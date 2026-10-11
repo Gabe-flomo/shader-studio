@@ -14,7 +14,7 @@ The kind page's **Grid scene** opens the Grid builder. Grid Rules (the simulatio
 heat, Wireworld) is reached from it:
 
 - **Make it a simulation → Grid Rules** in the builder's header builds the drawing (if it changed),
-  adds a Grid Rules node that starts from it, puts the Output on the simulation and opens the Grid
+  adds a Grid Rules node whose drawn start is it, puts the Output on the simulation and opens the Grid
   Rules editor.
 - The Grid Rules editor of a node made that way has **‹ Pattern grid**: the Output goes back to the
   drawing and the Grid builder opens on it. The Grid Rules node stays; jumping again reuses it.
@@ -28,12 +28,16 @@ work is. Drawing first and then simulating is the path the jump makes easy; the 
 
 ### What carries over
 
-The drawing's shapes, as they are at that moment, are the simulation's start: the Grid scene node's
-distance goes through a small Expression Block (**Start cells**: white inside a shape) into a Pass
-(at the board's size, nearest filter) whose Texture is the Grid Rules node's **Start image**, with
-Start set to Image. Bright cells start on. The board is Coarse (⅛), so each drawn cell becomes a
-small blob of board cells, and Life evolves it. **Reset** on the Grid Rules node deals the board
-again from the drawing as it is now. The rule starts as Life; any preset can be picked in the editor.
+The drawing's placed cells, as they are at that moment, are the simulation's **drawn start**
+(Grid Rules' Start: Your drawing, the node's `startCells`, see grid-rules.md "A drawn start"): every
+drawn shape is a live cell (state 1), cropped to the drawn cells. The Grid Rules builder's try board
+and the node's own board both start from it. A drawing of another size than the board is placed in
+the middle, as the drawn-start mode does. The node is made with `startCells` in
+`simulationFromGrid` (`gridScene/actions.ts`, `drawnStartOf`). The board is Coarse (⅛), so each
+drawn cell is one board cell, and Life evolves it. **Reset** on the Grid Rules node deals the board
+again from the drawing as it was when you jumped; jumping again updates the drawing on the same
+node. Nodes made by an older jump (a Start image through a Pass) keep working, and the next jump
+switches them to the drawn start. The rule starts as Life; any preset can be picked in the editor.
 
 ## The window
 

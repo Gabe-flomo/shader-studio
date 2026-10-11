@@ -310,7 +310,8 @@ drawn cell at 1 (Growing patterns: B).
 **From another builder.** `newGridRules({ params, startCells })` (`src/builders/open.ts`) adds a
 Grid Rules node with those params and a drawn start (rows of states, top first, or a StartCells)
 and opens the builder: the way a builder hands its drawn cells to Grid Rules
-(`gridSeedParams` is the pure part). `newGridRules()` with nothing is as before.
+(`gridSeedParams` is the pure part). The Grid scene builder's "Make it a simulation" uses the same
+start (`startCells`, each drawn shape a live cell). `newGridRules()` with nothing is as before.
 
 ## As text: the Recipe tab
 
