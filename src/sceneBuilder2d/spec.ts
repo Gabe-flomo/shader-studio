@@ -19,6 +19,7 @@
 import type { GridSpec } from './grid';
 import type { FnRef } from './functions';
 import { blockSummary, cloneBlock, COMBINE_BY_MODE, type CombineMode, type CombineSpec, type SpaceBlock } from './blocks';
+import type { TexSource, TexUse } from '../builders/textures';
 
 export type Vec2 = [number, number];
 export type Vec3 = [number, number, number];
@@ -94,6 +95,8 @@ export const SHAPES: ShapeDef[] = [
     params: [] },
   { kind: 'vesica', label: 'Vesica', aliases: ['lens', 'eye'], shape: 'vesica', blurb: 'The lens where two circles overlap.',
     params: [P('w', 'Width', 'rx', 0.34, 0.02, 2), P('h', 'Height', 'he', 0.18, 0.02, 2)] },
+  { kind: 'picture', label: 'Picture', aliases: ['image', 'photo'], shape: 'box', blurb: 'A picture as a layer: a box the picture\'s shape, filled with it (Fill sets how).',
+    params: [P('h', 'Half height', '', 0.6, 0.02, 4, 0.01, { hint: 'Half its height; its width follows the picture\'s shape.' })] },
 ];
 
 export const SHAPE_BY_KIND: Record<string, ShapeDef> = Object.fromEntries(SHAPES.map(s => [s.kind, s]));
@@ -225,7 +228,14 @@ interface ItemBase {
   color: Vec3;
   /** With Glow set to "selected": this layer glows. */
   glow: boolean;
+  /** Painted with a picture instead of its colour (docs/scene-builder-2d.md, "Textures"). */
+  fill?: TexUse | null;
+  /** Only shown where a picture is bright (or dark, inverted). */
+  mask?: TexMask | null;
 }
+
+/** A layer shown only where a picture is bright: the picture over the whole frame, its brightness against `cut`. */
+export interface TexMask { tex: string; cut: number; invert: boolean }
 
 export interface ShapeSpec extends ItemBase {
   type: 'shape';
@@ -277,6 +287,8 @@ export type ColourBy = typeof COLOUR_BYS[number];
 
 export interface LookSpec {
   bg: Vec3;
+  /** A picture behind every layer, read at the warped point (`warp`) or the screen's. */
+  bgTex?: (TexUse & { warp: boolean }) | null;
   glow: { mode: GlowMode; amount: number; falloff: number; tint: Vec3 | null };
   colour: { by: ColourBy; palette: string; scale: number; speed: number };
   tone: ToneMode;
@@ -293,6 +305,8 @@ export interface Scene2D {
   grid?: GridSpec | null;
   look: LookSpec;
   output?: OutputSpec;
+  /** The pictures the scene reads (builders/textures.ts): fills, picture layers, masks, the background. */
+  textures?: TexSource[];
 }
 
 // ── Defaults ────────────────────────────────────────────────────────────────
@@ -431,6 +445,8 @@ export function itemSummary(it: Item): string {
   if (it.dup) parts.push(`${it.dup.inner ? `${it.dup.count}×${it.dup.inner.count}` : it.dup.count}${it.dup.levels > 1 ? `×${it.dup.levels} sizes` : ' copies'}`);
   for (const m of it.motion) parts.push(MOTION_BY_KIND[m.kind]?.label.toLowerCase() ?? m.kind);
   if (it.hollow > 0) parts.push('outline');
+  if (it.fill) parts.push(`picture ${it.fill.tex}`);
+  if (it.mask) parts.push(`mask ${it.mask.tex}`);
   return parts.join(' · ');
 }
 
@@ -455,6 +471,9 @@ export function canonicalScene(spec: Scene2D): Scene2D {
   const out = structuredClone(spec);
   if (!out.output || out.output.show === 'picture') delete out.output;
   else if (!out.output.palette) delete out.output.palette;
+  if (!out.textures?.length) delete out.textures;
+  if (!out.look.bgTex) delete out.look.bgTex;
+  walkItems(out.layers, it => { if (!it.fill) delete it.fill; if (!it.mask) delete it.mask; });
   let s = 0, g = 0, m = 0, p = 0;
   for (const op of out.space) op.id = `p${++p}`;
   walkItems(out.layers, it => {
@@ -466,5 +485,13 @@ export function canonicalScene(spec: Scene2D): Scene2D {
 
 /** Does the scene have anything to draw? */
 export function hasShapes(spec: Scene2D): boolean {
-  return allShapes(spec).length > 0 || !!spec.grid;
+  return allShapes(spec).length > 0 || !!spec.grid || !!spec.look.bgTex;
+}
+
+/** The names of the pictures a scene uses (fills, masks, the background). */
+export function texturesUsed2D(spec: Scene2D): string[] {
+  const out: string[] = [];
+  walkItems(spec.layers, it => { if (it.fill) out.push(it.fill.tex); if (it.mask) out.push(it.mask.tex); });
+  if (spec.look.bgTex) out.push(spec.look.bgTex.tex);
+  return [...new Set(out)];
 }

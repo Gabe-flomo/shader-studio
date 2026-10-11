@@ -15,6 +15,7 @@ import { placeInFreeSpace } from '../store/agentSetup';
 import { BUILD_KEY } from '../sceneBuilder/apply';
 import { buildScene2D, META_KEY_2D, ROLE_KEY, type Scene2DMeta } from './build';
 import type { Scene2D } from './spec';
+import { ensureSources } from '../builders/textures';
 
 const IGNORED_KEYS = new Set(['__comment', ROLE_KEY, BUILD_KEY, META_KEY_2D, 'subgraph', '_sbName']);
 const ignored = (k: string) => IGNORED_KEYS.has(k) || k.startsWith('_') || k.includes('::');
@@ -68,6 +69,8 @@ export interface Apply2DResult {
   focusId: string;
   warnings: string[];
   kept: string[];
+  /** The scene as built: its pictures each with their node (a picture without one got an empty Texture node). */
+  spec: Scene2D;
 }
 
 const paramName = (n: GraphNode, k: string) => getNodeDefinition(n.type)?.paramDefs?.[k]?.label ?? k;
@@ -78,10 +81,15 @@ const nameOf = (n: GraphNode) => (typeof n.params.label === 'string' && n.params
  * rebuild), or replacing the build of `sceneId`, keeping the user's own settings where the new
  * spec doesn't change them. The graph's Output shows the scene.
  */
-export function applyScene2D(graph: GraphNode[], spec: Scene2D, opts: { nextId: () => string; sceneId?: string | null; asNew?: boolean; at?: { x: number; y: number }; restore?: boolean }): Apply2DResult {
+export function applyScene2D(graph: GraphNode[], spec0: Scene2D, opts: { nextId: () => string; sceneId?: string | null; asNew?: boolean; at?: { x: number; y: number }; restore?: boolean }): Apply2DResult {
   const found = !opts.asNew && opts.sceneId ? find2dBuild(graph, opts.sceneId) : null;
   const taken = new Set(graph.map(n => n.id));
   const nextId = () => { let id = opts.nextId(); while (taken.has(id)) id = opts.nextId(); taken.add(id); return id; };
+  // Every picture the scene reads has a node (builders/textures.ts): one typed in a recipe gets an empty Texture node.
+  const uvAt = found?.byRole.get('uv')?.position ?? opts.at ?? { x: 0, y: 0 };
+  const ensured = ensureSources(graph, spec0.textures, nextId, uvAt);
+  const spec: Scene2D = spec0.textures?.length ? { ...spec0, textures: ensured.sources } : spec0;
+  graph = [...graph, ...ensured.added];
   const buildKey = found?.meta.build ?? `b${nextId()}`;
   const idOfRole = new Map<string, string>();
   const idFor = (role: string) => {
@@ -149,5 +157,5 @@ export function applyScene2D(graph: GraphNode[], spec: Scene2D, opts: { nextId: 
   }
   const outId = output.id;
   rest = rest.map(n => (n.id === outId ? { ...n, inputs: { ...n.inputs, color: { ...n.inputs.color, connection: { ...built.final } } } } : n));
-  return { nodes: [...rest, ...top], sceneId: built.sceneId, focusId: built.sceneId, warnings: built.warnings, kept };
+  return { nodes: [...rest, ...top], sceneId: built.sceneId, focusId: built.sceneId, warnings: built.warnings, kept, spec };
 }

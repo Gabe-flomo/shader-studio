@@ -21,9 +21,10 @@ import { getNodeDefinition } from '../nodes/definitions';
 import { startingSockets } from '../nodes/definitions/transformAny';
 import { estimateNodeHeight, layoutByRank } from '../store/graphLayout';
 import {
-  SHAPE_BY_KIND, WARP_BY_KIND, allShapes, effectiveStepScale, filterTree, itemName, num, opLabel, stepHints,
+  MAX_TEX_SHAPES, SHAPE_BY_KIND, TEX_MAP_LABELS, TEX_SHARP_DEFAULT, WARP_BY_KIND, allShapes, effectiveStepScale, filterTree, itemName, num, opLabel, stepHints,
   type GroupSpec, type SceneItem, type SceneSpec, type ShapeSpec, type Vec3, type WarpSpec,
 } from './spec';
+import { LUMA, findTex, fitLines, glf, picUv, sampleWrap, standInId, standIns } from '../builders/textures';
 import { fmt } from './recipe';
 import { OUTPUT_BY_SHOW, PALETTE_BY_KEY, isPicture, outputClause, outputProblem, type OutputSpec } from './output';
 
@@ -242,8 +243,11 @@ function shapeSummary(sh: ShapeSpec): string {
   }).join(', ');
 }
 
-/** Scene Pos (or any point) → this shape's warps, move, turns → the shape → its distance. */
-function emitShape(ctx: Ctx, sh: ShapeSpec, pos: Ref, list: GraphNode[]): Ref | null {
+/**
+ * Scene Pos (or any point) → this shape's warps, move, turns → the shape → its distance. `local`
+ * gets the point as the shape sees it (after them): where a picture on it is read.
+ */
+function emitShape(ctx: Ctx, sh: ShapeSpec, pos: Ref, list: GraphNode[], local?: Map<string, Ref>): Ref | null {
   const name = `‘${itemName(ctx.spec, sh)}’`;
   if (sh.kind === 'custom') { ctx.warnings.push(`custom(${sh.label ?? ''}) can't be built: it stands for nodes the builder doesn't know. Left out.`); return null; }
   const def = SHAPE_BY_KIND[sh.kind];
@@ -259,6 +263,7 @@ function emitShape(ctx: Ctx, sh: ShapeSpec, pos: Ref, list: GraphNode[]): Ref | 
       `Places ${name}: ${bits.join(' and ')}. A shape is measured in its own space, so the point is moved and turned the other way first: that puts the shape there.`, list);
     pos = ref(n, 'p');
   }
+  local?.set(sh.id, pos);
   const rounded = def.roundType && Number(sh.size.round ?? 0) > 0;
   const params: Record<string, unknown> = {};
   for (const p of def.params) {
@@ -357,12 +362,16 @@ function pathWarps(spec: SceneSpec, target: ShapeSpec): Array<{ warps: WarpSpec[
   return out;
 }
 
-function materialsGroup(ctx: Ctx, shapes: ShapeSpec[], hitPos: Ref): GraphNode {
+function materialsGroup(ctx: Ctx, shapes: ShapeSpec[], hitPos: Ref, texShapes: ShapeSpec[] = []): GraphNode {
   const inner: GraphNode[] = [];
   // Inside the group the hit point arrives through the port.
   const port: Ref = { nodeId: GROUP_PORT_SENTINEL, outputKey: 'hitPos' };
   let colour: Ref | null = null, shine: Ref | null = null, dist: Ref | null = null;
   const anyShine = shapes.some(s => s.shine > 0);
+  // Pictures: each painted shape's own point (where its picture is read) and which one is nearest (a slot per channel).
+  const local = new Map<string, Ref>();
+  const texPos: Ref[] = [];
+  let slots: Ref | null = null;
   for (const sh0 of shapes) {
     const sh = sh0;
     // Each shape is measured on its own here, so the warps it shares with others are made once per shape.
@@ -372,18 +381,34 @@ function materialsGroup(ctx: Ctx, shapes: ShapeSpec[], hitPos: Ref): GraphNode {
       const w = emitWarps(scope, step.warps.filter(x => !WARP_BY_KIND[x.kind]?.modifier), pos, step.on, inner);
       pos = w.pos;
     }
-    const d = emitShape(scope, { ...sh, warps: sh.warps }, pos, inner);
+    const d = emitShape(scope, { ...sh, warps: sh.warps }, pos, inner, local);
     if (!d) continue;
     const name = `‘${itemName(ctx.spec, sh)}’`;
     const c = mk(scope, 'colorPicker', `${sh.id}:color`, { color: [...sh.color] }, {}, `${name}'s colour.`, inner);
+    const slot = texShapes.indexOf(sh);
+    let own: Ref | null = null;
+    if (texShapes.length) {
+      const e: Vec3 = [slot === 0 ? 1 : 0, slot === 1 ? 1 : 0, slot === 2 ? 1 : 0];
+      own = ref(mk(scope, 'colorPicker', `${sh.id}:texslot`, { color: e }, {}, slot >= 0
+        ? `${name}'s picture slot: ${'xyz'[slot]} (${['red', 'green', 'blue'][slot]}) is 1 where ${name} is the nearest surface, so its picture is painted only there.`
+        : `${name} has no picture: 0 in every slot.`, inner), 'rgb');
+      if (slot >= 0) {
+        let lp = local.get(sh.id) ?? port;
+        // The group's output needs a node to come from: the hit point as it is, through a block.
+        if (lp.nodeId === GROUP_PORT_SENTINEL) lp = ref(exprBlock(scope, `${sh.id}:local`, 'Own point', [{ name: 'p', type: 'vec3', from: lp }], 'p', `The point as ${name} sees it (it has no move or warp of its own): where its picture is read.`, inner), 'result');
+        texPos[slot] = lp;
+      }
+    }
     if (!colour || !dist) {
       colour = ref(c, 'rgb'); dist = d;
+      if (own) slots = own;
       if (anyShine) shine = ref(mk(scope, 'constant', `${sh.id}:shine`, { value: sh.shine }, {}, `${name}'s shine: how strong its highlight is (0 matt, 1 glossy).`, inner), 'value');
       continue;
     }
     const pick = mk(scope, 'materialSelect', `${sh.id}:pick`, {}, { distA: dist, distB: d, colorA: colour, colorB: ref(c, 'rgb') },
       `Picks ${name}'s colour where ${name} is the nearest surface, the colour so far elsewhere.`, inner);
     colour = ref(pick, 'color');
+    if (own && slots) slots = ref(vecMath(scope, 'mix', `${sh.id}:texpick`, slots, own, ref(pick, 'blend'), `Takes ${name}'s picture slot where it is the nearest surface (the same choice as its colour).`, inner), 'result');
     if (anyShine && shine) {
       const own = mk(scope, 'constant', `${sh.id}:shine`, { value: sh.shine }, {}, `${name}'s shine (0 matt, 1 glossy).`, inner);
       const mixS = mk(scope, 'mix', `${sh.id}:shinemix`, {}, { a: shine, b: ref(own, 'value'), t: ref(pick, 'blend') }, `Takes ${name}'s shine where its colour was picked.`, inner);
@@ -393,7 +418,15 @@ function materialsGroup(ctx: Ctx, shapes: ShapeSpec[], hitPos: Ref): GraphNode {
     dist = ref(nearer, 'dist');
   }
   tidy(inner, 0, 120);
-  const outputs: Record<string, OutputSocket> = { color: { type: 'vec3', label: 'Colour' }, ...(shine ? { shine: { type: 'float', label: 'Shine' } } : {}) };
+  const texOuts = texShapes.map((s, i) => ({ key: `tp${i}`, label: `${itemName(ctx.spec, s)} point`, from: texPos[i] })).filter(o => o.from);
+  const pics = slots && texOuts.length ? [
+    { key: 'slots', type: 'vec3' as const, label: 'Picture slots', from: slots },
+    ...texOuts.map(o => ({ key: o.key, type: 'vec3' as const, label: o.label, from: o.from })),
+  ] : [];
+  const outputs: Record<string, OutputSocket> = {
+    color: { type: 'vec3', label: 'Colour' }, ...(shine ? { shine: { type: 'float', label: 'Shine' } } : {}),
+    ...Object.fromEntries(pics.map(o => [o.key, { type: o.type, label: o.label }])),
+  };
   const node: GraphNode = {
     id: ctx.idFor('materials'), type: 'group', position: { x: 0, y: 0 },
     inputs: { hitPos: { type: 'vec3', label: 'Hit Pos', connection: { ...hitPos } } },
@@ -406,14 +439,133 @@ function materialsGroup(ctx: Ctx, shapes: ShapeSpec[], hitPos: Ref): GraphNode {
         outputPorts: [
           { key: 'color', type: 'vec3', label: 'Colour', fromNodeId: colour!.nodeId, fromOutputKey: colour!.outputKey },
           ...(shine ? [{ key: 'shine', type: 'float' as const, label: 'Shine', fromNodeId: shine.nodeId, fromOutputKey: shine.outputKey }] : []),
+          ...pics.map(o => ({ key: o.key, type: o.type, label: o.label, fromNodeId: o.from.nodeId, fromOutputKey: o.from.outputKey })),
         ],
       } satisfies SubgraphData,
-      __comment: 'Which shape is under each pixel, and its colour. Each shape is measured again at the hit point and Material Select keeps the colour of the nearest one. Edit the colours inside (double-click), or in the Scene Builder.',
+      __comment: `Which shape is under each pixel, and its colour. Each shape is measured again at the hit point and Material Select keeps the colour of the nearest one. Edit the colours inside (double-click), or in the Scene Builder.${pics.length ? ' Picture slots says which painted shape is nearest (x, y, z: the first, second and third), and each painted shape\'s point is the hit point as that shape sees it, so its picture moves, turns and repeats with it.' : ''}`,
       [ROLE_KEY]: 'materials',
     },
   };
   ctx.nodes.push(node);
   return node;
+}
+
+// ── Pictures on surfaces (docs/scene-builder-3d.md, "Textures") ─────────────
+
+/** A shape's half-size across its front (x, y), for the face map. */
+function faceExtent(sh: ShapeSpec): [number, number] {
+  const size = sh.size.size;
+  if (Array.isArray(size)) return [Math.max(0.01, size[0]), Math.max(0.01, size[1])];
+  const r = num(sh.size.r ?? sh.size.R ?? sh.size.s, 0.5);
+  const h = num(sh.size.h, r);
+  return [Math.max(0.01, r), Math.max(0.01, sh.kind === 'cylinder' ? h : r)];
+}
+
+/**
+ * The colour of each painted shape's picture at the hit point, read in the shape's own space with
+ * its map, and painted over the base colour where that shape is the nearest surface. Tiled maps
+ * read through Sample (texture) on Edges: Repeat, which wraps in the shader but picks the mipmap
+ * from the unwrapped place: no seam where the picture starts again, no shimmer far away. With a
+ * bump on any shape, `height` is the pictures' brightness (times each bump) for bumpNormal.
+ */
+function surfacePictures(ctx: Ctx, texShapes: ShapeSpec[], mat: GraphNode, normal: Ref, base: Ref): { color: Ref; height: Ref | null } {
+  const cols: Array<{ i: number; from: Ref; bump: number }> = [];
+  const L = (lhs: string, rhs: string) => ({ lhs, op: '=', rhs });
+  texShapes.forEach((sh, i) => {
+    const t = sh.tex!;
+    const src = findTex(ctx.spec.textures, t.tex);
+    const name = `‘${itemName(ctx.spec, sh)}’`;
+    if (!src) { ctx.warnings.push(`${name} reads the picture “${t.tex}”, which the scene doesn't have: pick one under Pictures.`); return; }
+    if (!mat.outputs[`tp${i}`]) return;
+    const texRef: Ref = { nodeId: standInId(src), outputKey: 'texture' };
+    const a = glf(src.aspect ?? 1);
+    const role = `${sh.id}:pic`;
+    const map = TEX_MAP_LABELS[t.map];
+    const tiled = t.map !== 'face';
+    const sample = (k: string, uv: Ref) => ref(mk(ctx, 'sampleTexture', `${role}:${k}`, sampleWrap(tiled ? 'repeat' : 'once'), { texture: texRef, uv },
+      `Reads the picture “${src.name}” for ${name}${k === 'x' || k === 'y' || k === 'z' ? `: the projection along ${k}` : ''}. Its Texture is wired from the picture's node. ${tiled ? 'Edges: Repeat wraps the picture here, picking the mipmap from the unwrapped place, so it repeats with no seam and doesn\'t shimmer far away.' : ''}`), 'color');
+    const off = t.offset ?? [0, 0];
+    const common = [
+      { name: 'k', type: 'float' as const, slider: { value: t.scale, min: 0.1, max: 16 } },
+      { name: 'ox', type: 'float' as const, slider: { value: off[0], min: -1, max: 1 } },
+      { name: 'oy', type: 'float' as const, slider: { value: off[1], min: -1, max: 1 } },
+      { name: 'turn', type: 'float' as const, slider: { value: t.rot ?? 0, min: -180, max: 180 } },
+    ];
+    // Turned about the picture's middle, then slid: R * (place - 0.5) + 0.5 + offset.
+    const place = (st: string) => picUv(`R * (${st} - 0.5) + 0.5 + vec2(ox, oy)`);
+    const rotLines = [L('float ca', 'cos(radians(turn))'), L('float sa', 'sin(radians(turn))'), L('mat2 R', 'mat2(ca, sa, -sa, ca)')];
+    const head = `Where ${name}'s picture “${src.name}” is read: p is the hit point in ${name}'s own space (after its move, turn and warps, so the picture moves and repeats with it). ${map.label}: ${map.blurb} `
+      + `k is ${t.map === 'face' ? 'a zoom, above 1 closer' : t.map === 'spherical' ? 'how many times it goes round' : 'how many times it repeats every 2 units'}; ox and oy slide it (1 is a whole picture), turn turns it (degrees). All live.`;
+    if (t.map === 'triplanar') {
+      const coords = exprBlock(ctx, `${role}:coords`, 'Triplanar', [
+        { name: 'p', type: 'vec3', from: ref(mat, `tp${i}`) }, { name: 'n', type: 'vec3', from: normal },
+        ...common, { name: 'sharp', type: 'float', slider: { value: t.sharp ?? TEX_SHARP_DEFAULT, min: 1, max: 16 } },
+      ], 'ux', `${head} ux, uy and uz are the places to read for the projections along x, y and z (the picture keeps its shape, ${glf(src.aspect ?? 1)} wide for 1 tall); w how much of each to take, from how squarely the surface faces each axis, to the power sharp (1 a soft blend, 16 crisp edges between them).`);
+      coords.params.lines = [
+        ...rotLines,
+        L('vec3 q', 'p * k * 0.5'),
+        L('vec2 ux', place(`vec2(q.z / ${a}, q.y)`)),
+        L('vec2 uy', place(`vec2(q.x / ${a}, q.z)`)),
+        L('vec2 uz', place(`vec2(q.x / ${a}, q.y)`)),
+        L('vec3 w', 'pow(abs(n), vec3(sharp))'),
+        L('w', 'w / max(w.x + w.y + w.z, 1e-4)'),
+      ];
+      coords.params.outputs = ['uy', 'uz', 'w'];
+      coords.outputs = { result: { type: 'vec2', label: 'Result' }, uy: { type: 'vec2', label: 'uy' }, uz: { type: 'vec2', label: 'uz' }, w: { type: 'vec3', label: 'w' } };
+      coords.params.outputType = 'vec2';
+      const cx = sample('x', ref(coords, 'result')), cy = sample('y', ref(coords, 'uy')), cz = sample('z', ref(coords, 'uz'));
+      const blend = exprBlock(ctx, `${role}:blend`, 'Triplanar blend', [
+        { name: 'cx', type: 'vec3', from: cx }, { name: 'cy', type: 'vec3', from: cy }, { name: 'cz', type: 'vec3', from: cz }, { name: 'w', type: 'vec3', from: ref(coords, 'w') },
+      ], 'cx * w.x + cy * w.y + cz * w.z', `${name}'s picture: the three projections mixed by w, so each face takes the one that looks at it squarely.`);
+      cols.push({ i, from: ref(blend, 'result'), bump: t.bump ?? 0 });
+      return;
+    }
+    const lines = t.map === 'planar'
+      ? [...rotLines, L('vec2 uv', place(`vec2(p.x / ${a}, p.y) * k * 0.5 + 0.5`))]
+      : t.map === 'spherical'
+        ? [...rotLines, L('vec3 d', 'normalize(p + vec3(1e-5))'), L('vec2 uv', place('vec2(atan(d.z, d.x) / 6.2831853 + 0.5, acos(clamp(d.y, -1.0, 1.0)) / 3.1415927) * k'))]
+        : [...rotLines, L('vec2 ext', `vec2(${faceExtent(sh).map(glf).join(', ')})`), ...fitLines('cover', 'p.xy', 'ext', a, 'k'), L('vec2 uv', place('st'))];
+    const coords = exprBlock(ctx, `${role}:coords`, `${map.label} map`, [{ name: 'p', type: 'vec3', from: ref(mat, `tp${i}`) }, ...common], 'uv', `${head} uv is the place to read, in the picture coordinates Sample (texture) reads.`);
+    coords.params.lines = lines;
+    coords.params.outputType = 'vec2';
+    coords.outputs = { result: { type: 'vec2', label: 'Result' } };
+    cols.push({ i, from: sample('s', ref(coords, 'result')), bump: t.bump ?? 0 });
+  });
+  if (!cols.length) return { color: base, height: null };
+  const chain = cols.reduce((acc, c) => `mix(${acc}, c${c.i}, slots.${'xyz'[c.i]})`, 'base');
+  const bumps = cols.filter(c => c.bump > 0);
+  const paint = exprBlock(ctx, 'pictures', 'Surface pictures', [
+    { name: 'base', type: 'vec3', from: base }, { name: 'slots', type: 'vec3', from: ref(mat, 'slots') },
+    ...cols.map(c => ({ name: `c${c.i}`, type: 'vec3' as const, from: c.from })),
+    ...bumps.map(c => ({ name: `b${c.i}`, type: 'float' as const, slider: { value: c.bump, min: 0, max: 4 } })),
+  ], chain, `Paints each picture on its shape: base is the shapes' own colours, slots says which painted shape is nearest (x the first, y the second, z the third), c0… their pictures. The lighting after it shades the pictures like any colour.${bumps.length ? ' h is the height for the bump: each bumped picture\'s brightness times its bump (b0…, live), where it is painted.' : ''}`);
+  if (!bumps.length) return { color: ref(paint, 'result'), height: null };
+  paint.params.lines = [L('float h', bumps.map(c => `${LUMA(`c${c.i}`)} * slots.${'xyz'[c.i]} * b${c.i}`).join(' + '))];
+  paint.params.outputs = ['h'];
+  paint.outputs = { ...paint.outputs, h: { type: 'float', label: 'Height' } };
+  return { color: ref(paint, 'result'), height: ref(paint, 'h') };
+}
+
+/**
+ * Bump from brightness: the surface's normal tilted by how the picture's brightness changes from
+ * pixel to pixel (Mikkelsen's surface gradient, from screen derivatives: no extra reads of the
+ * picture, no tangents), so a plain photo gets some relief under the light.
+ */
+function bumpNormal(ctx: Ctx, normal: Ref, pos: Ref, height: Ref): Ref {
+  const L = (lhs: string, rhs: string) => ({ lhs, op: '=', rhs });
+  const b = exprBlock(ctx, 'bump', 'Bump from brightness', [
+    { name: 'n', type: 'vec3', from: normal }, { name: 'p', type: 'vec3', from: pos }, { name: 'h', type: 'float', from: height },
+    { name: 'depth', type: 'float', slider: { value: 0.03, min: 0, max: 0.2 } },
+  ], 'normalize(abs(det) * n - depth * g)',
+  'Bump from brightness: tilts the surface\'s normal by how the pictures\' brightness (h) changes across the screen, so bright parts read as raised. dpx and dpy are how the hit point changes from one pixel to the next, dhx and dhy the same for h; g is the slope of h along the surface (Mikkelsen\'s surface gradient), depth how deep the relief is (live). The lights read this normal; shadows and AO keep the shape\'s own.');
+  b.params.lines = [
+    L('vec3 dpx', 'dFdx(p)'), L('vec3 dpy', 'dFdy(p)'),
+    L('float dhx', 'dFdx(h)'), L('float dhy', 'dFdy(h)'),
+    L('vec3 r1', 'cross(dpy, n)'), L('vec3 r2', 'cross(n, dpx)'),
+    L('float det', 'dot(dpx, r1)'),
+    L('vec3 g', 'sign(det) * (dhx * r1 + dhy * r2)'),
+  ];
+  return ref(b, 'result');
 }
 
 // ── Layout ──────────────────────────────────────────────────────────────────
@@ -545,6 +697,14 @@ export function buildSceneGraph(spec: SceneSpec, idFor: (role: string) => string
     `Which way the sunlight comes from ${v3(L.sunDir)} (pointing toward the sun; only its direction matters). It feeds the shadows and the lighting, so they always agree.`) : null;
 
   const background = (): Ref => {
+    const bgSrc = L.bgTex ? findTex(spec.textures, L.bgTex) : undefined;
+    if (L.bgTex && !bgSrc) ctx.warnings.push(`The background reads the picture “${L.bgTex}”, which the scene doesn't have: pick one under Pictures.`);
+    if (bgSrc) {
+      const env = mk(ctx, 'pictureEnvironment', 'bg', { fov: C.zoom }, {
+        picture: { nodeId: standInId(bgSrc), outputKey: 'texture' }, dir: ref(cam, 'rd'), forward: ref(cam, 'forward'), right: ref(cam, 'right'), up: ref(cam, 'up'),
+      }, `The background: the picture “${bgSrc.name}” as the backdrop the camera looks at (Picture Environment). Each ray that misses every shape reads the picture where it points; past the frame's edge the picture is mirrored. Its Camera FOV matches the camera's Zoom (${fmt(C.zoom)}).`);
+      return ref(env, 'color');
+    }
     if (!L.bg2) return ref(mk(ctx, 'colorPicker', 'bg', { color: [...L.bg] }, {}, 'The background: what rays that miss every shape see.'), 'rgb');
     const top = mk(ctx, 'colorPicker', 'bg:top', { color: [...L.bg] }, {}, 'The top of the background gradient (looking up).');
     const bottom = mk(ctx, 'colorPicker', 'bg:bottom', { color: [...L.bg2] }, {}, 'The bottom of the background gradient (looking down).');
@@ -628,21 +788,31 @@ export function buildSceneGraph(spec: SceneSpec, idFor: (role: string) => string
     const shines = new Set(shapes.map(s => s.shine));
     let base: Ref, shine: Ref | null = null;
     const shineValue = shapes[0]?.shine ?? 0;
-    if (shapes.length > 1 && (colours.size > 1 || shines.size > 1)) {
-      const mat = materialsGroup(ctx, shapes, pos);
+    let litNormal = normal;
+    const painted = shapes.filter(s => s.tex);
+    if (painted.length > MAX_TEX_SHAPES) ctx.warnings.push(`Pictures paint ${MAX_TEX_SHAPES} shapes at most; ${painted.slice(MAX_TEX_SHAPES).map(s => `‘${itemName(spec, s)}’`).join(', ')} keep${painted.length - MAX_TEX_SHAPES === 1 ? 's' : ''} its colour.`);
+    const texShapes = painted.slice(0, MAX_TEX_SHAPES);
+    if (texShapes.length || (shapes.length > 1 && (colours.size > 1 || shines.size > 1))) {
+      const mat = materialsGroup(ctx, shapes, pos, texShapes);
       base = ref(mat, 'color');
       if (mat.outputs.shine) shine = ref(mat, 'shine');
+      if (texShapes.length) {
+        const pics = surfacePictures(ctx, texShapes, mat, normal, base);
+        base = pics.color;
+        // Bump from brightness: the lights (and the highlight) read a normal tilted by the pictures.
+        if (pics.height) litNormal = bumpNormal(ctx, normal, pos, pics.height);
+      }
     } else {
       base = ref(mk(ctx, 'colorPicker', 'color', { color: [...(shapes[0]?.color ?? [0.8, 0.8, 0.8])] }, {}, 'The surface colour. Keep it fairly dark (around 0.2–0.8) and get brightness from the lights.'), 'rgb');
     }
     const light = mk(ctx, 'multiLight', 'light', {
       sunDirX: L.sunDir[0], sunDirY: L.sunDir[1], sunDirZ: L.sunDir[2], sunR: L.sunColor[0], sunG: L.sunColor[1], sunB: L.sunColor[2],
       skyR: L.sky[0], skyG: L.sky[1], skyB: L.sky[2], bounceR: L.bounce[0], bounceG: L.bounce[1], bounceB: L.bounce[2],
-    }, { baseColor: base, normal, hit, ao: ao ? ref(ao, 'ao') : null, shadow: shadow ? ref(shadow, 'shadow') : null, sunDir: sun ? ref(sun, 'rgb') : null },
+    }, { baseColor: base, normal: litNormal, hit, ao: ao ? ref(ao, 'ao') : null, shadow: shadow ? ref(shadow, 'shadow') : null, sunDir: sun ? ref(sun, 'rgb') : null },
     'The outdoor light rig: a warm sun (shadowed), a cool sky from above and a weak bounce from below (both darkened by AO). It gives linear light that can go past 1; Tone Map brings it back.');
     let lit = ref(light, 'color');
     if (shine || shineValue > 0) {
-      const spec2 = mk(ctx, 'blinnPhong', 'spec', { shininess: 48, diffuseness: 0 }, { normal, viewDir: ref(cam, 'rd'), lightDir: sun ? ref(sun, 'rgb') : null },
+      const spec2 = mk(ctx, 'blinnPhong', 'spec', { shininess: 48, diffuseness: 0 }, { normal: litNormal, viewDir: ref(cam, 'rd'), lightDir: sun ? ref(sun, 'rgb') : null },
         'The highlight: where the surface mirrors the sun toward the camera (Blinn-Phong, specular only).');
       const add = exprBlock(ctx, 'shine', 'Add highlight', [
         { name: 'lit', type: 'vec3', from: lit }, { name: 'spec', type: 'float', from: ref(spec2, 'light') }, { name: 'hit', type: 'float', from: hit },
@@ -659,6 +829,7 @@ export function buildSceneGraph(spec: SceneSpec, idFor: (role: string) => string
     const compose = vecMath(ctx, 'mix', 'compose', background(), lit, hit, 'The lit surface where a ray hit (Hit = 1), the background where it missed.');
     final = ref(compose, 'result');
   }
+  if (L.mode !== 'surface' && shapes.some(s => s.tex)) ctx.warnings.push('Pictures on shapes are a Surface-mode feature; in this mode the shapes keep their colours.');
   if (L.tone !== 'none') final = ref(mk(ctx, 'toneMap', 'tone', { mode: L.tone }, { color: final }, toneNote(L.tone)), 'color');
   // Another output: the measurement instead of the picture (the picture's nodes stay, unwired).
   if (!isPicture(spec.output)) {
@@ -679,6 +850,8 @@ export function metaOf(node: GraphNode | undefined | null): SceneBuilderMeta | n
 /** A stand-alone graph (with its own Output) for `spec`: examples and tests. */
 export function buildStandaloneGraph(spec: SceneSpec, opts: { idFor?: (role: string) => string; outputId?: string } = {}): BuildResult & { outputId: string } {
   const built = buildSceneGraph(spec, opts.idFor);
+  // Its pictures: a Texture node per source, so it compiles alone (the previews bind the real picture to it).
+  built.nodes.push(...standIns(spec.textures));
   const scene = built.nodes.find(n => n.id === built.sceneId)!;
   scene.params = { ...scene.params, [META_KEY]: { v: 1, spec: structuredClone(spec) } satisfies SceneBuilderMeta };
   const last = built.nodes.find(n => n.id === built.final.nodeId)!;

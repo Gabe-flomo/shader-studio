@@ -493,6 +493,11 @@ Every input the builder can wire (only when, a field layer's region, Field ƒ, b
 2. **From a group:** an output of another group: a plain group, a Shader Texture, or the Trail field another Agents group deposits into ("from Prey"). The row says "from …" and has **Edit inside ↗**.
 3. **Create new:** a shape drawn on the picture (Circle, Box, Ring, Polygon, Text); **New Shader Texture** (docs/texture-builder.md: white discs to start; for uses that read a texture); **New group** (a plain group whose Distance output is a circle, `length(uv) − r`, with a note). Each is a top-level node wired in, in the same undo step as the wiring. A new Shader Texture or group is **opened ready to edit**: the builder closes, the graph enters it, and a toast offers **Back to the Agent Builder**.
 
+For uses that read a texture, **Create new** also has **A picture…**: the scene builders' shared
+picture picker ([scene-builder.md](scene-builder.md#textures)), its upload, paste, link and image
+library ways. The picture lands on a new Texture node (one undo step), which is then wired in as a
+texture region (a second undo step), the same as picking it from the graph.
+
 `where.ts listRegions` tags group outputs (`from`, `inside`); `whereActions.ts setWhere` takes `create: 'shaderTexture' | 'group'` (`newRegionGroup`) and keeps the new node for `takeCreated`.
 
 ### Text as a shape or a wall

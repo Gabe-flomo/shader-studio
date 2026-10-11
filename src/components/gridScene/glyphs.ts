@@ -16,7 +16,7 @@ export function compileGridScene(spec: GridSceneSpec): Compiled {
     const g = buildStandaloneGrid(spec, { idFor: role => `pg_${role.replace(/[^A-Za-z0-9]/g, '_')}` });
     const r = compileGraph({ nodes: g.nodes });
     if (!r.success) return { vs: '', fs: '', uniforms: {}, nodes: g.nodes.length, error: (r.errors ?? []).join('; ') || 'The graph did not compile.', ms: performance.now() - t0 };
-    return { vs: r.vertexShader, fs: r.fragmentShader, uniforms: r.paramUniforms as Record<string, number | number[]>, nodes: g.nodes.length, error: null, ms: performance.now() - t0 };
+    return { vs: r.vertexShader, fs: r.fragmentShader, uniforms: r.paramUniforms as Record<string, number | number[]>, nodes: g.nodes.length, error: null, ms: performance.now() - t0, textures: r.textureUniforms };
   } catch (e) {
     return { vs: '', fs: '', uniforms: {}, nodes: 0, error: e instanceof Error ? e.message : String(e), ms: 0 };
   }
@@ -47,6 +47,15 @@ export function drawGlyph(ctx: CanvasRenderingContext2D, kind: ShapeKind, x: num
       ctx.bezierCurveTo(-s * 1.4, -s * 0.05, -s * 0.6, -s * 1.05, 0, -s * 0.4);
       ctx.bezierCurveTo(s * 0.6, -s * 1.05, s * 1.4, -s * 0.05, 0, s * 0.95);
       ctx.closePath();
+      break;
+    }
+    case 'picture': {
+      // A picture: a frame with a hill and a sun in it.
+      ctx.rect(-r, -r, r * 2, r * 2);
+      ctx.fillStyle = fill; ctx.globalAlpha = 0.35; ctx.fill(); ctx.globalAlpha = 1;
+      ctx.beginPath();
+      ctx.moveTo(-r, r); ctx.lineTo(-r * 0.3, -r * 0.1); ctx.lineTo(r * 0.2, r * 0.45); ctx.lineTo(r * 0.55, r * 0.1); ctx.lineTo(r, r); ctx.closePath();
+      ctx.moveTo(r * 0.6, -r * 0.45); ctx.arc(r * 0.45, -r * 0.45, r * 0.18, 0, Math.PI * 2);
       break;
     }
   }

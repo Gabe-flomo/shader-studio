@@ -29,6 +29,7 @@ import { GRID_LABELS, gridProgram, type GridSpec } from './grid';
 import { callBody, type FnRef } from './functions';
 import { COMBINE_BY_MODE, blockGlslLines, checkBlock, clampTimes, type SpaceBlock } from './blocks';
 import { BLOCK_BY_ID } from './blockLibrary';
+import { FIT_LABELS, LUMA, findTex, fitLines, glf, picUv, sampleWrap, standInId, standIns, type TexSource, type TexUse } from '../builders/textures';
 
 export { ROLE_KEY };
 /** On the UV node: the scene it was built from (and, once applied, fingerprints of what was built). */
@@ -61,18 +62,68 @@ interface B {
   spec: Scene2D;
   time: Ref | null;
   getTime: () => Ref;
+  /** Each item's own point (after its placement, motion and ring): where a picture fill is read. */
+  local: Map<string, Ref>;
+}
+
+// ── Pictures (builders/textures.ts) ─────────────────────────────────────────
+
+/** The source a use names, and its Texture output; a warning (and null) when there is none. */
+function texFor(b: B, name: string, what: string): { src: TexSource; out: Ref } | null {
+  const src = findTex(b.spec.textures, name);
+  if (!src) { b.c.warnings.push(`${what} reads the picture “${name}”, which the scene doesn't have: pick one under Pictures.`); return null; }
+  return { src, out: { nodeId: standInId(src), outputKey: 'texture' } };
+}
+
+/** The frame's half-size: the picture is 2 tall and as wide as the screen. */
+const SCREEN_EXT = 'vec2(u_resolution.x / u_resolution.y, 1.0)';
+
+/**
+ * A picture read in a box: q (a point, centred in the box of half-size `ext`) through the fit to a
+ * place on the picture, then Sample (texture). Returns its colour, its alpha and whether q is on the
+ * picture (Fit leaves a margin).
+ */
+function samplePicture(b: B, role: string, use: TexUse, src: TexSource, out: Ref, q: Ref, ext: string, where: string): { color: Ref; alpha: Ref; inside: Ref } {
+  const { c } = b;
+  const tile = use.fit === 'tile';
+  const fit = expr(c, `${role}:fit`, 'Picture fit', [
+    { name: 'q', type: 'vec2', from: q },
+    { name: 'k', type: 'float', slider: { value: use.scale, min: tile ? 0.25 : 0.1, max: tile ? 16 : 8 } },
+  ], picUv('st'),
+  `Where ${where} reads the picture “${src.name}”: q is the point in its box (ext is the box's half-size${ext === SCREEN_EXT ? ', the whole frame' : ''}); the picture is ${fmt(src.aspect ?? 1)} wide for 1 tall. `
+    + `${FIT_LABELS[use.fit].label}: ${FIT_LABELS[use.fit].blurb} k is ${tile ? 'how many times it repeats up the box' : 'a zoom, above 1 closer'} (live). `
+    + 'st is the place on the picture (0 to 1 across); the result is that place in the picture coordinates Sample (texture) reads; inside is 0 off the picture.',
+  'vec2', [{ lhs: 'vec2 ext', op: '=', rhs: ext }, ...fitLines(use.fit, 'q', 'ext', glf(src.aspect ?? 1), 'k')], [{ name: 'inside', type: 'float', label: 'Inside' }]);
+  const s = mk(c, 'sampleTexture', `${role}:sample`, sampleWrap(use.fit), { texture: out, uv: ref(fit, 'result') },
+    `Reads the picture “${src.name}” where the fit before it says: its colour and alpha there. Its Texture is wired from the picture's node, so a new picture there shows here.`);
+  return { color: ref(s, 'color'), alpha: ref(s, 'alpha'), inside: ref(fit, 'inside') };
+}
+
+/** A shape's half-size in its own space, for fitting a picture to it. */
+function extentOf(spec: Scene2D, it: Item): Vec2 {
+  if (it.type === 'group') return [0.5, 0.5];
+  const v = (k: string, d: number) => num(it.size[k], d);
+  if (it.kind === 'picture') { const h = v('h', 0.6); const src = it.fill ? findTex(spec.textures, it.fill.tex) : undefined; return [h * (src?.aspect ?? 1), h]; }
+  const size = it.size.size;
+  if (Array.isArray(size)) return [Math.max(0.01, size[0]), Math.max(0.01, size[1])];
+  if (it.kind === 'heart') return [1, 1];
+  if (it.kind === 'vesica') return [v('w', 0.34), Math.max(0.01, v('h', 0.18) * 2)];
+  if (it.kind === 'ring') return [v('r', 0.3) + v('th', 0.04), v('r', 0.3) + v('th', 0.04)];
+  const r = Math.max(0.01, v('r', 0.3));
+  return [r, r];
 }
 
 /** An Expression Block with typed inputs (wired, or a float slider) and a float or vec3 result. */
-function expr(c: Ctx, role: string, label: string, inputs: Array<{ name: string; type: 'float' | 'vec2' | 'vec3'; from?: Ref; slider?: { value: number; min: number; max: number } }>, result: string, note: string, outputType: 'vec3' | 'vec2' | 'float' = 'vec3', lines: Array<{ lhs: string; op: string; rhs: string }> = []): GraphNode {
+function expr(c: Ctx, role: string, label: string, inputs: Array<{ name: string; type: 'float' | 'vec2' | 'vec3'; from?: Ref; slider?: { value: number; min: number; max: number } }>, result: string, note: string, outputType: 'vec3' | 'vec2' | 'float' = 'vec3', lines: Array<{ lhs: string; op: string; rhs: string }> = [], outputs: Array<{ name: string; type: 'float' | 'vec2' | 'vec3'; label: string }> = []): GraphNode {
   const node: GraphNode = {
     id: c.idFor(role), type: 'exprNode', position: { x: 0, y: 0 },
     inputs: Object.fromEntries(inputs.map(i => [i.name, { type: i.type, label: i.name, ...(i.from ? { connection: { ...i.from } } : {}) } as InputSocket])),
-    outputs: { result: { type: outputType, label: 'Result' } },
+    outputs: { result: { type: outputType, label: 'Result' }, ...Object.fromEntries(outputs.map(o => [o.name, { type: o.type, label: o.label }])) },
     params: {
       label, outputType, lines, result, expr: result,
       inputs: inputs.map(i => ({ name: i.name, type: i.type, slider: i.slider ? { min: i.slider.min, max: i.slider.max } : null })),
       ...Object.fromEntries(inputs.filter(i => i.slider).map(i => [i.name, i.slider!.value])),
+      ...(outputs.length ? { outputs: outputs.map(o => o.name) } : {}),
       __comment: note, [ROLE_KEY]: role,
     },
   };
@@ -300,6 +351,13 @@ function shapeNode(b: B, sh: ShapeSpec, pos: Ref, name: string, sfx = ''): Ref {
     const fat = mk(c, 'sdfOffset', `${sh.id}:th${sfx}`, { amount: -th }, { sdf: ref(hair, 'distance') }, `Thickens ${name}'s line: an Offset of ${fmt(-th)} pushes the edge out by ${fmt(th)} each side of the hairline.`);
     return ref(fat, 'result');
   }
+  if (def.kind === 'picture') {
+    const [rx, ry] = extentOf(b.spec, sh);
+    if (!sh.fill) c.warnings.push(`${name} has no picture yet: pick one for it under Picture.`);
+    const n = mk(c, 'shapeSDF', `${sh.id}${sfx}`, { shape: 'box', rx: Math.round(rx * 1e6) / 1e6, ry }, { p: pos },
+      `${name}: a picture layer, a box ${fmt(rx * 2)} wide and ${fmt(ry * 2)} tall (the picture's shape), painted with ${sh.fill ? `“${sh.fill.tex}”` : 'a picture'} where it is drawn. It gives the distance to the box's edge: negative inside.`);
+    return ref(n, 'distance');
+  }
   const n = mk(c, 'shapeSDF', `${sh.id}${sfx}`, { shape: def.shape, ...params }, { p: pos }, note);
   return ref(n, 'distance');
 }
@@ -336,6 +394,7 @@ function emitItem(b: B, it: Item, pos: Ref, depth: number): Ref | null {
   const branches: Ref[] = [];
   for (let k = 0; k < levels; k++) {
     const br = dup ? emitRing(b, it, { ...dup, levels }, start, k, name) : start;
+    if (k === 0) b.local.set(it.id, br.pos);
     const sfx = levels > 1 ? `:${k}` : '';
     let dist: Ref | null;
     if (it.type === 'shape') dist = shapeNode(b, it, br.pos, name, sfx);
@@ -395,7 +454,7 @@ const DRIVERS: Record<string, { code: string; what: string }> = {
 export function buildScene2D(spec: Scene2D, idFor: (role: string) => string = role => `sb2_${role.replace(/[^A-Za-z0-9]/g, '_')}`): Build2DResult {
   const c: Ctx = { spec: undefined as never, idFor, nodes: [], warnings: [] };
   const L = spec.look;
-  const b: B = { c, spec, time: null, getTime: () => {
+  const b: B = { c, spec, time: null, local: new Map(), getTime: () => {
     if (!b.time) b.time = ref(mk(c, 'time', 'time', {}, {}, 'Time in seconds: it drives every motion, spin and drifting warp in this scene.'), 'time');
     return b.time;
   } };
@@ -423,14 +482,37 @@ export function buildScene2D(spec: Scene2D, idFor: (role: string) => string = ro
 
   const bg = mk(c, 'colorPicker', 'bg', { color: [...L.bg] }, {}, `The background colour, ${col(L.bg)}: what shows where no shape is.`);
   let acc: Ref = ref(bg, 'rgb');
+  if (L.bgTex) {
+    const t = texFor(b, L.bgTex.tex, 'The background');
+    if (t) {
+      const warped = L.bgTex.warp && spec.space.length > 0;
+      const pic = samplePicture(b, 'bgpic', L.bgTex, t.src, t.out, L.bgTex.warp ? pos : screen, SCREEN_EXT, 'the background');
+      acc = ref(expr(c, 'bgpic', 'Background picture', [
+        { name: 'bg', type: 'vec3', from: acc }, { name: 'tex', type: 'vec3', from: pic.color }, { name: 'a', type: 'float', from: pic.alpha }, { name: 'inside', type: 'float', from: pic.inside },
+      ], 'mix(bg, tex, clamp(a, 0.0, 1.0) * inside)',
+      `The picture “${t.src.name}” behind every layer, over the background colour (which shows where the picture is see-through or, with Fit, round it). `
+        + `${warped ? 'It is read at the warped point: every space transform and block above bends it, so warping the picture is adding a block.' : L.bgTex.warp ? 'It is read at the warped point: add a space transform or block to bend it.' : 'It is read at the screen\'s point, so the space transforms leave it as it is.'}`), 'result');
+    }
+  }
   const glowTint = L.glow.tint ? ref(mk(c, 'colorPicker', 'glowtint', { color: [...L.glow.tint] }, {}, `The glow's colour, ${col(L.glow.tint)}, for every glowing layer. Clear Tint in the builder to glow in each layer's own colour.`), 'rgb') : null;
   for (const { it, d } of layers) {
     const name = `‘${itemName(spec, it)}’`;
+    const behind = acc;
     let fill: Ref;
     if (sharedColour) fill = sharedColour;
     else if (by === 'distance') {
       fill = paletteNode(c, `${it.id}:palette`, L.colour.palette, d, anim, L.colour.scale, L.colour.speed, `Colours ${name} by its distance field, so it comes out in bands that follow its outline.`);
     } else fill = ref(mk(c, 'colorPicker', `${it.id}:color`, { color: [...it.color] }, {}, `${name}'s colour, ${col(it.color)}.`), 'rgb');
+    // A picture fill: read at the layer's own point, so the picture moves, turns and repeats with it.
+    const t = it.fill ? texFor(b, it.fill.tex, name) : null;
+    if (t && it.fill) {
+      const pic = samplePicture(b, `${it.id}:tex`, it.fill, t.src, t.out, b.local.get(it.id) ?? pos, `vec2(${extentOf(spec, it).map(glf).join(', ')})`, name);
+      fill = ref(expr(c, `${it.id}:paint`, 'Picture fill', [
+        { name: 'base', type: 'vec3', from: fill }, { name: 'tex', type: 'vec3', from: pic.color }, { name: 'a', type: 'float', from: pic.alpha }, { name: 'inside', type: 'float', from: pic.inside },
+      ], 'mix(base, tex, clamp(a, 0.0, 1.0) * inside)',
+      `${name} painted with the picture “${t.src.name}”: the picture where it is opaque, ${name}'s own colour where it is see-through or (with Fit) round it. `
+        + 'It is read at the layer\'s own point (after its place, motion and ring of copies), so the picture moves, turns and repeats with it and bends with every space transform above.'), 'result');
+    }
     const glows = L.glow.mode === 'all' || (L.glow.mode === 'selected' && it.glow);
     if (glows) {
       const g = mk(c, 'glowLayer', `${it.id}:glow`, { intensity: L.glow.amount, power: L.glow.falloff }, { d, color: glowTint ?? fill },
@@ -439,6 +521,22 @@ export function buildScene2D(spec: Scene2D, idFor: (role: string) => string = ro
     }
     acc = ref(mk(c, 'sdfFill', `${it.id}:fill`, {}, { d, fillColor: fill, background: acc },
       `Paints ${name} over what is behind it: inside the distance is negative, so the fill colour shows there; the edge is anti-aliased by one pixel.`), 'result');
+    // A picture mask: the layer (and its glow) only where the picture is bright.
+    const m = it.mask ? texFor(b, it.mask.tex, `${name}'s mask`) : null;
+    if (m && it.mask) {
+      const pic = samplePicture(b, `${it.id}:mask`, { tex: m.src.name, fit: 'cover', scale: 1 }, m.src, m.out, screen, SCREEN_EXT, `${name}'s mask`);
+      acc = ref(expr(c, `${it.id}:masked`, 'Picture mask', [
+        { name: 'behind', type: 'vec3', from: behind }, { name: 'layer', type: 'vec3', from: acc },
+        { name: 'tex', type: 'vec3', from: pic.color }, { name: 'a', type: 'float', from: pic.alpha }, { name: 'inside', type: 'float', from: pic.inside },
+        { name: 'cut', type: 'float', slider: { value: it.mask.cut, min: 0, max: 1 } },
+      ], 'mix(behind, layer, m)',
+      `${name} only where the picture “${m.src.name}” (over the whole frame) is ${it.mask.invert ? 'dark' : 'bright'}: l is its brightness (times its alpha), m how much of the layer shows, softly round cut (live). `
+        + 'behind is the picture before this layer, layer the picture with it and its glow.', 'vec3', [
+        { lhs: 'float l', op: '=', rhs: `${LUMA('tex')} * clamp(a, 0.0, 1.0) * inside` },
+        { lhs: 'float m', op: '=', rhs: 'smoothstep(cut - 0.05, cut + 0.05, l)' },
+        ...(it.mask.invert ? [{ lhs: 'm', op: '=', rhs: '1.0 - m' }] : []),
+      ]), 'result');
+    }
   }
   if (spec.grid) acc = emitGrid(b, spec.grid, pos, acc, anim);
   let final = acc;
@@ -529,6 +627,8 @@ function emitOutput(b: B, show: 'distance' | 'mask' | 'space', palette: string |
 /** A stand-alone graph (with its own Output) for `scene`: examples and tests. */
 export function buildStandalone2D(scene: Scene2D, opts: { idFor?: (role: string) => string; outputId?: string } = {}): Build2DResult & { outputId: string } {
   const built = buildScene2D(scene, opts.idFor);
+  // Its pictures: a Texture node per source, so it compiles alone (the previews bind the real picture to it).
+  built.nodes.push(...standIns(scene.textures));
   const uv = built.nodes.find(n => n.id === built.sceneId)!;
   uv.params = { ...uv.params, [META_KEY_2D]: { v: 1, spec: structuredClone(scene) } satisfies Scene2DMeta };
   const last = built.nodes.find(n => n.id === built.final.nodeId)!;

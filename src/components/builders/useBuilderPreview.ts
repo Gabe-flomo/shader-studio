@@ -11,6 +11,7 @@
  */
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { makeProgram, type Compiled } from '../sceneBuilder/previewGl';
+import { bindPreviewTextures } from './previewTextures';
 
 /** The quickest compiles follow a drag (about 20 a second). */
 export const COMPILE_EVERY_MS = 50;
@@ -59,6 +60,8 @@ export function useBuilderPreview(canvasRef: RefObject<HTMLCanvasElement | null>
   const { error } = compiled;
   const vs = useMemo(() => shaderKey(compiled.vs), [compiled.vs]);
   const fs = useMemo(() => shaderKey(compiled.fs), [compiled.fs]);
+  // Its pictures (sampler → the graph node it shows), bound with the program (previewTextures.ts).
+  const texKey = JSON.stringify(compiled.textures ?? {});
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || error || !vs || !fs) return;
@@ -91,6 +94,8 @@ export function useBuilderPreview(canvasRef: RefObject<HTMLCanvasElement | null>
       }
     };
     uniforms.current.dirty = true;
+    const pictures = bindPreviewTextures(gl, prog, JSON.parse(texKey) as Record<string, string>);
+    let frames = 0;
     const uRes = gl.getUniformLocation(prog, 'u_resolution');
     const uTime = gl.getUniformLocation(prog, 'u_time');
     let raf = 0, last = 0, sized = '';
@@ -112,16 +117,18 @@ export function useBuilderPreview(canvasRef: RefObject<HTMLCanvasElement | null>
       gl.viewport(0, 0, w, h);
       gl.uniform2f(uRes, w, h);
       gl.uniform1f(uTime, clock.current);
+      pictures.refresh(frames++);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     };
     raf = requestAnimationFrame(frame);
     return () => {
       cancelAnimationFrame(raf);
+      pictures.dispose();
       gl.deleteProgram(prog);
       gl.deleteBuffer(buf);
       gl.deleteVertexArray(vao);
     };
-  }, [canvasRef, vs, fs, error]);
+  }, [canvasRef, vs, fs, error, texKey]);
 
   return error ?? glError;
 }

@@ -7,6 +7,9 @@ import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { addImage, getImage } from '../backgroundLibrary';
 import { createPictureRestorer, decodePicture, embedPicture, thumbPicture, type Decoded } from './pictures';
 
+/** Anisotropic filtering for pictures (three clamps it to the GPU's most). */
+export const PICTURE_ANISOTROPY = 8;
+
 function textureOf(d: Decoded): THREE.Texture {
   const c = document.createElement('canvas');
   c.width = d.width; c.height = d.height;
@@ -14,6 +17,10 @@ function textureOf(d: Decoded): THREE.Texture {
   if (!x) throw new Error('2D canvas context unavailable');
   x.drawImage(d.el, 0, 0);
   const tex = new THREE.CanvasTexture(c);
+  // Mipmaps (three's default for a canvas texture) and anisotropic filtering: a picture seen at a
+  // slant or repeated far away (the scene builders' pictures) stays sharp without shimmering.
+  // three clamps it to what the GPU offers.
+  tex.anisotropy = PICTURE_ANISOTROPY;
   tex.needsUpdate = true;
   return tex;
 }

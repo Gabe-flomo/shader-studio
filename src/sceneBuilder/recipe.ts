@@ -18,8 +18,10 @@
 import {
   DEFAULT_CAMERA, DEFAULT_COLOR, DEFAULT_LOOK, DEFAULT_QUALITY, SHAPES, SHAPE_BY_KIND, TONE_MODES, WARPS, WARP_BY_KIND,
   DIM_WORDS, defaultSize, defaultWarpValues, emptySpec, newGroup, newShape, newWarp, shapeDims, shapeParamWord,
-  type CameraSpec, type DimTarget, type DimWord, type ShapeDef, type CombineOp, type ParamDef, type RenderMode, type SceneItem, type SceneSpec, type ShapeSpec, type ToneMode, type Vec3, type WarpDef, type WarpSpec,
+  TEX_MAPS,
+  type CameraSpec, type DimTarget, type DimWord, type ShapeDef, type CombineOp, type ParamDef, type RenderMode, type SceneItem, type SceneSpec, type ShapeSpec, type TexMap, type ToneMode, type Vec3, type WarpDef, type WarpSpec,
 } from './spec';
+import { findTex, texSlug, type TexSource } from '../builders/textures';
 import { COLOUR_TABLE, colourText } from '../lang/colours';
 import { Cursor } from '../lang/parse';
 import { continuesClause, lineCol, type Tok, type Unit } from '../lang/lex';
@@ -89,7 +91,7 @@ export const DEFAULT_SMOOTH_K = 0.3;
 
 const SHAPE_WORDS: Record<string, string> = Object.fromEntries(SHAPES.flatMap(s => [[s.kind, s.kind], ...s.aliases.map(a => [a, s.kind])]));
 const WARP_WORDS: Record<string, string> = Object.fromEntries(WARPS.flatMap(w => [[w.kind, w.kind], ...w.aliases.map(a => [a, w.kind])]));
-const SETTING_WORDS = ['sun', 'sky', 'bounce', 'shadows', 'shadow', 'ao', 'occlusion', 'fog', 'background', 'bg', 'tone', 'camera', 'cam', 'quality', 'custom', 'custom-warp', 'output', 'show', 'colour', 'color'];
+const SETTING_WORDS = ['sun', 'sky', 'bounce', 'shadows', 'shadow', 'ao', 'occlusion', 'fog', 'background', 'bg', 'tone', 'camera', 'cam', 'quality', 'custom', 'custom-warp', 'output', 'show', 'colour', 'color', 'texture'];
 
 const COLOR_NAMES = COLOUR_TABLE as Readonly<Record<string, Vec3>>;
 
@@ -142,6 +144,17 @@ class Parser {
   private seedOpt: number | undefined;
   private rngCache: Rng | null = null;
   resolved: Resolved[] = [];
+  /** The pictures declared (`texture …`) or named by a use (docs/scene-builder-3d.md, "Textures"). */
+  textures: TexSource[] = [];
+
+  /** A picture's name from a value; the scene gets the source when the recipe never declared it. */
+  texName(a: Arg, what: string): string | null {
+    const w = a.value.kind === 'word' || a.value.kind === 'str' ? a.value.v : null;
+    if (!w) { this.fail(a, `${what} is a picture's name (from a texture clause).`); return null; }
+    const name = texSlug(w);
+    if (!findTex(this.textures, name)) this.textures.push({ name });
+    return name;
+  }
 
   constructor(src: string, opts: ParseOptions = {}) {
     this.src = src;
@@ -302,6 +315,7 @@ class Parser {
       spec.root = newGroup(this.gid(), { name: 'Scene', children: items, warps: sceneWarps });
     }
     if (!spec.root.name) spec.root.name = 'Scene';
+    if (this.textures.length) spec.textures = this.textures;
     this.renumber(spec);
     const r: ParseResult = { spec, errors: this.errors, warnings: this.warnings };
     if (this.hints.length) r.hints = this.hints;
@@ -496,9 +510,34 @@ class Parser {
   shapeArgs(sh: ShapeSpec, args: Arg[]) {
     const def = SHAPE_BY_KIND[sh.kind];
     let positional = 0;
+    // A picture on its surface: texture=…, map=…, tiles=… (in any order).
+    let texName: string | null = null;
+    let map: TexMap | null = null;
+    let tiles: number | null = null;
+    const look: { sharp?: number; offset?: [number, number]; rot?: number; bump?: number } = {};
     for (const a of args) {
       const raw = a.key;
       const key = raw?.toLowerCase();
+      if (key === 'texture' || key === 'tex' || key === 'picture') { texName = this.texName(a, key); continue; }
+      if (key === 'map') {
+        const w = a.value.kind === 'word' ? a.value.v.toLowerCase() : '';
+        if ((TEX_MAPS as readonly string[]).includes(w)) map = w as TexMap; else this.fail(a, `map is one of ${TEX_MAPS.join(', ')}.`);
+        continue;
+      }
+      if (key === 'sharp' || key === 'tex-rot' || key === 'bump') {
+        if (a.value.kind !== 'num') { this.fail(a, `${key} is a number.`); continue; }
+        if (key === 'sharp') look.sharp = Math.max(1, Math.min(32, a.value.v));
+        else if (key === 'bump') look.bump = Math.max(0, a.value.v);
+        else look.rot = a.value.v;
+        continue;
+      }
+      if (key === 'tex-offset') {
+        if (a.value.kind === 'vec') look.offset = [a.value.v[0], a.value.v[1] ?? 0];
+        else if (a.value.kind === 'num') look.offset = [a.value.v, a.value.v];
+        else this.fail(a, 'tex-offset is (x, y): how far to slide the picture, 1 a whole picture.');
+        continue;
+      }
+      if (key === 'tiles') { if (a.value.kind === 'num') tiles = Math.max(0.05, a.value.v); else this.fail(a, 'tiles is a number: how many times the picture repeats every 2 units.'); continue; }
       if (!raw) {
         if (a.value.kind === 'word' && a.value.v.toLowerCase() === 'glass') { sh.glass = true; continue; }
         if (a.value.kind === 'str') { sh.name = a.value.v; continue; }
@@ -540,6 +579,8 @@ class Parser {
       const n = this.numberFor(p, a);
       if (n !== null) sh.size[p.key] = n;
     }
+    if (texName) sh.tex = { tex: texName, map: map ?? 'triplanar', scale: tiles ?? 1, ...look };
+    else if (map || tiles !== null || Object.keys(look).length) this.warnings.push('map= and tiles= are for a picture on the shape: add texture=… (a picture\'s name).');
   }
 
   warpArgs(wp: WarpSpec, def: WarpDef, args0: Arg[]) {
@@ -619,8 +660,26 @@ class Parser {
     }
   }
 
+  /** `texture [name] node=… aspect=… kind=image|shader`: a picture the scene reads. */
+  texture(t: { at: number; end: number }, args: Arg[]) {
+    let src: TexSource | null = null;
+    for (const a of args) {
+      const key = a.key?.toLowerCase() ?? null;
+      if (!src && (key === null || key === 'name') && (a.value.kind === 'word' || a.value.kind === 'str')) { src = { name: texSlug(a.value.v) }; continue; }
+      if (!src) break;
+      if (key === 'node' && (a.value.kind === 'word' || a.value.kind === 'str')) src.node = a.value.v;
+      else if (key === 'aspect' && a.value.kind === 'num' && a.value.v > 0) src.aspect = a.value.v;
+      else if (key === 'kind' && a.value.kind === 'word' && /^(image|shader)$/i.test(a.value.v)) src.kind = a.value.v.toLowerCase() as TexSource['kind'];
+      else this.fail(a, 'texture takes a name, node=, aspect= (a number) and kind= (image or shader).');
+    }
+    if (!src) { this.fail(t, 'texture needs a name: texture name=brick (then texture=brick on a shape, or background picture=brick).'); return; }
+    const i = this.textures.findIndex(s => s.name === src!.name);
+    if (i >= 0) this.textures[i] = { ...this.textures[i], ...src }; else this.textures.push(src);
+  }
+
   setting(spec: SceneSpec, w: string, t: { at: number; end: number }, args: Arg[]) {
     const L = spec.look;
+    if (w === 'texture') { this.texture(t, args); return; }
     const first = args[0];
     const firstNum = first && !first.key && first.value.kind === 'num' ? first.value.v : null;
     const off = first && !first.key && first.value.kind === 'word' && /^(off|no|none|false)$/i.test(first.value.v);
@@ -662,9 +721,10 @@ class Parser {
         let pos = 0;
         for (const a of args) {
           const key = a.key?.toLowerCase();
+          if (key === 'picture' || key === 'texture') { const n = this.texName(a, key); if (n) L.bgTex = n; continue; }
           if (key === 'top' || (!key && pos === 0)) { const c = this.colour(a); if (c) L.bg = c; if (!key) pos++; }
           else if (key === 'bottom' || (!key && pos === 1)) { const c = this.colour(a); if (c) L.bg2 = c; if (!key) pos++; }
-          else this.fail(a, 'background takes a colour, or top= and bottom= for a gradient.');
+          else this.fail(a, 'background takes a colour, top= and bottom= for a gradient, or picture= (a picture\'s name).');
         }
         return;
       }
@@ -858,8 +918,21 @@ function printItem(it: SceneItem, indent: string | null = null): string {
   if (!same(it.color, DEFAULT_COLOR)) parts.push(`color=${fmtColour(it.color)}`);
   if (it.shine > 0) parts.push(`shine=${fmt(it.shine)}`);
   if (it.glass) parts.push('glass');
+  if (it.tex) {
+    const t = it.tex;
+    parts.push(`texture=${fmtName(t.tex)}`, ...(t.map !== 'triplanar' ? [`map=${t.map}`] : []), ...(round(t.scale) !== 1 ? [`tiles=${fmt(t.scale)}`] : []));
+    if (t.sharp !== undefined) parts.push(`sharp=${fmt(t.sharp)}`);
+    if (t.offset) parts.push(`tex-offset=(${t.offset.map(fmt).join(',')})`);
+    if (t.rot !== undefined) parts.push(`tex-rot=${fmt(t.rot)}`);
+    if (t.bump !== undefined) parts.push(`bump=${fmt(t.bump)}`);
+  }
   if (it.name) parts.push(`name=${fmtName(it.name)}`);
   return [...parts, ...warps].join(' ');
+}
+
+/** `texture brick node=node_4 aspect=1.5`. */
+function printTexture(s: TexSource): string {
+  return ['texture', fmtName(s.name), ...(s.node ? [`node=${fmtName(s.node)}`] : []), ...(s.aspect && round(s.aspect) !== 1 ? [`aspect=${fmt(s.aspect)}`] : []), ...(s.kind === 'shader' ? ['kind=shader'] : [])].join(' ');
 }
 
 /**
@@ -891,6 +964,7 @@ export function printRecipe(spec: SceneSpec, opts: { multiline?: boolean; pretty
     if (!valueEq(L.gi.spec, D.gi.spec)) mode.push(`spec=${fmt(L.gi.spec)}`);
   }
   clauses.push(mode.join(' '));
+  clauses.push(...(spec.textures ?? []).map(printTexture));
   // The tree: a plain union root is its items; anything else is one combine clause.
   const root = spec.root;
   if (root.op === 'union' && root.k === 0 && (!root.name || root.name === 'Scene')) clauses.push(...root.children.map(c => printItem(c, ind)));
@@ -908,8 +982,10 @@ export function printRecipe(spec: SceneSpec, opts: { multiline?: boolean; pretty
   if (!valueEq(L.shadows, D.shadows)) clauses.push(L.shadows > 0 ? `shadows ${fmt(L.shadows)}` : 'shadows off');
   if (!valueEq(L.ao, D.ao)) clauses.push(L.ao > 0 ? `ao ${fmt(L.ao)}` : 'ao off');
   if (L.fog > 0 || L.fogColor) clauses.push([`fog ${fmt(L.fog)}`, ...(L.fogColor ? [`color=${fmtColour(L.fogColor)}`] : [])].join(' '));
-  if (L.bg2) clauses.push(`background top=${fmtColour(L.bg)} bottom=${fmtColour(L.bg2)}`);
-  else if (!same(L.bg, D.bg)) clauses.push(`background ${fmtColour(L.bg)}`);
+  const bgPic = L.bgTex ? [`picture=${fmtName(L.bgTex)}`] : [];
+  if (L.bg2) clauses.push([`background top=${fmtColour(L.bg)} bottom=${fmtColour(L.bg2)}`, ...bgPic].join(' '));
+  else if (!same(L.bg, D.bg)) clauses.push([`background ${fmtColour(L.bg)}`, ...bgPic].join(' '));
+  else if (bgPic.length) clauses.push(['background', ...bgPic].join(' '));
   if (L.tone !== D.tone) clauses.push(`tone ${L.tone}`);
   // Camera and quality.
   const cam = (Object.keys(DEFAULT_CAMERA) as Array<keyof CameraSpec>).filter(k => !valueEq(spec.camera[k], DEFAULT_CAMERA[k]));
@@ -939,7 +1015,7 @@ export const RECIPE_VOCABULARY = {
   combines: ['union', 'smooth-union', 'subtract', 'smooth-subtract', 'intersect', 'smooth-intersect'],
   shapes: SHAPES.map(s => ({ kind: s.kind, keys: [...s.params.map(p => p.key), ...(shapeDims(s) ? (shapeDims(s)!.vector ? DIM_WORDS : ['size']) : [])] })),
   warps: WARPS.map(w => ({ kind: w.kind === 'noise' ? 'warp' : w.kind, keys: [...(w.axes ? [w.axes.key] : []), ...w.params.map(p => p.key), ...(w.select ? [w.select.key] : [])] })),
-  settings: ['sun dir=(x,y,z) color=…', 'sky (r,g,b)', 'bounce (r,g,b)', 'shadows 16 | off', 'ao 0.06 | off', 'fog 0.3 color=…', 'background (r,g,b) | top=… bottom=…', `tone ${TONE_MODES.join('|')}`, 'camera dist angle elev orbit zoom flatten x y z', 'quality steps dist step jitter'],
+  settings: ['sun dir=(x,y,z) color=…', 'sky (r,g,b)', 'bounce (r,g,b)', 'shadows 16 | off', 'ao 0.06 | off', 'fog 0.3 color=…', 'background (r,g,b) | top=… bottom=… | picture=…', `tone ${TONE_MODES.join('|')}`, 'camera dist angle elev orbit zoom flatten x y z', 'quality steps dist step jitter', 'texture name node= aspect=', `shape … texture=name map=${TEX_MAPS.join('|')} tiles=2 sharp=4 tex-offset=(0.25,0) tex-rot=30 bump=1`],
   colours: Object.keys(COLOR_NAMES),
   outputs: OUTPUTS.map(o => o.words[0]),
   palettes: PALETTES.map(p => p.key),

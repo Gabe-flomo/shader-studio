@@ -87,6 +87,8 @@ export async function buildFromBuilder(asNew = false): Promise<boolean> {
   useNodeGraphStore.getState().setNodesRewritten(placed, rebuildAsNew ? 'Built a 3D scene' : 'Rebuilt the 3D scene');
   useNodeGraphStore.getState().focusNode(result.focusId);
   sb.setTarget(result.sceneId);
+  // Pictures that had no node got one: the builder reads them from now on.
+  if (JSON.stringify(result.spec.textures ?? []) !== JSON.stringify(sb.spec.textures ?? [])) useSceneBuilder.setState(s => ({ spec: { ...s.spec, textures: result.spec.textures } }));
   sb.markBuilt();
   const notes = [
     ...(result.kept.length ? [`Kept ${result.kept.length} setting${result.kept.length === 1 ? '' : 's'} you changed on the nodes.`] : []),

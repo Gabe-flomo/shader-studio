@@ -12,6 +12,7 @@ import { getNodeDefinition } from '../nodes/definitions';
 import { placeInFreeSpace } from '../store/agentSetup';
 import { GS_BUILD, GS_META, GS_ROLE, buildGridScene, type GridSceneMeta } from './build';
 import type { GridSceneSpec } from './spec';
+import { ensureSources } from '../builders/textures';
 
 const ignored = (k: string) => k === '__comment' || k.startsWith('_') || k.includes('::') || k === GS_META || k === 'glslFunctions' || k === 'lines' || k === 'inputs' || k === 'outputs';
 const roleOf = (n: GraphNode) => (typeof n.params[GS_ROLE] === 'string' ? n.params[GS_ROLE] as string : '');
@@ -52,16 +53,22 @@ export interface ApplyGridResult {
   finalId: string;
   warnings: string[];
   kept: number;
+  /** The spec as built: its pictures each with their node. */
+  spec: GridSceneSpec;
 }
 
 /**
  * The graph with `spec` built into it: new beside what is there (`asNew`, or nothing to rebuild),
  * or replacing the build of `sceneId`. The graph's Output shows it (unless `keepOutput`).
  */
-export function applyGridScene(graph: GraphNode[], spec: GridSceneSpec, opts: { nextId: () => string; sceneId?: string | null; asNew?: boolean; at?: { x: number; y: number }; keepOutput?: boolean }): ApplyGridResult {
+export function applyGridScene(graph: GraphNode[], spec0: GridSceneSpec, opts: { nextId: () => string; sceneId?: string | null; asNew?: boolean; at?: { x: number; y: number }; keepOutput?: boolean }): ApplyGridResult {
   const found = !opts.asNew && opts.sceneId ? findGridBuild(graph, opts.sceneId) : null;
   const taken = new Set(graph.map(n => n.id));
   const nextId = () => { let id = opts.nextId(); while (taken.has(id)) id = opts.nextId(); taken.add(id); return id; };
+  // Every picture the scene reads has a node (builders/textures.ts).
+  const ensured = ensureSources(graph, spec0.textures, nextId, found?.byRole.get('uv')?.position ?? opts.at ?? { x: 0, y: 0 });
+  const spec: GridSceneSpec = spec0.textures?.length ? { ...spec0, textures: ensured.sources } : spec0;
+  graph = [...graph, ...ensured.added];
   const buildKey = found?.meta.build ?? `g${nextId()}`;
   const idOfRole = new Map<string, string>();
   const idFor = (role: string) => {
@@ -125,7 +132,7 @@ export function applyGridScene(graph: GraphNode[], spec: GridSceneSpec, opts: { 
     const outId = output.id;
     rest = rest.map(n => (n.id === outId ? { ...n, inputs: { ...n.inputs, color: { ...n.inputs.color, connection: { ...built.final } } } } : n));
   }
-  return { nodes: [...rest, ...top], sceneId: built.sceneId, gridId: built.gridId, finalId: built.final.nodeId, warnings: built.warnings, kept };
+  return { nodes: [...rest, ...top], sceneId: built.sceneId, gridId: built.gridId, finalId: built.final.nodeId, warnings: built.warnings, kept, spec };
 }
 
 /** The node whose colour is the scene's picture (what the Output shows): its last node. */

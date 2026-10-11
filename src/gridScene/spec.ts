@@ -19,6 +19,7 @@
 import type { SpaceBlock } from '../sceneBuilder2d/blocks';
 import { cloneBlock } from '../sceneBuilder2d/blocks';
 import type { TextMask } from './textMask';
+import type { TexSource } from '../builders/textures';
 
 export type Vec2 = [number, number];
 export type Vec3 = [number, number, number];
@@ -32,10 +33,10 @@ export const MAX_RULES = 8;
 export const MAX_WARPS = 3;
 export const SHAPE_IDS = ['A', 'B', 'C', 'D', 'E', 'F'] as const;
 
-export const SHAPE_KINDS = ['circle', 'square', 'ring', 'diamond', 'triangle', 'hexagon', 'star', 'plus', 'cross', 'heart'] as const;
+export const SHAPE_KINDS = ['circle', 'square', 'ring', 'diamond', 'triangle', 'hexagon', 'star', 'plus', 'cross', 'heart', 'picture'] as const;
 export type ShapeKind = typeof SHAPE_KINDS[number];
 export const SHAPE_LABELS: Record<ShapeKind, string> = {
-  circle: 'Circle', square: 'Square', ring: 'Ring', diamond: 'Diamond', triangle: 'Triangle', hexagon: 'Hexagon', star: 'Star', plus: 'Plus', cross: 'Cross', heart: 'Heart',
+  circle: 'Circle', square: 'Square', ring: 'Ring', diamond: 'Diamond', triangle: 'Triangle', hexagon: 'Hexagon', star: 'Star', plus: 'Plus', cross: 'Cross', heart: 'Heart', picture: 'Picture',
 };
 
 export const MOTION_PATHS = ['still', 'updown', 'sideways', 'both', 'circle', 'eight', 'bounce', 'travel', 'hop'] as const;
@@ -52,7 +53,7 @@ export const MOTION_LABELS: Record<MotionPath, { label: string; blurb: string }>
   hop: { label: 'Hop', blurb: 'Jumps X, Y cells at a time, wrapping round the grid.' },
 };
 
-export const PATTERN_KINDS = ['none', 'ripple', 'diagonal', 'checker', 'rings', 'spiral', 'stripes', 'random'] as const;
+export const PATTERN_KINDS = ['none', 'ripple', 'diagonal', 'checker', 'rings', 'spiral', 'stripes', 'random', 'picture'] as const;
 export type PatternKind = typeof PATTERN_KINDS[number];
 export const PATTERN_LABELS: Record<PatternKind, { label: string; blurb: string }> = {
   none: { label: 'None', blurb: 'No wave: every shape as you set it.' },
@@ -63,6 +64,7 @@ export const PATTERN_LABELS: Record<PatternKind, { label: string; blurb: string 
   spiral: { label: 'Spiral', blurb: 'Spiral arms turning round the centre.' },
   stripes: { label: 'Stripes', blurb: 'Columns in waves, left to right.' },
   random: { label: 'Random', blurb: 'Each cell its own phase: twinkling.' },
+  picture: { label: 'Picture', blurb: 'A picture over the grid: each cell takes its brightness there (bright is the wave\'s top), so the picture drives the size, turn, colour…' },
 };
 
 export const PATTERN_TARGETS = ['size', 'turn', 'push', 'hue', 'bright'] as const;
@@ -101,6 +103,8 @@ export interface GShape {
   /** 0 filled; above 0 an outline this wide (a share of half a cell). */
   outline: number;
   motion: Motion;
+  /** kind 'picture': the picture shown inside the cell (a name in the scene's textures). */
+  tex?: string;
 }
 
 export interface Cell { x: number; y: number; s: string }
@@ -119,6 +123,8 @@ export interface Pattern {
   fill: string | null;
   /** Words the pattern is limited to (textMask.ts): the wave and the fill only in the cells they cover. Absent or null: everywhere. */
   mask?: TextMask | null;
+  /** kind 'picture': the picture whose brightness is the wave (a name in the scene's textures). */
+  tex?: string;
 }
 
 export interface GridRule {
@@ -150,7 +156,13 @@ export interface GridSceneSpec {
   warps: SpaceBlock[];
   rules: GridRule[];
   look: Look;
+  /** The pictures the scene reads (builders/textures.ts): picture cells, a picture pattern, the mask. */
+  textures?: TexSource[];
+  /** Shapes only in the cells where a picture is bright (or dark, inverted), read at each cell's centre. */
+  picMask?: GridPicMask | null;
 }
+
+export interface GridPicMask { tex: string; cut: number; invert: boolean }
 
 const PALETTE: Vec3[] = [[0.35, 0.8, 1], [1, 0.45, 0.7], [1, 0.82, 0.3], [0.5, 1, 0.6], [0.75, 0.55, 1], [1, 0.55, 0.3]];
 const KINDS_IN_ORDER: ShapeKind[] = ['circle', 'star', 'square', 'heart', 'triangle', 'ring'];
@@ -294,4 +306,12 @@ export function motionAt(spec: Pick<GridSceneSpec, 'cols' | 'rows'>, m: Motion, 
   let px = hx + 0.5 + ox, py = hy + 0.5 - oy;
   if (m.path === 'travel' || m.path === 'hop') { px = fract(px / spec.cols) * spec.cols; py = fract(py / spec.rows) * spec.rows; }
   return [px, py];
+}
+
+/** The names of the pictures a grid scene uses. */
+export function texturesUsedGrid(spec: GridSceneSpec): string[] {
+  const out = spec.shapes.filter(s => s.kind === 'picture' && s.tex).map(s => s.tex!);
+  if (spec.pattern.kind === 'picture' && spec.pattern.tex) out.push(spec.pattern.tex);
+  if (spec.picMask) out.push(spec.picMask.tex);
+  return [...new Set(out)];
 }
