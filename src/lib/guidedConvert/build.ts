@@ -5,7 +5,7 @@
  * groups collapsed, columns laid out again. Pure and deterministic: the same (shader, steps) gives the
  * same graph, so undo is dropping the last step.
  */
-import { glslToGraph, type ConversionReport } from '../../glslToGraph';
+import { glslToGraph, type ConversionReport, type NodeCall } from '../../glslToGraph';
 import { compileGraph } from '../../compiler/graphCompiler';
 import { optimizeGraph } from '../../optimize/optimizeGraph';
 import { collapseToGroup } from '../../store/groupCollapse';
@@ -16,7 +16,8 @@ import type { GraphNode } from '../../types/nodeGraph';
 import type { PlayControl } from '../../types/play';
 import type { ConstantsItem } from '../../nodes/definitions/constants';
 import { lineShare, type Analysis } from './analyse';
-import { stage, unitOwners, type ConvertStep, type GroupStep, type Staged, type Step } from './stage';
+import { stage, unitOwners, type ConvertStep, type CutCall, type GroupStep, type RecognisedChoice, type Staged, type Step } from './stage';
+import { FBM_RECIPE, recipeByKind } from './recipes';
 
 /** Nodes every step reads (time, resolution, the Constants card): never tinted as a step's, never pulled into a group. */
 export const SHARED_TYPES = new Set(['fragCoord', 'resolution', 'time', 'mouse', 'constants', 'output', 'vec4Output']);
@@ -33,6 +34,10 @@ export interface GuidedBuild {
   share: { done: number; total: number };
   /** Things a step asked for that couldn't be done (a group that would loop back on itself). */
   notes: string[];
+  /** Recognised patterns the steps cut out, and what each became: its node(s), a block, or (when the recipe couldn't take it) plain nodes. */
+  recognised: { id: string; owner: string; choice: RecognisedChoice; as: 'node' | 'block' | 'nodes'; nodeId: string }[];
+  /** Calls of helpers opened as groups, and the group each became. */
+  helperGroups: { fn: string; nodeId: string }[];
   /** The compiled graph's fragment shader and slider uniforms (null when it doesn't compile). */
   compiled: { fragmentShader: string; paramUniforms: Record<string, number | number[]> } | null;
   compileErrors: string[];
@@ -77,7 +82,7 @@ export function slidersOf(nodes: readonly GraphNode[], keys: ReadonlyMap<string,
 export function buildGuided(a: Analysis, steps: readonly Step[]): BuildResult {
   const staged = stage(a, steps);
   if ('error' in staged) return { ok: false, error: staged.error };
-  const conv = glslToGraph(staged.code, { origins: true });
+  const conv = glslToGraph(staged.code, { origins: true, helperGroups: staged.opened, nodeCalls: nodeCallsFor(staged.calls) });
   if (conv.report.unsupported.length) return { ok: false, error: `The converter can’t take this cut: ${conv.report.unsupported.join(' · ')}` };
   let nodes = conv.nodes;
   const notes: string[] = [];
@@ -86,25 +91,36 @@ export function buildGuided(a: Analysis, steps: readonly Step[]): BuildResult {
   const offset = (conv.mainStatements ?? staged.stmtOwner.length) - staged.stmtOwner.length;
   const owner = new Map<string, string>();
   for (const [id, i] of Object.entries(conv.origins ?? {})) owner.set(id, i < 0 ? 'setup' : staged.stmtOwner[i - offset] ?? 'setup');
+  // Nodes inside a helper's group: the statement of its body they were made for, and that statement's owner.
+  for (const [id, o] of Object.entries(conv.helperOrigins ?? {})) { const w = staged.helperStmtOwner.get(o.fn)?.[o.stmt]; if (w) owner.set(id, w); }
   const steppy = steps.filter((s): s is ConvertStep => s.kind === 'convert');
   const stepById = new Map(steppy.map(s => [s.id, s]));
 
   // Remainder and One function regions: labelled by where they came from.
   const runOf = new Map(staged.runs.map(r => [r.owner, r]));
   const linesOf = (units: number[]) => `${a.units[units[0]].lines[0]}–${Math.max(...units.map(i => a.units[i].lines[1]))}`;
-  nodes = nodes.map(n => {
+  const helperLines = (fn: string, units: number[]) => { const us = a.helpers.find(h => h.name === fn)?.units ?? []; return `${us[units[0]]?.lines[0]}–${Math.max(...units.map(i => us[i]?.lines[1] ?? 0))}`; };
+  const relabel = (list: GraphNode[]): GraphNode[] => list.map(n => {
+    const sg = n.params.subgraph as { nodes: GraphNode[] } | undefined;
+    if (sg && n.type === 'group') return { ...n, params: { ...n.params, subgraph: { ...sg, nodes: relabel(sg.nodes) } } };
     const run = runOf.get(owner.get(n.id) ?? '');
     if (!run || n.type !== 'customFn') return n;
     const part = /\(\d+\/\d+\)$/.exec(String(n.params.label ?? ''))?.[0];
     const rest = run.owner.startsWith('rest:');
-    const label = rest ? `Not converted yet · lines ${linesOf(run.units)}` : stepById.get(run.owner)?.name ?? run.fn;
+    const label = rest ? `Not converted yet · lines ${run.scope ? helperLines(run.scope, run.units) : linesOf(run.units)}` : stepById.get(run.owner)?.name ?? run.fn;
     return { ...n, params: { ...n.params, label: part ? `${label} ${part}` : label, __guided: rest ? 'rest' : 'step' } };
   });
+  nodes = relabel(nodes);
 
   // Number chips on One function steps: a slider is a slider input on the function, an input stays wired to its constant.
+  const deep = (list: GraphNode[], f: (n: GraphNode) => GraphNode): GraphNode[] => list.map(n => {
+    const sg = n.params.subgraph as { nodes: GraphNode[] } | undefined;
+    const m = sg && n.type === 'group' ? { ...n, params: { ...n.params, subgraph: { ...sg, nodes: deep(sg.nodes, f) } } } : n;
+    return f(m);
+  });
   for (const run of staged.runs) for (const c of run.chipParams) {
     if (c.choice !== 'slider') continue;
-    nodes = nodes.map(n => {
+    nodes = deep(nodes, n => {
       if (n.type !== 'customFn' || owner.get(n.id) !== run.owner || !n.inputs[c.name]) return n;
       const r = rangeForValue(c.value);
       const ins = (n.params.inputs as Array<{ name: string; type: string; slider: unknown }>).map(i => (i.name === c.name ? { ...i, slider: { min: Math.min(r.min, c.value), max: Math.max(r.max, c.value) } } : i));
@@ -115,7 +131,7 @@ export function buildGuided(a: Analysis, steps: readonly Step[]): BuildResult {
 
   // Expression steps: the step's chains of math cards folded into Expression Blocks, sliders kept.
   for (const s of steppy) {
-    if (s.mode !== 'blocks') continue;
+    if (s.mode !== 'blocks' || s.fn) continue; // a helper's body is Nodes or One function
     const only = new Set(nodes.filter(n => owner.get(n.id) === s.id && !SHARED_TYPES.has(n.type)).map(n => n.id));
     if (only.size < 2) continue;
     const o = optimizeGraph(nodes, { only, minChain: 2, keepSliders: true, absorb: false });
@@ -162,12 +178,26 @@ export function buildGuided(a: Analysis, steps: readonly Step[]): BuildResult {
   const owned = new Set<number>();
   for (const [u, o] of unitOwners(a, steps)) if (o !== 'setup') owned.add(u);
   const c = compileGraph({ nodes });
+  const byFn = new Map(staged.calls.map(c => [c.fn, c]));
+  const recognised = (conv.report.nodeCalls ?? []).flatMap(r => { const c = byFn.get(r.fn); return c ? [{ id: c.rec.id, owner: c.owner, choice: c.choice, as: r.as, nodeId: r.nodeId }] : []; });
   return {
     ok: true, staged, nodes, ...(conv.controls ? { controls: conv.controls } : {}), owner, report: conv.report,
-    share: lineShare(a, owned), notes,
+    share: lineShare(a, owned), notes, recognised, helperGroups: conv.report.helperGroups ?? [],
     compiled: c.success ? { fragmentShader: c.fragmentShader, paramUniforms: c.paramUniforms ?? {} } : null,
     compileErrors: c.success ? [] : (c.errors ?? ['The graph doesn’t compile']),
   };
+}
+
+/** What the converter makes of each cut-out call: the recipe's nodes, or one block. */
+function nodeCallsFor(calls: readonly CutCall[]): Record<string, NodeCall | 'block'> {
+  const out: Record<string, NodeCall | 'block'> = {};
+  for (const c of calls) {
+    if (c.choice === 'block') { out[c.fn] = 'block'; continue; }
+    if (c.rec.kind === 'fbm' && c.rec.fbm) { out[c.fn] = FBM_RECIPE.make(c.rec.fbm); continue; }
+    const r = recipeByKind(c.rec.kind);
+    if (r) out[c.fn] = r.make(c.rec.variant);
+  }
+  return out;
 }
 
 /** Constants entries nothing reads any more (a chip turned into a slider) go; an empty card goes too. */
@@ -205,9 +235,9 @@ function loopsBack(nodes: readonly GraphNode[], ids: ReadonlySet<string>): strin
   return null;
 }
 
-/** Owners shown in colour: the convert steps, in order (remainder and setup aren't). */
+/** Owners shown in colour: the convert steps and opened helpers, in order (remainder and setup aren't). */
 export const STEP_HUES = [211, 28, 152, 280, 345, 48, 188, 100];
 export const hueOf = (steps: readonly Step[], id: string): number | null => {
-  const i = steps.filter(s => s.kind === 'convert').findIndex(s => s.id === id);
+  const i = steps.filter(s => s.kind === 'convert' || s.kind === 'helper').findIndex(s => s.id === id);
   return i < 0 ? null : STEP_HUES[i % STEP_HUES.length];
 };

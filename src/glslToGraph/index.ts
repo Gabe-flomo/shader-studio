@@ -71,7 +71,31 @@ export interface ConversionOptions {
    * Guided Convert (docs/guided-convert.md) maps nodes back to the lines they came from with it.
    */
   origins?: boolean;
+  /**
+   * Helpers whose calls become a Group of their own (Guided Convert, "open as a group"): the body
+   * converted inside the group, the parameters its input ports, the return value its output. Each
+   * call is a copy of the group. A helper that can't be one (out parameters, an early return…) stays
+   * a Custom Function.
+   */
+  helperGroups?: ReadonlySet<string>;
+  /**
+   * Calls the caller turns into nodes itself (Guided Convert's recognised idioms): the function is a
+   * one-line helper (`return <expr>;`) whose parameters are what the recipe wires. 'block' makes the
+   * call one Expression Block holding the body; a recipe that returns null falls back to the body as
+   * nodes, as if it had been written inline.
+   */
+  nodeCalls?: Readonly<Record<string, NodeCall | 'block'>>;
 }
+
+/** An argument of a recognised call, as a recipe sees it: its type, and its value when it is a number or a vector of numbers. */
+export interface CallArg { type: 'float' | 'vec2' | 'vec3' | 'vec4'; lit?: number; vec?: number[] }
+/** Where a recipe's socket is fed from: an argument (by parameter name), a node it made, or a number (the socket's slider when it has one). */
+export type CallWire = { arg: string } | { node: number; out: string } | { lit: number };
+export interface CallMaker {
+  /** A node; returns a handle for wiring it on. `params.outputType` sets a typed card's type. */
+  node(type: string, params: Record<string, unknown>, wires: Record<string, CallWire | undefined>): number;
+}
+export type NodeCall = (args: Readonly<Record<string, CallArg>>, make: CallMaker) => { node: number; out: string } | null;
 
 /** What the converter needs of a saved function preset. */
 export interface LibraryFunction {
@@ -99,6 +123,10 @@ export interface ConversionReport {
   regions: { code: string; why: string; nodeId?: string }[];
   /** Helper calls that became a saved function from the library: the helper's name and the preset's. */
   reused?: { fn: string; presetId: string; label: string }[];
+  /** `options.nodeCalls` that were used: the function, the node (or block) it became, and how. */
+  nodeCalls?: { fn: string; nodeId: string; as: 'node' | 'block' | 'nodes' }[];
+  /** `options.helperGroups` calls that became groups: the helper and the group node. */
+  helperGroups?: { fn: string; nodeId: string }[];
   /** Why the shader can't be a graph at all (empty when it can). */
   unsupported: string[];
   /** When the shader doesn't parse: the line of the paste the parser stopped at. */
@@ -116,6 +144,8 @@ export interface ConversionResult {
   origins?: Record<string, number>;
   /** With `options.origins`: how many top-level statements main() had as converted (the reading may add some at the top). */
   mainStatements?: number;
+  /** With `options.origins`: for a node inside a helper's group, the helper and the top-level statement of its body it was made for. */
+  helperOrigins?: Record<string, { fn: string; stmt: number }>;
 }
 /** A uniform no node stands for, now a live entry on the Constants card; `value` is what it starts at (the check sets the original's uniform to it). */
 export interface ConvertedUniform { name: string; type: 'float' | 'int' | 'vec2' | 'vec3'; value: number | number[]; min: number; max: number; step: number; colour: boolean }
@@ -166,6 +196,9 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
   /** Which top-level statement of main() is being converted (for `options.origins`). */
   let topIndex = -1; let topList: Ast[] | null = null;
   const origins: Record<string, number> | null = options.origins ? {} : null;
+  const helperOrigins: Record<string, { fn: string; stmt: number }> | null = options.origins ? {} : null;
+  /** The helper whose body is being converted into its group (innermost), and which of its statements. */
+  let helperScope: { fn: string; list: Ast[]; stmt: number } | null = null;
   /** Where new nodes go: the graph, or the subgraph of the loop group being built. */
   let sink: GraphNode[] = nodes;
   /** The subgraphs made along the way, laid out at the end like the graph itself. */
@@ -270,6 +303,7 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
     const node = { id: id(type), type, position: { x: 0, y: 0 }, inputs, outputs, params: { ...(def?.defaultParams ?? {}), ...params, ...(EXACT.has(type) ? { exact: true } : {}) } } as GraphNode;
     sink.push(node);
     if (origins) origins[node.id] = topIndex;
+    if (helperOrigins && helperScope) helperOrigins[node.id] = { fn: helperScope.fn, stmt: helperScope.stmt };
     return node;
   }
   const ref = (n: GraphNode, out: string, t: T): Ref => ({ nodeId: n.id, outputKey: out, type: t });
@@ -395,7 +429,15 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
    * value, and the body's nodes wire to the port sentinel. One port per outer
    * value, however often it's read.
    */
-  interface LoopCtx { ports: Map<string, Ref>; inputPorts: GroupInputPort[]; wires: Record<string, Ref>; sockets: Record<string, InputSocket>; outerSink: GraphNode[] }
+  interface LoopCtx {
+    ports: Map<string, Ref>; inputPorts: GroupInputPort[]; wires: Record<string, Ref>; sockets: Record<string, InputSocket>; outerSink: GraphNode[];
+    /** The scope around this one (a helper's group can sit inside a loop's, and a loop inside a helper's). */
+    parent?: LoopCtx | null;
+    /** A helper's group (one pass) rather than an iterated loop. */
+    helper?: boolean;
+  }
+  /** Is the code being converted inside an iterated loop's group (at any depth)? */
+  const inLoopGroup = (): boolean => { for (let c = loopCtx; c; c = c.parent ?? null) if (!c.helper) return true; return false; };
   let loopCtx: LoopCtx | null = null;
   function portRef(ctx: LoopCtx, outerRef: Ref, label: string): Ref {
     let outer = outerRef;
@@ -416,7 +458,7 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
     // Inside a loop group the source node lives outside and comes in through a port.
     if (loopCtx) {
       const ctx = loopCtx, saved = sink;
-      loopCtx = null; sink = ctx.outerSink;
+      loopCtx = ctx.parent ?? null; sink = ctx.outerSink;
       try { return portRef(ctx, srcRef(name), SOURCES[name].name); } finally { loopCtx = ctx; sink = saved; }
     }
     const s = SOURCES[name];
@@ -675,6 +717,8 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
     const user = fns.get(name);
     if (user) {
       const o = overloadFor(user, args, env);
+      const how = options.nodeCalls?.[name];
+      if (how) { const v = nodeCall(a, env, o, how); if (v) return v; }
       if (o.params.some(p => p.qual !== 'in')) return outCall(a, env, o) ?? (() => { throw new Unmapped(`${name}() returns nothing`); })();
       // A helper that only builds a rotation (`mat2 rot(float a) { float c = cos(a), s = sin(a); return mat2(c, -s, s, c); }`).
       const dir = rotationFn(o);
@@ -686,6 +730,7 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
         }
       }
       if (!(o.ret in N_OF)) throw new Unmapped(`${name}() returns a ${o.ret}`);
+      if (options.helperGroups?.has(name)) { const v = helperGroup(a, env, o); if (v) return v; }
       const saved = libraryMatch(name);
       if (saved) { const v = fromLibrary(a, env, name, saved); if (v) return v; }
       return region(a, env, `call to ${name}()`);
@@ -932,6 +977,145 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
     return { ref: ref(n, 'result', t), type: t, ast: a };
   }
 
+  // ── Guided Convert: a helper as a group of its own, a recognised call as library nodes ──
+  /** The program's global consts and live uniforms as values: what code inside a helper's group can read besides its parameters. */
+  let constEnv: Env = new Map();
+  const bodies = new Map<string, Ast[] | null>();
+  /** A helper's body statements when its calls can be a group: one definition, `in` parameters, a value back, one return, at the end. */
+  function groupBody(f: UserFn): Ast[] | null {
+    if (bodies.has(f.source)) return bodies.get(f.source)!;
+    let body: Ast[] | null = null;
+    if (f.overloads.length === 1 && f.ret in N_OF && f.params.every(p => p.qual === 'in' && (p.type in N_OF || p.type === 'int'))) {
+      try {
+        const fnAst = parser.parse(f.source, { quiet: true }).program[0] as unknown as Ast;
+        const list = ((fnAst.body as Ast)?.statements as Ast[] | undefined) ?? [];
+        const last = list[list.length - 1];
+        if (last?.type === 'return_statement' && last.expression && !hasAny(list.slice(0, -1), ['return_statement', 'discard_statement']) && !mentions(list, 'gl_FragColor')) body = list;
+      } catch { body = null; }
+    }
+    bodies.set(f.source, body);
+    return body;
+  }
+  /** The terminals of a group's input ports: the first reader of each, for display. */
+  function portTerminals(ports: GroupInputPort[], inner: GraphNode[]): void {
+    for (const p of ports) {
+      const reader = inner.find(n => Object.values(n.inputs).some(i => i.connection?.nodeId === GROUP_PORT_SENTINEL && i.connection.outputKey === p.key));
+      if (reader) { p.toNodeId = reader.id; p.toInputKey = Object.entries(reader.inputs).find(([, i]) => i.connection?.nodeId === GROUP_PORT_SENTINEL && i.connection.outputKey === p.key)![0]; }
+    }
+  }
+  /**
+   * A call to a helper opened as a group (`options.helperGroups`): its body converted inside a plain
+   * Group (one pass), each parameter an input port fed by the argument (a number comes in from a
+   * Constants entry), the return value its one output. Each call is a copy. Null when the helper
+   * can't be one; the caller keeps the call as code.
+   */
+  function helperGroup(a: Ast, env: Env, f: UserFn): Val | null {
+    const body = groupBody(f);
+    const args = (a.args as Ast[] | undefined ?? []).filter(x => x.type !== 'literal');
+    if (!body || args.length !== f.params.length) return null;
+    const vals = args.map((x, i) => expr(x, env, (f.params[i].type in N_OF ? f.params[i].type : 'float') as T));
+    if (vals.some((v, i) => v.type !== (f.params[i].type === 'int' ? 'float' : f.params[i].type))) return null;
+    const ctx: LoopCtx = { ports: new Map(), inputPorts: [], wires: {}, sockets: {}, outerSink: sink, parent: loopCtx, helper: true };
+    const inner: GraphNode[] = [];
+    const saved = { sink, loopCtx, current, helperScope, frames: frames.splice(0, frames.length) };
+    const scope = { fn: f.name, list: body, stmt: 0 };
+    let out: Val;
+    sink = inner; loopCtx = ctx; helperScope = scope; current = null;
+    try {
+      const innerEnv: Env = new Map();
+      // Parameters first, so the group's sockets read in the function's order.
+      f.params.forEach((p, i) => {
+        const v = vals[i];
+        const r = portRef(ctx, anon(v) ? asRef({ ...v, name: p.name }) : asRef(v), p.name);
+        innerEnv.set(p.name, { ref: r, type: v.type, ast: { type: 'param' }, int: p.type === 'int' || v.int || undefined });
+      });
+      const used = new Set<string>(); freeNames(body, used);
+      for (const [k, v] of constEnv) if (used.has(k) && !innerEnv.has(k)) innerEnv.set(k, v.ref ? { ...v, ref: portRef(ctx, v.ref, k) } : v);
+      stmts(body.slice(0, -1), innerEnv);
+      scope.stmt = body.length - 1;
+      const ret = body[body.length - 1];
+      current = ret;
+      out = expr(ret.expression as Ast, innerEnv, f.ret as T);
+      // A number, or a parameter handed straight back: the group still needs a card to read its output from.
+      if (!out.ref) out = { ...out, ref: materialize(asRef(out)) };
+      else if (out.ref.nodeId === GROUP_PORT_SENTINEL) out = codeNode([{ name: 'v', val: out }], out.type, 'v', `${f.name}() hands back its input`);
+    } finally {
+      sink = saved.sink; loopCtx = saved.loopCtx; helperScope = saved.helperScope; current = saved.current;
+      frames.splice(0, frames.length, ...saved.frames);
+    }
+    portTerminals(ctx.inputPorts, inner);
+    const t = out.type;
+    const outputPorts: GroupOutputPort[] = [{ key: 'out0', type: t as DataType, label: f.name, fromNodeId: out.ref!.nodeId, fromOutputKey: out.ref!.outputKey }];
+    const g = mk('group', { label: f.name, __helper: f.name, subgraph: { nodes: inner, inputPorts: ctx.inputPorts, outputPorts } }, ctx.wires, { inputs: ctx.sockets, outputs: { out0: { type: t as DataType, label: f.name } } });
+    subgraphs.push(inner);
+    (report.helperGroups ??= []).push({ fn: f.name, nodeId: g.id });
+    return { ref: ref(g, 'out0', t), type: t, ast: a };
+  }
+  /** `vec3(0.5, 0.2, 1.0)` or `vec2(0.3)`: its components, else null. */
+  function constVec(x: Ast): number[] | null {
+    while (x.type === 'group') x = x.expression as Ast;
+    if (x.type !== 'function_call' || (x.identifier as Ast).type !== 'type_specifier') return null;
+    const k = tokenOf(x.identifier as Ast); const n = k === 'vec2' ? 2 : k === 'vec3' ? 3 : k === 'vec4' ? 4 : 0;
+    const vs = ((x.args as Ast[] | undefined) ?? []).filter(y => y.type !== 'literal').map(litOf);
+    if (!n || vs.some(v => v === null)) return null;
+    return vs.length === 1 ? Array(n).fill(vs[0]) : vs.length === n ? vs as number[] : null;
+  }
+  /**
+   * A call `options.nodeCalls` names (Guided Convert's recognised idioms): the recipe's library nodes,
+   * or one Expression Block ('block'), or, when the recipe can't take these arguments, the body as
+   * nodes as if written inline. Null for a function that isn't a one-line helper.
+   */
+  function nodeCall(a: Ast, env: Env, f: UserFn, how: NodeCall | 'block'): Val | null {
+    if (f.overloads.length > 1 || !(f.ret in N_OF) || f.params.some(p => p.qual !== 'in' || !(p.type in N_OF))) return null;
+    let retAst: Ast | null = null;
+    try {
+      const list = (((parser.parse(f.source, { quiet: true }).program[0] as unknown as Ast).body as Ast)?.statements as Ast[] | undefined) ?? [];
+      if (list.length === 1 && list[0].type === 'return_statement') retAst = list[0].expression as Ast;
+    } catch { retAst = null; }
+    const args = (a.args as Ast[] | undefined ?? []).filter(x => x.type !== 'literal');
+    if (!retAst || args.length !== f.params.length) return null;
+    const body = retAst;
+    const t = f.ret as T;
+    const built = new Map<string, Val>();
+    const argVal = (name: string): Val => {
+      let v = built.get(name);
+      if (!v) { const i = f.params.findIndex(p => p.name === name); v = expr(args[i], env, f.params[i].type as T); built.set(name, v); }
+      return v;
+    };
+    const record = (nodeId: string, as: 'node' | 'block' | 'nodes') => { (report.nodeCalls ??= []).push({ fn: f.name, nodeId, as }); };
+    if (how === 'block') {
+      const v = codeNode(f.params.map(p => ({ name: p.name, val: argVal(p.name) })), t, generate(body as never).trim(), `${f.name}(): a recognised pattern, kept as one block`);
+      record(v.ref!.nodeId, 'block');
+      return { ...v, ast: a };
+    }
+    const info: Record<string, CallArg> = {};
+    f.params.forEach((p, i) => { const lit = litOf(args[i]); const vec = constVec(args[i]); info[p.name] = { type: p.type as T, ...(lit !== null ? { lit } : {}), ...(vec ? { vec } : {}) }; });
+    const made: GraphNode[] = [];
+    const maker: CallMaker = {
+      node: (type, params, wires) => {
+        const w: Record<string, Ref | undefined> = {};
+        for (const [k, c] of Object.entries(wires)) {
+          if (!c) continue;
+          if ('arg' in c) w[k] = asRef(argVal(c.arg));
+          else if ('node' in c) { const n = made[c.node]; w[k] = ref(n, c.out, (n.outputs[c.out]?.type ?? 'float') as T); }
+          else w[k] = asRef({ lit: c.lit, type: 'float', ast: { type: 'made' } });
+        }
+        made.push(mk(type, { ...params }, w));
+        return made.length - 1;
+      },
+    };
+    let res: { node: number; out: string } | null = null;
+    try { res = how(info, maker); } catch (e) { if (!(e instanceof Unsupported || e instanceof Unmapped)) throw e; res = null; }
+    const n = res ? made[res.node] : undefined;
+    if (n && res && n.outputs[res.out]?.type === t) { record(n.id, 'node'); return { ref: ref(n, res.out, t), type: t, ast: a }; }
+    // Not as library nodes: the body as written, its parameters the arguments.
+    const inner: Env = new Map(constEnv);
+    for (const p of f.params) inner.set(p.name, argVal(p.name));
+    const v = expr(body, inner, t);
+    record(v.ref?.nodeId ?? '', 'nodes');
+    return { ...v, ast: a };
+  }
+
   /**
    * A call to a function with `out` / `inout` parameters. GLSL wants variables
    * there, and a region's inputs are values, so the region declares locals for
@@ -1024,7 +1208,7 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
     // `x *= a - b` is `x * (a - b)`: the right side keeps its own parentheses when it is text again.
     const rhsAst: Ast = opTok === '=' ? right : { type: 'binary', operator: { type: 'literal', literal: ops[opTok], whitespace: '' }, left, right: { type: 'group', lp: { type: 'literal', literal: '(', whitespace: '' }, expression: right, rp: { type: 'literal', literal: ')', whitespace: '' } } } as Ast;
     if (!ops[opTok] && opTok !== '=') throw new Unmapped(`assignment ${opTok}`);
-    if (loopCtx && writesOutput(left, env)) throw new Unsupported('gl_FragColor written inside a loop');
+    if (loopCtx && writesOutput(left, env)) throw new Unsupported(loopCtx.helper ? 'gl_FragColor written inside a helper function' : 'gl_FragColor written inside a loop');
     if (left.type === 'identifier') {
       const name = left.identifier as string;
       if (isOutput(name, env)) {
@@ -1078,7 +1262,7 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
     const carried = [...assigned].filter(n => env.has(n) && n !== name);
     // The carries' starting values, as nodes in the scope outside the loop.
     const inits = new Map(carried.map(v => [v, asRef(env.get(v)!)]));
-    const ctx: LoopCtx = { ports: new Map(), inputPorts: [], wires: {}, sockets: {}, outerSink: sink };
+    const ctx: LoopCtx = { ports: new Map(), inputPorts: [], wires: {}, sockets: {}, outerSink: sink, parent: loopCtx };
     const inner: GraphNode[] = [];
     const savedSink = sink, savedCtx = loopCtx;
     sink = inner; loopCtx = ctx;
@@ -1229,6 +1413,7 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
   function stmts(list: Ast[], env: Env): void {
     list.forEach((s, i) => {
       if (list === topList) topIndex = i;
+      if (helperScope && list === helperScope.list) helperScope.stmt = i;
       const saved = current; frames.push({ rest: list.slice(i + 1) }); current = s;
       try { stmt(s, env); } finally { frames.pop(); current = saved; }
     });
@@ -1350,7 +1535,7 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
           }
           // An iterated group runs up to 16 times and has no early exit; a loop inside a loop stays code.
           const exits = hasAny(s.body, ['break_statement', 'continue_statement', 'return_statement', 'discard_statement']);
-          if (count >= 1 && count <= 16 && !exits && !loopCtx) { loopGroup(s, env, name, start, step, count, intCounter); return; }
+          if (count >= 1 && count <= 16 && !exits && !inLoopGroup()) { loopGroup(s, env, name, start, step, count, intCounter); return; }
         }
         return loopRegion(s, env, name);
       }
@@ -1361,7 +1546,7 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
       // `discard` is a value: kept_ is 0 from here on. if/else merges it like any variable; at the end the colour
       // is multiplied by it, so a discarded pixel is transparent black, what a cleared canvas shows there.
       case 'discard_statement':
-        if (loopCtx || !env.has(KEPT)) throw new Unsupported('discard inside a loop');
+        if (loopCtx || !env.has(KEPT)) throw new Unsupported(loopCtx?.helper ? 'discard inside a helper function' : 'discard inside a loop');
         env.set(KEPT, { lit: 0, type: 'float', ast: s });
         return;
       case 'return_statement': case 'break_statement': case 'continue_statement': case 'do_statement': case 'switch_statement':
@@ -1397,6 +1582,7 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
       try { const mark = sink.length; const v = { ...expr(c.init, env), int: c.type === 'int' || undefined }; titleWith(v, c.name, mark); env.set(c.name, v.lit !== undefined ? { ...v, name: v.name ?? c.name } : v); }
       catch (e) { if (!(e instanceof Unsupported || e instanceof Unmapped)) throw e; }
     }
+    constEnv = new Map(env);
     topList = (main!.body as Ast).statements as Ast[];
     stmts(topList, env);
     if (!output) report.unsupported.push('main() never writes gl_FragColor');
@@ -1413,7 +1599,8 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
   if (report.unsupported.length) return { nodes: [], report };
 
   // Nodes nothing reads (a const the shader never used, a split only half read) go.
-  for (const g of nodes) if (g.type === 'group') { const sg = g.params.subgraph as { nodes: GraphNode[]; outputPorts: { fromNodeId: string }[] }; prune(sg.nodes, new Set(sg.outputPorts.map(p => p.fromNodeId))); }
+  const pruneGroups = (list: GraphNode[]) => { for (const g of list) if (g.type === 'group') { const sg = g.params.subgraph as { nodes: GraphNode[]; outputPorts: { fromNodeId: string }[] }; prune(sg.nodes, new Set(sg.outputPorts.map(p => p.fromNodeId))); pruneGroups(sg.nodes); } };
+  pruneGroups(nodes);
   prune(nodes, new Set());
   // Code that became unused (a rotation matrix a Rotate 2D node took the place of) isn't reported either.
   const kept = new Set<string>();
@@ -1432,7 +1619,7 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
   layout(nodes);
   for (const sg of subgraphs) layout(sg);
   report.stats = { nodes: nodes.length, blocks: report.blocks.length, regions: report.regions.length, sliders: report.stats.sliders, loops: report.stats.loops };
-  return { nodes, report, ...(controls.length ? { controls } : {}), ...(origins ? { origins, mainStatements: topList?.length ?? 0 } : {}) };
+  return { nodes, report, ...(controls.length ? { controls } : {}), ...(origins ? { origins, mainStatements: topList?.length ?? 0, ...(helperOrigins && Object.keys(helperOrigins).length ? { helperOrigins } : {}) } : {}) };
 }
 
 /**
