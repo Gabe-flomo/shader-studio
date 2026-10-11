@@ -18,6 +18,10 @@ import { useBuilderWindows } from '../../../builders/windows';
 import { useSceneBuilder } from '../../../sceneBuilder/store';
 import { useSceneBuilder2D } from '../../../sceneBuilder2d/store';
 import { useGridBuilder } from '../../../gridScene/store';
+import { useSplatBuilder } from '../../../splatBuilder/store';
+import { applySplatScene } from '../../../splatBuilder/apply';
+import { starterSplatScene } from '../../../splatBuilder/spec';
+import { closeSplatBuilder } from '../../../splatBuilder/actions';
 import { applyScene } from '../../../sceneBuilder/apply';
 import { templateSpec } from '../../../sceneBuilder/templates';
 import { applyScene2D } from '../../../sceneBuilder2d/apply';
@@ -78,6 +82,11 @@ function buildOf(kind: SceneKind): string {
     return r.sceneId;
   }
   if (kind === 'grid') { const id = newGridRules(); useBuilderWindows.setState({ gridRules: null }); return id; }
+  if (kind === 'splat') {
+    const r = applySplatScene(nodes(), starterSplatScene(), { nextId });
+    useNodeGraphStore.setState({ nodes: r.nodes });
+    return r.scanId;
+  }
   return makeAgentGroup(START_CARDS[0], '2d')!.groupId;
 }
 
@@ -89,17 +98,18 @@ beforeEach(() => {
   useSceneBuilder.setState({ open: false, targetSceneId: null });
   useSceneBuilder2D.setState({ open: false, targetSceneId: null });
   useGridBuilder.setState({ open: false, targetSceneId: null });
+  useSplatBuilder.setState({ open: false, targetId: null });
   resetBuilderSliderRanges();
 });
 
 describe('the kind page', () => {
-  it('shows the four kinds, each with a picture and a line', () => {
+  it('shows the five kinds, each with a picture and a line', () => {
     act(() => openBuilder('scenes'));
     mount(<Shell />);
     expect($('[data-studio-title]')?.textContent).toBe('Scene builder');
     expect($('[data-studio-kind]')?.textContent).toBe('What kind of scene?');
     const cards = [...document.querySelectorAll('[data-scene-kind]')];
-    expect(cards.map(c => c.getAttribute('data-scene-kind'))).toEqual(['2d', 'agents', 'grid', '3d']);
+    expect(cards.map(c => c.getAttribute('data-scene-kind'))).toEqual(['2d', 'agents', 'grid', '3d', 'splat']);
     for (const c of cards) {
       expect(c.querySelector('canvas')).toBeTruthy();
       expect(c.textContent).toContain(SCENE_KINDS.find(k => k.id === c.getAttribute('data-scene-kind'))!.line);
@@ -114,6 +124,8 @@ describe('the kind page', () => {
     // Grid scene opens the Grid builder (gridScene/); Grid Rules is its "Make it a simulation" jump.
     ['grid', () => useGridBuilder.getState().open && useGridBuilder.getState().targetSceneId === null],
     ['agents', () => useBuilderWindows.getState().agentBuilder?.groupId === null && useBuilderWindows.getState().agentBuilder?.fromShell === true],
+    // A Splat scene is built at once (its picture is the main preview's): the builder opens on the new Splat Scene.
+    ['splat', () => useSplatBuilder.getState().open && nodes().some(x => x.id === useSplatBuilder.getState().targetId && x.type === 'splatScene')],
   ])('picking %s turns the window into its builder', (kind, isOpen) => {
     act(() => openBuilder('scenes'));
     mount(<Shell />);
@@ -148,7 +160,7 @@ describe('entry points that open one kind go straight to it', () => {
 });
 
 describe('a graph no builder made: clear by default, or keep it', () => {
-  it.each<SceneKind>(['2d', 'agents', 'grid', '3d'])('%s: Clear and start over is the default; the clear is an undo step of its own', kind => {
+  it.each<SceneKind>(['2d', 'agents', 'grid', '3d', 'splat'])('%s: Clear and start over is the default; the clear is an undo step of its own', kind => {
     useNodeGraphStore.setState({ nodes: handGraph() });
     act(() => openBuilder('scenes'));
     expect(useBuilderWindows.getState().sceneShell).toEqual({ page: 'kinds' });
@@ -162,7 +174,7 @@ describe('a graph no builder made: clear by default, or keep it', () => {
     for (let i = 0; i < 3 && !nodes().some(x => x.id === 'uv'); i++) undo();
     expect(nodes().map(x => x.id).sort()).toEqual(['out', 'uv']);
   });
-  it.each<SceneKind>(['2d', 'agents', 'grid', '3d'])('%s: Keep my graph keeps it', kind => {
+  it.each<SceneKind>(['2d', 'agents', 'grid', '3d', 'splat'])('%s: Keep my graph keeps it', kind => {
     useNodeGraphStore.setState({ nodes: handGraph() });
     act(() => openBuilder('scenes'));
     mount(<Shell />);
@@ -174,7 +186,7 @@ describe('a graph no builder made: clear by default, or keep it', () => {
 });
 
 describe('a graph a builder made: reopen it as it was built', () => {
-  it.each<SceneKind>(['2d', 'agents', 'grid', '3d'])('%s: found, and Edit this one opens its builder on the build', kind => {
+  it.each<SceneKind>(['2d', 'agents', 'grid', '3d', 'splat'])('%s: found, and Edit this one opens its builder on the build', kind => {
     const id = buildOf(kind);
     expect(builtScenes(nodes()).map(b => [b.kind, b.id])).toEqual([[kind, id]]);
     act(() => openBuilder('scenes'));
@@ -193,11 +205,16 @@ describe('a graph a builder made: reopen it as it was built', () => {
       expect(useSceneBuilder2D.getState().scene).toEqual(starterScene());
     } else if (kind === 'grid') {
       expect(useBuilderWindows.getState().gridRules).toBe(id);
+    } else if (kind === 'splat') {
+      expect(useSplatBuilder.getState().open).toBe(true);
+      expect(useSplatBuilder.getState().targetId).toBe(id);
+      expect(useSplatBuilder.getState().spec).toEqual(starterSplatScene());
+      closeSplatBuilder();
     } else {
       expect(useBuilderWindows.getState().agentBuilder).toEqual({ groupId: id });
     }
   });
-  it.each<SceneKind>(['2d', 'agents', 'grid', '3d'])('%s: Start over takes the build away (one undo step), then the kinds', kind => {
+  it.each<SceneKind>(['2d', 'agents', 'grid', '3d', 'splat'])('%s: Start over takes the build away (one undo step), then the kinds', kind => {
     const id = buildOf(kind);
     const before = nodes().map(x => x.id).sort();
     act(() => openBuilder('scenes'));
@@ -210,7 +227,7 @@ describe('a graph a builder made: reopen it as it was built', () => {
     undo();
     expect(nodes().map(x => x.id).sort()).toEqual(before);
   });
-  it.each<SceneKind>(['2d', 'agents', 'grid', '3d'])('%s: Add another goes to the kinds, keeping the graph', kind => {
+  it.each<SceneKind>(['2d', 'agents', 'grid', '3d', 'splat'])('%s: Add another goes to the kinds, keeping the graph', kind => {
     const id = buildOf(kind);
     act(() => openBuilder('scenes'));
     mount(<Shell />);

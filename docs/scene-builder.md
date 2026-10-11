@@ -9,6 +9,7 @@ kind you pick turns the window into that kind's builder:
 | **Agent scene** | the Agent Builder ([agent-builder.md](agent-builder.md)) | trail followers, particles, flocks, crowds, orbiters, in 2D or 3D |
 | **Grid scene** | the Grid builder ([grid-builder.md](grid-builder.md)), with a switch to Grid Rules ([grid-rules.md](grid-rules.md)) | shapes drawn on cells, motion, patterns, grid warps, rules between shapes; or a simulation: Life, sand, heat, Wireworld |
 | **3D scene** | the 3D Scene Builder ([scene-builder-3d.md](scene-builder-3d.md)) | ray-marched shapes, combined, bent, lit and seen through a camera |
+| **Splat scene** | the Splat builder ([splat-builder.md](splat-builder.md)) | a Gaussian splat scan, placed, with stacked effects (dissolve, explode, wave, grade, crop, points), optionally in a ray-marched world |
 
 Each builder keeps its own code and docs. The Scene builder only routes between them
 (`src/builders/sceneKinds.ts`, `src/components/builders/SceneBuilderShell.tsx`).
@@ -33,7 +34,7 @@ What it shows first depends on the graph:
   - **Edit this one** opens the kind's builder on it: a 2D or 3D build on its saved spec (the
     recipe stored on the build, so the form is exactly as it was built), a Grid scene in the Grid
     builder on its saved spec, a Grid Rules node in its editor, a rules Agents group in the Agent
-    Builder.
+    Builder, a splat scene in the Splat builder on its saved spec (kept on its Splat Scene).
   - **Start over** takes it away, as one undo step ("Scene builder: started over"): the build's
     nodes, and anything only they read from or that reads only from them (its picture, its Draw
     agents). The Output and nodes outside the build stay. Then the kind page, with a line saying
@@ -41,7 +42,8 @@ What it shows first depends on the graph:
   - **Add another** goes to the kind page with **Keep my graph** picked.
 
 What counts as made by a builder: a 2D build or a Grid scene (its UV node holds the spec), a Scene
-Group the 3D builder made, a Grid Rules node, and a rules Agents group (`builtScenes`).
+Group the 3D builder made, a Grid Rules node, a rules Agents group, and a Splat Scene the Splat builder
+made (`builtScenes`).
 
 ### Straight to one kind
 
@@ -57,7 +59,7 @@ Agent Builder's own start page asks about clearing the graph the same way, with 
 Every kind's header starts with **Scene builder › 2D scene** (› the group's name in the Agent
 Builder). **Scene builder** goes back to the kind page; what you built stays in the graph, and the
 page then keeps the graph by default. The kind's sections are its tabs (2D: Space, Shapes, Grid,
-Look, Output, Recipe, Templates) or, in the 3D Scene Builder, Grid Rules and the
+Look, Output, Recipe, Templates) or, in the 3D Scene Builder, the Splat builder, Grid Rules and the
 Agent Builder, the left nav of the studio shell. The Agent Builder's start page also has **‹** for the kind page. The
 kind page and every kind's window are the same size (1440 × 900), so picking a kind doesn't jump.
 
@@ -75,6 +77,7 @@ unfolds if it was folded):
 | Agent Builder | **Advanced rules** on **Every rule** (its When … Do … lines; the first one focused) |
 | Agent Rules window | the **Recipe** tab |
 | Grid scene | **Rules** (a Grid scene has no recipe text) |
+| Splat builder | **Under the hood**, the recipe as text |
 
 The kind page and the Agent Builder's start page have no recipe, so ⌘⇧D closes them (they would
 cover the bar) and opens the Do… bar; "new 2d scene" and the like there open a kind again.
@@ -91,7 +94,9 @@ While a builder with a picture of its own is open (the kind page, the 2D and 3D 
 Grid Rules), the main preview behind it is held (`src/builders/previewPriority.ts`, using
 `lib/previewHold.ts`): it stops drawing and keeps its last frame, its clock waits, and the
 builder's preview has the GPU to itself. An output window or a recording keeps full speed. The
-Agent Builder is the exception: its picture is the main preview, mirrored, so it keeps running.
+Agent Builder and the Splat builder are the exceptions: their picture is the main preview, mirrored (a scan is drawn by
+the main preview's raster pass), so it keeps running, and the Splat builder builds every change into the graph as you
+go.
 
 The 2D and 3D previews (`src/components/builders/useBuilderPreview.ts`):
 
@@ -193,6 +198,7 @@ Build makes an **empty Texture node** named after it, beside the scene, and the 
 | Grid scene | a **Picture** cell shape; a **Picture** pattern (brightness drives size, turn, push, hue or brightness); a picture mask | [grid-builder.md](grid-builder.md#textures) |
 | Grid Rules | Start → A picture: the same picker, wired into Start image | [grid-rules.md](grid-rules.md#a-picture-start) |
 | Agent Builder | Where → Create new → **A picture…** (born inside, food, only when, a layer's region) | [agent-builder.md](agent-builder.md) |
+| Splat scene | Scene → Background → **Picture** (the backdrop the camera looks at, with or without a world) | [splat-builder.md](splat-builder.md) |
 
 ### Looking good repeated
 

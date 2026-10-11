@@ -222,6 +222,9 @@ the view's sideways axes don't change the order, so they don't sort again.
 
 ### For a Splat builder
 
+Built: [splat-builder.md](splat-builder.md) (the Scene builder's Splat scene). What it rests on:
+
+
 - Lay modifiers down with `addSplatModifier(nodes, splatId, pick, nextId)` (`nodes/recipes/splatModifierRecipes.ts`),
   which appends to the chain; `splatModifierChain` reads it back (scan first). A builder's stack is that chain.
 - Each recipe is one node with plain params (all live uniforms): a builder sets params, never GLSL. Custom looks are
