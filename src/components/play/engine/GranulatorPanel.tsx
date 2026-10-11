@@ -8,13 +8,14 @@
  * an Audio Unit parameter's), and the grains' readouts can become controls
  * or nulls (play/grainControls.ts).
  */
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { useTokens } from '../../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../../theme/tokens';
 import { Button, IconButton } from '../../ui/Button';
 import { Segmented, Toggle } from '../../ui/Choice';
 import { Select } from '../../ui/Select';
 import { RulerSlider } from '../../ui/RulerSlider';
+import { LogRulerSlider } from '../../ui/LogRulerSlider';
 import { toast } from '../../ui/toastStore';
 import { GR_FROM_LINKS_MAX, GR_FROM_PROPS, GR_FROM_PROP_NAMES, GR_FROM_TARGETS, GR_MODES, GR_SYNTHS, GR_SYNTH_NAMES, grFromDefaults, grGrainOpacity, grNewStats, grParam, grSpectrumImage, grSummary, type GrParam } from '../../../play/kit/granulator.js';
 import { AE_INST, aeRack, aeSlot, auPropId, auTarget, patchSlot, type AeGrainFrom, type AeGrainLink, type AeGrainSample, type AeRack, type AeSlot } from '../../../types/playAudioEngine';
@@ -222,21 +223,10 @@ export function ParamRow({ p, value, touch, exposed, onSet, onExpose, soft }: { 
   );
 }
 
-/** A setting on a log scale (Hz, ms, grains a second): a plain range input and its value. */
+/** A setting on a log scale (Hz, ms, grains a second): the app's ruler, dragging by ratios, its chip in the setting's unit. */
 function LogSlider({ p, value, onSet }: { p: GrParam; value: number; onSet: (v: number) => void }) {
-  const tk = useTokens();
-  const lo = Math.max(p.min, p.min > 0 ? p.min : 0.1), span = Math.log(p.max / lo);
-  const toT = (v: number) => (v <= lo ? 0 : Math.log(v / lo) / span);
-  const fromT = (t: number) => (t <= 0 ? p.min : lo * Math.exp(t * span));
-  const round = (v: number) => (p.step >= 1 ? Math.round(v) : v >= 100 ? Math.round(v) : Math.round(v * 100) / 100);
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-      <input type="range" min={0} max={1000} step={1} value={Math.round(toT(value) * 1000)} aria-label={p.name} title={p.hint}
-        onChange={e => onSet(round(fromT(Number(e.target.value) / 1000)))} onDoubleClick={() => onSet(p.value)}
-        style={{ flex: 1, minWidth: 0, accentColor: tk.accent.base, height: 18 }} />
-      <span style={{ color: tk.text.secondary, font: `500 11px ${fontFamily.mono}`, minWidth: 58, textAlign: 'right' }}>{formatParam({ unit: p.unit, kind: 'number', min: p.min }, value)}</span>
-    </div>
-  );
+  const format = useCallback((v: number) => formatParam({ unit: p.unit, kind: 'number', min: p.min }, v), [p.unit, p.min]);
+  return <LogRulerSlider value={value} min={p.min} max={p.max} step={p.step} defaultValue={p.value} onChange={onSet} ariaLabel={p.name} format={format} />;
 }
 
 // ── The sample ───────────────────────────────────────────────────────────────
@@ -433,10 +423,11 @@ function GrainWave({ rack, mode, sub, area, side, position, spray, band, bandWid
         onPointerMove={e => { if (drag.current) put(e); }}
         onPointerUp={() => { drag.current = false; }} onPointerCancel={() => { drag.current = false; }}
         style={{ display: 'block', width: '100%', height: spectral ? 96 : 72, borderRadius: radius.md, background: tk.bg.field, cursor: spectral ? 'crosshair' : 'ew-resize', touchAction: 'none' }} />
-      <div style={{ display: 'flex', justifyContent: 'space-between', color: tk.text.faint, font: `500 10px ${fontFamily.mono}`, marginTop: 3, gap: 8 }}>
+      {/* Live numbers: fixed-width digits and room for the widest, so the row doesn't shuffle as they change. */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', color: tk.text.faint, font: `500 10px ${fontFamily.mono}`, fontVariantNumeric: 'tabular-nums', marginTop: 3, gap: 8 }}>
         <span>{ui?.status === 'loading' ? 'loading…' : ui?.duration ? `${ui.duration.toFixed(2)} s` : 'no sample'}</span>
-        <span>{count} grain{count === 1 ? '' : 's'}{count ? (spectral ? ` · band ${(sum.band * 100).toFixed(0)}%` : ` · mean ${(sum.mean * 100).toFixed(0)}%`) : ''}</span>
-        <span>pos {(position * 100).toFixed(1)}%{spectral ? ` · band ${(band * 100).toFixed(1)}%` : ''}</span>
+        <span data-grain-count style={{ minWidth: '19ch', textAlign: 'center' }}>{count} grain{count === 1 ? '' : 's'}{count ? (spectral ? ` · band ${(sum.band * 100).toFixed(0)}%` : ` · mean ${(sum.mean * 100).toFixed(0)}%`) : ''}</span>
+        <span data-grain-pos style={{ minWidth: spectral ? '22ch' : '10ch', textAlign: 'right' }}>pos {(position * 100).toFixed(1)}%{spectral ? ` · band ${(band * 100).toFixed(1)}%` : ''}</span>
       </div>
     </div>
   );

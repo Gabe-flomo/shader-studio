@@ -6,6 +6,7 @@ import { Icon } from './Icon';
 import { menuAsSheet } from './menuSheet';
 import { Popover } from './Popover';
 import { Sheet } from './Sheet';
+import { clampLines } from './textFit';
 import {
   SEARCH_ABOVE, countItems, filterSections, findItem, moveActive, navigableValues, typeahead,
   type NavKey, type PickerItem, type PickerSection,
@@ -87,13 +88,14 @@ export function GroupedPicker({
         onFocus={e => setFocusRing(e.currentTarget.matches(':focus-visible'))}
         onBlur={() => setFocusRing(false)}
         style={{
-          position: 'relative', height, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0 6px 0 10px', minWidth: 0,
+          position: 'relative', minHeight: height, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '2px 6px 2px 10px', minWidth: 0, boxSizing: 'border-box',
           border: 0, borderRadius: radius.md, background: tk.bg.field, color: current ? tk.text.primary : tk.text.muted, cursor: 'pointer', textAlign: 'left',
-          font: `500 12.5px ${mono ? fontFamily.mono : fontFamily.ui}`, outline: 'none',
+          font: `500 12.5px/1.2 ${mono ? fontFamily.mono : fontFamily.ui}`, outline: 'none',
           boxShadow: focusRing || open ? `inset 0 0 0 1.5px ${alpha(tk.accent.base, open ? 0.55 : 1)}` : 'none', ...style,
         }}
       >
-        <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{current?.label ?? placeholder ?? value}</span>
+        {/* A long choice wraps to a second line rather than being cut short (the full text is the title). */}
+        <span data-picker-face-label style={{ flex: 1, ...clampLines(2) }}>{current?.label ?? placeholder ?? value}</span>
         {current?.pro && <ProBadge />}
         <Icon name="chevD" size={14} style={{ color: tk.text.faint, flexShrink: 0 }} />
       </button>
@@ -352,12 +354,13 @@ function Row({ id, item: it, selected, active, asSheet, height, onHover, onPick 
     >
       {it.icon && <Icon name={it.icon} size={asSheet ? 18 : 15} style={{ color: selected ? tk.accent.base : tk.text.muted, flexShrink: 0 }} />}
       <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
-        <span style={{
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          font: `${selected ? 600 : 500} ${asSheet ? 15 : 12.5}px ${fontFamily.ui}`, color: selected ? tk.accent.text : tk.text.primary,
+        {/* A long label wraps; a description is clamped to two lines (its full text on hover). */}
+        <span data-picker-label style={{
+          whiteSpace: 'normal', overflowWrap: 'break-word',
+          font: `${selected ? 600 : 500} ${asSheet ? 15 : 12.5}px/1.25 ${fontFamily.ui}`, color: selected ? tk.accent.text : tk.text.primary,
         }}>{it.label}</span>
         {it.description && (
-          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', font: `${asSheet ? 12.5 : 11}px/1.3 ${fontFamily.ui}`, color: tk.text.faint }}>{it.description}</span>
+          <span data-picker-description title={it.description} style={{ ...clampLines(2), font: `${asSheet ? 12.5 : 11}px/1.3 ${fontFamily.ui}`, color: tk.text.faint }}>{it.description}</span>
         )}
       </span>
       {it.pro && <ProBadge />}

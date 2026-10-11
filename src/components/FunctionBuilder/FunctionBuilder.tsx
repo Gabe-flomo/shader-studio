@@ -8,6 +8,7 @@ import { useThemeMode, useTokens } from '../../theme/themeStore';
 import { fontFamily } from '../../theme/tokens';
 import { Callout } from '../ui/Callout';
 import { usePhoneLayout } from '../../hooks/useBreakpoint';
+import { wheelIntent } from '../ui/wheelOwner';
 
 const DEBOUNCE_MS = 150;
 
@@ -131,6 +132,13 @@ export function FunctionBuilder({ onNavigateToStudio }: Props) {
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       const rect = el.getBoundingClientRect();
+      // A sideways trackpad swipe pans; ctrl / pinch or a mostly-vertical wheel zooms.
+      if (wheelIntent(e) === 'pan') {
+        const { xRange: xr } = useFunctionBuilder.getState();
+        const d = (e.deltaX / rect.width) * (xr[1] - xr[0]);
+        useFunctionBuilder.getState().setXRange([xr[0] + d, xr[1] + d]);
+        return;
+      }
       const cx = (e.clientX - rect.left) / rect.width;
       const cy = 1 - (e.clientY - rect.top) / rect.height;
       const factor = e.deltaY > 0 ? 1.12 : 1 / 1.12;

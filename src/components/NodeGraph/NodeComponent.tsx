@@ -120,6 +120,8 @@ import { Button, IconButton } from '../ui/Button';
 import { Icon } from '../ui/Icon';
 import { nestedSectionStyle } from '../ui/nesting';
 import { RulerSlider } from '../ui/RulerSlider';
+import { LogRulerSlider } from '../ui/LogRulerSlider';
+import { BuilderSlider } from '../builders/BuilderSlider';
 import { Select } from '../ui/Select';
 import { Toggle } from '../ui/Choice';
 import { ColorSwatch } from '../ui/ColorPicker';
@@ -208,16 +210,8 @@ interface Props {
   onSocketHover?: (info: { nodeId: string; key: string; dir: 'in' | 'out' } | null) => void;
 }
 
-// Maps slider position (0–1000) to Hz using a dampened log scale (power=0.6)
-// Feels smoother than pure log but still covers 20Hz–20kHz
-function sliderToHz(v: number): number {
-  const t = v / 1000;
-  return Math.round(20 * Math.pow(1000, Math.pow(t, 0.6)));
-}
-function hzToSlider(hz: number): number {
-  const ratio = Math.log(Math.max(20, Math.min(20000, hz)) / 20) / Math.log(1000);
-  return Math.round(Math.pow(Math.max(0, ratio), 1 / 0.6) * 1000);
-}
+/** A band centre as the chip shows it: 440, 1.2k. */
+const formatHz = (hz: number) => (hz >= 1000 ? `${(hz / 1000).toFixed(1)}k` : `${Math.round(hz)}`);
 
 let zCounter = 10; // incremented each time a node is brought to front
 const LFO_TYPES    = new Set(['lfo']);
@@ -294,7 +288,7 @@ function NodeTooltip({ def, node, allNodes }: { def: NodeDefinition; node: Graph
       if (type === 'float') {
         const decoded = floatValueRegistry.get(`__preview__${connKey}`);
         if (decoded !== undefined) {
-          return <span style={{ color: tc.yellow, fontFamily: fontFamily.mono, fontSize: 11 }}>{decoded.toFixed(3)}</span>;
+          return <span style={{ color: tc.yellow, fontFamily: fontFamily.mono, fontSize: 11, fontVariantNumeric: 'tabular-nums', minWidth: '6ch', textAlign: 'right', display: 'inline-block' }}>{decoded.toFixed(3)}</span>;
         }
       } else if (type === 'vec2' || type === 'vec3') {
         const vals = vectorValueRegistry.get(`__preview__${connKey}`);
@@ -302,7 +296,7 @@ function NodeTooltip({ def, node, allNodes }: { def: NodeDefinition; node: Graph
           const formatted = type === 'vec2'
             ? `(${vals[0].toFixed(2)}, ${vals[1].toFixed(2)})`
             : `(${vals[0].toFixed(2)}, ${vals[1].toFixed(2)}, ${vals[2].toFixed(2)})`;
-          return <span style={{ color: tc.yellow, fontFamily: fontFamily.mono, fontSize: 11 }}>{formatted}</span>;
+          return <span style={{ color: tc.yellow, fontFamily: fontFamily.mono, fontSize: 11, fontVariantNumeric: 'tabular-nums', minWidth: type === 'vec2' ? '12ch' : '18ch', textAlign: 'right', display: 'inline-block' }}>{formatted}</span>;
         }
       }
       return <span style={{ color: tc.surface1, fontSize: '10px' }}>← {srcLabel ?? src?.type}</span>;
@@ -1242,14 +1236,11 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             {/* Shared range */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <span style={{ fontSize: '10px', color: tc.surface2, width: '60px', flexShrink: 0 }}>Range Hz</span>
-              <input
-                type="range" min={0} max={10000} step={1}
-                value={freqRange}
-                disabled={mode === 'full'}
-                onChange={e => updateNodeParams(node.id, { freq_range: parseFloat(e.target.value) }, { immediate: true })}
-                style={{ flex: 1, accentColor: tc.sky, cursor: mode === 'full' ? 'default' : 'pointer', opacity: mode === 'full' ? 0.3 : 1 }}
-              />
-              <span style={{ fontSize: '10px', color: tc.overlay0, fontFamily: 'monospace', width: '42px', textAlign: 'right' }}>±{freqRange}</span>
+              {/* The app's ruler, with the node card's Play menu on right-click. */}
+              <span data-audio-range style={{ flex: 1, minWidth: 0, display: 'flex' }}>
+                <BuilderSlider value={freqRange} min={0} max={10000} step={1} integer ariaLabel="Range Hz" disabled={mode === 'full'} defaultValue={200}
+                  onChange={v => updateNodeParams(node.id, { freq_range: v }, { immediate: true })} param={{ nodeId: node.id, key: 'freq_range' }} />
+              </span>
             </div>
             {/* Band list */}
             {mode !== 'full' && bands.map((center, i) => (
@@ -1267,18 +1258,13 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                   title={soloedBand === i ? 'Un-solo' : 'Solo this band'}
                   style={{ background: 'none', border: 'none', color: soloedBand === i ? tc.yellow : tc.surface1, cursor: 'pointer', fontSize: '9px', padding: '0', lineHeight: 1, flexShrink: 0, fontWeight: 700 }}
                 >S</button>
-                <input
-                  type="range" min={0} max={1000} step={1}
-                  value={hzToSlider(center)}
-                  onChange={e => {
-                    const newHz = sliderToHz(parseInt(e.target.value));
-                    const newBands = bands.map((c, idx) => idx === i ? newHz : c);
-                    updateNodeParams(node.id, { _bands: newBands }, { immediate: true });
-                  }}
-                  style={{ flex: 1, accentColor: tc.sky, cursor: 'pointer' }}
-                />
-                <span style={{ fontSize: '10px', color: tc.overlay0, fontFamily: 'monospace', width: '38px', textAlign: 'right' }}>
-                  {center >= 1000 ? `${(center/1000).toFixed(1)}k` : `${center}`}
+                {/* A band's centre on a log scale (20 Hz – 20 kHz): a drag moves by octaves, not by hertz. */}
+                <span data-audio-band={i} style={{ flex: 1, minWidth: 0, display: 'flex' }}>
+                  <LogRulerSlider value={center} min={20} max={20000} step={1} ariaLabel={`Band ${i + 1} centre (Hz)`} format={formatHz}
+                    onChange={hz => {
+                      const newBands = bands.map((c, idx) => idx === i ? hz : c);
+                      updateNodeParams(node.id, { _bands: newBands }, { immediate: true });
+                    }} />
                 </span>
               </div>
             ))}

@@ -454,6 +454,8 @@ export const HOVER_GRACE_MS = 300;
 export interface HoverIntent<T> {
   /** The pointer is over a word (`key` tells words apart). */
   over(key: string, target: T): void;
+  /** A tap or a caret placed on a word (a touch screen has no hover): open its help now. */
+  openNow(key: string, target: T): void;
   /** The pointer left the words. */
   out(): void;
   /** The pointer went into the open help: it stays open. */
@@ -494,6 +496,7 @@ export function hoverIntent<T>(opts: { delay?: number; grace?: number; onOpen: (
       pendingKey = key;
       openTimer = setTimeout(() => { openTimer = null; pendingKey = null; clearClose(); inPopover = false; openKey = key; opts.onOpen(target, key); }, delay);
     },
+    openNow(key, target) { clearOpen(); clearClose(); inPopover = false; openKey = key; opts.onOpen(target, key); },
     out() { clearOpen(); scheduleClose(); },
     enterPopover() { inPopover = true; clearClose(); clearOpen(); },
     leavePopover() { inPopover = false; scheduleClose(); },

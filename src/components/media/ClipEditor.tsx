@@ -35,6 +35,7 @@ import {
 import { cpAt, cpFollow, cpLength } from '../../play/kit/clipPlay.js';
 import { openVideoReader, type FrameReader } from '../../lib/timeCube/frames';
 import { STRIP_H, STRIP_THUMBS, coarsePointer, rememberMode, rememberedMode, stripFor, thumbOrder, trimHandleGrab, type ClipPreviewMode } from './clipEditorParts';
+import { wheelIntent } from '../ui/wheelOwner';
 
 /** Where the editor's frames come from: a video file, or a picture painted at any time (a built-in clip). */
 export type ClipFrameSource =
@@ -487,15 +488,18 @@ export function ClipEditor({ source, meta, value, onChange, plan, side, fps = 30
     });
   }, [dur, fps]);
 
-  // Wheel: ctrl / pinch zooms around the cursor, otherwise pans. Not passive: the page must not scroll.
+  // Wheel: ctrl / pinch zooms around the cursor, a sideways swipe pans; a plain vertical wheel is left to scroll the
+  // page past the timeline. Not passive: a zoom or pan must not also scroll.
   useEffect(() => {
     const c = tl.ref.current;
     if (!c) return;
     const onWheel = (e: WheelEvent) => {
+      const intent = wheelIntent(e);
+      if (intent === 'vertical') return;
       e.preventDefault(); e.stopPropagation();
       const r = c.getBoundingClientRect();
-      if (e.ctrlKey || e.metaKey) zoomAt(Math.exp(-e.deltaY * 0.01), view.t0 + ((e.clientX - r.left) / r.width) * vd);
-      else { const d = (Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY) * (vd / r.width); setView(v => ({ ...v, t0: clamp(v.t0 + d, 0, dur - dur / v.z) })); }
+      if (intent === 'zoom') zoomAt(Math.exp(-e.deltaY * 0.01), view.t0 + ((e.clientX - r.left) / r.width) * vd);
+      else { const d = e.deltaX * (vd / r.width); setView(v => ({ ...v, t0: clamp(v.t0 + d, 0, dur - dur / v.z) })); }
     };
     // Safari's trackpad pinch.
     let g0 = 1;
