@@ -20,6 +20,7 @@ import { getNodeDefinition } from '../nodes/definitions';
 import { placeInFreeSpace } from '../store/agentSetup';
 import { buildSceneGraph, META_KEY, ROLE_KEY, type SceneBuilderMeta } from './build';
 import type { SceneSpec } from './spec';
+import { TO_TRANSFORM_TYPES, transformParamFor } from '../nodes/toTransform';
 
 export const BUILD_KEY = '_sbBuild';
 
@@ -42,7 +43,7 @@ function everyNode(nodes: GraphNode[], parent: GraphNode | null = null, out: Loc
 const roleOf = (n: GraphNode) => (typeof n.params[ROLE_KEY] === 'string' ? n.params[ROLE_KEY] as string : '');
 
 /** What a build made a node as: its settings and where its wires come from (by role). */
-function snapshot(n: GraphNode, roleById: Map<string, string>): { type: string; params: Record<string, unknown>; wires: Record<string, string> } {
+export function snapshot(n: GraphNode, roleById: Map<string, string>): { type: string; params: Record<string, unknown>; wires: Record<string, string> } {
   const params: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(n.params)) if (!ignored(k)) params[k] = v;
   const wires: Record<string, string> = {};
@@ -51,6 +52,15 @@ function snapshot(n: GraphNode, roleById: Map<string, string>): { type: string; 
 }
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+/** Equal, allowing the rounding of a radians → degrees conversion. */
+const near = (a: unknown, b: unknown) => (typeof a === 'number' && typeof b === 'number' ? Math.abs(a - b) <= 1e-6 * Math.max(1, Math.abs(a), Math.abs(b)) : same(a, b));
+
+/**
+ * A scene built before 2026-10-10 has Translate / Rotate / Scale 3D where a rebuild makes one Transform
+ * (docs/transform-node.md). The same role, an old type and a Transform now: the same item, its settings
+ * found on the Transform by transformParamFor (tx → x, an angle in radians → degrees).
+ */
+const becameTransform = (old: GraphNode, next: GraphNode | undefined) => !!next && next.type === 'transform' && old.type !== 'transform' && TO_TRANSFORM_TYPES.has(old.type);
 
 /**
  * Did the user change setting `k` since the build? A key the build didn't write counts only when it
@@ -111,9 +121,19 @@ export function checkEdits(graph: GraphNode[], sceneId: string, next: SceneSpec)
     if (!here) { report.lost.push(`You deleted ${was.type === 'sceneGroup' ? 'the Scene Group' : `a ${getNodeDefinition(was.type)?.label ?? was.type}`} (${role}); a rebuild makes it again.`); continue; }
     const now = snapshot(here, roleById);
     const will = freshAll.get(role);
+    const toTransform = becameTransform(here, will);
     for (const [k, v] of Object.entries(now.params)) {
       if (ignored(k)) continue;
       if (!userChanged(here, k, v, was.params)) continue;
+      // An older scene's Translate / Rotate / Scale 3D that the rebuild makes a Transform: the same item.
+      if (TO_TRANSFORM_TYPES.has(here.type) && (toTransform || !will)) {
+        const to = toTransform ? transformParamFor(here, k) : null;
+        const nextV = to ? snapshot(will!, freshRoleById).params[to.to] : undefined;
+        const wasV = typeof was.params[k] === 'number' && to ? (was.params[k] as number) * to.factor : was.params[k];
+        if (to && near(nextV, wasV)) report.kept.push(`${nameOf(here)} · ${paramName(here, k)} (kept on the Transform that replaces it)`);
+        else report.lost.push(`${nameOf(here)} · ${paramName(here, k)}: this scene was built before moves and turns became one Transform; the rebuild makes that Transform from the recipe, so set this again there (or in the builder).`);
+        continue;
+      }
       const nextV = will ? snapshot(will, freshRoleById).params[k] : undefined;
       if (will && will.type === here.type && same(nextV, was.params[k])) report.kept.push(`${nameOf(here)} · ${paramName(here, k)}`);
       else report.lost.push(`${nameOf(here)} · ${paramName(here, k)}: you set it on the node, and the builder sets it too.`);
@@ -166,6 +186,17 @@ export function applyScene(graph: GraphNode[], spec: SceneSpec, opts: { nextId: 
     const fresh = snapshot(node, roleById);
     snapshots[role] = JSON.stringify(fresh);
     if (old && found?.byRole.get(role)?.parent) node.position = { ...old.position };
+    // An older scene's Translate / Rotate / Scale 3D that is a Transform now: the user's settings carry over
+    // where the recipe leaves them, under the Transform's names and units.
+    if (old && was && becameTransform(old, node) && !opts.restore) {
+      for (const [k, v] of Object.entries(old.params)) {
+        if (ignored(k) || !userChanged(old, k, v, was.params)) continue;
+        const to = transformParamFor(old, k);
+        if (!to || typeof v !== 'number') continue;
+        const wasV = typeof was.params[k] === 'number' ? (was.params[k] as number) * to.factor : was.params[k];
+        if (near(fresh.params[to.to], wasV)) { node.params[to.to] = v * to.factor; kept.push(`${nameOf(old)} · ${paramName(old, k)}`); }
+      }
+    }
     if (old && was && old.type === node.type && !opts.restore) {
       for (const [k, v] of Object.entries(old.params)) {
         if (ignored(k)) continue;

@@ -2,6 +2,7 @@
 // of nodes (the current context: the whole graph at the top level, a group's subgraph inside one).
 import type { GraphNode, SubgraphData } from '../../types/nodeGraph';
 import { getNodeDefinitionFor } from '../../nodes/definitions';
+import { nodeCategory } from '../../nodes/nodeCategory';
 
 const OUTPUT_TYPES = new Set(['output', 'vec4Output']);
 
@@ -63,7 +64,8 @@ export function computeGraphStats(nodes: readonly GraphNode[], topLevel: boolean
     if (subgraphOf(n)) { groups++; return; }
     if (n.bypassed) bypassed.push(n.id);
     const def = getNodeDefinitionFor(n);
-    const category = def?.category ?? 'Other';
+    // A Transform counts in its Dimension's category (nodes/nodeCategory.ts).
+    const category = nodeCategory(n) ?? def?.category ?? 'Other';
     byCat.set(category, (byCat.get(category) ?? 0) + 1);
     const entry = byType.get(n.type) ?? { label: def?.label ?? n.type, category, ids: [] };
     entry.ids.push(n.id);

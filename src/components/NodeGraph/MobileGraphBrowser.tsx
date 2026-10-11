@@ -28,6 +28,7 @@ import { PublishNodeModal } from './PublishNodeModal';
 import type { PublishSource } from '../../nodes/userNodes/publishUserNode';
 import { NodeInlineViz, INLINE_VIZ_TYPES } from './NodeInlineViz';
 import { compileNodePreviewShader } from '../../lib/compileNodePreviewShader';
+import { previewTypeOf } from '../../lib/nodePreview/previewPlan';
 import { nodePreviewRenderer } from '../../lib/nodePreviewRenderer';
 import { typesCompatible } from '../../lib/typesCompatible';
 import { groupNodesByRank, computeNodeRanks } from '../../store/graphLayout';
@@ -3051,7 +3052,7 @@ export function MobileGraphBrowser() {
                       <span>{vizExpanded ? '▾' : '▸'} VISUAL</span>
                     </button>
                     {vizExpanded && (
-                      INLINE_VIZ_TYPES.has(node.type)
+                      INLINE_VIZ_TYPES.has(previewTypeOf(node))
                         ? <InlineVizFrame key={node.id} node={node} />
                         : <GenericPreviewViz key={node.id} node={node} nodes={nodes} />
                     )}

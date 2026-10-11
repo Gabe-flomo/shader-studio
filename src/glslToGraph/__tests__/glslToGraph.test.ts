@@ -21,13 +21,13 @@ describe('GLSL → node graph', () => {
     expect(c.success).toBe(true);
   });
 
-  it('turns `if (c) discard;` into alpha 0 through an RGBA Output, and rot() into a Rotate 2D node', () => {
+  it('turns `if (c) discard;` into alpha 0 through an RGBA Output, and rot() into a Transform (2D, Apply mode)', () => {
     const r = glslToGraph(corpus.find(([f]) => f.startsWith('08'))![1]);
     expect(r.report.unsupported).toEqual([]);
     const out = r.nodes.find(n => n.type === 'vec4Output')!;
     const mul = r.nodes.find(n => n.id === out.inputs.color.connection!.nodeId)!;
     expect(mul).toMatchObject({ type: 'multiply', params: { outputType: 'vec4' } });
-    expect(r.nodes.some(n => n.type === 'rotate2d')).toBe(true);
+    expect(r.nodes.some(n => n.type === 'transform' && n.params.mode === 'space')).toBe(true);
     expect(r.report.regions.map(x => x.why).join(' ')).not.toMatch(/rot/);
   });
   it('still refuses a discard inside a while loop, and says why', () => {

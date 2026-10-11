@@ -66,12 +66,23 @@ export const OWN_CARD_TYPES: ReadonlySet<string> = new Set(['agentsGroup']);
 export const THREE_D_GROUP_TYPES: ReadonlySet<string> = new Set(['sceneGroup', 'spaceWarpGroup', 'marchLoopGroup', 'giLitMarchGroup', 'volumetricScene', 'sceneBuilder']);
 
 /**
+ * The type a node's preview is chosen by: its own, except a Transform, whose card follows its Dimension
+ * (docs/transform-node.md): 2D draws its space like the 2D space nodes ('transform'), 3D lists its
+ * settings like the 3D transforms ('transform3D'), 4D shows what the 4D transforms do ('transform4D').
+ */
+export function previewTypeOf(node: Pick<GraphNode, 'type'> & { params?: Record<string, unknown> }): string {
+  if (node.type !== 'transform') return node.type;
+  const d = String(node.params?.dim ?? '2');
+  return d === '3' ? 'transform3D' : d === '4' ? 'transform4D' : 'transform';
+}
+
+/**
  * The plan for a node. `hasDiagram(type)` says whether NodeInlineViz draws a real diagram for it
  * (not just its parameters listed, which the sliders already show). `insideGroup` is the type of
  * the group being edited, when the node is inside one.
  */
-export function previewPlan(node: Pick<GraphNode, 'type' | 'outputs'>, hasDiagram: (type: string) => boolean, insideGroup?: string | null): PreviewPlan {
-  const t = node.type;
+export function previewPlan(node: Pick<GraphNode, 'type' | 'outputs'> & { params?: Record<string, unknown> }, hasDiagram: (type: string) => boolean, insideGroup?: string | null): PreviewPlan {
+  const t = previewTypeOf(node);
   if (SINK_TYPES.has(t)) return { eye: false, body: 'none', diagram: false, why: 'a sink: nothing of its own to show' };
   if (insideGroup && THREE_D_GROUP_TYPES.has(insideGroup)) {
     return hasDiagram(t)
@@ -101,7 +112,7 @@ export function previewPlan(node: Pick<GraphNode, 'type' | 'outputs'>, hasDiagra
  */
 export const PARAM_LIST_TYPES: ReadonlySet<string> = new Set([
   'sphereSDF3D', 'boxSDF3D', 'torusSDF3D', 'capsuleSDF3D', 'cylinderSDF3D', 'coneSDF3D', 'octahedronSDF3D', 'planeSDF3D',
-  'translate3D', 'rotate3D', 'repeat3D', 'twist3D', 'fold3D',
+  'translate3D', 'rotate3D', 'repeat3D', 'twist3D', 'fold3D', 'transform3D', 'transform4D',
   'roundedBoxSDF3D', 'boxFrameSDF3D', 'ellipsoidSDF3D', 'cappedTorusSDF3D', 'linkSDF3D', 'pyramidSDF3D', 'hexPrismSDF3D',
   'triPrismSDF3D', 'cappedConeSDF3D', 'roundedCylinderSDF3D', 'solidAngleSDF3D', 'verticalCapsuleSDF3D',
   'scale3d', 'rotateAxis3D', 'sinWarp3D', 'bend3D', 'limitedRepeat3D', 'polarRepeat3D', 'displace3D', 'sdfOnion',

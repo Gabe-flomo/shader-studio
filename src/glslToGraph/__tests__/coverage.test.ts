@@ -162,18 +162,22 @@ describe('phase 2: what used to be kept as code', () => {
     expect(r.report.blocks).toEqual([]);
     expect(r.nodes.filter(n => n.type === 'swizzle').map(n => n.params.pattern).sort()).toEqual(['xyx', 'zwxy', 'zwx', 'zyx'].sort());
   });
-  it('mat2(c, -s, s, c) * v, v * mat2(…), a mat2 variable and a rot() helper are Rotate 2D nodes', () => {
+  it('mat2(c, -s, s, c) * v, v * mat2(…), a mat2 variable and a rot() helper are Transform nodes (2D, Apply mode)', () => {
     const { r } = ok('mat2 rot(float a) { float c = cos(a), s = sin(a); return mat2(c, -s, s, c); }\nvoid main(){ vec2 u = gl_FragCoord.xy / u_resolution.xy - 0.5; float a = u_time; u = mat2(cos(a), -sin(a), sin(a), cos(a)) * u; mat2 m = mat2(cos(a), sin(a), -sin(a), cos(a)); u = u * m; u *= rot(0.3); gl_FragColor = vec4(u, 0.0, 1.0); }');
-    expect(r.nodes.filter(n => n.type === 'rotate2d')).toHaveLength(3);
+    const turns = r.nodes.filter(n => n.type === 'transform');
+    expect(turns).toHaveLength(3);
+    expect(turns.every(n => n.params.dim === '2' && n.params.mode === 'space')).toBe(true);
     expect(r.report.blocks).toEqual([]);
     expect(r.report.regions).toEqual([]);
-    // m * v with mat2(c, -s, s, c) turns by -a, v * m with mat2(c, s, -s, c) by -a, v * rot(t) by +t.
+    // m * v with mat2(c, -s, s, c) turns by -a, v * m with mat2(c, s, -s, c) by -a (wired into Turn), v * rot(t) by +t.
     expect(r.nodes.filter(n => n.type === 'negate')).toHaveLength(2);
-    expect(r.nodes.find(n => n.type === 'rotate2d' && n.params.angle === 0.3)).toBeTruthy();
+    expect(turns.filter(n => n.inputs.turn?.connection)).toHaveLength(2);
+    // A number angle is the Rotate slider, in degrees.
+    expect(turns.find(n => Math.abs(Number(n.params.rotate) - 0.3 * 180 / Math.PI) < 1e-9)).toBeTruthy();
   });
   it('a matrix that is not a rotation stays code', () => {
     const { r } = ok('void main(){ vec2 u = gl_FragCoord.xy / u_resolution.xy; float a = u_time; u = mat2(cos(a), sin(a), sin(a), cos(a)) * u; gl_FragColor = vec4(u, 0.0, 1.0); }');
-    expect(r.nodes.some(n => n.type === 'rotate2d')).toBe(false);
+    expect(r.nodes.some(n => n.type === 'rotate2d' || n.type === 'transform')).toBe(false);
     expect(r.report.blocks.length).toBeGreaterThan(0);
   });
 });
