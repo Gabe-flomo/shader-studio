@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.172',
+    date: '2026-10-11',
+    title: 'Preview with the keys',
+    highlights: [
+      { area: 'Files', text: 'Every media picker previews from the keyboard: ↑/↓ move and preview, ←/→ restart or skip, Space plays, Enter picks. Sounds, pictures and videos alike.' },
+      { area: 'Files', text: 'A click now previews instead of choosing straight away; double-click, Enter or Use it chooses. Only one preview plays at a time.' },
+    ],
+  },
+  {
     id: '2026.10.171',
     date: '2026-10-11',
     title: 'Builders on your phone',
