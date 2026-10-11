@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.148',
+    date: '2026-10-10',
+    title: 'Text grids',
+    highlights: [
+      { area: 'Studio', text: 'Grid Rules: start from text (the letters come alive), stamp words on the try board, and draw your own neighbourhood up to 7×7 with weights.' },
+      { area: 'Studio', text: 'Grid scene: stamp text onto the mini grid or keep a pattern only inside words. Open as nodes now works with drawn and text starts.' },
+    ],
+  },
+  {
     id: '2026.10.147',
     date: '2026-10-10',
     title: '3D Scene Builder, rebuilt',

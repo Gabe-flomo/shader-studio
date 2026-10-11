@@ -11,6 +11,9 @@ import { surpriseGridScene } from './surprise';
 export type GridSection = 'shapes' | 'motion' | 'patterns' | 'rules' | 'look';
 export const GRID_SECTIONS: GridSection[] = ['shapes', 'motion', 'patterns', 'rules', 'look'];
 
+/** The mini grid's text stamp: on or off, the words, and how many cells tall. */
+export interface TextStamp { on: boolean; text: string; size: number }
+
 interface GridBuilderState {
   open: boolean;
   spec: GridSceneSpec;
@@ -24,6 +27,8 @@ interface GridBuilderState {
   brush: string;
   /** A rule waiting for a cell to be picked on the mini grid (its id). */
   picking: string | null;
+  /** The text stamp (docs/grid-builder.md "Text"): while on, a click on the mini grid stamps the words there in the brush's shape. */
+  textStamp: TextStamp;
   dirty: boolean;
   surpriseSeed: number | null;
 
@@ -37,6 +42,7 @@ interface GridBuilderState {
   setSection: (s: GridSection) => void;
   setBrush: (b: string) => void;
   setPicking: (id: string | null) => void;
+  setTextStamp: (patch: Partial<TextStamp>) => void;
   setTarget: (id: string | null) => void;
   markBuilt: () => void;
   /** Surprise me: a random scene from `seed`, one undo step. */
@@ -56,6 +62,7 @@ export const useGridBuilder = create<GridBuilderState>((set, get) => ({
   section: 'shapes',
   brush: 'A',
   picking: null,
+  textStamp: { on: false, text: 'HI', size: 7 },
   dirty: false,
   surpriseSeed: null,
 
@@ -64,7 +71,7 @@ export const useGridBuilder = create<GridBuilderState>((set, get) => ({
     targetSceneId: o.targetSceneId ?? null, at: o.at ?? null, section: o.section ?? 'shapes',
     brush: spec.shapes[0]?.id ?? 'erase', picking: null, surpriseSeed: null,
   }),
-  close: () => set({ open: false, picking: null }),
+  close: () => set(s => ({ open: false, picking: null, textStamp: { ...s.textStamp, on: false } })),
   edit: (fn, coalesce) => {
     const { spec, past } = get();
     const next = structuredClone(spec);
@@ -96,6 +103,7 @@ export const useGridBuilder = create<GridBuilderState>((set, get) => ({
   setSection: section => set({ section, picking: null }),
   setBrush: brush => set({ brush }),
   setPicking: picking => set({ picking }),
+  setTextStamp: patch => set(s => ({ textStamp: { ...s.textStamp, ...patch } })),
   setTarget: id => set({ targetSceneId: id }),
   markBuilt: () => set({ dirty: false }),
   surprise: seed => {

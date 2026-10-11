@@ -6,6 +6,8 @@ import { compileGraph } from '../../compiler/graphCompiler';
 import type { Compiled } from '../sceneBuilder/previewGl';
 import { buildStandaloneGrid } from '../../gridScene/build';
 import { shapeOf, type GridSceneSpec, type ShapeKind, type Vec3 } from '../../gridScene/spec';
+import { activeMask } from '../../gridScene/glsl';
+import { textMaskAt } from '../../gridScene/textMask';
 
 /** Build and compile a spec the way Build would: the preview. */
 export function compileGridScene(spec: GridSceneSpec): Compiled {
@@ -64,11 +66,18 @@ export function paintGrid(ctx: CanvasRenderingContext2D, spec: GridSceneSpec, w:
   for (let i = 0; i <= spec.cols; i++) { ctx.moveTo(x0 + i * cell + 0.5, y0); ctx.lineTo(x0 + i * cell + 0.5, y0 + spec.rows * cell); }
   for (let j = 0; j <= spec.rows; j++) { ctx.moveTo(x0, y0 + j * cell + 0.5); ctx.lineTo(x0 + spec.cols * cell, y0 + j * cell + 0.5); }
   ctx.stroke();
-  // The pattern's fill: a faint glyph in every empty cell.
+  // The pattern's text mask: its cells tinted (the wave and the fill live only there).
+  const mask = activeMask(spec);
+  if (mask) {
+    ctx.fillStyle = 'rgba(255,255,255,0.07)';
+    for (let y = 0; y < spec.rows; y++) for (let x = 0; x < spec.cols; x++) if (textMaskAt(mask, spec.cols, spec.rows, x, y)) ctx.fillRect(x0 + x * cell + 1, y0 + y * cell + 1, cell - 1, cell - 1);
+  }
+  // The pattern's fill: a faint glyph in every empty cell (inside the mask, when there is one).
   const fill = spec.pattern.kind !== 'none' ? shapeOf(spec, spec.pattern.fill) : undefined;
   if (fill) {
     for (let y = 0; y < spec.rows; y++) for (let x = 0; x < spec.cols; x++) {
       if (spec.cells.some(c => c.x === x && c.y === y)) continue;
+      if (mask && !textMaskAt(mask, spec.cols, spec.rows, x, y)) continue;
       drawGlyph(ctx, fill.kind, x0 + (x + 0.5) * cell, y0 + (y + 0.5) * cell, cell * 0.5 * Math.min(1, fill.size) * 0.8, rgb(fill.color, 0.28));
     }
   }

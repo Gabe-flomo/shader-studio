@@ -103,7 +103,7 @@ describe('a drawn start', () => {
     expect(readStartCells({ rows: [] })).toBeNull();
     expect(readStartCells('junk')).toBeNull();
     expect(startCellsFromGrid([[0, 0]])).toBeNull();
-    const big = startCellsFromGrid(Array.from({ length: 80 }, () => Array(90).fill(1)))!;
+    const big = startCellsFromGrid(Array.from({ length: 140 }, () => Array(150).fill(1)))!;
     expect([big.w, big.h]).toEqual([MAX_START, MAX_START]);
     expect(drawnCount(sc)).toBe(2);
   });

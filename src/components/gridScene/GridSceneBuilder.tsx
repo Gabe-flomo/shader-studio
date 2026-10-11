@@ -44,6 +44,9 @@ import {
   type DoKind, type GShape, type GridSceneSpec, type MotionPath, type PatternKind, type PatternTarget, type ShapeKind, type Vec2, type WhenKind,
 } from '../../gridScene/spec';
 import { MiniGrid } from './MiniGrid';
+import { Field } from '../ui/Field';
+import { DEFAULT_TEXT_MASK, MAX_MASK_SIZE, MIN_MASK_SIZE, readTextMask, type TextMask } from '../../gridScene/textMask';
+import { cleanStartText, MAX_TEXT_CHARS } from '../../gridRules/textCells';
 import { compileGridScene, drawGlyph, gridPicture, rgb } from './glyphs';
 
 const edit = (fn: (d: GridSceneSpec) => void, key?: string) => useGridBuilder.getState().edit(fn, key);
@@ -185,6 +188,28 @@ function Brush() {
   );
 }
 
+/** The text stamp (docs/grid-builder.md "Text"): words in the stroke font, stamped onto the mini grid in the brush's shape. */
+function TextStampRow() {
+  const tk = useTokens();
+  const stamp = useGridBuilder(s => s.textStamp);
+  const setStamp = useGridBuilder(s => s.setTextStamp);
+  return (
+    <div data-text-stamp style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <Button size="sm" variant={stamp.on ? 'primary' : 'ghost'} icon="text" aria-pressed={stamp.on} data-text-stamp-toggle onClick={() => setStamp({ on: !stamp.on })}
+        title="Text stamp: click the grid to fill the cells some words cover with the brush's shape">Text</Button>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <Field aria-label="Words to stamp" height={28} value={stamp.text} maxLength={MAX_TEXT_CHARS} data-text-stamp-words
+          onChange={e => setStamp({ text: cleanStartText(e.target.value), on: true })} />
+      </span>
+      <span title="How many cells tall the letters are" style={{ fontSize: 11.5, color: tk.text.muted }}>tall</span>
+      <span style={{ width: 56 }}>
+        <Select ariaLabel="Letter height (cells)" height={28} value={String(stamp.size)} onChange={v => setStamp({ size: Number(v) })}
+          options={[3, 4, 5, 6, 7, 8, 10, 12].map(n => ({ value: String(n), label: String(n) }))} />
+      </span>
+    </div>
+  );
+}
+
 function LeftPanel() {
   const tk = useTokens();
   const section = useGridBuilder(s => s.section);
@@ -193,6 +218,7 @@ function LeftPanel() {
   const rows = useGridBuilder(s => s.spec.rows);
   const placed = useGridBuilder(s => s.spec.cells.length);
   const picking = useGridBuilder(s => s.picking);
+  const stampOn = useGridBuilder(s => s.textStamp.on);
   const summaryKey = useGridBuilder(s => {
     const sp = s.spec;
     return JSON.stringify({
@@ -208,9 +234,10 @@ function LeftPanel() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '14px 14px 18px' }}>
       <StudioLabel meta={`${placed} / ${MAX_PLACED} cells`}>Draw</StudioLabel>
       <Brush />
+      <TextStampRow />
       <MiniGrid size={288} />
-      <span data-grid-hint style={{ fontSize: 11.5, color: picking ? tk.status.warningText : tk.text.muted, lineHeight: 1.4 }}>
-        {picking ? 'Click a cell for the rule (Esc to stop picking).' : 'Click or drag to place the brush; right-click or the eraser clears. The faint lines are the brush shape\'s motion.'}
+      <span data-grid-hint style={{ fontSize: 11.5, color: picking || stampOn ? tk.status.warningText : tk.text.muted, lineHeight: 1.4 }}>
+        {picking ? 'Click a cell for the rule (Esc to stop picking).' : stampOn ? 'Click the grid to stamp the words there in the brush\'s shape (right-click or Alt clears them). Turn Text off to draw cells again.' : 'Click or drag to place the brush; right-click or the eraser clears. The faint lines are the brush shape\'s motion.'}
       </span>
       <div style={{ display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr)', alignItems: 'center', gap: '6px 10px' }}>
         <span style={{ fontSize: 12, color: tk.text.secondary }}>Columns</span>
@@ -320,6 +347,30 @@ function MotionSection() {
   );
 }
 
+/** The pattern's text mask: the wave (and the fill) only in the cells the words cover, drawn in the shader. */
+function MaskRows({ mask, onChange }: { mask: TextMask | null; onChange: (m: TextMask | null, key?: string) => void }) {
+  const m = mask ?? DEFAULT_TEXT_MASK;
+  const put = (patch: Partial<TextMask>, key?: string) => onChange({ ...m, ...patch }, key);
+  return (
+    <>
+      <Row label="Only in words" hint="Limit the pattern to the cells some words cover: the wave changes only those cells, and Fill puts its shape only there, so the fill spells the words.">
+        <Toggle checked={!!mask} onChange={on => onChange(on ? { ...DEFAULT_TEXT_MASK } : null)} label={mask ? 'On' : 'Off'} />
+      </Row>
+      {mask && (
+        <>
+          <Row label="Words" hint="A–Z, 0–9 and a few signs, in the stroke font.">
+            <Field aria-label="Mask words" value={m.text} maxLength={MAX_TEXT_CHARS} data-mask-words onChange={e => put({ text: cleanStartText(e.target.value) }, 'mt')} />
+          </Row>
+          <NumRow label="Size" hint="How many cells tall the letters are." value={m.size} min={MIN_MASK_SIZE} max={MAX_MASK_SIZE} defaultValue={DEFAULT_TEXT_MASK.size} onChange={v => put({ size: v }, 'ms')} />
+          <NumRow label="Weight" hint="How thick the strokes are." value={m.weight} min={0.02} max={0.8} defaultValue={DEFAULT_TEXT_MASK.weight} onChange={v => put({ weight: v }, 'mw')} />
+          <NumRow label="Across" hint="Cells right of the grid's middle." value={m.x} min={-12} max={12} defaultValue={0} onChange={v => put({ x: v }, 'mx')} />
+          <NumRow label="Up" hint="Cells above the grid's middle." value={m.y} min={-12} max={12} defaultValue={0} onChange={v => put({ y: v }, 'my')} />
+        </>
+      )}
+    </>
+  );
+}
+
 function PatternsSection() {
   const p = useGridBuilder(s => s.spec.pattern);
   const shapes = useGridBuilder(s => s.spec.shapes);
@@ -341,6 +392,7 @@ function PatternsSection() {
             <Row label="Fill empty cells" hint="Put a shape in every cell you haven't drawn on; its size follows the wave.">
               <Select ariaLabel="Fill empty cells with" value={p.fill ?? ''} options={[{ value: '', label: 'No' }, ...shapes.map(s => ({ value: s.id, label: `With ${s.id} · ${SHAPE_LABELS[s.kind]}` }))]} onChange={v => setP(x => { x.fill = v || null; })} />
             </Row>
+            <MaskRows mask={readTextMask(p.mask)} onChange={(m, key) => setP(x => { x.mask = m; }, key)} />
           </>
         )}
       </Card>

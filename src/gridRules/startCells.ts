@@ -17,10 +17,13 @@ export interface StartCells {
   h: number;
   /** Top row first; '.' is empty, a digit (or a…f) the state. */
   rows: string[];
+  /** Moved this many cells from the middle (x right, y up): a text start's position. */
+  ox?: number;
+  oy?: number;
 }
 
-/** Largest drawing, in cells each way (the GLSL bakes a test per drawn row and state). */
-export const MAX_START = 64;
+/** Largest drawing, in cells each way (the GLSL bakes a test per drawn row, state and 16 cells). A text start is wide and short. */
+export const MAX_START = 128;
 /** Bits per mask in the GLSL (whole numbers below 2^16 stay exact in any float). */
 const CHUNK = 16;
 
@@ -35,7 +38,10 @@ export function readStartCells(v: unknown): StartCells | null {
   if (!Array.isArray(x.rows) || !x.rows.length) return null;
   const rows = x.rows.slice(0, MAX_START).map(r => (typeof r === 'string' ? r : '').slice(0, MAX_START));
   const w = Math.max(1, ...rows.map(r => r.length));
-  return fromGrid(rows.map(r => Array.from({ length: w }, (_, i) => stateOf(r[i]))));
+  const sc = fromGrid(rows.map(r => Array.from({ length: w }, (_, i) => stateOf(r[i]))));
+  const off = (n: unknown) => (typeof n === 'number' && Number.isFinite(n) ? Math.round(Math.max(-4096, Math.min(4096, n))) : 0);
+  if (sc && (off(x.ox) || off(x.oy))) { sc.ox = off(x.ox); sc.oy = off(x.oy); }
+  return sc;
 }
 
 /** The state of a drawing's cell, x right, y up from its bottom row (0 outside). */
@@ -74,7 +80,7 @@ export function startCellsFromBoard(B: CpuBoard): StartCells | null {
 }
 
 /** Where a drawing's bottom-left cell lands on a w × h board (the same on the GPU). */
-export const startOrigin = (sc: StartCells, w: number, h: number): [number, number] => [Math.floor((w - sc.w) / 2), Math.floor((h - sc.h) / 2)];
+export const startOrigin = (sc: StartCells, w: number, h: number): [number, number] => [Math.floor((w - sc.w) / 2) + (sc.ox ?? 0), Math.floor((h - sc.h) / 2) + (sc.oy ?? 0)];
 
 /** The drawing's state at board cell (x, y up), placed in the middle of a w × h board. */
 export function stampedAt(sc: StartCells, w: number, h: number, x: number, y: number): number {
@@ -89,7 +95,7 @@ export const drawnCount = (sc: StartCells | null) => (sc ? sc.rows.join('').spli
 export function startCellsHash(sc: StartCells | null): number {
   if (!sc) return 0;
   let h = 7;
-  for (const ch of `${sc.w}x${sc.h}:${sc.rows.join('/')}`) h = (h * 31 + ch.charCodeAt(0)) % 65521;
+  for (const ch of `${sc.w}x${sc.h}:${sc.rows.join('/')}${sc.ox || sc.oy ? `@${sc.ox ?? 0},${sc.oy ?? 0}` : ''}`) h = (h * 31 + ch.charCodeAt(0)) % 65521;
   return h % 16;
 }
 
@@ -105,8 +111,8 @@ export function startCellsGLSL(sc: StartCells | null, drawn: string, cell: strin
   if (!sc) return L;
   const sx = `${prefix}_sx`, sy = `${prefix}_sy`;
   L.push(
-    `float ${sx} = ${cell}.x - floor((${res}.x - ${f(sc.w)}) * 0.5);`,
-    `float ${sy} = ${cell}.y - floor((${res}.y - ${f(sc.h)}) * 0.5);`,
+    `float ${sx} = ${cell}.x - floor((${res}.x - ${f(sc.w)}) * 0.5)${sc.ox ? ` - ${f(sc.ox)}` : ''};`,
+    `float ${sy} = ${cell}.y - floor((${res}.y - ${f(sc.h)}) * 0.5)${sc.oy ? ` - ${f(sc.oy)}` : ''};`,
   );
   for (let r = 0; r < sc.h; r++) {
     const y = sc.h - 1 - r;
