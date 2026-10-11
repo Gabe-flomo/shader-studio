@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.154',
+    date: '2026-10-11',
+    title: 'Splat modifiers',
+    highlights: [
+      { area: 'Studio', text: 'Splat modifiers: wire nodes into a Splat Scene to change every splat: dissolve by noise, explode and return home, wave, colour grade, crop, size, points.' },
+      { area: 'Studio', text: 'Splat Attributes and Set Splat let any node chain move or recolour splats, live from Play. Sorting follows moved splats so scans stay correct.' },
+    ],
+  },
+  {
     id: '2026.10.153',
     date: '2026-10-10',
     title: 'Frame rate',
