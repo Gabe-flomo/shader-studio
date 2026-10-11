@@ -43,6 +43,7 @@ import { SETTING_HINTS } from '../../agentBuilder/words';
 import { CARD_WORDS, KIND_SECTIONS, MORE_HINTS, type SectionId, isTrailKind, kindCards, sectionWordsOf } from '../../agentBuilder/sections';
 import { type BuilderGroup, applyBuilderPreset, builderGroups, clearableCount, clearGraphForBuilder, discardAgentGroup, endSetupBurst, makeAgentGroup, removeAgentSetup, setSetupParam, setupOf } from '../../agentBuilder/actions';
 import { BehaviourCard, ChipRow, SettingRow, SliderSetting } from './BehaviourCard';
+import { MuteToggle } from '../builders/MuteToggle';
 import { WalkerDiagram, type BornInfo } from './WalkerDiagram';
 import { KindDiagram, OnlyWhenOverlay } from './KindDiagram';
 import { SectionCards } from './SectionCards';
@@ -525,7 +526,7 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
           onFocus={onFocusSetting} disabled={!cards.senses.there} onChange={v => update(patchCard(set, s, 'senses', { degrees: v }))} />
         <SliderSetting id="wobble" label="Wobble" hint={SETTING_HINTS.wobble} value={cards.turning.wobble} min={0} max={45} step={0.5}
           onFocus={onFocusSetting} onChange={v => update(patchCard(set, s, 'wobble', { degrees: v }))}
-          right={<span data-card-switch="wobble"><Toggle checked={cards.turning.wobbleOn} onChange={on => update(setCardOn(set, s, 'wobble', on))} /></span>} />
+          right={<span data-card-switch="wobble"><MuteToggle muted={!cards.turning.wobbleOn} what="the wobble" onToggle={() => update(setCardOn(set, s, 'wobble', !cards.turning.wobbleOn))} /></span>} />
       </BehaviourCard>
       {extraCards(['wobble', 'goal', 'turnRound'])}
     </div>

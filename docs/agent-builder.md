@@ -78,7 +78,7 @@ Only the selected section's card is open. The others are their summaries in the 
 
 - a picture;
 - a plain name, with a hint when you hover over it;
-- an on/off switch where the behaviour can be off;
+- a mute button where the behaviour can be left out (see Muting);
 - two or three sliders (the app's RulerSlider);
 - a folded **More**;
 - **Learn more**, the field guide's paragraph in short.
@@ -189,6 +189,17 @@ Each card has an optional **Only when…** line. "+ Only when…" opens a picker
 - in / not in state ….
 
 Once picked, it is a small chip ("only when · older than 2 s") with its settings folded under it, and × makes the card always act again. It is the card's rule's condition. Pointing at a card with an "only when" draws where it applies: a shape is drawn on the picture with the rest shaded, and other conditions are a badge at the top of the viewport.
+
+## Muting
+
+Every behaviour card that can be left out has a mute button in its header, the same mark as a node's bypass in the graph (the builders' shared `MuteToggle`). This is the old on/off switch with a new look: a muted card is its rule switched off (the rule's `off`), so nothing changes for saved setups.
+
+- **What can be muted:** the behaviour cards (Senses, Trail, every force, flocking, goal, orbit, wobble, memory and Turn round cards), Turning's Wobble, each Advanced rule, and each layer of a Follow a field card. Born, Turning, Moving, Look and the other settings cards are what a walker is, so they have no mute.
+- **Left out, not gated:** agents compile through their own path (`agentRules/generate.ts`), which has no live mute gate, so a muted card's action is left out of the generated nodes: the walkers run as if the card were taken away. Toggling rebuilds the group's inside (as any card edit does). Its settings stay on the card.
+- A muted card says **Muted** beside its name and its settings dim; they can still be edited.
+- **Alt/Option-click** the mute solos the card in its section: the other cards there are muted. Alt-click it again turns them all back on (`soloCard`).
+- Each mute (or solo) is one undo step, and it is saved with the group, so it is still muted when the builder is opened again.
+- **Text:** a muted rule prints with `@off` in the agents dialect, as before. The builders' word `muted` (a bare `muted` at the end of the rule, or `@muted`) reads as `@off` too, and prints back as `@off`.
 
 ## Dragging cards
 

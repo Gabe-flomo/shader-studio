@@ -20,7 +20,7 @@ import { BuilderSlider } from '../builders/BuilderSlider';
 import { gridShape, ruleSummary } from '../../gridRules/spec';
 import {
   ARROWS, BLOCKED_ACTS, COLLIDE_ACTS, DIRECTIONS, MAX_CLUSTER_RADIUS, MAX_COPIES, MAX_DISTANCE, MAX_STACK, STACK_KINDS, STACK_RECIPES,
-  describeStackRule, newStackRule, readStack, stacksOn, type StackAct, type StackKind, type StackRule,
+  describeStackRule, newStackRule, readStack, soloOff, stacksOn, type StackAct, type StackKind, type StackRule,
 } from '../../gridRules/stack';
 import { stackRecipePatch } from '../../gridRules/stackRecipes';
 import { ListActions, Row, RuleCard, move } from './StencilForms';
@@ -59,7 +59,7 @@ export function StackForm({ p, set, onHoverCard }: { p: P; set: Setter; onHoverC
 
       {cards.map((r, j) => (
         <RuleCard key={j} index={j} title={`${j + 1} · ${STACK_KINDS.find(k => k.kind === r.kind)!.label}`} off={r.off} onHover={on => onHoverCard?.(on ? j : null)}
-          actions={<ListActions i={j} n={cards.length} off={!!r.off} onMove={d => save(move(cards, j, d))} onDelete={() => { onHoverCard?.(null); save(cards.filter((_, k) => k !== j)); }} onToggle={on => edit(j, { off: !on })} />}>
+          actions={<ListActions i={j} n={cards.length} off={!!r.off} onMove={d => save(move(cards, j, d))} onDelete={() => { onHoverCard?.(null); save(cards.filter((_, k) => k !== j)); }} onToggle={on => edit(j, { off: !on })} onSolo={() => save(soloOff(cards, j))} what="this card" />}>
           <span data-stack-sentence style={{ fontSize: 12.5, lineHeight: 1.45 }}>{describeStackRule(r)}</span>
           <CardSettings r={r} top={top} edit={(patch, immediate) => edit(j, patch, immediate)} />
         </RuleCard>

@@ -260,6 +260,8 @@ export interface WarpSpec {
   values: Record<string, number | Vec3 | string>;
   /** kind === 'custom': what the recogniser could not read. */
   label?: string;
+  /** Switched off for now (builders/mute.ts): its node passes what came in, by a live uniform; settings kept. */
+  muted?: boolean;
 }
 
 export interface ShapeSpec {
@@ -283,6 +285,8 @@ export interface ShapeSpec {
   warps: WarpSpec[];
   /** kind === 'custom': what the recogniser could not read. */
   label?: string;
+  /** Switched off for now (builders/mute.ts): its distance is far away, by a live uniform, so it draws nothing; settings kept. */
+  muted?: boolean;
 }
 
 export type CombineOp = 'union' | 'subtract' | 'intersect';
@@ -296,6 +300,8 @@ export interface GroupSpec {
   k: number;
   children: SceneItem[];
   warps: WarpSpec[];
+  /** Switched off for now (builders/mute.ts): everything in it draws nothing, by a live uniform. Not on the root. */
+  muted?: boolean;
 }
 
 export type SceneItem = ShapeSpec | GroupSpec;
@@ -363,7 +369,16 @@ export interface LookSpec {
   glow: { density: number; falloff: number; shell: number; exposure: number; tint: Vec3 };
   glass: { ior: number; dispersion: number; tint: Vec3 };
   gi: { strength: number; metal: number; rough: number; spec: number };
+  /** Lights and effects switched off for now (builders/mute.ts): bypassed by a live uniform, settings kept. */
+  mute?: Partial<Record<LookMute3D, boolean>>;
 }
+
+/**
+ * The look's parts that can be muted: soft shadows and AO (their shade is 1, fully lit), the
+ * highlight (shine), fog and the tone map (the colour passes through).
+ */
+export const LOOK_MUTES_3D = ['shadows', 'ao', 'shine', 'fog', 'tone'] as const;
+export type LookMute3D = typeof LOOK_MUTES_3D[number];
 
 /** How the camera's rays leave it (March Camera's Perspective). */
 export type CameraProjection = 'perspective' | 'orthographic' | 'reverse';
@@ -511,6 +526,20 @@ export function starterSpec(): SceneSpec {
 export function walkItems(item: SceneItem, visit: (it: SceneItem, parent: GroupSpec | null, depth: number) => void, parent: GroupSpec | null = null, depth = 0): void {
   visit(item, parent, depth);
   if (item.type === 'group') for (const c of item.children) walkItems(c, visit, item, depth + 1);
+}
+
+/**
+ * The shapes that are muted, by themselves or by a group round them (builders/mute.ts): the root
+ * can't be muted. Materials leaves them out, so a muted shape never wins a colour.
+ */
+export function mutedShapes(spec: SceneSpec): Set<string> {
+  const out = new Set<string>();
+  const go = (it: SceneItem, under: boolean) => {
+    const m = under || (it.id !== spec.root.id && !!it.muted);
+    if (it.type === 'shape') { if (m) out.add(it.id); } else for (const c of it.children) go(c, m);
+  };
+  go(spec.root, false);
+  return out;
 }
 
 export function allShapes(spec: SceneSpec): ShapeSpec[] {

@@ -19,6 +19,7 @@ import { Select } from '../ui/Select';
 import { Icon } from '../ui/Icon';
 import { NEST_INDENT, nestedSectionStyle } from '../ui/nesting';
 import { MiniCloud } from './MiniCloud';
+import { MuteToggle, MutedTag, MUTED_DIM } from '../builders/MuteToggle';
 import { useScanBox } from './SplatViewport';
 import { useSplatBuilder } from '../../splatBuilder/store';
 import { findSplatBuild } from '../../splatBuilder/apply';
@@ -31,7 +32,7 @@ import { centrePlace, fitPlace, onFloorPlace, quarterTurn, scanCenter } from '..
 import { readSplatRecipe, splatRecipe } from '../../splatBuilder/recipe';
 import {
   EFFECT_INFO, EFFECT_KINDS, EFFECT_TYPE, LIGHTS, LIGHT_INFO, PROP_KINDS, PROP_LABELS, QUALITY_KEYS, QUALITY_PRESETS, TONES, TONE_LABELS,
-  animateFor, effectSummary, moveEffect, newEffect, nextEffectId, placeEffect, qualityOf, scanName,
+  animateFor, effectSummary, moveEffect, newEffect, nextEffectId, placeEffect, qualityOf, scanName, soloEffect, toggleEffectMute,
   type EffectKind, type EffectSpec, type ParamValue, type PropKind, type SplatBuilderSpec, type SplatSection, type Vec3,
 } from '../../splatBuilder/spec';
 
@@ -326,31 +327,31 @@ function EffectCard({ e, index, count }: { e: EffectSpec; index: number; count: 
       onDragLeave={() => setDragOver(false)}
       onDrop={ev => { ev.preventDefault(); setDragOver(false); const id = ev.dataTransfer.getData('text/x-splat-effect'); if (id && id !== e.id) edit(d => { d.effects = placeEffect(d.effects, id, e.id); }); }}
       style={{
-        borderRadius: radius.control, background: tk.bg.panel, flexShrink: 0, overflow: 'hidden', opacity: e.on ? 1 : 0.6,
+        borderRadius: radius.control, background: tk.bg.panel, flexShrink: 0, overflow: 'hidden',
         boxShadow: dragOver ? `inset 0 3px 0 ${tk.accent.base}, inset 0 0 0 1px ${tk.border.default}` : `inset 0 0 0 1px ${picked ? tk.accent.base : tk.border.default}`,
       }}>
       <div onClick={() => useSplatBuilder.getState().setPicked(picked ? null : e.id)}
         style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 6px 6px 8px', minHeight: 42, cursor: 'pointer' }}>
         <Icon name="grip" size={13} style={{ color: tk.text.faint, cursor: 'grab', flexShrink: 0 }} />
         <span style={{ width: 18, height: 18, borderRadius: 5, background: alpha(tk.accent.base, 0.14), color: tk.accent.text, fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{index + 1}</span>
-        <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
-          <b style={{ fontSize: 13 }}>{info.label}</b>
+        <span data-muted={!e.on || undefined} style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1, ...(e.on ? {} : MUTED_DIM) }}>
+          <b style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>{info.label}{!e.on && <MutedTag />}</b>
           <span data-splat-effect-summary style={{ fontSize: 11.5, color: tk.text.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{effectSummary(e)}</span>
         </span>
         <span onClick={ev => ev.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <Toggle checked={e.on} onChange={on => up(x => { x.on = on; })} />
+          <MuteToggle muted={!e.on} what={info.label} onToggle={() => edit(d => toggleEffectMute(d.effects, e.id))} onSolo={() => edit(d => soloEffect(d.effects, e.id))} />
           <IconButton icon="chevU" size="sm" label="Earlier (applied before)" disabled={index === 0} onClick={() => edit(d => { d.effects = moveEffect(d.effects, e.id, -1); })} data-effect-up />
           <IconButton icon="chevD" size="sm" label="Later (applied after)" disabled={index === count - 1} onClick={() => edit(d => { d.effects = moveEffect(d.effects, e.id, 1); })} data-effect-down />
           <IconButton icon="trash" size="sm" label={custom ? 'Take out of the stack (the nodes stay on the graph, unwired)' : 'Remove'} onClick={() => edit(d => { d.effects = d.effects.filter(x => x.id !== e.id); })} data-effect-remove />
         </span>
       </div>
       {picked && custom && (
-        <div data-splat-custom-note style={{ padding: '8px 12px 12px', borderTop: `1px solid ${tk.border.subtle}` }}>
+        <div data-splat-custom-note style={{ padding: '8px 12px 12px', borderTop: `1px solid ${tk.border.subtle}`, ...(e.on ? {} : MUTED_DIM) }}>
           <BuilderNote>Nodes you added on the Splat Scene card. The builder never changes them: it keeps them wired here in the stack, so move the card to change what they come before or after. Edit them on the graph.</BuilderNote>
         </div>
       )}
       {picked && !custom && (
-        <div style={{ padding: '4px 12px 12px', display: 'flex', flexDirection: 'column', gap: 6, borderTop: `1px solid ${tk.border.subtle}` }}>
+        <div style={{ padding: '4px 12px 12px', display: 'flex', flexDirection: 'column', gap: 6, borderTop: `1px solid ${tk.border.subtle}`, ...(e.on ? {} : MUTED_DIM) }}>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             <MiniCloud effects={[e]} bg={bg} width={128} height={80} label={`${info.label}: a live preview on a point cloud`} />
             <BuilderNote>{info.line}. Live on a small cloud here; on your scan in the picture.</BuilderNote>

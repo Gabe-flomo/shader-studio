@@ -147,6 +147,26 @@ every library entry checks, runs, draws and compiles, chaining, the four combine
 recipes) and `src/components/sceneBuilder2d/__tests__/spaceBlocks.test.tsx` (the library, Random,
 errors as you type, Make a slider, three lines at most).
 
+## Muting
+
+Any card can be switched off for a while ([scene-builder.md](scene-builder.md#muting) has the
+shared rules: ⊘ on the card, Alt-click solos, one undo step, saved with the scene):
+
+| What | How it is muted |
+| --- | --- |
+| A space transform, block or combine (Space tab) | Live: its node passes the uv it was given straight through. In the example, Mirror both muted shows the picture before the fold. |
+| A layer or a shape in a combine (the layer list's ⊘, or its card) | Live: its distance is pushed far away (so unions, cuts and glows ignore it) and, for a layer, the picture behind passes through. |
+| A motion (Shapes → Motion) | Left out of the build. |
+| A ring of copies (Duplicate) | Left out: one copy. |
+| The grid (Grid → Cells) | Live: the picture under the grid passes through. |
+| Glow, tone map, bloom, vignette, grain, scanlines (Look) | Live: each effect's node passes its colour through. |
+| The picture in pieces | Live: the picture under it passes through. |
+| A Grade card (Look) or an Effects card | Left out of the build (the card's existing off flag, now the ⊘ with Alt-click solo; `muted` in a recipe reads as `off`). |
+
+Recipe: `mirror xy muted`, `circle r=0.3 muted`, `@orbit(0.3 muted)`, `@ring(6 r=0.5 muted)`,
+`grid 12 muted`, `glow muted`, `tone aces muted`, `bloom 0.6 muted`. Tests:
+`src/sceneBuilder2d/__tests__/mute.test.ts`.
+
 ## Textures
 
 Pictures through the shared picker ([scene-builder.md](scene-builder.md#textures)). The scene keeps

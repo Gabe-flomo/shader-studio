@@ -93,7 +93,7 @@ export function parseStackItem(defs: Record<string, StackKindDef>, kind: string,
       continue;
     }
     const w = r.word(a);
-    if (w === 'off' || w === 'no') { it.on = false; continue; }
+    if (w === 'off' || w === 'no' || w === 'muted') { it.on = false; continue; }
     if (w === 'on') { it.on = true; continue; }
     if (a.value.k === 'num' && !primaryDone) {
       const p = def.params.find(q => q.primary) ?? def.params.find(q => q.type === 'num');

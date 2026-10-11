@@ -46,6 +46,8 @@ import {
   type DoKind, type DrawMode, type GridClause, type GridDo, type GridRule, type Join, type GShape, type PicMode, type GridSceneSpec, type MotionPath, type PatternKind, type PatternTarget, type ShapeKind, type Vec2, type WhenKind,
 } from '../../gridScene/spec';
 import { MiniGrid } from './MiniGrid';
+import { MUTED_DIM, MuteToggle, MutedTag } from '../builders/MuteToggle';
+import { soloIn } from '../../builders/mute';
 import { Field } from '../ui/Field';
 import { DEFAULT_TEXT_MASK, MAX_MASK_SIZE, MIN_MASK_SIZE, readTextMask, type TextMask } from '../../gridScene/textMask';
 import { cleanStartText, MAX_TEXT_CHARS } from '../../gridRules/textCells';
@@ -334,7 +336,8 @@ function ShapesSection() {
             style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', border: 0, borderRadius: radius.sm, cursor: 'pointer', textAlign: 'left',
               background: sh?.id === s.id ? tk.bg.selected : tk.bg.field, color: tk.text.primary, font: `500 12.5px ${fontFamily.ui}` }}>
             <Glyph kind={s.kind} color={s.color} outline={s.outline} />
-            <b style={{ width: 14 }}>{s.id}</b>
+            <b style={{ width: 14, ...(s.muted ? MUTED_DIM : {}) }}>{s.id}</b>
+            {s.muted && <MutedTag />}
             <span style={{ flex: 1, minWidth: 0, color: tk.text.muted, fontSize: 11.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{shapeSummary(spec, s)}</span>
           </button>
         ))}
@@ -342,6 +345,7 @@ function ShapesSection() {
       </div>
       {sh && (
         <Card id="gs-shape" defaultOpen title={`Shape ${sh.id}`} summary={SHAPE_LABELS[sh.kind]}
+          mute={{ muted: !!sh.muted, what: `shape ${sh.id}`, onToggle: () => editShape(sh.id, s => { s.muted = !s.muted; }), onSolo: () => edit(d => soloIn(d.shapes, sh.id)) }}
           actions={shapes.length > 1 ? <IconButton icon="trash" size="sm" label={`Remove shape ${sh.id} (its cells and rules go too)`} onClick={() => { edit(d => removeShape(d, sh.id)); setBrush(useGridBuilder.getState().spec.shapes[0]?.id ?? 'erase'); }} /> : undefined}>
           <Tiles items={SHAPE_KINDS} value={sh.kind} label={k => SHAPE_LABELS[k]} onPick={k => editShape(sh.id, s => { s.kind = k; })}
             render={k => <Glyph kind={k} color={sh.color} size={20} />} />
@@ -445,6 +449,13 @@ function MaskRows({ mask, onChange }: { mask: TextMask | null; onChange: (m: Tex
   );
 }
 
+/** Alt-click solo for a warp (warps have no ids: by place in the list, as soloIn does by id). */
+function soloWarp(d: GridSceneSpec, i: number) {
+  const tagged = d.warps.map((w, k) => ({ id: String(k), muted: w.muted }));
+  soloIn(tagged, String(i));
+  tagged.forEach((t, k) => { if (!!t.muted !== !!d.warps[k].muted) d.warps[k].muted = !!t.muted; });
+}
+
 function PatternsSection() {
   const p = useGridBuilder(s => s.spec.pattern);
   const shapes = useGridBuilder(s => s.spec.shapes);
@@ -455,7 +466,8 @@ function PatternsSection() {
   const setP = (fn: (x: typeof p) => void, key?: string) => edit(d => fn(d.pattern), key);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <Card id="gs-pattern" defaultOpen title="Pattern" summary={PATTERN_LABELS[p.kind].label}>
+      <Card id="gs-pattern" defaultOpen title="Pattern" summary={PATTERN_LABELS[p.kind].label}
+        mute={p.kind !== 'none' || p.muted ? { muted: !!p.muted, what: 'the pattern', onToggle: () => setP(x => { x.muted = !x.muted; }) } : undefined}>
         <Tiles items={PATTERN_KINDS} value={p.kind} cols={4} label={k => PATTERN_LABELS[k].label} onPick={(k: PatternKind) => setP(x => { x.kind = k; })} />
         <BuilderNote>{PATTERN_LABELS[p.kind].blurb}</BuilderNote>
         {p.kind === 'picture' && <TexturePicker id="pattern" sources={sources} value={p.tex} onAdd={addSource} startOpen={!p.tex} none="Pick a picture" onChange={name => setP(x => { x.tex = name ?? undefined; })} />}
@@ -488,7 +500,10 @@ function PatternsSection() {
         {warps.map((w, i) => (
           <div key={`${w.lib ?? 'w'}-${i}`} data-warp={i} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <b style={{ flex: 1, fontSize: 12.5 }}>{w.name ?? `Warp ${i + 1}`}</b>
+              <b style={{ flex: 1, fontSize: 12.5, ...(w.muted ? MUTED_DIM : {}) }}>{w.name ?? `Warp ${i + 1}`}</b>
+              {w.muted && <MutedTag />}
+              <MuteToggle muted={!!w.muted} what={w.name ?? `warp ${i + 1}`} onToggle={() => edit(d => { d.warps[i].muted = !d.warps[i].muted; })}
+                onSolo={() => edit(d => soloWarp(d, i))} />
               <IconButton icon="trash" size="sm" label={`Remove ${w.name ?? 'the warp'}`} onClick={() => edit(d => { d.warps.splice(i, 1); })} />
             </div>
             {w.params.map((pp, j) => (

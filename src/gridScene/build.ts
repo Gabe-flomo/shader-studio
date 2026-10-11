@@ -26,8 +26,9 @@ import { BLOCK_BY_ID } from '../sceneBuilder2d/blockLibrary';
 import { colourText } from '../lang/colours';
 import { gf, gridProgram, shapeArgs, activeMask, activeRules } from './glsl';
 import { findTex, standInId, standIns } from '../builders/textures';
+import { gateNode, type Mutable } from '../builders/mute';
 import {
-  DRAW_MODE_LABELS, MOTION_LABELS, PATTERN_LABELS, PIC_MODE_LABELS, SHAPE_LABELS, TARGET_LABELS, cellSize, drawOf, picModeOf, ruleText, shapeOf,
+  DRAW_MODE_LABELS, MOTION_LABELS, PATTERN_LABELS, PIC_MODE_LABELS, SHAPE_LABELS, TARGET_LABELS, cellSize, drawOf, picModeOf, ruleText, shapeOf, liveGridSpec,
   type GShape, type GridSceneSpec,
 } from './spec';
 
@@ -124,6 +125,8 @@ function warpNode(c: Ctx, i: number, block: SpaceBlock, pos: Ref): Ref {
   ], 'uv', `${name} (grid warp ${i + 1}): ${entry ? entry.blurb : 'a space block.'} It bends the space the whole grid is drawn in, so the cells and their shapes warp together${times > 1 ? `; its lines run ${times} times over` : ''}. `
     + `${block.params.length ? `The sliders (${block.params.map(p => `${p.name} ${r2(p.value)}`).join(', ')}) are live.` : ''} From the 2D Scene Builder's block library.`,
   { outputType: 'vec2', lines });
+  // Muted (builders/mute.ts): still built, its point passed straight through by a live uniform.
+  gateNode(node, (block as Mutable).muted, { from: 'uv' });
   return ref(node, 'result');
 }
 
@@ -204,6 +207,8 @@ function memoryNodes(c: Ctx, spec: GridSceneSpec, mem: NonNullable<ReturnType<ty
 
 /** The scene's nodes. */
 export function buildGridScene(spec: GridSceneSpec, idFor: (role: string) => string = r => `gs_${r.replace(/[^A-Za-z0-9]/g, '_')}`): GridBuildResult {
+  // Muted shapes and a muted pattern are left out of the code (spec.ts liveGridSpec); muted warps are gated (warpNode).
+  spec = liveGridSpec(spec);
   const c: Ctx = { idFor, nodes: [], warnings: [] };
   const look = spec.look;
   const uv = mk(c, 'uv', 'uv', {}, {}, `The picture's coordinates: the centre is (0, 0), the top is 1. Built by the Grid builder (${spec.cols} × ${spec.rows} cells); open the Scene builder (or right-click → Edit in Grid builder) to draw on it again.`);

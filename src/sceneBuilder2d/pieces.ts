@@ -13,6 +13,8 @@ export const PIECES_SIZE_BYS = ['none', 'brightness', 'darkness'] as const;
 export type PiecesSizeBy = typeof PIECES_SIZE_BYS[number];
 
 export interface PiecesSpec {
+  /** Switched off for now (builders/mute.ts): bypassed by a live uniform, settings kept. */
+  muted?: boolean;
   /** The picture (a name in the scene's textures). */
   tex: string;
   shape: PieceShape;

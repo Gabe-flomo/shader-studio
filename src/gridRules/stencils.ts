@@ -63,7 +63,7 @@ export function readPatterns(v: unknown): PatternRule[] {
       cells, becomes: clampInt(x.becomes, 0, 15, 0),
       symmetry: x.symmetry === 'rotate' || x.symmetry === 'all' ? x.symmetry : 'none',
       count: c ? { state: clampInt(c.state, 0, 15, 1), min: clampInt(c.min, 0, 8, 0), max: clampInt(c.max, 0, 8, 8) } : null,
-      ...(x.off ? { off: true } : {}),
+      ...(x.off || (x as { muted?: boolean }).muted ? { off: true } : {}),
     };
   });
 }
@@ -77,7 +77,7 @@ export function readBlocks(v: unknown): BlockRule[] {
       after: Array.from({ length: 4 }, (_, i) => clampInt(Array.isArray(x.after) ? x.after[i] : SAME, -1, 15, SAME)),
       symmetry: x.symmetry === 'mirror' || x.symmetry === 'rotate' ? x.symmetry : 'none',
       chance: typeof x.chance === 'number' && isFinite(x.chance) ? Math.max(0, Math.min(1, x.chance)) : 1,
-      ...(x.off ? { off: true } : {}),
+      ...(x.off || (x as { muted?: boolean }).muted ? { off: true } : {}),
     };
   });
 }

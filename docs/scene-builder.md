@@ -198,6 +198,42 @@ Every builder's number slider is the app's ruler slider through one wrapper
 
 Not yet: keyframes from a builder slider, and the Play menu on the 2D builder's sliders.
 
+## Muting
+
+Every builder can switch a card off for a while, to see the picture without it, and back on,
+without losing a setting. The ⊘ on a card's header mutes it (it is the same ⊘ as a node's
+bypass, because that is what it is in the graph):
+
+- **Click** (or Enter / Space on the focused ⊘) mutes or unmutes the card. Each mute is one undo
+  step, and it is saved in the builder's spec, so it survives Build and reopening the builder.
+- **Alt/Option-click** solos the card: every other card in the same stack is muted. Alt-click the
+  soloed card again to bring them all back.
+- A muted card is dimmed and says **Muted**; its settings stay editable.
+- **Recipe:** a muted clause ends with the flag `muted` (`mirror xy muted`, `@spin(0.25 muted)`,
+  `bloom 0.6 muted`) and reads back the same way. Hovering `muted` explains it.
+
+How a mute builds (`src/builders/mute.ts`, `src/compiler/muteGate.ts`):
+
+- **Live, no recompile (preferred).** The muted piece is still built. The node that does its work
+  gets a mute gate (`__mute` 0 or 1, and `__muteFrom`, the input it passes through, or
+  `__muteTo`, a value such as a far distance so a shape draws nothing). The compiler mixes the
+  node's output back to that input by a uniform, `mix(out, in, u_<node>_mute)`, so muting and
+  unmuting set a number: the shader text is the same either way and the preview never relinks. A
+  piece that was never muted has no gate and builds exactly as before; once muted, unmuting keeps
+  the gate so the next toggle is live too.
+- **Left out (fallback).** Where nothing passes through (a motion, a ring of copies, a simulation
+  rule or behaviour), the muted piece is left out of the build: one cheap rebuild.
+- **In the graph** a gated node shows the node-bypass style with a **MUTED** badge; its ⊘ turns it
+  back on there (a rebuild from the builder sets it from the spec again).
+
+What each builder mutes: [2D](scene-builder-2d.md#muting), [3D](scene-builder-3d.md#muting),
+[Grid](grid-builder.md#muting), [Grid Rules](grid-rules.md#muting),
+[Agent Builder](agent-builder.md#muting), [Splats](splat-builder.md#muting). The shared pieces are
+`src/builders/mute.ts` (spec helpers, `gateNode`, `gateChain`, solo, the recipe flag),
+`src/compiler/muteGate.ts` (the compiled gate), `src/components/builders/MuteToggle.tsx` (the ⊘,
+the Muted tag, the dim) and the `mute` prop of the builders' `Card`
+(`src/components/sceneBuilder/controls.tsx`).
+
 ## Textures
 
 Pictures are a source like any other in every kind of scene: upload one, paste one, pick one from the

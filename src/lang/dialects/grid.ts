@@ -26,6 +26,7 @@
  * The params are the stored form; text is a view of them, so no saved file changes.
  */
 import { Cursor } from '../parse';
+import { MUTED_WORD, takeMuted } from '../../builders/mute';
 import type { Arg, Diagnostic, Value } from '../ast';
 import type { Tok } from '../lex';
 import { COLOUR_NAMES, colourOf, colourText, type RGB } from '../colours';
@@ -347,7 +348,7 @@ export function parseGrid(src: string, opts: { base?: P; seed?: number } = {}): 
     const out: { symmetry?: string; off?: boolean } = {};
     for (const m of c.mods()) {
       const name = m.name.toLowerCase();
-      if (name === 'off') out.off = true;
+      if (name === 'off' || name === 'muted') out.off = true;
       else if (allowed[name]) out.symmetry = allowed[name];
       else c.error(m, `@${m.name} isn't a ${what} modifier: ${Object.keys(allowed).map(k => `@${k}`).join(', ')} or @off.`);
     }
@@ -398,6 +399,7 @@ export function parseGrid(src: string, opts: { base?: P; seed?: number } = {}): 
           if (c.peek().t === '@') { m = { ...m, ...mods({ turns: 'rotate', 'turns-mirrors': 'all' }, 'stencil') }; continue; }
           const k = c.peek();
           if (k.t === 'word' && k.v.toLowerCase() === 'count' && c.peek(1).t === '=') { c.next(); c.next(); count = readCount(); continue; }
+          if (k.t === 'word' && k.v.toLowerCase() === MUTED_WORD) { c.next(); m = { ...m, off: true }; continue; }
           c.error(k, `Unexpected “${c.text(k)}”: a stencil takes count=state:min..max and @turns or @turns-mirrors.`);
           c.next();
         }
@@ -413,7 +415,8 @@ export function parseGrid(src: string, opts: { base?: P; seed?: number } = {}): 
         let m: ReturnType<typeof mods> = {};
         while (!c.atClauseEnd()) {
           if (c.peek().t === '@') { m = { ...m, ...mods({ mirror: 'mirror', turns: 'rotate' }, 'block') }; continue; }
-          const args = c.args(['@']);
+          const { muted, rest: args } = takeMuted(c.args(['@']));
+          if (muted) m = { ...m, off: true };
           for (const a of args) {
             if (a.key?.toLowerCase() === 'chance') { const n = num(draw(a, 'chance', { kind: 'num', lo: 0.3, hi: 1 }), a, 'chance'); if (n !== null) chance = Math.max(0, Math.min(1, n)); }
             else c.error(a, 'A block takes chance= and @mirror or @turns.');
@@ -443,7 +446,9 @@ export function parseGrid(src: string, opts: { base?: P; seed?: number } = {}): 
         };
         while (!c.atClauseEnd()) {
           if (c.peek().t === '@') { m = { ...m, ...mods({}, 'stacked rule') }; continue; }
-          for (const a of c.args(['@'])) {
+          const { muted, rest: thenArgs } = takeMuted(c.args(['@']));
+          if (muted) m = { ...m, off: true };
+          for (const a of thenArgs) {
             const k = a.key?.toLowerCase() ?? null;
             const flag = !k && a.value.k === 'word' ? a.value.v.toLowerCase() : null;
             const dirOf = (word: string) => (word === 'none' ? 0 : DIRECTIONS.findIndex(x => x.key === word) + 1);
