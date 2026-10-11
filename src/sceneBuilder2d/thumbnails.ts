@@ -295,9 +295,9 @@ export function renderSpaceThumbnail(op: SpaceOp, size: number): Uint8ClampedArr
   return out;
 }
 
-/** The whole space stack as one map: each transform's uv feeds the next. */
+/** The whole space stack as one map: each transform's uv feeds the next. A muted one passes the uv through, as in the build. */
 export function stackMap(ops: readonly SpaceOp[], t = 0): Map2 {
-  const maps = ops.map(op => spaceMap(op, t));
+  const maps = ops.filter(op => !op.muted).map(op => spaceMap(op, t));
   return (x, y) => { let p: [number, number] = [x, y]; for (const m of maps) p = m(p[0], p[1]); return p; };
 }
 

@@ -112,12 +112,19 @@ Words in the Agent Builder's stroke font (`agentBuilder/strokeFont.ts`), two way
   them). One undo step a stamp, within the 128 drawn cells. The cells are the ones Grid Rules' text
   start and try-board stamp use (`gridRules/textCells.ts`), so **Make it a simulation** starts Life
   from the letters.
-- **The pattern's mask.** Patterns & warps → **Only in words**: the wave changes only the cells whose
-  middle the words cover, and **Fill empty cells** puts its shape only there, so the fill spells the
+- **How letters become cells.** A cell counts when a stroke reaches into it, not only when the
+  stroke covers its middle: the distance is measured square-wise (the larger of the x and y gaps),
+  so a thin stroke lying between two cells' middles marks both instead of neither, and every letter
+  and digit keeps all its strokes at every size (an "HI" at 6 cells used to lose half the I and the
+  H's bar). Letters are spaced at least two cells apart, so neighbours never run together, and the
+  box the words are drawn in is sized from the strokes plus their reach, so nothing is cut off
+  (`gridRules/__tests__/textCells.test.ts` checks A–Z and 0–9 at 3–24 cells).
+- **The pattern's mask.** Patterns & warps → **Only in words**: the wave changes only the cells the
+  words reach into, and **Fill empty cells** puts its shape only there, so the fill spells the
   words and moves with the wave. Words, Size, Weight, Across and Up (cells from the grid's middle).
   In the shader the mask is a function of its own (`gs_mask`: the font's strokes, one line each, as
   the Agent Builder's text: no texture); the mini grid tints the same cells, worked out on the CPU
-  with the same distance (`textMaskAt`; `gridText.test.ts` checks them cell for cell). Changing the
+  with the same square-wise distance (`textMaskAt`; `gridText.test.ts` checks them cell for cell). Changing the
   words rebuilds; the pattern's numbers stay live.
 
 ### Sections

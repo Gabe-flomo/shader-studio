@@ -4,6 +4,9 @@ import { join } from 'path';
 import { analyse, unitsForLines, type Analysis } from '../analyse';
 import { buildGuided, slidersOf, stableKeys, type GuidedBuild } from '../build';
 import type { ConvertStep, GroupStep, Step } from '../stage';
+import { graphDifference, SAME } from '../check';
+import { stage } from '../stage';
+import { maxDifference } from '../cpuGlsl';
 import { suggestNext, guidedReducer, initialGuided } from '../session';
 import { CONVERT_EXAMPLES } from '../../../glslToGraph/examples';
 import type { GraphNode } from '../../../types/nodeGraph';
@@ -244,4 +247,38 @@ describe('the selection’s picture', () => {
     // A selection that only writes the colour shows the colour.
     expect(probeShader(a, [4])!.name).toBe('the colour');
   });
+});
+
+describe('a remainder with a variable named like a source (Breathing Fibonacci Flower)', () => {
+  // The shader keeps `float resolution = min(iResolution.x, iResolution.y)`. Converting the breathing()
+  // line left a remainder reading both u_resolution and that local; the converter brought u_resolution
+  // in as an input named `resolution`, so the local and the Resolution wire were one name and the
+  // dots were drawn at the wrong size.
+  const a = ok(readFileSync(join(CORPUS, 'user', 'Breathing Fibonacci Flower.glsl'), 'utf8'));
+  const INPUTS = { resolution: [64, 48] as [number, number], time: 1.3, mouse: [20, 30] as [number, number] };
+  const check = (steps: Step[], what: string) => {
+    const b = built(a, steps);
+    const s = stage(a, steps);
+    if ('error' in s) throw new Error(s.error);
+    expect(maxDifference(a.norm, s.code, INPUTS, [4, 3]), `staged, ${what}`).toBeLessThan(1e-6);
+    const g = graphDifference(a, b, undefined, 20_000);
+    expect(g, `graph, ${what}`).not.toBeNull();
+    expect(g!, `graph, ${what}`).toBeLessThanOrEqual(SAME);
+  };
+  it('converting the breathing() line plainly keeps the picture', () => {
+    check([conv(linesOf(a, /breathing\(/))], 'the breathing() line');
+  });
+  it('stays the same picture at every step, one statement at a time and each statement alone', () => {
+    const steps: Step[] = [];
+    let alone = 0;
+    for (const u of a.units.filter(x => !x.setup)) {
+      if (buildGuided(a, [conv([u.index])]).ok) { alone++; check([conv([u.index])], `“${u.text.slice(0, 40)}” alone`); }
+      const next = [...steps, conv([u.index])];
+      if (!buildGuided(a, next).ok) continue;
+      steps.push(next[next.length - 1]);
+      check(steps, `after “${u.text.slice(0, 40)}”`);
+    }
+    expect(alone).toBeGreaterThan(3);
+    expect(steps.length).toBeGreaterThan(3);
+  }, 60_000);
 });
