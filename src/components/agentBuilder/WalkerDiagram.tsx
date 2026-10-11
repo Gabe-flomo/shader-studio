@@ -11,8 +11,12 @@
  *
  * The lens keeps its magnification while a slider moves (diagram.ts keepRef), so the feelers
  * grow and shrink as you drag.
+ *
+ * With `edit`, the drawings are handles (DragHandle.tsx): a feeler's tip (out or in for How far
+ * ahead, sideways for How wide), the new heading's end (How sharply), the wobble fan's edges, and
+ * Born's shape (its middle moves it, its edge or corner sizes it). The maths is diagramDrag.ts.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { clockNow, subscribeTimeTick } from '../../lib/timeTick';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily } from '../../theme/tokens';
@@ -25,6 +29,9 @@ import { sphereOnPicture } from '../../agentBuilder/diagram';
 import { agCamera3, agProject3 } from '../../play/kit/agentPlan.js';
 import { DiagramTags, type ViewportLink } from './ViewportLegend';
 import { LEGEND_COLOURS, dimFor, num, tagCollector } from '../../agentBuilder/legend';
+import { setSensors, patchCard } from '../../agentBuilder/cards';
+import { dragBornSize, dragSensor, dragTurn, dragWobble, moved } from '../../agentBuilder/diagramDrag';
+import { type DiagramEdit, DragHandle } from './DragHandle';
 
 const readNum = (v: unknown, d: number) => (typeof v === 'number' && isFinite(v) ? v : d);
 
@@ -123,7 +130,7 @@ export interface TrailInfo { halfLife: number; diffuse: number }
 
 const fmt = (v: number, d = 3) => String(Math.round(v * 10 ** d) / 10 ** d);
 
-export function WalkerDiagram({ focus, cards, box, born, trail, lensRef, d3, camera, feelersShown = true, link }: {
+export function WalkerDiagram({ focus, cards, box, born, trail, lensRef, d3, camera, feelersShown = true, link, edit }: {
   focus: DiagramFocus; cards: TrailCards; box: { w: number; h: number; image: ViewRect };
   born?: BornInfo; trail?: TrailInfo; lensRef: number; d3: boolean;
   /** In 3D: Draw agents' camera settings, to draw the Emit's ball, shell or box through it. */
@@ -132,12 +139,18 @@ export function WalkerDiagram({ focus, cards, box, born, trail, lensRef, d3, cam
   feelersShown?: boolean;
   /** The legend's linking: the tags, and the drawings dimmed while another entry is lit. */
   link?: ViewportLink;
+  /** Dragging the drawings changes the settings (absent: drawn only). */
+  edit?: DiagramEdit;
 }) {
   const tk = useTokens();
+  // A drag reads the pointer through the lens (and the Born shape) as they were when it began,
+  // so a lens that zooms while the feelers grow doesn't feed back into the value.
+  const dragFrom = useRef<{ lens: Lens; born?: BornInfo } | null>(null);
   const accent = tk.accent.base;
   const ink = 'rgba(255,255,255,0.92)';
   const faint = 'rgba(255,255,255,0.45)';
-  const lens = lensFor(box.w, box.h, lensRef, link?.freeLeft ?? 0);
+  // While a feeler is dragged the lens holds still, so the feeler's tip stays under the pointer; it re-fits after.
+  const lens = dragFrom.current?.lens ?? lensFor(box.w, box.h, lensRef, link?.freeLeft ?? 0);
   const { list: tags, tag } = tagCollector();
   const dim = (id: string) => dimFor(link, id);
   const walker = (l: Lens) => (
@@ -162,6 +175,17 @@ export function WalkerDiagram({ focus, cards, box, born, trail, lensRef, d3, cam
           </g>
         ))}
         <path data-angle-arc d={arcPath(lens.walker, arcR, 0, s.angle)} fill="none" stroke={hot('angle') ? accent : faint} strokeWidth={hot('angle') ? 2.5 : 1.5} />
+        {edit && (['left', 'centre', 'right'] as const).map(k => (
+          <DragHandle key={`h-${k}`} id={`feeler-${k}`} at={f[k]} edit={edit} quiet size={9} colour={LEGEND_COLOURS.senses} setting={k === 'centre' ? 'distance' : 'angle'} card="senses"
+            label={k === 'centre' ? 'Agent Builder: dragged How far ahead' : 'Agent Builder: dragged the feelers'}
+            hint={k === 'centre' ? 'Drag out or in: How far ahead' : 'Drag sideways for How wide, out or in for How far ahead'}
+            onStart={() => { dragFrom.current = { lens }; }} onEnd={() => { dragFrom.current = null; }}
+            onMove={p => {
+              const L0 = dragFrom.current?.lens ?? lens;
+              const v = dragSensor(L0.walker, L0.scale, p, k);
+              edit.rules(setSensors(edit.set, v.angle === undefined ? { distance: v.distance } : { distance: v.distance, angle: v.angle }));
+            }} />
+        ))}
         {tag(along(lens.walker, f.length * 0.55, Math.min(s.angle + 22, 150)), 'senses', `±${num(s.angle, 1)}°`, 'wide')}
         {tag(along(lens.walker, f.length * 0.55, -Math.min(s.angle + 22, 150)), 'senses', num(s.distance), 'far')}
         {walker(lens)}
@@ -182,6 +206,16 @@ export function WalkerDiagram({ focus, cards, box, born, trail, lensRef, d3, cam
         {!t.sharpOn && tag({ x: lens.walker.x, y: lens.walker.y - r - 14 }, 'turn', 'no turn', 'noturn')}
         {t.wobbleOn && t.wobble > 0 && tag(along(lens.walker, r * 0.95 + 16, -t.wobble - 8), 'wobble', `±${num(t.wobble, 1)}°`, 'wob')}
         {walker(lens)}
+        {edit && t.sharpOn && (
+          <DragHandle id="turn" at={along(lens.walker, r, t.sharp)} edit={edit} colour={LEGEND_COLOURS.turn} setting="sharp" card="senses"
+            label="Agent Builder: dragged How sharply" hint="Drag round the walker: How sharply it turns toward the smell"
+            onMove={p => edit.rules(patchCard(edit.set, edit.sp, 'senses', { degrees: dragTurn(lens.walker, p) }))} />
+        )}
+        {edit && t.wobbleOn && ([1, -1] as const).map(side => (
+          <DragHandle key={side} id={`wobble-${side > 0 ? 'left' : 'right'}`} at={along(lens.walker, r * 0.95, side * Math.max(t.wobble, 0.5))} edit={edit} colour={LEGEND_COLOURS.wobble} setting="wobble" card="wobble"
+            label="Agent Builder: dragged the wobble" hint="Drag round the walker: how far it wobbles either way"
+            onMove={p => edit.rules(patchCard(edit.set, edit.sp, 'wobble', { degrees: dragWobble(lens.walker, p) }))} />
+        ))}
       </g>
     );
   } else if (focus.section === 'moving' && focus.setting !== 'edges') {
@@ -265,6 +299,16 @@ export function WalkerDiagram({ focus, cards, box, born, trail, lensRef, d3, cam
         {shape === 'screen' && <rect x={im.x + 3} y={im.y + 3} width={im.w - 6} height={im.h - 6} fill="none" stroke={accent} strokeWidth={2.5} strokeDasharray="8 6" />}
         {/* Born in a region (the Where picker): the region itself is drawn by its overlay. */}
         {shape !== 'picture' && shape !== 'field' && tag({ x: c.x, y: Math.max(im.y + 18, c.y - Math.max(rpx, 8) - 16) }, 'born', born.count.toUpperCase().replace('K', 'k'), 'count')}
+        {edit?.emitId && shape !== 'screen' && shape !== 'picture' && shape !== 'field' && <>
+          <DragHandle id="born-move" at={c} edit={edit} colour={accent} cursor="move" setting="where" label="Agent Builder: moved where they are born" hint="Drag to move where they are born"
+            onStart={() => { dragFrom.current = { lens, born }; }} onEnd={() => { dragFrom.current = null; }}
+            onMove={(p, start) => { const b0 = dragFrom.current?.born ?? born; edit.setup(edit.emitId, { ...moved(im, { x: b0.x, y: b0.y }, start, p) }); }} />
+          {shape !== 'point' && (
+            <DragHandle id="born-size" at={shape === 'box' ? { x: c.x + rpx, y: c.y - rpx } : { x: c.x + rpx, y: c.y }} edit={edit} colour={accent} cursor={shape === 'box' ? 'nesw-resize' : 'ew-resize'} setting="size"
+              label="Agent Builder: sized where they are born" hint={shape === 'box' ? 'Drag the corner: its size' : shape === 'line' ? 'Drag the end: its length' : 'Drag the edge: its radius'}
+              onMove={p => edit.setup(edit.emitId, { size: dragBornSize(shape, c, p, im.h) })} />
+          )}
+        </>}
       </g>
     );
   }

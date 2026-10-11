@@ -24,6 +24,8 @@ export function openAgentRulesEditor(groupId: string): void {
 }
 
 let last = { id: '', at: 0 };
+/** The next rules edit starts an undo step of its own (a diagram drag just ended: its step is closed). */
+export function endRulesBurst(): void { last = { id: '', at: 0 }; }
 
 /**
  * The rules editor's change: the group's inside generated again (one undo step per burst of

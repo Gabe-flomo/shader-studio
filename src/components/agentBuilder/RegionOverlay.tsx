@@ -11,7 +11,8 @@ import { useTokens } from '../../theme/themeStore';
 import { fontFamily } from '../../theme/tokens';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { picToView } from '../../agentBuilder/diagram';
-import { type MadeShape, newMadeShape, readMadeShape, textBoxes } from '../../agentBuilder/madeShapes';
+import { type MadeShape, newMadeShape, readMadeShape, textBoxes, textHalfWidth } from '../../agentBuilder/madeShapes';
+import { DEFAULT_WEIGHT, strokesPath } from '../../agentBuilder/strokeFont';
 import { setMadeShape } from '../../agentBuilder/whereActions';
 import { regionEdge, regionField, regionImage, slopeArrows } from '../../lib/regionValues';
 import type { ViewRect } from '../builders/studio/LiveViewport';
@@ -24,6 +25,45 @@ const r4 = (v: number) => Math.round(v * 1e4) / 1e4;
 export function viewToPic(rect: ViewRect, p: P): P {
   const aspect = rect.w / Math.max(rect.h, 1);
   return { x: r4(((p.x - rect.x) / rect.w - 0.5) * 2 * aspect), y: r4((0.5 - (p.y - rect.y) / rect.h) * 2) };
+}
+
+/** Text in the stroke font: its strokes as a path, drawn with a round line this wide (px). Null for any other shape. */
+export function textStrokes(s: MadeShape, im: ViewRect): { d: string; width: number } | null {
+  if (s.shape !== 'text' || s.font !== 'stroke') return null;
+  const d = strokesPath(s.text ?? 'A', (x, y) => picToView(im, { x: s.x + x * s.size, y: s.y + y * s.size }));
+  return { d, width: Math.max(1, 2 * (s.weight ?? DEFAULT_WEIGHT) * s.size * im.h / 2) };
+}
+
+/**
+ * A made shape drawn over the picture: an outline, or text in the stroke font as its strokes. `shade`
+ * darkens where it doesn't act (the outside, or the inside for "outside"), `fill` tints the shape.
+ */
+function ShapeDrawing({ shape, im, stroke, fill, shade, dash = '8 5' }: { shape: MadeShape; im: ViewRect; stroke: string; fill: string; shade: 'outside' | 'inside' | null; dash?: string }) {
+  const t = textStrokes(shape, im);
+  const id = useMemo(() => `ab-text-${Math.random().toString(36).slice(2, 8)}`, []);
+  if (t) {
+    return (
+      <g data-text-strokes={shape.text}>
+        {shade && <>
+          <defs>
+            <mask id={id} maskUnits="userSpaceOnUse" x={im.x} y={im.y} width={im.w} height={im.h}>
+              <rect x={im.x} y={im.y} width={im.w} height={im.h} fill={shade === 'outside' ? '#fff' : '#000'} />
+              <path d={t.d} fill="none" stroke={shade === 'outside' ? '#000' : '#fff'} strokeWidth={t.width} strokeLinecap="round" strokeLinejoin="round" />
+            </mask>
+          </defs>
+          <rect x={im.x} y={im.y} width={im.w} height={im.h} fill="rgba(8,8,12,0.55)" mask={`url(#${id})`} />
+        </>}
+        <path d={t.d} fill="none" stroke={fill === 'none' ? 'rgba(91,140,255,0.22)' : fill} strokeWidth={t.width} strokeLinecap="round" strokeLinejoin="round" />
+        <path d={t.d} fill="none" stroke={stroke} strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" strokeDasharray={dash} opacity={0.9} />
+      </g>
+    );
+  }
+  const path = shapePath(shape, im);
+  const outside = `M ${im.x} ${im.y} h ${im.w} v ${im.h} h ${-im.w} Z`;
+  return <>
+    {shade && <path d={shade === 'outside' ? `${outside} ${path}` : path} fill="rgba(8,8,12,0.55)" fillRule="evenodd" />}
+    <path d={path} fill={fill} fillRule="evenodd" stroke={stroke} strokeWidth={2.5} strokeDasharray={dash} />
+  </>;
 }
 
 /** A shape's outline as an SVG path on the shown picture (every part a closed loop: even-odd fills it). */
@@ -47,7 +87,7 @@ function handlesOf(s: MadeShape): Array<{ id: string; at: P; kind: 'move' | 'siz
   if (s.shape === 'circle' || s.shape === 'ring') out.push({ id: 'size', at: { x: s.x + s.size, y: s.y }, kind: 'size' });
   if (s.shape === 'ring') out.push({ id: 'thick', at: { x: s.x - s.size - (s.thickness ?? 0.05), y: s.y }, kind: 'thick' });
   if (s.shape === 'box') out.push({ id: 'size', at: { x: s.x + s.size, y: s.y + (s.h ?? s.size) }, kind: 'size' });
-  if (s.shape === 'text') { const w = (textBoxes(s.text ?? 'A').reduce((m, b) => Math.max(m, b.x + b.hx), 0)) * s.size; out.push({ id: 'size', at: { x: s.x + w, y: s.y + s.size }, kind: 'size' }); }
+  if (s.shape === 'text') out.push({ id: 'size', at: { x: s.x + textHalfWidth(s), y: s.y + s.size }, kind: 'size' });
   if (s.shape === 'polygon') {
     const pts = s.points ?? [];
     pts.forEach((p, i) => out.push({ id: `p${i}`, at: { x: p[0], y: p[1] }, kind: 'corner' }));
@@ -165,12 +205,10 @@ function ShownRegion({ shown, box, readOnly }: { shown: WhereShown; box: { w: nu
     const b = svgRef.current?.getBoundingClientRect();
     return viewToPic(im, { x: e.clientX - (b?.left ?? 0), y: e.clientY - (b?.top ?? 0) });
   };
-  const verb = shown.use === 'obstacle' ? (shown.outside ? 'walls outside' : 'a wall') : shown.use === 'born' ? (shown.outside ? 'born outside' : 'born inside') : shown.use === 'slope' ? 'the field followed' : (shown.outside ? 'acts outside' : 'acts inside');
+  const verb = shown.use === 'obstacle' ? (shown.outside ? 'walls outside' : 'a wall') : shown.use === 'born' ? (shown.outside ? 'born outside' : 'born inside') : shown.use === 'slope' ? 'the field followed' : shown.use === 'food' ? (shown.outside ? 'food outside' : 'food') : (shown.outside ? 'acts outside' : 'acts inside');
   const label = `${verb} · ${r.label}`;
-  const outside = `M ${im.x} ${im.y} h ${im.w} v ${im.h} h ${-im.w} Z`;
   if (shape) {
-    const path = shapePath(shape, im);
-    const idle = shown.use === 'slope' ? null : shown.use === 'obstacle' ? (shown.outside ? path : `${outside} ${path}`) : shown.outside ? path : `${outside} ${path}`;
+    const shade = shown.use === 'slope' ? null : shown.outside ? 'inside' as const : 'outside' as const;
     const top = picToView(im, { x: shape.x, y: shape.y + (shape.shape === 'box' ? shape.h ?? shape.size : shape.size) });
     const handles = readOnly ? [] : handlesOf(shape);
     const down = (id: string) => (e: React.PointerEvent) => {
@@ -198,13 +236,14 @@ function ShownRegion({ shown, box, readOnly }: { shown: WhereShown; box: { w: nu
     return (
       <svg ref={svgRef} data-region-overlay="made" data-region-shape={shape.shape} data-region-x={shape.x} data-region-y={shape.y} data-region-size={shape.size}
         width={box.w} height={box.h} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }} onPointerMove={move} onPointerUp={up}>
-        {idle && <path d={idle} fill="rgba(8,8,12,0.55)" fillRule="evenodd" />}
-        <path d={path} fill={shown.use === 'obstacle' && !shown.outside ? 'rgba(255,120,90,0.18)' : 'none'} fillRule="evenodd" stroke={tk.accent.base} strokeWidth={2.5} strokeDasharray="8 5" />
+        <ShapeDrawing shape={shape} im={im} shade={shade} stroke={tk.accent.base}
+          fill={shown.use === 'obstacle' && !shown.outside ? 'rgba(255,120,90,0.32)' : shown.use === 'food' && !shown.outside ? 'rgba(255,210,122,0.3)' : 'none'} />
         {handles.map(hd => {
           const p = picToView(im, hd.at);
           const big = hd.kind === 'move';
           return (
-            <g key={hd.id} data-where-handle={hd.id} style={{ pointerEvents: 'all', cursor: big ? 'move' : hd.kind === 'add' ? 'copy' : 'nwse-resize' }} onPointerDown={down(hd.id)}>
+            <g key={hd.id} data-where-handle={hd.id} style={{ pointerEvents: 'all', cursor: drag?.handle === hd.id ? 'grabbing' : big ? 'move' : hd.kind === 'add' ? 'copy' : 'nwse-resize' }} onPointerDown={down(hd.id)}>
+              <title>{big ? 'Drag to move it' : hd.kind === 'add' ? 'Add a corner here' : hd.kind === 'corner' ? 'Drag this corner' : hd.kind === 'thick' ? 'Drag for its width' : 'Drag to size it'}</title>
               <circle cx={p.x} cy={p.y} r={12} fill="transparent" />
               {hd.kind === 'add'
                 ? <><circle cx={p.x} cy={p.y} r={5.5} fill="rgba(13,13,18,0.85)" stroke="#fff" strokeWidth={1.2} /><path d={`M ${p.x - 3} ${p.y} h 6 M ${p.x} ${p.y - 3} v 6`} stroke="#fff" strokeWidth={1.3} /></>
@@ -286,13 +325,19 @@ function DrawLayer({ drawing, box }: { drawing: WhereDrawing; box: { w: number; 
       case 'circle': return { shape: 'circle', x: a.x, y: a.y, size: r4(d) };
       case 'ring': return { shape: 'ring', x: a.x, y: a.y, size: r4(d), thickness: r4(Math.max(0.01, d * 0.15)) };
       case 'box': return { shape: 'box', x: r4((a.x + b.x) / 2), y: r4((a.y + b.y) / 2), size: r4(Math.max(0.01, Math.abs(b.x - a.x) / 2)), h: r4(Math.max(0.01, Math.abs(b.y - a.y) / 2)) };
-      case 'text': return { ...newMadeShape('text'), x: r4((a.x + b.x) / 2), y: r4((a.y + b.y) / 2), size: r4(Math.max(0.03, Math.abs(b.y - a.y) / 2)) };
+      case 'text': {
+        // The words fit the box dragged: as tall as it, unless that makes them wider than it.
+        const t = newMadeShape('text');
+        const perUnit = textHalfWidth({ ...t, size: 1 });
+        return { ...t, x: r4((a.x + b.x) / 2), y: r4((a.y + b.y) / 2), size: r4(Math.max(0.03, Math.min(Math.abs(b.y - a.y) / 2, Math.abs(b.x - a.x) / 2 / Math.max(perUnit, 1e-3)))) };
+      }
       default: return newMadeShape(drawing.kind, a.x, a.y, 0.3);
     }
   };
   const preview = drawing.kind === 'polygon'
     ? (pts.length ? [...pts, ...(hover ? [hover] : [])].map((p, i) => { const q = picToView(im, p); return `${i ? 'L' : 'M'} ${q.x} ${q.y}`; }).join(' ') : '')
-    : drag ? shapePath(shapeOf(drag.a, drag.b), im) : '';
+    : '';
+  const previewShape = drawing.kind !== 'polygon' && drag ? shapeOf(drag.a, drag.b) : null;
   return (
     <div ref={ref} data-where-draw={drawing.kind} style={{ position: 'absolute', inset: 0, cursor: 'crosshair', touchAction: 'none' }}
       onPointerDown={e => {
@@ -313,6 +358,7 @@ function DrawLayer({ drawing, box }: { drawing: WhereDrawing; box: { w: number; 
       <svg width={box.w} height={box.h} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
         <rect x={im.x} y={im.y} width={im.w} height={im.h} fill="rgba(8,8,12,0.25)" />
         {preview && <path d={preview} fill={alphaFill} fillRule="evenodd" stroke={tk.accent.base} strokeWidth={2.5} strokeDasharray="8 5" />}
+        {previewShape && <ShapeDrawing shape={previewShape} im={im} shade={null} fill={alphaFill} stroke={tk.accent.base} />}
         {pts.map((p, i) => { const q = picToView(im, p); return <circle key={i} cx={q.x} cy={q.y} r={i === 0 && pts.length >= 3 ? 8 : 5} fill={i === 0 ? tk.accent.base : '#fff'} stroke={tk.accent.base} strokeWidth={2} />; })}
         <Badge x={im.x + im.w / 2} y={im.y + 20} text={drawing.kind === 'polygon' ? 'Click its corners · the first again (or Enter) closes it' : `Drag to draw the ${drawing.kind} · Esc stops`} />
       </svg>

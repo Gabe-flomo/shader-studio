@@ -13,12 +13,16 @@
  *   box      a box's exact distance, half-sizes (w, h)
  *   ring     |length(uv − c) − r| − t (a band t either side of the circle)
  *   polygon  Inigo Quilez's polygon distance, one line per edge, corners p0…p7 (sliders)
- *   text     a 5 × 7 pixel font: each run of lit pixels a box, joined with min (centre c, height 2·s)
+ *   text     a monoline stroke font (strokeFont.ts): segments, arcs and dots, joined with min, less
+ *            the strokes' half-weight wt (centre c, height 2·s). Older text kept the 5 × 7 pixel font
+ *            (`font: 'blocky'`: each run of lit pixels a box), which still loads and draws.
  */
 import type { GraphNode } from '../types/nodeGraph';
 import { n } from '../store/graphBuilder';
+import { DEFAULT_WEIGHT, STROKE_GLYPHS, layoutStrokes, strokeGlsl, textDistance } from './strokeFont';
 
 export type MadeShapeKind = 'circle' | 'box' | 'ring' | 'polygon' | 'text';
+export type TextFont = 'stroke' | 'blocky';
 export interface MadeShape {
   shape: MadeShapeKind;
   /** Its centre (picture units: x ±aspect across, y ±1 up). */
@@ -29,8 +33,12 @@ export interface MadeShape {
   h?: number;
   /** ring: half its thickness. */
   thickness?: number;
-  /** text: the word (A–Z, 0–9, a few marks; up to 12). */
+  /** text: the words (A–Z, 0–9, a few marks; up to MAX_TEXT). */
   text?: string;
+  /** text: the smooth stroke font (new text) or the 5 × 7 pixel font (text made before it; still loads). */
+  font?: TextFont;
+  /** text, stroke font: the strokes' half-weight, in the letters' units (they are 2 tall). */
+  weight?: number;
   /** polygon: its corners (3–8), picture units. */
   points?: Array<[number, number]>;
 }
@@ -40,10 +48,10 @@ export const MADE_SHAPES: ReadonlyArray<{ kind: MadeShapeKind; label: string; hi
   { kind: 'box', label: 'Box', hint: 'A box: drag its middle, its corner for the size.' },
   { kind: 'ring', label: 'Ring', hint: 'A band round a circle: drag its edge for the radius, the inner handle for the width.' },
   { kind: 'polygon', label: 'Polygon', hint: 'Corners you drag; click a side\'s middle for another corner.' },
-  { kind: 'text', label: 'Text', hint: 'A word in blocky letters: drag it, its corner for the size.' },
+  { kind: 'text', label: 'Text', hint: 'Words in smooth letters: drag them, their corner for the size; type the words, the weight and the size in the card.' },
 ];
 export const MAX_POLY = 8;
-export const MAX_TEXT = 12;
+export const MAX_TEXT = 16;
 
 const num = (v: unknown, d: number) => (typeof v === 'number' && isFinite(v) ? v : d);
 const r4 = (v: number) => Math.round(v * 1e4) / 1e4;
@@ -61,7 +69,7 @@ export function newMadeShape(kind: MadeShapeKind, x = 0, y = 0, size = 0.35): Ma
       });
       return { shape: kind, x, y, size, points: pts };
     }
-    case 'text': return { shape: kind, x, y, size: Math.min(size, 0.2), text: 'HELLO' };
+    case 'text': return { shape: kind, x, y, size: Math.min(size, 0.2), text: 'HELLO', font: 'stroke', weight: DEFAULT_WEIGHT };
   }
 }
 
@@ -74,7 +82,13 @@ export function normalizeMadeShape(raw: unknown): MadeShape | null {
   const base = newMadeShape(kind, num(r.x, 0), num(r.y, 0), Math.max(0.005, num(r.size, 0.35)));
   if (kind === 'box') base.h = Math.max(0.005, num(r.h, base.h!));
   if (kind === 'ring') base.thickness = Math.max(0.002, num(r.thickness, base.thickness!));
-  if (kind === 'text') base.text = cleanText(typeof r.text === 'string' ? r.text : base.text!);
+  if (kind === 'text') {
+    // Text saved before the stroke font has no `font`: it keeps its blocky letters.
+    base.font = r.font === 'stroke' ? 'stroke' : 'blocky';
+    if (base.font === 'stroke') base.weight = Math.min(0.6, Math.max(0.01, num(r.weight, DEFAULT_WEIGHT)));
+    else delete base.weight;
+    base.text = cleanText(typeof r.text === 'string' ? r.text : base.text!, base.font);
+  }
   if (kind === 'polygon') {
     const pts = Array.isArray(r.points) ? r.points.filter(p => Array.isArray(p) && p.length === 2 && p.every(v => typeof v === 'number' && isFinite(v))).slice(0, MAX_POLY) as Array<[number, number]> : [];
     if (pts.length >= 3) base.points = pts.map(p => [p[0], p[1]]);
@@ -82,10 +96,18 @@ export function normalizeMadeShape(raw: unknown): MadeShape | null {
   return base;
 }
 
-/** The word as the font can draw it: upper case, known characters, up to MAX_TEXT. */
-export function cleanText(t: string): string {
-  const s = t.toUpperCase().split('').filter(c => c in FONT).join('').slice(0, MAX_TEXT);
+/** The words as the font can draw them: upper case, known characters, up to MAX_TEXT. */
+export function cleanText(t: string, font: TextFont = 'blocky'): string {
+  const glyphs: Record<string, unknown> = font === 'stroke' ? STROKE_GLYPHS : FONT;
+  const s = t.toUpperCase().split('').filter(c => c in glyphs).join('').slice(0, MAX_TEXT);
   return s.trim() ? s : 'A';
+}
+const fontOf = (s: MadeShape): TextFont => (s.font === 'stroke' ? 'stroke' : 'blocky');
+
+/** A text shape's half-width, in picture units (for its size handle and its outline). */
+export function textHalfWidth(s: MadeShape): number {
+  if (fontOf(s) === 'stroke') return (layoutStrokes(cleanText(s.text ?? 'A', 'stroke')).halfWidth + (s.weight ?? DEFAULT_WEIGHT)) * s.size;
+  return textBoxes(s.text ?? 'A').reduce((m, b) => Math.max(m, b.x + b.hx), 0) * s.size;
 }
 
 // ── A 5 × 7 pixel font (rows top to bottom, 5 bits each, left bit first) ────────
@@ -178,6 +200,7 @@ export function shapeSliders(s: MadeShape): Array<{ name: string; value: number;
   if (s.shape === 'box') out.push({ name: 'w', value: s.size, min: 0.005, max: 2 }, { name: 'h', value: s.h ?? s.size, min: 0.005, max: 2 });
   if (s.shape === 'ring') out.push({ name: 't', value: s.thickness ?? 0.05, min: 0.002, max: 1 });
   if (s.shape === 'text') out.push({ name: 's', value: s.size, min: 0.01, max: 1 });
+  if (s.shape === 'text' && fontOf(s) === 'stroke') out.push({ name: 'wt', value: s.weight ?? DEFAULT_WEIGHT, min: 0.01, max: 0.6 });
   if (s.shape === 'polygon') (s.points ?? []).forEach((p, i) => out.push({ name: `p${i}x`, value: p[0] - s.x, min: -3, max: 3 }, { name: `p${i}y`, value: p[1] - s.y, min: -2, max: 2 }));
   return out.map(o => ({ ...o, value: r4(o.value) }));
 }
@@ -195,6 +218,12 @@ export function shapeLines(s: MadeShape): { lines: Array<{ lhs: string; op: stri
     case 'ring': return { lines, result: 'abs(length(q) - r) - t', why: 'result: how far from a band t wide either side of the circle of radius r (below 0 in the band).' };
     case 'text': {
       add('q', 'q / s', 'q: scaled so the letters are 2 tall (s: half their height).', '=');
+      if (fontOf(s) === 'stroke') {
+        const words = cleanText(s.text ?? 'A', 'stroke');
+        add('float d', '1e5', 'd: the nearest stroke so far (none yet).');
+        for (const st of layoutStrokes(words).strokes) add('d', `min(d, ${strokeGlsl(st)})`, st.k === 'A' ? 'd: and each curve of the letters (an arc: on its circle within its angles, else its nearer end).' : st.k === 'P' ? 'd: and each dot.' : 'd: and each straight stroke of the letters (the nearest point of a segment).');
+        return { lines, result: '(d - wt) * s', why: `result: how far from the letters "${words}" (below 0 on them: wt is the strokes' half-weight), in picture units.` };
+      }
       add('float d', '1e5', 'd: the nearest lit pixel so far (none yet).');
       for (const b of textBoxes(s.text ?? 'A')) add('d', `min(d, max(abs(q.x - ${glf(b.x)}) - ${glf(b.hx)}, abs(q.y - ${glf(b.y)}) - ${glf(b.hy)}))`, 'd: and each run of lit pixels of the letters (a box).');
       return { lines, result: 'd * s', why: `result: how far from the letters "${cleanText(s.text ?? 'A')}" (below 0 on them), in picture units.` };
@@ -220,7 +249,7 @@ const LABEL: Record<MadeShapeKind, string> = { circle: 'circle', box: 'box', rin
 /** "Circle", "Text "HI"". */
 export function madeShapeName(s: MadeShape): string {
   const l = LABEL[s.shape];
-  return s.shape === 'text' ? `Text "${cleanText(s.text ?? 'A')}"` : l[0].toUpperCase() + l.slice(1);
+  return s.shape === 'text' ? `Text "${cleanText(s.text ?? 'A', fontOf(s))}"` : l[0].toUpperCase() + l.slice(1);
 }
 
 /** The node's params for a shape (its lines, sliders, label, note and the spec it is read back from). */
@@ -272,6 +301,7 @@ export function readMadeShape(node: GraphNode | undefined): MadeShape | null {
   if (s.shape === 'box') { live.size = val('w', s.size); live.h = val('h', s.h ?? s.size); }
   if (s.shape === 'ring') live.thickness = val('t', s.thickness ?? 0.05);
   if (s.shape === 'text') live.size = val('s', s.size);
+  if (s.shape === 'text' && fontOf(s) === 'stroke') live.weight = val('wt', s.weight ?? DEFAULT_WEIGHT);
   if (s.shape === 'polygon') live.points = (s.points ?? []).map((p, i) => [r4(live.x + val(`p${i}x`, p[0] - s.x)), r4(live.y + val(`p${i}y`, p[1] - s.y))]);
   const want = shapeLines(live);
   const lines = (P.lines as Array<{ lhs: string; op: string; rhs: string }> | undefined) ?? [];
@@ -285,7 +315,7 @@ export function readMadeShape(node: GraphNode | undefined): MadeShape | null {
  */
 export function madeShapePatch(node: GraphNode, next: MadeShape): Record<string, unknown> {
   const was = readMadeShape(node);
-  const sameOutline = was && was.shape === next.shape && (next.shape !== 'polygon' || (was.points?.length ?? 0) === (next.points?.length ?? 0)) && (next.shape !== 'text' || cleanText(was.text ?? '') === cleanText(next.text ?? ''));
+  const sameOutline = was && was.shape === next.shape && (next.shape !== 'polygon' || (was.points?.length ?? 0) === (next.points?.length ?? 0)) && (next.shape !== 'text' || (fontOf(was) === fontOf(next) && cleanText(was.text ?? '', fontOf(was)) === cleanText(next.text ?? '', fontOf(next))));
   if (sameOutline) {
     // Keep the stored spec's outline (its corners' count, its word), the place and size in the sliders.
     return { ...Object.fromEntries(shapeSliders(next).map(x => [x.name, x.value])), whereShape: { ...next } };
@@ -307,6 +337,7 @@ export function madeShapeDistance(s: MadeShape, px: number, py: number): number 
     }
     case 'text': {
       const sc = Math.max(s.size, 1e-4);
+      if (fontOf(s) === 'stroke') return textDistance(cleanText(s.text ?? 'A', 'stroke'), qx / sc, qy / sc, s.weight ?? DEFAULT_WEIGHT) * sc;
       let d = 1e5;
       for (const b of textBoxes(s.text ?? 'A')) d = Math.min(d, Math.max(Math.abs(qx / sc - b.x) - b.hx, Math.abs(qy / sc - b.y) - b.hy));
       return d * sc;
