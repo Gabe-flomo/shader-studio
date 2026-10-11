@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.143',
+    date: '2026-10-10',
+    title: 'Transform by default',
+    highlights: [
+      { area: 'Studio', text: 'Transform is the default way to move, turn and scale: Position is open, Rotate and Scale fold with a summary, and the controls grow from 2D to 3D to 4D.' },
+      { area: 'Studio', text: 'Builders, the Do bar and search use Transform now. In 3D it joins or makes a Scene. The smaller transform nodes are still there.' },
+    ],
+  },
+  {
     id: '2026.10.142',
     date: '2026-10-10',
     title: 'One Scene builder',
