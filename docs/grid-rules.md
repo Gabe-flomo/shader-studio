@@ -32,7 +32,7 @@ Code:
 | A text start (words rasterised to cells, the stamps) | `src/gridRules/textCells.ts` (the font: `src/agentBuilder/strokeFont.ts`) |
 | Your own neighbourhood: stencils, weights, presets; its editor | `src/gridRules/neighbourhoods.ts`, `src/components/gridRules/StencilEditor.tsx` |
 | Before/after pictures, Smooth in plain words | `src/gridRules/ruleExamples.ts`, `smoothWords.ts` |
-| Stacked rules on the base: the cards, their CPU step and GPU stage | `src/gridRules/stack.ts`, `src/components/gridRules/StackForm.tsx` |
+| Stacked rules on the base: the cards, headings, their CPU step and GPU stage, recipes | `src/gridRules/stack.ts`, `stackRecipes.ts`, `src/components/gridRules/StackForm.tsx` |
 | Examples | `src/store/gridRulesExamples.ts`, `gridRulesExampleIndex.ts` |
 | Tests | `src/compiler/__tests__/gridRules*.test.ts`, `gridHarness.ts`, `glslRun.ts`, `src/gridRules/__tests__/` |
 
@@ -322,6 +322,11 @@ for the wider simulation builder is [simulation-builder-plan.md](simulation-buil
 | **Too crowded → die or move** | a live cell has at least N live neighbours | it dies, or steps one cell away from them (the sign of their offsets, turned round) into an empty cell | Crowded at, Dies / Moves away, Chance |
 | **Drift in a direction** | always, where the cell ahead is empty | live cells (or every cell that isn't empty) step one cell in a direction | Direction (eight arrows), Live / Any not empty, Chance |
 | **Big clusters change** | a live cell has at least N live cells within a square of radius R | it becomes a state (0 dies; on Stages, 2 starts it fading) | Looks within 1–4, Big at, Becomes, Chance |
+| **Move along a heading** | a cell has a heading (or takes one) and the cell ahead is empty and claimed by no other mover | it steps one cell along its heading; a blocked one waits, bounces (turns round) or turns right | No heading: stay still / random / this way, When blocked, Which cells, Chance |
+| **Movers collide → …** | two movers head-on (side by side, facing) or heading for the same empty cell | bounce, turn (right), stop, merge (one cell, heading the way the two add up to) or explode (they vanish; copies land round the meeting cell, flying outward) | Then they, Copies, Distance, Copies are, Copies fly outward, Which cells, Chance |
+
+Every card also has **Only cells heading** (any, none, or one of the eight arrows): it then acts only on
+cells with that heading ("only cells heading right"). Explode has **Copies fly outward**.
 
 - **Order matters.** The base steps first; each card then works on the board the one before left,
   so a later card has the last word on the cells it touches. Crowd → explode is not explode → crowd
@@ -350,9 +355,57 @@ for the wider simulation builder is [simulation-builder-plan.md](simulation-buil
   adds 2 to the board's blue on a frame it stepped; a card acts only then (not on a frame Speed
   skips, nor on a new deal). Steps a frame is cut to fit the Pass's 64 draws (16 → 12 with four
   cards).
-- **Not yet:** cards on Blocks and Smooth (kept on the node, not run); Open as nodes with cards (it
-  says to switch them off); card settings as live uniforms (a card edit recompiles, as a Stencils
+- **Not yet:** cards on Blocks and Smooth (kept on the node, not run, as decided: Blocks keep counts
+  in pairs and Smooth holds numbers); card settings as live uniforms (a card edit recompiles, as a Stencils
   edit does).
+
+### Movers: headings and collisions
+
+Cells can carry a **heading** as extra state (`gridRules/stack.ts`): 1 to 8 for up, up right, right…
+clockwise, 0 for none. It rides in red's fraction: red = state + heading / 32. That is at most a
+quarter, so everything that reads a state as `floor(red + 0.5)` (the base, the view, the other cards,
+the try board) reads it as before, and every value is exact in a half float. The base keeps a cell's
+heading while the cell stays (a survivor keeps it, a dying Stages cell too); a newborn, a painted or a
+seeded cell has none. Drift, Crowd's step away and Move carry it along; Cluster keeps it.
+
+**Claim and resolve.** A mover claims the cell ahead. A cell that is empty, inside the walls and
+claimed by exactly one mover takes it; the mover's cell empties. Anything else is a conflict and the
+mover is **blocked**: two movers claiming one cell, two facing each other side by side, a wall or a
+cell ahead. Every cell works its answer out from the cells within two of it (a mover's target's
+claimants), so no two cells ever write one cell and nothing is lost or doubled: moving, bouncing,
+turning and stopping keep every cell (300 steps, walls and wrap, in the tests). A queue moves as
+rule 184 traffic does: only the front car whose cell ahead is free moves this step.
+
+The **Collide** card is the resolve pass: placed before a Move card it finds this step's conflicts
+(head-on pairs and contested cells) and settles them; Move then moves what is left. Its chance is
+rolled once per **meeting cell** (the contested cell, or the head-on pair's cell heading up, up right,
+right or down right), so both movers do the same thing. Merge leaves one cell on the contested cell
+with the first claimant's state (clockwise from above) and the heading of the sum of their steps
+(head-on: they cancel and stop). Explode's copies land on empty cells `distance` from the meeting
+cell, flying outward with Copies fly outward.
+
+**On the try board** the arrows under the board (· for none, then the eight) set the heading cells are
+drawn with, shown when a card moves or reads headings; every cell with a heading shows an arrow, and
+pointing at a cell says its heading and the next step's. **Use as the start** keeps the arrows: the
+drawn start has a `heads` row per row (`'.'` none, `1`…`8`), the GLSL bakes them as it bakes the
+states, and a new set of arrows is a new signature.
+
+**Recipes:** *Bouncing cells* (a still base, B/S012345678, collide bounce → move with random headings,
+walls), *Fireworks* (collide explode, 8 copies flying 2 away → move → a cluster that thins crowds),
+*Movers that merge*, *Traffic* (every cell heads right: rule 184).
+
+**As text:** `then move assign=random blocked=bounce any`, `then collide explode copies=8 distance=2
+fly`, `then collide merge`, and `heading=e` (or `heading=none`) on any card.
+
+`gridRulesMovers.test.ts`: the GPU stages and the CPU try step from the same board (random states and
+headings) give the same red (state and heading) and green, value for value, for ten steps: move with
+random headings, bounce on walls, turn, the heading filter, collide bounce / turn / stop / merge /
+explode (flying and still) before move, Life with movers, Brian's Brain with any cell moving, drift
+carrying headings, crowd stepping away; every movers recipe; step-through back and forward. And by
+hand: one cell a step, assign, two claimants waiting, bounce and turn (contested and head-on), merge
+(sum of headings; head-on stops), explode's 8 copies flying outward, walls turning a bouncer round,
+counts kept for 300 steps, a traffic jam, drawn headings dealt alike on both and kept through Use as
+the start, `then` lines read and printed back, and the recipes still moving after 200 steps.
 
 `gridRulesStack.test.ts`: every card (and four at once) on Life, Brian's Brain, Star Wars and
 Wireworld, wrapping and walled, stepped on the GPU program (every stage, with the Pass's Step) and
@@ -602,8 +655,10 @@ and leaves the node as it was (unwired: delete it when you like):
   SDF, Mouse button or Paint, Fill), Mix nodes that hold, start and paint, Round;
 - the look: Color cards and a Colour by state (or Colour ramp) Expression Block.
 
-Every node has a note; every Expression Block's note explains each named line. Radius 3 and up
-isn't built ((2N + 1)² − 1 Sample cards); the button says so. Seeding uses Noise Float's hash, so a
+Every node has a note; every Expression Block's note explains each named line. Radius 3 and up, and
+your own neighbourhood past 24 cells, are counted in one **Count the neighbours** Expression Block
+that reads the board itself (its function reads each counted cell, one line a cell, weights
+included), instead of a Sample (texture) card each. Seeding uses Noise Float's hash, so a
 new board is a different (as random) deal.
 
 - **A drawn or text start** opens as a **Drawn start** (or **Text start**) Expression Block: the
@@ -612,8 +667,19 @@ new board is a different (as random) deal.
   cell, clamped to the rule's last state; Start over? mixes it in on a new board (or Reset). Smooth
   reads it into Start values. A new drawing writes a new function.
 - **Your own neighbourhood** opens as one Sample (texture) card per counted cell, and Count the
-  neighbours multiplies each by its weight. Up to 24 counted cells (radius 2's); more and the button
-  says so.
+  neighbours multiplies each by its weight. Up to 24 counted cells (radius 2's); more are counted in
+  one block (above).
+- **Stacked rules** open as a Pass a card. The base is the board Pass (it also writes the step mark,
+  **Clock and step mark**, and **Keep the heading** keeps a staying cell's heading); each card is a
+  **Card k** Expression Block (its function is the very GLSL of the node's stage k: `stackStageGLSL`)
+  and a Pass, `<label> card k (nodes)`, reading the Pass before it. The base's reads a step ago come
+  from the last card's Previous, so a frame starts where the last card left the board; the look and
+  the Board output read the last card. A drawn start with arrows adds **Drawn headings**. One step a
+  frame (a chain of Passes can't Repeat as one: with Steps a frame above 1 the node steps faster).
+  `gridRulesAsNodes.test.ts` steps the opened graph (every Pass in order) against the node for six
+  steps from a board with headings: Life + explode, crowd + drift with walls, Brian's Brain + drift,
+  Wireworld + cluster, collide bounce → move, fireworks, merge at Speed ½, and Life + move from a
+  drawing with arrows (dealt alike); and radius 3 and a weighted 7 × 7 neighbourhood.
 - `gridRulesTextNb.test.ts` opens Life from a drawing and from text, Brian's Brain from a drawing,
   Heat from text and a custom neighbourhood from a drawing: each compiles, deals the drawing on a new
   board exactly as the node does (and as the CPU stamps it) and steps as the node for five steps.
@@ -697,9 +763,9 @@ board's. A radius-7 Larger than Life rule reads 224 neighbours a cell.
   recompiles.
 - **The try board** (CPU) doesn't run a custom Smooth update (it shows plain spreading), and deals
   an Image start as noise.
-- **Open as nodes** builds radius 1 and 2 only, and your own neighbourhood up to 24 counted cells;
-  it seeds noise with a different hash (a drawn or text start is the same cells); it doesn't build
-  stacked rules.
+- **Open as nodes** counts radius 3 and up and big neighbourhoods of your own in one block; it
+  seeds noise with a different hash (a drawn or text start is the same cells); stacked rules open
+  one step a frame.
 - **States** above 8 share colours: Stages blends its dying stages from State 2's colour to State
   3's; Patterns and Blocks give states past 7 the eighth colour.
 - **Stages' born / survive** count only state 1 (Generations), never the dying stages.
