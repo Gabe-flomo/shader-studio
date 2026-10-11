@@ -7,6 +7,10 @@ A node that holds **its own shader graph, drawn into a texture**. "Load a textur
 - **Add one** from the node browser (Sources, next to Texture; search also finds "Create a new texture", "Texture builder", "Procedural texture"), or press **Create a new texture** on an empty Texture card: a Shader Texture takes its place, wired where the Texture was.
 - **The card** shows the texture live, its size and its GPU time when drawn, an **Edit inside** button and **Start from: Noise · Gradient · Circles · Stripes** (replaces the inside; one undo step).
 - **Edit inside** (or double-click the header or the picture) opens its graph like a group, with a panel showing the live texture and a Done button (Esc works too). The inside ends in **Texture Output** (Color, Alpha), which can't be deleted. There are no group input or output terminals: the inside is self-contained. **UV inside runs −1 to 1 across the texture's own square**, whatever the picture's shape. The eye on a node inside shows that node over the picture.
+- **Inside:**
+  - Entering frames the inside's nodes (beside the panel). Leaving goes back to the view you had outside. This holds for every way in and out (Edit inside, double-click, Esc, Done, the breadcrumb) and for every group, Pass and Agents group too.
+  - The minimap shows the inside's nodes, not the top level's.
+  - **The main preview shows the texture you are editing**, stretched over the picture. **Preview shows: This texture · Where it's used** on the panel flips it to the graph's own output, with this texture in it. Both follow edits inside live. The choice is kept for the session (default This texture). The eye on a node inside still wins over both.
 - **Settings:**
   - **Resolution:** 128, 256, 512 (default), 1024 or 2048 square, or Match the picture.
   - **Update:**
@@ -53,11 +57,14 @@ It reuses the Pass machinery; there is no second renderer.
 - **Store.**
   - `defaultSubgraphFor('shaderTexture', params)` builds the starter (`nodes/shaderTextureStarters.ts`).
   - Entering one uses the ordinary group path. The inside's eye preview compiles the inner graph alone.
+  - **What the main preview shows inside** (`insideShaderTexture`, `shownShaderTexture`, `insideTextureView`). With This texture, `compile()` compiles the node's Color on an Output (`buildPreviewGraph`, or `buildGroupPreviewGraph` inside a plain group), so the texture is drawn by its own pass. Show passes still lists the whole graph's passes. A store subscription recompiles when the scope or the choice changes what is shown. The choice is in sessionStorage (`playfield.insideTextureView`).
   - Starters, Create a new texture and Turn into a Shader Texture are each one undo step through `rewriteTopLevel` (`components/shaderTexture/actions.ts`).
 - **UI.**
   - `components/shaderTexture/ShaderTextureCardBody.tsx` holds the card body and the inside panel. Both register the node id with `passThumbRegistry`, and only one is mounted at a time.
   - NodeComponent mounts the body and lets a double-click enter.
-  - NodeGraph hides the group terminals inside, shows the panel, names the breadcrumb and adds the context-menu items.
+  - NodeGraph hides the group terminals inside, shows the panel, names the breadcrumb and adds the context-menu items. The panel holds the Preview shows switch.
+  - **Framing** (`components/NodeGraph/scopeView.ts`). A layout effect on `activeGroupPath` saves the outer view, frames the new scope's cards with `frameNodes`, and frames again a frame later with measured sizes unless something else moved the view. Leaving restores the saved view. A pending focus request (revealNode) takes priority. Before, nothing moved the view on entry, so the inside appeared wherever the outer view happened to be.
+  - **Minimap.** It was drawn from the top-level `nodes` while inside, so it showed the outer graph. It now gets the open scope's nodes and draws measured card sizes, redrawing when they change.
   - TextureCardBody has the Create a new texture button.
 
 ## Tests
@@ -84,6 +91,9 @@ It reuses the Pass machinery; there is no second renderer.
   - the clock ignored without a Time node;
   - the page host drawing Once a single time.
 - **Save, load and undo:** the store saves and loads, and undo works.
+- **Inside:** `insideShaderTexture` (top level, inside a plain group, not inside other groups); entering shows the texture and leaving shows the output; Where it's used shows the output, follows edits inside and is kept for the session; the eye still wins.
+
+`src/components/NodeGraph/__tests__/scopeView.test.tsx`: `frameNodes` (centring, zoom cap, measured sizes, inset); `scopeChange`; NodeGraph framing a Shader Texture's and a plain group's inside on entry, restoring the outer view on exitGroup, exitToDepth and exitToRoot, and the minimap getting the open scope's nodes.
 - **Edits:** starters, from a Texture node, from a selection and a plain group, and the refusal message.
 
 ## Not done yet
@@ -93,4 +103,4 @@ It reuses the Pass machinery; there is no second renderer.
 - **Nested Shader Textures.** One inside another's inside compiles, but a Pass inside a plain group inside a Shader Texture isn't opened.
 - **Copies share inner ids.** A pasted copy's inside keeps the same inner ids, and the compile prefixes them. A slider inside the second copy then recompiles instead of moving a uniform live.
 - **Turn into a Shader Texture** works on the top level only.
-- **Aspect.** The texture is square (unless Match the picture), so Color stretches it over a wide picture.
+- **Aspect.** The texture is square (unless Match the picture), so Color stretches it over a wide picture. The main preview inside stretches it the same way.

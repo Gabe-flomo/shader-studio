@@ -14,6 +14,7 @@ import { p, pv3 } from './helpers';
 import { BOARD_SIZES, GRID_DEFAULTS, MAX_RADIUS, MAX_STATES, MAX_STEPS, gridShape } from '../../gridRules/spec';
 import { GRID_VIEWS, GR_HASH_GLSL, gridStepGLSL, gridViewGLSL, gridViewMode, type GridNames } from '../../gridRules/glsl';
 import { GR_DICE_GLSL } from '../../gridRules/dice';
+import { GR_STACK_GLSL } from '../../gridRules/stack';
 
 /** The pointer's button (1 while down over the picture). Declared only by the nodes that read it. */
 export const MOUSE_BUTTON_UNIFORM = 'u_mousebtn';
@@ -145,6 +146,8 @@ export const GridRulesStepNode: NodeDefinition = {
   inputs: {
     prev: { type: 'texture', label: 'Board a step ago' },
     image: { type: 'texture', label: 'Start image' },
+    // Stacked rules: the board Pass's Step (which stage this draw is: the base, or a card).
+    stage: { type: 'float', label: 'Stage' },
   },
   outputs: {
     color: { type: 'vec3', label: 'Color' },
@@ -154,13 +157,16 @@ export const GridRulesStepNode: NodeDefinition = {
   paramDefs: GRID_PARAM_DEFS,
   assignable: false,
   glslFunction: GR_HASH_GLSL,
-  // Blocks' dice and block layout (gridRules/dice.ts): only Blocks boards carry them.
-  glslFunctionsFor: (node: GraphNode) => (gridShape(node.params).type === 'blocks' ? [GR_DICE_GLSL] : []),
+  // Blocks' dice and block layout (gridRules/dice.ts): only Blocks boards carry them; stacked rules roll the same dice.
+  glslFunctionsFor: (node: GraphNode) => {
+    const s = gridShape(node.params);
+    return [...(s.type === 'blocks' || s.stack.length ? [GR_DICE_GLSL] : []), ...(s.stack.length ? [GR_STACK_GLSL] : [])];
+  },
   declarationsFor: () => [BUTTON_DECL],
   generateGLSL: (node, inputVars) => {
     const id = node.id;
     if (!inputVars.prev) return { code: `    vec3 ${id}_out = vec3(0.0);\n    float ${id}_outA = 0.0;\n`, outputVars: { color: `${id}_out`, alpha: `${id}_outA` } };
-    return { code: gridStepGLSL(gridShape(node.params), names(node), inputVars.prev, inputVars.image), outputVars: { color: `${id}_out`, alpha: `${id}_outA` } };
+    return { code: gridStepGLSL(gridShape(node.params), names(node), inputVars.prev, inputVars.image, inputVars.stage), outputVars: { color: `${id}_out`, alpha: `${id}_outA` } };
   },
 };
 

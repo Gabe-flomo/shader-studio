@@ -76,7 +76,8 @@ const GRID_RULE_SECTION: Record<GridRuleType, { label: string; how: string }> = 
 
 /**
  * Grid Rules' sections (the builder's left nav, components/gridRules/GridRulesEditor.tsx): the rule
- * first, then Neighbourhood (where cells are counted) · Start · Speed · Brush · Look · As text.
+ * first, then Neighbourhood (where cells are counted) · Stacked rules (Count, Stages, Stencils) · Start ·
+ * Speed · Brush · Look · As text.
  * A Smooth rule's section is named for its template ("Heat", "Ripples"…).
  */
 export function gridRulesSections(type: GridRuleType, smoothTitle?: string): BuilderSectionTab[] {
@@ -84,6 +85,8 @@ export function gridRulesSections(type: GridRuleType, smoothTitle?: string): Bui
   return [
     { id: 'rule', label: type === 'smooth' && smoothTitle ? smoothTitle : GRID_RULE_SECTION[type].label, icon: 'sliders', how: GRID_RULE_SECTION[type].how },
     ...(counting ? [{ id: 'neighbourhood', label: 'Neighbourhood', icon: 'grid' as IconName, how: 'Which cells round a cell count as its neighbours: the 8 round it, the 4 beside it, or every cell within a radius.' }] : []),
+    // Stacked rules on the base (gridRules/stack.ts): the whole-number kinds with a cell-by-cell rule.
+    ...(counting || type === 'patterns' ? [{ id: 'stack', label: 'Stacked rules', icon: 'layers' as IconName, how: 'Rule cards that run after the base, in order, every step: cells that meet explode, crowds die or move, cells drift, clusters change.' }] : []),
     { id: 'start', label: 'Start', icon: 'play', how: 'What a new board starts as: your drawing, noise, one seed in the middle or a picture; its size and its edges.' },
     { id: 'run', label: 'Speed', icon: 'clock', how: 'How many steps the board takes a second, and the seed its dice roll from.' },
     { id: 'brush', label: 'Brush', icon: 'hand', how: 'Hold the mouse button over the picture to paint cells in: its size, what it paints and how thickly.' },

@@ -24,6 +24,7 @@
 import type { GraphNode } from '../types/nodeGraph';
 import { PassNode } from '../nodes/definitions/passes';
 import { gridShape } from '../gridRules/spec';
+import { stackedSteps } from '../gridRules/stack';
 
 export const GRID_TYPE = 'gridRules';
 export const gridCellsId = (id: string) => `${id}__cells`;
@@ -78,11 +79,15 @@ export function expandGridRules(nodes: GraphNode[]): ExpandedGridRules {
         ...paramWires,
         prev: wire(gridCellsId(n.id), 'previous', 'texture', 'Board a step ago'),
         image: { type: 'texture', label: 'Start image', ...(n.inputs.image?.connection ? { connection: { ...n.inputs.image.connection } } : {}) },
+        // Stacked rules (gridRules/stack.ts): which stage of the Repeat this draw is.
+        ...(s.stack.length ? { stage: wire(gridCellsId(n.id), 'step', 'float', 'Stage') } : {}),
       },
     };
+    // With stacked rules each step is 1 + cards draws of the board (the base, then each card).
+    const repeat = s.stack.length ? stackedSteps(s.steps, s.stack.length) * (1 + s.stack.length) : s.steps;
     const cells: GraphNode = {
       id: gridCellsId(n.id), type: 'pass', position: at, outputs: passOutputs(),
-      params: { label: `${label} cells`, scale: String(s.scale), filter: 'nearest', wrap: s.wrap ? 'repeat' : 'clamp', format: 'half', repeat: s.steps },
+      params: { label: `${label} cells`, scale: String(s.scale), filter: 'nearest', wrap: s.wrap ? 'repeat' : 'clamp', format: 'half', repeat },
       inputs: { color: wire(step.id, 'color', 'vec3', 'Color'), alpha: wire(step.id, 'alpha', 'float', 'Alpha') },
     };
     const board = wire(cells.id, 'texture', 'texture', 'Cells');

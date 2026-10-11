@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { GraphNode } from '../../types/nodeGraph';
 import { useTokens } from '../../theme/themeStore';
-import { useNodeGraphStore } from '../../store/useNodeGraphStore';
+import { useNodeGraphStore, type InsideTextureView } from '../../store/useNodeGraphStore';
 import { passThumbRegistry } from '../../lib/passRunner';
 import { getPerfSnapshot } from '../../lib/perfStats';
 import { SHADER_TEXTURE_SIZES, SHADER_TEXTURE_STARTERS, shaderTextureUpdate } from '../../nodes/definitions/shaderTexture';
@@ -84,6 +84,36 @@ export function ShaderTextureCardBody({ node, onEnterGroup }: { node: GraphNode;
   );
 }
 
+const VIEW_CHOICES: Array<{ value: InsideTextureView; label: string; title: string }> = [
+  { value: 'texture', label: 'This texture', title: 'The main preview shows the texture you are editing' },
+  { value: 'used', label: "Where it's used", title: 'The main preview shows the graph\'s own output, with this texture in it' },
+];
+
+/** What the main preview shows while you are inside: this texture (the default) or the output it feeds. Kept for the session. */
+export function PreviewShowsSwitch() {
+  const tk = useTokens();
+  const view = useNodeGraphStore(s => s.insideTextureView);
+  const setView = useNodeGraphStore(s => s.setInsideTextureView);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <span style={{ fontSize: 10, color: tk.text.faint, fontFamily: MONO }}>Preview shows</span>
+      <div role="radiogroup" aria-label="Preview shows" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, padding: 2, borderRadius: 7, background: tk.bg.field, border: `1px solid ${tk.border.subtle}` }}>
+        {VIEW_CHOICES.map(c => {
+          const on = view === c.value;
+          return (
+            <button key={c.value} type="button" role="radio" aria-checked={on} title={c.title} onClick={() => setView(c.value)}
+              data-preview-shows={c.value}
+              style={{
+                font: `500 11px ${MONO}`, padding: '3px 4px', borderRadius: 5, cursor: 'pointer', border: 'none', whiteSpace: 'nowrap',
+                background: on ? tk.ink.base : 'transparent', color: on ? tk.ink.text : tk.text.secondary,
+              }}>{c.label}</button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 /** Inside a Shader Texture: its live texture, what it is and a way back out. */
 export function ShaderTextureInsidePanel({ node, top }: { node: GraphNode; top: number }) {
   const tk = useTokens();
@@ -98,6 +128,7 @@ export function ShaderTextureInsidePanel({ node, top }: { node: GraphNode; top: 
       <strong style={{ fontSize: 12 }}>{typeof node.params.label === 'string' && node.params.label ? node.params.label : 'Shader Texture'}</strong>
       <canvas ref={ref} width={128} height={128} style={{ display: 'block', width: 200, height: 200, background: '#000', borderRadius: 6, imageRendering: node.params.filter === 'nearest' ? 'pixelated' : 'auto' }} />
       <div style={{ fontSize: 10, color: tk.text.faint, fontFamily: MONO }}>{summary(node)}{status ? <><br />{status}</> : null}</div>
+      <PreviewShowsSwitch />
       <div style={{ fontSize: 11, lineHeight: 1.4, color: tk.text.muted }}>
         What reaches Texture Output is drawn into this texture. UV runs −1 to 1 across its square.
       </div>
