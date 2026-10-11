@@ -24,19 +24,38 @@ import { openExpressionBuilder } from '../exprBuilder/store';
 import type { GraphNode } from '../types/nodeGraph';
 import type { BuilderId } from './registry';
 import { closeSceneShell, openAgentBuilder, openGridRulesEditor, showRecipeOf } from './windows';
+import { readStartCells, startCellsFromGrid, type StartCells } from '../gridRules/startCells';
 import { editScene2DInBuilder } from '../sceneBuilder2d/actions';
 import { openSceneBuilderShell, type BuiltScene, type SceneKind } from './sceneKinds';
 import { openAgentRulesEditor } from '../agentRules/storeActions';
 import { builderRecipeOf } from './recipe';
 import type { BuilderAction } from './doBuilders';
 
-/** Add a Grid Rules node at the top level and open its editor. Returns its id. */
-export function newGridRules(): string {
+/**
+ * What a new Grid Rules node starts with (newGridRules): params over its defaults, and a drawn start
+ * (the cells, as rows of states top first, or a StartCells), which sets Start to "Your drawing".
+ * The Grid scene builder's "Make it a simulation" hands its drawn cells over this way.
+ */
+export interface GridRulesSeed {
+  params?: Record<string, unknown>;
+  startCells?: StartCells | number[][] | null;
+}
+
+/** The params a GridRulesSeed makes (a drawing that is empty is left out). Pure. */
+export function gridSeedParams(seed: GridRulesSeed = {}): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...(seed.params ?? {}) };
+  const sc = Array.isArray(seed.startCells) ? startCellsFromGrid(seed.startCells) : readStartCells(seed.startCells);
+  if (sc) { out.start = 'cells'; out.startCells = sc; }
+  return out;
+}
+
+/** Add a Grid Rules node at the top level and open its editor, optionally from a seed (params, a drawn start). Returns its id. */
+export function newGridRules(seed: GridRulesSeed = {}): string {
   const st = useNodeGraphStore.getState();
   if (st.activeGroupPath.length) st.exitToRoot();
   const now = useNodeGraphStore.getState();
   const selected = now.selectedNodeIds.length ? now.selectedNodeIds : now.selectedNodeId ? [now.selectedNodeId] : [];
-  const made = addGridRules(now.nodes, {}, selected.filter(id => now.nodes.some(nd => nd.id === id)), () => now.newNodeId(), { topLevel: true, heightOf: estimateNodeHeight });
+  const made = addGridRules(now.nodes, gridSeedParams(seed), selected.filter(id => now.nodes.some(nd => nd.id === id)), () => now.newNodeId(), { topLevel: true, heightOf: estimateNodeHeight });
   // Beside the selection or the Output; brought into the visible canvas when that is off screen.
   now.setNodesRewritten(intoView(now.nodes, made.nodes, 'ifOutOfView'), 'Added Grid Rules');
   useNodeGraphStore.getState().focusNode(made.id);

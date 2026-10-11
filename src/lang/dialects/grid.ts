@@ -80,6 +80,8 @@ const NB_WORDS: Record<string, string> = { moore: 'moore', 'von-neumann': 'vonNe
 const NB_TEXT: Record<string, string> = { moore: 'moore', vonNeumann: 'von-neumann', radius: 'radius' };
 const TEMPLATES = ['diffusion', 'waves', 'reaction', 'custom'] as const;
 const START_WORDS = ['noise', 'empty', 'image', 'centre', 'center'];
+/** `start=cells`: the drawing already on the node (its startCells); a drawing has no words of its own. */
+const START_CELLS = 'cells';
 
 /** Settings keys → params (number settings). */
 const NUM_KEYS: Record<string, { param: string; min?: number; max?: number; int?: boolean }> = {
@@ -264,7 +266,9 @@ export function parseGrid(src: string, opts: { base?: P; seed?: number } = {}): 
     if (key === 'start') {
       const v = draw(a, 'start');
       const w = v?.k === 'word' ? v.v.toLowerCase() : '';
-      if (START_WORDS.includes(w)) P.start = w === 'center' ? 'centre' : w; else c.error(a, 'start is noise, empty, image or centre.');
+      if (START_WORDS.includes(w)) P.start = w === 'center' ? 'centre' : w;
+      else if (w === START_CELLS && P.startCells) P.start = w;
+      else c.error(a, w === START_CELLS ? 'start=cells needs a drawing: draw one on the builder\'s board and press Use as the start.' : 'start is noise, empty, image or centre.');
       return;
     }
     if (key === 'template') {

@@ -41,12 +41,17 @@ export function CellPicture({ cells, size, cell = 8, gap = 1.5, colour, centre, 
 }
 
 /** One row of switches 0…max, each with its picture; a line under it says what the hovered one does. */
-export function PictureSwitches({ row, mask, max, nb, colour, born, survive, stages, onChange }: {
+export function PictureSwitches({ row, mask, max, nb, colour, born, survive, stages, onChange, onHoverCount, compact = false }: {
   row: 'born' | 'survive'; mask: number; max: number; nb: 'moore' | 'vonNeumann'; colour: string;
   born: number[]; survive: number[]; stages: boolean; onChange: (mask: number) => void;
+  /** The count pointed at (null: none), so the builder's board can light the cells it stands for. */
+  onHoverCount?: (k: number | null) => void;
+  /** Narrower switches (the builder's side panel). */
+  compact?: boolean;
 }) {
   const tk = useTokens();
-  const [hover, setHover] = useState<number | null>(null);
+  const [hover, setHoverState] = useState<number | null>(null);
+  const setHover = (k: number | null) => { setHoverState(k); onHoverCount?.(k); };
   const counts = row === 'born' ? born : survive;
   const shown = hover ?? (counts[0] ?? null);
   const title = row === 'born' ? 'Born' : 'Survive';
@@ -69,7 +74,7 @@ export function PictureSwitches({ row, mask, max, nb, colour, born, survive, sta
             <button key={k} type="button" role="checkbox" aria-checked={on} aria-label={`${title} with ${k}: ${label}`} title={label} data-count={k}
               onClick={() => onChange(Math.round(mask) ^ (1 << k))} onMouseEnter={() => setHover(k)} onFocus={() => setHover(k)} onBlur={() => setHover(null)}
               style={{
-                width: 46, padding: '6px 0 4px', border: 0, borderRadius: radius.md, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+                width: compact ? 39 : 46, padding: '6px 0 4px', border: 0, borderRadius: radius.md, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
                 background: on ? alpha(colour, 0.16) : tk.bg.field,
                 boxShadow: on ? `inset 0 0 0 1.5px ${colour}` : hover === k ? `inset 0 0 0 1px ${tk.border.strong}` : `inset 0 0 0 1px ${tk.border.subtle}`,
               }}>

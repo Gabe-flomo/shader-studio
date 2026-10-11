@@ -11,6 +11,7 @@
  * Only GLSL ES 1.00 that the test evaluator also runs (compiler/__tests__/glslRun.ts): declarations,
  * if / else, for loops with constant bounds, ?:, and the built-ins.
  */
+import { startCellsGLSL } from './startCells';
 import { ANY, NOT_EMPTY, SAME, blockCorner, blockVariants, patternVariants, stencilOffset } from './stencils';
 import {
   MOORE_OFFSETS, VON_NEUMANN_OFFSETS, gridSignature, floatLiterals, isDiscrete,
@@ -68,6 +69,8 @@ export function gridStepGLSL(s: GridShape, N: GridNames, prev: string, image?: s
     `vec2 ${v('m')} = u_mouse * ${f(s.scale)};`,
     `float ${v('in')} = (length(${v('cell')} + 0.5 - ${v('m')}) < ${P('brushRadius')} ? 1.0 : 0.0) * max(step(0.5, u_mousebtn), step(0.5, ${P('paint')}));`,
   );
+  // A drawn start (gridRules/startCells.ts): the drawing's state at this cell, read only when the board is dealt.
+  if (s.start === 'cells') L.push(...startCellsGLSL(s.startCells, v('drawn'), v('cell'), v('res'), id));
   if (isDiscrete(s.type)) L.push(...discreteStep(s, N, read, image, sig, prev));
   else L.push(...smoothStep(s, N, read, image));
   return L.map(l => `    ${l}\n`).join('');
@@ -78,6 +81,7 @@ function discreteSeed(s: GridShape, N: GridNames, image?: string): string {
   const { id, P } = N;
   const noise = `(${id}_h < ${P('density')} ? 1.0 : 0.0)`;
   if (s.start === 'empty') return '0.0';
+  if (s.start === 'cells') return `min(${id}_drawn, ${id}_top)`;
   if (s.start === 'centre') return `(length(${id}_cell + 0.5 - ${id}_res * 0.5) < min(${id}_res.x, ${id}_res.y) * 0.15 ? ${noise} : 0.0)`;
   // An image: its brightness picks the state (0 dark … the last state white), so a picture can lay out several.
   if (s.start === 'image' && image) return `floor(clamp(dot(texture2D(${image}, (${id}_cell + 0.5) / ${id}_res).rgb, vec3(0.2126, 0.7152, 0.0722)), 0.0, 1.0) * ${id}_top + 0.5)`;
@@ -324,12 +328,13 @@ function smoothStep(s: GridShape, N: GridNames, read: (d: string) => string, ima
   const disc = `(length(${v('cell')} + 0.5 - ${v('res')} * 0.5) < min(${v('res')}.x, ${v('res')}.y) * 0.08 ? 1.0 : 0.0)`;
   const lum = image ? `dot(texture2D(${image}, (${v('cell')} + 0.5) / ${v('res')}).rgb, vec3(0.2126, 0.7152, 0.0722))` : null;
   const blob = `(grHash(vec3(floor(${v('cell')} / 6.0), ${FRAME} + ${P('seed')} * 1013.0 + 3.0)) < ${D} * 0.04 ? 1.0 : 0.0)`;
+  const drawn = `(${v('drawn')} > 0.5 ? 1.0 : 0.0)`;
   let su: string, sv: string;
   if (s.template === 'reaction') {
-    const b = s.start === 'empty' ? '0.0' : s.start === 'centre' ? disc : s.start === 'image' && lum ? lum : blob;
+    const b = s.start === 'empty' ? '0.0' : s.start === 'cells' ? drawn : s.start === 'centre' ? disc : s.start === 'image' && lum ? lum : blob;
     su = '0.0'; sv = b; // A = 1 everywhere (red keeps 1 − A)
   } else {
-    const a = s.start === 'empty' ? '0.0' : s.start === 'centre' ? disc : s.start === 'image' && lum ? lum
+    const a = s.start === 'empty' ? '0.0' : s.start === 'cells' ? drawn : s.start === 'centre' ? disc : s.start === 'image' && lum ? lum
       : s.template === 'waves' ? `(${v('h')} < ${D} * 0.02 ? 1.0 : 0.0)` : `(${v('h')} < ${D} ? 1.0 : 0.0)`;
     su = a; sv = s.template === 'waves' ? a : '0.0';
   }
