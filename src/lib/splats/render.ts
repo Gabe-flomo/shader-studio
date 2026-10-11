@@ -5,10 +5,19 @@
  * Per frame (SplatPass.draw): the probe program (the picture's uniforms, compiler/splatGraph.ts) draws the camera and
  * placement into 8 × 1 float texels; the splats draw with them, in the last order the worker sent. The probe's texels
  * are read back without stalling (a pixel-pack buffer and a fence, polled next frame), only to decide when to sort.
+ *
+ * With a Modifier wired (docs/splat-scene.md "Per-splat modifiers"), the modifier program draws after the probe, one
+ * texel per splat, into two targets the splat shader then reads (SPLAT_VERT_MOD). While it moves splats, the engine
+ * asks for their depths (a small pass, four splats a texel) to be read back the same way, and sorts by those.
  */
 import * as THREE from 'three';
-import { SPLAT_FRAG, SPLAT_VERT } from './shaders';
+import { SPLAT_DEPTH_FRAG, SPLAT_DEPTH_VERT, SPLAT_FRAG, SPLAT_VERT, SPLAT_VERT_MOD } from './shaders';
 import { PACK_WIDTH, SH_WIDTH, type PackedSplats } from './pack';
+
+/** The modifier targets' width (compiler/splatGraph.ts SPLAT_MOD_WIDTH): one texel per splat. */
+export const MOD_WIDTH = 2048;
+/** A modifier program's own uniform names (compiler/splatGraph.ts splatModUniformNames). */
+export interface ModNames { data: string; probe: string; count: string }
 
 /** The probe's texels as numbers: eye, three rays, three model columns (w: size, opacity), offset. */
 export type ProbeReading = Float32Array;
@@ -57,6 +66,25 @@ export class SplatPass {
   private pbo: WebGLBuffer | null = null;
   private fence: WebGLSync | null = null;
   private floatProbe: boolean;
+  private splatUniforms: Record<string, THREE.IUniform>;
+  // Per-splat modifiers: the program, its targets, the splat shader that reads them, and the moved-centres read.
+  private modMat: THREE.ShaderMaterial | null = null;
+  private modKey = '';
+  private modNames: ModNames | null = null;
+  private modTarget: THREE.WebGLRenderTarget | null = null;
+  private modScene = new THREE.Scene();
+  private modMesh: THREE.Mesh;
+  private modSplatMat: THREE.RawShaderMaterial | null = null;
+  private movedPbo: WebGLBuffer | null = null;
+  private movedFence: WebGLSync | null = null;
+  private movedBytes = 0;
+  private spareDepths: Float32Array | null = null;
+  private depthTarget: THREE.WebGLRenderTarget | null = null;
+  private depthMat: THREE.RawShaderMaterial | null = null;
+  private depthScene = new THREE.Scene();
+  private depthMesh: THREE.Mesh;
+  /** A modifier was asked for but this GPU has no float render targets: the scan draws unmodified. */
+  modifierRefused = false;
   /** The last reading that came back (null until the first). */
   reading: ProbeReading | null = null;
   /** Bumped each time a reading arrives. */
@@ -77,14 +105,30 @@ export class SplatPass {
     this.quadMesh.frustumCulled = false;
     this.quadScene.add(this.quadMesh);
     this.geometry = quad();
-    this.material = new THREE.RawShaderMaterial({
+    this.splatUniforms = {
+      u_data: { value: null }, u_sh: { value: null }, u_probe: { value: this.probeTarget.texture },
+      u_shDeg: { value: 0 }, u_view: { value: new THREE.Vector2(1, 1) },
+      u_modA: { value: null }, u_modB: { value: null },
+    };
+    this.material = this.splatMaterial(SPLAT_VERT);
+    this.mesh = new THREE.Mesh(this.geometry, this.material);
+    this.mesh.frustumCulled = false;
+    this.scene.add(this.mesh);
+    this.modMesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2));
+    this.modMesh.frustumCulled = false;
+    this.modScene.add(this.modMesh);
+    this.depthMesh = new THREE.Mesh(this.modMesh.geometry);
+    this.depthMesh.frustumCulled = false;
+    this.depthScene.add(this.depthMesh);
+  }
+
+  /** The splat shader (both variants share one uniform table). */
+  private splatMaterial(vertexShader: string): THREE.RawShaderMaterial {
+    return new THREE.RawShaderMaterial({
       glslVersion: THREE.GLSL3,
-      vertexShader: SPLAT_VERT,
+      vertexShader,
       fragmentShader: SPLAT_FRAG,
-      uniforms: {
-        u_data: { value: null }, u_sh: { value: null }, u_probe: { value: this.probeTarget.texture },
-        u_shDeg: { value: 0 }, u_view: { value: new THREE.Vector2(1, 1) },
-      },
+      uniforms: this.splatUniforms,
       // Either winding: the quad's axes turn either way round depending on the ellipse.
       side: THREE.DoubleSide,
       transparent: true, depthTest: false, depthWrite: false,
@@ -92,10 +136,145 @@ export class SplatPass {
       blendEquation: THREE.AddEquation, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
       blendEquationAlpha: THREE.AddEquation, blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.OneMinusSrcAlphaFactor,
     });
-    this.mesh = new THREE.Mesh(this.geometry, this.material);
-    this.mesh.frustumCulled = false;
-    this.scene.add(this.mesh);
   }
+
+  // ── Per-splat modifiers (docs/splat-scene.md) ───────────────────────────────
+
+  /**
+   * The modifier program (compiler/splatGraph.ts), drawn with the picture's uniforms plus its own three (the splat
+   * data, the probe, the count, by `names`), or none (null). Needs float render targets; without them the scan draws
+   * unmodified and `modifierRefused` says so.
+   */
+  setModifier(vertexShader: string, fragmentShader: string | null, uniforms: Record<string, THREE.IUniform>, names: ModNames | null): void {
+    if (!fragmentShader || !names || !this.floatProbe) {
+      this.modifierRefused = !!fragmentShader && !this.floatProbe;
+      if (this.modMat) { this.modMat.dispose(); this.modMat = null; this.modKey = ''; }
+      this.modNames = null;
+      return;
+    }
+    if (this.modMat && this.modKey === fragmentShader && this.modMat.uniforms === uniforms) return;
+    this.modMat?.dispose();
+    this.modMat = new THREE.ShaderMaterial({ vertexShader, fragmentShader, uniforms, depthTest: false, depthWrite: false, blending: THREE.NoBlending });
+    this.modKey = fragmentShader;
+    this.modNames = names;
+    this.modMesh.material = this.modMat;
+    if (!this.modSplatMat) this.modSplatMat = this.splatMaterial(SPLAT_VERT_MOD);
+  }
+
+  hasModifier(): boolean { return !!this.modMat; }
+
+  /** The two modifier targets, one texel per splat: (centre, size) as floats, (colour, opacity) as half floats. */
+  private ensureModTarget(): THREE.WebGLRenderTarget {
+    const rows = Math.max(1, Math.ceil(this.count / MOD_WIDTH));
+    if (this.modTarget && this.modTarget.height === rows) return this.modTarget;
+    this.modTarget?.dispose();
+    const t = new THREE.WebGLRenderTarget(MOD_WIDTH, rows, { count: 2, type: THREE.FloatType, format: THREE.RGBAFormat, depthBuffer: false, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
+    t.textures[1].type = THREE.HalfFloatType;
+    for (const x of t.textures) x.generateMipmaps = false;
+    this.modTarget = t;
+    return t;
+  }
+
+  /** Draw the modifier program over every splat (after the probe, which it reads). */
+  private runModifier(): void {
+    const r = this.renderer, t = this.ensureModTarget(), u = this.modMat!.uniforms, nm = this.modNames!;
+    const set = (k: string, value: unknown) => { if (u[k]) u[k].value = value; else u[k] = { value }; };
+    set(nm.data, this.data);
+    set(nm.probe, this.probeTarget.texture);
+    set(nm.count, this.count);
+    r.setRenderTarget(t);
+    r.render(this.modScene, this.ortho);
+    this.splatUniforms.u_modA.value = t.textures[0];
+    this.splatUniforms.u_modB.value = t.textures[1];
+  }
+
+  /** The moved splats' depths along the camera's forward ray, four a texel (shaders.ts SPLAT_DEPTH_FRAG). */
+  private runDepths(): THREE.WebGLRenderTarget {
+    const rows = Math.max(1, Math.ceil(this.count / (4 * MOD_WIDTH)));
+    if (!this.depthTarget || this.depthTarget.height !== rows) {
+      this.depthTarget?.dispose();
+      this.depthTarget = new THREE.WebGLRenderTarget(MOD_WIDTH, rows, { type: THREE.FloatType, format: THREE.RGBAFormat, depthBuffer: false, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
+      this.depthTarget.texture.generateMipmaps = false;
+    }
+    if (!this.depthMat) {
+      this.depthMat = new THREE.RawShaderMaterial({
+        glslVersion: THREE.GLSL3, vertexShader: SPLAT_DEPTH_VERT, fragmentShader: SPLAT_DEPTH_FRAG,
+        uniforms: { u_modA: { value: null }, u_probe: { value: this.probeTarget.texture }, u_count: { value: 0 } },
+        depthTest: false, depthWrite: false, blending: THREE.NoBlending,
+      });
+      this.depthMesh.material = this.depthMat;
+    }
+    this.depthMat.uniforms.u_modA.value = this.modTarget!.textures[0];
+    this.depthMat.uniforms.u_count.value = this.count;
+    const r = this.renderer;
+    r.setRenderTarget(this.depthTarget);
+    r.render(this.depthScene, this.ortho);
+    return this.depthTarget;
+  }
+
+  /** A read of the moved splats' depths is on its way. */
+  get movedPending(): boolean { return !!this.movedFence; }
+
+  /**
+   * Start reading the moved splats' depths back (for the sort): worked out on the GPU from this frame's modifier
+   * targets, then a pixel-pack buffer and a fence, so nothing waits. They come back from pollDepths on a later frame.
+   * False when there is nothing to read or a read is on its way.
+   */
+  startDepthRead(): boolean {
+    if (!this.modTarget || !this.modMat || this.movedFence || this.count === 0) return false;
+    const gl = this.renderer.getContext() as WebGL2RenderingContext;
+    if (typeof gl.fenceSync !== 'function') return false;
+    const prev = this.renderer.getRenderTarget();
+    const t = this.runDepths();
+    const bytes = MOD_WIDTH * t.height * 16;
+    if (!this.movedPbo || this.movedBytes !== bytes) {
+      if (this.movedPbo) gl.deleteBuffer(this.movedPbo);
+      this.movedPbo = gl.createBuffer();
+      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.movedPbo);
+      gl.bufferData(gl.PIXEL_PACK_BUFFER, bytes, gl.STREAM_READ);
+      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+      this.movedBytes = bytes;
+    }
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.movedPbo);
+    gl.readPixels(0, 0, MOD_WIDTH, t.height, gl.RGBA, gl.FLOAT, 0);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+    this.renderer.setRenderTarget(prev);
+    this.movedFence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+    return true;
+  }
+
+  /** The moved splats' depths (splat i at [i], bigger is farther) once the read has landed, else null. */
+  pollDepths(): Float32Array | null {
+    if (!this.movedFence || !this.movedPbo) return null;
+    const gl = this.renderer.getContext() as WebGL2RenderingContext;
+    const st = gl.clientWaitSync(this.movedFence, 0, 0);
+    if (st === gl.TIMEOUT_EXPIRED) return null;
+    gl.deleteSync(this.movedFence);
+    this.movedFence = null;
+    if (st === gl.WAIT_FAILED) return null;
+    const out = this.spareDepths && this.spareDepths.length * 4 === this.movedBytes ? this.spareDepths : new Float32Array(this.movedBytes / 4);
+    this.spareDepths = null;
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.movedPbo);
+    gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, out);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+    return out;
+  }
+
+  /** The moved splats' depths now (stalls: offline renders only; after runProbe). */
+  readDepthsNow(): Float32Array | null {
+    if (!this.modTarget || !this.modMat || this.count === 0) return null;
+    const gl = this.renderer.getContext() as WebGL2RenderingContext;
+    const prev = this.renderer.getRenderTarget();
+    const t = this.runDepths();
+    const out = new Float32Array(MOD_WIDTH * t.height * 4);
+    gl.readPixels(0, 0, MOD_WIDTH, t.height, gl.RGBA, gl.FLOAT, out);
+    this.renderer.setRenderTarget(prev);
+    return out;
+  }
+
+  /** A buffer the sort has finished with: the next read lands in it (no allocation per sort). */
+  recycleDepths(buf: Float32Array): void { this.spareDepths = buf; }
+
 
   get splatCount(): number { return this.count; }
 
@@ -153,11 +332,15 @@ export class SplatPass {
       r.setRenderTarget(this.probeTarget);
       r.render(this.quadScene, this.ortho);
     }
+    // The modifier program, over every splat, before the splats that read it.
+    const modOn = this.modifierReady();
+    if (modOn) this.runModifier();
+    this.mesh.material = modOn ? this.modSplatMat! : this.material;
     r.setRenderTarget(this.target);
     r.setClearColor(0x000000, 0);
     r.clear(true, false, false);
     if (this.count > 0 && this.probeMat && this.data) {
-      (this.material.uniforms.u_view.value as THREE.Vector2).set(w, h);
+      (this.splatUniforms.u_view.value as THREE.Vector2).set(w, h);
       r.render(this.scene, this.ortho);
     }
     r.setClearColor(prevColor, prevAlpha);
@@ -166,13 +349,18 @@ export class SplatPass {
     r.setRenderTarget(prev);
   }
 
-  /** Draw only the probe (offline renders read it at once after). */
+  /** Draw only the probe, and the modifier program after it (offline renders read them at once after). */
   runProbe(): void {
     if (!this.probeMat) return;
     const r = this.renderer, prev = r.getRenderTarget();
     r.setRenderTarget(this.probeTarget);
     r.render(this.quadScene, this.ortho);
+    if (this.modifierReady()) this.runModifier();
     r.setRenderTarget(prev);
+  }
+
+  private modifierReady(): boolean {
+    return !!(this.modMat && this.modNames && this.modSplatMat && this.count > 0 && this.data && this.probeMat);
   }
 
   /** Read the probe now (stalls: offline renders only). */
@@ -228,16 +416,19 @@ export class SplatPass {
   /** The context was lost: let everything go (made again on the next use). */
   contextLost(): void {
     this.pbo = null; this.fence = null;
+    this.movedPbo = null; this.movedFence = null;
   }
 
   dispose(): void {
     const gl = this.renderer.getContext() as WebGL2RenderingContext;
-    if (this.fence) { try { gl.deleteSync(this.fence); } catch { /* lost */ } }
-    if (this.pbo) { try { gl.deleteBuffer(this.pbo); } catch { /* lost */ } }
-    this.pbo = null; this.fence = null;
-    this.target.dispose(); this.probeTarget.dispose();
+    for (const f of [this.fence, this.movedFence]) if (f) { try { gl.deleteSync(f); } catch { /* lost */ } }
+    for (const b of [this.pbo, this.movedPbo]) if (b) { try { gl.deleteBuffer(b); } catch { /* lost */ } }
+    this.pbo = null; this.fence = null; this.movedPbo = null; this.movedFence = null;
+    this.target.dispose(); this.probeTarget.dispose(); this.modTarget?.dispose(); this.depthTarget?.dispose();
     this.probeMat?.dispose(); this.material.dispose(); this.geometry.dispose();
+    this.modMat?.dispose(); this.modSplatMat?.dispose(); this.depthMat?.dispose();
     this.data?.dispose(); this.sh?.dispose();
     (this.quadMesh.geometry as THREE.BufferGeometry).dispose();
+    (this.modMesh.geometry as THREE.BufferGeometry).dispose();
   }
 }

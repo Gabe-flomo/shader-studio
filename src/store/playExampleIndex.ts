@@ -123,6 +123,8 @@ const ROWS: Array<[string, string, string]> = [
   // The Displacement Map (after the rest, so their numbers stay).
   ['displaceText', 'Displace: text rippling through a map', 'A word displaced by a hidden layer of waves: its red pushes the letters sideways, its alpha up and down, as After Effects’ Displacement Map.'],
   ['displaceParticles', 'Displace: particles by the shader, the picture by a word', 'Particles displaced by the shader’s red and green as they drift, and the whole picture bent by a hidden word in the Look’s Displace, By channels.'],
+  // Per-splat modifiers (after the rest, so their numbers stay).
+  ['splatDissolvePlay', 'Splats: a scan dissolving', 'A splat scan dissolving by noise and coming back: Play sweeps the Splat Dissolve\'s Amount with an LFO, and the mouse sets how bright the burning edge glows.'],
 ];
 
 const num = (i: number) => String(i + 1).padStart(2, '0');
@@ -152,6 +154,7 @@ const GROUP_STARTS: Array<[string, string]> = [
   ['Build your own Look', 'lookBuilt'],
   ['Agents in Play', 'agentsHandBeat'],
   ['Displacement maps', 'displaceText'],
+  ['Splats in Play', 'splatDissolvePlay'],
 ];
 export const PLAY_EXAMPLE_GROUPS: Array<{ label: string; keys: string[] }> = GROUP_STARTS.map(([label, first], i) => {
   const from = PLAY_EXAMPLE_KEYS.indexOf(first);

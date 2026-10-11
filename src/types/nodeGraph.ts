@@ -8,7 +8,9 @@ export type DataType = "float" | "vec2" | "vec3" | "vec4" | "mat2" | "mat3" | "s
    */
   | "agents" | "emitter" | "deposit"
   /** A Time Cube's stacked frames (docs/time-cube.md): the name of its atlas sampler, wired only into Time Cube View and Time Slice. */
-  | "volume";
+  | "volume"
+  /** One splat's state in a Splat Scene's modifier chain (docs/splat-scene.md): a GLSL mat3, wired only between splat nodes. */
+  | "splat";
 
 // Socket (connection point on a node)
 export interface Socket {

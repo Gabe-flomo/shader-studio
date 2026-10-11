@@ -60,6 +60,7 @@ const TYPE_COLOR: Record<DataType, string> = {
   emitter:     '#ffd166',
   deposit:     '#c792ea',
   volume:      '#f5a97f',
+  splat:       '#7fd1e8',
 };
 
 // ─── Styles ───────────────────────────────────────────────────────────────────

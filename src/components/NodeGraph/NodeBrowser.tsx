@@ -54,11 +54,13 @@ const HIDDEN_NODES = new Set([
   'baked',
   // An Agents group's anchors (made with the group) and its update shader's end (compiler/agentGraph.ts).
   'agentInputs', 'agentOutput', 'agentStepOut', 'trailStepOut', 'agentProbeOut', 'splatProbeOut', 'agentGridOut',
+  // A Splat Scene's modifier program's end (compiler/splatGraph.ts).
+  'splatModOut',
 ]);
 
 const CATEGORY_SECTIONS_RAW: Array<{ label: string; categories: string[] }> = [
   { label: '2D tools',         categories: ['2D Primitives', '2D Space', 'Grid', 'Field', 'Halftone'] },
-  { label: '3D tools',         categories: ['3D Primitives', '3D Transforms', '3D Boolean Ops', '3D Scene', '3D Lighting', 'Loops', '4D Shapes', '4D Space', '4D Projection'] },
+  { label: '3D tools',         categories: ['3D Primitives', '3D Transforms', '3D Boolean Ops', '3D Scene', '3D Lighting', 'Loops', '4D Shapes', '4D Space', '4D Projection', 'Splats'] },
   { label: 'Shape operations', categories: ['SDF'] },
   { label: 'Colour',           categories: ['Color', 'Color Grading', 'Combiners'] },
   { label: 'Effects',          categories: ['Effects', 'Passes', 'Texture tools'] },
@@ -122,6 +124,7 @@ export const CATEGORY_INFO: Record<string, string> = {
   '3D Transforms': 'Change 3D space before the shapes measure it: move, rotate, repeat, twist, bend or fold. Put them between Scene Pos and the shapes.',
   '3D Boolean Ops': 'Join, cut or overlap 3D distances.',
   '3D Scene': 'The 3D pipeline: a March Camera makes the rays, a Scene Group holds the shapes, a March Loop finds where each ray hits.',
+  Splats: 'Change every splat of a Splat Scene before it is drawn: Dissolve, Explode, Wave, Colour, Crop, Size & Opacity and Points, or Splat Attributes → your own nodes → Set Splat. Chain them into the Splat Scene\'s Modifier; the chain runs once per splat.',
   '3D Lighting': 'Light what the march loop hit: shading, shadows, ambient occlusion, glass and fog. Wire them from the loop\'s outputs.',
   Loops: 'Repeat a chain of nodes several times inside one shader.',
   '4D Shapes': 'Shapes in four dimensions, measured at a 4D point (from Lift to 4D): hypersphere, tesseract, duocylinder, the regular polytopes and quaternion fractals. What you see is their 3D slice.',

@@ -23,16 +23,28 @@ import { generateFragmentShader } from './shaderAssembler';
 import { compilePassGraph, hasPassNode } from './passGraph';
 import { hasAgentsNode } from './agentGraph';
 import { hasHiddenBlur } from './blurPasses';
-import { compileSplatProbes, hasSplatScene } from './splatGraph';
+import { compileSplatProbes, hasSplatScene, pictureGraphOf } from './splatGraph';
 
 const EMPTY_OUTPUT_VARS = new Map<string, Record<string, string>>();
 
 export function compileGraph(graph: NodeGraph): CompilationResult {
-  const result = compileProgram(graph);
+  // A Splat Scene's Modifier chain runs in a program of its own (docs/splat-scene.md "Per-splat modifiers"): the
+  // picture compiles without it.
+  const result = compileProgram(pictureGraphOf(graph));
   // Splat Scene nodes (docs/splat-scene.md): each gets a probe program for its camera, named as the picture's.
   if (!result.success || !hasSplatScene(graph.nodes)) return result;
-  const { programs, errors } = compileSplatProbes(graph, result.nodeSlugMap);
-  return errors.length ? { ...result, success: false, errors: [...(result.errors ?? []), ...errors] } : { ...result, splats: programs };
+  const { programs, errors, tables } = compileSplatProbes(graph, result.nodeSlugMap);
+  if (errors.length) return { ...result, success: false, errors: [...(result.errors ?? []), ...errors] };
+  // The Modifier chains' sliders join the picture's uniform table, so a drag, Play and keyframes reach them.
+  return {
+    ...result, splats: programs,
+    paramUniforms: { ...result.paramUniforms, ...tables.paramUniforms },
+    paramBindings: { ...result.paramBindings, ...tables.paramBindings },
+    textureUniforms: { ...result.textureUniforms, ...tables.textureUniforms },
+    videoUniforms: { ...result.videoUniforms, ...tables.videoUniforms },
+    audioUniforms: { ...result.audioUniforms, ...tables.audioUniforms },
+    liveUniforms: { ...result.liveUniforms, ...tables.liveUniforms },
+  };
 }
 
 function compileProgram(graph: NodeGraph): CompilationResult {
