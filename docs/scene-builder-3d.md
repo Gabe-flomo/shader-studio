@@ -46,19 +46,91 @@ rebuild makes (`checkEdits`), so Open in Scene Builder will tell you what a rebu
 hand-made Scene Group has no chip. The Do… bar's "show the recipe" opens it; "copy the recipe"
 copies it. Code: `src/builders/recipe.ts`, `src/components/builders/RecipeChip.tsx`.
 
-The window has the Expression Block editor's layout:
+## The window
 
-- side panels that fold from the header (⌘[ the **Scene** tree, ⌘] the
-  **Preview**), and become drawers on a narrow window;
-- Undo and Redo for the form (⌘Z / ⌘⇧Z while it is open);
-- **Done** in the footer.
+Since 2026-10-10 (Wave 5, item 15) the builder is on the Agent Builder's studio shell
+(`components/builders/studio/StudioShell.tsx`), viewport first:
 
-Its shell, `src/components/builders/BuilderWindow.tsx`, is meant to be shared
-by the other builders (Grid Rules, Agent Rules).
+```
+┌ Scene builder › 3D scene · name ── undo · redo · Under the hood · Describe · Surprise · Open as nodes · ⋯ · Done ┐
+│ Sections, each with a │        the scene, live and big: drag to turn the camera,   │ the section's     │
+│ one-line summary      │        scroll to zoom, click a shape, drag its gizmo       │ settings          │
+├───────────────────────┴─────────────────────────────────────────────────────────────┴───────────────────┤
+│ presets, as pictures · Surprise me                                                                       │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+- **Left:** the sections (below), each with a one-line summary of the scene (`5: sphere, sphere, capsule…`,
+  `smooth union k 0.35`, `3.8 away, 30° round, orbit 6°/s`), and **Describe** under "From the graph".
+- **Right:** the picked section's settings. Each section opens with a short line of what you can build
+  there and **Learn more** (`src/sceneBuilder/sections.ts`).
+- **Bottom:** the templates as pictures (each drawn once a session by `specThumbs.ts`: the template built,
+  compiled and drawn small), and **Surprise me** with its seed.
+- **Top bar:** Undo and Redo (⌘Z / ⌘⇧Z), **Under the hood** (the recipe, below, in place of the settings;
+  Esc goes back), **Describe** (reads the 3D graph on the canvas), **Surprise me**, **Open as nodes**, ⋯
+  (**Build now** / **Rebuild now**, and **Build as a new copy** on a built scene) and **Done**.
+- **Done** builds the scene when it isn't built or has changed (a rebuild of the scene it was opened on,
+  keeping edits made on its nodes, as before), closes the window and frames the scene on the graph. **Open
+  as nodes** does the same and opens the Scene Group, to see the shapes, combines and warps as nodes. × closes
+  without building. The kind line under the name says which: "not built yet: Done builds it", "changed:
+  Done rebuilds it" or "built".
+- The side panels fold (⌘[ ⌘]); under 1100 px they are drawers; on a phone the window fills the screen.
+
+Code: `src/components/sceneBuilder/SceneBuilderModal.tsx` (the window), `SceneViewport.tsx`,
+`sectionPanels.tsx`, `specThumbs.ts`; the sections' words in `src/sceneBuilder/sections.ts`; the viewport's
+maths in `src/sceneBuilder/viewMath.ts`. Older entry points that name a tab still work: Look opens Light &
+colour, Quality opens Output, Templates and Recipe open Shapes (`sectionOfTab`).
+
+### The viewport
+
+The scene Build will make, compiled and drawn live (the same preview as before, `useBuilderPreview`), as
+big as the window allows.
+
+- **Drag** the picture to turn the camera round (Angle, Elevation); **scroll** to come closer (Distance).
+  These write the Camera section's values: what you see is what Build makes. A drag is one undo step.
+- **Click** a shape to pick it. Picking marches each shape's own distance on the CPU (the gallery's
+  formulas, `thumbnails.ts makeSdf`), placed and turned as the build places it (`viewMath.ts pickShape`).
+  A click from Mode, Camera or Output goes to Shapes.
+- **The gizmo** on the picked shape: its white middle moves it across the picture, the **X**, **Y** and
+  **Z** arrows move it along one axis, and the yellow square on its dashed ring sizes it (every length
+  together, keeping its proportions: the linked Size). A drag writes the same values as the sliders (its
+  Position, its sizes), live, and is **one undo step** however long it pauses (`store.beginGesture` /
+  `endGesture`). The gizmo follows an orbiting camera.
+- The picked shape's name, a hint, Build's warnings and the compile time are drawn over the picture;
+  **Pause** stops the clock.
+
+The camera maths is March Camera's own (`viewMath.ts cameraBasis`, `project`, `rayAt`, with Flatten), so
+the gizmo sits where the shape is drawn. Not followed: warps other than Move on the shape or the groups
+round it (the gizmo is where the shape would be without them), and rotations of the gizmo itself.
 
 ## The sections
 
-**Scene tree (left panel).** The combine tree. Every combine is a box: a badge
+They follow the recipe help's sections and say what you can build:
+
+| Section | What you build there | Holds |
+|---|---|---|
+| **Mode** | how it is drawn | four picture cards (Surface, Volumetric glow, Glass, GI lit, each a small scene drawn in that mode), the mode's own settings (Glow, Glass, Global illumination) and, in Glass mode, which shapes are glass |
+| **Shapes** | what is in the scene | the shape gallery (pictures), the shapes in the scene as chips, the picked shape: name, kind, **Size** (Linked, or Width · height · depth for a box, box frame and ellipsoid, Radius · height for a cylinder, capsule and prisms), its other settings, Position, Rotation, colour, shine, modifiers |
+| **Combine** | how shapes join | six picture buttons (two discs shaded as the combine keeps them) for the group round the picked item, its blend k, and the scene as a tree (the Scene tree, below) |
+| **Warps** | bent space | what to bend (chips), the stack as a flow (space comes in, each warp a card, the item is measured), the warps to add, and the step scale they ask for |
+| **Light & colour** | colours and light | each shape's colour and shine, the lights, shadows and occlusion, fog and the background |
+| **Camera** | where you look from | the camera's sliders |
+| **Output** | what the scene shows | the outputs and palettes, the tone map, and Quality (steps, distance, step scale, jitter, warp safety) |
+
+### Play controls from the builder
+
+Every slider is a `BuilderSlider`. Where a value builds a node param, right-click offers the node card's Play
+menu (**Add to Play controls**), for the node the build made: the builder edits a recipe, so
+`src/sceneBuilder/paramMap.ts` maps each value to the role of the node it builds and its param (a shape's
+size → the shape node's param, its Position → `s1:at`'s x/y/z, a combine's k → its first join, a warp's
+settings, the camera, the look's numbers, quality). The node is looked up when the menu opens
+(`liveParam`), so the scene has to be built: before that, and for a value whose node isn't built yet, the
+menu says so. A Play control drives the node, not the builder: a rebuild keeps it pointed at the same node
+(ids are kept by role), and the builder's value is what the node is rebuilt with.
+
+The older parts of the window, now inside the sections:
+
+**Scene tree (in Combine).** The combine tree. Every combine is a box: a badge
 with its operator (∪ union, − subtract, ∩ intersect, with `smooth` and its k
 for the smooth ones) over the shapes and groups inside it, indented with a
 guide line. So `smooth-union(a, b)`, then intersect with c, then subtract d
@@ -129,7 +201,7 @@ A shape's own place and turn (`at=`, `rot=`) are one 3D Transform (role `s1:at`)
 modifier it was made for (`_sbKind`) so Describe reads it back (docs/transform-node.md). Graphs from before
 2026-10-10 used Translate / Rotate / Scale 3D; Describe still reads those.
 
-**Combine.** Shows the tree as a formula, then one card per group:
+**Combine (the older tab; the Combine section now has picture buttons and the tree).** Shows the tree as a formula, then one card per group:
 
 - operator: union, smooth union, subtract, smooth subtract, intersect or
   smooth intersect;
@@ -139,7 +211,7 @@ modifier it was made for (`_sbKind`) so Describe reads it back (docs/transform-n
 
 Subtract cuts every later item out of the first one.
 
-**Bend space.** Pick what to bend: the whole scene, a group or a shape. Then
+**Warps (was Bend space).** Pick what to bend: the whole scene, a group or a shape. Then
 stack warps on it. Warps run top to bottom:
 
 | Warp | What it does | Node |
@@ -170,7 +242,7 @@ see the ray-marching guide, "Warps that stretch space"). With Step Scale on
 **auto** (Quality), the loop uses the smallest hint any warp or shape asks for.
 The Bend space tab lists who is asking.
 
-**Look.**
+**Look (now Mode, and Light & colour).**
 
 - **Mode:**
   - **Surface:** a March Loop, then Soft Shadow, SDF Ambient Occlusion and
@@ -208,20 +280,20 @@ It builds a March Camera:
 - Flatten becomes its **Flatten** setting. This setting is new. A camera
   without it compiles exactly as before.
 
-**Quality.**
+**Quality (now in Output).**
 
 - Steps;
 - Max distance;
 - Step scale: auto, or a fixed value;
 - Jitter.
 
-**Recipe.** The whole scene as text. Type or paste a recipe and the form
+**Recipe (now Under the hood).** The whole scene as text. Type or paste a recipe and the form
 follows as you type, as long as the recipe reads cleanly. Mistakes are listed
 with their line and column (click one to select it). **Apply what reads** uses
 the clauses that are fine. While you aren't typing, the text follows the form.
 **Show the words** lists the vocabulary.
 
-**Templates.**
+**Templates (now the presets strip, as pictures).**
 
 - Glowing orb (volumetric);
 - Smooth-blob sculpture;
@@ -233,11 +305,10 @@ the clauses that are fine. While you aren't typing, the text follows the form.
 
 Each template is a recipe, so reading one is a good way to learn the language.
 
-**Describe.** See "Scene → words" below.
+**Describe (in the nav, under From the graph, and the top bar's search button).** See "Scene → words" below.
 
-**Preview (right panel).** The graph Build will make, compiled and drawn live by
-a small WebGL2 canvas of its own. It doesn't touch the main canvas. Below the
-preview: build warnings, and the list of nodes it will make.
+**Preview (now the viewport).** The graph Build will make, compiled and drawn live by
+a WebGL2 canvas of its own. It doesn't touch the main canvas. Build's warnings are drawn over it.
 
 ### Output
 
@@ -290,9 +361,9 @@ A new builder adds its block to `BUILDER_HELP` and gets all of this by using `Bu
 (`<BuilderHelp id>`, `<EmptyHelp id>`, `<HintMark text>`, `<HintLabel hint>`). A test checks
 that every registered section has help.
 
-In the Scene Builder each tab (Shapes, Combine, Bend space, Look, Camera, Quality, Output,
-Recipe, Templates, Describe) and the empty scene tree has its card; an example adds its recipe
-clause to the scene (one undo step).
+In the Scene Builder the studio's sections use a short line and Learn more instead (`sections.ts`); the
+cards are still under the hood (Recipe), in Describe and in the empty scene tree; an example adds its
+recipe clause to the scene (one undo step).
 
 ## Build and Rebuild
 
@@ -677,7 +748,11 @@ Right-click any node → Edit in Scene Builder to change it.
 | `src/sceneBuilder/thumbnails.ts` | The gallery's tiles and its CPU thumbnail renderer |
 | `src/sceneBuilder/templates.ts` | Templates, as recipes |
 | `src/sceneBuilder/store.ts`, `actions.ts` | The window's state, and the glue to the node graph |
-| `src/components/sceneBuilder/` | The window, its tabs (the inspector and modifier chips are in `tabs.tsx`), scene tree, shape gallery and live preview |
+| `src/components/sceneBuilder/` | The window (`SceneBuilderModal.tsx`, on the studio shell), the viewport (`SceneViewport.tsx`), the sections (`sectionPanels.tsx`; the inspector, modifier chips and older tabs in `tabs.tsx`), scene tree, shape gallery, preset and mode pictures (`specThumbs.ts`) |
+| `src/sceneBuilder/sections.ts` | The sections: words, Learn more, nav summaries |
+| `src/sceneBuilder/viewMath.ts` | The viewport on the CPU: March Camera's maths, picking, gizmo drags, sizes |
+| `src/sceneBuilder/paramMap.ts` | Recipe values → the node params they build (the Play menu) |
+| `src/components/sceneBuilder/__tests__/studio.test.tsx` | The studio: sections, viewport drags, Play mapping, Surprise, reopen |
 | `src/components/builders/BuilderWindow.tsx` | The shared builder shell |
 | `src/store/sceneBuilderExamples.ts` | The examples folder |
 | `src/sceneBuilder/__tests__/sceneBuilder.test.ts` | Tests |

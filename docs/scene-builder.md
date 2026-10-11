@@ -57,8 +57,8 @@ Agent Builder's own start page asks about clearing the graph the same way, with 
 Every kind's header starts with **Scene builder › 2D scene** (› the group's name in the Agent
 Builder). **Scene builder** goes back to the kind page; what you built stays in the graph, and the
 page then keeps the graph by default. The kind's sections are its tabs (2D: Space, Shapes, Grid,
-Look, Output, Recipe, Templates; 3D: Shapes … Describe; Grid Rules: Presets … Recipe) or, in the
-Agent Builder, its left nav. The Agent Builder's start page also has **‹** for the kind page. The
+Look, Output, Recipe, Templates) or, in the 3D Scene Builder, Grid Rules and the
+Agent Builder, the left nav of the studio shell. The Agent Builder's start page also has **‹** for the kind page. The
 kind page and every kind's window are the same size (1440 × 900), so picking a kind doesn't jump.
 
 **Done** closes the window and frames what was built on the graph (`src/builders/finish.ts`); the
@@ -120,8 +120,9 @@ Every builder's number slider is the app's ruler slider through one wrapper
 - **Right-click** on a slider that is a real node's param opens the node card's Play menu: **Add to
   Play controls** (or **Remove from Play controls**). That is every Grid Rules slider, and the
   Agent Builder's settings on the nodes round the group (Born's Size, Shot out at and Lives for;
-  Trail's Fades, Spreads and How much food; Look's Size, Brightness and Streak length). The 2D and
-  3D builders edit a spec, not nodes, so their sliders have no Play menu.
+  Trail's Fades, Spreads and How much food; Look's Size, Brightness and Streak length). The 3D
+  Scene Builder edits a spec, not nodes: its sliders map each value to the node param it builds
+  (`sceneBuilder/paramMap.ts`, BuilderSlider `lazyParam`), found when the menu opens, once the scene
+  is built ([scene-builder-3d.md](scene-builder-3d.md), "Play controls from the builder").
 
-Not yet: keyframes from a builder slider, and the Play menu on a 2D or 3D build's sliders (mapping
-a spec value to the param it builds).
+Not yet: keyframes from a builder slider, and the Play menu on the 2D builder's sliders.

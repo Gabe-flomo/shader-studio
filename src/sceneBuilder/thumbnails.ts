@@ -13,7 +13,7 @@
  */
 import { SHAPES, defaultSize, type ShapeDef, type Vec3 } from './spec';
 
-type Sdf = (x: number, y: number, z: number) => number;
+export type Sdf = (x: number, y: number, z: number) => number;
 
 const len2 = (a: number, b: number) => Math.sqrt(a * a + b * b);
 const len3 = (a: number, b: number, c: number) => Math.sqrt(a * a + b * b + c * c);
@@ -82,8 +82,8 @@ function sdf4(kind: string, s: Record<string, number | Vec3>, q: V4): number {
   }
 }
 
-/** The 3D distance of a builder shape (at its size `over`), for thumbnails. */
-function makeSdf(def: ShapeDef, over: Record<string, number | Vec3> = {}): Sdf {
+/** The 3D distance of a builder shape (at its size `over`), for thumbnails and the viewport's picking (viewMath.ts). */
+export function makeSdf(def: ShapeDef, over: Record<string, number | Vec3> = {}): Sdf {
   const s = { ...defaultSize(def.kind), ...over };
   if (def.fourD) {
     const slice = def.fourD.slice, w = Number(s.w ?? 0);
