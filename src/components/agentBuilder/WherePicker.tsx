@@ -24,6 +24,7 @@ import type { WhereEdit, WherePick } from '../../agentBuilder/whereActions';
 import { setMadeShape, whereNow } from '../../agentBuilder/whereActions';
 import { regionField, regionImage } from '../../lib/regionValues';
 import { PictureWays } from '../builders/TexturePicker';
+import { clampLines } from '../ui/textFit';
 
 /** What the viewport shows for the Where row pointed at, and a shape being drawn. */
 export interface WhereShown { key: string; use: WhereUse; region: Region | null; outside: boolean }
@@ -147,7 +148,7 @@ export function WherePicker({ id, use, region, outside, onPick, allowOutside = t
             style={{ display: 'flex', flexDirection: 'column', gap: 5, padding: 4, border: 0, borderRadius: 9, cursor: 'pointer', textAlign: 'left', minWidth: 0,
               background: on ? tk.bg.selected : tk.bg.panel, boxShadow: on ? `inset 0 0 0 1.5px ${tk.accent.base}` : `inset 0 0 0 1px ${tk.border.default}`, color: tk.text.primary }}>
             <Thumb region={r} />
-            <span style={{ fontSize: 11.5, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.label}</span>
+            <span data-where-option-name title={r.label} style={{ fontSize: 11.5, fontWeight: 600, lineHeight: 1.25, ...clampLines(2) }}>{r.label}</span>
             <KindBadge region={r} />
           </button>
         );
@@ -161,7 +162,7 @@ export function WherePicker({ id, use, region, outside, onPick, allowOutside = t
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
         <Thumb region={region} w={64} h={36} />
         <span style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0, flex: 1 }}>
-          <span data-where-name style={{ fontSize: 12.5, fontWeight: 600, color: region ? tk.text.primary : tk.text.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <span data-where-name title={region?.label} style={{ fontSize: 12.5, fontWeight: 600, lineHeight: 1.25, color: region ? tk.text.primary : tk.text.muted, ...clampLines(2) }}>
             {region ? region.label : USE_WORDS[use].none}
           </span>
           {region && <span style={{ display: 'flex', gap: 6, alignItems: 'center', minWidth: 0 }}><KindBadge region={region} />{region.from && <span style={{ fontSize: 10.5, color: tk.text.faint, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>from {region.from}</span>}</span>}

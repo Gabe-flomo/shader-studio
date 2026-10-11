@@ -59,6 +59,7 @@ export function StackForm({ p, set, onHoverCard }: { p: P; set: Setter; onHoverC
 
       {cards.map((r, j) => (
         <RuleCard key={j} index={j} title={`${j + 1} · ${STACK_KINDS.find(k => k.kind === r.kind)!.label}`} off={r.off} onHover={on => onHoverCard?.(on ? j : null)}
+          onRemove={() => { onHoverCard?.(null); save(cards.filter((_, k) => k !== j)); }}
           actions={<ListActions i={j} n={cards.length} off={!!r.off} onMove={d => save(move(cards, j, d))} onDelete={() => { onHoverCard?.(null); save(cards.filter((_, k) => k !== j)); }} onToggle={on => edit(j, { off: !on })} onSolo={() => save(soloOff(cards, j))} what="this card" />}>
           <span data-stack-sentence style={{ fontSize: 12.5, lineHeight: 1.45 }}>{describeStackRule(r)}</span>
           <CardSettings r={r} top={top} edit={(patch, immediate) => edit(j, patch, immediate)} />
@@ -99,7 +100,8 @@ function Chip({ children, strong = false, off = false }: { children: ReactNode; 
 function Slider({ label, hint, value, min, max, step = 1, integer = true, def, onChange }: { label: string; hint: string; value: number; min: number; max: number; step?: number; integer?: boolean; def: number; onChange: (v: number) => void }) {
   return (
     <Row label={label} hint={hint}>
-      <BuilderSlider ariaLabel={label} value={value} min={min} max={max} step={step} integer={integer} defaultValue={def} onChange={onChange} />
+      {/* A card's setting lives inside the node's `stack` param (no param of its own for a Play menu); its widened range is kept. */}
+      <BuilderSlider ariaLabel={label} value={value} min={min} max={max} step={step} integer={integer} defaultValue={def} onChange={onChange} rangeKey={`grid:stack:${label}`} />
     </Row>
   );
 }

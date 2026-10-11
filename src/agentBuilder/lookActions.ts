@@ -46,6 +46,30 @@ export function addDrawAgents(groupId: string): string | null {
   return id;
 }
 
+/**
+ * Take "Draw the walkers too" back: the Draw agents goes, and whatever read its picture (the Output) reads the
+ * picture it was drawn over again (the trail), as one undo step. Only when there is such a picture to fall back to.
+ */
+export function removeDrawAgents(groupId: string): boolean {
+  const st = useNodeGraphStore.getState();
+  const before = st.nodes;
+  const draw = setupOf(before, groupId).draw;
+  const over = draw?.inputs.over?.connection;
+  if (!draw || !over) return false;
+  undoManager.push(before, { label: 'Agent Builder: stop drawing the walkers' });
+  const nodes = before.filter(x => x.id !== draw.id).map(x => {
+    let changed = false;
+    const inputs = { ...x.inputs };
+    for (const [k, sock] of Object.entries(x.inputs)) {
+      if (sock.connection?.nodeId === draw.id) { inputs[k] = { ...sock, connection: { ...over } }; changed = true; }
+    }
+    return changed ? { ...x, inputs } : x;
+  });
+  useNodeGraphStore.setState({ nodes });
+  st.compile();
+  return true;
+}
+
 /** The trail's palette set to these colours (its stop count follows), one undo step. */
 export function setTrailPalette(paletteId: string, stops: Array<[number, number, number]>): void {
   const st = useNodeGraphStore.getState();

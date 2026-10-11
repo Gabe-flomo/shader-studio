@@ -22,6 +22,7 @@ import { PALETTE_PRESETS_CHANGED, loadPalettePresets, savePalettePreset, type Pa
 import {
   CUSTOM_PALETTE, LIBRARY_PALETTES, MAX_SWATCHES, librarySwatches, paletteLabel, paletteSwatches, savedSwatches, slotColour, swatchGradient, type Vec3,
 } from '../../../builders/look/palette';
+import { tileName } from '../../ui/textFit';
 
 const css = (c: Vec3) => `rgb(${c.map(v => Math.round(Math.max(0, Math.min(1, v)) * 255)).join(',')})`;
 
@@ -33,7 +34,7 @@ function Strip({ colours, label, selected, onPick, testId }: { colours: readonly
       <span style={{ display: 'flex', height: 18, borderRadius: 4, overflow: 'hidden', boxShadow: `inset 0 0 0 1px ${tk.border.subtle}` }}>
         {colours.map((c, i) => <span key={i} style={{ flex: 1, background: css(c) }} />)}
       </span>
-      <span style={{ fontSize: 11, color: selected ? tk.accent.text : tk.text.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
+      <span data-tile-name title={label} style={{ fontSize: 11, color: selected ? tk.accent.text : tk.text.muted, ...tileName }}>{label}</span>
     </>
   );
   const style = {

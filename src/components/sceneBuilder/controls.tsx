@@ -14,6 +14,8 @@ import type { Vec3 } from '../../sceneBuilder/spec';
 import type { SpecPath } from '../../sceneBuilder/paramMap';
 import { lazyParamFor } from './playParam';
 import { MUTED_DIM, MuteToggle, MutedTag } from '../builders/MuteToggle';
+import { IconButton } from '../ui/Button';
+import { removeKeys } from '../builders/removable';
 
 const LABEL_W = 116;
 
@@ -88,28 +90,37 @@ const openCards = new Map<string, boolean>();
 /** A card's mute switch (builders/mute.ts): its toggle, its solo (Alt-click) and what it is called. */
 export interface CardMute { muted: boolean; onToggle: () => void; onSolo?: () => void; what?: string }
 
-/** A folding card: a header with its title, a one-line summary while folded, and actions. With `mute`, a ⊘ switch and, muted, a dimmed body. */
-export function Card({ id, title, summary, accent, actions, defaultOpen = false, children, selected, onHeaderClick, mute }: {
+/**
+ * A folding card: a header with its title, a one-line summary while folded, and actions. With `mute`, a ⊘ switch and,
+ * muted, a dimmed body. With `onRemove` (something the user added), a trash button at the very end of the header and
+ * Delete / Backspace while the card has focus (builders/removable.ts). The title gives way before the buttons do, so
+ * the remove control is never pushed out of a narrow panel.
+ */
+export function Card({ id, title, summary, accent, actions, defaultOpen = false, children, selected, onHeaderClick, mute, onRemove, removeLabel }: {
   id: string; title: ReactNode; summary?: ReactNode; accent?: string; actions?: ReactNode; defaultOpen?: boolean; children: ReactNode; selected?: boolean; onHeaderClick?: () => void;
   mute?: CardMute;
+  onRemove?: () => void;
+  /** The remove button's label ("Remove shape A"). */
+  removeLabel?: string;
 }) {
   const tk = useTokens();
   const [open, setOpenState] = useState(() => openCards.get(id) ?? defaultOpen);
   const setOpen = (v: boolean) => { openCards.set(id, v); setOpenState(v); };
   return (
-    <div data-sb-card={id} style={{
+    <div data-sb-card={id} {...removeKeys(onRemove, typeof title === 'string' ? title : id)} style={{ outline: 'none',
       borderRadius: radius.control, background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${selected ? tk.accent.base : tk.border.default}`, overflow: 'hidden', flexShrink: 0,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px 6px 10px', minHeight: 40, boxSizing: 'border-box', cursor: 'pointer' }}
         onClick={() => { setOpen(!open); onHeaderClick?.(); }}>
         <Icon name={open ? 'chevD' : 'chevR'} size={14} style={{ color: tk.text.faint, flexShrink: 0 }} />
         {accent && <span style={{ width: 10, height: 10, borderRadius: 3, background: accent, flexShrink: 0 }} />}
-        <span style={{ fontWeight: 600, fontSize: 13, color: tk.text.primary, flexShrink: 0, ...(mute?.muted ? MUTED_DIM : {}) }}>{title}</span>
+        <span style={{ fontWeight: 600, fontSize: 13, color: tk.text.primary, flexShrink: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', ...(mute?.muted ? MUTED_DIM : {}) }}>{title}</span>
         {mute?.muted && <MutedTag />}
         <span style={{ flex: 1, minWidth: 0, fontSize: 12, color: tk.text.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{!open && summary}</span>
-        <span onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+        <span onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
           {mute && <MuteToggle muted={mute.muted} onToggle={mute.onToggle} onSolo={mute.onSolo} what={mute.what ?? (typeof title === 'string' ? title : 'this card')} />}
           {actions}
+          {onRemove && <IconButton icon="trash" size="sm" tone="danger" data-card-remove={id} label={removeLabel ?? `Remove ${typeof title === 'string' ? title.toLowerCase() : 'this'} (Delete)`} onClick={onRemove} />}
         </span>
       </div>
       {open && <div data-muted={mute?.muted || undefined} style={{ padding: '4px 12px 12px', display: 'flex', flexDirection: 'column', gap: 6, borderTop: `1px solid ${tk.border.subtle}`, ...(mute?.muted ? MUTED_DIM : {}) }}>{children}</div>}

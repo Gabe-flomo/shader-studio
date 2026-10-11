@@ -48,6 +48,7 @@ import { toast } from '../ui/toastStore';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
 import type { SpecPath } from '../../sceneBuilder/paramMap';
+import { clampLines } from '../ui/textFit';
 
 const Pane = ({ children }: { children: React.ReactNode }) => (
   <div style={{ padding: '16px 20px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>{children}</div>
@@ -291,7 +292,7 @@ export function Inspector({ item, sizes }: { item: SceneItem; sizes?: (sh: Shape
           ? <ShapeThumb kind={item.kind} size={36} />
           : <span style={{ width: 36, height: 36, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', background: tk.bg.field, color: tk.text.secondary, font: `700 18px ${fontFamily.mono}` }}>{OP_GLYPH[item.op]}</span>}
         <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-          <span style={{ fontWeight: 650, fontSize: 14, color: tk.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{isRoot ? 'The whole scene' : itemName(spec, item)}</span>
+          <span data-inspector-name style={{ fontWeight: 650, fontSize: 14, lineHeight: 1.25, color: tk.text.primary, ...clampLines(2) }}>{isRoot ? 'The whole scene' : itemName(spec, item)}</span>
           <span style={{ fontSize: 11.5, color: tk.text.muted }}>{item.type === 'shape' ? SHAPE_BY_KIND[item.kind]?.label ?? 'custom' : `${opLabel(item)}${item.k > 0 ? ` · k ${item.k}` : ''} · ${item.children.length} item${item.children.length === 1 ? '' : 's'}`}</span>
         </span>
         {item.type === 'shape' && item.color && <span title="Its colour" style={{ width: 14, height: 14, borderRadius: 4, background: rgbCss(item.color), boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.18)' }} />}
@@ -567,6 +568,13 @@ export function LightSettings() {
   // A light or effect's mute switch (builders/mute.ts): Alt-click solos it among the look's.
   const mute = (key: LookMute3D, what: string) => ({ muted: !!L.mute?.[key], what, onToggle: () => edit(d => toggleLookMute(d, key)), onSolo: () => edit(d => toggleLookMute(d, key, true)) });
   const muteBit = (key: LookMute3D, what: string) => <MuteToggle {...mute(key, what)} />;
+  // One switch for a setting that is either off (0, compiled out) or on and mutable: off, it turns on; on, it mutes
+  // and unmutes (live, no recompile), as the ⊘ does everywhere else.
+  const switchBit = (key: 'shadows' | 'ao', what: string, on: boolean, turnOn: (d: SceneSpec) => void) => (
+    <MuteToggle muted={!on || !!L.mute?.[key]} what={what}
+      onToggle={() => edit(d => { if (!on) { turnOn(d); if (d.look.mute?.[key]) toggleLookMute(d, key); } else toggleLookMute(d, key); })}
+      onSolo={on ? () => edit(d => toggleLookMute(d, key, true)) : undefined} />
+  );
   return (
     <>
         {L.mode !== 'volumetric' && (
@@ -581,9 +589,9 @@ export function LightSettings() {
         )}
         {L.mode === 'surface' && (
           <Card id="look:shadow" title="Shadows & occlusion" summary={`${L.shadows ? `shadows ${L.shadows}` : 'no shadows'} · ${L.ao ? 'AO' : 'no AO'}`}>
-            <Row label="Soft shadows" hint="Shadows from the sun, marched from each surface toward it."><span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={L.mute?.shadows ? MUTED_DIM : undefined}><Toggle checked={L.shadows > 0} onChange={v => set(l => { l.shadows = v ? DEFAULT_LOOK.shadows : 0; })} label={L.shadows > 0 ? 'On' : 'Off'} /></span>{L.shadows > 0 && muteBit('shadows', 'the shadows')}</span></Row>
+            <Row label="Soft shadows" hint="Shadows from the sun, marched from each surface toward it."><span data-look-switch="shadows" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>{switchBit('shadows', 'the shadows', L.shadows > 0, d => { d.look.shadows = DEFAULT_LOOK.shadows; })}{(L.shadows === 0 || L.mute?.shadows) && <MutedTag />}</span></Row>
             {L.shadows > 0 && <NumRow label="Hardness" hint="8 soft … 32 hard." value={L.shadows} defaultValue={DEFAULT_SPEC.look.shadows} min={1} max={64} step={1} onChange={v => set(l => { l.shadows = v; }, 'shadows')} play={{ at: 'look', key: 'shadows' }} />}
-            <Row label="Ambient occl." hint="Ambient occlusion: darkens creases and corners."><span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={L.mute?.ao ? MUTED_DIM : undefined}><Toggle checked={L.ao > 0} onChange={v => set(l => { l.ao = v ? DEFAULT_LOOK.ao : 0; })} label={L.ao > 0 ? 'On' : 'Off'} /></span>{L.ao > 0 && muteBit('ao', 'the ambient occlusion')}</span></Row>
+            <Row label="Ambient occl." hint="Ambient occlusion: darkens creases and corners."><span data-look-switch="ao" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>{switchBit('ao', 'the ambient occlusion', L.ao > 0, d => { d.look.ao = DEFAULT_LOOK.ao; })}{(L.ao === 0 || L.mute?.ao) && <MutedTag />}</span></Row>
             {allShapes(spec).some(sh => sh.shine > 0) && <Row label="Highlight" hint="The shine on the shapes (each shape's Shine). Mute it to see the picture without it."><span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>{muteBit('shine', 'the highlight')}{L.mute?.shine && <MutedTag />}</span></Row>}
             {L.ao > 0 && <NumRow label="AO step" hint="Smaller: finer contact shadows; larger: broader." value={L.ao} defaultValue={DEFAULT_SPEC.look.ao} min={0.005} max={0.2} step={0.005} onChange={v => set(l => { l.ao = v; }, 'ao')} play={{ at: 'look', key: 'ao' }} />}
           </Card>
@@ -920,6 +928,7 @@ export function RecipeTab() {
           onFocus={el => { setFocused(true); setCaret(el.selectionStart); }} onBlur={() => { setFocused(false); setCaret(null); }}
           onSelect={el => { setCaret(el.selectionStart); }}
           onHoverChar={(off, rectOf) => wordHelp.hover(text, off, rectOf)}
+          onTapChar={(off, rectOf) => wordHelp.tap(text, off, rectOf)}
           anchor={assistHere}
           invalid={errors.length > 0} minHeight={240} maxHeight={460} />
       ) : (

@@ -22,6 +22,7 @@ import {
   type LookParam, type StackItem, type StackKindDef,
 } from '../../../builders/look/stack';
 import type { Vec3 } from '../../../builders/look/palette';
+import { removeKeys } from '../removable';
 
 export type LazyParam = () => { nodeId: string; key: string } | { missing: string };
 
@@ -95,13 +96,13 @@ function StackCard({ it, def, index, count, props }: { it: StackItem; def: Stack
   const up = (fn: (x: StackItem) => void, key?: string) => props.onEdit(items => edited(items, it.id, fn), key && `${props.name}:${it.id}:${key}`);
   const pictureShown = def.picture && (!def.picture.showWhen || def.picture.showWhen.is.includes(String(it.params[def.picture.showWhen.key])));
   return (
-    <div data-look-stack-card={it.id} data-look-kind={it.kind} draggable
+    <div data-look-stack-card={it.id} data-look-kind={it.kind} draggable {...removeKeys(() => props.onEdit(items => items.filter(x => x.id !== it.id)), def.label)}
       onDragStart={ev => { ev.dataTransfer.setData(mime, it.id); ev.dataTransfer.effectAllowed = 'move'; }}
       onDragOver={ev => { if (ev.dataTransfer.types.includes(mime)) { ev.preventDefault(); setDragOver(true); } }}
       onDragLeave={() => setDragOver(false)}
       onDrop={ev => { ev.preventDefault(); setDragOver(false); const id = ev.dataTransfer.getData(mime); if (id && id !== it.id) props.onEdit(items => placeStackItem(items, id, it.id)); }}
       style={{
-        borderRadius: radius.control, background: tk.bg.panel, flexShrink: 0, overflow: 'hidden', 
+        borderRadius: radius.control, background: tk.bg.panel, flexShrink: 0, overflow: 'hidden', outline: 'none',
         boxShadow: dragOver ? `inset 0 3px 0 ${tk.accent.base}, inset 0 0 0 1px ${tk.border.default}` : `inset 0 0 0 1px ${tk.border.default}`,
       }}>
       <div onClick={() => setOpen(o => !o)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 6px 6px 8px', minHeight: 42, cursor: 'pointer' }}>
@@ -114,7 +115,7 @@ function StackCard({ it, def, index, count, props }: { it: StackItem; def: Stack
           </span>
           <span data-look-stack-summary style={{ fontSize: 11.5, color: tk.text.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{stackSummary(it, def)}</span>
         </span>
-        <span onClick={ev => ev.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+        <span onClick={ev => ev.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
           {/* Muting (builders/mute.ts): a muted card stays in the stack and isn't built; Alt-click solos it. */}
           <MuteToggle muted={!it.on} what={def.label} onToggle={() => up(x => { x.on = !x.on; })}
             onSolo={() => props.onEdit(items => {
@@ -123,7 +124,7 @@ function StackCard({ it, def, index, count, props }: { it: StackItem; def: Stack
             })} />
           <IconButton icon="chevU" size="sm" label="Earlier (applied before)" disabled={index === 0} onClick={() => props.onEdit(items => moveStackItem(items, it.id, -1))} />
           <IconButton icon="chevD" size="sm" label="Later (applied after)" disabled={index === count - 1} onClick={() => props.onEdit(items => moveStackItem(items, it.id, 1))} />
-          <IconButton icon="trash" size="sm" label="Remove" onClick={() => props.onEdit(items => items.filter(x => x.id !== it.id))} />
+          <IconButton icon="trash" size="sm" tone="danger" label={`Remove ${def.label} (Delete)`} data-look-stack-remove={it.id} onClick={() => props.onEdit(items => items.filter(x => x.id !== it.id))} />
         </span>
       </div>
       {open && (

@@ -127,9 +127,9 @@ export function PathModifiers({ shape, mods, onEdit }: { shape: GShape; mods: Pa
               <>
                 <IconButton icon="chevU" size="sm" label="Move up" disabled={i === 0} onClick={() => onEdit(d => { [d[i - 1], d[i]] = [d[i], d[i - 1]]; })} />
                 <IconButton icon="chevD" size="sm" label="Move down" disabled={i === mods.length - 1} onClick={() => onEdit(d => { [d[i + 1], d[i]] = [d[i], d[i + 1]]; })} />
-                <IconButton icon="trash" size="sm" label={`Remove ${def.label}`} onClick={() => onEdit(d => { d.splice(i, 1); })} />
               </>
-            )}>
+            )}
+            onRemove={() => onEdit(d => { d.splice(i, 1); })} removeLabel={`Remove ${def.label}`}>
             {def.params.map((p, j) => (md.kind === 'mirror'
               ? (
                 <Row key={p.key} label="Axis" hint={p.hint}>
