@@ -13,6 +13,8 @@ export interface GuidedSession {
 }
 export type GuidedAction =
   | { type: 'add'; step: Step }
+  /** Several steps at once (opening a helper and converting its body): undone one at a time. */
+  | { type: 'addMany'; steps: Step[] }
   | { type: 'undo' }
   | { type: 'redo' }
   /** Undo back to `to` steps (a click on the strip). */
@@ -24,6 +26,7 @@ export const initialGuided = (source: string): GuidedSession => ({ source, steps
 export function guidedReducer(s: GuidedSession, a: GuidedAction): GuidedSession {
   switch (a.type) {
     case 'add': return { ...s, steps: [...s.steps, a.step], redo: [] };
+    case 'addMany': return a.steps.length ? { ...s, steps: [...s.steps, ...a.steps], redo: [] } : s;
     case 'undo': return s.steps.length ? { ...s, steps: s.steps.slice(0, -1), redo: [...s.redo, s.steps[s.steps.length - 1]] } : s;
     case 'redo': return s.redo.length ? { ...s, steps: [...s.steps, s.redo[s.redo.length - 1]], redo: s.redo.slice(0, -1) } : s;
     case 'back': {

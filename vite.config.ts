@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import { existsSync, readFileSync } from 'node:fs'
@@ -136,6 +137,9 @@ export default defineConfig({
   define: { __APP_VERSION__: JSON.stringify(appVersion) },
   // The hand tracker's worker imports MediaPipe as an ES module.
   worker: { format: 'es' },
+  // Tests: many render or compile whole graphs and are run three or four at a time, often while other
+  // checks share the machine; 5 s timed out often on a busy machine. Slow files set their own longer limit.
+  test: { testTimeout: 20_000 },
   base: isTauri ? '/' : '/shader-studio/',
   server: {
     watch: usePolling ? { usePolling: true, interval: 500 } : undefined,

@@ -11,7 +11,7 @@ export type Ast = Record<string, any> & { type: string };
 
 /** A number in a unit, offered as a chip (slider / input / fixed). */
 export interface LiteralSite {
-  /** `${unit}:${k}`, k counting the unit's chippable numbers in source order. */
+  /** `${unit}:${k}` in main(), `${fn}/${unit}:${k}` in a helper, k counting the unit's chippable numbers in source order. */
   id: string;
   unit: number;
   value: number;
@@ -48,9 +48,33 @@ export interface Unit {
   /** Top-level statements it stands for: more than 1 only for a return's merged tail. */
   parts: number;
   ast: Ast;
+  /** The helper whose body it is a statement of (absent: main()). */
+  fn?: string;
 }
 
-export interface HelperFn { name: string; lines: [number, number]; calls: Set<string>; outParams: Set<number> }
+export interface HelperParam { name: string; type: string; qual: 'in' | 'out' | 'inout' }
+
+export interface HelperFn {
+  name: string;
+  lines: [number, number];
+  calls: Set<string>;
+  outParams: Set<number>;
+  params: HelperParam[];
+  /** Its return type. */
+  ret: string;
+  /** Offsets of its definition in `norm`: from its return type to after its closing brace. */
+  start: number; end: number;
+  /** Its text up to the body's `{` (the header), as written. */
+  header: string;
+  /** Its body's top-level statements, as units (the last is its `return`). */
+  units: Unit[];
+  /** Types of its parameters and top-level locals. */
+  localTypes: Map<string, string>;
+  /** Whether it can open as a group of its own: true, or why not. */
+  openable: true | string;
+  /** Statements of main() that call it by name. */
+  callers: number[];
+}
 
 export interface Analysis {
   ok: true;
@@ -162,7 +186,7 @@ export function freshName(want: string, taken: Set<string>): string {
 }
 
 /** Numbers in a unit worth a chip, in source order: float constants outside loop headers and array sizes. */
-function literalsOf(unit: Ast, unitIndex: number, norm: string, toSourceLine: (l: number) => number, taken: Set<string>): LiteralSite[] {
+function literalsOf(unit: Ast, unitIndex: number, norm: string, toSourceLine: (l: number) => number, taken: Set<string>, prefix = ''): LiteralSite[] {
   const out: LiteralSite[] = [];
   const visit = (n: Ast, parents: Ast[]) => {
     if (n.type === 'for_statement') { if (n.body) visit(n.body as Ast, [...parents, n]); return; }
@@ -197,7 +221,7 @@ function literalsOf(unit: Ast, unitIndex: number, norm: string, toSourceLine: (l
         if (v) name = `${v}K`;
       }
       if (name.startsWith('gl_')) name = name.slice(3);
-      out.push({ id: `${unitIndex}:${out.length}`, unit: unitIndex, value, raw, at, name: freshName(name, taken), fixedByDefault: colour || value === 0 || value === 1, line: toSourceLine(lineAt(norm, at)) });
+      out.push({ id: `${prefix}${unitIndex}:${out.length}`, unit: unitIndex, value, raw, at, name: freshName(name, taken), fixedByDefault: colour || value === 0 || value === 1, line: toSourceLine(lineAt(norm, at)) });
       return;
     }
     for (const c of children(n)) visit(c, [...parents, n]);
@@ -255,31 +279,22 @@ export function analyse(source: string): AnalysisResult {
     }
   }
   if (!main) return { ok: false, error: 'No main() in this shader.' };
-  const helpers: HelperFn[] = fnAsts.map(f => {
+  const helperInfo = fnAsts.map(f => {
     const acc = { uses: new Set<string>(), writes: new Set<string>(), calls: new Set<string>(), discard: false, ret: false };
     scan(f.body as Ast, outParams, acc);
-    const loc = f.location as { start: { offset: number }; end: { offset: number } };
-    return { name: ((f.prototype as Ast).header as Ast).name.identifier as string, lines: [toSourceLine(lineAt(norm, loc.start.offset)), toSourceLine(lineAt(norm, trimEnd(norm, loc.end.offset)))], calls: new Set([...acc.calls].filter(c => outParams.has(c))), outParams: outParams.get(((f.prototype as Ast).header as Ast).name.identifier as string) ?? new Set() };
+    return { f, acc, name: ((f.prototype as Ast).header as Ast).name.identifier as string };
   });
   // Calls through helpers count (fbm() calls noise()).
+  const callsOf = new Map(helperInfo.map(h => [h.name, new Set([...h.acc.calls].filter(c => outParams.has(c)))]));
   const reach = (fn: string, seen = new Set<string>()): Set<string> => {
     if (seen.has(fn)) return seen; seen.add(fn);
-    for (const h of helpers) if (h.name === fn) for (const c of h.calls) reach(c, seen);
+    for (const c of callsOf.get(fn) ?? []) reach(c, seen);
     return seen;
   };
-
-  const mainLoc = (main as Ast).location as { start: { offset: number }; end: { offset: number } };
-  const mainHeaderLine = toSourceLine(lineAt(norm, mainLoc.start.offset));
-  const mainCloseLine = toSourceLine(lineAt(norm, trimEnd(norm, mainLoc.end.offset)));
-  const srcLines = source.split('\n');
-  // Setup lines: on main's header or closing line, where the paste itself has no statement.
-  const headerHasCode = /;/.test((srcLines[mainHeaderLine - 1] ?? '').replace(/^[^{]*\{/, ''));
-  const closeHasCode = /;/.test((srcLines[mainCloseLine - 1] ?? '').replace(/\}[^}]*$/, ''));
-
-  const statements = ((((main as Ast).body as Ast).statements as Ast[]) ?? []);
-  const localTypes = new Map<string, string>();
   const taken = new Set(names);
-  let units: Unit[] = statements.map((s, index) => {
+
+  /** A body's top-level statements as units: names declared, read and written, calls, numbers. */
+  const unitsOf = (statements: Ast[], localTypes: Map<string, string>, isSetup: (lines: [number, number]) => boolean, fn?: string): Unit[] => statements.map((s, index) => {
     const loc = s.location as { start: { offset: number }; end: { offset: number } };
     const start = loc.start.offset, end = trimEnd(norm, loc.end.offset);
     const acc = { uses: new Set<string>(), writes: new Set<string>(), calls: new Set<string>(), discard: false, ret: false };
@@ -297,9 +312,20 @@ export function analyse(source: string): AnalysisResult {
     const calls = new Set<string>();
     for (const c of acc.calls) if (outParams.has(c)) for (const r of reach(c)) calls.add(r);
     const lines: [number, number] = [toSourceLine(lineAt(norm, start)), toSourceLine(lineAt(norm, end))];
-    const setup = (lines[0] === mainHeaderLine && !headerHasCode) || (lines[0] === mainCloseLine && !closeHasCode);
-    return { index, start, end, text: norm.slice(start, end), lines, decls, uses: acc.uses, writes: acc.writes, calls, literals: [], setup, hasDiscard: acc.discard, hasReturn: acc.ret, parts: 1, ast: s };
+    return { index, start, end, text: norm.slice(start, end), lines, decls, uses: acc.uses, writes: acc.writes, calls, literals: [], setup: isSetup(lines), hasDiscard: acc.discard, hasReturn: acc.ret, parts: 1, ast: s, ...(fn ? { fn } : {}) };
   });
+
+  const mainLoc = (main as Ast).location as { start: { offset: number }; end: { offset: number } };
+  const mainHeaderLine = toSourceLine(lineAt(norm, mainLoc.start.offset));
+  const mainCloseLine = toSourceLine(lineAt(norm, trimEnd(norm, mainLoc.end.offset)));
+  const srcLines = source.split('\n');
+  // Setup lines: on main's header or closing line, where the paste itself has no statement.
+  const headerHasCode = /;/.test((srcLines[mainHeaderLine - 1] ?? '').replace(/^[^{]*\{/, ''));
+  const closeHasCode = /;/.test((srcLines[mainCloseLine - 1] ?? '').replace(/\}[^}]*$/, ''));
+
+  const statements = ((((main as Ast).body as Ast).statements as Ast[]) ?? []);
+  const localTypes = new Map<string, string>();
+  let units = unitsOf(statements, localTypes, lines => (lines[0] === mainHeaderLine && !headerHasCode) || (lines[0] === mainCloseLine && !closeHasCode));
   // A return in main() (the reading lowers them; a hand-written one may stay): everything from it on is one unit,
   // so no cut separates a return from the lines it skips.
   const firstRet = units.findIndex(u => u.hasReturn);
@@ -315,6 +341,44 @@ export function analyse(source: string): AnalysisResult {
     units = [...units.slice(0, firstRet), merged];
   }
   units.forEach((u, i) => { u.index = i; u.literals = u.setup ? [] : literalsOf(u.ast, i, norm, toSourceLine, taken); });
+
+  // Helpers: their body as units too, so one can be opened as a group and converted step by step.
+  const overloads = new Map<string, number>();
+  for (const h of helperInfo) overloads.set(h.name, (overloads.get(h.name) ?? 0) + 1);
+  const helpers: HelperFn[] = helperInfo.map(({ f, acc, name }) => {
+    const loc = f.location as { start: { offset: number }; end: { offset: number } };
+    const proto = f.prototype as Ast;
+    const params: HelperParam[] = (((proto.parameters as Ast[] | undefined) ?? []).filter(p => p.type !== 'literal')).map(p => ({
+      name: ((p.identifier as Ast | undefined)?.identifier ?? '') as string,
+      type: tokenOf(p.specifier as Ast),
+      qual: ((((p.qualifier as Ast[] | undefined) ?? []).map(q => q.token as string).find(q => q === 'out' || q === 'inout')) ?? 'in') as HelperParam['qual'],
+    })).filter(p => p.type !== 'void');
+    const ret = tokenOf((((proto.header as Ast).returnType as Ast)?.specifier ?? (proto.header as Ast).returnType) as Ast);
+    const body = f.body as Ast;
+    const bodyStart = (body.location as { start: { offset: number } }).start.offset;
+    const types = new Map<string, string>(params.map(p => [p.name, p.type]));
+    const hUnits = overloads.get(name)! > 1 ? [] : unitsOf((body.statements as Ast[] | undefined) ?? [], types, () => false, name);
+    hUnits.forEach((u, i) => { u.literals = literalsOf(u.ast, i, norm, toSourceLine, taken, `${name}/`); });
+    const lines: [number, number] = [toSourceLine(lineAt(norm, loc.start.offset)), toSourceLine(lineAt(norm, trimEnd(norm, loc.end.offset)))];
+    const earlyReturn = hUnits.slice(0, -1).find(u => u.hasReturn) ?? (hUnits.length && hUnits[hUnits.length - 1].ast.type !== 'return_statement' && hUnits[hUnits.length - 1].hasReturn ? hUnits[hUnits.length - 1] : undefined);
+    const openable: true | string =
+      overloads.get(name)! > 1 ? `${name}() has several versions (overloads)`
+      : !['float', 'vec2', 'vec3', 'vec4'].includes(ret) ? `${name}() returns ${ret === 'void' ? 'nothing' : `a ${ret}`}`
+      : params.some(p => p.qual !== 'in') ? `${name}() gives values back through out parameters`
+      : params.some(p => !['float', 'int', 'vec2', 'vec3', 'vec4'].includes(p.type)) ? `${name}() takes a ${params.find(p => !['float', 'int', 'vec2', 'vec3', 'vec4'].includes(p.type))!.type}`
+      : !hUnits.length || hUnits[hUnits.length - 1].ast.type !== 'return_statement' ? `${name}() doesn’t end with a return`
+      : earlyReturn ? `${name}() returns early (line ${earlyReturn.lines[0]})`
+      : acc.discard ? `${name}() discards pixels`
+      : acc.uses.has('gl_FragColor') || acc.writes.has('gl_FragColor') ? `${name}() writes the colour itself`
+      : [...acc.writes].some(w => globals.has(w)) ? `${name}() changes a global variable`
+      : true;
+    const direct = new RegExp(`\\b${name}\\s*\\(`);
+    return {
+      name, lines, calls: callsOf.get(name) ?? new Set(), outParams: outParams.get(name) ?? new Set(), params, ret,
+      start: loc.start.offset, end: trimEnd(norm, loc.end.offset), header: norm.slice(loc.start.offset, bodyStart), units: hUnits, localTypes: types, openable,
+      callers: units.filter(u => !u.setup && direct.test(u.text)).map(u => u.index),
+    };
+  });
   return { ok: true, source, norm, toSourceLine, units, helpers, mainStart: mainLoc.start.offset, mainEnd: trimEnd(norm, mainLoc.end.offset), localTypes, uniforms, names, globals };
 }
 
@@ -323,16 +387,29 @@ function trimEnd(text: string, end: number): number { let e = end; while (e > 0 
 
 /**
  * The units a selection of pasted lines [from, to] takes: the statements of main() it overlaps that
- * no step has yet. A selection inside a helper takes the statements that call it. `via` names the helper.
+ * no step has yet. A selection inside a helper opened as a group (`open`) takes the statements of its
+ * body (`fn` names it); inside any other helper, the statements of main() that call it (`via` names it).
  */
-export function unitsForLines(a: Analysis, from: number, to: number, taken: ReadonlySet<number>): { units: number[]; via?: string } {
+export function unitsForLines(
+  a: Analysis, from: number, to: number, taken: ReadonlySet<number>,
+  open?: { has(fn: string): boolean; taken(fn: string): ReadonlySet<number> },
+): { units: number[]; via?: string; fn?: string } {
   const lo = Math.min(from, to), hi = Math.max(from, to);
   const free = (u: Unit) => !u.setup && !taken.has(u.index);
   const direct = a.units.filter(u => free(u) && u.lines[1] >= lo && u.lines[0] <= hi).map(u => u.index);
   if (direct.length) return { units: direct };
   const helper = a.helpers.find(h => h.lines[0] <= lo && h.lines[1] >= hi) ?? a.helpers.find(h => h.lines[1] >= lo && h.lines[0] <= hi);
   if (!helper) return { units: [] };
+  if (open?.has(helper.name)) {
+    const mine = open.taken(helper.name);
+    return { units: helper.units.filter(u => !mine.has(u.index) && u.lines[1] >= lo && u.lines[0] <= hi).map(u => u.index), fn: helper.name };
+  }
   return { units: a.units.filter(u => free(u) && u.calls.has(helper.name)).map(u => u.index), via: helper.name };
+}
+
+/** The statements of a scope: main() (no `fn`) or a helper's body. */
+export function scopeUnits(a: Analysis, fn?: string): Unit[] {
+  return fn ? a.helpers.find(h => h.name === fn)?.units ?? [] : a.units;
 }
 
 /** How many of the shader's lines (in main(), setup excluded) the given units cover, out of all. */
