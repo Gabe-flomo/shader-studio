@@ -8,6 +8,7 @@ import { NodeGraph } from './components/NodeGraph/NodeGraph';
 import { FlowStrip } from './components/structure/FlowStrip';
 import { BROWSE_STAGE_EVENT } from './structure/browse';
 import { NodePalette } from './components/NodeGraph/NodePalette';
+import { FreezeBehindBuilder } from './components/builders/FreezeBehindBuilder';
 import { CodeBarRow, CodePanel } from './components/CodePanel';
 import { tokenizeLine } from './components/glslSyntax';
 import { DesktopTopNav } from './components/shell/DesktopTopNav';
@@ -1334,7 +1335,7 @@ function App() {
             {/* Full palette only when expanded */}
             {paletteExpanded && (
               <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                <NodePalette mode="drawer" onNodeAdded={() => setPaletteExpanded(false)} />
+                <FreezeBehindBuilder><NodePalette mode="drawer" onNodeAdded={() => setPaletteExpanded(false)} /></FreezeBehindBuilder>
               </div>
             )}
           </div>}
@@ -1431,7 +1432,8 @@ function App() {
               </div>
             ) : (
               <>
-                <NodePalette onCollapse={() => setPaletteCollapsed(true)} />
+                {/* Behind a Splat builder or an Agent Builder window the node browser waits (builders/builderFocus.ts). */}
+                <FreezeBehindBuilder><NodePalette onCollapse={() => setPaletteCollapsed(true)} /></FreezeBehindBuilder>
                 {/* Resize handle */}
                 <div
                   onMouseDown={handlePaletteResizeStart}

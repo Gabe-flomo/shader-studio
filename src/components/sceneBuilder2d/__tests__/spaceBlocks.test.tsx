@@ -106,3 +106,52 @@ describe('the block editor', () => {
     expect(addLine()).toBeNull();
   });
 });
+
+describe('saving a block (My blocks)', () => {
+  function Harness({ start }: { start: SpaceBlock }) {
+    const [b, setB] = useState(start);
+    return <><BlockEditor block={b} idBase="t" update={fn => setB(old => { const n = structuredClone(old); fn(n); return n; })} /><pre data-state>{JSON.stringify(b)}</pre></>;
+  }
+  const typeInput = (el: HTMLInputElement, value: string) => {
+    const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+    act(() => { set.call(el, value); el.dispatchEvent(new Event('input', { bubbles: true })); });
+  };
+  const mine: SpaceBlock = { name: 'My block', lines: [{ target: 'uv.x', op: '+=', rhs: 'amp * sin(y * 7 + t)' }], params: [{ name: 'amp', value: 0.2, min: 0, max: 1 }], times: 1 };
+
+  it('saves a hand-written block; it shows in the library under My blocks, with its picture, and picks', () => {
+    localStorage.removeItem('shader-studio:space-blocks');
+    const host = mount(<Harness start={mine} />);
+    click(host.querySelector('[data-save-block="t"]'));
+    typeInput(host.querySelector('[aria-label="Block name"]') as HTMLInputElement, 'Wobble rows');
+    typeInput(host.querySelector('[aria-label="What it does"]') as HTMLInputElement, 'Rows slide on a sine.');
+    click(host.querySelector('[data-save-block-confirm]'));
+    const state = JSON.parse(host.querySelector('[data-state]')!.textContent!) as SpaceBlock;
+    expect(state.my).toBe('Wobble rows');
+    expect(host.querySelector('[data-save-block="t"]')?.textContent).toMatch(/Save changes/);
+
+    const onPick = vi.fn();
+    const lib = mount(<BlockLibrary onPick={onPick} />);
+    const tile = lib.querySelector('[data-saved-block="Wobble rows"]');
+    expect(tile).toBeTruthy();
+    expect(tile!.querySelector('img')?.getAttribute('src')).toMatch(/^data:image\/png;base64,/);
+    expect(tile!.textContent).toMatch(/Rows slide on a sine/);
+    // My blocks first, then the library.
+    expect(lib.querySelector('[data-my-blocks]')!.compareDocumentPosition(lib.querySelector('[data-block-entry]')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Searchable.
+    const search = lib.querySelector('[aria-label="Search blocks"]') as HTMLInputElement;
+    typeInput(search, 'slide on');
+    expect(lib.querySelector('[data-saved-block="Wobble rows"]')).toBeTruthy();
+    typeInput(search, 'zzzz');
+    expect(lib.querySelector('[data-saved-block="Wobble rows"]')).toBeNull();
+    typeInput(search, '');
+    // The My blocks tab shows only yours.
+    click(lib.querySelector('[data-cat-mine]'));
+    expect(lib.querySelectorAll('[data-block-entry]').length).toBe(0);
+    click(lib.querySelector('[data-saved-block="Wobble rows"]'));
+    expect(onPick).toHaveBeenCalledTimes(1);
+    const picked = onPick.mock.calls[0][0] as SpaceBlock;
+    expect(picked.my).toBe('Wobble rows');
+    expect(picked.lines).toEqual(mine.lines);
+    expect(picked.params).toEqual(mine.params);
+  });
+});

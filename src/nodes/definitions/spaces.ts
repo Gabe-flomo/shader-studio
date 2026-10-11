@@ -6,7 +6,7 @@
  * automatically lives in the new geometry.
  */
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { p } from './helpers';
+import { p, withParamSockets } from './helpers';
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -392,7 +392,7 @@ export const RippleSpaceNode: NodeDefinition = {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const InfiniteRepeatSpaceNode: NodeDefinition = {
+export const InfiniteRepeatSpaceNode: NodeDefinition = withParamSockets({
   type: 'infiniteRepeatSpace',
   label: 'Infinite Repeat', aliases: ['repeat space', 'grid', 'tile', 'opRepeat'],
   category: '2D Space', subcategory: 'Repeat',
@@ -431,12 +431,12 @@ export const InfiniteRepeatSpaceNode: NodeDefinition = {
       outputVars: { output: `${id}_output`, cellID: `${id}_cellID` },
     };
   },
-};
+}, ['stagger']);
 
 // ─── New Space Nodes (V2) ──────────────────────────────────────────────────────
 
 // WaveTexture — procedural bands/rings/directional waves
-export const WaveTextureNode: NodeDefinition = {
+export const WaveTextureNode: NodeDefinition = withParamSockets({
   type: 'waveTexture', label: 'Wave Texture', category: '2D Space', subcategory: 'Pattern',
   description: 'Procedural wave pattern: bands, rings, or directional waves.',
   inputs: {
@@ -483,10 +483,10 @@ export const WaveTextureNode: NodeDefinition = {
       outputVars: { value: `${id}_value` },
     };
   },
-};
+}, ['distortion']);
 
 // MagicTexture — multicolored interference pattern (Blender-style)
-export const MagicTextureNode: NodeDefinition = {
+export const MagicTextureNode: NodeDefinition = withParamSockets({
   type: 'magicTexture', label: 'Magic Texture', category: '2D Space', subcategory: 'Pattern',
   description: 'Multicolored interference / psychedelic pattern reminiscent of Blender\'s Magic texture.',
   inputs: {
@@ -520,7 +520,7 @@ export const MagicTextureNode: NodeDefinition = {
     lines.push(`    vec3 ${id}_color = 0.5 + 0.5 * vec3(${id}_x, ${id}_y, sin(${id}_x - ${id}_y));\n`);
     return { code: lines.join(''), outputVars: { color: `${id}_color` } };
   },
-};
+}, ['distortion']);
 
 // Grid — outputs a grid/checkerboard mask + cell ID
 export const GridNode: NodeDefinition = {
@@ -799,7 +799,7 @@ export const AngularRepeat2DNode: NodeDefinition = {
 // ─── CRT Screen ─────────────────────────────────────────────────────────────
 // After Xor's GM Shaders Mini: CRT — the UV half of the effect (curvature, cell pixelation, vignette).
 
-export const CrtScreenNode: NodeDefinition = {
+export const CrtScreenNode: NodeDefinition = withParamSockets({
   type: 'crtScreen',
   label: 'CRT Screen',
   category: '2D Space', subcategory: 'Warp',
@@ -843,7 +843,7 @@ export const CrtScreenNode: NodeDefinition = {
       outputVars: { uv: `${id}_uv`, vignette: `${id}_vignette` },
     };
   },
-};
+}, ['cellSize', 'vignettePower']);
 
 // ─── Lens Distortion ────────────────────────────────────────────────────────
 
@@ -851,7 +851,7 @@ export const CrtScreenNode: NodeDefinition = {
 // Xor's turbulence loop (mini.gmshaders.com/p/turbulence, seen in 'atlantic'
 // and 'main frame' on FragCoord): every octave adds sin(rotated p · d) / d,
 // with d growing each pass. Cheaper than FBM domain warp and far more fluid.
-export const TurbulenceNode: NodeDefinition = {
+export const TurbulenceNode: NodeDefinition = withParamSockets({
   type: 'turbulence',
   label: 'Turbulence', aliases: ['xor warp', 'sine warp loop', 'fluid warp'],
   category: '2D Space', subcategory: 'Warp',
@@ -895,13 +895,13 @@ export const TurbulenceNode: NodeDefinition = {
       outputVars: { output: `${id}_output` },
     };
   },
-};
+}, ['frequency', 'decay', 'rotate']);
 
 // ─── Chaos Layers (Xor, "Efficient Chaos") ──────────────────────────────────
 // mini.gmshaders.com/p/efficient-chaos: a tiled grid of cell points, repeated
 // as a few layers that are golden-angle rotated, shifted and scaled so the
 // tiling disappears. Cheaper than Worley noise and it parallax-scrolls.
-export const ChaosLayersNode: NodeDefinition = {
+export const ChaosLayersNode: NodeDefinition = withParamSockets({
   type: 'chaosLayers',
   label: 'Chaos Layers', aliases: ['efficient chaos', 'starfield', 'scatter layers', 'xor stars'],
   category: '2D Space', subcategory: 'Pattern',
@@ -978,9 +978,9 @@ float chaosHash(vec2 p) {
       outputVars: { glow: `${id}_glow`, layer: `${id}_layer` },
     };
   },
-};
+}, ['scale', 'brightness', 'size', 'shift', 'layerScale', 'waves', 'cutout', 'parallaxX', 'parallaxY']);
 
-export const LensDistortionNode: NodeDefinition = {
+export const LensDistortionNode: NodeDefinition = withParamSockets({
   type: 'lensDistortion',
   label: 'Lens Distortion',
   category: '2D Space', subcategory: 'Warp',
@@ -1009,4 +1009,4 @@ export const LensDistortionNode: NodeDefinition = {
       outputVars: { output: `${id}_output` },
     };
   },
-};
+}, ['k2', 'zoom']);

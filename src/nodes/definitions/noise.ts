@@ -1,5 +1,5 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { f, p, pv3 } from './helpers';
+import { f, p, pv3, withParamSockets } from './helpers';
 
 // ─── FBM — Fractal Brownian Motion ───────────────────────────────────────────
 
@@ -24,7 +24,7 @@ float fbm(vec2 p, int octaves, float lacunarity, float gain) {
     return value;
 }`;
 
-export const FBMNode: NodeDefinition = {
+export const FBMNode: NodeDefinition = withParamSockets({
   type: 'fbm',
   label: 'Fractal Noise (FBM)', aliases: ['FBM'],
   category: 'Noise',
@@ -68,7 +68,7 @@ export const FBMNode: NodeDefinition = {
       outputVars: { value: outVar, uv: uvVar },
     };
   },
-};
+}, ['lacunarity', 'gain']);
 
 // ─── Voronoi — Worley/cell noise ─────────────────────────────────────────────
 
@@ -155,7 +155,7 @@ vec2 domainWarp(vec2 p, float strength, int octaves, float lacunarity, float gai
     return p + strength * q;
 }`;
 
-export const DomainWarpNode: NodeDefinition = {
+export const DomainWarpNode: NodeDefinition = withParamSockets({
   type: 'domainWarp',
   label: 'Domain Warp',
   category: 'Noise',
@@ -206,7 +206,7 @@ export const DomainWarpNode: NodeDefinition = {
       outputVars: { uv: warpedVar, offset: offsetVar },
     };
   },
-};
+}, ['lacunarity', 'gain']);
 
 // ─── Flow Field — fake GLSL particle system ───────────────────────────────────
 
@@ -256,7 +256,7 @@ float ffAngle(vec2 p, float scale, float quant, int mode) {
     return angle;
 }`;
 
-export const FlowFieldNode: NodeDefinition = {
+export const FlowFieldNode: NodeDefinition = withParamSockets({
   type: 'flowField',
   label: 'Flow Field',
   category: 'Fractals',
@@ -380,7 +380,7 @@ export const FlowFieldNode: NodeDefinition = {
       },
     };
   },
-};
+}, ['step_size', 'noise_scale', 'speed', 'line_width', 'line_softness', 'palette_offset', 'palette_a', 'palette_b', 'palette_c', 'palette_d']);
 
 // ─── Circle Pack ──────────────────────────────────────────────────────────────
 //
@@ -398,7 +398,7 @@ export const FlowFieldNode: NodeDefinition = {
 //   ring      — hollow rings (stroke only)
 //   noise     — FBM texture fill
 //
-export const CirclePackNode: NodeDefinition = {
+export const CirclePackNode: NodeDefinition = withParamSockets({
   type: 'circlePack',
   label: 'Circle Pack',
   category: 'Fractals',
@@ -551,11 +551,11 @@ export const CirclePackNode: NodeDefinition = {
       },
     };
   },
-};
+}, ['min_radius', 'max_radius', 'padding', 'edge_softness', 'animate', 'palette_offset', 'palette_a', 'palette_b', 'palette_c', 'palette_d']);
 
 // ─── Noise Float ─────────────────────────────────────────────────────────────
 
-export const NoiseFloatNode: NodeDefinition = {
+export const NoiseFloatNode: NodeDefinition = withParamSockets({
   type: 'noiseFloat',
   label: 'Noise Float',
   category: 'Noise',
@@ -621,7 +621,7 @@ float perlinNoise2(vec2 p) {
       },
     };
   },
-};
+}, ['scale', 'outMin', 'outMax', 'speed']);
 
 // ─── Scatter ──────────────────────────────────────────────────────────────────
 //
@@ -704,7 +704,7 @@ vec2 scatterNoise2(vec2 p, float t, float freq, int mode) {
     return vec2(hx, hy) * 2.0 - 1.0;
 }`;
 
-export const ScatterNode: NodeDefinition = {
+export const ScatterNode: NodeDefinition = withParamSockets({
   type: 'scatter',
   label: 'Scatter',
   category: 'Noise',
@@ -767,5 +767,5 @@ export const ScatterNode: NodeDefinition = {
       },
     };
   },
-};
+}, ['frequency', 'amplitude']);
 

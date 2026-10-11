@@ -1,5 +1,5 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { p, pv3, fieldFn } from './helpers';
+import { p, pv3, fieldFn, withParamSockets } from './helpers';
 
 /**
  * Array — N copies of a shape on a line, a grid or a ring.
@@ -19,7 +19,7 @@ import { p, pv3, fieldFn } from './helpers';
  */
 const MAX_COPIES = 64;
 
-export const ArrayFieldNode: NodeDefinition = {
+export const ArrayFieldNode: NodeDefinition = withParamSockets({
   type: 'arrayField',
   label: 'Array',
   category: 'Grid',
@@ -161,4 +161,4 @@ export const ArrayFieldNode: NodeDefinition = {
       outputVars: { color: `${a}col`, distance: `${a}d`, mask: `${a}mask`, nearestIndex: `${a}near` },
     };
   },
-};
+}, ['radius', 'startAngle', 'sweep', 'smoothK', 'size', 'antialias', 'color', 'background']);

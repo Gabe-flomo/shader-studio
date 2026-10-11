@@ -14,7 +14,7 @@
  * its texture. Its own program ends in a Pass output (passOutput) instead.
  */
 import type { GraphNode, NodeDefinition } from '../../types/nodeGraph';
-import { fieldFn, p, pv3, withNewOutputs } from './helpers';
+import { fieldFn, p, pv3, withNewOutputs, withParamSockets } from './helpers';
 import { BL_BASE_GLSL, BL_BLOOM_W_GLSL, BL_GLSL2 as BL_GLSL_GRAPH } from '../../play/kit/blur.js';
 import { blurMethod } from '../../compiler/blurPasses';
 import { DM_CHANNELS, DM_CHANNEL_LABELS, DM_GLSL, DM_HINTS, dmChannelGlsl } from '../../play/kit/displace.js';
@@ -152,7 +152,7 @@ const QUALITY = { label: 'Quality', type: 'select' as const, showWhen: { param: 
 ] };
 const tapsOf = (v: unknown) => (v === '12' || v === '48' ? Number(v) : 24);
 
-export const SampleTextureNode: NodeDefinition = {
+export const SampleTextureNode: NodeDefinition = withParamSockets({
   type: 'sampleTexture',
   label: 'Sample (texture)',
   category: 'Passes',
@@ -193,9 +193,9 @@ export const SampleTextureNode: NodeDefinition = {
       : `    vec4 ${id}_s = vec4(0.0);\n`;
     return { code, outputVars: { color: `${id}_s.rgb`, alpha: `${id}_s.a` } };
   },
-};
+}, ['offsetX', 'offsetY']);
 
-export const EdgesTextureNode: NodeDefinition = {
+export const EdgesTextureNode: NodeDefinition = withParamSockets({
   type: 'edgesTexture',
   label: 'Edges (texture)',
   category: 'Passes',
@@ -241,7 +241,7 @@ export const EdgesTextureNode: NodeDefinition = {
     ].join('');
     return { code, outputVars: { edges: `${id}_edges`, direction: `${id}_dir`, color: `${id}_color` } };
   },
-};
+}, ['strength', 'width']);
 
 const METHOD_HELP = 'Smooth: a true Gaussian, across then down (two hidden passes that read between texels, so no pixel is skipped), on a smaller copy first when Radius is wide. Bloom chain (Glow): the picture halved again and again, then built back up, each size adding its own glow: a soft core with a long, wide tail, like a lens. Fast: one pass of a few reads turned at random per pixel: cheap, and when Radius is wide it shows fine grain rather than copies. Graphs made before this setting use Smooth, with the same Radius, so they keep their look without the copies; a Glow added now starts as a Bloom chain. Hidden passes don\'t count towards the 8 Pass nodes; Performance lists them under this node.';
 
@@ -366,7 +366,7 @@ export const GlowTextureNode: NodeDefinition = {
   },
 };
 
-export const DisplaceTextureNode: NodeDefinition = {
+export const DisplaceTextureNode: NodeDefinition = withParamSockets({
   type: 'displaceTexture',
   label: 'Displace (texture)',
   category: 'Passes',
@@ -400,7 +400,7 @@ export const DisplaceTextureNode: NodeDefinition = {
     ].join('');
     return { code, outputVars: { color: `${id}_s.rgb`, alpha: `${id}_s.a` } };
   },
-};
+}, ['amount']);
 
 // ── Displacement Map (After Effects) ─────────────────────────────────────────
 
@@ -415,7 +415,7 @@ const DM_CHANNEL_SELECT = DM_CHANNELS.map(c => ({ value: c, label: DM_CHANNEL_LA
  * Input). A chain that isn't (previous frame, particles, Play layers) is
  * refused on the card: put a Pass after it and wire its Texture instead.
  */
-export const DisplacementMapNode: NodeDefinition = {
+export const DisplacementMapNode: NodeDefinition = withParamSockets({
   type: 'displacementMap',
   label: 'Displacement Map',
   category: 'Passes',
@@ -473,7 +473,7 @@ export const DisplacementMapNode: NodeDefinition = {
     }
     return { code: lines.join(''), outputVars: { color: `${id}_s.rgb`, alpha: `${id}_s.a` } };
   },
-};
+}, ['maxH', 'maxV']);
 
 export const JumpFloodTextureNode: NodeDefinition = {
   type: 'jumpFloodTexture',

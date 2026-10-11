@@ -1,5 +1,5 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { f, p, pv3, vec3Str } from './helpers';
+import { f, p, pv3, vec3Str, withParamSockets } from './helpers';
 
 // Shared palette GLSL function — referenced by both PaletteNode and FractalLoopNode
 // so the compiler's Set-based deduplication keeps exactly one copy in the shader.
@@ -41,7 +41,7 @@ export function paletteNodePreset(value: unknown): PalettePreset | null {
   return PALETTE_PRESETS[Math.max(0, Math.min(idx, PALETTE_PRESETS.length - 1))] ?? null;
 }
 
-export const PaletteNode: NodeDefinition = {
+export const PaletteNode: NodeDefinition = withParamSockets({
   type: 'palette',
   label: 'Palette',
   category: 'Color',
@@ -114,7 +114,7 @@ export const PaletteNode: NodeDefinition = {
       outputVars: { color: outVar },
     };
   },
-};
+}, ['scale', 'speed']);
 
 // ─── Gradient Node ────────────────────────────────────────────────────────────
 
@@ -193,7 +193,7 @@ const STOP_PALETTE_DEFAULTS: number[][] = [
 ];
 /** Default colour for stop `i` (the 12 above, repeated). */
 const stopDefault = (i: number) => STOP_PALETTE_DEFAULTS[i % STOP_PALETTE_DEFAULTS.length];
-export const StopPaletteNode: NodeDefinition = {
+export const StopPaletteNode: NodeDefinition = withParamSockets({
   type: 'stopPalette',
   label: 'Stops Palette', aliases: ['palette creator', 'palette builder', 'custom palette', 'color stops', 'colour stops', 'gradient palette', 'cycle colors', 'paste palette', 'hex palette', 'coolors'],
   category: 'Color', subcategory: 'Palette',
@@ -262,7 +262,7 @@ vec3 stopPaletteCurve(vec3 p0, vec3 p1, vec3 p2, vec3 p3, float t) {
     }
     return { code: lines.join(''), outputVars: { color: `${id}_color` } };
   },
-};
+}, ['scale', 'speed']);
 
 export const GradientNode: NodeDefinition = {
   type: 'gradient',
@@ -515,7 +515,7 @@ export const ColorRampNode: NodeDefinition = {
 };
 
 // BlendModes: full Photoshop-style blend operations
-export const BlendModesNode: NodeDefinition = {
+export const BlendModesNode: NodeDefinition = withParamSockets({
   type: 'blendModes', label: 'Blend Modes', category: 'Color',
   description: 'Photoshop-style blend operations: Multiply, Screen, Overlay, Soft Light, Hard Light, Difference, Exclusion, Dodge, Burn, Lighten, Darken.',
   inputs: {
@@ -593,7 +593,7 @@ vec3 blendSubtract(vec3 b, vec3 s) { return b - s; }`,
       outputVars: { result: `${id}_result` },
     };
   },
-};
+}, ['strength']);
 
 // BrightnessContrast
 export const BrightnessContrastNode: NodeDefinition = {
@@ -720,7 +720,7 @@ export const SaturationNode: NodeDefinition = {
 
 // Shadows/Highlights: push shadows and highlights independently using a
 // luminance mask. Positive shadows = brighten darks, negative = crush them.
-export const ShadowsHighlightsNode: NodeDefinition = {
+export const ShadowsHighlightsNode: NodeDefinition = withParamSockets({
   type: 'shadowsHighlights', label: 'Shadows / Highlights', category: 'Color Grading',
   description: 'Push shadows and highlights independently. Uses a luminance mask: positive shadows lifts darks, negative crushes them. Pivot sets the midpoint.',
   inputs: {
@@ -751,12 +751,12 @@ export const ShadowsHighlightsNode: NodeDefinition = {
       outputVars: { color: `${id}_color` },
     };
   },
-};
+}, ['pivot']);
 
 // Tone Curve: remap the tonal range with a black point, white point, and
 // S-curve strength. Blacks/whites set the input range; strength blends
 // between linear and the smoothstep S-curve.
-export const ToneCurveNode: NodeDefinition = {
+export const ToneCurveNode: NodeDefinition = withParamSockets({
   type: 'toneCurve', label: 'Tone Curve', category: 'Color Grading',
   description: 'Remap tonal range. Blacks sets the dark floor, Whites sets the bright ceiling, Strength blends between linear (0) and a smoothstep S-curve (1).',
   inputs: {
@@ -785,7 +785,7 @@ export const ToneCurveNode: NodeDefinition = {
       outputVars: { color: `${id}_color` },
     };
   },
-};
+}, ['blacks', 'whites']);
 
 // Blackbody: converts color temperature (Kelvin) to approximate RGB
 // Uses IQ's polynomial fit for [1000K .. 12000K]
@@ -833,7 +833,7 @@ vec3 blackbodyColor(float kelvin) {
 // Perceptual blend: mixing in OkLab keeps the midpoint bright and colourful where an RGB mix
 // goes grey. OkLab by Björn Ottosson (public domain); the fused mix by Inigo Quilez (MIT).
 
-export const OklabMixNode: NodeDefinition = {
+export const OklabMixNode: NodeDefinition = withParamSockets({
   type: 'oklabMix',
   label: 'OkLab Mix',
   category: 'Color',
@@ -882,7 +882,7 @@ export const OklabMixNode: NodeDefinition = {
       outputVars: { result: `${id}_result` },
     };
   },
-};
+}, ['midGain']);
 
 // ─── Color (picker) ─────────────────────────────────────────────────────────
 // One colour, chosen in the design-tool picker on the card (hue / saturation /

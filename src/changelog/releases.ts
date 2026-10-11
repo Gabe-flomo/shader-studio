@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.160',
+    date: '2026-10-11',
+    title: 'Wire any slider',
+    highlights: [
+      { area: 'Studio', text: 'Wire into sliders: every splat modifier control, and 553 sliders on 157 nodes, can be driven from the graph. Right-click a slider → Control from outside.' },
+      { area: 'Studio', text: 'Splat builder is smooth: the picture follows drags and orbits (about 6 ms a frame at 1M splats), and the graph behind it rests while it is open.' },
+      { area: 'Studio', text: 'Labels on node cards and builder panels are never cut off; long names wrap. Fixed: the Explain view crashed in a tab opened before an update.' },
+    ],
+  },
+  {
     id: '2026.10.159',
     date: '2026-10-11',
     title: 'Node search, redesigned',

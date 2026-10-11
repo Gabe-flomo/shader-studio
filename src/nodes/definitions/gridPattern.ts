@@ -1,5 +1,5 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { p, pv3, fieldFn, withNewOutputs } from './helpers';
+import { p, pv3, fieldFn, withNewOutputs, withParamSockets } from './helpers';
 import { GLSL_MAT2_INV } from './matrixOps';
 import { columnsExpr, gridColumnsMigration } from './gridColumns';
 import { GRID_HASH_GLSL } from './gridHash';
@@ -49,7 +49,7 @@ const inv2 = ([a, b, c, d]: number[]) => { const det = a * d - c * b; return [d 
  * Columns, the UV being 2 × aspect wide), so a Grid with the same Columns
  * lines up with it exactly.
  */
-export const GridPatternNode: NodeDefinition = {
+export const GridPatternNode: NodeDefinition = withParamSockets({
   type: 'gridPattern',
   label: 'Grid Pattern',
   category: 'Grid',
@@ -348,4 +348,4 @@ float gpPlaced(vec2 id, float pattern, float density) {
       },
     };
   },
-};
+}, ['rotation', 'jitter', 'density', 'affectRadius', 'affectSoftness', 'antialias']);

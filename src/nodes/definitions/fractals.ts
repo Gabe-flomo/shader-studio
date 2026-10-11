@@ -1,5 +1,5 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { f, p } from './helpers';
+import { f, p, withParamSockets } from './helpers';
 import { PALETTE_GLSL_FN, PALETTE_PRESET_OPTIONS } from './color';
 
 // ─── Shared GLSL helpers for fractal nodes ────────────────────────────────────
@@ -505,7 +505,7 @@ const IFS_GLSL = IFS_HELPERS + '\n' + FERN_TRANSFORMS + '\n'
   + SIERPINSKI_TRANSFORMS + '\n' + DRAGON_TRANSFORMS + '\n' + KOCH_TRANSFORMS
   + '\n' + PALETTE_GLSL_FN;
 
-export const IFSNode: NodeDefinition = {
+export const IFSNode: NodeDefinition = withParamSockets({
   type: 'ifs',
   label: 'IFS Fractal',
   category: 'Fractals',
@@ -631,7 +631,7 @@ export const IFSNode: NodeDefinition = {
       outputVars: { color: `${id}_color`, glow: `${id}_glow` },
     };
   },
-};
+}, ['glow', 'scale', 'offset_x', 'offset_y', 'anim_speed', 'color_scale', 'color_offset']);
 
 // ─── Newton Fractal ───────────────────────────────────────────────────────────
 
@@ -643,7 +643,7 @@ vec2 cdiv(vec2 a, vec2 b) {
 
 const NEWTON_GLSL = FRACTAL_GLSL_HELPERS + '\n' + NEWTON_EXTRAS + '\n' + PALETTE_GLSL_FN;
 
-export const NewtonFractalNode: NodeDefinition = {
+export const NewtonFractalNode: NodeDefinition = withParamSockets({
   type: 'newtonFractal',
   label: 'Newton Fractal',
   category: 'Fractals',
@@ -784,11 +784,11 @@ export const NewtonFractalNode: NodeDefinition = {
       outputVars: { color: `${id}_color`, iter: `${id}_iter`, root: `${id}_root` },
     };
   },
-};
+}, ['zoom', 'center_x', 'center_y', 'shade_power', 'convergence']);
 
 // ─── Lyapunov Fractal ─────────────────────────────────────────────────────────
 
-export const LyapunovNode: NodeDefinition = {
+export const LyapunovNode: NodeDefinition = withParamSockets({
   type: 'lyapunov',
   label: 'Lyapunov Fractal',
   category: 'Fractals',
@@ -892,13 +892,13 @@ export const LyapunovNode: NodeDefinition = {
       outputVars: { color: `${id}_color`, stability: `${id}_stability` },
     };
   },
-};
+}, ['r_min', 'r_max', 'lyap_scale']);
 
 // ─── Apollonian Gasket ────────────────────────────────────────────────────────
 
 const APOLLONIAN_GLSL = FRACTAL_GLSL_HELPERS + '\n' + PALETTE_GLSL_FN;
 
-export const ApollonianNode: NodeDefinition = {
+export const ApollonianNode: NodeDefinition = withParamSockets({
   type: 'apollonian',
   label: 'Apollonian Gasket',
   category: 'Fractals',
@@ -979,7 +979,7 @@ export const ApollonianNode: NodeDefinition = {
       outputVars: { color: `${id}_color`, distance: `${id}_distance`, orbit: `${id}_orbit` },
     };
   },
-};
+}, ['scale', 'zoom', 'center_x', 'center_y', 'animate', 'color_scale', 'color_offset']);
 
 // ─── Spherical Fold Fractal ────────────────────────────────────────────────────
 // Self-contained 3D raymarch. Each ray step runs an inner IFS loop that
@@ -1003,7 +1003,7 @@ vec3 sffHSV(float h, float s, float v) {
 }
 `;
 
-export const SphericalFoldFractalNode: NodeDefinition = {
+export const SphericalFoldFractalNode: NodeDefinition = withParamSockets({
   type: 'sphericalFoldFractal',
   label: 'Spherical Fold Fractal',
   category: 'Fractals',
@@ -1094,4 +1094,4 @@ export const SphericalFoldFractalNode: NodeDefinition = {
 
     return { code: code.join(''), outputVars: { color: `${id}_color` } };
   },
-};
+}, ['zoom', 'time_speed', 'fold_x', 'fold_y', 'fold_z', 'offset_x', 'offset_y', 'offset_z', 'inv_scale', 'inv_min', 'hue', 'saturation', 'color_scale']);
