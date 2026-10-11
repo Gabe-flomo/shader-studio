@@ -219,3 +219,6 @@ export function evaluateFunction(code: string, args: Value[], extra: EvalEnv = {
   names.forEach((n, i) => { env[n] = args[i]; });
   return evaluate(r.expr, env);
 }
+
+/** The built-ins and the product rule, for evaluators of whole programs (lib/guidedConvert/cpuGlsl.ts). */
+export { call as callBuiltin, mul as mulValues };

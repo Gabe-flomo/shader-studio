@@ -481,6 +481,16 @@ bottom bar; the graph fills the screen instead of stacking under the editor
 and the check, and the code pane stays mounted so its undo history survives a
 look at the graph.
 
+## Guided Convert (step by step)
+
+**Automatic | Guided** on the Convert page's top bar (desktop) switches to Guided Convert
+(docs/guided-convert.md): the same converter, but you choose the cuts. Select lines of the shader, make
+them Nodes, Expression Blocks or One function, choose which numbers become sliders, inputs or stay
+fixed, group steps; what isn't converted yet runs as one Custom Function (a "remainder"), so the graph
+draws the shader at every step and the check says Same picture / Differs after each one. The GLSL page's
+**Step by step** button opens a shader there. The shader is fixed while Guided is open; **Edit** goes back
+to the automatic page and its editor.
+
 ## Product plan
 
 **Where it lives.** Two entry points, both already natural in the app:
