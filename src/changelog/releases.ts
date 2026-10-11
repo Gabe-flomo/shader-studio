@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.163',
+    date: '2026-10-11',
+    title: 'Clean grid glow',
+    highlights: [
+      { area: 'Studio', text: 'Grid builder: fixed shapes sliced by a seam on Travel and Hop with lag, and the blocky glow patches between cells.' },
+      { area: 'Studio', text: 'Grid builder glow style: Soft (default) runs each shape\'s colour into its glow, so it reads as one shape; Halo keeps the old rim.' },
+    ],
+  },
+  {
     id: '2026.10.162',
     date: '2026-10-11',
     title: 'Surprise, unfrozen',
