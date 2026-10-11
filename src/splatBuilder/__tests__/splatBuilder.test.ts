@@ -16,6 +16,7 @@ import type { GraphNode } from '../../types/nodeGraph';
 import { undoManager, useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { splatModifierChain } from '../../nodes/recipes/splatModifierRecipes';
 import { fitParams } from '../../lib/splats/fit';
+import { applyModel, modelMatrix } from '../../lib/splats/math';
 import { SP_META, buildSplatStandalone, splatMetaOf } from '../build';
 import { applySplatScene, findSplatBuild, paramDiff, splatSceneOfBuild } from '../apply';
 import { SPLAT_TEMPLATES, splatTemplate, withTemplate } from '../templates';
@@ -29,6 +30,7 @@ import { useSplatBuilder } from '../store';
 import { closeSplatBuilder, editSplatSceneInBuilder, openNewSplatScene, syncSplatBuilder } from '../actions';
 import { SCENE_KINDS, builtSceneIds, builtScenes, selectedBuiltScene } from '../../builders/sceneKinds';
 import { editBuiltScene } from '../../builders/open';
+import { paramBindingKey } from '../../compiler/uniformPatcher';
 
 function compiles(spec: SplatBuilderSpec) {
   const g = buildSplatStandalone(spec);
@@ -207,6 +209,42 @@ describe('the live sync', () => {
     expect(useNodeGraphStore.getState().nodes.map(x => x.id)).toEqual(['out']);
   });
 
+  it('a slider drag doesn\'t rebuild the graph: one store write a tick, the uniforms pushed, no compile (now or later)', () => {
+    vi.useFakeTimers();
+    try {
+      openNewSplatScene();
+      useNodeGraphStore.getState().compile();
+      const st0 = useNodeGraphStore.getState();
+      const cam = st0.nodes.find(x => x.type === 'marchCamera')!;
+      const uName = st0.paramBindings[paramBindingKey(cam.id, 'camDist')];
+      expect(uName && uName in st0.paramUniforms).toBe(true);
+      const compile = vi.spyOn(useNodeGraphStore.getState(), 'compile');
+      const before = useNodeGraphStore.getState().nodes;
+      let writes = 0;
+      const off = useNodeGraphStore.subscribe(() => { writes++; });
+      for (let i = 1; i <= 5; i++) {
+        useSplatBuilder.getState().edit(d => { d.camera.dist = 3 + i; });
+        syncSplatBuilder();
+        // The picture has the new value at once (a live uniform), not after the drag.
+        expect(useNodeGraphStore.getState().paramUniforms[uName]).toBe(3 + i);
+      }
+      off();
+      expect(writes).toBe(5);
+      vi.advanceTimersByTime(2000);
+      expect(compile).not.toHaveBeenCalled();
+      // The same nodes and wires; nodes the slider doesn't set are the very same objects.
+      const after = useNodeGraphStore.getState().nodes;
+      expect(after.map(x => x.id)).toEqual(before.map(x => x.id));
+      const wires = (ns: readonly GraphNode[]) => JSON.stringify(ns.map(x => Object.entries(x.inputs).map(([k, v]) => [k, v.connection?.nodeId, v.connection?.outputKey])));
+      expect(wires(after)).toBe(wires(before));
+      const touched = after.filter((x, i) => x !== before[i]).map(x => x.type).sort();
+      expect(touched).toEqual(['marchCamera', 'splatScene']);
+      expect(after.find(x => x.id === cam.id)!.params.camDist).toBe(8);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('closing builds a change the frame hasn\'t yet', () => {
     const id = openNewSplatScene()!;
     useSplatBuilder.getState().edit(d => { d.place.opacity = 0.5; });
@@ -303,8 +341,10 @@ describe('the kind page and Place', () => {
     const fit = fitPlace(place, box);
     const card = fitParams({ id: 'x', type: 'splatScene', position: { x: 0, y: 0 }, inputs: {}, outputs: {}, params: { rotation: place.rotation, up: 'minusY' } }, box.center, box.radius);
     expect(fit.scale).toBe(card.scale);
-    fit.position.forEach((v, i) => expect(v).toBeCloseTo(card.position[i], 2));
+    // The builder turns about the file's origin (pivot 'origin', build.ts) and moves Position to keep the middle;
+    // the card turns about the middle. Either way the middle lands at the centre.
     scanCenter(fit, box).forEach(v => expect(v).toBeCloseTo(0, 2));
+    applyModel(modelMatrix({ position: card.position, rotation: place.rotation, scale: card.scale, flip: true, pivot: box.center }), box.center).forEach(v => expect(v).toBeCloseTo(0, 2));
   });
 
   it('Centre, turns and sizes keep the middle; Stand on the floor puts its bottom on it', () => {

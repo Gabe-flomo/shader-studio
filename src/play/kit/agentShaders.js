@@ -569,3 +569,168 @@ export const AG_NB_BIN_FRAG = `precision highp float;
 in vec4 v_out;
 out vec4 o;
 void main() { o = v_out; }`;
+
+/*
+ * Draw agents' Splats look (docs/splat-scene.md "Agents as splats"): every walker a soft oriented
+ * Gaussian, stretched along its velocity, projected with the Splat Scene's maths (EWA: in 3D the
+ * world covariance through the camera's Jacobian, Kerbl et al. 2023; in 2D the picture's own), drawn
+ * as one quad (two triangles, six vertices a walker) spanning √(2λ) along the ellipse's axes, the
+ * fragment weighing exp(−|v|²) as lib/splats/shaders.ts does.
+ *
+ * Walkers move every step, so instead of the scan's back-to-front sort they are put together without
+ * an order (weighted blended order-independent transparency, McGuire & Bavoil 2013): two targets,
+ * the same blend on both (RGB added, alpha multiplied by 1 − α):
+ *   target 0: rgb Σ cᵢ αᵢ wᵢ, alpha Π (1 − αᵢ) (cleared to 1: what shows through);
+ *   target 1: r Σ αᵢ wᵢ, g Σ αᵢ wᵢ dᵢ (dᵢ the distance from the eye), b Σ αᵢ, alpha the same product.
+ * wᵢ favours near splats in 3D (1 in 2D), so the front of a cloud reads in front. AG_SPLAT_RESOLVE_FRAG
+ * turns them into a premultiplied picture: colour Σcαw / Σαw times its cover 1 − Π(1 − α). Its
+ * distance is Σαwd / Σαw (Draw agents' Distance output), the Splat Scene's kind, so a Splat Scene can
+ * take the walkers as its Scene and the two meet by distance. CPU mirrors: lib/agentSplats.ts.
+ *
+ * Size: Splat size (picture units), or × (0.35 + 0.65 × speed / Fast is) by speed, or a More memory
+ * number × Memory scale (u_sizeBy 2–5: x, y, z, w; Emit from a splat scan keeps each splat's size in w).
+ * Long: the axis along the velocity is (1 + Stretch × speed / Fast is) times as long.
+ */
+export const AG_SPLAT_VERT = `precision highp float;
+precision highp int;
+uniform highp sampler2D u_a;
+uniform highp sampler2D u_b;
+uniform highp sampler2D u_c;
+uniform highp sampler2D u_e;
+uniform highp sampler2D u_cam;
+uniform int u_side, u_species, u_colorBy, u_fade, u_usePal, u_rainbow, u_stateC, u_stateE, u_d3, u_camSrc, u_sizeBy;
+uniform float u_aspect, u_bright, u_speedRef, u_splat, u_stretch, u_memScale, u_opacity;
+uniform vec3 u_colA, u_colB;
+uniform vec3 u_pal[4];
+uniform vec2 u_viewSize;
+uniform vec3 u_eye, u_fwd, u_right, u_up;
+uniform float u_lens, u_ortho, u_camDist;
+out vec4 v_col;
+out vec2 v_pos;
+out float v_dist;
+out float v_w;
+${gpPaletteGlsl('agPalette', 'u_rainbow', 'u_pal')}
+void agCull() { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); v_col = vec4(0.0); v_pos = vec2(9.0); v_dist = 0.0; v_w = 0.0; }
+void main() {
+  int id = gl_VertexID / 6;
+  int k6 = gl_VertexID - id * 6;
+  // Two triangles: (−1, −1) (1, −1) (1, 1), (−1, −1) (1, 1) (−1, 1).
+  vec2 cq = k6 == 0 || k6 == 3 ? vec2(-1.0, -1.0) : k6 == 1 ? vec2(1.0, -1.0) : k6 == 5 ? vec2(-1.0, 1.0) : vec2(1.0, 1.0);
+  ivec2 t = ivec2(id % u_side, id / u_side);
+  vec4 A = texelFetch(u_a, t, 0), B = texelFetch(u_b, t, 0);
+  if (B.w <= 0.0) { agCull(); return; }
+  float age = B.w > 1.0e20 ? 0.0 : clamp(A.w / B.w, 0.0, 1.0);
+  float fade = u_fade == 1 && B.w < 1.0e20 ? ${gpFade('age')} : 1.0;
+  vec3 vel = u_d3 == 1 ? B.xyz : vec3(B.xy, 0.0);
+  float sp = length(vel);
+  float k = 0.0;
+  vec4 C = u_stateC == 1 ? texelFetch(u_c, t, 0) : vec4(float(id % u_species), 0.0, 0.0, 16777215.0);
+  if (u_colorBy == 1) k = u_species > 1 ? C.x / float(u_species - 1) : 0.0;
+  else if (u_colorBy == 2) k = clamp(sp / max(u_speedRef, 1e-4), 0.0, 1.0);
+  else if (u_colorBy == 3) k = u_d3 == 1 ? (sp > 1e-9 ? 0.5 + 0.5 * B.x / sp : 0.5) : 0.5 + 0.5 * cos(A.z);
+  else if (u_colorBy == 4) k = age;
+  else if (u_colorBy == 6) k = 1.0 - clamp(sp / max(u_speedRef, 1e-4), 0.0, 1.0);
+  else if (u_colorBy == 7) k = fract(atan(vel.y, vel.x) / 6.2831853 + 0.5);
+  vec3 c = u_usePal == 1 ? agPalette(k) : mix(u_colA, u_colB, k);
+  if (u_colorBy == 5) {
+    float bb = floor(C.w / 65536.0), gg = floor((C.w - bb * 65536.0) / 256.0);
+    c = vec3(C.w - bb * 65536.0 - gg * 256.0, gg, bb) / 255.0;
+  }
+  // Its size across (sigma, picture units) and along its velocity.
+  float fast = sp / max(u_speedRef, 1e-4);
+  float s0 = u_splat;
+  if (u_sizeBy == 1) s0 *= 0.35 + 0.65 * min(fast, 3.0);
+  else if (u_sizeBy >= 2 && u_stateE == 1) s0 = max(texelFetch(u_e, t, 0)[u_sizeBy - 2], 0.0) * u_memScale;
+  float s1 = s0 * (1.0 + max(u_stretch, 0.0) * min(fast, 4.0));
+  if (!(s0 > 1e-6)) { agCull(); return; }
+  vec3 dir = sp > 1e-7 ? vel / sp : vec3(1.0, 0.0, 0.0);
+  // Σ = s0² I + (s1² − s0²) d dᵀ.
+  mat3 S = mat3(s0 * s0) + (s1 * s1 - s0 * s0) * outerProduct(dir, dir);
+  float kpx = 0.5 * u_viewSize.y;
+  vec2 ndc;
+  float ca, cb, cc, z = 1.0, cd = 1.0;
+  v_dist = 0.0;
+  if (u_d3 == 1) {
+    vec3 eye = u_eye, f = u_fwd, r = u_right, u = u_up;
+    float lens = u_lens;
+    cd = u_camDist;
+    float fl = clamp(u_ortho, 0.0, 1.0);
+    if (u_camSrc == 1) {
+      // A ray-marched scene's camera, rebuilt from its probe as AG_DRAW3_VERT does.
+      eye = texelFetch(u_cam, ivec2(0, 0), 0).xyz;
+      f = normalize(texelFetch(u_cam, ivec2(1, 0), 0).xyz);
+      vec3 rx = normalize(texelFetch(u_cam, ivec2(2, 0), 0).xyz), ry = normalize(texelFetch(u_cam, ivec2(3, 0), 0).xyz);
+      float cx = dot(rx, f), cy = clamp(dot(ry, f), -0.9999, 0.9999);
+      lens = 0.5 / tan(acos(cy));
+      r = normalize(rx - cx * f);
+      u = normalize(ry - cy * f);
+      u = normalize(u - dot(r, u) * r);
+      cd = max(0.1, dot(-eye, f));
+      fl = 0.0;
+    }
+    vec3 d = A.xyz - eye;
+    z = dot(d, f);
+    if (z < 0.06 && fl < 0.999) { agCull(); return; }
+    float w = mix(z, cd, fl);
+    float x = dot(d, r), y = dot(d, u);
+    ndc = vec2(x, y) * lens / w;
+    ndc.x /= u_aspect;
+    v_dist = length(d);
+    // The EWA Jacobian (pixels per world unit), the perspective part fading out with Flatten.
+    vec3 j0 = kpx * lens * (r / w - (1.0 - fl) * x * f / (w * w));
+    vec3 j1 = kpx * lens * (u / w - (1.0 - fl) * y * f / (w * w));
+    ca = dot(j0, S * j0) + 0.3; cb = dot(j0, S * j1); cc = dot(j1, S * j1) + 0.3;
+  } else {
+    ndc = vec2(A.x / u_aspect, A.y);
+    ca = kpx * kpx * S[0][0] + 0.3; cb = kpx * kpx * S[0][1]; cc = kpx * kpx * S[1][1] + 0.3;
+  }
+  if (abs(ndc.x) > 1.5 || abs(ndc.y) > 1.5) { agCull(); return; }
+  float mid = 0.5 * (ca + cc), rad = length(vec2(0.5 * (ca - cc), cb));
+  float l1 = mid + rad, l2 = max(mid - rad, 0.1);
+  vec2 dv = vec2(cb, l1 - ca);
+  dv = length(dv) > 1e-12 ? normalize(dv) : (ca >= cc ? vec2(1.0, 0.0) : vec2(0.0, 1.0));
+  vec2 major = min(sqrt(2.0 * l1), 512.0) * dv;
+  vec2 minor = min(sqrt(2.0 * l2), 512.0) * vec2(dv.y, -dv.x);
+  // Very near the lens a splat fades rather than filling the screen.
+  float near = u_d3 == 1 ? smoothstep(0.06, 0.4, z) : 1.0;
+  v_col = vec4(c * u_bright, clamp(u_opacity * fade * near, 0.0, 1.0));
+  // Near ones count for more (3D): w = (camera distance / its depth)⁴, kept in 0.01–100 for half floats.
+  v_w = u_d3 == 1 ? clamp(pow(cd / max(z, 1e-3), 4.0), 0.01, 100.0) : 1.0;
+  v_pos = cq * 2.0;
+  gl_Position = vec4(ndc + (v_pos.x * major + v_pos.y * minor) * 2.0 / u_viewSize, 0.0, 1.0);
+}`;
+
+/** One splat's share (see AG_SPLAT_VERT): the Gaussian, hidden behind a scene's depth (u_depth), into both targets. */
+export const AG_SPLAT_FRAG = `precision highp float;
+uniform int u_depth;
+uniform highp sampler2D u_field;
+uniform vec2 u_viewSize;
+in vec4 v_col;
+in vec2 v_pos;
+in float v_dist;
+in float v_w;
+layout(location = 0) out vec4 o0;
+layout(location = 1) out vec4 o1;
+void main() {
+  if (u_depth == 1 && v_dist > texture(u_field, gl_FragCoord.xy / u_viewSize).b) discard;
+  float q = dot(v_pos, v_pos);
+  if (q > 4.0) discard;
+  float a = min(0.99, exp(-q) * v_col.a);
+  if (a < 1.0 / 1024.0) discard;
+  float aw = a * v_w;
+  o0 = vec4(v_col.rgb * aw, a);
+  o1 = vec4(aw, aw * v_dist, a, a);
+}`;
+
+/** The splats' two targets as a premultiplied picture: the weighted mean colour times the cover 1 − Π(1 − α). */
+export const AG_SPLAT_RESOLVE_FRAG = `precision highp float;
+uniform highp sampler2D u_t0;
+uniform highp sampler2D u_t1;
+out vec4 o;
+void main() {
+  ivec2 p = ivec2(gl_FragCoord.xy);
+  vec4 a = texelFetch(u_t0, p, 0), b = texelFetch(u_t1, p, 0);
+  float cover = clamp(1.0 - a.a, 0.0, 1.0);
+  vec3 c = b.r > 1e-6 ? a.rgb / b.r : vec3(0.0);
+  o = vec4(c * cover, cover);
+}`;

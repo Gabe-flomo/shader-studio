@@ -63,12 +63,22 @@ export function LookSection({ groupId, set, sp, update, draw, d3, intro, onFocus
     <>
       {intro}
       <BehaviourCard id="look" picture="look" title="Drawn as" hint="How each walker is drawn over the picture (Draw agents)."
-        summary={draw ? `${STYLES.find(x => x.value === draw.params.style)?.label ?? 'Dots'} · size ${r3(num(draw.params.size, 1.5))}` : 'the trail is the picture'}>
+        summary={draw ? `${STYLES.find(x => x.value === draw.params.style)?.label ?? 'Dots'} · size ${String(draw.params.style) === 'splats' ? r3(num(draw.params.splatSize, 0.012)) : r3(num(draw.params.size, 1.5))}` : 'the trail is the picture'}>
         {draw ? <>
           <SettingRow id="style" label="Style" hint={MORE_HINTS.style} onFocus={onFocus}>
             <Segmented size="sm" fill ariaLabel="Style" value={(String(draw.params.style ?? 'points')) as typeof STYLES[number]['value']} options={STYLES} onChange={v => setSetupParam(draw.id, { style: v })} />
           </SettingRow>
-          <SliderSetting id="dsize" label="Size" hint={MORE_HINTS.size} value={num(draw.params.size, 1.5)} min={0.25} max={8} step={0.05} onFocus={onFocus} onChange={v => setSetupParam(draw.id, { size: v })} param={{ nodeId: draw.id, key: 'size' }} />
+          {String(draw.params.style) === 'splats' ? <>
+            <SliderSetting id="splatSize" label="Splat size" hint="How wide each splat is (its sigma), in picture units; in 3D it shrinks with distance. Sized by a memory: the memory times this." value={String(draw.params.sizeBy ?? 'fixed').startsWith('mem') ? num(draw.params.memScale, 1) : num(draw.params.splatSize, 0.012)}
+              min={0} max={String(draw.params.sizeBy ?? 'fixed').startsWith('mem') ? 4 : 0.1} step={0.001} onFocus={onFocus}
+              onChange={v => setSetupParam(draw.id, String(draw.params.sizeBy ?? 'fixed').startsWith('mem') ? { memScale: v } : { splatSize: v })} param={{ nodeId: draw.id, key: String(draw.params.sizeBy ?? 'fixed').startsWith('mem') ? 'memScale' : 'splatSize' }} />
+            <SettingRow id="sizeBy" label="Size by" hint="Fixed: all the same. Speed: faster ones bigger. Its own: the size it was born with (a splat scan's splats, kept in its memory w)." onFocus={onFocus}>
+              <ChipRow label="Size by" value={String(draw.params.sizeBy ?? 'fixed')} onChange={v => setSetupParam(draw.id, { sizeBy: v })}
+                options={[{ value: 'fixed', label: 'Fixed' }, { value: 'speed', label: 'Speed' }, ...((set.memories?.length ?? 0) > 0 ? [{ value: 'memW', label: 'Its own' }] : [])]} />
+            </SettingRow>
+            <SliderSetting id="stretch" label="Stretch" hint="How much longer a splat is along its motion, at full speed (Fast is): 0 round." value={num(draw.params.stretch, 1.5)} min={0} max={8} step={0.01} onFocus={onFocus} onChange={v => setSetupParam(draw.id, { stretch: v })} param={{ nodeId: draw.id, key: 'stretch' }} />
+            <SliderSetting id="opacity" label="Opacity" hint="How much each splat covers at its middle: where many overlap the cloud turns solid." value={num(draw.params.opacity, 0.6)} min={0} max={1} step={0.01} onFocus={onFocus} onChange={v => setSetupParam(draw.id, { opacity: v })} param={{ nodeId: draw.id, key: 'opacity' }} />
+          </> : <SliderSetting id="dsize" label="Size" hint={MORE_HINTS.size} value={num(draw.params.size, 1.5)} min={0.25} max={8} step={0.05} onFocus={onFocus} onChange={v => setSetupParam(draw.id, { size: v })} param={{ nodeId: draw.id, key: 'size' }} />}
           <SliderSetting id="brightness" label="Brightness" hint={MORE_HINTS.brightness} value={num(draw.params.brightness, 0.5)} min={0} max={3} step={0.01} onFocus={onFocus} onChange={v => setSetupParam(draw.id, { brightness: v })} param={{ nodeId: draw.id, key: 'brightness' }} />
           {String(draw.params.style) === 'streaks' && <SliderSetting id="streak" label="Streak length" hint="How long each streak is (seconds of travel × 0.12)." value={num(draw.params.streak, 0.25)} min={0} max={4} step={0.01} onFocus={onFocus} onChange={v => setSetupParam(draw.id, { streak: v })} param={{ nodeId: draw.id, key: 'streak' }} />}
         </> : <>
@@ -96,12 +106,12 @@ export function LookSection({ groupId, set, sp, update, draw, d3, intro, onFocus
           {by === 'speed' && <SliderSetting id="speedRef" label="Fast is" hint="The speed that reaches the end of the palette (picture units a second)." value={num(draw.params.speedRef, 0.5)} min={0.01} max={4} step={0.01} onFocus={onFocus} onChange={v => setSetupParam(draw.id, { speedRef: v })} />}
         </>}
         {by === 'kind' && species && <StatesEditor set={set} sp={sp} update={update} />}
-        {by === 'trail' && set.look && <>
+        {by === 'trail' && set.look?.by === 'trail' && <>
           <SettingRow id="lookChannel" label="Which trail" onFocus={onFocus}>
-            <ChipRow label="Which trail" value={set.look.channel} onChange={v => update({ ...set, look: { ...set.look!, channel: v as 0 | 1 | 2 | 3 } })}
+            <ChipRow label="Which trail" value={set.look.channel} onChange={v => update({ ...set, look: { ...(set.look as Extract<typeof set.look, { by: 'trail' }>), channel: v as 0 | 1 | 2 | 3 } })}
               options={(swatches.length ? swatches : [{ index: 0, label: 'trail 1', colour: '#e8a33a', word: 'amber' }]).map(c => ({ value: c.index as 0 | 1 | 2 | 3, label: `${c.label} · ${c.word}`, dot: c.colour }))} />
           </SettingRow>
-          <SliderSetting id="lookGain" label="Full colour at" hint="How much trail gives the full channel colour (× this)." value={set.look.gain} min={0.05} max={20} step={0.05} onFocus={onFocus} onChange={v => update({ ...set, look: { ...set.look!, gain: Math.max(0.01, v) } })} />
+          <SliderSetting id="lookGain" label="Full colour at" hint="How much trail gives the full channel colour (× this)." value={set.look.gain} min={0.05} max={20} step={0.05} onFocus={onFocus} onChange={v => update({ ...set, look: { ...(set.look as Extract<typeof set.look, { by: 'trail' }>), gain: Math.max(0.01, v) } })} />
         </>}
         {by === 'memory' && <MemoryColourRow set={set} update={update} onFocus={onFocus} />}
       </BehaviourCard>

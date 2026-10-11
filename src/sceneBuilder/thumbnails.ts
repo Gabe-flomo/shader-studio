@@ -220,6 +220,16 @@ export function makeSdf(def: ShapeDef, over: Record<string, number | Vec3> = {})
         return Math.max(l, m * sgn(cy * qx - cx * qy));
       };
     }
+    case 'picture-balls': {
+      // A flat grid of balls (the picture's lift isn't known here), 3:2.
+      // At most 7 across, so a small tile reads as balls.
+      const n = Math.min(7, Math.max(1, Math.round(num(s, 'across')))), cs = Math.min(num(s, 'width'), 1.6) / n, r = cs * 0.5 * num(s, 'ball');
+      const m = Math.max(1, Math.round(n / 1.5)), hx = (n - 1) / 2, hy = (m - 1) / 2;
+      return (x, y, z) => {
+        const cx = clamp(Math.floor(x / cs + hx + 0.5), 0, n - 1) - hx, cy = clamp(Math.floor(y / cs + hy + 0.5), 0, m - 1) - hy;
+        return len3(x - cx * cs, y - cy * cs, z) - r;
+      };
+    }
     case 'cross': {
       // Three endless bars, cut to a box so the picture has an edge.
       const sz = num(s, 's');

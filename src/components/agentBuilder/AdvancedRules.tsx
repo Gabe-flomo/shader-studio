@@ -10,11 +10,12 @@ import { useState } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { IconButton } from '../ui/Button';
-import { Segmented, Toggle } from '../ui/Choice';
+import { Segmented } from '../ui/Choice';
 import { Icon } from '../ui/Icon';
 import { type AgentRule, type AgentRuleSet, defaultRule, describeRule, kindOf } from '../../agentRules/spec';
 import { type EditCtx, RuleLines, channelOptionsOf } from '../agentRules/RuleEditors';
 import { CardGlyph } from './BehaviourCard';
+import { MuteToggle, MutedTag, MUTED_DIM } from '../builders/MuteToggle';
 
 export type AdvancedView = 'advanced' | 'all';
 
@@ -84,7 +85,8 @@ function AdvancedRuleCard({ i, n, rule, ctx, onChange, onMove, onDuplicate, onRe
           <b style={{ fontSize: 13, fontWeight: 650 }}>Rule {i + 1}</b>
           <span data-advanced-text style={{ fontSize: 11.5, color: rule.off ? tk.text.faint : tk.text.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{text}</span>
         </button>
-        <span data-rule-switch={i}><Toggle checked={!rule.off} onChange={on => onChange({ ...rule, off: !on })} /></span>
+        {rule.off && <MutedTag />}
+        <span data-rule-switch={i}><MuteToggle muted={!!rule.off} what={`rule ${i + 1}`} onToggle={() => onChange({ ...rule, off: !rule.off })} /></span>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 2, marginTop: -4 }}>
         <span style={{ flex: 1, font: `600 10.5px ${fontFamily.ui}`, letterSpacing: '0.06em', textTransform: 'uppercase', color: alpha(tk.text.faint, 0.9) }}>runs {i + 1} of {n}</span>
@@ -93,7 +95,7 @@ function AdvancedRuleCard({ i, n, rule, ctx, onChange, onMove, onDuplicate, onRe
         <IconButton icon="plus" label="Duplicate this rule" size="sm" onClick={onDuplicate} />
         <IconButton icon="close" label="Take this rule away" size="sm" tone="danger" onClick={onRemove} data-rule-remove={i} />
       </div>
-      {open && <div style={{ display: 'flex', flexDirection: 'column', gap: 8, opacity: rule.off ? 0.55 : 1 }}><RuleLines rule={rule} ctx={ctx} onChange={onChange} /></div>}
+      {open && <div style={{ display: 'flex', flexDirection: 'column', gap: 8, ...(rule.off ? MUTED_DIM : {}) }}><RuleLines rule={rule} ctx={ctx} onChange={onChange} /></div>}
     </section>
   );
 }

@@ -31,14 +31,21 @@ describe('splat engine', () => {
     a.forEach((v, i) => expect(v).toBeCloseTo(want[i] / l, 5));
   });
 
-  it('sorts again once the view has turned a quarter of a degree, or every frame when asked', () => {
+  it('sorts again once the view has turned a quarter of a degree, or at any turn when sorted every frame', () => {
     const a: [number, number, number] = [0, 0, 1];
     const small: [number, number, number] = [Math.sin(0.001), 0, Math.cos(0.001)];
     const big: [number, number, number] = [Math.sin(0.01), 0, Math.cos(0.01)];
     expect(needsResort(null, a, false)).toBe(true);
     expect(needsResort(a, small, false)).toBe(false);
     expect(needsResort(a, big, false)).toBe(true);
-    expect(needsResort(a, a, true)).toBe(true);
+    expect(needsResort(a, small, true)).toBe(true);
+    expect(needsResort(null, a, true)).toBe(true);
+  });
+
+  it('a still camera is never sorted again, even sorted every frame (the order would be the same)', () => {
+    const a: [number, number, number] = [0.3, 0.2, Math.sqrt(1 - 0.13)];
+    expect(needsResort(a, [...a], true)).toBe(false);
+    expect(needsResort(a, [...a], false)).toBe(false);
   });
 
   it('a broken reading sorts nothing', () => {
@@ -64,7 +71,10 @@ describe('splat engine', () => {
     const center: [number, number, number] = [3, -2, 7];
     const fit = fitParams(node, center, 6);
     expect(fit.scale).toBeCloseTo(0.25, 3);
-    const m = modelMatrix({ position: fit.position, rotation: [0, 45, 0], scale: fit.scale, flip: true });
+    // It turns about its middle from now on, so Position is where the middle sits: the centre.
+    expect(fit.pivot).toBe('middle');
+    expect(fit.position).toEqual([0, 0, 0]);
+    const m = modelMatrix({ position: fit.position, rotation: [0, 45, 0], scale: fit.scale, flip: true, pivot: center });
     applyModel(m, center).forEach(v => expect(Math.abs(v)).toBeLessThan(2e-3));
   });
 

@@ -17,9 +17,12 @@
  */
 
 import type { GridSpec } from './grid';
+import type { PiecesSpec } from './pieces';
 import type { FnRef } from './functions';
 import { blockSummary, cloneBlock, COMBINE_BY_MODE, type CombineMode, type CombineSpec, type SpaceBlock } from './blocks';
 import type { TexSource, TexUse } from '../builders/textures';
+import type { StackItem } from '../builders/look/stack';
+import type { DepthPic2D } from './depth';
 
 export type Vec2 = [number, number];
 export type Vec3 = [number, number, number];
@@ -190,6 +193,8 @@ export interface MotionSpec {
   phase: number;
   /** Degrees: the line a bob slides along. */
   dir: number;
+  /** Switched off for now (builders/mute.ts): left out of the build, settings kept. */
+  muted?: boolean;
 }
 
 /** A ring of copies about the item's centre: `count` copies, each `radius` out, optionally rings of rings and the whole repeated at bigger scales. */
@@ -201,6 +206,8 @@ export interface DupSpec {
   /** The whole ring repeated `levels` times, each `factor` times the one before (1 level: no repeat). */
   levels: number;
   factor: number;
+  /** Switched off for now: one copy, as if there were no ring (settings kept). */
+  muted?: boolean;
 }
 
 export const MAX_DUP = 32;
@@ -226,12 +233,16 @@ interface ItemBase {
   hollow: number;
   /** A layer's colour (a nested item's is not used). */
   color: Vec3;
+  /** Its colour from the scene's palette instead: a slot (0 the first swatch). Absent or null: `color`. */
+  slot?: number | null;
   /** With Glow set to "selected": this layer glows. */
   glow: boolean;
   /** Painted with a picture instead of its colour (docs/scene-builder-2d.md, "Textures"). */
   fill?: TexUse | null;
   /** Only shown where a picture is bright (or dark, inverted). */
   mask?: TexMask | null;
+  /** Switched off for now (builders/mute.ts): drawn as nothing, by a live uniform; settings kept. */
+  muted?: boolean;
 }
 
 /** A layer shown only where a picture is bright: the picture over the whole frame, its brightness against `cut`. */
@@ -266,6 +277,8 @@ export interface SpaceOp {
   block?: SpaceBlock;
   /** kind 'combine': two blocks run on the same uv and joined. */
   combine?: CombineSpec;
+  /** Switched off for now (builders/mute.ts): bypassed by a live uniform, settings kept. */
+  muted?: boolean;
 }
 
 /** A transform block in the space stack. */
@@ -292,8 +305,26 @@ export interface LookSpec {
   glow: { mode: GlowMode; amount: number; falloff: number; tint: Vec3 | null };
   colour: { by: ColourBy; palette: string; scale: number; speed: number };
   tone: ToneMode;
+  /**
+   * The finish. Bloom and Scanlines are no longer offered (the Effects page has Glow and CRT mask);
+   * a scene made with them keeps them, built as before, until they are set to 0.
+   */
   post: { bloom: number; vignette: number; grain: number; scanlines: number };
+  /** Effects switched off for now (builders/mute.ts): bypassed by a live uniform, settings kept. */
+  mute?: Partial<Record<LookMute2D, boolean>>;
+  /** The scene's own palette (`colour.palette` is 'custom'): its colours, 2–8 (builders/look/palette.ts). */
+  custom?: Vec3[] | null;
+  /** Its name, for the library. */
+  customName?: string | null;
+  /** The background's colour from a palette slot instead of `bg`. */
+  bgSlot?: number | null;
+  /** The colour grade, a stack built after the tone map (builders/look/grade.ts). */
+  grade?: StackItem[];
 }
+
+/** The look's effects that can be muted. */
+export const LOOK_MUTES_2D = ['glow', 'tone', 'bloom', 'vignette', 'grain', 'scanlines'] as const;
+export type LookMute2D = typeof LOOK_MUTES_2D[number];
 
 export type Show2D = 'picture' | 'distance' | 'mask' | 'space';
 export interface OutputSpec { show: Show2D; /** Colour the number through this palette (a key of PALETTES). */ palette?: string }
@@ -303,10 +334,16 @@ export interface Scene2D {
   layers: Item[];
   /** A grid of cells drawn over the layers (grid.ts), or none. */
   grid?: GridSpec | null;
+  /** A picture rebuilt from pieces over the layers and the grid (pieces.ts), or none. */
+  pieces?: PiecesSpec | null;
   look: LookSpec;
   output?: OutputSpec;
   /** The pictures the scene reads (builders/textures.ts): fills, picture layers, masks, the background. */
   textures?: TexSource[];
+  /** The Effects page: shader effects on the finished picture, in order (builders/look/effects.ts). */
+  effects?: StackItem[];
+  /** A picture with depth the shapes interact with (depth.ts, docs/depth-mix.md), or none. */
+  depth?: DepthPic2D | null;
 }
 
 // ── Defaults ────────────────────────────────────────────────────────────────
@@ -472,9 +509,19 @@ export function canonicalScene(spec: Scene2D): Scene2D {
   if (!out.output || out.output.show === 'picture') delete out.output;
   else if (!out.output.palette) delete out.output.palette;
   if (!out.textures?.length) delete out.textures;
+  if (!out.pieces) delete out.pieces;
   if (!out.look.bgTex) delete out.look.bgTex;
-  walkItems(out.layers, it => { if (!it.fill) delete it.fill; if (!it.mask) delete it.mask; });
+  if (!out.look.grade?.length) delete out.look.grade;
+  if (!out.effects?.length) delete out.effects;
+  if (!out.look.custom?.length) delete out.look.custom;
+  if (!out.look.customName) delete out.look.customName;
+  if (out.look.bgSlot == null) delete out.look.bgSlot;
+  walkItems(out.layers, it => { if (!it.fill) delete it.fill; if (!it.mask) delete it.mask; if (it.slot == null) delete it.slot; });
+  if (!out.depth) delete out.depth;
+  else delete out.depth.bake;
   let s = 0, g = 0, m = 0, p = 0;
+  out.look.grade?.forEach((x, i) => { x.id = `gr${i + 1}`; });
+  out.effects?.forEach((x, i) => { x.id = `fx${i + 1}`; });
   for (const op of out.space) op.id = `p${++p}`;
   walkItems(out.layers, it => {
     it.id = it.type === 'group' ? `g${++g}` : `s${++s}`;
@@ -485,7 +532,7 @@ export function canonicalScene(spec: Scene2D): Scene2D {
 
 /** Does the scene have anything to draw? */
 export function hasShapes(spec: Scene2D): boolean {
-  return allShapes(spec).length > 0 || !!spec.grid || !!spec.look.bgTex;
+  return allShapes(spec).length > 0 || !!spec.grid || !!spec.pieces || !!spec.look.bgTex || !!spec.depth;
 }
 
 /** The names of the pictures a scene uses (fills, masks, the background). */
@@ -494,5 +541,8 @@ export function texturesUsed2D(spec: Scene2D): string[] {
   walkItems(spec.layers, it => { if (it.fill) out.push(it.fill.tex); if (it.mask) out.push(it.mask.tex); });
   if (spec.look.bgTex) out.push(spec.look.bgTex.tex);
   if (spec.grid?.pic) out.push(spec.grid.pic.tex);
+  for (const fx of spec.effects ?? []) if (fx.tex) out.push(fx.tex);
+  if (spec.pieces) out.push(spec.pieces.tex);
+  if (spec.depth) out.push(spec.depth.tex);
   return [...new Set(out)];
 }

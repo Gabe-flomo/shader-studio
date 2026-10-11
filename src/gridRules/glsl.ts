@@ -11,7 +11,7 @@
  * Only GLSL ES 1.00 that the test evaluator also runs (compiler/__tests__/glslRun.ts): declarations,
  * if / else, for loops with constant bounds, ?:, and the built-ins.
  */
-import { startCellsGLSL } from './startCells';
+import { startCellsGLSL, startHeadingsGLSL } from './startCells';
 import { stackStageGLSL } from './stack';
 import { ANY, NOT_EMPTY, SAME, blockCorner, blockVariants, patternVariants, stencilOffset } from './stencils';
 import {
@@ -76,6 +76,8 @@ export function gridStepGLSL(s: GridShape, N: GridNames, prev: string, image?: s
   );
   // A drawn start (gridRules/startCells.ts): the drawing's state at this cell, read only when the board is dealt.
   if (isDrawnStart(s.start)) L.push(...startCellsGLSL(s.startCells, v('drawn'), v('cell'), v('res'), id));
+  // Drawn headings (stacked Move and Collide cards): red keeps state + heading / 32 (gridRules/stack.ts).
+  if (isDrawnStart(s.start) && s.stack.length && s.startCells?.heads) L.push(...startHeadingsGLSL(s.startCells, v('drawnHd'), v('cell'), v('res'), `${id}_hd`));
   if (s.stack.length && isDiscrete(s.type)) {
     // Stacked rules: the base and each card are stages of the Pass's Repeat, picked by its Step.
     const n = s.stack.length;
@@ -100,7 +102,11 @@ function discreteSeed(s: GridShape, N: GridNames, image?: string): string {
   const { id, P } = N;
   const noise = `(${id}_h < ${P('density')} ? 1.0 : 0.0)`;
   if (s.start === 'empty') return '0.0';
-  if (isDrawnStart(s.start)) return `min(${id}_drawn, ${id}_top)`;
+  if (isDrawnStart(s.start)) {
+    // Drawn headings ride in red's fraction (gridRules/stack.ts), on a drawn cell only.
+    if (s.stack.length && s.startCells?.heads) return `(min(${id}_drawn, ${id}_top) + (${id}_drawn > 0.5 ? ${id}_drawnHd / 32.0 : 0.0))`;
+    return `min(${id}_drawn, ${id}_top)`;
+  }
   if (s.start === 'centre') return `(length(${id}_cell + 0.5 - ${id}_res * 0.5) < min(${id}_res.x, ${id}_res.y) * 0.15 ? ${noise} : 0.0)`;
   // An image: its brightness picks the state (0 dark … the last state white), so a picture can lay out several.
   if (s.start === 'image' && image) return `floor(clamp(dot(texture2D(${image}, (${id}_cell + 0.5) / ${id}_res).rgb, vec3(0.2126, 0.7152, 0.0722)), 0.0, 1.0) * ${id}_top + 0.5)`;
@@ -183,8 +189,10 @@ function discreteStep(s: GridShape, N: GridNames, read: (d: string) => string, i
     `if (${v('next')} > 0.5 && ${v('next')} < 1.5) ${v('ng')} = (${v('s')} > 0.5 && ${v('s')} < 1.5) ? min(1.0, ${v('g')} + ${P('ageRate')}) : 0.0;`,
     `else if (${v('next')} < 0.5) ${v('ng')} = ${v('s')} > 0.5 ? ${P('afterglow')} : ${v('g')} * ${P('afterglow')};`,
   );
+  L.push(`if (${v('tick')} < 0.5) { ${v('next')} = ${v('s')}; ${v('ng')} = ${v('g')}; }`);
+  // Stacked rules: a cell that stays (not emptied) keeps its heading, red's fraction (gridRules/stack.ts).
+  if (staged) L.push(`if (${v('s')} > 0.5 && ${v('next')} > 0.5) ${v('next')} = ${v('next')} + ${v('me')}.r - ${v('s')};`);
   L.push(
-    `if (${v('tick')} < 0.5) { ${v('next')} = ${v('s')}; ${v('ng')} = ${v('g')}; }`,
     `if (${v('fresh')} > 0.5) { ${v('next')} = ${discreteSeed(s, N, image)}; ${v('ng')} = 0.0; }`,
     `float ${v('roll')} = grHash(vec3(${v('cell')} + 0.5, ${FRAME} + 7919.0));`,
     `if (${v('in')} > 0.5 && ${v('roll')} < ${P('brushFill')}) { ${v('next')} = clamp(floor(${P('brushState')} + 0.5), 0.0, ${v('top')}); ${v('ng')} = 0.0; }`,

@@ -26,7 +26,7 @@ import {
   usesAction, usesDeposit, usesFade, usesFlow, usesStop,
 } from './spec';
 import { fieldLines, fieldName, normalizeFieldSpec } from './fields';
-import { checkMemoryExpr, memoryExprGlsl, memorySlots, usesMemories } from './memory';
+import { checkMemoryExpr, memoryExprGlsl, memoryGlslType, memorySlots, memorySwizzle, usesMemories } from './memory';
 import { type MemoryTimes, memoryOf } from './spec';
 
 type Wire = [string, string];
@@ -245,7 +245,7 @@ export function generateRulesInside(set: AgentRuleSet, o: GenerateOptions): Grap
     for (const m of set.memories ?? []) {
       const sl = slots.get(m.id);
       if (!sl) continue;
-      if (m.start) { startLines.push({ lhs: `mem2.${sl}`, op: '=', rhs: `age < 0.025 ? ${m.type === 'position' ? `vec2(${glf(m.start)})` : glf(m.start)} : mem2.${sl}` }); memNotes.push(`mem2.${sl}: ${m.name} starts at ${m.start} on its first step.`); }
+      if (m.start && m.type !== 'home') { startLines.push({ lhs: `mem2.${sl}`, op: '=', rhs: `age < 0.025 ? ${m.type === 'position' ? `vec2(${glf(m.start)})` : glf(m.start)} : mem2.${sl}` }); memNotes.push(`mem2.${sl}: ${m.name} starts at ${m.start} on its first step.`); }
       if (m.type === 'timer') { startLines.push({ lhs: `mem2.${sl}`, op: '+=', rhs: 'a_dt' }); memNotes.push(`mem2.${sl}: ${m.name}, a timer, counts the seconds (a_dt a step).`); }
       if (m.type === 'level' && (m.fade ?? 0) > 0) { startLines.push({ lhs: `mem2.${sl}`, op: '*=', rhs: `exp(-${glf(m.fade!)} * a_dt)` }); memNotes.push(`mem2.${sl}: ${m.name}, a level, fades: it loses ${m.fade} of itself a second.`); }
     }
@@ -300,7 +300,7 @@ export function generateRulesInside(set: AgentRuleSet, o: GenerateOptions): Grap
   const colours = set.species.map((_, s) => colourOf(s));
   const stateColour = colours.length === 1 ? colours[0] : colours.slice(0, -1).map((c, i) => `sp < ${glf(i + 0.5)} ? (${c}) : `).join('') + `(${colours[colours.length - 1]})`;
   // Look's "colour by a memory": the memory on Under the hood's heat map (black, red, yellow, white), lo to hi.
-  const byMem = mems && set.colourBy && slots.get(set.colourBy.memory) && memoryOf(set, set.colourBy.memory)?.type !== 'position' ? set.colourBy : null;
+  const byMem = mems && set.colourBy && slots.get(set.colourBy.memory) && !['position', 'home'].includes(memoryOf(set, set.colourBy.memory)?.type ?? '') ? set.colourBy : null;
   // Look: coloured by a trail channel where it stands (its kind's colour, dimmed, to the channel's).
   const lookTrail = !byMem && set.look?.by === 'trail' && senses.includes(String(set.look.channel)) ? set.look : null;
   const chanRgb = (hex: string) => { const v = parseInt(hex.slice(1), 16); return [((v >> 16) & 255) / 255, ((v >> 8) & 255) / 255, (v & 255) / 255]; };
@@ -353,6 +353,8 @@ export function generateRulesInside(set: AgentRuleSet, o: GenerateOptions): Grap
   const outWires: Record<string, Wire> = {
     position: [id.move, 'position'], heading: [id.move, 'heading'], speed: [id.finish, 'speed'], memory: src.mem, colour: [id.finish, 'result'],
   };
+  // Look: its own colour from birth (a splat scan's): Colour left unwired keeps what its Emit gave it.
+  if (!byMem && set.look?.by === 'birth') delete outWires.colour;
   // ── Around a shape (3D): Collide (3D scene) after Move, the heading following the velocity it leaves ──
   if (d3 && set.collide) {
     const c = set.collide;
@@ -530,7 +532,8 @@ function conditionTerm(set: AgentRuleSet, cond: RuleCondition, s: number, ri: nu
       const sl = memorySlots(set).get(cond.memory);
       if (!sl) return ['0.0'];
       const m = memoryOf(set, cond.memory)!;
-      const v = m.type === 'position' ? `length(${read('pos')}.xy - ${read('mem2')}.${sl})` : `${read('mem2')}.${sl}`;
+      const v = m.type === 'home' ? `length(${read('pos')} - ${read('mem2')}.${memorySwizzle(m, sl, d3)})`
+        : m.type === 'position' ? `length(${read('pos')}.xy - ${read('mem2')}.${sl})` : `${read('mem2')}.${sl}`;
       return [cond.cmp === '=' ? `float(abs(${v} - ${glf(cond.value)}) < 0.001)` : `float(${v} ${cond.cmp} ${glf(cond.value)})`];
     }
     case 'shape': {
@@ -547,7 +550,7 @@ function actionLines(set: AgentRuleSet, a: RuleAction, s: number, ri: number, j:
   const say = describeAction(set, s, a);
   const { d3 } = c;
   // Its main number × a named memory ("speed × energy"): M is the factor, G a number with it.
-  const M = a.times && memorySlots(set).has(a.times.memory) && memoryOf(set, a.times.memory)?.type !== 'position' ? timesFactor(set, a.times, read('mem2')) : null;
+  const M = a.times && memorySlots(set).has(a.times.memory) && !['position', 'home'].includes(memoryOf(set, a.times.memory)?.type ?? '') ? timesFactor(set, a.times, read('mem2')) : null;
   const G = (v: number) => (M ? `(${glf(v)} * ${M})` : glf(v));
   // 3D: a direction across the heading to turn in (this step's random plane, kept square to the heading).
   const across = () => {
@@ -726,6 +729,25 @@ function actionLines(set: AgentRuleSet, a: RuleAction, s: number, ri: number, j:
       add('h', '=', d3 ? `spd > 1e-6 ? vel${j} / spd : h` : `spd > 1e-6 ? atan(vel${j}.y, vel${j}.x) : h`, 'h: the heading, the velocity\'s direction (kept when it stands still).', 'h');
       return;
     }
+    case 'home': {
+      // Return home: a damped spring toward its Home memory (lib/agentRules/home.ts mirrors it).
+      // Its Home memory (the one named, else the rule set's Home).
+      const m = memoryOf(set, a.memory) ?? set.memories?.find(x => x.type === 'home');
+      const sl = m?.type === 'home' ? memorySlots(set).get(m.id) : undefined;
+      if (!m || !sl) return;
+      read('h'); read('spd'); read('mem2'); read('age');
+      const P = d3 ? 'vec3' : 'vec2';
+      const delay = Math.max(0, a.delay ?? 0);
+      add(`${P} vel${j}`, '=', `${d3 ? 'h' : 'vec2(cos(h), sin(h))'} * spd`, `vel${j}: its velocity now (heading × speed).`);
+      add(`${P} home${j}`, '=', `mem2.${memorySwizzle(m, sl, d3)}`, `home${j}: ${m.name}, where it was born (its Emit kept it there).`);
+      add(`float on${j}`, '=', delay > 0 ? `go * smoothstep(${glf(delay)}, ${glf(delay + 0.5)}, ${read('age')})` : 'go',
+        delay > 0 ? `on${j}: 0 until it is ${a.delay} s old, then up to 1 over half a second (the spring lets go of nothing before).` : `on${j}: the rule's go: the spring pulls from birth.`);
+      add(`vel${j}`, '*=', `1.0 + (exp(-${G(Math.max(a.damping ?? 0, 0))} * a_dt) - 1.0) * on${j}`, `vel${j}: calmed by the damping, ${a.damping ?? 0} of itself a second (e^(−damping·dt) a step: steady at any frame rate).`);
+      add(`vel${j}`, '+=', `on${j} * ${G(a.strength)} * (home${j} - ${read('pos')}) * a_dt`, `vel${j}: pulled toward home, ${a.strength} a second² for each unit it is away (a spring; Move then steps with the new velocity).`);
+      add('spd', '=', `length(vel${j})`, `spd: the speed, the velocity's length (${say}).`, 'spd');
+      add('h', '=', d3 ? `spd > 1e-6 ? vel${j} / spd : h` : `spd > 1e-6 ? atan(vel${j}.y, vel${j}.x) : h`, 'h: the heading, the velocity\'s direction (kept when it stands still).', 'h');
+      return;
+    }
     case 'drag':
       read('spd');
       add('spd', '*=', `mix(1.0, exp(-${G(Math.max(a.amount, 0))} * a_dt), go)`, `spd: the speed, losing ${a.amount} of itself a second (e^(−${a.amount}·dt) a step: the same at any frame rate) (${say}).`, 'spd');
@@ -734,17 +756,18 @@ function actionLines(set: AgentRuleSet, a: RuleAction, s: number, ri: number, j:
       const sl = memorySlots(set).get(a.memory);
       const m = memoryOf(set, a.memory);
       if (!sl || !m) return;
-      const t = `mem2.${sl}`;
+      const t = `mem2.${memorySwizzle(m, sl, d3)}`;
       read('mem2');
       const v = a.value ?? 0;
-      const zero = m.type === 'position' ? 'vec2(0.0)' : '0.0';
+      const T = memoryGlslType(m, d3);
+      const zero = T === 'float' ? '0.0' : `${T}(0.0)`;
       const here = () => read(hereVar(String(a.channel ?? 'own')));
       switch (a.op) {
         case 'add': add(t, '+=', `go * ${glf(v)}${a.perSecond ? ' * a_dt' : ''}`, `${t}: ${m.name} (${say}${a.perSecond ? ': a_dt is one step, 1/60 s' : ''}).`, 'mem2'); return;
-        case 'set': add(t, '=', `mix(${t}, ${m.type === 'position' ? `vec2(${glf(v)})` : glf(v)}, go)`, `${t}: ${m.name} (${say}).`, 'mem2'); return;
+        case 'set': add(t, '=', `mix(${t}, ${T === 'float' ? glf(v) : `${T}(${glf(v)})`}, go)`, `${t}: ${m.name} (${say}).`, 'mem2'); return;
         case 'toggle': add(t, '=', `mix(${t}, 1.0 - step(0.5, ${t}), go)`, `${t}: ${m.name}, on becomes off and off on (${say}).`, 'mem2'); return;
         case 'reset': add(t, '=', `mix(${t}, ${zero}, go)`, `${t}: ${m.name} back to 0 (${say}).`, 'mem2'); return;
-        case 'place': add(t, '=', `mix(${t}, ${read('pos')}.xy, go)`, `${t}: ${m.name}, where it is now (${say}).`, 'mem2'); return;
+        case 'place': add(t, '=', `mix(${t}, ${read('pos')}${m.type === 'home' ? '' : '.xy'}, go)`, `${t}: ${m.name}, where it is now (${say}).`, 'mem2'); return;
         case 'smell': add(t, '=', `mix(${t}, ${here()}, go)`, `${t}: ${m.name}, what it smells here now (${say}).`, 'mem2'); return;
         case 'sum': add(t, '+=', `go * ${glf(v || 1)} * ${here()} * a_dt`, `${t}: ${m.name}, adding up what it smells here, a second's worth a second (${say}).`, 'mem2'); return;
         case 'decay': add(t, '*=', `mix(1.0, exp(-${glf(Math.max(v, 0))} * a_dt), go)`, `${t}: ${m.name}, losing ${v} of itself a second (e^(−${v}·dt) a step) (${say}).`, 'mem2'); return;

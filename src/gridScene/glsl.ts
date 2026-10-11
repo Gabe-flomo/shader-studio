@@ -33,7 +33,7 @@
  * Shapes are measured with y up. The result is vec4(colour, distance in picture units); `hp` gets the
  * winning shape's home centre and piece place (picture units).
  */
-import { PIC_MODES, SHAPE_KINDS, cellSize, drawOf, picModeOf, ruleProblem, shapeOf, type GShape, type GridRule, type GridSceneSpec, type MotionPath, type PatternKind, type ShapeKind } from './spec';
+import { PIC_MODES, SHAPE_KINDS, cellSize, clauseNeedsB, drawOf, picModeOf, ruleClauses, ruleProblem, shapeOf, type GShape, type GridClause, type GridDo, type GridRule, type GridSceneSpec, type MotionPath, type PatternKind, type ShapeKind } from './spec';
 import { findTex } from '../builders/textures';
 import { readTextMask, textMaskGlsl, type TextMask } from './textMask';
 
@@ -193,16 +193,29 @@ function targetLines(spec: GridSceneSpec, texs: string[], pad: string): string[]
 /** The argument names of a shape's numbers: motion, look, edge, colour. */
 export const shapeArgs = (id: string) => ({ m: `m${id}`, l: `l${id}`, e: `e${id}`, c: `c${id}` });
 
-/** The rules that run, with their swaps mirrored (A swaps with B: B takes A's colour too). */
+/**
+ * The rules that run, with their swaps mirrored (A swaps with B: B takes A's colour too). Only a
+ * swap on its one condition is mirrored: with and / or, only A's side changes. The mirror has no
+ * Else (that is A's) and stays changed when the rule does.
+ */
 export function activeRules(spec: GridSceneSpec): GridRule[] {
   const out: GridRule[] = [];
   for (const r of spec.rules) {
     if (!r.on || ruleProblem(spec, r)) continue;
     out.push(r);
-    if (r.do.kind === 'swap' && r.when.b && r.when.b !== r.when.a) out.push({ ...r, id: `${r.id}~`, when: { ...r.when, a: r.when.b, b: r.when.a } });
+    if (r.do.kind === 'swap' && r.when.b && r.when.b !== r.when.a && !r.also?.length) out.push({ ...r, id: `${r.id}~`, when: { ...r.when, a: r.when.b, b: r.when.a }, else: null });
   }
   return out;
 }
+
+/** The rules that stay changed, in the order of their bits in the memory pass (at most 16: two channels of 8). */
+export const stickyRules = (spec: GridSceneSpec): GridRule[] => activeRules(spec).filter(r => r.sticky).slice(0, 16);
+/** The memory pass's size: one texel per cell (square, the grid's longer side). */
+export const memorySize = (spec: Pick<GridSceneSpec, 'cols' | 'rows'>) => Math.max(spec.cols, spec.rows);
+/** A sticky rule's bit: its channel (x the red, y the green) and its place value there. */
+const bitOf = (i: number) => ({ ch: i < 8 ? 'x' : 'y', p: 2 ** (i % 8) });
+/** The Do and Else of a rule (what it can do to a shape). */
+const doesOf = (r: GridRule): GridDo[] => [r.do, ...(r.else ? [r.else] : [])];
 
 // ── The search ──────────────────────────────────────────────────────────────
 
@@ -210,6 +223,8 @@ export function activeRules(spec: GridSceneSpec): GridRule[] {
 const KIND_REACH: Record<ShapeKind, number> = {
   circle: 1, square: 1.21, ring: 1, diamond: 1, triangle: 1.04, hexagon: 1.04, star: 1.1, plus: 1.05, cross: 1.05, heart: 1.35, picture: 1.42,
 };
+/** Glow: the distance (cells from a shape's edge) it starts fading at, and where it is gone. Below 1: the search finds every shape within a cell. */
+export const GLOW_FADE: readonly [number, number] = [0.35, 0.95];
 /** The widest a search goes (cells either side): 13 × 13 cells. Its loops are this long and stop early at the live radius. */
 export const MAX_SEARCH = 6;
 const isWrap = (p: MotionPath) => p === 'travel' || p === 'hop';
@@ -227,8 +242,9 @@ const numsOf = (spec: GridSceneSpec, s: GShape): Nums => ({ size: s.size, pulse:
 function reachSums(spec: GridSceneSpec, s: GShape, fill: boolean) {
   const P = spec.pattern;
   const kf = (x: GShape) => KIND_REACH[x.kind];
-  const grow = fill ? 1 : activeRules(spec).filter(r => r.when.a === s.id && r.do.kind === 'grow').reduce((g, r) => g * Math.max(1, r.do.amount ?? 1.5), 1);
-  const become = fill ? [] : activeRules(spec).filter(r => r.when.a === s.id && r.do.kind === 'become').map(r => shapeOf(spec, r.do.shape)).filter((x): x is GShape => !!x);
+  const does = fill ? [] : activeRules(spec).filter(r => r.when.a === s.id).flatMap(doesOf);
+  const grow = does.filter(d => d.kind === 'grow').reduce((g, d) => g * Math.max(1, d.amount ?? 1.5), 1);
+  const become = does.filter(d => d.kind === 'become').map(d => shapeOf(spec, d.shape)).filter((x): x is GShape => !!x);
   const sizeGrow = !fill && P.kind !== 'none' && P.target === 'size';
   const push = P.kind !== 'none' && P.target === 'push';
   const glsl = () => {
@@ -290,12 +306,13 @@ const MAX_CONTRACTION = 0.8;
 
 /**
  * The search radius (cells either side, before the cap) a shape's search uses at its spec's values,
- * as the shader works it out live: for the UI's warning and the tests. Glow adds a cell.
+ * as the shader works it out live: for the UI's warning and the tests. Glow adds a cell to the reach
+ * (every shape within a cell of the point is found, so the glow can fade out by then: GLOW_FADE).
  */
 export function searchRadiusAt(spec: GridSceneSpec, s: GShape, fill = false): number {
-  const rch = shapeReach(spec, s, fill);
   const glow = spec.look.glow ? 1 : 0;
-  if (fill) return Math.floor(rch + 0.5 + glow);
+  const rch = shapeReach(spec, s, fill) + glow;
+  if (fill) return Math.floor(rch + 0.5);
   const m = s.motion;
   const lag = Math.abs(m.lag) < 1e-6 ? 0 : Math.abs(m.lag);
   const big = Math.max(Math.abs(m.xy[0]), Math.abs(m.xy[1]));
@@ -309,7 +326,7 @@ export function searchRadiusAt(spec: GridSceneSpec, s: GShape, fill = false): nu
     const Ri = L < MAX_CONTRACTION ? rch / (1 - L) : Infinity;
     R = Math.min(Ri, rch + A);
   }
-  return Math.floor(R + 0.5 + glow);
+  return Math.floor(R + 0.5);
 }
 
 /** Would a shape's search be cut by the cap at its spec's values (the builder says so)? */
@@ -337,7 +354,10 @@ function searchLoop(spec: GridSceneSpec, s: GShape, X: string, rch: string, glow
     `${p}  }`,
     `${p}}`,
   ];
-  const cap = (r: string) => `min(${gf(M)}, floor(${r} + ${glow ? '1.5' : '0.5'}))`;
+  const cap = (r: string) => `min(${gf(M)}, floor(${r} + 0.5))`;
+  // With glow the search reaches a cell further (inside the motion's inverse, so lag widens it too):
+  // every shape within a cell of X is found, and the glow fades out by then (GLOW_FADE).
+  if (glow) rch = `(${rch} + 1.0)`;
   if (!isWrap(s.motion.path)) {
     return [`${pad}{`, `${pad}  float R;`, `${pad}  vec2 hc = gs_find${s.id}$(${X}, t, ${m}, ${rch}, R);`, `${pad}  R = ${cap('R')};`, ...inner(`${pad}  `), `${pad}}`];
   }
@@ -416,8 +436,17 @@ function motionFns(spec: GridSceneSpec, s: GShape): string[] {
       '  den = abs(den) < 0.05 ? (den < 0.0 ? -0.05 : 0.05) : den;',
       '  vec2 w = X - 0.5 - a * T;',
       '  vec2 h0 = w - v * ((w.x + w.y) / den);',
-      '  vec2 wk = w + (k - floor(h0 / dims)) * dims;',
-      '  return wk - v * ((wk.x + wk.y) / den);',
+      // Wrap n (whole grids) moves the home by M n = dims n − v (dims · n) / den: the lag couples x and y, so a
+      // wrap in one moves the other too. n is solved so the home lands mid-grid (M⁻¹, det = dims.x dims.y / den),
+      // then k steps to the copies round it. (Rounding h0 / dims alone was off by v · dims · n / den cells, which
+      // grows with time: shapes went missing in bands, cut by a seam.)
+      '  vec2 c0 = vec2(dims.x - v.x * dims.x / den, -v.y * dims.x / den);',
+      '  vec2 c1 = vec2(-v.x * dims.y / den, dims.y - v.y * dims.y / den);',
+      '  vec2 g = 0.5 * dims - h0;',
+      '  float det = c0.x * c1.y - c1.x * c0.y;',
+      '  vec2 nr = vec2(c1.y * g.x - c1.x * g.y, c0.x * g.y - c0.y * g.x) / det;',
+      '  vec2 n = floor(nr + 0.5) + k;',
+      '  return h0 + c0 * n.x + c1 * n.y;',
       '}',
       `float gs_spread${s.id}$(vec4 m, float rch) {`,
       '  float lag = abs(m.w) < 1.0e-6 ? 0.0 : abs(m.w);',
@@ -431,22 +460,29 @@ function motionFns(spec: GridSceneSpec, s: GShape): string[] {
 }
 
 // A rule's id may end in ~ (a swap's mirror): never two underscores in a row (reserved in GLSL), so no _ before the suffix.
-const ruleFn = (r: GridRule) => `gs_r${r.id.replace(/[^A-Za-z0-9]/g, 'm')}$`;
+const ruleKey = (r: GridRule) => r.id.replace(/[^A-Za-z0-9]/g, 'm');
+/** A rule's partner search for its condition k (shares a cell with, is near). */
+const ruleFn = (r: GridRule, k: number) => `gs_r${ruleKey(r)}c${k}$`;
+/** A rule's whole condition (its clauses joined by and / or), 1 or 0. */
+const condFn = (r: GridRule) => `gs_c${ruleKey(r)}$`;
+/** The shapes a rule's conditions meet (their motion is an argument of its condition function). */
+const partnersOf = (r: GridRule): string[] => [...new Set(ruleClauses(r).filter(c => clauseNeedsB(c.when)).map(c => c.when.b!))];
 
-/** The condition of a rule for the cell being drawn (C its cell, P its place, hs its home), or null when it can't apply. */
-function condition(r: GridRule, cellArgs: string): string | null {
-  const w = r.when;
+/** One condition for the cell being drawn (C its cell, P its place, hs its home). */
+function clauseExpr(r: GridRule, k: number, w: GridClause, cellArgs: string): string {
   switch (w.kind) {
     case 'cell': return `max(abs(C.x - ${gf(w.x ?? 0)}), abs(C.y - ${gf(w.y ?? 0)})) < 0.5`;
     case 'column': return `abs(C.x - ${gf(w.x ?? 0)}) < 0.5`;
     case 'row': return `abs(C.y - ${gf(w.y ?? 0)}) < 0.5`;
     case 'sameCell':
-    case 'near': return `${ruleFn(r)}(P, C, hs, t, ${shapeArgs(w.b!).m}, gd${cellArgs}) > 0.5`;
+    case 'near': return `${ruleFn(r, k)}(P, C, hs, t, ${shapeArgs(w.b!).m}, gd${cellArgs}) > 0.5`;
   }
 }
 
-function effect(spec: GridSceneSpec, r: GridRule, pics: boolean, slotOf: (s: GShape) => number): string {
-  const d = r.do;
+/** The call of a rule's condition function, from where P, C, hs, t, the shapes' motions and gd are (the scene, the memory pass). */
+const condCall = (r: GridRule, cellArgs: string) => `${condFn(r)}(P, C, hs, t${partnersOf(r).map(id => `, ${shapeArgs(id).m}`).join('')}, gd${cellArgs})`;
+
+function effect(spec: GridSceneSpec, r: GridRule, d: GridDo, pics: boolean, slotOf: (s: GShape) => number): string {
   switch (d.kind) {
     case 'become': {
       const to = shapeOf(spec, d.shape)!;
@@ -486,6 +522,12 @@ export interface GridProgram {
   radius: Record<string, number>;
   /** The fill's, the same way. */
   fillRadius: number;
+  /**
+   * Rules that stay changed: the memory pass (docs/grid-builder.md "Rules that stay changed"). The
+   * scene function then reads `lt` (the pass's texture, one texel per cell holding its bits) and the
+   * pass's Expression Block calls `latchName` with `latchArgs` over `latchFunctions`. Null without one.
+   */
+  memory: { size: number; rules: string[]; latchFunctions: string; latchName: string; latchArgs: string[] } | null;
 }
 
 /** The drawing packed for `gd` (see GridProgram.data). */
@@ -556,6 +598,56 @@ function cellFns(spec: GridSceneSpec, n: number, repeat: boolean): string {
 }
 
 /**
+ * The memory pass's functions (docs/grid-builder.md "Rules that stay changed"): for the drawn cell
+ * h (one texel a cell), the bits of the sticky rules whose conditions hold now (gs_fire), OR-ed
+ * with the bits it had (gs_latch). Its shape's place is worked out as the scene does (its motion,
+ * "copies match"), and each rule's condition is the same function the scene calls. A reset (above
+ * 0.5) or the clock going back (a restart) forgets everything. Result: (bits 0–7, bits 8–15) ÷ 255
+ * and the time.
+ */
+function memoryFns(spec: GridSceneSpec, sticky: GridRule[], n: number, repeat: boolean, source: boolean, cellArgs: string, ruleFns: string[]): { code: string; args: string[] } {
+  const shapes = spec.shapes;
+  const rpDecl = repeat ? ', vec4 rp, float rs' : '';
+  const mDecl = shapes.map(s => `, vec4 ${shapeArgs(s.id).m}`).join('');
+  const mArgs = shapes.map(s => `, ${shapeArgs(s.id).m}`).join('');
+  const fire: string[] = [
+    `vec2 gs_fire$(vec2 h, float t${mDecl}, float gd[${n}]${rpDecl}) {`,
+    '  vec2 b = vec2(0.0);',
+    `  float sl = gs_cell$(gd, h${cellArgs});`,
+  ];
+  shapes.forEach((sh, si) => {
+    const mine = sticky.filter(r => r.when.a === sh.id);
+    if (!mine.length) return;
+    const m = shapeArgs(sh.id).m;
+    fire.push(
+      `  if (abs(sl - ${gf(si + 1)}) < 0.5) {`,
+      source ? `    vec2 hs = gs_src$(h${cellArgs}); vec2 P = gs_move${sh.id}$(h, hs.x + hs.y, t, ${m}) - (h - hs);` : `    vec2 hs = h; vec2 P = gs_move${sh.id}$(h, h.x + h.y, t, ${m});`,
+      '    vec2 C = floor(P);',
+      ...mine.map(r => { const { ch, p } = bitOf(sticky.indexOf(r)); return `    if (${condCall(r, cellArgs)} > 0.5) b.${ch} += ${gf(p)}; // ${r.id}`; }),
+      '  }',
+    );
+  });
+  fire.push('  return b;', '}');
+  const latch = [
+    `vec3 gs_latch$(vec2 h, float t, vec4 pv, float reset${mDecl}, float gd[${n}]${rpDecl}) {`,
+    '  vec2 held = floor(pv.rg * 255.0 + 0.5);',
+    '  if (reset > 0.5 || t < pv.b - max(1.0, 0.002 * pv.b)) held = vec2(0.0);',
+    `  vec2 f = gs_fire$(h, t${mArgs}, gd${cellArgs});`,
+    '  vec2 o = vec2(0.0);',
+    '  float p = 1.0;',
+    '  for (int i = 0; i < 8; i++) {',
+    '    o += max(mod(floor(held / p), 2.0), mod(floor(f / p), 2.0)) * p;',
+    '    p *= 2.0;',
+    '  }',
+    '  return vec3(o / 255.0, t);',
+    '}',
+  ];
+  // What the conditions need: the drawing, the shapes' motions, the partner searches, the conditions.
+  const code = [cellFns(spec, n, repeat), ...shapes.flatMap(s => motionFns(spec, s)), ...ruleFns, fire.join('\n'), latch.join('\n')].join('\n');
+  return { code, args: ['h', 't', 'pv', 'reset', ...shapes.map(s => shapeArgs(s.id).m), 'gd', ...(repeat ? ['rp', 'rs'] : [])] };
+}
+
+/**
  * The whole program for a spec. `brute` (tests only) looks at every cell of the grid for every
  * shape instead of searching: the reference the search is checked against.
  */
@@ -568,6 +660,7 @@ export function gridProgram(spec: GridSceneSpec, opts: { brute?: boolean } = {})
   const source = copiesMatch(spec);
   const cellArgs = repeat ? ', rp, rs' : '';
   const rules = activeRules(spec);
+  const sticky = stickyRules(spec);
   const texs = sceneTextures(spec);
   const slotOf = (s: GShape) => (s.tex ? texs.indexOf(s.tex) : -1);
   const shapePics = shapes.some(s => slotOf(s) >= 0 || s.kind === 'picture');
@@ -578,11 +671,11 @@ export function gridProgram(spec: GridSceneSpec, opts: { brute?: boolean } = {})
     'vec2 uv', 'float t', 'vec4 pt',
     ...shapes.flatMap(s => { const a = shapeArgs(s.id); return [`vec4 ${a.m}`, `vec4 ${a.l}`, `float ${a.e}`, `vec3 ${a.c}`]; }),
     `float gd[${n}]`, ...(repeat ? ['vec4 rp', 'float rs'] : []),
-    ...texs.map((_, i) => `sampler2D ${texArg(i)}`), ...(pm ? ['float pcut'] : []), ...(screen ? ['vec2 suv'] : []), 'inout vec4 hp',
+    ...texs.map((_, i) => `sampler2D ${texArg(i)}`), ...(sticky.length ? ['sampler2D lt'] : []), ...(pm ? ['float pcut'] : []), ...(screen ? ['vec2 suv'] : []), 'inout vec4 hp',
   ];
   const args = [
     ...shapes.flatMap(s => { const a = shapeArgs(s.id); return [a.m, a.l, a.e, a.c]; }),
-    'gd', ...(repeat ? ['rp', 'rs'] : []), ...texs.map((_, i) => texArg(i)), ...(pm ? ['pcut'] : []), ...(screen ? ['suv'] : []), 'hp',
+    'gd', ...(repeat ? ['rp', 'rs'] : []), ...texs.map((_, i) => texArg(i)), ...(sticky.length ? ['lt'] : []), ...(pm ? ['pcut'] : []), ...(screen ? ['suv'] : []), 'hp',
   ];
   // A picture cell is a square (k 10): only then does the shape function know it, so other scenes keep their shapes' code.
   const fns: string[] = [shapes.some(s => s.kind === 'picture') ? HELPERS.replace('  return gs_heart$(q, s);\n}', '  if (k < 9.5) return gs_heart$(q, s);\n  return gs_box$(q, vec2(s));\n}') : HELPERS];
@@ -635,25 +728,46 @@ export function gridProgram(spec: GridSceneSpec, opts: { brute?: boolean } = {})
   };
   const search = (s: GShape, X: string, rch: string, glow: boolean, m: string, body: string[], pad: string) =>
     (opts.brute ? bruteLoop(body, pad) : searchLoop(spec, s, X, rch, glow, m, body, pad));
-  // The rules with a partner: does a cell of the partner's shape share this cell (or come near)?
+  // The rules' conditions with a partner: does a cell of the partner's shape share this cell (or come near)?
+  // Then each rule's whole condition, its clauses joined by and / or (left to right), as one function the
+  // scene and the memory pass both call.
+  const ruleFns: string[] = [];
+  const rpDecl = repeat ? ', vec4 rp, float rs' : '';
   for (const r of rules) {
-    if (r.when.kind !== 'sameCell' && r.when.kind !== 'near') continue;
-    const b = shapeOf(spec, r.when.b)!;
-    const near = r.when.kind === 'near';
-    const dist = Math.max(0.05, r.when.dist ?? 1);
-    const body = [
-      `if (abs(gs_cell$(gd, h${cellArgs}) - ${gf(shapes.indexOf(b) + 1)}) > 0.5) continue;`,
-      // "Copies match": the rule is checked in the drawing's frame, so the partner is one of the drawn cells.
-      ...(source ? [`if (gs_src$(h${cellArgs}) != h) continue;`] : []),
-      ...(b.id === r.when.a ? ['if (h == self) continue;'] : []),
-      `vec2 PB = gs_move${b.id}$(h, h.x + h.y, t, mB);`,
-      near ? `if (distance(P, PB) <= ${gf(dist)}) return 1.0;` : 'if (max(abs(floor(PB).x - C.x), abs(floor(PB).y - C.y)) < 0.5) return 1.0;',
-    ];
-    fns.push([
-      `float ${ruleFn(r)}(vec2 P, vec2 C, vec2 self, float t, vec4 mB, float gd[${n}]${repeat ? ', vec4 rp, float rs' : ''}) {`,
-      ...search(b, near ? 'P' : 'C + 0.5', gf(near ? dist : 0.5), false, 'mB', body, '  '),
-      '  return 0.0;',
+    const clauses = ruleClauses(r);
+    clauses.forEach((c, k) => {
+      if (!clauseNeedsB(c.when)) return;
+      const b = shapeOf(spec, c.when.b)!;
+      const near = c.when.kind === 'near';
+      const dist = Math.max(0.05, c.when.dist ?? 1);
+      const body = [
+        `if (abs(gs_cell$(gd, h${cellArgs}) - ${gf(shapes.indexOf(b) + 1)}) > 0.5) continue;`,
+        // "Copies match": the rule is checked in the drawing's frame, so the partner is one of the drawn cells.
+        ...(source ? [`if (gs_src$(h${cellArgs}) != h) continue;`] : []),
+        ...(b.id === r.when.a ? ['if (h == self) continue;'] : []),
+        `vec2 PB = gs_move${b.id}$(h, h.x + h.y, t, mB);`,
+        near ? `if (distance(P, PB) <= ${gf(dist)}) return 1.0;` : 'if (max(abs(floor(PB).x - C.x), abs(floor(PB).y - C.y)) < 0.5) return 1.0;',
+      ];
+      ruleFns.push([
+        `float ${ruleFn(r, k)}(vec2 P, vec2 C, vec2 self, float t, vec4 mB, float gd[${n}]${rpDecl}) {`,
+        ...search(b, near ? 'P' : 'C + 0.5', gf(near ? dist : 0.5), false, 'mB', body, '  '),
+        '  return 0.0;',
+        '}',
+      ].join('\n'));
+    });
+    ruleFns.push([
+      `// rule ${r.id}: ${clauses.map((c, k) => `${k ? `${c.join} ` : ''}${c.when.kind}`).join(' ')}`,
+      `float ${condFn(r)}(vec2 P, vec2 C, vec2 hs, float t${partnersOf(r).map(id => `, vec4 ${shapeArgs(id).m}`).join('')}, float gd[${n}]${rpDecl}) {`,
+      ...clauses.map((c, k) => (k === 0 ? `  bool c = ${clauseExpr(r, k, c.when, cellArgs)};` : `  c = c ${c.join === 'or' ? '||' : '&&'} (${clauseExpr(r, k, c.when, cellArgs)});`)),
+      '  return c ? 1.0 : 0.0;',
       '}',
+    ].join('\n'));
+  }
+  fns.push(...ruleFns);
+  if (sticky.length) {
+    fns.push([
+      '// The rules that stay changed: their bits for cell h, kept by the memory pass (one texel a cell: r bits 0–7, g bits 8–15, ÷ 255).',
+      `vec2 gs_held$(sampler2D lt, vec2 h) { return floor(textureLod(lt, (h + 0.5) / ${gf(memorySize(spec))}, 0.0).rg * 255.0 + 0.5); }`,
     ].join('\n'));
   }
   const fill = spec.pattern.kind !== 'none' ? shapeOf(spec, spec.pattern.fill) : undefined;
@@ -694,12 +808,18 @@ export function gridProgram(spec: GridSceneSpec, opts: { brute?: boolean } = {})
       `float an = ${a.l}.y + t * ${a.l}.z * 6.2831853;`,
       `s *= 1.0 + ${a.l}.w * 0.5 * sin((t * ${pulseRate(sh)} + ${a.m}.w * (hs.x + hs.y)) * 6.2831853);`,
       ...pmLine('C'),
-      ...targetLines(spec, texs, ''),
     ];
-    for (const r of rules) {
-      if (r.when.a !== sh.id) continue;
-      const cond = condition(r, cellArgs);
-      if (cond) body.push(`if (${cond}) { ${effect(spec, r, shapePics, slotOf)} } // ${r.id}`);
+    // The rules' conditions, from where the shape is (before the pattern's push): the same sums as the memory pass.
+    const mine = rules.filter(r => r.when.a === sh.id);
+    if (mine.some(r => sticky.includes(r))) body.push('vec2 hb = gs_held$(lt, h);');
+    for (const r of mine) {
+      const i = sticky.indexOf(r);
+      const cond = i >= 0 ? `max(${condCall(r, cellArgs)}, mod(floor(hb.${bitOf(i).ch} / ${gf(bitOf(i).p)}), 2.0))` : condCall(r, cellArgs);
+      body.push(`float f${ruleKey(r)} = ${cond};${i >= 0 ? ' // stays changed: or once it has held for this cell' : ''}`);
+    }
+    body.push(...targetLines(spec, texs, ''));
+    for (const r of mine) {
+      body.push(`if (f${ruleKey(r)} > 0.5) { ${effect(spec, r, r.do, shapePics, slotOf)} }${r.else ? ` else { ${effect(spec, r, r.else, shapePics, slotOf)} }` : ''} // ${r.id}`);
     }
     body.push(
       ...(source ? ['P += dP;'] : []),
@@ -767,14 +887,22 @@ export function gridProgram(spec: GridSceneSpec, opts: { brute?: boolean } = {})
       L.push('  if (pw.w > -0.5) col = mix(col, tc.rgb, clamp(tc.a, 0.0, 1.0));');
     }
   }
+  // The glow reads the distance: past GLOW_FADE[0] it is stretched to "far" by GLOW_FADE[1] cells, where the
+  // search is still sure to have found every shape (it reaches a cell further with glow), so the glow
+  // never steps where neighbouring pixels search different cells.
+  if (look.glow) L.push(`  if (best > ${gf(GLOW_FADE[0])}) best = best >= ${gf(GLOW_FADE[1])} ? 1.0e5 : best / max(1.0 - smoothstep(${gf(GLOW_FADE[0])}, ${gf(GLOW_FADE[1])}, best), 1.0e-5);`);
   L.push('  hp = vec4(gs_uv$(hp.xy), gs_uv$(hp.zw));');
   L.push(`  return vec4(col, best * ${cs});`);
   L.push('}');
   fns.push(L.join('\n'));
+  const latch = sticky.length ? memoryFns(spec, sticky, n, repeat, source, cellArgs, ruleFns) : null;
   const code = fns.join('\n');
-  const h = `_${codeHash(code)}`;
+  // One suffix for the scene and its memory pass (the pass shares the scene's motion and condition functions).
+  const h = `_${codeHash(code + (latch?.code ?? ''))}`;
+  const named = (x: string) => x.split('$').join(h);
   return {
-    functions: code.split('$').join(h), name: `gs_scene${h}`, args, placed, data,
+    functions: named(code), name: `gs_scene${h}`, args, placed, data,
     textures: texs, shapePics, screen, maskCut: !!pm, repeat, radius, fillRadius,
+    memory: latch ? { size: memorySize(spec), rules: sticky.map(r => r.id), latchFunctions: named(latch.code), latchName: `gs_latch${h}`, latchArgs: latch.args } : null,
   };
 }

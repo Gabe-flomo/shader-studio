@@ -67,7 +67,9 @@ function ahSet(gl, us, name, v) {
  */
 export function ahCreate(gl, spec, env) {
   const unsupported = ahUnsupported(gl);
-  const groups = spec.groups || [], deposits = spec.deposits || [], trails = spec.trails || [], draws = spec.draws || [];
+  // Draw agents' Splats look and an Emit's splat scan are the app's only (docs/splat-scene.md "Agents as splats"):
+  // a page draws splats as points, and its scans read empty (no walker is born from one).
+  const groups = spec.groups || [], deposits = spec.deposits || [], trails = spec.trails || [], draws = (spec.draws || []).map(d => (d.style === 'splats' ? { ...d, style: 'points' } : d));
   // Every sampler the agents fill starts blank (the app's empty texture), every `_px` at one pixel.
   for (const g of groups) for (const k of ['A', 'B', 'C', 'D', 'E']) if (g.u[k]) env.textures.set(g.u[k], null);
   for (const t of trails) { env.textures.set(t.u.tex, null); env.vec2s.set(t.u.tex + '_px', [1, 1]); if (t.stepShader) env.textures.set(t.u.src, null); }
@@ -77,6 +79,8 @@ export function ahCreate(gl, spec, env) {
   for (const d of draws) if (d.probe) vec4s.set(d.probe.uniform, [0, 0, 0, 0]);
   for (const g of groups) for (const gr of g.grids || []) { env.textures.set(gr.u.grid, null); vec4s.set(gr.u.at, [0, 0, 0, 2]); }
   for (const d of draws) { env.textures.set(d.u.tex, null); env.vec2s.set(d.u.tex + '_px', [1, 1]); }
+  for (const d of spec.draws || []) if (d.style === 'splats') env.textures.set(d.u.tex + '_dist', null);
+  for (const g of groups) for (const sc of g.scans || []) env.textures.set('u_agScan_' + sc.slug, null);
   // Neighbours: a group's grid (its two slot atlases and the count per cell) and its layout uniform.
   for (const g of groups) if (g.neighbours && g.u.nb) { for (const k of ['a', 'b', 'n']) env.textures.set(g.u.nb[k], null); vec4s.set(g.u.nb.g, [1, 1, 1, 1]); }
   if (unsupported) {

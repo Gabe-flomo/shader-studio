@@ -21,6 +21,7 @@ import { SHAPE_BY_KIND, shapeDims } from '../sceneBuilder/spec';
 // The dialects' words register themselves on import.
 import './dialects/grid';
 import './dialects/agents';
+import { MUTED_HELP, MUTED_WORD } from '../builders/mute';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -126,9 +127,10 @@ const MORE: Record<string, string> = {
   'scene:ao': 'Ambient occlusion darkens creases and corners where light hardly reaches. The step is how far it looks; off turns it off.',
   'scene:fog': 'Far things fade into fog. 0.1 is a light haze, 0.5 thick. color sets the fog\'s colour.',
   'scene:background': 'What is behind the shapes: one colour, or top= and bottom= for a gradient from the top of the picture to the bottom.',
+  'scene:depth-picture': 'A photo the objects stand in: they pass behind and in front of what is in it, by its depth (worked out on this device). how=composite puts them in it (Depth Composite), lit adds the scene\'s light and shadows on the picture (Depth Light), reflect also mirrors the picture in the objects (Picture Environment). near= and far= say where its nearest and farthest things are, in scene units; soft= softens the edges. Surface and GI lit modes.',
   'scene:tone': 'Tone mapping squeezes bright light into what the screen can show. aces is filmic, agx soft and neutral; none leaves the values as they are.',
   'scene:quality': 'How carefully the rays march. steps: more is slower but finds thin parts; dist: how far they go; step: a scale on every step (lower for warped shapes, or auto to work it out); jitter breaks up banding; warp: a safety level for warps (off, auto, careful, high).',
-  'scene:camera': 'The orbit camera looks at the middle of the scene. dist is how far away it stands, angle where round it stands and elev how high (degrees), orbit turns it slowly (degrees a second), zoom is the lens, flatten 0 perspective … 1 isometric, and x, y, z move the point it looks at.',
+  'scene:camera': 'The orbit camera looks at the middle of the scene. dist is how far away it stands, angle where round it stands and elev how high (degrees), orbit turns it slowly (degrees a second), zoom is the lens, flatten 0 perspective … 1 isometric, and x, y, z move the point it looks at. The projection is a word: perspective (far things smaller), orthographic (parallel rays, no change of size with distance) or reverse (far things bigger, like a Byzantine icon; reverse= is its strength 0 … 1, converge= where the rays meet).',
   'scene:texture': 'A picture the scene reads, by name: texture pond, then texture=pond on a shape (its surface, read in the shape\'s own space so it moves and repeats with it) or background picture=pond. Picking a picture in the builder writes its node= and aspect=; one typed without a node gets an empty Texture node on Build, ready for a picture.',
   'scene:output': 'What the picture shows: the lit picture (the default), or one of the march\'s measurements for checking and colouring (depth, normal, hit, steps…), as grey or through a palette.',
   'scene:colour-by': 'Colours the scene by a measurement (depth, height, distance…) through a palette instead of lighting it: colour by depth palette=sunset.',
@@ -389,10 +391,18 @@ function paramOfEntry(e: HelpEntry, key: string): HelpParam | undefined {
 }
 
 /** The help for the word at `offset` of a line in dialect `d`: a head, a setting or a value. */
+/** The `muted` flag, the same in every dialect. */
+export const MUTED_ENTRY: HelpEntry = {
+  id: 'muted', word: MUTED_WORD, aliases: [], section: 'settings', title: MUTED_HELP.title, summary: MUTED_HELP.summary,
+  more: MUTED_HELP.more, params: [], flags: [], example: MUTED_HELP.example, signature: `<clause> ${MUTED_WORD}`,
+};
+
 export function helpAt(d: Dialect, text: string, offset: number): HelpAt | null {
   const span = wordAt(text, offset);
   if (!span) return null;
   const word = text.slice(span.from, span.to);
+  // `muted` on any clause (builders/mute.ts): the clause is switched off for now.
+  if (word.toLowerCase() === MUTED_WORD) return { ...span, word, kind: 'entry', entry: MUTED_ENTRY, alternatives: [] };
   const after = text.slice(span.to).match(/^\s*(\S)?/)?.[1];
   const beforeM = /([A-Za-z][\w-]*)\s*([*+]?=)\s*$/.exec(text.slice(0, span.from));
   const headWord = headBefore(text, span.from);

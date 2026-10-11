@@ -66,6 +66,8 @@ export interface GridSpec {
   glow: boolean;
   /** A picture the shapes carry (a name in the scene's textures), and how. Absent: none. */
   pic?: GridPicture | null;
+  /** Switched off for now (builders/mute.ts): bypassed by a live uniform, settings kept. */
+  muted?: boolean;
 }
 
 export const GRID_LABELS = {

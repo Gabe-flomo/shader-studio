@@ -16,6 +16,7 @@
 
 import type { OutputSpec } from './output';
 import type { TexSource } from '../builders/textures';
+import type { DepthBakeInfo } from '../nodes/definitions/depth';
 
 export type Vec3 = [number, number, number];
 
@@ -103,6 +104,17 @@ export const SHAPES: ShapeDef[] = [
     params: [P('freq', 'Frequency', 'frequency', 3.5, 0.1, 10), P('t', 'Thickness', 'thickness', 0.3, 0.001, 0.5, 0.005), P('ball', 'Ball radius', '', 1.1, 0, 5, 0.01, { hint: 'The ball the lattice is cut to. 0 fills all of space.' })] },
   { kind: 'schwarz-p', label: 'Schwarz-P', aliases: ['schwarz'], type: 'schwarzPField', posKey: 'pos', distKey: 'surface', field: true, stepHint: 0.6, blurb: 'A lattice of round chambers, cut to a ball.',
     params: [P('freq', 'Frequency', 'frequency', 3.5, 0.1, 10), P('t', 'Thickness', 'thickness', 0.3, 0.001, 0.5, 0.005), P('ball', 'Ball radius', '', 1.1, 0, 5, 0.01)] },
+  // A picture rebuilt from balls (docs/pieces.md): give it a picture (texture=) and each ball takes its colour and lift from it.
+  { kind: 'picture-balls', label: 'Picture balls', aliases: ['ball-action', 'pieces-3d'], type: 'pieceBalls', posKey: 'pos', distKey: 'dist', stepHint: 0.9,
+    blurb: 'A picture rebuilt from balls (CC Ball Action): each ball takes the picture\'s colour at its home and comes forward by its brightness. Give it a picture.',
+    params: [
+      P('width', 'Width', 'width', 3, 0.2, 20, 0.01, { hint: 'How wide the picture is.' }),
+      P('across', 'Balls across', 'count', 41, 3, 151, 1),
+      P('lift', 'Lift', 'lift', 0.4, -3, 3, 0.01, { hint: 'How far the brightest balls come forward (along z).' }),
+      P('ball', 'Ball size', 'size', 0.9, 0.1, 1.2, 0.01, { hint: '1 touches the neighbours.' }),
+      P('wave', 'Wave', 'wave', 0, -1, 1, 0.01, { hint: 'A ring wave rolling out from the middle.' }),
+      P('jitter', 'Jitter', 'jitter', 0, 0, 2, 0.01, { hint: 'A random push forward or back per ball.' }),
+    ] },
   // 4D shapes (docs/4d.md): sliced into the scene. W moves the slice; Spin turns the shape in the xw plane, so the slice morphs.
   { kind: 'hypersphere', label: 'Hypersphere', aliases: ['4d-ball', '4d-sphere'], type: 'hypersphereSDF', posKey: 'p4', distKey: 'dist', fourD: { slice: 'face' }, blurb: 'A 4D ball: its slice is a ball that grows and shrinks as W moves.',
     params: [P('r', 'Radius', 'radius', 0.6, 0.01, 5), P('w', 'Slice (w)', '', 0, -2, 2, 0.01, { hint: 'Where the 3D slice cuts the 4D shape.' }), P('spin', 'Spin', '', 0, -90, 90, 0.5, { hint: 'Degrees a second it turns in the xw plane.' })] },
@@ -248,6 +260,8 @@ export interface WarpSpec {
   values: Record<string, number | Vec3 | string>;
   /** kind === 'custom': what the recogniser could not read. */
   label?: string;
+  /** Switched off for now (builders/mute.ts): its node passes what came in, by a live uniform; settings kept. */
+  muted?: boolean;
 }
 
 export interface ShapeSpec {
@@ -271,6 +285,8 @@ export interface ShapeSpec {
   warps: WarpSpec[];
   /** kind === 'custom': what the recogniser could not read. */
   label?: string;
+  /** Switched off for now (builders/mute.ts): its distance is far away, by a live uniform, so it draws nothing; settings kept. */
+  muted?: boolean;
 }
 
 export type CombineOp = 'union' | 'subtract' | 'intersect';
@@ -284,6 +300,8 @@ export interface GroupSpec {
   k: number;
   children: SceneItem[];
   warps: WarpSpec[];
+  /** Switched off for now (builders/mute.ts): everything in it draws nothing, by a live uniform. Not on the root. */
+  muted?: boolean;
 }
 
 export type SceneItem = ShapeSpec | GroupSpec;
@@ -351,12 +369,37 @@ export interface LookSpec {
   glow: { density: number; falloff: number; shell: number; exposure: number; tint: Vec3 };
   glass: { ior: number; dispersion: number; tint: Vec3 };
   gi: { strength: number; metal: number; rough: number; spec: number };
+  /** Lights and effects switched off for now (builders/mute.ts): bypassed by a live uniform, settings kept. */
+  mute?: Partial<Record<LookMute3D, boolean>>;
 }
 
-/** The unified orbit camera: Distance, Angle, Elevation, Orbit speed, Zoom, Flatten, Translate X / Y / Z (angles in degrees). */
+/**
+ * The look's parts that can be muted: soft shadows and AO (their shade is 1, fully lit), the
+ * highlight (shine), fog and the tone map (the colour passes through).
+ */
+export const LOOK_MUTES_3D = ['shadows', 'ao', 'shine', 'fog', 'tone'] as const;
+export type LookMute3D = typeof LOOK_MUTES_3D[number];
+
+/** How the camera's rays leave it (March Camera's Perspective). */
+export type CameraProjection = 'perspective' | 'orthographic' | 'reverse';
+export const CAMERA_PROJECTIONS: readonly CameraProjection[] = ['perspective', 'orthographic', 'reverse'];
+/** Reverse perspective's defaults: how strongly the rays converge, and how far in front they meet. */
+export const REVERSE_DEFAULTS = { reverse: 1, converge: 8 } as const;
+
+/**
+ * The unified orbit camera: Distance, Angle, Elevation, Orbit speed, Zoom, Flatten, Translate X / Y / Z
+ * (angles in degrees), and its projection: perspective (absent; Flatten blends it toward
+ * orthographic), orthographic (parallel rays) or reverse (far things bigger; `reverse` is the
+ * strength, `converge` where the rays meet).
+ */
 export interface CameraSpec {
   dist: number; angle: number; elev: number; orbit: number; zoom: number; flatten: number; x: number; y: number; z: number;
+  projection?: CameraProjection;
+  reverse?: number;
+  converge?: number;
 }
+/** The camera's number settings (each a slider, and a March Camera param). */
+export type CameraNumKey = Exclude<keyof CameraSpec, 'projection'>;
 
 export interface QualitySpec {
   steps: number;
@@ -377,7 +420,34 @@ export interface SceneSpec {
   output?: OutputSpec;
   /** The pictures the scene reads (builders/textures.ts): shapes' surfaces and the background. */
   textures?: TexSource[];
+  /** A picture with depth the scene stands in (docs/depth-node.md "Depth in 3D scenes"), or none. */
+  depth?: DepthPic3D | null;
 }
+
+/**
+ * A picture with depth in a 3D scene: the objects go behind and in front of what is in the picture (Depth Composite),
+ * lit by the scene (+ Depth Light: its glowing shapes light the picture, its objects shadow it), and reflected
+ * (+ Picture Environment: the objects mirror the picture and take its colour).
+ */
+export type DepthPic3DHow = 'composite' | 'lit' | 'reflect';
+export const DEPTH_PIC_3D_HOWS: Array<{ how: DepthPic3DHow; label: string; blurb: string }> = [
+  { how: 'composite', label: 'In the picture', blurb: 'The objects go behind and in front of what is in the picture (Depth Composite): the nearer one shows at each pixel.' },
+  { how: 'lit', label: '…lit by the scene', blurb: 'The same, and the scene\'s glowing shapes light the picture while its objects cast soft shadows on it (Depth Light).' },
+  { how: 'reflect', label: '…lit, and reflected', blurb: 'Lit as above, and the objects mirror the picture and take its colour (Picture Environment): a chrome sphere shows the room.' },
+];
+export interface DepthPic3D {
+  /** The picture's name in the scene's textures. */
+  tex: string;
+  how: DepthPic3DHow;
+  /** Where, in scene units, the picture's nearest and farthest things are (Depth Composite's calibration). */
+  near: number;
+  far: number;
+  /** Edge softness, in scene units. */
+  soft: number;
+  /** The depth Generate depth baked (an image in the library); absent: the Depth node works it out live. */
+  bake?: DepthBakeInfo | null;
+}
+export const newDepthPic3D = (tex: string, over: Partial<DepthPic3D> = {}): DepthPic3D => ({ tex, how: 'composite', near: 1.5, far: 8, soft: 0.08, bake: null, ...over });
 
 // ── Defaults ────────────────────────────────────────────────────────────────
 
@@ -456,6 +526,20 @@ export function starterSpec(): SceneSpec {
 export function walkItems(item: SceneItem, visit: (it: SceneItem, parent: GroupSpec | null, depth: number) => void, parent: GroupSpec | null = null, depth = 0): void {
   visit(item, parent, depth);
   if (item.type === 'group') for (const c of item.children) walkItems(c, visit, item, depth + 1);
+}
+
+/**
+ * The shapes that are muted, by themselves or by a group round them (builders/mute.ts): the root
+ * can't be muted. Materials leaves them out, so a muted shape never wins a colour.
+ */
+export function mutedShapes(spec: SceneSpec): Set<string> {
+  const out = new Set<string>();
+  const go = (it: SceneItem, under: boolean) => {
+    const m = under || (it.id !== spec.root.id && !!it.muted);
+    if (it.type === 'shape') { if (m) out.add(it.id); } else for (const c of it.children) go(c, m);
+  };
+  go(spec.root, false);
+  return out;
 }
 
 export function allShapes(spec: SceneSpec): ShapeSpec[] {
@@ -556,6 +640,8 @@ export function canonicalSpec(spec: SceneSpec): SceneSpec {
   if (out.look.fogColor && out.look.fogColor.every((v, i) => v === out.look.bg[i])) out.look.fogColor = null;
   if (!out.textures?.length) delete out.textures;
   if (!out.look.bgTex) delete out.look.bgTex;
+  if (!out.depth) delete out.depth;
+  else delete out.depth.bake;
   let s = 0, g = 0, w = 0;
   walkItems(out.root, it => {
     it.id = it.type === 'group' ? `g${++g}` : `s${++s}`;
@@ -570,6 +656,7 @@ export function texturesUsed3D(spec: SceneSpec): string[] {
   const out: string[] = [];
   walkItems(spec.root, it => { if (it.type === 'shape' && it.tex) out.push(it.tex.tex); });
   if (spec.look.bgTex) out.push(spec.look.bgTex);
+  if (spec.depth) out.push(spec.depth.tex);
   return [...new Set(out)];
 }
 

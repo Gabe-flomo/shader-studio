@@ -15,8 +15,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { radius } from '../../theme/tokens';
-import { useGridBuilder } from '../../gridScene/store';
-import { eraseCell, motionAt, placeCell, shapeOf, sourceCell } from '../../gridScene/spec';
+import { parsePicking, useGridBuilder } from '../../gridScene/store';
+import { eraseCell, motionAt, placeCell, ruleClauses, shapeOf, sourceCell } from '../../gridScene/spec';
 import { textStampGridCells } from '../../gridScene/textMask';
 import { paintGrid, rgb } from './glyphs';
 
@@ -62,9 +62,7 @@ export function MiniGrid({ size = 288 }: { size?: number }) {
     // What the rules point at.
     ctx.strokeStyle = tk.accent.base;
     ctx.lineWidth = 2;
-    for (const r of spec.rules) {
-      if (!r.on) continue;
-      const w = r.when;
+    for (const w of spec.rules.filter(r => r.on).flatMap(r => ruleClauses(r).map(c => c.when))) {
       if (w.kind === 'cell') ctx.strokeRect(x0 + (w.x ?? 0) * cell + 1.5, y0 + (w.y ?? 0) * cell + 1.5, cell - 3, cell - 3);
       else if (w.kind === 'column') ctx.strokeRect(x0 + (w.x ?? 0) * cell + 1.5, y0 + 1.5, cell - 3, spec.rows * cell - 3);
       else if (w.kind === 'row') ctx.strokeRect(x0 + 1.5, y0 + (w.y ?? 0) * cell + 1.5, spec.cols * cell - 3, cell - 3);
@@ -102,8 +100,12 @@ export function MiniGrid({ size = 288 }: { size?: number }) {
   };
   const pick = (at: [number, number]) => {
     const gb = useGridBuilder.getState();
-    const id = gb.picking;
-    gb.edit(d => { const r = d.rules.find(x => x.id === id); if (r) { r.when.x = at[0]; r.when.y = at[1]; } });
+    const { ruleId, k } = parsePicking(gb.picking ?? '');
+    gb.edit(d => {
+      const r = d.rules.find(x => x.id === ruleId);
+      const w = r ? (k ? r.also?.[k - 1]?.when : r.when) : undefined;
+      if (w) { w.x = at[0]; w.y = at[1]; }
+    });
     gb.setPicking(null);
   };
 

@@ -106,6 +106,7 @@ import { useFoldState } from './foldState';
 import { RandomizeMenu } from './RandomizeMenu';
 import { timeReadoutRef } from '../../lib/timeTick';
 import type { NodeError } from '../../compiler/nodeErrors';
+import { MUTE_PARAM, nodeMuted } from '../../builders/mute';
 import { isKeyframeBypassed, socketHasKeyframes, socketHasVectorKeyframes, VECTOR_AXES } from '../../compiler/keyframes';
 import { loadImageTextureFromFile } from '../../lib/loadImageTexture';
 import { NumberInput } from './NumberInput';
@@ -117,6 +118,7 @@ import { nodeCategory } from '../../nodes/nodeCategory';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Button, IconButton } from '../ui/Button';
 import { Icon } from '../ui/Icon';
+import { nestedSectionStyle } from '../ui/nesting';
 import { RulerSlider } from '../ui/RulerSlider';
 import { Select } from '../ui/Select';
 import { Toggle } from '../ui/Choice';
@@ -141,6 +143,7 @@ import { TimeCubeCardBody } from '../timeCube/TimeCubeCardBody';
 import { DepthCardBody } from '../depth/DepthCardBody';
 import { DepthLightCardBody } from '../depth/DepthLightCardBody';
 import { SplatSceneCardBody } from '../splats/SplatSceneCardBody';
+import { EmitScanCardBody } from '../splats/EmitScanCardBody';
 import { TimeCubeViewKeyInfo } from '../timeCube/TimeCubeViewKeyInfo';
 import { toggleNodeCard } from '../explain/functionCard/fnCardStore';
 import { bakedSourceName } from '../../nodes/definitions/baked';
@@ -636,7 +639,9 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   const def = getNodeDefinitionFor(node);
   // The inputs the card shows (Input names… names these).
   const inputNameKeys = Object.keys(node.inputs).filter(k => !def || Object.keys(def.inputs).length === 0 || k in def.inputs);
-  const isBypassed = !!node.bypassed;
+  // A builder mute (builders/mute.ts) is a bypass too: the node passes its input through, by a uniform.
+  const builderMuted = nodeMuted(node);
+  const isBypassed = !!node.bypassed || builderMuted;
   const assignOp = node.assignOp ?? '=';
   const assignable = isAssignable(node);
   const legacyOp = legacyAssignOp(node);
@@ -2685,7 +2690,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
     if (!pd.section) return render();
     const keys = sectionKeys.get(pd.section) ?? [];
     const folded = sectionFolded(pd.section);
-    if (keys[0] !== key) return folded ? null : render();
+    if (keys[0] !== key) return folded ? null : def?.sectionNeeds?.(pd.section, node) ? sectionDimmed(render()) : render();
     // Counts only what opening the section shows (showWhen respected); see lib/sectionSummary.
     const summary = summarizeSection(keys, paramDefs, node.params, def?.defaultParams);
     if (summary.controls === 0) return null;
@@ -2694,6 +2699,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
     // A node can say what a folded section holds in its own words (Transform's "Rotate 30°").
     const summaryText = (folded && def?.sectionSummary?.(name, { ...(def.defaultParams ?? {}), ...node.params })) || summary.text;
     const pinned = name === def?.pinnedSection;
+    const needs = def?.sectionNeeds?.(name, node) || null;
     return (
       <React.Fragment key={`sec:${name}`}>
         <button
@@ -2710,17 +2716,24 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             : `Click to ${folded ? 'show' : 'fold'} ${name.toLowerCase()} settings (they keep working while folded)`}
         >
           {!pinned && <Icon name={folded ? 'chevR' : 'chevD'} size={13} style={{ color: tk.text.faint, flexShrink: 0 }} />}
-          <span>{name}</span>
+          <span style={needs ? { color: tk.text.faint } : undefined}>{name}</span>
           {folded && (
             <span style={{ marginLeft: 'auto', font: `500 11px ${fontFamily.ui}`, color: tk.text.muted }}>
-              {summaryText}
+              {needs ? 'not in use' : summaryText}
             </span>
           )}
         </button>
-        {folded ? null : render()}
+        {!folded && needs && (
+          <div data-section-needs={name} style={{ padding: '0 12px 4px 29px', font: `500 11.5px ${fontFamily.ui}`, color: tk.text.muted, lineHeight: 1.4 }}>{needs}</div>
+        )}
+        {folded ? null : needs ? sectionDimmed(render()) : render()}
       </React.Fragment>
     );
   };
+  // A section that can't act as the node is wired (NodeDefinition.sectionNeeds): its controls shown dimmed and inert.
+  const sectionDimmed = (body: React.ReactNode) => (
+    <div data-section-disabled aria-disabled="true" style={{ opacity: 0.45, pointerEvents: 'none' }}>{body}</div>
+  );
   // Hairline between the sockets, params and outputs sections
   const sectionRule = <div aria-hidden style={{ height: 1, background: tk.border.subtle, margin: '6px 0' }} />;
 
@@ -2978,7 +2991,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         )}
         {node.type === 'transform' && <TransformDimChip node={node} />}
         {def.deprecated && <CardBadge tone="muted">DEPRECATED</CardBadge>}
-        {isBypassed && <CardBadge>BYPASS</CardBadge>}
+        {isBypassed && <CardBadge>{builderMuted && !node.bypassed ? 'MUTED' : 'BYPASS'}</CardBadge>}
         {/* From the GLSL → nodes converter: code it kept as code, or a node that isn't quite the GLSL it stands for */}
         {!!node.params.__importedCode && <span title="From imported GLSL: the converter kept this part as code. Open it to keep refactoring by hand."><CardBadge tone="muted">FROM CODE</CardBadge></span>}
         {typeof node.params.__importWarning === 'string' && <span title={`From imported GLSL, not quite the same: ${node.params.__importWarning}`}><CardBadge>≈</CardBadge></span>}
@@ -3082,8 +3095,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           )}
           {!['output', 'vec4Output', 'uv', 'pixelUV', 'time', 'mouse', 'constant'].includes(node.type) && (
             <CardButton icon="bypass" tint="warning" on={isBypassed}
-              label={isBypassed ? 'Turn the node back on' : 'Bypass: pass the input straight through'}
-              onClick={() => toggleBypass(node.id)} />
+              label={builderMuted && !node.bypassed ? 'Muted in its builder: turn it back on' : isBypassed ? 'Turn the node back on' : 'Bypass: pass the input straight through'}
+              onClick={() => (builderMuted && !node.bypassed ? updateNodeParams(node.id, { [MUTE_PARAM]: 0 }, { immediate: true }) : toggleBypass(node.id))} />
           )}
           {!node.params._groupOriginal && (
             <CardButton icon="close" tone="danger" label="Remove node" onClick={() => removeNode(node.id)} />
@@ -3811,16 +3824,25 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             const max = paramDef.max ?? 1;
             // Per-component socket keys follow the pattern `{key}_r`, `{key}_g`, `{key}_b`
             const compKeys = [`${key}_r`, `${key}_g`, `${key}_b`];
-            const compLabels = ['r', 'g', 'b'];
+            // A position, turn or size reads X / Y / Z; per-channel colour maths (a palette's) r / g / b.
+            const compLabels = paramDef.axes === 'xyz' ? ['X', 'Y', 'Z'] : ['r', 'g', 'b'];
             const compColors = [tc.red, tc.green, tc.blue];
             const defVal = def?.defaultParams?.[key];
             // Each vec3 section folds on its own to a one-line summary (see foldState.ts)
             const foldId = `${node.id}:${key}`;
             const isFolded = !!foldedSections[foldId];
+            // Inside a card section (Splat Scene's Place › Position) it is a sub-section: stepped in under the
+            // section's header with a guide line (components/ui/nesting.ts, the app's one rule for nesting).
+            const nested = !!paramDef.section;
             return (
               <div
                 key={key}
-                style={{ padding: '6px 12px 6px 16px', display: 'flex', flexDirection: 'column', gap: 2 }}
+                data-param-key={key}
+                data-nested-section={nested ? 'true' : undefined}
+                style={{
+                  padding: nested ? '6px 12px 6px 8px' : '6px 12px 6px 16px', display: 'flex', flexDirection: 'column', gap: 2,
+                  ...(nested ? nestedSectionStyle(tk.border.subtle, 6) : {}),
+                }}
                 onMouseDown={e => e.stopPropagation()}
               >
                 <button
@@ -3848,7 +3870,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                   const conn = node.inputs[compKeys[idx]]?.connection;
                   return (
                     <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 32 }}>
-                      <span style={{ width: 10, flexShrink: 0, textAlign: 'center', font: `600 11px ${fontFamily.mono}`, color: compColors[idx] }}>{compLabels[idx]}</span>
+                      <span data-axis-label style={{ width: 10, flexShrink: 0, textAlign: 'center', font: `600 11px ${fontFamily.mono}`, color: compColors[idx] }}>{compLabels[idx]}</span>
                       {conn
                         ? <WiredChip source={conn} expr={getSourceExpr(shaderLines, nodeOutputVarMap, conn.nodeId, conn.outputKey)} />
                         : (
@@ -3889,6 +3911,16 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
 
           if (paramDef.type === 'vec3color') {
             const vals = toRgb(node.params[key]);
+            // Its socket wired (an Edge colour from a Color or a palette): the wire's chip in place of the swatch.
+            const colorWire = node.inputs[key]?.connection;
+            if (colorWire) {
+              return (
+                <div key={key} data-param-key={key} style={rowStyle} onMouseDown={e => e.stopPropagation()}>
+                  <ParamLabel muted title={paramDef.hint} help={paramDef.help}>{paramDef.label}</ParamLabel>
+                  <WiredChip source={colorWire} expr={getSourceExpr(shaderLines, nodeOutputVarMap, colorWire.nodeId, colorWire.outputKey)} />
+                </div>
+              );
+            }
             return (
               <div key={key} data-param-key={key} style={rowStyle} onMouseDown={e => e.stopPropagation()}>
                 <ParamLabel title={paramDef.hint} help={paramDef.help}>{paramDef.label}</ParamLabel>
@@ -3929,6 +3961,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         {!collapsed && node.type === 'depth' && <DepthCardBody node={node} touch={isTouchDevice} />}
         {!collapsed && node.type === 'depthLight' && <DepthLightCardBody node={node} touch={isTouchDevice} />}
         {!collapsed && node.type === 'splatScene' && <SplatSceneCardBody node={node} />}
+        {!collapsed && node.type === 'agentEmit' && node.params.shape === 'splats' && <EmitScanCardBody node={node} />}
         {!collapsed && node.type === 'timeCubeView' && <TimeCubeViewKeyInfo node={node} touch={isTouchDevice} />}
 
         {/* ── CustomFn / ExprNode slider params (hidden when collapsed) ── */}

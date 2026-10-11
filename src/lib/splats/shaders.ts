@@ -98,7 +98,6 @@ void main() {
   if (z < 0.05) { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); return; }
   vec2 uv = vec2(fx * x, fy * y) / z;
   vec2 ndc = vec2(uv.x * u_view.y / u_view.x, uv.y);
-  if (abs(ndc.x) > 1.3 || abs(ndc.y) > 1.3) { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); return; }
 
   vec2 u1 = unpackHalf2x16(b.x), u2 = unpackHalf2x16(b.y), u3 = unpackHalf2x16(b.z);
   mat3 S = mat3(u1.x, u1.y, u2.x, u1.y, u2.y, u3.x, u2.x, u3.x, u3.y) * (0.25 * sizeMul * sizeMul * sMul * sMul);
@@ -115,6 +114,10 @@ void main() {
   vec2 minor = min(sqrt(2.0 * l2), 1024.0) * vec2(dv.y, -dv.x);
   // A crisp dot (Splat Points): a round quad dotPx in radius (the fragment's edge is at |vPos| = 2).
   if (dotPx > 0.0) { major = vec2(0.5 * dotPx, 0.0); minor = vec2(0.0, 0.5 * dotPx); }
+  // Off the picture only when the whole quad is (math.ts splatOffscreen): a big splat whose centre is outside still
+  // shows its edge, so a turning or close-up scan isn't cut off at the picture's sides.
+  vec2 reach = 4.0 * (abs(major) + abs(minor)) / u_view;
+  if (any(greaterThan(abs(ndc) - reach, vec2(1.0)))) { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); return; }
 
   if (u_shDeg > 0) {
     // The view direction in the scan's own space (M may scale and flip).

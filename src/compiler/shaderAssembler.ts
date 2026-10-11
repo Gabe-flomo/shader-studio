@@ -24,6 +24,7 @@ function sliderUniformVars(node: GraphNode, patched: GraphNode, vars: Record<str
   return out;
 }
 import { computeNodeSlug } from './nodeSlug';
+import { muteGate } from './muteGate';
 import { midiOutputKeys, midiUniformName, liveChannelKey } from '../lib/midiOutputs';
 import { audioUniformName } from './audioUniformNames';
 import { coerce, coerceLossy } from '../lib/typesCompatible';
@@ -1953,7 +1954,8 @@ export class ShaderAssembler {
           const sgExternalVarMap = new Map<string, string>(); // GLSL var name → GLSL type
           for (const port of (subgraph.inputPorts ?? [])) {
             const outerVar = inputVars[port.key];
-            if (outerVar && isGlslVarRef(outerVar)) sgExternalVarMap.set(outerVar, port.type);
+            // A texture port carries a sampler's name: samplers are global uniforms, so the scene function reads it directly.
+            if (outerVar && isGlslVarRef(outerVar) && port.type !== 'texture') sgExternalVarMap.set(outerVar, port.type);
           }
           for (const subNode of subgraph.nodes) {
             const snDefScan = getNodeDefinitionFor(subNode);
@@ -2086,6 +2088,7 @@ export class ShaderAssembler {
                 }
                 const gnResult = gDef.generateGLSL(this.patchBodyNode(gn, gDef, origIdBySlug(grpSlugMap, gnOrigId)), gnInputVars);
                 sceneFnLines.push(gnResult.code);
+                gnResult.outputVars = this.gated(gn, gDef, gn.id, origIdBySlug(grpSlugMap, gnOrigId), gnInputVars, gnResult.outputVars, c => sceneFnLines.push(c));
                 this.nodeOutputs.set(gn.id, gnResult.outputVars);
                 { const dv = sceneDistanceVar(gDef, gn, gnResult.outputVars); if (dv) sgLastFloatVar = dv; }
               }
@@ -2138,6 +2141,7 @@ export class ShaderAssembler {
             const patchedSn = this.patchBodyNode(effectiveSn, snDef, origIdBySlug(sgSubSlugMap, origId));
             const snResult = snDef.generateGLSL(patchedSn, snInputVars);
             sceneFnLines.push(snResult.code);
+            snResult.outputVars = this.gated(sn, snDef, sn.id, origIdBySlug(sgSubSlugMap, origId), snInputVars, snResult.outputVars, c => sceneFnLines.push(c));
             this.nodeOutputs.set(sn.id, snResult.outputVars);
             sgRec.set(sn.id, { inputs: snInputVars, params: patchedSn.params, code: snResult.code });
 
@@ -4331,10 +4335,23 @@ export class ShaderAssembler {
             this.nodeOutputs.set(node.id, accVars);
           } else {
             this.mainCode.push(result.code);
-            this.nodeOutputs.set(node.id, result.outputVars);
+            this.nodeOutputs.set(node.id, this.gated(node, def, nodeSlug, bindId, inputVars, result.outputVars, c => this.mainCode.push(c)));
           }
         }
 
+  }
+
+  /**
+   * A builder mute (compiler/muteGate.ts): the node's outputs mixed toward what comes in by a
+   * uniform, so muting sets a number instead of recompiling. Unchanged without `__mute`.
+   */
+  private gated(node: GraphNode, def: NodeDefinition, slug: string, bindId: string, inputVars: Record<string, string>, outputVars: Record<string, string>, push: (code: string) => void): Record<string, string> {
+    const g = muteGate(node, def, slug, inputVars, outputVars, (k, t) => getNodeOutputType(node, k, t));
+    if (!g) return outputVars;
+    push(g.code);
+    this.paramUniforms[g.uniform] = g.value;
+    this.paramBindings[`${bindId}::__mute`] = g.uniform;
+    return g.outputVars;
   }
 
   private buildResult() {

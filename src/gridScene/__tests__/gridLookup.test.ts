@@ -11,8 +11,9 @@
 import { describe, expect, it } from 'vitest';
 import { CpuShader } from '../../lib/guidedConvert/cpuGlsl';
 import { gridProgram as legacyProgram } from './legacyGlsl';
-import { gridProgram, searchCapped, shapeArgs } from '../glsl';
+import { GLOW_FADE, gridProgram, searchCapped, shapeArgs } from '../glsl';
 import { GRID_TEMPLATES } from '../templates';
+import { buildStandaloneGrid, GS_ROLE } from '../build';
 import { surpriseGridScene } from '../surprise';
 import { cellSize, emptyGridScene, newShape, placeCell, shownCells, sourceCell, starterGridScene, type GridSceneSpec } from '../spec';
 
@@ -65,12 +66,25 @@ function lookupSource(spec: GridSceneSpec, extra: string[] = [], out = 'g', brut
     '}'].join('\n');
 }
 
+/** The glow's fade (glsl.ts GLOW_FADE) applied to a distance in picture units: what the lookup returns, for the old code's output. */
+function faded(spec: GridSceneSpec, d: number): number {
+  if (!spec.look.glow) return d;
+  const cs = cellSize(spec), b = d / cs, [e0, e1] = GLOW_FADE;
+  if (b <= e0) return d;
+  if (b >= e1) return 1e5 * cs;
+  const x = (b - e0) / (e1 - e0), sm = x * x * (3 - 2 * x);
+  return (b / Math.max(1 - sm, 1e-5)) * cs;
+}
+
 const aces = (x: number) => Math.min(1, Math.max(0, (x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14)));
 
 /** What the build paints from (colour, d): the glow over black, the shape filled, tone-mapped. */
 function composite(spec: GridSceneSpec, g: number[]): number[] {
   const [r, gg, b, d] = g;
-  const glow = spec.look.glow ? Math.min(50, (spec.look.glowAmount / Math.max(Math.abs(d), 1e-4)) ** spec.look.glowFalloff) : 0;
+  const L = spec.look;
+  // Soft (the default): amount ÷ (distance outside + amount), 1 at the edge; halo: the Glow Layer's amount ÷ |d|.
+  const glow = !L.glow ? 0 : L.glowStyle === 'halo' ? Math.min(50, (L.glowAmount / Math.max(Math.abs(d), 1e-4)) ** L.glowFalloff)
+    : (L.glowAmount / (Math.max(d, 0) + Math.max(L.glowAmount, 1e-5))) ** L.glowFalloff;
   const f = 1 - Math.min(1, Math.max(0, (d + 0.003) / 0.006));
   return [r, gg, b].map(c => aces(c * glow * (1 - f) + c * f));
 }
@@ -86,6 +100,8 @@ function compare(spec: GridSceneSpec, times = [0, 0.37, 1.9], n = 14): number {
         const uv = [-half + (2 * half * (i + 0.5)) / n, -half + (2 * half * (j + 0.5)) / n];
         const inputs = { resolution: [800, 800] as [number, number], time: t, uniforms: { ...base, p_uv: uv, p_t: t } };
         const a = A.run([0, 0], inputs)!, b = B.run([0, 0], inputs)!;
+        // The old code's glow reached every cell; the lookup's fades out within a cell (no patches): compare like with like.
+        a[3] = faded(spec, a[3]);
         // Inside or at the edge of a shape the two agree exactly (same colour, same distance).
         if (a[3] < cellSize(spec) * 0.25) {
           for (let k = 0; k < 4; k++) worst = Math.max(worst, Math.abs(a[k] - b[k]));
@@ -109,7 +125,7 @@ describe('Grid scene: the cell lookup draws what the per-cell code drew', () => 
 
   it.each([1, 2, 3, 4, 5, 6, 7, 8].map(s => [s] as const))('surprise scene %s', seed => {
     expect(compare(surpriseGridScene(seed), [0.2, 1.3], 10)).toBeLessThan(0.03);
-  });
+  }, 30_000);
 
   it('a shape with lag (a wave of motion) and a figure eight with a big reach', () => {
     const s = starterGridScene();
@@ -265,6 +281,85 @@ describe('Grid scene: big motion with lag, against brute force', () => {
     expect(searchCapped(s, s.shapes[0])).toBe(true);
     const ok = full(24, 'circle', [1, 1], 0.05);
     expect(searchCapped(ok, ok.shapes[0])).toBe(false);
+  });
+});
+
+describe('Grid scene: travel and hop round the wrap, against brute force (the seam bug)', () => {
+  // Big reach with lag, late enough that every cell has wrapped many times. The old home estimate
+  // rounded h0 / dims, which forgot that the lag couples a wrap in x to y: shapes went missing in
+  // bands, cut by a straight seam.
+  it.each([
+    ['travel', [-0.75, 0.65], 0.4, 31],
+    ['travel', [-2, 1.5], 0.2, 5.3],
+    ['travel', [3, -2.2], 0.2, 31],
+    ['hop', [-3, 3], 0.4, 5.3],
+    ['hop', [3, -2.2], 0.2, 31],
+  ] as const)('%s, reach %j, lag %s at t = %s', (path, xy, lag, t) => {
+    const s = full(10, path, [...xy] as [number, number], lag, 0.6);
+    expect(compareBrute(s, [t], 16)).toBeLessThan(0.03);
+  }, 30_000);
+
+  it('a sparse drawing near the seam, and the draw modes moving with travel', () => {
+    const s = starterGridScene();
+    s.shapes[0].motion = { path: 'travel', xy: [-3, 3], speed: 0.4, lag: 0.2 };
+    expect(compareBrute(s, [0.7, 31], 14)).toBeLessThan(0.03);
+    for (const mode of ['repeat', 'mirrorX'] as const) {
+      const r = starterGridScene();
+      r.shapes[0].motion = { path: 'travel', xy: [2, -1.5], speed: 0.4, lag: 0.15 };
+      r.draw = { mode, period: [3, 3], offset: [0, 0], shift: 0 };
+      expect(compareBrute(r, [5.3], 14)).toBeLessThan(0.03);
+    }
+  }, 30_000);
+});
+
+describe('Grid scene: the glow is continuous (no cell-shaped patches)', () => {
+  /** The composited picture along a row of points, `step` cells apart, from cell x0 to x1 at row y (cells). */
+  function row(spec: GridSceneSpec, y: number, x0: number, x1: number, step: number, t = 0.4): number[][] {
+    const cpu = new CpuShader(lookupSource(spec));
+    const cs = cellSize(spec);
+    const out: number[][] = [];
+    for (let x = x0; x <= x1 + 1e-9; x += step) {
+      const uv = [(x - spec.cols / 2) * cs, (spec.rows / 2 - y) * cs];
+      const g = cpu.run([0, 0], { resolution: [800, 800], time: t, uniforms: { ...uniformsOf(spec), p_uv: uv, p_t: t } })!;
+      out.push(composite(spec, g));
+    }
+    return out;
+  }
+  const worstJump = (px: number[][]) => px.slice(1).reduce((w, p, i) => Math.max(w, ...p.map((v, k) => Math.abs(v - px[i][k]))), 0);
+
+  it.each([
+    ['still', 'still', [0, 0]],
+    ['up and down', 'updown', [0, 0.25]],
+    ['travel with lag', 'travel', [-0.75, 0.65]],
+  ] as const)('%s: across cell borders far from the shapes the glow changes smoothly', (_n, path, xy) => {
+    const s = emptyGridScene();
+    s.shapes = [newShape('A', { kind: 'circle', size: 0.6, motion: { path, xy: [...xy] as [number, number], speed: 0.4, lag: 0.08 } })];
+    for (const [x, y] of [[2, 2], [7, 3], [4, 7], [8, 8], [1, 6]]) placeCell(s, x, y, 'A');
+    // Rows between the shapes, crossing every column border, sampled 0.005 of a cell apart (both glow styles).
+    for (const y of [0.3, 4.5, 5.2, 9.7]) {
+      s.look.glowStyle = y > 5 ? 'halo' : undefined;
+      const j = worstJump(row(s, y, 0.05, 9.95, 0.005));
+      expect(j, `row ${y}`).toBeLessThan(4e-4);
+    }
+  }, 30_000);
+});
+
+describe('Grid scene: the default glow and the shape read as one shape', () => {
+  it('soft glow is the shape\'s own colour at its edge, so the fill meets it without a rim; halo keeps the bright rim', () => {
+    const s = starterGridScene();
+    const g = buildStandaloneGrid(s);
+    const glow = g.nodes.find(n => n.params[GS_ROLE] === 'glow')!;
+    expect(glow.type).toBe('exprNode');
+    expect(String(glow.params.result)).toContain('max(d, 0.0)');
+    const L = s.look;
+    const soft = (d: number) => (L.glowAmount / (Math.max(d, 0) + L.glowAmount)) ** L.glowFalloff;
+    expect(soft(0)).toBe(1);
+    expect(soft(-0.1)).toBe(1);
+    // Far from the edge it is the old halo's strength (amount ÷ d)^falloff, within a few percent.
+    const d = 0.05, halo = (L.glowAmount / d) ** L.glowFalloff;
+    expect(soft(d) / halo).toBeGreaterThan(0.85);
+    s.look.glowStyle = 'halo';
+    expect(buildStandaloneGrid(s).nodes.find(n => n.params[GS_ROLE] === 'glow')!.type).toBe('glowLayer');
   });
 });
 

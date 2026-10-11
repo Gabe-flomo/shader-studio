@@ -25,7 +25,7 @@
  * picture shot with a normal lens the two agree closely enough to judge "in front or behind".
  */
 import type { NodeDefinition } from '../../types/nodeGraph';
-import { p, pv3 } from './helpers';
+import { p, pv3, withParamSockets } from './helpers';
 
 /** GLSL: the picture's distance along the ray, in scene units, from its 0–1 nearness. */
 export const DEPTH_SCENE_GLSL = `float depthSceneDist(float nearness, float nearD, float farD) {
@@ -55,7 +55,7 @@ const calibrationParams = {
   farD: { label: 'Farthest', type: 'float' as const, min: 0.2, max: 100, step: 0.1, section: CALIBRATION, hint: 'How far the farthest thing in the picture is (nearness 0). Further spreads the picture deeper.' },
 };
 
-export const DepthCompositeNode: NodeDefinition = {
+export const DepthCompositeNode: NodeDefinition = withParamSockets({
   type: 'depthComposite',
   label: 'Depth Composite',
   aliases: ['depth mix', 'z composite', 'put behind', 'occlusion', 'objects behind people'],
@@ -106,9 +106,9 @@ export const DepthCompositeNode: NodeDefinition = {
     ];
     return { code: lines.join(''), outputVars: { color: `${id}_color`, front: `${id}_front`, pictureDist: `${id}_pd` } };
   },
-};
+}, ['nearD', 'farD', 'softness']);
 
-export const DepthLightNode: NodeDefinition = {
+export const DepthLightNode: NodeDefinition = withParamSockets({
   type: 'depthLight',
   label: 'Depth Light',
   aliases: ['relight', 'light the picture', 'glow on picture', 'picture lighting'],
@@ -135,7 +135,7 @@ export const DepthLightNode: NodeDefinition = {
   defaultParams: { nearD: 1.5, farD: 8, lightPos: [0.6, 0.4, 2.0], lightColor: [1.0, 0.35, 0.2], intensity: 2, range: 1.5, wrap: 0.2, own: 1, glowColor: [0.4, 0.7, 1.0], glowIntensity: 2, glowReach: 0.6, shadowSoftness: 12, lightRadius: 0.05 },
   paramDefs: {
     ...calibrationParams,
-    lightPos: { label: 'Light position', type: 'vec3', min: -10, max: 10, step: 0.01, hint: 'Where the light is in the scene (x right, y up, z away from a default camera).' },
+    lightPos: { label: 'Light position', type: 'vec3', axes: 'xyz', min: -10, max: 10, step: 0.01, hint: 'Where the light is in the scene (x right, y up, z away from a default camera).' },
     lightColor: { label: 'Light colour', type: 'vec3color', hint: 'The light\'s colour.' },
     intensity: { label: 'Intensity', type: 'float', min: 0, max: 20, step: 0.01, hint: 'How bright the light is.' },
     range: { label: 'Reach', type: 'float', min: 0.05, max: 20, step: 0.01, hint: 'How far it reaches: at this distance it has fallen to a quarter.' },
@@ -208,7 +208,7 @@ export const DepthLightNode: NodeDefinition = {
     return { code, outputVars: { color: `${id}_color`, light: `${id}_light`, point: `${id}_point`, normal: `${id}_n` } };
   },
   glslFunction: DEPTH_SCENE_GLSL,
-};
+}, ['nearD', 'farD', 'intensity', 'range', 'wrap', 'own']);
 
 // ── Picture Environment ──────────────────────────────────────────────────────
 

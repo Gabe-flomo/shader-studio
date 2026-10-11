@@ -1,11 +1,11 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { p } from './helpers';
+import { p, withParamSockets } from './helpers';
 
 // ─── Gaussian Field ───────────────────────────────────────────────────────────
 // Single Gaussian emission from one source: exp(-d² · k).
 // Use inside a looped group with += carry to accumulate field from multiple sources.
 
-export const GaussianFieldNode: NodeDefinition = {
+export const GaussianFieldNode: NodeDefinition = withParamSockets({
   type: 'gaussianField',
   label: 'Gaussian Field',
   category: 'Field',
@@ -37,7 +37,7 @@ export const GaussianFieldNode: NodeDefinition = {
       outputVars: { field: `${id}_field` },
     };
   },
-};
+}, ['k']);
 
 // ─── Field Accumulate ─────────────────────────────────────────────────────────
 // Self-contained neighbor loop summing Gaussian contributions from a 3×3 or 5×5 grid neighborhood.
@@ -69,7 +69,7 @@ const FIELD_ACCUMULATE_5X5 = `float fieldAccumulate5x5Fn(vec2 worldPos, vec2 cel
     return total;
 }`;
 
-export const FieldAccumulateNode: NodeDefinition = {
+export const FieldAccumulateNode: NodeDefinition = withParamSockets({
   type: 'fieldAccumulate',
   label: 'Field Accumulate',
   category: 'Field',
@@ -108,12 +108,12 @@ export const FieldAccumulateNode: NodeDefinition = {
       outputVars: { totalField: `${id}_field` },
     };
   },
-};
+}, ['k']);
 
 // ─── Metaball Threshold ───────────────────────────────────────────────────────
 // Converts summed field into a blob fill and edge ring via smoothstep.
 
-export const MetaballThresholdNode: NodeDefinition = {
+export const MetaballThresholdNode: NodeDefinition = withParamSockets({
   type: 'metaballThreshold',
   label: 'Metaball Threshold',
   category: 'Field',
@@ -149,7 +149,7 @@ export const MetaballThresholdNode: NodeDefinition = {
       outputVars: { blob: `${id}_blob`, edge: `${id}_edge` },
     };
   },
-};
+}, ['softness']);
 
 // ─── Field to Lines ───────────────────────────────────────────────────────────
 // Draws the zero-crossing of any scalar field as an anti-aliased line, using
@@ -236,7 +236,7 @@ export const FieldToLinesNode: NodeDefinition = {
 // ─── Distance Falloff ─────────────────────────────────────────────────────────
 // Converts distance to smooth falloff using one of four physically-motivated curves.
 
-export const DistanceFalloffNode: NodeDefinition = {
+export const DistanceFalloffNode: NodeDefinition = withParamSockets({
   type: 'distanceFalloff',
   label: 'Distance Falloff',
   category: 'Field',
@@ -279,7 +279,7 @@ export const DistanceFalloffNode: NodeDefinition = {
       outputVars: { falloff: `${id}_falloff` },
     };
   },
-};
+}, ['k', 'power']);
 
 // ─── Noisy Grid SDF ───────────────────────────────────────────────────────────
 // Smooth-min of noise-displaced circle SDFs over a grid neighborhood.
@@ -321,7 +321,7 @@ const NOISY_GRID_SDF_5X5 = `float noisyGridSDF5x5Fn(vec2 gpos, vec2 cid, float t
     return result;
 }`;
 
-export const NoisyGridSDFNode: NodeDefinition = {
+export const NoisyGridSDFNode: NodeDefinition = withParamSockets({
   type: 'noisyGridSDF',
   label: 'Noisy Grid SDF',
   category: 'Field',
@@ -364,4 +364,4 @@ export const NoisyGridSDFNode: NodeDefinition = {
       outputVars: { sdf: `${id}_sdf` },
     };
   },
-};
+}, ['radius', 'noiseAmt', 'speed', 'smoothK']);

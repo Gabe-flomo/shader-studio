@@ -57,7 +57,7 @@ function installWheelGestures(): void {
 
 export function RulerSlider({
   value, min, max, step = 0.01, defaultValue, onChange, integer = false, keyframed, disabled = false,
-  ariaLabel, touch = false, onType, onRange, hard = false, unit: unitProp, bipolar = false,
+  ariaLabel, touch = false, onType, onRange, hard = false, unit: unitProp, bipolar = false, trackMinWidth = 0,
 }: {
   value: number;
   min: number;
@@ -91,6 +91,11 @@ export function RulerSlider({
    * fineUnit). A function gets the range in use, which a typed value may have widened.
    */
   unit?: number | ((min: number, max: number) => number | undefined);
+  /**
+   * The least the track may shrink to (px). 0 by default: in a narrow column the number chip keeps
+   * its width and the track can vanish, so a builder's sliders ask for some track to stay grabbable.
+   */
+  trackMinWidth?: number;
   /**
    * Bipolar: on a range symmetric about zero (−N … N), zero is marked on the ruler and the stretch
    * from zero to the needle is tinted, so which way and how far reads at a glance. A node card's
@@ -238,7 +243,7 @@ export function RulerSlider({
       onDoubleClick={() => { if (!locked && defaultValue !== undefined) onChange(defaultValue); }}
       onKeyDown={onKeyDown}
       style={{
-        position: 'relative', flex: 1, minWidth: 0, height: h, borderRadius: h / 2, overflow: 'hidden', outline: 'none',
+        position: 'relative', flex: 1, minWidth: trackMinWidth, height: h, borderRadius: h / 2, overflow: 'hidden', outline: 'none',
         background: tk.bg.field, touchAction: 'none', cursor: locked ? 'not-allowed' : 'ew-resize',
         opacity: locked ? 0.45 : 1,
         backgroundImage: keyframed

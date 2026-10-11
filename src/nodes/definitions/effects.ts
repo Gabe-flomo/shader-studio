@@ -1,5 +1,5 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { f, p, pv3, zeroFor } from './helpers';
+import { f, p, pv3, zeroFor, withParamSockets } from './helpers';
 import { PALETTE_GLSL_FN } from './color';
 import { MARCH_STEP_REF_KEY, stepWeightGlsl } from '../../compiler/marchJitter';
 // Shared with the Play page's Finish stack (play/kit/finish.js), so both tone-map and mask the same way.
@@ -30,7 +30,7 @@ export const AbsNode: NodeDefinition = {
   },
 };
 
-export const ToneMapNode: NodeDefinition = {
+export const ToneMapNode: NodeDefinition = withParamSockets({
   type: 'toneMap',
   label: 'Tone Map',
   category: 'Color Grading',
@@ -82,9 +82,9 @@ export const ToneMapNode: NodeDefinition = {
       outputVars: { color: outVar },
     };
   },
-};
+}, ['oklabKnee', 'oklabHighlights']);
 
-export const GrainNode: NodeDefinition = {
+export const GrainNode: NodeDefinition = withParamSockets({
   type: 'grain',
   label: 'Grain',
   category: 'Color Grading',
@@ -154,13 +154,13 @@ vec3 grainTemporal(vec3 color, vec2 uv, float amount, float scale, float time) {
       outputVars: { color: `${id}_color` },
     };
   },
-};
+}, ['amount', 'scale']);
 
 // ─── Legacy grain variants (hidden from palette, kept for backward compat) ────
 
 
 
-export const LightNode: NodeDefinition = {
+export const LightNode: NodeDefinition = withParamSockets({
   type: 'light',
   label: 'SDF Glow', aliases: ['Light', 'Make Light', 'Glow from Distance', 'ring light'],
   description: 'Turns a distance field into light. Glow is the classic exp(-falloff · d); Haze has a fatter tail; Bounded stops at a set radius; Ring adds concentric rings; Simple is 1/d. `Inner` lights the inside of the shape from the edge inward — add it to Glow for a neon tube. The `Tinted` output is the glow times `Tint`, so a coloured glow is one node — it replaces the SDF Glow → Palette → Multiply chain.',
@@ -239,13 +239,13 @@ float simpleLight(float d, float brightness) {
     code += `    vec3 ${outVar}_tinted = ${tintVar} * ${outVar};\n`;
     return { code, outputVars: { glow: outVar, inner: `${outVar}_inner`, tinted: `${outVar}_tinted` } };
   },
-};
+}, ['innerFalloff', 'ringFreq']);
 
 /**
  * Glow to Color — the "after the loop" half of every volumetric example:
  * Multiply(exposure) → Tanh → Make Vec3 → Multiply(tint) as one node.
  */
-export const GlowToColorNode: NodeDefinition = {
+export const GlowToColorNode: NodeDefinition = withParamSockets({
   type: 'glowToColor',
   label: 'Glow to Color',
   category: 'Effects',
@@ -271,7 +271,7 @@ export const GlowToColorNode: NodeDefinition = {
       outputVars: { color: `${id}_color` },
     };
   },
-};
+}, ['exposure']);
 
 /**
  * Normal to Color — Multiply(0.5) → Add(0.5) in one node, for showing normals, positions or any
@@ -300,7 +300,7 @@ export const NormalToColorNode: NodeDefinition = {
   },
 };
 
-export const FractalLoopNode: NodeDefinition = {
+export const FractalLoopNode: NodeDefinition = withParamSockets({
   type: 'fractalLoop',
   label: 'Fractal Loop',
   category: 'Fractals',
@@ -387,7 +387,7 @@ export const FractalLoopNode: NodeDefinition = {
     ].join('');
     return { code, outputVars: { color: `${id}_color`, uv_final: `${id}_uv`, uv0: `${id}_uv0` } };
   },
-};
+}, ['offset', 'amplitude', 'freq', 'phase']);
 
 export const RotatingLinesLoopNode: NodeDefinition = {
   type: 'rotatingLinesLoop',
@@ -455,7 +455,7 @@ export const RotatingLinesLoopNode: NodeDefinition = {
   },
 };
 
-export const AccumulateLoopNode: NodeDefinition = {
+export const AccumulateLoopNode: NodeDefinition = withParamSockets({
   type: 'accumulateLoop',
   label: 'Accumulate Loop',
   category: 'Fractals',
@@ -574,7 +574,7 @@ export const AccumulateLoopNode: NodeDefinition = {
     ].join('');
     return { code, outputVars: { color: `${id}_color`, uv: uvVar } };
   },
-};
+}, ['color_phase_r', 'color_phase_g', 'color_phase_b']);
 
 const DEFAULT_LOOP_BODY = [
   '@uv = fract(@uv * 3.0) - 0.5;',
@@ -882,7 +882,7 @@ export const CustomFnNode: NodeDefinition = {
 // Wire uv_lensed into any upstream shader node's UV input to lens its output.
 // Wire lens_center to Mouse for interactive lensing.
 
-export const GravitationalLensNode: NodeDefinition = {
+export const GravitationalLensNode: NodeDefinition = withParamSockets({
   type: 'gravitationalLens',
   label: 'Gravitational Lens',
   category: 'Effects',
@@ -1007,7 +1007,7 @@ export const GravitationalLensNode: NodeDefinition = {
       },
     };
   },
-};
+}, ['einstein_radius', 'strength', 'horizon_radius', 'softening', 'spin', 'redshift_power', 'photon_width', 'ripple_freq', 'ripple_speed']);
 
 // ─── Float Warp ───────────────────────────────────────────────────────────────
 // A single-float expression node. Wire any float in as `value`, optionally wire
@@ -1105,7 +1105,7 @@ export const VignetteNode: NodeDefinition = {
 };
 
 // Scanlines — CRT-style horizontal scan lines
-export const ScanlinesNode: NodeDefinition = {
+export const ScanlinesNode: NodeDefinition = withParamSockets({
   type: 'scanlines', label: 'Scanlines', category: 'Post Processing',
   description: 'Add CRT-style scanlines to a color.',
   inputs: {
@@ -1138,12 +1138,12 @@ export const ScanlinesNode: NodeDefinition = {
       outputVars: { result: `${id}_result` },
     };
   },
-};
+}, ['scroll']);
 
 // Sobel — edge detection using finite-difference Sobel operator on a grayscale value
 // Expects neighboring UV samples; for simplicity takes the color + UV and approximates
 // using fwidth (available in fragment shaders)
-export const SobelNode: NodeDefinition = {
+export const SobelNode: NodeDefinition = withParamSockets({
   type: 'sobel', label: 'Sobel Edges', category: 'Post Processing',
   description: 'Sobel edge detection. Wire a float/luminance value and UV; outputs edge strength.',
   inputs: {
@@ -1179,7 +1179,7 @@ export const SobelNode: NodeDefinition = {
       outputVars: { edges: `${id}_edges`, result: `${id}_result` },
     };
   },
-};
+}, ['colorR', 'colorG', 'colorB']);
 
 // ── Radiance Cascades 2D ─────────────────────────────────────────────────────
 
@@ -1215,7 +1215,7 @@ vec3 rcRadiance_rc2d(vec2 uv, int nRays, float rayLen, float dt, float c1s, floa
     return rad / float(nRays);
 }`;
 
-export const RadianceCascadesApproxNode: NodeDefinition = {
+export const RadianceCascadesApproxNode: NodeDefinition = withParamSockets({
   type: 'radianceCascadesApprox',
   label: 'Radiance Cascades 2D',
   category: 'Effects',
@@ -1269,7 +1269,7 @@ export const RadianceCascadesApproxNode: NodeDefinition = {
       },
     };
   },
-};
+}, ['ray_length', 'ray_step', 'c1_scale', 'emit_threshold']);
 
 // ─── ChromaticAberrationAutoNode ──────────────────────────────────────────────
 // Self-contained chromatic aberration node: UV in → split R/G/B UVs + composite color out.
@@ -1382,7 +1382,7 @@ export const ChromaticAberrationAutoNode: NodeDefinition = {
 // scene, sharp). Surrounding taps read the previous frame so the blur
 // converges to a correct result within 1–2 frames for static/slow content.
 
-export const GaussianBlurNode: NodeDefinition = {
+export const GaussianBlurNode: NodeDefinition = withParamSockets({
   type: 'gaussianBlur',
   label: 'Gaussian Blur',
   category: 'Effects',
@@ -1462,7 +1462,7 @@ export const GaussianBlurNode: NodeDefinition = {
     }
     return { code: lines.join(''), outputVars: { result: `${id}_result` } };
   },
-};
+}, ['radius']);
 
 // ─── Bloom ──────────────────────────────────────────────────────────────────
 // True screen-space bloom: thresholds the bright pixels of ANY rendered color
@@ -1481,7 +1481,7 @@ export const GaussianBlurNode: NodeDefinition = {
 // don't) and bands badly at large radii (too few samples over a huge
 // circumference). Golden-angle spiral placement + per-pixel jitter avoids
 // that banding far better than a handful of concentric rings.
-export const BloomNode: NodeDefinition = {
+export const BloomNode: NodeDefinition = withParamSockets({
   type: 'bloom',
   label: 'Bloom',
   category: 'Effects',
@@ -1598,13 +1598,13 @@ vec3 bloomKernel(vec2 uv01, vec2 px, float radius, float threshold, float softne
 
     return { code: lines.join(''), outputVars: { result: `${id}_result` } };
   },
-};
+}, ['softness']);
 
 // ─── Radial Blur ──────────────────────────────────────────────────────────────
 // Samples u_prevFrame along the radial direction from a center point, creating
 // a zoom/spin blur effect. Center tap = color input.
 
-export const RadialBlurNode: NodeDefinition = {
+export const RadialBlurNode: NodeDefinition = withParamSockets({
   type: 'radialBlur',
   glslFunctions: [BL_BASE_GLSL],
   label: 'Radial Blur',
@@ -1659,13 +1659,13 @@ export const RadialBlurNode: NodeDefinition = {
 
     return { code: lines.join(''), outputVars: { result: `${id}_result` } };
   },
-};
+}, ['strength', 'falloff']);
 
 // ─── Tilt-Shift Blur ──────────────────────────────────────────────────────────
 // Variable-radius blur whose strength increases with distance from a tilted
 // focus band, simulating a miniature / tilt-shift lens.
 
-export const TiltShiftBlurNode: NodeDefinition = {
+export const TiltShiftBlurNode: NodeDefinition = withParamSockets({
   type: 'tiltShiftBlur',
   glslFunctions: [BL_BASE_GLSL, BL_PREV_GLSL],
   label: 'Tilt-Shift Blur',
@@ -1744,7 +1744,7 @@ export const TiltShiftBlurNode: NodeDefinition = {
       outputVars: { result: `${id}_result`, mask: `${id}_mask` },
     };
   },
-};
+}, ['focus_center', 'band_width', 'max_blur', 'tilt_angle']);
 
 // ─── Lens Blur ────────────────────────────────────────────────────────────────
 // Simulates a camera lens with configurable focal length and aperture.
@@ -1795,7 +1795,7 @@ vec3 lensBlurOct(sampler2D tex, vec2 uv01, vec2 px, float coc, vec3 center) {
   return acc / wsum;
 }`;
 
-export const LensBlurNode: NodeDefinition = {
+export const LensBlurNode: NodeDefinition = withParamSockets({
   type: 'lensBlur',
   label: 'Lens Blur',
   category: 'Effects',
@@ -1880,14 +1880,14 @@ export const LensBlurNode: NodeDefinition = {
       outputVars: { result: `${id}_result`, coc: `${id}_coc` },
     };
   },
-};
+}, ['focus_distance', 'boost']);
 
 // ─── Depth of Field (post-process) ───────────────────────────────────────────
 // Reads dist from marchLoopGroup (world-unit ray distance). Pixels whose depth
 // deviates from focalDist by more than focalRange get a bokeh disc blur sampled
 // from u_prevFrame. Reuses the lensBlurDisc/Hex/Oct helpers from LensBlurNode.
 
-export const DepthOfFieldNode: NodeDefinition = {
+export const DepthOfFieldNode: NodeDefinition = withParamSockets({
   type: 'depthOfField',
   label: 'Depth of Field',
   category: 'Effects',
@@ -1938,14 +1938,14 @@ export const DepthOfFieldNode: NodeDefinition = {
       outputVars: { result: `${id}_result`, coc: `${id}_coc` },
     };
   },
-};
+}, ['focalDist', 'focalRange', 'maxBlur']);
 
 // ─── Motion Blur ─────────────────────────────────────────────────────────────
 // Temporal accumulation: blends current scene with the previous frame.
 // Creates smooth motion trails for animated shaders. Fast-moving elements
 // leave beautiful light streaks; persistence controls how long trails linger.
 
-export const MotionBlurNode: NodeDefinition = {
+export const MotionBlurNode: NodeDefinition = withParamSockets({
   type: 'motionBlur',
   label: 'Motion Blur',
   category: 'Post Processing',
@@ -1993,13 +1993,13 @@ export const MotionBlurNode: NodeDefinition = {
       outputVars: { result: `${id}_result` },
     };
   },
-};
+}, ['scene_weight', 'history_weight', 'decay_r', 'decay_g', 'decay_b']);
 // ─── Chroma Shift ─────────────────────────────────────────────────────────────
 // Color-space chromatic aberration: takes an already-rendered vec3 color and
 // spreads the R and B channels apart from G. Same modes as Chroma Aberration Auto
 // but works directly on a color value — no UV resampling required.
 
-export const ChromaShiftNode: NodeDefinition = {
+export const ChromaShiftNode: NodeDefinition = withParamSockets({
   type: 'chromaShift',
   label: 'Chroma Shift',
   category: 'Effects',
@@ -2084,50 +2084,98 @@ export const ChromaShiftNode: NodeDefinition = {
       outputVars: { result: `${id}_result` },
     };
   },
-};
+}, ['contrast', 'angle_deg', 'anim_speed']);
 
 /**
- * CRT Mask — the RGB shadow mask, pulse and scanlines of a cathode-ray tube, applied to a colour.
+ * The other two mask kinds for CRT Mask (Slot is crtMaskFn, play/kit/finishGlsl.js): kind 1 is an
+ * aperture grille (unbroken vertical RGB stripes, as a Trinitron), kind 2 a shadow mask (round
+ * phosphor dots in staggered triads). Brightness-preserving like crtMaskFn: about 1 on average.
+ */
+const FN_CRT_MASK_KIND_GLSL = `vec3 crtMaskKindFn(vec2 pixel, float cellSize, float border, float kind, float scan) {
+  vec2 coord = pixel / cellSize;
+  vec3 mask;
+  if (kind < 1.5) {
+    float sx = coord.x * 3.0;
+    float ind = mod(floor(sx), 3.0);
+    mask = vec3(ind == 0.0 ? 1.0 : 0.0, ind == 1.0 ? 1.0 : 0.0, ind == 2.0 ? 1.0 : 0.0) * 3.0;
+    float u = fract(sx) * 2.0 - 1.0;
+    mask *= 1.0 - u * u * border;
+  } else {
+    vec2 sub = coord * 3.0;
+    float drow = floor(sub.y);
+    float sx = sub.x + mod(drow, 2.0) * 1.5;
+    float ind = mod(floor(sx), 3.0);
+    mask = vec3(ind == 0.0 ? 1.0 : 0.0, ind == 1.0 ? 1.0 : 0.0, ind == 2.0 ? 1.0 : 0.0) * 3.0;
+    float d = length(vec2(fract(sx), fract(sub.y)) * 2.0 - 1.0);
+    mask *= (1.0 - border * smoothstep(0.45, 1.05, d)) * (1.0 + border * 0.6);
+  }
+  float row = mod(floor(coord.y), 2.0);
+  mask *= 1.0 - scan * row * 0.6;
+  return mask;
+}`;
+
+/** CRT Mask's Mask type as the kind number; a node made before the setting is a Slot mask (what it always drew). */
+const CRT_MASK_KINDS: Record<string, string> = { slot: '0.0', aperture: '1.0', shadow: '2.0' };
+export const CRT_MASK_TYPES = ['slot', 'aperture', 'shadow'] as const;
+export type CrtMaskType = typeof CRT_MASK_TYPES[number];
+
+/**
+ * CRT Mask — the RGB mask, pulse and scanlines of a cathode-ray tube, applied to a colour.
  * After Xor's GM Shaders Mini: CRT. Pair it with CRT Screen (2D Space) for the curvature and
  * cell pixelation, which have to happen before the picture is drawn.
  */
-export const CrtMaskNode: NodeDefinition = {
+export const CrtMaskNode: NodeDefinition = withParamSockets({
   type: 'crtMask',
   label: 'CRT Mask',
   category: 'Post Processing',
-  aliases: ['Shadow Mask', 'RGB Cells', 'Retro TV'],
-  description: 'Multiplies a colour by a CRT shadow mask: staggered red/green/blue sub-cells with soft borders, a slow brightness pulse across the screen, and optional scanlines. Use with **CRT Screen** on the UV first (curvature, cell pixelation) and its Vignette output here. Add Chromatic Aberration and Bloom for the full look. After Xor\'s GM Shaders Mini: CRT.',
+  aliases: ['Shadow Mask', 'Aperture Grille', 'Slot Mask', 'RGB Cells', 'Retro TV', 'Phosphor mask'],
+  description: 'Multiplies a colour by a CRT mask: the red, green and blue phosphors of a tube up close. Mask type picks the tube: a **slot mask** (staggered RGB slots, most TVs), an **aperture grille** (unbroken vertical stripes, Trinitron monitors) or a **shadow mask** (round dots in triads). Strength fades it in, a slow pulse travels across the screen and Scanlines darkens every other row. Use with **CRT Screen** on the UV first (curvature, cell pixelation) and wire its Vignette here. Add Chromatic Aberration (texture) for the full look. After Xor\'s GM Shaders Mini: CRT.',
   inputs: {
     color:    { type: 'vec3',  label: 'Color' },
     uv:       { type: 'vec2',  label: 'UV', hint: 'Screen UV, so the mask follows real pixels. Leave empty for the screen.' },
     vignette: { type: 'float', label: 'Vignette', hint: 'Wire CRT Screen\'s Vignette; 1 when empty.' },
   },
   outputs: { result: { type: 'vec3', label: 'Color' }, mask: { type: 'vec3', label: 'Mask', hint: 'The RGB cell mask alone, brightness-preserving.' } },
-  defaultParams: { cellSize: 6.0, border: 0.6, stagger: 'on', pulse: 0.03, pulseWidth: 60.0, pulseRate: 20.0, scanlines: 0.0 },
+  defaultParams: { maskType: 'slot', strength: 1.0, cellSize: 6.0, border: 0.6, stagger: 'on', pulse: 0.03, pulseWidth: 60.0, pulseRate: 20.0, scanlines: 0.0 },
   paramDefs: {
-    cellSize:   { label: 'Cell size',  type: 'float', min: 2, max: 16, step: 0.5, hint: 'Width of one RGB cell in pixels. 6 reads as a TV up close; 3 as a fine monitor.' },
+    maskType:   { label: 'Mask type', type: 'select', options: [
+      { value: 'slot', label: 'Slot mask' }, { value: 'aperture', label: 'Aperture grille' }, { value: 'shadow', label: 'Shadow mask (dots)' },
+    ], hint: 'Slot: staggered RGB slots, as most TVs. Aperture grille: unbroken vertical stripes, as a Trinitron. Shadow mask: round dots in triads, as an old monitor.' },
+    strength:   { label: 'Strength', type: 'float', min: 0, max: 1, step: 0.01, hint: 'How much of the mask shows: 0 is the picture as it is, 1 the full mask.' },
+    cellSize:  { label: 'Cell size',  type: 'float', min: 2, max: 16, step: 0.5, hint: 'Width of one RGB cell in pixels. 6 reads as a TV up close; 3 as a fine monitor.' },
     border:     { label: 'Cell border', type: 'float', min: 0, max: 1, step: 0.01, hint: 'How dark the gap between sub-cells is. 0 removes the grille.' },
-    stagger:    { label: 'Stagger', type: 'select', options: [{ value: 'on', label: 'Staggered rows' }, { value: 'off', label: 'Aligned grid' }], hint: 'Offsets every other column by half a cell, as a real shadow mask does.' },
+    stagger:    { label: 'Stagger', type: 'select', options: [{ value: 'on', label: 'Staggered rows' }, { value: 'off', label: 'Aligned grid' }], hint: 'Slot mask only: offsets every other column by half a cell, as a real slot mask does.' },
     pulse:      { label: 'Pulse', type: 'float', min: 0, max: 0.2, step: 0.005, hint: 'Brightness ripple travelling across the screen. 0.03 is subtle; 0 is off.' },
     pulseWidth: { label: 'Pulse width', type: 'float', min: 5, max: 300, step: 1, hint: 'Ripple wavelength in pixels.' },
     pulseRate:  { label: 'Pulse rate', type: 'float', min: 0, max: 60, step: 0.5, hint: 'Ripple speed. Needs the clock running.' },
     scanlines:  { label: 'Scanlines', type: 'float', min: 0, max: 1, step: 0.01, hint: 'Darkens every other row of cells.' },
   },
   glslFunction: FN_CRT_MASK_GLSL,
+  glslFunctions: [FN_CRT_MASK_KIND_GLSL],
   generateGLSL: (node: GraphNode, inputVars) => {
     const id = node.id;
     const color = inputVars.color ?? 'vec3(0.0)';
     const uv = inputVars.uv ?? 'g_uv';
     const vig = inputVars.vignette ?? '1.0';
     const stagger = node.params.stagger === 'off' ? '0.0' : '1.0';
+    const kind = CRT_MASK_KINDS[String(node.params.maskType ?? 'slot')] ?? '0.0';
+    const cell = p(node.params.cellSize, 6.0), border = p(node.params.border, 0.6), scan = p(node.params.scanlines, 0.0);
+    const maskCall = kind === '0.0'
+      ? `crtMaskFn(${id}_px, ${cell}, ${border}, ${stagger}, ${scan})`
+      : `crtMaskKindFn(${id}_px, ${cell}, ${border}, ${kind}, ${scan})`;
+    // A node from before Strength (no such param, nothing wired) compiles exactly as it did.
+    const legacy = node.params.strength === undefined;
+    const strength = p(node.params.strength, 1.0);
     return {
       code: [
         `    vec2 ${id}_px = (${uv} / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5) * u_resolution;\n`,
-        `    vec3 ${id}_mask = crtMaskFn(${id}_px, ${p(node.params.cellSize, 6.0)}, ${p(node.params.border, 0.6)}, ${stagger}, ${p(node.params.scanlines, 0.0)});\n`,
+        `    vec3 ${id}_mask = ${maskCall};\n`,
         `    float ${id}_pulse = 1.0 + ${p(node.params.pulse, 0.03)} * cos(${id}_px.x / ${p(node.params.pulseWidth, 60.0)} + u_time * ${p(node.params.pulseRate, 20.0)});\n`,
-        `    vec3 ${id}_result = ${color} * ${id}_mask * ${id}_pulse * ${vig};\n`,
+        legacy
+          ? `    vec3 ${id}_result = ${color} * ${id}_mask * ${id}_pulse * ${vig};\n`
+          : `    vec3 ${id}_result = ${color} * mix(vec3(1.0), ${id}_mask * ${id}_pulse, clamp(${strength}, 0.0, 1.0)) * ${vig};\n`,
       ].join(''),
       outputVars: { result: `${id}_result`, mask: `${id}_mask` },
     };
   },
-};
+}, ['strength', 'cellSize', 'border', 'pulse', 'pulseRate', 'scanlines']);

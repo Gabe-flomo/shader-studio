@@ -20,7 +20,8 @@ The scan is drawn by the main preview's raster pass, so the builder's picture **
 
 - opening on a new scene builds it: one undo step, "Splat builder: built a splat scene";
 - after that each change is synced quietly, once a frame at most. A change of settings only writes the nodes' params
-  (live uniforms: no recompile). A change of wiring (an effect added, removed, turned off or moved; the world turned
+  and their uniforms, in one store write (`writeParams`: live uniforms, no rebuild, no recompile; a param with no
+  uniform, a mode or a string, compiles at once). A change of wiring (an effect added, removed, turned off or moved; the world turned
   on) rebuilds, keeping every node's id by its role (`fx:e2`, `camera`, `scan`, `w:march`…), so Play controls stay
   pointed at them (`paramDiff` decides which);
 - closing (Done, ×, or back to the kinds) makes the whole session one undo step, "Splat builder: changed the splat
@@ -49,6 +50,12 @@ fingerprints, `apply.ts`).
 - **Its own size:** while the window is open the main preview draws at the viewport's size (`lib/previewSize.ts`,
   `LiveViewport ownSize`), so the picture fills the viewport sharp whatever shape the preview panel has; it goes back
   when the window closes.
+- **The picture comes first:** the viewport takes the preview's canvas itself (`lib/previewMirror.ts
+  adoptPreviewCanvas`: one draw a frame, straight to the screen, no copy), the graph and the node browser behind the
+  window are frozen, and the preview skips its readbacks and thumbnails for them (`builders/builderFocus.ts`). All of
+  it comes back when the window closes. Measured in [scene-builder.md](scene-builder.md), "The builder's picture comes
+  first": orbiting `train.splat` went from 11.4 / 22.9 ms a frame (p50 / p95) with a picture that didn't follow the
+  drag, to 5.7 / 6.3 ms following it.
 - **A paused clock** still shows the picture: the viewport keeps asking the main preview for a frame until one comes
   (the first ask can land while the Scene builder's kind page still holds the preview), so it shows the last frame
   rather than "the preview is hidden" (that note is only for a preview that really can't draw: its panel hidden). The
@@ -62,8 +69,8 @@ fingerprints, `apply.ts`).
 |---|---|
 | **Scan** | Drop a scan on the picture, **Load…** / **Replace…**, **From the library**, or **Example** (the generated ball or rings). The file's facts (splats, size, format, SH), its thumbnail and its size in units. **Quality**: Fast (500k, SH 0, half resolution), Balanced (2M, SH 1) or Best (4M, SH 3, sorted every frame), and the four settings under it. A new file is fitted to the view once it is read. |
 | **Place** | **Fit to view** (its middle at the centre, about 3 units across: the card's Fit to the scene), **Centre**, **Stand on the floor** (its lowest point on the world's floor, or y = −1). Which way is up: **Turn over** (−Y / +Y), **Stand it up** (a scan lying on its back), **Turn 90°**. Position, Turn, Scale, Splat size, Opacity. |
-| **Effects** | The Modifier chain as stacked cards: **Dissolve**, **Explode** (Return home), **Wave**, **Colour grade**, **Crop**, **Size & opacity**, **Points**. Add one from the tiles (each a small live picture), drag a card onto another to put it first, or ▲ ▼; the switch turns one off (left out of the chain, kept in the stack); 🗑 removes it. The first card applies first. An open card has a live mini preview of that effect on a point cloud, every setting of its node, and **Animate**: an LFO wired into one setting's socket (From → To, Speed). **Your nodes**: a run of nodes you added on the Splat Scene card (Splat Attributes → … → Set Splat, or any splat node) shows as a card of its own, in its place; move it, turn it off or take it out of the stack like the others (below). |
-| **Scene** | **A world**: a floor (height, colour), shapes (Ball, Box, Ring, Pillar, Pill, Gem: where, size, colour), a light (Studio, Sunset, Night, Overcast), shadows and fog. The world is the 3D Scene Builder's graph (`buildSceneGraph`); the scan is put together with it by distance. **Background**: a colour, a gradient, or a picture (the shared picture picker). |
+| **Effects** | The Modifier chain as stacked cards: **Dissolve**, **Explode** (Return home), **Wave**, **Colour grade**, **Crop**, **Size & opacity**, **Points**. Add one from the tiles (each a small live picture), drag a card onto another to put it first, or ▲ ▼; the ⊘ mutes one (left out of the chain, kept in the stack: see Muting); 🗑 removes it. The first card applies first. An open card has a live mini preview of that effect on a point cloud, every setting of its node, and **Animate**: an LFO wired into one setting's socket (From → To, Speed). **Your nodes**: a run of nodes you added on the Splat Scene card (Splat Attributes → … → Set Splat, or any splat node) shows as a card of its own, in its place; move it, mute it or take it out of the stack like the others (below). |
+| **Scene** | **A world**: a floor (height, colour), shapes (Ball, Box, Ring, Pillar, Pill, Gem: where, size, colour), a light (Studio, Sunset, Night, Overcast), shadows and fog. The world is the 3D Scene Builder's graph (`buildSceneGraph`); the scan is put together with it by distance. **Blending with the world**: Edge softness and Solid at (the Splat Scene's Compositing, written on the scan node); dimmed with "Add a world to blend the scan with it." while there is no world. **Background**: a colour, a gradient, or a picture (the shared picture picker). |
 | **Camera** | Distance, Angle, Elevation, Lens, **Turntable** (degrees a second), what it looks at, **Look at the scan**. |
 | **Look** | Bloom (intensity, threshold, radius), then Tone (As scanned, ACES, AgX, OkLab, Filmic). |
 
@@ -118,6 +125,23 @@ small world, with the scan stood on its floor (Place → Stand on the floor, by 
 the camera at a pleasant angle, turning most of the time; bloom when something glows. The same seed gives the same
 scene; your scan and its placement stay (with a world, only its height changes); your nodes stay; one undo step. The seed is shown and can be typed (SurpriseBar).
 
+## Muting
+
+Any effect card, your own nodes included, can be muted for a while to see the scan without it: the ⊘ on the
+card's header (the same mark as a node's bypass). A muted card keeps every setting and its place in the stack; it
+dims and says Muted, and its line in the left nav and the recipe says so too. Each mute is one undo step and is
+saved with the scene, so it survives Build and Edit this one. **Alt/Option-click** the ⊘ to solo a card (every other
+card muted); do it again to bring them all back.
+
+A muted effect is left out of the Modifier chain: the card before it feeds the card after it, exactly as if it were
+not there. The splat chain compiles in the scene's own modifier program, where the live mute gate other builders use
+does not reach, so a mute rebuilds the chain (nothing else changes) instead of moving a uniform. In the graph the
+muted effect's node is simply not there until you unmute it.
+
+In the recipe a muted card's line has the `muted` flag (`wave muted amplitude=0.02`, `yours muted tail=…`); taking
+the word away turns it back on. `off`, the word recipes used before, still reads as muted. Saved scenes from before
+are unchanged: the mute is the card's old off switch.
+
 ## Under the hood (⌘⇧D)
 
 The scene as a recipe, one line per part, editable (Apply or ⌘↵). ⌘⇧D opens it with the text focused.
@@ -126,7 +150,7 @@ The scene as a recipe, one line per part, editable (Apply or ⌘↵). ⌘⇧D op
 scan file="train.splat" id=… bytes=32848256 max=2000000 sh=1 sort=moves res=full
 place at=(-0.342,-0.54,-0.776) turn=(0,0,0) scale=0.024 up=-y size=1 opacity=1
 dissolve amount=0.4 scale=1.6 edge=0.07 edgeColor=(1,0.5,0.15) animate=amount:0.08:0:1
-wave off mode=wobble amplitude=0.02
+wave muted mode=wobble amplitude=0.02
 world on floor=on floor-y=-1 light=sunset shadows=on fog=0.02
 shape sphere at=(1.4,-0.6,-0.4) size=0.4 color=(0.85,0.3,0.2)
 background gradient color=(0.09,0.1,0.14) color2=(0.02,0.02,0.03)
@@ -134,7 +158,7 @@ camera dist=3.6 angle=25 elev=12 fov=1.5 turntable=8 target=(0,0,0)
 look tone=aces bloom=on bloom-intensity=0.5 bloom-threshold=0.8 bloom-radius=32
 ```
 
-An effect line is its kind and its node's own settings; `off` leaves it out of the chain; `animate=param:speed:from:to`.
+An effect line is its kind and its node's own settings; `muted` leaves it out of the chain (`off`, the older word, still reads); `animate=param:speed:from:to`.
 Each effect line takes the id of the scene's next effect of its kind, so editing the text keeps the nodes. A scan
 named by `file=` must be loaded (its `id` is the library's). Lines it can't read are listed; the rest applies.
 
@@ -154,6 +178,15 @@ named by `file=` must be loaded (its `id` is the library's). Lines it can't read
 Tests: `src/splatBuilder/__tests__/splatBuilder.test.ts` (every template and effect compiles, the stack is the chain
 in order, reopen as built, hand edits kept, the live sync and its undo steps, Surprise me, the recipe, Place's maths)
 and the kind page in `src/components/builders/__tests__/sceneBuilderShell.test.tsx`.
+
+### Laggy while dragging (fixed)
+
+Dragging a slider or orbiting felt laggy for two reasons. The live sync wrote a change of settings with
+`updateNodeParams` without its uniforms, which asks for a full compile 500 ms after the last change: the picture stood
+still for the whole drag (0 sorts while orbiting) and jumped half a second after it, with a recompile. And every tick
+re-rendered the graph behind the window (cards, wires, minimap, the node browser) and copied the preview into the
+viewport. Now one store write a tick carries the params and their uniforms, and the builder's picture comes first
+(above).
 
 ### A fix it needed
 

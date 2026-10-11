@@ -4,8 +4,10 @@
  * (`food = food * 0.98 + here.food`), checked as the GPU will (glslPatterns' parse and typecheck)
  * and turned into GLSL for the rule's Expression Block. Pure.
  *
- * Slots: the memories in order take E's numbers x, y, z, w; a remembered place takes two. A memory
- * that doesn't fit has no slot (the builder says so; it does nothing).
+ * Slots: the memories in order take E's numbers x, y, z, w; a remembered place takes two. A Home (where it was
+ * born, filled by its Emit) takes three and always comes first (x, y, z), whatever its place in the list, since
+ * the Emit writes it there; only the first Home has a slot. A memory that doesn't fit has no slot (the builder
+ * says so; it does nothing).
  */
 import { checkTypes, parseExpr, printExpr, walk, type Expr, type GlslType } from '../lib/glslPatterns';
 import { type AgentMemory, type AgentRuleSet, type MemoryType, hereChannelKey, memoryIdent } from './spec';
@@ -15,13 +17,16 @@ export const MEMORY_SLOTS = 4;
 const COMP = 'xyzw';
 
 /** How many numbers a memory of this type takes. */
-export const slotsOf = (t: MemoryType) => (t === 'position' ? 2 : 1);
+export const slotsOf = (t: MemoryType) => (t === 'home' ? 3 : t === 'position' ? 2 : 1);
 
 /** Each memory's swizzle of E (`x`, `zw`…), by id; memories that don't fit are left out. */
 export function memorySlots(set: AgentRuleSet): Map<string, string> {
   const out = new Map<string, string>();
   let at = 0;
-  for (const m of set.memories ?? []) {
+  // The Home first (the Emit writes it in x, y, z), then the rest in order; a second Home has no slot.
+  const all = set.memories ?? [];
+  const home = all.find(m => m.type === 'home');
+  for (const m of [...(home ? [home] : []), ...all.filter(m => m.type !== 'home')]) {
     const n = slotsOf(m.type);
     if (at + n > MEMORY_SLOTS) continue;
     out.set(m.id, COMP.slice(at, at + n));
@@ -35,8 +40,10 @@ export const slotsUsed = (set: AgentRuleSet) => (set.memories ?? []).reduce((s, 
 /** Does the rule set keep named memories (so its group gets More memory, state E)? */
 export const usesMemories = (set: AgentRuleSet) => memorySlots(set).size > 0;
 
-/** A memory's GLSL type: a place is a vec2, the rest one float. */
-export const memoryGlslType = (m: AgentMemory): 'float' | 'vec2' => (m.type === 'position' ? 'vec2' : 'float');
+/** A memory's GLSL type: a place is a vec2, a Home the walker's position (vec3 in 3D, vec2 in 2D), the rest one float. */
+export const memoryGlslType = (m: AgentMemory, d3 = false): 'float' | 'vec2' | 'vec3' => (m.type === 'home' ? (d3 ? 'vec3' : 'vec2') : m.type === 'position' ? 'vec2' : 'float');
+/** A memory's swizzle as read: its slot, a Home in 2D only its x and y. */
+export const memorySwizzle = (m: AgentMemory, slot: string, d3: boolean) => (m.type === 'home' && !d3 ? slot.slice(0, 2) : slot);
 
 /** A new memory id not taken in the set. */
 export function newMemoryId(set: AgentRuleSet): string {
@@ -59,7 +66,7 @@ export function exprNames(set: AgentRuleSet, d3 = false): ExprName[] {
       const n = set.channels[i]?.trim();
       return { name: `here.${n ? memoryIdent(n) : `trail${i + 1}`}`, type: 'float' as const, hint: `trail channel ${i + 1}${n ? ` (${n})` : ''} where it stands` };
     }),
-    ...(set.memories ?? []).map(m => ({ name: memoryIdent(m.name), type: memoryGlslType(m), hint: `the memory ${m.name} (${m.type})` })),
+    ...(set.memories ?? []).map(m => ({ name: memoryIdent(m.name), type: memoryGlslType(m, d3), hint: `the memory ${m.name} (${m.type})` })),
     { name: 'age', type: 'float', hint: 'seconds since it was born' },
     { name: 'speed', type: 'float', hint: 'its speed now' },
     { name: 'random', type: 'float', hint: 'a fresh random number 0–1' },
@@ -113,8 +120,8 @@ export function checkMemoryExpr(set: AgentRuleSet, memoryId: string, text: strin
   if (!re.ok) return { ok: false, error: re.error };
   const tc = checkTypes(re.expr, { ...env, _here: 'float' });
   if (!tc.ok) return { ok: false, error: tc.errors[0] ?? 'It doesn\'t typecheck.' };
-  const want = memoryGlslType(m);
-  if (tc.type !== 'unknown' && tc.type !== want) return { ok: false, error: `It gives a ${tc.type}; ${m.name} is ${want === 'vec2' ? 'a place (a vec2)' : 'one number (a float)'}.` };
+  const want = memoryGlslType(m, d3);
+  if (tc.type !== 'unknown' && tc.type !== want) return { ok: false, error: `It gives a ${tc.type}; ${m.name} is ${want === 'float' ? 'one number (a float)' : m.type === 'home' ? `a home (a ${want})` : 'a place (a vec2)'}.` };
   return { ok: true, expr: p.expr };
 }
 
@@ -135,7 +142,7 @@ export function memoryExprGlsl(set: AgentRuleSet, e: Expr, o: { read: (v: string
     }
     if (n.kind !== 'ident' || (n.name === 'here' && parent?.kind === 'member')) return;
     const m = byIdent.get(n.name);
-    if (m) { const sl = slots.get(m.id); subst.set(n.id, sl ? `${o.read('mem2')}.${sl}` : (m.type === 'position' ? 'vec2(0.0)' : '0.0')); return; }
+    if (m) { const sl = slots.get(m.id); const t = memoryGlslType(m, o.d3); subst.set(n.id, sl ? `${o.read('mem2')}.${memorySwizzle(m, sl, o.d3)}` : (t === 'float' ? '0.0' : `${t}(0.0)`)); return; }
     if (n.name === 'age') subst.set(n.id, o.read('age'));
     else if (n.name === 'speed') subst.set(n.id, o.read('spd'));
     else if (n.name === 'pos') subst.set(n.id, o.read('pos'));

@@ -68,13 +68,24 @@ has **Add a splat scan** (the sparkle icon), which adds a Splat Scene wired the 
 ## Settings
 
 - **Place:** Position, Rotation (degrees, X then Y then Z: the Transform node's order), Scale, and **Up is**: most scans
-  have y pointing down (3DGS, COLMAP), so −Y turns them over; +Y leaves them as they are. **Fit to the scene** sets
-  Position and Scale so the scan's middle (its box without the farthest 1 % each way) sits at the centre, about 3
-  units across. Position, Rotation and Scale are live uniforms: dragging them, Play mappings and keyframes never recompile.
+  have y pointing down (3DGS, COLMAP), so −Y turns them over; +Y leaves them as they are. The scan turns and scales
+  **about its middle** (its box without the farthest 1 % each way), and Position is where that middle sits, so a
+  Rotation wired to Time spins it in place. **Fit to the scene** sets Position to the centre and Scale to about 3 units
+  across; a scan picked on the card (dropped, Load…, From the library) is fitted once it is read. Position, Rotation
+  and Scale are live uniforms: dragging them, Play mappings and keyframes never recompile.
+  - *Graphs saved before* (schema version 1) turn about the file's own origin, as they did (`pivot: 'origin'`); a scan
+    whose origin is metres from its middle swung out of the picture as it turned (the "rotating cuts the scan off"
+    report). **Fit to the scene** moves such a node over to turning about its middle. The Splat builder keeps
+    `pivot: 'origin'`: its Place maths (`place.ts`) keep the middle in place themselves.
+  - How: the probe writes the offset as Position − M · middle (`SPLAT_PIVOT_UNIFORM`, the scan's middle in its own
+    coordinates, which the engine sets from the loaded file before each probe draws), so the splat shader, the
+    modifier program and the sort all see the same placement.
 - **Look:** Splat size (scales every Gaussian), Opacity.
 - **Quality:** Max splats (100 k – 4 M), Sort (when the camera moves, or every frame), SH degree (0 flat colour … 3),
   Resolution (full, or half: a quarter of the pixels to fill).
-- **Compositing:** Edge softness (how gently the scene and the splats cross, in scene units), Solid at.
+- **Compositing:** Edge softness (how gently the scene and the splats cross, in scene units), Solid at. They only act
+  with a Scene wired: without one the card dims the section and says "Add a world to blend the scan with it."
+  (`NodeDefinition.sectionNeeds`).
 
 ## How it draws
 
@@ -89,12 +100,16 @@ A raster pass before the picture (`lib/splats/engine.ts`, `render.ts`, `shaders.
    floats; harmonics as bytes in a second texture). The vertex shader rebuilds the camera from the probe (forward is the
    centre ray; right / up and the lens come from how far the side rays lean), places the covariance in the world
    (M Σ Mᵀ), and projects it with the EWA Jacobian (Kerbl et al. 2023): Σ₂ = J W Σ Wᵀ Jᵀ + 0.3 px². The quad spans
-   √(2λ) along the ellipse's axes, and the fragment weighs exp(−|v|²), alpha capped at 0.99, as 3DGS does. With SH
+   √(2λ) along the ellipse's axes, and the fragment weighs exp(−|v|²), alpha capped at 0.99, as 3DGS does. A splat is culled only when its whole quad is off the picture (`math.ts splatOffscreen`); it
+   used to be culled by its centre past 1.3 × the picture's half-size, which clipped big splats at the edges. With SH
    degree > 0, the view-dependent colour is added from the view direction in the scan's own space.
 3. **Back to front.** The worker sorts by depth along the view direction (in the scan's own space, Mᵀ · forward) with a
    counting sort on 16-bit keys. The engine reads the probe back without waiting (a pixel-pack buffer and a fence) and
-   asks for a new order when the view has turned more than 0.25°, or every frame (Sort: every frame). The new order lands
-   on a later frame; the camera itself is never late (the GPU reads it from the probe).
+   asks for a new order when the view has turned more than 0.25°, or at any turn at all (Sort: every frame); a view that
+   hasn't turned is never sorted again. The probe is read back only when a uniform it reads has changed since the last
+   read (`lib/splats/uniformPrint.ts`; a program that reads a texture has no print and is read every frame), so a still
+   camera with the clock paused costs no readback. The new order lands on a later frame; the camera itself is never
+   late (the GPU reads it from the probe).
 4. **Two targets.** Colour (premultiplied) and, in a second half-float target, Σ αᵢ Tᵢ dᵢ with the same alpha: divided
    by alpha it is the splats' distance at the pixel. The node samples both at the pixel and composites.
 
@@ -179,6 +194,27 @@ order: an Opacity floor after a Dissolve brings dissolved splats back; before it
 **Play:** every slider is an ordinary param, a live uniform of the picture's table, so dragging never recompiles and
 Play controls, mappings and keyframes drive them like any other (a top-level node: `nodeId::param`).
 
+**Wiring a slider:** every number, vector and colour slider of the recipes (and Set Splat's Amount) is also an input
+socket of the same name ([wireable-sliders.md](wireable-sliders.md)). Wired, the wire takes the slider's place and the
+card shows its chip instead; unwired, the slider is the value, and the code is what it was. The headline sockets show
+on the card; the rest come out from their slider (right-click → Control from outside), and stay out while wired:
+
+| Node | On the card | On demand |
+|---|---|---|
+| Splat Dissolve | Amount | Noise scale, Evolve, Softness, Edge width, Edge colour, Glow, Drift |
+| Splat Explode | Amount, Return home (and Center, as before) | Distance, Scatter, Stagger, Spin |
+| Splat Wave | Amplitude, Frequency, Speed | |
+| Splat Colour | Hue, Tint amount | Saturation, Brightness, Contrast, Tint |
+| Splat Crop | Offset (and Center, as before) | Size, Plane faces, Softness, Edge width, Edge colour, Glow |
+| Splat Size & Opacity | Size, Opacity, Keep | Opacity floor |
+| Splat Points | On, Dot size | Solid |
+| Set Splat | | Amount |
+
+What is wired runs in the modifier program, once per splat: an LFO into Wave's Amplitude, Time into its Speed, a Noise
+into Dissolve's Amount (read at a fixed point: one Amount for every splat, moving with time), or Splat Attributes →
+maths into a slider (a different value for every splat). Its own sliders join the picture's table, so Play still
+reaches them. A wire into an older graph's `__param_<key>` socket (the Splat builder's LFOs) keeps working.
+
 ### How it runs
 
 The compiler (`compiler/splatGraph.ts`) makes a **modifier program** per Splat Scene from the chain wired into its
@@ -199,11 +235,15 @@ the scan draws unmodified and the card says so.
 ### Sorting moved splats
 
 The compile knows which nodes move splats and by which params (Explode's Amount, Wave's Amplitude, Dissolve's Drift,
-Set Splat with Position or Offset wired). While any is non-zero, the engine sorts by the **moved** positions instead
+Set Splat with Position or Offset wired); one of those wired (into its socket or a `__param_` socket) or keyframed counts
+as moving whatever its slider says. While any is non-zero, the engine sorts by the **moved** positions instead
 of the scan's own: a small pass works out every moved splat's depth along the camera's forward ray (four a texel), it
 is read back without stalling (a pixel-pack buffer and a fence: 4 MB at 1 M splats), and the worker sorts those depths
 (`orderByDepth`, the same counting sort). One read or sort at a time, so it runs as fast as the worker sorts (a frame
 or a few behind a fast move, never holding a frame), and stops when the depths stop changing (a fingerprint of them).
+The 4 MB read itself is skipped while the camera (the probe's last reading) and the uniforms the modifier reads are as
+they were at the last read: a still scene with the clock paused reads nothing back and lets the preview's loop stop
+(before, a moving modifier kept a read in flight and the preview drawing forever).
 A splat a modifier breaks (NaN) takes no part. Offline renders read and sort for every frame, waited for. Moves along
 the view's sideways axes don't change the order, so they don't sort again.
 
@@ -232,10 +272,71 @@ Built: [splat-builder.md](splat-builder.md) (the Scene builder's Splat scene). W
 - Lay modifiers down with `addSplatModifier(nodes, splatId, pick, nextId)` (`nodes/recipes/splatModifierRecipes.ts`),
   which appends to the chain; `splatModifierChain` reads it back (scan first). A builder's stack is that chain.
 - Each recipe is one node with plain params (all live uniforms): a builder sets params, never GLSL. Custom looks are
-  Splat Attributes → ordinary nodes → Set Splat.
+  Splat Attributes → ordinary nodes → Set Splat. To animate a slider, wire into its socket (the param's own key).
 - A new moving node needs a line in `splatMoveGate` (`nodes/definitions/splatModifiers.ts`), or the sort won't follow
-  it.
+  it; its gate params count as moving while wired or keyframed. A new slider gets its socket from the node's
+  `withParamSockets` list.
 - `SplatModOut` packs state into the targets (size sign = dot); a new per-splat channel needs a third target.
+
+## Agents as splats
+
+The plan's phase 4 (docs/depth-and-splats-plan.md, section 3): walkers drawn as splats, and a scan turned into walkers
+that forces and fields move.
+
+### The Splats look (Draw agents)
+
+Draw agents' Style **Splats**: every walker a soft oriented Gaussian, stretched along its velocity, so clouds, smoke and
+liquids read as volumes (and a scan reads as a scan).
+
+- **Splat size** (its sigma, picture units; in 3D it shrinks with distance), **Size by** Fixed, Speed (bigger the
+  faster), or a More memory number × **Memory scale** (an Emit from a splat scan keeps each splat's own size in w);
+  **Stretch** (how much longer along its motion at full speed: Fast is); **Opacity** (how much one covers at its middle).
+- Colour by any of the usual options (Colour by Agent for a scan's own colours); Brightness multiplies it.
+- **Maths:** the Splat Scene's. In 3D the covariance Σ = s⊥² I + (s∥² − s⊥²) v̂v̂ᵀ goes through the camera's EWA Jacobian
+  (built-in camera or a scene's, with Flatten); in 2D through the picture's scale; then the same quad √(2λ) along the
+  ellipse's axes and exp(−|v|²) weight (kit/agentShaders.js AG_SPLAT_VERT; CPU mirror lib/agentSplats.ts, tested).
+- **No sort:** walkers move every step, so they are put together without an order (weighted blended OIT, McGuire &
+  Bavoil 2013): two half-float targets, colour added and cover multiplied, near splats weighted up in 3D
+  ((camera distance / depth)⁴). The resolve is the weighted mean colour × the cover 1 − Π(1 − α). Any order gives the same
+  pixel (tested), so it is deterministic.
+- **Compositing:** with Camera from / Camera ray / Depth wired, splats behind the ray-marched scene are hidden, as dots
+  are. The new **Distance** output (Σαwd / Σαw, far where none) is the Splat Scene's kind: wire Color, Distance and
+  Density (as Hit) into a Splat Scene's Scene inputs and a scan and the walkers meet by distance.
+- Web pages draw Splats as Points (the export dialog says so).
+
+### Emit from a splat scan
+
+Emit's Shape **Splat scan**: each splat is born as a walker, walker i from splat i, at its place (the scan's core box
+fitted to Size round X, Y, Z; 2D seen from the front), in its colour, its **home** (x, y, z) and its **size** (w) kept in
+More memory. The card picks the scan (Load…, From the library, a generated ball; kept by `videoId` like the Splat
+Scene's, so .playfiles carry it). **Up is** turns most scans over; **Skip below** leaves out faint floaters.
+
+- The engine reads the scan through the splat worker, thinned evenly to the group's count, into an RGBA32F texture
+  (lib/agentScans.ts, lib/splats/walkers.ts: two texels a splat) the Emit reads at birth. Until it arrives no walker is
+  born from it; when it lands the group starts over.
+- Any other Shape can **Remember home** too (the Pieces' picture in pieces uses it): the birth place goes into More
+  memory x, y, z.
+- The group keeps per-walker state (colour) by itself; the home needs More memory (a rules group with a Home memory).
+
+### Return home (shared)
+
+A rule action and an Agent Builder Forces card: a spring toward the **Home** memory (a memory kind of its own, always
+More memory x, y, z) with **Strength**, **Damping** (2√strength settles without overshoot) and **After** (seconds from
+birth before it pulls, eased in over half a second). In text: `home home 6 delay=1 damping=3`. The maths is
+agentRules/home.ts; the generated GLSL is checked against it on the CPU. Any kind with a Home can use it: a scan blown
+apart, a picture in pieces (docs/pieces.md).
+
+### Scan to walkers (Agent Builder)
+
+A start card, **Scan to walkers** (Particles' sections), 2D and 3D: a generated ball of 250 000 splats (256k walkers),
+blown out from the middle by a field (your own vx = x, vy = y, vz = z plus curl noise, for its first 1.2 s), then
+Return home (spring 9, damping 4.5, after 1.5 s) and drag bring it back. Look: Splats, sized by its own splat size,
+coloured by its own colour (Look → Colour → Its own). Examples: **Agent rules 12 · Scan to walkers** and **13 · … in 3D**.
+
+### Cost (Apple Silicon, browser pane, 2026-10-11)
+
+262 144 walkers (250 000 live) at 532 × 706: the step 0.7 ms, the splat draw about 10 ms while blown apart (big, near
+splats fill more), noisy (other work on the machine). A smaller Opacity or Splat size, or a lower count, is cheaper.
 
 ## Web pages
 
@@ -249,7 +350,6 @@ so (`play/exportScope.ts`, "Splat Scene scans"). Shipping the file and the raste
 - A Splat Scene inside a group (it draws only at the top level; the card says so).
 - The camera's Flatten / Reverse perspective: the splats are drawn with a pinhole camera.
 - Exact per-splat occlusion (see the limit above).
-- Phase 4, agents as splats (the plan).
 - Modifier chains inside a plain group (the `splat` wire through group ports isn't supported; keep chains at the top
   level), per-splat textures in a modifier (a Sample reads at a fixed point), and the scan's centre as an attribute.
 - Modifiers on exported web pages (with the scan itself).

@@ -147,6 +147,11 @@ export interface ParamDef {
    */
   section?: string;
   /**
+   * What a vec3's three sliders are called: 'xyz' (X / Y / Z, for a position, a turn, a size, a direction) or 'rgb'
+   * (r / g / b, the default, for per-channel colour maths such as a palette's coefficients).
+   */
+  axes?: 'xyz' | 'rgb';
+  /**
    * A fuller explanation than `hint` (what it does, a typical range, what it pairs with), shown
    * from a "?" beside the setting's name on the card. `hint` stays the one-line tooltip.
    */
@@ -305,6 +310,11 @@ export interface NodeDefinition {
    * "N controls · M changed": Transform's "Rotate 30°", "Scale 1.0". Undefined falls back.
    */
   sectionSummary?: (section: string, params: Record<string, unknown>) => string | undefined;
+  /**
+   * A section that can't do anything as the node is wired (Splat Scene's Compositing with no Scene): the one-line
+   * reason, and the card dims the section's controls under it. Null or undefined: the section works as usual.
+   */
+  sectionNeeds?: (section: string, node: GraphNode) => string | null | undefined;
 
   /** A section that never folds (its header shows, with no fold toggle): Transform's Position. */
   pinnedSection?: string;

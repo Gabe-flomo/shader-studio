@@ -5,7 +5,7 @@
  *   scan example=blob count=150000 max=2000000 sh=1 sort=moves res=full
  *   place at=(0,0,0) turn=(0,30,0) scale=1 up=-y size=1 opacity=1
  *   dissolve amount=0.35 scale=1.5 edgeColor=(1,0.45,0.12) animate=amount:0.08:0:1
- *   wave off mode=wobble amplitude=0.02
+ *   wave muted mode=wobble amplitude=0.02
  *   world on floor=on floor-y=-1 light=sunset shadows=on fog=0.02
  *   shape sphere at=(1.4,-0.6,-0.4) size=0.4 color=(0.85,0.3,0.2)
  *   background gradient color=(0.09,0.1,0.14) color2=(0.02,0.02,0.03)
@@ -13,17 +13,21 @@
  *   look tone=aces bloom=on bloom-intensity=0.8 bloom-threshold=0.6 bloom-radius=40
  *
  * An effect line is its kind and its node's own settings (the names on the node card's sliders, in camelCase); a
- * `yours tail=<node>` line is a run of nodes you added on the card ("Your nodes"), kept in its place. Pure.
+ * `yours tail=<node>` line is a run of nodes you added on the card ("Your nodes"), kept in its place. A muted card's line
+ * has the `muted` flag (builders/mute.ts); `off`, the older word for it, still reads. Pure.
  */
 import {
   EFFECT_KINDS, LIGHTS, PROP_KINDS, TONES, effectDefaults, starterSplatScene,
   type EffectKind, type EffectSpec, type LightKind, type ParamValue, type PropKind, type SplatBuilderSpec, type Tone, type Vec3,
 } from './spec';
+import { MUTED_WORD } from '../builders/mute';
 
 const fmt = (v: number) => String(Math.round(v * 1e4) / 1e4);
 const vec = (v: readonly number[]) => `(${v.map(fmt).join(',')})`;
 const val = (v: ParamValue): string => (typeof v === 'number' ? fmt(v) : Array.isArray(v) ? vec(v) : /\s/.test(v) ? JSON.stringify(v) : v);
 const onOff = (b: boolean) => (b ? 'on' : 'off');
+/** An effect line's mute: `muted` (or the older `off`). */
+const isMutedFlag = (flags: string[]) => flags.some(f => f === MUTED_WORD || f === 'off');
 
 /** The spec as recipe lines. */
 export function splatRecipe(spec: SplatBuilderSpec): string {
@@ -33,8 +37,8 @@ export function splatRecipe(spec: SplatBuilderSpec): string {
   lines.push(`scan ${src} max=${S.maxSplats} sh=${S.shDegree} sort=${S.sort} res=${S.resolution}`);
   lines.push(`place at=${vec(P.position)} turn=${vec(P.rotation)} scale=${fmt(P.scale)} up=${P.up === 'y' ? '+y' : '-y'} size=${fmt(P.splatSize)} opacity=${fmt(P.opacity)}`);
   for (const e of spec.effects) {
-    if (e.kind === 'custom') { lines.push(`yours${e.on ? '' : ' off'} tail=${e.tail}${e.label ? ` label=${JSON.stringify(e.label)}` : ''}`); continue; }
-    const words = [e.kind, ...(e.on ? [] : ['off']), ...Object.entries(e.params).map(([k, v]) => `${k}=${val(v)}`)];
+    if (e.kind === 'custom') { lines.push(`yours${e.on ? '' : ` ${MUTED_WORD}`} tail=${e.tail}${e.label ? ` label=${JSON.stringify(e.label)}` : ''}`); continue; }
+    const words = [e.kind, ...(e.on ? [] : [MUTED_WORD]), ...Object.entries(e.params).map(([k, v]) => `${k}=${val(v)}`)];
     if (e.animate) words.push(`animate=${e.animate.param}:${fmt(e.animate.speed)}:${fmt(e.animate.from)}:${fmt(e.animate.to)}`);
     lines.push(words.join(' '));
   }
@@ -144,6 +148,10 @@ export function readSplatRecipe(text: string, base: SplatBuilderSpec = starterSp
       case 'background': {
         const kind = flags[0] === 'solid' || flags[0] === 'picture' ? flags[0] : 'gradient';
         spec.background = { kind, color: v3('color', spec.background.color), color2: v3('color2', spec.background.color2), picture: kv.has('picture') ? word('picture', '') : kind === 'picture' ? spec.background.picture : null };
+        // A picture named here that the scene has no source for (a recipe from another project): a source by that
+        // name, so Build makes an empty Texture node for it (builders/textures.ts ensureSources).
+        const pic = spec.background.picture;
+        if (kind === 'picture' && pic && !(spec.textures ?? []).some(s => s.name === pic)) spec.textures = [...(spec.textures ?? []), { name: pic }];
         return;
       }
       case 'camera':
@@ -160,7 +168,7 @@ export function readSplatRecipe(text: string, base: SplatBuilderSpec = starterSp
         const tail = word('tail', '');
         const had = base.effects.find(e => e.kind === 'custom' && e.tail === tail);
         if (!had) { errors.push(`Line ${i + 1}: there are no nodes of yours ending in “${tail}” (add them on the Splat Scene card).`); return; }
-        spec.effects.push({ ...structuredClone(had), on: !flags.includes('off'), ...(kv.has('label') ? { label: word('label', '') } : {}) });
+        spec.effects.push({ ...structuredClone(had), on: !isMutedFlag(flags), ...(kv.has('label') ? { label: word('label', '') } : {}) });
         return;
       }
       default: {
@@ -173,7 +181,7 @@ export function readSplatRecipe(text: string, base: SplatBuilderSpec = starterSp
           if (!(k in defaults)) { errors.push(`Line ${i + 1}: ${kind} has no setting “${k}”.`); continue; }
           params[k] = v;
         }
-        const e: EffectSpec = { id: idFor(kind), kind, on: !flags.includes('off'), params, animate: null };
+        const e: EffectSpec = { id: idFor(kind), kind, on: !isMutedFlag(flags), params, animate: null };
         const an = kv.get('animate');
         if (typeof an === 'string') {
           const [param, speed, from, to] = an.split(':');

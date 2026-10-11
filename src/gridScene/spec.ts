@@ -20,6 +20,7 @@ import type { SpaceBlock } from '../sceneBuilder2d/blocks';
 import { cloneBlock } from '../sceneBuilder2d/blocks';
 import type { TextMask } from './textMask';
 import type { TexSource } from '../builders/textures';
+import type { Mutable } from '../builders/mute';
 
 export type Vec2 = [number, number];
 export type Vec3 = [number, number, number];
@@ -126,6 +127,8 @@ export interface GShape {
   tex?: string;
   /** How it carries it (PIC_MODES). Absent: 'cell', the whole picture in every shape. */
   picMode?: PicMode;
+  /** Switched off for now (builders/mute.ts): left out of the build, its cells and settings kept. */
+  muted?: boolean;
 }
 
 export interface Cell { x: number; y: number; s: string }
@@ -146,14 +149,45 @@ export interface Pattern {
   mask?: TextMask | null;
   /** kind 'picture': the picture whose brightness is the wave (a name in the scene's textures). */
   tex?: string;
+  /** Switched off for now (builders/mute.ts): built as no pattern, settings kept. */
+  muted?: boolean;
 }
+
+/** One condition of a rule on its shape (`a`, the rule's): where it is, or the shape it meets. */
+export interface GridClause { kind: WhenKind; b?: string; x?: number; y?: number; dist?: number }
+export type GridWhen = GridClause & { a: string };
+export type GridDo = { kind: DoKind; shape?: string; color?: Vec3; amount?: number };
+export const JOINS = ['and', 'or'] as const;
+export type Join = typeof JOINS[number];
+/** Most extra conditions a rule can have (after its first When). */
+export const MAX_ALSO = 3;
 
 export interface GridRule {
   id: string;
   on: boolean;
-  when: { kind: WhenKind; a: string; b?: string; x?: number; y?: number; dist?: number };
-  do: { kind: DoKind; shape?: string; color?: Vec3; amount?: number };
+  when: GridWhen;
+  /**
+   * More conditions on the same shape, each joined to everything before it (left to right: "A and B
+   * or C" is "(A and B) or C"). Absent: the one When.
+   */
+  also?: Array<{ join: Join; when: GridClause }>;
+  do: GridDo;
+  /** What the shape does while the conditions are false ("else"). Absent or null: nothing. */
+  else?: GridDo | null;
+  /**
+   * "Stays changed": once the conditions have held for a drawn cell, that cell keeps the Do after
+   * they end (a memory pass, docs/grid-builder.md "Rules that stay changed"). Absent: false.
+   */
+  sticky?: boolean;
 }
+
+/** A rule's conditions in order, the first with no join. */
+export function ruleClauses(r: GridRule): Array<{ join: Join | null; when: GridClause }> {
+  const { a: _a, ...first } = r.when;
+  return [{ join: null, when: first }, ...(r.also ?? []).filter(x => x && x.when && (WHEN_KINDS as readonly string[]).includes(x.when.kind)).map(x => ({ join: x.join === 'or' ? 'or' as const : 'and' as const, when: x.when }))];
+}
+/** Does a condition name a second shape? */
+export const clauseNeedsB = (c: Pick<GridClause, 'kind'>) => c.kind === 'sameCell' || c.kind === 'near';
 
 export interface Look {
   bg: Vec3;
@@ -163,6 +197,12 @@ export interface Look {
   glow: boolean;
   glowAmount: number;
   glowFalloff: number;
+  /**
+   * soft (absent): one shape, its colour running out into the glow (colour × (amount ÷ (distance
+   * outside + amount)) ^ falloff, 1 at the edge). halo: the Glow Layer's amount ÷ |distance|, a bright
+   * rim round a flat shape.
+   */
+  glowStyle?: 'soft' | 'halo';
   tone: 'none' | 'aces';
 }
 
@@ -174,7 +214,8 @@ export interface GridSceneSpec {
   shapes: GShape[];
   cells: Cell[];
   pattern: Pattern;
-  warps: SpaceBlock[];
+  /** A warp can be muted: still built, its node bypassed by a live uniform (builders/mute.ts). */
+  warps: Array<SpaceBlock & Mutable>;
   rules: GridRule[];
   look: Look;
   /** The pictures the scene reads (builders/textures.ts): picture cells, a picture pattern, the mask. */
@@ -183,6 +224,19 @@ export interface GridSceneSpec {
   picMask?: GridPicMask | null;
   /** How the drawing covers the grid (DRAW_MODES). Absent: each cell only itself. */
   draw?: DrawSpec | null;
+  /**
+   * "Make it a simulation": the Grid Rules state each shape starts as (shape id → 0 left out,
+   * 1…15), remembered for the next jump. Absent (or a shape missing): state 1.
+   */
+  simStates?: Record<string, number> | null;
+}
+
+/** Most states a drawn start can hold (Grid Rules' start cells: 1–9, a–f). */
+export const MAX_SIM_STATE = 15;
+/** The state shape `id` starts the simulation as (0 left out). */
+export function simStateOf(spec: Pick<GridSceneSpec, 'simStates'>, id: string): number {
+  const v = spec.simStates?.[id];
+  return typeof v === 'number' && Number.isFinite(v) ? Math.max(0, Math.min(MAX_SIM_STATE, Math.round(v))) : 1;
 }
 
 export interface GridPicMask { tex: string; cut: number; invert: boolean }
@@ -355,7 +409,7 @@ export function resizeGrid(spec: GridSceneSpec, cols: number, rows: number): voi
 export function removeShape(spec: GridSceneSpec, id: string): void {
   spec.shapes = spec.shapes.filter(s => s.id !== id);
   spec.cells = spec.cells.filter(c => c.s !== id);
-  spec.rules = spec.rules.filter(r => r.when.a !== id && r.when.b !== id && r.do.shape !== id);
+  spec.rules = spec.rules.filter(r => r.when.a !== id && r.when.b !== id && r.do.shape !== id && r.else?.shape !== id && !(r.also ?? []).some(x => x.when.b === id));
   if (spec.pattern.fill === id) spec.pattern.fill = null;
 }
 
@@ -371,9 +425,12 @@ export function newRule(spec: GridSceneSpec): GridRule {
 /** Does a rule name only shapes that exist (and the partner it needs)? */
 export function ruleProblem(spec: GridSceneSpec, r: GridRule): string | null {
   if (!shapeOf(spec, r.when.a)) return `shape ${r.when.a} isn't in the scene`;
-  if ((r.when.kind === 'sameCell' || r.when.kind === 'near' || r.do.kind === 'swap') && !shapeOf(spec, r.when.b)) return 'it needs a second shape';
+  if ((clauseNeedsB(r.when) || r.do.kind === 'swap') && !shapeOf(spec, r.when.b)) return 'it needs a second shape';
+  if (ruleClauses(r).slice(1).some(c => clauseNeedsB(c.when) && !shapeOf(spec, c.when.b))) return 'a condition needs a second shape';
   if (r.do.kind === 'become' && !shapeOf(spec, r.do.shape)) return 'it needs a shape to become';
-  if (r.do.kind === 'swap' && r.when.kind !== 'sameCell' && r.when.kind !== 'near') return 'swap needs “shares a cell with” or “is near”';
+  if (r.do.kind === 'swap' && !clauseNeedsB(r.when)) return 'swap needs “shares a cell with” or “is near”';
+  if (r.else && r.else.kind === 'become' && !shapeOf(spec, r.else.shape)) return 'its Else needs a shape to become';
+  if (r.else && r.else.kind === 'swap') return 'Else can\'t swap colours';
   return null;
 }
 
@@ -386,18 +443,26 @@ export function shapeSummary(spec: GridSceneSpec, s: GShape): string {
   return `${SHAPE_LABELS[s.kind].toLowerCase()} · ${n} cell${n === 1 ? '' : 's'}${spec.pattern.fill === s.id ? ' · pattern fill' : ''}${s.motion.path === 'still' ? '' : ` · ${MOTION_LABELS[s.motion.path].label.toLowerCase()}`}`;
 }
 
-/** One line for a rule, in words: "When A shares a cell with B, A swaps colours with B". */
-export function ruleText(r: GridRule): string {
-  const w = r.when;
-  const where = w.kind === 'cell' ? `${WHEN_LABELS.cell} (${w.x ?? 0}, ${w.y ?? 0})`
+/** A condition in words: "is in the column 4", "is within 2 cells of B". */
+export function clauseText(w: GridClause): string {
+  return w.kind === 'cell' ? `${WHEN_LABELS.cell} (${w.x ?? 0}, ${w.y ?? 0})`
     : w.kind === 'column' ? `${WHEN_LABELS.column} ${w.x ?? 0}`
       : w.kind === 'row' ? `${WHEN_LABELS.row} ${w.y ?? 0}`
         : w.kind === 'near' ? `is within ${w.dist ?? 1} cell${(w.dist ?? 1) === 1 ? '' : 's'} of ${w.b}`
           : `${WHEN_LABELS.sameCell} ${w.b}`;
-  const d = r.do;
-  const what = d.kind === 'become' ? `becomes ${d.shape}` : d.kind === 'colour' ? 'changes colour' : d.kind === 'swap' ? `swaps colours with ${w.b}`
+}
+
+/** A Do in words: "becomes B", "grows ×1.5". */
+export function doText(d: GridDo, b?: string): string {
+  return d.kind === 'become' ? `becomes ${d.shape}` : d.kind === 'colour' ? 'changes colour' : d.kind === 'swap' ? `swaps colours with ${b}`
     : d.kind === 'grow' ? `grows ×${d.amount ?? 1.5}` : d.kind === 'hide' ? 'hides' : `spins ${d.amount ?? 1} turn${(d.amount ?? 1) === 1 ? '' : 's'} a second`;
-  return `When ${w.a} ${where}, ${w.a} ${what}`;
+}
+
+/** One line for a rule, in words: "When A shares a cell with B, A swaps colours with B" (with its and / or, else, and "stays changed"). */
+export function ruleText(r: GridRule): string {
+  const w = r.when;
+  const where = ruleClauses(r).map((c, i) => `${i ? `${c.join} ` : ''}${clauseText(c.when)}`).join(' ');
+  return `When ${w.a} ${where}, ${w.a} ${doText(r.do, w.b)}${r.sticky ? ' and stays changed' : ''}${r.else ? `, else ${w.a} ${doText(r.else, w.b)}` : ''}`;
 }
 
 // ── Motion on the CPU (the same sums as the shader: glsl.ts) ──────────────────
@@ -433,4 +498,20 @@ export function texturesUsedGrid(spec: GridSceneSpec): string[] {
   if (spec.pattern.kind === 'picture' && spec.pattern.tex) out.push(spec.pattern.tex);
   if (spec.picMask) out.push(spec.picMask.tex);
   return [...new Set(out)];
+}
+
+// ── Muting (docs/grid-builder.md, "Muting") ─────────────────────────────────
+
+/**
+ * The scene as it builds: a muted shape is left out (with its cells, the rules that name it and the
+ * pattern's fill of it), a muted pattern builds as no pattern. Warps stay: their nodes are gated
+ * live (build.ts). Nothing muted: the spec itself, untouched.
+ */
+export function liveGridSpec(spec: GridSceneSpec): GridSceneSpec {
+  const mutedShapes = spec.shapes.filter(s => s.muted);
+  if (!mutedShapes.length && !spec.pattern.muted) return spec;
+  const out: GridSceneSpec = { ...spec, pattern: { ...spec.pattern } };
+  for (const s of mutedShapes) removeShape(out, s.id);
+  if (out.pattern.muted) out.pattern = { ...out.pattern, kind: 'none', fill: null };
+  return out;
 }

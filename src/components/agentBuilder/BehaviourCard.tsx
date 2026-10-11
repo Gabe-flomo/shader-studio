@@ -1,6 +1,7 @@
 /**
  * The Agent Builder's behaviour cards (docs/agent-builder.md): a picture, a plain name with its
- * one-line hint on hover, an on/off switch where the behaviour can be off, two or three settings,
+ * one-line hint on hover, a mute switch where the behaviour can be left out (the builders' shared
+ * MuteToggle: a muted card is its rule switched off, so the build leaves it out), two or three settings,
  * a folded "More" for the rest, and "Learn more" (the field guide's paragraph, retold).
  *
  * Settings tell the viewport which one is under the pointer or being dragged (`onFocus`), so its
@@ -9,14 +10,14 @@
 import { useState, type ReactNode } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
-import { Toggle } from '../ui/Choice';
+import { MuteToggle, MutedTag, MUTED_DIM } from '../builders/MuteToggle';
 import { Icon } from '../ui/Icon';
 import { Tooltip } from '../ui/Tooltip';
 import { BuilderSlider } from '../builders/BuilderSlider';
 import { fineUnit } from '../ui/rulerMath';
 
 export type CardPicture = 'born' | 'senses' | 'turning' | 'moving' | 'trail' | 'advanced'
-  | 'gravity' | 'wind' | 'curl' | 'field' | 'attract' | 'drag' | 'fade' | 'die' | 'life' | 'look' | 'neighbours'
+  | 'gravity' | 'wind' | 'curl' | 'field' | 'attract' | 'drag' | 'home' | 'fade' | 'die' | 'life' | 'look' | 'neighbours'
   | 'separate' | 'match' | 'cohere' | 'avoidEdges' | 'goal' | 'slow' | 'orbit' | 'wobble';
 
 /** A card's small picture: the behaviour drawn in a few strokes. */
@@ -69,6 +70,10 @@ export function CardGlyph({ kind, size = 40 }: { kind: CardPicture; size?: numbe
       case 'attract': return <>
         <circle cx={20} cy={20} r={3.2} fill={a} />
         {[0, 90, 180, 270].map(d => { const r = d * Math.PI / 180; const o = [20 + Math.cos(r) * 14, 20 + Math.sin(r) * 14], i = [20 + Math.cos(r) * 7, 20 + Math.sin(r) * 7]; return <path key={d} d={`M${o[0]} ${o[1]} L${i[0]} ${i[1]}`} stroke={ink} strokeWidth={1.6} strokeLinecap="round" />; })}
+      </>;
+      case 'home': return <>
+        <path d="M13 21 L20 14 L27 21 V28 H13 Z" fill="none" stroke={a} strokeWidth={1.8} strokeLinejoin="round" />
+        {[[6, 9], [33, 10], [7, 31]].map(([x, y]) => <circle key={x} cx={x} cy={y} r={1.8} fill={ink} />)}
       </>;
       case 'drag': return <>
         <path d="M8 14 H32 M8 20 H24 M8 26 H16" stroke={a} strokeWidth={2.2} strokeLinecap="round" />
@@ -128,11 +133,13 @@ export function CardGlyph({ kind, size = 40 }: { kind: CardPicture; size?: numbe
   );
 }
 
-export function BehaviourCard({ id, picture, title, hint, summary, learn, guide, on, onToggle, children, more, footer, handle, onlyWhen, onRemove, hot = false }: {
+export function BehaviourCard({ id, picture, title, hint, summary, learn, guide, on, onToggle, onSolo, children, more, footer, handle, onlyWhen, onRemove, hot = false }: {
   id: string; picture: CardPicture; title: string; hint: string; summary?: string;
   learn?: string; guide?: string;
   /** The card's switch (absent: the behaviour is always part of the walker). */
   on?: boolean; onToggle?: (on: boolean) => void;
+  /** Alt/Option-click the mute: solo this card in its section (the others muted). */
+  onSolo?: () => void;
   children?: ReactNode;
   /** Folded settings ("More"). */
   more?: ReactNode;
@@ -151,18 +158,21 @@ export function BehaviourCard({ id, picture, title, hint, summary, learn, guide,
   const [moreOpen, setMoreOpen] = useState(false);
   const off = on === false;
   return (
-    <section data-card={id} data-card-on={on === undefined ? undefined : String(on)}
+    <section data-card={id} data-card-on={on === undefined ? undefined : String(on)} data-muted={off || undefined}
       style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 14, borderRadius: radius.card, background: tk.bg.panel, boxShadow: `inset 0 0 0 ${hot ? 1.5 : 1}px ${hot ? alpha(tk.accent.base, 0.55) : tk.border.default}` }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         {handle}
-        <CardGlyph kind={picture} />
+        <span style={{ display: 'flex', ...(off ? MUTED_DIM : {}) }}><CardGlyph kind={picture} /></span>
         <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, flex: 1 }}>
-          <Tooltip label={title} description={hint} placement="bottom">
-            <b style={{ fontSize: 14, fontWeight: 650, cursor: 'help' }}>{title}</b>
-          </Tooltip>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+            <Tooltip label={title} description={hint} placement="bottom">
+              <b style={{ fontSize: 14, fontWeight: 650, cursor: 'help' }}>{title}</b>
+            </Tooltip>
+            {off && onToggle && <MutedTag />}
+          </span>
           {summary && <span style={{ fontSize: 11.5, color: tk.text.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{summary}</span>}
         </span>
-        {onToggle && <span data-card-switch={id}><Toggle checked={!!on} onChange={onToggle} label={on ? 'On' : 'Off'} /></span>}
+        {onToggle && <span data-card-switch={id}><MuteToggle muted={off} onToggle={() => onToggle(off)} onSolo={onSolo} what={title} /></span>}
         {onRemove && (
           <button type="button" data-card-remove={id} aria-label={`Take ${title} away`} title={`Take ${title} away`} onClick={onRemove}
             style={{ width: 24, height: 24, padding: 0, border: 0, borderRadius: 7, background: 'none', color: tk.text.faint, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -170,7 +180,7 @@ export function BehaviourCard({ id, picture, title, hint, summary, learn, guide,
           </button>
         )}
       </div>
-      {children && <div style={{ display: 'flex', flexDirection: 'column', gap: 12, opacity: off ? 0.5 : 1 }}>{children}</div>}
+      {children && <div style={{ display: 'flex', flexDirection: 'column', gap: 12, ...(off ? MUTED_DIM : {}) }}>{children}</div>}
       {onlyWhen}
       {more && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -178,7 +188,7 @@ export function BehaviourCard({ id, picture, title, hint, summary, learn, guide,
             style={{ alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 4, padding: 0, border: 0, background: 'none', cursor: 'pointer', color: tk.text.muted, font: `600 11.5px ${fontFamily.ui}` }}>
             <Icon name={moreOpen ? 'chevD' : 'chevR'} size={12} />More
           </button>
-          {moreOpen && <div style={{ display: 'flex', flexDirection: 'column', gap: 12, opacity: off ? 0.5 : 1 }}>{more}</div>}
+          {moreOpen && <div style={{ display: 'flex', flexDirection: 'column', gap: 12, ...(off ? MUTED_DIM : {}) }}>{more}</div>}
         </div>
       )}
       {footer}

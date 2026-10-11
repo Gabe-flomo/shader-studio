@@ -96,7 +96,52 @@ Grid Rules), the main preview behind it is held (`src/builders/previewPriority.t
 builder's preview has the GPU to itself. An output window or a recording keeps full speed. The
 Agent Builder and the Splat builder are the exceptions: their picture is the main preview, mirrored (a scan is drawn by
 the main preview's raster pass), so it keeps running, and the Splat builder builds every change into the graph as you
-go.
+go. For those two, everything that isn't their picture waits instead (below).
+
+### The builder's picture comes first (Splat builder, Agent Builder)
+
+While one of them is open, `src/builders/builderFocus.ts` has the focus (set by `watchBuilderPreview`, cleared when it
+closes) and only the picture runs:
+
+- **The graph behind the window is frozen** (`components/builders/FreezeBehindBuilder.tsx`, a Suspense freeze): the
+  node cards and their inline previews, the wires, the minimap, the recipe and suggestion strips, and the node browser
+  don't re-render on the builder's writes. They keep their state and catch up in one render when the window closes.
+  (`BuilderWindowsHost` stays outside the freeze, inside NodeGraph.)
+- **The preview skips what only the hidden panels use** (ShaderCanvas, `focus`): the pixel under the pointer, the
+  histogram, the selected node's probe, Scope and LFO cards, the eye preview's readouts and scopes, and the Pass and
+  Agents node thumbnails. The Agent Builder's own spotlight and Under the hood still draw.
+- **One draw, straight to the viewport** (Splat builder): the preview already draws at the viewport's size (`ownSize`),
+  so the viewport takes the preview's canvas itself (`lib/previewMirror.ts adoptPreviewCanvas`) instead of copying
+  each frame into a 2D canvas, and nothing is left drawing under the window. The canvas goes back to its panel when the
+  window closes (or before the preview unmounts). The Agent Builder's viewport is a different shape from the preview,
+  so it still copies (one drawImage a frame).
+- **A slider tick is one store write** (`splatBuilder/actions.ts writeParams`): the changed params and their uniforms
+  together, no rebuild and no compile. Before, the params went in without their uniforms and each tick asked for a full
+  compile 500 ms later, so the picture stood still during a drag and caught up after it.
+- **The scan is read back and sorted only when it can have changed** ([splat-scene.md](splat-scene.md)): the probe and
+  the moved depths are read only when what they read has changed; Sort: every frame skips a view that hasn't turned.
+
+Measured with `train.splat` (1.03 M splats, Balanced), in the browser pane at 1500 × 950 (the pane's screen runs at
+about 175 Hz, a frame every 5.7 ms), a slider (Place › Opacity) and an orbit (Angle and Elevation)
+for 3 s each, a tick every 16 ms, medians of three runs. Main-thread busy is the time a frame the page's main thread
+was not free (scripts, React, style and layout), measured with a message-channel probe.
+
+| | Before (main) | Live sync | + frozen graph, skipped readbacks | + canvas in the viewport | + read/sort only on change |
+|---|---|---|---|---|---|
+| Orbit: the picture follows the drag | no (0 sorts; caught up 500 ms after) | yes | yes | yes | yes |
+| Orbit: frame time p50 / p95 | 11.4 / 22.9 ms | 9.1 / 25.1 ms | 5.7 / 11.3 ms | 5.7 / 6.3 ms | 5.7 / 6.3 ms |
+| Orbit: main thread busy a frame | 11.3 ms | 13.3 ms | 4.6 ms | 3.0 ms | 3.1 ms |
+| Slider: frame time p50 / p95 | 5.7 / 17.1 ms | 8.4 / 24.6 ms | 5.7 / 6.4 ms | 5.7 / 6.4 ms | 5.7 / 6.3 ms |
+| Slider: main thread busy a frame | 6.8 ms | 9.7 ms | 2.9 ms | 2.4 ms | 2.5 ms |
+
+The live sync column is slower than main because it does the work main skipped: the picture now changes on every tick
+(about 60 sorts a second while orbiting). The last fix shows with the clock paused and a moving effect (Wave), still:
+before, 142 probe reads and 79 depth reads (4 MB each) a second and the preview never stopped drawing; after, none, and
+the loop stops. With Sort: every frame and a still camera: no sorts (before, one per probe reading).
+
+Where the time went before (a JS profile of 3 s of orbit): React re-rendering the graph behind the window (the node
+cards, the node browser's per-row counts) was most of it; then the per-frame copy of the preview into the viewport
+(about 1.3 ms a frame) and the probe's readback.
 
 The 2D and 3D previews (`src/components/builders/useBuilderPreview.ts`):
 
@@ -153,6 +198,42 @@ Every builder's number slider is the app's ruler slider through one wrapper
 
 Not yet: keyframes from a builder slider, and the Play menu on the 2D builder's sliders.
 
+## Muting
+
+Every builder can switch a card off for a while, to see the picture without it, and back on,
+without losing a setting. The ⊘ on a card's header mutes it (it is the same ⊘ as a node's
+bypass, because that is what it is in the graph):
+
+- **Click** (or Enter / Space on the focused ⊘) mutes or unmutes the card. Each mute is one undo
+  step, and it is saved in the builder's spec, so it survives Build and reopening the builder.
+- **Alt/Option-click** solos the card: every other card in the same stack is muted. Alt-click the
+  soloed card again to bring them all back.
+- A muted card is dimmed and says **Muted**; its settings stay editable.
+- **Recipe:** a muted clause ends with the flag `muted` (`mirror xy muted`, `@spin(0.25 muted)`,
+  `bloom 0.6 muted`) and reads back the same way. Hovering `muted` explains it.
+
+How a mute builds (`src/builders/mute.ts`, `src/compiler/muteGate.ts`):
+
+- **Live, no recompile (preferred).** The muted piece is still built. The node that does its work
+  gets a mute gate (`__mute` 0 or 1, and `__muteFrom`, the input it passes through, or
+  `__muteTo`, a value such as a far distance so a shape draws nothing). The compiler mixes the
+  node's output back to that input by a uniform, `mix(out, in, u_<node>_mute)`, so muting and
+  unmuting set a number: the shader text is the same either way and the preview never relinks. A
+  piece that was never muted has no gate and builds exactly as before; once muted, unmuting keeps
+  the gate so the next toggle is live too.
+- **Left out (fallback).** Where nothing passes through (a motion, a ring of copies, a simulation
+  rule or behaviour), the muted piece is left out of the build: one cheap rebuild.
+- **In the graph** a gated node shows the node-bypass style with a **MUTED** badge; its ⊘ turns it
+  back on there (a rebuild from the builder sets it from the spec again).
+
+What each builder mutes: [2D](scene-builder-2d.md#muting), [3D](scene-builder-3d.md#muting),
+[Grid](grid-builder.md#muting), [Grid Rules](grid-rules.md#muting),
+[Agent Builder](agent-builder.md#muting), [Splats](splat-builder.md#muting). The shared pieces are
+`src/builders/mute.ts` (spec helpers, `gateNode`, `gateChain`, solo, the recipe flag),
+`src/compiler/muteGate.ts` (the compiled gate), `src/components/builders/MuteToggle.tsx` (the ⊘,
+the Muted tag, the dim) and the `mute` prop of the builders' `Card`
+(`src/components/sceneBuilder/controls.tsx`).
+
 ## Textures
 
 Pictures are a source like any other in every kind of scene: upload one, paste one, pick one from the
@@ -193,12 +274,21 @@ Build makes an **empty Texture node** named after it, beside the scene, and the 
 
 | Kind | Uses | Docs |
 |---|---|---|
-| 2D scene | a shape filled with a picture (Fill, Fit, Stretch, Tile); a **Picture** layer; the background picture, read at the warped point so every space transform and block bends it; a mask | [scene-builder-2d.md](scene-builder-2d.md#textures) |
-| 3D scene | a shape's surface (triplanar, planar, spherical, face), tiles, blend sharpness, offset, turn, bump from brightness; picture panels; the background from a picture; the template *A picture, repeated forever* | [scene-builder-3d.md](scene-builder-3d.md#textures) |
+| 2D scene | a shape filled with a picture (Fill, Fit, Stretch, Tile); a **Picture** layer; the background picture, read at the warped point so every space transform and block bends it; a mask; a **picture with depth** (Depth tab: shapes sized or moved by depth, occlude, fog, mix, light, a gradient over depth) | [scene-builder-2d.md](scene-builder-2d.md#textures), [depth-mix.md](depth-mix.md) |
+| 3D scene | a shape's surface (triplanar, planar, spherical, face), tiles, blend sharpness, offset, turn, bump from brightness; picture panels; the background from a picture; a **picture with depth** the objects stand in (composite, lit, reflected); the template *A picture, repeated forever* | [scene-builder-3d.md](scene-builder-3d.md#textures) |
 | Grid scene | a **Picture** cell shape; a **Picture** pattern (brightness drives size, turn, push, hue or brightness); a picture mask | [grid-builder.md](grid-builder.md#textures) |
 | Grid Rules | Start → A picture: the same picker, wired into Start image | [grid-rules.md](grid-rules.md#a-picture-start) |
 | Agent Builder | Where → Create new → **A picture…** (born inside, food, only when, a layer's region) | [agent-builder.md](agent-builder.md) |
 | Splat scene | Scene → Background → **Picture** (the backdrop the camera looks at, with or without a world) | [splat-builder.md](splat-builder.md) |
+
+### Generate depth
+
+Where a builder takes a picture with depth (the 2D Depth tab, the 3D Picture with depth card), **Generate depth**
+works its depth out once, on this device, as the Texture card's Generate depth does, and keeps it as an image beside
+the picture; Build puts it on the Depth node (Update: Baked). The first time, it offers the model's one-time download.
+The builders' previews show that depth (or the depth a Depth node on the canvas already has for the picture, or the
+picture's brightness as a stand-in) through `registerPreviewDepth` in `previewTextures.ts`
+(`src/builders/depthPicture.ts`, `components/builders/DepthGenerateRow.tsx`).
 
 ### Looking good repeated
 

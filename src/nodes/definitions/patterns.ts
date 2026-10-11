@@ -1,5 +1,5 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { p, pv3 } from './helpers';
+import { p, pv3, withParamSockets } from './helpers';
 import { PALETTE_GLSL_FN, PALETTE_PRESET_OPTIONS } from './color';
 
 // ─── Truchet Tiles ────────────────────────────────────────────────────────────
@@ -18,7 +18,7 @@ float truchetQuarter(vec2 uv, float scale, float lineWidth) {
     return min(d1, d2) - lineWidth * 0.5;
 }`;
 
-export const TruchetNode: NodeDefinition = {
+export const TruchetNode: NodeDefinition = withParamSockets({
   type: 'truchet',
   label: 'Truchet Tiles',
   category: '2D Primitives',
@@ -80,7 +80,7 @@ export const TruchetNode: NodeDefinition = {
       outputVars: { color: `${id}_color`, distance: `${id}_dist`, mask: `${id}_mask` },
     };
   },
-};
+}, ['scale', 'line_width', 'aa', 'animate']);
 
 // ─── Metaballs 2D ─────────────────────────────────────────────────────────────
 
@@ -94,7 +94,7 @@ float metaballField(vec2 p, vec2 c1, vec2 c2, vec2 c3, float r1, float r2, float
     return field - 1.0;
 }`;
 
-export const MetaballsNode: NodeDefinition = {
+export const MetaballsNode: NodeDefinition = withParamSockets({
   type: 'metaballs',
   label: 'Metaballs 2D',
   category: '2D Primitives',
@@ -191,7 +191,7 @@ export const MetaballsNode: NodeDefinition = {
       outputVars: { field: `${id}_field`, color: `${id}_color`, mask: `${id}_mask` },
     };
   },
-};
+}, ['radius1', 'radius2', 'radius3', 'speed1', 'speed2', 'speed3', 'threshold', 'aa', 'color_scale']);
 
 // ─── Lissajous ───────────────────────────────────────────────────────────────
 
@@ -207,7 +207,7 @@ float lissajousSDF(vec2 p, float a, float b, float delta, float thickness) {
     return minD - thickness;
 }`;
 
-export const LissajousNode: NodeDefinition = {
+export const LissajousNode: NodeDefinition = withParamSockets({
   type: 'lissajous',
   label: 'Lissajous Curve',
   category: '2D Primitives',
@@ -275,4 +275,4 @@ export const LissajousNode: NodeDefinition = {
       outputVars: { distance: `${id}_distance`, mask: `${id}_mask`, color: `${id}_color` },
     };
   },
-};
+}, ['thickness', 'delta_speed', 'color_inner', 'color_outer']);

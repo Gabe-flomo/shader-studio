@@ -6,22 +6,35 @@
  *  - `setPrograms(probes, vertexShader)`: after each compile, each node's probe program (compiler/splatGraph.ts).
  *  - `beforeFrame(ctx)`: before the picture's programs (ShaderCanvas). Each slot draws its probe and its splats into
  *    its two targets (bound as the node's `::color` and `::depth` textures). When the probe's numbers come back and
- *    the camera (or the scan) has turned, the worker sorts again; the new order is drawn when it arrives.
+ *    the camera (or the scan) has turned, the worker sorts again; the new order is drawn when it arrives. Nothing is
+ *    read back while the uniforms the probe (and a moving modifier) read are as they were at the last read
+ *    (uniformPrint.ts): a still camera over a still scan costs no readback and no sort.
  *  - `settle(ctx)`: offline renders: the probe read at once and a sort waited for, so every exported frame is in order.
  */
 import * as THREE from 'three';
 import type { GraphNode } from '../../types/nodeGraph';
 import type { SplatModifierProgram, SplatProbeProgram } from '../../compiler/types';
-import { SPLAT_SCENE_TYPE, splatFileOf, splatMaxOf, splatScaleOf, splatShOf, splatSortOf } from '../../nodes/definitions/splatScene';
+import { SPLAT_PIVOT_UNIFORM, SPLAT_SCENE_TYPE, splatFileOf, splatMaxOf, splatScaleOf, splatShOf, splatSortOf } from '../../nodes/definitions/splatScene';
 import { SplatPass, type ProbeReading } from './render';
 import { dropSplats, loadSplats, repackSplats, sortKeptSplats, sortSplatDepths } from './client';
 import { getSplatFile } from './library';
 import { setVideoThumb } from '../backgroundLibrary';
 import { sortAxis } from './math';
+import { uniformsPrint, usedUniforms } from './uniformPrint';
 import type { PackedSplats, SplatInfo } from './pack';
 import { THUMB_H, THUMB_W } from './workerCore';
 import { DEMO_KINDS, demoBlob, demoRings } from './demo';
 import { writeSplat } from './format';
+
+/**
+ * The scan's middle (its own coordinates) for the probe about to draw: what a Splat Scene turns and scales about
+ * (splatScene.ts SPLAT_PIVOT_UNIFORM). One uniform for every probe, set before each one draws; in the table before
+ * the probe's material is made, so three.js uploads it. Before the file is read: the origin.
+ */
+export function setPivot(uniforms: Record<string, THREE.IUniform>, center: readonly number[] | undefined): void {
+  const u = uniforms[SPLAT_PIVOT_UNIFORM] ?? (uniforms[SPLAT_PIVOT_UNIFORM] = { value: new THREE.Vector3() });
+  (u.value as THREE.Vector3).set(center?.[0] ?? 0, center?.[1] ?? 0, center?.[2] ?? 0);
+}
 
 /**
  * A generated scan instead of a file (params.demo = 'rings' or 'blob', params.demoCount): the example graphs', and
@@ -82,6 +95,12 @@ interface Slot {
   readingsSeen: number;
   /** Modifiers moving the splats: a fingerprint of the depths the last moved sort used (NaN: none yet). */
   movedSum: number;
+  /**
+   * The print of the uniforms the probe read at its last read started (uniformPrint.ts), and the probe's and the
+   * modifier's at the last depth read. Undefined: none yet; null: no print (it reads a texture), read every frame.
+   */
+  probePrint?: string | null;
+  movedPrint?: string | null;
 }
 
 const idle = (): SplatStatus => ({ state: 'empty', drawn: 0, shDegree: 0, sorts: 0 });
@@ -100,9 +119,13 @@ export function axisFromReading(r: ProbeReading): [number, number, number] | nul
   return al > 1e-12 ? [a[0] / al, a[1] / al, a[2] / al] : null;
 }
 
-/** Should the scan be sorted again (the view turned past RESORT_COS, or Sort: every frame)? */
+/**
+ * Should the scan be sorted again (the view turned past RESORT_COS, or with Sort: every frame, turned at all)? A view
+ * that hasn't turned is never sorted again: the order would be the same.
+ */
 export function needsResort(prev: readonly number[] | null, next: readonly number[], everyFrame: boolean): boolean {
-  if (!prev || everyFrame) return true;
+  if (!prev) return true;
+  if (everyFrame) return prev[0] !== next[0] || prev[1] !== next[1] || prev[2] !== next[2];
   return prev[0] * next[0] + prev[1] * next[1] + prev[2] * next[2] < RESORT_COS;
 }
 
@@ -212,7 +235,7 @@ class SplatEngine {
   private async load(id: string, s: Slot): Promise<void> {
     const gen = ++s.gen;
     const name = typeof s.node.params.fileName === 'string' ? s.node.params.fileName : '';
-    s.packed = null; s.order = null; s.sortedAxis = null;
+    s.packed = null; s.order = null; s.sortedAxis = null; s.movedPrint = undefined;
     void dropSplats(id);
     if (!s.file) { s.status = idle(); this.changed(); this.host?.requestRender(); return; }
     s.status = { ...idle(), state: 'loading', fileName: name, message: 'Reading the scan…' };
@@ -253,7 +276,7 @@ class SplatEngine {
     try {
       const r = await repackSplats(id, splatMaxOf(s.node), splatShOf(s.node));
       if (s.gen !== gen) return;
-      s.packed = r.packed; s.order = null; s.sortedAxis = null;
+      s.packed = r.packed; s.order = null; s.sortedAxis = null; s.movedPrint = undefined;
       s.pass?.setSplats(r.packed);
       s.status = { ...s.status, drawn: r.packed.count, shDegree: r.packed.shDegree };
       this.changed();
@@ -285,15 +308,24 @@ class SplatEngine {
       const probe = this.probes.get(id);
       if (!probe) continue;
       const pass = this.ensurePass(id, s, ctx.renderer);
+      setPivot(ctx.uniforms, s.status.info?.center);
       pass.setProbe(this.vertexShader, probe.fragmentShader, ctx.uniforms);
       this.setModifier(s, pass, probe, ctx.uniforms);
       const k = splatScaleOf(s.node);
-      pass.draw(Math.max(1, Math.round(ctx.width * k)), Math.max(1, Math.round(ctx.height * k)));
+      // The probe's numbers are read back only when what it reads has changed since the last read (or it reads a
+      // texture, which has no print): a still camera reads nothing back while a slider that doesn't move it is dragged.
+      const print = uniformsPrint(usedUniforms(probe.fragmentShader), ctx.uniforms);
+      const read = print === null || print !== s.probePrint || !pass.reading;
+      if (pass.draw(Math.max(1, Math.round(ctx.width * k)), Math.max(1, Math.round(ctx.height * k)), read)) s.probePrint = print;
       const fresh = pass.readings !== s.readingsSeen && !!pass.reading;
       if (fresh) s.readingsSeen = pass.readings;
+      // A read on its way lands on a later frame: draw one even with the clock paused (the last turn of a slider). Not
+      // for a probe without a print, which reads every frame drawn (that would keep a paused preview drawing).
+      if (pass.probePending && print !== null) this.host?.requestRender();
       // Modifiers moving the splats: sort by the moved centres (read back from the GPU) instead.
-      if (pass.hasModifier() && modifierMoves(probe.modifier, ctx.uniforms)) this.sortMovedFrame(id, s, pass);
-      else if (fresh) this.maybeSort(id, s, pass.reading!);
+      if (pass.hasModifier() && modifierMoves(probe.modifier, ctx.uniforms)) this.sortMovedFrame(id, s, pass, this.movedPrintOf(pass, probe.modifier!, ctx.uniforms));
+      // A new reading, or no order for this view yet (a new scan, after a moved sort): sort if the view needs it.
+      else if (pass.reading && (fresh || !s.sortedAxis)) this.maybeSort(id, s, pass.reading);
     }
   }
 
@@ -310,11 +342,13 @@ class SplatEngine {
    * centres) has landed, sort them unless nothing changed, else start a read. One read or sort at a time, so it runs
    * as fast as the worker sorts and stops when the scan and the camera are still.
    */
-  private sortMovedFrame(id: string, s: Slot, pass: SplatPass): void {
+  private sortMovedFrame(id: string, s: Slot, pass: SplatPass, print: string | null): void {
     if (s.status.state !== 'ready' || !s.packed) return;
     const got = pass.pollDepths();
     if (!got) {
-      if (!pass.movedPending && !s.sortBusy) pass.startDepthRead();
+      // Nothing the modifier or the camera reads has changed since the last read: the depths are the same.
+      const same = print !== null && print === s.movedPrint;
+      if (!pass.movedPending && !s.sortBusy && !same && pass.startDepthRead()) s.movedPrint = print;
       // Draw again so the read is picked up, even with the clock paused (a slider dragged, a Play control).
       if (pass.movedPending) this.host?.requestRender();
       return;
@@ -333,6 +367,20 @@ class SplatEngine {
       // The next unmoved sort starts afresh (this order is the moved one's).
       s.sortedAxis = null;
     }, e => { s.sortBusy = false; console.warn('[splats] moved sort', e); });
+  }
+
+  /**
+   * The print a depth read depends on: the camera as the probe last read it (its numbers, not the uniforms behind
+   * them, so a slider the camera doesn't read, or the clock under a still camera, doesn't count), and the modifier's
+   * own uniforms. A turn shows in the next reading, so the depths are read again a frame later.
+   */
+  private movedPrintOf(pass: SplatPass, mod: SplatModifierProgram, uniforms: Record<string, THREE.IUniform>): string | null {
+    if (!pass.reading) return null;
+    // The splat data doesn't change while the scan is loaded (a new one resets movedPrint); the probe's target holds
+    // the camera the reading prints.
+    const fixed = new Set<unknown>([uniforms[mod.uniforms.data]?.value, uniforms[mod.uniforms.probe]?.value]);
+    const own = uniformsPrint(usedUniforms(mod.fragmentShader), uniforms, fixed);
+    return own === null ? null : `${Array.prototype.join.call(pass.reading)}|${own}`;
   }
 
   private landOrder(s: Slot, order: Uint32Array, ms: number): void {
@@ -354,7 +402,7 @@ class SplatEngine {
       if (s.gen !== gen || s.packed !== packed || r.order.length !== packed.count) return;
       s.sortedAxis = axis;
       // The next moved sort (if a modifier starts moving them) starts afresh.
-      s.movedSum = NaN;
+      s.movedSum = NaN; s.movedPrint = undefined;
       this.landOrder(s, r.order, r.ms);
     }, e => { s.sortBusy = false; console.warn('[splats] sort', e); });
   }
@@ -369,6 +417,7 @@ class SplatEngine {
       const probe = this.probes.get(id);
       if (!probe || !s.packed) continue;
       const pass = this.ensurePass(id, s, ctx.renderer);
+      setPivot(ctx.uniforms, s.status.info?.center);
       pass.setProbe(this.vertexShader, probe.fragmentShader, ctx.uniforms);
       this.setModifier(s, pass, probe, ctx.uniforms);
       // The probe, then the modifier program (it reads the probe), for this frame's time.

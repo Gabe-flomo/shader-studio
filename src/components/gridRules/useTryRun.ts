@@ -13,6 +13,7 @@ import { GRID_DEFAULTS, gridShape, stepsPerSecond } from '../../gridRules/spec';
 import { makeRng } from '../../lib/surprise';
 import { startCellsFromGrid, startCellsHash, type StartCells } from '../../gridRules/startCells';
 import { patternBoard, type TestPattern } from '../../gridRules/explain';
+import { headingOfValue } from '../../gridRules/stack';
 import { clearedBoard, paintCell, tryBack, tryBoardOf, tryEdit, tryForward, tryRewind, tryStart, type TryRun } from '../../gridRules/tryRun';
 
 export type TrySpeed = 'slow' | 'medium' | 'built';
@@ -40,7 +41,9 @@ export function drawingOf(params: Record<string, unknown>, B: CpuBoard): StartCe
     if (s.type !== 'smooth') return Math.round(B.a[i]);
     return (s.template === 'reaction' ? B.b[i] : B.a[i]) > 0.5 ? 1 : 0;
   }));
-  return startCellsFromGrid(grid);
+  // Headings (stacked Move and Collide cards) go with the drawing.
+  const heads = s.type !== 'smooth' && s.stack.length ? Array.from({ length: B.h }, (_, r) => Array.from({ length: B.w }, (_, x) => headingOfValue(B.a[(B.h - 1 - r) * B.w + x]))) : undefined;
+  return startCellsFromGrid(grid, heads);
 }
 
 export interface TryControls {
@@ -57,8 +60,8 @@ export interface TryControls {
   deal: () => void;
   clear: () => void;
   pattern: (p: TestPattern) => void;
-  /** Paint (or erase with 0) cells of the frame shown; `begin` starts a stroke (pauses play). */
-  paint: (cells: Array<[number, number]>, state: number) => void;
+  /** Paint (or erase with 0) cells of the frame shown, with a heading (0 none); pauses play. */
+  paint: (cells: Array<[number, number]>, state: number, heading?: number) => void;
   size: { w: number; h: number };
 }
 
@@ -69,7 +72,7 @@ export function useTryRun(nodeParams: Record<string, unknown>): TryControls {
   const live = useRef(params);
   useEffect(() => { live.current = params; });
   const [dealNo, setDealNo] = useState(1);
-  const dealKey = `${s.type}:${s.template}:${s.start}:${startCellsHash(s.startCells)}:${s.startCells?.rows.join('/') ?? ''}:${size.w}x${size.h}:${dealNo}`;
+  const dealKey = `${s.type}:${s.template}:${s.start}:${startCellsHash(s.startCells)}:${s.startCells?.rows.join('/') ?? ''}${s.startCells?.heads?.join('/') ?? ''}:${size.w}x${size.h}:${dealNo}`;
   const seed = useCallback(() => cpuSeed(live.current, size.w, size.h, makeRng(dealNo * 7919 + Number(live.current.seed ?? 1)).next), [dealNo, size.w, size.h]);
   const [run, setRun] = useState<TryRun>(() => tryStart(seed()));
   const [playing, setPlaying] = useState(false);
@@ -102,12 +105,12 @@ export function useTryRun(nodeParams: Record<string, unknown>): TryControls {
     return () => cancelAnimationFrame(raf);
   }, [playing, speed]);
 
-  const paint = useCallback((cells: Array<[number, number]>, state: number) => {
+  const paint = useCallback((cells: Array<[number, number]>, state: number, heading = 0) => {
     setPlaying(false);
     setRun(r => {
       let b = tryBoardOf(r);
       const smooth = gridShape(live.current).type === 'smooth';
-      for (const [x, y] of cells) b = paintCell(b, x, y, state, smooth, gridShape(live.current).template);
+      for (const [x, y] of cells) b = paintCell(b, x, y, state, smooth, gridShape(live.current).template, heading);
       return tryEdit(r, b);
     });
   }, []);

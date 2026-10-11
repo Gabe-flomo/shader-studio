@@ -25,7 +25,7 @@ export type CardId =
   // Trail followers
   | 'senses' | 'wobble' | 'trail'
   // Particles
-  | 'gravity' | 'wind' | 'curl' | 'field' | 'attract' | 'drag' | 'fade' | 'die'
+  | 'gravity' | 'wind' | 'curl' | 'field' | 'attract' | 'drag' | 'home' | 'fade' | 'die'
   // Flocks, crowds and orbiters
   | 'separate' | 'match' | 'cohere' | 'avoidEdges' | 'goal' | 'slow' | 'orbit'
   // Memory (phase 4): a memory operation (any kind), and Turn round (a card when a memory gates it)
@@ -57,6 +57,8 @@ export const CARD_DEFS: Record<CardId, CardDef> = {
   field: { id: 'field', multi: true, match: is('field'), make: () => ({ kind: 'field', strength: 1, grip: 3, spec: DEFAULT_FIELD() }) },
   attract: { id: 'attract', multi: true, match: force(['point', 'mouse']), make: () => ({ kind: 'force', field: 'point', strength: 0.6, x: 0, y: 0 }) },
   drag: { id: 'drag', match: is('drag'), make: () => ({ kind: 'drag', amount: 0.5 }) },
+  // Return home (shared: a scan blown apart, a picture in pieces): its memory '' is the rule set's Home.
+  home: { id: 'home', match: is('home'), make: () => ({ kind: 'home', memory: '', strength: 6, delay: 1, damping: 3 }) },
   fade: { id: 'fade', match: is('fade'), make: () => ({ kind: 'fade', seconds: 3 }) },
   die: { id: 'die', match: is('die'), make: () => ({ kind: 'die' }), when: () => ({ kind: 'age', cmp: '>', seconds: 3 }) },
   separate: { id: 'separate', multi: true, match: is('separate'), make: () => ({ kind: 'separate', who: 'all', degrees: 12 }) },
@@ -203,6 +205,26 @@ export function setOnAt(set: AgentRuleSet, sp: number, at: Loc, on: boolean): Ag
   if (on) delete r.off; else r.off = true;
   rules[ri] = r;
   return withRules(set, sp, rules);
+}
+
+/**
+ * Solo the card `key` among the cards `keys` (one section's stack; Alt/Option-click its mute):
+ * the others muted (their rules off), it on. Soloing the card already soloed turns the whole
+ * stack back on. Cards are found again by key after each switch (switching splits rules).
+ */
+export function soloCard(set: AgentRuleSet, sp: number, cards: readonly CardId[], keys: readonly string[], key: string): AgentRuleSet {
+  const find = (s: AgentRuleSet, k: string) => readBehaviours(s, sp, cards).cards.find(c => c.key === k);
+  const now = keys.map(k => find(set, k)).filter((c): c is CardRead => !!c);
+  if (!now.some(c => c.key === key)) return set;
+  const alreadySolo = now.every(c => (c.key === key ? c.on : !c.on));
+  let out = set;
+  for (const k of keys) {
+    const c = find(out, k);
+    if (!c) continue;
+    const on = alreadySolo || k === key;
+    if (c.on !== on) out = setOnAt(out, sp, c.at, on);
+  }
+  return out;
 }
 
 /** Change the card's action at `at`. */

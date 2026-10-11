@@ -17,6 +17,25 @@ The same description can be written as a **recipe**, a short line of text:
 volumetric · smooth-union(sphere r=1, cone height=2 rot=(30,0,0)) k=0.3 · twist 0.5 · polar-repeat 6 · camera dist=4 orbit=10
 ```
 
+## Muting
+
+Any shape, group, warp, light or effect can be switched off for a while
+([scene-builder.md](scene-builder.md#muting) has the shared rules: the ⊘ on its card or tree row,
+Alt-click solos, one undo step, saved with the scene):
+
+| What | How it is muted |
+| --- | --- |
+| A shape (tree row or card) | Live: its distance is pushed far away inside the Scene Group, so it draws nothing and unions ignore it. In Materials (a plain group, which has no gates) the same bypass is an Expression Block with a 0/1 Constant, so it never wins a colour. |
+| A group (not the scene itself) | Live: its last combine measures far away. |
+| A warp | Live: its node passes the point straight through; a modifier passes the distance; Scale gates both its halves. |
+| Soft shadows, ambient occlusion | Live: their shade is 1 (fully lit). |
+| The highlight (shine) | Live. |
+| Fog, tone map | Live: the colour passes through. |
+
+Recipe: `sphere r=1 muted`, `union(…) muted`, `@twist(2 muted)`, `shadows 16 muted`,
+`fog 0.05 muted`, `tone aces muted`. The recogniser reads mutes back from a built graph. Tests:
+`src/sceneBuilder/__tests__/mute.test.ts`.
+
 ## Opening it
 
 - **Node browser, Builders (first section):** **Scene builder** → **3D scene** opens it on a
@@ -116,6 +135,14 @@ They follow the recipe help's sections and say what you can build:
 | **Light & colour** | colours and light | each shape's colour and shine, the lights, shadows and occlusion, fog and the background |
 | **Camera** | where you look from | the camera's sliders |
 | **Output** | what the scene shows | the outputs and palettes, the tone map, and Quality (steps, distance, step scale, jitter, warp safety) |
+
+### Sliders in a narrow panel
+
+Every builder slider keeps at least 64 px of track beside its number (`BuilderSlider` `TRACK_MIN`,
+RulerSlider `trackMinWidth`), and X / Y / Z rows (Position, Rotation, Sun direction, a modifier's
+vector) put one axis on each line. Before 2026-10-11 the three axes sat side by side: the number
+chips took the whole column, the tracks were 0 px wide and only the numbers could be reached; in
+a narrow panel the same happened to single sliders (a cone's Angle ° and Height).
 
 ### Play controls from the builder
 
@@ -270,15 +297,30 @@ agents:
 - Elevation, in degrees;
 - Orbit speed, in degrees a second;
 - Zoom;
-- Flatten (0 perspective … 1 orthographic);
+- **Projection** (Perspective / Orthographic / Reverse, with hover help on each):
+  - **Perspective** (the default): far things look smaller; **Flatten** (0 perspective … 1
+    orthographic) blends it toward an isometric look;
+  - **Orthographic**: the rays run parallel, so size doesn't change with distance and parallel
+    edges stay parallel;
+  - **Reverse** (reverse perspective, [curved-space.md](curved-space.md)): the rays start spread
+    out and meet in front of the camera, so far things look bigger, like a Byzantine icon.
+    **Strength** (0 parallel … 1 the rays meet exactly at Converge at) and **Converge at** (how
+    far in front they meet; past it the picture flips). The point it looks at keeps its size;
 - Translate X / Y / Z, which move the camera and the point it looks at
   together.
 
 It builds a March Camera:
 
 - Translate becomes its Target;
-- Flatten becomes its **Flatten** setting. This setting is new. A camera
-  without it compiles exactly as before.
+- Flatten becomes its **Flatten** setting (only in Perspective). A camera
+  without it compiles exactly as before;
+- Projection becomes its **Perspective** (Normal, Orthographic, Reverse), Strength and Converge
+  at its Reverse strength and Converge at. Perspective sets nothing, so an older scene builds as
+  before. Describe reads the card's Perspective back.
+
+The viewport follows the projection (picking and the gizmo use the same maths, `viewMath.ts`).
+In a recipe the projection is a word: `camera orthographic`, `camera reverse converge=6`
+(`reverse=` is the strength), `camera perspective`, or `projection=…`.
 
 **Quality (now in Output).**
 
@@ -637,7 +679,7 @@ depth: `subtract(intersect(smooth-union(sphere @move(0.3,0,0), box @rotate(30,0,
 | `fog` | density · color= (default: the background) |
 | `background` (bg) | a colour, or `top=… bottom=…` for a gradient |
 | `tone` | aces agx hable reinhard2 tanh oklab none |
-| `camera` (cam) | dist 4 · angle 35 · elev 17 · orbit 0 (°/s) · zoom 1.5 · flatten 0 · x y z |
+| `camera` (cam) | dist 4 · angle 35 · elev 17 · orbit 0 (°/s) · zoom 1.5 · flatten 0 · x y z · `perspective` \| `orthographic` \| `reverse` (or `projection=`) · reverse 1 · converge 8 |
 | `quality` | steps 96 · dist 20 · step auto (or a number) · jitter 1 |
 | `output` (show) | picture depth distance height normal hit position steps ao shadow, then optionally `palette=…` |
 | `colour by` (color by) | an output, then `palette=…` (default sunset): `colour by depth palette=sunset` |
@@ -732,6 +774,13 @@ pictures (no PBR maps). In Surface mode; other modes keep the shapes' colours an
 - **Template: A picture, repeated forever.** A rounded cube painted triplanar, repeated in every
   direction by Repeat, with fog. Pick its picture under Pictures (or drop one on its Texture node).
 
+Pictures in the builder's own pictures (the live viewport, the preset and Mode thumbnails, Surprise
+me's check) are bound by `previewTextures.ts`: each sampler the shader reads gets the texture unit
+its picture is uploaded on. Before 2026-10-11 the units were numbered by place in the list, so a
+picture no shape reads (the template's, after another was picked: the GLSL compiler drops its
+sampler) left the next one reading an empty unit, and the scene drew black; the thumbnails bound
+no pictures at all (the "A picture, repeated forever" preset was black).
+
 What Build makes: the Materials group gains **Picture slots** (which painted shape is nearest, x y z)
 and each painted shape's point; per shape a coordinates block (Triplanar: three places and the
 weights), its Sample (texture) nodes and a blend; **Surface pictures** paints them over the base
@@ -750,6 +799,47 @@ background navy picture=pond
 Shape keys: `texture=` (`tex=`, `picture=`), `map=triplanar|planar|spherical|face`, `tiles=`,
 `sharp=`, `tex-offset=(x,y)`, `tex-rot=`, `bump=`. The recipe help (hover a word) has entries for
 `texture`, these keys and `background picture=`.
+
+## A picture with depth
+
+The objects stand in a photo: they pass behind and in front of what is in it. **Light & colour → Picture with
+depth** (Surface and GI lit; the march has to stop on surfaces to know what is nearer). It is "Add a picture with
+depth" from the March Loop card ([depth-node.md](depth-node.md#add-a-picture-with-depth)), as plain choices:
+
+- **Pick** the picture with the shared picker.
+- **Generate depth** works its depth out now, on this device (Depth Anything V2 Small; the first time it offers the
+  one-time 50 MB download, which the browser keeps). The result is kept as an image beside the picture, and Build puts
+  it on the Depth node (Update: Baked): ready at once, and it goes into exported pages. Without it, the Depth node
+  works the depth out live once the model is downloaded. Until there is a depth, the builder's preview uses the
+  picture's brightness as a stand-in (the card says which it shows).
+- **How:** **In the picture** (Depth Composite: the nearer one shows at each pixel), **…lit by the scene** (+ Depth
+  Light: the scene's glowing shapes light the picture, its objects shadow it), **…lit, and reflected** (+ Picture
+  Environment: the objects mirror the picture and take its colour).
+- **Nearest** / **Farthest** (where, in scene units, the picture's near and far things are) and **Edge softness**.
+- **Face the picture** turns the camera to angle 0, height 0, no orbit: a photo is seen from the front.
+
+What Build makes: the picture's Texture node → **Depth** → **Depth Composite** (the picture, its depth, and the lit
+scene after fog, with the loop's Distance and Hit) → Tone Map. Lit adds **Only the picture** (1 − Scene in front) and
+a **Depth Light** whose Glowing scene and Shadows from are the scene. Reflected adds a mirror direction, **Picture
+Environment** and **Reflect the picture** before the composite. To make the Depth Light's point light follow a shape,
+use **Link to scene object…** on its card after Build.
+
+In a recipe: `depth-picture pond how=composite|lit|reflect near=1.5 far=8 soft=0.08`. The recipe doesn't carry a
+generated depth (Edit this one keeps it, from the build's saved spec).
+
+Code: `sceneBuilder/build.ts` (`emitDepthPicture3D`), `components/sceneBuilder/DepthPictureCard.tsx`; tests in
+`src/sceneBuilder/__tests__/depthPicture.test.ts`.
+
+## What Build makes, and what it leaves out
+
+Build makes only what the scene uses: no Fog at density 0, no SDF Ambient Occlusion with AO off,
+no Soft Shadow with shadows off, no Texture node for a picture nothing reads (the source stays in
+the scene's Pictures), and nothing inside Materials that isn't handed out (the last shape's
+"nearest so far", a lone painted shape's own distance). Turning one on later adds its node; a
+rebuild keeps every other node's id (ids are kept by role), so wires and Play controls stay put.
+A scene built before keeps working: reopening reads its spec, and a rebuild drops the nodes it no
+longer makes. Not dropped: with another Output, the picture's lit nodes stay beside it, unwired,
+so wiring Tone Map back shows the picture again.
 
 ## Limits
 

@@ -28,6 +28,12 @@ work is. Drawing first and then simulating is the path the jump makes easy; the 
 
 ### What carries over
 
+**A state per shape.** Make it a simulation lists the drawing's shapes, each with a state (0 leaves
+it out, 1 and up a state of the rule; a Stages, Stencils or Blocks rule can be picked there too), so
+walls, sand and air, or wires and sparks, start as different states. The picks are kept on the spec
+(`simStates`), so the next jump uses them. `drawnStartOf` writes the rows with each shape's state
+(digits, a–f above 9).
+
 The drawing's placed cells, as they are at that moment, are the simulation's **drawn start**
 (Grid Rules' Start: Your drawing, the node's `startCells`, see grid-rules.md "A drawn start"): every
 drawn shape is a live cell (state 1), cropped to the drawn cells. The Grid Rules builder's try board
@@ -122,7 +128,41 @@ Words in the Agent Builder's stroke font (`agentBuilder/strokeFont.ts`), two way
 | **Motion** | The brush shape's path: still, up and down, side to side, both at once, circle, figure eight, bounce, travel, hop. The **XY control** sets how far (in cells, y up): drag the point, the path is drawn round it; X and Y sliders beside it. Speed (cycles a second) and lag (each cell starts (x + y) × lag of a cycle later: the motion runs through the drawing as a wave). Travel and hop wrap round the grid. |
 | **Patterns & warps** | A wave over the cells: ripple, diagonal, checker, rings, spiral, stripes, random. It changes every shape's size, turn, push, hue or brightness by Amount; Waves is how many across the grid, Speed in cycles a second, Arms for the spiral. **Fill empty cells** puts a shape in every cell you didn't draw on, its size following the wave (checker + fill is a checkerboard that swaps). **Only in words** limits the wave and the fill to the cells some words cover (see Text). **Grid warps**: up to three space blocks from the 2D Scene Builder's library (the same picker: categories, search, Random), bending the space the whole grid is drawn in, lines and all. |
 | **Rules** | When … Do … for every drawn cell, checked in the shader each frame, top to bottom. When a shape *is in the cell (x, y)*, *is in the column*, *is in the row*, *shares a cell with* another shape, or *is near* it (within N cells). Do: *becomes* another shape (its kind, size and colour), *turns a colour*, *swaps colours with* the other shape (both ways), *grows by*, *hides*, *spins*. A rule that names a shape that isn't there is shown as off. |
-| **Look** | Background, grid lines (on or off, colour, width in cells), the grid's size, glow (amount, falloff), tone map. |
+| **Look** | Background, grid lines (on or off, colour, width in cells), the grid's size, glow (amount, falloff, style), tone map. Glow style **Soft** (the default) is one shape: the shape's colour runs out into its glow, colour × (amount ÷ (distance outside + amount)) ^ falloff, which is 1 at the edge and inside, so the fill meets it without a seam. **Halo** is the Glow Layer's amount ÷ \|distance\|: a bright rim round a flat shape (the look before). |
+
+### Rules that stay changed, and/or, else
+
+- **And / or**: a rule can have more conditions on the same shape, each joined to everything before
+  it, left to right ("in column 1 or row 1, and near B").
+- **Else**: a second Do that applies while the conditions don't hold (it can't swap colours).
+- **Stays changed**: once the rule has fired for a drawn cell, that cell keeps the change after the
+  condition ends. Only when some rule is sticky, Build adds a small memory Pass (`Rule memory`: one
+  texel a cell, Nearest, half float, reading its own Previous) that keeps a bit per sticky rule per
+  cell, set when the rule fires and kept after; the scene reads it as "the rule holds here". A
+  sticky rule's Else applies until the rule has fired. The Rule memory block's Reset (map a Play
+  button to it), or the clock going back, forgets. The builder's own preview draws the Pass too (`components/builders/previewPasses.ts`).
+- Tests: `src/gridScene/__tests__/gridRulesMore.test.ts` (and/or, else, old specs still reading, the
+  memory pass and its bits, the change kept after the condition ends, the state per shape).
+
+### Muting
+
+A shape, the pattern or a grid warp can be muted for a while to see the grid without it: click the
+mute switch (the same icon as a node's bypass) on the shape's card, the Pattern card, or a warp's row.
+A muted piece shows a MUTED tag and dims, keeps every setting, is saved in the scene (so it is still
+muted after Build and reopening) and is one undo step.
+
+- **Warps** are still built, their Expression Block bypassed by a live uniform: the point coming in
+  passes straight through, so muting and unmuting set a number and nothing recompiles. In the graph
+  the warp's node shows the bypass style; its own mute switch there un-mutes it.
+- **Shapes** and the **pattern** live inside the Grid scene node's generated code, which has nothing
+  to pass through, so they are left out while muted: a muted shape's node, cells, rules and the
+  pattern's fill of it are not built; a muted pattern builds as no pattern. Toggling these rebuilds
+  the code.
+- **Rules** already have their own on/off switch, which works the same way (left out while off).
+
+Alt/Option-click a shape's or a warp's mute switch to solo it: every other shape (or warp) is muted;
+solo the same one again to unmute them all. The Grid builder has no text recipe, so there is no
+`muted` word to type here.
 
 ## What Build makes
 
@@ -131,7 +171,7 @@ UV ─► warps (Expression Blocks) ─┬─► Grid scene (Expression Block + 
 Time ────────────────────────────┤      ▲ motion, look, edge, colour per shape
 per shape: Colour, Shape A (Expression Block of sliders)
 Ground & lines (Expression Block over the background) ◄─ the warped UV
-Glow Layer (d, colour) ─► Add over the ground ─► SDF Fill ─► Tone Map ─► Output
+Soft glow (d, colour; or Glow Layer for Halo) ─► Add over the ground ─► SDF Fill ─► Tone Map ─► Output
 ```
 
 - **Shape A, B…**: an Expression Block whose sliders are the shape's numbers (size, turn, spin,
@@ -165,12 +205,20 @@ Every pixel looks only at the cells near it, not at every drawn cell:
   path's fastest rate a cell; while L is under 0.8 the iteration converges and the search stays
   small (reach ÷ (1 − L)) however big the motion. Lag 0 is exact in one step. Above it, shapes
   overtake each other and no single home is "the" one: the search is the middle of the path widened
-  by its range. Travel and Hop solve their wrap round the grid (with lag, each way round it). A
+  by its range. Travel and Hop solve their wrap round the grid (with lag, each way round it): the
+  wrap count is solved with the lag's coupling (a wrap in x moves the home in y too), so however long
+  the scene has run the home lands mid-grid and its copies one grid either way are tried. (Before,
+  rounding h ÷ grid size alone drifted by lag × reach × wraps cells: with big reach or lag the shapes
+  went missing in bands, cut by a straight seam.) A
   square of cells round that home is read in the drawing; a cell is drawn only if it holds this
   shape.
 - **The square's size is worked out live, every pixel**, from the shape's sliders as they are now:
   its size, pulse, outline, the pattern's grow (size) and push, its rules' grow and become, and the
-  motion (reach and lag) as above. Glow adds a cell so halos stay. The loops run to the cap, 13 × 13,
+  motion (reach and lag) as above. Glow adds a cell to the reach (inside the inverse, so lag widens
+  it too): every shape within a cell of the pixel is found. The glow's distance fades out by then
+  (from 0.35 to 0.95 of a cell past a shape's edge, `GLOW_FADE`), so the halo never steps where
+  neighbouring pixels search different cells (it used to show as faint cell-shaped patches); within
+  0.35 of a cell it is as before. The loops run to the cap, 13 × 13,
   and stop at the live radius, so dragging any slider on the Shape or Grid scene node, as far as you
   like, never cuts a shape and never recompiles. Typically 3 × 3 (no glow) or 5 × 5. When a setting
   would need more than the cap (huge reach with a lot of lag), the builder's Motion section says so:
@@ -200,7 +248,10 @@ Every pixel looks only at the cells near it, not at every drawn cell:
   template and a spread of Surprise scenes draw the same picture with the lookup (within 0.005 of a
   colour step for the templates), compared on the CPU (`gridLookup.test.ts`). The search is also
   checked against brute force (`gridProgram(spec, { brute: true })`, every cell for every shape) for
-  big motion with lag on every non-wrapping path, and with copies matching.
+  big motion with lag on every non-wrapping path, with copies matching, and for Travel and Hop with
+  big reach and lag late in time (near the wrap seam, with Repeat and Mirror too). The glow is
+  sampled along rows crossing cell borders far from the shapes: no step. The old code is compared
+  with the same glow fade applied.
 
 The UV node keeps the spec (`gridScene`), so the Scene builder lists the build ("Grid scene · 10 ×
 10 · 27 cells drawn") and **Edit this one** reopens it exactly as built. A rebuild keeps each node's
@@ -283,9 +334,5 @@ rule between two shapes. One undo step; Reroll and Undo in its toast.
 
 - Shapes moving through the pattern's fill don't push it aside; the fill only skips the cells you
   drew on.
-- Rules see each shape where it is now; there is no memory (a shape that became a star goes back
-  when it leaves the column). A "stays changed" Do would need a feedback pass.
-- The jump to Grid Rules starts every drawn shape as state 1; shapes as different states (for
-  Stages, Patterns, Blocks) are a follow-up.
 - Keyframes and the Play menu on the builder's own sliders (as for the 2D and 3D builders); the
   built nodes' sliders have both.

@@ -19,7 +19,7 @@ import type { GraphNode, SubgraphData } from '../types/nodeGraph';
 import { getNodeDefinition } from '../nodes/definitions';
 import { placeInFreeSpace } from '../store/agentSetup';
 import { buildSceneGraph, META_KEY, ROLE_KEY, type SceneBuilderMeta } from './build';
-import type { SceneSpec } from './spec';
+import { texturesUsed3D, type SceneSpec } from './spec';
 import { ensureSources } from '../builders/textures';
 import { TO_TRANSFORM_TYPES, transformParamFor } from '../nodes/toTransform';
 
@@ -171,8 +171,12 @@ export function applyScene(graph: GraphNode[], spec0: SceneSpec, opts: { nextId:
   const taken = new Set(everyNode(graph).map(l => l.node.id));
   const nextId = () => { let id = opts.nextId(); while (taken.has(id)) id = opts.nextId(); taken.add(id); return id; };
   // Every picture the scene reads has a node (builders/textures.ts): one typed in a recipe gets an empty Texture node.
-  const ensured = ensureSources(graph, spec0.textures, nextId, found?.byRole.get('camera')?.node.position ?? opts.at ?? { x: 0, y: 0 });
-  const spec: SceneSpec = spec0.textures?.length ? { ...spec0, textures: ensured.sources } : spec0;
+  // Only the pictures something reads get a node: a source no shape or background uses any more (a
+  // template's picture after another was picked) stays in the spec, but Build adds no empty Texture for it.
+  const used = new Set(texturesUsed3D(spec0));
+  const ensured = ensureSources(graph, (spec0.textures ?? []).filter(s => used.has(s.name)), nextId, found?.byRole.get('camera')?.node.position ?? opts.at ?? { x: 0, y: 0 });
+  const withNode = new Map(ensured.sources.map(s => [s.name, s]));
+  const spec: SceneSpec = spec0.textures?.length ? { ...spec0, textures: spec0.textures.map(s => withNode.get(s.name) ?? s) } : spec0;
   graph = [...graph, ...ensured.added];
   const buildKey = found?.meta.build ?? `b${nextId()}`;
   const idOfRole = new Map<string, string>();

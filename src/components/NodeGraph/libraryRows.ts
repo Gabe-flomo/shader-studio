@@ -162,7 +162,7 @@ export const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: strin
     { label: 'Patterns', types: ['truchet', 'metaballs', 'lissajous'] },
   ],
   '3D Primitives': [
-    { label: 'Basic',   types: ['sphereSDF3D', 'boxSDF3D', 'torusSDF3D', 'capsuleSDF3D', 'cylinderSDF3D', 'coneSDF3D', 'planeSDF3D', 'octahedronSDF3D'] },
+    { label: 'Basic',   types: ['sphereSDF3D', 'boxSDF3D', 'torusSDF3D', 'capsuleSDF3D', 'cylinderSDF3D', 'coneSDF3D', 'planeSDF3D', 'octahedronSDF3D', 'pieceBalls'] },
     { label: 'Curved',  types: ['ellipsoidSDF3D', 'cappedTorusSDF3D', 'cappedConeSDF3D', 'roundedBoxSDF3D', 'roundedCylinderSDF3D', 'verticalCapsuleSDF3D'] },
     { label: 'Complex', types: ['boxFrameSDF3D', 'linkSDF3D', 'pyramidSDF3D', 'hexPrismSDF3D', 'triPrismSDF3D', 'solidAngleSDF3D', 'sdCross3D'] },
     { label: 'Fields',  types: ['gyroidField', 'schwarzPField'] },
@@ -253,7 +253,7 @@ export const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: strin
     { label: 'Layer',   types: ['glowLayer', 'deepGlow'] },
   ],
   Grid: [
-    { label: 'Layout',   types: ['gridPattern', 'gridPaint', 'arrayField', 'gridLayout', 'cellPicture'] },
+    { label: 'Layout',   types: ['gridPattern', 'gridPaint', 'arrayField', 'gridLayout', 'cellPicture', 'pieces'] },
     { label: 'Motion',   types: ['waveRadius', 'animatedCellCenter'] },
     { label: 'Displace', types: ['neighborDist', 'cellDisplace', 'neighborAttractCircles'] },
     { label: 'Filter',   types: ['cellFilter', 'cellPattern', 'neighborOffset2d'] },

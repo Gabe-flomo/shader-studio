@@ -34,8 +34,8 @@ export const SCENE_SECTIONS: SectionInfo[] = [
     learn: 'Warps change space before the shapes are measured, top to bottom: a Repeat makes endless copies at no extra cost, Mirror folds space onto itself, Twist turns it more the higher it goes. Warps that stretch space make the march take smaller steps (Step Scale on auto in Output), or a ray can jump through a surface.' },
   { id: 'light', label: 'Light & colour', icon: 'sun', line: 'Colours of the shapes, the sun, the sky, shadows, fog and the background.',
     learn: 'Each shape\'s colour and shine show in Surface mode. The sun shades and shadows the surfaces; the sky colours them from above and the bounce from below. Fog fades the distance into the background\'s colour (or its own). The background is what a ray that misses everything sees: one colour, or a gradient from top to bottom.' },
-  { id: 'camera', label: 'Camera', icon: 'camera', line: 'Where you look from: distance, angle, height, zoom and a slow orbit.',
-    learn: 'The orbit camera circles the point it looks at. Drag in the viewport to turn it round, scroll to come closer. Orbit speed turns it on its own over time. Flatten goes from perspective to an isometric look, where parallel edges stay parallel. Translate moves the camera and the point it looks at together.' },
+  { id: 'camera', label: 'Camera', icon: 'camera', line: 'Where you look from: distance, angle, height, zoom, a slow orbit and the projection.',
+    learn: 'The orbit camera circles the point it looks at. Drag in the viewport to turn it round, scroll to come closer. Orbit speed turns it on its own over time. Projection is how its rays leave it: Perspective (far things smaller; Flatten blends it toward an isometric look), Orthographic (parallel rays: sizes do not change with distance, parallel edges stay parallel) or Reverse (far things bigger, like a Byzantine icon). Translate moves the camera and the point it looks at together.' },
   { id: 'output', label: 'Output', icon: 'sliders', line: 'What the scene shows (the picture, depth, normals…), the tone map and quality.',
     learn: 'Besides the lit picture, the march measures depth, distance, height, normals, where rays hit, and how many steps they took: show any of them, as grey or through a palette. Tone map squeezes bright light into screen colours. Quality: more steps reach finer detail and cost more; Step Scale below 1 keeps warped space from tearing.' },
 ];
@@ -81,7 +81,7 @@ export function sectionSummary(spec: SceneSpec, id: SceneSection): string {
       const bits = [L.mode === 'surface' ? (L.shadows ? 'shadows' : 'no shadows') : null, L.fog > 0 ? `fog ${r(L.fog)}` : null, L.bg2 ? 'sky gradient' : null].filter(Boolean);
       return bits.length ? `sun, ${bits.join(', ')}` : 'sun and sky';
     }
-    case 'camera': return `${r(C.dist)} away, ${r(C.angle)}° round${C.orbit ? `, orbit ${r(C.orbit)}°/s` : ''}`;
+    case 'camera': return `${r(C.dist)} away, ${r(C.angle)}° round${C.orbit ? `, orbit ${r(C.orbit)}°/s` : ''}${C.projection === 'orthographic' ? ', orthographic' : C.projection === 'reverse' ? ', reverse' : ''}`;
     case 'output': {
       const o = spec.output;
       const show = o && o.show !== 'picture' ? `${OUTPUT_BY_SHOW[o.show].label.toLowerCase()}${o.palette ? ` · ${o.palette}` : ''}` : 'the picture';

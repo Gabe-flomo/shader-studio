@@ -326,8 +326,11 @@ export class SplatPass {
 
   hasProbe(): boolean { return !!this.probeMat; }
 
-  /** Draw: the probe, then the splats into the targets (`w` × `h`), then ask for the probe's numbers. */
-  draw(w: number, h: number, readBack = true): void {
+  /**
+   * Draw: the probe, then the splats into the targets (`w` × `h`), then ask for the probe's numbers (`readBack`; when
+   * false, a read already on its way is still picked up). True when a new read of the probe started.
+   */
+  draw(w: number, h: number, readBack = true): boolean {
     const r = this.renderer;
     if (this.target.width !== w || this.target.height !== h) this.target.setSize(w, h);
     const prev = r.getRenderTarget();
@@ -352,8 +355,10 @@ export class SplatPass {
     }
     r.setClearColor(prevColor, prevAlpha);
     r.autoClear = prevAutoClear;
-    if (readBack && this.probeMat) this.readProbe();
+    let started = false;
+    if (this.probeMat) { if (readBack) started = this.readProbe(); else this.pollProbe(); }
     r.setRenderTarget(prev);
+    return started;
   }
 
   /** Draw only the probe, and the modifier program after it (offline renders read them at once after). */
@@ -385,28 +390,19 @@ export class SplatPass {
     return out;
   }
 
-  /** Poll last frame's read; start this frame's (WebGL2: a pixel-pack buffer and a fence, so nothing waits). */
-  private readProbe(): void {
+  /**
+   * Poll last frame's read; start this frame's (WebGL2: a pixel-pack buffer and a fence, so nothing waits). True when
+   * a read started (or, without float targets, was made).
+   */
+  private readProbe(): boolean {
     const gl = this.renderer.getContext() as WebGL2RenderingContext;
     if (!this.floatProbe || typeof gl.fenceSync !== 'function') {
       // Without float targets the read is small and rare enough to do directly.
-      if (this.readings === 0 || this.readings % 4 === 0) this.readProbeNow(); else this.readings++;
-      return;
+      if (this.readings === 0 || this.readings % 4 === 0) { this.readProbeNow(); return true; }
+      this.readings++;
+      return false;
     }
-    if (this.fence) {
-      const st = gl.clientWaitSync(this.fence, 0, 0);
-      if (st === gl.TIMEOUT_EXPIRED) return;
-      gl.deleteSync(this.fence);
-      this.fence = null;
-      if (st !== gl.WAIT_FAILED) {
-        const out = new Float32Array(32);
-        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.pbo);
-        gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, out);
-        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
-        this.reading = out;
-        this.readings++;
-      }
-    }
+    if (!this.pollProbe()) return false;
     if (!this.pbo) {
       this.pbo = gl.createBuffer();
       gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.pbo);
@@ -418,6 +414,29 @@ export class SplatPass {
     gl.readPixels(0, 0, 8, 1, gl.RGBA, gl.FLOAT, 0);
     gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
     this.fence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+    return true;
+  }
+
+  /** A read of the probe is on its way. */
+  get probePending(): boolean { return !!this.fence; }
+
+  /** Pick up a read on its way if it has landed. False while it hasn't (true when there is none). */
+  private pollProbe(): boolean {
+    if (!this.fence) return true;
+    const gl = this.renderer.getContext() as WebGL2RenderingContext;
+    const st = gl.clientWaitSync(this.fence, 0, 0);
+    if (st === gl.TIMEOUT_EXPIRED) return false;
+    gl.deleteSync(this.fence);
+    this.fence = null;
+    if (st !== gl.WAIT_FAILED) {
+      const out = new Float32Array(32);
+      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.pbo);
+      gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, out);
+      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+      this.reading = out;
+      this.readings++;
+    }
+    return true;
   }
 
   /** The context was lost: let everything go (made again on the next use). */
