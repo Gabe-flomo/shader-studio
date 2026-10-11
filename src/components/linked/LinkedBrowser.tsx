@@ -28,7 +28,8 @@ import { firstFiles, hintFilter, linkedRef, mediaKindOf, pickerEntries, type Lin
 import { cachedPreview, linkedPreview, type LinkedPreview } from '../../files/linkedThumbs';
 import { FILTER_WORDS, lengthWords, sizeWords, type LinkedPick } from './linkedUi';
 import { AutoPreviewToggle, SampleRow } from '../audio/SampleRow';
-import { useSamplePreview } from '../audio/useSamplePreview';
+import { useMediaPreviewList, type MediaKind } from '../media/useMediaPreviewList';
+import { MediaPreviewPane } from '../media/MediaPreviewPane';
 import { stopPreview } from '../../lib/samplePreview';
 
 const KIND_ICON: Record<string, IconName> = { image: 'overlay', video: 'play', audio: 'wave', font: 'text' };
@@ -114,13 +115,14 @@ function detailOf(e: LinkedEntry, p: LinkedPreview | null): string {
   return [sizeWords(e.size), p?.width && p.height ? `${p.width} × ${p.height}` : '', p?.duration ? lengthWords(p.duration) : ''].filter(Boolean).join(' · ');
 }
 
-function Row({ folderId, e, selected, onClick, onDouble, compact, showPath }: { folderId: string; e: LinkedEntry; selected: boolean; onClick: () => void; onDouble?: () => void; compact: boolean; showPath: boolean }) {
+function Row({ folderId, e, selected, onClick, onDouble, compact, showPath, option }: { folderId: string; e: LinkedEntry; selected: boolean; onClick: () => void; onDouble?: () => void; compact: boolean; showPath: boolean; option?: { id?: string; role: 'option'; 'aria-selected': boolean } }) {
   const tk = useTokens();
   const [hover, setHover] = useState(false);
   // The detail line fills in once the thumbnail's preview is made (its size, length).
   const [p, setP] = useState<LinkedPreview | null>(() => cachedPreview(folderId, e));
   return (
-    <button type="button" onClick={onClick} onDoubleClick={onDouble} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} aria-pressed={selected}
+    <button type="button" onClick={onClick} onDoubleClick={onDouble} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+      {...(option ? { ...option, tabIndex: -1 } : { 'aria-pressed': selected })}
       title={e.path}
       style={{
         display: 'flex', alignItems: 'center', gap: 10, width: '100%', minHeight: compact ? 48 : 44, padding: '4px 8px 4px 6px', border: 0, borderRadius: radius.md, cursor: 'pointer', textAlign: 'left',
@@ -139,8 +141,8 @@ function Row({ folderId, e, selected, onClick, onDouble, compact, showPath }: { 
 interface AuditionItem { id: string; entry: LinkedEntry }
 
 /** A sound row that plays through the shared preview player (Splice-style auditioning). */
-function AudioRow({ folderId, entry, highlighted, playing, loading, progress, compact, onClick, onDouble, onTap, onPick }: {
-  folderId: string; entry: LinkedEntry; highlighted: boolean; playing: boolean; loading: boolean; progress: number; compact: boolean;
+function AudioRow({ folderId, entry, highlighted, playing, loading, progress, compact, onClick, onDouble, onTap, onPick, optionId }: {
+  folderId: string; entry: LinkedEntry; highlighted: boolean; playing: boolean; loading: boolean; progress: number; compact: boolean; optionId?: string;
   onClick: () => void; onDouble: () => void; onTap: () => void; onPick: () => void;
 }) {
   const [p, setP] = useState<LinkedPreview | null>(() => cachedPreview(folderId, entry));
@@ -148,7 +150,7 @@ function AudioRow({ folderId, entry, highlighted, playing, loading, progress, co
   return (
     <SampleRow title={entry.name} detail={detailOf(entry, p)} thumb={p?.thumb} w={compact ? 56 : 64} h={compact ? 34 : 36}
       highlighted={highlighted} playing={playing} loading={loading} progress={progress} touch={compact}
-      onClick={onClick} onDoubleClick={onDouble} onTap={onTap} onPick={onPick} />
+      onClick={onClick} onDoubleClick={onDouble} onTap={onTap} onPick={onPick} optionId={optionId} />
   );
 }
 
@@ -233,15 +235,23 @@ export function LinkedBrowser({ filter: pickerFilter, mode, onPick, compact = fa
   };
   const pickFile = (e: LinkedEntry) => { if (mode === 'file' && folder && !e.dir) onPick?.({ kind: 'file', ref: linkedRef(folder.id, e.path), folderId: folder.id, entry: e }); };
 
-  // Splice-style auditioning: filtered to sounds, arrow through them and hear them as you go
-  // (docs/linked-folders.md). One player, shared with the Sounds tab and the drum pad picker.
-  const auditionOk = filter === 'audio' && !!folder;
-  const auditionItems = useMemo<AuditionItem[]>(() => (auditionOk ? shown.filter(e => !e.dir).map(e => ({ id: e.path, entry: e })) : []), [auditionOk, shown]);
-  const sp = useSamplePreview<AuditionItem>({
+  // The shared media list (components/media/useMediaPreviewList): filtered to sounds, pictures or
+  // videos, arrow through them and the preview follows (a sound plays, a picture shows large, a
+  // video plays); Enter uses it (docs/linked-folders.md). One player app-wide.
+  const previewKind: MediaKind | null = !folder ? null : filter === 'audio' ? 'audio' : filter === 'image' ? 'image' : filter === 'video' ? 'video' : null;
+  const auditionOk = previewKind === 'audio';
+  const auditionItems = useMemo<AuditionItem[]>(() => (previewKind ? shown.filter(e => !e.dir).map(e => ({ id: e.path, entry: e })) : []), [previewKind, shown]);
+  const sp = useMediaPreviewList<AuditionItem>({
+    kind: previewKind ?? 'image',
     items: auditionItems,
+    label: `${folder?.name ?? 'Folder'}: ${words.many}`,
     getSource: async ({ entry }) => { if (!folder) return null; const r = await resolveLinked(linkedRef(folder.id, entry.path)); return r.ok ? r.blob : null; },
     onPick: ({ entry }) => { setSelected(entry); pickFile(entry); },
   });
+  // Arrowing to a picture or a video shows it in the preview beside the list.
+  const hiEntry = sp.highlighted?.entry ?? null;
+  useEffect(() => { if (hiEntry && previewKind !== 'audio') setSelected(hiEntry); }, [hiEntry, previewKind]);
+  const loadEntry = (e: LinkedEntry) => async () => { if (!folder) return null; const r = await resolveLinked(linkedRef(folder.id, e.path)); return r.ok ? r.blob : null; };
 
   // ── Nothing to show yet ──
   if (support === 'none' && !folders.length) {
@@ -255,26 +265,33 @@ export function LinkedBrowser({ filter: pickerFilter, mode, onPick, compact = fa
   }
 
   const crumbs = folder ? [{ label: folder.name, dir: '' }, ...(dir ? dir.split('/').map((p, i, all) => ({ label: p, dir: all.slice(0, i + 1).join('/') })) : [])] : [];
-  const preview = selected && folder ? <Preview folderId={folder.id} e={selected} compact={compact} mode={mode} onUse={() => pickFile(selected)} /> : null;
+  const preview = selected && folder ? (
+    <Preview folderId={folder.id} e={selected} compact={compact} mode={mode} onUse={() => pickFile(selected)}
+      video={previewKind === 'video' && mediaKindOf(selected.name) === 'video' ? { load: loadEntry(selected), videoProps: sp.videoProps } : undefined} />
+  ) : null;
 
   const list = (
-    <div role="list" aria-label={`${folder?.name ?? 'Folder'} contents`} tabIndex={auditionOk ? 0 : undefined}
-      onKeyDown={auditionOk ? sp.onKeyDown : undefined}
-      style={{ display: 'flex', flexDirection: 'column', gap: 1, minHeight: 0, outline: 'none' }}>
+    <div {...(previewKind ? sp.listProps : { role: 'list', 'aria-label': `${folder?.name ?? 'Folder'} contents` })}
+      style={{ display: 'flex', flexDirection: 'column', gap: 1, minHeight: 0 }}>
       {error ? <Note>{error}</Note>
         : !entries && !found ? <Note>{st === 'checking' || !st ? 'Opening…' : ' '}</Note>
         : !shown.length ? <Note>{found ? `No ${words.many} called anything like “${q.trim()}”${found.complete ? '' : ' (stopped after the first 400 folders)'}.` : `No ${words.many} here${dir ? '' : ' at the top'}.`}</Note>
         : shown.map(e => auditionOk && !e.dir ? (
           <AudioRow key={e.path} folderId={folder!.id} entry={e} compact={compact}
             highlighted={sp.highlight === e.path} playing={sp.playingId === e.path && sp.playing} loading={sp.playingId === e.path && sp.loading}
-            progress={sp.playingId === e.path && sp.duration ? sp.position / sp.duration : 0}
+            progress={sp.playingId === e.path && sp.duration ? sp.position / sp.duration : 0} optionId={sp.optionProps({ id: e.path, entry: e }).id}
             onClick={() => { setSelected(e); sp.onRowClick({ id: e.path, entry: e }); }}
             onDouble={() => sp.onRowDoubleClick({ id: e.path, entry: e })}
             onTap={() => { setSelected(e); sp.onRowTap({ id: e.path, entry: e }); }}
             onPick={() => sp.onRowDoubleClick({ id: e.path, entry: e })} />
         ) : (
           <Row key={e.path} folderId={folder!.id} e={e} compact={compact} showPath={!!found} selected={selected?.path === e.path}
-            onClick={() => { if (e.dir) { setDir(e.path); setQ(''); } else setSelected(e); }}
+            option={previewKind && !e.dir ? sp.optionProps({ id: e.path, entry: e }) : undefined}
+            onClick={() => {
+              if (e.dir) { setDir(e.path); setQ(''); return; }
+              setSelected(e);
+              if (previewKind) (compact && mode === 'file' ? sp.onRowTap : sp.onRowClick)({ id: e.path, entry: e });
+            }}
             onDouble={mode === 'file' && !e.dir ? () => pickFile(e) : undefined} />
         ))}
       {found && !found.complete && shown.length > 0 && <Note>Showing the first {shown.length}. Type more of the name to narrow it.</Note>}
@@ -337,13 +354,15 @@ export function LinkedBrowser({ filter: pickerFilter, mode, onPick, compact = fa
   );
 }
 
-function Preview({ folderId, e, compact, mode, onUse }: { folderId: string; e: LinkedEntry; compact: boolean; mode: LinkedBrowserProps['mode']; onUse: () => void }) {
+function Preview({ folderId, e, compact, mode, onUse, video }: { folderId: string; e: LinkedEntry; compact: boolean; mode: LinkedBrowserProps['mode']; onUse: () => void; video?: { load: () => Promise<Blob | string | null>; videoProps: Parameters<typeof MediaPreviewPane>[0]['videoProps'] } }) {
   const tk = useTokens();
   const [p, setP] = useState<LinkedPreview | null>(() => cachedPreview(folderId, e));
   useEffect(() => { let live = true; setP(cachedPreview(folderId, e)); void linkedPreview(folderId, e).then(x => { if (live) setP(x); }); return () => { live = false; }; }, [folderId, e]);
   return (
     <div style={{ display: 'flex', flexDirection: compact ? 'row' : 'column', gap: 10, alignItems: compact ? 'center' : 'stretch', padding: compact ? 8 : 0, borderRadius: radius.md, background: compact ? tk.bg.field : 'transparent' }}>
-      {compact ? <EntryThumb folderId={folderId} entry={e} w={72} h={44} /> : <EntryThumb folderId={folderId} entry={e} w="100%" h={124} big />}
+      {video
+        ? <div style={{ width: compact ? 120 : '100%', flexShrink: 0 }}><MediaPreviewPane kind="video" itemKey={`${folderId}/${e.path}`} thumb={p?.thumb} load={video.load} videoProps={video.videoProps} height={compact ? 68 : 124} /></div>
+        : compact ? <EntryThumb folderId={folderId} entry={e} w={72} h={44} /> : <EntryThumb folderId={folderId} entry={e} w="100%" h={124} big />}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0, flex: 1 }}>
         <span style={{ font: `600 12.5px ${fontFamily.ui}`, color: tk.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: compact ? 'nowrap' : 'normal', wordBreak: 'break-word' }}>{e.name}</span>
         <span style={{ font: `11.5px ${fontFamily.ui}`, color: tk.text.muted }}>{detailOf(e, p)}</span>
