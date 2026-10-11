@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.153',
+    date: '2026-10-10',
+    title: 'Frame rate',
+    highlights: [
+      { area: 'Studio', text: 'Frame rate: pick Auto (your screen\'s max) or 6–60 fps in the preview header. At 12 fps time steps in 1/12 s jumps for a stop-motion look.' },
+      { area: 'Studio', text: 'Frame rate is saved with the graph and kept in recordings, exports, Bake and web pages: a 60 fps video of a 12 fps graph holds each picture.' },
+    ],
+  },
+  {
     id: '2026.10.152',
     date: '2026-10-10',
     title: 'Splats and pictures',
