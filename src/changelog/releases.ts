@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.146',
+    date: '2026-10-10',
+    title: 'Switch to Transform',
+    highlights: [
+      { area: 'Studio', text: 'Old transform cards have a Transform pill that swaps them for the universal Transform, keeping wires, keyframes and Play controls. Right-click switches all.' },
+      { area: 'Studio', text: 'Transform shows a 2D / 3D / 4D chip and the right preview. GLSL import turns rotations into Transform.' },
+    ],
+  },
+  {
     id: '2026.10.145',
     date: '2026-10-10',
     title: 'Grid Rules, rebuilt',
