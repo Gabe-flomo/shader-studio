@@ -20,6 +20,8 @@ and so does the 3D Scene Builder for 3D scenes ([scene-builder-3d.md](scene-buil
 | Phase | Added to the gradient's Phase: wire Time to make the colours flow along depth |
 | Direction | (on demand, from *Direction°*) Which way *Shift* moves near things: wire the Mouse to look around |
 
+Every slider is also a socket of its own name ([wireable-sliders.md](wireable-sliders.md)): right-click it → Control from outside, and wire Time, an LFO or any number in. A mode's own settings (Fog, Light, Mix) and the gradient's show once that mode or a gradient is picked.
+
 ## Outputs
 
 | Output | What it is |

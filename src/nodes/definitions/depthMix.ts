@@ -20,7 +20,7 @@
  * Phase to animate it), applied to the scene, the picture or both. The maths is mirrored in plain JS below for tests.
  */
 import type { GraphNode, NodeDefinition } from '../../types/nodeGraph';
-import { p, pv3 } from './helpers';
+import { p, pv3, withParamSockets } from './helpers';
 import { PALETTE_PRESETS } from './color';
 import { TEXTURE_TOOLS_CATEGORY } from './textureTools';
 
@@ -101,6 +101,8 @@ export function depthMixGradient(n: number, preset: number, scale: number, phase
 // ── The node ─────────────────────────────────────────────────────────────────
 
 const SHAPE = 'Depth range';
+/** The gradient's settings show (and are read) once a gradient is picked. */
+const GRADIENT_ON = { param: 'gradient', value: PALETTE_PRESETS.map((_, i) => String(i)) };
 const SIZE = 'Size';
 const SPACE = 'Space';
 const OCCLUDE = 'Occlude';
@@ -121,7 +123,8 @@ const presetOf = (v: unknown): number | null => {
 };
 const v3 = (a: number[]) => `vec3(${a.map(x => (Number.isInteger(x) ? `${x}.0` : String(x))).join(', ')})`;
 
-export const DepthMixNode: NodeDefinition = {
+/** Every slider is wireable (docs/wireable-sliders.md): a wire takes its place, sockets come out on demand. */
+export const DepthMixNode: NodeDefinition = withParamSockets({
   type: DEPTH_MIX_TYPE,
   label: 'Depth Mix',
   category: TEXTURE_TOOLS_CATEGORY,
@@ -174,20 +177,20 @@ export const DepthMixNode: NodeDefinition = {
     focus: { label: 'Focus', type: 'float', min: 0, max: 1, step: 0.01, section: SPACE, hint: 'The depth that stays still: nearer moves one way, farther the other.' },
     level: { label: 'Scene sits at', type: 'float', min: 0, max: 1, step: 0.005, section: OCCLUDE, hint: 'Occlude: the scene\'s depth (0 far, 1 near). The picture hides it wherever the picture is nearer.' },
     softness: { label: 'Softness', type: 'float', min: 0, max: 0.5, step: 0.005, section: OCCLUDE, hint: 'How gently the scene fades in and out at that depth (depth is soft round hair and edges).' },
-    fogDensity: { label: 'Density', type: 'float', min: 0, max: 1, step: 0.01, section: FOG, hint: 'Fog: how much the scene fades on the farthest things (1: gone).' },
-    haze: { label: 'Haze', type: 'float', min: 0, max: 1, step: 0.01, section: FOG, hint: 'How much fog colour hangs in the far part of the picture itself.' },
-    fogColor: { label: 'Fog colour', type: 'vec3color', section: FOG, hint: 'The haze\'s colour.' },
-    lightStrength: { label: 'Strength', type: 'float', min: 0, max: 10, step: 0.01, section: LIGHT, hint: 'Light by depth: how strongly the scene lights the picture (most on near things).' },
-    ambient: { label: 'Own light', type: 'float', min: 0, max: 1.5, step: 0.01, section: LIGHT, hint: 'How much of the picture\'s own light stays: lower for a night relight.' },
-    glowKeep: { label: 'Glow', type: 'float', min: 0, max: 2, step: 0.01, section: LIGHT, hint: 'How much of the scene still shows as itself, on top.' },
-    mixNear: { label: 'Near shows', type: 'select', section: MIX, hint: 'Mix: what the near things show.', options: [{ value: 'picture', label: 'The picture' }, { value: 'scene', label: 'The scene' }] },
-    mixAmount: { label: 'Amount', type: 'float', min: 0, max: 1, step: 0.01, section: MIX, hint: 'How far the blend goes: 1 is all the way.' },
+    fogDensity: { showWhen: { param: 'mode', value: 'fog' }, label: 'Density', type: 'float', min: 0, max: 1, step: 0.01, section: FOG, hint: 'Fog: how much the scene fades on the farthest things (1: gone).' },
+    haze: { showWhen: { param: 'mode', value: 'fog' }, label: 'Haze', type: 'float', min: 0, max: 1, step: 0.01, section: FOG, hint: 'How much fog colour hangs in the far part of the picture itself.' },
+    fogColor: { showWhen: { param: 'mode', value: 'fog' }, label: 'Fog colour', type: 'vec3color', section: FOG, hint: 'The haze\'s colour.' },
+    lightStrength: { showWhen: { param: 'mode', value: 'light' }, label: 'Strength', type: 'float', min: 0, max: 10, step: 0.01, section: LIGHT, hint: 'Light by depth: how strongly the scene lights the picture (most on near things).' },
+    ambient: { showWhen: { param: 'mode', value: 'light' }, label: 'Own light', type: 'float', min: 0, max: 1.5, step: 0.01, section: LIGHT, hint: 'How much of the picture\'s own light stays: lower for a night relight.' },
+    glowKeep: { showWhen: { param: 'mode', value: 'light' }, label: 'Glow', type: 'float', min: 0, max: 2, step: 0.01, section: LIGHT, hint: 'How much of the scene still shows as itself, on top.' },
+    mixNear: { showWhen: { param: 'mode', value: 'mix' }, label: 'Near shows', type: 'select', section: MIX, hint: 'Mix: what the near things show.', options: [{ value: 'picture', label: 'The picture' }, { value: 'scene', label: 'The scene' }] },
+    mixAmount: { showWhen: { param: 'mode', value: 'mix' }, label: 'Amount', type: 'float', min: 0, max: 1, step: 0.01, section: MIX, hint: 'How far the blend goes: 1 is all the way.' },
     gradient: { label: 'Gradient', type: 'select', section: GRADIENT, hint: 'A palette laid along depth: the colour shifts as the picture gets deeper.', options: DEPTH_GRADIENT_OPTIONS },
-    gradientTo: { label: 'On', type: 'select', section: GRADIENT, hint: 'What the gradient colours.', options: [{ value: 'scene', label: 'The scene' }, { value: 'picture', label: 'The picture' }, { value: 'both', label: 'Both' }] },
-    gradientHow: { label: 'How', type: 'select', section: GRADIENT, hint: 'Multiply tints; Colorize keeps only brightness and takes the gradient\'s colour; Add lays it on as light.', options: [{ value: 'multiply', label: 'Multiply' }, { value: 'colorize', label: 'Colorize' }, { value: 'add', label: 'Add' }] },
-    gradientAmount: { label: 'Amount', type: 'float', min: 0, max: 1, step: 0.01, section: GRADIENT, hint: 'How strong the gradient is.' },
-    gradientScale: { label: 'Cycles', type: 'float', min: 0, max: 8, step: 0.01, section: GRADIENT, hint: 'How many times the palette repeats from far to near.' },
-    gradientPhase: { label: 'Phase', type: 'float', min: -2, max: 2, step: 0.005, section: GRADIENT, hint: 'Shifts the colours along depth. Wire Time into the Phase socket to make them flow.' },
+    gradientTo: { showWhen: GRADIENT_ON, label: 'On', type: 'select', section: GRADIENT, hint: 'What the gradient colours.', options: [{ value: 'scene', label: 'The scene' }, { value: 'picture', label: 'The picture' }, { value: 'both', label: 'Both' }] },
+    gradientHow: { showWhen: GRADIENT_ON, label: 'How', type: 'select', section: GRADIENT, hint: 'Multiply tints; Colorize keeps only brightness and takes the gradient\'s colour; Add lays it on as light.', options: [{ value: 'multiply', label: 'Multiply' }, { value: 'colorize', label: 'Colorize' }, { value: 'add', label: 'Add' }] },
+    gradientAmount: { showWhen: GRADIENT_ON, label: 'Amount', type: 'float', min: 0, max: 1, step: 0.01, section: GRADIENT, hint: 'How strong the gradient is.' },
+    gradientScale: { showWhen: GRADIENT_ON, label: 'Cycles', type: 'float', min: 0, max: 8, step: 0.01, section: GRADIENT, hint: 'How many times the palette repeats from far to near.' },
+    gradientPhase: { showWhen: GRADIENT_ON, label: 'Phase', type: 'float', min: -2, max: 2, step: 0.005, section: GRADIENT, hint: 'Shifts the colours along depth. Wire Time into the Phase socket to make them flow.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id = node.id;
@@ -278,4 +281,4 @@ export const DepthMixNode: NodeDefinition = {
       outputVars: { color: `${id}_color`, depth: `${id}_n`, scale: `${id}_scale`, sized: `${id}_sized`, uv: `${id}_uv`, nearMask: `${id}_near`, front: `${id}_front`, gradient: `${id}_grad` },
     };
   },
-};
+}, ['pictureAmount', 'farEnd', 'nearEnd', 'curve', 'sizeFar', 'sizeNear', 'spaceAmount', 'angle', 'focus', 'level', 'softness', 'fogDensity', 'haze', 'fogColor', 'lightStrength', 'ambient', 'glowKeep', 'mixAmount', 'gradientAmount', 'gradientScale', 'gradientPhase']);
