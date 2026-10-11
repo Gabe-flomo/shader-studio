@@ -92,6 +92,7 @@ const LIST_KINDS: ListKind[] = [
   { kind: 'drumKit', area: 'presets', key: 'shader-studio:drum-kits', root: 'presets/drum kits', ext: '.kit.json', label: 'Drum kit' },
   { kind: 'layerSet', area: 'presets', key: 'shader-studio:layer-sets', root: 'presets/layer sets', ext: '.set.json', label: 'Layer set' },
   { kind: 'rackPreset', area: 'presets', key: 'shader-studio:rack-presets', root: 'presets/racks', ext: '.rack.json', label: 'Rack preset' },
+  { kind: 'spaceBlock', area: 'presets', key: 'shader-studio:space-blocks', root: 'presets/space blocks', ext: '.spaceblock.json', label: 'Space block' },
 ];
 
 /** How the two sides' changes to a file combine when both changed it. */

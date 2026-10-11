@@ -11,7 +11,7 @@
  * tone map, post) is an existing node.
  */
 import type { GraphNode, NodeDefinition } from '../../types/nodeGraph';
-import { p } from './helpers';
+import { p, withParamSockets } from './helpers';
 
 const DEG = '0.017453292519943295';
 const TAU = '6.28318530718';
@@ -61,7 +61,7 @@ export const Place2DNode: NodeDefinition = {
   },
 };
 
-export const Motion2DNode: NodeDefinition = {
+export const Motion2DNode: NodeDefinition = withParamSockets({
   type: 'motion2D',
   label: 'Motion 2D',
   category: '2D Space', subcategory: 'Basic',
@@ -107,9 +107,9 @@ export const Motion2DNode: NodeDefinition = {
     else lines.push(`    ${id}_grow *= 1.0 + ${amt} * sin(${id}_w);\n`);
     return { code: lines.join(''), outputVars: { offset: `${id}_offset`, turn: `${id}_turn`, grow: `${id}_grow` } };
   },
-};
+}, ['speed', 'amount']);
 
-export const Mirror2DNode: NodeDefinition = {
+export const Mirror2DNode: NodeDefinition = withParamSockets({
   type: 'mirror2D',
   label: 'Mirror 2D',
   category: '2D Space', subcategory: 'Repeat',
@@ -136,6 +136,6 @@ export const Mirror2DNode: NodeDefinition = {
     if (axes.includes('y')) lines.push(`    ${id}_uv.y = abs(${id}_uv.y - ${p(node.params.offsetY, 0)}) + ${p(node.params.offsetY, 0)};\n`);
     return { code: lines.join(''), outputVars: { uv: `${id}_uv` } };
   },
-};
+}, ['offsetX', 'offsetY']);
 
 export const SCENE2D_NODES = { place2D: Place2DNode, motion2D: Motion2DNode, mirror2D: Mirror2DNode };

@@ -44,6 +44,8 @@ export interface BlockParam { name: string; value: number; min: number; max: num
 export interface SpaceBlock {
   /** The library entry it came from (blockLibrary.ts), while its lines are the entry's. */
   lib?: string;
+  /** The saved block (savedBlocks.ts, "My blocks") it came from, by name: recipes print `my="…"`. */
+  my?: string;
   /** What it is called in the stack and on its node. */
   name?: string;
   lines: BlockLine[];
@@ -61,7 +63,11 @@ export const COMBINE_MODES: Array<{ mode: CombineMode; label: string; blurb: str
 ];
 export const COMBINE_BY_MODE = Object.fromEntries(COMBINE_MODES.map(m => [m.mode, m])) as Record<CombineMode, typeof COMBINE_MODES[number]>;
 
-export interface CombineSpec { mode: CombineMode; /** Blend only: 0 is A, 1 is B. */ amount: number; a: SpaceBlock; b: SpaceBlock }
+export interface CombineSpec {
+  mode: CombineMode; /** Blend only: 0 is A, 1 is B. */ amount: number; a: SpaceBlock; b: SpaceBlock;
+  /** The saved combine (savedBlocks.ts) it came from, by name. */
+  my?: string;
+}
 
 /** Names a block's own numbers can't take: the variables, the Expression Block's scratch `p`, GLSL's words. */
 const RESERVED = new Set(['x', 'y', 'uv', 't', 'p', 'PI', 'TAU', 'true', 'false', 'float', 'int', 'bool', 'vec2', 'vec3', 'vec4', 'mat2', 'mat3', 'mat4',
