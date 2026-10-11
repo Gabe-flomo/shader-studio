@@ -214,7 +214,14 @@ export interface DrawSpec {
   offset: Vec2;
   /** Repeat: each row of tiles slides this many cells across (bricks, staggers). */
   shift: number;
+  /**
+   * What a copy runs as: 'shown' (the default) its own cell, so lag ripples across the copies and
+   * rules and pictures see where it is; 'source' the drawn cell it copies, so every copy moves and
+   * looks alike ("Copies match the drawn cell").
+   */
+  copies?: DrawCopies;
 }
+export type DrawCopies = 'shown' | 'source';
 export const defaultDraw = (): DrawSpec => ({ mode: 'here', period: [2, 2], offset: [0, 0], shift: 0 });
 export const drawOf = (spec: Pick<GridSceneSpec, 'draw'>): DrawSpec => ({ ...defaultDraw(), ...(spec.draw ?? {}) });
 

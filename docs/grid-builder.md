@@ -86,10 +86,13 @@ it reads the drawing, so a mode costs nothing per shape (`gs_cell`; `sourceCell`
 | **Mirror X / Mirror Y / Mirror both** | Draw on the left half (top half, top-left quarter); it reflects. |
 | **Rotate 4** | Draw in the top-left quarter; it turns round the middle into all four (a kaleidoscope; best on a square grid, as a turned cell can fall off a non-square one). |
 
-Motion lag, rules, the pattern's wave and the picture modes all use the **shown** cell, not the
-drawn one: copies ripple across the grid with the lag, a rule on column 6 catches the copies there,
-and each copy carries its own piece of a picture. (The source cell instead would make every copy
-move and look alike; not offered yet.) Make it a simulation starts from what the grid shows, copies
+By default motion lag, rules, the pattern's wave and the picture modes use the **shown** cell:
+copies ripple across the grid with the lag, a rule on column 6 catches the copies there, and each
+copy carries its own piece of a picture. **Copies match the drawn cell** (a toggle under the draw
+mode) runs every copy as the cell it copies instead: its lag, pulse, wave, mask, rules and picture
+are worked out in the drawing's own frame and the result is moved to the copy, so every copy moves
+and looks exactly alike (and carries the drawn cell's piece of a picture). A rule with a partner is
+then checked between drawn cells. Make it a simulation starts from what the grid shows, copies
 included.
 
 ### Text
@@ -156,17 +159,22 @@ Glow Layer (d, colour) ─► Add over the ground ─► SDF Fill ─► Tone Ma
 Every pixel looks only at the cells near it, not at every drawn cell:
 
 - **Each shape is searched on its own.** Its motion is turned backwards to find the home cell a
-  shape at this pixel would have come from: exactly when every cell moves alike (lag 0), or round
-  the middle of the path when the motion runs as a wave (lag). Travel and Hop solve their wrap
-  round the grid (with lag, each way round it). A square of cells round that home is read in the
-  drawing; a cell is drawn only if it holds this shape.
-- **The square's size** comes from what the shape could reach: its size (at least 1, so dragging
-  the size slider up to 1 stays whole), pulse, outline, the pattern's grow (size) and push, its
-  rules' grow and become, and with lag the path's reach (X, Y). Glow adds a cell so halos stay.
-  Typically 3 × 3 (no glow) or 5 × 5; at most 13 × 13. The square is sized when the scene is built:
-  dragging a shape's size, pulse, reach or lag far past what was built (on the Shape node, without
-  rebuilding) can cut a shape at the square's edge until the next build; the builder rebuilds
-  itself.
+  shape at this pixel would have come from (`gs_find…`): the fixed point h = X − (P(h) − h), the
+  place a home's motion puts it at, iterated (up to 8 times, stopping when it settles). With lag,
+  neighbouring cells are lag of a cycle apart, so their places differ by at most L = 2 · lag · the
+  path's fastest rate a cell; while L is under 0.8 the iteration converges and the search stays
+  small (reach ÷ (1 − L)) however big the motion. Lag 0 is exact in one step. Above it, shapes
+  overtake each other and no single home is "the" one: the search is the middle of the path widened
+  by its range. Travel and Hop solve their wrap round the grid (with lag, each way round it). A
+  square of cells round that home is read in the drawing; a cell is drawn only if it holds this
+  shape.
+- **The square's size is worked out live, every pixel**, from the shape's sliders as they are now:
+  its size, pulse, outline, the pattern's grow (size) and push, its rules' grow and become, and the
+  motion (reach and lag) as above. Glow adds a cell so halos stay. The loops run to the cap, 13 × 13,
+  and stop at the live radius, so dragging any slider on the Shape or Grid scene node, as far as you
+  like, never cuts a shape and never recompiles. Typically 3 × 3 (no glow) or 5 × 5. When a setting
+  would need more than the cap (huge reach with a lot of lag), the builder's Motion section says so:
+  some shapes may be cut.
 - **The pattern's fill** is searched round the pixel's own cell the same way, so a fill shape bigger
   than its cell, pulsing or pushed reaches over the cell's edge instead of being cut there.
 - **Rules with a partner** (*shares a cell with*, *is near*) search the partner shape's cells round
@@ -175,11 +183,24 @@ Every pixel looks only at the cells near it, not at every drawn cell:
   on this Mac: 5.3 ms a frame with glow (a 5 × 5 search), 2.6 ms without (3 × 3), against 13.9 ms for
   the old code (one block per drawn cell, every pixel testing every one; it allowed 128 cells, so
   576 is its worst case); the shader's grid code is 4 KB instead of 311 KB and links in about 85 ms
-  instead of 1.5 s. Very large motion with lag (an X or Y of 3 cells) widens the search to 9 × 9 or
-  more and costs more; several shapes cost one search each.
+  instead of 1.5 s. Big motion with lag, the same grid (glow on unless said), before (the search
+  sized from the path's range) and after (the fixed-point inverse, live radius):
+
+  | Motion | Before | After |
+  |---|---|---|
+  | circle, reach 3, lag 0.02 | 24.8 ms (11 × 11) | 7.0 ms (5 × 5) |
+  | the same, no glow | 16.9 ms (9 × 9) | 4.1 ms (3 × 3) |
+  | up and down, reach 3, lag 0.03 (L ≈ 1.1: bounded by the range) | 23.9 ms (11 × 11) | 17.0 ms (9 × 9) |
+  | circle, reach 2, lag 0.1 (L ≈ 2.5) | 17.9 ms (9 × 9) | 10.9 ms (7 × 7) |
+  | circle, reach 0.3, lag 0.08 | 5.8 ms | 6.0 ms |
+
+  (The last rows gain from the radius following the real size, not size 1.) Several shapes cost one
+  search each.
 - The old per-cell code is kept in the tests (`src/gridScene/__tests__/legacyGlsl.ts`): every
   template and a spread of Surprise scenes draw the same picture with the lookup (within 0.005 of a
-  colour step for the templates), compared on the CPU (`gridLookup.test.ts`).
+  colour step for the templates), compared on the CPU (`gridLookup.test.ts`). The search is also
+  checked against brute force (`gridProgram(spec, { brute: true })`, every cell for every shape) for
+  big motion with lag on every non-wrapping path, and with copies matching.
 
 The UV node keeps the spec (`gridScene`), so the Scene builder lists the build ("Grid scene · 10 ×
 10 · 27 cells drawn") and **Edit this one** reopens it exactly as built. A rebuild keeps each node's
@@ -257,10 +278,8 @@ rule between two shapes. One undo step; Reroll and Undo in its toast.
 
 ## Not yet
 
-- Draw modes that use the drawn (source) cell for lag, rules and pictures instead of the shown one
-  (every copy moving and looking alike).
-- Search sizes follow the scene as built: a Shape node's slider dragged far past it, without a
-  rebuild, can cut shapes at the search's edge.
+- Huge reach with a lot of lag (shapes overtaking each other, past 13 × 13 cells) is capped; the
+  builder warns.
 
 - Shapes moving through the pattern's fill don't push it aside; the fill only skips the cells you
   drew on.
