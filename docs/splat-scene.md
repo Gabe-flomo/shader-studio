@@ -93,8 +93,11 @@ A raster pass before the picture (`lib/splats/engine.ts`, `render.ts`, `shaders.
    degree > 0, the view-dependent colour is added from the view direction in the scan's own space.
 3. **Back to front.** The worker sorts by depth along the view direction (in the scan's own space, Mᵀ · forward) with a
    counting sort on 16-bit keys. The engine reads the probe back without waiting (a pixel-pack buffer and a fence) and
-   asks for a new order when the view has turned more than 0.25°, or every frame (Sort: every frame). The new order lands
-   on a later frame; the camera itself is never late (the GPU reads it from the probe).
+   asks for a new order when the view has turned more than 0.25°, or at any turn at all (Sort: every frame); a view that
+   hasn't turned is never sorted again. The probe is read back only when a uniform it reads has changed since the last
+   read (`lib/splats/uniformPrint.ts`; a program that reads a texture has no print and is read every frame), so a still
+   camera with the clock paused costs no readback. The new order lands on a later frame; the camera itself is never
+   late (the GPU reads it from the probe).
 4. **Two targets.** Colour (premultiplied) and, in a second half-float target, Σ αᵢ Tᵢ dᵢ with the same alpha: divided
    by alpha it is the splats' distance at the pixel. The node samples both at the pixel and composites.
 
@@ -179,6 +182,27 @@ order: an Opacity floor after a Dissolve brings dissolved splats back; before it
 **Play:** every slider is an ordinary param, a live uniform of the picture's table, so dragging never recompiles and
 Play controls, mappings and keyframes drive them like any other (a top-level node: `nodeId::param`).
 
+**Wiring a slider:** every number, vector and colour slider of the recipes (and Set Splat's Amount) is also an input
+socket of the same name ([wireable-sliders.md](wireable-sliders.md)). Wired, the wire takes the slider's place and the
+card shows its chip instead; unwired, the slider is the value, and the code is what it was. The headline sockets show
+on the card; the rest come out from their slider (right-click → Control from outside), and stay out while wired:
+
+| Node | On the card | On demand |
+|---|---|---|
+| Splat Dissolve | Amount | Noise scale, Evolve, Softness, Edge width, Edge colour, Glow, Drift |
+| Splat Explode | Amount, Return home (and Center, as before) | Distance, Scatter, Stagger, Spin |
+| Splat Wave | Amplitude, Frequency, Speed | |
+| Splat Colour | Hue, Tint amount | Saturation, Brightness, Contrast, Tint |
+| Splat Crop | Offset (and Center, as before) | Size, Plane faces, Softness, Edge width, Edge colour, Glow |
+| Splat Size & Opacity | Size, Opacity, Keep | Opacity floor |
+| Splat Points | On, Dot size | Solid |
+| Set Splat | | Amount |
+
+What is wired runs in the modifier program, once per splat: an LFO into Wave's Amplitude, Time into its Speed, a Noise
+into Dissolve's Amount (read at a fixed point: one Amount for every splat, moving with time), or Splat Attributes →
+maths into a slider (a different value for every splat). Its own sliders join the picture's table, so Play still
+reaches them. A wire into an older graph's `__param_<key>` socket (the Splat builder's LFOs) keeps working.
+
 ### How it runs
 
 The compiler (`compiler/splatGraph.ts`) makes a **modifier program** per Splat Scene from the chain wired into its
@@ -199,11 +223,15 @@ the scan draws unmodified and the card says so.
 ### Sorting moved splats
 
 The compile knows which nodes move splats and by which params (Explode's Amount, Wave's Amplitude, Dissolve's Drift,
-Set Splat with Position or Offset wired). While any is non-zero, the engine sorts by the **moved** positions instead
+Set Splat with Position or Offset wired); one of those wired (into its socket or a `__param_` socket) or keyframed counts
+as moving whatever its slider says. While any is non-zero, the engine sorts by the **moved** positions instead
 of the scan's own: a small pass works out every moved splat's depth along the camera's forward ray (four a texel), it
 is read back without stalling (a pixel-pack buffer and a fence: 4 MB at 1 M splats), and the worker sorts those depths
 (`orderByDepth`, the same counting sort). One read or sort at a time, so it runs as fast as the worker sorts (a frame
 or a few behind a fast move, never holding a frame), and stops when the depths stop changing (a fingerprint of them).
+The 4 MB read itself is skipped while the camera (the probe's last reading) and the uniforms the modifier reads are as
+they were at the last read: a still scene with the clock paused reads nothing back and lets the preview's loop stop
+(before, a moving modifier kept a read in flight and the preview drawing forever).
 A splat a modifier breaks (NaN) takes no part. Offline renders read and sort for every frame, waited for. Moves along
 the view's sideways axes don't change the order, so they don't sort again.
 
@@ -232,9 +260,10 @@ Built: [splat-builder.md](splat-builder.md) (the Scene builder's Splat scene). W
 - Lay modifiers down with `addSplatModifier(nodes, splatId, pick, nextId)` (`nodes/recipes/splatModifierRecipes.ts`),
   which appends to the chain; `splatModifierChain` reads it back (scan first). A builder's stack is that chain.
 - Each recipe is one node with plain params (all live uniforms): a builder sets params, never GLSL. Custom looks are
-  Splat Attributes → ordinary nodes → Set Splat.
+  Splat Attributes → ordinary nodes → Set Splat. To animate a slider, wire into its socket (the param's own key).
 - A new moving node needs a line in `splatMoveGate` (`nodes/definitions/splatModifiers.ts`), or the sort won't follow
-  it.
+  it; its gate params count as moving while wired or keyframed. A new slider gets its socket from the node's
+  `withParamSockets` list.
 - `SplatModOut` packs state into the targets (size sign = dot); a new per-splat channel needs a third target.
 
 ## Web pages

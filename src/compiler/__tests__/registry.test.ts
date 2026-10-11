@@ -136,6 +136,31 @@ describe('node registry', () => {
     expect(dead, `dead sliders (uniform declared, never read):\n  ${dead.join('\n  ')}`).toEqual([]);
   });
 
+  it('D2b: a slider\'s own socket (the same key) carries the slider\'s kind, and a wire into it replaces the slider', () => {
+    // nodes/definitions/helpers.ts withParamSockets; the full sweep is nodes/definitions/__tests__/paramSockets.test.ts.
+    const mismatched: string[] = [];
+    for (const [type, def] of Object.entries(NODE_REGISTRY)) {
+      for (const [k, pd] of Object.entries(def.paramDefs ?? {})) {
+        const sock = def.inputs?.[k];
+        if (!sock || (pd.type !== 'vec3' && pd.type !== 'vec3color' && pd.type !== 'float')) continue;
+        const want = pd.type === 'float' ? 'float' : 'vec3';
+        if (sock.type !== want) mismatched.push(`${type}.${k}: slider ${pd.type}, socket ${sock.type}`);
+      }
+    }
+    expect(mismatched, mismatched.join('\n')).toEqual([]);
+    // A sample: Time into FBM's Gain, Gravitational Lens's Strength and an LFO's Amplitude; the slider goes unread.
+    for (const [type, key] of [['fbm', 'gain'], ['gravitationalLens', 'strength'], ['lfo', 'amplitude']] as const) {
+      const def = NODE_REGISTRY[type];
+      const node = makeNode('n1', type, def);
+      const src = makeNode('src', 'time', NODE_REGISTRY.time);
+      node.inputs[key] = { ...node.inputs[key], connection: { nodeId: 'src', outputKey: Object.keys(NODE_REGISTRY.time.outputs)[0] } };
+      const r = compileGraph({ nodes: [src, node, outputNode('n1', pickOutput(def)!)] });
+      expect(r.success, `${type}.${key}`).toBe(true);
+      const u = r.paramBindings[`n1::${key}`];
+      expect(new RegExp(`\\b${u}\\b`).test(stripDeclarations(r.fragmentShader)), `${type}.${key} slider unread`).toBe(false);
+    }
+  });
+
   it('D3: nodes that share a GLSL helper name compile together with one definition each', () => {
     // Function names each node's shader defines (from the single-node compiles).
     const defRe = /^\s*(?:float|vec[234]|mat[234]|int|ivec[234]|bool|bvec[234]|void)\s+([A-Za-z_]\w*)\s*\([^)]*\)\s*\{/gm;

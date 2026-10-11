@@ -39,6 +39,43 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.163',
+    date: '2026-10-11',
+    title: 'Clean grid glow',
+    highlights: [
+      { area: 'Studio', text: 'Grid builder: fixed shapes sliced by a seam on Travel and Hop with lag, and the blocky glow patches between cells.' },
+      { area: 'Studio', text: 'Grid builder glow style: Soft (default) runs each shape\'s colour into its glow, so it reads as one shape; Halo keeps the old rim.' },
+    ],
+  },
+  {
+    id: '2026.10.162',
+    date: '2026-10-11',
+    title: 'Surprise, unfrozen',
+    highlights: [
+      { area: 'Studio', text: 'Fixed: Surprise me in the Agent Builder (3D slime especially) could freeze the walkers so later Surprises only changed colour. Every Surprise now restarts.' },
+      { area: 'Studio', text: 'Surprise me skips presets that need their own setup, and a surprise that would not compile is undone and rerolled.' },
+    ],
+  },
+  {
+    id: '2026.10.161',
+    date: '2026-10-11',
+    title: 'My blocks',
+    highlights: [
+      { area: 'Studio', text: '2D Scene Builder: save your own space blocks and combines with a picture of what they do. My blocks leads the library; export, import and copy as text.' },
+      { area: 'Studio', text: 'Insert on a wire: float nodes fit any wire (broadcast), and genType nodes like Exp take the wire\'s type. Related search only lists nodes that can connect.' },
+    ],
+  },
+  {
+    id: '2026.10.160',
+    date: '2026-10-11',
+    title: 'Wire any slider',
+    highlights: [
+      { area: 'Studio', text: 'Wire into sliders: every splat modifier control, and 553 sliders on 157 nodes, can be driven from the graph. Right-click a slider → Control from outside.' },
+      { area: 'Studio', text: 'Splat builder is smooth: the picture follows drags and orbits (about 6 ms a frame at 1M splats), and the graph behind it rests while it is open.' },
+      { area: 'Studio', text: 'Labels on node cards and builder panels are never cut off; long names wrap. Fixed: the Explain view crashed in a tab opened before an update.' },
+    ],
+  },
+  {
     id: '2026.10.159',
     date: '2026-10-11',
     title: 'Node search, redesigned',

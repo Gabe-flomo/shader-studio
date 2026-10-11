@@ -1,5 +1,5 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { f, p } from './helpers';
+import { f, p, withParamSockets } from './helpers';
 
 // Deterministic per-node offset for "off the plate" sentinel values. Using a
 // shared constant (e.g. plain 4.0) for every masked node is dangerous: if two
@@ -98,7 +98,7 @@ vec2 ch2_noise2(vec2 p, float t, float spd, int mode) {
     return vec2(hx, hy) * 2.0 - 1.0;
 }`;
 
-export const ChladniNode: NodeDefinition = {
+export const ChladniNode: NodeDefinition = withParamSockets({
   type: 'chladni',
   label: 'Chladni Plate',
   category: 'Science',
@@ -192,7 +192,7 @@ export const ChladniNode: NodeDefinition = {
       },
     };
   },
-};
+}, ['scale', 'line_width', 'aa', 'turbulence', 'turb_speed', 'brightness']);
 
 // ─── Wave Term ────────────────────────────────────────────────────────────────
 //
@@ -416,7 +416,7 @@ const CHLADNI_SUPERPOSITION_TERM_DEFAULTS: Record<number, { n: number; m: number
   6: { n: 8.0, m: 3.0, w: 0.1  },
 };
 
-export const ChladniSuperpositionNode: NodeDefinition = {
+export const ChladniSuperpositionNode: NodeDefinition = withParamSockets({
   type: 'chladniSuperposition',
   label: 'Chladni Superposition',
   category: 'Science',
@@ -555,7 +555,7 @@ export const ChladniSuperpositionNode: NodeDefinition = {
       outputVars: { field: `${id}_field`, uv: `${id}_p` },
     };
   },
-};
+}, ['n2', 'm2', 'w2', 'n3', 'm3', 'w3', 'n4', 'm4', 'w4', 'n5', 'm5', 'w5', 'n6', 'm6', 'w6']);
 
 // ─── Chladni Mode Frequency ────────────────────────────────────────────────────
 //

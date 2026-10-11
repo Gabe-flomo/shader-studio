@@ -1,5 +1,5 @@
 import type { NodeDefinition, GraphNode, ParamDef } from '../../types/nodeGraph';
-import { p, zeroFor } from './helpers';
+import { p, zeroFor, withParamSockets } from './helpers';
 
 /**
  * The "exact" switch of the guarded math nodes (Divide, Pow, Square Root). Off, the node guards
@@ -282,7 +282,7 @@ export const ModNode: NodeDefinition = {
 };
 
 // ModSelectNode — mod-based 0/1 mask for even/odd/every-Nth selection.
-export const ModSelectNode: NodeDefinition = {
+export const ModSelectNode: NodeDefinition = withParamSockets({
   type: 'modSelect',
   label: 'Mod Select',
   category: 'Math', subcategory: 'Modulo',
@@ -318,7 +318,7 @@ export const ModSelectNode: NodeDefinition = {
       outputVars: { mask: `${id}_mask`, modValue: `${id}_mv`, phase: `${id}_ph` },
     };
   },
-};
+}, ['threshold', 'softness']);
 
 export const Atan2Node: NodeDefinition = {
   type: 'atan2', label: 'Vector Angle', aliases: ['Atan2'], category: 'Math', subcategory: 'Trigonometry', description: 'Polar angle: atan(y, x).',
@@ -686,7 +686,7 @@ export const ReflectNode: NodeDefinition = {
   },
 };
 
-export const RefractDirNode: NodeDefinition = {
+export const RefractDirNode: NodeDefinition = withParamSockets({
   type: 'refractDir', label: 'Refract Dir', category: 'Math', subcategory: 'Vector Ops',
   description: 'Compute refracted ray direction via Snell\'s law (GLSL refract). When total internal reflection occurs, falls back to the reflected direction and sets TIR=1.',
   inputs: {
@@ -720,7 +720,7 @@ export const RefractDirNode: NodeDefinition = {
       outputVars: { refracted: `${id}_refracted`, tir: `${id}_tir` },
     };
   },
-};
+}, ['ior1', 'ior2']);
 
 export const ComplexMulNode: NodeDefinition = {
   type: 'complexMul', label: 'Complex Mul', category: 'Math', subcategory: 'Complex Numbers', description: 'Multiply two complex numbers (vec2)',
@@ -846,7 +846,7 @@ export const StepNode: NodeDefinition = {
   },
 };
 
-export const WeightedAverageNode: NodeDefinition = {
+export const WeightedAverageNode: NodeDefinition = withParamSockets({
   type: 'weightedAverage',
   label: 'Weighted Average',
   category: 'Math', subcategory: 'Interpolation',
@@ -904,9 +904,9 @@ export const WeightedAverageNode: NodeDefinition = {
       outputVars: { result: `${id}_result`, total_weight: `${id}_total_weight` },
     };
   },
-};
+}, ['w1', 'w2', 'w3', 'w4']);
 
-export const CompareNode: NodeDefinition = {
+export const CompareNode: NodeDefinition = withParamSockets({
   type: 'compare',
   label: 'Compare',
   category: 'Conditionals',
@@ -960,7 +960,7 @@ export const CompareNode: NodeDefinition = {
       outputVars: { mask: `${id}_mask` },
     };
   },
-};
+}, ['smoothing']);
 
 export const SelectNode: NodeDefinition = {
   type: 'select',
