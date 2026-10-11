@@ -41,6 +41,8 @@ export interface SplatBuildResult {
   final: Ref;
   scanId: string;
   warnings: string[];
+  /** Your nodes: each run's end, and what feeds the run now (apply.ts wires the run's start to it). */
+  customs: Array<{ tail: string; from: Ref | null }>;
 }
 
 const rad = (deg: number) => Math.round(deg * Math.PI / 180 * 1e6) / 1e6;
@@ -92,8 +94,9 @@ export const hasWorld = (spec: SplatBuilderSpec) => spec.world.on && (spec.world
  * The graph for `spec`. `idFor(role)` names each node (a rebuild passes the ids the nodes had). No Output node:
  * `final` is what to wire into it.
  */
-export function buildSplatGraph(spec: SplatBuilderSpec, idFor: (role: string) => string = role => `sp_${role.replace(/[^A-Za-z0-9]/g, '_')}`): SplatBuildResult {
+export function buildSplatGraph(spec: SplatBuilderSpec, idFor: (role: string) => string = role => `sp_${role.replace(/[^A-Za-z0-9]/g, '_')}`, opts: { existing?: ReadonlySet<string> } = {}): SplatBuildResult {
   const nodes: GraphNode[] = [];
+  const customs: SplatBuildResult['customs'] = [];
   const warnings: string[] = [];
   const C = spec.camera, B = spec.background;
 
@@ -152,9 +155,18 @@ export function buildSplatGraph(spec: SplatBuilderSpec, idFor: (role: string) =>
   let modifier: Ref | null = null;
   for (const e of spec.effects) {
     if (!e.on) continue;
+    if (e.kind === 'custom') {
+      // Your nodes: not built, only wired in their place (the run's end feeds the next card).
+      if (!e.tail || !opts.existing?.has(e.tail)) { warnings.push(`${e.label || 'Your nodes'}: not on the graph any more, left out.`); continue; }
+      customs.push({ tail: e.tail, from: modifier });
+      modifier = { nodeId: e.tail, outputKey: 'splat' };
+      continue;
+    }
     const type = EFFECT_TYPE[e.kind];
     const params: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(e.params)) params[k] = Array.isArray(v) ? [...v] : v;
+    // Sizes and distances in the scan's own size: the same look on a small object and on a whole place.
+    if (getNodeDefinition(type)?.paramDefs?.relative) params.relative = true;
     const notes = SPLAT_MODIFIER_NOTES[type] ?? [EFFECT_INFO[e.kind].line];
     const fx = mk(nodes, idFor, type, `fx:${e.id}`, params, { splat: modifier }, [...notes, 'Made by the Splat builder: its Effects section reorders, adds and removes these.'].join('\n'));
     if (e.animate) {
@@ -185,19 +197,36 @@ export function buildSplatGraph(spec: SplatBuilderSpec, idFor: (role: string) =>
   ].join('\n'));
 
   // ── The look ──
+  // Bloom is the same-frame chain (Pass → Glow (texture), Bloom → Add glow): the old Bloom node reads the frame before,
+  // its own glow included, so on a bright scan the glow fed back into itself frame after frame and washed it out.
+  // Then the tone map, after the glow, so the added light rolls off instead of clipping.
   let final: Ref = ref(scan, 'color');
+  if (spec.look.bloom.on) {
+    const b = spec.look.bloom;
+    const pass = mk(nodes, idFor, 'pass', 'bloom:pass', { scale: '1', format: 'half' }, { color: final },
+      'Pass: the picture as a texture, this frame, so the glow reads round each pixel without waiting a frame (and never reads its own glow back). Half float keeps brightness above 1.');
+    const glow = mk(nodes, idFor, 'glowTexture', 'bloom', { method: 'bloom', threshold: b.threshold, knee: 0.25, radius: Math.min(64, Math.max(1, b.radius * 0.5)), intensity: b.intensity, tail: 0.4 }, { texture: ref(pass, 'texture') },
+      'Glow (texture), Bloom chain: the parts brighter than Threshold, blurred wide (Radius) with a tight core, at Intensity.');
+    const def = getNodeDefinition('exprNode')!;
+    const add: GraphNode = {
+      id: idFor('bloom:add'), type: 'exprNode', position: { x: 0, y: 0 },
+      inputs: { picture: { type: 'vec3', label: 'picture', connection: ref(pass, 'color') }, glow: { type: 'vec3', label: 'glow', connection: ref(glow, 'glow') } },
+      outputs: { result: { type: 'vec3', label: 'Result' } },
+      params: {
+        ...(def.defaultParams ?? {}), label: 'Add glow', outputType: 'vec3', lines: [], result: 'picture + glow', expr: 'picture + glow',
+        inputs: [{ name: 'picture', type: 'vec3', slider: null }, { name: 'glow', type: 'vec3', slider: null }],
+        __comment: 'Add glow: the picture with the glow added on top (light adds).', [SP_ROLE]: 'bloom:add',
+      },
+    };
+    nodes.push(add);
+    final = ref(add, 'result');
+  }
   if (spec.look.tone !== 'none') {
     final = ref(mk(nodes, idFor, 'toneMap', 'tone', { mode: spec.look.tone }, { color: final }, 'Tone Map: rolls bright colours off gently instead of clipping them (the scan\'s own colours are already for a screen, so this mostly shapes glows and highlights).'), 'color');
   }
-  if (spec.look.bloom.on) {
-    const uv = mk(nodes, idFor, 'uv', 'bloom:uv', {}, {}, 'UV: where each pixel is, for the bloom.');
-    const b = spec.look.bloom;
-    final = ref(mk(nodes, idFor, 'bloom', 'bloom', { intensity: b.intensity, threshold: b.threshold, radius: b.radius, select: 'luma', softness: 0.25 }, { color: final, uv: ref(uv, 'uv') },
-      'Bloom: bright parts of the picture glow into their surroundings (Threshold is how bright a pixel must be, Intensity how strong the glow).'), 'result');
-  }
 
   tidy(nodes, 0, 0);
-  return { nodes, final, scanId: scan.id, warnings };
+  return { nodes, final, scanId: scan.id, warnings, customs };
 }
 
 /** The spec a Splat Scene the builder made carries. */

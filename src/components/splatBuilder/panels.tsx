@@ -236,7 +236,7 @@ export function PlaceSection() {
   const set = (fn: (d: SplatBuilderSpec) => void) => edit(fn);
   return (
     <>
-      <BuilderNote>Drag the gizmo in the picture: arrows move it, the square sizes it, ↻ turns it.</BuilderNote>
+      <BuilderNote>Drag the gizmo in the picture: arrows move it, the square sizes it, the X / Y / Z rings turn it.</BuilderNote>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
         <Button size="sm" icon="fit" data-splat-fit disabled={!box} onClick={() => box && set(d => { d.place = fitPlace(d.place, box); })} title="Its middle at the centre, about 3 units across">Fit to view</Button>
         <Button size="sm" variant="ghost" data-splat-centre onClick={() => set(d => { d.place = centrePlace(d.place, box); })} title="Its middle at the centre, its size as it is">Centre</Button>
@@ -311,7 +311,9 @@ function EffectCard({ e, index, count }: { e: EffectSpec; index: number; count: 
   const bg = useSplatBuilder(s => s.spec.background.color);
   const [dragOver, setDragOver] = useState(false);
   const info = EFFECT_INFO[e.kind];
-  const keys = Object.keys(getNodeDefinition(EFFECT_TYPE[e.kind])?.paramDefs ?? {}).filter(k => k !== 'on');
+  const custom = e.kind === 'custom';
+  // Relative to the scan is always on for the builder's nodes (build.ts), so it isn't a setting here.
+  const keys = custom ? [] : Object.keys(getNodeDefinition(EFFECT_TYPE[e.kind])?.paramDefs ?? {}).filter(k => k !== 'on' && k !== 'relative');
   const up = (fn: (x: EffectSpec) => void) => edit(d => { const x = d.effects.find(y => y.id === e.id); if (x) fn(x); });
   return (
     <div data-splat-effect={e.id} data-splat-effect-kind={e.kind} draggable
@@ -335,10 +337,15 @@ function EffectCard({ e, index, count }: { e: EffectSpec; index: number; count: 
           <Toggle checked={e.on} onChange={on => up(x => { x.on = on; })} />
           <IconButton icon="chevU" size="sm" label="Earlier (applied before)" disabled={index === 0} onClick={() => edit(d => { d.effects = moveEffect(d.effects, e.id, -1); })} data-effect-up />
           <IconButton icon="chevD" size="sm" label="Later (applied after)" disabled={index === count - 1} onClick={() => edit(d => { d.effects = moveEffect(d.effects, e.id, 1); })} data-effect-down />
-          <IconButton icon="trash" size="sm" label="Remove" onClick={() => edit(d => { d.effects = d.effects.filter(x => x.id !== e.id); })} data-effect-remove />
+          <IconButton icon="trash" size="sm" label={custom ? 'Take out of the stack (the nodes stay on the graph, unwired)' : 'Remove'} onClick={() => edit(d => { d.effects = d.effects.filter(x => x.id !== e.id); })} data-effect-remove />
         </span>
       </div>
-      {picked && (
+      {picked && custom && (
+        <div data-splat-custom-note style={{ padding: '8px 12px 12px', borderTop: `1px solid ${tk.border.subtle}` }}>
+          <BuilderNote>Nodes you added on the Splat Scene card. The builder never changes them: it keeps them wired here in the stack, so move the card to change what they come before or after. Edit them on the graph.</BuilderNote>
+        </div>
+      )}
+      {picked && !custom && (
         <div style={{ padding: '4px 12px 12px', display: 'flex', flexDirection: 'column', gap: 6, borderTop: `1px solid ${tk.border.subtle}` }}>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             <MiniCloud effects={[e]} bg={bg} width={128} height={80} label={`${info.label}: a live preview on a point cloud`} />
@@ -499,7 +506,7 @@ export function LookSection() {
         {l.bloom.on && <>
           <Num label="Intensity" value={l.bloom.intensity} min={0} max={5} defaultValue={0.5} play={['bloom', 'intensity']} onChange={v => edit(d => { d.look.bloom.intensity = v; }, 'bloom:i')} />
           <Num label="Threshold" value={l.bloom.threshold} min={0} max={2} defaultValue={0.8} play={['bloom', 'threshold']} onChange={v => edit(d => { d.look.bloom.threshold = v; }, 'bloom:t')} />
-          <Num label="Radius" unit="px" value={l.bloom.radius} min={1} max={200} step={1} defaultValue={32} play={['bloom', 'radius']} onChange={v => edit(d => { d.look.bloom.radius = v; }, 'bloom:r')} />
+          <Num label="Radius" unit="px" value={l.bloom.radius} min={1} max={128} step={1} defaultValue={32} play={['bloom', 'radius']} onChange={v => edit(d => { d.look.bloom.radius = v; }, 'bloom:r')} />
         </>}
       </Group>
     </>

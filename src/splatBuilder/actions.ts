@@ -14,7 +14,7 @@ import { undoManager, useNodeGraphStore } from '../store/useNodeGraphStore';
 import { intoView } from '../components/NodeGraph/spawnPoint';
 import { finishBuilder } from '../builders/finish';
 import { useSplatBuilder } from './store';
-import { applySplatScene, findSplatBuild, paramDiff, splatSceneOfBuild } from './apply';
+import { adoptCustomChains, applySplatScene, findSplatBuild, paramDiff, splatSceneOfBuild } from './apply';
 import { normalizeSpec, starterSplatScene, type SplatBuilderSpec, type SplatSection } from './spec';
 
 /** The graph as the session started (after the first build), and the spec then: what closing compares with. */
@@ -40,7 +40,8 @@ export function editSplatSceneInBuilder(nodeId: string, section?: SplatSection):
   const scanId = splatSceneOfBuild(nodes, nodeId);
   const found = scanId ? findSplatBuild(nodes, scanId) : null;
   if (!found) return false;
-  useSplatBuilder.getState().openWith(normalizeSpec(found.meta.spec), { targetId: scanId, section });
+  // Nodes you added on the card since (Splat Attributes → … → Set Splat) join the stack as "Your nodes", in their place.
+  useSplatBuilder.getState().openWith(adoptCustomChains(nodes, scanId!, normalizeSpec(found.meta.spec)), { targetId: scanId, section });
   lastSynced = useSplatBuilder.getState().spec;
   startSession();
   return true;

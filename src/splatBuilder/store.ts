@@ -7,6 +7,7 @@
 import { create } from 'zustand';
 import { starterSplatScene, type SplatBuilderSpec, type SplatSection } from './spec';
 import { surpriseSplatScene } from './surprise';
+import type { ScanBox } from './place';
 
 export const SPLAT_SECTIONS: SplatSection[] = ['scan', 'place', 'effects', 'scene', 'camera', 'look'];
 
@@ -46,7 +47,7 @@ interface SplatBuilderState {
   setTarget: (id: string | null) => void;
   setFitPending: (p: { was: string } | null) => void;
   /** Surprise me: a scene from `seed` over this one (the scan stays), one undo step. */
-  surprise: (seed: number) => void;
+  surprise: (seed: number, box?: ScanBox | null) => void;
 }
 
 let lastCoalesce: { key: string; at: number } | null = null;
@@ -120,8 +121,8 @@ export const useSplatBuilder = create<SplatBuilderState>((set, get) => ({
   setPicked: picked => set({ picked }),
   setTarget: targetId => set({ targetId }),
   setFitPending: fitPending => set({ fitPending }),
-  surprise: seed => {
-    get().replace(surpriseSplatScene(seed, get().spec));
+  surprise: (seed, box) => {
+    get().replace(surpriseSplatScene(seed, get().spec, box));
     set({ surpriseSeed: seed, picked: get().spec.effects[0]?.id ?? null });
   },
 }));

@@ -5,15 +5,18 @@
  * comes (the preview is hidden in this layout) it says so.
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { mirrorPreview } from '../../../lib/previewMirror';
+import { mirrorPreview, wakePreview } from '../../../lib/previewMirror';
+import { setPreviewSizeOverride } from '../../../lib/previewSize';
 import { useTokens } from '../../../theme/themeStore';
 import { containRect } from '../../../agentBuilder/diagram';
 
 export interface ViewRect { x: number; y: number; w: number; h: number }
 
-export function LiveViewport({ overlay, emptyNote = 'The preview is hidden: show it to see the walkers here.' }: {
+export function LiveViewport({ overlay, emptyNote = 'The preview is hidden: show it to see the walkers here.', ownSize = false }: {
   overlay?: (box: { w: number; h: number; image: ViewRect }) => ReactNode;
   emptyNote?: string;
+  /** Draw the main preview at this viewport's size while it is open (lib/previewSize.ts), not the panel's shape. */
+  ownSize?: boolean;
 }) {
   const tk = useTokens();
   const boxRef = useRef<HTMLDivElement>(null);
@@ -36,10 +39,14 @@ export function LiveViewport({ overlay, emptyNote = 'The preview is hidden: show
   useEffect(() => {
     let got = false;
     const none = setTimeout(() => { if (!got) setFrames('none'); }, 1500);
+    // A paused clock draws only when asked. The first ask (mirrorPreview's) can land while the preview is still held
+    // by the window it opened from (the Scene builder's kind page) and draw nothing, so ask again until a frame comes:
+    // a paused preview then shows its last frame instead of "hidden". One frame each, only until the first arrives.
+    const retry = setInterval(() => { if (got) clearInterval(retry); else wakePreview(); }, 250);
     const stop = mirrorPreview(frame => {
       const c = canvasRef.current, el = boxRef.current;
       if (!c || !el) return;
-      if (!got) { got = true; setFrames('live'); }
+      if (!got) { got = true; setFrames('live'); clearInterval(retry); }
       const w = el.clientWidth, h = el.clientHeight;
       if (!w || !h || !frame.width || !frame.height) return;
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -53,8 +60,15 @@ export function LiveViewport({ overlay, emptyNote = 'The preview is hidden: show
       ctx.clearRect(0, 0, w, h);
       ctx.drawImage(frame, r.x, r.y, r.w, r.h);
     });
-    return () => { clearTimeout(none); stop(); };
+    return () => { clearTimeout(none); clearInterval(retry); stop(); };
   }, []);
+
+  // Its own size: the main preview draws at the viewport's size (and goes back to its panel's when it closes).
+  useEffect(() => {
+    if (!ownSize || !box.w || !box.h) return;
+    setPreviewSizeOverride({ width: box.w, height: box.h });
+  }, [ownSize, box.w, box.h]);
+  useEffect(() => (ownSize ? () => setPreviewSizeOverride(null) : undefined), [ownSize]);
 
   const image = containRect(box.w, box.h, src.w, src.h);
   return (

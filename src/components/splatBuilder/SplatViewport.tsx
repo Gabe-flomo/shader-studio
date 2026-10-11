@@ -5,13 +5,13 @@
  *
  *  - Drag the picture to turn the camera round (Angle, Elevation); scroll to come closer (Distance).
  *  - In Place, the scan has a gizmo: its middle moves it across the picture, X / Y / Z along one axis, the yellow
- *    square on its ring sizes it and the round handle under it turns it. Each drag is one undo step.
+ *    square on its ring sizes it and the X / Y / Z rings turn it round that axis. Each drag is one undo step.
  */
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent as RPointerEvent } from 'react';
 import { LiveViewport, type ViewRect } from '../builders/studio/LiveViewport';
 import { useSplatBuilder } from '../../splatBuilder/store';
 import { AXES, axisMove, cameraBasis, planeMove, project, unitsPerUv, uvToPx, type CamBasis } from '../../sceneBuilder/viewMath';
-import { keepMiddle, scanCenter, scanReach, type ScanBox } from '../../splatBuilder/place';
+import { keepMiddle, scanCenter, scanReach, turnAbout, type ScanBox } from '../../splatBuilder/place';
 import { splatEngine } from '../../lib/splats/engine';
 import { clockNow } from '../../lib/timeTick';
 import { fontFamily } from '../../theme/tokens';
@@ -20,7 +20,7 @@ import type { CameraSpec, PlaceSpec, Vec3 } from '../../splatBuilder/spec';
 type Axis = 'x' | 'y' | 'z';
 type Drag =
   | { kind: 'orbit'; x: number; y: number; angle: number; elev: number; moved: boolean }
-  | { kind: 'move' | 'axis' | 'size' | 'turn'; axis?: Axis; x: number; y: number; b: CamBasis; p: Vec3; z: number; place: PlaceSpec; cx: number; cy: number; moved: boolean };
+  | { kind: 'move' | 'axis' | 'size' | 'turn'; axis?: Axis; x: number; y: number; b: CamBasis; p: Vec3; z: number; place: PlaceSpec; cx: number; cy: number; moved: boolean; facing?: number };
 
 const AXIS_COLOUR: Record<Axis, string> = { x: '#f2555a', y: '#46c27a', z: '#4d8dff' };
 const chip = { background: 'rgba(13,13,18,0.72)', color: '#e8e8f0', borderRadius: 8, font: `500 11.5px ${fontFamily.ui}`, padding: '4px 9px' } as const;
@@ -34,6 +34,12 @@ export function useScanBox(scanId: string | null): ScanBox | null {
     return info ? JSON.stringify({ center: info.center, radius: info.radius, coreMin: info.coreMin, coreMax: info.coreMax }) : '';
   });
   return useMemo(() => (key ? JSON.parse(key) as ScanBox : null), [key]);
+}
+
+/** What the engine knows about a scan's box now (for actions that run on a click: Surprise me). */
+export function scanBoxNow(scanId: string | null): ScanBox | null {
+  const info = scanId ? splatEngine.status(scanId).info : undefined;
+  return info ? { center: info.center, radius: info.radius, coreMin: info.coreMin, coreMax: info.coreMax } : null;
 }
 
 /** The builder's camera as the 3D viewport maths takes it. */
@@ -94,7 +100,24 @@ function Overlay({ image }: { image: ViewRect }) {
       return { a, p: [ex + image.x, ey + image.y] as [number, number] };
     }).filter((x): x is { a: Axis; p: [number, number] } => !!x);
     const ring = Math.max(26, Math.min(Math.min(w, h) * 0.45, scanReach(spec.place, box) * pxPerUnit));
-    return { P, z: pr.z, cx, cy, ends, ring };
+    // A turning ring round each axis, drawn as the circle (in the plane across that axis) projects.
+    const rw = (ring * 0.78) / pxPerUnit;
+    const rings = (Object.keys(AXES) as Axis[]).map(a => {
+      const i = 'xyz'.indexOf(a), u = [0, 0, 0] as number[], v2 = [0, 0, 0] as number[];
+      u[(i + 1) % 3] = 1; v2[(i + 2) % 3] = 1;
+      const pts: string[] = [];
+      for (let k = 0; k <= 48; k++) {
+        const t = (k / 48) * Math.PI * 2, cs = Math.cos(t) * rw, sn = Math.sin(t) * rw;
+        const e = project(b, [P[0] + u[0] * cs + v2[0] * sn, P[1] + u[1] * cs + v2[1] * sn, P[2] + u[2] * cs + v2[2] * sn]);
+        if (!e) return null;
+        const [ex, ey] = uvToPx(e.uv, w, h);
+        pts.push(`${(ex + image.x).toFixed(1)},${(ey + image.y).toFixed(1)}`);
+      }
+      // Which way round a turn looks: +1 when the axis points at the camera (counter-clockwise on screen).
+      const facing = -(AXES[a][0] * b.fwd[0] + AXES[a][1] * b.fwd[1] + AXES[a][2] * b.fwd[2]) >= 0 ? 1 : -1;
+      return { a, pts: pts.join(' '), facing };
+    }).filter((x): x is { a: Axis; pts: string; facing: number } => !!x);
+    return { P, z: pr.z, cx, cy, ends, ring, rings };
   })();
 
   const rel = (e: { clientX: number; clientY: number }) => {
@@ -109,7 +132,8 @@ function Overlay({ image }: { image: ViewRect }) {
     ref.current?.setPointerCapture?.(e.pointerId);
     const { x, y } = rel(e);
     useSplatBuilder.getState().beginGesture();
-    setDrag({ kind, axis, x, y, b: cameraBasis(camOf(spec.camera), clockNow() ?? 0), p: gizmo.P, z: gizmo.z, place: structuredClone(spec.place), cx: gizmo.cx, cy: gizmo.cy, moved: false });
+    const facing = kind === 'turn' && axis ? gizmo.rings.find(r => r.a === axis)?.facing ?? 1 : 1;
+    setDrag({ kind, axis, x, y, b: cameraBasis(camOf(spec.camera), clockNow() ?? 0), p: gizmo.P, z: gizmo.z, place: structuredClone(spec.place), cx: gizmo.cx, cy: gizmo.cy, moved: false, facing });
   };
 
   const onPointerDown = (e: RPointerEvent) => {
@@ -148,10 +172,12 @@ function Overlay({ image }: { image: ViewRect }) {
       } else if (d.kind === 'size') {
         const r0 = Math.hypot(d.x - d.cx, d.y - d.cy), r1 = Math.hypot(x - d.cx, y - d.cy);
         if (r0 > 2) s.place = keepMiddle(d.place, box, { scale: tidy(Math.max(0.01, d.place.scale * r1 / r0)) });
-      } else if (d.kind === 'turn') {
-        const rotation = [...d.place.rotation] as Vec3;
-        rotation[1] = tidy(((d.place.rotation[1] + dx * 0.6 + 540) % 360) - 180);
-        s.place = keepMiddle(d.place, box, { rotation });
+      } else if (d.kind === 'turn' && d.axis) {
+        // The pointer's angle round the gizmo's middle, counter-clockwise on screen, then the axis's way round.
+        const a0 = Math.atan2(-(d.y - d.cy), d.x - d.cx), a1 = Math.atan2(-(y - d.cy), x - d.cx);
+        let deg = (a1 - a0) * 180 / Math.PI;
+        if (deg > 180) deg -= 360; else if (deg < -180) deg += 360;
+        s.place = turnAbout(d.place, box, 'xyz'.indexOf(d.axis) as 0 | 1 | 2, tidy(deg * (d.facing ?? 1)));
       }
     });
   };
@@ -162,7 +188,7 @@ function Overlay({ image }: { image: ViewRect }) {
   };
 
   const live = drag && drag.kind !== 'orbit' && drag.moved
-    ? drag.kind === 'size' ? `scale ${tidy(spec.place.scale)}` : drag.kind === 'turn' ? `turned ${tidy(spec.place.rotation[1])}°` : `at (${spec.place.position.map(tidy).join(', ')})`
+    ? drag.kind === 'size' ? `scale ${tidy(spec.place.scale)}` : drag.kind === 'turn' ? `turned ${spec.place.rotation.map(tidy).join(', ')}°` : `at (${spec.place.position.map(tidy).join(', ')})`
     : '';
   return (
     <div ref={ref} data-splat-viewport onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}
@@ -183,15 +209,17 @@ function Overlay({ image }: { image: ViewRect }) {
             style={{ pointerEvents: 'all', cursor: 'move' }} onPointerDown={startHandle('move')} />
           <rect data-gizmo-size x={gizmo.cx + gizmo.ring * Math.SQRT1_2 - 7} y={gizmo.cy - gizmo.ring * Math.SQRT1_2 - 7} width={14} height={14} rx={3}
             fill="#ffd166" stroke="rgba(0,0,0,0.45)" style={{ pointerEvents: 'all', cursor: 'nesw-resize' }} onPointerDown={startHandle('size')} />
-          <g data-gizmo-turn style={{ pointerEvents: 'all', cursor: 'ew-resize' }} onPointerDown={startHandle('turn')}>
-            <circle cx={gizmo.cx} cy={gizmo.cy + gizmo.ring} r={10} fill="#c792ea" stroke="rgba(0,0,0,0.45)" />
-            <text x={gizmo.cx} y={gizmo.cy + gizmo.ring + 4} textAnchor="middle" fill="#fff" style={{ font: `700 11px ${fontFamily.ui}`, pointerEvents: 'none' }}>↻</text>
-          </g>
+          {gizmo.rings.map(r => (
+            <g key={r.a} data-gizmo-ring={r.a} style={{ pointerEvents: 'all', cursor: 'grab' }} onPointerDown={startHandle('turn', r.a)}>
+              <polyline points={r.pts} fill="none" stroke="transparent" strokeWidth={12} style={{ pointerEvents: 'stroke' }} />
+              <polyline points={r.pts} fill="none" stroke={AXIS_COLOUR[r.a]} strokeOpacity={drag?.kind === 'turn' && drag.axis === r.a ? 1 : 0.7} strokeWidth={drag?.kind === 'turn' && drag.axis === r.a ? 3 : 1.75} style={{ pointerEvents: 'none' }} />
+            </g>
+          ))}
         </svg>
       )}
       <div style={{ position: 'absolute', left: 12, top: 12, display: 'flex', gap: 6, alignItems: 'center', pointerEvents: 'none', flexWrap: 'wrap', right: 12 }}>
         <span data-viewport-hint style={chip}>
-          {showGizmo ? (live ? `The scan · ${live}` : 'Drag the arrows to move the scan, the square to size it, ↻ to turn it') : 'Drag to turn the camera · scroll to zoom'}
+          {showGizmo ? (live ? `The scan · ${live}` : 'Arrows move the scan, the square sizes it, the rings turn it') : 'Drag to turn the camera · scroll to zoom'}
         </span>
       </div>
     </div>
@@ -200,7 +228,7 @@ function Overlay({ image }: { image: ViewRect }) {
 
 export function SplatViewport() {
   return (
-    <LiveViewport emptyNote="The preview is hidden: show it to see the scan here."
+    <LiveViewport emptyNote="The preview is hidden: show it to see the scan here." ownSize
       overlay={({ image }) => <Overlay image={image} />} />
   );
 }

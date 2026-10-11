@@ -3,7 +3,7 @@
  * example scan. Picking one keeps your own scan (and where you put it) when you have loaded one: the template brings
  * its effects, world, camera and look.
  */
-import { animateFor, newEffect, starterSplatScene, type SplatBuilderSpec } from './spec';
+import { animateFor, keepCustom, newEffect, starterSplatScene, type SplatBuilderSpec } from './spec';
 
 export interface SplatTemplate { key: string; label: string; blurb: string; make: () => SplatBuilderSpec }
 
@@ -99,5 +99,7 @@ export function withTemplate(current: SplatBuilderSpec, t: SplatTemplate): Splat
     next.place = structuredClone(current.place);
   }
   if (current.textures?.length) next.textures = structuredClone(current.textures);
+  // Your nodes stay (after the template's effects).
+  next.effects = keepCustom(next.effects, current.effects);
   return next;
 }

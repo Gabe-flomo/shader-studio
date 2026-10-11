@@ -33,9 +33,38 @@ const PRETEND_STATE = 'mat3(vec3(g_uv, 0.0), vec3(0.8), vec3(1.0, 1.0, 0.0))';
 export function splatContext(node: GraphNode) {
   const prog = node.params.__splatProgram === true;
   return prog
-    ? { base: 'sp_base', local: 'sp_local', index: 'sp_index', rand: 'sp_rand', count: 'sp_count', radius: 'sp_radius', origin: 'sp_T' }
-    : { base: PRETEND_STATE, local: 'vec3(g_uv, 0.0)', index: '0.0', rand: 'fract(sin(dot(g_uv, vec2(12.9898, 78.233))) * 43758.5453)', count: '1.0', radius: '0.02', origin: 'vec3(0.0)' };
+    ? { base: 'sp_base', local: 'sp_local', index: 'sp_index', rand: 'sp_rand', count: 'sp_count', radius: 'sp_radius', origin: 'sp_T', mid: 'sp_mid', midW: 'sp_midW', unit: 'sp_unit' }
+    : { base: PRETEND_STATE, local: 'vec3(g_uv, 0.0)', index: '0.0', rand: 'fract(sin(dot(g_uv, vec2(12.9898, 78.233))) * 43758.5453)', count: '1.0', radius: '0.02', origin: 'vec3(0.0)', mid: 'vec3(0.0)', midW: 'vec3(0.0)', unit: '1.0' };
 }
+
+// ── Relative to the scan ────────────────────────────────────────────────────
+//
+// A moving or cutting node can measure in the scan's own size instead of scene units (`relative`, on for new nodes):
+// its place in the scan is taken from the scan's middle and divided by the scan's size (its core radius × Scale), and
+// its distances (Distance, Amplitude, Drift) are multiplied by it. So Noise scale 1.5 is "a patch a radius / 1.5
+// across" on a small object and on a whole street alike. Graphs saved before it keep measuring in scene units: their
+// nodes load with `relative` off (SPLAT_RELATIVE_VERSION's migration).
+
+/** The schema version that brought `relative`: older saved nodes load with it off, so they look as they did. */
+export const SPLAT_RELATIVE_VERSION = 2;
+
+/** Version, migration and the param for a node that can measure relative to the scan. */
+const relativeParam = {
+  version: SPLAT_RELATIVE_VERSION,
+  migrateParams: (params: Record<string, unknown>, fromVersion: number) => (fromVersion < SPLAT_RELATIVE_VERSION && !('relative' in params) ? { ...params, relative: false } : params),
+} as const;
+const RELATIVE_DEF = { label: 'Relative to the scan', type: 'bool' as const, hint: 'On: sizes and distances are in the scan\'s own size (its radius), so the look is the same on a small object and on a whole place. Off: scene units.' };
+const RELATIVE_DEFAULTS = { relative: true, _schemaVersion: SPLAT_RELATIVE_VERSION };
+
+/** Whether a node measures relative to the scan (absent: off, as before). */
+export const splatRelative = (node: GraphNode) => node.params.relative === true;
+
+/** The node's place in the scan: relative (from the middle, in scan sizes) or as it is. */
+const placeIn = (node: GraphNode, c: ReturnType<typeof splatContext>) => (splatRelative(node) ? `((${c.local} - ${c.mid}) / ${c.unit})` : c.local);
+/** A distance in the node's units, in scene units. */
+const scaled = (node: GraphNode, c: ReturnType<typeof splatContext>, x: string) => (splatRelative(node) ? `(${x} * ${c.unit})` : x);
+/** The point the scan moves round: its middle (relative) or its origin. */
+const pivot = (node: GraphNode, c: ReturnType<typeof splatContext>) => (splatRelative(node) ? c.midW : c.origin);
 
 /** Shared helpers: 3D value noise (0–1, stretched to fill the range), a vec3 of it, a hash and a hue turn. */
 export const SPLAT_GLSL = `float spHash31(vec3 p) {
@@ -193,9 +222,11 @@ export const SplatDissolveNode: NodeDefinition = {
     ...timeIn,
   },
   outputs: { ...splatOut },
-  defaultParams: { amount: 0.4, scale: 1.5, evolve: 0.1, softness: 0.08, edge: 0.06, edgeColor: [1, 0.45, 0.12], glow: 4, mode: 'both', drift: 0.25 },
+  defaultParams: { amount: 0.4, scale: 1.5, evolve: 0.1, softness: 0.08, edge: 0.06, edgeColor: [1, 0.45, 0.12], glow: 4, mode: 'both', drift: 0.25, ...RELATIVE_DEFAULTS },
+  ...relativeParam,
   paramDefs: {
     amount: { label: 'Amount', type: 'float', min: 0, max: 1, step: 0.005, hint: '0: the whole scan. 1: all gone. Map it in Play, or keyframe it.' },
+    relative: RELATIVE_DEF,
     scale: { label: 'Noise scale', type: 'float', min: 0.05, max: 20, step: 0.01, hint: 'How fine the noise is: small numbers dissolve in big patches.' },
     evolve: { label: 'Evolve', type: 'float', min: 0, max: 2, step: 0.01, hint: 'How fast the noise changes over time (0: still).' },
     softness: { label: 'Softness', type: 'float', min: 0, max: 0.5, step: 0.005, hint: 'How gradually a splat fades as the threshold passes it.' },
@@ -212,7 +243,7 @@ export const SplatDissolveNode: NodeDefinition = {
     const id = node.id, P = node.params, c = splatContext(node);
     const soft = p(P.softness, 0.08), edge = p(P.edge, 0.06);
     const mode = P.mode === 'fade' || P.mode === 'shrink' ? P.mode : 'both';
-    const field = v.field ?? `spFbm3(${c.local} * ${p(P.scale, 1.5)} + vec3(0.0, ${id}_t, ${id}_t * 0.7))`;
+    const field = v.field ?? `spFbm3(${placeIn(node, c)} * ${p(P.scale, 1.5)} + vec3(0.0, ${id}_t, ${id}_t * 0.7))`;
     return {
       code: head(node, v) + [
         `    float ${id}_t = ${v.time ?? 'u_time'} * ${p(P.evolve, 0.1)};\n`,
@@ -222,7 +253,7 @@ export const SplatDissolveNode: NodeDefinition = {
         `    float ${id}_vis = ${id}_soft > 0.0 ? smoothstep(-${id}_soft, 0.0, ${id}_d) : step(0.0, ${id}_d);\n`,
         `    float ${id}_e = ${id}_ew > 1e-4 ? 1.0 - smoothstep(0.0, ${id}_ew, abs(${id}_d)) : 0.0;\n`,
         `    mat3 ${id}_s = ${id}_i;\n`,
-        `    ${id}_s[0] += vec3(0.0, ${p(P.drift, 0.25)} * (1.0 - ${id}_vis), 0.0);\n`,
+        `    ${id}_s[0] += vec3(0.0, ${scaled(node, c, p(P.drift, 0.25))} * (1.0 - ${id}_vis), 0.0);\n`,
         `    ${id}_s[1] += ${pv3(P.edgeColor, [1, 0.45, 0.12])} * (${p(P.glow, 4)} * ${id}_e);\n`,
         mode !== 'shrink' ? `    ${id}_s[2].x *= ${id}_vis;\n` : '',
         mode !== 'fade' ? `    ${id}_s[2].y *= ${id}_vis;\n` : '',
@@ -245,8 +276,10 @@ export const SplatExplodeNode: NodeDefinition = {
     center: { type: 'vec3', label: 'Center', hint: 'Where they fly from, in the scene. Unwired: the Center sliders.' },
   },
   outputs: { ...splatOut },
-  defaultParams: { amount: 0.5, distance: 1.5, center: [0, 0, 0], scatter: 0.35, stagger: 0.5, returnHome: 0, spin: 0.25 },
+  defaultParams: { amount: 0.5, distance: 1.5, center: [0, 0, 0], scatter: 0.35, stagger: 0.5, returnHome: 0, spin: 0.25, ...RELATIVE_DEFAULTS },
+  ...relativeParam,
   paramDefs: {
+    relative: RELATIVE_DEF,
     amount: { label: 'Amount', type: 'float', min: 0, max: 1, step: 0.005, hint: '0: every splat at home. 1: all the way out.' },
     returnHome: { label: 'Return home', type: 'float', min: 0, max: 1, step: 0.005, hint: 'Brings them back: 1 is home again, whatever Amount says.' },
     distance: { label: 'Distance', type: 'float', min: 0, max: 10, step: 0.01, hint: 'How far they fly, in scene units.' },
@@ -258,7 +291,8 @@ export const SplatExplodeNode: NodeDefinition = {
   glslFunction: SPLAT_GLSL,
   generateGLSL: (node, v) => {
     const id = node.id, P = node.params, c = splatContext(node);
-    const center = v.center ?? pv3(P.center, [0, 0, 0]);
+    // Relative: the sliders' Center is from the scan's middle, in scan sizes (a wired Center stays in the scene).
+    const center = v.center ?? (splatRelative(node) ? `(${c.midW} + ${pv3(P.center, [0, 0, 0])} * ${c.unit})` : pv3(P.center, [0, 0, 0]));
     const stagger = p(P.stagger, 0.5);
     return {
       code: head(node, v) + [
@@ -271,7 +305,7 @@ export const SplatExplodeNode: NodeDefinition = {
         `    vec3 ${id}_rel = ${id}_i[0] - ${id}_c;\n`,
         `    vec3 ${id}_rnd = vec3(spHash31(vec3(${id}_r * 113.1, ${id}_r * 71.7, 1.3)), spHash31(vec3(${id}_r * 57.3, 2.9, ${id}_r * 91.1)), spHash31(vec3(3.7, ${id}_r * 37.9, ${id}_r * 19.3))) * 2.0 - 1.0;\n`,
         `    vec3 ${id}_dir = normalize(mix(${id}_rel / max(length(${id}_rel), 1e-4), ${id}_rnd / max(length(${id}_rnd), 1e-4), clamp(${p(P.scatter, 0.35)}, 0.0, 1.0)) + vec3(1e-5));\n`,
-        `    vec3 ${id}_moved = ${id}_rel + ${id}_dir * (${p(P.distance, 1.5)} * ${id}_k * (0.6 + 0.8 * fract(${id}_r * 7.31)));\n`,
+        `    vec3 ${id}_moved = ${id}_rel + ${id}_dir * (${scaled(node, c, p(P.distance, 1.5))} * ${id}_k * (0.6 + 0.8 * fract(${id}_r * 7.31)));\n`,
         `    mat3 ${id}_s = ${id}_i;\n`,
         `    ${id}_s[0] = ${id}_c + spRotY(${p(P.spin, 0.25)} * 6.2831853 * ${id}_k) * ${id}_moved;\n`,
       ].join(''),
@@ -292,8 +326,10 @@ export const SplatWaveNode: NodeDefinition = {
   description: 'Moves the splats: a Wave travelling through the scan, a noisy Wobble, or a Twist round the vertical. Amplitude 0 leaves them still.',
   inputs: { ...splatIn, ...timeIn },
   outputs: { ...splatOut },
-  defaultParams: { mode: 'wave', amplitude: 0.06, frequency: 3, speed: 1.5, along: 'x', push: 'y' },
+  defaultParams: { mode: 'wave', amplitude: 0.06, frequency: 3, speed: 1.5, along: 'x', push: 'y', ...RELATIVE_DEFAULTS },
+  ...relativeParam,
   paramDefs: {
+    relative: RELATIVE_DEF,
     mode: { label: 'Kind', type: 'select', hint: 'Wave: a sine travelling along an axis. Wobble: noise in every direction. Twist: turns the scan more the higher up.', options: [
       { value: 'wave', label: 'Wave' }, { value: 'wobble', label: 'Wobble' }, { value: 'twist', label: 'Twist' },
     ] },
@@ -312,15 +348,17 @@ export const SplatWaveNode: NodeDefinition = {
     const id = node.id, P = node.params, c = splatContext(node);
     const amp = p(P.amplitude, 0.06), freq = p(P.frequency, 3);
     const t = `(${v.time ?? 'u_time'} * ${p(P.speed, 1.5)})`;
+    const at = placeIn(node, c), o = pivot(node, c), a = scaled(node, c, amp);
     const lines = [head(node, v), `    mat3 ${id}_s = ${id}_i;\n`];
     if (P.mode === 'wobble') {
-      lines.push(`    ${id}_s[0] += (spNoise33(${c.local} * ${freq} + vec3(${t}, ${t} * 0.83, ${t} * 0.61)) * 2.0 - 1.0) * ${amp};\n`);
+      lines.push(`    ${id}_s[0] += (spNoise33(${at} * ${freq} + vec3(${t}, ${t} * 0.83, ${t} * 0.61)) * 2.0 - 1.0) * ${a};\n`);
     } else if (P.mode === 'twist') {
-      lines.push(`    ${id}_s[0] = ${c.origin} + spRotY(${amp} * 6.2831853 * ${c.local}.y * sin(${t} + ${c.local}.y * ${freq} * 0.25)) * (${id}_i[0] - ${c.origin});\n`);
+      // Turns per unit of height: relative, per scan size (an angle, so Amplitude isn't scaled).
+      lines.push(`    ${id}_s[0] = ${o} + spRotY(${amp} * 6.2831853 * ${at}.y * sin(${t} + ${at}.y * ${freq} * 0.25)) * (${id}_i[0] - ${o});\n`);
     } else {
-      const along = P.along === 'radial' ? `length(${c.local})` : `dot(${c.local}, ${AXES[String(P.along)] ?? AXES.x})`;
-      const push = P.push === 'out' ? `normalize(${id}_i[0] - ${c.origin} + vec3(1e-5))` : AXES[String(P.push)] ?? AXES.y;
-      lines.push(`    ${id}_s[0] += ${push} * (${amp} * sin(${along} * ${freq} - ${t}));\n`);
+      const along = P.along === 'radial' ? `length(${at})` : `dot(${at}, ${AXES[String(P.along)] ?? AXES.x})`;
+      const push = P.push === 'out' ? `normalize(${id}_i[0] - ${o} + vec3(1e-5))` : AXES[String(P.push)] ?? AXES.y;
+      lines.push(`    ${id}_s[0] += ${push} * (${a} * sin(${along} * ${freq} - ${t}));\n`);
     }
     return { code: lines.join(''), outputVars: { splat: `${id}_s` } };
   },
@@ -376,8 +414,10 @@ export const SplatCropNode: NodeDefinition = {
     center: { type: 'vec3', label: 'Center', hint: 'The shape\'s centre (or a point on the plane). Unwired: the Center sliders.' },
   },
   outputs: { ...splatOut },
-  defaultParams: { shape: 'plane', space: 'scan', keep: 'inside', center: [0, 0, 0], size: [1, 1, 1], normal: [0, 1, 0], offset: 0, softness: 0.05, edge: 0.03, edgeColor: [0.3, 0.8, 1], glow: 2 },
+  defaultParams: { shape: 'plane', space: 'scan', keep: 'inside', center: [0, 0, 0], size: [1, 1, 1], normal: [0, 1, 0], offset: 0, softness: 0.05, edge: 0.03, edgeColor: [0.3, 0.8, 1], glow: 2, ...RELATIVE_DEFAULTS },
+  ...relativeParam,
   paramDefs: {
+    relative: RELATIVE_DEF,
     shape: { label: 'Shape', type: 'select', hint: 'What to cut with.', options: [
       { value: 'plane', label: 'Plane (keep one side)' }, { value: 'box', label: 'Box' }, { value: 'sphere', label: 'Sphere' },
     ] },
@@ -398,7 +438,9 @@ export const SplatCropNode: NodeDefinition = {
   },
   generateGLSL: (node, v) => {
     const id = node.id, P = node.params, c = splatContext(node);
-    const at = P.space === 'scene' ? `${id}_i[0]` : c.local;
+    // Relative: measured from the scan's middle in scan sizes (Size 1 is the whole scan; Offset −1 … 1 sweeps through it).
+    const rel = splatRelative(node);
+    const at = P.space === 'scene' ? (rel ? `((${id}_i[0] - ${c.midW}) / ${c.unit})` : `${id}_i[0]`) : placeIn(node, c);
     const center = v.center ?? pv3(P.center, [0, 0, 0]);
     const off = p(P.offset, 0);
     const shape = P.shape === 'box' || P.shape === 'sphere' ? P.shape : 'plane';

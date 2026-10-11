@@ -29,7 +29,7 @@ import { closeSplatBuilder, finishSplatBuilder, openSplatAsNodes, syncSplatBuild
 import { SPLAT_TEMPLATES, withTemplate } from '../../splatBuilder/templates';
 import { EFFECT_INFO, scanName, sectionSummary, type SplatSection } from '../../splatBuilder/spec';
 import { SECTION_PANELS, RecipeSection } from './panels';
-import { SplatViewport, useScanBox } from './SplatViewport';
+import { SplatViewport, scanBoxNow, useScanBox } from './SplatViewport';
 import { fitPlace } from '../../splatBuilder/place';
 import { cloudPicture } from './MiniCloud';
 
@@ -151,12 +151,12 @@ export function SplatBuilder() {
         <IconButton icon="redo" size="sm" label="Redo" shortcut="cmd+shift+z" disabled={!canRedo} onClick={redo} />
         <IconButton icon="code" size="sm" active={hood} data-hood-toggle label={hood ? 'Hide Under the hood' : 'Under the hood: the scene as a recipe (⌘⇧D)'} onClick={() => useSplatBuilder.getState().setHood(!hood)} />
         <SurpriseBar seed={seed} title="A random look from a new seed: an effect stack, a background, the camera (your scan stays; one undo step)" onSurprise={s => {
-          useSplatBuilder.getState().surprise(s);
+          useSplatBuilder.getState().surprise(s, scanBoxNow(useSplatBuilder.getState().targetId));
           const made = useSplatBuilder.getState().spec;
           announceSurprise({
             title: 'Splat surprise', seed: s,
             message: `${made.effects.map(e => EFFECT_INFO[e.kind].label).join(' → ') || 'no effects'}${made.world.on ? ' · in a world' : ''}${made.camera.turntable ? ' · turning' : ''}.`,
-            reroll: () => { undo(); useSplatBuilder.getState().surprise(newSeed()); },
+            reroll: () => { undo(); useSplatBuilder.getState().surprise(newSeed(), scanBoxNow(useSplatBuilder.getState().targetId)); },
             undo: () => undo(),
             stillCurrent: () => useSplatBuilder.getState().spec === made,
           });
