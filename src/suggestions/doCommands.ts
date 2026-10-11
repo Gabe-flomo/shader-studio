@@ -53,6 +53,8 @@ export interface CmdStep {
   notes: string[];
   /** Node ids this step made or changed (for highlighting). */
   touched: string[];
+  /** The graph level after this step (only with CommandOptions.snapshots: Show me how draws it). */
+  after?: GraphNode[];
 }
 
 export interface CmdPick {
@@ -101,6 +103,8 @@ export interface CommandOptions {
   nextId?: () => string;
   topLevel?: boolean;
   heightOf?: (nd: GraphNode) => number;
+  /** Keep the graph after every step (CmdStep.after), for Show me how. */
+  snapshots?: boolean;
 }
 
 // ── Words ───────────────────────────────────────────────────────────────────
@@ -547,7 +551,12 @@ interface Run {
   initial: string[];
   /** The last clause couldn't run ("it" is unknown). */
   broken?: boolean;
+  /** Keep each step's graph (CommandOptions.snapshots). */
+  snapshots?: boolean;
 }
+
+/** A step's graph, when the run keeps them. */
+const snap = (r: Run, nodes: GraphNode[]) => (r.snapshots ? { after: nodes } : {});
 
 interface ClauseCtx { run: Run; index: number; last: boolean; steps: CmdStep[]; text: string; /** A later clause wires something to the Output itself. */ outputLater?: boolean }
 
@@ -636,7 +645,7 @@ function typeCheck(c: ClauseCtx, from: GraphNode, outKey: string, to: GraphNode,
 }
 
 function step(c: ClauseCtx, label: string, before: GraphNode[], notes: string[] = []) {
-  c.steps.push({ clause: c.index, label, notes, ...diffNodes(before, c.run.nodes) });
+  c.steps.push({ clause: c.index, label, notes, ...diffNodes(before, c.run.nodes), ...snap(c.run, c.run.nodes) });
 }
 
 /** The node a reference names, as a wire end (the Output by name means what it shows, for values). */
@@ -726,7 +735,7 @@ function execBuild(c: ClauseCtx, toks: Tok[]) {
   const notes = unknown.length ? [`Skipped “${unknown.join(' ')}”${didYouMean(unknown[0]).length ? ` (did you mean ${didYouMean(unknown[0]).map(w => `“${w}”`).join(' or ')}?)` : ''}.`] : [];
   const res = runDoPlan(r.nodes, plan, r.nextId, {
     topLevel: r.topLevel, heightOf: r.heightOf, show: !c.outputLater, paintShapes: c.last,
-    onStep: (k, label, before, after) => c.steps.push({ clause: c.index, label, notes: k === 0 ? notes : [], ...diffNodes(before, after) }),
+    onStep: (k, label, before, after) => c.steps.push({ clause: c.index, label, notes: k === 0 ? notes : [], ...diffNodes(before, after), ...snap(r, after) }),
   });
   r.nodes = res.nodes;
   // "It" afterwards: the node a space move went in front of (warp it → the noise), else what the move made.
@@ -1241,7 +1250,7 @@ function execGroup(c: ClauseCtx, rest: Tok[]) {
   if (ids.some(id => byId.get(id)?.type === 'output')) fail('The Output can’t go in a group.');
   const name = asAt >= 0 ? (rest.slice(asAt + 1).find(t => t.q)?.w ?? rest.slice(asAt + 1).map(t => t.w).join(' ')) : undefined;
   c.run.group = { ids, label: name || undefined };
-  c.steps.push({ clause: c.index, label: `Group ${ids.map(id => nodeName(byId.get(id))).join(', ')}${name ? ` as “${name}”` : ''}`, adds: ['Group'], removes: [], wires: [], unwires: [], params: [], notes: ['Wires into and out of them become the group’s inputs and outputs.'], touched: ids });
+  c.steps.push({ clause: c.index, label: `Group ${ids.map(id => nodeName(byId.get(id))).join(', ')}${name ? ` as “${name}”` : ''}`, adds: ['Group'], removes: [], wires: [], unwires: [], params: [], notes: ['Wires into and out of them become the group’s inputs and outputs.'], touched: ids, ...snap(c.run, c.run.nodes) });
 }
 
 function execSelect(c: ClauseCtx, rest: Tok[]) {
@@ -1250,7 +1259,7 @@ function execSelect(c: ClauseCtx, rest: Tok[]) {
   c.run.select = ids;
   c.run.selected = ids;
   c.run.subject = { id: ids[0] };
-  c.steps.push({ clause: c.index, label: `Select ${ids.map(id => nodeName(byId.get(id))).join(', ')}`, adds: [], removes: [], wires: [], unwires: [], params: [], notes: [], touched: ids });
+  c.steps.push({ clause: c.index, label: `Select ${ids.map(id => nodeName(byId.get(id))).join(', ')}`, adds: [], removes: [], wires: [], unwires: [], params: [], notes: [], touched: ids, ...snap(c.run, c.run.nodes) });
 }
 
 /** "the length of the space", "the angle", "time", "noise", "<ref>": a float to run a palette along. */
@@ -1397,7 +1406,7 @@ export function execCommand(text: string, nodes: GraphNode[], opts: CommandOptio
   let k = 0;
   const run: Run = {
     nodes, subject: null, selected: [...opts.selected], initial: [...opts.selected], select: null,
-    nextId: opts.nextId ?? (() => `do-preview-${++k}`), topLevel: opts.topLevel ?? true, heightOf: opts.heightOf ?? cardHeight, picks: opts.picks ?? {},
+    nextId: opts.nextId ?? (() => `do-preview-${++k}`), topLevel: opts.topLevel ?? true, heightOf: opts.heightOf ?? cardHeight, picks: opts.picks ?? {}, snapshots: opts.snapshots,
   };
   const plan: CommandPlan = { text: trimmed, clauses: [], steps: [], nodes, select: [], ok: false, changed: false };
   if (!trimmed) return plan;
@@ -1419,7 +1428,7 @@ export function execCommand(text: string, nodes: GraphNode[], opts: CommandOptio
         fail(whole.unknown.length ? `Didn’t understand “${whole.unknown.join(' ')}”.` : whole.problem ?? 'No shape, action or verb in that.', sug);
       }
       const notes = whole.unknown.length ? [`Skipped “${whole.unknown.join(' ')}”.`] : [];
-      const res = runDoPlan(nodes, whole, run.nextId, { topLevel: run.topLevel, heightOf: run.heightOf, onStep: (i, label, b, a) => c.steps.push({ clause: 0, label, notes: i === 0 ? notes : [], ...diffNodes(b, a) }) });
+      const res = runDoPlan(nodes, whole, run.nextId, { topLevel: run.topLevel, heightOf: run.heightOf, onStep: (i, label, b, a) => c.steps.push({ clause: 0, label, notes: i === 0 ? notes : [], ...diffNodes(b, a), ...snap(run, a) }) });
       run.nodes = res.nodes;
       if (res.select) run.select = [res.select];
     } catch (e) {

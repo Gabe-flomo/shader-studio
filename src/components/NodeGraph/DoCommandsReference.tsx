@@ -4,8 +4,8 @@
  *
  * Every verb with its syntax, slots, words and examples; objects, modifiers, references,
  * connectors and recipes. Searchable. Each example can be tried in the bar on the current graph
- * ("Try"), or shown step by step on a small scratch graph ("Show me how": the nodes, wires and
- * values it makes, and what each new node does in the node's own words).
+ * ("Try"), or shown step by step on a small scratch graph in its own window ("Show me how",
+ * ShowHowWindow.tsx: the nodes, wires and values each step makes, a picture after each step).
  *
  * Opened from the "?" in the Do… bar, Keys → Do… bar commands, and More tools.
  */
@@ -16,12 +16,8 @@ import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { closeCommandsRef, openDoBar, useCommandsRef } from '../../suggestions/doBarStore';
 import { fullReference } from '../../lang/reference';
-import { readLine, readsCanonically } from '../../lang/run';
-import { searchReference, REFERENCE_SECTIONS, SCRATCH_LABELS, COMMAND_LIMITS, type CommandExample, type ReferenceEntry } from '../../lang/commands';
-import { execCommand } from '../../suggestions/doCommands';
-import { scratchGraph } from '../../suggestions/doScratch';
-import { estimateNodeHeight } from '../../store/graphLayout';
-import { getNodeDefinition } from '../../nodes/definitions';
+import { searchReference, REFERENCE_SECTIONS, COMMAND_LIMITS, type CommandExample, type ReferenceEntry } from '../../lang/commands';
+import { openShowHow } from '../../suggestions/showHowStore';
 
 /** The modal (mounted with the canvas). */
 export function CommandsReference() {
@@ -117,55 +113,15 @@ function Entry({ e, onTry }: { e: ReferenceEntry; onTry: (text: string) => void 
 /** `how`: offer Show me how (not for builder phrases: they open a window, they don't change a graph). */
 function Example({ x, onTry, how: canShow = true }: { x: CommandExample; onTry: (text: string) => void; how?: boolean }) {
   const tk = useTokens();
-  const [how, setHow] = useState(false);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
         <code style={{ flex: '1 1 260px', minWidth: 0, font: `12px ${fontFamily.mono}`, color: tk.accent.base, overflowWrap: 'anywhere' }}>{x.text}</code>
         <Button size="sm" variant="ghost" onClick={() => onTry(x.text)} title="Open it in the Do… bar on this graph (the preview shows what it would do)">Try</Button>
-        {canShow && <Button size="sm" variant="ghost" onClick={() => setHow(h => !h)} data-show-how>{how ? 'Hide' : 'Show me how'}</Button>}
+        {canShow && <Button size="sm" variant="ghost" icon="play" onClick={() => openShowHow({ text: x.text, on: x.on, selected: x.selected })} data-show-how
+          title="Open a window that builds it step by step on a small graph, with a picture after each step">Show me how</Button>}
       </div>
       {x.note && <span style={{ fontSize: 11.5, color: tk.text.muted }}>{x.note}</span>}
-      {how && <ShowHow x={x} />}
-    </div>
-  );
-}
-
-/** The steps an example makes on its scratch graph, with what each new node does. */
-function ShowHow({ x }: { x: CommandExample }) {
-  const tk = useTokens();
-  const plan = useMemo(() => {
-    let k = 0;
-    // A canonical line runs as the bar runs it (its sentence through the same executors).
-    const line = readLine(x.text, { seed: 1 });
-    const text = readsCanonically(line) && line.dialect === 'picture' ? line.picture!.sentence! : x.text;
-    return execCommand(text, scratchGraph(x.on), { selected: x.selected ?? [], nextId: () => `how${++k}`, heightOf: estimateNodeHeight });
-  }, [x]);
-  const newTypes = [...new Set(plan.nodes.filter(nd => !scratchGraph(x.on).some(o => o.id === nd.id)).map(nd => nd.type))];
-  return (
-    <div style={{ marginLeft: 8, paddingLeft: 10, borderLeft: `2px solid ${alpha(tk.accent.base, 0.4)}`, display: 'flex', flexDirection: 'column', gap: 4 }} data-show-how-steps>
-      <span style={{ fontSize: 11.5, color: tk.text.faint }}>On {SCRATCH_LABELS[x.on]}{x.selected ? `, with ${x.selected.length > 1 ? 'two nodes' : 'one node'} selected` : ''}:</span>
-      {plan.clauses.filter(c => c.status !== 'ok').map(c => <span key={c.index} style={{ fontSize: 12, color: tk.status.warningText }}>“{c.text}”: {c.message}</span>)}
-      {plan.steps.map((s, i) => (
-        <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-          <span style={{ fontSize: 12.5 }}><b style={{ color: tk.accent.base }}>{i + 1}.</b> {s.label}</span>
-          {s.adds.length > 0 && <span style={{ fontSize: 11.5, color: tk.text.muted, paddingLeft: 14 }}>adds {s.adds.join(', ')}</span>}
-          {s.wires.map(w => <span key={w} style={{ fontSize: 11.5, color: tk.text.muted, paddingLeft: 14, font: `11px ${fontFamily.mono}` }}>+ {w}</span>)}
-          {s.unwires.map(w => <span key={w} style={{ fontSize: 11.5, color: tk.text.faint, paddingLeft: 14, font: `11px ${fontFamily.mono}`, textDecoration: 'line-through' }}>{w}</span>)}
-          {s.params.map(p => <span key={p} style={{ fontSize: 11.5, color: tk.text.muted, paddingLeft: 14 }}>{p}</span>)}
-        </div>
-      ))}
-      {newTypes.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, paddingTop: 2 }}>
-          <span style={{ fontSize: 11, letterSpacing: '0.06em', textTransform: 'uppercase', color: tk.text.faint }}>What the new nodes do</span>
-          {newTypes.map(t => {
-            const def = getNodeDefinition(t);
-            const d = def?.description;
-            const text = Array.isArray(d) ? d.join(' ') : d;
-            return <span key={t} style={{ fontSize: 11.5, color: tk.text.secondary }}><b>{def?.label ?? t}</b>{text ? ` — ${String(text).split(/(?<=\.)\s/)[0]}` : ''}</span>;
-          })}
-        </div>
-      )}
     </div>
   );
 }

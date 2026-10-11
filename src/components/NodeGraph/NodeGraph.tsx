@@ -19,6 +19,7 @@ import { SmartConnectMenu } from './SmartConnectMenu';
 import { SuggestionStrip } from './SuggestionStrip';
 import { DoBar } from './DoBar';
 import { CommandsReference } from './DoCommandsReference';
+import { ShowHowWindow } from './ShowHowWindow';
 import { openDoBar, useDoBarHighlight } from '../../suggestions/doBarStore';
 import { useLongPress } from '../../lib/longPress';
 import { learnedNext, rankTables } from '../../suggestions';
@@ -2335,6 +2336,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
       {/* The Do… bar (⌘K): typed phrases → moves (suggestions/doBar.ts) */}
       {!locked && <DoBar />}
       <CommandsReference />
+      <ShowHowWindow />
 
       {/* Feature 1: Alt-click socket filtered palette */}
       {smartConnect && (() => {

@@ -8,7 +8,9 @@
  *    "did you mean"; old words get a hint and a Use… button; `random` values show what they became.
  *  - Apply (or ⌘Enter, or leaving the field) writes it into the builder as one undo step. Rules
  *    bake into GLSL, so text is not applied on every keystroke.
- *  - Type-ahead and the signature line come from the registry (lang/complete.ts langAssist).
+ *  - Type-ahead and the signature line come from the registry (lang/complete.ts langAssist), shown
+ *    at the word being typed; resting the pointer on a word opens its help there (WordHelp.tsx), and
+ *    Show the words opens the dialect's guide (LanguageGuide.tsx).
  *
  * The Scene Builder's own Recipe tab (sceneBuilder/tabs.tsx) has rows as well and applies live.
  */
@@ -21,6 +23,8 @@ import { CodeField } from '../code/CodeField';
 import type { Completion } from '../code/glslReference';
 import { BuilderLabel, BuilderNote } from './BuilderWindow';
 import { AssistList, SignatureLine, useTypeAhead } from './TypeAhead';
+import { useWordHelp } from './WordHelp';
+import { LanguageGuide } from './LanguageGuide';
 import { recipeHtml } from '../sceneBuilder/recipeColours';
 import { langAssist } from '../../lang/complete';
 import { wordKindFor } from '../../lang/highlight';
@@ -76,6 +80,18 @@ export function LanguageTab({ dialect, printed, read, title = 'Recipe', note, ex
     setDirty(false);
   };
   const danger = tk.status.danger;
+  const [showWords, setShowWords] = useState(false);
+  // A word's help where the word is; suggestions at the word being typed.
+  const wordHelp = useWordHelp({ dialect, onReplace: (from, to, next) => change(`${text.slice(0, from)}${next}${text.slice(to)}`) });
+  const assistHere = focused && ta.from !== null && (ta.items.length > 0 || !!ta.signature) ? {
+    at: ta.from,
+    content: (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }} data-language-assist>
+        {ta.signature && <SignatureLine sig={ta.signature} />}
+        {ta.items.length > 0 && <AssistList items={ta.items} active={ta.active} onPick={ta.pick} onHover={ta.setActive} />}
+      </div>
+    ),
+  } : null;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }} data-language-tab={dialect}>
       <BuilderLabel meta="type or paste; Apply writes it into the form">{title}</BuilderLabel>
@@ -90,13 +106,15 @@ export function LanguageTab({ dialect, printed, read, title = 'Recipe', note, ex
         onFocus={el => { setFocused(true); setCaret(el.selectionStart); }}
         onBlur={() => { setFocused(false); setCaret(null); if (dirty && !r.errors.length) apply(); }}
         onSelect={el => setCaret(el.selectionStart)}
+        onHoverChar={(off, rectOf) => wordHelp.hover(text, off, rectOf)}
+        anchor={assistHere}
         invalid={r.errors.length > 0} minHeight={140} maxHeight={420} />
-      {focused && ta.signature && <SignatureLine sig={ta.signature} />}
-      {ta.items.length > 0 && <AssistList items={ta.items} active={ta.active} onPick={ta.pick} onHover={ta.setActive} />}
+      {wordHelp.popover}
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <Button size="sm" variant="primary" icon="check" disabled={!dirty || r.errors.length > 0} onClick={apply} data-language-apply title="Write the text into the form (⌘Enter)">Apply</Button>
         {dirty && <Button size="sm" variant="ghost" icon="undo" onClick={() => { setText(printed); setDirty(false); }}>Back to the form</Button>}
         <Button size="sm" variant="ghost" icon="copy" onClick={() => { void navigator.clipboard?.writeText(text).then(() => toast.success('Copied')).catch(() => {}); }}>Copy</Button>
+        <Button size="sm" variant="ghost" icon="book" aria-pressed={showWords} data-language-words onClick={() => setShowWords(v => !v)}>{showWords ? 'Hide' : 'Show'} the words</Button>
         <span style={{ flex: 1 }} />
         <BuilderNote>{r.errors.length ? `${r.errors.length} mistake${r.errors.length === 1 ? '' : 's'}` : dirty ? 'Reads cleanly: Apply to use it' : 'The form as text'}</BuilderNote>
       </div>
@@ -125,6 +143,7 @@ export function LanguageTab({ dialect, printed, read, title = 'Recipe', note, ex
           </span>
         </div>
       )}
+      {showWords && <LanguageGuide dialect={dialect} onUse={ex => change(ex)} />}
       {examples && examples.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
           <BuilderNote>Try:</BuilderNote>

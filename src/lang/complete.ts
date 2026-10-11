@@ -15,7 +15,7 @@
  * Pure: no React, no store.
  */
 import { getNodeDefinition } from '../nodes/definitions';
-import { SHAPES as SCENE_SHAPES, SHAPE_BY_KIND, WARPS, WARP_BY_KIND, TONE_MODES, type ParamDef } from '../sceneBuilder/spec';
+import { DIM_WORDS, SHAPES as SCENE_SHAPES, SHAPE_BY_KIND, WARPS, WARP_BY_KIND, TONE_MODES, shapeDims, type ParamDef, type ShapeDef } from '../sceneBuilder/spec';
 import { RECIPE_WORDS } from '../sceneBuilder/recipe';
 import { OUTPUTS, PALETTES } from '../sceneBuilder/output';
 import { ACTIONS, SHAPES as WORD_SHAPES, editDistance, fuzzBudget } from './vocabulary';
@@ -101,6 +101,14 @@ const SHAPE_COMMON = [
   { key: 'name', label: 'Name', hint: 'A name for notes and the tree.', text: 'name=…' },
 ];
 
+/** A shape's linked size words (spec.ts shapeDims): width / height / depth, or a round shape's size. */
+function dimSignature(s: ShapeDef): SignatureParam[] {
+  const d = shapeDims(s);
+  if (!d) return [];
+  if (!d.vector) return [{ key: 'size', label: 'Size (linked)', hint: 'One number: the radius and the height together.', text: 'size=…' }];
+  return DIM_WORDS.map(w => ({ key: w, label: w[0].toUpperCase() + w.slice(1), hint: `One number: only the ${w} (size= sets all three).`, text: `${w}=…` }));
+}
+
 export interface SignatureParam { key: string; label: string; hint: string; text: string }
 export interface Signature { head: string; detail: string; params: SignatureParam[]; /** The param the caret is on (or the next to fill); -1: none. */ active: number }
 
@@ -147,7 +155,7 @@ export function signatureFor(head: string): Signature | null {
   const shapeKind = RECIPE_WORDS.shapes[w];
   if (shapeKind) {
     const s = SHAPE_BY_KIND[shapeKind];
-    return { head: s.kind, detail: `${s.label}: ${s.blurb}`, params: [...s.params.map(p => ({ key: p.key, label: p.label, hint: p.hint ?? `${p.label}, ${p.min} to ${p.max}${p.deg ? '°' : ''}.`, text: paramText(p) })), ...SHAPE_COMMON], active: -1 };
+    return { head: s.kind, detail: `${s.label}: ${s.blurb}`, params: [...s.params.map(p => ({ key: p.key, label: p.label, hint: p.hint ?? `${p.label}, ${p.min} to ${p.max}${p.deg ? '°' : ''}.`, text: paramText(p) })), ...dimSignature(s), ...SHAPE_COMMON], active: -1 };
   }
   const warpKind = RECIPE_WORDS.warps[w];
   if (warpKind) {
