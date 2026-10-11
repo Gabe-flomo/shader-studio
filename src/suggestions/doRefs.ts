@@ -137,6 +137,14 @@ export function namesOf(node: GraphNode): Set<string> {
   return names;
 }
 
+/** The words that make a Transform: a verb, optionally a dimension ("rotate", "move 3d", "transform 4d"). */
+const TRANSFORM_VERBS = new Set(['transform', 'translate', 'move', 'rotate', 'turn', 'scale', 'place', 'position']);
+export function transformWords(phrase: string): { type: 'transform'; params?: Record<string, unknown> } | null {
+  const m = /^([a-z]+)(?: ([234])d)?$/.exec(phrase);
+  if (!m || !TRANSFORM_VERBS.has(m[1])) return null;
+  return m[2] && m[2] !== '2' ? { type: 'transform', params: { dim: m[2] } } : { type: 'transform' };
+}
+
 /** A node type named by `words` (exact name, type word, shape): the type and its starting params. */
 export function typeByName(words: string[]): { type: string; params?: Record<string, unknown>; shape?: string } | null {
   const phrase = words.join(' ');
@@ -144,6 +152,9 @@ export function typeByName(words: string[]): { type: string; params?: Record<str
   for (const sh of SHAPES) if (sh.node2d && (sh.words.includes(phrase) || sh.words.includes(plural(phrase)))) return { type: sh.node2d.type, params: sh.node2d.params, shape: sh.id };
   const tw = TYPE_WORDS[phrase] ?? TYPE_WORDS[plural(phrase)];
   if (tw) return { type: tw[0] };
+  // Moving, turning and scaling make the one Transform, in the dimension named (docs/transform-node.md).
+  const trf = transformWords(phrase);
+  if (trf) return trf;
   const defs = getOfferedDefinitions();
   const exact = (d: (typeof defs)[number]) => [d.label, d.label.replace(/\bsdf\b/i, ''), d.label.replace(/\s*\(.*\)\s*/, ''), d.type, ...(d.aliases ?? [])].map(lowerLabel);
   for (const d of defs) if (exact(d).includes(phrase) || exact(d).includes(plural(phrase))) return { type: d.type };

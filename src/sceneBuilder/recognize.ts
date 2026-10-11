@@ -19,7 +19,7 @@ import {
   type GroupSpec, type SceneItem, type SceneSpec, type ShapeDef, type ShapeSpec, type Vec3, type WarpDef, type WarpSpec,
 } from './spec';
 import { round, printRecipe } from './recipe';
-import { META_KEY, ROLE_KEY, type SceneBuilderMeta } from './build';
+import { META_KEY, ROLE_KEY, WARP_KIND_KEY, type SceneBuilderMeta } from './build';
 import { DEFAULT_PALETTE, OUTPUT_BY_SHOW, PALETTES, type OutputShow, type OutputSpec } from './output';
 
 export interface DescribeResult {
@@ -98,6 +98,50 @@ function toWarp(r: Reader, n: GraphNode): WarpSpec {
   return { id, kind: def.kind, values: warpValues(n, def) };
 }
 
+// ── Transform (docs/transform-node.md) ──────────────────────────────────────
+
+const isPlace3D = (n: GraphNode) => n.type === 'transform' && String(n.params.dim) === '3' && n.params.mode !== 'space';
+/** A Transform with nothing beyond Move / Rotate / Scale: no wires but its point, no spin or stretch. */
+const plainTransform = (n: GraphNode) => ['offset', 'turn', 'grow', 'dist'].every(k => !n.inputs[k]?.connection)
+  && !num(n.params.spin, 0) && n.params.stretch !== true;
+const v3p = (n: GraphNode, keys: [string, string, string]) => keys.map(k => round(num(n.params[k], 0))) as Vec3;
+
+/** What a point-side node multiplies the point by, as Scale 3D's Scale (a Transform's Scale divides): to pair it with its distance half. */
+function pointScale(n: GraphNode): number | null {
+  if (n.type === 'scale3d') return num(n.params.scale, 1);
+  if (isPlace3D(n) && !n.inputs.dist?.connection) return 1 / Math.max(1e-6, num(n.params.scale, 1));
+  return null;
+}
+
+/** A 3D Transform as the builder's warps: the one it was made for (_sbKind), else Move, Rotate and Scale in that order. */
+function transformWarps(r: Reader, n: GraphNode): WarpSpec[] {
+  r.read.add(n.id);
+  const role = roleOf(n);
+  const id = /^w\d+$/.test(role) ? role : `w_${n.id}`;
+  const kind = typeof n.params[WARP_KIND_KEY] === 'string' ? String(n.params[WARP_KIND_KEY]) : '';
+  const custom = (): WarpSpec[] => { r.unknown.push(`${label(n)} bends space in a way the builder doesn't know: custom.`); return [{ id, kind: 'custom', values: {}, label: label(n) }]; };
+  if (String(n.params.dim) !== '3') return custom();
+  r.wiredParams(n, ['offset', 'turn', 'grow'], 'Transform');
+  const apply = n.params.mode === 'space';
+  if (kind === 'turn' || (apply && !kind)) {
+    const set = (['x', 'y', 'z'] as const).filter(a => num(n.params[`r${a}`], 0) !== 0);
+    if (!apply || set.length > 1 || [n.params.x, n.params.y, n.params.z].some(v => num(v, 0) !== 0) || num(n.params.scale, 1) !== 1) return custom();
+    const axis = set[0] ?? 'y';
+    return [{ id, kind: 'turn', values: { axis, angle: round(num(n.params[`r${axis}`], 0)) } }];
+  }
+  if (apply) return custom();
+  const move = v3p(n, ['x', 'y', 'z']), rot = v3p(n, ['rx', 'ry', 'rz']), s = round(num(n.params.scale, 1));
+  if (kind === 'move') return [{ id, kind: 'move', values: { by: move } }];
+  if (kind === 'rotate') return [{ id, kind: 'rotate', values: { by: rot } }];
+  if (kind === 'scale') return [{ id, kind: 'scale', values: { s } }];
+  const out: WarpSpec[] = [];
+  if (move.some(v => v !== 0)) out.push({ id: `${id}_m`, kind: 'move', values: { by: move } });
+  if (rot.some(v => v !== 0)) out.push({ id: `${id}_r`, kind: 'rotate', values: { by: rot } });
+  if (s !== 1) out.push({ id: `${id}_s`, kind: 'scale', values: { s } });
+  if (out.length === 1) out[0].id = id;
+  return out.length ? out : [{ id, kind: 'move', values: { by: move } }];
+}
+
 /** A distance modifier read off the distance chain, or Scale's correction, and where on the point chain it sits. */
 type Mod =
   | { kind: 'mod'; w: WarpSpec; /** the node whose point it reads (Displace) */ at: string | null }
@@ -115,7 +159,7 @@ function posChain(r: Reader, n: GraphNode | undefined, key: string, guard = 0): 
   if (!from || guard > 64) return [];
   if (from.type === 'scenePos') { r.read.add(from.id); return []; }
   const def = WARP_OF_TYPE.get(from.type);
-  const inKey = def?.posIn ?? Object.keys(from.inputs).find(k => from.inputs[k].type === 'vec3' && from.inputs[k].connection) ?? 'pos';
+  const inKey = from.type === 'transform' ? 'p' : def?.posIn ?? Object.keys(from.inputs).find(k => from.inputs[k].type === 'vec3' && from.inputs[k].connection) ?? 'pos';
   return [...posChain(r, from, inKey, guard + 1), from];
 }
 
@@ -142,6 +186,14 @@ function readDist(r: Reader, from: GraphNode | undefined, guard = 0): Raw | null
   const shapeDef = SHAPE_OF_TYPE.get(from.type);
   if (shapeDef) {
     return { kind: 'shape', shape: readShape(r, from, shapeDef), chain: posChain(r, from, shapeDef.posKey), mods: [] };
+  }
+  // A Transform's Distance (Scale's distance half, as the builder writes it): Scale's correction.
+  if (from.type === 'transform' && from.inputs.dist?.connection && String(from.params.dim) === '3' && from.params.mode !== 'space') {
+    const inner = readDist(r, r.src(from, 'dist'), guard + 1);
+    if (!inner) return inner;
+    r.read.add(from.id);
+    inner.mods.push({ kind: 'fix', node: from, scale: 1 / Math.max(1e-6, num(from.params.scale, 1)) });
+    return inner;
   }
   // A modifier on the distance (innermost first, as the builder applies them): kept on the item it changes.
   const distDef = DIST_OF_TYPE.get(from.type);
@@ -220,6 +272,7 @@ function chainWarps(r: Reader, nodes: GraphNode[]): Array<{ w: WarpSpec; at: num
   const out: Array<{ w: WarpSpec; at: number }> = [];
   for (let i = 0; i < nodes.length; i++) {
     const n = nodes[i];
+    if (n.type === 'transform') { for (const w of transformWarps(r, n)) out.push({ w, at: i }); continue; }
     const m = n.type === 'rotate3D' && !n.inputs.angle?.connection ? /^(w\d+):([xyz])$/.exec(roleOf(n)) : null;
     if (m) {
       const by: Vec3 = [0, 0, 0];
@@ -253,7 +306,7 @@ function stack(r: Reader, own: GraphNode[], upTo: number, mods: Mod[]): WarpSpec
   const keyed: Array<{ w: WarpSpec | null; key: number | null }> = inOrder.map(m => {
     if (m.kind === 'fix') {
       const role = roleOf(m.node).replace(/:dist$/, '');
-      const i = own.slice(0, upTo).findIndex(n => n.type === 'scale3d' && !paired.has(n.id) && (role && roleOf(n) === role || Math.abs(num(n.params.scale, 1) - m.scale) < 1e-6));
+      const i = own.slice(0, upTo).findIndex(n => pointScale(n) !== null && !paired.has(n.id) && (role && roleOf(n) === role || Math.abs(pointScale(n)! - m.scale) < 1e-6));
       if (i < 0) { r.unknown.push('A Scale 3D on the distance has no matching Scale 3D on the point: left out.'); return { w: null, key: null }; }
       paired.add(own[i].id);
       return { w: null, key: i - 0.5 };
@@ -293,6 +346,16 @@ function finish(r: Reader, raw: Raw, taken: number): SceneItem {
     return raw.group;
   }
   const sh = raw.shape;
+  // A last Transform (the builder's `s1:at`, or a plain one with no role) is where the shape is and how it is turned.
+  const lastT = own[own.length - 1];
+  if (lastT && isPlace3D(lastT) && plainTransform(lastT) && num(lastT.params.scale, 1) === 1
+    && (roleOf(lastT) ? roleOf(lastT).endsWith(':at') : typeof lastT.params[WARP_KIND_KEY] !== 'string')) {
+    r.read.add(lastT.id);
+    sh.at = v3p(lastT, ['x', 'y', 'z']).map(v => (Object.is(v, -0) ? 0 : v)) as Vec3;
+    sh.rot = v3p(lastT, ['rx', 'ry', 'rz']).map(v => (Object.is(v, -0) ? 0 : v)) as Vec3;
+    sh.warps = builderOrder(r, sh.id, stack(r, own, own.length - 1, raw.mods));
+    return sh;
+  }
   // Trailing turns (Z, then Y, then X as the builder writes them) are the shape's rotation; a move just before them is where it is.
   let end = own.length;
   const rot: Vec3 = [0, 0, 0];

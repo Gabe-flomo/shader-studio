@@ -154,10 +154,20 @@ export const CATEGORY_INFO: Record<string, string> = {
   Output: 'Where the picture leaves the graph.',
 };
 
+/**
+ * Nodes a row also lists from another category, with the settings they start with there: the one
+ * Transform (2D Space) leads the 3D and 4D moves too, in that dimension (docs/transform-node.md).
+ */
+const ROW_ADD_PARAMS: Record<string, Record<string, Record<string, unknown>>> = {
+  '3D Transforms': { transform: { dim: '3' } },
+  '4D Space': { transform: { dim: '4' } },
+};
+
 const nodesOfRow = (row: string) => {
+  const extra = Object.keys(ROW_ADD_PARAMS[row] ?? {}).map(t => getOfferedDefinitions().find(d => d.type === t)).filter((d): d is NonNullable<typeof d> => !!d);
   const v = VIRTUAL_ROWS[row];
-  if (v) return getNodesByCategory(v.from).filter(d => (v.only ? v.only.includes(d.type) : !(v.not ?? []).includes(d.type)));
-  return (MERGED_CATEGORIES[row] ?? [row]).flatMap(c => getNodesByCategory(c));
+  if (v) return [...extra, ...getNodesByCategory(v.from).filter(d => (v.only ? v.only.includes(d.type) : !(v.not ?? []).includes(d.type)))];
+  return [...extra, ...(MERGED_CATEGORIES[row] ?? [row]).flatMap(c => getNodesByCategory(c))];
 };
 
 const CATEGORY_ORDER = [...CATEGORY_SECTIONS.flatMap(s => s.categories.flatMap(c => MERGED_CATEGORIES[c] ?? [c])), ...new Set(Object.values(VIRTUAL_ROWS).map(v => v.from))];
@@ -175,7 +185,7 @@ const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: string[] }>>
     { label: 'Fields',  types: ['gyroidField', 'schwarzPField'] },
   ],
   '3D Transforms': [
-    { label: 'Move',   types: ['translate3D', 'rotate3D', 'rotateAxis3D', 'scale3d'] },
+    { label: 'Move',   types: ['transform', 'translate3D', 'rotate3D', 'rotateAxis3D', 'scale3d'] },
     { label: 'Repeat', types: ['repeat3D', 'limitedRepeat3D', 'polarRepeat3D', 'mirroredRepeat3D', 'voxelize'] },
     { label: 'Warp',   types: ['twist3D', 'bend3D', 'sinWarp3D', 'displace3D', 'spiralWarp3D', 'domainWarp3D', 'turbulence3D', 'shear3D'] },
     { label: 'Fold',   types: ['fold3D', 'mirrorFold3D', 'kaleidoscope3D', 'sphereInvert3D', 'mobiusWarp3D', 'logPolarWarp3D', 'helixWarp3D'] },
@@ -186,7 +196,7 @@ const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: string[] }>>
     { label: 'Solids',    types: ['hypersphereSDF', 'tesseractSDF', 'duocylinderSDF', 'spherinderSDF', 'cubinderSDF', 'cylPrismSDF', 'ditorusSDF', 'cliffordTorusSDF', 'hopfCirclesSDF'] },
   ],
   '4D Space': [
-    { label: 'Into 4D, move and turn', types: ['lift4D', 'translate4D', 'rotate4D', 'scale4D'] },
+    { label: 'Into 4D, move and turn', types: ['lift4D', 'transform', 'translate4D', 'rotate4D', 'scale4D'] },
     { label: 'Repeat, fold and warp',  types: ['repeat4D', 'fold4D', 'twist4D', 'noise4D'] },
   ],
   '3D Lighting': [
@@ -249,7 +259,7 @@ const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: string[] }>>
     { label: 'Style',   types: ['sdfFill', 'sdfColorize'] },
   ],
   '2D Space': [
-    { label: 'Basic',   types: ['uvTransform2d', 'rotate2d', 'shear', 'perspective2d', 'fract', 'displace'] },
+    { label: 'Basic',   types: ['transform', 'uvTransform2d', 'rotate2d', 'shear', 'perspective2d', 'fract', 'displace'] },
     { label: 'Repeat',  types: ['infiniteRepeatSpace', 'limitedRepeat2D', 'mirroredRepeat2D', 'angularRepeat2D', 'kaleidoSpace', 'grid'] },
     { label: 'Warp',    types: ['uvWarp', 'smoothWarp', 'curlWarp', 'swirlWarp', 'swirlSpace', 'rippleSpace', 'sphericalSpace', 'lensDistortion', 'crtScreen', 'turbulence', 'uvReciprocal', 'gravityField', 'spiralField', 'vectorField'] },
     { label: 'Map',     types: ['polarSpace', 'logPolarSpace', 'hyperbolicSpace', 'inversionSpace', 'mobiusSpace', 'cornerPin'] },
@@ -550,9 +560,10 @@ function CapsLabel({ children, rule = false }: { children: ReactNode; rule?: boo
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 interface NodeBrowserProps {
-  onAdd: (type: string) => void;
+  /** `params`: a row's starting settings for the node (a Transform added from the 3D row is 3D). */
+  onAdd: (type: string, params?: Record<string, unknown>) => void;
   /** Add `type` at a graph position (a pill dragged onto the graph). Left out: pills don't drag. */
-  onDragAdd?: (type: string, position: { x: number; y: number }) => string | undefined;
+  onDragAdd?: (type: string, position: { x: number; y: number }, params?: Record<string, unknown>) => string | undefined;
   /** After a drop, e.g. to close a drawer. */
   onDragDone?: () => void;
   swapTargetNodeId: string | null;
@@ -641,9 +652,9 @@ export function NodeBrowser({
       setGlslPopupType(null);
       return;
     }
-    onAdd(type);
+    onAdd(type, ROW_ADD_PARAMS[path[0] ?? '']?.[type]);
     setPreviewType(null);
-  }, [isGlsl, onAdd, onGlslInsert]);
+  }, [isGlsl, onAdd, onGlslInsert, path]);
 
   // A wrap of node pills, with the preview card for the selected one underneath.
   const renderPills = (nodes: Array<{ type: string; label: string; description?: string; badge?: string }>) => (
@@ -658,7 +669,7 @@ export function NodeBrowser({
             onSingleClick={() => handleNodeClick(def.type)}
             onDoubleClick={() => handleNodeDblClick(def.type)}
             swapMode={!!swapTargetNodeId}
-            drag={onDragAdd && !isGlsl ? { label: def.label, type: def.type, place: pos => onDragAdd(def.type, pos) } : null}
+            drag={onDragAdd && !isGlsl ? { label: def.label, type: def.type, place: pos => onDragAdd(def.type, pos, ROW_ADD_PARAMS[path[0] ?? '']?.[def.type]) } : null}
             onDragEnd={() => { setPreviewType(null); onDragDone?.(); }}
             btnRef={el => { if (el) nodeButtonRefs.current.set(def.type, el); else nodeButtonRefs.current.delete(def.type); }}
           />
@@ -837,7 +848,8 @@ export function NodeBrowser({
     // In Agent presets every node is a preset: no need to say so on each.
     const shown = (list: typeof rawNodes) => [...list]
       .map(d => (cat === 'Agent presets' ? { ...d, label: d.label.replace(/\s*\(preset\)$/i, '') } : d))
-      .sort((a, b) => byLabel(a.label, b.label));
+      // The universal Transform leads its group; the rest are alphabetical.
+      .sort((a, b) => (a.type === 'transform' ? -1 : b.type === 'transform' ? 1 : byLabel(a.label, b.label)));
     const info = CATEGORY_INFO[cat];
     innerContent = (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>

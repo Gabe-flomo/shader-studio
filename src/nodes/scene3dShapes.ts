@@ -16,7 +16,7 @@
  *               distance through it.
  *
  * A shape added to a scene that already returns a distance is joined to it by
- * a Union (with a note), and moved aside by a Translate 3D (with a note) so it
+ * a Union (with a note), and moved aside by a Transform (3D, or 4D after a Lift) (with a note) so it
  * doesn't hide inside what's there. Inside a Scene Group (the user is building
  * by hand) a shape is wired from Scene Pos and into the Union / Scene Output,
  * without the Translate, and warps / modifiers are left for the user to wire.
@@ -31,6 +31,7 @@ import { getNodeDefinition } from './definitions';
 import { instantiateNode } from './scene3dDefaults';
 
 import { SCENE_SPACE_CATEGORIES, fourDRole, type FourDRole } from './smart3d';
+import { transformDim } from './definitions/transformAny';
 
 export type SceneRole =
   | { kind: 'shape'; posInput: string; distOutput: string }
@@ -41,8 +42,18 @@ export type SceneRole =
 const DIST_OUTPUTS = ['dist', 'distance', 'surface'];
 const POS_OUTPUTS = ['pos', 'p', 'cellPos'];
 
-/** What a scene-space node does in a scene, from its sockets. Null for anything else. */
-export function sceneRole(def: NodeDefinition): SceneRole | null {
+/**
+ * What a scene-space node does in a scene, from its sockets. Null for anything else. A Transform's
+ * role follows its Dimension (`params`, else its definition's default): a 3D one is a warp (its
+ * Distance sockets are for a second Transform, not a partner), a 4D one a 4D warp, a 2D one none.
+ */
+export function sceneRole(def: NodeDefinition, params?: Record<string, unknown>): SceneRole | null {
+  if (def.type === 'transform') {
+    const dim = transformDim({ params: params ?? def.defaultParams ?? {} });
+    if (dim === '4') return { kind: 'shape4d', lead: 'warp' };
+    if (dim === '3') return { kind: 'warp', posInput: 'p', posOutput: 'p', distInput: null, distOutput: null };
+    return null;
+  }
   const four = fourDRole(def);
   if (four) return four;
   if (!SCENE_SPACE_CATEGORIES.has(def.category)) return null;
@@ -133,12 +144,12 @@ export function buildShapeChain(
     let shapePos: Ref = { nodeId: node.id, outputKey: role.posOutput };
     if (partnerSpec.shift) {
       const [tx, ty, tz] = partnerSpec.shift;
-      const shift = make(nextId, 'translate3D', { x: at.x + 440, y: at.y }, {
-        tx, ty, tz,
+      const shift = make(nextId, 'transform', { x: at.x + 440, y: at.y }, {
+        dim: '3', x: tx, y: ty, z: tz,
         ...note(`Moves the ${shapeName} off the centre, where ${label} copies or mirrors it, so you can see the copies. Set it to 0 to put the ${shapeName} back on the centre.`),
       });
-      wire(shift, 'pos', shapePos);
-      shapePos = { nodeId: shift.id, outputKey: 'pos' };
+      wire(shift, 'p', shapePos);
+      shapePos = { nodeId: shift.id, outputKey: 'p' };
       partner.position = { x: at.x + 880, y: at.y };
       out.push(shift);
     }
@@ -188,9 +199,11 @@ function build4DChain(
     p4 = { nodeId: lift.id, outputKey: 'p4' };
   }
   if (role.lead === 'warp') {
-    wire(node, 'p4', p4);
+    // A 4D transform reads and gives its point on p4 (a 4D Transform on p).
+    const key = node.inputs.p4 ? 'p4' : 'p';
+    wire(node, key, p4);
     place(node);
-    p4 = { nodeId: node.id, outputKey: 'p4' };
+    p4 = { nodeId: node.id, outputKey: node.outputs.p4 ? 'p4' : 'p' };
   }
   if (role.lead === 'shape') {
     wire(node, 'p4', p4);
@@ -305,11 +318,12 @@ export function addToScene(
       const k = shapeCount(nodes) + 1;
       const tx = Math.round(1.3 * Math.ceil(k / 2) * (k % 2 ? 1 : -1) * 100) / 100;
       const where = `Moves ${label} ${Math.abs(tx)} to the ${tx > 0 ? 'right' : 'left'} so it sits beside the shapes already in the scene instead of inside them.`;
+      // A Transform (4D after a Lift, else 3D) moves it: Move X/Y/Z(/W), and Rotate and Scale are there too.
       const shift = fromP4
-        ? make(nextId, 'translate4D', at, { tx, ty: 0, tz: 0, tw: 0, _autoShift: true, ...note(`${where} Change X, Y, Z and W to place it, or delete this to put it back on the centre.`) })
-        : make(nextId, 'translate3D', at, { tx, ty: 0, tz: 0, _autoShift: true, ...note(`${where} Change X, Y and Z to place it, or delete this to put it back on the centre.`) });
-      if (fromP4) { wire(shift, 'p4', fromP4); fromP4 = { nodeId: shift.id, outputKey: 'p4' }; }
-      else { wire(shift, 'pos', pos); from = { nodeId: shift.id, outputKey: 'pos' }; }
+        ? make(nextId, 'transform', at, { dim: '4', x: tx, _autoShift: true, ...note(`${where} Change Move X, Y, Z and W to place it, or delete this to put it back on the centre.`) })
+        : make(nextId, 'transform', at, { dim: '3', x: tx, _autoShift: true, ...note(`${where} Change Move X, Y and Z to place it, or delete this to put it back on the centre.`) });
+      if (fromP4) { wire(shift, 'p', fromP4); fromP4 = { nodeId: shift.id, outputKey: 'p' }; }
+      else { wire(shift, 'p', pos); from = { nodeId: shift.id, outputKey: 'p' }; }
       added.push(shift);
     }
     const chainAt = { x: at.x + (opts.byHand ? 0 : 440), y: at.y };
@@ -324,7 +338,7 @@ export function addToScene(
     wire(union, 'a', current);
     wire(union, 'b', chain.dist);
     wire(sceneOut, 'dist', { nodeId: union.id, outputKey: 'dist' });
-    const spread = added.find(n => n.params._autoShift === true)?.params.tx as number | undefined;
+    const spread = added.find(n => n.params._autoShift === true)?.params.x as number | undefined;
     return done([...added, union], `${label} is joined to the scene with a Union${opts.byHand ? '' : ' and moved beside what was there'}.`, spread === undefined ? undefined : Math.abs(spread));
   }
 

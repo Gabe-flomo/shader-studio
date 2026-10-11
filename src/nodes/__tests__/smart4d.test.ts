@@ -48,9 +48,13 @@ describe('4D nodes build their own scene', () => {
     const placed = addToScene(nextId, first, second, sceneRole(getNodeDefinition('tesseractSDF')!)!, { byHand: false })!;
     const t = types(placed.subgraph.nodes);
     expect(t.filter(x => x === 'lift4D')).toHaveLength(1);
-    expect(t).toContain('translate4D');
+    // Moved aside by a 4D Transform (docs/transform-node.md).
+    expect(t).toContain('transform');
     expect(t).toContain('sdfUnion');
-    expect(feeds(placed.subgraph.nodes, second, 'p4')).toBe('translate4D');
+    expect(feeds(placed.subgraph.nodes, second, 'p4')).toBe('transform');
+    const shift = placed.subgraph.nodes.find(n => n.type === 'transform')!;
+    expect(shift.params.dim).toBe('4');
+    expect(shift.inputs.p.type).toBe('vec4');
   });
 
   it('inside a group by hand, a 4D shape is wired from the Lift without moving it', () => {

@@ -9,6 +9,8 @@ export function scoreNodeDef(def: NodeDefinition, query: string): number {
   const q = query.trim().toLowerCase();
   if (!q) return 1;
   const label = def.label.toLowerCase();
+  // The default node for a word (Transform for "move", "translate"…) comes first, the specific ones after it.
+  if (q.length >= 3 && def.leadsFor?.some(w => w.startsWith(q))) return 130;
   if (label === q) return 120;
   if (label.startsWith(q)) return 100;
   const aliases = (def.aliases ?? []).map(a => a.toLowerCase());

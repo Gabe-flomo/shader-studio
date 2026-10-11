@@ -104,6 +104,8 @@ export const FOUR_D_CATEGORY = '4D';
 
 export function fourDRole(def: NodeDefinition): FourDRole | { kind: 'shape'; posInput: string; distOutput: string } | null {
   if (def.category !== FOUR_D_CATEGORY) return null;
+  // A 4D Transform (transformDefFor('4')) moves a 4D point: a warp, with a Lift before it.
+  if (def.type === 'transform') return { kind: 'shape4d', lead: 'warp' };
   const pos3 = def.inputs.pos?.type === 'vec3';
   const p4In = def.inputs.p4?.type === 'vec4';
   const p4Out = def.outputs.p4?.type === 'vec4';
@@ -128,7 +130,7 @@ export function planSmart3DAdd(type: string, def: NodeDefinition, topLevel: Grap
 
   if (SCENE_SPACE_CATEGORIES.has(def.category)) {
     const posInput = def.inputs.pos ? 'pos' : def.inputs.p ? 'p' : null;
-    const distOutput = def.outputs.dist?.type === 'float' ? 'dist' : null;
+    const distOutput = def.outputs.dist?.type === 'float' && def.type !== 'transform' ? 'dist' : null;
     return { kind: 'wrap-scene', posInput, distOutput, ...placeScene(topLevel, position) };
   }
 

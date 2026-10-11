@@ -56,16 +56,26 @@ function nameOf(n: GraphNode): string {
   return quoted ? `${quoted} (${def})` : def;
 }
 
-/** The objects a light can follow in a Scene Group: its Translate 3D nodes and its shapes. */
+/**
+ * The params that move an object: a Translate 3D's X/Y/Z, or a 3D Transform's Move X/Y/Z (Place mode, the
+ * one the builders and smart placement make; Apply mode moves the point, not the object). Null for the rest.
+ */
+export function moveKeys(n: GraphNode): [string, string, string] | null {
+  if (n.type === 'translate3D') return ['tx', 'ty', 'tz'];
+  if (n.type === 'transform' && String(n.params.dim) === '3' && n.params.mode !== 'space') return ['x', 'y', 'z'];
+  return null;
+}
+
+/** The objects a light can follow in a Scene Group: its Translate 3D / Transform nodes and its shapes. */
 export function linkTargets(scene: GraphNode): LinkTarget[] {
   const sg = subOf(scene);
   if (!sg) return [];
   const out: LinkTarget[] = [];
   for (const n of sg.nodes) {
-    if (n.type === 'translate3D') {
+    if (moveKeys(n)) {
       // An unnamed Translate is named after the shape it moves ("Translate 3D (Sphere SDF 3D)").
       const own = nameOf(n);
-      const moved = own === 'Translate 3D' ? sg.nodes.find(x => { const k = posInputOf(x); return !!k && x.inputs[k]?.connection?.nodeId === n.id; }) : undefined;
+      const moved = own === getNodeDefinition(n.type)?.label ? sg.nodes.find(x => { const k = posInputOf(x); return !!k && x.inputs[k]?.connection?.nodeId === n.id; }) : undefined;
       out.push({ id: n.id, kind: 'translate', label: moved ? `${own} (${nameOf(moved)})` : own });
       continue;
     }
@@ -86,7 +96,7 @@ export function translateChain(nodes: readonly GraphNode[], targetId: string): s
   let cur = byId.get(targetId);
   while (cur && !seen.has(cur.id)) {
     seen.add(cur.id);
-    if (cur.type === 'translate3D') out.push(cur.id);
+    if (moveKeys(cur)) out.push(cur.id);
     const key = posInputOf(cur);
     const from = key ? cur.inputs[key]?.connection?.nodeId : undefined;
     cur = from ? byId.get(from) : undefined;
@@ -102,7 +112,7 @@ export function staticCentre(scene: GraphNode, targetId: string): [number, numbe
   for (const id of translateChain(sg.nodes, targetId)) {
     const t = sg.nodes.find(n => n.id === id)!;
     const ov = (k: string) => scene.params[`${id}::${k}`];
-    ['tx', 'ty', 'tz'].forEach((k, i) => { const v = ov(k) ?? t.params[k]; c[i] += typeof v === 'number' ? v : 0; });
+    (moveKeys(t) ?? []).forEach((k, i) => { const v = ov(k) ?? t.params[k]; c[i] += typeof v === 'number' ? v : 0; });
   }
   return c;
 }
