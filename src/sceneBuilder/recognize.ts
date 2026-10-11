@@ -531,8 +531,11 @@ export function describeGraph(nodes: GraphNode[]): DescribeResult | null {
     spec.camera = {
       dist: round(num(P.camDist, 3)), angle: deg(num(P.camAngle, 0.6)), elev: deg(num(P.camElevation, 0.3)), orbit: deg(num(P.rotSpeed, 0)),
       zoom: round(num(P.fov, 1.5)), flatten: round(num(P.ortho, 0)), x: round(num(P.targetX, 0)), y: round(num(P.targetY, 0)), z: round(num(P.targetZ, 0)),
+      // Perspective: Orthographic or Reverse on the card is the builder's projection (Normal, or none, is perspective).
+      ...(P.projection === 'orthographic' ? { projection: 'orthographic' as const } : {}),
+      ...(P.projection === 'reverse' ? { projection: 'reverse' as const, reverse: round(num(P.reverseStrength, 1)), converge: round(num(P.reverseDist, 8)) } : {}),
     };
-    r.wiredParams(cam, ['camDist', 'camAngle', 'camElevation', 'rotSpeed', 'fov', 'target', 'targetX', 'targetY', 'targetZ'], 'March Camera');
+    r.wiredParams(cam, ['camDist', 'camAngle', 'camElevation', 'rotSpeed', 'fov', 'target', 'targetX', 'targetY', 'targetZ', 'reverseStrength', 'reverseDist'], 'March Camera');
     if (num(P.aperture, 0) > 0) r.unknown.push('March Camera\'s depth of field (Aperture) has no builder setting.');
     recognized.push('March Camera');
   } else r.unknown.push(cam ? `${label(cam)} makes the rays: not a March Camera, so the camera is the builder's default.` : 'Nothing is wired into the loop\'s Ray Origin.');

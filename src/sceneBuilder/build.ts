@@ -21,7 +21,7 @@ import { getNodeDefinition } from '../nodes/definitions';
 import { startingSockets } from '../nodes/definitions/transformAny';
 import { estimateNodeHeight, layoutByRank } from '../store/graphLayout';
 import {
-  MAX_TEX_SHAPES, SHAPE_BY_KIND, TEX_MAP_LABELS, TEX_SHARP_DEFAULT, WARP_BY_KIND, allShapes, effectiveStepScale, filterTree, itemName, num, opLabel, stepHints,
+  MAX_TEX_SHAPES, REVERSE_DEFAULTS, texturesUsed3D, SHAPE_BY_KIND, TEX_MAP_LABELS, TEX_SHARP_DEFAULT, WARP_BY_KIND, allShapes, effectiveStepScale, filterTree, itemName, num, opLabel, stepHints,
   type GroupSpec, type SceneItem, type SceneSpec, type ShapeSpec, type Vec3, type WarpSpec,
 } from './spec';
 import { LUMA, findTex, fitLines, glf, picUv, sampleWrap, standInId, standIns } from '../builders/textures';
@@ -362,6 +362,20 @@ function pathWarps(spec: SceneSpec, target: ShapeSpec): Array<{ warps: WarpSpec[
   return out;
 }
 
+/** The nodes of `nodes` that `roots` read, directly or through others (by their wires). */
+function reachableFrom(nodes: GraphNode[], roots: string[]): Set<string> {
+  const byId = new Map(nodes.map(n => [n.id, n]));
+  const seen = new Set<string>();
+  const stack = [...roots];
+  while (stack.length) {
+    const id = stack.pop()!;
+    if (seen.has(id) || !byId.has(id)) continue;
+    seen.add(id);
+    for (const sock of Object.values(byId.get(id)!.inputs)) if (sock.connection) stack.push(sock.connection.nodeId);
+  }
+  return seen;
+}
+
 function materialsGroup(ctx: Ctx, shapes: ShapeSpec[], hitPos: Ref, texShapes: ShapeSpec[] = []): GraphNode {
   const inner: GraphNode[] = [];
   // Inside the group the hit point arrives through the port.
@@ -417,6 +431,12 @@ function materialsGroup(ctx: Ctx, shapes: ShapeSpec[], hitPos: Ref, texShapes: S
     const nearer = mk(scope, 'sdfUnion', `${sh.id}:near`, { k: 0 }, { a: dist, b: d }, `The nearest of the shapes so far, for the next pick.`, inner);
     dist = ref(nearer, 'dist');
   }
+  const texOuts0 = texShapes.map((_, i) => texPos[i]).filter(Boolean);
+  // Only what the group hands out: the last shape's "nearest so far" (no shape after it to pick
+  // against) and a lone painted shape's own distance (nothing to compare it with) are not built.
+  const roots = [colour, shine, ...(slots && texOuts0.length ? [slots, ...texOuts0] : [])].filter((r): r is Ref => !!r).map(r => r.nodeId);
+  const live = reachableFrom(inner, roots);
+  for (let i = inner.length - 1; i >= 0; i--) if (!live.has(inner[i].id)) inner.splice(i, 1);
   tidy(inner, 0, 120);
   const texOuts = texShapes.map((s, i) => ({ key: `tp${i}`, label: `${itemName(ctx.spec, s)} point`, from: texPos[i] })).filter(o => o.from);
   const pics = slots && texOuts.length ? [
@@ -677,10 +697,19 @@ export function buildSceneGraph(spec: SceneSpec, idFor: (role: string) => string
   const step = effectiveStepScale(spec);
   const hints = stepHints(spec);
 
+  // Projection (March Camera's Perspective): absent is perspective, as before, with Flatten when set.
+  const proj = C.projection ?? 'perspective';
+  const rev = { strength: C.reverse ?? REVERSE_DEFAULTS.reverse, at: C.converge ?? REVERSE_DEFAULTS.converge };
+  const projParams = proj === 'orthographic' ? { projection: 'orthographic' }
+    : proj === 'reverse' ? { projection: 'reverse', reverseStrength: rev.strength, reverseDist: rev.at }
+      : C.flatten > 0 ? { ortho: C.flatten } : {};
+  const projNote = proj === 'orthographic' ? ', orthographic: its rays run parallel, so size doesn\'t change with distance (an isometric drawing)'
+    : proj === 'reverse' ? `, in reverse perspective: its rays start spread out and meet ${fmt(rev.at)} in front (strength ${fmt(rev.strength)}), so far things look bigger, like a Byzantine icon`
+      : C.flatten ? `, flattened ${fmt(C.flatten)} toward isometric` : '';
   const cam = mk(ctx, 'marchCamera', 'camera', {
     camDist: C.dist, camAngle: rad(C.angle), camElevation: rad(C.elev), rotSpeed: rad(C.orbit), fov: C.zoom,
-    targetX: C.x, targetY: C.y, targetZ: C.z, ...(C.flatten > 0 ? { ortho: C.flatten } : {}),
-  }, {}, `The camera: ${fmt(C.dist)} away, ${fmt(C.angle)}° round and ${fmt(C.elev)}° up${C.orbit ? `, orbiting ${fmt(C.orbit)}° a second` : ''}, zoom ${fmt(C.zoom)}${C.flatten ? `, flattened ${fmt(C.flatten)} toward isometric` : ''}. Every pixel becomes a ray from here. Target X / Y / Z move the camera and the point it looks at together (Translate).`);
+    targetX: C.x, targetY: C.y, targetZ: C.z, ...projParams,
+  }, {}, `The camera: ${fmt(C.dist)} away, ${fmt(C.angle)}° round and ${fmt(C.elev)}° up${C.orbit ? `, orbiting ${fmt(C.orbit)}° a second` : ''}, zoom ${fmt(C.zoom)}${projNote}. Every pixel becomes a ray from here. Target X / Y / Z move the camera and the point it looks at together (Translate).`);
 
   // Glass mode measures two scenes: the glass, and what is seen through it.
   const glassParts = L.mode === 'glass' ? filterTree(spec.root, s => s.glass) : null;
@@ -850,8 +879,10 @@ export function metaOf(node: GraphNode | undefined | null): SceneBuilderMeta | n
 /** A stand-alone graph (with its own Output) for `spec`: examples and tests. */
 export function buildStandaloneGraph(spec: SceneSpec, opts: { idFor?: (role: string) => string; outputId?: string } = {}): BuildResult & { outputId: string } {
   const built = buildSceneGraph(spec, opts.idFor);
-  // Its pictures: a Texture node per source, so it compiles alone (the previews bind the real picture to it).
-  built.nodes.push(...standIns(spec.textures));
+  // Its pictures: a Texture node per source it reads, so it compiles alone (the previews bind the real
+  // picture to it). A source nothing reads gets none: no unused node, and no sampler the GLSL compiler drops.
+  const used = new Set(texturesUsed3D(spec));
+  built.nodes.push(...standIns(spec.textures?.filter(s => used.has(s.name))));
   const scene = built.nodes.find(n => n.id === built.sceneId)!;
   scene.params = { ...scene.params, [META_KEY]: { v: 1, spec: structuredClone(spec) } satisfies SceneBuilderMeta };
   const last = built.nodes.find(n => n.id === built.final.nodeId)!;

@@ -3802,7 +3802,7 @@ Examples:
 Words: `camera`, `cam`
 
 ```
-camera [dist] angle= elev= orbit= zoom= flatten= x= y= z=
+camera [dist] angle= elev= orbit= zoom= flatten= x= y= z= projection= reverse= converge=
 ```
 
 | Slot | What |
@@ -3816,6 +3816,9 @@ camera [dist] angle= elev= orbit= zoom= flatten= x= y= z=
 | x | number |
 | y | number |
 | z | number |
+| projection | How the rays leave the camera: perspective (far things smaller), orthographic (parallel: no change of size with distance) or reverse (far things bigger). The word alone works too: camera reverse. · perspective, orthographic, reverse |
+| reverse | Reverse: how strongly the rays converge (0 parallel … 1 meeting at converge). |
+| converge | Reverse: how far in front of the camera the rays meet. |
 
 Examples:
 
