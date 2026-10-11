@@ -111,9 +111,10 @@ export function lookEntries(o: { set: AgentRuleSet; kind: WalkerKind; draw?: Gra
       const by2 = String(d.params.sizeBy ?? 'fixed');
       const sized = by2 === 'speed' ? ', bigger the faster it goes' : by2.startsWith('mem') ? `, as big as its memory ${by2.slice(3).toLowerCase()} × ${n2(Number(d.params.memScale ?? 1))}` : '';
       out.push({ id: 'look:style', title: 'Drawn as', colour: pal[pal.length - 1] ?? '#ffffff', numbers: `splats · ${n2(ss)}`, on: true, el: 'look', settings: ['style', 'splatSize', 'stretch', 'opacity'],
-        line: `Each ${n.one} is a soft Gaussian splat ${n2(ss)} wide${sized}, ${n2(1 + st)} times as long along its motion at full speed, covering ${Math.round(Number(d.params.opacity ?? 0.6) * 100)}% at its middle: where many overlap they read as a volume.`, demo: { kind: 'look', style, colourBy: by, colours: pal } });
+        line: `Each ${n.one} is a soft Gaussian splat ${n2(ss)} wide${sized}, ${n2(1 + st)} times as long along its motion at full speed, covering ${Math.round(Number(d.params.opacity ?? 0.6) * 100)}% at its middle: where many overlap they read as a volume.`,
+        words: `Each ${n.one} is a soft Gaussian splat${sized ? sized.replace(/ × [^,]*$/, '') : ''}, stretched along its motion: where many overlap they read as a volume.`, demo: { kind: 'look', style, colourBy: by, colours: pal } });
     } else out.push({ id: 'look:style', title: 'Drawn as', colour: pal[pal.length - 1] ?? '#ffffff', numbers: `${style} · ${n2(size)} px`, on: true, el: 'look', settings: ['style', 'dsize', 'brightness'],
-      line: `Each ${n.one} is ${what}, ${n2(size)} pixels across, at brightness ${n2(Number(d.params.brightness ?? 0.5))}.`, demo: { kind: 'look', style, colourBy: by, colours: pal } });
+      line: `Each ${n.one} is ${what}, ${n2(size)} pixels across, at brightness ${n2(Number(d.params.brightness ?? 0.5))}.`, words: `Each ${n.one} is ${what}, this many pixels across.`, demo: { kind: 'look', style, colourBy: by, colours: pal } });
     const say: Record<ColourBy, string> = {
       kind: `each ${n.one} in its kind's colour${o.set.species.some(s => s.states.length > 1) ? ' (its state\'s, when it changes state)' : ''}`,
       speed: `slow ${n.many} at the palette's start, fast ones at its end (fast is ${n2(Number(d.params.speedRef ?? 0.5))} a second)`,
@@ -125,13 +126,14 @@ export function lookEntries(o: { set: AgentRuleSet; kind: WalkerKind; draw?: Gra
       memory: o.set.colourBy ? `by its memory on a heat map: black at ${n2(o.set.colourBy.lo)}, white at ${n2(o.set.colourBy.hi)}` : 'by a memory',
     };
     out.push({ id: 'look:colour', title: `Colour by ${COLOUR_BY.find(c => c.value === by)!.label.toLowerCase()}`, colour: pal[0] ?? '#ffffff', numbers: by === 'kind' || by === 'trail' || by === 'memory' || by === 'own' ? by : String(d.params.palette ?? 'ab'),
-      on: true, el: 'look', settings: ['colourBy', 'palette'], line: `Colour: ${say[by]}.`, demo: { kind: 'look', style: String(d.params.style ?? 'points'), colourBy: by, colours: pal } });
+      on: true, el: 'look', settings: ['colourBy', 'palette'], line: `Colour: ${say[by]}.`, words: `${say[by].charAt(0).toUpperCase()}${say[by].slice(1)}.`, demo: { kind: 'look', style: String(d.params.style ?? 'points'), colourBy: by, colours: pal } });
   }
   if (o.trailStops?.length) {
     out.push({ id: 'look:trail', title: 'The trail\'s palette', colour: o.trailStops[Math.floor(o.trailStops.length * 0.7)] ?? '#e8a33a', numbers: `${o.trailStops.length} colours`, on: true, el: 'trailLook', settings: ['trailPalette'],
-      line: `The trail is drawn from ${o.trailStops.length > 2 ? 'black where there is none' : 'its first colour'} to its last where it is thickest.`, demo: { kind: 'look', style: 'trail', colourBy: 'single', colours: o.trailStops } });
+      line: `The trail is drawn from ${o.trailStops.length > 2 ? 'black where there is none' : 'its first colour'} to its last where it is thickest.`,
+      words: `Drawn from ${o.trailStops.length > 2 ? 'black where there is none' : 'its first colour'} to its last where it is thickest.`, demo: { kind: 'look', style: 'trail', colourBy: 'single', colours: o.trailStops } });
   }
   if (o.d3 && d) out.push({ id: 'look:camera', title: 'Camera', colour: '#8aa8ff', numbers: `${n2(Number(d.params.camDist ?? 3.8))} away · ${n2(Number(d.params.rotSpeed ?? 0))}°/s`, on: true, el: 'camera', settings: ['camDist', 'camAngle', 'camElevation', 'rotSpeed', 'fov'],
-    line: `Seen from ${n2(Number(d.params.camDist ?? 3.8))} away, ${n2(Number(d.params.camElevation ?? 15))}° above, circling at ${n2(Number(d.params.rotSpeed ?? 0))}° a second.`, demo: { kind: 'look', style: 'camera', colourBy: by, colours: pal } });
+    line: `Seen from ${n2(Number(d.params.camDist ?? 3.8))} away, ${n2(Number(d.params.camElevation ?? 15))}° above, circling at ${n2(Number(d.params.rotSpeed ?? 0))}° a second.`, words: 'How far away the camera is, and how fast it circles the walkers.', demo: { kind: 'look', style: 'camera', colourBy: by, colours: pal } });
   return out;
 }

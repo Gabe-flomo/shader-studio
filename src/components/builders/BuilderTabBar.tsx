@@ -90,7 +90,7 @@ export function BuilderFold({ foldKey, title, summary, children }: { foldKey: st
         style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, border: 0, background: 'transparent', padding: '4px 0', cursor: 'pointer', color: tk.text.primary, textAlign: 'left' }}>
         <Icon name={open ? 'chevD' : 'chevR'} size={14} style={{ color: tk.text.faint }} />
         <b style={{ font: `600 13px ${fontFamily.ui}` }}>{title}</b>
-        {!open && <span style={{ marginLeft: 'auto', color: tk.text.muted, fontSize: 11.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 320 }}>{summary}</span>}
+        {!open && <span style={{ marginLeft: 'auto', color: tk.text.muted, fontSize: 11.5, fontVariantNumeric: 'tabular-nums', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 320 }}>{summary}</span>}
       </button>
       {open && <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '8px 0 4px' }}>{children}</div>}
     </section>

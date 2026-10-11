@@ -93,11 +93,21 @@ async function openView() {
 }
 
 describe('the fold under a line', () => {
-  it('folded: what it reads → its steps → what it sets; open: a short summary and Open explain view', () => {
+  it('folded: just Explain; open: the pattern by a plain name, one sentence, then Open explain view', () => {
     const opened: number[] = [];
-    act(() => root.render(<LineFold text="float g = smoothstep(0.0, 0.1, d)" ctx={{ types: { d: 'float' } }} onOpenView={() => opened.push(1)} />));
-    expect(q('[data-explain-summary]')!.textContent).toBe('d → 1 step → g');
+    act(() => root.render(<LineFold text="float z = 1.0 - dot(p, p)" ctx={{ types: { p: 'vec2' } }} onOpenView={() => opened.push(1)} />));
+    expect(q('[data-explain-toggle]')!.textContent).toBe('Explain');
     expect(q('[data-line-fold-body]')).toBeNull();
+    click('[data-explain-toggle]');
+    // In order: the pattern's name, the sentence, the action; the pattern isn't repeated as a chip
+    const body = q('[data-line-fold-body]')!;
+    expect([...body.children].map(c => (c as HTMLElement).dataset.lineFoldPattern !== undefined ? 'pattern' : (c as HTMLElement).dataset.lineFoldLead !== undefined ? 'lead' : (c as HTMLElement).dataset.explainAction)).toEqual(['pattern', 'lead', 'open-view']);
+    expect(q('[data-line-fold-pattern]')!.textContent).toBe('Flipping a mask');
+    expect(body.textContent).not.toContain('Invert (1 − x)');
+    expect(body.textContent).not.toMatch(/→/);
+    click('[data-explain-toggle]');
+    // A line that is no known pattern: no name, just the sentence
+    act(() => root.render(<LineFold text="float g = smoothstep(0.0, 0.1, d)" ctx={{ types: { d: 'float' } }} onOpenView={() => opened.push(1)} />));
     click('[data-explain-toggle]');
     const lead = q('[data-line-fold-lead]')!.textContent!;
     expect(lead.length).toBeGreaterThan(5);

@@ -1,7 +1,7 @@
 /**
  * CodeCard — the card face of an Expression Block or a Custom Function: a carousel of read-only
- * pages (Code → Preview → Note; empty ones left out), flipped with the dots, the arrows, a
- * sideways swipe or scroll, or ←/→ when the card has focus. The page is remembered per node
+ * pages (Code → Preview → Note; empty ones left out), flipped only with the pager's dots and
+ * arrows, or ←/→ when the card has focus (a sideways scroll or swipe over it pans the canvas). The page is remembered per node
  * (cardPageStore). The bar holds only the page name (its tooltip is the block's signature) and
  * the pager: editing happens in the full editor (the card header's button, a double-click or
  * ↵), and the note is written from the card's footer (or the Note page's own link). There is no
@@ -94,24 +94,13 @@ export const CodeCard = React.memo(function CodeCard({ node, touch = false, onEd
 
   // ── Gestures ───────────────────────────────────────────────────────────────
   const codeRef = useRef<HTMLDivElement>(null);
-  const wheelAcc = useRef({ x: 0, at: 0 });
   const touchStart = useRef<{ x: number; y: number; top: number } | null>(null);
 
+  // Only the pager (its dots and arrows) flips the page: a sideways scroll or swipe over the card is
+  // the canvas being panned, and passes through to it.
   const onWheel = (e: React.WheelEvent) => {
     if (e.ctrlKey) return; // pinch-zoom stays with the canvas
-    if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
-      // Sideways: flip pages (one flip per gesture), never pan the canvas
-      e.stopPropagation();
-      const now = performance.now();
-      if (now - wheelAcc.current.at > 350) wheelAcc.current.x = 0;
-      wheelAcc.current.at = now;
-      wheelAcc.current.x += e.deltaX;
-      if (Math.abs(wheelAcc.current.x) > 60) {
-        flip(wheelAcc.current.x > 0 ? 1 : -1);
-        wheelAcc.current.x = e.deltaX > 0 ? -1e6 : 1e6; // swallow the rest of this swipe
-      }
-      return;
-    }
+    if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return; // sideways: the canvas pans
     // Up/down over code that can still scroll that way scrolls it, not the canvas
     const el = codeRef.current;
     if (el && el.contains(e.target as Node)) {
@@ -120,7 +109,7 @@ export const CodeCard = React.memo(function CodeCard({ node, touch = false, onEd
       if ((e.deltaY > 0 && canDown) || (e.deltaY < 0 && canUp)) e.stopPropagation();
     }
   };
-  // The canvas cancels touch scrolling, so the code scrolls by hand; a sideways swipe flips the page.
+  // The canvas cancels touch scrolling, so the code scrolls by hand (a sideways swipe is left to the canvas).
   const onTouchStart = (e: React.TouchEvent) => {
     if (e.touches.length !== 1) { touchStart.current = null; return; }
     const t = e.touches[0];
@@ -134,14 +123,7 @@ export const CodeCard = React.memo(function CodeCard({ node, touch = false, onEd
     const dy = t.clientY - s.y;
     if (Math.abs(dy) > Math.abs(t.clientX - s.x)) el.scrollTop = s.top - dy;
   };
-  const onTouchEnd = (e: React.TouchEvent) => {
-    const s = touchStart.current;
-    touchStart.current = null;
-    if (!s) return;
-    const t = e.changedTouches[0];
-    const dx = t.clientX - s.x, dy = t.clientY - s.y;
-    if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.5) flip(dx < 0 ? 1 : -1);
-  };
+  const onTouchEnd = () => { touchStart.current = null; };
 
   // ── Pages ──────────────────────────────────────────────────────────────────
   const mono = `${touch ? 12.5 : 11.5}px/1.65 ${fontFamily.mono}`;

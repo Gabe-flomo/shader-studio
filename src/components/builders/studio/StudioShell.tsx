@@ -298,7 +298,7 @@ export function StudioNavItem({ icon, label, summary, selected, onClick, hint, d
       </span>
       <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, gap: 1 }}>
         <span style={{ fontWeight: 600 }}>{label}</span>
-        {summary && <span data-studio-summary style={{ fontSize: 11.5, color: tk.text.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{summary}</span>}
+        {summary && <span data-studio-summary style={{ fontSize: 11.5, color: tk.text.muted, fontVariantNumeric: 'tabular-nums', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{summary}</span>}
       </span>
     </button>
   );

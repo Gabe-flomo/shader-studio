@@ -170,7 +170,7 @@ export function BehaviourCard({ id, picture, title, hint, summary, learn, guide,
             </Tooltip>
             {off && onToggle && <MutedTag />}
           </span>
-          {summary && <span style={{ fontSize: 11.5, color: tk.text.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{summary}</span>}
+          {summary && <span data-card-summary style={{ fontSize: 11.5, color: tk.text.muted, fontVariantNumeric: 'tabular-nums', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{summary}</span>}
         </span>
         {onToggle && <span data-card-switch={id}><MuteToggle muted={off} onToggle={() => onToggle(off)} onSolo={onSolo} what={title} /></span>}
         {onRemove && (

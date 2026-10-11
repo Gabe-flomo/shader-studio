@@ -25,7 +25,7 @@ import { holdPreview } from '../../lib/previewHold';
 import { nowParamValue } from '../../lib/nowValue';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { useTokens } from '../../theme/themeStore';
-import { alpha, fontFamily, radius } from '../../theme/tokens';
+import { fontFamily, radius } from '../../theme/tokens';
 import { Icon } from '../ui/Icon';
 import { Toggle } from '../ui/Choice';
 import { RulerSlider } from '../ui/RulerSlider';
@@ -39,7 +39,7 @@ import { varSpans } from './ExplainView';
 import { ExplainLiveCanvas } from './ExplainLiveCanvas';
 import { exprBlockBuildUp, exprBlockVarying, type BuildUpHost } from './buildUpHost';
 import { liveProgram, liveUniformValues, type LiveType } from './liveRender';
-import { lineIdiom } from './LineFold';
+import { lineIdiom, linePattern } from './LineFold';
 import { scopeNodes } from './hosts';
 import { lineTimeNames } from './timeNames';
 
@@ -131,7 +131,9 @@ export function LineExplainView({ node, at, stops, ctx, onGo, onBack, onFindUses
     if (last && last.node === ex.root) out.set('result', out.get(`step:${last.label}`) ?? null);
     return out;
   }, [ex, vars]);
-  const idioms = useMemo(() => new Map(ex.ok ? ex.steps.flatMap(s => (s.idiom ? [[s.label, s.idiom] as const] : [])) : []), [ex]);
+  // The whole line's pattern is named once, over the sentence: its step doesn't repeat it as a chip
+  const pattern = ex.ok ? linePattern(ex) : undefined;
+  const idioms = useMemo(() => new Map(ex.ok ? ex.steps.flatMap(s => (s.idiom && !(pattern && s.node === ex.root) ? [[s.label, s.idiom] as const] : [])) : []), [ex, pattern]);
 
   // The live picture: one program for every row; overriding a name (not its value) makes a new one
   const overriddenKey = Object.keys(overrides).sort().join(',');
@@ -229,13 +231,16 @@ export function LineExplainView({ node, at, stops, ctx, onGo, onBack, onFindUses
           </div>
           {ex.ok ? (
             <>
-              <span style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap', font: `500 12.5px/1.55 ${fontFamily.ui}`, color: tk.text.secondary }}>
-                <ExplainText segs={ex.leadSegs} activeVar={hoverVar} onVarHover={setHoverVar} />
-                {lineIdiom(ex) && (
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '1px 8px', borderRadius: 9, background: alpha(tk.status.success, 0.12), font: `600 11px ${fontFamily.ui}` }}>
-                    <Icon name="star" size={10} />{lineIdiom(ex)}
+              <span style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {pattern && (
+                  <span data-explain-pattern="" title={lineIdiom(ex) ? `A well-known shader pattern: ${lineIdiom(ex)}` : 'A well-known shader pattern'}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 5, font: `650 13px ${fontFamily.ui}`, color: tk.text.primary }}>
+                    <Icon name="star" size={11} style={{ color: tk.status.success }} />{pattern}
                   </span>
                 )}
+                <span style={{ font: `500 12.5px/1.55 ${fontFamily.ui}`, color: tk.text.secondary }}>
+                  <ExplainText segs={ex.leadSegs} activeVar={hoverVar} onVarHover={setHoverVar} />
+                </span>
               </span>
               <SectionHead meta={`${rows.filter(r => r.kind === 'input').length} in · ${ex.steps.length} step${ex.steps.length === 1 ? '' : 's'} · click a row or ← → to show it`}>Step by step</SectionHead>
               <BuildUpView rows={rows} vars={vars} ranges={ranges} host={host} activeVar={hoverVar}

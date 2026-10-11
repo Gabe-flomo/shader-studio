@@ -147,7 +147,9 @@ const pack = (v: string, type: string) =>
 export function uniformsOf(values: Record<string, number | number[]>): Record<string, THREE.IUniform> {
   const out: Record<string, THREE.IUniform> = {};
   for (const [k, v] of Object.entries(values)) {
-    out[k] = { value: Array.isArray(v) ? (v.length === 2 ? new THREE.Vector2(v[0], v[1]) : v.length === 3 ? new THREE.Vector3(v[0], v[1], v[2]) : new THREE.Vector4(v[0], v[1], v[2] ?? 0, v[3] ?? 0)) : v };
+    // vec2…vec4 as vectors; any other array (a float[N] uniform, a matrix's numbers) as it is, which
+    // three.js hands to gl.uniform*fv (a Vector4 there throws)
+    out[k] = { value: Array.isArray(v) ? (v.length === 2 ? new THREE.Vector2(v[0], v[1]) : v.length === 3 ? new THREE.Vector3(v[0], v[1], v[2]) : v.length === 4 ? new THREE.Vector4(v[0], v[1], v[2], v[3]) : [...v]) : v };
   }
   return out;
 }

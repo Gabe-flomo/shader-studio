@@ -73,7 +73,7 @@ describe('Follow a field', () => {
     expect(fieldOf()).toMatchObject({ strength: 1, grip: 3, spec: { layers: [{ kind: 'vortex' }] } });
     expect(Number($('[data-force="field"]')?.getAttribute('data-field-arrows'))).toBeGreaterThan(50);
     expect($$('[data-legend-entry]').map(e => e.getAttribute('data-legend-entry'))).toContain('field#0:L0');
-    expect($('[data-legend-entry="field#0:L0"]')?.textContent).toMatch(/Vortex at the centre, strength 0.6: particles circle anticlockwise, faster near the middle/);
+    expect($('[data-legend-entry="field#0:L0"]')?.textContent).toMatch(/^Vortex× 0.6Particles circle anticlockwise, faster near the middle\./);
     // The gallery: eleven tiles; curl noise adds a layer and a legend entry.
     click($('[data-field-add]'));
     expect($$('[data-field-tile]').length).toBe(11);
