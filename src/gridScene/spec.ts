@@ -18,6 +18,7 @@
  */
 import type { SpaceBlock } from '../sceneBuilder2d/blocks';
 import { cloneBlock } from '../sceneBuilder2d/blocks';
+import type { TextMask } from './textMask';
 
 export type Vec2 = [number, number];
 export type Vec3 = [number, number, number];
@@ -116,6 +117,8 @@ export interface Pattern {
   arms: number;
   /** A shape the pattern puts in every empty cell (its size follows the wave), or null. */
   fill: string | null;
+  /** Words the pattern is limited to (textMask.ts): the wave and the fill only in the cells they cover. Absent or null: everywhere. */
+  mask?: TextMask | null;
 }
 
 export interface GridRule {

@@ -12,6 +12,8 @@
  *    stands for, the cells a stencil matches, the 2×2 blocks of the next step.
  *  - Under the hood: every cell's numbers.
  *  - Use as the start: the cells on the board become the node's start (stamped in the middle).
+ *  - Text stamp: words in the stroke font (gridRules/textCells.ts), stamped where you click, in the
+ *    picked state; the cells it will cover are outlined under the pointer.
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTokens } from '../../theme/themeStore';
@@ -20,11 +22,13 @@ import { Button, IconButton } from '../ui/Button';
 import { Segmented } from '../ui/Choice';
 import { Select } from '../ui/Select';
 import { cpuColours, cpuStep, cpuStepUpTo } from '../../gridRules/cpu';
-import { GRID_DEFAULTS, gridShape, maxCount, countsOf } from '../../gridRules/spec';
+import { GRID_DEFAULTS, countsAsRanges, gridShape, maxCount, countsOf } from '../../gridRules/spec';
 import { TEST_PATTERNS, countLabel, rangeCounts, type TestPattern } from '../../gridRules/explain';
 import { blockRects, boardLife, canBack, changesBetween, liveNeighbours, neighbourCells, patternMatches, tryGeneration } from '../../gridRules/tryRun';
 import { TRY_SPEEDS, drawingOf, useTryRun, type TrySpeed } from './useTryRun';
 import { drawnCount } from '../../gridRules/startCells';
+import { DEFAULT_START_TEXT, MAX_TEXT_CHARS, cleanStartText, readStartText, textStampCells } from '../../gridRules/textCells';
+import { Field } from '../ui/Field';
 
 type P = Record<string, unknown>;
 
@@ -63,6 +67,13 @@ export function TryBoard({ params, nodeParams, focus, hood, onUseAsStart }: {
   useEffect(() => { if (brush > top) setBrush(1); }, [brush, top]);
   const [hover, setHover] = useState<[number, number] | null>(null);
   const [showNext, setShowNext] = useState(true);
+  // The Text stamp: words (the node's text start's to begin with) and their height in cells.
+  const [stamp, setStamp] = useState<{ on: boolean; text: string; size: number }>(() => {
+    const st = readStartText(params.startText);
+    return { on: false, text: st.text || DEFAULT_START_TEXT.text, size: Math.min(st.size, 12) };
+  });
+  const stampWeight = readStartText(params.startText).weight;
+  const stampCells = (at: [number, number]) => textStampCells(stamp.text, stamp.size, stampWeight, at[0], at[1]);
 
   // Fit: whole pixels a cell, centred.
   const stageRef = useRef<HTMLDivElement>(null);
@@ -106,6 +117,12 @@ export function TryBoard({ params, nodeParams, focus, hood, onUseAsStart }: {
     if (e.button !== 0) return;
     const c = cellAt(e);
     if (!c) return;
+    if (stamp.on && !smooth) {
+      // The Text stamp: the letters' cells in the picked state (state 1 when the eraser is picked; Shift erases).
+      t.paint(stampCells(c), e.shiftKey ? 0 : brush || 1);
+      return;
+    }
+    if (stamp.on && smooth) { t.paint(stampCells(c), e.shiftKey ? 0 : 1); return; }
     (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
     const here = smooth ? (B.a[c[1] * B.w + c[0]] > 0.5 ? 1 : 0) : Math.round(B.a[c[1] * B.w + c[0]]);
     const state = e.shiftKey || (here === brush && brush !== 0) ? 0 : brush;
@@ -191,8 +208,8 @@ export function TryBoard({ params, nodeParams, focus, hood, onUseAsStart }: {
       for (const [nx, ny] of neighbourCells(params, B, x, y)) overlay.push(<rect key={`h${nx},${ny}`} x={px(nx) + 0.5} y={py(ny) + 0.5} width={cell - 1} height={cell - 1} fill={ink('#ffffff', 0.08)} stroke={ink('#9cc1ff', 0.9)} strokeWidth={1} />);
       const st = Math.round(B.a[i]);
       const k = liveNeighbours(params, B, x, y);
-      const max = maxCount(s.neighbourhood, s.radius, s.shape);
-      const radiusMode = s.neighbourhood === 'radius';
+      const max = maxCount(s.neighbourhood, s.radius, s.shape, s.stencil);
+      const radiusMode = countsAsRanges(s);
       const born = radiusMode ? rangeCounts(Number(params.bornLo), Number(params.bornHi)) : countsOf(Number(params.bornMask), max);
       const survive = radiusMode ? rangeCounts(Number(params.surviveLo), Number(params.surviveHi)) : countsOf(Number(params.surviveMask), max);
       hoverNote = st >= 2 ? `A dying cell (stage ${st - 1}): it fades on, whatever is round it.` : countLabel(st === 1 ? 'survive' : 'born', k, born, survive, s.type === 'stages');
@@ -200,6 +217,12 @@ export function TryBoard({ params, nodeParams, focus, hood, onUseAsStart }: {
       hoverNote = s.template === 'reaction' ? `food ${(B.a[i]).toFixed(3)} · B ${B.b[i].toFixed(3)}` : `value ${B.a[i].toFixed(3)}${s.template === 'waves' ? ` · a step ago ${B.b[i].toFixed(3)}` : ''}`;
     } else hoverNote = `State ${Math.round(B.a[i])}${changes?.has(i) ? ` → ${Math.round(next.a[i])} next step` : ''}`;
     overlay.push(<rect key="hover" x={px(x) + 0.5} y={py(y) + 0.5} width={cell - 1} height={cell - 1} fill="none" stroke="#fff" strokeWidth={1.5} />);
+  }
+  // The Text stamp: the cells it will cover.
+  if (stamp.on && hover) {
+    let d = '';
+    for (const [x, y] of stampCells(hover)) if (x >= 0 && y >= 0 && x < B.w && y < B.h) d += `M${px(x) + 1} ${py(y) + 1}h${cell - 2}v${cell - 2}h${-(cell - 2)}Z`;
+    overlay.push(<path key="stamp" d={d} fill={ink(tk.accent.base, 0.35)} stroke={tk.accent.base} strokeWidth={1} data-stamp-preview />);
   }
   // Under the hood: each cell's numbers.
   if (hood && cell >= 9) {
@@ -217,7 +240,7 @@ export function TryBoard({ params, nodeParams, focus, hood, onUseAsStart }: {
   return (
     <div data-try-board style={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: tk.bg.render }}>
       <div ref={stageRef} tabIndex={0} onKeyDown={onKey} aria-label="Try board: draw cells, then step through" style={{ flex: 1, minHeight: 0, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', outline: 'none' }}>
-        <div data-try-surface style={{ position: 'relative', width: W, height: H, cursor: 'crosshair', touchAction: 'none', boxShadow: `0 0 0 1px ${tk.border.default}` }}
+        <div data-try-surface style={{ position: 'relative', width: W, height: H, cursor: stamp.on ? 'copy' : 'crosshair', touchAction: 'none', boxShadow: `0 0 0 1px ${tk.border.default}` }}
           onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} onPointerLeave={() => setHover(null)}>
           <canvas ref={canvasRef} width={B.w} height={B.h} aria-label="The try board" style={{ width: W, height: H, imageRendering: 'pixelated', display: 'block' }} />
           <svg width={W} height={H} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>{overlay}</svg>
@@ -261,6 +284,20 @@ export function TryBoard({ params, nodeParams, focus, hood, onUseAsStart }: {
                   color: '#888', font: `600 10px ${fontFamily.mono}`,
                 }}>{k === 0 ? '⌫' : top > 1 ? k : ''}</button>
             ))}
+          </span>
+        )}
+        <IconButton icon="text" size="sm" label={stamp.on ? 'Stop stamping text (draw cells again)' : 'Text stamp: click the board to stamp words there, in the picked state'} active={stamp.on}
+          onClick={() => setStamp(x => ({ ...x, on: !x.on }))} data-try-stamp />
+        {stamp.on && (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ width: 92 }}>
+              <Field aria-label="Words to stamp" height={28} value={stamp.text} maxLength={MAX_TEXT_CHARS} data-try-stamp-words
+                onChange={e => setStamp(x => ({ ...x, text: cleanStartText(e.target.value) }))} />
+            </span>
+            <span style={{ width: 58 }}>
+              <Select ariaLabel="Letter height (cells)" height={28} value={String(stamp.size)} onChange={v => setStamp(x => ({ ...x, size: Number(v) }))}
+                options={[5, 6, 7, 8, 10, 12, 16, 20].map(n => ({ value: String(n), label: `${n}` }))} />
+            </span>
           </span>
         )}
         <IconButton icon="trash" size="sm" label="Clear the board" onClick={t.clear} data-try-clear />

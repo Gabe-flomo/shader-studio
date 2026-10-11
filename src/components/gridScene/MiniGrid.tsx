@@ -7,13 +7,16 @@
  *  - the brush shape's motion paths are drawn faintly through its cells (motionAt, the shader's
  *    sums on the CPU), so a path can be set up before looking at the preview;
  *  - cells a rule points at are ringed; while a rule waits for a cell ("Pick on the grid"), a click
- *    sets it instead of painting.
+ *    sets it instead of painting;
+ *  - with the text stamp on, the words' cells are outlined under the pointer and a click places the
+ *    brush's shape in every one of them (one undo step).
  */
 import { useEffect, useRef, useState } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { radius } from '../../theme/tokens';
 import { useGridBuilder } from '../../gridScene/store';
 import { eraseCell, motionAt, placeCell, shapeOf } from '../../gridScene/spec';
+import { textStampGridCells } from '../../gridScene/textMask';
 import { paintGrid, rgb } from './glyphs';
 
 export function MiniGrid({ size = 288 }: { size?: number }) {
@@ -21,6 +24,7 @@ export function MiniGrid({ size = 288 }: { size?: number }) {
   const spec = useGridBuilder(s => s.spec);
   const brush = useGridBuilder(s => s.brush);
   const picking = useGridBuilder(s => s.picking);
+  const stamp = useGridBuilder(s => s.textStamp);
   const ref = useRef<HTMLCanvasElement>(null);
   const [hover, setHover] = useState<[number, number] | null>(null);
   const stroke = useRef<{ key: string; erase: boolean; last: [number, number] } | null>(null);
@@ -64,12 +68,20 @@ export function MiniGrid({ size = 288 }: { size?: number }) {
       else if (w.kind === 'column') ctx.strokeRect(x0 + (w.x ?? 0) * cell + 1.5, y0 + 1.5, cell - 3, spec.rows * cell - 3);
       else if (w.kind === 'row') ctx.strokeRect(x0 + 1.5, y0 + (w.y ?? 0) * cell + 1.5, spec.cols * cell - 3, cell - 3);
     }
-    if (hover) {
+    if (hover && stamp.on && !picking) {
+      // The text stamp: the cells it will fill.
+      ctx.fillStyle = tk.accent.base;
+      ctx.globalAlpha = 0.45;
+      for (const [x, y] of textStampGridCells(stamp.text, stamp.size, hover[0], hover[1])) {
+        if (x >= 0 && y >= 0 && x < spec.cols && y < spec.rows) ctx.fillRect(x0 + x * cell + 2, y0 + y * cell + 2, cell - 4, cell - 4);
+      }
+      ctx.globalAlpha = 1;
+    } else if (hover) {
       ctx.strokeStyle = picking ? tk.status.warningText : tk.text.primary;
       ctx.lineWidth = 1.5;
       ctx.strokeRect(x0 + hover[0] * cell + 1, y0 + hover[1] * cell + 1, cell - 2, cell - 2);
     }
-  }, [spec, brush, hover, picking, size, tk]);
+  }, [spec, brush, hover, picking, size, tk, stamp]);
 
   const cellOf = (e: React.PointerEvent | React.MouseEvent): [number, number] | null => {
     const r = (e.currentTarget as HTMLCanvasElement).getBoundingClientRect();
@@ -93,12 +105,21 @@ export function MiniGrid({ size = 288 }: { size?: number }) {
 
   return (
     <canvas ref={ref} data-mini-grid aria-label={`The grid, ${spec.cols} by ${spec.rows}: click or drag to place the brush's shape, right-click to clear`}
-      style={{ width: size, height: size, display: 'block', borderRadius: radius.md, cursor: picking ? 'crosshair' : brush === 'erase' ? 'cell' : 'pointer', touchAction: 'none', boxShadow: `0 0 0 1px ${tk.border.default}` }}
+      style={{ width: size, height: size, display: 'block', borderRadius: radius.md, cursor: picking ? 'crosshair' : stamp.on ? 'copy' : brush === 'erase' ? 'cell' : 'pointer', touchAction: 'none', boxShadow: `0 0 0 1px ${tk.border.default}` }}
       onContextMenu={e => e.preventDefault()}
       onPointerDown={e => {
         const at = cellOf(e);
         if (!at) return;
         if (useGridBuilder.getState().picking) { pick(at); return; }
+        const gs = useGridBuilder.getState();
+        if (gs.textStamp.on) {
+          // Stamp the words: the brush's shape (or the first shape, while erasing) in every cell they cover; Alt or right-click clears them.
+          const erase = e.button === 2 || e.altKey || gs.brush === 'erase';
+          const shape = shapeOf(gs.spec, gs.brush)?.id ?? gs.spec.shapes[0]?.id;
+          const cells = textStampGridCells(gs.textStamp.text, gs.textStamp.size, at[0], at[1]);
+          if (shape || erase) gs.edit(d => { for (const [x, y] of cells) { if (erase) eraseCell(d, x, y); else placeCell(d, x, y, shape!); } });
+          return;
+        }
         (e.currentTarget as HTMLCanvasElement).setPointerCapture?.(e.pointerId);
         const erase = e.button === 2 || e.altKey || useGridBuilder.getState().brush === 'erase';
         stroke.current = { key: `stroke:${Date.now()}`, erase, last: at };

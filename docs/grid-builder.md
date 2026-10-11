@@ -71,13 +71,32 @@ it).
 - Up to 128 drawn cells: every one is a few lines of the shader and every pixel looks at each.
   The pattern's fill covers the rest of the grid at no extra cost.
 
+### Text
+
+Words in the Agent Builder's stroke font (`agentBuilder/strokeFont.ts`), two ways
+(`src/gridScene/textMask.ts`):
+
+- **The text stamp.** **Text** beside the words and their height (3–12 cells) under the brush: while
+  it is on, pointing at the mini grid fills the cells the letters will cover, and a click puts the
+  brush's shape in every one (the first shape while the eraser is picked; right-click or Alt clears
+  them). One undo step a stamp, within the 128 drawn cells. The cells are the ones Grid Rules' text
+  start and try-board stamp use (`gridRules/textCells.ts`), so **Make it a simulation** starts Life
+  from the letters.
+- **The pattern's mask.** Patterns & warps → **Only in words**: the wave changes only the cells whose
+  middle the words cover, and **Fill empty cells** puts its shape only there, so the fill spells the
+  words and moves with the wave. Words, Size, Weight, Across and Up (cells from the grid's middle).
+  In the shader the mask is a function of its own (`gs_mask`: the font's strokes, one line each, as
+  the Agent Builder's text: no texture); the mini grid tints the same cells, worked out on the CPU
+  with the same distance (`textMaskAt`; `gridText.test.ts` checks them cell for cell). Changing the
+  words rebuilds; the pattern's numbers stay live.
+
 ### Sections
 
 | Section | What it sets |
 |---|---|
 | **Shapes** | Up to six shapes: kind (circle, square, ring, diamond, triangle, hexagon, star, plus, cross, heart), colour, size (a share of half a cell: 1 touches the neighbours), turn, spin, pulse, outline. Add and remove shapes (a removed shape's cells and rules go with it). |
 | **Motion** | The brush shape's path: still, up and down, side to side, both at once, circle, figure eight, bounce, travel, hop. The **XY control** sets how far (in cells, y up): drag the point, the path is drawn round it; X and Y sliders beside it. Speed (cycles a second) and lag (each cell starts (x + y) × lag of a cycle later: the motion runs through the drawing as a wave). Travel and hop wrap round the grid. |
-| **Patterns & warps** | A wave over the cells: ripple, diagonal, checker, rings, spiral, stripes, random. It changes every shape's size, turn, push, hue or brightness by Amount; Waves is how many across the grid, Speed in cycles a second, Arms for the spiral. **Fill empty cells** puts a shape in every cell you didn't draw on, its size following the wave (checker + fill is a checkerboard that swaps). **Grid warps**: up to three space blocks from the 2D Scene Builder's library (the same picker: categories, search, Random), bending the space the whole grid is drawn in, lines and all. |
+| **Patterns & warps** | A wave over the cells: ripple, diagonal, checker, rings, spiral, stripes, random. It changes every shape's size, turn, push, hue or brightness by Amount; Waves is how many across the grid, Speed in cycles a second, Arms for the spiral. **Fill empty cells** puts a shape in every cell you didn't draw on, its size following the wave (checker + fill is a checkerboard that swaps). **Only in words** limits the wave and the fill to the cells some words cover (see Text). **Grid warps**: up to three space blocks from the 2D Scene Builder's library (the same picker: categories, search, Random), bending the space the whole grid is drawn in, lines and all. |
 | **Rules** | When … Do … for every drawn cell, checked in the shader each frame, top to bottom. When a shape *is in the cell (x, y)*, *is in the column*, *is in the row*, *shares a cell with* another shape, or *is near* it (within N cells). Do: *becomes* another shape (its kind, size and colour), *turns a colour*, *swaps colours with* the other shape (both ways), *grows by*, *hides*, *spins*. A rule that names a shape that isn't there is shown as off. |
 | **Look** | Background, grid lines (on or off, colour, width in cells), the grid's size, glow (amount, falloff), tone map. |
 
