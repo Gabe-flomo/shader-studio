@@ -135,10 +135,18 @@ function waveBody(kind: PatternKind, spec: GridSceneSpec): string {
   return lines.join('\n');
 }
 
+/** The wave at a cell: the pattern's function, or (a picture pattern) the picture's brightness pb at this pixel's cell, −1 … 1. */
+const waveExpr = (spec: GridSceneSpec) => (spec.pattern.kind === 'picture' ? '(pb * 2.0 - 1.0)' : 'gs_wave$(P, t, pt)');
+
+/** The pictures shown inside cells, in slot order (pic.w in the scene function). */
+export function pictureSlots(spec: GridSceneSpec): string[] {
+  return [...new Set(spec.shapes.filter(s => s.kind === 'picture' && s.tex).map(s => s.tex!))];
+}
+
 /** What the pattern's target does to a shape's s (size), an (angle), P (place), c (colour). */
 function targetLines(spec: GridSceneSpec, pad: string): string[] {
   if (spec.pattern.kind === 'none') return [];
-  const out = [`${pad}float w = gs_wave$(P, t, pt);`];
+  const out = [`${pad}float w = ${waveExpr(spec)};`];
   // The text mask: the wave only in the cells the words cover.
   if (activeMask(spec)) out.push(`${pad}w *= gs_mask$(floor(P));`);
   switch (spec.pattern.target) {
@@ -211,6 +219,12 @@ export interface GridProgram {
   args: string[];
   /** How many placed cells it draws. */
   placed: number;
+  /** Picture cells: the function writes the winning cell's picture place into `pic` (inout): xy the place 0–1, z 1 for a picture, w its slot. */
+  picture: boolean;
+  /** A picture pattern: the function reads `pb`, the picture's brightness at this pixel's cell. */
+  patternPic: boolean;
+  /** The pictures in cells, in slot order. */
+  slots: string[];
 }
 
 /** The whole program for a spec. */
@@ -222,10 +236,16 @@ export function gridProgram(spec: GridSceneSpec): GridProgram {
     if (sh && c.x < spec.cols && c.y < spec.rows) insts.push({ index: insts.length, x: c.x, y: c.y, shape: sh });
   }
   const rules = activeRules(spec);
-  const params = ['vec2 uv', 'float t', 'vec4 pt', ...shapes.flatMap(s => { const a = shapeArgs(s.id); return [`vec4 ${a.m}`, `vec4 ${a.l}`, `float ${a.e}`, `vec3 ${a.c}`]; })];
-  const args = shapes.flatMap(s => { const a = shapeArgs(s.id); return [a.m, a.l, a.e, a.c]; });
-
-  const fns: string[] = [HELPERS];
+  const slots = pictureSlots(spec);
+  const picture = shapes.some(s => s.kind === 'picture');
+  const patternPic = spec.pattern.kind === 'picture';
+  const params = ['vec2 uv', 'float t', 'vec4 pt', ...shapes.flatMap(s => { const a = shapeArgs(s.id); return [`vec4 ${a.m}`, `vec4 ${a.l}`, `float ${a.e}`, `vec3 ${a.c}`]; }),
+    ...(patternPic ? ['float pb'] : []), ...(picture ? ['inout vec4 pic'] : [])];
+  const args = [...shapes.flatMap(s => { const a = shapeArgs(s.id); return [a.m, a.l, a.e, a.c]; }), ...(patternPic ? ['pb'] : []), ...(picture ? ['pic'] : [])];
+  // A picture cell is a square (k 10): only then does the shape function know it, so older scenes keep their code.
+  const fns: string[] = [picture ? HELPERS.replace('  return gs_heart$(q, s);\n}', '  if (k < 9.5) return gs_heart$(q, s);\n  return gs_box$(q, vec2(s));\n}') : HELPERS];
+  /** The winner's picture place, for a picture cell (slot −1: none). */
+  const won = (sh: GShape) => (picture ? ` pic = vec4(q / (2.0 * max(s, 1e-4)) + 0.5, step(9.5, k), ${gf(sh.kind === 'picture' && sh.tex ? slots.indexOf(sh.tex) : -1)});` : '');
   // Each shape's motion.
   for (const s of shapes) {
     const wrap = s.motion.path === 'travel' || s.motion.path === 'hop';
@@ -240,7 +260,7 @@ export function gridProgram(spec: GridSceneSpec): GridProgram {
       '}',
     ].join('\n'));
   }
-  if (spec.pattern.kind !== 'none') fns.push(`float gs_wave$(vec2 P, float t, vec4 pt) {\n${waveBody(spec.pattern.kind, spec)}\n}`);
+  if (spec.pattern.kind !== 'none' && !patternPic) fns.push(`float gs_wave$(vec2 P, float t, vec4 pt) {\n${waveBody(spec.pattern.kind, spec)}\n}`);
   const mask = activeMask(spec);
   if (mask) fns.push(textMaskGlsl(mask, spec.cols, spec.rows));
   const fill = spec.pattern.kind !== 'none' ? shapeOf(spec, spec.pattern.fill) : undefined;
@@ -279,7 +299,7 @@ export function gridProgram(spec: GridSceneSpec): GridProgram {
     L.push('    q = mat2(cos(an), -sin(an), sin(an), cos(an)) * q;');
     L.push('    float d = gs_sdf$(k, q, s);');
     L.push('    if (e > 0.0) d = abs(d) - e;');
-    L.push('    if (vis > 0.5 && d < best) { best = d; col = c; }');
+    L.push(`    if (vis > 0.5 && d < best) { best = d; col = c;${won(i.shape)} }`);
     L.push('  }');
   }
   if (fill) {
@@ -292,14 +312,14 @@ export function gridProgram(spec: GridSceneSpec): GridProgram {
     L.push(`      float an = ${a.l}.y + t * ${a.l}.z * 6.2831853;`);
     L.push(`      s *= 1.0 + ${a.l}.w * 0.5 * sin((t + ${a.m}.w * (id.x + id.y)) * 6.2831853);`);
     if (spec.pattern.target === 'size') {
-      L.push('      float w = gs_wave$(P, t, pt);');
+      L.push(`      float w = ${waveExpr(spec)};`);
       L.push('      s *= mix(1.0, 0.5 + 0.5 * w, clamp(pt.x, 0.0, 1.0));');
     } else L.push(...targetLines(spec, '      '));
     L.push('      vec2 q = cp - P; q.y = -q.y;');
     L.push('      q = mat2(cos(an), -sin(an), sin(an), cos(an)) * q;');
     L.push('      float d = gs_sdf$(k, q, s);');
     L.push('      if (e > 0.0) d = abs(d) - e;');
-    L.push('      if (s > 0.002 && d < best) { best = d; col = c; }');
+    L.push(`      if (s > 0.002 && d < best) { best = d; col = c;${won(fill)} }`);
     L.push('    }');
     L.push('  }');
   }
@@ -308,5 +328,5 @@ export function gridProgram(spec: GridSceneSpec): GridProgram {
   fns.push(L.join('\n'));
   const code = fns.join('\n');
   const h = `_${codeHash(code)}`;
-  return { functions: code.split('$').join(h), name: `gs_scene${h}`, args, placed: insts.length };
+  return { functions: code.split('$').join(h), name: `gs_scene${h}`, args, placed: insts.length, picture, patternPic, slots };
 }

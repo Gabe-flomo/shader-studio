@@ -160,6 +160,11 @@ export function shapeSdf(kind: string, over: SizeMap = {}): Sdf {
         return len(x - cy, y - cx) - cz;
       };
     }
+    case 'picture': {
+      // A picture layer: a box of the picture's shape (drawn here 4:3, as a frame).
+      const h = n(s, 'h'), w = h * 4 / 3;
+      return (x, y) => { const qx = Math.abs(x) - w, qy = Math.abs(y) - h; return len(Math.max(qx, 0), Math.max(qy, 0)) + Math.min(Math.max(qx, qy), 0); };
+    }
     default: return (x, y) => len(x, y) - 0.3;
   }
 }

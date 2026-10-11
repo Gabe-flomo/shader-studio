@@ -15,6 +15,7 @@
  */
 
 import type { OutputSpec } from './output';
+import type { TexSource } from '../builders/textures';
 
 export type Vec3 = [number, number, number];
 
@@ -265,6 +266,8 @@ export interface ShapeSpec {
   shine: number;
   /** In Glass mode: made of glass (the rest is seen through it). */
   glass: boolean;
+  /** Its surface coloured by a picture (Surface mode; docs/scene-builder-3d.md, "Textures"). */
+  tex?: ShapeTex | null;
   warps: WarpSpec[];
   /** kind === 'custom': what the recogniser could not read. */
   label?: string;
@@ -284,6 +287,41 @@ export interface GroupSpec {
 }
 
 export type SceneItem = ShapeSpec | GroupSpec;
+
+/**
+ * How a picture wraps a shape, in the shape's own space (so it moves, turns and repeats with it):
+ * triplanar (three flat projections blended by which way the surface faces: no stretching on any
+ * shape), planar (one projection along z), spherical (round the centre, like a globe) or face (the
+ * picture fitted once to the shape's front: a picture panel).
+ */
+export const TEX_MAPS = ['triplanar', 'planar', 'spherical', 'face'] as const;
+export type TexMap = typeof TEX_MAPS[number];
+export const TEX_MAP_LABELS: Record<TexMap, { label: string; blurb: string }> = {
+  triplanar: { label: 'Triplanar', blurb: 'Three flat projections, blended by which way the surface faces: no stretching, on any shape.' },
+  planar: { label: 'Planar', blurb: 'Projected straight along z, like a slide projector: sharp on the front and back, streaked on the sides.' },
+  spherical: { label: 'Spherical', blurb: 'Wrapped round the shape\'s centre like a globe (a seam at the back, pinched at the poles).' },
+  face: { label: 'Face', blurb: 'The picture once over the shape\'s front, keeping its shape: a picture panel.' },
+};
+export interface ShapeTex {
+  /** The picture's name in the scene's textures. */
+  tex: string;
+  map: TexMap;
+  /** Repeats per 2 units (triplanar, planar, spherical) or a zoom (face). */
+  scale: number;
+  /** Triplanar: how sharply the three projections meet (a power; 1 soft … 16 crisp). Default 4. */
+  sharp?: number;
+  /** Slides the picture across the surface, in pictures (0–1 a whole picture). */
+  offset?: [number, number];
+  /** Turns the picture on the surface, degrees. */
+  rot?: number;
+  /** Bump from brightness: bright parts of the picture stand out (0 off; 1 a fair relief). */
+  bump?: number;
+}
+
+export const TEX_SHARP_DEFAULT = 4;
+
+/** The most shapes a scene paints with pictures (one Materials output each). */
+export const MAX_TEX_SHAPES = 3;
 
 export type RenderMode = 'surface' | 'volumetric' | 'glass' | 'gi';
 export const TONE_MODES = ['aces', 'agx', 'hable', 'reinhard2', 'tanh', 'oklab', 'none'] as const;
@@ -307,6 +345,8 @@ export interface LookSpec {
   bg: Vec3;
   /** The bottom of a background gradient; null for a solid colour. */
   bg2: Vec3 | null;
+  /** A picture as the background (Picture Environment, the camera's backdrop): its name in the scene's textures. */
+  bgTex?: string | null;
   tone: ToneMode;
   glow: { density: number; falloff: number; shell: number; exposure: number; tint: Vec3 };
   glass: { ior: number; dispersion: number; tint: Vec3 };
@@ -335,6 +375,8 @@ export interface SceneSpec {
   quality: QualitySpec;
   /** What the built scene shows (output.ts); absent: the picture. */
   output?: OutputSpec;
+  /** The pictures the scene reads (builders/textures.ts): shapes' surfaces and the background. */
+  textures?: TexSource[];
 }
 
 // ── Defaults ────────────────────────────────────────────────────────────────
@@ -512,12 +554,23 @@ export function canonicalSpec(spec: SceneSpec): SceneSpec {
   if (!out.output || out.output.show === 'picture') delete out.output;
   else if (!out.output.palette) delete out.output.palette;
   if (out.look.fogColor && out.look.fogColor.every((v, i) => v === out.look.bg[i])) out.look.fogColor = null;
+  if (!out.textures?.length) delete out.textures;
+  if (!out.look.bgTex) delete out.look.bgTex;
   let s = 0, g = 0, w = 0;
   walkItems(out.root, it => {
     it.id = it.type === 'group' ? `g${++g}` : `s${++s}`;
     for (const wp of it.warps) wp.id = `w${++w}`;
+    if (it.type === 'shape' && !it.tex) delete it.tex;
   });
   return out;
+}
+
+/** The names of the pictures a scene uses (shapes' surfaces, the background). */
+export function texturesUsed3D(spec: SceneSpec): string[] {
+  const out: string[] = [];
+  walkItems(spec.root, it => { if (it.type === 'shape' && it.tex) out.push(it.tex.tex); });
+  if (spec.look.bgTex) out.push(spec.look.bgTex);
+  return [...new Set(out)];
 }
 
 /** The glass and non-glass parts of the tree (Glass mode's two scenes); empty groups dropped. */

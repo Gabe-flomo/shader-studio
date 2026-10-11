@@ -53,6 +53,21 @@ export const SCENE_TEMPLATES: SceneTemplate[] = [
     ].join('\n'),
   },
   {
+    key: 'pictures', label: 'A picture, repeated forever',
+    blurb: 'A picture on a rounded cube (triplanar, so no side is stretched), repeated forever in every direction by Repeat; fog fades the far ones. Pick the picture under Pictures, or drop one on its Texture node once built.',
+    recipe: [
+      'surface',
+      'texture picture',
+      'box size=0.55 round=0.08 texture=picture tiles=1.8 name=Cube @repeat(2)',
+      'sun dir=(0.5,0.8,0.4) color=(1,0.95,0.85)',
+      'ao 0.04',
+      'fog 0.12',
+      'background (0.06,0.06,0.09)',
+      'camera dist=3.5 angle=30 elev=20 orbit=4',
+      'quality steps=128 dist=30',
+    ].join('\n'),
+  },
+  {
     key: 'twisted', label: 'Twisted torus',
     blurb: 'A standing ring twisted about the up axis: Twist stretches space, so the loop takes smaller steps (Step Scale on auto).',
     recipe: [

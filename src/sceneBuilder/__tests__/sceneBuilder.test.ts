@@ -185,7 +185,8 @@ describe('spec → graph', () => {
 
 describe('graph → spec (Describe this graph)', () => {
   it('reads every template\'s graph back exactly', () => {
-    for (const t of SCENE_TEMPLATES) {
+    // Pictures aren't read back from a graph yet (a built scene reopens from the spec it keeps).
+    for (const t of SCENE_TEMPLATES.filter(x => !templateSpec(x.key).textures)) {
       const spec = templateSpec(t.key);
       const d = describeGraph(buildStandaloneGraph(spec).nodes)!;
       expect(d.unknown, t.key).toEqual([]);

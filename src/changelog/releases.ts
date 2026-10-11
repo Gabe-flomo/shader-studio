@@ -39,6 +39,17 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.152',
+    date: '2026-10-10',
+    title: 'Splats and pictures',
+    highlights: [
+      { area: 'Studio', text: 'Splat Scene: load a Gaussian splat scan (.ply, .splat, .spz) and render it through the March Camera, hiding and hidden by ray-marched shapes.' },
+      { area: 'Studio', text: 'Splat Scene: a million splats in a few milliseconds, placed with Position/Rotation/Scale sliders. Add a splat scan from any March Loop card.' },
+      { area: 'Studio', text: 'Every scene builder takes pictures: fill shapes, warp a background through space blocks, wrap 3D shapes and repeat them forever, or put a picture in grid cells.' },
+      { area: 'Studio', text: 'Pictures in 3D tile without seams or shimmer, with sharpness, slide, turn and bump-from-brightness sliders.' },
+    ],
+  },
+  {
     id: '2026.10.151',
     date: '2026-10-10',
     title: 'Guided Convert',

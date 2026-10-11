@@ -9,7 +9,10 @@ import { useSceneBuilder } from '../../sceneBuilder/store';
 import {
   DEFAULT_LOOK, MODIFIER_KINDS, SHAPES, SHAPE_BY_KIND, TONE_MODES, WARPS, WARP_BY_KIND, allShapes, autoStepScale, defaultSize, findItem, itemName, modifierSummary, opLabel, starterSpec, stepHints, walkItems,
   type GroupSpec, type ParamDef, type RenderMode, type SceneItem, type SceneSpec, type ShapeSpec, type Vec3, type WarpSpec,
+  TEX_MAPS, TEX_MAP_LABELS, TEX_SHARP_DEFAULT, type TexMap,
 } from '../../sceneBuilder/spec';
+import { TexturePicker } from '../builders/TexturePicker';
+import { findTex, withSource } from '../../builders/textures';
 import { randomShapeAction, randomiseThisAction } from './surpriseActions';
 import { addModifier, addShape, addWarp, duplicateItem, moveBy, moveItem, moveModifierTo, moveWarp, removeItem, removeWarp, ungroup } from '../../sceneBuilder/edit';
 import { GALLERY_SHAPES, type GalleryShape } from '../../sceneBuilder/thumbnails';
@@ -186,6 +189,45 @@ export function ShapeInspector({ sh, sizes, kindPicker = true }: { sh: ShapeSpec
     <ColourRow label="Colour" value={sh.color} hint={mode === 'surface' ? 'Its surface colour (Surface mode picks one per shape).' : 'Colours show in Surface mode; GI uses the first shape\'s, Volumetric its glow tint.'} onChange={v => set(s => { s.color = v; }, `color:${sh.id}`)} />
     <NumRow label="Shine" hint="How strong its highlight is: 0 matt, 1 glossy (Surface mode)." value={sh.shine} min={0} max={1} onChange={v => set(s => { s.shine = v; }, `shine:${sh.id}`)} />
     {mode === 'glass' && <Row label="Glass" hint="In Glass mode: glass shapes refract the others."><Toggle checked={sh.glass} onChange={v => set(s => { s.glass = v; })} label={sh.glass ? 'Made of glass' : 'Seen through the glass'} /></Row>}
+    <ShapePicture sh={sh} />
+  </>;
+}
+
+/**
+ * A picture on a shape's surface (docs/scene-builder-3d.md, "Textures"): which picture, how it wraps
+ * (triplanar, planar, spherical, face), its tiles, how sharply triplanar's projections meet, where
+ * it sits (offset, turn) and a bump from its brightness.
+ */
+function ShapePicture({ sh }: { sh: ShapeSpec }) {
+  const spec = useSceneBuilder(s => s.spec);
+  const edit = useSceneBuilder(s => s.edit);
+  const set = (fn: (s: ShapeSpec) => void, key?: string) => edit(d => { const it = findItem(d, sh.id)?.item; if (it?.type === 'shape') fn(it); }, key);
+  const t = sh.tex;
+  const tiled = t && t.map !== 'face';
+  const src = t ? findTex(spec.textures, t.tex) : undefined;
+  return <>
+    <BuilderLabel hint="Read in the shape's own space, so the picture moves, turns and repeats with it (a Repeat warp repeats it forever). Surface mode.">Picture</BuilderLabel>
+    {spec.look.mode !== 'surface' && t && <BuilderNote>Pictures show in Surface mode; this mode keeps the colour.</BuilderNote>}
+    <TexturePicker id={`tex-${sh.id}`} sources={spec.textures ?? []} value={t?.tex} none="Its colour"
+      onAdd={src2 => edit(d => { d.textures = withSource(d.textures, src2); })}
+      onChange={name => set(s => { s.tex = name ? (s.tex ? { ...s.tex, tex: name } : { tex: name, map: 'triplanar', scale: 1 }) : null; })} />
+    {t && <>
+      <Row label="Wrap" hint={TEX_MAP_LABELS[t.map].blurb}>
+        <Select ariaLabel="Picture wrap" value={t.map} options={TEX_MAPS.map(m => ({ value: m, label: TEX_MAP_LABELS[m].label }))} onChange={v => set(s => { if (s.tex) s.tex.map = v as TexMap; })} />
+      </Row>
+      <NumRow label={tiled ? 'Tiles' : 'Zoom'} hint={t.map === 'face' ? 'Above 1 closer.' : t.map === 'spherical' ? 'How many times it goes round.' : 'How many times it repeats every 2 units.'} value={t.scale} defaultValue={1} min={0.1} max={16} onChange={v => set(s => { if (s.tex) s.tex.scale = v; }, `texk:${sh.id}`)} />
+      {t.map === 'triplanar' && <NumRow label="Blend sharpness" hint="How sharply the three projections meet on a curve: 1 a soft blend, 16 crisp edges." value={t.sharp ?? TEX_SHARP_DEFAULT} defaultValue={TEX_SHARP_DEFAULT} min={1} max={16} step={0.1} onChange={v => set(s => { if (s.tex) s.tex.sharp = v; }, `texs:${sh.id}`)} />}
+      <NumRow label="Slide across" hint="Moves the picture sideways on the surface (1 is a whole picture)." value={t.offset?.[0] ?? 0} defaultValue={0} min={-1} max={1} onChange={v => set(s => { if (s.tex) s.tex.offset = [v, s.tex.offset?.[1] ?? 0]; }, `texox:${sh.id}`)} />
+      <NumRow label="Slide up" hint="Moves the picture up the surface (1 is a whole picture)." value={t.offset?.[1] ?? 0} defaultValue={0} min={-1} max={1} onChange={v => set(s => { if (s.tex) s.tex.offset = [s.tex.offset?.[0] ?? 0, v]; }, `texoy:${sh.id}`)} />
+      <NumRow label="Turn" unit="°" hint="Turns the picture on the surface." value={t.rot ?? 0} defaultValue={0} min={-180} max={180} step={0.5} onChange={v => set(s => { if (s.tex) s.tex.rot = v; }, `texr:${sh.id}`)} />
+      <NumRow label="Bump" hint="Bump from brightness: bright parts of the picture stand out under the light (0 off). Cheap: no extra reads of the picture." value={t.bump ?? 0} defaultValue={0} min={0} max={4} onChange={v => set(s => { if (s.tex) s.tex.bump = v; }, `texb:${sh.id}`)} />
+      {t.map === 'face' && sh.kind === 'box' && src?.aspect && (
+        <Row label=""><Button size="sm" title="A thin box the picture's shape: a picture panel" onClick={() => set(s => {
+          const sz = (Array.isArray(s.size.size) ? s.size.size : [0.5, 0.5, 0.5]) as Vec3;
+          s.size.size = [Math.round(sz[1] * src.aspect! * 1000) / 1000, sz[1], 0.02];
+        })}>Make it a picture panel</Button></Row>
+      )}
+    </>}
   </>;
 }
 
@@ -549,6 +591,9 @@ export function LightSettings() {
               onChange={v => set(l => { l.bg2 = v === 'gradient' ? [Math.min(1, l.bg[0] * 0.4), Math.min(1, l.bg[1] * 0.4), Math.min(1, l.bg[2] * 0.4)] : null; })} /></Row>
             <ColourRow label={L.bg2 ? 'Top' : 'Colour'} hint="What rays that miss every shape see." value={L.bg} onChange={v => set(l => { l.bg = v; }, 'bg')} />
             {L.bg2 && <ColourRow label="Bottom" hint="The bottom of the gradient (looking down)." value={L.bg2} onChange={v => set(l => { l.bg2 = v; }, 'bg2')} />}
+            <BuilderLabel hint="The picture as the backdrop the camera looks at (Picture Environment): rays that miss every shape see it. Past the frame's edge it is mirrored.">Picture</BuilderLabel>
+            <TexturePicker id="bg" sources={spec.textures ?? []} value={L.bgTex} none="Only the colour"
+              onAdd={src => edit(d => { d.textures = withSource(d.textures, src); })} onChange={name => set(l => { l.bgTex = name; })} />
           </Card>
         )}
     </>

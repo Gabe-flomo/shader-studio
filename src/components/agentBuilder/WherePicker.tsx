@@ -23,6 +23,7 @@ import { SliderSetting } from './BehaviourCard';
 import type { WhereEdit, WherePick } from '../../agentBuilder/whereActions';
 import { setMadeShape, whereNow } from '../../agentBuilder/whereActions';
 import { regionField, regionImage } from '../../lib/regionValues';
+import { PictureWays } from '../builders/TexturePicker';
 
 /** What the viewport shows for the Where row pointed at, and a shape being drawn. */
 export interface WhereShown { key: string; use: WhereUse; region: Region | null; outside: boolean }
@@ -115,6 +116,7 @@ export function WherePicker({ id, use, region, outside, onPick, allowOutside = t
   const tk = useTokens();
   const ctx = useContext(WhereFocusContext);
   const [open, setOpen] = useState(startOpen);
+  const [picture, setPicture] = useState(false);
   const groupId = ctx?.groupId ?? '';
   const regionsKey = useNodeGraphStore(s => (open ? JSON.stringify(regionsFor(use, listRegions(s.nodes, groupId, ctx?.d3 ?? false))) : ''));
   const regions = useMemo(() => (regionsKey ? JSON.parse(regionsKey) as Region[] : []), [regionsKey]);
@@ -211,6 +213,11 @@ export function WherePicker({ id, use, region, outside, onPick, allowOutside = t
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {takesTexture(use) && (
+              <button type="button" data-where-create="picture" aria-expanded={picture} title="A picture (upload, paste, a link or the image library) on a new Texture node, wired in: the scene builders' shared picture picker" onClick={() => setPicture(v => !v)} style={chip}>
+                <Icon name="camera" size={13} />A picture…
+              </button>
+            )}
+            {takesTexture(use) && (
               <button type="button" data-where-create="shaderTexture" title="A new Shader Texture (its own little shader graph drawn into a texture), wired in, and opened so you can edit what it draws" onClick={() => { setOpen(false); onPick({ create: 'shaderTexture', outside }); }} style={chip}>
                 <Icon name="layers" size={13} />New Shader Texture
               </button>
@@ -219,6 +226,9 @@ export function WherePicker({ id, use, region, outside, onPick, allowOutside = t
               <Icon name="nodes" size={13} />New group
             </button>
           </div>
+          {picture && takesTexture(use) && (
+            <PictureWays graph={false} shader={false} onPicked={p => { setPicture(false); setOpen(false); onPick({ region: { nodeId: p.nodeId, outputKey: 'texture' }, outside }); }} />
+          )}
         </div>
       )}
     </div>

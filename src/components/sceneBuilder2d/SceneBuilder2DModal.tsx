@@ -42,6 +42,8 @@ import { useThrottled } from '../builders/useBuilderPreview';
 import { BuilderSlider } from '../builders/BuilderSlider';
 import { finishBuilder } from '../../builders/finish';
 import { scene2dBuildIds } from '../../builders/finishScenes';
+import { TexturePicker } from '../builders/TexturePicker';
+import { FIT_LABELS, TEX_FITS, newTexUse, withSource, type TexFit, type TexSource, type TexUse } from '../../builders/textures';
 
 const TABS: Array<{ id: Builder2DTab; label: string; icon: IconName; gapBefore?: boolean }> = [
   { id: 'space', label: 'Space', icon: 'wave' },
@@ -358,6 +360,45 @@ function SpaceTab() {
   );
 }
 
+/** Adds a picture to the scene's list (the shared picker's onAdd). */
+const addSource = (src: TexSource) => edit(d => { d.textures = withSource(d.textures, src); });
+
+/** A picture use's fit and its tiles / zoom. */
+function FitRows({ use, onChange, k }: { use: TexUse; onChange: (fn: (u: TexUse) => void, key?: string) => void; k: string }) {
+  return (
+    <>
+      <Row label="Fit" hint={FIT_LABELS[use.fit].blurb}>
+        <Select ariaLabel="Fit" value={use.fit} options={TEX_FITS.map(f => ({ value: f, label: FIT_LABELS[f].label }))} onChange={v => onChange(u => { u.fit = v as TexFit; if (v === 'tile' && u.scale === 1) u.scale = 3; })} />
+      </Row>
+      <NumRow label={use.fit === 'tile' ? 'Tiles' : 'Zoom'} hint={use.fit === 'tile' ? 'How many times it repeats up the shape.' : 'Above 1 closer.'} value={use.scale} defaultValue={use.fit === 'tile' ? 3 : 1} min={use.fit === 'tile' ? 0.25 : 0.1} max={use.fit === 'tile' ? 16 : 8} onChange={v => onChange(u => { u.scale = v; }, `${k}:scale`)} />
+    </>
+  );
+}
+
+/** A layer's pictures: painted with one (Fill), shown only where one is bright (Mask). */
+function PictureCard({ id, it }: { id: string; it: Item }) {
+  const sources = useSceneBuilder2D(s => s.scene.textures) ?? [];
+  const upd = (fn: (x: Item) => void, key?: string) => edit(d => { const g = findItem(d, id); if (g) fn(g.item); }, key && `${id}:${key}`);
+  const picture = it.type === 'shape' && it.kind === 'picture';
+  return (
+    <Card id={`it2-${id}-picture`} defaultOpen={picture || !!it.fill || !!it.mask} title="Picture" summary={[it.fill ? `painted with ${it.fill.tex}` : '', it.mask ? `mask ${it.mask.tex}` : ''].filter(Boolean).join(' · ') || 'its colour'}>
+      <BuilderLabel hint="The picture is read at this layer's own point: it moves, turns and repeats with it, and bends with the Space tab.">{picture ? 'The picture' : 'Fill with a picture'}</BuilderLabel>
+      <TexturePicker id={`fill-${id}`} sources={sources} value={it.fill?.tex} onAdd={addSource} startOpen={picture && !it.fill} none={picture ? 'Pick its picture' : 'Its own colour'}
+        onChange={name => upd(x => { x.fill = name ? (x.fill ? { ...x.fill, tex: name } : newTexUse(name)) : null; })} />
+      {it.fill && <FitRows use={it.fill} k="fill" onChange={(fn, key) => upd(x => { if (x.fill) fn(x.fill); }, key)} />}
+      <BuilderLabel hint="The layer (and its glow) only where a picture over the whole frame is bright: a stencil.">Mask with a picture</BuilderLabel>
+      <TexturePicker id={`mask-${id}`} sources={sources} value={it.mask?.tex} onAdd={addSource} none="No mask"
+        onChange={name => upd(x => { x.mask = name ? { tex: name, cut: x.mask?.cut ?? 0.5, invert: x.mask?.invert ?? false } : null; })} />
+      {it.mask && (
+        <>
+          <NumRow label="Cut" hint="How bright the picture must be for the layer to show." value={it.mask.cut} defaultValue={0.5} min={0} max={1} onChange={v => upd(x => { if (x.mask) x.mask.cut = v; }, 'maskcut')} />
+          <Row label="Invert"><Toggle checked={it.mask.invert} onChange={v => upd(x => { if (x.mask) x.mask.invert = v; })} label="Show where the picture is dark" /></Row>
+        </>
+      )}
+    </Card>
+  );
+}
+
 function ItemInspector({ id }: { id: string }) {
   const scene = useSceneBuilder2D(s => s.scene);
   const f = findItem(scene, id);
@@ -387,6 +428,7 @@ function ItemInspector({ id }: { id: string }) {
         {!f.parent && <ColourRow label="Colour" value={it.color} onChange={v => upd(x => { x.color = v; }, 'color')} />}
         {!f.parent && <Row label="Glow"><Toggle checked={it.glow} onChange={v => upd(x => { x.glow = v; })} label="Glows when Look → Glow is Selected" /></Row>}
       </Card>
+      {!f.parent && <PictureCard id={id} it={it} />}
       <Card id={`it2-${id}-place`} title="Place" summary={`at ${it.at.map(n => +n.toFixed(2)).join(', ')} · ${Math.round(it.rot)}° · ×${+it.scale.toFixed(2)}`}>
         <Vec2Row label="Position" value={it.at} min={-2} max={2} onChange={v => upd(x => { x.at = v; }, 'at')} />
         <NumRow label="Rotate" unit="°" value={it.rot} defaultValue={0} min={-180} max={180} step={0.5} onChange={v => upd(x => { x.rot = v; }, 'rot')} />
@@ -548,6 +590,7 @@ function GridTab() {
 function LookTab() {
   const look = useSceneBuilder2D(s => s.scene.look);
   const hasGrid = useSceneBuilder2D(s => !!s.scene.grid && s.scene.grid.colourBy !== 'shape');
+  const sources = useSceneBuilder2D(s => s.scene.textures) ?? [];
   const set = (fn: (l: Scene2D['look']) => void, key?: string) => edit(d => fn(d.look), key && `look:${key}`);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -561,6 +604,17 @@ function LookTab() {
             <Row label="Palette" hint={look.colour.by === 'layer' ? 'Used by the grid (Grid → Colour by ripple or cell).' : undefined}><Select ariaLabel="Palette" value={look.colour.palette} options={PALETTES.map(p => ({ value: p.key, label: p.label }))} onChange={v => set(l => { l.colour.palette = v; })} /></Row>
             <NumRow label="Scale" value={look.colour.scale} defaultValue={DEFAULT_SCENE_2D.look.colour.scale} min={0.1} max={8} onChange={v => set(l => { l.colour.scale = v; }, 'cs')} />
             <NumRow label="Drift" hint="How fast the palette cycles over time." value={look.colour.speed} defaultValue={DEFAULT_SCENE_2D.look.colour.speed} min={-1} max={1} onChange={v => set(l => { l.colour.speed = v; }, 'cv')} />
+          </>
+        )}
+      </Card>
+      <Card id="look2-picture" defaultOpen={!!look.bgTex} title="Background picture" summary={look.bgTex ? `${look.bgTex.tex}${look.bgTex.warp ? ' · bent by the space' : ''}` : 'none'}>
+        <BuilderNote>A picture behind every layer. Read at the warped point, every space transform and block bends it: add a block on the Space tab to warp the picture.</BuilderNote>
+        <TexturePicker id="bg" sources={sources} value={look.bgTex?.tex} onAdd={addSource} none="Only the colour"
+          onChange={name => set(l => { l.bgTex = name ? (l.bgTex ? { ...l.bgTex, tex: name } : { ...newTexUse(name), warp: true }) : null; })} />
+        {look.bgTex && (
+          <>
+            <FitRows use={look.bgTex} k="bg" onChange={(fn, key) => set(l => { if (l.bgTex) fn(l.bgTex); }, key)} />
+            <Row label="Bent by the space"><Toggle checked={look.bgTex.warp} onChange={v => set(l => { if (l.bgTex) l.bgTex.warp = v; })} label="Read the picture at the warped point" /></Row>
           </>
         )}
       </Card>

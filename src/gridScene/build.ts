@@ -23,6 +23,7 @@ import { blockGlslLines, checkBlock, clampTimes, type SpaceBlock } from '../scen
 import { BLOCK_BY_ID } from '../sceneBuilder2d/blockLibrary';
 import { colourText } from '../lang/colours';
 import { gf, gridProgram, shapeArgs, activeMask, activeRules } from './glsl';
+import { LUMA, findTex, fitLines, picUv, standInId, standIns } from '../builders/textures';
 import {
   MOTION_LABELS, PATTERN_LABELS, SHAPE_LABELS, TARGET_LABELS, cellSize, ruleText, shapeOf,
   type GShape, type GridSceneSpec,
@@ -185,6 +186,39 @@ export function buildGridScene(spec: GridSceneSpec, idFor: (role: string) => str
       { name: a.c, type: 'vec3', from: sr.colour },
     );
   }
+  // Pictures (docs/grid-builder.md, "Textures"): a picture over the grid, read at the centre of this pixel's cell.
+  const cs0 = cellSize(spec);
+  const gx = spec.cols * cs0 / 2, gy = spec.rows * cs0 / 2;
+  const cellLum = new Map<string, Ref>();
+  const texOf = (name: string | undefined, what: string) => {
+    const src = findTex(spec.textures, name);
+    if (!src) { c.warnings.push(`${what} reads the picture “${name ?? ''}”, which the scene doesn't have: pick one.`); return null; }
+    return { src, out: { nodeId: standInId(src), outputKey: 'texture' } as Ref };
+  };
+  const brightnessAtCell = (name: string | undefined, what: string): Ref | null => {
+    if (name && cellLum.has(name)) return cellLum.get(name)!;
+    const t = texOf(name, what);
+    if (!t) return null;
+    const key = t.src.name.replace(/[^A-Za-z0-9]/g, '_');
+    const at = expr(c, `pic:${key}:cell`, 'Cell centre on the picture', [{ name: 'uv', type: 'vec2', from: pos }], picUv('st'),
+      `Where the picture “${t.src.name}” is read for this pixel's cell: id is the cell (as the grid counts them), q its centre in picture units, the picture covering the whole grid (Fill, keeping its shape). Every pixel of a cell reads the same place, so a cell takes one brightness.`,
+      { outputType: 'vec2', lines: [
+        L('vec2 cp', `vec2(uv.x / ${gf(cs0)} + ${gf(spec.cols / 2)}, ${gf(spec.rows / 2)} - uv.y / ${gf(cs0)})`),
+        L('vec2 id', 'floor(cp)'),
+        L('vec2 q', `vec2((id.x + 0.5) * ${gf(cs0)} - ${gf(gx)}, ${gf(gy)} - (id.y + 0.5) * ${gf(cs0)})`),
+        L('vec2 ext', `vec2(${gf(gx)}, ${gf(gy)})`),
+        ...fitLines('cover', 'q', 'ext', gf(t.src.aspect ?? 1), '1.0'),
+      ] });
+    const smp = mk(c, 'sampleTexture', `pic:${key}:sample`, {}, { texture: t.out, uv: ref(at, 'result') }, `Reads the picture “${t.src.name}” at the centre of this pixel's cell.`);
+    const lum = expr(c, `pic:${key}:lum`, 'Cell brightness', [{ name: 'col', type: 'vec3', from: ref(smp, 'color') }, { name: 'a', type: 'float', from: ref(smp, 'alpha') }],
+      `${LUMA('col')} * a`, `The brightness of “${t.src.name}” at this cell, 0 to 1 (times its alpha).`, { outputType: 'float' });
+    cellLum.set(t.src.name, ref(lum, 'result'));
+    return ref(lum, 'result');
+  };
+  if (prog.patternPic) {
+    const pb = brightnessAtCell(P.tex, 'The pattern');
+    inputs.push(pb ? { name: 'pb', type: 'float', from: pb } : { name: 'pb', type: 'float', slider: { value: 0.5, min: 0, max: 1 } });
+  }
   const rules = activeRules(spec).filter(r => !r.id.endsWith('~'));
   const fill = shapeOf(spec, P.fill);
   const patternWords = P.kind === 'none' ? 'No pattern.' : `Pattern: ${PATTERN_LABELS[P.kind].label.toLowerCase()} (${PATTERN_LABELS[P.kind].blurb.toLowerCase()}) changing each shape's ${TARGET_LABELS[P.target].toLowerCase()} by amount; freq is waves across the grid, speed cycles a second${P.kind === 'spiral' ? ', arms the spiral\'s arms' : ''}.${fill ? ` It fills the empty cells with shape ${fill.id}.` : ''}${activeMask(spec) ? ` Only in the cells the words "${activeMask(spec)!.text}" cover (gs_mask: the stroke font, one line a stroke).` : ''}`;
@@ -195,12 +229,41 @@ export function buildGridScene(spec: GridSceneSpec, idFor: (role: string) => str
     + 'Result: the colour of the nearest shape; d: the distance to it (negative inside). The sliders are live; drawing cells, paths and rules rebuild the code.',
   {
     outputType: 'vec3',
-    lines: [L('vec4 g', `${prog.name}(uv, t, vec4(amount, freq, speed, arms)${prog.args.length ? `, ${prog.args.join(', ')}` : ''})`), L('float d', 'g.w')],
-    outputs: [{ name: 'd', type: 'float', label: 'Distance' }],
+    lines: [
+      ...(prog.picture ? [L('vec4 pic', 'vec4(0.0, 0.0, 0.0, -1.0)')] : []),
+      L('vec4 g', `${prog.name}(uv, t, vec4(amount, freq, speed, arms)${prog.args.length ? `, ${prog.args.join(', ')}` : ''})`), L('float d', 'g.w'),
+    ],
+    outputs: [{ name: 'd', type: 'float', label: 'Distance' }, ...(prog.picture ? [{ name: 'pic', type: 'vec4', label: 'Picture place' }] : [])],
     functions: prog.functions,
   });
-  const d = ref(grid, 'd');
-  const colour = ref(grid, 'result');
+  if (prog.patternPic) grid.params.__comment = `${grid.params.__comment} pb is the pattern's picture brightness at this pixel's cell (the wave is pb × 2 − 1).`;
+  let d = ref(grid, 'd');
+  let colour = ref(grid, 'result');
+  // Pictures inside cells: the winning cell's place on its picture (pic), read and painted over its colour.
+  prog.slots.forEach((name, j) => {
+    const t = texOf(name, 'A picture cell');
+    if (!t) return;
+    const key = t.src.name.replace(/[^A-Za-z0-9]/g, '_');
+    const at = expr(c, `cells:${key}:fit`, 'Picture in the cell', [{ name: 'pic', type: 'vec4', from: ref(grid, 'pic') }], picUv('st'),
+      `Where the picture “${t.src.name}” is read inside a cell: pic.xy is the place in the cell's square (0 to 1, turning with the shape), fitted to the picture (Fill, keeping its shape).`,
+      { outputType: 'vec2', lines: [L('vec2 q', 'pic.xy - 0.5'), L('vec2 ext', 'vec2(0.5)'), ...fitLines('cover', 'q', 'ext', gf(t.src.aspect ?? 1), '1.0')] });
+    const smp = mk(c, 'sampleTexture', `cells:${key}:sample`, {}, { texture: t.out, uv: ref(at, 'result') }, `Reads the picture “${t.src.name}” inside its cells.`);
+    colour = ref(expr(c, `cells:${key}:paint`, 'Paint picture cells', [
+      { name: 'base', type: 'vec3', from: colour }, { name: 'tex', type: 'vec3', from: ref(smp, 'color') }, { name: 'a', type: 'float', from: ref(smp, 'alpha') }, { name: 'pic', type: 'vec4', from: ref(grid, 'pic') },
+    ], `mix(base, tex, pic.z * step(abs(pic.w - ${gf(j)}), 0.5) * clamp(a, 0.0, 1.0))`,
+    `The picture “${t.src.name}” where the nearest cell is a picture cell showing it (pic.z 1, slot pic.w ${j}); the shapes' own colours elsewhere.`), 'result');
+  });
+  // The picture mask: shapes only in the cells where the picture is bright (or dark).
+  if (spec.picMask) {
+    const m = spec.picMask;
+    const lum = brightnessAtCell(m.tex, 'The mask');
+    if (lum) {
+      d = ref(expr(c, 'picmask', 'Picture mask', [
+        { name: 'd', type: 'float', from: d }, { name: 'l', type: 'float', from: lum }, { name: 'cut', type: 'float', slider: { value: m.cut, min: 0, max: 1 } },
+      ], `mix(1.0e3, d, ${m.invert ? '1.0 - ' : ''}step(cut, l))`,
+      `Shapes only in the cells where the picture is ${m.invert ? 'darker' : 'brighter'} than cut (live): elsewhere the distance is pushed far away, so nothing is drawn or glows there. Read once per cell, at its centre.`, { outputType: 'float' }), 'result');
+    }
+  }
 
   // The ground: background, a faint checker of the cells, and the grid lines, in the warped space.
   const bg = mk(c, 'colorPicker', 'bg', { color: [...look.bg] }, {}, `The background, ${col(look.bg)}.`);
@@ -239,6 +302,8 @@ export function buildGridScene(spec: GridSceneSpec, idFor: (role: string) => str
 /** A stand-alone graph with its own Output: the builder's preview, examples and tests. */
 export function buildStandaloneGrid(spec: GridSceneSpec, opts: { idFor?: (role: string) => string; outputId?: string } = {}): GridBuildResult & { outputId: string } {
   const built = buildGridScene(spec, opts.idFor);
+  // Its pictures: a Texture node per source, so it compiles alone (the preview binds the real picture to it).
+  built.nodes.push(...standIns(spec.textures));
   const uv = built.nodes.find(n => n.id === built.sceneId)!;
   uv.params = { ...uv.params, [GS_META]: { v: 1, spec: structuredClone(spec) } satisfies GridSceneMeta };
   const last = built.nodes.find(n => n.id === built.final.nodeId)!;

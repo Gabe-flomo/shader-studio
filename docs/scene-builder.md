@@ -147,3 +147,81 @@ Every builder's number slider is the app's ruler slider through one wrapper
   is built ([scene-builder-3d.md](scene-builder-3d.md), "Play controls from the builder").
 
 Not yet: keyframes from a builder slider, and the Play menu on the 2D builder's sliders.
+
+## Textures
+
+Pictures are a source like any other in every kind of scene: upload one, paste one, pick one from the
+library or the graph, and use it as a fill, a layer, a surface, a background, cells, a pattern or a mask.
+
+### The picture picker
+
+Every place in the builders that takes a picture shows the same row: the picture it reads now (a
+thumbnail and its name), **Pick…** / **Change**, and ✕ for none. **Pick…** opens the scene's own
+pictures first, then the ways to take a new one (`components/builders/TexturePicker.tsx`):
+
+| Way | What it makes |
+|---|---|
+| **Upload or drop a picture** | a new Texture node with the picture (kept in the image library and embedded in the node, as the Texture card does: [texture-node.md](texture-node.md)) |
+| **Paste a picture or its link** (⌘V in the field, or a link and Enter) | the same; a link is fetched as the card's **Load** is, and kept as its Source |
+| **Image library** | the same, from Files → Backgrounds |
+| **From the graph** | nothing new: the Texture, Shader Texture (or anything else with a Texture output) already there |
+| **New Shader Texture** | a new Shader Texture ([texture-builder.md](texture-builder.md)), Start from: Circles; edit what it draws on its card |
+
+A new node is one undo step ("Added a picture: pond"), placed in view; the picture loads into it a
+moment later. The picker's store side is `src/builders/textureActions.ts`.
+
+### One node per picture, a reference in the spec
+
+A scene's spec keeps a list of its pictures (`textures`): each a **name** (what the recipe and the
+lists call it), the **node** it reads (its `texture` output) and the picture's **aspect**. Uses name
+a picture; picking the same picture twice reads the same node. Build wires each use from that node
+(a Sample (texture) reading it, or Picture Environment), so a new picture dropped on the Texture card
+shows in the built scene at once. **Edit this one** reopens the scene with the same references.
+
+A picture typed in a recipe (`texture brick`, or a use naming one never declared) has no node yet:
+Build makes an **empty Texture node** named after it, beside the scene, and the spec then reads it
+(`ensureSources`). Drop a picture on it.
+
+**Start over** takes the picture's node away with the build when nothing else reads it.
+
+### Where each kind uses pictures
+
+| Kind | Uses | Docs |
+|---|---|---|
+| 2D scene | a shape filled with a picture (Fill, Fit, Stretch, Tile); a **Picture** layer; the background picture, read at the warped point so every space transform and block bends it; a mask | [scene-builder-2d.md](scene-builder-2d.md#textures) |
+| 3D scene | a shape's surface (triplanar, planar, spherical, face), tiles, blend sharpness, offset, turn, bump from brightness; picture panels; the background from a picture; the template *A picture, repeated forever* | [scene-builder-3d.md](scene-builder-3d.md#textures) |
+| Grid scene | a **Picture** cell shape; a **Picture** pattern (brightness drives size, turn, push, hue or brightness); a picture mask | [grid-builder.md](grid-builder.md#textures) |
+| Grid Rules | Start → A picture: the same picker, wired into Start image | [grid-rules.md](grid-rules.md#a-picture-start) |
+| Agent Builder | Where → Create new → **A picture…** (born inside, food, only when, a layer's region) | [agent-builder.md](agent-builder.md) |
+
+### Looking good repeated
+
+- **Seamless repeats.** A tiled picture is read through Sample (texture) with **Edges: Repeat**: it
+  wraps in the shader but picks the mipmap from the unwrapped place (`textureGrad`), so there is no
+  line where the picture starts again and no shimmer far away. Sample's default reads as before.
+- **Mipmaps and anisotropy.** Pictures are uploaded with mipmaps and 8× anisotropic filtering (three
+  clamps it to the GPU's), so a picture at a slant stays sharp. The builders' previews do the same.
+
+### The previews
+
+The builders' own previews compile a stand-alone graph with a stand-in Texture node per picture (same
+id as the real one, `standIns`) and bind the real picture to it (`previewTextures.ts`): the picture
+the app holds for a Texture node, a Shader Texture's last frame (its card thumbnail, refreshed a few
+times a second), or a grey checker while there is none.
+
+### Code and tests
+
+`src/builders/textures.ts` (sources, stand-ins, `ensureSources`, fits, GLSL helpers),
+`src/builders/textureActions.ts`, `src/components/builders/TexturePicker.tsx`,
+`src/components/builders/previewTextures.ts`. Tests: `src/sceneBuilder2d/__tests__/textures.test.ts`,
+`src/sceneBuilder/__tests__/textures.test.ts`, `src/gridScene/__tests__/gridTextures.test.ts`.
+
+### Not yet
+
+- Graph → spec (*Describe this graph*) doesn't read pictures back; a built scene reopens from its spec.
+- Displacement from a picture in 3D (the bump only tilts the light); a picture inside a Scene Group's
+  distance is a Pass away.
+- Grid scenes read a picture pattern or mask once per cell, at the pixel's own cell, so a shape
+  reaching into a neighbouring cell takes that cell's value.
+- Video and webcam sources work through **From the graph** (a Texture node switched to Video), not
+  from the picker's upload.

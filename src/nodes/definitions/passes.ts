@@ -170,11 +170,24 @@ export const SampleTextureNode: NodeDefinition = {
   paramDefs: {
     offsetX: { label: 'Offset X', type: 'float', min: -50, max: 50, step: 0.5, hint: 'Shift the read sideways, in picture pixels.' },
     offsetY: { label: 'Offset Y', type: 'float', min: -50, max: 50, step: 0.5, hint: 'Shift the read up or down, in picture pixels.' },
+    wrap: { label: 'Edges', type: 'select', hint: 'Repeat: past the picture\'s edge it starts again, with no seam and no shimmer far away (mipmaps chosen from the unwrapped place). The scene builders use it to tile pictures.', options: [
+      { value: 'clamp', label: 'As the texture is' },
+      { value: 'repeat', label: 'Repeat (seamless)' },
+    ] },
   },
   assignable: false,
   generateGLSL: (node: GraphNode, inputVars) => {
     const id = node.id;
     const tex = inputVars.texture;
+    // Repeat (docs/scene-builder.md, "Textures"): wrap in the shader, but pick the mip level from the
+    // unwrapped place, so the wrap is seamless and far repeats don't shimmer. Only when set.
+    if (tex && node.params.wrap === 'repeat') {
+      return {
+        code: `    vec2 ${id}_st = ${texUv(inputVars.uv ?? 'g_uv')} + vec2(${p(node.params.offsetX, 0)}, ${p(node.params.offsetY, 0)}) * ${passPxUniform(tex)};\n`
+          + `    vec4 ${id}_s = textureGrad(${tex}, fract(${id}_st), dFdx(${id}_st), dFdy(${id}_st));\n`,
+        outputVars: { color: `${id}_s.rgb`, alpha: `${id}_s.a` },
+      };
+    }
     const code = tex
       ? `    vec4 ${id}_s = texture2D(${tex}, ${texUv(inputVars.uv ?? 'g_uv')} + vec2(${p(node.params.offsetX, 0)}, ${p(node.params.offsetY, 0)}) * ${passPxUniform(tex)});\n`
       : `    vec4 ${id}_s = vec4(0.0);\n`;

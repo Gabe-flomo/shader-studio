@@ -128,6 +128,24 @@ The UV node keeps the spec (`gridScene`), so the Scene builder lists the build (
 id (Play controls and your wires stay), its place, and a slider you changed on a node that the new
 spec leaves alone (`src/gridScene/apply.ts`, the 2D Scene Builder's scheme).
 
+## Textures
+
+Pictures through the shared picker ([scene-builder.md](scene-builder.md#textures)):
+
+- **Picture cells:** the shape kind **Picture** shows a picture inside each of its cells, filling
+  the cell's square (Fill, keeping the picture's shape), turning, spinning and pulsing with the
+  shape. The scene function writes the winning cell's place on its picture (`inout vec4 pic`: xy the
+  place, z 1 for a picture, w its slot); a Sample (texture) per picture reads it and paints it over.
+  Scenes without picture cells compile to the same code as before.
+- **Picture pattern:** the pattern **Picture** puts a picture over the grid; each cell takes its
+  brightness there (read at the centre of the pixel's cell), as the wave: bright is the wave's top, so
+  the picture drives the size, turn, push, hue or brightness, and the fill of empty cells.
+- **Picture mask** (Patterns): shapes only in the cells where a picture is bright (**Cut**, live),
+  or dark (**Invert**).
+
+The pattern and the mask share one read of the same picture. Read per cell, a shape reaching into a
+neighbouring cell takes that cell's value.
+
 ## Surprise me
 
 A whole grid scene from a seed (`src/gridScene/surprise.ts`), the same seed always the same:

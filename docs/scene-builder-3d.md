@@ -703,6 +703,54 @@ The **3D: Scene Builder** examples folder has six scenes made in the builder:
 Each one's recipe is in its description and in its Scene Group's note.
 Right-click any node → Edit in Scene Builder to change it.
 
+## Textures
+
+Pictures through the shared picker ([scene-builder.md](scene-builder.md#textures)), plain colour
+pictures (no PBR maps). In Surface mode; other modes keep the shapes' colours and say so.
+
+- **On a shape** (its inspector's **Picture**): the picture colours the surface, read in the shape's
+  **own space** (after its warps, move and turn: the Materials group hands each painted shape's point
+  out), so it moves and turns with the shape, and **a Repeat warp repeats it forever**. Up to three
+  painted shapes (one slot each).
+  - **Wrap:** Triplanar (default: three projections blended by which way the surface faces; no
+    stretching on any shape), Planar (along z), Spherical (a globe; a seam at the back), Face (once
+    over the shape's front, keeping the picture's shape: a picture panel; **Make it a picture panel**
+    sizes a box to the picture).
+  - **Tiles** (repeats every 2 units; Face: a zoom), **Blend sharpness** (triplanar: 1 soft … 16
+    crisp), **Slide across / up** (an offset, 1 is a whole picture), **Turn** (degrees). All live
+    sliders on the built coordinates block.
+  - **Bump** (bump from brightness): the lights read a normal tilted by how the pictures' brightness
+    changes across the screen (Mikkelsen's surface gradient from screen derivatives: no extra reads
+    of the picture, no tangents), so a plain photo gets some relief. Shadows and AO keep the shape's
+    own normal. **depth** on the Bump block sets how deep.
+  - **Good filtering.** Tiled maps read through Sample (texture) with Edges: Repeat (`textureGrad`
+    from the unwrapped place): no seam where the picture repeats, no shimmer far away; pictures have
+    mipmaps and anisotropic filtering.
+- **Background** (Look › Background › Picture): the picture as the backdrop the camera looks at,
+  through **Picture Environment** (from the depth work, [depth-node.md](depth-node.md)) on the
+  camera's rays, Forward, Right and Up, its FOV the camera's Zoom.
+- **Template: A picture, repeated forever.** A rounded cube painted triplanar, repeated in every
+  direction by Repeat, with fog. Pick its picture under Pictures (or drop one on its Texture node).
+
+What Build makes: the Materials group gains **Picture slots** (which painted shape is nearest, x y z)
+and each painted shape's point; per shape a coordinates block (Triplanar: three places and the
+weights), its Sample (texture) nodes and a blend; **Surface pictures** paints them over the base
+colour (and, with a bump, hands out **h**); **Bump from brightness** feeds Multi-Light and the
+highlight.
+
+### In a recipe
+
+```
+texture pond node=node_4 aspect=1.5
+sphere r=0.6 texture=pond map=spherical tiles=2 tex-offset=(0.1,0.2) tex-rot=15 bump=0.5
+box size=0.5 texture=pond sharp=8 @repeat(2)
+background navy picture=pond
+```
+
+Shape keys: `texture=` (`tex=`, `picture=`), `map=triplanar|planar|spherical|face`, `tiles=`,
+`sharp=`, `tex-offset=(x,y)`, `tex-rot=`, `bump=`. The recipe help (hover a word) has entries for
+`texture`, these keys and `background picture=`.
+
 ## Limits
 
 - **Per-shape colour and shine are a Surface-mode feature.** Each shape is

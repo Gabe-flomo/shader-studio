@@ -256,6 +256,17 @@ function shapeWord(s: ShapeDef, p: ParamSpec): ParamSpec {
   return { ...p, key: word, aliases: [p.key, ...across] };
 }
 
+/** A shape's picture settings (docs/scene-builder-3d.md, "Textures"). */
+const TEXTURE_SHAPE_PARAMS: ParamSpec[] = [
+  { key: 'texture', aliases: ['tex', 'picture'], type: 'name', hint: 'A picture on its surface: a name from a texture clause (Surface mode).' },
+  { key: 'map', type: 'choice', options: ['triplanar', 'planar', 'spherical', 'face'], def: 'triplanar', hint: 'How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel).' },
+  { key: 'tiles', type: 'number', min: 0.1, max: 16, def: 1, hint: 'How many times the picture repeats every 2 units (face: a zoom).' },
+  { key: 'sharp', type: 'number', min: 1, max: 16, def: 4, hint: 'Triplanar: how sharply the three projections meet (1 soft, 16 crisp).' },
+  { key: 'tex-offset', type: 'vec2', hint: 'Slides the picture across the surface (1 is a whole picture).' },
+  { key: 'tex-rot', type: 'angle', min: -180, max: 180, hint: 'Turns the picture on the surface.' },
+  { key: 'bump', type: 'number', min: 0, max: 4, def: 0, hint: 'Bump from brightness: bright parts of the picture stand out under the light.' },
+];
+
 /** D8: the scene's noise warp is written `warp`; `noise` is the 2D node. */
 export const SCENE_WARP_WORD: Readonly<Record<string, string>> = { noise: 'warp' };
 
@@ -279,6 +290,7 @@ function sceneEntries(): Entry[] {
         { key: 'color', aliases: ['colour', 'c'], type: 'colour', rand: { kind: 'colour' } },
         { key: 'shine', aliases: ['gloss'], type: 'number', rand: { kind: 'num', lo: 0, hi: 0.8 } },
         { key: 'name', type: 'name' },
+        ...TEXTURE_SHAPE_PARAMS,
       ],
       flags: ['glass'], summary: `${s.label}: ${s.blurb}`, examples: [`${s.kind}`], stage: 'objects',
     });
@@ -319,7 +331,13 @@ function sceneEntries(): Entry[] {
     ['shadows', ['shadow'], 'soft shadows: hardness (8 soft … 32 hard) or off', [{ key: 'hardness', type: 'number', primary: true, rand: { kind: 'num', lo: 6, hi: 32 } }]],
     ['ao', ['occlusion'], 'ambient occlusion: step or off', [{ key: 'step', type: 'number', primary: true }]],
     ['fog', [], 'distance fades into fog', [{ key: 'density', type: 'number', primary: true, rand: { kind: 'num', lo: 0.05, hi: 0.5 } }, { key: 'color', type: 'colour' }]],
-    ['background', ['bg'], 'the background colour or gradient', [{ key: 'top', type: 'colour', primary: true }, { key: 'bottom', type: 'colour' }]],
+    ['background', ['bg'], 'the background colour, gradient or picture', [{ key: 'top', type: 'colour', primary: true }, { key: 'bottom', type: 'colour' }, { key: 'picture', aliases: ['texture'], type: 'name', hint: 'A picture (a name from a texture clause) as the backdrop the camera looks at.' }]],
+    ['texture', [], 'a picture the scene reads', [
+      { key: 'name', type: 'name', primary: true, hint: 'What the shapes and the background call it: texture=… and picture=….' },
+      { key: 'node', type: 'name', hint: 'The Texture or Shader Texture node it reads (filled in when you pick a picture; without one, Build makes an empty Texture node).' },
+      { key: 'aspect', type: 'number', min: 0.05, max: 20, hint: 'The picture\'s width ÷ height (fits keep it).' },
+      { key: 'kind', type: 'choice', options: ['image', 'shader'], hint: 'A picture or a Shader Texture.' },
+    ]],
     ['tone', [], 'tone map', [{ key: 'mode', type: 'choice', options: TONE_MODES, primary: true }]],
     ['camera', ['cam'], 'the orbit camera', ['dist', 'angle', 'elev', 'orbit', 'zoom', 'flatten', 'x', 'y', 'z'].map((k, i) => ({ key: k, type: 'number' as const, ...(i === 0 ? { primary: true } : {}), ...(k === 'dist' ? { rand: { kind: 'num' as const, lo: 3, hi: 6 } } : k === 'orbit' ? { rand: { kind: 'num' as const, lo: 0, hi: 15 } } : k === 'elev' ? { rand: { kind: 'num' as const, lo: 5, hi: 35 } } : {}) }))],
     ['quality', [], 'the march\'s steps and limits', [...['steps', 'dist', 'step', 'jitter'].map(k => ({ key: k, type: 'number' as const })), { key: 'warp', type: 'choice' as const, options: ['off', 'auto', 'careful', 'high'] }]],
@@ -327,6 +345,7 @@ function sceneEntries(): Entry[] {
   const SETTING_EXAMPLES: Record<string, string> = {
     sun: 'sphere · sun dir=(1,2,1)', sky: 'sphere · sky (0.5,0.6,0.9)', bounce: 'sphere · bounce (0.3,0.2,0.1)', shadows: 'sphere · shadows 16', ao: 'sphere · ao 0.06',
     fog: 'sphere · fog 0.3', background: 'sphere · background navy', tone: 'sphere · tone agx', camera: 'sphere · camera dist=5 orbit=10', quality: 'sphere · quality steps=128',
+    texture: 'texture pond · box size=0.5 texture=pond @repeat(2)',
   };
   for (const [w, aliases, summary, params] of settings) out.push({ id: `scene:${w}`, kind: 'setting', dialects: ['scene'], words: [w, ...aliases], params, summary, examples: [SETTING_EXAMPLES[w] ?? `sphere · ${w}`], stage: w === 'camera' ? 'camera' : 'lighting' });
   out.push({

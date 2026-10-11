@@ -2325,7 +2325,7 @@ Examples:
 Words: `sphere`, `ball`, `orb`
 
 ```
-sphere [r] at= rot= color= shine= name= [glass]
+sphere [r] at= rot= color= shine= name= texture= map= tiles= sharp= tex-offset= tex-rot= bump= [glass]
 ```
 
 | Slot | What |
@@ -2336,6 +2336,13 @@ sphere [r] at= rot= color= shine= name= [glass]
 | color | random: a harmonious colour |
 | shine | random: 0–0.8 |
 | name | name |
+| texture | A picture on its surface: a name from a texture clause (Surface mode). |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
+| tex-offset | Slides the picture across the surface (1 is a whole picture). |
+| tex-rot | Turns the picture on the surface. |
+| bump | Bump from brightness: bright parts of the picture stand out under the light. · default 0 |
 
 Examples:
 
@@ -2348,7 +2355,7 @@ Examples:
 Words: `box`, `cube`, `rounded-box`, `roundbox`
 
 ```
-box [size] round= width= height= depth= at= rot= color= shine= name= [glass]
+box [size] round= width= height= depth= at= rot= color= shine= name= texture= map= tiles= sharp= tex-offset= tex-rot= bump= [glass]
 ```
 
 | Slot | What |
@@ -2363,6 +2370,13 @@ box [size] round= width= height= depth= at= rot= color= shine= name= [glass]
 | color | random: a harmonious colour |
 | shine | random: 0–0.8 |
 | name | name |
+| texture | A picture on its surface: a name from a texture clause (Surface mode). |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
+| tex-offset | Slides the picture across the surface (1 is a whole picture). |
+| tex-rot | Turns the picture on the surface. |
+| bump | Bump from brightness: bright parts of the picture stand out under the light. · default 0 |
 
 Examples:
 
@@ -2375,7 +2389,7 @@ Examples:
 Words: `torus`, `donut`, `ring`
 
 ```
-torus [R] r= at= rot= color= shine= name= [glass]
+torus [R] r= at= rot= color= shine= name= texture= map= tiles= sharp= tex-offset= tex-rot= bump= [glass]
 ```
 
 | Slot | What |
@@ -2387,6 +2401,13 @@ torus [R] r= at= rot= color= shine= name= [glass]
 | color | random: a harmonious colour |
 | shine | random: 0–0.8 |
 | name | name |
+| texture | A picture on its surface: a name from a texture clause (Surface mode). |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
+| tex-offset | Slides the picture across the surface (1 is a whole picture). |
+| tex-rot | Turns the picture on the surface. |
+| bump | Bump from brightness: bright parts of the picture stand out under the light. · default 0 |
 
 Examples:
 
@@ -2399,7 +2420,7 @@ Examples:
 Words: `cone`
 
 ```
-cone [angle] height= at= rot= color= shine= name= [glass]
+cone [angle] height= at= rot= color= shine= name= texture= map= tiles= sharp= tex-offset= tex-rot= bump= [glass]
 ```
 
 | Slot | What |
@@ -2411,6 +2432,13 @@ cone [angle] height= at= rot= color= shine= name= [glass]
 | color | random: a harmonious colour |
 | shine | random: 0–0.8 |
 | name | name |
+| texture | A picture on its surface: a name from a texture clause (Surface mode). |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
+| tex-offset | Slides the picture across the surface (1 is a whole picture). |
+| tex-rot | Turns the picture on the surface. |
+| bump | Bump from brightness: bright parts of the picture stand out under the light. · default 0 |
 
 Examples:
 
@@ -2423,7 +2451,7 @@ Examples:
 Words: `capped-cone`, `frustum`
 
 ```
-capped-cone [height] r1= r2= at= rot= color= shine= name= [glass]
+capped-cone [height] r1= r2= at= rot= color= shine= name= texture= map= tiles= sharp= tex-offset= tex-rot= bump= [glass]
 ```
 
 | Slot | What |
@@ -2436,6 +2464,13 @@ capped-cone [height] r1= r2= at= rot= color= shine= name= [glass]
 | color | random: a harmonious colour |
 | shine | random: 0–0.8 |
 | name | name |
+| texture | A picture on its surface: a name from a texture clause (Surface mode). |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
+| tex-offset | Slides the picture across the surface (1 is a whole picture). |
+| tex-rot | Turns the picture on the surface. |
+| bump | Bump from brightness: bright parts of the picture stand out under the light. · default 0 |
 
 Examples:
 
@@ -2448,7 +2483,7 @@ Examples:
 Words: `cylinder`, `pillar`, `column`, `rounded-cylinder`
 
 ```
-cylinder [radius] height= round= size= at= rot= color= shine= name= [glass]
+cylinder [radius] height= round= size= at= rot= color= shine= name= texture= map= tiles= sharp= tex-offset= tex-rot= bump= [glass]
 ```
 
 | Slot | What |
@@ -2462,6 +2497,13 @@ cylinder [radius] height= round= size= at= rot= color= shine= name= [glass]
 | color | random: a harmonious colour |
 | shine | random: 0–0.8 |
 | name | name |
+| texture | A picture on its surface: a name from a texture clause (Surface mode). |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
+| tex-offset | Slides the picture across the surface (1 is a whole picture). |
+| tex-rot | Turns the picture on the surface. |
+| bump | Bump from brightness: bright parts of the picture stand out under the light. · default 0 |
 
 Examples:
 
@@ -2474,7 +2516,7 @@ Examples:
 Words: `capsule`, `pill`
 
 ```
-capsule [height] radius= size= at= rot= color= shine= name= [glass]
+capsule [height] radius= size= at= rot= color= shine= name= texture= map= tiles= sharp= tex-offset= tex-rot= bump= [glass]
 ```
 
 | Slot | What |
@@ -2487,6 +2529,13 @@ capsule [height] radius= size= at= rot= color= shine= name= [glass]
 | color | random: a harmonious colour |
 | shine | random: 0–0.8 |
 | name | name |
+| texture | A picture on its surface: a name from a texture clause (Surface mode). |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
+| tex-offset | Slides the picture across the surface (1 is a whole picture). |
+| tex-rot | Turns the picture on the surface. |
+| bump | Bump from brightness: bright parts of the picture stand out under the light. · default 0 |
 
 Examples:
 
@@ -2499,7 +2548,7 @@ Examples:
 Words: `plane`, `floor`, `ground`
 
 ```
-plane [y] at= rot= color= shine= name= [glass]
+plane [y] at= rot= color= shine= name= texture= map= tiles= sharp= tex-offset= tex-rot= bump= [glass]
 ```
 
 | Slot | What |
@@ -2510,6 +2559,13 @@ plane [y] at= rot= color= shine= name= [glass]
 | color | random: a harmonious colour |
 | shine | random: 0–0.8 |
 | name | name |
+| texture | A picture on its surface: a name from a texture clause (Surface mode). |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
+| tex-offset | Slides the picture across the surface (1 is a whole picture). |
+| tex-rot | Turns the picture on the surface. |
+| bump | Bump from brightness: bright parts of the picture stand out under the light. · default 0 |
 
 Examples:
 
@@ -2522,7 +2578,7 @@ Examples:
 Words: `octahedron`, `diamond`
 
 ```
-octahedron [s] at= rot= color= shine= name= [glass]
+octahedron [s] at= rot= color= shine= name= texture= map= tiles= sharp= tex-offset= tex-rot= bump= [glass]
 ```
 
 | Slot | What |
@@ -2533,6 +2589,13 @@ octahedron [s] at= rot= color= shine= name= [glass]
 | color | random: a harmonious colour |
 | shine | random: 0–0.8 |
 | name | name |
+| texture | A picture on its surface: a name from a texture clause (Surface mode). |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
+| tex-offset | Slides the picture across the surface (1 is a whole picture). |
+| tex-rot | Turns the picture on the surface. |
+| bump | Bump from brightness: bright parts of the picture stand out under the light. · default 0 |
 
 Examples:
 
@@ -2545,7 +2608,7 @@ Examples:
 Words: `pyramid`
 
 ```
-pyramid [height] at= rot= color= shine= name= [glass]
+pyramid [height] at= rot= color= shine= name= texture= map= tiles= sharp= tex-offset= tex-rot= bump= [glass]
 ```
 
 | Slot | What |
@@ -2556,6 +2619,13 @@ pyramid [height] at= rot= color= shine= name= [glass]
 | color | random: a harmonious colour |
 | shine | random: 0–0.8 |
 | name | name |
+| texture | A picture on its surface: a name from a texture clause (Surface mode). |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
+| tex-offset | Slides the picture across the surface (1 is a whole picture). |
+| tex-rot | Turns the picture on the surface. |
+| bump | Bump from brightness: bright parts of the picture stand out under the light. · default 0 |
 
 Examples:
 
@@ -2568,7 +2638,7 @@ Examples:
 Words: `ellipsoid`, `egg`
 
 ```
-ellipsoid [size] width= height= depth= at= rot= color= shine= name= [glass]
+ellipsoid [size] width= height= depth= at= rot= color= shine= name= texture= map= tiles= sharp= tex-offset= tex-rot= bump= [glass]
 ```
 
 | Slot | What |
@@ -2582,6 +2652,13 @@ ellipsoid [size] width= height= depth= at= rot= color= shine= name= [glass]
 | color | random: a harmonious colour |
 | shine | random: 0–0.8 |
 | name | name |
+| texture | A picture on its surface: a name from a texture clause (Surface mode). |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
+| tex-offset | Slides the picture across the surface (1 is a whole picture). |
+| tex-rot | Turns the picture on the surface. |
+| bump | Bump from brightness: bright parts of the picture stand out under the light. · default 0 |
 
 Examples:
 
@@ -2594,7 +2671,7 @@ Examples:
 Words: `hex-prism`, `hexagon`
 
 ```
-hex-prism [radius] height= size= at= rot= color= shine= name= [glass]
+hex-prism [radius] height= size= at= rot= color= shine= name= texture= map= tiles= sharp= tex-offset= tex-rot= bump= [glass]
 ```
 
 | Slot | What |
@@ -2607,6 +2684,13 @@ hex-prism [radius] height= size= at= rot= color= shine= name= [glass]
 | color | random: a harmonious colour |
 | shine | random: 0–0.8 |
 | name | name |
+| texture | A picture on its surface: a name from a texture clause (Surface mode). |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
+| tex-offset | Slides the picture across the surface (1 is a whole picture). |
+| tex-rot | Turns the picture on the surface. |
+| bump | Bump from brightness: bright parts of the picture stand out under the light. · default 0 |
 
 Examples:
 
@@ -2619,7 +2703,7 @@ Examples:
 Words: `tri-prism`, `triangle`
 
 ```
-tri-prism [radius] height= size= at= rot= color= shine= name= [glass]
+tri-prism [radius] height= size= at= rot= color= shine= name= texture= map= tiles= sharp= tex-offset= tex-rot= bump= [glass]
 ```
 
 | Slot | What |
@@ -2632,6 +2716,13 @@ tri-prism [radius] height= size= at= rot= color= shine= name= [glass]
 | color | random: a harmonious colour |
 | shine | random: 0–0.8 |
 | name | name |
+| texture | A picture on its surface: a name from a texture clause (Surface mode). |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
+| tex-offset | Slides the picture across the surface (1 is a whole picture). |
+| tex-rot | Turns the picture on the surface. |
+| bump | Bump from brightness: bright parts of the picture stand out under the light. · default 0 |
 
 Examples:
 
@@ -2644,7 +2735,7 @@ Examples:
 Words: `link`, `chain`
 
 ```
-link [len] R= r= at= rot= color= shine= name= [glass]
+link [len] R= r= at= rot= color= shine= name= texture= map= tiles= sharp= tex-offset= tex-rot= bump= [glass]
 ```
 
 | Slot | What |
@@ -2657,6 +2748,13 @@ link [len] R= r= at= rot= color= shine= name= [glass]
 | color | random: a harmonious colour |
 | shine | random: 0–0.8 |
 | name | name |
+| texture | A picture on its surface: a name from a texture clause (Surface mode). |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
+| tex-offset | Slides the picture across the surface (1 is a whole picture). |
+| tex-rot | Turns the picture on the surface. |
+| bump | Bump from brightness: bright parts of the picture stand out under the light. · default 0 |
 
 Examples:
 
@@ -2669,7 +2767,7 @@ Examples:
 Words: `box-frame`, `frame`, `wireframe`
 
 ```
-box-frame [size] t= width= height= depth= at= rot= color= shine= name= [glass]
+box-frame [size] t= width= height= depth= at= rot= color= shine= name= texture= map= tiles= sharp= tex-offset= tex-rot= bump= [glass]
 ```
 
 | Slot | What |
@@ -2684,6 +2782,13 @@ box-frame [size] t= width= height= depth= at= rot= color= shine= name= [glass]
 | color | random: a harmonious colour |
 | shine | random: 0–0.8 |
 | name | name |
+| texture | A picture on its surface: a name from a texture clause (Surface mode). |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
+| tex-offset | Slides the picture across the surface (1 is a whole picture). |
+| tex-rot | Turns the picture on the surface. |
+| bump | Bump from brightness: bright parts of the picture stand out under the light. · default 0 |
 
 Examples:
 
@@ -2696,7 +2801,7 @@ Examples:
 Words: `capped-torus`, `arc`
 
 ```
-capped-torus [R] r= angle= at= rot= color= shine= name= [glass]
+capped-torus [R] r= angle= at= rot= color= shine= name= texture= map= tiles= sharp= tex-offset= tex-rot= bump= [glass]
 ```
 
 | Slot | What |
@@ -2709,6 +2814,13 @@ capped-torus [R] r= angle= at= rot= color= shine= name= [glass]
 | color | random: a harmonious colour |
 | shine | random: 0–0.8 |
 | name | name |
+| texture | A picture on its surface: a name from a texture clause (Surface mode). |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
+| tex-offset | Slides the picture across the surface (1 is a whole picture). |
+| tex-rot | Turns the picture on the surface. |
+| bump | Bump from brightness: bright parts of the picture stand out under the light. · default 0 |
 
 Examples:
 
@@ -2721,7 +2833,7 @@ Examples:
 Words: `solid-angle`, `wedge`
 
 ```
-solid-angle [r] angle= at= rot= color= shine= name= [glass]
+solid-angle [r] angle= at= rot= color= shine= name= texture= map= tiles= sharp= tex-offset= tex-rot= bump= [glass]
 ```
 
 | Slot | What |
@@ -2733,6 +2845,13 @@ solid-angle [r] angle= at= rot= color= shine= name= [glass]
 | color | random: a harmonious colour |
 | shine | random: 0–0.8 |
 | name | name |
+| texture | A picture on its surface: a name from a texture clause (Surface mode). |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
+| tex-offset | Slides the picture across the surface (1 is a whole picture). |
+| tex-rot | Turns the picture on the surface. |
+| bump | Bump from brightness: bright parts of the picture stand out under the light. · default 0 |
 
 Examples:
 
@@ -2745,7 +2864,7 @@ Examples:
 Words: `cross`, `plus`
 
 ```
-cross [s] at= rot= color= shine= name= [glass]
+cross [s] at= rot= color= shine= name= texture= map= tiles= sharp= tex-offset= tex-rot= bump= [glass]
 ```
 
 | Slot | What |
@@ -2756,6 +2875,13 @@ cross [s] at= rot= color= shine= name= [glass]
 | color | random: a harmonious colour |
 | shine | random: 0–0.8 |
 | name | name |
+| texture | A picture on its surface: a name from a texture clause (Surface mode). |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
+| tex-offset | Slides the picture across the surface (1 is a whole picture). |
+| tex-rot | Turns the picture on the surface. |
+| bump | Bump from brightness: bright parts of the picture stand out under the light. · default 0 |
 
 Examples:
 
@@ -2768,7 +2894,7 @@ Examples:
 Words: `gyroid`
 
 ```
-gyroid [freq] t= ball= at= rot= color= shine= name= [glass]
+gyroid [freq] t= ball= at= rot= color= shine= name= texture= map= tiles= sharp= tex-offset= tex-rot= bump= [glass]
 ```
 
 | Slot | What |
@@ -2781,6 +2907,13 @@ gyroid [freq] t= ball= at= rot= color= shine= name= [glass]
 | color | random: a harmonious colour |
 | shine | random: 0–0.8 |
 | name | name |
+| texture | A picture on its surface: a name from a texture clause (Surface mode). |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
+| tex-offset | Slides the picture across the surface (1 is a whole picture). |
+| tex-rot | Turns the picture on the surface. |
+| bump | Bump from brightness: bright parts of the picture stand out under the light. · default 0 |
 
 Examples:
 
@@ -2793,7 +2926,7 @@ Examples:
 Words: `schwarz-p`, `schwarz`
 
 ```
-schwarz-p [freq] t= ball= at= rot= color= shine= name= [glass]
+schwarz-p [freq] t= ball= at= rot= color= shine= name= texture= map= tiles= sharp= tex-offset= tex-rot= bump= [glass]
 ```
 
 | Slot | What |
@@ -2806,6 +2939,13 @@ schwarz-p [freq] t= ball= at= rot= color= shine= name= [glass]
 | color | random: a harmonious colour |
 | shine | random: 0–0.8 |
 | name | name |
+| texture | A picture on its surface: a name from a texture clause (Surface mode). |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
+| tex-offset | Slides the picture across the surface (1 is a whole picture). |
+| tex-rot | Turns the picture on the surface. |
+| bump | Bump from brightness: bright parts of the picture stand out under the light. · default 0 |
 
 Examples:
 
@@ -2818,7 +2958,7 @@ Examples:
 Words: `hypersphere`, `4d-ball`, `4d-sphere`
 
 ```
-hypersphere [r] w= spin= at= rot= color= shine= name= [glass]
+hypersphere [r] w= spin= at= rot= color= shine= name= texture= map= tiles= sharp= tex-offset= tex-rot= bump= [glass]
 ```
 
 | Slot | What |
@@ -2831,6 +2971,13 @@ hypersphere [r] w= spin= at= rot= color= shine= name= [glass]
 | color | random: a harmonious colour |
 | shine | random: 0–0.8 |
 | name | name |
+| texture | A picture on its surface: a name from a texture clause (Surface mode). |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
+| tex-offset | Slides the picture across the surface (1 is a whole picture). |
+| tex-rot | Turns the picture on the surface. |
+| bump | Bump from brightness: bright parts of the picture stand out under the light. · default 0 |
 
 Examples:
 
@@ -2843,7 +2990,7 @@ Examples:
 Words: `tesseract`, `hypercube`, `4d-cube`
 
 ```
-tesseract [size] round= w= spin= at= rot= color= shine= name= [glass]
+tesseract [size] round= w= spin= at= rot= color= shine= name= texture= map= tiles= sharp= tex-offset= tex-rot= bump= [glass]
 ```
 
 | Slot | What |
@@ -2857,6 +3004,13 @@ tesseract [size] round= w= spin= at= rot= color= shine= name= [glass]
 | color | random: a harmonious colour |
 | shine | random: 0–0.8 |
 | name | name |
+| texture | A picture on its surface: a name from a texture clause (Surface mode). |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
+| tex-offset | Slides the picture across the surface (1 is a whole picture). |
+| tex-rot | Turns the picture on the surface. |
+| bump | Bump from brightness: bright parts of the picture stand out under the light. · default 0 |
 
 Examples:
 
@@ -2869,7 +3023,7 @@ Examples:
 Words: `duocylinder`, `4d-cylinder`
 
 ```
-duocylinder [r1] r2= w= spin= at= rot= color= shine= name= [glass]
+duocylinder [r1] r2= w= spin= at= rot= color= shine= name= texture= map= tiles= sharp= tex-offset= tex-rot= bump= [glass]
 ```
 
 | Slot | What |
@@ -2883,6 +3037,13 @@ duocylinder [r1] r2= w= spin= at= rot= color= shine= name= [glass]
 | color | random: a harmonious colour |
 | shine | random: 0–0.8 |
 | name | name |
+| texture | A picture on its surface: a name from a texture clause (Surface mode). |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
+| tex-offset | Slides the picture across the surface (1 is a whole picture). |
+| tex-rot | Turns the picture on the surface. |
+| bump | Bump from brightness: bright parts of the picture stand out under the light. · default 0 |
 
 Examples:
 
@@ -2895,7 +3056,7 @@ Examples:
 Words: `clifford-torus`, `clifford`, `4d-torus`
 
 ```
-clifford-torus [r] t= w= spin= at= rot= color= shine= name= [glass]
+clifford-torus [r] t= w= spin= at= rot= color= shine= name= texture= map= tiles= sharp= tex-offset= tex-rot= bump= [glass]
 ```
 
 | Slot | What |
@@ -2909,6 +3070,13 @@ clifford-torus [r] t= w= spin= at= rot= color= shine= name= [glass]
 | color | random: a harmonious colour |
 | shine | random: 0–0.8 |
 | name | name |
+| texture | A picture on its surface: a name from a texture clause (Surface mode). |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
+| tex-offset | Slides the picture across the surface (1 is a whole picture). |
+| tex-rot | Turns the picture on the surface. |
+| bump | Bump from brightness: bright parts of the picture stand out under the light. · default 0 |
 
 Examples:
 
@@ -2921,7 +3089,7 @@ Examples:
 Words: `cell24`, `icositetrachoron`, `twenty-four-cell`
 
 ```
-cell24 [r] w= spin= at= rot= color= shine= name= [glass]
+cell24 [r] w= spin= at= rot= color= shine= name= texture= map= tiles= sharp= tex-offset= tex-rot= bump= [glass]
 ```
 
 | Slot | What |
@@ -2934,6 +3102,13 @@ cell24 [r] w= spin= at= rot= color= shine= name= [glass]
 | color | random: a harmonious colour |
 | shine | random: 0–0.8 |
 | name | name |
+| texture | A picture on its surface: a name from a texture clause (Surface mode). |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
+| tex-offset | Slides the picture across the surface (1 is a whole picture). |
+| tex-rot | Turns the picture on the surface. |
+| bump | Bump from brightness: bright parts of the picture stand out under the light. · default 0 |
 
 Examples:
 
@@ -2946,7 +3121,7 @@ Examples:
 Words: `julia4d`, `julia`, `quaternion-julia`
 
 ```
-julia4d [cx] cy= scale= w= spin= at= rot= color= shine= name= [glass]
+julia4d [cx] cy= scale= w= spin= at= rot= color= shine= name= texture= map= tiles= sharp= tex-offset= tex-rot= bump= [glass]
 ```
 
 | Slot | What |
@@ -2961,6 +3136,13 @@ julia4d [cx] cy= scale= w= spin= at= rot= color= shine= name= [glass]
 | color | random: a harmonious colour |
 | shine | random: 0–0.8 |
 | name | name |
+| texture | A picture on its surface: a name from a texture clause (Surface mode). |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
+| tex-offset | Slides the picture across the surface (1 is a whole picture). |
+| tex-rot | Turns the picture on the surface. |
+| bump | Bump from brightness: bright parts of the picture stand out under the light. · default 0 |
 
 Examples:
 
@@ -2973,7 +3155,7 @@ Examples:
 Words: `mandel4d`, `mandelbrot4d`, `quaternion-mandelbrot`
 
 ```
-mandel4d [scale] w= spin= at= rot= color= shine= name= [glass]
+mandel4d [scale] w= spin= at= rot= color= shine= name= texture= map= tiles= sharp= tex-offset= tex-rot= bump= [glass]
 ```
 
 | Slot | What |
@@ -2986,6 +3168,13 @@ mandel4d [scale] w= spin= at= rot= color= shine= name= [glass]
 | color | random: a harmonious colour |
 | shine | random: 0–0.8 |
 | name | name |
+| texture | A picture on its surface: a name from a texture clause (Surface mode). |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
+| tex-offset | Slides the picture across the surface (1 is a whole picture). |
+| tex-rot | Turns the picture on the surface. |
+| bump | Bump from brightness: bright parts of the picture stand out under the light. · default 0 |
 
 Examples:
 
@@ -3549,22 +3738,44 @@ Examples:
 
 ### background
 
-3D scene · setting. the background colour or gradient Also: bg.
+3D scene · setting. the background colour, gradient or picture Also: bg.
 
 Words: `background`, `bg`
 
 ```
-background [top] bottom=
+background [top] bottom= picture=
 ```
 
 | Slot | What |
 |---|---|
 | top (bare) | colour |
 | bottom | colour |
+| picture | A picture (a name from a texture clause) as the backdrop the camera looks at. |
 
 Examples:
 
 - `sphere · background navy` — on an empty graph (just an Output)
+
+### texture
+
+3D scene · setting. a picture the scene reads
+
+Words: `texture`
+
+```
+texture [name] node= aspect= kind=
+```
+
+| Slot | What |
+|---|---|
+| name (bare) | What the shapes and the background call it: texture=… and picture=…. |
+| node | The Texture or Shader Texture node it reads (filled in when you pick a picture; without one, Build makes an empty Texture node). |
+| aspect | The picture's width ÷ height (fits keep it). |
+| kind | A picture or a Shader Texture. · image, shader |
+
+Examples:
+
+- `texture pond · box size=0.5 texture=pond @repeat(2)` — on an empty graph (just an Output)
 
 ### tone
 
