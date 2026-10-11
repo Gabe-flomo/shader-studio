@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.176',
+    date: '2026-10-11',
+    title: 'Calmer explanations',
+    highlights: [
+      { area: 'Studio', text: 'Agent Builder legend: numbers once, beside the title, in steady digits; the words below stay put while you drag.' },
+      { area: 'Studio', text: 'Expression Blocks: the Explain row shows the pattern name, its sentence and Open explain view. Panning over a card no longer flips its faces.' },
+      { area: 'Studio', text: 'The explain view now keeps any error inside itself with a Back button, instead of taking down the app.' },
+    ],
+  },
+  {
     id: '2026.10.175',
     date: '2026-10-11',
     title: 'Fixes: text, depth, convert',
