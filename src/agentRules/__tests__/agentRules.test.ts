@@ -382,7 +382,7 @@ describe('3D', () => {
 
 describe('templates, examples and the starter', () => {
   it('every template is a few readable lines and compiles in 2D, with Draw\'s Colour by State as the walker\'s own colour', () => {
-    expect(RULES_TEMPLATES.map(t => t.key)).toEqual(['slime', 'ants', 'boids', 'particles', 'swarm', 'crowd', 'predatorPrey', 'sir', 'termites', 'fireflies', 'dla']);
+    expect(RULES_TEMPLATES.map(t => t.key)).toEqual(['slime', 'ants', 'boids', 'particles', 'swarm', 'crowd', 'predatorPrey', 'sir', 'termites', 'fireflies', 'scanWalkers', 'dla']);
     for (const t of RULES_TEMPLATES) {
       const set = t.set();
       set.species.forEach((sp, s) => sp.rules.forEach(r => expect(describeRule(set, s, r)).toMatch(/^When .+ → .+/)));
@@ -398,7 +398,7 @@ describe('templates, examples and the starter', () => {
 
   it('the Agents: rules folder holds every template as an example, each compiling, with notes everywhere', () => {
     expect(EXAMPLE_FOLDERS.find(f => f.label === 'Agents: rules')?.keys).toEqual(AGENT_RULE_EXAMPLE_KEYS);
-    expect(AGENT_RULE_EXAMPLE_KEYS.length).toBe(11);
+    expect(AGENT_RULE_EXAMPLE_KEYS.length).toBe(13);
     const walk = (nodes: GraphNode[], f: (x: GraphNode) => void) => { for (const x of nodes) { f(x); const sg = x.params.subgraph as { nodes?: GraphNode[] } | undefined; if (sg?.nodes) walk(sg.nodes, f); } };
     for (const k of AGENT_RULE_EXAMPLE_KEYS) {
       expect(EXAMPLE_INDEX[k]?.label, k).toMatch(/^Agent rules \d+ · /);

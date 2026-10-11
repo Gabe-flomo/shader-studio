@@ -126,7 +126,10 @@ describe('real counts over the bundled examples (docs/code-explorer-plan.md §9)
     expect(functionReport(ix, 'length').patterns.slice(0, 2).map(p => p.l2)).toContain('length(_)');
   });
   it('step is the most-called function in written code', () => {
-    expect(summarise(ix).top[0].key).toBe('step');
+    // step, or level with it (mix has caught up as the examples grew: a tie sorts either way).
+    const top = summarise(ix).top;
+    const step = top.find(t => t.key === 'step')!;
+    expect(step.count).toBe(top[0].count);
   });
 });
 

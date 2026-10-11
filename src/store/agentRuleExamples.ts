@@ -6,6 +6,8 @@
  */
 import type { ExampleGraph } from './exampleIndex';
 import { rulesTemplateNodes } from '../agentRules/templates';
+import { agents3dStarter } from '../agentRules/space3d';
+import { n } from './graphBuilder';
 
 export const AGENT_RULE_EXAMPLE_INDEX: Record<string, { label: string; description: string }> = {
   agentRulesSlime: {
@@ -52,6 +54,14 @@ export const AGENT_RULE_EXAMPLE_INDEX: Record<string, { label: string; descripti
     label: 'Agent rules 11 · Crowd: two-way walkers',
     description: 'Kind: Crowd. Two crowds walk opposite ways; each walker steps out of the other kind\'s way, keeps a little apart and slows as the crowd round it thickens, all from Neighbours. Lanes form by themselves. The node version: Simulations: agents → Crowd: lanes in two-way traffic.',
   },
+  agentRulesScan: {
+    label: 'Agent rules 12 · Scan to walkers',
+    description: 'A splat scan as walkers (Emit: Splat scan, a generated ball of 250 000 splats): each splat a walker at its place, in its colour, drawn as a splat. A field blows the scan apart, then Return home springs each walker back to where it was born. Pick a real scan on the Emit card; Burst (or Start over) blows it apart again.',
+  },
+  agentRulesScan3d: {
+    label: 'Agent rules 13 · Scan to walkers in 3D',
+    description: 'The same in 3D: a generated scan of 250 000 splats, blown apart in the box and flowing back home, drawn as soft Gaussian splats through the camera (Draw agents: Splats) so it reads as a volume while it flies.',
+  },
 };
 
 /** The ordered keys, for the Agents: rules folder. */
@@ -61,10 +71,18 @@ const TEMPLATE_OF: Record<string, [string, string]> = {
   agentRulesSlime: ['slime', 'arSl'], agentRulesAnts: ['ants', 'arAn'], agentRulesBoids: ['boids', 'arBo'], agentRulesPredatorPrey: ['predatorPrey', 'arPp'],
   agentRulesSir: ['sir', 'arSir'], agentRulesTermites: ['termites', 'arTe'], agentRulesFireflies: ['fireflies', 'arFf'], agentRulesDla: ['dla', 'arDla'],
   agentRulesParticles: ['particles', 'arPa'], agentRulesSwarm: ['swarm', 'arSw'], agentRulesCrowd: ['crowd', 'arCr'],
+  agentRulesScan: ['scanWalkers', 'arSc'],
 };
+
+/** The 3D Scan to walkers: the builder's 3D setup (space3d.ts) with an Output on its Draw agents. */
+function scan3dNodes() {
+  const s = agents3dStarter('scanWalkers3d');
+  return [...s.nodes, n('output', 'arSc3Output', 2100, 0, { __comment: 'Output: the walkers drawn as splats over the night backdrop.' }, { color: [s.out.nodeId, s.out.outputKey] })];
+}
 
 export function buildAgentRuleExamples(): Record<string, ExampleGraph> {
   return Object.fromEntries(AGENT_RULE_EXAMPLE_KEYS.map(k => {
+    if (k === 'agentRulesScan3d') return [k, { ...AGENT_RULE_EXAMPLE_INDEX[k], counter: 60, nodes: scan3dNodes() }];
     const [template, prefix] = TEMPLATE_OF[k];
     return [k, { ...AGENT_RULE_EXAMPLE_INDEX[k], counter: 60, nodes: rulesTemplateNodes(template, prefix, 0, 200) }];
   }));

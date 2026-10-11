@@ -4771,7 +4771,7 @@ Agent Rules · header. The rule set: what kind of walkers, what the edges do, ho
 Words: `agents`
 
 ```
-agents kind= edges= view= view-max=
+agents kind= edges= view= view-max= colour=
 ```
 
 | Slot | What |
@@ -4780,6 +4780,7 @@ agents kind= edges= view= view-max=
 | edges | wrap, bounce, slide |
 | view | random: 0.02–0.08 |
 | view-max | count |
+| colour | own |
 
 Examples:
 
@@ -4853,7 +4854,7 @@ Examples:
 
 ### remember
 
-Agent Rules · setting. A named memory each walker keeps: a counter, timer, flag, value, position or level.
+Agent Rules · setting. A named memory each walker keeps: a counter, timer, flag, value, position, level or home (where it was born).
 
 Words: `remember`
 
@@ -4870,6 +4871,7 @@ Examples:
 
 - `remember carrying flag` — on an empty graph (just an Output)
 - `remember energy level start=1 fade=0.3` — on an empty graph (just an Output)
+- `remember home home` — on an empty graph (just an Output)
 
 ### color-by
 
@@ -5359,6 +5361,20 @@ fade
 Examples:
 
 - `fade 3s` — on an empty graph (just an Output)
+
+### home
+
+Agent Rules · action. Action: return home (a spring to its Home).
+
+Words: `home`
+
+```
+home
+```
+
+Examples:
+
+- `always do home 6 delay=1 damping=3` — on an empty graph (just an Output)
 
 ## Limits
 

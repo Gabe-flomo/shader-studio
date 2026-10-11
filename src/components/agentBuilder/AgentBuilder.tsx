@@ -672,7 +672,7 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
       case 'born': return `${born.shape} · ${born.count.replace('m', 'M')}`;
       case 'senses': case 'turning': case 'trail': return sectionSummary(cards, id);
       case 'moving': return sectionSummary(cards, 'moving');
-      case 'forces': return titles(['gravity', 'wind', 'curl', 'field', 'attract', 'drag']);
+      case 'forces': return titles(['gravity', 'wind', 'curl', 'field', 'attract', 'home', 'drag']);
       case 'life': {
         const f = on(['fade'])[0]?.action, d = on(['die'])[0];
         return [f?.kind === 'fade' ? `fades ${r3(f.seconds)} s` : '', d?.when?.kind === 'age' ? `dies at ${r3(d.when.seconds)} s` : d ? 'dies' : ''].filter(Boolean).join(' · ') || 'for ever';

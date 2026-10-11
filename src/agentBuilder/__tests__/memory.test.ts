@@ -56,13 +56,15 @@ const run = (set: AgentRuleSet, steps: number, w: Partial<Walker> = {}, trail?: 
 describe('memory slots (state E)', () => {
   it('a group gets More memory only when something reads or sets it: every example compiles as before', () => {
     for (const t of RULES_TEMPLATES) {
+      // Scan to walkers keeps a Home memory by design.
+      if (t.set().memories?.length) continue;
       const inside = generateRulesInside(t.set(), { groupId: GID, d3: false });
       const out = inside.find(x => x.type === 'agentOutput')!;
       expect(out.inputs.moreMemory?.connection, t.key).toBeUndefined();
       expect(needsStateE(inside, out), t.key).toBe(false);
     }
     for (const [k, g] of Object.entries(EXAMPLE_GRAPHS)) {
-      if (!g.nodes.some(n => n.type === 'agentsGroup')) continue;
+      if (!g.nodes.some(n => n.type === 'agentsGroup') || k.startsWith('agentRulesScan')) continue;
       const r = compileGraph({ nodes: resolveNodeAliases(g.nodes, getNodeDefinition) });
       for (const grp of r.agents?.groups ?? []) {
         expect(grp.stateE, k).toBeUndefined();

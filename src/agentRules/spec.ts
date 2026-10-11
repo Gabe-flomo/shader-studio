@@ -115,6 +115,13 @@ type RuleActionKinds =
    */
   | { kind: 'field'; strength: number; grip?: number; spec: FieldSpec }
   /**
+   * Return home: a spring toward its Home memory (where it was born: an Emit with Remember home, or from a splat
+   * scan). `strength` pulls (units a second² per unit away), `damping` calms it (a share of its velocity a second;
+   * 2√strength settles it without overshoot), starting `delay` seconds after birth (eased in over half a second).
+   * Shared by every kind that has a Home (a scan blown apart, a picture in pieces).
+   */
+  | { kind: 'home'; memory: string; strength: number; delay?: number; damping?: number }
+  /**
    * Change a named memory (memory.ts): count up or down (`value` a step, or a second), set it
    * (on / off), toggle it, reset it (a timer starts again), remember where the walker is, remember
    * or add up what it smells here (`channel`), let it decay (`value` a second), or set it to an
@@ -129,8 +136,12 @@ type RuleActionKinds =
 export interface MemoryTimes { memory: string; fade?: number }
 export type RuleAction = RuleActionKinds & { times?: MemoryTimes };
 
-/** What a named memory holds (the Memory section's type pictures). A place takes two numbers. */
-export type MemoryType = 'counter' | 'timer' | 'flag' | 'value' | 'position' | 'level';
+/**
+ * What a named memory holds (the Memory section's type pictures). A place takes two numbers. A Home takes three
+ * (x, y, z; 2D: z is 0) and is always first (More memory x, y, z): an Emit fills it at birth (Remember home, or a
+ * splat scan), and Return home pulls the walker back to it.
+ */
+export type MemoryType = 'counter' | 'timer' | 'flag' | 'value' | 'position' | 'level' | 'home';
 export type MemoryOp = 'add' | 'set' | 'toggle' | 'reset' | 'place' | 'smell' | 'sum' | 'decay' | 'expr';
 
 /**
@@ -209,10 +220,11 @@ export interface AgentRuleSet {
 
 /**
  * The rules' own colouring of a walker, read by Draw agents' Colour by Agent: by how much of a trail
- * channel is where it stands (from its kind's colour, dimmed, to the channel's colour). Colour by a
+ * channel is where it stands (from its kind's colour, dimmed, to the channel's colour), or its own colour
+ * from birth (`birth`: the rules leave it as its Emit gave it, a splat scan's colours). Colour by a
  * memory (`colourBy`) wins over it.
  */
-export type WalkerLook = { by: 'trail'; channel: 0 | 1 | 2 | 3; gain: number };
+export type WalkerLook = { by: 'trail'; channel: 0 | 1 | 2 | 3; gain: number } | { by: 'birth' };
 
 /** The trail channels' default colours: amber, blue, green, violet (the builder's swatches). */
 export const TRAIL_COLOURS = ['#e8a33a', '#57b6ff', '#7ad38a', '#c792ea'] as const;
@@ -224,7 +236,7 @@ export interface AgentCollide { reach: number; margin: number; cushion: number; 
 export const DEFAULT_COLLIDE: AgentCollide = { reach: 1.6, margin: 0.03, cushion: 0.18, bounce: 0.2 };
 
 export const MAX_SPECIES = 4;
-export const MEMORY_TYPES: readonly MemoryType[] = ['counter', 'timer', 'flag', 'value', 'position', 'level'];
+export const MEMORY_TYPES: readonly MemoryType[] = ['counter', 'timer', 'flag', 'value', 'position', 'level', 'home'];
 export const MAX_STATES = 8;
 export const MAX_MASKS = 4;
 
@@ -308,6 +320,7 @@ export const ACTION_KINDS: Array<{ kind: RuleAction['kind']; label: string }> = 
   { kind: 'drag', label: 'drag (slow down)' },
   { kind: 'fade', label: 'fade with age' },
   { kind: 'field', label: 'follow a field' },
+  { kind: 'home', label: 'return home (a spring to its Home)' },
 ];
 
 /** The rule set's view radius and how many neighbours a reading reads at most, when it doesn't say. */
@@ -334,7 +347,7 @@ export const WALKER_KINDS: Record<WalkerKind, { label: string; blurb: string; se
     label: 'Particles', blurb: 'No sensing: forces (gravity, wind, curl, toward or away from a point or the mouse) move them; they live, fade and are born again.',
     sections: ['masks', 'flow'],
     conditions: ['chance', 'age', 'mask', 'memory', 'shape'],
-    actions: ['force', 'field', 'drag', 'fade', 'bounce', 'speed', 'wander', 'die', 'trail', 'memory'],
+    actions: ['force', 'field', 'home', 'drag', 'fade', 'bounce', 'speed', 'wander', 'die', 'trail', 'memory'],
     templates: ['particles'],
   },
   flock: {
@@ -355,7 +368,7 @@ export const WALKER_KINDS: Record<WalkerKind, { label: string; blurb: string; se
     label: 'Swarm / orbiters', blurb: 'Orbit a point (or the mouse) and flock loosely: keep apart, drift together.',
     sections: ['neighbours', 'states', 'flow'],
     conditions: ['neighbours', 'chance', 'age', 'state', 'shape'],
-    actions: ['orbit', 'separate', 'cohere', 'match', 'force', 'field', 'drag', 'wander', 'speed', 'state', 'trail'],
+    actions: ['orbit', 'separate', 'cohere', 'match', 'force', 'field', 'home', 'drag', 'wander', 'speed', 'state', 'trail'],
     templates: ['swarm'],
   },
   crowd: {
@@ -423,6 +436,7 @@ export function newAction(kind: RuleAction['kind']): RuleAction {
     case 'drag': return { kind, amount: 0.5 };
     case 'fade': return { kind, seconds: 3 };
     case 'field': return { kind, strength: 1, grip: 3, spec: DEFAULT_FIELD() };
+    case 'home': return { kind, memory: '', strength: 6, delay: 1, damping: 3 };
     default: return { kind } as RuleAction;
   }
 }
@@ -468,7 +482,7 @@ export function describeMemCondition(set: AgentRuleSet, c: Extract<RuleCondition
   const name = memName(set, c.memory);
   if (m?.type === 'flag') return `${name} is ${(c.cmp === '<') ? 'off' : 'on'}`;
   if (m?.type === 'timer' && c.cmp === '>') return `${num(c.value)} s after ${name} started`;
-  if (m?.type === 'position') return `${c.cmp === '<' ? 'within' : 'further than'} ${num(c.value)} of ${name}`;
+  if (m?.type === 'position' || m?.type === 'home') return `${c.cmp === '<' ? 'within' : 'further than'} ${num(c.value)} of ${name}`;
   return `${name} ${c.cmp} ${num(c.value)}`;
 }
 
@@ -534,6 +548,7 @@ function describeActionOnly(set: AgentRuleSet, sp: number, a: RuleAction): strin
     case 'drag': return `drag ${num(a.amount)} a second`;
     case 'fade': return `fade with age over ${num(a.seconds)} s`;
     case 'field': return `follow a field (${fieldName(a.spec)}) ×${num(a.strength)}${a.grip ? `, riding it (grip ${num(a.grip)})` : ', as a force'}`;
+    case 'home': return `return home to ${memoryOf(set, a.memory)?.name ?? set.memories?.find(x => x.type === 'home')?.name ?? 'its home'} (spring ${num(a.strength)}, damping ${num(a.damping ?? 0)}${(a.delay ?? 0) > 0 ? `, after ${num(a.delay ?? 0)} s` : ''})`;
     case 'mem': return describeMemAction(set, a);
   }
 }
@@ -688,6 +703,7 @@ export function normalizeRuleSet(raw: unknown): AgentRuleSet {
     ...(r.obstacle && typeof r.obstacle === 'object' ? { obstacle: { on: r.obstacle.on === 'slide' ? 'slide' : 'turn' } } : {}),
     ...(Array.isArray(r.channelColours) ? { channelColours: [0, 1, 2, 3].map(i => (typeof r.channelColours![i] === 'string' && /^#[0-9a-f]{6}$/i.test(r.channelColours![i]) ? r.channelColours![i] : TRAIL_COLOURS[i])) } : {}),
     ...(r.look && typeof r.look === 'object' && r.look.by === 'trail' ? { look: { by: 'trail' as const, channel: ([0, 1, 2, 3].includes(Number(r.look.channel)) ? Number(r.look.channel) : 0) as 0 | 1 | 2 | 3, gain: Number(r.look.gain) > 0 ? Number(r.look.gain) : 1 } } : {}),
+    ...(r.look && typeof r.look === 'object' && r.look.by === 'birth' ? { look: { by: 'birth' as const } } : {}),
     ...(Array.isArray(r.memories) && r.memories.length ? { memories: r.memories.filter(m => m && typeof m.id === 'string' && typeof m.name === 'string' && MEMORY_TYPES.includes(m.type)) } : {}),
     ...(r.colourBy && typeof r.colourBy === 'object' && typeof r.colourBy.memory === 'string' ? { colourBy: { memory: r.colourBy.memory, lo: Number(r.colourBy.lo) || 0, hi: Number.isFinite(Number(r.colourBy.hi)) ? Number(r.colourBy.hi) : 1 } } : {}),
   };

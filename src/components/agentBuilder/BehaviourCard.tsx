@@ -16,7 +16,7 @@ import { BuilderSlider } from '../builders/BuilderSlider';
 import { fineUnit } from '../ui/rulerMath';
 
 export type CardPicture = 'born' | 'senses' | 'turning' | 'moving' | 'trail' | 'advanced'
-  | 'gravity' | 'wind' | 'curl' | 'field' | 'attract' | 'drag' | 'fade' | 'die' | 'life' | 'look' | 'neighbours'
+  | 'gravity' | 'wind' | 'curl' | 'field' | 'attract' | 'drag' | 'home' | 'fade' | 'die' | 'life' | 'look' | 'neighbours'
   | 'separate' | 'match' | 'cohere' | 'avoidEdges' | 'goal' | 'slow' | 'orbit' | 'wobble';
 
 /** A card's small picture: the behaviour drawn in a few strokes. */
@@ -69,6 +69,10 @@ export function CardGlyph({ kind, size = 40 }: { kind: CardPicture; size?: numbe
       case 'attract': return <>
         <circle cx={20} cy={20} r={3.2} fill={a} />
         {[0, 90, 180, 270].map(d => { const r = d * Math.PI / 180; const o = [20 + Math.cos(r) * 14, 20 + Math.sin(r) * 14], i = [20 + Math.cos(r) * 7, 20 + Math.sin(r) * 7]; return <path key={d} d={`M${o[0]} ${o[1]} L${i[0]} ${i[1]}`} stroke={ink} strokeWidth={1.6} strokeLinecap="round" />; })}
+      </>;
+      case 'home': return <>
+        <path d="M13 21 L20 14 L27 21 V28 H13 Z" fill="none" stroke={a} strokeWidth={1.8} strokeLinejoin="round" />
+        {[[6, 9], [33, 10], [7, 31]].map(([x, y]) => <circle key={x} cx={x} cy={y} r={1.8} fill={ink} />)}
       </>;
       case 'drag': return <>
         <path d="M8 14 H32 M8 20 H24 M8 26 H16" stroke={a} strokeWidth={2.2} strokeLinecap="round" />

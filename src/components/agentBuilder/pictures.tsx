@@ -59,6 +59,28 @@ export function KindPicture({ kind, width = 240, height = 136, accent = '#ffcf7a
         raf = requestAnimationFrame(frame);
       };
       frame();
+    } else if (kind === 'scan') {
+      // Scan to walkers: a ball of coloured dots blown apart and springing back home, every 4 s.
+      const N = 320;
+      const home = Array.from({ length: N }, (_, i) => { const a = i * 2.39996, r = Math.sqrt((i + 0.5) / N) * 0.42; return [Math.cos(a) * r, Math.sin(a) * r, a] as const; });
+      const t0 = performance.now();
+      const frame = () => {
+        if (!alive) return;
+        const t = ((performance.now() - t0) / 1000) % 4;
+        // Out for 1.2 s, then a damped spring home.
+        const out = t < 1.2 ? Math.sin((t / 1.2) * Math.PI / 2) : Math.exp(-3 * (t - 1.2)) * Math.cos(2.2 * (t - 1.2));
+        ctx.fillStyle = 'rgba(13,13,18,0.35)';
+        ctx.fillRect(0, 0, W, H);
+        for (const [x, y, a] of home) {
+          const k = 1 + 1.6 * out * (0.6 + 0.4 * Math.sin(a * 3.1));
+          ctx.fillStyle = `hsl(${Math.round(20 + 200 * (y + 0.42) / 0.84)}, 75%, 62%)`;
+          ctx.beginPath();
+          ctx.arc(W / 2 + x * k * H, H / 2 - y * k * H, 2.2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        raf = requestAnimationFrame(frame);
+      };
+      frame();
     } else {
       const rand = miniRandom(11);
       const n = kind === 'particles' ? 220 : kind === 'flock' ? 70 : 260;

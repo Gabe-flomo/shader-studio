@@ -55,7 +55,7 @@ describe('the 3D Agent Builder\'s setup', () => {
   });
 
   it('every 3D template is a few readable lines, compiles in 3D as a builder setup, and applies onto a flat group', () => {
-    expect(RULES_TEMPLATES_3D.map(t => t.key)).toEqual(['slime3d', 'flock3d', 'orbiters3d', 'curl3d', 'shape3d']);
+    expect(RULES_TEMPLATES_3D.map(t => t.key)).toEqual(['slime3d', 'flock3d', 'orbiters3d', 'curl3d', 'scanWalkers3d', 'shape3d']);
     for (const t of RULES_TEMPLATES_3D) {
       const set = t.set();
       set.species.forEach((sp, si) => sp.rules.forEach(r => expect(describeRule(set, si, r)).toMatch(/^When .+ → .+/)));

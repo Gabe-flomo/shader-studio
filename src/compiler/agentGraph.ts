@@ -271,6 +271,8 @@ export function trailSpec(n: GraphNode, slug: string, params: Record<string, Age
   };
 }
 
+const SPLAT_ONLY = new Set(['splatSize', 'stretch', 'sizeBy', 'memScale', 'opacity']);
+
 /** The engine's view of a Draw agents node. */
 export function drawSpec(n: GraphNode, slug: string, groupSlug: string, params: Record<string, AgentParam | number[]>): Omit<AgentDrawProgram, 'live'> {
   return {
@@ -284,7 +286,8 @@ export function drawSpec(n: GraphNode, slug: string, groupSlug: string, params: 
     lightMotion: choice(n.params.lightMotion, ['orbit', 'still'] as const, 'orbit'),
     fade: choice(n.params.fade, ['on', 'off'] as const, 'on') === 'on',
     scaleBy: choice(n.params.scaleBy, ['walker', 'crowd'] as const, 'walker'),
-    params,
+    // The Splats look's settings only when it draws splats: every other drawing's spec is as it always was.
+    params: n.params.style === 'splats' ? params : Object.fromEntries(Object.entries(params).filter(([k]) => !SPLAT_ONLY.has(k))),
   };
 }
 
