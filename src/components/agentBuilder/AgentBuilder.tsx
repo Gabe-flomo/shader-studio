@@ -18,7 +18,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { GraphNode } from '../../types/nodeGraph';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
-import { useNodeGraphStore } from '../../store/useNodeGraphStore';
+import { undoManager, useNodeGraphStore } from '../../store/useNodeGraphStore';
+import { endRulesBurst } from '../../agentRules/storeActions';
+import { toast } from '../ui/toastStore';
+import { openAgentBuilder } from '../../builders/windows';
+import type { DiagramEdit } from './DragHandle';
 import { restartAgents } from '../../lib/agentRunner';
 import { Button, IconButton } from '../ui/Button';
 import { Segmented, Toggle } from '../ui/Choice';
@@ -36,7 +40,7 @@ import { START_CARDS, type StartCard } from '../../agentBuilder/kinds';
 import { presetsFor } from '../../agentBuilder/presets';
 import { SETTING_HINTS } from '../../agentBuilder/words';
 import { CARD_WORDS, KIND_SECTIONS, MORE_HINTS, type SectionId, isTrailKind, kindCards, sectionWordsOf } from '../../agentBuilder/sections';
-import { type BuilderGroup, applyBuilderPreset, builderGroups, clearableCount, clearGraphForBuilder, discardAgentGroup, makeAgentGroup, removeAgentSetup, setSetupParam, setupOf } from '../../agentBuilder/actions';
+import { type BuilderGroup, applyBuilderPreset, builderGroups, clearableCount, clearGraphForBuilder, discardAgentGroup, endSetupBurst, makeAgentGroup, removeAgentSetup, setSetupParam, setupOf } from '../../agentBuilder/actions';
 import { BehaviourCard, ChipRow, SettingRow, SliderSetting } from './BehaviourCard';
 import { WalkerDiagram, type BornInfo } from './WalkerDiagram';
 import { KindDiagram, OnlyWhenOverlay } from './KindDiagram';
@@ -51,7 +55,7 @@ import { usePresetThumbs } from './presetThumbs';
 import { HoodLayer, HoodPanel } from './HoodView';
 import { channelIndex, hoodHighlights, hoodTrailChannels, type Rgb } from '../../agentBuilder/hood';
 import { channelChips } from '../../agentBuilder/trailChannels';
-import { type WhereEdit, type WherePick, setWhere } from '../../agentBuilder/whereActions';
+import { type WhereEdit, type WherePick, foodNow, setFoodChannel, setWhere, takeCreated } from '../../agentBuilder/whereActions';
 import type { WhereUse } from '../../agentBuilder/where';
 import { lookEntries, cssOf, stopsOf } from '../../agentBuilder/look';
 import { trailPaletteOf } from '../../agentBuilder/lookActions';
@@ -255,9 +259,11 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
   const group = useNodeGraphStore(s => s.nodes.find(x => x.id === groupId));
   const emit = useNodeGraphStore(s => setupOf(s.nodes, groupId).emit);
   const trailNode = useNodeGraphStore(s => setupOf(s.nodes, groupId).trail);
+  const foodKey = useNodeGraphStore(s => JSON.stringify(foodNow(s.nodes, groupId)));
+  const food = useMemo(() => JSON.parse(foodKey) as ReturnType<typeof foodNow>, [foodKey]);
   const draw = useNodeGraphStore(s => setupOf(s.nodes, groupId).draw);
   const depositWhat = useNodeGraphStore(s => String(setupOf(s.nodes, groupId).deposit?.params.what ?? 'trail'));
-  const { set, setSet, update: apply, flush } = useRuleSetEditing(groupId);
+  const { set, setSet, update: apply, flush, hold } = useRuleSetEditing(groupId);
   const kind = kindOf(set);
   const trailKind = isTrailKind(kind);
   const sections = KIND_SECTIONS[kind];
@@ -282,24 +288,53 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
   const setTint = (v: boolean) => { setTintState(v); writePref(TINT_PREF, v); };
   const applyWhere = (use: WhereUse, pick: WherePick | null, edit: WhereEdit = {}) => {
     flush();
+    // Food goes into the channel the walkers smell (or the one it was in).
+    if (use === 'food' && edit.channel === undefined) {
+      const was = foodNow(useNodeGraphStore.getState().nodes, groupId);
+      edit = { ...edit, channel: was?.channel ?? channelIndex(readCards(set, Math.min(sp, set.species.length - 1)).senses.channel, Math.min(sp, set.species.length - 1)) };
+    }
     const next = setWhere(groupId, use, pick, edit);
     if (next) { setSet(next); setPreset(null); }
     // Born somewhere else: start the walkers over so they are born there.
     if (use === 'born') setTimeout(() => restartAgents(groupId), 400);
+    // Created new (a Shader Texture, a group): opened ready to edit.
+    const made = takeCreated();
+    if (made) openInside(made, true);
+  };
+  /**
+   * Open a group or a Shader Texture to edit what it holds: the builder closes (the edit is already
+   * in the graph), and a toast brings it back on this group.
+   */
+  const openInside = (nodeId: string, isNew = false) => {
+    flush();
+    onClose();
+    const st = useNodeGraphStore.getState();
+    if (st.activeGroupPath.length) st.exitToRoot();
+    useNodeGraphStore.getState().enterGroup(nodeId);
+    const nd = useNodeGraphStore.getState().nodes.find(x => x.id === nodeId);
+    const what = nd?.type === 'shaderTexture' ? 'the Shader Texture' : 'the group';
+    toast.info(isNew ? `Made ${what}: edit it here` : `Editing ${what}`, {
+      message: `It is wired into ${group?.params.label ?? 'the Agents group'} already. Done (or Esc) comes back out.`,
+      action: { label: 'Back to the Agent Builder', onClick: () => { useNodeGraphStore.getState().exitToRoot(); openAgentBuilder(groupId); } },
+    });
   };
   // One context value while nothing it holds changes (its readers re-render only then).
   const applyRef = useRef(applyWhere);
   applyRef.current = applyWhere;
+  const insideRef = useRef(openInside);
+  insideRef.current = openInside;
   const space3d = group?.params.space === '3d';
   const whereCtx = useMemo<WhereFocus>(() => ({
     groupId, d3: space3d, shown: whereShown,
     show: w => setWhereShown(o => (o?.key === w?.key && o?.region?.nodeId === w?.region?.nodeId && o?.outside === w?.outside ? o : w)),
     drawing, draw: setDrawing, apply: (u, p, e) => applyRef.current(u, p, e),
+    openInside: id => insideRef.current(id),
   }), [groupId, space3d, whereShown, drawing]);
   const trailStopsKey = useNodeGraphStore(s => JSON.stringify(stopsOf(trailPaletteOf(s.nodes, groupId)).map(cssOf)));
   // A kind added or taken away: start the walkers over once the rules are in, so births share them
   // out among the kinds (walkers born all at once keep the kind they were born with).
   const kindsWas = useRef(set.species.length);
+  const dragMark = useRef<{ top: number; label: string; born: boolean } | null>(null);
   useEffect(() => {
     if (kindsWas.current === set.species.length) return;
     kindsWas.current = set.species.length;
@@ -519,6 +554,16 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
           <SliderSetting id="spreads" label="Spreads" hint={SETTING_HINTS.spreads} value={trail.diffuse} min={0} max={1} step={0.01}
             onFocus={onFocusSetting} onChange={v => setSetupParam(trailNode.id, { diffuse: v })} />
           <FadeStrip halfLife={trail.halfLife} diffuse={trail.diffuse} colour={chips.find(c => c.value === cards.trail.channel)?.dot} />
+          {!d3 && <SettingRow id="food" label="Food" hint="Something painted into the trail every second, so the walkers that smell it grow over it: a shape, words, a mask or a picture (the Trail field's Add)." onFocus={onFocusSetting}>
+            <WhereRow id="food" use="food" onFocus={onFocusSetting} />
+          </SettingRow>}
+          {!d3 && food && <>
+            <SliderSetting id="foodAmount" label="How much food" hint="Trail it paints a second where it is (its Food block's amount)." value={food.amount} min={0} max={2000} step={5}
+              onFocus={onFocusSetting} onChange={v => setSetupParam(food.adapter, { amount: Math.max(0, v) })} />
+            <SettingRow id="foodChannel" label="Into" hint="The trail channel the food is painted into: the one the walkers smell, to grow over it." onFocus={onFocusSetting}>
+              <ChipRow label="Food into" options={chips.filter(c => c.value !== 'own').map(c => ({ ...c, value: c.value as number }))} value={food.channel} onChange={v => setFoodChannel(groupId, v)} />
+            </SettingRow>
+          </>}
         </> : <span style={{ fontSize: 12, color: tk.text.muted }}>No Trail field: wire the group into a Deposit and a Trail field to see and smell it.</span>}
       </BehaviourCard>
       {extraCards(['trail'])}
@@ -695,6 +740,28 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
     if (current === 'forces') return behaviours.cards.some(c => c.on && c.card === 'field') ? 'One particle with its forces; the field (and any curl flow) as arrows over the picture.' : 'One particle with its forces; the curl flow over the picture.';
     return undefined;
   })();
+  // Dragging the diagrams (DragHandle.tsx): live writes as the sliders make them, one undo step a drag.
+  const diagramEdit: DiagramEdit = {
+    begin: ({ label, setting, card }) => {
+      flush();
+      dragMark.current = { top: undoManager.top()?.id ?? 0, label, born: current === 'born' };
+      hold(true);
+      if (setting || card) setFocus(f => ({ ...f, section: current, ...(setting ? { setting } : {}), ...(card ? { card } : {}) }));
+    },
+    end: () => {
+      hold(false);
+      const m = dragMark.current;
+      dragMark.current = null;
+      if (!m) return;
+      undoManager.collapseSince(m.top, { label: m.label });
+      endRulesBurst();
+      endSetupBurst();
+      setPreset(null);
+      // Born somewhere else: start the walkers over so they are born there.
+      if (m.born) restartAgents(groupId);
+    },
+    set, sp: s, rules: update, setup: setSetupParam, emitId: emit?.id,
+  };
   // The region pointed at in a Where row stays drawn (with its handles) over whatever else the picture shows.
   const overlay = (b: { w: number; h: number; image: ViewRect }) => <>
     {baseOverlay(b)}
@@ -735,7 +802,7 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
       const when = hotTrailCard ? cards.when[hotTrailCard] : null;
       return <>
         {tinted}
-        <WalkerDiagram focus={{ ...focus, section: current as DiagramSection }} cards={cards} box={box} born={born} trail={trail} lensRef={lensRef} d3={d3} camera={camera} feelersShown={trailKind} link={link} />
+        <WalkerDiagram focus={{ ...focus, section: current as DiagramSection }} cards={cards} box={box} born={born} trail={trail} lensRef={lensRef} d3={d3} camera={camera} feelersShown={trailKind} link={link} edit={diagramEdit} />
         {when && <svg width={w} height={h} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
           <OnlyWhenOverlay set={set} sp={s} c={when} title={CARD_WORDS[hotTrailCard as RuleCard].title} box={box} />
         </svg>}
@@ -746,7 +813,7 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
     return <>
       {tinted}
       <KindDiagram focus={{ ...focus, section: current as DiagramSection }} cards={behaviours.cards as CardRead[]} set={set} sp={s} box={box} viewRef={viewRef}
-        life={num(emit?.params.life, 0)} link={link} />
+        life={num(emit?.params.life, 0)} link={link} edit={diagramEdit} />
       {legend}
     </>;
   };

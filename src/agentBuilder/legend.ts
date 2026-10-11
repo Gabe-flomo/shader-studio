@@ -237,7 +237,7 @@ export type DemoSpec =
   | { kind: 'avoidEdges'; margin: number; degrees: number }
   | { kind: 'wander'; degrees: number; edges?: DemoEdges }
   | { kind: 'view'; radius: number; max: number }
-  | { kind: 'senses'; angle: number; turn: number; away: boolean; edges?: DemoEdges }
+  | { kind: 'senses'; angle: number; turn: number; away: boolean; distance?: number; edges?: DemoEdges }
   | { kind: 'orbit'; degrees: number; cw: boolean; edges?: DemoEdges }
   | { kind: 'speed'; speed: number }
   | { kind: 'edges'; edges: 'wrap' | 'bounce' | 'slide' }
@@ -423,12 +423,12 @@ export function legendEntries(inp: LegendInput): LegendEntry[] {
     }
     case 'senses':
       if (t) out.push({ id: 'senses', title: 'Sensors', colour: LEGEND_COLOURS.senses, numbers: `${num(t.senses.distance, 3)} · ±${num(t.senses.angle, 1)}°`, line: phrase.senses(n, t.senses.on, t.senses.distance, t.senses.angle),
-        on: t.senses.on, card: 'senses', settings: ['distance', 'angle', 'smells'], el: 'senses', demo: { kind: 'senses', angle: t.senses.angle, turn: t.turning.sharp, away: t.senses.away } });
+        on: t.senses.on, card: 'senses', settings: ['distance', 'angle', 'smells'], el: 'senses', demo: { kind: 'senses', angle: t.senses.angle, distance: t.senses.distance, turn: t.turning.sharp, away: t.senses.away } });
       break;
     case 'turning':
       if (t) out.push(
         { id: 'turn', title: 'Turn', colour: LEGEND_COLOURS.turn, numbers: `${num(t.turning.sharp, 1)}°`, line: phrase.turn(n, t.turning.sharpOn, t.turning.sharp, t.senses.away), on: t.turning.sharpOn, settings: ['sharp'], el: 'turning',
-          demo: { kind: 'senses', angle: t.senses.angle, turn: t.turning.sharp, away: t.senses.away } },
+          demo: { kind: 'senses', angle: t.senses.angle, distance: t.senses.distance, turn: t.turning.sharp, away: t.senses.away } },
         { id: 'wobble', title: 'Wobble', colour: LEGEND_COLOURS.wobble, numbers: `±${num(t.turning.wobble, 1)}°`, line: phrase.wander(n, t.turning.wobbleOn ? t.turning.wobble : 0), on: t.turning.wobbleOn, card: 'wobble', settings: ['wobble'], el: 'turning',
           demo: { kind: 'wander', degrees: t.turning.wobbleOn ? t.turning.wobble : 0 } },
       );
