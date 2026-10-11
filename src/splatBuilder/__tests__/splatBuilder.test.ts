@@ -332,7 +332,7 @@ describe('the kind page and Place', () => {
     const k = SCENE_KINDS.find(x => x.id === 'splat')!;
     expect(k.title).toBe('Splat scene');
     expect(k.line.length).toBeGreaterThan(20);
-    expect(SCENE_KINDS.map(x => x.id)).toEqual(['2d', 'agents', 'grid', '3d', 'splat']);
+    expect(SCENE_KINDS.map(x => x.id)).toEqual(['2d', 'agents', 'grid', 'simulation', '3d', 'splat']);
   });
 
   const box: ScanBox = { center: [2, -1, 3], radius: 4, coreMin: [0, -3, 1], coreMax: [4, 1, 5] };
