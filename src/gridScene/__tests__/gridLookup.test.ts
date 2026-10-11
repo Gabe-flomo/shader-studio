@@ -16,6 +16,7 @@ import { GLOW_FADE, gridProgram, searchCapped, shapeArgs } from '../glsl';
 import { GRID_TEMPLATES } from '../templates';
 import { buildStandaloneGrid, GS_ROLE } from '../build';
 import { defaultDrawnPath, generatePath } from '../paths';
+import { CURVE_PRESETS, defaultMath, newMod, type ModKind } from '../pathMods';
 import { surpriseGridScene } from '../surprise';
 import { cellSize, emptyGridScene, newShape, placeCell, shownCells, sourceCell, starterGridScene, type GridSceneSpec } from '../spec';
 
@@ -341,6 +342,23 @@ describe('Grid scene: Angle and drawn paths, against brute force', () => {
     const s = full(10, 'drawn', [1.5, 1], 0.1, 0.6);
     s.shapes[0].motion.angle = 35;
     s.shapes[0].motion.drawn = { ...defaultDrawnPath(), ...d, pts: generatePath(17, { closed: d.closed, wiggle: 0.7, points: 9 }) };
+    expect(compareBrute(s, [0.6, 5.3], 14)).toBeLessThan(0.03);
+  }, 30_000);
+});
+
+describe('Grid scene: math paths and path modifiers, against brute force', () => {
+  // The general bound (a reach and a rate from the live numbers) keeps the search finding every
+  // shape, with lag (the fixed-point inverse, or the reach when the path can jump).
+  const mods = (...ks: Array<[ModKind, number[]?]>) => ks.map(([k, v], i) => ({ ...newMod(k, []), id: `m${i + 1}`, ...(v ? { v } : {}) }));
+  it.each([
+    ['formula rose', { path: 'math', xy: [1.2, 1.2], math: { ...defaultMath(), kind: 'formula', x: 'cos(k * TAU * t) * cos(TAU * t)', y: 'cos(k * TAU * t) * sin(TAU * t)', params: [{ name: 'k', value: 3, min: 1, max: 9 }] } }],
+    ['curve star', { path: 'math', xy: [1.4, 1.4], math: { ...defaultMath(), kind: 'curve', curve: { ...CURVE_PRESETS.find(c => c.key === 'star')!.curve } } }],
+    ['circle + twist + noise', { path: 'circle', xy: [1, 0.6], mods: mods(['twist', [0.5, 2, 1]], ['noise', [0.4, 5, 0.3, 3]]) }],
+    ['both + wave + scale', { path: 'both', xy: [1.2, 0.4], mods: mods(['wave', [0.3, 4, 0.5]], ['scale', [1.5, -1]]) }],
+    ['eight + repeat + ease + rotate', { path: 'eight', xy: [1, 0.7], mods: mods(['repeat', [2]], ['ease', [1]], ['rotate', [30, 60]]) }],
+  ] as const)('%s with lag', (_n, m) => {
+    const s = full(10, m.path, [...m.xy] as [number, number], 0.12, 0.6);
+    Object.assign(s.shapes[0].motion, structuredClone(m));
     expect(compareBrute(s, [0.6, 5.3], 14)).toBeLessThan(0.03);
   }, 30_000);
 });
