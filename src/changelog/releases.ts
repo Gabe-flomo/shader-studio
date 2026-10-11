@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.158',
+    date: '2026-10-11',
+    title: 'Splat builder, refined',
+    highlights: [
+      { area: 'Studio', text: 'Splat effects can measure in the scan\'s own size, so dissolve, explode, wave and crop look right on an object or a whole street.' },
+      { area: 'Studio', text: 'Splat builder: X/Y/Z rotation rings, your own node chains kept as cards, a viewport with its own shape, and bloom that no longer washes out scans.' },
+      { area: 'Studio', text: 'Fixed: a builder opened from the kind page with the clock paused showed "The preview is hidden" instead of the last frame.' },
+    ],
+  },
+  {
     id: '2026.10.157',
     date: '2026-10-11',
     title: 'Faster moving grids',
