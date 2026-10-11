@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.150',
+    date: '2026-10-10',
+    title: 'Paste a picture',
+    highlights: [
+      { area: 'Studio', text: '⌘⇧D opens the Do bar from any page. Inside a scene builder it jumps to that scene\'s recipe instead.' },
+      { area: 'Studio', text: 'Paste a picture: ⌘V a copied image or image link onto a Texture card, or onto the canvas for a new one. The card keeps the link as its source.' },
+      { area: 'Desktop', text: 'Image and video links load from any site in the desktop app, including ones that block web pages.' },
+    ],
+  },
+  {
     id: '2026.10.149',
     date: '2026-10-10',
     title: 'Web pages: backgrounds and input',
