@@ -3,9 +3,14 @@
  * with an overlay drawn over it (a diagram) that knows where the picture sits. While it is open
  * the builder holds the picture: every frame the main preview draws is copied here. When no frame
  * comes (the preview is hidden in this layout) it says so.
+ *
+ * With `ownSize` (the Splat builder) the preview draws at this viewport's size, so the viewport takes the preview's
+ * canvas itself (adoptPreviewCanvas) rather than copying it: one draw a frame, straight to the screen, and nothing
+ * drawn under the window. It gives it back when it closes. Without a canvas to take (none yet, or another viewport has
+ * it) it copies, as before.
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { mirrorPreview, wakePreview } from '../../../lib/previewMirror';
+import { adoptPreviewCanvas, mirrorPreview, wakePreview } from '../../../lib/previewMirror';
 import { setPreviewSizeOverride } from '../../../lib/previewSize';
 import { useTokens } from '../../../theme/themeStore';
 import { containRect } from '../../../agentBuilder/diagram';
@@ -38,6 +43,10 @@ export function LiveViewport({ overlay, emptyNote = 'The preview is hidden: show
 
   useEffect(() => {
     let got = false;
+    // Its own size: the canvas itself, drawn into this box (no copy a frame).
+    const copy = canvasRef.current;
+    const giveBack = ownSize && boxRef.current ? adoptPreviewCanvas(boxRef.current) : null;
+    if (giveBack && copy) copy.style.display = 'none';
     const none = setTimeout(() => { if (!got) setFrames('none'); }, 1500);
     // A paused clock draws only when asked. The first ask (mirrorPreview's) can land while the preview is still held
     // by the window it opened from (the Scene builder's kind page) and draw nothing, so ask again until a frame comes:
@@ -49,6 +58,7 @@ export function LiveViewport({ overlay, emptyNote = 'The preview is hidden: show
       if (!got) { got = true; setFrames('live'); clearInterval(retry); }
       const w = el.clientWidth, h = el.clientHeight;
       if (!w || !h || !frame.width || !frame.height) return;
+      if (giveBack) { setSrc(s => (s.w === frame.width && s.h === frame.height ? s : { w: frame.width, h: frame.height })); return; }
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       const pw = Math.round(w * dpr), ph = Math.round(h * dpr);
       if (c.width !== pw || c.height !== ph) { c.width = pw; c.height = ph; }
@@ -60,7 +70,13 @@ export function LiveViewport({ overlay, emptyNote = 'The preview is hidden: show
       ctx.clearRect(0, 0, w, h);
       ctx.drawImage(frame, r.x, r.y, r.w, r.h);
     });
-    return () => { clearTimeout(none); clearInterval(retry); stop(); };
+    return () => {
+      clearTimeout(none); clearInterval(retry); stop();
+      giveBack?.();
+      if (copy) copy.style.display = 'block';
+    };
+    // ownSize is fixed for a viewport's life (a builder passes it or not).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Its own size: the main preview draws at the viewport's size (and goes back to its panel's when it closes).

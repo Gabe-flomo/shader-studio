@@ -96,7 +96,52 @@ Grid Rules), the main preview behind it is held (`src/builders/previewPriority.t
 builder's preview has the GPU to itself. An output window or a recording keeps full speed. The
 Agent Builder and the Splat builder are the exceptions: their picture is the main preview, mirrored (a scan is drawn by
 the main preview's raster pass), so it keeps running, and the Splat builder builds every change into the graph as you
-go.
+go. For those two, everything that isn't their picture waits instead (below).
+
+### The builder's picture comes first (Splat builder, Agent Builder)
+
+While one of them is open, `src/builders/builderFocus.ts` has the focus (set by `watchBuilderPreview`, cleared when it
+closes) and only the picture runs:
+
+- **The graph behind the window is frozen** (`components/builders/FreezeBehindBuilder.tsx`, a Suspense freeze): the
+  node cards and their inline previews, the wires, the minimap, the recipe and suggestion strips, and the node browser
+  don't re-render on the builder's writes. They keep their state and catch up in one render when the window closes.
+  (`BuilderWindowsHost` stays outside the freeze, inside NodeGraph.)
+- **The preview skips what only the hidden panels use** (ShaderCanvas, `focus`): the pixel under the pointer, the
+  histogram, the selected node's probe, Scope and LFO cards, the eye preview's readouts and scopes, and the Pass and
+  Agents node thumbnails. The Agent Builder's own spotlight and Under the hood still draw.
+- **One draw, straight to the viewport** (Splat builder): the preview already draws at the viewport's size (`ownSize`),
+  so the viewport takes the preview's canvas itself (`lib/previewMirror.ts adoptPreviewCanvas`) instead of copying
+  each frame into a 2D canvas, and nothing is left drawing under the window. The canvas goes back to its panel when the
+  window closes (or before the preview unmounts). The Agent Builder's viewport is a different shape from the preview,
+  so it still copies (one drawImage a frame).
+- **A slider tick is one store write** (`splatBuilder/actions.ts writeParams`): the changed params and their uniforms
+  together, no rebuild and no compile. Before, the params went in without their uniforms and each tick asked for a full
+  compile 500 ms later, so the picture stood still during a drag and caught up after it.
+- **The scan is read back and sorted only when it can have changed** ([splat-scene.md](splat-scene.md)): the probe and
+  the moved depths are read only when what they read has changed; Sort: every frame skips a view that hasn't turned.
+
+Measured with `train.splat` (1.03 M splats, Balanced), in the browser pane at 1500 × 950 (the pane's screen runs at
+about 175 Hz, a frame every 5.7 ms), a slider (Place › Opacity) and an orbit (Angle and Elevation)
+for 3 s each, a tick every 16 ms, medians of three runs. Main-thread busy is the time a frame the page's main thread
+was not free (scripts, React, style and layout), measured with a message-channel probe.
+
+| | Before (main) | Live sync | + frozen graph, skipped readbacks | + canvas in the viewport | + read/sort only on change |
+|---|---|---|---|---|---|
+| Orbit: the picture follows the drag | no (0 sorts; caught up 500 ms after) | yes | yes | yes | yes |
+| Orbit: frame time p50 / p95 | 11.4 / 22.9 ms | 9.1 / 25.1 ms | 5.7 / 11.3 ms | 5.7 / 6.3 ms | 5.7 / 6.3 ms |
+| Orbit: main thread busy a frame | 11.3 ms | 13.3 ms | 4.6 ms | 3.0 ms | 3.1 ms |
+| Slider: frame time p50 / p95 | 5.7 / 17.1 ms | 8.4 / 24.6 ms | 5.7 / 6.4 ms | 5.7 / 6.4 ms | 5.7 / 6.3 ms |
+| Slider: main thread busy a frame | 6.8 ms | 9.7 ms | 2.9 ms | 2.4 ms | 2.5 ms |
+
+The live sync column is slower than main because it does the work main skipped: the picture now changes on every tick
+(about 60 sorts a second while orbiting). The last fix shows with the clock paused and a moving effect (Wave), still:
+before, 142 probe reads and 79 depth reads (4 MB each) a second and the preview never stopped drawing; after, none, and
+the loop stops. With Sort: every frame and a still camera: no sorts (before, one per probe reading).
+
+Where the time went before (a JS profile of 3 s of orbit): React re-rendering the graph behind the window (the node
+cards, the node browser's per-row counts) was most of it; then the per-frame copy of the preview into the viewport
+(about 1.3 ms a frame) and the probe's readback.
 
 The 2D and 3D previews (`src/components/builders/useBuilderPreview.ts`):
 

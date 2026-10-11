@@ -1,5 +1,5 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { p } from './helpers';
+import { p, withParamSockets } from './helpers';
 
 // ─── Legacy standalone nodes (kept for backwards compat) ─────────────────────
 // An unwired UV is the canvas UV, as on every other shape node, so a shape
@@ -589,7 +589,7 @@ export function buildShapeSdfCall(
   }
 }
 
-export const ShapeSDFNode: NodeDefinition = {
+export const ShapeSDFNode: NodeDefinition = withParamSockets({
   type: 'shapeSDF',
   label: 'Shape SDF',
   category: '2D Primitives',
@@ -794,7 +794,7 @@ export const ShapeSDFNode: NodeDefinition = {
       outputVars: { distance: outVar },
     };
   },
-};
+}, ['r2', 'roundness', 'chamfer', 'he', 'sk', 'k', 'd', 'tb', 'm_pts']);
 
 // ─── Simple SDF Node (quick 3-shape picker) ───────────────────────────────────
 

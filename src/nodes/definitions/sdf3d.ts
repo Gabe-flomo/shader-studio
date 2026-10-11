@@ -12,7 +12,7 @@
  * Transform nodes transform an incoming vec3 point and output the new vec3.
  */
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { p } from './helpers';
+import { p, withParamSockets } from './helpers';
 
 // ─── Shared GLSL helpers ───────────────────────────────────────────────────────
 
@@ -674,7 +674,7 @@ export const SinWarp3DNode: NodeDefinition = {
 
 // ─── New 3D SDF Primitive Nodes ───────────────────────────────────────────────
 
-export const RoundedBoxSDF3DNode: NodeDefinition = {
+export const RoundedBoxSDF3DNode: NodeDefinition = withParamSockets({
   type: 'roundedBoxSDF3D', label: 'Rounded Box', category: '3D Primitives',
   description: 'Box SDF with rounded corners and edges. radius=0 is a plain box.',
   inputs: { pos: { type: 'vec3', label: 'Position' }, radius: { type: 'float', label: 'Radius' } },
@@ -696,9 +696,9 @@ export const RoundedBoxSDF3DNode: NodeDefinition = {
     const r   = inputVars.radius || p(node.params.radius, 0.1);
     return { code: `    float ${id}_dist = sdf3d_roundedBox(${pos}, vec3(${sx}, ${sy}, ${sz}), ${r});\n`, outputVars: { dist: `${id}_dist` } };
   },
-};
+}, ['sizeX', 'sizeY', 'sizeZ']);
 
-export const BoxFrameSDF3DNode: NodeDefinition = {
+export const BoxFrameSDF3DNode: NodeDefinition = withParamSockets({
   type: 'boxFrameSDF3D', label: 'Box Frame', category: '3D Primitives',
   description: 'Wireframe box — only the 12 edges, not the faces. Good for grid aesthetics.',
   inputs: { pos: { type: 'vec3', label: 'Position' } },
@@ -720,9 +720,9 @@ export const BoxFrameSDF3DNode: NodeDefinition = {
     const th = p(node.params.thickness, 0.05);
     return { code: `    float ${id}_dist = sdf3d_boxFrame(${pos}, vec3(${sx}, ${sy}, ${sz}), ${th});\n`, outputVars: { dist: `${id}_dist` } };
   },
-};
+}, ['sizeX', 'sizeY', 'sizeZ', 'thickness']);
 
-export const EllipsoidSDF3DNode: NodeDefinition = {
+export const EllipsoidSDF3DNode: NodeDefinition = withParamSockets({
   type: 'ellipsoidSDF3D', label: 'Ellipsoid', category: '3D Primitives',
   description: 'Sphere stretched per-axis. Approximate SDF — use stepScale 0.8 in MLG.',
   inputs: { pos: { type: 'vec3', label: 'Position' } },
@@ -742,9 +742,9 @@ export const EllipsoidSDF3DNode: NodeDefinition = {
     const rz = p(node.params.rz, 0.4);
     return { code: `    float ${id}_dist = sdf3d_ellipsoid(${pos}, vec3(${rx}, ${ry}, ${rz}));\n`, outputVars: { dist: `${id}_dist` } };
   },
-};
+}, ['rx', 'ry', 'rz']);
 
-export const CappedTorusSDF3DNode: NodeDefinition = {
+export const CappedTorusSDF3DNode: NodeDefinition = withParamSockets({
   type: 'cappedTorusSDF3D', label: 'Capped Torus', category: '3D Primitives',
   description: 'Partial torus (arc). angle controls how much of the ring is visible (0=line, π=full ring).',
   inputs: { pos: { type: 'vec3', label: 'Position' } },
@@ -767,9 +767,9 @@ export const CappedTorusSDF3DNode: NodeDefinition = {
       outputVars: { dist: `${id}_dist` },
     };
   },
-};
+}, ['majorR', 'minorR', 'angle']);
 
-export const LinkSDF3DNode: NodeDefinition = {
+export const LinkSDF3DNode: NodeDefinition = withParamSockets({
   type: 'linkSDF3D', label: 'Chain Link', category: '3D Primitives',
   description: 'Chain link shape — two cylinders connected by half-tori.',
   inputs: { pos: { type: 'vec3', label: 'Position' } },
@@ -789,9 +789,9 @@ export const LinkSDF3DNode: NodeDefinition = {
     const r2 = p(node.params.r2, 0.08);
     return { code: `    float ${id}_dist = sdf3d_link(${pos}, ${le}, ${r1}, ${r2});\n`, outputVars: { dist: `${id}_dist` } };
   },
-};
+}, ['length', 'r1', 'r2']);
 
-export const PyramidSDF3DNode: NodeDefinition = {
+export const PyramidSDF3DNode: NodeDefinition = withParamSockets({
   type: 'pyramidSDF3D', label: 'Pyramid', category: '3D Primitives',
   description: 'Square-base pyramid pointing upward. Great for fractal iteration.',
   inputs: { pos: { type: 'vec3', label: 'Position' } },
@@ -805,9 +805,9 @@ export const PyramidSDF3DNode: NodeDefinition = {
     const h = inputVars.height || p(node.params.height, 0.8);
     return { code: `    float ${id}_dist = sdf3d_pyramid(${pos}, ${h});\n`, outputVars: { dist: `${id}_dist` } };
   },
-};
+}, ['height']);
 
-export const HexPrismSDF3DNode: NodeDefinition = {
+export const HexPrismSDF3DNode: NodeDefinition = withParamSockets({
   type: 'hexPrismSDF3D', label: 'Hex Prism', category: '3D Primitives',
   description: 'Hexagonal prism. Good for honeycomb patterns.',
   inputs: { pos: { type: 'vec3', label: 'Position' } },
@@ -825,9 +825,9 @@ export const HexPrismSDF3DNode: NodeDefinition = {
     const h = p(node.params.height, 0.2);
     return { code: `    float ${id}_dist = sdf3d_hexPrism(${pos}, vec2(${r}, ${h}));\n`, outputVars: { dist: `${id}_dist` } };
   },
-};
+}, ['radius', 'height']);
 
-export const TriPrismSDF3DNode: NodeDefinition = {
+export const TriPrismSDF3DNode: NodeDefinition = withParamSockets({
   type: 'triPrismSDF3D', label: 'Tri Prism', category: '3D Primitives',
   description: 'Triangular prism.',
   inputs: { pos: { type: 'vec3', label: 'Position' } },
@@ -845,9 +845,9 @@ export const TriPrismSDF3DNode: NodeDefinition = {
     const h = p(node.params.height, 0.2);
     return { code: `    float ${id}_dist = sdf3d_triPrism(${pos}, vec2(${r}, ${h}));\n`, outputVars: { dist: `${id}_dist` } };
   },
-};
+}, ['radius', 'height']);
 
-export const CappedConeSDF3DNode: NodeDefinition = {
+export const CappedConeSDF3DNode: NodeDefinition = withParamSockets({
   type: 'cappedConeSDF3D', label: 'Capped Cone', category: '3D Primitives',
   description: 'Frustum/truncated cone. r1=bottom radius, r2=top radius.',
   inputs: { pos: { type: 'vec3', label: 'Position' } },
@@ -867,9 +867,9 @@ export const CappedConeSDF3DNode: NodeDefinition = {
     const r2 = p(node.params.r2, 0.1);
     return { code: `    float ${id}_dist = sdf3d_cappedCone(${pos}, ${h}, ${r1}, ${r2});\n`, outputVars: { dist: `${id}_dist` } };
   },
-};
+}, ['height', 'r1', 'r2']);
 
-export const RoundedCylinderSDF3DNode: NodeDefinition = {
+export const RoundedCylinderSDF3DNode: NodeDefinition = withParamSockets({
   type: 'roundedCylinderSDF3D', label: 'Rounded Cylinder', category: '3D Primitives',
   description: 'Cylinder with rounded top/bottom edges (hockey puck with bevels).',
   inputs: { pos: { type: 'vec3', label: 'Position' } },
@@ -889,9 +889,9 @@ export const RoundedCylinderSDF3DNode: NodeDefinition = {
     const h  = p(node.params.height, 0.4);
     return { code: `    float ${id}_dist = sdf3d_roundedCylinder(${pos}, ${ra}, ${rb}, ${h});\n`, outputVars: { dist: `${id}_dist` } };
   },
-};
+}, ['radius', 'edgeRadius', 'height']);
 
-export const SolidAngleSDF3DNode: NodeDefinition = {
+export const SolidAngleSDF3DNode: NodeDefinition = withParamSockets({
   type: 'solidAngleSDF3D', label: 'Solid Angle', category: '3D Primitives',
   description: 'Sphere with a cone-shaped bite removed — pac-man wedge in 3D.',
   inputs: { pos: { type: 'vec3', label: 'Position' } },
@@ -912,9 +912,9 @@ export const SolidAngleSDF3DNode: NodeDefinition = {
       outputVars: { dist: `${id}_dist` },
     };
   },
-};
+}, ['radius', 'angle']);
 
-export const VerticalCapsuleSDF3DNode: NodeDefinition = {
+export const VerticalCapsuleSDF3DNode: NodeDefinition = withParamSockets({
   type: 'verticalCapsuleSDF3D', label: 'Vertical Capsule', category: '3D Primitives',
   description: 'Axis-aligned capsule centered at origin, extends along Y.',
   inputs: { pos: { type: 'vec3', label: 'Position' } },
@@ -932,7 +932,7 @@ export const VerticalCapsuleSDF3DNode: NodeDefinition = {
     const r = p(node.params.radius, 0.2);
     return { code: `    float ${id}_dist = sdf3d_vertCapsule(${pos}, ${h}, ${r});\n`, outputVars: { dist: `${id}_dist` } };
   },
-};
+}, ['height', 'radius']);
 
 // ─── SDF Boolean Ops ──────────────────────────────────────────────────────────
 
@@ -1053,7 +1053,7 @@ export const Bend3DNode: NodeDefinition = {
   },
 };
 
-export const LimitedRepeat3DNode: NodeDefinition = {
+export const LimitedRepeat3DNode: NodeDefinition = withParamSockets({
   type: 'limitedRepeat3D', label: 'Limited Repeat 3D', category: '3D Transforms',
   description: 'Repeat geometry N times in each direction — does not go to infinity.',
   inputs: { pos: { type: 'vec3', label: 'Position' } },
@@ -1081,7 +1081,7 @@ export const LimitedRepeat3DNode: NodeDefinition = {
       outputVars: { pos: `${id}_pos` },
     };
   },
-};
+}, ['cellX', 'cellY', 'cellZ']);
 
 export const PolarRepeat3DNode: NodeDefinition = {
   type: 'polarRepeat3D', label: 'Polar Repeat 3D', category: '3D Transforms',
@@ -1698,7 +1698,7 @@ float fbm3(vec3 p, int octaves, float lacunarity, float gain) {
 // ─── Turbulence 3D (Xor) ────────────────────────────────────────────────────
 // The 3D form of the sine turbulence loop ('atlantic' on FragCoord):
 // p += strength · sin(rotateAxis(p, axis, d) · d + time) / d, d /= decay.
-export const Turbulence3DNode: NodeDefinition = {
+export const Turbulence3DNode: NodeDefinition = withParamSockets({
   type: 'turbulence3D',
   label: 'Turbulence 3D', aliases: ['xor warp 3d', 'sine warp loop 3d'],
   category: '3D Primitives',
@@ -1746,9 +1746,9 @@ export const Turbulence3DNode: NodeDefinition = {
       outputVars: { pos: `${id}_pos` },
     };
   },
-};
+}, ['frequency', 'decay', 'ax', 'ay', 'az']);
 
-export const DomainWarp3DNode: NodeDefinition = {
+export const DomainWarp3DNode: NodeDefinition = withParamSockets({
   type: 'domainWarp3D',
   label: '3D Domain Warp',
   category: '3D Primitives',
@@ -1795,4 +1795,4 @@ export const DomainWarp3DNode: NodeDefinition = {
       outputVars: { pos: `${id}_pos` },
     };
   },
-};
+}, ['gain', 'lacunarity']);

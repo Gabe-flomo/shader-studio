@@ -29,7 +29,7 @@
  * on the cards (vizGeneric.tsx) draw with it and the tests check the GLSL against it.
  */
 import type { GraphNode, NodeDefinition } from '../../types/nodeGraph';
-import { p, pv3 } from './helpers';
+import { p, pv3, withParamSockets } from './helpers';
 import { passPxUniform, texUv } from './passes';
 
 export const TEXTURE_TOOLS_CATEGORY = 'Texture tools';
@@ -156,7 +156,7 @@ const sel = (v: unknown, fallback: string) => (typeof v === 'string' ? v : fallb
 const SOURCE_SECTION = 'Source';
 const THRESHOLD_SECTION = 'Threshold';
 
-export const TextureMaskNode: NodeDefinition = {
+export const TextureMaskNode: NodeDefinition = withParamSockets({
   type: 'textureMask',
   label: 'Mask (texture)',
   category: TEXTURE_TOOLS_CATEGORY,
@@ -217,11 +217,11 @@ export const TextureMaskNode: NodeDefinition = {
     );
     return { code: lines.join(''), outputVars: { mask: `${id}_mask`, color: `${id}_color`, value: `${id}_src`, seed: `${id}_seed` } };
   },
-};
+}, ['hue', 'hueWidth', 'key', 'tolerance', 'softness', 'level', 'width']);
 
 // ── Levels (texture) ─────────────────────────────────────────────────────────
 
-export const TextureLevelsNode: NodeDefinition = {
+export const TextureLevelsNode: NodeDefinition = withParamSockets({
   type: 'textureLevels',
   label: 'Levels (texture)',
   category: TEXTURE_TOOLS_CATEGORY,
@@ -279,11 +279,11 @@ export const TextureLevelsNode: NodeDefinition = {
     ];
     return { code: lines.join(''), outputVars: { value: `${id}_value`, color: v } };
   },
-};
+}, ['gain', 'offset', 'inBlack', 'inWhite', 'gamma', 'rollOff', 'outBlack', 'outWhite']);
 
 // ── Flow (texture) ───────────────────────────────────────────────────────────
 
-export const TextureFlowNode: NodeDefinition = {
+export const TextureFlowNode: NodeDefinition = withParamSockets({
   type: 'textureFlow',
   label: 'Flow (texture)',
   category: TEXTURE_TOOLS_CATEGORY,
@@ -345,7 +345,7 @@ export const TextureFlowNode: NodeDefinition = {
     lines.push(`    vec2 ${id}_uv = ${here} + ${id}_flow;\n`);
     return { code: lines.join(''), outputVars: { flow: `${id}_flow`, amount: `${id}_amount`, uv: `${id}_uv` } };
   },
-};
+}, ['strength', 'reach']);
 
 // ── Neighbours (texture) ─────────────────────────────────────────────────────
 
@@ -365,7 +365,7 @@ export function neighbourTaps(size: number, between = false): number {
   return n;
 }
 
-export const TextureNeighboursNode: NodeDefinition = {
+export const TextureNeighboursNode: NodeDefinition = withParamSockets({
   type: 'textureNeighbours',
   label: 'Neighbours (texture)',
   category: TEXTURE_TOOLS_CATEGORY,
@@ -439,11 +439,11 @@ export const TextureNeighboursNode: NodeDefinition = {
     lines.push(`    vec4 ${id}_r = ${result};\n`, `    float ${id}_value = dot(${id}_r.rgb, ${LUMA});\n`);
     return { code: lines.join(''), outputVars: { color: `${id}_r.rgb`, value: `${id}_value`, alpha: `${id}_r.a` } };
   },
-};
+}, ['strength', 'spacing']);
 
 // ── Change (texture) ─────────────────────────────────────────────────────────
 
-export const TextureChangeNode: NodeDefinition = {
+export const TextureChangeNode: NodeDefinition = withParamSockets({
   type: 'textureChange',
   label: 'Change (texture)',
   category: TEXTURE_TOOLS_CATEGORY,
@@ -498,13 +498,13 @@ export const TextureChangeNode: NodeDefinition = {
     ];
     return { code: lines.join(''), outputVars: { motion: `${id}_motion`, change: `${id}_change`, direction: `${id}_dir`, color: `${id}_color` } };
   },
-};
+}, ['amount', 'level', 'width']);
 
 // ── Outline (distance) ───────────────────────────────────────────────────────
 
 const MODE_OUTLINE = 'outline';
 
-export const DistanceShapeNode: NodeDefinition = {
+export const DistanceShapeNode: NodeDefinition = withParamSockets({
   type: 'distanceShape',
   label: 'Outline (distance)',
   category: TEXTURE_TOOLS_CATEGORY,
@@ -558,11 +558,11 @@ export const DistanceShapeNode: NodeDefinition = {
     lines.push(`    vec3 ${id}_light = ${pv3(P.tint, [1, 0.75, 0.35])} * ${id}_mask;\n`);
     return { code: lines.join(''), outputVars: { mask: `${id}_mask`, light: `${id}_light` } };
   },
-};
+}, ['offset', 'width', 'softness', 'reach', 'spacing', 'thickness', 'fade', 'speed', 'tint']);
 
 // ── Fade (feedback) ──────────────────────────────────────────────────────────
 
-export const TextureFadeNode: NodeDefinition = {
+export const TextureFadeNode: NodeDefinition = withParamSockets({
   type: 'textureFade',
   label: 'Fade (feedback)',
   category: TEXTURE_TOOLS_CATEGORY,
@@ -605,11 +605,11 @@ export const TextureFadeNode: NodeDefinition = {
     ];
     return { code: lines.join(''), outputVars: { color: `${id}_color`, alpha: `${id}_alpha` } };
   },
-};
+}, ['tail', 'clean', 'tint']);
 
 // ── Read (texture) ───────────────────────────────────────────────────────────
 
-export const ReadTextureNode: NodeDefinition = {
+export const ReadTextureNode: NodeDefinition = withParamSockets({
   type: 'readTexture',
   label: 'Read (texture)',
   category: TEXTURE_TOOLS_CATEGORY,
@@ -664,7 +664,7 @@ export const ReadTextureNode: NodeDefinition = {
     }
     return { code: lines.join(''), outputVars: { color: `${id}_s.rgb`, alpha: `${id}_s.a`, uv: `${id}_q` } };
   },
-};
+}, ['zoom', 'turn', 'moveX', 'moveY', 'pivotX', 'pivotY', 'flowAmount']);
 
 /** Every Texture tools node type, in palette order. */
 export const TEXTURE_TOOL_TYPES = [

@@ -7,7 +7,7 @@
  *    checked as you type; its numbers as sliders; Run × for folds that repeat; Make a slider on a number.
  *  - CombineEditor: two blocks on the same uv, joined by add, subtract, multiply or blend.
  *  - BlockLibrary: the library by category, each with a thumbnail of a grid warped by it, and
- *    Random, which offers three to pick from.
+ *    Random, which offers three to pick from. My blocks (your saved ones, MyBlocks.tsx) come first.
  *
  * The pure work is sceneBuilder2d/blocks.ts and blockLibrary.ts; this is the form.
  */
@@ -16,7 +16,9 @@ import {
   BLOCK_OPS, BLOCK_TARGETS, COMBINE_MODES, MAX_LINES, MAX_TIMES, blockMap, checkBlock, emptyLine, paramNameProblem, rangeFor,
   type BlockOp, type BlockTarget, type CombineMode, type CombineSpec, type SpaceBlock,
 } from '../../sceneBuilder2d/blocks';
-import { BLOCK_CATEGORIES, BLOCK_LIBRARY, blockFromEntry, isLibraryBlock, randomChoices, type BlockCategory } from '../../sceneBuilder2d/blockLibrary';
+import { BLOCK_CATEGORIES, BLOCK_LIBRARY, blockFromEntry, isLibraryBlock, randomChoices, type BlockCategory, type BlockEntry } from '../../sceneBuilder2d/blockLibrary';
+import { MY_BLOCKS, MY_BLOCKS_LABEL, sceneOpFromSaved, type SavedBlock } from '../../sceneBuilder2d/savedBlocks';
+import { ImportBlock, SaveBlockForm, SavedTile, useSavedBlocks } from './MyBlocks';
 import { renderWarpThumbnail, stackMap } from '../../sceneBuilder2d/thumbnails';
 import type { SpaceOp } from '../../sceneBuilder2d/spec';
 import { literalAt, literalToSlider, type LiteralSpan } from '../../lib/glslPatterns/literalSlider';
@@ -89,6 +91,7 @@ export function BlockEditor({ block, update, idBase }: { block: SpaceBlock; upda
   const chk = useMemo(() => checkBlock(block), [block]);
   const [offer, setOffer] = useState<{ line: number; lit: LiteralSpan } | null>(null);
   const [newName, setNewName] = useState('');
+  const [saving, setSaving] = useState(false);
   const lib = isLibraryBlock(block);
   const taken = [...TAKEN_ALWAYS, ...block.params.map(p => p.name)];
 
@@ -175,6 +178,15 @@ export function BlockEditor({ block, update, idBase }: { block: SpaceBlock; upda
       {nameProblem && <BuilderNote style={{ color: tk.status.danger }}>{nameProblem}</BuilderNote>}
       <NumRow label="Run ×" hint="Runs the lines this many times over: folds and repeats become fractals." value={block.times} min={1} max={MAX_TIMES} integer
         onChange={v => update(b => { b.times = Math.max(1, Math.min(MAX_TIMES, Math.round(v))); }, `${idBase}:times`)} />
+      {saving
+        ? <SaveBlockForm src={{ block }} onCancel={() => setSaving(false)} onSaved={name => { update(b => { b.my = name; b.name = name; delete b.lib; }); setSaving(false); }} />
+        : (
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <Button size="sm" variant="ghost" icon="save" data-save-block={idBase} onClick={() => setSaving(true)}
+              title="Save this block to My blocks in the library, with a picture of what it does">{block.my ? 'Save changes…' : 'Save block…'}</Button>
+            {block.my && <BuilderNote style={{ fontSize: 11 }}>From your “{block.my}”</BuilderNote>}
+          </div>
+        )}
     </div>
   );
 }
@@ -184,6 +196,7 @@ export function BlockEditor({ block, update, idBase }: { block: SpaceBlock; upda
 export function CombineEditor({ spec, update, idBase }: { spec: CombineSpec; update: (fn: (c: CombineSpec) => void, key?: string) => void; idBase: string }) {
   const tk = useTokens();
   const [picking, setPicking] = useState<'a' | 'b' | null>(null);
+  const [saving, setSaving] = useState(false);
   const mode = COMBINE_MODES.find(m => m.mode === spec.mode) ?? COMBINE_MODES[0];
   return (
     <div data-combine-editor={idBase} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -197,6 +210,10 @@ export function CombineEditor({ spec, update, idBase }: { spec: CombineSpec; upd
         ))}
       </div>
       <BuilderNote>{mode.blurb} <code style={{ fontFamily: fontFamily.mono }}>uv = {mode.glsl}</code></BuilderNote>
+      {saving
+        ? <SaveBlockForm src={{ combine: spec }} onCancel={() => setSaving(false)} onSaved={name => { update(c => { c.my = name; }); setSaving(false); }} />
+        : <Button size="sm" variant="ghost" icon="save" data-save-combine={idBase} style={{ alignSelf: 'flex-start' }} onClick={() => setSaving(true)}
+            title="Save the whole combine (both blocks and how they join) to My blocks">{spec.my ? `Save changes to “${spec.my}”…` : 'Save combine…'}</Button>}
       {spec.mode === 'blend' && <NumRow label="Amount" hint="0 is all A, 1 is all B." value={spec.amount} min={0} max={1} onChange={v => update(c => { c.amount = v; }, `${idBase}:amount`)} />}
       {(['a', 'b'] as const).map(side => {
         const b = spec[side];
@@ -219,12 +236,21 @@ export function CombineEditor({ spec, update, idBase }: { spec: CombineSpec; upd
 // ── The library ───────────────────────────────────────────────────────────────
 
 /** The library: categories, search, a tile per block (thumbnail, name, what it does), and Random. */
-export function BlockLibrary({ onPick, compact = false }: { onPick: (b: SpaceBlock) => void; compact?: boolean }) {
+export function BlockLibrary({ onPick, onPickCombine, compact = false }: { onPick: (b: SpaceBlock) => void; /** A saved combine; without it, saved combines aren't offered. */ onPickCombine?: (c: CombineSpec) => void; compact?: boolean }) {
   const tk = useTokens();
-  const [cat, setCat] = useState<BlockCategory | 'all'>('all');
+  const [cat, setCat] = useState<BlockCategory | 'all' | typeof MY_BLOCKS>('all');
   const [q, setQ] = useState('');
   const [choices, setChoices] = useState<SpaceBlock[] | null>(null);
-  const shown = BLOCK_LIBRARY.filter(e => (cat === 'all' || e.category === cat) && (!q || `${e.name} ${e.blurb} ${e.lines.map(l => l.rhs).join(' ')}`.toLowerCase().includes(q.toLowerCase())));
+  const [importing, setImporting] = useState(false);
+  const saved = useSavedBlocks().filter(s => s.block || onPickCombine);
+  const matches = (text: string) => !q || text.toLowerCase().includes(q.toLowerCase());
+  const shown = cat === MY_BLOCKS ? [] : BLOCK_LIBRARY.filter(e => (cat === 'all' || e.category === cat) && matches(`${e.name} ${e.blurb} ${e.lines.map(l => l.rhs).join(' ')}`));
+  const savedText = (s: SavedBlock) => `${s.name} ${s.blurb} ${(s.block ? [s.block] : s.combine ? [s.combine.a, s.combine.b] : []).flatMap(b => b.lines.map(l => l.rhs)).join(' ')}`;
+  const savedShown = saved.filter(s => (cat === 'all' || cat === MY_BLOCKS || s.category === cat) && matches(savedText(s))).sort((a, b) => a.name.localeCompare(b.name));
+  // Random offers your saved blocks only when you said it may (Save block → Random may offer it).
+  const randomExtra: BlockEntry[] = saved.filter(s => s.random && s.block).map(s => ({ id: `my:${s.name}`, name: s.name, category: (s.category === MY_BLOCKS ? 'mine' : s.category) as BlockCategory, blurb: s.blurb, lines: s.block!.lines, params: s.block!.params, times: s.block!.times }));
+  const deal = (prev: SpaceBlock[] | null) => setChoices(randomChoices(Math.random, 3, prev?.map(c => c.lib ?? (c.my ? `my:${c.my}` : '')) ?? [], randomExtra));
+  const pickSaved = (s: SavedBlock) => { const o = sceneOpFromSaved(s); if (o.combine) onPickCombine?.(o.combine); else if (o.block) onPick(o.block); };
   const thumb = compact ? 52 : 64;
   const chip = (on: boolean): React.CSSProperties => ({
     padding: '4px 9px', border: 0, borderRadius: 999, cursor: 'pointer', font: `600 11.5px ${fontFamily.ui}`,
@@ -239,19 +265,19 @@ export function BlockLibrary({ onPick, compact = false }: { onPick: (b: SpaceBlo
       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
         <input aria-label="Search blocks" placeholder={`Search ${BLOCK_LIBRARY.length} blocks…`} value={q} onChange={e => setQ(e.target.value)}
           style={{ flex: 1, minWidth: 0, height: 28, padding: '0 8px', borderRadius: radius.sm, border: `1px solid ${tk.border.default}`, background: tk.bg.field, color: tk.text.primary, font: `500 12px ${fontFamily.ui}` }} />
-        <Button size="sm" icon="dice" data-block-random onClick={() => setChoices(randomChoices(Math.random, 3, choices?.map(c => c.lib ?? '') ?? []))}
+        <Button size="sm" icon="dice" data-block-random onClick={() => deal(choices)}
           title="Offers three random blocks to pick from">Random</Button>
       </div>
       {choices && (
         <div data-random-choices style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 10, borderRadius: radius.md, background: alpha(tk.accent.base, 0.08) }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <b style={{ fontSize: 12.5, flex: 1 }}>Pick one of three</b>
-            <Button size="sm" variant="ghost" icon="dice" onClick={() => setChoices(randomChoices(Math.random, 3, choices.map(c => c.lib ?? '')))}>Three more</Button>
+            <Button size="sm" variant="ghost" icon="dice" onClick={() => deal(choices)}>Three more</Button>
             <IconButton icon="close" label="Close the choices" size="sm" onClick={() => setChoices(null)} />
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6 }}>
             {choices.map((b, i) => (
-              <button key={`${b.lib}-${i}`} type="button" data-random-choice={b.lib} onClick={() => { onPick(b); setChoices(null); }}
+              <button key={`${b.lib ?? b.my}-${i}`} type="button" data-random-choice={b.lib ?? `my:${b.my}`} onClick={() => { onPick(b); setChoices(null); }}
                 style={{ ...tileStyle, flexDirection: 'column', alignItems: 'center', background: tk.bg.panel }}
                 title={b.lines.map(l => `${l.target} ${l.op} ${l.rhs}`).join('\n')}>
                 <WarpCanvas map={() => blockMap(b, 1)} k={JSON.stringify(b)} size={84} />
@@ -264,11 +290,28 @@ export function BlockLibrary({ onPick, compact = false }: { onPick: (b: SpaceBlo
       )}
       <div role="tablist" aria-label="Block categories" style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
         <button type="button" role="tab" aria-selected={cat === 'all'} style={chip(cat === 'all')} onClick={() => setCat('all')}>All</button>
+        <button type="button" role="tab" aria-selected={cat === MY_BLOCKS} data-cat-mine title="The blocks you saved" style={chip(cat === MY_BLOCKS)} onClick={() => setCat(MY_BLOCKS)}>{MY_BLOCKS_LABEL}{saved.length ? ` ${saved.length}` : ''}</button>
         {BLOCK_CATEGORIES.map(c => (
           <button key={c.id} type="button" role="tab" aria-selected={cat === c.id} title={c.blurb} style={chip(cat === c.id)} onClick={() => setCat(c.id)}>{c.label}</button>
         ))}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fill, minmax(${compact ? 200 : 230}px, 1fr))`, gap: 6, maxHeight: compact ? 260 : undefined, overflow: compact ? 'auto' : undefined }}>
+      {(cat === 'all' || cat === MY_BLOCKS || savedShown.length > 0) && (
+        <div data-my-blocks style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <b style={{ fontSize: 12.5, flex: 1 }}>{MY_BLOCKS_LABEL}</b>
+            {!importing && <Button size="sm" variant="ghost" icon="import" onClick={() => setImporting(true)} title="Add a block someone shared (its text or a .spaceblock.json file)">Import…</Button>}
+          </div>
+          {importing && <ImportBlock onDone={() => setImporting(false)} />}
+          {savedShown.length > 0 && (
+            <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fill, minmax(${compact ? 200 : 230}px, 1fr))`, gap: 6, maxHeight: compact ? 200 : undefined, overflow: compact ? 'auto' : undefined }}>
+              {savedShown.map(s => <SavedTile key={s.id} s={s} thumb={thumb} onPick={() => pickSaved(s)} />)}
+            </div>
+          )}
+          {!savedShown.length && <BuilderNote>{saved.length ? 'None of your blocks match.' : 'Blocks you save (Save block… on any block) show here, with a picture of what they do.'}</BuilderNote>}
+        </div>
+      )}
+      {cat !== MY_BLOCKS && (cat === 'all' || savedShown.length > 0) && <b style={{ fontSize: 12.5 }}>Library</b>}
+      {cat !== MY_BLOCKS && <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fill, minmax(${compact ? 200 : 230}px, 1fr))`, gap: 6, maxHeight: compact ? 260 : undefined, overflow: compact ? 'auto' : undefined }}>
         {shown.map(e => (
           <button key={e.id} type="button" data-block-entry={e.id} style={tileStyle} onClick={() => onPick(blockFromEntry(e))}
             title={`${e.lines.map(l => `${l.target} ${l.op} ${l.rhs}`).join('\n')}${e.times && e.times > 1 ? `\n(run ×${e.times})` : ''}`}>
@@ -281,7 +324,7 @@ export function BlockLibrary({ onPick, compact = false }: { onPick: (b: SpaceBlo
           </button>
         ))}
         {!shown.length && <BuilderNote>No block matches.</BuilderNote>}
-      </div>
+      </div>}
     </div>
   );
 }

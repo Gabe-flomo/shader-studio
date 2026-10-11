@@ -144,6 +144,10 @@ export function readSplatRecipe(text: string, base: SplatBuilderSpec = starterSp
       case 'background': {
         const kind = flags[0] === 'solid' || flags[0] === 'picture' ? flags[0] : 'gradient';
         spec.background = { kind, color: v3('color', spec.background.color), color2: v3('color2', spec.background.color2), picture: kv.has('picture') ? word('picture', '') : kind === 'picture' ? spec.background.picture : null };
+        // A picture named here that the scene has no source for (a recipe from another project): a source by that
+        // name, so Build makes an empty Texture node for it (builders/textures.ts ensureSources).
+        const pic = spec.background.picture;
+        if (kind === 'picture' && pic && !(spec.textures ?? []).some(s => s.name === pic)) spec.textures = [...(spec.textures ?? []), { name: pic }];
         return;
       }
       case 'camera':

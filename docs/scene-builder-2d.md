@@ -72,6 +72,32 @@ travelling waves (`vec2(sin(y·9 + t), cos(x·9 − t))`). The library writes th
 blocks and fills in the classics the corpus only hints at (log-polar, kaleidoscope folds, Kali and
 IFS folds, iq's warp of a warp).
 
+### My blocks (saving your own)
+
+**Save block…** (under Run × on any block, written by hand or changed from the library) saves it
+to the library: a **name**, an optional line on **what it does**, a **category** (My blocks, or one
+of the library's eight) and **Random may offer it** (off unless you tick it). It keeps the lines,
+the sliders (names, values, ranges) and Run ×, and draws the same **warped-grid thumbnail** the
+library draws for its own blocks (the same renderer, `renderWarpThumbnail`, stored as a 64 px
+PNG). On a combine, **Save combine…** saves the whole thing: both blocks and how they join.
+
+- The block in the scene links back to it (`From your “Wobble rings”`) and the button becomes
+  **Save changes…**: saving under a name you already have replaces that block, which is how a
+  saved block is edited.
+- **In the library** a **My blocks** section comes first (and a *My blocks* tab shows only yours),
+  each with its thumbnail, what it does and its sliders. Search covers them. A block saved into a
+  library category also shows under that category's tab. Picking one adds it like a library block
+  (a saved combine adds a combine).
+- On each saved tile: **Rename**, **Duplicate**, **Copy** (a small JSON text to paste on another
+  machine), **Export** (a `.spaceblock.json` file) and **Delete** (scenes that used it keep their
+  own copy of its lines). **Import…** takes the copied text or a file; the thumbnail is redrawn and
+  a taken name gets a number.
+- **Stored** like rack presets: one list in localStorage, `shader-studio:space-blocks`
+  (`src/sceneBuilder2d/savedBlocks.ts`). It goes into backups, library downloads and profile ZIPs
+  (*space blocks.json*), the workspace folder (`presets/space blocks/*.spaceblock.json`), and the
+  Files page shows them under Presets → *Space blocks (2D Scene Builder)* with their pictures.
+- Not built: a second thumbnail of the current scene through the block.
+
 ### What Build makes
 
 Each block is one **Expression Block**: a `uv` input wired from the stack above, a float slider
@@ -91,6 +117,19 @@ combine-blocks multiply a=kaleidoscope b={uv = abs(uv)} a_count=8
 A library name prints only the sliders that differ from the entry; written lines print in `{ }`
 with every slider. `combine-blocks` takes `add|subtract|multiply|blend`, `a=` and `b=` (a name or
 lines), `amount=`, and `a_…` / `b_…` for each side's sliders and `times`.
+
+One of **your saved blocks** prints with its name *and* its lines, so the recipe still works in a
+project (or on a machine) that doesn't have it:
+
+```
+space-block my="Wobble rings" {uv.x += amp * sin(y * freq + t)} amp=0.15 freq=9
+space-block my="Wobble rings" amp=0.3
+combine-blocks multiply my=Pair a={…} b={…}
+```
+
+With lines in `{ }` the lines are used and the block keeps its link; `my=` alone looks the block up
+in My blocks (its sliders by name, as for a library block) and says so, with a suggestion, when it
+isn't there. `combine-blocks my=…` alone does the same for a saved combine.
 
 ### Later
 

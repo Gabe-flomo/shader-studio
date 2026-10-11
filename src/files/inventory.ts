@@ -143,6 +143,8 @@ export const DRUM_KITS_KEY = 'shader-studio:drum-kits';
 /** Saved layer sets and rack presets (play/layerSets.ts, play/rackPresets.ts; docs/presets.md). */
 export const LAYER_SETS_KEY = 'shader-studio:layer-sets';
 export const RACK_PRESETS_KEY = 'shader-studio:rack-presets';
+/** Your saved 2D Scene Builder space blocks (sceneBuilder2d/savedBlocks.ts). */
+export const SPACE_BLOCKS_KEY = 'shader-studio:space-blocks';
 /** The backgrounds library's palettes (lib/backgroundLibrary.ts); its images live in IndexedDB (backgroundsSource.ts). */
 export const BG_PALETTES_KEY = 'shader-studio-backgrounds:palettes';
 export const BG_PALETTE_SCOPE = 'backgrounds:palettes';
@@ -174,7 +176,7 @@ export function isOwnedKey(k: string): boolean {
 /** A saved graph: `shader-studio:<name>` whose value has a `nodes` array (and isn't a preset or a setting). */
 export function isGraphEntry(key: string, parsed: unknown): boolean {
   if (!key.startsWith(GRAPH_PREFIX) || key.startsWith(NODE_PREFIX) || PRESET_PREFIXES.some(p => key.startsWith(p.prefix))) return false;
-  if (key === GLSL_KEY || key === PALETTES_KEY || key === FINISH_PRESETS_KEY || key === FINISH_EFFECTS_KEY || key === FINISH_LOOKS_KEY || key === DRUM_KITS_KEY || key === LAYER_SETS_KEY || key === RACK_PRESETS_KEY || /^shader-studio:(settings|play|osc|theme|shortcuts|minimap|glsl-editor)\b/.test(key)) return false;
+  if (key === GLSL_KEY || key === PALETTES_KEY || key === FINISH_PRESETS_KEY || key === FINISH_EFFECTS_KEY || key === FINISH_LOOKS_KEY || key === DRUM_KITS_KEY || key === LAYER_SETS_KEY || key === RACK_PRESETS_KEY || key === SPACE_BLOCKS_KEY || /^shader-studio:(settings|play|osc|theme|shortcuts|minimap|glsl-editor)\b/.test(key)) return false;
   return !!parsed && typeof parsed === 'object' && Array.isArray((parsed as { nodes?: unknown }).nodes);
 }
 
@@ -334,7 +336,7 @@ export async function buildInventory(kv: KV, opts: BuildOptions = {}): Promise<I
   const perPrefix = new Map<string, FileNode[]>();
   const publishedNodes: FileNode[] = [];
   const settings: FileNode[] = [];
-  let finishPresets: FileNode[] = [], finishEffects: FileNode[] = [], finishLooks: FileNode[] = [], drumKits: FileNode[] = [], layerSets: FileNode[] = [], rackPresets: FileNode[] = [];
+  let finishPresets: FileNode[] = [], finishEffects: FileNode[] = [], finishLooks: FileNode[] = [], drumKits: FileNode[] = [], layerSets: FileNode[] = [], rackPresets: FileNode[] = [], spaceBlocks: FileNode[] = [];
   let glsl: FileNode[] = [], palettes: FileNode[] = [], bgPalettes: FileNode[] = [], scripts: FileNode[] = [], kinds: FileNode[] = [], builderFns: FileNode[] = [], builderGroups: FileNode[] = [];
   const installedKinds: Array<{ id: string; node: FileNode }> = [];
   const cfpBodies: Array<{ body: string; node: FileNode }> = [];
@@ -420,6 +422,15 @@ export async function buildInventory(kv: KV, opts: BuildOptions = {}): Promise<I
         const fx = arr(r?.effects).length;
         return `${name}${fx ? ` · ${plural(fx, 'effect')}` : ''}${arr(x.controls).length ? ` · ${plural(arr(x.controls).length, 'control')}` : ''}`;
       });
+    } else if (key === SPACE_BLOCKS_KEY) {
+      spaceBlocks = listItems(key, parsed, 'presets', 'preset', 'sblk', x => {
+        const c = obj(x.combine), b = obj(x.block);
+        const lines = c ? `combine (${str(c.mode) ?? 'add'})` : plural(arr(b?.lines).filter(l => str(obj(l)?.rhs)?.trim()).length, 'line');
+        return [lines, str(x.blurb)].filter(Boolean).join(' · ');
+      });
+      // Their warped-grid pictures.
+      const pics = new Map(arr(parsed).map(obj).map(x => [str(x?.id) ?? '', str(x?.thumb)]));
+      for (const n of spaceBlocks) { const t = pics.get(n.id.slice('sblk:'.length)); if (t) n.thumb = t; }
     } else if (key === PALETTES_KEY) {
       palettes = listItems(key, parsed, 'presets', 'palette', 'palette', x => `${str(x.kind) === 'stops' ? `${arr(x.stops).length} stops` : 'Cosine'}`);
     } else if (key === BG_PALETTES_KEY) {
@@ -548,6 +559,7 @@ export async function buildInventory(kv: KV, opts: BuildOptions = {}): Promise<I
   if (drumKits.length) presetChildren.push(group('presets', 'section:presets', 'drum-kits', 'Drum kits', drumKits.sort(byName)));
   if (layerSets.length) presetChildren.push(group('presets', 'section:presets', 'layer-sets', 'Layer sets', layerSets.sort(byName)));
   if (rackPresets.length) presetChildren.push(group('presets', 'section:presets', 'rack-presets', 'Racks', rackPresets.sort(byName)));
+  if (spaceBlocks.length) presetChildren.push(group('presets', 'section:presets', 'space-blocks', 'Space blocks (2D Scene Builder)', spaceBlocks.sort(byName)));
 
   const scriptChildren: FileNode[] = [];
   if (scripts.length) scriptChildren.push(group('scripts', 'section:scripts', 'sketches', 'Saved sketches', scripts.sort(byName)));

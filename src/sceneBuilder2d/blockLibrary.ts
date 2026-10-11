@@ -161,10 +161,12 @@ export function isLibraryBlock(b: SpaceBlock): BlockEntry | null {
 
 /**
  * Random: three different blocks to pick from (from three different categories when it can),
- * each with its sliders set somewhere in the middle of their ranges. `rand` is 0..1.
+ * each with its sliders set somewhere in the middle of their ranges. `rand` is 0..1. `extra`: your
+ * saved blocks that may be offered too (only those you opted in; their ids start `my:`, and the
+ * block they make links back with `my` instead of `lib`).
  */
-export function randomChoices(rand: () => number = Math.random, n = 3, avoid: readonly string[] = []): SpaceBlock[] {
-  const pool = BLOCK_LIBRARY.filter(e => !avoid.includes(e.id));
+export function randomChoices(rand: () => number = Math.random, n = 3, avoid: readonly string[] = [], extra: readonly BlockEntry[] = []): SpaceBlock[] {
+  const pool = [...BLOCK_LIBRARY, ...extra].filter(e => !avoid.includes(e.id));
   const out: BlockEntry[] = [];
   const usedCats = new Set<BlockCategory>();
   let guard = 0;
@@ -178,6 +180,7 @@ export function randomChoices(rand: () => number = Math.random, n = 3, avoid: re
   for (const e of BLOCK_LIBRARY) if (out.length < n && !out.includes(e)) out.push(e);
   return out.map(e => {
     const b = blockFromEntry(e);
+    if (e.id.startsWith('my:')) { delete b.lib; b.my = e.name; }
     for (const p of b.params) {
       // Somewhere between the default and the middle of the range: varied, rarely wild.
       const mid = (p.min + p.max) / 2;

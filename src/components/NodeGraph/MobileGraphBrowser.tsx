@@ -31,6 +31,7 @@ import { compileNodePreviewShader } from '../../lib/compileNodePreviewShader';
 import { previewTypeOf } from '../../lib/nodePreview/previewPlan';
 import { nodePreviewRenderer } from '../../lib/nodePreviewRenderer';
 import { typesCompatible } from '../../lib/typesCompatible';
+import { insertIntoWire } from './nodeDrop';
 import { groupNodesByRank, computeNodeRanks } from '../../store/graphLayout';
 import { moveItem } from '../../lib/reorder';
 import { GLSL_PALETTE } from '../../lib/glslPalette';
@@ -1929,20 +1930,15 @@ export function MobileGraphBrowser() {
 
   // Splices a freshly-placed node into an existing source->target edge:
   // source now feeds the new node instead, and the new node feeds target
-  // in target's original input's place. The search palette that triggers
-  // this was already filtered (filterOutputType=targetInputType,
-  // filterInputType=sourceOutputType) so a compatible pair is guaranteed
-  // to exist; first-match is the same convention every other placement
-  // flow here uses when more than one socket would technically qualify.
+  // in target's original input's place. Same wiring as the desktop's wire
+  // insert (nodeDrop.insertIntoWire): a genType node takes the edge's
+  // vector type first, and a float output broadcasts into a vector input.
   const handleNodePlacedForPathInsert = (newId: string, edge: NonNullable<typeof pathInsert>) => {
-    const newNode = getFreshActiveNodes().find(n => n.id === newId);
-    if (!newNode) return;
-    const inKey = firstCompatibleInputKey(newNode, edge.sourceOutputType);
-    const outKey = firstCompatibleOutputKey(newNode, edge.targetInputType);
-    if (!inKey || !outKey) return;
-    connectNodes(edge.sourceNodeId, edge.sourceOutputKey, newId, inKey);
-    connectNodes(newId, outKey, edge.targetNodeId, edge.targetInputKey);
-    pushFocus(newId);
+    const ok = insertIntoWire(newId, {
+      fromNodeId: edge.sourceNodeId, fromOutputKey: edge.sourceOutputKey, fromType: edge.sourceOutputType,
+      toNodeId: edge.targetNodeId, toInputKey: edge.targetInputKey, toType: edge.targetInputType,
+    });
+    if (ok) pushFocus(newId);
   };
 
   // ── Ghost-suggested connection ───────────────────────────────────────────

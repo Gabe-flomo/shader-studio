@@ -1,5 +1,5 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { p } from './helpers';
+import { p, withParamSockets } from './helpers';
 
 /**
  * Cell Picture and Cell Pattern — the Grid builder's picture modes and draw modes as plain nodes
@@ -57,7 +57,7 @@ export const CellPictureNode: NodeDefinition = {
 
 export const CELL_PATTERN_MODES = ['repeat', 'mirrorX', 'mirrorY', 'mirrorXY', 'rotate4'] as const;
 
-export const CellPatternNode: NodeDefinition = {
+export const CellPatternNode: NodeDefinition = withParamSockets({
   type: 'cellPattern',
   label: 'Cell Pattern',
   category: 'Grid',
@@ -122,4 +122,4 @@ export const CellPatternNode: NodeDefinition = {
     lines.push(`    float ${id}_is = step(max(abs(${id}_s.x - ${id}_h.x), abs(${id}_s.y - ${id}_h.y)), 0.5);`);
     return { code: lines.join('\n') + '\n', outputVars: { sourceID: `${id}_s`, isSource: `${id}_is` } };
   },
-};
+}, ['centreX', 'centreY']);

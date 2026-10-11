@@ -4982,16 +4982,11 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       if (state.nodes.some(n => n.id === nodeId)) {
         return { nodes: state.nodes.map(n => n.id === nodeId ? updater(n) : n) };
       }
-      const groupId = state.activeGroupId;
-      if (!groupId) return {};
-      return {
-        nodes: state.nodes.map(n => {
-          if (n.id !== groupId) return n;
-          const sg = n.params.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
-          if (!sg) return n;
-          return { ...n, params: { ...n.params, subgraph: { ...sg, nodes: sg.nodes.map(sn => sn.id === nodeId ? updater(sn) : sn) } } };
-        }),
-      };
+      // Inside a group (at any depth): the level being edited.
+      const active = state.activeGroupId ? getActiveNodes(state.nodes, state.activeGroupPath) : null;
+      if (!active?.some(n => n.id === nodeId)) return {};
+      const updated = setActiveNodes(state.nodes, state.activeGroupPath, active.map(n => n.id === nodeId ? updater(n) : n));
+      return updated ? { nodes: updated } : {};
     });
     get().compile();
   },

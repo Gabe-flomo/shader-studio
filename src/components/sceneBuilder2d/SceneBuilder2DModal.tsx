@@ -343,7 +343,7 @@ function SpaceTab() {
         <span style={{ flex: 1 }} />
         <Button size="sm" variant="ghost" icon="plus" onClick={() => addBlock(emptyBlock())}>Empty block</Button>
       </div>
-      <BlockLibrary onPick={addBlock} />
+      <BlockLibrary onPick={addBlock} onPickCombine={c => edit(d => { const op = newCombineOp(nextId(d, 'p'), c.a, c.b, c.mode, c.amount); if (c.my) op.combine!.my = c.my; d.space.push(op); })} />
       <Card id="sp2-builtins" title="Built-in transforms" summary="zoom, rotate, tile, mirror, kaleidoscope… as their own nodes">
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
           {SPACES.filter(sp => sp.kind !== 'fn').map(sp => (
