@@ -12,9 +12,11 @@
  */
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { useNodeGraphStore } from '../../../store/useNodeGraphStore';
-import { analyse, unitsForLines, type Analysis } from '../../../lib/guidedConvert/analyse';
+import { analyse, scopeUnits, unitsForLines, type Analysis, type HelperFn } from '../../../lib/guidedConvert/analyse';
 import { buildGuided, hueOf, slidersOf, stableKeys, SHARED_TYPES, type GuidedBuild } from '../../../lib/guidedConvert/build';
-import { defaultChip, type ChipChoice, type ConvertMode, type ConvertStep, type GroupStep, type Step } from '../../../lib/guidedConvert/stage';
+import { defaultChip, helperOwners, openedHelpers, type ChipChoice, type ConvertMode, type ConvertStep, type GroupStep, type HelperStep, type Step } from '../../../lib/guidedConvert/stage';
+import { offersFor, recognisedChoices, type Offer } from '../../../lib/guidedConvert/offers';
+import type { GraphNode } from '../../../types/nodeGraph';
 import { describeUnits, guidedReducer, initialGuided, needsMakes, suggestNext } from '../../../lib/guidedConvert/session';
 import { probeShader } from '../../../lib/guidedConvert/probe';
 import { learnGraph, textSignature } from '../../../suggestions/learning';
@@ -47,8 +49,9 @@ let stepSeq = 0;
 const newId = (p: string) => `${p}${Date.now().toString(36)}${(++stepSeq).toString(36)}`;
 
 /** A name for a step from what it is: the value it makes, the helper it calls. */
-function defaultName(a: Analysis, units: readonly number[]): string {
-  const us = units.map(i => a.units[i]);
+function defaultName(a: Analysis, units: readonly number[], fn?: string): string {
+  const us = units.map(i => scopeUnits(a, fn)[i]);
+  if (fn && us.some(u => u.ast.type === 'return_statement')) return `${fn} result`;
   const call = a.helpers.find(h => us.some(u => new RegExp(`\\b${h.name}\\s*\\(`).test(u.text)));
   if (call) return call.name;
   const made = us.flatMap(u => u.decls.map(d => d.name));
@@ -136,6 +139,9 @@ function GuidedInner({ a, steps, dispatch, redoCount, onExit, onMaterialized, tk
     for (const s of steps) if (s.kind === 'convert') for (const u of s.units) if (!m.has(u)) m.set(u, s.id);
     return m;
   }, [steps]);
+  const opened = useMemo(() => openedHelpers(steps), [steps]);
+  const ownersIn = useMemo(() => new Map([...opened].map(fn => [fn, helperOwners(steps, fn)])), [opened, steps]);
+  const stepOf = useCallback((id: string) => steps.find(s => s.id === id) as ConvertStep | HelperStep | undefined, [steps]);
   const groupOf = useMemo(() => {
     const m = new Map<string, GroupStep>();
     for (const s of steps) if (s.kind === 'group') for (const id of s.members) m.set(id, s);
@@ -147,12 +153,31 @@ function GuidedInner({ a, steps, dispatch, redoCount, onExit, onMaterialized, tk
     for (const u of a.units) {
       const o = owners.get(u.index); if (!o) continue;
       const hue = hueOf(steps, o); if (hue === null) continue;
-      const step = steps.find(s => s.id === o) as ConvertStep;
+      const step = stepOf(o)!;
       const g = groupOf.get(o);
-      for (let l = u.lines[0]; l <= u.lines[1]; l++) m.set(l, { hue, label: `${step.name}${g ? ` (in ${g.name})` : ''}`, active: active === o || (!!g && active === g.id) });
+      const label = step.kind === 'helper' ? `Calls ${step.fn}(): a copy of its group` : `${step.name}${g ? ` (in ${g.name})` : ''}`;
+      for (let l = u.lines[0]; l <= u.lines[1]; l++) m.set(l, { hue, label, active: active === o || (!!g && active === g.id) });
+    }
+    // An opened helper: its header in the helper step's colour, its body lines in the colour of the step that converted them.
+    for (const s of steps) {
+      if (s.kind !== 'helper') continue;
+      const h = a.helpers.find(x => x.name === s.fn); const hue = hueOf(steps, s.id);
+      if (!h || hue === null) continue;
+      m.set(h.lines[0], { hue, label: `${s.fn}() is a group: select lines inside it to convert them`, active: active === s.id });
+      for (const u of h.units) {
+        const o = ownersIn.get(s.fn)?.get(u.index); const uh = o ? hueOf(steps, o) : null;
+        if (!o || uh === null) continue;
+        for (let l = u.lines[0]; l <= u.lines[1]; l++) m.set(l, { hue: uh, label: `${stepOf(o)!.name} (in ${s.fn}())`, active: active === o });
+      }
     }
     return m;
-  }, [a, owners, steps, groupOf, active]);
+  }, [a, owners, ownersIn, steps, stepOf, groupOf, active]);
+  const allNodes = useMemo(() => {
+    const m = new Map<string, GraphNode>();
+    const walk = (list: readonly GraphNode[]) => { for (const n of list) { m.set(n.id, n); const sg = n.params.subgraph as { nodes: GraphNode[] } | undefined; if (sg) walk(sg.nodes); } };
+    walk(good?.nodes ?? []);
+    return m;
+  }, [good]);
   const firstOfOwner = useMemo(() => {
     const seen = new Set<string>(); const first = new Set<string>();
     for (const n of good?.nodes ?? []) { const o = good!.owner.get(n.id); if (o && !seen.has(o) && !SHARED_TYPES.has(n.type)) { seen.add(o); first.add(n.id); } }
@@ -161,55 +186,72 @@ function GuidedInner({ a, steps, dispatch, redoCount, onExit, onMaterialized, tk
   const tintOf = useCallback((id: string): CardTint | null => {
     if (!good) return null;
     const o = good.owner.get(id);
-    const node = good.nodes.find(n => n.id === id);
+    const node = allNodes.get(id);
     if (!o || !node || SHARED_TYPES.has(node.type)) return null;
     if (o.startsWith('rest:')) return { hue: null, label: firstOfOwner.has(id) ? 'Not converted yet' : '', dashed: true };
     const g = steps.find(s => s.id === o && s.kind === 'group') as GroupStep | undefined;
     if (g) return { hue: hueOf(steps, g.members[0]), label: firstOfOwner.has(id) ? g.name : '', active: active === g.id };
     const hue = hueOf(steps, o);
     if (hue === null) return null;
-    const s = steps.find(x => x.id === o) as ConvertStep;
+    const s = stepOf(o)!;
     return { hue, label: firstOfOwner.has(id) ? s.name : '', active: active === o };
-  }, [good, steps, active, firstOfOwner]);
+  }, [good, steps, active, firstOfOwner, allNodes, stepOf]);
 
   // ── Selection ───────────────────────────────────────────────────────────────
   const [drag, setDrag] = useState<[number, number] | null>(null);
-  const [sel, setSel] = useState<{ units: number[]; via?: string } | null>(null);
+  /** The selection: statements of main() (or of an opened helper's body, `fn`); `via` when it was made inside a helper not opened yet. */
+  const [sel, setSel] = useState<{ units: number[]; via?: string; fn?: string } | null>(null);
   const [mode, setMode] = useState<ConvertMode>('nodes');
   const [name, setName] = useState('');
   const [chips, setChips] = useState<Record<string, ChipChoice>>({});
+  /** Recognised patterns turned down (kept as a plain block), by id. */
+  const [plain, setPlain] = useState<ReadonlySet<string>>(() => new Set());
   const taken = useMemo(() => new Set(owners.keys()), [owners]);
-  const choose = useCallback((units: number[], via?: string) => {
-    setSel(units.length ? { units, ...(via ? { via } : {}) } : null);
-    setName(units.length ? defaultName(a, units) : '');
+  const openInfo = useMemo(() => ({ has: (fn: string) => opened.has(fn), taken: (fn: string) => new Set(ownersIn.get(fn)?.keys() ?? []) }), [opened, ownersIn]);
+  const choose = useCallback((units: number[], via?: string, fn?: string) => {
+    setSel(units.length || via ? { units, ...(via ? { via } : {}), ...(fn ? { fn } : {}) } : null);
+    setName(units.length ? defaultName(a, units, fn) : '');
     setChips({});
-  }, [a]);
+    setPlain(new Set());
+    if (fn && mode === 'blocks') setMode('nodes');
+  }, [a, mode]);
   const onSelect = useCallback((range: [number, number] | null, done: boolean) => {
     setDrag(range);
     if (!done || !range) return;
-    const r = unitsForLines(a, range[0], range[1], taken);
-    if (!r.units.length) {
-      const already = a.units.some(u => owners.has(u.index) && u.lines[1] >= Math.min(...range) && u.lines[0] <= Math.max(...range));
+    const r = unitsForLines(a, range[0], range[1], taken, openInfo);
+    if (!r.units.length && !r.via) {
+      const lo = Math.min(...range), hi = Math.max(...range);
+      const already = a.units.some(u => owners.has(u.index) && u.lines[1] >= lo && u.lines[0] <= hi) || (!!r.fn && (a.helpers.find(h => h.name === r.fn)?.units ?? []).some(u => u.lines[1] >= lo && u.lines[0] <= hi));
       if (already) toast.info('Converted already', { message: 'Those lines are nodes now. Undo a step to change how they were cut.' });
       setDrag(null); setSel(null); return;
     }
     setDrag(null);
-    choose(r.units, r.via);
-  }, [a, taken, owners, choose]);
+    choose(r.units, r.via, r.fn);
+  }, [a, taken, owners, choose, openInfo]);
+  const selUnits = useMemo(() => (sel ? sel.units.map(i => scopeUnits(a, sel.fn)[i]) : []), [a, sel]);
   const snapped = useMemo(() => {
     const s = new Set<number>();
-    for (const i of sel?.units ?? []) for (let l = a.units[i].lines[0]; l <= a.units[i].lines[1]; l++) s.add(l);
+    for (const u of selUnits) for (let l = u.lines[0]; l <= u.lines[1]; l++) s.add(l);
     return s;
-  }, [sel, a]);
-  const draft: ConvertStep | null = useMemo(() => (sel ? { kind: 'convert', id: 'draft', units: sel.units, mode, name: name.trim() || defaultName(a, sel.units), chips } : null), [sel, mode, name, chips, a]);
+  }, [selUnits]);
+  // The draft as cut (what the recognised patterns are offered against), then with their choices.
+  const cut: ConvertStep | null = useMemo(() => (sel?.units.length ? { kind: 'convert', id: 'draft', units: sel.units, mode, name: 'draft', chips, ...(sel.fn ? { fn: sel.fn } : {}) } : null), [sel, mode, chips]);
+  const offers: Offer[] = useMemo(() => (cut && cut.mode === 'nodes' ? offersFor(a, steps, cut) : []), [a, steps, cut]);
+  const draft: ConvertStep | null = useMemo(() => (cut && sel ? { ...cut, name: name.trim() || defaultName(a, sel.units, sel.fn), ...(offers.length ? { recognised: recognisedChoices(offers, plain) } : {}) } : null), [cut, sel, name, a, offers, plain]);
   const draftBuild = useMemo(() => (draft ? buildGuided(a, [...steps, draft]) : null), [a, steps, draft]);
-  const probe = useMemo(() => (sel ? probeShader(a, sel.units) : null), [a, sel]);
+  const probe = useMemo(() => (sel?.units.length && !sel.fn ? probeShader(a, sel.units) : null), [a, sel]);
   const probeCode = useMemo(() => (probe ? wrapOriginal(probe.code).code : null), [probe]);
-  const io = useMemo(() => (sel ? needsMakes(a, sel.units) : null), [a, sel]);
-  const literals = useMemo(() => (sel ? sel.units.flatMap(i => a.units[i].literals) : []), [a, sel]);
+  const io = useMemo(() => (sel?.units.length && !sel.fn ? needsMakes(a, sel.units) : null), [a, sel]);
+  const literals = useMemo(() => {
+    // A number a library node takes the place of isn't a chip any more.
+    const gone = new Set(offers.filter(o => o.ok).flatMap(o => o.rec.swallowed));
+    return selUnits.flatMap(u => u.literals).filter(l => !gone.has(l.id));
+  }, [selUnits, offers]);
   const draftCounts = useMemo(() => {
     if (!draftBuild?.ok) return null;
-    const mine = draftBuild.nodes.filter(n => draftBuild.owner.get(n.id) === 'draft' && !SHARED_TYPES.has(n.type));
+    const mine: GraphNode[] = [];
+    const walk = (list: readonly GraphNode[]) => { for (const n of list) { if (draftBuild.owner.get(n.id) === 'draft' && !SHARED_TYPES.has(n.type)) mine.push(n); const sg = n.params.subgraph as { nodes: GraphNode[] } | undefined; if (sg) walk(sg.nodes); } };
+    walk(draftBuild.nodes);
     const fns = mine.filter(n => n.type === 'customFn').length, blocks = mine.filter(n => n.type === 'exprNode').length;
     return { nodes: mine.length - fns - blocks, fns, blocks };
   }, [draftBuild]);
@@ -219,6 +261,26 @@ function GuidedInner({ a, steps, dispatch, redoCount, onExit, onMaterialized, tk
     const step: ConvertStep = { ...draft, id: newId('s') };
     dispatch({ type: 'add', step });
     setSel(null); setActive(null);
+  };
+
+  // ── Helpers as groups ───────────────────────────────────────────────────────
+  /** Open a helper as a group (its free callers converted with it, so the group shows where it is used); `whole` converts its body too. */
+  const openHelper = (h: HelperFn, whole: boolean) => {
+    const free = h.callers.filter(i => !owners.has(i));
+    let step: HelperStep = { kind: 'helper', id: newId('h'), fn: h.name, name: `${h.name}()`, callers: free };
+    let b = buildGuided(a, [...steps, step]);
+    if (!b.ok && free.length) { step = { ...step, callers: [] }; b = buildGuided(a, [...steps, step]); }
+    if (!b.ok) { toast.error(`${h.name}() can’t open as a group`, { message: b.error }); return; }
+    const add: Step[] = [step];
+    if (whole && h.units.length) {
+      const body: ConvertStep = { kind: 'convert', id: newId('s'), units: h.units.map(u => u.index), mode: 'nodes', name: `${h.name} body`, chips: {}, fn: h.name };
+      const o = offersFor(a, [...steps, step], body);
+      const withRec: ConvertStep = { ...body, ...(o.length ? { recognised: recognisedChoices(o, new Set()) } : {}) };
+      if (buildGuided(a, [...steps, step, withRec]).ok) add.push(withRec);
+      else toast.info(`${h.name}() opened`, { message: 'Its body can’t become nodes in one go: select its lines to convert them step by step.' });
+    }
+    dispatch({ type: 'addMany', steps: add });
+    setSel(null); setActive(step.id);
   };
 
   // ── Next cut ────────────────────────────────────────────────────────────────
@@ -240,7 +302,7 @@ function GuidedInner({ a, steps, dispatch, redoCount, onExit, onMaterialized, tk
   // ── Groups ──────────────────────────────────────────────────────────────────
   const [picking, setPicking] = useState<Set<string> | null>(null);
   const [groupDialog, setGroupDialog] = useState<{ members: string[] } | null>(null);
-  const convertSteps = steps.filter((s): s is ConvertStep => s.kind === 'convert');
+  const convertSteps = steps.filter((s): s is ConvertStep => s.kind === 'convert' && !s.fn);
   const groupable = convertSteps.filter(s => !groupOf.has(s.id));
 
   // ── Finish ──────────────────────────────────────────────────────────────────
@@ -293,10 +355,11 @@ function GuidedInner({ a, steps, dispatch, redoCount, onExit, onMaterialized, tk
             <span style={{ flex: 1 }} />
             <Button size="sm" variant="ghost" icon="edit" onClick={onExit} title="Back to the automatic page, where the shader can be edited (the steps here are dropped)">Edit</Button>
           </div>
-          <GuidedCode source={a.source} tints={tints} selected={drag} snapped={snapped} onSelect={onSelect} focusLine={sel ? a.units[sel.units[0]].lines[0] : null} />
-          {sel && draft && (
+          <GuidedCode source={a.source} tints={tints} selected={drag} snapped={snapped} onSelect={onSelect} focusLine={selUnits.length ? selUnits[0].lines[0] : null} />
+          {sel && (
             <SelectionPanel a={a} tk={tk} sel={sel} mode={mode} setMode={setMode} name={name} setName={setName} chips={chips} setChips={setChips}
-              literals={literals} probeCode={probeCode} probeName={probe ? `${probe.name} · ${probe.type}` : null} io={io!} counts={draftCounts}
+              literals={literals} probeCode={probeCode} probeName={probe ? `${probe.name} · ${probe.type}` : null} io={io} counts={draftCounts}
+              offers={offers} plain={plain} setPlain={setPlain} helper={sel.via ? a.helpers.find(h => h.name === sel.via) ?? null : null} onOpenHelper={openHelper}
               error={draftBuild && !draftBuild.ok ? draftBuild.error : null} onMake={make} onClose={() => setSel(null)} />
           )}
         </div>
@@ -331,8 +394,8 @@ function GuidedInner({ a, steps, dispatch, redoCount, onExit, onMaterialized, tk
             {steps.map((s, i) => {
               const isGroup = s.kind === 'group';
               const colour = isGroup ? stepTint(s.members[0]) : stepTint(s.id);
-              const label = isGroup ? `▣ ${s.name}` : `${s.name}`;
-              const sub = isGroup ? `${s.members.length} steps` : s.mode === 'function' ? 'function' : s.mode === 'blocks' ? 'expression' : null;
+              const label = isGroup ? `▣ ${s.name}` : s.kind === 'helper' ? `▣ ${s.name}` : s.fn ? `${s.fn}: ${s.name}` : `${s.name}`;
+              const sub = isGroup ? `${s.members.length} steps` : s.kind === 'helper' ? 'opened as a group' : s.mode === 'function' ? 'function' : s.mode === 'blocks' ? 'expression' : null;
               const pickable = !isGroup && picking && groupable.some(g => g.id === s.id);
               return (
                 <StepChip key={s.id} tk={tk} label={label} sub={sub} colour={colour} active={active === s.id} check={checks[s.id]}
@@ -403,13 +466,20 @@ function StepChip({ tk, label, sub, colour, active, check, picked, title, onClic
   );
 }
 
-function SelectionPanel({ a, tk, sel, mode, setMode, name, setName, chips, setChips, literals, probeCode, probeName, io, counts, error, onMake, onClose }: {
-  a: Analysis; tk: Tk; sel: { units: number[]; via?: string }; mode: ConvertMode; setMode: (m: ConvertMode) => void; name: string; setName: (n: string) => void;
+function SelectionPanel({ a, tk, sel, mode, setMode, name, setName, chips, setChips, literals, probeCode, probeName, io, counts, offers, plain, setPlain, helper, onOpenHelper, error, onMake, onClose }: {
+  a: Analysis; tk: Tk; sel: { units: number[]; via?: string; fn?: string }; mode: ConvertMode; setMode: (m: ConvertMode) => void; name: string; setName: (n: string) => void;
   chips: Record<string, ChipChoice>; setChips: (f: (c: Record<string, ChipChoice>) => Record<string, ChipChoice>) => void;
-  literals: Analysis['units'][number]['literals']; probeCode: string | null; probeName: string | null; io: { needs: string[]; makes: string[] };
-  counts: { nodes: number; fns: number; blocks: number } | null; error: string | null; onMake: () => void; onClose: () => void;
+  literals: Analysis['units'][number]['literals']; probeCode: string | null; probeName: string | null; io: { needs: string[]; makes: string[] } | null;
+  counts: { nodes: number; fns: number; blocks: number } | null;
+  offers: Offer[]; plain: ReadonlySet<string>; setPlain: (s: ReadonlySet<string>) => void;
+  /** The helper the selection was made inside, when it isn't opened yet. */
+  helper: HelperFn | null; onOpenHelper: (h: HelperFn, whole: boolean) => void;
+  error: string | null; onMake: () => void; onClose: () => void;
 }) {
-  const lines = [a.units[sel.units[0]].lines[0], Math.max(...sel.units.map(i => a.units[i].lines[1]))];
+  const units = scopeUnits(a, sel.fn);
+  const us = sel.units.map(i => units[i]);
+  const lines = us.length ? [us[0].lines[0], Math.max(...us.map(u => u.lines[1]))] : helper ? helper.lines : [0, 0];
+  const modes = sel.fn ? MODES.filter(m => m.value !== 'blocks') : MODES;
   const choiceOf = (id: string, fixedByDefault: boolean) => chips[id] ?? defaultChip(mode, fixedByDefault);
   const cycle = (c: ChipChoice): ChipChoice => (mode === 'function' ? (c === 'slider' ? 'input' : c === 'input' ? 'fixed' : 'slider') : c === 'fixed' ? 'slider' : 'fixed');
   const caps = { color: tk.text.faint, font: `600 10.5px ${fontFamily.ui}`, letterSpacing: '0.06em', textTransform: 'uppercase' as const, marginBottom: 5 };
@@ -419,31 +489,69 @@ function SelectionPanel({ a, tk, sel, mode, setMode, name, setName, chips, setCh
     <div data-guided-selection style={{ flexShrink: 0, maxHeight: '58%', overflowY: 'auto', borderTop: `1px solid ${tk.border.default}`, background: tk.bg.subtle, padding: '10px 14px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <b style={{ fontSize: 13 }}>Lines {lines[0]}{lines[1] !== lines[0] ? `–${lines[1]}` : ''}</b>
-        <span style={{ color: tk.text.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sel.via ? `the lines that call ${sel.via}()` : describeUnits(a, sel.units)}</span>
+        <span style={{ color: tk.text.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sel.fn ? `in ${sel.fn}(), its group` : sel.via ? (sel.units.length ? `the lines that call ${sel.via}()` : `inside ${sel.via}()`) : describeUnits(a, sel.units)}</span>
         <span style={{ flex: 1 }} />
         <IconButton icon="close" label="Clear the selection (Esc)" size="sm" onClick={onClose} />
       </div>
-      <div>
+      {helper && (
+        <div data-guided-helper style={{ padding: '8px 10px', borderRadius: radius.md, background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${tk.border.default}`, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ fontWeight: 650 }}>{helper.name}() as a group of its own</div>
+          {helper.openable === true ? (
+            <>
+              <div style={{ color: tk.text.muted, fontSize: 11.5, lineHeight: 1.45 }}>
+                Its parameters ({helper.params.map(p => p.name).join(', ') || 'none'}) become the group’s inputs and its value the output; every converted call is a copy of the group{helper.callers.length ? ` (called on line${helper.callers.length === 1 ? '' : 's'} ${helper.callers.map(i => a.units[i].lines[0]).join(', ')})` : ''}. Convert the body all at once, or open it and select its lines step by step.
+              </div>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <Button size="sm" variant="primary" icon="layers" onClick={() => onOpenHelper(helper, true)} title="Open it as a group and turn its whole body into nodes">Convert this function</Button>
+                <Button size="sm" variant="secondary" onClick={() => onOpenHelper(helper, false)} title="Open it as a group; its body stays one Custom Function inside it until you convert its lines">Open as a group</Button>
+              </div>
+            </>
+          ) : <div style={{ color: tk.text.muted, fontSize: 11.5 }}>Can’t open as a group: {helper.openable}. Its calls stay Custom Functions.</div>}
+        </div>
+      )}
+      {sel.units.length > 0 && <div>
         <div style={caps}>Make it into</div>
-        <Segmented size="sm" ariaLabel="Make the selection into" value={mode} onChange={setMode} options={MODES.map(m => ({ value: m.value, label: m.label }))} />
+        <Segmented size="sm" ariaLabel="Make the selection into" value={mode} onChange={setMode} options={modes.map(m => ({ value: m.value, label: m.label }))} />
         <div style={{ color: tk.text.faint, fontSize: 11.5, marginTop: 4 }}>{MODES.find(m => m.value === mode)!.title}</div>
-      </div>
-      <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-        <div>
+      </div>}
+      {offers.length > 0 && (
+        <div data-guided-recognised>
+          <div style={caps}>Recognised</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {offers.map(o => (
+              <div key={o.rec.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: o.ok ? tk.text.primary : tk.text.muted }} title={`${o.rec.code} (line ${o.rec.line})`}>
+                <Icon name={o.ok ? 'spark' : 'info'} size={13} />
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  {o.rec.what} → <b>{o.ok && plain.has(o.rec.id) ? 'a plain block' : o.rec.node}</b>
+                  <span style={{ color: tk.text.faint }}> · line {o.rec.line}</span>
+                  {!o.ok && o.why && <span style={{ display: 'block', color: tk.text.faint, fontSize: 11 }}>Kept as written: {o.why}</span>}
+                </span>
+                {o.ok && (
+                  <Segmented size="sm" ariaLabel={`${o.rec.what} as`} value={plain.has(o.rec.id) ? 'block' : 'node'}
+                    onChange={v => { const n = new Set(plain); if (v === 'block') n.add(o.rec.id); else n.delete(o.rec.id); setPlain(n); }}
+                    options={[{ value: 'node', label: 'Node' }, { value: 'block', label: 'Block' }]} />
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {sel.units.length > 0 && <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+        {probeCode !== null && <div>
           <ProbeView shader={probeCode} size={104} />
           {probeName && <div style={{ color: tk.text.faint, font: `500 10.5px ${fontFamily.mono}`, marginTop: 4, maxWidth: 104, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{probeName}</div>}
-        </div>
+        </div>}
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div>
             <div style={caps}>Name</div>
             <Field height={30} value={name} onChange={e => setName(e.target.value)} placeholder="what this part does" />
           </div>
           <div style={{ color: tk.text.muted, fontSize: 11.5, lineHeight: 1.6 }}>
-            {io.needs.length ? <div>Needs {io.needs.map((n, i) => <span key={n}>{i ? ' ' : ''}{chip(n)}</span>)}</div> : null}
-            {io.makes.length ? <div>Makes {io.makes.map((n, i) => <span key={n}>{i ? ' ' : ''}{chip(n)}</span>)}</div> : null}
+            {io?.needs.length ? <div>Needs {io.needs.map((n, i) => <span key={n}>{i ? ' ' : ''}{chip(n)}</span>)}</div> : null}
+            {io?.makes.length ? <div>Makes {io.makes.map((n, i) => <span key={n}>{i ? ' ' : ''}{chip(n)}</span>)}</div> : null}
           </div>
         </div>
-      </div>
+      </div>}
       {literals.length > 0 && (
         <div>
           <div style={caps}>Numbers <span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 500 }}>· click to switch</span></div>
@@ -463,10 +571,10 @@ function SelectionPanel({ a, tk, sel, mode, setMode, name, setName, chips, setCh
         </div>
       )}
       {error ? <Callout tone="warning" title="Can’t make this cut">{error}</Callout> : null}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      {sel.units.length > 0 && <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <span style={{ flex: 1, color: tk.text.muted, fontSize: 11.5 }}>{made ? `Becomes ${made}` : ''}</span>
         <Button size="sm" variant="primary" icon="nodes" disabled={!!error} onClick={onMake} title="Turn the selection into nodes (↵)">Make nodes</Button>
-      </div>
+      </div>}
     </div>
   );
 }
