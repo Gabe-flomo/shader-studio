@@ -198,10 +198,10 @@
   "reads": "build",
   "ok": true,
   "added": [
-   "uvTransform2d"
+   "transform"
   ],
   "removed": [],
-  "hash": "0ffac085"
+  "hash": "a68d1fd7"
  },
  "commands:empty · flibbertigibbet": {
   "reads": "build!error",
@@ -1752,19 +1752,19 @@
   "reads": "build",
   "ok": true,
   "added": [
-   "uvTransform2d"
+   "transform"
   ],
   "removed": [],
-  "hash": "0ffac085"
+  "hash": "a68d1fd7"
  },
  "action zoom-rotate:noise [f] · zoom 2": {
   "reads": "build",
   "ok": true,
   "added": [
-   "uvTransform2d"
+   "transform"
   ],
   "removed": [],
-  "hash": "8076ad31"
+  "hash": "5f0248b5"
  },
  "action code-here:circle [c] · custom code": {
   "reads": "build",
@@ -2619,19 +2619,19 @@
   "reads": "build",
   "ok": true,
   "added": [
-   "uvTransform2d"
+   "transform"
   ],
   "removed": [],
-  "hash": "6f33d341"
+  "hash": "3e151e15"
  },
  "phrase:circle [c] · rotate 45 degrees": {
   "reads": "build",
   "ok": true,
   "added": [
-   "uvTransform2d"
+   "transform"
   ],
   "removed": [],
-  "hash": "0ffac085"
+  "hash": "a68d1fd7"
  },
  "phrase:circle [c] · custom code": {
   "reads": "build",

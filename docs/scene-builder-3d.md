@@ -118,11 +118,16 @@ a note. Whole-scene warps stay under Bend space.
 
 | Modifier | Builds | Notes |
 |---|---|---|
-| move | Translate 3D | |
-| rotate | Rotate 3D per axis (roles `w3:z`, `w3:y`, `w3:x`) | X, then Y, then Z, like a shape's own Rotation |
-| scale | Scale 3D on the point (Scale = 1 ÷ factor), and a second Scale 3D after the distance | keeps distances exact; keep the two Scales equal |
+| move | a 3D Transform (Move) | |
+| rotate | a 3D Transform (Rotate X, Y, Z) | X, then Y, then Z, like a shape's own Rotation |
+| turn | a 3D Transform in Apply mode, one axis | turns the point, as Rotate 3D did |
+| scale | a 3D Transform on the point (Scale = factor), and a second one after the distance (its Distance sockets) | keeps distances exact; keep the two Scales equal |
 | round | Offset (amount = −r) | grows the surface out, rounding its edges |
 | onion | Onion | a thin shell (cut it to see inside) |
+
+A shape's own place and turn (`at=`, `rot=`) are one 3D Transform (role `s1:at`). Each Transform carries the
+modifier it was made for (`_sbKind`) so Describe reads it back (docs/transform-node.md). Graphs from before
+2026-10-10 used Translate / Rotate / Scale 3D; Describe still reads those.
 
 **Combine.** Shows the tree as a formula, then one card per group:
 
@@ -139,10 +144,10 @@ stack warps on it. Warps run top to bottom:
 
 | Warp | What it does | Node |
 |---|---|---|
-| move | shifts what follows | Translate 3D |
-| turn | turns what follows about one axis | Rotate 3D |
-| rotate | turns about X, then Y, then Z | Rotate 3D × up to 3 |
-| scale | grows or shrinks, distances kept exact | Scale 3D × 2 |
+| move | shifts what follows | Transform (3D) |
+| turn | turns what follows about one axis | Transform (3D, Apply mode) |
+| rotate | turns about X, then Y, then Z | Transform (3D) |
+| scale | grows or shrinks, distances kept exact | Transform (3D) × 2 |
 | repeat | endless copies, one per cell | Repeat 3D |
 | mirror-repeat | endless copies, every other one flipped | Mirrored Repeat 3D |
 | limited-repeat | a few copies each way | Limited Repeat 3D |
@@ -643,8 +648,8 @@ Right-click any node → Edit in Scene Builder to change it.
 - **Recognising hand-made graphs is structural.**
   - A distance node it doesn't know (an Expression Block, say) becomes
     `custom(…)`, and so does a warp it doesn't know.
-  - Per-item transforms are read where they sit: Translate 3D, Rotate 3D and
-    Scale 3D on an item's point chain (a Scale 3D after its distance is the
+  - Per-item transforms are read where they sit: Transform (3D), Translate 3D, Rotate 3D and
+    Scale 3D on an item's point chain (a Scale 3D, or a Transform's Distance, after its distance is the
     scale's correction, paired with it), Offset (round), Onion and Displace 3D
     after its distance. A Displace goes back after the warp whose point it
     reads; Round and Onion, which don't depend on the point, go before the next

@@ -466,7 +466,7 @@ const actionSummary: Record<string, string> = {
   polar: 'Polar coordinates.',
   mirror: 'Mirrors the space (x, y or both).',
   repeat: 'Tiles the space; "around" repeats round the centre.',
-  'zoom-rotate': 'Zoom / rotate the space (UV Transform).',
+  'zoom-rotate': 'Zoom / rotate the space (a Transform).',
   'code-here': 'An Expression Block on the wire, for code of your own.',
   'mix-with': 'Mixes a colour with another (OkLab Mix); "these" mixes two selected.',
   palette: 'Recolours by brightness; on a number, the number through a palette.',

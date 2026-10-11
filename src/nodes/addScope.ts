@@ -80,3 +80,14 @@ export function scopeFromKey(key: string): AddScope {
   const [g, o] = key.split('|');
   return g ? { groupType: g, hasSceneOutput: o === '1' } : TOP_LEVEL;
 }
+
+/**
+ * The Dimension a Transform added here starts with (docs/transform-node.md): 3D inside a Scene Group
+ * or a Space Warp Group, and on the top level of a graph that already draws a 3D scene (it then goes
+ * into that scene, as Rotate 3D would); 2D everywhere else. A Dimension the caller passes wins.
+ */
+export function transformDimHere(scope: AddScope, topNodes: readonly GraphNode[]): '2' | '3' {
+  if (scope.groupType === 'sceneGroup' || scope.groupType === 'spaceWarpGroup') return '3';
+  if (!scope.groupType && topNodes.some(n => MARCH_GROUP_TYPES.has(n.type))) return '3';
+  return '2';
+}

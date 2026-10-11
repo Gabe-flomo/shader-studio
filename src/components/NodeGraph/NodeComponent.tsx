@@ -2648,7 +2648,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   const sectionKeys = new Map<string, string[]>();
   for (const [k, pd] of Object.entries(paramDefs)) if (pd.section) sectionKeys.set(pd.section, [...(sectionKeys.get(pd.section) ?? []), k]);
   const firstSection = sectionKeys.keys().next().value as string | undefined;
-  const sectionFolded = (name: string) => (name !== firstSection) !== !!foldedSections[`${node.id}:sec:${name}`];
+  const sectionFolded = (name: string) => name !== def?.pinnedSection && (name !== firstSection) !== !!foldedSections[`${node.id}:sec:${name}`];
   const withSection = (key: string, pd: ParamDef, render: () => React.ReactNode): React.ReactNode => {
     if (!pd.section) return render();
     const keys = sectionKeys.get(pd.section) ?? [];
@@ -2659,26 +2659,29 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
     if (summary.controls === 0) return null;
     const name = pd.section;
     const offFeature = summary.on === false;
+    // A node can say what a folded section holds in its own words (Transform's "Rotate 30°").
+    const summaryText = (folded && def?.sectionSummary?.(name, { ...(def.defaultParams ?? {}), ...node.params })) || summary.text;
+    const pinned = name === def?.pinnedSection;
     return (
       <React.Fragment key={`sec:${name}`}>
         <button
           type="button"
           aria-expanded={!folded}
           onMouseDown={e => e.stopPropagation()}
-          onClick={() => toggleFold(`${node.id}:sec:${name}`)}
+          onClick={() => { if (!pinned) toggleFold(`${node.id}:sec:${name}`); }}
           style={{
             display: 'flex', alignItems: 'center', gap: 4, width: '100%', padding: '8px 12px 4px 12px', border: 0, background: 'none',
-            cursor: 'pointer', textAlign: 'left', color: tk.text.secondary, font: `600 12px ${fontFamily.ui}`, letterSpacing: 0.2,
+            cursor: pinned ? 'default' : 'pointer', textAlign: 'left', color: tk.text.secondary, font: `600 12px ${fontFamily.ui}`, letterSpacing: 0.2,
           }}
-          title={offFeature
+          title={pinned ? undefined : offFeature
             ? `${name} is off. Click to ${folded ? 'show' : 'fold'} its switch: turn it on to use it`
             : `Click to ${folded ? 'show' : 'fold'} ${name.toLowerCase()} settings (they keep working while folded)`}
         >
-          <Icon name={folded ? 'chevR' : 'chevD'} size={13} style={{ color: tk.text.faint, flexShrink: 0 }} />
+          {!pinned && <Icon name={folded ? 'chevR' : 'chevD'} size={13} style={{ color: tk.text.faint, flexShrink: 0 }} />}
           <span>{name}</span>
           {folded && (
             <span style={{ marginLeft: 'auto', font: `500 11px ${fontFamily.ui}`, color: tk.text.muted }}>
-              {summary.text}
+              {summaryText}
             </span>
           )}
         </button>

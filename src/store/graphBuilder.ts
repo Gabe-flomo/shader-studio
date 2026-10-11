@@ -10,6 +10,7 @@ import type { GraphNode, GroupInputPort, GroupOutputPort } from '../types/nodeGr
 import { GROUP_PORT_SENTINEL } from '../types/nodeGraph';
 import type { PlayControl, PlayRecord } from '../types/play';
 import { getNodeDefinition } from '../nodes/definitions';
+import { startingSockets } from '../nodes/definitions/transformAny';
 
 // ── Graph builder ───────────────────────────────────────────────────────────
 
@@ -20,13 +21,15 @@ type Wires = Record<string, Wire>;
 export function n(type: string, id: string, x: number, y: number, params: Record<string, unknown> = {}, wires: Wires = {}, extra: Partial<GraphNode> = {}): GraphNode {
   const def = getNodeDefinition(type);
   if (!def) throw new Error(`learnExamples: unknown node type ${type}`);
+  // A Transform's sockets follow its Dimension (transformAny.ts); everything else has its definition's.
+  const sockets = startingSockets(type, def, { ...(def.defaultParams ?? {}), ...params });
   const inputs: GraphNode['inputs'] = {};
-  for (const [k, v] of Object.entries(def.inputs ?? {})) {
+  for (const [k, v] of Object.entries(sockets.inputs ?? {})) {
     inputs[k] = { type: v.type, label: v.label, ...(wires[k] ? { connection: { nodeId: wires[k][0], outputKey: wires[k][1] } } : {}) };
   }
   for (const k of Object.keys(wires)) if (!inputs[k]) throw new Error(`learnExamples: ${type} has no input ${k}`);
   const outputs: GraphNode['outputs'] = {};
-  for (const [k, v] of Object.entries(def.outputs ?? {})) outputs[k] = { type: v.type, label: v.label };
+  for (const [k, v] of Object.entries(sockets.outputs ?? {})) outputs[k] = { type: v.type, label: v.label };
   return { id, type, position: { x, y }, inputs, outputs, params: { ...(def.defaultParams ?? {}), ...params }, ...extra };
 }
 
