@@ -76,6 +76,21 @@ describe('Texture card', () => {
     act(() => { button('Load')!.click(); });
     await flush();
     expect(host!.querySelector('[data-texture-error]')!.textContent).toMatch(/CORS/);
+    // The suggested fix: Copy Image, then paste onto the card.
+    expect(host!.querySelector('[data-texture-error]')!.textContent).toMatch(/Copy Image.*⌘V/);
+  });
+
+  it('a picture from a link shows the link as its source, with a copy button', async () => {
+    const writeText = vi.fn(async () => {});
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    useNodeGraphStore.setState(s => ({ nodes: s.nodes.map(x => (x.id === 'tex' ? { ...x, params: { ...x.params, _imageUrl: 'https://picsum.photos/id/1015/640/400', _imageSrc: 'data:x' } } : x)) }));
+    render();
+    const row = host!.querySelector('[data-texture-source]')!;
+    expect(row.textContent).toContain('picsum.photos/id/1015/640/400');
+    expect(row.querySelector('a')!.getAttribute('href')).toBe('https://picsum.photos/id/1015/640/400');
+    act(() => { (row.querySelector('[aria-label="Copy the source link"]') as HTMLButtonElement).click(); });
+    await flush();
+    expect(writeText).toHaveBeenCalledWith('https://picsum.photos/id/1015/640/400');
   });
 
   it('a kept video this browser doesn\'t have shows Missing and Re-link', async () => {
