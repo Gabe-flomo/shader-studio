@@ -39,6 +39,17 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.167',
+    date: '2026-10-11',
+    title: 'Pieces and movers',
+    highlights: [
+      { area: 'Studio', text: 'Pieces: a picture rebuilt from shapes that keep their home colour, scattered by any field and drawn back. Balls: the same in 3D, lifted by brightness or depth.' },
+      { area: 'Studio', text: 'Grid Rules: cells with a heading, Move and Collide cards (bounce, turn, merge, explode) and four recipes: Bouncing cells, Fireworks, Movers that merge, Traffic.' },
+      { area: 'Studio', text: 'Stacked rules open as nodes, one pass per card. Grid builder rules can stay changed and use and/or/else; shapes pick their simulation state.' },
+      { area: 'Studio', text: 'Agent Builder preview: pause, step forward and step back through the last 60 frames.' },
+    ],
+  },
+  {
     id: '2026.10.166',
     date: '2026-10-11',
     title: 'Depth Mix',
