@@ -1,5 +1,5 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { p } from './helpers';
+import { p, withParamSockets } from './helpers';
 
 // ─── Sine LFO ─────────────────────────────────────────────────────────────────
 // ─── LFO (one node, four waveforms) ──────────────────────────────────────────
@@ -16,7 +16,7 @@ const LFO_WAVE = (wave: string, t: string, freq: string, ph: string): string => 
   }
 };
 
-export const LFONode: NodeDefinition = {
+export const LFONode: NodeDefinition = withParamSockets({
   type: 'lfo',
   label: 'LFO',
   aliases: ['sine', 'square', 'sawtooth', 'triangle', 'oscillator', 'wave'],
@@ -54,10 +54,10 @@ export const LFONode: NodeDefinition = {
       outputVars: { value: `${id}_value` },
     };
   },
-};
+}, ['freq', 'phase', 'amplitude', 'offset']);
 
 // ─── BPM Sync ─────────────────────────────────────────────────────────────────
-export const BPMSyncNode: NodeDefinition = {
+export const BPMSyncNode: NodeDefinition = withParamSockets({
   type: 'bpmSync',
   label: 'BPM Sync',
   category: 'Animation',
@@ -83,4 +83,4 @@ export const BPMSyncNode: NodeDefinition = {
       outputVars: { phase: `${id}_phase` },
     };
   },
-};
+}, ['bpm', 'beats']);

@@ -6,7 +6,7 @@
  */
 
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { p } from './helpers';
+import { p, withParamSockets } from './helpers';
 
 // ── Shared GLSL helpers ───────────────────────────────────────────────────────
 
@@ -59,7 +59,7 @@ const bipPost = (id: string, bip: boolean) =>
 
 // ── Exponential Ease ──────────────────────────────────────────────────────────
 
-export const ExpEaseNode: NodeDefinition = {
+export const ExpEaseNode: NodeDefinition = withParamSockets({
   type: 'expEase', label: 'Exp Ease', category: 'Shapers',
   description: 'Exponential ease. a=0→strong ease-in, a=0.5→linear, a=1→strong ease-out.',
   ...floatIO,
@@ -88,11 +88,11 @@ export const ExpEaseNode: NodeDefinition = {
       outputVars: { y: `${id}_y` },
     };
   },
-};
+}, ['a']);
 
 // ── Double Exponential Seat ───────────────────────────────────────────────────
 
-export const DoubleExpSeatNode: NodeDefinition = {
+export const DoubleExpSeatNode: NodeDefinition = withParamSockets({
   type: 'doubleExpSeat', label: 'Exp Seat', category: 'Shapers',
   description: 'Double-exponential seat. Low a = flat plateau; high a = strong dip.',
   ...floatIO,
@@ -121,11 +121,11 @@ export const DoubleExpSeatNode: NodeDefinition = {
       outputVars: { y: `${id}_y` },
     };
   },
-};
+}, ['a']);
 
 // ── Double Exponential Sigmoid ────────────────────────────────────────────────
 
-export const DoubleExpSigmoidNode: NodeDefinition = {
+export const DoubleExpSigmoidNode: NodeDefinition = withParamSockets({
   type: 'doubleExpSigmoid', label: 'Exp Sigmoid', category: 'Shapers',
   description: 'Double-exponential S-curve. a→0 = near-linear; a→1 = sharp step.',
   ...floatIO,
@@ -154,11 +154,11 @@ export const DoubleExpSigmoidNode: NodeDefinition = {
       outputVars: { y: `${id}_y` },
     };
   },
-};
+}, ['a']);
 
 // ── Logistic Sigmoid ──────────────────────────────────────────────────────────
 
-export const LogisticSigmoidNode: NodeDefinition = {
+export const LogisticSigmoidNode: NodeDefinition = withParamSockets({
   type: 'logisticSigmoid', label: 'Logistic Sigmoid', category: 'Shapers',
   description: 'Classic logistic / smooth step. a=0→linear; a→1→sharp step at 0.5.',
   ...floatIO,
@@ -186,7 +186,7 @@ export const LogisticSigmoidNode: NodeDefinition = {
       outputVars: { y: `${id}_y` },
     };
   },
-};
+}, ['a']);
 
 // ── Circular Ease In ──────────────────────────────────────────────────────────
 
@@ -228,7 +228,7 @@ export const CircularEaseOutNode: NodeDefinition = {
 
 // ── Double Circle Seat ────────────────────────────────────────────────────────
 
-export const DoubleCircleSeatNode: NodeDefinition = {
+export const DoubleCircleSeatNode: NodeDefinition = withParamSockets({
   type: 'doubleCircleSeat', label: 'Circle Seat', category: 'Shapers',
   description: 'Double-circle seat curve. a controls where the two arcs meet (0–1).',
   ...floatIO,
@@ -258,11 +258,11 @@ export const DoubleCircleSeatNode: NodeDefinition = {
       outputVars: { y: `${id}_y` },
     };
   },
-};
+}, ['a']);
 
 // ── Double Circle Sigmoid ─────────────────────────────────────────────────────
 
-export const DoubleCircleSigmoidNode: NodeDefinition = {
+export const DoubleCircleSigmoidNode: NodeDefinition = withParamSockets({
   type: 'doubleCircleSigmoid', label: 'Circle Sigmoid', category: 'Shapers',
   description: 'S-curve made from two circular arcs. a controls the inflection point.',
   ...floatIO,
@@ -292,11 +292,11 @@ export const DoubleCircleSigmoidNode: NodeDefinition = {
       outputVars: { y: `${id}_y` },
     };
   },
-};
+}, ['a']);
 
 // ── Double Elliptic Sigmoid ───────────────────────────────────────────────────
 
-export const DoubleEllipticSigmoidNode: NodeDefinition = {
+export const DoubleEllipticSigmoidNode: NodeDefinition = withParamSockets({
   type: 'doubleEllipticSigmoid', label: 'Elliptic Sigmoid', category: 'Shapers',
   description: 'Asymmetric elliptic S-curve. a=inflection x, b=inflection y.',
   ...floatIO,
@@ -329,11 +329,11 @@ export const DoubleEllipticSigmoidNode: NodeDefinition = {
       outputVars: { y: `${id}_y` },
     };
   },
-};
+}, ['a', 'b']);
 
 // ── Quadratic Bezier Shaper ───────────────────────────────────────────────────
 
-export const QuadBezierShaperNode: NodeDefinition = {
+export const QuadBezierShaperNode: NodeDefinition = withParamSockets({
   type: 'quadBezierShaper', label: 'Quad Bezier', category: 'Shapers',
   description: 'Quadratic bezier curve shaper. (a,b) is the single control point.',
   ...floatIO,
@@ -355,11 +355,11 @@ export const QuadBezierShaperNode: NodeDefinition = {
       outputVars: { y: `${id}_y` },
     };
   },
-};
+}, ['a', 'b']);
 
 // ── Cubic Bezier Shaper ───────────────────────────────────────────────────────
 
-export const CubicBezierShaperNode: NodeDefinition = {
+export const CubicBezierShaperNode: NodeDefinition = withParamSockets({
   type: 'cubicBezierShaper', label: 'Cubic Bezier', category: 'Shapers',
   description: 'Cubic bezier shaper. (a,b) = first control point, (c,d) = second. Same parameterization as CSS cubic-bezier().',
   ...floatIO,
@@ -385,4 +385,4 @@ export const CubicBezierShaperNode: NodeDefinition = {
       outputVars: { y: `${id}_y` },
     };
   },
-};
+}, ['a', 'b', 'c', 'd']);
