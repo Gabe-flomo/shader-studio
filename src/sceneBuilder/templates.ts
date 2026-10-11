@@ -68,6 +68,21 @@ export const SCENE_TEMPLATES: SceneTemplate[] = [
     ].join('\n'),
   },
   {
+    key: 'balls', label: 'Picture as balls',
+    blurb: 'CC Ball Action: a picture rebuilt from balls, each the picture\'s colour at its home and lifted towards you by its brightness, with a wave rolling through. Pick the picture under Pictures, or drop one on its Texture node once built.',
+    recipe: [
+      'surface',
+      'texture picture',
+      'picture-balls width=4 across=51 lift=0.5 ball=0.92 wave=0.08 texture=picture name=Picture',
+      'sun dir=(-0.4,0.7,0.8) color=(1,0.96,0.9)',
+      'shadows 0',
+      'ao 0',
+      'background (0.02,0.025,0.04)',
+      'camera dist=3.1 angle=0 elev=8',
+      'quality steps=160 dist=20 jitter=0',
+    ].join('\n'),
+  },
+  {
     key: 'twisted', label: 'Twisted torus',
     blurb: 'A standing ring twisted about the up axis: Twist stretches space, so the loop takes smaller steps (Step Scale on auto).',
     recipe: [

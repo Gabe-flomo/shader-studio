@@ -1,4 +1,5 @@
-import React, { Fragment, Suspense, lazy, useState, useEffect, useMemo, useRef } from 'react';
+import React, { Fragment, Suspense, useState, useEffect, useMemo, useRef } from 'react';
+import { lazySafe } from '../lazyWithSuspense';
 import { toggleLineOff } from '../../lib/exprLines';
 import type { GraphNode, DataType } from '../../types/nodeGraph';
 import { setInputSlider } from '../../nodes/sliderFreeze';
@@ -69,7 +70,7 @@ const TYPE_OPTIONS: DataType[] = ['float', 'vec2', 'vec3', 'vec4'];
 // Presses of a line's ▶ (each opens that line's fold once)
 let explainSeq = 0;
 // The explain view of one line (the steps, a live picture, values to try, the model): loaded when first opened
-const LineExplainView = lazy(() => import('../explain/LineExplainView').then(m => ({ default: m.LineExplainView })));
+const LineExplainView = lazySafe(() => import('../explain/LineExplainView').then(m => ({ default: m.LineExplainView })));
 const OPS = ['=', '+=', '-=', '*=', '/='];
 
 

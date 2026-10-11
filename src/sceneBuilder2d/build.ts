@@ -26,11 +26,17 @@ import {
 } from './spec';
 import { colourText } from '../lang/colours';
 import { GRID_LABELS, gridProgram, type GridSpec } from './grid';
+import type { PiecesSpec } from './pieces';
 import { callBody, type FnRef } from './functions';
 import { COMBINE_BY_MODE, blockGlslLines, checkBlock, clampTimes, type SpaceBlock } from './blocks';
 import { BLOCK_BY_ID } from './blockLibrary';
 import { FAR, gateChain, gateNode } from '../builders/mute';
+import { DEPTH_LOOK_LABELS, depthMixParams, depthSummary, type DepthPic2D } from './depth';
+import { DEPTH_MIX_COMBINE_LABELS, DEPTH_SPACE_LABELS } from '../nodes/definitions/depthMix';
 import { FIT_LABELS, LUMA, findTex, fitLines, glf, newTexUse, picUv, sampleWrap, standInId, standIns, type TexSource, type TexUse } from '../builders/textures';
+import { CUSTOM_PALETTE, paletteLabel, paletteSwatches, slotColour } from '../builders/look/palette';
+import { emitGrades } from '../builders/look/grade';
+import { emitEffects } from '../builders/look/effects';
 
 export { ROLE_KEY };
 /** On the UV node: the scene it was built from (and, once applied, fingerprints of what was built). */
@@ -65,6 +71,8 @@ interface B {
   getTime: () => Ref;
   /** Each item's own point (after its placement, motion and ring): where a picture fill is read. */
   local: Map<string, Ref>;
+  /** Depth → size: the Depth Mix Scale every top-level layer grows by (depth.ts), or null. */
+  depthGrow?: Ref | null;
 }
 
 // ── Pictures (builders/textures.ts) ─────────────────────────────────────────
@@ -84,7 +92,7 @@ const SCREEN_EXT = 'vec2(u_resolution.x / u_resolution.y, 1.0)';
  * place on the picture, then Sample (texture). Returns its colour, its alpha and whether q is on the
  * picture (Fit leaves a margin).
  */
-function samplePicture(b: B, role: string, use: TexUse, src: TexSource, out: Ref, q: Ref, ext: string, where: string): { color: Ref; alpha: Ref; inside: Ref } {
+function samplePicture(b: B, role: string, use: TexUse, src: TexSource, out: Ref, q: Ref, ext: string, where: string): { color: Ref; alpha: Ref; inside: Ref; place: Ref } {
   const { c } = b;
   const tile = use.fit === 'tile';
   const fit = expr(c, `${role}:fit`, 'Picture fit', [
@@ -97,7 +105,7 @@ function samplePicture(b: B, role: string, use: TexUse, src: TexSource, out: Ref
   'vec2', [{ lhs: 'vec2 ext', op: '=', rhs: ext }, ...fitLines(use.fit, 'q', 'ext', glf(src.aspect ?? 1), 'k')], [{ name: 'inside', type: 'float', label: 'Inside' }]);
   const s = mk(c, 'sampleTexture', `${role}:sample`, sampleWrap(use.fit), { texture: out, uv: ref(fit, 'result') },
     `Reads the picture “${src.name}” where the fit before it says: its colour and alpha there. Its Texture is wired from the picture's node, so a new picture there shows here.`);
-  return { color: ref(s, 'color'), alpha: ref(s, 'alpha'), inside: ref(fit, 'inside') };
+  return { color: ref(s, 'color'), alpha: ref(s, 'alpha'), inside: ref(fit, 'inside'), place: ref(fit, 'result') };
 }
 
 /** A shape's half-size in its own space, for fitting a picture to it. */
@@ -378,19 +386,28 @@ function emitItem(b: B, it: Item, pos: Ref, depth: number): Ref | null {
   const motions = it.motion.filter(m => !m.muted);
   const pulse = motions.some(m => m.kind === 'pulse');
   const baseScale = it.scale * unit;
-  const placed = it.at[0] !== 0 || it.at[1] !== 0 || it.rot !== 0 || baseScale !== 1 || motions.length > 0;
+  // Depth → size: every top-level layer grows by the picture's depth (its Transform's Grow).
+  const depthGrow = depth === 0 ? b.depthGrow ?? null : null;
+  const placed = it.at[0] !== 0 || it.at[1] !== 0 || it.rot !== 0 || baseScale !== 1 || motions.length > 0 || !!depthGrow;
   let start: Branch = { pos, scales: [] };
   if (placed) {
     const mo = emitMotion(b, it, name);
-    const wires: Record<string, Ref | null> = { p: pos, offset: mo.offset, turn: mo.turn, grow: mo.grow };
+    let grow = mo.grow;
+    if (depthGrow) {
+      grow = grow
+        ? ref(mk(c, 'multiply', `${it.id}:depthgrow`, {}, { a: grow, b: depthGrow }, `${name}'s pulse times its size by depth: both grow it.`), 'result')
+        : depthGrow;
+    }
+    const wires: Record<string, Ref | null> = { p: pos, offset: mo.offset, turn: mo.turn, grow };
     const bits: string[] = [];
     if (it.at[0] || it.at[1]) bits.push(`moved to ${v2(it.at)}`);
     if (it.rot) bits.push(`turned ${fmt(it.rot)}°`);
     if (baseScale !== 1) bits.push(def?.unit ? `sized ${fmt(unit)} (a ${def.label.toLowerCase()} has no radius of its own, so its size is this node's Scale)` : `scaled ${fmt(it.scale)}×`);
     if (motions.length) bits.push('moved by its motion');
+    if (depthGrow) bits.push('grown by the picture\'s depth (Grow is wired from Depth Mix\'s Scale: bigger on near things)');
     const pl = mk(c, 'transform', `${it.id}:place`, { dim: '2', x: it.at[0], y: it.at[1], rotate: it.rot, scale: baseScale }, wires,
       `Places ${name}: ${bits.join(', ')}. Transform gives the shape a new view of space: the shape is measured from the point as it sees it, so it ends up where the node says. Its Scale output multiplies the distance back to the picture's units.`);
-    start = { pos: ref(pl, 'p'), scales: baseScale !== 1 || pulse ? [ref(pl, 'scale')] : [] };
+    start = { pos: ref(pl, 'p'), scales: baseScale !== 1 || pulse || depthGrow ? [ref(pl, 'scale')] : [] };
   }
   const dup = it.dup && !it.dup.muted && it.dup.count >= 2 ? it.dup : null;
   const levels = dup ? Math.max(1, Math.min(6, Math.round(dup.levels))) : 1;
@@ -437,7 +454,11 @@ function emitItem(b: B, it: Item, pos: Ref, depth: number): Ref | null {
 // ── Colour, glow, composite ─────────────────────────────────────────────────
 
 /** A palette (cosine or ramp) from the colour-by settings: `value` through it. */
-export function paletteNode(c: Ctx, role: string, key: string, value: Ref, anim: Ref | null, scale: number, speed: number, note: string): Ref {
+export function paletteNode(c: Ctx, role: string, key: string, value: Ref, anim: Ref | null, scale: number, speed: number, note: string, custom?: readonly Vec3[] | null, customName?: string | null): Ref {
+  if (key === CUSTOM_PALETTE && custom && custom.length >= 2) {
+    const cols = custom.slice(0, 8);
+    return ref(mk(c, 'colorRamp', role, { stops: String(cols.length), ...Object.fromEntries(cols.map((s, i) => [`color${i}`, [...s]])) }, { t: value }, `${note} ${paletteLabel(key, customName)}: the scene's own palette (${cols.length} colours).`), 'color');
+  }
   const pal = PALETTE_BY_KEY[key] ?? PALETTE_BY_KEY.sunset;
   if (pal.kind === 'palette') {
     return ref(mk(c, 'palette', role, { preset: String(pal.preset ?? 0), scale, speed }, { value, anim }, `${note} The ${pal.label} palette (a cosine palette).`), 'color');
@@ -475,6 +496,10 @@ export function buildScene2D(spec: Scene2D, idFor: (role: string) => string = ro
     gateChain(c.nodes, pos, next, op.muted);
     pos = next;
   }
+  // A picture with depth (depth.ts): its picture and Depth node, and the Depth Mix the shapes read.
+  const depthPic = spec.depth ? emitDepthPicture(b, spec.depth, screen, pos) : null;
+  if (depthPic?.shapes && spec.depth?.space.on) pos = ref(depthPic.shapes, 'uv');
+  b.depthGrow = depthPic?.shapes && spec.depth?.size.on ? ref(depthPic.shapes, 'scale') : null;
 
   // Distances, one per layer.
   const layers = spec.layers.map(it => ({ it, d: emitItem(b, it, pos, 0) })).filter((x): x is { it: Item; d: Ref } => x.d !== null);
@@ -488,11 +513,25 @@ export function buildScene2D(spec: Scene2D, idFor: (role: string) => string = ro
     const value = driver ? ref(expr(c, 'drive', `Colour by ${by}`, [{ name: 'uv', type: 'vec2', from: pos }], driver.code, `The number the palette is read with: ${driver.what}, in the warped space. Colour → by ${by}.`, 'float'), 'result') : null;
     const speed = by === 'time' ? (L.colour.speed || 0.2) : L.colour.speed;
     sharedColour = paletteNode(c, 'palette', L.colour.palette, value ?? ref(mk(c, 'constant', 'drive', { value: 0 }, {}, 'Nothing drives the palette but time.'), 'value'), anim, L.colour.scale, speed,
-      `Colours every layer: ${driver ? driver.what : 'time'} read through a palette${speed ? `, moving at ${fmt(speed)}` : ''}.`);
+      `Colours every layer: ${driver ? driver.what : 'time'} read through a palette${speed ? `, moving at ${fmt(speed)}` : ''}.`, L.custom, L.customName);
   }
 
-  const bg = mk(c, 'colorPicker', 'bg', { color: [...L.bg] }, {}, `The background colour, ${col(L.bg)}: what shows where no shape is.`);
-  let acc: Ref = ref(bg, 'rgb');
+  // The palette's slots in use: one Color node each, wired to every part that takes it, so changing
+  // the palette (or that node) recolours them all (builders/look/palette.ts).
+  const swatches = paletteSwatches(L.colour.palette, L.custom);
+  const slots = new Map<number, Ref>();
+  const slotRef = (slot: number): Ref => {
+    const n = ((Math.round(slot) % swatches.length) + swatches.length) % swatches.length;
+    let r = slots.get(n);
+    if (!r) {
+      const colour = slotColour(swatches, n);
+      r = ref(mk(c, 'colorPicker', `palette:slot${n + 1}`, { color: colour }, {}, `Palette slot ${n + 1} of ${paletteLabel(L.colour.palette, L.customName)}, ${col(colour)}: every part coloured from this slot reads it, so changing it here (or the palette in the builder) recolours them all.`), 'rgb');
+      slots.set(n, r);
+    }
+    return r;
+  };
+  let acc: Ref = L.bgSlot != null ? slotRef(L.bgSlot)
+    : ref(mk(c, 'colorPicker', 'bg', { color: [...L.bg] }, {}, `The background colour, ${col(L.bg)}: what shows where no shape is.`), 'rgb');
   if (L.bgTex) {
     const t = texFor(b, L.bgTex.tex, 'The background');
     if (t) {
@@ -512,8 +551,9 @@ export function buildScene2D(spec: Scene2D, idFor: (role: string) => string = ro
     let fill: Ref;
     if (sharedColour) fill = sharedColour;
     else if (by === 'distance') {
-      fill = paletteNode(c, `${it.id}:palette`, L.colour.palette, d, anim, L.colour.scale, L.colour.speed, `Colours ${name} by its distance field, so it comes out in bands that follow its outline.`);
-    } else fill = ref(mk(c, 'colorPicker', `${it.id}:color`, { color: [...it.color] }, {}, `${name}'s colour, ${col(it.color)}.`), 'rgb');
+      fill = paletteNode(c, `${it.id}:palette`, L.colour.palette, d, anim, L.colour.scale, L.colour.speed, `Colours ${name} by its distance field, so it comes out in bands that follow its outline.`, L.custom, L.customName);
+    } else if (it.slot != null) fill = slotRef(it.slot);
+    else fill = ref(mk(c, 'colorPicker', `${it.id}:color`, { color: [...it.color] }, {}, `${name}'s colour, ${col(it.color)}.`), 'rgb');
     // A picture fill: read at the layer's own point, so the picture moves, turns and repeats with it.
     const t = it.fill ? texFor(b, it.fill.tex, name) : null;
     if (t && it.fill) {
@@ -558,11 +598,20 @@ export function buildScene2D(spec: Scene2D, idFor: (role: string) => string = ro
     acc = emitGrid(b, spec.grid, pos, screen, acc, anim);
     gateChain(c.nodes, under, acc, spec.grid.muted);
   }
+  if (spec.pieces) {
+    const under = acc;
+    acc = emitPieces(b, spec.pieces, pos, acc);
+    gateChain(c.nodes, under, acc, spec.pieces.muted);
+  }
+  if (depthPic && spec.depth) acc = emitDepthMix(b, spec.depth, depthPic, acc, layers.map(l => l.d));
   let final = acc;
   // A muted effect is still built, bypassed by a live uniform (builders/mute.ts).
   const M = L.mute ?? {};
   const effect = (key: keyof typeof M, n: GraphNode, out: string): Ref => { gateNode(n, M[key], { from: 'color' }); return ref(n, out); };
   if (L.tone !== 'none') final = effect('tone', mk(c, 'toneMap', 'tone', { mode: L.tone }, { color: final }, `Squeezes the bright, linear light into colours a screen can show (${L.tone.toUpperCase()}) without clipping highlights.`), 'color');
+  // The Look's grade, then the Effects page, each in its order (builders/look).
+  final = emitGrades(c, L.grade, final, { swatches });
+  final = emitEffects(c, spec.effects, final, { screen, getTime: b.getTime, texture: (name, what) => texFor(b, name, what)?.out ?? null });
   const P = L.post;
   if (P.bloom > 0) final = effect('bloom', mk(c, 'bloom', 'bloom', { intensity: P.bloom, threshold: 0.35 }, { color: final, uv: screen }, `Bloom: bright areas bleed light into their surroundings. Intensity ${fmt(P.bloom)}.`), 'result');
   if (P.vignette > 0) final = effect('vignette', mk(c, 'vignette', 'vignette', { strength: P.vignette }, { color: final, uv: screen }, `Vignette: darkens the corners. Strength ${fmt(P.vignette)}.`), 'result');
@@ -576,6 +625,93 @@ export function buildScene2D(spec: Scene2D, idFor: (role: string) => string = ro
   tidy(c.nodes, 0, 0);
   // The UV node carries the scene; it is the one place its Recipe chip shows.
   return { nodes: c.nodes, final, sceneId: uv.id, warnings: c.warnings };
+}
+
+/**
+ * Picture in pieces (pieces.ts, docs/pieces.md): the Pieces node over what is behind (its Background),
+ * moved by a Vector Field wired into its Offset ƒ (read at each piece's home) or pushed away from the
+ * mouse, with an LFO eased into Amount when it scatters and comes back.
+ */
+function emitPieces(b: B, pc: PiecesSpec, pos: Ref, behind: Ref): Ref {
+  const { c } = b;
+  const t = texFor(b, pc.tex, 'Picture in pieces');
+  let offset: Ref | null = null;
+  if (pc.move === 'noise' || pc.move === 'flow') {
+    const vf = mk(c, 'vectorField', 'pieces:field', { mode: pc.move === 'flow' ? 'curl' : 'fbm', scale: pc.swirl, speed: 0.12, strength: pc.amount }, { uv: pos, time: b.getTime() },
+      `The offset field: a direction at every point (${pc.move === 'flow' ? 'curl noise: it tears along lines' : 'noise, turning slowly'}), Strength ${fmt(pc.amount)} long: how far the pieces fly, a share of the frame's height. Pieces reads it at each piece's home (Offset ƒ is a field socket), so neighbours drift together.`);
+    offset = ref(vf, 'dir');
+  } else if (pc.move === 'mouse') {
+    const m = mk(c, 'mouse', 'pieces:mouse', {}, {}, 'The mouse, in the same space as UV: the pieces flee from it.');
+    offset = ref(expr(c, 'pieces:push', 'Push from the mouse', [{ name: 'uv', type: 'vec2', from: pos }, { name: 'm', type: 'vec2', from: ref(m, 'uv') }, { name: 'amount', type: 'float', slider: { value: pc.amount, min: 0, max: 1.5 } }],
+      'normalize(uv - m + 1e-5) * amount * exp(-length(uv - m) * 4.0)', 'The offset field: away from the mouse, strongest near it (amount at the pointer, fading over a quarter of the frame). Pieces reads it at each home.', 'vec2'), 'result');
+  }
+  let amount: Ref | null = null;
+  if (offset && pc.speed > 0) {
+    const lfo = mk(c, 'lfo', 'pieces:lfo', { waveform: 'sine', freq: pc.speed, amplitude: 0.5, offset: 0.5 }, { time: b.getTime() },
+      `An LFO from 0 to 1 and back, ${fmt(pc.speed)} times a second: the picture breaks up and comes home.`);
+    amount = ref(expr(c, 'pieces:ease', 'Ease', [{ name: 'v', type: 'float', from: ref(lfo, 'value') }], 'smoothstep(0.15, 0.95, v)',
+      'The LFO eased: it rests at 0 a moment (the picture whole) before it scatters again. It is Pieces\' Amount.', 'float'), 'result');
+  }
+  const node = mk(c, 'pieces', 'pieces', {
+    shape: pc.shape, count: pc.count, size: pc.size, colourMode: pc.colour, sizeBy: pc.sizeBy, minSize: pc.sizeBy === 'none' ? 0.15 : 0, amount: 1,
+    aspect: t?.src.aspect ?? 0,
+  }, { uv: pos, picture: t?.out, offset, amount, background: behind },
+  `Picture in pieces: “${pc.tex}” rebuilt from ${pc.count} ${pc.shape === 'glyph' ? 'glyphs' : `${pc.shape}s`} across, each the picture's colour ${pc.colour === 'piece' ? 'round its home (it carries its piece)' : 'at its home'}${pc.sizeBy !== 'none' ? `, sized by its ${pc.sizeBy}` : ''}. ${offset ? 'The offset moves them, and with them the picture.' : 'Wire a field into Offset ƒ to move them.'} What is behind shows between them (Background).`);
+  return ref(node, 'color');
+}
+
+// ── A picture with depth (depth.ts, docs/depth-mix.md) ──────────────────────
+
+interface DepthPicRefs { color: Ref; depth: Ref; shapes: GraphNode | null; name: string }
+
+/**
+ * The picture over the whole frame (a Picture fit and a Sample, at the screen's point), its Depth node (reading the
+ * same place, so depth and colour line up; baked when Generate depth ran), and, when the shapes respond to depth, the
+ * Depth Mix they read: Scale into each layer's Grow, Depth UV as their point.
+ */
+function emitDepthPicture(b: B, d: DepthPic2D, screen: Ref, pos: Ref): DepthPicRefs | null {
+  const { c } = b;
+  const t = texFor(b, d.tex, 'The picture with depth');
+  if (!t) return null;
+  // Stretch reads the picture at the screen's own point (no fit needed); Fill and Fit go through a Picture fit.
+  const pic = d.fit === 'stretch'
+    ? { color: ref(mk(c, 'sampleTexture', 'depth:pic:sample', {}, { texture: t.out, uv: screen }, `Reads the picture “${t.src.name}” stretched over the whole frame: its colour at this pixel.`), 'color'), place: null as Ref | null }
+    : samplePicture(b, 'depth:pic', newTexUse(t.src.name, { fit: d.fit }), t.src, t.out, screen, SCREEN_EXT, 'the picture with depth');
+  const baked = !!d.bake;
+  const dn = mk(c, 'depth', 'depth', baked ? { update: 'baked', depthBake: structuredClone(d.bake) } : {}, { texture: t.out, uv: pic.place },
+    `Depth: how far each part of “${t.src.name}” is (0 far, 1 near), worked out on this device by a small model. `
+      + (baked ? 'Generate depth ran it once in the 2D Scene Builder and kept the result as an image beside the picture (Update: Baked), so it is ready at once and goes into exported pages. ' : 'It runs live once the model is downloaded (the card offers it); Bake depth on the card keeps it, smooth and ready for exported pages. ')
+      + (pic.place ? 'Its UV is wired from the picture\'s fit, so the depth lines up with the picture whatever its shape.' : 'It reads this pixel, as the stretched picture does.'));
+  let shapes: GraphNode | null = null;
+  if (d.size.on || d.space.on) {
+    const what = [d.size.on ? `Scale (${fmt(d.size.far)} far … ${fmt(d.size.near)} near) grows every layer through its Transform's Grow` : '', d.space.on ? `Depth UV (${DEPTH_SPACE_LABELS[d.space.style].label.toLowerCase()}, amount ${fmt(d.space.amount)}) is the point every shape is measured from` : ''].filter(Boolean).join('; ');
+    shapes = mk(c, 'depthMix', 'depth:shapes', { ...depthMixParams(d), mode: d.space.on ? 'space' : 'size' }, { picture: pic.color, depth: ref(dn, 'depth'), uv: pos },
+      `Depth Mix for the shapes: ${what}. Its Color isn't used: the second Depth Mix puts the scene and the picture together (one node can't do both, as the shapes it moves feed that one's Scene). `
+        + 'Depth range and Curve shape the depth first (live sliders).');
+  }
+  return { color: pic.color, depth: ref(dn, 'depth'), shapes, name: t.src.name };
+}
+
+/** The scene and the picture put together by depth (the look), with the gradient over depth. */
+function emitDepthMix(b: B, d: DepthPic2D, p: DepthPicRefs, scene: Ref, dists: Ref[]): Ref {
+  const { c } = b;
+  let coverage: Ref | null = null;
+  if (d.with === 'over' && dists.length && (d.look === 'top' || d.look === 'occlude' || d.look === 'fog')) {
+    let u = dists[0];
+    dists.slice(1).forEach((x, i) => { u = ref(mk(c, 'sdfUnion', `depth:u${i + 1}`, { k: 0 }, { a: u, b: x }, 'Joins the layers into one distance for the Scene mask.'), 'dist'); });
+    coverage = ref(expr(c, 'depth:mask', 'Scene mask', [{ name: 'd', type: 'float', from: u }], '1.0 - smoothstep(-0.003, 0.003, d)',
+      'Where the shapes are (1) and aren\'t (0): With the picture: Over paints the scene over the picture only here (glows outside the shapes are left out).', 'float'), 'result');
+  }
+  const g = d.gradient;
+  const phase = g && g.flow ? ref(mk(c, 'multiply', 'depth:flow', { b: g.flow }, { a: b.getTime() }, `Time × ${fmt(g.flow)}: the gradient's colours flow along depth at ${fmt(g.flow)} cycles a second.`), 'result') : null;
+  const look = DEPTH_LOOK_LABELS[d.look];
+  const node = mk(c, 'depthMix', 'depth:mix', depthMixParams(d), { picture: p.color, depth: p.depth, scene, coverage, phase },
+    `Depth Mix: the scene and the picture “${p.name}” put together by depth. ${look.label}: ${look.blurb} `
+      + `${d.look === 'top' || d.look === 'occlude' || d.look === 'fog' ? `With the picture: ${DEPTH_MIX_COMBINE_LABELS[d.with].label} (${DEPTH_MIX_COMBINE_LABELS[d.with].blurb.toLowerCase()}) ` : ''}`
+      + `Picture ${fmt(d.picture)} is how bright the picture shows. Depth range ${fmt(d.range[0])}–${fmt(d.range[1])} and Curve ${fmt(d.curve)} shape the depth first. `
+      + (g ? `A ${g.palette} gradient is laid along depth on ${g.on === 'both' ? 'the scene and the picture' : `the ${g.on}`} (${g.how}, ${fmt(g.cycles)} cycle${g.cycles === 1 ? '' : 's'} far to near${g.flow ? ', flowing with time through Phase' : ''}). ` : '')
+      + `Built by the 2D Scene Builder: ${depthSummary(d)}. Every slider is live.`);
+  return ref(node, 'color');
 }
 
 /** The grid (grid.ts): one Expression Block for the cells, then colour, glow and fill over what is behind. */
@@ -609,7 +745,7 @@ function emitGrid(b: B, g: GridSpec, pos: Ref, screen: Ref, behind: Ref, anim: R
   let fill: Ref;
   if (g.colourBy === 'ripple' || g.colourBy === 'cell') {
     fill = paletteNode(c, 'grid:palette', L.colour.palette, ref(sp, g.colourBy === 'ripple' ? 'y' : 'z'), anim, L.colour.scale, L.colour.speed,
-      g.colourBy === 'ripple' ? 'Colours each cell by the ripple passing through it, so the waves show as colour.' : 'Colours each cell with its own random value through a palette.');
+      g.colourBy === 'ripple' ? 'Colours each cell by the ripple passing through it, so the waves show as colour.' : 'Colours each cell with its own random value through a palette.', L.custom, L.customName);
   } else {
     const c1 = mk(c, 'colorPicker', 'grid:color', { color: [...g.colour] }, {}, `The grid's first colour, ${col(g.colour)}: cells with the first shape.`);
     const c2 = mk(c, 'colorPicker', 'grid:color2', { color: [...g.colour2] }, {}, `The grid's second colour, ${col(g.colour2)}: cells with the last shape.`);

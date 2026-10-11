@@ -1,8 +1,9 @@
-import { lazy, Suspense, useRef, useState } from 'react';
+import { Suspense, useRef, useState } from 'react';
+import { lazySafe } from '../lazyWithSuspense';
 import { Button, IconButton } from '../ui/Button';
 
 // Loaded on first use: the finder pulls in the compiler and the offscreen renderer.
-const SuggestControlsPanel = lazy(() => import('./SuggestControlsPanel'));
+const SuggestControlsPanel = lazySafe(() => import('./SuggestControlsPanel'));
 
 /** "Suggest controls" beside Add control on the Play page. */
 export function SuggestControlsButton({ compact = false }: { compact?: boolean }) {

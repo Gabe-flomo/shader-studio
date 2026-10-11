@@ -39,6 +39,92 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.168',
+    date: '2026-10-11',
+    title: 'Palettes, effects and scan walkers',
+    highlights: [
+      { area: 'Studio', text: '2D Scene Builder Look: pick or make a palette and give shapes and background palette slots, plus a stack of colour grades. Bloom and Scanlines retire.' },
+      { area: 'Studio', text: 'New Effects page: displace by noise or a picture, swirl, ripple, lens, pixelate, kaleidoscope, blur, glow, chromatic aberration and CRT mask, in any order.' },
+      { area: 'Studio', text: 'Agents as splats: a Splats look for walkers, Emit from a splat scan, and Return home. Scan to walkers blows a scan apart and lets it flow back.' },
+    ],
+  },
+  {
+    id: '2026.10.167',
+    date: '2026-10-11',
+    title: 'Pieces and movers',
+    highlights: [
+      { area: 'Studio', text: 'Pieces: a picture rebuilt from shapes that keep their home colour, scattered by any field and drawn back. Balls: the same in 3D, lifted by brightness or depth.' },
+      { area: 'Studio', text: 'Grid Rules: cells with a heading, Move and Collide cards (bounce, turn, merge, explode) and four recipes: Bouncing cells, Fireworks, Movers that merge, Traffic.' },
+      { area: 'Studio', text: 'Stacked rules open as nodes, one pass per card. Grid builder rules can stay changed and use and/or/else; shapes pick their simulation state.' },
+      { area: 'Studio', text: 'Agent Builder preview: pause, step forward and step back through the last 60 frames.' },
+    ],
+  },
+  {
+    id: '2026.10.166',
+    date: '2026-10-11',
+    title: 'Depth Mix',
+    highlights: [
+      { area: 'Studio', text: 'Depth Mix: combine a scene with a picture\'s depth: size by depth, space by depth, occlude, fog, light or mix, plus a gradient that flows along depth.' },
+      { area: 'Studio', text: '2D Scene Builder Depth tab and a 3D "Picture with depth" card: pick a picture, generate its depth on this device, choose how the scene meets it.' },
+      { area: 'Studio', text: 'Examples: Circles sized by depth, and Glow beaming through depth.' },
+    ],
+  },
+  {
+    id: '2026.10.165',
+    date: '2026-10-11',
+    title: '3D builder fixes',
+    highlights: [
+      { area: 'Studio', text: '3D Scene Builder: Position and Rotation get one slider per axis, so every slider can be dragged. Fixed: a picture could turn the whole scene black.' },
+      { area: 'Studio', text: '3D Scene Builder camera: Perspective, Orthographic or Reverse projection. Built scenes no longer include unused picture or material nodes.' },
+      { area: 'Studio', text: 'Fixed: seven Ray March 3D sliders (Repeat, Noise Warp, Cone Angle, Twist, Round, Blend) never showed on the card.' },
+    ],
+  },
+  {
+    id: '2026.10.164',
+    date: '2026-10-11',
+    title: 'Paste any recipe',
+    highlights: [
+      { area: 'Studio', text: 'Paste a 2D Scene Builder or Splat builder recipe into the Do bar and it builds, ready to edit. Recipes from other projects fill in missing pictures.' },
+    ],
+  },
+  {
+    id: '2026.10.163',
+    date: '2026-10-11',
+    title: 'Clean grid glow',
+    highlights: [
+      { area: 'Studio', text: 'Grid builder: fixed shapes sliced by a seam on Travel and Hop with lag, and the blocky glow patches between cells.' },
+      { area: 'Studio', text: 'Grid builder glow style: Soft (default) runs each shape\'s colour into its glow, so it reads as one shape; Halo keeps the old rim.' },
+    ],
+  },
+  {
+    id: '2026.10.162',
+    date: '2026-10-11',
+    title: 'Surprise, unfrozen',
+    highlights: [
+      { area: 'Studio', text: 'Fixed: Surprise me in the Agent Builder (3D slime especially) could freeze the walkers so later Surprises only changed colour. Every Surprise now restarts.' },
+      { area: 'Studio', text: 'Surprise me skips presets that need their own setup, and a surprise that would not compile is undone and rerolled.' },
+    ],
+  },
+  {
+    id: '2026.10.161',
+    date: '2026-10-11',
+    title: 'My blocks',
+    highlights: [
+      { area: 'Studio', text: '2D Scene Builder: save your own space blocks and combines with a picture of what they do. My blocks leads the library; export, import and copy as text.' },
+      { area: 'Studio', text: 'Insert on a wire: float nodes fit any wire (broadcast), and genType nodes like Exp take the wire\'s type. Related search only lists nodes that can connect.' },
+    ],
+  },
+  {
+    id: '2026.10.160',
+    date: '2026-10-11',
+    title: 'Wire any slider',
+    highlights: [
+      { area: 'Studio', text: 'Wire into sliders: every splat modifier control, and 553 sliders on 157 nodes, can be driven from the graph. Right-click a slider → Control from outside.' },
+      { area: 'Studio', text: 'Splat builder is smooth: the picture follows drags and orbits (about 6 ms a frame at 1M splats), and the graph behind it rests while it is open.' },
+      { area: 'Studio', text: 'Labels on node cards and builder panels are never cut off; long names wrap. Fixed: the Explain view crashed in a tab opened before an update.' },
+    ],
+  },
+  {
     id: '2026.10.159',
     date: '2026-10-11',
     title: 'Node search, redesigned',

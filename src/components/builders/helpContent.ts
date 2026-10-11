@@ -92,9 +92,13 @@ export const BUILDER_HELP: Record<BuilderKey, Record<string, HelpEntry>> = {
       lines: [
         'An orbit camera: it circles the point it looks at. Distance is how far away, Angle where it stands round the point, Elevation how far above.',
         'Set Orbit speed to turn it over time, or Flatten to 1 for an isometric drawing.',
-        'Once it is built, the March Camera card has Perspective: Reverse makes things farther away look bigger, like a Byzantine icon.',
+        'Projection: Perspective (far things smaller), Orthographic (parallel rays, no change of size with distance) or Reverse (far things bigger, like a Byzantine icon). It builds the March Camera\'s Perspective.',
       ],
-      examples: [{ label: 'Slow orbit from further away', insert: { recipe: 'camera dist=6 orbit=10' } }],
+      examples: [
+        { label: 'Slow orbit from further away', insert: { recipe: 'camera dist=6 orbit=10' } },
+        { label: 'Orthographic', insert: { recipe: 'camera orthographic' } },
+        { label: 'Reverse perspective', insert: { recipe: 'camera reverse converge=6' } },
+      ],
     },
     quality: {
       title: 'Quality',
@@ -432,6 +436,7 @@ export const ACTION_HELP: Record<RuleAction['kind'], { hint: string; example: st
   force: { hint: 'A force that changes the velocity (so the heading and the speed follow): gravity, a gusty wind, curl noise, or a pull toward a point or the mouse (negative pushes away).', example: 'apply gravity 0.5 at −90°' },
   drag: { hint: 'Lose this share of the speed every second, like moving through water.', example: 'drag 0.5 a second' },
   fade: { hint: 'Dim to black over the seconds since it was born (its colour; Draw agents\' Colour by State shows it).', example: 'fade with age over 3 s' },
+  home: { hint: 'Return home: a spring toward its Home memory (where it was born; its Emit keeps it, Remember home or a splat scan), with a strength, a damping that calms it, and a delay after birth before it pulls. Blow a picture or a scan apart and let it flow back.', example: 'return home to home (spring 6, damping 3, after 1 s)' },
   field: { hint: 'Push (or carry) it along a vector field built from layers: curl noise, a vortex, a source or sink, waves, your own vx and vy… Build the layers in the Agent Builder\'s Follow a field card.', example: 'follow a field (vortex + curl noise × 0.5) ×1, riding it' },
   mem: { hint: 'Change a named memory (the Agent Builder\'s Memory section): count, set, toggle, reset, remember where it is or what it smells, add it up, decay, or an expression.', example: 'energy = energy * 0.98 + here.food' },
 };

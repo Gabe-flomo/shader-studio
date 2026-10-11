@@ -49,7 +49,11 @@ import { runBuilderAction } from '../../builders/open';
 import { builderRecipeOf } from '../../builders/recipe';
 import { outputClause } from '../../sceneBuilder/output';
 import { RecipeCode } from '../sceneBuilder/RecipeCode';
-import { readLine, readsCanonically, gridPlan, sceneNodes, agentsNodes, type LineRead } from '../../lang/run';
+import { readLine, readsCanonically, gridPlan, sceneNodes, scene2dNodes, splatNodes, agentsNodes, picturesToFill, type LineRead } from '../../lang/run';
+import { editScene2DInBuilder } from '../../sceneBuilder2d/actions';
+import { editSplatSceneInBuilder } from '../../splatBuilder/actions';
+import { withScanIn } from '../../lang/dialects/splat';
+import { listSplats } from '../../lib/splats/library';
 import { canonicalOf } from '../../lang/dialects/picture';
 import { barAssist } from '../../lang/barAssist';
 import { wordKindFor } from '../../lang/highlight';
@@ -242,6 +246,8 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
   // own errors show, not the picture phrases' reading of its words (its flow isn't the Pass Flow node).
   const otherDialect = canonicalRun && canonicalRun.dialect !== 'picture' ? canonicalRun : null;
   const ownDialect = !!otherDialect || line?.dialect === 'agents';
+  // A 2D recipe's pictures this project has no node for (they get empty Texture nodes when it builds).
+  const scene2dPictures = useMemo(() => (otherDialect?.dialect === 'scene2d' ? picturesToFill(rootNodes, otherDialect.scene2d?.textures) : []), [otherDialect, rootNodes]);
   const planRead = useMemo(() => {
     const empty: DoPlan = { steps: [], reading: [], unknown: [] };
     return text.trim() && !builder && !ownDialect && !surprise ? readSafely('the phrase reader', runText, () => parseDo(runText, scope), empty) : { value: empty, error: null };
@@ -327,6 +333,33 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
         useNodeGraphStore.getState().setNodesRewritten(intoView(nodes, made.nodes), `Do: ${text.trim()}`);
         useNodeGraphStore.getState().focusNode(made.focusId);
         toast.success('3D scene built', { message: 'Right-click the Scene Group → Edit in Scene Builder to change it. Undo takes it back.' });
+      } else if (r.dialect === 'scene2d') {
+        // A 2D Scene Builder recipe (copied from another project, say): a new 2D scene, one undo step.
+        const made = scene2dNodes(nodes, r.scene2d!, nextId, spawnPoint());
+        useNodeGraphStore.getState().setNodesRewritten(intoView(nodes, made.nodes), `Do: ${text.trim()}`);
+        useNodeGraphStore.getState().focusNode(made.focusId);
+        const pics = made.pictures.length ? ` ${made.pictures.length === 1 ? 'Its picture' : 'Its pictures'} (${made.pictures.map(p => `“${p}”`).join(', ')}) got an empty Texture node: drop a picture on ${made.pictures.length === 1 ? 'it' : 'each'}.` : '';
+        toast.success('2D scene built from the 2D Scene Builder recipe', {
+          message: `Right-click its UV node → Edit in 2D Scene Builder to change it.${pics} Undo takes it back.`,
+          action: { label: 'Edit in 2D Scene Builder', onClick: () => { editScene2DInBuilder(made.sceneId); }, stillValid: () => useNodeGraphStore.getState().nodes.some(n => n.id === made.sceneId) },
+        });
+      } else if (r.dialect === 'splat') {
+        // A scan file from another device isn't in this splat library: the example scan stands in (dialects/splat.ts).
+        const line = text.trim(), at = spawnPoint();
+        const build = (library: ReadonlySet<string>) => {
+          const { spec, note } = withScanIn(r.splat!, library);
+          const before = useNodeGraphStore.getState().nodes;
+          const made = splatNodes(before, spec, () => useNodeGraphStore.getState().newNodeId(), at);
+          useNodeGraphStore.getState().setNodesRewritten(intoView(before, made.nodes), `Do: ${line}`);
+          useNodeGraphStore.getState().focusNode(made.scanId);
+          const notes = [...(note ? [note] : []), ...(r.notes ?? [])];
+          toast.success('Splat scene built from the Splat builder recipe', {
+            message: `${notes.length ? `${notes.join(' ')} ` : ''}Undo takes it back.`,
+            action: { label: 'Edit in Splat builder', onClick: () => { editSplatSceneInBuilder(made.scanId); }, stillValid: () => useNodeGraphStore.getState().nodes.some(n => n.id === made.scanId) },
+          });
+        };
+        if (r.splat!.scan.source.kind !== 'file') build(new Set());
+        else void listSplats().then(l => build(new Set(l.map(v => v.id))), () => build(new Set()));
       } else if (r.dialect === 'agents') {
         const made = agentsNodes(nodes, r.agents!, nextId, spawnPoint());
         useNodeGraphStore.getState().setNodesRewritten(intoView(nodes, made.nodes), `Do: ${text.trim()}`);
@@ -419,8 +452,10 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
             // run them together, so a recipe that reads goes in as its own one-line form.
             const pasted = e.clipboardData.getData('text');
             if (!/\n/.test(pasted.trim())) return;
-            const one = readSafely('the pasted recipe', pasted, () => { const r = readLine(pasted, { seed }); return r.dialect !== 'picture' && readsCanonically(r) ? r.canonical : null; }, null as string | null).value;
-            if (!one) return;
+            const read = readSafely('the pasted recipe', pasted, () => { const r = readLine(pasted, { seed }); return r.dialect !== 'picture' && readsCanonically(r) ? r.canonical : null; }, null as string | null).value;
+            // One that doesn't read yet still goes in as one line, its lines joined by · (the box would drop the line
+            // breaks and run the words together), so its mistakes show where they are.
+            const one = read ?? pasted.trim().split(/\s*\n\s*/).filter(Boolean).join(' · ');
             e.preventDefault();
             const el = e.currentTarget;
             const from = el.selectionStart ?? text.length, to = el.selectionEnd ?? from;
@@ -492,10 +527,12 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
           </div>
         ))}
         {/* A line in another dialect: what Enter makes */}
-        {otherDialect && section(otherDialect.dialect === 'grid' ? 'Enter adds Grid Rules' : otherDialect.dialect === 'scene' ? 'Enter builds a 3D scene' : 'Enter adds an Agents group with these rules', (
+        {otherDialect && section(otherDialect.dialect === 'grid' ? 'Enter adds Grid Rules' : otherDialect.dialect === 'scene' ? 'Enter builds a 3D scene' : otherDialect.dialect === 'scene2d' ? 'Enter builds a 2D scene' : otherDialect.dialect === 'splat' ? 'Enter builds a Splat scene' : 'Enter adds an Agents group with these rules', (
           <span style={muted} data-do-dialect={otherDialect.dialect}>
             {otherDialect.dialect === 'grid' ? 'A Grid Rules node with this rule (beside the selection, or on the Output when the graph is empty). Its editor\'s Recipe tab shows the same line.'
               : otherDialect.dialect === 'scene' ? 'A new Scene Group, march loop and camera, beside what is there, on the Output. Edit it later in the 3D Scene Builder.'
+              : otherDialect.dialect === 'scene2d' ? `This is a 2D Scene Builder recipe: a new 2D scene beside what is there, on the Output. Edit it later in the 2D Scene Builder.${scene2dPictures.length ? ` ${scene2dPictures.map(p => `“${p}”`).join(', ')} ${scene2dPictures.length === 1 ? 'is a picture' : 'are pictures'} this project doesn't have: ${scene2dPictures.length === 1 ? 'it gets' : 'each gets'} an empty Texture node to drop a picture on.` : ''}`
+              : otherDialect.dialect === 'splat' ? `This is a Splat builder recipe: a new Splat scene beside what is there, on the Output. Edit it later in the Splat builder.${otherDialect.notes?.length ? ` ${otherDialect.notes.join(' ')}` : ''}`
                 : 'Emit → Agents (these rules) → Deposit → Trail field → palette, on the Output. Its rules editor\'s Recipe tab shows the same text.'}
           </span>
         ))}

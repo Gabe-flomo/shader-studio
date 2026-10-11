@@ -11,16 +11,23 @@
  * and expects the same boards.
  *
  * Seeding uses Noise Float's hash rather than the node's own, so a new board is a different (as
- * random) deal. Larger-than-Life radii above 2 aren't built: (2N + 1)² − 1 Sample nodes is too many
- * to read (gridAsNodesProblem says so). Patterns and Blocks are built by their own builders.
+ * random) deal. Larger-than-Life radii above 2, and your own neighbourhoods of more than 24 cells,
+ * are counted in one Expression Block that reads the board itself (a Sample card a cell would be
+ * too many to read). Patterns and Blocks are built by their own builders.
+ *
+ * Stacked rules (gridRules/stack.ts): the base is the board Pass above, and each card is a Pass of
+ * its own after it, wired in order (base → card 1 → card 2 …): an Expression Block holding the
+ * card's step (the same GLSL as the node's stage) reads the Pass before it. The base reads the last
+ * card's Previous, so each frame starts from where the last card left the board. One step a frame.
  */
 import type { GraphNode } from '../types/nodeGraph';
 import { n } from './graphBuilder';
 import {
-  GRID_DEFAULTS, MOORE_OFFSETS, countsAsRanges, gridShape, gridSignature, isDiscrete, isDrawnStart, maxCount, neighbourWeights, ruleSummary, floatLiterals,
+  GRID_DEFAULTS, MOORE_OFFSETS, countsAsRanges, gridShape, gridSignature, isDiscrete, isDrawnStart, neighbourWeights, ruleSummary, floatLiterals,
   type GridShape,
 } from '../gridRules/spec';
-import { drawnCount, startCellsGLSL } from '../gridRules/startCells';
+import { drawnCount, startCellsGLSL, startHeadingsGLSL } from '../gridRules/startCells';
+import { GR_STACK_GLSL, STACK_KINDS, describeStackRule, stackStageGLSL } from '../gridRules/stack';
 import { codeHash } from '../gridScene/glsl';
 import { gridLabel } from '../compiler/gridRulesExpand';
 import { ANY, NOT_EMPTY, SAME, blockVariants, patternVariants, stencilOffset } from '../gridRules/stencils';
@@ -35,25 +42,20 @@ export interface GridAsNodes {
   nodes: GraphNode[];
   /** Where each of the node's outputs comes from in the new graph. */
   outputs: Partial<Record<GridOutKey, Wire>>;
-  /** The new board Pass's id. */
+  /** The new board Pass's id (the base's, with stacked rules). */
   boardId: string;
+  /** Stacked rules: each card's Pass, in order (the last holds the board after a whole step). */
+  stageIds: string[];
 }
 
 /** Why this node can't be opened as nodes (null: it can). */
 export function gridAsNodesProblem(src: GraphNode): string | null {
-  const s = gridShape(src.params);
-  if (s.stack.length) return 'Stacked rules aren\'t built as nodes yet: switch the cards off (Stacked rules) to open the base as nodes.';
-  if (isDiscrete(s.type) && (s.type === 'count' || s.type === 'stages') && s.neighbourhood === 'radius' && s.radius > 2) {
-    return `Radius ${s.radius} counts ${maxCount('radius', s.radius, s.shape)} cells: as nodes that is one Sample (texture) card each. Open as nodes builds radius 1 and 2; set Radius to 2 to see one.`;
-  }
-  if ((s.type === 'count' || s.type === 'stages') && s.neighbourhood === 'custom') {
-    const cells = neighbourWeights(s).length;
-    if (cells > MAX_NODE_CELLS) return `Your neighbourhood counts ${cells} cells: as nodes that is one Sample (texture) card each. Open as nodes builds up to ${MAX_NODE_CELLS}; take some cells out of the stencil to see one.`;
-  }
+  // Everything opens: big neighbourhoods are counted in one Expression Block, stacked cards are Passes of their own.
+  void src;
   return null;
 }
 
-/** Most neighbour reads a custom neighbourhood opens as (one Sample (texture) card each): radius 2's. */
+/** Most neighbour reads opened as one Sample (texture) card each (radius 2's); more are counted in one Expression Block. */
 const MAX_NODE_CELLS = 24;
 
 // ── A small builder: local keys for ids, notes, Expression Blocks ───────────────────────────────
@@ -94,7 +96,7 @@ class Builder {
   /** An Expression Block: named inputs, lines `type name = rhs`, a result; its note explains every named line. */
   expr(key: string, col: number, row: number, o: {
     label: string; outputType: 'float' | 'vec2' | 'vec3';
-    inputs: Array<[name: string, type: 'float' | 'vec2' | 'vec3', from: LWire]>;
+    inputs: Array<[name: string, type: 'float' | 'vec2' | 'vec3' | 'texture', from: LWire]>;
     lines?: Array<[lhs: string, rhs: string]>;
     result: string; note: string[]; functions?: string;
   }): GraphNode {
@@ -205,15 +207,74 @@ export function gridRulesAsNodes(src: GraphNode, nextId: () => string, at: { x: 
   else ({ state, age } = smoothCore(b, s, P, cellPx));
 
   // ── Store and display ──
-  b.add('makeVec3', 'pack', 9, 2, {}, `Make Vec3: what the board keeps: red ${discrete ? 'the state' : 'u'}, green ${discrete ? 'the age / afterglow' : 'v'}, blue the step clock's phase${s.type === 'blocks' ? ' and the blocks\' parity' : ''}.`, { r: { ext: state }, g: { ext: age }, b: s.type === 'blocks' ? ['blue', 'result'] : ['tick', 'y'] });
-  b.add('pass', 'board', 10, 2, { label: `${label} cells (nodes)`, scale: String(s.scale), filter: 'nearest', wrap: s.wrap ? 'repeat' : 'clamp', format: 'half', repeat: s.steps }, [
+  const cards = discrete ? s.stack : [];
+  if (cards.length) {
+    // Stacked rules: blue also says "the base stepped this frame" (+2), so the cards act only after a real step.
+    b.expr('markStep', 8, 3, {
+      label: 'Clock and step mark', outputType: 'float',
+      inputs: [['phase', 'float', ['tick', 'y']], ['tick', 'float', ['tick', 'x']], ['restart', 'float', ['restart', 'result']]],
+      result: 'phase + 2.0 * tick * (1.0 - restart)',
+      note: [
+        'Clock and step mark: blue keeps the clock\'s phase, plus 2 on a frame the base really stepped (not one Speed skips, nor a new board). The stacked cards after this Pass act only when they see the mark; the next frame reads the phase back with fract, which drops it.',
+        'result: phase + 2 × step now × (not starting over).',
+      ],
+    });
+  }
+  b.add('makeVec3', 'pack', 9, 2, {}, `Make Vec3: what the board keeps: red ${discrete ? 'the state' : 'u'}, green ${discrete ? 'the age / afterglow' : 'v'}, blue the step clock's phase${s.type === 'blocks' ? ' and the blocks\' parity' : cards.length ? ' and the step mark' : ''}.`, { r: { ext: state }, g: { ext: age }, b: s.type === 'blocks' ? ['blue', 'result'] : cards.length ? ['markStep', 'result'] : ['tick', 'y'] });
+  b.add('pass', 'board', 10, 2, { label: `${label} cells (nodes)`, scale: String(s.scale), filter: 'nearest', wrap: s.wrap ? 'repeat' : 'clamp', format: 'half', repeat: cards.length ? 1 : s.steps }, [
     `Pass, the board: one pixel per cell at ${s.scale} of the picture's size. ${summary}.`,
     s.wrap ? 'Nearest keeps every read exactly one cell; Edges Repeat wraps the board round (a torus).' : 'Nearest keeps every read exactly one cell; Edges Clamp: a read past the edge sees the edge, which the walls keep empty.',
-    s.steps > 1 ? `Repeat ${s.steps}: the rule runs ${s.steps} times a frame, each reading the step before through Previous.` : 'Its Previous output is this board a step ago: every read on the left comes from it.',
+    cards.length
+      ? `With stacked rules this Pass is the base's step: the ${cards.length} card${cards.length === 1 ? '' : 's'} after it each run in a Pass of ${cards.length === 1 ? 'its' : 'their'} own, and the reads on the left come from the last card's Previous (the whole step before). One step a frame${s.steps > 1 ? ` (the node runs ${stackedStepsWord(s.steps, cards.length)} a frame)` : ''}.`
+      : s.steps > 1 ? `Repeat ${s.steps}: the rule runs ${s.steps} times a frame, each reading the step before through Previous.` : 'Its Previous output is this board a step ago: every read on the left comes from it.',
     'Alpha keeps the rule\'s signature, so a new board is recognised.',
   ], { color: ['pack', 'rgb'], alpha: ['signature', 'value'] });
-  b.add('splitVec3', 'show', 11, 2, {}, `Split Vec3: the board now (the Pass's Color at this pixel). X is ${discrete ? 'the state' : 'u'}, Y ${discrete ? 'the age / afterglow' : 'v'}.`, { v: ['board', 'color'] });
-  const outputs: GridAsNodes['outputs'] = { board: { nodeId: b.id('board'), outputKey: 'texture' } };
+  // Stacked rules: each card a Pass after the one before.
+  let last = 'board';
+  const stageKeys: string[] = [];
+  if (cards.length) {
+    const stages = s.type !== 'count';
+    b.add('constant', 'stackSeed', 9, 4, { value: num(P, 'seed'), label: 'Seed' }, 'Seed: the stacked cards\' dice (their Chance, and a Move card\'s random headings) are rolled from it, the cell and the frame. Another seed, other rolls.');
+    cards.forEach((r, j) => {
+      const body = stackStageGLSL(r, j, { id: 'c', P: k => (k === 'seed' ? 'seed' : k === 'afterglow' ? 'afterglow' : k), prev: 'board', wrap: s.wrap, top: 'top' });
+      const name = `grCard_${codeHash(body.join('\n'))}`;
+      const fn = [
+        `vec3 ${name}(sampler2D board, vec2 cellIn, float t, float seed, float afterglow, float top, vec2 res) {`,
+        '    vec2 c_res = res;', '    vec2 c_cell = floor(cellIn);', '    vec4 c_me = texture2D(board, (c_cell + 0.5) / c_res);',
+        '    float c_frame = mod(floor(t * 60.0), 997.0);', '    vec3 c_out = c_me.rgb;', '    float c_outA = c_me.a;',
+        ...body.map(l => `    ${l}`), '    return c_out;', '}',
+      ].join('\n');
+      const kind = STACK_KINDS.find(k => k.kind === r.kind)!;
+      const key = `card${j}`, passKey = `cardPass${j}`;
+      b.expr(key, 11 + j * 2, 1, {
+        label: `Card ${j + 1}: ${kind.label}`, outputType: 'vec3',
+        inputs: [
+          ['board', 'texture', [last, 'texture']], ['cell', 'vec2', ['cell', 'coord']], ['t', 'float', ['time', 'time']],
+          ['seed', 'float', ['stackSeed', 'value']], ['afterglow', 'float', ['look', 'afterglow']],
+          ...(stages ? [['states', 'float', ['states', 'value']] as [string, 'float', LWire]] : []),
+        ],
+        lines: [['float top', stages ? 'max(floor(states + 0.5), 2.0) - 1.0' : '1.0']],
+        result: `${name}(board, cell, t, seed, afterglow, top, u_resolution)`,
+        functions: [GR_DICE_GLSL, GR_STACK_GLSL, fn].join('\n'),
+        note: [
+          `Card ${j + 1} of the stacked rules: ${describeStackRule(r)}`,
+          `It reads the board ${j === 0 ? 'the base has just stepped (the Pass on its left)' : `card ${j} has just changed`} and works out each cell's next state from the cells round it, gathered (a cell can only write itself). Red keeps the state plus a heading / 32 (movers), green the age, blue the clock and the step mark: a card acts only on a frame the base stepped.`,
+          `Why an Expression Block: the card's step is many reads and yes/no tests; its function (${name}) is the same GLSL the Grid Rules node runs for this card, so the two step alike. The dice (grDice) are whole numbers, as on the CPU try board.`,
+          'top: the last state the rule has (a card\'s states are clamped to it).',
+          'result: this cell after the card: state (+ heading), age, blue as it was.',
+        ],
+      });
+      b.add('pass', passKey, 12 + j * 2, 1, { label: `${label} card ${j + 1} (nodes)`, scale: String(s.scale), filter: 'nearest', wrap: s.wrap ? 'repeat' : 'clamp', format: 'half' }, [
+        `Pass, card ${j + 1}'s board: the board after the base${j ? ` and card${j > 1 ? 's 1 to' : ''} ${j}` : ''} and this card, one pixel per cell.`,
+        j === cards.length - 1 ? 'The last card: its Previous is where the next frame starts (the base reads it), and the look reads its Color.' : `Card ${j + 2} reads its Texture.`,
+        'Alpha keeps the rule\'s signature, as the base\'s does.',
+      ], { color: [key, 'result'], alpha: ['signature', 'value'] });
+      stageKeys.push(passKey);
+      last = passKey;
+    });
+  }
+  b.add('splitVec3', 'show', 11, 2, {}, `Split Vec3: the board now (${cards.length ? 'the last card\'s Pass' : 'the Pass\'s'} Color at this pixel). X is ${discrete ? 'the state' : 'u'}, Y ${discrete ? 'the age / afterglow' : 'v'}.`, { v: [last, 'color'] });
+  const outputs: GridAsNodes['outputs'] = { board: { nodeId: b.id(last), outputKey: 'texture' } };
   outputs.color = discrete ? discreteLook(b, s, P) : smoothLook(b, s, P);
   if (read.has('state')) {
     if (discrete) b.add('round', 'stateOut', 12, 6, {}, 'Round: the state here as a whole number (the State output).', { input: ['show', 'x'] });
@@ -236,6 +297,13 @@ export function gridRulesAsNodes(src: GraphNode, nextId: () => string, at: { x: 
     b.add('pass', 'picture', 13, 3, { label: `${label} picture (nodes)`, scale: String(s.scale), filter: 'nearest' }, 'Pass, the picture: the coloured board as a texture of its own (the Texture output), for Glow, Sample or a Texture tool.', { color: { ext: outputs.color } });
     outputs.texture = { nodeId: b.id('picture'), outputKey: 'texture' };
   }
+  // Stacked rules: every read of "the board a step ago" is the last card's Previous (a whole step, base and cards).
+  if (last !== 'board') {
+    const boardId = b.id('board'), lastId = b.id(last);
+    for (const nd of b.nodes) for (const inp of Object.values(nd.inputs)) {
+      if (inp.connection?.nodeId === boardId && inp.connection.outputKey === 'previous') inp.connection = { nodeId: lastId, outputKey: 'previous' };
+    }
+  }
   // Columns by data flow (the Studio's auto layout), the board's own Previous wires left out so the loop isn't one.
   const cut = b.nodes.map(nd => ({ ...nd, inputs: Object.fromEntries(Object.entries(nd.inputs).map(([k, i]) => [k, i.connection?.outputKey === 'previous' ? { ...i, connection: undefined } : i])) }));
   // A tall column (the neighbour reads) wraps into another one.
@@ -252,8 +320,11 @@ export function gridRulesAsNodes(src: GraphNode, nextId: () => string, at: { x: 
     x += 400;
   }
   const nodes = b.nodes.map(nd => ({ ...nd, position: pos.get(nd.id) ?? nd.position }));
-  return { nodes, outputs, boardId: b.id('board') };
+  return { nodes, outputs, boardId: b.id('board'), stageIds: stageKeys.map(k => b.id(k)) };
 }
+
+/** "3 steps" for a note: the node's steps a frame with a stack. */
+const stackedStepsWord = (steps: number, cards: number) => { const k = Math.max(1, Math.min(steps, Math.floor(64 / (1 + cards)))); return `${k} step${k === 1 ? '' : 's'}`; };
 
 // ── Count and Stages ────────────────────────────────────────────────────────────────────────────
 
@@ -301,6 +372,30 @@ function countCore(b: Builder, s: GridShape, P: Record<string, unknown>, cellPx:
   const weighted = neighbourWeights(s);
   const offsets = weighted.map(([dx, dy]) => [dx, dy] as [number, number]);
   const weightOf = (i: number) => weighted[i][2];
+  const max = weighted.reduce((t, [, , w]) => t + w, 0);
+  const heavy = weighted.some(([, , w]) => w > 1);
+  const what = s.neighbourhood === 'radius' ? `Larger than Life, radius ${s.radius}${s.shape === 'circle' ? ', a round neighbourhood' : ''}.` : s.neighbourhood === 'custom' ? 'Your own neighbourhood: the cells of the stencil drawn in the Grid Rules editor.' : s.neighbourhood === 'vonNeumann' ? 'von Neumann: the 4 cells beside it.' : 'Moore: the 8 cells round it.';
+  if (offsets.length > MAX_NODE_CELLS) {
+    // Too many cells for a Sample card each: one Expression Block reads the board itself, one read a cell (as the node's step does).
+    const body = weighted.map(([dx, dy, w]) => `    q = texture2D(board, (cell + vec2(${f(dx)}, ${f(dy)}) + 0.5) / res).r; n += ${w === 1 ? '' : `${f(w)} * `}(step(0.5, q) - step(1.5, q));`);
+    const name = `grCountNb_${codeHash(body.join('\n'))}`;
+    b.expr('count', 3, 11, {
+      label: 'Count the neighbours', outputType: 'float',
+      inputs: [['board', 'texture', ['board', 'previous']], ['cell', 'vec2', ['cell', 'coord']]],
+      result: `${name}(board, floor(cell), u_resolution)`,
+      functions: [`float ${name}(sampler2D board, vec2 cell, vec2 res) {`, '    float n = 0.0;', '    float q = 0.0;', ...body, '    return n;', '}'].join('\n'),
+      note: [
+        `Count the neighbours: how many of the ${offsets.length} cells round this one are on (state 1)${heavy ? ', each times its weight' : ''}: 0 to ${max}. ${what}`,
+        `Why an Expression Block that reads the board itself: ${offsets.length} cells would be ${offsets.length} Sample (texture) cards. Its function (${name}) reads each counted cell of the board a step ago (the Previous wired into board), one line a cell: q is the cell's state, and step(0.5, q) − step(1.5, q) is 1 for state 1 only, so dying cells don't count.`,
+        `result: the count${heavy ? ', weights included' : ''}, at this cell (floor(cell) is the cell, u_resolution the board's size).`,
+      ],
+    });
+  } else countCards(b, cellPx, offsets, weightOf, max, heavy, what);
+  countRule(b, s, P, max);
+}
+
+/** The neighbours as one Sample (texture) card each, and their sum. */
+function countCards(b: Builder, cellPx: number, offsets: Array<[number, number]>, weightOf: (i: number) => number, max: number, heavy: boolean, what: string): void {
   // The neighbours: one Sample (texture) each, one cell away (Offset is in picture pixels).
   offsets.forEach(([dx, dy], i) => {
     const nm = nbName(dx, dy);
@@ -309,19 +404,20 @@ function countCore(b: Builder, s: GridShape, P: Record<string, unknown>, cellPx:
       { texture: ['board', 'previous'] });
   });
   const names = offsets.map(([dx, dy]) => nbName(dx, dy));
-  const max = weighted.reduce((t, [, , w]) => t + w, 0);
-  const heavy = weighted.some(([, , w]) => w > 1);
   b.expr('count', 3, 11, {
     label: 'Count the neighbours', outputType: 'float',
     inputs: names.map(nm => [nm, 'vec3', [`nb_${nm}`, 'color']] as [string, 'vec3', LWire]),
     result: (names.map((nm, i) => (weightOf(i) === 1 ? `grIsOn(${nm}.r)` : `${f(weightOf(i))} * grIsOn(${nm}.r)`)).join(' + ')) || '0.0',
     functions: ON_FN,
     note: [
-      `Count the neighbours: how many of the ${offsets.length} cells round this one are on (state 1)${heavy ? ', each times its weight' : ''}: 0 to ${max}. ${s.neighbourhood === 'radius' ? `Larger than Life, radius ${s.radius}${s.shape === 'circle' ? ', a round neighbourhood' : ''}.` : s.neighbourhood === 'custom' ? 'Your own neighbourhood: the cells of the stencil drawn in the Grid Rules editor.' : s.neighbourhood === 'vonNeumann' ? 'von Neumann: the 4 cells beside it.' : 'Moore: the 8 cells round it.'}`,
+      `Count the neighbours: how many of the ${offsets.length} cells round this one are on (state 1)${heavy ? ', each times its weight' : ''}: 0 to ${max}. ${what}`,
       'Why an Expression Block: one sum of the reads is clearer as one line than as a chain of Add cards. grIsOn(s) is 1 for state 1 only (step(0.5, s) − step(1.5, s)), so dying cells don\'t count.',
       `result: ${heavy ? 'weight × ' : ''}grIsOn(n.r) + … for every neighbour.`,
     ],
   });
+}
+
+function countRule(b: Builder, s: GridShape, P: Record<string, unknown>, max: number): void {
   // The rule's numbers.
   if (countsAsRanges(s)) {
     b.card('ranges', 3, 13, 'Born and survive', [
@@ -404,6 +500,7 @@ function discreteTail(b: Builder, s: GridShape, P: Record<string, unknown>, stag
   });
   let state: Wire = { nodeId: b.id('stateRound'), outputKey: 'output' };
   let age: Wire = { nodeId: b.id('ageHeld'), outputKey: 'result' };
+  if (s.stack.length) state = keepHeading(b, s, state);
   if (s.type === 'blocks') {
     b.expr('inside', 8, 11, {
       label: 'In a block', outputType: 'float', inputs: [['cell', 'vec2', ['cell', 'coord']]],
@@ -429,6 +526,46 @@ function discreteTail(b: Builder, s: GridShape, P: Record<string, unknown>, stag
     age = { nodeId: b.id('ageIn'), outputKey: 'result' };
   }
   return { state, age };
+}
+
+/**
+ * Stacked rules carry a heading in red's fraction (state + heading / 32, gridRules/stack.ts): the
+ * base keeps it on a cell that stays (the rule's answer is a whole number), as the node's base
+ * stage does; a new board takes the drawing's headings, the brush none.
+ */
+function keepHeading(b: Builder, s: GridShape, state: Wire): Wire {
+  const heads = isDrawnStart(s.start) && s.startCells?.heads ? s.startCells : null;
+  if (heads) {
+    const body = startHeadingsGLSL(heads, 'hd', 'cell', 'res', 'gh');
+    const name = `grDrawnHd_${codeHash(body.join('\n'))}`;
+    b.expr('drawnHeads', 6, 6, {
+      label: 'Drawn headings', outputType: 'float', inputs: [['cell', 'vec2', ['cell', 'coord']]],
+      lines: [['float hd', `${name}(floor(cell), u_resolution)`]],
+      result: 'hd',
+      functions: `float ${name}(vec2 cell, vec2 res) {\n${body.map(l => `    ${l}`).join('\n')}\n    return hd;\n}`,
+      note: [
+        'Drawn headings: the arrows drawn with the start (1 up, 2 up right … 8 up left, 0 none), held in its function as the drawing is.',
+        'hd: the drawing\'s heading at this cell (0 off it).',
+        'result: hd.',
+      ],
+    });
+  }
+  b.expr('keepHeading', 9, 9, {
+    label: 'Keep the heading', outputType: 'float',
+    inputs: [
+      ['r', 'float', ['selfParts', 'x']], ['next', 'float', { ext: state }], ['restart', 'float', ['restart', 'result']], ['paint', 'float', ['paintHere', 'result']],
+      ...(heads ? [['drawnHd', 'float', ['drawnHeads', 'result']] as [string, 'float', LWire]] : []),
+    ],
+    lines: [['float s', 'floor(r + 0.5)'], ['float frac', 'r - s']],
+    result: `next + ((restart < 0.5 && paint < 0.5 && s > 0.5 && next > 0.5) ? frac : 0.0)${heads ? ' + ((restart > 0.5 && paint < 0.5 && next > 0.5) ? drawnHd / 32.0 : 0.0)' : ''}`,
+    note: [
+      'Keep the heading: red holds the state plus a heading / 32 (the stacked Move and Collide cards\' arrows). The rule above answers a whole number, so a cell that stays keeps its heading here; a cell that is born, painted or emptied has none.',
+      's: the state a step ago, as a whole number.',
+      'frac: its heading / 32 (0 for none).',
+      `result: the new state, plus the heading when the cell was and stays non-empty${heads ? ', or the drawing\'s heading on a new board' : ''}.`,
+    ],
+  });
+  return { nodeId: b.id('keepHeading'), outputKey: 'result' };
 }
 
 /**

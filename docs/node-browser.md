@@ -218,13 +218,31 @@ highlighted.
 2. **Related**: nodes the text didn't find that fit where you are: what usually goes with the
    selected node or the wire's node (your graphs and the examples' prior, suggestions/rank
    `affinity`, and the examples' follow counts, structure/relevance) and your recent nodes, each
-   with why ("Usually goes with Circle SDF", "Used recently").
+   with why ("Usually goes with Circle SDF", "Used recently"). Opened from a selected node (not a
+   wire), Related and Usually next only list nodes that can take one of that node's outputs, by the
+   wire-insert rule below (`wireFit.canFollow`).
 
 Nodes only offered in a scope (Scene Pos inside a Scene Group…) follow the add scope. **Relevant
 only / Show all** works as in the browser: with Relevant only, categories for another kind of graph
 (3D in a 2D graph) move under "Show what's not for this graph", 3D-only matches carry a badge and
 sink to the end of their tier, and Related leaves them out. Opened from a wire, only nodes that fit
 it are listed (a chip in the header says which type) and the added node is wired.
+
+**What fits a wire** (`wireFit.ts`; the same for the wire's **+**, dropping a node from the browser on
+a wire, and the phone's Insert into a connection). A node fits when it can take the wire's source and
+feed the wire's end:
+
+- the same type fits;
+- a **float fits any vector**: a node that outputs a float can go on a vec2 / vec3 / vec4 wire, its
+  value broadcast into every channel (`vec3(x)`), and a float wire can feed a vector input;
+- a **genType** node (the ones with float / vec2 / vec3 / vec4 pills: Exp, Sin, Add, Pow, Length…)
+  is set to the wire's vector type when it goes in, so Exp on a vec3 wire is `exp()` per channel.
+  Length and Dot keep their float output, which broadcasts.
+
+The picker doesn't offer nodes that would only fit by padding or truncating (vec2 ↔ vec3); those wires
+still connect by hand as before. After the add, the node is wired by its first exactly matching
+input and output, else the first the graph can promote (`nodeDrop.insertIntoWire`); if it no longer
+fits (the wire went away), the wire is left alone.
 
 **Keys.** Arrows move across tile grids and lists (while typing, up and down go through the
 results in order and left and right move the text cursor); **Tab** / **Shift+Tab** jump to the

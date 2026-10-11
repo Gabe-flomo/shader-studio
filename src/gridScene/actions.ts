@@ -3,8 +3,8 @@
  * or on a build already there, Build / Done, and the jump to Grid Rules and back.
  *
  * "Make it a simulation" turns the drawn grid into a Grid Rules drawn start (Start: Your drawing,
- * `startCells`: every drawn shape a live cell), so the simulation and the Grid Rules builder's try
- * board both start from the drawing. The Grid Rules node
+ * `startCells`: each drawn shape the state picked for it, 1 unless set, 0 left out), so the
+ * simulation and the Grid Rules builder's try board both start from the drawing. The Grid Rules node
  * remembers the scene (`_gridSceneFrom`), so its editor offers the way back, and a second jump
  * reuses it instead of adding another.
  */
@@ -13,12 +13,12 @@ import { useNodeGraphStore } from '../store/useNodeGraphStore';
 import { intoView } from '../components/NodeGraph/spawnPoint';
 import { toast } from '../components/ui/toastStore';
 import { n } from '../store/graphBuilder';
-import { COUNT_PRESETS, LOOKS, presetPatch } from '../gridRules/spec';
+import { COUNT_PRESETS, LOOKS, STAGES_PRESETS, presetPatch } from '../gridRules/spec';
 import { finishBuilder } from '../builders/finish';
 import { closeGridRulesEditor, openGridRulesEditor } from '../builders/windows';
 import { useGridBuilder } from './store';
 import { applyGridScene, findGridBuild, gridFinalOf, gridSceneOfBuild } from './apply';
-import { shownCells, starterGridScene, type GridSceneSpec } from './spec';
+import { shownCells, simStateOf, starterGridScene, type GridSceneSpec } from './spec';
 import { startCellsFromGrid, type StartCells } from '../gridRules/startCells';
 
 /** On a Grid Rules node made by the jump: the Grid scene (its UV node) it started from. */
@@ -86,12 +86,32 @@ export function finishGridBuilder(): void {
 /** The Grid Rules node made from the scene `sceneId`, if any. */
 export const simulationOf = (nodes: readonly GraphNode[], sceneId: string) => nodes.find(nd => nd.type === 'gridRules' && nd.params[FROM_GRID_KEY] === sceneId);
 
-/** The drawing as a Grid Rules drawn start: every drawn shape a live cell (state 1), rows top first. Null when nothing is drawn. Pure. */
+/**
+ * The drawing as a Grid Rules drawn start, rows top first: each drawn shape the state picked for it
+ * ("Make it a simulation": `spec.simStates`, 1 unless set; 0 leaves the shape out). Null when
+ * nothing is left. Pure.
+ */
 export function drawnStartOf(spec: GridSceneSpec): StartCells | null {
   const grid = Array.from({ length: spec.rows }, () => Array.from({ length: spec.cols }, () => 0));
   // What the grid shows (after the draw mode: repeat, mirror and rotate copies count too).
-  shownCells(spec).forEach((id, i) => { if (id) grid[Math.floor(i / spec.cols)][i % spec.cols] = 1; });
+  shownCells(spec).forEach((id, i) => { if (id) grid[Math.floor(i / spec.cols)][i % spec.cols] = simStateOf(spec, id); });
   return startCellsFromGrid(grid);
+}
+
+/**
+ * The rules the jump can start the simulation with ("count:life", "stages:briansBrain"): Grid
+ * Rules' Count and Stages presets, which read the drawn states (Stages: 1 alive, 2… dying).
+ */
+export const SIM_RULES: Array<{ key: string; label: string; hint: string; group: string }> = [
+  ...Object.entries(COUNT_PRESETS).map(([k, pr]) => ({ key: `count:${k}`, label: pr.label, hint: pr.hint, group: 'Count' })),
+  ...Object.entries(STAGES_PRESETS).map(([k, pr]) => ({ key: `stages:${k}`, label: pr.label, hint: pr.hint, group: 'Stages' })),
+];
+/** A rule key's params for the Grid Rules node (its type, preset and look), or null when unknown. */
+export function simRulePatch(key: string | null | undefined): Record<string, unknown> | null {
+  const [type, k] = (key ?? '').split(':');
+  if (type === 'count' && COUNT_PRESETS[k]) return { ruleType: 'count', ...presetPatch(COUNT_PRESETS[k]), ...LOOKS.count };
+  if (type === 'stages' && STAGES_PRESETS[k]) return { ruleType: 'stages', ...presetPatch(STAGES_PRESETS[k]) };
+  return null;
 }
 
 /**
@@ -101,7 +121,7 @@ export function drawnStartOf(spec: GridSceneSpec): StartCells | null {
  * its drawing; a node made by an older jump (a Start image through a Pass) keeps that wiring and
  * switches to the drawn start. Pure.
  */
-export function simulationFromGrid(graph: GraphNode[], sceneId: string, nextId: () => string): { nodes: GraphNode[]; gridRulesId: string } | null {
+export function simulationFromGrid(graph: GraphNode[], sceneId: string, nextId: () => string, o: { rule?: string | null } = {}): { nodes: GraphNode[]; gridRulesId: string } | null {
   const b = findGridBuild(graph, sceneId);
   const grid = b?.byRole.get('grid');
   if (!b || !grid) return null;
@@ -113,7 +133,7 @@ export function simulationFromGrid(graph: GraphNode[], sceneId: string, nextId: 
   if (!rules) {
     const rulesId = nextId();
     const gr = n('gridRules', rulesId, x0, y0, {
-      ...presetPatch(COUNT_PRESETS.life), ...LOOKS.count, board: '0.125', label: 'Grid Rules (from the grid)', [FROM_GRID_KEY]: sceneId,
+      ...(simRulePatch(o.rule) ?? { ...presetPatch(COUNT_PRESETS.life), ...LOOKS.count }), board: '0.125', label: 'Grid Rules (from the grid)', [FROM_GRID_KEY]: sceneId,
       ...(drawn ? { start: 'cells', startCells: drawn } : {}),
       __comment: 'Grid Rules started from the Grid builder\'s drawing: each drawn shape is a live cell of its drawn start (Start: Your drawing), placed in the middle of the board. Change the rule in its editor; “‹ Pattern grid” in the editor goes back to the drawing. Reset re-deals the board from the drawing as it was when you jumped.',
     }, {});
@@ -124,7 +144,8 @@ export function simulationFromGrid(graph: GraphNode[], sceneId: string, nextId: 
     const id = rules.id;
     nodes = nodes.map(nd => {
       if (nd.id !== id) return nd;
-      const params: Record<string, unknown> = { ...nd.params, reset: 0 };
+      // A rule picked for this jump replaces the one it has; otherwise its rule stays.
+      const params: Record<string, unknown> = { ...nd.params, ...(simRulePatch(o.rule) ?? {}), reset: 0 };
       if (drawn) { params.start = 'cells'; params.startCells = drawn; } else delete params.startCells;
       return { ...nd, params };
     });
@@ -135,17 +156,21 @@ export function simulationFromGrid(graph: GraphNode[], sceneId: string, nextId: 
   return { nodes, gridRulesId: rid };
 }
 
-/** "Make it a simulation → Grid Rules": build the drawing (if it changed), add or reuse the simulation, open its editor. */
-export function makeSimulation(): string | null {
+/**
+ * "Make it a simulation → Grid Rules": build the drawing (if it changed), add or reuse the
+ * simulation, open its editor. `rule`: a SIM_RULES key to start it with (a new one starts as Life;
+ * one made before keeps its rule unless one is given).
+ */
+export function makeSimulation(o: { rule?: string | null } = {}): string | null {
   const sceneId = buildFromGridBuilder(false, { quiet: true, keepOutput: true });
   const st = useNodeGraphStore.getState();
-  const r = simulationFromGrid(st.nodes, sceneId, () => useNodeGraphStore.getState().newNodeId());
+  const r = simulationFromGrid(st.nodes, sceneId, () => useNodeGraphStore.getState().newNodeId(), o);
   if (!r) return null;
   useNodeGraphStore.getState().setNodesRewritten(r.nodes, 'Grid builder: made it a simulation');
   useGridBuilder.getState().close();
   useNodeGraphStore.getState().focusNode(r.gridRulesId);
   openGridRulesEditor(r.gridRulesId);
-  toast.success('Now a simulation', { message: 'Grid Rules starts from your drawing (Life). Pick another rule here; “‹ Pattern grid” goes back to the drawing.' });
+  toast.success('Now a simulation', { message: 'Grid Rules starts from your drawing, each shape as the state you picked. Change the rule here; “‹ Pattern grid” goes back to the drawing.' });
   return r.gridRulesId;
 }
 

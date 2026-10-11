@@ -101,6 +101,31 @@ const particles = (): AgentRuleSet => base({
   }],
 });
 
+/**
+ * Scan to walkers (docs/splat-scene.md "Agents as splats"): every splat of a scan a walker born at its place in its
+ * colour, its home kept (a Home memory). For its first 1.2 s a field blows it apart (out from the middle, stirred
+ * by curl noise); from 1.5 s a spring pulls each one home (Return home), drag calming it on the way.
+ */
+export const scanWalkers = (d3 = false): AgentRuleSet => base({
+  kind: 'particles',
+  edges: 'slide',
+  memories: [{ id: 'm1', name: 'home', type: 'home' }],
+  look: { by: 'birth' },
+  species: [{
+    name: 'Splats', speed: 0, states: [{ name: 'scan', colour: [1, 1, 1] }],
+    rules: [
+      { when: [{ kind: 'age', cmp: '<', seconds: 1.2 }], do: [{ kind: 'field', strength: 0.8, spec: { layers: [
+        { kind: 'own', weight: 1, vx: 'x', vy: 'y', ...(d3 ? { vz: 'z' } : {}) },
+        { kind: 'curl', weight: 0.9, size: 0.35 },
+      ] } }] },
+      { when: [{ kind: 'always' }], do: [
+        { kind: 'home', memory: 'm1', strength: 9, delay: 1.5, damping: 4.5 },
+        { kind: 'drag', amount: 0.6 },
+      ] },
+    ],
+  }],
+});
+
 /** A swarm circling the middle: orbit it, keep apart, drift together; packed spots speed up and spill out. */
 const swarm = (): AgentRuleSet => base({
   kind: 'swarm',
@@ -275,6 +300,7 @@ export const RULES_TEMPLATES: RulesTemplate[] = [
   { key: 'sir', label: 'Infection (SIR)', blurb: 'Healthy, sick, recovered: the sick leave germs, the healthy who walk through them may fall sick, the sick recover, immunity wanes.', set: sir },
   { key: 'termites', label: 'Termites', blurb: 'Termites pick up wood chips and drop them beside other chips: within half a minute the scattered chips gather into piles.', set: termites },
   { key: 'fireflies', label: 'Fireflies', blurb: 'Each firefly flashes on its own clock; one past 60% of its cycle that sees a flash (its sensors look far out) flashes at once, so within seconds the whole swarm flashes together.', set: fireflies },
+  { key: 'scanWalkers', label: 'Scan to walkers', blurb: 'Every splat of a scan a walker in its own colour and place: a field blows the scan apart, then each flows back home (Return home).', set: () => scanWalkers(false) },
   { key: 'dla', label: 'DLA growth', blurb: 'Random walkers stick when they touch the crystal (or the seed) and become part of it: branching frost.', set: dla },
 ];
 
@@ -418,6 +444,21 @@ export function rulesTemplateNodes(key: string, p: string, x = 0, y = 0, withOut
       trailWhy: ['Trail field: the sparks\' paths, 512 rows, spreading a little and gone in a fraction of a second: short glowing tails.'],
       picture: t => ({ nodes: [palette(`${p}Colour`, X(1680), Y(0), t, [[0.01, 0.01, 0.02], [0.18, 0.05, 0.02], [0.6, 0.22, 0.05], [1, 0.75, 0.35]], ['Stops Palette: the sparks\' trails as embers on a dark ground.'])], out: [`${p}Colour`, 'color'] }),
       draw: { style: 'glow', colorBy: 'state', palette: 'ab', size: 1.5, brightness: 0.45, glow: 0.7, scaleBy: 'walker', fade: 'off', lights: '0', ...note(['Draw agents, Colour by State: each spark in its state\'s orange, dimmed by its age ("fade with age" in the rules), glowing.']) },
+    }, withOutput);
+    case 'scanWalkers': return setup(x, y, {
+      p, set: scanWalkers(false), label: 'Scan to walkers (rules)', tier: '256k', steps: 1, preroll: 0,
+      groupWhy: [
+        'Kind: Particles, born from a splat scan. Each walker keeps its home (the Home memory, filled by the Emit) and its colour (Look: its own).',
+        'Younger than 1.2 s: a field blows it out from the middle, stirred by curl noise. Always: Return home (a spring 9, damping 4.5, from 1.5 s old) pulls it back, and drag calms it.',
+        'Try: Born → Burst (or ↺ Start over) to blow it apart again; Return home\'s damping 1 to make it wobble round home first.',
+      ],
+      emits: [{ mode: 'fill', shape: 'splats', demo: 'blob', demoCount: 250000, up: '-y', minOpacity: 0.05, heading: 'outward', x: 0, y: 0, size: 0.75, life: 0,
+        ...note(['Emit, Shape Splat scan: every splat of the scan is born as a walker at its place (seen from the front), in its colour, its home and size kept in its More memory. A generated ball of 250 000 splats until you pick a scan on this card (Load…, From the library).']) }],
+      depositAmount: 0, depositWhy: 'Deposit 0: the walkers leave nothing (the splats are the picture).',
+      trail: { resolution: '0.5', diffuse: 0, halfLife: 0.05, edges: 'clamp', gain: 0.04 },
+      trailWhy: ['Trail field: unused here (Deposit 0); the dark ground under the splats.'],
+      picture: t => ({ nodes: [palette(`${p}Colour`, X(1680), Y(0), t, [[0.012, 0.012, 0.02], [0.03, 0.03, 0.05]], ['Stops Palette: a near-black ground for the splats.'])], out: [`${p}Colour`, 'color'] }),
+      draw: { style: 'splats', colorBy: 'agent', palette: 'ab', sizeBy: 'memW', memScale: 1.4, splatSize: 0.006, stretch: 2, opacity: 0.85, brightness: 1, speedRef: 0.6, fade: 'off', lights: '0', ...note(['Draw agents, Splats: each walker a soft Gaussian the size of its splat (More memory w × 1.4), stretched along its motion while it flies, in its own colour (Colour by Agent).']) },
     }, withOutput);
     case 'swarm': return setup(x, y, {
       p, set: swarm(), label: 'Swarm (rules)', tier: '64k', steps: 2, preroll: 6,

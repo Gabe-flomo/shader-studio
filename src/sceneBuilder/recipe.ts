@@ -18,8 +18,8 @@
 import {
   DEFAULT_CAMERA, DEFAULT_COLOR, DEFAULT_LOOK, DEFAULT_QUALITY, SHAPES, SHAPE_BY_KIND, TONE_MODES, WARPS, WARP_BY_KIND,
   DIM_WORDS, defaultSize, defaultWarpValues, emptySpec, newGroup, newShape, newWarp, shapeDims, shapeParamWord,
-  TEX_MAPS, LOOK_MUTES_3D,
-  type CameraSpec, type DimTarget, type DimWord, type ShapeDef, type CombineOp, type ParamDef, type RenderMode, type SceneItem, type SceneSpec, type ShapeSpec, type TexMap, type ToneMode, type Vec3, type WarpDef, type WarpSpec,
+  TEX_MAPS, CAMERA_PROJECTIONS, REVERSE_DEFAULTS, DEPTH_PIC_3D_HOWS, newDepthPic3D, LOOK_MUTES_3D,
+  type DepthPic3D, type DepthPic3DHow, type CameraNumKey, type CameraProjection, type DimTarget, type DimWord, type ShapeDef, type CombineOp, type ParamDef, type RenderMode, type SceneItem, type SceneSpec, type ShapeSpec, type TexMap, type ToneMode, type Vec3, type WarpDef, type WarpSpec,
 } from './spec';
 import { findTex, texSlug, type TexSource } from '../builders/textures';
 import { COLOUR_TABLE, colourText } from '../lang/colours';
@@ -92,7 +92,14 @@ export const DEFAULT_SMOOTH_K = 0.3;
 
 const SHAPE_WORDS: Record<string, string> = Object.fromEntries(SHAPES.flatMap(s => [[s.kind, s.kind], ...s.aliases.map(a => [a, s.kind])]));
 const WARP_WORDS: Record<string, string> = Object.fromEntries(WARPS.flatMap(w => [[w.kind, w.kind], ...w.aliases.map(a => [a, w.kind])]));
-const SETTING_WORDS = ['sun', 'sky', 'bounce', 'shadows', 'shadow', 'ao', 'occlusion', 'fog', 'background', 'bg', 'tone', 'camera', 'cam', 'quality', 'custom', 'custom-warp', 'output', 'show', 'colour', 'color', 'texture', 'shine'];
+/** The camera's projection words (camera orthographic, camera projection=reverse). */
+const PROJECTION_WORDS: Record<string, CameraProjection> = {
+  perspective: 'perspective', persp: 'perspective', normal: 'perspective',
+  orthographic: 'orthographic', ortho: 'orthographic', parallel: 'orthographic', isometric: 'orthographic',
+  reverse: 'reverse', inverse: 'reverse', 'reverse-perspective': 'reverse',
+};
+
+const SETTING_WORDS = ['sun', 'sky', 'bounce', 'shadows', 'shadow', 'ao', 'occlusion', 'fog', 'background', 'bg', 'tone', 'camera', 'cam', 'quality', 'custom', 'custom-warp', 'output', 'show', 'colour', 'color', 'texture', 'depth-picture', 'picture-depth', 'shine'];
 
 const COLOR_NAMES = COLOUR_TABLE as Readonly<Record<string, Vec3>>;
 
@@ -703,6 +710,25 @@ class Parser {
   setting(spec: SceneSpec, w: string, t: { at: number; end: number }, args: Arg[]) {
     const L = spec.look;
     if (w === 'texture') { this.texture(t, args); return; }
+    if (w === 'depth-picture' || w === 'picture-depth') {
+      // depth-picture <name> [how=composite|lit|reflect] [near=1.5] [far=8] [soft=0.08]
+      let d: DepthPic3D | null = null;
+      const rest: Arg[] = [];
+      for (const a of args) {
+        if (!d && !a.key && (a.value.kind === 'word' || a.value.kind === 'str')) { const n = this.texName(a, 'depth-picture'); if (n) d = newDepthPic3D(n); continue; }
+        rest.push(a);
+      }
+      if (!d) { this.fail(t, 'depth-picture needs a picture\'s name: depth-picture pond how=lit.'); return; }
+      for (const a of rest) {
+        const key = a.key?.toLowerCase();
+        const word = a.value.kind === 'word' ? a.value.v.toLowerCase() : '';
+        if (key === 'how' && DEPTH_PIC_3D_HOWS.some(h => h.how === word)) d.how = word as DepthPic3DHow;
+        else if ((key === 'near' || key === 'far' || key === 'soft') && a.value.kind === 'num') d[key] = a.value.v;
+        else this.fail(a, `depth-picture takes a picture's name, how=${DEPTH_PIC_3D_HOWS.map(h => h.how).join('|')}, near=, far= and soft=.`);
+      }
+      spec.depth = d;
+      return;
+    }
     const first = args[0];
     const firstNum = first && !first.key && first.value.kind === 'num' ? first.value.v : null;
     const off = first && !first.key && first.value.kind === 'word' && /^(off|no|none|false)$/i.test(first.value.v);
@@ -760,13 +786,22 @@ class Parser {
       }
       case 'camera': case 'cam': {
         const C = spec.camera;
-        const KEYS: Record<string, keyof CameraSpec> = {
+        const KEYS: Record<string, CameraNumKey> = {
           dist: 'dist', distance: 'dist', angle: 'angle', elev: 'elev', elevation: 'elev', orbit: 'orbit', speed: 'orbit',
           zoom: 'zoom', fov: 'zoom', flatten: 'flatten', ortho: 'flatten', x: 'x', y: 'y', z: 'z',
+          reverse: 'reverse', strength: 'reverse', converge: 'converge',
         };
         for (const a of args) {
+          // The projection: projection=orthographic, or the word alone (camera reverse dist=5).
+          const pk = a.key?.toLowerCase();
+          if (pk === 'projection' || pk === 'proj' || (!a.key && a.value.kind === 'word')) {
+            const w = a.value.kind === 'word' ? PROJECTION_WORDS[a.value.v.toLowerCase()] : undefined;
+            if (!w) { this.fail(a, `camera projection is ${CAMERA_PROJECTIONS.join(', ')}.`); continue; }
+            if (w === 'perspective') delete C.projection; else C.projection = w;
+            continue;
+          }
           const key = a.key ? KEYS[a.key.toLowerCase()] : 'dist';
-          if (!key) { const s = suggest(a.key!, Object.keys(KEYS)); this.fail(a, `camera has no “${a.key}”.${s ? ` Did you mean “${s}”?` : ''}`); continue; }
+          if (!key) { const s = suggest(a.key!, [...Object.keys(KEYS), 'projection']); this.fail(a, `camera has no “${a.key}”.${s ? ` Did you mean “${s}”?` : ''}`); continue; }
           if (a.value.kind !== 'num') { this.fail(a, `camera ${key} is a number.`); continue; }
           const deg = key === 'angle' || key === 'elev' || key === 'orbit';
           C[key] = deg && a.value.unit === 'rad' ? round(a.value.v * 180 / Math.PI) : a.value.v;
@@ -1017,9 +1052,20 @@ export function printRecipe(spec: SceneSpec, opts: { multiline?: boolean; pretty
   else if (!same(L.bg, D.bg)) clauses.push([`background ${fmtColour(L.bg)}`, ...bgPic].join(' '));
   else if (bgPic.length) clauses.push(['background', ...bgPic].join(' '));
   if (L.tone !== D.tone || (LM.tone && L.tone !== 'none')) clauses.push(`tone ${L.tone}${L.tone !== 'none' ? mutedWord('tone') : ''}`);
+  if (spec.depth) {
+    const d = spec.depth, DD = newDepthPic3D(d.tex);
+    clauses.push(['depth-picture', fmtName(d.tex), ...(d.how !== DD.how ? [`how=${d.how}`] : []),
+      ...(['near', 'far', 'soft'] as const).filter(k => !valueEq(d[k], DD[k])).map(k => `${k}=${fmt(d[k])}`)].join(' '));
+  }
   // Camera and quality.
-  const cam = (Object.keys(DEFAULT_CAMERA) as Array<keyof CameraSpec>).filter(k => !valueEq(spec.camera[k], DEFAULT_CAMERA[k]));
-  if (cam.length) clauses.push(['camera', ...cam.map(k => `${k}=${fmt(spec.camera[k])}`)].join(' '));
+  const cam = (Object.keys(DEFAULT_CAMERA) as CameraNumKey[]).filter(k => !valueEq(spec.camera[k], DEFAULT_CAMERA[k]));
+  const C = spec.camera;
+  const camWords = [
+    ...(C.projection && C.projection !== 'perspective' ? [C.projection] : []),
+    ...cam.map(k => `${k}=${fmt(C[k] as number)}`),
+    ...(['reverse', 'converge'] as const).filter(k => C[k] !== undefined && !valueEq(C[k], REVERSE_DEFAULTS[k])).map(k => `${k}=${fmt(C[k] as number)}`),
+  ];
+  if (camWords.length) clauses.push(['camera', ...camWords].join(' '));
   const Q = spec.quality, DQ = DEFAULT_QUALITY;
   const q: string[] = [];
   if (Q.steps !== DQ.steps) q.push(`steps=${Q.steps}`);
@@ -1045,7 +1091,7 @@ export const RECIPE_VOCABULARY = {
   combines: ['union', 'smooth-union', 'subtract', 'smooth-subtract', 'intersect', 'smooth-intersect'],
   shapes: SHAPES.map(s => ({ kind: s.kind, keys: [...s.params.map(p => p.key), ...(shapeDims(s) ? (shapeDims(s)!.vector ? DIM_WORDS : ['size']) : [])] })),
   warps: WARPS.map(w => ({ kind: w.kind === 'noise' ? 'warp' : w.kind, keys: [...(w.axes ? [w.axes.key] : []), ...w.params.map(p => p.key), ...(w.select ? [w.select.key] : [])] })),
-  settings: ['sun dir=(x,y,z) color=…', 'sky (r,g,b)', 'bounce (r,g,b)', 'shadows 16 | off', 'ao 0.06 | off', 'fog 0.3 color=…', 'background (r,g,b) | top=… bottom=… | picture=…', `tone ${TONE_MODES.join('|')}`, 'camera dist angle elev orbit zoom flatten x y z', 'quality steps dist step jitter', 'texture name node= aspect=', `shape … texture=name map=${TEX_MAPS.join('|')} tiles=2 sharp=4 tex-offset=(0.25,0) tex-rot=30 bump=1`],
+  settings: ['sun dir=(x,y,z) color=…', 'sky (r,g,b)', 'bounce (r,g,b)', 'shadows 16 | off', 'ao 0.06 | off', 'fog 0.3 color=…', 'background (r,g,b) | top=… bottom=… | picture=…', `tone ${TONE_MODES.join('|')}`, 'camera perspective|orthographic|reverse dist angle elev orbit zoom flatten reverse converge x y z', 'quality steps dist step jitter', 'texture name node= aspect=', `shape … texture=name map=${TEX_MAPS.join('|')} tiles=2 sharp=4 tex-offset=(0.25,0) tex-rot=30 bump=1`],
   colours: Object.keys(COLOR_NAMES),
   outputs: OUTPUTS.map(o => o.words[0]),
   palettes: PALETTES.map(p => p.key),

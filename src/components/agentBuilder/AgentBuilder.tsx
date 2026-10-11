@@ -29,6 +29,7 @@ import { Segmented, Toggle } from '../ui/Choice';
 import { Select } from '../ui/Select';
 import { PresetCard, StudioLabel, StudioNavItem, StudioShell } from '../builders/studio/StudioShell';
 import { LiveViewport, type ViewRect } from '../builders/studio/LiveViewport';
+import { AgentTransport } from './AgentTransport';
 import { type AgentRuleSet, type ChannelRef, type RuleCondition, type WalkerKind, DEFAULT_NEIGHBOURS, kindOf, usesFlow, WALKER_KINDS, WALKER_KIND_KEYS } from '../../agentRules/spec';
 import { openGroupAsNodes, setGroupSpace } from '../../agentRules/storeActions';
 import { patchCard, readCards, sectionSummary, setCardOn, setEdges, setFlow, setNeighbours, setSensors, setSpeed, type RuleCard } from '../../agentBuilder/cards';
@@ -672,7 +673,7 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
       case 'born': return `${born.shape} · ${born.count.replace('m', 'M')}`;
       case 'senses': case 'turning': case 'trail': return sectionSummary(cards, id);
       case 'moving': return sectionSummary(cards, 'moving');
-      case 'forces': return titles(['gravity', 'wind', 'curl', 'field', 'attract', 'drag']);
+      case 'forces': return titles(['gravity', 'wind', 'curl', 'field', 'attract', 'home', 'drag']);
       case 'life': {
         const f = on(['fade'])[0]?.action, d = on(['die'])[0];
         return [f?.kind === 'fade' ? `fades ${r3(f.seconds)} s` : '', d?.when?.kind === 'age' ? `dies at ${r3(d.when.seconds)} s` : d ? 'dies' : ''].filter(Boolean).join(' · ') || 'for ever';
@@ -852,6 +853,7 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
       primary={{ label: madeHere ? 'Add to graph' : 'Done', onClick: close, title: madeHere ? 'Keep it (it is already live in your graph, wired to the Output)' : undefined }}
       nav={nav} inspector={inspector} presets={presetStrip}>
       <LiveViewport overlay={overlay} />
+      <AgentTransport groupId={groupId} />
       {hoodOpen && (
         <HoodPanel groupId={groupId} species={hoodSpecies} trails={trailChannels} highlight={hoodLit} onClose={() => setHoodOpen(false)} memoryNames={memorySlotNames(set)}
           speedMax={Math.max(0.05, ...set.species.map(x => x.speed), num(emit?.params.speed, 0)) * 1.5} lifeMax={num(emit?.params.life, 0)} />

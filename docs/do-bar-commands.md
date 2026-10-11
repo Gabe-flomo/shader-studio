@@ -25,6 +25,8 @@ While you type, the suggestions read as plain sentences of what taking one does 
 
 The **builders** (the 3D Scene Builder, Grid Rules, Agent Rules) open from whole phrases: "new 3d scene", "new grid rules", "edit the rules", "show the recipe" (see Builders below). They are also the first section of the node browser and the empty-canvas right-click menu's Builders.
 
+**Pasting a recipe**: a recipe copied from any builder (the 3D and 2D Scene Builders, the Splat builder, Grid Rules' "As text", Agent Rules) pastes into the bar, in this project or another, and Enter builds it: a new scene beside what is there, on the Output, one undo step. Multi-line recipes go in as one line joined by ` · `. The bar says which kind of recipe it read ("This is a 2D Scene Builder recipe"), and the built scene opens in its own builder. What the recipe names from its own project degrades instead of failing: a picture gets an empty Texture node named after it, a scan file this device doesn't have becomes the example scan, with a note.
+
 ## Verbs: editing what is there
 
 ### create
@@ -2951,6 +2953,41 @@ Examples:
 
 - `schwarz-p` — on an empty graph (just an Output)
 
+### picture-balls
+
+3D scene · maker. Picture balls: A picture rebuilt from balls (CC Ball Action): each ball takes the picture's colour at its home and comes forward by its brightness. Give it a picture. Also: ball-action, pieces-3d.
+
+Words: `picture-balls`, `ball-action`, `pieces-3d`
+
+```
+picture-balls [width] across= lift= ball= wave= jitter= at= rot= color= shine= name= texture= map= tiles= sharp= tex-offset= tex-rot= bump= [glass]
+```
+
+| Slot | What |
+|---|---|
+| width (bare) | Width · How wide the picture is. · default 3 · random: 1.5–4.800000000000001 |
+| across | Balls across · default 41 · random: 20.5–65.60000000000001 |
+| lift | Lift · How far the brightest balls come forward (along z). · default 0.4 · random: 0.2–0.6400000000000001 |
+| ball | Ball size · 1 touches the neighbours. · default 0.9 · random: 0.45–1.2 |
+| wave | Wave · A ring wave rolling out from the middle. · default 0 · random: -0.3333333333333333–0.3333333333333333 |
+| jitter | Jitter · A random push forward or back per ball. · default 0 · random: 0–0.3333333333333333 |
+| at | random: (-0.6…0.6)×3 |
+| rot | random: (-45…45)×3 |
+| color | random: a harmonious colour |
+| shine | random: 0–0.8 |
+| name | name |
+| texture | A picture on its surface: a name from a texture clause (Surface mode). |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
+| tex-offset | Slides the picture across the surface (1 is a whole picture). |
+| tex-rot | Turns the picture on the surface. |
+| bump | Bump from brightness: bright parts of the picture stand out under the light. · default 0 |
+
+Examples:
+
+- `picture-balls` — on an empty graph (just an Output)
+
 ### hypersphere
 
 3D scene · maker. Hypersphere: A 4D ball: its slice is a ball that grows and shrinks as W moves. Also: 4d-ball, 4d-sphere.
@@ -3777,6 +3814,28 @@ Examples:
 
 - `texture pond · box size=0.5 texture=pond @repeat(2)` — on an empty graph (just an Output)
 
+### depth-picture
+
+3D scene · setting. a picture with depth the objects stand in Also: picture-depth.
+
+Words: `depth-picture`, `picture-depth`
+
+```
+depth-picture [name] how= near= far= soft=
+```
+
+| Slot | What |
+|---|---|
+| name (bare) | The picture (a name from a texture clause). |
+| how | In the picture (Depth Composite), lit by the scene (+ Depth Light), or lit and reflected (+ Picture Environment). · composite, lit, reflect |
+| near | Where the picture's nearest thing is, in scene units. |
+| far | Where its farthest thing is. |
+| soft | Edge softness, in scene units. |
+
+Examples:
+
+- `texture pond · sphere r=0.5 · depth-picture pond how=lit` — on an empty graph (just an Output)
+
 ### tone
 
 3D scene · setting. tone map
@@ -3802,7 +3861,7 @@ Examples:
 Words: `camera`, `cam`
 
 ```
-camera [dist] angle= elev= orbit= zoom= flatten= x= y= z=
+camera [dist] angle= elev= orbit= zoom= flatten= x= y= z= projection= reverse= converge=
 ```
 
 | Slot | What |
@@ -3816,6 +3875,9 @@ camera [dist] angle= elev= orbit= zoom= flatten= x= y= z=
 | x | number |
 | y | number |
 | z | number |
+| projection | How the rays leave the camera: perspective (far things smaller), orthographic (parallel: no change of size with distance) or reverse (far things bigger). The word alone works too: camera reverse. · perspective, orthographic, reverse |
+| reverse | Reverse: how strongly the rays converge (0 parallel … 1 meeting at converge). |
+| converge | Reverse: how far in front of the camera the rays meet. |
 
 Examples:
 
@@ -4623,12 +4685,12 @@ Examples:
 
 ### then
 
-Grid Rules · action. A stacked rule after the base, run in order every step: explode (cells meet), crowd (too many neighbours: die or move), drift (a direction), cluster (a big clump changes).
+Grid Rules · action. A stacked rule after the base, run in order every step: explode (cells meet), crowd (too many neighbours: die or move), drift (a direction), cluster (a big clump changes), move (cells step along their heading), collide (movers that meet bounce, turn, stop, merge or explode). heading= limits a card to cells with that heading.
 
 Words: `then`
 
 ```
-then copies= distance= at= radius= dir= chance=
+then copies= distance= at= radius= dir= heading= assign= blocked= chance=
 ```
 
 | Slot | What |
@@ -4638,6 +4700,9 @@ then copies= distance= at= radius= dir= chance=
 | at | count |
 | radius | count |
 | dir | n, ne, e, se, s, sw, w, nw |
+| heading | none, n, ne, e, se, s, sw, w, nw |
+| assign | random, none, n, ne, e, se, s, sw, w, nw |
+| blocked | wait, bounce, turn |
 | chance | number |
 
 Examples:
@@ -4646,6 +4711,8 @@ Examples:
 - `then drift dir=e chance=0.3` — on an empty graph (just an Output)
 - `then crowd at=5 move` — on an empty graph (just an Output)
 - `then cluster radius=2 at=14` — on an empty graph (just an Output)
+- `then collide explode copies=8 fly` — on an empty graph (just an Output)
+- `then move assign=random blocked=bounce` — on an empty graph (just an Output)
 
 ### colours
 
@@ -4704,7 +4771,7 @@ Agent Rules · header. The rule set: what kind of walkers, what the edges do, ho
 Words: `agents`
 
 ```
-agents kind= edges= view= view-max=
+agents kind= edges= view= view-max= colour=
 ```
 
 | Slot | What |
@@ -4713,6 +4780,7 @@ agents kind= edges= view= view-max=
 | edges | wrap, bounce, slide |
 | view | random: 0.02–0.08 |
 | view-max | count |
+| colour | own |
 
 Examples:
 
@@ -4786,7 +4854,7 @@ Examples:
 
 ### remember
 
-Agent Rules · setting. A named memory each walker keeps: a counter, timer, flag, value, position or level.
+Agent Rules · setting. A named memory each walker keeps: a counter, timer, flag, value, position, level or home (where it was born).
 
 Words: `remember`
 
@@ -4803,6 +4871,7 @@ Examples:
 
 - `remember carrying flag` — on an empty graph (just an Output)
 - `remember energy level start=1 fade=0.3` — on an empty graph (just an Output)
+- `remember home home` — on an empty graph (just an Output)
 
 ### color-by
 
@@ -5292,6 +5361,20 @@ fade
 Examples:
 
 - `fade 3s` — on an empty graph (just an Output)
+
+### home
+
+Agent Rules · action. Action: return home (a spring to its Home).
+
+Words: `home`
+
+```
+home
+```
+
+Examples:
+
+- `always do home 6 delay=1 damping=3` — on an empty graph (just an Output)
 
 ## Limits
 

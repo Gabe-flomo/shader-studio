@@ -1,7 +1,19 @@
 # Simulation builder: plan
 
 Wave 6, item 17 (`docs/plan-2026-10-10.md`); the backlog's "Simulation builder (bigger idea)"
-(`docs/backlog-2026-10-10.md`). Phase 1 is built on `claude/w6-simulation-builder`.
+(`docs/backlog-2026-10-10.md`). Phase 1 is built on `claude/w6-simulation-builder`; movers (phase 3's
+headings and collisions), stacked rules as nodes (1b) and the grid builder's half are built on
+`claude/simulation-p2` (below, "Phase 2 of the build").
+
+## Your answers
+
+- Simulations live as a **mode of the existing kinds** (Grid scene → Grid Rules; Agent scene).
+- A cluster is a **local crowd** (as built), not a connected clump.
+- Cells carry a **heading** for real collisions (built: Move and Collide cards).
+- Stacked rules must **open as nodes**, each card an extra pass (built).
+- Blocks, sand and gas **skip** stacked rules (as built).
+- JS bodies are **skipped**.
+- **One shared vocabulary** across grid cards, Agents rules and the builders' sentences.
 
 What you asked for:
 
@@ -103,14 +115,14 @@ it" already reads a texture), and bodies can be drawn into a grid's start image.
    [grid-rules.md](grid-rules.md#stacked-rules).
    - 1b: Open as nodes with cards; card numbers as live uniforms (no recompile on a slider); a
      "when" picker on every card (any condition with any behaviour, not four fixed pairs).
-2. **Bodies on the Agents layer (JS)**: a **Touch** condition (two bodies' circles overlap, a body
+2. **Bodies on the Agents layer (JS)** *(skipped, your answer)*: a **Touch** condition (two bodies' circles overlap, a body
    and a wall) with **grow / shrink / split / merge / explode / die / change group / signal**
    actions; **Spawn within bounds** (a rectangle, a circle or a shape layer's outline); size as a
    per-body state that collisions read. Presets: "Balls that grow when they meet", "Cells that split
    at a size", "Fireworks". An **Agent scene → Bodies** start.
-3. **Movers on the grid**: cells with a heading (states per direction, as the HPP gas has), so
-   "two movers arrive at the same cell" is a true collision; connected-cluster sizes with a jump
-   flood pass, if local density falls short.
+3. **Movers on the grid** *(built, below)*: cells with a heading (extra state in red's fraction, not
+   states per direction), so "two movers arrive at the same cell" is a true collision. Connected-
+   cluster sizes with a jump flood stay unbuilt (you chose local crowds).
 4. **One toolkit**: the condition and behaviour words shared across grid cards, Agents rules and
    Play's When/Do, so a card can move between them; Surprise me for stacks.
 
@@ -124,3 +136,39 @@ it" already reads a texture), and bodies can be drawn into a grid's start image.
 | The section | `src/components/gridRules/StackForm.tsx`, `builderLayout.ts gridRulesSections`, `TryBoard.tsx` (`focus.card`) |
 | As text | `src/lang/dialects/grid.ts` (`then` lines) |
 | Tests | `src/compiler/__tests__/gridRulesStack.test.ts`, `gridRulesBuilderUi.test.tsx` |
+
+## Phase 2 of the build (`claude/simulation-p2`)
+
+| What | Where |
+|---|---|
+| Headings (red = state + heading / 32), the Move and Collide cards, the heading filter on every card, flying copies, recipes, CPU step and GPU stage | `src/gridRules/stack.ts`, `stackRecipes.ts` |
+| The base keeps a staying cell's heading; drawn headings dealt | `src/gridRules/glsl.ts`, `cpu.ts`, `startCells.ts` (`heads`) |
+| Arrows on the try board (draw, show, Use as the start) | `src/components/gridRules/TryBoard.tsx`, `useTryRun.ts`, `gridRules/tryRun.ts` (`paintCell`) |
+| The cards' settings | `src/components/gridRules/StackForm.tsx` |
+| Stacked rules open as nodes (a Pass a card); big neighbourhoods in one block | `src/store/gridRulesAsNodes.ts` |
+| As text | `src/lang/dialects/grid.ts` (`then move`, `then collide`, `heading=`) |
+| Tests | `src/compiler/__tests__/gridRulesMovers.test.ts`, `gridRulesAsNodes.test.ts` |
+
+**The GPU scheme** is claim and resolve, gathered: every mover claims the cell ahead; a cell that is
+empty and claimed once takes its mover; anything else is a conflict. Collide (one stage) settles the
+conflicts it sees, Move (the next stage) moves the rest, so a step is the two passes of the scheme.
+No cell is ever written by two, and moving, bouncing, turning and stopping keep every cell. The CPU
+try board runs the same card on the same dice, so it steps exactly as the GPU (value for value,
+headings included). Details: [grid-rules.md](grid-rules.md#movers-headings-and-collisions).
+
+**Open as nodes** with cards: the base Pass, then a Pass a card (an Expression Block whose function is
+the node's own stage GLSL), the base reading the last card's Previous. Same boards as the node, step
+for step, one step a frame.
+
+**Grid builder** (docs/grid-builder.md): rules that stay changed, if / then / else and and / or, and
+a state per drawn shape in Make it a simulation.
+
+**Agent Builder**: pause, step one frame, and step back through kept frames (docs/agent-builder.md).
+
+### Next
+
+- Card settings as live uniforms (an edit recompiles today).
+- A "when" picker on every card (any condition with any behaviour), sharing the words with Play's
+  When/Do (phase 4).
+- Diagonal bounces that reflect off a flat wall (a blocked diagonal mover turns round today).
+- Movers longer than one cell (a heading shared by a clump).

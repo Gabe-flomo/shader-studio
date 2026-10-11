@@ -21,6 +21,7 @@ The start page shows five cards, each with a small moving picture: **Trail follo
 | Flocks | flock | the Boids example's setup | 3D flock |
 | Crowds | crowd | the Crowd example's setup (two kinds walking opposite ways) | the 3D flock's setup with the crowd's rules, rescaled |
 | Orbiters | swarm | the Swarm example's setup | Orbiters in 3D |
+| Scan to walkers | particles | a splat scan as walkers (Emit: Splat scan, a generated ball), blown apart and flowing back home, drawn as Splats | Scan to walkers in 3D |
 
 Crowds have a card of their own but the Flocks sections. A crowd is a flock with somewhere to go (Head for) that slows in a jam. What you make looks different (people in lanes, not birds) and starts from a different setup, so it gets its own picture and presets.
 
@@ -59,6 +60,17 @@ The side panels and the strip fold from the top bar (⌘[ and ⌘] fold the side
 The builder doesn't pause the main preview (`previewHold.ts`) as the explain view does, because the agents' simulation only runs in the main preview's pipeline. The main canvas keeps drawing under the window, and the builder copies its frames.
 
 If no frame arrives (the preview is hidden in this layout), the viewport says so.
+
+### Stepping
+
+A bar under the viewport steps through the simulation, as the Grid Rules try board does: **⏮** back to the oldest step kept, **◀** one step back, **▶ / ⏸** play and pause (the preview's own clock, so everything else pauses too), **▶|** one step forward. With the bar focused, ← → and Space do the same; **Shift+→** (or Shift-click ▶|) runs a whole frame's steps at once (the group's Steps a frame). **Step N** is the group's own step count, the number the group card shows.
+
+- A step is one fixed tick of every Agents group in the graph (1/60 s of simulated time: sense, steer, move, deposit, then the trails spread and fade). The live runner runs it at its next frame, the same step the clock would run, and the clock carries on from there when you play again (no catch-up, no wait). Stepping is deterministic: the rule is a function of the state, the step and the seed.
+- Pressing ◀ or ▶| while playing pauses first.
+- **Back is limited.** While the builder is open the runner keeps a copy of the walkers' state textures and every trail's texture (and each group's schedule: births, Burst, what its listeners heard) before every frame that steps: a played frame (a few steps at once) or a step forward. ◀ puts back the newest copy at or before the step wanted and runs the steps between again, so back is always exactly one step, as far back as the oldest copy. The copies are GPU memory, as big as the state (a 256k-walker Slime mold with its 1024-row trail is about 23 MB), so at most 60 are kept and no more than 256 MB together; the bar says how many frames that is ("Keeps the last N frames") and how far back you can go. Nothing is copied while the builder is closed.
+- Starting over (↺, the clock reset) drops the copies. A group whose count or 2D/3D changed since a copy keeps its new state; a trail resized with the picture is left as it is. The picture's own feedback (a Feedback node, Echo) isn't part of the copies.
+
+Files: `src/agentBuilder/stepRun.ts` (the ring of copies, a step back's plan, the buttons' queue; tested with a CPU stand-in), `src/lib/agentSnapshots.ts` (the queue, the GPU copies, restoring, re-anchoring the clock; `AgentRunner.run` calls it), `src/components/agentBuilder/AgentTransport.tsx` (the bar).
 
 ## Sections and cards (Trail followers)
 
@@ -130,6 +142,8 @@ The rules the cards can't show (two conditions, Stop after this rule, states, ma
   - Attract / repel: Pull (negative pushes), toward A point or The mouse, Across, Up.
   - Follow a field: a vector field you pick, combine or write (below).
   - Drag.
+  - Return home: Strength, Damping, After (s): a spring back to the Home memory (where it was born). Without a Home
+    memory the card offers to add one; the Emit fills it (Remember home, or a splat scan).
 
   They run in order: drag the handle to reorder.
 - **Moving:** Speed, At the edges.
@@ -534,8 +548,8 @@ The trail's four channels are **named colour swatches** (Trail → Channels): a 
 
 Every kind has a Look section (`LookSection.tsx`, `agentBuilder/look.ts`):
 
-- **Drawn as**: Dots, Glow, Streaks or Ink, Size, Brightness (and Streak length): Draw agents. With no Draw agents (trail followers: the trail is the picture), **Draw the walkers too** adds one over what the Output showed.
-- **Colour**: by Kind (Draw agents' Colour by State: the kinds' and states' colours, named and coloured here, + State), Speed (with Fast is), Age, Heading, One colour (Draw agents' palette, or Colour A → B), **A trail** (the rules colour each walker from its kind's colour, dimmed, to a channel's colour as that trail is under it: the rule set's `look`, Finish's colour, Draw agents' Colour by Agent), or **A memory** (phase 4's `colourBy`).
+- **Drawn as**: Dots, Glow, Streaks, Ink or **Splats**, Size, Brightness (and Streak length): Draw agents. Splats has Splat size (or, sized by Its own, the memory scale), Size by (Fixed, Speed, Its own), Stretch and Opacity (docs/splat-scene.md "Agents as splats"). With no Draw agents (trail followers: the trail is the picture), **Draw the walkers too** adds one over what the Output showed.
+- **Colour**: by Kind (Draw agents' Colour by State: the kinds' and states' colours, named and coloured here, + State), Speed (with Fast is), Age, Heading, One colour (Draw agents' palette, or Colour A → B), **A trail** (the rules colour each walker from its kind's colour, dimmed, to a channel's colour as that trail is under it: the rule set's `look`, Finish's colour, Draw agents' Colour by Agent), or **A memory** (phase 4's `colourBy`), or **Its own** (the colour it was born with, a splat scan's: the rule set's `look: { by: 'birth' }` leaves Agent Output's Colour unwired).
 - **The trail**: what the picture shows (the trail, one channel, walker density) and its palette: five ready-made palettes and each stop's colour (the Stops Palette that shows the trail).
 - **3D: Camera**: Distance, Angle, Elevation, Orbit speed, Zoom, Focus, Blur, Max blur (Draw agents' camera), and Around a shape.
 - The legend says what is drawn: "Each walker is a dot with a soft glow, 1.2 pixels across", "Colour: slow particles at the palette's start, fast ones at its end", the trail's palette, the camera. Focus plays a few walkers drawn and coloured that way.
@@ -556,4 +570,5 @@ The left nav also has **What they are**: the kind (Trail followers, Particles, F
 - Where: `src/agentBuilder/where.ts` (the list, inside / outside, mask slots, adapters, food), `madeShapes.ts` (shapes as nodes, the stroke and pixel fonts), `whereActions.ts` (the store side: pick, read back, drag), `src/lib/regionValues.ts` (GPU values, thumbnails, the shaded region and its outline, slope arrows), `src/components/agentBuilder/WherePicker.tsx`, `RegionOverlay.tsx`.
 - Trail channels: `src/agentBuilder/trailChannels.ts`, `src/components/agentBuilder/TrailChannels.tsx`. Look: `src/agentBuilder/look.ts`, `lookActions.ts`, `src/components/agentBuilder/LookSection.tsx`.
 - `src/lib/previewMirror.ts`.
+- Stepping: `src/agentBuilder/stepRun.ts`, `src/lib/agentSnapshots.ts`, `src/components/agentBuilder/AgentTransport.tsx`.
 - The window state: `builders/windows.ts` (`agentBuilder`).

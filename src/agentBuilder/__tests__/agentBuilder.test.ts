@@ -154,7 +154,7 @@ describe('presets, kinds and words', () => {
 
   it('the start page\'s kinds map to the rule sets\' kinds and templates; every kind is built (phase 2), Crowds with a card of its own', () => {
     expect(START_CARDS.map(c => [c.label, c.kind, c.built])).toEqual([
-      ['Trail followers', 'trail', true], ['Particles', 'particles', true], ['Flocks', 'flock', true], ['Crowds', 'crowd', true], ['Orbiters', 'swarm', true],
+      ['Trail followers', 'trail', true], ['Particles', 'particles', true], ['Flocks', 'flock', true], ['Crowds', 'crowd', true], ['Orbiters', 'swarm', true], ['Scan to walkers', 'particles', true],
     ]);
     for (const c of START_CARDS) expect(rulesTemplate(c.template), c.id).toBeTruthy();
     expect([...BUILDER_KINDS]).toEqual(['trail', 'ants', 'particles', 'flock', 'crowd', 'swarm']);

@@ -13,6 +13,7 @@ export { VideoInputNode };
 import { BakedNode } from './baked';
 import { DepthNode } from './depth';
 import { DepthCompositeNode, DepthLightNode, PictureEnvironmentNode } from './depthScene';
+import { DepthMixNode } from './depthMix';
 import { SplatProbeOutNode, SplatSceneNode } from './splatScene';
 import { SetSplatNode, SplatAttributesNode, SplatColorNode, SplatCropNode, SplatDissolveNode, SplatExplodeNode, SplatLookNode, SplatModOutNode, SplatPointsNode, SplatWaveNode } from './splatModifiers';
 import { TimeCubeNode, TimeCubeViewNode, TimeSliceNode } from './timeCube';
@@ -39,6 +40,7 @@ export { PadGridNode } from './padGrid';
 export { GridPatternNode } from './gridPattern';
 export { GridPaintNode } from './gridPaint';
 export { CellPictureNode, CellPatternNode } from './cellPicture';
+export { PiecesNode, BallsNode } from './pieces';
 export { ArrayFieldNode } from './arrayField';
 export { FieldCellNode } from './fieldCell';
 export { GridLayoutNode, WaveRadiusNode, NeighborDistNode, CellFilterNode, CellDisplaceNode, GridDensityWarpNode, NeighborOffset2dNode, AnimatedCellCenterNode, NeighborAttractCirclesNode } from './grid';
@@ -150,7 +152,7 @@ export { GridUVNode, PixelateNode, DotMaskNode, SdfMaskNode, LumaRadiusNode, RGB
 // GPU Particles (the engine in play/kit/gpuParticles.js)
 export { GpuParticlesNode } from './gpuParticles';
 export { ShaderTextureNode, ShaderTextureOutputNode } from './shaderTexture';
-export { PassNode, PassOutputNode, SampleTextureNode, EdgesTextureNode, BlurTextureNode, GlowTextureNode, DisplaceTextureNode, DisplacementMapNode, JumpFloodTextureNode } from './passes';
+export { PassNode, PassOutputNode, SampleTextureNode, EdgesTextureNode, BlurTextureNode, GlowTextureNode, ChromaTextureNode, DisplaceTextureNode, DisplacementMapNode, JumpFloodTextureNode } from './passes';
 export { TextureMaskNode, TextureLevelsNode, TextureFlowNode, TextureNeighboursNode, TextureChangeNode, DistanceShapeNode, TextureFadeNode, ReadTextureNode } from './textureTools';
 export { AgentsGroupNode, AgentInputsNode, AgentOutputNode, AgentStepOutNode, AgentSenseNode, AgentSteerNode, AgentMoveNode, AgentBySpeciesNode, AgentEmitNode, AgentDepositNode, TrailFieldNode, TrailStepOutNode, AgentProbeOutNode, DrawAgentsNode, SlimeMoldPresetNode, ParticlesPresetNode, CurlSmokePresetNode, SoundBurstPresetNode, MultiSlimePresetNode, AntsPresetNode, BoidsPresetNode, StrandsPresetNode, GrowPicturePresetNode, GalaxyPresetNode, MyceliumPresetNode, SandPlatePresetNode } from './agents';
 export { AgentGravityNode, AgentWindNode, AgentCurlNode, AgentAttractNode, AgentVortexNode, AgentFlowNode, AgentSoundKickNode, AgentIntegrateNode, AgentAgeNode, AgentCollideNode, AgentChladniNode } from './agentForces';
@@ -195,6 +197,7 @@ import { EchoNode } from './echo';
 import { GridPatternNode } from './gridPattern';
 import { GridPaintNode } from './gridPaint';
 import { CellPictureNode, CellPatternNode } from './cellPicture';
+import { PiecesNode, BallsNode } from './pieces';
 import { ArrayFieldNode } from './arrayField';
 import { FieldCellNode } from './fieldCell';
 import { GridLayoutNode, WaveRadiusNode, NeighborDistNode, CellFilterNode, CellDisplaceNode, GridDensityWarpNode, NeighborOffset2dNode, AnimatedCellCenterNode, NeighborAttractCirclesNode } from './grid';
@@ -289,7 +292,7 @@ import { GpuParticlesNode } from './gpuParticles';
 import { BlurStageNode } from './blurStage';
 import { GridRulesNode, GridRulesStepNode, MouseButtonNode } from './gridRules';
 import { ShaderTextureNode, ShaderTextureOutputNode } from './shaderTexture';
-import { PassNode, PassOutputNode, SampleTextureNode, EdgesTextureNode, BlurTextureNode, GlowTextureNode, DisplaceTextureNode, DisplacementMapNode, JumpFloodTextureNode } from './passes';
+import { PassNode, PassOutputNode, SampleTextureNode, EdgesTextureNode, BlurTextureNode, GlowTextureNode, ChromaTextureNode, DisplaceTextureNode, DisplacementMapNode, JumpFloodTextureNode } from './passes';
 import { TextureMaskNode, TextureLevelsNode, TextureFlowNode, TextureNeighboursNode, TextureChangeNode, DistanceShapeNode, TextureFadeNode, ReadTextureNode } from './textureTools';
 import { AgentsGroupNode, AgentInputsNode, AgentOutputNode, AgentStepOutNode, AgentSenseNode, AgentSteerNode, AgentMoveNode, AgentBySpeciesNode, AgentEmitNode, AgentDepositNode, TrailFieldNode, TrailStepOutNode, AgentProbeOutNode, DrawAgentsNode, SlimeMoldPresetNode, ParticlesPresetNode, CurlSmokePresetNode, SoundBurstPresetNode, MultiSlimePresetNode, AntsPresetNode, BoidsPresetNode, StrandsPresetNode, GrowPicturePresetNode, GalaxyPresetNode, MyceliumPresetNode, SandPlatePresetNode } from './agents';
 import { AgentNeighboursNode } from './agentNeighbours';
@@ -321,6 +324,8 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   baked: BakedNode,
   // Depth (docs/depth-node.md): a picture's depth from an on-device model
   depth: DepthNode,
+  // Depth Mix (docs/depth-mix.md): a picture with depth and a scene put together (size, space, occlude, fog, light, mix)
+  depthMix: DepthMixNode,
   // Depth in 3D scenes (docs/depth-node.md): a picture with depth inside a ray-marched scene
   depthComposite: DepthCompositeNode,
   splatScene: SplatSceneNode,
@@ -402,6 +407,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   gridPaint: GridPaintNode,
   cellPicture: CellPictureNode,
   cellPattern: CellPatternNode,
+  pieces: PiecesNode,
   arrayField: ArrayFieldNode,
   fieldCell: FieldCellNode,
   neighborOffset2d: NeighborOffset2dNode,
@@ -540,6 +546,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   edgesTexture: EdgesTextureNode,
   blurTexture: BlurTextureNode,
   glowTexture: GlowTextureNode,
+  chromaTexture: ChromaTextureNode,
   displaceTexture: DisplaceTextureNode,
   displacementMap: DisplacementMapNode,
   jumpFloodTexture: JumpFloodTextureNode,
@@ -699,6 +706,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   sceneBuilder: SceneBuilderNode,
   repeatScene: RepeatSceneNode,
   repeatCell: RepeatCellNode,
+  pieceBalls: BallsNode,
   curveTrace: CurveTraceNode,
   curveTrace3D: CurveTrace3DNode,
   curveTraceBeamStep: CurveBeamStepNode,

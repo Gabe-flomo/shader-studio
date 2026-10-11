@@ -20,7 +20,8 @@ The scan is drawn by the main preview's raster pass, so the builder's picture **
 
 - opening on a new scene builds it: one undo step, "Splat builder: built a splat scene";
 - after that each change is synced quietly, once a frame at most. A change of settings only writes the nodes' params
-  (live uniforms: no recompile). A change of wiring (an effect added, removed, turned off or moved; the world turned
+  and their uniforms, in one store write (`writeParams`: live uniforms, no rebuild, no recompile; a param with no
+  uniform, a mode or a string, compiles at once). A change of wiring (an effect added, removed, turned off or moved; the world turned
   on) rebuilds, keeping every node's id by its role (`fx:e2`, `camera`, `scan`, `w:march`…), so Play controls stay
   pointed at them (`paramDiff` decides which);
 - closing (Done, ×, or back to the kinds) makes the whole session one undo step, "Splat builder: changed the splat
@@ -49,6 +50,12 @@ fingerprints, `apply.ts`).
 - **Its own size:** while the window is open the main preview draws at the viewport's size (`lib/previewSize.ts`,
   `LiveViewport ownSize`), so the picture fills the viewport sharp whatever shape the preview panel has; it goes back
   when the window closes.
+- **The picture comes first:** the viewport takes the preview's canvas itself (`lib/previewMirror.ts
+  adoptPreviewCanvas`: one draw a frame, straight to the screen, no copy), the graph and the node browser behind the
+  window are frozen, and the preview skips its readbacks and thumbnails for them (`builders/builderFocus.ts`). All of
+  it comes back when the window closes. Measured in [scene-builder.md](scene-builder.md), "The builder's picture comes
+  first": orbiting `train.splat` went from 11.4 / 22.9 ms a frame (p50 / p95) with a picture that didn't follow the
+  drag, to 5.7 / 6.3 ms following it.
 - **A paused clock** still shows the picture: the viewport keeps asking the main preview for a frame until one comes
   (the first ask can land while the Scene builder's kind page still holds the preview), so it shows the last frame
   rather than "the preview is hidden" (that note is only for a preview that really can't draw: its panel hidden). The
@@ -171,6 +178,15 @@ named by `file=` must be loaded (its `id` is the library's). Lines it can't read
 Tests: `src/splatBuilder/__tests__/splatBuilder.test.ts` (every template and effect compiles, the stack is the chain
 in order, reopen as built, hand edits kept, the live sync and its undo steps, Surprise me, the recipe, Place's maths)
 and the kind page in `src/components/builders/__tests__/sceneBuilderShell.test.tsx`.
+
+### Laggy while dragging (fixed)
+
+Dragging a slider or orbiting felt laggy for two reasons. The live sync wrote a change of settings with
+`updateNodeParams` without its uniforms, which asks for a full compile 500 ms after the last change: the picture stood
+still for the whole drag (0 sorts while orbiting) and jumped half a second after it, with a recompile. And every tick
+re-rendered the graph behind the window (cards, wires, minimap, the node browser) and copied the preview into the
+viewport. Now one store write a tick carries the params and their uniforms, and the builder's picture comes first
+(above).
 
 ### A fix it needed
 

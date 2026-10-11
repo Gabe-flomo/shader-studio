@@ -71,6 +71,15 @@ unit is one metre. A bake keeps only nearness.
 - **DepthFM:** a flow-matching (diffusion-family) model: many network passes per frame at a large size, too heavy
   for a browser.
 
+## Depth Mix and the scene builders
+
+**Depth Mix** ([depth-mix.md](depth-mix.md)) puts a picture with depth and any scene together: shapes sized by depth,
+moved by depth (parallax, glows beaming through), occluded, fogged, lit or mixed by depth, with a gradient laid along
+depth. The **2D Scene Builder**'s Depth tab builds it ([scene-builder-2d.md](scene-builder-2d.md#picture-with-depth)),
+and the **3D Scene Builder** has "Add a picture with depth" as a card (Light & colour → Picture with depth:
+[scene-builder-3d.md](scene-builder-3d.md#a-picture-with-depth)). Both have **Generate depth**, which runs the model once
+on the picture (`bakeImageDepth`, the same code as Bake depth on an image) and builds the Depth node baked.
+
 ## Video
 
 - **A video's depth is baked first.** Press **Bake depth**: it runs the model once over the clip, and

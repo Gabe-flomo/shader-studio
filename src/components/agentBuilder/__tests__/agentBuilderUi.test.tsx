@@ -98,8 +98,8 @@ describe('the shared shell', () => {
 describe('the start page', () => {
   it('asks what you are making: five kinds with pictures (Crowds has its own), 2D / 3D; nothing is added yet', () => {
     mount(<AgentBuilder groupId={null} onClose={() => {}} />);
-    expect($$('[data-start-kind]').map(b => b.getAttribute('data-start-kind'))).toEqual(['trail', 'particles', 'flock', 'crowd', 'orbit']);
-    expect($$('[data-kind-picture]').length).toBe(5);
+    expect($$('[data-start-kind]').map(b => b.getAttribute('data-start-kind'))).toEqual(['trail', 'particles', 'flock', 'crowd', 'orbit', 'scan']);
+    expect($$('[data-kind-picture]').length).toBe(6);
     expect($$('[data-start-old]').length).toBe(0);
     expect($('[aria-label="Start in 2D or 3D"]')).toBeTruthy();
     expect(useNodeGraphStore.getState().nodes).toEqual([]);

@@ -6,7 +6,8 @@
  * inside it, and what to do with it (Open, Export, Duplicate, Delete).
  * A panel on a desktop; the same inside a sheet on a phone.
  */
-import { lazy, Suspense, useMemo, useState } from 'react';
+import { Suspense, useMemo, useState } from 'react';
+import { lazySafe } from '../lazyWithSuspense';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Button, IconButton } from '../ui/Button';
@@ -22,7 +23,7 @@ import { capsLabel, cardStyle, KIND_LABELS, when, tintFor } from './fileUiShared
 import { Relations, LinkRow } from './NodeView';
 import { useItemPosters } from './useItemPosters';
 
-const CodePreviewPane = lazy(() => import('../present/CodePreview').then(m => ({ default: m.CodePreviewPane })));
+const CodePreviewPane = lazySafe(() => import('../present/CodePreview').then(m => ({ default: m.CodePreviewPane })));
 
 type Obj = Record<string, unknown>;
 const obj = (v: unknown): Obj | undefined => (v && typeof v === 'object' && !Array.isArray(v) ? v as Obj : undefined);

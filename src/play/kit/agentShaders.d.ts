@@ -24,3 +24,6 @@ export const AG_DRAW3_VERT: string;
 export const AG_NB_GLSL: string;
 export const AG_NB_BIN_VERT: string;
 export const AG_NB_BIN_FRAG: string;
+export const AG_SPLAT_VERT: string;
+export const AG_SPLAT_FRAG: string;
+export const AG_SPLAT_RESOLVE_FRAG: string;

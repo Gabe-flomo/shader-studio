@@ -119,6 +119,7 @@ The card shows a small live thumbnail of the texture (updated every few frames, 
 - **Edges (Sobel)**: 3×3 Sobel on luma → edge strength, direction vec2, an edge-tinted colour.
 - **Glow (texture)**: threshold, then blur, then intensity → glow colour to add.
 - **Displace**: texture A sampled at UV + (texture B's rg − 0.5) × amount.
+- **Chromatic Aberration (texture)** (added 2026-10-11): red read a little one way, blue the other, green where it is. Radial (outward from the centre, growing to the edges like a lens) or Directional (one way everywhere, like a video signal); Amount in picture pixels; Amount, Angle and Falloff can be wired. The scene builders' Effects → Chromatic aberration builds it.
 - **Composite** needs no new node: wire Pass/Blur/Glow colour outputs into the existing Blend / Mix / Add nodes.
 - **Feedback** needs no new node: wire a Pass's `previous` output into Sample (with a warped UV) and mix it into the Pass's own input. This is reaction-diffusion, trails and smoke, but per Pass, at its own Scale, and in the same frame as everything else.
 

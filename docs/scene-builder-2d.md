@@ -7,10 +7,12 @@ A builder for flat pictures, like the 3D Scene Builder: pick shapes, bend the sp
 - **Layers** (left): shapes and combine groups, painted top to bottom (the last is on top). Select one to edit it; move it earlier or later, delete it, join it with the next layer (∪ with next, − next) or ungroup.
 - **Space**: transforms applied to the picture's coordinates before the shapes measure them, top to bottom. At the top, a big **space view** (a grid seen through the whole stack; it stays in view as the stack scrolls, and hovering a transform shows the space after it). Then the stack: **space blocks** (below), and the built-in transforms (zoom, rotate with spin, move, pixelate, tile, mirror tile, mirror, kaleidoscope, polar repeat, polar, swirl, noise warp, wave, fisheye, invert; folded under *Built-in transforms*), and functions (*Add a function*). Each shows a thumbnail of a grid or checkerboard through it.
 - **Shapes**: a gallery of 17 shapes (circle, ring, box, rounded box, triangle, diamond, pentagon, hexagon, octagon, star, burst, hexagram, heart, cross, ellipse, moon, vesica). The selected layer's inspector has its size, colour and glow; **Place** (position, rotate, scale, round, outline only); **Motion** (orbit, bob, spin, pulse, with speed, amount, direction and phase); **Duplicate** (a ring of copies, rings of rings, and the whole ring repeated at bigger sizes).
-- **Look**: background, colour by (each layer's colour, or length, angle, x, y, time or distance through a palette), glow on all shapes or only layers marked Glow, tone map, bloom, vignette, grain, scanlines.
+- **Depth**: a picture with depth the shapes interact with (below, [Picture with depth](#picture-with-depth)).
+- **Look** ([builder-look.md](builder-look.md)): the scene's **palette** (the app's palettes as swatch strips, the palette library's saved ones, or one of your own made right there and saved to the library); the background and each layer can take a **palette slot** instead of a free colour, so changing the palette recolours them; colour by (each layer's colour, or length, angle, x, y, time or distance through the palette); glow on all shapes or only layers marked Glow; the **grade**, a stack of the app's colour-grading nodes in order; tone map, vignette, grain. Bloom and Scanlines are no longer offered (a scene made with them keeps them, under *older effects*): **Effects → Glow** and **CRT mask** replace them.
+- **Effects** ([builder-look.md](builder-look.md#effects)): shader effects on the finished picture as stacked cards, dragged into order: Displace (by noise, or by a picture through the shared picker or a Shader Texture), Swirl, Ripple, Lens, Pixelate, Kaleidoscope, Blur, Glow, Chromatic aberration and CRT mask.
 - **Output**: the picture, or a view of how it works: distance bands, the mask, or the space as a checkerboard.
 - **Recipe**: the whole scene as one line of the Playfield language, e.g. `kaleidoscope 8 · ring r=0.3 th=0.02 color=cyan @orbit(0.12 speed=0.12) · glow 0.008 · tone aces`. Edit and Apply, or paste one.
-- **Templates**: five starting points.
+- **Templates**: starting points (two with a picture with depth).
 - **Surprise me** (header): a whole random scene from a seed (see below). The seed shows beside it; type one and press Enter to make that scene again.
 - **Preview** (right): the graph Build makes, compiled and drawn live.
 
@@ -71,6 +73,32 @@ travelling waves (`vec2(sin(y·9 + t), cos(x·9 − t))`). The library writes th
 blocks and fills in the classics the corpus only hints at (log-polar, kaleidoscope folds, Kali and
 IFS folds, iq's warp of a warp).
 
+### My blocks (saving your own)
+
+**Save block…** (under Run × on any block, written by hand or changed from the library) saves it
+to the library: a **name**, an optional line on **what it does**, a **category** (My blocks, or one
+of the library's eight) and **Random may offer it** (off unless you tick it). It keeps the lines,
+the sliders (names, values, ranges) and Run ×, and draws the same **warped-grid thumbnail** the
+library draws for its own blocks (the same renderer, `renderWarpThumbnail`, stored as a 64 px
+PNG). On a combine, **Save combine…** saves the whole thing: both blocks and how they join.
+
+- The block in the scene links back to it (`From your “Wobble rings”`) and the button becomes
+  **Save changes…**: saving under a name you already have replaces that block, which is how a
+  saved block is edited.
+- **In the library** a **My blocks** section comes first (and a *My blocks* tab shows only yours),
+  each with its thumbnail, what it does and its sliders. Search covers them. A block saved into a
+  library category also shows under that category's tab. Picking one adds it like a library block
+  (a saved combine adds a combine).
+- On each saved tile: **Rename**, **Duplicate**, **Copy** (a small JSON text to paste on another
+  machine), **Export** (a `.spaceblock.json` file) and **Delete** (scenes that used it keep their
+  own copy of its lines). **Import…** takes the copied text or a file; the thumbnail is redrawn and
+  a taken name gets a number.
+- **Stored** like rack presets: one list in localStorage, `shader-studio:space-blocks`
+  (`src/sceneBuilder2d/savedBlocks.ts`). It goes into backups, library downloads and profile ZIPs
+  (*space blocks.json*), the workspace folder (`presets/space blocks/*.spaceblock.json`), and the
+  Files page shows them under Presets → *Space blocks (2D Scene Builder)* with their pictures.
+- Not built: a second thumbnail of the current scene through the block.
+
 ### What Build makes
 
 Each block is one **Expression Block**: a `uv` input wired from the stack above, a float slider
@@ -90,6 +118,19 @@ combine-blocks multiply a=kaleidoscope b={uv = abs(uv)} a_count=8
 A library name prints only the sliders that differ from the entry; written lines print in `{ }`
 with every slider. `combine-blocks` takes `add|subtract|multiply|blend`, `a=` and `b=` (a name or
 lines), `amount=`, and `a_…` / `b_…` for each side's sliders and `times`.
+
+One of **your saved blocks** prints with its name *and* its lines, so the recipe still works in a
+project (or on a machine) that doesn't have it:
+
+```
+space-block my="Wobble rings" {uv.x += amp * sin(y * freq + t)} amp=0.15 freq=9
+space-block my="Wobble rings" amp=0.3
+combine-blocks multiply my=Pair a={…} b={…}
+```
+
+With lines in `{ }` the lines are used and the block keeps its link; `my=` alone looks the block up
+in My blocks (its sliders by name, as for a library block) and says so, with a suggestion, when it
+isn't there. `combine-blocks my=…` alone does the same for a saved combine.
 
 ### Later
 
@@ -171,6 +212,50 @@ grid 16 12 picture=pond picture-mode=piece
 - `picture name` is a picture layer; `background … picture= fit= tiles= [still]`.
 - On the grid: `picture=` and `picture-mode=cell|mask|matte|piece` (piece when left out).
 
+## Picture with depth
+
+The **Depth** tab: a picture with depth the shapes interact with ([depth-mix.md](depth-mix.md)).
+
+- **Picture with depth:** pick it with the shared picker; **Fit** (Fill, Fit, Stretch) says how it covers the frame.
+- **Generate depth** works its depth out now, on this device, as the Texture card's Generate depth does (Depth
+  Anything V2 Small; the first time it offers the one-time 50 MB download, which the browser keeps). The result is
+  kept as an image beside the picture and Build puts it on the Depth node (Update: Baked). Without it, the built
+  Depth node works the depth out live. The preview shows the generated depth, or the depth a Depth node on the canvas
+  already has for the picture, or else the picture's brightness as a stand-in (the tab says which).
+- **Shapes and depth:** **Size by depth** (every layer grows on near things: *Size far*, *Size near*) and **Space by
+  depth** (the point every shape is measured from moves by depth: *Move by* Shift, Zoom or Turn, *Amount*,
+  *Direction*, *Focus*). Either, both or neither.
+- **With the picture:** the look. **On top** (the scene over the picture: *Scene over it* Add, Screen, Over or Tint),
+  **Occlude** (*Scene sits at*, *Softness*), **Fog** (*Density*, *Haze*, *Fog colour*), **Mix** (*Near shows*,
+  *Amount*), **Light** (*Strength*, *Own light*, *Glow*). **Picture** is how bright the picture shows.
+- **Depth range:** *Far end*, *Near end* and *Curve*: which part of the depth counts.
+- **Gradient over depth:** a palette along depth (*On* the scene, the picture or both; *How*; *Amount*, *Cycles*,
+  *Phase*, and *Flow*, which moves it through depth over time).
+
+What Build makes: a **Picture fit** and **Sample (texture)** (the picture over the frame), a **Depth** node reading
+the picture's node at the same place (so depth and colour line up), a **Depth Mix for the shapes** when size or space
+is on (its *Scale* into each top-level layer's Transform *Grow*, times a pulse when it has one; its *Depth UV* as the
+point the layers and the grid are measured from), and a **Depth Mix** after the layers and the grid that puts the
+scene and the picture together (its Scene mask from the layers' union with *Over*; *Time × Flow* into its Phase).
+Every setting is a live slider on those nodes; every node has a note.
+
+Size by depth grows top-level layers; a grid keeps its own sizes (space by depth moves it).
+
+### In a recipe
+
+```
+depth-picture pond size=(0.4,1.6) look=occlude at=0.5
+depth-picture pond space=shift shift=0.6 dir=90 focus=0.3 gradient=sunset cycles=1.5 flow=0.05
+```
+
+`depth-picture name` then: `fit=cover|contain|stretch`, `size` or `size=(far,near)`, `space=shift|zoom|turn`,
+`shift=`, `dir=`, `focus=`, `look=top|occlude|fog|mix|light`, `with=add|screen|over|tint`, `picture=`,
+`range=(far,near)`, `curve=`, `at=`, `soft=`, `fog=`, `haze=`, `fog-color=`, `light=`, `own=`, `glow=`,
+`near=picture|scene`, `mix=`, `gradient=<palette>|off`, `gradient-on=scene|picture|both`,
+`gradient-how=multiply|colorize|add`, `gradient-amount=`, `cycles=`, `phase=`, `flow=`. The palettes are the Palette
+node's: blue-teal, rainbow, warm, lemon, sunset, fire, forest, purple-haze, deep-purple, psychedelic. A recipe
+doesn't carry a generated depth; Apply on the Recipe tab keeps it for the same picture.
+
 ## Surprise me
 
 The header's **Surprise me** makes a good-looking random scene from a seed, as one undo step
@@ -186,7 +271,9 @@ The header's **Surprise me** makes a good-looking random scene from a seed, as o
   sizes); motion (orbit, bob, spin, pulse) on most.
 - **Look:** glow on all, a dark ground near the palette's hue, ACES tone mapping (AgX lifted the
   dark ground to grey in every trial), sometimes colour by length, angle or distance through a
-  palette, a little bloom and vignette.
+  palette, a little vignette; now and then the shapes take a library palette's slots, a same-frame
+  Glow, a touch of grade (saturation, levels) and, rarely, one tasteful effect (a little chromatic
+  aberration, a CRT mask).
 
 Tests (`src/sceneBuilder2d/__tests__/surprise.test.ts`): seeded, 30 seeds build with no warnings,
 compile and read back from their recipe, most use blocks, one undo step with the seed remembered.
@@ -206,7 +293,8 @@ widen when you type past the end.
 
 ## Examples
 
-**2D: Scene Builder** folder: Kaleidoscope of glowing rings, Orbiting shapes, A ring of rings.
+**2D: Scene Builder** folder: Kaleidoscope of glowing rings, Orbiting shapes, A ring of rings, and two pictures with
+depth on the "ridges at dusk" still: Circles sized by depth, Glow beaming through depth ([depth-mix.md](depth-mix.md#examples)).
 
 ## Functions
 

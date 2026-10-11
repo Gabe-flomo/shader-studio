@@ -7,7 +7,8 @@
  *    prefix, then fuzzy (a substring or the letters in order), then keywords (the "leads for"
  *    words like Transform's "move", old names, the category, the description).
  *  - Related: what fits where you are, whatever you typed: nodes that usually follow the node you
- *    came from (your graphs and the examples), and nodes you added recently.
+ *    came from (your graphs and the examples), and nodes you added recently. Opened from a selected
+ *    node, only nodes that can take one of its outputs (wireFit.canFollow).
  *  - Keyboard: arrows across tile grids and lists, Tab from one group to the next.
  */
 import type { NodeDefinition } from '../../types/nodeGraph';
@@ -16,6 +17,7 @@ import type { ctp } from '../../theme/palette';
 import { getAllCategories, getNodeDefinition, getNodesByCategory } from '../../nodes/definitions';
 import { CATEGORY_ORDER, CATEGORY_SECTIONS, nodesOfRow } from './libraryRows';
 import { CATEGORY_ROLES } from './nodeCategoryMeta';
+import { DYNAMIC_SOCKET_TYPES, canFollow, fitsWireInsert } from './wireFit';
 
 /** How many results lead, as big tiles; the rest are a list under them. */
 export const TOP_COUNT = 8;
@@ -135,6 +137,12 @@ export interface RelatedContext {
   follows?: ReadonlyMap<string, number> | null;
   /** Recently added types, newest first. */
   recents?: readonly string[];
+  /**
+   * The selected node's output types, when the search was opened from a node (not a wire): only
+   * nodes that can take one of them are related (wireFit.canFollow — float broadcasts, genType
+   * nodes take the vector type).
+   */
+  outTypes?: readonly string[] | null;
 }
 
 export interface RelatedPick { def: NodeDefinition; score: number; why: string }
@@ -165,6 +173,7 @@ export function rankRelated(defs: readonly NodeDefinition[], ctx: RelatedContext
   const out: RelatedPick[] = [];
   for (const def of defs) {
     if (exclude.has(def.type) || (ctx.fromType && def.type === ctx.fromType && !ctx.recents?.includes(def.type))) continue;
+    if (ctx.outTypes && !canFollow(def, ctx.outTypes)) continue;
     const score = contextScore(def.type, ctx);
     if (score < 0.08) continue;
     const aff = ctx.fromType ? (ctx.affinity?.(def.type) ?? 0) : 0;
@@ -177,13 +186,15 @@ export function rankRelated(defs: readonly NodeDefinition[], ctx: RelatedContext
 
 // ── Wire filters ──────────────────────────────────────────────────────────────
 
-// Expr Block / Custom Fn declare their sockets at run time (params.inputs), so they can take anything.
-const DYNAMIC_INPUT_NODE_TYPES = new Set(['exprNode', 'customFn']);
-
-/** A node that can feed a socket of `filterOutputType` and/or take a wire of `filterInputType` (float goes anywhere). */
+/**
+ * A node that can feed a socket of `filterOutputType` and/or take a wire of `filterInputType`
+ * (a float goes anywhere). With both, it is the insert-on-wire picker (wire from `filterInputType`
+ * to `filterOutputType`), which also takes genType nodes in the wire's type (wireFit.ts).
+ */
 export function passesWireFilter(def: NodeDefinition, filterOutputType?: string, filterInputType?: string): boolean {
+  if (filterOutputType && filterInputType) return fitsWireInsert(def, filterInputType, filterOutputType);
   if (filterOutputType && !Object.values(def.outputs).some(o => o.type === filterOutputType || o.type === 'float')) return false;
-  if (filterInputType && !DYNAMIC_INPUT_NODE_TYPES.has(def.type)
+  if (filterInputType && !DYNAMIC_SOCKET_TYPES.has(def.type)
     && !Object.values(def.inputs).some(i => i.type === filterInputType || filterInputType === 'float')) return false;
   return true;
 }

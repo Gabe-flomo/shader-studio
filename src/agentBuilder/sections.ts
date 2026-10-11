@@ -28,7 +28,7 @@ export const KIND_SECTIONS: Record<WalkerKind, readonly SectionDef[]> = {
   ants: [{ id: 'born', cards: [] }, { id: 'senses', cards: ['senses'] }, { id: 'turning', cards: ['wobble'] }, { id: 'moving', cards: [] }, { id: 'trail', cards: ['trail'] }, { id: 'memory', cards: [] }, { id: 'look', cards: [] }],
   particles: [
     { id: 'born', cards: [] },
-    { id: 'forces', cards: ['gravity', 'wind', 'curl', 'field', 'attract', 'drag'], reorder: true },
+    { id: 'forces', cards: ['gravity', 'wind', 'curl', 'field', 'attract', 'home', 'drag'], reorder: true },
     { id: 'moving', cards: [] },
     { id: 'life', cards: ['fade', 'die'] },
     { id: 'memory', cards: [] },
@@ -130,6 +130,7 @@ export const CARD_WORDS: Record<CardId, { title: string; hint: string }> = {
   field: { title: 'Follow a field', hint: 'Flow along a field you pick, combine or write yourself.' },
   attract: { title: 'Attract / repel', hint: 'A pull toward a point or the mouse; negative pushes away.' },
   drag: { title: 'Drag', hint: 'Loses this share of its speed every second.' },
+  home: { title: 'Return home', hint: 'A spring back to where it was born (its Home memory): blow it apart, it flows back.' },
   fade: { title: 'Fade with age', hint: 'Its colour dims to black over this many seconds.' },
   die: { title: 'Dies', hint: 'It dies (Kept full brings it back at once).' },
   separate: { title: 'Keep apart', hint: 'Turn away from the ones too close (separation).' },

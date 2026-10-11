@@ -55,9 +55,10 @@ export function Vec3Row({ label, value, min, max, step = 0.01, onChange, hint, a
   const tk = useTokens();
   return (
     <Row label={label} hint={hint}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6 }}>
+      {/* One axis a line: three side by side left each track no room beside its number (docs/scene-builder-3d.md). */}
+      <div data-vec3-row style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         {value.map((v, i) => (
-          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
             <span style={{ font: `600 10.5px ${fontFamily.mono}`, color: tk.text.faint, width: 10 }}>{axes[i]}</span>
             <div style={{ flex: 1, minWidth: 0 }}>
               <BuilderSlider value={v} min={min} max={max} step={step} ariaLabel={`${typeof label === 'string' ? label : 'value'} ${axes[i]}`} defaultValue={defaultValue?.[i]}

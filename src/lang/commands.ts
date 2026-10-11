@@ -616,6 +616,8 @@ export function commandsMarkdown(entries: ReferenceEntry[] = commandReference())
     '',
     'The **builders** (the 3D Scene Builder, Grid Rules, Agent Rules) open from whole phrases: "new 3d scene", "new grid rules", "edit the rules", "show the recipe" (see Builders below). They are also the first section of the node browser and the empty-canvas right-click menu\'s Builders.',
     '',
+    '**Pasting a recipe**: a recipe copied from any builder (the 3D and 2D Scene Builders, the Splat builder, Grid Rules\' "As text", Agent Rules) pastes into the bar, in this project or another, and Enter builds it: a new scene beside what is there, on the Output, one undo step. Multi-line recipes go in as one line joined by ` · `. The bar says which kind of recipe it read ("This is a 2D Scene Builder recipe"), and the built scene opens in its own builder. What the recipe names from its own project degrades instead of failing: a picture gets an empty Texture node named after it, a scan file this device doesn\'t have becomes the example scan, with a note.',
+    '',
   ];
   for (const kind of Object.keys(KIND_TITLES) as ReferenceEntry['kind'][]) {
     const list = entries.filter(e => e.kind === kind);

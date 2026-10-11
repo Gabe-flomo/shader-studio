@@ -41,7 +41,7 @@ describe('Palette', () => {
     };
     const time: GraphNode = { id: 't', type: 'time', position: { x: 0, y: 200 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} };
     const up = migrateNodeParams(upgradeLegacyNode(legacy), getNodeDefinition);
-    expect(Object.keys(up.inputs).sort()).toEqual(['amplitude', 'anim', 'freq', 'offset', 'phase', 'phase_g', 'value']);
+    expect(Object.keys(up.inputs).sort()).toEqual(['amplitude', 'anim', 'freq', 'offset', 'phase', 'phase_g', 'scale', 'speed', 'value']);
     expect(up.inputs.value.label).toBe('Angle');
     const r = compileGraph({ nodes: [uv, time, up, out("n2")] } as never);
     expect(r.success).toBe(true);

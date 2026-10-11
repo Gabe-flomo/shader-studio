@@ -15,6 +15,7 @@ import {
   type CardId, type CardRead, type Loc, addCard, patchAt, removeAt, reorderCards, setMemWhen, setOnAt, setOnlyWhen, soloCard,
 } from '../../agentBuilder/behaviours';
 import { TimesChip } from './MemorySection';
+import { addMemory } from '../../agentBuilder/memory';
 import { channelChips } from '../../agentBuilder/trailChannels';
 import type { FieldMask } from '../../agentRules/fields';
 import { WhereFocusContext, type WhereFocus } from './WherePicker';
@@ -41,6 +42,7 @@ export function cardSummary(c: CardRead): string {
     }
     case 'field': return `${fieldName(a.spec)} · ${a.grip ? 'rides it' : 'a force'}`;
     case 'drag': return `loses ${n(a.amount)} a second`;
+    case 'home': return `spring ${n(a.strength)} · after ${n(a.delay ?? 0, 1)} s`;
     case 'fade': return `black after ${n(a.seconds, 1)} s`;
     case 'die': return c.when?.kind === 'age' && c.when.cmp === '>' ? `at ${n(c.when.seconds)} s old` : c.when ? 'when its only when holds' : 'at once (give it an only when)';
     case 'separate': case 'match': case 'cohere': return `up to ${n(a.degrees, 1)}° a step`;
@@ -181,6 +183,19 @@ function CardSettings({ c, set, sp, update, onFocus, d3 }: { c: CardRead; set: A
           <SliderSetting id="x" label="Across" value={a.x ?? 0} min={-1.8} max={1.8} step={0.01} onFocus={onFocus} onChange={v => patch<Act<'force'>>({ x: v })} />
           <SliderSetting id="y" label="Up" value={a.y ?? 0} min={-1} max={1} step={0.01} onFocus={onFocus} onChange={v => patch<Act<'force'>>({ y: v })} />
         </>}
+      </>;
+    }
+ case 'home': {
+      const has = (set.memories ?? []).some(m => m.type === 'home');
+      return <>
+        {!has && <span style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 11.5, lineHeight: 1.4 }}>
+          It needs a Home memory, filled by its Emit (Born: a splat scan, or Remember home on).
+          <button type="button" data-home-add-memory onClick={() => { const r = addMemory(set, 'home'); if (r) update(r.set); }}
+            style={{ alignSelf: 'flex-start', height: 24, padding: '0 9px', borderRadius: 999, border: '1px dashed currentColor', background: 'none', cursor: 'pointer', font: 'inherit', color: 'inherit' }}>Add a Home memory</button>
+        </span>}
+        <SliderSetting id="homeStrength" label="Strength" hint="How hard it is pulled home: a second² for each unit it is away (a spring)." value={a.strength} min={0} max={40} step={0.1} onFocus={onFocus} onChange={v => patch<Act<'home'>>({ strength: v })} right={times} />
+        <SliderSetting id="homeDamping" label="Damping" hint="Calms the spring: 2 × √strength settles it without overshoot; less swings round home first." value={a.damping ?? 0} min={0} max={20} step={0.1} onFocus={onFocus} onChange={v => patch<Act<'home'>>({ damping: v })} />
+        <SliderSetting id="homeDelay" label="After (s)" hint="Seconds after it is born before the spring pulls (eased in over half a second): time for a field to blow it apart." value={a.delay ?? 0} min={0} max={10} step={0.05} onFocus={onFocus} onChange={v => patch<Act<'home'>>({ delay: v })} />
       </>;
     }
     case 'drag': return <SliderSetting id="drag" label="Drag" hint={MORE_HINTS.dragAmount} value={a.amount} min={0} max={4} step={0.01} onFocus={onFocus} onChange={v => patch<Act<'drag'>>({ amount: v })} right={times} />;

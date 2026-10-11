@@ -28,6 +28,7 @@ import { DRAW_3D_INPUTS } from '../nodes/definitions/agents';
 import { applyRulesToGroup, groupRules, isRulesGroup } from './apply';
 import { rulesGroupNote } from './generate';
 import { type AgentRuleSet, type AgentSpeciesRules, DEFAULT_COLLIDE, sensedChannels } from './spec';
+import { scanWalkers } from './templates';
 
 type Conn = { nodeId: string; outputKey: string };
 type Params = Record<string, unknown>;
@@ -247,6 +248,26 @@ export const RULES_TEMPLATES_3D: Rules3dTemplate[] = [
     },
   },
 ];
+
+RULES_TEMPLATES_3D.push({
+  key: 'scanWalkers3d', label: 'Scan to walkers in 3D', set: () => scanWalkers(true), tier: '256k', preroll: 0,
+  blurb: 'Every splat of a scan a walker in its colour and place, drawn as splats: a field blows the scan apart in 3D, then each flows back home (Return home).',
+  emit: { mode: 'fill', shape: 'splats', demo: 'blob', demoCount: 250000, up: '-y', minOpacity: 0.05, heading: 'outward', x: 0, y: 0, z: 0, size: 0.75, life: 0 },
+  deposit: { amount: 0, size: 1, what: 'trail' },
+  trail: { volume: '64', diffuse: 0, halfLife: 0.05, edges: 'clamp', gain: 0.04, kernel: '3' },
+  draw: { style: 'splats', colorBy: 'agent', palette: 'ab', sizeBy: 'memW', memScale: 1.4, splatSize: 0.006, stretch: 2, opacity: 0.85, brightness: 1, speedRef: 0.6, fade: 'off', lights: '0', ...CAMERA_3D, camDist: 3.2, camElevation: 12, rotSpeed: 8, blur: 0 },
+  notes: {
+    group: [
+      'Space 3D, Kind Particles, born from a splat scan (Emit: Splat scan): each walker keeps its home in the Home memory and its colour (Look: its own).',
+      'Younger than 1.2 s: a field blows it out from the middle in 3D (your own: vx = x, vy = y, vz = z), stirred by curl noise. Always: Return home (spring 9, damping 4.5, from 1.5 s) pulls it back; drag calms it.',
+      'Try: Burst on the Emit (or ↺ Start over) to blow it apart again; drop a real scan on the Emit card.',
+    ],
+    emit: ['Emit, Shape Splat scan: every splat a walker at its place in the scan, Size 0.75 round the middle, in its colour; its home (x, y, z) and its size (w) kept in More memory. A generated ball of 250 000 splats until you pick a scan here.'],
+    deposit: ['Deposit 0: the walkers leave nothing; the splats are the picture.'],
+    trail: ['Trail field: unused here.'],
+    draw: ['Draw agents in 3D, Splats: each walker a soft Gaussian the size of its splat, stretched along its motion, in its own colour, put together like a volume; the camera circles at 8° a second.'],
+  },
+});
 
 RULES_TEMPLATES_3D.push({
   key: 'shape3d', label: 'Around a shape: slime round a torus', set: slime3d, tier: '256k', preroll: 3, shape: 'torus',

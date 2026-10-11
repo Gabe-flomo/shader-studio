@@ -142,6 +142,7 @@ import { TimeCubeCardBody } from '../timeCube/TimeCubeCardBody';
 import { DepthCardBody } from '../depth/DepthCardBody';
 import { DepthLightCardBody } from '../depth/DepthLightCardBody';
 import { SplatSceneCardBody } from '../splats/SplatSceneCardBody';
+import { EmitScanCardBody } from '../splats/EmitScanCardBody';
 import { TimeCubeViewKeyInfo } from '../timeCube/TimeCubeViewKeyInfo';
 import { toggleNodeCard } from '../explain/functionCard/fnCardStore';
 import { bakedSourceName } from '../../nodes/definitions/baked';
@@ -3823,6 +3824,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             return (
               <div
                 key={key}
+                data-param-key={key}
                 style={{ padding: '6px 12px 6px 16px', display: 'flex', flexDirection: 'column', gap: 2 }}
                 onMouseDown={e => e.stopPropagation()}
               >
@@ -3892,6 +3894,16 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
 
           if (paramDef.type === 'vec3color') {
             const vals = toRgb(node.params[key]);
+            // Its socket wired (an Edge colour from a Color or a palette): the wire's chip in place of the swatch.
+            const colorWire = node.inputs[key]?.connection;
+            if (colorWire) {
+              return (
+                <div key={key} data-param-key={key} style={rowStyle} onMouseDown={e => e.stopPropagation()}>
+                  <ParamLabel muted title={paramDef.hint} help={paramDef.help}>{paramDef.label}</ParamLabel>
+                  <WiredChip source={colorWire} expr={getSourceExpr(shaderLines, nodeOutputVarMap, colorWire.nodeId, colorWire.outputKey)} />
+                </div>
+              );
+            }
             return (
               <div key={key} data-param-key={key} style={rowStyle} onMouseDown={e => e.stopPropagation()}>
                 <ParamLabel title={paramDef.hint} help={paramDef.help}>{paramDef.label}</ParamLabel>
@@ -3932,6 +3944,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         {!collapsed && node.type === 'depth' && <DepthCardBody node={node} touch={isTouchDevice} />}
         {!collapsed && node.type === 'depthLight' && <DepthLightCardBody node={node} touch={isTouchDevice} />}
         {!collapsed && node.type === 'splatScene' && <SplatSceneCardBody node={node} />}
+        {!collapsed && node.type === 'agentEmit' && node.params.shape === 'splats' && <EmitScanCardBody node={node} />}
         {!collapsed && node.type === 'timeCubeView' && <TimeCubeViewKeyInfo node={node} touch={isTouchDevice} />}
 
         {/* ── CustomFn / ExprNode slider params (hidden when collapsed) ── */}

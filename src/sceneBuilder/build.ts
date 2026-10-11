@@ -21,7 +21,7 @@ import { getNodeDefinition } from '../nodes/definitions';
 import { startingSockets } from '../nodes/definitions/transformAny';
 import { estimateNodeHeight, layoutByRank } from '../store/graphLayout';
 import {
-  MAX_TEX_SHAPES, SHAPE_BY_KIND, TEX_MAP_LABELS, TEX_SHARP_DEFAULT, WARP_BY_KIND, allShapes, effectiveStepScale, filterTree, itemName, mutedShapes, num, opLabel, pathTo, stepHints,
+  MAX_TEX_SHAPES, REVERSE_DEFAULTS, texturesUsed3D, SHAPE_BY_KIND, TEX_MAP_LABELS, TEX_SHARP_DEFAULT, WARP_BY_KIND, allShapes, effectiveStepScale, filterTree, itemName, mutedShapes, num, opLabel, pathTo, stepHints,
   type GroupSpec, type SceneItem, type SceneSpec, type ShapeSpec, type Vec3, type WarpSpec,
 } from './spec';
 import { LUMA, findTex, fitLines, glf, picUv, sampleWrap, standInId, standIns } from '../builders/textures';
@@ -65,7 +65,34 @@ export interface Ctx {
    * without them, so a mute there is an Expression Block with a live 0/1 slider instead.
    */
   noGate?: boolean;
+  /** Picture balls built in this scope, whose Picture comes in through a port of the group round them. */
+  balls?: Array<{ node: GraphNode; sh: ShapeSpec }>;
 }
+
+/** Picture balls' node params beyond the catalogue's: their own grid, and the picture's shape. */
+function ballsExtra(ctx: Ctx, sh: ShapeSpec): Record<string, unknown> {
+  const src = sh.tex ? findTex(ctx.spec.textures, sh.tex.tex) : undefined;
+  return { layout: 'own', aspect: src?.aspect ?? 1.5 };
+}
+
+/**
+ * The group ports that bring each picture-balls shape's picture in (a Picture port per shape, wired
+ * from the picture's node outside): Scene Groups map a port to its node (toNodeId), plain groups read
+ * it through the port sentinel.
+ */
+function ballsPorts(ctx: Ctx, list: Array<{ node: GraphNode; sh: ShapeSpec }>, sentinel: boolean): { ports: SubgraphData['inputPorts']; inputs: Record<string, InputSocket> } {
+  const ports: SubgraphData['inputPorts'] = [];
+  const inputs: Record<string, InputSocket> = {};
+  for (const { node, sh } of list) {
+    const src = sh.tex ? findTex(ctx.spec.textures, sh.tex.tex) : undefined;
+    if (!src) continue;
+    const key = `pic_${sh.id}`;
+    const label = `Picture for ${itemName(ctx.spec, sh)}`;
+    ports.push({ key, type: 'texture', label, toNodeId: node.id, toInputKey: 'picture' });
+    inputs[key] = { type: 'texture', label, connection: { nodeId: standInId(src), outputKey: 'texture' } };
+    if (sentinel) node.inputs.picture = { ...node.inputs.picture, connection: { nodeId: GROUP_PORT_SENTINEL, outputKey: key } };
+  }
+  return { ports, inputs };
 
 /** Muted from either: undefined only when neither was ever muted (no gate at all). */
 const anyMuted = (a: boolean | undefined, b: boolean | undefined): boolean | undefined => (a === undefined && b === undefined ? undefined : !!a || !!b);
@@ -326,8 +353,13 @@ function emitShape(ctx: Ctx, sh: ShapeSpec, pos: Ref, list: GraphNode[], local?:
       shapePos = ref(turn, 'p4');
     }
   }
-  const node = mk(ctx, rounded ? def.roundType! : def.type, sh.id, { ...params, _sbName: sh.name },
-    { [def.posKey]: shapePos }, `${name}: a ${def.label.toLowerCase()}${shapeSummary(sh) ? `, ${shapeSummary(sh)}` : ''}. ${def.blurb}${colourWord}`, list);
+  const isBalls = sh.kind === 'picture-balls';
+  const node = mk(ctx, rounded ? def.roundType! : def.type, sh.id, { ...params, ...(isBalls ? ballsExtra(ctx, sh) : {}), _sbName: sh.name },
+    { [def.posKey]: shapePos }, `${name}: a ${def.label.toLowerCase()}${shapeSummary(sh) ? `, ${shapeSummary(sh)}` : ''}. ${def.blurb}${colourWord}${isBalls ? ` Its picture comes in through the group's “Picture for ${itemName(ctx.spec, sh)}” port.` : ''}`, list);
+  if (isBalls) {
+    if (sh.tex) ctx.balls?.push({ node, sh });
+    else ctx.warnings.push(`${name} has no picture: give it one under its Picture (texture=), or its balls are a colour gradient, all at one depth.`);
+  }
   // Muted (itself, or a group round it): its distance is far away, by a live uniform, so it draws
   // nothing and unions ignore it. What comes after (a cut to a ball, modifiers) keeps it far.
   let dist = gate(ctx, list, node, ref(node, def.distKey), anyMuted(sh.muted, groupMuted), { to: FAR });
@@ -378,12 +410,16 @@ function emitItem(ctx: Ctx, it: SceneItem, pos: Ref, list: GraphNode[], groupMut
 /** A Scene Group holding `root`: Scene Pos → … → Scene Output, laid out in columns. */
 function sceneGroup(ctx: Ctx, role: string, root: GroupSpec, label: string, note: string): GraphNode {
   const inner: GraphNode[] = [];
-  const sp = mk(ctx, 'scenePos', `${role}:pos`, { _groupOriginal: true }, {}, 'The point being measured. The march asks the scene "how far is the nearest surface from here?" many times per pixel, moving this point along the ray.', inner);
-  const dist = emitItem(ctx, root, ref(sp, 'pos'), inner);
-  mk(ctx, 'sceneOutput', `${role}:out`, { _groupOriginal: true }, { dist }, 'The scene\'s answer: the distance from the point to the nearest surface.', inner);
+  const scope: Ctx = { ...ctx, balls: [] };
+  const sp = mk(scope, 'scenePos', `${role}:pos`, { _groupOriginal: true }, {}, 'The point being measured. The march asks the scene "how far is the nearest surface from here?" many times per pixel, moving this point along the ray.', inner);
+  const dist = emitItem(scope, root, ref(sp, 'pos'), inner);
+  mk(scope, 'sceneOutput', `${role}:out`, { _groupOriginal: true }, { dist }, 'The scene\'s answer: the distance from the point to the nearest surface.', inner);
   tidy(inner, 0, 120);
-  const sub: SubgraphData = { nodes: inner, inputPorts: [], outputPorts: [] };
-  return mk(ctx, 'sceneGroup', role, { label, subgraph: sub }, {}, note);
+  const pics = ballsPorts(ctx, scope.balls!, false);
+  const sub: SubgraphData = { nodes: inner, inputPorts: pics.ports, outputPorts: [] };
+  const g = mk(ctx, 'sceneGroup', role, { label, subgraph: sub }, {}, note);
+  g.inputs = { ...g.inputs, ...pics.inputs };
+  return g;
 }
 
 // ── Materials (surface mode, more than one colour) ──────────────────────────
@@ -404,8 +440,23 @@ function pathWarps(spec: SceneSpec, target: ShapeSpec): Array<{ warps: WarpSpec[
   return out;
 }
 
+/** The nodes of `nodes` that `roots` read, directly or through others (by their wires). */
+function reachableFrom(nodes: GraphNode[], roots: string[]): Set<string> {
+  const byId = new Map(nodes.map(n => [n.id, n]));
+  const seen = new Set<string>();
+  const stack = [...roots];
+  while (stack.length) {
+    const id = stack.pop()!;
+    if (seen.has(id) || !byId.has(id)) continue;
+    seen.add(id);
+    for (const sock of Object.values(byId.get(id)!.inputs)) if (sock.connection) stack.push(sock.connection.nodeId);
+  }
+  return seen;
+}
+
 function materialsGroup(ctx: Ctx, shapes: ShapeSpec[], hitPos: Ref, texShapes: ShapeSpec[] = []): GraphNode {
   const inner: GraphNode[] = [];
+  const matBalls: Array<{ node: GraphNode; sh: ShapeSpec }> = [];
   // Inside the group the hit point arrives through the port.
   const port: Ref = { nodeId: GROUP_PORT_SENTINEL, outputKey: 'hitPos' };
   let colour: Ref | null = null, shine: Ref | null = null, dist: Ref | null = null;
@@ -417,7 +468,7 @@ function materialsGroup(ctx: Ctx, shapes: ShapeSpec[], hitPos: Ref, texShapes: S
   for (const sh0 of shapes) {
     const sh = sh0;
     // Each shape is measured on its own here, so the warps it shares with others are made once per shape.
-    const scope: Ctx = { ...ctx, rolePrefix: `mat:${sh.id}:`, noGate: true };
+    const scope: Ctx = { ...ctx, rolePrefix: `mat:${sh.id}:`, balls: matBalls, noGate: true };
     let pos = port;
     for (const step of pathWarps(ctx.spec, sh)) {
       const w = emitWarps(scope, step.warps.filter(x => !WARP_BY_KIND[x.kind]?.modifier), pos, step.on, inner);
@@ -461,7 +512,14 @@ function materialsGroup(ctx: Ctx, shapes: ShapeSpec[], hitPos: Ref, texShapes: S
     const nearer = mk(scope, 'sdfUnion', `${sh.id}:near`, { k: 0 }, { a: dist, b: d }, `The nearest of the shapes so far, for the next pick.`, inner);
     dist = ref(nearer, 'dist');
   }
+  const texOuts0 = texShapes.map((_, i) => texPos[i]).filter(Boolean);
+  // Only what the group hands out: the last shape's "nearest so far" (no shape after it to pick
+  // against) and a lone painted shape's own distance (nothing to compare it with) are not built.
+  const roots = [colour, shine, ...(slots && texOuts0.length ? [slots, ...texOuts0] : [])].filter((r): r is Ref => !!r).map(r => r.nodeId);
+  const live = reachableFrom(inner, roots);
+  for (let i = inner.length - 1; i >= 0; i--) if (!live.has(inner[i].id)) inner.splice(i, 1);
   tidy(inner, 0, 120);
+  const matPics = ballsPorts(ctx, matBalls, true);
   const texOuts = texShapes.map((s, i) => ({ key: `tp${i}`, label: `${itemName(ctx.spec, s)} point`, from: texPos[i] })).filter(o => o.from);
   const pics = slots && texOuts.length ? [
     { key: 'slots', type: 'vec3' as const, label: 'Picture slots', from: slots },
@@ -473,13 +531,13 @@ function materialsGroup(ctx: Ctx, shapes: ShapeSpec[], hitPos: Ref, texShapes: S
   };
   const node: GraphNode = {
     id: ctx.idFor('materials'), type: 'group', position: { x: 0, y: 0 },
-    inputs: { hitPos: { type: 'vec3', label: 'Hit Pos', connection: { ...hitPos } } },
+    inputs: { hitPos: { type: 'vec3', label: 'Hit Pos', connection: { ...hitPos } }, ...matPics.inputs },
     outputs,
     params: {
       label: 'Materials', iterations: 1,
       subgraph: {
         nodes: inner,
-        inputPorts: [{ key: 'hitPos', type: 'vec3', label: 'Hit Pos', toNodeId: inner[0]?.id ?? '', toInputKey: 'pos' }],
+        inputPorts: [{ key: 'hitPos', type: 'vec3', label: 'Hit Pos', toNodeId: inner[0]?.id ?? '', toInputKey: 'pos' }, ...matPics.ports],
         outputPorts: [
           { key: 'color', type: 'vec3', label: 'Colour', fromNodeId: colour!.nodeId, fromOutputKey: colour!.outputKey },
           ...(shine ? [{ key: 'shine', type: 'float' as const, label: 'Shine', fromNodeId: shine.nodeId, fromOutputKey: shine.outputKey }] : []),
@@ -524,6 +582,16 @@ function surfacePictures(ctx: Ctx, texShapes: ShapeSpec[], mat: GraphNode, norma
     const texRef: Ref = { nodeId: standInId(src), outputKey: 'texture' };
     const a = glf(src.aspect ?? 1);
     const role = `${sh.id}:pic`;
+    if (sh.kind === 'picture-balls') {
+      // Picture balls: each ball is the picture's colour at its home, from the same grid at the shape's own point.
+      const def = SHAPE_BY_KIND['picture-balls'];
+      const params: Record<string, unknown> = { ...ballsExtra(ctx, sh) };
+      for (const p of def.params) if (typeof p.param === 'string' && p.param) params[p.param] = Number(sh.size[p.key] ?? p.def);
+      const b = mk(ctx, 'pieceBalls', `${role}:balls`, params, { pos: ref(mat, `tp${i}`), picture: texRef },
+        `${name}'s colour: the same grid of balls measured at the hit point (in ${name}'s own space), so each ball is the picture “${src.name}”'s colour at its home.`);
+      cols.push({ i, from: ref(b, 'color'), bump: t.bump ?? 0 });
+      return;
+    }
     const map = TEX_MAP_LABELS[t.map];
     const tiled = t.map !== 'face';
     const sample = (k: string, uv: Ref) => ref(mk(ctx, 'sampleTexture', `${role}:${k}`, sampleWrap(tiled ? 'repeat' : 'once'), { texture: texRef, uv },
@@ -726,10 +794,19 @@ export function buildSceneGraph(spec: SceneSpec, idFor: (role: string) => string
   const step = effectiveStepScale(spec);
   const hints = stepHints(spec);
 
+  // Projection (March Camera's Perspective): absent is perspective, as before, with Flatten when set.
+  const proj = C.projection ?? 'perspective';
+  const rev = { strength: C.reverse ?? REVERSE_DEFAULTS.reverse, at: C.converge ?? REVERSE_DEFAULTS.converge };
+  const projParams = proj === 'orthographic' ? { projection: 'orthographic' }
+    : proj === 'reverse' ? { projection: 'reverse', reverseStrength: rev.strength, reverseDist: rev.at }
+      : C.flatten > 0 ? { ortho: C.flatten } : {};
+  const projNote = proj === 'orthographic' ? ', orthographic: its rays run parallel, so size doesn\'t change with distance (an isometric drawing)'
+    : proj === 'reverse' ? `, in reverse perspective: its rays start spread out and meet ${fmt(rev.at)} in front (strength ${fmt(rev.strength)}), so far things look bigger, like a Byzantine icon`
+      : C.flatten ? `, flattened ${fmt(C.flatten)} toward isometric` : '';
   const cam = mk(ctx, 'marchCamera', 'camera', {
     camDist: C.dist, camAngle: rad(C.angle), camElevation: rad(C.elev), rotSpeed: rad(C.orbit), fov: C.zoom,
-    targetX: C.x, targetY: C.y, targetZ: C.z, ...(C.flatten > 0 ? { ortho: C.flatten } : {}),
-  }, {}, `The camera: ${fmt(C.dist)} away, ${fmt(C.angle)}° round and ${fmt(C.elev)}° up${C.orbit ? `, orbiting ${fmt(C.orbit)}° a second` : ''}, zoom ${fmt(C.zoom)}${C.flatten ? `, flattened ${fmt(C.flatten)} toward isometric` : ''}. Every pixel becomes a ray from here. Target X / Y / Z move the camera and the point it looks at together (Translate).`);
+    targetX: C.x, targetY: C.y, targetZ: C.z, ...projParams,
+  }, {}, `The camera: ${fmt(C.dist)} away, ${fmt(C.angle)}° round and ${fmt(C.elev)}° up${C.orbit ? `, orbiting ${fmt(C.orbit)}° a second` : ''}, zoom ${fmt(C.zoom)}${projNote}. Every pixel becomes a ray from here. Target X / Y / Z move the camera and the point it looks at together (Translate).`);
 
   // Glass mode measures two scenes: the glass, and what is seen through it.
   const glassParts = L.mode === 'glass' ? filterTree(spec.root, s => s.glass) : null;
@@ -885,6 +962,11 @@ export function buildSceneGraph(spec: SceneSpec, idFor: (role: string) => string
     final = ref(compose, 'result');
   }
   if (L.mode !== 'surface' && shapes.some(s => s.tex)) ctx.warnings.push('Pictures on shapes are a Surface-mode feature; in this mode the shapes keep their colours.');
+  // A picture with depth: the objects stand in it (docs/depth-node.md "Depth in 3D scenes").
+  if (spec.depth) {
+    if (march && (L.mode === 'surface' || L.mode === 'gi')) final = emitDepthPicture3D(ctx, spec, cam, ref(scene, 'scene'), march.loop, final);
+    else ctx.warnings.push('A picture with depth needs Surface or GI lit mode (the march has to stop on surfaces to know what is nearer); it is left out.');
+  }
   if (L.tone !== 'none') {
     const tone = mk(ctx, 'toneMap', 'tone', { mode: L.tone }, { color: final }, toneNote(L.tone));
     gateNode(tone, M.tone, { from: 'color' });
@@ -900,6 +982,45 @@ export function buildSceneGraph(spec: SceneSpec, idFor: (role: string) => string
   return { nodes: ctx.nodes, final, sceneId: scene.id, warnings: ctx.warnings };
 }
 
+/**
+ * A picture with depth in the scene: the picture (its Texture node), its Depth node (baked when Generate depth ran),
+ * and a Depth Composite of the picture and `shown` by distance; lit adds a Depth Light (the scene's glowing shapes and
+ * its shadows on the picture), reflect a Picture Environment the objects mirror first. The same wiring as "Add a
+ * picture with depth" on a March Loop card (nodes/recipes/depthRecipes.ts).
+ */
+function emitDepthPicture3D(ctx: Ctx, spec: SceneSpec, cam: GraphNode, scene: Ref, loop: GraphNode, shown: Ref): Ref {
+  const d = spec.depth!;
+  const src = findTex(spec.textures, d.tex);
+  if (!src) { ctx.warnings.push(`The picture with depth reads “${d.tex}”, which the scene doesn't have: pick one under Light & colour → Picture with depth.`); return shown; }
+  const tex = { nodeId: standInId(src), outputKey: 'texture' }, colour = { nodeId: standInId(src), outputKey: 'color' };
+  const dn = mk(ctx, 'depth', 'depth', d.bake ? { update: 'baked', depthBake: structuredClone(d.bake) } : {}, { texture: tex },
+    `Depth: how far each part of “${src.name}” is, worked out on this device by a small model. `
+      + (d.bake ? 'Generate depth ran it once in the Scene Builder and kept it as an image beside the picture (Update: Baked).' : 'It runs once the model is downloaded (the card offers it); Bake depth keeps it.'));
+  let sceneIn = shown;
+  if (d.how === 'reflect') {
+    const dir = exprBlock(ctx, 'depth:mirror', 'Mirror direction', [{ name: 'rd', type: 'vec3', from: ref(cam, 'rd') }, { name: 'normal', type: 'vec3', from: ref(loop, 'normal') }],
+      'reflect(normalize(rd), normalize(normal))', 'Where a mirror at each hit point looks: the camera\'s ray bounced off the surface. Picture Environment reads the picture that way.');
+    const env = mk(ctx, 'pictureEnvironment', 'depth:env', { fov: spec.camera.zoom, blur: 0.01 }, { picture: tex, dir: ref(dir, 'result'), forward: ref(cam, 'forward'), right: ref(cam, 'right'), up: ref(cam, 'up') },
+      `Picture Environment: “${src.name}” as the room round the objects. Color is what a mirror sees, Ambient the picture's average colour. Outside the photo's frame it is mirrored back in.`);
+    sceneIn = ref(exprBlock(ctx, 'depth:reflect', 'Reflect the picture', [
+      { name: 'scene', type: 'vec3', from: shown }, { name: 'env', type: 'vec3', from: ref(env, 'color') }, { name: 'ambient', type: 'vec3', from: ref(env, 'ambient') },
+      { name: 'normal', type: 'vec3', from: ref(loop, 'normal') }, { name: 'rd', type: 'vec3', from: ref(cam, 'rd') }, { name: 'hit', type: 'float', from: ref(loop, 'hit') },
+      { name: 'reflectivity', type: 'float', slider: { value: 0.35, min: 0, max: 1 } }, { name: 'ambientMix', type: 'float', slider: { value: 0.5, min: 0, max: 1 } },
+    ], 'mix(scene * mix(vec3(1.0), ambient * 1.6, ambientMix), env, clamp(hit * (reflectivity + (1.0 - reflectivity) * pow(1.0 - max(dot(-normalize(rd), normalize(normal)), 0.0), 5.0)), 0.0, 1.0))',
+    'The objects mirror the picture: more at grazing angles (Schlick\'s Fresnel), at least Reflectivity facing you; Ambient Mix tints them by the picture\'s average colour.'), 'result');
+  }
+  const comp = mk(ctx, 'depthComposite', 'depth:composite', { nearD: d.near, farD: d.far, softness: d.soft },
+    { picture: colour, nearness: ref(dn, 'depth'), scene: sceneIn, dist: ref(loop, 'dist'), hit: ref(loop, 'hit') },
+    `Depth Composite: “${src.name}” and the scene, the nearer one at each pixel, so the objects pass behind and in front of what is in the picture. Nearest ${fmt(d.near)} and Farthest ${fmt(d.far)} say where the picture's near and far things are, in scene units: set them with Show: Picture distance.`);
+  if (d.how === 'composite') return ref(comp, 'color');
+  const only = exprBlock(ctx, 'depth:only', 'Only the picture', [{ name: 'front', type: 'float', from: ref(comp, 'front') }], '1.0 - front',
+    '1 where the picture shows, 0 where an object is in front: the light relights the picture, not the objects (they have their own).', ctx.nodes, 'float');
+  const light = mk(ctx, 'depthLight', 'depth:light', { nearD: d.near, farD: d.far, glowIntensity: 0.6, glowReach: 0.3 }, {
+    picture: ref(comp, 'color'), nearness: ref(dn, 'depth'), ro: ref(cam, 'ro'), rd: ref(cam, 'rd'), mask: ref(only, 'result'), glow: scene, occluders: scene,
+  }, 'Depth Light: the scene\'s light on the picture. The Glowing scene\'s shapes light it from where they are, and Shadows from lets the objects shade it. Link to scene object… on the card makes its point light follow a shape.');
+  return ref(light, 'color');
+}
+
 /** The spec a built scene carries (on its Scene Group). */
 export function metaOf(node: GraphNode | undefined | null): SceneBuilderMeta | null {
   const m = node?.params?.[META_KEY] as SceneBuilderMeta | undefined;
@@ -909,8 +1030,10 @@ export function metaOf(node: GraphNode | undefined | null): SceneBuilderMeta | n
 /** A stand-alone graph (with its own Output) for `spec`: examples and tests. */
 export function buildStandaloneGraph(spec: SceneSpec, opts: { idFor?: (role: string) => string; outputId?: string } = {}): BuildResult & { outputId: string } {
   const built = buildSceneGraph(spec, opts.idFor);
-  // Its pictures: a Texture node per source, so it compiles alone (the previews bind the real picture to it).
-  built.nodes.push(...standIns(spec.textures));
+  // Its pictures: a Texture node per source it reads, so it compiles alone (the previews bind the real
+  // picture to it). A source nothing reads gets none: no unused node, and no sampler the GLSL compiler drops.
+  const used = new Set(texturesUsed3D(spec));
+  built.nodes.push(...standIns(spec.textures?.filter(s => used.has(s.name))));
   const scene = built.nodes.find(n => n.id === built.sceneId)!;
   scene.params = { ...scene.params, [META_KEY]: { v: 1, spec: structuredClone(spec) } satisfies SceneBuilderMeta };
   const last = built.nodes.find(n => n.id === built.final.nodeId)!;

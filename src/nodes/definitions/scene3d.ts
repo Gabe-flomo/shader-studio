@@ -19,7 +19,7 @@
  *   - RayMarchNode/RayMarchLitNode receive this as their `scene` inputVar and plug it into the march loop.
  */
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { p, pv3, vec3Str, withNewOutputs } from './helpers';
+import { p, pv3, vec3Str, withNewOutputs, withParamSockets } from './helpers';
 import { MARCH_STEP_REF_KEY, stepWeightGlsl } from '../../compiler/marchJitter';
 
 // ─── Loop colours ─────────────────────────────────────────────────────────────
@@ -126,7 +126,7 @@ const CAMERA_AXES: GraphNode['outputs'] = {
   up:      { type: 'vec3', label: 'Up', hint: 'The camera\'s up, along the picture.' },
 };
 
-export const MarchCameraNode: NodeDefinition = {
+export const MarchCameraNode: NodeDefinition = withParamSockets({
   type: 'marchCamera', label: 'March Camera', category: '3D Scene',
   description: 'Camera setup for ray marching. Outputs ray origin (ro) and ray direction (rd). Connect to a March Loop Group.',
   inputs: {
@@ -243,14 +243,14 @@ export const MarchCameraNode: NodeDefinition = {
       outputVars: { ro: `${id}_ro`, rd: `${id}_rd`, forward: `${id}_fwd`, right: `${id}_rgt`, up: `${id}_up2` },
     };
   },
-};
+}, ['aperture', 'focalDist', 'lensSpeed', 'reverseStrength', 'reverseDist']);
 
 // ─── ForwardCameraNode ────────────────────────────────────────────────────────
 // Fixed forward-facing pinhole camera — no orbit. ro = vec3(0,0,-camDist),
 // rd = normalize(vec3(uv, fov)). Ideal for tunnel / fly-through scenes where
 // the warp lives entirely in the march loop body.
 
-export const ForwardCameraNode: NodeDefinition = {
+export const ForwardCameraNode: NodeDefinition = withParamSockets({
   type: 'forwardCamera', label: 'Camera (Forward)', category: '3D Scene', deprecated: true,
   description: 'Fixed forward-facing camera. ro sits at (0,0,−camDist) and rd = normalize(vec3(uv, fov)). No orbit — all motion lives inside the MLG body warp.',
   inputs: {
@@ -292,7 +292,7 @@ export const ForwardCameraNode: NodeDefinition = {
       outputVars: { ro: `${id}_ro`, rd: `${id}_rd` },
     };
   },
-};
+}, ['camDist', 'fov', 'aperture', 'focalDist', 'lensSpeed']);
 
 // ─── MarchPosNode ─────────────────────────────────────────────────────────────
 // Inside a marchLoopGroup, outputs the current ray march position (vec3).
@@ -464,7 +464,7 @@ export const MarchSceneDistNode: NodeDefinition = {
  * Volume Glow — the inside-the-loop half of every volumetric example:
  * Scene Distance → (Abs → Max) → Divide as one node, safe to accumulate with +=.
  */
-export const VolumeGlowNode: NodeDefinition = {
+export const VolumeGlowNode: NodeDefinition = withParamSockets({
   type: 'volumeGlow', label: 'Volume Glow', category: '3D Scene',
   // Summed per march step with +=.
   assignable: true,
@@ -497,7 +497,7 @@ export const VolumeGlowNode: NodeDefinition = {
       outputVars: { glow: `${id}_glow` },
     };
   },
-};
+}, ['density', 'falloff', 'shell']);
 
 /**
  * Volumetric Scene — a palette starter, never a node in a graph: adding it
@@ -792,7 +792,7 @@ const COMMON_MARCH_PARAM_DEFS = {
 // Camera + march only. No color computation.
 // Outputs raw data: dist, depth, normal, iter, hit.
 
-export const RayMarchNode: NodeDefinition = {
+export const RayMarchNode: NodeDefinition = withParamSockets({
   type: 'rayMarch', label: 'Ray March', category: '3D Scene',
   deprecated: true, // superseded by March Camera + Scene Group + March Loop Group (smart 3D placement builds that trio)
   description: 'Camera + sphere-march. Outputs raw hit data (dist, depth, normal, iter, hit) — no color. Connect to palette/math nodes for custom coloring. Wire a SpaceWarpGroup to spacewarp to bend the entire scene coordinate field inside the march loop.',
@@ -864,13 +864,13 @@ export const RayMarchNode: NodeDefinition = {
       },
     };
   },
-};
+}, ['bgR', 'bgG', 'bgB']);
 
 // ─── RayRenderNode ─────────────────────────────────────────────────────────────
 // LEGACY — kept for backward compatibility with saved graphs.
 // New graphs should use RayMarchNode instead.
 
-export const RayRenderNode: NodeDefinition = {
+export const RayRenderNode: NodeDefinition = withParamSockets({
   type: 'rayRender', label: 'Ray Render (Legacy)', category: '3D Scene', deprecated: true,
   description: 'Legacy sphere-tracer. Use RayMarch or RayMarchLit for new graphs.',
   inputs: {
@@ -923,10 +923,10 @@ export const RayRenderNode: NodeDefinition = {
     maxSteps: { label: 'Max Steps', type: 'select', options: [32,64,96,128].map(n => ({ value: String(n), label: String(n) })) },
     maxDist:  { label: 'Max Dist',  type: 'float', min: 5.0, max: 100.0, step: 1.0 },
     dist_scale:  { label: 'Dist Scale',  type: 'float', min: 0.0, max: 0.3,  step: 0.001, showWhen: { param: 'color_mode', value: ['distance'] } },
-    iter_scale:  { label: 'Iter Scale',  type: 'float', min: 0.0, max: 0.05, step: 0.0005, showWhen: { param: 'color_mode', value: ['iter'] } },
-    pal_r:       { label: 'Palette R',   type: 'float', min: 0.0, max: 1.0,  step: 0.01, showWhen: { param: 'color_mode', value: ['distance', 'iter'] } },
-    pal_g:       { label: 'Palette G',   type: 'float', min: 0.0, max: 1.0,  step: 0.01, showWhen: { param: 'color_mode', value: ['distance', 'iter'] } },
-    pal_b:       { label: 'Palette B',   type: 'float', min: 0.0, max: 1.0,  step: 0.01, showWhen: { param: 'color_mode', value: ['distance', 'iter'] } },
+    iter_scale:  { label: 'Iter Scale',  type: 'float', min: 0.0, max: 0.05, step: 0.0005, showWhen: { param: 'color_mode', value: ['distance'] } },
+    pal_r:       { label: 'Palette R',   type: 'float', min: 0.0, max: 1.0,  step: 0.01, showWhen: { param: 'color_mode', value: ['distance'] } },
+    pal_g:       { label: 'Palette G',   type: 'float', min: 0.0, max: 1.0,  step: 0.01, showWhen: { param: 'color_mode', value: ['distance'] } },
+    pal_b:       { label: 'Palette B',   type: 'float', min: 0.0, max: 1.0,  step: 0.01, showWhen: { param: 'color_mode', value: ['distance'] } },
     bgR:      { label: 'BG R',      type: 'float', min: 0.0, max: 1.0, step: 0.01 },
     bgG:      { label: 'BG G',      type: 'float', min: 0.0, max: 1.0, step: 0.01 },
     bgB:      { label: 'BG B',      type: 'float', min: 0.0, max: 1.0, step: 0.01 },
@@ -1094,4 +1094,4 @@ export const RayRenderNode: NodeDefinition = {
       },
     };
   },
-};
+}, ['camAngle', 'camRotSpeed', 'dist_scale', 'pal_r', 'pal_g', 'pal_b', 'bgR', 'bgG', 'bgB', 'ao_strength', 'lightX', 'lightY', 'lightZ', 'albedoR', 'albedoG', 'albedoB']);

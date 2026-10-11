@@ -1,5 +1,5 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { p, pv3 } from './helpers';
+import { p, pv3, withParamSockets } from './helpers';
 
 // ── Grid UV ────────────────────────────────────────────────────────────────────
 
@@ -136,7 +136,7 @@ export const SdfMaskNode: NodeDefinition = {
 
 // ── Luma Radius ────────────────────────────────────────────────────────────────
 
-export const LumaRadiusNode: NodeDefinition = {
+export const LumaRadiusNode: NodeDefinition = withParamSockets({
   type: 'lumaRadius',
   label: 'Luma Radius',
   category: 'Halftone',
@@ -169,7 +169,7 @@ export const LumaRadiusNode: NodeDefinition = {
       outputVars: { radius: `${id}_radius`, luma: `${id}_luma` },
     };
   },
-};
+}, ['minScale', 'maxScale']);
 
 // ── RGB → CMYK ─────────────────────────────────────────────────────────────────
 
@@ -207,7 +207,7 @@ export const RGBToCMYKNode: NodeDefinition = {
 
 // ── CMYK Halftone ─────────────────────────────────────────────────────────────
 
-export const CMYKHalftoneNode: NodeDefinition = {
+export const CMYKHalftoneNode: NodeDefinition = withParamSockets({
   type: 'cmykHalftone',
   label: 'CMYK Halftone',
   category: 'Halftone',
@@ -279,4 +279,4 @@ export const CMYKHalftoneNode: NodeDefinition = {
       outputVars: { result: `${id}_result` },
     };
   },
-};
+}, ['dotRadius', 'softness', 'paperColor', 'angleC', 'angleM', 'angleY', 'angleK']);

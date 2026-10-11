@@ -11,6 +11,14 @@ import { surpriseGridScene } from './surprise';
 export type GridSection = 'shapes' | 'motion' | 'patterns' | 'rules' | 'look';
 export const GRID_SECTIONS: GridSection[] = ['shapes', 'motion', 'patterns', 'rules', 'look'];
 
+/** What `picking` holds for a rule's condition k (0 its When, 1… its and / or conditions). */
+export const pickingKey = (ruleId: string, k: number) => (k ? `${ruleId}#${k}` : ruleId);
+/** The rule and condition a `picking` value names. */
+export function parsePicking(v: string): { ruleId: string; k: number } {
+  const m = /^(.*)#(\d+)$/.exec(v);
+  return m ? { ruleId: m[1], k: Number(m[2]) } : { ruleId: v, k: 0 };
+}
+
 /** The mini grid's text stamp: on or off, the words, and how many cells tall. */
 export interface TextStamp { on: boolean; text: string; size: number }
 
@@ -25,7 +33,7 @@ interface GridBuilderState {
   section: GridSection;
   /** The shape the mini grid paints with (and Shapes / Motion edit), or 'erase'. */
   brush: string;
-  /** A rule waiting for a cell to be picked on the mini grid (its id). */
+  /** A rule's condition waiting for a cell to be picked on the mini grid (pickingKey: its id, #k for a later condition). */
   picking: string | null;
   /** The text stamp (docs/grid-builder.md "Text"): while on, a click on the mini grid stamps the words there in the brush's shape. */
   textStamp: TextStamp;

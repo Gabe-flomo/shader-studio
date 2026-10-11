@@ -38,7 +38,7 @@ import {
   BOARD_SIZES, COUNT_PRESETS, GRID_DEFAULTS, LOOKS, MAX_RADIUS, MAX_STATES, MAX_STEPS, SMOOTH_PRESETS, STAGES_PRESETS,
   countsOf, gridTypeDefaults, maskOf, matchingPreset, parseRuleString, presetPatch, type GridPreset, type GridRuleType,
 } from '../../gridRules/spec';
-import { DIRECTIONS, MAX_CLUSTER_RADIUS, MAX_COPIES, MAX_DISTANCE, MAX_STACK, STACK_KINDS, newStackRule, readStack, type StackKind, type StackRule } from '../../gridRules/stack';
+import { BLOCKED_ACTS, COLLIDE_ACTS, DIRECTIONS, MAX_CLUSTER_RADIUS, MAX_COPIES, MAX_DISTANCE, MAX_STACK, STACK_KINDS, newStackRule, readStack, type StackKind, type StackRule } from '../../gridRules/stack';
 import { ANY, BLOCK_PRESETS, NOT_EMPTY, PATTERN_PRESETS, SAME, readBlocks, readPatterns, type BlockRule, type PatternRule } from '../../gridRules/stencils';
 import { DEFAULT_START_TEXT, cleanStartText, readStartText } from '../../gridRules/textCells';
 
@@ -432,7 +432,7 @@ export function parseGrid(src: string, opts: { base?: P; seed?: number } = {}): 
         const kind = kt.t === 'word' ? kt.v.toLowerCase() : '';
         if (!STACK_KINDS.some(k => k.kind === kind)) {
           const s2 = kt.t === 'word' ? suggest(kind, STACK_KINDS.map(k => k.kind)) : null;
-          c.error(kt, `A stacked rule is explode, crowd, drift or cluster: then explode copies=8.${s2 ? ` Did you mean “${s2}”?` : ''}`);
+          c.error(kt, `A stacked rule is explode, crowd, drift, cluster, move or collide: then explode copies=8.${s2 ? ` Did you mean “${s2}”?` : ''}`);
           c.skipClause();
           continue;
         }
@@ -451,19 +451,36 @@ export function parseGrid(src: string, opts: { base?: P; seed?: number } = {}): 
           for (const a of thenArgs) {
             const k = a.key?.toLowerCase() ?? null;
             const flag = !k && a.value.k === 'word' ? a.value.v.toLowerCase() : null;
+            const dirOf = (word: string) => (word === 'none' ? 0 : DIRECTIONS.findIndex(x => x.key === word) + 1);
+            const wordOf = () => (a.value.k === 'word' ? a.value.v.toLowerCase() : a.value.k === 'random' ? 'random' : '');
             if (flag === 'keep' && kind === 'explode') r.keep = true;
             else if (flag === 'move' && kind === 'crowd') r.move = true;
             else if (flag === 'die' && kind === 'crowd') r.move = false;
-            else if (flag === 'any' && kind === 'drift') r.any = true;
+            else if (flag === 'any' && (kind === 'drift' || kind === 'move' || kind === 'collide')) r.any = true;
+            else if (flag === 'fly' && (kind === 'explode' || kind === 'collide')) r.fly = true;
+            else if (flag === 'still' && (kind === 'explode' || kind === 'collide')) r.fly = false;
+            else if (flag && kind === 'collide' && COLLIDE_ACTS.some(x => x.value === flag)) r.act = flag as StackRule['act'];
+            else if (k === 'heading') {
+              // Only cells with this heading (or none): heading=e, heading=none.
+              const d = dirOf(wordOf());
+              if (d >= 0 && (d > 0 || wordOf() === 'none')) r.who = d; else c.error(a, 'heading is n, ne, e, se, s, sw, w, nw or none.');
+            } else if (k === 'assign' && kind === 'move') {
+              const wd = wordOf();
+              const d = wd === 'random' ? 0 : wd === 'none' ? -1 : DIRECTIONS.findIndex(x => x.key === wd) + 1;
+              if (wd === 'random' || wd === 'none' || d > 0) r.assign = d; else c.error(a, 'assign is random, none, or a direction (n, ne, e…).');
+            } else if (k === 'blocked' && kind === 'move') {
+              const wd = wordOf();
+              if (BLOCKED_ACTS.some(x => x.value === wd)) r.act = wd as StackRule['act']; else c.error(a, 'blocked is wait, bounce or turn.');
+            }
             else if (k === 'chance') { const n = num(draw(a, 'chance', { kind: 'num', lo: 0.2, hi: 1 }), a, 'chance'); if (n !== null) r.chance = Math.max(0, Math.min(1, n)); }
-            else if (k === 'copies' && kind === 'explode') { const n = int(a, 1, MAX_COPIES, 'copies'); if (n !== null) r.copies = n; }
-            else if (k === 'distance' && kind === 'explode') { const n = int(a, 1, MAX_DISTANCE, 'distance'); if (n !== null) r.distance = n; }
+            else if (k === 'copies' && (kind === 'explode' || kind === 'collide')) { const n = int(a, 1, MAX_COPIES, 'copies'); if (n !== null) r.copies = n; }
+            else if (k === 'distance' && (kind === 'explode' || kind === 'collide')) { const n = int(a, 1, MAX_DISTANCE, 'distance'); if (n !== null) r.distance = n; }
             else if (k === 'meet' && kind === 'explode') {
               if (a.value.k === 'range') { r.lo = Math.round(a.value.lo); r.hi = Math.max(r.lo, Math.round(a.value.hi)); } else { const n = int(a, 0, 8, 'meet'); if (n !== null) { r.lo = n; r.hi = n; } }
             }
             else if (k === 'at' && (kind === 'crowd' || kind === 'cluster')) { const n = int(a, 0, kind === 'cluster' ? (2 * MAX_CLUSTER_RADIUS + 1) ** 2 - 1 : 8, 'at'); if (n !== null) r.lo = n; }
             else if (k === 'radius' && kind === 'cluster') { const n = int(a, 1, MAX_CLUSTER_RADIUS, 'radius'); if (n !== null) r.radius = n; }
-            else if ((k === 'state' || k === 'becomes') && (kind === 'explode' || kind === 'cluster')) { const n = int(a, 0, MAX_STATES - 1, k); if (n !== null) r.becomes = n; }
+            else if ((k === 'state' || k === 'becomes') && (kind === 'explode' || kind === 'cluster' || kind === 'collide')) { const n = int(a, 0, MAX_STATES - 1, k); if (n !== null) r.becomes = n; }
             else if (k === 'dir' && kind === 'drift') {
               const dw = a.value.k === 'word' ? a.value.v.toLowerCase() : '';
               const d = DIRECTIONS.findIndex(x => x.key === dw);
@@ -590,6 +607,8 @@ const STACK_TEXT_HELP: Record<StackKind, string> = {
   crowd: 'at=0…8, move (or die), chance=',
   drift: 'dir=n|ne|e|se|s|sw|w|nw, any, chance=',
   cluster: 'radius=1…4, at=, becomes=, chance=',
+  move: 'assign=random|none|n|e…, blocked=wait|bounce|turn, any, chance=',
+  collide: 'bounce|turn|stop|merge|explode, copies=, distance=, state=, fly, any, chance=',
 };
 
 /** A stacked rule card as a `then` line: its main settings always, the rest where they differ from a new card's. */
@@ -607,10 +626,23 @@ export function printStackRule(r: StackRule): string {
   } else if (r.kind === 'drift') {
     parts.push(`dir=${DIRECTIONS[r.dir].key}`);
     if (r.any) parts.push('any');
-  } else {
+  } else if (r.kind === 'cluster') {
     parts.push(`radius=${r.radius}`, `at=${r.lo}`);
     if (r.becomes !== d.becomes) parts.push(`becomes=${r.becomes}`);
+  } else if (r.kind === 'move') {
+    parts.push(`assign=${r.assign < 0 ? 'none' : r.assign === 0 ? 'random' : DIRECTIONS[r.assign - 1].key}`);
+    if (r.act !== d.act) parts.push(`blocked=${r.act}`);
+    if (r.any) parts.push('any');
+  } else {
+    parts.push(r.act);
+    if (r.act === 'explode') {
+      parts.push(`copies=${r.copies}`, `distance=${r.distance}`);
+      if (r.becomes !== d.becomes) parts.push(`state=${r.becomes}`);
+    }
+    if (r.any) parts.push('any');
   }
+  if ((r.kind === 'explode' || r.kind === 'collide') && r.fly !== d.fly) parts.push(r.fly ? 'fly' : 'still');
+  if (r.who >= 0) parts.push(`heading=${r.who === 0 ? 'none' : DIRECTIONS[r.who - 1].key}`);
   if (roundN(r.chance) !== 1) parts.push(`chance=${fmtNum(r.chance)}`);
   if (r.off) parts.push('@off');
   return parts.join(' ');
@@ -734,7 +766,7 @@ const gridEntries = (): Entry[] => [
   },
   { id: 'grid:stencil', kind: 'action', dialects: ['grid'], words: ['stencil'], params: [{ key: 'count', type: 'name', hint: 'state:min..max neighbours, like count=1:1..2' }], summary: 'A Patterns rule: 3×3 cells (. any, * not empty, a state) → the state the middle becomes. @turns / @turns-mirrors for every orientation.', examples: ['stencil .../.1./... → 2', 'stencil .../.3./... → 1 count=1:1..2'], stage: 'rule' },
   { id: 'grid:block', kind: 'action', dialects: ['grid'], words: ['block'], params: [{ key: 'chance', type: 'number', min: 0, max: 1, rand: { kind: 'num', lo: 0.3, hi: 1 } }], summary: 'A Blocks rule: 2×2 before → after (= unchanged). @mirror / @turns; chance= per block.', examples: ['block 11/00 → 00/11', 'block 10/*0 → 00/=1 @mirror chance=0.8'], stage: 'rule' },
-  { id: 'grid:then', kind: 'action', dialects: ['grid'], words: ['then'], params: [{ key: 'copies', type: 'count', min: 1, max: MAX_COPIES }, { key: 'distance', type: 'count', min: 1, max: MAX_DISTANCE }, { key: 'at', type: 'count' }, { key: 'radius', type: 'count', min: 1, max: MAX_CLUSTER_RADIUS }, { key: 'dir', type: 'choice', options: DIRECTIONS.map(x => x.key) }, { key: 'chance', type: 'number', min: 0, max: 1 }], summary: 'A stacked rule after the base, run in order every step: explode (cells meet), crowd (too many neighbours: die or move), drift (a direction), cluster (a big clump changes).', examples: ['then explode copies=8 distance=2 chance=0.5', 'then drift dir=e chance=0.3', 'then crowd at=5 move', 'then cluster radius=2 at=14'], stage: 'rule' },
+  { id: 'grid:then', kind: 'action', dialects: ['grid'], words: ['then'], params: [{ key: 'copies', type: 'count', min: 1, max: MAX_COPIES }, { key: 'distance', type: 'count', min: 1, max: MAX_DISTANCE }, { key: 'at', type: 'count' }, { key: 'radius', type: 'count', min: 1, max: MAX_CLUSTER_RADIUS }, { key: 'dir', type: 'choice', options: DIRECTIONS.map(x => x.key) }, { key: 'heading', type: 'choice', options: ['none', ...DIRECTIONS.map(x => x.key)] }, { key: 'assign', type: 'choice', options: ['random', 'none', ...DIRECTIONS.map(x => x.key)] }, { key: 'blocked', type: 'choice', options: BLOCKED_ACTS.map(x => x.value) }, { key: 'chance', type: 'number', min: 0, max: 1 }], summary: 'A stacked rule after the base, run in order every step: explode (cells meet), crowd (too many neighbours: die or move), drift (a direction), cluster (a big clump changes), move (cells step along their heading), collide (movers that meet bounce, turn, stop, merge or explode). heading= limits a card to cells with that heading.', examples: ['then explode copies=8 distance=2 chance=0.5', 'then drift dir=e chance=0.3', 'then crowd at=5 move', 'then cluster radius=2 at=14', 'then collide explode copies=8 fly', 'then move assign=random blocked=bounce'], stage: 'rule' },
   { id: 'grid:colours', kind: 'setting', dialects: ['grid'], words: ['colours', 'colors'], params: Object.keys(COLOUR_KEYS).map(k => ({ key: k, type: 'colour' as const, rand: { kind: 'colour' as const } })), summary: 'Colours of the states (empty=, on=, dying=, c0= … c7=), the afterglow (glow=) and old cells (old=).', examples: ['grid life · colours on=green empty=black'], stage: 'colour' },
   { id: 'grid:brush', kind: 'setting', dialects: ['grid'], words: ['brush'], params: [{ key: 'size', type: 'number', primary: true }, { key: 'state', type: 'count' }, { key: 'fill', type: 'number', min: 0, max: 1 }], summary: 'The mouse brush: its size, the state it paints and how thickly.', examples: ['grid life · brush size=5 fill=0.3'] },
 ];

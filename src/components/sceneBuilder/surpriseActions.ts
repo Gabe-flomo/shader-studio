@@ -13,6 +13,7 @@ import { useSceneBuilder } from '../../sceneBuilder/store';
 import { addRandomShape, randomiseItem, surpriseScene } from '../../sceneBuilder/surprise';
 import { allShapes, findItem, itemName, type SceneSpec } from '../../sceneBuilder/spec';
 import { compileSpec, makeProgram } from './previewGl';
+import { bindPreviewTextures } from '../builders/previewTextures';
 import { announceSurprise } from '../surprise/announce';
 import { newSeed } from '../../lib/surprise';
 
@@ -29,15 +30,15 @@ export function sceneFrameStats(spec: SceneSpec, t = 0.5): FrameStats | null {
   if (typeof document === 'undefined') return null;
   const c = compileSpec(spec);
   if (c.error) return { clipped: 0, black: 1, flat: true, mean: 0, spread: 0 };
-  return programFrameStats(c.vs, c.fs, c.uniforms, t);
+  return programFrameStats(c.vs, c.fs, c.uniforms, t, c.textures);
 }
 
 /**
  * The frame stats of a compiled graph's shaders drawn at 96 × 64, `t` seconds in (the Do bar's
  * Surprise uses it too). Null without WebGL2; a shader that doesn't compile reads as blank.
  */
-export function programFrameStats(vs: string, fs: string, uniforms: Record<string, number | number[]>, t = 0.5): FrameStats | null {
-  const px = programPixels(vs, fs, uniforms, [t], W, H);
+export function programFrameStats(vs: string, fs: string, uniforms: Record<string, number | number[]>, t = 0.5, textures?: Record<string, string>): FrameStats | null {
+  const px = programPixels(vs, fs, uniforms, [t], W, H, textures);
   if (px === null) return null;
   if (px === 'error') return { clipped: 0, black: 1, flat: true, mean: 0, spread: 0 };
   return frameStats(px[0], W, H);
@@ -46,9 +47,11 @@ export function programFrameStats(vs: string, fs: string, uniforms: Record<strin
 /**
  * A compiled graph's shaders drawn at `w` × `h`, once per time in `times`, as RGBA bytes (one WebGL2
  * context for all of them). Null without WebGL2; 'error' when the shader doesn't compile.
+ * `textures` (the compile's textureUniforms) binds its pictures as the live preview does; without
+ * them a scene with a picture on a shape draws black there.
  */
-export function programPixels(vs: string, fs: string, uniforms: Record<string, number | number[]>, times: number[], w = W, h = H): Uint8Array[] | 'error' | null {
-  return programFrames(vs, fs, times.map(t => ({ uniforms, t })), w, h);
+export function programPixels(vs: string, fs: string, uniforms: Record<string, number | number[]>, times: number[], w = W, h = H, textures?: Record<string, string>): Uint8Array[] | 'error' | null {
+  return programFrames(vs, fs, times.map(t => ({ uniforms, t })), w, h, undefined, textures);
 }
 
 /**
@@ -57,7 +60,7 @@ export function programPixels(vs: string, fs: string, uniforms: Record<string, n
  * each frame; when true the frames drawn so far are returned. Null without WebGL2; 'error' when
  * the shader doesn't compile.
  */
-export function programFrames(vs: string, fs: string, frames: Array<{ uniforms: Record<string, number | number[]>; t: number }>, w = W, h = H, stop?: () => boolean): Uint8Array[] | 'error' | null {
+export function programFrames(vs: string, fs: string, frames: Array<{ uniforms: Record<string, number | number[]>; t: number }>, w = W, h = H, stop?: () => boolean, textures?: Record<string, string>): Uint8Array[] | 'error' | null {
   if (typeof document === 'undefined') return null;
   const canvas = document.createElement('canvas');
   canvas.width = w; canvas.height = h;
@@ -77,6 +80,7 @@ export function programFrames(vs: string, fs: string, frames: Array<{ uniforms: 
     gl.useProgram(prog);
     gl.uniform2f(gl.getUniformLocation(prog, 'u_resolution'), w, h);
     gl.viewport(0, 0, w, h);
+    const pictures = textures && Object.keys(textures).length ? bindPreviewTextures(gl, prog, textures) : null;
     const out: Uint8Array[] = [];
     for (const f of frames) {
       if (stop?.()) break;
@@ -89,11 +93,13 @@ export function programFrames(vs: string, fs: string, frames: Array<{ uniforms: 
         else if (v.length === 4) gl.uniform4f(loc, v[0], v[1], v[2], v[3]);
       }
       gl.uniform1f(gl.getUniformLocation(prog, 'u_time'), f.t);
+      pictures?.refresh(0);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
       const px = new Uint8Array(w * h * 4);
       gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
       out.push(px);
     }
+    pictures?.dispose();
     gl.deleteProgram(prog); gl.deleteBuffer(buf); gl.deleteVertexArray(vao);
     return out;
   } catch {

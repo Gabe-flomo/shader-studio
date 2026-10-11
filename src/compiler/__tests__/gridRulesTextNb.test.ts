@@ -264,8 +264,8 @@ describe('Open as nodes with a drawn or text start', { timeout: 60000 }, () => {
     });
   }
 
-  it('a custom neighbourhood of more than 24 cells is turned down, saying why', () => {
+  it('a custom neighbourhood of more than 24 cells opens too (counted in one block)', () => {
     const src = n('gridRules', 'x', 0, 0, { neighbourhood: 'custom', stencil: { size: 7, cells: Array(49).fill(1) } });
-    expect(gridAsNodesProblem(src)).toMatch(/48 cells/);
+    expect(gridAsNodesProblem(src)).toBeNull();
   });
 });

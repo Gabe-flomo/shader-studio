@@ -12,6 +12,7 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { makeProgram, type Compiled } from '../sceneBuilder/previewGl';
 import { bindPreviewTextures } from './previewTextures';
+import { makePreviewPasses } from './previewPasses';
 
 /** The quickest compiles follow a drag (about 20 a second). */
 export const COMPILE_EVERY_MS = 50;
@@ -62,6 +63,8 @@ export function useBuilderPreview(canvasRef: RefObject<HTMLCanvasElement | null>
   const fs = useMemo(() => shaderKey(compiled.fs), [compiled.fs]);
   // Its pictures (sampler → the graph node it shows), bound with the program (previewTextures.ts).
   const texKey = JSON.stringify(compiled.textures ?? {});
+  // Its Pass programs, if the graph has Pass nodes (previewPasses.ts): drawn before the picture each frame.
+  const passKey = useMemo(() => JSON.stringify((compiled.passes ?? []).map(p => ({ ...p, fs: shaderKey(p.fs) }))), [compiled.passes]);
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || error || !vs || !fs) return;
@@ -80,6 +83,11 @@ export function useBuilderPreview(canvasRef: RefObject<HTMLCanvasElement | null>
     const uvLoc = gl.getAttribLocation(prog, 'uv');
     if (posLoc >= 0) { gl.enableVertexAttribArray(posLoc); gl.vertexAttribPointer(posLoc, 3, gl.FLOAT, false, 20, 0); }
     if (uvLoc >= 0) { gl.enableVertexAttribArray(uvLoc); gl.vertexAttribPointer(uvLoc, 2, gl.FLOAT, false, 20, 12); }
+    gl.useProgram(prog);
+    const passSpecs = JSON.parse(passKey) as NonNullable<Compiled['passes']>;
+    const passes = passSpecs.length ? makePreviewPasses(gl, vs, passSpecs, buf) : null;
+    if (typeof passes === 'string') { setGlError(passes.slice(0, 400)); gl.deleteProgram(prog); return; }
+    gl.bindVertexArray(vao);
     gl.useProgram(prog);
     const locs = new Map<string, WebGLUniformLocation | null>();
     const loc = (name: string) => { if (!locs.has(name)) locs.set(name, gl.getUniformLocation(prog, name)); return locs.get(name) ?? null; };
@@ -113,6 +121,13 @@ export function useBuilderPreview(canvasRef: RefObject<HTMLCanvasElement | null>
       if (resized) { sized = size; if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; } }
       const u = uniforms.current;
       if (!running && !u.dirty && !resized) return;
+      if (passes) {
+        // The passes first (their own programs and targets), then back to the picture's program.
+        passes.draw(u.dirty ? u.values : null, clock.current, w, h);
+        gl.useProgram(prog);
+        gl.bindVertexArray(vao);
+        passes.bindFinal(prog);
+      }
       if (u.dirty) { setUniforms(u.values); u.dirty = false; }
       gl.viewport(0, 0, w, h);
       gl.uniform2f(uRes, w, h);
@@ -124,11 +139,12 @@ export function useBuilderPreview(canvasRef: RefObject<HTMLCanvasElement | null>
     return () => {
       cancelAnimationFrame(raf);
       pictures.dispose();
+      passes?.dispose();
       gl.deleteProgram(prog);
       gl.deleteBuffer(buf);
       gl.deleteVertexArray(vao);
     };
-  }, [canvasRef, vs, fs, error, texKey]);
+  }, [canvasRef, vs, fs, error, texKey, passKey]);
 
   return error ?? glError;
 }

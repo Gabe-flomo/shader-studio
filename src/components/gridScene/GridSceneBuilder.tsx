@@ -34,15 +34,16 @@ import { newSeed } from '../../lib/surprise';
 import { BlockLibrary } from '../sceneBuilder2d/SpaceBlocks';
 import { backToSceneKinds } from '../../builders/sceneKinds';
 import { useBuilderRecipeRequest } from '../../builders/windows';
-import { useGridBuilder, type GridSection } from '../../gridScene/store';
-import { buildFromGridBuilder, finishGridBuilder, makeSimulation, simulationOf } from '../../gridScene/actions';
+import { pickingKey, useGridBuilder, type GridSection } from '../../gridScene/store';
+import { SIM_RULES, buildFromGridBuilder, finishGridBuilder, makeSimulation, simulationOf } from '../../gridScene/actions';
+import { Popover } from '../ui/Popover';
 import { MAX_SEARCH, gridProgram, searchCapped } from '../../gridScene/glsl';
 import { GRID_TEMPLATES } from '../../gridScene/templates';
 import {
   DO_KINDS, DO_LABELS, DRAW_MODES, DRAW_MODE_LABELS, MAX_CELLS, MAX_PLACED, PIC_MODES, PIC_MODE_LABELS, defaultDraw, drawOf, picModeOf, MAX_RULES, MAX_SHAPES, MAX_WARPS, MIN_CELLS, MOTION_LABELS, MOTION_PATHS, PATTERN_KINDS, PATTERN_LABELS,
   PATTERN_TARGETS, SHAPE_KINDS, SHAPE_LABELS, TARGET_LABELS, WHEN_KINDS, WHEN_LABELS, defaultLook, defaultPattern, newRule, newShape, nextShapeId,
-  removeShape, resizeGrid, ruleProblem, ruleText, shapeOf, shapeSummary, warpOf,
-  type DoKind, type DrawMode, type GShape, type PicMode, type GridSceneSpec, type MotionPath, type PatternKind, type PatternTarget, type ShapeKind, type Vec2, type WhenKind,
+  removeShape, resizeGrid, ruleProblem, ruleText, shapeOf, shapeSummary, shownCells, warpOf, JOINS, MAX_ALSO, clauseNeedsB, ruleClauses, MAX_SIM_STATE, simStateOf,
+  type DoKind, type DrawMode, type GridClause, type GridDo, type GridRule, type Join, type GShape, type PicMode, type GridSceneSpec, type MotionPath, type PatternKind, type PatternTarget, type ShapeKind, type Vec2, type WhenKind,
 } from '../../gridScene/spec';
 import { MiniGrid } from './MiniGrid';
 import { MUTED_DIM, MuteToggle, MutedTag } from '../builders/MuteToggle';
@@ -516,19 +517,83 @@ function PatternsSection() {
   );
 }
 
-function RulesSection() {
+/** The fields of one condition: its kind, then the column / row / cell (with Pick on the grid) or the other shape (and how near). */
+function ClauseFields({ ruleId, k, w, a, setW }: { ruleId: string; k: number; w: GridClause; a: string; setW: (fn: (w: GridClause) => void, key?: string) => void }) {
   const tk = useTokens();
   const spec = useGridBuilder(s => s.spec);
   const picking = useGridBuilder(s => s.picking);
   const setPicking = useGridBuilder(s => s.setPicking);
   const shapeOpts = spec.shapes.map(s => ({ value: s.id, label: `${s.id} · ${SHAPE_LABELS[s.kind]}` }));
-  const setR = (id: string, fn: (r: GridSceneSpec['rules'][number]) => void, key?: string) => edit(d => { const r = d.rules.find(x => x.id === id); if (r) fn(r); }, key);
+  const pickKey = pickingKey(ruleId, k);
+  return (
+    <>
+      {(w.kind === 'cell' || w.kind === 'column') && (
+        <NumRow label="Column" value={w.x ?? 0} min={0} max={spec.cols - 1} integer onChange={v => setW(x => { x.x = v; }, `rx${ruleId}${k}`)} />
+      )}
+      {(w.kind === 'cell' || w.kind === 'row') && (
+        <NumRow label="Row" value={w.y ?? 0} min={0} max={spec.rows - 1} integer onChange={v => setW(x => { x.y = v; }, `ry${ruleId}${k}`)} />
+      )}
+      {!clauseNeedsB(w) && (
+        <Button size="sm" variant="ghost" icon="target" data-pick-cell={pickKey} onClick={() => setPicking(picking === pickKey ? null : pickKey)}
+          style={{ alignSelf: 'flex-start', color: picking === pickKey ? tk.status.warningText : undefined }}>{picking === pickKey ? 'Click a cell on the grid…' : 'Pick on the grid'}</Button>
+      )}
+      {clauseNeedsB(w) && (
+        <Row label="Other shape"><Select ariaLabel="Other shape" value={w.b ?? ''} options={shapeOpts} onChange={v => setW(x => { x.b = v; })} /></Row>
+      )}
+      {w.kind === 'near' && <NumRow label="Within" unit="cells" value={w.dist ?? 1} min={0.1} max={4} defaultValue={1} onChange={v => setW(x => { x.dist = v; }, `rd${ruleId}${k}`)} />}
+      {clauseNeedsB(w) && w.b === a && <BuilderNote>Another {a}: a different cell of the same shape.</BuilderNote>}
+    </>
+  );
+}
+
+/** The fields of a Do (or an Else): its kind, then what it becomes, its colour, how much. */
+function DoFields({ label, d, needsB, onKind, setD, keyPrefix, allowNone }: {
+  label: string; d: GridDo | null; needsB: boolean; onKind: (k: DoKind | null) => void; setD: (fn: (d: GridDo) => void, key?: string) => void; keyPrefix: string; allowNone?: boolean;
+}) {
+  const spec = useGridBuilder(s => s.spec);
+  const shapeOpts = spec.shapes.map(s => ({ value: s.id, label: `${s.id} · ${SHAPE_LABELS[s.kind]}` }));
+  const kinds = DO_KINDS.filter(k => k !== 'swap' || (needsB && !allowNone));
+  return (
+    <>
+      <Row label={label}>
+        <Select ariaLabel={label} value={d?.kind ?? ''} options={[...(allowNone ? [{ value: '', label: 'Nothing' }] : []), ...kinds.map(k => ({ value: k, label: DO_LABELS[k] }))]}
+          onChange={v => onKind(v ? v as DoKind : null)} />
+      </Row>
+      {d?.kind === 'become' && <Row label="Into"><Select ariaLabel={`${label}: become shape`} value={d.shape ?? ''} options={shapeOpts} onChange={v => setD(x => { x.shape = v; })} /></Row>}
+      {d?.kind === 'colour' && <ColourRow label="Colour" value={d.color ?? [1, 1, 1]} onChange={v => setD(x => { x.color = v; }, `${keyPrefix}c`)} />}
+      {d?.kind === 'grow' && <NumRow label="By" value={d.amount ?? 1.5} min={0} max={3} defaultValue={1.5} onChange={v => setD(x => { x.amount = v; }, `${keyPrefix}a`)} />}
+      {d?.kind === 'spin' && <NumRow label="Turns a second" value={d.amount ?? 1} min={-3} max={3} defaultValue={1} onChange={v => setD(x => { x.amount = v; }, `${keyPrefix}a`)} />}
+    </>
+  );
+}
+
+/** A Do of kind `k` for shape `a`, its settings filled in (from `was` when it had them). */
+function doOfKind(spec: GridSceneSpec, k: DoKind, a: string, was?: GridDo | null): GridDo {
+  const d: GridDo = { ...(was ?? {}), kind: k };
+  if (k === 'become' && !d.shape) d.shape = spec.shapes.find(s => s.id !== a)?.id ?? a;
+  if (k === 'colour' && !d.color) d.color = [1, 1, 1];
+  if ((k === 'grow' || k === 'spin') && d.amount === undefined) d.amount = k === 'grow' ? 1.5 : 1;
+  return d;
+}
+
+function RulesSection() {
+  const tk = useTokens();
+  const spec = useGridBuilder(s => s.spec);
+  const shapeOpts = spec.shapes.map(s => ({ value: s.id, label: `${s.id} · ${SHAPE_LABELS[s.kind]}` }));
+  const whenOpts = WHEN_KINDS.map(k => ({ value: k, label: WHEN_LABELS[k] }));
+  const setR = (id: string, fn: (r: GridRule) => void, key?: string) => edit(d => { const r = d.rules.find(x => x.id === id); if (r) fn(r); }, key);
+  /** A condition's kind changed: a partner when it needs one (and swap only on the first). */
+  const kindOf = (x: GridRule, w: GridClause, v: WhenKind, first: boolean) => {
+    w.kind = v;
+    if (clauseNeedsB(w) && !w.b) w.b = spec.shapes.find(s => s.id !== x.when.a)?.id ?? x.when.a;
+    if (first && x.do.kind === 'swap' && !clauseNeedsB(w)) x.do.kind = 'colour';
+  };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <BuilderNote>When … Do … for every drawn cell, checked in the shader each frame, top to bottom: a shape reaching a cell, a column or a row, or meeting another shape, changes.</BuilderNote>
+      <BuilderNote>When … Do … for every drawn cell, checked in the shader each frame, top to bottom: a shape reaching a cell, a column or a row, or meeting another shape, changes. Join conditions with and / or, add an Else, or make the change stay.</BuilderNote>
       {spec.rules.map(r => {
         const problem = ruleProblem(spec, r);
-        const needsB = r.when.kind === 'sameCell' || r.when.kind === 'near';
+        const clauses = ruleClauses(r);
         return (
           <Card key={r.id} id={`gs-rule-${r.id}`} defaultOpen title={<span data-rule={r.id}>{ruleText(r)}</span>} summary={problem ?? undefined}
             actions={<>
@@ -538,39 +603,38 @@ function RulesSection() {
             <Row label="When">
               <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.4fr)', gap: 6 }}>
                 <Select ariaLabel="When shape" value={r.when.a} options={shapeOpts} onChange={v => setR(r.id, x => { x.when.a = v; })} />
-                <Select ariaLabel="Condition" value={r.when.kind} options={WHEN_KINDS.map(k => ({ value: k, label: WHEN_LABELS[k] }))} onChange={v => setR(r.id, x => {
-                  x.when.kind = v as WhenKind;
-                  if ((v === 'sameCell' || v === 'near') && !x.when.b) x.when.b = spec.shapes.find(s => s.id !== x.when.a)?.id ?? x.when.a;
-                  if (x.do.kind === 'swap' && v !== 'sameCell' && v !== 'near') x.do.kind = 'colour';
-                })} />
+                <Select ariaLabel="Condition" value={r.when.kind} options={whenOpts} onChange={v => setR(r.id, x => kindOf(x, x.when, v as WhenKind, true))} />
               </div>
             </Row>
-            {(r.when.kind === 'cell' || r.when.kind === 'column') && (
-              <NumRow label="Column" value={r.when.x ?? 0} min={0} max={spec.cols - 1} integer onChange={v => setR(r.id, x => { x.when.x = v; }, `rx${r.id}`)} />
+            <ClauseFields ruleId={r.id} k={0} w={r.when} a={r.when.a} setW={(fn, key) => setR(r.id, x => fn(x.when), key)} />
+            {clauses.slice(1).map((c, i) => (
+              <div key={i} data-rule-clause={i + 1} style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingLeft: 8, borderLeft: `2px solid ${tk.border.default}` }}>
+                <Row label={
+                  <Select ariaLabel={`Join ${i + 1}`} value={c.join ?? 'and'} options={JOINS.map(j => ({ value: j, label: j }))} onChange={v => setR(r.id, x => { x.also![i].join = v as Join; })} />
+                }>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 6, alignItems: 'center' }}>
+                    <Select ariaLabel={`Condition ${i + 2}`} value={c.when.kind} options={whenOpts} onChange={v => setR(r.id, x => kindOf(x, x.also![i].when, v as WhenKind, false))} />
+                    <IconButton icon="close" size="sm" label="Remove this condition" onClick={() => setR(r.id, x => { x.also = (x.also ?? []).filter((_, j) => j !== i); if (!x.also.length) delete x.also; })} />
+                  </div>
+                </Row>
+                <ClauseFields ruleId={r.id} k={i + 1} w={c.when} a={r.when.a} setW={(fn, key) => setR(r.id, x => fn(x.also![i].when), key)} />
+              </div>
+            ))}
+            {clauses.length - 1 < MAX_ALSO && (
+              <div style={{ display: 'flex', gap: 6 }}>
+                {JOINS.map(j => (
+                  <Button key={j} size="sm" variant="ghost" icon="plus" data-add-clause={`${r.id}:${j}`} title={`Another condition, joined with “${j}” (checked left to right)`}
+                    onClick={() => setR(r.id, x => { x.also = [...(x.also ?? []), { join: j, when: { kind: 'column', x: Math.floor(spec.cols / 2) } }]; })}>{j}</Button>
+                ))}
+              </div>
             )}
-            {(r.when.kind === 'cell' || r.when.kind === 'row') && (
-              <NumRow label="Row" value={r.when.y ?? 0} min={0} max={spec.rows - 1} integer onChange={v => setR(r.id, x => { x.when.y = v; }, `ry${r.id}`)} />
-            )}
-            {r.when.kind !== 'sameCell' && r.when.kind !== 'near' && (
-              <Button size="sm" variant="ghost" icon="target" data-pick-cell={r.id} onClick={() => setPicking(picking === r.id ? null : r.id)}
-                style={{ alignSelf: 'flex-start', color: picking === r.id ? tk.status.warningText : undefined }}>{picking === r.id ? 'Click a cell on the grid…' : 'Pick on the grid'}</Button>
-            )}
-            {needsB && (
-              <Row label="Other shape"><Select ariaLabel="Other shape" value={r.when.b ?? ''} options={shapeOpts} onChange={v => setR(r.id, x => { x.when.b = v; })} /></Row>
-            )}
-            {r.when.kind === 'near' && <NumRow label="Within" unit="cells" value={r.when.dist ?? 1} min={0.1} max={4} defaultValue={1} onChange={v => setR(r.id, x => { x.when.dist = v; }, `rd${r.id}`)} />}
-            <Row label="Do">
-              <Select ariaLabel="Do" value={r.do.kind} options={DO_KINDS.filter(k => k !== 'swap' || needsB).map(k => ({ value: k, label: DO_LABELS[k] }))} onChange={v => setR(r.id, x => {
-                x.do.kind = v as DoKind;
-                if (v === 'become' && !x.do.shape) x.do.shape = spec.shapes.find(s => s.id !== x.when.a)?.id ?? x.when.a;
-                if (v === 'colour' && !x.do.color) x.do.color = [1, 1, 1];
-                if ((v === 'grow' || v === 'spin') && x.do.amount === undefined) x.do.amount = v === 'grow' ? 1.5 : 1;
-              })} />
+            <DoFields label="Do" d={r.do} needsB={clauseNeedsB(r.when)} keyPrefix={`rd${r.id}`}
+              onKind={k => setR(r.id, x => { if (k) x.do = doOfKind(spec, k, x.when.a, x.do); })} setD={(fn, key) => setR(r.id, x => fn(x.do), key)} />
+            <Row label="Stays changed" hint="Once the conditions have held for a drawn cell, that cell keeps the change after they end (a small memory pass remembers it, one texel a cell). The preview's Restart, the clock going back, or the Rule memory node's Reset forgets.">
+              <Toggle checked={!!r.sticky} onChange={v => setR(r.id, x => { if (v) x.sticky = true; else delete x.sticky; })} label={r.sticky ? 'On' : 'Off'} />
             </Row>
-            {r.do.kind === 'become' && <Row label="Into"><Select ariaLabel="Become shape" value={r.do.shape ?? ''} options={shapeOpts} onChange={v => setR(r.id, x => { x.do.shape = v; })} /></Row>}
-            {r.do.kind === 'colour' && <ColourRow label="Colour" value={r.do.color ?? [1, 1, 1]} onChange={v => setR(r.id, x => { x.do.color = v; }, `rc${r.id}`)} />}
-            {r.do.kind === 'grow' && <NumRow label="By" value={r.do.amount ?? 1.5} min={0} max={3} defaultValue={1.5} onChange={v => setR(r.id, x => { x.do.amount = v; }, `ra${r.id}`)} />}
-            {r.do.kind === 'spin' && <NumRow label="Turns a second" value={r.do.amount ?? 1} min={-3} max={3} defaultValue={1} onChange={v => setR(r.id, x => { x.do.amount = v; }, `ra${r.id}`)} />}
+            <DoFields label="Else" d={r.else ?? null} needsB={false} allowNone keyPrefix={`re${r.id}`}
+              onKind={k => setR(r.id, x => { if (k) x.else = doOfKind(spec, k, x.when.a, x.else); else delete x.else; })} setD={(fn, key) => setR(r.id, x => { if (x.else) fn(x.else); }, key)} />
             {problem && <BuilderNote style={{ color: tk.status.warningText }}>Off: {problem}.</BuilderNote>}
           </Card>
         );
@@ -602,6 +666,10 @@ function LookSection() {
         <Row label="Glow"><Toggle checked={look.glow} onChange={v => setL(l => { l.glow = v; })} label={look.glow ? 'On' : 'Off'} /></Row>
         {look.glow && (
           <>
+            <Row label="Style" hint="Soft: the shape's colour runs out into its glow, one shape. Halo: a bright rim round a flat shape.">
+              <Select ariaLabel="Glow style" value={look.glowStyle ?? 'soft'} options={[{ value: 'soft', label: 'Soft (one shape)' }, { value: 'halo', label: 'Halo (rim round the shape)' }]}
+                onChange={v => setL(l => { l.glowStyle = v === 'halo' ? 'halo' : undefined; })} />
+            </Row>
             <NumRow label="Amount" value={look.glowAmount} min={0.0005} max={0.05} step={0.0005} defaultValue={DEFAULT_LOOK.glowAmount} onChange={v => setL(l => { l.glowAmount = v; }, 'ga')} />
             <NumRow label="Falloff" value={look.glowFalloff} min={0.5} max={3} defaultValue={DEFAULT_LOOK.glowFalloff} onChange={v => setL(l => { l.glowFalloff = v; }, 'gf')} />
           </>
@@ -661,6 +729,70 @@ function Presets() {
   );
 }
 
+// ── Make it a simulation ──────────────────────────────────────────────────────
+
+/**
+ * "Make it a simulation → Grid Rules": a small panel first, listing the drawing's shapes with the
+ * state each starts the simulation as (0 leaves it out; remembered on the scene for the next jump)
+ * and the rule to start with, then the jump (actions.ts makeSimulation).
+ */
+function SimulationButton({ hasSim }: { hasSim: boolean }) {
+  const tk = useTokens();
+  const anchor = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const spec = useGridBuilder(s => s.spec);
+  const [rule, setRule] = useState<string>('');
+  const counts = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const id of shownCells(spec)) if (id) m.set(id, (m.get(id) ?? 0) + 1);
+    return m;
+  }, [spec]);
+  const drawn = spec.shapes.filter(s => counts.get(s.id));
+  const states = Array.from({ length: MAX_SIM_STATE + 1 }, (_, i) => ({ value: String(i), label: i === 0 ? '0 · left out' : i === 1 ? '1 · alive' : String(i) }));
+  const ruleOpts = [
+    { value: '', label: hasSim ? 'Keep its rule' : 'Life' },
+    ...SIM_RULES.filter(r => hasSim || r.key !== 'count:life').map(r => ({ value: r.key, label: `${r.group} · ${r.label}` })),
+  ];
+  const hint = SIM_RULES.find(r => r.key === rule)?.hint;
+  const left = drawn.every(s => simStateOf(spec, s.id) === 0);
+  return (
+    <div ref={anchor} style={{ display: 'flex' }}>
+      <Button size="sm" icon="grid" data-make-simulation onClick={() => setOpen(o => !o)}
+        title={`Make it a simulation: Grid Rules starts from your drawing, each shape as the state you pick${hasSim ? '; the one made before is reused' : ''}. Its editor has “‹ Pattern grid” to come back.`}>
+        Make it a simulation → Grid Rules
+      </Button>
+      {open && (
+        <Popover anchorRef={anchor} onClose={() => setOpen(false)} align="end" width={320} padding={12}>
+          <div data-sim-panel style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <StudioLabel>Each shape starts as</StudioLabel>
+            {!drawn.length && <BuilderNote>Nothing is drawn yet: the simulation starts empty.</BuilderNote>}
+            {drawn.map(s => (
+              <div key={s.id} data-sim-shape={s.id} style={{ display: 'grid', gridTemplateColumns: '22px minmax(0, 1fr) 118px', alignItems: 'center', gap: 8 }}>
+                <Glyph kind={s.kind} color={s.color} size={20} outline={s.outline} />
+                <span style={{ fontSize: 12.5, color: tk.text.secondary, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {s.id} · {SHAPE_LABELS[s.kind].toLowerCase()} · {counts.get(s.id)} cell{counts.get(s.id) === 1 ? '' : 's'}
+                </span>
+                <Select ariaLabel={`State for shape ${s.id}`} value={String(simStateOf(spec, s.id))} options={states}
+                  onChange={v => edit(d => { d.simStates = { ...(d.simStates ?? {}), [s.id]: Number(v) }; })} />
+              </div>
+            ))}
+            <BuilderNote>State 1 is alive. Count rules (Life…) see only alive or not; Stages rules read 2 and up as dying stages, so walls of a higher state don't come alive. Kept with the drawing for the next jump.</BuilderNote>
+            <Row label="Rule">
+              <Select ariaLabel="Simulation rule" value={rule} options={ruleOpts} onChange={setRule} />
+            </Row>
+            {hint && <BuilderNote>{hint}</BuilderNote>}
+            {left && drawn.length > 0 && <BuilderNote style={{ color: tk.status.warningText }}>Every shape is left out: the simulation starts empty.</BuilderNote>}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
+              <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
+              <Button size="sm" variant="primary" data-sim-go onClick={() => { setOpen(false); makeSimulation({ rule: rule || null }); }}>Make it a simulation</Button>
+            </div>
+          </div>
+        </Popover>
+      )}
+    </div>
+  );
+}
+
 // ── The window ────────────────────────────────────────────────────────────────
 
 export function GridSceneBuilder() {
@@ -716,10 +848,7 @@ export function GridSceneBuilder() {
         }} />
         <IconButton icon="undo" label="Undo" shortcut="cmd+z" size="sm" disabled={!canUndo} onClick={undo} />
         <IconButton icon="redo" label="Redo" shortcut="cmd+shift+z" size="sm" disabled={!canRedo} onClick={redo} />
-        <Button size="sm" icon="grid" data-make-simulation onClick={() => makeSimulation()}
-          title={`Make it a simulation: Grid Rules starts from your drawing (its shapes as the start cells)${hasSim ? '; the one made before is reused' : ''}. Its editor has “‹ Pattern grid” to come back.`}>
-          Make it a simulation → Grid Rules
-        </Button>
+        <SimulationButton hasSim={hasSim} />
         <Button size="sm" icon="rebuild" data-grid-build onClick={() => buildFromGridBuilder(false)} title={editing ? 'Rebuild the grid in the graph (keeps settings you changed on its nodes)' : 'Build the grid into the graph now'}>{editing ? 'Rebuild' : 'Build'}</Button>
       </>}
       primary={{ label: 'Done', onClick: finishGridBuilder, title: 'Build what changed, close, and show it on the graph' }}
