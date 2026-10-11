@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.171',
+    date: '2026-10-11',
+    title: 'Builders on your phone',
+    highlights: [
+      { area: 'Phone', text: 'Every builder fits a phone: the picture on top, the sections as swipeable tabs in the bottom bar, and tapping one opens its settings in a sheet.' },
+      { area: 'Phone', text: 'New graph on a phone starts from the Scene builder (an empty graph is one tap away). Sliders follow your finger; double tap resets.' },
+      { area: 'Studio', text: 'Grid simulation is its own Scene builder kind, opening Grid Rules directly, beside Grid scene.' },
+    ],
+  },
+  {
     id: '2026.10.170',
     date: '2026-10-11',
     title: 'Drawn paths',
