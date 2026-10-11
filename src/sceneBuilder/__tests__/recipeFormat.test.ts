@@ -11,7 +11,7 @@ vi.hoisted(() => {
 
 import { formatRecipe, parseRecipe, printRecipe } from '../recipe';
 import { clauseTree, recipeRuns, recipeTokens, splitClauses } from '../highlight';
-import { deleteClause, moveClause, replaceClause } from '../recipeRows';
+import { deleteClause, moveClause, replaceClause, replaceNthWord, wordsBefore } from '../recipeRows';
 import { canonicalSpec } from '../spec';
 import { SCENE_TEMPLATES, templateSpec } from '../templates';
 
@@ -150,5 +150,17 @@ describe('rows', () => {
     const gone = deleteClause(pretty, 4);
     expect(parseRecipe(gone).spec.look.shadows).toBe(parseRecipe('surface').spec.look.shadows);
     expect(splitClauses(gone)).toHaveLength(6);
+  });
+});
+
+describe('word help picks on a row', () => {
+  it('replaces the same word the row shows, by its place among equal words', () => {
+    const clause = 'smooth-union(\n  sphere r=0.5,\n  sphere r=0.5 at=(1,0,0)\n) k=0.5';
+    const lines = 'smooth-union(\nsphere r=0.5,\nsphere r=0.5 at=(1,0,0)\n) k=0.5';
+    const second = lines.indexOf('0.5', lines.indexOf('0.5') + 1);
+    expect(wordsBefore(lines, '0.5', second)).toBe(1);
+    expect(replaceNthWord(clause, '0.5', 1, '0.8')).toBe('smooth-union(\n  sphere r=0.5,\n  sphere r=0.8 at=(1,0,0)\n) k=0.5');
+    expect(replaceNthWord('box size=0.5 round=0.05', '0.5', 0, '1')).toBe('box size=1 round=0.05');
+    expect(replaceNthWord('volumetric density=1', 'volumetric', 0, 'glass')).toBe('glass density=1');
   });
 });

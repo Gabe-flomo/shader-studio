@@ -2044,7 +2044,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           );
         })()}
 
-        {/* A scene the 3D Scene Builder built: its recipe (docs/scene-builder.md, "The Recipe chip") */}
+        {/* A scene the 3D Scene Builder built: its recipe (docs/scene-builder-3d.md, "The Recipe chip") */}
         {isSceneGroup && !collapsed && !!node.params.sceneBuilder && <RecipeChip node={node} touch={isTouchDevice} />}
 
         {/* Inner node exposed params */}

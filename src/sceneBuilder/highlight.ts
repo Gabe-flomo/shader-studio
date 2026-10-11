@@ -1,5 +1,5 @@
 /**
- * highlight.ts — the recipe language coloured, and cut into rows (docs/scene-builder.md, "Recipe").
+ * highlight.ts — the recipe language coloured, and cut into rows (docs/scene-builder-3d.md, "Recipe").
  *
  *  - `recipeTokens`: every run of a recipe with its kind (a mode, a shape, a combine, a warp, a
  *    setting, a parameter key, a number, a vector, a name, a colour, punctuation, a comment), the

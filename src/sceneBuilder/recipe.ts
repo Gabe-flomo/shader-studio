@@ -1,5 +1,5 @@
 /**
- * recipe.ts — the Scene Builder's recipe text, both ways (docs/scene-builder.md).
+ * recipe.ts — the Scene Builder's recipe text, both ways (docs/scene-builder-3d.md).
  *
  *   volumetric · smooth-union(sphere r=1, cone h=2 rot=(30,0,0)) k=0.3 · twist 0.5 · polar-repeat 6 · camera dist=4 orbit=10 · fog 0.3
  *
@@ -17,8 +17,8 @@
  */
 import {
   DEFAULT_CAMERA, DEFAULT_COLOR, DEFAULT_LOOK, DEFAULT_QUALITY, SHAPES, SHAPE_BY_KIND, TONE_MODES, WARPS, WARP_BY_KIND,
-  defaultSize, defaultWarpValues, emptySpec, newGroup, newShape, newWarp,
-  type CameraSpec, type CombineOp, type ParamDef, type RenderMode, type SceneItem, type SceneSpec, type ShapeSpec, type ToneMode, type Vec3, type WarpDef, type WarpSpec,
+  DIM_WORDS, defaultSize, defaultWarpValues, emptySpec, newGroup, newShape, newWarp, shapeDims,
+  type CameraSpec, type DimTarget, type DimWord, type ShapeDef, type CombineOp, type ParamDef, type RenderMode, type SceneItem, type SceneSpec, type ShapeSpec, type ToneMode, type Vec3, type WarpDef, type WarpSpec,
 } from './spec';
 import { COLOUR_TABLE, colourText } from '../lang/colours';
 import { Cursor } from '../lang/parse';
@@ -370,6 +370,9 @@ class Parser {
       const sargs = this.resolveArgs(this.args([',', ')', '@']), kind, (key, n) => {
         const p = key ? def.params.find(q => q.key.toLowerCase() === key) ?? (key === 'radius' ? def.params.find(q => q.key === 'r') : undefined) : def.params[n];
         if (p) return sceneRand(p);
+        // width / height / depth, and a round shape's linked size: one number from the setting it sets.
+        const dim = key ? dimTarget(def, key) : null;
+        if (dim) { const r = sceneRand(def.params.find(q => q.key === dim[0].key)!); return r.kind === 'vec' ? { kind: 'num', lo: r.lo, hi: r.hi } : r; }
         const k = key === 'colour' || key === 'c' ? 'color' : key === 'pos' || key === 'position' ? 'at' : key;
         return SCENE_SETTING_RAND[`shape.${k}`];
       });
@@ -515,11 +518,21 @@ class Parser {
       if (key === 'shine' || key === 'gloss') { if (a.value.kind === 'num') sh.shine = Math.max(0, Math.min(1, a.value.v)); else this.fail(a, typeMismatch('shine', 'float', a.value, 'a number from 0 to 1')); continue; }
       if (key === 'name') { if (a.value.kind === 'str' || a.value.kind === 'word') sh.name = a.value.v; continue; }
       if (key === 'glass') { sh.glass = !(a.value.kind === 'word' && /^(no|off|false)$/i.test(a.value.v)) && !(a.value.kind === 'num' && a.value.v === 0); continue; }
+      // Linked size: width / height / depth set one dimension, a round shape's size sets them all.
+      const dim = def.params.some(q => q.key === raw) ? null : dimTarget(def, key!);
+      if (dim) {
+        if (a.value.kind !== 'num') { this.fail(a, typeMismatch(raw, 'float', a.value, `one number (${key === 'size' ? 'every dimension' : `the ${key}`})`)); continue; }
+        for (const t of dim) {
+          if (t.part === undefined) sh.size[t.key] = a.value.v;
+          else { const v = [...(sh.size[t.key] as Vec3)] as Vec3; v[t.part] = a.value.v; sh.size[t.key] = v; }
+        }
+        continue;
+      }
       // Size keys: exact first (torus R vs r), then any case.
       const p = def.params.find(q => q.key === raw) ?? def.params.find(q => q.key.toLowerCase() === key)
         ?? (key === 'radius' ? def.params.find(q => q.key === 'r') : key === 'height' ? def.params.find(q => q.key === 'h') : undefined);
       if (!p) {
-        const s = suggest(raw, [...def.params.map(q => q.key), 'at', 'rot', 'color', 'shine', 'name', 'glass']);
+        const s = suggest(raw, [...def.params.map(q => q.key), ...(shapeDims(def) ? ['size', ...DIM_WORDS] : []), 'at', 'rot', 'color', 'shine', 'name', 'glass']);
         this.fail(a, `${def.label} has no setting “${raw}”.${s ? ` Did you mean “${s}”?` : ` It takes ${def.params.map(q => q.key).join(', ')}.`}`);
         continue;
       }
@@ -732,7 +745,20 @@ class Parser {
   }
 }
 
-/** A value of the wrong type for a setting, with the fix where there is one (docs/scene-builder.md, "Type checks"). */
+/**
+ * What a dimension word sets on a shape (spec.ts shapeDims): `width`, `height`, `depth` one
+ * dimension each; `size` on a round shape (a cylinder's radius and height) all of them. Null when
+ * the word isn't one of its dimensions (a box's own `size` vector is an ordinary setting).
+ */
+function dimTarget(def: ShapeDef, key: string): DimTarget[] | null {
+  const d = shapeDims(def);
+  if (!d) return null;
+  if ((DIM_WORDS as readonly string[]).includes(key)) return [d.dims[key as DimWord]];
+  if (key === 'size' && !d.vector) return d.linked;
+  return null;
+}
+
+/** A value of the wrong type for a setting, with the fix where there is one (docs/scene-builder-3d.md, "Type checks"). */
 function typeMismatch(key: string, want: 'float' | 'vec3', v: Value, wantWords?: string): string {
   const what = want === 'float' ? (wantWords ?? 'a number (a float)') : 'a number or (x, y, z)';
   if (want === 'float' && v.kind === 'vec') {
@@ -804,9 +830,26 @@ function printItem(it: SceneItem, indent: string | null = null): string {
   const def = SHAPE_BY_KIND[it.kind];
   const parts: string[] = [it.kind];
   const defaults = defaultSize(it.kind);
+  const dims = shapeDims(def);
   for (const p of def.params) {
     const v = it.size[p.key];
-    if (v !== undefined && !valueEq(v, defaults[p.key])) parts.push(`${p.key}=${Array.isArray(v) ? fmtVec(v) : fmt(v)}`);
+    if (v === undefined) continue;
+    if (dims?.vector && p.key === 'size' && Array.isArray(v)) {
+      // Linked: size= when the three are equal, else width= height= depth= for the ones that changed.
+      const d = defaults.size as Vec3;
+      if (round(v[0]) === round(v[1]) && round(v[1]) === round(v[2])) { if (!valueEq(v, d)) parts.push(`size=${fmt(v[0])}`); }
+      else DIM_WORDS.forEach((w, i) => { if (round(v[i]) !== round(d[i])) parts.push(`${w}=${fmt(v[i])}`); });
+      continue;
+    }
+    if (dims && !dims.vector && (p.key === 'r' || p.key === 'h')) {
+      // A round shape: size= when its radius and height are equal (and not both the defaults).
+      const r = it.size.r as number, h = it.size.h as number;
+      if (round(r) === round(h) && !(valueEq(r, defaults.r) && valueEq(h, defaults.h))) {
+        if (p.key === def.params.find(q => q.key === 'r' || q.key === 'h')!.key) parts.push(`size=${fmt(r)}`);
+        continue;
+      }
+    }
+    if (!valueEq(v, defaults[p.key])) parts.push(`${p.key}=${Array.isArray(v) ? fmtVec(v) : fmt(v)}`);
   }
   if (!same(it.at, [0, 0, 0])) parts.push(`at=(${it.at.map(fmt).join(',')})`);
   if (!same(it.rot, [0, 0, 0])) parts.push(`rot=(${it.rot.map(fmt).join(',')})`);
@@ -892,7 +935,7 @@ export function formatRecipe(src: string): string {
 export const RECIPE_VOCABULARY = {
   modes: ['surface', 'volumetric', 'glass', 'gi'],
   combines: ['union', 'smooth-union', 'subtract', 'smooth-subtract', 'intersect', 'smooth-intersect'],
-  shapes: SHAPES.map(s => ({ kind: s.kind, keys: s.params.map(p => p.key) })),
+  shapes: SHAPES.map(s => ({ kind: s.kind, keys: [...s.params.map(p => p.key), ...(shapeDims(s) ? (shapeDims(s)!.vector ? DIM_WORDS : ['size']) : [])] })),
   warps: WARPS.map(w => ({ kind: w.kind === 'noise' ? 'warp' : w.kind, keys: [...(w.axes ? [w.axes.key] : []), ...w.params.map(p => p.key), ...(w.select ? [w.select.key] : [])] })),
   settings: ['sun dir=(x,y,z) color=…', 'sky (r,g,b)', 'bounce (r,g,b)', 'shadows 16 | off', 'ao 0.06 | off', 'fog 0.3 color=…', 'background (r,g,b) | top=… bottom=…', `tone ${TONE_MODES.join('|')}`, 'camera dist angle elev orbit zoom flatten x y z', 'quality steps dist step jitter'],
   colours: Object.keys(COLOR_NAMES),

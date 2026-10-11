@@ -1,5 +1,5 @@
 /**
- * The Scene Builder's tree and modifiers (docs/scene-builder.md, "The tree" and "Modifiers"):
+ * The Scene Builder's tree and modifiers (docs/scene-builder-3d.md, "The tree" and "Modifiers"):
  * deeply nested combines round-trip spec → recipe → spec → graph → spec; per-item modifiers
  * (@move, @rotate, @scale, @round, @onion…) build the right nodes before the item's distance
  * and are read back by Describe, in builder graphs and hand-made ones; the shape gallery

@@ -12,6 +12,7 @@ import { commandReference, commandsMarkdown, type ReferenceEntry } from './comma
 import { EDIT_SYNTAX, VERB_HEAD, registry, type Dialect, type Entry } from './registry';
 import { COLOUR_NAMES } from './colours';
 import { PALETTES } from '../sceneBuilder/output';
+import { helpSections } from './help';
 // The dialects' words register themselves on import.
 import './dialects/grid';
 import './dialects/agents';
@@ -95,6 +96,21 @@ export function languageMarkdown(): string {
     '| code | `{u + 0.2 * lap_u}` (one line of GLSL) |',
     '| random | `random`, `random(0.2..2)`, `random(red, teal)`; a leading `random` draws every unset setting; `seed=42` (or a word) repeats it |',
     `| palette | ${PALETTES.map(p => p.key).join(', ')} |`,
+    '',
+    '## Sizes',
+    '',
+    'A shape with several dimensions has them linked: `size=0.5` sets them all; `width=`, `height=` and `depth=` set one each.',
+    'A box, a box frame and an ellipsoid: the three parts of their size (`box size=0.3 height=1`); the old vector form `size=(0.3,1,0.3)` still reads.',
+    'A cylinder, a capsule and the prisms: `size` is the radius and the height together, `width=` (or `depth=`) the radius and `height=` the height.',
+    'Printed recipes write `size=` when the dimensions are equal, else the ones that changed by name: `box width=0.3 height=1 depth=0.3`.',
+    '',
+    '## Help in the app',
+    '',
+    'Rest the pointer on a word of a recipe (the 3D Scene Builder\'s rows or text, the Grid Rules and Agent Rules Recipe tabs, the Do… bar) and its help opens there, at the word: what it is, its settings with their types (number, 3 numbers, colour, angle…), ranges and defaults, an example, and other words of its kind to switch to with a click (another mode, another of a setting\'s choices, another colour). The pointer can move into the help to scroll it or pick from it. Suggestions while typing appear at the word being typed.',
+    '',
+    '**Show the words** opens the dialect\'s guide, in sections, each with a short description first; opening one lists its words, and clicking a word shows its help with an example to use or to watch built step by step (Show me how). The 3D scene\'s sections:',
+    '',
+    ...helpSections('scene').map(sec => `- **${sec.title}**: ${sec.blurb}`),
     '',
     '## References (edits)',
     '',

@@ -81,7 +81,7 @@ if (import.meta.env.DEV) {
     contextLossCheck: (o?: { example?: string; lostMs?: number; afterMs?: number; loadMs?: number }) => import('./lib/contextLossCheck').then(m => m.contextLossCheck(o)),
     /** The Layers node's distance field (docs/layers-node.md): `(await layersField()).layersFieldMode()` is 'gpu' | 'cpu' | 'off'; `.setLayersFieldForceCpu(true)` compares with the old CPU field. */
     layersField: () => import('./play/layersTexture'),
-    /** The 3D Scene Builder (docs/scene-builder.md): `(await sceneBuilder()).useSceneBuilder.getState().openWith(…)`, recipes, templates, describe. */
+    /** The 3D Scene Builder (docs/scene-builder-3d.md): `(await sceneBuilder()).useSceneBuilder.getState().openWith(…)`, recipes, templates, describe. */
     sceneBuilder: async () => ({ ...(await import('./sceneBuilder/store')), ...(await import('./sceneBuilder/recipe')), ...(await import('./sceneBuilder/templates')), ...(await import('./sceneBuilder/actions')), ...(await import('./sceneBuilder/recognize')) }),
     /** Narrow-width layout check (dev/overflowCheck.ts): `(await overflow()).sweepOverflow('[data-column=sources]', [280, 320])` lists what runs past its card. */
     overflow: () => import('./dev/overflowCheck'),

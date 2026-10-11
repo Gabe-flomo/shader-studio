@@ -19,6 +19,10 @@ modifier  := param number | number param | colour | place | "by" number | "much"
 
 In the app: the **?** in the Do… bar, or Keys → Do… bar commands. Every example can be tried in the bar or shown step by step.
 
+While you type, the suggestions read as plain sentences of what taking one does ("create — adds a shape (with its UV) or any node by name"). Rest the pointer on a word in the bar, or in the line under it, and that word's help opens where it is (its settings, their types and ranges, other words to switch to).
+
+**Show me how** (in the bar under a line that runs, and on every example in the reference) opens a window: the command, the picture it makes, and each step with what it does, its nodes, wires and values, and a small picture of the graph after that step. Click a step (or ← / →) to see its picture big. A 3D scene line is built clause by clause.
+
 The **builders** (the 3D Scene Builder, Grid Rules, Agent Rules) open from whole phrases: "new 3d scene", "new grid rules", "edit the rules", "show the recipe" (see Builders below). They are also the first section of the node browser and the empty-canvas right-click menu's Builders.
 
 ## Verbs: editing what is there
@@ -2333,13 +2337,16 @@ Examples:
 Words: `box`, `cube`, `rounded-box`, `roundbox`
 
 ```
-box [size] round= at= rot= color= shine= name= [glass]
+box [size] round= width= height= depth= at= rot= color= shine= name= [glass]
 ```
 
 | Slot | What |
 |---|---|
 | size (bare) | Size (half) · Half its width, height and depth. · random: (0.25…0.8)×3 |
 | round | Round · Above 0 it becomes a Rounded Box with edges this round. · default 0 · random: 0–0.16666666666666666 |
+| width | Width · Only the width (half of it, like size): size= sets all three. · default 0.5 · random: 0.25–0.8 |
+| height | Height · Only the height (half of it, like size): size= sets all three. · default 0.5 · random: 0.25–0.8 |
+| depth | Depth · Only the depth (half of it, like size): size= sets all three. · default 0.5 · random: 0.25–0.8 |
 | at | random: (-0.6…0.6)×3 |
 | rot | random: (-45…45)×3 |
 | color | random: a harmonious colour |
@@ -2430,7 +2437,7 @@ Examples:
 Words: `cylinder`, `pillar`, `column`, `rounded-cylinder`
 
 ```
-cylinder [r] h= round= at= rot= color= shine= name= [glass]
+cylinder [r] h= round= size= at= rot= color= shine= name= [glass]
 ```
 
 | Slot | What |
@@ -2438,6 +2445,7 @@ cylinder [r] h= round= at= rot= color= shine= name= [glass]
 | r (bare) | Radius · default 0.3 · random: 0.15–0.48 |
 | h | Height (half) · default 0.5 · random: 0.25–0.8 |
 | round | Round · default 0 · random: 0–0.08333333333333333 |
+| size | Size (linked) · The radius and the height together: size=0.5 sets both. · random: 0.2–0.6 |
 | at | random: (-0.6…0.6)×3 |
 | rot | random: (-45…45)×3 |
 | color | random: a harmonious colour |
@@ -2455,13 +2463,14 @@ Examples:
 Words: `capsule`, `pill`
 
 ```
-capsule [h] r= at= rot= color= shine= name= [glass]
+capsule [h] r= size= at= rot= color= shine= name= [glass]
 ```
 
 | Slot | What |
 |---|---|
 | h (bare) | Height · default 0.6 · random: 0.3–0.96 |
 | r | Radius · default 0.2 · random: 0.1–0.32000000000000006 |
+| size | Size (linked) · The radius and the height together: size=0.5 sets both. · random: 0.2–0.6 |
 | at | random: (-0.6…0.6)×3 |
 | rot | random: (-45…45)×3 |
 | color | random: a harmonious colour |
@@ -2548,12 +2557,15 @@ Examples:
 Words: `ellipsoid`, `egg`
 
 ```
-ellipsoid [size] at= rot= color= shine= name= [glass]
+ellipsoid [size] width= height= depth= at= rot= color= shine= name= [glass]
 ```
 
 | Slot | What |
 |---|---|
 | size (bare) | Radii · random: (0.3…0.96)×3 |
+| width | Width · Only the width: size= sets all three. · default 0.6 · random: 0.3–0.96 |
+| height | Height · Only the height: size= sets all three. · default 0.3 · random: 0.15–0.48 |
+| depth | Depth · Only the depth: size= sets all three. · default 0.4 · random: 0.2–0.6400000000000001 |
 | at | random: (-0.6…0.6)×3 |
 | rot | random: (-45…45)×3 |
 | color | random: a harmonious colour |
@@ -2571,13 +2583,14 @@ Examples:
 Words: `hex-prism`, `hexagon`
 
 ```
-hex-prism [r] h= at= rot= color= shine= name= [glass]
+hex-prism [r] h= size= at= rot= color= shine= name= [glass]
 ```
 
 | Slot | What |
 |---|---|
 | r (bare) | Radius · default 0.4 · random: 0.2–0.6400000000000001 |
 | h | Height · default 0.2 · random: 0.1–0.32000000000000006 |
+| size | Size (linked) · The radius and the height together: size=0.5 sets both. · random: 0.2–0.6 |
 | at | random: (-0.6…0.6)×3 |
 | rot | random: (-45…45)×3 |
 | color | random: a harmonious colour |
@@ -2595,13 +2608,14 @@ Examples:
 Words: `tri-prism`, `triangle`
 
 ```
-tri-prism [r] h= at= rot= color= shine= name= [glass]
+tri-prism [r] h= size= at= rot= color= shine= name= [glass]
 ```
 
 | Slot | What |
 |---|---|
 | r (bare) | Radius · default 0.4 · random: 0.2–0.6400000000000001 |
 | h | Height · default 0.2 · random: 0.1–0.32000000000000006 |
+| size | Size (linked) · The radius and the height together: size=0.5 sets both. · random: 0.2–0.6 |
 | at | random: (-0.6…0.6)×3 |
 | rot | random: (-45…45)×3 |
 | color | random: a harmonious colour |
@@ -2644,13 +2658,16 @@ Examples:
 Words: `box-frame`, `frame`, `wireframe`
 
 ```
-box-frame [size] t= at= rot= color= shine= name= [glass]
+box-frame [size] t= width= height= depth= at= rot= color= shine= name= [glass]
 ```
 
 | Slot | What |
 |---|---|
 | size (bare) | Size (half) · random: (0.2…0.6400000000000001)×3 |
 | t | Thickness · default 0.05 · random: 0.025–0.08000000000000002 |
+| width | Width · Only the width (half of it, like size): size= sets all three. · default 0.4 · random: 0.2–0.6400000000000001 |
+| height | Height · Only the height (half of it, like size): size= sets all three. · default 0.4 · random: 0.2–0.6400000000000001 |
+| depth | Depth · Only the depth (half of it, like size): size= sets all three. · default 0.4 · random: 0.2–0.6400000000000001 |
 | at | random: (-0.6…0.6)×3 |
 | rot | random: (-45…45)×3 |
 | color | random: a harmonious colour |

@@ -1,5 +1,5 @@
 /**
- * helpContent.ts — the builders' built-in guidance (docs/scene-builder.md, docs/grid-rules.md,
+ * helpContent.ts — the builders' built-in guidance (docs/scene-builder-3d.md, docs/grid-rules.md,
  * docs/agent-rules.md, docs/expression-builder.md): a short "how this works" for every builder section, rule type and empty
  * list, each with a worked example the user can click to insert, and a plain-language hint for
  * every Agent Rules condition and action.

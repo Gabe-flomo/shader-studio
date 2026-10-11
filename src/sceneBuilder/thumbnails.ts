@@ -1,5 +1,5 @@
 /**
- * thumbnails.ts — small pictures of the Scene Builder's shapes for the gallery (docs/scene-builder.md,
+ * thumbnails.ts — small pictures of the Scene Builder's shapes for the gallery (docs/scene-builder-3d.md,
  * "The shape gallery").
  *
  * A tiny CPU ray marcher: each shape's distance function (the same formulas as the 3D SDF

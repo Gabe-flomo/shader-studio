@@ -1,6 +1,6 @@
 /**
  * recipe.ts — what a builder-made node says about itself, for the Recipe chip on its card
- * (components/builders/RecipeChip.tsx; docs/scene-builder.md, "The Recipe chip"):
+ * (components/builders/RecipeChip.tsx; docs/scene-builder-3d.md, "The Recipe chip"):
  *
  *  - a Scene Group the 3D Scene Builder built: its recipe (printRecipe), and whether the graph was
  *    changed by hand since (the same check a rebuild makes, sceneBuilder/apply.ts checkEdits);

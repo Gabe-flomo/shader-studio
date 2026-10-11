@@ -29,3 +29,26 @@ export function deleteClause(src: string, index: number): string {
   cs.splice(index, 1);
   return join(cs);
 }
+
+const TOKEN = /[A-Za-z0-9_.#-]/;
+
+/** Whole-word places of `word` in `text` (a word is letters, digits, -, _, ., #). */
+function places(text: string, word: string): number[] {
+  const out: number[] = [];
+  for (let i = text.indexOf(word); i >= 0; i = text.indexOf(word, i + 1)) {
+    if (!TOKEN.test(text[i - 1] ?? '') && !TOKEN.test(text[i + word.length] ?? '')) out.push(i);
+  }
+  return out;
+}
+
+/**
+ * The clause with the `nth` whole-word `word` replaced by `next` (word help's pick on a row, whose
+ * lines are the clause with its spacing tidied: the nth word is the same word in both).
+ */
+export function replaceNthWord(clause: string, word: string, nth: number, next: string): string {
+  const at = places(clause, word)[nth];
+  return at === undefined ? clause : `${clause.slice(0, at)}${next}${clause.slice(at + word.length)}`;
+}
+
+/** How many whole-word `word`s come before `upTo` in `text`. */
+export const wordsBefore = (text: string, word: string, upTo: number) => places(text.slice(0, upTo + word.length), word).filter(i => i < upTo).length;

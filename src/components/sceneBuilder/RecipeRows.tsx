@@ -1,6 +1,6 @@
 /**
  * RecipeRows — the Recipe tab's recipe as rows, styled like an Expression Block's lines
- * (docs/scene-builder.md, "Recipe"): one numbered row per clause; a combine's items each on their
+ * (docs/scene-builder-3d.md, "Recipe"): one numbered row per clause; a combine's items each on their
  * own indented line under it, its `k=` on the closing line; long settings wrap with a hanging
  * indent under the shape's name. Words are coloured (RecipeCode).
  *
@@ -14,7 +14,7 @@ import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { useViewport } from '../../lib/viewport';
 import { clauseTree, splitClauses, type ClauseNode } from '../../sceneBuilder/highlight';
-import { deleteClause, moveClause, replaceClause } from '../../sceneBuilder/recipeRows';
+import { deleteClause, moveClause, replaceClause, replaceNthWord, wordsBefore } from '../../sceneBuilder/recipeRows';
 import type { RecipeError } from '../../sceneBuilder/recipe';
 import { recipeAssist } from '../../lang/complete';
 import { AssistList, SignatureLine, useTypeAhead } from '../builders/TypeAhead';
@@ -25,24 +25,42 @@ import { RecipeCode } from './RecipeCode';
 const NO_ERRORS: RecipeError[] = [];
 const MONO = `12.5px/1.7 ${fontFamily.mono}`;
 
-/** One line of a row: wraps with a hanging indent under its first word (a shape's name). */
-function Line({ text, depth }: { text: string; depth: number }) {
+/** One line of a row: wraps with a hanging indent under its first word (a shape's name). Rest the pointer on a word for its help. */
+function Line({ text, depth, before, onReplace }: { text: string; depth: number; before: string; onReplace?: (from: number, to: number, next: string) => void }) {
   const hang = Math.min(14, (text.split(' ')[0]?.length ?? 0) + 1);
   return (
     <div data-recipe-line style={{ paddingLeft: `calc(${depth * 2}ch + ${hang}ch)`, textIndent: `-${hang}ch`, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
-      <RecipeCode text={text} errors={NO_ERRORS} />
+      <RecipeCode text={text} errors={NO_ERRORS} help={{ dialect: 'scene', before, onReplace }} />
     </div>
   );
 }
 
-/** A clause drawn as its tree: head, items (one level in per combine), closing part. */
-function Tree({ node, depth, last }: { node: ClauseNode; depth: number; last: boolean }) {
-  if (!node.children) return <Line text={`${node.head}${depth > 0 && !last ? ',' : ''}`} depth={depth} />;
+/** A clause's tree as lines: head, items (one level in per combine), closing part. */
+function treeLines(node: ClauseNode, depth: number, last: boolean): Array<{ text: string; depth: number }> {
+  if (!node.children) return [{ text: `${node.head}${depth > 0 && !last ? ',' : ''}`, depth }];
+  return [
+    { text: node.head, depth },
+    ...node.children.flatMap((c, i) => treeLines(c, depth + 1, i === node.children!.length - 1)),
+    { text: `${node.tail ?? ')'}${depth > 0 && !last ? ',' : ''}`, depth },
+  ];
+}
+
+/** A clause drawn as its tree; a word picked from its help replaces that word in the clause. */
+function Tree({ clause, onClause }: { clause: string; onClause: (next: string) => void }) {
+  const lines = treeLines(clauseTree(clause), 0, true);
   return (
     <>
-      <Line text={node.head} depth={depth} />
-      {node.children.map((c, i) => <Tree key={i} node={c} depth={depth + 1} last={i === node.children!.length - 1} />)}
-      <Line text={`${node.tail ?? ')'}${depth > 0 && !last ? ',' : ''}`} depth={depth} />
+      {lines.map((l, i) => {
+        const before = lines.slice(0, i).map(x => x.text).join('\n');
+        return (
+          <Line key={i} text={l.text} depth={l.depth} before={before}
+            onReplace={(from, to, next) => {
+              const word = l.text.slice(from, to);
+              const nth = wordsBefore(`${before}\n${l.text}`, word, before.length + 1 + from);
+              onClause(replaceNthWord(clause, word, nth, next));
+            }} />
+        );
+      })}
     </>
   );
 }
@@ -122,7 +140,7 @@ export function RecipeRows({ text, onChange }: { text: string; onChange: (next: 
                 minWidth: 0, padding: '6px 10px', borderRadius: radius.md, background: tk.bg.field, color: tk.text.primary, font: MONO, cursor: 'text',
                 boxShadow: `inset 0 0 0 1px ${tk.border.subtle}`,
               }}>
-              <Tree node={clauseTree(c)} depth={0} last />
+              <Tree clause={c} onClause={next => { onChange(replaceClause(text, i, next)); }} />
             </div>
           )}
           <span style={touch ? { display: 'grid', gridTemplateColumns: 'auto auto', gridAutoFlow: 'column', gridTemplateRows: 'auto auto', gap: 0, paddingTop: 2 } : { display: 'flex', gap: 2, paddingTop: 3 }}>

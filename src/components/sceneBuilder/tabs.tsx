@@ -16,7 +16,7 @@ import { GALLERY_SHAPES, type GalleryShape } from '../../sceneBuilder/thumbnails
 import { ShapeGallery, ShapeThumb } from './ShapeGallery';
 import { NO_DRAG, OP_GLYPH } from './controls';
 import { Icon } from '../ui/Icon';
-import { RECIPE_VOCABULARY, parseRecipe, printRecipe, type RecipeError, type RecipeHint } from '../../sceneBuilder/recipe';
+import { parseRecipe, printRecipe, type RecipeError, type RecipeHint } from '../../sceneBuilder/recipe';
 import { freshSeed, type Resolved } from '../../lang/random';
 import { SCENE_TEMPLATES } from '../../sceneBuilder/templates';
 import { describeIntoBuilder } from '../../sceneBuilder/actions';
@@ -27,9 +27,10 @@ import { AssistList, SignatureLine, useTypeAhead } from '../builders/TypeAhead';
 import { recipeAssist } from '../../lang/complete';
 import { CodeField } from '../code/CodeField';
 import type { Completion } from '../code/glslReference';
-import { RecipeCode } from './RecipeCode';
 import { recipeHtml } from './recipeColours';
 import { RecipeRows } from './RecipeRows';
+import { LanguageGuide } from '../builders/LanguageGuide';
+import { useWordHelp } from '../builders/WordHelp';
 import { OUTPUTS, OUTPUT_BY_SHOW, PALETTES, DEFAULT_PALETTE, outputClause, outputProblem, type OutputShow } from '../../sceneBuilder/output';
 import { Button, IconButton } from '../ui/Button';
 import { Field } from '../ui/Field';
@@ -725,11 +726,31 @@ export function RecipeTab() {
   });
   const jump = (e: RecipeError) => { if (!asText) setAsText(true); requestAnimationFrame(() => { area.current?.focus(); area.current?.setSelectionRange(e.from, e.to); }); };
   const danger = tk.status.danger;
+  // A word's help where the word is (rest the pointer on it); picking an alternative puts it in.
+  const wordHelp = useWordHelp({ dialect: 'scene', onReplace: (from, to, next) => onChange(`${text.slice(0, from)}${next}${text.slice(to)}`) });
+  // Suggestions and the settings line at the word being typed, not under the box.
+  const assistHere = asText && focused && ta.from !== null && (ta.items.length > 0 || !!ta.signature) ? {
+    at: ta.from,
+    content: (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }} data-recipe-assist>
+        {ta.signature && <SignatureLine sig={ta.signature} />}
+        {ta.items.length > 0 && <AssistList items={ta.items} active={ta.active} onPick={ta.pick} onHover={ta.setActive} />}
+      </div>
+    ),
+  } : null;
+  // "Use" on an example in the guide: its clauses go on the end of the recipe (its render mode only when the recipe has none).
+  const useExample = (ex: string) => {
+    const r = parseRecipe(text);
+    const clauses = ex.split('·').map(c => c.trim()).filter(Boolean);
+    const hasMode = /^(surface|volumetric|glass|gi)\b/m.test(text.trim());
+    const keep = hasMode && /^(surface|volumetric|glass|gi)$/.test(clauses[0] ?? '') ? clauses.slice(1) : clauses;
+    onChange(r.errors.length || !text.trim() ? ex : `${text.trimEnd()}\n${keep.join('\n')}`);
+  };
   return (
     <Pane>
       <BuilderLabel meta={asText ? 'type or paste; the form follows' : 'one row per clause; click one to change it'}>Recipe</BuilderLabel>
       <BuilderHelp id="recipe" onExample={insert} />
-      <BuilderNote><code>@twist(2)</code> after a shape bends only that shape. Suggestions appear as you type; the line under the box shows the settings the clause takes.</BuilderNote>
+      <BuilderNote><code>@twist(2)</code> after a shape bends only that shape. Rest the pointer on any word for its help; suggestions appear where you type.</BuilderNote>
       {asText ? (
         <CodeField value={text} onChange={v => { onChange(v); }} completions={NO_COMPLETIONS} ariaLabel="Recipe" title="Recipe"
           textareaRef={el => { area.current = el; if (el) el.dataset.recipe = ''; }}
@@ -737,17 +758,18 @@ export function RecipeTab() {
           keyFirst={e => ta.onKeyDown(e)}
           onFocus={el => { setFocused(true); setCaret(el.selectionStart); }} onBlur={() => { setFocused(false); setCaret(null); }}
           onSelect={el => { setCaret(el.selectionStart); }}
+          onHoverChar={(off, rectOf) => wordHelp.hover(text, off, rectOf)}
+          anchor={assistHere}
           invalid={errors.length > 0} minHeight={240} maxHeight={460} />
       ) : (
         <RecipeRows text={errors.length ? text : printed} onChange={onChange} />
       )}
-      {asText && focused && ta.signature && <SignatureLine sig={ta.signature} />}
-      {asText && ta.items.length > 0 && <AssistList items={ta.items} active={ta.active} onPick={ta.pick} onHover={ta.setActive} />}
+      {wordHelp.popover}
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <Button size="sm" icon="copy" onClick={() => { void navigator.clipboard?.writeText(errors.length ? text : printed).then(() => toast.success('Recipe copied')).catch(() => {}); }}>Copy</Button>
         <Button size="sm" variant="ghost" icon={asText ? 'layout' : 'text'} aria-pressed={asText} data-recipe-as-text onClick={() => setAsText(!asText)}
           title={asText ? 'Show the recipe as rows, one per clause' : 'Edit the whole recipe as text'}>{asText ? 'Show as rows' : 'Edit as text'}</Button>
-        <Button size="sm" variant="ghost" icon="book" onClick={() => setShowRef(v => !v)}>{showRef ? 'Hide' : 'Show'} the words</Button>
+        <Button size="sm" variant="ghost" icon="book" data-recipe-words onClick={() => setShowRef(v => !v)}>{showRef ? 'Hide' : 'Show'} the words</Button>
         {errors.length > 0 && <Button size="sm" variant="ghost" onClick={() => { const r = parseRecipe(text); replace(r.spec); setErrors([]); }} title="Use everything that read cleanly, leaving out the clauses with mistakes">Apply what reads</Button>}
         <span style={{ flex: 1 }} />
         <BuilderNote>{errors.length ? `${errors.length} mistake${errors.length === 1 ? '' : 's'}: the form keeps the last clean recipe` : 'Reads cleanly'}</BuilderNote>
@@ -777,18 +799,7 @@ export function RecipeTab() {
           <Button size="sm" variant="ghost" onClick={() => onChange(`${text.slice(0, h.from)}${h.fix}${text.slice(h.to)}`)}>Use {h.fix}</Button>
         </span>
       ))}
-      {showRef && (
-        <div data-recipe-reference style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 12, borderRadius: radius.control, background: tk.bg.subtle, font: `12px/1.6 ${fontFamily.mono}`, color: tk.text.secondary }}>
-          <span><b>modes</b> <RecipeCode text={RECIPE_VOCABULARY.modes.join(' · ')} errors={[]} /></span>
-          <span><b>combines</b> <RecipeCode text={RECIPE_VOCABULARY.combines.join(' · ')} errors={[]} /> (k= blend radius, name=)</span>
-          <span><b>shapes</b> <RecipeCode text={RECIPE_VOCABULARY.shapes.map(sh => `${sh.kind} ${sh.keys.map(k => `${k}=`).join(' ')}`).join(' · ')} errors={[]} /></span>
-          <span><b>any shape</b> <RecipeCode text="at=(x,y,z) rot=(x,y,z) color=#ff8844|(0.9,0.5,0.3)|gold shine=0.4 glass name=Body" errors={[]} /></span>
-          <span><b>warps</b> <RecipeCode text={RECIPE_VOCABULARY.warps.map(w => `${w.kind} ${w.keys.map(k => `${k}=`).join(' ')}`).join(' · ')} errors={[]} /></span>
-          <span><b>settings</b> <RecipeCode text={RECIPE_VOCABULARY.settings.join(' · ')} errors={[]} /></span>
-          <span><b>colours</b> <RecipeCode text={RECIPE_VOCABULARY.colours.join(' ')} errors={[]} /></span>
-          <span><b>output</b> <RecipeCode text={`output ${RECIPE_VOCABULARY.outputs.join('|')} · colour by … palette ${RECIPE_VOCABULARY.palettes.join('|')}`} errors={[]} /></span>
-        </div>
-      )}
+      {showRef && <LanguageGuide dialect="scene" onUse={useExample} />}
     </Pane>
   );
 }

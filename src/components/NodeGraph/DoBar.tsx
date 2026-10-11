@@ -62,6 +62,9 @@ import { normaliseEnd, strength } from '../../suggestions/usage';
 import { historyAt, pushHistory, readHistory } from '../../suggestions/doBarHistory';
 import type { Assist } from '../../lang/complete';
 import { graphToScript } from '../../lang/fromGraph';
+import { useWordHelp, inputOffsetAt } from '../builders/WordHelp';
+import { openShowHow } from '../../suggestions/showHowStore';
+import type { Dialect } from '../../lang/registry';
 
 const WIDTH = 560;
 
@@ -380,6 +383,12 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
     setText('');
   };
 
+  // A word's help where the word is (rest the pointer on it), in the line's own dialect.
+  const helpDialect: Dialect = line?.dialect === 'scene' || line?.dialect === 'grid' || line?.dialect === 'agents' ? line.dialect : 'picture';
+  const wordHelp = useWordHelp({ dialect: helpDialect, onReplace: (from, to, next) => { const v = `${text.slice(0, from)}${next}${text.slice(to)}`; setText(v); setCaret(v.length); } });
+  // Show me how: the line built step by step, on this graph (or a new 3D scene).
+  const canShowHow = !!text.trim() && !builder && !surprise && (line?.dialect === 'scene' ? readsCanonically(line) : !!cmd && (cmd.ok || cmd.steps.length > 0) && !idiomWins);
+  const showHow = () => openShowHow(line?.dialect === 'scene' ? { text: text.trim(), dialect: 'scene' } : { text: runText.trim(), label: text.trim(), nodes: scope.nodes, selected: scope.selected, dialect: 'picture' });
   const muted = { fontSize: 11.5, color: tk.text.muted } as const;
   const section = (title: string, body: React.ReactNode) => (
     <div style={{ padding: '8px 12px', borderTop: `1px solid ${tk.border.subtle}`, display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -397,6 +406,7 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
         font: `13px ${fontFamily.ui}`, overflow: 'hidden', maxHeight: 'calc(100vh - 200px)', display: 'flex', flexDirection: 'column',
       }}>
       <SurpriseStrip rolls={rolls} index={rollAt} text={text} onStep={stepRoll} />
+      {wordHelp.popover}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 8px 8px 12px' }}>
         <Icon name="edit" size={15} style={{ color: tk.accent.base }} />
         <input
@@ -433,7 +443,12 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
             if (e.key === 'ArrowDown') { e.preventDefault(); setActive(a => Math.min(a + 1, Math.max(0, fallback.length - 1))); }
             if (e.key === 'ArrowUp') { e.preventDefault(); setActive(a => Math.max(0, a - 1)); }
           }}
-          placeholder="Do… e.g. circle with a glow, falloff 8 · repeat 6 times around · tone map it · is this typical?"
+          onMouseMove={e => {
+            const hit = inputOffsetAt(e.currentTarget, e.clientX);
+            wordHelp.hover(text, hit ? hit.offset : null, (from, to) => hit!.rectOf(from, to));
+          }}
+          onMouseLeave={() => wordHelp.leave()}
+          placeholder="Do… e.g. circle with a glow · repeat 6 times around · tone map it"
           aria-label="Do"
           data-do-input
           style={{ flex: 1, minWidth: 0, border: 0, outline: 'none', background: 'transparent', color: tk.text.primary, font: `14px ${fontFamily.ui}` }}
@@ -446,7 +461,7 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
         <IconButton icon="close" size="sm" label="Close" shortcut="esc" onClick={closeDoBar} />
       </div>
 
-      {ta.items.length > 0 && <div style={{ padding: '0 8px 6px' }}><AssistList items={ta.items} active={ta.active} onPick={ta.pick} onHover={ta.setActive} /></div>}
+      {ta.items.length > 0 && <div style={{ padding: '0 8px 6px' }}><AssistList variant="sentences" items={ta.items} active={ta.active} onPick={ta.pick} onHover={ta.setActive} /></div>}
       {ta.signature && text.trim() && !plan.steps.some(st => st.kind === 'scene-output') && <div style={{ padding: '0 8px 6px' }}><SignatureLine sig={ta.signature} /></div>}
       <div style={{ overflowY: 'auto', minHeight: 0 }}>
         {/* The line in the language's own words: click to edit it (✓ when you typed it that way) */}
@@ -455,7 +470,8 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
             onClick={() => { setText(canonical); setCaret(canonical.length); inputRef.current?.focus(); }}
             style={{ display: 'flex', gap: 8, alignItems: 'baseline', width: '100%', padding: '0 12px 6px', border: 0, background: 'transparent', cursor: 'pointer', textAlign: 'left', color: tk.text.muted, font: `11.5px ${fontFamily.ui}` }}>
             <span style={{ color: text.trim() === canonical ? tk.status.success : tk.text.faint, flexShrink: 0 }}>{text.trim() === canonical ? '✓' : '→'}</span>
-            <code style={{ font: `11.5px/1.5 ${fontFamily.mono}`, overflowWrap: 'anywhere' }}><RecipeCode text={canonical} errors={[]} wordKind={canonicalRun?.dialect === 'scene' ? undefined : wordKindFor(canonicalRun?.dialect === 'grid' ? 'grid' : canonicalRun?.dialect === 'agents' ? 'agents' : 'picture', 'edit')} /></code>
+            <code style={{ font: `11.5px/1.5 ${fontFamily.mono}`, overflowWrap: 'anywhere' }}><RecipeCode text={canonical} errors={[]} wordKind={canonicalRun?.dialect === 'scene' ? undefined : wordKindFor(canonicalRun?.dialect === 'grid' ? 'grid' : canonicalRun?.dialect === 'agents' ? 'agents' : 'picture', 'edit')}
+              help={{ dialect: helpDialect, onReplace: (from, to, next) => { const v = `${canonical.slice(0, from)}${next}${canonical.slice(to)}`; setText(v); setCaret(v.length); } }} /></code>
           </button>
         )}
         {/* What random values became, with a new roll and Keep */}
@@ -514,6 +530,11 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
           <CommandPreview cmd={cmd} onPick={(key, id) => setPicks(p => ({ ...p, [key]: id }))} onHoverPick={setHoverPick}
             onSuggest={(clause, s2) => { setText(cmd.clauses.length === 1 ? s2 : cmd.clauses.map(c => (c.index === clause.index ? s2 : c.text)).join(', ')); inputRef.current?.focus(); }} />
         ))}
+        {canShowHow && (
+          <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '0 12px 8px' }}>
+            <Button size="sm" variant="ghost" icon="play" onClick={showHow} data-do-show-how title="A window that builds this line step by step, with a picture after each step">Show me how</Button>
+          </div>
+        )}
         {/* A 3D output phrase: the recipe clause it writes into the scene */}
         {plan.steps.filter((st): st is Extract<typeof st, { kind: 'scene-output' }> => st.kind === 'scene-output').map((st, i) => (
           <div key={`so${i}`} data-do-recipe style={{ padding: '0 12px 8px', display: 'flex', gap: 8, alignItems: 'baseline', fontSize: 11.5, color: tk.text.muted }}>
@@ -537,9 +558,9 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
             ))}
           </div>
         )}
-        {(plan.reading.length > 0 || plan.unknown.length > 0) && !plan.intent && !editing && (
+        {(plan.unknown.length > 0 || (plan.reading.length > 0 && !showCommand)) && !plan.intent && !editing && (
           <div style={{ padding: '0 12px 8px', display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-            {plan.reading.map((r, i) => <span key={i} title={r.as} style={{ fontSize: 11, padding: '1px 6px', borderRadius: 6, background: tk.bg.hover, color: tk.text.secondary }}>{r.text} <span style={{ color: tk.text.faint }}>· {r.as}</span></span>)}
+            {!showCommand && plan.reading.map((r, i) => <span key={i} title={r.as} style={{ fontSize: 11, padding: '1px 6px', borderRadius: 6, background: tk.bg.hover, color: tk.text.secondary }}>{r.text} <span style={{ color: tk.text.faint }}>· {r.as}</span></span>)}
             {plan.unknown.map((w, i) => <span key={`u${i}`} title="Not a word the Do… bar knows" style={{ fontSize: 11, padding: '1px 6px', borderRadius: 6, color: tk.text.faint, textDecoration: 'line-through' }}>{w}</span>)}
           </div>
         )}

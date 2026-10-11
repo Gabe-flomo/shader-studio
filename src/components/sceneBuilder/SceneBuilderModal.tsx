@@ -1,5 +1,5 @@
 /**
- * SceneBuilderModal — the 3D Scene Builder window (docs/scene-builder.md).
+ * SceneBuilderModal — the 3D Scene Builder window (docs/scene-builder-3d.md).
  *
  * Left: the scene as a tree (drag to reorder and nest). Middle: the sections
  * (Shapes, Combine, Bend space, Look, Camera, Quality, Output) plus the Recipe,
@@ -93,7 +93,7 @@ export function SceneBuilderModal() {
   const tab = useSceneBuilder(s => s.tab);
   const setTab = useSceneBuilder(s => s.setTab);
   // Only what the frame shows (a count, the mode), so a slider drag re-renders the tab it is on,
-  // not the whole window (docs/scene-builder.md, "The preview comes first").
+  // not the whole window (docs/scene-builder-3d.md, "The preview comes first").
   const shapes = useSceneBuilder(s => allShapes(s.spec).length);
   const mode = useSceneBuilder(s => s.spec.look.mode);
   const close = useSceneBuilder(s => s.close);
