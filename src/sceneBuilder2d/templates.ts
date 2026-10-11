@@ -44,6 +44,11 @@ export const TEMPLATES_2D: Template2D[] = [
     recipe: 'grid 16 shape=diamond shape=ring assign=checker ripple=centre ripple=mouse freq=10 speed=0.5 target=size amount=0.7 · glow 0.005 · tone aces · background navy',
   },
   {
+    key: 'pieces', label: 'Picture in pieces',
+    blurb: 'A picture rebuilt from circles, each its colour at home, that scatter on a noise field and flow back together. Pick the picture under Pictures.',
+    recipe: 'texture picture · pieces picture count=36 · tone aces · background night',
+  },
+  {
     key: 'pixel', label: 'Pixel hearts',
     blurb: 'Hearts that pulse and bob, seen through a coarse pixel grid.',
     recipe: 'pixelate 0.05 · heart size=0.25 at=(-0.4,0) color=red @pulse(0.2 speed=0.5) · heart size=0.18 at=(0.35,0.1) color=pink @bob(0.12 speed=0.4) · background navy',

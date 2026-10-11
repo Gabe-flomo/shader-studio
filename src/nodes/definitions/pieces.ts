@@ -28,7 +28,6 @@
  */
 import type { GraphNode, NodeDefinition } from '../../types/nodeGraph';
 import { fieldFn, p, pv3 } from './helpers';
-import { texUv } from './passes';
 import { CELL3_DECL, CELL3_GLOBAL, CELL3SIZE_GLOBAL } from './repeatScene';
 
 export const PIECE_SHAPES = ['circle', 'square', 'hexagon', 'diamond', 'glyph'] as const;
@@ -373,9 +372,12 @@ export function ballsCode(node: GraphNode, iv: Record<string, string>): { code: 
     v(`if (${id}_ci.x > 0.5) ${id}_wall = min(${id}_wall, 0.5 * ${id}_cs1 + ${id}_f.x);`);
     v(`if (${id}_ci.y < ${id}_nm.y - 1.5) ${id}_wall = min(${id}_wall, 0.5 * ${id}_cs1 - ${id}_f.y);`);
     v(`if (${id}_ci.y > 0.5) ${id}_wall = min(${id}_wall, 0.5 * ${id}_cs1 + ${id}_f.y);`);
-    // Off the grid every ball is at least as far as the grid's edge, so the cap never holds a ray back out there.
+    // Off the grid, or in front of or behind the slab the balls can be in, every ball is at least that
+    // far away, so the cap never holds a ray back out there (it would run out of steps).
     v(`float ${id}_out = length(max(abs(${pos}.xy) - 0.5 * ${id}_span, 0.0));`);
-    v(`${id}_dist = min(${id}_dist, max(max(${id}_wall, 0.0) + 0.04 * ${id}_cs1 + 1.0e-3, ${id}_out));`);
+    v(`float ${id}_zr = abs(${num('wave', 0)}) + 0.5 * abs(${num('jitter', 0)}) + 0.5 * ${id}_cs1 * max(${num('size', 0.9)}, 0.0) + ${iv.displace ? `abs((${iv.displace}).z)` : '0.0'};`);
+    v(`float ${id}_slab = max(min(0.0, ${num('lift', 1.5)}) - ${id}_zr - ${pos}.z, ${pos}.z - max(0.0, ${num('lift', 1.5)}) - ${id}_zr);`);
+    v(`${id}_dist = min(${id}_dist, max(max(${id}_wall, 0.0) + 0.04 * ${id}_cs1 + 1.0e-3, max(${id}_out, ${id}_slab)));`);
   }
   return {
     code: L.join(''),

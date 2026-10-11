@@ -26,6 +26,7 @@ import {
 } from './spec';
 import { colourText } from '../lang/colours';
 import { GRID_LABELS, gridProgram, type GridSpec } from './grid';
+import type { PiecesSpec } from './pieces';
 import { callBody, type FnRef } from './functions';
 import { COMBINE_BY_MODE, blockGlslLines, checkBlock, clampTimes, type SpaceBlock } from './blocks';
 import { BLOCK_BY_ID } from './blockLibrary';
@@ -539,6 +540,7 @@ export function buildScene2D(spec: Scene2D, idFor: (role: string) => string = ro
     }
   }
   if (spec.grid) acc = emitGrid(b, spec.grid, pos, screen, acc, anim);
+  if (spec.pieces) acc = emitPieces(b, spec.pieces, pos, acc);
   let final = acc;
   if (L.tone !== 'none') final = ref(mk(c, 'toneMap', 'tone', { mode: L.tone }, { color: final }, `Squeezes the bright, linear light into colours a screen can show (${L.tone.toUpperCase()}) without clipping highlights.`), 'color');
   const P = L.post;
@@ -554,6 +556,39 @@ export function buildScene2D(spec: Scene2D, idFor: (role: string) => string = ro
   tidy(c.nodes, 0, 0);
   // The UV node carries the scene; it is the one place its Recipe chip shows.
   return { nodes: c.nodes, final, sceneId: uv.id, warnings: c.warnings };
+}
+
+/**
+ * Picture in pieces (pieces.ts, docs/pieces.md): the Pieces node over what is behind (its Background),
+ * moved by a Vector Field wired into its Offset ƒ (read at each piece's home) or pushed away from the
+ * mouse, with an LFO eased into Amount when it scatters and comes back.
+ */
+function emitPieces(b: B, pc: PiecesSpec, pos: Ref, behind: Ref): Ref {
+  const { c } = b;
+  const t = texFor(b, pc.tex, 'Picture in pieces');
+  let offset: Ref | null = null;
+  if (pc.move === 'noise' || pc.move === 'flow') {
+    const vf = mk(c, 'vectorField', 'pieces:field', { mode: pc.move === 'flow' ? 'curl' : 'fbm', scale: pc.swirl, speed: 0.12, strength: pc.amount }, { uv: pos, time: b.getTime() },
+      `The offset field: a direction at every point (${pc.move === 'flow' ? 'curl noise: it tears along lines' : 'noise, turning slowly'}), Strength ${fmt(pc.amount)} long: how far the pieces fly, a share of the frame's height. Pieces reads it at each piece's home (Offset ƒ is a field socket), so neighbours drift together.`);
+    offset = ref(vf, 'dir');
+  } else if (pc.move === 'mouse') {
+    const m = mk(c, 'mouse', 'pieces:mouse', {}, {}, 'The mouse, in the same space as UV: the pieces flee from it.');
+    offset = ref(expr(c, 'pieces:push', 'Push from the mouse', [{ name: 'uv', type: 'vec2', from: pos }, { name: 'm', type: 'vec2', from: ref(m, 'uv') }, { name: 'amount', type: 'float', slider: { value: pc.amount, min: 0, max: 1.5 } }],
+      'normalize(uv - m + 1e-5) * amount * exp(-length(uv - m) * 4.0)', 'The offset field: away from the mouse, strongest near it (amount at the pointer, fading over a quarter of the frame). Pieces reads it at each home.', 'vec2'), 'result');
+  }
+  let amount: Ref | null = null;
+  if (offset && pc.speed > 0) {
+    const lfo = mk(c, 'lfo', 'pieces:lfo', { waveform: 'sine', freq: pc.speed, amplitude: 0.5, offset: 0.5 }, { time: b.getTime() },
+      `An LFO from 0 to 1 and back, ${fmt(pc.speed)} times a second: the picture breaks up and comes home.`);
+    amount = ref(expr(c, 'pieces:ease', 'Ease', [{ name: 'v', type: 'float', from: ref(lfo, 'value') }], 'smoothstep(0.15, 0.95, v)',
+      'The LFO eased: it rests at 0 a moment (the picture whole) before it scatters again. It is Pieces\' Amount.', 'float'), 'result');
+  }
+  const node = mk(c, 'pieces', 'pieces', {
+    shape: pc.shape, count: pc.count, size: pc.size, colourMode: pc.colour, sizeBy: pc.sizeBy, minSize: pc.sizeBy === 'none' ? 0.15 : 0, amount: 1,
+    aspect: t?.src.aspect ?? 0,
+  }, { uv: pos, picture: t?.out, offset, amount, background: behind },
+  `Picture in pieces: “${pc.tex}” rebuilt from ${pc.count} ${pc.shape === 'glyph' ? 'glyphs' : `${pc.shape}s`} across, each the picture's colour ${pc.colour === 'piece' ? 'round its home (it carries its piece)' : 'at its home'}${pc.sizeBy !== 'none' ? `, sized by its ${pc.sizeBy}` : ''}. ${offset ? 'The offset moves them, and with them the picture.' : 'Wire a field into Offset ƒ to move them.'} What is behind shows between them (Background).`);
+  return ref(node, 'color');
 }
 
 /** The grid (grid.ts): one Expression Block for the cells, then colour, glow and fill over what is behind. */

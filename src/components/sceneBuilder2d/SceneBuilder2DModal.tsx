@@ -43,6 +43,8 @@ import { BuilderSlider } from '../builders/BuilderSlider';
 import { finishBuilder } from '../../builders/finish';
 import { scene2dBuildIds } from '../../builders/finishScenes';
 import { TexturePicker } from '../builders/TexturePicker';
+import { PIECES_LABELS, PIECES_MOVES, PIECES_SIZE_BYS, defaultPieces, type PiecesSpec } from '../../sceneBuilder2d/pieces';
+import { PIECE_SHAPES } from '../../nodes/definitions/pieces';
 import { FIT_LABELS, TEX_FITS, newTexUse, withSource, type TexFit, type TexSource, type TexUse } from '../../builders/textures';
 
 const TABS: Array<{ id: Builder2DTab; label: string; icon: IconName; gapBefore?: boolean }> = [
@@ -511,7 +513,50 @@ function ShapesTab() {
 
 const DEFAULT_COLOURS: Vec3[] = [[0.35, 0.8, 1], [1, 0.45, 0.7], [1, 0.8, 0.3], [0.5, 1, 0.6], [0.75, 0.55, 1]];
 
+/** Picture in pieces (sceneBuilder2d/pieces.ts): the Pieces node over the layers, with the shared picture picker. */
+function PiecesCard() {
+  const pieces = useSceneBuilder2D(s => s.scene.pieces);
+  const sources = useSceneBuilder2D(s => s.scene.textures) ?? [];
+  const set = (fn: (p: PiecesSpec) => void, key?: string) => edit(d => { if (d.pieces) fn(d.pieces); }, key && `pieces:${key}`);
+  const D = defaultPieces('');
+  return (
+    <Card id="pieces2" defaultOpen={!!pieces} title="Picture in pieces" summary={pieces ? `${pieces.tex} · ${pieces.count} ${pieces.shape}s · ${PIECES_LABELS.move[pieces.move].toLowerCase()}` : 'none'}
+      actions={pieces ? <IconButton icon="trash" label="Remove the picture in pieces" size="sm" onClick={() => edit(d => { d.pieces = null; })} /> : undefined}>
+      <BuilderNote>A picture rebuilt from pieces, each the picture's colour at its home, drawn over the layers and the grid. Move the pieces and the picture moves: they scatter and flow back home.</BuilderNote>
+      <TexturePicker id="pieces" sources={sources} value={pieces?.tex} onAdd={addSource} none="No picture in pieces"
+        onChange={name => edit(d => { d.pieces = name ? { ...(d.pieces ?? defaultPieces(name)), tex: name } : null; })} />
+      {pieces && (
+        <>
+          <Row label="Shape">
+            <Select ariaLabel="Piece shape" value={pieces.shape} options={PIECE_SHAPES.map(k => ({ value: k, label: PIECES_LABELS.shape[k] }))} onChange={v => set(p => { p.shape = v as PiecesSpec['shape']; })} />
+          </Row>
+          <NumRow label="Pieces across" integer value={pieces.count} defaultValue={D.count} min={4} max={160} onChange={v => set(p => { p.count = Math.round(v); }, 'count')} />
+          <NumRow label="Size" hint="1 touches the neighbours." value={pieces.size} defaultValue={D.size} min={0.1} max={2} onChange={v => set(p => { p.size = v; }, 'size')} />
+          <Row label="Colour">
+            <Select ariaLabel="Piece colour" value={pieces.colour} options={[{ value: 'flat', label: 'Flat: its colour at home' }, { value: 'piece', label: 'Piece: carries its bit of the picture' }]} onChange={v => set(p => { p.colour = v as PiecesSpec['colour']; })} />
+          </Row>
+          <Row label="Size by">
+            <Select ariaLabel="Piece size by" value={pieces.sizeBy} options={PIECES_SIZE_BYS.map(k => ({ value: k, label: PIECES_LABELS.sizeBy[k] }))} onChange={v => set(p => { p.sizeBy = v as PiecesSpec['sizeBy']; })} />
+          </Row>
+          <Row label="Move">
+            <Select ariaLabel="What moves the pieces" value={pieces.move} options={PIECES_MOVES.map(k => ({ value: k, label: PIECES_LABELS.move[k] }))} onChange={v => set(p => { p.move = v as PiecesSpec['move']; })} />
+          </Row>
+          {pieces.move !== 'none' && <>
+            <NumRow label="Scatter" hint="How far the pieces fly: a share of the frame's height." value={pieces.amount} defaultValue={D.amount} min={0} max={1.5} onChange={v => set(p => { p.amount = v; }, 'amount')} />
+            <NumRow label="Pace" hint="Scatters a second (0: they stay scattered)." value={pieces.speed} defaultValue={D.speed} min={0} max={1} onChange={v => set(p => { p.speed = v; }, 'speed')} />
+            {pieces.move !== 'mouse' && <NumRow label="Swirl size" hint="The noise's scale: smaller is broader swirls." value={pieces.swirl} defaultValue={D.swirl} min={0.1} max={5} onChange={v => set(p => { p.swirl = v; }, 'swirl')} />}
+          </>}
+        </>
+      )}
+    </Card>
+  );
+}
+
 function GridTab() {
+  return <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}><PiecesCard /><GridCells /></div>;
+}
+
+function GridCells() {
   const tk = useTokens();
   const grid = useSceneBuilder2D(s => s.scene.grid);
   const sources = useSceneBuilder2D(s => s.scene.textures) ?? [];

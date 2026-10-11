@@ -59,6 +59,34 @@ export interface Ctx {
   rolePrefix?: string;
   nodes: GraphNode[];
   warnings: string[];
+  /** Picture balls built in this scope, whose Picture comes in through a port of the group round them. */
+  balls?: Array<{ node: GraphNode; sh: ShapeSpec }>;
+}
+
+/** Picture balls' node params beyond the catalogue's: their own grid, and the picture's shape. */
+function ballsExtra(ctx: Ctx, sh: ShapeSpec): Record<string, unknown> {
+  const src = sh.tex ? findTex(ctx.spec.textures, sh.tex.tex) : undefined;
+  return { layout: 'own', aspect: src?.aspect ?? 1.5 };
+}
+
+/**
+ * The group ports that bring each picture-balls shape's picture in (a Picture port per shape, wired
+ * from the picture's node outside): Scene Groups map a port to its node (toNodeId), plain groups read
+ * it through the port sentinel.
+ */
+function ballsPorts(ctx: Ctx, list: Array<{ node: GraphNode; sh: ShapeSpec }>, sentinel: boolean): { ports: SubgraphData['inputPorts']; inputs: Record<string, InputSocket> } {
+  const ports: SubgraphData['inputPorts'] = [];
+  const inputs: Record<string, InputSocket> = {};
+  for (const { node, sh } of list) {
+    const src = sh.tex ? findTex(ctx.spec.textures, sh.tex.tex) : undefined;
+    if (!src) continue;
+    const key = `pic_${sh.id}`;
+    const label = `Picture for ${itemName(ctx.spec, sh)}`;
+    ports.push({ key, type: 'texture', label, toNodeId: node.id, toInputKey: 'picture' });
+    inputs[key] = { type: 'texture', label, connection: { nodeId: standInId(src), outputKey: 'texture' } };
+    if (sentinel) node.inputs.picture = { ...node.inputs.picture, connection: { nodeId: GROUP_PORT_SENTINEL, outputKey: key } };
+  }
+  return { ports, inputs };
 }
 
 /** A node of `type` from its definition: sockets as defined, params = defaults + `params`, wires and note. */
@@ -291,8 +319,13 @@ function emitShape(ctx: Ctx, sh: ShapeSpec, pos: Ref, list: GraphNode[], local?:
       shapePos = ref(turn, 'p4');
     }
   }
-  const node = mk(ctx, rounded ? def.roundType! : def.type, sh.id, { ...params, _sbName: sh.name },
-    { [def.posKey]: shapePos }, `${name}: a ${def.label.toLowerCase()}${shapeSummary(sh) ? `, ${shapeSummary(sh)}` : ''}. ${def.blurb}${colourWord}`, list);
+  const isBalls = sh.kind === 'picture-balls';
+  const node = mk(ctx, rounded ? def.roundType! : def.type, sh.id, { ...params, ...(isBalls ? ballsExtra(ctx, sh) : {}), _sbName: sh.name },
+    { [def.posKey]: shapePos }, `${name}: a ${def.label.toLowerCase()}${shapeSummary(sh) ? `, ${shapeSummary(sh)}` : ''}. ${def.blurb}${colourWord}${isBalls ? ` Its picture comes in through the group's “Picture for ${itemName(ctx.spec, sh)}” port.` : ''}`, list);
+  if (isBalls) {
+    if (sh.tex) ctx.balls?.push({ node, sh });
+    else ctx.warnings.push(`${name} has no picture: give it one under its Picture (texture=), or its balls are a colour gradient, all at one depth.`);
+  }
   let dist = ref(node, def.distKey);
   if (def.field) {
     const ball = Number(sh.size.ball ?? 1.1);
@@ -336,12 +369,16 @@ function emitItem(ctx: Ctx, it: SceneItem, pos: Ref, list: GraphNode[]): Ref | n
 /** A Scene Group holding `root`: Scene Pos → … → Scene Output, laid out in columns. */
 function sceneGroup(ctx: Ctx, role: string, root: GroupSpec, label: string, note: string): GraphNode {
   const inner: GraphNode[] = [];
-  const sp = mk(ctx, 'scenePos', `${role}:pos`, { _groupOriginal: true }, {}, 'The point being measured. The march asks the scene "how far is the nearest surface from here?" many times per pixel, moving this point along the ray.', inner);
-  const dist = emitItem(ctx, root, ref(sp, 'pos'), inner);
-  mk(ctx, 'sceneOutput', `${role}:out`, { _groupOriginal: true }, { dist }, 'The scene\'s answer: the distance from the point to the nearest surface.', inner);
+  const scope: Ctx = { ...ctx, balls: [] };
+  const sp = mk(scope, 'scenePos', `${role}:pos`, { _groupOriginal: true }, {}, 'The point being measured. The march asks the scene "how far is the nearest surface from here?" many times per pixel, moving this point along the ray.', inner);
+  const dist = emitItem(scope, root, ref(sp, 'pos'), inner);
+  mk(scope, 'sceneOutput', `${role}:out`, { _groupOriginal: true }, { dist }, 'The scene\'s answer: the distance from the point to the nearest surface.', inner);
   tidy(inner, 0, 120);
-  const sub: SubgraphData = { nodes: inner, inputPorts: [], outputPorts: [] };
-  return mk(ctx, 'sceneGroup', role, { label, subgraph: sub }, {}, note);
+  const pics = ballsPorts(ctx, scope.balls!, false);
+  const sub: SubgraphData = { nodes: inner, inputPorts: pics.ports, outputPorts: [] };
+  const g = mk(ctx, 'sceneGroup', role, { label, subgraph: sub }, {}, note);
+  g.inputs = { ...g.inputs, ...pics.inputs };
+  return g;
 }
 
 // ── Materials (surface mode, more than one colour) ──────────────────────────
@@ -378,6 +415,7 @@ function reachableFrom(nodes: GraphNode[], roots: string[]): Set<string> {
 
 function materialsGroup(ctx: Ctx, shapes: ShapeSpec[], hitPos: Ref, texShapes: ShapeSpec[] = []): GraphNode {
   const inner: GraphNode[] = [];
+  const matBalls: Array<{ node: GraphNode; sh: ShapeSpec }> = [];
   // Inside the group the hit point arrives through the port.
   const port: Ref = { nodeId: GROUP_PORT_SENTINEL, outputKey: 'hitPos' };
   let colour: Ref | null = null, shine: Ref | null = null, dist: Ref | null = null;
@@ -389,7 +427,7 @@ function materialsGroup(ctx: Ctx, shapes: ShapeSpec[], hitPos: Ref, texShapes: S
   for (const sh0 of shapes) {
     const sh = sh0;
     // Each shape is measured on its own here, so the warps it shares with others are made once per shape.
-    const scope: Ctx = { ...ctx, rolePrefix: `mat:${sh.id}:` };
+    const scope: Ctx = { ...ctx, rolePrefix: `mat:${sh.id}:`, balls: matBalls };
     let pos = port;
     for (const step of pathWarps(ctx.spec, sh)) {
       const w = emitWarps(scope, step.warps.filter(x => !WARP_BY_KIND[x.kind]?.modifier), pos, step.on, inner);
@@ -438,6 +476,7 @@ function materialsGroup(ctx: Ctx, shapes: ShapeSpec[], hitPos: Ref, texShapes: S
   const live = reachableFrom(inner, roots);
   for (let i = inner.length - 1; i >= 0; i--) if (!live.has(inner[i].id)) inner.splice(i, 1);
   tidy(inner, 0, 120);
+  const matPics = ballsPorts(ctx, matBalls, true);
   const texOuts = texShapes.map((s, i) => ({ key: `tp${i}`, label: `${itemName(ctx.spec, s)} point`, from: texPos[i] })).filter(o => o.from);
   const pics = slots && texOuts.length ? [
     { key: 'slots', type: 'vec3' as const, label: 'Picture slots', from: slots },
@@ -449,13 +488,13 @@ function materialsGroup(ctx: Ctx, shapes: ShapeSpec[], hitPos: Ref, texShapes: S
   };
   const node: GraphNode = {
     id: ctx.idFor('materials'), type: 'group', position: { x: 0, y: 0 },
-    inputs: { hitPos: { type: 'vec3', label: 'Hit Pos', connection: { ...hitPos } } },
+    inputs: { hitPos: { type: 'vec3', label: 'Hit Pos', connection: { ...hitPos } }, ...matPics.inputs },
     outputs,
     params: {
       label: 'Materials', iterations: 1,
       subgraph: {
         nodes: inner,
-        inputPorts: [{ key: 'hitPos', type: 'vec3', label: 'Hit Pos', toNodeId: inner[0]?.id ?? '', toInputKey: 'pos' }],
+        inputPorts: [{ key: 'hitPos', type: 'vec3', label: 'Hit Pos', toNodeId: inner[0]?.id ?? '', toInputKey: 'pos' }, ...matPics.ports],
         outputPorts: [
           { key: 'color', type: 'vec3', label: 'Colour', fromNodeId: colour!.nodeId, fromOutputKey: colour!.outputKey },
           ...(shine ? [{ key: 'shine', type: 'float' as const, label: 'Shine', fromNodeId: shine.nodeId, fromOutputKey: shine.outputKey }] : []),
@@ -500,6 +539,16 @@ function surfacePictures(ctx: Ctx, texShapes: ShapeSpec[], mat: GraphNode, norma
     const texRef: Ref = { nodeId: standInId(src), outputKey: 'texture' };
     const a = glf(src.aspect ?? 1);
     const role = `${sh.id}:pic`;
+    if (sh.kind === 'picture-balls') {
+      // Picture balls: each ball is the picture's colour at its home, from the same grid at the shape's own point.
+      const def = SHAPE_BY_KIND['picture-balls'];
+      const params: Record<string, unknown> = { ...ballsExtra(ctx, sh) };
+      for (const p of def.params) if (typeof p.param === 'string' && p.param) params[p.param] = Number(sh.size[p.key] ?? p.def);
+      const b = mk(ctx, 'pieceBalls', `${role}:balls`, params, { pos: ref(mat, `tp${i}`), picture: texRef },
+        `${name}'s colour: the same grid of balls measured at the hit point (in ${name}'s own space), so each ball is the picture “${src.name}”'s colour at its home.`);
+      cols.push({ i, from: ref(b, 'color'), bump: t.bump ?? 0 });
+      return;
+    }
     const map = TEX_MAP_LABELS[t.map];
     const tiled = t.map !== 'face';
     const sample = (k: string, uv: Ref) => ref(mk(ctx, 'sampleTexture', `${role}:${k}`, sampleWrap(tiled ? 'repeat' : 'once'), { texture: texRef, uv },

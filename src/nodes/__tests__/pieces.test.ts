@@ -202,8 +202,10 @@ describe('Balls', () => {
   });
 
   it('on its own grid: the distance never steps past a wall into a neighbour, but runs free off the edge', () => {
-    // Far in front of the ball, 0.05 from the wall to the next column: capped at the wall.
-    expect(ownGrid([1.45, -1, 6])[3]).toBeCloseTo(0.05 + 0.04 + 0.001, 4);
+    // Level with the balls, 0.05 from the wall to the next column: capped at the wall.
+    expect(ownGrid([1.45, -1, 0])[3]).toBeCloseTo(0.05 + 0.04 + 0.001, 4);
+    // Far in front of every ball (beyond the lift, 2, and a radius): the slab, not the wall.
+    expect(ownGrid([1.45, -1, 6])[3]).toBeCloseTo(6 - 2 - 0.45, 4);
     // Past the last column there is no neighbour: the plain distance to the edge ball.
     const far = ownGrid([9, 0, 0]);
     expect(far[3]).toBeGreaterThan(6);
