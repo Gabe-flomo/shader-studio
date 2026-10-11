@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.151',
+    date: '2026-10-10',
+    title: 'Guided Convert',
+    highlights: [
+      { area: 'Studio', text: 'Guided Convert: turn a shader into a graph step by step. Select lines, make them nodes, an expression or one function, and pick sliders and inputs.' },
+      { area: 'Studio', text: 'Guided Convert: unconverted code keeps running as functions, so the picture stays the same at every step (checked). Group steps, undo, or convert the rest.' },
+    ],
+  },
+  {
     id: '2026.10.150',
     date: '2026-10-10',
     title: 'Paste a picture',
