@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.159',
+    date: '2026-10-11',
+    title: 'Node search, redesigned',
+    highlights: [
+      { area: 'Studio', text: 'Shift+Space search is wide and follows light/dark mode. It opens on category tiles (plus Builders, Recent, Favourites); open one to browse its nodes.' },
+      { area: 'Studio', text: 'Typing shows Matches (exact, prefix, fuzzy, keywords) then Related nodes that fit what you selected, top 8 as tiles, with a preview panel.' },
+    ],
+  },
+  {
     id: '2026.10.158',
     date: '2026-10-11',
     title: 'Splat builder, refined',
