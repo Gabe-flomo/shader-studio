@@ -11,7 +11,7 @@
 import { describe, expect, it } from 'vitest';
 import { CpuShader } from '../../lib/guidedConvert/cpuGlsl';
 import { gridProgram as legacyProgram } from './legacyGlsl';
-import { gridProgram, shapeArgs } from '../glsl';
+import { gridProgram, searchCapped, shapeArgs } from '../glsl';
 import { GRID_TEMPLATES } from '../templates';
 import { surpriseGridScene } from '../surprise';
 import { cellSize, emptyGridScene, newShape, placeCell, shownCells, sourceCell, starterGridScene, type GridSceneSpec } from '../spec';
@@ -52,8 +52,8 @@ function legacySource(spec: GridSceneSpec): string {
     `void main() { gl_FragColor = ${p.name}(p_uv, p_t, pt${p.args.length ? `, ${p.args.join(', ')}` : ''}); }`].join('\n');
 }
 
-function lookupSource(spec: GridSceneSpec, extra: string[] = [], out = 'g'): string {
-  const p = gridProgram(spec);
+function lookupSource(spec: GridSceneSpec, extra: string[] = [], out = 'g', brute = false): string {
+  const p = gridProgram(spec, { brute });
   const call = p.args.map(a => (a === 'rp' ? 'rpU' : a === 'rs' ? 'rsU' : a));
   return ['uniform vec2 p_uv;', 'uniform float p_t;', 'uniform vec4 pt;', 'uniform vec4 rpU;', 'uniform float rsU;', ...shapeDecls(spec), ...extra, p.functions,
     'void main() {',
@@ -147,15 +147,16 @@ describe('Grid scene: a fill shape bigger than its cell', () => {
 });
 
 describe('Grid scene: draw modes', () => {
-  /** What cell (x, y) shows in the shader (gs_cell through the program). */
-  function shaderShows(spec: GridSceneSpec, x: number, y: number): number {
+  /** What each cell shows in the shader (gs_cell through the program): a reader, parsed once. */
+  function shaderShows(spec: GridSceneSpec): (x: number, y: number) => number {
     const p = gridProgram(spec);
     const fn = /float gs_cell_\w+/.exec(p.functions)![0].replace('float ', '');
-    const src = ['uniform vec4 rpU;', 'uniform float rsU;', p.functions.replace(/vec4 gs_scene[\s\S]*$/, ''),
+    const src = ['uniform vec4 rpU;', 'uniform float rsU;', 'uniform vec2 cellU;', p.functions.replace(/vec4 gs_scene[\s\S]*$/, ''),
       'void main() {', `  float gd[${p.data.length}];`, ...p.data.map((v, i) => `  gd[${i}] = ${v.toFixed(1)};`),
-      `  gl_FragColor = vec4(${fn}(gd, vec2(${x.toFixed(1)}, ${y.toFixed(1)})${p.repeat ? ', rpU, rsU' : ''}));`, '}'].join('\n');
+      `  gl_FragColor = vec4(${fn}(gd, cellU${p.repeat ? ', rpU, rsU' : ''}));`, '}'].join('\n');
     const d = spec.draw!;
-    return new CpuShader(src).run([0, 0], { resolution: [8, 8], time: 0, uniforms: { rpU: [d.period[0], d.period[1], d.offset[0], d.offset[1]], rsU: d.shift } })![0];
+    const cpu = new CpuShader(src);
+    return (x, y) => cpu.run([0, 0], { resolution: [8, 8], time: 0, uniforms: { cellU: [x, y], rpU: [d.period[0], d.period[1], d.offset[0], d.offset[1]], rsU: d.shift } })![0];
   }
 
   const scene = (mode: NonNullable<GridSceneSpec['draw']>['mode'], extra: Partial<NonNullable<GridSceneSpec['draw']>> = {}) => {
@@ -172,10 +173,11 @@ describe('Grid scene: draw modes', () => {
   it.each([['repeat'], ['mirrorX'], ['mirrorY'], ['mirrorXY'], ['rotate4']] as const)('%s: the shader shows what sourceCell says, cell by cell', mode => {
     const s = mode === 'rotate4' ? { ...scene(mode), cols: 6, rows: 6 } : scene(mode);
     const shown = shownCells(s);
+    const shows = shaderShows(s);
     for (let y = 0; y < s.rows; y++) {
       for (let x = 0; x < s.cols; x++) {
         const id = shown[y * s.cols + x];
-        expect(shaderShows(s, x, y), `cell ${x}, ${y}`).toBe(id ? s.shapes.findIndex(q => q.id === id) + 1 : 0);
+        expect(shows(x, y), `cell ${x}, ${y}`).toBe(id ? s.shapes.findIndex(q => q.id === id) + 1 : 0);
       }
     }
   });
@@ -198,5 +200,146 @@ describe('Grid scene: draw modes', () => {
     expect(sourceCell(r, 5, 1)).toEqual([1, 0]);
     expect(sourceCell(r, 4, 5)).toEqual([1, 0]);
     expect(sourceCell(r, 0, 4)).toEqual([1, 0]);
+  });
+});
+
+// ── The search against brute force, live radii, copies that match ──────────────
+
+/** The search against every cell of the grid (gridProgram's brute option), as `compare` does against the old code. */
+function compareBrute(spec: GridSceneSpec, times = [0.3, 1.7], n = 12): number {
+  const A = new CpuShader(lookupSource(spec, [], 'g', true)), B = new CpuShader(lookupSource(spec));
+  const base = uniformsOf(spec);
+  const D = spec.draw;
+  const rp: Record<string, number | number[]> = D ? { rpU: [D.period[0], D.period[1], D.offset[0], D.offset[1]], rsU: D.shift } : {};
+  let worst = 0;
+  const half = spec.span * 1.05;
+  for (const t of times) {
+    for (let j = 0; j < n; j++) {
+      for (let i = 0; i < n; i++) {
+        const uv = [-half + (2 * half * (i + 0.5)) / n, -half + (2 * half * (j + 0.5)) / n];
+        const inputs = { resolution: [800, 800] as [number, number], time: t, uniforms: { ...base, ...rp, p_uv: uv, p_t: t } };
+        const a = A.run([0, 0], inputs)!, b = B.run([0, 0], inputs)!;
+        if (a[3] < cellSize(spec) * 0.25) for (let k = 0; k < 4; k++) worst = Math.max(worst, Math.abs(a[k] - b[k]));
+        const ca = composite(spec, a), cb = composite(spec, b);
+        for (let k = 0; k < 3; k++) worst = Math.max(worst, Math.abs(ca[k] - cb[k]));
+      }
+    }
+  }
+  return worst;
+}
+
+/** A grid drawn full with one moving shape. */
+function full(cols: number, path: GridSceneSpec['shapes'][number]['motion']['path'], xy: [number, number], lag: number, size = 0.5): GridSceneSpec {
+  const s = emptyGridScene();
+  s.cols = cols; s.rows = cols;
+  s.shapes = [newShape('A', { kind: 'circle', size, motion: { path, xy, speed: 0.4, lag } })];
+  for (let y = 0; y < cols; y++) for (let x = 0; x < cols; x++) s.cells.push({ x, y, s: 'A' });
+  return s;
+}
+
+describe('Grid scene: big motion with lag, against brute force', () => {
+  it.each([
+    ['circle', [1.5, 1.5], 0.03],
+    ['updown', [0, 3], 0.02],
+    ['eight', [2, 1], 0.15],
+    ['both', [2.5, 2.5], 0.2],
+    ['bounce', [0, 2.5], 0.05],
+  ] as const)('%s, reach %j, lag %s: the refined search finds what looking everywhere finds', (path, xy, lag) => {
+    const s = full(8, path, [...xy] as [number, number], lag);
+    expect(compareBrute(s)).toBeLessThan(0.03);
+  });
+
+  it('the fixed-point inverse keeps the search small where the path\'s range alone would need a wide one', () => {
+    // Circle 3 cells round, lag 0.02: L = 2 · 0.02 · 2π · 3 ≈ 0.75, the iteration converges.
+    const slow = full(24, 'circle', [3, 3], 0.02);
+    slow.look.glow = false;
+    expect(gridProgram(slow).radius.A).toBeLessThanOrEqual(2);
+    // At lag 0.03 (L ≈ 1.13) shapes overtake each other: the range bounds the search (3 + reach).
+    const fast = full(24, 'circle', [3, 3], 0.03);
+    fast.look.glow = false;
+    expect(gridProgram(fast).radius.A).toBeGreaterThan(2);
+  });
+
+  it('says when a setting would be cut by the cap', () => {
+    const s = full(24, 'both', [6, 6], 0.3);
+    expect(searchCapped(s, s.shapes[0])).toBe(true);
+    const ok = full(24, 'circle', [1, 1], 0.05);
+    expect(searchCapped(ok, ok.shapes[0])).toBe(false);
+  });
+});
+
+describe('Grid scene: the search follows the live sliders', () => {
+  it('a shape dragged far past its built size is not cut (the radius is worked out from the slider)', () => {
+    const s = emptyGridScene();
+    s.look.glow = false;
+    s.shapes = [newShape('A', { kind: 'circle', size: 0.5 })];
+    placeCell(s, 5, 5, 'A');
+    const cpu = new CpuShader(lookupSource(s));
+    const u = uniformsOf(s);
+    const cs = cellSize(s);
+    // 2 cells right of cell (5, 5)'s centre; built at size 0.5 the search is a cell either side.
+    const uv = [(5.5 + 2 - 5) * cs, (5 - 5.5) * cs];
+    const at = (size: number) => cpu.run([0, 0], { resolution: [800, 800], time: 0, uniforms: { ...u, lA: [size, 0, 0, 0], p_uv: uv, p_t: 0 } })![3];
+    expect(gridProgram(s).radius.A).toBeLessThan(2);
+    expect(at(0.5)).toBeGreaterThan(0);
+    expect(at(4.4)).toBeLessThan(0);
+  });
+
+  it('the fill too', () => {
+    const s = emptyGridScene();
+    s.look.glow = false;
+    s.cols = 6; s.rows = 6;
+    s.shapes = [newShape('A', { kind: 'circle', size: 0.4 }), newShape('B', { kind: 'circle', size: 0.01 })];
+    s.pattern = { kind: 'checker', target: 'turn', amount: 0, freq: 4, speed: 0, arms: 3, fill: 'A' };
+    // Only cell (2, 2) is empty, so only it holds a fill shape; the point is 1.8 cells right of it.
+    for (let y = 0; y < 6; y++) for (let x = 0; x < 6; x++) if (!(x === 2 && y === 2)) s.cells.push({ x, y, s: 'B' });
+    const cpu = new CpuShader(lookupSource(s));
+    const cs = cellSize(s);
+    const uv = [(2.5 + 1.8 - 3) * cs, (3 - 2.5) * cs];
+    const at = (size: number) => cpu.run([0, 0], { resolution: [800, 800], time: 0, uniforms: { ...uniformsOf(s), lA: [size, 0, 0, 0], p_uv: uv, p_t: 0 } })![3];
+    expect(at(0.4)).toBeGreaterThan(0);
+    expect(at(4)).toBeLessThan(0);
+  });
+});
+
+describe('Grid scene: copies match the drawn cell', () => {
+  const tiled = (copies: 'shown' | 'source') => {
+    const s = emptyGridScene();
+    s.cols = 8; s.rows = 8;
+    s.look.glow = false;
+    s.shapes = [newShape('A', { kind: 'circle', size: 0.5, motion: { path: 'circle', xy: [0.3, 0.3], speed: 0.4, lag: 0.12 } })];
+    s.draw = { mode: 'repeat', period: [2, 2], offset: [0, 0], shift: 0, copies };
+    s.cells = [{ x: 0, y: 0, s: 'A' }];
+    return s;
+  };
+  /** (home.x, home.y, distance) at a point `d` from cell (x, y)'s centre, at time t. */
+  const probe = (s: GridSceneSpec, x: number, y: number, d: [number, number], t: number) => {
+    const cpu = new CpuShader(lookupSource(s, [], 'vec4(hp.xy, g.w, 0.0)'));
+    const cs = cellSize(s);
+    const uv = [(x + 0.5 + d[0] - s.cols / 2) * cs, (s.rows / 2 - (y + 0.5 + d[1])) * cs];
+    const D = s.draw!;
+    return cpu.run([0, 0], { resolution: [800, 800], time: t, uniforms: { ...uniformsOf(s), rpU: [D.period[0], D.period[1], D.offset[0], D.offset[1]], rsU: D.shift, p_uv: uv, p_t: t } })!;
+  };
+
+  it('every copy moves as the drawn cell does; by default the lag ripples across them', () => {
+    const d: [number, number] = [0.2, -0.1];
+    const t = 0.9;
+    const a = probe(tiled('source'), 0, 0, d, t), b = probe(tiled('source'), 4, 6, d, t);
+    expect(b[2]).toBeCloseTo(a[2], 6);
+    const c = probe(tiled('shown'), 0, 0, d, t), e = probe(tiled('shown'), 4, 6, d, t);
+    expect(Math.abs(e[2] - c[2])).toBeGreaterThan(1e-3);
+  });
+
+  it('and carries the drawn cell\'s piece of a picture (its home is the drawn cell)', () => {
+    const cs = cellSize(tiled('source'));
+    const g = probe(tiled('source'), 4, 6, [0, 0], 0);
+    expect(g[0]).toBeCloseTo((0.5 - 4) * cs, 5);
+    expect(g[1]).toBeCloseTo((4 - 0.5) * cs, 5);
+    const shown = probe(tiled('shown'), 4, 6, [0, 0], 0);
+    expect(shown[0]).toBeCloseTo((4.5 - 4) * cs, 5);
+  });
+
+  it('matches brute force with the copies matching', () => {
+    expect(compareBrute(tiled('source'))).toBeLessThan(0.03);
   });
 });

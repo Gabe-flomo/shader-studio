@@ -36,7 +36,7 @@ import { backToSceneKinds } from '../../builders/sceneKinds';
 import { useBuilderRecipeRequest } from '../../builders/windows';
 import { useGridBuilder, type GridSection } from '../../gridScene/store';
 import { buildFromGridBuilder, finishGridBuilder, makeSimulation, simulationOf } from '../../gridScene/actions';
-import { gridProgram } from '../../gridScene/glsl';
+import { MAX_SEARCH, gridProgram, searchCapped } from '../../gridScene/glsl';
 import { GRID_TEMPLATES } from '../../gridScene/templates';
 import {
   DO_KINDS, DO_LABELS, DRAW_MODES, DRAW_MODE_LABELS, MAX_CELLS, MAX_PLACED, PIC_MODES, PIC_MODE_LABELS, defaultDraw, drawOf, picModeOf, MAX_RULES, MAX_SHAPES, MAX_WARPS, MIN_CELLS, MOTION_LABELS, MOTION_PATHS, PATTERN_KINDS, PATTERN_LABELS,
@@ -233,6 +233,12 @@ function DrawModeRow() {
         </span>
       </div>
       {draw.mode !== 'here' && <span style={{ fontSize: 11.5, color: tk.text.muted, lineHeight: 1.4 }}>{DRAW_MODE_LABELS[draw.mode].blurb} Copies show faintly; the outlined cells are the ones you draw in.</span>}
+      {draw.mode !== 'here' && (
+        <div data-draw-copies style={{ display: 'flex', alignItems: 'center', gap: 8 }}
+          title="Off: each copy runs as the cell it is in, so the lag ripples across the copies and rules and pictures see where it is. On: every copy runs as the cell you drew, so they all move and look alike.">
+          <Toggle checked={draw.copies === 'source'} onChange={v => set(d => { d.copies = v ? 'source' : 'shown'; })} label="Copies match the drawn cell" />
+        </div>
+      )}
       {draw.mode === 'repeat' && (
         <div style={{ display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr)', alignItems: 'center', gap: '6px 10px' }}>
           <span style={lbl} title="The tile's size: it repeats every this many cells across">Period X</span>
@@ -368,9 +374,12 @@ function ShapesSection() {
 }
 
 function MotionSection() {
+  const tk = useTokens();
   const sh = useEditedShape();
   const shapes = useGridBuilder(s => s.spec.shapes);
   const setBrush = useGridBuilder(s => s.setBrush);
+  // Would this shape's search be cut by its cap (MAX_SEARCH)? Big reach with a lot of lag, or a huge shape.
+  const capped = useGridBuilder(s => { const x = shapeOf(s.spec, s.brush) ?? s.spec.shapes[0]; return !!x && searchCapped(s.spec, x); });
   if (!sh) return <BuilderNote>Add a shape first.</BuilderNote>;
   const m = sh.motion;
   const usesX = m.path !== 'updown' && m.path !== 'bounce' && m.path !== 'still';
@@ -401,6 +410,11 @@ function MotionSection() {
           <NumRow label="Speed" hint="Cycles a second (negative runs backwards)." value={m.speed} min={-2} max={2} defaultValue={0.5} onChange={v => editShape(sh.id, s => { s.motion.speed = v; }, `sp${sh.id}`)} />
           <NumRow label="Lag" hint="Each cell starts this much of a cycle after its neighbour (x + y): the motion runs through the drawing as a wave." value={m.lag} min={-0.5} max={0.5} defaultValue={0} onChange={v => editShape(sh.id, s => { s.motion.lag = v; }, `lag${sh.id}`)} />
         </>
+      )}
+      {capped && (
+        <span data-search-capped style={{ fontSize: 11.5, color: tk.status.warningText, lineHeight: 1.4 }}>
+          This much reach with this much lag makes the shapes overtake each other, beyond the {2 * MAX_SEARCH + 1} × {2 * MAX_SEARCH + 1} cells each pixel looks through: some shapes may be cut. Lower the lag or the reach (or the size).
+        </span>
       )}
     </div>
   );
