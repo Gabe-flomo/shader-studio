@@ -93,11 +93,14 @@ export function ViewportLegend({ entries, lit, focused, note, onHover, onFocus, 
                   }}>
                   <Dot colour={e.colour} size={10} style={{ marginTop: 3 }} />
                   <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, flex: 1 }}>
-                    <span style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                      <b style={{ fontSize: 12.5, fontWeight: 650 }}>{e.title}</b>
-                      <span data-legend-numbers style={{ fontSize: 11, color: tk.text.muted, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.numbers}{e.on ? '' : ' · off'}</span>
+                    {/* The numbers once, beside the title, on one line of steady width (tabular figures):
+                        they change while a slider is dragged, the words under them don't, so the
+                        legend keeps its size */}
+                    <span style={{ display: 'flex', alignItems: 'baseline', gap: 6, minWidth: 0 }}>
+                      <b style={{ fontSize: 12.5, fontWeight: 650, flexShrink: 0, whiteSpace: 'nowrap' }}>{e.title}</b>
+                      <span data-legend-numbers style={{ flex: 1, minWidth: 0, fontSize: 11, color: tk.text.muted, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.numbers}{e.on ? '' : ' · off'}</span>
                     </span>
-                    <span data-legend-line style={{ fontSize: 11.5, lineHeight: 1.4, color: tk.text.secondary }}>{e.line}</span>
+                    <span data-legend-line style={{ fontSize: 11.5, lineHeight: 1.4, color: tk.text.secondary }}>{e.words}</span>
                   </span>
                 </button>
               </li>
@@ -166,7 +169,7 @@ export function FocusDemo({ entry, onClose }: { entry: LegendEntry; onClose: () 
         background: alpha(tk.bg.panel, 0.95), borderRadius: radius.lg, boxShadow: `${tk.shadow.float}, inset 0 0 0 1px ${tk.border.default}`, color: tk.text.primary, pointerEvents: 'auto' }}>
       <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <Dot colour={entry.colour} size={10} />
-        <b style={{ fontSize: 12.5, fontWeight: 650, flex: 1 }}>{entry.title} <span style={{ fontWeight: 500, color: tk.text.muted, fontSize: 11 }}>{entry.numbers}</span></b>
+        <b style={{ fontSize: 12.5, fontWeight: 650, flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{entry.title} <span style={{ fontWeight: 500, color: tk.text.muted, fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>{entry.numbers}</span></b>
         <button type="button" data-focus-close aria-label="Leave focus (Esc)" title="Leave focus (Esc)" onClick={onClose}
           style={{ width: 22, height: 22, padding: 0, border: 0, borderRadius: 6, background: 'none', color: tk.text.faint, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <Icon name="close" size={12} />

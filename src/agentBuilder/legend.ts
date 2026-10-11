@@ -218,6 +218,121 @@ export const phrase = {
   },
 };
 
+/**
+ * The legend row's line: the same behaviours in words only. The row's title already shows the
+ * numbers (once), so these never repeat them: they stay the same while a slider is dragged, and the
+ * legend doesn't grow and shrink under the pointer. (`phrase` keeps the worded-with-numbers line
+ * for the focus view.)
+ */
+export const say = {
+  gravity(n: Noun, strength: number, angle: number): string {
+    if (Math.abs(strength) < 1e-6) return `No pull: each ${n.one} keeps the speed it has.`;
+    const g = signed(strength, angle);
+    return `Each ${n.one} is pulled ${directionWords(g.deg).ward}, a little faster every second${g.flipped ? ' (negative: turned round)' : ''}.`;
+  },
+  wind(n: Noun, strength: number, angle: number): string {
+    if (Math.abs(strength) < 1e-6) return 'Still air.';
+    return `${cap(n.many)} drift ${directionWords(signed(strength, angle).deg).ward} in gusts that rise and fall.`;
+  },
+  curl(n: Noun, strength: number, evolve: number): string {
+    if (Math.abs(strength) < 1e-6) return 'No current.';
+    const still = evolve <= 1e-6 ? 'the currents stand still' : evolve < 0.3 ? 'the currents shift slowly' : 'the currents shift quickly';
+    return `${cap(n.many)} ride swirling currents that never bunch them up (bigger eddies: smaller, busier swirls); ${still}.`;
+  },
+  attract(n: Noun, strength: number, target: 'point' | 'mouse'): string {
+    const at = target === 'mouse' ? 'the mouse' : 'the point';
+    if (Math.abs(strength) < 1e-6) return `${cap(at)} neither pulls nor pushes.`;
+    return strength > 0 ? `Each ${n.one} is pulled toward ${at}, however far away it is.` : `Each ${n.one} is pushed away from ${at}, however far away it is.`;
+  },
+  drag(n: Noun, amount: number): string {
+    return amount <= 1e-6 ? `Nothing slows ${n.many}; they keep all their speed.` : `Slows each ${n.one} down: the share of its speed it keeps after a second.`;
+  },
+  sum(n: Noun, strength: number): string {
+    return strength < 1e-6 ? `The forces cancel out; a ${n.one} keeps the speed it has.` : `The forces added up: how each ${n.one}'s velocity changes every second.`;
+  },
+  fade(n: Noun): string { return `Each ${n.one} dims from full colour at birth to black by this age.`; },
+  die(n: Noun, when: string | null, seconds: number | null): string {
+    if (seconds !== null) return `At this age the ${n.one} is gone (Kept full brings a new one at once).`;
+    if (when) return `When ${when}.`;
+    return 'At once, every step: give it an "only when".';
+  },
+  lives(n: Noun, life: number): string {
+    return life > 0 ? `Each ${n.one} is taken away at this age.` : `Only a Dies card ends a ${n.one}.`;
+  },
+  turnRule(n: Noun, what: 'separate' | 'match' | 'cohere', degrees: number, who: 'all' | 'own' | 'others' = 'all'): string {
+    if (degrees <= 1e-6) return 'It doesn\'t turn for this.';
+    const whose = who === 'own' ? ' of its own kind' : who === 'others' ? ' of the other kinds' : '';
+    const how = what === 'separate' ? `away from the ones${whose} too close`
+      : what === 'match' ? `toward the way its neighbours${whose} go`
+        : `toward the middle of the ones${whose} it sees`;
+    return `Each step a ${n.one} turns ${how}, at most this much.`;
+  },
+  avoidEdges(n: Noun): string { return `Near the picture's edge, each ${n.one} turns back inward.`; },
+  goal(n: Noun, toward: string): string { return `Each step a ${n.one} turns toward ${toward === 'point' ? 'the point' : `the ${toward}`}, at most this much.`; },
+  slow(n: Noun): string { return `A ${n.one} slows as more gather round it, nearly stopping at the jam.`; },
+  orbit(n: Noun, target: string, cw: boolean): string {
+    return `Each ${n.one} circles ${target === 'point' ? 'the point' : `the ${target}`} ${cw ? 'clockwise' : 'anticlockwise'}: in when further, out when nearer.`;
+  },
+  wander(n: Noun, degrees: number): string {
+    return degrees <= 1e-6 ? `Each ${n.one} goes straight.` : `Each step a ${n.one} turns a random amount, up to this either way.`;
+  },
+  view(n: Noun): string { return `How far each ${n.one} looks around it; it only knows the ones inside.`; },
+  max(n: Noun): string { return `A ${n.one} counts at most this many of the ones it sees; more count the same.`; },
+  senses(n: Noun, on: boolean): string {
+    return on ? 'Three feelers smell the trail: one straight ahead, one to each side.' : `${cap(n.many)} don't smell the trail.`;
+  },
+  turn(n: Noun, on: boolean, away: boolean): string {
+    if (!on) return `Senses is off, so a ${n.one} doesn't turn toward a smell.`;
+    return `Each step a ${n.one} turns ${away ? 'away from' : 'toward'} the feeler that smells most, at most this much.`;
+  },
+  speed(n: Noun, speed: number): string { return speed <= 1e-6 ? `${cap(n.many)} stand still.` : `How far each ${n.one} moves in a second.`; },
+  edges(n: Noun, edges: 'wrap' | 'bounce' | 'slide'): string {
+    return edges === 'wrap' ? `A ${n.one} that leaves one side comes back in at the other.`
+      : edges === 'bounce' ? `A ${n.one} that reaches the edge turns back.`
+        : `A ${n.one} that reaches the edge runs along it.`;
+  },
+  trail(n: Noun, on: boolean): string {
+    return on ? `Each ${n.one} leaves trail where it walks; it fades (half gone in the time shown) and spreads to the pixels round it.` : `${cap(n.many)} leave nothing behind.`;
+  },
+  born(n: Noun, shape: string): string {
+    const at = shape === 'screen' ? 'all over the picture' : shape === 'point' ? 'at one point'
+      : shape === 'picture' ? 'where a picture is bright' : shape === 'field' ? 'only inside a region (Or born inside)'
+        : `in a ${shape === 'sphere' ? 'shell' : shape}`;
+    return `Where ${n.many} start: ${at}.`;
+  },
+  /** One layer of a field, in words (its strength, place and size are in the row's numbers). */
+  fieldLayer(n: Noun, l: FieldLayer): string {
+    const back = l.weight < 0;
+    const way = (cw: boolean) => ((cw !== back) ? 'clockwise' : 'anticlockwise');
+    const dir = (deg: number) => directionWords(back ? deg + 180 : deg).to;
+    let head: string;
+    if (Math.abs(l.weight) < 1e-6) head = 'It adds nothing.';
+    else switch (l.kind) {
+      case 'curl': head = `${cap(n.many)} ride swirling eddies that never bunch them up.`; break;
+      case 'vortex': head = `${cap(n.many)} circle ${way(!!l.flip)}, faster near the middle.`; break;
+      case 'source': head = (!!l.flip !== back) ? `A sink: ${n.many} stream in to it and gather there.` : `${cap(n.many)} stream out from it, slower further away.`; break;
+      case 'saddle': head = `${cap(n.many)} come in from ${dir((l.angle ?? 0) + 90)} and ${dir((l.angle ?? 0) - 90)} and leave to the ${dir(l.angle ?? 0)} and ${dir((l.angle ?? 0) + 180)}.`; break;
+      case 'dipole': head = `${cap(n.many)} pour out of one pole and into the other, flowing ${dir((l.angle ?? 0) + (l.flip ? 180 : 0))} between them.`; break;
+      case 'waves': head = `${cap(n.many)} flow ${dir((l.angle ?? 0) + (l.flip ? 180 : 0))}, weaving from side to side.`; break;
+      case 'wind': head = `Every ${n.one} is pushed ${dir(l.angle ?? 0)}, the same everywhere.`; break;
+      case 'spiral': head = `${cap(n.many)} circle ${way(!!l.flip)} and drain into the middle.`; break;
+      case 'shear': head = `${cap(n.many)} on one side of the line flow ${dir((l.angle ?? 0) + (l.flip ? 180 : 0))}, on the other ${dir((l.angle ?? 0) + (l.flip ? 0 : 180))}.`; break;
+      case 'slope': head = `${cap(n.many)} flow ${l.around ? 'round the graph field\'s contour lines' : (!!l.flip !== back) ? 'uphill on the graph\'s field' : 'downhill on the graph\'s field'}.`; break;
+      case 'own': head = phrase.fieldLayer(n, l); break;
+    }
+    const extra: string[] = [];
+    if (l.rotate) extra.push('turned');
+    if (l.mask) extra.push(`only ${l.mask.outside ? 'outside' : 'inside'} ${l.mask.region ? l.mask.region.name ?? 'its region' : `a ${l.mask.shape}`}`);
+    if (l.animate?.speed) extra.push(l.animate.mode === 'spin' ? 'spinning' : `drifting ${directionWords(l.animate.angle ?? 0).to}`);
+    if (l.off) extra.push('switched off');
+    return extra.length ? `${head.replace(/\.$/, '')}; ${extra.join(', ')}.` : head;
+  },
+  fieldHow(n: Noun, grip: number | undefined): string {
+    return grip && grip > 0 ? `Each ${n.one} rides the field: its velocity eases toward the field's.` : `The field is a force: each ${n.one}'s velocity changes by it every second.`;
+  },
+};
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
 // ── The legend ───────────────────────────────────────────────────────────────
 
 /** What a focus view animates (demos.ts), with the live values it needs. */
@@ -256,8 +371,10 @@ export interface LegendEntry {
   colour: string;
   /** Its key numbers ("0.25 · up"). */
   numbers: string;
-  /** One plain line: what it does to the walkers. */
+  /** One plain line: what it does to the walkers, with its numbers (the focus view). */
   line: string;
+  /** The same in words only (the legend row: its numbers are beside the title, once). */
+  words: string;
   on: boolean;
   /** The control it comes from: the card (the diagram focus' `card`) and the settings in it. */
   card?: string;
@@ -339,51 +456,51 @@ export function legendEntries(inp: LegendInput): LegendEntry[] {
         if (a.field === 'gravity' || a.field === 'wind') {
           const d = a.angle ?? (a.field === 'gravity' ? -90 : 0);
           return { ...base, title: CARD_WORDS[c.card].title, colour: LEGEND_COLOURS[a.field], numbers: `${num(a.strength, 2)} · ${directionWords(signed(a.strength, d).deg).to}`,
-            line: a.field === 'gravity' ? phrase.gravity(n, a.strength, d) : phrase.wind(n, a.strength, d), settings: ['strength', 'angle'],
+            line: a.field === 'gravity' ? phrase.gravity(n, a.strength, d) : phrase.wind(n, a.strength, d), words: a.field === 'gravity' ? say.gravity(n, a.strength, d) : say.wind(n, a.strength, d), settings: ['strength', 'angle'],
             demo: { kind: a.field, strength: a.strength, angle: d } };
         }
         if (a.field === 'curl') {
           return { ...base, title: 'Curl flow', colour: LEGEND_COLOURS.curl, numbers: `×${num(a.strength, 2)} · eddies ${num(set.flow.size, 2)}`,
-            line: phrase.curl(n, a.strength, set.flow.size, set.flow.evolve), settings: ['strength', 'flowSize', 'flowEvolve'],
+            line: phrase.curl(n, a.strength, set.flow.size, set.flow.evolve), words: say.curl(n, a.strength, set.flow.evolve), settings: ['strength', 'flowSize', 'flowEvolve'],
             demo: { kind: 'curl', strength: a.strength, eddies: set.flow.size, evolve: set.flow.evolve } };
         }
         const t = a.field === 'mouse' ? 'mouse' : 'point';
         return { ...base, title: a.strength < 0 ? 'Repel' : 'Attract', colour: LEGEND_COLOURS.attract,
           numbers: `${num(a.strength, 2)} · ${t === 'mouse' ? 'the mouse' : where(a.x ?? 0, a.y ?? 0)}`,
-          line: phrase.attract(n, a.strength, t, a.x ?? 0, a.y ?? 0), settings: ['strength', 'target', 'x', 'y'],
+          line: phrase.attract(n, a.strength, t, a.x ?? 0, a.y ?? 0), words: say.attract(n, a.strength, t), settings: ['strength', 'target', 'x', 'y'],
           demo: { kind: 'attract', strength: a.strength, x: t === 'mouse' ? 0 : a.x ?? 0, y: t === 'mouse' ? 0 : a.y ?? 0 } };
       }
       case 'field': return null;
       case 'drag': return { ...base, title: 'Drag', colour: LEGEND_COLOURS.drag, numbers: `${num(a.amount, 2)} · keeps ${pct(Math.exp(-Math.max(0, a.amount)))}`,
-        line: phrase.drag(n, a.amount), settings: ['drag'], demo: { kind: 'drag', amount: Math.max(0, a.amount) } };
-      case 'fade': return { ...base, title: 'Fade with age', colour: LEGEND_COLOURS.fade, numbers: `${num(a.seconds, 2)} s`, line: phrase.fade(n, a.seconds), settings: ['fade'],
+        line: phrase.drag(n, a.amount), words: say.drag(n, a.amount), settings: ['drag'], demo: { kind: 'drag', amount: Math.max(0, a.amount) } };
+      case 'fade': return { ...base, title: 'Fade with age', colour: LEGEND_COLOURS.fade, numbers: `${num(a.seconds, 2)} s`, line: phrase.fade(n, a.seconds), words: say.fade(n), settings: ['fade'],
         demo: { kind: 'life', fade: a.seconds, dies: dieAt(cards) } };
       case 'die': {
         const s = c.when?.kind === 'age' && c.when.cmp === '>' ? c.when.seconds : null;
         return { ...base, title: 'Dies', colour: LEGEND_COLOURS.die, numbers: s !== null ? `at ${num(s, 2)} s` : c.when ? 'only when' : 'at once',
-          line: phrase.die(n, c.when ? inp.whenText?.(c.when) ?? null : null, s), settings: ['dieAfter'], demo: { kind: 'life', fade: fadeOf(cards), dies: s } };
+          line: phrase.die(n, c.when ? inp.whenText?.(c.when) ?? null : null, s), words: say.die(n, c.when ? inp.whenText?.(c.when) ?? null : null, s), settings: ['dieAfter'], demo: { kind: 'life', fade: fadeOf(cards), dies: s } };
       }
       case 'separate': case 'match': case 'cohere':
         return { ...base, title: CARD_WORDS[c.card].title, colour: LEGEND_COLOURS[a.kind], numbers: `≤ ${num(a.degrees, 1)}° a step`,
-          line: phrase.turnRule(n, a.kind, a.degrees, a.who), settings: ['degrees', 'who', 'reach'], demo: flockDemo(a.kind) };
+          line: phrase.turnRule(n, a.kind, a.degrees, a.who), words: say.turnRule(n, a.kind, a.degrees, a.who), settings: ['degrees', 'who', 'reach'], demo: flockDemo(a.kind) };
       case 'avoidEdges': return { ...base, title: 'Avoid edges', colour: LEGEND_COLOURS.avoidEdges, numbers: `${num(a.margin, 2)} · ≤ ${num(a.degrees, 1)}°`,
-        line: phrase.avoidEdges(n, a.margin, a.degrees), settings: ['degrees', 'margin'], demo: { kind: 'avoidEdges', margin: a.margin, degrees: a.degrees } };
+        line: phrase.avoidEdges(n, a.margin, a.degrees), words: say.avoidEdges(n), settings: ['degrees', 'margin'], demo: { kind: 'avoidEdges', margin: a.margin, degrees: a.degrees } };
       case 'turn': return { ...base, title: 'Head for', colour: LEGEND_COLOURS.goal, numbers: `${a.toward === 'point' ? where(a.x ?? 0, a.y ?? 0) : a.toward} · ≤ ${num(a.degrees, 1)}°`,
-        line: phrase.goal(n, a.toward, a.degrees, a.x ?? 0, a.y ?? 0), settings: ['target', 'x', 'y', 'degrees'], demo: { kind: 'goal', degrees: a.degrees } };
-      case 'slow': return { ...base, title: 'Slow in a crowd', colour: LEGEND_COLOURS.slow, numbers: `jam ${num(a.jam, 0)}`, line: phrase.slow(n, a.jam), settings: ['jam', 'who', 'reach'],
+        line: phrase.goal(n, a.toward, a.degrees, a.x ?? 0, a.y ?? 0), words: say.goal(n, a.toward), settings: ['target', 'x', 'y', 'degrees'], demo: { kind: 'goal', degrees: a.degrees } };
+      case 'slow': return { ...base, title: 'Slow in a crowd', colour: LEGEND_COLOURS.slow, numbers: `jam ${num(a.jam, 0)}`, line: phrase.slow(n, a.jam), words: say.slow(n), settings: ['jam', 'who', 'reach'],
         demo: { kind: 'slow', jam: a.jam } };
       case 'orbit': return { ...base, title: 'Orbit', colour: LEGEND_COLOURS.orbit, numbers: `${num(a.distance, 2)} · ${a.cw ? '↻' : '↺'} ≤ ${num(a.degrees, 1)}°`,
-        line: phrase.orbit(n, a.target, a.distance, a.degrees, !!a.cw, a.x ?? 0, a.y ?? 0), settings: ['target', 'x', 'y', 'distance', 'way', 'degrees'],
+        line: phrase.orbit(n, a.target, a.distance, a.degrees, !!a.cw, a.x ?? 0, a.y ?? 0), words: say.orbit(n, a.target, !!a.cw), settings: ['target', 'x', 'y', 'distance', 'way', 'degrees'],
         demo: { kind: 'orbit', degrees: a.degrees, cw: !!a.cw } };
-      case 'wander': return { ...base, title: 'Wander', colour: LEGEND_COLOURS.wobble, numbers: `±${num(a.degrees, 1)}°`, line: phrase.wander(n, a.degrees), settings: ['wobble'],
+      case 'wander': return { ...base, title: 'Wander', colour: LEGEND_COLOURS.wobble, numbers: `±${num(a.degrees, 1)}°`, line: phrase.wander(n, a.degrees), words: say.wander(n, a.degrees), settings: ['wobble'],
         demo: { kind: 'wander', degrees: a.degrees } };
       default: return null;
     }
   };
   const of = (ids: string[]) => ids.flatMap(id => cards.filter(c => c.card === id)).flatMap(c => (c.action.kind === 'field' ? fieldEntries(c, n) : [card(c)])).filter((e): e is LegendEntry => !!e);
   const viewEntries = (): LegendEntry[] => [
-    { id: 'view', title: 'View radius', colour: LEGEND_COLOURS.view, numbers: num(radius, 3), line: phrase.view(n, radius), on: true, settings: ['radius'], el: 'view', demo: { kind: 'view', radius, max } },
-    { id: 'max', title: 'Max neighbours', colour: LEGEND_COLOURS.max, numbers: num(max, 0), line: phrase.max(n, max), on: true, settings: ['max'], el: 'view', demo: { kind: 'view', radius, max } },
+    { id: 'view', title: 'View radius', colour: LEGEND_COLOURS.view, numbers: num(radius, 3), line: phrase.view(n, radius), words: say.view(n), on: true, settings: ['radius'], el: 'view', demo: { kind: 'view', radius, max } },
+    { id: 'max', title: 'Max neighbours', colour: LEGEND_COLOURS.max, numbers: num(max, 0), line: phrase.max(n, max), words: say.max(n), on: true, settings: ['max'], el: 'view', demo: { kind: 'view', radius, max } },
   ];
   const t = inp.trail;
   switch (section) {
@@ -393,7 +510,7 @@ export function legendEntries(inp: LegendInput): LegendEntry[] {
       if (sum.strength > 1e-3) {
         const forces = cards.filter(c => c.on && c.action.kind === 'force').map(c => { const a = c.action as Act<'force'>; return { field: a.field, strength: a.strength, angle: a.angle, x: a.x, y: a.y }; });
         const drag = cards.find(c => c.on && c.action.kind === 'drag')?.action as Act<'drag'> | undefined;
-        out.push({ id: 'sum', title: 'All together', colour: LEGEND_COLOURS.sum, numbers: `${num(sum.strength, 2)} · ${directionWords(sum.deg).to}`, line: phrase.sum(n, sum.strength, sum.deg), on: true, el: '',
+        out.push({ id: 'sum', title: 'All together', colour: LEGEND_COLOURS.sum, numbers: `${num(sum.strength, 2)} · ${directionWords(sum.deg).to}`, line: phrase.sum(n, sum.strength, sum.deg), words: say.sum(n, sum.strength), on: true, el: '',
           demo: { kind: 'sum', forces, drag: Math.max(0, drag?.amount ?? 0), eddies: set.flow.size } });
       }
       break;
@@ -407,7 +524,7 @@ export function legendEntries(inp: LegendInput): LegendEntry[] {
       break;
     case 'orbit': out.push(...of(['orbit'])); break;
     case 'life':
-      if (inp.life !== null) out.push({ id: 'lives', title: 'Lives for', colour: LEGEND_COLOURS.lives, numbers: inp.life > 0 ? `${num(inp.life, 2)} s` : 'for ever', line: phrase.lives(n, inp.life), on: true, settings: ['life'], el: 'lives',
+      if (inp.life !== null) out.push({ id: 'lives', title: 'Lives for', colour: LEGEND_COLOURS.lives, numbers: inp.life > 0 ? `${num(inp.life, 2)} s` : 'for ever', line: phrase.lives(n, inp.life), words: say.lives(n, inp.life), on: true, settings: ['life'], el: 'lives',
         demo: { kind: 'life', fade: fadeOf(cards), dies: dieAt(cards) ?? (inp.life > 0 ? inp.life : null) } });
       out.push(...of(['fade', 'die']));
       break;
@@ -416,20 +533,20 @@ export function legendEntries(inp: LegendInput): LegendEntry[] {
       const edges = t?.moving.edges ?? set.edges;
       const toFeelers = t ? set.sensor.distance / Math.max(speed / 60, 1e-9) : undefined;
       out.push(
-        { id: 'speed', title: 'Speed', colour: LEGEND_COLOURS.speed, numbers: `${num(speed, 3)} a second`, line: phrase.speed(n, speed, speed > 0 ? toFeelers : undefined), on: true, settings: ['speed'], el: 'moving', demo: { kind: 'speed', speed } },
-        { id: 'edges', title: 'At the edges', colour: LEGEND_COLOURS.edges, numbers: edges, line: phrase.edges(n, edges), on: true, settings: ['edges'], el: 'moving', demo: { kind: 'edges', edges } },
+        { id: 'speed', title: 'Speed', colour: LEGEND_COLOURS.speed, numbers: `${num(speed, 3)} a second`, line: phrase.speed(n, speed, speed > 0 ? toFeelers : undefined), words: say.speed(n, speed), on: true, settings: ['speed'], el: 'moving', demo: { kind: 'speed', speed } },
+        { id: 'edges', title: 'At the edges', colour: LEGEND_COLOURS.edges, numbers: edges, line: phrase.edges(n, edges), words: say.edges(n, edges), on: true, settings: ['edges'], el: 'moving', demo: { kind: 'edges', edges } },
       );
       break;
     }
     case 'senses':
-      if (t) out.push({ id: 'senses', title: 'Sensors', colour: LEGEND_COLOURS.senses, numbers: `${num(t.senses.distance, 3)} · ±${num(t.senses.angle, 1)}°`, line: phrase.senses(n, t.senses.on, t.senses.distance, t.senses.angle),
+      if (t) out.push({ id: 'senses', title: 'Sensors', colour: LEGEND_COLOURS.senses, numbers: `${num(t.senses.distance, 3)} · ±${num(t.senses.angle, 1)}°`, line: phrase.senses(n, t.senses.on, t.senses.distance, t.senses.angle), words: say.senses(n, t.senses.on),
         on: t.senses.on, card: 'senses', settings: ['distance', 'angle', 'smells'], el: 'senses', demo: { kind: 'senses', angle: t.senses.angle, distance: t.senses.distance, turn: t.turning.sharp, away: t.senses.away } });
       break;
     case 'turning':
       if (t) out.push(
-        { id: 'turn', title: 'Turn', colour: LEGEND_COLOURS.turn, numbers: `${num(t.turning.sharp, 1)}°`, line: phrase.turn(n, t.turning.sharpOn, t.turning.sharp, t.senses.away), on: t.turning.sharpOn, settings: ['sharp'], el: 'turning',
+        { id: 'turn', title: 'Turn', colour: LEGEND_COLOURS.turn, numbers: `${num(t.turning.sharp, 1)}°`, line: phrase.turn(n, t.turning.sharpOn, t.turning.sharp, t.senses.away), words: say.turn(n, t.turning.sharpOn, t.senses.away), on: t.turning.sharpOn, settings: ['sharp'], el: 'turning',
           demo: { kind: 'senses', angle: t.senses.angle, distance: t.senses.distance, turn: t.turning.sharp, away: t.senses.away } },
-        { id: 'wobble', title: 'Wobble', colour: LEGEND_COLOURS.wobble, numbers: `±${num(t.turning.wobble, 1)}°`, line: phrase.wander(n, t.turning.wobbleOn ? t.turning.wobble : 0), on: t.turning.wobbleOn, card: 'wobble', settings: ['wobble'], el: 'turning',
+        { id: 'wobble', title: 'Wobble', colour: LEGEND_COLOURS.wobble, numbers: `±${num(t.turning.wobble, 1)}°`, line: phrase.wander(n, t.turning.wobbleOn ? t.turning.wobble : 0), words: say.wander(n, t.turning.wobbleOn ? t.turning.wobble : 0), on: t.turning.wobbleOn, card: 'wobble', settings: ['wobble'], el: 'turning',
           demo: { kind: 'wander', degrees: t.turning.wobbleOn ? t.turning.wobble : 0 } },
       );
       break;
@@ -437,13 +554,13 @@ export function legendEntries(inp: LegendInput): LegendEntry[] {
       if (t) {
         const f = inp.trailField ?? { halfLife: 0.12, diffuse: 1 };
         out.push({ id: 'trail', title: 'Trail', colour: LEGEND_COLOURS.trail, numbers: `${num(t.trail.amount, 2)} · ½ in ${num(f.halfLife, 3)} s · ${pct(f.diffuse)}`,
-          line: phrase.trail(n, t.trail.on, t.trail.amount, f.halfLife, f.diffuse), on: t.trail.on, card: 'trail', settings: ['amount', 'fades', 'spreads', 'lays'], el: 'trail',
+          line: phrase.trail(n, t.trail.on, t.trail.amount, f.halfLife, f.diffuse), words: say.trail(n, t.trail.on), on: t.trail.on, card: 'trail', settings: ['amount', 'fades', 'spreads', 'lays'], el: 'trail',
           demo: { kind: 'trail', amount: t.trail.amount, halfLife: f.halfLife, diffuse: f.diffuse } });
       }
       break;
     case 'born':
       if (inp.born) out.push({ id: 'born', title: 'Born', colour: LEGEND_COLOURS.born, numbers: `${inp.born.shape} · ${inp.born.count.toUpperCase().replace('K', 'k')}`,
-        line: phrase.born(n, inp.born.shape, inp.born.size, inp.born.count), on: true, settings: ['where', 'size', 'count', 'facing', 'births', 'launch'], el: 'born',
+        line: phrase.born(n, inp.born.shape, inp.born.size, inp.born.count), words: say.born(n, inp.born.shape), on: true, settings: ['where', 'size', 'count', 'facing', 'births', 'launch'], el: 'born',
         demo: { kind: 'born', shape: inp.born.shape } });
       break;
     default: break;
@@ -463,6 +580,7 @@ export function fieldEntries(c: CardRead, n: Noun): LegendEntry[] {
     title: FIELD_KINDS[l.kind].label, colour: FIELD_COLOURS[k % FIELD_COLOURS.length],
     numbers: `× ${num(l.weight, 2)}${l.mask ? ` · ${l.mask.outside ? 'outside' : 'inside'} ${l.mask.region ? l.mask.region.name ?? 'a region' : l.mask.shape}` : ''}${l.animate?.speed ? ` · ${l.animate.mode}` : ''}`,
     line: `${phrase.fieldLayer(n, l)}${k === 0 ? ` ${how}` : ''}`,
+    words: `${say.fieldLayer(n, l)}${k === 0 ? ` ${say.fieldHow(n, a.grip)}` : ''}`,
     settings: [`layer${k}`],
     demo: { kind: 'field', spec, strength: a.strength, ...(a.grip ? { grip: a.grip } : {}), layer: k },
   }));

@@ -30,6 +30,7 @@ import { insertSnippet } from '../code/useCompletion';
 import { HowUsedButton } from '../codeExplorer/HowUsedButton';
 import { useExprBlockJump } from '../codeExplorer/useCodeJumpFocus';
 import { LineFold } from '../explain/LineFold';
+import { ExplainViewBoundary } from '../explain/ExplainViewBoundary';
 import { useExplainDialogs } from '../explain/useExplainDialogs';
 import { exprBlockContext, exprBlockUseHere, exprBlockCode, scopeNodes } from '../explain/hosts';
 import { ExplainScopeProvider } from '../explain/ExplainScope';
@@ -467,6 +468,7 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
       {viewAt !== null ? (
         // ── The explain view of one line: replaces the editor until Back ──
         <div style={{ display: 'flex', height: '100%', minHeight: 0, position: 'relative' }}>
+          <ExplainViewBoundary key={String(viewAt)} onBack={() => setViewAt(null)}>
           <Suspense fallback={<div style={{ padding: 20 }}><Note>Opening the explain view…</Note></div>}>
             <LineExplainView key={String(viewAt)} node={node} at={viewAt} stops={explainStops(lines, result)}
               ctx={viewCtx}
@@ -479,6 +481,7 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
                 explainDialogs.makeNode({ source: rhs, span: rel, ctx: viewCtx, useHere: exprBlockUseHere(node.id, at, rel) });
               }} />
           </Suspense>
+          </ExplainViewBoundary>
           {explainDialogs.dialogs}
         </div>
       ) : (

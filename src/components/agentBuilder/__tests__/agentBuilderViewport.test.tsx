@@ -72,7 +72,10 @@ describe('one legend instead of scattered labels', () => {
     const ids = legendIds();
     expect(ids).toEqual(expect.arrayContaining(['curl#0', 'gravity#0', 'drag#0']));
     const g = $('[data-legend-entry="gravity#0"]')!;
-    expect(g.querySelector('[data-legend-line]')?.textContent).toMatch(/^Gravity [\d.]+, pointing (up|down): each particle is pulled (upward|downward)/);
+    // The numbers once, beside the title; the line under it in words only (it holds still while a slider moves)
+    expect(g.querySelector('[data-legend-numbers]')?.textContent).toMatch(/^[\d.]+ · (up|down)$/);
+    expect(g.querySelector('[data-legend-line]')?.textContent).toMatch(/^Each particle is pulled (upward|downward), a little faster every second\.$/);
+    for (const e of $$('[data-legend-line]')) expect(e.textContent, e.textContent ?? '').not.toMatch(/\d/);
     // Every tag on the picture belongs to an entry of the legend, and none is a sentence.
     const tags = $$('[data-tag]');
     expect(tags.length).toBeGreaterThan(2);

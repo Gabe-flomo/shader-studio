@@ -169,6 +169,10 @@ describe('legend entries match what each section draws', () => {
         expect(e.length, `${set.kind} ${sec.id}`).toBeGreaterThan(0);
         for (const x of e) {
           expect(x.line.length).toBeGreaterThan(10);
+          // The legend row's words never repeat its numbers (or any number): they are shown once, beside the title
+          expect(x.words.length, x.id).toBeGreaterThan(10);
+          expect(x.words, `${set.kind} ${x.id}: ${x.words}`).not.toMatch(/\d/);
+          expect(x.words.startsWith(x.title), `${x.id} words start with its title`).toBe(false);
           expect(x.colour).toMatch(/^#/);
           const d = makeDemo(x.demo, x.colour);
           const f = d.frame(d.period / 2);

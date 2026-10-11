@@ -177,7 +177,7 @@ describe('Look for every kind', () => {
     expect(draw().params.style).toBe('glow');
     click($('[data-setting="colourBy"] [data-chip="speed"]'));
     expect(draw().params.colorBy).toBe('speed');
-    expect($('[data-legend-entry="look:colour"]')?.textContent).toMatch(/slow particles at the palette's start/);
+    expect($('[data-legend-entry="look:colour"]')?.textContent).toMatch(/Slow particles at the palette's start/);
     click($('[data-setting="colourBy"] [data-chip="trail"]'));
     settle();
     expect(draw().params.colorBy).toBe('agent');

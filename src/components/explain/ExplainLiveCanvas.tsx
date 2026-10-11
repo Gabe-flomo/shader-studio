@@ -143,7 +143,16 @@ export function ExplainLiveCanvas({ program, values, sel, size, rowKey, timeName
       else cur.value = v;
     };
 
+    // A frame that throws (a GL call refusing a uniform's value, a lost context) stops the picture
+    // with a word, never the view: draw runs inside effects, where a throw would take the app down.
     const draw = (now: number) => {
+      try { drawFrame(now); } catch (err) {
+        if (!failed) console.error('The explain view’s picture failed to draw.', err);
+        failed = true;
+        setProblem('The picture can’t be drawn here.');
+      }
+    };
+    const drawFrame = (now: number) => {
       const { program: p, values: vals, sel: s } = live.current;
       if (!p) return;
       if (p.key !== builtKey) build(p);
@@ -209,6 +218,13 @@ export function ExplainLiveCanvas({ program, values, sel, size, rowKey, timeName
 
     // The filmstrip: the selected row at each time, drawn small into a target and read back as images
     snap.current = (times: number[]) => {
+      try { return snapFrames(times); } catch (err) {
+        console.error('The explain view’s filmstrip failed to draw.', err);
+        try { renderer.setRenderTarget(null); } catch { /* the context is gone */ }
+        return [];
+      }
+    };
+    const snapFrames = (times: number[]) => {
       const { program: p, values: vals, sel: s } = live.current;
       if (!alive || !p || failed) return [];
       if (p.key !== builtKey) build(p);
