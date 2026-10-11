@@ -1,5 +1,5 @@
 import { DEPTH_TYPE, depthSampler } from '../nodes/definitions/depth';
-import { LINK_AT, LINK_COL, LINK_TOKEN_RE, linkColourSource, linkUniformToken, translateChain } from '../nodes/sceneLink';
+import { LINK_AT, LINK_COL, LINK_TOKEN_RE, linkColourSource, linkUniformToken, moveKeys, translateChain } from '../nodes/sceneLink';
 import { GROUP_PORT_SENTINEL } from '../types/nodeGraph';
 import { dataBlocksFirst } from '../data/dataGlsl';
 import { MAX_GROUP_ITERATIONS } from '../nodes/definitions/group';
@@ -2227,7 +2227,10 @@ export class ShaderAssembler {
     for (const key of keys) {
       const innerId = key.startsWith(LINK_AT) ? key.slice(LINK_AT.length) : key.slice(LINK_COL.length);
       if (key.startsWith(LINK_AT)) {
-        const terms = translateChain(subgraph.nodes, innerId).map(id => `vec3(${['tx', 'ty', 'tz'].map(k => offset(pre(id), k)).join(', ')})`);
+        const terms = translateChain(subgraph.nodes, innerId).map(id => {
+          const keys = moveKeys(subgraph.nodes.find(n => n.id === id)!) ?? ['tx', 'ty', 'tz'];
+          return `vec3(${keys.map(k => offset(pre(id), k)).join(', ')})`;
+        });
         out[key] = terms.length ? `(${terms.join(' + ')})` : 'vec3(0.0)';
       } else {
         const src = linkColourSource(this.allNodes, node, innerId);

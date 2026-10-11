@@ -46,7 +46,8 @@ import { tidyGroups } from '../types/layerGroups';
 import { isDatasetsEmpty, parseDatasetsRecord, type Dataset, type DatasetsRecord } from '../data/types';
 import { datasetStore } from '../data/datasetStore';
 import { retypeDataNode } from '../nodes/definitions/data';
-import { retypeTransform } from '../nodes/definitions/transformAny';
+import { retypeTransform, transformDefFor, transformDim } from '../nodes/definitions/transformAny';
+import { addScopeOf, transformDimHere } from '../nodes/addScope';
 import { migratePlayRecord } from './migratePlay';
 import { clearLegacyColumnsWire } from '../nodes/definitions/gridColumns';
 import { playEngine } from '../lib/playEngine';
@@ -453,10 +454,16 @@ let skip3DAsk = false;
 /** Set while a bare Agents group is added after its "start with" question (Empty group). */
 let skipAgentsAsk = false;
 
+/** The definition a node being added is placed by: a Transform's follows its Dimension (3D / 4D are scene nodes). */
+function defForAdd(type: string, params?: Record<string, unknown>) {
+  if (type === 'transform') return transformDefFor(transformDim({ params: { dim: params?.dim ?? '2' } }));
+  return getNodeDefinition(type);
+}
+
 /** Would adding `type` at the top level build a new 3D scene (camera, loop and Output takeover)? */
-function startsA3DScene(type: string, nodes: GraphNode[]): boolean {
+function startsA3DScene(type: string, nodes: GraphNode[], params?: Record<string, unknown>): boolean {
   if (type === 'marchLoopGroup' || type === 'giLitMarchGroup' || type === 'marchCamera' || type === 'volumetricScene') return true;
-  const def = getNodeDefinition(type);
+  const def = defForAdd(type, params);
   if (!def) return false;
   const plan = type === 'sceneGroup' ? planSceneGroupAdd(nodes, { x: 0, y: 0 }) : planSmart3DAdd(type, def, nodes, { x: 0, y: 0 });
   if (def.category === LIGHTING_CATEGORY && type !== 'glass3d') return !nodes.some(n => MARCH_GROUP_TYPES.has(n.type));
@@ -2536,7 +2543,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       const intoScene: string[] = [];
       for (const copy of newNodes) {
         const def = getNodeDefinitionFor(copy);
-        const role = def ? sceneRole(def) : null;
+        const role = def ? sceneRole(def, copy.params) : null;
         const target = role ? targetScene(top, copy.position) : null;
         const sub = target?.params.subgraph as SubgraphData | undefined;
         const placed = role && target && sub ? addToScene(() => idGenerator.next(), sub, { ...copy }, role, { byHand: false }) : null;
@@ -3598,6 +3605,14 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   addNode: (type, position, overrideParams?) => {
+    // A Transform starts in the dimension of where it is added (3D in a scene), unless told; with only
+    // its Dimension given it is still placed like any 3D node (smart 3D placement below).
+    if (type === 'transform' && overrideParams?.dim === undefined) {
+      const dim = transformDimHere(addScopeOf(get().nodes, get().activeGroupPath), get().nodes);
+      if (dim !== '2') overrideParams = { ...(overrideParams ?? {}), dim };
+    }
+    const dimOnly = type === 'transform' && !!overrideParams && Object.keys(overrideParams).every(k => k === 'dim');
+    const smartOverride = !!overrideParams && !dimOnly;
     // "New 3D scene…" is a palette entry that opens the 3D Scene Builder (docs/scene-builder-3d.md).
     if (type === 'sceneBuilder') { openNewSceneBuilder(position); return undefined; }
     // ── The Agents family (docs/agents-plan.md) ──────────────────────────────
@@ -3689,13 +3704,13 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     // scene→scene). Adding a SceneGroup auto-spawns a RayMarch to the right.
     // Only at the top level — not inside a group drill-down.
     // overrideParams guard prevents triggering from programmatic calls.
-    if (!get().activeGroupId && !overrideParams) {
+    if (!get().activeGroupId && !smartOverride) {
       // ── First 3D in a 2D graph ───────────────────────────────────────────
       // A 3D scene takes the Output over. When it is the graph's first 3D and
       // there are 2D nodes, ask whether to clear them (the picture they made is
       // being replaced) or keep them beside the scene, unwired from the Output.
       // The add then runs again with the answer; it returns no id this time.
-      if (!skip3DAsk && startsA3DScene(type, get().nodes)) {
+      if (!skip3DAsk && startsA3DScene(type, get().nodes, overrideParams)) {
         const twoD = twoDNodesBefore3D(get().nodes);
         if (twoD.length) {
           void askChoice('Adding a 3D scene', [
@@ -3713,7 +3728,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
                 })) });
               }
               skip3DAsk = true;
-              try { get().addNode(type, position); } finally { skip3DAsk = false; }
+              try { get().addNode(type, position, dimOnly ? overrideParams : undefined); } finally { skip3DAsk = false; }
             });
           return undefined;
         }
@@ -3722,7 +3737,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       // A shape or 3D transform dropped on the top level goes into a new Scene
       // Group wired to a march loop; a lighting node is wired to the nearest
       // loop's outputs. See nodes/smart3d.ts for the rules.
-      const smartDef = getNodeDefinition(type);
+      const smartDef = defForAdd(type, overrideParams);
       const plan = type === 'sceneGroup'
         ? planSceneGroupAdd(get().nodes, position)
         : smartDef ? planSmart3DAdd(type, smartDef, get().nodes, position) : { kind: 'none' as const };
@@ -4025,7 +4040,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       for (const [k, t] of Object.entries(alias.socketTypes.outputs ?? {})) if (outputs[k]) outputs[k] = { ...outputs[k], type: t };
     }
 
-    const newNode: GraphNode = {
+    let newNode: GraphNode = {
       id: nodeId,
       type,
       position,
@@ -4033,15 +4048,17 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       outputs,
       params: mergedParams,
     };
+    // A Transform's sockets follow its Dimension.
+    if (type === 'transform') newNode = retypeTransform(newNode);
 
     const { activeGroupId, activeGroupPath } = get();
     // Inside a Scene Group: a shape is wired from Scene Pos and into the scene's
     // output (joined by a Union when something is there already), so it shows.
     if (activeGroupId) {
       const holder = getActiveNodes(get().nodes, activeGroupPath.slice(0, -1))?.find(n => n.id === activeGroupId);
-      const role = holder?.type === 'sceneGroup' ? sceneRole(def) : null;
+      const role = holder?.type === 'sceneGroup' ? sceneRole(def, mergedParams) : null;
       const active = role ? getActiveNodes(get().nodes, activeGroupPath) : null;
-      if (role && active && !overrideParams) {
+      if (role && active && !smartOverride) {
         const placed = addToScene(() => idGenerator.next(), { nodes: active, inputPorts: [], outputPorts: [] }, newNode, role, { byHand: true, at: position });
         const updated = placed ? setActiveNodes(get().nodes, activeGroupPath, placed.subgraph.nodes) : null;
         if (placed && updated) {

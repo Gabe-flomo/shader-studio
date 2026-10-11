@@ -759,6 +759,8 @@ function execCreate(c: ClauseCtx, rest: Tok[]) {
     if (s) { execBuild(c, rest); return; }
     fail(`“${w.join(' ')}” isn’t a node or shape.`, [...like.map(l => c.text.replace(w.join(' '), l)), ...didYouMean(w[0] ?? '').map(m => c.text.replace(w[0], m))]);
   }
+  // A Transform made inside a Scene Group (its level has Scene Pos) is 3D, as when added by hand (nodes/addScope.ts).
+  if (named!.type === 'transform' && named!.params?.dim === undefined && c.run.nodes.some(nd => nd.type === 'scenePos')) named = { ...named!, params: { ...(named!.params ?? {}), dim: '3' } };
   const def = getNodeDefinition(named!.type)!;
   const before = c.run.nodes;
   const id = c.run.nextId();

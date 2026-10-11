@@ -3,12 +3,12 @@
  *
  * The graph is what a skilled user would wire by hand:
  *
- *   UV ─► space transforms ─► per shape: Motion 2D ─► Transform 2D ─► (ring: Angular Repeat ─► Transform 2D)
+ *   UV ─► space transforms ─► per shape: Motion 2D ─► Transform ─► (ring: Angular Repeat ─► Transform)
  *                                  ─► Shape SDF ─► Offset / Onion ─► × scale ─► combines ─► distance
  *   background ─► (Glow Layer ─► Add) ─► SDF Fill, one pair per layer ─► Tone Map ─► post ─► Output
  *
  * Every node gets a plain-language note (`__comment`) and a role (`_sbRole`): a stable name for the
- * part of the spec it comes from (`s2:place` is shape s2's Transform 2D, `p1` the first space
+ * part of the spec it comes from (`s2:place` is shape s2's Transform, `p1` the first space
  * transform), so a rebuild can find the node again, keep its id (Play controls stay pointed at it)
  * and carry the user's own edits over. Numbers go on params, which compile to live uniforms:
  * dragging a generated slider never recompiles.
@@ -164,19 +164,20 @@ function spaceNode(b: B, op: SpaceOp, pos: Ref): Ref {
       return ref(fnNode(b, op.id, f, pos, 'vec2', `${f.name} (space ${op.id}, ${f.from || 'a function'}): bends space through this GLSL function, vec2 ${f.name}(vec2 p${f.timed ? ', float t' : ''}). The function is in the node's helpers; the body calls it. Edit either to change what it does. It changes where every shape below it looks.`), 'result');
     }
     case 'zoom': {
+      // A Transform (Place mode) scaled by the zoom: the point is divided by it, so the picture magnifies.
       const by = Math.max(0.01, n1('by', 1.5));
-      return ref(mk(c, 'uvTransform2d', op.id, { sx: Math.round(1e6 / by) / 1e6, sy: Math.round(1e6 / by) / 1e6 }, { uv: pos }, note(` UV Transform 2D scales the coordinates by 1 ÷ ${fmt(by)}: smaller coordinates magnify.`)), 'result');
+      return ref(mk(c, 'transform', op.id, { dim: '2', scale: by }, { p: pos }, note(` Transform divides the coordinates by its Scale ${fmt(by)}: smaller coordinates magnify.`)), 'p');
     }
     case 'move': {
       const by = (Array.isArray(v.by) ? v.by : [0, 0]) as Vec2;
-      return ref(mk(c, 'uvTransform2d', op.id, { tx: -by[0], ty: -by[1] }, { uv: pos }, note(' The coordinates are shifted the other way, which slides the picture this way.')), 'result');
+      return ref(mk(c, 'transform', op.id, { dim: '2', x: by[0], y: by[1] }, { p: pos }, note(' Transform moves the picture by its Move X and Y (the coordinates are shifted the other way).')), 'p');
     }
     case 'rotate': {
-      const angle = rad(n1('angle', 30)), spin = n1('spin', 0);
-      if (!spin) return ref(mk(c, 'rotate2d', op.id, { angle }, { input: pos }, note()), 'output');
-      const w = mk(c, 'multiply', `${op.id}:spin`, { b: Math.round(spin * 2 * Math.PI * 1e6) / 1e6 }, { a: b.getTime() }, `Spin for ${op.id}: time × ${fmt(spin)} turns a second in radians (2π × ${fmt(spin)}).`);
-      const a = mk(c, 'add', `${op.id}:angle`, { b: angle }, { a: ref(w, 'result') }, `The starting angle ${fmt(n1('angle', 30))}° (${fmt(angle)} radians) plus the spin so far: the angle Rotate 2D uses.`);
-      return ref(mk(c, 'rotate2d', op.id, {}, { input: pos, angle: ref(a, 'result') }, note(' Its Angle is wired from the spin below.')), 'output');
+      // Apply mode turns the point itself (as Rotate 2D did), so the picture turns the other way round.
+      const deg = n1('angle', 30), spin = n1('spin', 0);
+      if (!spin) return ref(mk(c, 'transform', op.id, { dim: '2', mode: 'space', rotate: deg }, { p: pos }, note()), 'p');
+      const w = mk(c, 'multiply', `${op.id}:spin`, { b: Math.round(spin * 2 * Math.PI * 1e6) / 1e6 }, { a: b.getTime() }, `Spin for ${op.id}: time × ${fmt(spin)} turns a second in radians (2π × ${fmt(spin)}), into the Transform's Turn.`);
+      return ref(mk(c, 'transform', op.id, { dim: '2', mode: 'space', rotate: deg }, { p: pos, turn: ref(w, 'result') }, note(' Its Turn is wired from the spin below.')), 'p');
     }
     case 'wave': {
       const speed = n1('speed', 0);
@@ -218,7 +219,7 @@ function motionWords(m: MotionSpec): string {
   return `${d.label.toLowerCase()} ${fmt(m.speed)} cycles a second${d.amount ? `, ${d.amount.label.toLowerCase()} ${fmt(m.amount)}` : ''}${m.phase ? `, starting ${fmt(m.phase)}° in` : ''}`;
 }
 
-/** An item's Motion 2D chain: what to wire into its Transform 2D. */
+/** An item's Motion 2D chain: what to wire into its Transform. */
 function emitMotion(b: B, it: Item, name: string): { offset: Ref | null; turn: Ref | null; grow: Ref | null } {
   const { c } = b;
   let last: GraphNode | null = null;
@@ -232,7 +233,7 @@ function emitMotion(b: B, it: Item, name: string): { offset: Ref | null; turn: R
       if (hasGrow) wires.grow = ref(last, 'grow');
     }
     last = mk(c, 'motion2D', m.id, { mode: m.kind, speed: m.speed, amount: m.amount, phase: m.phase, direction: m.dir }, wires,
-      `${d.label} on ${name}: ${d.blurb} ${motionWords(m)}. Wired into ${name}'s Transform 2D${it.motion.length > 1 ? '; motions are chained, each adds to the one before' : ''}.`);
+      `${d.label} on ${name}: ${d.blurb} ${motionWords(m)}. Wired into ${name}'s Transform${it.motion.length > 1 ? '; motions are chained, each adds to the one before' : ''}.`);
     if (m.kind === 'orbit' || m.kind === 'bob') hasOffset = true;
     if (m.kind === 'spin') hasTurn = true;
     if (m.kind === 'pulse') hasGrow = true;
@@ -242,7 +243,7 @@ function emitMotion(b: B, it: Item, name: string): { offset: Ref | null; turn: R
 
 interface Branch { pos: Ref; scales: Ref[] }
 
-/** The ring array of an item from `start`: Angular Repeat, then Transform 2D out to the radius (twice for rings of rings). */
+/** The ring array of an item from `start`: Angular Repeat, then Transform out to the radius (twice for rings of rings). */
 function emitRing(b: B, it: Item, dup: DupSpec, start: Branch, k: number, name: string): Branch {
   const { c } = b;
   const suffix = dup.levels > 1 ? `:${k}` : '';
@@ -251,20 +252,20 @@ function emitRing(b: B, it: Item, dup: DupSpec, start: Branch, k: number, name: 
   // The whole ring at a bigger (or smaller) size.
   if (dup.levels > 1 && k > 0) {
     const s = Math.round(Math.pow(dup.factor, k) * 1e6) / 1e6;
-    const lv = mk(c, 'place2D', `${it.id}:size${suffix}`, { scale: s }, { uv: pos },
+    const lv = mk(c, 'transform', `${it.id}:size${suffix}`, { dim: '2', scale: s }, { p: pos },
       `Size ${k + 1} of ${dup.levels} for ${name}'s ring: the whole ring drawn ${fmt(s)}× as big (${fmt(dup.factor)} to the power ${k}). The ring is drawn once per size and the sizes are joined.`);
     pos = ref(lv, 'p');
     scales.push(ref(lv, 'scale'));
   }
   const ring = mk(c, 'angularRepeat2D', `${it.id}:ring${suffix}`, { count: dup.count }, { input: pos },
     `Ring of ${dup.count} for ${name}: repeats space ${dup.count} times round the centre, like slices of a cake, so one shape becomes ${dup.count}.`);
-  const out = mk(c, 'place2D', `${it.id}:ring-at${suffix}`, { x: dup.radius }, { uv: ref(ring, 'output') },
+  const out = mk(c, 'transform', `${it.id}:ring-at${suffix}`, { dim: '2', x: dup.radius }, { p: ref(ring, 'output') },
     `Puts each copy of ${name} ${fmt(dup.radius)} out from the centre of its ring (Move X ${fmt(dup.radius)}). Change it to make the ring wider or tighter.`);
   pos = ref(out, 'p');
   if (dup.inner) {
     const r2 = mk(c, 'angularRepeat2D', `${it.id}:inner${suffix}`, { count: dup.inner.count }, { input: pos },
       `Rings of rings for ${name}: each of the ${dup.count} copies is itself a ring of ${dup.inner.count}.`);
-    const o2 = mk(c, 'place2D', `${it.id}:inner-at${suffix}`, { x: dup.inner.radius }, { uv: ref(r2, 'output') },
+    const o2 = mk(c, 'transform', `${it.id}:inner-at${suffix}`, { dim: '2', x: dup.inner.radius }, { p: ref(r2, 'output') },
       `Puts each copy of the inner ring ${fmt(dup.inner.radius)} out from the centre of its inner ring.`);
     pos = ref(o2, 'p');
   }
@@ -304,7 +305,7 @@ function shapeNode(b: B, sh: ShapeSpec, pos: Ref, name: string, sfx = ''): Ref {
 }
 
 /**
- * An item's distance from `pos`: placement (Motion 2D → Transform 2D), the ring array, the shape or the
+ * An item's distance from `pos`: placement (Motion 2D → Transform), the ring array, the shape or the
  * combine of its children, Round and Outline, and the distance put right for any scaling.
  */
 function emitItem(b: B, it: Item, pos: Ref, depth: number): Ref | null {
@@ -320,14 +321,14 @@ function emitItem(b: B, it: Item, pos: Ref, depth: number): Ref | null {
   let start: Branch = { pos, scales: [] };
   if (placed) {
     const mo = emitMotion(b, it, name);
-    const wires: Record<string, Ref | null> = { uv: pos, offset: mo.offset, turn: mo.turn, grow: mo.grow };
+    const wires: Record<string, Ref | null> = { p: pos, offset: mo.offset, turn: mo.turn, grow: mo.grow };
     const bits: string[] = [];
     if (it.at[0] || it.at[1]) bits.push(`moved to ${v2(it.at)}`);
     if (it.rot) bits.push(`turned ${fmt(it.rot)}°`);
     if (baseScale !== 1) bits.push(def?.unit ? `sized ${fmt(unit)} (a ${def.label.toLowerCase()} has no radius of its own, so its size is this node's Scale)` : `scaled ${fmt(it.scale)}×`);
     if (it.motion.length) bits.push('moved by its motion');
-    const pl = mk(c, 'place2D', `${it.id}:place`, { x: it.at[0], y: it.at[1], rotate: it.rot, scale: baseScale }, wires,
-      `Places ${name}: ${bits.join(', ')}. Transform 2D gives the shape a new view of space: the shape is measured from the point as it sees it, so it ends up where the node says. Its Scale output multiplies the distance back to the picture's units.`);
+    const pl = mk(c, 'transform', `${it.id}:place`, { dim: '2', x: it.at[0], y: it.at[1], rotate: it.rot, scale: baseScale }, wires,
+      `Places ${name}: ${bits.join(', ')}. Transform gives the shape a new view of space: the shape is measured from the point as it sees it, so it ends up where the node says. Its Scale output multiplies the distance back to the picture's units.`);
     start = { pos: ref(pl, 'p'), scales: baseScale !== 1 || pulse ? [ref(pl, 'scale')] : [] };
   }
   const dup = it.dup && it.dup.count >= 2 ? it.dup : null;
@@ -357,7 +358,7 @@ function emitItem(b: B, it: Item, pos: Ref, depth: number): Ref | null {
     if (it.hollow > 0) dist = ref(mk(c, 'sdfOnion', `${it.id}:hollow${sfx}`, { r: it.hollow }, { dist }, `Outline on ${name}: Onion turns the solid into a line ${fmt(it.hollow)} thick, abs(distance) − ${fmt(it.hollow)}.`), 'dist');
     br.scales.forEach((s, i) => {
       dist = ref(mk(c, 'multiply', `${it.id}:fix${sfx}${br.scales.length > 1 ? `-${i}` : ''}`, {}, { a: dist!, b: s },
-        `Puts ${name}'s distance back in the picture's units: multiplies it by the scale it was drawn at (the Scale output of its Transform 2D), so combines, glow and outlines measure true.`), 'result');
+        `Puts ${name}'s distance back in the picture's units: multiplies it by the scale it was drawn at (the Scale output of its Transform), so combines, glow and outlines measure true.`), 'result');
     });
     branches.push(dist!);
   }

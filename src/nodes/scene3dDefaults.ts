@@ -13,14 +13,18 @@
 
 import type { GraphNode, InputSocket, NodeDefinition, SubgraphData } from '../types/nodeGraph';
 import { getNodeDefinition } from './definitions';
+import { startingSockets } from './definitions/transformAny';
 
 /** A fresh node from its definition, the way addNode/spawnGraph build one. */
 export function instantiateNode(id: string, type: string, def: NodeDefinition, position: { x: number; y: number }, params?: Record<string, unknown>): GraphNode {
+  const all = { ...(def.defaultParams ?? {}), ...(params ?? {}) };
+  // A Transform's sockets follow its Dimension (transformAny.ts).
+  const sockets = startingSockets(type, def, all);
   const inputs: Record<string, InputSocket> = {};
-  for (const [key, socket] of Object.entries(def.inputs)) {
+  for (const [key, socket] of Object.entries(sockets.inputs)) {
     inputs[key] = { ...socket, defaultValue: def.paramDefs?.[key] ? undefined : def.defaultParams?.[key] as number | number[] | undefined };
   }
-  return { id, type, position, inputs, outputs: { ...def.outputs }, params: { ...(def.defaultParams ?? {}), ...(params ?? {}) } };
+  return { id, type, position, inputs, outputs: { ...sockets.outputs }, params: all };
 }
 
 function fresh(nextId: () => string, type: string, position: { x: number; y: number }, params?: Record<string, unknown>): GraphNode {

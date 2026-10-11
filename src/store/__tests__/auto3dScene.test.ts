@@ -107,18 +107,19 @@ describe('a 3D node on the top level of a graph that already has a scene', () =>
     const inner = subOf(scenes()[0]);
     const union = inner.find(n => n.type === 'sdfUnion')!;
     const box = inner.find(n => n.type === 'boxSDF3D')!;
-    const shift = inner.find(n => n.type === 'translate3D')!;
+    const shift = inner.find(n => n.type === 'transform')!;
     expect(inner.find(n => n.type === 'sceneOutput')!.inputs.dist.connection).toEqual({ nodeId: union.id, outputKey: 'dist' });
     expect(union.inputs.b.connection).toEqual({ nodeId: box.id, outputKey: 'dist' });
-    expect(box.inputs.pos.connection).toEqual({ nodeId: shift.id, outputKey: 'pos' });
-    expect(shift.params.tx).not.toBe(0);
+    expect(box.inputs.pos.connection).toEqual({ nodeId: shift.id, outputKey: 'p' });
+    expect(shift.params.dim).toBe('3');
+    expect(shift.params.x).not.toBe(0);
     expect(typeof union.params.__comment).toBe('string');
     expect(typeof shift.params.__comment).toBe('string');
     // The camera, still at its default distance, moves back to keep both in view.
     expect(st().nodes.find(n => n.type === 'marchCamera')!.params.camDist as number).toBeGreaterThan(3);
     // A third goes to the other side.
     st().addNode('torusSDF3D', { x: 400, y: 800 });
-    const shifts = subOf(scenes()[0]).filter(n => n.type === 'translate3D').map(n => n.params.tx as number);
+    const shifts = subOf(scenes()[0]).filter(n => n.type === 'transform').map(n => n.params.x as number);
     expect(Math.sign(shifts[0])).toBe(-Math.sign(shifts[1]));
   });
 
@@ -256,5 +257,41 @@ describe('the Volumetric switch', () => {
     expect(subOf(loopOf()).filter(n => n.type === 'volumeGlow')).toHaveLength(1);
     expect(st().nodes.filter(n => n.type === 'glowToColor')).toHaveLength(1);
     compiles(st().nodes);
+  });
+});
+
+describe('the one Transform (docs/transform-node.md)', () => {
+  it('added as 3D on the top level is wrapped in a new scene with a camera and loop, and compiles', () => {
+    st().addNode('transform', { x: 0, y: 0 }, { dim: '3' });
+    expect(scenes()).toHaveLength(1);
+    const t = subOf(scenes()[0]).find(n => n.type === 'transform')!;
+    expect(t.params.dim).toBe('3');
+    expect(t.inputs.p.type).toBe('vec3');
+    expect(reaches(subOf(scenes()[0]), t.id)).toBe(true);
+    expect(outputWire()?.nodeId).toBe(loopOf().id);
+    compiles(st().nodes);
+  });
+
+  it('added with no Dimension to a 3D graph is 3D and bends the scene; to a 2D graph it is 2D', () => {
+    st().addNode('transform', { x: 0, y: 0 });
+    expect(st().nodes.find(n => n.type === 'transform')?.params.dim).toBe('2');
+    st().replaceGraph(outputOnly());
+    st().addNode('sphereSDF3D', { x: 0, y: 0 });
+    st().addNode('transform', { x: 400, y: 400 });
+    const inner = subOf(scenes()[0]);
+    const t = inner.find(n => n.type === 'transform')!;
+    expect(t.params.dim).toBe('3');
+    expect(reaches(inner, t.id)).toBe(true);
+    compiles(st().nodes);
+  });
+
+  it('added inside a Scene Group is 3D', () => {
+    st().addNode('sphereSDF3D', { x: 0, y: 0 });
+    const g = scenes()[0];
+    useNodeGraphStore.setState({ activeGroupId: g.id, activeGroupPath: [g.id] });
+    st().addNode('transform', { x: 300, y: 300 });
+    const t = subOf(st().nodes.find(n => n.id === g.id)).find(n => n.type === 'transform')!;
+    expect(t.params.dim).toBe('3');
+    expect(t.outputs.p.type).toBe('vec3');
   });
 });

@@ -32,7 +32,7 @@ const WORDS: Record<string, Record<string, Test>> = {
   space: {
     twist: types('twist3D', 'helixWarp3D'), swirl: types('swirlSpace', 'swirlWarp'), 'polar-repeat': types('angularRepeat2D', 'kaleidoSpace', 'polarRepeat3D'),
     repeat: types('infiniteRepeatSpace', 'limitedRepeat2D', 'repeat3D'), mirror: types('mirroredRepeat2D', 'mirrorFold3D'),
-    warp: types('domainWarp', 'uvWarp', 'smoothWarp', 'curlWarp', 'turbulence'), 'zoom-rotate': types('rotate2d', 'uvTransform2d'),
+    warp: types('domainWarp', 'uvWarp', 'smoothWarp', 'curlWarp', 'turbulence'), 'zoom-rotate': types('transform', 'rotate2d', 'uvTransform2d'),
   },
   shapeIt: {
     glow: types('light', 'glowLayer', 'deepGlow', 'glowToColor'), rings: n => n.type === 'light' && n.params?.mode === 'ring' || n.type === 'rippleSpace', outline: types('sdfSharpen', 'sobel', 'edgesTexture'),

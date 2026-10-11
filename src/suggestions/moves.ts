@@ -370,7 +370,7 @@ const SPACE: Move[] = [
   },
   {
     id: 'zoom-rotate', label: 'Zoom / rotate', kinds: ['space'], shape: 'transform', sides: ['in', 'out'],
-    anchor: { type: 'uvTransform2d', key: 'uv', out: 'result' },
+    anchor: { type: 'transform', key: 'p', out: 'p' },
     why: 'a space: scale and turn it',
     args: [
       { name: 'zoom', label: 'Zoom', kind: 'number', default: 1.5, words: ['zoom', 'scale', 'by'] },
@@ -379,11 +379,11 @@ const SPACE: Move[] = [
     build: ctx => {
       const s = 1 / Math.max(0.01, num(ctx, 'zoom', 1.5));
       return {
-        nodes: [n('uvTransform2d', 'view', C(1), 0, { sx: Math.round(s * 1000) / 1000, sy: Math.round(s * 1000) / 1000, angle: num(ctx, 'angle', 0.4), ...note(
-          'UV Transform 2D: moves, turns and scales the space.',
+        nodes: [n('transform', 'view', C(1), 0, { dim: '2', mode: 'space', scale: Math.round(s * 1000) / 1000, rotate: Math.round(num(ctx, 'angle', 0.4) * 180 / Math.PI * 1e4) / 1e4, ...note(
+          'Transform (Apply mode): moves, turns and scales the space.',
           `Why: the Zoom / rotate suggestion: zoomed ×${fmt(num(ctx, 'zoom', 1.5))} (Scale ${fmt(s)}: below 1 zooms in) and turned ${fmt(num(ctx, 'angle', 0.4))} rad.`,
-        ) }, { uv: [IN, ''] })],
-        result: ['view', 'result'],
+        ) }, { p: [IN, ''] })],
+        result: ['view', 'p'],
       };
     },
   },

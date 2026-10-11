@@ -42,8 +42,11 @@ export function isParamVisible(
   const sw = paramDef.showWhen;
   if (!sw) return true;
   // A gate param an older save never had (e.g. palette's `preset`) reads as its default.
-  const v = String(params[sw.param] ?? defaults?.[sw.param]);
-  return Array.isArray(sw.value) ? sw.value.includes(v) : sw.value === v;
+  const holds = (c: { param: string; value: string | string[] }) => {
+    const v = String(params[c.param] ?? defaults?.[c.param]);
+    return Array.isArray(c.value) ? c.value.includes(v) : c.value === v;
+  };
+  return holds(sw) && (!sw.and || holds(sw.and));
 }
 
 /** Default GLSL zero literal for a given type. */
