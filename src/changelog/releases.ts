@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.164',
+    date: '2026-10-11',
+    title: 'Paste any recipe',
+    highlights: [
+      { area: 'Studio', text: 'Paste a 2D Scene Builder or Splat builder recipe into the Do bar and it builds, ready to edit in its builder. Recipes from other projects fill in missing pictures.' },
+    ],
+  },
+  {
     id: '2026.10.163',
     date: '2026-10-11',
     title: 'Clean grid glow',
