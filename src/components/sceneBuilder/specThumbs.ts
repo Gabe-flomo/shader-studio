@@ -18,7 +18,7 @@ let pumping = false;
 function draw(spec: SceneSpec, w: number, h: number): string | null {
   const c = compileSpec(spec);
   if (c.error) return null;
-  const px = programPixels(c.vs, c.fs, c.uniforms, [0.5], w, h);
+  const px = programPixels(c.vs, c.fs, c.uniforms, [0.5], w, h, c.textures);
   if (!px || px === 'error') return null;
   const canvas = document.createElement('canvas');
   canvas.width = w; canvas.height = h;

@@ -346,7 +346,12 @@ function sceneEntries(): Entry[] {
       { key: 'soft', type: 'number', min: 0, max: 1, hint: 'Edge softness, in scene units.' },
     ]],
     ['tone', [], 'tone map', [{ key: 'mode', type: 'choice', options: TONE_MODES, primary: true }]],
-    ['camera', ['cam'], 'the orbit camera', ['dist', 'angle', 'elev', 'orbit', 'zoom', 'flatten', 'x', 'y', 'z'].map((k, i) => ({ key: k, type: 'number' as const, ...(i === 0 ? { primary: true } : {}), ...(k === 'dist' ? { rand: { kind: 'num' as const, lo: 3, hi: 6 } } : k === 'orbit' ? { rand: { kind: 'num' as const, lo: 0, hi: 15 } } : k === 'elev' ? { rand: { kind: 'num' as const, lo: 5, hi: 35 } } : {}) }))],
+    ['camera', ['cam'], 'the orbit camera', [
+      ...['dist', 'angle', 'elev', 'orbit', 'zoom', 'flatten', 'x', 'y', 'z'].map((k, i) => ({ key: k, type: 'number' as const, ...(i === 0 ? { primary: true } : {}), ...(k === 'dist' ? { rand: { kind: 'num' as const, lo: 3, hi: 6 } } : k === 'orbit' ? { rand: { kind: 'num' as const, lo: 0, hi: 15 } } : k === 'elev' ? { rand: { kind: 'num' as const, lo: 5, hi: 35 } } : {}) })),
+      { key: 'projection', type: 'choice' as const, options: ['perspective', 'orthographic', 'reverse'], hint: 'How the rays leave the camera: perspective (far things smaller), orthographic (parallel: no change of size with distance) or reverse (far things bigger). The word alone works too: camera reverse.' },
+      { key: 'reverse', type: 'number' as const, min: 0, max: 1, hint: 'Reverse: how strongly the rays converge (0 parallel … 1 meeting at converge).' },
+      { key: 'converge', type: 'number' as const, min: 0.5, max: 50, hint: 'Reverse: how far in front of the camera the rays meet.' },
+    ]],
     ['quality', [], 'the march\'s steps and limits', [...['steps', 'dist', 'step', 'jitter'].map(k => ({ key: k, type: 'number' as const })), { key: 'warp', type: 'choice' as const, options: ['off', 'auto', 'careful', 'high'] }]],
   ];
   const SETTING_EXAMPLES: Record<string, string> = {

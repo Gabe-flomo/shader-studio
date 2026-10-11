@@ -134,21 +134,27 @@ export function previewImageFor(nodeId: string): { image: PreviewImage | null; l
   return { image: checkerImage(), live: false };
 }
 
-interface Bound { uniform: string; nodeId: string; tex: WebGLTexture; src: PreviewImage | null; live: boolean }
+interface Bound { uniform: string; nodeId: string; tex: WebGLTexture; src: PreviewImage | null; live: boolean; unit: number }
 
 /** Bind the samplers of a compiled preview: returns `refresh` (call every frame) and `dispose`. */
 export function bindPreviewTextures(gl: WebGL2RenderingContext, prog: WebGLProgram, uniforms: Record<string, string> | undefined): { refresh: (frame: number) => void; dispose: () => void } {
   const aniso = gl.getExtension('EXT_texture_filter_anisotropic');
   const maxAniso = aniso ? Math.min(8, gl.getParameter(aniso.MAX_TEXTURE_MAX_ANISOTROPY_EXT) as number) : 0;
   const bound: Bound[] = [];
-  Object.entries(uniforms ?? {}).forEach(([uniform, nodeId], unit) => {
+  // A sampler the shader doesn't read (a picture no shape uses: the GLSL compiler drops it) has no
+  // location and gets no unit. The unit is the bound texture's own, so the samplers after it read
+  // the unit their picture is uploaded to: numbering them by their place in `uniforms` set the next
+  // sampler to unit 1 while its picture went to unit 0, and the scene read black ("uploading a
+  // picture made it all go black": the template's unused picture before the new one).
+  Object.entries(uniforms ?? {}).forEach(([uniform, nodeId]) => {
     const loc = gl.getUniformLocation(prog, uniform);
     if (!loc) return;
     const tex = gl.createTexture();
     if (!tex) return;
+    const unit = bound.length;
     gl.useProgram(prog);
     gl.uniform1i(loc, unit);
-    bound.push({ uniform, nodeId, tex, src: null, live: false });
+    bound.push({ uniform, nodeId, tex, src: null, live: false, unit });
   });
   const upload = (b: Bound, unit: number, img: PreviewImage) => {
     gl.activeTexture(gl.TEXTURE0 + unit);
@@ -165,7 +171,8 @@ export function bindPreviewTextures(gl: WebGL2RenderingContext, prog: WebGLProgr
     if (aniso && maxAniso > 1) gl.texParameterf(gl.TEXTURE_2D, aniso.TEXTURE_MAX_ANISOTROPY_EXT, maxAniso);
   };
   const refresh = (frame: number) => {
-    bound.forEach((b, unit) => {
+    bound.forEach(b => {
+      const { unit } = b;
       // A new picture shows at once; a Shader Texture's frame is copied a few times a second.
       if (b.src && frame % 10 !== 0) { gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, b.tex); return; }
       const now = previewImageFor(b.nodeId);

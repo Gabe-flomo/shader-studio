@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.165',
+    date: '2026-10-11',
+    title: '3D builder fixes',
+    highlights: [
+      { area: 'Studio', text: '3D Scene Builder: Position and Rotation get one slider per axis, so every slider can be dragged. Fixed: a picture could turn the whole scene black.' },
+      { area: 'Studio', text: '3D Scene Builder camera: Perspective, Orthographic or Reverse projection. Built scenes no longer include unused picture or material nodes.' },
+      { area: 'Studio', text: 'Fixed: seven Ray March 3D sliders (Repeat, Noise Warp, Cone Angle, Twist, Round, Blend) never showed on the card.' },
+    ],
+  },
+  {
     id: '2026.10.164',
     date: '2026-10-11',
     title: 'Paste any recipe',

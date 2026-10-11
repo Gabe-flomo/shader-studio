@@ -128,7 +128,12 @@ const SETTINGS: Record<string, { detail: string; params: SignatureParam[] }> = {
   fog: { detail: 'distance fades into fog', params: [{ key: '', label: 'Density', hint: '0 clear.', text: '0.3' }, { key: 'color', label: 'Colour', hint: 'Fog colour.', text: 'color=…' }] },
   background: { detail: 'the background colour or gradient', params: [{ key: 'top', label: 'Top', hint: 'A colour.', text: 'top=…' }, { key: 'bottom', label: 'Bottom', hint: 'A colour.', text: 'bottom=…' }] },
   tone: { detail: 'tone map', params: [{ key: '', label: 'Mode', hint: TONE_MODES.join(', '), text: TONE_MODES.join('|') }] },
-  camera: { detail: 'the orbit camera', params: ['dist', 'angle', 'elev', 'orbit', 'zoom', 'flatten', 'x', 'y', 'z'].map(k => ({ key: k, label: k, hint: k === 'dist' ? 'How far away.' : k === 'orbit' ? 'Degrees a second round the point.' : k === 'flatten' ? '0 perspective … 1 isometric.' : 'A number.', text: `${k}=…` })) },
+  camera: { detail: 'the orbit camera', params: [
+    ...['dist', 'angle', 'elev', 'orbit', 'zoom', 'flatten', 'x', 'y', 'z'].map(k => ({ key: k, label: k, hint: k === 'dist' ? 'How far away.' : k === 'orbit' ? 'Degrees a second round the point.' : k === 'flatten' ? '0 perspective … 1 isometric.' : 'A number.', text: `${k}=…` })),
+    { key: 'projection', label: 'projection', hint: 'perspective, orthographic or reverse (far things bigger).', text: 'projection=…' },
+    { key: 'reverse', label: 'reverse', hint: 'Reverse perspective\'s strength, 0 … 1.', text: 'reverse=…' },
+    { key: 'converge', label: 'converge', hint: 'Reverse: how far in front the rays meet.', text: 'converge=…' },
+  ] },
   quality: { detail: 'the march\'s steps and limits', params: [...['steps', 'dist', 'step', 'jitter'].map(k => ({ key: k, label: k, hint: k === 'step' ? 'Step scale, or auto.' : 'A number.', text: `${k}=…` })), { key: 'warp', label: 'warp', hint: 'Warp safety: off, auto, careful or high.', text: 'warp=auto' }] },
   output: { detail: 'what the scene shows: depth, normal, hit…', params: [{ key: '', label: 'Show', hint: OUTPUTS.map(o => o.words[0]).join(', '), text: OUTPUTS.map(o => o.words[0]).join('|') }, { key: 'palette', label: 'Palette', hint: PALETTES.map(p => p.key).join(', '), text: 'palette …' }] },
   colour: { detail: 'colour the space through a palette', params: [{ key: 'by', label: 'By', hint: 'by depth, height, normal, distance, position…', text: 'by depth' }, { key: 'palette', label: 'Palette', hint: PALETTES.map(p => p.key).join(', '), text: 'palette=sunset' }] },
