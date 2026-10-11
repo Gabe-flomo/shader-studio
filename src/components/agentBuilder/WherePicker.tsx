@@ -1,9 +1,11 @@
 /**
  * The Where picker (docs/agent-builder.md "Where"): what a card reads as "here". Its row shows the
- * region picked (a thumbnail, its name, its kind, inside / outside); "Change" opens the list of
- * things in your graph that can be a region, each with a thumbnail drawn on the GPU from the node's
- * own chain (lib/regionValues.ts), and "Make one here": a circle, box, ring, polygon or text, drawn
- * by dragging on the live picture. Pointing at the row shows the region over the picture
+ * region picked (a thumbnail, its name, its kind, inside / outside); "Change" opens a short list of
+ * the kinds of source (from the graph, from a group, a picture, a texture / field, create new).
+ * Choosing one shows only its UI, with "Change" back to the list: tiles drawn on the GPU from the
+ * node's own chain (lib/regionValues.ts), the picture picker, or the new things (a circle, box,
+ * ring, polygon or text drawn by dragging on the live picture, a Shader Texture, a group). A kind
+ * with nothing in it is greyed with a word why. Pointing at the row shows the region over the picture
  * (RegionOverlay); a shape made here keeps its handles there.
  *
  * The viewport side is shared through `WhereFocusContext`: the picker says which region to show,
@@ -13,6 +15,7 @@ import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Icon } from '../ui/Icon';
+import type { IconName } from '../ui/iconPaths';
 import { Segmented } from '../ui/Choice';
 import { Field } from '../ui/Field';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
@@ -101,7 +104,10 @@ function KindBadge({ region }: { region: Region }) {
   );
 }
 
-export function WherePicker({ id, use, region, outside, onPick, allowOutside = true, clearable = true, onFocus, startOpen = false }: {
+/** The kinds of source the picker offers, one at a time (docs/agent-builder.md "Where"). */
+export type WhereWay = 'graph' | 'group' | 'picture' | 'texture' | 'create';
+
+export function WherePicker({ id, use, region, outside, onPick, allowOutside = true, clearable = true, onFocus, startOpen = false, none }: {
   id: string;
   use: WhereUse;
   region: Region | null;
@@ -113,11 +119,14 @@ export function WherePicker({ id, use, region, outside, onPick, allowOutside = t
   onFocus?: (setting: string | undefined) => void;
   /** Open its list at once (an only when just asked for a region). */
   startOpen?: boolean;
+  /** The row's words while nothing is picked (else the use's own). */
+  none?: string;
 }) {
   const tk = useTokens();
   const ctx = useContext(WhereFocusContext);
   const [open, setOpen] = useState(startOpen);
-  const [picture, setPicture] = useState(false);
+  // The kind of source chosen in the panel: null shows the choices, one shows only its own UI.
+  const [way, setWay] = useState<WhereWay | null>(null);
   const groupId = ctx?.groupId ?? '';
   const regionsKey = useNodeGraphStore(s => (open ? JSON.stringify(regionsFor(use, listRegions(s.nodes, groupId, ctx?.d3 ?? false))) : ''));
   const regions = useMemo(() => (regionsKey ? JSON.parse(regionsKey) as Region[] : []), [regionsKey]);
@@ -127,13 +136,27 @@ export function WherePicker({ id, use, region, outside, onPick, allowOutside = t
   useEffect(() => {
     if (ctx?.shown && ctx.shown.key.startsWith(`${id}:`) && ctx.shown.key !== showKey) show();
   }, [showKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const close = () => { setOpen(false); setWay(null); };
   const draw = (kind: MadeShapeKind) => {
-    setOpen(false);
+    close();
     show();
     ctx?.draw({ kind, onDone: s => { ctx.draw(null); onPick({ make: s, outside }); }, onCancel: () => ctx.draw(null) });
   };
   const drawingHere = ctx?.drawing;
-  const inGraph = regions.filter(r => !r.from), fromGroups = regions.filter(r => r.from);
+  const tex = takesTexture(use);
+  // Outputs of the graph and of groups; textures (a Shader Texture, a Trail field, a picture node) on their own.
+  const inGraph = regions.filter(r => !r.from && r.kind !== 'texture'), fromGroups = regions.filter(r => r.from && r.kind !== 'texture');
+  const textures = regions.filter(r => r.kind === 'texture');
+  const ways: { way: WhereWay; title: string; hint: string; icon: IconName; count?: number; empty?: string }[] = [
+    { way: 'graph', title: 'From the graph', hint: 'An output already in your graph (a shape or a mask), wired in as it is.', icon: 'graphs', count: inGraph.length, empty: 'none in your graph yet' },
+    { way: 'group', title: 'From a group', hint: 'An output of another group: a plain group or another Agents group.', icon: 'nodes', count: fromGroups.length, empty: 'no group has one' },
+    ...(tex ? [
+      { way: 'picture' as const, title: 'A picture', hint: 'Upload, paste, a link or the image library, on a new Texture node.', icon: 'camera' as const },
+      { way: 'texture' as const, title: 'A texture / field', hint: 'A Shader Texture, a Trail field or another texture already in your graph.', icon: 'layers' as const, count: textures.length, empty: 'none in your graph yet' },
+    ] : []),
+    { way: 'create', title: 'Create new', hint: `A shape drawn on the picture${tex ? ', a new Shader Texture' : ''} or a new group, wired in.`, icon: 'plus' },
+  ];
+  const chosen = ways.find(w => w.way === way);
   const chip: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 6, height: 28, padding: '0 10px', border: `1px dashed ${tk.border.default}`, borderRadius: 999, background: 'none', cursor: 'pointer', color: tk.text.secondary, font: `500 12px ${fontFamily.ui}` };
   const regionTiles = (list: Region[]) => list.length ? (
     <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fill, minmax(${TW + 8}px, 1fr))`, gap: 8 }}>
@@ -144,7 +167,7 @@ export function WherePicker({ id, use, region, outside, onPick, allowOutside = t
             title={`${r.label}${r.from ? ` (from ${r.from})` : ''}: ${REGION_WORDS[r.kind].hint}`}
             onPointerEnter={() => ctx?.show({ key: `${id}:preview`, use, region: r, outside })}
             onPointerLeave={() => show()}
-            onClick={() => { setOpen(false); onPick({ region: { nodeId: r.nodeId, outputKey: r.outputKey }, outside }); }}
+            onClick={() => { close(); onPick({ region: { nodeId: r.nodeId, outputKey: r.outputKey }, outside }); }}
             style={{ display: 'flex', flexDirection: 'column', gap: 5, padding: 4, border: 0, borderRadius: 9, cursor: 'pointer', textAlign: 'left', minWidth: 0,
               background: on ? tk.bg.selected : tk.bg.panel, boxShadow: on ? `inset 0 0 0 1.5px ${tk.accent.base}` : `inset 0 0 0 1px ${tk.border.default}`, color: tk.text.primary }}>
             <Thumb region={r} />
@@ -163,7 +186,7 @@ export function WherePicker({ id, use, region, outside, onPick, allowOutside = t
         <Thumb region={region} w={64} h={36} />
         <span style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0, flex: 1 }}>
           <span data-where-name title={region?.label} style={{ fontSize: 12.5, fontWeight: 600, lineHeight: 1.25, color: region ? tk.text.primary : tk.text.muted, ...clampLines(2) }}>
-            {region ? region.label : USE_WORDS[use].none}
+            {region ? region.label : none ?? USE_WORDS[use].none}
           </span>
           {region && <span style={{ display: 'flex', gap: 6, alignItems: 'center', minWidth: 0 }}><KindBadge region={region} />{region.from && <span style={{ fontSize: 10.5, color: tk.text.faint, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>from {region.from}</span>}</span>}
         </span>
@@ -173,7 +196,7 @@ export function WherePicker({ id, use, region, outside, onPick, allowOutside = t
             Edit inside ↗
           </button>
         )}
-        <button type="button" data-where-open={id} aria-expanded={open} onClick={() => { setOpen(v => !v); show(); }}
+        <button type="button" data-where-open={id} aria-expanded={open} onClick={() => { setOpen(v => !v); setWay(null); show(); }}
           style={{ height: 26, padding: '0 10px', border: 0, borderRadius: radius.control, background: open ? tk.bg.selected : tk.bg.field, color: open ? tk.accent.text : tk.text.secondary, cursor: 'pointer', font: `600 11.5px ${fontFamily.ui}`, whiteSpace: 'nowrap' }}>
           {region ? 'Change' : 'Pick…'}
         </button>
@@ -196,54 +219,64 @@ export function WherePicker({ id, use, region, outside, onPick, allowOutside = t
         </span>
       )}
       {open && (
-        <div data-where-panel={id} style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 10, borderRadius: radius.card, background: tk.bg.subtle, boxShadow: `inset 0 0 0 1px ${tk.border.subtle}` }}>
-          {/* Wiring three ways: an output of the graph, an output from a group, or something new. */}
-          <WaysHead n={1} title="Wire from the graph" hint="An output already in your graph, wired in as it is." />
-          {inGraph.length === 0 && <span style={{ fontSize: 12, color: tk.text.muted }}>Nothing in your graph can be read here yet: a shape (an SDF), a mask (any number that changes across the picture){takesTexture(use) ? ' or a texture' : ''}. Create one below.</span>}
-          {regionTiles(inGraph)}
-          <WaysHead n={2} title="From a group" hint="An output of another group: a plain group, a Shader Texture, another Agents group's trail." />
-          {fromGroups.length === 0 && <span data-where-no-groups style={{ fontSize: 12, color: tk.text.muted }}>No group in your graph has an output this can read. Create a new one below.</span>}
-          {regionTiles(fromGroups)}
-          <WaysHead n={3} title="Create new" hint="A new top-level source, wired in: a shape drawn on the picture, a Shader Texture or a group, opened ready to edit." />
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {MADE_SHAPES.map(m => (
-              <button key={m.kind} type="button" data-where-make={m.kind} title={`Draw on the picture. ${m.hint}`} onClick={() => draw(m.kind)} style={chip}>
-                <ShapeGlyph kind={m.kind} />{m.label}
+        <div data-where-panel={id} data-where-panel-way={way ?? ''} style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 8, borderRadius: radius.card, background: tk.bg.subtle, boxShadow: `inset 0 0 0 1px ${tk.border.subtle}` }}>
+          {!chosen ? (
+            // What kind of source: one short list; an empty kind is greyed with why.
+            <div data-where-ways style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {ways.map(w => {
+                const empty = w.count === 0;
+                return (
+                  <button key={w.way} type="button" data-where-way={w.way} data-where-way-empty={empty || undefined} disabled={empty} title={w.hint}
+                    onClick={() => setWay(w.way)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 36, padding: '6px 10px', border: 0, borderRadius: radius.control, textAlign: 'left',
+                      background: empty ? 'none' : tk.bg.panel, boxShadow: empty ? 'none' : `inset 0 0 0 1px ${tk.border.subtle}`, color: empty ? tk.text.faint : tk.text.primary, cursor: empty ? 'default' : 'pointer', font: `600 12.5px ${fontFamily.ui}` }}>
+                    <Icon name={w.icon} size={14} />
+                    <span style={{ flex: 1, minWidth: 0 }}>{w.title}</span>
+                    {empty ? <span data-where-way-why style={{ fontWeight: 500, fontSize: 11, color: tk.text.faint }}>{w.empty}</span>
+                      : w.count ? <span style={{ fontWeight: 600, fontSize: 11, color: tk.text.muted }}>{w.count}</span> : null}
+                    {!empty && <Icon name="chevR" size={12} />}
+                  </button>
+                );
+              })}
+            </div>
+          ) : <>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, fontWeight: 650, color: tk.text.muted, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+              <Icon name={chosen.icon} size={13} />
+              <span data-where-chosen={chosen.way} style={{ flex: 1 }}>{chosen.title}</span>
+              <button type="button" data-where-back={id} onClick={() => setWay(null)}
+                style={{ padding: '2px 4px', border: 0, background: 'none', color: tk.accent.text, cursor: 'pointer', font: `600 11.5px ${fontFamily.ui}`, letterSpacing: 0, textTransform: 'none' }}>
+                Change
               </button>
-            ))}
-          </div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {takesTexture(use) && (
-              <button type="button" data-where-create="picture" aria-expanded={picture} title="A picture (upload, paste, a link or the image library) on a new Texture node, wired in: the scene builders' shared picture picker" onClick={() => setPicture(v => !v)} style={chip}>
-                <Icon name="camera" size={13} />A picture…
-              </button>
+            </span>
+            {way === 'graph' && regionTiles(inGraph)}
+            {way === 'group' && regionTiles(fromGroups)}
+            {way === 'texture' && regionTiles(textures)}
+            {way === 'picture' && tex && (
+              <PictureWays graph={false} shader={false} onPicked={p => { close(); onPick({ region: { nodeId: p.nodeId, outputKey: 'texture' }, outside }); }} />
             )}
-            {takesTexture(use) && (
-              <button type="button" data-where-create="shaderTexture" title="A new Shader Texture (its own little shader graph drawn into a texture), wired in, and opened so you can edit what it draws" onClick={() => { setOpen(false); onPick({ create: 'shaderTexture', outside }); }} style={chip}>
-                <Icon name="layers" size={13} />New Shader Texture
-              </button>
-            )}
-            <button type="button" data-where-create="group" title="A new group whose Distance output is wired in (a circle to start), opened so you can build the shape inside" onClick={() => { setOpen(false); onPick({ create: 'group', outside }); }} style={chip}>
-              <Icon name="nodes" size={13} />New group
-            </button>
-          </div>
-          {picture && takesTexture(use) && (
-            <PictureWays graph={false} shader={false} onPicked={p => { setPicture(false); setOpen(false); onPick({ region: { nodeId: p.nodeId, outputKey: 'texture' }, outside }); }} />
-          )}
+            {way === 'create' && <>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {MADE_SHAPES.map(m => (
+                  <button key={m.kind} type="button" data-where-make={m.kind} title={`Draw on the picture. ${m.hint}`} onClick={() => draw(m.kind)} style={chip}>
+                    <ShapeGlyph kind={m.kind} />{m.label}
+                  </button>
+                ))}
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {tex && (
+                  <button type="button" data-where-create="shaderTexture" title="A new Shader Texture (its own little shader graph drawn into a texture), wired in, and opened so you can edit what it draws" onClick={() => { close(); onPick({ create: 'shaderTexture', outside }); }} style={chip}>
+                    <Icon name="layers" size={13} />New Shader Texture
+                  </button>
+                )}
+                <button type="button" data-where-create="group" title="A new group whose Distance output is wired in (a circle to start), opened so you can build the shape inside" onClick={() => { close(); onPick({ create: 'group', outside }); }} style={chip}>
+                  <Icon name="nodes" size={13} />New group
+                </button>
+              </div>
+            </>}
+          </>}
         </div>
       )}
     </div>
-  );
-}
-
-/** A heading of the picker's three ways in. */
-function WaysHead({ n, title, hint }: { n: number; title: string; hint: string }) {
-  const tk = useTokens();
-  return (
-    <span data-where-way={n} title={hint} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 650, color: tk.text.muted, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-      <span aria-hidden style={{ width: 16, height: 16, borderRadius: 8, background: tk.bg.field, color: tk.text.secondary, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10 }}>{n}</span>
-      {title}
-    </span>
   );
 }
 
@@ -285,10 +318,16 @@ export function ShapeGlyph({ kind, size = 14 }: { kind: MadeShapeKind; size?: nu
 }
 
 /** A Where row for a use that needs nothing but the pick (born inside, walls, Field ƒ): what it reads now, and the picker. */
-export function WhereRow({ id, use, allowOutside = true, onFocus }: { id: string; use: WhereUse; allowOutside?: boolean; onFocus?: (s: string | undefined) => void }) {
+export function WhereRow({ id, use, allowOutside = true, onFocus, startOpen, none, onPicked }: {
+  id: string; use: WhereUse; allowOutside?: boolean; onFocus?: (s: string | undefined) => void;
+  startOpen?: boolean; none?: string;
+  /** After a pick is applied (born: the Where select leaves External when it is taken away). */
+  onPicked?: (pick: WherePick | null) => void;
+}) {
   const ctx = useContext(WhereFocusContext);
   const key = useNodeGraphStore(s => JSON.stringify(whereNow(s.nodes, ctx?.groupId ?? '', use)));
   const now = JSON.parse(key) as ReturnType<typeof whereNow>;
   if (!ctx) return null;
-  return <WherePicker id={id} use={use} region={now.region} outside={now.outside} allowOutside={allowOutside} onFocus={onFocus} onPick={p => ctx.apply(use, p)} />;
+  return <WherePicker id={id} use={use} region={now.region} outside={now.outside} allowOutside={allowOutside} onFocus={onFocus} startOpen={startOpen} none={none}
+    onPick={p => { ctx.apply(use, p); onPicked?.(p); }} />;
 }

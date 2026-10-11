@@ -212,6 +212,7 @@ describe('"only when…"', () => {
     click($('[data-only-when-add="cohere#0"]'));
     click($$('[role="menuitem"]').find(b => b.textContent?.includes('inside / outside')) ?? null);
     expect($('[data-only-when-picking="cohere#0"] [data-where-panel]')).toBeTruthy();
+    click($('[data-only-when-picking="cohere#0"] [data-where-way="create"]'));
     expect($$('[data-where-make]').map(b => b.getAttribute('data-where-make'))).toEqual(['circle', 'box', 'ring', 'polygon', 'text']);
   });
 

@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.177',
+    date: '2026-10-11',
+    title: 'Choosing a source',
+    highlights: [
+      { area: 'Studio', text: 'Agent Builder: Where has External…, which asks what kind of source (graph, group, picture, texture, or create new) and then shows only that choice.' },
+      { area: 'Studio', text: 'A picked source shrinks to a thumbnail with Change and ×. The same flow for Born, Only when, field regions, slopes, walls and food.' },
+    ],
+  },
+  {
     id: '2026.10.176',
     date: '2026-10-11',
     title: 'Calmer explanations',

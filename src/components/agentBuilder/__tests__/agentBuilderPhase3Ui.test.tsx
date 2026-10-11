@@ -49,6 +49,10 @@ const input = (el: Element | null, v: string) => {
     el!.dispatchEvent(new Event('input', { bubbles: true }));
   });
 };
+const choose = (el: Element | null, v: string) => {
+  expect(el).toBeTruthy();
+  act(() => { (el as HTMLSelectElement).value = v; el!.dispatchEvent(new Event('change', { bubbles: true })); });
+};
 const blur = (el: Element | null) => act(() => { (el as HTMLElement).blur(); el!.dispatchEvent(new FocusEvent('focusout', { bubbles: true })); });
 const nodes = () => useNodeGraphStore.getState().nodes;
 const group = () => nodes().find(x => x.type === 'agentsGroup')!;
@@ -74,6 +78,7 @@ describe('the Where picker', () => {
     start('trail');
     click($('[data-only-when-add="senses"]'));
     click($$('[role="menuitem"]').find(b => b.textContent?.includes('inside / outside a region')) ?? null);
+    click($('[data-where-way="graph"]'));
     const tile = $('[data-where-tile="gCircle:distance"]');
     expect(tile?.getAttribute('data-where-tile-kind')).toBe('shape');
     expect(tile?.textContent).toContain('Circle SDF');
@@ -96,6 +101,7 @@ describe('the Where picker', () => {
     click($('[data-studio-section="steering"]'));
     click($('[data-only-when-add="cohere#0"]'));
     click($$('[role="menuitem"]').find(b => b.textContent?.includes('inside / outside a region')) ?? null);
+    click($('[data-only-when-picking="cohere#0"] [data-where-way="create"]'));
     click($('[data-only-when-picking="cohere#0"] [data-where-make="circle"]'));
     const draw = $('[data-where-draw="circle"]');
     pointer(draw, 'pointerdown', 400, 300);
@@ -125,17 +131,53 @@ describe('the Where picker', () => {
   it('born inside and walls: a region feeds the Emit\'s Where ƒ and Move\'s Obstacle ƒ', () => {
     start('trail');
     click($('[data-studio-section="born"]'));
-    click($('[data-where-open="born"]'));
+    // Where: the built-in shapes and External…; there is no separate "Or born inside" row.
+    expect($('[data-setting="bornWhere"]')).toBeNull();
+    expect($('[data-where="born"]')).toBeNull();
+    const where = () => $('select[aria-label="Where they are born"]') as HTMLSelectElement;
+    expect([...where().options].map(o => o.value)).toContain('external');
+    choose(where(), 'external');
+    // External opens on the kinds of source; picking one wires the Emit's Where ƒ as before.
+    expect($('[data-where-panel="born"] [data-where-ways]')).toBeTruthy();
+    click($('[data-where-panel="born"] [data-where-way="graph"]'));
     click($('[data-where-tile="gCircle:distance"]'));
     const emit = nodes().find(x => x.type === 'agentEmit')!;
     expect(emit.params.shape).toBe('field');
     expect(nodes().find(x => x.id === emit.inputs.where.connection!.nodeId)!.params.whereAdapter).toMatchObject({ nodeId: 'gCircle', use: 'born' });
+    expect(where().value).toBe('external');
+    expect($('[data-where="born"] [data-where-name]')?.textContent).toBe('Circle SDF');
+    expect($('[data-where-panel="born"]')).toBeNull();
     click($('[data-studio-section="moving"]'));
     click($('[data-where-open="walls"]'));
+    click($('[data-where-way="graph"]'));
     click($('[data-where-tile="gCircle:distance"]'));
     expect(groupRules(group()).obstacle).toEqual({ on: 'turn' });
     expect(group().inputs.obstacle?.connection).toEqual({ nodeId: 'gCircle', outputKey: 'distance' });
     click($$('[data-setting="wallsHow"] button').find(b => b.textContent === 'Slide along') ?? null);
+  });
+
+  it('a scene already born inside a source reopens as External with its summary; a built-in shape unwires it', () => {
+    start('trail');
+    click($('[data-studio-section="born"]'));
+    choose($('select[aria-label="Where they are born"]'), 'external');
+    click($('[data-where-panel="born"] [data-where-way="graph"]'));
+    click($('[data-where-tile="gCircle:distance"]'));
+    const id = group().id;
+    for (const m of mounted.splice(0)) { act(() => m.root.unmount()); m.host.remove(); }
+    mount(<AgentBuilder groupId={id} onClose={() => {}} onOpenGroup={() => {}} />);
+    click($('[data-studio-section="born"]'));
+    const where = () => $('select[aria-label="Where they are born"]') as HTMLSelectElement;
+    expect(where().value).toBe('external');
+    expect($('[data-where="born"] [data-where-name]')?.textContent).toBe('Circle SDF');
+    expect($('[data-where-panel="born"]')).toBeNull();
+    // Change opens the kinds again; ✕ or a built-in shape takes it away.
+    click($('[data-where-open="born"]'));
+    expect($('[data-where-panel="born"] [data-where-ways]')).toBeTruthy();
+    choose(where(), 'ring');
+    const emit = nodes().find(x => x.type === 'agentEmit')!;
+    expect(emit.params.shape).toBe('ring');
+    expect(emit.inputs.where?.connection).toBeUndefined();
+    expect($('[data-where="born"]')).toBeNull();
   });
 });
 

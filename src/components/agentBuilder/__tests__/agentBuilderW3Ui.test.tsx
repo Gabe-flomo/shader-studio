@@ -16,6 +16,7 @@ vi.hoisted(() => {
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { undoManager, useNodeGraphStore } from '../../../store/useNodeGraphStore';
+import { n } from '../../../store/graphBuilder';
 import { useBuilderWindows } from '../../../builders/windows';
 import { groupRules } from '../../../agentRules/apply';
 import { setupOf } from '../../../agentBuilder/actions';
@@ -147,15 +148,33 @@ describe('dragging the diagrams', () => {
 });
 
 describe('wiring three ways, Food and text', () => {
-  it('the picker has the three ways; a new group is made, wired, and opened (the builder closes, a toast brings it back)', () => {
+  it('the picker asks the kind of source, then shows only that; a new group is made, wired, and opened (the builder closes, a toast brings it back)', () => {
     vi.useFakeTimers();
     onClose.mockClear();
     start('trail');
+    // A circle in the graph to pick from (and no group to read).
+    act(() => useNodeGraphStore.setState(st => ({ nodes: [...st.nodes, n('circleSDF', 'gCircle', -900, 0, { radius: 0.35 })] })));
     click($('[data-studio-section="moving"]'));
     click($('[data-where-open="walls"]'));
-    expect($$('[data-where-way]').map(x => x.textContent)).toEqual(['1Wire from the graph', '2From a group', '3Create new']);
-    expect($('[data-where-no-groups]')).toBeTruthy();
-    // Walls can't read a texture: no Shader Texture there.
+    // Walls can't read a texture: no picture or texture kinds.
+    expect($$('[data-where-way]').map(x => x.getAttribute('data-where-way'))).toEqual(['graph', 'group', 'create']);
+    // No group has an output walls can read: greyed, with a word why.
+    const grp = $('[data-where-way="group"]') as HTMLButtonElement;
+    expect(grp.disabled).toBe(true);
+    expect(grp.querySelector('[data-where-way-why]')?.textContent).toBe('no group has one');
+    expect(($('[data-where-way="graph"]') as HTMLButtonElement).disabled).toBe(false);
+    // Choosing one locks it in: only its UI, and Change goes back to the kinds.
+    click($('[data-where-way="graph"]'));
+    expect($('[data-where-chosen="graph"]')).toBeTruthy();
+    expect($$('[data-where-way]')).toEqual([]);
+    expect($('[data-where-tile="gCircle:distance"]')).toBeTruthy();
+    expect($('[data-where-make]')).toBeNull();
+    click($('[data-where-back="walls"]'));
+    expect($$('[data-where-way]').length).toBe(3);
+    expect($('[data-where-tile]')).toBeNull();
+    click($('[data-where-way="create"]'));
+    expect($('[data-where-tile]')).toBeNull();
+    expect($$('[data-where-make]').length).toBe(5);
     expect($('[data-where-create="shaderTexture"]')).toBeNull();
     click($('[data-where-create="group"]'));
     const pg = nodes().find(x => x.type === 'group')!;
@@ -169,6 +188,11 @@ describe('wiring three ways, Food and text', () => {
     start('trail');
     click($('[data-studio-section="trail"]'));
     click($('[data-where-open="food"]'));
+    expect($$('[data-where-way]').map(x => x.getAttribute('data-where-way'))).toEqual(['graph', 'group', 'picture', 'texture', 'create']);
+    click($('[data-where-way="picture"]'));
+    expect($('[data-where-make]')).toBeNull();
+    click($('[data-where-back="food"]'));
+    click($('[data-where-way="create"]'));
     expect($('[data-where-create="shaderTexture"]')).toBeTruthy();
     click($('[data-where-make="text"]'));
     const draw = $('[data-where-draw="text"]');
