@@ -29,7 +29,8 @@ import { MiniMapper } from '../play/MiniMapper';
 import { sourceLabel } from '../../play/playSources';
 import { candidateLabel, collectPlayCandidates } from '../../play/playControls';
 import { videoEngine } from '../../lib/videoEngine';
-import { listImages, listVideos, getImage, type BackgroundImageMeta, type LibraryVideoMeta } from '../../lib/backgroundLibrary';
+import { listImages, listVideos, getImage, getVideo, isAudioType, type BackgroundImageMeta, type LibraryVideoMeta } from '../../lib/backgroundLibrary';
+import { MediaLibraryGrid } from '../media/MediaLibraryGrid';
 import { KIND_LABEL, imageNameOf, textureKindOf, type TextureKind } from '../../lib/texture/textureSource';
 import { fetchMedia, TextureUrlError } from '../../lib/texture/pictures';
 import { takePicture } from '../../lib/texture/pictureHost';
@@ -320,25 +321,22 @@ function LibraryPicker({ anchorRef, kind, onPick, onClose }: { anchorRef: React.
   const [items, setItems] = useState<LibItem[] | null>(null);
   useEffect(() => {
     let live = true;
-    const load: Promise<Array<BackgroundImageMeta | LibraryVideoMeta>> = kind === 'image' ? listImages() : listVideos();
+    const load: Promise<Array<BackgroundImageMeta | LibraryVideoMeta>> = kind === 'image' ? listImages() : listVideos().then(l => l.filter(v => !isAudioType(v.type)));
     load.then(l => { if (live) setItems(l.map(x => ({ id: x.id, name: x.name, thumb: x.thumb }))); }, () => { if (live) setItems([]); });
     return () => { live = false; };
   }, [kind]);
+  // ↑/↓ look through them with a large preview (a video plays), Enter or double-click uses one (components/media).
   return (
-    <Popover anchorRef={anchorRef} onClose={onClose} width={280} padding={8}>
-      <div data-texture-library style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 300, overflowY: 'auto', font: `11.5px ${fontFamily.ui}` }}>
-        <span style={{ color: tk.text.faint, fontSize: 11 }}>{kind === 'image' ? 'Pictures in the library (Files → Backgrounds)' : 'Videos in the library'}</span>
+    <Popover anchorRef={anchorRef} onClose={onClose} width={300} padding={8}>
+      <div data-texture-library style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 420, overflowY: 'auto', font: `11.5px ${fontFamily.ui}` }}
+        onKeyDown={e => e.stopPropagation()}>
+        <span style={{ color: tk.text.faint, fontSize: 11 }}>{kind === 'image' ? 'Pictures in the library (Files → Backgrounds)' : 'Videos in the library'} · ↑↓ to look, Enter to use</span>
         {items === null && <span style={{ color: tk.text.muted }}>Loading…</span>}
         {items?.length === 0 && <span style={{ color: tk.text.muted }}>Nothing here yet. Pictures and videos you load are kept here.</span>}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
-          {items?.map(i => (
-            <button key={i.id} type="button" onClick={() => onPick(i)} title={i.name}
-              style={{ border: `1px solid ${tk.border.default}`, borderRadius: radius.md, background: tk.bg.field, padding: 3, cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-              {i.thumb ? <img src={i.thumb} alt="" style={{ width: '100%', height: 48, objectFit: 'cover', borderRadius: 3 }} /> : <span style={{ height: 48, display: 'flex', alignItems: 'center', justifyContent: 'center', color: tk.text.faint }}>{kind === 'image' ? 'picture' : 'video'}</span>}
-              <span style={{ fontSize: 10, color: tk.text.secondary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{i.name}</span>
-            </button>
-          ))}
-        </div>
+        {items && items.length > 0 && (
+          <MediaLibraryGrid kind={kind} items={items} label={kind === 'image' ? 'Library pictures' : 'Library videos'} onPick={onPick} onClose={onClose}
+            load={async i => (kind === 'image' ? (await getImage(i.id))?.blob : (await getVideo(i.id))?.blob) ?? null} />
+        )}
       </div>
     </Popover>
   );

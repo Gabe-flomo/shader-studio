@@ -25,7 +25,7 @@ import { Segmented } from '../ui/Choice';
 import { askConfirm, askText } from '../ui/dialogStore';
 import { toast } from '../ui/toastStore';
 import { FolderableList } from '../NodeGraph/FolderableList';
-import { createFolder, getFolderForItem, loadFolders } from '../../utils/assetFolders';
+import { createFolder, getFolderForItem, getMembership, loadFolders } from '../../utils/assetFolders';
 import { saveBinaryFile } from '../../utils/fileIO';
 import { EXAMPLE_INDEX } from '../../store/exampleIndex';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
@@ -43,7 +43,8 @@ import { PaletteEditor } from './FillEditor';
 import { LinkedBrowser } from '../linked/LinkedBrowser';
 import { useLinkedAvailable } from '../linked/LinkedPickButton';
 import { AutoPreviewToggle, SampleRow } from '../audio/SampleRow';
-import { useSamplePreview } from '../audio/useSamplePreview';
+import { useMediaPreviewList } from '../media/useMediaPreviewList';
+import { MediaPreviewPane } from '../media/MediaPreviewPane';
 import { stopPreview } from '../../lib/samplePreview';
 
 type Tab = 'images' | 'palettes' | 'videos' | 'sounds' | 'linked';
@@ -76,14 +77,19 @@ function Thumb({ src, w = 72, h = 40, icon = 'overlay' }: { src?: string; w?: nu
   );
 }
 
-function Row({ lead, title, detail, picking, onPick, onMenu, compact }: { lead: React.ReactNode; title: string; detail: string; picking: boolean; onPick: () => void; onMenu?: (el: HTMLElement) => void; compact: boolean }) {
+function Row({ lead, title, detail, picking, onPick, onDoubleClick, onMenu, compact, option }: {
+  lead: React.ReactNode; title: string; detail: string; picking: boolean; onPick: () => void; onDoubleClick?: () => void; onMenu?: (el: HTMLElement) => void; compact: boolean;
+  /** In a media listbox (useMediaPreviewList): its option props; a click then previews, double-click/Enter picks. */
+  option?: { id?: string; role: 'option'; 'aria-selected': boolean };
+}) {
   const tk = useTokens();
   const [hover, setHover] = useState(false);
   const menuRef = useRef<HTMLSpanElement>(null);
+  const on = !!option?.['aria-selected'];
   return (
-    <div onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
-      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 4px 5px 6px', borderRadius: radius.md, background: hover ? tk.bg.hover : 'transparent' }}>
-      <button type="button" onClick={onPick} title={picking ? `Use “${title}”` : title}
+    <div onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} {...option} aria-label={option ? title : undefined}
+      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 4px 5px 6px', borderRadius: radius.md, background: on ? tk.bg.selected : hover ? tk.bg.hover : 'transparent' }}>
+      <button type="button" onClick={onPick} onDoubleClick={onDoubleClick} tabIndex={option ? -1 : undefined} title={picking ? (option ? `${title}: double-click or Enter to use it` : `Use “${title}”`) : title}
         style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 10, border: 0, padding: 0, background: 'none', cursor: picking ? 'pointer' : 'default', textAlign: 'left', color: tk.text.primary }}>
         {lead}
         <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -151,7 +157,9 @@ export function BackgroundsDialog({ pick, title, linked = false, onDone }: { pic
   // go, through the shared preview player (not the master effects). Stops when the tab
   // changes or the dialog closes.
   const soundItems = useMemo(() => (sound ? snds.map(v => ({ id: v.id, meta: v })) : []), [sound, snds]);
-  const sp = useSamplePreview<{ id: string; meta: LibraryVideoMeta }>({
+  const sp = useMediaPreviewList<{ id: string; meta: LibraryVideoMeta }>({
+    kind: 'audio',
+    label: 'Sounds',
     items: soundItems,
     getSource: async ({ meta }) => (await getVideo(meta.id))?.blob ?? null,
     onPick: () => {},
@@ -165,6 +173,32 @@ export function BackgroundsDialog({ pick, title, linked = false, onDone }: { pic
   const palById = useMemo(() => new Map(palettes.map(p => [p.id, p])), [palettes]);
   const presets = palettes.filter(p => p.preset);
   const mine = palettes.filter(p => !p.preset);
+
+  // Pictures and videos browse the same way (components/media/useMediaPreviewList): up/down move,
+  // the large preview above the list follows, Enter (or double-click) uses it; a click only previews.
+  const pickImages = picking && pick !== 'palette';
+  const imageList = (() => {
+    if (tab !== 'images') return [];
+    if (needle) return imgs.filter(m => `${m.name} ${imageDetail(m)}`.toLowerCase().includes(needle)).map(m => ({ id: m.id, meta: m }));
+    // The order the folder list shows them in: open folders' pictures first, then the loose ones.
+    const member = getMembership(IMAGE_FOLDER_SCOPE);
+    const folders = loadFolders(IMAGE_FOLDER_SCOPE);
+    const out = folders.flatMap(f => (f.collapsed ? [] : imgs.filter(m => member[m.id] === f.id)));
+    return [...out, ...imgs.filter(m => !member[m.id] || !folders.some(f => f.id === member[m.id]))].map(m => ({ id: m.id, meta: m }));
+  })();
+  const ip = useMediaPreviewList<{ id: string; meta: BackgroundImageMeta }>({
+    kind: 'image',
+    items: imageList,
+    label: 'Image backgrounds',
+    onPick: ({ meta }) => { if (pickImages) onDone({ kind: 'image', image: meta }); },
+  });
+  const videoList = useMemo(() => (tab !== 'videos' ? [] : (needle ? vids.filter(v => v.name.toLowerCase().includes(needle)) : vids).map(v => ({ id: v.id, meta: v }))), [tab, vids, needle]);
+  const vp = useMediaPreviewList<{ id: string; meta: LibraryVideoMeta }>({
+    kind: 'video',
+    items: videoList,
+    label: 'Videos',
+    onPick: ({ meta }) => setViewing(meta),
+  });
 
   const moveItems = (scope: string, id: string, move: (id: string, folder: string | null) => void): MenuItem[] => {
     const inFolder = getFolderForItem(scope, id);
@@ -230,7 +264,9 @@ export function BackgroundsDialog({ pick, title, linked = false, onDone }: { pic
   const videoRow = (v: LibraryVideoMeta) => (
     <Row key={v.id} compact={compact} picking={false} title={v.name} detail={videoDetail(v, uses?.get(v.id))}
       lead={<Thumb src={v.thumb || undefined} icon={isAudioType(v.type) ? 'wave' : 'play'} w={compact ? 64 : 80} h={compact ? 36 : 45} />}
-      onPick={() => setViewing(v)} onMenu={el => openMenu(el, videoMenu(v))} />
+      option={vp.optionProps({ id: v.id, meta: v })}
+      onPick={() => (compact ? vp.onRowTap : vp.onRowClick)({ id: v.id, meta: v })} onDoubleClick={() => setViewing(v)}
+      onMenu={el => openMenu(el, videoMenu(v))} />
   );
   const viewer = viewing && (
     <LazyClipEditorModal host="viewer" title={viewing.name} subtitle={videoDetail(viewing, uses?.get(viewing.id))}
@@ -240,7 +276,7 @@ export function BackgroundsDialog({ pick, title, linked = false, onDone }: { pic
   const soundRow = (v: LibraryVideoMeta) => (
     <SampleRow key={v.id} title={v.name} detail={videoDetail(v, uses?.get(v.id))} thumb={v.thumb || undefined} w={compact ? 64 : 80} h={compact ? 36 : 45}
       highlighted={sp.highlight === v.id} playing={sp.playingId === v.id && sp.playing} loading={sp.playingId === v.id && sp.loading}
-      progress={sp.playingId === v.id && sp.duration ? sp.position / sp.duration : 0} touch={compact}
+      progress={sp.playingId === v.id && sp.duration ? sp.position / sp.duration : 0} touch={compact} optionId={sp.optionProps({ id: v.id, meta: v }).id}
       onClick={() => sp.onRowClick({ id: v.id, meta: v })} onDoubleClick={() => sp.onRowDoubleClick({ id: v.id, meta: v })}
       onTap={() => sp.onRowTap({ id: v.id, meta: v })} onPick={() => sp.onRowDoubleClick({ id: v.id, meta: v })}
       onMenu={el => openMenu(el, videoMenu(v))} />
@@ -257,9 +293,11 @@ export function BackgroundsDialog({ pick, title, linked = false, onDone }: { pic
   ];
 
   const imageRow = (m: BackgroundImageMeta) => (
-    <Row key={m.id} compact={compact} picking={picking && pick !== 'palette'} title={m.name} detail={imageDetail(m)}
+    <Row key={m.id} compact={compact} picking={pickImages} title={m.name} detail={imageDetail(m)}
       lead={<Thumb src={m.thumb} w={compact ? 64 : 80} h={compact ? 36 : 45} />}
-      onPick={() => { if (picking && pick !== 'palette') onDone({ kind: 'image', image: m }); }}
+      option={ip.optionProps({ id: m.id, meta: m })}
+      onPick={() => (compact && pickImages ? ip.onRowTap : ip.onRowClick)({ id: m.id, meta: m })}
+      onDoubleClick={() => { if (pickImages) onDone({ kind: 'image', image: m }); }}
       onMenu={el => openMenu(el, imageMenu(m, el))} />
   );
   const paletteRow = (p: Palette) => (
@@ -350,17 +388,17 @@ export function BackgroundsDialog({ pick, title, linked = false, onDone }: { pic
     const found = needle ? imgs.filter(m => `${m.name} ${imageDetail(m)}`.toLowerCase().includes(needle)) : null;
     body = images === null ? empty('Loading…')
       : error ? empty(`Image backgrounds can’t be kept in this browser: ${error}`)
-      : found ? (found.length ? <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>{found.map(imageRow)}</div> : empty(`No image background called anything like “${q.trim()}”.`))
-      : <FolderableList scopeKey={IMAGE_FOLDER_SCOPE} color={tk.accent.base} items={imgs.map(m => ({ id: m.id, label: m.name }))}
+      : found ? (found.length ? <div {...ip.listProps} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>{found.map(imageRow)}</div> : empty(`No image background called anything like “${q.trim()}”.`))
+      : <div {...ip.listProps}><FolderableList scopeKey={IMAGE_FOLDER_SCOPE} color={tk.accent.base} items={imgs.map(m => ({ id: m.id, label: m.name }))}
           renderItem={item => { const m = byId.get(item.id); return m ? imageRow(m) : null; }}
-          emptyHint={empty('No image backgrounds yet. Capture one from a graph (any moment, with or without its layers), or import a picture.')} />;
+          emptyHint={empty('No image backgrounds yet. Capture one from a graph (any moment, with or without its layers), or import a picture.')} /></div>;
   } else if (tab === 'videos' || tab === 'sounds') {
     const list = needle ? media.filter(v => v.name.toLowerCase().includes(needle)) : media;
     body = videos === null ? empty('Loading…')
       : videoError ? empty(`${sound ? 'Sounds' : 'Videos'} can’t be kept in this browser: ${videoError}`)
       : list.length ? (
-        <div role="list" aria-label="Sounds" tabIndex={sound ? 0 : undefined} onKeyDown={sound ? sp.onKeyDown : undefined}
-          style={{ display: 'flex', flexDirection: 'column', gap: 2, outline: 'none' }}>
+        <div {...(sound ? sp.listProps : vp.listProps)}
+          style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           {list.map(sound ? soundRow : videoRow)}
         </div>
       )
@@ -382,10 +420,25 @@ export function BackgroundsDialog({ pick, title, linked = false, onDone }: { pic
         </>
       );
   }
+  const hiImage = tab === 'images' ? ip.highlighted?.meta ?? null : null;
+  const hiVideo = tab === 'videos' ? vp.highlighted?.meta ?? null : null;
+  const previewPane = hiImage ? (
+    <div style={{ padding: compact ? '8px 0 0' : '10px 18px 0' }}>
+      <MediaPreviewPane kind="image" itemKey={hiImage.id} name={hiImage.name} detail={imageDetail(hiImage)} thumb={hiImage.thumb}
+        load={async () => (await getImage(hiImage.id))?.blob ?? null} height={compact ? 140 : 180}
+        onUse={pickImages ? () => onDone({ kind: 'image', image: hiImage }) : undefined} />
+    </div>
+  ) : hiVideo ? (
+    <div style={{ padding: compact ? '8px 0 0' : '10px 18px 0' }}>
+      <MediaPreviewPane kind="video" itemKey={hiVideo.id} name={hiVideo.name} detail={videoDetail(hiVideo, uses?.get(hiVideo.id))} thumb={hiVideo.thumb || undefined}
+        load={async () => (await getVideo(hiVideo.id))?.blob ?? null} videoProps={vp.videoProps} height={compact ? 140 : 180}
+        onUse={() => setViewing(hiVideo)} useLabel="Open" />
+    </div>
+  ) : null;
   const content = <div style={{ padding: compact ? '10px 0 4px' : '8px 14px 14px', minHeight: compact ? 180 : 300 }}>{body}</div>;
   const note = (
     <div style={{ color: tk.text.faint, font: `500 11.5px/1.5 ${fontFamily.ui}` }}>
-      {picking ? 'Choose one to use it. ' : ''}{tab === 'linked'
+      {picking ? 'Click one to see it; double-click it, or Enter, to use it. ' : ''}{tab === 'linked'
         ? 'Files in folders you linked (Files → Linked folders), used from where they are: not copied into the library, and not counted toward the storage limit.'
         : tab === 'sounds'
         ? 'Kept in this browser with the videos; Export everything, the workspace folder and the backup folder include them. Drum pads and the Audio engine’s sample player point at their sounds here, so a setup shared without them asks for the files.'
@@ -403,14 +456,15 @@ export function BackgroundsDialog({ pick, title, linked = false, onDone }: { pic
   if (compact) {
     return (
       <Sheet title={heading} onClose={() => onDone(null)} maxHeight="90dvh">
-        {toolbar}{content}<div style={{ padding: '6px 2px 4px' }}>{note}</div>{popup}{editor}{viewer}
+        {toolbar}{previewPane}{content}<div style={{ padding: '6px 2px 4px' }}>{note}</div>{popup}{editor}{viewer}
       </Sheet>
     );
   }
   return (
     <Modal title={heading} subtitle={images ? `${plural(images.length, 'image')} · ${plural(mine.length, 'palette')} of yours${vids.length && !picking ? ` · ${plural(vids.length, 'video')}` : ''}${snds.length && !picking ? ` · ${plural(snds.length, 'sound')}` : ''}` : undefined} icon="overlay" onClose={() => onDone(null)} width={600} footer={note}>
       {toolbar}
-      <div style={{ maxHeight: 'min(58vh, 540px)', overflowY: 'auto' }}>{content}</div>
+      {previewPane}
+      <div style={{ maxHeight: previewPane ? 'min(40vh, 360px)' : 'min(58vh, 540px)', overflowY: 'auto' }}>{content}</div>
       {popup}{editor}{viewer}
     </Modal>
   );
