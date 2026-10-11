@@ -87,7 +87,8 @@ export function HintMark({ text, style }: { text: string; style?: React.CSSPrope
 export function HintLabel({ children, hint }: { children: ReactNode; hint?: string }) {
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, minWidth: 0 }}>
-      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{children}</span>
+      {/* A long name wraps onto a second line rather than being cut off */}
+      <span data-hint-label style={{ minWidth: 0, whiteSpace: 'normal', overflowWrap: 'break-word', lineHeight: 1.25 }}>{children}</span>
       {hint && <HintMark text={hint} />}
     </span>
   );

@@ -1,0 +1,42 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`card label layout > Repeat Scene 1`] = `
+[
+  "column: Cell X",
+  "column: Cell Y",
+  "column: Cell Z",
+  "column: Copies each side X",
+  "column: Copies each side Y",
+  "column: Copies each side Z",
+  "column: Neighbours",
+  "column: Combine with Not repeated",
+  "column: Overlap",
+]
+`;
+
+exports[`card label layout > Splat Wave 1`] = `
+[
+  "fill: Relative to the scan",
+  "column: Kind",
+  "column: Amplitude",
+  "column: Frequency",
+  "column: Speed",
+  "column: Travels along",
+  "column: Pushes",
+]
+`;
+
+exports[`card label layout > Time Cube View 1`] = `
+[
+  "column: Time",
+  "column: Offset",
+  "column: Before opacity",
+  "column: After opacity",
+  "column: Feather (frames)",
+  "column: Feather side",
+  "column: Feather curve",
+  "column: Slice face",
+  "column: Tilt X°",
+  "column: Tilt Y°",
+]
+`;
