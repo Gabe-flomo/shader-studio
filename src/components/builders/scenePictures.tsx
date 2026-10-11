@@ -17,6 +17,9 @@ import { KindPicture } from '../agentBuilder/pictures';
 
 const BG = '#0d0d12';
 
+/** A picture as wide as its card allows, up to its own size, keeping its shape. */
+const fluid = (width: number, height: number) => ({ width: '100%', maxWidth: width, height: 'auto', aspectRatio: `${width} / ${height}`, display: 'block', borderRadius: 10, background: BG }) as const;
+
 /** Run `frame` about `fps` times a second while mounted (and the page can be seen). */
 function useTicker(fps: number, frame: (t: number) => void) {
   const live = useRef(frame);
@@ -65,7 +68,7 @@ function TwoDPicture({ width, height }: { width: number; height: number }) {
     }
     ctx.putImageData(img, 0, 0);
   });
-  return <canvas ref={ref} width={width} height={height} style={{ width, height, display: 'block', borderRadius: 10, background: BG }} />;
+  return <canvas ref={ref} width={width} height={height} style={fluid(width, height)} />;
 }
 
 const LIFE = { ...COUNT_PRESETS.life.params, density: 0.22 };
@@ -89,7 +92,7 @@ function GridPicture({ width, height }: { width: number; height: number }) {
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(off, 0, 0, c.width, c.height);
   });
-  return <canvas ref={ref} width={width} height={height} style={{ width, height, display: 'block', borderRadius: 10, background: BG, imageRendering: 'pixelated' }} />;
+  return <canvas ref={ref} width={width} height={height} style={{ ...fluid(width, height), imageRendering: 'pixelated' }} />;
 }
 
 function ThreeDPicture({ width, height }: { width: number; height: number }) {
@@ -112,7 +115,7 @@ function ThreeDPicture({ width, height }: { width: number; height: number }) {
     put('rounded-box', Math.round(s * 0.62), Math.round(width * 0.66), Math.round(height * 0.4));
     put('torus', s, Math.round((width - s) / 2), Math.round(height * 0.1));
   }, [width, height]);
-  return <canvas ref={ref} width={width} height={height} style={{ width, height, display: 'block', borderRadius: 10, background: BG }} />;
+  return <canvas ref={ref} width={width} height={height} style={fluid(width, height)} />;
 }
 
 /** A kind's picture for the kind page. */
@@ -120,5 +123,5 @@ export function ScenePicture({ kind, width = 240, height = 136 }: { kind: SceneK
   if (kind === '2d') return <TwoDPicture width={width} height={height} />;
   if (kind === 'grid') return <GridPicture width={width} height={height} />;
   if (kind === '3d') return <ThreeDPicture width={width} height={height} />;
-  return <span style={{ display: 'block', borderRadius: 10, overflow: 'hidden', width, height }}><KindPicture kind="trail" width={width} height={height} /></span>;
+  return <span style={{ display: 'block', borderRadius: 10, overflow: 'hidden', width: '100%', maxWidth: width }}><KindPicture kind="trail" width={width} height={height} /></span>;
 }

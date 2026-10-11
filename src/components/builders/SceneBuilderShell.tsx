@@ -18,6 +18,8 @@ import { Button } from '../ui/Button';
 import { Segmented } from '../ui/Choice';
 import { Icon } from '../ui/Icon';
 import { StudioShell } from './studio/StudioShell';
+import { useNarrowWindow } from '../code/SidePanels';
+import { usePhoneDialog } from '../ui/phoneDialog';
 import { ScenePicture } from './scenePictures';
 import { SCENE_KINDS, builtScenes, builderMade, clearForScene, removeBuiltScene, sceneKindInfo, selectedBuiltScene, type BuiltScene, type SceneKind, type SceneKindInfo } from '../../builders/sceneKinds';
 import { editBuiltScene, startSceneKind } from '../../builders/open';
@@ -39,6 +41,9 @@ function KindPage({ note, keep }: { note?: string; keep?: boolean }) {
   const clearable = useNodeGraphStore(s => clearableCount(s.nodes));
   const made = useNodeGraphStore(s => builderMade(s.nodes));
   const [choice, setChoice] = useState<'clear' | 'keep' | null>(null);
+  // Four across, two on a narrow window, one on a phone (never three and one).
+  const phone = usePhoneDialog();
+  const narrow = useNarrowWindow();
   // Clear by default, unless a builder made what is here (or Add another / Back said keep it).
   const clearFirst = choice ?? (keep || made ? 'keep' : 'clear');
   const pick = (k: SceneKind) => {
@@ -64,7 +69,7 @@ function KindPage({ note, keep }: { note?: string; keep?: boolean }) {
         {clearFirst === 'clear' && clearable > 0 && (
           <span data-scene-clear-note style={{ fontSize: 12, color: tk.status.warningText, marginTop: -10 }}>Picking a kind clears the graph first (all but the Output). Undo brings it back.</span>
         )}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16, width: '100%', maxWidth: 1240 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${phone ? 1 : narrow ? 2 : 4}, minmax(0, 1fr))`, gap: 16, width: '100%', maxWidth: narrow ? 640 : 1240 }}>
           {SCENE_KINDS.map(k => <KindCard key={k.id} info={k} onPick={() => pick(k.id)} />)}
         </div>
       </div>
@@ -82,7 +87,7 @@ function KindCard({ info, onPick }: { info: SceneKindInfo; onPick: () => void })
         display: 'flex', flexDirection: 'column', gap: 10, padding: 10, border: 0, borderRadius: radius.card, cursor: 'pointer', textAlign: 'left',
         background: hover ? tk.bg.hover : tk.bg.panel, boxShadow: hover ? `inset 0 0 0 1.5px ${tk.accent.base}` : `inset 0 0 0 1px ${tk.border.default}`, color: tk.text.primary,
       }}>
-      <span style={{ display: 'flex', justifyContent: 'center' }}><ScenePicture kind={info.id} width={272} height={168} /></span>
+      <span style={{ display: 'flex', justifyContent: 'center', width: '100%' }}><ScenePicture kind={info.id} width={272} height={168} /></span>
       <span style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '0 4px' }}>
         <b style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 14, fontWeight: 650 }}><Icon name={info.icon} size={15} />{info.title}</b>
         <span style={{ fontSize: 12, color: tk.text.muted, lineHeight: 1.4 }}>{info.line}</span>
@@ -130,7 +135,7 @@ function ExistingScenes() {
                   display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px 8px 8px', border: 0, borderRadius: radius.card, cursor: 'pointer', textAlign: 'left',
                   background: on ? tk.bg.selected : tk.bg.panel, color: tk.text.primary, boxShadow: on ? `inset 0 0 0 1.5px ${tk.accent.base}` : `inset 0 0 0 1px ${tk.border.default}`,
                 }}>
-                <ScenePicture kind={b.kind} width={84} height={48} />
+                <span style={{ width: 84, flexShrink: 0 }}><ScenePicture kind={b.kind} width={84} height={48} /></span>
                 <span style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
                   <b style={{ fontSize: 13, fontWeight: 650 }}>{b.label}</b>
                   <span style={{ fontSize: 11.5, color: tk.text.muted }}>{sceneKindInfo(b.kind).title} · {b.detail}</span>
