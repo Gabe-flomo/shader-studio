@@ -26,6 +26,7 @@ import type { HelpExample } from '../builders/helpContent';
 import { AssistList, SignatureLine, useTypeAhead } from '../builders/TypeAhead';
 import { recipeAssist } from '../../lang/complete';
 import { CodeField } from '../code/CodeField';
+import { BUILDER_RECIPE_EVENT } from '../../builders/windows';
 import type { Completion } from '../code/glslReference';
 import { recipeHtml } from './recipeColours';
 import { RecipeRows } from './RecipeRows';
@@ -755,6 +756,8 @@ export function OutputTab() {
 /** Rows or text, remembered in this browser. */
 const AS_TEXT_KEY = 'sceneBuilder.recipeAsText';
 const readAsText = () => { try { return localStorage.getItem(AS_TEXT_KEY) === '1'; } catch { return false; } };
+/** Show the recipe as text from now on (⌘⇧D, before Under the hood opens). */
+export const preferRecipeAsText = () => { try { localStorage.setItem(AS_TEXT_KEY, '1'); } catch { /* per session */ } };
 
 export function RecipeTab() {
   const spec = useSceneBuilder(s => s.spec);
@@ -765,6 +768,12 @@ export function RecipeTab() {
   const printed = useMemo(() => printRecipe(spec, { pretty: true }), [spec]);
   const [asText, setAsTextState] = useState(readAsText);
   const setAsText = (v: boolean) => { setAsTextState(v); try { localStorage.setItem(AS_TEXT_KEY, v ? '1' : '0'); } catch { /* per session */ } };
+  // ⌘⇧D (builders/windows.ts): the recipe as text, ready to type.
+  useEffect(() => {
+    const on = () => setAsTextState(true);
+    window.addEventListener(BUILDER_RECIPE_EVENT, on);
+    return () => window.removeEventListener(BUILDER_RECIPE_EVENT, on);
+  }, []);
   const [text, setText] = useState(printed);
   const [focused, setFocused] = useState(false);
   const [errors, setErrors] = useState<RecipeError[]>([]);

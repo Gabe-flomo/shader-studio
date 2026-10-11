@@ -27,6 +27,7 @@ import { fontFamily, radius } from '../../theme/tokens';
 import { BuilderFold, HintLabel } from '../builders/BuilderWindow';
 import { gridRulesSections, rememberTab, rememberedTab, validTab } from '../builders/builderLayout';
 import { LanguageTab, type LanguageRead } from '../builders/LanguageTab';
+import { focusRecipeEditor, useBuilderRecipeRequest } from '../../builders/windows';
 import { RECIPE_KEYS, parseGrid, printGrid } from '../../lang/dialects/grid';
 import { AssistList, useTypeAhead } from '../builders/TypeAhead';
 import { wordAssist, type Completion } from '../../lang/complete';
@@ -110,6 +111,8 @@ function GridRulesBuilder({ node, onClose }: { node: GraphNode; onClose: () => v
   const [picked, setPicked] = useState(() => rememberedTab('grid-rules', sections.map(x => x.id), 'rule'));
   const section = validTab(picked, sections, 'rule');
   const select = (id: string) => { setPicked(id); rememberTab('grid-rules', id); setFocus({}); };
+  // ⌘⇧D: As text (the recipe), its text focused.
+  useBuilderRecipeRequest(() => { select('recipe'); focusRecipeEditor('[data-language-tab="grid"] textarea'); });
   const [focus, setFocus] = useState<Omit<TryFocus, 'section'>>({});
   const info = sections.find(x => x.id === section)!;
 

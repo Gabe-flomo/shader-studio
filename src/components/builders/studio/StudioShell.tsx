@@ -25,6 +25,7 @@ import { Segmented } from '../../ui/Choice';
 import { portalGuard } from '../../ui/portalGuard';
 import { usePhoneDialog } from '../../ui/phoneDialog';
 import { SidePanel, useNarrowWindow } from '../../code/SidePanels';
+import { BUILDER_RECIPE_EVENT } from '../../../builders/windows';
 
 const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 
@@ -88,6 +89,14 @@ export function StudioShell(p: StudioShellProps) {
   };
   const toggle = useRef<(f: Fold) => void>(() => {});
   useEffect(() => { toggle.current = f => set(f, !open[f]); });
+  // ⌘⇧D (builders/windows.ts requestBuilderRecipe): the recipe shows in the inspector, so unfold it.
+  const showInspector = useRef<() => void>(() => {});
+  useEffect(() => { showInspector.current = () => { if (!open.inspector) set('inspector', true); }; });
+  useEffect(() => {
+    const on = () => showInspector.current();
+    window.addEventListener(BUILDER_RECIPE_EVENT, on);
+    return () => window.removeEventListener(BUILDER_RECIPE_EVENT, on);
+  }, []);
 
   useEffect(() => {
     if (!panelRef.current?.contains(document.activeElement)) panelRef.current?.focus();

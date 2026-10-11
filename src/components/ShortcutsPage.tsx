@@ -175,7 +175,7 @@ function DoBarCommandsSection() {
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px' }}>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 15, fontWeight: 650 }}>Do… bar commands</div>
-          <div style={{ color: tk.text.muted, marginTop: 4 }}>⌘K opens the Do… bar: build and edit the graph in words (“connect the noise to the output”, “make the circle bigger”). Every verb, with examples to try.</div>
+          <div style={{ color: tk.text.muted, marginTop: 4 }}>⌘K opens the Do… bar, and ⌘⇧D opens it from any page (in a scene builder, ⌘⇧D jumps to its recipe): build and edit the graph in words (“connect the noise to the output”, “make the circle bigger”). Every verb, with examples to try.</div>
         </div>
         <Button size="sm" icon={open ? 'chevU' : 'chevD'} onClick={() => setOpen(o => !o)}>{open ? 'Hide' : 'Show commands'}</Button>
       </div>
