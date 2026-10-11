@@ -27,7 +27,8 @@ function base64ToBytes(b64: string): Uint8Array {
   return out;
 }
 
-async function fetchDesktop(url: string, kaggle: boolean): Promise<Fetched> {
+/** The desktop app's Rust fetch (`fetch_url`); also used by the Texture node's image URLs. */
+export async function fetchDesktop(url: string, kaggle: boolean): Promise<Fetched> {
   const { invoke } = await import('@tauri-apps/api/core');
   try {
     const r = await invoke<{ status: number; contentType: string | null; finalUrl: string; body: string }>('fetch_url', { url, kaggle });

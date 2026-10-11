@@ -93,25 +93,48 @@ export class TextureUrlError extends Error {
 /** What the card says when a link can't be read (and what to do instead). */
 export const URL_MESSAGES = {
   invalid: 'That isn’t a web address. Paste a link that starts with https://.',
-  blocked: 'The site didn’t let this page read it. Many sites block other pages from downloading their files (CORS), or the link can’t be reached. Download the file and drop it on the card instead, or use a link from a site that allows it (Wikimedia upload links, picsum.photos, GitHub raw files).',
-  notPicture: 'That link isn’t a picture: it leads to a web page. Right-click the picture itself and choose Copy Image Address.',
+  blocked: 'The site didn’t let this page read it (CORS: many sites block other pages from downloading their files), or the link can’t be reached. Instead: right-click the picture, choose Copy Image, then point at this card and press ⌘V (Ctrl+V). Dropping the downloaded file works too, and the desktop app can fetch any link.',
+  blockedVideo: 'The site didn’t let this page read it. Many sites block other pages from downloading their files (CORS), or the link can’t be reached. Download the file and drop it on the card instead; the desktop app can fetch any link.',
+  notPicture: 'That link isn’t a picture: it leads to a web page. Right-click the picture itself and choose Copy Image, then press ⌘V (Ctrl+V) over this card (or Copy Image Address, and paste that link).',
   notVideo: 'That link isn’t a video file (an .mp4 or .webm). Video pages (YouTube, Vimeo) can’t be read: download the video and drop it on the card.',
   empty: 'That link gave an empty file.',
 } as const;
 
+/** In the desktop app (Tauri), where the Rust side can fetch any https link. */
+const inDesktopApp = (): boolean => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+
+/**
+ * The desktop app's fetch: the Rust side (`fetch_url`, src-tauri/src/data_fetch.rs: https only,
+ * no cookies, 25 MB, 30 s) reads the link, so CORS doesn't apply. Shaped as a Response.
+ */
+export async function desktopFetch(href: string): Promise<Response> {
+  const { fetchDesktop } = await import('../../data/urlFetch');
+  let r: Awaited<ReturnType<typeof fetchDesktop>>;
+  try { r = await fetchDesktop(href, false); } catch (e) {
+    throw new TextureUrlError('blocked', `Couldn’t fetch it: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  const body = r.bytes.slice().buffer as ArrayBuffer;
+  return new Response(r.status === 204 || r.status === 304 ? null : body, { status: r.status, headers: r.contentType ? { 'content-type': r.contentType } : {} });
+}
+
 /**
  * Fetch a picture or video by URL on the CPU (it is then decoded and uploaded as a texture).
- * The browser only hands the bytes over when the site allows other pages to read them (CORS);
- * otherwise this throws a TextureUrlError that says so.
+ * In a browser tab the page fetches it, and the browser only hands the bytes over when the site
+ * allows other pages to read them (CORS); otherwise this throws a TextureUrlError that says so.
+ * In the desktop app the Rust side fetches it, so any public https link works.
  */
-export async function fetchMedia(url: string, want: 'image' | 'video', fetchFn: typeof fetch = fetch): Promise<{ blob: Blob; name: string }> {
+export async function fetchMedia(url: string, want: 'image' | 'video', fetchFn?: typeof fetch): Promise<{ blob: Blob; name: string }> {
   let u: URL;
   try { u = new URL(url.trim()); } catch { throw new TextureUrlError('invalid', URL_MESSAGES.invalid); }
   if (!/^(https?|data|blob):$/.test(u.protocol)) throw new TextureUrlError('invalid', URL_MESSAGES.invalid);
   let res: Response;
-  try { res = await fetchFn(u.href, { mode: 'cors', credentials: 'omit' }); } catch {
-    // A CORS refusal and an unreachable host look the same from here (a TypeError).
-    throw new TextureUrlError('blocked', URL_MESSAGES.blocked);
+  if (!fetchFn && inDesktopApp() && /^https?:$/.test(u.protocol)) {
+    res = await desktopFetch(u.href);
+  } else {
+    try { res = await (fetchFn ?? fetch)(u.href, { mode: 'cors', credentials: 'omit' }); } catch {
+      // A CORS refusal and an unreachable host look the same from here (a TypeError).
+      throw new TextureUrlError('blocked', want === 'image' ? URL_MESSAGES.blocked : URL_MESSAGES.blockedVideo);
+    }
   }
   if (!res.ok) throw new TextureUrlError('status', `The site answered ${res.status}${res.statusText ? ` (${res.statusText})` : ''}. Check the link opens in a new tab.`);
   const type = (res.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase();

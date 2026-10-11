@@ -64,6 +64,8 @@ import { builderSceneOf, describeIntoBuilder, editSceneInBuilder } from '../../s
 import { useLibraryPrefs } from '../../structure/libraryPrefs';
 import { ShaderTextureInsidePanel } from '../shaderTexture/ShaderTextureCardBody';
 import { turnIntoShaderTexture } from '../shaderTexture/actions';
+import { isEditableTarget, readClipboardPicture } from '../../lib/texture/texturePaste';
+import { spawnPoint } from './spawnPoint';
 const OptimizeModal = lazyWithSuspense<PropsOf<typeof OptimizeModalT>>(() => import('./OptimizeModal').then(m => ({ default: m.OptimizeModal })));
 const BakeDialogHost = lazyWithSuspense<Record<string, never>>(() => import('../bake/BakeDialog').then(m => ({ default: m.BakeDialogHost })));
 const SceneBuilderModal = lazyWithSuspense<Record<string, never>>(() => import('../sceneBuilder/SceneBuilderModal').then(m => ({ default: m.SceneBuilderModal })));
@@ -554,6 +556,32 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup',   onKeyUp);
     };
+  }, []);
+
+  // ── ⌘V / Ctrl+V a picture (docs/texture-node.md, "Pasting a picture") ──────
+  // Image data (Copy Image) or an image link: onto the Texture card under the pointer or the
+  // selected Texture node, else a new Texture node in view. Text fields keep their own paste,
+  // and a paste with no picture or link in it goes on as usual.
+  const lastPointer = useRef<{ x: number; y: number } | null>(null);
+  useEffect(() => {
+    const onMove = (e: PointerEvent) => { lastPointer.current = { x: e.clientX, y: e.clientY }; };
+    const onPaste = (e: ClipboardEvent) => {
+      const canvas = canvasRef.current;
+      if (e.defaultPrevented || !canvas || lockedRef.current || !canvas.getClientRects().length) return;
+      if (isEditableTarget(document.activeElement) || isEditableTarget(e.target as Element | null)) return;
+      if (useNodeGraphStore.getState().scratch || document.querySelector('[role="dialog"]')) return;
+      const picture = readClipboardPicture(e.clipboardData);
+      if (!picture) return;
+      const pt = lastPointer.current;
+      const under = pt ? document.elementFromPoint(pt.x, pt.y) : null;
+      // Only a pointer over this canvas picks the card; otherwise the selection decides.
+      const hovered = under && canvas.contains(under) ? under.closest<HTMLElement>('[data-node-id]')?.dataset.nodeId ?? null : null;
+      e.preventDefault();
+      void import('../../lib/texture/texturePasteHost').then(m => m.pasteIntoGraph(picture, hovered, spawnPoint));
+    };
+    window.addEventListener('pointermove', onMove, { passive: true });
+    window.addEventListener('paste', onPaste);
+    return () => { window.removeEventListener('pointermove', onMove); window.removeEventListener('paste', onPaste); };
   }, []);
 
   // ── Keep the browser's own wheel gestures off the canvas ──────────────────

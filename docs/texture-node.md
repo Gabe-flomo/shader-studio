@@ -10,7 +10,7 @@ and every wire. What the other source had is put aside on the node, so switching
 
 | Source | How | Kept |
 |---|---|---|
-| **Image** | Click to pick a file, drop one on the card, **Library**, or paste a URL and press **Load** (or Enter) | In the image library at full size, plus a copy in the node (see below) |
+| **Image** | Click to pick a file, drop one on the card, **Library**, paste a URL and press **Load** (or Enter), or **⌘V** a copied picture or link (see *Pasting a picture*) | In the image library at full size, plus a copy in the node (see below) |
 | **Video** | Click to pick a file, drop one, **Library**, or paste the URL of a video *file* | In the video library, by reference |
 | **Webcam** | Choose Webcam | Play's Camera layer (its settings live on this computer) |
 
@@ -18,14 +18,43 @@ Dropping a video on an Image card switches it to Video, and the other way round.
 
 ### Image URLs
 
-The picture is downloaded on the CPU (`fetch`), decoded and uploaded as a texture. Then it's kept like an
-uploaded file.
+The picture is downloaded on the CPU, decoded and uploaded as a texture. Then it's kept like an uploaded
+file, and the node keeps the link as its source (`params._imageUrl`).
 
-- **What works:** sites that let other pages read their files (CORS), such as Wikimedia upload links
-  (`upload.wikimedia.org/...`), `picsum.photos`, GitHub raw files and most CDNs and image hosts.
-- **What doesn't:** most other sites block it. The card then says the site didn't let the page read it, and
-  suggests downloading the file and dropping it instead. A link to a web page rather than a picture says so,
-  with the hint to use **Copy Image Address**.
+- **In a browser tab** the page fetches it (`fetch`, CORS).
+  - **What works:** sites that let other pages read their files, such as Wikimedia upload links
+    (`upload.wikimedia.org/...`), `picsum.photos`, GitHub raw files and most CDNs and image hosts.
+  - **What doesn't:** most other sites block it. The card then says the site didn't let the page read it,
+    and suggests **Copy Image** and ⌘V on the card instead (see below), or dropping the downloaded file.
+- **In the desktop app** the Rust side fetches it (`fetch_url` in `src-tauri/src/data_fetch.rs`, the same
+  command the Data editor's links use: https only, no cookies, at most 25 MB, 30 s). CORS doesn't apply, so
+  any public https link works.
+- A link to a web page rather than a picture says so, with the hint to use **Copy Image** (or Copy Image
+  Address).
+
+**Source:** a picture that came from a link shows it on the card under **Source**, with a button that copies
+it. The link is saved with the graph, in its versions and in a .playfile, next to the stored picture. A
+picture loaded any other way (a file, the library, a screenshot) has no source.
+
+### Pasting a picture
+
+Copy a picture in a browser (**Copy Image**) or its link (**Copy Image Address**), then press **⌘V**
+(Ctrl+V) in the graph:
+
+| Where | What happens |
+|---|---|
+| Pointer over a Texture card | The picture goes onto that node. |
+| A Texture node selected (and the pointer not over another card) | The picture goes onto the selected node. |
+| Anywhere else on the canvas | A new Texture node is added in view, showing the picture, and selected. |
+
+- **Image data** (Copy Image) is loaded as it is, with no download, so it works from any site. Copy Image
+  usually brings the picture's address along in its HTML, and the node keeps it as the source.
+- **A link** is fetched as **Load** does (CORS in a browser tab, any link in the desktop app). When it
+  can't be read, the card says why. Pasted with no Texture node to take it, a failed link adds nothing and
+  a toast says why.
+- A Video or Webcam node switches to Image, as when a picture is dropped on it.
+- Text fields keep their own paste. A paste with no picture or link in it (plain text) does nothing here.
+  ⌘D (duplicate) is unchanged, and a duplicate keeps the picture and its source.
 - **Video by URL** works the same way when the site allows it and the link is a video *file* (.mp4,
   .webm). Video pages such as YouTube or Vimeo can't be read: download the video and drop it.
 
@@ -132,6 +161,7 @@ video). Keeping them made the change safe, and saved graphs compile to the same 
 |---|---|
 | Sources, switch, names | `src/lib/texture/textureSource.ts` |
 | Pictures: embed, URL fetch, restore on open | `src/lib/texture/pictures.ts`, `pictureHost.ts` |
+| Pasting a picture (⌘V) | `src/lib/texture/texturePaste.ts` (reading the clipboard, the target), `texturePasteHost.ts`; the listener is in `NodeGraph.tsx` |
 | Videos onto the node | `src/lib/texture/videoActions.ts` |
 | Webcam texture and Camera layer | `src/lib/texture/webcam.ts`, `webcamHost.ts` |
 | Generate depth, placement | `src/lib/texture/generateDepth.ts` |

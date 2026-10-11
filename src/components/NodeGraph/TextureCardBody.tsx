@@ -33,6 +33,7 @@ import { listImages, listVideos, getImage, type BackgroundImageMeta, type Librar
 import { KIND_LABEL, imageNameOf, textureKindOf, type TextureKind } from '../../lib/texture/textureSource';
 import { fetchMedia, TextureUrlError } from '../../lib/texture/pictures';
 import { takePicture } from '../../lib/texture/pictureHost';
+import { onTexturePaste } from '../../lib/texture/texturePaste';
 import { isImageFile, isVideoFile, loadLibraryVideo, loadVideoIntoNode, videoMissing } from '../../lib/texture/videoActions';
 import { textureToShaderTexture } from '../shaderTexture/actions';
 import { cameraLayerOf, mirrorParams, setCameraMirror } from '../../lib/texture/webcam';
@@ -40,6 +41,8 @@ import { textureTileOf, textureWrapOf } from '../../nodes/definitions/sources';
 import { TextureImageEditModal } from './TextureImageEditModal';
 
 const KINDS: TextureKind[] = ['image', 'video', 'webcam'];
+/** A link as the card shows it: the site and path, without https:// or www. */
+const shortUrl = (u: string) => u.replace(/^https?:\/\/(www\.)?/i, '');
 const subscribeEngine = (fn: () => void) => videoEngine.onChange(fn);
 
 export function TextureCardBody({ node, onEditClip }: { node: GraphNode; onEditClip: () => void }) {
@@ -61,6 +64,7 @@ export function TextureCardBody({ node, onEditClip }: { node: GraphNode; onEditC
   const [editing, setEditing] = useState(false);
   const [missing, setMissing] = useState(false);
   const [mapTarget, setMapTarget] = useState<string>('');
+  const [copied, setCopied] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const libRef = useRef<HTMLSpanElement>(null);
   const mapRef = useRef<HTMLSpanElement>(null);
@@ -86,6 +90,11 @@ export function TextureCardBody({ node, onEditClip }: { node: GraphNode; onEditC
       setError(e instanceof TextureUrlError ? e.message : e instanceof Error ? e.message : String(e));
     } finally { setBusy(''); }
   };
+
+  // ⌘V over this card (or with it selected) runs here, so its progress and errors show on the card.
+  const runRef = useRef(run);
+  runRef.current = run;
+  useEffect(() => onTexturePaste(node.id, (what, job) => runRef.current(what, async () => { await job(); setUrl(''); })), [node.id]);
 
   const toKind = (k: TextureKind) => {
     if (k === kind) return;
@@ -132,6 +141,7 @@ export function TextureCardBody({ node, onEditClip }: { node: GraphNode; onEditC
   };
 
   const thumb = typeof p._thumbnailUrl === 'string' ? p._thumbnailUrl : '';
+  const sourceUrl = typeof p._imageUrl === 'string' && /^https?:\/\//i.test(p._imageUrl) ? p._imageUrl : '';
   const name = kind === 'image' ? imageNameOf(p) : (typeof p._fileName === 'string' ? p._fileName : '');
   const cam = cameraLayerOf(play);
   const mirror = cam ? cam.mirror : p.mirror !== false;
@@ -160,7 +170,7 @@ export function TextureCardBody({ node, onEditClip }: { node: GraphNode; onEditC
       {kind === 'image' && <>
         {dropZone(thumb
           ? <img src={thumb} alt={name || 'picture'} style={{ width: '100%', maxHeight: 110, objectFit: 'contain', display: 'block' }} />
-          : <span style={{ ...line, padding: 10, textAlign: 'center' }}>Click or drop a picture (or a video)</span>)}
+          : <span style={{ ...line, padding: 10, textAlign: 'center' }}>Click or drop a picture (or a video), or paste one with ⌘V</span>)}
         {thumb && !hasPicture && !busy && <span style={{ ...line, color: tk.status.warning }}>Opening the picture… (if it stays like this, load it again: it was saved before pictures were kept with the graph)</span>}
       </>}
 
@@ -220,6 +230,18 @@ export function TextureCardBody({ node, onEditClip }: { node: GraphNode; onEditC
         <span style={{ ...line, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={name}>
           {name}{kind === 'image' && typeof p._imageSrc === 'string' ? ' · kept with the graph' : kind === 'video' && videoId ? ' · in the video library' : ''}
         </span>
+      )}
+
+      {kind === 'image' && sourceUrl && (
+        <div data-texture-source style={{ display: 'flex', gap: 6, alignItems: 'center', minWidth: 0 }}>
+          <span style={label}>Source</span>
+          <a href={sourceUrl} target="_blank" rel="noreferrer noopener" title={sourceUrl} onClick={stop}
+            style={{ ...line, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: tk.text.muted, textDecoration: 'none' }}>
+            {shortUrl(sourceUrl)}
+          </a>
+          <Button size="sm" variant="ghost" icon={copied ? 'check' : 'copy'} title="Copy the picture’s link" aria-label="Copy the source link"
+            onClick={() => { void navigator.clipboard?.writeText(sourceUrl).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1200); }, () => toast.error('Couldn’t copy the link')); }} />
+        </div>
       )}
 
       {kind === 'image' && (
