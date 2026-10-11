@@ -52,7 +52,7 @@ describe('Cell Pattern', () => {
       node('gridLayout', 'grid', {}, { uv: ['uv', 'uv'] }),
       node('cellPattern', 'pat', { mode: 'mirrorXY' }, { cellID: ['grid', 'cellID'] }),
       node('cellFilter', 'pick', { x: 0, y: 0 }, { cellID: ['pat', 'sourceID'] }),
-      { ...node('output', 'out'), inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'pick', outputKey: 'mask' } } } },
+      node('output', 'out', {}, { color: ['pick', 'mask'] }),
     ];
     const r = compileGraph({ nodes });
     expect(r.success, String(r.errors)).toBe(true);
@@ -79,7 +79,7 @@ describe('Cell Picture', () => {
       node('cellPicture', 'pc', { mode: 'piece' }, { uv: ['uv', 'uv'], cellCenter: ['gp', 'cellCenter'], cellUV: ['gp', 'cellUV'], cellSize: ['gp', 'cellSize'] }),
       node('textureInput', 'tex', {}, { uv: ['pc', 'uv'] }),
       node('gridPaint', 'paint', {}, { color: ['tex', 'color'], distance: ['gp', 'distance'], placed: ['gp', 'placed'] }),
-      { ...node('output', 'out'), inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'paint', outputKey: 'color' } } } },
+      node('output', 'out', {}, { color: ['paint', 'color'] }),
     ];
     const r = compileGraph({ nodes });
     expect(r.success, String(r.errors)).toBe(true);
