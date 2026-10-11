@@ -20,6 +20,8 @@ import { focusItems } from '../../nodes/randomizeFocus';
 import { focusWeights } from './focusWeights';
 import { announceSurprise } from './announce';
 import { restartAgents } from '../../lib/agentRunner';
+import { compileGraph } from '../../compiler/graphCompiler';
+import type { GraphNode } from '../../types/nodeGraph';
 
 /** The last seed per builder window (by node id) and for the whole graph. */
 export const useSurpriseSeeds = create<{ grid: Record<string, number>; agents: Record<string, number>; graph: number | null }>(() => ({ grid: {}, agents: {}, graph: null }));
@@ -71,19 +73,50 @@ export function surpriseBuilderAction(groupId: string, seed: number): boolean {
   const g = useNodeGraphStore.getState().nodes.find(n => n.id === groupId);
   if (!g) return false;
   const was = groupRules(g);
-  const s = surpriseForKind(makeRng(seed), kindOf(was), { d3: g.params.space === '3d' });
-  const set = was.collide ? { ...s.set, collide: was.collide } : s.set;
-  if (!surpriseGroupRules(groupId, { ...s, set }, `Surprise: ${s.summary}`)) return false;
-  restartAgents(groupId);
-  if (typeof window !== 'undefined') window.dispatchEvent(new Event('agents-restart'));
-  useSurpriseSeeds.setState(x => ({ agents: { ...x.agents, [groupId]: seed } }));
-  announceSurprise({
-    title: 'Surprise', seed, message: s.summary,
-    stillCurrent: stillTop(),
-    undo: undoGraph,
-    reroll: () => { undoGraph(); surpriseBuilderAction(groupId, newSeed()); },
-  });
-  return true;
+  // A rule set that doesn't compile would leave the old program drawing a still picture: it is taken
+  // back and the next seed tried (a graph that didn't compile before isn't the surprise's fault).
+  const before = useNodeGraphStore.getState().nodes;
+  let brokenBefore: boolean | undefined;
+  let failure: string | null = null;
+  for (let i = 0; i < SURPRISE_TRIES; i++) {
+    const sd = i ? nextSeed(seed, i) : seed;
+    const s = surpriseForKind(makeRng(sd), kindOf(was), { d3: g.params.space === '3d' });
+    const set = was.collide ? { ...s.set, collide: was.collide } : s.set;
+    if (!surpriseGroupRules(groupId, { ...s, set }, `Surprise: ${s.summary}`)) return false;
+    const err = graphCompileError(useNodeGraphStore.getState().nodes);
+    if (err && !(brokenBefore ??= graphCompileError(before) !== null)) {
+      undoGraph();
+      failure = err;
+      continue;
+    }
+    // A new rule set starts from a fresh board (the runner keeps the request until the new rule has compiled).
+    restartAgents(groupId);
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event('agents-restart'));
+    useSurpriseSeeds.setState(x => ({ agents: { ...x.agents, [groupId]: sd } }));
+    announceSurprise({
+      title: 'Surprise', seed: sd, message: failure ? `${s.summary} (skipped ${i} that didn't compile)` : s.summary,
+      stillCurrent: stillTop(),
+      undo: undoGraph,
+      reroll: () => { undoGraph(); surpriseBuilderAction(groupId, newSeed()); },
+    });
+    return true;
+  }
+  if (failure) toast.error('Surprise didn\'t compile', { message: 'The random rules were taken back; the scene is as it was. Try again for another seed.', details: failure });
+  return false;
+}
+
+/** Tries before a Surprise gives up on rule sets that don't compile. */
+const SURPRISE_TRIES = 4;
+/** The seed tried after `seed` fails `i` times (deterministic, so the same seed gives the same result). */
+const nextSeed = (seed: number, i: number) => (seed + i * 7919) % 2147483647;
+/** The graph's first compile error, or null. */
+function graphCompileError(nodes: GraphNode[]): string | null {
+  try {
+    const r = compileGraph({ nodes });
+    return r.errors?.length ? r.errors[0] : null;
+  } catch (e) {
+    return e instanceof Error ? e.message : String(e);
+  }
 }
 
 /** The options as used for one randomize (the saved ones, unless a caller overrides). */
