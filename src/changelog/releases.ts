@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.168',
+    date: '2026-10-11',
+    title: 'Palettes, effects and scan walkers',
+    highlights: [
+      { area: 'Studio', text: '2D Scene Builder Look: pick or make a palette and give shapes and background palette slots, plus a stack of colour grades. Bloom and Scanlines retire.' },
+      { area: 'Studio', text: 'New Effects page: displace by noise or a picture, swirl, ripple, lens, pixelate, kaleidoscope, blur, glow, chromatic aberration and CRT mask, in any order.' },
+      { area: 'Studio', text: 'Agents as splats: a Splats look for walkers, Emit from a splat scan, and Return home. Scan to walkers blows a scan apart and lets it flow back.' },
+    ],
+  },
+  {
     id: '2026.10.167',
     date: '2026-10-11',
     title: 'Pieces and movers',
