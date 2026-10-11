@@ -202,6 +202,15 @@ Built:
 
 Next: the example graph from a real photo; camera match ("match the picture's camera"); phase 1c (Pieces).
 
+### Phase 1c status (Pieces, `claude/pieces`)
+
+Built (docs/pieces.md): the **Pieces** node (2D: Offset ƒ field socket, sure and fast neighbour searches, shapes with
+glyphs, size by brightness or depth, Flat / Piece colour, outputs Colour, Mask, Piece ID, Home); **Balls** (3D: its own
+walled grid or one ball per Repeat Scene copy, lifted by brightness or depth, wave, jitter, Displace); the 2D builder's
+**Picture in pieces** and the 3D builder's **Picture balls** shape with a **Picture as balls** template; two examples.
+
+Not yet: pieces as walkers with Return home (waits for the agents-as-splats card).
+
 ### Phase 2 status (Splat Scene, `claude/splat-scene`)
 
 Built (docs/splat-scene.md):

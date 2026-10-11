@@ -17,6 +17,7 @@
  */
 
 import type { GridSpec } from './grid';
+import type { PiecesSpec } from './pieces';
 import type { FnRef } from './functions';
 import { blockSummary, cloneBlock, COMBINE_BY_MODE, type CombineMode, type CombineSpec, type SpaceBlock } from './blocks';
 import type { TexSource, TexUse } from '../builders/textures';
@@ -304,6 +305,8 @@ export interface Scene2D {
   layers: Item[];
   /** A grid of cells drawn over the layers (grid.ts), or none. */
   grid?: GridSpec | null;
+  /** A picture rebuilt from pieces over the layers and the grid (pieces.ts), or none. */
+  pieces?: PiecesSpec | null;
   look: LookSpec;
   output?: OutputSpec;
   /** The pictures the scene reads (builders/textures.ts): fills, picture layers, masks, the background. */
@@ -475,6 +478,7 @@ export function canonicalScene(spec: Scene2D): Scene2D {
   if (!out.output || out.output.show === 'picture') delete out.output;
   else if (!out.output.palette) delete out.output.palette;
   if (!out.textures?.length) delete out.textures;
+  if (!out.pieces) delete out.pieces;
   if (!out.look.bgTex) delete out.look.bgTex;
   if (!out.depth) delete out.depth;
   else delete out.depth.bake;
@@ -490,7 +494,7 @@ export function canonicalScene(spec: Scene2D): Scene2D {
 
 /** Does the scene have anything to draw? */
 export function hasShapes(spec: Scene2D): boolean {
-  return allShapes(spec).length > 0 || !!spec.grid || !!spec.look.bgTex || !!spec.depth;
+  return allShapes(spec).length > 0 || !!spec.grid || !!spec.pieces || !!spec.look.bgTex || !!spec.depth;
 }
 
 /** The names of the pictures a scene uses (fills, masks, the background). */
@@ -499,6 +503,7 @@ export function texturesUsed2D(spec: Scene2D): string[] {
   walkItems(spec.layers, it => { if (it.fill) out.push(it.fill.tex); if (it.mask) out.push(it.mask.tex); });
   if (spec.look.bgTex) out.push(spec.look.bgTex.tex);
   if (spec.grid?.pic) out.push(spec.grid.pic.tex);
+  if (spec.pieces) out.push(spec.pieces.tex);
   if (spec.depth) out.push(spec.depth.tex);
   return [...new Set(out)];
 }
