@@ -68,8 +68,29 @@ it).
   shader uses (`motionAt`).
 - Cells a rule points at (a cell, a column, a row) are ringed. **Pick on the grid** in a rule waits
   for a click on a cell (Esc stops it).
-- Up to 128 drawn cells: every one is a few lines of the shader and every pixel looks at each.
-  The pattern's fill covers the rest of the grid at no extra cost.
+- Every cell can be drawn (up to 24 × 24). The drawing is data, not code: drawing and erasing change
+  numbers on the Grid scene node, never the shader, so nothing recompiles (see "How a pixel finds
+  its shapes").
+- **Draw mode** (under the brush): how the drawing covers the grid (see "Draw modes"). A click on a
+  copy draws in the cell it copies; copies show faintly and the cells you draw in are outlined.
+
+### Draw modes
+
+The drawing stays the source; the shader maps each cell to the cell of the drawing it shows before
+it reads the drawing, so a mode costs nothing per shape (`gs_cell`; `sourceCell` on the CPU):
+
+| Mode | What it does |
+|---|---|
+| **Only here** | A shape goes only in the cell you draw it in (the default). |
+| **Repeat** | Draw in one tile, Period X × Period Y cells starting at Offset; it repeats over the whole grid (cell id mod the period, as Cell Filter's Modulo). **Row shift** slides each row of tiles across: bricks, staggers. Period, offset and shift are live sliders on the Grid scene node. Repeat 1 × 1 fills every cell from one. |
+| **Mirror X / Mirror Y / Mirror both** | Draw on the left half (top half, top-left quarter); it reflects. |
+| **Rotate 4** | Draw in the top-left quarter; it turns round the middle into all four (a kaleidoscope; best on a square grid, as a turned cell can fall off a non-square one). |
+
+Motion lag, rules, the pattern's wave and the picture modes all use the **shown** cell, not the
+drawn one: copies ripple across the grid with the lag, a rule on column 6 catches the copies there,
+and each copy carries its own piece of a picture. (The source cell instead would make every copy
+move and look alike; not offered yet.) Make it a simulation starts from what the grid shows, copies
+included.
 
 ### Text
 
@@ -94,7 +115,7 @@ Words in the Agent Builder's stroke font (`agentBuilder/strokeFont.ts`), two way
 
 | Section | What it sets |
 |---|---|
-| **Shapes** | Up to six shapes: kind (circle, square, ring, diamond, triangle, hexagon, star, plus, cross, heart), colour, size (a share of half a cell: 1 touches the neighbours), turn, spin, pulse, outline. Add and remove shapes (a removed shape's cells and rules go with it). |
+| **Shapes** | Up to six shapes: kind (circle, square, ring, diamond, triangle, hexagon, star, plus, cross, heart), colour, size (a share of half a cell: 1 touches the neighbours), turn, spin, pulse, outline. Add and remove shapes (a removed shape's cells and rules go with it). **Picture**: a picture the shape carries, and its mode (see Pictures in pieces). |
 | **Motion** | The brush shape's path: still, up and down, side to side, both at once, circle, figure eight, bounce, travel, hop. The **XY control** sets how far (in cells, y up): drag the point, the path is drawn round it; X and Y sliders beside it. Speed (cycles a second) and lag (each cell starts (x + y) × lag of a cycle later: the motion runs through the drawing as a wave). Travel and hop wrap round the grid. |
 | **Patterns & warps** | A wave over the cells: ripple, diagonal, checker, rings, spiral, stripes, random. It changes every shape's size, turn, push, hue or brightness by Amount; Waves is how many across the grid, Speed in cycles a second, Arms for the spiral. **Fill empty cells** puts a shape in every cell you didn't draw on, its size following the wave (checker + fill is a checkerboard that swaps). **Only in words** limits the wave and the fill to the cells some words cover (see Text). **Grid warps**: up to three space blocks from the 2D Scene Builder's library (the same picker: categories, search, Random), bending the space the whole grid is drawn in, lines and all. |
 | **Rules** | When … Do … for every drawn cell, checked in the shader each frame, top to bottom. When a shape *is in the cell (x, y)*, *is in the column*, *is in the row*, *shares a cell with* another shape, or *is near* it (within N cells). Do: *becomes* another shape (its kind, size and colour), *turns a colour*, *swaps colours with* the other shape (both ways), *grows by*, *hides*, *spins*. A rule that names a shape that isn't there is shown as off. |
@@ -113,15 +134,52 @@ Glow Layer (d, colour) ─► Add over the ground ─► SDF Fill ─► Tone Ma
 - **Shape A, B…**: an Expression Block whose sliders are the shape's numbers (size, turn, spin,
   pulse, outline, move X and Y, speed, lag). Its result is the motion (x, y, speed, lag); `look`
   and `edge` are exposed outputs. Colour is a Colour node. All live: no recompile.
-- **Grid scene**: an Expression Block with the pattern's sliders (amount, freq, speed, arms). Its
-  helper functions (in the node's functions) draw the grid: for every drawn cell, where its shape is
-  now, which cell that is, the pattern's wave there, the rules, and the shape's distance; the
-  nearest shape gives the colour. Each function's name ends in a hash of its code, so two grid
-  scenes in a graph never clash. Result: the colour; `d`: the distance (picture units).
+- **Grid scene**: an Expression Block with the pattern's sliders (amount, freq, speed, arms) and
+  the drawing as hidden sliders (`g0…`, eight cells a number, three bits a cell: which shape, 0 for
+  none), gathered into an array `gd` in its first line. Its helper functions (in the node's
+  functions) draw the grid: for each shape, the drawn cells whose shape could be at this pixel now
+  (see below), then the pattern's wave there, the rules, and the shape's distance; the nearest
+  shape gives the colour. Each function's name ends in a hash of its code, so two grid scenes in a
+  graph never clash. Result: the colour; `d`: the distance (picture units); `home` and `piece`: the
+  winning shape's home cell centre and the place on a still picture this point of it came from
+  (picture units; see "Pictures in pieces"). Pictures come in as `tx0…` (texture inputs); the
+  draw mode Repeat adds periodX, periodY, offsetX, offsetY and shift.
 - **Ground & lines**: the background, a faint checker of the cells (tint) and the cell borders,
   read in the warped space so the lines bend with the warps.
-- Every node has a note. The structure (the cells, a path's kind, the pattern's kind, the rules,
-  the warps) is code: changing it rebuilds; numbers are uniforms.
+- Every node has a note. The structure (a path's kind, the shapes' kinds, the pattern's kind, the
+  draw mode, the rules, the warps, the pictures) is code: changing it rebuilds; numbers, and the
+  drawing itself, are uniforms. The notes never count drawn cells, so drawing leaves the shader text
+  (notes are comments in it) exactly as it was.
+
+### How a pixel finds its shapes
+
+Every pixel looks only at the cells near it, not at every drawn cell:
+
+- **Each shape is searched on its own.** Its motion is turned backwards to find the home cell a
+  shape at this pixel would have come from: exactly when every cell moves alike (lag 0), or round
+  the middle of the path when the motion runs as a wave (lag). Travel and Hop solve their wrap
+  round the grid (with lag, each way round it). A square of cells round that home is read in the
+  drawing; a cell is drawn only if it holds this shape.
+- **The square's size** comes from what the shape could reach: its size (at least 1, so dragging
+  the size slider up to 1 stays whole), pulse, outline, the pattern's grow (size) and push, its
+  rules' grow and become, and with lag the path's reach (X, Y). Glow adds a cell so halos stay.
+  Typically 3 × 3 (no glow) or 5 × 5; at most 13 × 13. The square is sized when the scene is built:
+  dragging a shape's size, pulse, reach or lag far past what was built (on the Shape node, without
+  rebuilding) can cut a shape at the square's edge until the next build; the builder rebuilds
+  itself.
+- **The pattern's fill** is searched round the pixel's own cell the same way, so a fill shape bigger
+  than its cell, pulsing or pushed reaches over the cell's edge instead of being cut there.
+- **Rules with a partner** (*shares a cell with*, *is near*) search the partner shape's cells round
+  the cell (or point) in question the same way.
+- **Cost.** A 24 × 24 grid drawn full, one circle moving round, at 1920 × 1080 in the browser pane
+  on this Mac: 5.3 ms a frame with glow (a 5 × 5 search), 2.6 ms without (3 × 3), against 13.9 ms for
+  the old code (one block per drawn cell, every pixel testing every one; it allowed 128 cells, so
+  576 is its worst case); the shader's grid code is 4 KB instead of 311 KB and links in about 85 ms
+  instead of 1.5 s. Very large motion with lag (an X or Y of 3 cells) widens the search to 9 × 9 or
+  more and costs more; several shapes cost one search each.
+- The old per-cell code is kept in the tests (`src/gridScene/__tests__/legacyGlsl.ts`): every
+  template and a spread of Surprise scenes draw the same picture with the lookup (within 0.005 of a
+  colour step for the templates), compared on the CPU (`gridLookup.test.ts`).
 
 The UV node keeps the spec (`gridScene`), so the Scene builder lists the build ("Grid scene · 10 ×
 10 · 27 cells drawn") and **Edit this one** reopens it exactly as built. A rebuild keeps each node's
@@ -130,21 +188,57 @@ spec leaves alone (`src/gridScene/apply.ts`, the 2D Scene Builder's scheme).
 
 ## Textures
 
-Pictures through the shared picker ([scene-builder.md](scene-builder.md#textures)):
+Pictures through the shared picker ([scene-builder.md](scene-builder.md#textures)). Every picture
+the scene reads is a texture input of the Grid scene node (`tx0…`) that its scene function reads
+itself (an Expression Block passes a texture input to its helpers by name), so a video or the
+webcam plays inside the shapes: every frame is read again.
 
-- **Picture cells:** the shape kind **Picture** shows a picture inside each of its cells, filling
-  the cell's square (Fill, keeping the picture's shape), turning, spinning and pulsing with the
-  shape. The scene function writes the winning cell's place on its picture (`inout vec4 pic`: xy the
-  place, z 1 for a picture, w its slot); a Sample (texture) per picture reads it and paints it over.
-  Scenes without picture cells compile to the same code as before.
-- **Picture pattern:** the pattern **Picture** puts a picture over the grid; each cell takes its
-  brightness there (read at the centre of the pixel's cell), as the wave: bright is the wave's top, so
-  the picture drives the size, turn, push, hue or brightness, and the fill of empty cells.
-- **Picture mask** (Patterns): shapes only in the cells where a picture is bright (**Cut**, live),
-  or dark (**Invert**).
+- **Pictures in pieces** (Shapes → Picture): any shape can carry a picture, in one of four modes
+  (below). The shape kind **Picture** is a square that carries one (In each shape, by default).
+- **Picture pattern:** the pattern **Picture** puts a picture over the grid; each shape takes the
+  brightness at **its own cell** (the cell it is in now; the fill: its cell), as the wave: bright is
+  the wave's top, so the picture drives the size, turn, push, hue or brightness, and the fill.
+- **Picture mask** (Patterns): shapes only where **their own cell** is bright in a picture (**Cut**,
+  live), or dark (**Invert**). A shape reaching into a neighbouring cell keeps its own cell's
+  answer.
 
-The pattern and the mask share one read of the same picture. Read per cell, a shape reaching into a
-neighbouring cell takes that cell's value.
+The pattern, the mask and the shapes share one texture input for the same picture.
+
+### Pictures in pieces
+
+Cut a picture up into the grid: the shapes carry it, so you don't see the picture itself, only the
+shapes made of it. If the shapes move or wave, the picture does too (in the Matte modes).
+
+| Mode | Where a shape reads the picture | Moving shapes |
+|---|---|---|
+| **In each shape** | The whole picture fitted to the shape's square (Fill), turning with it. | The picture goes with each shape, whole. |
+| **Mask** | The point on the screen (before the warps): the picture stays put; the shapes are windows onto it. | Show different parts of the picture as they move. |
+| **Matte: colour** | The picture's colour at the shape's **home cell's centre**: one flat colour a shape, a mosaic or halftone look. | Keep their colour wherever they go. |
+| **Matte: piece** | Home cell centre + the point's offset within the shape, turned and scaled with it (its base Turn left out). At rest the pieces make up the picture (the same as Mask); then each carries its piece away, like After Effects' CC Ball Action. | Their piece moves, waves, spins, pulses and grows with them. |
+
+All motion carries the picture in the Matte modes and not in Mask: the paths (up and down, circle,
+figure eight, bounce, travel, hop), lag ripples, spin, pulse, the pattern's push, turn and size, and
+the rules (a shape that *becomes* another takes that shape's picture and mode). Tests check the
+sampling place under each path (`gridTextures.test.ts`, "where each picture mode reads the
+picture"). The picture covers the whole grid (Fill, keeping its shape).
+
+For a matte of your own, the Grid scene node's `home` and `piece` outputs are picture-unit points:
+wire either into a Sample (texture)'s UV. For hand-built grids, the **Cell Picture** node does the
+same from a Grid's or Grid Pattern's Cell Center, Cell UV and Cell Size (below).
+
+Template: **A picture in pieces**: circles waving round their cells (circle path with lag), one
+drawn cell repeated 1 × 1 into all 16 × 12, each carrying its piece (Matte: piece). Pick its picture
+under Shapes → Picture.
+
+### In the node graph
+
+- **Cell Picture** (Grid): Mode Mask / Matte: colour / Matte: piece. Wire UV, Cell Center, Cell UV
+  and Cell Size (Grid has all four; Grid Pattern now hands out Cell Size too), and its UV into a
+  Texture's or Sample (texture)'s UV. Grid Pattern's Cell UV is already grown, pulled and spun, so
+  the piece follows the shape. With Overflow on, the neighbours' shapes read the pixel's own cell.
+- **Cell Pattern** (Grid): Cell ID in, Source ID out (and Is Source): Repeat (Period, Offset,
+  Shift), Mirror X / Y / both and Rotate 4 round a Centre: the draw modes for any per-cell value
+  (read a hash, a Cell Filter or a Pad Grid at Source ID).
 
 ## Surprise me
 
@@ -162,6 +256,11 @@ rule between two shapes. One undo step; Reroll and Undo in its toast.
   Scene Builder.
 
 ## Not yet
+
+- Draw modes that use the drawn (source) cell for lag, rules and pictures instead of the shown one
+  (every copy moving and looking alike).
+- Search sizes follow the scene as built: a Shape node's slider dragged far past it, without a
+  rebuild, can cut shapes at the search's edge.
 
 - Shapes moving through the pattern's fill don't push it aside; the fill only skips the cells you
   drew on.

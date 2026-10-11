@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.155',
+    date: '2026-10-11',
+    title: 'Pictures in pieces',
+    highlights: [
+      { area: 'Studio', text: 'Grid pictures: Mask (shapes are windows onto a still picture), Matte: colour (one colour per shape) or Matte: piece (each shape carries its piece as it moves).' },
+      { area: 'Studio', text: 'Grid builder: drawing is data now (no rebuild, full 24×24, 2.6× faster). Draw modes: only here, repeat, mirror, rotate 4. Big fill shapes no longer clip.' },
+      { area: 'Studio', text: 'New nodes: Cell Picture and Cell Pattern bring matte pieces and repeat/mirror cell lookups to hand-built grids.' },
+    ],
+  },
+  {
     id: '2026.10.154',
     date: '2026-10-11',
     title: 'Splat modifiers',

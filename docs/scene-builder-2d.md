@@ -123,6 +123,13 @@ its pictures by name; each use reads its node.
   Off reads the screen.
 - **Mask** (the Picture card): the layer and its glow only where a picture over the whole frame is
   bright (**Cut**, live), or dark (**Invert**).
+- **Grid picture** (Grid → **Picture**): the grid's shapes carry a picture, cut up into them, in one
+  of the Grid builder's modes ([grid-builder.md](grid-builder.md#pictures-in-pieces)): **In each
+  shape** (the whole picture in every shape), **Mask** (the picture over the whole frame, read at the
+  screen's point: the shapes are windows onto it), **Matte: colour** (each shape the picture's colour
+  at its cell's centre) or **Matte: piece** (each shape its own piece from round its cell, turned,
+  pushed and grown with it by the ripple; at rest the pieces make up the picture). The Grid block
+  writes `place`, where to read it; a Picture fit and a Sample read it and paint it over the shapes.
 
 What Build makes: per use a **Picture fit** Expression Block (q, the point; k, Tiles or Zoom, live;
 the fit's lines; `inside` out), a **Sample (texture)** wired from the picture's node (Edges: Repeat
@@ -136,6 +143,7 @@ swirl 2
 circle r=0.4 fill=pond fit=tile tiles=3 mask=pond mask-cut=0.3 mask-invert
 picture pond h=0.3 at=(0.5,0) fit=contain zoom=1.2
 background navy picture=pond fit=stretch still
+grid 16 12 picture=pond picture-mode=piece
 ```
 
 - `texture name [node=] [aspect=] [kind=image|shader]` declares a picture (printed first). A name
@@ -143,6 +151,7 @@ background navy picture=pond fit=stretch still
 - On any layer: `fill=`, `fit=cover|contain|stretch|tile` (`fill` and `fit` read as cover and
   contain too), `tiles=` (Tile) or `zoom=`; `mask=`, `mask-cut=`, `mask-invert`.
 - `picture name` is a picture layer; `background … picture= fit= tiles= [still]`.
+- On the grid: `picture=` and `picture-mode=cell|mask|matte|piece` (piece when left out).
 
 ## Surprise me
 

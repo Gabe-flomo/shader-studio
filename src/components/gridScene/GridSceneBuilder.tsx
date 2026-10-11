@@ -39,10 +39,10 @@ import { buildFromGridBuilder, finishGridBuilder, makeSimulation, simulationOf }
 import { gridProgram } from '../../gridScene/glsl';
 import { GRID_TEMPLATES } from '../../gridScene/templates';
 import {
-  DO_KINDS, DO_LABELS, MAX_CELLS, MAX_PLACED, MAX_RULES, MAX_SHAPES, MAX_WARPS, MIN_CELLS, MOTION_LABELS, MOTION_PATHS, PATTERN_KINDS, PATTERN_LABELS,
+  DO_KINDS, DO_LABELS, DRAW_MODES, DRAW_MODE_LABELS, MAX_CELLS, MAX_PLACED, PIC_MODES, PIC_MODE_LABELS, defaultDraw, drawOf, picModeOf, MAX_RULES, MAX_SHAPES, MAX_WARPS, MIN_CELLS, MOTION_LABELS, MOTION_PATHS, PATTERN_KINDS, PATTERN_LABELS,
   PATTERN_TARGETS, SHAPE_KINDS, SHAPE_LABELS, TARGET_LABELS, WHEN_KINDS, WHEN_LABELS, defaultLook, defaultPattern, newRule, newShape, nextShapeId,
   removeShape, resizeGrid, ruleProblem, ruleText, shapeOf, shapeSummary, warpOf,
-  type DoKind, type GShape, type GridSceneSpec, type MotionPath, type PatternKind, type PatternTarget, type ShapeKind, type Vec2, type WhenKind,
+  type DoKind, type DrawMode, type GShape, type PicMode, type GridSceneSpec, type MotionPath, type PatternKind, type PatternTarget, type ShapeKind, type Vec2, type WhenKind,
 } from '../../gridScene/spec';
 import { MiniGrid } from './MiniGrid';
 import { Field } from '../ui/Field';
@@ -215,6 +215,42 @@ function TextStampRow() {
   );
 }
 
+/** How the drawing covers the grid (docs/grid-builder.md "Draw modes"): only here, repeat, mirror, rotate. */
+function DrawModeRow() {
+  const tk = useTokens();
+  const stored = useGridBuilder(s => s.spec.draw);
+  const draw = drawOf({ draw: stored });
+  const cols = useGridBuilder(s => s.spec.cols);
+  const rows = useGridBuilder(s => s.spec.rows);
+  const set = (fn: (d: NonNullable<GridSceneSpec['draw']>) => void, key?: string) => edit(d => { const x = { ...defaultDraw(), ...(d.draw ?? {}) }; fn(x); d.draw = x.mode === 'here' ? null : x; }, key);
+  const lbl: React.CSSProperties = { fontSize: 12, color: tk.text.secondary };
+  return (
+    <div data-draw-mode style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={lbl} title={DRAW_MODES.map(m => `${DRAW_MODE_LABELS[m].label}: ${DRAW_MODE_LABELS[m].blurb}`).join('\n')}>Draw mode</span>
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <Select ariaLabel="Draw mode" height={28} value={draw.mode} options={DRAW_MODES.map(m => ({ value: m, label: DRAW_MODE_LABELS[m].label }))} onChange={v => set(d => { d.mode = v as DrawMode; })} />
+        </span>
+      </div>
+      {draw.mode !== 'here' && <span style={{ fontSize: 11.5, color: tk.text.muted, lineHeight: 1.4 }}>{DRAW_MODE_LABELS[draw.mode].blurb} Copies show faintly; the outlined cells are the ones you draw in.</span>}
+      {draw.mode === 'repeat' && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr)', alignItems: 'center', gap: '6px 10px' }}>
+          <span style={lbl} title="The tile's size: it repeats every this many cells across">Period X</span>
+          <BuilderSlider value={draw.period[0]} min={1} max={cols} integer ariaLabel="Repeat period X" defaultValue={2} onChange={v => set(d => { d.period = [v, d.period[1]]; }, 'rpx')} />
+          <span style={lbl} title="…and down">Period Y</span>
+          <BuilderSlider value={draw.period[1]} min={1} max={rows} integer ariaLabel="Repeat period Y" defaultValue={2} onChange={v => set(d => { d.period = [d.period[0], v]; }, 'rpy')} />
+          <span style={lbl} title="Where the tile starts, in cells">Offset X</span>
+          <BuilderSlider value={draw.offset[0]} min={0} max={cols - 1} integer ariaLabel="Repeat offset X" defaultValue={0} onChange={v => set(d => { d.offset = [v, d.offset[1]]; }, 'rox')} />
+          <span style={lbl} title="Where the tile starts, in cells">Offset Y</span>
+          <BuilderSlider value={draw.offset[1]} min={0} max={rows - 1} integer ariaLabel="Repeat offset Y" defaultValue={0} onChange={v => set(d => { d.offset = [d.offset[0], v]; }, 'roy')} />
+          <span style={lbl} title="Each row of tiles slides this many cells across: bricks and staggers">Row shift</span>
+          <BuilderSlider value={draw.shift} min={-4} max={4} integer ariaLabel="Repeat row shift" defaultValue={0} onChange={v => set(d => { d.shift = v; }, 'rsh')} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function LeftPanel() {
   const tk = useTokens();
   const section = useGridBuilder(s => s.section);
@@ -239,6 +275,7 @@ function LeftPanel() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '14px 14px 18px' }}>
       <StudioLabel meta={`${placed} / ${MAX_PLACED} cells`}>Draw</StudioLabel>
       <Brush />
+      <DrawModeRow />
       <TextStampRow />
       <MiniGrid size={288} />
       <span data-grid-hint style={{ fontSize: 11.5, color: picking || stampOn ? tk.status.warningText : tk.text.muted, lineHeight: 1.4 }}>
@@ -301,17 +338,29 @@ function ShapesSection() {
           actions={shapes.length > 1 ? <IconButton icon="trash" size="sm" label={`Remove shape ${sh.id} (its cells and rules go too)`} onClick={() => { edit(d => removeShape(d, sh.id)); setBrush(useGridBuilder.getState().spec.shapes[0]?.id ?? 'erase'); }} /> : undefined}>
           <Tiles items={SHAPE_KINDS} value={sh.kind} label={k => SHAPE_LABELS[k]} onPick={k => editShape(sh.id, s => { s.kind = k; })}
             render={k => <Glyph kind={k} color={sh.color} size={20} />} />
-          {sh.kind === 'picture' && <>
-            <BuilderNote>A picture inside each of its cells, filling the cell's square (it turns, spins and pulses with the shape).</BuilderNote>
-            <TexturePicker id={`cell-${sh.id}`} sources={spec.textures ?? []} value={sh.tex} onAdd={addSource} startOpen={!sh.tex} none="Pick its picture"
-              onChange={name => editShape(sh.id, s => { s.tex = name ?? undefined; })} />
-          </>}
+          {sh.kind === 'picture' && !sh.tex && <BuilderNote>A square that shows a picture: pick it below.</BuilderNote>}
           <ColourRow label="Colour" value={sh.color} onChange={v => editShape(sh.id, s => { s.color = v; }, `col${sh.id}`)} />
           <NumRow label="Size" hint="The radius as a share of half a cell: 1 touches the neighbours." value={sh.size} min={0.05} max={1.5} defaultValue={DEFAULT_SHAPE.size} onChange={v => editShape(sh.id, s => { s.size = v; }, `size${sh.id}`)} />
           <NumRow label="Turn" unit="°" value={sh.turn} min={-180} max={180} step={1} defaultValue={0} onChange={v => editShape(sh.id, s => { s.turn = v; }, `turn${sh.id}`)} />
           <NumRow label="Spin" hint="Turns a second." value={sh.spin} min={-2} max={2} defaultValue={0} onChange={v => editShape(sh.id, s => { s.spin = v; }, `spin${sh.id}`)} />
           <NumRow label="Pulse" hint="How much the size breathes, once a cycle of its motion." value={sh.pulse} min={0} max={1} defaultValue={0} onChange={v => editShape(sh.id, s => { s.pulse = v; }, `pulse${sh.id}`)} />
           <NumRow label="Outline" hint="0 is filled; above 0 only the edge, this wide." value={sh.outline} min={0} max={0.5} defaultValue={0} onChange={v => editShape(sh.id, s => { s.outline = v; }, `out${sh.id}`)} />
+        </Card>
+      )}
+      {sh && (
+        <Card id="gs-shape-picture" defaultOpen={!!sh.tex || sh.kind === 'picture'} title="Picture" summary={sh.tex ? `${sh.tex} · ${PIC_MODE_LABELS[picModeOf(sh)].label.toLowerCase()}` : 'none'}>
+          <BuilderNote>Cut a picture up into the grid: the shapes carry it, so you see the shapes made of the picture, not the picture itself.</BuilderNote>
+          <TexturePicker id={`cell-${sh.id}`} sources={spec.textures ?? []} value={sh.tex} onAdd={addSource} startOpen={sh.kind === 'picture' && !sh.tex} none={sh.kind === 'picture' ? 'Pick its picture' : 'No picture'}
+            onChange={name => editShape(sh.id, s => { s.tex = name ?? undefined; if (name && !s.picMode) s.picMode = s.kind === 'picture' ? 'cell' : 'piece'; })} />
+          {sh.tex && (
+            <>
+              <Row label="Mode" hint={PIC_MODES.map(m => `${PIC_MODE_LABELS[m].label}: ${PIC_MODE_LABELS[m].blurb}`).join('\n')}>
+                <Select ariaLabel="Picture mode" value={picModeOf(sh)} options={PIC_MODES.map(m => ({ value: m, label: PIC_MODE_LABELS[m].label }))}
+                  onChange={v => editShape(sh.id, s => { s.picMode = v as PicMode; })} />
+              </Row>
+              <BuilderNote>{PIC_MODE_LABELS[picModeOf(sh)].blurb}</BuilderNote>
+            </>
+          )}
         </Card>
       )}
     </div>

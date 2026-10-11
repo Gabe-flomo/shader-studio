@@ -55,7 +55,7 @@ describe('spec → graph: everything compiles', () => {
     if (kind === 'picture') { s.textures = [{ name: 'pond' }]; s.pattern.tex = 'pond'; }
     const { g } = compiles(s);
     const grid = g.nodes.find(n => n.params[GS_ROLE] === 'grid')!;
-    expect(String(grid.params.glslFunctions).includes('gs_drawn_')).toBe(kind !== 'none');
+    expect(String(grid.params.glslFunctions).includes('the pattern fills the empty cells')).toBe(kind !== 'none');
   });
   it.each(BLOCK_LIBRARY.map(e => e.id))('warp %s', id => {
     const s = starterGridScene();
@@ -113,11 +113,18 @@ describe('drawing and motion', () => {
     resizeGrid(s, 4, 4);
     expect(s.cells.every(c => c.x < 4 && c.y < 4)).toBe(true);
   });
-  it('every drawn cell is a block of the shader, at its cell', () => {
+  it('the drawing is data: every drawn cell is a number in gd, and drawing never changes the code', () => {
     const s = starterGridScene();
     const p = gridProgram(s);
     expect(p.placed).toBe(s.cells.length);
-    for (const c of s.cells) expect(p.functions).toContain(`// cell (${c.x}, ${c.y}): shape A`);
+    expect(p.data).toHaveLength(10 * 2);
+    for (const c of s.cells) expect(Math.floor(p.data[c.y * 2 + Math.floor(c.x / 8)] / 8 ** (c.x % 8)) % 8).toBe(1);
+    const t = structuredClone(s);
+    placeCell(t, 9, 9, 'A');
+    eraseCell(t, s.cells[0].x, s.cells[0].y);
+    const q = gridProgram(t);
+    expect(q.functions).toBe(p.functions);
+    expect(q.data).not.toEqual(p.data);
   });
   it('moves as the shader does: up and down, side to side, round, travelling and hopping round the grid', () => {
     const g = { cols: 10, rows: 10 };

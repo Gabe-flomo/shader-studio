@@ -688,9 +688,26 @@ export const ExprBlockNode: NodeDefinition = {
     // Type-appropriate zero for the output type — used as fallback value
     const outDefault = outType === 'float' ? '0.0' : /^(vec[234]|mat[234]|int|bool)$/.test(outType) ? `${outType}(0.0)` : 'vec3(0.0)';
 
+    // A picture input (type 'texture'): a sampler can't be a local variable, so its name in the
+    // lines and the result is replaced by the wired sampler itself (a helper function can take it as
+    // a `sampler2D` argument). Unwired, the block has nothing to read: its lines are left out.
+    const samplers = new Map<string, string>();
+    let unwiredSampler = false;
+    if (Array.isArray(dynamicInputs)) {
+      for (const inp of dynamicInputs) {
+        if (inp.type !== 'texture') continue;
+        const v = inputVars[inp.name];
+        if (v) samplers.set(inp.name, v); else unwiredSampler = true;
+      }
+    }
+    const withSamplers = (text: string) => (samplers.size
+      ? text.replace(/\b[A-Za-z_]\w*\b/g, w => samplers.get(w) ?? w)
+      : text);
+
     if (Array.isArray(dynamicInputs)) {
       // New format: handles empty array (inputs:[]) and populated arrays
       for (const inp of dynamicInputs) {
+        if (inp.type === 'texture') continue;
         const fallback = inp.type === 'vec3' ? 'vec3(0.0)' : inp.type === 'vec2' ? 'vec2(0.0)' : '0.0';
         const carryVar = inputVars[`__carry_${inp.name}`];
         if (carryVar) {
@@ -734,15 +751,18 @@ export const ExprBlockNode: NodeDefinition = {
     const lines = node.params.lines as Array<{ lhs: string; op: string; rhs: string; off?: boolean }> | undefined;
     const resultExpr = (node.params.result as string | undefined)?.trim() || '';
 
-    if (Array.isArray(lines)) {
+    if (unwiredSampler) {
+      stmts.push(`        // a picture input is not wired: the block gives ${outDefault}\n`);
+      stmts.push(`        ${outVar} = ${outDefault};\n`);
+    } else if (Array.isArray(lines)) {
       // New format: lines array is present (may be empty — just a result expression)
       for (const line of lines) {
         if (!line.lhs || !line.rhs) continue;
         // A line switched off is kept as a comment: skipped, and still readable in the shader.
         if (line.off) stmts.push(`        // off: ${`${line.lhs} ${line.op || '='} ${line.rhs}`.replace(/\n/g, ' ')}\n`);
-        else stmts.push(`        ${line.lhs} ${line.op || '='} ${line.rhs};\n`);
+        else stmts.push(`        ${withSamplers(line.lhs)} ${line.op || '='} ${withSamplers(line.rhs)};\n`);
       }
-      stmts.push(`        ${outVar} = ${resultExpr || outDefault};\n`);
+      stmts.push(`        ${outVar} = ${withSamplers(resultExpr) || outDefault};\n`);
     } else {
       // ── Legacy semicolon-separated expr format (backward compat) ─────────
       // Only reached when lines is undefined (old saved graphs without the lines field)
@@ -781,8 +801,9 @@ export const ExprBlockNode: NodeDefinition = {
     const extraVars: Record<string, string> = {};
     for (const name of exposed) {
       const v = `${id}_${name}`; extraVars[name] = v;
-      exposedDecls.push(`    ${localType(name)} ${v};\n`);
-      exposedCopies.push(`        ${v} = ${name};\n`);
+      const ty = localType(name);
+      exposedDecls.push(`    ${ty} ${v};\n`);
+      exposedCopies.push(unwiredSampler ? `        ${v} = ${ty === 'float' ? '0.0' : ty === 'int' ? '0' : ty === 'bool' ? 'false' : `${ty}(0.0)`};\n` : `        ${v} = ${name};\n`);
     }
 
     const code = [
