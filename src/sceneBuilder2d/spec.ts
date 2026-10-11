@@ -18,6 +18,7 @@
 
 import type { GridSpec } from './grid';
 import type { FnRef } from './functions';
+import { blockSummary, cloneBlock, COMBINE_BY_MODE, type CombineMode, type CombineSpec, type SpaceBlock } from './blocks';
 
 export type Vec2 = [number, number];
 export type Vec3 = [number, number, number];
@@ -247,9 +248,24 @@ export type Item = ShapeSpec | GroupSpec;
 
 export interface SpaceOp {
   id: string;
+  /** A SPACES kind, or `block` (a transform block, blocks.ts) or `combine` (two blocks joined). */
   kind: string;
   /** Numbers and vectors by ParamDef key; selects by their key. */
   values: Record<string, number | Vec2 | string>;
+  /** kind 'block': its lines, sliders and repeat count. */
+  block?: SpaceBlock;
+  /** kind 'combine': two blocks run on the same uv and joined. */
+  combine?: CombineSpec;
+}
+
+/** A transform block in the space stack. */
+export function newBlockOp(id: string, block: SpaceBlock): SpaceOp {
+  return { id, kind: 'block', values: {}, block: cloneBlock(block) };
+}
+
+/** Two blocks run on the same uv and joined (add, subtract, multiply, blend). */
+export function newCombineOp(id: string, a: SpaceBlock, b: SpaceBlock, mode: CombineMode = 'add', amount = 0.5): SpaceOp {
+  return { id, kind: 'combine', values: {}, combine: { mode, amount, a: cloneBlock(a), b: cloneBlock(b) } };
 }
 
 export const TONE_MODES = ['none', 'aces', 'agx', 'hable', 'reinhard2', 'tanh', 'oklab'] as const;
@@ -420,6 +436,8 @@ export function itemSummary(it: Item): string {
 
 /** A space transform's chip words: its label and its main setting. */
 export function spaceSummary(op: SpaceOp): { label: string; value: string } {
+  if (op.kind === 'block' && op.block) return { label: op.block.name || 'Block', value: `${blockSummary(op.block)}${op.block.times > 1 ? ` ×${op.block.times}` : ''}` };
+  if (op.kind === 'combine' && op.combine) return { label: `Combine: ${(COMBINE_BY_MODE[op.combine.mode]?.label ?? 'add').toLowerCase()}`, value: `${op.combine.a.name || 'A'} · ${op.combine.b.name || 'B'}` };
   if (op.kind === 'fn') return { label: 'Function', value: String(op.values.name ?? '') };
   const def = SPACE_BY_KIND[op.kind];
   if (!def) return { label: op.kind, value: '' };

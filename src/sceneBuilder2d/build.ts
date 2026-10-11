@@ -27,6 +27,8 @@ import {
 import { colourText } from '../lang/colours';
 import { GRID_LABELS, gridProgram, type GridSpec } from './grid';
 import { callBody, type FnRef } from './functions';
+import { COMBINE_BY_MODE, blockGlslLines, checkBlock, clampTimes, type SpaceBlock } from './blocks';
+import { BLOCK_BY_ID } from './blockLibrary';
 
 export { ROLE_KEY };
 /** On the UV node: the scene it was built from (and, once applied, fingerprints of what was built). */
@@ -62,7 +64,7 @@ interface B {
 }
 
 /** An Expression Block with typed inputs (wired, or a float slider) and a float or vec3 result. */
-function expr(c: Ctx, role: string, label: string, inputs: Array<{ name: string; type: 'float' | 'vec2' | 'vec3'; from?: Ref; slider?: { value: number; min: number; max: number } }>, result: string, note: string, outputType: 'vec3' | 'float' = 'vec3', lines: Array<{ lhs: string; op: string; rhs: string }> = []): GraphNode {
+function expr(c: Ctx, role: string, label: string, inputs: Array<{ name: string; type: 'float' | 'vec2' | 'vec3'; from?: Ref; slider?: { value: number; min: number; max: number } }>, result: string, note: string, outputType: 'vec3' | 'vec2' | 'float' = 'vec3', lines: Array<{ lhs: string; op: string; rhs: string }> = []): GraphNode {
   const node: GraphNode = {
     id: c.idFor(role), type: 'exprNode', position: { x: 0, y: 0 },
     inputs: Object.fromEntries(inputs.map(i => [i.name, { type: i.type, label: i.name, ...(i.from ? { connection: { ...i.from } } : {}) } as InputSocket])),
@@ -97,8 +99,53 @@ function fnNode(b: B, role: string, f: FnRef, pos: Ref, out: 'vec2' | 'float', n
 
 // ── Space ───────────────────────────────────────────────────────────────────
 
+/** A transform block as an Expression Block: uv in, its lines (run `times` over), uv out; its numbers are sliders. */
+function blockNode(b: B, role: string, block: SpaceBlock, pos: Ref, where: string): Ref | null {
+  const { c } = b;
+  const lines = blockGlslLines(block);
+  const name = block.name || 'Block';
+  if (!lines) {
+    const chk = checkBlock(block);
+    const why = [...chk.errors, ...chk.lines.filter(l => !l.ok).map(l => l.error!)][0] ?? 'it doesn\'t check';
+    c.warnings.push(`${where} “${name}” was left out: ${why}`);
+    return null;
+  }
+  const times = clampTimes(block.times);
+  const entry = block.lib ? BLOCK_BY_ID[block.lib] : undefined;
+  const sliders = block.params.map(p => `${p.name} ${fmt(p.value)}`);
+  const note = `${name} (${where}): ${entry ? entry.blurb : 'a transform block written in the 2D Scene Builder.'} `
+    + `Each line changes uv, the point every shape below looks from, top to bottom${times > 1 ? `; the ${lines.length / times} line${lines.length / times === 1 ? ' is' : 's are'} written out ${times} times, so the fold runs ${times} times over` : ''}. `
+    + 'In the builder x and y stand for uv.x and uv.y (written out here), t is time in seconds, and whole numbers are written as floats. '
+    + `${sliders.length ? `The sliders (${sliders.join(', ')}) are live: drag them on the node without recompiling.` : 'It has no sliders: select a number in a line to make one.'}`;
+  const node = expr(c, role, name, [
+    { name: 'uv', type: 'vec2', from: pos },
+    ...block.params.map(p => ({ name: p.name, type: 'float' as const, slider: { value: p.value, min: p.min, max: p.max } })),
+  ], 'uv', note, 'vec2', lines);
+  return ref(node, 'result');
+}
+
 function spaceNode(b: B, op: SpaceOp, pos: Ref): Ref {
   const { c } = b;
+  if (op.kind === 'block') {
+    if (!op.block) { c.warnings.push(`The block ${op.id} is empty; left out.`); return pos; }
+    return blockNode(b, op.id, op.block, pos, `space ${op.id}`) ?? pos;
+  }
+  if (op.kind === 'combine') {
+    const k = op.combine;
+    if (!k) { c.warnings.push(`The combine ${op.id} is empty; left out.`); return pos; }
+    const m = COMBINE_BY_MODE[k.mode] ?? COMBINE_BY_MODE.add;
+    const A = blockNode(b, `${op.id}:a`, k.a, pos, `block A of ${op.id}`) ?? pos;
+    const B2 = blockNode(b, `${op.id}:b`, k.b, pos, `block B of ${op.id}`) ?? pos;
+    const an = k.a.name || 'A', bn = k.b.name || 'B';
+    const node = expr(c, op.id, `${m.label} blocks`, [
+      { name: 'uv', type: 'vec2', from: pos },
+      { name: 'a', type: 'vec2', from: A },
+      { name: 'b', type: 'vec2', from: B2 },
+      ...(k.mode === 'blend' ? [{ name: 'amount', type: 'float' as const, slider: { value: k.amount, min: 0, max: 1 } }] : []),
+    ], m.glsl, `${m.label} (space ${op.id}): joins two blocks that both start from the same uv. a is “${an}”, b is “${bn}”, uv the point before either. ${m.blurb} `
+      + `${k.mode === 'add' ? 'a + b − uv adds the two pushes (each block\'s change from uv).' : k.mode === 'subtract' ? 'uv + a − b keeps A\'s push and takes B\'s away.' : k.mode === 'multiply' ? 'a * b multiplies x by x and y by y.' : 'Amount is live: 0 is all A, 1 is all B.'} The result is the uv every shape below looks from.`, 'vec2');
+    return ref(node, 'result');
+  }
   const def = SPACE_BY_KIND[op.kind];
   if (!def) { c.warnings.push(`A space transform “${op.kind}” isn't known; left out.`); return pos; }
   const v = op.values;
