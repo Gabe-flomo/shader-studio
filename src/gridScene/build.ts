@@ -24,7 +24,7 @@ import { tidy } from '../sceneBuilder/build';
 import { blockGlslLines, checkBlock, clampTimes, type SpaceBlock } from '../sceneBuilder2d/blocks';
 import { BLOCK_BY_ID } from '../sceneBuilder2d/blockLibrary';
 import { colourText } from '../lang/colours';
-import { gf, gridProgram, motionExtra, motionLen, shapeArgs, activeMask, activeRules } from './glsl';
+import { gf, gridProgram, liveAt, motionExtra, motionLen, shapeArgs, activeMask, activeRules } from './glsl';
 import { findTex, standInId, standIns } from '../builders/textures';
 import { defaultDrawnPath, pathConfig } from './paths';
 import { CURVE_MODE_LABELS, MOD_DEFS, mathOf, modsOf, pathLiveParams } from './pathMods';
@@ -144,7 +144,8 @@ function motionInputs(s: GShape, node: GraphNode): { inputs: In[]; line: Line } 
   const ins: In[] = [{ name: a.r, type: 'vec2', from: ref(node, 'dir') }];
   const parts = [`${a.r}.x`, `${a.r}.y`];
   if (s.motion.path === 'drawn') {
-    const pts = motionExtra(s).slice(6);
+    // The drawn path's head and points only (the live numbers after them come from the Shape node).
+    const pts = motionExtra(s).slice(6, liveAt(s));
     ins.push({ name: a.d, type: 'vec4', from: ref(node, 'path') });
     pts.forEach((v, i) => ins.push({ name: `p${s.id}${i}`, type: 'float', slider: { value: v, min: -1, max: 1 }, hidden: true }));
     parts.push(`${a.d}.x`, `${a.d}.y`, `${a.d}.z`, `${a.d}.w`, ...pts.map((_, i) => `p${s.id}${i}`));

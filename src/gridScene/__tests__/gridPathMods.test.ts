@@ -236,6 +236,21 @@ describe('the built nodes and the Play menu', () => {
     const a = shapeArgs('A');
     expect(grid.inputs[a.r]).toBeDefined();
   });
+  it('the Grid scene node builds each motion array with exactly as many numbers as the code reads (a drawn path with modifiers too)', () => {
+    const s = scene({ path: 'drawn', xy: [0.5, 0.5], speed: 0.3, lag: 0, drawn: defaultDrawnPath(), mods: [mod('noise'), mod('twist')] });
+    s.shapes.push(newShape('B', { motion: { path: 'math', xy: [0.4, 0.4], speed: 0.3, lag: 0, math: formula('rose'), mods: [mod('wave')] } }));
+    placeCell(s, 2, 2, 'B');
+    const g = buildStandaloneGrid(s);
+    const grid = g.nodes.find(n => n.params[GS_ROLE] === 'grid')!;
+    const lines = grid.params.lines as Array<{ lhs: string; rhs: string }>;
+    for (const sh of s.shapes) {
+      const line = lines.find(l => l.lhs.startsWith(`float ${shapeArgs(sh.id).x}[`))!;
+      const K = Number(/\[(\d+)\]/.exec(line.lhs)![1]);
+      expect(K).toBe(motionExtra(sh).length);
+      expect(line.rhs.slice(line.rhs.indexOf('(') + 1, -1).split(',')).toHaveLength(K);
+    }
+  });
+
   it('the Play menu finds them on the built node', () => {
     const s = scene({ path: 'math', xy: [0.5, 0.5], speed: 0.3, lag: 0, math: formula('rose'), mods: [mod('noise')] });
     let n = 0;
