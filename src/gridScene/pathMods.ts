@@ -347,7 +347,7 @@ export function sampledReach(f: (u: number) => Vec2, xy: Vec2): number {
  * draws a circle (the builder shows why).
  */
 export function mathGlsl(id: string, m: MathPath, K: number, at: number): string {
-  const head = `vec2 gs_math${id}$(float X_[${K}], float t) {`;
+  const head = `vec2 gs_math${id}$(inout float X_[${K}], float t) {`;
   if (m.kind === 'curve') {
     const node = {
       id: `gsc${id}`, type: 'curveTrace', inputs: {}, outputs: {}, position: { x: 0, y: 0 },

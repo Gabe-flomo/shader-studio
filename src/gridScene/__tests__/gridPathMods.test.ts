@@ -221,6 +221,18 @@ describe('formulas: checked as typed, and nothing live rebuilds', () => {
   });
 });
 
+describe('the motion arrays are passed by reference', () => {
+  it('every function takes a shape\'s motion array inout (copied by value at every call, a big stack failed to compile on the GPU)', () => {
+    const s = scene({ path: 'math', xy: [0.5, 0.5], speed: 0.3, lag: 0.05, math: formula('rose'), mods: [mod('wave'), mod('noise'), mod('twist')] });
+    s.shapes.push(newShape('B', { motion: { path: 'drawn', xy: [0.4, 0.4], speed: 0.3, lag: 0, drawn: defaultDrawnPath(), mods: [mod('ease')] } }));
+    placeCell(s, 2, 2, 'B');
+    const f = gridProgram(s).functions;
+    expect(f).toMatch(/inout float x\[/);
+    expect(f).toMatch(/inout float X_\[/);
+    expect(f).not.toMatch(/[(,] ?float (x|xB|X_|x[A-F])\[\d+\]/);
+  });
+});
+
 describe('the built nodes and the Play menu', () => {
   it('a curve\'s numbers and the modifiers\' are sliders on the Shape node (wireable), packed into lp… for the Grid scene', () => {
     const s = scene({ path: 'math', xy: [0.5, 0.5], speed: 0.3, lag: 0, math: curve('star'), mods: [mod('wave'), mod('scale', [1, 2], true)] });

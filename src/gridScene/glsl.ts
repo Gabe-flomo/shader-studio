@@ -160,7 +160,7 @@ export function motionExtra(s: Pick<GShape, 'motion'>): number[] {
 /** A path bounded the general way (gs_bound: a reach and a rate from the live numbers): a math path, or any with modifiers. */
 export const generalBound = (s: Pick<GShape, 'motion'>) => s.motion.path === 'math' || modsOf(s.motion).length > 0;
 /** A shape's motion as a parameter list (`vec4 mA, float xA[K]`), named as given. */
-const mvDecl = (s: Pick<GShape, 'motion'>, m: string, x: string) => `vec4 ${m}, float ${x}[${motionLen(s)}]`;
+const mvDecl = (s: Pick<GShape, 'motion'>, m: string, x: string) => `vec4 ${m}, inout float ${x}[${motionLen(s)}]`;
 /** The same as arguments. */
 const mvArgs = (id: string) => { const a = shapeArgs(id); return `${a.m}, ${a.x}`; };
 
@@ -169,7 +169,7 @@ function drawnFns(id: string, K: number): string {
   const N = gf(PATH_POINTS);
   const last = PATH_AT + 2 * PATH_POINTS;
   return [
-    `vec2 gs_along${id}$(float x[${K}], float s, float closed) {`,
+    `vec2 gs_along${id}$(inout float x[${K}], float s, float closed) {`,
     '  float i; float j; float k;',
     `  if (closed > 0.5) { float f = fract(s) * ${N}; i = floor(f); k = f - i; i = mod(i, ${N}); j = mod(i + 1.0, ${N}); }`,
     `  else { float f = clamp(s, 0.0, 1.0) * ${gf(PATH_POINTS - 1)}; i = min(floor(f), ${gf(PATH_POINTS - 2)}); k = f - i; j = i + 1.0; }`,
@@ -178,7 +178,7 @@ function drawnFns(id: string, K: number): string {
     '  return mix(vec2(x[ii], x[ii + 1]), vec2(x[jj], x[jj + 1]), k);',
     '}',
     '// One cycle: closed round the loop; open snap back (x[3] 0), ease back over x[4] of it (1), or ping-pong (2); x[5] eases it.',
-    `vec2 gs_path${id}$(float x[${K}], float ph) {`,
+    `vec2 gs_path${id}$(inout float x[${K}], float ph) {`,
     '  float u = fract(ph);',
     '  float e = x[5];',
     `  if (x[2] > 0.5) return gs_along${id}$(x, u + (smoothstep(0.0, 1.0, u) - u) * e, 1.0);`,
@@ -517,7 +517,7 @@ function boundFn(s: GShape, K: number, modsAt: number): string {
       default: return ['  R = 0.0; V = 0.0;'];
     }
   };
-  return [`vec2 gs_bound${s.id}$(vec4 m, float x[${K}], float t) {`, '  float R; float V;', ...base(), ...modBoundGlsl(modsOf(s.motion), modsAt), '  return vec2(R, V);', '}'].join('\n');
+  return [`vec2 gs_bound${s.id}$(vec4 m, inout float x[${K}], float t) {`, '  float R; float V;', ...base(), ...modBoundGlsl(modsOf(s.motion), modsAt), '  return vec2(R, V);', '}'].join('\n');
 }
 
 /** The general bound on the CPU at the spec's values (boundFn's sums). */
