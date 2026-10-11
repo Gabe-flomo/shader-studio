@@ -19,6 +19,7 @@
 
 import { checkExprType } from '../lang/typeCheck';
 import { readStartCells, startCellsHash, type StartCells } from './startCells';
+import { activeStack, type StackRule } from './stack';
 import { BLOCK_PRESETS, DEFAULT_BLOCKS, DEFAULT_PATTERNS, PATTERN_PRESETS, readBlocks, readPatterns, type BlockRule, type PatternRule } from './stencils';
 
 export type GridRuleType = 'count' | 'stages' | 'patterns' | 'blocks' | 'smooth';
@@ -236,6 +237,8 @@ export const GRID_DEFAULTS: Record<string, unknown> = {
   color4: [0.3, 0.6, 1.0], color5: [1.0, 0.85, 0.3], color6: [0.7, 0.3, 0.9], color7: [0.4, 0.9, 0.5],
   glowColor: [0.55, 0.12, 0.35], oldColor: [0.3, 0.75, 1.0],
   patterns: DEFAULT_PATTERNS, blocks: DEFAULT_BLOCKS,
+  // `stack` (stacked rules on the base, gridRules/stack.ts) has no default: absent is no cards, so a
+  // node made without any keeps the params it always had.
 };
 
 /** The baked part of the rule, read from a node's params (what decides the GLSL's shape). */
@@ -257,6 +260,8 @@ export interface GridShape {
   blocks: BlockRule[];
   /** The drawn start (start 'cells'), or null. */
   startCells: StartCells | null;
+  /** Stacked rules that run after the base (Count, Stages, Stencils only; switched-off cards left out). */
+  stack: StackRule[];
 }
 
 const pick = <T extends string>(v: unknown, allowed: readonly T[], d: T): T => (typeof v === 'string' && (allowed as readonly string[]).includes(v) ? v as T : d);
@@ -278,6 +283,7 @@ export function gridShape(params: Record<string, unknown>): GridShape {
     patterns: readPatterns(P.patterns),
     blocks: readBlocks(P.blocks),
     startCells: P.start === 'cells' ? readStartCells(P.startCells) : null,
+    stack: activeStack(String(P.ruleType), P.stack),
   };
 }
 
@@ -304,6 +310,12 @@ export const isDiscrete = (t: GridRuleType) => t !== 'smooth';
 /** One-line summary of a node's rule (card, tooltips). */
 export function ruleSummary(params: Record<string, unknown>): string {
   const P = { ...GRID_DEFAULTS, ...params };
+  const cards = gridShape(P).stack.length;
+  const base = baseSummary(P);
+  return cards ? `${base} + ${cards} rule${cards === 1 ? '' : 's'}` : base;
+}
+
+function baseSummary(P: Record<string, unknown>): string {
   const s = gridShape(P);
   const born = Number(P.bornMask), survive = Number(P.surviveMask);
   const nbWord = s.neighbourhood === 'moore' ? '' : s.neighbourhood === 'vonNeumann' ? ' · von Neumann' : ` · radius ${s.radius}${s.shape === 'circle' ? ' circle' : ''}`;

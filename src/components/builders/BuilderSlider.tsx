@@ -9,7 +9,9 @@
  *  - typing past the end widens the range (no min/max fields), and the builder remembers the wider
  *    range for as long as the app runs (`rangeKey`);
  *  - where the value is a real node's param (`param`), right-click opens the Play menu the node
- *    card has: Add to (or Remove from) Play controls.
+ *    card has: Add to (or Remove from) Play controls. A builder that edits a recipe (the 3D Scene
+ *    Builder) passes `lazyParam` instead: the node it built, looked up when the menu opens
+ *    (sceneBuilder/paramMap.ts), or why there is none yet.
  */
 import { useState, type ReactNode } from 'react';
 import { RulerSlider } from '../ui/RulerSlider';
@@ -34,6 +36,8 @@ export interface BuilderSliderProps {
   rangeKey?: string;
   /** A real node param this slider sets: right-click offers the node card's Play menu. */
   param?: { nodeId: string; key: string };
+  /** The node param this value builds, found when the menu opens; `missing` says why there is none (shown in the menu). */
+  lazyParam?: () => { nodeId: string; key: string } | { missing: string };
   /** Force bipolar on or off (default: on for a range symmetric about zero). */
   bipolar?: boolean;
   hard?: boolean;
@@ -41,7 +45,7 @@ export interface BuilderSliderProps {
   unit?: number | ((min: number, max: number) => number | undefined);
 }
 
-export function BuilderSlider({ value, min, max, step, integer, onChange, ariaLabel, defaultValue, disabled, rangeKey, param, bipolar, hard, unit }: BuilderSliderProps) {
+export function BuilderSlider({ value, min, max, step, integer, onChange, ariaLabel, defaultValue, disabled, rangeKey, param, lazyParam, bipolar, hard, unit }: BuilderSliderProps) {
   const [mountValue] = useState(value);
   const [, bump] = useState(0);
   const kept = rangeKey ? widened.get(rangeKey) : undefined;
@@ -53,6 +57,17 @@ export function BuilderSlider({ value, min, max, step, integer, onChange, ariaLa
       bipolar={bipolar ?? isSymmetricRange(lo, hi)}
       onRange={rangeKey ? (a, b) => { widened.set(rangeKey, { min: a, max: b }); bump(n => n + 1); } : undefined} />
   );
+  if (!param && lazyParam) {
+    const items = () => {
+      const p = lazyParam();
+      return 'missing' in p ? [{ heading: 'Play' }, { label: p.missing, disabled: true, onSelect: () => {} }] : paramPlayItems(p.nodeId, p.key);
+    };
+    return (
+      <ContextMenuArea items={items} style={{ display: 'flex', flex: 1, minWidth: 0 }}>
+        <span data-builder-lazy-param style={{ display: 'flex', flex: 1, minWidth: 0 }}>{slider}</span>
+      </ContextMenuArea>
+    );
+  }
   if (!param) return <>{slider}</>;
   return (
     <ContextMenuArea items={() => paramPlayItems(param.nodeId, param.key)} style={{ display: 'flex', flex: 1, minWidth: 0 }}>

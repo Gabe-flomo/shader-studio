@@ -24,14 +24,14 @@ describe('builder windows on a phone', () => {
 });
 
 describe('the builders\' tab model', () => {
-  it('Grid Rules: the rule first, then Neighbourhood · Start · Speed · Brush · Look · As text for a Count rule', () => {
-    expect(gridRulesSections('count').map(t => t.label)).toEqual(['Born & Survive', 'Neighbourhood', 'Start', 'Speed', 'Brush', 'Look', 'As text']);
+  it('Grid Rules: the rule first, then Neighbourhood · Stacked rules · Start · Speed · Brush · Look · As text for a Count rule', () => {
+    expect(gridRulesSections('count').map(t => t.label)).toEqual(['Born & Survive', 'Neighbourhood', 'Stacked rules', 'Start', 'Speed', 'Brush', 'Look', 'As text']);
   });
 
   it('the rule section is named for the rule type (always id "rule"); Neighbourhood only where cells are counted', () => {
     const labels = (t: Parameters<typeof gridRulesSections>[0]) => gridRulesSections(t).map(x => x.label);
-    expect(labels('stages')).toEqual(['Born, Survive & Fade', 'Neighbourhood', 'Start', 'Speed', 'Brush', 'Look', 'As text']);
-    expect(labels('patterns')).toEqual(['Stencils', 'Start', 'Speed', 'Brush', 'Look', 'As text']);
+    expect(labels('stages')).toEqual(['Born, Survive & Fade', 'Neighbourhood', 'Stacked rules', 'Start', 'Speed', 'Brush', 'Look', 'As text']);
+    expect(labels('patterns')).toEqual(['Stencils', 'Stacked rules', 'Start', 'Speed', 'Brush', 'Look', 'As text']);
     expect(labels('blocks')).toEqual(['Blocks', 'Start', 'Speed', 'Brush', 'Look', 'As text']);
     expect(gridRulesSections('smooth', 'Ripples').map(x => x.label)).toEqual(['Ripples', 'Start', 'Speed', 'Brush', 'Look', 'As text']);
     for (const t of RULE_TYPES) {
@@ -55,7 +55,7 @@ describe('the builders\' tab model', () => {
 
   it('a phone shows one row: the left panel, the tabs, the right panel', () => {
     const row = sectionRow(gridRulesSections('count'), undefined, 'Preview');
-    expect(row.map(r => r.value)).toEqual(['rule', 'neighbourhood', 'start', 'run', 'brush', 'look', 'recipe', PANEL_RIGHT]);
+    expect(row.map(r => r.value)).toEqual(['rule', 'neighbourhood', 'stack', 'start', 'run', 'brush', 'look', 'recipe', PANEL_RIGHT]);
     expect(row.at(-1)!.label).toBe('Preview');
     expect(sectionRow(AGENT_RULES_TABS).map(r => r.label)).toEqual(['Species', 'Rules', 'Trails', 'Look', 'Recipe']);
     expect(sectionRow([{ id: 'shapes', label: 'Shapes' }, { id: 'recipe', label: 'Recipe', gapBefore: true }], 'Scene', 'Preview'))

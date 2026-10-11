@@ -40,12 +40,17 @@ type Uniforms = Compiled['uniforms'];
  */
 export const shaderKey = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '').replace(/[ \t]+\n/g, '\n');
 
-/** Draw `compiled` into `canvasRef` every frame. Returns a GL error (shader compile or link), if any. */
-export function useBuilderPreview(canvasRef: RefObject<HTMLCanvasElement | null>, compiled: Compiled, paused: boolean): string | null {
+/**
+ * Draw `compiled` into `canvasRef` every frame. Returns a GL error (shader compile or link), if any.
+ * `clockRef`, when given, is the picture's clock (seconds): the 3D viewport reads it to put its
+ * gizmo where an orbiting camera is now.
+ */
+export function useBuilderPreview(canvasRef: RefObject<HTMLCanvasElement | null>, compiled: Compiled, paused: boolean, clockRef?: { current: number }): string | null {
   const [glError, setGlError] = useState<string | null>(null);
   const pausedRef = useRef(paused);
   // The clock carries on across a new program (a structural change while dragging doesn't jump the picture back).
-  const clock = useRef(0);
+  const ownClock = useRef(0);
+  const clock = clockRef ?? ownClock;
   pausedRef.current = paused;
   const uniforms = useRef<{ values: Uniforms; dirty: boolean }>({ values: compiled.uniforms, dirty: true });
   // Every compile hands its uniforms to the running program (no relink when the shaders are the same).

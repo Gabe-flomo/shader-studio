@@ -12,6 +12,7 @@
  * if / else, for loops with constant bounds, ?:, and the built-ins.
  */
 import { startCellsGLSL } from './startCells';
+import { stackStageGLSL } from './stack';
 import { ANY, NOT_EMPTY, SAME, blockCorner, blockVariants, patternVariants, stencilOffset } from './stencils';
 import {
   MOORE_OFFSETS, VON_NEUMANN_OFFSETS, gridSignature, floatLiterals, isDiscrete,
@@ -42,8 +43,12 @@ const off = (dx: number, dy: number) => `vec2(${f(dx)}, ${f(dy)})`;
 /** The frame number for hashing (kept small so the hash stays precise). */
 const FRAME = 'mod(floor(u_time * 60.0), 997.0)';
 
-/** One step of the board. `prev` is the board a step ago (a sampler), `image` the start picture's sampler, if wired. */
-export function gridStepGLSL(s: GridShape, N: GridNames, prev: string, image?: string): string {
+/**
+ * One step of the board. `prev` is the board a step ago (a sampler), `image` the start picture's
+ * sampler, if wired. With stacked rules (gridRules/stack.ts), `stage` is the board Pass's Step
+ * (GLSL): draw 0 of every 1 + cards is the base, draw k card k, each reading the one before.
+ */
+export function gridStepGLSL(s: GridShape, N: GridNames, prev: string, image?: string, stage?: string): string {
   const { id, P } = N;
   const v = (name: string) => `${id}_${name}`;
   const read = (d: string) => `texture2D(${prev}, (${v('cell')} + ${d} + 0.5) / ${v('res')})`;
@@ -71,7 +76,21 @@ export function gridStepGLSL(s: GridShape, N: GridNames, prev: string, image?: s
   );
   // A drawn start (gridRules/startCells.ts): the drawing's state at this cell, read only when the board is dealt.
   if (s.start === 'cells') L.push(...startCellsGLSL(s.startCells, v('drawn'), v('cell'), v('res'), id));
-  if (isDiscrete(s.type)) L.push(...discreteStep(s, N, read, image, sig, prev));
+  if (s.stack.length && isDiscrete(s.type)) {
+    // Stacked rules: the base and each card are stages of the Pass's Repeat, picked by its Step.
+    const n = s.stack.length;
+    const top = s.type === 'count' ? '1.0' : `max(floor(${P('states')} + 0.5), 2.0) - 1.0`;
+    L.push(
+      `float ${v('stage')} = floor(mod(${stage ?? '0.0'} + 0.5, ${f(n + 1)}));`,
+      `float ${v('frame')} = ${FRAME};`,
+      `vec3 ${v('out')} = ${v('me')}.rgb;`,
+      `float ${v('outA')} = ${v('me')}.a;`,
+      `if (${v('stage')} < 0.5) {`,
+      ...discreteStep(s, N, read, image, sig, prev, true).map(l => `    ${l}`),
+      '}',
+    );
+    s.stack.forEach((r, j) => L.push(`else if (${v('stage')} < ${f(j + 1.5)}) {`, ...stackStageGLSL(r, j, { id, P, prev, wrap: s.wrap, top }).map(l => `    ${l}`), '}'));
+  } else if (isDiscrete(s.type)) L.push(...discreteStep(s, N, read, image, sig, prev));
   else L.push(...smoothStep(s, N, read, image));
   return L.map(l => `    ${l}\n`).join('');
 }
@@ -112,7 +131,8 @@ function countLines(s: GridShape, N: GridNames, read: (d: string) => string): st
   return L;
 }
 
-function discreteStep(s: GridShape, N: GridNames, read: (d: string) => string, image: string | undefined, sig: number, prev: string): string[] {
+/** `staged`: the base stage of a stack: assigns out (declared before) and marks blue +2 on a frame it stepped. */
+function discreteStep(s: GridShape, N: GridNames, read: (d: string) => string, image: string | undefined, sig: number, prev: string, staged = false): string[] {
   const { id, P } = N;
   const v = (name: string) => `${id}_${name}`;
   const L: string[] = [`float ${v('s')} = floor(${v('me')}.r + 0.5);`, `float ${v('g')} = ${v('me')}.g;`];
@@ -178,6 +198,11 @@ function discreteStep(s: GridShape, N: GridNames, read: (d: string) => string, i
   }
   // Blocks: blue also keeps the step's parity (2 + phase on odd steps), which shifts the blocks.
   const blue = s.type === 'blocks' ? `${v('phase')} + 2.0 * (${v('tick')} > 0.5 ? 1.0 - ${v('par')} : ${v('par')})` : v('phase');
+  if (staged) {
+    // The cards act only after a real step (not on a frame Speed skips, nor on a new deal): +2 in blue says so.
+    L.push(`${v('out')} = vec3(${v('next')}, ${v('ng')}, ${blue} + 2.0 * ${v('tick')} * (1.0 - ${v('fresh')}));`, `${v('outA')} = ${f(sig)};`);
+    return L;
+  }
   L.push(`vec3 ${v('out')} = vec3(${v('next')}, ${v('ng')}, ${blue});`, `float ${v('outA')} = ${f(sig)};`);
   return L;
 }

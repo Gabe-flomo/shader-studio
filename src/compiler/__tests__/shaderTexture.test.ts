@@ -19,7 +19,7 @@ import { PassRunner, PassTargets, uniformsRead } from '../../lib/passRunner';
 import { ppKeeps, ppSize, ppTargetKey } from '../../play/kit/passPlan.js';
 import { phCreate } from '../../play/kit/passHost.js';
 import { webPasses } from '../../play/webInput';
-import { useNodeGraphStore } from '../../store/useNodeGraphStore';
+import { insideShaderTexture, useNodeGraphStore } from '../../store/useNodeGraphStore';
 import type { PassProgram } from '../types';
 import type { GraphNode, SubgraphData } from '../../types/nodeGraph';
 
@@ -363,5 +363,75 @@ describe('edits that make one', () => {
     const out = sg.nodes.find(x => x.type === 'shaderTextureOutput')!;
     expect(out.params._groupOriginal).toBe(true);
     expect(out.inputs.color.connection).toBeTruthy();
+  });
+});
+
+describe('inside: what the main preview shows', () => {
+  const st = () => useNodeGraphStore.getState();
+  /** The texture's Color on its own: what the main preview compiles while you are inside. */
+  const textureAlone = (tex: GraphNode) => compileGraph({ nodes: [tex, n('output', '__preview_output__', 0, 0, {}, { color: [tex.id, 'color'] })] }).fragmentShader;
+  function load() {
+    useNodeGraphStore.setState({ activeGroupId: null, activeGroupPath: [], previewNodeId: null, insideTextureView: 'texture' });
+    const tex = { ...makeShaderTexture(ids(), { x: 0, y: 0 }, { starter: 'circles' }), id: 'tex' };
+    // The output reads something else: the texture only shows when the preview switches to it.
+    st().replaceGraph([tex, n('uv', 'u', 0, 300), n('output', 'out', 400, 0, {}, { color: ['u', 'uv'] })]);
+    st().compile();
+    return st().fragmentShader;
+  }
+
+  it('insideShaderTexture: at the top level and inside a plain group, not inside other groups', () => {
+    const tex = { ...makeShaderTexture(ids(), { x: 0, y: 0 }), id: 'tex' };
+    const g = group('g', 0, 0, { label: 'G', iterations: 1, inputs: [], outputs: [{ key: 'o', type: 'vec3', label: 'O', from: ['tex', 'color'] }], nodes: [tex] });
+    expect(insideShaderTexture([tex], ['tex'])).toEqual({ id: 'tex', groupId: null });
+    expect(insideShaderTexture([g], ['g', 'tex'])).toEqual({ id: 'tex', groupId: 'g' });
+    expect(insideShaderTexture([{ ...g, type: 'sceneGroup' }], ['g', 'tex'])).toBeNull();
+    expect(insideShaderTexture([tex], [])).toBeNull();
+    expect(insideShaderTexture([g], ['g'])).toBeNull();
+  });
+
+  it('entering shows the texture; exiting shows the graph\'s output again', () => {
+    const rootShader = load();
+    st().enterGroup('tex');
+    expect(st().fragmentShader).toBe(textureAlone(st().nodes.find(x => x.id === 'tex')!));
+    expect(st().fragmentShader).not.toBe(rootShader);
+    expect(st().passes?.map(p => p.nodeId)).toEqual(['tex']);
+    expect(st().programMap?.passes?.some(p => p.nodeId === 'tex')).toBe(true);
+    st().exitGroup();
+    expect(st().fragmentShader).toBe(rootShader);
+  });
+
+  it('"Where it\'s used" shows the output, follows edits inside, and is kept for the session', () => {
+    const store = new Map<string, string>();
+    vi.stubGlobal('sessionStorage', { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => store.set(k, v) });
+    const rootShader = load();
+    st().enterGroup('tex');
+    st().setInsideTextureView('used');
+    expect(store.get('playfield.insideTextureView')).toBe('used');
+    expect(st().fragmentShader).toBe(rootShader);
+    // An edit inside: the preview is still the whole graph, compiled with the new inside.
+    const rings = (st().nodes.find(x => x.id === 'tex')!.params.subgraph as SubgraphData).nodes.find(x => x.type === 'exprNode')!;
+    st().updateNodeParams(rings.id, { expr: 'vec3(0.25)' });
+    expect(st().fragmentShader).toBe(compileGraph({ nodes: st().nodes }).fragmentShader);
+    // Leaving and coming back keeps the choice.
+    st().exitGroup();
+    st().enterGroup('tex');
+    expect(st().insideTextureView).toBe('used');
+    expect(st().fragmentShader).toBe(compileGraph({ nodes: st().nodes }).fragmentShader);
+    st().setInsideTextureView('texture');
+    expect(st().fragmentShader).toBe(textureAlone(st().nodes.find(x => x.id === 'tex')!));
+    st().exitGroup();
+    vi.unstubAllGlobals();
+  });
+
+  it('the eye on a node inside still wins over the texture', () => {
+    load();
+    st().enterGroup('tex');
+    const shown = st().fragmentShader;
+    const uv = (st().nodes.find(x => x.id === 'tex')!.params.subgraph as SubgraphData).nodes.find(x => x.type === 'uv')!;
+    st().setPreviewNodeId(uv.id);
+    expect(st().fragmentShader).not.toBe(shown);
+    st().setPreviewNodeId(null);
+    expect(st().fragmentShader).toBe(shown);
+    st().exitGroup();
   });
 });
