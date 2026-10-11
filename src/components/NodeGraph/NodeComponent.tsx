@@ -571,6 +571,21 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   const updateNodeOutputs  = useNodeGraphStore(s => s.updateNodeOutputs);
   const updateNodeInputs   = useNodeGraphStore(s => s.updateNodeInputs);
   const disconnectInput    = useNodeGraphStore(s => s.disconnectInput);
+  // An input socket on a custom card (Texture's UV, Group Output's Position, a param socket) behaves as every card's:
+  // a left click on a wired socket takes the wire off (one undo step), on an open one finishes a wire being dragged;
+  // a tap does the same on a touch screen.
+  const inSocketUp = (key: string) => (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (e.button !== 0) return;
+    if (!isConnectionDragging && node.inputs[key]?.connection) disconnectInput(node.id, key);
+    else onEndConnection(node.id, key);
+  };
+  const inSocketTouch = (key: string) => (e: React.TouchEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (pendingMobileConnection) onTapInputSocket?.(node.id, key);
+    else if (node.inputs[key]?.connection) disconnectInput(node.id, key);
+  };
   const setPreviewNodeId   = useNodeGraphStore(s => s.setPreviewNodeId);
   const toggleBypass       = useNodeGraphStore(s => s.toggleBypass);
   const setNodeAssignOp      = useNodeGraphStore(s => s.setNodeAssignOp);
@@ -987,8 +1002,9 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
               <div
                 data-socket="in"
                 ref={el => { registerSocket(node.id, 'in', 'uv', el); }}
-                onMouseUp={e => { e.stopPropagation(); onEndConnection(node.id, 'uv'); }}
-                onTouchEnd={e => { e.stopPropagation(); e.preventDefault(); onTapInputSocket?.(node.id, 'uv'); }}
+                data-texture-uv-socket=""
+                onMouseUp={inSocketUp('uv')}
+                onTouchEnd={inSocketTouch('uv')}
                 style={{
                   width: isTouchDevice ? 22 : 12, height: isTouchDevice ? 22 : 12,
                   borderRadius: '50%',
@@ -1310,9 +1326,9 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
       <div
         data-socket={dir}
         ref={el => { registerSocket(node.id, dir, key, el); }}
-        onMouseUp={dir === 'in' ? e => { e.stopPropagation(); onEndConnection(node.id, key); } : undefined}
+        onMouseUp={dir === 'in' ? inSocketUp(key) : undefined}
         onMouseDown={dir === 'out' ? e => { e.stopPropagation(); onStartConnection(node.id, key, e); } : undefined}
-        onTouchEnd={e => { e.stopPropagation(); e.preventDefault(); if (dir === 'in') onTapInputSocket?.(node.id, key); else onTapOutputSocket?.(node.id, key); }}
+        onTouchEnd={dir === 'in' ? inSocketTouch(key) : e => { e.stopPropagation(); e.preventDefault(); onTapOutputSocket?.(node.id, key); }}
         style={{
           width: isTouchDevice ? 22 : 12, height: isTouchDevice ? 22 : 12, borderRadius: '50%', flexShrink: 0, touchAction: 'manipulation',
           background: dir === 'out' || connected ? TYPE_COLORS[type] ?? '#888' : '#333', border: `2px solid ${TYPE_COLORS[type] ?? '#888'}`,
@@ -1463,14 +1479,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '0 10px 0 0' }}>
             <div
               ref={el => { registerSocket(node.id, 'in', 'value', el); }}
-              onMouseUp={e => {
-                e.stopPropagation();
-                if (node.inputs.value?.connection && !isConnectionDragging) {
-                  disconnectInput(node.id, 'value');
-                } else {
-                  onEndConnection(node.id, 'value');
-                }
-              }}
+              onMouseUp={inSocketUp('value')}
+              onTouchEnd={inSocketTouch('value')}
               style={{
                 width: 12, height: 12, borderRadius: '50%',
                 background: node.inputs.value?.connection ? TYPE_COLORS['float'] : '#333',
@@ -1656,7 +1666,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           >
             <div
               ref={el => { if (el) registerSocket(node.id, 'in', 'pos', el); }}
-              onMouseUp={() => onEndConnection(node.id, 'pos')}
+              onMouseUp={inSocketUp('pos')}
+              onTouchEnd={inSocketTouch('pos')}
               style={{
                 width: 12, height: 12, borderRadius: '50%', boxSizing: 'border-box', marginLeft: -6, flexShrink: 0, cursor: 'crosshair',
                 background: isConnected ? posColor : (hoveredInput === 'pos' ? posColor : tk.bg.panel), border: `2px solid ${posColor}`,
@@ -1752,7 +1763,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           onMouseDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()}>
           <ParamSocket color={TYPE_COLORS.float} wired={wired} touch={isTouchDevice}
             register={el => { registerSocket(node.id, 'in', o.psKey, el); }}
-            onMouseUp={e => { e.stopPropagation(); onEndConnection(node.id, o.psKey); }} />
+            onMouseUp={inSocketUp(o.psKey)} />
           {o.reveal ? (
             <ParamLabel muted={wired} title="Open this node in the group" onClick={() => revealNode(o.reveal!.path, o.reveal!.nodeId)}>{o.label}</ParamLabel>
           ) : (
@@ -2550,7 +2561,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           {activeGroupId && (
             <ParamSocket color={TYPE_COLORS.float} wired touch={isTouchDevice}
               register={el => { registerSocket(node.id, 'in', paramInputKey, el); }}
-              onMouseUp={e => { e.stopPropagation(); onEndConnection(node.id, paramInputKey); }} />
+              onMouseUp={inSocketUp(paramInputKey)} />
           )}
           {labelNode(true)}
           <WiredChip source={paramInputConn!} expr={srcExpr} />
@@ -2568,7 +2579,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           {activeGroupId && (
             <ParamSocket color={TYPE_COLORS.float} wired={false} touch={isTouchDevice}
               register={el => { registerSocket(node.id, 'in', paramInputKey, el); }}
-              onMouseUp={e => { e.stopPropagation(); onEndConnection(node.id, paramInputKey); }} />
+              onMouseUp={inSocketUp(paramInputKey)} />
           )}
           {labelNode(false)}
           {drive && <PlayDriveChip drive={drive} />}
@@ -2611,7 +2622,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         {activeGroupId && (
           <ParamSocket color={TYPE_COLORS.float} wired={false} touch={isTouchDevice}
             register={el => { registerSocket(node.id, 'in', paramInputKey, el); }}
-            onMouseUp={e => { e.stopPropagation(); onEndConnection(node.id, paramInputKey); }} />
+            onMouseUp={inSocketUp(paramInputKey)} />
         )}
         {labelNode(false)}
         {drive && <PlayDriveChip drive={drive} />}

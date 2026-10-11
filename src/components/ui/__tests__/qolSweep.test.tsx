@@ -32,7 +32,6 @@ function mount(ui: React.ReactElement) {
 }
 afterEach(() => { for (const m of mounted.splice(0)) { act(() => m.root.unmount()); m.host.remove(); } });
 const $ = (sel: string) => document.body.querySelector<HTMLElement>(sel);
-const $$ = (sel: string) => Array.from(document.body.querySelectorAll<HTMLElement>(sel));
 
 function fire(el: EventTarget, type: string, init: Record<string, unknown> = {}) {
   const e = new MouseEvent(type, { bubbles: true, cancelable: true, button: 0, ...init });
