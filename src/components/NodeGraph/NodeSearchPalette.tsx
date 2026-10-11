@@ -149,14 +149,17 @@ function SearchPanel({ onClose, spawnPosition, filterOutputType, filterInputType
   }, [userNodesVersion, hiddenSearch, wireOk]);
 
   // ── Context: the node you came from, what usually goes with it, what you added lately ──
-  const from = useMemo(() => {
+  // Opened from a selected node (not a wire): Related only lists what can take one of its outputs.
+  const { from, outTypes } = useMemo<{ from: string | null; outTypes: string[] | null }>(() => {
     const wire = useLibraryPrefs.getState().wire;
-    if (boostFrom) return boostFrom;
-    if (wire) return wire.nodeType;
+    if (boostFrom) return { from: boostFrom, outTypes: null };
+    if (wire) return { from: wire.nodeType, outTypes: null };
     const st = useNodeGraphStore.getState();
-    if (!st.selectedNodeId) return null;
-    const n = st.nodes.find(x => x.id === st.selectedNodeId) ?? getActiveNodes(st.nodes, st.activeGroupPath)?.find(x => x.id === st.selectedNodeId);
-    return n?.type ?? null;
+    if (!st.selectedNodeId) return { from: null, outTypes: null };
+    const n = getActiveNodes(st.nodes, st.activeGroupPath)?.find(x => x.id === st.selectedNodeId) ?? st.nodes.find(x => x.id === st.selectedNodeId);
+    if (!n) return { from: null, outTypes: null };
+    const outs = Object.entries(n.outputs).filter(([k]) => !k.startsWith('__')).map(([, o]) => o.type as string);
+    return { from: n.type, outTypes: [...new Set(outs)] };
   }, [boostFrom]);
   const affinityOf = useMemo(() => {
     if (!from) return () => 0;
@@ -177,8 +180,8 @@ function SearchPanel({ onClose, spawnPosition, filterOutputType, filterInputType
   }, [from]);
   const recents = useMemo(() => recentNodes(), []);
   const ctx = useMemo<RelatedContext>(() => ({
-    fromType: from, fromLabel: from ? getNodeDefinition(from)?.label ?? from : null, affinity: affinityOf, follows, recents,
-  }), [from, affinityOf, follows, recents]);
+    fromType: from, fromLabel: from ? getNodeDefinition(from)?.label ?? from : null, affinity: affinityOf, follows, recents, outTypes,
+  }), [from, affinityOf, follows, recents, outTypes]);
   const offered = useMemo(() => new Set(searchDefs.map(d => d.type)), [searchDefs]);
   const fitDefs = useMemo(() => searchDefs.filter(d => !misfit(d)), [searchDefs, misfit]);
   const usuallyNext = useMemo(() => (from ? rankRelated(fitDefs, { ...ctx, recents: [] }, new Set(), 16) : []), [from, fitDefs, ctx]);
