@@ -104,6 +104,17 @@ export const SHAPES: ShapeDef[] = [
     params: [P('freq', 'Frequency', 'frequency', 3.5, 0.1, 10), P('t', 'Thickness', 'thickness', 0.3, 0.001, 0.5, 0.005), P('ball', 'Ball radius', '', 1.1, 0, 5, 0.01, { hint: 'The ball the lattice is cut to. 0 fills all of space.' })] },
   { kind: 'schwarz-p', label: 'Schwarz-P', aliases: ['schwarz'], type: 'schwarzPField', posKey: 'pos', distKey: 'surface', field: true, stepHint: 0.6, blurb: 'A lattice of round chambers, cut to a ball.',
     params: [P('freq', 'Frequency', 'frequency', 3.5, 0.1, 10), P('t', 'Thickness', 'thickness', 0.3, 0.001, 0.5, 0.005), P('ball', 'Ball radius', '', 1.1, 0, 5, 0.01)] },
+  // A picture rebuilt from balls (docs/pieces.md): give it a picture (texture=) and each ball takes its colour and lift from it.
+  { kind: 'picture-balls', label: 'Picture balls', aliases: ['ball-action', 'pieces-3d'], type: 'pieceBalls', posKey: 'pos', distKey: 'dist', stepHint: 0.9,
+    blurb: 'A picture rebuilt from balls (CC Ball Action): each ball takes the picture\'s colour at its home and comes forward by its brightness. Give it a picture.',
+    params: [
+      P('width', 'Width', 'width', 3, 0.2, 20, 0.01, { hint: 'How wide the picture is.' }),
+      P('across', 'Balls across', 'count', 41, 3, 151, 1),
+      P('lift', 'Lift', 'lift', 0.4, -3, 3, 0.01, { hint: 'How far the brightest balls come forward (along z).' }),
+      P('ball', 'Ball size', 'size', 0.9, 0.1, 1.2, 0.01, { hint: '1 touches the neighbours.' }),
+      P('wave', 'Wave', 'wave', 0, -1, 1, 0.01, { hint: 'A ring wave rolling out from the middle.' }),
+      P('jitter', 'Jitter', 'jitter', 0, 0, 2, 0.01, { hint: 'A random push forward or back per ball.' }),
+    ] },
   // 4D shapes (docs/4d.md): sliced into the scene. W moves the slice; Spin turns the shape in the xw plane, so the slice morphs.
   { kind: 'hypersphere', label: 'Hypersphere', aliases: ['4d-ball', '4d-sphere'], type: 'hypersphereSDF', posKey: 'p4', distKey: 'dist', fourD: { slice: 'face' }, blurb: 'A 4D ball: its slice is a ball that grows and shrinks as W moves.',
     params: [P('r', 'Radius', 'radius', 0.6, 0.01, 5), P('w', 'Slice (w)', '', 0, -2, 2, 0.01, { hint: 'Where the 3D slice cuts the 4D shape.' }), P('spin', 'Spin', '', 0, -90, 90, 0.5, { hint: 'Degrees a second it turns in the xw plane.' })] },

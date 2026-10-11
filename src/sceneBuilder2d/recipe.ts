@@ -31,6 +31,8 @@ import { BUILT_IN_FUNCTIONS, builtInFunction } from './functions';
 import { COMBINE_MODES, checkBlock, clampTimes, linesText, parseBlockText, rangeFor, type CombineMode, type SpaceBlock } from './blocks';
 import { BLOCK_BY_ID, BLOCK_LIBRARY, blockFromEntry, isLibraryBlock } from './blockLibrary';
 import { findSavedBlock, loadSavedBlocks, sceneOpFromSaved } from './savedBlocks';
+import { PIECES_MOVES, PIECES_SIZE_BYS, PIECES_VOCABULARY, defaultPieces, printPieces, type PiecesSpec } from './pieces';
+import { PIECE_SHAPES } from '../nodes/definitions/pieces';
 import { GRID_ASSIGNS, GRID_COLOUR_BYS, GRID_PIC_MODES, GRID_SHAPES, GRID_TARGETS, RIPPLE_FROMS, defaultGrid, printGrid, type GridPicMode, type GridShape, type GridSpec } from './grid';
 import type { RecipeError } from '../sceneBuilder/recipe';
 import { parseDepthArgs, printDepth } from './depth';
@@ -384,6 +386,9 @@ class Parser {
           || (!!first && first.value.k === 'num' && Number.isInteger(first.value.v) && first.value.v >= 2);
         if (isCells || !args.length) this.grid(scene, args);
         else scene.space.push(this.space(t, SPACE_WORDS[w], args));
+      } else if (w === 'pieces') {
+        this.c.next();
+        this.pieces(scene, this.c.args([]));
       } else if (w === 'space-block') {
         this.c.next();
         const b = this.block(t, this.c.args([]), '');
@@ -586,6 +591,41 @@ class Parser {
     if (pic.tex) g.pic = { tex: pic.tex, mode: pic.mode ?? 'piece' };
     else if (pic.mode) this.warnings.push('picture-mode= is for a grid with a picture: add picture=… (a picture\'s name).');
     scene.grid = g;
+  }
+
+  /** `pieces brick count=40 shape=… size=1 colour=flat|piece size-by=… move=… amount=0.35 speed=0.1 swirl=0.8` (pieces.ts) */
+  private pieces(scene: Scene2D, args: AstArg[]) {
+    let p: PiecesSpec | null = null;
+    const rest: AstArg[] = [];
+    for (const a of args) {
+      if (!a.key && !p) { const n = this.texName(a, 'pieces'); if (n) p = defaultPieces(n); continue; }
+      rest.push(a);
+    }
+    for (const a of rest) {
+      const key = a.key?.toLowerCase() ?? '';
+      if (key === 'picture' || key === 'texture') { const n = this.texName(a, key); if (n) p = { ...(p ?? defaultPieces(n)), tex: n }; }
+    }
+    if (!p) { this.warnings.push('pieces needs a picture: pieces brick … (a picture\'s name).'); return; }
+    const pick = <T extends string>(a: AstArg, list: readonly T[], what: string): T | null => {
+      const w = this.word(a);
+      if (w && (list as readonly string[]).includes(w)) return w as T;
+      this.fail(a, `${what} is one of ${list.join(', ')}.`);
+      return null;
+    };
+    for (const a of rest) {
+      const key = a.key?.toLowerCase() ?? '';
+      switch (key) {
+        case 'picture': case 'texture': break;
+        case 'count': case 'across': { const n = this.num(a, key); if (n !== null) p.count = Math.max(2, Math.round(n)); break; }
+        case 'size': case 'amount': case 'speed': case 'swirl': { const n = this.num(a, key); if (n !== null) p[key] = n; break; }
+        case 'shape': { const v = pick(a, PIECE_SHAPES, 'A piece\'s shape'); if (v) p.shape = v; break; }
+        case 'colour': case 'color': { const v = pick(a, ['flat', 'piece'] as const, key); if (v) p.colour = v; break; }
+        case 'size-by': { const v = pick(a, PIECES_SIZE_BYS, 'size-by'); if (v) p.sizeBy = v; break; }
+        case 'move': { const v = pick(a, PIECES_MOVES, 'move'); if (v) p.move = v; break; }
+        default: this.fail(a, `pieces has no setting “${a.key ?? ''}”.`);
+      }
+    }
+    scene.pieces = p;
   }
 
   private look(scene: Scene2D, w: string, t: { at: number; end: number }, args: AstArg[]) {
@@ -828,6 +868,7 @@ export function printRecipe2D(scene: Scene2D, opts: { multiline?: boolean; prett
   clauses.push(...scene.space.map(printSpace));
   clauses.push(...scene.layers.map(it => printItem(it, ind)));
   if (scene.grid) clauses.push(printGrid(scene.grid, colourText));
+  if (scene.pieces) clauses.push(printPieces(scene.pieces, fmtName));
   // Look.
   if (L.glow.mode !== 'off') {
     const g = ['glow'];
@@ -868,6 +909,7 @@ export const RECIPE_VOCABULARY_2D = {
   textures: ['texture brick node=node_4 aspect=1.5', 'picture brick h=0.6 fit=cover', 'circle r=0.4 fill=brick fit=tile tiles=3', 'background picture=brick fit=cover [still]', `grid 12 picture=brick picture-mode=${GRID_PIC_MODES.join('|')}`],
   depth: ['depth-picture pond [fit=cover] [size | size=(0.4,1.6)] [space=shift|zoom|turn shift=0.15 dir=0 focus=0] [look=top|occlude|fog|mix|light] [with=add|screen|over|tint] [picture=1] [range=(0,1)] [curve=1] [at=0.5 soft=0.05] [fog=0.9 haze=0.35 fog-color=] [light=2 own=0.55 glow=1] [near=picture|scene mix=1] [gradient=sunset gradient-on=scene|picture|both gradient-how=multiply|colorize|add gradient-amount=0.8 cycles=1 phase=0 flow=0.1]'],
   grid: [`grid 12 [rows] shape=${GRID_SHAPES.join('|')} assign=${GRID_ASSIGNS.join('|')} size=0.7 ripple=centre|corners|mouse|(x,y) freq=8 speed=0.4 target=${GRID_TARGETS.join('|')} amount=0.5 by=${GRID_COLOUR_BYS.join('|')} color= color2= glow=off picture=brick picture-mode=${GRID_PIC_MODES.join('|')}`],
+  pieces: [PIECES_VOCABULARY],
   motion: ['@orbit(0.3 speed=0.25)', '@bob(0.15 dir=90)', '@spin(0.25)', '@pulse(0.25 speed=0.5)'],
   ring: ['@ring(6 r=0.5)', '@ring(6 r=0.5 inner=(5,0.2))', '@ring(6 r=0.5 levels=3 factor=1.6)'],
   look: ['glow [selected] [amount] falloff= color=', `colour by ${COLOUR_BYS.join('|')} palette= scale= speed=`, `tone ${TONE_MODES.join('|')}`, 'background colour [picture=brick fit= tiles= still]', 'bloom 0.6', 'vignette 0.5', 'grain 0.05', 'scanlines 0.3', 'output distance|mask|space palette='],

@@ -1953,7 +1953,8 @@ export class ShaderAssembler {
           const sgExternalVarMap = new Map<string, string>(); // GLSL var name → GLSL type
           for (const port of (subgraph.inputPorts ?? [])) {
             const outerVar = inputVars[port.key];
-            if (outerVar && isGlslVarRef(outerVar)) sgExternalVarMap.set(outerVar, port.type);
+            // A texture port carries a sampler's name: samplers are global uniforms, so the scene function reads it directly.
+            if (outerVar && isGlslVarRef(outerVar) && port.type !== 'texture') sgExternalVarMap.set(outerVar, port.type);
           }
           for (const subNode of subgraph.nodes) {
             const snDefScan = getNodeDefinitionFor(subNode);

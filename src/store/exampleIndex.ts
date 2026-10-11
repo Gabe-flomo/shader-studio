@@ -18,6 +18,7 @@ import { LEARN_COLOR_KEYS, LEARN_CURVES_KEYS, LEARN_EXAMPLE_INDEX, LEARN_EXAMPLE
 import { LEARN3D_EXAMPLE_INDEX, LEARN3D_EXAMPLE_KEYS } from './learn3dExampleIndex';
 import { CURVED_EXAMPLE_INDEX, CURVED_EXAMPLE_KEYS } from './curvedSpaceExampleIndex';
 import { REPEAT_SCENE_EXAMPLE_INDEX, REPEAT_SCENE_EXAMPLE_KEYS } from './repeatSceneExampleIndex';
+import { PIECES_EXAMPLE_INDEX, PIECES_EXAMPLE_KEYS } from './piecesExampleIndex';
 import { CURVE_TRACE_EXAMPLE_INDEX, CURVE_TRACE_2D_KEYS, CURVE_TRACE_3D_KEYS } from './curveTraceExampleIndex';
 import { COMBO_EXAMPLE_INDEX } from './comboExamples';
 import { MATRIX_EXAMPLE_INDEX, MATRIX_EXAMPLE_KEYS } from './matrixExamples';
@@ -214,6 +215,7 @@ export const EXAMPLE_INDEX: Record<string, ExampleIndexEntry> = {
   // The Curved space folder: spherical and hyperbolic views, reverse perspective (curvedSpaceExampleIndex.ts).
   ...CURVED_EXAMPLE_INDEX,
   ...REPEAT_SCENE_EXAMPLE_INDEX,
+  ...PIECES_EXAMPLE_INDEX,
   ...CURVE_TRACE_EXAMPLE_INDEX,
   // Node Combos built from the definitions (comboExamples.ts): the Grid Pattern → shape → Grid Paint flow, and field sockets.
   ...COMBO_EXAMPLE_INDEX,
@@ -293,6 +295,7 @@ export const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: string
   { label: "Effects & Lens",    color: ctp.mauve, keys: ['echoTrails','feedbackSmear','crtTv','lensBarrel'] },
   { label: "Space & Texture",   color: ctp.flamingo, keys: ['waveTextureDemo','waveInterference','magicTextureDemo','neonFloorGrid','spaceAtlas'] },
   { label: "Grid",              color: ctp.sky, keys: [...GRID_EXAMPLE_KEYS, ...LEARN_GRID_KEYS, 'gridNeighborDisplaced','gridMetaballs','gridBreathing','gridDensityWave','gridLavaLamp','beatGrid'] },
+  { label: "Pictures in pieces", color: ctp.sky, keys: PIECES_EXAMPLE_KEYS },
   { label: "Matrices",          color: ctp.peach, keys: MATRIX_EXAMPLE_KEYS },
   { label: "Data",              color: ctp.teal, keys: DATA_EXAMPLE_KEYS },
   { label: "Halftone",          color: '#a6e3d5', keys: ['cmykNoise','webcamCmyk'] },

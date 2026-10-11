@@ -2953,6 +2953,41 @@ Examples:
 
 - `schwarz-p` — on an empty graph (just an Output)
 
+### picture-balls
+
+3D scene · maker. Picture balls: A picture rebuilt from balls (CC Ball Action): each ball takes the picture's colour at its home and comes forward by its brightness. Give it a picture. Also: ball-action, pieces-3d.
+
+Words: `picture-balls`, `ball-action`, `pieces-3d`
+
+```
+picture-balls [width] across= lift= ball= wave= jitter= at= rot= color= shine= name= texture= map= tiles= sharp= tex-offset= tex-rot= bump= [glass]
+```
+
+| Slot | What |
+|---|---|
+| width (bare) | Width · How wide the picture is. · default 3 · random: 1.5–4.800000000000001 |
+| across | Balls across · default 41 · random: 20.5–65.60000000000001 |
+| lift | Lift · How far the brightest balls come forward (along z). · default 0.4 · random: 0.2–0.6400000000000001 |
+| ball | Ball size · 1 touches the neighbours. · default 0.9 · random: 0.45–1.2 |
+| wave | Wave · A ring wave rolling out from the middle. · default 0 · random: -0.3333333333333333–0.3333333333333333 |
+| jitter | Jitter · A random push forward or back per ball. · default 0 · random: 0–0.3333333333333333 |
+| at | random: (-0.6…0.6)×3 |
+| rot | random: (-45…45)×3 |
+| color | random: a harmonious colour |
+| shine | random: 0–0.8 |
+| name | name |
+| texture | A picture on its surface: a name from a texture clause (Surface mode). |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
+| tex-offset | Slides the picture across the surface (1 is a whole picture). |
+| tex-rot | Turns the picture on the surface. |
+| bump | Bump from brightness: bright parts of the picture stand out under the light. · default 0 |
+
+Examples:
+
+- `picture-balls` — on an empty graph (just an Output)
+
 ### hypersphere
 
 3D scene · maker. Hypersphere: A 4D ball: its slice is a ball that grows and shrinks as W moves. Also: 4d-ball, 4d-sphere.

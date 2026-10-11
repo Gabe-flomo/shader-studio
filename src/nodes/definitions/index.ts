@@ -40,6 +40,7 @@ export { PadGridNode } from './padGrid';
 export { GridPatternNode } from './gridPattern';
 export { GridPaintNode } from './gridPaint';
 export { CellPictureNode, CellPatternNode } from './cellPicture';
+export { PiecesNode, BallsNode } from './pieces';
 export { ArrayFieldNode } from './arrayField';
 export { FieldCellNode } from './fieldCell';
 export { GridLayoutNode, WaveRadiusNode, NeighborDistNode, CellFilterNode, CellDisplaceNode, GridDensityWarpNode, NeighborOffset2dNode, AnimatedCellCenterNode, NeighborAttractCirclesNode } from './grid';
@@ -196,6 +197,7 @@ import { EchoNode } from './echo';
 import { GridPatternNode } from './gridPattern';
 import { GridPaintNode } from './gridPaint';
 import { CellPictureNode, CellPatternNode } from './cellPicture';
+import { PiecesNode, BallsNode } from './pieces';
 import { ArrayFieldNode } from './arrayField';
 import { FieldCellNode } from './fieldCell';
 import { GridLayoutNode, WaveRadiusNode, NeighborDistNode, CellFilterNode, CellDisplaceNode, GridDensityWarpNode, NeighborOffset2dNode, AnimatedCellCenterNode, NeighborAttractCirclesNode } from './grid';
@@ -405,6 +407,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   gridPaint: GridPaintNode,
   cellPicture: CellPictureNode,
   cellPattern: CellPatternNode,
+  pieces: PiecesNode,
   arrayField: ArrayFieldNode,
   fieldCell: FieldCellNode,
   neighborOffset2d: NeighborOffset2dNode,
@@ -702,6 +705,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   sceneBuilder: SceneBuilderNode,
   repeatScene: RepeatSceneNode,
   repeatCell: RepeatCellNode,
+  pieceBalls: BallsNode,
   curveTrace: CurveTraceNode,
   curveTrace3D: CurveTrace3DNode,
   curveTraceBeamStep: CurveBeamStepNode,
