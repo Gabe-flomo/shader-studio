@@ -125,10 +125,61 @@ Words in the Agent Builder's stroke font (`agentBuilder/strokeFont.ts`), two way
 | Section | What it sets |
 |---|---|
 | **Shapes** | Up to six shapes: kind (circle, square, ring, diamond, triangle, hexagon, star, plus, cross, heart), colour, size (a share of half a cell: 1 touches the neighbours), turn, spin, pulse, outline. Add and remove shapes (a removed shape's cells and rules go with it). **Picture**: a picture the shape carries, and its mode (see Pictures in pieces). |
-| **Motion** | The brush shape's path: still, up and down, side to side, both at once, circle, figure eight, bounce, travel, hop. The **XY control** sets how far (in cells, y up): drag the point, the path is drawn round it; X and Y sliders beside it. Speed (cycles a second) and lag (each cell starts (x + y) × lag of a cycle later: the motion runs through the drawing as a wave). Travel and hop wrap round the grid. |
+| **Motion** | The brush shape's path: still, up and down, side to side, both at once, circle, figure eight, bounce, travel, hop, or **Drawn** (your own; see Drawn paths). The **XY control** sets how far (in cells, y up): drag the point, the path is drawn round it; X and Y sliders beside it, and the reach's **Length**. **Angle** (degrees) turns the whole path round, keeping its length, and **Angle spin** (degrees a second) turns it on its own (see Angle). Speed (cycles a second) and lag (each cell starts (x + y) × lag of a cycle later: the motion runs through the drawing as a wave). Travel and hop wrap round the grid. |
 | **Patterns & warps** | A wave over the cells: ripple, diagonal, checker, rings, spiral, stripes, random. It changes every shape's size, turn, push, hue or brightness by Amount; Waves is how many across the grid, Speed in cycles a second, Arms for the spiral. **Fill empty cells** puts a shape in every cell you didn't draw on, its size following the wave (checker + fill is a checkerboard that swaps). **Only in words** limits the wave and the fill to the cells some words cover (see Text). **Grid warps**: up to three space blocks from the 2D Scene Builder's library (the same picker: categories, search, Random), bending the space the whole grid is drawn in, lines and all. |
 | **Rules** | When … Do … for every drawn cell, checked in the shader each frame, top to bottom. When a shape *is in the cell (x, y)*, *is in the column*, *is in the row*, *shares a cell with* another shape, or *is near* it (within N cells). Do: *becomes* another shape (its kind, size and colour), *turns a colour*, *swaps colours with* the other shape (both ways), *grows by*, *hides*, *spins*. A rule that names a shape that isn't there is shown as off. |
 | **Look** | Background, grid lines (on or off, colour, width in cells), the grid's size, glow (amount, falloff, style), tone map. Glow style **Soft** (the default) is one shape: the shape's colour runs out into its glow, colour × (amount ÷ (distance outside + amount)) ^ falloff, which is 1 at the edge and inside, so the fill meets it without a seam. **Halo** is the Glow Layer's amount ÷ \|distance\|: a bright rim round a flat shape (the look before). |
+
+### Angle
+
+The motion's XY arrow, turned: the shape moves along `rotate((x, y), Angle + Angle spin × t)`.
+X and Y stay the base, so a scene without an Angle moves exactly as before (Angle 0). Every path
+turns: up and down, side to side and bounce swing off their axis, both at once points the arrow,
+circle and figure eight turn their whole path, travel and hop set off at the angle, and a drawn
+path turns with it. On the XY pad the point and the path are drawn turned (what the shape does),
+with the X / Y as set faint and the angle's arc between; dragging places the turned point.
+
+It is live and animatable: Angle and Angle spin are sliders on the built Shape node (`angle`,
+`angleSpin`, so an LFO or Time can be wired into either), their right-click menu adds them to Play
+controls, and nothing about them rebuilds the code. The node passes them to the Grid scene as
+`dir`; the scene turns each shape's offset by them.
+
+The search stays exact: a turn keeps the reach's length, and the search's bounds are worked out
+from the turned path each frame (for a line its turned extent; circle and figure eight a box round
+the turned path, the same as before at 0°). Spinning, the builder's warning uses the worst angle.
+
+### Drawn paths
+
+Pick **Drawn** and the pad becomes a drawing surface (−1 … 1 each way; X and Y stretch it into
+cells, Angle turns it):
+
+- **Draw**: drag on the pad; when the pointer lifts the stroke is kept (one undo step). With **Auto
+  smooth** on it is thinned to its turning points first (Ramer–Douglas–Peucker) and capped at 64
+  points. **Edit**: drag a point to move it; right-click (or Alt-click) it to delete it.
+- **Smooth** rounds the corners (up to three passes of Chaikin's corner cutting), then the path is
+  resampled to 32 points evenly spaced along its length, so the shape moves at an even speed
+  however the stroke was drawn.
+- **Closed** loops it seamlessly. An open path's end: **Snap back** (straight back to the start),
+  **Ease back** (out over the rest of the cycle, then an eased glide straight home over **Back** of
+  it), or **Ping-pong** (out and back along the path). **Ease** eases in and out along the path each
+  cycle (0: an even speed).
+- **Generate** makes a random path from a new seed (one undo step): a wobbly loop when Closed (a few
+  smooth harmonics on a circle), a meander when open, with **Wiggle** and **Points**.
+
+On the GPU the path is numbers: the 32 points (with the path's box and fastest step) are hidden
+sliders on the Grid scene node (`pA0…`), its settings (closed, end mode, back, ease) on the Shape
+node (`path`), so redrawing, smoothing or generating never rebuilds. The neighbour search bounds it
+by its box (turned by the Angle) and, with lag, by its fastest step (Snap back jumps, so with lag
+the box bounds it). Lag still ripples along it. The spec keeps the stroke and its settings
+(`motion.drawn`), so Edit this one reopens it; Surprise me now and then gives a shape a generated
+path. `src/gridScene/paths.ts` has the sums, the same on the CPU as in the shader.
+
+### The Play menu
+
+Right-click a slider for the built node's Play menu (Add to Play controls, keyframes): the shapes'
+size, turn, spin, pulse, outline, X, Y, speed, lag, Angle, Angle spin, a drawn path's Ease and Back,
+the pattern's numbers and the glow's. It finds the node by its role in the build the builder edits,
+so it needs a Build first (the menu says so).
 
 ### Rules that stay changed, and/or, else
 
@@ -175,8 +226,9 @@ Soft glow (d, colour; or Glow Layer for Halo) ─► Add over the ground ─► 
 ```
 
 - **Shape A, B…**: an Expression Block whose sliders are the shape's numbers (size, turn, spin,
-  pulse, outline, move X and Y, speed, lag). Its result is the motion (x, y, speed, lag); `look`
-  and `edge` are exposed outputs. Colour is a Colour node. All live: no recompile.
+  pulse, outline, move X and Y, speed, lag, angle, angleSpin; a drawn path's ease and back). Its
+  result is the motion (x, y, speed, lag); `look`, `edge`, `dir` (the angle and its spin, radians)
+  and, for a drawn path, `path` are exposed outputs. Colour is a Colour node. All live: no recompile.
 - **Grid scene**: an Expression Block with the pattern's sliders (amount, freq, speed, arms) and
   the drawing as hidden sliders (`g0…`, eight cells a number, three bits a cell: which shape, 0 for
   none), gathered into an array `gd` in its first line. Its helper functions (in the node's
@@ -316,7 +368,8 @@ under Shapes → Picture.
 
 A whole grid scene from a seed (`src/gridScene/surprise.ts`), the same seed always the same:
 a 6 to 14 cell grid; one to three shapes in one harmonious palette on a dark ground; cells drawn as
-a motif (a mirrored pixel sprite, a ring, a diagonal, a border, a scatter); motion for most shapes;
+a motif (a mirrored pixel sprite, a ring, a diagonal, a border, a scatter); motion for most shapes
+(now and then a generated Drawn path);
 a pattern most of the time (sometimes filling the empty cells); now and then a gentle warp (one of
 the library's blocks that bends a grid without tearing it, at or below its default strength) and a
 rule between two shapes. One undo step; Reroll and Undo in its toast.
@@ -334,5 +387,5 @@ rule between two shapes. One undo step; Reroll and Undo in its toast.
 
 - Shapes moving through the pattern's fill don't push it aside; the fill only skips the cells you
   drew on.
-- Keyframes and the Play menu on the builder's own sliders (as for the 2D and 3D builders); the
-  built nodes' sliders have both.
+- Math paths (x(t), y(t) expressions and the curve library), path modifiers, per-cell randomness and
+  one motion shared across shapes: planned next.

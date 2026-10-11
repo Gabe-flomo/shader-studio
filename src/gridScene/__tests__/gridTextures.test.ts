@@ -7,6 +7,7 @@
  * The sampling coordinates are checked on the CPU (cpuGlsl.ts): the picture read is replaced by its
  * own coordinates, so the colour a pixel gets *is* where it read the picture.
  */
+import { motionDecls, motionLines, motionUniforms } from './motionArgs';
 import { describe, expect, it } from 'vitest';
 import { parser } from '@shaderfrog/glsl-parser';
 import { compileGraph } from '../../compiler/graphCompiler';
@@ -162,9 +163,10 @@ function cpuScene(spec: GridSceneSpec) {
   const p = gridProgram(spec);
   const fns = p.functions.replace(/return texture2D\(tx, st\);/, 'return vec4(st, 0.0, 1.0);')
     .replace(/vec4 c = textureLod\(tx, ([^;]*), 0\.0\);/, 'vec4 c = vec4($1, 0.0, 1.0);');
-  const decl = spec.shapes.flatMap(s => { const a = shapeArgs(s.id); return [`uniform vec4 ${a.m};`, `uniform vec4 ${a.l};`, `uniform float ${a.e};`, `uniform vec3 ${a.c};`]; });
+  const decl = [...spec.shapes.flatMap(s => { const a = shapeArgs(s.id); return [`uniform vec4 ${a.m};`, `uniform vec4 ${a.l};`, `uniform float ${a.e};`, `uniform vec3 ${a.c};`]; }), ...motionDecls(spec)]
   const src = ['uniform vec2 p_uv;', 'uniform float p_t;', 'uniform vec4 pt;', 'uniform float tx0;', 'uniform float pcut;', ...decl, fns,
     'void main() {', `  float gd[${p.data.length}];`, ...p.data.map((v, i) => `  gd[${i}] = ${v.toFixed(1)};`),
+    ...motionLines(spec),
     '  vec4 hp = vec4(0.0);',
     `  vec4 g = ${p.name}(p_uv, p_t, pt, ${p.args.map(a => (a === 'suv' ? 'p_uv' : a)).join(', ')});`,
     '  gl_FragColor = vec4(g.xy, g.w, 0.0);', '}'].join('\n');
@@ -176,6 +178,7 @@ function cpuScene(spec: GridSceneSpec) {
     u[a.l] = [s.size, s.turn * Math.PI / 180, s.spin, s.pulse];
     u[a.e] = s.outline; u[a.c] = [...s.color];
   }
+  Object.assign(u, motionUniforms(spec));
   const cs = cellSize(spec);
   /** What the pixel at grid place g (cells, y down) gets at time t: [st.x, st.y, distance]. */
   return (g: [number, number], t: number) => {

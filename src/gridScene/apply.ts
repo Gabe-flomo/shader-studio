@@ -144,3 +144,15 @@ export function gridFinalOf(graph: readonly GraphNode[], sceneId: string): { nod
   const fill = b.byRole.get('fill');
   return fill ? { nodeId: fill.id, outputKey: 'result' } : null;
 }
+
+/** A built node's param, for the Grid builder's Play menu: the node with role `role` in the build of `sceneId`, or why there is none. */
+export type ParamTarget = { nodeId: string; key: string } | { missing: string };
+
+export function gridParamTarget(nodes: readonly GraphNode[], sceneId: string | null, role: string, key: string): ParamTarget {
+  if (!sceneId) return { missing: 'Build the scene first: the Play menu sets the built node.' };
+  const node = findGridBuild(nodes, sceneId)?.byRole.get(role);
+  if (!node) return { missing: 'Not in the built scene yet: Build to add it.' };
+  if (!(key in node.params)) return { missing: 'Not on the built node yet: Build to add it.' };
+  return { nodeId: node.id, key };
+}
+
