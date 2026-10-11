@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.162',
+    date: '2026-10-11',
+    title: 'Surprise, unfrozen',
+    highlights: [
+      { area: 'Studio', text: 'Fixed: Surprise me in the Agent Builder (3D slime especially) could freeze the walkers so later Surprises only changed colour. Every Surprise now restarts.' },
+      { area: 'Studio', text: 'Surprise me skips presets that need their own setup, and a surprise that would not compile is undone and rerolled.' },
+    ],
+  },
+  {
     id: '2026.10.161',
     date: '2026-10-11',
     title: 'My blocks',

@@ -30,7 +30,14 @@ const KEEP = new Set<RuleAction['kind']>(['mem', 'memory', 'state', 'spawn', 'fi
 /** One of the kind's presets (only those of this kind), with every number varied and new colours. */
 function variedPreset(rng: Rng, kind: WalkerKind, d3 = false): { set: AgentRuleSet; label: string } | null {
   // In 3D only presets that rescale (they sense a trail): a 2D-sized one would be tiny in the volume.
-  const list = presetsFor(kind).filter(p => { const set = p.set(); return kindOf(set) === kind && (!d3 || (kind !== 'trail' && kind !== 'ants') || rescaleForSpace(set, '3d') !== set); });
+  // Not one that needs a setup of its own (`sim`: Frost's crystal), which Surprise doesn't build: Frost's
+  // walkers stick where they touch the trail, so on a trail setup they all froze at once. Ants keep theirs
+  // (an ants group has its setup already).
+  const list = presetsFor(kind).filter(p => {
+    if (p.sim && kind !== 'ants') return false;
+    const set = p.set();
+    return kindOf(set) === kind && (!d3 || (kind !== 'trail' && kind !== 'ants') || rescaleForSpace(set, '3d') !== set);
+  });
   if (!list.length) return null;
   const p = rng.pick(list);
   const base = p.set();
