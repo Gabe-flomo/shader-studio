@@ -17,7 +17,8 @@ import { BLOCK_LIBRARY, blockFromEntry } from '../../sceneBuilder2d/blockLibrary
 import { buildStandaloneGrid, GS_ROLE } from '../build';
 import { gridProgram } from '../glsl';
 import { applyGridScene, findGridBuild, gridMetaOf } from '../apply';
-import { backToGridScene, buildFromGridBuilder, FROM_GRID_KEY, simulationFromGrid } from '../actions';
+import { backToGridScene, buildFromGridBuilder, drawnStartOf, FROM_GRID_KEY, simulationFromGrid } from '../actions';
+import { startOrigin } from '../../gridRules/startCells';
 import { useGridBuilder } from '../store';
 import { surpriseGridScene } from '../surprise';
 import { GRID_TEMPLATES } from '../templates';
@@ -211,18 +212,33 @@ describe('in the graph: reopen as built, rebuild, the jump to Grid Rules and bac
     const nodes = r.nodes;
     const gr = nodes.find(x => x.id === r.gridRulesId)!;
     expect(gr.type).toBe('gridRules');
-    expect(gr.params.start).toBe('image');
+    expect(gr.params.start).toBe('cells');
     expect(gr.params[FROM_GRID_KEY]).toBe(sceneId);
-    const pass = nodes.find(x => x.id === gr.inputs.image.connection!.nodeId)!;
-    expect(pass.type).toBe('pass');
-    const start = nodes.find(x => x.id === pass.inputs.color.connection!.nodeId)!;
-    expect(start.inputs.d.connection).toEqual({ nodeId: findGridBuild(nodes, sceneId)!.byRole.get('grid')!.id, outputKey: 'd' });
+    const spec = findGridBuild(nodes, sceneId)!.meta.spec;
+    const sc = gr.params.startCells as { w: number; h: number; rows: string[] };
+    expect(sc.rows.join('').replace(/\./g, '').length).toBe(new Set(spec.cells.map(c => `${c.x},${c.y}`)).size);
+    expect(sc).toEqual(drawnStartOf(spec));
+    expect(nodes.some(x => x.type === 'pass')).toBe(false);
     expect(nodes.find(x => x.id === 'out')!.inputs.color.connection).toEqual({ nodeId: gr.id, outputKey: 'color' });
     expect(compileGraph({ nodes }).success).toBe(true);
     // Again: the same one, not a second.
     const r2 = simulationFromGrid(nodes, sceneId, () => `sim${++n}`)!;
     expect(r2.gridRulesId).toBe(gr.id);
     expect(r2.nodes.filter(x => x.type === 'gridRules')).toHaveLength(1);
+    // A second jump after a change updates the drawing on the same node.
+    useNodeGraphStore.setState({ nodes: r2.nodes });
+    useGridBuilder.getState().edit(d => { placeCell(d, 0, 0, 'A'); });
+    const id3 = buildFromGridBuilder(false, { quiet: true, keepOutput: true });
+    const r3 = simulationFromGrid(useNodeGraphStore.getState().nodes, id3, () => `sim${++n}`)!;
+    expect(r3.gridRulesId).toBe(gr.id);
+    expect(r3.nodes.filter(x => x.type === 'gridRules')).toHaveLength(1);
+    expect(r3.nodes.find(x => x.id === gr.id)!.params.startCells).toEqual(drawnStartOf(findGridBuild(r3.nodes, id3)!.meta.spec));
+    expect(r3.nodes.find(x => x.id === gr.id)!.params.startCells).not.toEqual(sc);
+    // An older jumped node (image start through a Pass) keeps working and switches to the drawn start.
+    const old = r2.nodes.map(x => (x.id === gr.id ? { ...x, params: { ...x.params, start: 'image', startCells: undefined } } : x));
+    const r4 = simulationFromGrid(old, sceneId, () => `sim${++n}`)!;
+    expect(r4.nodes.find(x => x.id === gr.id)!.params.start).toBe('cells');
+    expect(compileGraph({ nodes: r4.nodes }).success).toBe(true);
     // Back: the Output on the drawing, the Grid builder on it.
     useNodeGraphStore.setState({ nodes: r2.nodes });
     useGridBuilder.setState({ open: false });
@@ -232,5 +248,17 @@ describe('in the graph: reopen as built, rebuild, the jump to Grid Rules and bac
     expect(useGridBuilder.getState().open).toBe(true);
     expect(useGridBuilder.getState().targetSceneId).toBe(sceneId);
     expect(outWire()?.nodeId).toBe(findGridBuild(useNodeGraphStore.getState().nodes, sceneId)!.byRole.get('tone')!.id);
+  });
+});
+
+describe('the drawn start of the jump', () => {
+  it('is the drawn cells as state 1, and sits in the middle of a board of another size', () => {
+    const s = emptyGridScene();
+    placeCell(s, 2, 3, 'A'); placeCell(s, 3, 3, 'A'); placeCell(s, 3, 4, 'A');
+    const sc = drawnStartOf(s)!;
+    expect(sc.rows).toEqual(['11', '.1']);
+    expect([sc.w, sc.h]).toEqual([2, 2]);
+    expect(startOrigin(sc, 20, 10)).toEqual([9, 4]);
+    expect(drawnStartOf(emptyGridScene())).toBeNull();
   });
 });
