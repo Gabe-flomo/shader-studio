@@ -11,6 +11,7 @@ import { Fragment, useEffect, useMemo, useRef, useState, type KeyboardEvent, typ
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { pickerAssist, type Assist, type Completion, type Signature } from '../../lang/complete';
+import { plainSentence } from '../../lang/help';
 
 export function useTypeAhead(text: string, caret: number | null, compute: (text: string, caret: number) => Assist, apply: (next: string, caret: number) => void) {
   const [active, setActive] = useState(0);
@@ -32,7 +33,7 @@ export function useTypeAhead(text: string, caret: number | null, compute: (text:
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setClosed(true); return true; }
     return false;
   };
-  return { items, active, setActive, pick, onKeyDown, signature: assist?.signature ?? null, close: () => setClosed(true) };
+  return { items, active, setActive, pick, onKeyDown, signature: assist?.signature ?? null, close: () => setClosed(true), from: assist?.from ?? null };
 }
 
 const KIND_COLOUR: Record<string, 'accent' | 'faint'> = { shape: 'accent', combine: 'accent', warp: 'accent', action: 'accent', output: 'accent' };
@@ -53,9 +54,27 @@ export function SignatureLine({ sig }: { sig: Signature }) {
   );
 }
 
-export function AssistList({ items, active, onPick, onHover, footer }: { items: Completion[]; active: number; onPick: (c: Completion) => void; onHover?: (i: number) => void; footer?: ReactNode }) {
+/**
+ * `sentences` (the Do… bar): each suggestion as the word and a plain sentence of what taking it
+ * does ("create — adds a shape or any node by name"), one line each, without the signatures.
+ */
+export function AssistList({ items, active, onPick, onHover, footer, variant = 'list' }: { items: Completion[]; active: number; onPick: (c: Completion) => void; onHover?: (i: number) => void; footer?: ReactNode; variant?: 'list' | 'sentences' }) {
   const tk = useTokens();
   if (!items.length) return null;
+  if (variant === 'sentences') return (
+    <div role="listbox" data-assist-list="sentences" style={{ display: 'flex', flexDirection: 'column', padding: 4, borderRadius: radius.md, background: tk.bg.panel, maxHeight: 240, overflowY: 'auto' }}>
+      {items.map((c, i) => (<Fragment key={`${c.kind}:${c.label}:${i}`}>
+        {c.group && c.group !== items[i - 1]?.group && <span data-assist-group={c.group} style={{ padding: '6px 8px 2px', font: `600 10.5px ${fontFamily.ui}`, letterSpacing: '0.06em', textTransform: 'uppercase', color: tk.text.faint }}>{c.group}</span>}
+        <button type="button" role="option" aria-selected={i === active} data-assist-item={c.label} title={c.signature}
+          onMouseDown={e => { e.preventDefault(); onPick(c); }} onMouseEnter={() => onHover?.(i)}
+          style={{ display: 'flex', gap: 8, alignItems: 'baseline', textAlign: 'left', border: 0, cursor: 'pointer', padding: '5px 8px', borderRadius: radius.md, background: i === active ? alpha(tk.accent.base, 0.12) : 'transparent', color: tk.text.primary, minWidth: 0 }}>
+          <span style={{ font: `600 13px ${fontFamily.mono}`, color: KIND_COLOUR[c.kind] === 'accent' ? tk.accent.text : tk.text.primary, whiteSpace: 'nowrap', flexShrink: 0 }}>{c.label}</span>
+          <span style={{ font: `12.5px ${fontFamily.ui}`, color: tk.text.secondary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>— {plainSentence(c)}</span>
+        </button>
+      </Fragment>))}
+      {footer}
+    </div>
+  );
   return (
     <div role="listbox" data-assist-list style={{
       display: 'flex', flexDirection: 'column', padding: 4, borderRadius: radius.md, background: tk.bg.panel, boxShadow: tk.shadow.popover,

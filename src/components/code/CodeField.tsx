@@ -1,6 +1,8 @@
 import { selectTokenOnDoubleClick, wrapSelection } from './editKeys';
 import { BracketMarks } from './BracketMarks';
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
+import { portalGuard } from '../ui/portalGuard';
 import { useThemeMode, useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { C, C_LIGHT, tokenizeLine, type Token } from '../glslSyntax';
@@ -51,7 +53,7 @@ function esc(s: string) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').
 export function CodeField({
   value, onChange, completions, title = 'GLSL', actions, textareaRef, onKeyDown, onBlur, onFocus, onSelect, placeholder,
   ariaLabel, grow = false, minHeight = 120, maxHeight, invalid = false, style, tokenize = tokenizeLine, members, autoIndent = false, flash,
-  highlight, keyFirst,
+  highlight, keyFirst, onHoverChar, anchor,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -84,6 +86,10 @@ export function CodeField({
   highlight?: (value: string, pal: typeof C) => string;
   /** Keys for a caller's own suggestions, before the field's: true when it used the key. */
   keyFirst?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => boolean;
+  /** The pointer is over character `offset` (null: over no character), for word help; `rectOf` says where a span of the text is on screen. */
+  onHoverChar?: (offset: number | null, rectOf: (from: number, to: number) => CharRect) => void;
+  /** Something to show anchored under a character (the caller's suggestions, at the word being typed). */
+  anchor?: { at: number; content: ReactNode } | null;
 }) {
   const tk = useTokens();
   const pal = useThemeMode() === 'dark' ? C : C_LIGHT;
@@ -139,6 +145,35 @@ export function CodeField({
 
   const [caret, setCaret] = useState<number | null>(null);
   const trackCaret = (e: React.SyntheticEvent<HTMLTextAreaElement>) => { const el = e.currentTarget; setCaret(el.selectionStart === el.selectionEnd ? el.selectionStart : null); onSelect?.(el); };
+  // Where characters are on screen (monospace, one line height): for word help and the anchored list.
+  const innerRef = useRef<HTMLDivElement>(null);
+  const rectOf = useCallback((from: number): CharRect => {
+    const r = innerRef.current?.getBoundingClientRect();
+    const before = value.slice(0, from);
+    const line = before.split('\n').length - 1;
+    const col = before.length - before.lastIndexOf('\n') - 1;
+    const left = (r?.left ?? 0) + PAD_X + col * charWidth();
+    const top = (r?.top ?? 0) + PAD_Y + line * LINE_H;
+    return { left, top, bottom: top + LINE_H };
+  }, [value]);
+  const offsetAt = (clientX: number, clientY: number): number | null => {
+    const r = innerRef.current?.getBoundingClientRect();
+    if (!r) return null;
+    const line = Math.floor((clientY - r.top - PAD_Y) / LINE_H);
+    const col = Math.floor((clientX - r.left - PAD_X) / charWidth());
+    if (line < 0 || line >= lines.length || col < 0 || col >= lines[line].length) return null;
+    return lines.slice(0, line).reduce((n, l) => n + l.length + 1, 0) + col;
+  };
+  // The anchored content follows the text when anything scrolls.
+  const [, setScrollTick] = useState(0);
+  useEffect(() => {
+    if (!anchor) return;
+    const bump = () => setScrollTick(t => t + 1);
+    window.addEventListener('scroll', bump, true);
+    window.addEventListener('resize', bump);
+    return () => { window.removeEventListener('scroll', bump, true); window.removeEventListener('resize', bump); };
+  }, [anchor]);
+  const anchorRect = anchor ? rectOf(anchor.at) : null;
   const text: CSSProperties = {
     margin: 0, padding: `${PAD_Y}px ${PAD_X}px`, border: 0, font: `${FONT_SIZE}px/${LINE_H}px ${fontFamily.mono}`,
     whiteSpace: 'pre', tabSize: 2, letterSpacing: 0, boxSizing: 'border-box',
@@ -171,7 +206,7 @@ export function CodeField({
           {lines.map((_, i) => <div key={i}>{i + 1}</div>)}
         </div>
         {/* As wide as the longest line, so the textarea never scrolls on its own */}
-        <div style={{ position: 'relative', flex: '1 0 auto' }}>
+        <div ref={innerRef} style={{ position: 'relative', flex: '1 0 auto' }}>
           {flash && flash.lines.length > 0 && <FlashBands key={flash.key} lines={flash.lines} />}
           <pre aria-hidden dangerouslySetInnerHTML={{ __html: html }} style={{ ...text, color: tk.text.primary, minWidth: '100%', width: 'max-content', pointerEvents: 'none' }} />
           <BracketMarks text={value} caret={caret} charW={charWidth()} lineH={LINE_H} padX={PAD_X} padY={PAD_Y} fontSize={FONT_SIZE} />
@@ -223,6 +258,8 @@ export function CodeField({
             onClick={e => { ac.close(); trackCaret(e); }}
             onSelect={trackCaret}
             onKeyUp={trackCaret}
+            onMouseMove={onHoverChar ? e => onHoverChar(offsetAt(e.clientX, e.clientY), rectOf) : undefined}
+            onMouseLeave={onHoverChar ? () => onHoverChar(null, rectOf) : undefined}
             onFocus={e => { setFocused(true); onFocus?.(e.currentTarget); }}
             onBlur={() => { setFocused(false); ac.close(); setCaret(null); onBlur?.(); }}
             style={{
@@ -243,9 +280,20 @@ export function CodeField({
           onPick={item => { if (taRef.current) ac.apply(taRef.current, item); }}
         />
       )}
+      {anchor && anchorRect && createPortal(
+        <div {...portalGuard} data-code-anchored style={{
+          position: 'fixed', zIndex: 2100, left: Math.max(8, Math.min(anchorRect.left - 8, window.innerWidth - 468)), width: 460, maxWidth: 'calc(100vw - 16px)', boxSizing: 'border-box',
+          padding: 4, borderRadius: radius.md, background: tk.bg.panel, boxShadow: tk.shadow.popover, border: `1px solid ${tk.border.default}`,
+          ...(window.innerHeight - anchorRect.bottom > 220 ? { top: anchorRect.bottom + 4 } : { bottom: window.innerHeight - anchorRect.top + 4 }),
+        }}>{anchor.content}</div>,
+        document.body,
+      )}
     </div>
   );
 }
+
+/** Where a character is on screen. */
+export interface CharRect { left: number; top: number; bottom: number }
 
 /**
  * One-line GLSL expression field (Expr Block lines, return expression) with the same

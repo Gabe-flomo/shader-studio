@@ -605,6 +605,10 @@ export function commandsMarkdown(entries: ReferenceEntry[] = commandReference())
     '',
     'In the app: the **?** in the Do… bar, or Keys → Do… bar commands. Every example can be tried in the bar or shown step by step.',
     '',
+    'While you type, the suggestions read as plain sentences of what taking one does ("create — adds a shape (with its UV) or any node by name"). Rest the pointer on a word in the bar, or in the line under it, and that word\'s help opens where it is (its settings, their types and ranges, other words to switch to).',
+    '',
+    '**Show me how** (in the bar under a line that runs, and on every example in the reference) opens a window: the command, the picture it makes, and each step with what it does, its nodes, wires and values, and a small picture of the graph after that step. Click a step (or ← / →) to see its picture big. A 3D scene line is built clause by clause.',
+    '',
     'The **builders** (the 3D Scene Builder, Grid Rules, Agent Rules) open from whole phrases: "new 3d scene", "new grid rules", "edit the rules", "show the recipe" (see Builders below). They are also the first section of the node browser and the empty-canvas right-click menu\'s Builders.',
     '',
   ];

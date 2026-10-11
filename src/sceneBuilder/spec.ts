@@ -121,6 +121,28 @@ export const SHAPES: ShapeDef[] = [
 
 export const SHAPE_BY_KIND: Record<string, ShapeDef> = Object.fromEntries(SHAPES.map(s => [s.kind, s]));
 
+// ── Linked size (docs/scene-builder.md, "Size") ─────────────────────────────
+
+/** The words for one dimension of a shape. */
+export const DIM_WORDS = ['width', 'height', 'depth'] as const;
+export type DimWord = typeof DIM_WORDS[number];
+/** What a dimension word sets: a setting, or one part of a vector setting. */
+export interface DimTarget { key: string; part?: 0 | 1 | 2 }
+
+/**
+ * A shape's dimensions, where it has several: `size` is them linked (`size=0.5` sets them all),
+ * `width`, `height` and `depth` set one each. A box's, a box frame's and an ellipsoid's are the
+ * three parts of their `size` vector; a cylinder's, capsule's and prisms' are the radius (across:
+ * width and depth) and the height. Null for a shape with one dimension or none.
+ */
+export function shapeDims(def: ShapeDef): { dims: Record<DimWord, DimTarget>; linked: DimTarget[]; vector: boolean } | null {
+  const vec = def.params.find(p => p.key === 'size' && Array.isArray(p.def));
+  if (vec) return { dims: { width: { key: 'size', part: 0 }, height: { key: 'size', part: 1 }, depth: { key: 'size', part: 2 } }, linked: [{ key: 'size' }], vector: true };
+  const r = def.params.find(p => p.key === 'r'), h = def.params.find(p => p.key === 'h');
+  if (r && h && !def.fourD) return { dims: { width: { key: 'r' }, height: { key: 'h' }, depth: { key: 'r' } }, linked: [{ key: 'r' }, { key: 'h' }], vector: false };
+  return null;
+}
+
 // ── Warps ───────────────────────────────────────────────────────────────────
 
 export interface WarpDef {

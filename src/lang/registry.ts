@@ -13,7 +13,7 @@
  * Grid Rules, Agent Rules and pass words (lang/dialects/*). A test checks that no word means two
  * things within one dialect.
  */
-import { SHAPES as SCENE_SHAPES, WARPS, TONE_MODES, type ParamDef } from '../sceneBuilder/spec';
+import { DIM_WORDS, SHAPES as SCENE_SHAPES, WARPS, TONE_MODES, shapeDims, type ParamDef, type ShapeDef } from '../sceneBuilder/spec';
 import { OUTPUTS, PALETTES } from '../sceneBuilder/output';
 import { ACTIONS, SHAPES as WORD_SHAPES } from './vocabulary';
 import { COMMAND_VERBS } from './commands';
@@ -223,6 +223,26 @@ const sceneParam = (p: ParamDef, primary: boolean): ParamSpec => {
   };
 };
 
+/**
+ * A shape's linked size (spec.ts shapeDims): a box's `width`, `height` and `depth` beside its
+ * `size`; a round shape's `size` (its radius and height together).
+ */
+function dimParams(s: ShapeDef): ParamSpec[] {
+  const d = shapeDims(s);
+  if (!d) return [];
+  if (!d.vector) {
+    const r = s.params.find(p => p.key === 'r')!;
+    return [{ key: 'size', type: 'number', label: 'Size (linked)', min: r.min, max: r.max, hint: 'The radius and the height together: size=0.5 sets both.', rand: { kind: 'num', lo: 0.2, hi: 0.6 } }];
+  }
+  const v = s.params.find(p => p.key === 'size')!;
+  const def = v.def as number[];
+  const half = /half/i.test(v.label) ? ' (half of it, like size)' : '';
+  return DIM_WORDS.map((w, i) => ({
+    key: w, type: 'number' as const, label: w[0].toUpperCase() + w.slice(1), def: def[i], min: v.min, max: v.max,
+    hint: `Only the ${w}${half}: size= sets all three.`, rand: { kind: 'num' as const, lo: Math.max(v.min, def[i] * 0.5), hi: Math.min(v.max, def[i] * 1.6) },
+  }));
+}
+
 /** D8: the scene's noise warp is written `warp`; `noise` is the 2D node. */
 export const SCENE_WARP_WORD: Readonly<Record<string, string>> = { noise: 'warp' };
 
@@ -239,7 +259,8 @@ function sceneEntries(): Entry[] {
     out.push({
       id: `scene:shape:${s.kind}`, kind: 'maker', dialects: ['scene'], words: [s.kind, ...s.aliases],
       params: [
-        ...s.params.map((p, i) => sceneParam(p, i === 0)),
+        ...s.params.map((p, i) => sceneParam(p, i === 0)).map(p => (shapeDims(s) && !shapeDims(s)!.vector && (p.key === 'r' || p.key === 'h') ? { ...p, aliases: p.key === 'r' ? ['radius', 'width', 'depth'] : ['height'] } : p)),
+        ...dimParams(s),
         { key: 'at', aliases: ['pos', 'position'], type: 'vec3', rand: { kind: 'vec', lo: -0.6, hi: 0.6, n: 3 } },
         { key: 'rot', aliases: ['rotate', 'turn'], type: 'vec3', rand: { kind: 'vec', lo: -45, hi: 45, n: 3 } },
         { key: 'color', aliases: ['colour', 'c'], type: 'colour', rand: { kind: 'colour' } },

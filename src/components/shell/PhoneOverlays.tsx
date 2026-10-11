@@ -6,6 +6,7 @@
  */
 import { DoBar } from '../NodeGraph/DoBar';
 import { CommandsReference } from '../NodeGraph/DoCommandsReference';
+import { ShowHowWindow } from '../NodeGraph/ShowHowWindow';
 import { SceneBuilderHost } from '../sceneBuilder/SceneBuilderModal';
 import { BuilderWindowsHost } from '../builders/BuilderWindowsHost';
 
@@ -14,6 +15,7 @@ export function PhoneOverlays() {
     <>
       <DoBar />
       <CommandsReference />
+      <ShowHowWindow />
       <SceneBuilderHost />
       <BuilderWindowsHost />
     </>

@@ -413,6 +413,17 @@ the words**, and in the Do… bar where a recipe shows (a 3D output's clause, "s
 Code: `src/sceneBuilder/highlight.ts` (tokens, clauses, the clause tree), `recipeRows.ts`,
 `src/components/sceneBuilder/RecipeRows.tsx`, `RecipeCode.tsx`, `recipeColours.ts`.
 
+**Help from the word.** Rest the pointer on a word (in the rows or the text) for a moment and its
+help opens there: a mode, a shape, a setting (with its type, range and default) or a value (with
+the setting's other choices, or other colours). Move into it to scroll it; click another word in
+it (another mode, another choice, another colour) to put it in place of the one under the pointer.
+While you type, the suggestions and the settings line appear at the word being typed. **Show the
+words** opens the guide: Modes, Combine, Shapes, Warps, Settings, Camera, Colours and Output, each
+with a short description; open one for its words, click a word for its help, an example to **Use**
+and **Show me how** (a window that builds the example clause by clause, with a picture after each).
+Code: `src/lang/help.ts` (sections, `helpAt`, the hover timing), `src/components/builders/WordHelp.tsx`,
+`LanguageGuide.tsx`, `src/components/NodeGraph/ShowHowWindow.tsx`.
+
 ### Values
 
 | Value | Written |
@@ -462,6 +473,13 @@ the settings in order: `torus 1 0.2` is `torus R=1 r=0.2`.
 | solid-angle (wedge) | r 0.6 · angle 57.3° |
 | cross (plus) | s 0.3 |
 | gyroid, schwarz-p | freq 3.5 · t 0.3 · ball 1.1 |
+
+**Linked size.** Where a shape has several dimensions, `size` is them linked: `size=0.5` sets them
+all, and `width=`, `height=` and `depth=` set one each (`box size=0.3 height=1`). A box, a box
+frame and an ellipsoid: the three parts of their size; the vector form `size=(0.3,1,0.3)` still
+reads. A cylinder, capsule, hex prism and tri prism: `size` is the radius and the height together,
+`width=` / `depth=` the radius, `height=` the height. Printed recipes write `size=` when the
+dimensions are equal, else the ones that differ from the default by name.
 
 Every shape also takes:
 
@@ -583,7 +601,7 @@ camera dist=3.8 orbit=6
 ```
 
 ```
-surface · union(cylinder r=0.22 h=1.6, box size=(0.36,0.06,0.36) at=(0,1.55,0)) @repeat(2,100,2) · plane y=-1 · fog 0.9
+surface · union(cylinder r=0.22 h=1.6, box width=0.36 height=0.06 depth=0.36 at=(0,1.55,0)) @repeat(2,100,2) · plane y=-1 · fog 0.9
 ```
 
 ```
