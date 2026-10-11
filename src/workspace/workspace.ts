@@ -104,7 +104,7 @@ async function appImages(): Promise<ImageStore> {
 async function appVideos(): Promise<ImageStore> {
   const lib = await import('../lib/backgroundLibrary');
   return {
-    list: async () => (await lib.listVideos()).map(v => ({ id: v.id, name: v.name, type: v.type, bytes: v.bytes, createdAt: v.createdAt, width: v.width ?? 0, height: v.height ?? 0, ...(v.duration ? { duration: v.duration } : {}) })),
+    list: async () => (await lib.listVideos({ withSplats: true })).map(v => ({ id: v.id, name: v.name, type: v.type, bytes: v.bytes, createdAt: v.createdAt, width: v.width ?? 0, height: v.height ?? 0, ...(v.duration ? { duration: v.duration } : {}) })),
     async read(id) { const v = await lib.getVideo(id); return v ? new Uint8Array(await v.blob.arrayBuffer()) : null; },
     async put(meta, data) {
       const copy = new Uint8Array(data.byteLength); copy.set(data);

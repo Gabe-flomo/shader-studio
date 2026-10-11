@@ -13,8 +13,10 @@ import { AUDIO_RECIPES, FEEDBACK_RECIPES, LFO_RECIPES, PARTICLE_RECIPES, PASS_RE
 import { CHANGE_RECIPES, FADE_RECIPES, JUMP_FLOOD_RECIPES } from './textureRecipes';
 import { LIGHT_RECIPES } from './lightRecipes';
 import { PICTURE_DEPTH_RECIPES, PICTURE_DEPTH_SET } from './depthRecipes';
+import { SPLAT_SCENE_RECIPES, SPLAT_SCENE_SET } from './splatRecipes';
 
 export { PICTURE_DEPTH_SET, FACE_CAMERA_OPTION, pictureSource } from './depthRecipes';
+export { SPLAT_SCENE_SET, wireSplatIntoScene, hasMarchLoop } from './splatRecipes';
 
 export { LIGHT_SCENE_TYPES } from './lightRecipes';
 
@@ -50,6 +52,8 @@ export const STARTER_RECIPES: Readonly<Record<string, StarterRecipe[]>> = {
   marchLoopGroup: LIGHT_RECIPES,
   // "Add a picture with depth" (docs/depth-node.md): opened from a March Loop / GI Lit card, never on add.
   [PICTURE_DEPTH_SET]: PICTURE_DEPTH_RECIPES,
+  // "Add a splat scan" (docs/splat-scene.md): opened from a March Loop / GI Lit card, never on add.
+  [SPLAT_SCENE_SET]: SPLAT_SCENE_RECIPES,
   ...each(['bloom', 'vignette', 'grain', 'toneMap', 'chromaShift', 'colorSaturation', 'hueRotate', 'posterize', 'scanlines', 'brightnessContrast', 'toneCurve', 'invert', 'cmykHalftone'], PICTURE_EFFECT_RECIPES),
 };
 

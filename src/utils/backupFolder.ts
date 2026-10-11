@@ -264,7 +264,7 @@ async function writeVideos(force: boolean): Promise<void> {
   const sig = await videosSignature();
   if (!force && sig === lastVideos) return;
   let list: Awaited<ReturnType<typeof listVideos>>;
-  try { list = await listVideos(); } catch { return; }
+  try { list = await listVideos({ withSplats: true }); } catch { return; }
   // Never clear the folder's videos because this browser's list came back empty.
   if (!list.length && !force) { lastVideos = sig; return; }
   const have = new Set(await target.list(VIDEOS_DIR));

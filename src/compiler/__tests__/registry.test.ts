@@ -32,6 +32,8 @@ const CONNECTION_GATED = new Set([
   'glassScene.diffuseness',   // the node emits no code at all until its scene inputs are wired
   // Depth Light: the glow settings only with a Glowing scene wired, the shadow ones only with Shadows from
   'depthLight.glowColor', 'depthLight.glowIntensity', 'depthLight.glowReach', 'depthLight.shadowSoftness', 'depthLight.lightRadius',
+  // Splat Scene: Edge softness only with a Scene wired
+  'splatScene.softness',
   // Picture Environment reads nothing until a picture's Texture is wired
   'pictureEnvironment.fov', 'pictureEnvironment.blur', 'pictureEnvironment.strength',
   // GI Lit March Group: the PBR lighting block is only emitted once a scene is wired
@@ -121,7 +123,8 @@ describe('node registry', () => {
       const outKey = pickOutput(def)!;
       const r = compileGraph({ nodes: [makeNode('n1', type, def), outputNode('n1', outKey)] });
       // Every program the node compiles into (a Grid Rules node's rule runs in its board's pass).
-      const body = [r.fragmentShader, ...(r.passes ?? []).map(p => p.fragmentShader)].map(stripDeclarations).join('\n');
+      // A Splat Scene's placement sliders are read by its probe program (compiler/splatGraph.ts).
+      const body = [r.fragmentShader, ...(r.passes ?? []).map(p => p.fragmentShader), ...(r.splats ?? []).map(p => p.fragmentShader)].map(stripDeclarations).join('\n');
       for (const uniform of Object.keys(r.paramUniforms)) {
         if (!new RegExp(`\\b${uniform}\\b`).test(body)) {
           const param = uniform.split('_').slice(3).join('_');
