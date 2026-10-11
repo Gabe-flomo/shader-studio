@@ -72,7 +72,7 @@ describe('the Grid Rules builder', () => {
     mount(<GridRulesEditor nodeId="g1" onClose={() => {}} />);
     expect($('[data-studio="grid-rules"]')).toBeTruthy();
     expect($('[data-scene-crumb="grid"]')).toBeTruthy();
-    expect(nav()).toEqual(['rule', 'neighbourhood', 'start', 'run', 'brush', 'look', 'recipe']);
+    expect(nav()).toEqual(['rule', 'neighbourhood', 'stack', 'start', 'run', 'brush', 'look', 'recipe']);
     expect($('[data-studio-section="rule"] [data-studio-summary]')?.textContent).toBe('B3/S23');
     expect($('[data-studio-section="run"] [data-studio-summary]')?.textContent).toBe('30 steps a second');
     expect($('[data-inspector]')?.getAttribute('data-inspector')).toBe('rule');
@@ -179,6 +179,28 @@ describe('the Grid Rules builder', () => {
     });
     click($('[data-language-apply]'));
     expect(params()).toMatchObject({ bornMask: (1 << 3) | (1 << 6), edges: 'walls', board: '0.25' });
+  });
+
+  it('Stacked rules: add cards on the base, in order; a recipe sets base and cards; the text keeps them', () => {
+    mount(<GridRulesEditor nodeId="g1" onClose={() => {}} />);
+    click($('[data-studio-section="stack"]'));
+    expect($('[data-inspector]')?.getAttribute('data-inspector')).toBe('stack');
+    expect($('[data-studio-section="stack"] [data-studio-summary]')?.textContent).toBe('none yet: add a card');
+    click($('[data-stack-add-kind="explode"]'));
+    click($('[data-stack-add-kind="drift"]'));
+    expect((params().stack as Array<{ kind: string }>).map(r => r.kind)).toEqual(['explode', 'drift']);
+    expect($('[data-studio-section="stack"] [data-studio-summary]')?.textContent).toBe('+ explode, drift');
+    expect($$('[data-stack-sentence]').map(e => e.textContent)[0]).toMatch(/^When two live cells meet/);
+    // Drift's direction: the arrows.
+    click($('[data-drift-dir="nw"]'));
+    expect((params().stack as Array<{ dir: number }>)[1].dir).toBe(7);
+    // A recipe: Brian's Brain with a crowd card.
+    click($('[data-stack-recipe="crowdedBrain"]'));
+    expect(params()).toMatchObject({ ruleType: 'stages', states: 3 });
+    expect((params().stack as Array<{ kind: string; move: boolean }>)).toMatchObject([{ kind: 'crowd', move: true }]);
+    // As text: the card is a then line, and applying the text keeps it.
+    click($('[data-studio-section="recipe"]'));
+    expect(document.body.textContent).toContain('then crowd at=4 move');
   });
 
   it('a section the rule type does not have falls back to the rule', () => {

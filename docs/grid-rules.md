@@ -30,6 +30,7 @@ Code:
 | The builder (shell, try board, sections), card | `src/components/gridRules/` |
 | The CPU step, the try board's step-through, a drawn start | `src/gridRules/cpu.ts`, `tryRun.ts`, `startCells.ts` |
 | Before/after pictures, Smooth in plain words | `src/gridRules/ruleExamples.ts`, `smoothWords.ts` |
+| Stacked rules on the base: the cards, their CPU step and GPU stage | `src/gridRules/stack.ts`, `src/components/gridRules/StackForm.tsx` |
 | Examples | `src/store/gridRulesExamples.ts`, `gridRulesExampleIndex.ts` |
 | Tests | `src/compiler/__tests__/gridRules*.test.ts`, `gridHarness.ts`, `glslRun.ts`, `src/gridRules/__tests__/` |
 
@@ -53,7 +54,7 @@ the settings sit at the side.
   line on each) and the **sections**, each with a one-line summary: the rule first (**Born &
   Survive**, **Born, Survive & Fade**, **Stencils**, **Blocks**, or Smooth named for what it makes:
   **Heat**, **Ripples**, **Growing patterns**, **Your own update**), then **Neighbourhood** (Count
-  and Stages), **Start**, **Speed**, **Brush**, **Look** and **As text**. The section shown is
+  and Stages), **Stacked rules** (Count, Stages and Stencils, [below](#stacked-rules)), **Start**, **Speed**, **Brush**, **Look** and **As text**. The section shown is
   remembered; a section the rule type doesn't have falls back to the rule.
 - **Right:** the section's settings, under its name, one line and a **Learn more**.
 - **Bottom:** the kind's presets as pictures (each run on the CPU from its own start, made one at a
@@ -273,6 +274,57 @@ and Margolus; Jitter 0). Surprise me gives sand a Jitter of 0.6–1 and the gas 
 **Image start** for every whole-number rule: the picture's brightness picks the state, 0 for black
 up to the last state for white (two states: bright parts start on). Wireworld's example draws its
 starter circuit that way.
+
+## Stacked rules
+
+The rule picked under What it is is the **base**. On a Count, Stages or Stencils base you can stack
+up to four **rule cards** that run after it, in order, every step (`gridRules/stack.ts`; the plan
+for the wider simulation builder is [simulation-builder-plan.md](simulation-builder-plan.md)):
+
+| Card | When | Does | Settings |
+|---|---|---|---|
+| **Cells meet → explode** | a live cell has from…to live neighbours (1…1: two cells touching and nothing else round them) | the empty cells `distance` away in the first `copies` directions (up, down, right, left, then the corners) become the copies' state; the meeting cells vanish | Meets with, …up to, Copies 1–8, Distance 1–4, Copies are (a state), The meeting cells stay, Chance |
+| **Too crowded → die or move** | a live cell has at least N live neighbours | it dies, or steps one cell away from them (the sign of their offsets, turned round) into an empty cell | Crowded at, Dies / Moves away, Chance |
+| **Drift in a direction** | always, where the cell ahead is empty | live cells (or every cell that isn't empty) step one cell in a direction | Direction (eight arrows), Live / Any not empty, Chance |
+| **Big clusters change** | a live cell has at least N live cells within a square of radius R | it becomes a state (0 dies; on Stages, 2 starts it fading) | Looks within 1–4, Big at, Becomes, Chance |
+
+- **Order matters.** The base steps first; each card then works on the board the one before left,
+  so a later card has the last word on the cells it touches. Crowd → explode is not explode → crowd
+  (`gridRulesStack.test.ts` "stacking order matters as designed").
+- **Gathered.** Each cell works out its own next state from what is round it (a fragment shader can
+  only write itself): a copy lands where a meeting cell sits `distance` away; a mover's empty target
+  takes it. Copies only land on empty cells. Two movers aiming at one empty cell leave one there.
+- **Chance** is rolled per cell (explode: per meeting cell; moves: per moving cell) and step with
+  Blocks' whole-number dice (`dice.ts`), keyed by the cell, the frame and the Seed, so the try
+  board's CPU rolls what the GPU rolls.
+- **The section:** a chain line (Base: Count B3/S23 → 1 explode → 2 drift), a card per rule with
+  its sentence, on/off, order and remove (the Stencils cards' pieces), **Add another card**, and
+  **Or start from one**, which sets a base and its cards as one undo step: *Life that explodes*,
+  *Brain in the wind*, *Brain that spreads out*, *Crystals that burn out* (each tuned to stay alive
+  on the try board for 300 steps). Pointing at a card lights, on the try board, the cells that card
+  changes next step ("Card 1 changes 33 cells next step"); otherwise the board shows the whole
+  step's born and dies marks. The nav reads "+ explode, drift"; the node's card reads "Count B3/S23
+  + 2 rules".
+- **As text:** `then` lines after the rule: `then explode copies=8 distance=3 chance=0.05`,
+  `then crowd at=4 move`, `then drift dir=e any chance=0.3`, `then cluster radius=2 at=10 becomes=0`,
+  `meet=1..2`, `state=`, `keep`, `@off`. A line that names its rule without `then` lines clears the
+  cards (in the editor's As text).
+- **On the GPU** the cards are stages of the same board Pass: its Repeat is Steps × (1 + cards) and
+  the Pass's Step says which stage a draw is (0 the base, k card k). Each stage reads the one before
+  through Previous, so a stack costs one more board draw per card and no Pass of its own. The base
+  adds 2 to the board's blue on a frame it stepped; a card acts only then (not on a frame Speed
+  skips, nor on a new deal). Steps a frame is cut to fit the Pass's 64 draws (16 → 12 with four
+  cards).
+- **Not yet:** cards on Blocks and Smooth (kept on the node, not run); Open as nodes with cards (it
+  says to switch them off); card settings as live uniforms (a card edit recompiles, as a Stencils
+  edit does).
+
+`gridRulesStack.test.ts`: every card (and four at once) on Life, Brian's Brain, Star Wars and
+Wireworld, wrapping and walled, stepped on the GPU program (every stage, with the Pass's Step) and
+on the CPU for eight steps: the same board each step; step-through back and forward lands on the
+GPU's boards; a frame Speed skips leaves the cards out; the order tests; each card on a hand-laid
+board; the spec → one board Pass with Repeat 1 + cards; the recipes compile; `then` lines read and
+print back.
 
 ## Shared settings
 
@@ -565,7 +617,8 @@ board's. A radius-7 Larger than Life rule reads 224 neighbours a cell.
   recompiles.
 - **The try board** (CPU) doesn't run a custom Smooth update (it shows plain spreading), and deals
   an Image start as noise.
-- **Open as nodes** builds radius 1 and 2 only; it seeds with a different hash.
+- **Open as nodes** builds radius 1 and 2 only; it seeds with a different hash; it doesn't build
+  stacked rules.
 - **States** above 8 share colours: Stages blends its dying stages from State 2's colour to State
   3's; Patterns and Blocks give states past 7 the eighth colour.
 - **Stages' born / survive** count only state 1 (Generations), never the dying stages.

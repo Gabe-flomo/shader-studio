@@ -4410,6 +4410,32 @@ Examples:
 - `block 11/00 → 00/11` — on an empty graph (just an Output)
 - `block 10/*0 → 00/=1 @mirror chance=0.8` — on an empty graph (just an Output)
 
+### then
+
+Grid Rules · action. A stacked rule after the base, run in order every step: explode (cells meet), crowd (too many neighbours: die or move), drift (a direction), cluster (a big clump changes).
+
+Words: `then`
+
+```
+then copies= distance= at= radius= dir= chance=
+```
+
+| Slot | What |
+|---|---|
+| copies | count |
+| distance | count |
+| at | count |
+| radius | count |
+| dir | n, ne, e, se, s, sw, w, nw |
+| chance | number |
+
+Examples:
+
+- `then explode copies=8 distance=2 chance=0.5` — on an empty graph (just an Output)
+- `then drift dir=e chance=0.3` — on an empty graph (just an Output)
+- `then crowd at=5 move` — on an empty graph (just an Output)
+- `then cluster radius=2 at=14` — on an empty graph (just an Output)
+
 ### colours
 
 Grid Rules · setting. Colours of the states (empty=, on=, dying=, c0= … c7=), the afterglow (glow=) and old cells (old=). Also: colors.
