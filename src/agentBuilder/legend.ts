@@ -212,7 +212,7 @@ export const phrase = {
   born(n: Noun, shape: string, size: number, count: string): string {
     const many = count.toUpperCase().replace('K', 'k');
     const at = shape === 'screen' ? 'all over the picture' : shape === 'point' ? 'at one point'
-      : shape === 'picture' ? 'where a picture is bright' : shape === 'field' ? 'only inside a region (Or born inside)'
+      : shape === 'picture' ? 'where a picture is bright' : shape === 'field' ? 'only inside a region (Where: External)'
         : `in a ${shape === 'sphere' ? 'shell' : shape === 'ball' ? 'ball' : shape} of size ${num(size, 2)}`;
     return `Born ${at}: ${many} ${n.many}.`;
   },
@@ -296,7 +296,7 @@ export const say = {
   },
   born(n: Noun, shape: string): string {
     const at = shape === 'screen' ? 'all over the picture' : shape === 'point' ? 'at one point'
-      : shape === 'picture' ? 'where a picture is bright' : shape === 'field' ? 'only inside a region (Or born inside)'
+      : shape === 'picture' ? 'where a picture is bright' : shape === 'field' ? 'only inside a region (Where: External)'
         : `in a ${shape === 'sphere' ? 'shell' : shape}`;
     return `Where ${n.many} start: ${at}.`;
   },
@@ -559,7 +559,7 @@ export function legendEntries(inp: LegendInput): LegendEntry[] {
       }
       break;
     case 'born':
-      if (inp.born) out.push({ id: 'born', title: 'Born', colour: LEGEND_COLOURS.born, numbers: `${inp.born.shape} · ${inp.born.count.toUpperCase().replace('K', 'k')}`,
+      if (inp.born) out.push({ id: 'born', title: 'Born', colour: LEGEND_COLOURS.born, numbers: `${inp.born.shape === 'field' || inp.born.shape === 'picture' ? 'external' : inp.born.shape} · ${inp.born.count.toUpperCase().replace('K', 'k')}`,
         line: phrase.born(n, inp.born.shape, inp.born.size, inp.born.count), words: say.born(n, inp.born.shape), on: true, settings: ['where', 'size', 'count', 'facing', 'births', 'launch'], el: 'born',
         demo: { kind: 'born', shape: inp.born.shape } });
       break;

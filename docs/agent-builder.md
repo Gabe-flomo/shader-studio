@@ -85,7 +85,7 @@ Only the selected section's card is open. The others are their summaries in the 
 
 | Section | Settings | Writes |
 |---|---|---|
-| Born | Where (shape), Size, How many; More: Facing, Births | the group's Emit (shape, size, heading, mode) and the group's Count |
+| Born | Where (a shape, or External…: a source picked in the Where picker), Size, How many; More: Facing, Births | the group's Emit (shape, size, heading, mode) and the group's Count |
 | Senses (switch) | How far ahead, How wide, Smells (chips), Avoid it | the rule set's sensors; a Turn toward a trail (its channel, `away`) |
 | Turning | How sharply; Wobble (its own switch) | that Turn's degrees; a Wander |
 | Moving | Speed, At the edges (Wrap / Bounce / Slide) | the species' speed; the rule set's edges |
@@ -491,7 +491,7 @@ Wherever a card asks "where", the **Where picker** answers it. It replaced every
 | Only when inside / outside | a card's "Only when… → inside / outside a region…" | a mask slot of the rule set (up to four), a `mask` condition, and the group's mask socket wired to the region |
 | A field layer's region | Follow a field → a layer → Turn, mask, animate → Only in a region | the layer's `mask.region` (the same mask slots); the Field block reads `mask1`… where the walker stands |
 | The slope layer's field | Follow a field → Slope of a picture → The slope of | the group's Field ƒ socket |
-| Born inside | Born → Or born inside | the Emit: Shape Field with Where ƒ (a shape or mask, through a small adapter block), or Picture (a texture); Threshold ½ |
+| Born inside | Born → Where → **External…** (the built-in shapes stay in the same select) | the Emit: Shape Field with Where ƒ (a shape or mask, through a small adapter block), or Picture (a texture); Threshold ½ |
 | Walls | Moving → Walls, and At a wall (Turn back / Slide along) | the rule set's `obstacle`, the group's Obstacle ƒ socket into Move's Obstacle ƒ (a mask, or "outside", through an adapter); in 3D a Scene goes to Collide (3D scene) |
 | Food (2D) | Trail → Food, with How much and Into (a channel) | the Trail field's Add, through a **Food** Expression Block: `vec4` with the food in one channel × amount (a shape's inside, a mask's or a texture's brightness; a texture is read through a Sample (texture)) |
 
@@ -510,18 +510,19 @@ Constants, the agents' own nodes and anything downstream of the group (a cycle) 
 
 Old typed-in shapes (an only when's `shape`, a field layer's circle or box mask) still load and work; their settings offer **Make it a shape you can drag**.
 
-### Wiring three ways
+### Choosing a source
 
-Every input the builder can wire (only when, a field layer's region, Field ƒ, born inside, walls, food) opens the same picker, in three parts:
+Every input the builder can wire (only when, a field layer's region, Field ƒ, born inside, walls, food) opens the same picker. Born has no separate row for it: its **Where** select lists the built-in shapes and **External…**; choosing External shows the picker under the select (open at once when nothing is picked yet), and choosing a built-in shape again unwires it. A scene already born inside a source reopens with Where on External and the source's summary.
 
-1. **Wire from the graph:** an output already there, with its thumbnail.
-2. **From a group:** an output of another group: a plain group, a Shader Texture, or the Trail field another Agents group deposits into ("from Prey"). The row says "from …" and has **Edit inside ↗**.
-3. **Create new:** a shape drawn on the picture (Circle, Box, Ring, Polygon, Text); **New Shader Texture** (docs/texture-builder.md: white discs to start; for uses that read a texture); **New group** (a plain group whose Distance output is a circle, `length(uv) − r`, with a note). Each is a top-level node wired in, in the same undo step as the wiring. A new Shader Texture or group is **opened ready to edit**: the builder closes, the graph enters it, and a toast offers **Back to the Agent Builder**.
+The picker first asks **what kind of source**, as a short list:
 
-For uses that read a texture, **Create new** also has **A picture…**: the scene builders' shared
-picture picker ([scene-builder.md](scene-builder.md#textures)), its upload, paste, link and image
-library ways. The picture lands on a new Texture node (one undo step), which is then wired in as a
-texture region (a second undo step), the same as picking it from the graph.
+1. **From the graph:** a shape or mask output already there (in 3D also a Scene).
+2. **From a group:** an output of another group: a plain group, or the Trail field another Agents group deposits into ("from Prey"). The row says "from …" and has **Edit inside ↗**.
+3. **A picture** (uses that read a texture): the scene builders' shared picture picker ([scene-builder.md](scene-builder.md#textures)), its upload, paste, link and image library ways. The picture lands on a new Texture node (one undo step), which is then wired in as a texture region (a second undo step).
+4. **A texture / field** (uses that read a texture): a texture output already there: a Shader Texture, a Trail field, a Pass, a Texture node.
+5. **Create new:** a shape drawn on the picture (Circle, Box, Ring, Polygon, Text); **New Shader Texture** (docs/texture-builder.md: white discs to start; for uses that read a texture); **New group** (a plain group whose Distance output is a circle, `length(uv) − r`, with a note). Each is a top-level node wired in, in the same undo step as the wiring. A new Shader Texture or group is **opened ready to edit**: the builder closes, the graph enters it, and a toast offers **Back to the Agent Builder**.
+
+A kind with nothing in it (no group with an output this use can read) is greyed out with a few words why, not a paragraph. Choosing a kind **locks it in**: the others go and only its UI shows (the tiles with thumbnails, the picture picker, or the new things), with **Change** to go back to the kinds. Once picked, the row is a compact summary: thumbnail, name, kind, **Change** (back to the kinds) and **×**. The wiring is the same whichever way it is reached.
 
 `where.ts listRegions` tags group outputs (`from`, `inside`); `whereActions.ts setWhere` takes `create: 'shaderTexture' | 'group'` (`newRegionGroup`) and keeps the new node for `takeCreated`.
 
