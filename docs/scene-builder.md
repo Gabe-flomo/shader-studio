@@ -193,12 +193,21 @@ Build makes an **empty Texture node** named after it, beside the scene, and the 
 
 | Kind | Uses | Docs |
 |---|---|---|
-| 2D scene | a shape filled with a picture (Fill, Fit, Stretch, Tile); a **Picture** layer; the background picture, read at the warped point so every space transform and block bends it; a mask | [scene-builder-2d.md](scene-builder-2d.md#textures) |
-| 3D scene | a shape's surface (triplanar, planar, spherical, face), tiles, blend sharpness, offset, turn, bump from brightness; picture panels; the background from a picture; the template *A picture, repeated forever* | [scene-builder-3d.md](scene-builder-3d.md#textures) |
+| 2D scene | a shape filled with a picture (Fill, Fit, Stretch, Tile); a **Picture** layer; the background picture, read at the warped point so every space transform and block bends it; a mask; a **picture with depth** (Depth tab: shapes sized or moved by depth, occlude, fog, mix, light, a gradient over depth) | [scene-builder-2d.md](scene-builder-2d.md#textures), [depth-mix.md](depth-mix.md) |
+| 3D scene | a shape's surface (triplanar, planar, spherical, face), tiles, blend sharpness, offset, turn, bump from brightness; picture panels; the background from a picture; a **picture with depth** the objects stand in (composite, lit, reflected); the template *A picture, repeated forever* | [scene-builder-3d.md](scene-builder-3d.md#textures) |
 | Grid scene | a **Picture** cell shape; a **Picture** pattern (brightness drives size, turn, push, hue or brightness); a picture mask | [grid-builder.md](grid-builder.md#textures) |
 | Grid Rules | Start → A picture: the same picker, wired into Start image | [grid-rules.md](grid-rules.md#a-picture-start) |
 | Agent Builder | Where → Create new → **A picture…** (born inside, food, only when, a layer's region) | [agent-builder.md](agent-builder.md) |
 | Splat scene | Scene → Background → **Picture** (the backdrop the camera looks at, with or without a world) | [splat-builder.md](splat-builder.md) |
+
+### Generate depth
+
+Where a builder takes a picture with depth (the 2D Depth tab, the 3D Picture with depth card), **Generate depth**
+works its depth out once, on this device, as the Texture card's Generate depth does, and keeps it as an image beside
+the picture; Build puts it on the Depth node (Update: Baked). The first time, it offers the model's one-time download.
+The builders' previews show that depth (or the depth a Depth node on the canvas already has for the picture, or the
+picture's brightness as a stand-in) through `registerPreviewDepth` in `previewTextures.ts`
+(`src/builders/depthPicture.ts`, `components/builders/DepthGenerateRow.tsx`).
 
 ### Looking good repeated
 

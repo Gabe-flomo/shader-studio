@@ -48,6 +48,16 @@ export const TEMPLATES_2D: Template2D[] = [
     blurb: 'Hearts that pulse and bob, seen through a coarse pixel grid.',
     recipe: 'pixelate 0.05 · heart size=0.25 at=(-0.4,0) color=red @pulse(0.2 speed=0.5) · heart size=0.18 at=(0.35,0.1) color=pink @bob(0.12 speed=0.4) · background navy',
   },
+  {
+    key: 'depthSize', label: 'Circles sized by depth',
+    blurb: 'A field of glowing circles over a picture with depth: each circle\'s radius follows the depth, so they swell on near things and shrink into the distance, and they take the picture\'s colours. Drop a picture on the Texture node it makes (or pick one on the Depth tab).',
+    recipe: 'tile 0.2 · circle r=0.07 color=white glow · glow 0.004 falloff=1.3 · tone aces · background black · depth-picture ridges size=(0.15,1.5) with=tint picture=0.55 curve=1.4',
+  },
+  {
+    key: 'depthBeams', label: 'Glow beaming through depth',
+    blurb: 'Rings whose point is moved by the picture\'s depth: near and far parts pull them apart, so their glow beams through the picture. A sunset gradient flows along depth. Drop a picture on the Texture node it makes (or pick one on the Depth tab).',
+    recipe: 'ring r=0.22 th=0.012 color=gold glow @ring(6 r=0.45) @spin(0.05) · glow 0.006 falloff=1.1 · tone aces · bloom 0.4 · background black · depth-picture ridges space=shift shift=0.9 dir=90 focus=0.3 picture=0.8 gradient=sunset cycles=1.5 flow=0.05',
+  },
 ];
 
 export function templateScene(key: string): Scene2D {

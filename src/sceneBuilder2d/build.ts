@@ -29,6 +29,8 @@ import { GRID_LABELS, gridProgram, type GridSpec } from './grid';
 import { callBody, type FnRef } from './functions';
 import { COMBINE_BY_MODE, blockGlslLines, checkBlock, clampTimes, type SpaceBlock } from './blocks';
 import { BLOCK_BY_ID } from './blockLibrary';
+import { DEPTH_LOOK_LABELS, depthMixParams, depthSummary, type DepthPic2D } from './depth';
+import { DEPTH_MIX_COMBINE_LABELS, DEPTH_SPACE_LABELS } from '../nodes/definitions/depthMix';
 import { FIT_LABELS, LUMA, findTex, fitLines, glf, newTexUse, picUv, sampleWrap, standInId, standIns, type TexSource, type TexUse } from '../builders/textures';
 
 export { ROLE_KEY };
@@ -64,6 +66,8 @@ interface B {
   getTime: () => Ref;
   /** Each item's own point (after its placement, motion and ring): where a picture fill is read. */
   local: Map<string, Ref>;
+  /** Depth → size: the Depth Mix Scale every top-level layer grows by (depth.ts), or null. */
+  depthGrow?: Ref | null;
 }
 
 // ── Pictures (builders/textures.ts) ─────────────────────────────────────────
@@ -83,7 +87,7 @@ const SCREEN_EXT = 'vec2(u_resolution.x / u_resolution.y, 1.0)';
  * place on the picture, then Sample (texture). Returns its colour, its alpha and whether q is on the
  * picture (Fit leaves a margin).
  */
-function samplePicture(b: B, role: string, use: TexUse, src: TexSource, out: Ref, q: Ref, ext: string, where: string): { color: Ref; alpha: Ref; inside: Ref } {
+function samplePicture(b: B, role: string, use: TexUse, src: TexSource, out: Ref, q: Ref, ext: string, where: string): { color: Ref; alpha: Ref; inside: Ref; place: Ref } {
   const { c } = b;
   const tile = use.fit === 'tile';
   const fit = expr(c, `${role}:fit`, 'Picture fit', [
@@ -96,7 +100,7 @@ function samplePicture(b: B, role: string, use: TexUse, src: TexSource, out: Ref
   'vec2', [{ lhs: 'vec2 ext', op: '=', rhs: ext }, ...fitLines(use.fit, 'q', 'ext', glf(src.aspect ?? 1), 'k')], [{ name: 'inside', type: 'float', label: 'Inside' }]);
   const s = mk(c, 'sampleTexture', `${role}:sample`, sampleWrap(use.fit), { texture: out, uv: ref(fit, 'result') },
     `Reads the picture “${src.name}” where the fit before it says: its colour and alpha there. Its Texture is wired from the picture's node, so a new picture there shows here.`);
-  return { color: ref(s, 'color'), alpha: ref(s, 'alpha'), inside: ref(fit, 'inside') };
+  return { color: ref(s, 'color'), alpha: ref(s, 'alpha'), inside: ref(fit, 'inside'), place: ref(fit, 'result') };
 }
 
 /** A shape's half-size in its own space, for fitting a picture to it. */
@@ -375,19 +379,28 @@ function emitItem(b: B, it: Item, pos: Ref, depth: number): Ref | null {
   const unit = def?.unit ? Number((it as ShapeSpec).size.size ?? def.params[0].def) : 1;
   const pulse = it.motion.some(m => m.kind === 'pulse');
   const baseScale = it.scale * unit;
-  const placed = it.at[0] !== 0 || it.at[1] !== 0 || it.rot !== 0 || baseScale !== 1 || it.motion.length > 0;
+  // Depth → size: every top-level layer grows by the picture's depth (its Transform's Grow).
+  const depthGrow = depth === 0 ? b.depthGrow ?? null : null;
+  const placed = it.at[0] !== 0 || it.at[1] !== 0 || it.rot !== 0 || baseScale !== 1 || it.motion.length > 0 || !!depthGrow;
   let start: Branch = { pos, scales: [] };
   if (placed) {
     const mo = emitMotion(b, it, name);
-    const wires: Record<string, Ref | null> = { p: pos, offset: mo.offset, turn: mo.turn, grow: mo.grow };
+    let grow = mo.grow;
+    if (depthGrow) {
+      grow = grow
+        ? ref(mk(c, 'multiply', `${it.id}:depthgrow`, {}, { a: grow, b: depthGrow }, `${name}'s pulse times its size by depth: both grow it.`), 'result')
+        : depthGrow;
+    }
+    const wires: Record<string, Ref | null> = { p: pos, offset: mo.offset, turn: mo.turn, grow };
     const bits: string[] = [];
     if (it.at[0] || it.at[1]) bits.push(`moved to ${v2(it.at)}`);
     if (it.rot) bits.push(`turned ${fmt(it.rot)}°`);
     if (baseScale !== 1) bits.push(def?.unit ? `sized ${fmt(unit)} (a ${def.label.toLowerCase()} has no radius of its own, so its size is this node's Scale)` : `scaled ${fmt(it.scale)}×`);
     if (it.motion.length) bits.push('moved by its motion');
+    if (depthGrow) bits.push('grown by the picture\'s depth (Grow is wired from Depth Mix\'s Scale: bigger on near things)');
     const pl = mk(c, 'transform', `${it.id}:place`, { dim: '2', x: it.at[0], y: it.at[1], rotate: it.rot, scale: baseScale }, wires,
       `Places ${name}: ${bits.join(', ')}. Transform gives the shape a new view of space: the shape is measured from the point as it sees it, so it ends up where the node says. Its Scale output multiplies the distance back to the picture's units.`);
-    start = { pos: ref(pl, 'p'), scales: baseScale !== 1 || pulse ? [ref(pl, 'scale')] : [] };
+    start = { pos: ref(pl, 'p'), scales: baseScale !== 1 || pulse || depthGrow ? [ref(pl, 'scale')] : [] };
   }
   const dup = it.dup && it.dup.count >= 2 ? it.dup : null;
   const levels = dup ? Math.max(1, Math.min(6, Math.round(dup.levels))) : 1;
@@ -464,6 +477,10 @@ export function buildScene2D(spec: Scene2D, idFor: (role: string) => string = ro
   const screen = ref(uv, 'uv');
   let pos = screen;
   for (const op of spec.space) pos = spaceNode(b, op, pos);
+  // A picture with depth (depth.ts): its picture and Depth node, and the Depth Mix the shapes read.
+  const depthPic = spec.depth ? emitDepthPicture(b, spec.depth, screen, pos) : null;
+  if (depthPic?.shapes && spec.depth?.space.on) pos = ref(depthPic.shapes, 'uv');
+  b.depthGrow = depthPic?.shapes && spec.depth?.size.on ? ref(depthPic.shapes, 'scale') : null;
 
   // Distances, one per layer.
   const layers = spec.layers.map(it => ({ it, d: emitItem(b, it, pos, 0) })).filter((x): x is { it: Item; d: Ref } => x.d !== null);
@@ -539,6 +556,7 @@ export function buildScene2D(spec: Scene2D, idFor: (role: string) => string = ro
     }
   }
   if (spec.grid) acc = emitGrid(b, spec.grid, pos, screen, acc, anim);
+  if (depthPic && spec.depth) acc = emitDepthMix(b, spec.depth, depthPic, acc, layers.map(l => l.d));
   let final = acc;
   if (L.tone !== 'none') final = ref(mk(c, 'toneMap', 'tone', { mode: L.tone }, { color: final }, `Squeezes the bright, linear light into colours a screen can show (${L.tone.toUpperCase()}) without clipping highlights.`), 'color');
   const P = L.post;
@@ -554,6 +572,57 @@ export function buildScene2D(spec: Scene2D, idFor: (role: string) => string = ro
   tidy(c.nodes, 0, 0);
   // The UV node carries the scene; it is the one place its Recipe chip shows.
   return { nodes: c.nodes, final, sceneId: uv.id, warnings: c.warnings };
+}
+
+// ── A picture with depth (depth.ts, docs/depth-mix.md) ──────────────────────
+
+interface DepthPicRefs { color: Ref; depth: Ref; shapes: GraphNode | null; name: string }
+
+/**
+ * The picture over the whole frame (a Picture fit and a Sample, at the screen's point), its Depth node (reading the
+ * same place, so depth and colour line up; baked when Generate depth ran), and, when the shapes respond to depth, the
+ * Depth Mix they read: Scale into each layer's Grow, Depth UV as their point.
+ */
+function emitDepthPicture(b: B, d: DepthPic2D, screen: Ref, pos: Ref): DepthPicRefs | null {
+  const { c } = b;
+  const t = texFor(b, d.tex, 'The picture with depth');
+  if (!t) return null;
+  const pic = samplePicture(b, 'depth:pic', newTexUse(t.src.name, { fit: d.fit }), t.src, t.out, screen, SCREEN_EXT, 'the picture with depth');
+  const baked = !!d.bake;
+  const dn = mk(c, 'depth', 'depth', baked ? { update: 'baked', depthBake: structuredClone(d.bake) } : {}, { texture: t.out, uv: pic.place },
+    `Depth: how far each part of “${t.src.name}” is (0 far, 1 near), worked out on this device by a small model. `
+      + (baked ? 'Generate depth ran it once in the 2D Scene Builder and kept the result as an image beside the picture (Update: Baked), so it is ready at once and goes into exported pages. ' : 'It runs live once the model is downloaded (the card offers it); Bake depth on the card keeps it, smooth and ready for exported pages. ')
+      + 'Its UV is wired from the picture\'s fit, so the depth lines up with the picture whatever its shape.');
+  let shapes: GraphNode | null = null;
+  if (d.size.on || d.space.on) {
+    const what = [d.size.on ? `Scale (${fmt(d.size.far)} far … ${fmt(d.size.near)} near) grows every layer through its Transform's Grow` : '', d.space.on ? `Depth UV (${DEPTH_SPACE_LABELS[d.space.style].label.toLowerCase()}, amount ${fmt(d.space.amount)}) is the point every shape is measured from` : ''].filter(Boolean).join('; ');
+    shapes = mk(c, 'depthMix', 'depth:shapes', { ...depthMixParams(d), mode: d.space.on ? 'space' : 'size' }, { picture: pic.color, depth: ref(dn, 'depth'), uv: pos },
+      `Depth Mix for the shapes: ${what}. Its Color isn't used: the second Depth Mix puts the scene and the picture together (one node can't do both, as the shapes it moves feed that one's Scene). `
+        + 'Depth range and Curve shape the depth first (live sliders).');
+  }
+  return { color: pic.color, depth: ref(dn, 'depth'), shapes, name: t.src.name };
+}
+
+/** The scene and the picture put together by depth (the look), with the gradient over depth. */
+function emitDepthMix(b: B, d: DepthPic2D, p: DepthPicRefs, scene: Ref, dists: Ref[]): Ref {
+  const { c } = b;
+  let coverage: Ref | null = null;
+  if (d.with === 'over' && dists.length && (d.look === 'top' || d.look === 'occlude' || d.look === 'fog')) {
+    let u = dists[0];
+    dists.slice(1).forEach((x, i) => { u = ref(mk(c, 'sdfUnion', `depth:u${i + 1}`, { k: 0 }, { a: u, b: x }, 'Joins the layers into one distance for the Scene mask.'), 'dist'); });
+    coverage = ref(expr(c, 'depth:mask', 'Scene mask', [{ name: 'd', type: 'float', from: u }], '1.0 - smoothstep(-0.003, 0.003, d)',
+      'Where the shapes are (1) and aren\'t (0): With the picture: Over paints the scene over the picture only here (glows outside the shapes are left out).', 'float'), 'result');
+  }
+  const g = d.gradient;
+  const phase = g && g.flow ? ref(mk(c, 'multiply', 'depth:flow', { b: g.flow }, { a: b.getTime() }, `Time × ${fmt(g.flow)}: the gradient's colours flow along depth at ${fmt(g.flow)} cycles a second.`), 'result') : null;
+  const look = DEPTH_LOOK_LABELS[d.look];
+  const node = mk(c, 'depthMix', 'depth:mix', depthMixParams(d), { picture: p.color, depth: p.depth, scene, coverage, phase },
+    `Depth Mix: the scene and the picture “${p.name}” put together by depth. ${look.label}: ${look.blurb} `
+      + `${d.look === 'top' || d.look === 'occlude' || d.look === 'fog' ? `With the picture: ${DEPTH_MIX_COMBINE_LABELS[d.with].label} (${DEPTH_MIX_COMBINE_LABELS[d.with].blurb.toLowerCase()}) ` : ''}`
+      + `Picture ${fmt(d.picture)} is how bright the picture shows. Depth range ${fmt(d.range[0])}–${fmt(d.range[1])} and Curve ${fmt(d.curve)} shape the depth first. `
+      + (g ? `A ${g.palette} gradient is laid along depth on ${g.on === 'both' ? 'the scene and the picture' : `the ${g.on}`} (${g.how}, ${fmt(g.cycles)} cycle${g.cycles === 1 ? '' : 's'} far to near${g.flow ? ', flowing with time through Phase' : ''}). ` : '')
+      + `Built by the 2D Scene Builder: ${depthSummary(d)}. Every slider is live.`);
+  return ref(node, 'color');
 }
 
 /** The grid (grid.ts): one Expression Block for the cells, then colour, glow and fill over what is behind. */
