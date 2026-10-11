@@ -43,6 +43,8 @@ import { appFocused, backgroundFrame, backgroundMode, onFocusChange, onLongHidde
 import { onPreviewHold, previewHeld } from '../lib/previewHold';
 import { previewMirrored, sendPreviewFrame, setPreviewWake } from '../lib/previewMirror';
 import { emitTimeTick } from '../lib/timeTick';
+import { gateFrame, newDrawGate, newOfflineHold, offlineFrame, posterizeTime, resolveFrameRate, useFrameRate, type EffectiveFrameRate } from '../lib/frameRate';
+import { startRefreshDetection } from '../lib/refreshRate';
 import { outputTap } from '../lib/outputTap';
 import { GpuTimer } from '../lib/gpuTimer';
 import { OfflineHistory } from '../lib/offlineHistory';
@@ -571,6 +573,9 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     // Every store write is a user action (Phase 1 removed the idle ones), so
     // any of them may have changed what the canvas should show.
     const unsubRender = useNodeGraphStore.subscribe(() => requestRender());
+    // The canvas frame rate: the screen's measured rate and the default for graphs without their own.
+    startRefreshDetection();
+    const unsubFrameRate = useFrameRate.subscribe(() => requestRender());
     // An input arriving while the loop sleeps (MIDI, a Play key or the pointer) draws a frame.
     const unsubWake = inputBus.onWake(requestRender);
     // Play's background: opening or leaving the Play page, a new source, a video's first frame.
@@ -1086,6 +1091,9 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       });
       let offlineStarted = false;
       let offlineAgentsStarted = false;
+      const offlineHold = newOfflineHold();
+      let offlineQueueDrew = false;
+      const offlineFrameRate = () => resolveFrameRate(useNodeGraphStore.getState().play.frameRate, useFrameRate.getState().fallback);
 
       const handle: OfflineRenderHandle = {
         get width()  { ensureRT(); return exportW; },
@@ -1121,8 +1129,17 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           // As the live loop writes the input bus: a colour as a plain [r, g, b].
           else u.value = Array.isArray(value) ? [...value] : value;
         },
-        renderAtTime: (time: number, opts?: { dt?: number; first?: boolean }) => {
+        renderAtTime: (atTime: number, atOpts?: { dt?: number; first?: boolean }) => {
           ensureRT();
+          // The graph's frame rate (lib/frameRate.ts): a frame in the same 1/fps step as the last is held
+          // (the readback target still has its picture), and the rest render at the step's time with the
+          // time since the last as their step, so a 60 fps export of a 12 fps graph shows each picture 5×.
+          // A Background layer's other graph drawn since (it shares the targets) means drawing again.
+          const plan = offlineFrame(offlineHold, atTime, offlineFrameRate(), atOpts);
+          if (!plan.render && !offlineQueueDrew) return;
+          offlineQueueDrew = false;
+          const time = plan.time;
+          const opts = atOpts ? { ...atOpts, dt: plan.render ? plan.dt : 0 } : undefined;
           const u = material.uniforms;
           if (u.u_frameDt) u.u_frameDt.value = opts?.dt ?? 1 / 60;
           // Passes a Particles node reads (Emit from): drawn at this frame's time before the particles step,
@@ -1206,7 +1223,9 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           ensureRT();
           const m = bgProgram(item, true);
           if (!m || !exportRT || !exportReadbackRT) return false;
-          drawBgGraph(m, time, exportReadbackRT, exportRT, ditherSeed(Math.floor(time * 100.0)));
+          offlineQueueDrew = true;
+          const fr = offlineFrameRate();
+          drawBgGraph(m, fr.posterize || fr.draw ? posterizeTime(time, fr.fps) : time, exportReadbackRT, exportRT, ditherSeed(Math.floor(time * 100.0)));
           handle.readPixels(out, exportW, exportH);
           return true;
         },
@@ -1568,6 +1587,12 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     // paused without resetting to 0 — THREE.Clock.start() always zeroes
     // elapsedTime, so there's no clean way to "resume" with it.
     let virtualTime = keepClock ? clockAtTeardown : 0;
+    // The canvas frame rate: the graph's own (PlayRecord.frameRate), else the default, capped at the screen's.
+    const drawGate = newDrawGate();
+    const liveFrameRate = (): EffectiveFrameRate => {
+      const f = useFrameRate.getState();
+      return resolveFrameRate(useNodeGraphStore.getState().play.frameRate, f.fallback, f.screenHz);
+    };
     let lastRafTime: number | null = null;
     let frameCount = 0;
     const SAMPLE_EVERY = 6; // sample every 6 frames (~10fps if running at 60fps)
@@ -1625,6 +1650,14 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       // Auto resolution: the frame counters start over.
       if (bg === 'hold') { lastRafTime = null; loopRunning = false; fpsFrameCount = 0; fpsLastTime = 0; drawnThisSecond = 0; return; }
       if (bg === 'skip') { scheduleFrame(); return; }
+      // The canvas frame rate (lib/frameRate.ts): at a chosen rate, the screen's other frames are
+      // skipped like a background window's (lastRafTime stays, so the clock catches up on the next).
+      const fr = liveFrameRate();
+      if (fr.draw && fr.fps) {
+        const playingNow = timePlayingRef.current;
+        const ahead = playingNow && lastRafTime !== null ? Math.max(0, (now - lastRafTime) / 1000) : 0;
+        if (!gateFrame(drawGate, { now, fps: fr.fps, time: virtualTime + ahead, stepped: fr.posterize, playing: playingNow, wants: needsRender, slackMs: 250 / useFrameRate.getState().screenHz })) { scheduleFrame(); return; }
+      }
       lastSlowDraw = now;
       const frameT0 = performance.now();
       pollGpuTimer();
@@ -1642,7 +1675,9 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         if (pq.auto && pq.holds === 0 && appFocused()) {
           const snap = getPerfSnapshot();
           const gpuMs = snap.gpuTimer === 'supported' ? snap.gpu.avg : null;
-          pq.setAutoScale(autoQualityStep(autoState, pq.autoScale, { gpuMs, floorMs: snap.timer.baselineMs, fps: currentFps, drawing: drawnThisSecond > 1 }, now));
+          // A chosen lower frame rate isn't a slow picture: the rate is read against the cap (as if out of 60).
+          const capFps = fr.draw && fr.fps ? fr.fps : 0;
+          pq.setAutoScale(autoQualityStep(autoState, pq.autoScale, { gpuMs, floorMs: snap.timer.baselineMs, fps: capFps ? currentFps / capFps * 60 : currentFps, drawing: drawnThisSecond > 1 }, now));
         }
         drawnThisSecond = 0;
       }
@@ -1652,6 +1687,9 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       lastRafTime = now;
       if (timePlayingRef.current) virtualTime += dt;
       const elapsed = virtualTime;
+      // The time the picture sees: stepped by 1/fps at a posterized frame rate. Sound, video layers and
+      // the inputs keep the smooth clock (\`elapsed\`).
+      const shaderTime = fr.posterize ? posterizeTime(elapsed, fr.fps) : elapsed;
       // Songs in audio layers play on this clock (seeks, pauses and ↺ move them too).
       {
         const play = useNodeGraphStore.getState().play;
@@ -1665,12 +1703,12 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         // The tape's scale: racks with Snap to scale put live notes in it.
         audioEngineHost.setScale(rec.arrangement?.scale);
       }
-      setUniform(material, 'u_time', elapsed);
+      setUniform(material, 'u_time', shaderTime);
       setUniform(material, 'u_frameDt', timePlayingRef.current ? dt : 0);
       // Clock followers (time readouts, keyframe playheads) get every frame: a listener call is
       // cheap, and throttling it made the readout visibly choppy once frames were throttled.
       // Always emitted: it also records the clock for clockNow() (freezing a keyframed slider).
-      emitTimeTick(elapsed);
+      emitTimeTick(shaderTime);
 
       // ── Audio engine tick: push amplitude uniforms + draw live spectrum ──
       // tick() keys are the compiled uniform names (setUniformNames above).
@@ -1766,7 +1804,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           const m = bgProgram(item);
           if (!m) continue;
           gpuTimer.begin('background');
-          drawBgGraph(m, elapsed, null, floatRt, ditherSeed(frameCount));
+          drawBgGraph(m, shaderTime, null, floatRt, ditherSeed(frameCount));
           gpuTimer.end();
           if (!queue.direct) playBackground.captureGraph(item.id, renderer.domElement);
         }
@@ -1813,11 +1851,11 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
             if (step.last && (frameCount % 10 === 0 || !dynamic)) passRunner!.drawThumbnails(passTargets!);
           } else if (step.do === 'particles') {
             gpuTimer.begin('particles');
-            drawGpuParticles(material, { width: fw, height: fh, dt: playing ? dt : 0, time: elapsed, mouse: particleMouse(fw, fh) });
+            drawGpuParticles(material, { width: fw, height: fh, dt: playing ? dt : 0, time: shaderTime, mouse: particleMouse(fw, fh) });
             gpuTimer.end();
           } else {
             const nowMs = performance.now();
-            agentRunner!.run(agentTargets!, { width: fw, height: fh, time: elapsed, live: true, frameMs: lastAgentFrame ? nowMs - lastAgentFrame : 0, timer: gpuTimer });
+            agentRunner!.run(agentTargets!, { width: fw, height: fh, time: shaderTime, live: true, frameMs: lastAgentFrame ? nowMs - lastAgentFrame : 0, timer: gpuTimer });
             lastAgentFrame = nowMs;
             if (frameCount % 10 === 0 || !dynamic) agentRunner!.drawThumbnails(agentTargets!);
             // The Agent Builder's species spotlight, only while one is showing.
@@ -2624,6 +2662,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       clockAtTeardown = virtualTime;
       unregisterRebuild();
       unsubRender();
+      unsubFrameRate();
       unsubWake();
       unsubBackground();
       unsubFocus();

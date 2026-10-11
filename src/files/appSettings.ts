@@ -54,6 +54,7 @@ const KNOWN: Record<string, SettingInfo> = {
   'shader-studio:settings:outline': S('Graph outline', 'studio'),
   'shader-studio:settings:outlinePos': S('Graph outline position', 'studio'),
   'shader-studio:settings:previewAspect': S('Preview shape', 'studio'),
+  'shader-studio:frame-rate-default': S('Frame rate default', 'studio'),
   'shader-studio:settings:libraryOpen': S('Library panel open', 'studio'),
   'shader-studio:settings:recentColors': S('Recent colours', 'studio'),
   'shader-studio:phoneSplit:studio': S('Split view on a phone (Studio)', 'studio'),
