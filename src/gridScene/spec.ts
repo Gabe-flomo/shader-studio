@@ -22,6 +22,7 @@ import type { TextMask } from './textMask';
 import type { TexSource } from '../builders/textures';
 import type { Mutable } from '../builders/mute';
 import { defaultDrawnPath, pathAt, pathConfig, samplePoints, type DrawnPath } from './paths';
+import { mathOf, mathPoint, modOffset, modPhase, modsOf, varyRandom, type MathPath, type MotionMix, type PathMod, type Vary, type VaryKey } from './pathMods';
 
 /** A Drawn path with no stroke yet moves round the default one (as the shader does). */
 const DEFAULT_DRAWN = defaultDrawnPath();
@@ -63,7 +64,7 @@ export const PIC_MODE_LABELS: Record<PicMode, { label: string; word: string; blu
 /** The picture mode a shape uses (a picture shape defaults to its own: in each cell). */
 export const picModeOf = (s: Pick<GShape, 'picMode'>): PicMode => ((PIC_MODES as readonly string[]).includes(s.picMode as string) ? s.picMode! : 'cell');
 
-export const MOTION_PATHS = ['still', 'updown', 'sideways', 'both', 'circle', 'eight', 'bounce', 'travel', 'hop', 'drawn'] as const;
+export const MOTION_PATHS = ['still', 'updown', 'sideways', 'both', 'circle', 'eight', 'bounce', 'travel', 'hop', 'drawn', 'math'] as const;
 export type MotionPath = typeof MOTION_PATHS[number];
 export const MOTION_LABELS: Record<MotionPath, { label: string; blurb: string }> = {
   still: { label: 'Still', blurb: 'Stays in its cell.' },
@@ -76,6 +77,7 @@ export const MOTION_LABELS: Record<MotionPath, { label: string; blurb: string }>
   travel: { label: 'Travel', blurb: 'Glides X, Y cells each cycle, wrapping round the grid.' },
   hop: { label: 'Hop', blurb: 'Jumps X, Y cells at a time, wrapping round the grid.' },
   drawn: { label: 'Drawn', blurb: 'Your own path: draw it on the pad (or Generate one), X wide and Y tall.' },
+  math: { label: 'Math', blurb: 'A path from a formula (x and y of t, 0 to 1 round the cycle) or a curve from the library (Lissajous, loops, stars, spirals), X wide and Y tall.' },
 };
 
 export const PATTERN_KINDS = ['none', 'ripple', 'diagonal', 'checker', 'rings', 'spiral', 'stripes', 'random', 'picture'] as const;
@@ -117,6 +119,12 @@ export interface Motion {
   angleSpin?: number;
   /** The Drawn path's stroke and settings (kept when another path is picked, so it comes back). */
   drawn?: DrawnPath;
+  /** The Math path's formula or curve (kept when another path is picked). */
+  math?: MathPath;
+  /** Path modifiers, in order (not for Travel and Hop). */
+  mods?: PathMod[];
+  /** Vary per cell: a random strength per number (absent: every cell alike, and the code as it was). */
+  vary?: Vary;
 }
 
 export interface GShape {
@@ -240,6 +248,8 @@ export interface GridSceneSpec {
    * 1…15), remembered for the next jump. Absent (or a shape missing): state 1.
    */
   simStates?: Record<string, number> | null;
+  /** The scene's motion mix: one motion shared by every shape, the per-shape Offset, the Seed of Vary per cell. Absent: none (the code as it was). */
+  motionMix?: MotionMix;
 }
 
 /** Most states a drawn start can hold (Grid Rules' start cells: 1–9, a–f). */
@@ -498,8 +508,16 @@ export function drawnPoints(p: DrawnPath): Vec2[] {
   return q;
 }
 
-/** A path's offset from its home (cells, y up) at phase `ph` cycles, before the Angle: the shader's pathOffset. */
-export function pathOffsetAt(m: Motion, ph: number): Vec2 {
+/** A path's offset from its home (cells, y up) at phase `ph` cycles and time t, with its modifiers, before the Angle: the shader's gs_move. */
+export function pathOffsetAt(m: Motion, ph: number, t = 0): Vec2 {
+  const mods = modsOf(m);
+  if (!mods.length) return baseOffsetAt(m, ph);
+  const q = modPhase(mods, ph);
+  return modOffset(mods, baseOffsetAt(m, q), q, t, e => baseOffsetAt(m, e));
+}
+
+/** The unmodified path's offset (the shader's gs_base). */
+function baseOffsetAt(m: Motion, ph: number): Vec2 {
   const a = ph * TAU;
   const [ax, ay] = m.xy;
   switch (m.path) {
@@ -516,14 +534,30 @@ export function pathOffsetAt(m: Motion, ph: number): Vec2 {
       const p = pathAt(drawnPoints(d), pathConfig(d), ph);
       return [ax * p[0], ay * p[1]];
     }
+    case 'math': { const p = mathPoint(mathOf(m), ph - Math.floor(ph)); return [ax * p[0], ay * p[1]]; }
     default: return [0, 0];
   }
 }
 
-export function motionAt(spec: Pick<GridSceneSpec, 'cols' | 'rows'>, m: Motion, hx: number, hy: number, t: number): Vec2 {
-  const ph = t * m.speed + m.lag * (hx + hy);
-  let [ox, oy] = pathOffsetAt(m, ph);
-  const th = motionTheta(m, t);
+/**
+ * Where a shape whose home is cell (hx, hy) is at time t (the shader's gs_move): its path, its
+ * modifiers, its Angle, and with `index` (its place for the scene's Offset: shapeIndex) the scene's
+ * mix and its per-cell vary.
+ */
+export function motionAt(spec: Pick<GridSceneSpec, 'cols' | 'rows'> & { motionMix?: MotionMix }, m: Motion, hx: number, hy: number, t: number, index = 0): Vec2 {
+  const wrap = m.path === 'travel' || m.path === 'hop';
+  const mix = spec.motionMix;
+  const seed = mix?.seed ?? 0;
+  const r = (k: VaryKey) => (!wrap && m.vary?.[k]?.amt ? m.vary[k]!.amt * varyRandom(hx, hy, seed, k, m.vary[k]) : 0);
+  const reach = (1 + r('reach')) * (1 + index * (mix?.offReach ?? 0));
+  const modsMul = 1 + r('mods');
+  const mv: Motion = reach === 1 && modsMul === 1 ? m : {
+    ...m, xy: [m.xy[0] * reach, m.xy[1] * reach],
+    mods: m.mods?.map(md => (md.kind === 'wave' || md.kind === 'noise' || md.kind === 'twist' ? { ...md, v: md.v.map((v, i) => (i === 0 ? v * modsMul : v)) } : md)),
+  };
+  const ph = t * m.speed * (1 + r('speed')) + m.lag * (hx + hy) + r('phase') + index * (mix?.offPhase ?? 0);
+  let [ox, oy] = pathOffsetAt(mv, ph, t);
+  const th = motionTheta(m, t) + r('angle') * Math.PI + index * (mix?.offAngle ?? 0) * Math.PI / 180;
   if (th) [ox, oy] = rotate2([ox, oy], th);
   let px = hx + 0.5 + ox, py = hy + 0.5 - oy;
   if (m.path === 'travel' || m.path === 'hop') { px = fract(px / spec.cols) * spec.cols; py = fract(py / spec.rows) * spec.rows; }
@@ -553,3 +587,6 @@ export function liveGridSpec(spec: GridSceneSpec): GridSceneSpec {
   if (out.pattern.muted) out.pattern = { ...out.pattern, kind: 'none', fill: null };
   return out;
 }
+
+/** The shapes an edit of shape `id`'s motion changes: every shape while the motion is Shared (docs/grid-builder.md "Shared motion"), else just it. */
+export const motionTargets = (spec: GridSceneSpec, id: string): GShape[] => spec.shapes.filter(s => s.id === id || !!spec.motionMix?.shared);

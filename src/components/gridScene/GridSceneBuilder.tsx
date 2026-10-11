@@ -43,11 +43,14 @@ import {
   DO_KINDS, DO_LABELS, DRAW_MODES, DRAW_MODE_LABELS, MAX_CELLS, MAX_PLACED, PIC_MODES, PIC_MODE_LABELS, defaultDraw, drawOf, picModeOf, MAX_RULES, MAX_SHAPES, MAX_WARPS, MIN_CELLS, MOTION_LABELS, MOTION_PATHS, PATTERN_KINDS, PATTERN_LABELS,
   PATTERN_TARGETS, SHAPE_KINDS, SHAPE_LABELS, TARGET_LABELS, WHEN_KINDS, WHEN_LABELS, defaultLook, defaultPattern, newRule, newShape, nextShapeId,
   removeShape, resizeGrid, ruleProblem, ruleText, shapeOf, shapeSummary, shownCells, warpOf, JOINS, MAX_ALSO, clauseNeedsB, ruleClauses, MAX_SIM_STATE, simStateOf,
-  motionTheta, pathOffsetAt, rotate2,
+  motionTargets, motionTheta, pathOffsetAt, rotate2,
   type DoKind, type DrawMode, type GridClause, type GridDo, type GridRule, type Join, type GShape, type PicMode, type GridSceneSpec, type PatternKind, type PatternTarget, type ShapeKind, type Vec2, type WhenKind,
 } from '../../gridScene/spec';
 import { MiniGrid } from './MiniGrid';
 import { DrawnPathControls, DrawnPathPad } from './DrawnPathPad';
+import { MathPathControls, PathModifiers } from './PathControls';
+import { AllShapesCard, VaryCard } from './MotionShared';
+import { defaultMath, type MathPath, type PathMod, type Vary } from '../../gridScene/pathMods';
 import { gridPlay } from './playParam';
 import { defaultDrawnPath, type DrawnPath } from '../../gridScene/paths';
 import { MUTED_DIM, MuteToggle, MutedTag } from '../builders/MuteToggle';
@@ -395,19 +398,29 @@ function MotionSection() {
   // Would this shape's search be cut by its cap (MAX_SEARCH)? Big reach with a lot of lag, or a huge shape.
   const capped = useGridBuilder(s => { const x = shapeOf(s.spec, s.brush) ?? s.spec.shapes[0]; return !!x && searchCapped(s.spec, x); });
   if (!sh) return <BuilderNote>Add a shape first.</BuilderNote>;
+  // Shared motion: an edit here edits every shape's motion (docs/grid-builder.md "Shared motion").
+  const editM = (fn: (s: GShape) => void, key?: string) => edit(d => {
+    for (const s of motionTargets(d, sh.id)) fn(s);
+  }, key);
   const m = sh.motion;
   const usesX = m.path !== 'updown' && m.path !== 'bounce' && m.path !== 'still';
   const usesY = m.path !== 'sideways' && m.path !== 'still';
   const drawn = m.path === 'drawn';
-  const editDrawn = (fn: (d: DrawnPath) => void, key?: string) => editShape(sh.id, s => { s.motion.drawn ??= defaultDrawnPath(); fn(s.motion.drawn); }, key);
+  const editDrawn = (fn: (d: DrawnPath) => void, key?: string) => editM(s => { s.motion.drawn ??= defaultDrawnPath(); fn(s.motion.drawn); }, key);
+  const editMath = (fn: (d: MathPath) => void, key?: string) => editM(s => { s.motion.math ??= defaultMath(); fn(s.motion.math); }, key);
+  const editMods = (fn: (d: PathMod[]) => void, key?: string) => editM(s => { s.motion.mods ??= []; fn(s.motion.mods); }, key);
+  const modsAllowed = m.path !== 'still' && m.path !== 'travel' && m.path !== 'hop';
+  const editVary = (fn: (v: Vary) => void, key?: string) => editM(s => { s.motion.vary ??= {}; fn(s.motion.vary); }, key);
   const reach = Math.hypot(usesX ? m.xy[0] : 0, usesY ? m.xy[1] : 0);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <Row label="Shape">
         <Select ariaLabel="Shape to move" value={sh.id} options={shapes.map(s => ({ value: s.id, label: `${s.id} · ${SHAPE_LABELS[s.kind]}` }))} onChange={setBrush} />
       </Row>
-      <Tiles items={MOTION_PATHS} value={m.path} cols={3} label={p => MOTION_LABELS[p].label} onPick={p => editShape(sh.id, s => {
+      <AllShapesCard shape={sh} />
+      <Tiles items={MOTION_PATHS} value={m.path} cols={3} label={p => MOTION_LABELS[p].label} onPick={p => editM(s => {
         s.motion.path = p;
+        if (p === 'math') { s.motion.math ??= defaultMath(); if (Math.abs(s.motion.xy[0]) < 0.05 && Math.abs(s.motion.xy[1]) < 0.05) s.motion.xy = [0.4, 0.4]; }
         if (p === 'drawn') { s.motion.drawn ??= defaultDrawnPath(); if (Math.abs(s.motion.xy[0]) < 0.05 && Math.abs(s.motion.xy[1]) < 0.05) s.motion.xy = [0.4, 0.4]; }
         // Travel and hop step a whole cell by default; the others sway a little.
         if ((p === 'travel' || p === 'hop') && Math.abs(s.motion.xy[0]) + Math.abs(s.motion.xy[1]) < 0.5) s.motion.xy = [1, 0];
@@ -419,26 +432,29 @@ function MotionSection() {
           <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
             {drawn
               ? <DrawnPathPad shape={sh} onEdit={editDrawn} />
-              : <XYPad value={m.xy} shape={sh} range={m.path === 'travel' || m.path === 'hop' ? 3 : 2} onChange={v => editShape(sh.id, s => { s.motion.xy = v; }, `xy${sh.id}`)} />}
+              : <XYPad value={m.xy} shape={sh} range={m.path === 'travel' || m.path === 'hop' ? 3 : 2} onChange={v => editM(s => { s.motion.xy = v; }, `xy${sh.id}`)} />}
             <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
               <span style={{ fontSize: 11.5, color: usesX ? undefined : 'GrayText' }}>X (cells)</span>
-              <BuilderSlider value={m.xy[0]} min={-3} max={3} disabled={!usesX} ariaLabel="Move X" defaultValue={0} lazyParam={gridPlay(sh.id, 'moveX')} onChange={v => editShape(sh.id, s => { s.motion.xy = [v, s.motion.xy[1]]; }, `mx${sh.id}`)} />
+              <BuilderSlider value={m.xy[0]} min={-3} max={3} disabled={!usesX} ariaLabel="Move X" defaultValue={0} lazyParam={gridPlay(sh.id, 'moveX')} onChange={v => editM(s => { s.motion.xy = [v, s.motion.xy[1]]; }, `mx${sh.id}`)} />
               <span style={{ fontSize: 11.5, color: usesY ? undefined : 'GrayText' }}>Y (cells, up)</span>
-              <BuilderSlider value={m.xy[1]} min={-3} max={3} disabled={!usesY} ariaLabel="Move Y" defaultValue={0} lazyParam={gridPlay(sh.id, 'moveY')} onChange={v => editShape(sh.id, s => { s.motion.xy = [s.motion.xy[0], v]; }, `my${sh.id}`)} />
+              <BuilderSlider value={m.xy[1]} min={-3} max={3} disabled={!usesY} ariaLabel="Move Y" defaultValue={0} lazyParam={gridPlay(sh.id, 'moveY')} onChange={v => editM(s => { s.motion.xy = [s.motion.xy[0], v]; }, `my${sh.id}`)} />
               <span data-motion-length style={{ fontSize: 11.5, color: tk.text.muted }}>Length {reach.toFixed(2)} cells{m.angle || m.angleSpin ? ' (the Angle keeps it)' : ''}</span>
             </div>
           </div>
           {drawn && <DrawnPathControls shape={sh} onEdit={editDrawn} />}
+          {m.path === 'math' && <MathPathControls shape={sh} onEdit={editMath} />}
           <NumRow label="Angle" unit="°" hint="Turns the whole path round (the XY arrow), keeping its length. Right-click to put it in Play controls; on the built Shape node it is an input: wire an LFO or Time into it."
             value={m.angle ?? 0} min={-180} max={180} step={1} defaultValue={0} lazyParam={gridPlay(sh.id, 'angle')}
-            onChange={v => editShape(sh.id, s => { s.motion.angle = v; }, `ang${sh.id}`)} />
+            onChange={v => editM(s => { s.motion.angle = v; }, `ang${sh.id}`)} />
           <NumRow label="Angle spin" unit="°/s" hint="Turns the Angle on its own, degrees a second (negative: the other way)."
             value={m.angleSpin ?? 0} min={-180} max={180} step={1} defaultValue={0} lazyParam={gridPlay(sh.id, 'angleSpin')}
-            onChange={v => editShape(sh.id, s => { s.motion.angleSpin = v; }, `angs${sh.id}`)} />
-          <NumRow label="Speed" hint="Cycles a second (negative runs backwards)." value={m.speed} min={-2} max={2} defaultValue={0.5} lazyParam={gridPlay(sh.id, 'speed')} onChange={v => editShape(sh.id, s => { s.motion.speed = v; }, `sp${sh.id}`)} />
-          <NumRow label="Lag" hint="Each cell starts this much of a cycle after its neighbour (x + y): the motion runs through the drawing as a wave." value={m.lag} min={-0.5} max={0.5} defaultValue={0} lazyParam={gridPlay(sh.id, 'lag')} onChange={v => editShape(sh.id, s => { s.motion.lag = v; }, `lag${sh.id}`)} />
+            onChange={v => editM(s => { s.motion.angleSpin = v; }, `angs${sh.id}`)} />
+          <NumRow label="Speed" hint="Cycles a second (negative runs backwards)." value={m.speed} min={-2} max={2} defaultValue={0.5} lazyParam={gridPlay(sh.id, 'speed')} onChange={v => editM(s => { s.motion.speed = v; }, `sp${sh.id}`)} />
+          <NumRow label="Lag" hint="Each cell starts this much of a cycle after its neighbour (x + y): the motion runs through the drawing as a wave." value={m.lag} min={-0.5} max={0.5} defaultValue={0} lazyParam={gridPlay(sh.id, 'lag')} onChange={v => editM(s => { s.motion.lag = v; }, `lag${sh.id}`)} />
+          {modsAllowed && <PathModifiers shape={sh} mods={m.mods ?? []} onEdit={editMods} />}
         </>
       )}
+      <VaryCard shape={sh} onEdit={editVary} wrap={m.path === 'travel' || m.path === 'hop' || m.path === 'still'} />
       {capped && (
         <span data-search-capped style={{ fontSize: 11.5, color: tk.status.warningText, lineHeight: 1.4 }}>
           This much reach with this much lag makes the shapes overtake each other, beyond the {2 * MAX_SEARCH + 1} × {2 * MAX_SEARCH + 1} cells each pixel looks through: some shapes may be cut. Lower the lag or the reach (or the size).

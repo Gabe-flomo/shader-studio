@@ -125,7 +125,7 @@ Words in the Agent Builder's stroke font (`agentBuilder/strokeFont.ts`), two way
 | Section | What it sets |
 |---|---|
 | **Shapes** | Up to six shapes: kind (circle, square, ring, diamond, triangle, hexagon, star, plus, cross, heart), colour, size (a share of half a cell: 1 touches the neighbours), turn, spin, pulse, outline. Add and remove shapes (a removed shape's cells and rules go with it). **Picture**: a picture the shape carries, and its mode (see Pictures in pieces). |
-| **Motion** | The brush shape's path: still, up and down, side to side, both at once, circle, figure eight, bounce, travel, hop, or **Drawn** (your own; see Drawn paths). The **XY control** sets how far (in cells, y up): drag the point, the path is drawn round it; X and Y sliders beside it, and the reach's **Length**. **Angle** (degrees) turns the whole path round, keeping its length, and **Angle spin** (degrees a second) turns it on its own (see Angle). Speed (cycles a second) and lag (each cell starts (x + y) × lag of a cycle later: the motion runs through the drawing as a wave). Travel and hop wrap round the grid. |
+| **Motion** | The brush shape's path: still, up and down, side to side, both at once, circle, figure eight, bounce, travel, hop, **Drawn** (your own; see Drawn paths) or **Math** (a formula or a curve; see Math paths), with **path modifiers** under them (see Path modifiers), **Vary per cell** (see below) and an **All shapes** card (Shared, Offset: see Shared motion). The **XY control** sets how far (in cells, y up): drag the point, the path is drawn round it; X and Y sliders beside it, and the reach's **Length**. **Angle** (degrees) turns the whole path round, keeping its length, and **Angle spin** (degrees a second) turns it on its own (see Angle). Speed (cycles a second) and lag (each cell starts (x + y) × lag of a cycle later: the motion runs through the drawing as a wave). Travel and hop wrap round the grid. |
 | **Patterns & warps** | A wave over the cells: ripple, diagonal, checker, rings, spiral, stripes, random. It changes every shape's size, turn, push, hue or brightness by Amount; Waves is how many across the grid, Speed in cycles a second, Arms for the spiral. **Fill empty cells** puts a shape in every cell you didn't draw on, its size following the wave (checker + fill is a checkerboard that swaps). **Only in words** limits the wave and the fill to the cells some words cover (see Text). **Grid warps**: up to three space blocks from the 2D Scene Builder's library (the same picker: categories, search, Random), bending the space the whole grid is drawn in, lines and all. |
 | **Rules** | When … Do … for every drawn cell, checked in the shader each frame, top to bottom. When a shape *is in the cell (x, y)*, *is in the column*, *is in the row*, *shares a cell with* another shape, or *is near* it (within N cells). Do: *becomes* another shape (its kind, size and colour), *turns a colour*, *swaps colours with* the other shape (both ways), *grows by*, *hides*, *spins*. A rule that names a shape that isn't there is shown as off. |
 | **Look** | Background, grid lines (on or off, colour, width in cells), the grid's size, glow (amount, falloff, style), tone map. Glow style **Soft** (the default) is one shape: the shape's colour runs out into its glow, colour × (amount ÷ (distance outside + amount)) ^ falloff, which is 1 at the edge and inside, so the fill meets it without a seam. **Halo** is the Glow Layer's amount ÷ \|distance\|: a bright rim round a flat shape (the look before). |
@@ -174,10 +174,107 @@ the box bounds it). Lag still ripples along it. The spec keeps the stroke and it
 (`motion.drawn`), so Edit this one reopens it; Surprise me now and then gives a shape a generated
 path. `src/gridScene/paths.ts` has the sums, the same on the CPU as in the shader.
 
+### Math paths
+
+Pick **Math** for a path from numbers (`src/gridScene/pathMods.ts`). The point is in pad units,
+−1 … 1 (X and Y stretch it into cells, Angle turns it, lag ripples it across the cells):
+
+- **Curve** (the default): Curve Trace's curves, built by its own `curvePoint`. A preset to start
+  from (circle, Lissajous 3 : 2, figure eight, pretzel, rotary loops, counter-rotating star and
+  flower, harmonograph spiral), its **motion** (lateral: X and Y on their own waves; rotary: two
+  circles, the same way or opposite ways), the lateral waves (sine, triangle, square, saw), and
+  its numbers as sliders: X / Y frequency, phase and size, Damping, Turns.
+- **Formula**: `x =` and `y =` typed in the 2D Scene Builder's space-block language and checked by
+  it as you type (errors in plain words; until it checks the shape goes round a circle). `t` runs
+  0 → 1 round the cycle; `PI`, `TAU`, the formula's own sliders by name (Add a slider), and in the
+  y line `x`, the x just worked out. Whole numbers are written as floats. Presets: circle, heart,
+  rose (k petals), squircle, wobbly circle.
+
+The sliders (a curve's numbers, a formula's own) are live sliders on the built Shape node
+(`curveFreqX…`, `f_<name>`): animatable, wireable, in the Play menu, never rebuilding. The formula's
+text and a curve's motion and waves are code.
+
+### Path modifiers
+
+A stack under the Motion section, for every path but Travel and Hop (they wrap round the grid),
+applied top to bottom; each a card with its sliders, up / down / remove and the shared mute:
+
+| Modifier | What it does |
+|---|---|
+| **Wave along** | A sine wobble across the path (its normal), Amount in cells, Waves a cycle, Speed (it runs along). |
+| **Noise** | A smooth random wobble that loops with the path: Amount, Bumps a cycle, Drift, Seed. |
+| **Scale** | Stretches across (X) and up (Y); negative flips. |
+| **Rotate** | Turns the path by Angle, and Spin degrees a second (ties in with the motion's own Angle). |
+| **Mirror** | Flips across, up and down, or both. |
+| **Twist** | The radius swells with progress (Swell, Waves) and the path turns as it goes (Turns). |
+| **Repeat** | Goes round the path Times a cycle. |
+| **Ease** | Slow at each lap's ends, fast in the middle. |
+
+Ease and Repeat change the progress along the path (wherever they sit); the rest change its
+offset, in order. Whole Waves, Bumps, Turns and Times loop seamlessly. Every number is a live slider
+on the Shape node (`m1amp`…), the mute a hidden number (`m1on`), so moving, muting and animating
+never rebuild; adding, removing, reordering or changing a modifier's kind does.
+
+**The search's bound.** A math path, or any path with modifiers, is bounded the general way
+(`gs_bound`): a reach R round the home and a rate V (cells, a cycle), Euclidean so the Angle and
+Rotate leave them alone, worked out each frame from the live numbers. The path's own (its formula
+from the built-in path; a curve's from Curve Trace's bounds; a formula's sampled at 48 points plus
+the largest step), then each modifier's: Scale multiplies both, Twist widens R by its swell and V
+by its swell and turns, Wave and Noise add their amounts, Repeat and Ease speed the progress up.
+Where the path can jump (a formula, a curve, Wave along, a twist that isn't whole), V is "far": with
+lag the search is bounded by the reach alone. Tests check the bound against densely sampled paths,
+random stacks and the shader's own `gs_bound`, and the search against brute force with lag.
+
+### Vary per cell
+
+A **Vary per cell** card under Motion gives each number a Random strength (0: every cell alike):
+Reach, Angle, Speed, Phase and Modifiers (the path), Size, Spin and Pulse (the look). Every drawn
+cell gets a stable random offset from a hash of its home cell and the scene's **Seed**, times the
+strength: reach × (1 ± s), angle ± s × 180°, speed × (1 ± s) (cells drift out of step), phase ± s
+cycles (a random lag), the wave, noise and twist amounts × (1 ± s), size × (1 ± s), spin ± s turns
+a second, pulse × (1 ± s). Each number's randomness is **±** or **Up only**, and **each cell**
+(a hash a cell) or **smooth** (two slow sine waves across the cells, drifting about a fifth from
+one cell to the next: neighbouring cells alike, flowing regions). **Seed** (with Reroll) picks another pattern; the same
+seed always gives the same one. Travel, Hop and Still vary only the look.
+
+The strengths are live sliders on the Shape node (`v_reach…`; ± / up and smooth are hidden numbers
+beside them), so they animate and sit in the Play menu; the Seed is on the Motion node. A scene
+that never turned Vary on builds exactly the code it did; at strength 0 every cell moves as before.
+
+The randoms are worked out once per candidate cell, where the search knows the cell (four keys in
+one vector call), and handed to the motion function; the motion arrays are passed by reference.
+Both keep the shader small: copying the arrays, or working the randoms out inside the motion
+function at every call, made big scenes fail to compile on Apple GPUs (they drew black).
+
+The search: while any path strength is above 0 the cells no longer move alike, so each shape is
+looked for within its path's reach (`gs_bound`, widened by the reach's and the modifiers'
+strengths) round the home, whatever the lag. Size and pulse widen the shape's own reach. Tests
+check the search against brute force for each kind of vary, the shader against the CPU, ± / up and
+smooth / independent, the seed, and strength 0 against a scene without Vary.
+
+### Shared motion
+
+An **All shapes** card at the top of Motion:
+
+- **Shared**: one motion for every shape. Turning it on gives every shape this shape's motion;
+  while it is on, editing the motion (path, reach, Angle, speed, modifiers, Vary…) edits them all.
+  Off, each keeps its copy to change on its own. **Copy motion to all** does it once.
+- **Offset** spreads the shapes out of step by their place (A 0, B 1, C 2…, by id, so muting one
+  doesn't shift the rest): **Phase** (each shape that much of a cycle after the one before),
+  **Angle** (turned that much more) and **Reach** (times 1 + that more). 0 is perfect sync. It
+  combines with Vary per cell: the Offset is the same for every cell of a shape, the randomness
+  differs per cell.
+
+They are live on a **Motion (all shapes)** node the build adds only when a scene has them
+(`offPhase`, `offAngle`, `offReach`, `seed`), wired into the Grid scene (and the rule memory), so
+an LFO on `offPhase` makes the shapes chase each other. The search follows the offset exactly
+(each shape's reach and angle), Travel and Hop included.
+
 ### The Play menu
 
 Right-click a slider for the built node's Play menu (Add to Play controls, keyframes): the shapes'
 size, turn, spin, pulse, outline, X, Y, speed, lag, Angle, Angle spin, a drawn path's Ease and Back,
+a math path's numbers, the modifiers' numbers, Vary per cell's strengths, the Offset and the Seed,
 the pattern's numbers and the glow's. It finds the node by its role in the build the builder edits,
 so it needs a Build first (the menu says so).
 
@@ -387,5 +484,5 @@ rule between two shapes. One undo step; Reroll and Undo in its toast.
 
 - Shapes moving through the pattern's fill don't push it aside; the fill only skips the cells you
   drew on.
-- Math paths (x(t), y(t) expressions and the curve library), path modifiers, per-cell randomness and
-  one motion shared across shapes: planned next.
+- A formula path's bound is sampled (48 points plus the largest step): a formula with detail finer
+  than a forty-eighth of the cycle can stray past it and be cut where shapes overtake (with lag).

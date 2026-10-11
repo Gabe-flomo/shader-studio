@@ -24,9 +24,10 @@ import { tidy } from '../sceneBuilder/build';
 import { blockGlslLines, checkBlock, clampTimes, type SpaceBlock } from '../sceneBuilder2d/blocks';
 import { BLOCK_BY_ID } from '../sceneBuilder2d/blockLibrary';
 import { colourText } from '../lang/colours';
-import { gf, gridProgram, motionExtra, motionLen, shapeArgs, activeMask, activeRules } from './glsl';
+import { gf, gridProgram, liveAt, motionExtra, motionLen, shapeArgs, activeMask, activeRules } from './glsl';
 import { findTex, standInId, standIns } from '../builders/textures';
 import { defaultDrawnPath, pathConfig } from './paths';
+import { CURVE_MODE_LABELS, MOD_DEFS, mathOf, modsOf, pathLiveParams, type MotionMix } from './pathMods';
 import { gateNode, type Mutable } from '../builders/mute';
 import {
   DRAW_MODE_LABELS, MOTION_LABELS, PATTERN_LABELS, PIC_MODE_LABELS, SHAPE_LABELS, TARGET_LABELS, cellSize, drawOf, picModeOf, ruleText, shapeOf, liveGridSpec,
@@ -137,18 +138,44 @@ function warpNode(c: Ctx, i: number, block: SpaceBlock, pos: Ref): Ref {
  * here: pA0…, the head then x, y pairs; redrawing changes numbers, not the code). The line packs them
  * into the array the functions read (glsl.ts motionLen).
  */
-function motionInputs(s: GShape, node: GraphNode): { inputs: In[]; line: Line } {
+function motionInputs(s: GShape, node: GraphNode, spec: GridSceneSpec, mix: Ref | null): { inputs: In[]; line: Line } {
   const a = shapeArgs(s.id);
-  const K = motionLen(s);
+  const K = motionLen(s, spec);
   const ins: In[] = [{ name: a.r, type: 'vec2', from: ref(node, 'dir') }];
   const parts = [`${a.r}.x`, `${a.r}.y`];
   if (s.motion.path === 'drawn') {
-    const pts = motionExtra(s).slice(6);
+    // The drawn path's head and points only (the live numbers after them come from the Shape node).
+    const pts = motionExtra(s).slice(6, liveAt(s));
     ins.push({ name: a.d, type: 'vec4', from: ref(node, 'path') });
     pts.forEach((v, i) => ins.push({ name: `p${s.id}${i}`, type: 'float', slider: { value: v, min: -1, max: 1 }, hidden: true }));
     parts.push(`${a.d}.x`, `${a.d}.y`, `${a.d}.z`, `${a.d}.w`, ...pts.map((_, i) => `p${s.id}${i}`));
   }
+  // A math path's and the modifiers' numbers: the Shape node's sliders, four to an output (lp0…).
+  const live = pathLiveParams(s.motion);
+  for (let k = 0; k * 4 < live.length; k++) {
+    const name = `lp${s.id}${k}`;
+    ins.push({ name, type: 'vec4', from: ref(node, `lp${k}`) });
+    parts.push(...['x', 'y', 'z', 'w'].slice(0, Math.min(4, live.length - k * 4)).map(c => `${name}.${c}`));
+  }
+  // The scene's motion mix (Shared, Offset, Seed): the Motion node's numbers, the same for every shape.
+  if (spec.motionMix && mix) {
+    if (!ins.some(i => i.name === 'mmix')) ins.push({ name: 'mmix', type: 'vec4', from: mix });
+    parts.push('mmix.x', 'mmix.y', 'mmix.z', 'mmix.w');
+  }
   return { inputs: ins, line: L(`float ${a.x}[${K}]`, `float[${K}](${parts.join(', ')})`) };
+}
+
+/** The scene's motion mix: the per-shape Offset (phase, angle, reach, times each shape's place: A 0, B 1…) and the Seed. */
+function mixNode(c: Ctx, x: MotionMix): GraphNode {
+  return expr(c, 'motion', 'Motion (all shapes)', [
+    { name: 'offPhase', type: 'float', slider: { value: x.offPhase, min: -1, max: 1 } },
+    { name: 'offAngle', type: 'float', slider: { value: x.offAngle, min: -180, max: 180 } },
+    { name: 'offReach', type: 'float', slider: { value: x.offReach, min: -1, max: 1 } },
+    { name: 'seed', type: 'float', slider: { value: x.seed, min: 0, max: 999 } },
+  ], 'vec4(offPhase, radians(offAngle), offReach, seed)',
+  'The motion every shape shares: Offset spreads the shapes out of step, shape A by 0, B by one step, C by two…: offPhase cycles later, offAngle degrees turned, offReach (its reach times 1 + this). '
+    + 'Seed picks the pattern of Vary per cell\'s randomness (the same seed, the same pattern). All live; wire an LFO into offPhase to make the shapes chase each other. Result: (offPhase, offAngle in radians, offReach, seed).',
+  { outputType: 'vec4' });
 }
 
 /** A shape's sliders: an Expression Block whose result is its motion, with its look and outline beside. */
@@ -158,6 +185,9 @@ function shapeNode(c: Ctx, spec: GridSceneSpec, s: GShape): { node: GraphNode; c
   const path = MOTION_LABELS[m.path];
   const drawn = m.path === 'drawn';
   const dcfg = pathConfig(m.drawn ?? defaultDrawnPath());
+  const live = pathLiveParams(m);
+  const mods = modsOf(m);
+  const packs = Array.from({ length: Math.ceil(live.length / 4) }, (_, k) => live.slice(k * 4, k * 4 + 4).map(p => p.name));
   const node = expr(c, s.id, `Shape ${s.id} · ${SHAPE_LABELS[s.kind].toLowerCase()}`, [
     { name: 'size', type: 'float', slider: { value: s.size, min: 0.05, max: 1.5 } },
     { name: 'turn', type: 'float', slider: { value: s.turn, min: -180, max: 180 } },
@@ -176,6 +206,7 @@ function shapeNode(c: Ctx, spec: GridSceneSpec, s: GShape): { node: GraphNode; c
       { name: 'closed', type: 'float' as const, slider: { value: dcfg[0], min: 0, max: 1 }, hidden: true },
       { name: 'ends', type: 'float' as const, slider: { value: dcfg[1], min: 0, max: 2 }, hidden: true },
     ] : []),
+    ...live.map(p => ({ name: p.name, type: 'float' as const, slider: { value: p.value, min: p.min, max: p.max }, ...(p.hidden ? { hidden: true } : {}) })),
   ], 'vec4(moveX, moveY, speed, lag)',
   `Shape ${s.id}: a ${SHAPE_LABELS[s.kind].toLowerCase()}, drawn in the cells you give it${spec.pattern.fill === s.id ? ', and the pattern\'s fill' : ''}. Its sliders feed the Grid scene node and are live. `
     + `Size is the radius as a share of half a cell (1 touches the neighbours); turn in degrees; spin in turns a second; pulse makes the size breathe; outline above 0 draws only the edge. `
@@ -183,16 +214,21 @@ function shapeNode(c: Ctx, spec: GridSceneSpec, s: GShape): { node: GraphNode; c
     + 'Angle (degrees) turns the whole path round, keeping its length; angleSpin turns it on its own, degrees a second (wire an LFO or Time into angle to animate it). '
     + (drawn ? 'Drawn path: its points are on the Grid scene node (hidden, redrawing never rebuilds); ease eases the progress along it each cycle, back is the share of the cycle Ease back glides home in. ' : '')
     + 'The path itself is set in the Grid builder (it shapes the code). Result: the motion (x, y, speed, lag); look: (size, turn in radians, spin, pulse); edge: the outline; dir: (angle, its spin) in radians'
-    + (drawn ? '; path: (closed, end mode, back, ease).' : '.'),
+    + (drawn ? '; path: (closed, end mode, back, ease)' : '')
+    + (m.path === 'math' ? `. Math path: ${mathOf(m).kind === 'curve' ? `a curve (${CURVE_MODE_LABELS[mathOf(m).curve.mode].toLowerCase()}), its numbers the curve… sliders` : `x = ${mathOf(m).x}, y = ${mathOf(m).y} (t from 0 to 1 round the cycle)${mathOf(m).params.length ? `, its sliders f_…` : ''}`}` : '')
+    + (mods.length ? `. Path modifiers, in order: ${mods.map(x => `${MOD_DEFS[x.kind].label.toLowerCase()} (${x.id}…)`).join(', ')}; a muted one's on (hidden) is 0` : '')
+    + (packs.length ? '; lp0…: these numbers four at a time, for the Grid scene.' : '.'),
   {
     outputType: 'vec4',
     lines: [
       L('vec4 look', 'vec4(size, radians(turn), spin, pulse)'), L('float edge', 'outline'), L('vec2 dir', 'vec2(radians(angle), radians(angleSpin))'),
       ...(drawn ? [L('vec4 path', 'vec4(closed, ends, back, ease)')] : []),
+      ...packs.map((names, k) => L(`vec4 lp${k}`, `vec4(${[...names, '0.0', '0.0', '0.0'].slice(0, 4).join(', ')})`)),
     ],
     outputs: [
       { name: 'look', type: 'vec4', label: 'Look' }, { name: 'edge', type: 'float', label: 'Edge' }, { name: 'dir', type: 'vec2', label: 'Angle' },
       ...(drawn ? [{ name: 'path', type: 'vec4', label: 'Path' }] : []),
+      ...packs.map((_, k) => ({ name: `lp${k}`, type: 'vec4', label: `Path numbers ${k + 1}` })),
     ],
   });
   return { node, colour: ref(colour, 'rgb') };
@@ -207,7 +243,7 @@ function shapeNode(c: Ctx, spec: GridSceneSpec, s: GShape): { node: GraphNode; c
  * (its `prev` input is wired to the pass after the layout).
  */
 function memoryNodes(c: Ctx, spec: GridSceneSpec, mem: NonNullable<ReturnType<typeof gridProgram>['memory']>, time: Ref,
-  shapeRefs: Map<string, { node: GraphNode }>, drawing: In[], D: ReturnType<typeof drawOf>): GraphNode {
+  shapeRefs: Map<string, { node: GraphNode }>, drawing: In[], D: ReturnType<typeof drawOf>, mix: Ref | null): GraphNode {
   const N = mem.size;
   const repeat = mem.latchArgs.includes('rp');
   const rules = activeRules(spec).filter(r => mem.rules.includes(r.id));
@@ -215,7 +251,7 @@ function memoryNodes(c: Ctx, spec: GridSceneSpec, mem: NonNullable<ReturnType<ty
     { name: 't', type: 'float', from: time },
     { name: 'prev', type: 'texture' },
     { name: 'reset', type: 'float', slider: { value: 0, min: 0, max: 1 } },
-    ...spec.shapes.flatMap(s => [{ name: shapeArgs(s.id).m, type: 'vec4' as const, from: ref(shapeRefs.get(s.id)!.node, 'result') }, ...motionInputs(s, shapeRefs.get(s.id)!.node).inputs]),
+    ...spec.shapes.flatMap(s => [{ name: shapeArgs(s.id).m, type: 'vec4' as const, from: ref(shapeRefs.get(s.id)!.node, 'result') }, ...motionInputs(s, shapeRefs.get(s.id)!.node, spec, mix).inputs]).filter((x, i, all) => all.findIndex(y => y.name === x.name) === i),
     ...(repeat ? [
       { name: 'periodX', type: 'float' as const, slider: { value: D.period[0], min: 1, max: spec.cols }, hidden: true },
       { name: 'periodY', type: 'float' as const, slider: { value: D.period[1], min: 1, max: spec.rows }, hidden: true },
@@ -235,7 +271,7 @@ function memoryNodes(c: Ctx, spec: GridSceneSpec, mem: NonNullable<ReturnType<ty
     lines: [
       L('vec2 h', `floor(vUv * ${gf(N)})`),
       L(`float gd[${drawing.length}]`, `float[${drawing.length}](${drawing.map(x => x.name).join(', ')})`),
-      ...spec.shapes.map(s => motionInputs(s, shapeRefs.get(s.id)!.node).line),
+      ...spec.shapes.map(s => motionInputs(s, shapeRefs.get(s.id)!.node, spec, mix).line),
       L('vec4 pv', `texture2D(prev, (h + 0.5) / ${gf(N)})`),
       L('vec3 m', `${mem.latchName}(${callArgs.join(', ')})`),
     ],
@@ -261,6 +297,8 @@ export function buildGridScene(spec: GridSceneSpec, idFor: (role: string) => str
   if (spec.cells.length > prog.placed) c.warnings.push('Some drawn cells name a shape that is gone or sit outside the grid; they were left out.');
   const shapeRefs = new Map<string, { node: GraphNode; colour: Ref }>();
   for (const s of spec.shapes) shapeRefs.set(s.id, shapeNode(c, spec, s));
+  // The scene's motion mix (docs/grid-builder.md "Shared motion"): one node of sliders every shape reads.
+  const mix = spec.motionMix ? ref(mixNode(c, spec.motionMix), 'result') : null;
 
   const P = spec.pattern;
   const inputs: In[] = [
@@ -276,7 +314,7 @@ export function buildGridScene(spec: GridSceneSpec, idFor: (role: string) => str
     const sr = shapeRefs.get(s.id)!;
     inputs.push(
       { name: a.m, type: 'vec4', from: ref(sr.node, 'result') },
-      ...motionInputs(s, sr.node).inputs,
+      ...motionInputs(s, sr.node, spec, mix).inputs.filter(x => !inputs.some(y => y.name === x.name)),
       { name: a.l, type: 'vec4', from: ref(sr.node, 'look') },
       { name: a.e, type: 'float', from: ref(sr.node, 'edge') },
       { name: a.c, type: 'vec3', from: sr.colour },
@@ -331,7 +369,7 @@ export function buildGridScene(spec: GridSceneSpec, idFor: (role: string) => str
     outputType: 'vec3',
     lines: [
       L(`float gd[${prog.data.length}]`, `float[${prog.data.length}](${prog.data.map((_, i) => `g${i}`).join(', ')})`),
-      ...spec.shapes.map(s => motionInputs(s, shapeRefs.get(s.id)!.node).line),
+      ...spec.shapes.map(s => motionInputs(s, shapeRefs.get(s.id)!.node, spec, mix).line),
       L('vec4 hp', 'vec4(0.0)'),
       L('vec4 g', `${prog.name}(uv, t, vec4(amount, freq, speed, arms), ${callArgs.join(', ')})`),
       L('float d', 'g.w'),
@@ -384,7 +422,7 @@ export function buildGridScene(spec: GridSceneSpec, idFor: (role: string) => str
   }
   let final = ref(mk(c, 'sdfFill', 'fill', {}, { d, fillColor: colour, background: acc }, 'Paints the shapes over the ground: inside a shape (negative distance) its colour shows, the edge anti-aliased.'), 'result');
   if (look.tone !== 'none') final = ref(mk(c, 'toneMap', 'tone', { mode: look.tone }, { color: final }, `Squeezes the glow's bright light into colours a screen can show (${look.tone.toUpperCase()}).`), 'color');
-  const latch = prog.memory ? memoryNodes(c, spec, prog.memory, ref(time, 'time'), shapeRefs, drawing, D) : null;
+  const latch = prog.memory ? memoryNodes(c, spec, prog.memory, ref(time, 'time'), shapeRefs, drawing, D, mix) : null;
   tidy(c.nodes, 0, 0);
   // The feedback wire (the pass's Previous into its own input) after the layout, which follows wires left to right.
   if (latch) latch.inputs.prev = { ...latch.inputs.prev, connection: { nodeId: c.idFor('memory'), outputKey: 'previous' } };

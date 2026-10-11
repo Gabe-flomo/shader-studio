@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.173',
+    date: '2026-10-11',
+    title: 'Math paths and loose grids',
+    highlights: [
+      { area: 'Studio', text: 'Grid builder: math paths (curves like Lissajous, rose and harmonograph, or your own x and y of t) and path modifiers: wave, noise, twist, repeat, ease.' },
+      { area: 'Studio', text: 'Grid builder: vary motion, size, spin and pulse per cell (seeded, smooth or per cell), and share one motion across shapes with an offset.' },
+    ],
+  },
+  {
     id: '2026.10.172',
     date: '2026-10-11',
     title: 'Preview with the keys',

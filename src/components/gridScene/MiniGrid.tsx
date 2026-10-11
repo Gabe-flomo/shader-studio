@@ -19,6 +19,7 @@ import { parsePicking, useGridBuilder } from '../../gridScene/store';
 import { eraseCell, motionAt, placeCell, ruleClauses, shapeOf, sourceCell } from '../../gridScene/spec';
 import { textStampGridCells } from '../../gridScene/textMask';
 import { paintGrid, rgb } from './glyphs';
+import { shapeIndex } from '../../gridScene/glsl';
 
 export function MiniGrid({ size = 288 }: { size?: number }) {
   const tk = useTokens();
@@ -51,7 +52,7 @@ export function MiniGrid({ size = 288 }: { size?: number }) {
         ctx.beginPath();
         let last: [number, number] | null = null;
         for (let i = 0; i <= 48; i++) {
-          const [px, py] = motionAt(spec, sh.motion, c.x, c.y, (i / 48) * period);
+          const [px, py] = motionAt(spec, sh.motion, c.x, c.y, (i / 48) * period, shapeIndex(sh));
           const X = x0 + px * cell, Y = y0 + py * cell;
           if (last && Math.hypot(X - last[0], Y - last[1]) > cell * 1.5) ctx.moveTo(X, Y); else if (i) ctx.lineTo(X, Y); else ctx.moveTo(X, Y);
           last = [X, Y];
