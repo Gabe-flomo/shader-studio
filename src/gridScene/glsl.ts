@@ -210,6 +210,8 @@ export function activeRules(spec: GridSceneSpec): GridRule[] {
 const KIND_REACH: Record<ShapeKind, number> = {
   circle: 1, square: 1.21, ring: 1, diamond: 1, triangle: 1.04, hexagon: 1.04, star: 1.1, plus: 1.05, cross: 1.05, heart: 1.35, picture: 1.42,
 };
+/** Glow: the distance (cells from a shape's edge) it starts fading at, and where it is gone. Below 1: the search finds every shape within a cell. */
+export const GLOW_FADE: readonly [number, number] = [0.35, 0.95];
 /** The widest a search goes (cells either side): 13 × 13 cells. Its loops are this long and stop early at the live radius. */
 export const MAX_SEARCH = 6;
 const isWrap = (p: MotionPath) => p === 'travel' || p === 'hop';
@@ -290,12 +292,13 @@ const MAX_CONTRACTION = 0.8;
 
 /**
  * The search radius (cells either side, before the cap) a shape's search uses at its spec's values,
- * as the shader works it out live: for the UI's warning and the tests. Glow adds a cell.
+ * as the shader works it out live: for the UI's warning and the tests. Glow adds a cell to the reach
+ * (every shape within a cell of the point is found, so the glow can fade out by then: GLOW_FADE).
  */
 export function searchRadiusAt(spec: GridSceneSpec, s: GShape, fill = false): number {
-  const rch = shapeReach(spec, s, fill);
   const glow = spec.look.glow ? 1 : 0;
-  if (fill) return Math.floor(rch + 0.5 + glow);
+  const rch = shapeReach(spec, s, fill) + glow;
+  if (fill) return Math.floor(rch + 0.5);
   const m = s.motion;
   const lag = Math.abs(m.lag) < 1e-6 ? 0 : Math.abs(m.lag);
   const big = Math.max(Math.abs(m.xy[0]), Math.abs(m.xy[1]));
@@ -309,7 +312,7 @@ export function searchRadiusAt(spec: GridSceneSpec, s: GShape, fill = false): nu
     const Ri = L < MAX_CONTRACTION ? rch / (1 - L) : Infinity;
     R = Math.min(Ri, rch + A);
   }
-  return Math.floor(R + 0.5 + glow);
+  return Math.floor(R + 0.5);
 }
 
 /** Would a shape's search be cut by the cap at its spec's values (the builder says so)? */
@@ -337,7 +340,10 @@ function searchLoop(spec: GridSceneSpec, s: GShape, X: string, rch: string, glow
     `${p}  }`,
     `${p}}`,
   ];
-  const cap = (r: string) => `min(${gf(M)}, floor(${r} + ${glow ? '1.5' : '0.5'}))`;
+  const cap = (r: string) => `min(${gf(M)}, floor(${r} + 0.5))`;
+  // With glow the search reaches a cell further (inside the motion's inverse, so lag widens it too):
+  // every shape within a cell of X is found, and the glow fades out by then (GLOW_FADE).
+  if (glow) rch = `(${rch} + 1.0)`;
   if (!isWrap(s.motion.path)) {
     return [`${pad}{`, `${pad}  float R;`, `${pad}  vec2 hc = gs_find${s.id}$(${X}, t, ${m}, ${rch}, R);`, `${pad}  R = ${cap('R')};`, ...inner(`${pad}  `), `${pad}}`];
   }
@@ -416,8 +422,17 @@ function motionFns(spec: GridSceneSpec, s: GShape): string[] {
       '  den = abs(den) < 0.05 ? (den < 0.0 ? -0.05 : 0.05) : den;',
       '  vec2 w = X - 0.5 - a * T;',
       '  vec2 h0 = w - v * ((w.x + w.y) / den);',
-      '  vec2 wk = w + (k - floor(h0 / dims)) * dims;',
-      '  return wk - v * ((wk.x + wk.y) / den);',
+      // Wrap n (whole grids) moves the home by M n = dims n − v (dims · n) / den: the lag couples x and y, so a
+      // wrap in one moves the other too. n is solved so the home lands mid-grid (M⁻¹, det = dims.x dims.y / den),
+      // then k steps to the copies round it. (Rounding h0 / dims alone was off by v · dims · n / den cells, which
+      // grows with time: shapes went missing in bands, cut by a seam.)
+      '  vec2 c0 = vec2(dims.x - v.x * dims.x / den, -v.y * dims.x / den);',
+      '  vec2 c1 = vec2(-v.x * dims.y / den, dims.y - v.y * dims.y / den);',
+      '  vec2 g = 0.5 * dims - h0;',
+      '  float det = c0.x * c1.y - c1.x * c0.y;',
+      '  vec2 nr = vec2(c1.y * g.x - c1.x * g.y, c0.x * g.y - c0.y * g.x) / det;',
+      '  vec2 n = floor(nr + 0.5) + k;',
+      '  return h0 + c0 * n.x + c1 * n.y;',
       '}',
       `float gs_spread${s.id}$(vec4 m, float rch) {`,
       '  float lag = abs(m.w) < 1.0e-6 ? 0.0 : abs(m.w);',
@@ -767,6 +782,10 @@ export function gridProgram(spec: GridSceneSpec, opts: { brute?: boolean } = {})
       L.push('  if (pw.w > -0.5) col = mix(col, tc.rgb, clamp(tc.a, 0.0, 1.0));');
     }
   }
+  // The glow reads the distance: past GLOW_FADE[0] it is stretched to "far" by GLOW_FADE[1] cells, where the
+  // search is still sure to have found every shape (it reaches a cell further with glow), so the glow
+  // never steps where neighbouring pixels search different cells.
+  if (look.glow) L.push(`  if (best > ${gf(GLOW_FADE[0])}) best = best >= ${gf(GLOW_FADE[1])} ? 1.0e5 : best / max(1.0 - smoothstep(${gf(GLOW_FADE[0])}, ${gf(GLOW_FADE[1])}, best), 1.0e-5);`);
   L.push('  hp = vec4(gs_uv$(hp.xy), gs_uv$(hp.zw));');
   L.push(`  return vec4(col, best * ${cs});`);
   L.push('}');

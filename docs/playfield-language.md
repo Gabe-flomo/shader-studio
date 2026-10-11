@@ -69,7 +69,10 @@ Edit verbs leave "the" out: `set glow falloff=8`. A clause that is only a refere
 
 - A header decides: `grid`, `agents` / `species`, a render mode (`surface`, `volumetric`, `glass`, `gi`).
 - Otherwise a line with a 3D-only word (a 3D shape, a scene setting, an `@` warp) is a 3D scene, and anything else a 2D picture or an edit.
-- A line that mixes 3D-only and 2D-only words is refused: one line is one or the other.
+- A 2D Scene Builder recipe is told apart by the words only it has (`combine-blocks`, `space-block`, `fn-shape`, `picture-mode=`, `mask-cut=`, `mask-invert`, and the 2D motions `@orbit( )`, `@bob( )`, `@spin( )`, `@pulse( )`, `@ring( )`), or by being the one reading that works where the 3D scene, Grid Rules or picture reading fails. It builds a new 2D scene (Edit in 2D Scene Builder opens it).
+- A Splat builder recipe starts with `scan` and builds a new Splat scene. A scan file this device doesn't have becomes the example scan, with a note; nodes added by hand in the other project (`yours`) are left out.
+- Every builder's copied recipe pastes in, multi-line or joined by ` · `. A picture it names from another project (`texture brick node=…`) gets an empty Texture node named after it.
+- A line that mixes 3D-only and 2D-only words and is no 2D Scene Builder recipe either is refused: one line is one or the other.
 - `grid` is needed only where a preset's name is also another word (`grid swirl`, `grid ripples`).
 - Agent rules on one line follow their species after a colon: `species Slime: always do wander 7deg`.
 
