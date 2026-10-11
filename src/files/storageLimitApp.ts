@@ -39,7 +39,7 @@ export function installStorageLimit(): void {
   setUsageSources({
     local: localTotal,
     async media() {
-      const [images, videos] = await Promise.all([listImages(), listVideos()]);
+      const [images, videos] = await Promise.all([listImages(), listVideos({ withSplats: true })]);
       return {
         images: images.reduce((n, i) => n + i.bytes, 0),
         videos: videos.filter(v => !isAudioType(v.type)).reduce((n, v) => n + v.bytes, 0),

@@ -33,7 +33,7 @@ export const FIELD_TYPES: ReadonlySet<string> = new Set(['float', 'vec2', 'vec3'
 
 /** Sinks and markers: nothing of their own to show, so no eye and no area. */
 export const SINK_TYPES: ReadonlySet<string> = new Set([
-  'output', 'vec4Output', 'agentOutput', 'agentStepOut', 'trailStepOut', 'agentProbeOut', 'agentGridOut',
+  'output', 'vec4Output', 'agentOutput', 'agentStepOut', 'trailStepOut', 'agentProbeOut', 'splatProbeOut', 'agentGridOut',
   'marchLoopOutput', 'passOutput', 'groupOutput', 'groupInput', 'shaderTextureOutput',
 ]);
 

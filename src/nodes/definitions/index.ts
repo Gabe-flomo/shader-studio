@@ -13,6 +13,7 @@ export { VideoInputNode };
 import { BakedNode } from './baked';
 import { DepthNode } from './depth';
 import { DepthCompositeNode, DepthLightNode, PictureEnvironmentNode } from './depthScene';
+import { SplatProbeOutNode, SplatSceneNode } from './splatScene';
 import { TimeCubeNode, TimeCubeViewNode, TimeSliceNode } from './timeCube';
 import { FrameStackNode } from './frameStack';
 export { BakedNode };
@@ -319,6 +320,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   depth: DepthNode,
   // Depth in 3D scenes (docs/depth-node.md): a picture with depth inside a ray-marched scene
   depthComposite: DepthCompositeNode,
+  splatScene: SplatSceneNode,
   depthLight: DepthLightNode,
   pictureEnvironment: PictureEnvironmentNode,
   // Time cube (docs/time-cube.md): a video as a box of time
@@ -550,6 +552,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   drawAgents: DrawAgentsNode,
   trailStepOut: TrailStepOutNode,
   agentProbeOut: AgentProbeOutNode,
+  splatProbeOut: SplatProbeOutNode,
   agentCollideScene: AgentCollideSceneNode,
   agentNeighbours: AgentNeighboursNode,
   agentRideCurve: AgentRideCurveNode,

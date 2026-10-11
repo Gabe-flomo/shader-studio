@@ -20,10 +20,11 @@ import { parseHandAnchor, triggerUsesHands, usesHands, type PlayAction, type Pla
 import { usesFace, usesPose } from '../types/playTracking';
 import type { PlayLayer } from '../types/playLayers';
 import { DEPTH_SOURCE_MARK } from '../nodes/definitions/depth';
+import { SPLAT_MARK } from '../nodes/definitions/splatScene';
 
 /** A kind of thing a web page doesn't run. */
-export type ExportOut = 'hands' | 'face' | 'pose' | 'camera' | 'midi' | 'mic' | 'depth';
-export const EXPORT_OUTS: readonly ExportOut[] = ['hands', 'face', 'pose', 'camera', 'midi', 'mic', 'depth'];
+export type ExportOut = 'hands' | 'face' | 'pose' | 'camera' | 'midi' | 'mic' | 'depth' | 'splats';
+export const EXPORT_OUTS: readonly ExportOut[] = ['hands', 'face', 'pose', 'camera', 'midi', 'mic', 'depth', 'splats'];
 
 /** What a web export runs, as the dialog and the docs list it. */
 export const EXPORT_SUPPORTED: readonly string[] = [
@@ -39,7 +40,7 @@ export const EXPORT_SUPPORTED: readonly string[] = [
 export interface ExportFrozen { kind: ExportOut; what: string; why: string }
 
 const NAMES: Record<ExportOut, string> = {
-  hands: 'Hand tracking', face: 'Face tracking', pose: 'Body (pose) tracking', camera: 'The camera', midi: 'MIDI', mic: 'The microphone and live audio', depth: 'The Depth node’s model',
+  hands: 'Hand tracking', face: 'Face tracking', pose: 'Body (pose) tracking', camera: 'The camera', midi: 'MIDI', mic: 'The microphone and live audio', depth: 'The Depth node’s model', splats: 'Splat Scene scans',
 };
 const WHY: Record<ExportOut, string> = {
   hands: 'Hand tracking won’t work on a web page; those controls will hold their current value.',
@@ -49,6 +50,7 @@ const WHY: Record<ExportOut, string> = {
   midi: 'MIDI won’t work on a web page; controls MIDI moves will hold their current value, and the pad grid and MIDI-played sounds stay quiet.',
   mic: 'The microphone and live audio won’t work on a web page; controls they move will hold their current value.',
   depth: 'The Depth node’s model won’t run on a web page, so its depth reads 0 there. Bake the depth (a video or an image) to bring it along.',
+  splats: 'Splat Scene scans don’t go onto web pages yet: the scan reads empty there and the rest of the scene draws as usual.',
 };
 
 /** The sentence for one kind, for tests and the docs. */
@@ -192,5 +194,7 @@ export function webExportScope(input: PlayHtmlInput): { input: PlayHtmlInput; fr
     const t = input.media?.textures?.[m[1]];
     if (!t?.src && !(t && t.bytes > 0)) kinds.add('depth');
   }
+  // A Splat Scene's scan is drawn by the app's raster pass, which pages don't have yet (docs/splat-scene.md).
+  if (shaders.includes(SPLAT_MARK)) kinds.add('splats');
   return { input: next, frozen: EXPORT_OUTS.filter(k => kinds.has(k)).map(exportFrozenText) };
 }

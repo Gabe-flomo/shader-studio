@@ -814,6 +814,8 @@ interface NodeGraphState {
   passes: import('../compiler/types').PassProgram[] | null;
   /** The Agents family's programs from the last compile (compiler/agentGraph.ts); null without one. */
   agents: import('../compiler/types').AgentsSpec | null;
+  /** Splat Scene nodes' probe programs (compiler/splatGraph.ts), drawn by lib/splats/engine.ts. */
+  splats: import('../compiler/types').SplatProbeProgram[] | null;
   /** With passes or agents: the nodes compiled into the final picture (Show passes). */
   finalNodeIds: string[] | null;
   /**
@@ -1906,6 +1908,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   echoConfig: null,
   passes: null,
   agents: null,
+  splats: null,
   finalNodeIds: null,
   programMap: null,
   showPasses: false,
@@ -5412,6 +5415,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       echoConfig: result.echo ?? null,
       passes: result.passes ?? null,
       agents: result.agents ?? null,
+      splats: result.splats ?? null,
       finalNodeIds: result.finalNodeIds ?? null,
       nodeSlugMap: result.nodeSlugMap ?? new Map(),
       // Probe values are read from the compiled program, so they only go

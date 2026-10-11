@@ -30,6 +30,7 @@ import { AGENT_3D_EXAMPLE_INDEX, AGENT_3D_EXAMPLE_KEYS } from './agentExamples3d
 import { SIM_AGENT_EXAMPLE_INDEX, SIM_AGENT_EXAMPLE_KEYS } from './agentExamplesSim';
 import { CONVERT_EXAMPLE_INDEX, CONVERT_EXAMPLE_KEYS } from './convertExampleIndex';
 import { BAKE_EXAMPLE_INDEX } from './bakeExamples';
+import { SPLAT_EXAMPLE_INDEX, SPLAT_EXAMPLE_KEYS } from './splatExamples';
 import { TIME_CUBE_EXAMPLE_INDEX, TIME_CUBE_EXAMPLE_KEYS } from './timeCubeExamples';
 import { FRAME_STACK_EXAMPLE_INDEX, FRAME_STACK_EXAMPLE_KEYS } from './frameStackExamples';
 import { FOURD_EXAMPLE_INDEX, FOURD_EXAMPLE_KEYS } from './fourDExamples';
@@ -240,6 +241,8 @@ export const EXAMPLE_INDEX: Record<string, ExampleIndexEntry> = {
   ...CONVERT_EXAMPLE_INDEX,
   // Bake (bakeExamples.ts, docs/bake.md): a heavy scene to freeze into a video, live effects on top.
   ...BAKE_EXAMPLE_INDEX,
+  // Splat Scene (splatExamples.ts, docs/splat-scene.md): a generated scan among ray-marched shapes.
+  ...SPLAT_EXAMPLE_INDEX,
   // Time cube (timeCubeExamples.ts, docs/time-cube.md): a video as a box of time, a colour key, slit-scan.
   ...TIME_CUBE_EXAMPLE_INDEX,
   // Frame stack (frameStackExamples.ts, docs/frame-stack.md): a video's frames as cards to arrange.
@@ -301,7 +304,7 @@ export const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: string
   { label: "Inputs",            color: ctp.teal, keys: ['midiGlowKeys'] },
   { label: "Blur & Lens",       color: ctp.blue, keys: ['motionBlurTrails','tiltShiftScene','dofOrbitOrbs','dofDepthBlur','comboBlurDirectional'] },
   { label: "Functions",         color: ctp.sapphire, keys: ['ringGlow'] },
-  { label: "3D Basics",         color: ctp.sky, keys: ['raymarchSpheres','rayMarchOutputs3D','shapesAndGround3D','softMetaballs3D','normalColorDemo'] },
+  { label: "3D Basics",         color: ctp.sky, keys: ['raymarchSpheres','rayMarchOutputs3D','shapesAndGround3D','softMetaballs3D','normalColorDemo', ...SPLAT_EXAMPLE_KEYS] },
   { label: "3D SDF",            color: ctp.sky, keys: [...REPEAT_SCENE_EXAMPLE_KEYS, ...CURVE_TRACE_3D_KEYS, 'sdfPolarRepeat','sdfBend3D','sdCrossScene3D','infinitePillars3D','spiralWorld3D','gyroidWarped','bakeHeavyScene','mlgWiggleTunnel','voxelTerrain'] },
   { label: "3D Lighting",       color: '#f9c468', keys: ['fresnelSchlickRim','refractDirFakeGlass','glassPhysical','glassMetaballs','litStillLife'] },
   { label: "GI Lighting",       color: ctp.green, keys: ['giSphereGround','giBoxFrame'] },
