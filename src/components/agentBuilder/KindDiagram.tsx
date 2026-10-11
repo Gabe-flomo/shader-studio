@@ -14,7 +14,13 @@
  *  - Life: brightness by age, with when it dies.
  *
  * And for any card with an "Only when…", where it applies: the shape on the picture, or a badge.
+ *
+ * With `edit`, the drawings are handles (DragHandle.tsx, maths in diagramDrag.ts): a force's arrow
+ * tip (its direction and strength), the attract point, a field layer's centre, size and direction
+ * (and an older typed-in mask's place and size), the view ring, an orbit's centre and radius, and
+ * Avoid edges' band.
  */
+import { useRef } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily } from '../../theme/tokens';
 import type { AgentRuleSet, RuleAction, RuleCondition } from '../../agentRules/spec';
@@ -29,7 +35,11 @@ import {
 import type { ViewRect } from '../builders/studio/LiveViewport';
 import { DiagramTags, type ViewportLink } from './ViewportLegend';
 import { FIELD_COLOURS, FORCE_PARTICLE, LEGEND_COLOURS, dimFor, num, tagCollector } from '../../agentBuilder/legend';
-import { FIELD_KINDS, fieldArrows, fieldFunction, layerSpec, normalizeFieldSpec } from '../../agentRules/fields';
+import { FIELD_KINDS, type FieldLayer, fieldArrows, fieldFunction, layerSpec, normalizeFieldSpec } from '../../agentRules/fields';
+import { patchAt } from '../../agentBuilder/behaviours';
+import { setNeighbours } from '../../agentBuilder/cards';
+import { angleOnScreen, dragBornSize, dragForce, dragMargin, dragPictureRadius, dragRadius, moved, snap } from '../../agentBuilder/diagramDrag';
+import { type DiagramEdit, DragHandle } from './DragHandle';
 
 type Act<K extends RuleAction['kind']> = Extract<RuleAction, { kind: K }>;
 const fmt = (v: number, d = 3) => String(Math.round(v * 10 ** d) / 10 ** d);
@@ -64,7 +74,7 @@ export function useDiagramLabel() {
   };
 }
 
-export function KindDiagram({ focus, cards, set, sp, box, viewRef, life, anchor, link }: {
+export function KindDiagram({ focus, cards, set, sp, box, viewRef, life, anchor, link, edit }: {
   focus: DiagramFocus; cards: readonly CardRead[]; set: AgentRuleSet; sp: number;
   box: { w: number; h: number; image: ViewRect };
   /** The view radius the Neighbours lens is magnified for (kept while a slider moves). */
@@ -75,8 +85,19 @@ export function KindDiagram({ focus, cards, set, sp, box, viewRef, life, anchor,
   anchor?: Pt;
   /** The legend's linking: the tags, and the drawings dimmed while another entry is lit. */
   link?: ViewportLink;
+  /** Dragging the drawings changes the settings (absent: drawn only). */
+  edit?: DiagramEdit;
 }) {
   const { list: tags, tag } = tagCollector();
+  // What a drag started from (a lens's scale, a point's place), so the drag doesn't feed back into itself.
+  const dragFrom = useRef<{ scale?: number; at?: Pt } | null>(null);
+  const handles: React.ReactNode[] = [];
+  const patch = (c: CardRead, p: object) => edit?.rules(patchAt(edit.set, edit.sp, c.at, p as Partial<RuleAction>));
+  const setLayer = (c: CardRead, k: number, p: Partial<FieldLayer>) => {
+    const spec = normalizeFieldSpec((c.action as Act<'field'>).spec);
+    patch(c, { spec: { ...spec, layers: spec.layers.map((l, i) => (i === k ? { ...l, ...p } : l)) } });
+  };
+  const from = (at: Pt) => ({ onStart: () => { dragFrom.current = { at }; }, onEnd: () => { dragFrom.current = null; } });
   const dim = (id: string) => dimFor(link, id);
   const im = box.image;
   const hotKey = focus.card;
@@ -131,6 +152,36 @@ export function KindDiagram({ focus, cards, set, sp, box, viewRef, life, anchor,
             const mc = m ? picToView(im, { x: m.x, y: m.y }) : null;
             const mr = m ? m.size * im.h / 2 : 0;
             const tagAt = ctr ?? (mc ? { x: mc.x, y: mc.y - mr } : arrows[Math.min(arrows.length - 1, Math.round(arrows.length * (0.2 + 0.15 * k)))]?.at ?? { x: im.x + 40, y: im.y + 30 });
+            if (edit && c.on) {
+              const info = FIELD_KINDS[l.kind];
+              const word = info.label;
+              if (ctr) handles.push(<DragHandle key={`${c.key}L${k}c`} id={`field-${k}-centre`} at={ctr} edit={edit} colour={col} cursor="move" card={c.key}
+                label={`Agent Builder: moved the ${word.toLowerCase()}`} hint={`Drag to move the ${word.toLowerCase()}`} {...from({ x: l.x ?? 0, y: l.y ?? 0 })}
+                onMove={(p, start) => setLayer(c, k, moved(im, dragFrom.current?.at ?? { x: l.x ?? 0, y: l.y ?? 0 }, start, p))} />);
+              const anchorPt = ctr ?? picToView(im, { x: 0, y: 0 });
+              if (ctr && info.size && l.size !== undefined) {
+                const sz = l.size * im.h / 2;
+                handles.push(<g key={`${c.key}L${k}r`}><circle cx={ctr.x} cy={ctr.y} r={sz} fill="none" stroke={col} strokeWidth={1} strokeDasharray="2 5" opacity={0.6} />
+                  <DragHandle id={`field-${k}-size`} at={{ x: ctr.x, y: ctr.y + sz }} edit={edit} colour={col} cursor="ns-resize" card={c.key}
+                    label={`Agent Builder: sized the ${word.toLowerCase()}`} hint={`Drag out or in: its ${info.size.label.toLowerCase()}`}
+                    onMove={p => setLayer(c, k, { size: Math.min(info.size!.max * 2, Math.max(info.size!.min, dragPictureRadius(ctr, p, im.h, info.size!.min))) })} /></g>);
+              }
+              if (info.angle) {
+                const a = l.angle ?? 0, tip = toward(anchorPt, 46 + k * 6, a);
+                handles.push(<g key={`${c.key}L${k}a`}><line x1={anchorPt.x} y1={anchorPt.y} x2={tip.x} y2={tip.y} stroke={col} strokeWidth={1.4} strokeDasharray="3 3" opacity={0.7} />
+                  <DragHandle id={`field-${k}-angle`} at={tip} edit={edit} colour={col} card={c.key}
+                    label={`Agent Builder: turned the ${word.toLowerCase()}`} hint="Drag round: which way it points"
+                    onMove={p => setLayer(c, k, { angle: snap(angleOnScreen(anchorPt, p), 1) })} /></g>);
+              }
+              if (m && mc && !m.region) {
+                handles.push(<DragHandle key={`${c.key}L${k}m`} id={`field-${k}-mask`} at={mc} edit={edit} colour={col} cursor="move" card={c.key}
+                  label="Agent Builder: moved a layer's region" hint="Drag to move where this layer acts" {...from({ x: m.x, y: m.y })}
+                  onMove={(p, start) => setLayer(c, k, { mask: { ...m, ...moved(im, dragFrom.current?.at ?? { x: m.x, y: m.y }, start, p) } })} />);
+                handles.push(<DragHandle key={`${c.key}L${k}ms`} id={`field-${k}-mask-size`} at={m.shape === 'circle' ? { x: mc.x + mr, y: mc.y } : { x: mc.x + mr, y: mc.y - mr }} edit={edit} colour={col} cursor="nesw-resize" card={c.key}
+                  label="Agent Builder: sized a layer's region" hint="Drag to size where this layer acts"
+                  onMove={p => setLayer(c, k, { mask: { ...m, size: m.shape === 'circle' ? dragPictureRadius(mc, p, im.h) : dragBornSize('box', mc, p, im.h) } })} />);
+              }
+            }
             return (
               <g key={k} data-field-layer={k} opacity={fade(k)}>
                 {m && mc && (m.shape === 'circle'
@@ -157,6 +208,9 @@ export function KindDiagram({ focus, cards, set, sp, box, viewRef, life, anchor,
           {tag(toward(P, len + 20, deg), c.key, num(a.strength, 2), `${c.key}-t`)}
         </g>,
       );
+      if (edit && c.on) handles.push(<DragHandle key={`${c.key}-h`} id={`${c.key}-tip`} at={to} edit={edit} colour={LEGEND_COLOURS[a.field === 'wind' ? 'wind' : 'gravity']} card={c.key} setting="strength"
+        label={`Agent Builder: dragged ${a.field === 'wind' ? 'the wind' : 'gravity'}`} hint="Drag the arrow's tip: round for its direction, out or in for its strength"
+        onMove={p => patch(c, dragForce(P, p, a.strength < 0 ? -1 : 1))} />);
     }
     for (const c of of(['attract'])) {
       const a = c.action as Act<'force'>;
@@ -180,6 +234,9 @@ export function KindDiagram({ focus, cards, set, sp, box, viewRef, life, anchor,
           {tag({ x: T.x, y: T.y + 88 }, c.key, `${num(a.strength, 2)}${a.field === 'mouse' ? ' · mouse' : ''}`, `${c.key}-t`)}
         </g>,
       );
+      if (edit && c.on && a.field !== 'mouse') handles.push(<DragHandle key={`${c.key}-h`} id={`${c.key}-point`} at={T} edit={edit} colour={LEGEND_COLOURS.attract} cursor="move" card={c.key} setting="x"
+        label="Agent Builder: moved the attract point" hint="Drag to move the point they are pulled to (or pushed from)" {...from({ x: a.x ?? 0, y: a.y ?? 0 })}
+        onMove={(p, start) => patch(c, moved(im, dragFrom.current?.at ?? { x: a.x ?? 0, y: a.y ?? 0 }, start, p))} />);
     }
     for (const c of of(['drag'])) {
       const a = c.action as Act<'drag'>;
@@ -226,6 +283,9 @@ export function KindDiagram({ focus, cards, set, sp, box, viewRef, life, anchor,
           {tag({ x: x1 - m - 60, y: y - 100 }, edgeCard.key, `${num(a.margin, 2)} · ≤ ${num(a.degrees, 1)}°`, 'edges-t')}
         </g>
       );
+      if (edit) handles.push(<DragHandle key="margin" id="edges-margin" at={{ x: im.x + im.w - m, y: im.y + im.h / 2 }} edit={edit} colour={LEGEND_COLOURS.avoidEdges} cursor="ew-resize" card={edgeCard.key} setting="margin"
+        label="Agent Builder: dragged Avoid edges" hint="Drag in or out: how far from the edge they start turning back"
+        onMove={p => patch(edgeCard, { margin: dragMargin(im.x + im.w, p, im.h) })} />);
     } else {
       const L = ringLens(box.w, box.h, viewRef, link?.freeLeft ?? 0);
       lens = L;
@@ -291,6 +351,12 @@ export function KindDiagram({ focus, cards, set, sp, box, viewRef, life, anchor,
           {focus.section === 'steering' && show(slow) && tag({ x: L.walker.x, y: L.walker.y + R + 26 }, slow!.key, `${counted} / ${num((slow!.action as Act<'slow'>).jam, 0)}`, 'slow')}
           <path d={`M ${L.walker.x} ${L.walker.y - 12} L ${L.walker.x + 7.5} ${L.walker.y + 7} L ${L.walker.x} ${L.walker.y + 3} L ${L.walker.x - 7.5} ${L.walker.y + 7} Z`} fill="#fff" />
           {tag({ x: L.walker.x + R * 0.72 + 30, y: L.walker.y - R * 0.72 }, 'view', num(radius, 3), 'sees')}
+          {edit && (
+            <DragHandle id="view-ring" at={{ x: L.walker.x + R * Math.SQRT1_2, y: L.walker.y + R * Math.SQRT1_2 }} edit={edit} colour={LEGEND_COLOURS.view} cursor="nwse-resize" setting="radius"
+              label="Agent Builder: dragged the view radius" hint="Drag out or in: how far it sees (View radius)"
+              onStart={() => { dragFrom.current = { scale: L.scale }; }} onEnd={() => { dragFrom.current = null; }}
+              onMove={p => edit.rules(setNeighbours(edit.set, { radius: dragRadius(L.walker, p, dragFrom.current?.scale ?? L.scale) }))} />
+          )}
           {tag({ x: L.walker.x, y: L.walker.y + Math.min(R + 22, L.r - 18) }, 'max', `${counted} / ${max}`, 'counts')}
         </g>
       );
@@ -311,6 +377,16 @@ export function KindDiagram({ focus, cards, set, sp, box, viewRef, life, anchor,
               <circle cx={g.c.x} cy={g.c.y} r={6} fill={LEGEND_COLOURS.orbit} stroke="#fff" strokeWidth={1.5} />
               <line x1={g.c.x} y1={g.c.y} x2={g.c.x + g.r} y2={g.c.y} stroke={INK} strokeWidth={1.2} strokeDasharray="3 4" />
               {tag({ x: g.c.x + g.r / 2, y: g.c.y + 16 }, c.key, `${num(a.distance, 2)} · ${a.cw ? '↻' : '↺'} ≤ ${num(a.degrees, 1)}°`, `${c.key}-t`)}
+              {edit && c.on && a.target === 'point' && (
+                <DragHandle id={`${c.key}-centre`} at={g.c} edit={edit} colour={LEGEND_COLOURS.orbit} cursor="move" card={c.key} setting="target"
+                  label="Agent Builder: moved the orbit" hint="Drag to move what they circle" {...from({ x: a.x ?? 0, y: a.y ?? 0 })}
+                  onMove={(p, start) => patch(c, moved(im, dragFrom.current?.at ?? { x: a.x ?? 0, y: a.y ?? 0 }, start, p))} />
+              )}
+              {edit && c.on && (
+                <DragHandle id={`${c.key}-radius`} at={{ x: g.c.x + g.r, y: g.c.y }} edit={edit} colour={LEGEND_COLOURS.orbit} cursor="ew-resize" card={c.key} setting="distance"
+                  label="Agent Builder: dragged the orbit's radius" hint="Drag out or in: the orbit's radius"
+                  onMove={p => patch(c, { distance: dragPictureRadius(g.c, p, im.h, 0.005) })} />
+              )}
             </g>
           );
         })}
@@ -354,6 +430,7 @@ export function KindDiagram({ focus, cards, set, sp, box, viewRef, life, anchor,
         <g clipPath="url(#ab-kind-lens)">{body}</g>
       </>}
       {!lens && body}
+      {handles}
       {only}
       <DiagramTags requests={tags} bounds={{ x: 0, y: 0, w: box.w, h: box.h }} link={link} />
     </svg>

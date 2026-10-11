@@ -115,6 +115,8 @@ export function setupOf(nodes: readonly GraphNode[], groupId: string): { group?:
 }
 
 let burst = { key: '', at: 0 };
+/** The next setting starts an undo step of its own (a diagram drag just ended: its step is closed). */
+export function endSetupBurst(): void { burst = { key: '', at: 0 }; }
 
 /**
  * A setting on a node round the group (the Emit's Shape, the Trail's Half-life, the group's Count,

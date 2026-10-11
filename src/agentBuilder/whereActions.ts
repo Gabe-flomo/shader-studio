@@ -3,6 +3,11 @@
  * the graph (or make a shape here) for a use, and it is wired where that use reads it, with the
  * rule set changed to match, as one undo step. Dragging a made shape writes its sliders (a burst of
  * moves is one undo step, and no recompile). Pure planning is where.ts; shapes are madeShapes.ts.
+ *
+ * Wiring three ways: a pick is an output of the graph, an output from a group, or something
+ * created new for it: a shape made here, a new Shader Texture (docs/texture-builder.md) or a new
+ * plain group, each a top-level node wired in as part of the same undo step. The new node's id is
+ * kept for the builder to open it ready to edit (`takeCreated`).
  */
 import type { GraphNode } from '../types/nodeGraph';
 import { useNodeGraphStore, undoManager } from '../store/useNodeGraphStore';
@@ -13,15 +18,19 @@ import { type AgentRuleSet, type RuleCondition, DEFAULT_COLLIDE } from '../agent
 import type { FieldMask } from '../agentRules/fields';
 import { type MadeShape, madeShapeName, madeShapeNode, madeShapePatch, shapeSliders } from './madeShapes';
 import {
-  type Region, type RegionOut, type WhereUse, adapterNode, maskCondition, maskSlotFor, needsAdapter, pruneMasks, regionAt, throughAdapter,
+  type Region, type RegionOut, type WhereUse, FOOD_AMOUNT, USE_WORDS, adapterNode, foodAdapterNode, foodResult, foodSampleNode, maskCondition, maskSlotFor, needsAdapter, pruneMasks, regionAt, throughAdapter,
 } from './where';
+import { makeShaderTexture } from '../nodes/shaderTextureStarters';
+import { group as groupNode, n } from '../store/graphBuilder';
 import { setSetupParam, setupOf } from './actions';
 
 export interface WherePick {
   /** A region of the graph… */
   region?: RegionOut;
-  /** …or a shape made here (a new node). */
+  /** …or a shape made here (a new node)… */
   make?: MadeShape;
+  /** …or a new top-level source: a Shader Texture (a texture) or a plain group (a shape). */
+  create?: 'shaderTexture' | 'group';
   /** Outside it instead of inside. */
   outside?: boolean;
 }
@@ -34,9 +43,59 @@ export interface WhereEdit {
   fieldMask?: (set: AgentRuleSet, m: FieldMask | undefined) => AgentRuleSet;
   /** The mask slot it reads now (re-picking may reuse it). */
   slot?: number;
+  /** food: the trail channel it is painted into (0–3). */
+  channel?: number;
 }
 
-const USE_LABEL: Record<WhereUse, string> = { onlyWhen: 'only when inside', fieldMask: 'a field layer\'s region', slope: 'Field ƒ', born: 'born inside', obstacle: 'walls' };
+const USE_LABEL: Record<WhereUse, string> = { onlyWhen: 'only when inside', fieldMask: 'a field layer\'s region', slope: 'Field ƒ', born: 'born inside', obstacle: 'walls', food: 'food' };
+
+/** The node the last pick created (a Shader Texture or a group), for the builder to open; read once. */
+let created: string | null = null;
+export function takeCreated(): string | null { const c = created; created = null; return c; }
+
+/**
+ * A new plain group whose one output is a shape's distance, for "Create new → A new group": inside, an
+ * Expression Block (a circle, with a note saying what to change), its Distance the group's output.
+ */
+export function newRegionGroup(id: string, innerId: string, x: number, y: number): GraphNode {
+  const inner = n('exprNode', innerId, 300, 160, {
+    label: 'Shape',
+    inputs: [{ name: 'uv', type: 'vec2', slider: null }, { name: 'r', type: 'float', slider: { min: 0.01, max: 2 } }],
+    r: 0.5, outputType: 'float', lines: [], result: 'length(uv) - r', expr: 'length(uv) - r',
+    __comment: [
+      'Shape (an Expression Block in a group made by the Agent Builder): a distance, below 0 inside. The group\'s Distance output feeds what you made it for (only when, born inside, walls, food…).',
+      'uv: where it is read (inside an Agents group: where each walker stands).',
+      'result: length(uv) − r, a circle of radius r round the middle. Write any shape here, or add nodes and wire them into the Distance output.',
+    ].join('\n'),
+  });
+  inner.inputs = { uv: { type: 'vec2', label: 'uv (vec2)' }, r: { type: 'float', label: 'r (float)' } } as GraphNode['inputs'];
+  inner.outputs = { result: { type: 'float', label: 'Result (float)' } };
+  const g = groupNode(id, x, y, { label: 'New region', iterations: 1, inputs: [], outputs: [{ key: 'out0', type: 'float', label: 'Distance', from: [innerId, 'result'] }], nodes: [inner] });
+  return { ...g, params: { ...g.params, __comment: 'A group made by the Agent Builder (Create new → A new group): its Distance output is a region (below 0 inside). Open it to change the shape.' } };
+}
+
+/** What a group's food reads now: its adapter (How much and the channel), or null. */
+export function foodNow(nodes: readonly GraphNode[], groupId: string): { adapter: string; amount: number; channel: number } | null {
+  const t = setupOf(nodes, groupId).trail;
+  const c = t?.inputs.add?.connection;
+  const a = c ? nodes.find(x => x.id === c.nodeId) : undefined;
+  const w = a?.params.whereAdapter as { use?: string; channel?: number } | undefined;
+  if (!a || w?.use !== 'food') return null;
+  return { adapter: a.id, amount: typeof a.params.amount === 'number' ? a.params.amount : FOOD_AMOUNT, channel: w.channel ?? 0 };
+}
+
+/** Food into another trail channel: the adapter's result rewritten (one undo step). */
+export function setFoodChannel(groupId: string, channel: number): void {
+  const st = useNodeGraphStore.getState();
+  const f = foodNow(st.nodes, groupId);
+  if (!f || f.channel === channel) return;
+  const a = st.nodes.find(x => x.id === f.adapter)!;
+  const w = a.params.whereAdapter as { kind: Region['kind']; outside?: boolean };
+  const result = foodResult(w.kind, channel, !!w.outside);
+  undoManager.push(st.nodes, { label: 'Agent Builder: food channel' });
+  useNodeGraphStore.setState({ nodes: st.nodes.map(x => (x.id === a.id ? { ...x, params: { ...x.params, result, expr: result, whereAdapter: { ...a.params.whereAdapter as object, channel } } } : x)) });
+  st.compile();
+}
 const conn = (o: RegionOut) => ({ nodeId: o.nodeId, outputKey: o.outputKey });
 
 /** What the group's mask socket `i` reads (through nothing: masks are wired straight). */
@@ -66,12 +125,26 @@ export function setWhere(groupId: string, use: WhereUse, pick: WherePick | null,
   let nodes = before.slice();
   const added: GraphNode[] = [];
   let region: Region | null = null;
+  const near = { at: { x: g0.position.x - 340, y: g0.position.y + 120 } };
   if (pick?.make) {
     const id = st.newNodeId();
     const node = madeShapeNode(id, pick.make, g0.position.x - 520, g0.position.y + 40, `"${USE_LABEL[use]}"`);
-    const [placed] = placeSetupInView(nodes, [node], st._viewportRectGetter?.() ?? null, { at: { x: g0.position.x - 340, y: g0.position.y + 120 } });
+    const [placed] = placeSetupInView(nodes, [node], st._viewportRectGetter?.() ?? null, near);
     added.push(placed);
     region = { nodeId: id, outputKey: 'result', kind: 'shape', label: madeShapeName(pick.make), made: pick.make };
+  } else if (pick?.create === 'shaderTexture') {
+    // A new Shader Texture (white discs on black to start), its Texture wired in.
+    if (!USE_WORDS[use].kinds.includes('texture')) return null;
+    const node = makeShaderTexture(() => useNodeGraphStore.getState().newNodeId(), { x: g0.position.x - 520, y: g0.position.y + 40 }, { starter: 'circles' });
+    const [placed] = placeSetupInView(nodes, [node], st._viewportRectGetter?.() ?? null, near);
+    added.push(placed);
+    region = { nodeId: placed.id, outputKey: 'texture', kind: 'texture', label: 'Shader Texture', from: 'Shader Texture', inside: placed.id };
+  } else if (pick?.create === 'group') {
+    // A new plain group: its Distance output (a circle to start) wired in.
+    const id = st.newNodeId(), inner = st.newNodeId();
+    const [placed] = placeSetupInView(nodes, [newRegionGroup(id, inner, g0.position.x - 520, g0.position.y + 40)], st._viewportRectGetter?.() ?? null, near);
+    added.push(placed);
+    region = { nodeId: id, outputKey: 'out0', kind: 'shape', label: 'New region', from: 'New region', inside: id };
   } else if (pick?.region) region = regionAt(nodes, pick.region);
   if (pick && !region) return null;
   nodes = [...nodes, ...added];
@@ -148,7 +221,34 @@ export function setWhere(groupId: string, use: WhereUse, pick: WherePick | null,
       g = wire(applyRulesToGroup(g, set), 'obstacle', adapt(region, 'obstacle'));
       break;
     }
+    case 'food': {
+      // Painted into the Trail field every step (its Add), through a Food block (How much, the channel).
+      const trail = setupOf(nodes, groupId).trail;
+      if (!trail?.inputs.add) { toast.info('No Trail field', { message: 'Food is painted into the trail: wire the group into a Deposit and a Trail field first.' }); return null; }
+      if (region?.kind === 'scene') return null;
+      const was = foodNow(nodes, groupId);
+      const { connection: _c, ...rest } = trail.inputs.add;
+      let t: GraphNode = { ...trail, inputs: { ...trail.inputs, add: rest } };
+      if (region) {
+        const at = { x: trail.position.x - 340, y: trail.position.y + 260 };
+        let sampleId: string | undefined;
+        if (region.kind === 'texture') {
+          sampleId = useNodeGraphStore.getState().newNodeId();
+          const [sm] = placeSetupInView(nodes, [foodSampleNode(sampleId, region, 0, 0)], st._viewportRectGetter?.() ?? null, { at: { x: at.x - 300, y: at.y } });
+          nodes.push(sm);
+          added.push(sm);
+        }
+        const id = useNodeGraphStore.getState().newNodeId();
+        const [a] = placeSetupInView(nodes, [foodAdapterNode(id, { ...region, outside, name: region.label, channel: edit.channel ?? was?.channel ?? 0, amount: was?.amount }, 0, 0, sampleId)], st._viewportRectGetter?.() ?? null, { at });
+        nodes.push(a);
+        added.push(a);
+        t = { ...t, inputs: { ...t.inputs, add: { ...rest, connection: { nodeId: id, outputKey: 'result' } } } };
+      }
+      nodes = nodes.map(x => (x.id === t.id ? t : x));
+      break;
+    }
   }
+  if (pick?.create && region) created = region.nodeId;
   nodes = dropOrphanAdapters(nodes.map(x => (x.id === groupId ? g : x)));
   undoManager.push(before, { label: `Agent Builder: ${USE_LABEL[use]}${region ? `: ${region.label}` : ' (none)'}` });
   useNodeGraphStore.setState({ nodes });
@@ -179,6 +279,11 @@ export function whereNow(nodes: readonly GraphNode[], groupId: string, use: Wher
       const c = e.params.shape === 'field' ? e.inputs.where?.connection : e.params.shape === 'picture' ? e.inputs.picture?.connection : null;
       const t = throughAdapter(nodes, c);
       return { region: t ? regionAt(nodes, t.out) : null, outside: !!t?.outside };
+    }
+    case 'food': {
+      const t = setupOf(nodes, groupId).trail;
+      const r = throughAdapter(nodes, t?.inputs.add?.connection);
+      return { region: r ? regionAt(nodes, r.out) : null, outside: !!r?.outside };
     }
     case 'obstacle': {
       const set = groupRules(g);

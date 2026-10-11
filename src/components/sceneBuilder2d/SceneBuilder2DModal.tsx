@@ -11,7 +11,7 @@ import { useSceneBuilder2D, type Builder2DTab } from '../../sceneBuilder2d/store
 import { buildFromBuilder2D } from '../../sceneBuilder2d/actions';
 import {
   COLOUR_BYS, MAX_DUP, MAX_LEVELS, MOTIONS, OUTPUT_SHOWS, SHAPES, SHAPE_BY_KIND, SPACES, SPACE_BY_KIND, TONE_MODES,
-  allShapes, findItem, itemName, itemSummary, newDup, newGroup, newMotion, newShape, newSpaceOp, nextId, num, opLabel, spaceSummary,
+  allShapes, findItem, itemName, itemSummary, newBlockOp, newCombineOp, newDup, newGroup, newMotion, newShape, newSpaceOp, nextId, num, opLabel, spaceSummary,
   type CombineOp, type GlowMode, type Item, type MotionKind, type ParamDef, type Scene2D, type ShapeSpec, type Show2D, type ToneMode, type Vec2, type Vec3,
 } from '../../sceneBuilder2d/spec';
 import { parseRecipe2D, printRecipe2D } from '../../sceneBuilder2d/recipe';
@@ -31,6 +31,14 @@ import { Toggle } from '../ui/Choice';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
 import { Preview2D, compileScene2D } from './Preview2D';
+import { BlockEditor, BlockLibrary, CombineEditor, SpaceView, WarpCanvas } from './SpaceBlocks';
+import { blockMap, combineMap, emptyBlock, type CombineSpec, type SpaceBlock } from '../../sceneBuilder2d/blocks';
+import { BLOCK_BY_ID } from '../../sceneBuilder2d/blockLibrary';
+import { SurpriseBar } from '../surprise/SurpriseBar';
+import { announceSurprise } from '../surprise/announce';
+import { newSeed } from '../../lib/surprise';
+import { finishBuilder } from '../../builders/finish';
+import { scene2dBuildIds } from '../../builders/finishScenes';
 
 const TABS: Array<{ id: Builder2DTab; label: string; icon: IconName; gapBefore?: boolean }> = [
   { id: 'space', label: 'Space', icon: 'wave' },
@@ -246,51 +254,99 @@ function FunctionPicker({ role, onPick }: { role: FnRole; onPick: (f: FnEntry) =
 function SpaceTab() {
   const tk = useTokens();
   const scene = useSceneBuilder2D(s => s.scene);
+  const [hover, setHover] = useState<number | null>(null);
+  const move = (i: number, dir: -1 | 1) => edit(d => { const j = i + dir; if (j < 0 || j >= d.space.length) return; [d.space[i], d.space[j]] = [d.space[j], d.space[i]]; });
+  const upd = (i: number) => (fn: (b: SpaceBlock) => void, key?: string) => edit(d => { const b = d.space[i]?.block; if (b) fn(b); }, key);
+  const updC = (i: number) => (fn: (c: CombineSpec) => void, key?: string) => edit(d => { const c = d.space[i]?.combine; if (c) fn(c); }, key);
+  const addBlock = (b: SpaceBlock) => edit(d => { d.space.push(newBlockOp(nextId(d, 'p'), b)); });
+  const hoverOp = hover !== null ? scene.space[hover] : null;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <BuilderNote>Space transforms change where every pixel looks before the shapes measure it, applied top to bottom. They bend everything after them: tile once and every shape repeats.</BuilderNote>
+      <SpaceView ops={scene.space} upTo={hover === null ? null : hover + 1} hoverName={hoverOp ? spaceSummary(hoverOp).label : undefined} />
       {scene.space.map((op, i) => {
+        const block = op.kind === 'block' ? op.block : undefined;
+        const comb = op.kind === 'combine' ? op.combine : undefined;
         const def = SPACE_BY_KIND[op.kind];
-        if (!def) return null;
+        if (!block && !comb && !def) return null;
         const sum = spaceSummary(op);
+        const order = <>
+          <IconButton icon="chevU" label="Earlier" size="sm" disabled={i === 0} onClick={() => move(i, -1)} />
+          <IconButton icon="chevD" label="Later" size="sm" disabled={i === scene.space.length - 1} onClick={() => move(i, 1)} />
+          <IconButton icon="trash" label="Remove" size="sm" onClick={() => edit(d => { d.space.splice(i, 1); })} />
+        </>;
         return (
-          <Card key={op.id} id={`sp2-${op.id}`} defaultOpen title={def.label} summary={sum.value}
-            actions={<>
-              <IconButton icon="chevU" label="Earlier" size="sm" disabled={i === 0} onClick={() => edit(d => { [d.space[i - 1], d.space[i]] = [d.space[i], d.space[i - 1]]; })} />
-              <IconButton icon="chevD" label="Later" size="sm" disabled={i === scene.space.length - 1} onClick={() => edit(d => { [d.space[i + 1], d.space[i]] = [d.space[i], d.space[i + 1]]; })} />
-              <IconButton icon="trash" label="Remove" size="sm" onClick={() => edit(d => { d.space.splice(i, 1); })} />
-            </>}>
-            <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-              <Thumb k={JSON.stringify(op)} make={() => renderSpaceThumbnail(op, 64)} size={64} />
-              <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <BuilderNote>{op.kind === 'fn' ? `${String(op.values.name)} (${String(op.values.from || 'a function')}): ${def.blurb}` : def.blurb}</BuilderNote>
-                {op.kind === 'fn' && <pre style={{ margin: 0, maxHeight: 140, overflow: 'auto', padding: 8, borderRadius: radius.sm, background: tk.bg.field, font: `500 10.5px/1.5 ${fontFamily.mono}`, color: tk.text.secondary }}>{String(op.values.code ?? '')}</pre>}
-                {def.select && (
-                  <Row label={def.select.label}>
-                    <Select ariaLabel={def.select.label} value={String(op.values[def.select.key] ?? def.select.def)} options={def.select.options.map(o => ({ value: o, label: o }))}
-                      onChange={v => edit(d => { d.space[i].values[def.select!.key] = v; })} />
-                  </Row>
-                )}
-                {def.params.map(p => (
-                  <ParamControl key={p.key} p={p} keyBase={op.id} value={op.values[p.key]} onChange={v => edit(d => { d.space[i].values[p.key] = v; }, `sp:${op.id}:${p.key}`)} />
-                ))}
-              </div>
-            </div>
-          </Card>
+          <div key={op.id} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(h => (h === i ? null : h))} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {i > 0 && <span aria-hidden style={{ alignSelf: 'center', font: `600 10.5px ${fontFamily.mono}`, color: tk.text.faint }}>↓ uv</span>}
+            {block ? (
+              <Card id={`sp2-${op.id}`} defaultOpen title={sum.label} summary={sum.value}
+                actions={<>
+                  <IconButton icon="link" label="Combine with another block (add, subtract, multiply, blend)" size="sm"
+                    onClick={() => edit(d => { const b = d.space[i].block; if (b) d.space[i] = newCombineOp(d.space[i].id, b, emptyBlock(), 'add'); })} />
+                  {order}
+                </>}>
+                <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                  <WarpCanvas map={() => blockMap(block, 1)} k={JSON.stringify(block)} size={72} title="A grid through this block alone" />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    {block.lib && BLOCK_BY_ID[block.lib] && <BuilderNote>{BLOCK_BY_ID[block.lib].blurb}</BuilderNote>}
+                    <BlockEditor block={block} idBase={`sp:${op.id}`} update={upd(i)} />
+                  </div>
+                </div>
+              </Card>
+            ) : comb ? (
+              <Card id={`sp2-${op.id}`} defaultOpen title={sum.label} summary={sum.value}
+                actions={<>
+                  <Button size="sm" variant="ghost" title="Undo the combine: A and B become two blocks in a chain (A, then B)"
+                    onClick={() => edit(d => { const c = d.space[i].combine; if (!c) return; const id2 = nextId(d, 'p'); d.space.splice(i, 1, newBlockOp(d.space[i].id, c.a), newBlockOp(id2, c.b)); })}>Split</Button>
+                  {order}
+                </>}>
+                <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                  <WarpCanvas map={() => combineMap(comb, 1)} k={JSON.stringify(comb)} size={72} title="A grid through the combine" />
+                  <div style={{ flex: 1, minWidth: 0 }}><CombineEditor spec={comb} idBase={`sp:${op.id}`} update={updC(i)} /></div>
+                </div>
+              </Card>
+            ) : def && (
+              <Card id={`sp2-${op.id}`} defaultOpen title={def.label} summary={sum.value} actions={order}>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                  <Thumb k={JSON.stringify(op)} make={() => renderSpaceThumbnail(op, 64)} size={64} />
+                  <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <BuilderNote>{op.kind === 'fn' ? `${String(op.values.name)} (${String(op.values.from || 'a function')}): ${def.blurb}` : def.blurb}</BuilderNote>
+                    {op.kind === 'fn' && <pre style={{ margin: 0, maxHeight: 140, overflow: 'auto', padding: 8, borderRadius: radius.sm, background: tk.bg.field, font: `500 10.5px/1.5 ${fontFamily.mono}`, color: tk.text.secondary }}>{String(op.values.code ?? '')}</pre>}
+                    {def.select && (
+                      <Row label={def.select.label}>
+                        <Select ariaLabel={def.select.label} value={String(op.values[def.select.key] ?? def.select.def)} options={def.select.options.map(o => ({ value: o, label: o }))}
+                          onChange={v => edit(d => { d.space[i].values[def.select!.key] = v; })} />
+                      </Row>
+                    )}
+                    {def.params.map(p => (
+                      <ParamControl key={p.key} p={p} keyBase={op.id} value={op.values[p.key]} onChange={v => edit(d => { d.space[i].values[p.key] = v; }, `sp:${op.id}:${p.key}`)} />
+                    ))}
+                  </div>
+                </div>
+              </Card>
+            )}
+          </div>
         );
       })}
-      <BuilderLabel>Add a space transform</BuilderLabel>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-        {SPACES.filter(sp => sp.kind !== 'fn').map(sp => (
-          <button key={sp.kind} type="button" title={sp.blurb} style={tile(tk)}
-            onClick={() => edit(d => { d.space.push(newSpaceOp(sp.kind, nextId(d, 'p'))); })}>
-            <Thumb k={`space:${sp.kind}`} make={() => renderSpaceThumbnail(newSpaceOp(sp.kind, 'x'), 44)} />
-            {sp.label}
-          </button>
-        ))}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+        <BuilderLabel hint="A block is up to three lines like an Expression Block: uv.x, uv.y or uv, then =, +=, -= or *=, then any expression of x, y, uv and t. Blocks chain: each one's uv feeds the next. Link (on a block) combines two blocks instead.">Add a block</BuilderLabel>
+        <span style={{ flex: 1 }} />
+        <Button size="sm" variant="ghost" icon="plus" onClick={() => addBlock(emptyBlock())}>Empty block</Button>
       </div>
-      <BuilderLabel hint="A GLSL function vec2 f(vec2 p[, float t]) that bends space: built in, or found in your code and the examples. It becomes a Custom Function node.">Add a function</BuilderLabel>
-      <FunctionPicker role="space" onPick={f => edit(d => { d.space.push(newSpaceOp('fn', nextId(d, 'p'), { name: f.name, code: f.code, timed: f.timed ? 1 : 0, from: f.from })); })} />
+      <BlockLibrary onPick={addBlock} />
+      <Card id="sp2-builtins" title="Built-in transforms" summary="zoom, rotate, tile, mirror, kaleidoscope… as their own nodes">
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {SPACES.filter(sp => sp.kind !== 'fn').map(sp => (
+            <button key={sp.kind} type="button" title={sp.blurb} style={tile(tk)}
+              onClick={() => edit(d => { d.space.push(newSpaceOp(sp.kind, nextId(d, 'p'))); })}>
+              <Thumb k={`space:${sp.kind}`} make={() => renderSpaceThumbnail(newSpaceOp(sp.kind, 'x'), 44)} />
+              {sp.label}
+            </button>
+          ))}
+        </div>
+      </Card>
+      <Card id="sp2-functions" title="Add a function" summary="vec2 f(vec2 p[, float t]) from the built-ins, your code and the examples">
+        <FunctionPicker role="space" onPick={f => edit(d => { d.space.push(newSpaceOp('fn', nextId(d, 'p'), { name: f.name, code: f.code, timed: f.timed ? 1 : 0, from: f.from })); })} />
+      </Card>
     </div>
   );
 }
@@ -592,7 +648,7 @@ function PreviewPanel() {
       <BuilderLabel>Preview</BuilderLabel>
       <Preview2D scene={scene} />
       <BuilderLabel meta={`${c.nodes} nodes`}>What Build makes</BuilderLabel>
-      <BuilderNote>UV → {scene.space.length ? `${scene.space.length} space transform${scene.space.length === 1 ? '' : 's'} → ` : ''}{allShapes(scene).length} shape{allShapes(scene).length === 1 ? '' : 's'} with their placing, motion and copies{scene.grid ? ' and a grid (one Expression Block, line by line)' : ''} → colour and glow{scene.look.tone !== 'none' ? ' → Tone Map' : ''} → the Output. Every node gets a note.</BuilderNote>
+      <BuilderNote>UV → {scene.space.length ? `${scene.space.length} space transform${scene.space.length === 1 ? '' : 's'} (blocks as Expression Blocks with sliders) → ` : ''}{allShapes(scene).length} shape{allShapes(scene).length === 1 ? '' : 's'} with their placing, motion and copies{scene.grid ? ' and a grid (one Expression Block, line by line)' : ''} → colour and glow{scene.look.tone !== 'none' ? ' → Tone Map' : ''} → the Output. Every node gets a note.</BuilderNote>
     </div>
   );
 }
@@ -608,6 +664,7 @@ export function SceneBuilder2DModal() {
   const canUndo = useSceneBuilder2D(s => s.past.length > 0);
   const canRedo = useSceneBuilder2D(s => s.future.length > 0);
   const dirty = useSceneBuilder2D(s => s.dirty);
+  const surpriseSeed = useSceneBuilder2D(s => s.surpriseSeed);
   const targetSceneId = useSceneBuilder2D(s => s.targetSceneId);
   const targetExists = useNodeGraphStore(s => !!targetSceneId && s.nodes.some(n => n.id === targetSceneId));
   const editing = !!targetSceneId && targetExists;
@@ -640,6 +697,17 @@ export function SceneBuilder2DModal() {
       left={{ label: 'Layers', icon: 'layers', width: 260, content: <LayerList /> }}
       right={{ label: 'Preview', icon: 'eye', width: 340, content: <PreviewPanel /> }}
       headerActions={<>
+        <SurpriseBar seed={surpriseSeed} title="A random scene from a new seed: space blocks, shapes, motion and a look (one undo step)" onSurprise={seed => {
+          useSceneBuilder2D.getState().surprise(seed);
+          const made = useSceneBuilder2D.getState().scene;
+          announceSurprise({
+            title: '2D scene surprise', seed,
+            message: `${made.space.length} space transform${made.space.length === 1 ? '' : 's'} · ${made.layers.length} shape${made.layers.length === 1 ? '' : 's'}. Build puts it on the canvas.`,
+            reroll: () => { undo(); useSceneBuilder2D.getState().surprise(newSeed()); },
+            undo: () => undo(),
+            stillCurrent: () => useSceneBuilder2D.getState().scene === made,
+          });
+        }} />
         <IconButton icon="undo" label="Undo" shortcut="cmd+z" disabled={!canUndo} onClick={undo} />
         <IconButton icon="redo" label="Redo" shortcut="cmd+shift+z" disabled={!canRedo} onClick={redo} />
       </>}
@@ -648,7 +716,7 @@ export function SceneBuilder2DModal() {
         <BuilderNote>{editing ? 'Rebuild replaces the scene it was built as, keeping settings you changed on its nodes.' : 'Build adds the graph to the canvas and shows it on the Output.'}</BuilderNote>
         <span style={{ flex: 1 }} />
         {dirty && <BuilderNote style={{ color: tk.text.faint }}>Not built yet</BuilderNote>}
-        <Button onClick={close}>Done</Button>
+        <Button onClick={() => finishBuilder(close, scene2dBuildIds(useSceneBuilder2D.getState().targetSceneId))}>Done</Button>
         <Button variant="primary" icon="rebuild" disabled={!shapes && !scene.grid} onClick={() => buildFromBuilder2D(false)}>{editing ? 'Rebuild' : 'Build'}</Button>
       </>}
     >

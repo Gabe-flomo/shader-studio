@@ -45,6 +45,7 @@ import {
 } from '../../gridRules/spec';
 import { gridAsNodesProblem } from '../../store/gridRulesAsNodes';
 import type { GraphNode } from '../../types/nodeGraph';
+import { finishBuilder } from '../../builders/finish';
 
 /** The rule types this editor offers (Patterns and Blocks have their own forms). */
 const EDITOR_RULE_TYPES: GridRuleType[] = ['count', 'stages', 'patterns', 'blocks', 'smooth'];
@@ -101,7 +102,7 @@ function GridRulesWindow({ node, tab, setTab, tabs, onClose }: {
         </Button>
         <BuilderNote>{problem ?? 'Every change applies as you make it; switches and sliders never recompile.'}</BuilderNote>
         <span style={{ flex: 1 }} />
-        <Button variant="primary" onClick={onClose}>Done</Button>
+        <Button variant="primary" onClick={() => finishBuilder(onClose, [node.id])}>Done</Button>
       </>}
     >
       <div style={{ flex: 1, padding: '16px 22px 22px', display: 'flex', flexDirection: 'column', gap: 18, font: `12.5px ${fontFamily.ui}`, color: tk.text.primary }} data-testid="grid-rule-form" data-grid-tab={tab}>

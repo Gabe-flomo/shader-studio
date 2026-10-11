@@ -39,6 +39,36 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.140',
+    date: '2026-10-10',
+    title: 'Transform any space',
+    highlights: [
+      { area: 'Studio', text: 'Transform: one node that moves, turns and scales 2D, 3D or 4D space. Place 2D is now called Transform 2D.' },
+      { area: 'Studio', text: 'SDF Fill no longer draws faint lines along grid cell edges (Pixel hearts and other cell scenes).' },
+      { area: 'Studio', text: 'Builders: Done closes the builder and zooms to what it built. Socket tooltips wrap and stay on screen, without the browser tooltip doubling them.' },
+      { area: 'Files', text: 'Fixed: small web export pages showed only black. The mouse now works in them too.' },
+    ],
+  },
+  {
+    id: '2026.10.139',
+    date: '2026-10-10',
+    title: 'Drag the diagrams',
+    highlights: [
+      { area: 'Studio', text: 'Agent Builder: drag the diagrams (feelers, turn arcs, Born, arrows, fields, view ring) and the sliders follow, one undo per drag.' },
+      { area: 'Studio', text: 'Agent Builder: any input can be wired from the graph, from a group, or a new Shader Texture or group. The Sensors demo walker now rides the trail.' },
+      { area: 'Studio', text: 'Agent Builder: text as food (slime grows into the letters) or as a wall, in a smooth shader-drawn font you can edit and drag.' },
+    ],
+  },
+  {
+    id: '2026.10.138',
+    date: '2026-10-10',
+    title: 'Space blocks',
+    highlights: [
+      { area: 'Studio', text: '2D Scene Builder: space blocks of uv.x / uv.y / uv lines with x, y and t, a library of 37 warps, Random offers three, and blocks chain or combine.' },
+      { area: 'Studio', text: '2D Scene Builder: Surprise me makes a whole scene (warps, shapes, motion and colours) from a seed, as one undo step.' },
+    ],
+  },
+  {
     id: '2026.10.137',
     date: '2026-10-10',
     title: 'Shader Texture and small exports',

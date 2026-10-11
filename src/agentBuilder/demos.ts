@@ -106,6 +106,40 @@ function throwParticle(p0: Pt, v0: Pt, period: number, force: (p: Pt, t: number)
 const dirOf = (deg: number): Pt => ({ x: Math.cos(deg * DEG), y: Math.sin(deg * DEG) });
 
 /** The demo a focus view plays for a legend entry. */
+// ── The Sensors demo's walker ───────────────────────────────────────────────
+
+/** The Sensors demo's trail: a wave across the panel. */
+export const SENSES_TRAIL = (x: number) => 0.35 * Math.sin(x * 1.7);
+/** How strongly the trail smells at `p`: the line with a soft glow round it (the trail spreads), so feelers off it still smell which way it is. */
+const sensesSmell = (p: Pt) => { const d = p.y - SENSES_TRAIL(p.x); return Math.exp(-(d * d) / (2 * 0.12 * 0.12)); };
+/** The slime starter's How far ahead: the demo's feelers are 0.3 long at this. */
+const SENSES_REF = 0.03;
+
+/**
+ * The Sensors demo's walker (field guide 2.4): three feelers How far ahead (scaled into the panel
+ * from the live value, 0.3 at the slime's 0.03) at ±How wide; each step it keeps on when the centre
+ * smells most, turns toward the stronger side (away from it with Avoid it), or picks a side when both
+ * beat the centre. Its turn a step is How sharply, eased for the demo's longer steps, so it swings
+ * onto the trail and then rides along it. Starts below the trail, heading up and to the right.
+ */
+export function sensesWalk(spec: { angle: number; turn: number; away: boolean; distance?: number; edges?: DemoEdges }, steps: number) {
+  const D = Math.min(0.7, Math.max(0.1, 0.3 * (spec.distance ?? SENSES_REF) / SENSES_REF));
+  const a = Math.min(90, Math.max(0, spec.angle)) * DEG;
+  const speed = 0.8;
+  const turn = Math.min(Math.max(0, spec.turn), 90) * DEG * 0.12 * (spec.away ? -1 : 1);
+  let p: Pt = { x: -1.3, y: SENSES_TRAIL(-1.3) - 0.4 }, h = Math.atan(0.35 * 1.7 * Math.cos(-1.3 * 1.7)) + 20 * DEG;
+  const track: Array<Pt & { h: number; read: [number, number, number] }> = [];
+  const rnd = rand(4);
+  for (let k = 0; k <= steps; k++) {
+    const feel = [h + a, h, h - a].map(q => sensesSmell({ x: p.x + Math.cos(q) * D, y: p.y + Math.sin(q) * D })) as [number, number, number];
+    track.push({ ...p, h, read: feel });
+    const [L, C, R] = feel;
+    if (C >= L && C >= R) { /* straight on */ } else if (L > C && R > C) h += turn * (rnd() < 0.5 ? 1 : -1); else if (L > R) h += turn; else if (R > L) h -= turn;
+    ({ p, h } = keepIn({ x: p.x + Math.cos(h) * speed * DT, y: p.y + Math.sin(h) * speed * DT }, h, spec.edges));
+  }
+  return { track, D, a };
+}
+
 export function makeDemo(spec: DemoSpec, colour = '#ff9a6b'): Demo {
   switch (spec.kind) {
     case 'gravity': case 'wind': {
@@ -461,22 +495,9 @@ export function makeDemo(spec: DemoSpec, colour = '#ff9a6b'): Demo {
     }
     case 'senses': {
       // A trail along a wave; three feelers read it, and it turns toward (or away from) the strongest.
-      const period = 6, D = 0.32, speed = 0.5;
-      const curve = (x: number) => 0.35 * Math.sin(x * 1.7);
-      const smell = (p: Pt) => Math.exp(-((p.y - curve(p.x)) ** 2) / 0.02);
-      const a = Math.max(0, spec.angle) * DEG;
-      let p = { x: -1.4, y: -0.55 }, h = 25 * DEG;
-      const track: Array<Pt & { h: number; read: [number, number, number] }> = [];
-      const rnd = rand(4);
-      for (let k = 0; k <= period * DEMO_FPS; k++) {
-        const feel = [h + a, h, h - a].map(q => smell({ x: p.x + Math.cos(q) * D, y: p.y + Math.sin(q) * D })) as [number, number, number];
-        track.push({ ...p, h, read: feel });
-        const [L, C, Rr] = feel;
-        const step = perStep(spec.turn) * (spec.away ? -1 : 1);
-        if (C > L && C > Rr) { /* straight on */ } else if (L > C && Rr > C) h += step * (rnd() < 0.5 ? 1 : -1); else if (L > Rr) h += step; else if (Rr > L) h -= step;
-        ({ p, h } = keepIn({ x: p.x + Math.cos(h) * speed * DT, y: p.y + Math.sin(h) * speed * DT }, h, spec.edges));
-      }
-      const wave = Array.from({ length: 65 }, (_, i) => { const x = BOX.x0 + (i / 64) * (BOX.x1 - BOX.x0); return { x, y: curve(x) }; });
+      const period = 4;
+      const { track, D, a } = sensesWalk(spec, period * DEMO_FPS);
+      const wave = Array.from({ length: 65 }, (_, i) => { const x = BOX.x0 + (i / 64) * (BOX.x1 - BOX.x0); return { x, y: SENSES_TRAIL(x) }; });
       return {
         period, bounds: BOX, key: [{ colour: '#e8a33a', label: 'the trail' }, { colour, label: 'its three feelers (bright: smells more)' }],
         frame(t) {

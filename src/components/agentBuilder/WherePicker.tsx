@@ -16,8 +16,10 @@ import { Icon } from '../ui/Icon';
 import { Segmented } from '../ui/Choice';
 import { Field } from '../ui/Field';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
-import { type Region, type WhereUse, REGION_WORDS, USE_WORDS, listRegions, regionsFor } from '../../agentBuilder/where';
+import { type Region, type WhereUse, REGION_WORDS, USE_WORDS, listRegions, regionsFor, takesTexture } from '../../agentBuilder/where';
 import { type MadeShape, type MadeShapeKind, MADE_SHAPES, MAX_TEXT, cleanText } from '../../agentBuilder/madeShapes';
+import { DEFAULT_WEIGHT } from '../../agentBuilder/strokeFont';
+import { SliderSetting } from './BehaviourCard';
 import type { WhereEdit, WherePick } from '../../agentBuilder/whereActions';
 import { setMadeShape, whereNow } from '../../agentBuilder/whereActions';
 import { regionField, regionImage } from '../../lib/regionValues';
@@ -34,6 +36,8 @@ export interface WhereFocus {
   draw: (d: WhereDrawing | null) => void;
   /** Pick for a use (whereActions.setWhere, after the pending rule edits). */
   apply: (use: WhereUse, pick: WherePick | null, edit?: WhereEdit) => void;
+  /** Open a group or a Shader Texture to edit what it holds (the builder closes; a toast brings it back). */
+  openInside?: (nodeId: string) => void;
 }
 export const WhereFocusContext = createContext<WhereFocus | null>(null);
 
@@ -126,6 +130,28 @@ export function WherePicker({ id, use, region, outside, onPick, allowOutside = t
     ctx?.draw({ kind, onDone: s => { ctx.draw(null); onPick({ make: s, outside }); }, onCancel: () => ctx.draw(null) });
   };
   const drawingHere = ctx?.drawing;
+  const inGraph = regions.filter(r => !r.from), fromGroups = regions.filter(r => r.from);
+  const chip: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 6, height: 28, padding: '0 10px', border: `1px dashed ${tk.border.default}`, borderRadius: 999, background: 'none', cursor: 'pointer', color: tk.text.secondary, font: `500 12px ${fontFamily.ui}` };
+  const regionTiles = (list: Region[]) => list.length ? (
+    <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fill, minmax(${TW + 8}px, 1fr))`, gap: 8 }}>
+      {list.map(r => {
+        const on = !!region && r.nodeId === region.nodeId && r.outputKey === region.outputKey;
+        return (
+          <button key={`${r.nodeId}:${r.outputKey}`} type="button" data-where-tile={`${r.nodeId}:${r.outputKey}`} data-where-tile-kind={r.kind} data-where-tile-from={r.from ?? ''} aria-pressed={on}
+            title={`${r.label}${r.from ? ` (from ${r.from})` : ''}: ${REGION_WORDS[r.kind].hint}`}
+            onPointerEnter={() => ctx?.show({ key: `${id}:preview`, use, region: r, outside })}
+            onPointerLeave={() => show()}
+            onClick={() => { setOpen(false); onPick({ region: { nodeId: r.nodeId, outputKey: r.outputKey }, outside }); }}
+            style={{ display: 'flex', flexDirection: 'column', gap: 5, padding: 4, border: 0, borderRadius: 9, cursor: 'pointer', textAlign: 'left', minWidth: 0,
+              background: on ? tk.bg.selected : tk.bg.panel, boxShadow: on ? `inset 0 0 0 1.5px ${tk.accent.base}` : `inset 0 0 0 1px ${tk.border.default}`, color: tk.text.primary }}>
+            <Thumb region={r} />
+            <span style={{ fontSize: 11.5, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.label}</span>
+            <KindBadge region={r} />
+          </button>
+        );
+      })}
+    </div>
+  ) : null;
   return (
     <div data-where={id} data-where-use={use} data-where-region={region ? `${region.nodeId}:${region.outputKey}` : ''}
       onPointerEnter={() => { show(); onFocus?.(id); }} onFocus={() => show()}
@@ -136,8 +162,14 @@ export function WherePicker({ id, use, region, outside, onPick, allowOutside = t
           <span data-where-name style={{ fontSize: 12.5, fontWeight: 600, color: region ? tk.text.primary : tk.text.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {region ? region.label : USE_WORDS[use].none}
           </span>
-          {region && <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}><KindBadge region={region} /></span>}
+          {region && <span style={{ display: 'flex', gap: 6, alignItems: 'center', minWidth: 0 }}><KindBadge region={region} />{region.from && <span style={{ fontSize: 10.5, color: tk.text.faint, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>from {region.from}</span>}</span>}
         </span>
+        {region?.inside && ctx?.openInside && (
+          <button type="button" data-where-inside={region.inside} title={`Open ${region.from ?? 'it'} to edit what it draws (the builder closes; the toast brings you back)`} onClick={() => ctx.openInside!(region.inside!)}
+            style={{ height: 26, padding: '0 8px', border: 0, borderRadius: radius.control, background: tk.bg.field, color: tk.text.secondary, cursor: 'pointer', font: `600 11.5px ${fontFamily.ui}`, whiteSpace: 'nowrap' }}>
+            Edit inside ↗
+          </button>
+        )}
         <button type="button" data-where-open={id} aria-expanded={open} onClick={() => { setOpen(v => !v); show(); }}
           style={{ height: 26, padding: '0 10px', border: 0, borderRadius: radius.control, background: open ? tk.bg.selected : tk.bg.field, color: open ? tk.accent.text : tk.text.secondary, cursor: 'pointer', font: `600 11.5px ${fontFamily.ui}`, whiteSpace: 'nowrap' }}>
           {region ? 'Change' : 'Pick…'}
@@ -162,34 +194,30 @@ export function WherePicker({ id, use, region, outside, onPick, allowOutside = t
       )}
       {open && (
         <div data-where-panel={id} style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 10, borderRadius: radius.card, background: tk.bg.subtle, boxShadow: `inset 0 0 0 1px ${tk.border.subtle}` }}>
-          <span style={{ fontSize: 11, fontWeight: 650, color: tk.text.muted, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Make one here</span>
+          {/* Wiring three ways: an output of the graph, an output from a group, or something new. */}
+          <WaysHead n={1} title="Wire from the graph" hint="An output already in your graph, wired in as it is." />
+          {inGraph.length === 0 && <span style={{ fontSize: 12, color: tk.text.muted }}>Nothing in your graph can be read here yet: a shape (an SDF), a mask (any number that changes across the picture){takesTexture(use) ? ' or a texture' : ''}. Create one below.</span>}
+          {regionTiles(inGraph)}
+          <WaysHead n={2} title="From a group" hint="An output of another group: a plain group, a Shader Texture, another Agents group's trail." />
+          {fromGroups.length === 0 && <span data-where-no-groups style={{ fontSize: 12, color: tk.text.muted }}>No group in your graph has an output this can read. Create a new one below.</span>}
+          {regionTiles(fromGroups)}
+          <WaysHead n={3} title="Create new" hint="A new top-level source, wired in: a shape drawn on the picture, a Shader Texture or a group, opened ready to edit." />
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {MADE_SHAPES.map(m => (
-              <button key={m.kind} type="button" data-where-make={m.kind} title={m.hint} onClick={() => draw(m.kind)}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 28, padding: '0 10px', border: `1px dashed ${tk.border.default}`, borderRadius: 999, background: 'none', cursor: 'pointer', color: tk.text.secondary, font: `500 12px ${fontFamily.ui}` }}>
+              <button key={m.kind} type="button" data-where-make={m.kind} title={`Draw on the picture. ${m.hint}`} onClick={() => draw(m.kind)} style={chip}>
                 <ShapeGlyph kind={m.kind} />{m.label}
               </button>
             ))}
           </div>
-          <span style={{ fontSize: 11, fontWeight: 650, color: tk.text.muted, letterSpacing: '0.04em', textTransform: 'uppercase' }}>In your graph</span>
-          {regions.length === 0 && <span style={{ fontSize: 12, color: tk.text.muted }}>Nothing in your graph can be a region yet: a shape (an SDF), a mask (any number that changes across the picture) or a texture. Make one here instead.</span>}
-          <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fill, minmax(${TW + 8}px, 1fr))`, gap: 8 }}>
-            {regions.map(r => {
-              const on = !!region && r.nodeId === region.nodeId && r.outputKey === region.outputKey;
-              return (
-                <button key={`${r.nodeId}:${r.outputKey}`} type="button" data-where-tile={`${r.nodeId}:${r.outputKey}`} data-where-tile-kind={r.kind} aria-pressed={on}
-                  title={`${r.label}: ${REGION_WORDS[r.kind].hint}`}
-                  onPointerEnter={() => ctx?.show({ key: `${id}:preview`, use, region: r, outside })}
-                  onPointerLeave={() => show()}
-                  onClick={() => { setOpen(false); onPick({ region: { nodeId: r.nodeId, outputKey: r.outputKey }, outside }); }}
-                  style={{ display: 'flex', flexDirection: 'column', gap: 5, padding: 4, border: 0, borderRadius: 9, cursor: 'pointer', textAlign: 'left', minWidth: 0,
-                    background: on ? tk.bg.selected : tk.bg.panel, boxShadow: on ? `inset 0 0 0 1.5px ${tk.accent.base}` : `inset 0 0 0 1px ${tk.border.default}`, color: tk.text.primary }}>
-                  <Thumb region={r} />
-                  <span style={{ fontSize: 11.5, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.label}</span>
-                  <KindBadge region={r} />
-                </button>
-              );
-            })}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {takesTexture(use) && (
+              <button type="button" data-where-create="shaderTexture" title="A new Shader Texture (its own little shader graph drawn into a texture), wired in, and opened so you can edit what it draws" onClick={() => { setOpen(false); onPick({ create: 'shaderTexture', outside }); }} style={chip}>
+                <Icon name="layers" size={13} />New Shader Texture
+              </button>
+            )}
+            <button type="button" data-where-create="group" title="A new group whose Distance output is wired in (a circle to start), opened so you can build the shape inside" onClick={() => { setOpen(false); onPick({ create: 'group', outside }); }} style={chip}>
+              <Icon name="nodes" size={13} />New group
+            </button>
           </div>
         </div>
       )}
@@ -197,15 +225,38 @@ export function WherePicker({ id, use, region, outside, onPick, allowOutside = t
   );
 }
 
-/** A text shape's word (the one text box: what the letters say). */
+/** A heading of the picker's three ways in. */
+function WaysHead({ n, title, hint }: { n: number; title: string; hint: string }) {
+  const tk = useTokens();
+  return (
+    <span data-where-way={n} title={hint} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 650, color: tk.text.muted, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+      <span aria-hidden style={{ width: 16, height: 16, borderRadius: 8, background: tk.bg.field, color: tk.text.secondary, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10 }}>{n}</span>
+      {title}
+    </span>
+  );
+}
+
+/** A text shape's words, size and weight, and its font (the smooth stroke font, or the blocky one text made before it had). */
 function TextOf({ region }: { region: Region }) {
+  const tk = useTokens();
   const made = region.made!;
+  const font = made.font === 'stroke' ? 'stroke' : 'blocky';
   const [text, setText] = useState(made.text ?? '');
   useEffect(() => setText(made.text ?? ''), [made.text]);
-  const commit = () => { const t = cleanText(text); if (t !== made.text) setMadeShape(region.nodeId, { ...made, text: t }); };
+  const commit = () => { const t = cleanText(text, font); if (t !== made.text) setMadeShape(region.nodeId, { ...made, text: t }); };
   return (
-    <Field data-where-text value={text} maxLength={MAX_TEXT} placeholder="Its word" aria-label="Its word" height={28}
-      onChange={e => setText(e.currentTarget.value.toUpperCase())} onBlur={commit} onKeyDown={e => { if (e.key === 'Enter') commit(); }} />
+    <div data-where-text-editor style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '8px 10px', borderRadius: radius.card, background: tk.bg.subtle }}>
+      <Field data-where-text value={text} maxLength={MAX_TEXT} placeholder="Its words" aria-label="Its words" height={28}
+        onChange={e => setText(e.currentTarget.value.toUpperCase())} onBlur={commit} onKeyDown={e => { if (e.key === 'Enter') commit(); }} />
+      <SliderSetting id="textSize" label="Size" hint="Half the letters' height, in picture units (the picture is 2 tall). Their corner handle on the picture does the same." value={made.size} min={0.02} max={1} step={0.005}
+        onChange={v => setMadeShape(region.nodeId, { ...made, size: Math.max(0.01, v) })} />
+      {font === 'stroke' && (
+        <SliderSetting id="textWeight" label="Weight" hint="How thick the strokes are (their half-width, in the letters' units: they are 2 tall)." value={made.weight ?? DEFAULT_WEIGHT} min={0.02} max={0.5} step={0.005}
+          onChange={v => setMadeShape(region.nodeId, { ...made, weight: Math.max(0.01, v) })} />
+      )}
+      <Segmented size="sm" fill ariaLabel="Font" value={font} onChange={v => setMadeShape(region.nodeId, { ...made, font: v, text: cleanText(made.text ?? 'A', v), ...(v === 'stroke' ? { weight: made.weight ?? DEFAULT_WEIGHT } : {}) })}
+        options={[{ value: 'stroke' as const, label: 'Smooth' }, { value: 'blocky' as const, label: 'Blocky (5 × 7)' }]} />
+    </div>
   );
 }
 

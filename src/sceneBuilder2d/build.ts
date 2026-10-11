@@ -3,12 +3,12 @@
  *
  * The graph is what a skilled user would wire by hand:
  *
- *   UV ─► space transforms ─► per shape: Motion 2D ─► Place 2D ─► (ring: Angular Repeat ─► Place 2D)
+ *   UV ─► space transforms ─► per shape: Motion 2D ─► Transform 2D ─► (ring: Angular Repeat ─► Transform 2D)
  *                                  ─► Shape SDF ─► Offset / Onion ─► × scale ─► combines ─► distance
  *   background ─► (Glow Layer ─► Add) ─► SDF Fill, one pair per layer ─► Tone Map ─► post ─► Output
  *
  * Every node gets a plain-language note (`__comment`) and a role (`_sbRole`): a stable name for the
- * part of the spec it comes from (`s2:place` is shape s2's Place 2D, `p1` the first space
+ * part of the spec it comes from (`s2:place` is shape s2's Transform 2D, `p1` the first space
  * transform), so a rebuild can find the node again, keep its id (Play controls stay pointed at it)
  * and carry the user's own edits over. Numbers go on params, which compile to live uniforms:
  * dragging a generated slider never recompiles.
@@ -27,6 +27,8 @@ import {
 import { colourText } from '../lang/colours';
 import { GRID_LABELS, gridProgram, type GridSpec } from './grid';
 import { callBody, type FnRef } from './functions';
+import { COMBINE_BY_MODE, blockGlslLines, checkBlock, clampTimes, type SpaceBlock } from './blocks';
+import { BLOCK_BY_ID } from './blockLibrary';
 
 export { ROLE_KEY };
 /** On the UV node: the scene it was built from (and, once applied, fingerprints of what was built). */
@@ -62,7 +64,7 @@ interface B {
 }
 
 /** An Expression Block with typed inputs (wired, or a float slider) and a float or vec3 result. */
-function expr(c: Ctx, role: string, label: string, inputs: Array<{ name: string; type: 'float' | 'vec2' | 'vec3'; from?: Ref; slider?: { value: number; min: number; max: number } }>, result: string, note: string, outputType: 'vec3' | 'float' = 'vec3', lines: Array<{ lhs: string; op: string; rhs: string }> = []): GraphNode {
+function expr(c: Ctx, role: string, label: string, inputs: Array<{ name: string; type: 'float' | 'vec2' | 'vec3'; from?: Ref; slider?: { value: number; min: number; max: number } }>, result: string, note: string, outputType: 'vec3' | 'vec2' | 'float' = 'vec3', lines: Array<{ lhs: string; op: string; rhs: string }> = []): GraphNode {
   const node: GraphNode = {
     id: c.idFor(role), type: 'exprNode', position: { x: 0, y: 0 },
     inputs: Object.fromEntries(inputs.map(i => [i.name, { type: i.type, label: i.name, ...(i.from ? { connection: { ...i.from } } : {}) } as InputSocket])),
@@ -97,8 +99,53 @@ function fnNode(b: B, role: string, f: FnRef, pos: Ref, out: 'vec2' | 'float', n
 
 // ── Space ───────────────────────────────────────────────────────────────────
 
+/** A transform block as an Expression Block: uv in, its lines (run `times` over), uv out; its numbers are sliders. */
+function blockNode(b: B, role: string, block: SpaceBlock, pos: Ref, where: string): Ref | null {
+  const { c } = b;
+  const lines = blockGlslLines(block);
+  const name = block.name || 'Block';
+  if (!lines) {
+    const chk = checkBlock(block);
+    const why = [...chk.errors, ...chk.lines.filter(l => !l.ok).map(l => l.error!)][0] ?? 'it doesn\'t check';
+    c.warnings.push(`${where} “${name}” was left out: ${why}`);
+    return null;
+  }
+  const times = clampTimes(block.times);
+  const entry = block.lib ? BLOCK_BY_ID[block.lib] : undefined;
+  const sliders = block.params.map(p => `${p.name} ${fmt(p.value)}`);
+  const note = `${name} (${where}): ${entry ? entry.blurb : 'a transform block written in the 2D Scene Builder.'} `
+    + `Each line changes uv, the point every shape below looks from, top to bottom${times > 1 ? `; the ${lines.length / times} line${lines.length / times === 1 ? ' is' : 's are'} written out ${times} times, so the fold runs ${times} times over` : ''}. `
+    + 'In the builder x and y stand for uv.x and uv.y (written out here), t is time in seconds, and whole numbers are written as floats. '
+    + `${sliders.length ? `The sliders (${sliders.join(', ')}) are live: drag them on the node without recompiling.` : 'It has no sliders: select a number in a line to make one.'}`;
+  const node = expr(c, role, name, [
+    { name: 'uv', type: 'vec2', from: pos },
+    ...block.params.map(p => ({ name: p.name, type: 'float' as const, slider: { value: p.value, min: p.min, max: p.max } })),
+  ], 'uv', note, 'vec2', lines);
+  return ref(node, 'result');
+}
+
 function spaceNode(b: B, op: SpaceOp, pos: Ref): Ref {
   const { c } = b;
+  if (op.kind === 'block') {
+    if (!op.block) { c.warnings.push(`The block ${op.id} is empty; left out.`); return pos; }
+    return blockNode(b, op.id, op.block, pos, `space ${op.id}`) ?? pos;
+  }
+  if (op.kind === 'combine') {
+    const k = op.combine;
+    if (!k) { c.warnings.push(`The combine ${op.id} is empty; left out.`); return pos; }
+    const m = COMBINE_BY_MODE[k.mode] ?? COMBINE_BY_MODE.add;
+    const A = blockNode(b, `${op.id}:a`, k.a, pos, `block A of ${op.id}`) ?? pos;
+    const B2 = blockNode(b, `${op.id}:b`, k.b, pos, `block B of ${op.id}`) ?? pos;
+    const an = k.a.name || 'A', bn = k.b.name || 'B';
+    const node = expr(c, op.id, `${m.label} blocks`, [
+      { name: 'uv', type: 'vec2', from: pos },
+      { name: 'a', type: 'vec2', from: A },
+      { name: 'b', type: 'vec2', from: B2 },
+      ...(k.mode === 'blend' ? [{ name: 'amount', type: 'float' as const, slider: { value: k.amount, min: 0, max: 1 } }] : []),
+    ], m.glsl, `${m.label} (space ${op.id}): joins two blocks that both start from the same uv. a is “${an}”, b is “${bn}”, uv the point before either. ${m.blurb} `
+      + `${k.mode === 'add' ? 'a + b − uv adds the two pushes (each block\'s change from uv).' : k.mode === 'subtract' ? 'uv + a − b keeps A\'s push and takes B\'s away.' : k.mode === 'multiply' ? 'a * b multiplies x by x and y by y.' : 'Amount is live: 0 is all A, 1 is all B.'} The result is the uv every shape below looks from.`, 'vec2');
+    return ref(node, 'result');
+  }
   const def = SPACE_BY_KIND[op.kind];
   if (!def) { c.warnings.push(`A space transform “${op.kind}” isn't known; left out.`); return pos; }
   const v = op.values;
@@ -171,7 +218,7 @@ function motionWords(m: MotionSpec): string {
   return `${d.label.toLowerCase()} ${fmt(m.speed)} cycles a second${d.amount ? `, ${d.amount.label.toLowerCase()} ${fmt(m.amount)}` : ''}${m.phase ? `, starting ${fmt(m.phase)}° in` : ''}`;
 }
 
-/** An item's Motion 2D chain: what to wire into its Place 2D. */
+/** An item's Motion 2D chain: what to wire into its Transform 2D. */
 function emitMotion(b: B, it: Item, name: string): { offset: Ref | null; turn: Ref | null; grow: Ref | null } {
   const { c } = b;
   let last: GraphNode | null = null;
@@ -185,7 +232,7 @@ function emitMotion(b: B, it: Item, name: string): { offset: Ref | null; turn: R
       if (hasGrow) wires.grow = ref(last, 'grow');
     }
     last = mk(c, 'motion2D', m.id, { mode: m.kind, speed: m.speed, amount: m.amount, phase: m.phase, direction: m.dir }, wires,
-      `${d.label} on ${name}: ${d.blurb} ${motionWords(m)}. Wired into ${name}'s Place 2D${it.motion.length > 1 ? '; motions are chained, each adds to the one before' : ''}.`);
+      `${d.label} on ${name}: ${d.blurb} ${motionWords(m)}. Wired into ${name}'s Transform 2D${it.motion.length > 1 ? '; motions are chained, each adds to the one before' : ''}.`);
     if (m.kind === 'orbit' || m.kind === 'bob') hasOffset = true;
     if (m.kind === 'spin') hasTurn = true;
     if (m.kind === 'pulse') hasGrow = true;
@@ -195,7 +242,7 @@ function emitMotion(b: B, it: Item, name: string): { offset: Ref | null; turn: R
 
 interface Branch { pos: Ref; scales: Ref[] }
 
-/** The ring array of an item from `start`: Angular Repeat, then Place 2D out to the radius (twice for rings of rings). */
+/** The ring array of an item from `start`: Angular Repeat, then Transform 2D out to the radius (twice for rings of rings). */
 function emitRing(b: B, it: Item, dup: DupSpec, start: Branch, k: number, name: string): Branch {
   const { c } = b;
   const suffix = dup.levels > 1 ? `:${k}` : '';
@@ -257,7 +304,7 @@ function shapeNode(b: B, sh: ShapeSpec, pos: Ref, name: string, sfx = ''): Ref {
 }
 
 /**
- * An item's distance from `pos`: placement (Motion 2D → Place 2D), the ring array, the shape or the
+ * An item's distance from `pos`: placement (Motion 2D → Transform 2D), the ring array, the shape or the
  * combine of its children, Round and Outline, and the distance put right for any scaling.
  */
 function emitItem(b: B, it: Item, pos: Ref, depth: number): Ref | null {
@@ -280,7 +327,7 @@ function emitItem(b: B, it: Item, pos: Ref, depth: number): Ref | null {
     if (baseScale !== 1) bits.push(def?.unit ? `sized ${fmt(unit)} (a ${def.label.toLowerCase()} has no radius of its own, so its size is this node's Scale)` : `scaled ${fmt(it.scale)}×`);
     if (it.motion.length) bits.push('moved by its motion');
     const pl = mk(c, 'place2D', `${it.id}:place`, { x: it.at[0], y: it.at[1], rotate: it.rot, scale: baseScale }, wires,
-      `Places ${name}: ${bits.join(', ')}. Place 2D gives the shape a new view of space: the shape is measured from the point as it sees it, so it ends up where the node says. Its Scale output multiplies the distance back to the picture's units.`);
+      `Places ${name}: ${bits.join(', ')}. Transform 2D gives the shape a new view of space: the shape is measured from the point as it sees it, so it ends up where the node says. Its Scale output multiplies the distance back to the picture's units.`);
     start = { pos: ref(pl, 'p'), scales: baseScale !== 1 || pulse ? [ref(pl, 'scale')] : [] };
   }
   const dup = it.dup && it.dup.count >= 2 ? it.dup : null;
@@ -310,7 +357,7 @@ function emitItem(b: B, it: Item, pos: Ref, depth: number): Ref | null {
     if (it.hollow > 0) dist = ref(mk(c, 'sdfOnion', `${it.id}:hollow${sfx}`, { r: it.hollow }, { dist }, `Outline on ${name}: Onion turns the solid into a line ${fmt(it.hollow)} thick, abs(distance) − ${fmt(it.hollow)}.`), 'dist');
     br.scales.forEach((s, i) => {
       dist = ref(mk(c, 'multiply', `${it.id}:fix${sfx}${br.scales.length > 1 ? `-${i}` : ''}`, {}, { a: dist!, b: s },
-        `Puts ${name}'s distance back in the picture's units: multiplies it by the scale it was drawn at (the Scale output of its Place 2D), so combines, glow and outlines measure true.`), 'result');
+        `Puts ${name}'s distance back in the picture's units: multiplies it by the scale it was drawn at (the Scale output of its Transform 2D), so combines, glow and outlines measure true.`), 'result');
     });
     branches.push(dist!);
   }

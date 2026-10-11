@@ -99,6 +99,8 @@ export function IconButton({
         ...style,
       }}
       {...rest}
+      // With a Playfield tooltip showing the label, the native title would be a second box.
+      title={tooltip ? undefined : rest.title}
     >
       <Icon name={icon} size={size === 'md' ? 16 : 15} />
     </button>

@@ -203,6 +203,29 @@ Selecting a section draws its diagram over the live picture. Pointing at or drag
 
 The geometry is in `src/agentBuilder/diagram.ts`, and the drawing is `components/agentBuilder/WalkerDiagram.tsx`.
 
+## Dragging the diagrams
+
+Every diagram can be dragged, as well as its sliders moved (wave 3). A drag writes the same values the slider writes, live (the slider moves with it, and the picture follows a few times a second), and the whole drag is **one undo step**, named for what was dragged ("Agent Builder: dragged the feelers").
+
+| Diagram | Handle | Writes |
+|---|---|---|
+| Senses | each feeler's tip (L, C, R): out or in is How far ahead; the left or right one dragged sideways is How wide | the rule set's `sensor` |
+| Turning | the new heading's end; the wobble fan's two edges | Turn's degrees (0–90°); Wander's degrees (0–45°) |
+| Born (2D) | the shape's middle moves it; its edge (disc, ring, line) or corner (box) sizes it; a point is moved | the Emit's x, y and size (the walkers start over when the drag ends) |
+| Forces | gravity's and the wind's arrow tip: round for the direction, out or in for the strength (the arrow is 18 px + 70 px a unit); the attract point | the force's angle and strength; the attract point's x, y |
+| Follow a field | a centred layer's centre, its size (a ring under it), its direction (a short line); an older typed-in mask's middle and edge | the layer's x, y, size, angle, mask |
+| Neighbours | the view ring | View radius |
+| Orbit | the centre (when it circles a point) and the circle's edge | the orbit's x, y and radius |
+| Avoid edges | the band's inner edge | its margin |
+
+Handles are a soft dot (a feeler's tip is its own handle) until the pointer is over one; then a ring, a cursor (move, resize, grab, grabbing) and a hint. While a feeler is dragged the lens holds still, so the tip stays under the pointer; it re-fits when you let go. Handles show in focus too, so the focus demo can be watched while the sensors are dragged.
+
+**How:** `components/agentBuilder/DragHandle.tsx` is the handle; the maths, from the pointer to the value with the slider's step and sensible ends, is `agentBuilder/diagramDrag.ts` (pure). The builder gives each diagram a `DiagramEdit`: `begin` flushes pending edits, marks the undo history and lights the setting; the writes are the cards' own (`update`, `setSetupParam`), with rule edits applied every 140 ms while held (`useRuleSetEditing.hold`); `end` applies the last one and folds every step since the mark into one (`undoManager.collapseSince`), then closes the bursts (`endRulesBurst`, `endSetupBurst`) so the next edit is a step of its own. Not draggable yet: Born in 3D, the curl flow, drag, Life, Speed and the trail.
+
+### The Sensors demo
+
+Its walker (`demos.ts sensesWalk`) starts below a wavy trail heading along it, with feelers How far ahead (scaled into the panel: 0.3 long at the slime's 0.03) at ±How wide, and turns by How sharply (eased for the demo's longer steps) toward the stronger side. It swings onto the trail within a second or two and rides along it (tested), and it follows the values as they are dragged.
+
 The diagrams carry no sentences: each drawing has a small coloured tag with its number, and the words are in the legend (below). Older notes above that quote labels ("turns 45° toward the smell") describe what the legend now says.
 
 ## Legend, tags and focus
@@ -445,6 +468,7 @@ Wherever a card asks "where", the **Where picker** answers it. It replaced every
 | The slope layer's field | Follow a field → Slope of a picture → The slope of | the group's Field ƒ socket |
 | Born inside | Born → Or born inside | the Emit: Shape Field with Where ƒ (a shape or mask, through a small adapter block), or Picture (a texture); Threshold ½ |
 | Walls | Moving → Walls, and At a wall (Turn back / Slide along) | the rule set's `obstacle`, the group's Obstacle ƒ socket into Move's Obstacle ƒ (a mask, or "outside", through an adapter); in 3D a Scene goes to Collide (3D scene) |
+| Food (2D) | Trail → Food, with How much and Into (a channel) | the Trail field's Add, through a **Food** Expression Block: `vec4` with the food in one channel × amount (a shape's inside, a mask's or a texture's brightness; a texture is read through a Sample (texture)) |
 
 **The list** (`agentBuilder/where.ts listRegions`) holds everything at the top of the graph that can say "here":
 
@@ -455,11 +479,31 @@ Wherever a card asks "where", the **Where picker** answers it. It replaced every
 
 Constants, the agents' own nodes and anything downstream of the group (a cycle) are left out; the group's own trail texture is allowed (it is read a step late, as Sense reads it). Each tile has a **thumbnail**: the node's own chain compiled as a node preview and its raw values rendered on the GPU in the picture's shape (`lib/regionValues.ts`, through `nodePreviewRenderer.renderValues`), inside in the accent colour. Thumbnails are cached by shader and uniforms. A texture shows its card's thumbnail when it has one.
 
-**Make one here**: Circle, Box, Ring, Polygon or Text. Pick one and draw it on the live picture: drag from the middle for a circle or ring, corner to corner for a box or a word, click the corners of a polygon (the first again, Enter or a double-click closes it), Esc stops; a click without a drag makes a default one there. It becomes a real node (`agentBuilder/madeShapes.ts`): an Expression Block "Where: circle" returning the shape's signed distance, with a note line by line. Its place and size are the block's **sliders** (cx, cy, r, w, h, t, s, p0x…), so dragging its handles writes uniforms (no recompile, the walkers aren't started over); only a polygon's corner count or a word's letters are in its lines. The spec is kept on the node (`whereShape`), so the builder reads it back and shows its handles; a block whose lines were edited by hand is just a graph output. Text is a 5 × 7 pixel font, each run of lit pixels a box.
+**Make one here**: Circle, Box, Ring, Polygon or Text. Pick one and draw it on the live picture: drag from the middle for a circle or ring, corner to corner for a box or a word, click the corners of a polygon (the first again, Enter or a double-click closes it), Esc stops; a click without a drag makes a default one there. It becomes a real node (`agentBuilder/madeShapes.ts`): an Expression Block "Where: circle" returning the shape's signed distance, with a note line by line. Its place and size are the block's **sliders** (cx, cy, r, w, h, t, s, p0x…), so dragging its handles writes uniforms (no recompile, the walkers aren't started over); only a polygon's corner count or a word's letters are in its lines. The spec is kept on the node (`whereShape`), so the builder reads it back and shows its handles; a block whose lines were edited by hand is just a graph output. Text is the stroke font (see "Text as a shape or a wall"; phase 3's 5 × 7 pixel font still loads).
 
 **On the picture** (`RegionOverlay.tsx`): pointing at a Where row (or a tile in its list) draws the region over the live picture, the part where the card does nothing shaded, with a badge ("acts inside · Pond", "a wall · Polygon", "born inside · Circle"). A region of the graph is shaded from its GPU values with a smooth outline (marching squares); a shape made here is its vector outline with handles: the middle moves it, the edge or corner sizes it, a ring's inner handle sets its width, a polygon's corners move and the "+" on each side adds one. **Done** (or Esc) stops showing it. A walls region is tinted red.
 
 Old typed-in shapes (an only when's `shape`, a field layer's circle or box mask) still load and work; their settings offer **Make it a shape you can drag**.
+
+### Wiring three ways
+
+Every input the builder can wire (only when, a field layer's region, Field ƒ, born inside, walls, food) opens the same picker, in three parts:
+
+1. **Wire from the graph:** an output already there, with its thumbnail.
+2. **From a group:** an output of another group: a plain group, a Shader Texture, or the Trail field another Agents group deposits into ("from Prey"). The row says "from …" and has **Edit inside ↗**.
+3. **Create new:** a shape drawn on the picture (Circle, Box, Ring, Polygon, Text); **New Shader Texture** (docs/texture-builder.md: white discs to start; for uses that read a texture); **New group** (a plain group whose Distance output is a circle, `length(uv) − r`, with a note). Each is a top-level node wired in, in the same undo step as the wiring. A new Shader Texture or group is **opened ready to edit**: the builder closes, the graph enters it, and a toast offers **Back to the Agent Builder**.
+
+`where.ts listRegions` tags group outputs (`from`, `inside`); `whereActions.ts setWhere` takes `create: 'shaderTexture' | 'group'` (`newRegionGroup`) and keeps the new node for `takeCreated`.
+
+### Text as a shape or a wall
+
+Text made here is drawn in a **stroke font in the shader's own style** (`agentBuilder/strokeFont.ts`): each letter a few strokes (segments, arcs, dots) on a grid two units tall, and the words' distance the nearest stroke's less the strokes' half-weight. It is smooth at any size, round at the ends, the same on the CPU and the GPU, and it compiles to one line per stroke of the Expression Block (no texture), so it works wherever a shape does:
+
+- **as the pattern:** Trail → Food → Text: the words are painted into the trail the slime smells, and the veins grow over the letters;
+- **as a wall:** Moving → Walls → Text: the distance goes straight into Move's Obstacle ƒ, and walkers turn back (or slide along) at the letters;
+- born inside the words, only when inside them, a field layer's region.
+
+Its card row edits **the words** (A–Z, 0–9 and `! ? . , : ' - + * / = #`, up to 16), **Size** (half their height), **Weight** (the strokes' half-width, the `wt` slider) and the **font** (Smooth, or Blocky 5 × 7). Dragging on the picture moves it; its corner sizes it; a word drawn by dragging fits the box. Size and weight are sliders (uniforms, no recompile); new words or a font change rewrite the lines. Text made in phase 3 (no `font` saved) keeps the blocky 5 × 7 font and loads as it was.
 
 ## Trail channels
 
@@ -491,7 +535,9 @@ The left nav also has **What they are**: the kind (Trail followers, Particles, F
 - Legend, tags and focus: `src/agentBuilder/legend.ts` (the phrases, the entries, linking, the tag layout, the focus words), `src/agentBuilder/demos.ts` (the focus demos), `src/components/agentBuilder/ViewportLegend.tsx` (the legend, the tags, the demo panel).
 - Follow a field: `src/agentRules/fields.ts` (the layers, their GLSL lines, the CPU function, own-expression checks, text), `generate.ts` (the Field block, slope Flow nodes, the rule's push or ride), `src/components/agentBuilder/FieldCard.tsx` (the card, the layers, the gallery tiles, your own), `KindDiagram.tsx` (the arrows), `legend.ts` (`fieldEntries`, `phrase.fieldLayer`), `demos.ts` (the `field` demo).
 - `src/components/agentBuilder/`: `AgentBuilder.tsx`, `BehaviourCard.tsx`, `SectionCards.tsx`, `OnlyWhenLine.tsx`, `KindChips.tsx`, `SpeciesSpotlight.tsx`, `WalkerDiagram.tsx`, `KindDiagram.tsx`, `pictures.tsx`, `presetThumbs.ts`, `useLensRef.ts`, `useRuleSetEditing.ts`. They are loaded lazily by `BuilderWindowsHost`.
-- Where: `src/agentBuilder/where.ts` (the list, inside / outside, mask slots, adapters), `madeShapes.ts` (shapes as nodes, the pixel font), `whereActions.ts` (the store side: pick, read back, drag), `src/lib/regionValues.ts` (GPU values, thumbnails, the shaded region and its outline, slope arrows), `src/components/agentBuilder/WherePicker.tsx`, `RegionOverlay.tsx`.
+- Dragging: `src/agentBuilder/diagramDrag.ts` (pointer → value), `src/components/agentBuilder/DragHandle.tsx` (the handle, `DiagramEdit`).
+- Text: `src/agentBuilder/strokeFont.ts` (glyphs, layout, distance, GLSL, SVG strokes).
+- Where: `src/agentBuilder/where.ts` (the list, inside / outside, mask slots, adapters, food), `madeShapes.ts` (shapes as nodes, the stroke and pixel fonts), `whereActions.ts` (the store side: pick, read back, drag), `src/lib/regionValues.ts` (GPU values, thumbnails, the shaded region and its outline, slope arrows), `src/components/agentBuilder/WherePicker.tsx`, `RegionOverlay.tsx`.
 - Trail channels: `src/agentBuilder/trailChannels.ts`, `src/components/agentBuilder/TrailChannels.tsx`. Look: `src/agentBuilder/look.ts`, `lookActions.ts`, `src/components/agentBuilder/LookSection.tsx`.
 - `src/lib/previewMirror.ts`.
 - The window state: `builders/windows.ts` (`agentBuilder`).

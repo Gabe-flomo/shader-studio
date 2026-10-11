@@ -2,7 +2,7 @@
  * scene2d.ts — the three small nodes the 2D Scene Builder needs and the 2D set didn't have
  * (docs/scene-builder-2d-plan.md):
  *
- *   Place 2D    moves, turns and scales one shape (or a whole cluster): the 2D twin of a 3D shape's
+ *   Transform 2D  moves, turns and scales one shape (or a whole cluster): the 2D twin of a 3D shape's
  *               Position / Rotation, and it hands out the scale so the distance can be put right.
  *   Motion 2D   a motion for it: orbit, bob, spin or pulse, from Time. Chain several to combine them.
  *   Mirror 2D   folds space onto one side of a line (or two): symmetry in one node.
@@ -18,14 +18,15 @@ const TAU = '6.28318530718';
 
 export const Place2DNode: NodeDefinition = {
   type: 'place2D',
-  label: 'Place 2D',
+  label: 'Transform 2D',
   category: '2D Space', subcategory: 'Basic',
-  aliases: ['place shape', 'move rotate scale', 'shape transform'],
+  // Called Place 2D until 2026-10-10: the type id stays 'place2D' so saved graphs load unchanged.
+  aliases: ['Place 2D', 'place shape', 'move rotate scale', 'shape transform', 'translate rotate scale'],
   description:
     'Places a shape: moves it, turns it and scales it, in one node. It does not move the shape itself, it gives the shape a new view of space (the point as the shape sees it), so wire its Local UV into the shape\'s Position. ' +
     'When it scales, a shape drawn through it measures in its own, scaled units: multiply the shape\'s Distance by the Scale output to get it back to the picture\'s units (SDF Union, glow and outlines then stay right).',
   inputs: {
-    uv:     { type: 'vec2',  label: 'UV', hint: 'The space to place the shape in: UV, or the output of another Place 2D or a space transform.' },
+    uv:     { type: 'vec2',  label: 'UV', hint: 'The space to place the shape in: UV, or the output of another Transform 2D or a space transform.' },
     offset: { type: 'vec2',  label: 'Offset', hint: 'Added to Move: wire a Motion 2D here for a shape that orbits or bobs.' },
     turn:   { type: 'float', label: 'Turn (rad)', hint: 'Added to Rotate, in radians: wire a Motion 2D here for a shape that spins.' },
     grow:   { type: 'float', label: 'Grow', hint: 'Multiplies Scale: wire a Motion 2D here for a shape that pulses. Leave empty for 1.' },
@@ -67,7 +68,7 @@ export const Motion2DNode: NodeDefinition = {
   aliases: ['orbit', 'bob', 'spin', 'pulse', 'shape motion'],
   description:
     'One motion for a shape, driven by Time: Orbit goes round a circle, Bob slides back and forth along a line, Spin turns, Pulse swells and shrinks. ' +
-    'Wire Offset, Turn and Grow into a Place 2D. To give a shape two motions, chain a second Motion 2D after the first: it adds its motion to what comes in.',
+    'Wire Offset, Turn and Grow into a Transform 2D. To give a shape two motions, chain a second Motion 2D after the first: it adds its motion to what comes in.',
   inputs: {
     time:   { type: 'float', label: 'Time', hint: 'Seconds. Left empty it uses the clock.' },
     offset: { type: 'vec2',  label: 'Offset in', hint: 'Another Motion 2D\'s Offset: this motion is added to it.' },
@@ -75,9 +76,9 @@ export const Motion2DNode: NodeDefinition = {
     grow:   { type: 'float', label: 'Grow in', hint: 'Another Motion 2D\'s Grow: this motion multiplies it.' },
   },
   outputs: {
-    offset: { type: 'vec2',  label: 'Offset', hint: 'Where the motion has moved the shape. Into a Place 2D\'s Offset.' },
-    turn:   { type: 'float', label: 'Turn (rad)', hint: 'How far it has turned, in radians. Into a Place 2D\'s Turn.' },
-    grow:   { type: 'float', label: 'Grow', hint: 'How much it has swollen: 1 is its own size. Into a Place 2D\'s Grow.' },
+    offset: { type: 'vec2',  label: 'Offset', hint: 'Where the motion has moved the shape. Into a Transform 2D\'s Offset.' },
+    turn:   { type: 'float', label: 'Turn (rad)', hint: 'How far it has turned, in radians. Into a Transform 2D\'s Turn.' },
+    grow:   { type: 'float', label: 'Grow', hint: 'How much it has swollen: 1 is its own size. Into a Transform 2D\'s Grow.' },
   },
   defaultParams: { mode: 'orbit', speed: 0.25, amount: 0.3, phase: 0.0, direction: 0.0 },
   paramDefs: {
