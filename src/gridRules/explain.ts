@@ -12,6 +12,7 @@
  * Pure: no React, so the tests read it directly.
  */
 import { neighbourOffsets, type Neighbourhood, type RadiusShape } from './spec';
+import type { NeighbourStencil } from './neighbourhoods';
 import { cpuBoard, type CpuBoard } from './cpu';
 
 // ── 3×3 pictures ────────────────────────────────────────────────────────────────────────────────
@@ -41,8 +42,8 @@ export function neighbourPicture(n: number, nb: 'moore' | 'vonNeumann' = 'moore'
  * A neighbourhood as a square of cells (2r + 1 across; r = 1 for Moore and von Neumann): true where
  * a cell is counted. The centre is never counted.
  */
-export function countedCells(nb: Neighbourhood, radius = 1, shape: RadiusShape = 'box'): { size: number; cells: boolean[] } {
-  const offs = neighbourOffsets(nb, radius, shape);
+export function countedCells(nb: Neighbourhood, radius = 1, shape: RadiusShape = 'box', stencil?: NeighbourStencil | null): { size: number; cells: boolean[] } {
+  const offs = neighbourOffsets(nb, radius, shape, stencil);
   const r = Math.max(1, ...offs.map(([dx, dy]) => Math.max(Math.abs(dx), Math.abs(dy))));
   const size = 2 * r + 1;
   const cells = Array.from({ length: size * size }, () => false);

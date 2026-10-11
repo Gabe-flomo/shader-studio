@@ -11,7 +11,7 @@
  * (born, dies, changes). Pure.
  */
 import { cpuBoard, cpuStep, type CpuBoard } from './cpu';
-import { GRID_DEFAULTS, gridShape, neighbourOffsets } from './spec';
+import { GRID_DEFAULTS, gridShape, neighbourWeights } from './spec';
 import { patternVariants, specMatches, stencilOffset } from './stencils';
 import { blockStartsAt, diceFrame } from './dice';
 
@@ -71,22 +71,22 @@ export function paintCell(B: CpuBoard, x: number, y: number, state: number, smoo
 /** An empty board of the same size (Blocks keep their step count and parity). */
 export const clearedBoard = (B: CpuBoard): CpuBoard => ({ ...cpuBoard(B.w, B.h), par: B.par, step: B.step });
 
-/** The cells a board's cell counts, as board cells (wrapped, or left off past a wall). */
-export function neighbourCells(params: Record<string, unknown>, B: CpuBoard, x: number, y: number): Array<[number, number]> {
+/** The cells a board's cell counts, as board cells (wrapped, or left off past a wall), each with its weight (a custom stencil's; else 1). */
+export function neighbourCells(params: Record<string, unknown>, B: CpuBoard, x: number, y: number): Array<[number, number, number]> {
   const s = gridShape({ ...GRID_DEFAULTS, ...params });
-  const offs = s.type === 'count' || s.type === 'stages' ? neighbourOffsets(s.neighbourhood, s.radius, s.shape) : neighbourOffsets('moore');
-  const out: Array<[number, number]> = [];
-  for (const [dx, dy] of offs) {
+  const offs = s.type === 'count' || s.type === 'stages' ? neighbourWeights(s) : neighbourWeights({ ...s, neighbourhood: 'moore' });
+  const out: Array<[number, number, number]> = [];
+  for (const [dx, dy, w] of offs) {
     let nx = x + dx, ny = y + dy;
     if (s.wrap) { nx = (nx + B.w) % B.w; ny = (ny + B.h) % B.h; } else if (nx < 0 || ny < 0 || nx >= B.w || ny >= B.h) continue;
-    out.push([nx, ny]);
+    out.push([nx, ny, w]);
   }
   return out;
 }
 
-/** Live neighbours (state 1, as the rule counts them) of a cell. */
+/** Live neighbours (state 1, as the rule counts them, weights included) of a cell. */
 export function liveNeighbours(params: Record<string, unknown>, B: CpuBoard, x: number, y: number): number {
-  return neighbourCells(params, B, x, y).filter(([nx, ny]) => Math.round(B.a[ny * B.w + nx]) === 1).length;
+  return neighbourCells(params, B, x, y).reduce((n, [nx, ny, w]) => n + (Math.round(B.a[ny * B.w + nx]) === 1 ? w : 0), 0);
 }
 
 export type CellChange = 'born' | 'dies' | 'fades' | 'changes';

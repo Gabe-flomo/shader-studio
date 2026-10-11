@@ -22,7 +22,7 @@ import { tidy } from '../sceneBuilder/build';
 import { blockGlslLines, checkBlock, clampTimes, type SpaceBlock } from '../sceneBuilder2d/blocks';
 import { BLOCK_BY_ID } from '../sceneBuilder2d/blockLibrary';
 import { colourText } from '../lang/colours';
-import { gf, gridProgram, shapeArgs, activeRules } from './glsl';
+import { gf, gridProgram, shapeArgs, activeMask, activeRules } from './glsl';
 import {
   MOTION_LABELS, PATTERN_LABELS, SHAPE_LABELS, TARGET_LABELS, cellSize, ruleText, shapeOf,
   type GShape, type GridSceneSpec,
@@ -187,7 +187,7 @@ export function buildGridScene(spec: GridSceneSpec, idFor: (role: string) => str
   }
   const rules = activeRules(spec).filter(r => !r.id.endsWith('~'));
   const fill = shapeOf(spec, P.fill);
-  const patternWords = P.kind === 'none' ? 'No pattern.' : `Pattern: ${PATTERN_LABELS[P.kind].label.toLowerCase()} (${PATTERN_LABELS[P.kind].blurb.toLowerCase()}) changing each shape's ${TARGET_LABELS[P.target].toLowerCase()} by amount; freq is waves across the grid, speed cycles a second${P.kind === 'spiral' ? ', arms the spiral\'s arms' : ''}.${fill ? ` It fills the empty cells with shape ${fill.id}.` : ''}`;
+  const patternWords = P.kind === 'none' ? 'No pattern.' : `Pattern: ${PATTERN_LABELS[P.kind].label.toLowerCase()} (${PATTERN_LABELS[P.kind].blurb.toLowerCase()}) changing each shape's ${TARGET_LABELS[P.target].toLowerCase()} by amount; freq is waves across the grid, speed cycles a second${P.kind === 'spiral' ? ', arms the spiral\'s arms' : ''}.${fill ? ` It fills the empty cells with shape ${fill.id}.` : ''}${activeMask(spec) ? ` Only in the cells the words "${activeMask(spec)!.text}" cover (gs_mask: the stroke font, one line a stroke).` : ''}`;
   const grid = expr(c, 'grid', 'Grid scene', inputs, 'g.rgb',
     `The grid: ${spec.cols} × ${spec.rows} cells, ${prog.placed} drawn with shapes ${spec.shapes.map(s => s.id).join(', ') || 'none'}. `
     + `Its helper ${prog.name} (in the node's functions) draws every drawn cell: where its shape is now (its motion), which cell that is, the pattern's wave there, the rules, and its distance; the nearest shape gives the colour. `

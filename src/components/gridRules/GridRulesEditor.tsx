@@ -53,8 +53,11 @@ import { useGridThumbs } from './gridThumbs';
 import { rangeCounts } from '../../gridRules/explain';
 import { SMOOTH_WORDS } from '../../gridRules/smoothWords';
 import { drawnCount, type StartCells } from '../../gridRules/startCells';
+import { DEFAULT_START_TEXT, MAX_TEXT_CHARS, MAX_TEXT_SIZE, MIN_TEXT_SIZE, cleanStartText, readStartText, type StartText } from '../../gridRules/textCells';
+import { DEFAULT_STENCIL, readStencil, stencilMax, stencilSummary, stencilUsesRanges, type NeighbourStencil } from '../../gridRules/neighbourhoods';
+import { StencilEditor } from './StencilEditor';
 import {
-  BOARD_SIZES, COUNT_PRESETS, GRID_DEFAULTS, MAX_RADIUS, MAX_STATES, MAX_STEPS, RULE_TYPES, SMOOTH_NAMES, SMOOTH_PRESETS, STAGES_PRESETS,
+  BOARD_SIZES, COUNT_PRESETS, GRID_DEFAULTS, countsAsRanges, MAX_RADIUS, MAX_STATES, MAX_STEPS, RULE_TYPES, SMOOTH_NAMES, SMOOTH_PRESETS, STAGES_PRESETS,
   SMOOTH_FUNCTIONS, countsOf, customUpdateProblem, gridShape, gridTypeDefaults, matchingPreset, maxCount, parseRuleString, presetPatch, ruleString, ruleSummary,
   stepsPerSecond, type GridPreset, type GridRuleType,
 } from '../../gridRules/spec';
@@ -122,7 +125,7 @@ function GridRulesBuilder({ node, onClose }: { node: GraphNode; onClose: () => v
   const summary = (id: string): string => {
     switch (id) {
       case 'rule': return ruleLine(params);
-      case 'neighbourhood': return shape.neighbourhood === 'moore' ? 'the 8 round it' : shape.neighbourhood === 'vonNeumann' ? 'the 4 beside it' : `radius ${shape.radius}, ${shape.shape === 'circle' ? 'round' : 'square'}`;
+      case 'neighbourhood': return shape.neighbourhood === 'moore' ? 'the 8 round it' : shape.neighbourhood === 'vonNeumann' ? 'the 4 beside it' : shape.neighbourhood === 'custom' ? `your own · ${stencilSummary(shape.stencil ?? DEFAULT_STENCIL).toLowerCase()}` : `radius ${shape.radius}, ${shape.shape === 'circle' ? 'round' : 'square'}`;
       case 'start': return startLine(params);
       case 'run': return `${Math.round(stepsPerSecond(params))} steps a second`;
       case 'brush': return `${num(params, 'brushRadius')} cells · ${shape.type === 'smooth' ? `sets ${num(params, 'brushState')}` : num(params, 'brushState') === 0 ? 'erases' : `paints ${num(params, 'brushState')}`}`;
@@ -222,8 +225,8 @@ const LEARN: Record<string, string> = {
   'rule:patterns': 'Each rule is a picture of the 3×3 cells round a cell. Hatched cells aren\'t looked at; a coloured cell must be that state; a dotted one anything but empty. The first rule that fits says what the cell becomes. Point at a rule to light the cells it fits on the board.',
   'rule:blocks': 'The board is cut into 2×2 blocks, and the cut moves one cell diagonally every step. A block that looks like a before picture becomes its after picture, all four cells at once, so a rule that only moves cells never loses or makes one: sand falls and piles, gas flies.',
   'rule:smooth': 'Instead of a few states, every cell holds a number (two, for ripples and patterns), and every step each cell takes a little from its neighbours.',
-  neighbourhood: 'Which cells a cell counts. The 8 round it (Moore) is Life\'s. The 4 beside it (von Neumann) grows diamonds. A radius counts every cell within that many steps: counts run into the dozens, and Born and Survive become ranges.',
-  start: 'A new board is dealt when the rule\'s kind or the start changes, or when you press Deal a new board. Your drawing is placed in the middle of the board, whatever its size.',
+  neighbourhood: 'Which cells a cell counts. The 8 round it (Moore) is Life\'s. The 4 beside it (von Neumann) grows diamonds. A radius counts every cell within that many steps: counts run into the dozens, and Born and Survive become ranges. Your own: draw the cells that count on a stencil up to 7×7; with Weights a cell can count two or three times. Born and Survive then count against your stencil, on the try board and on the GPU alike.',
+  start: 'A new board is dealt when the rule\'s kind or the start changes, or when you press Deal a new board. Your drawing is placed in the middle of the board, whatever its size. Text: the words are drawn in the stroke font and every cell the letters cover starts live, so Life (or any rule) starts from the letters.',
   run: 'Speed below 1 steps on some frames only: 0.5 is a step every other frame, 30 a second. Steps a frame above 1 runs the rule that many times a frame.',
   brush: 'Hold the mouse button over the picture to paint: in the Studio preview, on the Play page and on exported pages. Paint on the card\'s Play controls paints without the button.',
   look: 'Afterglow: a cell that just died glows and fades. Age fade: live cells move towards Old cells as they age. Color shows can show a number as grey instead (state, age, neighbours), to see why a rule does what it does.',
@@ -259,16 +262,17 @@ function ruleLine(p: P): string {
     const on = rules.filter(r => !r.off).length;
     return `${on} rule${on === 1 ? '' : 's'} · ${Math.round(num(p, 'states'))} states`;
   }
-  const max = maxCount(s.neighbourhood, s.radius, s.shape);
-  const text = s.neighbourhood === 'radius' ? `born ${num(p, 'bornLo')}–${num(p, 'bornHi')}, survive ${num(p, 'surviveLo')}–${num(p, 'surviveHi')}` : ruleString(num(p, 'bornMask'), num(p, 'surviveMask'), max);
+  const max = maxCount(s.neighbourhood, s.radius, s.shape, s.stencil);
+  const text = countsAsRanges(s) ? `born ${num(p, 'bornLo')}–${num(p, 'bornHi')}, survive ${num(p, 'surviveLo')}–${num(p, 'surviveHi')}` : ruleString(num(p, 'bornMask'), num(p, 'surviveMask'), max);
   return s.type === 'stages' ? `${text} · ${Math.round(num(p, 'states'))} states` : text;
 }
 
-const START_NAMES: Record<string, string> = { cells: 'Your drawing', noise: 'Noise', centre: 'A seed in the middle', empty: 'Empty', image: 'A picture' };
+const START_NAMES: Record<string, string> = { text: 'Text', cells: 'Your drawing', noise: 'Noise', centre: 'A seed in the middle', empty: 'Empty', image: 'A picture' };
 
 function startLine(p: P): string {
   const s = gridShape(p);
   if (s.start === 'cells') return s.startCells ? `your drawing · ${drawnCount(s.startCells)} cells` : 'your drawing (nothing drawn)';
+  if (s.start === 'text') return s.startText?.text ? `text "${s.startText.text}" · ${s.startText.size} cells tall` : 'text (no words yet)';
   if (s.start === 'noise' || s.start === 'centre') return `${START_NAMES[s.start].toLowerCase()} · ${Math.round(num(p, 'density') * 100)}%`;
   return START_NAMES[s.start].toLowerCase();
 }
@@ -301,8 +305,8 @@ const Fold = ({ id, ...rest }: { id: string; title: string; summary: string; chi
 /** The Born and Survive counts (switch masks, or a radius rule's ranges) and the largest count. */
 function countSets(p: P): { born: number[]; survive: number[]; max: number } {
   const s = gridShape(p);
-  const max = maxCount(s.neighbourhood, s.radius, s.shape);
-  if (s.neighbourhood === 'radius') return { born: rangeCounts(num(p, 'bornLo'), num(p, 'bornHi')), survive: rangeCounts(num(p, 'surviveLo'), num(p, 'surviveHi')), max };
+  const max = maxCount(s.neighbourhood, s.radius, s.shape, s.stencil);
+  if (countsAsRanges(s)) return { born: rangeCounts(num(p, 'bornLo'), num(p, 'bornHi')), survive: rangeCounts(num(p, 'surviveLo'), num(p, 'surviveHi')), max };
   return { born: countsOf(num(p, 'bornMask'), max), survive: countsOf(num(p, 'surviveMask'), max), max };
 }
 
@@ -311,8 +315,9 @@ function countSets(p: P): { born: number[]; survive: number[]; max: number } {
 function BornSurviveSection({ p, set, stages, onHoverCount }: { p: P; set: Setter; stages: boolean; onHoverCount: (c: TryFocus['count']) => void }) {
   const tk = useTokens();
   const s = gridShape(p);
-  const radiusMode = s.neighbourhood === 'radius';
+  const radiusMode = countsAsRanges(s);
   const { born, survive, max } = countSets(p);
+  const plain = s.neighbourhood === 'custom';
   const [text, setText] = useState<string | null>(null);
   const shown = text ?? ruleString(num(p, 'bornMask'), num(p, 'surviveMask'), max);
   const bad = text !== null && !parseRuleString(text);
@@ -323,7 +328,7 @@ function BornSurviveSection({ p, set, stages, onHoverCount }: { p: P; set: Sette
       <RuleSentence born={born} survive={survive} max={max} stages={stages} states={num(p, 'states')} />
       {radiusMode ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <span style={{ fontSize: 12, color: tk.text.muted }}>A radius counts up to {max} cells, so Born and Survive are ranges.</span>
+          <span style={{ fontSize: 12, color: tk.text.muted }}>{s.neighbourhood === 'custom' ? `Your neighbourhood counts up to ${max}` : `A radius counts up to ${max} cells`}, so Born and Survive are ranges.</span>
           <Slider p={p} set={set} k="bornLo" label="Born from" min={0} max={max} step={1} integer />
           <Slider p={p} set={set} k="bornHi" label="Born to" min={0} max={max} step={1} integer />
           <Slider p={p} set={set} k="surviveLo" label="Survive from" min={0} max={max} step={1} integer />
@@ -331,9 +336,9 @@ function BornSurviveSection({ p, set, stages, onHoverCount }: { p: P; set: Sette
         </div>
       ) : (
         <>
-          <PictureSwitches compact row="born" mask={num(p, 'bornMask')} max={max} nb={nb} colour={bornColour} born={born} survive={survive} stages={stages}
+          <PictureSwitches compact plain={plain} row="born" mask={num(p, 'bornMask')} max={max} nb={nb} colour={bornColour} born={born} survive={survive} stages={stages}
             onChange={m => set({ bornMask: m }, true)} onHoverCount={k => onHoverCount(k === null ? null : { row: 'born', k })} />
-          <PictureSwitches compact row="survive" mask={num(p, 'surviveMask')} max={max} nb={nb} colour={surviveColour} born={born} survive={survive} stages={stages}
+          <PictureSwitches compact plain={plain} row="survive" mask={num(p, 'surviveMask')} max={max} nb={nb} colour={surviveColour} born={born} survive={survive} stages={stages}
             onChange={m => set({ surviveMask: m }, true)} onHoverCount={k => onHoverCount(k === null ? null : { row: 'survive', k })} />
           <span style={{ fontSize: 11.5, color: tk.text.faint, lineHeight: 1.4 }}>Point at a switch: the board lights the cells with that count.</span>
         </>
@@ -346,7 +351,7 @@ function BornSurviveSection({ p, set, stages, onHoverCount }: { p: P; set: Sette
           <Slider p={p} set={set} k="states" label="States" min={2} max={MAX_STATES} step={1} integer hint="Empty (0), on (1), then the dying stages. 3 is one dying stage (Brian's Brain)." />
         </div>
       )}
-      {!radiusMode && (
+      {!radiusMode && max <= 8 && (
         <Fold id="as-text" title="As B/S text" summary={stages ? `${shown} · S${countsOf(num(p, 'surviveMask'), max).join('')}/B${countsOf(num(p, 'bornMask'), max).join('')}/C${Math.round(num(p, 'states'))}` : shown}>
           <Row label="B/S notation" hint="B3/S23 is Life (born on 3, survive on 2 or 3). Type a rule or a preset's name; press Enter to use it.">
             <RuleTextField shown={shown} text={text} bad={bad} setText={setText} onUse={r => set({ bornMask: r.born, surviveMask: r.survive }, true)} />
@@ -359,14 +364,35 @@ function BornSurviveSection({ p, set, stages, onHoverCount }: { p: P; set: Sette
 
 // ── Neighbourhood ───────────────────────────────────────────────────────────────────────────────
 
+/** Born and Survive that suit a stencil: Life's counts with switches, Bosco's proportions as ranges. */
+function countsFor(st: NeighbourStencil): P {
+  const max = stencilMax(st);
+  if (!stencilUsesRanges(st)) return {};
+  return { bornLo: Math.round(max * 0.34), bornHi: Math.round(max * 0.45), surviveLo: Math.round(max * 0.33), surviveHi: Math.round(max * 0.57) };
+}
+
 function NeighbourhoodSection({ p, set }: { p: P; set: Setter }) {
   const tk = useTokens();
   const s = gridShape(p);
-  const max = maxCount(s.neighbourhood, s.radius, s.shape);
+  const max = maxCount(s.neighbourhood, s.radius, s.shape, s.stencil);
+  const stencil = readStencil(p.stencil);
+  const setStencil = (st: NeighbourStencil) => {
+    // Crossing into ranges (or back to switches) brings counts that work there.
+    const was = stencilUsesRanges(stencil), now = stencilUsesRanges(st);
+    set({ stencil: st, ...(now && !was ? countsFor(st) : {}), ...(!now && was ? { bornMask: 8, surviveMask: 12 } : {}) }, true);
+  };
   return (
     <>
-      <NeighbourhoodPictures value={s.neighbourhood} radius={s.radius} shape={s.shape}
-        onChange={v => set(v === 'radius' ? { neighbourhood: v, bornLo: 34, bornHi: 45, surviveLo: 33, surviveHi: 57, radius: 5 } : { neighbourhood: v }, true)} />
+      <NeighbourhoodPictures value={s.neighbourhood} radius={s.radius} shape={s.shape} stencil={p.stencil ? stencil : null}
+        onChange={v => set(v === 'radius' ? { neighbourhood: v, bornLo: 34, bornHi: 45, surviveLo: 33, surviveHi: 57, radius: 5 }
+          : v === 'custom' ? { neighbourhood: v, stencil, ...countsFor(stencil) } : { neighbourhood: v }, true)} />
+      {s.neighbourhood === 'custom' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <b style={{ fontSize: 13 }}>Your neighbourhood</b>
+          <span style={{ fontSize: 12, color: tk.text.muted, lineHeight: 1.45 }}>Click the cells that count round this cell (the ringed middle). Point at the board to see them; Born and Survive count against them.</span>
+          <StencilEditor stencil={stencil} onChange={setStencil} />
+        </div>
+      )}
       {s.neighbourhood === 'radius' && (
         <>
           <Slider p={p} set={v => set(v, true)} k="radius" label="Radius" min={1} max={MAX_RADIUS} step={1} integer hint="How far the neighbourhood reaches, in cells." />
@@ -375,7 +401,7 @@ function NeighbourhoodSection({ p, set }: { p: P; set: Setter }) {
           </Row>
         </>
       )}
-      <span style={{ color: tk.text.muted, fontSize: 12 }}>Counts up to {max} cells (the cell itself is not counted). Point at the board to see the cells one counts.</span>
+      <span style={{ color: tk.text.muted, fontSize: 12 }}>{s.neighbourhood === 'custom' ? `Counts up to ${max} (weights included; the cell itself is never counted)` : `Counts up to ${max} cells (the cell itself is not counted)`}. Point at the board to see the cells one counts.</span>
     </>
   );
 }
@@ -384,6 +410,7 @@ function NeighbourhoodSection({ p, set }: { p: P; set: Setter }) {
 
 const START_OPTIONS: Array<{ value: string; label: string; hint: string }> = [
   { value: 'cells', label: 'Your drawing', hint: 'The cells you drew on the board (Use as the start), in the middle.' },
+  { value: 'text', label: 'Text', hint: 'Words: the cells the letters cover start live.' },
   { value: 'noise', label: 'Noise', hint: 'Cells scattered at random.' },
   { value: 'centre', label: 'A seed in the middle', hint: 'A round patch of noise in the middle.' },
   { value: 'empty', label: 'Empty', hint: 'Nothing: paint with the brush.' },
@@ -416,6 +443,7 @@ function StartSection({ p, set }: { p: P; set: Setter }) {
           {s.startCells ? `${drawnCount(s.startCells)} cells drawn (${s.startCells.w} × ${s.startCells.h}). Draw on the board and press Use as the start to change it.` : 'Nothing drawn yet: draw on the board, then press Use as the start.'}
         </span>
       )}
+      {s.start === 'text' && <TextStartFields p={p} set={set} />}
       {(s.start === 'noise' || s.start === 'centre') && <Slider p={p} set={set} k="density" label="How full" min={0} max={1} hint="The share of cells that start on." />}
       <Row label=""><Button size="sm" icon="dice" onClick={deal}>Deal a new board</Button></Row>
       <Row label="Board size" hint="How many cells: each cell is a block of the picture's pixels.">
@@ -425,6 +453,40 @@ function StartSection({ p, set }: { p: P; set: Setter }) {
         <Segmented<string> ariaLabel="Edges" size="sm" value={s.wrap ? 'wrap' : 'walls'} onChange={v => set({ edges: v }, true)} options={[{ value: 'wrap', label: 'Wrap round' }, { value: 'walls', label: 'Walls' }]} />
       </Row>
     </>
+  );
+}
+
+/** Start → Text: the words, their size, weight and place, and (several states) the state they start in. */
+function TextStartFields({ p, set }: { p: P; set: Setter }) {
+  const tk = useTokens();
+  const s = gridShape(p);
+  const st = readStartText(p.startText);
+  const [draft, setDraft] = useState<string | null>(null);
+  const put = (patch: Partial<StartText>, immediate = false) => set({ startText: { ...st, ...patch } }, immediate);
+  const top = s.type === 'count' || s.type === 'smooth' ? 1 : Math.max(2, Math.round(num(p, 'states'))) - 1;
+  const row = (label: string, hint: string, key: 'size' | 'weight' | 'x' | 'y' | 'state', min: number, max: number, o: { integer?: boolean; step?: number } = {}) => (
+    <Row label={label} hint={hint}>
+      <BuilderSlider ariaLabel={`Text ${label.toLowerCase()}`} value={st[key]} min={min} max={max} step={o.step ?? (o.integer ? 1 : 0.01)} integer={o.integer}
+        defaultValue={DEFAULT_START_TEXT[key]} rangeKey={`grid:text:${key}`} onChange={v => put({ [key]: v })} />
+    </Row>
+  );
+  const cells = s.startCells ? drawnCount(s.startCells) : 0;
+  return (
+    <div data-text-start style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <Row label="Words" hint={`A–Z, 0–9 and ! ? . , : ' - + * / = #, up to ${MAX_TEXT_CHARS}. Drawn in the stroke font (the Agent Builder's).`}>
+        <Field aria-label="Text start words" value={draft ?? st.text} maxLength={MAX_TEXT_CHARS * 2} data-text-start-words
+          onChange={e => { setDraft(e.target.value); const t = cleanStartText(e.target.value); if (t) put({ text: t }); }}
+          onBlur={() => setDraft(null)} />
+      </Row>
+      {row('Size', 'How many cells tall the letters are.', 'size', MIN_TEXT_SIZE, MAX_TEXT_SIZE, { integer: true })}
+      {row('Weight', 'How thick the strokes are (half their width, in the letters\' units: they are 2 tall). Thin strokes stay one cell wide.', 'weight', 0.02, 0.8)}
+      {row('Across', 'Where the words\' middle is, in cells right of the board\'s middle.', 'x', -120, 120, { integer: true })}
+      {row('Up', 'Where the words\' middle is, in cells above the board\'s middle.', 'y', -70, 70, { integer: true })}
+      {top > 1 && row('State', 'The state the letters\' cells start in.', 'state', 1, top, { integer: true })}
+      <span data-text-start-cells style={{ fontSize: 12, color: cells ? tk.text.secondary : tk.status.warningText, lineHeight: 1.45 }}>
+        {cells ? `${cells} cells start live (${s.startCells!.w} × ${s.startCells!.h}). The try board shows them; Life eats into the letters from the first step.` : 'No letters the font knows: type A–Z or 0–9.'}
+      </span>
+    </div>
   );
 }
 
@@ -591,7 +653,7 @@ function GridRecipeTab({ params, set }: { params: P; set: Setter }) {
       errors: r.errors, hints: r.hints, resolved: r.resolved,
       apply: () => {
         const patch: P = {};
-        for (const k of RECIPE_KEYS) if (JSON.stringify(r.params[k]) !== JSON.stringify(params[k])) patch[k] = r.params[k];
+        for (const k of [...RECIPE_KEYS, 'startText']) if (r.params[k] !== undefined && JSON.stringify(r.params[k]) !== JSON.stringify(params[k])) patch[k] = r.params[k];
         if (r.params.ruleType !== params.ruleType) patch.ruleType = r.params.ruleType;
         if (Object.keys(patch).length) set(patch, true);
       },

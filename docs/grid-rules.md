@@ -29,6 +29,8 @@ Code:
 | Open as nodes | `src/store/gridRulesAsNodes.ts` |
 | The builder (shell, try board, sections), card | `src/components/gridRules/` |
 | The CPU step, the try board's step-through, a drawn start | `src/gridRules/cpu.ts`, `tryRun.ts`, `startCells.ts` |
+| A text start (words rasterised to cells, the stamps) | `src/gridRules/textCells.ts` (the font: `src/agentBuilder/strokeFont.ts`) |
+| Your own neighbourhood: stencils, weights, presets; its editor | `src/gridRules/neighbourhoods.ts`, `src/components/gridRules/StencilEditor.tsx` |
 | Before/after pictures, Smooth in plain words | `src/gridRules/ruleExamples.ts`, `smoothWords.ts` |
 | Examples | `src/store/gridRulesExamples.ts`, `gridRulesExampleIndex.ts` |
 | Tests | `src/compiler/__tests__/gridRules*.test.ts`, `gridHarness.ts`, `glslRun.ts`, `src/gridRules/__tests__/` |
@@ -73,6 +75,9 @@ again when the kind of rule, the template or the start changes.
   already that state erases it (and the drag goes on erasing); Shift-drag erases; ⌫ is state 0.
   Smooth drops a value. **Clear**, **Deal again** and, for counting rules, a **Test pattern**
   (Glider, Blinker, R-pentomino, a random blob).
+- **Text stamp** (the **T** button): type words and pick how many cells tall; pointing at the board
+  outlines the cells the letters will cover, and a click stamps them in the picked state (Shift-click
+  erases them). The letters are the stroke font's, rasterised as a text start is (below).
 - **Step through:** ⏮ back to the first step kept, ◀ one generation back, ▶ play or pause,
   ▶| one forward (← → and Space when the board has focus). The last 400 frames are kept, so back
   shows the very frame you saw, not a new step. Drawing on a frame keeps it and drops the frames
@@ -85,7 +90,8 @@ again when the kind of rule, the template or the start changes.
 - **Pictures for the section being edited:**
   - Born & Survive and Neighbourhood: what the next step does, a green ring where a cell is born, a
     red cross where one dies (Stages: an amber dot where it changes stage); the switch in the
-    corner turns them off. Pointing at a cell outlines the cells it counts.
+    corner turns them off. Pointing at a cell outlines the cells it counts (your own
+    neighbourhood's too), and the note under the step counter gives its count, weights included.
   - Pointing at a **count switch** lights the cells it stands for: the empty cells with that many
     live neighbours (Born) or the live ones (Survive).
   - Stencils: pointing at a rule lights the cells it matches now, with "Rule 2 matches 14 cells
@@ -184,8 +190,9 @@ alive; a live cell with a count in **Survive on** stays alive; every other cell 
 
 - **Born on / Survive on**: a row of switches 0…8 (0…4 for von Neumann), stored as bit masks
   (`bornMask`, `surviveMask`: bit k = count k). Type B/S notation (`B36/S23`) in **As text**.
-- **Neighbourhood**: Moore (8), von Neumann (4), or **Radius N** (Larger than Life, 1–7, a box or a
-  circle). A radius rule uses ranges: Born from…to, Survive from…to.
+- **Neighbourhood**: Moore (8), von Neumann (4), **Radius N** (Larger than Life, 1–7, a box or a
+  circle), or **Your own** (a stencil you draw, below). A radius rule uses ranges: Born from…to,
+  Survive from…to.
 - **Presets**: Life, HighLife, Seeds, Day & Night, Maze, Coral, Anneal, Diamoeba, Replicator,
   Life without Death, Caves, Diamonds (von Neumann), Bosco (radius 5), Majority (radius 4).
 
@@ -274,9 +281,37 @@ and Margolus; Jitter 0). Surprise me gives sand a Jitter of 0.6–1 and the gas 
 up to the last state for white (two states: bright parts start on). Wireworld's example draws its
 starter circuit that way.
 
+### Your own neighbourhood
+
+Neighbourhood → **Your own** (`neighbourhood: 'custom'`, the node's `stencil` param,
+`src/gridRules/neighbourhoods.ts`): Count and Stages count the cells of a stencil you draw instead of
+the 8 round, the 4 beside or a radius.
+
+- **The editor** (`StencilEditor.tsx`): a 3×3, 5×5 or 7×7 square round **this cell** (ringed in the
+  middle, never counted). Click a cell to count it, again to take it out. With **Weights** on, a click
+  steps a cell 1 → ×2 → ×3 → off: a live cell there counts that many times. Shift-click or right-click
+  takes a cell out. A line under it sums it up ("10 cells (weighted) · counts 0–14").
+- **Presets**: Moore and von Neumann (exactly the built-in ones), **Hex-ish** (the 8 less two opposite
+  corners: six neighbours, as a hexagonal grid sits on a square one), a **Ring** (the 16 cells two steps
+  out, none of the 8 next to it) and a **Cross** (two cells each way: 8 in a plus).
+- **Born and Survive** count against the stencil: a cell's count is the sum of its live neighbours'
+  weights, 0 to the stencil's total. Up to a total of 23 they are switches (bit masks, exact as float
+  uniforms to 2²⁴), shown as numbers (a 3×3 picture of 8 neighbours wouldn't be your stencil); above
+  23 they are ranges, as a radius rule's. Crossing from one to the other brings counts that work there.
+  B/S text (`B3/S23`) is offered for totals up to 8; past 9 the rule line puts commas between counts
+  (`B3/S2,3`).
+- **On the GPU** the step unrolls one read per counted cell, times its weight (`gridRules/glsl.ts`
+  countLines); the CPU try board adds the same weights (`cpu.ts`). The stencil is baked into the
+  GLSL, so an edit recompiles; it doesn't deal a new board. A custom neighbourhood's signature has a
+  range of its own (500 up), so switching to it deals the board again.
+- `gridRulesTextNb.test.ts`: the Moore and von Neumann presets give the built-in neighbourhoods'
+  boards (Life, HighLife, Diamonds; CPU and GPU, 8 steps), a 5×5 stencil of ones is radius 2, and a
+  weighted cross, the ring with walls, hex-ish Stages and a 7×7 weighted stencil counted as ranges
+  step the same on the CPU and the GPU for 8 steps.
+
 ## Shared settings
 
-- **Start**: **Your drawing** (below), Noise (How full, Seed), A seed in the middle, Empty, A picture
+- **Start**: **Your drawing** (below), **Text** (below), Noise (How full, Seed), A seed in the middle, Empty, A picture
   (wire a picture into **Start image**: bright cells start on; Smooth takes its brightness).
   **Deal a new board** in the builder, or the **Reset** param (a Play switch).
 - **Speed** below 1 steps on some frames only (a clock kept in the board's blue); **Steps a frame**
@@ -296,16 +331,39 @@ starter circuit that way.
 
 Start **Your drawing** (`start: 'cells'`) deals a new board from cells you drew, placed in the middle
 of the board whatever its size (`src/gridRules/startCells.ts`). The drawing is the node's
-`startCells` param: `{ w, h, rows }`, rows top first, `.` empty and a digit (or a–f) the state,
-cropped to its cells, at most 64 × 64. A state above the rule's last is clamped; Smooth starts a
-drawn cell at 1 (Growing patterns: B).
+`startCells` param: `{ w, h, rows, ox?, oy? }`, rows top first, `.` empty and a digit (or a–f) the
+state, cropped to its cells, at most 128 × 128, moved `ox` cells right and `oy` up from the middle
+(a text start's position). A state above the rule's last is clamped; Smooth starts a drawn cell at 1
+(Growing patterns: B).
 
 - The GLSL bakes one test per drawn row, state and 16 cells (a bit of a whole-number mask) and
   places the drawing's bottom-left cell at floor((board − drawing) / 2), as the CPU stamps it.
 - Its signature is 100 and up (past every other start's), with a hash of the drawing, so a new
   drawing deals a new board.
 - As text it is `start=cells` (the drawing has no words; the text keeps the one on the node).
-- Open as nodes doesn't build a drawn start yet (the button says so).
+- Open as nodes builds it: a **Drawn start** Expression Block holding the drawing (see Open as nodes).
+
+## A text start
+
+Start **Text** (`start: 'text'`, the node's `startText`: `{ text, size, weight, x, y, state }`,
+`src/gridRules/textCells.ts`): words in the Agent Builder's stroke font (`agentBuilder/strokeFont.ts`,
+docs/agent-builder.md "Text as a shape or a wall"), rasterised on the CPU so that live cells form the
+letters. Life (or any rule) then runs from the letters.
+
+- **Words** (A–Z, 0–9 and `! ? . , : ' - + * / = #`, up to 16), **Size** (how many cells tall the
+  letters are, 3–60), **Weight** (the strokes' half-width in the font's units, the letters being 2
+  tall), **Across** and **Up** (cells from the board's middle), and, for rules with several states,
+  the **State** the letters start in.
+- A cell is on when the letters cover its middle: the nearest stroke is closer than the half-weight,
+  or (so thin strokes stay joined) closer than half a cell.
+- The cells become a drawn start (`gridShape` turns `startText` into `startCells`, offsets
+  included), so the GLSL bakes them and the CPU stamps them exactly as a drawing, and the signature
+  changes with the words. Editing the words, size or weight recompiles and deals the board again;
+  the try board shows the new letters at once.
+- As text: `start=text text="LIFE" text-size=12` (either `text=` or `text-size=` sets the start).
+- `gridRulesTextNb.test.ts`: an L is a column and a foot, I is symmetric, O a closed ring, thin
+  strokes stay 8-connected, the start is centred and moved by x and y, and the GPU deals the letters
+  where the CPU stamps them (Count, Stages, Smooth), Life then stepping alike.
 
 **From another builder.** `newGridRules({ params, startCells })` (`src/builders/open.ts`) adds a
 Grid Rules node with those params and a drawn start (rows of states, top first, or a StartCells)
@@ -344,10 +402,13 @@ life · colours on=green empty=black · brush size=5 fill=0.3
 - **Settings:**
   - `born=` / `survive=` take counts (`2,3`) or, with `neighbours=radius`, a range (`34..45`).
     `rule=B36/S23` and a bare `B36/S23` also read.
-  - `neighbours=moore|von-neumann|radius`, `radius=`, `shape=box|circle`, `states=`.
+  - `neighbours=moore|von-neumann|radius|custom`, `radius=`, `shape=box|circle`, `states=`.
+    `custom` is the stencil already on the node (Moore's when there is none): a stencil has no
+    words.
   - `board=` is cells across at 1080p (960, 480, 240, 120, 60). `wrap` / `walls`.
   - `speed=` runs 0–1 a frame; above 1 it is steps a frame. `steps=`.
-  - `start=noise|empty|image|centre`, `density=`, `start-seed=`.
+  - `start=noise|empty|image|centre|text`, `density=`, `start-seed=`; `text="LIFE"` and
+    `text-size=12` (a text start).
   - Smooth: `spread=`, `cooling=`, `wave-speed=`, `damping=`, `feed=`, `kill=`, `spread-a=`,
     `spread-b=`, `u={…}`, `v={…}`, `a=` to `d=`, `gain=`.
   - `afterglow=`, `age-rate=`, `age-fade=`.
@@ -486,6 +547,18 @@ Every node has a note; every Expression Block's note explains each named line. R
 isn't built ((2N + 1)² − 1 Sample cards); the button says so. Seeding uses Noise Float's hash, so a
 new board is a different (as random) deal.
 
+- **A drawn or text start** opens as a **Drawn start** (or **Text start**) Expression Block: the
+  drawing is data, held in its function (`grDrawn_<hash>`) as numbers, one per drawn row, state and 16
+  cells whose bits are the cells, the same code the node bakes. Its result is the drawn state at this
+  cell, clamped to the rule's last state; Start over? mixes it in on a new board (or Reset). Smooth
+  reads it into Start values. A new drawing writes a new function.
+- **Your own neighbourhood** opens as one Sample (texture) card per counted cell, and Count the
+  neighbours multiplies each by its weight. Up to 24 counted cells (radius 2's); more and the button
+  says so.
+- `gridRulesTextNb.test.ts` opens Life from a drawing and from text, Brian's Brain from a drawing,
+  Heat from text and a custom neighbourhood from a drawing: each compiles, deals the drawing on a new
+  board exactly as the node does (and as the CPU stamps it) and steps as the node for five steps.
+
 Patterns open as eight Sample reads and one **The patterns** Expression Block (each rule a named
 line); Blocks as **Jitter** and **Seed** constants, **This cell's block** (the corner, from
 `grBlockOf`, and the parity), four UVs and four Sample reads of the block's cells, and **The
@@ -565,7 +638,8 @@ board's. A radius-7 Larger than Life rule reads 224 neighbours a cell.
   recompiles.
 - **The try board** (CPU) doesn't run a custom Smooth update (it shows plain spreading), and deals
   an Image start as noise.
-- **Open as nodes** builds radius 1 and 2 only; it seeds with a different hash.
+- **Open as nodes** builds radius 1 and 2 only, and your own neighbourhood up to 24 counted cells;
+  it seeds noise with a different hash (a drawn or text start is the same cells).
 - **States** above 8 share colours: Stages blends its dying stages from State 2's colour to State
   3's; Patterns and Blocks give states past 7 the eighth colour.
 - **Stages' born / survive** count only state 1 (Generations), never the dying stages.

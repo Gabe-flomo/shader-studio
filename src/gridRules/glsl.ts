@@ -14,7 +14,7 @@
 import { startCellsGLSL } from './startCells';
 import { ANY, NOT_EMPTY, SAME, blockCorner, blockVariants, patternVariants, stencilOffset } from './stencils';
 import {
-  MOORE_OFFSETS, VON_NEUMANN_OFFSETS, gridSignature, floatLiterals, isDiscrete,
+  MOORE_OFFSETS, VON_NEUMANN_OFFSETS, countsAsRanges, gridSignature, floatLiterals, isDiscrete, isDrawnStart, maxCount, neighbourWeights,
   type GridShape,
 } from './spec';
 
@@ -70,7 +70,7 @@ export function gridStepGLSL(s: GridShape, N: GridNames, prev: string, image?: s
     `float ${v('in')} = (length(${v('cell')} + 0.5 - ${v('m')}) < ${P('brushRadius')} ? 1.0 : 0.0) * max(step(0.5, u_mousebtn), step(0.5, ${P('paint')}));`,
   );
   // A drawn start (gridRules/startCells.ts): the drawing's state at this cell, read only when the board is dealt.
-  if (s.start === 'cells') L.push(...startCellsGLSL(s.startCells, v('drawn'), v('cell'), v('res'), id));
+  if (isDrawnStart(s.start)) L.push(...startCellsGLSL(s.startCells, v('drawn'), v('cell'), v('res'), id));
   if (isDiscrete(s.type)) L.push(...discreteStep(s, N, read, image, sig, prev));
   else L.push(...smoothStep(s, N, read, image));
   return L.map(l => `    ${l}\n`).join('');
@@ -81,7 +81,7 @@ function discreteSeed(s: GridShape, N: GridNames, image?: string): string {
   const { id, P } = N;
   const noise = `(${id}_h < ${P('density')} ? 1.0 : 0.0)`;
   if (s.start === 'empty') return '0.0';
-  if (s.start === 'cells') return `min(${id}_drawn, ${id}_top)`;
+  if (isDrawnStart(s.start)) return `min(${id}_drawn, ${id}_top)`;
   if (s.start === 'centre') return `(length(${id}_cell + 0.5 - ${id}_res * 0.5) < min(${id}_res.x, ${id}_res.y) * 0.15 ? ${noise} : 0.0)`;
   // An image: its brightness picks the state (0 dark … the last state white), so a picture can lay out several.
   if (s.start === 'image' && image) return `floor(clamp(dot(texture2D(${image}, (${id}_cell + 0.5) / ${id}_res).rgb, vec3(0.2126, 0.7152, 0.0722)), 0.0, 1.0) * ${id}_top + 0.5)`;
@@ -106,6 +106,11 @@ function countLines(s: GridShape, N: GridNames, read: (d: string) => string): st
     );
     return L;
   }
+  if (s.neighbourhood === 'custom') {
+    // Your own neighbourhood (gridRules/neighbourhoods.ts): one read a counted cell, times its weight.
+    for (const [dx, dy, w] of neighbourWeights(s)) L.push(`${id}_q = ${read(off(dx, dy))}.r;`, `${id}_cnt += ${w === 1 ? on : `${f(w)} * ${on}`};`);
+    return L;
+  }
   for (const [dx, dy] of s.neighbourhood === 'vonNeumann' ? VON_NEUMANN_OFFSETS : MOORE_OFFSETS) {
     L.push(`${id}_q = ${read(off(dx, dy))}.r;`, `${id}_cnt += ${on};`);
   }
@@ -123,7 +128,7 @@ function discreteStep(s: GridShape, N: GridNames, read: (d: string) => string, i
   }
   if (!multi) L.push(...countLines(s, N, read));
   // Born / survive: bit `count` of the masks (Moore, von Neumann), or a range (radius).
-  if (multi) { /* the next state is worked out above */ } else if (s.neighbourhood === 'radius') {
+  if (multi) { /* the next state is worked out above */ } else if (countsAsRanges(s)) {
     L.push(
       `float ${v('born')} = step(${P('bornLo')} - 0.5, ${v('cnt')}) * step(${v('cnt')}, ${P('bornHi')} + 0.5);`,
       `float ${v('surv')} = step(${P('surviveLo')} - 0.5, ${v('cnt')}) * step(${v('cnt')}, ${P('surviveHi')} + 0.5);`,
@@ -329,12 +334,13 @@ function smoothStep(s: GridShape, N: GridNames, read: (d: string) => string, ima
   const lum = image ? `dot(texture2D(${image}, (${v('cell')} + 0.5) / ${v('res')}).rgb, vec3(0.2126, 0.7152, 0.0722))` : null;
   const blob = `(grHash(vec3(floor(${v('cell')} / 6.0), ${FRAME} + ${P('seed')} * 1013.0 + 3.0)) < ${D} * 0.04 ? 1.0 : 0.0)`;
   const drawn = `(${v('drawn')} > 0.5 ? 1.0 : 0.0)`;
+  const drawnStart = isDrawnStart(s.start);
   let su: string, sv: string;
   if (s.template === 'reaction') {
-    const b = s.start === 'empty' ? '0.0' : s.start === 'cells' ? drawn : s.start === 'centre' ? disc : s.start === 'image' && lum ? lum : blob;
+    const b = s.start === 'empty' ? '0.0' : drawnStart ? drawn : s.start === 'centre' ? disc : s.start === 'image' && lum ? lum : blob;
     su = '0.0'; sv = b; // A = 1 everywhere (red keeps 1 − A)
   } else {
-    const a = s.start === 'empty' ? '0.0' : s.start === 'cells' ? drawn : s.start === 'centre' ? disc : s.start === 'image' && lum ? lum
+    const a = s.start === 'empty' ? '0.0' : drawnStart ? drawn : s.start === 'centre' ? disc : s.start === 'image' && lum ? lum
       : s.template === 'waves' ? `(${v('h')} < ${D} * 0.02 ? 1.0 : 0.0)` : `(${v('h')} < ${D} ? 1.0 : 0.0)`;
     su = a; sv = s.template === 'waves' ? a : '0.0';
   }
@@ -370,6 +376,10 @@ export function gridNeighboursExpr(s: GridShape, board: string): string {
   const at = (dx: number, dy: number) => `texture2D(${board}, (floor(vUv * ${res}) + ${off(dx, dy)} + 0.5) / ${res}).r`;
   const offs = s.neighbourhood === 'vonNeumann' ? VON_NEUMANN_OFFSETS : MOORE_OFFSETS;
   if (!isDiscrete(s.type)) return `((${offs.map(([dx, dy]) => at(dx, dy)).join(' + ')}) / ${f(offs.length)})`;
+  // A custom neighbourhood: its own cells, weighted, as the rule counts them.
+  if (s.neighbourhood === 'custom' && (s.type === 'count' || s.type === 'stages')) {
+    return `(${neighbourWeights(s).map(([dx, dy, w]) => `${w === 1 ? '' : `${f(w)} * `}(1.0 - step(0.5, abs(${at(dx, dy)} - 1.0)))`).join(' + ') || '0.0'})`;
+  }
   return `(${offs.map(([dx, dy]) => `(1.0 - step(0.5, abs(${at(dx, dy)} - 1.0)))`).join(' + ')})`;
 }
 
@@ -419,7 +429,7 @@ export function gridViewGLSL(s: GridShape, N: GridNames, board: string | undefin
   let color = v('col');
   if (view !== 'colour') {
     const top = s.type === 'count' ? '1.0' : s.type === 'smooth' ? '1.0' : `max(${P('states')} - 1.0, 1.0)`;
-    const maxN = s.neighbourhood === 'vonNeumann' ? 4 : 8;
+    const maxN = s.neighbourhood === 'vonNeumann' ? 4 : s.neighbourhood === 'custom' && (s.type === 'count' || s.type === 'stages') ? Math.max(1, maxCount('custom', 1, 'box', s.stencil)) : 8;
     const g = view === 'state' ? (isDiscrete(s.type) ? `clamp(${v('st')} / ${top}, 0.0, 1.0)` : `clamp(${v('st')}, 0.0, 1.0)`)
       : view === 'age' ? `clamp(${v('age')}, 0.0, 1.0)`
       : isDiscrete(s.type) ? `${neighbours} / ${f(maxN)}` : `clamp(${neighbours}, 0.0, 1.0)`;

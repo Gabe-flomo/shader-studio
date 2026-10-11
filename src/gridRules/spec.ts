@@ -19,14 +19,22 @@
 
 import { checkExprType } from '../lang/typeCheck';
 import { readStartCells, startCellsHash, type StartCells } from './startCells';
+import { readStartText, textStartCells, type StartText } from './textCells';
+import { readStencil, stencilMax, stencilUsesRanges, stencilWeights, type NeighbourStencil } from './neighbourhoods';
 import { BLOCK_PRESETS, DEFAULT_BLOCKS, DEFAULT_PATTERNS, PATTERN_PRESETS, readBlocks, readPatterns, type BlockRule, type PatternRule } from './stencils';
 
 export type GridRuleType = 'count' | 'stages' | 'patterns' | 'blocks' | 'smooth';
-export type Neighbourhood = 'moore' | 'vonNeumann' | 'radius';
+/** 'custom': a stencil you draw (the `stencil` param, gridRules/neighbourhoods.ts), cells weighted. */
+export type Neighbourhood = 'moore' | 'vonNeumann' | 'radius' | 'custom';
 export type RadiusShape = 'box' | 'circle';
 export type SmoothTemplate = 'diffusion' | 'waves' | 'reaction' | 'custom';
-/** 'cells': the drawing in `startCells`, in the middle of the board (gridRules/startCells.ts). */
-export type StartMode = 'noise' | 'empty' | 'image' | 'centre' | 'cells';
+/**
+ * 'cells': the drawing in `startCells`, in the middle of the board (gridRules/startCells.ts).
+ * 'text': words in `startText`, rasterised to cells (gridRules/textCells.ts) and dealt as a drawing.
+ */
+export type StartMode = 'noise' | 'empty' | 'image' | 'centre' | 'cells' | 'text';
+/** A start dealt from drawn cells (a drawing, or words rasterised to cells). */
+export const isDrawnStart = (m: StartMode) => m === 'cells' || m === 'text';
 
 /** Board sizes: the Pass's scale. One pixel of the board is one cell. */
 export const BOARD_SIZES: Array<{ value: string; label: string; scale: number }> = [
@@ -59,10 +67,11 @@ export const MAX_STEPS = 16;
 export const MOORE_OFFSETS: Array<[number, number]> = [[0, 1], [1, 1], [1, 0], [1, -1], [0, -1], [-1, -1], [-1, 0], [-1, 1]];
 export const VON_NEUMANN_OFFSETS: Array<[number, number]> = [[0, 1], [1, 0], [0, -1], [-1, 0]];
 
-/** The offsets a neighbourhood counts (self excluded). */
-export function neighbourOffsets(nb: Neighbourhood, radius = 1, shape: RadiusShape = 'box'): Array<[number, number]> {
+/** The offsets a neighbourhood counts (self excluded). A custom one needs its stencil. */
+export function neighbourOffsets(nb: Neighbourhood, radius = 1, shape: RadiusShape = 'box', stencil?: NeighbourStencil | null): Array<[number, number]> {
   if (nb === 'moore') return MOORE_OFFSETS;
   if (nb === 'vonNeumann') return VON_NEUMANN_OFFSETS;
+  if (nb === 'custom') return stencilWeights(readStencil(stencil)).map(([dx, dy]) => [dx, dy]);
   const r = clampRadius(radius);
   const out: Array<[number, number]> = [];
   for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
@@ -73,8 +82,18 @@ export function neighbourOffsets(nb: Neighbourhood, radius = 1, shape: RadiusSha
   return out;
 }
 export const clampRadius = (r: unknown) => Math.max(1, Math.min(MAX_RADIUS, Math.round(typeof r === 'number' && isFinite(r) ? r : 2)));
-/** Most neighbours the neighbourhood can count. */
-export const maxCount = (nb: Neighbourhood, radius = 1, shape: RadiusShape = 'box') => neighbourOffsets(nb, radius, shape).length;
+/** Most neighbours the neighbourhood can count (a custom one: the sum of its weights). */
+export const maxCount = (nb: Neighbourhood, radius = 1, shape: RadiusShape = 'box', stencil?: NeighbourStencil | null) =>
+  (nb === 'custom' ? stencilMax(readStencil(stencil)) : neighbourOffsets(nb, radius, shape).length);
+
+/** The cells a rule counts with their weights (1 for every built-in neighbourhood). */
+export function neighbourWeights(s: Pick<GridShape, 'neighbourhood' | 'radius' | 'shape' | 'stencil'>): Array<[number, number, number]> {
+  if (s.neighbourhood === 'custom') return stencilWeights(readStencil(s.stencil));
+  return neighbourOffsets(s.neighbourhood, s.radius, s.shape).map(([dx, dy]) => [dx, dy, 1]);
+}
+
+/** Born and Survive as ranges (from…to) rather than switches: a radius, or a custom stencil that counts past MASK_MAX_COUNT. */
+export const countsAsRanges = (s: Pick<GridShape, 'neighbourhood' | 'stencil'>) => s.neighbourhood === 'radius' || (s.neighbourhood === 'custom' && stencilUsesRanges(readStencil(s.stencil)));
 
 // ── Born / survive sets as bit masks (live floats: bit k is "on with k neighbours") ─────────────
 
@@ -84,7 +103,9 @@ export const hasCount = (mask: number, k: number) => ((Math.round(mask) >> k) & 
 
 /** B3/S23 style text for a mask pair (Moore / von Neumann). */
 export function ruleString(born: number, survive: number, max = 8): string {
-  return `B${countsOf(born, max).join('')}/S${countsOf(survive, max).join('')}`;
+  // Counts past 9 (a weighted stencil) need commas: B3,12/S2,3.
+  const sep = max > 9 ? ',' : '';
+  return `B${countsOf(born, max).join(sep)}/S${countsOf(survive, max).join(sep)}`;
 }
 
 /** Parse "B36/S23" (or "23/3", S/B order as in Golly's older notation); null if it isn't one. */
@@ -255,8 +276,12 @@ export interface GridShape {
   patterns: PatternRule[];
   /** Blocks: the before → after rules. */
   blocks: BlockRule[];
-  /** The drawn start (start 'cells'), or null. */
+  /** The drawn start (start 'cells', or 'text' rasterised), or null. */
   startCells: StartCells | null;
+  /** The text start's words and their size (start 'text'), or null. */
+  startText: StartText | null;
+  /** The custom neighbourhood's stencil (neighbourhood 'custom'), or null. */
+  stencil: NeighbourStencil | null;
 }
 
 const pick = <T extends string>(v: unknown, allowed: readonly T[], d: T): T => (typeof v === 'string' && (allowed as readonly string[]).includes(v) ? v as T : d);
@@ -265,26 +290,28 @@ export function gridShape(params: Record<string, unknown>): GridShape {
   const P = { ...GRID_DEFAULTS, ...params };
   return {
     type: pick(P.ruleType, ['count', 'stages', 'patterns', 'blocks', 'smooth'] as const, 'count'),
-    neighbourhood: pick(P.neighbourhood, ['moore', 'vonNeumann', 'radius'] as const, 'moore'),
+    neighbourhood: pick(P.neighbourhood, ['moore', 'vonNeumann', 'radius', 'custom'] as const, 'moore'),
     radius: clampRadius(P.radius),
     shape: pick(P.shape, ['box', 'circle'] as const, 'box'),
     template: pick(P.template, ['diffusion', 'waves', 'reaction', 'custom'] as const, 'diffusion'),
     customU: typeof P.customU === 'string' ? P.customU : 'u',
     customV: typeof P.customV === 'string' ? P.customV : 'v',
-    start: pick(P.start, ['noise', 'empty', 'image', 'centre', 'cells'] as const, 'noise'),
+    start: pick(P.start, ['noise', 'empty', 'image', 'centre', 'cells', 'text'] as const, 'noise'),
     wrap: P.edges !== 'walls',
     scale: boardScale(P.board),
     steps: Math.max(1, Math.min(MAX_STEPS, Math.round(typeof P.steps === 'number' && isFinite(P.steps) ? P.steps : 1))),
     patterns: readPatterns(P.patterns),
     blocks: readBlocks(P.blocks),
-    startCells: P.start === 'cells' ? readStartCells(P.startCells) : null,
+    startCells: P.start === 'cells' ? readStartCells(P.startCells) : P.start === 'text' ? textStartCells(readStartText(P.startText)) : null,
+    startText: P.start === 'text' ? readStartText(P.startText) : null,
+    stencil: P.neighbourhood === 'custom' ? readStencil(P.stencil) : null,
   };
 }
 
 const TYPE_INDEX: Record<GridRuleType, number> = { count: 0, stages: 1, patterns: 2, blocks: 3, smooth: 4 };
 const TEMPLATE_INDEX: Record<SmoothTemplate, number> = { diffusion: 0, waves: 1, reaction: 2, custom: 3 };
-const NB_INDEX: Record<Neighbourhood, number> = { moore: 0, vonNeumann: 1, radius: 2 };
-const START_INDEX: Record<Exclude<StartMode, 'cells'>, number> = { noise: 0, empty: 1, image: 2, centre: 3 };
+const NB_INDEX: Record<Exclude<Neighbourhood, 'custom'>, number> = { moore: 0, vonNeumann: 1, radius: 2 };
+const START_INDEX: Record<Exclude<StartMode, 'cells' | 'text'>, number> = { noise: 0, empty: 1, image: 2, centre: 3 };
 
 /**
  * The board's signature (stored in Alpha): changes when the rule type, the neighbourhood (Count,
@@ -292,10 +319,14 @@ const START_INDEX: Record<Exclude<StartMode, 'cells'>, number> = { noise: 0, emp
  */
 export function gridSignature(s: GridShape): number {
   const kind = s.type === 'smooth' ? 4 + TEMPLATE_INDEX[s.template] : TYPE_INDEX[s.type];
-  const nb = s.type === 'count' || s.type === 'stages' ? NB_INDEX[s.neighbourhood] : 0;
+  // A custom neighbourhood (Count and Stages only): a range of its own, 500 up (past a drawn start's 483); still a whole number a half float keeps.
+  if (s.neighbourhood === 'custom' && (s.type === 'count' || s.type === 'stages')) {
+    return isDrawnStart(s.start) ? 520 + kind * 16 + startCellsHash(s.startCells) : 500 + kind * 4 + START_INDEX[s.start as Exclude<StartMode, 'cells' | 'text'>];
+  }
+  const nb = s.type === 'count' || s.type === 'stages' ? NB_INDEX[s.neighbourhood as Exclude<Neighbourhood, 'custom'>] : 0;
   // A drawn start: its own range (100 up, past every other start's 97), with the drawing's hash, so a new drawing deals again.
-  if (s.start === 'cells') return 100 + (kind * 3 + nb) * 16 + startCellsHash(s.startCells);
-  return 2 + (kind * 3 + nb) * 4 + START_INDEX[s.start];
+  if (isDrawnStart(s.start)) return 100 + (kind * 3 + nb) * 16 + startCellsHash(s.startCells);
+  return 2 + (kind * 3 + nb) * 4 + START_INDEX[s.start as Exclude<StartMode, 'cells' | 'text'>];
 }
 
 /** Whether the rule type keeps whole-number states (everything but Smooth). */
@@ -306,9 +337,9 @@ export function ruleSummary(params: Record<string, unknown>): string {
   const P = { ...GRID_DEFAULTS, ...params };
   const s = gridShape(P);
   const born = Number(P.bornMask), survive = Number(P.surviveMask);
-  const nbWord = s.neighbourhood === 'moore' ? '' : s.neighbourhood === 'vonNeumann' ? ' · von Neumann' : ` · radius ${s.radius}${s.shape === 'circle' ? ' circle' : ''}`;
-  const max = maxCount(s.neighbourhood, s.radius, s.shape);
-  const counts = s.neighbourhood === 'radius'
+  const nbWord = s.neighbourhood === 'moore' ? '' : s.neighbourhood === 'vonNeumann' ? ' · von Neumann' : s.neighbourhood === 'custom' ? ' · your neighbourhood' : ` · radius ${s.radius}${s.shape === 'circle' ? ' circle' : ''}`;
+  const max = maxCount(s.neighbourhood, s.radius, s.shape, s.stencil);
+  const counts = countsAsRanges(s)
     ? `B${P.bornLo}–${P.bornHi}/S${P.surviveLo}–${P.surviveHi}`
     : ruleString(born, survive, max);
   if (s.type === 'count') return `Count ${counts}${nbWord}`;

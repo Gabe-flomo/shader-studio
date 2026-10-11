@@ -17,9 +17,11 @@
 import type { GraphNode } from '../types/nodeGraph';
 import { n } from './graphBuilder';
 import {
-  GRID_DEFAULTS, MOORE_OFFSETS, VON_NEUMANN_OFFSETS, gridShape, gridSignature, isDiscrete, maxCount, neighbourOffsets, ruleSummary, floatLiterals,
+  GRID_DEFAULTS, MOORE_OFFSETS, countsAsRanges, gridShape, gridSignature, isDiscrete, isDrawnStart, maxCount, neighbourWeights, ruleSummary, floatLiterals,
   type GridShape,
 } from '../gridRules/spec';
+import { drawnCount, startCellsGLSL } from '../gridRules/startCells';
+import { codeHash } from '../gridScene/glsl';
 import { gridLabel } from '../compiler/gridRulesExpand';
 import { ANY, NOT_EMPTY, SAME, blockVariants, patternVariants, stencilOffset } from '../gridRules/stencils';
 import { GR_HASH_GLSL } from '../gridRules/glsl';
@@ -40,12 +42,18 @@ export interface GridAsNodes {
 /** Why this node can't be opened as nodes (null: it can). */
 export function gridAsNodesProblem(src: GraphNode): string | null {
   const s = gridShape(src.params);
-  if (s.start === 'cells') return 'A drawn start isn\'t built as nodes yet: set Start to Noise, Empty or Centre seed to open it as nodes.';
   if (isDiscrete(s.type) && (s.type === 'count' || s.type === 'stages') && s.neighbourhood === 'radius' && s.radius > 2) {
     return `Radius ${s.radius} counts ${maxCount('radius', s.radius, s.shape)} cells: as nodes that is one Sample (texture) card each. Open as nodes builds radius 1 and 2; set Radius to 2 to see one.`;
   }
+  if ((s.type === 'count' || s.type === 'stages') && s.neighbourhood === 'custom') {
+    const cells = neighbourWeights(s).length;
+    if (cells > MAX_NODE_CELLS) return `Your neighbourhood counts ${cells} cells: as nodes that is one Sample (texture) card each. Open as nodes builds up to ${MAX_NODE_CELLS}; take some cells out of the stencil to see one.`;
+  }
   return null;
 }
+
+/** Most neighbour reads a custom neighbourhood opens as (one Sample (texture) card each): radius 2's. */
+const MAX_NODE_CELLS = 24;
 
 // ── A small builder: local keys for ids, notes, Expression Blocks ───────────────────────────────
 
@@ -288,7 +296,10 @@ function discreteCore(b: Builder, s: GridShape, P: Record<string, unknown>, cell
 }
 
 function countCore(b: Builder, s: GridShape, P: Record<string, unknown>, cellPx: number): void {
-  const offsets = s.neighbourhood === 'moore' ? MOORE_OFFSETS : s.neighbourhood === 'vonNeumann' ? VON_NEUMANN_OFFSETS : neighbourOffsets('radius', s.radius, s.shape);
+  // The cells counted, with their weights (1, except in a stencil you drew).
+  const weighted = neighbourWeights(s);
+  const offsets = weighted.map(([dx, dy]) => [dx, dy] as [number, number]);
+  const weightOf = (i: number) => weighted[i][2];
   // The neighbours: one Sample (texture) each, one cell away (Offset is in picture pixels).
   offsets.forEach(([dx, dy], i) => {
     const nm = nbName(dx, dy);
@@ -297,24 +308,25 @@ function countCore(b: Builder, s: GridShape, P: Record<string, unknown>, cellPx:
       { texture: ['board', 'previous'] });
   });
   const names = offsets.map(([dx, dy]) => nbName(dx, dy));
-  const max = offsets.length;
+  const max = weighted.reduce((t, [, , w]) => t + w, 0);
+  const heavy = weighted.some(([, , w]) => w > 1);
   b.expr('count', 3, 11, {
     label: 'Count the neighbours', outputType: 'float',
     inputs: names.map(nm => [nm, 'vec3', [`nb_${nm}`, 'color']] as [string, 'vec3', LWire]),
-    result: names.map(nm => `grIsOn(${nm}.r)`).join(' + '),
+    result: (names.map((nm, i) => (weightOf(i) === 1 ? `grIsOn(${nm}.r)` : `${f(weightOf(i))} * grIsOn(${nm}.r)`)).join(' + ')) || '0.0',
     functions: ON_FN,
     note: [
-      `Count the neighbours: how many of the ${max} cells round this one are on (state 1): 0 to ${max}. ${s.neighbourhood === 'radius' ? `Larger than Life, radius ${s.radius}${s.shape === 'circle' ? ', a round neighbourhood' : ''}.` : s.neighbourhood === 'vonNeumann' ? 'von Neumann: the 4 cells beside it.' : 'Moore: the 8 cells round it.'}`,
+      `Count the neighbours: how many of the ${offsets.length} cells round this one are on (state 1)${heavy ? ', each times its weight' : ''}: 0 to ${max}. ${s.neighbourhood === 'radius' ? `Larger than Life, radius ${s.radius}${s.shape === 'circle' ? ', a round neighbourhood' : ''}.` : s.neighbourhood === 'custom' ? 'Your own neighbourhood: the cells of the stencil drawn in the Grid Rules editor.' : s.neighbourhood === 'vonNeumann' ? 'von Neumann: the 4 cells beside it.' : 'Moore: the 8 cells round it.'}`,
       'Why an Expression Block: one sum of the reads is clearer as one line than as a chain of Add cards. grIsOn(s) is 1 for state 1 only (step(0.5, s) − step(1.5, s)), so dying cells don\'t count.',
-      `result: grIsOn(n.r) + … for every neighbour.`,
+      `result: ${heavy ? 'weight × ' : ''}grIsOn(n.r) + … for every neighbour.`,
     ],
   });
   // The rule's numbers.
-  if (s.neighbourhood === 'radius') {
+  if (countsAsRanges(s)) {
     b.card('ranges', 3, 13, 'Born and survive', [
       ['bornLo', 'Born from', num(P, 'bornLo'), 224], ['bornHi', 'Born to', num(P, 'bornHi'), 224],
       ['surviveLo', 'Survive from', num(P, 'surviveLo'), 224], ['surviveHi', 'Survive to', num(P, 'surviveHi'), 224],
-    ], 'Constants: Larger than Life\'s ranges. An empty cell is born with Born from…to live neighbours; a live cell survives with Survive from…to. Live entries, so Play can change them.');
+    ], (s.neighbourhood === 'custom' ? 'Constants: the ranges (your neighbourhood counts too high for a switch per count).' : 'Constants: Larger than Life\'s ranges.') + ' An empty cell is born with Born from…to live neighbours; a live cell survives with Survive from…to. Live entries, so Play can change them.');
     b.expr('born', 4, 11, {
       label: 'Born?', outputType: 'float', inputs: [['count', 'float', ['count', 'result']], ['lo', 'float', ['ranges', 'bornLo']], ['hi', 'float', ['ranges', 'bornHi']]],
       result: 'step(lo - 0.5, count) * step(count, hi + 0.5)',
@@ -418,7 +430,37 @@ function discreteTail(b: Builder, s: GridShape, P: Record<string, unknown>, stag
   return { state, age };
 }
 
+/**
+ * A drawn start (your drawing, or words rasterised to cells) as an Expression Block that holds the
+ * drawing: a function with one test per drawn row, state and 16 cells (the same code the node bakes,
+ * gridRules/startCells.ts), placed in the middle of the board as the node places it. Its result is
+ * the drawn state at this cell (0 off the drawing).
+ */
+function drawnStartNode(b: Builder, key: string, s: GridShape, stages: boolean, col: number, row: number): Wire {
+  const body = startCellsGLSL(s.startCells, 'drawn', 'cell', 'res', 'gd');
+  const name = `grDrawn_${codeHash(body.join('\n'))}`;
+  const functions = `float ${name}(vec2 cell, vec2 res) {\n${body.map(l => `    ${l}`).join('\n')}\n    return drawn;\n}`;
+  const what = s.start === 'text' ? `the words "${s.startText?.text ?? ''}", ${s.startText?.size ?? 0} cells tall, rasterised to cells` : 'the cells you drew';
+  const sc = s.startCells;
+  b.expr(key, col, row, {
+    label: s.start === 'text' ? 'Text start' : 'Drawn start', outputType: 'float',
+    inputs: [['cell', 'vec2', ['cell', 'coord']], ...(stages ? [['states', 'float', ['states', 'value']] as [string, 'float', LWire]] : [])],
+    lines: [['float drawn', `${name}(floor(cell), u_resolution)`], ['float top', stages ? 'max(floor(states + 0.5), 2.0) - 1.0' : '1.0']],
+    result: 'min(drawn, top)',
+    functions,
+    note: [
+      `${s.start === 'text' ? 'Text start' : 'Drawn start'}: the board starts as ${what} (${drawnCount(sc)} cells, ${sc?.w ?? 0} × ${sc?.h ?? 0}), in the middle of the board${sc?.ox || sc?.oy ? `, moved ${sc?.ox ?? 0} right and ${sc?.oy ?? 0} up` : ''}.`,
+      `Why an Expression Block: the drawing is data. Its function (${name}) holds it as numbers: for each drawn row and state, a whole number whose bits are the cells (16 to a number), and a cell reads its own bit. A new drawing writes a new function.`,
+      'drawn: the drawing\'s state at this cell (0 off it); floor(cell) is the cell, counted from 0, and u_resolution the board\'s size.',
+      'top: the last state the rule has, so a drawn state above it is clamped.',
+      'result: the drawn state, no higher than the last state.',
+    ],
+  });
+  return { nodeId: b.id(key), outputKey: 'result' };
+}
+
 function startDiscrete(b: Builder, s: GridShape, P: Record<string, unknown>, stages: boolean): Wire {
+  if (isDrawnStart(s.start)) return drawnStartNode(b, 'seedValue', s, stages, 5, 3);
   if (s.start === 'empty') {
     b.add('constant', 'seedValue', 5, 3, { value: 0, label: 'Start empty' }, 'Start: empty. A new board starts with every cell at 0: paint on it.');
     return { nodeId: b.id('seedValue'), outputKey: 'value' };
@@ -575,8 +617,10 @@ function smoothCore(b: Builder, s: GridShape, P: Record<string, unknown>, cellPx
   const startWord: Record<string, string> = {
     noise: s.template === 'reaction' ? 'blobs of B: 6 × 6 blocks of cells, each set with chance Density × 0.04 (single cells of B would only fade)' : s.template === 'waves' ? 'a few raised cells (Density × 0.02)' : 'cells set where the roll is under Density',
     empty: 'nothing', centre: 'a disc in the middle', image: 'the picture\'s brightness',
+    cells: 'the cells you drew (Drawn start, on the left)', text: 'the words\' cells (Text start, on the left)',
   };
-  const startExpr = s.start === 'empty' ? '0.0' : s.start === 'centre' ? '(centre < 0.0 ? 1.0 : 0.0)' : s.start === 'image' ? 'pic'
+  const drawnStart = isDrawnStart(s.start) ? drawnStartNode(b, 'drawnStart', s, false, 4, 5) : null;
+  const startExpr = s.start === 'empty' ? '0.0' : drawnStart ? '(drawn > 0.5 ? 1.0 : 0.0)' : s.start === 'centre' ? '(centre < 0.0 ? 1.0 : 0.0)' : s.start === 'image' ? 'pic'
     : s.template === 'reaction' ? '(grHash(vec3(floor(cell / 6.0), mod(floor(t * 60.0), 997.0) + seed * 1013.0 + 3.0)) < density * 0.04 ? 1.0 : 0.0)' : s.template === 'waves' ? '(roll < density * 0.02 ? 1.0 : 0.0)' : '(roll < density ? 1.0 : 0.0)';
   if (s.start === 'image') {
     b.add('sampleTexture', 'startPic', 4, 5, {}, 'Sample (texture): the start picture (what was wired into the Grid Rules node\'s Start image).', b.image ? { texture: { ext: b.image } } : {});
@@ -587,6 +631,7 @@ function smoothCore(b: Builder, s: GridShape, P: Record<string, unknown>, cellPx
     inputs: [
       ['roll', 'float', ['seedRoll', 'value']], ['density', 'float', ['density', 'value']], ['centre', 'float', ['centre', 'distance']],
       ...(s.start === 'image' ? [['pic', 'float', ['startLum', 'result']] as [string, 'float', LWire]] : []),
+      ...(drawnStart ? [['drawn', 'float', { ext: drawnStart }] as [string, 'float', LWire]] : []),
       ...(s.template === 'reaction' ? [['cell', 'vec2', ['cell', 'coord']], ['seed', 'float', ['seed', 'value']]] as Array<[string, 'vec2' | 'float', LWire]> : []),
     ],
     lines: [['float a', startExpr]],

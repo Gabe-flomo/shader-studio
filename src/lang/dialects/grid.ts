@@ -35,6 +35,7 @@ import {
   countsOf, gridTypeDefaults, maskOf, matchingPreset, parseRuleString, presetPatch, type GridPreset, type GridRuleType,
 } from '../../gridRules/spec';
 import { ANY, BLOCK_PRESETS, NOT_EMPTY, PATTERN_PRESETS, SAME, readBlocks, readPatterns, type BlockRule, type PatternRule } from '../../gridRules/stencils';
+import { DEFAULT_START_TEXT, cleanStartText, readStartText } from '../../gridRules/textCells';
 
 type P = Record<string, unknown>;
 
@@ -76,8 +77,9 @@ const ACROSS = BOARD_SIZES.map(b => ({ value: b.value, across: Math.round(1920 *
 const boardFor = (cells: number) => ACROSS.reduce((best, b) => (Math.abs(Math.log(b.across / cells)) < Math.abs(Math.log(best.across / cells)) ? b : best)).value;
 const acrossOf = (v: unknown) => ACROSS.find(b => b.value === String(v))?.across ?? 240;
 
-const NB_WORDS: Record<string, string> = { moore: 'moore', 'von-neumann': 'vonNeumann', vonneumann: 'vonNeumann', 'von_neumann': 'vonNeumann', radius: 'radius', larger: 'radius' };
-const NB_TEXT: Record<string, string> = { moore: 'moore', vonNeumann: 'von-neumann', radius: 'radius' };
+const NB_WORDS: Record<string, string> = { moore: 'moore', 'von-neumann': 'vonNeumann', vonneumann: 'vonNeumann', 'von_neumann': 'vonNeumann', radius: 'radius', larger: 'radius', custom: 'custom', own: 'custom', stencil: 'custom' };
+/** `neighbours=custom`: the stencil already on the node (its `stencil`, or Moore's); a stencil has no words of its own. */
+const NB_TEXT: Record<string, string> = { moore: 'moore', vonNeumann: 'von-neumann', radius: 'radius', custom: 'custom' };
 const TEMPLATES = ['diffusion', 'waves', 'reaction', 'custom'] as const;
 const START_WORDS = ['noise', 'empty', 'image', 'centre', 'center'];
 /** `start=cells`: the drawing already on the node (its startCells); a drawing has no words of its own. */
@@ -242,7 +244,7 @@ export function parseGrid(src: string, opts: { base?: P; seed?: number } = {}): 
     if (key === 'neighbours' || key === 'neighbors' || key === 'neighbourhood') {
       const v = draw(a, 'neighbours');
       const w = v?.k === 'word' ? v.v.toLowerCase() : '';
-      if (NB_WORDS[w]) P.neighbourhood = NB_WORDS[w]; else c.error(a, 'neighbours is moore, von-neumann or radius.');
+      if (NB_WORDS[w]) P.neighbourhood = NB_WORDS[w]; else c.error(a, 'neighbours is moore, von-neumann, radius or custom (the stencil drawn in the editor).');
       return;
     }
     if (key === 'shape') {
@@ -268,7 +270,24 @@ export function parseGrid(src: string, opts: { base?: P; seed?: number } = {}): 
       const w = v?.k === 'word' ? v.v.toLowerCase() : '';
       if (START_WORDS.includes(w)) P.start = w === 'center' ? 'centre' : w;
       else if (w === START_CELLS && P.startCells) P.start = w;
-      else c.error(a, w === START_CELLS ? 'start=cells needs a drawing: draw one on the builder\'s board and press Use as the start.' : 'start is noise, empty, image or centre.');
+      else if (w === 'text') P.start = 'text';
+      else c.error(a, w === START_CELLS ? 'start=cells needs a drawing: draw one on the builder\'s board and press Use as the start.' : 'start is noise, empty, image, centre or text.');
+      return;
+    }
+    // A text start: the words (text="HELLO") and how many cells tall they are (text-size=12). Either one sets start=text.
+    if (key === 'text') {
+      const v = a.value;
+      const words = v.k === 'str' || v.k === 'word' || v.k === 'code' ? cleanStartText(String(v.v)) : '';
+      if (!words) { c.error(a, 'text is the words to start from: text="LIFE" (A–Z, 0–9).'); return; }
+      P.startText = { ...readStartText(P.startText), text: words };
+      P.start = 'text';
+      return;
+    }
+    if (key === 'text-size') {
+      const n = num(a.value, a, 'text-size');
+      if (n === null) return;
+      P.startText = { ...readStartText(P.startText), size: Math.round(n) };
+      P.start = 'text';
       return;
     }
     if (key === 'template') {
@@ -563,6 +582,11 @@ export function printGrid(params: P, opts: { header?: 'always' | 'never' | 'clas
   if (differs('customV')) parts.push(`v={${P.customV}}`);
   for (const [param, k] of NUM_PRINT) if (differs(param)) parts.push(`${k}=${fmtNum(Number(P[param]))}`);
   if (differs('start')) parts.push(`start=${P.start}`);
+  if (P.start === 'text') {
+    const st = readStartText(P.startText);
+    parts.push(`text="${st.text}"`);
+    if (st.size !== DEFAULT_START_TEXT.size) parts.push(`text-size=${st.size}`);
+  }
   if (differs('density')) parts.push(`density=${fmtNum(Number(P.density))}`);
   if (differs('seed')) parts.push(`start-seed=${P.seed}`);
   if (differs('board')) parts.push(`board=${acrossOf(P.board)}`);

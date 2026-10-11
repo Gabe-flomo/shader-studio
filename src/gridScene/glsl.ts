@@ -17,6 +17,14 @@
  * Shapes are measured with y up. The result is vec4(colour, distance in picture units).
  */
 import { SHAPE_KINDS, cellSize, ruleProblem, shapeOf, type GShape, type GridRule, type GridSceneSpec, type MotionPath, type PatternKind } from './spec';
+import { readTextMask, textMaskGlsl, type TextMask } from './textMask';
+
+/** The pattern's text mask when it has words and a pattern to mask (else null). */
+export function activeMask(spec: GridSceneSpec): TextMask | null {
+  if (spec.pattern.kind === 'none') return null;
+  const m = readTextMask(spec.pattern.mask);
+  return m && m.text ? m : null;
+}
 
 /** A GLSL float literal. */
 export const gf = (n: number) => {
@@ -131,6 +139,8 @@ function waveBody(kind: PatternKind, spec: GridSceneSpec): string {
 function targetLines(spec: GridSceneSpec, pad: string): string[] {
   if (spec.pattern.kind === 'none') return [];
   const out = [`${pad}float w = gs_wave$(P, t, pt);`];
+  // The text mask: the wave only in the cells the words cover.
+  if (activeMask(spec)) out.push(`${pad}w *= gs_mask$(floor(P));`);
   switch (spec.pattern.target) {
     case 'size': out.push(`${pad}s *= max(0.0, 1.0 + pt.x * w);`); break;
     case 'turn': out.push(`${pad}an += pt.x * w * 3.1415927;`); break;
@@ -231,6 +241,8 @@ export function gridProgram(spec: GridSceneSpec): GridProgram {
     ].join('\n'));
   }
   if (spec.pattern.kind !== 'none') fns.push(`float gs_wave$(vec2 P, float t, vec4 pt) {\n${waveBody(spec.pattern.kind, spec)}\n}`);
+  const mask = activeMask(spec);
+  if (mask) fns.push(textMaskGlsl(mask, spec.cols, spec.rows));
   const fill = spec.pattern.kind !== 'none' ? shapeOf(spec, spec.pattern.fill) : undefined;
   if (fill) {
     // Is a cell one you drew on? Grouped by row.
@@ -274,7 +286,7 @@ export function gridProgram(spec: GridSceneSpec): GridProgram {
     const a = shapeArgs(fill.id);
     L.push(`  { // the pattern fills the empty cells with shape ${fill.id}`);
     L.push('    vec2 id = floor(cp);');
-    L.push(`    if (id.x >= 0.0 && id.y >= 0.0 && id.x < ${gf(spec.cols)} && id.y < ${gf(spec.rows)} && gs_drawn$(id) < 0.5) {`);
+    L.push(`    if (id.x >= 0.0 && id.y >= 0.0 && id.x < ${gf(spec.cols)} && id.y < ${gf(spec.rows)} && gs_drawn$(id) < 0.5${mask ? ' && gs_mask$(id) > 0.5' : ''}) {`);
     L.push('      vec2 P = id + 0.5;');
     L.push(`      float k = ${gf(kindIndex(fill.kind))}; float s = ${a.l}.x * 0.5; vec3 c = ${a.c}; float e = ${a.e} * 0.5;`);
     L.push(`      float an = ${a.l}.y + t * ${a.l}.z * 6.2831853;`);

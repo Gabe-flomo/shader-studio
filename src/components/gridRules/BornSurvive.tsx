@@ -14,6 +14,7 @@ import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Icon } from '../ui/Icon';
 import { countLabel, countedCells, neighbourPicture, ruleSentence, surviveFate, type PictureCell } from '../../gridRules/explain';
 import type { Neighbourhood, RadiusShape } from '../../gridRules/spec';
+import { DEFAULT_STENCIL, type NeighbourStencil } from '../../gridRules/neighbourhoods';
 
 /** A small square of cells (a 3×3 picture, or a neighbourhood). */
 export function CellPicture({ cells, size, cell = 8, gap = 1.5, colour, centre, label }: {
@@ -41,13 +42,15 @@ export function CellPicture({ cells, size, cell = 8, gap = 1.5, colour, centre, 
 }
 
 /** One row of switches 0…max, each with its picture; a line under it says what the hovered one does. */
-export function PictureSwitches({ row, mask, max, nb, colour, born, survive, stages, onChange, onHoverCount, compact = false }: {
+export function PictureSwitches({ row, mask, max, nb, colour, born, survive, stages, onChange, onHoverCount, compact = false, plain = false }: {
   row: 'born' | 'survive'; mask: number; max: number; nb: 'moore' | 'vonNeumann'; colour: string;
   born: number[]; survive: number[]; stages: boolean; onChange: (mask: number) => void;
   /** The count pointed at (null: none), so the builder's board can light the cells it stands for. */
   onHoverCount?: (k: number | null) => void;
   /** Narrower switches (the builder's side panel). */
   compact?: boolean;
+  /** Numbers only, no 3×3 pictures (a neighbourhood you drew: a picture of 8 wouldn't be it). */
+  plain?: boolean;
 }) {
   const tk = useTokens();
   const [hover, setHoverState] = useState<number | null>(null);
@@ -67,18 +70,18 @@ export function PictureSwitches({ row, mask, max, nb, colour, born, survive, sta
       </div>
       <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }} role="group" aria-label={`${title} on`} onMouseLeave={() => setHover(null)}>
         {Array.from({ length: max + 1 }, (_, k) => {
-          const on = ((Math.round(mask) >> k) & 1) === 1;
+          const on = Math.floor(Math.round(mask) / 2 ** k) % 2 === 1;
           const label = countLabel(row, k, born, survive, stages);
           const fate = row === 'survive' && !on ? surviveFate(k, survive) : null;
           return (
             <button key={k} type="button" role="checkbox" aria-checked={on} aria-label={`${title} with ${k}: ${label}`} title={label} data-count={k}
-              onClick={() => onChange(Math.round(mask) ^ (1 << k))} onMouseEnter={() => setHover(k)} onFocus={() => setHover(k)} onBlur={() => setHover(null)}
+              onClick={() => onChange(on ? Math.round(mask) - 2 ** k : Math.round(mask) + 2 ** k)} onMouseEnter={() => setHover(k)} onFocus={() => setHover(k)} onBlur={() => setHover(null)}
               style={{
                 width: compact ? 39 : 46, padding: '6px 0 4px', border: 0, borderRadius: radius.md, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
                 background: on ? alpha(colour, 0.16) : tk.bg.field,
                 boxShadow: on ? `inset 0 0 0 1.5px ${colour}` : hover === k ? `inset 0 0 0 1px ${tk.border.strong}` : `inset 0 0 0 1px ${tk.border.subtle}`,
               }}>
-              <CellPicture cells={neighbourPicture(k, nb, row === 'survive')} size={3} colour={on ? colour : tk.text.faint} centre />
+              {!plain && <CellPicture cells={neighbourPicture(k, nb, row === 'survive')} size={3} colour={on ? colour : tk.text.faint} centre />}
               <span style={{ font: `650 12.5px ${fontFamily.mono}`, color: on ? tk.text.primary : tk.text.muted, lineHeight: 1 }}>{k}</span>
               <span aria-hidden style={{ font: `600 9px ${fontFamily.ui}`, color: on ? colour : tk.text.faint, lineHeight: 1, height: 9, whiteSpace: 'nowrap' }}>
                 {row === 'born' ? (on ? 'born' : '') : on ? 'stays' : fate === 'lonely' ? 'lonely' : fate === 'crowded' ? 'crowded' : stages ? 'fades' : 'dies'}
@@ -107,17 +110,20 @@ const NB_OPTIONS: Array<{ value: Neighbourhood; label: string; hint: string }> =
   { value: 'moore', label: 'Moore · 8', hint: 'The 8 cells round it, corners too (Life).' },
   { value: 'vonNeumann', label: 'von Neumann · 4', hint: 'Only the 4 beside it: up, down, left, right.' },
   { value: 'radius', label: 'Radius N', hint: 'Every cell within N steps: big, smooth-looking rules (Larger than Life).' },
+  { value: 'custom', label: 'Your own', hint: 'Draw which cells count (up to 7×7), and how much each one counts.' },
 ];
 
 /** The three neighbourhoods as pictures, the chosen one ringed. */
-export function NeighbourhoodPictures({ value, radius: r, shape, onChange }: { value: Neighbourhood; radius: number; shape: RadiusShape; onChange: (v: Neighbourhood) => void }) {
+export function NeighbourhoodPictures({ value, radius: r, shape, stencil, onChange }: { value: Neighbourhood; radius: number; shape: RadiusShape; stencil?: NeighbourStencil | null; onChange: (v: Neighbourhood) => void }) {
   const tk = useTokens();
   return (
     <div role="radiogroup" aria-label="Neighbourhood" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
       {NB_OPTIONS.map(o => {
         const on = o.value === value;
         // Radius: the chosen radius when it is picked, otherwise 2 (enough to show the idea).
-        const pic = countedCells(o.value, o.value === 'radius' ? (on ? r : 2) : 1, shape);
+        const pic = o.value === 'custom'
+          ? (() => { const st = stencil ?? DEFAULT_STENCIL; return { size: st.size, cells: st.cells.map(w => w > 0) }; })()
+          : countedCells(o.value, o.value === 'radius' ? (on ? r : 2) : 1, shape);
         const gap = pic.size > 7 ? 0.75 : 1.5;
         const cell = pic.size <= 3 ? 14 : pic.size <= 5 ? 9 : Math.max(2, Math.floor((72 - (pic.size - 1) * gap) / pic.size));
         return (

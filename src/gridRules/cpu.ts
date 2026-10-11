@@ -5,7 +5,7 @@
  * while it is being written, without the GPU (gridRulesCpuGpu.test.ts checks they agree).
  * Boards wrap or have walls as the node's do. Two channels per cell: a (state, or u) and b (age, or v).
  */
-import { GRID_DEFAULTS, gridShape, neighbourOffsets, type GridShape } from './spec';
+import { GRID_DEFAULTS, countsAsRanges, gridShape, isDrawnStart, neighbourWeights, type GridShape } from './spec';
 import { SAME, blockVariants, patternVariants, specMatches, stencilOffset } from './stencils';
 import { blockStartsAt, diceFrame, grDice } from './dice';
 import { stampedAt } from './startCells';
@@ -34,7 +34,7 @@ export function cpuSeed(params: Record<string, unknown>, w: number, h: number, r
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
     const i = y * w + x;
     if (s.start === 'empty') continue;
-    if (s.start === 'cells') {
+    if (isDrawnStart(s.start)) {
       const d = s.startCells ? stampedAt(s.startCells, w, h, x, y) : 0;
       if (s.type !== 'smooth') B.a[i] = Math.min(d, top);
       else if (s.template === 'reaction') { B.a[i] = 1; B.b[i] = d > 0 ? 1 : 0; } else { B.a[i] = d > 0 ? 1 : 0; B.b[i] = s.template === 'waves' ? B.a[i] : 0; }
@@ -171,8 +171,9 @@ function blocks(s: GridShape, P: Record<string, unknown>, B: CpuBoard, trace?: C
 
 function discrete(s: GridShape, P: Record<string, unknown>, B: CpuBoard): CpuBoard {
   const out = cpuBoard(B.w, B.h);
-  const offsets = neighbourOffsets(s.neighbourhood, s.radius, s.shape);
-  const radius = s.neighbourhood === 'radius';
+  // The cells counted, with their weights (a custom stencil can count a cell twice).
+  const offsets = neighbourWeights(s);
+  const radius = countsAsRanges(s);
   const born = Math.round(Number(P.bornMask)), surv = Math.round(Number(P.surviveMask));
   const [bl, bh, sl, sh] = [P.bornLo, P.bornHi, P.surviveLo, P.surviveHi].map(Number);
   const N = Math.max(2, Math.round(Number(P.states)));
@@ -181,9 +182,11 @@ function discrete(s: GridShape, P: Record<string, unknown>, B: CpuBoard): CpuBoa
     const i = y * B.w + x;
     const st = Math.round(B.a[i]);
     let c = 0;
-    for (const [dx, dy] of offsets) if (Math.round(at(B, 'a', x + dx, y + dy, s.wrap)) === 1) c++;
-    const b = radius ? c >= bl && c <= bh : ((born >> c) & 1) === 1;
-    const sv = radius ? c >= sl && c <= sh : ((surv >> c) & 1) === 1;
+    for (const [dx, dy, w] of offsets) if (Math.round(at(B, 'a', x + dx, y + dy, s.wrap)) === 1) c += w;
+    // Bit c of a mask (exact to 2^24 as a float, as on the GPU; past bit 30 JavaScript's >> wraps, so divide).
+    const bit = (m: number) => Math.floor(m / 2 ** c) % 2 === 1;
+    const b = radius ? c >= bl && c <= bh : bit(born);
+    const sv = radius ? c >= sl && c <= sh : bit(surv);
     let next: number;
     if (s.type === 'stages') next = st === 0 ? (b ? 1 : 0) : st === 1 ? (sv ? 1 : N > 2 ? 2 : 0) : st + 1 >= N ? 0 : st + 1;
     else next = st === 1 ? (sv ? 1 : 0) : b ? 1 : 0;
