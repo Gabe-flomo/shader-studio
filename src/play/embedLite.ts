@@ -329,18 +329,24 @@ const BOOTSTRAP = `(function (root, src, U, O) {
     var W = cv.width, H = cv.height, set = function (k, v) { if (setters[k]) setters[k](v); };
     if (O.feedback && !targets) targets = [target(W, H), target(W, H)];
     gl.useProgram(prog); gl.bindFramebuffer(gl.FRAMEBUFFER, targets ? targets[ping].fb : null); gl.viewport(0, 0, W, H);
-    set('u_time', time); set('u_frameDt', fdt); set('u_resolution', [W, H]); set('u_mouse', [mouse[0] * W, mouse[1] * H]); set('u_mousebtn', down);
+    set('u_time', clock()); set('u_frameDt', fdt); set('u_resolution', [W, H]); set('u_mouse', [mouse[0] * W, mouse[1] * H]); set('u_mousebtn', down);
     for (var k in U) set(k, U[k]);
     samplers.forEach(function (s) { set(s, T[s]); });
     if (targets) set('u_prevFrame', targets[1 - ping].t);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     if (targets) { gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.useProgram(copy); gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, targets[ping].t); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); ping = 1 - ping; }
   }
+  // The graph's frame rate (O.fps): draw that often (gateMs) and/or step the time by 1/fps (stepT).
+  var F = O.fps || 0, gateMs = F && O.fpsMode !== 'posterize' ? 1000 / F : 0, stepT = F && O.fpsMode !== 'draw', nextAt = 0, acc = 0, shown = -1;
+  function clock() { return stepT ? Math.floor(time * F + 1e-6) / F : time; }
   function frame(now) {
     raf = requestAnimationFrame(frame);
-    var dt = last ? Math.min(0.1, (now - last) / 1000) : 0; last = now; fdt = dt;
+    var dt = last ? Math.min(0.1, (now - last) / 1000) : 0, s, nu; last = now; fdt = dt;
     if (!visible || document.hidden || (still && !dirty)) return;
     if (!still) time += dt;
+    if (gateMs) { acc += dt; s = Math.floor(time * F + 1e-6); nu = stepT && !still && s !== shown;
+      if (nu) nextAt = now + gateMs; else if (!nextAt || now >= nextAt - 2) nextAt = nextAt && now - nextAt < gateMs ? nextAt + gateMs : now + gateMs; else return;
+      if (!nu && stepT && !still && !dirty) return; shown = s; fdt = Math.min(0.25, acc); acc = 0; }
     /*TICK*/dirty = false; draw();
   }
   function resize() {
@@ -361,7 +367,7 @@ const BOOTSTRAP = `(function (root, src, U, O) {
 /** The bootstrap for a snippet without mappings. */
 export const LITE_BOOTSTRAP = BOOTSTRAP.replace('/*MAPS*/\n', '').replace('/*TICK*/', '');
 /** The bootstrap with the mapping part (LITE_MAPS), for a snippet whose mappings read the pointer or keys. */
-export const LITE_BOOTSTRAP_MAPS = BOOTSTRAP.replace('/*MAPS*/\n', () => LITE_MAPS).replace('/*TICK*/', 'tickMaps(dt); ');
+export const LITE_BOOTSTRAP_MAPS = BOOTSTRAP.replace('/*MAPS*/\n', () => LITE_MAPS).replace('/*TICK*/', 'tickMaps(fdt); ');
 
 /** The small snippet's options, from the dialog's. */
 export interface LiteOptions { mode: EmbedOptions['mode']; placement: EmbedOptions['placement']; height: number; followPage: boolean }
@@ -391,6 +397,9 @@ export function buildLiteSnippet(input: PlayHtmlInput, options: LiteOptions): st
   if (bg) o.window = true;
   const maps = liteMaps(input) ?? [];
   if (maps.length) o.maps = maps;
+  // The graph's frame rate (docs/frame-rate.md): the snippet draws that often and/or steps its time.
+  const rate = input.play.frameRate;
+  if (rate && rate.fps !== 'auto') { o.fps = rate.fps; if (rate.mode && rate.mode !== 'both') o.fpsMode = rate.mode; }
   if (images.length) o.images = Object.fromEntries(images.map(i => [i.uniform, i.flat ? { src: i.src, flat: true } : { src: i.src }]));
   const glsl = input.fragmentShader.replace(/<\/script/gi, '<\\/script').trim();
   return `<!-- Playfield · ${escapeHtml(input.title).replace(/-{2,}/g, '-')} · ${bg ? 'background' : 'player'} · WebGL2, no libraries.

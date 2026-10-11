@@ -12,6 +12,7 @@ import { recompileTriggers } from '../../lib/recompileTriggers';
 import type { PassProgram } from '../../compiler/types';
 import { programTintColour } from '../../lib/programTints';
 import { HintMark } from '../builders/BuilderHelp';
+import { resolveFrameRate, useFrameRate } from '../../lib/frameRate';
 
 const SCALE_MARK: Record<number, string> = { 0.5: ' (½)', 0.25: ' (¼)', 0.125: ' (⅛)' };
 
@@ -168,6 +169,12 @@ function Bar({ label, value, max, unit, color, sub }: { label: string; value: nu
 export function PerfPanel({ onClose }: { onClose: () => void }) {
   const tk = useTokens();
   const snap = usePerfSnapshot();
+  // The canvas frame rate: a chosen rate caps the count (lib/frameRate.ts); else the screen does.
+  const screenHz = useFrameRate(f => f.screenHz);
+  const fallbackRate = useFrameRate(f => f.fallback);
+  const ownRate = useNodeGraphStore(s => s.play.frameRate);
+  const rate = resolveFrameRate(ownRate, fallbackRate, screenHz);
+  const fpsSub = rate.fps ? `${rate.draw ? 'capped at' : 'time steps at'} ${+rate.fps.toFixed(2)} · screen ${screenHz} Hz` : `screen ${screenHz} Hz`;
   const nodes = useNodeGraphStore(s => s.nodes);
   const activeGroupPath = useNodeGraphStore(s => s.activeGroupPath);
   const fragmentShader = useNodeGraphStore(s => s.fragmentShader);
@@ -222,13 +229,13 @@ export function PerfPanel({ onClose }: { onClose: () => void }) {
     ? [
         ['Shader', `${fmtMs(shader.ms)} ms`, shaderSub, ISOLATION_TIP],
         ['Frame GPU work (everything)', `${fmtMs(frameAvg)} ms`, `this frame's total · worst ${fmtMs(frame.p95)}`],
-        ['FPS', `${snap.fps || '—'}`, 'display-capped'],
+        ['FPS', `${snap.fps || '—'}`, fpsSub],
         ['Pixels', snap.width ? `${snap.width}×${snap.height}` : '—', `${((snap.width * snap.height) / 1e6).toFixed(2)} Mpx`],
       ]
     : [
         ['Frame', `${fmt(frameAvg)} ms`, over ? `over the ${BUDGET_MS.toFixed(1)} ms budget` : `of ${BUDGET_MS.toFixed(1)} ms budget`],
         ['Worst', `${fmt(frame.p95)} ms`, 'slowest 5% of frames'],
-        ['FPS', `${snap.fps || '—'}`, 'display-capped'],
+        ['FPS', `${snap.fps || '—'}`, fpsSub],
         ['Pixels', snap.width ? `${snap.width}×${snap.height}` : '—', `${((snap.width * snap.height) / 1e6).toFixed(2)} Mpx`],
       ];
   const segMax = Math.max(1e-3, ...gpuRows.map(q => q.avg), snap.probeMs ?? 0);

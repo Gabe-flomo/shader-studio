@@ -1613,6 +1613,11 @@ void main() {
     const base = new Map(), live = new Map(), layerLive = new Map(), trig = new Map(), actLevel = new Map();
     const mouse = { x: 0.5, y: 0.5, down: 0, over: false };
     let time = typeof opts.startTime === 'number' && isFinite(opts.startTime) ? Math.max(0, opts.startTime) : 0, playing = !opts.paused, lastNow = 0, frame = 0;
+    // The graph's frame rate (docs/frame-rate.md): draw that often (frGate ms) and/or step the picture's time by 1/fps.
+    const frRate = play.frameRate && typeof play.frameRate.fps === 'number' && play.frameRate.fps > 0 ? play.frameRate : null;
+    const frFps = frRate ? frRate.fps : 0, frGate = frRate && frRate.mode !== 'posterize' ? 1000 / frFps : 0, frStep = !!frRate && frRate.mode !== 'draw';
+    let frNext = 0, frAcc = 0, frShown = -1;
+    const pictureTime = () => (frStep ? Math.floor(time * frFps + 1e-6) / frFps : time);
     // The frame's length in seconds (u_frameDt: Fade (feedback) keeps its tail in seconds with it; 0 reads as 1/60).
     let frameDt = 0;
     // A noise source with New each play takes a fresh path each time the page opens.
@@ -2911,7 +2916,7 @@ void main() {
     }
     /** The graph's inputs on the current program (the picture's, or the Particles probe's): uniforms and samplers. */
     function bindPictureInputs(W, H) {
-      setUniform('u_time', time);
+      setUniform('u_time', pictureTime());
       setUniform('u_frameDt', frameDt);
       setUniform('u_resolution', [W, H]);
       // In the picture's pixels in every program, as in the app (a pass program's W × H is the pass's size).
@@ -2968,7 +2973,7 @@ void main() {
     function tick(now) {
       if (!alive) return;
       if (!follow) raf = requestAnimationFrame(tick);
-      const dt = lastNow ? Math.min(0.1, (now - lastNow) / 1000) : 0;
+      let dt = lastNow ? Math.min(0.1, (now - lastNow) / 1000) : 0;
       lastNow = now;
       if (ctxLost || held) return;
       const running = (follow ? fed.playing : playing) && !reduced && !document.hidden && !(pauseOffscreen && !onScreen);
@@ -2980,6 +2985,16 @@ void main() {
       if (reduced && !needsDraw && frame > 0) return;
       if (follow) time = fed.t;
       else if (playing && !reduced) time += dt;
+      // A chosen frame rate: the screen's other frames skip (stepped and playing: a new time step draws).
+      if (frGate) {
+        frAcc += dt;
+        const due = !frNext || now >= frNext - 2, step = Math.floor(time * frFps + 1e-6), moving = frStep && (follow ? fed.playing : playing) && !reduced;
+        if (moving && step !== frShown) frNext = now + frGate;
+        else if (due) frNext = frNext && now - frNext < frGate ? frNext + frGate : now + frGate;
+        else return;
+        if (moving && step === frShown && !needsDraw) return;
+        frShown = step; dt = Math.min(0.25, frAcc); frAcc = 0;
+      }
       frame++;
       shared.live.clock++;
       if (bg && followPage) clampedMouse(shared.pageX, shared.pageY);

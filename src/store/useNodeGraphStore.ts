@@ -5483,7 +5483,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
   graphFileJson: (asPlay) => {
     const { nodes, looseGroups, play, datasets } = get();
-    if (!asPlay) return JSON.stringify({ nodes, looseGroups, ...(isPlayRecordEmpty(play) ? {} : { play }), ...datasetsField(datasets), layout: LAYOUT_VERSION }, null, 2);
+    if (!asPlay) return JSON.stringify({ nodes, looseGroups, ...(isPlayRecordEmpty(play) && !play.frameRate ? {} : { play }), ...datasetsField(datasets), layout: LAYOUT_VERSION }, null, 2);
     const live = new Map<string, number | number[]>();
     for (const c of play.controls) {
       const v = playEngine.liveValue(c.id);

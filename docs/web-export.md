@@ -80,6 +80,11 @@ flips and mipmaps images as the app does, resizes with the box (device pixels ca
 1.5 for a background, 1 with feedback), pauses off-screen and in hidden tabs, and holds a still
 frame for reduced motion.
 
+A graph with a chosen **frame rate** (docs/frame-rate.md) carries it as `fps` (and `fpsMode`
+unless it is "Both") in the options: the snippet draws only that often and/or steps `u_time` by
+1/fps, as the app does, and `renderAt(t)` draws the stepped time. The full player does the same
+from the play record's `frameRate`. Auto adds nothing.
+
 From the page:
 
 - `data-u_name="0.5"` (or `"1,0,0"` for a vector) on the div overrides a baked value;
