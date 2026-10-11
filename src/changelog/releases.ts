@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.161',
+    date: '2026-10-11',
+    title: 'My blocks',
+    highlights: [
+      { area: 'Studio', text: '2D Scene Builder: save your own space blocks and combines with a picture of what they do. My blocks leads the library; export, import and copy as text.' },
+      { area: 'Studio', text: 'Insert on a wire: float nodes fit any wire (broadcast), and genType nodes like Exp take the wire\'s type. Related search only lists nodes that can connect.' },
+    ],
+  },
+  {
     id: '2026.10.160',
     date: '2026-10-11',
     title: 'Wire any slider',
