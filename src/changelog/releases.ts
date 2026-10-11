@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.166',
+    date: '2026-10-11',
+    title: 'Depth Mix',
+    highlights: [
+      { area: 'Studio', text: 'Depth Mix: combine a scene with a picture\'s depth: size by depth, space by depth, occlude, fog, light or mix, plus a gradient that flows along depth.' },
+      { area: 'Studio', text: '2D Scene Builder Depth tab and a 3D "Picture with depth" card: pick a picture, generate its depth on this device, choose how the scene meets it.' },
+      { area: 'Studio', text: 'Examples: Circles sized by depth, and Glow beaming through depth.' },
+    ],
+  },
+  {
     id: '2026.10.165',
     date: '2026-10-11',
     title: '3D builder fixes',
