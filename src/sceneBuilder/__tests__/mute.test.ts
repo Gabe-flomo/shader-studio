@@ -12,7 +12,7 @@ vi.hoisted(() => {
 });
 import { compileGraph } from '../../compiler/graphCompiler';
 import { buildStandaloneGraph, ROLE_KEY } from '../build';
-import { newGroup, newShape, newWarp, starterSpec, emptySpec, type SceneSpec } from '../spec';
+import { autoStepScale, newGroup, newShape, newWarp, starterSpec, emptySpec, stepHints, type SceneSpec } from '../spec';
 import { parseRecipe, printRecipe } from '../recipe';
 import { describeGraph } from '../recognize';
 import { useSceneBuilder } from '../store';
@@ -211,5 +211,18 @@ describe('muting in the 3D Scene Builder', () => {
     expect(editSceneInBuilder(sceneId)).toBe(true);
     expect(st().spec.root.children[0].muted).toBe(true);
     expect(st().spec.look.mute).toEqual({ fog: true });
+  });
+});
+
+describe('a muted warp, shape or group asks nothing of the march step', () => {
+  it('a muted twist no longer makes the march take smaller steps; unmuted it does', () => {
+    expect(autoStepScale(scene())).toBeLessThan(1);
+    expect(autoStepScale(scene({ warp: false }))).toBeLessThan(1);
+    expect(autoStepScale(scene({ warp: true }))).toBe(1);
+    expect(stepHints(scene({ warp: true }))).toEqual([]);
+  });
+  it('nor does a twist on a muted shape, or in a muted group', () => {
+    expect(autoStepScale(scene({ shape: true }))).toBe(1);
+    expect(autoStepScale(scene({ group: true }))).toBe(1);
   });
 });

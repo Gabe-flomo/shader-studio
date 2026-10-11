@@ -157,8 +157,8 @@ export const DepthMixNode: NodeDefinition = withParamSockets({
     sizeFar: 0.4, sizeNear: 1.6,
     spaceStyle: 'shift', spaceAmount: 0.15, angle: 0, focus: 0,
     level: 0.5, softness: 0.05,
-    fogDensity: 0.9, haze: 0.35, fogColor: [0.72, 0.78, 0.9],
-    lightStrength: 2, ambient: 0.55, glowKeep: 1,
+    fogDensity: 1, haze: 0.6, fogColor: [0.72, 0.78, 0.9],
+    lightStrength: 3, ambient: 0.5, glowKeep: 0.35,
     mixNear: 'picture', mixAmount: 1,
     gradient: 'off', gradientTo: 'scene', gradientHow: 'multiply', gradientAmount: 0.8, gradientScale: 1, gradientPhase: 0,
   },
@@ -177,12 +177,12 @@ export const DepthMixNode: NodeDefinition = withParamSockets({
     focus: { label: 'Focus', type: 'float', min: 0, max: 1, step: 0.01, section: SPACE, hint: 'The depth that stays still: nearer moves one way, farther the other.' },
     level: { label: 'Scene sits at', type: 'float', min: 0, max: 1, step: 0.005, section: OCCLUDE, hint: 'Occlude: the scene\'s depth (0 far, 1 near). The picture hides it wherever the picture is nearer.' },
     softness: { label: 'Softness', type: 'float', min: 0, max: 0.5, step: 0.005, section: OCCLUDE, hint: 'How gently the scene fades in and out at that depth (depth is soft round hair and edges).' },
-    fogDensity: { showWhen: { param: 'mode', value: 'fog' }, label: 'Density', type: 'float', min: 0, max: 1, step: 0.01, section: FOG, hint: 'Fog: how much the scene fades on the farthest things (1: gone).' },
+    fogDensity: { showWhen: { param: 'mode', value: 'fog' }, label: 'Density', type: 'float', min: 0, max: 1, step: 0.01, section: FOG, hint: 'Fog: how much the scene fades on the farthest things (1: gone). Near things stay clear.' },
     haze: { showWhen: { param: 'mode', value: 'fog' }, label: 'Haze', type: 'float', min: 0, max: 1, step: 0.01, section: FOG, hint: 'How much fog colour hangs in the far part of the picture itself.' },
     fogColor: { showWhen: { param: 'mode', value: 'fog' }, label: 'Fog colour', type: 'vec3color', section: FOG, hint: 'The haze\'s colour.' },
     lightStrength: { showWhen: { param: 'mode', value: 'light' }, label: 'Strength', type: 'float', min: 0, max: 10, step: 0.01, section: LIGHT, hint: 'Light by depth: how strongly the scene lights the picture (most on near things).' },
     ambient: { showWhen: { param: 'mode', value: 'light' }, label: 'Own light', type: 'float', min: 0, max: 1.5, step: 0.01, section: LIGHT, hint: 'How much of the picture\'s own light stays: lower for a night relight.' },
-    glowKeep: { showWhen: { param: 'mode', value: 'light' }, label: 'Glow', type: 'float', min: 0, max: 2, step: 0.01, section: LIGHT, hint: 'How much of the scene still shows as itself, on top.' },
+    glowKeep: { showWhen: { param: 'mode', value: 'light' }, label: 'Glow', type: 'float', min: 0, max: 2, step: 0.01, section: LIGHT, hint: 'How much of the scene still shows as itself, on top (Screen: never past white). Keep it low so the scene reads as light on the picture.' },
     mixNear: { showWhen: { param: 'mode', value: 'mix' }, label: 'Near shows', type: 'select', section: MIX, hint: 'Mix: what the near things show.', options: [{ value: 'picture', label: 'The picture' }, { value: 'scene', label: 'The scene' }] },
     mixAmount: { showWhen: { param: 'mode', value: 'mix' }, label: 'Amount', type: 'float', min: 0, max: 1, step: 0.01, section: MIX, hint: 'How far the blend goes: 1 is all the way.' },
     gradient: { label: 'Gradient', type: 'select', section: GRADIENT, hint: 'A palette laid along depth: the colour shifts as the picture gets deeper.', options: DEPTH_GRADIENT_OPTIONS },
@@ -257,14 +257,23 @@ export const DepthMixNode: NodeDefinition = withParamSockets({
         line(`vec3 ${id}_color = ${over(`${id}_front`)};`);
         break;
       case 'fog': {
-        line(`float ${id}_fog = clamp(${p(P.fogDensity, 0.9)} * (1.0 - ${id}_n), 0.0, 1.0);`);
+        // Fog thickens with distance: the scene fades on far things (it is behind the haze), and the haze itself
+        // (the fog colour) lies over the far part of the picture and of what is left of the scene. Near things
+        // stay clear. Occlude is the other way round: there the near picture hides the scene.
+        line(`float ${id}_fog = clamp(${p(P.fogDensity, 1)} * (1.0 - ${id}_n), 0.0, 1.0);`);
         line(`float ${id}_front = 1.0 - ${id}_fog;`);
-        line(`vec3 ${id}_color = mix(${over(`${id}_front`)}, ${pv3(P.fogColor, [0.72, 0.78, 0.9])}, clamp(${p(P.haze, 0.35)} * (1.0 - ${id}_n), 0.0, 1.0));`);
+        line(`vec3 ${id}_color = mix(${over(`${id}_front`)}, ${pv3(P.fogColor, [0.72, 0.78, 0.9])}, clamp(${p(P.haze, 0.6)} * (1.0 - ${id}_n), 0.0, 1.0));`);
         break;
       }
       case 'light':
+        // The scene is coloured light: it multiplies the picture (Own light everywhere, plus Strength × the scene
+        // on near things), so the picture keeps its colours. Where that runs past 1 the colour is scaled down
+        // as a whole rather than clipped per channel, which bleached bright parts to grey-white. The scene's
+        // own glow goes on top by Screen, never past white.
         line(`float ${id}_front = clamp(${cov}, 0.0, 1.0);`);
-        line(`vec3 ${id}_color = ${id}_pic * (${p(P.ambient, 0.55)} + ${p(P.lightStrength, 2)} * ${id}_sc * ${id}_n) + ${id}_sc * ${p(P.glowKeep, 1)};`);
+        line(`vec3 ${id}_lit = ${id}_pic * (${p(P.ambient, 0.5)} + ${p(P.lightStrength, 3)} * max(${id}_sc, 0.0) * ${id}_n);`);
+        line(`${id}_lit /= max(1.0, max(max(${id}_lit.r, ${id}_lit.g), ${id}_lit.b));`);
+        line(`vec3 ${id}_color = vec3(1.0) - (vec3(1.0) - ${id}_lit) * (vec3(1.0) - clamp(${id}_sc * ${p(P.glowKeep, 0.35)}, 0.0, 1.0));`);
         break;
       case 'mix': {
         const w = P.mixNear === 'scene' ? `(1.0 - ${id}_n)` : `${id}_n`;

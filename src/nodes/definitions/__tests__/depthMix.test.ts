@@ -17,6 +17,7 @@ import {
   DEPTH_MIX_COMBINES, DEPTH_MIX_MODES, DEPTH_SPACE_STYLES, depthMixFront, depthMixGradient, depthMixScale, depthMixShape, depthMixUv,
 } from '../depthMix';
 import type { GraphNode } from '../../../types/nodeGraph';
+import { CpuShader } from '../../../lib/guidedConvert/cpuGlsl';
 
 /** A picture, its depth, a circle measured at Depth UV with its radius Sized by depth, glowing, and a Depth Mix. */
 function graph(params: Record<string, unknown> = {}): GraphNode[] {
@@ -136,6 +137,54 @@ describe('Depth Mix', () => {
       expect(far).not.toEqual(near);
       const shifted = depthMixGradient(0, 1, 1, 0.5);
       near.forEach((v, i) => expect(shifted[i]).toBeCloseTo(v));
+    });
+  });
+
+  describe('the modes\' colour, run on the CPU on a synthetic depth', () => {
+    // The node's own GLSL, its inputs as uniforms: a warm picture, a white light scene, depth set per pixel.
+    const PIC = [0.6, 0.3, 0.1], SCENE = [0.5, 0.5, 0.5], FOG = [0.72, 0.78, 0.9];
+    const colour = (params: Record<string, unknown>, depth: number, pic = PIC, scene = SCENE): number[] => {
+      const def = getNodeDefinition('depthMix')!;
+      const node = { id: 'dm', type: 'depthMix', position: { x: 0, y: 0 }, inputs: {}, outputs: {}, params: { ...def.defaultParams, ...params } } as unknown as GraphNode;
+      const { code } = def.generateGLSL(node, { picture: 'u_pic', depth: 'u_dep', scene: 'u_sc' }) as { code: string };
+      const src = `uniform vec2 u_resolution;\nuniform vec3 u_pic;\nuniform float u_dep;\nuniform vec3 u_sc;\nvoid main() {\n  vec2 g_uv = vec2(0.0);\n${code}  gl_FragColor = vec4(clamp(dm_color, 0.0, 1.0), 1.0);\n}`;
+      return new CpuShader(src).run([1, 1], { resolution: [2, 2], time: 0, uniforms: { u_pic: pic, u_dep: depth, u_sc: scene } })!.slice(0, 3);
+    };
+    const sat = (c: number[]) => (Math.max(...c) - Math.min(...c)) / Math.max(...c, 1e-6);
+    const dist = (a: number[], b: number[]) => Math.max(...a.map((x, i) => Math.abs(x - b[i])));
+    const lum = (c: number[]) => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+
+    it('light by depth lights near things and keeps the picture\'s colour (no grey wash)', () => {
+      const far = colour({ mode: 'light' }, 0), near = colour({ mode: 'light' }, 1);
+      expect(lum(near)).toBeGreaterThan(lum(far) * 2);
+      // The light multiplies the picture: its hue stays (red over green about 2, as in the picture) and it isn't
+      // bleached towards grey, near or far (far without the scene's own glow on top, which is the scene itself).
+      for (const c of [near, colour({ mode: 'light', glowKeep: 0 }, 0)]) {
+        expect(c[0] / c[1]).toBeGreaterThan(1.6);
+        expect(sat(c)).toBeGreaterThan(sat(PIC) * 0.75);
+      }
+      // A strong light saturates as a whole instead of clipping each channel to white.
+      const blown = colour({ mode: 'light', lightStrength: 10, glowKeep: 0 }, 1);
+      expect(blown[0]).toBeCloseTo(1, 3);
+      expect(blown[0] / blown[1]).toBeCloseTo(2, 1);
+      // No scene, no light: the picture at Own light.
+      colour({ mode: 'light', glowKeep: 0 }, 1, PIC, [0, 0, 0]).forEach((v, i) => expect(v).toBeCloseTo(PIC[i] * 0.5, 3));
+    });
+
+    it('fog and occlude are opposite: fog hazes the far part, occlude hides the scene behind near things', () => {
+      const fogFar = colour({ mode: 'fog' }, 0), fogNear = colour({ mode: 'fog' }, 1);
+      const occFar = colour({ mode: 'occlude' }, 0), occNear = colour({ mode: 'occlude' }, 1);
+      const pictureAndScene = PIC.map((v, i) => Math.min(v + SCENE[i], 1));
+      // Fog: near things stay clear (the scene over the picture); far ones go into the fog colour, the scene gone.
+      expect(dist(fogNear, pictureAndScene)).toBeLessThan(1e-3);
+      expect(dist(fogFar, PIC.map((v, i) => v + 0.6 * (FOG[i] - v)))).toBeLessThan(1e-3);
+      expect(dist(fogFar, FOG)).toBeLessThan(dist(fogFar, PIC));
+      // Occlude: the scene shows on the far part and the near picture hides it. No fog colour anywhere.
+      expect(dist(occFar, pictureAndScene)).toBeLessThan(1e-3);
+      expect(dist(occNear, PIC)).toBeLessThan(1e-3);
+      // So the two differ clearly at both ends.
+      expect(dist(fogFar, occFar)).toBeGreaterThan(0.25);
+      expect(dist(fogNear, occNear)).toBeGreaterThan(0.25);
     });
   });
 });

@@ -49,11 +49,15 @@ to flatten the background), and **Curve** bends it (above 1 only the nearest thi
   centre, *Turn* turns the point round the centre. Small *Amount* is parallax; large *Amount* drags each glow across
   everything at its depth, so it beams through the picture. *Focus* is the depth that stays still.
 - **Occlude.** The scene sits at one depth (**Scene sits at**, 0 far … 1 near). Wherever the picture is nearer, the
-  picture hides it; **Softness** fades the edge (depth is soft round hair).
-- **Fog.** The scene fades out where the picture is far (**Density**: 1 gone on the farthest things), and **Haze**
-  hangs the **Fog colour** in the picture's far part, so the scene sits in the picture's air.
-- **Light by depth.** The scene is light falling on the picture: `picture × (Own light + Strength × scene × depth)`,
-  most on near things, plus the scene itself × **Glow** on top. Lower *Own light* for a night relight.
+  picture hides it; **Softness** fades the edge (depth is soft round hair). Far parts show the scene; there is no haze.
+- **Fog.** The other way round: near things stay clear and the scene fades out where the picture is far (**Density**:
+  1 gone on the farthest things), while **Haze** (0.6 by default) lays the **Fog colour** over the picture's far part,
+  so the scene sits in the picture's air.
+- **Light by depth.** The scene is coloured light falling on the picture: `picture × (Own light + Strength × scene ×
+  depth)`, most on near things, so the picture keeps its own colours. Where that runs past white the colour is scaled
+  down as a whole (not clipped channel by channel, which bleached it grey-white). The scene itself goes on top by
+  Screen × **Glow** (0.35 by default: keep it low so the scene reads as light, not as a layer). Lower *Own light* for a
+  night relight.
 - **Mix.** The scene and the picture blended by depth: **Near shows** the picture (or the scene), far the other;
   **Amount** says how far the blend goes.
 
@@ -98,6 +102,6 @@ the picture is an empty Texture node until you drop one on it.
   `src/components/builders/DepthGenerateRow.tsx`; the builders' previews show its depth through
   `components/builders/previewTextures.ts` (`registerPreviewDepth`).
 - Tests: `src/nodes/definitions/__tests__/depthMix.test.ts` (every mode, combine, space style and gradient
-  compiles; the maths on a synthetic depth), `src/sceneBuilder2d/__tests__/depth.test.ts` (every look, size and
+  compiles; the maths on a synthetic depth; Light, Fog and Occlude's colour run on the CPU on a synthetic depth), `src/sceneBuilder2d/__tests__/depth.test.ts` (every look, size and
   space, the recipe, Build round-trip, the bake, templates and examples), `src/sceneBuilder/__tests__/depthPicture.test.ts`.
   No test downloads the model.

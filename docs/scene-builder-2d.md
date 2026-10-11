@@ -154,7 +154,8 @@ shared rules: ⊘ on the card, Alt-click solos, one undo step, saved with the sc
 
 | What | How it is muted |
 | --- | --- |
-| A space transform, block or combine (Space tab) | Live: its node passes the uv it was given straight through. In the example, Mirror both muted shows the picture before the fold. |
+| A space transform, block or combine (Space tab) | Live: its node passes the uv it was given straight through. In the example, Mirror both muted shows the picture before the fold. The tab's grid preview skips it too. |
+| Size by depth, Space by depth (Depth tab) | Their ⊘ is their on/off: muted, the shapes don't read depth (one rebuild). |
 | A layer or a shape in a combine (the layer list's ⊘, or its card) | Live: its distance is pushed far away (so unions, cuts and glows ignore it) and, for a layer, the picture behind passes through. |
 | A motion (Shapes → Motion) | Left out of the build. |
 | A ring of copies (Duplicate) | Left out: one copy. |
@@ -224,9 +225,10 @@ The **Depth** tab: a picture with depth the shapes interact with ([depth-mix.md]
   kept as an image beside the picture and Build puts it on the Depth node (Update: Baked). Without it, the built
   Depth node works the depth out live. The preview shows the generated depth, or the depth a Depth node on the canvas
   already has for the picture, or else the picture's brightness as a stand-in (the tab says which).
-- **Shapes and depth:** **Size by depth** (every layer grows on near things: *Size far*, *Size near*) and **Space by
-  depth** (the point every shape is measured from moves by depth: *Move by* Shift, Zoom or Turn, *Amount*,
-  *Direction*, *Focus*). Either, both or neither.
+- **Size by depth** (every layer grows on near things: *Size far*, *Size near*) and **Space by depth** (the point
+  every shape is measured from moves by depth: *Move by* Shift, Zoom or Turn, *Amount*, *Direction*, *Focus*): two
+  cards, each switched on and off by the shared ⊘ mute like every other card (off keeps the settings). Either, both
+  or neither.
 - **With the picture:** the look. **On top** (the scene over the picture: *Scene over it* Add, Screen, Over or Tint),
   **Occlude** (*Scene sits at*, *Softness*), **Fog** (*Density*, *Haze*, *Fog colour*), **Mix** (*Near shows*,
   *Amount*), **Light** (*Strength*, *Own light*, *Glow*). **Picture** is how bright the picture shows.

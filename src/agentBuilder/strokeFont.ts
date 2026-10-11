@@ -103,11 +103,11 @@ function halfWidth(ch: string): number {
 /** The characters the font draws, from what was typed (upper case; unknown characters dropped). */
 export const strokeChars = (t: string) => t.toUpperCase().split('').filter(c => c in STROKE_GLYPHS).join('');
 
-/** The text's strokes laid out along a line, centred on 0 (glyph units), and its half-width. */
-export function layoutStrokes(text: string): { strokes: Stroke[]; halfWidth: number } {
+/** The text's strokes laid out along a line, centred on 0 (glyph units), and its half-width. `gap` is the space between letters (glyph units). */
+export function layoutStrokes(text: string, gap = LETTER_GAP): { strokes: Stroke[]; halfWidth: number } {
   const chars = strokeChars(text).split('');
   const widths = chars.map(halfWidth);
-  const total = widths.reduce((s, w) => s + 2 * w, 0) + Math.max(0, chars.length - 1) * LETTER_GAP;
+  const total = widths.reduce((s, w) => s + 2 * w, 0) + Math.max(0, chars.length - 1) * gap;
   let pen = -total / 2;
   const out: Stroke[] = [];
   chars.forEach((ch, i) => {
@@ -117,7 +117,7 @@ export function layoutStrokes(text: string): { strokes: Stroke[]; halfWidth: num
       else if (s.k === 'A') out.push({ ...s, c: [s.c[0] + ox, s.c[1]] });
       else out.push({ k: 'P', p: [s.p[0] + ox, s.p[1]] });
     }
-    pen += 2 * widths[i] + LETTER_GAP;
+    pen += 2 * widths[i] + gap;
   });
   return { strokes: out, halfWidth: total / 2 };
 }

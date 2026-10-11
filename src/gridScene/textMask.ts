@@ -4,14 +4,15 @@
  *
  *  - the text stamp: the cells the letters cover, centred where you click the mini grid, each given
  *    the brush's shape (textStampGridCells, through gridRules/textCells.ts on the CPU);
- *  - the pattern's mask: the wave (and the pattern's fill) only in the cells whose middle the words
- *    cover, worked out in the shader with the font's own strokes (textMaskGlsl), and on the CPU for
- *    the mini grid (textMaskAt). Both test the same distance against the same reach.
+ *  - the pattern's mask: the wave (and the pattern's fill) only in the cells the words reach into
+ *    (textCells.ts: coverage, measured square-wise, so no stroke falls between cell middles), worked
+ *    out in the shader with the font's own strokes (textMaskGlsl), and on the CPU for the mini grid
+ *    (textMaskAt). Both test the same distance against the same reach.
  *
  * Cell coordinates as the rest of the builder: x right, y down, a cell's middle at +0.5. Pure.
  */
-import { DEFAULT_WEIGHT, layoutStrokes, strokeDistance, strokeGlsl } from '../agentBuilder/strokeFont';
-import { cleanStartText, textStampCells } from '../gridRules/textCells';
+import { DEFAULT_WEIGHT } from '../agentBuilder/strokeFont';
+import { cleanStartText, textCovers, textRaster, textStampCells } from '../gridRules/textCells';
 
 /** A GLSL float literal (as glsl.ts gf; kept here so the two files don't import each other). */
 const gf = (n: number) => { const v = Math.round((Number.isFinite(n) ? n : 0) * 1e6) / 1e6; const t = String(v); return /[.e]/.test(t) ? t : `${t}.0`; };
@@ -48,38 +49,40 @@ export function readTextMask(v: unknown): TextMask | null {
   };
 }
 
-/** Cells per font unit, and how near a stroke a cell's middle must be to count as inside. */
-function scaleOf(m: TextMask): { unit: number; reach: number } {
-  const unit = m.size / 2;
-  return { unit, reach: Math.max(m.weight, 1 / (2 * unit)) };
-}
-
 /** Is cell (x, y) (y down) of a cols × rows grid inside the words? The CPU twin of textMaskGlsl. */
 export function textMaskAt(m: TextMask, cols: number, rows: number, x: number, y: number): boolean {
-  const { strokes } = layoutStrokes(m.text);
-  if (!strokes.length) return false;
-  const { unit, reach } = scaleOf(m);
-  const qx = (x + 0.5 - (cols / 2 + m.x)) / unit, qy = ((rows / 2 - m.y) - (y + 0.5)) / unit;
-  let d = Infinity;
-  for (const s of strokes) d = Math.min(d, strokeDistance(s, qx, qy));
-  return d < reach;
+  const r = textRaster(m.text, m.size, m.weight);
+  if (!r.segs.length) return false;
+  return textCovers(r, x + 0.5 - (cols / 2 + m.x), (rows / 2 - m.y) - (y + 0.5));
 }
 
 /**
  * The mask as a GLSL function `float <name>(vec2 id)`: 1 when cell `id` (x right, y down) is inside
- * the words, else 0. One line a stroke, as the Agent Builder's text (no texture). `$` is the
- * builder's name suffix.
+ * the words, else 0. One line a straight piece of a stroke (no texture), each the square-wise
+ * distance of textCells.ts segLinf. `$` is the builder's name suffix.
  */
 export function textMaskGlsl(m: TextMask, cols: number, rows: number, name = 'gs_mask$'): string {
-  const { strokes } = layoutStrokes(m.text);
-  if (!strokes.length) return `float ${name}(vec2 id) { return 0.0; }`;
-  const { unit, reach } = scaleOf(m);
+  const r = textRaster(m.text, m.size, m.weight);
+  if (!r.segs.length) return `float ${name}(vec2 id) { return 0.0; }`;
+  const seg = `${name}_seg`;
   const L = [
+    `float ${seg}_t(float n, float d) { return abs(d) < 1e-12 ? 0.0 : clamp(n / d, 0.0, 1.0); }`,
+    `float ${seg}_m(vec2 v) { return max(abs(v.x), abs(v.y)); }`,
+    `// The square-wise distance from p to the piece a→b: the least of the larger x / y gap along it.`,
+    `float ${seg}(vec2 p, vec2 a, vec2 b) {`,
+    '  vec2 o = a - p, e = b - a;',
+    `  float best = min(${seg}_m(o), ${seg}_m(o + e));`,
+    `  best = min(best, ${seg}_m(o + e * ${seg}_t(-o.x, e.x)));`,
+    `  best = min(best, ${seg}_m(o + e * ${seg}_t(-o.y, e.y)));`,
+    `  best = min(best, ${seg}_m(o + e * ${seg}_t(o.y - o.x, e.x - e.y)));`,
+    `  return min(best, ${seg}_m(o + e * ${seg}_t(-(o.x + o.y), e.x + e.y)));`,
+    '}',
     `float ${name}(vec2 id) {`,
-    `  vec2 q = vec2(id.x + 0.5 - ${gf(cols / 2 + m.x)}, ${gf(rows / 2 - m.y)} - (id.y + 0.5)) / ${gf(unit)};`,
+    `  vec2 q = vec2(id.x + 0.5 - ${gf(cols / 2 + m.x)}, ${gf(rows / 2 - m.y)} - (id.y + 0.5));`,
+    `  if (abs(q.x) > ${gf(r.halfW + 0.5)} || abs(q.y) > ${gf(r.halfH + 0.5)}) return 0.0;`,
     '  float d = 1.0e5;',
-    ...strokes.map(s => `  d = min(d, ${strokeGlsl(s)});`),
-    `  return d < ${gf(reach)} ? 1.0 : 0.0;`,
+    ...r.segs.map(([ax, ay, bx, by]) => `  d = min(d, ${seg}(q, vec2(${gf(ax)}, ${gf(ay)}), vec2(${gf(bx)}, ${gf(by)})));`),
+    `  return d <= ${gf(r.reach + 1e-6)} ? 1.0 : 0.0;`,
     '}',
   ];
   return L.join('\n');

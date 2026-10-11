@@ -3,9 +3,14 @@
  * "Text"): the Agent Builder's stroke font (agentBuilder/strokeFont.ts) rasterised on the CPU, so
  * live cells form the letters.
  *
- * A cell is on when the letters cover its middle: the nearest stroke is closer than the stroke's
- * half-weight, or (so thin strokes stay joined) closer than half a cell. The letters are `size`
- * cells tall (the font's two units), centred on the grid's middle.
+ * A cell is on when a stroke reaches into it (coverage, not its middle point): the stroke's line
+ * passes through the cell's square, or a heavy stroke's half-weight reaches its middle. Measured
+ * square-wise (the largest of the x and y distances), so a stroke lying on the line between two
+ * cells marks both rather than neither, and a thin stroke at a small size never falls between
+ * cell middles and drops out. Arcs are measured as short straight pieces. The letters are spaced at
+ * least two cells apart (more than twice the reach and a cell), so neighbours never run together,
+ * and the grid is sized from the strokes' own extent plus that reach, so nothing is cut off. The
+ * letters are `size` cells tall (the font's two units), centred on the grid's middle.
  *
  * Used by:
  *  - Grid Rules' Start → Text (`start: 'text'`, the node's `startText`): the cells become the
@@ -13,7 +18,7 @@
  *  - the try board's Text stamp, and the Grid builder's text stamp onto the mini grid.
  * The shader version of the same letters (for the Grid builder's pattern mask) is strokeGlsl. Pure.
  */
-import { DEFAULT_WEIGHT, layoutStrokes, strokeChars, strokeDistance } from '../agentBuilder/strokeFont';
+import { DEFAULT_WEIGHT, LETTER_GAP, layoutStrokes, strokeChars, type Stroke } from '../agentBuilder/strokeFont';
 import { startCellsFromGrid, type StartCells } from './startCells';
 
 /** Most characters a text start holds. */
@@ -57,29 +62,88 @@ export function readStartText(v: unknown): StartText {
   };
 }
 
+/** A straight piece of a letter, in cells from the words' middle (x right, y up). */
+export type CellSeg = [number, number, number, number];
+
+/** The words laid out in cells: their strokes as straight pieces, how far a stroke reaches, and the extent. */
+export interface TextRaster {
+  segs: CellSeg[];
+  /** A cell is on when a stroke is within this of its middle, square-wise (cells): at least half a cell. */
+  reach: number;
+  /** The strokes' extent either side of the middle, reach included (cells). */
+  halfW: number;
+  halfH: number;
+}
+
+const DEG = Math.PI / 180;
+
+function strokeSegs(st: Stroke, unit: number): CellSeg[] {
+  if (st.k === 'L') return [[st.a[0] * unit, st.a[1] * unit, st.b[0] * unit, st.b[1] * unit]];
+  if (st.k === 'P') return [[st.p[0] * unit, st.p[1] * unit, st.p[0] * unit, st.p[1] * unit]];
+  // An arc as straight pieces: about 10° each, fine enough that no piece strays a tenth of a cell at 60 cells.
+  const n = Math.max(2, Math.ceil(Math.abs(st.a1 - st.a0) / 10));
+  const pt = (k: number) => {
+    const a = (st.a0 + (st.a1 - st.a0) * k / n) * DEG;
+    return [(st.c[0] + Math.cos(a) * st.r) * unit, (st.c[1] + Math.sin(a) * st.r) * unit];
+  };
+  const out: CellSeg[] = [];
+  for (let k = 0; k < n; k++) { const [ax, ay] = pt(k), [bx, by] = pt(k + 1); out.push([ax, ay, bx, by]); }
+  return out;
+}
+
+/**
+ * The words in cells: `size` cells tall, strokes of half-weight `weight` (font units). The gap
+ * between letters is widened at small sizes so two letters' cells never touch.
+ */
+export function textRaster(text: string, size: number, weight = DEFAULT_WEIGHT): TextRaster {
+  const unit = size / 2; // cells per font unit
+  const reach = Math.max(0.5, weight * unit);
+  const gap = Math.max(LETTER_GAP, (2 * reach + 1.01) / unit);
+  const { strokes } = layoutStrokes(cleanStartText(text), gap);
+  const segs = strokes.flatMap(st => strokeSegs(st, unit));
+  let mx = 0, my = 0;
+  for (const [ax, ay, bx, by] of segs) mx = Math.max(mx, Math.abs(ax), Math.abs(bx)), my = Math.max(my, Math.abs(ay), Math.abs(by));
+  return { segs, reach, halfW: mx + reach, halfH: my + reach };
+}
+
+const linf = (x: number, y: number) => Math.max(Math.abs(x), Math.abs(y));
+const tAt = (num: number, den: number) => (Math.abs(den) < 1e-12 ? 0 : Math.max(0, Math.min(1, num / den)));
+
+/**
+ * The square-wise distance from (px, py) to a straight piece: the smallest, along the piece, of the
+ * larger of the x and y gaps. It bends only where a gap is 0 or the two gaps are equal, so the least
+ * is at one of those points or an end. The GLSL in textMask.ts does the same sums.
+ */
+export function segLinf(px: number, py: number, s: CellSeg): number {
+  const ox = s[0] - px, oy = s[1] - py, dx = s[2] - s[0], dy = s[3] - s[1];
+  let best = Math.min(linf(ox, oy), linf(ox + dx, oy + dy));
+  for (const t of [tAt(-ox, dx), tAt(-oy, dy), tAt(oy - ox, dx - dy), tAt(-(ox + oy), dx + dy)]) best = Math.min(best, linf(ox + dx * t, oy + dy * t));
+  return best;
+}
+
+/** Does the cell whose middle is (x, y) (cells from the words' middle, y up) hold part of a letter? */
+export function textCovers(r: TextRaster, x: number, y: number): boolean {
+  if (Math.abs(x) > r.halfW + 0.5 || Math.abs(y) > r.halfH + 0.5) return false;
+  for (const s of r.segs) if (segLinf(x, y, s) <= r.reach + 1e-9) return true;
+  return false;
+}
+
 /**
  * The words as a grid of cells, rows top first: 1 (or `state`) on the letters, 0 elsewhere, not
  * cropped; the words' middle is the grid's middle (a half cell off on an even side).
  */
 export function textCellGrid(text: string, size: number, weight = DEFAULT_WEIGHT, state = 1): number[][] {
-  const words = cleanStartText(text);
-  const { strokes, halfWidth } = layoutStrokes(words);
-  if (!strokes.length) return [];
-  const unit = Math.max(MIN_TEXT_SIZE, size) / 2; // cells per font unit
-  const reach = Math.max(weight, 1 / (2 * unit)); // a cell is on within this of a stroke (font units)
-  const w = Math.ceil(2 * (halfWidth + reach) * unit) + 1;
-  const h = Math.ceil(2 * (1.3 + reach) * unit) + 1; // commas and Q's tail reach below −1
+  const r = textRaster(text, Math.max(MIN_TEXT_SIZE, size), weight);
+  if (!r.segs.length) return [];
+  // Sized from the strokes' own extent, reach included, and a spare cell each side: nothing is cut off.
+  const w = Math.ceil(2 * r.halfW) + 2;
+  const h = Math.ceil(2 * r.halfH) + 2;
   const grid: number[][] = [];
-  for (let r = 0; r < h; r++) {
-    const gy = (h / 2 - r - 0.5) / unit;
-    const row: number[] = [];
-    for (let c = 0; c < w; c++) {
-      const gx = (c + 0.5 - w / 2) / unit;
-      let d = Infinity;
-      for (const s of strokes) { d = Math.min(d, strokeDistance(s, gx, gy)); if (d < reach) break; }
-      row.push(d < reach ? state : 0);
-    }
-    grid.push(row);
+  for (let row = 0; row < h; row++) {
+    const gy = h / 2 - row - 0.5;
+    const line: number[] = [];
+    for (let c = 0; c < w; c++) line.push(textCovers(r, c + 0.5 - w / 2, gy) ? state : 0);
+    grid.push(line);
   }
   return grid;
 }

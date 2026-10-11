@@ -27,7 +27,7 @@ Alt-click solos, one undo step, saved with the scene):
 | --- | --- |
 | A shape (tree row or card) | Live: its distance is pushed far away inside the Scene Group, so it draws nothing and unions ignore it. In Materials (a plain group, which has no gates) the same bypass is an Expression Block with a 0/1 Constant, so it never wins a colour. |
 | A group (not the scene itself) | Live: its last combine measures far away. |
-| A warp | Live: its node passes the point straight through; a modifier passes the distance; Scale gates both its halves. |
+| A warp | Live: its node passes the point straight through; a modifier passes the distance; Scale gates both its halves. Muted, it no longer asks for a smaller march step (Step Scale on auto), nor does one on a muted shape or group. |
 | Soft shadows, ambient occlusion | Live: their shade is 1 (fully lit). |
 | The highlight (shine) | Live. |
 | Fog, tone map | Live: the colour passes through. |

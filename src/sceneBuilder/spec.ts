@@ -607,8 +607,14 @@ export function opLabel(g: Pick<GroupSpec, 'op' | 'k'>): string {
 /** The step each warp or shape asks for, smallest first, with who asks. */
 export function stepHints(spec: SceneSpec): Array<{ value: number; why: string }> {
   const out: Array<{ value: number; why: string }> = [];
+  // A muted warp passes the point straight through, and a muted shape or group draws nothing: neither
+  // asks the march for smaller steps.
+  const off = new Set<string>();
+  walkItems(spec.root, (it, parent) => { if ((it.id !== spec.root.id && it.muted) || (parent && off.has(parent.id))) off.add(it.id); });
   walkItems(spec.root, it => {
+    if (off.has(it.id)) return;
     for (const w of it.warps) {
+      if (w.muted) continue;
       const def = WARP_BY_KIND[w.kind];
       if (!def) continue;
       const v = def.stepHint(w);

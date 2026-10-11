@@ -779,6 +779,19 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
     for (const [k, v] of Object.entries(n)) if (k !== 'type' && k !== 'whitespace') freeNames(v, out, inCall);
   }
   /**
+   * The input a source uniform comes into kept code by: its port name (u_resolution as `resolution`),
+   * or a fresh one when the code already has a variable of that name. A remainder function with a local
+   * `resolution` (a float the shader computes) otherwise read the Resolution wire in its place.
+   */
+  function sourcePort(n: string, a: unknown, names: ReadonlySet<string>): string {
+    const base = SOURCES[n].name;
+    const used = new Set(names); declaredNames(a, used);
+    if (!used.has(base)) return base;
+    let name = `${base}_src`;
+    for (let k = 2; used.has(name); k++) name = `${base}_src${k}`;
+    return name;
+  }
+  /**
    * What code kept as text reads: an input per live variable and source. An `int` travels
    * as a float input (`n_in`) and `ints` declares it back (`int n = int(n_in);`) for the code.
    */
@@ -790,7 +803,7 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
     for (const n of names) {
       if (env.has(n) && env.get(n)!.int) { const v = env.get(n)!; inputs.push({ name: `${n}_in`, type: v.type }); wires[`${n}_in`] = asRef(v); ints.push({ name: n, from: `${n}_in` }); }
       else if (env.has(n)) { const v = env.get(n)!; inputs.push({ name: n, type: v.type }); wires[n] = asRef(v); }
-      else if (SOURCES[n]) { const s = SOURCES[n]; inputs.push({ name: s.name, type: s.t }); wires[s.name] = srcRef(n); code = code.replace(new RegExp(`\\b${n}\\b`, 'g'), s.name); }
+      else if (SOURCES[n]) { const s = SOURCES[n], port = sourcePort(n, a, names); inputs.push({ name: port, type: s.t }); wires[port] = srcRef(n); code = code.replace(new RegExp(`\\b${n}\\b`, 'g'), port); }
       else if (fns.has(n)) { /* a call: handled by the caller (region) */ }
       else throw new Unsupported(`Unknown identifier ${n}`);
     }
@@ -1146,7 +1159,7 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
       }
       else if (env.has(n) && env.get(n)!.int) { const v = env.get(n)!; inputs.push({ name: `${n}_in`, type: v.type }); wires[`${n}_in`] = asRef(v); prelude.push(`int ${n} = int(${n}_in);`); }
       else if (env.has(n)) { const v = env.get(n)!; inputs.push({ name: n, type: v.type }); wires[n] = asRef(v); }
-      else if (SOURCES[n]) { const s = SOURCES[n]; inputs.push({ name: s.name, type: s.t }); wires[s.name] = srcRef(n); code = code.replace(new RegExp(`\\b${n}\\b`, 'g'), s.name); }
+      else if (SOURCES[n]) { const s = SOURCES[n], port = sourcePort(n, a, names); inputs.push({ name: port, type: s.t }); wires[port] = srcRef(n); code = code.replace(new RegExp(`\\b${n}\\b`, 'g'), port); }
       else if (!fns.has(n)) throw new Unsupported(`Unknown identifier ${n}`);
     }
     const callLine = fn.ret === 'void' ? `${code};` : `${fn.ret} ret_ = ${code};`;
@@ -1386,7 +1399,7 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
         const v = env.get(n)!; inputs.push({ name: `${n}_in`, type: v.type }); wires[`${n}_in`] = asRef(v);
         prelude.push(v.int ? `int ${n} = int(${n}_in);` : `${v.type} ${n} = ${n}_in;`);
       }
-      else if (SOURCES[n]) { const so = SOURCES[n]; inputs.push({ name: so.name, type: so.t }); wires[so.name] = srcRef(n); code = code.replace(new RegExp(`\\b${n}\\b`, 'g'), so.name); }
+      else if (SOURCES[n]) { const so = SOURCES[n], port = sourcePort(n, s, names); inputs.push({ name: port, type: so.t }); wires[port] = srcRef(n); code = code.replace(new RegExp(`\\b${n}\\b`, 'g'), port); }
       else if (!fns.has(n)) throw new Unsupported(`Unknown identifier ${n}`);
     }
     const results = packed(live.map(n => ({ name: n, type: env.get(n)!.type, int: env.get(n)!.int })), ret => `${prelude.join('\n')}\n${code}\nreturn ${ret};`, inputs, wires, helpersFor(s), `loop → ${live.join(', ')}`, s);
