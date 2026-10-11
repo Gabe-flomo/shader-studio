@@ -5,7 +5,8 @@
  *  - 2D scene: a ring of stars folded round the centre, turning slowly (sceneBuilder2d's shape SDFs);
  *  - Agent scene: the Agent Builder's trail followers, moving (agentBuilder/miniSim.ts);
  *  - Grid scene: Conway's Life running on a small board (gridRules/cpu.ts);
- *  - 3D scene: a torus, a ball and a box from the 3D builder's own thumbnail marcher.
+ *  - 3D scene: a torus, a ball and a box from the 3D builder's own thumbnail marcher;
+ *  - Splat scene: a point cloud dissolving and coming back (the Splat builder's own mini cloud).
  */
 import { useEffect, useRef } from 'react';
 import type { SceneKind } from '../../builders/sceneKinds';
@@ -14,6 +15,19 @@ import { renderThumbnail } from '../../sceneBuilder/thumbnails';
 import { cpuColours, cpuSeed, cpuStep, type CpuBoard } from '../../gridRules/cpu';
 import { COUNT_PRESETS } from '../../gridRules/spec';
 import { KindPicture } from '../agentBuilder/pictures';
+import { MiniCloud } from '../splatBuilder/MiniCloud';
+import { animateFor, newEffect } from '../../splatBuilder/spec';
+
+/** The Splat scene's picture: a dissolve sweeping through the cloud, with a glowing edge. */
+const SPLAT_PICTURE = [{ ...newEffect('dissolve', 'k1', { edge: 0.08, glow: 5, drift: 0.4 }), animate: animateFor('dissolve', 'amount', 0.12) }];
+
+function SplatPicture({ width, height }: { width: number; height: number }) {
+  return (
+    <span style={{ display: 'block', width: '100%', maxWidth: width, aspectRatio: `${width} / ${height}`, borderRadius: 10, overflow: 'hidden', background: BG }}>
+      <MiniCloud effects={SPLAT_PICTURE} bg={[13 / 255, 13 / 255, 18 / 255]} width={width} height={height} fps={20} fluid label="A splat scan dissolving" />
+    </span>
+  );
+}
 
 const BG = '#0d0d12';
 
@@ -123,5 +137,6 @@ export function ScenePicture({ kind, width = 240, height = 136 }: { kind: SceneK
   if (kind === '2d') return <TwoDPicture width={width} height={height} />;
   if (kind === 'grid') return <GridPicture width={width} height={height} />;
   if (kind === '3d') return <ThreeDPicture width={width} height={height} />;
+  if (kind === 'splat') return <SplatPicture width={width} height={height} />;
   return <span style={{ display: 'block', borderRadius: 10, overflow: 'hidden', width: '100%', maxWidth: width }}><KindPicture kind="trail" width={width} height={height} /></span>;
 }

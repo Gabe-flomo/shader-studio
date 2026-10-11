@@ -1,5 +1,5 @@
 /**
- * BuilderWindowsHost — draws the Scene builder's own pages (SceneBuilderShell), the Grid builder, the Grid Rules editor, the Agent Rules editor, the Agent Builder and the Expression
+ * BuilderWindowsHost — draws the Scene builder's own pages (SceneBuilderShell), the Grid builder, the Splat builder, the Grid Rules editor, the Agent Rules editor, the Agent Builder and the Expression
  * Builder when one is open (builders/windows.ts, exprBuilder/store.ts), whoever opened it: the card's own button, the node browser's Builders
  * section, the Do… bar, a Recipe chip. Mounted once beside the desktop graph (NodeGraph) and once
  * on a phone (PhoneOverlays), where the windows are full screen. While it is mounted the main
@@ -18,6 +18,7 @@ import { watchBuilderPreview } from '../../builders/previewPriority';
 import type { SceneBuilderShell as SceneBuilderShellT } from './SceneBuilderShell';
 import { finishBuilder } from '../../builders/finish';
 import { useGridBuilder } from '../../gridScene/store';
+import { useSplatBuilder } from '../../splatBuilder/store';
 
 /** The Agent Builder's Done (and close): back to the graph, framed on the group it is building. */
 const finishAgentBuilder = () => finishBuilder(closeAgentBuilder, [useBuilderWindows.getState().agentBuilder?.groupId]);
@@ -31,6 +32,8 @@ const AgentBuilder = lazyWithSuspense<PropsOf<typeof AgentBuilderT>>(() => impor
 const SceneBuilderShell = lazyWithSuspense<PropsOf<typeof SceneBuilderShellT>>(() => import('./SceneBuilderShell').then(m => ({ default: m.SceneBuilderShell })));
 // The Grid builder (the Scene builder's Grid scene) loads only when it opens.
 const GridSceneBuilder = lazyWithSuspense<Record<string, never>>(() => import('../gridScene/GridSceneBuilder').then(m => ({ default: m.GridSceneBuilder })));
+// The Splat builder (the Scene builder's Splat scene) loads only when it opens.
+const SplatBuilder = lazyWithSuspense<Record<string, never>>(() => import('../splatBuilder/SplatBuilder').then(m => ({ default: m.SplatBuilder })));
 const ExpressionBuilderModal = lazyWithSuspense<Record<string, never>>(() => import('../exprBuilder/ExpressionBuilderModal').then(m => ({ default: m.ExpressionBuilderModal })));
 
 export function BuilderWindowsHost() {
@@ -40,6 +43,7 @@ export function BuilderWindowsHost() {
   const builder = useBuilderWindows(s => s.agentBuilder);
   const shell = useBuilderWindows(s => s.sceneShell);
   const gridSceneOpen = useGridBuilder(s => s.open);
+  const splatOpen = useSplatBuilder(s => s.open);
   // The builder's preview comes first: the main preview waits while one with its own is open.
   useEffect(() => watchBuilderPreview(), []);
   const builderGroupOk = useNodeGraphStore(s => !builder?.groupId || s.nodes.some(nd => nd.id === builder.groupId && isRulesGroup(nd)));
@@ -59,6 +63,7 @@ export function BuilderWindowsHost() {
       {builder && builderGroupOk && <AgentBuilder key="agent-builder" groupId={builder.groupId} onClose={finishAgentBuilder} onOpenGroup={openAgentBuilder} fromShell={!!builder.fromShell} />}
 
       {gridSceneOpen && <GridSceneBuilder />}
+      {splatOpen && <SplatBuilder />}
       {shell && <SceneBuilderShell key={`${shell.page}:${shell.note ?? ''}:${shell.keep ? 1 : 0}`} page={shell} />}
     </>
   );

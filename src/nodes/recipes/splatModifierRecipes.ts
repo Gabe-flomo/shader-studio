@@ -26,7 +26,8 @@ export const SPLAT_MODIFIER_MENU: Array<{ pick: SplatModifierPick; label: string
   { pick: 'custom', label: 'Your own nodes', hint: 'Splat Attributes → (your Noise, maths, Expression Blocks…) → Set Splat.' },
 ];
 
-const NOTES: Record<string, string[]> = {
+/** Each recipe node's note (the Splat builder writes the same ones). */
+export const SPLAT_MODIFIER_NOTES: Record<string, string[]> = {
   splatDissolve: ['Splat Dissolve: as Amount goes from 0 to 1, a threshold sweeps through noise and the splats below it fade and shrink away, with a glowing edge.', 'Map Amount in Play (an LFO, a key, the mouse) or keyframe it.'],
   splatExplode: ['Splat Explode: Amount blows the splats out from Center, each a little after the last (Stagger); Return home brings them back.'],
   splatWave: ['Splat Wave: a wave travelling through the scan (or a wobble, or a twist) moves every splat. Amplitude 0 is still.'],
@@ -57,7 +58,7 @@ export function addSplatModifier(nodes: GraphNode[], splatId: string, pick: Spla
     added.push(attrs, set);
     last = set.id;
   } else {
-    const m = n(pick, nextId(), x, y, note(...(NOTES[pick] ?? [])), from);
+    const m = n(pick, nextId(), x, y, note(...(SPLAT_MODIFIER_NOTES[pick] ?? [])), from);
     added.push(m);
     last = m.id;
   }

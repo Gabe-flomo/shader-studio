@@ -57,6 +57,7 @@ import { previewBanner } from '../../lib/nodePreview/previewPlan';
 import { useSceneBuilder } from '../../sceneBuilder/store';
 import { useSceneBuilder2D } from '../../sceneBuilder2d/store';
 import { builder2dSceneOf, editScene2DInBuilder } from '../../sceneBuilder2d/actions';
+import { builderSplatSceneOf, editSplatSceneInBuilder } from '../../splatBuilder/actions';
 import { BuilderWindowsHost } from '../builders/BuilderWindowsHost';
 import { BUILDERS } from '../../builders/registry';
 import { openBuilder } from '../../builders/open';
@@ -1922,6 +1923,14 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                   <>
                     <button style={ctxBtnStyle} onClick={() => { editScene2DInBuilder(clickedNode.id); setContextMenu(null); }}>
                       Edit in 2D Scene Builder
+                    </button>
+                    <div style={{ borderTop: `1px solid ${tc.surface0}`, margin: '4px 0' }} />
+                  </>
+                )}
+                {clickedNode && activeGroupPath.length === 0 && builderSplatSceneOf(clickedNode.id) && (
+                  <>
+                    <button style={ctxBtnStyle} data-ctx-edit-splat onClick={() => { editSplatSceneInBuilder(clickedNode.id); setContextMenu(null); }}>
+                      Edit in Splat builder
                     </button>
                     <div style={{ borderTop: `1px solid ${tc.surface0}`, margin: '4px 0' }} />
                   </>

@@ -2936,8 +2936,11 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
   useEffect(() => {
     const mat = materialRef.current;
     if (mat) {
+      // A name the table doesn't have yet is added too: a Splat Scene's modifier chain compiles into its own program,
+      // so adding one leaves the picture's shader as it was, and its sliders' uniforms arrive by this path.
       for (const [name, value] of Object.entries(paramUniforms)) {
         if (mat.uniforms[name]) mat.uniforms[name].value = value;
+        else mat.uniforms[name] = { value };
       }
     }
     // The store write already asked for a frame, but that frame can run before this effect (a

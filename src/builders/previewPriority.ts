@@ -5,8 +5,8 @@
  * first"). An output window or a recording keeps full speed, as with every hold.
  *
  * Held for: the Scene builder's own pages, the 2D and 3D Scene Builders and the Grid builder (their own WebGL previews)
- * and the Grid Rules editor (its CPU preview). Not for the Agent Builder: its picture IS the main
- * preview, mirrored (components/builders/studio/LiveViewport.tsx).
+ * and the Grid Rules editor (its CPU preview). Not for the Agent Builder or the Splat builder: their picture IS
+ * the main preview, mirrored (components/builders/studio/LiveViewport.tsx).
  */
 import { holdPreview } from '../lib/previewHold';
 import { useSceneBuilder } from '../sceneBuilder/store';
