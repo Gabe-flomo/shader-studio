@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.175',
+    date: '2026-10-11',
+    title: 'Fixes: text, depth, convert',
+    highlights: [
+      { area: 'Studio', text: 'Text on grids keeps every stroke at every size: a cell counts if any part of a letter touches it, and letters keep a gap.' },
+      { area: 'Studio', text: 'Depth Mix: Light keeps the picture\'s colour instead of bleaching it, and Fog and Occlude now look clearly different.' },
+      { area: 'Studio', text: 'Fixed: Guided Convert drew wrong when a shader had its own resolution, time or mouse variable. Muted warps no longer slow 3D scenes.' },
+    ],
+  },
+  {
     id: '2026.10.174',
     date: '2026-10-11',
     title: 'Light rays',
