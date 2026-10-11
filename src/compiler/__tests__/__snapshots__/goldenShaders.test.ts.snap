@@ -485,7 +485,7 @@ exports[`golden shaders: every Play example exports the same bundle > gridRulesC
 
 exports[`golden shaders: every Play example exports the same bundle > gridRulesFire 1`] = `
 {
-  "bundle": "17f926e3201d461261edabc2cd86:15341",
+  "bundle": "18dc96d45a58b2194ed6d1cdc68e:15341",
   "missing": [],
 }
 `;
@@ -499,7 +499,7 @@ exports[`golden shaders: every Play example exports the same bundle > gridRulesG
 
 exports[`golden shaders: every Play example exports the same bundle > gridRulesHeat 1`] = `
 {
-  "bundle": "0811ebf2d16a6b1f5c58a76cce2a:14277",
+  "bundle": "05d2c7d5ca8a480a5a559066439d:14277",
   "missing": [],
 }
 `;
@@ -527,7 +527,7 @@ exports[`golden shaders: every Play example exports the same bundle > gridRulesS
 
 exports[`golden shaders: every Play example exports the same bundle > gridRulesWater 1`] = `
 {
-  "bundle": "0441f6dfbe974f14f8694632f4cd:14033",
+  "bundle": "0214c0b59fa1de132fd6de146763:14033",
   "missing": [],
 }
 `;
@@ -7668,7 +7668,7 @@ exports[`golden shaders: every example compiles as it did > gridRulesFire 1`] = 
     "u_p_firexrulesx0xc2_spread",
     "u_p_firexrulesx0xc2_waveSpeed",
   ],
-  "paramValues": "0277ba4431e0dc1a0c407fcedcea:882",
+  "paramValues": "0cc485ad5653ce1620bbfdf392df:882",
   "passes": [
     {
       "filter": "nearest",
@@ -8109,7 +8109,7 @@ exports[`golden shaders: every example compiles as it did > gridRulesHeat 1`] = 
     "u_p_heatxrulesx0xc2_spread",
     "u_p_heatxrulesx0xc2_waveSpeed",
   ],
-  "paramValues": "05c1c4b2937ac30bd11ea4beccaa:876",
+  "paramValues": "0b89ca78ad718d0628d025a525eb:876",
   "passes": [
     {
       "filter": "nearest",
@@ -8875,7 +8875,7 @@ exports[`golden shaders: every example compiles as it did > gridRulesWater 1`] =
     "u_p_waterxrulesx0xc2_spread",
     "u_p_waterxrulesx0xc2_waveSpeed",
   ],
-  "paramValues": "182508696253ad00a2216df5caed:897",
+  "paramValues": "048bfc7fb201e514819c2c412f33:897",
   "passes": [
     {
       "filter": "nearest",

@@ -31,6 +31,8 @@ export function readBuilderCommand(text: string): BuilderCommand | null {
 }
 
 export type BuilderAction =
+  | { kind: 'open-scenes' }
+  | { kind: 'new-grid-scene' }
   | { kind: 'new-scene' }
   | { kind: 'new-scene2d' }
   | { kind: 'new-expression' }
@@ -100,6 +102,9 @@ export function planBuilderCommand(cmd: BuilderCommand, ctx: BuilderContext): Bu
   const which = (many: number | undefined, what: string) => (many ? `Select the ${what} first: there are ${many}.` : `There is no ${what} in this graph.`);
   switch (cmd.id) {
     case 'open-scene-builder':
+      return { id: cmd.id, label: 'Opens the Scene builder: “What kind of scene?”', action: { kind: 'open-scenes' } };
+    case 'new-grid-scene':
+      return { id: cmd.id, label: 'Opens the Grid builder on a new grid', action: { kind: 'new-grid-scene' } };
     case 'new-3d-scene':
       return { id: cmd.id, label: 'Opens the 3D Scene Builder on a new scene', action: { kind: 'new-scene' } };
     case 'new-2d-scene':

@@ -17,6 +17,7 @@ import { undoManager, useNodeGraphStore } from '../../../store/useNodeGraphStore
 import { useBuilderWindows } from '../../../builders/windows';
 import { useSceneBuilder } from '../../../sceneBuilder/store';
 import { useSceneBuilder2D } from '../../../sceneBuilder2d/store';
+import { useGridBuilder } from '../../../gridScene/store';
 import { applyScene } from '../../../sceneBuilder/apply';
 import { templateSpec } from '../../../sceneBuilder/templates';
 import { applyScene2D } from '../../../sceneBuilder2d/apply';
@@ -87,6 +88,7 @@ beforeEach(() => {
   useBuilderWindows.setState({ gridRules: null, agentRules: null, agentBuilder: null, recipe: null, sceneShell: null });
   useSceneBuilder.setState({ open: false, targetSceneId: null });
   useSceneBuilder2D.setState({ open: false, targetSceneId: null });
+  useGridBuilder.setState({ open: false, targetSceneId: null });
   resetBuilderSliderRanges();
 });
 
@@ -109,7 +111,8 @@ describe('the kind page', () => {
   it.each<[SceneKind, () => boolean]>([
     ['2d', () => useSceneBuilder2D.getState().open && useSceneBuilder2D.getState().targetSceneId === null],
     ['3d', () => useSceneBuilder.getState().open && useSceneBuilder.getState().targetSceneId === null],
-    ['grid', () => !!useBuilderWindows.getState().gridRules && nodes().some(x => x.id === useBuilderWindows.getState().gridRules && x.type === 'gridRules')],
+    // Grid scene opens the Grid builder (gridScene/); Grid Rules is its "Make it a simulation" jump.
+    ['grid', () => useGridBuilder.getState().open && useGridBuilder.getState().targetSceneId === null],
     ['agents', () => useBuilderWindows.getState().agentBuilder?.groupId === null && useBuilderWindows.getState().agentBuilder?.fromShell === true],
   ])('picking %s turns the window into its builder', (kind, isOpen) => {
     act(() => openBuilder('scenes'));

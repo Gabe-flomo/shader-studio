@@ -18,13 +18,15 @@
  */
 
 import { checkExprType } from '../lang/typeCheck';
+import { readStartCells, startCellsHash, type StartCells } from './startCells';
 import { BLOCK_PRESETS, DEFAULT_BLOCKS, DEFAULT_PATTERNS, PATTERN_PRESETS, readBlocks, readPatterns, type BlockRule, type PatternRule } from './stencils';
 
 export type GridRuleType = 'count' | 'stages' | 'patterns' | 'blocks' | 'smooth';
 export type Neighbourhood = 'moore' | 'vonNeumann' | 'radius';
 export type RadiusShape = 'box' | 'circle';
 export type SmoothTemplate = 'diffusion' | 'waves' | 'reaction' | 'custom';
-export type StartMode = 'noise' | 'empty' | 'image' | 'centre';
+/** 'cells': the drawing in `startCells`, in the middle of the board (gridRules/startCells.ts). */
+export type StartMode = 'noise' | 'empty' | 'image' | 'centre' | 'cells';
 
 /** Board sizes: the Pass's scale. One pixel of the board is one cell. */
 export const BOARD_SIZES: Array<{ value: string; label: string; scale: number }> = [
@@ -113,7 +115,8 @@ export const LOOKS = {
   count: { color0: [0.02, 0.025, 0.05], color1: [0.85, 1.0, 0.92], glowColor: [0.55, 0.12, 0.35], oldColor: [0.3, 0.75, 1.0] },
   stages: { color0: [0.01, 0.01, 0.03], color1: [0.75, 0.95, 1.0], color2: [0.25, 0.45, 1.0], color3: [0.12, 0.06, 0.3], afterglow: 0 },
   heat: { color0: [0.02, 0.02, 0.05], color1: [0.55, 0.05, 0.2], color2: [1.0, 0.45, 0.1], color3: [1.0, 0.95, 0.75], gain: 1, brushState: 1, steps: 1 },
-  ripples: { color0: [0.0, 0.04, 0.12], color1: [0.03, 0.2, 0.42], color2: [0.3, 0.65, 0.88], color3: [0.95, 1.0, 1.0], gain: 3, brushState: 1, steps: 2 },
+  // One step every other frame (30 a second): ripples you can follow, not a flicker.
+  ripples: { color0: [0.0, 0.04, 0.12], color1: [0.03, 0.2, 0.42], color2: [0.3, 0.65, 0.88], color3: [0.95, 1.0, 1.0], gain: 3, brushState: 1, steps: 1, rate: 0.5 },
   reaction: { color0: [0.97, 0.95, 0.9], color1: [0.55, 0.75, 0.8], color2: [0.1, 0.3, 0.45], color3: [0.02, 0.04, 0.1], gain: 1, brushState: 1, steps: 8 },
 } satisfies Record<string, Record<string, unknown>>;
 
@@ -155,7 +158,7 @@ export const STAGES_PRESETS: Record<string, GridPreset> = {
 /** Smooth presets: a template and its numbers. */
 export const SMOOTH_PRESETS: Record<string, GridPreset> = {
   heat: { label: 'Heat', hint: 'Diffusion: every cell drifts towards its neighbours\' average and cools a little.', params: { template: 'diffusion', spread: 0.9, decay: 0.004 }, look: LOOKS.heat },
-  ripples: { label: 'Ripples', hint: 'The two-buffer wave: height and last height; the mouse drops ripples.', params: { template: 'waves', waveSpeed: 0.9, damping: 0.995 }, look: LOOKS.ripples },
+  ripples: { label: 'Ripples', hint: 'The two-buffer wave: height and last height; the mouse drops ripples.', params: { template: 'waves', waveSpeed: 0.5, damping: 0.995 }, look: LOOKS.ripples },
   mitosis: { label: 'Mitosis', hint: 'Gray–Scott reaction–diffusion, feed 0.0367 kill 0.0649: dividing cells.', params: { template: 'reaction', feed: 0.0367, kill: 0.0649, diffA: 1, diffB: 0.5 }, look: LOOKS.reaction },
   coralRd: { label: 'Coral growth', hint: 'Gray–Scott, feed 0.0545 kill 0.062: branching coral.', params: { template: 'reaction', feed: 0.0545, kill: 0.062, diffA: 1, diffB: 0.5 }, look: LOOKS.reaction },
   worms: { label: 'Worms', hint: 'Gray–Scott, feed 0.078 kill 0.061: wriggling worms.', params: { template: 'reaction', feed: 0.078, kill: 0.061, diffA: 1, diffB: 0.5 }, look: LOOKS.reaction },
@@ -223,7 +226,7 @@ export const GRID_DEFAULTS: Record<string, unknown> = {
   /** Blocks: how much the block grid is shuffled each step, 0 (classic Margolus) to 1 (gridRules/dice.ts). */
   jitter: 0,
   template: 'diffusion', customU: 'u + 0.2 * lap_u', customV: 'v',
-  spread: 0.9, decay: 0.004, waveSpeed: 0.9, damping: 0.995, feed: 0.0367, kill: 0.0649, diffA: 1, diffB: 0.5,
+  spread: 0.9, decay: 0.004, waveSpeed: 0.5, damping: 0.995, feed: 0.0367, kill: 0.0649, diffA: 1, diffB: 0.5,
   knobA: 0.5, knobB: 0.5, knobC: 0.5, knobD: 0.5, gain: 1,
   start: 'noise', density: 0.3, seed: 1, reset: 0,
   edges: 'wrap', board: '0.125', steps: 1, rate: 0.5,
@@ -252,6 +255,8 @@ export interface GridShape {
   patterns: PatternRule[];
   /** Blocks: the before → after rules. */
   blocks: BlockRule[];
+  /** The drawn start (start 'cells'), or null. */
+  startCells: StartCells | null;
 }
 
 const pick = <T extends string>(v: unknown, allowed: readonly T[], d: T): T => (typeof v === 'string' && (allowed as readonly string[]).includes(v) ? v as T : d);
@@ -266,19 +271,20 @@ export function gridShape(params: Record<string, unknown>): GridShape {
     template: pick(P.template, ['diffusion', 'waves', 'reaction', 'custom'] as const, 'diffusion'),
     customU: typeof P.customU === 'string' ? P.customU : 'u',
     customV: typeof P.customV === 'string' ? P.customV : 'v',
-    start: pick(P.start, ['noise', 'empty', 'image', 'centre'] as const, 'noise'),
+    start: pick(P.start, ['noise', 'empty', 'image', 'centre', 'cells'] as const, 'noise'),
     wrap: P.edges !== 'walls',
     scale: boardScale(P.board),
     steps: Math.max(1, Math.min(MAX_STEPS, Math.round(typeof P.steps === 'number' && isFinite(P.steps) ? P.steps : 1))),
     patterns: readPatterns(P.patterns),
     blocks: readBlocks(P.blocks),
+    startCells: P.start === 'cells' ? readStartCells(P.startCells) : null,
   };
 }
 
 const TYPE_INDEX: Record<GridRuleType, number> = { count: 0, stages: 1, patterns: 2, blocks: 3, smooth: 4 };
 const TEMPLATE_INDEX: Record<SmoothTemplate, number> = { diffusion: 0, waves: 1, reaction: 2, custom: 3 };
 const NB_INDEX: Record<Neighbourhood, number> = { moore: 0, vonNeumann: 1, radius: 2 };
-const START_INDEX: Record<StartMode, number> = { noise: 0, empty: 1, image: 2, centre: 3 };
+const START_INDEX: Record<Exclude<StartMode, 'cells'>, number> = { noise: 0, empty: 1, image: 2, centre: 3 };
 
 /**
  * The board's signature (stored in Alpha): changes when the rule type, the neighbourhood (Count,
@@ -287,6 +293,8 @@ const START_INDEX: Record<StartMode, number> = { noise: 0, empty: 1, image: 2, c
 export function gridSignature(s: GridShape): number {
   const kind = s.type === 'smooth' ? 4 + TEMPLATE_INDEX[s.template] : TYPE_INDEX[s.type];
   const nb = s.type === 'count' || s.type === 'stages' ? NB_INDEX[s.neighbourhood] : 0;
+  // A drawn start: its own range (100 up, past every other start's 97), with the drawing's hash, so a new drawing deals again.
+  if (s.start === 'cells') return 100 + (kind * 3 + nb) * 16 + startCellsHash(s.startCells);
   return 2 + (kind * 3 + nb) * 4 + START_INDEX[s.start];
 }
 
@@ -329,4 +337,12 @@ export function gridTypeDefaults(t: GridRuleType): Record<string, unknown> {
   if (t === 'patterns') return { ruleType: t, ...presetPatch(PATTERN_PRESETS.wireworld) };
   if (t === 'blocks') return { ruleType: t, ...presetPatch(BLOCK_PRESETS.sand) };
   return { ruleType: t, ...presetPatch(COUNT_PRESETS.life), ...LOOKS.count, brushState: 1 };
+}
+
+/** How many steps a second the node runs at 60 frames a second: Steps a frame above 1, otherwise Speed's share of frames. */
+export function stepsPerSecond(params: Record<string, unknown>): number {
+  const P = { ...GRID_DEFAULTS, ...params };
+  const s = gridShape(P);
+  if (s.steps > 1) return 60 * s.steps;
+  return 60 * Math.max(0, Math.min(1, Number(P.rate) || 0));
 }

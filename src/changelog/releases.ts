@@ -39,6 +39,24 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.145',
+    date: '2026-10-10',
+    title: 'Grid Rules, rebuilt',
+    highlights: [
+      { area: 'Studio', text: 'Grid Rules builder in the Agent Builder layout: draw cells on a try board, step back and forward, and use your drawing as the start.' },
+      { area: 'Studio', text: 'Grid Rules: stencils you click to edit, Blocks as before/after per rule then Together, Smooth settings in plain words, and slower Waves.' },
+    ],
+  },
+  {
+    id: '2026.10.144',
+    date: '2026-10-10',
+    title: 'Grid builder',
+    highlights: [
+      { area: 'Studio', text: 'Grid scene builder: draw shapes on a mini grid, give them motion, add patterns and warps, and rules like "when A is in column 5, become a star".' },
+      { area: 'Studio', text: 'Grid scene: Make it a simulation turns your drawing into a Grid Rules start (and back). Templates, Surprise me, and Edit this one reopen it.' },
+    ],
+  },
+  {
     id: '2026.10.143',
     date: '2026-10-10',
     title: 'Transform by default',

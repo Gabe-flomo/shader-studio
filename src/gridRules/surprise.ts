@@ -130,7 +130,8 @@ function smoothRule(rng: Rng): P {
     return { ...presetPatch(pr), feed: Number(pr.params.feed) + rng.float(-0.002, 0.002), kill: Number(pr.params.kill) + rng.float(-0.0012, 0.0012), diffB: rng.float(0.45, 0.55) };
   }
   if (t === 'diffusion') return { ...presetPatch(SMOOTH_PRESETS.heat), spread: rng.float(0.6, 1), decay: rng.logFloat(0.001, 0.01) };
-  return { ...presetPatch(SMOOTH_PRESETS.ripples), waveSpeed: rng.float(0.6, 1), damping: rng.float(0.985, 0.999) };
+  // Calm water: the template's own pace (a step every other frame), ripples that travel at a speed you can follow.
+  return { ...presetPatch(SMOOTH_PRESETS.ripples), waveSpeed: rng.float(0.3, 0.7), damping: rng.float(0.985, 0.999) };
 }
 
 /** Patterns: a preset with its density and (Crystal) count varied. */
