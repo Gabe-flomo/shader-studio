@@ -6,7 +6,8 @@
  *
  *  - 2D scene → the 2D Scene Builder (sceneBuilder2d), on a new scene or on a build's saved spec;
  *  - Agent scene → the Agent Builder (agentBuilder), on its "What are you making?" page or a group;
- *  - Grid scene → Grid Rules (gridRules): a new node and its editor, or a node's editor;
+ *  - Grid scene → the Grid builder (gridScene), on a new scene or a build's saved spec; a Grid Rules
+ *    node (the simulation the Grid builder's "Make it a simulation" jumps to) opens in its editor;
  *  - 3D scene → the 3D Scene Builder (sceneBuilder), on a new scene or on a build's saved spec.
  *
  * Opening the Scene builder: a graph a builder made reopens that scene ("Edit this one / Start
@@ -24,6 +25,8 @@ import { useSceneBuilder } from '../sceneBuilder/store';
 import { useSceneBuilder2D } from '../sceneBuilder2d/store';
 import { agentSetupIds, builderGroups, clearableCount, clearGraphForBuilder, removeSetupNodes } from '../agentBuilder/actions';
 import { gridShape } from '../gridRules/spec';
+import { findGridBuild, gridMetaOf, gridSceneOfBuild } from '../gridScene/apply';
+import { useGridBuilder } from '../gridScene/store';
 import { closeAgentBuilder, closeGridRulesEditor, openSceneShell, useBuilderWindows } from './windows';
 
 export type SceneKind = '2d' | 'agents' | 'grid' | '3d';
@@ -42,7 +45,7 @@ export interface SceneKindInfo {
 export const SCENE_KINDS: readonly SceneKindInfo[] = [
   { id: '2d', title: '2D scene', line: 'Shapes, rings of rings, kaleidoscopes, motion and glow, flat on the picture', icon: 'mask', builder: '2D Scene Builder' },
   { id: 'agents', title: 'Agent scene', line: 'Many small walkers, one big pattern: slime, particles, flocks, crowds, orbiters', icon: 'swarm', builder: 'Agent Builder' },
-  { id: 'grid', title: 'Grid scene', line: 'Cells and rules: Life, sand, heat, waves, Wireworld', icon: 'grid', builder: 'Grid Rules' },
+  { id: 'grid', title: 'Grid scene', line: 'Shapes you draw on cells, with motion, patterns, warps and rules; or a simulation (Life, sand)', icon: 'grid', builder: 'Grid builder' },
   { id: '3d', title: '3D scene', line: 'Shapes in space, combined and bent, lit and seen through a camera', icon: 'cube', builder: '3D Scene Builder' },
 ];
 
@@ -51,7 +54,7 @@ export const sceneKindInfo = (k: SceneKind): SceneKindInfo => SCENE_KINDS.find(x
 /** Something a builder made, as the "Edit this one" prompt lists it. `id` is what its builder opens on. */
 export interface BuiltScene {
   kind: SceneKind;
-  /** 3D: the Scene Group; 2D: the UV node holding the spec; grid: the Grid Rules node; agents: the rules group. */
+  /** 3D: the Scene Group; 2D and a Grid scene: the UV node holding the spec; a simulation: the Grid Rules node; agents: the rules group. */
   id: string;
   label: string;
   /** "Trail followers · 2D", "3 shapes"… */
@@ -68,9 +71,13 @@ export function builtScenes(nodes: readonly GraphNode[]): BuiltScene[] {
     const m2 = meta2dOf(n);
     if (m2) out.push({ kind: '2d', id: n.id, label: '2D scene', detail: `${plural(m2.spec.layers.length, 'layer')}${m2.spec.grid ? ' · a grid' : ''}` });
   }
+  for (const n of nodes) {
+    const mg = gridMetaOf(n);
+    if (mg) out.push({ kind: 'grid', id: n.id, label: 'Grid scene', detail: `${mg.spec.cols} × ${mg.spec.rows} · ${plural(mg.spec.cells.length, 'cell')} drawn` });
+  }
   for (const g of builderGroups(nodes)) out.push({ kind: 'agents', id: g.id, label: g.label, detail: `${g.kind} · ${g.d3 ? '3D' : '2D'}` });
   for (const n of nodes) {
-    if (n.type === 'gridRules') out.push({ kind: 'grid', id: n.id, label: labelOf(n, 'Grid Rules'), detail: `${gridShape(n.params).type} rules` });
+    if (n.type === 'gridRules') out.push({ kind: 'grid', id: n.id, label: labelOf(n, 'Grid Rules'), detail: `a simulation · ${gridShape(n.params).type} rules` });
   }
   for (const n of nodes) {
     const m = n.type === 'sceneGroup' ? metaOf(n) : null;
@@ -90,7 +97,8 @@ export function selectedBuiltScene(nodes: readonly GraphNode[], selected: readon
     if (direct) return direct;
     const s2 = scene2dOfBuild(nodes as GraphNode[], id);
     const s3 = sceneOfBuild(nodes as GraphNode[], id);
-    const hit = all.find(b => b.id === s2 || b.id === s3);
+    const sg = gridSceneOfBuild(nodes, id);
+    const hit = all.find(b => b.id === s2 || b.id === s3 || b.id === sg);
     if (hit) return hit;
   }
   return null;
@@ -109,6 +117,9 @@ export function builtSceneIds(nodes: readonly GraphNode[], b: Pick<BuiltScene, '
   } else if (b.kind === '2d') {
     const found = find2dBuild(nodes as GraphNode[], b.id);
     if (found) for (const n of found.byRole.values()) seeds.push(n.id);
+  } else if (b.kind === 'grid') {
+    const found = findGridBuild(nodes, b.id);
+    if (found) for (const n of found.byRole.values()) seeds.push(n.id);
   }
   const ids = new Set<string>();
   for (const s of seeds) for (const id of agentSetupIds(nodes, s)) ids.add(id);
@@ -124,6 +135,7 @@ export function openSceneKind(): SceneKind | null {
   const w = useBuilderWindows.getState();
   if (useSceneBuilder2D.getState().open) return '2d';
   if (useSceneBuilder.getState().open) return '3d';
+  if (useGridBuilder.getState().open) return 'grid';
   if (w.agentBuilder) return 'agents';
   if (w.gridRules) return 'grid';
   return null;
@@ -133,6 +145,7 @@ export function openSceneKind(): SceneKind | null {
 export function closeSceneKinds(): void {
   if (useSceneBuilder2D.getState().open) useSceneBuilder2D.getState().close();
   if (useSceneBuilder.getState().open) useSceneBuilder.getState().close();
+  if (useGridBuilder.getState().open) useGridBuilder.getState().close();
   if (useBuilderWindows.getState().agentBuilder) closeAgentBuilder();
   if (useBuilderWindows.getState().gridRules) closeGridRulesEditor();
 }

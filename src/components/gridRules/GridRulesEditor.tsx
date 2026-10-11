@@ -32,6 +32,7 @@ import { SurpriseBar } from '../surprise/SurpriseBar';
 import { surpriseGridAction, useSurpriseSeeds } from '../surprise/surpriseActions';
 import { Field } from '../ui/Field';
 import { SCENE_WINDOW, SceneCrumb } from '../builders/SceneCrumb';
+import { backToGridScene, gridSceneOfSimulation } from '../../gridScene/actions';
 import { BuilderSlider } from '../builders/BuilderSlider';
 import { Select } from '../ui/Select';
 import { ColorSwatch } from '../ui/ColorPicker';
@@ -81,12 +82,18 @@ function GridRulesWindow({ node, tab, setTab, tabs, onClose }: {
   const onExample = (ex: HelpExample) => { if ('patch' in ex.insert) set(ex.insert.patch, true); };
   const surpriseSeed = useSurpriseSeeds(s => s.grid[node.id] ?? null);
   const [keepType, setKeepType] = useState(false);
+  // Made by the Grid builder's "Make it a simulation": the way back to the drawing.
+  const fromGrid = useNodeGraphStore(s => !!gridSceneOfSimulation(s.nodes, node.id));
   return (
     <BuilderWindow
       prefsKey="grid-rules"
-      title={<SceneCrumb kind="grid" />} subtitle={`Grid Rules · ${label} · ${ruleSummary(params)}`} icon="grid" width={SCENE_WINDOW.width} height={SCENE_WINDOW.height} onClose={onClose}
+      title={<SceneCrumb kind="grid" leaf="Simulation" />} subtitle={`Grid Rules · ${label} · ${ruleSummary(params)}`} icon="grid" width={SCENE_WINDOW.width} height={SCENE_WINDOW.height} onClose={onClose}
       tabs={{ items: tabs, value: tab, onChange: setTab, ariaLabel: 'Grid Rules sections' }}
       headerActions={<>
+        {fromGrid && (
+          <Button size="sm" icon="chevL" data-grid-back onClick={() => backToGridScene(node.id)}
+            title="Back to the Grid builder on the drawing this simulation starts from (the Output shows the drawing again; this node stays)">Pattern grid</Button>
+        )}
         <Toggle checked={keepType} onChange={setKeepType} label="Keep the type" />
         <SurpriseBar seed={surpriseSeed} onSurprise={seed => surpriseGridAction(node.id, seed, keepType ? shape.type : undefined)}
           title="A random rule that stays alive (tried on a test board first), with a random start and colours (one undo step)" />

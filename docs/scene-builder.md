@@ -7,7 +7,7 @@ kind you pick turns the window into that kind's builder:
 |---|---|---|
 | **2D scene** | the 2D Scene Builder ([scene-builder-2d.md](scene-builder-2d.md)) | shapes, rings of rings, kaleidoscopes, motion and glow |
 | **Agent scene** | the Agent Builder ([agent-builder.md](agent-builder.md)) | trail followers, particles, flocks, crowds, orbiters, in 2D or 3D |
-| **Grid scene** | Grid Rules ([grid-rules.md](grid-rules.md)) | Life, sand, heat, waves, Wireworld |
+| **Grid scene** | the Grid builder ([grid-builder.md](grid-builder.md)), with a switch to Grid Rules ([grid-rules.md](grid-rules.md)) | shapes drawn on cells, motion, patterns, grid warps, rules between shapes; or a simulation: Life, sand, heat, Wireworld |
 | **3D scene** | the 3D Scene Builder ([scene-builder-3d.md](scene-builder-3d.md)) | ray-marched shapes, combined, bent, lit and seen through a camera |
 
 Each builder keeps its own code and docs. The Scene builder only routes between them
@@ -31,24 +31,26 @@ What it shows first depends on the graph:
   (the default; Enter), **Start over** or **Add another**. With several, they are listed with
   their kind and picture; a selected one (or a selected node of one) is picked first.
   - **Edit this one** opens the kind's builder on it: a 2D or 3D build on its saved spec (the
-    recipe stored on the build, so the form is exactly as it was built), a Grid Rules node in its
-    editor, a rules Agents group in the Agent Builder.
+    recipe stored on the build, so the form is exactly as it was built), a Grid scene in the Grid
+    builder on its saved spec, a Grid Rules node in its editor, a rules Agents group in the Agent
+    Builder.
   - **Start over** takes it away, as one undo step ("Scene builder: started over"): the build's
     nodes, and anything only they read from or that reads only from them (its picture, its Draw
     agents). The Output and nodes outside the build stay. Then the kind page, with a line saying
     what went.
   - **Add another** goes to the kind page with **Keep my graph** picked.
 
-What counts as made by a builder: a 2D build (its UV node holds the spec), a Scene Group the 3D
-builder made, a Grid Rules node, and a rules Agents group (`builtScenes`).
+What counts as made by a builder: a 2D build or a Grid scene (its UV node holds the spec), a Scene
+Group the 3D builder made, a Grid Rules node, and a rules Agents group (`builtScenes`).
 
 ### Straight to one kind
 
 Entry points that name a kind still open it directly, without the kind page: the Do… bar's
-"new 2d scene", "new 3d scene", "new grid rules", "new agent rules", "edit this scene", "edit the
+"new 2d scene", "new 3d scene", "new grid scene", "new grid rules", "new agent rules", "edit this scene", "edit the
 rules"; a Recipe chip's **Open**; a Grid Rules card's editor button; right-click → **Edit in Scene
 Builder**. These keep their own behaviour (Grid Rules adds its node beside the selection). The
 Agent Builder's own start page asks about clearing the graph the same way, with the same default.
+"Open the scene builder" in the Do… bar opens the kind page (it used to open the 3D builder).
 
 ## Finding your way
 
