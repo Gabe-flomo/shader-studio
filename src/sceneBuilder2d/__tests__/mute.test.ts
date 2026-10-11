@@ -19,6 +19,7 @@ import { buildFromBuilder2D, editScene2DInBuilder } from '../actions';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { MUTE_FROM_PARAM, MUTE_PARAM, soloIn } from '../../builders/mute';
 import { helpAt } from '../../lang/help';
+import { stackMap } from '../thumbnails';
 import type { GraphNode } from '../../types/nodeGraph';
 
 const idFor = (role: string) => `t_${role.replace(/[^A-Za-z0-9]/g, '_')}`;
@@ -164,5 +165,16 @@ describe('muting in the 2D Scene Builder', () => {
     const g = parseRecipe2D('circle · grade saturation 1.3 muted');
     expect(g.errors).toEqual([]);
     expect(g.scene.look.grade?.[0].on).toBe(false);
+  });
+});
+
+describe('the Space tab\'s grid preview skips muted transforms', () => {
+  it('a muted transform draws as if it were not there', () => {
+    const at = (s: Scene2D) => stackMap(s.space)(-0.3, 0.4);
+    const zoomOnly = emptyScene();
+    zoomOnly.space.push(newSpaceOp('zoom', 'p1', { by: 2 }));
+    expect(at(mirrorScene(true))).toEqual(at(zoomOnly));
+    expect(at(mirrorScene(false))).not.toEqual(at(zoomOnly));
+    expect(at(mirrorScene())).toEqual(at(mirrorScene(false)));
   });
 });

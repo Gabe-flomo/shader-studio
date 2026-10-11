@@ -20,7 +20,6 @@ import { TexturePicker } from '../builders/TexturePicker';
 import { DepthGenerateRow } from '../builders/DepthGenerateRow';
 import { Card, ColourRow, NumRow, Row } from '../sceneBuilder/controls';
 import { Select } from '../ui/Select';
-import { Toggle } from '../ui/Choice';
 
 const D = newDepthPic('');
 const edit = (fn: (d: Scene2D) => void, key?: string) => useSceneBuilder2D.getState().edit(fn, key);
@@ -63,29 +62,23 @@ function DepthSettings({ d }: { d: DepthPic2D }) {
   const usesWith = d.look === 'top' || d.look === 'occlude' || d.look === 'fog';
   return (
     <>
-      <Card id="depth2-shapes" defaultOpen title="Shapes and depth" summary={[d.size.on && 'size', d.space.on && 'space'].filter(Boolean).join(' · ') || 'not moved by depth'}>
-        <Row label="Size by depth" hint="Every layer grows on near things and shrinks on far ones: depth into its radius.">
-          <Toggle checked={d.size.on} onChange={v => setD(x => { x.size.on = v; })} label="Shapes grow on near things" />
+      {/* Size and space by depth: each its own card, switched on and off by the builders' shared mute (⊘),
+          like every other card; switched off it keeps its settings, dimmed and editable. */}
+      <Card id="depth2-size" defaultOpen={d.size.on} title="Size by depth" summary={d.size.on ? `${d.size.far}× far … ${d.size.near}× near` : 'off'}
+        mute={{ muted: !d.size.on, onToggle: () => setD(x => { x.size.on = !x.size.on; }), what: 'size by depth' }}>
+        <BuilderNote>Every layer grows on near things and shrinks on far ones: depth into its radius.</BuilderNote>
+        <NumRow label="Size far" hint="How big shapes are on the farthest things (× their own size)." value={d.size.far} defaultValue={D.size.far} min={0} max={4} onChange={v => setD(x => { x.size.far = v; }, 'sf')} />
+        <NumRow label="Size near" hint="How big shapes are on the nearest things." value={d.size.near} defaultValue={D.size.near} min={0} max={4} onChange={v => setD(x => { x.size.near = v; }, 'sn')} />
+      </Card>
+      <Card id="depth2-space" defaultOpen={d.space.on} title="Space by depth" summary={d.space.on ? `${DEPTH_SPACE_LABELS[d.space.style].label} ${d.space.amount}` : 'off'}
+        mute={{ muted: !d.space.on, onToggle: () => setD(x => { x.space.on = !x.space.on; }), what: 'space by depth' }}>
+        <BuilderNote>The point every shape is measured from moves by depth: near and far parts pull the shapes apart, so glows beam through the picture.</BuilderNote>
+        <Row label="Move by" hint={DEPTH_SPACE_LABELS[d.space.style].blurb}>
+          <Select ariaLabel="Move by" value={d.space.style} options={DEPTH_SPACE_STYLES.map(s => ({ value: s, label: DEPTH_SPACE_LABELS[s].label }))} onChange={v => setD(x => { x.space.style = v as DepthSpaceStyle; })} />
         </Row>
-        {d.size.on && (
-          <>
-            <NumRow label="Size far" hint="How big shapes are on the farthest things (× their own size)." value={d.size.far} defaultValue={D.size.far} min={0} max={4} onChange={v => setD(x => { x.size.far = v; }, 'sf')} />
-            <NumRow label="Size near" hint="How big shapes are on the nearest things." value={d.size.near} defaultValue={D.size.near} min={0} max={4} onChange={v => setD(x => { x.size.near = v; }, 'sn')} />
-          </>
-        )}
-        <Row label="Space by depth" hint="The point every shape is measured from moves by depth: near and far parts pull the shapes apart, so glows beam through the picture.">
-          <Toggle checked={d.space.on} onChange={v => setD(x => { x.space.on = v; })} label="Shapes move by depth" />
-        </Row>
-        {d.space.on && (
-          <>
-            <Row label="Move by" hint={DEPTH_SPACE_LABELS[d.space.style].blurb}>
-              <Select ariaLabel="Move by" value={d.space.style} options={DEPTH_SPACE_STYLES.map(s => ({ value: s, label: DEPTH_SPACE_LABELS[s].label }))} onChange={v => setD(x => { x.space.style = v as DepthSpaceStyle; })} />
-            </Row>
-            <NumRow label="Amount" hint="How far depth moves them. Small is parallax; large beams the glow across the picture." value={d.space.amount} defaultValue={D.space.amount} min={-1} max={1} step={0.005} onChange={v => setD(x => { x.space.amount = v; }, 'sa')} />
-            {d.space.style === 'shift' && <NumRow label="Direction" unit="°" hint="Which way near things move (0 right, 90 up)." value={d.space.dir} defaultValue={D.space.dir} min={-180} max={180} step={1} onChange={v => setD(x => { x.space.dir = v; }, 'sd')} />}
-            <NumRow label="Focus" hint="The depth that stays still: nearer moves one way, farther the other." value={d.space.focus} defaultValue={D.space.focus} min={0} max={1} onChange={v => setD(x => { x.space.focus = v; }, 'sfo')} />
-          </>
-        )}
+        <NumRow label="Amount" hint="How far depth moves them. Small is parallax; large beams the glow across the picture." value={d.space.amount} defaultValue={D.space.amount} min={-1} max={1} step={0.005} onChange={v => setD(x => { x.space.amount = v; }, 'sa')} />
+        {d.space.style === 'shift' && <NumRow label="Direction" unit="°" hint="Which way near things move (0 right, 90 up)." value={d.space.dir} defaultValue={D.space.dir} min={-180} max={180} step={1} onChange={v => setD(x => { x.space.dir = v; }, 'sd')} />}
+        <NumRow label="Focus" hint="The depth that stays still: nearer moves one way, farther the other." value={d.space.focus} defaultValue={D.space.focus} min={0} max={1} onChange={v => setD(x => { x.space.focus = v; }, 'sfo')} />
       </Card>
       <Card id="depth2-look" defaultOpen title="With the picture" summary={look.label}>
         <Row label="Look" hint={look.blurb}>
@@ -106,7 +99,7 @@ function DepthSettings({ d }: { d: DepthPic2D }) {
         )}
         {d.look === 'fog' && (
           <>
-            <NumRow label="Density" hint="How much the scene fades on the farthest things (1: gone)." value={d.fog} defaultValue={D.fog} min={0} max={1} onChange={v => setD(x => { x.fog = v; }, 'fd')} />
+            <NumRow label="Density" hint="How much the scene fades on the farthest things (1: gone). Near things stay clear." value={d.fog} defaultValue={D.fog} min={0} max={1} onChange={v => setD(x => { x.fog = v; }, 'fd')} />
             <NumRow label="Haze" hint="How much fog colour hangs in the far part of the picture." value={d.haze} defaultValue={D.haze} min={0} max={1} onChange={v => setD(x => { x.haze = v; }, 'fh')} />
             <ColourRow label="Fog colour" value={d.fogColor} onChange={(v: Vec3) => setD(x => { x.fogColor = v; }, 'fc')} />
           </>
@@ -115,7 +108,7 @@ function DepthSettings({ d }: { d: DepthPic2D }) {
           <>
             <NumRow label="Strength" hint="How strongly the scene lights the picture, most on near things." value={d.light} defaultValue={D.light} min={0} max={10} onChange={v => setD(x => { x.light = v; }, 'ls')} />
             <NumRow label="Own light" hint="How much of the picture's own light stays: lower for a night relight." value={d.own} defaultValue={D.own} min={0} max={1.5} onChange={v => setD(x => { x.own = v; }, 'lo')} />
-            <NumRow label="Glow" hint="How much of the scene still shows as itself, on top." value={d.glow} defaultValue={D.glow} min={0} max={2} onChange={v => setD(x => { x.glow = v; }, 'lg')} />
+            <NumRow label="Glow" hint="How much of the scene still shows as itself, on top. Keep it low so the scene reads as light on the picture." value={d.glow} defaultValue={D.glow} min={0} max={2} onChange={v => setD(x => { x.glow = v; }, 'lg')} />
           </>
         )}
         {d.look === 'mix' && (

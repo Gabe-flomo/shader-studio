@@ -99,7 +99,7 @@ export function newDepthPic(tex: string, over: Partial<DepthPic2D> = {}): DepthP
     size: { on: false, far: 0.4, near: 1.6 },
     space: { on: false, style: 'shift', amount: 0.15, dir: 0, focus: 0 },
     look: 'top', with: 'add', picture: 1, range: [0, 1], curve: 1,
-    at: 0.5, soft: 0.05, fog: 0.9, haze: 0.35, fogColor: [0.72, 0.78, 0.9], light: 2, own: 0.55, glow: 1,
+    at: 0.5, soft: 0.05, fog: 1, haze: 0.6, fogColor: [0.72, 0.78, 0.9], light: 3, own: 0.5, glow: 0.35,
     near: 'picture', mix: 1, gradient: null,
     ...over,
   };
