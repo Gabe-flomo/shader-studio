@@ -34,6 +34,7 @@ import { showSocketPatch, socketVisible, socketsForParam } from '../../lib/socke
 import { candidateFor, candidateLabel, collectPlayCandidates, upstreamControls } from '../../play/playControls';
 import { addCandidateControl, driveWithNull, graphNullDrives } from '../play/layerOps';
 import { Minimap } from './Minimap';
+import { frameNodes, scopeChange, scopeKey, type View } from './scopeView';
 import { useCtp, type CtpPalette } from '../../theme/nodePalette';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
@@ -1125,29 +1126,23 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
   }, [pendingSocket, connectNodes]);
 
   // ── Fit to screen helper ────────────────────────────────────────────────────
-  const handleFitView = useCallback((ids?: ReadonlyArray<string>) => {
+  const handleFitView = useCallback((ids?: ReadonlyArray<string>, opts?: { maxZoom?: number }) => {
     // With ids (a builder's Done, builders/finish.ts): frame just those nodes, when any are on this level.
     const want = ids?.length ? new Set(ids) : null;
     const picked = want ? displayNodes.filter(n => want.has(n.id)) : displayNodes;
     const fit = picked.length ? picked : displayNodes;
-    if (!fit.length || !canvasRef.current) return;
     const canvas = canvasRef.current;
-    const pad = 60;
-    const minX = Math.min(...fit.map(n => n.position.x)) - pad;
-    const minY = Math.min(...fit.map(n => n.position.y)) - pad;
-    const maxX = Math.max(...fit.map(n => n.position.x + NODE_WIDTH)) + pad;
-    const maxY = Math.max(...fit.map(n => n.position.y + 200)) + pad;
-    const cw = canvas.clientWidth;
-    const ch = canvas.clientHeight;
+    if (!canvas) return null;
     // Framing a few nodes stops at 100% rather than blowing one card up to fill the canvas.
-    const newZoom = Math.min(want ? Math.min(1, ZOOM_MAX) : ZOOM_MAX, Math.max(ZOOM_MIN,
-      Math.min(cw / (maxX - minX), ch / (maxY - minY))
-    ));
-    applyView({
-      x: (cw - (maxX + minX) * newZoom) / 2,
-      y: (ch - (maxY + minY) * newZoom) / 2,
-    }, newZoom, 'now');
-  }, [displayNodes, applyView]);
+    // Inside a Shader Texture its panel covers the top right: frame beside it.
+    const v = frameNodes(fit, canvas.clientWidth, canvas.clientHeight, {
+      sizeOf: getCardSize, minZoom: ZOOM_MIN,
+      maxZoom: opts?.maxZoom ?? (want ? Math.min(1, ZOOM_MAX) : ZOOM_MAX),
+      insetRight: isInsideShaderTexture && activeGroupPath.length === 1 ? 244 : 0,
+    });
+    if (v) applyView(v.pan, v.zoom, 'now');
+    return v;
+  }, [displayNodes, applyView, isInsideShaderTexture, activeGroupPath.length]);
 
   // A focus request (a Play control's "go to source"): centre on that node. The graph may
   // mount because of the request, so a pending one is handled on mount too.
@@ -1176,6 +1171,34 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
   handleFitViewRef.current = handleFitView;
   useEffect(() => { registerFitView(ids => handleFitViewRef.current(ids)); }, [registerFitView]);
   useEffect(() => { registerSetView((p, z) => applyView(p, Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z)), 'now')); }, [registerSetView, applyView]);
+
+  // Entering a group, a Shader Texture, a Pass or any other scope frames its cards; leaving goes back to the
+  // view the outer level had (or frames it). Every way in and out (button, double-click, Esc, the
+  // breadcrumb, a builder) changes activeGroupPath, so this follows that. The cards are measured a frame
+  // later, so the framing runs again then with their real sizes, unless something else moved the view.
+  const savedViews = useRef(new Map<string, View>());
+  const scopeRef = useRef<string[]>(activeGroupPath);
+  // A layout effect, so a focus request (revealNode) is still pending when this looks.
+  useLayoutEffect(() => {
+    const prev = scopeRef.current;
+    if (prev === activeGroupPath) return;
+    scopeRef.current = activeGroupPath;
+    savedViews.current.set(scopeKey(prev), { pan: panRef.current, zoom: zoomRef.current });
+    const step = scopeChange(prev, activeGroupPath, savedViews.current);
+    if (!step) return;
+    if ('restore' in step) { applyView(step.restore.pan, step.restore.zoom, 'now'); return; }
+    // A focus request already aimed at a card on this level (revealNode) picks the view instead.
+    const fr = useNodeGraphStore.getState().focusRequest;
+    if (fr && displayNodesRef.current.some(n => n.id === fr.nodeId)) return;
+    let set = handleFitViewRef.current(undefined, { maxZoom: 1 });
+    let raf = requestAnimationFrame(() => {
+      raf = requestAnimationFrame(() => {
+        const moved = !set || panRef.current.x !== set.pan.x || panRef.current.y !== set.pan.y || zoomRef.current !== set.zoom;
+        if (!moved) set = handleFitViewRef.current(undefined, { maxZoom: 1 });
+      });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [activeGroupPath, applyView]);
 
   useEffect(() => {
     registerViewportCenterGetter(() => {
@@ -2072,7 +2095,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
       {/* Minimap overlay — screen space, bottom-right (hidden on touch devices) */}
       {showMinimap && !isTouchDevice.current && (
         <Minimap
-          nodes={nodes}
+          nodes={displayNodes}
           viewportWidth={canvasWidth}
           viewportHeight={canvasHeight}
           onPanTo={handleMinimapPanTo}
