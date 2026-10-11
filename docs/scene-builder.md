@@ -88,6 +88,32 @@ answers, and the Do… bar opens when nobody does. `StudioShell` unfolds its ins
 **Done** closes the window and frames what was built on the graph (`src/builders/finish.ts`); the
 kind page's × closes it with nothing to frame.
 
+## On a phone
+
+**A new graph starts here.** The phone's ⋯ menu has **New graph…** (it used to be *Clear the graph…*):
+it asks first, since the open graph goes, then loads a blank graph and opens the kind page
+(`src/builders/newGraph.ts`, `components/shell/NewGraphSheet.tsx`). **Start from an empty graph** is
+a small link under the button, and again under the kinds. Once the graph exists, you edit it however
+you like: this is only how you get started.
+
+**Every kind uses one phone layout** (`components/builders/studio/PhoneStudio.tsx`), drawn by
+`StudioShell` when the screen is a phone (and by the 2D Scene Builder, which uses `StudioShell` there):
+
+- no side panels or drawers; the viewport is on top, as large as the sheet leaves it;
+- the bottom bar (where the presets strip is on a computer) is one swipeable row of tabs:
+  **Presets** first (the presets with **Surprise me**, `StudioShell`'s `surprise`), then any panel the
+  kind keeps beside its sections (Grid scene: **Draw**; Agent Builder: **Walkers**; Grid Rules:
+  **Rule type**; 2D: **Layers**), then the sections;
+- tapping a section selects it and turns the sheet into its settings, scrollable, with a handle to
+  resize it (remembered per builder), **‹ Presets** to go back, and ⓘ for the section's help (a tap,
+  not a hover). A section picked another way (the 3D viewport, ⌘⇧D, Under the hood) shows its settings
+  too.
+
+The sections are the nav's own `StudioNavItem`s: on a phone they register with the shell instead of
+drawing (a `StudioLabel sections` heading over them hides too), so a builder lists them once. Inside
+the shell every button, field and slider is at least 40 px; `BuilderSlider` takes the touch size
+(`RulerSlider touch`, 40 px) and a double tap resets it, as a double-click does.
+
 ## The preview comes first
 
 While a builder with a picture of its own is open (the kind page, the 2D and 3D Scene Builders,

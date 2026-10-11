@@ -125,7 +125,7 @@ export function RulerSlider({
   };
   const unit = (typeof unitProp === 'function' ? unitProp(min, max) : unitProp) ?? rulerUnit(min, max, integer);
   const effectiveStep = integer ? 1 : step;
-  const h = touch ? 36 : 28;
+  const h = touch ? 40 : 28;
   const fmt = useCallback((n: number) => formatValue(n, effectiveStep, integer), [effectiveStep, integer]);
 
   const trackRef = useRef<HTMLDivElement>(null);
@@ -165,7 +165,9 @@ export function RulerSlider({
     };
   }, []);
 
-  const drag = useRef<{ lastX: number; acc: number } | null>(null);
+  const drag = useRef<{ lastX: number; acc: number; startX: number } | null>(null);
+  // A double tap resets, as a double-click does (a touch screen doesn't always send dblclick).
+  const lastTap = useRef(0);
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (locked || e.button !== 0) return;
@@ -173,7 +175,16 @@ export function RulerSlider({
     e.stopPropagation(); // don't start a canvas pan / node drag underneath
     e.currentTarget.setPointerCapture(e.pointerId);
     e.currentTarget.focus();
-    drag.current = { lastX: e.clientX, acc: value };
+    if (e.pointerType === 'touch') {
+      const now = e.timeStamp || performance.now();
+      if (now - lastTap.current < 320 && defaultValue !== undefined) {
+        lastTap.current = 0;
+        onChange(defaultValue);
+        return;
+      }
+      lastTap.current = now;
+    }
+    drag.current = { lastX: e.clientX, acc: value, startX: e.clientX };
     setHeld(range);
   };
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -186,7 +197,11 @@ export function RulerSlider({
     const next = clampToStep(d.acc, min, max, effectiveStep);
     if (next !== value) onChange(next);
   };
-  const endDrag = () => { drag.current = null; setHeld(null); };
+  const endDrag = () => {
+    // A drag isn't a tap: only a still touch counts towards a double tap.
+    if (drag.current && Math.abs(drag.current.lastX - drag.current.startX) > 6) lastTap.current = 0;
+    drag.current = null; setHeld(null);
+  };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (locked) return;
