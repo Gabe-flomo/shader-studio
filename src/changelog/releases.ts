@@ -39,6 +39,18 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.147',
+    date: '2026-10-10',
+    title: '3D Scene Builder, rebuilt',
+    highlights: [
+      { area: 'Studio', text: '3D Scene Builder in the Agent Builder layout: sections for Mode, Shapes, Combine, Warps, Light, Camera and Output, with pictures throughout.' },
+      { area: 'Studio', text: '3D Scene Builder: orbit the preview, click a shape and drag its handles to move or resize it. Sliders get the Play menu once built.' },
+      { area: 'Studio', text: 'Grid Rules: stack rule cards on a base (cells meet and explode, too crowded, drift, big clusters change), with four ready-made recipes.' },
+      { area: 'Studio', text: 'Inside a Shader Texture the view centres its nodes, the minimap shows the inside, and the preview shows the texture (or where it is used).' },
+      { area: 'Studio', text: 'Grid scene: Make it a simulation now starts Grid Rules from your drawing.' },
+    ],
+  },
+  {
     id: '2026.10.146',
     date: '2026-10-10',
     title: 'Switch to Transform',
