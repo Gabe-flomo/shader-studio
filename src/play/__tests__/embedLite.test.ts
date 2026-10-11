@@ -18,7 +18,7 @@ vi.hoisted(() => {
 import { parser } from '@shaderfrog/glsl-parser';
 import { snapshotExample } from '../../present/snapshot';
 import { DEFAULT_EMBED, KIT_GROUPS, buildPlaySnippet, kitGroupsFor, kitScript, playBundle, type KitGroup, type PlayHtmlInput } from '../exportHtml';
-import { LITE_BOOTSTRAP, buildGlslOnly, buildLitePage, buildLiteSnippet, liteBlockers, liteImages, usedUniforms } from '../embedLite';
+import { LITE_BOOTSTRAP, LITE_BOOTSTRAP_MAPS, buildGlslOnly, buildLitePage, buildLiteSnippet, liteBlockers, liteImages, liteMaps, usedUniforms } from '../embedLite';
 import { defaultLayer, emptyPlayRecord, type PlayMapping } from '../../types/play';
 
 const SHADER = `precision highp float;
@@ -135,11 +135,147 @@ describe('the small snippet', () => {
   });
 });
 
+describe('the small snippet with clicks and keys', () => {
+  const ctl = (id: string, target: string, label: string) => ({ id, target, kind: 'float' as const, label, min: 0, max: 4 });
+  const map = (id: string, controlId: string, source: PlayMapping['source'], extra: Partial<PlayMapping> = {}): PlayMapping => ({ id, controlId, source, outMin: 0, outMax: 4, curve: 'linear', smoothMs: 0, enabled: true, ...extra });
+  const trig = (on: Record<string, unknown>, mode: 'toggle' | 'envelope' | 'step' | 'random', env: Partial<{ attack: number; decay: number; sustain: number; release: number; steps: number }> = {}): PlayMapping['source'] =>
+    ({ kind: 'trigger', trigger: on as never, mode, attack: 0, decay: 0, sustain: 1, release: 0, steps: 4, velocity: false, ...env });
+  const withMaps = (mappings: PlayMapping[]): PlayHtmlInput => ({
+    ...simple(), paramBindings: { 'n::speed': 'u_p_n_speed', 'n::tint': 'u_p_n_tint' },
+    play: { ...emptyPlayRecord(), controls: [ctl('c', 'n::speed', 'Speed'), { ...ctl('t', 'n::tint', 'Tint'), kind: 'color' as never }], mappings },
+  });
+
+  it('takes mappings from the mouse, keys and the clock; any other source needs the player', () => {
+    expect(liteMaps(withMaps([map('m', 'c', { kind: 'clock', shape: 'saw', bpm: 120, beats: 4 })]))?.[0]).toMatchObject({ on: 'wave', w: { shape: 'saw', hz: 0.5, ph: 0 } });
+    expect(liteMaps(withMaps([map('m', 'c', { kind: 'mouse', axis: 'down' })]))).toEqual([{ u: 'u_p_n_speed', on: 'down', lo: 0, hi: 4 }]);
+    expect(liteMaps(withMaps([map('m', 'c', trig({ on: 'key', code: 'Space' }, 'toggle'))]))?.[0]).toMatchObject({ on: 'key', key: 'Space', t: { mode: 'toggle' } });
+    expect(liteMaps(withMaps([map('m', 't', { kind: 'mouse', axis: 'x' }, { channel: 1 })]))?.[0]).toMatchObject({ u: 'u_p_n_tint', ch: 1 });
+    expect(liteBlockers(withMaps([map('m', 'c', { kind: 'key', code: 'KeyA' })]))).toEqual([]);
+    for (const bad of [
+      map('m', 'c', { kind: 'noise', type: 'smooth', rate: 1, seed: 1, steps: 0 }),
+      map('m', 'c', { kind: 'lfo', shape: 'random', rate: 1, phase: 0 }),
+      map('m', 'c', { kind: 'tilt', axis: 'beta' }),
+      map('m', 'c', { kind: 'mouse', axis: 'x' }, { delayMs: 200 }),
+      map('m', 'c', trig({ on: 'key', code: 'KeyA', fire: { mode: 'every', every: 3, unit: 'frames' } }, 'toggle')),
+    ]) expect(liteBlockers(withMaps([bad])).map(b => b.what), JSON.stringify(bad.source)).toEqual(['Mappings']);
+    // A colour as a whole: its brightness; its channels one each.
+    expect(liteMaps(withMaps([map('m', 't', { kind: 'mouse', axis: 'x' })]))?.[0]).toMatchObject({ u: 'u_p_n_tint', ch: -1 });
+    expect(liteMaps(withMaps([map('a', 't', { kind: 'mouse', axis: 'x' }, { channel: 0 }), map('b', 't', { kind: 'mouse', axis: 'y' }, { channel: 2 })]))).toHaveLength(2);
+    expect(liteMaps(withMaps([map('a', 't', { kind: 'mouse', axis: 'x' }, { channel: 0 }), map('b', 't', { kind: 'mouse', axis: 'y' })]))).toBeNull();
+    // Two mappings on one control combine in the player.
+    expect(liteMaps(withMaps([map('a', 'c', { kind: 'mouse', axis: 'x' }), map('b', 'c', { kind: 'key', code: 'KeyA' })]))).toBeNull();
+  });
+
+  it('carries the mapping code only when it has mappings', () => {
+    expect(buildLiteSnippet(simple(), opts)).not.toContain('function tickMaps');
+    const s = buildLiteSnippet(withMaps([map('m', 'c', { kind: 'key', code: 'Space' })]), opts);
+    expect(s).toContain('tickMaps(dt)');
+    expect(s).toContain('"maps":[{"u":"u_p_n_speed","on":"key","key":"Space","lo":0,"hi":4}]');
+    expect(LITE_BOOTSTRAP_MAPS.length - LITE_BOOTSTRAP.length).toBeLessThan(4 * 1024);
+  });
+
+  it('runs: keys held and pressed, clicks on the picture, a colour channel', () => {
+    const page = livePage(buildLiteSnippet(withMaps([
+      map('k', 'c', { kind: 'key', code: 'Space' }),
+      map('t', 't', trig({ on: 'mouse' }, 'toggle'), { channel: 2, outMin: 0, outMax: 1 }),
+    ]), opts));
+    page.frame();
+    expect(page.last('u_p_n_speed')).toBe('0');
+    expect(page.last('u_p_n_tint')).toBe('1,0.5,0');
+    page.fire('keydown', { code: 'Space', repeat: false, target: {} });
+    page.frame();
+    expect(page.last('u_p_n_speed')).toBe('4');
+    page.fire('keyup', { code: 'Space' });
+    page.frame();
+    expect(page.last('u_p_n_speed')).toBe('0');
+    // Typing in a field on the page doesn't count.
+    page.fire('keydown', { code: 'Space', repeat: false, target: { tagName: 'INPUT' } });
+    page.frame();
+    expect(page.last('u_p_n_speed')).toBe('0');
+    // A click on the picture toggles the blue channel on; another, off. A click off the picture doesn't count.
+    page.click(100, 100); page.frame();
+    expect(page.last('u_p_n_tint')).toBe('1,0.5,1');
+    page.click(900, 900); page.frame();
+    expect(page.last('u_p_n_tint')).toBe('1,0.5,1');
+    page.click(100, 100); page.frame();
+    expect(page.last('u_p_n_tint')).toBe('1,0.5,0');
+  });
+
+  it('a colour mapped as a whole scales its brightness', () => {
+    const page = livePage(buildLiteSnippet(withMaps([map('b', 't', { kind: 'key', code: 'KeyB' }, { outMin: 0.5, outMax: 1 })]), opts));
+    page.frame();
+    expect(page.last('u_p_n_tint')).toBe('0.5,0.25,0.125');
+    page.fire('keydown', { code: 'KeyB', repeat: false, target: {} }); page.frame();
+    expect(page.last('u_p_n_tint')).toBe('1,0.5,0.25');
+  });
+
+  it('an envelope on a key: up over its attack, down over its release', () => {
+    const page = livePage(buildLiteSnippet(withMaps([map('e', 'c', trig({ on: 'key', code: 'KeyA' }, 'envelope', { attack: 100, decay: 0, sustain: 1, release: 100 }))]), opts));
+    page.frame();
+    page.fire('keydown', { code: 'KeyA', repeat: false, target: {} });
+    page.frame(50); // half the attack
+    expect(Number(page.last('u_p_n_speed'))).toBeCloseTo(2, 5);
+    page.frame(50); page.frame(16);
+    expect(page.last('u_p_n_speed')).toBe('4');
+    page.fire('keyup', { code: 'KeyA' });
+    page.frame(16); page.frame(50);
+    expect(Number(page.last('u_p_n_speed'))).toBeLessThan(4);
+    page.frame(100);
+    expect(page.last('u_p_n_speed')).toBe('0');
+  });
+
+  it('an LFO on the snippet’s clock, and renderAt draws it at that time', () => {
+    const page = livePage(buildLiteSnippet(withMaps([map('l', 'c', { kind: 'lfo', shape: 'triangle', rate: 0.5, phase: 0 })]), opts));
+    for (let i = 0; i < 10; i++) page.frame(100); // one second in (frames step at most 0.1 s): half a cycle, the top of the triangle
+    expect(Number(page.last('u_p_n_speed'))).toBeCloseTo(4, 5);
+    page.renderAt(0.5);
+    expect(Number(page.last('u_p_n_speed'))).toBeCloseTo(2, 5);
+  });
+
+  it('the mouse button drives a mapping, and a background reads clicks from the window', () => {
+    const bg = livePage(buildLiteSnippet(withMaps([map('d', 'c', { kind: 'mouse', axis: 'down' })]), { ...opts, mode: 'background', placement: 'page', followPage: true }));
+    expect(bg.rootListeners).not.toContain('pointerdown');
+    bg.fire('pointerdown', { clientX: 10, clientY: 10 }); bg.frame();
+    expect(bg.last('u_p_n_speed')).toBe('4');
+    bg.fire('pointerup', {}); bg.frame();
+    expect(bg.last('u_p_n_speed')).toBe('0');
+  });
+});
+
+/** The snippet's bootstrap running on a fake page: frames on demand, window and root events, the uniforms it sets. */
+function livePage(snippet: string) {
+  const calls: string[] = [];
+  const { root } = fakePage(calls);
+  const win: Record<string, ((e: unknown) => void)[]> = {};
+  const rootListeners: string[] = [];
+  (root as unknown as { addEventListener: (k: string, f: (e: unknown) => void) => void }).addEventListener = (k, f) => { rootListeners.push(k); (win[`root:${k}`] ??= []).push(f); };
+  const glsl = snippet.split('<script type="x-shader/x-fragment">\n')[1].split('\n</script>')[0];
+  const call = snippet.split('<script>\n')[1].split('\n</script>')[0]
+    .replace(/\(function \(\) \{ var el = document\.currentScript[^\n]*\n/, 'ROOT,\n')
+    .replace('document.currentScript.previousElementSibling.textContent', 'GLSL');
+  const raf: ((t: number) => void)[] = [];
+  let now = 0;
+  const win0 = { devicePixelRatio: 1, addEventListener: (k: string, f: (e: unknown) => void) => { (win[k] ??= []).push(f); }, matchMedia: () => ({ matches: false }) };
+  new Function('ROOT', 'GLSL', 'window', 'document', 'requestAnimationFrame', 'cancelAnimationFrame', 'ResizeObserver', 'IntersectionObserver', 'Image', 'matchMedia', call)(
+    root, glsl, win0, { hidden: false }, (f: (t: number) => void) => raf.push(f), () => {}, class { observe() {} }, class { observe() {} }, class {}, () => ({ matches: false }),
+  );
+  raf.shift()!(now += 16);
+  const fire = (k: string, e: Record<string, unknown>) => { for (const f of [...(win[k] ?? []), ...(win[`root:${k}`] ?? [])]) f(e); };
+  return {
+    rootListeners,
+    renderAt: (t: number) => (root as unknown as { playfield: { renderAt(t: number): void } }).playfield.renderAt(t),
+    frame: (ms = 16) => raf.shift()!(now += ms),
+    fire,
+    click: (x: number, y: number) => { fire('pointerdown', { clientX: x, clientY: y }); fire('pointerup', {}); },
+    last: (u: string) => { for (let i = calls.length - 1; i >= 0; i--) if (calls[i].split(' ')[1] === u) return calls[i].split(' ')[2]; return undefined; },
+  };
+}
+
 describe('when a graph needs the full player', () => {
-  const what = (i: PlayHtmlInput) => liteBlockers(i).map(b => b.what);
+  const what =(i: PlayHtmlInput) => liteBlockers(i).map(b => b.what);
   it('says what it uses, feature by feature', () => {
     expect(what(simple())).toEqual([]);
-    const map: PlayMapping = { id: 'm', enabled: true } as PlayMapping;
+    const map: PlayMapping = { id: 'm', controlId: 'c', source: { kind: 'noise', type: 'smooth', rate: 1, seed: 1, steps: 0 }, outMin: 0, outMax: 4, curve: 'linear', smoothMs: 0, enabled: true };
     expect(what({ ...simple(), play: { ...simple().play, mappings: [map] } })).toEqual(['Mappings']);
     expect(what({ ...simple(), play: { ...simple().play, layers: [defaultLayer('script', 'L1', 'Sketch')] } })).toEqual(['Script layers']);
     expect(liteBlockers({ ...simple(), play: { ...simple().play, layers: [defaultLayer('script', 'L1', 'Sketch')] } })[0].feature).toBe('script');

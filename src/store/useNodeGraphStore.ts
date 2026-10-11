@@ -41,7 +41,7 @@ import { AGENT_INSIDE_TYPES, AGENT_OUTSIDE_TYPES, AGENT_PRESET_TYPES, syncAgentS
 import { randomizedParams, weightKey } from '../nodes/randomizeParams';
 import { getRandomizeOptions } from '../nodes/randomizeOptions';
 import { upgradeLegacyNode } from './legacyLabels';
-import { emptyPlayRecord, isPlayRecordEmpty, parsePlayRecord, usesHands, type PlayRecord, type PlayControl } from '../types/play';
+import { emptyPlayRecord, isPlayRecordEmpty, parsePlayRecord, type PlayRecord, type PlayControl } from '../types/play';
 import { tidyGroups } from '../types/layerGroups';
 import { isDatasetsEmpty, parseDatasetsRecord, type Dataset, type DatasetsRecord } from '../data/types';
 import { datasetStore } from '../data/datasetStore';
@@ -59,6 +59,7 @@ import { bakeFor } from '../types/playTracking';
 import { bakeBase64 } from '../lib/trackBakes';
 import { loadThreeSource, playUses3D } from '../play/threeSource';
 import { webInputFrom } from '../play/webInput';
+import { webExportScope } from '../play/exportScope';
 import { queueGraphsForWeb } from '../play/queueGraphs';
 import { imageDataUrl, mediaSource } from '../lib/mediaSources';
 import { audioUniformNamesByNode } from '../compiler/audioUniformNames';
@@ -621,9 +622,8 @@ interface NodeGraphState {
    * controls at their live value), and what in the graph it can't run.
    */
   playWebInput: (title: string) => { input: PlayHtmlInput; missing: string[] };
-  /** Save a web page (player or background) to a file. See play/exportHtml.ts. */
-  /** `hands`: carry hand tracking's files in the page (about 12 MB; play/handExport.ts). */
-  exportPlayHtml: (options: EmbedOptions, title: string, extras?: { hands?: boolean }) => Promise<FileResult>;
+  /** Save a web page (player or background) to a file, with what a web page runs (play/exportScope.ts). See play/exportHtml.ts. */
+  exportPlayHtml: (options: EmbedOptions, title: string) => Promise<FileResult>;
   /** Bumped when a play file is imported; App switches to the Play page. */
   playOpenRequest: number;
   /** Asks the app to open the Studio centred on a node (a Play control's "go to source"). `n` counts requests. */
@@ -5433,12 +5433,9 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     return webInputFrom(st, st.play, { title, aspect: st.previewAspect, live, media: webMedia(st), backgroundGraphs: queueGraphsForWeb(st.play).graphs, datasets: st.datasets, liveData: id => datasetStore.result(id) });
   },
 
-  exportPlayHtml: async (options, title, extras) => {
-    const { input } = get().playWebInput(title);
-    if (extras?.hands && usesHands(input.play)) {
-      const { loadHandAssets } = await import('../play/handExport');
-      input.handAssets = await loadHandAssets();
-    }
+  exportPlayHtml: async (options, title) => {
+    // What a web page runs (play/exportScope.ts): tracking, the camera, MIDI and the mic stay out, held at their values.
+    const { input } = webExportScope(get().playWebInput(title).input);
     // A 3D Script layer: the page carries three.js, loaded on first need.
     if (playUses3D(input.play)) await loadThreeSource();
     const base = (title.trim() || 'play').replace(/\.html?$/i, '').replace(/[^\w\- ]+/g, '').trim() || 'play';

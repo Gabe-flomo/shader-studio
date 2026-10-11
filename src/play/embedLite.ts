@@ -15,6 +15,7 @@ import { renderableFinish } from '../types/playFinish';
 import { backgroundLayerOf } from '../types/play';
 import { PREVIEW_ASPECTS } from '../utils/graphImportPlan';
 import type { EmbedOptions, PlayHtmlInput } from './exportHtml';
+import type { PlayCurve, PlaySource, TriggerMode } from '../types/play';
 
 /** One reason the small snippet can't run a graph: what it uses, and (when it maps to one) the kit feature the player brings for it. */
 export interface LiteBlocker { what: string; feature?: string }
@@ -52,7 +53,9 @@ export function liteBlockers(input: PlayHtmlInput): LiteBlocker[] {
   // Play: anything that moves, draws over or sounds needs the player.
   const visible = play.layers.filter(l => l.visible !== false);
   for (const l of visible) add(`${l.kind[0].toUpperCase()}${l.kind.slice(1)} layers`, LAYER_FEATURE[l.kind]);
-  if (play.mappings.some(m => m.enabled !== false)) add('Mappings');
+  // Mappings from the pointer, keys and the clock run in the snippet (liteMaps); any other kind needs the player.
+  if (liteMaps(input) === null) add('Mappings');
+  if (play.pairMappings?.length) add('Pair mappings');
   if (play.actions?.length) add('Actions');
   if (renderableFinish(play.finish)) add('Finish effects', 'finish');
   if (play.audioFx && Object.keys(play.audioFx.chains ?? {}).length) add('Audio effects', 'audioFx');
@@ -88,6 +91,136 @@ const UNIFORM_KINDS: [RegExp, string, string?][] = [
 
 /** The kit feature a layer kind brings (exportHtml.ts KIT_GROUPS), for the dialog's sizes. */
 const LAYER_FEATURE: Partial<Record<string, string>> = { script: 'script', agents: 'agentsCpu', water: 'finish', drumpad: 'drums', data: 'data' };
+
+/**
+ * A Play mapping the snippet runs: a uniform written from the pointer (x, y, a button held), a key held,
+ * an LFO or Clock on the snippet's clock,
+ * or a key / click trigger (envelope, toggle, step or random), through the mapping's range, curve and
+ * smoothing, as the player does (runtime/play-runtime.js readSource, stepTrigger, smoothAxis).
+ */
+export interface LiteMap {
+  u: string;
+  on: 'x' | 'y' | 'down' | 'key' | 'click' | 'wave';
+  key?: string;
+  /** A wave on the clock (an LFO, or a Clock at its tempo): its shape, cycles a second and phase. */
+  w?: { shape: 'sine' | 'triangle' | 'saw' | 'square'; hz: number; ph: number };
+  /** A trigger's mode and envelope (ms), and Step's count. */
+  t?: { mode: TriggerMode; a: number; d: number; s: number; r: number; n: number };
+  lo: number;
+  hi: number;
+  c?: Exclude<PlayCurve, 'linear'>;
+  cy?: number[];
+  /** Smoothing, ms. */
+  ms?: number;
+  /** A colour's channel; -1: the whole colour, its brightness (the colour as exported times the value). */
+  ch?: 0 | 1 | 2 | -1;
+}
+
+/** The pointer or key a source reads, in the snippet's terms; null for anything else. */
+function liteSource(s: PlaySource): Pick<LiteMap, 'on' | 'key' | 't' | 'w'> | null {
+  // Time: an LFO, or a Clock (one cycle every `beats` beats at `bpm`); a random wave needs the player.
+  if ((s.kind === 'lfo' || s.kind === 'clock') && s.shape !== 'random') {
+    return { on: 'wave', w: { shape: s.shape, hz: s.kind === 'lfo' ? s.rate : s.bpm / 60 / Math.max(0.0625, s.beats), ph: s.kind === 'lfo' ? s.phase : 0 } };
+  }
+  if (s.kind === 'mouse') return { on: s.axis };
+  if (s.kind === 'key') return { on: 'key', key: s.code };
+  if (s.kind === 'trigger') {
+    const tr = s.trigger;
+    if (tr.fire && tr.fire.mode !== 'once') return null;
+    const t = { mode: s.mode, a: s.attack, d: s.decay, s: s.sustain, r: s.release, n: s.steps };
+    if (tr.on === 'key') return { on: 'key', key: tr.code, t };
+    if (tr.on === 'mouse') return { on: 'click', t };
+  }
+  return null;
+}
+
+/**
+ * The Play mappings the snippet runs, or null when one needs the player: every enabled mapping (and
+ * Source route) reads the pointer, a key or the clock (an LFO, a Clock), writes a uniform the shader reads (a colour by one channel),
+ * one per control, with no increment or delay. An empty list: no mappings.
+ */
+export function liteMaps(input: PlayHtmlInput): LiteMap[] | null {
+  const play = input.play;
+  const used = new Set(usedUniforms(input.fragmentShader));
+  const out: LiteMap[] = [];
+  const seen = new Set<string>();
+  const one = (source: PlaySource, r: { controlId: string; outMin: number; outMax: number; curve: PlayCurve; curveY?: number[]; smoothMs?: number; delayMs?: number; channel?: 0 | 1 | 2 }): boolean => {
+    const src = liteSource(source);
+    const c = play.controls.find(x => x.id === r.controlId);
+    // One mapping per control; a colour's channels each take one (the player sums nothing else).
+    const ch = r.channel ?? undefined;
+    const key = `${c?.id}:${ch ?? 'all'}`;
+    if (!src || !c || (r.delayMs ?? 0) > 0 || seen.has(key) || (ch === undefined ? [...seen].some(k => k.startsWith(`${c.id}:`)) : seen.has(`${c.id}:all`))) return false;
+    seen.add(key);
+    const u = /^[\w-]+::/.test(c.target) && !/^(layer|act|finish|spread|audiofx|au|macro|reader|grains):/.test(c.target) ? input.paramBindings[c.target.split('::').slice(-2).join('::')] : undefined;
+    if (!u || !(u in input.uniforms)) return false;
+    const v = input.uniforms[u];
+    if (!Array.isArray(v) && ch !== undefined) return false;
+    if (!used.has(u)) return true;
+    out.push({
+      u, ...src, lo: r.outMin, hi: r.outMax,
+      ...(r.curve !== 'linear' ? { c: r.curve } : {}), ...(r.curve === 'custom' && r.curveY ? { cy: r.curveY } : {}),
+      ...(r.smoothMs ? { ms: r.smoothMs } : {}), ...(Array.isArray(v) ? { ch: ch ?? -1 } : {}),
+    });
+    return true;
+  };
+  for (const m of play.mappings) {
+    if (m.enabled === false) continue;
+    if (m.increment || !one(m.source, m)) return null;
+  }
+  for (const d of play.sources ?? []) {
+    if (!d.enabled) continue;
+    for (const o of d.outputs) {
+      const routes = o.routes.filter(r => r.enabled !== false);
+      if (o.kind !== 'value' && routes.length) return null;
+      for (const r of routes) if (r.mode !== 'replace' || !one(d.source, { ...r, controlId: r.to })) return null;
+    }
+  }
+  return out;
+}
+
+/**
+ * The bootstrap's mapping part, in the snippet only when it has mappings: keys held and pressed, clicks
+ * on the picture, the player's trigger envelope and smoothing. `mouse`, `down`, `clicks` and `U` are the
+ * bootstrap's own.
+ */
+export const LITE_MAPS = `  var M = O.maps || [], held = {}, presses = {}, mst = M.map(function (m) { return { seen: 0, value: 0, stage: 'idle', index: -1, s: undefined, b: [].concat(U[m.u]) }; });
+  function typing(t) { return t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable); }
+  // Capture phase: a host page that stops a key for its own shortcut still lets the picture hear it.
+  window.addEventListener('keydown', function (e) { if (e.repeat || typing(e.target)) return; held[e.code] = 1; presses[e.code] = (presses[e.code] || 0) + 1; }, true);
+  window.addEventListener('keyup', function (e) { held[e.code] = 0; }, true);
+  window.addEventListener('blur', function () { held = {}; });
+  function curve(x, m) { x = x < 0 ? 0 : x > 1 ? 1 : x; if (m.c === 'exp') return x * x; if (m.c === 'log') return Math.sqrt(x); if (m.c === 'custom' && m.cy && m.cy.length > 1) { var p = x * (m.cy.length - 1), i = Math.min(m.cy.length - 2, Math.floor(p)); return m.cy[i] + (m.cy[i + 1] - m.cy[i]) * (p - i); } return x; }
+  // A trigger: toggle, step, random, or an attack / decay / sustain / release envelope (ms) while held.
+  function trig(t, st, n, gate, dt) {
+    var fresh = n > st.seen, E = 1e-6, ms = dt * 1000, lv = t.s; st.seen = n;
+    if (t.mode === 'toggle') { if (fresh) st.value = st.value >= 0.5 ? 0 : 1; return st.value; }
+    if (t.mode === 'step') { if (fresh) { var k = Math.max(2, t.n); st.index = (st.index + 1) % k; st.value = st.index / (k - 1); } return st.value; }
+    if (t.mode === 'random') { if (fresh) st.value = Math.random(); return st.value; }
+    if (fresh) st.stage = 'attack';
+    if (st.stage === 'attack') { st.value = t.a <= 0 ? 1 : Math.min(1, st.value + ms / t.a); if (st.value >= 1 - E) { st.value = 1; st.stage = 'decay'; } }
+    else if (st.stage === 'decay') { st.value = t.d <= 0 ? lv : Math.max(lv, st.value - (ms / t.d) * (1 - lv || 1)); if (st.value <= lv + E) { st.value = lv; st.stage = 'sustain'; } }
+    else if (st.stage === 'sustain') st.value = lv;
+    else if (st.stage === 'release') { st.value = t.r <= 0 ? 0 : Math.max(0, st.value - ms / t.r); if (st.value <= E) { st.value = 0; st.stage = 'idle'; } }
+    else st.value = 0;
+    if (!gate && (st.stage === 'decay' || st.stage === 'sustain')) st.stage = lv > 0 || st.stage === 'sustain' ? 'release' : st.stage;
+    if (st.stage === 'sustain' && lv === 0) st.stage = 'idle';
+    return st.value;
+  }
+  function tickMaps(dt) {
+    M.forEach(function (m, j) {
+      var st = mst[j], u, v;
+      if (m.t) u = trig(m.t, st, m.on === 'key' ? presses[m.key] || 0 : clicks, m.on === 'key' ? !!held[m.key] : !!down, dt);
+      else if (m.w) { var p = time * m.w.hz + m.w.ph; p -= Math.floor(p); u = m.w.shape === 'sine' ? 0.5 - 0.5 * Math.cos(p * Math.PI * 2) : m.w.shape === 'triangle' ? 1 - Math.abs(2 * p - 1) : m.w.shape === 'square' ? (p < 0.5 ? 1 : 0) : p; }
+      else u = m.on === 'x' ? mouse[0] : m.on === 'y' ? mouse[1] : m.on === 'down' ? down : held[m.key] ? 1 : 0;
+      v = m.lo + (m.hi - m.lo) * curve(u, m);
+      st.s = st.s === undefined || !m.ms ? v : st.s + (v - st.s) * (1 - Math.exp(-(dt * 1000) / m.ms));
+      if (m.ch === undefined) U[m.u] = st.s;
+      else if (m.ch < 0) U[m.u] = st.b.map(function (x) { return x * st.s; });
+      else { var a = [].concat(U[m.u]); a[m.ch] = st.s; U[m.u] = a; }
+    });
+  }
+`;
 
 /** A safe file name for an image that stays next to the page. */
 export function liteFileName(label: string, name: string, uniform: string): string {
@@ -135,7 +268,7 @@ function uniformLines(input: PlayHtmlInput): string {
  * previous-frame feedback, the clock, the mouse, resizing, pausing off-screen
  * and a still frame for reduced motion. Plain JS, no libraries.
  */
-export const LITE_BOOTSTRAP = `(function (root, src, U, O) {
+const BOOTSTRAP = `(function (root, src, U, O) {
   'use strict';
   var cv = root.querySelector('canvas');
   var gl = cv.getContext('webgl2', { antialias: false, premultipliedAlpha: false, preserveDrawingBuffer: true });
@@ -189,7 +322,8 @@ export const LITE_BOOTSTRAP = `(function (root, src, U, O) {
   // Data attributes override the baked values: data-u_speed="2", data-u_tint="1,0.5,0".
   var lower = {}; Object.keys(U).forEach(function (k) { lower[k.toLowerCase()] = k; });
   Object.keys(root.dataset).forEach(function (k) { var u = lower[k.toLowerCase()]; if (u) U[u] = root.dataset[k].indexOf(',') >= 0 ? root.dataset[k].split(',').map(Number) : Number(root.dataset[k]); });
-  var time = 0, fdt = 0, last = 0, mouse = [0.5, 0.5], down = 0, dirty = true, visible = true, raf = 0;
+  var time = 0, fdt = 0, last = 0, mouse = [0.5, 0.5], down = 0, clicks = 0, dirty = true, visible = true, raf = 0;
+/*MAPS*/
   var still = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
   function draw() {
     var W = cv.width, H = cv.height, set = function (k, v) { if (setters[k]) setters[k](v); };
@@ -207,7 +341,7 @@ export const LITE_BOOTSTRAP = `(function (root, src, U, O) {
     var dt = last ? Math.min(0.1, (now - last) / 1000) : 0; last = now; fdt = dt;
     if (!visible || document.hidden || (still && !dirty)) return;
     if (!still) time += dt;
-    dirty = false; draw();
+    /*TICK*/dirty = false; draw();
   }
   function resize() {
     var r = root.getBoundingClientRect(), d = Math.min(O.dpr, window.devicePixelRatio || 1);
@@ -217,11 +351,17 @@ export const LITE_BOOTSTRAP = `(function (root, src, U, O) {
   new ResizeObserver(resize).observe(root); resize();
   if (window.IntersectionObserver) new IntersectionObserver(function (e) { visible = e[0].isIntersecting; }).observe(root);
   (O.followPage ? window : root).addEventListener('pointermove', function (e) { var r = root.getBoundingClientRect(); mouse = [Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)), Math.max(0, Math.min(1, 1 - (e.clientY - r.top) / r.height))]; dirty = true; });
-  root.addEventListener('pointerdown', function () { down = 1; }); window.addEventListener('pointerup', function () { down = 0; });
+  // A click on the picture (a background takes it from the window: it lets the page's own clicks through).
+  (O.window ? window : root).addEventListener('pointerdown', function (e) { var r = root.getBoundingClientRect(); down = 1; if (e.clientX >= r.left && e.clientX <= r.left + r.width && e.clientY >= r.top && e.clientY <= r.top + r.height) clicks++; dirty = true; });
+  window.addEventListener('pointerup', function () { down = 0; dirty = true; });
   // el.playfield: set a uniform, stop the clock, or draw one frame at a time (stops the clock).
-  root.playfield = { uniforms: U, set: function (k, v) { U[k] = v; dirty = true; }, stop: function () { cancelAnimationFrame(raf); }, renderAt: function (t) { cancelAnimationFrame(raf); time = t; fdt = 1 / 60; drop(); draw(); } };
+  root.playfield = { uniforms: U, set: function (k, v) { U[k] = v; dirty = true; }, stop: function () { cancelAnimationFrame(raf); }, renderAt: function (t) { cancelAnimationFrame(raf); time = t; fdt = 1 / 60; drop(); if (typeof tickMaps === 'function') tickMaps(fdt); draw(); } };
   raf = requestAnimationFrame(frame);
 })`;
+/** The bootstrap for a snippet without mappings. */
+export const LITE_BOOTSTRAP = BOOTSTRAP.replace('/*MAPS*/\n', '').replace('/*TICK*/', '');
+/** The bootstrap with the mapping part (LITE_MAPS), for a snippet whose mappings read the pointer or keys. */
+export const LITE_BOOTSTRAP_MAPS = BOOTSTRAP.replace('/*MAPS*/\n', () => LITE_MAPS).replace('/*TICK*/', 'tickMaps(dt); ');
 
 /** The small snippet's options, from the dialog's. */
 export interface LiteOptions { mode: EmbedOptions['mode']; placement: EmbedOptions['placement']; height: number; followPage: boolean }
@@ -248,6 +388,9 @@ export function buildLiteSnippet(input: PlayHtmlInput, options: LiteOptions): st
   const o: Record<string, unknown> = { dpr: input.passes?.stateful ? 1 : bg ? 1.5 : 2 };
   if (input.passes?.stateful) o.feedback = true;
   if (bg && options.followPage) o.followPage = true;
+  if (bg) o.window = true;
+  const maps = liteMaps(input) ?? [];
+  if (maps.length) o.maps = maps;
   if (images.length) o.images = Object.fromEntries(images.map(i => [i.uniform, i.flat ? { src: i.src, flat: true } : { src: i.src }]));
   const glsl = input.fragmentShader.replace(/<\/script/gi, '<\\/script').trim();
   return `<!-- Playfield · ${escapeHtml(input.title).replace(/-{2,}/g, '-')} · ${bg ? 'background' : 'player'} · WebGL2, no libraries.
@@ -259,7 +402,7 @@ export function buildLiteSnippet(input: PlayHtmlInput, options: LiteOptions): st
 ${glsl}
 </script>
 <script>
-${LITE_BOOTSTRAP}(
+${maps.length ? LITE_BOOTSTRAP_MAPS : LITE_BOOTSTRAP}(
   (function () { var el = document.currentScript.previousElementSibling.previousElementSibling;${hostFix} return el; })(),
   document.currentScript.previousElementSibling.textContent,
   ${uniformLines(input)},

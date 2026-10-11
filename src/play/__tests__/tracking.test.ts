@@ -19,6 +19,7 @@ import { inputBus } from '../../lib/inputBus';
 import { clearBakeCache, putBake } from '../../lib/trackBakes';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { kitScript, leftBehind, mediaCarried, playBundle, type PlayHtmlInput } from '../exportHtml';
+import { webExportScope } from '../exportScope';
 import runtimeSource from '../runtime/play-runtime.js?raw';
 import { sourceFromType, sourceLabel, triggerLabel } from '../playSources';
 import { triggerKey } from '../triggers';
@@ -377,8 +378,16 @@ describe('a web page carries and reads a baked track', () => {
     expect(b.hands).toBeUndefined();
     expect(mediaCarried(input(rec, true).media, undefined, rec).some(m => /Hands tracking of “Clip”/.test(m.what))).toBe(true);
     expect(leftBehind(rec, input(rec, true).media).some(l => /tracking/i.test(l.what))).toBe(false);
-    expect(leftBehind(rec, {}).some(l => /Hands tracking of “Clip”/.test(l.what))).toBe(true);
-    expect(leftBehind({ ...rec, face: { smoothing: 0.5, overlay: true, colour: [1, 1, 1], mirror: true }, mappings: [...rec.mappings, { ...rec.mappings[0], id: 'f', source: { kind: 'face', read: 'smile', point: 1, axis: 'x', gesture: 'smile' } }] }, {}).some(l => /Face tracking from the camera/.test(l.what))).toBe(true);
+  });
+
+  it('a website export leaves tracking out, a baked track too, and says so (play/exportScope.ts)', () => {
+    const rec = videoHandsRecord('k');
+    const face = { ...rec, face: { smoothing: 0.5, overlay: true, colour: [1, 1, 1] as [number, number, number], mirror: true }, mappings: [...rec.mappings, { ...rec.mappings[0], id: 'f', source: { kind: 'face' as const, read: 'smile' as const, point: 1, axis: 'x' as const, gesture: 'smile' as const } }] };
+    const s = webExportScope(input(face, true));
+    expect(s.frozen.map(f => f.kind)).toEqual(['hands', 'face']);
+    expect(s.input.media?.tracks).toBeUndefined();
+    expect(s.input.play.mappings).toEqual([]);
+    expect(playBundle(s.input)).not.toHaveProperty('tracks');
   });
 
   it('the page’s runtime reads the hand from the track at the video’s time', () => {

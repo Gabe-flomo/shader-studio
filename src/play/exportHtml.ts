@@ -283,7 +283,7 @@ export function playUsesCamera(play: PlayRecord): boolean {
  * player only) and the notes. Images placed as layers are data URLs and do
  * travel, as do the graph's images and small videos and songs.
  */
-export function leftBehind(play: PlayRecord, media?: PlayMedia, opts: { hands?: boolean; graphs?: PlayHtmlInput['backgroundGraphs']; datasets?: WebDatasets } = {}): LeftBehind[] {
+export function leftBehind(play: PlayRecord, media?: PlayMedia, opts: { graphs?: PlayHtmlInput['backgroundGraphs']; datasets?: WebDatasets } = {}): LeftBehind[] {
   const out: LeftBehind[] = [];
   // Datasets travel as their results: a dataset never run has none, and notebooks and files stay in the app.
   const sets = Object.values(opts.datasets ?? {});
@@ -297,20 +297,8 @@ export function leftBehind(play: PlayRecord, media?: PlayMedia, opts: { hands?: 
     if (s.kind === 'video' && !s.src) out.push({ what: `The background video “${s.name}”${s.bytes ? ` (${sizeText(s.bytes)})` : ''}`, why: `Videos over ${sizeText(BACKGROUND_VIDEO_KEEP)} play in the app for the session only, so the page shows the Background layer’s colour while it would show. Trim or compress it under ${sizeText(BACKGROUND_VIDEO_KEEP)} to bring it along.` });
     if (s.kind === 'graph' && s.graph !== 'this' && opts.graphs && !opts.graphs[s.id]) out.push({ what: `The background graph “${s.name}”`, why: 'It couldn’t be compiled for the page (an example still loading, or a graph with an error), so the page shows the Background layer’s colour while it would show. Open the page again in a moment, or check the graph.' });
   }
-  // Trackers on a Video layer: the page reads their analysis (baked track) by the video's time, never a model.
-  for (const kind of trackersUsed(play)) {
-    const s = kind === 'hands' ? play.hands : play[kind];
-    if (!s?.source) {
-      if (kind !== 'hands') out.push({ what: `${TRACKER_NAMES[kind]} tracking from the camera`, why: `Pages don’t carry the ${kind === 'face' ? 'face' : 'body'} model yet, so ${kind === 'face' ? 'face' : 'pose'} mappings, gestures and nulls stay at rest there. Track an analysed Video layer instead to bring it along.` });
-      continue;
-    }
-    const t = media?.tracks?.[kind], layer = play.layers.find(l => l.id === s.source);
-    if (t?.src) continue;
-    out.push(t && t.bytes > TRACK_LIMIT
-      ? { what: `${TRACKER_NAMES[kind]} tracking of “${layer?.label ?? 'a video'}” (${sizeText(t.bytes)})`, why: `Analyses over ${sizeText(TRACK_LIMIT)} stay out of the page. Analyse at a lower frame rate (15 or 10 fps), or trim the video.` }
-      : { what: `${TRACKER_NAMES[kind]} tracking of “${layer?.label ?? 'a video'}”`, why: 'The page reads a video’s analysis, never a model: this one isn’t analysed (or the analysis isn’t loaded in this browser), so what it drives stays at rest there. Press Analyse video in the tracker’s settings, then export again.' });
-  }
-  if (usesHands(play) && !play.hands?.source && !opts.hands) out.push({ what: 'Hand tracking', why: `It needs MediaPipe and its hand model (about ${sizeText(HAND_BYTES)}), which stay out of the page unless you tick Include hand tracking. Without them, hand mappings, gestures and nulls that follow a hand stay at rest.` });
+  // Hand, face and pose tracking, the camera, MIDI and the mic never come along: play/exportScope.ts leaves
+  // them out and says so (its `frozen` list), before this list is made.
   for (const v of Object.values(media?.videos ?? {})) {
     if (!v.src && v.bytes > 0) out.push({ what: `The video “${v.name}” (${sizeText(v.bytes)}) in ${v.label}`, why: `Videos over ${sizeText(VIDEO_LIMIT)} stay out of the page to keep it light, so that input shows black there. Trim or compress it under ${sizeText(VIDEO_LIMIT)} to bring it along.` });
   }
@@ -523,7 +511,7 @@ function runtimeOptions(o: EmbedOptions) {
  * bundle doesn't use (`kitGroupsFor`): a plain shader with a few layers
  * carries no Finish, particles, agents, audio engine, tracking or scripts.
  */
-export type KitGroup = 'script' | 'agentsCpu' | 'trackers' | 'data' | 'finish' | 'blur' | 'audioFx' | 'drums' | 'jfa' | 'gpuParticles' | 'passes' | 'agentsGpu';
+export type KitGroup = 'script' | 'agentsCpu' | 'trackers' | 'midi' | 'data' | 'finish' | 'blur' | 'audioFx' | 'drums' | 'jfa' | 'gpuParticles' | 'passes' | 'agentsGpu';
 export const KIT_FILES: { name: string; src: string; group?: KitGroup }[] = [
   { name: 'particle-sim', src: particleSource }, { name: 'geometry', src: geometrySource },
   { name: 'sketch3d', src: sketch3dSource, group: 'script' }, { name: 'p5', src: p5Source, group: 'script' },
@@ -532,7 +520,7 @@ export const KIT_FILES: { name: string; src: string; group?: KitGroup }[] = [
   { name: 'relationship', src: relationshipSource }, { name: 'agents', src: agentsSource, group: 'agentsCpu' }, { name: 'motion', src: motionSource },
   { name: 'hands', src: handsSource, group: 'trackers' }, { name: 'tracks', src: tracksSource, group: 'trackers' },
   { name: 'face', src: faceSource, group: 'trackers' }, { name: 'pose', src: poseSource, group: 'trackers' },
-  { name: 'queue', src: queueSource }, { name: 'data', src: dataSource, group: 'data' }, { name: 'midi', src: midiSource },
+  { name: 'queue', src: queueSource }, { name: 'data', src: dataSource, group: 'data' }, { name: 'midi', src: midiSource, group: 'midi' },
   { name: 'clipPlay', src: clipPlaySource }, { name: 'kit', src: kitSource },
   { name: 'finishGlsl', src: finishGlslSource, group: 'finish' }, { name: 'blur', src: blurSource, group: 'blur' },
   { name: 'finish', src: finishSource, group: 'finish' }, { name: 'waterLayer', src: waterLayerSource, group: 'finish' },
@@ -546,10 +534,10 @@ export const KIT_FILES: { name: string; src: string; group?: KitGroup }[] = [
 ];
 /** Every kit file, in order (the full kit). */
 export const KIT_SOURCES = KIT_FILES.map(f => f.src);
-export const KIT_GROUPS: KitGroup[] = ['script', 'agentsCpu', 'trackers', 'data', 'finish', 'blur', 'audioFx', 'drums', 'jfa', 'gpuParticles', 'passes', 'agentsGpu'];
+export const KIT_GROUPS: KitGroup[] = ['script', 'agentsCpu', 'trackers', 'midi', 'data', 'finish', 'blur', 'audioFx', 'drums', 'jfa', 'gpuParticles', 'passes', 'agentsGpu'];
 /** What each group is, as the export dialog says it. */
 export const KIT_GROUP_NAMES: Record<KitGroup, string> = {
-  script: 'Script layers (p5 and 3D)', agentsCpu: 'Agents layers', trackers: 'Hand, face and pose tracking', data: 'Data', finish: 'Finish effects and Water layers',
+  script: 'Script layers (p5 and 3D)', agentsCpu: 'Agents layers', trackers: 'Hand, face and pose tracking', midi: 'MIDI (locks, note ranges and the pad grid)', data: 'Data', finish: 'Finish effects and Water layers',
   blur: 'Blur (for Finish and particles)', audioFx: 'Audio effects', drums: 'Drum pads and the Audio engine', jfa: 'The Layers node', gpuParticles: 'Particles', passes: 'Pass nodes', agentsGpu: 'Agents',
 };
 
@@ -561,7 +549,7 @@ const KIT_API: [string, string, KitGroup?, string?][] = [
   ['face', '{ create: fcCreate, update: fcUpdate, read: fcRead, gate: fcGate, point: fcPoint }', 'trackers'],
   ['pose', '{ create: psCreate, update: psUpdate, read: psRead, gate: psGate, point: psPoint }', 'trackers'],
   ['data', '{ unit: kdUnit, column: kdColumn }', 'data'],
-  ['midi', '{ lockRecord: kmLockRecord, lockRead: kmLockRead, rangeRead: kmRangeRead, noteUnit: kmNoteUnit, gridFit: kmGridFit, gridMessage: kmGridMessage, gridFill: kmGridFill, gridRead: kmGridRead }'],
+  ['midi', '{ lockRecord: kmLockRecord, lockRead: kmLockRead, rangeRead: kmRangeRead, noteUnit: kmNoteUnit, gridFit: kmGridFit, gridMessage: kmGridMessage, gridFill: kmGridFill, gridRead: kmGridRead }', 'midi'],
   ['finish', '{ create: fnCreate, active: fnActive, mapLayers: fnMapLayers, usesMotion: fnUsesMotion, looks: { create: fnLookNew, act: fnLookAct, step: fnLookStep, value: fnLookValue, reset: fnLookReset, is: fnLookIs } }', 'finish'],
   ['audioFx', '{ chain: afCreateChain, loadWorklet: afLoadWorklet, needsWorklet: afNeedsWorklet }', 'audioFx'],
   ['drumPads', '{ sampler: dpCreateSampler, numbers: dpHitNumbers, key: dpKey, synth: dpSynthBuffer, padOfKey: dpPadOfKey, padOfNote: dpPadOfNote, padOfCell: dpPadOfCell, slots: dpSlots, pick: dpPickPad, hash: dpHash01 }', 'drums'],
@@ -591,7 +579,8 @@ export function kitGroupsFor(bundle: ReturnType<typeof playBundle>): Set<KitGrou
   const g = new Set<KitGroup>();
   if (/"kind":"script"|"code"|"sketch/.test(json) || play.layerKinds?.length || playUses3D(play)) g.add('script');
   if (json.includes('"kind":"agents"')) g.add('agentsCpu');
-  if (play.hands || play.face || play.pose || bundle.tracks || bundle.hands || /hand|face|pose/i.test(json)) g.add('trackers');
+  // Never 'trackers' or 'midi': a web page doesn't track hands, faces or bodies or hear MIDI
+  // (play/exportScope.ts holds what they drive still). Only a Present canvas (host) keeps them.
   if (bundle.datasets || /"kind":"data"|dataset/i.test(json)) g.add('data');
   if (play.finish || /"kind":"water"|look/i.test(json)) g.add('finish');
   if (play.audioFx) g.add('audioFx');

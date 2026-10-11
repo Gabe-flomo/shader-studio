@@ -13,10 +13,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
-import { DEFAULT_EMBED, HAND_BYTES, KIT_GROUP_NAMES, buildPlaySnippet, kitFeatureBytes, kitGroupBytes, kitGroupsFor, leftBehind, mediaCarried, playBundle, playerCoreBytes, playUses3D, threeCarried, type EmbedOptions, type KitGroup } from '../../play/exportHtml';
-import { buildGlslOnly, buildLitePage, buildLiteSnippet, liteBlockers, liteImages } from '../../play/embedLite';
+import { DEFAULT_EMBED, KIT_GROUP_NAMES, buildPlaySnippet, kitFeatureBytes, kitGroupBytes, kitGroupsFor, leftBehind, mediaCarried, playBundle, playerCoreBytes, playUses3D, threeCarried, type EmbedOptions, type KitGroup } from '../../play/exportHtml';
+import { buildGlslOnly, buildLitePage, buildLiteSnippet, liteBlockers, liteImages, liteMaps } from '../../play/embedLite';
+import { EXPORT_SUPPORTED, webExportScope } from '../../play/exportScope';
 import { saveTextFile } from '../../utils/fileIO';
-import { usesHands } from '../../types/play';
 import { useThreeSource } from '../../play/threeSource';
 import { Icon } from '../ui/Icon';
 import { Modal } from '../ui/Modal';
@@ -34,15 +34,7 @@ export function EmbedDialog({ onClose }: { onClose: () => void }) {
   const tk = useTokens();
   const playWebInput = useNodeGraphStore(s => s.playWebInput);
   const exportPlayHtml = useNodeGraphStore(s => s.exportPlayHtml);
-  const hasNulls = useNodeGraphStore(s => s.play.layers.some(l => l.kind === 'null'));
-  const usesOsc = useNodeGraphStore(s => s.play.mappings.some(m => m.source.kind === 'osc' || (m.source.kind === 'trigger' && m.source.trigger.on === 'osc')));
-  const needsGesture = useNodeGraphStore(s => !!s.play.padGrid || s.play.mappings.some(m => m.enabled && (m.source.kind === 'midi' || m.source.kind === 'pad' || m.source.kind === 'live' || m.source.kind === 'reader' || (m.source.kind === 'trigger' && (m.source.trigger.on === 'note' || m.source.trigger.on === 'audio' || m.source.trigger.on === 'reader')))));
-  // Hands from the camera need the model in the page; hands on an analysed video don't.
-  const hands = useNodeGraphStore(s => usesHands(s.play) && !s.play.hands?.source);
-  // Hand tracking's files are big (MediaPipe and the model): only in the page when asked for.
-  const [includeHands, setIncludeHands] = useState(false);
   const [packing, setPacking] = useState(false);
-  const withHands = hands && includeHands;
   const [title, setTitle] = useState('Playfield');
   const [site, setSite] = useState<MockSite>('landing');
   const [device, setDevice] = useState<'desktop' | 'phone'>('desktop');
@@ -50,8 +42,14 @@ export function EmbedDialog({ onClose }: { onClose: () => void }) {
   const [opts, setOpts] = useState<EmbedOptions>(DEFAULT_EMBED);
   const set = (p: Partial<EmbedOptions>) => setOpts(o => ({ ...o, ...p, ...(p.mode === 'background' ? { markers: false } : p.mode === 'player' ? { markers: true } : {}) }));
   const bg = opts.mode === 'background';
-  // Built once per open + option change; the snapshot is taken when the dialog opens.
-  const { input, missing } = useMemo(() => playWebInput(title), [playWebInput, title]);
+  // Built once per open + option change; the snapshot is taken when the dialog opens. A web page runs the
+  // shader, time, the pointer, keys, feedback, images and mappings from those; tracking, the camera, MIDI and
+  // the mic stay out, their controls held at their value (play/exportScope.ts).
+  const { input, missing, frozen } = useMemo(() => { const w = playWebInput(title); return { ...webExportScope(w.input), missing: w.missing }; }, [playWebInput, title]);
+  const hasNulls = input.play.layers.some(l => l.kind === 'null');
+  const usesOsc = input.play.mappings.some(m => m.source.kind === 'osc' || (m.source.kind === 'trigger' && m.source.trigger.on === 'osc'));
+  // Audio readers on a video's or the pads' sound start with the visitor's first click.
+  const needsGesture = input.play.mappings.some(m => m.enabled && (m.source.kind === 'reader' || (m.source.kind === 'trigger' && m.source.trigger.on === 'reader')));
   // A 3D Script layer brings three.js along: the snippet is rebuilt once it has loaded.
   const threeReady = useThreeSource(playUses3D(input.play));
   // The small snippet (a canvas, a WebGL2 bootstrap and the GLSL) whenever it can run the graph; the full player otherwise or when asked for.
@@ -66,8 +64,9 @@ export function EmbedDialog({ onClose }: { onClose: () => void }) {
   const groupBytes = useMemo(() => kitGroupBytes(), []);
   const blockerText = blockers.map(b => `${b.what}${b.feature && groups.includes(b.feature as KitGroup) ? ` (+${KB(kitFeatureBytes(b.feature as KitGroup))})` : ''}`).join(', ');
   const fileImages = useMemo(() => liteImages(input).filter(i => !i.inline), [input]);
-  const left = useMemo(() => leftBehind(input.play, input.media, { hands: withHands, graphs: input.backgroundGraphs ?? {}, datasets: input.datasets }), [input, withHands]);
-  const carried = useMemo(() => { const t = threeCarried(input.play); return [...(t ? [t] : []), ...mediaCarried(input.media, withHands ? 'pending' : undefined, input.play, input.datasets)]; }, [input, withHands, threeReady]); // eslint-disable-line react-hooks/exhaustive-deps
+  const left = useMemo(() => leftBehind(input.play, input.media, { graphs: input.backgroundGraphs ?? {}, datasets: input.datasets }), [input]);
+  const carried = useMemo(() => { const t = threeCarried(input.play); return [...(t ? [t] : []), ...mediaCarried(input.media, undefined, input.play, input.datasets)]; }, [input, threeReady]); // eslint-disable-line react-hooks/exhaustive-deps
+  const maps = useMemo(() => (blockers.length ? [] : liteMaps(input) ?? []), [input, blockers]);
   // Show what the reader recognises: the div, then the mount call; the runtime and the piece are elided.
   const preview = useMemo(() => {
     if (small) return snippet.split('\n').filter(l => !/^\s/.test(l) || l.includes('data-playfield')).slice(0, 8).join('\n') + '\n…';
@@ -78,19 +77,8 @@ export function EmbedDialog({ onClose }: { onClose: () => void }) {
     return [lines[0], lines[1], '<script>', `  /* Playfield runtime, ${KB(snippet.length)} with your piece */`, '  ' + mount.trim(), '</script>'].join('\n');
   }, [snippet, small]);
 
-  /** The snippet to copy: with hand tracking's files packed in when asked for (the preview never carries them). */
-  const fullSnippet = async () => {
-    if (small || !withHands) return snippet;
-    setPacking(true);
-    try {
-      const { loadHandAssets } = await import('../../play/handExport');
-      return buildPlaySnippet({ ...input, handAssets: await loadHandAssets() }, opts);
-    } finally { setPacking(false); }
-  };
   const copy = async () => {
-    let text: string;
-    try { text = await fullSnippet(); } catch { toast.error('Couldn’t pack hand tracking', { message: 'Its files didn’t load. Try again, or copy without hand tracking.' }); return; }
-    try { await navigator.clipboard.writeText(text); toast.success('Embed snippet copied', { message: `${bg ? 'Paste it inside the section you want it behind.' : 'Paste it where the player should go.'}${small && fileImages.length ? ` Put ${fileImages.map(f => f.src).join(', ')} next to the page.` : ''}` }); }
+    try { await navigator.clipboard.writeText(snippet); toast.success('Embed snippet copied', { message: `${bg ? 'Paste it inside the section you want it behind.' : 'Paste it where the player should go.'}${small && fileImages.length ? ` Put ${fileImages.map(f => f.src).join(', ')} next to the page.` : ''}` }); }
     catch { toast.error('Couldn’t copy', { message: 'Your browser blocked the clipboard. Download the page instead.' }); }
   };
   const copyGlsl = async () => {
@@ -103,9 +91,8 @@ export function EmbedDialog({ onClose }: { onClose: () => void }) {
       if (reportFileResult(await saveTextFile(buildLitePage(input, opts), `${base}.html`, 'text/html'), { failTitle: 'Couldn’t export the page', success: 'Web page exported' })) onClose();
       return;
     }
-    setPacking(withHands);
-    try { if (reportFileResult(await exportPlayHtml(opts, title, { hands: withHands }), { failTitle: 'Couldn’t export the page', success: 'Web page exported' })) onClose(); }
-    catch { toast.error('Couldn’t pack hand tracking', { message: 'Its files didn’t load. Try again, or export without hand tracking.' }); }
+    setPacking(true);
+    try { if (reportFileResult(await exportPlayHtml(opts, title), { failTitle: 'Couldn’t export the page', success: 'Web page exported' })) onClose(); }
     finally { setPacking(false); }
   };
 
@@ -145,9 +132,16 @@ export function EmbedDialog({ onClose }: { onClose: () => void }) {
       {blockers.length
         ? note(`This graph needs the full player: it uses ${blockerText}. The player is ${KB(playerCoreBytes())} before what it adds for those.`)
         : small
-          ? note(`No player, no libraries: the shader runs on its own, with the values the controls have now baked in. Set one from the page with data-u_name="…" on the div, or el.playfield.set('u_name', v).${input.play.controls.length ? ' Its controls panel doesn’t come along: choose Full player for that.' : ''}`)
+          ? note(`No player, no libraries: the shader runs on its own, with the values the controls have now baked in${maps.length ? `, and ${maps.length === 1 ? 'its mapping' : `its ${maps.length} mappings`} from the ${[...new Set(maps.map(m => (m.on === 'key' ? 'keys' : m.on === 'click' || m.on === 'down' ? 'mouse clicks' : 'mouse')))].join(' and ')}` : ''}. Set one from the page with data-u_name="…" on the div, or el.playfield.set('u_name', v).${input.play.controls.length ? ' Its controls panel doesn’t come along: choose Full player for that.' : ''}`)
           : note('The full player: the picture with its controls panel, layers and mappings, and only the parts of the player this graph uses.')}
       {small && fileImages.length > 0 && note(`Too big to carry inside the snippet: ${fileImages.map(f => `${f.label} (as ${f.src})`).join(', ')}. Put ${fileImages.length === 1 ? 'that file' : 'those files'} next to the page the snippet goes in, under that name.`)}
+
+      {frozen.length > 0 && (
+        <div data-export-frozen style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 6, padding: '8px 12px', borderRadius: radius.md, background: alpha(tk.status.warning, 0.12), color: tk.status.warningText, font: `12px/1.5 ${fontFamily.ui}` }}>
+          {frozen.map(f => <div key={f.kind}>{f.why}</div>)}
+          <div style={{ color: tk.text.muted }}>A web page runs {EXPORT_SUPPORTED.join(', ')}. The rest exports without it, held where it is now.</div>
+        </div>
+      )}
 
       {label('What')}
       <Segmented
@@ -179,7 +173,7 @@ export function EmbedDialog({ onClose }: { onClose: () => void }) {
             {usesOsc && <Toggle checked={opts.osc} onChange={osc => set({ osc })} label="Connect to the OSC bridge on load" />}
           </div>
           {note('The background never takes clicks or keys from your page, pauses when it scrolls out of view or the tab is hidden, and shows a still frame to visitors who ask for reduced motion. Keyboard and click triggers still fire.')}
-          {needsGesture && note('MIDI and live audio need a visitor to click Enable first, which a background has no button for, so those mappings stay at rest there. Use the player for them.')}
+          {needsGesture && note('Audio readers start listening at the visitor’s first click or key.')}
         </>
       ) : (
         <>
@@ -195,20 +189,11 @@ export function EmbedDialog({ onClose }: { onClose: () => void }) {
         </>
       )}
 
-      {hands && (
-        <>
-          {label('Hand tracking')}
-          <Toggle checked={includeHands} onChange={setIncludeHands} label={`Include hand tracking (+${(HAND_BYTES / 1024 / 1024).toFixed(1)} MB)`} />
-          {note(includeHands
-            ? `The page carries MediaPipe and its hand model, so it tracks hands offline, on the visitor’s device. ${bg ? 'A background has no Enable button: your page can call ShaderStudioPlay.enableHands() from a click of its own.' : 'Visitors click Enable hands; the browser asks for the camera once.'} The preview here leaves them out.`
-            : 'This setup follows hands. Without these files the page leaves hand mappings, gestures and hand-following nulls at rest.')}
-        </>
-      )}
 
       {label('Title')}
       <Field value={title} onChange={e => setTitle(e.target.value)} height={32} placeholder="Shown on the player and as the page title" />
 
-      {label(`Snippet · ${KB(snippet.length)}${withHands ? ` + ${(HAND_BYTES / 1024 / 1024).toFixed(1)} MB hand tracking` : ''}`)}
+      {label(`Snippet · ${KB(snippet.length)}`)}
       <pre style={{ margin: 0, maxHeight: 120, overflow: 'auto', padding: '8px 10px', borderRadius: radius.md, background: tk.bg.field, color: tk.text.secondary, font: `11px/1.5 ${fontFamily.mono}`, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
         {preview}
       </pre>
