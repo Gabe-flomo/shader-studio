@@ -1,8 +1,8 @@
 /**
  * BuildersSection — the Builders at the top of the node browser (docs/node-browser.md, "Builders"):
- * the 3D Scene Builder, Grid Rules and Agent Rules as three big entries, each with what it is and
- * what you can make with it. A click opens it (builders/open.ts): a new scene in the Scene
- * Builder, a new Grid Rules node with its editor open, a new rules Agents group with its rules open.
+ * one big entry, the Scene builder, with what it is and what you can make with it. A click opens
+ * it (builders/open.ts) on "What kind of scene?" (2D, agents, grid, 3D), or on the scene a builder
+ * already made in this graph (docs/scene-builder.md).
  *
  * Folds, and remembers that in this browser. While searching, only the builders the search finds
  * show ("builder", "scene", "rules"), unfolded. The desktop palette, its drawer and the phone's
@@ -33,7 +33,7 @@ export function BuildersSection({ query = '', touch = false, onOpened }: { query
           cursor: searching ? 'default' : 'pointer', color: tk.text.faint, textAlign: 'left',
         }}>
         <span style={{ fontSize: touch ? 10.5 : 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Builders</span>
-        {!open && <span style={{ font: `500 11px ${fontFamily.ui}`, color: tk.text.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>3D scenes, grid rules, agent rules</span>}
+        {!open && <span style={{ font: `500 11px ${fontFamily.ui}`, color: tk.text.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>2D, agent, grid and 3D scenes</span>}
         <span style={{ flex: 1, height: 1, background: tk.border.subtle }} />
         {!searching && <Icon name={open ? 'chevU' : 'chevD'} size={13} />}
       </button>

@@ -6,9 +6,12 @@ rule GLSL the wired [grid examples](simulations-grids.md) are built from; **Open
 that wired graph, every node with a note, for learning.
 
 **Opening it:** the node browser's **Builders** section (first, on the desktop and on a phone) →
-**Grid Rules** adds a Grid Rules node (on the Output when the graph is empty) and opens its editor;
-so do the empty canvas's right-click → **Builders** → **Grid Rules…** and the Do… bar's "new grid
-rules". "open grid rules" or "edit the rules" opens the selected (or only) one's editor; the card's
+**Scene builder** → **Grid scene** ([scene-builder.md](scene-builder.md)) adds a Grid Rules node (on
+the Output when the graph is empty) and opens its editor; so do the empty canvas's right-click →
+**Builders** → **Scene builder** and the Do… bar's "new grid rules". The editor's header reads
+**Scene builder › Grid scene** (back to the kinds); the main preview waits while it is open (its
+own CPU sketch runs); every slider resets on double-click, and right-click offers Add to Play
+controls. "open grid rules" or "edit the rules" opens the selected (or only) one's editor; the card's
 ⊞ button and its rule line do too. The card's **Rule** chip shows the rule as text ("Life B3/S23 ·
 240×135 · wrap") with **Copy** and **Open editor**.
 

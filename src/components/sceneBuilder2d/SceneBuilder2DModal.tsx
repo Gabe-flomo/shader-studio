@@ -11,7 +11,7 @@ import { useSceneBuilder2D, type Builder2DTab } from '../../sceneBuilder2d/store
 import { buildFromBuilder2D } from '../../sceneBuilder2d/actions';
 import {
   COLOUR_BYS, MAX_DUP, MAX_LEVELS, MOTIONS, OUTPUT_SHOWS, SHAPES, SHAPE_BY_KIND, SPACES, SPACE_BY_KIND, TONE_MODES,
-  allShapes, findItem, itemName, itemSummary, newBlockOp, newCombineOp, newDup, newGroup, newMotion, newShape, newSpaceOp, nextId, num, opLabel, spaceSummary,
+  allShapes, findItem, itemName, itemSummary, newBlockOp, starterScene, newCombineOp, newDup, newGroup, newMotion, newShape, newSpaceOp, nextId, num, opLabel, spaceSummary,
   type CombineOp, type GlowMode, type Item, type MotionKind, type ParamDef, type Scene2D, type ShapeSpec, type Show2D, type ToneMode, type Vec2, type Vec3,
 } from '../../sceneBuilder2d/spec';
 import { parseRecipe2D, printRecipe2D } from '../../sceneBuilder2d/recipe';
@@ -26,7 +26,6 @@ import { Card, ColourRow, NumRow, Row, rgbCss, OP_GLYPH } from '../sceneBuilder/
 import { Button, IconButton } from '../ui/Button';
 import type { IconName } from '../ui/iconPaths';
 import { Select } from '../ui/Select';
-import { RulerSlider } from '../ui/RulerSlider';
 import { Toggle } from '../ui/Choice';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
@@ -37,6 +36,9 @@ import { BLOCK_BY_ID } from '../../sceneBuilder2d/blockLibrary';
 import { SurpriseBar } from '../surprise/SurpriseBar';
 import { announceSurprise } from '../surprise/announce';
 import { newSeed } from '../../lib/surprise';
+import { SCENE_WINDOW, SceneCrumb } from '../builders/SceneCrumb';
+import { useThrottled } from '../builders/useBuilderPreview';
+import { BuilderSlider } from '../builders/BuilderSlider';
 import { finishBuilder } from '../../builders/finish';
 import { scene2dBuildIds } from '../../builders/finishScenes';
 
@@ -49,6 +51,10 @@ const TABS: Array<{ id: Builder2DTab; label: string; icon: IconName; gapBefore?:
   { id: 'recipe', label: 'Recipe', icon: 'text', gapBefore: true },
   { id: 'templates', label: 'Templates', icon: 'presets' },
 ];
+
+/** What the look and grid sliders reset to on double-click: a new scene's and a new grid's settings. */
+const DEFAULT_SCENE_2D = starterScene();
+const DEFAULT_GRID = defaultGrid();
 
 const edit = (fn: (d: Scene2D) => void, key?: string) => useSceneBuilder2D.getState().edit(fn, key);
 
@@ -72,7 +78,7 @@ function Thumb({ make, size = 44, k }: { make: () => Uint8ClampedArray; size?: n
   return <canvas ref={ref} width={size} height={size} style={{ width: size, height: size, borderRadius: 6, display: 'block', flexShrink: 0 }} />;
 }
 
-function Vec2Row({ label, value, min, max, step = 0.01, onChange, hint }: { label: ReactNode; value: Vec2; min: number; max: number; step?: number; onChange: (v: Vec2) => void; hint?: string }) {
+function Vec2Row({ label, value, min, max, step = 0.01, onChange, hint, defaultValue }: { label: ReactNode; value: Vec2; min: number; max: number; step?: number; onChange: (v: Vec2) => void; hint?: string; defaultValue?: Vec2 }) {
   const tk = useTokens();
   return (
     <Row label={label} hint={hint}>
@@ -81,7 +87,7 @@ function Vec2Row({ label, value, min, max, step = 0.01, onChange, hint }: { labe
           <div key={ax} style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
             <span style={{ font: `600 10.5px ${fontFamily.mono}`, color: tk.text.faint, width: 10 }}>{ax}</span>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <NumOnly value={value[i]} min={min} max={max} step={step} label={`${typeof label === 'string' ? label : 'value'} ${ax}`}
+              <NumOnly value={value[i]} min={min} max={max} step={step} label={`${typeof label === 'string' ? label : 'value'} ${ax}`} defaultValue={defaultValue?.[i]}
                 onChange={n => { const next = [...value] as Vec2; next[i] = n; onChange(next); }} />
             </div>
           </div>
@@ -91,19 +97,19 @@ function Vec2Row({ label, value, min, max, step = 0.01, onChange, hint }: { labe
   );
 }
 
-function NumOnly({ value, min, max, step, onChange, label }: { value: number; min: number; max: number; step: number; onChange: (n: number) => void; label: string }) {
-  return <RulerSlider value={value} min={min} max={max} step={step} onChange={onChange} ariaLabel={label} />;
+function NumOnly({ value, min, max, step, onChange, label, defaultValue }: { value: number; min: number; max: number; step: number; onChange: (n: number) => void; label: string; defaultValue?: number }) {
+  return <BuilderSlider value={value} min={min} max={max} step={step} onChange={onChange} ariaLabel={label} defaultValue={defaultValue} />;
 }
 
 /** One catalogue setting (number or x/y pair) bound to a value map. */
 function ParamControl({ p, value, onChange, keyBase }: { p: ParamDef; value: number | Vec2 | string | undefined; onChange: (v: number | Vec2) => void; keyBase: string }) {
   if (Array.isArray(p.def)) {
     const v = Array.isArray(value) ? value as Vec2 : [...p.def] as Vec2;
-    return <Vec2Row label={p.label} hint={p.hint} value={v} min={p.min} max={p.max} step={p.step} onChange={onChange} />;
+    return <Vec2Row label={p.label} hint={p.hint} value={v} min={p.min} max={p.max} step={p.step} onChange={onChange} defaultValue={p.def as Vec2} />;
   }
   const v = typeof value === 'number' ? value : p.def;
   void keyBase;
-  return <NumRow label={p.label} hint={p.hint} value={v} min={p.min} max={p.max} step={p.step} unit={p.deg ? '°' : undefined} integer={p.step === 1} onChange={onChange} />;
+  return <NumRow label={p.label} hint={p.hint} value={v} min={p.min} max={p.max} step={p.step} unit={p.deg ? '°' : undefined} integer={p.step === 1} onChange={onChange} defaultValue={p.def} />;
 }
 
 const tile = (tk: ReturnType<typeof useTokens>, on = false): React.CSSProperties => ({
@@ -382,10 +388,10 @@ function ItemInspector({ id }: { id: string }) {
       </Card>
       <Card id={`it2-${id}-place`} title="Place" summary={`at ${it.at.map(n => +n.toFixed(2)).join(', ')} · ${Math.round(it.rot)}° · ×${+it.scale.toFixed(2)}`}>
         <Vec2Row label="Position" value={it.at} min={-2} max={2} onChange={v => upd(x => { x.at = v; }, 'at')} />
-        <NumRow label="Rotate" unit="°" value={it.rot} min={-180} max={180} step={0.5} onChange={v => upd(x => { x.rot = v; }, 'rot')} />
-        <NumRow label="Scale" value={it.scale} min={0.05} max={4} onChange={v => upd(x => { x.scale = v; }, 'scale')} />
-        <NumRow label="Round" hint="Grows the edge outward, rounding corners." value={it.inflate} min={0} max={0.3} step={0.002} onChange={v => upd(x => { x.inflate = v; }, 'inflate')} />
-        <NumRow label="Outline only" hint="Above 0: only an outline this thick." value={it.hollow} min={0} max={0.2} step={0.002} onChange={v => upd(x => { x.hollow = v; }, 'hollow')} />
+        <NumRow label="Rotate" unit="°" value={it.rot} defaultValue={0} min={-180} max={180} step={0.5} onChange={v => upd(x => { x.rot = v; }, 'rot')} />
+        <NumRow label="Scale" value={it.scale} defaultValue={1} min={0.05} max={4} onChange={v => upd(x => { x.scale = v; }, 'scale')} />
+        <NumRow label="Round" hint="Grows the edge outward, rounding corners." value={it.inflate} defaultValue={0} min={0} max={0.3} step={0.002} onChange={v => upd(x => { x.inflate = v; }, 'inflate')} />
+        <NumRow label="Outline only" hint="Above 0: only an outline this thick." value={it.hollow} defaultValue={0} min={0} max={0.2} step={0.002} onChange={v => upd(x => { x.hollow = v; }, 'hollow')} />
       </Card>
       <Card id={`it2-${id}-motion`} title="Motion" summary={it.motion.length ? it.motion.map(m => m.kind).join(' · ') : 'still'}>
         {it.motion.map((m, mi) => {
@@ -482,10 +488,10 @@ function GridTab() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <Card id="grid2-cells" defaultOpen title="Cells" summary={`${grid.cols} × ${grid.rows}`}
         actions={<IconButton icon="trash" label="Remove the grid" size="sm" onClick={() => edit(d => { d.grid = null; })} />}>
-        <NumRow label="Columns" integer value={grid.cols} min={1} max={48} onChange={v => set(g => { g.cols = Math.round(v); }, 'cols')} />
-        <NumRow label="Rows" integer value={grid.rows} min={1} max={48} onChange={v => set(g => { g.rows = Math.round(v); }, 'rows')} />
-        <NumRow label="Span" hint="Half the grid's width: 1 reaches the top edge." value={grid.span} min={0.1} max={3} onChange={v => set(g => { g.span = v; }, 'span')} />
-        <NumRow label="Shape size" hint="A share of the cell: 1 touches the neighbours." value={grid.size} min={0.05} max={1.5} onChange={v => set(g => { g.size = v; }, 'size')} />
+        <NumRow label="Columns" integer value={grid.cols} defaultValue={DEFAULT_GRID.cols} min={1} max={48} onChange={v => set(g => { g.cols = Math.round(v); }, 'cols')} />
+        <NumRow label="Rows" integer value={grid.rows} defaultValue={DEFAULT_GRID.rows} min={1} max={48} onChange={v => set(g => { g.rows = Math.round(v); }, 'rows')} />
+        <NumRow label="Span" hint="Half the grid's width: 1 reaches the top edge." value={grid.span} defaultValue={DEFAULT_GRID.span} min={0.1} max={3} onChange={v => set(g => { g.span = v; }, 'span')} />
+        <NumRow label="Shape size" hint="A share of the cell: 1 touches the neighbours." value={grid.size} defaultValue={DEFAULT_GRID.size} min={0.05} max={1.5} onChange={v => set(g => { g.size = v; }, 'size')} />
       </Card>
       <Card id="grid2-shapes" defaultOpen title="Shapes" summary={grid.shapes.join(', ')}>
         <BuilderNote>Pick up to three. With more than one, a rule gives each cell its shape.</BuilderNote>
@@ -502,7 +508,7 @@ function GridTab() {
             <Select ariaLabel="Give out shapes" value={grid.assign} options={GRID_ASSIGNS.map(a => ({ value: a, label: GRID_LABELS.assign[a] }))} onChange={v => set(g => { g.assign = v as GridSpec['assign']; })} />
           </Row>
         )}
-        {grid.shapes.length > 1 && grid.assign === 'every' && <NumRow label="Every" integer value={grid.every} min={2} max={12} onChange={v => set(g => { g.every = Math.round(v); }, 'every')} />}
+        {grid.shapes.length > 1 && grid.assign === 'every' && <NumRow label="Every" integer value={grid.every} defaultValue={DEFAULT_GRID.every} min={2} max={12} onChange={v => set(g => { g.every = Math.round(v); }, 'every')} />}
       </Card>
       <Card id="grid2-ripples" defaultOpen title="Ripples" summary={grid.ripples.map(r => r.from).join(' + ')}>
         {grid.ripples.map((r, i) => (
@@ -517,12 +523,12 @@ function GridTab() {
           </div>
         ))}
         {grid.ripples.length < 4 && <Button size="sm" variant="ghost" icon="plus" onClick={() => set(g => { g.ripples.push({ from: 'corners', at: [0, 0] }); })} style={{ alignSelf: 'flex-start' }}>Another ripple</Button>}
-        <NumRow label="Rings" hint="Waves per unit of distance." value={grid.freq} min={0} max={40} step={0.1} onChange={v => set(g => { g.freq = v; }, 'freq')} />
-        <NumRow label="Speed" hint="Cycles a second. 0 stands still." value={grid.speed} min={-3} max={3} onChange={v => set(g => { g.speed = v; }, 'speed')} />
+        <NumRow label="Rings" hint="Waves per unit of distance." value={grid.freq} defaultValue={DEFAULT_GRID.freq} min={0} max={40} step={0.1} onChange={v => set(g => { g.freq = v; }, 'freq')} />
+        <NumRow label="Speed" hint="Cycles a second. 0 stands still." value={grid.speed} defaultValue={DEFAULT_GRID.speed} min={-3} max={3} onChange={v => set(g => { g.speed = v; }, 'speed')} />
         <Row label="Changes">
           <Select ariaLabel="What the ripple changes" value={grid.target} options={GRID_TARGETS.map(x => ({ value: x, label: GRID_LABELS.target[x] }))} onChange={v => set(g => { g.target = v as GridSpec['target']; })} />
         </Row>
-        {grid.target !== 'none' && <NumRow label="Amount" value={grid.amount} min={0} max={1.5} onChange={v => set(g => { g.amount = v; }, 'amount')} />}
+        {grid.target !== 'none' && <NumRow label="Amount" value={grid.amount} defaultValue={DEFAULT_GRID.amount} min={0} max={1.5} onChange={v => set(g => { g.amount = v; }, 'amount')} />}
         {grid.target === 'morph' && grid.shapes.length < 2 && <BuilderNote>Morph blends the first two shapes: pick a second one above (a box is used until you do).</BuilderNote>}
       </Card>
       <Card id="grid2-colour" title="Colour" summary={GRID_LABELS.colourBy[grid.colourBy]}>
@@ -552,8 +558,8 @@ function LookTab() {
         {(look.colour.by !== 'layer' || hasGrid) && (
           <>
             <Row label="Palette" hint={look.colour.by === 'layer' ? 'Used by the grid (Grid → Colour by ripple or cell).' : undefined}><Select ariaLabel="Palette" value={look.colour.palette} options={PALETTES.map(p => ({ value: p.key, label: p.label }))} onChange={v => set(l => { l.colour.palette = v; })} /></Row>
-            <NumRow label="Scale" value={look.colour.scale} min={0.1} max={8} onChange={v => set(l => { l.colour.scale = v; }, 'cs')} />
-            <NumRow label="Drift" hint="How fast the palette cycles over time." value={look.colour.speed} min={-1} max={1} onChange={v => set(l => { l.colour.speed = v; }, 'cv')} />
+            <NumRow label="Scale" value={look.colour.scale} defaultValue={DEFAULT_SCENE_2D.look.colour.scale} min={0.1} max={8} onChange={v => set(l => { l.colour.scale = v; }, 'cs')} />
+            <NumRow label="Drift" hint="How fast the palette cycles over time." value={look.colour.speed} defaultValue={DEFAULT_SCENE_2D.look.colour.speed} min={-1} max={1} onChange={v => set(l => { l.colour.speed = v; }, 'cv')} />
           </>
         )}
       </Card>
@@ -564,17 +570,17 @@ function LookTab() {
         </Row>
         {look.glow.mode !== 'off' && (
           <>
-            <NumRow label="Amount" value={look.glow.amount} min={0.001} max={0.05} step={0.0005} onChange={v => set(l => { l.glow.amount = v; }, 'ga')} />
-            <NumRow label="Falloff" value={look.glow.falloff} min={0.5} max={3} onChange={v => set(l => { l.glow.falloff = v; }, 'gf')} />
+            <NumRow label="Amount" value={look.glow.amount} defaultValue={DEFAULT_SCENE_2D.look.glow.amount} min={0.001} max={0.05} step={0.0005} onChange={v => set(l => { l.glow.amount = v; }, 'ga')} />
+            <NumRow label="Falloff" value={look.glow.falloff} defaultValue={DEFAULT_SCENE_2D.look.glow.falloff} min={0.5} max={3} onChange={v => set(l => { l.glow.falloff = v; }, 'gf')} />
           </>
         )}
       </Card>
       <Card id="look2-finish" title="Finish" summary={`tone ${look.tone}${look.post.bloom ? ' · bloom' : ''}${look.post.vignette ? ' · vignette' : ''}`}>
         <Row label="Tone map"><Select ariaLabel="Tone map" value={look.tone} options={TONE_MODES.map(t => ({ value: t, label: t }))} onChange={v => set(l => { l.tone = v as ToneMode; })} /></Row>
-        <NumRow label="Bloom" value={look.post.bloom} min={0} max={1.5} onChange={v => set(l => { l.post.bloom = v; }, 'pb')} />
-        <NumRow label="Vignette" value={look.post.vignette} min={0} max={1} onChange={v => set(l => { l.post.vignette = v; }, 'pv')} />
-        <NumRow label="Grain" value={look.post.grain} min={0} max={0.5} onChange={v => set(l => { l.post.grain = v; }, 'pg')} />
-        <NumRow label="Scanlines" value={look.post.scanlines} min={0} max={1} onChange={v => set(l => { l.post.scanlines = v; }, 'ps')} />
+        <NumRow label="Bloom" value={look.post.bloom} defaultValue={DEFAULT_SCENE_2D.look.post.bloom} min={0} max={1.5} onChange={v => set(l => { l.post.bloom = v; }, 'pb')} />
+        <NumRow label="Vignette" value={look.post.vignette} defaultValue={DEFAULT_SCENE_2D.look.post.vignette} min={0} max={1} onChange={v => set(l => { l.post.vignette = v; }, 'pv')} />
+        <NumRow label="Grain" value={look.post.grain} defaultValue={DEFAULT_SCENE_2D.look.post.grain} min={0} max={0.5} onChange={v => set(l => { l.post.grain = v; }, 'pg')} />
+        <NumRow label="Scanlines" value={look.post.scanlines} defaultValue={DEFAULT_SCENE_2D.look.post.scanlines} min={0} max={1} onChange={v => set(l => { l.post.scanlines = v; }, 'ps')} />
       </Card>
     </div>
   );
@@ -641,12 +647,14 @@ function TemplatesTab() {
 // ── The window ────────────────────────────────────────────────────────────────
 
 function PreviewPanel() {
-  const scene = useSceneBuilder2D(s => s.scene);
+  const live = useSceneBuilder2D(s => s.scene);
+  // One compile for the picture and the node count, following a drag at most every 50 ms.
+  const scene = useThrottled(live);
   const c = useMemo(() => compileScene2D(scene), [scene]);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '16px 14px' }}>
       <BuilderLabel>Preview</BuilderLabel>
-      <Preview2D scene={scene} />
+      <Preview2D scene={scene} compiled={c} />
       <BuilderLabel meta={`${c.nodes} nodes`}>What Build makes</BuilderLabel>
       <BuilderNote>UV → {scene.space.length ? `${scene.space.length} space transform${scene.space.length === 1 ? '' : 's'} (blocks as Expression Blocks with sliders) → ` : ''}{allShapes(scene).length} shape{allShapes(scene).length === 1 ? '' : 's'} with their placing, motion and copies{scene.grid ? ' and a grid (one Expression Block, line by line)' : ''} → colour and glow{scene.look.tone !== 'none' ? ' → Tone Map' : ''} → the Output. Every node gets a note.</BuilderNote>
     </div>
@@ -657,7 +665,10 @@ export function SceneBuilder2DModal() {
   const tk = useTokens();
   const tab = useSceneBuilder2D(s => s.tab);
   const setTab = useSceneBuilder2D(s => s.setTab);
-  const scene = useSceneBuilder2D(s => s.scene);
+  // Only what the frame shows, so a slider drag re-renders the tab it is on, not the whole window.
+  const shapes = useSceneBuilder2D(s => allShapes(s.scene).length);
+  const spaceCount = useSceneBuilder2D(s => s.scene.space.length);
+  const gridSize = useSceneBuilder2D(s => (s.scene.grid ? `${s.scene.grid.cols} × ${s.scene.grid.rows}` : null));
   const close = useSceneBuilder2D(s => s.close);
   const undo = useSceneBuilder2D(s => s.undo);
   const redo = useSceneBuilder2D(s => s.redo);
@@ -682,14 +693,14 @@ export function SceneBuilder2DModal() {
     return () => window.removeEventListener('keydown', onKey, true);
   }, [undo, redo]);
 
-  const shapes = allShapes(scene).length;
   const body = { space: <SpaceTab />, shapes: <ShapesTab />, grid: <GridTab />, look: <LookTab />, output: <OutputTab />, recipe: <RecipeTab />, templates: <TemplatesTab /> }[tab];
   void num;
   return (
     <BuilderWindow
       prefsKey="scene-builder-2d"
-      title="2D Scene Builder"
-      subtitle={`${editing ? 'Editing a built scene' : 'A new scene'} · ${scene.space.length} space · ${shapes} shape${shapes === 1 ? '' : 's'}${scene.grid ? ` · a ${scene.grid.cols} × ${scene.grid.rows} grid` : ''}`}
+      width={SCENE_WINDOW.width} height={SCENE_WINDOW.height}
+      title={<SceneCrumb kind="2d" />}
+      subtitle={`2D Scene Builder · ${editing ? 'editing a built scene' : 'a new scene'} · ${spaceCount} space · ${shapes} shape${shapes === 1 ? '' : 's'}${gridSize ? ` · a ${gridSize} grid` : ''}`}
       icon="mask"
       iconColor={tk.kind.fn}
       onClose={close}
@@ -717,7 +728,7 @@ export function SceneBuilder2DModal() {
         <span style={{ flex: 1 }} />
         {dirty && <BuilderNote style={{ color: tk.text.faint }}>Not built yet</BuilderNote>}
         <Button onClick={() => finishBuilder(close, scene2dBuildIds(useSceneBuilder2D.getState().targetSceneId))}>Done</Button>
-        <Button variant="primary" icon="rebuild" disabled={!shapes && !scene.grid} onClick={() => buildFromBuilder2D(false)}>{editing ? 'Rebuild' : 'Build'}</Button>
+        <Button variant="primary" icon="rebuild" disabled={!shapes && !gridSize} onClick={() => buildFromBuilder2D(false)}>{editing ? 'Rebuild' : 'Build'}</Button>
       </>}
     >
       <div style={{ padding: '14px 16px' }}>{body}</div>

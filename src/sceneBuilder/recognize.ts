@@ -1,6 +1,6 @@
 /**
  * recognize.ts — a 3D graph back into a Scene Builder spec ("Describe this
- * graph", docs/scene-builder.md).
+ * graph", docs/scene-builder-3d.md).
  *
  * For a graph the builder made, this reads back exactly the spec it was built
  * from (the tests check every template). For a hand-made 3D graph it is a

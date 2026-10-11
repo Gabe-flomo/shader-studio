@@ -11,15 +11,13 @@ The first section of the browser (the desktop palette, its drawer, and the phone
 
 | Builder | Makes | A click |
 |---|---|---|
-| **3D Scene Builder** | shapes, combine, bend space, look, outputs | opens the builder on a new scene ([scene-builder.md](scene-builder.md)) |
-| **Grid Rules** | Life, sand, heat, waves, Wireworld… | adds a Grid Rules node and opens its editor ([grid-rules.md](grid-rules.md)) |
-| **Agent Rules** | slime, ants, flocks, infection… | adds an Agents group in rules mode and opens its rules ([agent-rules.md](agent-rules.md)) |
-| **3D Agent Builder** | 3D slime, 3D flocks, orbiting swarms, curl smoke… | adds 3D agents (Ball Emit, a volume Trail, Draw agents through an orbiting camera) and opens their rules ([agent-rules.md](agent-rules.md) "The 3D Agent Builder") |
-| **Expression Builder** | repeats, folds, warps, distances, colour from space | opens the builder on UV; Add to graph makes an Expression Block ([expression-builder.md](expression-builder.md)) |
+| **Scene builder** | 2D shapes and kaleidoscopes, slime and flocks, Life and sand, raymarched 3D | opens on "What kind of scene?" (2D, agent, grid, 3D), or on the scene a builder already made here ([scene-builder.md](scene-builder.md)) |
 
-The section folds (the header's chevron) and stays folded in this browser. Searching "builder",
-"scene", "rules" (or what they make: "sand", "slime") shows the builders found above the node
-results. The empty canvas's right-click menu has the same builders under **Builders**, and the Do…
+The four kinds (2D Scene Builder, Agent Builder, Grid Rules, 3D Scene Builder), the 3D Agent
+Builder and the Expression Builder are not listed; they open from the Scene builder, the Do… bar
+or a card. The section folds (the header's chevron) and stays folded in this browser. Searching
+"builder", "scene", "rules" (or what they make: "sand", "slime") shows the Scene builder above the
+node results. The empty canvas's right-click menu has the same builders under **Builders**, and the Do…
 bar opens them by name: "new 3d scene", "new grid rules", "new agent rules", "edit the rules",
 "new expression"
 ([do-bar-commands.md](do-bar-commands.md), Builders). Code: `src/builders/` (registry, open,

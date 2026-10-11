@@ -519,7 +519,7 @@ export const VolumetricSceneNode: NodeDefinition = {
 
 /**
  * New 3D scene… — a palette entry, never a node in a graph: adding it opens the
- * 3D Scene Builder (docs/scene-builder.md), a form that describes a scene and
+ * 3D Scene Builder (docs/scene-builder-3d.md), a form that describes a scene and
  * builds the graph for it, every node with a note.
  */
 export const SceneBuilderNode: NodeDefinition = {

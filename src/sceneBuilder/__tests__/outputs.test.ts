@@ -1,5 +1,5 @@
 /**
- * Scene Builder outputs (sceneBuilder/output.ts, docs/scene-builder.md "Output"): every output
+ * Scene Builder outputs (sceneBuilder/output.ts, docs/scene-builder-3d.md "Output"): every output
  * compiles in Surface and GI, through a palette and a ramp too; the recipe prints and reads them
  * back; Describe reads them from the built graph; type mistakes in a recipe say how to fix them.
  */

@@ -3,6 +3,8 @@
  * Builders section, the empty-canvas right-click menu's Builders, the Do… bar's builder phrases
  * and the Recipe chips on the cards.
  *
+ *  - Scene builder (the one listed): "What kind of scene?", or the scene a builder made here
+ *    (builders/sceneKinds.ts); a kind then opens one of the four below.
  *  - 3D Scene Builder: the builder on a new scene (Build adds it to the graph).
  *  - Grid Rules: a new Grid Rules node (on the Output when the graph is empty), its editor open.
  *  - Agent Builder: its start page ("What are you making?"); picking a kind adds the group.
@@ -21,7 +23,9 @@ import { toast } from '../components/ui/toastStore';
 import { openExpressionBuilder } from '../exprBuilder/store';
 import type { GraphNode } from '../types/nodeGraph';
 import type { BuilderId } from './registry';
-import { openAgentBuilder, openGridRulesEditor, showRecipeOf } from './windows';
+import { closeSceneShell, openAgentBuilder, openGridRulesEditor, showRecipeOf } from './windows';
+import { editScene2DInBuilder } from '../sceneBuilder2d/actions';
+import { openSceneBuilderShell, type BuiltScene, type SceneKind } from './sceneKinds';
 import { openAgentRulesEditor } from '../agentRules/storeActions';
 import { builderRecipeOf } from './recipe';
 import type { BuilderAction } from './doBuilders';
@@ -56,13 +60,42 @@ export function newAgents3d(template?: string): string | null {
 
 /** Open a builder from the Builders section or menu. */
 export function openBuilder(id: BuilderId, at?: { x: number; y: number }): void {
-  if (id === 'scene') openNewSceneBuilder(at);
+  if (id === 'scenes') openSceneBuilderShell();
+  else if (id === 'scene') openNewSceneBuilder(at);
   else if (id === 'scene2d') openNewSceneBuilder2D(at);
   else if (id === 'grid') newGridRules();
   else if (id === 'agents3d') newAgents3d();
   else if (id === 'expr') openExpressionBuilder({ place: at });
   // The Agent Builder opens on its start page ("What are you making?"): nothing is added until a kind is picked.
   else openAgentBuilder(null);
+}
+
+/**
+ * The Scene builder's kind page picked a kind: its builder, on a new scene. `fromShell` tells the
+ * Agent Builder the kind page already asked about clearing the graph.
+ */
+export function startSceneKind(kind: SceneKind, o: { at?: { x: number; y: number }; fromShell?: boolean } = {}): void {
+  closeSceneShell();
+  if (kind === '3d') openNewSceneBuilder(o.at);
+  else if (kind === '2d') openNewSceneBuilder2D(o.at);
+  else if (kind === 'grid') newGridRules();
+  else openAgentBuilder(null, { fromShell: o.fromShell });
+}
+
+/** "Edit this one": a built scene in its own builder, as it was built (its saved spec, its node, its group). */
+export function editBuiltScene(b: Pick<BuiltScene, 'kind' | 'id'>): boolean {
+  closeSceneShell();
+  if (b.kind === '3d') return editSceneInBuilder(b.id);
+  if (b.kind === '2d') return editScene2DInBuilder(b.id);
+  if (b.kind === 'grid') {
+    const st = useNodeGraphStore.getState();
+    if (st.activeGroupPath.length) st.exitToRoot();
+    useNodeGraphStore.getState().focusNode(b.id);
+    openGridRulesEditor(b.id);
+    return true;
+  }
+  openAgentBuilder(b.id);
+  return true;
 }
 
 /** Copy a builder-made node's recipe (a scene's recipe, a Grid Rules rule, a group's rules as sentences). */

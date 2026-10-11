@@ -1840,7 +1840,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                     <div style={{ borderTop: `1px solid ${tc.surface0}`, margin: '4px 0' }} />
                   </>
                 )}
-                {/* The 3D Scene Builder (docs/scene-builder.md): on the empty canvas, and on any node of a scene it built. */}
+                {/* The 3D Scene Builder (docs/scene-builder-3d.md): on the empty canvas, and on any node of a scene it built. */}
                 {!clickedNode && activeGroupPath.length === 0 && (
                   <>
                     {/* Builders (builders/registry.ts): the same three as the node browser's Builders section */}

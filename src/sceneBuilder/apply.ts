@@ -1,6 +1,6 @@
 /**
  * apply.ts — putting a built scene into the user's graph, and rebuilding it
- * later without trampling their edits (docs/scene-builder.md, "Rebuild").
+ * later without trampling their edits (docs/scene-builder-3d.md, "Rebuild").
  *
  * Every node a build makes carries its role (`_sbRole`) and the build it
  * belongs to (`_sbBuild`); the Scene Group keeps the spec and, per role, what

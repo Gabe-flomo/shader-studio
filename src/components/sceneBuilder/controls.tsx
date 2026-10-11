@@ -4,7 +4,7 @@
  * the builder store's `edit`, with a coalesce key so one drag is one undo step.
  */
 import { useState, type ReactNode } from 'react';
-import { RulerSlider } from '../ui/RulerSlider';
+import { BuilderSlider } from '../builders/BuilderSlider';
 import { ColorSwatch } from '../ui/ColorPicker';
 import { Icon } from '../ui/Icon';
 import { useTokens } from '../../theme/themeStore';
@@ -24,18 +24,26 @@ export function Row({ label, hint, children }: { label: ReactNode; hint?: string
   );
 }
 
-export function NumRow({ label, value, min, max, step = 0.01, onChange, hint, integer, unit }: {
+/**
+ * A labelled number slider: the builders' slider (components/builders/BuilderSlider.tsx), so
+ * double-click resets (to `defaultValue`, else the value it came into view with), a ±N range is
+ * bipolar and typing past the end widens it.
+ */
+export function NumRow({ label, value, min, max, step = 0.01, onChange, hint, integer, unit, defaultValue, rangeKey }: {
   label: ReactNode; value: number; min: number; max: number; step?: number; onChange: (v: number) => void; hint?: string; integer?: boolean; unit?: string;
+  defaultValue?: number; rangeKey?: string;
 }) {
   return (
     <Row label={unit ? <>{label} <span style={{ opacity: 0.6 }}>{unit}</span></> : label} hint={hint}>
-      <RulerSlider value={value} min={min} max={max} step={integer ? 1 : step} integer={integer} onChange={onChange} ariaLabel={typeof label === 'string' ? label : 'value'} />
+      <BuilderSlider value={value} min={min} max={max} step={integer ? 1 : step} integer={integer} onChange={onChange} ariaLabel={typeof label === 'string' ? label : 'value'}
+        defaultValue={defaultValue} rangeKey={rangeKey} />
     </Row>
   );
 }
 
-export function Vec3Row({ label, value, min, max, step = 0.01, onChange, hint, axes = ['X', 'Y', 'Z'] }: {
+export function Vec3Row({ label, value, min, max, step = 0.01, onChange, hint, axes = ['X', 'Y', 'Z'], defaultValue }: {
   label: ReactNode; value: Vec3; min: number; max: number; step?: number; onChange: (v: Vec3) => void; hint?: string; axes?: [string, string, string];
+  defaultValue?: Vec3;
 }) {
   const tk = useTokens();
   return (
@@ -45,7 +53,7 @@ export function Vec3Row({ label, value, min, max, step = 0.01, onChange, hint, a
           <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
             <span style={{ font: `600 10.5px ${fontFamily.mono}`, color: tk.text.faint, width: 10 }}>{axes[i]}</span>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <RulerSlider value={v} min={min} max={max} step={step} ariaLabel={`${typeof label === 'string' ? label : 'value'} ${axes[i]}`}
+              <BuilderSlider value={v} min={min} max={max} step={step} ariaLabel={`${typeof label === 'string' ? label : 'value'} ${axes[i]}`} defaultValue={defaultValue?.[i]}
                 onChange={n => { const next = [...value] as Vec3; next[i] = n; onChange(next); }} />
             </div>
           </div>

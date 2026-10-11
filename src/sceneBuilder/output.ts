@@ -1,5 +1,5 @@
 /**
- * output.ts — what a built 3D scene shows (docs/scene-builder.md, "Output").
+ * output.ts — what a built 3D scene shows (docs/scene-builder-3d.md, "Output").
  *
  * The picture is the default. The march itself measures more for every pixel, and the March Loop
  * / GI Lit March already hand those out as sockets: how far the ray went (Distance, Depth), which

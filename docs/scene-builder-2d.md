@@ -1,6 +1,6 @@
 # 2D Scene Builder
 
-A builder for flat pictures, like the 3D Scene Builder: pick shapes, bend the space they live in, add motion and copies, set the look, and Build writes a real node graph (every node with a note). Open it from **Builders → 2D Scene Builder** in the Nodes sidebar. Right-click any node of a built scene → **Edit in 2D Scene Builder** to change it again; Rebuild keeps the settings you changed on its nodes.
+A builder for flat pictures, like the 3D Scene Builder: pick shapes, bend the space they live in, add motion and copies, set the look, and Build writes a real node graph (every node with a note). Open it from **Builders → Scene builder → 2D scene** in the Nodes sidebar ([scene-builder.md](scene-builder.md)), or the Do… bar's "new 2d scene". Right-click any node of a built scene → **Edit in 2D Scene Builder** to change it again; Rebuild keeps the settings you changed on its nodes.
 
 ## The window
 
@@ -126,14 +126,18 @@ The header's **Surprise me** makes a good-looking random scene from a seed, as o
 Tests (`src/sceneBuilder2d/__tests__/surprise.test.ts`): seeded, 30 seeds build with no warnings,
 compile and read back from their recipe, most use blocks, one undo step with the seed remembered.
 
-## One builder later
+## In the Scene builder
 
-The scene builders are to become one builder with a "what kind of scene" start page. The 2D
-builder stays self-contained for that: its data, recipe, graph, blocks, library and surprise are
-in `src/sceneBuilder2d/` (pure, no React), its window and pieces in
-`src/components/sceneBuilder2d/` (`SceneBuilder2DModal`, `SpaceBlocks`, `Preview2D`), and its
-state in its own store (`useSceneBuilder2D`). A start page only needs `openWith(scene)` (or
-`surprise(seed)`) and the window.
+The 2D Scene Builder is the Scene builder's **2D scene** ([scene-builder.md](scene-builder.md)). It
+stays self-contained: its data, recipe, graph, blocks, library and surprise are in
+`src/sceneBuilder2d/` (pure, no React), its window and pieces in `src/components/sceneBuilder2d/`
+(`SceneBuilder2DModal`, `SpaceBlocks`, `Preview2D`), and its state in its own store
+(`useSceneBuilder2D`). The kind page calls `openWith(scene)` on a new scene, or on a build's saved
+spec for **Edit this one**. Its header reads **Scene builder › 2D scene** (back to the kinds). The
+main preview is held while it is open; its own preview draws every frame at the screen's density and
+follows a slider while it moves (uniforms only when the shader stays the same). Its sliders reset on
+double-click (to the shape's, block's, look's or grid's default), are bipolar on a ±N range, and
+widen when you type past the end.
 
 ## Examples
 

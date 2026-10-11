@@ -201,14 +201,16 @@ function plainGraph(): GraphNode[] {
 }
 
 describe('the start page: clear the current graph first?', () => {
-  it('keep is the default; nothing to clear, no question', () => {
+  it('clear is the default on a graph no builder made (the Scene builder rule); Keep my graph keeps it; nothing to clear, no question', () => {
     openStart();
     expect($('[data-start-clear]')).toBeNull();
     for (const m of mounted.splice(0)) { act(() => m.root.unmount()); m.host.remove(); }
     useNodeGraphStore.setState({ nodes: plainGraph() });
     openStart();
-    expect($('[data-start-clear]')?.getAttribute('data-start-clear')).toBe('keep');
+    expect($('[data-start-clear]')?.getAttribute('data-start-clear')).toBe('clear');
     expect($('[data-start-clear]')?.textContent).toContain('Your graph has 1 node');
+    click($('[aria-label="Clear the current graph first?"] button:last-child'));
+    expect($('[data-start-clear]')?.getAttribute('data-start-clear')).toBe('keep');
     click($('[data-start-kind="trail"]'));
     expect(useNodeGraphStore.getState().nodes.some(n => n.id === 'uv')).toBe(true);
   });
@@ -216,7 +218,7 @@ describe('the start page: clear the current graph first?', () => {
   it('Clear: the graph is cleared (its own undo step) before the group is added; undo steps back through both; Back restores it all', () => {
     useNodeGraphStore.setState({ nodes: plainGraph() });
     openStart();
-    click($('[aria-label="Clear the current graph first?"] [data-value="clear"], [aria-label="Clear the current graph first?"] button:last-child'));
+    click($('[aria-label="Clear the current graph first?"] button:first-child'));
     expect($('[data-start-clear]')?.getAttribute('data-start-clear')).toBe('clear');
     expect($('[data-start-clear-note]')).toBeTruthy();
     click($('[data-start-kind="trail"]'));
@@ -234,7 +236,7 @@ describe('the start page: clear the current graph first?', () => {
   it('Back after a cleared start puts the whole graph back', () => {
     useNodeGraphStore.setState({ nodes: plainGraph() });
     openStart();
-    click($('[aria-label="Clear the current graph first?"] button:last-child'));
+    click($('[aria-label="Clear the current graph first?"] button:first-child'));
     click($('[data-start-kind="particles"]'));
     click($('[data-studio-back]'));
     expect(useNodeGraphStore.getState().nodes.map(n => n.id)).toEqual(['uv', 'out']);

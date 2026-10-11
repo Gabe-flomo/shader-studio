@@ -73,6 +73,20 @@ export function rangeEdges(value: number, min: number, max: number, unit: number
   return { lo: lo > -reach ? lo : null, hi: hi < reach ? hi : null };
 }
 
+/** Whether a range runs symmetrically both ways about zero (−N … N): such a slider is shown bipolar. */
+export const isSymmetricRange = (min: number, max: number) => min < 0 && max > 0 && Math.abs(min + max) <= 1e-9 * Math.max(1, max);
+
+/**
+ * A bipolar (centred) ruler: where zero is, in px from the needle, and the band between zero and
+ * the needle (left/width in px from the needle), kept within `reach` either side. Null when the
+ * range isn't symmetric about zero.
+ */
+export function bipolarBand(value: number, min: number, max: number, unit: number, reach = 2000): { zero: number; left: number; width: number } | null {
+  if (!isSymmetricRange(min, max)) return null;
+  const zero = Math.max(-reach, Math.min(reach, ((0 - value) / unit) * PX_PER_UNIT));
+  return { zero, left: Math.min(zero, 0), width: Math.abs(zero) };
+}
+
 export { niceCeil, rangeAfterTyping, rangeIncluding } from '../../lib/rangeMath';
 
 export function clampToStep(n: number, min: number, max: number, step: number): number {

@@ -67,6 +67,8 @@ import { type Box, type LegendEntry, entryForFocus, focusOfEntry, legendEntries,
 import { onlyWhenText } from '../../agentBuilder/onlyWhen';
 import { DEMO_H, DEMO_W, FocusDemo, ViewportLegend, type ViewportLink } from './ViewportLegend';
 import { Icon } from '../ui/Icon';
+import { SceneCrumb } from '../builders/SceneCrumb';
+import { backToSceneKinds, builderMade } from '../../builders/sceneKinds';
 import { AdvancedRules, type AdvancedView } from './AdvancedRules';
 import { SurpriseBar } from '../surprise/SurpriseBar';
 import { surpriseBuilderAction, useSurpriseSeeds } from '../surprise/surpriseActions';
@@ -74,20 +76,28 @@ import { newSeed } from '../../lib/surprise';
 
 type Section = SectionId | 'advanced';
 
-export function AgentBuilder({ groupId, onClose, onOpenGroup }: {
+export function AgentBuilder({ groupId, onClose, onOpenGroup, fromShell = false }: {
   groupId: string | null; onClose: () => void;
+  /**
+   * Opened from the Scene builder's kind page (builders/sceneKinds.ts), which already asked whether
+   * to clear the graph and what to do with scenes already there: the start page asks neither.
+   */
+  fromShell?: boolean;
   /** The builder moved to a group it made (the host keeps its window on it). */
   onOpenGroup?: (id: string | null) => void;
 }) {
   const [made, setMade] = useState<{ groupId: string; before: GraphNode[] } | null>(null);
   const [startSpace, setStartSpace] = useState<'2d' | '3d'>('2d');
-  // The start page's "Clear the graph first?" (keep is the default).
-  const [clearFirst, setClearFirst] = useState<'keep' | 'clear'>('keep');
+  // The start page's "Clear the graph first?": clear by default, unless a builder made what is
+  // there or Add another was picked (the Scene builder's rule for every kind, docs/scene-builder.md).
+  const [clearChoice, setClearFirst] = useState<'keep' | 'clear' | null>(null);
   // Opened with builder groups already in the graph: Edit this one / Start over / Add another. Null until answered.
   const [answer, setAnswer] = useState<{ to: 'add' | 'over'; gone?: string } | null>(null);
   const groupsKey = useNodeGraphStore(s => JSON.stringify(builderGroups(s.nodes)));
   const groups = useMemo(() => JSON.parse(groupsKey) as BuilderGroup[], [groupsKey]);
-  const clearable = useNodeGraphStore(s => clearableCount(s.nodes));
+  const clearable = useNodeGraphStore(s => (fromShell ? 0 : clearableCount(s.nodes)));
+  const madeByBuilder = useNodeGraphStore(s => builderMade(s.nodes));
+  const clearFirst = clearChoice ?? (answer?.to === 'add' || madeByBuilder ? 'keep' : 'clear');
   const id = groupId ?? made?.groupId ?? null;
   const pick = (card: StartCard) => {
     // "Clear the graph first": its own undo step, before the one that adds the group; Back brings the whole graph back.
@@ -97,7 +107,7 @@ export function AgentBuilder({ groupId, onClose, onOpenGroup }: {
     setMade({ groupId: r.groupId, before: original ?? r.before });
     onOpenGroup?.(r.groupId);
   };
-  if (!id && groups.length && !answer) {
+  if (!id && groups.length && !answer && !fromShell) {
     return <ExistingPrompt groups={groups} onClose={onClose}
       onEdit={g => onOpenGroup?.(g)}
       onStartOver={g => { const label = groups.find(x => x.id === g)?.label; if (removeAgentSetup(g)) setAnswer({ to: 'over', gone: label }); }}
@@ -129,7 +139,7 @@ function ExistingPrompt({ groups, onEdit, onStartOver, onAdd, onClose }: {
   const sel = groups.find(g => g.id === picked) ?? groups[0];
   const many = groups.length > 1;
   return (
-    <StudioShell prefsKey="agent-builder" icon="swarm" title="Agent Builder" kind={many ? `${groups.length} Agents groups in this graph` : 'An Agents group is already here'} onClose={onClose}>
+    <StudioShell prefsKey="agent-builder" icon="swarm" title="Agent Builder" crumb={<SceneCrumb kind="agents" />} kind={many ? `${groups.length} Agents groups in this graph` : 'An Agents group is already here'} onClose={onClose}>
       <div data-agent-existing style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '48px 24px', gap: 20 }}
         onKeyDown={e => { if (e.key === 'Enter' && (e.target as HTMLElement).tagName !== 'BUTTON') onEdit(sel.id); }}>
         <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, textAlign: 'center' }}>
@@ -183,7 +193,8 @@ function StartPage({ space, onSpace, onPick, onClose, clearable, clearFirst, onC
 }) {
   const tk = useTokens();
   return (
-    <StudioShell prefsKey="agent-builder" icon="swarm" title="Agent Builder" kind="What are you making?" onClose={onClose}>
+    <StudioShell prefsKey="agent-builder" icon="swarm" title="Agent Builder" crumb={<SceneCrumb kind="agents" />} kind="What are you making?" onClose={onClose}
+      onBack={backToSceneKinds} backLabel="Back to “What kind of scene?”">
       <div data-agent-start style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '36px 24px', gap: 22 }}>
         <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
           <b style={{ fontSize: 20, fontWeight: 650, letterSpacing: '-0.01em' }}>What are you making?</b>
@@ -200,7 +211,7 @@ function StartPage({ space, onSpace, onPick, onClose, clearable, clearFirst, onC
               title="Clear: everything but the Output goes first, as an undo step of its own (undo, or Back, brings it all back). Keep: the new group is added beside what is there.">
               Your graph has {clearable} {clearable === 1 ? 'node' : 'nodes'}:
               <Segmented ariaLabel="Clear the current graph first?" value={clearFirst} onChange={onClearFirst}
-                options={[{ value: 'keep' as const, label: 'Keep them' }, { value: 'clear' as const, label: 'Clear the graph first' }]} />
+                options={[{ value: 'clear' as const, label: 'Clear and start over' }, { value: 'keep' as const, label: 'Keep my graph' }]} />
             </span>
           )}
         </span>
@@ -439,7 +450,7 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
         </SettingRow>
         {kind === 'particles' && emit && (
           <SliderSetting id="launch" label="Shot out at" hint="Its speed at birth, along its facing (Emit's Speed)." value={num(emit.params.speed, 0)} min={0} max={3} step={0.01} onFocus={onFocusSetting}
-            onChange={v => setSetupParam(emit.id, { speed: v })} />
+            onChange={v => setSetupParam(emit.id, { speed: v })} param={{ nodeId: emit.id, key: 'speed' }} />
         )}
       </>}>
       {!emit && <span style={{ fontSize: 12, color: tk.text.muted }}>No Emit is wired into this group: they are born anywhere, all at once.</span>}
@@ -453,7 +464,7 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
         </SettingRow>
       )}
       <SliderSetting id="size" label="Size" hint={SETTING_HINTS.size} value={born.size} min={0} max={2} step={0.01} onFocus={onFocusSetting}
-        onChange={v => setSetupParam(emit?.id, { size: v })} disabled={!emit || born.shape === 'screen' || born.shape === 'point'} />
+        param={emit ? { nodeId: emit.id, key: 'size' } : undefined} onChange={v => setSetupParam(emit?.id, { size: v })} disabled={!emit || born.shape === 'screen' || born.shape === 'point'} />
       <SettingRow id="count" label="How many" hint={SETTING_HINTS.count} onFocus={onFocusSetting}>
         <Segmented size="sm" ariaLabel="How many walkers" value={born.count as typeof COUNT_OPTIONS[number]['value']} options={COUNT_OPTIONS} onChange={v => setSetupParam(groupId, { tier: v })} />
       </SettingRow>
@@ -550,16 +561,16 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
           onFocus={onFocusSetting} onChange={v => update(patchCard(set, s, 'trail', { amount: v }))} right={trailTimes('trail')} />
         {trailNode ? <>
           <SliderSetting id="fades" label="Fades" hint={SETTING_HINTS.fades} value={trail.halfLife} min={0.005} max={1} step={0.005}
-            onFocus={onFocusSetting} onChange={v => setSetupParam(trailNode.id, { halfLife: Math.max(0.005, v) })} />
+            onFocus={onFocusSetting} onChange={v => setSetupParam(trailNode.id, { halfLife: Math.max(0.005, v) })} param={{ nodeId: trailNode.id, key: 'halfLife' }} />
           <SliderSetting id="spreads" label="Spreads" hint={SETTING_HINTS.spreads} value={trail.diffuse} min={0} max={1} step={0.01}
-            onFocus={onFocusSetting} onChange={v => setSetupParam(trailNode.id, { diffuse: v })} />
+            onFocus={onFocusSetting} onChange={v => setSetupParam(trailNode.id, { diffuse: v })} param={{ nodeId: trailNode.id, key: 'diffuse' }} />
           <FadeStrip halfLife={trail.halfLife} diffuse={trail.diffuse} colour={chips.find(c => c.value === cards.trail.channel)?.dot} />
           {!d3 && <SettingRow id="food" label="Food" hint="Something painted into the trail every second, so the walkers that smell it grow over it: a shape, words, a mask or a picture (the Trail field's Add)." onFocus={onFocusSetting}>
             <WhereRow id="food" use="food" onFocus={onFocusSetting} />
           </SettingRow>}
           {!d3 && food && <>
             <SliderSetting id="foodAmount" label="How much food" hint="Trail it paints a second where it is (its Food block's amount)." value={food.amount} min={0} max={2000} step={5}
-              onFocus={onFocusSetting} onChange={v => setSetupParam(food.adapter, { amount: Math.max(0, v) })} />
+              onFocus={onFocusSetting} onChange={v => setSetupParam(food.adapter, { amount: Math.max(0, v) })} param={{ nodeId: food.adapter, key: 'amount' }} />
             <SettingRow id="foodChannel" label="Into" hint="The trail channel the food is painted into: the one the walkers smell, to grow over it." onFocus={onFocusSetting}>
               <ChipRow label="Food into" options={chips.filter(c => c.value !== 'own').map(c => ({ ...c, value: c.value as number }))} value={food.channel} onChange={v => setFoodChannel(groupId, v)} />
             </SettingRow>
@@ -597,7 +608,7 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
   const lifeIntro = emit ? (
     <BehaviourCard id="lives" picture="life" title="Lives for" hint={MORE_HINTS.life} summary={num(emit.params.life, 0) > 0 ? `${r3(num(emit.params.life, 0))} s` : 'for ever'}>
       <SliderSetting id="life" label="Seconds (0: for ever)" hint={MORE_HINTS.life} value={num(emit.params.life, 0)} min={0} max={30} step={0.1} onFocus={onFocusSetting}
-        onChange={v => setSetupParam(emit.id, { life: Math.max(0, v) })} />
+        onChange={v => setSetupParam(emit.id, { life: Math.max(0, v) })} param={{ nodeId: emit.id, key: 'life' }} />
     </BehaviourCard>
   ) : undefined;
   const lookCard = (
@@ -820,7 +831,7 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
 
   return (
     <WhereFocusContext.Provider value={whereCtx}>
-    <StudioShell prefsKey="agent-builder" icon="swarm" title={name} kind={`${kindLabel} · ${d3 ? '3D' : '2D'}`} onClose={close}
+    <StudioShell prefsKey="agent-builder" icon="swarm" title={name} crumb={<SceneCrumb kind="agents" onBack={() => { flush(); backToSceneKinds(); }} />} kind={`${kindLabel} · ${d3 ? '3D' : '2D'}`} onClose={close}
       onEscape={() => { if (drawing) { setDrawing(null); return true; } if (whereShown) { setWhereShown(null); return true; } if (!focused) return false; setFocusId(null); return true; }}
       onBack={onBack} backLabel="Back to the start (takes this group away)"
       space={{ value: d3 ? '3d' : '2d', onChange: v => { flush(); setGroupSpace(groupId, v); }, hint: 'Switching turns the whole setup (sensors and speed rescaled, Trail ↔ volume); undo switches it back.' }}

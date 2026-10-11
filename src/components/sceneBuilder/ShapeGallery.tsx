@@ -1,5 +1,5 @@
 /**
- * ShapeGallery — the Scene Builder's shapes as a grid of small pictures (docs/scene-builder.md,
+ * ShapeGallery — the Scene Builder's shapes as a grid of small pictures (docs/scene-builder-3d.md,
  * "The shape gallery"). Click (or tap) a tile to add the shape beside the selection; on a desktop,
  * drag it onto a row of the Scene tree to put it before, after or inside that row.
  *

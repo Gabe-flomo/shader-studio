@@ -1,6 +1,6 @@
 /**
  * RecipeRows — the Recipe tab's recipe as rows, styled like an Expression Block's lines
- * (docs/scene-builder.md, "Recipe"): one numbered row per clause; a combine's items each on their
+ * (docs/scene-builder-3d.md, "Recipe"): one numbered row per clause; a combine's items each on their
  * own indented line under it, its `k=` on the closing line; long settings wrap with a hanging
  * indent under the shape's name. Words are coloured (RecipeCode).
  *

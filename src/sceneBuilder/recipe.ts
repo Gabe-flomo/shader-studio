@@ -1,5 +1,5 @@
 /**
- * recipe.ts — the Scene Builder's recipe text, both ways (docs/scene-builder.md).
+ * recipe.ts — the Scene Builder's recipe text, both ways (docs/scene-builder-3d.md).
  *
  *   volumetric · smooth-union(sphere r=1, cone h=2 rot=(30,0,0)) k=0.3 · twist 0.5 · polar-repeat 6 · camera dist=4 orbit=10 · fog 0.3
  *
@@ -758,7 +758,7 @@ function dimTarget(def: ShapeDef, key: string): DimTarget[] | null {
   return null;
 }
 
-/** A value of the wrong type for a setting, with the fix where there is one (docs/scene-builder.md, "Type checks"). */
+/** A value of the wrong type for a setting, with the fix where there is one (docs/scene-builder-3d.md, "Type checks"). */
 function typeMismatch(key: string, want: 'float' | 'vec3', v: Value, wantWords?: string): string {
   const what = want === 'float' ? (wantWords ?? 'a number (a float)') : 'a number or (x, y, z)';
   if (want === 'float' && v.kind === 'vec') {

@@ -1,5 +1,5 @@
 /**
- * SceneTree — the scene as a tree in the builder's left panel (docs/scene-builder.md, "The tree").
+ * SceneTree — the scene as a tree in the builder's left panel (docs/scene-builder-3d.md, "The tree").
  *
  * Every combine is a box: its operator badge (∪ union, − subtract, ∩ intersect; smooth ones
  * with their k) over the shapes and groups inside it, indented with a guide line, so
