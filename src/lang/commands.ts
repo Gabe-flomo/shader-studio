@@ -593,7 +593,7 @@ export function commandsMarkdown(entries: ReferenceEntry[] = commandReference())
     '',
     '<!-- Generated from src/lang/commands.ts, src/lang/vocabulary.ts and src/lang/registry.ts (src/lang/reference.ts) by `npm run docs:do-bar`. Don\'t edit by hand: a test fails when it is out of date. -->',
     '',
-    'The Do… bar (⌘K) reads a small command language: no AI, the same sentence always does the same thing.',
+    'The Do… bar (⌘K, or ⌘⇧D from any page) reads a small command language: no AI, the same sentence always does the same thing.',
     'A sentence is one or more **clauses**; each starts with a **verb**, names **objects** and **references**, and takes **modifiers**.',
     'Clauses are joined by **connectors** ("then", ",", "and" before a verb) and each builds on what the last one made ("it").',
     'Before Enter the preview lists every step with the nodes, wires and values it will make; a clause it can\'t read is marked, with "did you mean", and the rest still previews.',

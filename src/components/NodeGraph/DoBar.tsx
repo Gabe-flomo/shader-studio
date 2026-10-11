@@ -125,7 +125,7 @@ function DoBarCrashed({ message }: { message: string }) {
 
 /** The canvas toolbar's Do… button. */
 export function DoBarButton() {
-  return <IconButton icon="edit" size="sm" label="Do…: type what to do (circle with a glow, repeat 6 times around, tone map it)" shortcut="⌘K" onClick={() => openDoBar()} />;
+  return <IconButton icon="edit" size="sm" label="Do…: type what to do (circle with a glow, repeat 6 times around, tone map it). ⌘⇧D opens it from any page, even while typing" shortcut="⌘K" onClick={() => openDoBar()} />;
 }
 
 function useScope(): { nodes: GraphNode[]; selected: string[]; topLevel: boolean } {

@@ -22,6 +22,7 @@ import { GRID_ASSIGNS, GRID_COLOUR_BYS, GRID_LABELS, GRID_SHAPES, GRID_TARGETS, 
 import { PALETTES } from '../../sceneBuilder/output';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { BuilderLabel, BuilderNote, BuilderWindow } from '../builders/BuilderWindow';
+import { focusRecipeEditor, useBuilderRecipeRequest } from '../../builders/windows';
 import { Card, ColourRow, NumRow, Row, rgbCss, OP_GLYPH } from '../sceneBuilder/controls';
 import { Button, IconButton } from '../ui/Button';
 import type { IconName } from '../ui/iconPaths';
@@ -679,6 +680,8 @@ export function SceneBuilder2DModal() {
   const targetSceneId = useSceneBuilder2D(s => s.targetSceneId);
   const targetExists = useNodeGraphStore(s => !!targetSceneId && s.nodes.some(n => n.id === targetSceneId));
   const editing = !!targetSceneId && targetExists;
+  // ⌘⇧D: the Recipe tab, its text focused.
+  useBuilderRecipeRequest(() => { setTab('recipe'); focusRecipeEditor('textarea[aria-label="2D scene recipe"]'); });
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

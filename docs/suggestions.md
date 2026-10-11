@@ -137,7 +137,10 @@ flat, stepped or clipped (Posterize, Floor, Step, Compare, Color, Constant, Time
 
 ## The Do… bar
 
-**⌘K**, or the ✎ button in the canvas toolbar. Type what to do; a live preview lists the steps that
+**⌘K**, or the ✎ button in the canvas toolbar. **⌘⇧D** (Ctrl+Shift+D on Windows and Linux) opens it
+from any page (Play, Present, Files… switch to the Studio first) and even while typing in a text
+field; inside a scene builder it jumps to that builder's recipe instead (docs/scene-builder.md). Both
+are listed, and remappable, on the Shortcuts page. Type what to do; a live preview lists the steps that
 will run with their values, and how each word was read. Enter runs them all as **one undo step**.
 
 ```

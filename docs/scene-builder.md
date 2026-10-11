@@ -61,6 +61,27 @@ Look, Output, Recipe, Templates) or, in the 3D Scene Builder, Grid Rules and the
 Agent Builder, the left nav of the studio shell. The Agent Builder's start page also has **‹** for the kind page. The
 kind page and every kind's window are the same size (1440 × 900), so picking a kind doesn't jump.
 
+### ⌘⇧D: straight to the recipe
+
+**⌘⇧D** (Ctrl+Shift+D on Windows and Linux) opens the Do… bar from anywhere, but inside a kind it
+jumps to that scene's recipe instead, with its text focused and ready to type (the settings panel
+unfolds if it was folded):
+
+| Kind | Where ⌘⇧D goes |
+|---|---|
+| 2D Scene Builder | the **Recipe** tab |
+| 3D Scene Builder | **Under the hood**, the recipe as text |
+| Grid Rules | **As text** |
+| Agent Builder | **Advanced rules** on **Every rule** (its When … Do … lines; the first one focused) |
+| Agent Rules window | the **Recipe** tab |
+| Grid scene | **Rules** (a Grid scene has no recipe text) |
+
+The kind page and the Agent Builder's start page have no recipe, so ⌘⇧D closes them (they would
+cover the bar) and opens the Do… bar; "new 2d scene" and the like there open a kind again.
+One mechanism (`src/builders/windows.ts`): each kind with a recipe listens while it is open
+(`useBuilderRecipeRequest`); the shortcut calls `requestBuilderRecipe()`, the topmost listener
+answers, and the Do… bar opens when nobody does. `StudioShell` unfolds its inspector on the same ask.
+
 **Done** closes the window and frames what was built on the graph (`src/builders/finish.ts`); the
 kind page's × closes it with nothing to frame.
 

@@ -989,6 +989,8 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
     const handler = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement)?.isContentEditable) return;
+      // Plain keys only: ⌘⇧D (the Do… bar), ⌘C and the like aren't tool picks.
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
       const key = e.key.toLowerCase();
       if (key === 'v') setToolMode('select');
       else if (key === 'c') setToolMode('add');

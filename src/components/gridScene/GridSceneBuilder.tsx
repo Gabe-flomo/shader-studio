@@ -33,6 +33,7 @@ import { announceSurprise } from '../surprise/announce';
 import { newSeed } from '../../lib/surprise';
 import { BlockLibrary } from '../sceneBuilder2d/SpaceBlocks';
 import { backToSceneKinds } from '../../builders/sceneKinds';
+import { useBuilderRecipeRequest } from '../../builders/windows';
 import { useGridBuilder, type GridSection } from '../../gridScene/store';
 import { buildFromGridBuilder, finishGridBuilder, makeSimulation, simulationOf } from '../../gridScene/actions';
 import { gridProgram } from '../../gridScene/glsl';
@@ -574,6 +575,8 @@ export function GridSceneBuilder() {
   const target = useGridBuilder(s => s.targetSceneId);
   const editing = useNodeGraphStore(s => !!target && s.nodes.some(n => n.id === target));
   const hasSim = useNodeGraphStore(s => !!target && !!simulationOf(s.nodes, target));
+  // ⌘⇧D: a Grid scene has no recipe text; its When … Do … rules are the nearest thing.
+  useBuilderRecipeRequest(() => useGridBuilder.getState().setSection('rules'));
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

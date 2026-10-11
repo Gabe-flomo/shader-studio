@@ -33,11 +33,12 @@ import { surpriseSceneAction, useSceneSurprise } from './surpriseActions';
 import { SceneCrumb } from '../builders/SceneCrumb';
 import { BuilderHelpContext } from '../builders/BuilderHelp';
 import { PresetCard, StudioLabel, StudioNavItem, StudioShell } from '../builders/studio/StudioShell';
-import { DescribeTab, RecipeTab } from './tabs';
+import { DescribeTab, RecipeTab, preferRecipeAsText } from './tabs';
 import { SectionHead, SectionPanel } from './sectionPanels';
 import { SceneViewport } from './SceneViewport';
 import { useSpecThumbs } from './specThumbs';
 import { finishBuilder } from '../../builders/finish';
+import { focusRecipeEditor, useBuilderRecipeRequest } from '../../builders/windows';
 import { scene3dBuildIds } from '../../builders/finishScenes';
 
 const MODE_LABEL = { surface: 'Surface', volumetric: 'Volumetric glow', glass: 'Glass', gi: 'GI lit' } as const;
@@ -115,6 +116,8 @@ export function SceneBuilderModal() {
   const [more, setMore] = useState<{ x: number; y: number } | null>(null);
   const section = sectionOfTab(tab);
   const shapes = allShapes(spec).length;
+  // ⌘⇧D: Under the hood (the recipe), its text focused.
+  useBuilderRecipeRequest(() => { preferRecipeAsText(); setHood(true); focusRecipeEditor('[data-inspector="recipe"] textarea'); });
 
   // ⌘Z / ⌘⇧Z undo the form, not the graph, while the builder is open (text fields keep their own).
   useEffect(() => {
