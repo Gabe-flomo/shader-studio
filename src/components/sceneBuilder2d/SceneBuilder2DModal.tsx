@@ -31,6 +31,7 @@ import { Toggle } from '../ui/Choice';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
 import { Preview2D, compileScene2D } from './Preview2D';
+import { DepthTab } from './DepthTab';
 import { BlockEditor, BlockLibrary, CombineEditor, SpaceView, WarpCanvas } from './SpaceBlocks';
 import { blockMap, combineMap, emptyBlock, type CombineSpec, type SpaceBlock } from '../../sceneBuilder2d/blocks';
 import { BLOCK_BY_ID } from '../../sceneBuilder2d/blockLibrary';
@@ -51,6 +52,7 @@ const TABS: Array<{ id: Builder2DTab; label: string; icon: IconName; gapBefore?:
   { id: 'space', label: 'Space', icon: 'wave' },
   { id: 'shapes', label: 'Shapes', icon: 'mask' },
   { id: 'grid', label: 'Grid', icon: 'grid' },
+  { id: 'depth', label: 'Depth', icon: 'layers' },
   { id: 'look', label: 'Look', icon: 'sun' },
   { id: 'output', label: 'Output', icon: 'eye' },
   { id: 'recipe', label: 'Recipe', icon: 'text', gapBefore: true },
@@ -728,7 +730,11 @@ function RecipeTab() {
     const r = parseRecipe2D(text);
     const errs = r.errors.map(e => (typeof e === 'string' ? e : (e as { message?: string }).message ?? String(e)));
     setErrors(errs);
-    if (!errs.length) useSceneBuilder2D.getState().replace(r.scene);
+    if (errs.length) return;
+    // A recipe doesn't carry the generated depth (an image in the library): keep it for the same picture.
+    const was = useSceneBuilder2D.getState().scene.depth;
+    if (r.scene.depth && was?.bake && was.tex === r.scene.depth.tex) r.scene.depth.bake = was.bake;
+    useSceneBuilder2D.getState().replace(r.scene);
   };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -771,7 +777,7 @@ function PreviewPanel() {
       <BuilderLabel>Preview</BuilderLabel>
       <Preview2D scene={scene} compiled={c} />
       <BuilderLabel meta={`${c.nodes} nodes`}>What Build makes</BuilderLabel>
-      <BuilderNote>UV → {scene.space.length ? `${scene.space.length} space transform${scene.space.length === 1 ? '' : 's'} (blocks as Expression Blocks with sliders) → ` : ''}{allShapes(scene).length} shape{allShapes(scene).length === 1 ? '' : 's'} with their placing, motion and copies{scene.grid ? ' and a grid (one Expression Block, line by line)' : ''} → colour and glow{scene.look.tone !== 'none' ? ' → Tone Map' : ''} → the Output. Every node gets a note.</BuilderNote>
+      <BuilderNote>UV → {scene.space.length ? `${scene.space.length} space transform${scene.space.length === 1 ? '' : 's'} (blocks as Expression Blocks with sliders) → ` : ''}{allShapes(scene).length} shape{allShapes(scene).length === 1 ? '' : 's'} with their placing, motion and copies{scene.grid ? ' and a grid (one Expression Block, line by line)' : ''}{scene.depth ? ` → a picture with depth (Depth node, Depth Mix: ${scene.depth.look === 'top' ? 'on top' : scene.depth.look})` : ''} → colour and glow{scene.look.tone !== 'none' ? ' → Tone Map' : ''} → the Output. Every node gets a note.</BuilderNote>
     </div>
   );
 }
@@ -810,7 +816,7 @@ export function SceneBuilder2DModal() {
     return () => window.removeEventListener('keydown', onKey, true);
   }, [undo, redo]);
 
-  const body = { space: <SpaceTab />, shapes: <ShapesTab />, grid: <GridTab />, look: <LookTab />, output: <OutputTab />, recipe: <RecipeTab />, templates: <TemplatesTab /> }[tab];
+  const body = { space: <SpaceTab />, shapes: <ShapesTab />, grid: <GridTab />, depth: <DepthTab />, look: <LookTab />, output: <OutputTab />, recipe: <RecipeTab />, templates: <TemplatesTab /> }[tab];
   void num;
   return (
     <BuilderWindow

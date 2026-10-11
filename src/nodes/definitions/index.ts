@@ -13,6 +13,7 @@ export { VideoInputNode };
 import { BakedNode } from './baked';
 import { DepthNode } from './depth';
 import { DepthCompositeNode, DepthLightNode, PictureEnvironmentNode } from './depthScene';
+import { DepthMixNode } from './depthMix';
 import { SplatProbeOutNode, SplatSceneNode } from './splatScene';
 import { SetSplatNode, SplatAttributesNode, SplatColorNode, SplatCropNode, SplatDissolveNode, SplatExplodeNode, SplatLookNode, SplatModOutNode, SplatPointsNode, SplatWaveNode } from './splatModifiers';
 import { TimeCubeNode, TimeCubeViewNode, TimeSliceNode } from './timeCube';
@@ -323,6 +324,8 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   baked: BakedNode,
   // Depth (docs/depth-node.md): a picture's depth from an on-device model
   depth: DepthNode,
+  // Depth Mix (docs/depth-mix.md): a picture with depth and a scene put together (size, space, occlude, fog, light, mix)
+  depthMix: DepthMixNode,
   // Depth in 3D scenes (docs/depth-node.md): a picture with depth inside a ray-marched scene
   depthComposite: DepthCompositeNode,
   splatScene: SplatSceneNode,

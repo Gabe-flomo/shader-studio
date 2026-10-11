@@ -35,6 +35,7 @@ import { PIECES_MOVES, PIECES_SIZE_BYS, PIECES_VOCABULARY, defaultPieces, printP
 import { PIECE_SHAPES } from '../nodes/definitions/pieces';
 import { GRID_ASSIGNS, GRID_COLOUR_BYS, GRID_PIC_MODES, GRID_SHAPES, GRID_TARGETS, RIPPLE_FROMS, defaultGrid, printGrid, type GridPicMode, type GridShape, type GridSpec } from './grid';
 import type { RecipeError } from '../sceneBuilder/recipe';
+import { parseDepthArgs, printDepth } from './depth';
 import { TEX_FITS, findTex, newTexUse, texSlug, type TexFit, type TexSource, type TexUse } from '../builders/textures';
 import {
   COLOUR_BYS, DEFAULT_COLOR, DEFAULT_LOOK, MAX_DUP, MAX_LEVELS, MOTIONS, MOTION_BY_KIND, SHAPES, SHAPE_BY_KIND, SHOW_WORDS, SPACES, SPACE_BY_KIND, TONE_MODES,
@@ -65,7 +66,7 @@ const SPACE_WORDS: Record<string, string> = Object.fromEntries(SPACES.flatMap(s 
 const MOTION_WORDS = [...MOTIONS.map(m => m.kind), 'ring'];
 const BUILT_IN_FN_NAMES = { space: BUILT_IN_FUNCTIONS.filter(f => f.role === 'space').map(f => f.name), shape: BUILT_IN_FUNCTIONS.filter(f => f.role === 'shape').map(f => f.name) };
 const BLOCK_WORDS = ['space-block', 'combine-blocks', 'texture'];
-const LOOK_WORDS = ['grid', 'glow', 'colour', 'color', 'tone', 'tone-map', 'tonemap', 'background', 'bg', 'bloom', 'vignette', 'grain', 'scanlines', 'output', 'show'];
+const LOOK_WORDS = ['depth-picture', 'picture-depth', 'grid', 'glow', 'colour', 'color', 'tone', 'tone-map', 'tonemap', 'background', 'bg', 'bloom', 'vignette', 'grain', 'scanlines', 'output', 'show'];
 const CLAUSE_WORDS = [...Object.keys(SHAPE_WORDS), ...Object.keys(OP_WORDS), ...Object.keys(SPACE_WORDS), ...BLOCK_WORDS, ...LOOK_WORDS];
 
 export const round = (n: number) => Math.round(n * 10000) / 10000;
@@ -629,6 +630,15 @@ class Parser {
 
   private look(scene: Scene2D, w: string, t: { at: number; end: number }, args: AstArg[]) {
     if (w === 'grid') { this.grid(scene, args); return; }
+    if (w === 'depth-picture' || w === 'picture-depth') {
+      const d = parseDepthArgs(args, {
+        key: a => a.key?.toLowerCase() ?? null, word: a => this.word(a), num: (a, what) => this.num(a, what), vec2: (a, what) => this.vec2(a, what),
+        colour: a => this.colour(a), fail: (a, m) => this.fail(a, m),
+      }, a => this.texName(a, 'depth-picture'));
+      if (!d) { this.fail(t, 'depth-picture needs a picture\'s name: depth-picture pond size look=fog.'); return; }
+      scene.depth = d;
+      return;
+    }
     const L = scene.look;
     const first = args[0];
     const firstNum = first && !first.key && first.value.k === 'num' ? first.value.v : null;
@@ -878,6 +888,7 @@ export function printRecipe2D(scene: Scene2D, opts: { multiline?: boolean; prett
   if (L.bgTex) clauses.push(['background', ...(!same(L.bg, D.bg) ? [colourText(L.bg)] : []), `picture=${fmtName(L.bgTex.tex)}`, ...printUse(L.bgTex), ...(L.bgTex.warp ? [] : ['still'])].join(' '));
   else if (!same(L.bg, D.bg)) clauses.push(`background ${colourText(L.bg)}`);
   for (const k of ['bloom', 'vignette', 'grain', 'scanlines'] as const) if (L.post[k] > 0) clauses.push(`${k} ${fmt(L.post[k])}`);
+  if (scene.depth) clauses.push(printDepth(scene.depth, { num: fmt, name: fmtName, colour: colourText }));
   if (scene.output && scene.output.show !== 'picture') clauses.push(`output ${scene.output.show}${scene.output.palette ? ` palette=${scene.output.palette}` : ''}`);
   return clauses.join(opts.multiline || opts.pretty ? '\n' : ' · ');
 }
@@ -896,6 +907,7 @@ export const RECIPE_VOCABULARY_2D = {
   shapes: SHAPES.map(s => ({ kind: s.kind, keys: s.params.map(p => p.key) })),
   itemKeys: ['at=(x,y)', 'rot=30', 'scale=1.5', 'color=teal', 'inflate=0.02', 'outline=0.02', 'glow', 'name="Sun"', 'fill=brick fit=cover|contain|stretch|tile tiles=3 zoom=1.5', 'mask=brick mask-cut=0.5 mask-invert'],
   textures: ['texture brick node=node_4 aspect=1.5', 'picture brick h=0.6 fit=cover', 'circle r=0.4 fill=brick fit=tile tiles=3', 'background picture=brick fit=cover [still]', `grid 12 picture=brick picture-mode=${GRID_PIC_MODES.join('|')}`],
+  depth: ['depth-picture pond [fit=cover] [size | size=(0.4,1.6)] [space=shift|zoom|turn shift=0.15 dir=0 focus=0] [look=top|occlude|fog|mix|light] [with=add|screen|over|tint] [picture=1] [range=(0,1)] [curve=1] [at=0.5 soft=0.05] [fog=0.9 haze=0.35 fog-color=] [light=2 own=0.55 glow=1] [near=picture|scene mix=1] [gradient=sunset gradient-on=scene|picture|both gradient-how=multiply|colorize|add gradient-amount=0.8 cycles=1 phase=0 flow=0.1]'],
   grid: [`grid 12 [rows] shape=${GRID_SHAPES.join('|')} assign=${GRID_ASSIGNS.join('|')} size=0.7 ripple=centre|corners|mouse|(x,y) freq=8 speed=0.4 target=${GRID_TARGETS.join('|')} amount=0.5 by=${GRID_COLOUR_BYS.join('|')} color= color2= glow=off picture=brick picture-mode=${GRID_PIC_MODES.join('|')}`],
   pieces: [PIECES_VOCABULARY],
   motion: ['@orbit(0.3 speed=0.25)', '@bob(0.15 dir=90)', '@spin(0.25)', '@pulse(0.25 speed=0.5)'],
