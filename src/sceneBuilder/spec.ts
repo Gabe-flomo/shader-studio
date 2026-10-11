@@ -1,5 +1,5 @@
 /**
- * spec.ts — what the 3D Scene Builder describes (docs/scene-builder.md).
+ * spec.ts — what the 3D Scene Builder describes (docs/scene-builder-3d.md).
  *
  * A scene is a tree: groups that combine their children (union, subtract,
  * intersect, each optionally smooth) and shapes at the leaves. Any item can
@@ -121,7 +121,7 @@ export const SHAPES: ShapeDef[] = [
 
 export const SHAPE_BY_KIND: Record<string, ShapeDef> = Object.fromEntries(SHAPES.map(s => [s.kind, s]));
 
-// ── Linked size (docs/scene-builder.md, "Size") ─────────────────────────────
+// ── Linked size (docs/scene-builder-3d.md, "Size") ─────────────────────────────
 
 /** The words for one dimension of a shape. */
 export const DIM_WORDS = ['width', 'height', 'depth'] as const;

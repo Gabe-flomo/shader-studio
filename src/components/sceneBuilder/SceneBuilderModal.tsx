@@ -1,5 +1,5 @@
 /**
- * SceneBuilderModal — the 3D Scene Builder window (docs/scene-builder.md).
+ * SceneBuilderModal — the 3D Scene Builder window (docs/scene-builder-3d.md).
  *
  * Left: the scene as a tree (drag to reorder and nest). Middle: the sections
  * (Shapes, Combine, Bend space, Look, Camera, Quality, Output) plus the Recipe,
@@ -23,6 +23,8 @@ import { SceneTree } from './SceneTree';
 import { ScenePreview } from './ScenePreview';
 import { SurpriseBar } from '../surprise/SurpriseBar';
 import { surpriseSceneAction, useSceneSurprise } from './surpriseActions';
+import { SCENE_WINDOW, SceneCrumb } from '../builders/SceneCrumb';
+import { useThrottled } from '../builders/useBuilderPreview';
 import { CameraTab, CombineTab, DescribeTab, LookTab, OutputTab, QualityTab, RecipeTab, ShapesTab, TemplatesTab, WarpsTab } from './tabs';
 import { finishBuilder } from '../../builders/finish';
 import { scene3dBuildIds } from '../../builders/finishScenes';
@@ -46,9 +48,11 @@ const MODE_LABEL = { surface: 'Surface', volumetric: 'Volumetric glow', glass: '
 function PreviewPanel() {
   const spec = useSceneBuilder(s => s.spec);
   const tk = useTokens();
+  // What Build makes, counted a few times a second while a slider moves (not on every tick).
+  const counted = useThrottled(spec, 250);
   const dry = useMemo(() => {
-    try { return buildSceneGraph(spec); } catch { return null; }
-  }, [spec]);
+    try { return buildSceneGraph(counted); } catch { return null; }
+  }, [counted]);
   const counts = useMemo(() => {
     const byType = new Map<string, number>();
     const walk = (list: NonNullable<typeof dry>['nodes']) => {
@@ -88,7 +92,10 @@ export function SceneBuilderModal() {
   const tk = useTokens();
   const tab = useSceneBuilder(s => s.tab);
   const setTab = useSceneBuilder(s => s.setTab);
-  const spec = useSceneBuilder(s => s.spec);
+  // Only what the frame shows (a count, the mode), so a slider drag re-renders the tab it is on,
+  // not the whole window (docs/scene-builder-3d.md, "The preview comes first").
+  const shapes = useSceneBuilder(s => allShapes(s.spec).length);
+  const mode = useSceneBuilder(s => s.spec.look.mode);
   const close = useSceneBuilder(s => s.close);
   const undo = useSceneBuilder(s => s.undo);
   const redo = useSceneBuilder(s => s.redo);
@@ -115,7 +122,6 @@ export function SceneBuilderModal() {
     return () => window.removeEventListener('keydown', onKey, true);
   }, [undo, redo]);
 
-  const shapes = allShapes(spec).length;
   const body = {
     shapes: <ShapesTab />, combine: <CombineTab />, warps: <WarpsTab />, look: <LookTab />, camera: <CameraTab />, quality: <QualityTab />, output: <OutputTab />,
     recipe: <RecipeTab />, templates: <TemplatesTab />, describe: <DescribeTab />,
@@ -124,8 +130,9 @@ export function SceneBuilderModal() {
   return (
     <BuilderWindow
       prefsKey="scene-builder"
-      title="3D Scene Builder"
-      subtitle={`${editing ? 'Editing a built scene' : 'A new scene'} · ${shapes} shape${shapes === 1 ? '' : 's'} · ${MODE_LABEL[spec.look.mode]}`}
+      width={SCENE_WINDOW.width} height={SCENE_WINDOW.height}
+      title={<SceneCrumb kind="3d" />}
+      subtitle={`3D Scene Builder · ${editing ? 'editing a built scene' : 'a new scene'} · ${shapes} shape${shapes === 1 ? '' : 's'} · ${MODE_LABEL[mode]}`}
       icon="cube"
       iconColor={tk.kind.fn}
       onClose={close}

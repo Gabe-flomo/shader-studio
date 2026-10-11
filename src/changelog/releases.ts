@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.142',
+    date: '2026-10-10',
+    title: 'One Scene builder',
+    highlights: [
+      { area: 'Studio', text: 'One Scene builder: pick 2D, Agent, Grid or 3D scene. It starts fresh by default, or reopens a scene a builder made to edit it.' },
+      { area: 'Studio', text: 'While a builder is open the canvas behind it pauses: 2D and 3D previews run twice as often, sharper, and update while you drag.' },
+      { area: 'Studio', text: 'Builder sliders work like the app\'s: double-click to reset, centred two-way sliders, type past the end to widen, right-click Play menu.' },
+    ],
+  },
+  {
     id: '2026.10.141',
     date: '2026-10-10',
     title: 'Recipes explain themselves',
@@ -802,7 +812,7 @@ export const RELEASES: Release[] = [
     date: '2026-10-07',
     title: 'A visual Scene Builder',
     highlights: [
-      { area: 'Studio', text: 'Scene Builder: a shape gallery with real thumbnails; click or drag shapes in, then edit them in an inspector.', link: { kind: 'doc', path: 'docs/scene-builder.md' } },
+      { area: 'Studio', text: 'Scene Builder: a shape gallery with real thumbnails; click or drag shapes in, then edit them in an inspector.', link: { kind: 'doc', path: 'docs/scene-builder-3d.md' } },
       { area: 'Studio', text: 'Combines nest any way you like: smooth-union two shapes, intersect that with a third, subtract a fourth. Wrap in… groups a selection.' },
       { area: 'Studio', text: 'Any shape or group can carry modifiers (move, rotate, scale, twist, round, onion…) as chips; @move(1,0.5,0) now works in recipes.' },
     ],
@@ -832,7 +842,7 @@ export const RELEASES: Release[] = [
     highlights: [
       { area: 'Studio', text: 'A Builders section tops the node browser (3D Scene Builder, Grid Rules, Agent Rules), also on right-click and in the Do… bar ("new 3d scene").' },
       { area: 'Studio', text: 'Built cards show their recipe or rule as a chip with Copy and Open, and say "edited since build" when you have changed the nodes.' },
-      { area: 'Studio', text: 'The Recipe tab colours every word and shows one row per clause, with combined shapes indented like a tree. Edit as text still works.', link: { kind: 'doc', path: 'docs/scene-builder.md' } },
+      { area: 'Studio', text: 'The Recipe tab colours every word and shows one row per clause, with combined shapes indented like a tree. Edit as text still works.', link: { kind: 'doc', path: 'docs/scene-builder-3d.md' } },
     ],
   },
   {
@@ -873,7 +883,7 @@ export const RELEASES: Release[] = [
     highlights: [
       { area: 'Studio', text: 'Builders explain themselves: How this works cards with clickable examples, ? hints on every control, and a Tips switch to hide or show them.' },
       { area: 'Studio', text: 'Type-ahead in recipes, the Do… bar and rule pickers, plus type checks that refuse bad wires and offer a fix (use its brightness, take .x).' },
-      { area: 'Studio', text: 'Scene Builder Output: depth, normal, distance, hit, steps, AO, or colour by depth/height/normal through a palette ("output depth").', link: { kind: 'doc', path: 'docs/scene-builder.md' } },
+      { area: 'Studio', text: 'Scene Builder Output: depth, normal, distance, hit, steps, AO, or colour by depth/height/normal through a palette ("output depth").', link: { kind: 'doc', path: 'docs/scene-builder-3d.md' } },
     ],
   },
   {
@@ -929,7 +939,7 @@ export const RELEASES: Release[] = [
     date: '2026-10-06',
     title: 'Scene Builder and Agent Rules',
     highlights: [
-      { area: 'Studio', text: '3D Scene Builder: describe shapes, how they combine, space warps, look and camera in a form; Build makes a real, readable node graph.', link: { kind: 'doc', path: 'docs/scene-builder.md' } },
+      { area: 'Studio', text: '3D Scene Builder: describe shapes, how they combine, space warps, look and camera in a form; Build makes a real, readable node graph.', link: { kind: 'doc', path: 'docs/scene-builder-3d.md' } },
       { area: 'Studio', text: 'Scenes round-trip as recipe text, e.g. "volumetric · smooth-union(sphere, cone) k=0.3 · twist 0.5"; Describe reads hand-made 3D graphs.' },
       { area: 'Studio', text: 'Agent Rules: write agent behaviour as When … Do … lines with named states; Open as nodes shows the same rule as ordinary nodes.', link: { kind: 'doc', path: 'docs/agent-rules.md' } },
       { area: 'Studio', text: 'New folders: 3D: Scene Builder (six scenes) and Agents: rules (slime, ants, boids, predators, infection, termites, fireflies, coral).' },

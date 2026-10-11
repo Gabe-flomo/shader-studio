@@ -13,7 +13,7 @@
  * colours are live uniforms on the picture (no recompile); a select (type, neighbourhood,
  * template, start, board size, edges, steps) recompiles.
  */
-import { useCallback, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
@@ -31,7 +31,8 @@ import { Segmented, Toggle } from '../ui/Choice';
 import { SurpriseBar } from '../surprise/SurpriseBar';
 import { surpriseGridAction, useSurpriseSeeds } from '../surprise/surpriseActions';
 import { Field } from '../ui/Field';
-import { RulerSlider } from '../ui/RulerSlider';
+import { SCENE_WINDOW, SceneCrumb } from '../builders/SceneCrumb';
+import { BuilderSlider } from '../builders/BuilderSlider';
 import { Select } from '../ui/Select';
 import { ColorSwatch } from '../ui/ColorPicker';
 import { MiniBoard, RulePreview } from './RulePreview';
@@ -83,7 +84,7 @@ function GridRulesWindow({ node, tab, setTab, tabs, onClose }: {
   return (
     <BuilderWindow
       prefsKey="grid-rules"
-      title="Grid Rules" subtitle={`${label} · ${ruleSummary(params)}`} icon="grid" width={1180} height={780} onClose={onClose}
+      title={<SceneCrumb kind="grid" />} subtitle={`Grid Rules · ${label} · ${ruleSummary(params)}`} icon="grid" width={SCENE_WINDOW.width} height={SCENE_WINDOW.height} onClose={onClose}
       tabs={{ items: tabs, value: tab, onChange: setTab, ariaLabel: 'Grid Rules sections' }}
       headerActions={<>
         <Toggle checked={keepType} onChange={setKeepType} label="Keep the type" />
@@ -106,6 +107,7 @@ function GridRulesWindow({ node, tab, setTab, tabs, onClose }: {
       </>}
     >
       <div style={{ flex: 1, padding: '16px 22px 22px', display: 'flex', flexDirection: 'column', gap: 18, font: `12.5px ${fontFamily.ui}`, color: tk.text.primary }} data-testid="grid-rule-form" data-grid-tab={tab}>
+        <GridNodeContext.Provider value={node.id}>
         {tab === 'presets' && <PresetsTab p={params} set={set} onExample={onExample} />}
         {tab === 'neighbourhood' && <NeighbourhoodTab p={params} set={set} />}
         {tab === 'rule' && (
@@ -118,6 +120,7 @@ function GridRulesWindow({ node, tab, setTab, tabs, onClose }: {
         {tab === 'brush' && <BrushTab p={params} set={set} />}
         {tab === 'colours' && <ColoursTab p={params} set={set} onExample={onExample} />}
         {tab === 'recipe' && <GridRecipeTab params={params} set={set} />}
+        </GridNodeContext.Provider>
       </div>
     </BuilderWindow>
   );
@@ -196,10 +199,15 @@ function Row({ label, children, hint }: { label: string; children: ReactNode; hi
   );
 }
 
+/** The Grid Rules node the editor is on: its sliders are that node's params (the Play menu on right-click). */
+const GridNodeContext = createContext<string | null>(null);
+
 function Slider({ p, set, k, label, min, max, step = 0.01, integer = false, hint }: { p: P; set: Setter; k: string; label: string; min: number; max: number; step?: number; integer?: boolean; hint?: string }) {
+  const nodeId = useContext(GridNodeContext);
   return (
     <Row label={label} hint={hint ?? GRID_PARAM_DEFS[k]?.hint}>
-      <RulerSlider ariaLabel={label} value={num(p, k)} min={min} max={max} step={step} integer={integer} defaultValue={GRID_DEFAULTS[k] as number} onChange={v => set({ [k]: v })} />
+      <BuilderSlider ariaLabel={label} value={num(p, k)} min={min} max={max} step={step} integer={integer} defaultValue={GRID_DEFAULTS[k] as number} onChange={v => set({ [k]: v })}
+        rangeKey={`grid:${k}`} param={nodeId ? { nodeId, key: k } : undefined} />
     </Row>
   );
 }

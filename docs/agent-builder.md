@@ -4,7 +4,7 @@ The Agent Builder makes and edits an Agents group's walkers with pictures instea
 
 ## Ways in
 
-- **Builders → Agent Builder**, the canvas menu's Builders, or the Do… bar's "new agent rules": the start page. Nothing is added until you pick a kind. When the graph already has an Agents group the builder made (a rules group on the top level), it asks first (see "Opening with a group already there").
+- **Builders → Scene builder → Agent scene** ([scene-builder.md](scene-builder.md)), the canvas menu's Builders, or the Do… bar's "new agent rules": the start page. From the Scene builder the start page doesn't ask about clearing the graph or about groups already there (the kind page asked); its header reads **Scene builder › Agent scene**, and **‹** goes back to the kinds. Nothing is added until you pick a kind. When the graph already has an Agents group the builder made (a rules group on the top level), it asks first (see "Opening with a group already there").
 - **Edit rules ↗** on a rules group's card, or a double-click on its title, opens the builder on that group, for every kind (trail followers, ants, particles, flocks, crowds, orbiters).
 - **"new 3d agents"** adds the 3D slime setup and opens it in the builder.
 - A rules group's Recipe chip (**Open rules**) opens the builder too.
@@ -28,7 +28,7 @@ Crowds have a card of their own but the Flocks sections. A crowd is a flock with
 
 ### Clear the current graph first?
 
-When the graph has anything besides its Output, the start page asks beside **Make it in**: "Your graph has N nodes: **Keep them** | **Clear the graph first**". **Keep them** is the default: the new group is added beside what is there. With **Clear the graph first** picked, a line under it says what will happen, and picking a kind first clears everything but the Output (unwired), as an undo step of its own ("Agent Builder: cleared the graph"), then adds the group as its own step. So undo takes back the group, then the clear. **Back** puts the whole graph back as it was before the clear (`agentBuilder/actions.ts clearGraphForBuilder`).
+When the graph has anything besides its Output, the start page asks beside **Make it in**: "Your graph has N nodes: **Clear and start over** | **Keep my graph**". As in the Scene builder, **Clear and start over** is the default on a graph no builder made; on a graph a builder made, or after **Add another**, **Keep my graph** is. Keep adds the new group beside what is there. With clear picked, a line under it says what will happen, and picking a kind first clears everything but the Output (unwired), as an undo step of its own ("Agent Builder: cleared the graph"), then adds the group as its own step. So undo takes back the group, then the clear. **Back** puts the whole graph back as it was before the clear (`agentBuilder/actions.ts clearGraphForBuilder`).
 
 ### Opening with a group already there
 

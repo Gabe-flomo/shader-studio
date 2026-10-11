@@ -1,5 +1,5 @@
 /**
- * Linked size (docs/scene-builder.md, "Size"): `size` sets every dimension of a shape that has
+ * Linked size (docs/scene-builder-3d.md, "Size"): `size` sets every dimension of a shape that has
  * several, `width` / `height` / `depth` set one each, the old vector form still reads, and the
  * printer writes `size=` when the dimensions are equal, else the ones that changed by name.
  */

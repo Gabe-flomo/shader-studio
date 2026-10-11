@@ -90,7 +90,7 @@ These were found by reading the code and, for the recipe, by running `parseRecip
 | D10 | **`show` and `output`.** In the bar, "output X" or "show X" wires node X to the Output. In a recipe, `output depth` or `show depth` picks what the scene shows. | `commands.ts output`, `output.ts OUTPUT_WORDS` | One verb, `output`. Its argument decides: an output word (depth, normal…) or a reference |
 | D11 | **`colour`.** The bar's `colour <ref> by <driver>` puts a palette on a value. The recipe's `colour by depth palette sunset` is an output. | `commands.ts colour`, `output.ts outputClause` | Both are `colour by <driver> [palette=<name>]`. `palette` is an alias head (§4.1) |
 | D12 | **Values.** The bar takes `falloff 8`, `8 falloff`, `6 times` and `6x`. The recipe takes `falloff=8` and positional values in a fixed order. | `doBar.ts`, `recipe.ts args` | Canonical `key=value`. The registry marks one **primary** param per head that may be written bare (§3.4) |
-| D13 | **Vectors in `@warp(…)`.** `@move(0,1,0)` fails today ("Unexpected ,", and it prints `@move(0)`); it has to be written `@move((0,1,0))`, as `docs/scene-builder.md` does for `@repeat((2,100,2))`. | `recipe.ts warpBody → args([')'])` | When a head's primary param is a vector, a call's bare numbers fill it: `@move(0,1,0)` |
+| D13 | **Vectors in `@warp(…)`.** `@move(0,1,0)` fails today ("Unexpected ,", and it prints `@move(0)`); it has to be written `@move((0,1,0))`, as `docs/scene-builder-3d.md` does for `@repeat((2,100,2))`. | `recipe.ts warpBody → args([')'])` | When a head's primary param is a vector, a call's bare numbers fill it: `@move(0,1,0)` |
 | D14 | **Grid presets clash with other words.** `swirl` (a Stages preset and a bar action), `ripples` (Smooth, and a rings alias), `diamonds` (Count, and the diamond shape), `spirals`. The bar needs a grid word for these. The key `maze` is a Count preset **and** a Smooth preset (label Labyrinth). | `doBarGridRules.ts`, `gridRules/spec.ts` | Grid lines start with `grid` outside the Grid Rules editor. Presets are named by their slugged label (`maze`, `labyrinth`) |
 | D15 | **No text in for grid stencils, blocks or agent rules.** Patterns and Blocks exist only as click grids. Agent rules exist only as the form. | `gridRules/stencils.ts`, `agentRules/spec.ts` | New grammar for them (§4.3, §4.4) |
 | D16 | **Two lists of value kinds.** Suggestions use `ValueKind` (distance, mask, colour, space, texture, scene3d, scalar). The explainer uses `Role` (space, colour, value, mask, distance, angle, time, direction, cell). | `suggestions/kinds.ts:12`, `glslPatterns/roles.ts:13` | The language's type checker uses `ValueKind`, plus the explainer's angle, time and direction where it can tell them apart (§8.6) |
@@ -1176,7 +1176,7 @@ changes colour silently. Q3 asks whether to snap instead.
 - `docs/playfield-language.md` is new and generated from the registry: grammar, dialects and
   every head.
 - `docs/do-bar-commands.md` is still generated (the edit section).
-- `docs/scene-builder.md` "The recipe language", `docs/grid-rules.md` "As text",
+- `docs/scene-builder-3d.md` "The recipe language", `docs/grid-rules.md` "As text",
   `docs/agent-rules.md` and `docs/suggestions.md` "The Do… bar" are rewritten to link to the
   language page and keep only what is domain-specific.
 - Release notes get What's new entries in each phase that changes what users see (the release

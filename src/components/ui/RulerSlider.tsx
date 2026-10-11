@@ -3,7 +3,7 @@ import { NumberInput } from '../NodeGraph/NumberInput';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import {
-  COUNT_MAX_MARKS, TICK_HEIGHT, TICK_WIDTH, clampToStep, countAfterDrag, dragStep, formatValue, rangeAfterTyping, rangeEdges, rangeIncluding, rulerTicks, rulerUnit,
+  COUNT_MAX_MARKS, TICK_HEIGHT, TICK_WIDTH, bipolarBand, clampToStep, countAfterDrag, dragStep, formatValue, rangeAfterTyping, rangeEdges, rangeIncluding, rulerTicks, rulerUnit,
   valueAfterDrag,
 } from './rulerMath';
 import { Tooltip } from './Tooltip';
@@ -57,7 +57,7 @@ function installWheelGestures(): void {
 
 export function RulerSlider({
   value, min, max, step = 0.01, defaultValue, onChange, integer = false, keyframed, disabled = false,
-  ariaLabel, touch = false, onType, onRange, hard = false, unit: unitProp,
+  ariaLabel, touch = false, onType, onRange, hard = false, unit: unitProp, bipolar = false,
 }: {
   value: number;
   min: number;
@@ -91,6 +91,12 @@ export function RulerSlider({
    * fineUnit). A function gets the range in use, which a typed value may have widened.
    */
   unit?: number | ((min: number, max: number) => number | undefined);
+  /**
+   * Bipolar: on a range symmetric about zero (−N … N), zero is marked on the ruler and the stretch
+   * from zero to the needle is tinted, so which way and how far reads at a glance. A node card's
+   * bidirectional slider and the builders' symmetric ones use it.
+   */
+  bipolar?: boolean;
 }) {
   const tk = useTokens();
   const locked = disabled || !!keyframed;
@@ -208,6 +214,7 @@ export function RulerSlider({
     </span>
   );
   const edges = rangeEdges(value, min, max, unit);
+  const band = bipolar && !integer ? bipolarBand(value, min, max, unit) : null;
   const needle = locked ? tk.text.faint : tk.accent.base;
   const outShade: CSSProperties = { position: 'absolute', top: 0, bottom: 0, background: alpha(tk.text.primary, 0.05) };
   const edgeLine = `1.5px solid ${alpha(tk.text.primary, 0.25)}`;
@@ -241,6 +248,10 @@ export function RulerSlider({
       onBlur={e => { e.currentTarget.style.boxShadow = 'none'; }}
     >
       {integer ? countMarks : <>
+      {band && <>
+        <span data-ruler-bipolar="" style={{ position: 'absolute', top: 5, bottom: 5, left: `calc(50% + ${band.left}px)`, width: band.width, background: alpha(tk.accent.base, locked ? 0.08 : 0.2), borderRadius: 2 }} />
+        <span data-ruler-zero="" style={{ position: 'absolute', top: 2, bottom: 2, left: `calc(50% + ${band.zero}px)`, width: 2, marginLeft: -1, borderRadius: 1, background: alpha(tk.accent.base, 0.55) }} />
+      </>}
       {edges.lo !== null && <span style={{ ...outShade, left: 0, width: `calc(50% + ${edges.lo}px)`, borderRight: edgeLine }} />}
       {edges.hi !== null && <span style={{ ...outShade, right: 0, left: `calc(50% + ${edges.hi}px)`, borderLeft: edgeLine }} />}
       {ticks.map(t => (

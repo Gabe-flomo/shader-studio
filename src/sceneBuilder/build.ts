@@ -1,5 +1,5 @@
 /**
- * build.ts — a Scene Builder spec as a real node graph (docs/scene-builder.md).
+ * build.ts — a Scene Builder spec as a real node graph (docs/scene-builder-3d.md).
  *
  * The graph is what a skilled user would wire by hand:
  *

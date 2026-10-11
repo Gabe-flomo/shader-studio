@@ -1,6 +1,6 @@
 /**
  * sceneBuilderExamples.ts — the "3D: Scene Builder" folder: graphs made by the
- * 3D Scene Builder from its templates (docs/scene-builder.md), exactly as
+ * 3D Scene Builder from its templates (docs/scene-builder-3d.md), exactly as
  * Build makes them, each with its recipe in its description and on its Scene
  * Group's note. Right-click a node → Edit in Scene Builder opens the recipe in
  * the form again.

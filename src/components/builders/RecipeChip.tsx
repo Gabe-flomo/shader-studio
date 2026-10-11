@@ -1,5 +1,5 @@
 /**
- * RecipeChip — the recipe of a builder-made node, on its card (docs/scene-builder.md, "The Recipe
+ * RecipeChip — the recipe of a builder-made node, on its card (docs/scene-builder-3d.md, "The Recipe
  * chip"; builders/recipe.ts):
  *
  *  - a Scene Group the 3D Scene Builder built: its recipe, and "edited since build" when its nodes

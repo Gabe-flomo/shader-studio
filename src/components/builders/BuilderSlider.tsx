@@ -1,0 +1,62 @@
+/**
+ * BuilderSlider — every builder's number slider (docs/scene-builder.md, "Sliders"), the app's own
+ * RulerSlider with the app's habits:
+ *
+ *  - double-click resets it: to its default when the builder knows one, else to the value it had
+ *    when it came into view;
+ *  - a range symmetric about zero (−N … N) is shown bipolar: zero marked, the stretch to the
+ *    needle tinted;
+ *  - typing past the end widens the range (no min/max fields), and the builder remembers the wider
+ *    range for as long as the app runs (`rangeKey`);
+ *  - where the value is a real node's param (`param`), right-click opens the Play menu the node
+ *    card has: Add to (or Remove from) Play controls.
+ */
+import { useState, type ReactNode } from 'react';
+import { RulerSlider } from '../ui/RulerSlider';
+import { isSymmetricRange } from '../ui/rulerMath';
+import { ContextMenuArea } from '../ui/ContextMenuArea';
+import { paramPlayItems } from './paramPlayMenu';
+import { widenedRanges as widened } from './builderSliderRanges';
+
+
+export interface BuilderSliderProps {
+  value: number;
+  min: number;
+  max: number;
+  step?: number;
+  integer?: boolean;
+  onChange: (v: number) => void;
+  ariaLabel: string;
+  /** What double-click goes back to. Without one, the value it had when it came into view. */
+  defaultValue?: number;
+  disabled?: boolean;
+  /** Names the slider for its remembered range ("scene3d:camera:dist"). Without one, the range lasts while it is shown. */
+  rangeKey?: string;
+  /** A real node param this slider sets: right-click offers the node card's Play menu. */
+  param?: { nodeId: string; key: string };
+  /** Force bipolar on or off (default: on for a range symmetric about zero). */
+  bipolar?: boolean;
+  hard?: boolean;
+  /** The ruler's unit (RulerSlider `unit`). */
+  unit?: number | ((min: number, max: number) => number | undefined);
+}
+
+export function BuilderSlider({ value, min, max, step, integer, onChange, ariaLabel, defaultValue, disabled, rangeKey, param, bipolar, hard, unit }: BuilderSliderProps) {
+  const [mountValue] = useState(value);
+  const [, bump] = useState(0);
+  const kept = rangeKey ? widened.get(rangeKey) : undefined;
+  const lo = kept ? Math.min(min, kept.min) : min;
+  const hi = kept ? Math.max(max, kept.max) : max;
+  const slider: ReactNode = (
+    <RulerSlider value={value} min={lo} max={hi} step={integer ? 1 : step} integer={integer} onChange={onChange} ariaLabel={ariaLabel}
+      defaultValue={defaultValue ?? mountValue} disabled={disabled} hard={hard} unit={unit}
+      bipolar={bipolar ?? isSymmetricRange(lo, hi)}
+      onRange={rangeKey ? (a, b) => { widened.set(rangeKey, { min: a, max: b }); bump(n => n + 1); } : undefined} />
+  );
+  if (!param) return <>{slider}</>;
+  return (
+    <ContextMenuArea items={() => paramPlayItems(param.nodeId, param.key)} style={{ display: 'flex', flex: 1, minWidth: 0 }}>
+      <span data-builder-param={`${param.nodeId}::${param.key}`} style={{ display: 'flex', flex: 1, minWidth: 0 }}>{slider}</span>
+    </ContextMenuArea>
+  );
+}

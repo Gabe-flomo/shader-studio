@@ -1,6 +1,11 @@
 /**
  * registry.ts — the builders, as the node browser's Builders section shows them
- * (docs/node-browser.md, "Builders"): the 3D and 2D Scene Builders, Grid Rules, Agent Rules and the
+ * (docs/node-browser.md, "Builders"). Listed: the one Scene builder (docs/scene-builder.md), which
+ * opens on "What kind of scene?" and routes to the 2D Scene Builder, the Agent Builder, Grid Rules
+ * or the 3D Scene Builder (builders/sceneKinds.ts). Those four stay here, hidden, for the entry
+ * points that open one kind straight away (the Do… bar, Recipe chips, a card's button).
+ *
+ * Every builder: the 3D and 2D Scene Builders, Grid Rules, Agent Rules and the
  * 3D Agent Builder (Agent Rules in a volume, seen through a camera) and the Expression Builder (an
  * expression grown move by move from UV, a world position or time). Each is a window that writes a
  * graph for you from a form, a few lines of text or a few clicks.
@@ -10,7 +15,7 @@
  */
 import type { IconName } from '../components/ui/iconPaths';
 
-export type BuilderId = 'scene' | 'scene2d' | 'grid' | 'agents' | 'agents3d' | 'expr';
+export type BuilderId = 'scenes' | 'scene' | 'scene2d' | 'grid' | 'agents' | 'agents3d' | 'expr';
 
 export interface BuilderInfo {
   id: BuilderId;
@@ -25,19 +30,32 @@ export interface BuilderInfo {
   /** Words the node browser's search finds it by (with the title, description and makes). */
   keywords: string[];
   /**
-   * Kept working (its code, saved setups, the Do… bar where noted) but not listed: the Expression
-   * Builder (not helpful enough yet), and the 3D Agent Builder (the Agent Builder does 2D and 3D).
+   * Kept working (its code, saved setups, the Do… bar where noted) but not listed: the four scene
+   * kinds (the Scene builder lists them on its kind page), the Expression Builder (not helpful
+   * enough yet), and the 3D Agent Builder (the Agent Builder does 2D and 3D).
    */
   hidden?: boolean;
 }
 
 export const ALL_BUILDERS: readonly BuilderInfo[] = [
   {
+    id: 'scenes', title: 'Scene builder', icon: 'presets',
+    description: 'A 2D, agent, grid or 3D scene, from a form',
+    makes: 'shapes and kaleidoscopes, slime and flocks, Life and sand, raymarched 3D',
+    action: 'Opens on "What kind of scene?" (or the scene a builder already made here)',
+    keywords: [
+      'builder', 'builders', 'scene', 'scenes', 'recipe', '2d', '3d', 'flat', 'shapes', 'sdf', 'kaleidoscope', 'raymarch',
+      'rules', 'grid', 'cellular', 'automaton', 'automata', 'cells', 'simulation', 'life', 'sand', 'wireworld',
+      'agents', 'agent', 'walkers', 'boids', 'swarm', 'flock', 'slime', 'particles', 'volume',
+    ],
+  },
+  {
     id: 'scene', title: '3D Scene Builder', icon: 'cube',
     description: '3D scenes from a form or a recipe',
     makes: 'shapes, combine, bend space, look, outputs',
     action: 'Opens the builder on a new scene',
     keywords: ['builder', 'builders', 'scene', '3d', 'raymarch', 'sdf', 'recipe'],
+    hidden: true,
   },
   {
     id: 'scene2d', title: '2D Scene Builder', icon: 'mask',
@@ -45,6 +63,7 @@ export const ALL_BUILDERS: readonly BuilderInfo[] = [
     makes: 'shapes, rings of rings, kaleidoscopes, motion, glow',
     action: 'Opens the builder on a new 2D scene',
     keywords: ['builder', 'builders', 'scene', '2d', 'flat', 'shapes', 'sdf', 'kaleidoscope', 'recipe'],
+    hidden: true,
   },
   {
     id: 'grid', title: 'Grid Rules', icon: 'grid',
@@ -52,6 +71,7 @@ export const ALL_BUILDERS: readonly BuilderInfo[] = [
     makes: 'Life, sand, heat, waves, Wireworld…',
     action: 'Adds a Grid Rules node and opens its editor',
     keywords: ['builder', 'builders', 'rules', 'grid', 'cellular', 'automaton', 'automata', 'cells', 'simulation'],
+    hidden: true,
   },
   {
     id: 'agents', title: 'Agent Builder', icon: 'swarm',
@@ -59,6 +79,7 @@ export const ALL_BUILDERS: readonly BuilderInfo[] = [
     makes: 'slime, ants, flocks, swarms, particles…',
     action: 'Opens the builder on "What are you making?" (2D or 3D)',
     keywords: ['builder', 'builders', 'rules', 'agents', 'agent', 'walkers', 'boids', 'when do', '3d', 'volume', 'swarm', 'flock', 'slime'],
+    hidden: true,
   },
   {
     id: 'agents3d', title: '3D Agent Builder', icon: 'swarm',

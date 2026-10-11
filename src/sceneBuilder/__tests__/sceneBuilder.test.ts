@@ -1,5 +1,5 @@
 /**
- * The 3D Scene Builder (docs/scene-builder.md): the recipe language both ways,
+ * The 3D Scene Builder (docs/scene-builder-3d.md): the recipe language both ways,
  * spec → graph, graph → spec (exact for builder graphs, partial for hand-made
  * ones), templates and examples compiling, and rebuilds that keep edits.
  */
