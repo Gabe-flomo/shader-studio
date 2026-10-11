@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.169',
+    date: '2026-10-11',
+    title: 'Mute anything',
+    highlights: [
+      { area: 'Studio', text: 'Mute any card in any builder (⊘): space blocks, shapes, warps, effects, rules, behaviours. Alt-click solos one. Live mutes never recompile.' },
+      { area: 'Studio', text: 'Splat scans turn and scale around their middle, so rotating no longer swings them out of view, and big edge splats are no longer clipped.' },
+      { area: 'Studio', text: 'Nested sections on cards are indented with a guide line; Position and Rotation read X/Y/Z. Splat compositing is greyed out until a world is wired.' },
+    ],
+  },
+  {
     id: '2026.10.168',
     date: '2026-10-11',
     title: 'Palettes, effects and scan walkers',
