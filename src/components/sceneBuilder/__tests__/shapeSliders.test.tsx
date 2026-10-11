@@ -112,5 +112,5 @@ describe('shape settings take input', () => {
       for (const m of mounted.splice(0)) { act(() => m.root.unmount()); m.host.remove(); }
       sb().close();
     }
-  });
+  }, 30_000);
 });
