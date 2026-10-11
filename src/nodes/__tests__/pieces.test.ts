@@ -169,7 +169,7 @@ describe('Pieces in graphs', () => {
 
 describe('Balls', () => {
   it('reads the picture at its copy\'s centre, lifted by the brightness', () => {
-    const n = node('pieceBalls', 'b', { count: 9, aspect: 1.5, lift: 2, size: 1 });
+    const n = node('pieceBalls', 'b', { layout: 'repeat', count: 9, aspect: 1.5, lift: 2, size: 1 });
     const { code } = ballsCode(n, { pos: 'P', picture: 'u_pic' });
     const src = ['uniform vec3 P;', 'vec3 g_cell3 = vec3(2.0, -1.0, 0.0);', 'vec3 g_cellSize3 = vec3(0.5, 0.5, 50.0);',
       'vec4 testPic(vec2 st, float lod) { return vec4(st, 0.0, 1.0); }', 'void main() {', code.replace(/textureLod\(u_pic, /g, 'testPic('), '  gl_FragColor = vec4(b_st, b_lift, b_dist);', '}'].join('\n');
@@ -180,5 +180,32 @@ describe('Balls', () => {
     const lum = 0.2126 * out[0] + 0.7152 * out[1];
     expect(out[2]).toBeCloseTo(2 * lum, 5);
     expect(out[3]).toBeCloseTo(2 * lum - 0.25, 4);
+  });
+
+  /** Own grid: 5 × 5 balls a unit apart (Width 5, Aspect 1), run on the CPU at `pos`. */
+  const ownGrid = (pos: [number, number, number]) => {
+    const n = node('pieceBalls', 'b', { layout: 'own', count: 5, width: 5, aspect: 1, lift: 2, size: 0.9 });
+    const { code } = ballsCode(n, { pos: 'P', picture: 'u_pic' });
+    const src = ['uniform vec3 P;', 'vec3 g_cell3 = vec3(0.0);', 'vec3 g_cellSize3 = vec3(0.0);',
+      'vec4 testPic(vec2 st, float lod) { return vec4(st, 0.0, 1.0); }', 'void main() {', code.replace(/textureLod\(u_pic, /g, 'testPic('), '  gl_FragColor = vec4(b_st, b_lift, b_dist);', '}'].join('\n');
+    return new CpuShader(src).run([0, 0], { resolution: [8, 8], time: 0, uniforms: { P: pos } })!;
+  };
+
+  it('on its own grid: finds the cell, reads its home, and is a ball there', () => {
+    const at = ownGrid([1.2, -0.9, 0]);
+    expect(at[0]).toBeCloseTo(0.3, 5); // home (1, −1) on a picture 5 wide, mirrored in X
+    expect(at[1]).toBeCloseTo(0.3, 5);
+    const lift = at[2];
+    expect(lift).toBeCloseTo(2 * (0.2126 * 0.3 + 0.7152 * 0.3), 5);
+    // At the ball's centre: inside by its radius.
+    expect(ownGrid([1, -1, lift])[3]).toBeCloseTo(-0.45, 4);
+  });
+
+  it('on its own grid: the distance never steps past a wall into a neighbour, but runs free off the edge', () => {
+    // Far in front of the ball, 0.05 from the wall to the next column: capped at the wall.
+    expect(ownGrid([1.45, -1, 6])[3]).toBeCloseTo(0.05 + 0.04 + 0.001, 4);
+    // Past the last column there is no neighbour: the plain distance to the edge ball.
+    const far = ownGrid([9, 0, 0]);
+    expect(far[3]).toBeGreaterThan(6);
   });
 });

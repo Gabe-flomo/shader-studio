@@ -62,7 +62,7 @@ export function ballsGraph(o: { across: number; aspect: number; cell: number; li
         lines: [], result: 'vec3(0.0, 0.0, amp * sin(length(c.xy) * 1.6 - t * 2.0))', outputType: 'vec3', wires: { c: ['cell', 'centre'], t: ['btime', 'time'] },
         note: ['Wave: a ring rolling out from the middle, moving each ball along Z by its distance from the centre (Repeat Cell\'s Centre), so every ball moves its own way. It is Balls\' Displace: wire any vec3 here (noise of the Centre scatters them).'],
       }),
-      n('pieceBalls', 'ball', 600, 200, { count: half * 2 + 1, aspect: o.aspect, lift: o.lift, liftBy: o.liftBy, size: 0.92, ...note([
+      n('pieceBalls', 'ball', 600, 200, { layout: 'repeat', count: half * 2 + 1, aspect: o.aspect, lift: o.lift, liftBy: o.liftBy, size: 0.92, ...note([
         `Balls: this copy's ball. It reads the picture at its cell's centre (the picture spans ${half * 2 + 1} copies across), is lifted towards the camera by the ${o.liftBy} there (Lift), and moved by the Wave.`,
       ]) }, { pos: ['sp', 'pos'], displace: ['wave', 'result'] }),
       n('sceneOutput', 'so', 900, 200, { _groupOriginal: true, ...note(['Scene Output: the distance to this copy\'s ball.']) }, { dist: ['ball', 'dist'] }),
@@ -91,7 +91,7 @@ export function ballsGraph(o: { across: number; aspect: number; cell: number; li
     n('repeatCell', 'hitCell', 940, 520, note([
       'Repeat Cell, after the loop: with the Repeat Scene and the Hit Pos wired in, it looks up which ball each ray hit.',
     ]), { scene: ['rep', 'scene'], pos: ['march', 'pos'] }),
-    n('pieceBalls', 'ballColour', 1220, 520, { count: half * 2 + 1, aspect: o.aspect, ...note([
+    n('pieceBalls', 'ballColour', 1220, 520, { layout: 'repeat', count: half * 2 + 1, aspect: o.aspect, ...note([
       'Balls, after the loop: with Repeat Cell\'s Cell wired in, its Colour is the picture at the home of the ball each ray hit (the same reading as inside the scene).',
     ]) }, { cell: ['hitCell', 'cell'], picture: ['photo', 'texture'] }),
     expr('shade', 1500, 220, {

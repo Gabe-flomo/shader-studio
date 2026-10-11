@@ -304,7 +304,16 @@ export const PiecesNode: NodeDefinition = {
 
 export const BALL_LIFT_BY = ['brightness', 'darkness', 'depth', 'none'] as const;
 
-/** The Balls node's GLSL (inside a Scene Group under Repeat Scene, or after the March Loop with Cell wired). */
+/**
+ * The Balls node's GLSL. Two layouts:
+ *  - Own grid (the default): the node is the whole grid. It finds the cell the point is in (Pieces
+ *    across × as many rows as the picture's Aspect gives, each Width ÷ Pieces across wide, centred on
+ *    the origin), measures that cell's ball, and caps the distance at the cell's walls (towards cells
+ *    that exist), so a ray never steps over a short ball's cell into a tall neighbour. It works in any
+ *    Scene Group, and after the March Loop at Hit Pos it gives the colour of the ball there.
+ *  - Repeat Scene: one ball per copy, the copy's cell from Repeat Scene (or Repeat Cell's Cell, wired
+ *    after the loop); Repeat Scene's own neighbour checks and wall cap apply.
+ */
 export function ballsCode(node: GraphNode, iv: Record<string, string>): { code: string; outputVars: Record<string, string> } {
   const id = node.id;
   const P = node.params;
@@ -312,36 +321,65 @@ export function ballsCode(node: GraphNode, iv: Record<string, string>): { code: 
   const liftBy = pick(P.liftBy, BALL_LIFT_BY, 'brightness');
   const sizeBy = pick(P.sizeBy, PIECE_SIZE_BY, 'none');
   const box = P.shape === 'box';
+  const own = P.layout !== 'repeat';
   const tex = iv.picture;
   const depth = iv.depth;
+  const pos = iv.pos || 'vec3(0.0)';
   const L: string[] = [];
   const v = (s: string) => L.push(`    ${s}\n`);
-  // The copy: Repeat Cell's Cell when wired (after the loop), else the copy being measured.
-  v(`vec3 ${id}_cell = ${iv.cell || CELL3_GLOBAL};`);
-  v(`vec2 ${id}_cs = max(${CELL3SIZE_GLOBAL}.xy, vec2(1.0e-4));`);
+  v(`float ${id}_n = max(floor(${num('count', 31)} + 0.5), 1.0);`);
+  v(`float ${id}_asp = max(${num('aspect', 1.5)}, 0.05);`);
+  if (own) {
+    v(`float ${id}_cs1 = max(${num('width', 4)}, 1.0e-3) / ${id}_n;`);
+    v(`vec2 ${id}_cs = vec2(${id}_cs1);`);
+    v(`vec2 ${id}_nm = vec2(${id}_n, max(floor(${id}_n / ${id}_asp + 0.5), 1.0));`);
+    v(`vec2 ${id}_mid = (${id}_nm - 1.0) * 0.5;`);
+    v(`vec2 ${id}_ci = clamp(floor(${pos}.xy / ${id}_cs1 + ${id}_mid + 0.5), vec2(0.0), ${id}_nm - 1.0);`);
+    v(`vec3 ${id}_cell = vec3(${id}_ci - ${id}_mid, 0.0);`);
+    v(`vec2 ${id}_span = ${id}_nm * ${id}_cs1;`);
+  } else {
+    // The copy: Repeat Cell's Cell when wired (after the loop), else the copy being measured.
+    v(`vec3 ${id}_cell = ${iv.cell || CELL3_GLOBAL};`);
+    v(`vec2 ${id}_cs = max(${CELL3SIZE_GLOBAL}.xy, vec2(1.0e-4));`);
+    v(`float ${id}_W = ${id}_n * ${id}_cs.x;`);
+    v(`vec2 ${id}_span = vec2(${id}_W, ${id}_W / ${id}_asp);`);
+  }
   v(`vec2 ${id}_home = ${id}_cell.xy * ${id}_cs;`);
-  // The picture spans Pieces across copies; its height follows Aspect. Mirror X: the March Camera's
-  // right is −X when it looks along −Z (Angle 0), so the picture reads the right way round from there.
-  v(`float ${id}_W = max(${num('count', 31)}, 1.0) * ${id}_cs.x;`);
-  v(`vec2 ${id}_span = vec2(${id}_W, ${id}_W / max(${num('aspect', 1.5)}, 0.05));`);
+  // Mirror X: the March Camera's right is −X when it looks along −Z (Angle 0), so the picture reads
+  // the right way round from there.
   v(`vec2 ${id}_st = ${id}_home / ${id}_span * vec2(${P.mirror === false ? '1.0' : '-1.0'}, 1.0) + 0.5;`);
   v(`float ${id}_in = step(0.0, ${id}_st.x) * step(${id}_st.x, 1.0) * step(0.0, ${id}_st.y) * step(${id}_st.y, 1.0);`);
   v(`vec3 ${id}_col = ${tex ? `textureLod(${tex}, clamp(${id}_st, 0.0, 1.0), 0.0).rgb` : `(0.5 + 0.5 * cos(6.2831853 * (dot(${id}_st, vec2(0.8, 0.3)) + vec3(0.0, 0.33, 0.67))))`};`);
   v(`float ${id}_lum = dot(${LUMA}, clamp(${id}_col, 0.0, 1.0));`);
   v(`float ${id}_dep = ${depth ? `textureLod(${depth}, clamp(${id}_st, 0.0, 1.0), 0.0).r` : `${id}_lum`};`);
+  v(`float ${id}_rnd = fract(sin(dot(${id}_cell.xy, vec2(12.9898, 78.233))) * 43758.5453);`);
   const drive = (by: string) => (by === 'brightness' ? `${id}_lum` : by === 'darkness' ? `(1.0 - ${id}_lum)` : by === 'depth' ? `${id}_dep` : '0.0');
   v(`float ${id}_lift = ${num('lift', 1.5)} * ${drive(liftBy)};`);
   v(`float ${id}_r = 0.5 * min(${id}_cs.x, ${id}_cs.y) * max(${num('size', 0.9)}, 0.0)${sizeBy !== 'none' ? ` * mix(clamp(${num('minSize', 0.3)}, 0.0, 1.0), 1.0, clamp(${drive(sizeBy)}, 0.0, 1.0))` : ''} * ${id}_in;`);
-  // The ball's centre in the copy's own space: lifted along Z (towards a camera at Angle 0), then displaced.
-  v(`vec3 ${id}_c = vec3(0.0, 0.0, ${id}_lift) + ${iv.displace || 'vec3(0.0)'};`);
-  v(`vec3 ${id}_q = ${iv.pos || 'vec3(0.0)'} - ${id}_c;`);
+  // Along Z (towards a camera at Angle 0): the lift, a ring wave rolling out from the middle, a
+  // random push per ball, then Displace.
+  v(`float ${id}_wave = ${num('wave', 0)} * sin(length(${id}_home) * ${num('waveFreq', 6)} - u_time * ${num('waveSpeed', 2)});`);
+  v(`vec3 ${id}_c = vec3(0.0, 0.0, ${id}_lift + ${id}_wave + ${num('jitter', 0)} * (${id}_rnd - 0.5)) + ${iv.displace || 'vec3(0.0)'};`);
+  v(`vec3 ${id}_q = ${pos} - ${own ? `vec3(${id}_home, 0.0)` : 'vec3(0.0)'} - ${id}_c;`);
   if (box) {
     v(`vec3 ${id}_b = abs(${id}_q) - vec3(${id}_r * 0.8);`);
     v(`float ${id}_dist = length(max(${id}_b, 0.0)) + min(max(${id}_b.x, max(${id}_b.y, ${id}_b.z)), 0.0) - ${id}_r * 0.2;`);
   } else v(`float ${id}_dist = length(${id}_q) - ${id}_r;`);
+  if (own) {
+    // The wall cap: never step past this cell's wall into a neighbour (only towards cells that exist).
+    v(`vec2 ${id}_f = ${pos}.xy - ${id}_home;`);
+    v(`float ${id}_wall = 1.0e5;`);
+    v(`if (${id}_ci.x < ${id}_nm.x - 1.5) ${id}_wall = min(${id}_wall, 0.5 * ${id}_cs1 - ${id}_f.x);`);
+    v(`if (${id}_ci.x > 0.5) ${id}_wall = min(${id}_wall, 0.5 * ${id}_cs1 + ${id}_f.x);`);
+    v(`if (${id}_ci.y < ${id}_nm.y - 1.5) ${id}_wall = min(${id}_wall, 0.5 * ${id}_cs1 - ${id}_f.y);`);
+    v(`if (${id}_ci.y > 0.5) ${id}_wall = min(${id}_wall, 0.5 * ${id}_cs1 + ${id}_f.y);`);
+    // Off the grid every ball is at least as far as the grid's edge, so the cap never holds a ray back out there.
+    v(`float ${id}_out = length(max(abs(${pos}.xy) - 0.5 * ${id}_span, 0.0));`);
+    v(`${id}_dist = min(${id}_dist, max(max(${id}_wall, 0.0) + 0.04 * ${id}_cs1 + 1.0e-3, ${id}_out));`);
+  }
   return {
     code: L.join(''),
-    outputVars: { dist: `${id}_dist`, color: `${id}_col`, home: `${id}_st`, lift: `${id}_lift`, centre: `${id}_c` },
+    outputVars: { dist: `${id}_dist`, color: `${id}_col`, home: `${id}_st`, lift: `${id}_lift`, centre: `${id}_c`, cell: `${id}_cell` },
   };
 }
 
@@ -350,37 +388,46 @@ export const BallsNode: NodeDefinition = {
   label: 'Balls',
   category: '3D Primitives',
   aliases: ['Picture balls', 'CC Ball Action', 'Ball action', 'Picture as balls', 'Pieces 3D'],
-  description: 'One ball of a picture rebuilt from balls (CC Ball Action), inside a Scene Group repeated by Repeat Scene: each copy reads the picture at its cell\'s centre, is lifted towards the camera by the brightness or a Depth texture, and moved by Displace (anything from Repeat Cell\'s Centre: noise, a wave). After the March Loop, wire Repeat Cell\'s Cell (looked up at Hit Pos) to get the colour of the ball each ray hit.',
+  description: 'A picture rebuilt from balls (CC Ball Action): a grid of spheres or boxes, each the picture\'s colour at its home, lifted towards the camera by the brightness or a Depth texture, with a wave, a random push and a Displace wire. On its own grid it is one shape for any Scene Group (and, after the March Loop at Hit Pos, gives the colour of the ball there); or one ball per copy of a Repeat Scene, so Displace can come from Repeat Cell.',
   brief: {
     summary: 'A picture as a grid of balls, lifted by brightness or depth: CC Ball Action in 3D.',
     start: [
       'Easiest: Scene builder → 3D scene → the "Picture as balls" template.',
-      'By hand: in a Scene Group under Repeat Scene, Scene Pos → Balls → Scene Output; wire the picture into Picture.',
-      'After the March Loop, another Balls with Repeat Cell\'s Cell gives each ball\'s colour.',
+      'By hand: in a Scene Group, Scene Pos → Balls → Scene Output; wire the picture into the group and on to Picture.',
+      'After the March Loop, another Balls (same settings) at Hit Pos gives each ball\'s colour.',
     ],
   },
   inputs: {
-    pos: { type: 'vec3', label: 'Position', hint: 'Scene Pos inside the Scene Group (already moved into this copy\'s cell by Repeat Scene).' },
+    pos: { type: 'vec3', label: 'Position', hint: 'Scene Pos inside the Scene Group (with Repeat Scene: already moved into this copy\'s cell). After the March Loop: Hit Pos, for the colour of the ball there.' },
     picture: { type: 'texture', label: 'Picture', hint: 'The picture the balls take their colour and lift from.' },
     depth: { type: 'texture', label: 'Depth', hint: 'A Depth node\'s Depth texture: with Lift by Depth, near parts of the picture come forward.' },
-    displace: { type: 'vec3', label: 'Displace', hint: 'Moves this ball: wire anything worked out from Repeat Cell\'s Centre or Random (noise, a wave), so every ball moves its own way.' },
-    cell: { type: 'vec3', label: 'Cell', hint: 'Only after the March Loop: Repeat Cell\'s Cell (with the Repeat Scene and Hit Pos wired in), for the colour of the ball each ray hit.' },
+    displace: { type: 'vec3', label: 'Displace', hint: 'Moves the ball. Under Repeat Scene, wire anything worked out from Repeat Cell\'s Centre or Random (noise, a wave), so every ball moves its own way. On its own grid keep it along Z: each ball must stay over its cell.' },
+    cell: { type: 'vec3', label: 'Cell', hint: 'Repeat Scene layout, after the March Loop: Repeat Cell\'s Cell (with the Repeat Scene and Hit Pos wired in), for the colour of the ball each ray hit.' },
     lift: { type: 'float', label: 'Lift', hint: 'How far the brightest (or nearest) balls come forward.' },
     size: { type: 'float', label: 'Size', hint: 'A ball\'s size: 1 touches its neighbours.' },
     minSize: { type: 'float', label: 'Min size', hint: 'With Size by: the smallest ball, as a share of Size.' },
-    count: { type: 'float', label: 'Pieces across', hint: 'How many copies the picture spans across (Repeat Scene\'s Copies each side × 2 + 1).' },
+    count: { type: 'float', label: 'Pieces across', hint: 'How many balls across the picture.' },
+    width: { type: 'float', label: 'Width', hint: 'Own grid: how wide the picture is, in scene units.' },
     aspect: { type: 'float', label: 'Aspect', hint: 'The picture\'s width ÷ height.' },
+    wave: { type: 'float', label: 'Wave', hint: 'How far a ring wave rolling out from the middle moves the balls along Z.' },
+    waveFreq: { type: 'float', label: 'Wave rings', hint: 'How close together the wave\'s rings are.' },
+    waveSpeed: { type: 'float', label: 'Wave speed', hint: 'How fast the wave rolls out.' },
+    jitter: { type: 'float', label: 'Jitter', hint: 'A random push along Z per ball.' },
   },
-  socketsOnDemand: { minSize: ['minSize'], count: ['count'], aspect: ['aspect'] },
+  socketsOnDemand: { minSize: ['minSize'], count: ['count'], width: ['width'], aspect: ['aspect'], waveFreq: ['waveFreq'], waveSpeed: ['waveSpeed'], jitter: ['jitter'] },
   outputs: {
     dist: { type: 'float', label: 'Distance', hint: 'The distance to this copy\'s ball: into Scene Output.' },
     color: { type: 'vec3', label: 'Colour', hint: 'The picture\'s colour at this ball\'s home.' },
     home: { type: 'vec2', label: 'Home', hint: 'Where on the picture this ball comes from (0–1).' },
     lift: { type: 'float', label: 'Lift', hint: 'How far this ball is lifted.' },
-    centre: { type: 'vec3', label: 'Centre', hint: 'The ball\'s centre in its copy\'s space (lift + Displace).' },
+    centre: { type: 'vec3', label: 'Centre', hint: 'The ball\'s centre from its home (lift, wave, jitter and Displace).' },
+    cell: { type: 'vec3', label: 'Cell', hint: 'Which ball: its column and row from the middle.' },
   },
-  defaultParams: { shape: 'sphere', liftBy: 'brightness', sizeBy: 'none', lift: 1.5, size: 0.9, minSize: 0.3, count: 31, aspect: 1.5, mirror: true },
+  defaultParams: { layout: 'own', shape: 'sphere', liftBy: 'brightness', sizeBy: 'none', lift: 0.6, size: 0.9, minSize: 0.3, count: 41, width: 4, aspect: 1.5, wave: 0, waveFreq: 6, waveSpeed: 2, jitter: 0, mirror: true },
   paramDefs: {
+    layout: { label: 'Grid', type: 'select', options: [
+      { value: 'own', label: 'Its own grid' }, { value: 'repeat', label: 'One ball per Repeat Scene copy' },
+    ], hint: 'Its own grid: the node is the whole picture of balls (Width, Pieces across), one shape for any scene. One per Repeat Scene copy: put it in the Scene Group a Repeat Scene repeats; the copy spacing is the ball spacing and Displace can differ per copy (Repeat Cell).' },
     shape: { label: 'Shape', type: 'select', options: [{ value: 'sphere', label: 'Sphere' }, { value: 'box', label: 'Rounded box' }] },
     liftBy: { label: 'Lift by', type: 'select', options: [
       { value: 'brightness', label: 'Brightness' }, { value: 'darkness', label: 'Darkness' }, { value: 'depth', label: 'Depth (wire a Depth texture)' }, { value: 'none', label: 'Nothing (flat)' },
@@ -391,8 +438,13 @@ export const BallsNode: NodeDefinition = {
     ] },
     size: { label: 'Size', type: 'float', min: 0, max: 3, step: 0.01, hint: '1 touches the neighbours. Above 1 they overlap: raise Repeat Scene\'s Overlap to match.' },
     minSize: { label: 'Min size', type: 'float', min: 0, max: 1, step: 0.01, showWhen: { param: 'sizeBy', value: ['brightness', 'darkness', 'depth'] } },
-    count: { label: 'Pieces across', type: 'float', min: 1, max: 201, step: 1, hint: 'How many copies the picture spans across: Repeat Scene\'s Copies each side X × 2 + 1.' },
+    count: { label: 'Pieces across', type: 'float', min: 1, max: 201, step: 1, hint: 'How many balls across the picture. With Repeat Scene: its Copies each side X × 2 + 1.' },
+    width: { label: 'Width', type: 'float', min: 0.1, max: 40, step: 0.01, showWhen: { param: 'layout', value: 'own' }, hint: 'How wide the picture is, in scene units.' },
     aspect: { label: 'Aspect', type: 'float', min: 0.2, max: 4, step: 0.01, hint: 'The picture\'s width ÷ height (1.5 for 3:2).' },
+    wave: { label: 'Wave', type: 'float', min: -3, max: 3, step: 0.01, hint: 'A ring wave rolling out from the middle, this far along Z.' },
+    waveFreq: { label: 'Wave rings', type: 'float', min: 0, max: 40, step: 0.1, hint: 'How close together the wave\'s rings are (per scene unit).' },
+    waveSpeed: { label: 'Wave speed', type: 'float', min: -10, max: 10, step: 0.01, hint: 'How fast it rolls out.' },
+    jitter: { label: 'Jitter', type: 'float', min: 0, max: 3, step: 0.01, hint: 'A random push along Z per ball: the picture breaks into depth.' },
     mirror: { label: 'Face a camera at Angle 0', type: 'bool', hint: 'On: the picture reads the right way round from a March Camera at Angle 0 (looking along −Z). Off: from Angle π.' },
   },
   declarationsFor: () => [CELL3_DECL],
