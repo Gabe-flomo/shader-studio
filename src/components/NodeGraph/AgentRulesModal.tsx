@@ -41,6 +41,7 @@ import { surpriseAgentsAction, useSurpriseSeeds } from '../surprise/surpriseActi
 import { AGENT_VIEWS, agentsViewOf, type AgentsView } from '../../agentRules/outputs';
 import { type EditCtx, Num, RuleCard } from '../agentRules/RuleEditors';
 import { finishBuilder } from '../../builders/finish';
+import { focusRecipeEditor, useBuilderRecipeRequest } from '../../builders/windows';
 
 const hex = (c: number[]) => `#${c.slice(0, 3).map(v => Math.round(Math.min(Math.max(v, 0), 1) * 255).toString(16).padStart(2, '0')).join('')}`;
 const fromHex = (h: string): [number, number, number] => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255) as [number, number, number];
@@ -52,6 +53,8 @@ export function AgentRulesModal({ node, onClose }: { node: GraphNode; onClose: (
   const [sp, setSp] = useState(0);
   const [showLines, setShowLines] = useState(false);
   const [tab, setTab] = useRememberedTab('agent-rules', AGENT_RULES_TABS, 'rules');
+  // ⌘⇧D: the Recipe tab, its text focused.
+  useBuilderRecipeRequest(() => { setTab('recipe'); focusRecipeEditor('[data-language-tab="agents"] textarea'); });
   const pending = useRef<AgentRuleSet | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const flush = () => {

@@ -19,6 +19,8 @@ export interface ShortcutAction {
   description?: string;
   /** Also fires while typing in a text field or code editor (a combo no editor uses itself). */
   inEditors?: boolean;
+  /** On Windows and Linux, ⌃ in place of ⌘ fires it too (⌘⇧D → Ctrl+Shift+D). */
+  alsoCtrl?: boolean;
 }
 
 export type ShortcutMap = Record<string, string>; // actionId → combo
@@ -51,6 +53,8 @@ export const DEFAULT_ACTIONS: ShortcutAction[] = [
   { id: 'railSignals',       label: 'Go to Rules',           group: 'View',       defaultCombo: 'cmd+5',       description: 'On the Play page: open the split (if it’s closed) and show Rules: when something happens, what to do. Also ⌃5' },
   // Node graph — add nodes
   { id: 'doBar',             label: 'Do…',                   group: 'Add Nodes',  defaultCombo: 'cmd+k',       description: 'Type what to do: “circle with a glow”, “repeat 6 times around”, “tone map it”, “is this typical?”' },
+  // ⌘⇧D (Ctrl+Shift+D off a Mac): from any page and from a text field. In a scene builder: its recipe.
+  { id: 'doBarOrRecipe',     label: 'Do… from anywhere',     group: 'Add Nodes',  defaultCombo: 'cmd+shift+d', description: 'Open the Do… bar from any page (Play, Present, Files… switch to Studio first), even while typing. In a scene builder it jumps to that scene’s recipe instead, ready to type. Ctrl+Shift+D on Windows and Linux', inEditors: true, alsoCtrl: true },
   { id: 'addNode',           label: 'Open node palette',     group: 'Add Nodes',  defaultCombo: 'a',           description: 'Open the add-node palette' },
   { id: 'addUV',             label: 'Add UV node',           group: 'Add Nodes',  defaultCombo: 'u',           description: 'Instantly add a UV node' },
   { id: 'addTime',           label: 'Add Time node',         group: 'Add Nodes',  defaultCombo: 't',           description: 'Instantly add a Time node' },
@@ -109,6 +113,8 @@ export function resetShortcutMap(): ShortcutMap {
 
 // ─── Combo helpers ────────────────────────────────────────────────────────────
 
+const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+
 const MODS = new Set(['cmd', 'ctrl', 'shift', 'alt', 'meta']);
 
 /** Normalise a combo string: lowercase, sorted modifiers, '+' separated */
@@ -161,12 +167,23 @@ export function displayCombo(combo: string): string {
  * The action a key press triggers, if any. In a text field or code editor only the actions
  * marked `inEditors` count, so typing never fires a graph shortcut.
  */
-export function findShortcut(map: ShortcutMap, combo: string, editable = false): string | null {
+export function findShortcut(map: ShortcutMap, combo: string, editable = false, mac = IS_MAC): string | null {
   const pressed = normaliseCombo(combo);
   for (const [actionId, bound] of Object.entries(map)) {
     if (normaliseCombo(bound) !== pressed) continue;
     if (editable && !DEFAULT_ACTIONS.find(a => a.id === actionId)?.inEditors) return null;
     return actionId;
+  }
+  // Off a Mac, ⌃ stands in for ⌘ on the actions that ask for it (alsoCtrl).
+  const parts = pressed.split('+');
+  if (!mac && parts.includes('ctrl') && !parts.includes('cmd')) {
+    const asCmd = normaliseCombo(parts.map(p => (p === 'ctrl' ? 'cmd' : p)).join('+'));
+    for (const [actionId, bound] of Object.entries(map)) {
+      if (normaliseCombo(bound) !== asCmd) continue;
+      const a = DEFAULT_ACTIONS.find(x => x.id === actionId);
+      if (!a?.alsoCtrl || (editable && !a.inEditors)) continue;
+      return actionId;
+    }
   }
   return null;
 }

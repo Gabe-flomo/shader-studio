@@ -21,7 +21,7 @@ import { fontFamily, radius } from '../../theme/tokens';
 import { undoManager, useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { endRulesBurst } from '../../agentRules/storeActions';
 import { toast } from '../ui/toastStore';
-import { openAgentBuilder } from '../../builders/windows';
+import { focusRecipeEditor, openAgentBuilder, useBuilderRecipeRequest } from '../../builders/windows';
 import type { DiagramEdit } from './DragHandle';
 import { restartAgents } from '../../lib/agentRunner';
 import { Button, IconButton } from '../ui/Button';
@@ -371,6 +371,13 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
     setChipPicked(false);
     if (x === 'advanced') setAdvanced(true); else { setAdvanced(false); setFocus({ section: x as DiagramSection }); }
   };
+  // ⌘⇧D: Advanced rules on Every rule, the kind's whole recipe as When … Do … lines.
+  useBuilderRecipeRequest(() => {
+    select('advanced');
+    setAdvView('all');
+    const all = '[data-advanced-rules="all"]';
+    focusRecipeEditor(`${all} input, ${all} textarea, ${all} select, ${all} [data-add-rule]`);
+  });
   const onFocusSetting = (setting: string | undefined) => setFocus(f => ({ ...f, section: current, setting }));
   const focusCard = (card: string | undefined) => setFocus(f => (f.card === card ? f : { ...f, section: current, card }));
 
