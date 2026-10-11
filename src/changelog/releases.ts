@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.145',
+    date: '2026-10-10',
+    title: 'Grid Rules, rebuilt',
+    highlights: [
+      { area: 'Studio', text: 'Grid Rules builder in the Agent Builder layout: draw cells on a try board, step back and forward, and use your drawing as the start.' },
+      { area: 'Studio', text: 'Grid Rules: stencils you click to edit, Blocks as before/after per rule then Together, Smooth settings in plain words, and slower Waves.' },
+    ],
+  },
+  {
     id: '2026.10.144',
     date: '2026-10-10',
     title: 'Grid builder',
