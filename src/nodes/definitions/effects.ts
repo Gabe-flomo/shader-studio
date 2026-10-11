@@ -2087,7 +2087,40 @@ export const ChromaShiftNode: NodeDefinition = withParamSockets({
 }, ['contrast', 'angle_deg', 'anim_speed']);
 
 /**
- * CRT Mask — the RGB shadow mask, pulse and scanlines of a cathode-ray tube, applied to a colour.
+ * The other two mask kinds for CRT Mask (Slot is crtMaskFn, play/kit/finishGlsl.js): kind 1 is an
+ * aperture grille (unbroken vertical RGB stripes, as a Trinitron), kind 2 a shadow mask (round
+ * phosphor dots in staggered triads). Brightness-preserving like crtMaskFn: about 1 on average.
+ */
+const FN_CRT_MASK_KIND_GLSL = `vec3 crtMaskKindFn(vec2 pixel, float cellSize, float border, float kind, float scan) {
+  vec2 coord = pixel / cellSize;
+  vec3 mask;
+  if (kind < 1.5) {
+    float sx = coord.x * 3.0;
+    float ind = mod(floor(sx), 3.0);
+    mask = vec3(ind == 0.0 ? 1.0 : 0.0, ind == 1.0 ? 1.0 : 0.0, ind == 2.0 ? 1.0 : 0.0) * 3.0;
+    float u = fract(sx) * 2.0 - 1.0;
+    mask *= 1.0 - u * u * border;
+  } else {
+    vec2 sub = coord * 3.0;
+    float drow = floor(sub.y);
+    float sx = sub.x + mod(drow, 2.0) * 1.5;
+    float ind = mod(floor(sx), 3.0);
+    mask = vec3(ind == 0.0 ? 1.0 : 0.0, ind == 1.0 ? 1.0 : 0.0, ind == 2.0 ? 1.0 : 0.0) * 3.0;
+    float d = length(vec2(fract(sx), fract(sub.y)) * 2.0 - 1.0);
+    mask *= (1.0 - border * smoothstep(0.45, 1.05, d)) * (1.0 + border * 0.6);
+  }
+  float row = mod(floor(coord.y), 2.0);
+  mask *= 1.0 - scan * row * 0.6;
+  return mask;
+}`;
+
+/** CRT Mask's Mask type as the kind number; a node made before the setting is a Slot mask (what it always drew). */
+const CRT_MASK_KINDS: Record<string, string> = { slot: '0.0', aperture: '1.0', shadow: '2.0' };
+export const CRT_MASK_TYPES = ['slot', 'aperture', 'shadow'] as const;
+export type CrtMaskType = typeof CRT_MASK_TYPES[number];
+
+/**
+ * CRT Mask — the RGB mask, pulse and scanlines of a cathode-ray tube, applied to a colour.
  * After Xor's GM Shaders Mini: CRT. Pair it with CRT Screen (2D Space) for the curvature and
  * cell pixelation, which have to happen before the picture is drawn.
  */
@@ -2095,39 +2128,54 @@ export const CrtMaskNode: NodeDefinition = withParamSockets({
   type: 'crtMask',
   label: 'CRT Mask',
   category: 'Post Processing',
-  aliases: ['Shadow Mask', 'RGB Cells', 'Retro TV'],
-  description: 'Multiplies a colour by a CRT shadow mask: staggered red/green/blue sub-cells with soft borders, a slow brightness pulse across the screen, and optional scanlines. Use with **CRT Screen** on the UV first (curvature, cell pixelation) and its Vignette output here. Add Chromatic Aberration and Bloom for the full look. After Xor\'s GM Shaders Mini: CRT.',
+  aliases: ['Shadow Mask', 'Aperture Grille', 'Slot Mask', 'RGB Cells', 'Retro TV', 'Phosphor mask'],
+  description: 'Multiplies a colour by a CRT mask: the red, green and blue phosphors of a tube up close. Mask type picks the tube: a **slot mask** (staggered RGB slots, most TVs), an **aperture grille** (unbroken vertical stripes, Trinitron monitors) or a **shadow mask** (round dots in triads). Strength fades it in, a slow pulse travels across the screen and Scanlines darkens every other row. Use with **CRT Screen** on the UV first (curvature, cell pixelation) and wire its Vignette here. Add Chromatic Aberration (texture) for the full look. After Xor\'s GM Shaders Mini: CRT.',
   inputs: {
     color:    { type: 'vec3',  label: 'Color' },
     uv:       { type: 'vec2',  label: 'UV', hint: 'Screen UV, so the mask follows real pixels. Leave empty for the screen.' },
     vignette: { type: 'float', label: 'Vignette', hint: 'Wire CRT Screen\'s Vignette; 1 when empty.' },
   },
   outputs: { result: { type: 'vec3', label: 'Color' }, mask: { type: 'vec3', label: 'Mask', hint: 'The RGB cell mask alone, brightness-preserving.' } },
-  defaultParams: { cellSize: 6.0, border: 0.6, stagger: 'on', pulse: 0.03, pulseWidth: 60.0, pulseRate: 20.0, scanlines: 0.0 },
+  defaultParams: { maskType: 'slot', strength: 1.0, cellSize: 6.0, border: 0.6, stagger: 'on', pulse: 0.03, pulseWidth: 60.0, pulseRate: 20.0, scanlines: 0.0 },
   paramDefs: {
-    cellSize:   { label: 'Cell size',  type: 'float', min: 2, max: 16, step: 0.5, hint: 'Width of one RGB cell in pixels. 6 reads as a TV up close; 3 as a fine monitor.' },
+    maskType:   { label: 'Mask type', type: 'select', options: [
+      { value: 'slot', label: 'Slot mask' }, { value: 'aperture', label: 'Aperture grille' }, { value: 'shadow', label: 'Shadow mask (dots)' },
+    ], hint: 'Slot: staggered RGB slots, as most TVs. Aperture grille: unbroken vertical stripes, as a Trinitron. Shadow mask: round dots in triads, as an old monitor.' },
+    strength:   { label: 'Strength', type: 'float', min: 0, max: 1, step: 0.01, hint: 'How much of the mask shows: 0 is the picture as it is, 1 the full mask.' },
+    cellSize:  { label: 'Cell size',  type: 'float', min: 2, max: 16, step: 0.5, hint: 'Width of one RGB cell in pixels. 6 reads as a TV up close; 3 as a fine monitor.' },
     border:     { label: 'Cell border', type: 'float', min: 0, max: 1, step: 0.01, hint: 'How dark the gap between sub-cells is. 0 removes the grille.' },
-    stagger:    { label: 'Stagger', type: 'select', options: [{ value: 'on', label: 'Staggered rows' }, { value: 'off', label: 'Aligned grid' }], hint: 'Offsets every other column by half a cell, as a real shadow mask does.' },
+    stagger:    { label: 'Stagger', type: 'select', options: [{ value: 'on', label: 'Staggered rows' }, { value: 'off', label: 'Aligned grid' }], hint: 'Slot mask only: offsets every other column by half a cell, as a real slot mask does.' },
     pulse:      { label: 'Pulse', type: 'float', min: 0, max: 0.2, step: 0.005, hint: 'Brightness ripple travelling across the screen. 0.03 is subtle; 0 is off.' },
     pulseWidth: { label: 'Pulse width', type: 'float', min: 5, max: 300, step: 1, hint: 'Ripple wavelength in pixels.' },
     pulseRate:  { label: 'Pulse rate', type: 'float', min: 0, max: 60, step: 0.5, hint: 'Ripple speed. Needs the clock running.' },
     scanlines:  { label: 'Scanlines', type: 'float', min: 0, max: 1, step: 0.01, hint: 'Darkens every other row of cells.' },
   },
   glslFunction: FN_CRT_MASK_GLSL,
+  glslFunctions: [FN_CRT_MASK_KIND_GLSL],
   generateGLSL: (node: GraphNode, inputVars) => {
     const id = node.id;
     const color = inputVars.color ?? 'vec3(0.0)';
     const uv = inputVars.uv ?? 'g_uv';
     const vig = inputVars.vignette ?? '1.0';
     const stagger = node.params.stagger === 'off' ? '0.0' : '1.0';
+    const kind = CRT_MASK_KINDS[String(node.params.maskType ?? 'slot')] ?? '0.0';
+    const cell = p(node.params.cellSize, 6.0), border = p(node.params.border, 0.6), scan = p(node.params.scanlines, 0.0);
+    const maskCall = kind === '0.0'
+      ? `crtMaskFn(${id}_px, ${cell}, ${border}, ${stagger}, ${scan})`
+      : `crtMaskKindFn(${id}_px, ${cell}, ${border}, ${kind}, ${scan})`;
+    // A node from before Strength (no such param, nothing wired) compiles exactly as it did.
+    const legacy = node.params.strength === undefined;
+    const strength = p(node.params.strength, 1.0);
     return {
       code: [
         `    vec2 ${id}_px = (${uv} / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5) * u_resolution;\n`,
-        `    vec3 ${id}_mask = crtMaskFn(${id}_px, ${p(node.params.cellSize, 6.0)}, ${p(node.params.border, 0.6)}, ${stagger}, ${p(node.params.scanlines, 0.0)});\n`,
+        `    vec3 ${id}_mask = ${maskCall};\n`,
         `    float ${id}_pulse = 1.0 + ${p(node.params.pulse, 0.03)} * cos(${id}_px.x / ${p(node.params.pulseWidth, 60.0)} + u_time * ${p(node.params.pulseRate, 20.0)});\n`,
-        `    vec3 ${id}_result = ${color} * ${id}_mask * ${id}_pulse * ${vig};\n`,
+        legacy
+          ? `    vec3 ${id}_result = ${color} * ${id}_mask * ${id}_pulse * ${vig};\n`
+          : `    vec3 ${id}_result = ${color} * mix(vec3(1.0), ${id}_mask * ${id}_pulse, clamp(${strength}, 0.0, 1.0)) * ${vig};\n`,
       ].join(''),
       outputVars: { result: `${id}_result`, mask: `${id}_mask` },
     };
   },
-}, ['cellSize', 'border', 'pulse', 'pulseRate', 'scanlines']);
+}, ['strength', 'cellSize', 'border', 'pulse', 'pulseRate', 'scanlines']);

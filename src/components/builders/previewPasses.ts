@@ -163,3 +163,9 @@ export function makePreviewPasses(gl: WebGL2RenderingContext, vs: string, specs:
     dispose,
   };
 }
+
+/** A compile's Pass programs as a preview draws them (the live ones, in order): a builder's effects stack makes these. */
+export function previewPassesOf(passes: ReadonlyArray<{ slug: string; fragmentShader: string; scale: number; filter: 'linear' | 'nearest'; format: 'half' | 'byte'; live: boolean; size?: number }> | undefined): PreviewPass[] | undefined {
+  const out = (passes ?? []).filter(p => p.live).map(p => ({ slug: p.slug, fs: p.fragmentShader, scale: p.scale, filter: p.filter, format: p.format, ...(p.size ? { size: p.size } : {}) }));
+  return out.length ? out : undefined;
+}
