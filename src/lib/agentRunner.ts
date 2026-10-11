@@ -46,6 +46,7 @@ import {
 import { CanvasProbeRegistry } from './canvasProbeRegistry';
 import { agentReadingsWanted, publishAgentReadings, setAgentGroups } from './agentReadings';
 import { hoodRequests, pokeHood } from './agentHood';
+import { AgentSnapshots, agentSteppingArmed } from './agentSnapshots';
 import type { AgentHoodGpu, AgentStateView } from './agentHoodGpu';
 
 type Uniforms = Record<string, THREE.IUniform>;
@@ -446,6 +447,8 @@ export class AgentRunner {
   private aspect = 16 / 9;
   /** The clock of the last live run (where a 3D spotlight's camera was then). */
   private lastTime = 0;
+  /** Live runs so far (the first has no clock to compare with). */
+  private liveRuns = 0;
   // The Agent Builder's species spotlight (agentSpotRegistry): one species' walkers as additive dots.
   private spotMat = raw(AG_SPOT_VERT, AG_SPOT_FRAG, {
     u_a: { value: null }, u_b: { value: null }, u_c: { value: null }, u_cam: { value: null },
@@ -648,6 +651,8 @@ export class AgentRunner {
   contextLost(): void {
     this.hood?.dispose();
     this.hood = null;
+    this.snapshots?.dispose();
+    this.snapshots = null;
     for (const slug of [...this.nbGrids.keys()]) this.dropNeighbours(slug);
     for (const r of this.reads.values()) { for (const rt of r.rts) rt.dispose(); r.reader.dispose(); }
     this.reads.clear();
@@ -710,11 +715,24 @@ export class AgentRunner {
     const u = this.host.uniforms();
     const w = Math.max(1, o.width), h = Math.max(1, o.height);
     const aspect = w / h;
-    if (o.live) { this.aspect = aspect; this.lastTime = o.time; }
+    // The clock stood still since the last live frame (paused): a transport holds the walkers where they are.
+    const clockStill = o.live && this.liveRuns > 0 && o.time === this.lastTime;
+    if (o.live) { this.aspect = aspect; this.lastTime = o.time; this.liveRuns++; }
     // A group steps once its rule is compiled, and its Collide (3D scene) grids too (else its first steps would collide with nothing).
     const gridDone = (g: AgentGroupProgram) => (g.grids ?? []).every(gr => this.gridPrograms.some(x => x.slug === gr.slug && (x.ready || x.failed)));
     const ready = this.steps.filter(e => e.spec.live && e.ready && !e.failed && gridDone(e.spec));
     const cap = o.live ? agGovern(this.gov, o.frameMs ?? 0, 1000 / 60) : Infinity;
+    // Stepping by hand (the Agent Builder's transport, lib/agentSnapshots.ts): backs restore a snapshot now,
+    // steps forward are added to every group's plan below.
+    if (o.live && !this.snapshots && agentSteppingArmed()) this.snapshots = new AgentSnapshots(this.host);
+    // The step shown (the first group's): what a step back counts from, and the label of a snapshot.
+    const nowStep = () => targets.groups.values().next().value?.step ?? 0;
+    const hand = o.live && this.snapshots ? this.snapshots.frame(targets, nowStep()) : null;
+    const prerollOf = (slug: string) => { const g = this.spec.groups.find(x => x.slug === slug); return g ? this.reader(g.params.preroll, 0) : 0; };
+    // Put back: the clock carries on from the step restored (else it would run the frame's steps again at once).
+    // Paused (or put back), the clock carries on from the step shown: no catching up on steps a slow frame owed
+    // (else the walkers would run on after Pause), and a step back doesn't run the frame's steps again.
+    if (hand && (hand.restored || (clockStill && agentSteppingArmed()))) this.snapshots!.settle(targets, o.time, prerollOf);
 
     // How many steps each group runs this frame.
     const plan: Array<{ e: StepEntry; s: GroupState; steps: number; spf: number; preroll: number }> = [];
@@ -727,10 +745,15 @@ export class AgentRunner {
       const r = agGroupSteps(s, g, this.reader, { live: o.live, time: o.time, cap, restart: o.live && (restartAll || restartRequests.has(g.nodeId)) }, () => {
         targets.restartGroup(s); restarted.add(g.slug);
       });
-      if (o.live) { stats.set(g.nodeId, { count: g.side * g.side, stepsPerFrame: r.spf, rate: r.rate, step: s.step + r.steps }); stepped.push(g.nodeId); }
-      plan.push({ e, s, steps: r.steps, spf: r.spf, preroll: r.preroll });
+      // A step forward by hand: exactly that many fixed steps more (once the group runs on the live clock).
+      // After a step back, the steps from the snapshot restored to the step wanted (the same steps again).
+      const steps = r.steps + (hand && isFinite(s.live.anchorTime) ? hand.forward + hand.replay : 0);
+      if (o.live) { stats.set(g.nodeId, { count: g.side * g.side, stepsPerFrame: r.spf, rate: r.rate, step: s.step + steps }); stepped.push(g.nodeId); }
+      plan.push({ e, s, steps, spf: r.spf, preroll: r.preroll });
     }
     if (o.live) settleRestarts(stepped, this.steps.filter(e => e.spec.live && !e.failed).map(e => e.spec.nodeId));
+    // A run that started over isn't the one the snapshots are of.
+    if (restarted.size) this.snapshots?.startedOver();
 
     // Trails: their textures at this size; a trail fed by a group that started over starts empty too.
     const trailState = new Map<string, TrailState>();
@@ -763,6 +786,9 @@ export class AgentRunner {
     const keepTime = timeUniform?.value;
     try {
       const most = plan.reduce((m, p) => Math.max(m, p.steps), 0);
+      // While a transport is open: the state before this frame's steps, kept to go back to.
+      // (Not before a step back's replay: the snapshot it starts from is kept already.)
+      if (hand && !hand.restored && most > 0 && agentSteppingArmed()) this.snapshots!.keep(targets, nowStep());
       for (let k = 0; k < most; k++) {
         const stepping = plan.filter(p => p.steps > k);
         // The clock time of this step (the first stepping group's): a Trail's own step program reads it.
@@ -865,6 +891,9 @@ export class AgentRunner {
         // An offline run can be thousands of steps: hand the GPU each chunk as it goes.
         if (!o.live && k > 0 && k % AG_OFFLINE_CHUNK === 0) renderer.getContext().flush();
       }
+      // Moved by hand: the live clock carries on from here.
+      if (hand && (hand.forward > 0 || hand.replay > 0)) this.snapshots!.settle(targets, o.time, prerollOf);
+      if (hand?.more) this.host.onReady();
       for (const p of plan) this.bindState(p.e.spec, p.s);
       bindTrails();
       project();
@@ -1608,6 +1637,8 @@ export class AgentRunner {
 
   // The Agent Builder's Under the hood (lib/agentHood.ts): loaded and made the first time one is open.
   private hood: AgentHoodGpu | null = null;
+  /** The live run's snapshots for stepping back (made when a transport first opens). */
+  private snapshots: AgentSnapshots | null = null;
   private hoodLoading = false;
   private disposed = false;
   /** Whether the hood still holds targets (ShaderCanvas calls drawHood once more after the last one closes, to free them). */
@@ -1635,6 +1666,8 @@ export class AgentRunner {
     this.disposed = true;
     this.hood?.dispose();
     this.hood = null;
+    this.snapshots?.dispose();
+    this.snapshots = null;
     for (const e of this.steps) this.drop(e);
     for (const e of this.trailSteps) this.drop(e);
     for (const e of this.probes) this.drop(e);

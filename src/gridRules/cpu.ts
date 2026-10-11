@@ -8,7 +8,7 @@
 import { GRID_DEFAULTS, countsAsRanges, gridShape, isDrawnStart, neighbourWeights, type GridShape } from './spec';
 import { SAME, blockVariants, patternVariants, specMatches, stencilOffset } from './stencils';
 import { blockStartsAt, diceFrame, grDice } from './dice';
-import { stampedAt } from './startCells';
+import { stampedAt, stampedHeadingAt } from './startCells';
 import { cpuStackStep } from './stack';
 
 export interface CpuBoard {
@@ -37,7 +37,9 @@ export function cpuSeed(params: Record<string, unknown>, w: number, h: number, r
     if (s.start === 'empty') continue;
     if (isDrawnStart(s.start)) {
       const d = s.startCells ? stampedAt(s.startCells, w, h, x, y) : 0;
-      if (s.type !== 'smooth') B.a[i] = Math.min(d, top);
+      // Drawn headings (stacked Move and Collide cards) ride in red's fraction, as the GLSL deals them.
+      const hd = s.stack.length && s.startCells?.heads && d > 0 ? stampedHeadingAt(s.startCells, w, h, x, y) : 0;
+      if (s.type !== 'smooth') B.a[i] = Math.min(d, top) + hd / 32;
       else if (s.template === 'reaction') { B.a[i] = 1; B.b[i] = d > 0 ? 1 : 0; } else { B.a[i] = d > 0 ? 1 : 0; B.b[i] = s.template === 'waves' ? B.a[i] : 0; }
       continue;
     }
@@ -89,6 +91,11 @@ function stackAfter(s: GridShape, P: Record<string, unknown>, B: CpuBoard, base:
     wrap: s.wrap, top: s.type === 'count' ? 1 : Math.max(2, Math.round(Number(P.states))) - 1,
     afterglow: Number(P.afterglow), frame: diceFrame(step), seed: Number(P.seed) || 0,
   };
+  // A cell that stays (not emptied) keeps its heading, red's fraction (gridRules/stack.ts), as the GPU's base does.
+  for (let i = 0; i < base.a.length; i++) {
+    const st = Math.round(B.a[i]);
+    if (st > 0 && base.a[i] > 0.5) base.a[i] += B.a[i] - st;
+  }
   let out = base;
   s.stack.forEach((r, j) => { out = cpuStackStep(r, j, out, ctx); });
   return { ...out, step: step + 1 };

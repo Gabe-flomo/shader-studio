@@ -29,6 +29,7 @@ import { Segmented, Toggle } from '../ui/Choice';
 import { Select } from '../ui/Select';
 import { PresetCard, StudioLabel, StudioNavItem, StudioShell } from '../builders/studio/StudioShell';
 import { LiveViewport, type ViewRect } from '../builders/studio/LiveViewport';
+import { AgentTransport } from './AgentTransport';
 import { type AgentRuleSet, type ChannelRef, type RuleCondition, type WalkerKind, DEFAULT_NEIGHBOURS, kindOf, usesFlow, WALKER_KINDS, WALKER_KIND_KEYS } from '../../agentRules/spec';
 import { openGroupAsNodes, setGroupSpace } from '../../agentRules/storeActions';
 import { patchCard, readCards, sectionSummary, setCardOn, setEdges, setFlow, setNeighbours, setSensors, setSpeed, type RuleCard } from '../../agentBuilder/cards';
@@ -851,6 +852,7 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
       primary={{ label: madeHere ? 'Add to graph' : 'Done', onClick: close, title: madeHere ? 'Keep it (it is already live in your graph, wired to the Output)' : undefined }}
       nav={nav} inspector={inspector} presets={presetStrip}>
       <LiveViewport overlay={overlay} />
+      <AgentTransport groupId={groupId} />
       {hoodOpen && (
         <HoodPanel groupId={groupId} species={hoodSpecies} trails={trailChannels} highlight={hoodLit} onClose={() => setHoodOpen(false)} memoryNames={memorySlotNames(set)}
           speedMax={Math.max(0.05, ...set.species.map(x => x.speed), num(emit?.params.speed, 0)) * 1.5} lifeMax={num(emit?.params.life, 0)} />

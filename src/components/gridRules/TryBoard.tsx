@@ -12,6 +12,8 @@
  *    stands for, the cells a stencil matches, the 2×2 blocks of the next step.
  *  - Under the hood: every cell's numbers.
  *  - Use as the start: the cells on the board become the node's start (stamped in the middle).
+ *  - Headings (stacked Move and Collide cards): an arrow picked under the board goes with the cells
+ *    drawn; every cell's heading is drawn as an arrow (gridRules/stack.ts).
  *  - Text stamp: words in the stroke font (gridRules/textCells.ts), stamped where you click, in the
  *    picked state; the cells it will cover are outlined under the pointer.
  */
@@ -29,6 +31,7 @@ import { TRY_SPEEDS, drawingOf, useTryRun, type TrySpeed } from './useTryRun';
 import { drawnCount } from '../../gridRules/startCells';
 import { DEFAULT_START_TEXT, MAX_TEXT_CHARS, cleanStartText, readStartText, textStampCells } from '../../gridRules/textCells';
 import { Field } from '../ui/Field';
+import { ARROWS, DIRECTIONS, headingOfValue, usesHeadings } from '../../gridRules/stack';
 
 type P = Record<string, unknown>;
 
@@ -65,6 +68,10 @@ export function TryBoard({ params, nodeParams, focus, hood, onUseAsStart }: {
   const top = s.type === 'count' ? 1 : smooth ? 1 : Math.max(2, Math.round(Number(params.states))) - 1;
   const [brush, setBrush] = useState(1);
   useEffect(() => { if (brush > top) setBrush(1); }, [brush, top]);
+  // Headings: offered when a stacked card moves cells along them (or reads them).
+  const arrows = !smooth && s.stack.some(usesHeadings);
+  const [head, setHead] = useState(0);
+  const heading = arrows ? head : 0;
   const [hover, setHover] = useState<[number, number] | null>(null);
   const [showNext, setShowNext] = useState(true);
   // The Text stamp: words (the node's text start's to begin with) and their height in cells.
@@ -119,22 +126,24 @@ export function TryBoard({ params, nodeParams, focus, hood, onUseAsStart }: {
     if (!c) return;
     if (stamp.on && !smooth) {
       // The Text stamp: the letters' cells in the picked state (state 1 when the eraser is picked; Shift erases).
-      t.paint(stampCells(c), e.shiftKey ? 0 : brush || 1);
+      t.paint(stampCells(c), e.shiftKey ? 0 : brush || 1, heading);
       return;
     }
     if (stamp.on && smooth) { t.paint(stampCells(c), e.shiftKey ? 0 : 1); return; }
     (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
-    const here = smooth ? (B.a[c[1] * B.w + c[0]] > 0.5 ? 1 : 0) : Math.round(B.a[c[1] * B.w + c[0]]);
-    const state = e.shiftKey || (here === brush && brush !== 0) ? 0 : brush;
+    const v = B.a[c[1] * B.w + c[0]];
+    const here = smooth ? (v > 0.5 ? 1 : 0) : Math.round(v);
+    // A cell already this state (and heading) is erased; another heading on it is turned.
+    const state = e.shiftKey || (here === brush && brush !== 0 && (smooth || headingOfValue(v) === heading)) ? 0 : brush;
     stroke.current = { state, last: c.join() };
-    t.paint([c], state);
+    t.paint([c], state, heading);
   };
   const onMove = (e: React.PointerEvent) => {
     const c = cellAt(e);
     setHover(c);
     if (!stroke.current || !c || c.join() === stroke.current.last) return;
     stroke.current.last = c.join();
-    t.paint([c], stroke.current.state);
+    t.paint([c], stroke.current.state, heading);
   };
   const onUp = () => { stroke.current = null; };
 
@@ -216,7 +225,28 @@ export function TryBoard({ params, nodeParams, focus, hood, onUseAsStart }: {
     } else if (smooth) {
       hoverNote = s.template === 'reaction' ? `food ${(B.a[i]).toFixed(3)} · B ${B.b[i].toFixed(3)}` : `value ${B.a[i].toFixed(3)}${s.template === 'waves' ? ` · a step ago ${B.b[i].toFixed(3)}` : ''}`;
     } else hoverNote = `State ${Math.round(B.a[i])}${changes?.has(i) ? ` → ${Math.round(next.a[i])} next step` : ''}`;
+    // Its heading, and the next step's.
+    if (arrows && Math.round(B.a[i]) > 0) {
+      const h0 = headingOfValue(B.a[i]), h1 = headingOfValue(next.a[i]);
+      const word = (h: number) => (h ? `heading ${DIRECTIONS[h - 1].label.toLowerCase()}` : 'no heading');
+      hoverNote = `${hoverNote} · ${word(h0)}${Math.round(next.a[i]) > 0 && h1 !== h0 ? ` → ${word(h1)}` : ''}`;
+    }
     overlay.push(<rect key="hover" x={px(x) + 0.5} y={py(y) + 0.5} width={cell - 1} height={cell - 1} fill="none" stroke="#fff" strokeWidth={1.5} />);
+  }
+  // Headings: an arrow on every cell that has one.
+  if (arrows && cell >= 6) {
+    let d = '';
+    for (let y = 0; y < B.h; y++) for (let x = 0; x < B.w; x++) {
+      const v = B.a[y * B.w + x];
+      const hd = Math.round(v) > 0 ? headingOfValue(v) : 0;
+      if (!hd) continue;
+      const [dx, dy] = DIRECTIONS[hd - 1].d;
+      const len = Math.hypot(dx, dy), ux = dx / len, uy = -dy / len, r = cell * 0.36;
+      const cx = px(x) + cell / 2, cy = py(y) + cell / 2;
+      const tx = cx + ux * r, ty = cy + uy * r;
+      d += `M${cx - ux * r} ${cy - uy * r}L${tx} ${ty}M${tx - ux * r * 0.6 - uy * r * 0.45} ${ty - uy * r * 0.6 + ux * r * 0.45}L${tx} ${ty}L${tx - ux * r * 0.6 + uy * r * 0.45} ${ty - uy * r * 0.6 - ux * r * 0.45}`;
+    }
+    overlay.push(<path key="arrows" d={d} fill="none" stroke="rgba(0,0,0,0.7)" strokeWidth={Math.max(1.2, cell / 10)} strokeLinecap="round" strokeLinejoin="round" data-try-arrows />);
   }
   // The Text stamp: the cells it will cover.
   if (stamp.on && hover) {
@@ -283,6 +313,19 @@ export function TryBoard({ params, nodeParams, focus, hood, onUseAsStart }: {
                   boxShadow: brush === k ? `0 0 0 2px ${tk.accent.base}` : `inset 0 0 0 1px ${tk.border.default}`,
                   color: '#888', font: `600 10px ${fontFamily.mono}`,
                 }}>{k === 0 ? '⌫' : top > 1 ? k : ''}</button>
+            ))}
+          </span>
+        )}
+        {arrows && (
+          <span role="radiogroup" aria-label="Heading to draw" data-try-headings style={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+            <span style={{ fontSize: 11.5, color: tk.text.muted, marginRight: 2 }}>heading</span>
+            {[0, 1, 2, 3, 4, 5, 6, 7, 8].map(h => (
+              <button key={h} type="button" role="radio" aria-checked={head === h} data-try-heading={h} title={h ? `Cells drawn head ${DIRECTIONS[h - 1].label.toLowerCase()}` : 'Cells drawn have no heading (a Move card can give them one)'} onClick={() => setHead(h)}
+                style={{
+                  width: 22, height: 24, padding: 0, border: 0, borderRadius: 6, cursor: 'pointer',
+                  background: head === h ? tk.accent.base : tk.bg.field, color: head === h ? '#fff' : tk.text.secondary,
+                  boxShadow: `inset 0 0 0 1px ${tk.border.default}`, font: `600 12px ${fontFamily.ui}`,
+                }}>{h ? ARROWS[h - 1] : '·'}</button>
             ))}
           </span>
         )}

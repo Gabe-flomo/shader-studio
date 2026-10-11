@@ -272,7 +272,7 @@ Edit verbs leave "the" out: `set glow falloff=8`. A clause that is only a refere
 | `gas` | hpp |  | `grid gas` |
 | `stencil count=` |  | count: state:min..max neighbours, like count=1:1..2 | `stencil .../.1./... → 2` |
 | `block chance=` |  | chance: random: 0.3–1 | `block 11/00 → 00/11` |
-| `then copies= distance= at= radius= dir= chance=` |  | copies: count; distance: count; at: count; radius: count; dir: n, ne, e, se, s, sw, w, nw; chance: number | `then explode copies=8 distance=2 chance=0.5` |
+| `then copies= distance= at= radius= dir= heading= assign= blocked= chance=` |  | copies: count; distance: count; at: count; radius: count; dir: n, ne, e, se, s, sw, w, nw; heading: none, n, ne, e, se, s, sw, w, nw; assign: random, none, n, ne, e, se, s, sw, w, nw; blocked: wait, bounce, turn; chance: number | `then explode copies=8 distance=2 chance=0.5` |
 | `colours empty= on= dying= glow= old= c0= c1= c2= c3= c4= c5= c6= c7=` | colors | empty: random: a harmonious colour; on: random: a harmonious colour; dying: random: a harmonious colour; glow: random: a harmonious colour; old: random: a harmonious colour; c0: random: a harmonious colour; c1: random: a harmonious colour; c2: random: a harmonious colour; c3: random: a harmonious colour; c4: random: a harmonious colour; c5: random: a harmonious colour; c6: random: a harmonious colour; c7: random: a harmonious colour | `grid life · colours on=green empty=black` |
 | `brush [size] state= fill=` |  | size (bare): number; state: count; fill: number | `grid life · brush size=5 fill=0.3` |
 

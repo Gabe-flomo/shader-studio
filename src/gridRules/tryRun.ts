@@ -14,6 +14,7 @@ import { cpuBoard, cpuStep, type CpuBoard } from './cpu';
 import { GRID_DEFAULTS, gridShape, neighbourWeights } from './spec';
 import { patternVariants, specMatches, stencilOffset } from './stencils';
 import { blockStartsAt, diceFrame } from './dice';
+import { withHeading } from './stack';
 
 /** Frames kept for stepping back. */
 export const MAX_FRAMES = 400;
@@ -56,12 +57,15 @@ export function tryEdit(run: TryRun, board: CpuBoard): TryRun {
   return { frames: [...run.frames.slice(0, run.at), board], at: run.at, first: run.first };
 }
 
-/** A copy of a board with cell (x, y up) set to `state` (Smooth: its value; a second channel cleared). */
-export function paintCell(B: CpuBoard, x: number, y: number, state: number, smooth = false, template?: string): CpuBoard {
+/**
+ * A copy of a board with cell (x, y up) set to `state` (Smooth: its value; a second channel cleared),
+ * and `heading` (stacked Move and Collide cards: 1…8, 0 none; red's fraction, gridRules/stack.ts).
+ */
+export function paintCell(B: CpuBoard, x: number, y: number, state: number, smooth = false, template?: string, heading = 0): CpuBoard {
   if (x < 0 || y < 0 || x >= B.w || y >= B.h) return B;
   const i = y * B.w + x;
   const out: CpuBoard = { ...B, a: B.a.slice(), b: B.b.slice() };
-  if (!smooth) { out.a[i] = state; out.b[i] = 0; return out; }
+  if (!smooth) { out.a[i] = withHeading(state, heading); out.b[i] = 0; return out; }
   if (template === 'reaction') { out.b[i] = state > 0 ? 1 : 0; return out; }
   out.a[i] = state > 0 ? 1 : 0;
   if (template === 'waves') out.b[i] = out.a[i];

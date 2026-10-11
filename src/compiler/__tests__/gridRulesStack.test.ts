@@ -269,6 +269,6 @@ describe('the spec → graph', () => {
     expect(back.errors).toEqual([]);
     expect(readStack(back.params.stack)).toEqual(readStack(P.stack));
     expect(parseGrid('life · then explode copies=12').errors.length).toBeGreaterThan(0);
-    expect(parseGrid('life · then wobble').errors[0].message).toMatch(/explode, crowd, drift or cluster/);
+    expect(parseGrid('life · then wobble').errors[0].message).toMatch(/explode, crowd, drift, cluster, move or collide/);
   });
 });

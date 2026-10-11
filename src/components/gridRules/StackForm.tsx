@@ -17,26 +17,18 @@ import { fontFamily, radius } from '../../theme/tokens';
 import { Button } from '../ui/Button';
 import { Segmented, Toggle } from '../ui/Choice';
 import { BuilderSlider } from '../builders/BuilderSlider';
-import { COUNT_PRESETS, LOOKS, STAGES_PRESETS, gridShape, presetPatch, ruleSummary, type GridPreset } from '../../gridRules/spec';
-import { PATTERN_PRESETS } from '../../gridRules/stencils';
+import { gridShape, ruleSummary } from '../../gridRules/spec';
 import {
-  DIRECTIONS, MAX_CLUSTER_RADIUS, MAX_COPIES, MAX_DISTANCE, MAX_STACK, STACK_KINDS, STACK_RECIPES,
-  describeStackRule, newStackRule, readStack, stacksOn, type StackKind, type StackRule,
+  ARROWS, BLOCKED_ACTS, COLLIDE_ACTS, DIRECTIONS, MAX_CLUSTER_RADIUS, MAX_COPIES, MAX_DISTANCE, MAX_STACK, STACK_KINDS, STACK_RECIPES,
+  describeStackRule, newStackRule, readStack, stacksOn, type StackAct, type StackKind, type StackRule,
 } from '../../gridRules/stack';
+import { stackRecipePatch } from '../../gridRules/stackRecipes';
 import { ListActions, Row, RuleCard, move } from './StencilForms';
+
+export { stackRecipePatch };
 
 type P = Record<string, unknown>;
 type Setter = (patch: P, immediate?: boolean) => void;
-
-const BASE_TABLES: Record<string, Record<string, GridPreset>> = { count: COUNT_PRESETS, stages: STAGES_PRESETS, patterns: PATTERN_PRESETS as Record<string, GridPreset> };
-
-/** A recipe's whole patch: its base (as the presets strip sets it) and its cards. */
-export function stackRecipePatch(key: string): P | null {
-  const rc = STACK_RECIPES.find(r => r.key === key);
-  const pr = rc ? BASE_TABLES[rc.base.ruleType]?.[rc.base.preset] : undefined;
-  if (!rc || !pr) return null;
-  return { ruleType: rc.base.ruleType, ...(rc.base.ruleType === 'count' ? { ...LOOKS.count, brushState: 1 } : {}), ...presetPatch(pr), ...(rc.extra ?? {}), stack: readStack(rc.stack) };
-}
 
 export function StackForm({ p, set, onHoverCard }: { p: P; set: Setter; onHoverCard?: (j: number | null) => void }) {
   const tk = useTokens();
@@ -62,7 +54,7 @@ export function StackForm({ p, set, onHoverCard }: { p: P; set: Setter; onHoverC
         ))}
       </div>
       <span style={{ fontSize: 12, color: tk.text.muted, lineHeight: 1.45 }}>
-        Every step the base runs first, then each card in order on the board the one before made: a later card has the last word on the cells it touches. Change the base under What it is or with the presets below.
+        Every step the base runs first, then each card in order on the board the one before made: a later card has the last word on the cells it touches. Change the base under What it is or with the presets below. Movers: put Collide before Move (it settles who meets whom; Move then moves the rest), and draw headings on the board with the arrows under it.
       </span>
 
       {cards.map((r, j) => (
@@ -115,7 +107,21 @@ function Slider({ label, hint, value, min, max, step = 1, integer = true, def, o
 /** A card's own settings, by kind. Sliders write as they move (one undo step a drag); choices at once. */
 function CardSettings({ r, top, edit }: { r: StackRule; top: number; edit: (patch: Partial<StackRule>, immediate?: boolean) => void }) {
   const d = newStackRule(r.kind as StackKind);
-  const chance = <Slider label="Chance" hint="The share of the cells it could change that it does change, rolled per cell each step (the same dice on the GPU and here)." value={r.chance} min={0} max={1} step={0.01} integer={false} def={d.chance} onChange={v => edit({ chance: v }, false)} />;
+  const chance = (
+    <>
+      <Slider label="Chance" hint="The share of the cells it could change that it does change, rolled per cell each step (the same dice on the GPU and here)." value={r.chance} min={0} max={1} step={0.01} integer={false} def={d.chance} onChange={v => edit({ chance: v }, false)} />
+      <Row label="Only cells heading" hint="Limit the card to cells with one heading (an arrow drawn on the try board, or given by a Move card), or to cells with none.">
+        <HeadingPicker value={r.who} onChange={v => edit({ who: v })} withAny label="Only cells heading" />
+      </Row>
+    </>
+  );
+  const fly = <Toggle checked={r.fly} onChange={v => edit({ fly: v })} label="Copies fly outward (each heads away from the meeting cell)" />;
+  const which = (
+    <Row label="Which cells" hint="Live cells only (state 1), or every cell that isn't empty (dying stages too).">
+      <Segmented<'live' | 'any'> size="sm" ariaLabel="Which cells" value={r.any ? 'any' : 'live'} onChange={v => edit({ any: v === 'any' })}
+        options={[{ value: 'live', label: 'Live' }, { value: 'any', label: 'Any not empty' }]} />
+    </Row>
+  );
   const state = (key: 'becomes', label: string, hint: string) => top > 1 && (
     <Slider label={label} hint={hint} value={Math.min(r[key], top)} min={0} max={top} def={d[key]} onChange={v => edit({ [key]: v }, false)} />
   );
@@ -128,6 +134,7 @@ function CardSettings({ r, top, edit }: { r: StackRule; top: number; edit: (patc
         <Slider label="Distance" hint="How far from the meeting cell the copies land (they only land on empty cells)." value={r.distance} min={1} max={MAX_DISTANCE} def={d.distance} onChange={v => edit({ distance: v }, false)} />
         {state('becomes', 'Copies are', 'The state of the copies.')}
         <Toggle checked={r.keep} onChange={v => edit({ keep: v })} label="The meeting cells stay (else they vanish)" />
+        {fly}
         {chance}
       </>
     );
@@ -146,10 +153,44 @@ function CardSettings({ r, top, edit }: { r: StackRule; top: number; edit: (patc
         <Row label="Direction" hint="Where the cells step, one cell a step, when the cell there is empty.">
           <DirectionPicker dir={r.dir} onChange={v => edit({ dir: v })} />
         </Row>
-        <Row label="Which cells" hint="Live cells only (state 1), or every cell that isn't empty (dying stages too).">
-          <Segmented<'live' | 'any'> size="sm" ariaLabel="Which cells drift" value={r.any ? 'any' : 'live'} onChange={v => edit({ any: v === 'any' })}
-            options={[{ value: 'live', label: 'Live' }, { value: 'any', label: 'Any not empty' }]} />
+        {which}
+        {chance}
+      </>
+    );
+    case 'move': return (
+      <>
+        <Row label="No heading" hint="Cells without a heading (newborns, cells you drew without an arrow): stay still, take one at random (once, then keep it), or all take one direction.">
+          <Segmented<'still' | 'random' | 'set'> size="sm" ariaLabel="Cells with no heading" value={r.assign < 0 ? 'still' : r.assign === 0 ? 'random' : 'set'}
+            onChange={v => edit({ assign: v === 'still' ? -1 : v === 'random' ? 0 : 3 })}
+            options={[{ value: 'still', label: 'Stay still' }, { value: 'random', label: 'Random' }, { value: 'set', label: 'This way' }]} />
         </Row>
+        {r.assign > 0 && (
+          <Row label="They head" hint="The heading cells without one take.">
+            <DirectionPicker dir={r.assign - 1} onChange={v => edit({ assign: v + 1 })} />
+          </Row>
+        )}
+        <Row label="When blocked" hint="A mover is blocked by a wall, a cell ahead, or another mover heading for the same cell (a Collide card before this one can settle those first).">
+          <Segmented<StackAct> size="sm" ariaLabel="Blocked movers" value={r.act} onChange={v => edit({ act: v })} options={BLOCKED_ACTS.map(a => ({ value: a.value, label: a.label }))} />
+        </Row>
+        {which}
+        {chance}
+      </>
+    );
+    case 'collide': return (
+      <>
+        <Row label="Then they" hint="What two movers do when they meet head-on (side by side, facing) or head for the same empty cell. The chance is rolled once per meeting, so both do the same.">
+          <Segmented<StackAct> size="sm" ariaLabel="Colliding movers" value={r.act} onChange={v => edit({ act: v })} options={COLLIDE_ACTS.map(a => ({ value: a.value, label: a.label }))} />
+        </Row>
+        <span style={{ fontSize: 12, lineHeight: 1.45, opacity: 0.8 }}>{COLLIDE_ACTS.find(a => a.value === r.act)?.hint}</span>
+        {r.act === 'explode' && (
+          <>
+            <Slider label="Copies" hint="How many copies land round the meeting cell: up, down, right, left first, then the corners." value={r.copies} min={1} max={MAX_COPIES} def={d.copies} onChange={v => edit({ copies: v }, false)} />
+            <Slider label="Distance" hint="How far from the meeting cell the copies land (only on empty cells)." value={r.distance} min={1} max={MAX_DISTANCE} def={d.distance} onChange={v => edit({ distance: v }, false)} />
+            {state('becomes', 'Copies are', 'The state of the copies.')}
+            {fly}
+          </>
+        )}
+        {which}
         {chance}
       </>
     );
@@ -168,12 +209,31 @@ function CardSettings({ r, top, edit }: { r: StackRule; top: number; edit: (patc
   }
 }
 
+/** A heading for a card's "Only cells heading": any, none, or one of the eight (−1, 0, 1…8). */
+function HeadingPicker({ value, onChange, withAny = false, label }: { value: number; onChange: (v: number) => void; withAny?: boolean; label: string }) {
+  const tk = useTokens();
+  const opts = [...(withAny ? [-1] : []), 0, 1, 2, 3, 4, 5, 6, 7, 8];
+  return (
+    <span role="radiogroup" aria-label={label} style={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+      {opts.map(h => (
+        <button key={h} type="button" role="radio" aria-checked={value === h} data-stack-who={h} onClick={() => onChange(h)}
+          title={h < 0 ? 'Any cell' : h === 0 ? 'Only cells with no heading' : `Only cells heading ${DIRECTIONS[h - 1].label.toLowerCase()}`}
+          style={{
+            minWidth: 24, height: 24, padding: '0 5px', border: 0, borderRadius: 6, cursor: 'pointer',
+            background: value === h ? tk.accent.base : tk.bg.field, color: value === h ? '#fff' : tk.text.secondary,
+            boxShadow: `inset 0 0 0 1px ${tk.border.default}`, font: `600 ${h < 0 ? 11 : 12.5}px ${fontFamily.ui}`,
+          }}>{h < 0 ? 'Any' : h === 0 ? '·' : ARROWS[h - 1]}</button>
+      ))}
+    </span>
+  );
+}
+
 /** Eight arrows round a dot: the drift direction. */
 function DirectionPicker({ dir, onChange }: { dir: number; onChange: (d: number) => void }) {
   const tk = useTokens();
   // Grid positions (row, col) of each direction.
   const at = (i: number): [number, number] => { const [dx, dy] = DIRECTIONS[i].d; return [1 - dy, 1 + dx]; };
-  const arrows = ['↑', '↗', '→', '↘', '↓', '↙', '←', '↖'];
+  const arrows = ARROWS;
   return (
     <div role="radiogroup" aria-label="Drift direction" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 26px)', gridTemplateRows: 'repeat(3, 26px)', gap: 3 }}>
       {DIRECTIONS.map((x, i) => {
