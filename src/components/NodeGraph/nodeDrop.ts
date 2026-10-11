@@ -18,6 +18,8 @@ import { NODE_ALIASES, getNodeDefinition, getNodeDefinitionFor } from '../../nod
 import { getActiveNodes, undoManager, useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { closeRecipeOffer } from '../../store/recipeOfferStore';
 import { typesCompatible } from '../../lib/typesCompatible';
+import { VECTORIZABLE_NODES } from '../../nodes/definitions/math';
+import { DYNAMIC_SOCKET_TYPES, genTypeFor, socketsAs } from './wireFit';
 import type { GraphNode } from '../../types/nodeGraph';
 import type { EdgeInfo } from './WireLayer';
 
@@ -110,15 +112,51 @@ export function pickInsertSockets(inputs: Sockets, outputs: Sockets, fromType: s
   return inKey && outKey ? { inKey, outKey } : null;
 }
 
-/** Expression blocks and custom functions get their sockets from their params, so a definition can't say. */
-const DYNAMIC_SOCKET_TYPES = new Set(['exprNode', 'customFn']);
-
-/** Could a node of `type` go into `edge`? (Checked on hover, before the node exists.) */
+/**
+ * Could a node of `type` go into `edge`? (Checked on hover, before the node exists.) A genType
+ * node (Exp, Sin, Add…) counts in the wire's vector type, as insertIntoWire will set it.
+ */
 export function typeFitsWire(type: string | undefined, edge: EdgeInfo): boolean {
   if (!type) return false;
   if (DYNAMIC_SOCKET_TYPES.has(type)) return true;
-  const def = getNodeDefinition(NODE_ALIASES[type]?.to ?? type);
-  return !!def && pickInsertSockets(def.inputs, def.outputs, edge.fromType, edge.toType) !== null;
+  const t = NODE_ALIASES[type]?.to ?? type;
+  const def = getNodeDefinition(t);
+  if (!def) return false;
+  const vt = genTypeFor(t, edge.fromType);
+  const { inputs, outputs } = vt ? socketsAs(t, def.inputs, def.outputs, vt) : def;
+  return pickInsertSockets(inputs, outputs, edge.fromType, edge.toType) !== null;
+}
+
+/**
+ * Wire the node `id` (on the level being edited) into `edge`: a genType node first takes the
+ * wire's vector type (Exp on a vec3 wire is exp per channel), then the wire's source feeds its
+ * input and its output takes the wire's place — a float output broadcasts (vec3(x)). False, and
+ * nothing wired, when the node doesn't fit or the wire is gone.
+ */
+export function insertIntoWire(id: string, edge: EdgeInfo): boolean {
+  const levelNow = () => {
+    const st = useNodeGraphStore.getState();
+    return getActiveNodes(st.nodes, st.activeGroupPath) ?? st.nodes;
+  };
+  let node = levelNow().find(n => n.id === id);
+  const dest = levelNow().find(n => n.id === edge.toNodeId);
+  if (!node || dest?.inputs[edge.toInputKey]?.connection?.nodeId !== edge.fromNodeId) return false;
+  const vt = genTypeFor(node.type, edge.fromType);
+  if (vt && node.params.outputType !== vt) {
+    const info = VECTORIZABLE_NODES[node.type];
+    const as = socketsAs(node.type, node.inputs, node.outputs, vt);
+    if (!pickInsertSockets(as.inputs, as.outputs, edge.fromType, edge.toType)) return false;
+    useNodeGraphStore.getState().changeNodeVectorType(id, info.primaryInput, info.primaryOutput, vt);
+    node = levelNow().find(n => n.id === id);
+    if (!node) return false;
+  }
+  const pick = pickInsertSockets(node.inputs, node.outputs, edge.fromType, edge.toType);
+  if (!pick) return false;
+  const st = useNodeGraphStore.getState();
+  st.connectNodes(edge.fromNodeId, edge.fromOutputKey, id, pick.inKey);
+  st.connectNodes(id, pick.outKey, edge.toNodeId, edge.toInputKey); // replaces the wire it sits on
+  closeRecipeOffer(); // a node placed on a wire is already wired; no starter to offer
+  return true;
 }
 
 // ── The drop ──────────────────────────────────────────────────────────────────
@@ -139,18 +177,8 @@ export function placeDropped(payload: DropPayload, world: Pt, edge: EdgeInfo | n
   const id = payload.place(dropPosition(world)) ?? null;
   if (!id || !edge) return { id, inserted: false };
 
-  const st = useNodeGraphStore.getState();
-  const level = getActiveNodes(st.nodes, st.activeGroupPath) ?? st.nodes;
   // A node of its own on this level (not a group the add put it inside, or one already there).
-  const node = had.has(id) ? undefined : level.find(n => n.id === id);
-  const dest = level.find(n => n.id === edge.toNodeId);
-  const stillThere = dest?.inputs[edge.toInputKey]?.connection?.nodeId === edge.fromNodeId;
-  const pick = node && stillThere ? pickInsertSockets(node.inputs, node.outputs, edge.fromType, edge.toType) : null;
-  if (!node || !pick) return { id, inserted: false };
-
-  st.connectNodes(edge.fromNodeId, edge.fromOutputKey, id, pick.inKey);
-  st.connectNodes(id, pick.outKey, edge.toNodeId, edge.toInputKey); // replaces the wire it sits on
-  closeRecipeOffer(); // a node placed on a wire is already wired; no starter to offer
+  if (had.has(id) || !insertIntoWire(id, edge)) return { id, inserted: false }; // a node placed on a wire is already wired; no starter to offer
   undoManager.collapseSince(mark, { label: `Inserted ${payload.label} into a wire`, nodeIds: [id] });
   return { id, inserted: true };
 }

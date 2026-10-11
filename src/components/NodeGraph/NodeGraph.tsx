@@ -11,7 +11,7 @@ import { CanvasToolbar } from '../shell/CanvasToolbar';
 import { setVizScale, vizScaleForZoom } from './vizKit';
 import { registerSocket, remeasureAllSockets, setLayoutZoomGetter, getSocketOffset, getDragPosition, publishView, getCardSize, isDragging, subscribeCardSizes, forgetNodeLayout, type Pt } from './socketRegistry';
 import { WireLayer, type EdgeInfo } from './WireLayer';
-import { registerDropTarget, edgeInfoFromKey } from './nodeDrop';
+import { registerDropTarget, edgeInfoFromKey, insertIntoWire } from './nodeDrop';
 import { buildNodeErrors } from '../../compiler/nodeErrors';
 import { suggestConnections, type Suggestion } from './smartConnect';
 import { suggestQuickAdds, type QuickAdd } from './quickAdds';
@@ -200,7 +200,6 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
   const removeNode          = useNodeGraphStore(s => s.removeNode);
   const updateNodeParams    = useNodeGraphStore(s => s.updateNodeParams);
   const deselectAll         = useNodeGraphStore(s => s.deselectAll);
-  const disconnectInput     = useNodeGraphStore(s => s.disconnectInput);
 
   // When drilling into a group, show its subgraph nodes instead
   const displayNodes = React.useMemo(() => {
@@ -2367,21 +2366,13 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
           <NodeSearchPalette
             open={true}
             onClose={() => { setWireInsertOpen(false); setHoveredWire(null); }}
-            filterOutputType={wv.fromType}
-            filterInputType={wv.toType}
+            // The new node takes the wire's source and feeds its end (float outputs broadcast,
+            // genType nodes take the wire's type: wireFit.ts).
+            filterOutputType={wv.toType}
+            filterInputType={wv.fromType}
             spawnPosition={screenToWorld(wv.midX, wv.midY)}
             onNodePlaced={(newNodeId) => {
-              // Disconnect existing connection
-              disconnectInput(wv.toNodeId, wv.toInputKey);
-              // Wire: from → new node first input, new node first output → to
-              const newNode = useNodeGraphStore.getState().nodes.find(n => n.id === newNodeId)
-                ?? getActiveNodes(useNodeGraphStore.getState().nodes, useNodeGraphStore.getState().activeGroupPath)?.find(n => n.id === newNodeId);
-              if (newNode) {
-                const firstIn  = Object.keys(newNode.inputs)[0];
-                const firstOut = Object.keys(newNode.outputs)[0];
-                if (firstIn)  connectNodes(wv.fromNodeId, wv.fromOutputKey, newNodeId, firstIn);
-                if (firstOut) connectNodes(newNodeId, firstOut, wv.toNodeId, wv.toInputKey);
-              }
+              insertIntoWire(newNodeId, wv);
               setWireInsertOpen(false);
               setHoveredWire(null);
             }}
