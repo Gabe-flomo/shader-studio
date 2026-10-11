@@ -31,6 +31,7 @@ scroll input: Play has no scroll source, so nothing reads one (a follow-up if wa
 | MIDI | MIDI and pad sources, note triggers and actions, the pad grid, the MIDI file, drum pads' and racks' MIDI input (their keys and clicks stay) | "MIDI won't work on a web page; …" |
 | The microphone and live audio | live sources, audio triggers, readers on the live input, Audio layers (hidden), an Audio Input node with no song (its band mappings too) | "The microphone and live audio won't work on a web page; …" |
 | The Depth node's model | nothing to remove: its live texture reads 0 on a page (a baked depth travels) | "The Depth node's model won't run on a web page, …" |
+| Splat Scene scans | nothing to remove: the scan's textures read empty on a page (docs/splat-scene.md) | "Splat Scene scans don't go onto web pages yet: the scan reads empty there …" |
 
 "Held at its current value": `webInputFrom` already bakes the values mappings are giving controls
 right now into the uniforms and layers; the scope only removes the mappings, so nothing moves them

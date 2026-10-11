@@ -534,6 +534,7 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
           // Baked nodes: their videos on this frame before the shader reads them (docs/bake.md).
           await Promise.all([bakedVideos.seek(t), videoEngine.seek(t), timeCubes.settled()]);
           await depthEngine.seek();
+          await offlineRender?.settleSplats?.(t);
           // A Background layer: the sources showing at t (the shader only while this graph is one).
           // Play's image, video or colour background: no shader to render, the video seeks to the frame.
           if (frameQueue) { await queueFrame(offlineRender, frameQueue, t, queueScratch); if (planShowsThis(frameQueue)) renderAtTime(t, { dt: 1 / fps, first: firstRender }); }
@@ -623,6 +624,7 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
         const queue = playOverlay.exportQueuePlan(t, i === 0, actions, applier?.seed);
         await Promise.all([bakedVideos.seek(t), videoEngine.seek(t), timeCubes.settled()]);
         await depthEngine.seek();
+        await offlineRender?.settleSplats?.(t);
         if (queue) { await queueFrame(offlineRender, queue, t, queueScratch); if (planShowsThis(queue)) { renderAtTime(t, { dt: 1 / fps, first: i === 0 }); readPixels(pixels, w, h); } }
         else if (playBackground.active()) await playBackground.seek(t);
         else { renderAtTime(t, { dt: 1 / fps, first: i === 0 }); readPixels(pixels, w, h); }
@@ -723,6 +725,7 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
       const queue = playOverlay.exportQueuePlan(t, true, []);
       await Promise.all([bakedVideos.seek(t), videoEngine.seek(t), timeCubes.settled()]);
       await depthEngine.seek();
+      await offlineRender?.settleSplats?.(t);
       if (queue) { await queueFrame(offlineRender, queue, t, new Uint8Array(w * h * 4)); if (planShowsThis(queue)) { renderAtTime(t); readPixels(pixels, w, h); } }
       else if (!playBackground.active()) { renderAtTime(t); readPixels(pixels, w, h); }
       playOverlay.compositePixels(pixels, w, h, t, 1 / 60, true, { transparent: true, picture });

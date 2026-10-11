@@ -14,6 +14,7 @@ import { DEFAULT_EMBED, buildPlaySnippet, kitGroupsFor, playBundle, type PlayHtm
 import { webInputFrom, type CompiledForWeb } from '../webInput';
 import { buildLiteSnippet, liteBlockers, liteMaps } from '../embedLite';
 import { DEPTH_SOURCE_MARK } from '../../nodes/definitions/depth';
+import { SPLAT_MARK } from '../../nodes/definitions/splatScene';
 import { defaultLayer, emptyPlayRecord, type PlayMapping, type PlayRecord, type PlaySource } from '../../types/play';
 
 const SHADER = `precision highp float;
@@ -143,6 +144,12 @@ describe('left out, held at the current value', () => {
     expect(webExportScope(input(record([]), { fragmentShader: live })).frozen.map(f => f.kind)).toEqual(['depth']);
     const baked = { textures: { u_tex_d1: { label: 'Depth', name: 'd.png', src: 'data:image/png;base64,AA', bytes: 2 } } };
     expect(webExportScope(input(record([]), { fragmentShader: live, media: baked })).frozen).toEqual([]);
+  });
+
+  it('a Splat Scene is named: its scan reads empty on a page', () => {
+    const f = webExportScope(input(record([]), { fragmentShader: `${SHADER}\n${SPLAT_MARK}u_tex_splat_1_color` })).frozen;
+    expect(f.map(x => x.kind)).toEqual(['splats']);
+    expect(f[0].why).toMatch(/reads empty/);
   });
 
   it('a graph with nothing left out is unchanged', () => {

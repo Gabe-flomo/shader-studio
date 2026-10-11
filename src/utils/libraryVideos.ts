@@ -27,7 +27,7 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
  */
 export async function askVideosInZip(ask: typeof askChoice = askChoice, limit = VIDEO_ZIP_ASK, ids?: readonly string[]): Promise<'all' | 'none' | null> {
   let list: Awaited<ReturnType<typeof listVideos>>;
-  try { list = await listVideos(); } catch { return 'all'; }
+  try { list = await listVideos({ withSplats: true }); } catch { return 'all'; }
   // Only these (the ones a .playfile's Video layers use).
   if (ids) { const want = new Set(ids); list = list.filter(v => want.has(v.id)); }
   let bytes = list.reduce((n, v) => n + v.bytes, 0);

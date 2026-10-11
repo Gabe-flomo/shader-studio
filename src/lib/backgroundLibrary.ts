@@ -704,12 +704,15 @@ export const VIDEOS_MANIFEST_KIND = 'shader-studio-videos';
 // Drum pad samples live here too (audio types): they travel in the same ZIPs, folders and play files.
 const VIDEO_EXT: Record<string, string> = {
   'video/mp4': 'mp4', 'video/webm': 'webm', 'video/quicktime': 'mov', 'video/ogg': 'ogv', 'video/x-m4v': 'm4v',
+  'model/x-splat-ply': 'ply', 'model/x-splat-splat': 'splat', 'model/x-splat-spz': 'spz', 'model/x-splat-ksplat': 'ksplat',
   'audio/wav': 'wav', 'audio/x-wav': 'wav', 'audio/wave': 'wav', 'audio/mpeg': 'mp3', 'audio/ogg': 'ogg', 'audio/mp4': 'm4a', 'audio/x-m4a': 'm4a', 'audio/aac': 'aac', 'audio/flac': 'flac', 'audio/x-flac': 'flac', 'audio/webm': 'weba', 'audio/aiff': 'aif', 'audio/x-aiff': 'aif',
 };
 const VIDEO_MIME: Record<string, string> = {
   mp4: 'video/mp4', m4v: 'video/x-m4v', webm: 'video/webm', mov: 'video/quicktime', ogv: 'video/ogg',
   wav: 'audio/wav', mp3: 'audio/mpeg', ogg: 'audio/ogg', oga: 'audio/ogg', m4a: 'audio/mp4', aac: 'audio/aac', flac: 'audio/flac', weba: 'audio/webm', aif: 'audio/aiff', aiff: 'audio/aiff',
 };
+/** Is a kept file a Gaussian splat scan (a Splat Scene node's, lib/splats/library.ts) rather than a video? */
+export const isSplatType = (type: string) => type.startsWith('model/x-splat');
 /** Is a kept file a sound (a drum pad's sample) rather than a video? */
 export const isAudioType = (type: string) => type.startsWith('audio/');
 /** A video file's extension for its MIME type ("webm"), mp4 when unknown. */
@@ -730,9 +733,9 @@ export async function addVideoFile(file: Blob & { name?: string }, o: { name?: s
   }
   await ensureRoom(file.size);
   const type = file.type || videoMimeOf(file.name ?? name) || 'video/mp4';
-  const rec: StoredVideo = { id: o.id || newBackgroundId(isAudioType(type) ? 'snd' : 'vid'), name, type, bytes: file.size, createdAt: o.createdAt ?? Date.now(), ...cleanPoster(o.poster), data: await file.arrayBuffer() };
-  // A sound has no frame to show.
-  if (isAudioType(type) && rec.thumb === undefined) rec.thumb = '';
+  const rec: StoredVideo = { id: o.id || newBackgroundId(isAudioType(type) ? 'snd' : isSplatType(type) ? 'splat' : 'vid'), name, type, bytes: file.size, createdAt: o.createdAt ?? Date.now(), ...cleanPoster(o.poster), data: await file.arrayBuffer() };
+  // A sound has no frame to show; a splat scan has none to decode (its card makes its own picture: lib/splats/library.ts).
+  if ((isAudioType(type) || isSplatType(type)) && rec.thumb === undefined) rec.thumb = '';
   await tx('readwrite', s => s.put(rec), VIDEO_STORE);
   emit();
   if (rec.thumb === undefined && canPoster()) void ensureVideoPoster(rec.id).catch(() => {});
@@ -755,10 +758,14 @@ function videoMeta(r: StoredVideo): LibraryVideoMeta {
   return { id: r.id, name: r.name, type: r.type, bytes: r.bytes, createdAt: r.createdAt, ...cleanPoster(r) };
 }
 
-/** Every kept video (no bytes), newest first. */
-export async function listVideos(): Promise<LibraryVideoMeta[]> {
+/**
+ * Every kept video and sound (no bytes), newest first. Splat scans (Splat Scene nodes, docs/splat-scene.md) are kept
+ * in the same store, so they travel in the same ZIPs, folders and play files; lists of videos leave them out unless
+ * `withSplats` (the ZIPs, backups, the workspace and storage counts take them).
+ */
+export async function listVideos(o: { withSplats?: boolean } = {}): Promise<LibraryVideoMeta[]> {
   const all = await tx<StoredVideo[]>('readonly', s => s.getAll(), VIDEO_STORE);
-  return (all ?? []).map(videoMeta).sort((a, b) => b.createdAt - a.createdAt);
+  return (all ?? []).filter(r => o.withSplats || !isSplatType(r.type)).map(videoMeta).sort((a, b) => b.createdAt - a.createdAt);
 }
 
 /** A kept video's file, or null when this browser doesn't have it. */
@@ -794,6 +801,12 @@ async function patchVideo(id: string, patch: Partial<Pick<StoredVideo, 'name' | 
 }
 
 export async function renameVideo(id: string, name: string): Promise<void> { await patchVideo(id, { name: cleanName(name) }); }
+
+/** Set a kept file's small picture (a splat scan's, made once it has been read: lib/splats/engine.ts). */
+export async function setVideoThumb(id: string, thumb: string): Promise<void> {
+  if (!thumb.startsWith('data:image/')) return;
+  await patchVideo(id, { thumb });
+}
 
 /** Delete a kept video. True when there was one. */
 export async function deleteVideo(id: string): Promise<boolean> {
@@ -933,7 +946,7 @@ export interface VideosManifest {
  */
 export async function videoZipFiles(ids: readonly string[] | null = null, o: { naming?: 'name' | 'id'; only?: 'video' | 'audio' } = {}): Promise<Record<string, Uint8Array>> {
   let metas: LibraryVideoMeta[];
-  try { metas = await listVideos(); } catch { return {}; }
+  try { metas = await listVideos({ withSplats: true }); } catch { return {}; }
   if (ids) { const want = new Set(ids); metas = metas.filter(m => want.has(m.id)); }
   // Linked files the ids name (read from their folders; one this device can't reach stays out, or its imported copy goes).
   const linked: Array<{ id: string; name: string; type: string; data: Uint8Array; createdAt: number }> = [];
@@ -972,7 +985,7 @@ export async function videoZipFiles(ids: readonly string[] | null = null, o: { n
 
 /** What the kept videos are (ids, names, sizes), to tell when they changed. */
 export async function videosSignature(): Promise<string> {
-  try { return JSON.stringify((await listVideos()).map(m => [m.id, m.name, m.bytes])); } catch { return '[]'; }
+  try { return JSON.stringify((await listVideos({ withSplats: true })).map(m => [m.id, m.name, m.bytes])); } catch { return '[]'; }
 }
 
 /** The videos manifest in a set of files (under any folder), and the folder it sits in ("…/backgrounds/"). */

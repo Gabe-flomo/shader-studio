@@ -23,10 +23,19 @@ import { generateFragmentShader } from './shaderAssembler';
 import { compilePassGraph, hasPassNode } from './passGraph';
 import { hasAgentsNode } from './agentGraph';
 import { hasHiddenBlur } from './blurPasses';
+import { compileSplatProbes, hasSplatScene } from './splatGraph';
 
 const EMPTY_OUTPUT_VARS = new Map<string, Record<string, string>>();
 
 export function compileGraph(graph: NodeGraph): CompilationResult {
+  const result = compileProgram(graph);
+  // Splat Scene nodes (docs/splat-scene.md): each gets a probe program for its camera, named as the picture's.
+  if (!result.success || !hasSplatScene(graph.nodes)) return result;
+  const { programs, errors } = compileSplatProbes(graph, result.nodeSlugMap);
+  return errors.length ? { ...result, success: false, errors: [...(result.errors ?? []), ...errors] } : { ...result, splats: programs };
+}
+
+function compileProgram(graph: NodeGraph): CompilationResult {
   // Pass nodes (render to texture) and the Agents family (docs/agents-plan.md) cut the graph into
   // several programs. Only graphs that have one take this branch; everything below is the
   // single-program compile, unchanged.

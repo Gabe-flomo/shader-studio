@@ -201,3 +201,25 @@ Built:
   use directly. Timings and quality per model are in docs/depth-node.md.
 
 Next: the example graph from a real photo; camera match ("match the picture's camera"); phase 1c (Pieces).
+
+### Phase 2 status (Splat Scene, `claude/splat-scene`)
+
+Built (docs/splat-scene.md):
+- **Loading:** `.ply` (3DGS, with SH up to degree 3), `.splat`, `.spz` versions 1–3, parsed in a worker; dropped on the
+  card, picked, or taken from the library / workspace. Kept in the library by reference (the videos store, type
+  `model/x-splat-*`), so .playfile bundles, ZIPs and the workspace carry it. `.ksplat` and `.spz` v4 are refused with a
+  message.
+- **Rendering:** our own small renderer (no Spark / GaussianSplats3D: their per-splat hooks don't fit node-made
+  modifiers, and ours is ~600 lines): instanced quads from the projected 3D covariance (EWA), a counting sort in the
+  worker when the view turns, SH 0–3 behind a setting.
+- **Camera:** a probe program reads the March Camera's rays (and the scan's placement) on the GPU each frame, so the
+  scan sits in the same space as the ray-marched shapes, with no lag.
+- **Compositing:** Color, Alpha, Distance, Hit and Scene in front: the nearer wins per pixel.
+- **Card:** picture, facts, Load / Replace / From the library, Add to scene, Fit to the scene; "Add a splat scan" on
+  March Loop cards; an example (3D: Splat scan in a scene) with a generated scan.
+- **Web export:** listed as not supported yet.
+
+Measured: 1 M splats draw in about 2–5 ms a frame here (Apple Silicon), sorting in 5–7 ms in the worker. Real scans
+(antimatter15's plush, nike, train) load and render; the train scan (1 M) is the timing above.
+
+Next: phase 3 (per-splat modifiers), phase 4 (agents as splats).

@@ -26,7 +26,7 @@ import { frozenValueOf } from '../../nodes/sliderFreeze';
 import { isAssignable, legacyAssignOp } from '../../nodes/assignable';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { openRecipeOffer } from '../../store/recipeOfferStore';
-import { PICTURE_DEPTH_SET } from '../../nodes/recipes';
+import { PICTURE_DEPTH_SET, SPLAT_SCENE_SET } from '../../nodes/recipes';
 import { nodeJumpSignal, takeNodeJump, useCodeJump } from '../../codeExplorer/jumpStore';
 import { lazyWithSuspense, type PropsOf } from '../lazyWithSuspense';
 // Editors that only open on demand load in their own chunks (type-only imports
@@ -140,6 +140,7 @@ import { BakedCardBody } from '../bake/BakedCardBody';
 import { TimeCubeCardBody } from '../timeCube/TimeCubeCardBody';
 import { DepthCardBody } from '../depth/DepthCardBody';
 import { DepthLightCardBody } from '../depth/DepthLightCardBody';
+import { SplatSceneCardBody } from '../splats/SplatSceneCardBody';
 import { TimeCubeViewKeyInfo } from '../timeCube/TimeCubeViewKeyInfo';
 import { toggleNodeCard } from '../explain/functionCard/fnCardStore';
 import { bakedSourceName } from '../../nodes/definitions/baked';
@@ -1904,6 +1905,10 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             {(node.type === 'marchLoopGroup' || node.type === 'giLitMarchGroup') && (
               <CardButton icon="layers" label="Add a picture with depth: a picture (drop an image on it), its Depth and a Depth Composite, wired to this loop and the Output (optionally lit by the scene)"
                 onClick={() => requestAnimationFrame(() => openRecipeOffer(node.id, PICTURE_DEPTH_SET))} />
+            )}
+            {(node.type === 'marchLoopGroup' || node.type === 'giLitMarchGroup') && (
+              <CardButton icon="spark" label="Add a splat scan: a Splat Scene (drop a .ply, .splat or .spz on it) seen through this loop's camera, put together with the scene by distance"
+                onClick={() => requestAnimationFrame(() => openRecipeOffer(node.id, SPLAT_SCENE_SET))} />
             )}
             <CardButton icon="copy" label="Duplicate group (an independent copy)" onClick={() => duplicateGroup(node.id)} />
             <CardButton icon="save" tint="success" on={savedFlash} label="Save as a preset" onClick={() => {
@@ -3674,7 +3679,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         })()}
 
         {/* ── Image slots (published nodes with sampler2D arguments) ── */}
-        {!collapsed && def.textureSlots && def.textureSlots.length > 0 && (() => {
+        {!collapsed && def.textureSlots && def.textureSlots.length > 0 && node.type !== 'splatScene' && (() => {
           const un = getUserNode(node.type);
           return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '6px 12px 8px' }} onMouseDown={e => e.stopPropagation()}>
@@ -3913,6 +3918,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         {!collapsed && node.type === 'timeCube' && <TimeCubeCardBody node={node} touch={isTouchDevice} />}
         {!collapsed && node.type === 'depth' && <DepthCardBody node={node} touch={isTouchDevice} />}
         {!collapsed && node.type === 'depthLight' && <DepthLightCardBody node={node} touch={isTouchDevice} />}
+        {!collapsed && node.type === 'splatScene' && <SplatSceneCardBody node={node} />}
         {!collapsed && node.type === 'timeCubeView' && <TimeCubeViewKeyInfo node={node} touch={isTouchDevice} />}
 
         {/* ── CustomFn / ExprNode slider params (hidden when collapsed) ── */}
