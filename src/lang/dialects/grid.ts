@@ -447,7 +447,7 @@ export function parseGrid(src: string, opts: { base?: P; seed?: number } = {}): 
             const k = a.key?.toLowerCase() ?? null;
             const flag = !k && a.value.k === 'word' ? a.value.v.toLowerCase() : null;
             const dirOf = (word: string) => (word === 'none' ? 0 : DIRECTIONS.findIndex(x => x.key === word) + 1);
-            const wordOf = () => (a.value.k === 'word' ? a.value.v.toLowerCase() : '');
+            const wordOf = () => (a.value.k === 'word' ? a.value.v.toLowerCase() : a.value.k === 'random' ? 'random' : '');
             if (flag === 'keep' && kind === 'explode') r.keep = true;
             else if (flag === 'move' && kind === 'crowd') r.move = true;
             else if (flag === 'die' && kind === 'crowd') r.move = false;

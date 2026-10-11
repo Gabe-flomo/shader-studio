@@ -4650,12 +4650,12 @@ Examples:
 
 ### then
 
-Grid Rules · action. A stacked rule after the base, run in order every step: explode (cells meet), crowd (too many neighbours: die or move), drift (a direction), cluster (a big clump changes).
+Grid Rules · action. A stacked rule after the base, run in order every step: explode (cells meet), crowd (too many neighbours: die or move), drift (a direction), cluster (a big clump changes), move (cells step along their heading), collide (movers that meet bounce, turn, stop, merge or explode). heading= limits a card to cells with that heading.
 
 Words: `then`
 
 ```
-then copies= distance= at= radius= dir= chance=
+then copies= distance= at= radius= dir= heading= assign= blocked= chance=
 ```
 
 | Slot | What |
@@ -4665,6 +4665,9 @@ then copies= distance= at= radius= dir= chance=
 | at | count |
 | radius | count |
 | dir | n, ne, e, se, s, sw, w, nw |
+| heading | none, n, ne, e, se, s, sw, w, nw |
+| assign | random, none, n, ne, e, se, s, sw, w, nw |
+| blocked | wait, bounce, turn |
 | chance | number |
 
 Examples:
@@ -4673,6 +4676,8 @@ Examples:
 - `then drift dir=e chance=0.3` — on an empty graph (just an Output)
 - `then crowd at=5 move` — on an empty graph (just an Output)
 - `then cluster radius=2 at=14` — on an empty graph (just an Output)
+- `then collide explode copies=8 fly` — on an empty graph (just an Output)
+- `then move assign=random blocked=bounce` — on an empty graph (just an Output)
 
 ### colours
 
