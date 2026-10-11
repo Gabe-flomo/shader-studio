@@ -259,7 +259,9 @@ const TINT_PREF = 'builder:agent-builder:studio:tint';
 const readPref = (k: string) => { try { return localStorage.getItem(k) === '1'; } catch { return false; } };
 const writePref = (k: string, v: boolean) => { try { localStorage.setItem(k, v ? '1' : '0'); } catch { /* this session only */ } };
 /** Born in a region: the Emit's Shape Field or Picture, in words. */
-const BORN_REGION = [{ value: 'field', label: 'A region (below)' }, { value: 'picture', label: 'A texture (below)' }];
+/** Born's Where: the built-in shapes, then External… (a source of the graph, a group, a picture, a texture or one made here). */
+const BORN_EXTERNAL = { value: 'external', label: 'External…' };
+const isExternalShape = (shape: string) => shape === 'field' || shape === 'picture';
 const readHood = () => { try { return localStorage.getItem(HOOD_PREF) === '1'; } catch { return false; } };
 const writeHood = (v: boolean) => { try { localStorage.setItem(HOOD_PREF, v ? '1' : '0'); } catch { /* this session only */ } };
 const r3 = (v: number) => String(Math.round(v * 1000) / 1000);
@@ -293,6 +295,8 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
   const surpriseSeed = useSurpriseSeeds(st => st.agents[groupId] ?? null);
   // Memory (phase 4): the memory being edited; the viewport colours the walkers by it.
   const [memPicked, setMemPicked] = useState<string | null>(null);
+  // Born's Where set to External… before a source is picked (once picked, the Emit's shape says so).
+  const [bornExternal, setBornExternal] = useState(false);
   const update = (next: AgentRuleSet) => { apply(next); setPreset(null); };
   // Where (the Where picker): the region shown over the picture, a shape being drawn, and the pick.
   const [whereShown, setWhereShown] = useState<WhereShown | null>(null);
@@ -447,9 +451,10 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
   };
 
   // ── Born ──
+  const bornIsExternal = !!emit && (bornExternal || isExternalShape(born.shape));
   const bornCard = (
     <BehaviourCard id="born" picture="born" title="Born" hint={words('born').hint} learn={words('born').learn} guide={words('born').guide}
-      summary={`${(d3 ? SHAPES_3D : SHAPES_2D).find(x => x.value === born.shape)?.label ?? born.shape} · ${born.count.replace('m', 'M')}`}
+      summary={`${isExternalShape(born.shape) ? 'External' : (d3 ? SHAPES_3D : SHAPES_2D).find(x => x.value === born.shape)?.label ?? born.shape} · ${born.count.replace('m', 'M')}`}
       more={<>
         <SettingRow id="facing" label="Facing" hint={SETTING_HINTS.facing} onFocus={onFocusSetting}>
           <Select ariaLabel="Facing" value={String(emit?.params.heading ?? 'inward')} options={FACING} onChange={v => setSetupParam(emit?.id, { heading: v })} />
@@ -464,14 +469,22 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
       </>}>
       {!emit && <span style={{ fontSize: 12, color: tk.text.muted }}>No Emit is wired into this group: they are born anywhere, all at once.</span>}
       <SettingRow id="where" label="Where" hint={SETTING_HINTS.where} onFocus={onFocusSetting}>
-        <Select ariaLabel="Where they are born" value={born.shape} options={(d3 ? SHAPES_3D : SHAPES_2D).concat((d3 ? SHAPES_3D : SHAPES_2D).some(x => x.value === born.shape) ? [] : [BORN_REGION.find(x => x.value === born.shape) ?? { value: born.shape, label: born.shape }])}
-          onChange={v => setSetupParam(emit?.id, { shape: v })} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <Select ariaLabel="Where they are born" value={bornIsExternal ? BORN_EXTERNAL.value : born.shape}
+            options={(d3 ? SHAPES_3D : SHAPES_2D).concat(emit ? [BORN_EXTERNAL] : [], (d3 ? SHAPES_3D : SHAPES_2D).some(x => x.value === born.shape) || isExternalShape(born.shape) ? [] : [{ value: born.shape, label: born.shape }])}
+            onChange={v => {
+              if (v === BORN_EXTERNAL.value) { setBornExternal(true); return; }
+              setBornExternal(false);
+              if (isExternalShape(born.shape)) whereCtx.apply('born', null);
+              setSetupParam(emit?.id, { shape: v });
+            }} />
+          {/* External: the shared Where picker, its source kinds one at a time, then the summary row. */}
+          {emit && bornIsExternal && (
+            <WhereRow id="born" use="born" onFocus={onFocusSetting} startOpen={!isExternalShape(born.shape)} none="Pick a source"
+              onPicked={p => { if (!p) setBornExternal(false); }} />
+          )}
+        </div>
       </SettingRow>
-      {emit && (
-        <SettingRow id="bornWhere" label="Or born inside" hint="A shape, mask or texture of your graph, or one you draw on the picture: they are born only there." onFocus={onFocusSetting}>
-          <WhereRow id="born" use="born" onFocus={onFocusSetting} />
-        </SettingRow>
-      )}
       <SliderSetting id="size" label="Size" hint={SETTING_HINTS.size} value={born.size} min={0} max={2} step={0.01} onFocus={onFocusSetting}
         param={emit ? { nodeId: emit.id, key: 'size' } : undefined} onChange={v => setSetupParam(emit?.id, { size: v })} disabled={!emit || born.shape === 'screen' || born.shape === 'point'} />
       <SettingRow id="count" label="How many" hint={SETTING_HINTS.count} onFocus={onFocusSetting}>
@@ -670,7 +683,7 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
   const titles = (ids: string[]) => on(ids).map(c => CARD_WORDS[c.card].title.toLowerCase()).join(' · ') || 'none on';
   const summary = (id: SectionId): string => {
     switch (id) {
-      case 'born': return `${born.shape} · ${born.count.replace('m', 'M')}`;
+      case 'born': return `${isExternalShape(born.shape) ? 'external' : born.shape} · ${born.count.replace('m', 'M')}`;
       case 'senses': case 'turning': case 'trail': return sectionSummary(cards, id);
       case 'moving': return sectionSummary(cards, 'moving');
       case 'forces': return titles(['gravity', 'wind', 'curl', 'field', 'attract', 'home', 'drag']);
