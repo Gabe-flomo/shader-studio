@@ -1,5 +1,5 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { p } from './helpers';
+import { p, withParamSockets } from './helpers';
 
 const VF_NOISE_GLSL = `
 float _vfhash(vec2 p2) {
@@ -19,7 +19,7 @@ float _vfnoise(vec2 p2) {
 
 // ─── VectorFieldNode ──────────────────────────────────────────────────────────
 
-export const VectorFieldNode: NodeDefinition = {
+export const VectorFieldNode: NodeDefinition = withParamSockets({
   type: 'vectorField',
   label: 'Vector Field',
   category: '2D Space', subcategory: 'Warp',
@@ -103,11 +103,11 @@ export const VectorFieldNode: NodeDefinition = {
       },
     };
   },
-};
+}, ['scale', 'speed', 'strength']);
 
 // ─── GravityFieldNode ─────────────────────────────────────────────────────────
 
-export const GravityFieldNode: NodeDefinition = {
+export const GravityFieldNode: NodeDefinition = withParamSockets({
   type: 'gravityField',
   label: 'Gravity Field',
   category: '2D Space', subcategory: 'Warp',
@@ -186,11 +186,11 @@ export const GravityFieldNode: NodeDefinition = {
       },
     };
   },
-};
+}, ['min_dist']);
 
 // ─── SpiralFieldNode ──────────────────────────────────────────────────────────
 
-export const SpiralFieldNode: NodeDefinition = {
+export const SpiralFieldNode: NodeDefinition = withParamSockets({
   type: 'spiralField',
   label: 'Spiral Field',
   category: '2D Space', subcategory: 'Warp',
@@ -261,4 +261,4 @@ export const SpiralFieldNode: NodeDefinition = {
       },
     };
   },
-};
+}, ['spiral_ratio']);

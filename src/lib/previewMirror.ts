@@ -10,8 +10,10 @@
  * preserveDrawingBuffer. Nothing is copied while no one mirrors. A new sink asks for one frame
  * (so a paused clock still shows the picture).
  *
- * Unlike previewHold.ts this doesn't stop the main loop: the main canvas keeps drawing (under the
- * builder window) and the sinks copy it, at the cost of one drawImage a frame.
+ * Unlike previewHold.ts this doesn't stop the main loop: the main canvas keeps drawing and the sinks copy it, at the
+ * cost of one drawImage a frame. A viewport that has the preview drawn at its own size (the Splat builder,
+ * lib/previewSize.ts) takes the canvas itself instead (adoptPreviewCanvas): the preview draws straight into the
+ * viewport, with no copy and nothing left drawing under the window; the sinks are then only told a frame came.
  */
 type Sink = (src: HTMLCanvasElement) => void;
 
@@ -40,3 +42,45 @@ export function setPreviewWake(fn: (() => void) | null): void { wake = fn; }
 
 /** Ask the main preview for one frame (a paused clock draws one), e.g. for a builder's read of the live state. */
 export function wakePreview(): void { wake?.(); }
+
+// ── The canvas itself, lent to a viewport ────────────────────────────────────
+
+let canvas: HTMLCanvasElement | null = null;
+let lent: { host: HTMLElement; give: () => void } | null = null;
+
+/** ShaderCanvas: its canvas (null when it goes; a lent canvas comes back first). */
+export function setPreviewCanvas(c: HTMLCanvasElement | null): void {
+  if (c !== canvas) lent?.give();
+  canvas = c;
+}
+
+/** Whether the canvas is lent to a viewport now. */
+export function previewCanvasLent(): boolean { return lent !== null; }
+
+/**
+ * Put the main preview's canvas in `host` (filling it, under whatever else `host` holds; pointer events go through
+ * to the viewport) until the returned give-back, which puts it back where it was. Null when there is no canvas, or
+ * it is lent already. For a viewport whose size the preview is drawn at (previewSize.ts), so it fits as it is.
+ */
+export function adoptPreviewCanvas(host: HTMLElement): (() => void) | null {
+  const c = canvas;
+  if (!c || lent) return null;
+  const home = c.parentNode, next = c.nextSibling;
+  const was = { position: c.style.position, left: c.style.left, top: c.style.top, pointerEvents: c.style.pointerEvents };
+  host.insertBefore(c, host.firstChild);
+  c.style.position = 'absolute';
+  c.style.left = '0';
+  c.style.top = '0';
+  c.style.pointerEvents = 'none';
+  const give = () => {
+    if (lent?.give !== give) return;
+    lent = null;
+    Object.assign(c.style, was);
+    if (home) home.insertBefore(c, next && next.parentNode === home ? next : null);
+    else c.remove();
+    wake?.();
+  };
+  lent = { host, give };
+  wake?.();
+  return give;
+}
