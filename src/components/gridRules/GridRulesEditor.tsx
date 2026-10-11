@@ -204,7 +204,7 @@ function GridRulesBuilder({ node, onClose }: { node: GraphNode; onClose: () => v
   );
 
   return (
-    <StudioShell prefsKey="grid-rules" icon="grid" title={label} crumb={<SceneCrumb kind="grid" leaf={fromGrid ? 'Simulation' : undefined} />} kind={ruleSummary(params)} onClose={onClose}
+    <StudioShell prefsKey="grid-rules" icon="grid" title={label} crumb={fromGrid ? <SceneCrumb kind="grid" leaf="Simulation" /> : <SceneCrumb kind="simulation" />} kind={ruleSummary(params)} onClose={onClose}
       onEscape={() => { if (hood) { setHood(false); return true; } return false; }}
       actions={<>
         {fromGrid && (

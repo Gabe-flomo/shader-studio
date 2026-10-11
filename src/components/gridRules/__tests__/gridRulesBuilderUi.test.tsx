@@ -71,7 +71,7 @@ describe('the Grid Rules builder', () => {
   it('the shell: sections with summaries, the try board in the middle, presets below, the section remembered', () => {
     mount(<GridRulesEditor nodeId="g1" onClose={() => {}} />);
     expect($('[data-studio="grid-rules"]')).toBeTruthy();
-    expect($('[data-scene-crumb="grid"]')).toBeTruthy();
+    expect($('[data-scene-crumb="simulation"]')).toBeTruthy();
     expect(nav()).toEqual(['rule', 'neighbourhood', 'stack', 'start', 'run', 'brush', 'look', 'recipe']);
     expect($('[data-studio-section="rule"] [data-studio-summary]')?.textContent).toBe('B3/S23');
     expect($('[data-studio-section="run"] [data-studio-summary]')?.textContent).toBe('30 steps a second');
@@ -217,7 +217,7 @@ describe('the Grid Rules builder', () => {
     expect(useBuilderWindows.getState().gridRules).toBe(id);
     useBuilderWindows.setState({ gridRules: null });
     const built = builtScenes(useNodeGraphStore.getState().nodes).find(b => b.id === id)!;
-    expect(built.kind).toBe('grid');
+    expect(built.kind).toBe('simulation');
     expect(editBuiltScene(built)).toBe(true);
     expect(useBuilderWindows.getState().gridRules).toBe(id);
     let closed = 0;

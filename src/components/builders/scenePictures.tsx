@@ -4,7 +4,8 @@
  *
  *  - 2D scene: a ring of stars folded round the centre, turning slowly (sceneBuilder2d's shape SDFs);
  *  - Agent scene: the Agent Builder's trail followers, moving (agentBuilder/miniSim.ts);
- *  - Grid scene: Conway's Life running on a small board (gridRules/cpu.ts);
+ *  - Grid scene: shapes on cells, breathing in a wave across the grid;
+ *  - Grid simulation: Conway's Life running on a small board (gridRules/cpu.ts);
  *  - 3D scene: a torus, a ball and a box from the 3D builder's own thumbnail marcher;
  *  - Splat scene: a point cloud dissolving and coming back (the Splat builder's own mini cloud).
  */
@@ -87,6 +88,37 @@ function TwoDPicture({ width, height }: { width: number; height: number }) {
 
 const LIFE = { ...COUNT_PRESETS.life.params, density: 0.22 };
 
+/** Shapes drawn on cells (circles, squares, diamonds), sized by a wave that runs across the grid. */
+function GridScenePicture({ width, height }: { width: number; height: number }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const cols = 12, rows = Math.max(1, Math.round(12 * height / width));
+  useTicker(20, t => {
+    const c = ref.current, ctx = c?.getContext('2d');
+    if (!c || !ctx) return;
+    ctx.fillStyle = BG;
+    ctx.fillRect(0, 0, c.width, c.height);
+    const cw = c.width / cols, ch = c.height / rows;
+    ctx.strokeStyle = 'rgba(120, 140, 190, 0.35)';
+    ctx.lineWidth = 1;
+    for (let i = 1; i < cols; i++) { ctx.beginPath(); ctx.moveTo(i * cw, 0); ctx.lineTo(i * cw, c.height); ctx.stroke(); }
+    for (let j = 1; j < rows; j++) { ctx.beginPath(); ctx.moveTo(0, j * ch); ctx.lineTo(c.width, j * ch); ctx.stroke(); }
+    for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
+      const k = (i * 7 + j * 3) % 5;
+      if (k === 4) continue;
+      const wave = 0.5 + 0.5 * Math.sin(t * 2.2 - (i + j) * 0.55);
+      const r = Math.min(cw, ch) * (0.14 + 0.24 * wave);
+      const x = (i + 0.5) * cw, y = (j + 0.5) * ch;
+      ctx.fillStyle = `hsl(${190 + 40 * wave}, 80%, ${55 + 15 * wave}%)`;
+      ctx.beginPath();
+      if (k === 0 || k === 3) ctx.arc(x, y, r, 0, Math.PI * 2);
+      else if (k === 1) ctx.rect(x - r, y - r, r * 2, r * 2);
+      else { ctx.moveTo(x, y - r * 1.2); ctx.lineTo(x + r * 1.2, y); ctx.lineTo(x, y + r * 1.2); ctx.lineTo(x - r * 1.2, y); ctx.closePath(); }
+      ctx.fill();
+    }
+  });
+  return <canvas ref={ref} width={width} height={height} style={fluid(width, height)} />;
+}
+
 function GridPicture({ width, height }: { width: number; height: number }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const board = useRef<CpuBoard | null>(null);
@@ -135,7 +167,8 @@ function ThreeDPicture({ width, height }: { width: number; height: number }) {
 /** A kind's picture for the kind page. */
 export function ScenePicture({ kind, width = 240, height = 136 }: { kind: SceneKind; width?: number; height?: number }) {
   if (kind === '2d') return <TwoDPicture width={width} height={height} />;
-  if (kind === 'grid') return <GridPicture width={width} height={height} />;
+  if (kind === 'grid') return <GridScenePicture width={width} height={height} />;
+  if (kind === 'simulation') return <GridPicture width={width} height={height} />;
   if (kind === '3d') return <ThreeDPicture width={width} height={height} />;
   if (kind === 'splat') return <SplatPicture width={width} height={height} />;
   return <span style={{ display: 'block', borderRadius: 10, overflow: 'hidden', width: '100%', maxWidth: width }}><KindPicture kind="trail" width={width} height={height} /></span>;
