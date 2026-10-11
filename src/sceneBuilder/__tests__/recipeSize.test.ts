@@ -78,7 +78,19 @@ describe('linked size: printing', () => {
     expect(printed('box size=(0.3,1,0.3)')).toContain('box width=0.3 height=1 depth=0.3');
     expect(printed('box size=(0.5,1,0.5)')).toContain('box height=1');
     expect(printed('box size=(0.5,1,0.5)')).not.toContain('width');
-    expect(printed('cylinder r=0.2 h=0.7')).toContain('cylinder r=0.2 h=0.7');
+    expect(printed('cylinder r=0.2 h=0.7')).toContain('cylinder radius=0.2 height=0.7');
+  });
+  it('shapes with a height print radius= and height=; r= and h= still read', () => {
+    expect(printed('capsule r=0.3 h=0.9')).toContain('capsule height=0.9 radius=0.3');
+    expect(printed('hex-prism radius=0.25')).toContain('hex-prism radius=0.25');
+    expect(printed('cone h=2')).toContain('cone height=2');
+    expect(printed('pyramid height=1.2')).toContain('pyramid height=1.2');
+    // A sphere's and a torus's radius stay r=.
+    expect(printed('sphere r=0.3')).toContain('sphere r=0.3');
+    expect(printed('torus r=0.1')).toContain('torus r=0.1');
+    for (const [a, b] of [['cylinder r=0.2 h=0.7', 'cylinder radius=0.2 height=0.7'], ['capsule h=0.4', 'capsule height=0.4'], ['cone h=1.5', 'cone height=1.5']]) {
+      expect(shape(a).size).toEqual(shape(b).size);
+    }
   });
   it('defaults print nothing', () => {
     expect(printed('box')).toBe('surface · box');
@@ -87,7 +99,7 @@ describe('linked size: printing', () => {
   it('round-trips the old forms, the new ones and every shape with dimensions', () => {
     for (const src of [
       'box size=(0.3,1,0.3)', 'box size=0.2', 'box height=2 round=0.1', 'box-frame width=0.1 t=0.02', 'ellipsoid size=(0.6,0.3,0.4)',
-      'cylinder size=0.6', 'cylinder width=0.1 height=1', 'capsule r=0.6 h=0.6', 'hex-prism size=0.3', 'tri-prism height=0.9',
+      'cylinder size=0.6', 'cylinder width=0.1 height=1', 'capsule r=0.6 h=0.6', 'cylinder radius=0.2 height=0.9', 'tri-prism radius=0.3 h=0.5', 'hex-prism size=0.3', 'tri-prism height=0.9',
       'smooth-union(box width=0.2, cylinder size=0.3 @twist(2)) k=0.2',
     ]) roundTrip(src);
     for (const s of SHAPES.filter(x => shapeDims(x))) {

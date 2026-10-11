@@ -83,6 +83,16 @@ Translate 3D / 4D, Rotate 4D, Scale 3D / 4D and Rotate 2D with a wired angle giv
 the ones whose angle changes from radians to degrees (UV Transform 2D, Rotate 2D's slider, Rotate 3D) agree
 to float rounding (1e-7).
 
+**A tiny rounding difference is said, not blocked.** Those three (with a non-zero angle on the slider) switch,
+but the plan carries a note (`TransformPlan.inexact`): "Output may differ by a tiny rounding amount". On the
+card the pill reads **Transform ≈**, and clicking it opens the note with **Switch** and **Keep** instead of
+switching at once. **Switch all** (right-click), when any switch has that difference, first shows a short list
+(`SwitchAllDialog`): the exact nodes and the rounding ones in two groups, each with a switch to leave the whole
+group out and a box per node, and the ones that can't switch with why; **Switch N** switches the ticked ones as
+one undo step (`previewSwitchAll`, `switchAllChoice` in `toTransform.ts`). With every switch exact, Switch all
+switches straight away as before. The toast says "same picture", or how many are up to a tiny rounding
+difference. `src/components/NodeGraph/__tests__/switchToTransformChoice.test.tsx` covers the choice flow.
+
 ## Where it comes from
 
 - **Browser**: listed first in 2D Space › Basic, 3D Transforms › Move (added as 3D) and 4D Space (added as 4D).

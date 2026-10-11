@@ -21,6 +21,7 @@ import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { handSourceLabel, sourceFromType, sourceLabel, sourceType, triggerLabel } from '../playSources';
 import { triggerKey } from '../triggers';
 import { leftBehind, mediaCarried, playBundle } from '../exportHtml';
+import { webExportScope } from '../exportScope';
 import { DEFAULT_HANDS, defaultLayer, emptyPlayRecord, oneHandUsed, parsePlayRecordAsSaved, usesHands, type PlayLayer, type PlayRecord, type PlaySource } from '../../types/play';
 
 // ── Synthetic hands ──────────────────────────────────────────────────────────
@@ -615,10 +616,13 @@ describe('hands in a play file', () => {
     expect(oneHandUsed(emptyPlayRecord())).toBeNull();
   });
 
-  it('leaves hand tracking out of a web page unless asked, and says so', () => {
+  it('leaves hand tracking out of a web page, and says so (play/exportScope.ts)', () => {
     const input = { title: 't', fragmentShader: '', uniforms: {}, paramBindings: {}, play: record, aspect: '16:9' as const };
-    expect(leftBehind(record).map(x => x.what)).toContain('Hand tracking');
-    expect(leftBehind(record, undefined, { hands: true }).map(x => x.what)).not.toContain('Hand tracking');
+    const scoped = webExportScope(input);
+    expect(scoped.frozen.map(f => f.why)).toContain('Hand tracking won’t work on a web page; those controls will hold their current value.');
+    expect(scoped.input.play.mappings.some(m => m.source.kind === 'hand')).toBe(false);
+    expect(scoped.input.play.hands).toBeUndefined();
+    expect(leftBehind(scoped.input.play).map(x => x.what)).not.toContain('Hand tracking');
     expect(mediaCarried(undefined, 'pending')[0].what).toMatch(/Hand tracking/);
     expect('hands' in playBundle(input)).toBe(false);
     const assets = { bundle: 'a', loader: 'b', wasm: 'c', model: 'd' };

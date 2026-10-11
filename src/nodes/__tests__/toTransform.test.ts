@@ -9,7 +9,7 @@ vi.hoisted(() => {
 });
 import { getNodeDefinition } from '../definitions';
 import { TransformNode } from '../definitions/transformAny';
-import { TO_TRANSFORM_TYPES, planToTransform, switchToTransformIn } from '../toTransform';
+import { INEXACT_NOTE, TO_TRANSFORM_TYPES, planToTransform, previewSwitchAll, switchAllChoice, switchToTransformIn } from '../toTransform';
 import { compileGraph } from '../../compiler/graphCompiler';
 import { compileFragment, type Env } from '../../compiler/__tests__/glslRun';
 import type { GraphNode } from '../../types/nodeGraph';
@@ -170,5 +170,57 @@ describe('Switch all to Transform', () => {
     const r = switchToTransformIn([node('rotate2d', { angle: 1 })], play([]), () => true);
     expect(r.switched).toEqual([]);
     expect(r.skipped[0].reason).toMatch(/Input/);
+  });
+});
+
+describe('Switch to Transform: a tiny rounding difference is said, and chosen', () => {
+  const play = { controls: [] } as unknown as PlayRecord;
+  const at = (n: GraphNode, id: string, label?: string): GraphNode => ({ ...n, id, params: { ...n.params, ...(label ? { label } : {}) } });
+  it('a plan says when an angle converts from radians to degrees (UV Transform 2D, Rotate 2D\'s slider, Rotate 3D)', () => {
+    const plan = (n: GraphNode) => planToTransform([n], n)!;
+    for (const n of [node('uvTransform2d', { angle: 0.7 }, { uv: 'a' }), node('rotate2d', { angle: 1.1 }, { input: 'a' }), node('rotate3D', { angle: 0.9 }, { pos: 'a' })]) {
+      expect(plan(n).ok, n.type).toBe(true);
+      expect(plan(n).inexact, n.type).toContain(INEXACT_NOTE);
+    }
+    // Exact: no angle to convert (0, or a wired angle replacing the slider), or no unit change at all.
+    for (const n of [node('rotate2d', { angle: 0 }, { input: 'a' }), node('rotate2d', { angle: 1 }, { input: 'a', angle: 'b' }), node('translate3D', { tx: 1 }, { pos: 'a' }), node('place2D', { rotate: 30 }), node('rotate4D', { angle: 40 }, { p4: 'a' })]) {
+      expect(plan(n).inexact, n.type).toBeUndefined();
+    }
+    // A refused switch has a reason, never a rounding note.
+    expect(plan(node('rotate2d', { angle: 1 })).inexact).toBeUndefined();
+  });
+
+  const graph = () => [
+    at(node('translate3D', { tx: 1 }, { pos: 'a' }), 't3', 'Move'),
+    at(node('rotate3D', { angle: 0.9 }, { pos: 'a' }), 'r3', 'Spin'),
+    at(node('rotate2d', { angle: 1.1 }, { input: 'a' }), 'r2'),
+    at(node('rotate2d', { angle: 1 }), 'bad'),
+  ];
+  it('Switch all lists the exact switches, the rounding ones and the ones left', () => {
+    const p = previewSwitchAll(graph(), play);
+    expect(p.exact).toEqual([{ id: 't3', label: 'Move' }]);
+    expect(p.inexact.map(x => x.id)).toEqual(['r3', 'r2']);
+    expect(p.inexact[0].label).toBe('Spin');
+    expect(p.inexact[1].label).toBe(getNodeDefinition('rotate2d')!.label);
+    expect(p.skipped.map(x => x.id)).toEqual(['bad']);
+  });
+  it('the choice: a group off skips all of it, a node unticked skips only it', () => {
+    const p = previewSwitchAll(graph(), play);
+    expect([...switchAllChoice(p, { exact: true, inexact: true })].sort()).toEqual(['r2', 'r3', 't3']);
+    expect([...switchAllChoice(p, { exact: true, inexact: false })]).toEqual(['t3']);
+    expect([...switchAllChoice(p, { exact: true, inexact: true, off: new Set(['r3']) })].sort()).toEqual(['r2', 't3']);
+    expect([...switchAllChoice(p, { exact: false, inexact: false })]).toEqual([]);
+  });
+  it('switching only the chosen ones leaves the rest as they were', () => {
+    const p = previewSwitchAll(graph(), play);
+    const chosen = switchAllChoice(p, { exact: true, inexact: false });
+    const r = switchToTransformIn(graph(), play, n => chosen.has(n.id));
+    expect(r.switched).toEqual(['t3']);
+    expect(r.exact.map(x => x.id)).toEqual(['t3']);
+    expect(r.inexact).toEqual([]);
+    expect(r.nodes.map(n => n.type)).toEqual(['transform', 'rotate3D', 'rotate2d', 'rotate2d']);
+    const both = switchToTransformIn(graph(), play, n => switchAllChoice(p, { exact: true, inexact: true }).has(n.id));
+    expect(both.inexact.map(x => x.id)).toEqual(['r3', 'r2']);
+    expect(both.nodes.map(n => n.type)).toEqual(['transform', 'transform', 'transform', 'rotate2d']);
   });
 });

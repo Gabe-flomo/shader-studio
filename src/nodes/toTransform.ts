@@ -20,6 +20,7 @@ import type { GraphNode, InputSocket, SubgraphData } from '../types/nodeGraph';
 import type { PlayRecord } from '../types/play';
 import { TransformNode, transformSockets, type TransformDim } from './definitions/transformAny';
 import { applySwitchToList, retargetPlay, type SwitchPlan } from './switchNode';
+import { getNodeDefinition } from './definitions';
 
 const R2D = 180 / Math.PI;
 
@@ -137,7 +138,20 @@ export interface BoundCheck {
 
 const PER_SOCKET = /^(__keyframes|__kfMode|__kfLoopBack|__kfBypass|__kfOffset|__kfLoopCount|__inExpr)_(.+?)(_[xyz])?$/;
 
-export type TransformPlan = SwitchPlan & { /** Group-card overrides to rename: old key → new key (with factor). */ overrides: ParamMove[] };
+export type TransformPlan = SwitchPlan & {
+  /** Group-card overrides to rename: old key → new key (with factor). */
+  overrides: ParamMove[];
+  /**
+   * Set when the switch is allowed but not bit-for-bit: an angle carried from radians to degrees
+   * (UV Transform 2D, Rotate 2D's slider, Rotate 3D) gives the same picture up to float rounding
+   * (about 1e-6). The card asks before switching; Switch all lists these apart.
+   */
+  inexact?: string;
+};
+
+/** What the card and Switch all say about a switch that differs by float rounding only. */
+export const INEXACT_NOTE = 'Output may differ by a tiny rounding amount';
+const INEXACT_WHY = `${INEXACT_NOTE} (about one part in a million): its angle converts from radians to degrees`;
 
 /** Plan replacing `old` with a Transform. `scope` is its level (for the wires out of it). Null for other types. */
 export function planToTransform(scope: readonly GraphNode[], old: GraphNode, bound: BoundCheck = {}): TransformPlan | null {
@@ -175,10 +189,13 @@ export function planToTransform(scope: readonly GraphNode[], old: GraphNode, bou
   const sockets = transformSockets(m.dim);
   const params: Record<string, unknown> = { ...TransformNode.defaultParams, dim: m.dim };
   const paramMap: Record<string, string> = {};
+  // A non-zero angle carried radians → degrees: the same picture up to float rounding, not bit for bit.
+  let inexact = false;
   for (const mv of moves) {
     const v = old.params[mv.from];
     if (typeof v === 'number') params[mv.to] = mv.factor ? v * mv.factor : v;
     if (!mv.factor || mv.factor === 1) paramMap[mv.from] = mv.to;
+    else if (typeof v === 'number' && v !== 0 && fixed[mv.to] === undefined) inexact = true;
   }
   if (old.type === 'rotate4D') params.spinPlane = String(old.params.plane ?? 'xw');
   Object.assign(params, fixed);
@@ -212,6 +229,7 @@ export function planToTransform(scope: readonly GraphNode[], old: GraphNode, bou
     type: 'transform', label: 'Transform', ok: !reason, ...(reason ? { reason } : {}), score: 0,
     inputMap, outputMap: { ...m.outputs }, keptWires: Object.keys(inputMap).length + outWires, droppedWires: dropped,
     node, paramMap, lostParams: [], lostLabels: [], overrides,
+    ...(inexact && !reason ? { inexact: INEXACT_WHY } : {}),
   };
 }
 
@@ -222,6 +240,10 @@ export interface SwitchResult {
   play: PlayRecord;
   /** Nodes switched (their ids, in the graph). */
   switched: string[];
+  /** The switched nodes whose output differs by float rounding (TransformPlan.inexact), with their labels. */
+  inexact: Array<{ id: string; label: string }>;
+  /** The switched nodes that give exactly the same numbers, with their labels. */
+  exact: Array<{ id: string; label: string }>;
   /** Nodes that would switch but can't, with why. */
   skipped: Array<{ id: string; label: string; reason: string }>;
 }
@@ -239,6 +261,9 @@ const subOf = (n: GraphNode): SubgraphData | null => {
 export function switchToTransformIn(nodes: GraphNode[], play: PlayRecord, want: (n: GraphNode) => boolean): SwitchResult {
   const switched: string[] = [];
   const skipped: SwitchResult['skipped'] = [];
+  const exact: SwitchResult['exact'] = [];
+  const inexact: SwitchResult['inexact'] = [];
+  const labelOf = (n: GraphNode) => (typeof n.params.label === 'string' && n.params.label) || getNodeDefinition(n.type)?.label || n.type;
   let pl = play;
   const playHas = (id: string, key: string) => (pl.controls ?? []).some(c => { const p = c.target.split('::'); return p.length >= 2 && p[p.length - 2] === id && p[p.length - 1] === key; });
 
@@ -261,7 +286,7 @@ export function switchToTransformIn(nodes: GraphNode[], play: PlayRecord, want: 
         groupOverride: k => parent !== null && `${old.id}::${k}` in pp(),
       });
       if (!plan) continue;
-      if (!plan.ok) { skipped.push({ id: old.id, label: (typeof old.params.label === 'string' && old.params.label) || old.type, reason: plan.reason ?? '' }); continue; }
+      if (!plan.ok) { skipped.push({ id: old.id, label: labelOf(old), reason: plan.reason ?? '' }); continue; }
       out = applySwitchToList(out, plan);
       pl = retargetPlay(pl, old.id, plan).play;
       outPorts[old.id] = plan.outputMap;
@@ -277,11 +302,32 @@ export function switchToTransformIn(nodes: GraphNode[], play: PlayRecord, want: 
         parentParams = params;
       }
       switched.push(old.id);
+      (plan.inexact ? inexact : exact).push({ id: old.id, label: labelOf(old) });
     }
     return { list: out, parentParams, outPorts };
   };
   const top = level(nodes, null);
-  return { nodes: top.list, play: pl, switched, skipped };
+  return { nodes: top.list, play: pl, switched, skipped, exact, inexact };
+}
+
+/** What Switch all would do, before doing it: the exact switches, the ones off by rounding, and the ones left. */
+export interface SwitchAllPreview {
+  exact: SwitchResult['exact'];
+  inexact: SwitchResult['inexact'];
+  skipped: SwitchResult['skipped'];
+}
+export function previewSwitchAll(nodes: GraphNode[], play: PlayRecord): SwitchAllPreview {
+  const r = switchToTransformIn(nodes, play, () => true);
+  return { exact: r.exact, inexact: r.inexact, skipped: r.skipped };
+}
+
+/**
+ * The nodes Switch all's list says to switch: each group's tick (exact, rounding), less the nodes
+ * unticked one by one. Pure, for the dialog and its tests.
+ */
+export function switchAllChoice(preview: SwitchAllPreview, pick: { exact: boolean; inexact: boolean; off?: ReadonlySet<string> }): Set<string> {
+  const off = pick.off ?? new Set<string>();
+  return new Set([...(pick.exact ? preview.exact : []), ...(pick.inexact ? preview.inexact : [])].map(x => x.id).filter(id => !off.has(id)));
 }
 
 /**

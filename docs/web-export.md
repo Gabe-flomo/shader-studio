@@ -10,6 +10,35 @@ something you paste into a page. There are three outputs, from the same input
 | **Full player** | The player runtime (`play/runtime/play-runtime.js`) and the parts of the layer kit (`play/kit/*`) the graph uses, with the controls panel, layers and mappings. | `play/exportHtml.ts` `buildPlaySnippet` / `buildPlayHtml` |
 | **Copy GLSL** | The fragment shader alone, with a header listing the uniforms it reads, their current values and controls' names, and the WebGL2 defines. | `play/embedLite.ts` `buildGlslOnly` |
 
+## What comes along (2026-10-10)
+
+A web export is for backgrounds and light interactivity, not every Play feature.
+`play/exportScope.ts` `webExportScope` runs on the page's input before anything is built (the
+dialog, Download page, the store's `exportPlayHtml` and the Stage's Exact view all go through it).
+
+**Supported:** the shader with its time and resolution; the mouse position and clicks (`u_mouse`,
+`u_mousebtn`, Play mouse sources and click triggers); key presses (key sources and key triggers);
+previous-frame feedback, echo and Pass nodes; images (and small videos and songs in the full player);
+Play mappings driven by those, by time (LFOs, clocks, noise…) and by other controls. There is no
+scroll input: Play has no scroll source, so nothing reads one (a follow-up if wanted).
+
+**Left out**, said plainly in the dialog, with what they drove held at its current value:
+
+| Left out | What goes | The dialog says |
+| --- | --- | --- |
+| Hand, face and pose tracking | hand / face / pose sources, gesture and proximity triggers, pair mappings on hand points, the trackers' settings, baked tracks and hand-model files | "Hand tracking won't work on a web page; those controls will hold their current value." (face, body alike) |
+| The camera | Camera layers and Motion layers reading it (removed), particles / glyphs / contours drawn from it (hidden), sensors and zones on those, controls on removed layers | "The camera won't work on a web page; …" |
+| MIDI | MIDI and pad sources, note triggers and actions, the pad grid, the MIDI file, drum pads' and racks' MIDI input (their keys and clicks stay) | "MIDI won't work on a web page; …" |
+| The microphone and live audio | live sources, audio triggers, readers on the live input, Audio layers (hidden), an Audio Input node with no song (its band mappings too) | "The microphone and live audio won't work on a web page; …" |
+| The Depth node's model | nothing to remove: its live texture reads 0 on a page (a baked depth travels) | "The Depth node's model won't run on a web page, …" |
+
+"Held at its current value": `webInputFrom` already bakes the values mappings are giving controls
+right now into the uniforms and layers; the scope only removes the mappings, so nothing moves them
+on the page. The full player never carries the trackers (`hands`, `tracks`, `face`, `pose`) or
+`midi.js`: `kitGroupsFor` no longer picks the `trackers` group and `midi` is now a group of its own it
+never picks; only a Present canvas (`host: true`) keeps the whole kit. The "Include hand tracking"
+option (12 MB of MediaPipe in the page) is gone from the dialog.
+
 ## Why it used to be 28,000 lines
 
 Before 2026-10-10 every export was the full player: the runtime (223 KB) plus **every** kit
@@ -29,8 +58,19 @@ shader reading only:
   file next to the page (the snippet's comment and the dialog name the file); an image input
   with no file reads blank, as in the app.
 
-and whose Play has no visible layers, enabled mappings, actions, Finish, audio, MIDI, pad grid,
-tracking, readers, or picture background. Anything else is listed by name ("uses Agents (+94 KB),
+and whose Play has no visible layers, actions, Finish, audio, MIDI, pad grid, tracking, readers,
+pair mappings or picture background, and whose mappings are ones the snippet runs (`liteMaps`):
+
+- each enabled mapping (or Source route, Replace) reads the mouse (x, y, a button held), a key held,
+  a key or click trigger (envelope, toggle, step or random; fire once), or an LFO or Clock (not the
+  random shape);
+- it writes a uniform the shader reads, a colour by one channel or as a whole (its brightness);
+- one per control (one per channel of a colour), with no increment or delay.
+
+The mapping part of the bootstrap (`LITE_MAPS`, about 3 KB) is in the snippet only when it has
+mappings: keys held and pressed from the window, in the capture phase so a host page's own shortcuts don't swallow them (not while typing in a field), clicks on the picture
+(a background reads them from the window, since it lets the page's own clicks through), the player's
+trigger envelope and its curve and smoothing. Anything else is listed by name ("uses Agents (+94 KB),
 Mappings"), and the dialog switches to the full player. A uniform the bootstrap doesn't know is
 named too ("its input u_x"), so a new built-in can't silently render black.
 
@@ -57,7 +97,8 @@ the groups a page needs, conservatively (a JSON scan of the Play record plus the
 | --- | --- | --- |
 | `script` | p5, sketch3d | a Script layer, a saved layer kind, any `code`/`sketch` in the record |
 | `agentsCpu` | agents | an Agents layer |
-| `trackers` | hands, tracks, face, pose | hands/face/pose settings, baked tracks, or any mention of them |
+| `trackers` | hands, tracks, face, pose | never in a web export (a Present canvas only) |
+| `midi` | midi | never in a web export (a Present canvas only) |
 | `data` | data | datasets, a Data layer, or a dataset reference |
 | `finish` | finishGlsl, finish, waterLayer | a Finish stack, a Water layer or a look |
 | `blur` | blur | with Finish or particles |
@@ -72,7 +113,29 @@ feature that stays at rest. A name an included file imports from a left-out file
 that throws "[Playfield] Finish effects and Water layers: not in this page" if it is ever called.
 Present canvases (`host: true`) keep the whole kit, since their host can swap a Script layer's code.
 
-## Sizes (2026-10-10, all 431 examples)
+## Sizes after the scope and the snippet's mappings (2026-10-10, all 432 examples)
+
+| | Before | After |
+| --- | --- | --- |
+| Small snippet | 201 examples | 220 examples |
+| Average export | 440 KB | 398 KB |
+| Average small / full player | 18.3 KB / 806 KB | 18.7 KB / 792 KB |
+| All 432 exports together | 185.5 MB | 167.9 MB |
+| Keys: hold and hit (Play 09) | 789 KB (player) | 14 KB (small, 2 mappings) |
+| Triggers: toggle, step, random (Play 10) | 790 KB (player) | 14 KB (small, 3 mappings) |
+| LFOs and the clock (Play 04) | 683 KB (player) | 14 KB (small, 3 mappings) |
+| Hands: two at once | 737 KB (player) | 11 KB (small, hands left out) |
+| Hands: pinch (null and particles layers) | 739 KB | 668 KB (no trackers) |
+| Agents Hand Beat | 1,198 KB | 1,099 KB |
+| Wave Interference (mappings from another control) | 699 KB | 683 KB (no midi.js) |
+
+19 examples moved to the small snippet: 15 whose mappings read the mouse, keys or an LFO / Clock
+(the Play tour's mouse, curves, LFO, expression knob, keys and triggers pages, four Matrix and Grid
+tours, two Time cube examples), and 4 whose only blockers were left-out inputs (live audio, MIDI,
+camera, two hands). None moved the other way. Every full-player page is about 16 KB lighter
+(midi.js); the 13 still on the player that used tracking or MIDI shed 16–71 KB.
+
+## Sizes (2026-10-10, all 431 examples, before the scope)
 
 | | Before | After |
 | --- | --- | --- |
@@ -90,7 +153,15 @@ Present canvases (`host: true`) keep the whole kit, since their host can swap a 
 
 `src/play/__tests__/embedLite.test.ts`: the small snippet has no player code and stays under its
 budget; it runs against a recording WebGL2 context; data attributes override; feature detection
-and the kit groups; every kit subset loads.
+and the kit groups; every kit subset loads; mappings from the mouse, keys and the clock: which
+qualify, the code only when needed, and the bootstrap run with key presses (and typing ignored),
+clicks on and off the picture, a key envelope, an LFO with renderAt, a colour's channel and
+brightness, and a background's window clicks.
+
+`src/play/__tests__/exportScope.test.ts`: the support classification of every source and trigger;
+the sentences; a hand and a MIDI mapping removed with their controls held at the live value (baked by
+`webInputFrom`), small afterwards, and a player page with no tracker or MIDI code; the camera, MIDI
+and mic cases; a song that travels; the Depth model; an untouched graph unchanged.
 
 In a browser, each example's small page was rendered at t = 1.5 s next to the full player page
 (which mirrors the app's canvas) and compared pixel by pixel: all 201 match, a mean difference

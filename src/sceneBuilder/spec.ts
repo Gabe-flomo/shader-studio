@@ -143,6 +143,16 @@ export function shapeDims(def: ShapeDef): { dims: Record<DimWord, DimTarget>; li
   return null;
 }
 
+/**
+ * How a recipe writes a shape's setting: a shape with a height (cylinder, capsule, the prisms, the
+ * cones, the pyramid) writes `radius=` and `height=` for its `r` and `h`; `r=` and `h=` still read.
+ * Every other setting is written by its key (a sphere's and a torus's `r`, a torus's `R`).
+ */
+export function shapeParamWord(def: ShapeDef, key: string): string {
+  if (def.fourD || !def.params.some(p => p.key === 'h')) return key;
+  return key === 'h' ? 'height' : key === 'r' ? 'radius' : key;
+}
+
 // ── Warps ───────────────────────────────────────────────────────────────────
 
 export interface WarpDef {

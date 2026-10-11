@@ -525,7 +525,7 @@ export const VolumetricSceneNode: NodeDefinition = {
 export const SceneBuilderNode: NodeDefinition = {
   type: 'sceneBuilder', label: 'New 3D scene…', category: '3D Scene',
   aliases: ['Scene Builder', '3D Scene Builder', 'Build a 3D scene', 'Describe 3D', 'Recipe'],
-  description: 'Opens the 3D Scene Builder: describe a scene (shapes, how they combine, how space bends, the look, the camera) in a form or as a recipe like `smooth-union(sphere r=1, cone h=2) k=0.3 · twist 0.5`, and Build makes the graph for it: Scene Group, March Camera, March Loop, lighting and Tone Map, every node with a note. Edit the graph freely afterwards, or reopen it in the builder.',
+  description: 'Opens the 3D Scene Builder: describe a scene (shapes, how they combine, how space bends, the look, the camera) in a form or as a recipe like `smooth-union(sphere r=1, cone height=2) k=0.3 · twist 0.5`, and Build makes the graph for it: Scene Group, March Camera, March Loop, lighting and Tone Map, every node with a note. Edit the graph freely afterwards, or reopen it in the builder.',
   inputs: {},
   outputs: {},
   defaultParams: {},

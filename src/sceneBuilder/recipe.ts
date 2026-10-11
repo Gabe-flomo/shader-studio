@@ -1,7 +1,7 @@
 /**
  * recipe.ts — the Scene Builder's recipe text, both ways (docs/scene-builder-3d.md).
  *
- *   volumetric · smooth-union(sphere r=1, cone h=2 rot=(30,0,0)) k=0.3 · twist 0.5 · polar-repeat 6 · camera dist=4 orbit=10 · fog 0.3
+ *   volumetric · smooth-union(sphere r=1, cone height=2 rot=(30,0,0)) k=0.3 · twist 0.5 · polar-repeat 6 · camera dist=4 orbit=10 · fog 0.3
  *
  * A recipe is clauses separated by `·`, `|`, `;` or new lines. A clause is a
  * render mode, a shape or a combine group (the scene's items, joined by a
@@ -17,7 +17,7 @@
  */
 import {
   DEFAULT_CAMERA, DEFAULT_COLOR, DEFAULT_LOOK, DEFAULT_QUALITY, SHAPES, SHAPE_BY_KIND, TONE_MODES, WARPS, WARP_BY_KIND,
-  DIM_WORDS, defaultSize, defaultWarpValues, emptySpec, newGroup, newShape, newWarp, shapeDims,
+  DIM_WORDS, defaultSize, defaultWarpValues, emptySpec, newGroup, newShape, newWarp, shapeDims, shapeParamWord,
   type CameraSpec, type DimTarget, type DimWord, type ShapeDef, type CombineOp, type ParamDef, type RenderMode, type SceneItem, type SceneSpec, type ShapeSpec, type ToneMode, type Vec3, type WarpDef, type WarpSpec,
 } from './spec';
 import { COLOUR_TABLE, colourText } from '../lang/colours';
@@ -532,8 +532,9 @@ class Parser {
       const p = def.params.find(q => q.key === raw) ?? def.params.find(q => q.key.toLowerCase() === key)
         ?? (key === 'radius' ? def.params.find(q => q.key === 'r') : key === 'height' ? def.params.find(q => q.key === 'h') : undefined);
       if (!p) {
-        const s = suggest(raw, [...def.params.map(q => q.key), ...(shapeDims(def) ? ['size', ...DIM_WORDS] : []), 'at', 'rot', 'color', 'shine', 'name', 'glass']);
-        this.fail(a, `${def.label} has no setting “${raw}”.${s ? ` Did you mean “${s}”?` : ` It takes ${def.params.map(q => q.key).join(', ')}.`}`);
+        const words = def.params.map(q => shapeParamWord(def, q.key));
+        const s = suggest(raw, [...words, ...(shapeDims(def) ? ['size', ...DIM_WORDS] : []), 'at', 'rot', 'color', 'shine', 'name', 'glass']);
+        this.fail(a, `${def.label} has no setting “${raw}”.${s ? ` Did you mean “${s}”?` : ` It takes ${words.join(', ')}.`}`);
         continue;
       }
       const n = this.numberFor(p, a);
@@ -849,7 +850,8 @@ function printItem(it: SceneItem, indent: string | null = null): string {
         continue;
       }
     }
-    if (!valueEq(v, defaults[p.key])) parts.push(`${p.key}=${Array.isArray(v) ? fmtVec(v) : fmt(v)}`);
+    // A shape with a height writes radius= and height= (r= and h= still read).
+    if (!valueEq(v, defaults[p.key])) parts.push(`${shapeParamWord(def, p.key)}=${Array.isArray(v) ? fmtVec(v) : fmt(v)}`);
   }
   if (!same(it.at, [0, 0, 0])) parts.push(`at=(${it.at.map(fmt).join(',')})`);
   if (!same(it.rot, [0, 0, 0])) parts.push(`rot=(${it.rot.map(fmt).join(',')})`);

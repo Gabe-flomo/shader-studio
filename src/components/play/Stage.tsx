@@ -24,6 +24,7 @@ import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { controlExists, readControlValue, targetParts } from '../../play/playControls';
 import { mappingLabel } from '../../play/incrementUi';
 import { leftBehind } from '../../play/exportHtml';
+import { webExportScope } from '../../play/exportScope';
 import { stagePageHtml } from '../../present/liveScript';
 import { playUses3D, useThreeSource } from '../../play/threeSource';
 import { parseLayerTarget, type PlayControl, type PlayRecord } from '../../types/play';
@@ -87,8 +88,10 @@ export function Stage({ canvas, onRecord }: {
   const exact = useMemo(() => {
     if (mode !== 'exact' || !threeReady) return null;
     if (snap) return { html: snap.html, missing: snap.missing, left: snap.left };
-    const { input, missing } = useNodeGraphStore.getState().playWebInput(graphName);
-    return { html: stagePageHtml(input), missing, left: leftBehind(input.play, input.media, { graphs: input.backgroundGraphs ?? {}, datasets: input.datasets }) };
+    // The exported page as a web export makes it (play/exportScope.ts): tracking, camera, MIDI and mic held still.
+    const { input: raw, missing } = useNodeGraphStore.getState().playWebInput(graphName);
+    const { input, frozen } = webExportScope(raw);
+    return { html: stagePageHtml(input), missing, left: [...frozen.map(f => ({ what: f.what, why: f.why })), ...leftBehind(input.play, input.media, { graphs: input.backgroundGraphs ?? {}, datasets: input.datasets })] };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, build, snap, threeReady]);
 

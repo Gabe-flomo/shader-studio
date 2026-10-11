@@ -14,7 +14,7 @@ node param, so every slider is a live uniform and dragging it never recompiles.
 The same description can be written as a **recipe**, a short line of text:
 
 ```
-volumetric · smooth-union(sphere r=1, cone h=2 rot=(30,0,0)) k=0.3 · twist 0.5 · polar-repeat 6 · camera dist=4 orbit=10
+volumetric · smooth-union(sphere r=1, cone height=2 rot=(30,0,0)) k=0.3 · twist 0.5 · polar-repeat 6 · camera dist=4 orbit=10
 ```
 
 ## Opening it
@@ -466,7 +466,7 @@ closing `)`) goes on with the clause, so a combine can put each item on its own 
 ```
 smooth-union(
   sphere r=0.55 at=(0,0.05,0) color=(0.85,0.45,0.3) shine=0.4 name=Body,
-  capsule h=0.5 r=0.12 at=(0.1,-0.3,0.55) rot=(0,0,60)
+  capsule height=0.5 radius=0.12 at=(0.1,-0.3,0.55) rot=(0,0,60)
 ) k=0.35 name=Sculpture
 ```
 
@@ -557,8 +557,10 @@ the settings in order: `torus 1 0.2` is `torus R=1 r=0.2`.
 all, and `width=`, `height=` and `depth=` set one each (`box size=0.3 height=1`). A box, a box
 frame and an ellipsoid: the three parts of their size; the vector form `size=(0.3,1,0.3)` still
 reads. A cylinder, capsule, hex prism and tri prism: `size` is the radius and the height together,
-`width=` / `depth=` the radius, `height=` the height. Printed recipes write `size=` when the
-dimensions are equal, else the ones that differ from the default by name.
+`radius=` the radius (`width=` / `depth=` too), `height=` the height. Printed recipes write `size=`
+when the dimensions are equal, else the ones that differ from the default by name: `cylinder
+radius=0.22 height=1.6`. The cones and the pyramid write their height as `height=` too. The old
+`r=` and `h=` still read, so older recipes parse as before.
 
 Every shape also takes:
 
@@ -680,7 +682,7 @@ camera dist=3.8 orbit=6
 ```
 
 ```
-surface · union(cylinder r=0.22 h=1.6, box width=0.36 height=0.06 depth=0.36 at=(0,1.55,0)) @repeat(2,100,2) · plane y=-1 · fog 0.9
+surface · union(cylinder radius=0.22 height=1.6, box width=0.36 height=0.06 depth=0.36 at=(0,1.55,0)) @repeat(2,100,2) · plane y=-1 · fog 0.9
 ```
 
 ```
