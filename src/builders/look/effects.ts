@@ -3,7 +3,7 @@
  * the finished picture, as stacked cards built after the scene in the order shown.
  *
  *   Displace (by noise, or by a picture) · Swirl · Ripple · Lens · Pixelate · Kaleidoscope ·
- *   Blur · Glow · Chromatic aberration · CRT mask
+ *   Blur · Glow · Light rays / Radial blur · Chromatic aberration · CRT mask
  *
  * How they build. An effect that moves the picture (Displace, Swirl, Pixelate, Kaleidoscope, CRT
  * curvature…) changes WHERE the picture is read: the picture so far goes into a Pass, and the next
@@ -81,6 +81,22 @@ export const FX_KINDS: StackKindDef[] = [
       { key: 'intensity', label: 'Intensity', hint: 'How bright the glow is.', type: 'num', def: 0.8, min: 0, max: 4, primary: true, node: '', param: 'intensity', aliases: ['amount'] },
       { key: 'threshold', label: 'Threshold', hint: 'How bright a part must be to glow: 0 everything, 0.8 only the brightest.', type: 'num', def: 0.6, min: 0, max: 2, node: '', param: 'threshold' },
       { key: 'radius', label: 'Radius', hint: 'How far the glow spreads, in screen pixels (its tail reaches further).', type: 'num', def: 16, min: 1, max: 64, step: 0.5, node: '', param: 'radius', aliases: ['r'] },
+    ],
+  },
+  {
+    kind: 'rays', label: 'Light rays / Radial blur', words: ['rays', 'light-rays', 'radial-blur', 'zoom-blur', 'god-rays'], nodes: ['radialFastBlur'],
+    blurb: 'Streaks from a centre, like CC Radial Fast Blur: light rays from the bright parts, or a zoom blur (Radial Fast Blur).',
+    params: [
+      { key: 'mode', label: 'Mode', hint: 'Brightest: light rays, the brightest colour along each streak where it is brighter. Average: a zoom blur. Add: the streaks added as glowing light.', type: 'select', def: 'brightest', options: sel(['brightest', 'Brightest (light rays)'], ['average', 'Average (zoom blur)'], ['add', 'Add (glow rays)']), node: '', param: 'mode' },
+      { key: 'length', label: 'Length', hint: 'How long the streaks are: 0.2 a smear, 1 half way to the centre, 3 a light-speed burst. Long streaks cost the same.', type: 'num', def: 0.6, min: 0, max: 4, primary: true, node: '', param: 'length', aliases: ['amount', 'len'] },
+      { key: 'threshold', label: 'Threshold', hint: 'Only parts brighter than this streak: 0 everything (a zoom blur), 0.5 rays from the bright parts.', type: 'num', def: 0.35, min: 0, max: 1.5, node: '', param: 'threshold', aliases: ['thr'] },
+      { key: 'intensity', label: 'Intensity', hint: 'How strong the streaks are.', type: 'num', def: 1, min: 0, max: 4, node: '', param: 'intensity' },
+      { key: 'decay', label: 'Decay', hint: 'How much the streaks fade along their length: 0 even, 1 a bright head and a faint tail.', type: 'num', def: 0.5, min: 0, max: 1, node: '', param: 'decay' },
+      { key: 'falloff', label: 'Falloff', hint: 'How much the effect fades away from the centre: 0 the same everywhere.', type: 'num', def: 0, min: 0, max: 4, node: '', param: 'falloff' },
+      { key: 'direction', label: 'Zoom', hint: 'Out: the streaks fly outward from the centre. In: they pull in toward it.', type: 'select', def: 'out', options: sel(['out', 'Out from the centre'], ['in', 'Into the centre']), node: '', param: 'direction', aliases: ['dir'] },
+      { key: 'cx', label: 'Centre X', hint: 'Where the streaks come from, across (0 the middle, ±1.8 the sides).', type: 'num', def: 0, min: -2, max: 2, step: 0.01, node: '', param: 'centerX', aliases: ['x'] },
+      { key: 'cy', label: 'Centre Y', hint: 'Where the streaks come from, up and down (0 the middle, 1 the top).', type: 'num', def: 0, min: -1, max: 1, step: 0.01, node: '', param: 'centerY', aliases: ['y'] },
+      { key: 'tint', label: 'Tint', hint: 'The streaks\' colour: white keeps the picture\'s own.', type: 'colour', def: [1, 1, 1], node: '', param: 'tint' },
     ],
   },
   {
@@ -196,6 +212,19 @@ export function emitEffects(c: Ctx, items: readonly StackItem[] | undefined, col
       case 'lens': bend('lensDistortion', { k1: n('bend'), zoom: n('zoom') }, {}, 'input', 'output', `a lens bend of ${fmt(n('bend'))}${n('zoom') !== 1 ? `, zoomed ${fmt(n('zoom'))}` : ''}.`); break;
       case 'pixelate': bend('pixelate', { pixelSize: n('size') }, {}, 'uv', 'uv', `blocks ${fmt(n('size'))} across.`); break;
       case 'kaleido': bend('kaleidoSpace', { segments: Math.round(n('segments')), rotate: rad(n('rotate')) }, {}, 'input', 'output', `${Math.round(n('segments'))} mirrored wedges${n('rotate') ? `, turned ${fmt(n('rotate'))}°` : ''}.`); break;
+      case 'rays': {
+        const tex = passFor(role, 'light rays');
+        if (!tex) break;
+        const mode = s('mode');
+        node = mk(c, 'radialFastBlur', role, {
+          mode, direction: s('direction'), length: n('length'), centerX: n('cx'), centerY: n('cy'), threshold: n('threshold'), knee: 0.15,
+          intensity: n('intensity'), decay: n('decay'), falloff: n('falloff'), tint: stackValue(it, P('tint')),
+        }, { texture: tex, uv: point },
+          `${step}: streaks ${s('direction') === 'in' ? 'into' : 'out from'} the centre, Length ${fmt(n('length'))}${mode === 'average' ? ' (a zoom blur)' : mode === 'add' ? ', added as light' : ', the brightest along each (light rays)'}${n('threshold') > 0 ? `, from the parts brighter than ${fmt(n('threshold'))}` : ''}. Four small hidden passes, so long streaks stay cheap.`);
+        cur = ref(node, 'color');
+        pass = null; point = null;
+        break;
+      }
       case 'blur': case 'glow': case 'chroma': {
         const tex = passFor(role, def.label.toLowerCase());
         if (!tex) break;

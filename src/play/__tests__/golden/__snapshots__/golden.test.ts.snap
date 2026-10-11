@@ -1787,6 +1787,25 @@ exports[`golden outputs: examples > playVideoSound 1`] = `
 }
 `;
 
+exports[`golden outputs: examples > raysColourBurst 1`] = `
+{
+  "decay": "- x120",
+  "int": "- x120",
+  "len": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > raysLightText 1`] = `
+{
+  "cx": "- x120",
+  "cy": "- x120",
+  "int": "- x120",
+  "len": "- x120",
+  "thr": "- x120",
+  "tint": "- x120",
+}
+`;
+
 exports[`golden outputs: examples > repeatSceneBubbles 1`] = `
 {
   "a": "- x120",

@@ -2,7 +2,7 @@
 export interface FnParam { key: string; label: string; min: number; max: number; step: number; value: number; hint: string; hidden: boolean }
 export type FnKind = 'grade' | 'lens' | 'chroma' | 'vignette' | 'crt' | 'bloom' | 'halation' | 'grain' | 'flicker' | 'shake' | 'time'
   | 'glitch' | 'ripple' | 'water' | 'displace' | 'mosaic' | 'mirror' | 'gradmap' | 'posterize' | 'edges' | 'feedback' | 'echo'
-  | 'pixelsort' | 'halftone' | 'ascii' | 'leaks' | 'datamosh' | 'motionx';
+  | 'pixelsort' | 'halftone' | 'ascii' | 'leaks' | 'datamosh' | 'motionx' | 'rays';
 /** A starting point for an effect: it sets numbers, and (`set`) a choice or two (Water's Source and Shape). */
 export interface FnPreset { name: string; values: Readonly<Record<string, number>>; set?: Readonly<Record<string, string>> }
 /** A colour kept as three hidden numbers, edited as one swatch. */
@@ -15,6 +15,8 @@ export const FN_KINDS: readonly FnKind[];
 export const FN_STAGE_KINDS: readonly FnKind[];
 /** Effects that keep frames of their own between draws (Datamosh, Motion extract): each heads a pass of its own. */
 export const FN_TEMPORAL_KINDS: readonly FnKind[];
+/** Effects that run passes of their own over their pass's input first (Light rays): each heads a pass of its own. */
+export const FN_PREPASS_KINDS: readonly FnKind[];
 /** What Feedback and Echo keep (their Source). */
 export const FN_SOURCE_MAPS: readonly ['picture', 'layer', 'moving', 'bright'];
 export function fnSourceOf(e: { map?: unknown; [key: string]: unknown } | null | undefined): 'picture' | 'layer' | 'moving' | 'bright';
@@ -177,7 +179,7 @@ export interface FnRing { readonly size: number; readonly count: number; readonl
 export function fnRing(size: number): FnRing;
 export function fnRingSize(quality: string, W: number, H: number): { frames: number; w: number; h: number; bytes: number };
 
-export function fnBuildFinal(effects: readonly FnEffect[], opts?: { tone?: string; hueCurves?: boolean; timeMap?: string; curves?: boolean; segment?: number }): { src: string; glow: boolean; time: boolean; feedback: boolean; echo: boolean; mosh: boolean; mx: boolean; maps: string[]; water: boolean; lut: boolean; ascAtlas: boolean; psTrail: boolean; custom: string[]; segments: number };
+export function fnBuildFinal(effects: readonly FnEffect[], opts?: { tone?: string; hueCurves?: boolean; timeMap?: string; curves?: boolean; segment?: number }): { src: string; glow: boolean; time: boolean; feedback: boolean; echo: boolean; mosh: boolean; mx: boolean; rays: boolean; maps: string[]; water: boolean; lut: boolean; ascAtlas: boolean; psTrail: boolean; custom: string[]; segments: number };
 
 export interface FnInput {
   finish: FnFinish;
