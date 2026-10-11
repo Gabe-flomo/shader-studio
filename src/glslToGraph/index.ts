@@ -65,6 +65,12 @@ export interface ConversionOptions {
    * region that carries the whole call as code.
    */
   library?: readonly LibraryFunction[];
+  /**
+   * Record, for each node, the index of the top-level statement of main() it was made for
+   * (`ConversionResult.origins`; -1 for nodes made before main, like a uniform's Constants card).
+   * Guided Convert (docs/guided-convert.md) maps nodes back to the lines they came from with it.
+   */
+  origins?: boolean;
 }
 
 /** What the converter needs of a saved function preset. */
@@ -106,6 +112,10 @@ export interface ConversionResult {
   nodes: GraphNode[]; report: ConversionReport;
   /** A Play control for each uniform the shader declared that no node stands for (see `ConversionReport.uniforms`). */
   controls?: PlayControl[];
+  /** With `options.origins`: node id → the top-level statement of main() it was made for (-1: before main). */
+  origins?: Record<string, number>;
+  /** With `options.origins`: how many top-level statements main() had as converted (the reading may add some at the top). */
+  mainStatements?: number;
 }
 /** A uniform no node stands for, now a live entry on the Constants card; `value` is what it starts at (the check sets the original's uniform to it). */
 export interface ConvertedUniform { name: string; type: 'float' | 'int' | 'vec2' | 'vec3'; value: number | number[]; min: number; max: number; step: number; colour: boolean }
@@ -152,8 +162,10 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
   const report: ConversionReport = { notes: [], warnings: [], blocks: [], regions: [], unsupported: [], stats: { nodes: 0, blocks: 0, regions: 0, sliders: 0, loops: 0 } };
   // Divide, Pow and Square Root come out with their Exact switch on (the plain GLSL call), so no
   // expression is offered as an inexact node any more; `warnings` and `options.asBlock` stay for the page.
-  void options;
   const nodes: GraphNode[] = [];
+  /** Which top-level statement of main() is being converted (for `options.origins`). */
+  let topIndex = -1; let topList: Ast[] | null = null;
+  const origins: Record<string, number> | null = options.origins ? {} : null;
   /** Where new nodes go: the graph, or the subgraph of the loop group being built. */
   let sink: GraphNode[] = nodes;
   /** The subgraphs made along the way, laid out at the end like the graph itself. */
@@ -257,6 +269,7 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
     if (poly && t) for (const k of poly) { if (inputs[k]) inputs[k].type = t as DataType; if (outputs[k]) outputs[k].type = t as DataType; }
     const node = { id: id(type), type, position: { x: 0, y: 0 }, inputs, outputs, params: { ...(def?.defaultParams ?? {}), ...params, ...(EXACT.has(type) ? { exact: true } : {}) } } as GraphNode;
     sink.push(node);
+    if (origins) origins[node.id] = topIndex;
     return node;
   }
   const ref = (n: GraphNode, out: string, t: T): Ref => ({ nodeId: n.id, outputKey: out, type: t });
@@ -1215,6 +1228,7 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
   /** Statements in order, each knowing what follows it (for `deadAfter`). */
   function stmts(list: Ast[], env: Env): void {
     list.forEach((s, i) => {
+      if (list === topList) topIndex = i;
       const saved = current; frames.push({ rest: list.slice(i + 1) }); current = s;
       try { stmt(s, env); } finally { frames.pop(); current = saved; }
     });
@@ -1383,7 +1397,8 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
       try { const mark = sink.length; const v = { ...expr(c.init, env), int: c.type === 'int' || undefined }; titleWith(v, c.name, mark); env.set(c.name, v.lit !== undefined ? { ...v, name: v.name ?? c.name } : v); }
       catch (e) { if (!(e instanceof Unsupported || e instanceof Unmapped)) throw e; }
     }
-    stmts(((main!.body as Ast).statements as Ast[]), env);
+    topList = (main!.body as Ast).statements as Ast[];
+    stmts(topList, env);
     if (!output) report.unsupported.push('main() never writes gl_FragColor');
     const keep = env.get(KEPT);
     if (output && keep && !(keep.lit === 1 && !keep.ref)) {
@@ -1417,7 +1432,7 @@ export function glslToGraph(source: string, options: ConversionOptions = {}): Co
   layout(nodes);
   for (const sg of subgraphs) layout(sg);
   report.stats = { nodes: nodes.length, blocks: report.blocks.length, regions: report.regions.length, sliders: report.stats.sliders, loops: report.stats.loops };
-  return { nodes, report, ...(controls.length ? { controls } : {}) };
+  return { nodes, report, ...(controls.length ? { controls } : {}), ...(origins ? { origins, mainStatements: topList?.length ?? 0 } : {}) };
 }
 
 /**

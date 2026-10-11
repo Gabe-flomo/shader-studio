@@ -571,7 +571,7 @@ function App() {
   }, []);
   // After Materialize on the Convert page: the Studio, with the new graph in view.
   const openStudioFitted = useCallback(() => { setPage('studio'); setTimeout(() => useNodeGraphStore.getState()._fitViewCallback?.(), 80); }, [setPage]);
-  const openConvertWith = useCallback((code: string) => { if (!requireFeature('convert')) return; requestConvert(code); setPage('convert'); }, [setPage]);
+  const openConvertWith = useCallback((code: string, guided?: boolean) => { if (!requireFeature('convert')) return; requestConvert(code, { guided }); setPage('convert'); }, [setPage]);
   // Stage › Exact records the website player's canvas instead of the app's.
   const [recordSource, setRecordSource]       = useState<HTMLCanvasElement | null>(null);
   const stageMode = useStage(s => s.mode);
