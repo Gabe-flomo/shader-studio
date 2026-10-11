@@ -2,9 +2,9 @@
  * actions.ts — the Grid builder joined to the graph (docs/grid-builder.md): open it on a new scene
  * or on a build already there, Build / Done, and the jump to Grid Rules and back.
  *
- * "Make it a simulation" turns the drawn grid into a Grid Rules start: the Grid scene's distance
- * (its shapes as they are) goes through a small Expression Block (white inside a shape) into a
- * Pass, whose Texture is the Grid Rules node's Start image (Start: Image). The Grid Rules node
+ * "Make it a simulation" turns the drawn grid into a Grid Rules drawn start (Start: Your drawing,
+ * `startCells`: every drawn shape a live cell), so the simulation and the Grid Rules builder's try
+ * board both start from the drawing. The Grid Rules node
  * remembers the scene (`_gridSceneFrom`), so its editor offers the way back, and a second jump
  * reuses it instead of adding another.
  */
@@ -18,7 +18,8 @@ import { finishBuilder } from '../builders/finish';
 import { closeGridRulesEditor, openGridRulesEditor } from '../builders/windows';
 import { useGridBuilder } from './store';
 import { applyGridScene, findGridBuild, gridFinalOf, gridSceneOfBuild } from './apply';
-import { starterGridScene } from './spec';
+import { starterGridScene, type GridSceneSpec } from './spec';
+import { startCellsFromGrid, type StartCells } from '../gridRules/startCells';
 
 /** On a Grid Rules node made by the jump: the Grid scene (its UV node) it started from. */
 export const FROM_GRID_KEY = '_gridSceneFrom';
@@ -84,10 +85,19 @@ export function finishGridBuilder(): void {
 /** The Grid Rules node made from the scene `sceneId`, if any. */
 export const simulationOf = (nodes: readonly GraphNode[], sceneId: string) => nodes.find(nd => nd.type === 'gridRules' && nd.params[FROM_GRID_KEY] === sceneId);
 
+/** The drawing as a Grid Rules drawn start: every drawn shape a live cell (state 1), rows top first. Null when nothing is drawn. Pure. */
+export function drawnStartOf(spec: GridSceneSpec): StartCells | null {
+  const grid = Array.from({ length: spec.rows }, () => Array.from({ length: spec.cols }, () => 0));
+  for (const c of spec.cells) if (grid[c.y]?.[c.x] !== undefined) grid[c.y][c.x] = 1;
+  return startCellsFromGrid(grid);
+}
+
 /**
- * The graph with a Grid Rules simulation started from the Grid scene `sceneId`: its shapes (white
- * inside, through a Pass) as the Start image, the Output on the simulation. Reuses the one made
- * before. Pure.
+ * The graph with a Grid Rules simulation started from the Grid scene `sceneId`: its drawn shapes as
+ * the node's drawn start (Start: Your drawing, each shape a live cell, placed in the middle of the
+ * board whatever its size), the Output on the simulation. Reuses the one made before and updates
+ * its drawing; a node made by an older jump (a Start image through a Pass) keeps that wiring and
+ * switches to the drawn start. Pure.
  */
 export function simulationFromGrid(graph: GraphNode[], sceneId: string, nextId: () => string): { nodes: GraphNode[]; gridRulesId: string } | null {
   const b = findGridBuild(graph, sceneId);
@@ -95,29 +105,27 @@ export function simulationFromGrid(graph: GraphNode[], sceneId: string, nextId: 
   if (!b || !grid) return null;
   const anchor = [...b.byRole.values()].reduce((m, x) => (x.position.x > m.position.x ? x : m), grid);
   const x0 = anchor.position.x + 480, y0 = anchor.position.y + 260;
+  const drawn = drawnStartOf(b.meta.spec);
   let nodes = graph;
   let rules = simulationOf(nodes, sceneId);
   if (!rules) {
-    const startId = nextId(), passId = nextId(), rulesId = nextId();
-    const start = n('exprNode', startId, x0, y0, {
-      label: 'Start cells', outputType: 'vec3', lines: [], result: 'vec3(1.0 - step(0.0, d))', expr: 'vec3(1.0 - step(0.0, d))',
-      inputs: [{ name: 'd', type: 'float', slider: null }],
-      __comment: 'The grid\'s shapes as a start for the simulation: white inside a shape (its distance below 0), black elsewhere. Made by the Grid builder\'s “Make it a simulation”.',
-    }, {}, {
-      inputs: { d: { type: 'float', label: 'd', connection: { nodeId: grid.id, outputKey: 'd' } } },
-      outputs: { result: { type: 'vec3', label: 'Result' } },
-    });
-    const pass = n('pass', passId, x0 + 440, y0, { scale: '0.125', filter: 'nearest', label: 'Start cells', __comment: 'Holds the start cells as a texture at the board\'s size, for Grid Rules\' Start image.' }, { color: [startId, 'result'] });
-    const gr = n('gridRules', rulesId, x0 + 880, y0, {
-      ...presetPatch(COUNT_PRESETS.life), ...LOOKS.count, start: 'image', board: '0.125', label: 'Grid Rules (from the grid)', [FROM_GRID_KEY]: sceneId,
-      __comment: 'Grid Rules started from the Grid builder\'s drawing: its Start image is the grid\'s shapes (bright cells start on). Change the rule in its editor; “‹ Pattern grid” in the editor goes back to the drawing. Reset re-deals the board from the drawing as it is now.',
-    }, { image: [passId, 'texture'] });
-    nodes = [...nodes, start, pass, gr];
+    const rulesId = nextId();
+    const gr = n('gridRules', rulesId, x0, y0, {
+      ...presetPatch(COUNT_PRESETS.life), ...LOOKS.count, board: '0.125', label: 'Grid Rules (from the grid)', [FROM_GRID_KEY]: sceneId,
+      ...(drawn ? { start: 'cells', startCells: drawn } : {}),
+      __comment: 'Grid Rules started from the Grid builder\'s drawing: each drawn shape is a live cell of its drawn start (Start: Your drawing), placed in the middle of the board. Change the rule in its editor; “‹ Pattern grid” in the editor goes back to the drawing. Reset re-deals the board from the drawing as it was when you jumped.',
+    }, {});
+    nodes = [...nodes, gr];
     rules = gr;
   } else {
-    // Make sure it still starts from the drawing.
+    // Update the drawing it starts from (and switch an older image-start node over to it).
     const id = rules.id;
-    nodes = nodes.map(nd => (nd.id === id ? { ...nd, params: { ...nd.params, start: 'image', reset: 0 } } : nd));
+    nodes = nodes.map(nd => {
+      if (nd.id !== id) return nd;
+      const params: Record<string, unknown> = { ...nd.params, reset: 0 };
+      if (drawn) { params.start = 'cells'; params.startCells = drawn; } else delete params.startCells;
+      return { ...nd, params };
+    });
   }
   const rid = rules.id;
   const out = nodes.find(nd => (nd.type === 'output' || nd.type === 'vec4Output') && nd.inputs.color);
