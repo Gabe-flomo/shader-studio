@@ -15,7 +15,7 @@
  * read whatever the Motion layer saw then.
  */
 import type { GraphNode, NodeDefinition } from '../../types/nodeGraph';
-import { p } from './helpers';
+import { p, withParamSockets } from './helpers';
 
 /** The shared uniforms (play/motionTexture.ts fills them; every Motion (texture) node reads the same). */
 export const MOTION_MAP_UNIFORM = 'u_motionMap';
@@ -23,7 +23,7 @@ export const MOTION_MAP_GLSL = `uniform sampler2D ${MOTION_MAP_UNIFORM};
 uniform vec2 ${MOTION_MAP_UNIFORM}_px;
 float mtMapAt(vec2 q) { return texture2D(${MOTION_MAP_UNIFORM}, clamp(q / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5, 0.0, 1.0)).r; }`;
 
-export const MotionMapNode: NodeDefinition = {
+export const MotionMapNode: NodeDefinition = withParamSockets({
   type: 'motionMap',
   label: 'Motion (texture)',
   category: 'Sources',
@@ -56,4 +56,4 @@ export const MotionMapNode: NodeDefinition = {
       outputVars: { amount: `${id}_m`, texture: MOTION_MAP_UNIFORM },
     };
   },
-};
+}, ['gain']);

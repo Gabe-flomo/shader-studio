@@ -69,7 +69,7 @@ export const FINISH_LIST_KEYS = ['shader-studio:finish-presets', 'shader-studio:
 /** Saved drum kits (play/drumKits.ts). */
 export const DRUM_KITS_KEY = 'shader-studio:drum-kits';
 /** Saved layer sets and rack presets (play/layerSets.ts, play/rackPresets.ts; docs/presets.md). */
-export const PLAY_PRESET_KEYS = ['shader-studio:layer-sets', 'shader-studio:rack-presets'];
+export const PLAY_PRESET_KEYS = ['shader-studio:layer-sets', 'shader-studio:rack-presets', 'shader-studio:space-blocks'];
 const NAMED_FILES: Record<string, string> = {
   'shader-studio:palette-presets': 'palettes.json',
   'shader-studio:finish-presets': 'finish stack presets.json',
@@ -78,6 +78,8 @@ const NAMED_FILES: Record<string, string> = {
   [DRUM_KITS_KEY]: 'drum kits.json',
   'shader-studio:layer-sets': 'layer sets.json',
   'shader-studio:rack-presets': 'rack presets.json',
+  // Your saved 2D Scene Builder space blocks (sceneBuilder2d/savedBlocks.ts).
+  'shader-studio:space-blocks': 'space blocks.json',
   [BACKGROUND_PALETTES_KEY]: 'background palettes.json',
   'shader-studio:glsl-shaders': 'glsl shaders.json',
   // Your saved Present themes (present/userThemes.ts USER_THEMES_KEY).

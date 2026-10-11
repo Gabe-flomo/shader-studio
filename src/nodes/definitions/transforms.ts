@@ -1,5 +1,5 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { p } from './helpers';
+import { p, withParamSockets } from './helpers';
 
 // ─── Shared GLSL helpers ──────────────────────────────────────────────────────
 
@@ -97,7 +97,7 @@ export const FractNode: NodeDefinition = {
   },
 };
 
-export const UVWarpNode: NodeDefinition = {
+export const UVWarpNode: NodeDefinition = withParamSockets({
   type: 'uvWarp',
   label: 'UV Warp (Jitter)',
   category: '2D Space', subcategory: 'Warp',
@@ -128,9 +128,9 @@ export const UVWarpNode: NodeDefinition = {
       outputVars: { output: `${id}_output` },
     };
   },
-};
+}, ['strength', 'scale', 'speed']);
 
-export const SmoothWarpNode: NodeDefinition = {
+export const SmoothWarpNode: NodeDefinition = withParamSockets({
   type: 'smoothWarp',
   label: 'UV Warp (Smooth)',
   category: '2D Space', subcategory: 'Warp',
@@ -162,9 +162,9 @@ export const SmoothWarpNode: NodeDefinition = {
       outputVars: { output: `${id}_output` },
     };
   },
-};
+}, ['scale', 'speed']);
 
-export const CurlWarpNode: NodeDefinition = {
+export const CurlWarpNode: NodeDefinition = withParamSockets({
   type: 'curlWarp',
   label: 'UV Warp (Curl)',
   category: '2D Space', subcategory: 'Warp',
@@ -196,9 +196,9 @@ export const CurlWarpNode: NodeDefinition = {
       outputVars: { output: `${id}_output` },
     };
   },
-};
+}, ['scale', 'speed']);
 
-export const SwirlWarpNode: NodeDefinition = {
+export const SwirlWarpNode: NodeDefinition = withParamSockets({
   type: 'swirlWarp',
   label: 'UV Warp (Swirl)',
   category: '2D Space', subcategory: 'Warp',
@@ -234,7 +234,7 @@ export const SwirlWarpNode: NodeDefinition = {
       outputVars: { output: `${id}_output` },
     };
   },
-};
+}, ['falloff', 'cx', 'cy', 'speed']);
 
 // "Displace" — wire any vec2 as the displacement direction, control amount with Strength
 export const DisplaceNode: NodeDefinition = {
@@ -341,7 +341,7 @@ export const UvTransform2dNode: NodeDefinition = {
 
 // ─── UV Reciprocal ────────────────────────────────────────────────────────────
 // N/x family transforms: bounded lens, raw hyperbolic, Möbius-like circle inversion.
-export const UvReciprocalNode: NodeDefinition = {
+export const UvReciprocalNode: NodeDefinition = withParamSockets({
   type: 'uvReciprocal',
   label: 'UV Reciprocal',
   category: '2D Space', subcategory: 'Warp',
@@ -378,4 +378,4 @@ export const UvReciprocalNode: NodeDefinition = {
       outputVars: { result: `${id}_result` },
     };
   },
-};
+}, ['k']);

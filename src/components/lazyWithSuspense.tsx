@@ -44,3 +44,15 @@ export function preloadLazyComponents(): Promise<unknown> {
 
 /** Props of a function component; `{}` for one that takes none. */
 export type PropsOf<T> = T extends () => unknown ? Record<never, never> : T extends (props: infer P) => unknown ? P : never;
+
+/**
+ * React.lazy for a component the caller wraps in its own Suspense. A chunk from a version that was
+ * redeployed under this tab is gone: say so (Reload) and render nothing, rather than crash the page.
+ */
+export function lazySafe<T extends React.ComponentType<any>>(loader: () => Promise<{ default: T }>) { // eslint-disable-line @typescript-eslint/no-explicit-any
+  return React.lazy(() => loader().catch(err => {
+    if (!isChunkLoadError(err)) throw err;
+    reportStaleBuild();
+    return { default: (() => null) as unknown as T };
+  }));
+}

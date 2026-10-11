@@ -101,6 +101,18 @@ let restartAll = false;
 export function restartAgents(nodeId?: string): void {
   if (nodeId) restartRequests.add(nodeId); else restartAll = true;
 }
+/**
+ * A live frame used up the start-over requests of the groups that stepped (`stepped`); the others
+ * wait. A group whose rule is still compiling (a Surprise or a rules edit just changed it) doesn't
+ * step, so its request stays until it does: dropped, the walkers would carry on from where the old
+ * rules left them (frozen, after a Frost) under the new ones. "All" waits until every live group stepped.
+ */
+export function settleRestarts(stepped: readonly string[], live: readonly string[]): void {
+  for (const id of stepped) restartRequests.delete(id);
+  if (restartAll && live.every(id => stepped.includes(id))) restartAll = false;
+}
+/** Whether a start over is still waiting for group `nodeId` (tests, the card). */
+export const restartPending = (nodeId: string): boolean => restartAll || restartRequests.has(nodeId);
 
 /** What one listening node (Sound kick, Chladni) has heard so far (kit/agentPlan.js), and its level history as a texture. */
 interface ListenState extends AgListenState { levelTex: THREE.DataTexture }
@@ -707,6 +719,7 @@ export class AgentRunner {
     // How many steps each group runs this frame.
     const plan: Array<{ e: StepEntry; s: GroupState; steps: number; spf: number; preroll: number }> = [];
     const restarted = new Set<string>();
+    const stepped: string[] = [];
     for (const e of ready) {
       const g = e.spec;
       const s = targets.group(g);
@@ -714,10 +727,10 @@ export class AgentRunner {
       const r = agGroupSteps(s, g, this.reader, { live: o.live, time: o.time, cap, restart: o.live && (restartAll || restartRequests.has(g.nodeId)) }, () => {
         targets.restartGroup(s); restarted.add(g.slug);
       });
-      if (o.live) stats.set(g.nodeId, { count: g.side * g.side, stepsPerFrame: r.spf, rate: r.rate, step: s.step + r.steps });
+      if (o.live) { stats.set(g.nodeId, { count: g.side * g.side, stepsPerFrame: r.spf, rate: r.rate, step: s.step + r.steps }); stepped.push(g.nodeId); }
       plan.push({ e, s, steps: r.steps, spf: r.spf, preroll: r.preroll });
     }
-    if (o.live) { restartAll = false; restartRequests.clear(); }
+    if (o.live) settleRestarts(stepped, this.steps.filter(e => e.spec.live && !e.failed).map(e => e.spec.nodeId));
 
     // Trails: their textures at this size; a trail fed by a group that started over starts empty too.
     const trailState = new Map<string, TrailState>();

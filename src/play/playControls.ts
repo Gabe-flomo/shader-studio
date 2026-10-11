@@ -63,7 +63,8 @@ function collectColourCandidates(nodes: GraphNode[]): PlayCandidate[] {
       for (const [key, pd] of Object.entries(def.paramDefs)) {
         if (!isColourDef(pd) || pd.compileTime) continue;
         if (!isParamVisible(pd, node.params, def.defaultParams)) continue;
-        if (node.inputs[`__param_${key}`]?.connection) continue;
+        // Driven by a wire (its own socket, or a group's param socket): not a free control.
+        if (node.inputs[`__param_${key}`]?.connection || node.inputs[key]?.connection) continue;
         const value = colourValue(overrides[`${node.id}::${key}`]) ?? colourValue(node.params[key]) ?? colourValue(def.defaultParams?.[key]);
         if (!value) continue;
         out.push({ target: `${prefix}${node.id}::${key}`, kind: 'color', nodeLabel: labelOf(node), groupLabel, paramLabel: pd.label, min: 0, max: 1, value, ...(pd.hint ? { hint: pd.hint } : {}) });

@@ -1,5 +1,5 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { p } from './helpers';
+import { p, withParamSockets } from './helpers';
 
 /** Most copies an Echo node can layer: one sampler each, on top of the shader's other textures. */
 export const ECHO_MAX_COPIES = 6;
@@ -14,7 +14,7 @@ export const ECHO_MAX_COPIES = 6;
  * every `delay` frames the ring rotates and the newest frame is captured, so
  * copy i always shows the picture (i + 1) × delay frames back.
  */
-export const EchoNode: NodeDefinition = {
+export const EchoNode: NodeDefinition = withParamSockets({
   type: 'echo',
   label: 'Echo (After-image)',
   category: 'Post Processing',
@@ -65,4 +65,4 @@ export const EchoNode: NodeDefinition = {
     }
     return { code: lines.join(''), outputVars: { color: `${id}_color`, alpha: `${id}_alpha` } };
   },
-};
+}, ['decay']);

@@ -69,7 +69,10 @@ Edit verbs leave "the" out: `set glow falloff=8`. A clause that is only a refere
 
 - A header decides: `grid`, `agents` / `species`, a render mode (`surface`, `volumetric`, `glass`, `gi`).
 - Otherwise a line with a 3D-only word (a 3D shape, a scene setting, an `@` warp) is a 3D scene, and anything else a 2D picture or an edit.
-- A line that mixes 3D-only and 2D-only words is refused: one line is one or the other.
+- A 2D Scene Builder recipe is told apart by the words only it has (`combine-blocks`, `space-block`, `fn-shape`, `picture-mode=`, `mask-cut=`, `mask-invert`, and the 2D motions `@orbit( )`, `@bob( )`, `@spin( )`, `@pulse( )`, `@ring( )`), or by being the one reading that works where the 3D scene, Grid Rules or picture reading fails. It builds a new 2D scene (Edit in 2D Scene Builder opens it).
+- A Splat builder recipe starts with `scan` and builds a new Splat scene. A scan file this device doesn't have becomes the example scan, with a note; nodes added by hand in the other project (`yours`) are left out.
+- Every builder's copied recipe pastes in, multi-line or joined by ` · `. A picture it names from another project (`texture brick node=…`) gets an empty Texture node named after it.
+- A line that mixes 3D-only and 2D-only words and is no 2D Scene Builder recipe either is refused: one line is one or the other.
 - `grid` is needed only where a preset's name is also another word (`grid swirl`, `grid ripples`).
 - Agent rules on one line follow their species after a colon: `species Slime: always do wander 7deg`.
 
@@ -219,7 +222,7 @@ Edit verbs leave "the" out: `set glow falloff=8`. A clause that is only a refere
 | `background [top] bottom= picture=` | bg | top (bare): colour; bottom: colour; picture: A picture (a name from a texture clause) as the backdrop the camera looks at. | `sphere · background navy` |
 | `texture [name] node= aspect= kind=` |  | name (bare): What the shapes and the background call it: texture=… and picture=….; node: The Texture or Shader Texture node it reads (filled in when you pick a picture; without one, Build makes an empty Texture node).; aspect: The picture's width ÷ height (fits keep it).; kind: A picture or a Shader Texture. · image, shader | `texture pond · box size=0.5 texture=pond @repeat(2)` |
 | `tone [mode]` |  | mode (bare): aces, agx, hable, reinhard2, tanh, oklab, none | `sphere · tone agx` |
-| `camera [dist] angle= elev= orbit= zoom= flatten= x= y= z=` | cam | dist (bare): random: 3–6; angle: number; elev: random: 5–35; orbit: random: 0–15; zoom: number; flatten: number; x: number; y: number; z: number | `sphere · camera dist=5 orbit=10` |
+| `camera [dist] angle= elev= orbit= zoom= flatten= x= y= z= projection= reverse= converge=` | cam | dist (bare): random: 3–6; angle: number; elev: random: 5–35; orbit: random: 0–15; zoom: number; flatten: number; x: number; y: number; z: number; projection: How the rays leave the camera: perspective (far things smaller), orthographic (parallel: no change of size with distance) or reverse (far things bigger). The word alone works too: camera reverse. · perspective, orthographic, reverse; reverse: Reverse: how strongly the rays converge (0 parallel … 1 meeting at converge).; converge: Reverse: how far in front of the camera the rays meet. | `sphere · camera dist=5 orbit=10` |
 | `quality steps= dist= step= jitter= warp=` |  | steps: number; dist: number; step: number; jitter: number; warp: off, auto, careful, high | `sphere · quality steps=128` |
 
 ## Grid Rules

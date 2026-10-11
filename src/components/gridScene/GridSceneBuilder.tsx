@@ -587,6 +587,10 @@ function LookSection() {
         <Row label="Glow"><Toggle checked={look.glow} onChange={v => setL(l => { l.glow = v; })} label={look.glow ? 'On' : 'Off'} /></Row>
         {look.glow && (
           <>
+            <Row label="Style" hint="Soft: the shape's colour runs out into its glow, one shape. Halo: a bright rim round a flat shape.">
+              <Select ariaLabel="Glow style" value={look.glowStyle ?? 'soft'} options={[{ value: 'soft', label: 'Soft (one shape)' }, { value: 'halo', label: 'Halo (rim round the shape)' }]}
+                onChange={v => setL(l => { l.glowStyle = v === 'halo' ? 'halo' : undefined; })} />
+            </Row>
             <NumRow label="Amount" value={look.glowAmount} min={0.0005} max={0.05} step={0.0005} defaultValue={DEFAULT_LOOK.glowAmount} onChange={v => setL(l => { l.glowAmount = v; }, 'ga')} />
             <NumRow label="Falloff" value={look.glowFalloff} min={0.5} max={3} defaultValue={DEFAULT_LOOK.glowFalloff} onChange={v => setL(l => { l.glowFalloff = v; }, 'gf')} />
           </>

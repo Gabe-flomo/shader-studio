@@ -1,5 +1,5 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { p, pv3 } from './helpers';
+import { p, pv3, withParamSockets } from './helpers';
 
 /**
  * Grid Paint — the other end of Grid Pattern, for shapes of your own.
@@ -21,7 +21,7 @@ import { p, pv3 } from './helpers';
  * (docs/field-sockets.md); this node stays for chains that need Grid
  * Pattern's other outputs or finishing after the shape.
  */
-export const GridPaintNode: NodeDefinition = {
+export const GridPaintNode: NodeDefinition = withParamSockets({
   type: 'gridPaint',
   label: 'Grid Paint',
   category: 'Grid',
@@ -61,4 +61,4 @@ export const GridPaintNode: NodeDefinition = {
     lines.push(`    vec3  ${id}_col  = mix(${bg}, ${col}, ${id}_mask);`);
     return { code: lines.join('\n') + '\n', outputVars: { color: `${id}_col`, mask: `${id}_mask` } };
   },
-};
+}, ['antialias', 'strokeWidth']);
