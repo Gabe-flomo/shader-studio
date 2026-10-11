@@ -135,7 +135,7 @@ describe('Splat modifiers: compiling', () => {
       const r = compileGraph({ nodes: scan([n('splatDissolve', 'd', 0, 0, { mode })], 'd') });
       parses(r.splats![0].modifier!.fragmentShader);
     }
-  });
+  }, 30_000); // 12 compiles: past 5 s on a loaded machine
 
   it('the chain\'s sliders join the picture\'s uniform table, so Play and drags reach them', () => {
     const r = compileGraph({ nodes: scan([n('splatDissolve', 'dis', 0, 0, { amount: 0.6 })], 'dis') });
