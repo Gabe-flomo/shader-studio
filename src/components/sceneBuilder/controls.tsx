@@ -11,6 +11,8 @@ import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
 import { HintLabel } from '../builders/BuilderHelp';
 import type { Vec3 } from '../../sceneBuilder/spec';
+import type { SpecPath } from '../../sceneBuilder/paramMap';
+import { lazyParamFor } from './playParam';
 
 const LABEL_W = 116;
 
@@ -29,21 +31,25 @@ export function Row({ label, hint, children }: { label: ReactNode; hint?: string
  * double-click resets (to `defaultValue`, else the value it came into view with), a ±N range is
  * bipolar and typing past the end widens it.
  */
-export function NumRow({ label, value, min, max, step = 0.01, onChange, hint, integer, unit, defaultValue, rangeKey }: {
+export function NumRow({ label, value, min, max, step = 0.01, onChange, hint, integer, unit, defaultValue, rangeKey, play }: {
   label: ReactNode; value: number; min: number; max: number; step?: number; onChange: (v: number) => void; hint?: string; integer?: boolean; unit?: string;
   defaultValue?: number; rangeKey?: string;
+  /** The value of the spec it sets: right-click offers the Play menu of the node param it builds (playParam.ts). */
+  play?: SpecPath;
 }) {
   return (
     <Row label={unit ? <>{label} <span style={{ opacity: 0.6 }}>{unit}</span></> : label} hint={hint}>
       <BuilderSlider value={value} min={min} max={max} step={integer ? 1 : step} integer={integer} onChange={onChange} ariaLabel={typeof label === 'string' ? label : 'value'}
-        defaultValue={defaultValue} rangeKey={rangeKey} />
+        defaultValue={defaultValue} rangeKey={rangeKey} lazyParam={play ? lazyParamFor(play) : undefined} />
     </Row>
   );
 }
 
-export function Vec3Row({ label, value, min, max, step = 0.01, onChange, hint, axes = ['X', 'Y', 'Z'], defaultValue }: {
+export function Vec3Row({ label, value, min, max, step = 0.01, onChange, hint, axes = ['X', 'Y', 'Z'], defaultValue, play }: {
   label: ReactNode; value: Vec3; min: number; max: number; step?: number; onChange: (v: Vec3) => void; hint?: string; axes?: [string, string, string];
   defaultValue?: Vec3;
+  /** Each axis's value of the spec: right-click offers its node param's Play menu. */
+  play?: (part: 0 | 1 | 2) => SpecPath;
 }) {
   const tk = useTokens();
   return (
@@ -54,6 +60,7 @@ export function Vec3Row({ label, value, min, max, step = 0.01, onChange, hint, a
             <span style={{ font: `600 10.5px ${fontFamily.mono}`, color: tk.text.faint, width: 10 }}>{axes[i]}</span>
             <div style={{ flex: 1, minWidth: 0 }}>
               <BuilderSlider value={v} min={min} max={max} step={step} ariaLabel={`${typeof label === 'string' ? label : 'value'} ${axes[i]}`} defaultValue={defaultValue?.[i]}
+                lazyParam={play ? lazyParamFor(play(i as 0 | 1 | 2)) : undefined}
                 onChange={n => { const next = [...value] as Vec3; next[i] = n; onChange(next); }} />
             </div>
           </div>
