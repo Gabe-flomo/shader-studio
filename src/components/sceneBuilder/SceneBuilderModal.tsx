@@ -24,6 +24,8 @@ import { ScenePreview } from './ScenePreview';
 import { SurpriseBar } from '../surprise/SurpriseBar';
 import { surpriseSceneAction, useSceneSurprise } from './surpriseActions';
 import { CameraTab, CombineTab, DescribeTab, LookTab, OutputTab, QualityTab, RecipeTab, ShapesTab, TemplatesTab, WarpsTab } from './tabs';
+import { finishBuilder } from '../../builders/finish';
+import { scene3dBuildIds } from '../../builders/finishScenes';
 
 /** The sections, as the builders' shared tab row (BuilderWindow `tabs`, components/builders/BuilderTabBar.tsx). */
 const TABS: Array<{ id: BuilderTab; label: string; icon: IconName; gapBefore?: boolean }> = [
@@ -148,7 +150,7 @@ export function SceneBuilderModal() {
         <BuilderNote>{editing ? 'Rebuild replaces the scene it was built as, keeping settings you changed on its nodes.' : 'Build adds the graph to the canvas and shows it on the Output.'}</BuilderNote>
         <span style={{ flex: 1 }} />
         {dirty && <BuilderNote style={{ color: tk.text.faint }}>Not built yet</BuilderNote>}
-        <Button onClick={close}>Done</Button>
+        <Button onClick={() => finishBuilder(close, scene3dBuildIds(useSceneBuilder.getState().targetSceneId))}>Done</Button>
         <Button variant="primary" icon="rebuild" disabled={!shapes} onClick={() => void buildFromBuilder(false)}>{editing ? 'Rebuild' : 'Build'}</Button>
       </>}
     >

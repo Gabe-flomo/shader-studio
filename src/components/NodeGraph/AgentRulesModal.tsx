@@ -40,6 +40,7 @@ import { SurpriseBar } from '../surprise/SurpriseBar';
 import { surpriseAgentsAction, useSurpriseSeeds } from '../surprise/surpriseActions';
 import { AGENT_VIEWS, agentsViewOf, type AgentsView } from '../../agentRules/outputs';
 import { type EditCtx, Num, RuleCard } from '../agentRules/RuleEditors';
+import { finishBuilder } from '../../builders/finish';
 
 const hex = (c: number[]) => `#${c.slice(0, 3).map(v => Math.round(Math.min(Math.max(v, 0), 1) * 255).toString(16).padStart(2, '0')).join('')}`;
 const fromHex = (h: string): [number, number, number] => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255) as [number, number, number];
@@ -295,7 +296,7 @@ export function AgentRulesModal({ node, onClose }: { node: GraphNode; onClose: (
         <Toggle checked={showLines} onChange={setShowLines} label="Show the lines" />
         <span style={{ flex: 1 }} />
         <Note>Memory holds a state and one number · changes apply live</Note>
-        <Button variant="primary" onClick={close}>Done</Button>
+        <Button variant="primary" onClick={() => finishBuilder(close, [node.id])}>Done</Button>
       </>}
     >
       <div data-agent-tab={tab} style={{ display: 'contents' }}>

@@ -163,6 +163,29 @@ vec3 deep_glow(float d, vec3 baseColor, float intensity, float radius, float sat
   },
 };
 
+/**
+ * One pixel of anti-aliasing for an SDF edge ("Crisp").
+ *
+ * fwidth(d) is how much the distance changes from one pixel to the next, which for a smooth
+ * SDF is one pixel's worth of distance: the right width to soften the edge over. But where the
+ * distance JUMPS — a cell border in a grid, or a block border after Pixelate, where the pixels on
+ * either side measure different shapes (or the same shape from different cell centres) — the GPU's
+ * 2×2 pixel quad straddles the border and fwidth measures the jump instead. Softening by a jump
+ * that big paints half-strength fill on every border pixel whose distance is smaller than the
+ * jump: faint 1-px lines along cell edges next to filled cells.
+ *
+ * A real SDF can't change by much more than a pixel per pixel, so a change several pixels big is a
+ * jump. There the edge is drawn crisp (one pixel of the picture's coordinates): each pixel keeps
+ * its own cell's value, which is exactly what a flat cell should look like. `px` is one pixel in
+ * the standard picture coordinates (top 1, bottom −1); jumps are anything over 4 of them, so
+ * coordinates scaled up a few times still get their full fwidth anti-aliasing.
+ */
+export function sdfPixelAA(id: string, dVar: string): string {
+  return `    float ${id}_fw = fwidth(${dVar});\n`
+    + `    float ${id}_px = 2.0 / max(u_resolution.y, 1.0);\n`
+    + `    float ${id}_aa = max(${id}_fw > 4.0 * ${id}_px ? ${id}_px : ${id}_fw, 0.00001);\n`;
+}
+
 export const SDFFillNode: NodeDefinition = {
   type: 'sdfFill',
   label: 'SDF Fill',
@@ -213,7 +236,7 @@ export const SDFFillNode: NodeDefinition = {
       code: [
         `    float ${id}_d  = ${dVar};\n`,
         `    float ${id}_sw = ${swVar};\n`,
-        pixelAA ? `    float ${id}_aa = max(fwidth(${id}_d), 0.00001);\n` : `    float ${id}_aa = max(${aaVar}, 0.00001);\n`,
+        pixelAA ? sdfPixelAA(id, `${id}_d`) : `    float ${id}_aa = max(${aaVar}, 0.00001);\n`,
         `    float ${id}_fill   = 1.0 - smoothstep(-${id}_aa, ${id}_aa, ${id}_d);\n`,
         `    float ${id}_stroke = (1.0 - smoothstep(-${id}_aa, ${id}_aa, ${band})) * step(0.000001, ${id}_sw);\n`,
         `    vec3  ${id}_result = mix(mix(${bgVar}, ${fVar}, ${id}_fill), ${sVar}, ${id}_stroke);\n`,

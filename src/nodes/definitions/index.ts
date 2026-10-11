@@ -22,6 +22,7 @@ import { DataNode } from './data';
 export { DataNode };
 import { Lift4DNode, Rotate4DNode, Translate4DNode, HypersphereSDFNode, TesseractSDFNode, FOURD_P2_NODES, FOURD_P4_NODES } from './fourD';
 import { SCENE2D_NODES } from './scene2d';
+import { TransformNode } from './transformAny';
 export { Lift4DNode, Rotate4DNode, Translate4DNode, HypersphereSDFNode, TesseractSDFNode };
 import { FOURD_P3_NODES } from './fourDProject';
 
@@ -331,6 +332,8 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   ...FOURD_P4_NODES,
   // The 2D Scene Builder's small nodes (docs/scene-builder-2d-plan.md)
   ...SCENE2D_NODES,
+  // Transform: move/turn/scale in 2D, 3D or 4D (transformAny.ts)
+  transform: TransformNode,
   timeCube: TimeCubeNode,
   timeSlice: TimeSliceNode,
   timeCubeView: TimeCubeViewNode,
