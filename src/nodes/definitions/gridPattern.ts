@@ -1,5 +1,5 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { p, pv3, fieldFn } from './helpers';
+import { p, pv3, fieldFn, withNewOutputs } from './helpers';
 import { GLSL_MAT2_INV } from './matrixOps';
 import { columnsExpr, gridColumnsMigration } from './gridColumns';
 import { GRID_HASH_GLSL } from './gridHash';
@@ -76,6 +76,7 @@ export const GridPatternNode: NodeDefinition = {
     cellID:     { type: 'vec2',  label: 'Cell ID', hint: 'Integer column and row: hash it for per-cell variation.' },
     cellCenter: { type: 'vec2',  label: 'Cell Center', hint: 'The cell’s centre in UV space.' },
     placed:     { type: 'float', label: 'Placed', hint: '1 where the pattern puts a shape in this cell, 0 where it leaves the cell empty.' },
+    cellSize:   { type: 'float', label: 'Cell Size', hint: 'A cell\'s size in UV units (2 × aspect ÷ Columns): with Cell Center and Cell UV, Cell Picture reads a picture in pieces.' },
   },
   // _schemaVersion: new nodes are made in the current Columns units (see gridColumns.ts).
   defaultParams: {
@@ -86,6 +87,8 @@ export const GridPatternNode: NodeDefinition = {
     color: [0.95, 0.85, 0.6], background: [0.06, 0.06, 0.09],
   },
   ...gridColumnsMigration(8),
+  // Cell Size (for Cell Picture) came later: older nodes gain the socket.
+  syncSockets: withNewOutputs({ cellSize: { type: 'float', label: 'Cell Size' } }),
   paramDefs: {
     columns:  { label: 'Columns', type: 'float', min: 1, max: 120, step: 1, hint: 'Cells across the width.' },
     lattice:  { label: 'Lattice', type: 'select', options: [
@@ -341,7 +344,7 @@ float gpPlaced(vec2 id, float pattern, float density) {
       code: lines.join('\n') + '\n',
       outputVars: {
         color: `${id}_col`, mask: `${id}_mask`, distance: `${id}_d`, influence: `${id}_inf`,
-        cellUV: `${id}_rq`, scale: `${id}_sc`, cellID: `${id}_cid`, cellCenter: `${id}_cc`, placed: `${id}_on`,
+        cellUV: `${id}_rq`, scale: `${id}_sc`, cellID: `${id}_cid`, cellCenter: `${id}_cc`, placed: `${id}_on`, cellSize: `${id}_cell`,
       },
     };
   },

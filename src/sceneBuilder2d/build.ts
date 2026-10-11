@@ -29,7 +29,7 @@ import { GRID_LABELS, gridProgram, type GridSpec } from './grid';
 import { callBody, type FnRef } from './functions';
 import { COMBINE_BY_MODE, blockGlslLines, checkBlock, clampTimes, type SpaceBlock } from './blocks';
 import { BLOCK_BY_ID } from './blockLibrary';
-import { FIT_LABELS, LUMA, findTex, fitLines, glf, picUv, sampleWrap, standInId, standIns, type TexSource, type TexUse } from '../builders/textures';
+import { FIT_LABELS, LUMA, findTex, fitLines, glf, newTexUse, picUv, sampleWrap, standInId, standIns, type TexSource, type TexUse } from '../builders/textures';
 
 export { ROLE_KEY };
 /** On the UV node: the scene it was built from (and, once applied, fingerprints of what was built). */
@@ -538,7 +538,7 @@ export function buildScene2D(spec: Scene2D, idFor: (role: string) => string = ro
       ]), 'result');
     }
   }
-  if (spec.grid) acc = emitGrid(b, spec.grid, pos, acc, anim);
+  if (spec.grid) acc = emitGrid(b, spec.grid, pos, screen, acc, anim);
   let final = acc;
   if (L.tone !== 'none') final = ref(mk(c, 'toneMap', 'tone', { mode: L.tone }, { color: final }, `Squeezes the bright, linear light into colours a screen can show (${L.tone.toUpperCase()}) without clipping highlights.`), 'color');
   const P = L.post;
@@ -557,7 +557,7 @@ export function buildScene2D(spec: Scene2D, idFor: (role: string) => string = ro
 }
 
 /** The grid (grid.ts): one Expression Block for the cells, then colour, glow and fill over what is behind. */
-function emitGrid(b: B, g: GridSpec, pos: Ref, behind: Ref, anim: Ref | null): Ref {
+function emitGrid(b: B, g: GridSpec, pos: Ref, screen: Ref, behind: Ref, anim: Ref | null): Ref {
   const { c, spec } = b;
   const L = spec.look;
   const prog = gridProgram(g);
@@ -579,8 +579,9 @@ function emitGrid(b: B, g: GridSpec, pos: Ref, behind: Ref, anim: Ref | null): R
     `Line by line: cs is a cell's size; id which cell this point is in (column, row); inGrid is 1 inside the grid; cc the cell's centre and q the point measured from it. ` +
     `w is the ripple: a sine of the distance from ${rip} to the cell's centre, moving with time (freq rings per unit, speed cycles a second), averaged, −1..1. ` +
     `It changes ${g.target === 'none' ? 'nothing but the colour' : GRID_LABELS.target[g.target].toLowerCase()} by amount. s is the shape's size (size × half a cell); k which shape the cell gets; d0… each shape's distance; d the one the cell uses (0 inside the grid's edge, far outside it). ` +
-    'The result packs three numbers: x the distance, y the ripple 0..1, z the shape (or a random per-cell value) 0..1. The sliders are live.',
-    'vec3', prog.lines);
+    'The result packs three numbers: x the distance, y the ripple 0..1, z the shape (or a random per-cell value) 0..1. The sliders are live.'
+    + (g.pic && prog.place ? ` place is where its picture is read (${GRID_LABELS.pic[g.pic.mode].label.toLowerCase()}): ${g.pic.mode === 'matte' ? 'the cell\'s centre, one colour a shape' : g.pic.mode === 'piece' ? 'the cell\'s centre plus q, turned and pushed with the shape, m / s undoing its grow, so its piece goes with it' : 'q in the shape\'s own box, the whole picture in every shape'}.` : ''),
+    'vec3', prog.lines, prog.place ? [{ name: 'place', type: 'vec2', label: 'Picture place' }] : []);
   const sp = mk(c, 'splitVec3', 'grid:split', {}, { v: ref(ge, 'result') }, 'Splits the grid\'s three numbers: X the distance to the cell\'s shape, Y the ripple (0..1), Z the shape index or per-cell value (0..1).');
   const d = ref(sp, 'x');
   let fill: Ref;
@@ -592,6 +593,17 @@ function emitGrid(b: B, g: GridSpec, pos: Ref, behind: Ref, anim: Ref | null): R
     const c2 = mk(c, 'colorPicker', 'grid:color2', { color: [...g.colour2] }, {}, `The grid's second colour, ${col(g.colour2)}: cells with the last shape.`);
     fill = ref(expr(c, 'grid:shade', 'Grid colour', [{ name: 'a', type: 'vec3', from: ref(c1, 'rgb') }, { name: 'b', type: 'vec3', from: ref(c2, 'rgb') }, { name: 'k', type: 'float', from: ref(sp, 'z') }],
       'mix(a, b, k)', 'Each cell\'s colour by its shape: the first colour for the first shape, the second for the last, blended between for a morph.'), 'result');
+  }
+  // The picture the shapes carry (GRID_PIC_MODES): read where the grid says (Mask: the screen's point), over their colour.
+  const t = g.pic ? texFor(b, g.pic.tex, 'The grid') : null;
+  if (g.pic && t) {
+    const mode = g.pic.mode;
+    const cellHalf = `vec2(${fmt(Math.min(2 * g.span / Math.max(1, g.cols), 2 * g.span / Math.max(1, g.rows)) * 0.5 * g.size)})`;
+    const pic = samplePicture(b, 'grid:pic', newTexUse(t.src.name), t.src, t.out, mode === 'mask' ? screen : ref(ge, 'place'), mode === 'cell' ? cellHalf : SCREEN_EXT,
+      mode === 'mask' ? 'the grid (Mask: the picture over the whole frame, read at the screen\'s point)' : mode === 'cell' ? 'each grid shape' : `the grid (${GRID_LABELS.pic[mode].label})`);
+    fill = ref(expr(c, 'grid:picpaint', 'Grid picture', [
+      { name: 'base', type: 'vec3', from: fill }, { name: 'tex', type: 'vec3', from: pic.color }, { name: 'a', type: 'float', from: pic.alpha }, { name: 'inside', type: 'float', from: pic.inside },
+    ], 'mix(base, tex, clamp(a, 0.0, 1.0) * inside)', `The grid's shapes painted with the picture “${t.src.name}” (${GRID_LABELS.pic[mode].label}: ${GRID_LABELS.pic[mode].blurb.toLowerCase()}); their own colour where the picture is clear.`), 'result');
   }
   let acc = behind;
   if (L.glow.mode === 'all' || (g.glow && L.glow.mode !== 'off')) {

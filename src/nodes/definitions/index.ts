@@ -37,6 +37,7 @@ export { PadGridNode } from './padGrid';
 // Grid
 export { GridPatternNode } from './gridPattern';
 export { GridPaintNode } from './gridPaint';
+export { CellPictureNode, CellPatternNode } from './cellPicture';
 export { ArrayFieldNode } from './arrayField';
 export { FieldCellNode } from './fieldCell';
 export { GridLayoutNode, WaveRadiusNode, NeighborDistNode, CellFilterNode, CellDisplaceNode, GridDensityWarpNode, NeighborOffset2dNode, AnimatedCellCenterNode, NeighborAttractCirclesNode } from './grid';
@@ -192,6 +193,7 @@ import { PadGridNode } from './padGrid';
 import { EchoNode } from './echo';
 import { GridPatternNode } from './gridPattern';
 import { GridPaintNode } from './gridPaint';
+import { CellPictureNode, CellPatternNode } from './cellPicture';
 import { ArrayFieldNode } from './arrayField';
 import { FieldCellNode } from './fieldCell';
 import { GridLayoutNode, WaveRadiusNode, NeighborDistNode, CellFilterNode, CellDisplaceNode, GridDensityWarpNode, NeighborOffset2dNode, AnimatedCellCenterNode, NeighborAttractCirclesNode } from './grid';
@@ -387,6 +389,8 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   gridDensityWarp: GridDensityWarpNode,
   gridPattern: GridPatternNode,
   gridPaint: GridPaintNode,
+  cellPicture: CellPictureNode,
+  cellPattern: CellPatternNode,
   arrayField: ArrayFieldNode,
   fieldCell: FieldCellNode,
   neighborOffset2d: NeighborOffset2dNode,
