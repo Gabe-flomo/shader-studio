@@ -17,10 +17,13 @@
  * splat at the pixel, so a preview shows something sensible instead of failing.
  *
  * Every slider is an ordinary param: a live uniform shared with the picture, so dragging, Play mappings and keyframes
- * never recompile.
+ * never recompile. Every number, vector and colour slider is also an input socket of the same key (withParamSockets):
+ * a wire (Time, an LFO, Noise, any node, run per splat in the modifier program) takes the slider's place. The
+ * headline ones show on the card; the rest come out from their slider (right-click → Control from outside).
  */
 import type { GraphNode, NodeDefinition } from '../../types/nodeGraph';
-import { p, pv3 } from './helpers';
+import { p, pv3, withParamSockets } from './helpers';
+import { isKeyframeBypassed, socketHasKeyframes } from '../../compiler/keyframes';
 
 export const SPLAT_TYPE = 'splat' as const;
 export const SPLAT_MOD_OUT_TYPE = 'splatModOut';
@@ -172,7 +175,7 @@ export const SplatAttributesNode: NodeDefinition = {
 
 // ── Set Splat ───────────────────────────────────────────────────────────────
 
-export const SetSplatNode: NodeDefinition = {
+export const SetSplatNode: NodeDefinition = withParamSockets({
   type: 'splatSet',
   label: 'Set Splat',
   category: SPLAT_CATEGORY,
@@ -206,11 +209,11 @@ export const SetSplatNode: NodeDefinition = {
       outputVars: { splat: `${id}_s` },
     };
   },
-};
+}, ['amount']);
 
 // ── Dissolve ────────────────────────────────────────────────────────────────
 
-export const SplatDissolveNode: NodeDefinition = {
+export const SplatDissolveNode: NodeDefinition = withParamSockets({
   type: 'splatDissolve',
   label: 'Splat Dissolve',
   category: SPLAT_CATEGORY,
@@ -261,11 +264,11 @@ export const SplatDissolveNode: NodeDefinition = {
       outputVars: { splat: `${id}_s` },
     };
   },
-};
+}, ['amount', 'scale', 'evolve', 'softness', 'edge', 'edgeColor', 'glow', 'drift'], ['amount']);
 
 // ── Explode / scatter ───────────────────────────────────────────────────────
 
-export const SplatExplodeNode: NodeDefinition = {
+export const SplatExplodeNode: NodeDefinition = withParamSockets({
   type: 'splatExplode',
   label: 'Splat Explode',
   category: SPLAT_CATEGORY,
@@ -312,13 +315,13 @@ export const SplatExplodeNode: NodeDefinition = {
       outputVars: { splat: `${id}_s` },
     };
   },
-};
+}, ['amount', 'returnHome', 'distance', 'scatter', 'stagger', 'spin'], ['amount', 'returnHome']);
 
 // ── Wave / wobble / twist ───────────────────────────────────────────────────
 
 const AXES: Record<string, string> = { x: 'vec3(1.0, 0.0, 0.0)', y: 'vec3(0.0, 1.0, 0.0)', z: 'vec3(0.0, 0.0, 1.0)' };
 
-export const SplatWaveNode: NodeDefinition = {
+export const SplatWaveNode: NodeDefinition = withParamSockets({
   type: 'splatWave',
   label: 'Splat Wave',
   category: SPLAT_CATEGORY,
@@ -362,11 +365,11 @@ export const SplatWaveNode: NodeDefinition = {
     }
     return { code: lines.join(''), outputVars: { splat: `${id}_s` } };
   },
-};
+}, ['amplitude', 'frequency', 'speed'], 'all');
 
 // ── Colour ──────────────────────────────────────────────────────────────────
 
-export const SplatColorNode: NodeDefinition = {
+export const SplatColorNode: NodeDefinition = withParamSockets({
   type: 'splatColor',
   label: 'Splat Colour',
   category: SPLAT_CATEGORY,
@@ -399,11 +402,11 @@ export const SplatColorNode: NodeDefinition = {
       outputVars: { splat: `${id}_s` },
     };
   },
-};
+}, ['hue', 'saturation', 'brightness', 'contrast', 'tint', 'tintAmount'], ['hue', 'tintAmount']);
 
 // ── Crop ────────────────────────────────────────────────────────────────────
 
-export const SplatCropNode: NodeDefinition = {
+export const SplatCropNode: NodeDefinition = withParamSockets({
   type: 'splatCrop',
   label: 'Splat Crop',
   category: SPLAT_CATEGORY,
@@ -465,11 +468,11 @@ export const SplatCropNode: NodeDefinition = {
       outputVars: { splat: `${id}_s` },
     };
   },
-};
+}, ['offset', 'size', 'normal', 'softness', 'edge', 'edgeColor', 'glow'], ['offset']);
 
 // ── Size & opacity ──────────────────────────────────────────────────────────
 
-export const SplatLookNode: NodeDefinition = {
+export const SplatLookNode: NodeDefinition = withParamSockets({
   type: 'splatLook',
   label: 'Splat Size & Opacity',
   category: SPLAT_CATEGORY,
@@ -495,11 +498,11 @@ export const SplatLookNode: NodeDefinition = {
       outputVars: { splat: `${id}_s` },
     };
   },
-};
+}, ['size', 'opacity', 'floor', 'keep'], ['size', 'opacity', 'keep']);
 
 // ── Points ──────────────────────────────────────────────────────────────────
 
-export const SplatPointsNode: NodeDefinition = {
+export const SplatPointsNode: NodeDefinition = withParamSockets({
   type: 'splatPoints',
   label: 'Splat Points',
   category: SPLAT_CATEGORY,
@@ -525,7 +528,7 @@ export const SplatPointsNode: NodeDefinition = {
       outputVars: { splat: `${id}_s` },
     };
   },
-};
+}, ['on', 'dotSize', 'solid'], ['on', 'dotSize']);
 
 // ── The program's end (made by compiler/splatGraph.ts; never in a graph) ────
 
@@ -565,13 +568,24 @@ export const SPLAT_NODE_TYPES = new Set(['splatAttributes', 'splatSet', 'splatDi
  * positions (lib/splats/engine.ts). Set Splat moves them whenever Position or Offset is wired.
  */
 export function splatMoveGate(n: GraphNode): SplatMoveGate | null {
+  const gate = (params: string[]): SplatMoveGate => (params.some(k => splatParamDriven(n, k)) ? { always: true } : { params });
   switch (n.type) {
-    case 'splatSet': return n.inputs.position?.connection || n.inputs.offset?.connection ? { params: ['amount'] } : null;
-    case 'splatDissolve': return { params: ['drift'] };
-    case 'splatExplode': return { params: ['amount'] };
-    case 'splatWave': return { params: ['amplitude'] };
+    case 'splatSet': return n.inputs.position?.connection || n.inputs.offset?.connection ? gate(['amount']) : null;
+    case 'splatDissolve': return gate(['drift']);
+    case 'splatExplode': return gate(['amount']);
+    case 'splatWave': return gate(['amplitude']);
     default: return null;
   }
+}
+
+/**
+ * Is a slider driven by something other than its own value: a wire into its socket (or its `__param_` socket, as
+ * the Splat builder and older graphs wire it), or keyframes on its socket? Then the slider's uniform says nothing
+ * about the value, so a moving node counts as moving (the engine still stops sorting once the depths settle).
+ */
+function splatParamDriven(n: GraphNode, key: string): boolean {
+  if (n.inputs[key]?.connection || n.inputs[`__param_${key}`]?.connection) return true;
+  return !!n.inputs[key] && socketHasKeyframes(n, key) && !isKeyframeBypassed(n, key);
 }
 
 /** The recipe nodes (each one look, a card of its own), in the order the Splat Scene card offers them. */
