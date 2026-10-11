@@ -2399,13 +2399,13 @@ Examples:
 Words: `cone`
 
 ```
-cone [angle] h= at= rot= color= shine= name= [glass]
+cone [angle] height= at= rot= color= shine= name= [glass]
 ```
 
 | Slot | What |
 |---|---|
 | angle (bare) | Angle · default 22.92 · random: 11.46–36.672000000000004 |
-| h | Height · default 1 · random: 0.5–1.6 |
+| height | Height · default 1 · random: 0.5–1.6 |
 | at | random: (-0.6…0.6)×3 |
 | rot | random: (-45…45)×3 |
 | color | random: a harmonious colour |
@@ -2423,12 +2423,12 @@ Examples:
 Words: `capped-cone`, `frustum`
 
 ```
-capped-cone [h] r1= r2= at= rot= color= shine= name= [glass]
+capped-cone [height] r1= r2= at= rot= color= shine= name= [glass]
 ```
 
 | Slot | What |
 |---|---|
-| h (bare) | Height · default 0.5 · random: 0.25–0.8 |
+| height (bare) | Height · default 0.5 · random: 0.25–0.8 |
 | r1 | Bottom radius · default 0.4 · random: 0.2–0.6400000000000001 |
 | r2 | Top radius · default 0.1 · random: 0.05–0.16000000000000003 |
 | at | random: (-0.6…0.6)×3 |
@@ -2448,13 +2448,13 @@ Examples:
 Words: `cylinder`, `pillar`, `column`, `rounded-cylinder`
 
 ```
-cylinder [r] h= round= size= at= rot= color= shine= name= [glass]
+cylinder [radius] height= round= size= at= rot= color= shine= name= [glass]
 ```
 
 | Slot | What |
 |---|---|
-| r (bare) | Radius · default 0.3 · random: 0.15–0.48 |
-| h | Height (half) · default 0.5 · random: 0.25–0.8 |
+| radius (bare) | Radius · default 0.3 · random: 0.15–0.48 |
+| height | Height (half) · default 0.5 · random: 0.25–0.8 |
 | round | Round · default 0 · random: 0–0.08333333333333333 |
 | size | Size (linked) · The radius and the height together: size=0.5 sets both. · random: 0.2–0.6 |
 | at | random: (-0.6…0.6)×3 |
@@ -2474,13 +2474,13 @@ Examples:
 Words: `capsule`, `pill`
 
 ```
-capsule [h] r= size= at= rot= color= shine= name= [glass]
+capsule [height] radius= size= at= rot= color= shine= name= [glass]
 ```
 
 | Slot | What |
 |---|---|
-| h (bare) | Height · default 0.6 · random: 0.3–0.96 |
-| r | Radius · default 0.2 · random: 0.1–0.32000000000000006 |
+| height (bare) | Height · default 0.6 · random: 0.3–0.96 |
+| radius | Radius · default 0.2 · random: 0.1–0.32000000000000006 |
 | size | Size (linked) · The radius and the height together: size=0.5 sets both. · random: 0.2–0.6 |
 | at | random: (-0.6…0.6)×3 |
 | rot | random: (-45…45)×3 |
@@ -2545,12 +2545,12 @@ Examples:
 Words: `pyramid`
 
 ```
-pyramid [h] at= rot= color= shine= name= [glass]
+pyramid [height] at= rot= color= shine= name= [glass]
 ```
 
 | Slot | What |
 |---|---|
-| h (bare) | Height · default 0.8 · random: 0.4–1.2800000000000002 |
+| height (bare) | Height · default 0.8 · random: 0.4–1.2800000000000002 |
 | at | random: (-0.6…0.6)×3 |
 | rot | random: (-45…45)×3 |
 | color | random: a harmonious colour |
@@ -2594,13 +2594,13 @@ Examples:
 Words: `hex-prism`, `hexagon`
 
 ```
-hex-prism [r] h= size= at= rot= color= shine= name= [glass]
+hex-prism [radius] height= size= at= rot= color= shine= name= [glass]
 ```
 
 | Slot | What |
 |---|---|
-| r (bare) | Radius · default 0.4 · random: 0.2–0.6400000000000001 |
-| h | Height · default 0.2 · random: 0.1–0.32000000000000006 |
+| radius (bare) | Radius · default 0.4 · random: 0.2–0.6400000000000001 |
+| height | Height · default 0.2 · random: 0.1–0.32000000000000006 |
 | size | Size (linked) · The radius and the height together: size=0.5 sets both. · random: 0.2–0.6 |
 | at | random: (-0.6…0.6)×3 |
 | rot | random: (-45…45)×3 |
@@ -2619,13 +2619,13 @@ Examples:
 Words: `tri-prism`, `triangle`
 
 ```
-tri-prism [r] h= size= at= rot= color= shine= name= [glass]
+tri-prism [radius] height= size= at= rot= color= shine= name= [glass]
 ```
 
 | Slot | What |
 |---|---|
-| r (bare) | Radius · default 0.4 · random: 0.2–0.6400000000000001 |
-| h | Height · default 0.2 · random: 0.1–0.32000000000000006 |
+| radius (bare) | Radius · default 0.4 · random: 0.2–0.6400000000000001 |
+| height | Height · default 0.2 · random: 0.1–0.32000000000000006 |
 | size | Size (linked) · The radius and the height together: size=0.5 sets both. · random: 0.2–0.6 |
 | at | random: (-0.6…0.6)×3 |
 | rot | random: (-45…45)×3 |
