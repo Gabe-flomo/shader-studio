@@ -9,12 +9,13 @@ import { GRID_DEFAULTS, countsAsRanges, gridShape, isDrawnStart, neighbourWeight
 import { SAME, blockVariants, patternVariants, specMatches, stencilOffset } from './stencils';
 import { blockStartsAt, diceFrame, grDice } from './dice';
 import { stampedAt } from './startCells';
+import { cpuStackStep } from './stack';
 
 export interface CpuBoard {
   w: number; h: number; a: Float32Array; b: Float32Array;
   /** Blocks: the step's parity. */
   par?: number;
-  /** Blocks: steps taken (the dice's frame number, as the GPU's is the frame's). */
+  /** Blocks and stacked rules: steps taken (the dice's frame number, as the GPU's is the frame's). */
   step?: number;
 }
 
@@ -75,9 +76,29 @@ export interface CpuTrace {
 export function cpuStep(params: Record<string, unknown>, B: CpuBoard, trace?: CpuTrace): CpuBoard {
   const P = { ...GRID_DEFAULTS, ...params };
   const s = gridShape(P);
-  if (s.type === 'patterns') return patterns(s, P, B);
   if (s.type === 'blocks') return blocks(s, P, B, trace);
-  return s.type === 'smooth' ? smooth(s, P, B) : discrete(s, P, B);
+  if (s.type === 'smooth') return smooth(s, P, B);
+  const base = s.type === 'patterns' ? patterns(s, P, B) : discrete(s, P, B);
+  return s.stack.length ? stackAfter(s, P, B, base) : base;
+}
+
+/** The base's step, then each stacked card in order on the board the one before made (gridRules/stack.ts). */
+function stackAfter(s: GridShape, P: Record<string, unknown>, B: CpuBoard, base: CpuBoard): CpuBoard {
+  const step = B.step ?? 0;
+  const ctx = {
+    wrap: s.wrap, top: s.type === 'count' ? 1 : Math.max(2, Math.round(Number(P.states))) - 1,
+    afterglow: Number(P.afterglow), frame: diceFrame(step), seed: Number(P.seed) || 0,
+  };
+  let out = base;
+  s.stack.forEach((r, j) => { out = cpuStackStep(r, j, out, ctx); });
+  return { ...out, step: step + 1 };
+}
+
+/** The board after the base and the first `cards` stacked cards (the try board's pictures of one card). */
+export function cpuStepUpTo(params: Record<string, unknown>, B: CpuBoard, cards: number): CpuBoard {
+  const P = { ...GRID_DEFAULTS, ...params };
+  const s = gridShape(P);
+  return cpuStep({ ...P, stack: s.stack.slice(0, cards) }, B);
 }
 
 function at(B: CpuBoard, ch: 'a' | 'b', x: number, y: number, wrap: boolean): number {

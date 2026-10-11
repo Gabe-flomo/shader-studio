@@ -2,10 +2,12 @@ import React, { useRef, useEffect, useCallback } from 'react';
 import type { GraphNode } from '../../types/nodeGraph';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, radius } from '../../theme/tokens';
-import { getView, subscribeView, type Pt } from './socketRegistry';
+import { getCardSize, getView, subscribeCardSizes, subscribeView, type Pt } from './socketRegistry';
 
 const NODE_W = 360;
 const NODE_H = 160;
+/** A card's measured size, or 360 × 160 before it is measured. */
+const sizeOf = (n: GraphNode) => getCardSize(n.id) ?? { w: NODE_W, h: NODE_H };
 const PAD    = 200;
 const MAP_W  = 180;
 const MAP_H  = 120;
@@ -21,8 +23,8 @@ interface MinimapProps {
 function mapping(nodes: GraphNode[]) {
   const minX = Math.min(...nodes.map(n => n.position.x)) - PAD;
   const minY = Math.min(...nodes.map(n => n.position.y)) - PAD;
-  const maxX = Math.max(...nodes.map(n => n.position.x + NODE_W)) + PAD;
-  const maxY = Math.max(...nodes.map(n => n.position.y + NODE_H)) + PAD;
+  const maxX = Math.max(...nodes.map(n => n.position.x + sizeOf(n).w)) + PAD;
+  const maxY = Math.max(...nodes.map(n => n.position.y + sizeOf(n).h)) + PAD;
   const worldW = maxX - minX;
   const worldH = maxY - minY;
   const scale  = Math.min(MAP_W / worldW, MAP_H / worldH);
@@ -56,7 +58,8 @@ export const Minimap = React.memo(function Minimap({ nodes, viewportWidth, viewp
     // Draw node rects
     ctx.fillStyle = tk.border.strong;
     for (const node of nodes) {
-      ctx.fillRect(toMapX(node.position.x), toMapY(node.position.y), Math.max(2, NODE_W * scale), Math.max(2, NODE_H * scale));
+      const s = sizeOf(node);
+      ctx.fillRect(toMapX(node.position.x), toMapY(node.position.y), Math.max(2, s.w * scale), Math.max(2, s.h * scale));
     }
 
     // Draw viewport rect — invert the pan/zoom to get world-space viewport
@@ -76,6 +79,8 @@ export const Minimap = React.memo(function Minimap({ nodes, viewportWidth, viewp
 
   // Redraw when nodes / viewport size change, and follow the live view.
   useEffect(() => { draw(getView()); }, [draw]);
+  // Cards are measured after they mount (and grow when opened): redraw with their real sizes.
+  useEffect(() => subscribeCardSizes(() => draw(getView())), [draw]);
   useEffect(() => {
     let raf: number | null = null;
     const unsub = subscribeView(v => {

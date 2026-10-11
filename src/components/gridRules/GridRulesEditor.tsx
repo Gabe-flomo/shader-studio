@@ -47,6 +47,8 @@ import { ColorSwatch } from '../ui/ColorPicker';
 import { PresetCard, StudioLabel, StudioNavItem, StudioShell } from '../builders/studio/StudioShell';
 import { DyingStages, NeighbourhoodPictures, PictureSwitches, RuleSentence } from './BornSurvive';
 import { BlocksForm, PatternsForm } from './StencilForms';
+import { StackForm } from './StackForm';
+import { readStack, stackLine } from '../../gridRules/stack';
 import { SmoothSection } from './SmoothPictures';
 import { TryBoard, type TryFocus } from './TryBoard';
 import { useGridThumbs } from './gridThumbs';
@@ -126,6 +128,7 @@ function GridRulesBuilder({ node, onClose }: { node: GraphNode; onClose: () => v
     switch (id) {
       case 'rule': return ruleLine(params);
       case 'neighbourhood': return shape.neighbourhood === 'moore' ? 'the 8 round it' : shape.neighbourhood === 'vonNeumann' ? 'the 4 beside it' : shape.neighbourhood === 'custom' ? `your own · ${stencilSummary(shape.stencil ?? DEFAULT_STENCIL).toLowerCase()}` : `radius ${shape.radius}, ${shape.shape === 'circle' ? 'round' : 'square'}`;
+      case 'stack': { const line = stackLine(readStack(params.stack)); return line ? `+ ${line}` : 'none yet: add a card'; }
       case 'start': return startLine(params);
       case 'run': return `${Math.round(stepsPerSecond(params))} steps a second`;
       case 'brush': return `${num(params, 'brushRadius')} cells · ${shape.type === 'smooth' ? `sets ${num(params, 'brushState')}` : num(params, 'brushState') === 0 ? 'erases' : `paints ${num(params, 'brushState')}`}`;
@@ -160,6 +163,7 @@ function GridRulesBuilder({ node, onClose }: { node: GraphNode; onClose: () => v
         if (shape.type === 'blocks') return <BlocksForm p={params} set={set} nodeId={node.id} />;
         return <BornSurviveSection p={params} set={set} stages={shape.type === 'stages'} onHoverCount={c => setFocus({ count: c })} />;
       case 'neighbourhood': return <NeighbourhoodSection p={params} set={set} />;
+      case 'stack': return <StackForm p={params} set={set} onHoverCard={j => setFocus({ card: j })} />;
       case 'start': return <StartSection p={params} set={set} />;
       case 'run': return <RunSection p={params} set={set} />;
       case 'brush': return <BrushSection p={params} set={set} />;
@@ -226,6 +230,7 @@ const LEARN: Record<string, string> = {
   'rule:blocks': 'The board is cut into 2×2 blocks, and the cut moves one cell diagonally every step. A block that looks like a before picture becomes its after picture, all four cells at once, so a rule that only moves cells never loses or makes one: sand falls and piles, gas flies.',
   'rule:smooth': 'Instead of a few states, every cell holds a number (two, for ripples and patterns), and every step each cell takes a little from its neighbours.',
   neighbourhood: 'Which cells a cell counts. The 8 round it (Moore) is Life\'s. The 4 beside it (von Neumann) grows diamonds. A radius counts every cell within that many steps: counts run into the dozens, and Born and Survive become ranges. Your own: draw the cells that count on a stencil up to 7×7; with Weights a cell can count two or three times. Born and Survive then count against your stencil, on the try board and on the GPU alike.',
+  stack: 'Start from a base (Life, Brian\'s Brain, Wireworld…) and stack rule cards on it: cells that meet explode into copies, crowded cells die or step away, cells drift in a direction, cells in big clusters change. The base steps first, then each card in order, so the order matters. Point at a card to see on the board the cells it changes next step. On the GPU the cards are extra draws of the same board Pass, so each card costs about one more step.',
   start: 'A new board is dealt when the rule\'s kind or the start changes, or when you press Deal a new board. Your drawing is placed in the middle of the board, whatever its size. Text: the words are drawn in the stroke font and every cell the letters cover starts live, so Life (or any rule) starts from the letters.',
   run: 'Speed below 1 steps on some frames only: 0.5 is a step every other frame, 30 a second. Steps a frame above 1 runs the rule that many times a frame.',
   brush: 'Hold the mouse button over the picture to paint: in the Studio preview, on the Play page and on exported pages. Paint on the card\'s Play controls paints without the button.',
@@ -655,6 +660,8 @@ function GridRecipeTab({ params, set }: { params: P; set: Setter }) {
         const patch: P = {};
         for (const k of [...RECIPE_KEYS, 'startText']) if (r.params[k] !== undefined && JSON.stringify(r.params[k]) !== JSON.stringify(params[k])) patch[k] = r.params[k];
         if (r.params.ruleType !== params.ruleType) patch.ruleType = r.params.ruleType;
+        // Stacked rules (the `then` lines): not a default param, so compared on their own.
+        if (JSON.stringify(readStack(r.params.stack)) !== JSON.stringify(readStack(params.stack))) patch.stack = readStack(r.params.stack);
         if (Object.keys(patch).length) set(patch, true);
       },
       kept: printGrid(r.params, { pretty: true }),
@@ -662,7 +669,7 @@ function GridRecipeTab({ params, set }: { params: P; set: Setter }) {
   }, [params, set]);
   return (
     <LanguageTab dialect="grid" printed={printed} read={read}
-      note="A preset (life, seeds, brians-brain, mitosis, falling-sand…) or a rule type, then what differs: born=3,6 survive=2,3 neighbours=von-neumann board=480 walls speed=0.3. Patterns are stencil lines, Blocks are block lines. In the Do… bar the same line starts with grid when its name is also another word (grid swirl)."
+      note="A preset (life, seeds, brians-brain, mitosis, falling-sand…) or a rule type, then what differs: born=3,6 survive=2,3 neighbours=von-neumann board=480 walls speed=0.3. Patterns are stencil lines, Blocks are block lines, stacked rules are then lines (then explode copies=8). In the Do… bar the same line starts with grid when its name is also another word (grid swirl)."
       examples={[
         { label: 'HighLife on walls', text: 'highlife walls board=480' },
         { label: 'Bosco', text: 'count neighbours=radius radius=5 born=34..45 survive=33..57' },

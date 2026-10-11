@@ -42,6 +42,7 @@ export interface GridAsNodes {
 /** Why this node can't be opened as nodes (null: it can). */
 export function gridAsNodesProblem(src: GraphNode): string | null {
   const s = gridShape(src.params);
+  if (s.stack.length) return 'Stacked rules aren\'t built as nodes yet: switch the cards off (Stacked rules) to open the base as nodes.';
   if (isDiscrete(s.type) && (s.type === 'count' || s.type === 'stages') && s.neighbourhood === 'radius' && s.radius > 2) {
     return `Radius ${s.radius} counts ${maxCount('radius', s.radius, s.shape)} cells: as nodes that is one Sample (texture) card each. Open as nodes builds radius 1 and 2; set Radius to 2 to see one.`;
   }

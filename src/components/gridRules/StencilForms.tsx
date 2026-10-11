@@ -85,7 +85,8 @@ function CellChoices({ p, value, after = false, anyOk = true, onPick, place }: {
   );
 }
 
-function RuleCard({ index, title, off, children, actions, onHover }: { index: number; title: string; off?: boolean; children: ReactNode; actions: ReactNode; onHover?: (on: boolean) => void }) {
+/** A rule's card: its colour, title, actions (on / off, order, remove); pointing at it reports the hover. Shared with StackForm.tsx. */
+export function RuleCard({ index, title, off, children, actions, onHover }: { index: number; title: string; off?: boolean; children: ReactNode; actions: ReactNode; onHover?: (on: boolean) => void }) {
   const tk = useTokens();
   return (
     <div data-rule-card={index} onPointerEnter={() => onHover?.(true)} onPointerLeave={() => onHover?.(false)}
@@ -100,7 +101,7 @@ function RuleCard({ index, title, off, children, actions, onHover }: { index: nu
   );
 }
 
-function ListActions({ i, n, off, onMove, onDelete, onToggle }: { i: number; n: number; off: boolean; onMove: (d: -1 | 1) => void; onDelete: () => void; onToggle: (on: boolean) => void }) {
+export function ListActions({ i, n, off, onMove, onDelete, onToggle }: { i: number; n: number; off: boolean; onMove: (d: -1 | 1) => void; onDelete: () => void; onToggle: (on: boolean) => void }) {
   return (
     <>
       <Toggle checked={!off} onChange={onToggle} label={off ? 'Off' : 'On'} />
@@ -111,9 +112,9 @@ function ListActions({ i, n, off, onMove, onDelete, onToggle }: { i: number; n: 
   );
 }
 
-const move = <T,>(list: T[], i: number, d: number) => { const out = [...list]; const [x] = out.splice(i, 1); out.splice(i + d, 0, x); return out; };
+export const move = <T,>(list: T[], i: number, d: number) => { const out = [...list]; const [x] = out.splice(i, 1); out.splice(i + d, 0, x); return out; };
 
-function Row({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+export function Row({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
   const tk = useTokens();
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '96px 1fr', alignItems: 'center', gap: 10 }}>

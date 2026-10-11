@@ -21,7 +21,7 @@ import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Button, IconButton } from '../ui/Button';
 import { Segmented } from '../ui/Choice';
 import { Select } from '../ui/Select';
-import { cpuColours, cpuStep } from '../../gridRules/cpu';
+import { cpuColours, cpuStep, cpuStepUpTo } from '../../gridRules/cpu';
 import { GRID_DEFAULTS, countsAsRanges, gridShape, maxCount, countsOf } from '../../gridRules/spec';
 import { TEST_PATTERNS, countLabel, rangeCounts, type TestPattern } from '../../gridRules/explain';
 import { blockRects, boardLife, canBack, changesBetween, liveNeighbours, neighbourCells, patternMatches, tryGeneration } from '../../gridRules/tryRun';
@@ -39,6 +39,8 @@ export interface TryFocus {
   rule?: number | null;
   /** A Born / Survive count switch hovered. */
   count?: { row: 'born' | 'survive'; k: number } | null;
+  /** A stacked rule card hovered (its index): the cells it changes next step. */
+  card?: number | null;
 }
 
 const rgbCss = (c: unknown, fallback: number[]) => {
@@ -156,6 +158,7 @@ export function TryBoard({ params, nodeParams, focus, hood, onUseAsStart }: {
     overlay.push(<path key="lines" d={d} stroke="rgba(255,255,255,0.07)" strokeWidth={1} fill="none" />);
   }
   const counting = s.type === 'count' || s.type === 'stages';
+  let matchNoteStack: string | null = null;
   // The cells a hovered count switch stands for: empty cells with that many (Born), live ones (Survive).
   if (counting && focus.count && !t.playing) {
     const { row, k } = focus.count;
@@ -164,7 +167,16 @@ export function TryBoard({ params, nodeParams, focus, hood, onUseAsStart }: {
       if ((row === 'born' ? st !== 0 : st !== 1) || liveNeighbours(params, B, x, y) !== k) continue;
       overlay.push(<rect key={`c${x},${y}`} x={px(x) + 1} y={py(y) + 1} width={cell - 2} height={cell - 2} rx={2} fill="none" stroke={row === 'born' ? '#3fbf7f' : tk.accent.base} strokeWidth={2} />);
     }
-  } else if (showNext && changes && cell >= 6 && (focus.section === 'rule' || focus.section === 'neighbourhood')) {
+  } else if (focus.section === 'stack' && focus.card != null && !t.playing) {
+    // A stacked card: the board as the base and the cards before it leave it, and what this card does to it.
+    const before = cpuStepUpTo(params, B, focus.card), after = cpuStepUpTo(params, B, focus.card + 1);
+    const ch = changesBetween(before, after);
+    matchNoteStack = `Card ${focus.card + 1} changes ${ch.size} cell${ch.size === 1 ? '' : 's'} next step`;
+    for (const [i, kind] of ch) {
+      const x = i % B.w, y = Math.floor(i / B.w);
+      overlay.push(<rect key={`k${i}`} x={px(x) + 1} y={py(y) + 1} width={cell - 2} height={cell - 2} rx={2} fill={ink(kind === 'born' ? '#3fbf7f' : kind === 'dies' ? '#ff5a5a' : '#f0b43c', 0.3)} stroke={kind === 'born' ? '#3fbf7f' : kind === 'dies' ? '#ff5a5a' : '#f0b43c'} strokeWidth={2} />);
+    }
+  } else if (showNext && changes && cell >= 6 && (focus.section === 'rule' || focus.section === 'neighbourhood' || focus.section === 'stack')) {
     // What the next step does: a green ring where a cell is born, a red cross where one dies.
     for (const [i, kind] of changes) {
       const x = i % B.w, y = Math.floor(i / B.w);
@@ -175,7 +187,7 @@ export function TryBoard({ params, nodeParams, focus, hood, onUseAsStart }: {
     }
   }
   // Stencils: the cells a hovered rule matches now.
-  let matchNote: string | null = null;
+  let matchNote: string | null = matchNoteStack;
   if (s.type === 'patterns' && focus.rule != null && focus.section === 'rule') {
     const m = patternMatches(params, B, focus.rule);
     matchNote = `Rule ${focus.rule + 1} matches ${m.size} cell${m.size === 1 ? '' : 's'} here`;
@@ -241,7 +253,7 @@ export function TryBoard({ params, nodeParams, focus, hood, onUseAsStart }: {
           {(hoverNote || matchNote) && <span data-try-note style={{ fontSize: 12, color: tk.text.primary, background: alpha(tk.bg.panel, 0.85), padding: '4px 8px', borderRadius: radius.sm, alignSelf: 'flex-start', lineHeight: 1.4 }}>{hoverNote ?? matchNote}</span>}
         </div>
         {/* Top right: the legend of the marks. */}
-        {!smooth && (focus.section === 'rule' || focus.section === 'neighbourhood') && !focus.count && (
+        {!smooth && (focus.section === 'rule' || focus.section === 'neighbourhood' || focus.section === 'stack') && !focus.count && (
           <label style={{ position: 'absolute', right: 12, top: 10, display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5, color: tk.text.secondary, background: alpha(tk.bg.panel, 0.85), padding: '4px 8px', borderRadius: radius.sm }}>
             <input type="checkbox" checked={showNext} onChange={e => setShowNext(e.target.checked)} data-try-show-next />
             Next step:
