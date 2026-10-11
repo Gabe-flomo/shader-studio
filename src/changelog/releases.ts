@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.170',
+    date: '2026-10-11',
+    title: 'Drawn paths',
+    highlights: [
+      { area: 'Studio', text: 'Grid builder motion: Angle and Angle spin turn any path; draw your own path or Generate one, open (snap back, ease back, ping-pong) or closed.' },
+      { area: 'Studio', text: 'Grid builder sliders get the right-click Play menu: add a built value to Play controls or keyframes.' },
+      { area: 'Studio', text: 'Guided Convert: open a helper function as its own group, and recognised patterns (circles, rotations, tiles, palettes, fbm) become library nodes.' },
+    ],
+  },
+  {
     id: '2026.10.169',
     date: '2026-10-11',
     title: 'Mute anything',
