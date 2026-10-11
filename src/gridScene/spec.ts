@@ -26,8 +26,8 @@ export type Vec3 = [number, number, number];
 
 export const MIN_CELLS = 2;
 export const MAX_CELLS = 24;
-/** Most placed cells: every one is drawn by every pixel, so the shader stays quick. */
-export const MAX_PLACED = 128;
+/** Most placed cells: the whole grid. The drawing is data the shader looks cells up in (glsl.ts). */
+export const MAX_PLACED = 24 * 24;
 export const MAX_SHAPES = 6;
 export const MAX_RULES = 8;
 export const MAX_WARPS = 3;
@@ -38,6 +38,25 @@ export type ShapeKind = typeof SHAPE_KINDS[number];
 export const SHAPE_LABELS: Record<ShapeKind, string> = {
   circle: 'Circle', square: 'Square', ring: 'Ring', diamond: 'Diamond', triangle: 'Triangle', hexagon: 'Hexagon', star: 'Star', plus: 'Plus', cross: 'Cross', heart: 'Heart', picture: 'Picture',
 };
+
+/**
+ * How a shape carries its picture (docs/grid-builder.md, "Pictures in pieces"):
+ *   cell   the whole picture inside every shape, fitted to its square (the Picture shape's way);
+ *   mask   the picture stays put on the screen; the shapes are windows onto it, moving over it;
+ *   matte  each shape is one flat colour, the picture's at its home cell's centre (a mosaic);
+ *   piece  each shape carries its own piece of the picture, from round its home cell, and takes it
+ *          wherever it moves, turns or grows: the picture is made of the pieces.
+ */
+export const PIC_MODES = ['cell', 'mask', 'matte', 'piece'] as const;
+export type PicMode = typeof PIC_MODES[number];
+export const PIC_MODE_LABELS: Record<PicMode, { label: string; word: string; blurb: string }> = {
+  cell: { label: 'In each shape', word: 'cell', blurb: 'The whole picture inside every shape, turning and pulsing with it.' },
+  mask: { label: 'Mask', word: 'mask', blurb: 'The picture stays still; the shapes are windows onto it, so moving shapes show different parts of it.' },
+  matte: { label: 'Matte: colour', word: 'matte', blurb: 'Each shape is one flat colour: the picture\'s colour at its home cell\'s centre. A mosaic that moves with the shapes.' },
+  piece: { label: 'Matte: piece', word: 'piece', blurb: 'Each shape carries its own piece of the picture wherever it moves, spins or grows. At rest the pieces make up the picture.' },
+};
+/** The picture mode a shape uses (a picture shape defaults to its own: in each cell). */
+export const picModeOf = (s: Pick<GShape, 'picMode'>): PicMode => ((PIC_MODES as readonly string[]).includes(s.picMode as string) ? s.picMode! : 'cell');
 
 export const MOTION_PATHS = ['still', 'updown', 'sideways', 'both', 'circle', 'eight', 'bounce', 'travel', 'hop'] as const;
 export type MotionPath = typeof MOTION_PATHS[number];
@@ -103,8 +122,10 @@ export interface GShape {
   /** 0 filled; above 0 an outline this wide (a share of half a cell). */
   outline: number;
   motion: Motion;
-  /** kind 'picture': the picture shown inside the cell (a name in the scene's textures). */
+  /** The picture the shape carries (a name in the scene's textures): any kind; a Picture shape needs one. */
   tex?: string;
+  /** How it carries it (PIC_MODES). Absent: 'cell', the whole picture in every shape. */
+  picMode?: PicMode;
 }
 
 export interface Cell { x: number; y: number; s: string }
@@ -160,9 +181,100 @@ export interface GridSceneSpec {
   textures?: TexSource[];
   /** Shapes only in the cells where a picture is bright (or dark, inverted), read at each cell's centre. */
   picMask?: GridPicMask | null;
+  /** How the drawing covers the grid (DRAW_MODES). Absent: each cell only itself. */
+  draw?: DrawSpec | null;
 }
 
 export interface GridPicMask { tex: string; cut: number; invert: boolean }
+
+/**
+ * How the brush's drawing covers the grid (docs/grid-builder.md, "Draw modes"). The drawing stays
+ * the source; the shader maps each cell to the cell of the drawing it shows before reading it:
+ *   here     each cell shows itself (the default);
+ *   repeat   the tile of period × period cells from offset repeats over the grid (cell id mod the
+ *            period, as Cell Filter's Modulo), each row of tiles shifted by shift cells (bricks);
+ *   mirrorX  the left half reflects into the right; mirrorY the top half into the bottom; mirrorXY both;
+ *   rotate4  the top-left quarter turned round the middle four times (a kaleidoscope; square grids).
+ */
+export const DRAW_MODES = ['here', 'repeat', 'mirrorX', 'mirrorY', 'mirrorXY', 'rotate4'] as const;
+export type DrawMode = typeof DRAW_MODES[number];
+export const DRAW_MODE_LABELS: Record<DrawMode, { label: string; blurb: string }> = {
+  here: { label: 'Only here', blurb: 'A shape goes only in the cell you draw it in.' },
+  repeat: { label: 'Repeat', blurb: 'Draw in one tile: it repeats over the whole grid, every Period cells across and down.' },
+  mirrorX: { label: 'Mirror X', blurb: 'Draw on the left half: the right half is its reflection.' },
+  mirrorY: { label: 'Mirror Y', blurb: 'Draw on the top half: the bottom half is its reflection.' },
+  mirrorXY: { label: 'Mirror both', blurb: 'Draw in the top-left quarter: it reflects across and down.' },
+  rotate4: { label: 'Rotate 4', blurb: 'Draw in the top-left quarter: it turns round the middle into all four (best on a square grid).' },
+};
+export interface DrawSpec {
+  mode: DrawMode;
+  /** Repeat: the tile's size in cells (x across, y down). */
+  period: Vec2;
+  /** Repeat: where the tile starts (cells). */
+  offset: Vec2;
+  /** Repeat: each row of tiles slides this many cells across (bricks, staggers). */
+  shift: number;
+}
+export const defaultDraw = (): DrawSpec => ({ mode: 'here', period: [2, 2], offset: [0, 0], shift: 0 });
+export const drawOf = (spec: Pick<GridSceneSpec, 'draw'>): DrawSpec => ({ ...defaultDraw(), ...(spec.draw ?? {}) });
+
+const imod = (a: number, b: number) => a - b * Math.floor(a / b);
+
+/**
+ * The cell of the drawing that cell (x, y) shows under the draw mode (the same sums as the shader's
+ * gs_cell), or null when it shows none (a turned cell outside a non-square grid).
+ */
+export function sourceCell(spec: Pick<GridSceneSpec, 'cols' | 'rows' | 'draw'>, x: number, y: number): [number, number] | null {
+  const d = drawOf(spec);
+  const { cols, rows } = spec;
+  let sx = x, sy = y;
+  switch (d.mode) {
+    case 'repeat': {
+      const px = Math.max(1, Math.round(d.period[0])), py = Math.max(1, Math.round(d.period[1]));
+      const ox = Math.round(d.offset[0]), oy = Math.round(d.offset[1]);
+      const ry = y - oy;
+      const row = Math.floor(ry / py);
+      const rx = x - ox - Math.round(d.shift) * row;
+      sx = ox + imod(rx, px); sy = oy + imod(ry, py);
+      break;
+    }
+    case 'mirrorX': sx = Math.min(x, cols - 1 - x); break;
+    case 'mirrorY': sy = Math.min(y, rows - 1 - y); break;
+    case 'mirrorXY': sx = Math.min(x, cols - 1 - x); sy = Math.min(y, rows - 1 - y); break;
+    case 'rotate4': {
+      const cx = (cols - 1) / 2, cy = (rows - 1) / 2;
+      let dx = x - cx, dy = y - cy;
+      for (let k = 0; k < 4; k++) {
+        if ((dx < 0 && dy <= 0) || (dx === 0 && dy === 0)) break;
+        [dx, dy] = [dy, -dx];
+      }
+      sx = Math.floor(cx + dx + 0.5); sy = Math.floor(cy + dy + 0.5);
+      break;
+    }
+    default: break;
+  }
+  return sx >= 0 && sy >= 0 && sx < cols && sy < rows ? [sx, sy] : null;
+}
+
+/** Is cell (x, y) part of the drawing itself (not a copy) under the draw mode? */
+export const isSourceCell = (spec: Pick<GridSceneSpec, 'cols' | 'rows' | 'draw'>, x: number, y: number) => {
+  const s = sourceCell(spec, x, y);
+  return !!s && s[0] === x && s[1] === y;
+};
+
+/** The shape each cell shows (after the draw mode), cols × rows, row by row: a shape id or null. */
+export function shownCells(spec: GridSceneSpec): Array<string | null> {
+  const at = new Map(spec.cells.map(c => [`${c.x},${c.y}`, c.s]));
+  const out: Array<string | null> = [];
+  for (let y = 0; y < spec.rows; y++) {
+    for (let x = 0; x < spec.cols; x++) {
+      const s = sourceCell(spec, x, y);
+      const id = s ? at.get(`${s[0]},${s[1]}`) : undefined;
+      out.push(id && shapeOf(spec, id) ? id : null);
+    }
+  }
+  return out;
+}
 
 const PALETTE: Vec3[] = [[0.35, 0.8, 1], [1, 0.45, 0.7], [1, 0.82, 0.3], [0.5, 1, 0.6], [0.75, 0.55, 1], [1, 0.55, 0.3]];
 const KINDS_IN_ORDER: ShapeKind[] = ['circle', 'star', 'square', 'heart', 'triangle', 'ring'];
@@ -310,7 +422,7 @@ export function motionAt(spec: Pick<GridSceneSpec, 'cols' | 'rows'>, m: Motion, 
 
 /** The names of the pictures a grid scene uses. */
 export function texturesUsedGrid(spec: GridSceneSpec): string[] {
-  const out = spec.shapes.filter(s => s.kind === 'picture' && s.tex).map(s => s.tex!);
+  const out = spec.shapes.filter(s => s.tex).map(s => s.tex!);
   if (spec.pattern.kind === 'picture' && spec.pattern.tex) out.push(spec.pattern.tex);
   if (spec.picMask) out.push(spec.picMask.tex);
   return [...new Set(out)];

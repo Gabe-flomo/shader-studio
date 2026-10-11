@@ -5,7 +5,7 @@
 import { compileGraph } from '../../compiler/graphCompiler';
 import type { Compiled } from '../sceneBuilder/previewGl';
 import { buildStandaloneGrid } from '../../gridScene/build';
-import { shapeOf, type GridSceneSpec, type ShapeKind, type Vec3 } from '../../gridScene/spec';
+import { drawOf, isSourceCell, shapeOf, shownCells, type GridSceneSpec, type ShapeKind, type Vec3 } from '../../gridScene/spec';
 import { activeMask } from '../../gridScene/glsl';
 import { textMaskAt } from '../../gridScene/textMask';
 
@@ -81,19 +81,37 @@ export function paintGrid(ctx: CanvasRenderingContext2D, spec: GridSceneSpec, w:
     ctx.fillStyle = 'rgba(255,255,255,0.07)';
     for (let y = 0; y < spec.rows; y++) for (let x = 0; x < spec.cols; x++) if (textMaskAt(mask, spec.cols, spec.rows, x, y)) ctx.fillRect(x0 + x * cell + 1, y0 + y * cell + 1, cell - 1, cell - 1);
   }
+  // What each cell shows after the draw mode (docs/grid-builder.md "Draw modes"): the drawing, and its copies faintly.
+  const shown = shownCells(spec);
+  const copying = drawOf(spec).mode !== 'here';
   // The pattern's fill: a faint glyph in every empty cell (inside the mask, when there is one).
   const fill = spec.pattern.kind !== 'none' ? shapeOf(spec, spec.pattern.fill) : undefined;
   if (fill) {
     for (let y = 0; y < spec.rows; y++) for (let x = 0; x < spec.cols; x++) {
-      if (spec.cells.some(c => c.x === x && c.y === y)) continue;
+      if (shown[y * spec.cols + x]) continue;
       if (mask && !textMaskAt(mask, spec.cols, spec.rows, x, y)) continue;
       drawGlyph(ctx, fill.kind, x0 + (x + 0.5) * cell, y0 + (y + 0.5) * cell, cell * 0.5 * Math.min(1, fill.size) * 0.8, rgb(fill.color, 0.28));
     }
   }
-  for (const c of spec.cells) {
-    const s = shapeOf(spec, c.s);
-    if (!s) continue;
-    drawGlyph(ctx, s.kind, x0 + (c.x + 0.5) * cell, y0 + (c.y + 0.5) * cell, cell * 0.5 * Math.min(1.1, s.size) * 0.9, rgb(s.color), s.outline, s.turn);
+  for (let y = 0; y < spec.rows; y++) {
+    for (let x = 0; x < spec.cols; x++) {
+      const s = shapeOf(spec, shown[y * spec.cols + x]);
+      if (!s) continue;
+      const copy = copying && !isSourceCell(spec, x, y);
+      drawGlyph(ctx, s.kind, x0 + (x + 0.5) * cell, y0 + (y + 0.5) * cell, cell * 0.5 * Math.min(1.1, s.size) * 0.9, rgb(s.color, copy ? 0.32 : 1), s.outline, s.turn);
+    }
+  }
+  if (copying && o.lines === undefined) {
+    // The cells you draw in: outlined.
+    let ax = Infinity, ay = Infinity, bx = -1, by = -1;
+    for (let y = 0; y < spec.rows; y++) for (let x = 0; x < spec.cols; x++) if (isSourceCell(spec, x, y)) { ax = Math.min(ax, x); ay = Math.min(ay, y); bx = Math.max(bx, x); by = Math.max(by, y); }
+    if (bx >= 0) {
+      ctx.strokeStyle = 'rgba(255, 210, 90, 0.9)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([4, 3]);
+      ctx.strokeRect(x0 + ax * cell + 1, y0 + ay * cell + 1, (bx - ax + 1) * cell - 2, (by - ay + 1) * cell - 2);
+      ctx.setLineDash([]);
+    }
   }
   return { cell, x0, y0 };
 }

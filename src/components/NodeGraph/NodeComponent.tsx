@@ -3923,8 +3923,9 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
 
         {/* ── CustomFn / ExprNode slider params (hidden when collapsed) ── */}
         {!collapsed && (node.type === 'customFn' || node.type === 'exprNode') && (() => {
-          const cfInputs = (node.params.inputs as Array<{ name: string; type: string; slider?: { min: number; max: number } | null }>) || [];
-          const sliderInputs = cfInputs.filter(inp => inp.type === 'float' && inp.slider != null);
+          const cfInputs = (node.params.inputs as Array<{ name: string; type: string; slider?: { min: number; max: number } | null; hidden?: boolean }>) || [];
+          // A hidden input is data a builder keeps on the node (a Grid scene's drawing): live, not a control.
+          const sliderInputs = cfInputs.filter(inp => inp.type === 'float' && inp.slider != null && !inp.hidden);
           if (sliderInputs.length === 0) return null;
           return sliderInputs.map(inp => {
             const sl = inp.slider!;
