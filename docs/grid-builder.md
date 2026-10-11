@@ -28,6 +28,12 @@ work is. Drawing first and then simulating is the path the jump makes easy; the 
 
 ### What carries over
 
+**A state per shape.** Make it a simulation lists the drawing's shapes, each with a state (0 leaves
+it out, 1 and up a state of the rule; a Stages, Stencils or Blocks rule can be picked there too), so
+walls, sand and air, or wires and sparks, start as different states. The picks are kept on the spec
+(`simStates`), so the next jump uses them. `drawnStartOf` writes the rows with each shape's state
+(digits, a–f above 9).
+
 The drawing's placed cells, as they are at that moment, are the simulation's **drawn start**
 (Grid Rules' Start: Your drawing, the node's `startCells`, see grid-rules.md "A drawn start"): every
 drawn shape is a live cell (state 1), cropped to the drawn cells. The Grid Rules builder's try board
@@ -123,6 +129,20 @@ Words in the Agent Builder's stroke font (`agentBuilder/strokeFont.ts`), two way
 | **Patterns & warps** | A wave over the cells: ripple, diagonal, checker, rings, spiral, stripes, random. It changes every shape's size, turn, push, hue or brightness by Amount; Waves is how many across the grid, Speed in cycles a second, Arms for the spiral. **Fill empty cells** puts a shape in every cell you didn't draw on, its size following the wave (checker + fill is a checkerboard that swaps). **Only in words** limits the wave and the fill to the cells some words cover (see Text). **Grid warps**: up to three space blocks from the 2D Scene Builder's library (the same picker: categories, search, Random), bending the space the whole grid is drawn in, lines and all. |
 | **Rules** | When … Do … for every drawn cell, checked in the shader each frame, top to bottom. When a shape *is in the cell (x, y)*, *is in the column*, *is in the row*, *shares a cell with* another shape, or *is near* it (within N cells). Do: *becomes* another shape (its kind, size and colour), *turns a colour*, *swaps colours with* the other shape (both ways), *grows by*, *hides*, *spins*. A rule that names a shape that isn't there is shown as off. |
 | **Look** | Background, grid lines (on or off, colour, width in cells), the grid's size, glow (amount, falloff), tone map. |
+
+### Rules that stay changed, and/or, else
+
+- **And / or**: a rule can have more conditions on the same shape, each joined to everything before
+  it, left to right ("in column 1 or row 1, and near B").
+- **Else**: a second Do that applies while the conditions don't hold (it can't swap colours).
+- **Stays changed**: once the rule has fired for a drawn cell, that cell keeps the change after the
+  condition ends. Only when some rule is sticky, Build adds a small memory Pass (`Rule memory`: one
+  texel a cell, Nearest, half float, reading its own Previous) that keeps a bit per sticky rule per
+  cell, set when the rule fires and kept after; the scene reads it as "the rule holds here". A
+  sticky rule's Else applies until the rule has fired. The Rule memory block's Reset (map a Play
+  button to it), or the clock going back, forgets. The builder's own preview draws the Pass too (`components/builders/previewPasses.ts`).
+- Tests: `src/gridScene/__tests__/gridRulesMore.test.ts` (and/or, else, old specs still reading, the
+  memory pass and its bits, the change kept after the condition ends, the state per shape).
 
 ## What Build makes
 
@@ -283,9 +303,5 @@ rule between two shapes. One undo step; Reroll and Undo in its toast.
 
 - Shapes moving through the pattern's fill don't push it aside; the fill only skips the cells you
   drew on.
-- Rules see each shape where it is now; there is no memory (a shape that became a star goes back
-  when it leaves the column). A "stays changed" Do would need a feedback pass.
-- The jump to Grid Rules starts every drawn shape as state 1; shapes as different states (for
-  Stages, Patterns, Blocks) are a follow-up.
 - Keyframes and the Play menu on the builder's own sliders (as for the 2D and 3D builders); the
   built nodes' sliders have both.

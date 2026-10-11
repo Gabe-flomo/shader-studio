@@ -16,7 +16,9 @@ export function compileGridScene(spec: GridSceneSpec): Compiled {
     const g = buildStandaloneGrid(spec, { idFor: role => `pg_${role.replace(/[^A-Za-z0-9]/g, '_')}` });
     const r = compileGraph({ nodes: g.nodes });
     if (!r.success) return { vs: '', fs: '', uniforms: {}, nodes: g.nodes.length, error: (r.errors ?? []).join('; ') || 'The graph did not compile.', ms: performance.now() - t0 };
-    return { vs: r.vertexShader, fs: r.fragmentShader, uniforms: r.paramUniforms as Record<string, number | number[]>, nodes: g.nodes.length, error: null, ms: performance.now() - t0, textures: r.textureUniforms };
+    // The rule memory (rules that stay changed) is a Pass: the preview draws it too (builders/previewPasses.ts).
+    const passes = (r.passes ?? []).filter(p => p.live).map(p => ({ slug: p.slug, fs: p.fragmentShader, scale: p.scale, filter: p.filter, format: p.format, ...(p.size ? { size: p.size } : {}) }));
+    return { vs: r.vertexShader, fs: r.fragmentShader, uniforms: r.paramUniforms as Record<string, number | number[]>, nodes: g.nodes.length, error: null, ms: performance.now() - t0, textures: r.textureUniforms, ...(passes.length ? { passes } : {}) };
   } catch (e) {
     return { vs: '', fs: '', uniforms: {}, nodes: 0, error: e instanceof Error ? e.message : String(e), ms: 0 };
   }

@@ -155,6 +155,53 @@ function shapeNode(c: Ctx, spec: GridSceneSpec, s: GShape): { node: GraphNode; c
   return { node, colour: ref(colour, 'rgb') };
 }
 
+/**
+ * Rules that stay changed (docs/grid-builder.md "Rules that stay changed"): an Expression Block
+ * ("Rule memory") drawn into a Pass of one texel per cell (Nearest, half float), which reads its own
+ * Previous: per cell, a bit per sticky rule, set once the rule's conditions hold there and kept.
+ * It reads the shapes' motions and its own copy of the drawing (hidden g0…), and Reset (1 forgets;
+ * so does the clock going back). The Grid scene reads the pass's texture (`lt`). Returns the block
+ * (its `prev` input is wired to the pass after the layout).
+ */
+function memoryNodes(c: Ctx, spec: GridSceneSpec, mem: NonNullable<ReturnType<typeof gridProgram>['memory']>, time: Ref,
+  shapeRefs: Map<string, { node: GraphNode }>, drawing: In[], D: ReturnType<typeof drawOf>): GraphNode {
+  const N = mem.size;
+  const repeat = mem.latchArgs.includes('rp');
+  const rules = activeRules(spec).filter(r => mem.rules.includes(r.id));
+  const inputs: In[] = [
+    { name: 't', type: 'float', from: time },
+    { name: 'prev', type: 'texture' },
+    { name: 'reset', type: 'float', slider: { value: 0, min: 0, max: 1 } },
+    ...spec.shapes.map(s => ({ name: shapeArgs(s.id).m, type: 'vec4' as const, from: ref(shapeRefs.get(s.id)!.node, 'result') })),
+    ...(repeat ? [
+      { name: 'periodX', type: 'float' as const, slider: { value: D.period[0], min: 1, max: spec.cols }, hidden: true },
+      { name: 'periodY', type: 'float' as const, slider: { value: D.period[1], min: 1, max: spec.rows }, hidden: true },
+      { name: 'offsetX', type: 'float' as const, slider: { value: D.offset[0], min: 0, max: spec.cols - 1 }, hidden: true },
+      { name: 'offsetY', type: 'float' as const, slider: { value: D.offset[1], min: 0, max: spec.rows - 1 }, hidden: true },
+      { name: 'shift', type: 'float' as const, slider: { value: D.shift, min: -4, max: 4 }, hidden: true },
+    ] : []),
+    ...drawing.map(x => ({ ...x })),
+  ];
+  const callArgs = mem.latchArgs.map(a => (a === 'rp' ? 'vec4(periodX, periodY, offsetX, offsetY)' : a === 'rs' ? 'shift' : a));
+  const block = expr(c, 'latch', 'Rule memory', inputs, 'm',
+    `What the rules that stay changed remember: one texel per cell of the ${spec.cols} × ${spec.rows} grid (the Pass after it is ${N} × ${N}, Nearest), a bit per rule (${rules.map(ruleText).join('; ')}). `
+    + 'Each frame, for the drawn cell this texel is, it works out where its shape is (the same motion as the Grid scene) and whether each rule\'s conditions hold there, and ORs that into what the cell had (prev, the Pass\'s Previous): once set, a bit stays. '
+    + 'The Grid scene reads the Pass and treats a rule as on for a cell whose bit is set. Reset at 1 forgets (map a Play button to it); so does the clock going back. g0… (hidden) are its own copy of the drawing. Result: (bits 0–7, bits 8–15) ÷ 255 and the time.',
+  {
+    outputType: 'vec3',
+    lines: [
+      L('vec2 h', `floor(vUv * ${gf(N)})`),
+      L(`float gd[${drawing.length}]`, `float[${drawing.length}](${drawing.map(x => x.name).join(', ')})`),
+      L('vec4 pv', `texture2D(prev, (h + 0.5) / ${gf(N)})`),
+      L('vec3 m', `${mem.latchName}(${callArgs.join(', ')})`),
+    ],
+    functions: mem.latchFunctions,
+  });
+  mk(c, 'pass', 'memory', { label: 'Rule memory', __size: N, filter: 'nearest', format: 'half', wrap: 'clamp', scale: '1' }, { color: ref(block, 'result') },
+    `The rules' memory: a ${N} × ${N} texture, one texel per grid cell (Nearest, half float), drawn before the scene each frame from the Rule memory block, which reads this Pass's Previous (its own last frame). The Grid scene reads its Texture. Only there while a rule stays changed.`);
+  return block;
+}
+
 /** The scene's nodes. */
 export function buildGridScene(spec: GridSceneSpec, idFor: (role: string) => string = r => `gs_${r.replace(/[^A-Za-z0-9]/g, '_')}`): GridBuildResult {
   const c: Ctx = { idFor, nodes: [], warnings: [] };
@@ -215,7 +262,11 @@ export function buildGridScene(spec: GridSceneSpec, idFor: (role: string) => str
     );
   }
   // The drawing: eight cells a number, live (drawing and erasing change these, never the code).
-  prog.data.forEach((v, i) => inputs.push({ name: `g${i}`, type: 'float', slider: { value: v, min: 0, max: 16777215 }, hidden: true }));
+  const drawing: In[] = prog.data.map((v, i) => ({ name: `g${i}`, type: 'float', slider: { value: v, min: 0, max: 16777215 }, hidden: true }));
+  inputs.push(...drawing);
+  // Rules that stay changed: the memory pass's texture (one texel a cell, its bits), drawn before the scene.
+  const memoryRef: Ref = { nodeId: c.idFor('memory'), outputKey: 'texture' };
+  if (prog.memory) inputs.push({ name: 'lt', type: 'texture', from: memoryRef });
   const rules = activeRules(spec).filter(r => !r.id.endsWith('~'));
   const fill = shapeOf(spec, P.fill);
   const patternWords = P.kind === 'none' ? 'No pattern.' : `Pattern: ${PATTERN_LABELS[P.kind].label.toLowerCase()} (${PATTERN_LABELS[P.kind].blurb.toLowerCase()}) changing each shape's ${TARGET_LABELS[P.target].toLowerCase()} by amount; freq is waves across the grid, speed cycles a second${P.kind === 'spiral' ? ', arms the spiral\'s arms' : ''}.${fill ? ` It fills the empty cells with shape ${fill.id}.` : ''}${activeMask(spec) ? ` Only in the cells the words "${activeMask(spec)!.text}" cover (gs_mask: the stroke font, one line a stroke).` : ''}`;
@@ -275,7 +326,10 @@ export function buildGridScene(spec: GridSceneSpec, idFor: (role: string) => str
   }
   let final = ref(mk(c, 'sdfFill', 'fill', {}, { d, fillColor: colour, background: acc }, 'Paints the shapes over the ground: inside a shape (negative distance) its colour shows, the edge anti-aliased.'), 'result');
   if (look.tone !== 'none') final = ref(mk(c, 'toneMap', 'tone', { mode: look.tone }, { color: final }, `Squeezes the glow's bright light into colours a screen can show (${look.tone.toUpperCase()}).`), 'color');
+  const latch = prog.memory ? memoryNodes(c, spec, prog.memory, ref(time, 'time'), shapeRefs, drawing, D) : null;
   tidy(c.nodes, 0, 0);
+  // The feedback wire (the pass's Previous into its own input) after the layout, which follows wires left to right.
+  if (latch) latch.inputs.prev = { ...latch.inputs.prev, connection: { nodeId: c.idFor('memory'), outputKey: 'previous' } };
   return { nodes: c.nodes, final, sceneId: uv.id, gridId: grid.id, warnings: c.warnings };
 }
 

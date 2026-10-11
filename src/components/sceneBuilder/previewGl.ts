@@ -6,11 +6,14 @@
 import { compileGraph } from '../../compiler/graphCompiler';
 import { buildStandaloneGraph } from '../../sceneBuilder/build';
 import type { SceneSpec } from '../../sceneBuilder/spec';
+import type { PreviewPass } from '../builders/previewPasses';
 
 export type Compiled = {
   vs: string; fs: string; uniforms: Record<string, number | number[]>; nodes: number; error: string | null; ms: number;
   /** Its pictures: sampler uniform → the graph node it shows (components/builders/previewTextures.ts). */
   textures?: Record<string, string>;
+  /** Its Pass programs, drawn before the picture (components/builders/previewPasses.ts). Absent: one program. */
+  passes?: PreviewPass[];
 };
 
 export function compileSpec(spec: SceneSpec): Compiled {

@@ -60,6 +60,17 @@ The builder doesn't pause the main preview (`previewHold.ts`) as the explain vie
 
 If no frame arrives (the preview is hidden in this layout), the viewport says so.
 
+### Stepping
+
+A bar under the viewport steps through the simulation, as the Grid Rules try board does: **⏮** back to the oldest step kept, **◀** one step back, **▶ / ⏸** play and pause (the preview's own clock, so everything else pauses too), **▶|** one step forward. With the bar focused, ← → and Space do the same; **Shift+→** (or Shift-click ▶|) runs a whole frame's steps at once (the group's Steps a frame). **Step N** is the group's own step count, the number the group card shows.
+
+- A step is one fixed tick of every Agents group in the graph (1/60 s of simulated time: sense, steer, move, deposit, then the trails spread and fade). The live runner runs it at its next frame, the same step the clock would run, and the clock carries on from there when you play again (no catch-up, no wait). Stepping is deterministic: the rule is a function of the state, the step and the seed.
+- Pressing ◀ or ▶| while playing pauses first.
+- **Back is limited.** While the builder is open the runner keeps a copy of the walkers' state textures and every trail's texture (and each group's schedule: births, Burst, what its listeners heard) before every frame that steps: a played frame (a few steps at once) or a step forward. ◀ puts back the newest copy at or before the step wanted and runs the steps between again, so back is always exactly one step, as far back as the oldest copy. The copies are GPU memory, as big as the state (a 256k-walker Slime mold with its 1024-row trail is about 23 MB), so at most 60 are kept and no more than 256 MB together; the bar says how many frames that is ("Keeps the last N frames") and how far back you can go. Nothing is copied while the builder is closed.
+- Starting over (↺, the clock reset) drops the copies. A group whose count or 2D/3D changed since a copy keeps its new state; a trail resized with the picture is left as it is. The picture's own feedback (a Feedback node, Echo) isn't part of the copies.
+
+Files: `src/agentBuilder/stepRun.ts` (the ring of copies, a step back's plan, the buttons' queue; tested with a CPU stand-in), `src/lib/agentSnapshots.ts` (the queue, the GPU copies, restoring, re-anchoring the clock; `AgentRunner.run` calls it), `src/components/agentBuilder/AgentTransport.tsx` (the bar).
+
 ## Sections and cards (Trail followers)
 
 Only the selected section's card is open. The others are their summaries in the nav, and Senses is selected first. Each card has:
@@ -545,4 +556,5 @@ The left nav also has **What they are**: the kind (Trail followers, Particles, F
 - Where: `src/agentBuilder/where.ts` (the list, inside / outside, mask slots, adapters, food), `madeShapes.ts` (shapes as nodes, the stroke and pixel fonts), `whereActions.ts` (the store side: pick, read back, drag), `src/lib/regionValues.ts` (GPU values, thumbnails, the shaded region and its outline, slope arrows), `src/components/agentBuilder/WherePicker.tsx`, `RegionOverlay.tsx`.
 - Trail channels: `src/agentBuilder/trailChannels.ts`, `src/components/agentBuilder/TrailChannels.tsx`. Look: `src/agentBuilder/look.ts`, `lookActions.ts`, `src/components/agentBuilder/LookSection.tsx`.
 - `src/lib/previewMirror.ts`.
+- Stepping: `src/agentBuilder/stepRun.ts`, `src/lib/agentSnapshots.ts`, `src/components/agentBuilder/AgentTransport.tsx`.
 - The window state: `builders/windows.ts` (`agentBuilder`).
