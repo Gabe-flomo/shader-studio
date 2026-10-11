@@ -40,6 +40,7 @@ import { newSeed } from '../../lib/surprise';
 import { surpriseGridAction, useSurpriseSeeds } from '../surprise/surpriseActions';
 import { Field } from '../ui/Field';
 import { SceneCrumb } from '../builders/SceneCrumb';
+import { backToGridScene, gridSceneOfSimulation } from '../../gridScene/actions';
 import { BuilderSlider } from '../builders/BuilderSlider';
 import { Select } from '../ui/Select';
 import { ColorSwatch } from '../ui/ColorPicker';
@@ -96,6 +97,8 @@ function GridRulesBuilder({ node, onClose }: { node: GraphNode; onClose: () => v
   const surpriseSeed = useSurpriseSeeds(s => s.grid[node.id] ?? null);
   const [keepType, setKeepType] = useState(true);
   const [hood, setHood] = useState(false);
+  // Made by the Grid builder's "Make it a simulation" (docs/grid-builder.md): the way back to the drawing.
+  const fromGrid = useNodeGraphStore(s => !!gridSceneOfSimulation(s.nodes, node.id));
 
   // Sections: the rule first; the one shown is remembered.
   const sections = gridRulesSections(shape.type, shape.type === 'smooth' ? SMOOTH_WORDS[shape.template].title : undefined);
@@ -189,9 +192,13 @@ function GridRulesBuilder({ node, onClose }: { node: GraphNode; onClose: () => v
   );
 
   return (
-    <StudioShell prefsKey="grid-rules" icon="grid" title={label} crumb={<SceneCrumb kind="grid" />} kind={ruleSummary(params)} onClose={onClose}
+    <StudioShell prefsKey="grid-rules" icon="grid" title={label} crumb={<SceneCrumb kind="grid" leaf={fromGrid ? 'Simulation' : undefined} />} kind={ruleSummary(params)} onClose={onClose}
       onEscape={() => { if (hood) { setHood(false); return true; } return false; }}
       actions={<>
+        {fromGrid && (
+          <Button size="sm" icon="chevL" data-grid-back onClick={() => backToGridScene(node.id)}
+            title="Back to the Grid builder on the drawing this simulation starts from (the Output shows the drawing again; this node stays)">Pattern grid</Button>
+        )}
         <IconButton icon="layers" size="sm" label={hood ? 'Hide Under the hood' : 'Under the hood: every cell\'s numbers, and what the GPU keeps'} active={hood} onClick={() => setHood(!hood)} data-hood-toggle />
         <IconButton icon="dice" size="sm" label="Surprise me: a random rule that stays alive (one undo step)" onClick={() => surprise(newSeed())} data-surprise-top />
         <IconButton icon="fn" size="sm" disabled={!!problem} label={problem ?? 'Open as nodes: the same simulation from ordinary nodes, every node with a note'} onClick={() => { if (openAsNodes(node.id)) onClose(); }} data-open-as-nodes />

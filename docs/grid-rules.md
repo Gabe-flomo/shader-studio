@@ -5,11 +5,12 @@ steps it; its editor window writes the rule; the compiler turns it into the same
 rule GLSL the wired [grid examples](simulations-grids.md) are built from; **Open as nodes** builds
 that wired graph, every node with a note, for learning.
 
-**Opening it:** the node browser's **Builders** section (first, on the desktop and on a phone) →
-**Scene builder** → **Grid scene** ([scene-builder.md](scene-builder.md)) adds a Grid Rules node (on
-the Output when the graph is empty) and opens its builder; so do the empty canvas's right-click →
-**Builders** → **Scene builder** and the Do… bar's "new grid rules". The builder's header reads
-**Scene builder › Grid scene** (back to the kinds); the main preview waits while it is open (its
+**Opening it:** the Do… bar's "new grid rules" adds a Grid Rules node (on the Output when the graph
+is empty) and opens its builder. **Scene builder** → **Grid scene** opens the Grid builder
+([grid-builder.md](grid-builder.md)), whose **Make it a simulation → Grid Rules** adds a Grid Rules
+node starting from the drawing and opens this builder, with **‹ Pattern grid** in its top bar (and
+"Simulation" in its crumb) to go back. The builder's header reads **Scene builder › Grid scene**
+(back to the kinds); the main preview waits while it is open (its
 own CPU try board runs); every slider resets on double-click, and right-click offers Add to Play
 controls. "open grid rules" or "edit the rules" opens the selected (or only) one's editor; the card's
 ⊞ button and its rule line do too. The card's **Rule** chip shows the rule as text ("Life B3/S23 ·
@@ -45,8 +46,8 @@ The builder is on the Agent Builder's shell (`components/builders/studio/StudioS
 layout of [agent-builder.md](agent-builder.md)): the board you try the rule on fills the middle,
 the settings sit at the side.
 
-- **Top bar:** Scene builder › Grid scene, the node's name and its rule ("Count B3/S23"); **Under
-  the hood**, **Surprise me**, **Open as nodes** and **Done** (closes and frames the node,
+- **Top bar:** Scene builder › Grid scene, the node's name and its rule ("Count B3/S23"); **‹ Pattern
+  grid** on a node the Grid builder made; **Under the hood**, **Surprise me**, **Open as nodes** and **Done** (closes and frames the node,
   `builders/finish.ts`).
 - **Left:** **What it is** (the kind of rule: Count, Stages, Stencils, Blocks, Smooth, with one
   line on each) and the **sections**, each with a one-line summary: the rule first (**Born &
@@ -402,10 +403,10 @@ A new builder adds its block to `BUILDER_HELP` and gets all of this by using `Bu
 (`<BuilderHelp id>`, `<EmptyHelp id>`, `<HintMark text>`, `<HintLabel hint>`). A test checks
 that every registered section has help.
 
-In Grid Rules each rule type has its card (Count, Stages, Patterns, Blocks, Smooth), and so do
-Presets, Neighbourhood, Born and survive, States, the stencil list, the block list and the shared
-sections (Start and run, Brush, Colours, Show). Examples set the rule (Life, HighLife, Brian's
-Brain, Heat, Show neighbour counts). Every slider's **?** reads the node's own parameter hint.
+Grid Rules is on the Agent Builder's shell now, and follows it instead of these cards: each
+section has its name, one line and a **Learn more** (`GridRulesEditor.tsx LEARN`), and the pictures
+on the try board do the explaining. Every slider's **?** reads the node's own parameter hint (or
+its plain-words line, in Smooth). Its `grid-rules` help block is kept for the words it shares.
 
 **Type-ahead and type checks.** *As text* completes a preset's name into its B/S rule ("high" →
 B36/S23 HighLife). The Smooth custom update completes its names (u, lap_u, avg_v…) and functions,

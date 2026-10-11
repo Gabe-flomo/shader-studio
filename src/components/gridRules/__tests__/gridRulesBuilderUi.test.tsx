@@ -26,6 +26,9 @@ import { BLOCK_PRESETS, NOT_EMPTY, PATTERN_PRESETS } from '../../../gridRules/st
 import { useBuilderWindows } from '../../../builders/windows';
 import { editBuiltScene, newGridRules } from '../../../builders/open';
 import { builtScenes } from '../../../builders/sceneKinds';
+import { buildFromGridBuilder, simulationFromGrid } from '../../../gridScene/actions';
+import { useGridBuilder } from '../../../gridScene/store';
+import { starterGridScene } from '../../../gridScene/spec';
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 HTMLCanvasElement.prototype.getContext = (() => null) as unknown as HTMLCanvasElement['getContext'];
@@ -201,5 +204,28 @@ describe('the Grid Rules builder', () => {
     expect($('[data-studio-section="rule"] [data-studio-summary]')?.textContent).toBe('B36/S23');
     click($('[data-studio-primary]'));
     expect(closed).toBe(1);
+  });
+
+  it('a node the Grid builder made (Make it a simulation) keeps ‹ Pattern grid, which goes back to the drawing', () => {
+    const out: GraphNode = { id: 'out', type: 'output', position: { x: 600, y: 0 }, inputs: { color: { type: 'vec3', label: 'Color' } } as GraphNode['inputs'], outputs: {}, params: {} };
+    useNodeGraphStore.setState({ nodes: [out] });
+    useGridBuilder.getState().openWith(starterGridScene());
+    const sceneId = buildFromGridBuilder(false, { quiet: true });
+    let k = 0;
+    const r = simulationFromGrid(useNodeGraphStore.getState().nodes, sceneId, () => `sim${++k}`)!;
+    useNodeGraphStore.setState({ nodes: r.nodes });
+    useGridBuilder.setState({ open: false });
+    useBuilderWindows.setState({ gridRules: r.gridRulesId });
+    mount(<GridRulesEditor nodeId={r.gridRulesId} onClose={() => {}} />);
+    expect($('[data-scene-crumb="grid"]')?.textContent).toMatch(/Simulation/);
+    click($('[data-grid-back]'));
+    expect(useBuilderWindows.getState().gridRules).toBeNull();
+    expect(useGridBuilder.getState().open).toBe(true);
+    expect(useGridBuilder.getState().targetSceneId).toBe(sceneId);
+  });
+
+  it('a plain Grid Rules node has no Pattern grid link', () => {
+    mount(<GridRulesEditor nodeId="g1" onClose={() => {}} />);
+    expect($('[data-grid-back]')).toBeNull();
   });
 });
