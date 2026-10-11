@@ -60,7 +60,7 @@ export function useTips(builder?: string) {
 
 // ── The pieces ───────────────────────────────────────────────────────────────
 
-/** The consistent "?": hover or focus shows the hint. */
+/** The consistent "?": hover, focus or a tap (a touch screen has no hover) shows the hint. */
 /** The tooltip is drawn here (no native `title`, which the browser would draw on top of it). */
 export function HintMark({ text, style }: { text: string; style?: React.CSSProperties }) {
   const tk = useTokens();
@@ -69,6 +69,7 @@ export function HintMark({ text, style }: { text: string; style?: React.CSSPrope
     <span style={{ position: 'relative', display: 'inline-flex', flexShrink: 0, ...style }}>
       <span role="img" tabIndex={0} aria-label={`Help: ${text}`} data-hint={text}
         onMouseEnter={() => setShow(true)} onMouseLeave={() => setShow(false)} onFocus={() => setShow(true)} onBlur={() => setShow(false)}
+        onClick={() => setShow(true)}
         style={{
           width: 14, height: 14, borderRadius: 7, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'help',
           font: `700 9.5px ${fontFamily.ui}`, color: tk.text.faint, boxShadow: `inset 0 0 0 1px ${tk.border.strong}`, userSelect: 'none',

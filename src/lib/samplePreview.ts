@@ -79,6 +79,33 @@ export function setAutoPreview(v: boolean): void {
   try { localStorage.setItem(AUTO_PREVIEW_KEY, v ? '1' : '0'); } catch { /* ignore */ }
 }
 
+// ── One preview at a time, app-wide ──
+// A video picker's preview <video> registers here (useMediaPreviewList's videoRef): starting
+// a sound preview pauses it, and a video preview starting stops the sound and pauses any
+// other video preview. So arrowing in one picker never leaves another one playing.
+let activeVideo: HTMLVideoElement | null = null;
+
+/** A video preview is about to play: stop the sound preview and pause any other video preview. */
+export function claimVideoPreview(el: HTMLVideoElement): void {
+  if (useSamplePreviewStore.getState().id) stopPreview();
+  if (activeVideo && activeVideo !== el) { try { activeVideo.pause(); } catch { /* ignore */ } }
+  activeVideo = el;
+}
+
+/** The video preview went away (its picker closed): pause it and forget it. */
+export function releaseVideoPreview(el: HTMLVideoElement): void {
+  if (activeVideo !== el) return;
+  try { el.pause(); } catch { /* ignore */ }
+  activeVideo = null;
+}
+
+/** The video preview registered now, if any (tests). */
+export function activeVideoPreview(): HTMLVideoElement | null { return activeVideo; }
+
+function pauseVideoPreview(): void {
+  if (activeVideo) { try { activeVideo.pause(); } catch { /* ignore */ } }
+}
+
 /** Stop and unload whatever is previewing (the picker closed, or a sample was picked). */
 export function stopPreview(): void {
   loadSeq++; // cancel anything in flight
@@ -95,6 +122,7 @@ export function stopPreview(): void {
  */
 export async function previewSample(id: string, getSource: () => Promise<Blob | string | null>): Promise<void> {
   const seq = ++loadSeq;
+  pauseVideoPreview();
   const a = getEl();
   useSamplePreviewStore.setState({ id, loading: true, error: null, playing: false, position: 0, duration: 0 });
   let got: Blob | string | null;
@@ -146,6 +174,7 @@ export function skipPreview(seconds: number): void {
 export function resetSamplePreviewForTests(fakeAudio?: HTMLAudioElement): void {
   stopPreview();
   audioEl = fakeAudio ?? null;
+  activeVideo = null;
   currentUrl = null; ownsUrl = false; loadSeq = 0;
   useSamplePreviewStore.setState({ id: null, playing: false, loading: false, position: 0, duration: 0, error: null, autoPreview: readAutoPreview() });
 }

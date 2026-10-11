@@ -8,7 +8,8 @@
  *    splatBuilder/, for a Splat scene).
  *  - 3D Scene Builder: the builder on a new scene (Build adds it to the graph).
  *  - Grid Rules: a new Grid Rules node (on the Output when the graph is empty), its editor open.
- *    (The kind page's Grid scene opens the Grid builder, gridScene/; it jumps to Grid Rules.)
+ *    (The kind page's Grid simulation opens it the same way; its Grid scene opens the Grid builder,
+ *    gridScene/, which jumps to Grid Rules with "Make it a simulation".)
  *  - Agent Builder: its start page ("What are you making?"); picking a kind adds the group.
  *  - 3D Agent Builder: a new 3D rules group (agentRules/space3d.ts: Ball Emit, a volume Trail, Draw
  *    agents through an orbiting camera), its rules editor open.
@@ -102,6 +103,7 @@ export function startSceneKind(kind: SceneKind, o: { at?: { x: number; y: number
   if (kind === '3d') openNewSceneBuilder(o.at);
   else if (kind === '2d') openNewSceneBuilder2D(o.at);
   else if (kind === 'grid') openNewGridScene(o.at);
+  else if (kind === 'simulation') newGridRules();
   else if (kind === 'splat') openNewSplatScene(o.at);
   else openAgentBuilder(null, { fromShell: o.fromShell });
 }
@@ -113,7 +115,7 @@ export function editBuiltScene(b: Pick<BuiltScene, 'kind' | 'id'>): boolean {
   if (b.kind === '2d') return editScene2DInBuilder(b.id);
   if (b.kind === 'splat') return editSplatSceneInBuilder(b.id);
   if (b.kind === 'grid' && useNodeGraphStore.getState().nodes.some(nd => nd.id === b.id && nd.type !== 'gridRules')) return editGridSceneInBuilder(b.id);
-  if (b.kind === 'grid') {
+  if (b.kind === 'grid' || b.kind === 'simulation') {
     const st = useNodeGraphStore.getState();
     if (st.activeGroupPath.length) st.exitToRoot();
     useNodeGraphStore.getState().focusNode(b.id);

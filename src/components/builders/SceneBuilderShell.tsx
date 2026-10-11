@@ -2,7 +2,7 @@
  * SceneBuilderShell — the one Scene builder's own pages (docs/scene-builder.md), on the shared
  * builder shell (StudioShell):
  *
- *  - "What kind of scene?": 2D scene, Agent scene, Grid scene, 3D scene, Splat scene, each with a picture and a
+ *  - "What kind of scene?": 2D scene, Agent scene, Grid scene, Grid simulation, 3D scene, Splat scene, each with a picture and a
  *    line. With nodes in the graph it asks first: Clear and start over (the default when no builder
  *    made the graph: everything but the Output goes, as an undo step of its own) or Keep my graph.
  *    Picking a kind turns the window into that kind's builder (builders/open.ts startSceneKind).
@@ -41,7 +41,7 @@ function KindPage({ note, keep }: { note?: string; keep?: boolean }) {
   const clearable = useNodeGraphStore(s => clearableCount(s.nodes));
   const made = useNodeGraphStore(s => builderMade(s.nodes));
   const [choice, setChoice] = useState<'clear' | 'keep' | null>(null);
-  // All five across, two on a narrow window, one on a phone.
+  // Three across (two rows of three), two on a narrow window, one on a phone.
   const phone = usePhoneDialog();
   const narrow = useNarrowWindow();
   // Clear by default, unless a builder made what is here (or Add another / Back said keep it).
@@ -52,7 +52,7 @@ function KindPage({ note, keep }: { note?: string; keep?: boolean }) {
   };
   return (
     <StudioShell prefsKey="scene-shell" icon="presets" title="Scene builder" kind="What kind of scene?" onClose={closeShell}>
-      <div data-scene-kinds style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'safe center', padding: '40px 24px 64px', gap: 22 }}>
+      <div data-scene-kinds style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'safe center', padding: phone ? '20px 16px 32px' : '40px 24px 64px', gap: phone ? 16 : 22 }}>
         <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, textAlign: 'center' }}>
           <b style={{ fontSize: 20, fontWeight: 650, letterSpacing: '-0.01em' }}>What kind of scene?</b>
           <span style={{ fontSize: 12.5, color: tk.text.muted }}>Pick one: the window becomes its builder. “Scene builder” at the top brings you back here.</span>
@@ -69,9 +69,16 @@ function KindPage({ note, keep }: { note?: string; keep?: boolean }) {
         {clearFirst === 'clear' && clearable > 0 && (
           <span data-scene-clear-note style={{ fontSize: 12, color: tk.status.warningText, marginTop: -10 }}>Picking a kind clears the graph first (all but the Output). Undo brings it back.</span>
         )}
-        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${phone ? 1 : narrow ? 2 : SCENE_KINDS.length}, minmax(0, 1fr))`, gap: 14, width: '100%', maxWidth: narrow ? 640 : 1340 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: `repeat(${phone ? 1 : narrow ? 2 : 3}, minmax(0, 1fr))`, gap: 14, width: '100%', maxWidth: narrow ? 640 : 940 }}>
           {SCENE_KINDS.map(k => <KindCard key={k.id} info={k} onPick={() => pick(k.id)} />)}
         </div>
+        {/* A phone starts every new graph here (builders/newGraph.ts): the empty graph stays one tap away. */}
+        {phone && (
+          <button type="button" data-scene-empty onClick={closeShell}
+            style={{ minHeight: 40, padding: '0 12px', border: 0, background: 'none', cursor: 'pointer', color: tk.text.muted, font: 'inherit', fontSize: 13, textDecoration: 'underline', textUnderlineOffset: 3 }}>
+            Start from an empty graph
+          </button>
+        )}
       </div>
     </StudioShell>
   );

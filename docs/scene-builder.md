@@ -7,7 +7,8 @@ kind you pick turns the window into that kind's builder:
 |---|---|---|
 | **2D scene** | the 2D Scene Builder ([scene-builder-2d.md](scene-builder-2d.md)) | shapes, rings of rings, kaleidoscopes, motion and glow |
 | **Agent scene** | the Agent Builder ([agent-builder.md](agent-builder.md)) | trail followers, particles, flocks, crowds, orbiters, in 2D or 3D |
-| **Grid scene** | the Grid builder ([grid-builder.md](grid-builder.md)), with a switch to Grid Rules ([grid-rules.md](grid-rules.md)) | shapes drawn on cells, motion, patterns, grid warps, rules between shapes; or a simulation: Life, sand, heat, Wireworld |
+| **Grid scene** | the Grid builder ([grid-builder.md](grid-builder.md)), with a switch to Grid Rules ([grid-rules.md](grid-rules.md)) | shapes drawn on cells, motion, patterns, grid warps, rules between shapes |
+| **Grid simulation** | Grid Rules ([grid-rules.md](grid-rules.md)), directly: a new Grid Rules node, its editor open | cells that follow a rule every step: Life, sand, heat, Wireworld, smooth patterns |
 | **3D scene** | the 3D Scene Builder ([scene-builder-3d.md](scene-builder-3d.md)) | ray-marched shapes, combined, bent, lit and seen through a camera |
 | **Splat scene** | the Splat builder ([splat-builder.md](splat-builder.md)) | a Gaussian splat scan, placed, with stacked effects (dissolve, explode, wave, grade, crop, points), optionally in a ray-marched world |
 
@@ -33,7 +34,7 @@ What it shows first depends on the graph:
   their kind and picture; a selected one (or a selected node of one) is picked first.
   - **Edit this one** opens the kind's builder on it: a 2D or 3D build on its saved spec (the
     recipe stored on the build, so the form is exactly as it was built), a Grid scene in the Grid
-    builder on its saved spec, a Grid Rules node in its editor, a rules Agents group in the Agent
+    builder on its saved spec, a Grid simulation (a Grid Rules node) in its editor, a rules Agents group in the Agent
     Builder, a splat scene in the Splat builder on its saved spec (kept on its Splat Scene).
   - **Start over** takes it away, as one undo step ("Scene builder: started over"): the build's
     nodes, and anything only they read from or that reads only from them (its picture, its Draw
@@ -85,8 +86,39 @@ One mechanism (`src/builders/windows.ts`): each kind with a recipe listens while
 (`useBuilderRecipeRequest`); the shortcut calls `requestBuilderRecipe()`, the topmost listener
 answers, and the Do… bar opens when nobody does. `StudioShell` unfolds its inspector on the same ask.
 
+**Grid scene and Grid simulation** are two kinds with a jump between them both ways: the Grid
+builder's **Make it a simulation** opens Grid Rules on what you drew (its header then reads *Scene
+builder › Grid scene › Simulation*, with **Pattern grid** to go back to the drawing); a simulation
+picked on the kind page reads *Scene builder › Grid simulation* and starts from its own preset.
+
 **Done** closes the window and frames what was built on the graph (`src/builders/finish.ts`); the
 kind page's × closes it with nothing to frame.
+
+## On a phone
+
+**A new graph starts here.** The phone's ⋯ menu has **New graph…** (it used to be *Clear the graph…*):
+it asks first, since the open graph goes, then loads a blank graph and opens the kind page
+(`src/builders/newGraph.ts`, `components/shell/NewGraphSheet.tsx`). **Start from an empty graph** is
+a small link under the button, and again under the kinds. Once the graph exists, you edit it however
+you like: this is only how you get started.
+
+**Every kind uses one phone layout** (`components/builders/studio/PhoneStudio.tsx`), drawn by
+`StudioShell` when the screen is a phone (and by the 2D Scene Builder, which uses `StudioShell` there):
+
+- no side panels or drawers; the viewport is on top, as large as the sheet leaves it;
+- the bottom bar (where the presets strip is on a computer) is one swipeable row of tabs:
+  **Presets** first (the presets with **Surprise me**, `StudioShell`'s `surprise`), then any panel the
+  kind keeps beside its sections (Grid scene: **Draw**; Agent Builder: **Walkers**; Grid Rules:
+  **Rule type**; 2D: **Layers**), then the sections;
+- tapping a section selects it and turns the sheet into its settings, scrollable, with a handle to
+  resize it (remembered per builder), **‹ Presets** to go back, and ⓘ for the section's help (a tap,
+  not a hover). A section picked another way (the 3D viewport, ⌘⇧D, Under the hood) shows its settings
+  too.
+
+The sections are the nav's own `StudioNavItem`s: on a phone they register with the shell instead of
+drawing (a `StudioLabel sections` heading over them hides too), so a builder lists them once. Inside
+the shell every button, field and slider is at least 40 px; `BuilderSlider` takes the touch size
+(`RulerSlider touch`, 40 px) and a double tap resets it, as a double-click does.
 
 ## The preview comes first
 

@@ -310,7 +310,7 @@ function LeftPanel() {
       <div style={{ display: 'flex', gap: 6 }}>
         <Button size="sm" variant="ghost" icon="trash" disabled={!placed} onClick={() => edit(d => { d.cells = []; })} title="Clear every cell (undo brings them back)">Clear cells</Button>
       </div>
-      <StudioLabel>Sections</StudioLabel>
+      <StudioLabel sections>Sections</StudioLabel>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         {SECTIONS.map(s => <StudioNavItem key={s.id} id={s.id} icon={s.icon} label={s.label} summary={summaries[s.id]} hint={s.hint} selected={section === s.id} onClick={() => setSection(s.id)} />)}
       </div>
@@ -865,7 +865,7 @@ export function GridSceneBuilder() {
       kind={`${size} · ${editing ? 'editing a built grid' : 'a new grid'}${dirty ? ' · not built yet' : ''}`}
       onClose={() => useGridBuilder.getState().close()}
       onEscape={() => { if (useGridBuilder.getState().picking) { useGridBuilder.getState().setPicking(null); return true; } return false; }}
-      actions={<>
+      surprise={
         <SurpriseBar seed={seed} title="A random grid from a new seed: cells, shapes, motion, a pattern, maybe a warp and a rule (one undo step)" onSurprise={s => {
           useGridBuilder.getState().surprise(s);
           const made = useGridBuilder.getState().spec;
@@ -876,14 +876,15 @@ export function GridSceneBuilder() {
             undo: () => undo(),
             stillCurrent: () => useGridBuilder.getState().spec === made,
           });
-        }} />
+        }} />}
+      actions={<>
         <IconButton icon="undo" label="Undo" shortcut="cmd+z" size="sm" disabled={!canUndo} onClick={undo} />
         <IconButton icon="redo" label="Redo" shortcut="cmd+shift+z" size="sm" disabled={!canRedo} onClick={redo} />
         <SimulationButton hasSim={hasSim} />
         <Button size="sm" icon="rebuild" data-grid-build onClick={() => buildFromGridBuilder(false)} title={editing ? 'Rebuild the grid in the graph (keeps settings you changed on its nodes)' : 'Build the grid into the graph now'}>{editing ? 'Rebuild' : 'Build'}</Button>
       </>}
       primary={{ label: 'Done', onClick: finishGridBuilder, title: 'Build what changed, close, and show it on the graph' }}
-      nav={<LeftPanel />} navWidth={318}
+      nav={<LeftPanel />} navWidth={318} phoneNav={{ label: 'Draw', icon: 'edit' }}
       inspector={<Inspector />} inspectorWidth={360}
       presets={<Presets />}>
       <Viewport />

@@ -33,6 +33,8 @@ export interface SampleRowProps {
   onTap?: () => void;
   onPick?: () => void;
   onMenu?: (el: HTMLElement) => void;
+  /** The row's id in its listbox (useMediaPreviewList's optionProps), for aria-activedescendant. */
+  optionId?: string;
 }
 
 /** The row's waveform: the picture already made for it, a playhead over it while playing. */
@@ -48,7 +50,7 @@ function WaveThumb({ thumb, progress, playing, active, w, h }: { thumb: string |
   );
 }
 
-export function SampleRow({ title, detail, thumb, highlighted, playing, loading, progress, w = 72, h = 40, touch, onClick, onDoubleClick, onTap, onPick, onMenu }: SampleRowProps) {
+export function SampleRow({ title, detail, thumb, highlighted, playing, loading, progress, w = 72, h = 40, touch, onClick, onDoubleClick, onTap, onPick, onMenu, optionId }: SampleRowProps) {
   const tk = useTokens();
   const [hover, setHover] = useState(false);
   const menuRef = useRef<HTMLSpanElement>(null);
@@ -56,13 +58,16 @@ export function SampleRow({ title, detail, thumb, highlighted, playing, loading,
   return (
     <div
       role="option"
+      id={optionId}
       aria-selected={highlighted}
+      aria-label={`${title}${playing ? ', playing' : loading ? ', loading' : ''}`}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '5px 4px 5px 6px', borderRadius: radius.md, background: highlighted ? tk.bg.selected : hover ? tk.bg.hover : 'transparent' }}
     >
       <button
         type="button"
+        tabIndex={-1}
         onClick={() => (touch ? (onTap ?? onClick)() : onClick())}
         onDoubleClick={onDoubleClick}
         title={title}

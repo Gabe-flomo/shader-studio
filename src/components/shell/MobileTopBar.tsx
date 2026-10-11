@@ -32,7 +32,7 @@ export function MobileTopBar({ page, onPageChange, onRecord, onClear }: {
   page: Page;
   onPageChange: (page: Page) => void;
   onRecord: () => void;
-  /** Studio only: start over from a blank graph (asks first). */
+  /** Studio only: a new graph, from the Scene builder or empty (asks first: NewGraphSheet). */
   onClear?: () => void;
 }) {
   const tk = useTokens();
@@ -150,7 +150,7 @@ export function MobileTopBar({ page, onPageChange, onRecord, onClear }: {
               : { label: 'Keyboard shortcuts', icon: 'hash', onSelect: () => onPageChange('shortcuts') },
             { label: mode === 'light' ? 'Dark theme' : 'Light theme', icon: mode === 'light' ? 'moon' : 'sun', onSelect: toggleTheme },
             { label: `Rotate to full screen · ${rotateFullscreenLabel(rotate.setting)}`, icon: 'phone', hint: 'Turned sideways, the picture alone fills the screen. Tap to change: Off, Play only, Always (Play and Studio)', onSelect: rotate.cycle },
-            ...(onClear ? ['separator' as const, { label: 'Clear the graph…', icon: 'trash' as const, danger: true, onSelect: onClear }] : []),
+            ...(onClear ? ['separator' as const, { label: 'New graph…', icon: 'plus' as const, hint: 'Start from a Scene builder, or from an empty graph', onSelect: onClear }] : []),
             ...(account.length ? ['separator' as const, ...account] : []),
           ]}
         />
