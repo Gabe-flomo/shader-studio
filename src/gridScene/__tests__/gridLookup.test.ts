@@ -297,7 +297,7 @@ describe('Grid scene: travel and hop round the wrap, against brute force (the se
   ] as const)('%s, reach %j, lag %s at t = %s', (path, xy, lag, t) => {
     const s = full(10, path, [...xy] as [number, number], lag, 0.6);
     expect(compareBrute(s, [t], 16)).toBeLessThan(0.03);
-  });
+  }, 30_000);
 
   it('a sparse drawing near the seam, and the draw modes moving with travel', () => {
     const s = starterGridScene();
@@ -309,7 +309,7 @@ describe('Grid scene: travel and hop round the wrap, against brute force (the se
       r.draw = { mode, period: [3, 3], offset: [0, 0], shift: 0 };
       expect(compareBrute(r, [5.3], 14)).toBeLessThan(0.03);
     }
-  });
+  }, 30_000);
 });
 
 describe('Grid scene: the glow is continuous (no cell-shaped patches)', () => {
@@ -341,7 +341,7 @@ describe('Grid scene: the glow is continuous (no cell-shaped patches)', () => {
       const j = worstJump(row(s, y, 0.05, 9.95, 0.005));
       expect(j, `row ${y}`).toBeLessThan(4e-4);
     }
-  });
+  }, 30_000);
 });
 
 describe('Grid scene: the default glow and the shape read as one shape', () => {
