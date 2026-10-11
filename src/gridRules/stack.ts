@@ -119,7 +119,7 @@ export function readStack(v: unknown): StackRule[] {
       copies: clampInt(x.copies, 1, MAX_COPIES, d.copies), distance: clampInt(x.distance, 1, MAX_DISTANCE, d.distance),
       becomes: clampInt(x.becomes, 0, 15, d.becomes), keep: x.keep === true, move: x.move === true,
       dir: clampInt(x.dir, 0, 7, d.dir), any: x.any === true, radius: clampInt(x.radius, 1, MAX_CLUSTER_RADIUS, d.radius),
-      ...(x.off ? { off: true } : {}),
+      ...(x.off || (x as { muted?: boolean }).muted ? { off: true } : {}),
     };
   });
 }
@@ -352,4 +352,20 @@ export function stackStageGLSL(r: StackRule, j: number, N: StackStageNames): str
   L.push(`if (${me}.b < 1.5) { ${v('next')} = ${v('s')}; ${v('ng')} = ${me}.g; }`);
   L.push(`${id}_out = vec3(${v('next')}, ${v('ng')}, ${me}.b);`, `${id}_outA = ${me}.a;`);
   return L;
+}
+
+/**
+ * Solo card `i` of a list switched by `off` (stacked cards, stencils, blocks): Alt/Option-click on its
+ * mute (builders/mute.ts soloIn). The others go off, it comes on; soloing the one already alone turns
+ * them all back on. `off` is the cards' mute: an off card stays in the spec and is left out of the step.
+ */
+export function soloOff<T extends { off?: boolean }>(list: T[], i: number): T[] {
+  const alone = !list[i]?.off && list.every((r, k) => k === i || r.off);
+  return list.map((r, k) => {
+    const off = alone ? false : k !== i;
+    if (off) return { ...r, off: true };
+    const on = { ...r };
+    delete on.off;
+    return on;
+  });
 }

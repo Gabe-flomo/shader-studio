@@ -12,7 +12,7 @@ import { Icon } from '../ui/Icon';
 import { Segmented } from '../ui/Choice';
 import type { AgentRuleSet, NeighbourWho, RuleAction, RuleCondition } from '../../agentRules/spec';
 import {
-  type CardId, type CardRead, type Loc, addCard, patchAt, removeAt, reorderCards, setMemWhen, setOnAt, setOnlyWhen,
+  type CardId, type CardRead, type Loc, addCard, patchAt, removeAt, reorderCards, setMemWhen, setOnAt, setOnlyWhen, soloCard,
 } from '../../agentBuilder/behaviours';
 import { TimesChip } from './MemorySection';
 import { channelChips } from '../../agentBuilder/trailChannels';
@@ -109,6 +109,7 @@ export function SectionCards({ section, all, set, sp, update, focusCard, hotCard
             <BehaviourCard id={c.key} picture={c.card as CardPicture} title={words.title} hint={words.hint} summary={cardSummary(c)}
               hot={hotCard === c.key} handle={handle}
               on={c.on} onToggle={on => update(setOnAt(set, sp, c.at, on))}
+              onSolo={cards.length > 1 ? () => update(soloCard(set, sp, cardsFor, cards.map(x => x.key), c.key)) : undefined}
               onRemove={() => update(removeAt(set, sp, c.at))}
               onlyWhen={<OnlyWhenLine id={c.key} set={set} sp={sp} when={c.when} memWhen={c.memWhen ?? null} onFocus={s => { focusCard(c.key); onFocusSetting(s); }}
                 onChange={w => update(setOnlyWhen(set, sp, c.at, w))} onMemChange={w => update(setMemWhen(set, sp, c.at, w))}

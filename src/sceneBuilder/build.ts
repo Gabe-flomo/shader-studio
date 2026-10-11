@@ -21,12 +21,13 @@ import { getNodeDefinition } from '../nodes/definitions';
 import { startingSockets } from '../nodes/definitions/transformAny';
 import { estimateNodeHeight, layoutByRank } from '../store/graphLayout';
 import {
-  MAX_TEX_SHAPES, SHAPE_BY_KIND, TEX_MAP_LABELS, TEX_SHARP_DEFAULT, WARP_BY_KIND, allShapes, effectiveStepScale, filterTree, itemName, num, opLabel, stepHints,
+  MAX_TEX_SHAPES, SHAPE_BY_KIND, TEX_MAP_LABELS, TEX_SHARP_DEFAULT, WARP_BY_KIND, allShapes, effectiveStepScale, filterTree, itemName, mutedShapes, num, opLabel, pathTo, stepHints,
   type GroupSpec, type SceneItem, type SceneSpec, type ShapeSpec, type Vec3, type WarpSpec,
 } from './spec';
 import { LUMA, findTex, fitLines, glf, picUv, sampleWrap, standInId, standIns } from '../builders/textures';
 import { fmt } from './recipe';
 import { OUTPUT_BY_SHOW, PALETTE_BY_KEY, isPicture, outputClause, outputProblem, type OutputSpec } from './output';
+import { FAR, gateNode } from '../builders/mute';
 
 export const ROLE_KEY = '_sbRole';
 /** On the Scene Group: the spec it was built from (and, once applied, fingerprints of what was built). */
@@ -59,6 +60,38 @@ export interface Ctx {
   rolePrefix?: string;
   nodes: GraphNode[];
   warnings: string[];
+  /**
+   * No mute gates here (builders/mute.ts): the Materials group is a plain group, whose body compiles
+   * without them, so a mute there is an Expression Block with a live 0/1 slider instead.
+   */
+  noGate?: boolean;
+}
+
+/** Muted from either: undefined only when neither was ever muted (no gate at all). */
+const anyMuted = (a: boolean | undefined, b: boolean | undefined): boolean | undefined => (a === undefined && b === undefined ? undefined : !!a || !!b);
+
+/**
+ * A mute on node `n`, whose output `out` carries the piece's work (builders/mute.ts): muted, `out`
+ * gives the input `from` (what came in) or the float `to` (a far distance). In the scene it is a gate
+ * on the node; in Materials (no gates there) the same bypass as an Expression Block with a live 0/1
+ * slider after it. Either way toggling sets a number: nothing recompiles. Nothing when never muted.
+ */
+function gate(ctx: Ctx, list: GraphNode[], n: GraphNode, out: Ref, muted: boolean | undefined, opts: { from?: string; to?: string }): Ref {
+  if (muted === undefined) return out;
+  if (!ctx.noGate) { gateNode(n, muted, opts); return out; }
+  const through = opts.from ? n.inputs[opts.from]?.connection : undefined;
+  if (opts.from && !through) return out;
+  const type = opts.from ? (n.inputs[opts.from].type === 'float' ? 'float' : 'vec3') : 'float';
+  const role = String(n.params[ROLE_KEY]);
+  const what = String(n.params.__comment ?? '').split(':')[0] || 'this part';
+  // A Constant, not a block slider: a group's inside reads params as live uniforms, not block sliders.
+  const m = mk({ ...ctx, rolePrefix: '' }, 'constant', `${role}:muted`, { value: muted ? 1 : 0 }, {}, `${what} muted: 1 muted, 0 live (the builder's mute switch).`, list);
+  const b = exprBlock(ctx, `${role}:mute`, 'Mute', [
+    { name: 'v', type, from: out }, ...(through ? [{ name: 'w', type, from: { ...through } }] : []),
+    { name: 'm', type: 'float' as const, from: ref(m, 'value') },
+  ], `mix(v, ${through ? 'w' : opts.to}, m)`,
+  `The builder's mute for ${what}: when m is 1 ${through ? 'what came in passes through' : 'it measures far away, so it never wins a colour'}. In Materials a block does it, as a group's inside has no bypass switch.`, list, type);
+  return ref(b, 'result');
 }
 
 /** A node of `type` from its definition: sockets as defined, params = defaults + `params`, wires and note. */
@@ -177,12 +210,13 @@ function emitWarps(ctx: Ctx, warps: WarpSpec[], pos: Ref, on: string, list: Grap
     const trf = transformWarp(w);
     if (trf) {
       const n = mk(ctx, 'transform', `${w.id}`, { dim: '3', ...trf.params, [WARP_KIND_KEY]: w.kind }, { p: pos }, `${warpNote(ctx, w, on)} ${trf.how}`, list);
-      pos = ref(n, 'p');
+      // Muted: the point passes through, by a live uniform (builders/mute.ts).
+      pos = gate(ctx, list, n, ref(n, 'p'), w.muted, { from: 'p' });
       if (def.distStep) modifiers.push({ w, pos });
       continue;
     }
     const n = mk(ctx, def.type, `${w.id}`, warpParams(w), { [def.posIn]: pos }, warpNote(ctx, w, on), list);
-    pos = ref(n, def.posOut);
+    pos = gate(ctx, list, n, ref(n, def.posOut), w.muted, { from: def.posIn });
     if (def.distStep) modifiers.push({ w, pos });
   }
   return { pos, modifiers };
@@ -226,11 +260,12 @@ function emitModifiers(ctx: Ctx, mods: DistStep[], dist: Ref, on: string, list: 
       // Scale's distance half: a second Transform with the same Scale, the distance through its Distance sockets.
       const n = mk(ctx, 'transform', role, { dim: '3', scale: num(w.values.s, 1.5), [WARP_KIND_KEY]: 'scale' }, { dist },
         `Scale on ${on}, the distance half: multiplies the distance by its Scale ${fmt(num(w.values.s, 1.5))}, so it is in the scene's units again. Keep its Scale equal to the first Transform's.`, list);
-      dist = ref(n, 'dist');
+      dist = gate(ctx, list, n, ref(n, 'dist'), w.muted, { from: 'dist' });
       continue;
     }
     const n = mk(ctx, step.type, role, warpParams(w), { [step.distIn]: dist, ...(step.posIn ? { [step.posIn]: pos } : {}) }, warpNote(ctx, w, on), list);
-    dist = ref(n, step.distOut);
+    // A muted modifier: the distance passes through.
+    dist = gate(ctx, list, n, ref(n, step.distOut), w.muted, { from: step.distIn });
   }
   return dist;
 }
@@ -247,7 +282,7 @@ function shapeSummary(sh: ShapeSpec): string {
  * Scene Pos (or any point) → this shape's warps, move, turns → the shape → its distance. `local`
  * gets the point as the shape sees it (after them): where a picture on it is read.
  */
-function emitShape(ctx: Ctx, sh: ShapeSpec, pos: Ref, list: GraphNode[], local?: Map<string, Ref>): Ref | null {
+function emitShape(ctx: Ctx, sh: ShapeSpec, pos: Ref, list: GraphNode[], local?: Map<string, Ref>, groupMuted?: boolean): Ref | null {
   const name = `‘${itemName(ctx.spec, sh)}’`;
   if (sh.kind === 'custom') { ctx.warnings.push(`custom(${sh.label ?? ''}) can't be built: it stands for nodes the builder doesn't know. Left out.`); return null; }
   const def = SHAPE_BY_KIND[sh.kind];
@@ -293,7 +328,9 @@ function emitShape(ctx: Ctx, sh: ShapeSpec, pos: Ref, list: GraphNode[], local?:
   }
   const node = mk(ctx, rounded ? def.roundType! : def.type, sh.id, { ...params, _sbName: sh.name },
     { [def.posKey]: shapePos }, `${name}: a ${def.label.toLowerCase()}${shapeSummary(sh) ? `, ${shapeSummary(sh)}` : ''}. ${def.blurb}${colourWord}`, list);
-  let dist = ref(node, def.distKey);
+  // Muted (itself, or a group round it): its distance is far away, by a live uniform, so it draws
+  // nothing and unions ignore it. What comes after (a cut to a ball, modifiers) keeps it far.
+  let dist = gate(ctx, list, node, ref(node, def.distKey), anyMuted(sh.muted, groupMuted), { to: FAR });
   if (def.field) {
     const ball = Number(sh.size.ball ?? 1.1);
     if (ball > 0) {
@@ -316,11 +353,15 @@ function opNote(g: GroupSpec, a: string, b: string): string {
 
 const TYPE_OF_OP = { union: 'sdfUnion', subtract: 'sdfSubtract', intersect: 'sdfIntersect' } as const;
 
-function emitItem(ctx: Ctx, it: SceneItem, pos: Ref, list: GraphNode[]): Ref | null {
-  if (it.type === 'shape') return emitShape(ctx, it, pos, list);
+function emitItem(ctx: Ctx, it: SceneItem, pos: Ref, list: GraphNode[], groupMuted?: boolean): Ref | null {
+  if (it.type === 'shape') return emitShape(ctx, it, pos, list, undefined, groupMuted);
   const name = it.id === ctx.spec.root.id ? 'the whole scene' : `‘${itemName(ctx.spec, it)}’`;
   const warped = emitWarps(ctx, it.warps, pos, name, list);
-  const parts = it.children.map(c => ({ c, d: emitItem(ctx, c, warped.pos, list) })).filter((x): x is { c: SceneItem; d: Ref } => x.d !== null);
+  // Muted (builders/mute.ts; never the root): its last combine's distance is far, by a live uniform.
+  // With one item there is no combine: the item inside carries the mute instead.
+  const muted = anyMuted(it.id === ctx.spec.root.id ? undefined : it.muted, groupMuted);
+  const many = it.children.filter(c => c.type === 'group' || c.kind !== 'custom').length > 1;
+  const parts = it.children.map(c => ({ c, d: emitItem(ctx, c, warped.pos, list, many ? groupMuted : muted) })).filter((x): x is { c: SceneItem; d: Ref } => x.d !== null);
   if (!parts.length) return null;
   let dist = parts[0].d;
   const names = parts.map(x => `‘${itemName(ctx.spec, x.c)}’`);
@@ -329,6 +370,7 @@ function emitItem(ctx: Ctx, it: SceneItem, pos: Ref, list: GraphNode[]): Ref | n
     const n = mk(ctx, TYPE_OF_OP[it.op], `${it.id}:op${i + 1}`, { k: it.k, ...(i === 0 && it.name ? { _sbName: it.name } : {}) }, { a: dist, b: d },
       `${opLabel(it)}${it.name ? ` (‘${it.name}’)` : ''}: ${opNote(it, join(names.slice(0, i + 1)), names[i + 1])}`, list);
     dist = ref(n, 'dist');
+    if (i === parts.length - 2 && many) dist = gate(ctx, list, n, dist, muted, { to: FAR });
   });
   return emitModifiers(ctx, warped.modifiers, dist, name, list);
 }
@@ -375,13 +417,15 @@ function materialsGroup(ctx: Ctx, shapes: ShapeSpec[], hitPos: Ref, texShapes: S
   for (const sh0 of shapes) {
     const sh = sh0;
     // Each shape is measured on its own here, so the warps it shares with others are made once per shape.
-    const scope: Ctx = { ...ctx, rolePrefix: `mat:${sh.id}:` };
+    const scope: Ctx = { ...ctx, rolePrefix: `mat:${sh.id}:`, noGate: true };
     let pos = port;
     for (const step of pathWarps(ctx.spec, sh)) {
       const w = emitWarps(scope, step.warps.filter(x => !WARP_BY_KIND[x.kind]?.modifier), pos, step.on, inner);
       pos = w.pos;
     }
-    const d = emitShape(scope, { ...sh, warps: sh.warps }, pos, inner, local);
+    // Muted, it measures far away (a live slider), so it never wins a colour.
+    const groupMuted = pathTo(ctx.spec, sh.id).filter(g => g.id !== ctx.spec.root.id).reduce<boolean | undefined>((m, g) => anyMuted(m, g.muted), undefined);
+    const d = emitShape(scope, { ...sh, warps: sh.warps }, pos, inner, local, groupMuted);
     if (!d) continue;
     const name = `‘${itemName(ctx.spec, sh)}’`;
     const c = mk(scope, 'colorPicker', `${sh.id}:color`, { color: [...sh.color] }, {}, `${name}'s colour.`, inner);
@@ -674,6 +718,11 @@ export function buildSceneGraph(spec: SceneSpec, idFor: (role: string) => string
   const L = spec.look, Q = spec.quality, C = spec.camera;
   const shapes = allShapes(spec).filter(s => s.kind !== 'custom');
   if (!shapes.length) ctx.warnings.push('The scene has no shapes yet: add one under Shapes.');
+  // Muted shapes (or ones in a muted group) draw nothing; Materials measures them far away, so they
+  // never win a colour (builders/mute.ts). One colour for all (GI, glass): the first that shows.
+  const hidden = mutedShapes(spec);
+  const firstShown = shapes.find(s => !hidden.has(s.id)) ?? shapes[0];
+  const M = L.mute ?? {};
   const step = effectiveStepScale(spec);
   const hints = stepHints(spec);
 
@@ -746,7 +795,7 @@ export function buildSceneGraph(spec: SceneSpec, idFor: (role: string) => string
     if (new Set(shapes.map(s => s.color.join())).size > 1) ctx.warnings.push('Volumetric glow has one tint; the shapes\' own colours are not used.');
   } else if (L.mode === 'glass') {
     const tint = mk(ctx, 'colorPicker', 'glassTint', { color: [...L.glass.tint] }, {}, 'The glass\'s tint: light passing through it takes this colour.');
-    const bgShape = bgRoot ? allShapes({ ...spec, root: bgRoot }).find(s => s.kind !== 'custom') : undefined;
+    const bgShape = bgRoot ? allShapes({ ...spec, root: bgRoot }).find(s => s.kind !== 'custom' && !hidden.has(s.id)) : undefined;
     const bgAlbedo = bgScene ? mk(ctx, 'colorPicker', 'bgAlbedo', { color: [...(bgShape?.color ?? [0.75, 0.78, 0.85])] }, {}, 'The colour of the shapes seen through the glass.') : null;
     const glass = mk(ctx, 'glassScene', 'march', { ior: L.glass.ior, dispersion: L.glass.dispersion }, {
       ro: ref(cam, 'ro'), rd: ref(cam, 'rd'), foreground: ref(scene, 'scene'), background: bgScene ? ref(bgScene, 'scene') : null,
@@ -755,7 +804,7 @@ export function buildSceneGraph(spec: SceneSpec, idFor: (role: string) => string
     final = ref(glass, 'color');
     if (L.fog > 0) ctx.warnings.push('Glass mode has no fog; it is left out.');
   } else if (L.mode === 'gi') {
-    const first = shapes[0]?.color ?? [0.7, 0.7, 0.7];
+    const first = firstShown?.color ?? [0.7, 0.7, 0.7];
     if (new Set(shapes.map(s => s.color.join())).size > 1) ctx.warnings.push('GI lighting uses one surface colour (the first shape\'s); per-shape colours are a Surface-mode feature.');
     const loop = mk(ctx, 'giLitMarchGroup', 'march', {
       ...loopParams, albedo: [...first], metallic: L.gi.metal, roughness: L.gi.rough, giStrength: L.gi.strength, specStrength: L.gi.spec,
@@ -771,6 +820,7 @@ export function buildSceneGraph(spec: SceneSpec, idFor: (role: string) => string
       const fogC = L.fogColor ?? L.bg;
       const fog = mk(ctx, 'volumetricFog', 'fog', { density: L.fog, fogR: fogC[0], fogG: fogC[1], fogB: fogC[2] }, { color: final, depth: ref(loop, 'depth'), hit: ref(loop, 'hit') },
         `Fog: distant surfaces fade into the fog colour, 1 − exp(−depth × ${fmt(L.fog)}).`);
+      gateNode(fog, M.fog, { from: 'color' });
       final = ref(fog, 'color');
     }
   } else {
@@ -782,8 +832,11 @@ export function buildSceneGraph(spec: SceneSpec, idFor: (role: string) => string
     const stretch = Q.warp ? { stretch: ref(loop, 'stretch') } : {};
     const ao = L.ao > 0 ? mk(ctx, 'sdfAo', 'ao', { stepDist: L.ao }, { scene: ref(scene, 'scene'), pos, normal, hit, ...stretch },
       'Ambient occlusion: steps out along the surface\'s normal and darkens creases and corners where other surfaces are close.') : null;
+    // Muted lights (builders/mute.ts): no shade, fully lit (1), by a live uniform.
+    if (ao) gateNode(ao, M.ao, { to: '1.0' });
     const shadow = L.shadows > 0 ? mk(ctx, 'softShadow', 'shadow', { k: L.shadows, tmax: Q.maxDist }, { scene: ref(scene, 'scene'), pos, normal, hit, lightDir: sun ? ref(sun, 'rgb') : null, ...stretch },
       `Soft shadows: marches again from the hit point toward the sun; Hardness ${fmt(L.shadows)} (8 soft … 32 hard).`) : null;
+    if (shadow) gateNode(shadow, M.shadows, { to: '1.0' });
     const colours = new Set(shapes.map(s => s.color.join()));
     const shines = new Set(shapes.map(s => s.shine));
     let base: Ref, shine: Ref | null = null;
@@ -818,19 +871,25 @@ export function buildSceneGraph(spec: SceneSpec, idFor: (role: string) => string
         { name: 'lit', type: 'vec3', from: lit }, { name: 'spec', type: 'float', from: ref(spec2, 'light') }, { name: 'hit', type: 'float', from: hit },
         shine ? { name: 'shine', type: 'float', from: shine } : { name: 'shine', type: 'float', slider: { value: shineValue, min: 0, max: 1 } },
       ], 'lit + vec3(spec * shine * hit)', 'Adds the highlight to the lit colour, scaled by Shine (0 matt, 1 glossy), only where a ray hit.');
+      gateNode(add, M.shine, { from: 'lit' });
       lit = ref(add, 'result');
     }
     if (L.fog > 0) {
       const fogC = L.fogColor ?? L.bg;
       const fog = mk(ctx, 'volumetricFog', 'fog', { density: L.fog, fogR: fogC[0], fogG: fogC[1], fogB: fogC[2] }, { color: lit, depth: ref(loop, 'depth'), hit },
         `Fog: distant surfaces fade into the fog colour, 1 − exp(−depth × ${fmt(L.fog)}). Depth is 0–1 of Max Dist.`);
+      gateNode(fog, M.fog, { from: 'color' });
       lit = ref(fog, 'color');
     }
     const compose = vecMath(ctx, 'mix', 'compose', background(), lit, hit, 'The lit surface where a ray hit (Hit = 1), the background where it missed.');
     final = ref(compose, 'result');
   }
   if (L.mode !== 'surface' && shapes.some(s => s.tex)) ctx.warnings.push('Pictures on shapes are a Surface-mode feature; in this mode the shapes keep their colours.');
-  if (L.tone !== 'none') final = ref(mk(ctx, 'toneMap', 'tone', { mode: L.tone }, { color: final }, toneNote(L.tone)), 'color');
+  if (L.tone !== 'none') {
+    const tone = mk(ctx, 'toneMap', 'tone', { mode: L.tone }, { color: final }, toneNote(L.tone));
+    gateNode(tone, M.tone, { from: 'color' });
+    final = ref(tone, 'color');
+  }
   // Another output: the measurement instead of the picture (the picture's nodes stay, unwired).
   if (!isPicture(spec.output)) {
     const problem = outputProblem(L.mode, spec.output);

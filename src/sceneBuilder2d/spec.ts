@@ -190,6 +190,8 @@ export interface MotionSpec {
   phase: number;
   /** Degrees: the line a bob slides along. */
   dir: number;
+  /** Switched off for now (builders/mute.ts): left out of the build, settings kept. */
+  muted?: boolean;
 }
 
 /** A ring of copies about the item's centre: `count` copies, each `radius` out, optionally rings of rings and the whole repeated at bigger scales. */
@@ -201,6 +203,8 @@ export interface DupSpec {
   /** The whole ring repeated `levels` times, each `factor` times the one before (1 level: no repeat). */
   levels: number;
   factor: number;
+  /** Switched off for now: one copy, as if there were no ring (settings kept). */
+  muted?: boolean;
 }
 
 export const MAX_DUP = 32;
@@ -232,6 +236,8 @@ interface ItemBase {
   fill?: TexUse | null;
   /** Only shown where a picture is bright (or dark, inverted). */
   mask?: TexMask | null;
+  /** Switched off for now (builders/mute.ts): drawn as nothing, by a live uniform; settings kept. */
+  muted?: boolean;
 }
 
 /** A layer shown only where a picture is bright: the picture over the whole frame, its brightness against `cut`. */
@@ -266,6 +272,8 @@ export interface SpaceOp {
   block?: SpaceBlock;
   /** kind 'combine': two blocks run on the same uv and joined. */
   combine?: CombineSpec;
+  /** Switched off for now (builders/mute.ts): bypassed by a live uniform, settings kept. */
+  muted?: boolean;
 }
 
 /** A transform block in the space stack. */
@@ -293,7 +301,13 @@ export interface LookSpec {
   colour: { by: ColourBy; palette: string; scale: number; speed: number };
   tone: ToneMode;
   post: { bloom: number; vignette: number; grain: number; scanlines: number };
+  /** Effects switched off for now (builders/mute.ts): bypassed by a live uniform, settings kept. */
+  mute?: Partial<Record<LookMute2D, boolean>>;
 }
+
+/** The look's effects that can be muted. */
+export const LOOK_MUTES_2D = ['glow', 'tone', 'bloom', 'vignette', 'grain', 'scanlines'] as const;
+export type LookMute2D = typeof LOOK_MUTES_2D[number];
 
 export type Show2D = 'picture' | 'distance' | 'mask' | 'space';
 export interface OutputSpec { show: Show2D; /** Colour the number through this palette (a key of PALETTES). */ palette?: string }

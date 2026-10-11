@@ -205,6 +205,26 @@ export function setOnAt(set: AgentRuleSet, sp: number, at: Loc, on: boolean): Ag
   return withRules(set, sp, rules);
 }
 
+/**
+ * Solo the card `key` among the cards `keys` (one section's stack; Alt/Option-click its mute):
+ * the others muted (their rules off), it on. Soloing the card already soloed turns the whole
+ * stack back on. Cards are found again by key after each switch (switching splits rules).
+ */
+export function soloCard(set: AgentRuleSet, sp: number, cards: readonly CardId[], keys: readonly string[], key: string): AgentRuleSet {
+  const find = (s: AgentRuleSet, k: string) => readBehaviours(s, sp, cards).cards.find(c => c.key === k);
+  const now = keys.map(k => find(set, k)).filter((c): c is CardRead => !!c);
+  if (!now.some(c => c.key === key)) return set;
+  const alreadySolo = now.every(c => (c.key === key ? c.on : !c.on));
+  let out = set;
+  for (const k of keys) {
+    const c = find(out, k);
+    if (!c) continue;
+    const on = alreadySolo || k === key;
+    if (c.on !== on) out = setOnAt(out, sp, c.at, on);
+  }
+  return out;
+}
+
 /** Change the card's action at `at`. */
 export function patchAt<A extends RuleAction>(set: AgentRuleSet, sp: number, at: Loc, patch: Partial<A>): AgentRuleSet {
   const rules = set.species[sp].rules.map((r, ri) => (ri !== at.rule ? r : { ...r, do: r.do.map((a, ai) => (ai === at.action ? { ...a, ...patch } as RuleAction : a)) }));

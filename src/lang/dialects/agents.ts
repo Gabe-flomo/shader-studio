@@ -789,9 +789,11 @@ export function parseAgents(src: string, opts: { seed?: number } = {}): AgentsPa
       for (const m of c.mods()) {
         const n = m.name.toLowerCase();
         if (n === 'last' || n === 'stop') rule.stop = true;
-        else if (n === 'off') rule.off = true;
+        else if (n === 'off' || n === 'muted') rule.off = true; // `muted`: the builders' mute word (builders/mute.ts) is a rule switched off
         else c.error(m, `@${m.name}: a rule takes @last (stop after it) and @off.`);
       }
+      // A trailing bare `muted` (every builder's mute flag) also switches the rule off; it prints back as @off.
+      if (c.peek().t === 'word' && nameOf(c.peek()).toLowerCase() === 'muted') { c.next(); rule.off = true; }
       if (!c.atClauseEnd()) { c.error(c.peek(), `Unexpected “${c.text(c.peek())}”: separate actions with commas.`); c.skipClause(); }
       if (ok) sp.rules.push(rule);
       void si;

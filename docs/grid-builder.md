@@ -124,6 +124,26 @@ Words in the Agent Builder's stroke font (`agentBuilder/strokeFont.ts`), two way
 | **Rules** | When … Do … for every drawn cell, checked in the shader each frame, top to bottom. When a shape *is in the cell (x, y)*, *is in the column*, *is in the row*, *shares a cell with* another shape, or *is near* it (within N cells). Do: *becomes* another shape (its kind, size and colour), *turns a colour*, *swaps colours with* the other shape (both ways), *grows by*, *hides*, *spins*. A rule that names a shape that isn't there is shown as off. |
 | **Look** | Background, grid lines (on or off, colour, width in cells), the grid's size, glow (amount, falloff), tone map. |
 
+### Muting
+
+A shape, the pattern or a grid warp can be muted for a while to see the grid without it: click the
+mute switch (the same icon as a node's bypass) on the shape's card, the Pattern card, or a warp's row.
+A muted piece shows a MUTED tag and dims, keeps every setting, is saved in the scene (so it is still
+muted after Build and reopening) and is one undo step.
+
+- **Warps** are still built, their Expression Block bypassed by a live uniform: the point coming in
+  passes straight through, so muting and unmuting set a number and nothing recompiles. In the graph
+  the warp's node shows the bypass style; its own mute switch there un-mutes it.
+- **Shapes** and the **pattern** live inside the Grid scene node's generated code, which has nothing
+  to pass through, so they are left out while muted: a muted shape's node, cells, rules and the
+  pattern's fill of it are not built; a muted pattern builds as no pattern. Toggling these rebuilds
+  the code.
+- **Rules** already have their own on/off switch, which works the same way (left out while off).
+
+Alt/Option-click a shape's or a warp's mute switch to solo it: every other shape (or warp) is muted;
+solo the same one again to unmute them all. The Grid builder has no text recipe, so there is no
+`muted` word to type here.
+
 ## What Build makes
 
 ```

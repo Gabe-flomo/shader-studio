@@ -10,9 +10,9 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useSceneBuilder2D, type Builder2DTab } from '../../sceneBuilder2d/store';
 import { buildFromBuilder2D } from '../../sceneBuilder2d/actions';
 import {
-  COLOUR_BYS, MAX_DUP, MAX_LEVELS, MOTIONS, OUTPUT_SHOWS, SHAPES, SHAPE_BY_KIND, SPACES, SPACE_BY_KIND, TONE_MODES,
+  COLOUR_BYS, LOOK_MUTES_2D, MAX_DUP, MAX_LEVELS, MOTIONS, OUTPUT_SHOWS, SHAPES, SHAPE_BY_KIND, SPACES, SPACE_BY_KIND, TONE_MODES,
   allShapes, findItem, itemName, itemSummary, newBlockOp, starterScene, newCombineOp, newDup, newGroup, newMotion, newShape, newSpaceOp, nextId, num, opLabel, spaceSummary,
-  type CombineOp, type GlowMode, type Item, type MotionKind, type ParamDef, type Scene2D, type ShapeSpec, type Show2D, type ToneMode, type Vec2, type Vec3,
+  type CombineOp, type GlowMode, type Item, type LookMute2D, type MotionKind, type ParamDef, type Scene2D, type ShapeSpec, type Show2D, type ToneMode, type Vec2, type Vec3,
 } from '../../sceneBuilder2d/spec';
 import { parseRecipe2D, printRecipe2D } from '../../sceneBuilder2d/recipe';
 import { TEMPLATES_2D, templateScene } from '../../sceneBuilder2d/templates';
@@ -43,6 +43,8 @@ import { BuilderSlider } from '../builders/BuilderSlider';
 import { finishBuilder } from '../../builders/finish';
 import { scene2dBuildIds } from '../../builders/finishScenes';
 import { TexturePicker } from '../builders/TexturePicker';
+import { MUTED_DIM, MuteToggle, MutedTag } from '../builders/MuteToggle';
+import { soloIn, soloKeys } from '../../builders/mute';
 import { FIT_LABELS, TEX_FITS, newTexUse, withSource, type TexFit, type TexSource, type TexUse } from '../../builders/textures';
 
 const TABS: Array<{ id: Builder2DTab; label: string; icon: IconName; gapBefore?: boolean }> = [
@@ -60,6 +62,19 @@ const DEFAULT_SCENE_2D = starterScene();
 const DEFAULT_GRID = defaultGrid();
 
 const edit = (fn: (d: Scene2D) => void, key?: string) => useSceneBuilder2D.getState().edit(fn, key);
+
+/** A layer's mute (builders/mute.ts): one undo step; Alt-click solos it among its siblings. */
+const itemMute = (id: string, what: string) => ({
+  onToggle: () => edit(d => { const f = findItem(d, id); if (f) f.item.muted = !f.item.muted; }),
+  onSolo: () => edit(d => { const f = findItem(d, id); if (f) soloIn(f.parent ? f.parent.children : d.layers, id); }),
+  what,
+});
+/** A look effect's mute: one undo step; Alt-click solos it among the look's effects. */
+const lookMute = (key: LookMute2D, what: string, muted: boolean) => ({
+  muted, what,
+  onToggle: () => edit(d => { d.look.mute = { ...d.look.mute, [key]: !d.look.mute?.[key] }; }),
+  onSolo: () => edit(d => { d.look.mute = soloKeys(d.look.mute ?? {}, LOOK_MUTES_2D, key); }),
+});
 
 // ── Small pieces ──────────────────────────────────────────────────────────────
 
@@ -167,15 +182,18 @@ function LayerList() {
       {rows.length === 0 && <BuilderNote>No shapes yet. Pick one on the Shapes tab.</BuilderNote>}
       <div role="listbox" aria-label="Layers" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         {rows.map(({ it, depth }) => (
-          <button key={it.id} type="button" role="option" aria-selected={it.id === selectedId} onClick={() => select(it.id)}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: `5px 8px 5px ${8 + depth * 14}px`, border: 0, borderRadius: radius.sm, cursor: 'pointer', textAlign: 'left',
-              background: it.id === selectedId ? tk.bg.selected : 'transparent', color: tk.text.primary, font: `500 12.5px ${fontFamily.ui}` }}>
+          <div key={it.id} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <button type="button" role="option" aria-selected={it.id === selectedId} onClick={() => select(it.id)}
+            style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6, padding: `5px 8px 5px ${8 + depth * 14}px`, border: 0, borderRadius: radius.sm, cursor: 'pointer', textAlign: 'left',
+              background: it.id === selectedId ? tk.bg.selected : 'transparent', color: tk.text.primary, font: `500 12.5px ${fontFamily.ui}`, ...(it.muted ? MUTED_DIM : {}) }}>
             {it.type === 'group'
               ? <span style={{ width: 16, textAlign: 'center', font: `700 13px ${fontFamily.mono}`, color: tk.accent.text }}>{OP_GLYPH[it.op]}</span>
               : <span style={{ width: 12, height: 12, borderRadius: 3, background: rgbCss(it.color), flexShrink: 0, boxShadow: `inset 0 0 0 1px ${tk.border.default}` }} />}
             <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{itemName(scene, it)}</span>
             {itemSummary(it) && <span style={{ fontSize: 11, color: tk.text.faint, whiteSpace: 'nowrap' }}>{itemSummary(it)}</span>}
           </button>
+          <MuteToggle muted={!!it.muted} {...itemMute(it.id, `‘${itemName(scene, it)}’`)} />
+          </div>
         ))}
       </div>
       {sel && (
@@ -278,6 +296,8 @@ function SpaceTab() {
         const def = SPACE_BY_KIND[op.kind];
         if (!block && !comb && !def) return null;
         const sum = spaceSummary(op);
+        // Mute (builders/mute.ts): bypassed by a live uniform; Alt-click solos it in the stack.
+        const mute = { muted: !!op.muted, what: sum.label, onToggle: () => edit(d => { d.space[i].muted = !d.space[i].muted; }), onSolo: () => edit(d => soloIn(d.space, op.id)) };
         const order = <>
           <IconButton icon="chevU" label="Earlier" size="sm" disabled={i === 0} onClick={() => move(i, -1)} />
           <IconButton icon="chevD" label="Later" size="sm" disabled={i === scene.space.length - 1} onClick={() => move(i, 1)} />
@@ -287,7 +307,7 @@ function SpaceTab() {
           <div key={op.id} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(h => (h === i ? null : h))} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             {i > 0 && <span aria-hidden style={{ alignSelf: 'center', font: `600 10.5px ${fontFamily.mono}`, color: tk.text.faint }}>↓ uv</span>}
             {block ? (
-              <Card id={`sp2-${op.id}`} defaultOpen title={sum.label} summary={sum.value}
+              <Card id={`sp2-${op.id}`} defaultOpen title={sum.label} summary={sum.value} mute={mute}
                 actions={<>
                   <IconButton icon="link" label="Combine with another block (add, subtract, multiply, blend)" size="sm"
                     onClick={() => edit(d => { const b = d.space[i].block; if (b) d.space[i] = newCombineOp(d.space[i].id, b, emptyBlock(), 'add'); })} />
@@ -302,7 +322,7 @@ function SpaceTab() {
                 </div>
               </Card>
             ) : comb ? (
-              <Card id={`sp2-${op.id}`} defaultOpen title={sum.label} summary={sum.value}
+              <Card id={`sp2-${op.id}`} defaultOpen title={sum.label} summary={sum.value} mute={mute}
                 actions={<>
                   <Button size="sm" variant="ghost" title="Undo the combine: A and B become two blocks in a chain (A, then B)"
                     onClick={() => edit(d => { const c = d.space[i].combine; if (!c) return; const id2 = nextId(d, 'p'); d.space.splice(i, 1, newBlockOp(d.space[i].id, c.a), newBlockOp(id2, c.b)); })}>Split</Button>
@@ -314,7 +334,7 @@ function SpaceTab() {
                 </div>
               </Card>
             ) : def && (
-              <Card id={`sp2-${op.id}`} defaultOpen title={def.label} summary={sum.value} actions={order}>
+              <Card id={`sp2-${op.id}`} defaultOpen title={def.label} summary={sum.value} actions={order} mute={mute}>
                 <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
                   <Thumb k={JSON.stringify(op)} make={() => renderSpaceThumbnail(op, 64)} size={64} />
                   <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -408,7 +428,8 @@ function ItemInspector({ id }: { id: string }) {
   const shapeDef = it.type === 'shape' ? SHAPE_BY_KIND[it.kind] : null;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <Card id={`it2-${id}-shape`} defaultOpen title={itemName(scene, it)} summary={it.type === 'group' ? opLabel(it) : shapeDef?.blurb}>
+      <Card id={`it2-${id}-shape`} defaultOpen title={itemName(scene, it)} summary={it.type === 'group' ? opLabel(it) : shapeDef?.blurb}
+        mute={{ muted: !!it.muted, ...itemMute(id, `‘${itemName(scene, it)}’`) }}>
         {it.type === 'group' ? (
           <>
             <Row label="Combine">
@@ -436,16 +457,25 @@ function ItemInspector({ id }: { id: string }) {
         <NumRow label="Round" hint="Grows the edge outward, rounding corners." value={it.inflate} defaultValue={0} min={0} max={0.3} step={0.002} onChange={v => upd(x => { x.inflate = v; }, 'inflate')} />
         <NumRow label="Outline only" hint="Above 0: only an outline this thick." value={it.hollow} defaultValue={0} min={0} max={0.2} step={0.002} onChange={v => upd(x => { x.hollow = v; }, 'hollow')} />
       </Card>
-      <Card id={`it2-${id}-motion`} title="Motion" summary={it.motion.length ? it.motion.map(m => m.kind).join(' · ') : 'still'}>
+      <Card id={`it2-${id}-motion`} title="Motion" summary={it.motion.length ? it.motion.map(m => `${m.kind}${m.muted ? ' (muted)' : ''}`).join(' · ') : 'still'}>
         {it.motion.map((m, mi) => {
           const md = MOTIONS.find(x => x.kind === m.kind)!;
           return (
             <div key={m.id} style={{ display: 'flex', flexDirection: 'column', gap: 4, paddingBottom: 6 }}>
-              <Row label={<b>{md.label}</b>}><Button size="sm" variant="ghost" icon="trash" onClick={() => upd(x => { x.motion.splice(mi, 1); })}>Remove</Button></Row>
+              <Row label={<span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><b style={m.muted ? MUTED_DIM : undefined}>{md.label}</b>{m.muted && <MutedTag />}</span>}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <MuteToggle muted={!!m.muted} what={`the ${md.label.toLowerCase()}`}
+                    onToggle={() => upd(x => { x.motion[mi].muted = !x.motion[mi].muted; })}
+                    onSolo={() => upd(x => soloIn(x.motion, m.id))} />
+                  <Button size="sm" variant="ghost" icon="trash" onClick={() => upd(x => { x.motion.splice(mi, 1); })}>Remove</Button>
+                </div>
+              </Row>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, ...(m.muted ? MUTED_DIM : {}) }}>
               <NumRow label="Speed" hint="Cycles a second." value={m.speed} min={-2} max={2} onChange={v => upd(x => { x.motion[mi].speed = v; }, `m:${m.id}:s`)} />
               {md.amount && <NumRow label={md.amount.label} value={m.amount} min={md.amount.min} max={md.amount.max} onChange={v => upd(x => { x.motion[mi].amount = v; }, `m:${m.id}:a`)} />}
               {md.dir && <NumRow label="Direction" unit="°" value={m.dir} min={0} max={360} step={1} onChange={v => upd(x => { x.motion[mi].dir = v; }, `m:${m.id}:d`)} />}
               <NumRow label="Phase" unit="°" value={m.phase} min={0} max={360} step={1} onChange={v => upd(x => { x.motion[mi].phase = v; }, `m:${m.id}:p`)} />
+              </div>
             </div>
           );
         })}
@@ -456,7 +486,9 @@ function ItemInspector({ id }: { id: string }) {
           ))}
         </div>
       </Card>
-      <Card id={`it2-${id}-dup`} title="Duplicate" summary={it.dup ? `${it.dup.count} copies${it.dup.inner ? ` × ${it.dup.inner.count}` : ''}${it.dup.levels > 1 ? ` · ${it.dup.levels} sizes` : ''}` : 'one'}>
+      <Card id={`it2-${id}-dup`} title="Duplicate"
+        mute={it.dup ? { muted: !!it.dup.muted, what: 'the ring of copies', onToggle: () => upd(x => { if (x.dup) x.dup.muted = !x.dup.muted; }) } : undefined}
+        summary={it.dup ? `${it.dup.count} copies${it.dup.inner ? ` × ${it.dup.inner.count}` : ''}${it.dup.levels > 1 ? ` · ${it.dup.levels} sizes` : ''}` : 'one'}>
         <Row label="Ring of copies"><Toggle checked={!!it.dup} onChange={v => upd(x => { x.dup = v ? newDup() : null; })} label="Copy it round a circle" /></Row>
         {it.dup && (
           <>
@@ -531,6 +563,7 @@ function GridTab() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <Card id="grid2-cells" defaultOpen title="Cells" summary={`${grid.cols} × ${grid.rows}`}
+        mute={{ muted: !!grid.muted, what: 'the grid', onToggle: () => set(g => { g.muted = !g.muted; }) }}
         actions={<IconButton icon="trash" label="Remove the grid" size="sm" onClick={() => edit(d => { d.grid = null; })} />}>
         <NumRow label="Columns" integer value={grid.cols} defaultValue={DEFAULT_GRID.cols} min={1} max={48} onChange={v => set(g => { g.cols = Math.round(v); }, 'cols')} />
         <NumRow label="Rows" integer value={grid.rows} defaultValue={DEFAULT_GRID.rows} min={1} max={48} onChange={v => set(g => { g.rows = Math.round(v); }, 'rows')} />
@@ -602,6 +635,16 @@ function GridTab() {
   );
 }
 
+/** A look row with its mute switch at the end (none while the effect is off). */
+function Effect({ m, children }: { m: ReturnType<typeof lookMute> | null; children: ReactNode }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+      <div style={{ flex: 1, minWidth: 0, ...(m?.muted ? MUTED_DIM : {}) }}>{children}</div>
+      {m ? <MuteToggle {...m} /> : <span style={{ width: 26, flexShrink: 0 }} />}
+    </div>
+  );
+}
+
 function LookTab() {
   const look = useSceneBuilder2D(s => s.scene.look);
   const hasGrid = useSceneBuilder2D(s => !!s.scene.grid && s.scene.grid.colourBy !== 'shape');
@@ -633,7 +676,7 @@ function LookTab() {
           </>
         )}
       </Card>
-      <Card id="look2-glow" defaultOpen title="Glow" summary={look.glow.mode}>
+      <Card id="look2-glow" defaultOpen title="Glow" summary={look.glow.mode} mute={look.glow.mode !== 'off' ? lookMute('glow', 'the glow', !!look.mute?.glow) : undefined}>
         <Row label="Glow">
           <Select ariaLabel="Glow" value={look.glow.mode} options={[{ value: 'off', label: 'Off' }, { value: 'all', label: 'All shapes' }, { value: 'selected', label: 'Only layers marked Glow' }]}
             onChange={v => set(l => { l.glow.mode = v as GlowMode; })} />
@@ -646,11 +689,21 @@ function LookTab() {
         )}
       </Card>
       <Card id="look2-finish" title="Finish" summary={`tone ${look.tone}${look.post.bloom ? ' · bloom' : ''}${look.post.vignette ? ' · vignette' : ''}`}>
-        <Row label="Tone map"><Select ariaLabel="Tone map" value={look.tone} options={TONE_MODES.map(t => ({ value: t, label: t }))} onChange={v => set(l => { l.tone = v as ToneMode; })} /></Row>
-        <NumRow label="Bloom" value={look.post.bloom} defaultValue={DEFAULT_SCENE_2D.look.post.bloom} min={0} max={1.5} onChange={v => set(l => { l.post.bloom = v; }, 'pb')} />
-        <NumRow label="Vignette" value={look.post.vignette} defaultValue={DEFAULT_SCENE_2D.look.post.vignette} min={0} max={1} onChange={v => set(l => { l.post.vignette = v; }, 'pv')} />
-        <NumRow label="Grain" value={look.post.grain} defaultValue={DEFAULT_SCENE_2D.look.post.grain} min={0} max={0.5} onChange={v => set(l => { l.post.grain = v; }, 'pg')} />
-        <NumRow label="Scanlines" value={look.post.scanlines} defaultValue={DEFAULT_SCENE_2D.look.post.scanlines} min={0} max={1} onChange={v => set(l => { l.post.scanlines = v; }, 'ps')} />
+        <Effect m={look.tone !== 'none' ? lookMute('tone', 'the tone map', !!look.mute?.tone) : null}>
+          <Row label="Tone map"><Select ariaLabel="Tone map" value={look.tone} options={TONE_MODES.map(t => ({ value: t, label: t }))} onChange={v => set(l => { l.tone = v as ToneMode; })} /></Row>
+        </Effect>
+        <Effect m={look.post.bloom > 0 ? lookMute('bloom', 'the bloom', !!look.mute?.bloom) : null}>
+          <NumRow label="Bloom" value={look.post.bloom} defaultValue={DEFAULT_SCENE_2D.look.post.bloom} min={0} max={1.5} onChange={v => set(l => { l.post.bloom = v; }, 'pb')} />
+        </Effect>
+        <Effect m={look.post.vignette > 0 ? lookMute('vignette', 'the vignette', !!look.mute?.vignette) : null}>
+          <NumRow label="Vignette" value={look.post.vignette} defaultValue={DEFAULT_SCENE_2D.look.post.vignette} min={0} max={1} onChange={v => set(l => { l.post.vignette = v; }, 'pv')} />
+        </Effect>
+        <Effect m={look.post.grain > 0 ? lookMute('grain', 'the grain', !!look.mute?.grain) : null}>
+          <NumRow label="Grain" value={look.post.grain} defaultValue={DEFAULT_SCENE_2D.look.post.grain} min={0} max={0.5} onChange={v => set(l => { l.post.grain = v; }, 'pg')} />
+        </Effect>
+        <Effect m={look.post.scanlines > 0 ? lookMute('scanlines', 'the scanlines', !!look.mute?.scanlines) : null}>
+          <NumRow label="Scanlines" value={look.post.scanlines} defaultValue={DEFAULT_SCENE_2D.look.post.scanlines} min={0} max={1} onChange={v => set(l => { l.post.scanlines = v; }, 'ps')} />
+        </Effect>
       </Card>
     </div>
   );

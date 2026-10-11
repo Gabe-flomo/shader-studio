@@ -18,7 +18,7 @@
 import {
   DEFAULT_CAMERA, DEFAULT_COLOR, DEFAULT_LOOK, DEFAULT_QUALITY, SHAPES, SHAPE_BY_KIND, TONE_MODES, WARPS, WARP_BY_KIND,
   DIM_WORDS, defaultSize, defaultWarpValues, emptySpec, newGroup, newShape, newWarp, shapeDims, shapeParamWord,
-  TEX_MAPS,
+  TEX_MAPS, LOOK_MUTES_3D,
   type CameraSpec, type DimTarget, type DimWord, type ShapeDef, type CombineOp, type ParamDef, type RenderMode, type SceneItem, type SceneSpec, type ShapeSpec, type TexMap, type ToneMode, type Vec3, type WarpDef, type WarpSpec,
 } from './spec';
 import { findTex, texSlug, type TexSource } from '../builders/textures';
@@ -31,6 +31,7 @@ import { drawFrom, freshSeed, makeRng, resolveRandom, seedOf, type RandSpec, typ
 import { SCENE_SETTING_RAND, sceneRand } from '../lang/sceneRand';
 import { suggest } from '../lang/fuzzy';
 import { DEFAULT_PALETTE, OUTPUTS, OUTPUT_WORDS, PALETTES, PALETTE_BY_KEY, outputClause, type OutputSpec } from './output';
+import { MUTED_WORD } from '../builders/mute';
 
 // ── Errors ──────────────────────────────────────────────────────────────────
 
@@ -91,7 +92,7 @@ export const DEFAULT_SMOOTH_K = 0.3;
 
 const SHAPE_WORDS: Record<string, string> = Object.fromEntries(SHAPES.flatMap(s => [[s.kind, s.kind], ...s.aliases.map(a => [a, s.kind])]));
 const WARP_WORDS: Record<string, string> = Object.fromEntries(WARPS.flatMap(w => [[w.kind, w.kind], ...w.aliases.map(a => [a, w.kind])]));
-const SETTING_WORDS = ['sun', 'sky', 'bounce', 'shadows', 'shadow', 'ao', 'occlusion', 'fog', 'background', 'bg', 'tone', 'camera', 'cam', 'quality', 'custom', 'custom-warp', 'output', 'show', 'colour', 'color', 'texture'];
+const SETTING_WORDS = ['sun', 'sky', 'bounce', 'shadows', 'shadow', 'ao', 'occlusion', 'fog', 'background', 'bg', 'tone', 'camera', 'cam', 'quality', 'custom', 'custom-warp', 'output', 'show', 'colour', 'color', 'texture', 'shine'];
 
 const COLOR_NAMES = COLOUR_TABLE as Readonly<Record<string, Vec3>>;
 
@@ -109,6 +110,12 @@ type Value = { kind: 'num'; v: number; unit: Unit | null } | { kind: 'vec'; v: V
 type Arg = { key: string | null; value: Value; at: number; end: number; comma?: boolean };
 
 export const round = (n: number) => Math.round(n * 10000) / 10000;
+
+/** A clause's arguments without its `muted` flag (builders/mute.ts), and whether it had one. */
+function takeMuted(args: Arg[]): { muted: boolean; rest: Arg[] } {
+  const rest = args.filter(a => !(a.key === null && (a.value.kind === 'word' || a.value.kind === 'str') && a.value.v.toLowerCase() === MUTED_WORD));
+  return { muted: rest.length !== args.length, rest };
+}
 
 /** A shared value in the recipe's terms (null: not a value a recipe takes). */
 function recipeValue(v: LangValue): Value | null {
@@ -291,7 +298,15 @@ class Parser {
         if (w === 'show') this.hint(t, '“show” in a recipe: write output.', 'output');
         const key0 = w === 'shadow' ? 'shadows' : w === 'bg' ? 'background' : w === 'cam' ? 'camera' : w;
         const PRIMARY: Record<string, string> = { fog: 'density', shadows: 'hardness', sky: 'color', bounce: 'color', background: 'top', tone: 'mode', camera: 'dist' };
-        const sargs = this.resolveArgs(this.args([]), key0, (key, n) => SCENE_SETTING_RAND[`${key0}.${key ?? (n === 0 ? PRIMARY[key0] : n === 1 && key0 === 'background' ? 'bottom' : '')}`]);
+        // `shadows 16 muted`, `fog 0.3 muted`: switched off for now (builders/mute.ts).
+        const mu = takeMuted(this.args([]));
+        if (mu.muted) {
+          const mk = key0 === 'occlusion' ? 'ao' : key0;
+          if ((LOOK_MUTES_3D as readonly string[]).includes(mk)) spec.look.mute = { ...spec.look.mute, [mk]: true };
+          else this.warnings.push(`${w} can't be muted; muted is left out.`);
+          if (key0 === 'shine') continue;
+        } else if (key0 === 'shine') { this.fail(t, 'shine is set on each shape (shine=0.5); a shine clause only takes muted: shine muted switches the highlight off.'); continue; }
+        const sargs = this.resolveArgs(mu.rest, key0, (key, n) => SCENE_SETTING_RAND[`${key0}.${key ?? (n === 0 ? PRIMARY[key0] : n === 1 && key0 === 'background' ? 'bottom' : '')}`]);
         if (this.randomAll && key0 === 'camera') for (const k of ['dist', 'orbit', 'elev']) if (!sargs.some(a => a.key?.toLowerCase() === k || (!a.key && k === 'dist'))) sargs.push({ key: k, value: this.draw(SCENE_SETTING_RAND[`camera.${k}`], `camera.${k}`, t), at: t.at, end: t.end });
         if (this.randomAll && key0 === 'fog' && !sargs.some(a => !a.key || a.key === 'density')) sargs.unshift({ key: null, value: this.draw(SCENE_SETTING_RAND['fog.density'], 'fog.density', t), at: t.at, end: t.end });
         this.setting(spec, w, t, sargs);
@@ -315,6 +330,7 @@ class Parser {
       spec.root = newGroup(this.gid(), { name: 'Scene', children: items, warps: sceneWarps });
     }
     if (!spec.root.name) spec.root.name = 'Scene';
+    if (spec.root.muted) { delete spec.root.muted; this.warnings.push('The whole scene can\'t be muted; muted is left out.'); }
     if (this.textures.length) spec.textures = this.textures;
     this.renumber(spec);
     const r: ParseResult = { spec, errors: this.errors, warnings: this.warnings };
@@ -365,7 +381,9 @@ class Parser {
       }
       if (this.peek().t === ')') this.next(); else this.fail(open, 'This ( is never closed.');
       if (!g.children.length) this.warnings.push(`${w}( ) is empty.`);
-      const gargs = this.resolveArgs(this.args([',', ')', '@']), w, key => (key === null || key === 'k' || key === 'blend' || key === 'smooth' ? SCENE_SETTING_RAND['combine.k'] : undefined));
+      const gm = takeMuted(this.args([',', ')', '@']));
+      if (gm.muted) g.muted = true;
+      const gargs = this.resolveArgs(gm.rest, w, key => (key === null || key === 'k' || key === 'blend' || key === 'smooth' ? SCENE_SETTING_RAND['combine.k'] : undefined));
       if (this.randomAll && smooth && !gargs.some(a => a.value.kind === 'num')) g.k = Math.max(0, (this.draw(SCENE_SETTING_RAND['combine.k'], `${w}.k`, t) as { v: number }).v);
       for (const a of gargs) {
         const key = a.key?.toLowerCase();
@@ -381,7 +399,9 @@ class Parser {
       if (w === 'rounded-box' || w === 'roundbox') sh.size.round = 0.1;
       if (w === 'rounded-cylinder') sh.size.round = 0.05;
       const def = SHAPE_BY_KIND[kind];
-      const sargs = this.resolveArgs(this.args([',', ')', '@']), kind, (key, n) => {
+      const sm = takeMuted(this.args([',', ')', '@']));
+      if (sm.muted) sh.muted = true;
+      const sargs = this.resolveArgs(sm.rest, kind, (key, n) => {
         const p = key ? def.params.find(q => q.key.toLowerCase() === key) ?? (key === 'radius' ? def.params.find(q => q.key === 'r') : undefined) : def.params[n];
         if (p) return sceneRand(p);
         // width / height / depth, and a round shape's linked size: one number from the setting it sets.
@@ -453,7 +473,10 @@ class Parser {
     if (kind === 'rotate' && args.some(a => (!a.key && a.value.kind === 'word' && /^[xyz]$/i.test(a.value.v)) || a.key?.toLowerCase() === 'axis')) kind = 'turn';
     const wp = newWarp(kind, this.wid());
     const def = WARP_BY_KIND[kind];
-    args = this.resolveArgs(args, kind, (key, n) => {
+    // `@twist(2 muted)`, `twist 2 muted`: switched off for now (builders/mute.ts).
+    const wm = takeMuted(args);
+    if (wm.muted) wp.muted = true;
+    args = this.resolveArgs(wm.rest, kind, (key, n) => {
       const p = key ? def.params.find(q => q.key.toLowerCase() === key) : def.params[n];
       if (p) return sceneRand(p);
       if (key && def.axes && (key === def.axes.key || key === 'axis')) return { kind: 'choice', options: def.axes.kind === 'one' ? def.axes.options : ['x', 'y', 'z', 'xz', 'xy'] };
@@ -871,6 +894,7 @@ function printWarp(w: WarpSpec, top: boolean): string {
   if (def.select && !valueEq(w.values[def.select.key], defaults[def.select.key])) parts.push(`${def.select.key}=${w.values[def.select.key]}`);
   // D8: the noise warp is written `warp` (noise is the 2D node); `noise` still reads.
   const word = w.kind === 'noise' ? 'warp' : w.kind;
+  if (w.muted) parts.push(MUTED_WORD);
   return top ? [word, ...parts].join(' ') : `@${word}(${parts.join(' ')})`;
 }
 
@@ -885,6 +909,7 @@ function printItem(it: SceneItem, indent: string | null = null): string {
     const extra: string[] = [];
     if (it.k > 0 && round(it.k) !== DEFAULT_SMOOTH_K) extra.push(`k=${fmt(it.k)}`);
     if (it.name) extra.push(`name=${fmtName(it.name)}`);
+    if (it.muted) extra.push(MUTED_WORD);
     return [head, ...extra, ...warps].join(' ');
   }
   if (it.kind === 'custom') return [`custom(${it.label ?? ''})`, ...warps].join(' ');
@@ -927,6 +952,7 @@ function printItem(it: SceneItem, indent: string | null = null): string {
     if (t.bump !== undefined) parts.push(`bump=${fmt(t.bump)}`);
   }
   if (it.name) parts.push(`name=${fmtName(it.name)}`);
+  if (it.muted) parts.push(MUTED_WORD);
   return [...parts, ...warps].join(' ');
 }
 
@@ -968,7 +994,7 @@ export function printRecipe(spec: SceneSpec, opts: { multiline?: boolean; pretty
   // The tree: a plain union root is its items; anything else is one combine clause.
   const root = spec.root;
   if (root.op === 'union' && root.k === 0 && (!root.name || root.name === 'Scene')) clauses.push(...root.children.map(c => printItem(c, ind)));
-  else clauses.push(printItem({ ...root, warps: [], name: root.name === 'Scene' ? '' : root.name }, ind));
+  else clauses.push(printItem({ ...root, warps: [], name: root.name === 'Scene' ? '' : root.name, muted: undefined }, ind));
   clauses.push(...root.warps.map(w => printWarp(w, true)));
   // Lights and air.
   if (!same(L.sunDir, D.sunDir) || !same(L.sunColor, D.sunColor)) {
@@ -979,14 +1005,18 @@ export function printRecipe(spec: SceneSpec, opts: { multiline?: boolean; pretty
   }
   if (!same(L.sky, D.sky)) clauses.push(`sky ${fmtColour(L.sky)}`);
   if (!same(L.bounce, D.bounce)) clauses.push(`bounce ${fmtColour(L.bounce)}`);
-  if (!valueEq(L.shadows, D.shadows)) clauses.push(L.shadows > 0 ? `shadows ${fmt(L.shadows)}` : 'shadows off');
-  if (!valueEq(L.ao, D.ao)) clauses.push(L.ao > 0 ? `ao ${fmt(L.ao)}` : 'ao off');
-  if (L.fog > 0 || L.fogColor) clauses.push([`fog ${fmt(L.fog)}`, ...(L.fogColor ? [`color=${fmtColour(L.fogColor)}`] : [])].join(' '));
+  // A muted light or effect prints with `muted` (builders/mute.ts), even at its default.
+  const LM = L.mute ?? {};
+  const mutedWord = (k: keyof typeof LM) => (LM[k] ? ` ${MUTED_WORD}` : '');
+  if (!valueEq(L.shadows, D.shadows) || (LM.shadows && L.shadows > 0)) clauses.push(L.shadows > 0 ? `shadows ${fmt(L.shadows)}${mutedWord('shadows')}` : 'shadows off');
+  if (!valueEq(L.ao, D.ao) || (LM.ao && L.ao > 0)) clauses.push(L.ao > 0 ? `ao ${fmt(L.ao)}${mutedWord('ao')}` : 'ao off');
+  if (LM.shine) clauses.push(`shine ${MUTED_WORD}`);
+  if (L.fog > 0 || L.fogColor) clauses.push([`fog ${fmt(L.fog)}`, ...(L.fogColor ? [`color=${fmtColour(L.fogColor)}`] : [])].join(' ') + (L.fog > 0 ? mutedWord('fog') : ''));
   const bgPic = L.bgTex ? [`picture=${fmtName(L.bgTex)}`] : [];
   if (L.bg2) clauses.push([`background top=${fmtColour(L.bg)} bottom=${fmtColour(L.bg2)}`, ...bgPic].join(' '));
   else if (!same(L.bg, D.bg)) clauses.push([`background ${fmtColour(L.bg)}`, ...bgPic].join(' '));
   else if (bgPic.length) clauses.push(['background', ...bgPic].join(' '));
-  if (L.tone !== D.tone) clauses.push(`tone ${L.tone}`);
+  if (L.tone !== D.tone || (LM.tone && L.tone !== 'none')) clauses.push(`tone ${L.tone}${L.tone !== 'none' ? mutedWord('tone') : ''}`);
   // Camera and quality.
   const cam = (Object.keys(DEFAULT_CAMERA) as Array<keyof CameraSpec>).filter(k => !valueEq(spec.camera[k], DEFAULT_CAMERA[k]));
   if (cam.length) clauses.push(['camera', ...cam.map(k => `${k}=${fmt(spec.camera[k])}`)].join(' '));

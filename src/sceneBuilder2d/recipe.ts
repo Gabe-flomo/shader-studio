@@ -32,9 +32,10 @@ import { COMBINE_MODES, checkBlock, clampTimes, linesText, parseBlockText, range
 import { BLOCK_BY_ID, BLOCK_LIBRARY, blockFromEntry, isLibraryBlock } from './blockLibrary';
 import { GRID_ASSIGNS, GRID_COLOUR_BYS, GRID_PIC_MODES, GRID_SHAPES, GRID_TARGETS, RIPPLE_FROMS, defaultGrid, printGrid, type GridPicMode, type GridShape, type GridSpec } from './grid';
 import type { RecipeError } from '../sceneBuilder/recipe';
+import { mutedSuffix, takeMuted } from '../builders/mute';
 import { TEX_FITS, findTex, newTexUse, texSlug, type TexFit, type TexSource, type TexUse } from '../builders/textures';
 import {
-  COLOUR_BYS, DEFAULT_COLOR, DEFAULT_LOOK, MAX_DUP, MAX_LEVELS, MOTIONS, MOTION_BY_KIND, SHAPES, SHAPE_BY_KIND, SHOW_WORDS, SPACES, SPACE_BY_KIND, TONE_MODES,
+  COLOUR_BYS, DEFAULT_COLOR, DEFAULT_LOOK, LOOK_MUTES_2D, MAX_DUP, MAX_LEVELS, MOTIONS, MOTION_BY_KIND, SHAPES, SHAPE_BY_KIND, SHOW_WORDS, SPACES, SPACE_BY_KIND, TONE_MODES,
   defaultSize, defaultSpaceValues, emptyScene, newBlockOp, newCombineOp, newDup, newGroup, newMotion, newShape, newSpaceOp, walkItems,
   type ColourBy, type CombineOp, type DupSpec, type Item, type MotionKind, type ParamDef, type Scene2D, type ShapeSpec, type SpaceDef, type SpaceOp, type ToneMode, type Vec2, type Vec3,
 } from './spec';
@@ -186,7 +187,10 @@ class Parser {
     const def: SpaceDef = SPACE_BY_KIND[kind];
     const op = newSpaceOp(kind, `p${++this.ids.p}`);
     let pos = 0;
-    for (const a of given ?? this.c.args([])) {
+    // `muted` on any clause: switched off for now (builders/mute.ts).
+    const m = takeMuted(given ?? this.c.args([]));
+    if (m.muted) op.muted = true;
+    for (const a of m.rest) {
       const key = a.key?.toLowerCase() ?? null;
       if (a.op !== '=') { this.fail(a, `${a.key}${a.op} changes a value by a factor: in a recipe, write ${a.key}=… .`); continue; }
       if (!key && def.select) {
@@ -237,8 +241,10 @@ class Parser {
       this.fail(raw.headSpan, `“${raw.head}” isn't a shape or a combine.`);
       return null;
     }
-    this.itemArgs(it, raw.args);
-    for (const m of raw.mods) this.modifier(it, m);
+    const m = takeMuted(raw.args);
+    this.itemArgs(it, m.rest);
+    if (m.muted) it.muted = true;
+    for (const mod of raw.mods) this.modifier(it, mod);
     return it;
   }
 
@@ -322,7 +328,9 @@ class Parser {
     }
     const mo = newMotion(d.kind, `m${++this.ids.m}`);
     let pos = 0;
-    for (const a of m.args) {
+    const mu = takeMuted(m.args);
+    if (mu.muted) mo.muted = true;
+    for (const a of mu.rest) {
       const key = a.key?.toLowerCase() ?? null;
       // The primary value: a spin's speed, otherwise the amount (radius, distance, swell).
       const primary = d.kind === 'spin' ? 'speed' : 'amount';
@@ -346,7 +354,9 @@ class Parser {
   private ring(it: Item, m: Modifier) {
     const dup: DupSpec = newDup({ count: 6, radius: 0.5 });
     let pos = 0;
-    for (const a of m.args) {
+    const mu = takeMuted(m.args);
+    if (mu.muted) dup.muted = true;
+    for (const a of mu.rest) {
       const key = a.key?.toLowerCase() ?? (pos++ === 0 ? 'count' : '');
       if (key === 'count' || key === 'n') { const v = this.num(a, 'count'); if (v !== null) dup.count = Math.max(2, Math.min(MAX_DUP, Math.round(v))); }
       else if (key === 'r' || key === 'radius') { const v = this.num(a, 'r'); if (v !== null) dup.radius = Math.max(0, v); }
@@ -384,23 +394,26 @@ class Parser {
         else scene.space.push(this.space(t, SPACE_WORDS[w], args));
       } else if (w === 'space-block') {
         this.c.next();
-        const b = this.block(t, this.c.args([]), '');
-        if (b) scene.space.push(newBlockOp(`p${++this.ids.p}`, b));
+        const m = takeMuted(this.c.args([]));
+        const b = this.block(t, m.rest, '');
+        if (b) scene.space.push({ ...newBlockOp(`p${++this.ids.p}`, b), ...(m.muted ? { muted: true } : {}) });
       } else if (w === 'combine-blocks') {
         this.c.next();
-        const op = this.combineBlocks(t, this.c.args([]));
-        if (op) scene.space.push(op);
+        const m = takeMuted(this.c.args([]));
+        const op = this.combineBlocks(t, m.rest);
+        if (op) scene.space.push(m.muted ? { ...op, muted: true } : op);
       } else if (w === 'texture') {
         this.c.next();
         this.texture(t, this.c.args([]));
       } else if (SPACE_WORDS[w] === 'fn') {
         this.c.next();
-        const args = this.c.args([]);
+        const mf = takeMuted(this.c.args([]));
+        const args = mf.rest;
         const nm = args.find(a => !a.key);
         const name = nm && (nm.value.k === 'word' || nm.value.k === 'str') ? nm.value.v : '';
         const f = builtInFunction(name);
         if (!f || f.role !== 'space') { this.fail(nm ?? t, `“${name}” isn't a built-in space function (${this.fnNames('space')}). Functions from your code are picked in the builder.`); continue; }
-        scene.space.push(newSpaceOp('fn', `p${++this.ids.p}`, { name: f.name, code: f.code, timed: 1, from: f.from }));
+        scene.space.push({ ...newSpaceOp('fn', `p${++this.ids.p}`, { name: f.name, code: f.code, timed: 1, from: f.from }), ...(mf.muted ? { muted: true } : {}) });
       } else if (SPACE_WORDS[w]) {
         this.c.next();
         scene.space.push(this.space(t, SPACE_WORDS[w]));
@@ -500,8 +513,11 @@ class Parser {
   fnNames(role: 'space' | 'shape') { return BUILT_IN_FN_NAMES[role].join(', '); }
 
   /** `grid 12 [rows] shape=… assign=… size=… ripple=… freq=… speed=… target=… amount=… by=… color=… color2=… glow=off picture=… picture-mode=cell|mask|matte|piece` */
-  private grid(scene: Scene2D, args: AstArg[]) {
+  private grid(scene: Scene2D, given: AstArg[]) {
     const g = defaultGrid();
+    const mu = takeMuted(given);
+    const args = mu.rest;
+    if (mu.muted) g.muted = true;
     const shapes: GridShape[] = [];
     const ripples: GridSpec['ripples'] = [];
     const pic: { tex?: string; mode?: GridPicMode } = {};
@@ -553,9 +569,17 @@ class Parser {
     scene.grid = g;
   }
 
-  private look(scene: Scene2D, w: string, t: { at: number; end: number }, args: AstArg[]) {
-    if (w === 'grid') { this.grid(scene, args); return; }
+  private look(scene: Scene2D, w: string, t: { at: number; end: number }, given: AstArg[]) {
+    if (w === 'grid') { this.grid(scene, given); return; }
     const L = scene.look;
+    // `tone aces muted`, `bloom 0.6 muted`: the effect switched off for now (builders/mute.ts).
+    const mu = takeMuted(given);
+    const args = mu.rest;
+    const effect = w === 'tone-map' || w === 'tonemap' ? 'tone' : w;
+    if (mu.muted) {
+      if ((LOOK_MUTES_2D as readonly string[]).includes(effect)) L.mute = { ...L.mute, [effect]: true };
+      else this.warnings.push(`${w} can't be muted; muted is left out.`);
+    }
     const first = args[0];
     const firstNum = first && !first.key && first.value.k === 'num' ? first.value.v : null;
     const firstWord = first && !first.key ? this.word(first) : null;
@@ -680,6 +704,10 @@ function printBlock(b: SpaceBlock, prefix = ''): { source: string; keys: string[
 }
 
 function printSpace(op: SpaceOp): string {
+  return printSpaceBody(op) + mutedSuffix(op);
+}
+
+function printSpaceBody(op: SpaceOp): string {
   if (op.kind === 'block' && op.block) { const p = printBlock(op.block); return ['space-block', p.source, ...p.keys].join(' '); }
   if (op.kind === 'combine' && op.combine) {
     const k = op.combine, a = printBlock(k.a, 'a_'), b = printBlock(k.b, 'b_');
@@ -701,7 +729,7 @@ function printSpace(op: SpaceOp): string {
   return [op.kind, ...parts].join(' ');
 }
 
-function printMotion(m: { kind: MotionKind; speed: number; amount: number; phase: number; dir: number }): string {
+function printMotion(m: { kind: MotionKind; speed: number; amount: number; phase: number; dir: number; muted?: boolean }): string {
   const d = MOTION_BY_KIND[m.kind];
   const dflt = newMotion(m.kind, '');
   const parts: string[] = [];
@@ -712,6 +740,7 @@ function printMotion(m: { kind: MotionKind; speed: number; amount: number; phase
   }
   if (m.phase) parts.push(`phase=${fmt(m.phase)}`);
   if (d.dir && !valueEq(m.dir, dflt.dir)) parts.push(`dir=${fmt(m.dir)}`);
+  if (m.muted) parts.push('muted');
   return `@${m.kind}(${parts.join(' ')})`;
 }
 
@@ -719,6 +748,7 @@ function printRing(d: DupSpec): string {
   const parts = [String(d.count), `r=${fmt(d.radius)}`];
   if (d.inner) parts.push(`inner=(${d.inner.count},${fmt(d.inner.radius)})`);
   if (d.levels > 1) parts.push(`levels=${d.levels}`, `factor=${fmt(d.factor)}`);
+  if (d.muted) parts.push('muted');
   return `@ring(${parts.join(' ')})`;
 }
 
@@ -746,6 +776,7 @@ function printItem(it: Item, indent: string | null = null): string {
   if (!same(it.color, DEFAULT_COLOR)) common.push(`color=${colourText(it.color)}`);
   if (it.glow) common.push('glow');
   if (it.name) common.push(`name=${fmtName(it.name)}`);
+  if (it.muted) common.push('muted');
   const mods = [...it.motion.map(printMotion), ...(it.dup ? [printRing(it.dup)] : [])];
   if (it.type === 'group') {
     const inner = indent === null
@@ -777,7 +808,8 @@ export function printRecipe2D(scene: Scene2D, opts: { multiline?: boolean; prett
   clauses.push(...(scene.textures ?? []).map(printTexture));
   clauses.push(...scene.space.map(printSpace));
   clauses.push(...scene.layers.map(it => printItem(it, ind)));
-  if (scene.grid) clauses.push(printGrid(scene.grid, colourText));
+  if (scene.grid) clauses.push(printGrid(scene.grid, colourText) + mutedSuffix(scene.grid));
+  const muted = (k: keyof NonNullable<typeof L.mute>) => (L.mute?.[k] ? ' muted' : '');
   // Look.
   if (L.glow.mode !== 'off') {
     const g = ['glow'];
@@ -785,7 +817,7 @@ export function printRecipe2D(scene: Scene2D, opts: { multiline?: boolean; prett
     if (!valueEq(L.glow.amount, D.glow.amount)) g.push(fmt(L.glow.amount));
     if (!valueEq(L.glow.falloff, D.glow.falloff)) g.push(`falloff=${fmt(L.glow.falloff)}`);
     if (L.glow.tint) g.push(`color=${colourText(L.glow.tint)}`);
-    clauses.push(g.join(' '));
+    clauses.push(g.join(' ') + muted('glow'));
   }
   if (L.colour.by !== 'layer') {
     const c = ['colour', 'by', L.colour.by, `palette=${L.colour.palette}`];
@@ -793,10 +825,10 @@ export function printRecipe2D(scene: Scene2D, opts: { multiline?: boolean; prett
     if (!valueEq(L.colour.speed, D.colour.speed)) c.push(`speed=${fmt(L.colour.speed)}`);
     clauses.push(c.join(' '));
   }
-  if (L.tone !== D.tone) clauses.push(`tone ${L.tone}`);
+  if (L.tone !== D.tone) clauses.push(`tone ${L.tone}${L.tone !== 'none' ? muted('tone') : ''}`);
   if (L.bgTex) clauses.push(['background', ...(!same(L.bg, D.bg) ? [colourText(L.bg)] : []), `picture=${fmtName(L.bgTex.tex)}`, ...printUse(L.bgTex), ...(L.bgTex.warp ? [] : ['still'])].join(' '));
   else if (!same(L.bg, D.bg)) clauses.push(`background ${colourText(L.bg)}`);
-  for (const k of ['bloom', 'vignette', 'grain', 'scanlines'] as const) if (L.post[k] > 0) clauses.push(`${k} ${fmt(L.post[k])}`);
+  for (const k of ['bloom', 'vignette', 'grain', 'scanlines'] as const) if (L.post[k] > 0) clauses.push(`${k} ${fmt(L.post[k])}${muted(k)}`);
   if (scene.output && scene.output.show !== 'picture') clauses.push(`output ${scene.output.show}${scene.output.palette ? ` palette=${scene.output.palette}` : ''}`);
   return clauses.join(opts.multiline || opts.pretty ? '\n' : ' · ');
 }

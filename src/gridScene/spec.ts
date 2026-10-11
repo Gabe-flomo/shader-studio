@@ -20,6 +20,7 @@ import type { SpaceBlock } from '../sceneBuilder2d/blocks';
 import { cloneBlock } from '../sceneBuilder2d/blocks';
 import type { TextMask } from './textMask';
 import type { TexSource } from '../builders/textures';
+import type { Mutable } from '../builders/mute';
 
 export type Vec2 = [number, number];
 export type Vec3 = [number, number, number];
@@ -126,6 +127,8 @@ export interface GShape {
   tex?: string;
   /** How it carries it (PIC_MODES). Absent: 'cell', the whole picture in every shape. */
   picMode?: PicMode;
+  /** Switched off for now (builders/mute.ts): left out of the build, its cells and settings kept. */
+  muted?: boolean;
 }
 
 export interface Cell { x: number; y: number; s: string }
@@ -146,6 +149,8 @@ export interface Pattern {
   mask?: TextMask | null;
   /** kind 'picture': the picture whose brightness is the wave (a name in the scene's textures). */
   tex?: string;
+  /** Switched off for now (builders/mute.ts): built as no pattern, settings kept. */
+  muted?: boolean;
 }
 
 export interface GridRule {
@@ -174,7 +179,8 @@ export interface GridSceneSpec {
   shapes: GShape[];
   cells: Cell[];
   pattern: Pattern;
-  warps: SpaceBlock[];
+  /** A warp can be muted: still built, its node bypassed by a live uniform (builders/mute.ts). */
+  warps: Array<SpaceBlock & Mutable>;
   rules: GridRule[];
   look: Look;
   /** The pictures the scene reads (builders/textures.ts): picture cells, a picture pattern, the mask. */
@@ -433,4 +439,20 @@ export function texturesUsedGrid(spec: GridSceneSpec): string[] {
   if (spec.pattern.kind === 'picture' && spec.pattern.tex) out.push(spec.pattern.tex);
   if (spec.picMask) out.push(spec.picMask.tex);
   return [...new Set(out)];
+}
+
+// ── Muting (docs/grid-builder.md, "Muting") ─────────────────────────────────
+
+/**
+ * The scene as it builds: a muted shape is left out (with its cells, the rules that name it and the
+ * pattern's fill of it), a muted pattern builds as no pattern. Warps stay: their nodes are gated
+ * live (build.ts). Nothing muted: the spec itself, untouched.
+ */
+export function liveGridSpec(spec: GridSceneSpec): GridSceneSpec {
+  const mutedShapes = spec.shapes.filter(s => s.muted);
+  if (!mutedShapes.length && !spec.pattern.muted) return spec;
+  const out: GridSceneSpec = { ...spec, pattern: { ...spec.pattern } };
+  for (const s of mutedShapes) removeShape(out, s.id);
+  if (out.pattern.muted) out.pattern = { ...out.pattern, kind: 'none', fill: null };
+  return out;
 }

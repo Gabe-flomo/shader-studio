@@ -106,6 +106,7 @@ import { useFoldState } from './foldState';
 import { RandomizeMenu } from './RandomizeMenu';
 import { timeReadoutRef } from '../../lib/timeTick';
 import type { NodeError } from '../../compiler/nodeErrors';
+import { MUTE_PARAM, nodeMuted } from '../../builders/mute';
 import { isKeyframeBypassed, socketHasKeyframes, socketHasVectorKeyframes, VECTOR_AXES } from '../../compiler/keyframes';
 import { loadImageTextureFromFile } from '../../lib/loadImageTexture';
 import { NumberInput } from './NumberInput';
@@ -636,7 +637,9 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   const def = getNodeDefinitionFor(node);
   // The inputs the card shows (Input names… names these).
   const inputNameKeys = Object.keys(node.inputs).filter(k => !def || Object.keys(def.inputs).length === 0 || k in def.inputs);
-  const isBypassed = !!node.bypassed;
+  // A builder mute (builders/mute.ts) is a bypass too: the node passes its input through, by a uniform.
+  const builderMuted = nodeMuted(node);
+  const isBypassed = !!node.bypassed || builderMuted;
   const assignOp = node.assignOp ?? '=';
   const assignable = isAssignable(node);
   const legacyOp = legacyAssignOp(node);
@@ -2978,7 +2981,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         )}
         {node.type === 'transform' && <TransformDimChip node={node} />}
         {def.deprecated && <CardBadge tone="muted">DEPRECATED</CardBadge>}
-        {isBypassed && <CardBadge>BYPASS</CardBadge>}
+        {isBypassed && <CardBadge>{builderMuted && !node.bypassed ? 'MUTED' : 'BYPASS'}</CardBadge>}
         {/* From the GLSL → nodes converter: code it kept as code, or a node that isn't quite the GLSL it stands for */}
         {!!node.params.__importedCode && <span title="From imported GLSL: the converter kept this part as code. Open it to keep refactoring by hand."><CardBadge tone="muted">FROM CODE</CardBadge></span>}
         {typeof node.params.__importWarning === 'string' && <span title={`From imported GLSL, not quite the same: ${node.params.__importWarning}`}><CardBadge>≈</CardBadge></span>}
@@ -3082,8 +3085,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           )}
           {!['output', 'vec4Output', 'uv', 'pixelUV', 'time', 'mouse', 'constant'].includes(node.type) && (
             <CardButton icon="bypass" tint="warning" on={isBypassed}
-              label={isBypassed ? 'Turn the node back on' : 'Bypass: pass the input straight through'}
-              onClick={() => toggleBypass(node.id)} />
+              label={builderMuted && !node.bypassed ? 'Muted in its builder: turn it back on' : isBypassed ? 'Turn the node back on' : 'Bypass: pass the input straight through'}
+              onClick={() => (builderMuted && !node.bypassed ? updateNodeParams(node.id, { [MUTE_PARAM]: 0 }, { immediate: true }) : toggleBypass(node.id))} />
           )}
           {!node.params._groupOriginal && (
             <CardButton icon="close" tone="danger" label="Remove node" onClick={() => removeNode(node.id)} />

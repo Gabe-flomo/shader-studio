@@ -8,13 +8,14 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSceneBuilder } from '../../sceneBuilder/store';
 import {
   DEFAULT_LOOK, MODIFIER_KINDS, SHAPES, SHAPE_BY_KIND, TONE_MODES, WARPS, WARP_BY_KIND, allShapes, autoStepScale, defaultSize, findItem, itemName, modifierSummary, opLabel, starterSpec, stepHints, walkItems,
-  type GroupSpec, type ParamDef, type RenderMode, type SceneItem, type SceneSpec, type ShapeSpec, type Vec3, type WarpSpec,
+  type GroupSpec, type LookMute3D, type ParamDef, type RenderMode, type SceneItem, type SceneSpec, type ShapeSpec, type Vec3, type WarpSpec,
   TEX_MAPS, TEX_MAP_LABELS, TEX_SHARP_DEFAULT, type TexMap,
 } from '../../sceneBuilder/spec';
 import { TexturePicker } from '../builders/TexturePicker';
 import { findTex, withSource } from '../../builders/textures';
 import { randomShapeAction, randomiseThisAction } from './surpriseActions';
-import { addModifier, addShape, addWarp, duplicateItem, moveBy, moveItem, moveModifierTo, moveWarp, removeItem, removeWarp, ungroup } from '../../sceneBuilder/edit';
+import { addModifier, addShape, addWarp, duplicateItem, moveBy, moveItem, moveModifierTo, moveWarp, removeItem, removeWarp, soloItem, soloWarp, toggleItemMute, toggleLookMute, toggleWarpMute, ungroup } from '../../sceneBuilder/edit';
+import { MUTED_DIM, MuteToggle, MutedTag } from '../builders/MuteToggle';
 import { GALLERY_SHAPES, type GalleryShape } from '../../sceneBuilder/thumbnails';
 import { ShapeGallery, ShapeThumb } from './ShapeGallery';
 import { NO_DRAG, OP_GLYPH } from './controls';
@@ -140,7 +141,7 @@ export function ModifierStack({ item }: { item: SceneItem }) {
                 display: 'inline-flex', alignItems: 'center', gap: 6, height: 28, padding: '0 4px 0 9px', borderRadius: 14, cursor: NO_DRAG ? 'pointer' : 'grab', userSelect: 'none',
                 background: on ? tk.bg.selected : tk.bg.field, color: on ? tk.accent.text : tk.text.primary,
                 boxShadow: `inset 0 0 0 ${on || over === i ? 1.5 : 1}px ${on || over === i ? tk.accent.base : tk.border.default}`,
-                font: `600 11.5px ${fontFamily.ui}`,
+                font: `600 11.5px ${fontFamily.ui}`, ...(w.muted ? MUTED_DIM : {}),
               }}>
               <span style={{ font: `600 10px ${fontFamily.mono}`, color: tk.text.faint }}>{i + 1}</span>
               {sum.label}
@@ -293,6 +294,8 @@ export function Inspector({ item, sizes }: { item: SceneItem; sizes?: (sh: Shape
           <span style={{ fontSize: 11.5, color: tk.text.muted }}>{item.type === 'shape' ? SHAPE_BY_KIND[item.kind]?.label ?? 'custom' : `${opLabel(item)}${item.k > 0 ? ` · k ${item.k}` : ''} · ${item.children.length} item${item.children.length === 1 ? '' : 's'}`}</span>
         </span>
         {item.type === 'shape' && item.color && <span title="Its colour" style={{ width: 14, height: 14, borderRadius: 4, background: rgbCss(item.color), boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.18)' }} />}
+        {!isRoot && item.muted && <MutedTag />}
+        {!isRoot && <MuteToggle muted={!!item.muted} what={itemName(spec, item)} onToggle={() => edit(d => toggleItemMute(d, item.id))} onSolo={() => edit(d => soloItem(d, item.id))} />}
         <IconButton icon="dice" size="sm" label={isRoot ? 'Randomise this: a new look and camera (one undo step)' : 'Randomise this: new settings for it (one undo step)'} onClick={() => randomiseThisAction(item.id)} data-randomise-this />
         {!isRoot && <IconButton icon="copy" size="sm" label="Duplicate" onClick={() => { let id = ''; edit(d => { id = duplicateItem(d, item.id)?.id ?? ''; }); if (id) select(id); }} />}
         {!isRoot && item.type === 'group' && <IconButton icon="unlink" size="sm" label="Ungroup (its items take its place)" onClick={() => edit(d => ungroup(d, item.id))} />}
@@ -385,6 +388,7 @@ export function CombineTab() {
         return (
           <Card key={g.id} id={`group:${g.id}`} title={isRoot ? 'Scene (the root)' : itemName(spec, g)} summary={`${opLabel(g)}${g.k > 0 ? ` k ${g.k}` : ''} · ${g.children.map(c => itemName(spec, c)).join(', ') || 'empty'}`}
             defaultOpen={g.id === selectedId || groups.length === 1} selected={g.id === selectedId} onHeaderClick={() => select(g.id)}
+            mute={isRoot ? undefined : { muted: !!g.muted, onToggle: () => edit(d => toggleItemMute(d, g.id)), onSolo: () => edit(d => soloItem(d, g.id)), what: itemName(spec, g) }}
             actions={!isRoot && <>
               <IconButton icon="unlink" size="sm" label="Ungroup (its items take its place)" onClick={() => edit(d => ungroup(d, g.id))} />
               <IconButton icon="trash" size="sm" tone="danger" label="Remove the group and what is in it" onClick={() => edit(d => removeItem(d, g.id))} />
@@ -426,6 +430,7 @@ export function WarpCard({ item, w, index, count }: { item: SceneItem; w: WarpSp
   const hint = def ? def.stepHint(w) : 1;
   return (
     <Card id={`warp:${w.id}`} title={`${index + 1}. ${def?.label ?? `custom(${w.label})`}`} defaultOpen
+      mute={{ muted: !!w.muted, onToggle: () => edit(d => toggleWarpMute(d, item.id, w.id)), onSolo: () => edit(d => soloWarp(d, item.id, w.id)), what: def?.label ?? 'this warp' }}
       summary={def ? def.params.map(p => `${p.key} ${Array.isArray(w.values[p.key]) ? vecText(w.values[p.key] as Vec3) : fmtN(Number(w.values[p.key]))}`).join(' · ') : ''}
       actions={<>
         {hint < 1 && <span title={`It stretches space: the march wants Step Scale ${hint} or less (Quality).`} style={{ padding: '1px 7px', borderRadius: 6, background: tk.status.warning, color: '#1a1b23', font: `700 10.5px ${fontFamily.ui}`, marginRight: 4 }}>step {hint}</span>}
@@ -558,6 +563,9 @@ export function LightSettings() {
   const L = spec.look;
   const set = (fn: (l: SceneSpec['look']) => void, key?: string) => edit(d => fn(d.look), key);
   const lit = L.mode === 'surface' || L.mode === 'gi';
+  // A light or effect's mute switch (builders/mute.ts): Alt-click solos it among the look's.
+  const mute = (key: LookMute3D, what: string) => ({ muted: !!L.mute?.[key], what, onToggle: () => edit(d => toggleLookMute(d, key)), onSolo: () => edit(d => toggleLookMute(d, key, true)) });
+  const muteBit = (key: LookMute3D, what: string) => <MuteToggle {...mute(key, what)} />;
   return (
     <>
         {L.mode !== 'volumetric' && (
@@ -572,14 +580,15 @@ export function LightSettings() {
         )}
         {L.mode === 'surface' && (
           <Card id="look:shadow" title="Shadows & occlusion" summary={`${L.shadows ? `shadows ${L.shadows}` : 'no shadows'} · ${L.ao ? 'AO' : 'no AO'}`}>
-            <Row label="Soft shadows" hint="Shadows from the sun, marched from each surface toward it."><Toggle checked={L.shadows > 0} onChange={v => set(l => { l.shadows = v ? DEFAULT_LOOK.shadows : 0; })} label={L.shadows > 0 ? 'On' : 'Off'} /></Row>
+            <Row label="Soft shadows" hint="Shadows from the sun, marched from each surface toward it."><span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={L.mute?.shadows ? MUTED_DIM : undefined}><Toggle checked={L.shadows > 0} onChange={v => set(l => { l.shadows = v ? DEFAULT_LOOK.shadows : 0; })} label={L.shadows > 0 ? 'On' : 'Off'} /></span>{L.shadows > 0 && muteBit('shadows', 'the shadows')}</span></Row>
             {L.shadows > 0 && <NumRow label="Hardness" hint="8 soft … 32 hard." value={L.shadows} defaultValue={DEFAULT_SPEC.look.shadows} min={1} max={64} step={1} onChange={v => set(l => { l.shadows = v; }, 'shadows')} play={{ at: 'look', key: 'shadows' }} />}
-            <Row label="Ambient occl." hint="Ambient occlusion: darkens creases and corners."><Toggle checked={L.ao > 0} onChange={v => set(l => { l.ao = v ? DEFAULT_LOOK.ao : 0; })} label={L.ao > 0 ? 'On' : 'Off'} /></Row>
+            <Row label="Ambient occl." hint="Ambient occlusion: darkens creases and corners."><span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span style={L.mute?.ao ? MUTED_DIM : undefined}><Toggle checked={L.ao > 0} onChange={v => set(l => { l.ao = v ? DEFAULT_LOOK.ao : 0; })} label={L.ao > 0 ? 'On' : 'Off'} /></span>{L.ao > 0 && muteBit('ao', 'the ambient occlusion')}</span></Row>
+            {allShapes(spec).some(sh => sh.shine > 0) && <Row label="Highlight" hint="The shine on the shapes (each shape's Shine). Mute it to see the picture without it."><span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>{muteBit('shine', 'the highlight')}{L.mute?.shine && <MutedTag />}</span></Row>}
             {L.ao > 0 && <NumRow label="AO step" hint="Smaller: finer contact shadows; larger: broader." value={L.ao} defaultValue={DEFAULT_SPEC.look.ao} min={0.005} max={0.2} step={0.005} onChange={v => set(l => { l.ao = v; }, 'ao')} play={{ at: 'look', key: 'ao' }} />}
           </Card>
         )}
         {lit && (
-          <Card id="look:fog" title="Fog" summary={L.fog > 0 ? `density ${L.fog}` : 'clear'}>
+          <Card id="look:fog" title="Fog" summary={L.fog > 0 ? `density ${L.fog}` : 'clear'} mute={L.fog > 0 ? mute('fog', 'the fog') : undefined}>
             <NumRow label="Density" hint="0 is clear. Distance fades into the fog colour." value={L.fog} defaultValue={DEFAULT_SPEC.look.fog} min={0} max={5} step={0.01} onChange={v => set(l => { l.fog = v; }, 'fog')} play={{ at: 'look', key: 'fog' }} />
             <Row label="Colour" hint="Fog the colour of the background, or its own colour."><Toggle checked={!L.fogColor} onChange={v => set(l => { l.fogColor = v ? null : [...l.bg] as Vec3; })} label="Same as the background" /></Row>
             {L.fogColor && <ColourRow label="Fog colour" hint="What distance fades into." value={L.fogColor} onChange={v => set(l => { l.fogColor = v; }, 'fogc')} />}
@@ -603,13 +612,17 @@ export function LightSettings() {
 /** The tone map: how bright light is squeezed into screen colours. */
 export function ToneRow() {
   const tone = useSceneBuilder(s => s.spec.look.tone);
+  const toneMuted = useSceneBuilder(s => !!s.spec.look.mute?.tone);
   const edit = useSceneBuilder(s => s.edit);
   const set = (fn: (l: SceneSpec['look']) => void) => edit(d => fn(d.look));
   const L = { tone };
   return (
     <>
         <Row label="Tone map" hint="Squeezes bright light into screen colours. None keeps colours as they are.">
-          <Select ariaLabel="Tone map" value={L.tone} options={TONE_MODES.map(m => ({ value: m, label: m === 'none' ? 'None' : m.toUpperCase() }))} onChange={v => set(l => { l.tone = v as SceneSpec['look']['tone']; })} />
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ flex: 1, minWidth: 0, ...(toneMuted ? MUTED_DIM : {}) }}><Select ariaLabel="Tone map" value={L.tone} options={TONE_MODES.map(m => ({ value: m, label: m === 'none' ? 'None' : m.toUpperCase() }))} onChange={v => set(l => { l.tone = v as SceneSpec['look']['tone']; })} /></span>
+            {L.tone !== 'none' && <MuteToggle muted={toneMuted} what="the tone map" onToggle={() => edit(d => toggleLookMute(d, 'tone'))} onSolo={() => edit(d => toggleLookMute(d, 'tone', true))} />}
+          </span>
         </Row>
     </>
   );

@@ -12,13 +12,14 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Icon } from '../ui/Icon';
-import { Segmented, Toggle } from '../ui/Choice';
+import { Segmented } from '../ui/Choice';
 import {
   type FieldKind, type FieldLayer, type FieldSpec, FIELD_GALLERY, FIELD_KINDS, MAX_LAYERS, OWN_EXAMPLES,
   fieldFunction, newLayer, normalizeFieldSpec, ownParts, rideField,
 } from '../../agentRules/fields';
 import { FIELD_COLOURS } from '../../agentBuilder/legend';
 import { SettingRow, SliderSetting } from './BehaviourCard';
+import { MuteToggle, MUTED_DIM } from '../builders/MuteToggle';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import type { FieldMask } from '../../agentRules/fields';
 import type { WherePick } from '../../agentBuilder/whereActions';
@@ -100,7 +101,7 @@ function LayerRow({ k, layer: l, d3, open, onOpen, onPatch, onRemove, onFocus, w
   const focus = (s: string | undefined) => onFocus(s === undefined ? undefined : `layer${k}`);
   return (
     <div data-field-layer-row={k} data-setting={`layer${k}`} onPointerEnter={() => onFocus(`layer${k}`)}
-      style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '8px 10px', borderRadius: radius.md, background: tk.bg.field, opacity: l.off ? 0.55 : 1, boxShadow: open ? `inset 0 0 0 1px ${alpha(colour, 0.6)}` : 'none' }}>
+      style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '8px 10px', borderRadius: radius.md, background: tk.bg.field, ...(l.off ? MUTED_DIM : {}), boxShadow: open ? `inset 0 0 0 1px ${alpha(colour, 0.6)}` : 'none' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <button type="button" data-field-layer-open={k} aria-expanded={open} onClick={onOpen}
           style={{ display: 'flex', alignItems: 'center', gap: 7, flex: 1, minWidth: 0, padding: 0, border: 0, background: 'none', cursor: 'pointer', color: tk.text.primary, textAlign: 'left' }}>
@@ -111,7 +112,7 @@ function LayerRow({ k, layer: l, d3, open, onOpen, onPatch, onRemove, onFocus, w
             {bad ? 'fix it' : `× ${Math.round(l.weight * 100) / 100}${l.mask ? ` · ${l.mask.outside ? 'outside' : 'inside'}` : ''}${l.animate?.speed ? ` · ${l.animate.mode}` : ''}`}
           </span>
         </button>
-        <span data-field-layer-switch={k}><Toggle checked={!l.off} onChange={on => onPatch({ off: on ? undefined : true })} /></span>
+        <span data-field-layer-switch={k}><MuteToggle muted={!!l.off} what={info.label} onToggle={() => onPatch({ off: l.off ? undefined : true })} /></span>
         <button type="button" data-field-layer-remove={k} aria-label={`Take ${info.label} away`} title={`Take ${info.label} away`} onClick={onRemove}
           style={{ width: 22, height: 22, padding: 0, border: 0, borderRadius: 6, background: 'none', color: tk.text.faint, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <Icon name="close" size={12} />

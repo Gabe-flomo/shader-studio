@@ -9,6 +9,7 @@
  */
 import { getNodeDefinition } from '../nodes/definitions';
 import type { TexSource } from '../builders/textures';
+import { soloIn } from '../builders/mute';
 
 export type Vec3 = [number, number, number];
 
@@ -81,7 +82,10 @@ export interface EffectSpec {
   tail?: string;
   /** Your nodes: what the run is made of, in words ("Splat Attributes → Expression → Set Splat"). */
   label?: string;
-  /** Off: left out of the chain (kept in the stack). */
+  /**
+   * Off is the card's mute (the ⊘ on its header, `muted` in the recipe): left out of the chain, kept in the
+   * stack with all its settings. Saved specs and recipes from before muting keep working as they were.
+   */
   on: boolean;
   /** The recipe node's params (its own keys). */
   params: Record<string, ParamValue>;
@@ -135,6 +139,19 @@ export function nextEffectId(effects: readonly EffectSpec[]): string {
 }
 
 /** The stack with `id` moved by `by` places (kept inside it). Pure. */
+/** Mute or unmute one effect card (builders/mute.ts): off = left out of the chain. */
+export function toggleEffectMute(effects: EffectSpec[], id: string): void {
+  const e = effects.find(x => x.id === id);
+  if (e) e.on = !e.on;
+}
+
+/** Alt/Option-click: solo one card (the others muted); again, every card back on. */
+export function soloEffect(effects: EffectSpec[], id: string): void {
+  const view = effects.map(e => ({ id: e.id, muted: !e.on }));
+  soloIn(view, id);
+  view.forEach((v, i) => { effects[i].on = !v.muted; });
+}
+
 export function moveEffect(effects: readonly EffectSpec[], id: string, by: number): EffectSpec[] {
   const out = [...effects];
   const i = out.findIndex(e => e.id === id);
@@ -319,12 +336,12 @@ export function sectionSummary(spec: SplatBuilderSpec, s: SplatSection): string 
 
 /** One line for an effect card while folded ("amount 0.35 · animated"). */
 export function effectSummary(e: EffectSpec): string {
-  if (e.kind === 'custom') return `${e.label || 'your own nodes'}${e.on ? '' : ' · off'}`;
+  if (e.kind === 'custom') return `${e.label || 'your own nodes'}${e.on ? '' : ' · muted'}`;
   const main = EFFECT_INFO[e.kind].main;
   const v = e.params[main];
   const label = getNodeDefinition(EFFECT_TYPE[e.kind])?.paramDefs?.[main]?.label ?? main;
   const val = typeof v === 'number' ? r2(v) : Array.isArray(v) ? v.map(r2).join(', ') : String(v ?? '');
-  return `${label.toLowerCase()} ${val}${e.animate ? ' · animated' : ''}${e.on ? '' : ' · off'}`;
+  return `${label.toLowerCase()} ${val}${e.animate ? ' · animated' : ''}${e.on ? '' : ' · muted'}`;
 }
 
 /** A card's name: the effect's, or "Your nodes". */
