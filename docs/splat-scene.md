@@ -93,8 +93,11 @@ A raster pass before the picture (`lib/splats/engine.ts`, `render.ts`, `shaders.
    degree > 0, the view-dependent colour is added from the view direction in the scan's own space.
 3. **Back to front.** The worker sorts by depth along the view direction (in the scan's own space, Mᵀ · forward) with a
    counting sort on 16-bit keys. The engine reads the probe back without waiting (a pixel-pack buffer and a fence) and
-   asks for a new order when the view has turned more than 0.25°, or every frame (Sort: every frame). The new order lands
-   on a later frame; the camera itself is never late (the GPU reads it from the probe).
+   asks for a new order when the view has turned more than 0.25°, or at any turn at all (Sort: every frame); a view that
+   hasn't turned is never sorted again. The probe is read back only when a uniform it reads has changed since the last
+   read (`lib/splats/uniformPrint.ts`; a program that reads a texture has no print and is read every frame), so a still
+   camera with the clock paused costs no readback. The new order lands on a later frame; the camera itself is never
+   late (the GPU reads it from the probe).
 4. **Two targets.** Colour (premultiplied) and, in a second half-float target, Σ αᵢ Tᵢ dᵢ with the same alpha: divided
    by alpha it is the splats' distance at the pixel. The node samples both at the pixel and composites.
 
@@ -226,6 +229,9 @@ of the scan's own: a small pass works out every moved splat's depth along the ca
 is read back without stalling (a pixel-pack buffer and a fence: 4 MB at 1 M splats), and the worker sorts those depths
 (`orderByDepth`, the same counting sort). One read or sort at a time, so it runs as fast as the worker sorts (a frame
 or a few behind a fast move, never holding a frame), and stops when the depths stop changing (a fingerprint of them).
+The 4 MB read itself is skipped while the camera (the probe's last reading) and the uniforms the modifier reads are as
+they were at the last read: a still scene with the clock paused reads nothing back and lets the preview's loop stop
+(before, a moving modifier kept a read in flight and the preview drawing forever).
 A splat a modifier breaks (NaN) takes no part. Offline renders read and sort for every frame, waited for. Moves along
 the view's sideways axes don't change the order, so they don't sort again.
 
