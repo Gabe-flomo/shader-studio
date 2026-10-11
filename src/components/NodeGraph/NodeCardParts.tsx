@@ -119,19 +119,65 @@ export function HelpDot({ text }: { text: string }) {
   );
 }
 
-/** Param name at the start of a row: fixed 66px so the rulers line up. `help` adds a "?" after it. */
-export function ParamLabel({ children, title, muted = false, onClick, help }: { children: ReactNode; title?: string; muted?: boolean; onClick?: () => void; help?: string }) {
+/** Narrowest and widest the label column gets; a name wider than the widest wraps onto a second line. */
+export const PARAM_LABEL_MIN = 66;
+export const PARAM_LABEL_MAX = 92;
+
+let measureCtx: CanvasRenderingContext2D | null | undefined;
+const measured = new Map<string, number>();
+/** Width of a param name in the card's label font (12.5px UI font), or null where there is no canvas (tests). */
+function labelTextWidth(text: string): number | null {
+  const hit = measured.get(text);
+  if (hit !== undefined) return hit;
+  if (measureCtx === undefined) {
+    try { measureCtx = typeof document !== 'undefined' ? document.createElement('canvas').getContext('2d') : null; } catch { measureCtx = null; }
+    if (measureCtx) measureCtx.font = `12.5px ${fontFamily.ui}`;
+  }
+  if (!measureCtx) return null;
+  const w = measureCtx.measureText(text).width;
+  measured.set(text, w);
+  return w;
+}
+
+/**
+ * One label column width for a card, so every ruler on it starts at the same x: wide enough for
+ * its longest name, between PARAM_LABEL_MIN and PARAM_LABEL_MAX (longer names wrap). The card
+ * sets it as `--param-label-w`; ParamLabel reads it.
+ */
+export function paramLabelColumn(labels: readonly string[]): number {
+  let widest = 0;
+  for (const l of labels) {
+    const w = labelTextWidth(l);
+    if (w == null) return PARAM_LABEL_MIN;
+    if (w > widest) widest = w;
+  }
+  return Math.min(PARAM_LABEL_MAX, Math.max(PARAM_LABEL_MIN, Math.ceil(widest) + 1));
+}
+
+/**
+ * Param name at the start of a row: at least 66px so the rulers line up, up to 92px, and a
+ * longer name wraps onto a second line rather than being cut off. `fill` is for a switch row:
+ * the name takes the whole row (the switch sits at its end) and wraps only if it must.
+ * `help` adds a "?" after it.
+ */
+export function ParamLabel({ children, title, muted = false, onClick, help, fill = false }: {
+  children: ReactNode; title?: string; muted?: boolean; onClick?: () => void; help?: string; fill?: boolean;
+}) {
   const tk = useTokens();
   const label = (
     <span
+      data-param-label={fill ? 'fill' : 'column'}
       title={title}
       role={onClick ? 'link' : undefined}
       onClick={onClick ? e => { e.stopPropagation(); onClick(); } : undefined}
       onMouseEnter={onClick ? e => { e.currentTarget.style.textDecoration = 'underline'; } : undefined}
       onMouseLeave={onClick ? e => { e.currentTarget.style.textDecoration = 'none'; } : undefined}
       style={{
-        // 66px keeps rulers aligned; a longer label ("Angle offset") may take a little more
-        minWidth: 66, maxWidth: 92, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        ...(fill
+          ? { flex: '1 1 auto', minWidth: 0 }
+          // One width per card (--param-label-w, from its longest name) so the rulers line up; 66–92px, then wraps
+          : { width: 'var(--param-label-w, auto)', minWidth: PARAM_LABEL_MIN, maxWidth: PARAM_LABEL_MAX, flexShrink: 0 }),
+        whiteSpace: 'normal', overflowWrap: 'break-word', lineHeight: 1.25,
         color: muted ? tk.text.faint : tk.text.secondary, fontSize: 12.5, cursor: onClick ? 'pointer' : undefined,
         textUnderlineOffset: 2,
       }}

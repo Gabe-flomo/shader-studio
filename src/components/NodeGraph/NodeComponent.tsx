@@ -126,7 +126,7 @@ import { ParticlePresets } from './ParticlePresets';
 import { socketVisible } from '../../lib/socketsOnDemand';
 import { StopPaletteStops } from './StopPaletteStops';
 import { toRgb } from '../../lib/colorMath';
-import { CardBadge, CardButton, CardDivider, KeyframedRuler, ParamLabel, ParamSocket, WiredChip } from './NodeCardParts';
+import { CardBadge, CardButton, CardDivider, KeyframedRuler, ParamLabel, ParamSocket, WiredChip, paramLabelColumn } from './NodeCardParts';
 import { driveKey, playDrivenMap } from '../../play/playDriven';
 import { driverOf } from '../../play/paramDrivers';
 import { PlayDriveChip } from './PlayDriveChip';
@@ -2296,7 +2296,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                 if (paramDef.type === 'bool') {
                   return (
                     <div key={paramKey} style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 36, padding: '4px 10px 4px 14px' }}>
-                      <ParamLabel title={paramDef.hint} help={paramDef.help}>{paramDef.label}</ParamLabel>
+                      <ParamLabel title={paramDef.hint} help={paramDef.help} fill>{paramDef.label}</ParamLabel>
                       <Toggle checked={node.params[paramKey] === true} onChange={v => paramKey === 'volumetric'
                         ? useNodeGraphStore.getState().setLoopVolumetric(node.id, v)
                         : updateNodeParams(node.id, { [paramKey]: v }, { immediate: true })} />
@@ -2666,6 +2666,15 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   // Param keys consumed as the second half of a `ParamDef.pair` group (e.g. Remap's inMax/outMax):
   // rendered together with their pair's owner, so they're skipped when the loop reaches them directly.
   const pairSecondaryKeys = new Set(Object.values(paramDefs).map(pd => pd.pair?.with).filter((v): v is string => !!v));
+  // One label column for the card (its longest slider / choice / colour name, 66–92px) so its rulers line up;
+  // switches take the whole row instead. Hidden (showWhen) params count, so the column holds still as they come and go.
+  const labelColumn = paramLabelColumn([
+    ...Object.values(paramDefs).filter(pd => !pd.pair && (pd.type === 'float' || pd.type === 'select' || pd.type === 'vec3color')).map(pd => pd.label),
+    ...(node.type === 'customFn' || node.type === 'exprNode'
+      ? ((node.params.inputs as Array<{ name: string; type: string; slider?: unknown; hidden?: boolean }> | undefined) ?? [])
+        .filter(i => i.type === 'float' && i.slider != null && !i.hidden).map(i => i.name)
+      : []),
+  ]);
   // Sections (ParamDef.section): a folding header before each run of params in one section. The
   // first section starts open, the rest folded; folding is display only (the params stay uniforms).
   const sectionKeys = new Map<string, string[]>();
@@ -2838,6 +2847,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         zIndex,
         width: 360,
         boxSizing: 'border-box',
+        ['--param-label-w' as string]: `${labelColumn}px`,
         background: tk.bg.panel,
         borderRadius: radius.card,
         color: tk.text.primary,
@@ -3898,7 +3908,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             const val = (node.params[key] ?? def?.defaultParams?.[key]) !== false;
             return (
               <div key={key} style={rowStyle} onMouseDown={e => e.stopPropagation()}>
-                <ParamLabel>{paramDef.label}</ParamLabel>
+                <ParamLabel fill>{paramDef.label}</ParamLabel>
                 <Toggle checked={val} onChange={v => key === 'volumetric' && VOLUMETRIC_LOOP_TYPES.has(node.type)
                   ? useNodeGraphStore.getState().setLoopVolumetric(node.id, v)
                   // Switching a feature on also gives its still-default controls their starting values (whenOn).
