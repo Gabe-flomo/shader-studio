@@ -1,87 +1,96 @@
 /**
- * SceneBuilderModal — the 3D Scene Builder window (docs/scene-builder-3d.md).
+ * SceneBuilderModal — the 3D Scene Builder (docs/scene-builder-3d.md), on the Agent Builder's
+ * studio shell (components/builders/studio/StudioShell.tsx):
  *
- * Left: the scene as a tree (drag to reorder and nest). Middle: the sections
- * (Shapes, Combine, Bend space, Look, Camera, Quality, Output) plus the Recipe,
- * Templates and Describe tabs. Right: a live preview of what Build will make.
- * Build puts the graph on the canvas (or rebuilds the scene it was opened
- * from, keeping the user's own edits where it can); Done closes.
+ *   ┌ Scene builder › 3D scene · name ──── undo · redo · Under the hood · Describe · Surprise · Open as nodes · Done ┐
+ *   │ Sections, with a  │        the scene, live and big: drag to orbit, scroll to     │ the section's    │
+ *   │ one-line summary  │        zoom, click a shape, drag its gizmo                   │ settings         │
+ *   ├───────────────────┴───────────────────────────────────────────────────────────────┴──────────────────┤
+ *   │ presets, as pictures · Surprise me                                                                   │
+ *   └──────────────────────────────────────────────────────────────────────────────────────────────────────┘
+ *
+ * The sections say what you can build (sections.ts): Mode, Shapes, Combine, Warps, Light & colour,
+ * Camera, Output. Under the hood shows the recipe (with hover help) in place of the settings;
+ * Describe reads the 3D graph on the canvas. Done builds the scene (or rebuilds the one it was
+ * opened on, keeping edits made on its nodes), closes and frames it; Open as nodes does the same
+ * and opens its Scene Group, to see the shapes as nodes.
  */
-import { useEffect, useMemo } from 'react';
-import { useSceneBuilder, type BuilderTab } from '../../sceneBuilder/store';
+import { useEffect, useState } from 'react';
+import { useSceneBuilder } from '../../sceneBuilder/store';
 import { buildFromBuilder, describeIntoBuilder } from '../../sceneBuilder/actions';
-import { buildSceneGraph } from '../../sceneBuilder/build';
-import { allShapes, effectiveStepScale } from '../../sceneBuilder/spec';
+import { allShapes } from '../../sceneBuilder/spec';
+import { parseRecipe } from '../../sceneBuilder/recipe';
+import { SCENE_TEMPLATES } from '../../sceneBuilder/templates';
+import { SCENE_SECTIONS, sectionOfTab, sectionSummary, type SceneSection } from '../../sceneBuilder/sections';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
-import { BuilderLabel, BuilderNote, BuilderWindow } from '../builders/BuilderWindow';
-import { Button, IconButton } from '../ui/Button';
-import { Icon } from '../ui/Icon';
+import { IconButton } from '../ui/Button';
+import { Menu } from '../ui/Menu';
 import type { IconName } from '../ui/iconPaths';
 import { useTokens } from '../../theme/themeStore';
-import { fontFamily } from '../../theme/tokens';
-import { SceneTree } from './SceneTree';
-import { ScenePreview } from './ScenePreview';
 import { SurpriseBar } from '../surprise/SurpriseBar';
+import { newSeed } from '../../lib/surprise';
 import { surpriseSceneAction, useSceneSurprise } from './surpriseActions';
-import { SCENE_WINDOW, SceneCrumb } from '../builders/SceneCrumb';
-import { useThrottled } from '../builders/useBuilderPreview';
-import { CameraTab, CombineTab, DescribeTab, LookTab, OutputTab, QualityTab, RecipeTab, ShapesTab, TemplatesTab, WarpsTab } from './tabs';
+import { SceneCrumb } from '../builders/SceneCrumb';
+import { BuilderHelpContext } from '../builders/BuilderHelp';
+import { PresetCard, StudioLabel, StudioNavItem, StudioShell } from '../builders/studio/StudioShell';
+import { DescribeTab, RecipeTab } from './tabs';
+import { SectionHead, SectionPanel } from './sectionPanels';
+import { SceneViewport } from './SceneViewport';
+import { useSpecThumbs } from './specThumbs';
 import { finishBuilder } from '../../builders/finish';
 import { scene3dBuildIds } from '../../builders/finishScenes';
 
-/** The sections, as the builders' shared tab row (BuilderWindow `tabs`, components/builders/BuilderTabBar.tsx). */
-const TABS: Array<{ id: BuilderTab; label: string; icon: IconName; gapBefore?: boolean }> = [
-  { id: 'shapes', label: 'Shapes', icon: 'cube' },
-  { id: 'combine', label: 'Combine', icon: 'layers' },
-  { id: 'warps', label: 'Bend space', icon: 'wave' },
-  { id: 'look', label: 'Look', icon: 'sun' },
-  { id: 'camera', label: 'Camera', icon: 'camera' },
-  { id: 'quality', label: 'Quality', icon: 'sliders' },
-  { id: 'output', label: 'Output', icon: 'eye' },
-  { id: 'recipe', label: 'Recipe', icon: 'text', gapBefore: true },
-  { id: 'templates', label: 'Templates', icon: 'presets' },
-  { id: 'describe', label: 'Describe', icon: 'search' },
-];
-
 const MODE_LABEL = { surface: 'Surface', volumetric: 'Volumetric glow', glass: 'Glass', gi: 'GI lit' } as const;
 
-function PreviewPanel() {
-  const spec = useSceneBuilder(s => s.spec);
-  const tk = useTokens();
-  // What Build makes, counted a few times a second while a slider moves (not on every tick).
-  const counted = useThrottled(spec, 250);
-  const dry = useMemo(() => {
-    try { return buildSceneGraph(counted); } catch { return null; }
-  }, [counted]);
-  const counts = useMemo(() => {
-    const byType = new Map<string, number>();
-    const walk = (list: NonNullable<typeof dry>['nodes']) => {
-      for (const n of list) {
-        byType.set(n.type, (byType.get(n.type) ?? 0) + 1);
-        const sg = n.params.subgraph as { nodes?: typeof list } | undefined;
-        if (sg?.nodes) walk(sg.nodes);
-      }
-    };
-    if (dry) walk(dry.nodes);
-    return byType;
-  }, [dry]);
-  const total = [...counts.values()].reduce((a, b) => a + b, 0);
+/** Sections a shape picked in the viewport can be edited in; from any other, a pick goes to Shapes. */
+const SHAPE_SECTIONS: Array<SceneSection | 'describe'> = ['shapes', 'combine', 'warps', 'light'];
+
+/** Build what is in the form when it isn't built yet (or its build is gone). False when the build was cancelled. */
+async function buildIfNeeded(): Promise<boolean> {
+  const sb = useSceneBuilder.getState();
+  if (!allShapes(sb.spec).length) return true;
+  const built = !!sb.targetSceneId && useNodeGraphStore.getState().nodes.some(n => n.id === sb.targetSceneId);
+  if (built && !sb.dirty) return true;
+  return buildFromBuilder(false);
+}
+
+/** Done: build if needed, close, and frame the scene on the graph. */
+export async function doneAction(): Promise<void> {
+  if (!(await buildIfNeeded())) return;
+  const sb = useSceneBuilder.getState();
+  finishBuilder(sb.close, scene3dBuildIds(sb.targetSceneId));
+}
+
+/** Open as nodes: build if needed, close, and open the Scene Group (its shapes, combines and warps as nodes). */
+export async function openAsNodesAction(): Promise<void> {
+  if (!(await buildIfNeeded())) return;
+  const sb = useSceneBuilder.getState();
+  const id = sb.targetSceneId;
+  sb.close();
+  if (id && useNodeGraphStore.getState().nodes.some(n => n.id === id)) {
+    const st = useNodeGraphStore.getState();
+    if (st.activeGroupPath.length) st.exitToRoot();
+    st.enterGroup(id);
+  }
+}
+
+function PresetsStrip() {
+  const replace = useSceneBuilder(s => s.replace);
+  const select = useSceneBuilder(s => s.select);
+  const seed = useSceneSurprise(s => s.seed);
+  const busy = useSceneSurprise(s => s.busy);
+  const thumbs = useSpecThumbs(SCENE_TEMPLATES.map(t => ({ key: `template:${t.key}`, spec: () => parseRecipe(t.recipe).spec })));
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '16px 14px' }}>
-      <BuilderLabel meta={MODE_LABEL[spec.look.mode]}>Preview</BuilderLabel>
-      <ScenePreview spec={spec} />
-      {dry?.warnings.map((w, i) => (
-        <div key={i} style={{ display: 'flex', gap: 6, fontSize: 12, color: tk.status.warningText, lineHeight: 1.4 }}><Icon name="warning" size={14} style={{ flexShrink: 0, marginTop: 1 }} />{w}</div>
-      ))}
-      <BuilderLabel meta={`${total} nodes`}>What Build makes</BuilderLabel>
-      <BuilderNote>
-        A Scene Group (Scene Pos → {allShapes(spec).length} shape{allShapes(spec).length === 1 ? '' : 's'}, combines and warps → Scene Output), a March Camera,{' '}
-        {spec.look.mode === 'glass' ? 'a Glass Scene' : spec.look.mode === 'gi' ? 'a GI Lit March Group' : `a March Loop${spec.look.mode === 'volumetric' ? ' in volumetric mode with Volume Glow inside' : ''}`}
-        {spec.look.mode === 'surface' ? ', soft shadows, ambient occlusion and Multi-Light' : ''}{spec.look.tone !== 'none' ? ', Tone Map' : ''} and the Output{spec.output && spec.output.show !== 'picture' ? `, which shows the ${spec.output.show}${spec.output.palette ? ` through the ${spec.output.palette} palette` : ''}` : ''}. Every node gets a note. Step Scale {effectiveStepScale(spec)}.
-      </BuilderNote>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-        {[...counts.entries()].sort((a, b) => b[1] - a[1]).map(([t, n]) => (
-          <span key={t} style={{ padding: '1px 7px', borderRadius: 6, background: tk.bg.field, color: tk.text.secondary, font: `500 11px ${fontFamily.mono}` }}>{t}{n > 1 ? ` ×${n}` : ''}</span>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <span style={{ flex: 1 }}><StudioLabel meta="click to start from one · undo takes it back">Presets</StudioLabel></span>
+        <SurpriseBar seed={seed} busy={busy} onSurprise={s => void surpriseSceneAction(s)}
+          title="A whole random scene: 2–6 shapes, combines, sometimes modifiers, a look, colours and a camera (one undo step). The same seed makes the same scene." />
+      </span>
+      <div data-scene-presets style={{ display: 'flex', gap: 12 }}>
+        {SCENE_TEMPLATES.map(t => (
+          <PresetCard key={t.key} id={t.key} label={t.label} hint={t.blurb} src={thumbs[`template:${t.key}`]}
+            onClick={() => { const s = parseRecipe(t.recipe).spec; replace(s); select(s.root.children[0]?.id ?? null); }} />
         ))}
       </div>
     </div>
@@ -92,10 +101,7 @@ export function SceneBuilderModal() {
   const tk = useTokens();
   const tab = useSceneBuilder(s => s.tab);
   const setTab = useSceneBuilder(s => s.setTab);
-  // Only what the frame shows (a count, the mode), so a slider drag re-renders the tab it is on,
-  // not the whole window (docs/scene-builder-3d.md, "The preview comes first").
-  const shapes = useSceneBuilder(s => allShapes(s.spec).length);
-  const mode = useSceneBuilder(s => s.spec.look.mode);
+  const spec = useSceneBuilder(s => s.spec);
   const close = useSceneBuilder(s => s.close);
   const undo = useSceneBuilder(s => s.undo);
   const redo = useSceneBuilder(s => s.redo);
@@ -105,8 +111,10 @@ export function SceneBuilderModal() {
   const targetSceneId = useSceneBuilder(s => s.targetSceneId);
   const targetExists = useNodeGraphStore(s => !!targetSceneId && s.nodes.some(n => n.id === targetSceneId));
   const editing = !!targetSceneId && targetExists;
-  const surpriseSeed = useSceneSurprise(s => s.seed);
-  const surpriseBusy = useSceneSurprise(s => s.busy);
+  const [hood, setHood] = useState(() => tab === 'recipe');
+  const [more, setMore] = useState<{ x: number; y: number } | null>(null);
+  const section = sectionOfTab(tab);
+  const shapes = allShapes(spec).length;
 
   // ⌘Z / ⌘⇧Z undo the form, not the graph, while the builder is open (text fields keep their own).
   useEffect(() => {
@@ -116,53 +124,64 @@ export function SceneBuilderModal() {
       if (t && (t.tagName === 'TEXTAREA' || (t.tagName === 'INPUT' && (t as HTMLInputElement).type === 'text'))) return;
       e.preventDefault();
       e.stopPropagation();
-      if (e.shiftKey) redo(); else undo();
+      if (e.shiftKey) useSceneBuilder.getState().redo(); else useSceneBuilder.getState().undo();
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [undo, redo]);
+  }, []);
 
-  const body = {
-    shapes: <ShapesTab />, combine: <CombineTab />, warps: <WarpsTab />, look: <LookTab />, camera: <CameraTab />, quality: <QualityTab />, output: <OutputTab />,
-    recipe: <RecipeTab />, templates: <TemplatesTab />, describe: <DescribeTab />,
-  }[tab];
+  const pick = (id: SceneSection | 'describe') => { setHood(false); setTab(id); };
+
+  const nav = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '14px 10px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <StudioLabel meta="what you can build">Sections</StudioLabel>
+        {SCENE_SECTIONS.map(x => (
+          <StudioNavItem key={x.id} id={x.id} icon={x.icon as IconName} label={x.label} hint={x.line} summary={sectionSummary(spec, x.id)}
+            selected={!hood && section === x.id} onClick={() => pick(x.id)} />
+        ))}
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <StudioLabel>From the graph</StudioLabel>
+        <StudioNavItem id="describe" icon="search" label="Describe" hint="Read the 3D graph on the canvas back into the builder" summary="read a 3D graph into words"
+          selected={!hood && section === 'describe'} onClick={() => pick('describe')} />
+      </div>
+    </div>
+  );
+
+  const inspector = (
+    <BuilderHelpContext.Provider value="scene-builder">
+      <div data-inspector={hood ? 'recipe' : section} data-scene-section={hood ? 'recipe' : section} style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: hood || section === 'describe' ? 0 : 14 }}>
+        {hood
+          ? <><div style={{ padding: '14px 14px 0' }}><SectionHead id="recipe" title="Under the hood" line="The whole scene as a recipe: one line per part. Rest the pointer on a word for its help; edit it and the scene follows." /></div><RecipeTab /></>
+          : section === 'describe' ? <DescribeTab /> : <SectionPanel id={section} />}
+      </div>
+    </BuilderHelpContext.Provider>
+  );
 
   return (
-    <BuilderWindow
-      prefsKey="scene-builder"
-      width={SCENE_WINDOW.width} height={SCENE_WINDOW.height}
-      title={<SceneCrumb kind="3d" />}
-      subtitle={`3D Scene Builder · ${editing ? 'editing a built scene' : 'a new scene'} · ${shapes} shape${shapes === 1 ? '' : 's'} · ${MODE_LABEL[mode]}`}
-      icon="cube"
-      iconColor={tk.kind.fn}
+    <StudioShell prefsKey="scene-builder-3d" icon="cube" iconColor={tk.kind.fn}
+      title={editing ? 'Your 3D scene' : 'A new 3D scene'} crumb={<SceneCrumb kind="3d" />}
+      kind={`${shapes} shape${shapes === 1 ? '' : 's'} · ${MODE_LABEL[spec.look.mode]} · ${!editing ? 'not built yet: Done builds it' : dirty ? 'changed: Done rebuilds it' : 'built'}`}
       onClose={close}
-      tabs={{ items: TABS, value: tab, onChange: id => setTab(id as BuilderTab), ariaLabel: 'Scene Builder sections' }}
-      left={{ label: 'Scene', icon: 'layers', width: 290, content: <SceneTree />, rail: expand => (
-        <button type="button" onClick={expand} title="Show the scene tree" aria-label="Show the scene tree"
-          style={{ width: 44, flexShrink: 0, border: 0, borderRight: `1px solid ${tk.border.subtle}`, background: tk.bg.subtle, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, paddingTop: 14, color: tk.text.faint }}>
-          <Icon name="chevR" size={14} /><Icon name="layers" size={15} />
-          <span style={{ font: `650 10px ${fontFamily.ui}`, writingMode: 'vertical-rl', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Scene · {shapes}</span>
-        </button>
-      ) }}
-      right={{ label: 'Preview', icon: 'eye', width: 360, content: <PreviewPanel /> }}
-      headerActions={<>
-        <SurpriseBar seed={surpriseSeed} busy={surpriseBusy} onSurprise={seed => void surpriseSceneAction(seed)}
-          title="A whole random scene: 2–6 shapes, combines, sometimes modifiers, a look, colours and a camera (one undo step)" />
-        <Button size="sm" variant="ghost" icon="search" style={{ marginRight: 4 }} title="Read the 3D graph on the canvas back into the builder" onClick={() => describeIntoBuilder()}>Describe graph</Button>
-        <IconButton icon="undo" label="Undo" shortcut="cmd+z" disabled={!canUndo} onClick={undo} />
-        <IconButton icon="redo" label="Redo" shortcut="cmd+shift+z" disabled={!canRedo} onClick={redo} />
+      onEscape={() => { if (hood) { setHood(false); return true; } return false; }}
+      actions={<>
+        <IconButton icon="undo" size="sm" label="Undo" shortcut="cmd+z" disabled={!canUndo} onClick={undo} />
+        <IconButton icon="redo" size="sm" label="Redo" shortcut="cmd+shift+z" disabled={!canRedo} onClick={redo} />
+        <IconButton icon="code" size="sm" active={hood} data-hood-toggle label={hood ? 'Hide Under the hood' : 'Under the hood: the scene as a recipe, with help on every word'} onClick={() => setHood(!hood)} />
+        <IconButton icon="search" size="sm" data-describe label="Describe the 3D graph on the canvas" onClick={() => { setHood(false); describeIntoBuilder(); }} />
+        <IconButton icon="dice" size="sm" data-surprise-top label="Surprise me: a whole random scene (one undo step)" onClick={() => void surpriseSceneAction(newSeed())} />
+        <IconButton icon="fn" size="sm" data-open-as-nodes disabled={!shapes} label="Open as nodes: build it and open its Scene Group (every node with a note)" onClick={() => void openAsNodesAction()} />
+        <IconButton icon="more" size="sm" data-build-menu label="More: build now, or build a new copy" onClick={e => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setMore({ x: Math.max(8, r.right - 260), y: r.bottom + 4 }); }} />
+        {more && <Menu x={more.x} y={more.y} onClose={() => setMore(null)} items={[
+          { label: editing ? 'Rebuild now' : 'Build now', icon: 'rebuild', hint: editing ? 'Replaces the scene it was built as, keeping settings you changed on its nodes' : 'Adds the graph to the canvas and shows it on the Output', disabled: !shapes, onSelect: () => void buildFromBuilder(false) },
+          ...(editing ? [{ label: 'Build as a new copy', icon: 'copy' as IconName, hint: 'Leave the built scene as it is and build this one beside it', onSelect: () => void buildFromBuilder(true) }] : []),
+        ]} />}
       </>}
-      footer={<>
-        {editing && <Button icon="copy" onClick={() => void buildFromBuilder(true)} title="Leave the built scene as it is and build this one beside it">Build as a new copy</Button>}
-        <BuilderNote>{editing ? 'Rebuild replaces the scene it was built as, keeping settings you changed on its nodes.' : 'Build adds the graph to the canvas and shows it on the Output.'}</BuilderNote>
-        <span style={{ flex: 1 }} />
-        {dirty && <BuilderNote style={{ color: tk.text.faint }}>Not built yet</BuilderNote>}
-        <Button onClick={() => finishBuilder(close, scene3dBuildIds(useSceneBuilder.getState().targetSceneId))}>Done</Button>
-        <Button variant="primary" icon="rebuild" disabled={!shapes} onClick={() => void buildFromBuilder(false)}>{editing ? 'Rebuild' : 'Build'}</Button>
-      </>}
-    >
-      {body}
-    </BuilderWindow>
+      primary={{ label: 'Done', onClick: () => void doneAction(), title: editing ? 'Rebuild the scene if it changed, close, and show it on the graph' : 'Build the scene, close, and show it on the graph' }}
+      nav={nav} inspector={inspector} inspectorWidth={hood ? 480 : 400} navWidth={236} presets={<PresetsStrip />}>
+      <SceneViewport onPicked={() => { if (!SHAPE_SECTIONS.includes(section)) pick('shapes'); }} />
+    </StudioShell>
   );
 }
 
