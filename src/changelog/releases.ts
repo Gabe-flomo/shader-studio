@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.142',
+    date: '2026-10-10',
+    title: 'One Scene builder',
+    highlights: [
+      { area: 'Studio', text: 'One Scene builder: pick 2D, Agent, Grid or 3D scene. It starts fresh by default, or reopens a scene a builder made to edit it.' },
+      { area: 'Studio', text: 'While a builder is open the canvas behind it pauses: 2D and 3D previews run twice as often, sharper, and update while you drag.' },
+      { area: 'Studio', text: 'Builder sliders work like the app\'s: double-click to reset, centred two-way sliders, type past the end to widen, right-click Play menu.' },
+    ],
+  },
+  {
     id: '2026.10.141',
     date: '2026-10-10',
     title: 'Recipes explain themselves',
