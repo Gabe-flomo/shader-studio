@@ -728,6 +728,34 @@ exports[`2D agents and pass graphs compile as they did before 3D > passSlimeEdge
 }
 `;
 
+exports[`2D agents and pass graphs compile as they did before 3D > raysColourBurst 1`] = `
+{
+  "agents": "1fe1f0024152e81521f99e5e13c1:4",
+  "errors": null,
+  "fragmentShader": "17fe877f399e4406afc069a58d9d:4897",
+  "paramBindings": "0b22f8cd6cf06312ba657c5b6c94:351",
+  "paramUniforms": "1652c301d049d6035d045264dce9:243",
+  "passes": "0d2f8a092e1c3c0e493578111912:24142",
+  "success": true,
+  "textureUniforms": "167d269bbddad80189e9f9473b28:2",
+  "web": null,
+}
+`;
+
+exports[`2D agents and pass graphs compile as they did before 3D > raysLightText 1`] = `
+{
+  "agents": "1fe1f0024152e81521f99e5e13c1:4",
+  "errors": null,
+  "fragmentShader": "08819182d9601b1b0014141caab0:4453",
+  "paramBindings": "0b22f8cd6cf06312ba657c5b6c94:351",
+  "paramUniforms": "06ec400979d4ff1559fd1383036b:261",
+  "passes": "1c9d3c1e2a33b012d0b5b4e06dff:22341",
+  "success": true,
+  "textureUniforms": "167d269bbddad80189e9f9473b28:2",
+  "web": null,
+}
+`;
+
 exports[`2D agents and pass graphs compile as they did before 3D > simAgentCrowd 1`] = `
 {
   "agents": "12c6f066b76f0e0f6503766896f4:35630",

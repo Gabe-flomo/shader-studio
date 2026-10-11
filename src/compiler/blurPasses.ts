@@ -16,8 +16,13 @@
  */
 import type { GraphNode } from '../types/nodeGraph';
 import { blBloomPlan, blSmoothPlan } from '../play/kit/blur.js';
+import { RF_PASSES } from '../play/kit/rays.js';
 
 export const BLUR_NODE_TYPES = new Set(['blurTexture', 'glowTexture']);
+/** Radial Fast Blur (Light rays): its log-step passes are hidden passes too (planRays). */
+export const RAYS_NODE_TYPE = 'radialFastBlur';
+/** Every node type with hidden passes. */
+export const HIDDEN_PASS_TYPES = new Set([...BLUR_NODE_TYPES, RAYS_NODE_TYPE]);
 /** Most hidden passes a graph's blurs and glows may add; a node past it draws in one pass (its Fast look). */
 export const MAX_HIDDEN_PASSES = 48;
 
@@ -48,7 +53,9 @@ export interface BlurStagePlan {
 }
 
 export interface BlurPlan {
-  method: Exclude<BlurMethod, 'fast'>;
+  method: Exclude<BlurMethod, 'fast'> | 'rays';
+  /** The internal node type each stage compiles as (blurStage when absent). */
+  stageType?: string;
   stages: BlurStagePlan[];
   /** The stage the node reads, and its scale. */
   out: string;
@@ -117,10 +124,27 @@ export function planBlur(method: BlurMethod, radius: number, srcScale: number, g
   return { method: 'smooth', stages, out: 'v', outScale: scale, cubic: plan.cubic };
 }
 
+/**
+ * A Radial Fast Blur's hidden passes (play/kit/rays.js): RF_PASSES log-step passes at the source's
+ * scale, the first reading the node's own texture (and applying Threshold), each later one the pass
+ * before, RF_TAPS times further apart.
+ */
+export function planRays(srcScale: number): BlurPlan {
+  const s = srcScale > 0 ? srcScale : 1;
+  const stages: BlurStagePlan[] = [];
+  for (let k = 0; k < RF_PASSES; k++) {
+    stages.push({
+      key: `r${k}`, scale: s, label: `streak ${k + 1}/${RF_PASSES}`, reads: [k === 0 ? 'source' : `r${k - 1}`],
+      params: { __k: k }, samplers: k === 0 ? {} : { __src: `r${k - 1}` },
+    });
+  }
+  return { method: 'rays', stageType: 'radialFastBlurStage', stages, out: `r${RF_PASSES - 1}`, outScale: s, cubic: false };
+}
+
 /** A hidden stage's slug: the node's slug and the stage key (no double underscores: GLSL reserves them). */
 export const hiddenSlug = (nodeSlug: string, key: string) => `${nodeSlug.replace(/_+$/, '')}Bl${key}`;
 
 /** Does the graph have a Smooth or Bloom-chain Blur / Glow (texture) with a Texture wired (top level)? Then it compiles as a pass graph. */
 export function hasHiddenBlur(nodes: readonly GraphNode[]): boolean {
-  return nodes.some(n => BLUR_NODE_TYPES.has(n.type) && !!n.inputs.texture?.connection && blurMethod(n) !== 'fast');
+  return nodes.some(n => (n.type === RAYS_NODE_TYPE || (BLUR_NODE_TYPES.has(n.type) && blurMethod(n) !== 'fast')) && !!n.inputs.texture?.connection);
 }

@@ -307,7 +307,7 @@ function PictureFinish({ play, onChange, touch, wide = false }: {
       )}
       {finish.effects.length > 1 && (
         <div style={{ marginTop: 10, color: tk.text.faint, font: `11px/1.45 ${fontFamily.ui}` }}>
-          Colour effects (your own included) run top to bottom. The warps (camera shake, lens distortion, CRT curvature, glitch blocks, ripple, displace, mosaic, mirror) bend the picture before anything reads it; chromatic aberration, the glitch’s colour split and time displacement choose what is read. Pixel sort, halftone, ASCII, feedback, echo, datamosh and motion extract see every effect above them. Any effect can show only somewhere: its <b>Where</b>.
+          Colour effects (your own included) run top to bottom. The warps (camera shake, lens distortion, CRT curvature, glitch blocks, ripple, displace, mosaic, mirror) bend the picture before anything reads it; chromatic aberration, the glitch’s colour split and time displacement choose what is read. Light rays, pixel sort, halftone, ASCII, feedback, echo, datamosh and motion extract see every effect above them. Any effect can show only somewhere: its <b>Where</b>.
         </div>
       )}
     </div>
@@ -523,6 +523,7 @@ function editorFor(e: FinishEffect, k: RowKit, touch: boolean, layers: LayerRef[
         {k.note(<>Motion makes the streaks alive even over a still picture: <b>Flow</b> runs them along their direction like paint, <b>Drip</b> gives each its own speed and stretch, <b>Breathe</b> swells and shrinks the sorted areas, <b>Wander</b> sways their direction, <b>Turbulence</b> melts their edges and <b>Trail</b> leaves a fading tail. All 0 is the still sort.</>)}
       </>
     );
+    case 'rays': return <RaysEditor e={e} k={k} onPatch={onPatch} />;
     case 'feedback': return <FeedbackEditor e={e} k={k} layers={layers} onPatch={onPatch} />;
     case 'echo': return <EchoEditor e={e} k={k} layers={layers} onPatch={onPatch} />;
     case 'custom': return <CustomEditor e={e} k={k} touch={touch} onReplace={onReplace} onEdit={onEdit} />;
@@ -685,6 +686,29 @@ function SourceRows({ e, k, layers, onPatch }: { e: FinishEffect; k: RowKit; lay
       {k.row('Source', <Select ariaLabel="What leaves the trail" value={src} height={26} options={SOURCE_OPTIONS} onChange={v => onPatch({ map: v as FinishEffect['map'], ...(v === 'layer' && !e.layerId ? { layerId: layers.find(l => l.kind !== 'background')?.id ?? '' } : {}) })} />,
         'What leaves the trail: the whole picture, one layer (only it echoes, over the untouched picture; it can be hidden), the parts that moved since the frame before, or the bright parts.')}
       {src === 'layer' && k.row('Layer', <LayerPick layers={layers} value={e.layerId ?? ''} onChange={v => onPatch({ layerId: v })} />, 'Only this layer leaves a trail. Hide it to show only the trail.')}
+    </>
+  );
+}
+
+const RAYS_MODES = [
+  { value: '0', label: 'Average', title: 'A zoom blur: the picture smeared along lines from the centre' },
+  { value: '1', label: 'Brightest', title: 'Light rays: the brightest along each streak, where it is brighter than the picture (CC Radial Fast Blur)' },
+  { value: '2', label: 'Add', title: 'The streaks added as light: glowing god rays' },
+];
+const RAYS_DIRECTIONS = [
+  { value: '0', label: 'Out', title: 'The streaks fly outward from the centre' },
+  { value: '1', label: 'In', title: 'The streaks pull in toward the centre' },
+];
+
+/** Light rays (CC Radial Fast Blur): Mode and Zoom as choices, then its numbers and Tint. */
+function RaysEditor({ e, k, onPatch }: { e: FinishEffect; k: RowKit; onPatch: (c: Partial<FinishEffect>) => void }) {
+  return (
+    <>
+      {k.row('Mode', <Segmented size="sm" ariaLabel="Light rays mode" value={String(Math.round(num(e, 'mode')))} onChange={v => onPatch({ mode: Number(v) })} options={RAYS_MODES} />, 'Average: a zoom blur. Brightest: light rays. Add: glowing rays.')}
+      {k.row('Zoom', <Segmented size="sm" ariaLabel="Light rays zoom direction" value={String(Math.round(num(e, 'direction')))} onChange={v => onPatch({ direction: Number(v) })} options={RAYS_DIRECTIONS} />, 'Out from the centre, or into it.')}
+      {k.nums('length', 'cx', 'cy', 'threshold', 'knee', 'intensity', 'decay', 'falloff')}
+      {k.colour('Tint', ['tintR', 'tintG', 'tintB'], 'The streaks’ colour: white keeps the colours of what streaks.')}
+      {k.note(<>After Effects’ CC Radial Fast Blur: the picture blurred along lines from a centre. <b>Brightest</b> with a <b>Threshold</b> throws rays from bright shapes and text. Fast at any Length: four small passes, each reading the one before eight times further apart. Map the pointer or a hand onto Centre X / Y to aim it.</>)}
     </>
   );
 }

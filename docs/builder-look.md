@@ -52,9 +52,14 @@ They are built after the grade.
   into a Pass, and the next read of it is at the bent point. A run of moves shares one Pass and
   one read.
 - **Reads round a pixel**: Blur (Blur (texture)), Glow (Glow (texture), Bloom chain, then Add),
+  Light rays / Radial blur (Radial Fast Blur: see [radial-fast-blur.md](radial-fast-blur.md)),
   Chromatic aberration (Chromatic Aberration (texture)) and Displace by a picture (Displace
   (texture), with the picture chosen in the shared texture picker or a Shader Texture). Each reads
   the Pass with its own node, at the bent point if moves came before it.
+- **Light rays / Radial blur** is CC Radial Fast Blur: Mode (Brightest: light rays; Average: a
+  zoom blur; Add: glowing rays), Length, Threshold, Intensity, Decay, Falloff, Zoom (out from or
+  into the centre), Centre X / Y and Tint, the node's own controls. Its four streak passes are
+  hidden passes, so they don't count towards the six Passes; long streaks cost the same.
 - **On the colour**: CRT mask (CRT Mask) has slot mask, aperture grille or shadow mask (dots), plus
   cell size, strength, scanlines, curvature and vignette.
 
@@ -82,6 +87,7 @@ chroma 6 mode=directional angle=30
 fx displace 0.12 scale=2 speed=0.2 · fx displace picture=clouds pixels=40
 fx swirl 2 · fx ripple 0.02 freq=12 · fx lens 0.2 · fx pixelate 0.03 · fx kaleido 8 rotate=15
 fx blur 4 · fx glow 1.2 threshold=0.5 radius=16
+fx rays 1.2 mode=average threshold=0 · fx rays 0.8 threshold=0.5 cx=0.3 tint=#ffcc88
 ```
 
 ## Surprise me

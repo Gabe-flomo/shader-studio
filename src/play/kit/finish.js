@@ -34,6 +34,7 @@ import { FN_TONE_GLSL, FN_TONE_FUNCTIONS, FN_CRT_MASK_GLSL } from './finishGlsl.
 import { BL_BASE_GLSL, blGlsl, blCubicGlsl } from './blur.js';
 import { gyAtlas } from './glyphs.js';
 import { DM_GLSL, DM_HINTS, DM_CHANNELS, DM_BEHAVIOURS, dmChannelGlsl, dmBoxOf } from './displace.js';
+import { RF_BASE_GLSL, RF_PASSES, rfGlsl } from './rays.js';
 
 // ── The catalogue ────────────────────────────────────────────────────────────
 
@@ -172,6 +173,34 @@ export const FN_EFFECTS = {
       FN_P('tintR', 'Tint R', 0, 1, 0.01, 1, '', true), FN_P('tintG', 'Tint G', 0, 1, 0.01, 1, '', true), FN_P('tintB', 'Tint B', 0, 1, 0.01, 1, '', true),
     ],
     colours: [{ label: 'Tint', keys: ['tintR', 'tintG', 'tintB'], hint: 'The glow’s colour: white keeps the colours of what glows.' }],
+  },
+  // Light rays (Radial Fast Blur, play/kit/rays.js): heads a pass of its own (FN_PREPASS_KINDS), whose
+  // input it streaks in RF_PASSES log-step passes first; the pass then lays the streaks over the picture.
+  rays: {
+    label: 'Light rays', group: 'Film', icon: 'sun',
+    summary: 'Zoom streaks and light rays from a centre (Radial Fast Blur)',
+    params: [
+      FN_P('mode', 'Mode', 0, 2, 1, 1, '0 Average (a zoom blur), 1 Brightest (light rays: the brightest along each streak, where it is brighter), 2 Add (the streaks added as light).', true),
+      FN_P('direction', 'Zoom', 0, 1, 1, 0, '0 out from the centre (streaks fly outward), 1 into it.', true),
+      FN_P('length', 'Length', 0, 4, 0.01, 0.6, 'How long the streaks are: the farthest copy is 1 + Length times bigger. 1 reaches half way to the centre; long streaks cost the same.'),
+      FN_P('cx', 'Centre X', 0, 1, 0.01, 0.5, 'Where the streaks come from (0 left, 1 right). Map a hand or the pointer onto it.'),
+      FN_P('cy', 'Centre Y', 0, 1, 0.01, 0.5, 'Where the streaks come from (0 bottom, 1 top).'),
+      FN_P('threshold', 'Threshold', 0, 1.5, 0.01, 0.35, 'Only parts brighter than this streak: 0 streaks everything (a zoom blur).'),
+      FN_P('knee', 'Knee', 0, 0.5, 0.01, 0.15, 'How softly the streaks fade in round Threshold.'),
+      FN_P('intensity', 'Intensity', 0, 4, 0.01, 1, 'How strong the streaks are. In Average, below 1 mixes the picture back.'),
+      FN_P('decay', 'Decay', 0, 1, 0.01, 0.5, 'How much the streaks fade along their length: 0 even, 1 a bright head and a faint tail.'),
+      FN_P('falloff', 'Falloff', 0, 4, 0.01, 0, 'How much the effect fades away from the centre: 0 the same everywhere.'),
+      FN_P('tintR', 'Tint R', 0, 1, 0.01, 1, '', true), FN_P('tintG', 'Tint G', 0, 1, 0.01, 1, '', true), FN_P('tintB', 'Tint B', 0, 1, 0.01, 1, '', true),
+    ],
+    colours: [{ label: 'Tint', keys: ['tintR', 'tintG', 'tintB'], hint: 'The streaks’ colour: white keeps the colours of what streaks.' }],
+    presets: [
+      { name: 'Light rays', values: { mode: 1, direction: 0, length: 0.6, threshold: 0.35, knee: 0.15, intensity: 1, decay: 0.5, falloff: 0 } },
+      { name: 'God rays', values: { mode: 2, direction: 0, length: 1.2, threshold: 0.5, knee: 0.2, intensity: 1.4, decay: 0.7, falloff: 0.3 } },
+      { name: 'Zoom burst', values: { mode: 0, direction: 0, length: 0.35, threshold: 0, knee: 0.15, intensity: 1, decay: 0, falloff: 0 } },
+      { name: 'Warp speed', values: { mode: 1, direction: 0, length: 3, threshold: 0.2, knee: 0.1, intensity: 1, decay: 0.85, falloff: 0 } },
+      { name: 'Pull in', values: { mode: 0, direction: 1, length: 0.4, threshold: 0, knee: 0.15, intensity: 1, decay: 0.3, falloff: 0 } },
+    ],
+    note: 'After Effects’ CC Radial Fast Blur. Brightest with a Threshold throws rays from bright shapes and text; Average is a zoom blur; Add glows. Map the pointer or a hand onto Centre X / Y to aim it.',
   },
   halation: {
     label: 'Halation', group: 'Film', icon: 'sun',
@@ -575,6 +604,12 @@ export const FN_STAGE_KINDS = ['pixelsort', 'halftone', 'ascii'];
  */
 export const FN_TEMPORAL_KINDS = ['feedback', 'echo', 'datamosh', 'motionx'];
 /**
+ * Effects that run passes of their own over their pass's input before it (Light rays' log-step
+ * streaks), so each heads a pass of its own (fnSegments) and streaks the picture as the effects above
+ * it left it.
+ */
+export const FN_PREPASS_KINDS = ['rays'];
+/**
  * What Feedback and Echo keep (their Source): the picture as the effects above left it, one layer
  * (drawn alone, hidden or not: only its own trail, over the untouched picture), the parts that moved
  * since the frame before, or the bright parts. Absent = the picture, as before.
@@ -607,7 +642,7 @@ export function fnSegments(effects) {
   const out = [];
   let cut = false;
   for (const e of effects) {
-    if (!out.length || cut || ((FN_STAGE_KINDS.includes(e.kind) || FN_TEMPORAL_KINDS.includes(e.kind)) && out[out.length - 1].length)) out.push([]);
+    if (!out.length || cut || ((FN_STAGE_KINDS.includes(e.kind) || FN_TEMPORAL_KINDS.includes(e.kind) || FN_PREPASS_KINDS.includes(e.kind)) && out[out.length - 1].length)) out.push([]);
     out[out.length - 1].push(e);
     cut = fnSortTrails(e);
   }
@@ -629,7 +664,7 @@ FN_EFFECTS.halation.presets = FN_HALATION_PRESETS;
 /** The kinds in the Add menu's order. Each kind appears at most once in a stack. */
 export const FN_KINDS = ['grade', 'lens', 'chroma', 'vignette', 'crt', 'bloom', 'halation', 'grain', 'flicker', 'shake', 'time',
   'glitch', 'ripple', 'water', 'displace', 'mosaic', 'mirror', 'gradmap', 'posterize', 'edges', 'feedback', 'echo', 'pixelsort', 'halftone', 'ascii', 'leaks',
-  'datamosh', 'motionx'];
+  'datamosh', 'motionx', 'rays'];
 export const FN_TONE_MODES = ['none', 'aces', 'agx', 'hable', 'reinhard2', 'unreal', 'lottes', 'uchimura', 'tanh', 'oklab'];
 export const FN_TIME_MAPS = ['slit', 'luma', 'noise', 'radial', 'layer'];
 /**
@@ -2060,6 +2095,8 @@ export function fnBuildFinal(effects, opts = {}) {
       + 'vec4 fnEcAt(vec2 q, int k) { return fnEcMask(texture(uEcR, vec3(q, uEcL[k])), texture(uEcR, vec3(q, uEcM[k]))); }\n';
   }
   if (mosh) src += '// Datamosh: the held picture, moved block by block this frame (premultiplied).\nuniform sampler2D uMosh;\n';
+  const rays = has('rays');
+  if (rays) src += '// Light rays: the streaks, drawn by the renderer before this pass (raysPass), premultiplied.\nuniform sampler2D uRays;\n' + RF_BASE_GLSL;
   if (mx) src += '// Motion extract: the ring of past frames, the layers holding now and Delay frames ago, and its size.\nuniform sampler2DArray uMxRing;\nuniform vec2 uMxAt, uMxTex;\n';
   // Each masked effect's weight at a point: its map (or 0 when the map is missing), maybe inverted.
   const weight = new Map();
@@ -2245,6 +2282,13 @@ vec4 fetch(vec2 q) {
       add += mix(col, vec3(1.0, 0.95, 0.85), w * w * 0.35) * w * 1.4;
     }
     c = 1.0 - (1.0 - c) * (1.0 - clamp(add * leaks_amount, 0.0, 1.0));
+  }`);
+    if (k === 'rays') op(e, `{
+    // Light rays (play/kit/rays.js): the streaks over the picture, premultiplied, faded away from the centre by Falloff.
+    vec2 rc = vec2(rays_cx, rays_cy);
+    vec4 P = rfComposite(vec4(c * a, a), texture(uRays, q), rays_mode, rays_intensity * rfFalloff(q, rc, uAspect, rays_falloff), vec3(rays_tintR, rays_tintG, rays_tintB));
+    a = clamp(P.a, 0.0, 1.0);
+    c = a > 1e-5 ? P.rgb / a : vec3(0.0);
   }`);
     if (k === 'datamosh') op(e, `{
     vec4 m = texture(uMosh, q);
@@ -2476,7 +2520,7 @@ vec4 fetch(vec2 q) {
   fragColor = vec4(c * a, a);`}
 }
 `;
-  return { src, glow, time, feedback, echo, mosh, mx, maps, water, lut: has('grade'), ascAtlas: mine.some(fnAsciiTyped), psTrail: mine.some(fnSortTrails), custom: customs.filter(e => mine.includes(e)).map(e => e.id), segments: segs.length };
+  return { src, glow, time, feedback, echo, mosh, mx, rays, maps, water, lut: has('grade'), ascAtlas: mine.some(fnAsciiTyped), psTrail: mine.some(fnSortTrails), custom: customs.filter(e => mine.includes(e)).map(e => e.id), segments: segs.length };
 }
 
 const FN_PREFILTER = (bloom, halation, crtGlow) => `${FN_COMMON}
@@ -2596,6 +2640,27 @@ uniform sampler2D uSrcTex, uMap;
 uniform float uFromStage, uFromMap;
 vec4 fnSrc(vec2 p) { return uFromStage > 0.5 ? texture(uSrcTex, p) : scene(p); }
 vec4 fnRaw(vec2 p) { if (uFromMap > 0.5) { vec4 m = texture(uMap, p); return vec4(m.rgb * m.a, m.a); } return fnSrc(p); }
+`;
+
+/**
+ * One of Light rays' log-step passes (play/kit/rays.js): uK 0 reads this pass's input (the pass before,
+ * or the picture) and keeps what is over Threshold; each later one reads the one before (uPrev),
+ * RF_TAPS times further apart. Premultiplied, upright.
+ */
+const FN_RAYS_STAGE = () => `${FN_COMMON}${FN_TMP_SRC}${fnDefines('rays')}${RF_BASE_GLSL}
+uniform sampler2D uPrev;
+uniform float uK;
+vec4 rfRead(vec2 p) { return uK < 0.5 ? fnSrc(p) : texture(uPrev, p); }
+${rfGlsl('texture', q => `rfRead(${q})`)}
+out vec4 fragColor;
+void main() {
+  vec2 p = gl_FragCoord.xy / uRes;
+  float len = rays_length;
+  vec4 v = rfPassR(p, vec2(rays_cx, rays_cy), rfStep(len, uK), rays_direction > 0.5 ? -1.0 : 1.0, rfDecayRate(len, rays_decay), abs(rays_mode - 1.0) < 0.5 ? 1.0 : 0.0, uK < 0.5 ? rays_threshold : 0.0, rays_knee);
+  // A little noise (under half an 8-bit step) so long, faint streaks don't band in an 8-bit target.
+  v.rgb = max(v.rgb + (rfIGN(gl_FragCoord.xy + uK * 17.0) - 0.5) / 510.0, 0.0);
+  fragColor = v;
+}
 `;
 
 /** One frame into a ring of past frames (Motion extract's, Echo's), at the ring's size. */
@@ -3114,6 +3179,7 @@ export function fnCreate(canvasIn) {
   let halT = null;
   let outT = null;
   let stageT = null; // two full-size targets for the passes before the last (fnSegments)
+  let raysT = null; // Light rays: two full-size targets (half float when it can), used in turn by its passes; `out` the last
   let ringT = null; // { key, tex, fb, w, h, ring }
 
   const clearMap = tex => { scratch(); gl.bindTexture(gl.TEXTURE_2D, tex); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4)); };
@@ -3571,6 +3637,35 @@ export function fnCreate(canvasIn) {
 
   // Pixel sort's trail: its sorted picture from the frame before (full size, 8-bit, premultiplied).
   let psT = null; // { key, tex, fb, valid, lastT }
+  function dropRays() { if (!raysT) return; for (const t of raysT.st) dropTarget(t); raysT = null; }
+  /**
+   * Light rays' streaks for this draw, just before the pass it heads (`pi`): RF_PASSES log-step passes
+   * over that pass's input (the pass before, or the picture), into two targets in turn.
+   */
+  function raysPass(e, pi, input, W, H, pixelsMode, value) {
+    if (!raysT || raysT.w !== W || raysT.h !== H) {
+      dropRays();
+      raysT = { w: W, h: H, st: [target(W, H, 1, floatGlow), target(W, H, 1, floatGlow)], out: null };
+    }
+    const prog = compile('rays', FN_RAYS_STAGE());
+    if (!prog) return false;
+    const fromStage = pi > 0 && !!stageT;
+    gl.useProgram(prog.prog);
+    common(prog, W, H, input, W, H, pixelsMode);
+    gl.uniform1f(loc(prog, 'uFromStage'), fromStage ? 1 : 0);
+    bindTex(prog, 'uSrcTex', 2, fromStage ? stageT[(pi - 1) % 2].texs[0] : clearTex);
+    gl.uniform1f(loc(prog, 'uFromMap'), 0);
+    bindTex(prog, 'uMap', 3, clearTex);
+    const ul = loc(prog, 'U_rays'); if (ul) gl.uniform4fv(ul, packed(e, value));
+    for (let k = 0; k < RF_PASSES; k++) {
+      const into = raysT.st[k % 2];
+      gl.uniform1f(loc(prog, 'uK'), k);
+      bindTex(prog, 'uPrev', 4, k === 0 ? clearTex : raysT.st[(k - 1) % 2].texs[0]);
+      draw(into.fb, W, H);
+      raysT.out = into.texs[0];
+    }
+    return true;
+  }
   function dropPs() { if (!psT) return; gl.deleteTexture(psT.tex); gl.deleteFramebuffer(psT.fb); psT = null; }
   function ensurePs(W, H) {
     const key = `${W}x${H}`;
@@ -3670,6 +3765,7 @@ export function fnCreate(canvasIn) {
     if (!ran.some(e => e.kind === 'feedback')) dropFb();
     if (!ran.some(fnSortTrails)) dropPs();
     if (!ran.some(e => e.kind === 'water')) dropWater();
+    if (!ran.some(e => e.kind === 'rays')) dropRays();
     const asc = ran.find(fnAsciiTyped);
     if (asc) ensureAscii(asc); else dropAscii();
     if (ran.some(fnSortTrails)) { const P = ensurePs(W, H); if (input.first) { P.valid = false; P.lastT = null; } }
@@ -3706,6 +3802,7 @@ export function fnCreate(canvasIn) {
       // A temporal effect heads its pass: its frames first, from what this pass reads.
       const head = segs[pi] && segs[pi][0];
       if (head && FN_TEMPORAL_KINDS.includes(head.kind)) temporalPass(head, pi, input, W, H, pixelsMode, value, built.maps);
+      if (head && head.kind === 'rays') raysPass(head, pi, input, W, H, pixelsMode, value);
       gl.useProgram(fin.prog);
       common(fin, W, H, input, W, H, pixelsMode);
       let ci = 0;
@@ -3765,6 +3862,7 @@ export function fnCreate(canvasIn) {
         gl.uniform1f(loc(fin, 'uPsOn'), psT.valid ? 1 : 0);
         gl.uniform1f(loc(fin, 'uPsKeep'), Math.pow(Math.max(0, Math.min(0.98, typeof tv === 'number' ? tv : 0)), dt * 60));
       }
+      if (b.rays) bindTex(fin, 'uRays', unit++, raysT && raysT.out ? raysT.out : clearTex);
       if (b.water) {
         bindTex(fin, 'uWater', unit++, wT && wT.out ? wT.out : clearTex);
         gl.uniform2f(loc(fin, 'uWTex'), wT ? wT.w : 1, wT ? wT.h : 1);
@@ -3836,7 +3934,7 @@ export function fnCreate(canvasIn) {
       dropTarget(outT);
       if (stageT) for (const t of stageT) dropTarget(t);
       if (ringT) { gl.deleteTexture(ringT.tex); gl.deleteFramebuffer(ringT.fb); }
-      dropMosh(); dropFb(); dropPs(); dropAscii(); dropWater(); dropTarget(packT); packT = null; for (const k of [...rings.keys()]) dropRing(k);
+      dropMosh(); dropFb(); dropPs(); dropAscii(); dropWater(); dropRays(); dropTarget(packT); packT = null; for (const k of [...rings.keys()]) dropRing(k);
       const lose = gl.getExtension('WEBGL_lose_context');
       if (lose) lose.loseContext();
     },

@@ -19,7 +19,7 @@ import type { GraphNode } from '../types/nodeGraph';
 import type { PassProgram } from './types';
 import type { generateFragmentShader } from './shaderAssembler';
 import { PASS_SCALES, passRepeat, passUniform } from '../nodes/definitions/passes';
-import { BLUR_NODE_TYPES, MAX_HIDDEN_PASSES, blurMethod, hiddenSlug, planBlur } from './blurPasses';
+import { HIDDEN_PASS_TYPES, MAX_HIDDEN_PASSES, RAYS_NODE_TYPE, blurMethod, hiddenSlug, planBlur, planRays } from './blurPasses';
 import { getNodeDefinitionFor } from '../nodes/definitions';
 
 /** The final picture's key in `before` / annotate. */
@@ -75,8 +75,9 @@ export function planHiddenBlurs(ctx: HiddenBlurCtx): HiddenBlurs {
     }) : list),
   };
   for (const node of ctx.nodes) {
-    if (!BLUR_NODE_TYPES.has(node.type)) continue;
-    const method = blurMethod(node);
+    if (!HIDDEN_PASS_TYPES.has(node.type)) continue;
+    const rays = node.type === RAYS_NODE_TYPE;
+    const method = rays ? 'rays' : blurMethod(node);
     const wire = node.inputs.texture?.connection;
     if (method === 'fast' || !wire) continue;
     const src = ctx.byId.get(wire.nodeId);
@@ -91,7 +92,7 @@ export function planHiddenBlurs(ctx: HiddenBlurCtx): HiddenBlurs {
     if (!usable.length) continue;
     const srcScale = src.type === 'pass' ? (PASS_SCALES[String(src.params.scale ?? '1')] ?? 1) : 1;
     const radius = typeof node.params.radius === 'number' ? node.params.radius : (node.type === 'glowTexture' ? 12 : 8);
-    const plan = planBlur(method, radius, srcScale, node.type === 'glowTexture');
+    const plan = rays ? planRays(srcScale) : planBlur(blurMethod(node), radius, srcScale, node.type === 'glowTexture');
     if (!plan || plan.stages.length > budget) continue;
     budget -= plan.stages.length;
 
@@ -102,7 +103,8 @@ export function planHiddenBlurs(ctx: HiddenBlurCtx): HiddenBlurs {
     const srcReads = [...source.reads].map(r => ctx.slugs.get(r)!);
     const srcPrev = [...source.readsPrevious].map(r => ctx.slugs.get(r)!);
     // Sliders driven by a wire (a group's param socket: __param_<key>): every stage computes the wire too.
-    const paramInputs = Object.fromEntries(Object.entries(node.inputs).filter(([k, i]) => k.startsWith('__param_') && i.connection));
+    // A Radial Fast Blur's wired sliders and Centre are inputs of their own (withParamSockets): every one but the texture and UV.
+    const paramInputs = Object.fromEntries(Object.entries(node.inputs).filter(([k, i]) => (rays ? k !== 'texture' && k !== 'uv' : k.startsWith('__param_')) && i.connection));
     const params = ctx.collect(Object.values(paramInputs).map(i => i.connection!));
     const parReads = [...params.reads].map(r => ctx.slugs.get(r)!);
     const parPrev = [...params.readsPrevious].map(r => ctx.slugs.get(r)!);
@@ -117,7 +119,7 @@ export function planHiddenBlurs(ctx: HiddenBlurCtx): HiddenBlurs {
       const fromSource = st.reads.includes('source');
       const samplerParams = Object.fromEntries(Object.entries(st.samplers).map(([k, key]) => [k, passUniform(slugOf(key))]));
       const stageNode: GraphNode = {
-        id: node.id, type: 'blurStage', position: { x: 0, y: 0 }, outputs: {},
+        id: node.id, type: plan.stageType ?? 'blurStage', position: { x: 0, y: 0 }, outputs: {},
         params: { ...node.params, ...st.params, ...samplerParams },
         inputs: { ...paramInputs, ...(fromSource ? { texture: { type: 'texture', label: 'Texture', connection: wire } } : {}) },
       };

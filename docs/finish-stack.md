@@ -2,7 +2,7 @@
 
 Play's **Finish** tab: colour grading, lens and screen effects, film effects,
 camera shake, time displacement, warps, glitches, a simulated water surface,
-stylised looks (pixel sort, halftone, ASCII, light leaks) and temporal effects
+stylised looks (pixel sort, halftone, ASCII, light leaks), light rays and temporal effects
 (feedback, echo, datamosh, motion extract) over the **final**
 picture, the shader and every layer together. One ordered stack per Play record
 (`play.finish`). Any effect can show only **somewhere** (its Where: a layer's
@@ -145,10 +145,33 @@ worst difference 1.4 / 255.
 | Vignette | Amount, Size, Roundness, Feather, Colour |
 | CRT | Curvature, Scanlines, Mask, Cell size, Stagger, Glow, Pulse. The mask is the CRT Mask node's GLSL. |
 | Bloom | Amount, Threshold, Radius, Tint |
+| Light rays | Mode, Zoom, Length, Centre X / Y, Threshold, Knee, Intensity, Decay, Falloff, Tint; presets Light rays, God rays, Zoom burst, Warp speed, Pull in. See below. |
 | Halation | Amount, Reach, Threshold, Highlight headroom, Warmth, Growth, Conserve; presets Subtle, Classic cine (the measured reference, and the defaults), Strong |
 | Film grain | Amount, Size (px at 1080p), Colour, Response (to brightness), Frames a second (0 holds it) |
 | Flicker | Amount, Speed |
 | Camera shake | Amount, Speed, Rotation, Gate weave; zoomed to hide the edges |
+
+### Light rays
+
+After Effects' CC Radial Fast Blur over the finished picture: zoom streaks and light rays from a
+centre. The same GLSL as the Studio's **Radial Fast Blur** node and the builders' Light rays card
+(`play/kit/rays.js`; the maths, controls and timings are in
+[radial-fast-blur.md](radial-fast-blur.md)).
+
+![Coloured shapes and text over a dark picture, throwing rays from the centre (Brightest, Threshold 0.5)](radial-fast-blur/finish-light-rays.jpg)
+
+- **Mode** (Average, Brightest, Add) and **Zoom** (Out, In) are choices on the card, kept as
+  numbers (0–2, 0–1), so they can be mapped too. Centre X / Y run 0–1 (0 is the left and the
+  bottom), as Ripple's: map the pointer or a hand onto them to aim the rays.
+- **Its passes** (`FN_PREPASS_KINDS`): Light rays heads a pass of its own (`fnSegments`), so it
+  streaks the picture as the effects above it left it. Before that pass the renderer runs
+  `raysPass`: four log-step passes over the pass's input (the pass before, or the picture) into
+  two full-size targets used in turn (half float when it can, else 8-bit with a little noise);
+  the pass then reads the last one at its point and composites it (`rfComposite`), in
+  premultiplied colour, so streaks over a transparent render raise its alpha. A Where fades it
+  like any colour step.
+- Exported websites, Stage, Present and offline renders run the same renderer; the kit file
+  `rays.js` is in the Blur group, which Finish already loads.
 
 ### Halation
 
@@ -1199,6 +1222,10 @@ picture uploaded each frame):
 
 So the water itself costs about 0.15 ms a frame (up to 1 ms at the highest
 speed and detail), plus a little when a tick lands twice in a frame.
+
+Light rays at 1920 × 1080 (headless Chrome, ANGLE Metal, an Apple M3 Pro; 120
+frames with a GPU sync each): about 1.0–1.6 ms over a Vignette-only stack at any
+Length (four full-size half-float passes of 8 reads, then the composite).
 
 The live preview draws the finished frame at the overlay's size, capped at about
 2.1 million pixels, so a retina preview costs no more than a 1080p one. Renders

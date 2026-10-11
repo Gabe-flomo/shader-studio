@@ -36,6 +36,7 @@ import { TIME_CUBE_EXAMPLE_INDEX, TIME_CUBE_EXAMPLE_KEYS } from './timeCubeExamp
 import { FRAME_STACK_EXAMPLE_INDEX, FRAME_STACK_EXAMPLE_KEYS } from './frameStackExamples';
 import { FOURD_EXAMPLE_INDEX, FOURD_EXAMPLE_KEYS } from './fourDExamples';
 import { TEXTURE_TOOL_EXAMPLE_INDEX, TEXTURE_TOOL_EXAMPLE_KEYS } from './textureToolExamples';
+import { RAYS_EXAMPLE_INDEX, RAYS_EXAMPLE_KEYS } from './raysExamples';
 import { SIM_GRID_EXAMPLE_INDEX } from './simGridExamples';
 import { GRID_RULES_EXAMPLE_INDEX, simGridsFolderKeys } from './gridRulesExampleIndex';
 import { AGENT_RULE_EXAMPLE_INDEX, AGENT_RULE_EXAMPLE_KEYS } from './agentRuleExamples';
@@ -253,6 +254,8 @@ export const EXAMPLE_INDEX: Record<string, ExampleIndexEntry> = {
   ...FOURD_EXAMPLE_INDEX,
   // Texture tools (textureToolExamples.ts, docs/texture-tools.md): Mask, Levels, Flow, Neighbours, Change, Outline, Fade, Read.
   ...TEXTURE_TOOL_EXAMPLE_INDEX,
+  // Light rays (raysExamples.ts, docs/radial-fast-blur.md): Radial Fast Blur on text and on a burst of shapes.
+  ...RAYS_EXAMPLE_INDEX,
   // The 3D: Scene Builder folder (sceneBuilderExamples.ts): graphs the 3D Scene Builder made from its templates.
   ...SCENE_BUILDER_EXAMPLE_INDEX,
   ...SCENE_BUILDER_2D_EXAMPLE_INDEX,
@@ -292,7 +295,7 @@ export const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: string
   { label: "Agents with shaders", color: ctp.green, keys: AGENT_SHADER_EXAMPLE_KEYS },
   { label: "Agents in 3D",      color: ctp.green, keys: AGENT_3D_EXAMPLE_KEYS },
   { label: "Simulations: agents", color: ctp.green, keys: SIM_AGENT_EXAMPLE_KEYS },
-  { label: "Effects & Lens",    color: ctp.mauve, keys: ['echoTrails','feedbackSmear','crtTv','lensBarrel'] },
+  { label: "Effects & Lens",    color: ctp.mauve, keys: ['echoTrails','feedbackSmear','crtTv','lensBarrel', ...RAYS_EXAMPLE_KEYS] },
   { label: "Space & Texture",   color: ctp.flamingo, keys: ['waveTextureDemo','waveInterference','magicTextureDemo','neonFloorGrid','spaceAtlas'] },
   { label: "Grid",              color: ctp.sky, keys: [...GRID_EXAMPLE_KEYS, ...LEARN_GRID_KEYS, 'gridNeighborDisplaced','gridMetaballs','gridBreathing','gridDensityWave','gridLavaLamp','beatGrid'] },
   { label: "Pictures in pieces", color: ctp.sky, keys: PIECES_EXAMPLE_KEYS },
