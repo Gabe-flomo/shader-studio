@@ -48,6 +48,8 @@ import {
 } from '../../gridScene/spec';
 import { MiniGrid } from './MiniGrid';
 import { DrawnPathControls, DrawnPathPad } from './DrawnPathPad';
+import { MathPathControls, PathModifiers } from './PathControls';
+import { defaultMath, type MathPath, type PathMod } from '../../gridScene/pathMods';
 import { gridPlay } from './playParam';
 import { defaultDrawnPath, type DrawnPath } from '../../gridScene/paths';
 import { MUTED_DIM, MuteToggle, MutedTag } from '../builders/MuteToggle';
@@ -400,6 +402,9 @@ function MotionSection() {
   const usesY = m.path !== 'sideways' && m.path !== 'still';
   const drawn = m.path === 'drawn';
   const editDrawn = (fn: (d: DrawnPath) => void, key?: string) => editShape(sh.id, s => { s.motion.drawn ??= defaultDrawnPath(); fn(s.motion.drawn); }, key);
+  const editMath = (fn: (d: MathPath) => void, key?: string) => editShape(sh.id, s => { s.motion.math ??= defaultMath(); fn(s.motion.math); }, key);
+  const editMods = (fn: (d: PathMod[]) => void, key?: string) => editShape(sh.id, s => { s.motion.mods ??= []; fn(s.motion.mods); }, key);
+  const modsAllowed = m.path !== 'still' && m.path !== 'travel' && m.path !== 'hop';
   const reach = Math.hypot(usesX ? m.xy[0] : 0, usesY ? m.xy[1] : 0);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -408,6 +413,7 @@ function MotionSection() {
       </Row>
       <Tiles items={MOTION_PATHS} value={m.path} cols={3} label={p => MOTION_LABELS[p].label} onPick={p => editShape(sh.id, s => {
         s.motion.path = p;
+        if (p === 'math') { s.motion.math ??= defaultMath(); if (Math.abs(s.motion.xy[0]) < 0.05 && Math.abs(s.motion.xy[1]) < 0.05) s.motion.xy = [0.4, 0.4]; }
         if (p === 'drawn') { s.motion.drawn ??= defaultDrawnPath(); if (Math.abs(s.motion.xy[0]) < 0.05 && Math.abs(s.motion.xy[1]) < 0.05) s.motion.xy = [0.4, 0.4]; }
         // Travel and hop step a whole cell by default; the others sway a little.
         if ((p === 'travel' || p === 'hop') && Math.abs(s.motion.xy[0]) + Math.abs(s.motion.xy[1]) < 0.5) s.motion.xy = [1, 0];
@@ -429,6 +435,7 @@ function MotionSection() {
             </div>
           </div>
           {drawn && <DrawnPathControls shape={sh} onEdit={editDrawn} />}
+          {m.path === 'math' && <MathPathControls shape={sh} onEdit={editMath} />}
           <NumRow label="Angle" unit="°" hint="Turns the whole path round (the XY arrow), keeping its length. Right-click to put it in Play controls; on the built Shape node it is an input: wire an LFO or Time into it."
             value={m.angle ?? 0} min={-180} max={180} step={1} defaultValue={0} lazyParam={gridPlay(sh.id, 'angle')}
             onChange={v => editShape(sh.id, s => { s.motion.angle = v; }, `ang${sh.id}`)} />
@@ -437,6 +444,7 @@ function MotionSection() {
             onChange={v => editShape(sh.id, s => { s.motion.angleSpin = v; }, `angs${sh.id}`)} />
           <NumRow label="Speed" hint="Cycles a second (negative runs backwards)." value={m.speed} min={-2} max={2} defaultValue={0.5} lazyParam={gridPlay(sh.id, 'speed')} onChange={v => editShape(sh.id, s => { s.motion.speed = v; }, `sp${sh.id}`)} />
           <NumRow label="Lag" hint="Each cell starts this much of a cycle after its neighbour (x + y): the motion runs through the drawing as a wave." value={m.lag} min={-0.5} max={0.5} defaultValue={0} lazyParam={gridPlay(sh.id, 'lag')} onChange={v => editShape(sh.id, s => { s.motion.lag = v; }, `lag${sh.id}`)} />
+          {modsAllowed && <PathModifiers shape={sh} mods={m.mods ?? []} onEdit={editMods} />}
         </>
       )}
       {capped && (

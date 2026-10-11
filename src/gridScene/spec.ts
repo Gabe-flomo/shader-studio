@@ -22,6 +22,7 @@ import type { TextMask } from './textMask';
 import type { TexSource } from '../builders/textures';
 import type { Mutable } from '../builders/mute';
 import { defaultDrawnPath, pathAt, pathConfig, samplePoints, type DrawnPath } from './paths';
+import { mathOf, mathPoint, modOffset, modPhase, modsOf, type MathPath, type PathMod } from './pathMods';
 
 /** A Drawn path with no stroke yet moves round the default one (as the shader does). */
 const DEFAULT_DRAWN = defaultDrawnPath();
@@ -63,7 +64,7 @@ export const PIC_MODE_LABELS: Record<PicMode, { label: string; word: string; blu
 /** The picture mode a shape uses (a picture shape defaults to its own: in each cell). */
 export const picModeOf = (s: Pick<GShape, 'picMode'>): PicMode => ((PIC_MODES as readonly string[]).includes(s.picMode as string) ? s.picMode! : 'cell');
 
-export const MOTION_PATHS = ['still', 'updown', 'sideways', 'both', 'circle', 'eight', 'bounce', 'travel', 'hop', 'drawn'] as const;
+export const MOTION_PATHS = ['still', 'updown', 'sideways', 'both', 'circle', 'eight', 'bounce', 'travel', 'hop', 'drawn', 'math'] as const;
 export type MotionPath = typeof MOTION_PATHS[number];
 export const MOTION_LABELS: Record<MotionPath, { label: string; blurb: string }> = {
   still: { label: 'Still', blurb: 'Stays in its cell.' },
@@ -76,6 +77,7 @@ export const MOTION_LABELS: Record<MotionPath, { label: string; blurb: string }>
   travel: { label: 'Travel', blurb: 'Glides X, Y cells each cycle, wrapping round the grid.' },
   hop: { label: 'Hop', blurb: 'Jumps X, Y cells at a time, wrapping round the grid.' },
   drawn: { label: 'Drawn', blurb: 'Your own path: draw it on the pad (or Generate one), X wide and Y tall.' },
+  math: { label: 'Math', blurb: 'A path from a formula (x and y of t, 0 to 1 round the cycle) or a curve from the library (Lissajous, loops, stars, spirals), X wide and Y tall.' },
 };
 
 export const PATTERN_KINDS = ['none', 'ripple', 'diagonal', 'checker', 'rings', 'spiral', 'stripes', 'random', 'picture'] as const;
@@ -117,6 +119,10 @@ export interface Motion {
   angleSpin?: number;
   /** The Drawn path's stroke and settings (kept when another path is picked, so it comes back). */
   drawn?: DrawnPath;
+  /** The Math path's formula or curve (kept when another path is picked). */
+  math?: MathPath;
+  /** Path modifiers, in order (not for Travel and Hop). */
+  mods?: PathMod[];
 }
 
 export interface GShape {
@@ -498,8 +504,16 @@ export function drawnPoints(p: DrawnPath): Vec2[] {
   return q;
 }
 
-/** A path's offset from its home (cells, y up) at phase `ph` cycles, before the Angle: the shader's pathOffset. */
-export function pathOffsetAt(m: Motion, ph: number): Vec2 {
+/** A path's offset from its home (cells, y up) at phase `ph` cycles and time t, with its modifiers, before the Angle: the shader's gs_move. */
+export function pathOffsetAt(m: Motion, ph: number, t = 0): Vec2 {
+  const mods = modsOf(m);
+  if (!mods.length) return baseOffsetAt(m, ph);
+  const q = modPhase(mods, ph);
+  return modOffset(mods, baseOffsetAt(m, q), q, t, e => baseOffsetAt(m, e));
+}
+
+/** The unmodified path's offset (the shader's gs_base). */
+function baseOffsetAt(m: Motion, ph: number): Vec2 {
   const a = ph * TAU;
   const [ax, ay] = m.xy;
   switch (m.path) {
@@ -516,13 +530,14 @@ export function pathOffsetAt(m: Motion, ph: number): Vec2 {
       const p = pathAt(drawnPoints(d), pathConfig(d), ph);
       return [ax * p[0], ay * p[1]];
     }
+    case 'math': { const p = mathPoint(mathOf(m), ph - Math.floor(ph)); return [ax * p[0], ay * p[1]]; }
     default: return [0, 0];
   }
 }
 
 export function motionAt(spec: Pick<GridSceneSpec, 'cols' | 'rows'>, m: Motion, hx: number, hy: number, t: number): Vec2 {
   const ph = t * m.speed + m.lag * (hx + hy);
-  let [ox, oy] = pathOffsetAt(m, ph);
+  let [ox, oy] = pathOffsetAt(m, ph, t);
   const th = motionTheta(m, t);
   if (th) [ox, oy] = rotate2([ox, oy], th);
   let px = hx + 0.5 + ox, py = hy + 0.5 - oy;

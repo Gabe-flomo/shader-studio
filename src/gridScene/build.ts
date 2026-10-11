@@ -24,9 +24,10 @@ import { tidy } from '../sceneBuilder/build';
 import { blockGlslLines, checkBlock, clampTimes, type SpaceBlock } from '../sceneBuilder2d/blocks';
 import { BLOCK_BY_ID } from '../sceneBuilder2d/blockLibrary';
 import { colourText } from '../lang/colours';
-import { gf, gridProgram, motionExtra, motionLen, shapeArgs, activeMask, activeRules } from './glsl';
+import { gf, gridProgram, liveAt, motionExtra, motionLen, shapeArgs, activeMask, activeRules } from './glsl';
 import { findTex, standInId, standIns } from '../builders/textures';
 import { defaultDrawnPath, pathConfig } from './paths';
+import { CURVE_MODE_LABELS, MOD_DEFS, mathOf, modsOf, pathLiveParams } from './pathMods';
 import { gateNode, type Mutable } from '../builders/mute';
 import {
   DRAW_MODE_LABELS, MOTION_LABELS, PATTERN_LABELS, PIC_MODE_LABELS, SHAPE_LABELS, TARGET_LABELS, cellSize, drawOf, picModeOf, ruleText, shapeOf, liveGridSpec,
@@ -143,10 +144,18 @@ function motionInputs(s: GShape, node: GraphNode): { inputs: In[]; line: Line } 
   const ins: In[] = [{ name: a.r, type: 'vec2', from: ref(node, 'dir') }];
   const parts = [`${a.r}.x`, `${a.r}.y`];
   if (s.motion.path === 'drawn') {
-    const pts = motionExtra(s).slice(6);
+    // The drawn path's head and points only (the live numbers after them come from the Shape node).
+    const pts = motionExtra(s).slice(6, liveAt(s));
     ins.push({ name: a.d, type: 'vec4', from: ref(node, 'path') });
     pts.forEach((v, i) => ins.push({ name: `p${s.id}${i}`, type: 'float', slider: { value: v, min: -1, max: 1 }, hidden: true }));
     parts.push(`${a.d}.x`, `${a.d}.y`, `${a.d}.z`, `${a.d}.w`, ...pts.map((_, i) => `p${s.id}${i}`));
+  }
+  // A math path's and the modifiers' numbers: the Shape node's sliders, four to an output (lp0…).
+  const live = pathLiveParams(s.motion);
+  for (let k = 0; k * 4 < live.length; k++) {
+    const name = `lp${s.id}${k}`;
+    ins.push({ name, type: 'vec4', from: ref(node, `lp${k}`) });
+    parts.push(...['x', 'y', 'z', 'w'].slice(0, Math.min(4, live.length - k * 4)).map(c => `${name}.${c}`));
   }
   return { inputs: ins, line: L(`float ${a.x}[${K}]`, `float[${K}](${parts.join(', ')})`) };
 }
@@ -158,6 +167,9 @@ function shapeNode(c: Ctx, spec: GridSceneSpec, s: GShape): { node: GraphNode; c
   const path = MOTION_LABELS[m.path];
   const drawn = m.path === 'drawn';
   const dcfg = pathConfig(m.drawn ?? defaultDrawnPath());
+  const live = pathLiveParams(m);
+  const mods = modsOf(m);
+  const packs = Array.from({ length: Math.ceil(live.length / 4) }, (_, k) => live.slice(k * 4, k * 4 + 4).map(p => p.name));
   const node = expr(c, s.id, `Shape ${s.id} · ${SHAPE_LABELS[s.kind].toLowerCase()}`, [
     { name: 'size', type: 'float', slider: { value: s.size, min: 0.05, max: 1.5 } },
     { name: 'turn', type: 'float', slider: { value: s.turn, min: -180, max: 180 } },
@@ -176,6 +188,7 @@ function shapeNode(c: Ctx, spec: GridSceneSpec, s: GShape): { node: GraphNode; c
       { name: 'closed', type: 'float' as const, slider: { value: dcfg[0], min: 0, max: 1 }, hidden: true },
       { name: 'ends', type: 'float' as const, slider: { value: dcfg[1], min: 0, max: 2 }, hidden: true },
     ] : []),
+    ...live.map(p => ({ name: p.name, type: 'float' as const, slider: { value: p.value, min: p.min, max: p.max }, ...(p.hidden ? { hidden: true } : {}) })),
   ], 'vec4(moveX, moveY, speed, lag)',
   `Shape ${s.id}: a ${SHAPE_LABELS[s.kind].toLowerCase()}, drawn in the cells you give it${spec.pattern.fill === s.id ? ', and the pattern\'s fill' : ''}. Its sliders feed the Grid scene node and are live. `
     + `Size is the radius as a share of half a cell (1 touches the neighbours); turn in degrees; spin in turns a second; pulse makes the size breathe; outline above 0 draws only the edge. `
@@ -183,16 +196,21 @@ function shapeNode(c: Ctx, spec: GridSceneSpec, s: GShape): { node: GraphNode; c
     + 'Angle (degrees) turns the whole path round, keeping its length; angleSpin turns it on its own, degrees a second (wire an LFO or Time into angle to animate it). '
     + (drawn ? 'Drawn path: its points are on the Grid scene node (hidden, redrawing never rebuilds); ease eases the progress along it each cycle, back is the share of the cycle Ease back glides home in. ' : '')
     + 'The path itself is set in the Grid builder (it shapes the code). Result: the motion (x, y, speed, lag); look: (size, turn in radians, spin, pulse); edge: the outline; dir: (angle, its spin) in radians'
-    + (drawn ? '; path: (closed, end mode, back, ease).' : '.'),
+    + (drawn ? '; path: (closed, end mode, back, ease)' : '')
+    + (m.path === 'math' ? `. Math path: ${mathOf(m).kind === 'curve' ? `a curve (${CURVE_MODE_LABELS[mathOf(m).curve.mode].toLowerCase()}), its numbers the curve… sliders` : `x = ${mathOf(m).x}, y = ${mathOf(m).y} (t from 0 to 1 round the cycle)${mathOf(m).params.length ? `, its sliders f_…` : ''}`}` : '')
+    + (mods.length ? `. Path modifiers, in order: ${mods.map(x => `${MOD_DEFS[x.kind].label.toLowerCase()} (${x.id}…)`).join(', ')}; a muted one's on (hidden) is 0` : '')
+    + (packs.length ? '; lp0…: these numbers four at a time, for the Grid scene.' : '.'),
   {
     outputType: 'vec4',
     lines: [
       L('vec4 look', 'vec4(size, radians(turn), spin, pulse)'), L('float edge', 'outline'), L('vec2 dir', 'vec2(radians(angle), radians(angleSpin))'),
       ...(drawn ? [L('vec4 path', 'vec4(closed, ends, back, ease)')] : []),
+      ...packs.map((names, k) => L(`vec4 lp${k}`, `vec4(${[...names, '0.0', '0.0', '0.0'].slice(0, 4).join(', ')})`)),
     ],
     outputs: [
       { name: 'look', type: 'vec4', label: 'Look' }, { name: 'edge', type: 'float', label: 'Edge' }, { name: 'dir', type: 'vec2', label: 'Angle' },
       ...(drawn ? [{ name: 'path', type: 'vec4', label: 'Path' }] : []),
+      ...packs.map((_, k) => ({ name: `lp${k}`, type: 'vec4', label: `Path numbers ${k + 1}` })),
     ],
   });
   return { node, colour: ref(colour, 'rgb') };
