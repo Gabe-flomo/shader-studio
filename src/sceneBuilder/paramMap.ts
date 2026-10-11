@@ -12,7 +12,7 @@
  */
 import type { GraphNode } from '../types/nodeGraph';
 import { findBuild } from './apply';
-import { SHAPE_BY_KIND, WARP_BY_KIND, findItem, type CameraSpec, type SceneSpec } from './spec';
+import { SHAPE_BY_KIND, WARP_BY_KIND, findItem, type CameraNumKey, type SceneSpec } from './spec';
 
 /** A value of the spec a slider sets. */
 export type SpecPath =
@@ -24,7 +24,7 @@ export type SpecPath =
   | { at: 'k'; id: string }
   /** A modifier's or a whole-scene warp's setting. */
   | { at: 'warp'; itemId: string; warpId: string; key: string; part?: 0 | 1 | 2 }
-  | { at: 'camera'; key: keyof CameraSpec }
+  | { at: 'camera'; key: CameraNumKey }
   | { at: 'look'; key: LookKey; part?: 0 | 1 | 2 }
   | { at: 'quality'; key: 'steps' | 'maxDist' | 'jitter' };
 
@@ -33,8 +33,9 @@ export type LookKey = 'glow.density' | 'glow.falloff' | 'glow.shell' | 'glow.exp
 
 export interface ParamTarget { role: string; key: string }
 
-const CAMERA: Record<keyof CameraSpec, string> = {
+const CAMERA: Record<CameraNumKey, string> = {
   dist: 'camDist', angle: 'camAngle', elev: 'camElevation', orbit: 'rotSpeed', zoom: 'fov', flatten: 'ortho', x: 'targetX', y: 'targetY', z: 'targetZ',
+  reverse: 'reverseStrength', converge: 'reverseDist',
 };
 
 /** The look's values by render mode: the role of the node that carries each, and its param. */

@@ -353,10 +353,26 @@ export interface LookSpec {
   gi: { strength: number; metal: number; rough: number; spec: number };
 }
 
-/** The unified orbit camera: Distance, Angle, Elevation, Orbit speed, Zoom, Flatten, Translate X / Y / Z (angles in degrees). */
+/** How the camera's rays leave it (March Camera's Perspective). */
+export type CameraProjection = 'perspective' | 'orthographic' | 'reverse';
+export const CAMERA_PROJECTIONS: readonly CameraProjection[] = ['perspective', 'orthographic', 'reverse'];
+/** Reverse perspective's defaults: how strongly the rays converge, and how far in front they meet. */
+export const REVERSE_DEFAULTS = { reverse: 1, converge: 8 } as const;
+
+/**
+ * The unified orbit camera: Distance, Angle, Elevation, Orbit speed, Zoom, Flatten, Translate X / Y / Z
+ * (angles in degrees), and its projection: perspective (absent; Flatten blends it toward
+ * orthographic), orthographic (parallel rays) or reverse (far things bigger; `reverse` is the
+ * strength, `converge` where the rays meet).
+ */
 export interface CameraSpec {
   dist: number; angle: number; elev: number; orbit: number; zoom: number; flatten: number; x: number; y: number; z: number;
+  projection?: CameraProjection;
+  reverse?: number;
+  converge?: number;
 }
+/** The camera's number settings (each a slider, and a March Camera param). */
+export type CameraNumKey = Exclude<keyof CameraSpec, 'projection'>;
 
 export interface QualitySpec {
   steps: number;

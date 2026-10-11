@@ -21,6 +21,13 @@ import { paramPlayItems } from './paramPlayMenu';
 import { widenedRanges as widened } from './builderSliderRanges';
 
 
+/**
+ * The least track a builder slider keeps beside its number chip: in a narrow panel (an X / Y / Z
+ * row, a drawer) the track used to shrink to nothing, leaving only the chip ("I can't get into these
+ * sliders").
+ */
+export const TRACK_MIN = 64;
+
 export interface BuilderSliderProps {
   value: number;
   min: number;
@@ -54,7 +61,7 @@ export function BuilderSlider({ value, min, max, step, integer, onChange, ariaLa
   const slider: ReactNode = (
     <RulerSlider value={value} min={lo} max={hi} step={integer ? 1 : step} integer={integer} onChange={onChange} ariaLabel={ariaLabel}
       defaultValue={defaultValue ?? mountValue} disabled={disabled} hard={hard} unit={unit}
-      bipolar={bipolar ?? isSymmetricRange(lo, hi)}
+      bipolar={bipolar ?? isSymmetricRange(lo, hi)} trackMinWidth={TRACK_MIN}
       onRange={rangeKey ? (a, b) => { widened.set(rangeKey, { min: a, max: b }); bump(n => n + 1); } : undefined} />
   );
   if (!param && lazyParam) {
