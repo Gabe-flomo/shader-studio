@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.149',
+    date: '2026-10-10',
+    title: 'Web pages: backgrounds and input',
+    highlights: [
+      { area: 'Files', text: 'Web export focuses on backgrounds and input: mouse, clicks and keys work, even in the small snippet. Tracking, camera, MIDI and mic are left out and say so.' },
+      { area: 'Studio', text: 'Recipes write radius= and height= for cylinders, cones and capsules (r= and h= still work). Switch to Transform warns when output differs by rounding.' },
+    ],
+  },
+  {
     id: '2026.10.148',
     date: '2026-10-10',
     title: 'Text grids',
