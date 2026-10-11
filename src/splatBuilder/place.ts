@@ -72,3 +72,35 @@ export function quarterTurn(place: PlaceSpec, box: ScanBox | null | undefined, a
   rotation[axis] = ((((rotation[axis] + deg) % 360) + 540) % 360) - 180;
   return keepMiddle(place, box, { rotation });
 }
+
+// ── Turning about any axis (the gizmo's rings) ──────────────────────────────
+
+type M3 = [number, number, number, number, number, number, number, number, number];
+const mul = (a: M3, b: M3): M3 => {
+  const o = new Array(9).fill(0) as M3;
+  for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) for (let k = 0; k < 3; k++) o[r * 3 + c] += a[r * 3 + k] * b[k * 3 + c];
+  return o;
+};
+const rx = (a: number): M3 => [1, 0, 0, 0, Math.cos(a), -Math.sin(a), 0, Math.sin(a), Math.cos(a)];
+const ry = (a: number): M3 => [Math.cos(a), 0, Math.sin(a), 0, 1, 0, -Math.sin(a), 0, Math.cos(a)];
+const rz = (a: number): M3 => [Math.cos(a), -Math.sin(a), 0, Math.sin(a), Math.cos(a), 0, 0, 0, 1];
+const D = Math.PI / 180;
+
+/** The Splat Scene's turn as a matrix (X, then Y, then Z: R = Rz · Ry · Rx, row-major). */
+export const turnMatrix = (deg: Vec3): M3 => mul(rz(deg[2] * D), mul(ry(deg[1] * D), rx(deg[0] * D)));
+
+/** A turn matrix back as X, Y, Z degrees (the Splat Scene's order). */
+export function turnDegrees(m: M3): Vec3 {
+  const b = Math.asin(Math.max(-1, Math.min(1, -m[6])));
+  let a: number, c: number;
+  if (Math.abs(Math.cos(b)) > 1e-6) { a = Math.atan2(m[7], m[8]); c = Math.atan2(m[3], m[0]); }
+  else { a = Math.atan2(-m[5], m[4]); c = 0; }
+  const r = (v: number) => Math.round(v / D * 100) / 100 + 0;
+  return [r(a), r(b), r(c)];
+}
+
+/** Turned `deg` degrees round the world's `axis` (0 X, 1 Y, 2 Z), its middle kept where it is. */
+export function turnAbout(place: PlaceSpec, box: ScanBox | null | undefined, axis: 0 | 1 | 2, deg: number): PlaceSpec {
+  const by = axis === 0 ? rx(deg * D) : axis === 1 ? ry(deg * D) : rz(deg * D);
+  return keepMiddle(place, box, { rotation: turnDegrees(mul(by, turnMatrix(place.rotation))) });
+}

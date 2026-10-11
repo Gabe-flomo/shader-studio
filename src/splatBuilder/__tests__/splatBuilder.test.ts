@@ -73,7 +73,13 @@ describe('spec → graph compiles', () => {
         const { g } = compiles(s);
         const scan = g.nodes.find(x => x.type === 'splatScene')!;
         expect(!!scan.inputs.dist.connection).toBe(world);
-        expect(g.nodes.find(x => x.id === 'out')!.inputs.color.connection?.nodeId).toBe(g.nodes.find(x => x.type === 'bloom')!.id);
+        // The same-frame bloom (Pass → Glow → Add glow), then the tone map; never the frame-before Bloom node.
+        expect(g.nodes.some(x => x.type === 'bloom')).toBe(false);
+        const tone = g.nodes.find(x => x.params._spRole === 'tone')!;
+        expect(g.nodes.find(x => x.id === 'out')!.inputs.color.connection?.nodeId).toBe(tone.id);
+        const add = g.nodes.find(x => x.id === tone.inputs.color.connection?.nodeId)!;
+        expect(add.params.label).toBe('Add glow');
+        expect(g.nodes.find(x => x.id === add.inputs.glow.connection?.nodeId)?.type).toBe('glowTexture');
       }
     }
   });
@@ -227,9 +233,12 @@ describe('Surprise me', () => {
     const mine = starterSplatScene();
     mine.scan.source = { kind: 'file', videoId: 'v', fileName: 'nike.ply', bytes: 9 };
     mine.place.scale = 0.4;
-    const s = surpriseSplatScene(12, mine);
-    expect(s.scan).toEqual(mine.scan);
-    expect(s.place).toEqual(mine.place);
+    for (const seed of [12, 13, 14, 15, 16, 17, 18, 19, 20]) {
+      const s = surpriseSplatScene(seed, mine);
+      expect(s.scan).toEqual(mine.scan);
+      // With a world, only its height changes: it stands on the floor.
+      expect({ ...s.place, position: [s.place.position[0], 0, s.place.position[2]] }).toEqual(mine.place);
+    }
   });
 
   it('is one undo step in the builder', () => {

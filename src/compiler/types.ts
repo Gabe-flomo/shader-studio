@@ -231,7 +231,7 @@ export interface SplatProbeProgram {
 export interface SplatModifierProgram {
   nodeId: string;
   fragmentShader: string;
-  uniforms: { data: string; probe: string; count: string };
+  uniforms: { data: string; probe: string; count: string; box?: string };
   paramUniforms: Record<string, number | number[]>;
   paramBindings: Record<string, string>;
   textureUniforms: Record<string, string>;

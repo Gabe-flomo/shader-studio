@@ -108,10 +108,13 @@ export function compileSplatProbes(graph: NodeGraph, slugs?: Map<string, string>
 /** The modifier targets' width: one texel per splat, this many to a row. */
 export const SPLAT_MOD_WIDTH = 2048;
 
-/** A Splat Scene's names for its modifier program's own uniforms: the splat data, its probe, and the splat count. */
-export function splatModUniformNames(nodeId: string): { data: string; probe: string; count: string } {
+/**
+ * A Splat Scene's names for its modifier program's own uniforms: the splat data, its probe, the splat count, and the
+ * scan's box (its middle in its own coordinates and its core radius: what "relative to the scan" measures by).
+ */
+export function splatModUniformNames(nodeId: string): { data: string; probe: string; count: string; box: string } {
   const k = nodeId.replace(/[^A-Za-z0-9]/g, 'x');
-  return { data: `u_spd_${k}`, probe: `u_spp_${k}`, count: `u_spn_${k}` };
+  return { data: `u_spd_${k}`, probe: `u_spp_${k}`, count: `u_spn_${k}`, box: `u_spb_${k}` };
 }
 
 /**
@@ -142,6 +145,11 @@ export function splatModPrelude(nodeId: string, flip: boolean): string {
     `    sp_rand = float(sp_h >> 8u) / 16777216.0;\n`,
     `    sp_index = float(sp_i);\n`,
     `    sp_count = ${u.count};\n`,
+    // The scan's middle (in the scan, and in the scene) and its size (core radius × Scale), for nodes set to measure
+    // relative to the scan: a scan metres across and a small object then dissolve, wave and crop alike.
+    `    sp_mid = ${u.box}.xyz * ${F} * sp_scale;\n`,
+    `    sp_midW = sp_M * ${u.box}.xyz + sp_T;\n`,
+    `    sp_unit = max(${u.box}.w * sp_scale, 1e-4);\n`,
     `    sp_base = mat3(sp_M * sp_p + sp_T, sp_rgba.rgb, vec3(sp_rgba.a, 1.0, 0.0));\n`,
     `    vec2 g_uv = vec2(0.0);\n`,
     `    vec2 splatModUv = vec2(0.5);\n`,
@@ -156,8 +164,9 @@ export function splatModHeader(nodeId: string): string {
     `uniform highp usampler2D ${u.data};`,
     `uniform highp sampler2D ${u.probe};`,
     `uniform float ${u.count};`,
+    `uniform vec4 ${u.box};`,
     'layout(location = 1) out highp vec4 splatModOut1;',
-    'mat3 sp_base; vec3 sp_local; vec3 sp_T; float sp_index; float sp_rand; float sp_count; float sp_radius;',
+    'mat3 sp_base; vec3 sp_local; vec3 sp_T; float sp_index; float sp_rand; float sp_count; float sp_radius; vec3 sp_mid; vec3 sp_midW; float sp_unit;',
     '',
   ].join('\n');
 }

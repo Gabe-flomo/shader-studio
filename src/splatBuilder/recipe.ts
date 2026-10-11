@@ -12,7 +12,8 @@
  *   camera dist=3.6 angle=25 elev=12 fov=1.5 turntable=8 target=(0,0,0)
  *   look tone=aces bloom=on bloom-intensity=0.8 bloom-threshold=0.6 bloom-radius=40
  *
- * An effect line is its kind and its node's own settings (the names on the node card's sliders, in camelCase). Pure.
+ * An effect line is its kind and its node's own settings (the names on the node card's sliders, in camelCase); a
+ * `yours tail=<node>` line is a run of nodes you added on the card ("Your nodes"), kept in its place. Pure.
  */
 import {
   EFFECT_KINDS, LIGHTS, PROP_KINDS, TONES, effectDefaults, starterSplatScene,
@@ -32,6 +33,7 @@ export function splatRecipe(spec: SplatBuilderSpec): string {
   lines.push(`scan ${src} max=${S.maxSplats} sh=${S.shDegree} sort=${S.sort} res=${S.resolution}`);
   lines.push(`place at=${vec(P.position)} turn=${vec(P.rotation)} scale=${fmt(P.scale)} up=${P.up === 'y' ? '+y' : '-y'} size=${fmt(P.splatSize)} opacity=${fmt(P.opacity)}`);
   for (const e of spec.effects) {
+    if (e.kind === 'custom') { lines.push(`yours${e.on ? '' : ' off'} tail=${e.tail}${e.label ? ` label=${JSON.stringify(e.label)}` : ''}`); continue; }
     const words = [e.kind, ...(e.on ? [] : ['off']), ...Object.entries(e.params).map(([k, v]) => `${k}=${val(v)}`)];
     if (e.animate) words.push(`animate=${e.animate.param}:${fmt(e.animate.speed)}:${fmt(e.animate.from)}:${fmt(e.animate.to)}`);
     lines.push(words.join(' '));
@@ -153,6 +155,14 @@ export function readSplatRecipe(text: string, base: SplatBuilderSpec = starterSp
           bloom: { on: bool('bloom', spec.look.bloom.on), intensity: num('bloom-intensity', spec.look.bloom.intensity), threshold: num('bloom-threshold', spec.look.bloom.threshold), radius: num('bloom-radius', spec.look.bloom.radius) },
         };
         return;
+      case 'yours': {
+        // Your nodes: a run you added on the card, by the node that ends it.
+        const tail = word('tail', '');
+        const had = base.effects.find(e => e.kind === 'custom' && e.tail === tail);
+        if (!had) { errors.push(`Line ${i + 1}: there are no nodes of yours ending in “${tail}” (add them on the Splat Scene card).`); return; }
+        spec.effects.push({ ...structuredClone(had), on: !flags.includes('off'), ...(kv.has('label') ? { label: word('label', '') } : {}) });
+        return;
+      }
       default: {
         if (!(EFFECT_KINDS as readonly string[]).includes(head)) { errors.push(`Line ${i + 1}: “${head}” isn't a part I know (scan, place, an effect: ${EFFECT_KINDS.join(', ')}, world, shape, background, camera, look).`); return; }
         const kind = head as EffectKind;
