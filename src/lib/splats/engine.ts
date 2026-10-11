@@ -14,7 +14,7 @@
 import * as THREE from 'three';
 import type { GraphNode } from '../../types/nodeGraph';
 import type { SplatModifierProgram, SplatProbeProgram } from '../../compiler/types';
-import { SPLAT_SCENE_TYPE, splatFileOf, splatMaxOf, splatScaleOf, splatShOf, splatSortOf } from '../../nodes/definitions/splatScene';
+import { SPLAT_PIVOT_UNIFORM, SPLAT_SCENE_TYPE, splatFileOf, splatMaxOf, splatScaleOf, splatShOf, splatSortOf } from '../../nodes/definitions/splatScene';
 import { SplatPass, type ProbeReading } from './render';
 import { dropSplats, loadSplats, repackSplats, sortKeptSplats, sortSplatDepths } from './client';
 import { getSplatFile } from './library';
@@ -25,6 +25,16 @@ import type { PackedSplats, SplatInfo } from './pack';
 import { THUMB_H, THUMB_W } from './workerCore';
 import { DEMO_KINDS, demoBlob, demoRings } from './demo';
 import { writeSplat } from './format';
+
+/**
+ * The scan's middle (its own coordinates) for the probe about to draw: what a Splat Scene turns and scales about
+ * (splatScene.ts SPLAT_PIVOT_UNIFORM). One uniform for every probe, set before each one draws; in the table before
+ * the probe's material is made, so three.js uploads it. Before the file is read: the origin.
+ */
+export function setPivot(uniforms: Record<string, THREE.IUniform>, center: readonly number[] | undefined): void {
+  const u = uniforms[SPLAT_PIVOT_UNIFORM] ?? (uniforms[SPLAT_PIVOT_UNIFORM] = { value: new THREE.Vector3() });
+  (u.value as THREE.Vector3).set(center?.[0] ?? 0, center?.[1] ?? 0, center?.[2] ?? 0);
+}
 
 /**
  * A generated scan instead of a file (params.demo = 'rings' or 'blob', params.demoCount): the example graphs', and
@@ -298,6 +308,7 @@ class SplatEngine {
       const probe = this.probes.get(id);
       if (!probe) continue;
       const pass = this.ensurePass(id, s, ctx.renderer);
+      setPivot(ctx.uniforms, s.status.info?.center);
       pass.setProbe(this.vertexShader, probe.fragmentShader, ctx.uniforms);
       this.setModifier(s, pass, probe, ctx.uniforms);
       const k = splatScaleOf(s.node);
@@ -406,6 +417,7 @@ class SplatEngine {
       const probe = this.probes.get(id);
       if (!probe || !s.packed) continue;
       const pass = this.ensurePass(id, s, ctx.renderer);
+      setPivot(ctx.uniforms, s.status.info?.center);
       pass.setProbe(this.vertexShader, probe.fragmentShader, ctx.uniforms);
       this.setModifier(s, pass, probe, ctx.uniforms);
       // The probe, then the modifier program (it reads the probe), for this frame's time.

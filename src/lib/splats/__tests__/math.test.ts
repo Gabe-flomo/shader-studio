@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { applyModel, cameraFromProbe, cameraRay, covariance3d, ellipseAxes, eyeInModel, marchCamera, modelMatrix, projectSplat, sortAxis, splatWeight, transformCov, type SplatCamera } from '../math';
+import { applyModel, cameraFromProbe, cameraRay, covariance3d, ellipseAxes, eyeInModel, marchCamera, modelMatrix, projectSplat, sortAxis, splatOffscreen, splatWeight, transformCov, type SplatCamera } from '../math';
+import { migrateNodeParams } from '../../../types/nodeGraph';
+import { getNodeDefinition } from '../../../nodes/definitions';
+import { SPLAT_PIVOT_UNIFORM, SplatProbeOutNode, splatPivotsAtMiddle } from '../../../nodes/definitions/splatScene';
 
 const near = (a: number, b: number, eps = 1e-6) => expect(Math.abs(a - b)).toBeLessThanOrEqual(eps);
 const nearAll = (a: readonly number[], b: readonly number[], eps = 1e-6) => { expect(a.length).toBe(b.length); a.forEach((v, i) => near(v, b[i], eps)); };
@@ -116,5 +119,55 @@ describe('the model transform', () => {
   it('puts the eye in the scan’s own space', () => {
     const m = modelMatrix({ position: [1, 0, 0], rotation: [0, 90, 0], scale: 2 });
     nearAll(applyModel(m, eyeInModel(m, [5, 4, 3])), [5, 4, 3], 1e-9);
+  });
+});
+
+// ── docs/splat-scene.md: turning about the middle, and the cull (the "rotating cuts the scan off" report) ──
+
+
+describe('turning about the scan\'s middle', () => {
+  // A scan whose own origin is metres from its middle (as nike.splat's is: middle ≈ (−0.08, 1.83, 1.28)).
+  const middle: [number, number, number] = [-0.08, 1.83, 1.28];
+  it('with a pivot the middle stays at Position for every turn (bounds don\'t go stale)', () => {
+    for (const ry of [0, 45, 90, 180, 270]) {
+      const m = modelMatrix({ position: [0.5, 0, -0.2], rotation: [10, ry, 0], scale: 0.9, flip: true, pivot: middle });
+      nearAll(applyModel(m, middle), [0.5, 0, -0.2], 1e-6);
+    }
+  });
+  it('without one (graphs saved before) the middle swings round the origin', () => {
+    const at = (ry: number) => applyModel(modelMatrix({ rotation: [0, ry, 0], scale: 0.9, flip: true }), middle);
+    expect(Math.hypot(...at(0).map((v, i) => v - at(180)[i]))).toBeGreaterThan(2);
+  });
+  it('the probe writes Position − M · middle when it turns about the middle, Position alone for older nodes', () => {
+    const base = { id: 's', type: 'splatScene', position: { x: 0, y: 0 }, inputs: {}, outputs: {} };
+    const now = SplatProbeOutNode.generateGLSL({ ...base, params: { pivot: 'middle' } } as never, {}).code;
+    expect(now).toContain(`- s_M * ${SPLAT_PIVOT_UNIFORM}`);
+    expect(SplatProbeOutNode.glslFunctionsFor!({ ...base, params: { pivot: 'middle' } } as never)).toEqual([`uniform vec3 ${SPLAT_PIVOT_UNIFORM};`]);
+    const old = SplatProbeOutNode.generateGLSL({ ...base, params: { pivot: 'origin' } } as never, {}).code;
+    expect(old).not.toContain(SPLAT_PIVOT_UNIFORM);
+  });
+  it('a Splat Scene saved before loads turning about its origin, so it looks as it did; new ones turn about the middle', () => {
+    const saved = migrateNodeParams({ id: 's', type: 'splatScene', position: { x: 0, y: 0 }, inputs: {}, outputs: {}, params: { position: [1, 2, 3], _schemaVersion: 1 } }, getNodeDefinition);
+    expect(saved.params.pivot).toBe('origin');
+    expect(splatPivotsAtMiddle(saved)).toBe(false);
+    expect(getNodeDefinition('splatScene')!.defaultParams!.pivot).toBe('middle');
+  });
+});
+
+describe('the splat cull: the whole quad off the picture, not the centre', () => {
+  const view: [number, number] = [1280, 720];
+  it('a big splat whose centre is past the old 1.3 margin still draws its edge', () => {
+    // Centre at x = 1.5 (off the right side), a 400 px ellipse: its quad reaches back over the picture.
+    expect(splatOffscreen([1.5, 0], [400, 0], [0, 80], view)).toBe(false);
+  });
+  it('a small splat past the edge is culled; one on the picture never is', () => {
+    expect(splatOffscreen([1.5, 0], [4, 0], [0, 4], view)).toBe(true);
+    expect(splatOffscreen([1.02, -1.02], [20, 0], [0, 20], view)).toBe(false);
+    expect(splatOffscreen([0.2, 0.3], [1, 0], [0, 1], view)).toBe(false);
+  });
+  it('the reach is the quad\'s (±2 along major and minor, in pixels)', () => {
+    // 4 · 160 / 1280 = 0.5: the quad's edge is exactly at the picture's edge from x = 1.5.
+    expect(splatOffscreen([1.49, 0], [160, 0], [0, 1], view)).toBe(false);
+    expect(splatOffscreen([1.51, 0], [160, 0], [0, 1], view)).toBe(true);
   });
 });

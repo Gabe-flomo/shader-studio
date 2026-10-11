@@ -154,9 +154,11 @@ export function splatWeight(p: Projected, d: [number, number]): number {
 /**
  * The node's placement as a column-major 4 × 4 (WebGL's order): T · R · S · F, where R turns by Rotation X, then Y,
  * then Z (degrees, the Transform node's order: docs/transform-node.md), S is the uniform Scale, and F turns a scan
- * upside down (y and z flipped: "right, down, forward" scans the right way up) when `flip` is on.
+ * upside down (y and z flipped: "right, down, forward" scans the right way up) when `flip` is on. With a `pivot` (a
+ * point in the scan's own coordinates, its middle for a Splat Scene that turns about it), the scan turns and scales
+ * about that point and Position is where it lands: T · R · S · F · (p − pivot).
  */
-export function modelMatrix(o: { position?: Vec3; rotation?: Vec3; scale?: number; flip?: boolean }): number[] {
+export function modelMatrix(o: { position?: Vec3; rotation?: Vec3; scale?: number; flip?: boolean; pivot?: Vec3 }): number[] {
   const [px, py, pz] = o.position ?? [0, 0, 0];
   const [rx, ry, rz] = (o.rotation ?? [0, 0, 0]).map(d => (d * Math.PI) / 180);
   const s = o.scale ?? 1;
@@ -168,7 +170,21 @@ export function modelMatrix(o: { position?: Vec3; rotation?: Vec3; scale?: numbe
   let L = mul3(Rz, mul3(Ry, Rx));
   if (o.flip) L = mul3(L, [1, 0, 0, 0, -1, 0, 0, 0, -1]);
   L = L.map(v => v * s);
-  return [L[0], L[3], L[6], 0, L[1], L[4], L[7], 0, L[2], L[5], L[8], 0, px, py, pz, 1];
+  const [qx, qy, qz] = o.pivot ?? [0, 0, 0];
+  const tx = px - (L[0] * qx + L[1] * qy + L[2] * qz), ty = py - (L[3] * qx + L[4] * qy + L[5] * qz), tz = pz - (L[6] * qx + L[7] * qy + L[8] * qz);
+  return [L[0], L[3], L[6], 0, L[1], L[4], L[7], 0, L[2], L[5], L[8], 0, tx, ty, tz, 1];
+}
+
+/**
+ * The splat shader's cull (shaders.ts): a splat is skipped only when its whole quad (the centre ± its ellipse's reach,
+ * the quad spanning ±2 along major and minor, in pixels) lies off the picture. Culling by the centre alone (it used
+ * to skip any centre past 1.3 × the picture's half-size) cut big splats off at the edges of a turning scan.
+ * `ndc` is the centre in −1…1, `major` / `minor` the ellipse's axes in pixels, `view` the picture's size in pixels.
+ */
+export function splatOffscreen(ndc: readonly [number, number], major: readonly [number, number], minor: readonly [number, number], view: readonly [number, number]): boolean {
+  const ex = 4 * (Math.abs(major[0]) + Math.abs(minor[0])) / view[0];
+  const ey = 4 * (Math.abs(major[1]) + Math.abs(minor[1])) / view[1];
+  return Math.abs(ndc[0]) - ex > 1 || Math.abs(ndc[1]) - ey > 1;
 }
 
 /** A point through a column-major 4 × 4. */

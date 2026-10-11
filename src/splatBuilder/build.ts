@@ -189,6 +189,8 @@ export function buildSplatGraph(spec: SplatBuilderSpec, idFor: (role: string) =>
     ...source,
     position: [...P.position], rotation: [...P.rotation], scale: P.scale, up: P.up, splatSize: P.splatSize, opacity: P.opacity,
     maxSplats: String(S.maxSplats), shDegree: String(S.shDegree), sortRate: S.sort, resolution: S.resolution,
+    // The builder's Place maths (place.ts) turn about the file's origin and keep the middle in place themselves.
+    pivot: 'origin',
   }, { ro: ref(camera, 'ro'), rd: ref(camera, 'rd'), scene, dist, hit, modifier },
   [
     S.source.kind === 'file' ? `Splat Scene: the scan “${S.source.fileName}”.` : 'Splat Scene: a generated example scan (no file). Load your own in the Splat builder\'s Scan section, or drop a .ply, .splat or .spz on this card.',

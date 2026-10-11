@@ -17,6 +17,7 @@ import { Button, IconButton } from '../ui/Button';
 import { Segmented, Toggle } from '../ui/Choice';
 import { Select } from '../ui/Select';
 import { Icon } from '../ui/Icon';
+import { NEST_INDENT, nestedSectionStyle } from '../ui/nesting';
 import { MiniCloud } from './MiniCloud';
 import { MuteToggle, MutedTag, MUTED_DIM } from '../builders/MuteToggle';
 import { useScanBox } from './SplatViewport';
@@ -95,7 +96,10 @@ function Group({ title, children, meta }: { title: string; children: ReactNode; 
       <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: tk.text.faint }}>
         <span style={{ flex: 1 }}>{title}</span>{meta}
       </span>
-      {children}
+      {/* A group inside a section is stepped in under its title (components/ui/nesting.ts). */}
+      <div data-nested-section="true" style={{ display: 'flex', flexDirection: 'column', gap: 6, ...nestedSectionStyle(tk.border.subtle, -NEST_INDENT + 4) }}>
+        {children}
+      </div>
     </div>
   );
 }
@@ -456,6 +460,7 @@ export function SceneSection() {
           </Group>
         </>
       )}
+      <BlendGroup worldOn={world.on} />
       <Group title="Background">
         <Segmented ariaLabel="Background" fill size="sm" value={bg.kind} onChange={v => edit(d => { d.background.kind = v; })}
           options={[{ value: 'solid', label: 'Colour' }, { value: 'gradient', label: 'Gradient' }, { value: 'picture', label: 'Picture' }]} />
@@ -468,6 +473,29 @@ export function SceneSection() {
         )}
       </Group>
     </>
+  );
+}
+
+/**
+ * How the scan and the world meet (the Splat Scene's Compositing: Edge softness, Solid at), written on the scan node
+ * itself (a rebuild keeps a param set by hand). With no world they do nothing, so they are dimmed and say why.
+ */
+function BlendGroup({ worldOn }: { worldOn: boolean }) {
+  const targetId = useSplatBuilder(s => s.targetId);
+  const scan = useNodeGraphStore(s => (targetId ? findSplatBuild(s.nodes, targetId)?.byRole.get('scan') ?? null : null));
+  if (!scan) return null;
+  const set = (k: string, v: number) => useNodeGraphStore.getState().updateNodeParams(scan.id, { [k]: v }, { immediate: true });
+  const num = (k: string, d: number) => (typeof scan.params[k] === 'number' ? (scan.params[k] as number) : d);
+  return (
+    <Group title="Blending with the world">
+      {!worldOn && <BuilderNote>Add a world to blend the scan with it.</BuilderNote>}
+      <div data-splat-blend aria-disabled={!worldOn} style={{ display: 'flex', flexDirection: 'column', gap: 6, ...(worldOn ? {} : { opacity: 0.45, pointerEvents: 'none' as const }) }}>
+        <Num label="Edge softness" value={num('softness', 0.05)} min={0} max={1} step={0.005} defaultValue={0.05} play={['scan', 'softness']} onChange={v => set('softness', v)}
+          hint="How gently the world and the splats cross where they meet, in scene units." />
+        <Num label="Solid at" value={num('hitAt', 0.5)} min={0.01} max={1} defaultValue={0.5} play={['scan', 'hitAt']} onChange={v => set('hitAt', v)}
+          hint="The splats' alpha from which a pixel counts as solid where they meet the world." />
+      </div>
+    </Group>
   );
 }
 

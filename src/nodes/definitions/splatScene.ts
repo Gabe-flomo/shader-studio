@@ -63,6 +63,21 @@ export const splatShOf = (node: GraphNode): number => {
 export const splatSortOf = (node: GraphNode): SplatSort => (node.params.sortRate === 'frame' ? 'frame' : 'moves');
 /** The resolution the splats are drawn at, as a share of the picture's. */
 export const splatScaleOf = (node: GraphNode): number => (node.params.resolution === 'half' ? 0.5 : 1);
+/**
+ * What the scan turns and scales about (docs/splat-scene.md "Settings"): its middle (the core box's centre, the
+ * engine's `info.center`), so Position is where the middle sits and turning it (a slider, or Rotation wired to Time)
+ * keeps it in place; or, for graphs saved before SPLAT_PIVOT_VERSION, the file's own origin (a scan whose origin is
+ * metres from its middle swung out of the picture as it turned).
+ */
+export const splatPivotsAtMiddle = (node: GraphNode): boolean => node.params.pivot !== 'origin';
+/**
+ * The probe's uniform for the scan's middle in its own coordinates. One name for every probe: each Splat Scene's probe
+ * is its own program, and the engine sets the value just before drawing it (lib/splats/engine.ts).
+ */
+export const SPLAT_PIVOT_UNIFORM = 'u_splatPivot';
+/** The schema version that turns about the scan's middle: older saved nodes load with `pivot: 'origin'`. */
+export const SPLAT_PIVOT_VERSION = 2;
+
 /** Is the scan turned over (y and z flipped: 3DGS scans have y down)? */
 export const splatFlipOf = (node: GraphNode): boolean => node.params.up !== 'y';
 
@@ -95,8 +110,8 @@ const QUALITY = 'Quality';
 const COMPOSITE = 'Compositing';
 
 const commonParams: NodeDefinition['paramDefs'] = {
-  position: { label: 'Position', type: 'vec3', min: -20, max: 20, step: 0.01, section: PLACE, hint: 'Where the scan sits in the scene (moved after it is turned and scaled).' },
-  rotation: { label: 'Rotation', type: 'vec3', min: -360, max: 360, step: 0.5, section: PLACE, hint: 'Turns the scan, in degrees: X, then Y, then Z (the Transform node\'s order).' },
+  position: { label: 'Position', type: 'vec3', axes: 'xyz', min: -20, max: 20, step: 0.01, section: PLACE, hint: 'Where the scan\'s middle sits in the scene (it turns and scales about its middle).' },
+  rotation: { label: 'Rotation', type: 'vec3', axes: 'xyz', min: -360, max: 360, step: 0.5, section: PLACE, hint: 'Turns the scan, in degrees: X, then Y, then Z (the Transform node\'s order).' },
   scale: { label: 'Scale', type: 'float', min: 0.01, max: 20, step: 0.01, section: PLACE, hint: 'Its size in the scene: 1 keeps the scan\'s own units (most apps: metres).' },
   up: { label: 'Up is', type: 'select', section: PLACE, hint: 'Most scans (3DGS, Polycam, Luma exports) have y pointing down: −Y turns them the right way up. Pick +Y if yours comes in upside down.', options: [
     { value: 'minusY', label: '−Y (most scans)' }, { value: 'y', label: '+Y' },
@@ -120,6 +135,7 @@ const commonParams: NodeDefinition['paramDefs'] = {
 export const splatDefaults: Record<string, unknown> = {
   position: [0, 0, 0], rotation: [0, 0, 0], scale: 1, up: 'minusY', splatSize: 1, opacity: 1,
   maxSplats: String(DEFAULT_MAX_SPLATS), sortRate: 'moves', shDegree: '3', resolution: 'full', softness: 0.05, hitAt: 0.5,
+  pivot: 'middle', _schemaVersion: SPLAT_PIVOT_VERSION,
 };
 
 const placeInputs: NodeDefinition['inputs'] = {
@@ -153,6 +169,10 @@ export const SplatSceneNode: NodeDefinition = {
     texture: { type: 'texture', label: 'Splats texture', hint: 'The splats alone (premultiplied colour, alpha) as a texture: for Sample, Blur and the Texture tools.' },
   },
   socketsOnDemand: { position: ['position'], rotation: ['rotation'], scale: ['scale'] },
+  version: SPLAT_PIVOT_VERSION,
+  migrateParams: (params: Record<string, unknown>, fromVersion: number) => (fromVersion < SPLAT_PIVOT_VERSION && !('pivot' in params) ? { ...params, pivot: 'origin' } : params),
+  // Compositing only acts with a scene wired: without one the card dims it and says why.
+  sectionNeeds: (name, node) => (name === COMPOSITE && !node.inputs.scene?.connection ? 'Add a world to blend the scan with it.' : null),
   textureSlots: [...SPLAT_SLOTS],
   defaultParams: splatDefaults,
   paramDefs: commonParams,
@@ -214,6 +234,7 @@ export const SplatProbeOutNode: NodeDefinition = {
   outputs: {},
   defaultParams: splatDefaults,
   paramDefs: commonParams,
+  glslFunctionsFor: (node: GraphNode) => (splatPivotsAtMiddle(node) ? [`uniform vec3 ${SPLAT_PIVOT_UNIFORM};`] : []),
   generateGLSL: (node: GraphNode, v) => {
     const id = node.id, P = node.params;
     const pos = v.position ?? pv3(P.position, [0, 0, 0]);
@@ -223,6 +244,8 @@ export const SplatProbeOutNode: NodeDefinition = {
     const ro = v.ro ?? 'vec3(0.0, 0.0, 3.0)';
     const rd = v.rd ?? 'normalize(vec3(g_uv, -1.5))';
     const flip = splatFlipOf(node) ? 'mat3(1.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.0, -1.0)' : 'mat3(1.0)';
+    // Turned about the scan's middle (its own coordinates, a uniform the engine sets): T = Position − M · middle.
+    const pivot = splatPivotsAtMiddle(node) ? ` - ${id}_M * ${SPLAT_PIVOT_UNIFORM}` : '';
     return {
       code: [
         `    int ${id}_i = int(gl_FragCoord.x);\n`,
@@ -239,7 +262,7 @@ export const SplatProbeOutNode: NodeDefinition = {
         `    else if (${id}_i == 4) ${id}_o = vec4(${id}_M[0], ${p(P.splatSize, 1)});\n`,
         `    else if (${id}_i == 5) ${id}_o = vec4(${id}_M[1], ${p(P.opacity, 1)});\n`,
         `    else if (${id}_i == 6) ${id}_o = vec4(${id}_M[2], 0.0);\n`,
-        `    else ${id}_o = vec4(${pos}, 1.0);\n`,
+        `    else ${id}_o = vec4(${pos}${pivot}, 1.0);\n`,
         `    gl_FragColor = ${id}_o;\n`,
       ].join(''),
       outputVars: {},
