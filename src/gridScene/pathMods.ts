@@ -225,7 +225,7 @@ function modParams(mods: readonly PathMod[]): LiveParam[] {
   ]);
 }
 
-export interface PathExtras { path: string; math?: MathPath; mods?: PathMod[] }
+export interface PathExtras { path: string; math?: MathPath; mods?: PathMod[]; vary?: Vary }
 /** Modifiers apply to every path but Travel and Hop (those wrap round the grid). */
 export const modsOf = (m: PathExtras): PathMod[] => (m.path === 'travel' || m.path === 'hop' || m.path === 'still' ? [] : m.mods ?? []);
 const DEFAULT_MATH = defaultMath();
@@ -233,7 +233,7 @@ export const mathOf = (m: PathExtras): MathPath => m.math ?? DEFAULT_MATH;
 
 /** Every live number of a shape's path beyond its Angle and drawn path, in their order. */
 export function pathLiveParams(m: PathExtras): LiveParam[] {
-  return [...(m.path === 'math' ? sourceParams(mathOf(m)) : []), ...modParams(modsOf(m))];
+  return [...(m.path === 'math' ? sourceParams(mathOf(m)) : []), ...modParams(modsOf(m)), ...(m.vary ? varyParams(m.vary) : [])];
 }
 
 // ── On the CPU: the modified offset and its bound ─────────────────────────────
@@ -405,8 +405,10 @@ export function modPhaseGlsl(mods: readonly PathMod[], at: number): string[] {
 }
 
 /** The offset modifiers' lines (in gs_move, on `o`, with `ph`, `t`; `base(e)` the unmodified path at ph + e). */
-export function modOffsetGlsl(mods: readonly PathMod[], at: number, base: (e: string) => string): string[] {
-  return modLayout(mods, at).flatMap(({ mod, on, v }) => {
+export function modOffsetGlsl(mods: readonly PathMod[], at: number, base: (e: string) => string, amt?: string): string[] {
+  return modLayout(mods, at).flatMap(({ mod, on, v: v0 }) => {
+    // The amounts (Wave's, Noise's, Twist's swell) times `amt` (Vary per cell's modifiers strength).
+    const v = (i: number) => (amt && i === 0 && (mod.kind === 'wave' || mod.kind === 'noise' || mod.kind === 'twist') ? `(${v0(0)} * ${amt})` : v0(i));
     const g = (body: string) => [`  if (x[${on}] > 0.5) { ${body} }`];
     switch (mod.kind) {
       case 'wave': return g(`vec2 dd = ${base('1.0e-3')} - ${base('-1.0e-3')}; vec2 nn = length(dd) > 1.0e-6 ? normalize(vec2(-dd.y, dd.x)) : vec2(0.0, 1.0); o += nn * ${v(0)} * sin(6.2831853 * ${v(1)} * fract(ph) + 6.2831853 * ${v(2)} * t);`);
@@ -451,3 +453,86 @@ export const NOISE_GLSL = [
 
 /** How many of the live numbers are the path's own (a math path's), before the modifiers'. */
 export const sourceLen = (m: PathExtras): number => (m.path === 'math' ? sourceParams(mathOf(m)).length : 0);
+
+// ── Vary per cell (docs/grid-builder.md "Vary per cell") ─────────────────────
+//
+// Each motion (and look) number can get a Random strength: every drawn cell gets a stable random
+// offset from a hash of its home cell (and the scene's Seed), scaled by the strength (0: all cells
+// alike). Up only or ± round the value; Smooth (neighbouring cells alike: value noise over the cell
+// ids, flowing regions) or independent (a hash a cell).
+
+export const VARY_KEYS = ['reach', 'angle', 'speed', 'phase', 'mods', 'size', 'spin', 'pulse'] as const;
+export type VaryKey = typeof VARY_KEYS[number];
+export const VARY_LABELS: Record<VaryKey, { label: string; hint: string; max: number }> = {
+  reach: { label: 'Reach', hint: 'Each cell\'s reach (X, Y) times 1 ± this.', max: 1 },
+  angle: { label: 'Angle', hint: 'Each cell\'s path turned by up to this × 180°.', max: 1 },
+  speed: { label: 'Speed', hint: 'Each cell\'s speed times 1 ± this: they drift out of step.', max: 1 },
+  phase: { label: 'Phase', hint: 'Each cell starts up to this many cycles off (a random lag).', max: 1 },
+  mods: { label: 'Modifiers', hint: 'Each cell\'s wave, noise and twist amounts times 1 ± this.', max: 1 },
+  size: { label: 'Size', hint: 'Each cell\'s size times 1 ± this.', max: 1 },
+  spin: { label: 'Spin', hint: 'Each cell spins up to this many turns a second more or less.', max: 2 },
+  pulse: { label: 'Pulse', hint: 'Each cell\'s pulse times 1 ± this.', max: 1 },
+};
+/** The keys that change the path (the rest change the look). */
+export const PATH_VARY: readonly VaryKey[] = ['reach', 'angle', 'speed', 'phase', 'mods'];
+export interface VarySpec { amt: number; up?: boolean; smooth?: boolean }
+export type Vary = Partial<Record<VaryKey, VarySpec>>;
+
+/** The vary numbers: per key its strength (a slider) and its up / smooth (hidden), in VARY_KEYS order. */
+function varyParams(v: Vary): LiveParam[] {
+  return VARY_KEYS.flatMap(k => {
+    const x = v[k];
+    return [
+      { name: `v_${k}`, value: x?.amt ?? 0, min: 0, max: VARY_LABELS[k].max, label: `Vary ${VARY_LABELS[k].label}` },
+      { name: `v_${k}Up`, value: x?.up ? 1 : 0, min: 0, max: 1, hidden: true, label: 'up' },
+      { name: `v_${k}Smooth`, value: x?.smooth ? 1 : 0, min: 0, max: 1, hidden: true, label: 'smooth' },
+    ];
+  });
+}
+/** Where the vary numbers start among the live numbers (after the path's own and the modifiers'). */
+export const varyOffset = (m: PathExtras): number => sourceLen(m) + modParams(modsOf(m)).length;
+/** The index of key k's strength among the vary numbers (then up, smooth). */
+export const varyIndex = (k: VaryKey) => VARY_KEYS.indexOf(k) * 3;
+
+/**
+ * A cell's random number for key k (the shader's gs_vary): 0 … 1 up only, else −1 … 1. Each cell: a
+ * hash of the cell. Smooth: two slow sine waves across the cells (a field that drifts a fifth or so
+ * from one cell to the next), so neighbouring cells get similar numbers. Cheap on purpose: it runs
+ * for every candidate cell of the search (a value noise there made the shader too big to compile).
+ */
+export function varyRandom(hx: number, hy: number, seed: number, k: VaryKey, spec: VarySpec | undefined): number {
+  const key = VARY_KEYS.indexOf(k);
+  const r = spec?.smooth
+    ? 0.5 + 0.25 * (Math.sin(hx * 0.61 + hy * 0.23 + seed * 1.37 + key * 2.13) + Math.sin(hy * 0.67 - hx * 0.29 + seed * 0.71 + key * 1.17))
+    : fract(Math.sin(hx * 12.9898 + hy * 78.233 + seed * 3.719 + key * 17.3) * 43758.5453);
+  return spec?.up ? r : 2 * r - 1;
+}
+export const VARY_GLSL = [
+  '// Four keys\' random numbers for the cell h, keys k0 … k0 + 3 (varyRandom, a lane each): up (0 … 1) or ±',
+  '// (−1 … 1), smooth (two slow sines across the cells) or a hash a cell. Vector maths: it runs for every',
+  '// candidate cell of the search, so it has to stay small.',
+  'vec4 gs_vary4$(vec2 h, float seed, float k0, vec4 up, vec4 sm) {',
+  '  vec4 k = vec4(k0, k0 + 1.0, k0 + 2.0, k0 + 3.0);',
+  '  vec4 hs = fract(sin(h.x * 12.9898 + h.y * 78.233 + seed * 3.719 + k * 17.3) * 43758.5453);',
+  '  vec4 sf = 0.5 + 0.25 * (sin(h.x * 0.61 + h.y * 0.23 + seed * 1.37 + k * 2.13) + sin(h.y * 0.67 - h.x * 0.29 + seed * 0.71 + k * 1.17));',
+  '  vec4 r = mix(hs, sf, step(0.5, sm));',
+  '  return mix(2.0 * r - 1.0, r, step(0.5, up));',
+  '}',
+].join('\n');
+
+// ── Shared motion across shapes (docs/grid-builder.md "Shared motion") ───────
+
+/** The scene's motion mix: Shared (one motion for every shape), the per-shape Offset, and the Seed of the randomness. */
+export interface MotionMix {
+  /** Editing one shape's motion edits them all. */
+  shared: boolean;
+  /** Per shape (by its place in the list): this many cycles later, this many degrees turned, its reach times 1 + this. */
+  offPhase: number;
+  offAngle: number;
+  offReach: number;
+  /** The Vary per cell randomness's seed. */
+  seed: number;
+}
+export const defaultMix = (): MotionMix => ({ shared: false, offPhase: 0, offAngle: 0, offReach: 0, seed: 0 });
+/** The mix's numbers, the motion array's tail in a scene with a mix: offPhase, offAngle (radians), offReach, seed. */
+export const mixValues = (x: MotionMix): number[] => [x.offPhase, x.offAngle * Math.PI / 180, x.offReach, x.seed];
