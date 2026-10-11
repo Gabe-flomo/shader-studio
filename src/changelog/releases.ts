@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.139',
+    date: '2026-10-10',
+    title: 'Drag the diagrams',
+    highlights: [
+      { area: 'Studio', text: 'Agent Builder: drag the diagrams (feelers, turn arcs, Born, arrows, fields, view ring) and the sliders follow, one undo per drag.' },
+      { area: 'Studio', text: 'Agent Builder: any input can be wired from the graph, from a group, or a new Shader Texture or group. The Sensors demo walker now rides the trail.' },
+      { area: 'Studio', text: 'Agent Builder: text as food (slime grows into the letters) or as a wall, in a smooth shader-drawn font you can edit and drag.' },
+    ],
+  },
+  {
     id: '2026.10.138',
     date: '2026-10-10',
     title: 'Space blocks',
