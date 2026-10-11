@@ -766,6 +766,9 @@ interface NodeGraphState {
   exitGroup: () => void;
   exitToRoot: () => void;
   exitToDepth: (depth: number) => void;
+  /** Inside a Shader Texture, the main preview shows the texture ('texture', the default) or where it's used. Kept for the session. */
+  insideTextureView: InsideTextureView;
+  setInsideTextureView: (v: InsideTextureView) => void;
   duplicateGroup: (groupId: string) => string | null;
   duplicateNode: (nodeId: string) => string | null;
   duplicateNodes: (nodeIds: string[]) => void;
@@ -1335,6 +1338,32 @@ export function getActiveNodes(nodes: GraphNode[], path: string[]): GraphNode[] 
   return sg1?.nodes ?? null;
 }
 
+// ── Inside a Shader Texture: what the main preview shows (docs/texture-builder.md) ──
+/** 'texture': the texture being edited (the default); 'used': the graph's own output, where it's used. */
+export type InsideTextureView = 'texture' | 'used';
+const INSIDE_TEXTURE_VIEW_KEY = 'playfield.insideTextureView';
+function readInsideTextureView(): InsideTextureView {
+  try { return globalThis.sessionStorage?.getItem(INSIDE_TEXTURE_VIEW_KEY) === 'used' ? 'used' : 'texture'; } catch { return 'texture'; }
+}
+
+/**
+ * The Shader Texture being edited when the innermost open scope is one, at the top level or inside a
+ * plain group (the two places the compile opens one), else null.
+ */
+export function insideShaderTexture(nodes: GraphNode[], path: string[]): { id: string; groupId: string | null } | null {
+  if (path.length === 0 || path.length > 2) return null;
+  const id = path[path.length - 1];
+  const parent = path.length === 1 ? nodes : getActiveNodes(nodes, path.slice(0, 1));
+  if (parent?.find(n => n.id === id)?.type !== 'shaderTexture') return null;
+  if (path.length === 1) return { id, groupId: null };
+  return nodes.find(n => n.id === path[0])?.type === 'group' ? { id, groupId: path[0] } : null;
+}
+
+/** The Shader Texture the main preview shows instead of the graph's output: the one being edited, unless "Where it's used" is picked. */
+export function shownShaderTexture(s: { nodes: GraphNode[]; activeGroupPath: string[]; insideTextureView: InsideTextureView }) {
+  return s.insideTextureView === 'used' ? null : insideShaderTexture(s.nodes, s.activeGroupPath);
+}
+
 /**
  * Remove `nodeId` from `nodeList` and repair the gap: any other node's input
  * that was wired to the deleted node's output is bridged directly to the
@@ -1860,6 +1889,11 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   searchPaletteOpen: false,
   activeGroupId: null,
   activeGroupPath: [],
+  insideTextureView: readInsideTextureView(),
+  setInsideTextureView: (v) => {
+    try { globalThis.sessionStorage?.setItem(INSIDE_TEXTURE_VIEW_KEY, v); } catch { /* private window */ }
+    set({ insideTextureView: v });
+  },
   nodeTextures: {},
   textureUniforms: {},
   audioUniforms: {},
@@ -5251,6 +5285,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       recompileUserNodes();
     }
     const { nodes, previewNodeId, activeGroupId, bakeGraph } = get();
+    const shown = !bakeGraph && !previewNodeId ? shownShaderTexture(get()) : null;
     let graphNodes: GraphNode[];
     if (bakeGraph) {
       // A bake rendering: exactly the graph it asked for.
@@ -5278,6 +5313,10 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       } else {
         graphNodes = buildPreviewGraph(nodes, previewNodeId);
       }
+    } else if (shown) {
+      // Inside a Shader Texture the main preview shows the texture being edited: the node's Color, drawn
+      // through its own render target like anything that reads it (docs/texture-builder.md).
+      graphNodes = shown.groupId ? buildGroupPreviewGraph(nodes, shown.groupId, shown.id) : buildPreviewGraph(nodes, shown.id);
     } else {
       graphNodes = nodes;
     }
@@ -5347,7 +5386,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     // Show passes: the whole graph's programs, even while the eye previews part of it.
     let whole: typeof result | null = result;
     if (bakeGraph) whole = null;
-    else if (previewNodeId && (hasPassNode(nodes) || hasAgentsNode(nodes) || hasHiddenBlur(nodes))) {
+    else if ((previewNodeId || shown) && (hasPassNode(nodes) || hasAgentsNode(nodes) || hasHiddenBlur(nodes))) {
       const full = compileGraph({ nodes });
       whole = full.success ? full : null;
     }
@@ -6029,6 +6068,15 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     return out.sort((a, b) => a.savedAt - b.savedAt);
   },
 }));
+
+// Entering or leaving a Shader Texture, or flipping what the preview shows while inside, changes what the
+// main preview compiles (shownShaderTexture).
+useNodeGraphStore.subscribe((s, prev) => {
+  if (s.activeGroupPath === prev.activeGroupPath && s.insideTextureView === prev.insideTextureView) return;
+  const now = shownShaderTexture(s)?.id ?? null;
+  const before = shownShaderTexture(prev)?.id ?? null;
+  if (now !== before) s.compile();
+});
 
 // Any change to the graph or its Play setup after it was opened or saved marks it unsaved.
 useNodeGraphStore.subscribe((s, prev) => {
