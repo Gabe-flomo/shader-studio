@@ -395,6 +395,13 @@ state, cropped to its cells, at most 128 × 128, moved `ox` cells right and `oy`
 - As text it is `start=cells` (the drawing has no words; the text keeps the one on the node).
 - Open as nodes builds it: a **Drawn start** Expression Block holding the drawing (see Open as nodes).
 
+## A picture start
+
+**Start → A picture** shows what **Start image** reads now and the scene builders' shared picture
+picker ([scene-builder.md](scene-builder.md#textures)): upload, paste, a link, the image library, a
+texture already in the graph, or a new Shader Texture. The pick is wired into Start image (one undo
+step); its bright parts start on.
+
 ## A text start
 
 Start **Text** (`start: 'text'`, the node's `startText`: `{ text, size, weight, x, y, state }`,

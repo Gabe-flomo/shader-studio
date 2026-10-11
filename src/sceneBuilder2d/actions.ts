@@ -57,6 +57,8 @@ export function buildFromBuilder2D(asNew = false): boolean {
   useNodeGraphStore.getState().setNodesRewritten(placed, fresh ? 'Built a 2D scene' : 'Rebuilt the 2D scene');
   useNodeGraphStore.getState().focusNode(result.focusId);
   sb.setTarget(result.sceneId);
+  // Pictures that had no node got one: the builder reads them from now on.
+  if (JSON.stringify(result.spec.textures ?? []) !== JSON.stringify(sb.scene.textures ?? [])) useSceneBuilder2D.setState(s => ({ scene: { ...s.scene, textures: result.spec.textures } }));
   sb.markBuilt();
   const notes = [
     ...(result.kept.length ? [`Kept ${result.kept.length} setting${result.kept.length === 1 ? '' : 's'} you changed on the nodes.`] : []),

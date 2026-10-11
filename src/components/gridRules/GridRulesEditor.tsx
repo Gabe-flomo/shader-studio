@@ -59,6 +59,8 @@ import { drawnCount, type StartCells } from '../../gridRules/startCells';
 import { DEFAULT_START_TEXT, MAX_TEXT_CHARS, MAX_TEXT_SIZE, MIN_TEXT_SIZE, cleanStartText, readStartText, type StartText } from '../../gridRules/textCells';
 import { DEFAULT_STENCIL, readStencil, stencilMax, stencilSummary, stencilUsesRanges, type NeighbourStencil } from '../../gridRules/neighbourhoods';
 import { StencilEditor } from './StencilEditor';
+import { PictureWays, TexThumb } from '../builders/TexturePicker';
+import { texNodeLabel } from '../../builders/textures';
 import {
   BOARD_SIZES, COUNT_PRESETS, GRID_DEFAULTS, countsAsRanges, MAX_RADIUS, MAX_STATES, MAX_STEPS, RULE_TYPES, SMOOTH_NAMES, SMOOTH_PRESETS, STAGES_PRESETS,
   SMOOTH_FUNCTIONS, countsOf, customUpdateProblem, gridShape, gridTypeDefaults, matchingPreset, maxCount, parseRuleString, presetPatch, ruleString, ruleSummary,
@@ -422,7 +424,7 @@ const START_OPTIONS: Array<{ value: string; label: string; hint: string }> = [
   { value: 'noise', label: 'Noise', hint: 'Cells scattered at random.' },
   { value: 'centre', label: 'A seed in the middle', hint: 'A round patch of noise in the middle.' },
   { value: 'empty', label: 'Empty', hint: 'Nothing: paint with the brush.' },
-  { value: 'image', label: 'A picture', hint: 'Wire a picture into Start image: its bright parts start on.' },
+  { value: 'image', label: 'A picture', hint: 'A picture whose bright parts start on: pick one below (or wire any texture into Start image).' },
 ];
 
 function StartSection({ p, set }: { p: P; set: Setter }) {
@@ -452,6 +454,7 @@ function StartSection({ p, set }: { p: P; set: Setter }) {
         </span>
       )}
       {s.start === 'text' && <TextStartFields p={p} set={set} />}
+      {s.start === 'image' && <StartPicture />}
       {(s.start === 'noise' || s.start === 'centre') && <Slider p={p} set={set} k="density" label="How full" min={0} max={1} hint="The share of cells that start on." />}
       <Row label=""><Button size="sm" icon="dice" onClick={deal}>Deal a new board</Button></Row>
       <Row label="Board size" hint="How many cells: each cell is a block of the picture's pixels.">
@@ -461,6 +464,36 @@ function StartSection({ p, set }: { p: P; set: Setter }) {
         <Segmented<string> ariaLabel="Edges" size="sm" value={s.wrap ? 'wrap' : 'walls'} onChange={v => set({ edges: v }, true)} options={[{ value: 'wrap', label: 'Wrap round' }, { value: 'walls', label: 'Walls' }]} />
       </Row>
     </>
+  );
+}
+
+/**
+ * Start → A picture: what Start image reads now, and the scene builders' shared picture picker
+ * (docs/scene-builder.md, "Textures"): upload, paste, a link, the library, a texture in the graph or
+ * a new Shader Texture, wired into Start image.
+ */
+function StartPicture() {
+  const tk = useTokens();
+  const nodeId = useContext(GridNodeContext);
+  const from = useNodeGraphStore(s => (nodeId ? s.nodes.find(n => n.id === nodeId)?.inputs.image?.connection?.nodeId : undefined));
+  const label = useNodeGraphStore(s => { const n = from ? s.nodes.find(x => x.id === from) : undefined; return n ? texNodeLabel(n) : ''; });
+  const [open, setOpen] = useState(!from);
+  if (!nodeId) return null;
+  return (
+    <div data-start-picture style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <TexThumb nodeId={from} />
+        <span style={{ flex: 1, fontSize: 12.5, fontWeight: 600, color: from ? tk.text.primary : tk.status.warningText }}>{from ? label : 'No picture yet: pick one'}</span>
+        <Button size="sm" aria-expanded={open} onClick={() => setOpen(o => !o)}>{from ? 'Change' : 'Pick…'}</Button>
+      </div>
+      {open && (
+        <PictureWays inScene={from ? [from] : []} onPicked={pk => {
+          setOpen(false);
+          useNodeGraphStore.getState().connectNodes(pk.nodeId, 'texture', nodeId, 'image');
+          useNodeGraphStore.getState().compile();
+        }} />
+      )}
+    </div>
   );
 }
 

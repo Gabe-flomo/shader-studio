@@ -19,7 +19,7 @@ export function compileScene2D(scene: Scene2D): Compiled {
     const g = buildStandalone2D(scene, { idFor: role => `pv2_${role.replace(/[^A-Za-z0-9]/g, '_')}` });
     const r = compileGraph({ nodes: g.nodes });
     if (!r.success) return { vs: '', fs: '', uniforms: {}, nodes: g.nodes.length, error: (r.errors ?? []).join('; ') || 'The graph did not compile.', ms: performance.now() - t0 };
-    return { vs: r.vertexShader, fs: r.fragmentShader, uniforms: r.paramUniforms as Record<string, number | number[]>, nodes: g.nodes.length, error: null, ms: performance.now() - t0 };
+    return { vs: r.vertexShader, fs: r.fragmentShader, uniforms: r.paramUniforms as Record<string, number | number[]>, nodes: g.nodes.length, error: null, ms: performance.now() - t0, textures: r.textureUniforms };
   } catch (e) {
     return { vs: '', fs: '', uniforms: {}, nodes: 0, error: e instanceof Error ? e.message : String(e), ms: 0 };
   }

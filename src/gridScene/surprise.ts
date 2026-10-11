@@ -98,7 +98,7 @@ export function surpriseGridScene(seed: number | string): GridSceneSpec {
 
   const pt = rng.fork('pattern');
   if (pt.chance(0.7)) {
-    s.pattern.kind = pt.pick(PATTERN_KINDS.filter(k => k !== 'none'));
+    s.pattern.kind = pt.pick(PATTERN_KINDS.filter(k => k !== 'none' && k !== 'picture'));
     s.pattern.target = pt.weighted<PatternTarget>([['size', 4], ['turn', 2], ['hue', 2], ['bright', 2], ['push', 1]]);
     s.pattern.amount = r3(pt.float(0.3, 0.8));
     s.pattern.freq = r3(pt.float(2, 6));

@@ -20,6 +20,7 @@ import { getNodeDefinition } from '../nodes/definitions';
 import { placeInFreeSpace } from '../store/agentSetup';
 import { buildSceneGraph, META_KEY, ROLE_KEY, type SceneBuilderMeta } from './build';
 import type { SceneSpec } from './spec';
+import { ensureSources } from '../builders/textures';
 import { TO_TRANSFORM_TYPES, transformParamFor } from '../nodes/toTransform';
 
 export const BUILD_KEY = '_sbBuild';
@@ -154,6 +155,8 @@ export interface ApplyResult {
   focusId: string;
   warnings: string[];
   kept: string[];
+  /** The spec as built: its pictures each with their node (one without got an empty Texture node). */
+  spec: SceneSpec;
 }
 
 /**
@@ -162,11 +165,15 @@ export interface ApplyResult {
  * keeping the user's own settings where the new spec doesn't change them.
  * The graph's Output shows the scene.
  */
-export function applyScene(graph: GraphNode[], spec: SceneSpec, opts: { nextId: () => string; sceneId?: string | null; asNew?: boolean; at?: { x: number; y: number }; /** Rebuild from the recipe: drop the settings changed by hand (§13 decision 4). */ restore?: boolean }): ApplyResult {
+export function applyScene(graph: GraphNode[], spec0: SceneSpec, opts: { nextId: () => string; sceneId?: string | null; asNew?: boolean; at?: { x: number; y: number }; /** Rebuild from the recipe: drop the settings changed by hand (§13 decision 4). */ restore?: boolean }): ApplyResult {
   const found = !opts.asNew && opts.sceneId ? findBuild(graph, opts.sceneId) : null;
   // Fresh ids never reuse one the graph already has.
   const taken = new Set(everyNode(graph).map(l => l.node.id));
   const nextId = () => { let id = opts.nextId(); while (taken.has(id)) id = opts.nextId(); taken.add(id); return id; };
+  // Every picture the scene reads has a node (builders/textures.ts): one typed in a recipe gets an empty Texture node.
+  const ensured = ensureSources(graph, spec0.textures, nextId, found?.byRole.get('camera')?.node.position ?? opts.at ?? { x: 0, y: 0 });
+  const spec: SceneSpec = spec0.textures?.length ? { ...spec0, textures: ensured.sources } : spec0;
+  graph = [...graph, ...ensured.added];
   const buildKey = found?.meta.build ?? `b${nextId()}`;
   const idOfRole = new Map<string, string>();
   const idFor = (role: string) => {
@@ -251,5 +258,5 @@ export function applyScene(graph: GraphNode[], spec: SceneSpec, opts: { nextId: 
   const outId = output.id;
   rest = rest.map(n => (n.id === outId ? { ...n, inputs: { ...n.inputs, color: { ...n.inputs.color, connection: { ...built.final } } } } : n));
   const focusId = top.find(n => roleOf(n) === 'march')?.id ?? built.sceneId;
-  return { nodes: [...rest, ...top], sceneId: built.sceneId, focusId, warnings: built.warnings, kept };
+  return { nodes: [...rest, ...top], sceneId: built.sceneId, focusId, warnings: built.warnings, kept, spec };
 }

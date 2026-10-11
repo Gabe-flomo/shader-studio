@@ -49,8 +49,12 @@ import { Field } from '../ui/Field';
 import { DEFAULT_TEXT_MASK, MAX_MASK_SIZE, MIN_MASK_SIZE, readTextMask, type TextMask } from '../../gridScene/textMask';
 import { cleanStartText, MAX_TEXT_CHARS } from '../../gridRules/textCells';
 import { compileGridScene, drawGlyph, gridPicture, rgb } from './glyphs';
+import { TexturePicker } from '../builders/TexturePicker';
+import { withSource, type TexSource } from '../../builders/textures';
 
 const edit = (fn: (d: GridSceneSpec) => void, key?: string) => useGridBuilder.getState().edit(fn, key);
+/** Adds a picture to the scene's list (the shared picker's onAdd, docs/grid-builder.md "Textures"). */
+const addSource = (src: TexSource) => edit(d => { d.textures = withSource(d.textures, src); });
 const DEFAULT_SHAPE = newShape('A');
 const DEFAULT_PATTERN = defaultPattern();
 const DEFAULT_LOOK = defaultLook();
@@ -297,6 +301,11 @@ function ShapesSection() {
           actions={shapes.length > 1 ? <IconButton icon="trash" size="sm" label={`Remove shape ${sh.id} (its cells and rules go too)`} onClick={() => { edit(d => removeShape(d, sh.id)); setBrush(useGridBuilder.getState().spec.shapes[0]?.id ?? 'erase'); }} /> : undefined}>
           <Tiles items={SHAPE_KINDS} value={sh.kind} label={k => SHAPE_LABELS[k]} onPick={k => editShape(sh.id, s => { s.kind = k; })}
             render={k => <Glyph kind={k} color={sh.color} size={20} />} />
+          {sh.kind === 'picture' && <>
+            <BuilderNote>A picture inside each of its cells, filling the cell's square (it turns, spins and pulses with the shape).</BuilderNote>
+            <TexturePicker id={`cell-${sh.id}`} sources={spec.textures ?? []} value={sh.tex} onAdd={addSource} startOpen={!sh.tex} none="Pick its picture"
+              onChange={name => editShape(sh.id, s => { s.tex = name ?? undefined; })} />
+          </>}
           <ColourRow label="Colour" value={sh.color} onChange={v => editShape(sh.id, s => { s.color = v; }, `col${sh.id}`)} />
           <NumRow label="Size" hint="The radius as a share of half a cell: 1 touches the neighbours." value={sh.size} min={0.05} max={1.5} defaultValue={DEFAULT_SHAPE.size} onChange={v => editShape(sh.id, s => { s.size = v; }, `size${sh.id}`)} />
           <NumRow label="Turn" unit="°" value={sh.turn} min={-180} max={180} step={1} defaultValue={0} onChange={v => editShape(sh.id, s => { s.turn = v; }, `turn${sh.id}`)} />
@@ -376,6 +385,8 @@ function PatternsSection() {
   const p = useGridBuilder(s => s.spec.pattern);
   const shapes = useGridBuilder(s => s.spec.shapes);
   const warps = useGridBuilder(s => s.spec.warps);
+  const sources = useGridBuilder(s => s.spec.textures) ?? [];
+  const picMask = useGridBuilder(s => s.spec.picMask);
   const [adding, setAdding] = useState(false);
   const setP = (fn: (x: typeof p) => void, key?: string) => edit(d => fn(d.pattern), key);
   return (
@@ -383,11 +394,12 @@ function PatternsSection() {
       <Card id="gs-pattern" defaultOpen title="Pattern" summary={PATTERN_LABELS[p.kind].label}>
         <Tiles items={PATTERN_KINDS} value={p.kind} cols={4} label={k => PATTERN_LABELS[k].label} onPick={(k: PatternKind) => setP(x => { x.kind = k; })} />
         <BuilderNote>{PATTERN_LABELS[p.kind].blurb}</BuilderNote>
+        {p.kind === 'picture' && <TexturePicker id="pattern" sources={sources} value={p.tex} onAdd={addSource} startOpen={!p.tex} none="Pick a picture" onChange={name => setP(x => { x.tex = name ?? undefined; })} />}
         {p.kind !== 'none' && (
           <>
             <Row label="Changes"><Select ariaLabel="What the pattern changes" value={p.target} options={PATTERN_TARGETS.map(t => ({ value: t, label: TARGET_LABELS[t] }))} onChange={v => setP(x => { x.target = v as PatternTarget; })} /></Row>
             <NumRow label="Amount" value={p.amount} min={0} max={1.5} defaultValue={DEFAULT_PATTERN.amount} onChange={v => setP(x => { x.amount = v; }, 'pa')} />
-            {p.kind !== 'checker' && p.kind !== 'random' && <NumRow label="Waves" hint="Waves across the grid (rings: how wide a ring is)." value={p.freq} min={0} max={16} defaultValue={DEFAULT_PATTERN.freq} onChange={v => setP(x => { x.freq = v; }, 'pf')} />}
+            {p.kind !== 'checker' && p.kind !== 'random' && p.kind !== 'picture' && <NumRow label="Waves" hint="Waves across the grid (rings: how wide a ring is)." value={p.freq} min={0} max={16} defaultValue={DEFAULT_PATTERN.freq} onChange={v => setP(x => { x.freq = v; }, 'pf')} />}
             <NumRow label="Speed" hint="Cycles a second." value={p.speed} min={-2} max={2} defaultValue={DEFAULT_PATTERN.speed} onChange={v => setP(x => { x.speed = v; }, 'ps')} />
             {p.kind === 'spiral' && <NumRow label="Arms" value={p.arms} min={1} max={8} integer defaultValue={3} onChange={v => setP(x => { x.arms = v; }, 'pr')} />}
             <Row label="Fill empty cells" hint="Put a shape in every cell you haven't drawn on; its size follows the wave.">
@@ -396,6 +408,15 @@ function PatternsSection() {
             <MaskRows mask={readTextMask(p.mask)} onChange={(m, key) => setP(x => { x.mask = m; }, key)} />
           </>
         )}
+      </Card>
+      <Card id="gs-picmask" defaultOpen={!!picMask} title="Picture mask" summary={picMask ? `${picMask.tex}${picMask.invert ? ' · dark cells' : ''}` : 'none'}>
+        <BuilderNote>Shapes only in the cells where a picture (over the whole grid) is bright, read at each cell's centre.</BuilderNote>
+        <TexturePicker id="picmask" sources={sources} value={picMask?.tex} onAdd={addSource} none="No mask"
+          onChange={name => edit(d => { d.picMask = name ? { tex: name, cut: d.picMask?.cut ?? 0.5, invert: d.picMask?.invert ?? false } : null; })} />
+        {picMask && <>
+          <NumRow label="Cut" hint="How bright a cell's picture must be for its shape to show." value={picMask.cut} min={0} max={1} defaultValue={0.5} onChange={v => edit(d => { if (d.picMask) d.picMask.cut = v; }, 'pmc')} />
+          <Row label="Invert"><Toggle checked={picMask.invert} onChange={v => edit(d => { if (d.picMask) d.picMask.invert = v; })} label="Shapes in the dark cells" /></Row>
+        </>}
       </Card>
       <Card id="gs-warps" defaultOpen title="Grid warps" summary={warps.length ? warps.map(w => w.name).join(', ') : 'none'}
         actions={<Button size="sm" variant="ghost" icon="plus" data-add-warp disabled={warps.length >= MAX_WARPS} onClick={() => setAdding(a => !a)}>{adding ? 'Close' : 'Add'}</Button>}>

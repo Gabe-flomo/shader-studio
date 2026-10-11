@@ -32,6 +32,7 @@ import { COMBINE_MODES, checkBlock, clampTimes, linesText, parseBlockText, range
 import { BLOCK_BY_ID, BLOCK_LIBRARY, blockFromEntry, isLibraryBlock } from './blockLibrary';
 import { GRID_ASSIGNS, GRID_COLOUR_BYS, GRID_SHAPES, GRID_TARGETS, RIPPLE_FROMS, defaultGrid, printGrid, type GridShape, type GridSpec } from './grid';
 import type { RecipeError } from '../sceneBuilder/recipe';
+import { TEX_FITS, findTex, newTexUse, texSlug, type TexFit, type TexSource, type TexUse } from '../builders/textures';
 import {
   COLOUR_BYS, DEFAULT_COLOR, DEFAULT_LOOK, MAX_DUP, MAX_LEVELS, MOTIONS, MOTION_BY_KIND, SHAPES, SHAPE_BY_KIND, SHOW_WORDS, SPACES, SPACE_BY_KIND, TONE_MODES,
   defaultSize, defaultSpaceValues, emptyScene, newBlockOp, newCombineOp, newDup, newGroup, newMotion, newShape, newSpaceOp, walkItems,
@@ -60,7 +61,7 @@ const SHAPE_WORDS: Record<string, string> = Object.fromEntries(SHAPES.flatMap(s 
 const SPACE_WORDS: Record<string, string> = Object.fromEntries(SPACES.flatMap(s => [[s.kind, s.kind], ...s.aliases.map(a => [a, s.kind])]));
 const MOTION_WORDS = [...MOTIONS.map(m => m.kind), 'ring'];
 const BUILT_IN_FN_NAMES = { space: BUILT_IN_FUNCTIONS.filter(f => f.role === 'space').map(f => f.name), shape: BUILT_IN_FUNCTIONS.filter(f => f.role === 'shape').map(f => f.name) };
-const BLOCK_WORDS = ['space-block', 'combine-blocks'];
+const BLOCK_WORDS = ['space-block', 'combine-blocks', 'texture'];
 const LOOK_WORDS = ['grid', 'glow', 'colour', 'color', 'tone', 'tone-map', 'tonemap', 'background', 'bg', 'bloom', 'vignette', 'grain', 'scanlines', 'output', 'show'];
 const CLAUSE_WORDS = [...Object.keys(SHAPE_WORDS), ...Object.keys(OP_WORDS), ...Object.keys(SPACE_WORDS), ...BLOCK_WORDS, ...LOOK_WORDS];
 
@@ -85,7 +86,52 @@ class Parser {
   private flagged = false;
 
   private src: string;
+  /** The pictures declared (`texture …`) or named by a use. */
+  textures: TexSource[] = [];
   constructor(src: string) { this.src = src; this.c = new Cursor(src); }
+
+  /** A picture's name from a value; the scene gets the source when the recipe never declared it. */
+  texName(a: AstArg, what: string): string | null {
+    const w = a.value.k === 'word' || a.value.k === 'str' ? a.value.v : null;
+    if (!w) { this.fail(a, `${what} is a picture's name (from a texture clause).`); return null; }
+    const name = texSlug(w);
+    if (!findTex(this.textures, name)) this.textures.push({ name });
+    return name;
+  }
+
+  /** `texture [name] node=… aspect=… kind=image|shader`: a picture the scene reads. */
+  texture(t: { at: number; end: number }, args: AstArg[]) {
+    let src: TexSource | null = null;
+    const rest: AstArg[] = [];
+    for (const a of args) {
+      const key = a.key?.toLowerCase() ?? null;
+      if (!src && (key === null || key === 'name') && (a.value.k === 'word' || a.value.k === 'str')) { src = { name: texSlug(a.value.v) }; continue; }
+      rest.push(a);
+    }
+    if (!src) { this.fail(t, 'texture needs a name: texture name=brick (then fill=brick on a shape, picture brick, mask=brick or background picture=brick).'); return; }
+    for (const a of rest) {
+      const key = a.key?.toLowerCase() ?? '';
+      if (key === 'node' && (a.value.k === 'word' || a.value.k === 'str')) src.node = a.value.v;
+      else if (key === 'aspect') { const n = this.num(a, 'aspect'); if (n !== null && n > 0) src.aspect = n; }
+      else if (key === 'kind') { const w = this.word(a); if (w === 'image' || w === 'shader') src.kind = w; else this.fail(a, 'kind is image or shader.'); }
+      else this.fail(a, `texture takes a name, node=, aspect= and kind=; not “${a.key ?? this.src.slice(a.at, a.end)}”.`);
+    }
+    const i = this.textures.findIndex(s => s.name === src!.name);
+    if (i >= 0) this.textures[i] = { ...this.textures[i], ...src }; else this.textures.push(src);
+  }
+
+  /** fit=, tiles= / zoom=: how a picture use covers its box. */
+  texUseKey(key: string, a: AstArg, use: Partial<TexUse>): boolean {
+    if (key === 'fit') {
+      const w = this.word(a);
+      const fit = w === 'fill' ? 'cover' : w === 'fit' ? 'contain' : w;
+      if (fit && (TEX_FITS as readonly string[]).includes(fit)) use.fit = fit as TexFit;
+      else this.fail(a, `fit is one of ${TEX_FITS.join(', ')}.`);
+      return true;
+    }
+    if (key === 'tiles' || key === 'zoom') { const n = this.num(a, key); if (n !== null) use.scale = Math.max(0.05, n); return true; }
+    return false;
+  }
 
   fail(s: { at: number; end: number }, message: string) {
     this.errors.push({ message, from: s.at, to: Math.max(s.end, s.at + 1), ...lineCol(this.src, s.at) });
@@ -199,9 +245,19 @@ class Parser {
   private itemArgs(it: Item, args: AstArg[]) {
     const def = it.type === 'shape' ? SHAPE_BY_KIND[it.kind] : null;
     let pos = 0;
+    // Picture settings (docs/scene-builder-2d.md, "Textures"), applied once the item's words are read.
+    const use: Partial<TexUse> = {};
+    let fillName: string | null = null;
+    const mask: { tex?: string; cut?: number; invert?: boolean } = {};
     for (const a of args) {
       const key = a.key?.toLowerCase() ?? null;
       if (a.op !== '=') { this.fail(a, `${a.key}${a.op} changes a value by a factor: in a recipe, write ${a.key}=… .`); continue; }
+      if (key === 'fill' || key === 'texture' || key === 'picture') { fillName = this.texName(a, key); continue; }
+      if (key && this.texUseKey(key, a, use)) continue;
+      if (key === 'mask') { const n = this.texName(a, 'mask'); if (n) mask.tex = n; continue; }
+      if (key === 'mask-cut') { const n = this.num(a, 'mask-cut'); if (n !== null) mask.cut = Math.max(0, Math.min(1, n)); continue; }
+      if (!key && this.word(a) === 'mask-invert') { mask.invert = true; continue; }
+      if (!key && it.type === 'shape' && it.kind === 'picture' && !fillName && (a.value.k === 'word' || a.value.k === 'str')) { fillName = this.texName(a, 'picture'); continue; }
       if (!key) {
         const word = this.word(a);
         if (a.value.k === 'str' && !(it.type === 'shape' && it.kind === 'fnshape' && !it.fn)) { it.name = a.value.v; continue; }
@@ -249,6 +305,10 @@ class Parser {
       const v = this.param(p, a);
       if (v !== null) (it as ShapeSpec).size[p.key] = v;
     }
+    if (fillName) it.fill = newTexUse(fillName, use);
+    else if (use.fit || use.scale !== undefined) this.warnings.push('fit= and tiles= are for a picture fill: add fill=… (a picture\'s name).');
+    if (mask.tex) it.mask = { tex: mask.tex, cut: mask.cut ?? 0.5, invert: !!mask.invert };
+    if (it.type === 'shape' && it.kind === 'picture' && !it.fill) this.warnings.push('A picture layer needs its picture: picture brick (a name from a texture clause).');
   }
 
   private modifier(it: Item, m: Modifier) {
@@ -330,6 +390,9 @@ class Parser {
         this.c.next();
         const op = this.combineBlocks(t, this.c.args([]));
         if (op) scene.space.push(op);
+      } else if (w === 'texture') {
+        this.c.next();
+        this.texture(t, this.c.args([]));
       } else if (SPACE_WORDS[w] === 'fn') {
         this.c.next();
         const args = this.c.args([]);
@@ -363,6 +426,7 @@ class Parser {
     let s = 0, g = 0, mo = 0, p = 0;
     for (const op of scene.space) op.id = `p${++p}`;
     walkItems(scene.layers, it => { it.id = it.type === 'group' ? `g${++g}` : `s${++s}`; for (const m of it.motion) m.id = `m${++mo}`; });
+    if (this.textures.length) scene.textures = this.textures;
     return { scene, errors: this.errors, warnings: this.warnings };
   }
 
@@ -540,8 +604,21 @@ class Parser {
         return;
       }
       case 'background': case 'bg': {
-        const c = first ? this.colour(first) : null;
-        if (c) L.bg = c; else if (!first) this.fail(t, 'background takes a colour.');
+        const use: Partial<TexUse> = {};
+        let pic: string | null = null;
+        let warp = true;
+        let coloured = false;
+        for (const a of args) {
+          const key = a.key?.toLowerCase() ?? null;
+          if (key === 'picture' || key === 'texture') { pic = this.texName(a, key); continue; }
+          if (key && this.texUseKey(key, a, use)) continue;
+          if (!key && this.word(a) === 'still') { warp = false; continue; }
+          if (!key && !coloured) { const c = this.colour(a); if (c) L.bg = c; coloured = true; continue; }
+          if (key === 'color' || key === 'colour') { const c = this.colour(a); if (c) L.bg = c; continue; }
+          this.fail(a, 'background takes a colour, picture=, fit=, tiles= and still (the picture not bent by the space).');
+        }
+        if (pic) L.bgTex = { ...newTexUse(pic, use), warp };
+        if (!args.length) this.fail(t, 'background takes a colour or picture=.');
         return;
       }
       case 'bloom': case 'vignette': case 'grain': case 'scanlines': {
@@ -640,9 +717,22 @@ function printRing(d: DupSpec): string {
   return `@ring(${parts.join(' ')})`;
 }
 
+/** A picture use's fit and scale, where they differ from the defaults (cover, 1). */
+function printUse(u: TexUse): string[] {
+  return [...(u.fit !== 'cover' ? [`fit=${u.fit}`] : []), ...(round(u.scale) !== 1 ? [`${u.fit === 'tile' ? 'tiles' : 'zoom'}=${fmt(u.scale)}`] : [])];
+}
+
+/** `texture brick node=node_4 aspect=1.5`. */
+function printTexture(s: TexSource): string {
+  return ['texture', fmtName(s.name), ...(s.node ? [`node=${fmtName(s.node)}`] : []), ...(s.aspect && round(s.aspect) !== 1 ? [`aspect=${fmt(s.aspect)}`] : []), ...(s.kind === 'shader' ? ['kind=shader'] : [])].join(' ');
+}
+
 /** An item as recipe text. `indent` (the pretty form): a combine's items each on their own line. */
 function printItem(it: Item, indent: string | null = null): string {
   const common: string[] = [];
+  const picture = it.type === 'shape' && it.kind === 'picture';
+  if (it.fill) common.push(...(picture ? [] : [`fill=${fmtName(it.fill.tex)}`]), ...printUse(it.fill));
+  if (it.mask) common.push(`mask=${fmtName(it.mask.tex)}`, ...(round(it.mask.cut) !== 0.5 ? [`mask-cut=${fmt(it.mask.cut)}`] : []), ...(it.mask.invert ? ['mask-invert'] : []));
   if (!same(it.at, [0, 0])) common.push(`at=(${it.at.map(fmt).join(',')})`);
   if (it.rot) common.push(`rot=${fmt(it.rot)}`);
   if (it.scale !== 1) common.push(`scale=${fmt(it.scale)}`);
@@ -662,7 +752,7 @@ function printItem(it: Item, indent: string | null = null): string {
     return [head, ...extra, ...common, ...mods].join(' ');
   }
   const def = SHAPE_BY_KIND[it.kind];
-  const parts: string[] = [it.kind === 'fnshape' ? `fn-shape ${fmtName(it.fn?.name ?? 'f')}` : it.kind];
+  const parts: string[] = [it.kind === 'fnshape' ? `fn-shape ${fmtName(it.fn?.name ?? 'f')}` : picture && it.fill ? `picture ${fmtName(it.fill.tex)}` : it.kind];
   const defaults = defaultSize(it.kind);
   for (const p of def.params) {
     const v = it.size[p.key];
@@ -679,6 +769,7 @@ export function printRecipe2D(scene: Scene2D, opts: { multiline?: boolean; prett
   const ind = opts.pretty ? '' : null;
   const L = scene.look, D = DEFAULT_LOOK;
   const clauses: string[] = [];
+  clauses.push(...(scene.textures ?? []).map(printTexture));
   clauses.push(...scene.space.map(printSpace));
   clauses.push(...scene.layers.map(it => printItem(it, ind)));
   if (scene.grid) clauses.push(printGrid(scene.grid, colourText));
@@ -698,7 +789,8 @@ export function printRecipe2D(scene: Scene2D, opts: { multiline?: boolean; prett
     clauses.push(c.join(' '));
   }
   if (L.tone !== D.tone) clauses.push(`tone ${L.tone}`);
-  if (!same(L.bg, D.bg)) clauses.push(`background ${colourText(L.bg)}`);
+  if (L.bgTex) clauses.push(['background', ...(!same(L.bg, D.bg) ? [colourText(L.bg)] : []), `picture=${fmtName(L.bgTex.tex)}`, ...printUse(L.bgTex), ...(L.bgTex.warp ? [] : ['still'])].join(' '));
+  else if (!same(L.bg, D.bg)) clauses.push(`background ${colourText(L.bg)}`);
   for (const k of ['bloom', 'vignette', 'grain', 'scanlines'] as const) if (L.post[k] > 0) clauses.push(`${k} ${fmt(L.post[k])}`);
   if (scene.output && scene.output.show !== 'picture') clauses.push(`output ${scene.output.show}${scene.output.palette ? ` palette=${scene.output.palette}` : ''}`);
   return clauses.join(opts.multiline || opts.pretty ? '\n' : ' · ');
@@ -716,10 +808,11 @@ export const RECIPE_VOCABULARY_2D = {
   blocks: [`space-block ${BLOCK_LIBRARY[0].id} amp=0.1`, 'space-block {uv.x += amp * sin(y * 6 + t)} amp=0.1 times=1', `combine-blocks ${COMBINE_MODES.map(m => m.mode).join('|')} a=… b=… amount=0.5 a_k=… b_k=…`],
   combines: ['union', 'smooth-union', 'subtract', 'smooth-subtract', 'intersect', 'smooth-intersect'],
   shapes: SHAPES.map(s => ({ kind: s.kind, keys: s.params.map(p => p.key) })),
-  itemKeys: ['at=(x,y)', 'rot=30', 'scale=1.5', 'color=teal', 'inflate=0.02', 'outline=0.02', 'glow', 'name="Sun"'],
+  itemKeys: ['at=(x,y)', 'rot=30', 'scale=1.5', 'color=teal', 'inflate=0.02', 'outline=0.02', 'glow', 'name="Sun"', 'fill=brick fit=cover|contain|stretch|tile tiles=3 zoom=1.5', 'mask=brick mask-cut=0.5 mask-invert'],
+  textures: ['texture brick node=node_4 aspect=1.5', 'picture brick h=0.6 fit=cover', 'circle r=0.4 fill=brick fit=tile tiles=3', 'background picture=brick fit=cover [still]'],
   motion: ['@orbit(0.3 speed=0.25)', '@bob(0.15 dir=90)', '@spin(0.25)', '@pulse(0.25 speed=0.5)'],
   ring: ['@ring(6 r=0.5)', '@ring(6 r=0.5 inner=(5,0.2))', '@ring(6 r=0.5 levels=3 factor=1.6)'],
-  look: ['glow [selected] [amount] falloff= color=', `colour by ${COLOUR_BYS.join('|')} palette= scale= speed=`, `tone ${TONE_MODES.join('|')}`, 'background colour', 'bloom 0.6', 'vignette 0.5', 'grain 0.05', 'scanlines 0.3', 'output distance|mask|space palette='],
+  look: ['glow [selected] [amount] falloff= color=', `colour by ${COLOUR_BYS.join('|')} palette= scale= speed=`, `tone ${TONE_MODES.join('|')}`, 'background colour [picture=brick fit= tiles= still]', 'bloom 0.6', 'vignette 0.5', 'grain 0.05', 'scanlines 0.3', 'output distance|mask|space palette='],
   colours: Object.keys(COLOUR_TABLE),
   palettes: PALETTES.map(p => p.key),
 };

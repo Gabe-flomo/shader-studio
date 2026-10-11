@@ -61,6 +61,7 @@ export function buildFromGridBuilder(asNew = false, o: { quiet?: boolean; keepOu
   const placed = fresh ? intoView(nodes, result.nodes, gb.at ? 'ifOutOfView' : 'centre') : result.nodes;
   useNodeGraphStore.getState().setNodesRewritten(placed, fresh ? 'Built a grid scene' : 'Rebuilt the grid scene');
   gb.setTarget(result.sceneId);
+  if (JSON.stringify(result.spec.textures ?? []) !== JSON.stringify(gb.spec.textures ?? [])) useGridBuilder.setState(s => ({ spec: { ...s.spec, textures: result.spec.textures } }));
   gb.markBuilt();
   if (!o.quiet) {
     const notes = [...(result.kept ? [`Kept ${result.kept} setting${result.kept === 1 ? '' : 's'} you changed on the nodes.`] : []), ...result.warnings];

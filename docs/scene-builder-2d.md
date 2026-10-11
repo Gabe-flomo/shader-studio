@@ -106,6 +106,44 @@ every library entry checks, runs, draws and compiles, chaining, the four combine
 recipes) and `src/components/sceneBuilder2d/__tests__/spaceBlocks.test.tsx` (the library, Random,
 errors as you type, Make a slider, three lines at most).
 
+## Textures
+
+Pictures through the shared picker ([scene-builder.md](scene-builder.md#textures)). The scene keeps
+its pictures by name; each use reads its node.
+
+- **Fill** (a layer's **Picture** card): the layer is painted with the picture instead of its colour,
+  read at the layer's **own point**, after its place, motion and ring of copies, so the picture moves,
+  turns and repeats with it, and bends with every space transform above. **Fit**: Fill (cover), Fit
+  (contain: the layer's colour shows round it), Stretch, or Tile (with **Tiles**, repeating up the
+  shape, seamless). **Zoom** for the others. Its alpha lets the layer's colour through.
+- **Picture layer** (Shapes → **Picture**): a box the picture's shape (Half height), filled with it.
+- **Background picture** (Look): the picture behind every layer, over the background colour. **Bent
+  by the space** (on by default) reads it at the warped point, so **warping a picture is adding a
+  block**: every built-in transform, every library block, written blocks and the four combines bend it.
+  Off reads the screen.
+- **Mask** (the Picture card): the layer and its glow only where a picture over the whole frame is
+  bright (**Cut**, live), or dark (**Invert**).
+
+What Build makes: per use a **Picture fit** Expression Block (q, the point; k, Tiles or Zoom, live;
+the fit's lines; `inside` out), a **Sample (texture)** wired from the picture's node (Edges: Repeat
+for Tile), and a block that paints or masks with it. Every node has a note.
+
+### In a recipe
+
+```
+texture pond node=node_4 aspect=1.5
+swirl 2
+circle r=0.4 fill=pond fit=tile tiles=3 mask=pond mask-cut=0.3 mask-invert
+picture pond h=0.3 at=(0.5,0) fit=contain zoom=1.2
+background navy picture=pond fit=stretch still
+```
+
+- `texture name [node=] [aspect=] [kind=image|shader]` declares a picture (printed first). A name
+  used but never declared becomes one.
+- On any layer: `fill=`, `fit=cover|contain|stretch|tile` (`fill` and `fit` read as cover and
+  contain too), `tiles=` (Tile) or `zoom=`; `mask=`, `mask-cut=`, `mask-invert`.
+- `picture name` is a picture layer; `background … picture= fit= tiles= [still]`.
+
 ## Surprise me
 
 The header's **Surprise me** makes a good-looking random scene from a seed, as one undo step

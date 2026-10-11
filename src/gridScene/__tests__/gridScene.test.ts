@@ -51,6 +51,8 @@ describe('spec → graph: everything compiles', () => {
   it.each(PATTERN_KINDS.flatMap(k => PATTERN_TARGETS.map(t => [k, t] as const)))('pattern %s changing %s, filling the empty cells', (kind, target) => {
     const s = twoShapes();
     s.pattern = { ...s.pattern, kind, target, fill: 'B' };
+    // A picture pattern reads a picture (gridTextures.test.ts covers it).
+    if (kind === 'picture') { s.textures = [{ name: 'pond' }]; s.pattern.tex = 'pond'; }
     const { g } = compiles(s);
     const grid = g.nodes.find(n => n.params[GS_ROLE] === 'grid')!;
     expect(String(grid.params.glslFunctions).includes('gs_drawn_')).toBe(kind !== 'none');
