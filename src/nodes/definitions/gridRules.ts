@@ -68,7 +68,7 @@ export const GRID_PARAM_DEFS: Record<string, ParamDef> = {
   rate: num('Speed', 0, 1, 0.01, 'Steps a frame below 1: at 0.25 the board steps every fourth frame. (Steps runs several a frame.)', 'Run'),
   steps: num('Steps a frame', 1, MAX_STEPS, 1, 'Runs the rule this many times each frame (the board Pass\'s Repeat). Costs that many board draws.', 'Run', { compileTime: true, hard: true }),
   reset: num('Reset', 0, 1, 0.5, 'While 1, the board is dealt again every frame. A switch in Play.', 'Run'),
-  start: sel('Start', [['noise', 'Noise'], ['empty', 'Empty'], ['image', 'Image (wire Start image)'], ['centre', 'Centre seed']], 'What a new board starts as.', 'Run'),
+  start: sel('Start', [['noise', 'Noise'], ['empty', 'Empty'], ['image', 'Image (wire Start image)'], ['centre', 'Centre seed'], ['cells', 'Your drawing (drawn in the editor)']], 'What a new board starts as. Your drawing: the cells drawn on the editor\'s board, in the middle.', 'Run'),
   density: num('Density', 0, 1, 0.01, 'Noise and Centre seed: the share of cells that start on.', 'Run'),
   seed: num('Seed', 0, 100, 0.5, 'Which noise: a different seed deals a different board.', 'Run'),
   board: sel('Board size', BOARD_SIZES.map(b => [b.value, b.label]), 'How many cells: the board Pass\'s size. Each cell is a block of the picture.', 'Run'),

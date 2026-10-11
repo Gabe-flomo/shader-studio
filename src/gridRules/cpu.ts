@@ -1,12 +1,14 @@
 /**
- * cpu.ts — a small CPU run of a Grid Rules rule set, for the editor's live preview
- * (components/gridRules/RulePreview.tsx): the same rules as the GLSL (gridRules/glsl.ts) on a board
- * of a few thousand cells, so a rule can be tried while it is being written, without the GPU.
+ * cpu.ts — a small CPU run of a Grid Rules rule set, for the builder's try board
+ * (components/gridRules/TryBoard.tsx, gridRules/tryRun.ts), its pictures and Surprise me: the same
+ * rules as the GLSL (gridRules/glsl.ts) on a board of a few thousand cells, so a rule can be tried
+ * while it is being written, without the GPU (gridRulesCpuGpu.test.ts checks they agree).
  * Boards wrap or have walls as the node's do. Two channels per cell: a (state, or u) and b (age, or v).
  */
 import { GRID_DEFAULTS, gridShape, neighbourOffsets, type GridShape } from './spec';
 import { SAME, blockVariants, patternVariants, specMatches, stencilOffset } from './stencils';
 import { blockStartsAt, diceFrame, grDice } from './dice';
+import { stampedAt } from './startCells';
 
 export interface CpuBoard {
   w: number; h: number; a: Float32Array; b: Float32Array;
@@ -27,9 +29,17 @@ export function cpuSeed(params: Record<string, unknown>, w: number, h: number, r
   const B = cpuBoard(w, h);
   const density = Number(P.density);
   const centre = (x: number, y: number, r: number) => Math.hypot(x + 0.5 - w / 2, y + 0.5 - h / 2) < Math.min(w, h) * r;
+  // A drawn start: the drawing in the middle, as the GLSL places it (gridRules/startCells.ts).
+  const top = s.type === 'count' ? 1 : Math.max(2, Math.round(Number(P.states))) - 1;
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
     const i = y * w + x;
     if (s.start === 'empty') continue;
+    if (s.start === 'cells') {
+      const d = s.startCells ? stampedAt(s.startCells, w, h, x, y) : 0;
+      if (s.type !== 'smooth') B.a[i] = Math.min(d, top);
+      else if (s.template === 'reaction') { B.a[i] = 1; B.b[i] = d > 0 ? 1 : 0; } else { B.a[i] = d > 0 ? 1 : 0; B.b[i] = s.template === 'waves' ? B.a[i] : 0; }
+      continue;
+    }
     if (s.type !== 'smooth') {
       const on = rnd() < density;
       B.a[i] = s.start === 'centre' ? (centre(x, y, 0.15) && on ? 1 : 0) : on ? 1 : 0;
@@ -55,12 +65,18 @@ export function cpuSeed(params: Record<string, unknown>, w: number, h: number, r
   return B;
 }
 
+/** What a step reports, for the builder's pictures (BlockPictures): which rule changed which block. */
+export interface CpuTrace {
+  /** Blocks: a rule (its index among the rules, off ones included) fired on the block whose bottom-left cell is (x, y). */
+  onBlock?: (x: number, y: number, rule: number) => void;
+}
+
 /** One step of the rule. */
-export function cpuStep(params: Record<string, unknown>, B: CpuBoard): CpuBoard {
+export function cpuStep(params: Record<string, unknown>, B: CpuBoard, trace?: CpuTrace): CpuBoard {
   const P = { ...GRID_DEFAULTS, ...params };
   const s = gridShape(P);
   if (s.type === 'patterns') return patterns(s, P, B);
-  if (s.type === 'blocks') return blocks(s, P, B);
+  if (s.type === 'blocks') return blocks(s, P, B, trace);
   return s.type === 'smooth' ? smooth(s, P, B) : discrete(s, P, B);
 }
 
@@ -97,7 +113,7 @@ function patterns(s: GridShape, P: Record<string, unknown>, B: CpuBoard): CpuBoa
   return out;
 }
 
-function blocks(s: GridShape, P: Record<string, unknown>, B: CpuBoard): CpuBoard {
+function blocks(s: GridShape, P: Record<string, unknown>, B: CpuBoard, trace?: CpuTrace): CpuBoard {
   const out = cpuBoard(B.w, B.h);
   const par = B.par ?? 0;
   out.par = 1 - par;
@@ -112,7 +128,7 @@ function blocks(s: GridShape, P: Record<string, unknown>, B: CpuBoard): CpuBoard
   out.a.set(B.a); out.b.set(B.b);
   // An odd last row or column has no block: kept empty.
   for (let y = 0; y < B.h; y++) for (let x = 0; x < B.w; x++) if (x >= W || y >= H) { out.a[y * B.w + x] = 0; out.b[y * B.w + x] = 0; }
-  const rules = s.blocks.filter(r => !r.off).map(r => ({ r, variants: blockVariants(r) }));
+  const rules = s.blocks.map((r, index) => ({ r, index, variants: blockVariants(r) })).filter(x => !x.r.off);
   const wrapX = (x: number) => ((x % W) + W) % W, wrapY = (y: number) => ((y % H) + H) % H;
   const val = (x: number, y: number) => {
     if (s.wrap) { x = wrapX(x); y = wrapY(y); } else if (x < 0 || y < 0 || x >= W || y >= H) return -1;
@@ -131,11 +147,12 @@ function blocks(s: GridShape, P: Record<string, unknown>, B: CpuBoard): CpuBoard
       const b = pos.map(([x, y]) => val(x, y));
       const ky = wrapY(oy);
       for (let j = 0; j < rules.length; j++) {
-        const { r, variants } = rules[j];
+        const { r, index, variants } = rules[j];
         const n = variants.length, o = Math.floor(grDice(strip, ky, frame, 31 + j * 2, seed) * n);
         let pick = -1;
         for (let k = 0; k < n && pick < 0; k++) { const v = (o + k) % n; if (variants[v].before.every((spec, q) => specMatches(spec, b[q]))) pick = v; }
         if (pick < 0 || (r.chance < 1 && !(grDice(strip, ky, frame, 32 + j * 2, seed) < r.chance))) continue;
+        trace?.onBlock?.(s.wrap ? wrapX(ox) : ox, s.wrap ? wrapY(oy) : oy, index);
         pos.forEach(([x, y], q) => {
           const a = variants[pick].after[q];
           if (a === SAME || b[q] < 0) return;
