@@ -130,7 +130,7 @@ interface GroupState extends AgGroupState<ListenState> {
 /** A Trail's textures; a volume (3D) also has its layout and its front view (`proj`, what the picture samples). */
 interface TrailState { key: string; w: number; h: number; rt: [THREE.WebGLRenderTarget, THREE.WebGLRenderTarget]; cur: 0 | 1; vol?: AgVolLayout; proj?: THREE.WebGLRenderTarget }
 /**
- * A Draw agents' targets; in 3D with a scene's camera also its probe (4 × 1: the camera) and the scene's depth (half size).
+ * A Draw agents' targets; in 3D with a scene's camera also its probe (6 × 1: the camera) and the scene's depth (half size).
  * Splats: `oit`, the two targets the splats are put together in (kit/agentShaders.js AG_SPLAT_VERT), resolved into acc.
  */
 interface DrawState { key: string; w: number; h: number; acc: THREE.WebGLRenderTarget; glow: THREE.WebGLRenderTarget[]; out: THREE.WebGLRenderTarget; cam?: THREE.WebGLRenderTarget; depth?: THREE.WebGLRenderTarget; oit?: THREE.WebGLRenderTarget }
@@ -280,9 +280,9 @@ export class AgentTargets {
 
   private disposeDraw(s: DrawState): void { s.acc.dispose(); for (const g of s.glow) g.dispose(); if (s.out !== s.acc) s.out.dispose(); s.cam?.dispose(); s.depth?.dispose(); s.oit?.dispose(); }
 
-  /** A 3D Draw agents' scene probe targets: the camera (4 × 1, full float) and the scene's depth at half the picture's size. */
+  /** A 3D Draw agents' scene probe targets: the camera (6 × 1, full float) and the scene's depth at half the picture's size. */
   probeTargets(s: DrawState, depth: boolean): void {
-    if (!s.cam) s.cam = new THREE.WebGLRenderTarget(4, 1, { type: THREE.FloatType, format: THREE.RGBAFormat, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: false, stencilBuffer: false });
+    if (!s.cam) s.cam = new THREE.WebGLRenderTarget(AG_PROBE_POINTS.length, 1, { type: THREE.FloatType, format: THREE.RGBAFormat, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: false, stencilBuffer: false });
     if (depth && !s.depth) {
       s.depth = new THREE.WebGLRenderTarget(Math.max(1, Math.ceil(s.w / 2)), Math.max(1, Math.ceil(s.h / 2)), {
         type: this.halfFloat ? THREE.HalfFloatType : THREE.FloatType, format: THREE.RGBAFormat, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: false, stencilBuffer: false,
@@ -405,7 +405,7 @@ export class AgentRunner {
     u_light: { value: [new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4()] },
     u_lightCol: { value: [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()] },
     u_camSrc: { value: 0 }, u_eye: { value: new THREE.Vector3() }, u_fwd: { value: new THREE.Vector3(0, 0, -1) }, u_right: { value: new THREE.Vector3(1, 0, 0) }, u_up: { value: new THREE.Vector3(0, 1, 0) },
-    u_lens: { value: 1.8 }, u_ortho: { value: 0 }, u_camDist: { value: 3 }, u_focus: { value: 3 }, u_coc: { value: 0 }, u_cap: { value: 7 },
+    u_lens: { value: 1.8 }, u_ortho: { value: 0 }, u_proj: { value: new THREE.Vector2(0, 1) }, u_camDist: { value: 3 }, u_focus: { value: 3 }, u_coc: { value: 0 }, u_cap: { value: 7 },
   }, true);
   private probes: TrailEntry[] = [];
   // Draw agents' Splats (2D and 3D): six vertices a walker (two triangles), put together without an order.
@@ -424,7 +424,7 @@ export class AgentRunner {
       u_pal: { value: [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()] },
       u_viewSize: { value: new THREE.Vector2(1, 1) },
       u_eye: { value: new THREE.Vector3() }, u_fwd: { value: new THREE.Vector3(0, 0, -1) }, u_right: { value: new THREE.Vector3(1, 0, 0) }, u_up: { value: new THREE.Vector3(0, 1, 0) },
-      u_lens: { value: 1.8 }, u_ortho: { value: 0 }, u_camDist: { value: 3 },
+      u_lens: { value: 1.8 }, u_ortho: { value: 0 }, u_proj: { value: new THREE.Vector2(0, 1) }, u_camDist: { value: 3 },
       u_depth: { value: 0 }, u_field: { value: null },
     },
   });
@@ -502,7 +502,7 @@ export class AgentRunner {
     u_side: { value: 1 }, u_stride: { value: 1 }, u_species: { value: 1 }, u_stateC: { value: 0 }, u_only: { value: -1 }, u_deep: { value: 0 }, u_camSrc: { value: 0 },
     u_aspect: { value: 1 }, u_px: { value: SPOT_PX }, u_gain: { value: 1 }, u_col: { value: new THREE.Vector3(1, 1, 1) },
     u_eye: { value: new THREE.Vector3() }, u_fwd: { value: new THREE.Vector3(0, 0, -1) }, u_right: { value: new THREE.Vector3(1, 0, 0) }, u_up: { value: new THREE.Vector3(0, 1, 0) },
-    u_lens: { value: 1.8 }, u_ortho: { value: 0 }, u_camDist: { value: 3 },
+    u_lens: { value: 1.8 }, u_ortho: { value: 0 }, u_proj: { value: new THREE.Vector2(0, 1) }, u_camDist: { value: 3 },
   }, true);
   private spot: THREE.Points;
   private spotScene = new THREE.Scene();
@@ -514,7 +514,7 @@ export class AgentRunner {
     u_side: { value: 1 }, u_stride: { value: 1 }, u_species: { value: 1 }, u_stateC: { value: 0 }, u_only: { value: -1 }, u_deep: { value: 0 }, u_camSrc: { value: 0 },
     u_aspect: { value: 1 }, u_px: { value: SPOT_PX }, u_gain: { value: 1 }, u_col: { value: new THREE.Vector3(1, 1, 1) },
     u_eye: { value: new THREE.Vector3() }, u_fwd: { value: new THREE.Vector3(0, 0, -1) }, u_right: { value: new THREE.Vector3(1, 0, 0) }, u_up: { value: new THREE.Vector3(0, 1, 0) },
-    u_lens: { value: 1.8 }, u_ortho: { value: 0 }, u_camDist: { value: 3 },
+    u_lens: { value: 1.8 }, u_ortho: { value: 0 }, u_proj: { value: new THREE.Vector2(0, 1) }, u_camDist: { value: 3 },
     u_memSrc: { value: 0 }, u_memComp: { value: 0 }, u_lo: { value: 0 }, u_hi: { value: 1 },
   }, false);
   private memRangeMat = raw(AG_FULL_VERT, MEM_RANGE_FRAG, { u_b: { value: null }, u_c: { value: null }, u_e: { value: null }, u_side: { value: 1 }, u_stride: { value: 1 }, u_hasE: { value: 0 } }, false);
@@ -1251,8 +1251,8 @@ export class AgentRunner {
 
   /**
    * A 3D Draw agents' look at a ray-marched scene (Camera from and Camera ray wired): the camera
-   * probe read at the four points (its origin, and its rays at the centre, half a picture right and
-   * half up) into a 4 × 1 texture the draw shader rebuilds the camera from (no read-back, no lag),
+   * probe read at AG_PROBE_POINTS (its origin, its rays at the centre, half a picture right and half
+   * up, and its origins half right and half up) into a 6 × 1 texture the draw shader rebuilds the camera from (no read-back, no lag),
    * and the Depth wired at half the picture's size. Null until its programs have compiled.
    */
   private probe(targets: AgentTargets, s: DrawState, d: AgentDrawProgram): { cam: THREE.Texture; depth: THREE.Texture | null } | null {
@@ -1270,7 +1270,7 @@ export class AgentRunner {
       renderer.setRenderTarget(s.cam!);
       renderer.render(this.quadScene, this.host.camera);
     });
-    s.cam!.viewport.set(0, 0, 4, 1);
+    s.cam!.viewport.set(0, 0, AG_PROBE_POINTS.length, 1);
     if (depth && s.depth) {
       depth.material.uniformsNeedUpdate = true;
       this.quad.material = depth.material;
@@ -1311,6 +1311,7 @@ export class AgentRunner {
     (du.u_eye.value as THREE.Vector3).fromArray(cam.eye); (du.u_fwd.value as THREE.Vector3).fromArray(cam.fwd);
     (du.u_right.value as THREE.Vector3).fromArray(cam.right); (du.u_up.value as THREE.Vector3).fromArray(cam.up);
     du.u_lens.value = cam.lens; du.u_ortho.value = seen ? 0 : cam.ortho; du.u_camDist.value = cam.dist;
+    (du.u_proj.value as THREE.Vector2).fromArray(cam.proj ?? [0, 1]);
     du.u_focus.value = seen ? cam.focusShare : cam.focus; du.u_coc.value = cam.coc; du.u_cap.value = cam.cap;
     du.u_camSrc.value = seen ? 1 : 0; du.u_cam.value = seen?.cam ?? null;
     du.u_depth.value = seen?.depth ? 1 : 0; du.u_field.value = seen?.depth ?? null;
@@ -1387,6 +1388,7 @@ export class AgentRunner {
       (su.u_eye.value as THREE.Vector3).fromArray(cam.eye); (su.u_fwd.value as THREE.Vector3).fromArray(cam.fwd);
       (su.u_right.value as THREE.Vector3).fromArray(cam.right); (su.u_up.value as THREE.Vector3).fromArray(cam.up);
       su.u_lens.value = cam.lens; su.u_ortho.value = seen ? 0 : cam.ortho; su.u_camDist.value = cam.dist;
+      (su.u_proj.value as THREE.Vector2).fromArray(cam.proj ?? [0, 1]);
     }
     su.u_camSrc.value = seen ? 1 : 0; su.u_cam.value = seen?.cam ?? null;
     su.u_depth.value = seen?.depth ? 1 : 0; su.u_field.value = seen?.depth ?? null;
@@ -1656,6 +1658,7 @@ export class AgentRunner {
         (su.u_eye.value as THREE.Vector3).fromArray(cam.eye); (su.u_fwd.value as THREE.Vector3).fromArray(cam.fwd);
         (su.u_right.value as THREE.Vector3).fromArray(cam.right); (su.u_up.value as THREE.Vector3).fromArray(cam.up);
         su.u_lens.value = cam.lens; su.u_ortho.value = cam.ortho; su.u_camDist.value = cam.dist;
+        (su.u_proj.value as THREE.Vector2).fromArray(cam.proj ?? [0, 1]);
         // A scene's camera (its probe has run): the same rays the 3D draw used.
         const probed = !!view3.probe && !!ds?.cam && this.probes.some(e => e.slug === `${view3.slug}:camera` && e.ready && !e.failed);
         if (probed) { su.u_camSrc.value = 1; su.u_cam.value = ds!.cam!.texture; }
@@ -1753,7 +1756,7 @@ export class AgentRunner {
       const ds = targets.draws.get(view3.slug);
       const c = agCamera3(view3, this.reader, this.lastTime, ds?.h ?? 360);
       const probed = !!view3.probe && !!ds?.cam && this.probes.some(e => e.slug === `${view3.slug}:camera` && e.ready && !e.failed);
-      camera = Object.freeze({ eye: [...c.eye], fwd: [...c.fwd], right: [...c.right], up: [...c.up], lens: c.lens, ortho: c.ortho, dist: c.dist, scene: probed ? ds!.cam!.texture : null });
+      camera = Object.freeze({ eye: [...c.eye], fwd: [...c.fwd], right: [...c.right], up: [...c.up], lens: c.lens, ortho: c.ortho, proj: [...(c.proj ?? [0, 1])], dist: c.dist, scene: probed ? ds!.cam!.texture : null });
     }
     return Object.freeze({
       nodeId, slug: g.slug, side: g.side, count: g.side * g.side, species: Math.max(1, g.species), stateC: !!g.stateC, d3: !!g.space3d,

@@ -3,6 +3,7 @@
  *  - a generated scan (two interlocking rings of coloured Gaussians: no file) in the 3D: Shapes + Ground scene, turning
  *    slowly so the rings pass through the sphere and the box. Built from that example (its nodes copied), so the scene
  *    never drifts from it;
+ *  - the generated rings through an orthographic (isometric) March Camera, built with the Splat builder;
  *  - per-splat modifiers on a generated ball: a custom chain (Splat Attributes → Expression Block → Set Splat) and two
  *    recipes (Explode on an LFO, a wobble);
  *  - the graph of the Play example "Splats: a scan dissolving" (playExamples.ts): a Dissolve whose Amount Play sweeps.
@@ -13,11 +14,17 @@ import type { ExampleGraph } from './exampleIndex';
 import type { GraphNode } from '../types/nodeGraph';
 import { n } from './graphBuilder';
 import { expr } from './agentExampleKit';
+import { buildSplatStandalone } from '../splatBuilder/build';
+import { starterSplatScene, type SplatBuilderSpec } from '../splatBuilder/spec';
 
 export const SPLAT_EXAMPLE_INDEX: Record<string, { label: string; description: string }> = {
   splatRingsInScene: {
     label: '3D: Splat scan in a scene',
     description: 'A Splat Scene (a generated scan: two rings of 60 000 coloured Gaussians) seen through the March Camera and put together with the ray-marched shapes by distance: the rings pass through the sphere and the box, hidden where the shapes are in front. Drop your own .ply, .splat or .spz on the Splat Scene card to put a real scan there.',
+  },
+  splatIsometric: {
+    label: '3D: Splat scan, isometric',
+    description: 'A generated scan (two rings of coloured Gaussians) seen through a March Camera set to Orthographic: its rays run parallel, so the scan keeps its size however far it is and its edges stay parallel, like an isometric drawing. The splats are projected without dividing by depth. Made with the Splat builder (right-click the Splat Scene → Edit in Splat builder); try Perspective Reverse there.',
   },
   splatModifiersBall: {
     label: '3D: Splat modifiers',
@@ -59,8 +66,27 @@ export function buildSplatExamples(all: Record<string, ExampleGraph>): Record<st
       counter: (src.counter ?? 0) + 10,
       nodes: [...nodes, ...added],
     },
+    splatIsometric: { ...SPLAT_EXAMPLE_INDEX.splatIsometric, counter: 20, nodes: splatIsometricNodes() },
     splatModifiersBall: { ...SPLAT_EXAMPLE_INDEX.splatModifiersBall, counter: 20, nodes: splatModifiersNodes() },
   };
+}
+
+/**
+ * The isometric example (docs/camera-projections.md): the Splat builder's scene with the generated rings, its camera
+ * at the isometric angle (45° round, 35.26° up: atan(1/√2)) and Perspective Orthographic, turning slowly, over a floor
+ * (the ray-marched world shares the camera, so the scan and the floor meet by distance in the same parallel view).
+ */
+export function splatIsometricNodes(): GraphNode[] {
+  const base = starterSplatScene();
+  const spec: SplatBuilderSpec = {
+    ...base,
+    scan: { ...base.scan, source: { kind: 'demo', demo: 'rings', count: 60_000 } },
+    place: { ...base.place, scale: 0.9 },
+    world: { ...base.world, on: true, floor: { ...base.world.floor, on: true, y: -0.9 } },
+    camera: { ...base.camera, dist: 3, angle: 45, elev: 35.26, fov: 1.6, turntable: 6, projection: 'orthographic' },
+  };
+  const built = buildSplatStandalone(spec, role => `iso_${role.replace(/[^A-Za-z0-9]/g, '_')}`);
+  return built.nodes.map(x => (x.type === 'output' ? { ...x, params: { ...x.params, ...note('Output: the scan, drawn isometric, is the picture.') } } : x));
 }
 
 /** A slow turn for a scan: Time × `speed` degrees a second round Y, as the Splat Scene's Rotation. */

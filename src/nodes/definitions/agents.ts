@@ -1449,17 +1449,29 @@ export const DRAW_COLOR_BY = ['single', 'species', 'speed', 'heading', 'age', 'a
  * Draw agents' camera in 3D: the unified camera of Time Cube View and Frame Stack (Distance, Angle,
  * Elevation, Orbit speed, Zoom, Flatten, Translate X / Y / Z; the same keys and the March Camera's
  * way round, Angle and Elevation in degrees here), plus the Particles node's Drift and depth of
- * field (Focus, Blur, Max blur). Shown only in 3D.
+ * field (Focus, Blur, Max blur). Shown only in 3D. Perspective is the March Camera's (Normal / Orthographic /
+ * Reverse, with Reverse strength and Converge at), done forward: agentPlan.js agProjection (docs/camera-projections.md).
+ * Absent is Normal, so a saved camera is as it was; Flatten blends whichever is chosen toward orthographic.
  */
 export const DRAW_CAMERA_DEFAULTS = { camDist: 3.2, camAngle: 0, camElevation: 15, rotSpeed: 0, fov: 1.8, ortho: 0, camX: 0, camY: 0, camZ: 0, drift: 0, focus: 1, blur: 0, maxBlur: 7 };
+/** Reverse perspective's defaults (the March Camera's): read only when Perspective is Reverse. */
+export const DRAW_REVERSE_DEFAULTS = { reverseStrength: 1, reverseDist: 8 };
 const in3d = { showWhen: { param: 'agentSpace', value: '3d' } };
+const in3dReverse = { showWhen: { param: 'agentSpace', value: '3d', and: { param: 'projection', value: 'reverse' } } };
 export const DRAW_CAMERA_PARAMS: Record<string, ParamDef> = {
   camDist: { label: 'Distance', type: 'float', min: 0.3, max: 40, step: 0.01, section: 'Camera', hint: 'How far the camera is from the point it looks at (picture units: the picture is 2 tall).', ...in3d },
   camAngle: { label: 'Angle', type: 'float', min: -360, max: 360, step: 0.5, section: 'Camera', hint: 'Where the camera stands round the point it looks at, in degrees (0: in front).', ...in3d },
   camElevation: { label: 'Elevation', type: 'float', min: -89, max: 89, step: 0.5, section: 'Camera', hint: 'How far above (or below) it looks from, in degrees: 0 level, 35 the isometric angle, 89 straight down.', ...in3d },
   rotSpeed: { label: 'Orbit speed', type: 'float', min: -180, max: 180, step: 0.5, section: 'Camera', hint: 'Turns the camera round the point it looks at over time, in degrees a second.', ...in3d },
   fov: { label: 'Zoom', type: 'float', min: 0.5, max: 5, step: 0.01, section: 'Camera', hint: 'Lens length: higher is zoomed in, with less perspective (1.8: Time Cube View\'s).', ...in3d },
-  ortho: { label: 'Flatten', type: 'float', min: 0, max: 1, step: 0.01, section: 'Camera', hint: 'From perspective (0) to orthographic (1): far walkers as big as near ones, like an isometric drawing.', ...in3d },
+  projection: { label: 'Perspective', type: 'select', section: 'Camera', options: [
+    { value: 'normal', label: 'Normal' },
+    { value: 'orthographic', label: 'Orthographic (parallel)' },
+    { value: 'reverse', label: 'Reverse (far = bigger)' },
+  ], hint: 'Normal: far walkers look smaller. Orthographic: size does not change with distance. Reverse: far walkers look bigger, as if the rays started spread out and met in front of the camera. The same as the March Camera\'s, so walkers line up with a scene drawn through one.', ...in3d },
+  reverseStrength: { label: 'Reverse strength', type: 'float', min: 0, max: 1, step: 0.01, section: 'Camera', hint: '0 = orthographic, 1 = the rays meet exactly at the Converge distance. Whatever the strength, the point it looks at keeps its size.', ...in3dReverse },
+  reverseDist: { label: 'Converge at', type: 'float', min: 0.5, max: 50, step: 0.1, section: 'Camera', hint: 'How far in front of the camera the rays meet (at strength 1). Nearer than this, walkers look bigger the farther away they are; past it the picture flips.', ...in3dReverse },
+  ortho: { label: 'Flatten', type: 'float', min: 0, max: 1, step: 0.01, section: 'Camera', hint: 'Blends the Perspective toward orthographic (1): far walkers as big as near ones, like an isometric drawing. A slider, so it animates.', ...in3d },
   camX: { label: 'Translate X', type: 'float', min: -5, max: 5, step: 0.01, section: 'Camera', hint: 'Moves the camera and the point it looks at sideways; Angle and Elevation turn round the moved point.', ...in3d },
   camY: { label: 'Translate Y', type: 'float', min: -5, max: 5, step: 0.01, section: 'Camera', hint: 'Moves the camera and the point it looks at up or down.', ...in3d },
   camZ: { label: 'Translate Z', type: 'float', min: -5, max: 5, step: 0.01, section: 'Camera', hint: 'Moves the camera and the point it looks at through the depth: fly through the walkers.', ...in3d },
@@ -1510,7 +1522,7 @@ export const DrawAgentsNode: NodeDefinition = {
     colorA: [1, 0.75, 0.35], colorB: [0.25, 0.55, 1], paper: [0.95, 0.95, 0.94],
     background: 'over', bgPalette: 'ember', bgGain: 1,
     lights: '0', lightColor: [1, 0.55, 0.25], lightPower: 1.6, lightReach: 0.3, halo: 0.5, lightMotion: 'orbit', lightOrbit: 0.5, lightX: 0, lightY: 0,
-    ...DRAW_CAMERA_DEFAULTS,
+    ...DRAW_CAMERA_DEFAULTS, ...DRAW_REVERSE_DEFAULTS,
   },
   paramDefs: {
     style: { label: 'Style', type: 'select', section: 'Look', hint: 'Points: soft dots. Glow: dots with a wide glow. Streaks: short lines along each walker\'s motion, glowing. Ink: dark ink laid on paper, bleeding a little. Splats: soft Gaussians stretched along their motion, laid over each other like a volume (clouds, smoke, liquids; a splat scan).', options: [

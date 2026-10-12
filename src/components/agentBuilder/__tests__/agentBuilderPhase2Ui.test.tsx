@@ -249,4 +249,22 @@ describe('undo and Born', () => {
     expect($('[data-born3d="ball"]')).toBeTruthy();
     expect(Number($('[data-born3d="ball"]')!.getAttribute('data-born3d-r'))).toBeGreaterThan(10);
   });
+
+  it('the 3D camera card picks the Perspective (Normal / Orthographic / Reverse), Reverse showing its two sliders, and Flatten', () => {
+    start('trail', '3d');
+    click($('[data-studio-section="look"]'));
+    const draw = () => useNodeGraphStore.getState().nodes.find(n => n.type === 'drawAgents')!;
+    expect($('[data-card="camera"] [data-setting="projection"] [data-chip="normal"]')?.getAttribute('aria-checked')).toBe('true');
+    expect($('[data-card="camera"] [data-setting="ortho"]')).toBeTruthy();
+    expect($('[data-card="camera"] [data-setting="reverseStrength"]')).toBeNull();
+    click($('[data-card="camera"] [data-chip="reverse"]'));
+    expect(draw().params.projection).toBe('reverse');
+    expect($('[data-card="camera"] [data-setting="reverseStrength"]')).toBeTruthy();
+    expect($('[data-card="camera"] [data-setting="reverseDist"]')).toBeTruthy();
+    click($('[data-card="camera"] [data-chip="orthographic"]'));
+    expect(draw().params.projection).toBe('orthographic');
+    expect($('[data-card="camera"] [data-setting="reverseStrength"]')).toBeNull();
+    click($('[data-card="camera"] [data-chip="normal"]'));
+    expect(draw().params.projection).toBeUndefined();
+  });
 });

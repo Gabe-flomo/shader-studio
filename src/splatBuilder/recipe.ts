@@ -9,7 +9,7 @@
  *   world on floor=on floor-y=-1 light=sunset shadows=on fog=0.02
  *   shape sphere at=(1.4,-0.6,-0.4) size=0.4 color=(0.85,0.3,0.2)
  *   background gradient color=(0.09,0.1,0.14) color2=(0.02,0.02,0.03)
- *   camera dist=3.6 angle=25 elev=12 fov=1.5 turntable=8 target=(0,0,0)
+ *   camera dist=3.6 angle=25 elev=12 fov=1.5 turntable=8 target=(0,0,0)   (+ orthographic, or reverse=1 converge=8)
  *   look tone=aces bloom=on bloom-intensity=0.8 bloom-threshold=0.6 bloom-radius=40
  *
  * An effect line is its kind and its node's own settings (the names on the node card's sliders, in camelCase); a
@@ -45,7 +45,8 @@ export function splatRecipe(spec: SplatBuilderSpec): string {
   lines.push(`world ${onOff(W.on)} floor=${onOff(W.floor.on)} floor-y=${fmt(W.floor.y)} floor-color=${vec(W.floor.color)} light=${W.light} shadows=${onOff(W.shadows)} fog=${fmt(W.fog)}`);
   for (const p of W.props) lines.push(`shape ${p.kind} at=${vec(p.at)} size=${fmt(p.size)} color=${vec(p.color)}`);
   lines.push(`background ${B.kind} color=${vec(B.color)} color2=${vec(B.color2)}${B.picture ? ` picture=${val(B.picture)}` : ''}`);
-  lines.push(`camera dist=${fmt(C.dist)} angle=${fmt(C.angle)} elev=${fmt(C.elev)} fov=${fmt(C.fov)} turntable=${fmt(C.turntable)} target=${vec(C.target)}`);
+  const proj = C.projection === 'orthographic' ? ' orthographic' : C.projection === 'reverse' ? ` reverse=${fmt(C.reverse ?? 1)} converge=${fmt(C.converge ?? 8)}` : '';
+  lines.push(`camera dist=${fmt(C.dist)} angle=${fmt(C.angle)} elev=${fmt(C.elev)} fov=${fmt(C.fov)} turntable=${fmt(C.turntable)} target=${vec(C.target)}${proj}`);
   lines.push(`look tone=${L.tone} bloom=${onOff(L.bloom.on)} bloom-intensity=${fmt(L.bloom.intensity)} bloom-threshold=${fmt(L.bloom.threshold)} bloom-radius=${fmt(L.bloom.radius)}`);
   return lines.join('\n');
 }
@@ -155,7 +156,9 @@ export function readSplatRecipe(text: string, base: SplatBuilderSpec = starterSp
         return;
       }
       case 'camera':
-        spec.camera = { dist: num('dist', spec.camera.dist), angle: num('angle', spec.camera.angle), elev: num('elev', spec.camera.elev), fov: num('fov', spec.camera.fov), turntable: num('turntable', spec.camera.turntable), target: v3('target', spec.camera.target) };
+        spec.camera = { dist: num('dist', spec.camera.dist), angle: num('angle', spec.camera.angle), elev: num('elev', spec.camera.elev), fov: num('fov', spec.camera.fov), turntable: num('turntable', spec.camera.turntable), target: v3('target', spec.camera.target),
+          // Perspective: `orthographic`, or `reverse=<strength>` with `converge=`; neither is Normal.
+          ...(flags.includes('orthographic') ? { projection: 'orthographic' as const } : kv.has('reverse') ? { projection: 'reverse' as const, reverse: num('reverse', 1), converge: num('converge', 8) } : {}) };
         return;
       case 'look':
         spec.look = {

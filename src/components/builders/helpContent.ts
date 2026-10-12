@@ -311,7 +311,8 @@ export const BUILDER_HELP: Record<BuilderKey, Record<string, HelpEntry>> = {
       lines: [
         'Pattern: Distance and Zoom frame the box; Angle and Elevation choose the side you look from; Orbit speed turns round it over time.',
         'Focus and Blur are depth of field: walkers at the focus stay sharp, nearer and further ones spread into soft discs, which is what makes the depth read.',
-        'These are Draw agents\' Camera settings: the card has the rest (Flatten, Translate, Drift).',
+        'Perspective is the March Camera\'s: Normal (far walkers smaller), Orthographic (no change of size, an isometric look) or Reverse (far walkers bigger). Flatten blends it toward orthographic.',
+        'These are Draw agents\' Camera settings: the card has the rest (Translate, Drift).',
       ],
     },
     shape: {

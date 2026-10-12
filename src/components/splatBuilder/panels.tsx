@@ -31,9 +31,9 @@ import { SPLAT_MAX_OPTIONS } from '../../nodes/definitions/splatScene';
 import { centrePlace, fitPlace, onFloorPlace, quarterTurn, scanCenter } from '../../splatBuilder/place';
 import { readSplatRecipe, splatRecipe } from '../../splatBuilder/recipe';
 import {
-  EFFECT_INFO, EFFECT_KINDS, EFFECT_TYPE, LIGHTS, LIGHT_INFO, PROP_KINDS, PROP_LABELS, QUALITY_KEYS, QUALITY_PRESETS, TONES, TONE_LABELS,
+  EFFECT_INFO, EFFECT_KINDS, EFFECT_TYPE, LIGHTS, LIGHT_INFO, PROP_KINDS, PROP_LABELS, QUALITY_KEYS, QUALITY_PRESETS, SPLAT_PROJECTIONS, SPLAT_REVERSE_DEFAULTS, TONES, TONE_LABELS,
   animateFor, effectSummary, moveEffect, newEffect, nextEffectId, placeEffect, qualityOf, scanName, soloEffect, toggleEffectMute,
-  type EffectKind, type EffectSpec, type ParamValue, type PropKind, type SplatBuilderSpec, type SplatSection, type Vec3,
+  type EffectKind, type EffectSpec, type ParamValue, type PropKind, type SplatBuilderSpec, type SplatProjection, type SplatSection, type Vec3,
 } from '../../splatBuilder/spec';
 import { tileName } from '../ui/textFit';
 import { removeKeys } from '../builders/removable';
@@ -514,10 +514,20 @@ function BlendGroup({ worldOn }: { worldOn: boolean }) {
 
 // ── Camera, Look ─────────────────────────────────────────────────────────────
 
+// The March Camera's Perspective, in its words (scene3d.ts; docs/camera-projections.md).
+const PERSPECTIVE_LABEL: Record<SplatProjection, string> = { normal: 'Normal', orthographic: 'Orthographic', reverse: 'Reverse' };
+const PERSPECTIVE_TITLE: Record<SplatProjection, string> = {
+  normal: 'Rays fan out from the camera: far things look smaller.',
+  orthographic: 'Rays run parallel: size doesn\'t change with distance, like an isometric drawing.',
+  reverse: 'Rays start spread out and meet in front of the camera: far things look bigger.',
+};
+const PERSPECTIVE_HINT = 'How the camera\'s rays leave it, as on the March Camera. Normal: far things smaller. Orthographic: parallel rays, no change of size with distance. Reverse: far things bigger.';
+
 export function CameraSection() {
   const c = useSplatBuilder(s => s.spec.camera);
   const targetId = useSplatBuilder(s => s.targetId);
   const box = useScanBox(targetId);
+  const proj: SplatProjection = c.projection ?? 'normal';
   return (
     <>
       <BuilderNote>Drag the picture to turn round the scan; scroll to come closer.</BuilderNote>
@@ -525,6 +535,19 @@ export function CameraSection() {
       <Num label="Angle" unit="°" value={c.angle} min={-180} max={180} step={0.5} defaultValue={25} onChange={v => edit(d => { d.camera.angle = v; }, 'cam:angle')} />
       <Num label="Elevation" unit="°" value={c.elev} min={-89} max={89} step={0.5} defaultValue={12} onChange={v => edit(d => { d.camera.elev = v; }, 'cam:elev')} />
       <Num label="Lens" value={c.fov} min={0.5} max={3.14} defaultValue={1.5} play={['camera', 'fov']} onChange={v => edit(d => { d.camera.fov = v; }, 'cam:fov')} hint="Higher is narrower (zoomed in), lower is wider." />
+      <Row label="Perspective" hint={PERSPECTIVE_HINT}>
+        <span data-splat-projection={proj} style={{ display: 'flex' }}>
+          <Segmented size="sm" ariaLabel="Perspective" fill value={proj}
+            options={SPLAT_PROJECTIONS.map(p => ({ value: p, label: PERSPECTIVE_LABEL[p], title: PERSPECTIVE_TITLE[p] }))}
+            onChange={(p: SplatProjection) => edit(d => { if (p === 'normal') delete d.camera.projection; else d.camera.projection = p; })} />
+        </span>
+      </Row>
+      {proj === 'reverse' && <>
+        <Num label="Reverse strength" value={c.reverse ?? SPLAT_REVERSE_DEFAULTS.reverse} min={0} max={1} defaultValue={SPLAT_REVERSE_DEFAULTS.reverse} play={['camera', 'reverseStrength']}
+          onChange={v => edit(d => { d.camera.reverse = v; }, 'cam:rev')} hint="0 = orthographic, 1 = the rays meet exactly at Converge at. Whatever the strength, the point it looks at keeps its size." />
+        <Num label="Converge at" value={c.converge ?? SPLAT_REVERSE_DEFAULTS.converge} min={0.5} max={50} step={0.1} defaultValue={SPLAT_REVERSE_DEFAULTS.converge} play={['camera', 'reverseDist']}
+          onChange={v => edit(d => { d.camera.converge = v; }, 'cam:conv')} hint="How far in front of the camera the rays meet. Nearer than this, things look bigger the farther away they are; past it the picture flips." />
+      </>}
       <Row label="Turntable" hint="The camera turns slowly round the scan.">
         <Toggle checked={c.turntable !== 0} onChange={on => edit(d => { d.camera.turntable = on ? 8 : 0; })} />
       </Row>
