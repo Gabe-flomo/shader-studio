@@ -11,18 +11,22 @@ import { useSceneBuilder2D, type Builder2DTab } from '../../sceneBuilder2d/store
 import { buildFromBuilder2D } from '../../sceneBuilder2d/actions';
 import {
   COLOUR_BYS, LOOK_MUTES_2D, MAX_DUP, MAX_LEVELS, MOTIONS, OUTPUT_SHOWS, SHAPES, SHAPE_BY_KIND, SPACES, SPACE_BY_KIND, TONE_MODES,
-  allShapes, findItem, itemName, itemSummary, newBlockOp, starterScene, newCombineOp, newDup, newGroup, newMotion, newShape, newSpaceOp, nextId, num, opLabel, spaceSummary,
-  type CombineOp, type GlowMode, type Item, type LookMute2D, type MotionKind, type ParamDef, type Scene2D, type ShapeSpec, type Show2D, type ToneMode, type Vec2, type Vec3,
+  COMBINE_CHOICES_2D, OP_GLYPH_2D, SHAPE_STYLES, allShapes, findItem, itemName, itemSummary, styleOf, newBlockOp, starterScene, newCombineOp, newDup, newGroup, newMotion, newShape, newSpaceOp, nextId, num, opLabel, spaceSummary,
+  type CombineOp, type GlowMode, type GroupSpec, type ShapeStyle, type Item, type LookMute2D, type MotionKind, type ParamDef, type Scene2D, type ShapeSpec, type Show2D, type ToneMode, type Vec2, type Vec3,
 } from '../../sceneBuilder2d/spec';
-import { parseRecipe2D, printRecipe2D } from '../../sceneBuilder2d/recipe';
+import { DEFAULT_SMOOTH_K, parseRecipe2D, printRecipe2D } from '../../sceneBuilder2d/recipe';
+import { GLOW_TYPES, GLOW_TYPE_LABELS, type GlowType } from '../../nodes/definitions/combiners';
+import { MODS, MOD_BY_KIND, checkCustom, modSummary, newMod, type DistMod, type ModKind } from '../../sceneBuilder2d/modify';
+import { ExprLineInput } from '../builders/ExprLineInput';
+import { paramNameProblem } from '../../sceneBuilder2d/blocks';
 import { TEMPLATES_2D, templateScene } from '../../sceneBuilder2d/templates';
 import { renderShapeThumbnail, renderSpaceThumbnail } from '../../sceneBuilder2d/thumbnails';
 import { BUILT_IN_FUNCTIONS, findFunctions, functionsFromGraphs, type FnEntry, type FnRole } from '../../sceneBuilder2d/functions';
-import { GRID_ASSIGNS, GRID_COLOUR_BYS, GRID_LABELS, GRID_PIC_MODES, GRID_SHAPES, GRID_TARGETS, RIPPLE_FROMS, defaultGrid, type GridPicMode, type GridShape, type GridSpec } from '../../sceneBuilder2d/grid';
+import { GRID_LABELS } from '../../sceneBuilder2d/grid';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { BuilderLabel, BuilderNote, BuilderWindow } from '../builders/BuilderWindow';
 import { focusRecipeEditor, useBuilderRecipeRequest } from '../../builders/windows';
-import { Card, ColourRow, NumRow, Row, rgbCss, OP_GLYPH } from '../sceneBuilder/controls';
+import { Card, NumRow, Row, rgbCss } from '../sceneBuilder/controls';
 import { Button, IconButton } from '../ui/Button';
 import type { IconName } from '../ui/iconPaths';
 import { Select } from '../ui/Select';
@@ -53,7 +57,8 @@ import { FIT_LABELS, TEX_FITS, newTexUse, withSource, type TexFit, type TexSourc
 import { find2dBuild } from '../../sceneBuilder2d/apply';
 import { paletteLabel, paletteSwatches, swatchGradient } from '../../builders/look/palette';
 import { GRADE_BY_KIND, GRADE_KINDS, gradeParamTarget } from '../../builders/look/grade';
-import { FX_KINDS, fxParamTarget } from '../../builders/look/effects';
+import { FX_KINDS, MAX_FX_PASSES, fxParamTarget } from '../../builders/look/effects';
+import { buildScene2D } from '../../sceneBuilder2d/build';
 import type { StackItem } from '../../builders/look/stack';
 import { StackCards, type LazyParam } from '../builders/look/StackCards';
 import { PaletteCardBody, SlotColourRow } from '../builders/look/PaletteCard';
@@ -61,18 +66,18 @@ import { PaletteCardBody, SlotColourRow } from '../builders/look/PaletteCard';
 const TABS: Array<{ id: Builder2DTab; label: string; icon: IconName; gapBefore?: boolean }> = [
   { id: 'space', label: 'Space', icon: 'wave' },
   { id: 'shapes', label: 'Shapes', icon: 'mask' },
-  { id: 'grid', label: 'Grid', icon: 'grid' },
+  { id: 'combine', label: 'Combine', icon: 'link' },
+  { id: 'modify', label: 'Modify', icon: 'sliders' },
   { id: 'depth', label: 'Depth', icon: 'layers' },
-  { id: 'look', label: 'Look', icon: 'sun' },
   { id: 'effects', label: 'Effects', icon: 'spark' },
+  { id: 'look', label: 'Look', icon: 'sun' },
   { id: 'output', label: 'Output', icon: 'eye' },
   { id: 'recipe', label: 'Recipe', icon: 'text', gapBefore: true },
   { id: 'templates', label: 'Templates', icon: 'presets' },
 ];
 
-/** What the look and grid sliders reset to on double-click: a new scene's and a new grid's settings. */
+/** What the look sliders reset to on double-click: a new scene's settings. */
 const DEFAULT_SCENE_2D = starterScene();
-const DEFAULT_GRID = defaultGrid();
 
 const edit = (fn: (d: Scene2D) => void, key?: string) => useSceneBuilder2D.getState().edit(fn, key);
 
@@ -82,6 +87,33 @@ const itemMute = (id: string, what: string) => ({
   onSolo: () => edit(d => { const f = findItem(d, id); if (f) soloIn(f.parent ? f.parent.children : d.layers, id); }),
   what,
 });
+/**
+ * Two items joined in a new combine: the first's place in the list, its style and glow; the colours
+ * blended from the shapes' own by the smooth weight (`mix`), each child keeping its colour.
+ */
+function joinedGroup(d: Scene2D, op: CombineOp, k: number, a: Item, b: Item): GroupSpec {
+  return newGroup(nextId(d, 'g'), { op, k, color: a.color, glow: a.glow || b.glow, style: a.style ?? 'filled', mix: true, children: [a, b] });
+}
+
+/** The seven combine choices as picture buttons; `value` marks the current one. */
+function CombineButtons({ value, onPick, label }: { value?: { op: CombineOp; k: number } | null; onPick: (op: CombineOp, smooth: boolean) => void; label: string }) {
+  const tk = useTokens();
+  return (
+    <div role="group" aria-label={label} style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+      {COMBINE_CHOICES_2D.map(ch => {
+        const on = !!value && value.op === ch.op && (ch.op === 'xor' || (value.k > 0) === ch.smooth);
+        return (
+          <button key={ch.key} type="button" data-combine-op={ch.key} aria-pressed={on} title={`${ch.label}: ${ch.blurb}`} onClick={() => onPick(ch.op, ch.smooth)}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 9px', border: 0, borderRadius: radius.md, cursor: 'pointer',
+              background: on ? tk.bg.selected : tk.bg.field, color: tk.text.primary, font: `500 11.5px ${fontFamily.ui}` }}>
+            <span style={{ font: `700 13px ${fontFamily.mono}`, color: tk.accent.text, minWidth: 18, textAlign: 'center' }}>{ch.glyph}</span>{ch.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 /** A look effect's mute: one undo step; Alt-click solos it among the look's effects. */
 const lookMute = (key: LookMute2D, what: string, muted: boolean) => ({
   muted, what,
@@ -190,8 +222,7 @@ function LayerList() {
     const list = f.parent ? f.parent.children : d.layers;
     const next = list[f.index + 1];
     if (!next) return;
-    const g = newGroup(nextId(d, 'g'), { op, k: 0, color: f.item.color, glow: f.item.glow, children: [f.item, next] });
-    list.splice(f.index, 2, g);
+    list.splice(f.index, 2, joinedGroup(d, op, 0, f.item, next));
   });
   const ungroup = () => edit(d => {
     const f = selectedId ? findItem(d, selectedId) : null;
@@ -212,7 +243,7 @@ function LayerList() {
             style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6, padding: `5px 8px 5px ${8 + depth * 14}px`, border: 0, borderRadius: radius.sm, cursor: 'pointer', textAlign: 'left',
               background: it.id === selectedId ? tk.bg.selected : 'transparent', color: tk.text.primary, font: `500 12.5px ${fontFamily.ui}`, ...(it.muted ? MUTED_DIM : {}) }}>
             {it.type === 'group'
-              ? <span style={{ width: 16, textAlign: 'center', font: `700 13px ${fontFamily.mono}`, color: tk.accent.text }}>{OP_GLYPH[it.op]}</span>
+              ? <span title={opLabel(it)} style={{ width: 16, textAlign: 'center', font: `700 13px ${fontFamily.mono}`, color: tk.accent.text }}>{OP_GLYPH_2D[it.op]}</span>
               : <span style={{ width: 12, height: 12, borderRadius: 3, background: rgbCss(it.color), flexShrink: 0, boxShadow: `inset 0 0 0 1px ${tk.border.default}` }} />}
             <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{itemName(scene, it)}</span>
             {it.id === selectedId && itemSummary(it) && <span data-layer-summary style={{ fontSize: 11, color: tk.text.faint, whiteSpace: 'nowrap' }}>{itemSummary(it)}</span>}
@@ -228,9 +259,10 @@ function LayerList() {
           <IconButton icon="chevU" label="Move back (earlier)" size="sm" disabled={sel.index === 0} onClick={() => move(-1)} />
           <IconButton icon="chevD" label="Move forward (later)" size="sm" disabled={!hasNext} onClick={() => move(1)} />
           <IconButton icon="trash" label="Delete" size="sm" onClick={remove} />
-          {hasNext && <Button size="sm" variant="ghost" onClick={() => groupWithNext('union')} title="Join this and the next layer in a Union">∪ with next</Button>}
+          {hasNext && <Button size="sm" variant="ghost" onClick={() => groupWithNext('union')} title="Join this and the next layer in a Union (Combine has the others: smooth union, subtract, intersect, xor)">∪ with next</Button>}
           {hasNext && <Button size="sm" variant="ghost" onClick={() => groupWithNext('subtract')} title="Cut the next layer out of this one">− next</Button>}
           {sel.item.type === 'group' && <Button size="sm" variant="ghost" onClick={ungroup}>Ungroup</Button>}
+          <Button size="sm" variant="ghost" icon="link" onClick={() => useSceneBuilder2D.getState().setTab('combine')} title="Combine: join, melt, cut or overlap shapes, with a smooth amount">Combine…</Button>
         </div>
       )}
     </div>
@@ -447,6 +479,22 @@ function PictureCard({ id, it }: { id: string; it: Item }) {
   );
 }
 
+/** A combine's operator (seven buttons), its smooth amount and its colour. */
+function GroupControls({ id, g }: { id: string; g: GroupSpec }) {
+  const upd = (fn: (x: GroupSpec) => void, key?: string) => edit(d => { const f = findItem(d, id); if (f?.item.type === 'group') fn(f.item); }, key && `${id}:${key}`);
+  return (
+    <>
+      <BuilderLabel hint="How the shapes inside join. Hover a button for what it does. The smooth ones melt, round or soften where the shapes meet over Smooth.">Combine</BuilderLabel>
+      <CombineButtons label="Combine operator" value={g} onPick={(op, smooth) => upd(x => { x.op = op; x.k = op === 'xor' || !smooth ? 0 : x.k > 0 ? x.k : DEFAULT_SMOOTH_K; })} />
+      {g.op !== 'xor' && <NumRow label="Smooth" hint="The blend radius k: 0 is the hard edge, above 0 the smooth combine (live: a slider on the combine node, so dragging never recompiles)." value={g.k} defaultValue={0} min={0} max={0.5} step={0.005}
+        onChange={v => upd(x => { x.k = v; }, 'k')} lazyParam={play2d(`${id}:op1`, 'k')} />}
+      <Row label="Colour" hint="Blend: each shape keeps its own colour and they run into each other by the combine's smooth weight. One colour: the group's.">
+        <Toggle checked={!!g.mix} onChange={v => upd(x => { if (v) x.mix = true; else delete x.mix; })} label={g.mix ? 'Blend the shapes\' colours' : 'One colour for the group'} />
+      </Row>
+    </>
+  );
+}
+
 function ItemInspector({ id }: { id: string }) {
   const scene = useSceneBuilder2D(s => s.scene);
   const f = findItem(scene, id);
@@ -460,11 +508,7 @@ function ItemInspector({ id }: { id: string }) {
         mute={{ muted: !!it.muted, ...itemMute(id, `‘${itemName(scene, it)}’`) }}>
         {it.type === 'group' ? (
           <>
-            <Row label="Combine">
-              <Select ariaLabel="Combine" value={it.op} options={[{ value: 'union', label: 'Union (either)' }, { value: 'subtract', label: 'Subtract (cut the rest out of the first)' }, { value: 'intersect', label: 'Intersect (only the overlap)' }]}
-                onChange={v => upd(x => { if (x.type === 'group') x.op = v as CombineOp; })} />
-            </Row>
-            <NumRow label="Blend" hint="0 is a hard edge; above 0 melts the shapes together." value={it.k} min={0} max={0.5} step={0.005} onChange={v => upd(x => { if (x.type === 'group') x.k = v; }, 'k')} />
+            <GroupControls id={id} g={it} />
           </>
         ) : it.type === 'shape' && it.kind === 'fnshape' ? (
           <>
@@ -474,9 +518,18 @@ function ItemInspector({ id }: { id: string }) {
         ) : shapeDef?.params.map(p => (
           <ParamControl key={p.key} p={p} keyBase={id} value={(it as ShapeSpec).size[p.key]} onChange={v => upd(x => { if (x.type === 'shape') x.size[p.key] = v; }, `size:${p.key}`)} />
         ))}
-        {!f.parent && <SlotColourRow label="Colour" value={it.color} slot={it.slot} swatches={paletteSwatches(scene.look.colour.palette, scene.look.custom)}
+        {!f.parent && <Row label="Style" hint={SHAPE_STYLES.map(x => `${x.label}: ${x.blurb}`).join('\n')}>
+          <Select ariaLabel="Style" value={styleOf(it)} options={SHAPE_STYLES.map(x => ({ value: x.style, label: x.label }))} onChange={v => upd(x => { x.style = v as ShapeStyle; })} />
+        </Row>}
+        {!f.parent && !(it.type === 'group' && it.mix) && <SlotColourRow label="Colour" value={it.color} slot={it.slot} swatches={paletteSwatches(scene.look.colour.palette, scene.look.custom)}
+          onColour={v => upd(x => { x.color = v; }, 'color')} onSlot={s => upd(x => { if (s == null) delete x.slot; else x.slot = s; })} />}
+        {f.parent?.mix && it.type === 'shape' && <SlotColourRow label="Colour" value={it.color} slot={it.slot} swatches={paletteSwatches(scene.look.colour.palette, scene.look.custom)}
           onColour={v => upd(x => { x.color = v; }, 'color')} onSlot={s => upd(x => { if (s == null) delete x.slot; else x.slot = s; })} />}
         {!f.parent && <Row label="Glow"><Toggle checked={it.glow} onChange={v => upd(x => { x.glow = v; })} label="Glows when Look → Glow is Selected" /></Row>}
+        {!f.parent && <Row label="Glow type" hint={GLOW_TYPES.map(t => `${GLOW_TYPE_LABELS[t].label}: ${GLOW_TYPE_LABELS[t].blurb}`).join('\n')}>
+          <Select ariaLabel="Layer glow type" value={it.glowType ?? ''} options={[{ value: '', label: 'The Look\'s' }, ...GLOW_TYPES.map(t => ({ value: t, label: GLOW_TYPE_LABELS[t].label }))]}
+            onChange={v => upd(x => { if (v) x.glowType = v as GlowType; else delete x.glowType; })} />
+        </Row>}
       </Card>
       {!f.parent && <PictureCard id={id} it={it} />}
       <Card id={`it2-${id}-place`} title="Place" summary={`at ${it.at.map(n => +n.toFixed(2)).join(', ')} · ${Math.round(it.rot)}° · ×${+it.scale.toFixed(2)}`}>
@@ -539,7 +592,7 @@ function ItemInspector({ id }: { id: string }) {
   );
 }
 
-function ShapesTab() {
+export function ShapesTab() {
   const tk = useTokens();
   const selectedId = useSceneBuilder2D(s => s.selectedId);
   const select = useSceneBuilder2D(s => s.select);
@@ -559,6 +612,9 @@ function ShapesTab() {
           </button>
         ))}
       </div>
+      <BuilderLabel hint="Pictures made of shapes: a picture rebuilt from pieces (a Pieces node), drawn over the layers.">Pictures</BuilderLabel>
+      <PiecesCard />
+      <OlderGridCard />
       <BuilderLabel hint="A GLSL function float f(vec2 p[, float t]) that measures a shape: negative inside, positive outside. It becomes a Custom Function node.">Function shapes</BuilderLabel>
       <FunctionPicker role="shape" onPick={f => {
         let id = '';
@@ -582,7 +638,7 @@ function PiecesCard() {
     <Card id="pieces2" defaultOpen={!!pieces} title="Picture in pieces"
       mute={pieces ? { muted: !!pieces.muted, what: 'the picture in pieces', onToggle: () => set(p => { p.muted = !p.muted; }) } : undefined} summary={pieces ? `${pieces.tex} · ${pieces.count} ${pieces.shape}s · ${PIECES_LABELS.move[pieces.move].toLowerCase()}` : 'none'}
       onRemove={pieces ? () => edit(d => { d.pieces = null; }) : undefined} removeLabel="Remove the picture in pieces">
-      <BuilderNote>A picture rebuilt from pieces, each the picture's colour at its home, drawn over the layers and the grid. Move the pieces and the picture moves: they scatter and flow back home.</BuilderNote>
+      <BuilderNote>A picture rebuilt from pieces, each the picture's colour at its home, drawn over the layers. Move the pieces and the picture moves: they scatter and flow back home.</BuilderNote>
       <TexturePicker id="pieces" sources={sources} value={pieces?.tex} onAdd={addSource} none="No picture in pieces"
         onChange={name => edit(d => { d.pieces = name ? { ...(d.pieces ?? startPieces(name)), tex: name } : null; })} />
       {pieces && (
@@ -619,98 +675,190 @@ function PiecesCard() {
   );
 }
 
-function GridTab() {
-  return <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}><PiecesCard /><GridCells /></div>;
+/**
+ * A grid from an older scene (grids are made in the Grid builder now). It can't be carried over (the
+ * Grid builder draws its grids cell by cell), so it stays as it was built: read-only, mutable, removable.
+ */
+function OlderGridCard() {
+  const grid = useSceneBuilder2D(s => s.scene.grid);
+  if (!grid) return null;
+  return (
+    <Card id="grid2-older" defaultOpen title="Grid (from an older scene)" summary={`${grid.cols} × ${grid.rows} · ${grid.shapes.join(', ')} · ${GRID_LABELS.target[grid.target].toLowerCase()}`}
+      mute={{ muted: !!grid.muted, what: 'the grid', onToggle: () => edit(d => { if (d.grid) d.grid.muted = !d.grid.muted; }) }}
+      onRemove={() => edit(d => { d.grid = null; })} removeLabel="Remove the grid">
+      <div data-older-grid><BuilderNote>This scene has a grid: edit it in the Grid builder. This one can't be carried over (the Grid builder draws its grids cell by cell), so it stays here as it was built, read-only; it still builds as before and its recipe keeps its <code>grid …</code> clause.</BuilderNote></div>
+      <Button size="sm" variant="ghost" icon="grid" style={{ alignSelf: 'flex-start' }} title="Opens the Grid builder on a new grid scene"
+        onClick={() => { void import('../../gridScene/actions').then(m => m.openNewGridScene()); }}>Open the Grid builder</Button>
+    </Card>
+  );
 }
 
-function GridCells() {
+/** One Modify card's body: its sliders, or for f(d) its line (the Expression Block editor) and sliders. */
+function ModBody({ id, m, i }: { id: string; m: DistMod; i: number }) {
   const tk = useTokens();
-  const grid = useSceneBuilder2D(s => s.scene.grid);
-  const sources = useSceneBuilder2D(s => s.scene.textures) ?? [];
-  const set = (fn: (g: GridSpec) => void, key?: string) => edit(d => { if (d.grid) fn(d.grid); }, key && `grid:${key}`);
-  if (!grid) {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <BuilderNote>A grid of cells, each with its own shape, and ripples that travel through the cells and change them: their size, their turn, a push, or a morph from one shape into another. It is drawn over the layers.</BuilderNote>
-        <Button variant="primary" icon="grid" onClick={() => edit(d => { d.grid = defaultGrid(); })} style={{ alignSelf: 'flex-start' }}>Add a grid</Button>
-      </div>
-    );
+  const [newName, setNewName] = useState('');
+  const upd = (fn: (x: DistMod) => void, key?: string) => edit(d => { const f = findItem(d, id); const x = f?.item.mods?.[i]; if (x) fn(x); }, key && `${id}:mod:${m.id}:${key}`);
+  const def = MOD_BY_KIND[m.kind];
+  if (m.kind !== 'custom') {
+    return <>{def.params.map(p => (
+      <NumRow key={p.key} label={p.label} hint={p.hint} integer={p.integer} value={m.values[p.key] ?? p.def} defaultValue={p.def} min={p.min} max={p.max} step={p.step}
+        onChange={v => upd(x => { x.values[p.key] = p.integer ? Math.round(v) : v; }, p.key)} lazyParam={p.key === 'count' ? undefined : play2d(`${id}:mod:${m.id}`, p.key)} />
+    ))}</>;
   }
-  const toggleShape = (k: GridShape) => set(g => {
-    if (g.shapes.includes(k)) { if (g.shapes.length > 1) g.shapes = g.shapes.filter(x => x !== k); }
-    else if (g.shapes.length < 3) g.shapes = [...g.shapes, k];
-  });
+  const chk = checkCustom(m);
+  const names = Object.keys(m.values);
+  const vars = [{ name: 'd', type: 'float' }, { name: 'x', type: 'float' }, { name: 'y', type: 'float' }, { name: 'uv', type: 'vec2' }, { name: 't', type: 'float' }, ...names.map(n => ({ name: n, type: 'float' }))];
+  const why = newName.trim() ? paramNameProblem(newName.trim(), ['d', 'x', 'y', 'uv', 't', 'PI', 'TAU', ...names]) : null;
+  return (
+    <>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ font: `600 12px ${fontFamily.mono}`, color: tk.text.muted }}>d =</span>
+        <ExprLineInput ariaLabel="f(d)" attrs={{ 'data-mod-fd': '' }} value={m.expr ?? ''} vars={vars} invalid={!chk.ok} placeholder="e.g. abs(d) - 0.02" onChange={v => upd(x => { x.expr = v; }, 'expr')} />
+      </div>
+      {!chk.ok && <div role="alert" data-mod-error style={{ fontSize: 11.5, color: tk.status.danger }}>{chk.error}</div>}
+      {names.map(n => {
+        const r = m.sliders?.find(s => s.name === n);
+        return (
+          <div key={n} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <NumRow label={<span style={{ fontFamily: fontFamily.mono }}>{n}</span>} value={m.values[n]} min={r?.min ?? Math.min(0, m.values[n] * 2)} max={r?.max ?? Math.max(1, m.values[n] * 2)}
+                onChange={v => upd(x => { x.values[n] = v; }, `s:${n}`)} lazyParam={play2d(`${id}:mod:${m.id}`, n)} />
+            </div>
+            <IconButton icon="close" size="sm" label={`Remove slider ${n}`} onClick={() => upd(x => { delete x.values[n]; x.sliders = x.sliders?.filter(s => s.name !== n); })} />
+          </div>
+        );
+      })}
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        <input aria-label="New slider name" placeholder="New slider (e.g. amp)" value={newName} onChange={e => setNewName(e.target.value)}
+          style={{ height: 26, padding: '0 8px', borderRadius: radius.sm, border: `1px solid ${why ? tk.status.danger : tk.border.default}`, background: tk.bg.field, color: tk.text.primary, font: `500 12px ${fontFamily.mono}`, width: 160 }} />
+        <Button size="sm" variant="ghost" icon="plus" disabled={!newName.trim() || !!why} onClick={() => { const n = newName.trim(); upd(x => { x.values[n] = 0.1; }); setNewName(''); }}>Slider</Button>
+        {why && <span style={{ fontSize: 11, color: tk.status.danger }}>{why}</span>}
+      </div>
+    </>
+  );
+}
+
+/**
+ * Modify: operations on the selected shape's (or combine's) distance, before it is drawn: a stack
+ * of cards, top to bottom (modify.ts). Every number is a live slider on its Expression Block.
+ */
+export function ModifyTab() {
+  const scene = useSceneBuilder2D(s => s.scene);
+  const selectedId = useSceneBuilder2D(s => s.selectedId);
+  const sel = selectedId ? findItem(scene, selectedId) : null;
+  if (!sel) return <BuilderNote>Pick a shape or a combine on the left: Modify changes its distance before it is drawn (a disc into rings, ripples, a wobbly edge…).</BuilderNote>;
+  const it = sel.item;
+  const id = it.id;
+  const mods = it.mods ?? [];
+  const add = (kind: ModKind) => edit(d => { const f = findItem(d, id); if (f) (f.item.mods ??= []).push(newMod(kind, nextId(d, 'x'))); });
+  const move = (i: number, dir: -1 | 1) => edit(d => { const l = findItem(d, id)?.item.mods; const j = i + dir; if (!l || j < 0 || j >= l.length) return; [l[i], l[j]] = [l[j], l[i]]; });
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <Card id="grid2-cells" defaultOpen title="Cells" summary={`${grid.cols} × ${grid.rows}`}
-        mute={{ muted: !!grid.muted, what: 'the grid', onToggle: () => set(g => { g.muted = !g.muted; }) }}
-        onRemove={() => edit(d => { d.grid = null; })} removeLabel="Remove the grid">
-        <NumRow label="Columns" integer value={grid.cols} defaultValue={DEFAULT_GRID.cols} min={1} max={48} onChange={v => set(g => { g.cols = Math.round(v); }, 'cols')} />
-        <NumRow label="Rows" integer value={grid.rows} defaultValue={DEFAULT_GRID.rows} min={1} max={48} onChange={v => set(g => { g.rows = Math.round(v); }, 'rows')} />
-        <NumRow label="Span" hint="Half the grid's width: 1 reaches the top edge." value={grid.span} defaultValue={DEFAULT_GRID.span} min={0.1} max={3} onChange={v => set(g => { g.span = v; }, 'span')} />
-        <NumRow label="Shape size" hint="A share of the cell: 1 touches the neighbours." value={grid.size} defaultValue={DEFAULT_GRID.size} min={0.05} max={1.5} onChange={v => set(g => { g.size = v; }, 'size')} />
-      </Card>
-      <Card id="grid2-shapes" defaultOpen title="Shapes" summary={grid.shapes.join(', ')}>
-        <BuilderNote>Pick up to three. With more than one, a rule gives each cell its shape.</BuilderNote>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          {GRID_SHAPES.map(k => (
-            <button key={k} type="button" style={tile(tk, grid.shapes.includes(k))} onClick={() => toggleShape(k)} aria-pressed={grid.shapes.includes(k)}>
-              <Thumb k={`gshape:${k}`} make={() => renderShapeThumbnail(k === 'box' ? 'box' : k, 44)} />
-              {k}
-            </button>
-          ))}
-        </div>
-        {grid.shapes.length > 1 && (
-          <Row label="Give out">
-            <Select ariaLabel="Give out shapes" value={grid.assign} options={GRID_ASSIGNS.map(a => ({ value: a, label: GRID_LABELS.assign[a] }))} onChange={v => set(g => { g.assign = v as GridSpec['assign']; })} />
-          </Row>
-        )}
-        {grid.shapes.length > 1 && grid.assign === 'every' && <NumRow label="Every" integer value={grid.every} defaultValue={DEFAULT_GRID.every} min={2} max={12} onChange={v => set(g => { g.every = Math.round(v); }, 'every')} />}
-      </Card>
-      <Card id="grid2-ripples" defaultOpen title="Ripples" summary={grid.ripples.map(r => r.from).join(' + ')}>
-        {grid.ripples.map((r, i) => (
-          <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <Row label={`From ${grid.ripples.length > 1 ? i + 1 : ''}`}>
-              <div style={{ display: 'flex', gap: 6 }}>
-                <Select ariaLabel="Ripple from" value={r.from} options={RIPPLE_FROMS.map(x => ({ value: x, label: GRID_LABELS.from[x] }))} onChange={v => set(g => { g.ripples[i].from = v as typeof r.from; })} />
-                {grid.ripples.length > 1 && <IconButton icon="trash" label="Remove this ripple" size="sm" onClick={() => set(g => { g.ripples.splice(i, 1); })} />}
-              </div>
-            </Row>
-            {r.from === 'point' && <Vec2Row label="Point" value={r.at} min={-1.5} max={1.5} onChange={v => set(g => { g.ripples[i].at = v; }, `rip${i}`)} />}
-          </div>
+      <BuilderNote>Changes how ‘{itemName(scene, it)}’ looks by changing its distance d (negative inside, positive outside) before it is drawn, after its place, motion, copies{it.type === 'group' ? ' and combine' : ''}. Applied top to bottom; each is an Expression Block whose numbers are live sliders you can drag or wire.</BuilderNote>
+      {mods.map((m, i) => (
+        <Card key={m.id} id={`mod2-${id}-${m.id}`} defaultOpen title={`${i + 1}. ${MOD_BY_KIND[m.kind]?.label ?? m.kind}`} summary={modSummary(m)}
+          mute={{ muted: !!m.muted, what: MOD_BY_KIND[m.kind]?.label ?? m.kind, onToggle: () => edit(d => { const x = findItem(d, id)?.item.mods?.[i]; if (x) x.muted = !x.muted; }), onSolo: () => edit(d => { const l = findItem(d, id)?.item.mods; if (l) soloIn(l, m.id); }) }}
+          onRemove={() => edit(d => { findItem(d, id)?.item.mods?.splice(i, 1); })} removeLabel={`Remove ${MOD_BY_KIND[m.kind]?.label}`}
+          actions={<>
+            <IconButton icon="chevU" label="Earlier" size="sm" disabled={i === 0} onClick={() => move(i, -1)} />
+            <IconButton icon="chevD" label="Later" size="sm" disabled={i === mods.length - 1} onClick={() => move(i, 1)} />
+          </>}>
+          <BuilderNote>{MOD_BY_KIND[m.kind]?.blurb}</BuilderNote>
+          <ModBody id={id} m={m} i={i} />
+        </Card>
+      ))}
+      <BuilderLabel hint="Each adds a card at the bottom of the stack. Hover a button for what it does.">Add</BuilderLabel>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+        {MODS.map(md => <Button key={md.kind} size="sm" variant="ghost" icon="plus" title={md.blurb} data-mod-add={md.kind} onClick={() => add(md.kind)}>{md.label}</Button>)}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Combine: the layers as a tree of combines (union, smooth union, subtract, intersect, xor), like the
+ * 3D builder's. Pick a layer, then join it with the next one; a combine's operator, smooth amount and
+ * colour are edited here. Each shape's motion, copies and place apply before it is combined.
+ */
+export function CombineTab() {
+  const tk = useTokens();
+  const scene = useSceneBuilder2D(s => s.scene);
+  const selectedId = useSceneBuilder2D(s => s.selectedId);
+  const select = useSceneBuilder2D(s => s.select);
+  const sel = selectedId ? findItem(scene, selectedId) : null;
+  const siblings = sel ? (sel.parent ? sel.parent.children : scene.layers) : [];
+  const next = sel ? siblings[sel.index + 1] : undefined;
+  const prev = sel ? siblings[sel.index - 1] : undefined;
+  const join = (op: CombineOp, smooth: boolean) => {
+    let gid = '';
+    edit(d => {
+      const f = selectedId ? findItem(d, selectedId) : null;
+      if (!f) return;
+      const list = f.parent ? f.parent.children : d.layers;
+      const nx = list[f.index + 1];
+      if (!nx) return;
+      const g = joinedGroup(d, op, smooth && op !== 'xor' ? DEFAULT_SMOOTH_K : 0, f.item, nx);
+      gid = g.id;
+      list.splice(f.index, 2, g);
+    });
+    if (gid) select(gid);
+  };
+  const intoAbove = () => edit(d => {
+    const f = selectedId ? findItem(d, selectedId) : null;
+    if (!f) return;
+    const list = f.parent ? f.parent.children : d.layers;
+    const above = list[f.index - 1];
+    if (above?.type !== 'group') return;
+    list.splice(f.index, 1);
+    above.children.push(f.item);
+  });
+  const outOf = () => edit(d => {
+    const f = selectedId ? findItem(d, selectedId) : null;
+    if (!f?.parent) return;
+    const p = findItem(d, f.parent.id);
+    if (!p) return;
+    f.parent.children.splice(f.index, 1);
+    (p.parent ? p.parent.children : d.layers).splice(p.index + 1, 0, f.item);
+  });
+  const rows: Array<{ it: Item; depth: number }> = [];
+  const walk = (items: Item[], depth: number) => { for (const it of items) { rows.push({ it, depth }); if (it.type === 'group') walk(it.children, depth + 1); } };
+  walk(scene.layers, 0);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <BuilderNote>Join shapes into one: union, smooth union (melted together), subtract (cut out), intersect (only the overlap), their smooth forms, and xor. Each shape's place, motion and copies apply first; the combine is real SDF combine nodes whose Smooth is a live slider. A combine blends its shapes' colours by the same smooth weight.</BuilderNote>
+      <div role="tree" aria-label="Combine tree" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {rows.map(({ it, depth }) => (
+          <button key={it.id} type="button" role="treeitem" aria-selected={it.id === selectedId} onClick={() => select(it.id)}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: `5px 8px 5px ${8 + depth * 18}px`, border: 0, borderLeft: depth ? `2px solid ${tk.border.default}` : '2px solid transparent', borderRadius: radius.sm, cursor: 'pointer', textAlign: 'left',
+              background: it.id === selectedId ? tk.bg.selected : 'transparent', color: tk.text.primary, font: `500 12.5px ${fontFamily.ui}`, ...(it.muted ? MUTED_DIM : {}) }}>
+            {it.type === 'group'
+              ? <span style={{ font: `700 12px ${fontFamily.mono}`, color: tk.accent.text, padding: '1px 6px', borderRadius: 4, background: tk.bg.field }}>{OP_GLYPH_2D[it.op]} {opLabel(it).toLowerCase()}{it.k > 0 && it.op !== 'xor' ? ` ${+it.k.toFixed(3)}` : ''}</span>
+              : <span style={{ width: 12, height: 12, borderRadius: 3, background: rgbCss(it.color), flexShrink: 0, boxShadow: `inset 0 0 0 1px ${tk.border.default}` }} />}
+            <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.type === 'group' && !it.name ? `${it.children.length} items` : itemName(scene, it)}</span>
+          </button>
         ))}
-        {grid.ripples.length < 4 && <Button size="sm" variant="ghost" icon="plus" onClick={() => set(g => { g.ripples.push({ from: 'corners', at: [0, 0] }); })} style={{ alignSelf: 'flex-start' }}>Another ripple</Button>}
-        <NumRow label="Rings" hint="Waves per unit of distance." value={grid.freq} defaultValue={DEFAULT_GRID.freq} min={0} max={40} step={0.1} onChange={v => set(g => { g.freq = v; }, 'freq')} />
-        <NumRow label="Speed" hint="Cycles a second. 0 stands still." value={grid.speed} defaultValue={DEFAULT_GRID.speed} min={-3} max={3} onChange={v => set(g => { g.speed = v; }, 'speed')} />
-        <Row label="Changes">
-          <Select ariaLabel="What the ripple changes" value={grid.target} options={GRID_TARGETS.map(x => ({ value: x, label: GRID_LABELS.target[x] }))} onChange={v => set(g => { g.target = v as GridSpec['target']; })} />
-        </Row>
-        {grid.target !== 'none' && <NumRow label="Amount" value={grid.amount} defaultValue={DEFAULT_GRID.amount} min={0} max={1.5} onChange={v => set(g => { g.amount = v; }, 'amount')} />}
-        {grid.target === 'morph' && grid.shapes.length < 2 && <BuilderNote>Morph blends the first two shapes: pick a second one above (a box is used until you do).</BuilderNote>}
-      </Card>
-      <Card id="grid2-colour" title="Colour" summary={GRID_LABELS.colourBy[grid.colourBy]}>
-        <Row label="Colour by">
-          <Select ariaLabel="Grid colour by" value={grid.colourBy} options={GRID_COLOUR_BYS.map(x => ({ value: x, label: GRID_LABELS.colourBy[x] }))} onChange={v => set(g => { g.colourBy = v as GridSpec['colourBy']; })} />
-        </Row>
-        {grid.colourBy === 'shape'
-          ? <><ColourRow label="First" value={grid.colour} onChange={v => set(g => { g.colour = v; }, 'c1')} /><ColourRow label="Second" value={grid.colour2} onChange={v => set(g => { g.colour2 = v; }, 'c2')} /></>
-          : <BuilderNote>Uses the palette on the Look tab.</BuilderNote>}
-        <Row label="Glow"><Toggle checked={grid.glow} onChange={v => set(g => { g.glow = v; })} label="Glows (when Look → Glow is on)" /></Row>
-      </Card>
-      <Card id="grid2-picture" defaultOpen={!!grid.pic} title="Picture" summary={grid.pic ? `${grid.pic.tex} · ${GRID_LABELS.pic[grid.pic.mode].label.toLowerCase()}` : 'none'}>
-        <BuilderNote>Cut a picture up into the grid: the shapes carry it, so you see the shapes made of the picture, not the picture itself.</BuilderNote>
-        <TexturePicker id="grid" sources={sources} value={grid.pic?.tex} onAdd={addSource} none="No picture"
-          onChange={name => set(g => { g.pic = name ? { tex: name, mode: g.pic?.mode ?? 'piece' } : null; })} />
-        {grid.pic && (
-          <>
-            <Row label="Mode" hint={GRID_PIC_MODES.map(m => `${GRID_LABELS.pic[m].label}: ${GRID_LABELS.pic[m].blurb}`).join('\n')}>
-              <Select ariaLabel="Grid picture mode" value={grid.pic.mode} options={GRID_PIC_MODES.map(m => ({ value: m, label: GRID_LABELS.pic[m].label }))}
-                onChange={v => set(g => { if (g.pic) g.pic.mode = v as GridPicMode; })} />
-            </Row>
-            <BuilderNote>{GRID_LABELS.pic[grid.pic.mode].blurb}</BuilderNote>
-          </>
-        )}
-      </Card>
+        {!rows.length && <BuilderNote>No shapes yet. Add two on the Shapes tab, then join them here.</BuilderNote>}
+      </div>
+      {sel && (
+        <>
+          <Card id="cb2-join" defaultOpen title={`Join ‘${itemName(scene, sel.item)}’ with the next layer`} summary={next ? `‘${itemName(scene, next)}’` : 'no next layer'}>
+            {next
+              ? <CombineButtons label="Join with the next layer" onPick={join} />
+              : <BuilderNote>It is the last {sel.parent ? 'item in its combine' : 'layer'}: pick an earlier one to join it with the one after.</BuilderNote>}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+              {prev?.type === 'group' && <Button size="sm" variant="ghost" onClick={intoAbove} title="Put it inside the combine just above it (last in it)">› Into the combine above</Button>}
+              {sel.parent && <Button size="sm" variant="ghost" onClick={outOf} title="Take it out of its combine, just after it">‹ Out of its combine</Button>}
+            </div>
+          </Card>
+          {sel.item.type === 'group' && (
+            <Card id={`cb2-${sel.item.id}`} defaultOpen title={opLabel(sel.item)} summary={`${sel.item.children.length} items${sel.item.mix ? ' · colours blended' : ''}`}
+              mute={{ muted: !!sel.item.muted, ...itemMute(sel.item.id, `‘${itemName(scene, sel.item)}’`) }}
+              actions={<Button size="sm" variant="ghost" onClick={() => edit(d => { const f = findItem(d, sel.item.id); if (f && f.item.type === 'group') (f.parent ? f.parent.children : d.layers).splice(f.index, 1, ...f.item.children); })}>Ungroup</Button>}>
+              <GroupControls id={sel.item.id} g={sel.item} />
+            </Card>
+          )}
+        </>
+      )}
     </div>
   );
 }
@@ -787,6 +935,11 @@ function LookTab() {
         </Row>
         {look.glow.mode !== 'off' && (
           <>
+            <Row label="Type" hint={GLOW_TYPES.map(t => `${GLOW_TYPE_LABELS[t].label}: ${GLOW_TYPE_LABELS[t].blurb}`).join('\n')}>
+              <Select ariaLabel="Glow type" value={look.glow.type ?? ''} options={[{ value: '', label: 'Soft (Glow style), Halo (Filled)' }, ...GLOW_TYPES.map(t => ({ value: t, label: GLOW_TYPE_LABELS[t].label }))]}
+                onChange={v => set(l => { if (v) l.glow.type = v as GlowType; else delete l.glow.type; })} />
+            </Row>
+            {look.glow.type && <BuilderNote>{GLOW_TYPE_LABELS[look.glow.type].blurb}</BuilderNote>}
             <NumRow label="Amount" value={look.glow.amount} defaultValue={DEFAULT_SCENE_2D.look.glow.amount} min={0.001} max={0.05} step={0.0005} onChange={v => set(l => { l.glow.amount = v; }, 'ga')} />
             <NumRow label="Falloff" value={look.glow.falloff} defaultValue={DEFAULT_SCENE_2D.look.glow.falloff} min={0.5} max={3} onChange={v => set(l => { l.glow.falloff = v; }, 'gf')} />
           </>
@@ -822,10 +975,24 @@ function LookTab() {
 function EffectsTab() {
   const effects = useSceneBuilder2D(s => s.scene.effects) ?? [];
   const sources = useSceneBuilder2D(s => s.scene.textures) ?? [];
+  const scene = useThrottled(useSceneBuilder2D(s => s.scene));
+  // The Passes the effects take (each move after a read starts a new one), as a tag on the card that takes one.
+  const passOf = useMemo(() => {
+    const out = new Map<string, number>();
+    let n = 0;
+    for (const node of buildScene2D(scene).nodes) {
+      const role = String(node.params._sbRole ?? '');
+      const m = /^fx:(.+):pass$/.exec(role);
+      if (m && node.type === 'pass') out.set(m[1], ++n);
+    }
+    return out;
+  }, [scene]);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <BuilderNote>Shader effects on the finished picture, top to bottom: each one works on what the ones above made. Moves (Displace, Swirl, Pixelate, Kaleidoscope, CRT curvature) bend where the picture is read; Blur, Glow and Chromatic aberration read round each pixel; CRT mask works on the colour. They build as real nodes after the Look's grade.</BuilderNote>
+      {passOf.size > 0 && <BuilderNote style={{ fontSize: 11 }}>Passes: {passOf.size} of {MAX_FX_PASSES} used, {MAX_FX_PASSES - passOf.size} left. A move (swirl, kaleidoscope…) after a read (blur, glow, rays…) takes a new one, so it bends what the reads made.</BuilderNote>}
       <StackCards name="fx" idPrefix="fx" items={effects} defs={FX_KINDS} playParam={fxPlay} sources={sources} onAddSource={addSource}
+        badge={it => (passOf.has(it.id) ? `pass ${passOf.get(it.id)} of ${MAX_FX_PASSES}` : null)}
         empty="No effects yet: add one above."
         onEdit={(fn, key) => edit(d => { const next = fn([...(d.effects ?? [])]); if (next.length) d.effects = next; else delete d.effects; }, key && `fx:${key}`)} />
     </div>
@@ -966,7 +1133,7 @@ export function SceneBuilder2DModal() {
     }} />
   );
   const done = () => finishBuilder(close, scene2dBuildIds(useSceneBuilder2D.getState().targetSceneId));
-  const body = { space: <SpaceTab />, shapes: <ShapesTab />, grid: <GridTab />, depth: <DepthTab />, look: <LookTab />, effects: <EffectsTab />, output: <OutputTab />, recipe: <RecipeTab />, templates: <TemplatesTab /> }[tab];
+  const body = { space: <SpaceTab />, shapes: <ShapesTab />, combine: <CombineTab />, modify: <ModifyTab />, depth: <DepthTab />, look: <LookTab />, effects: <EffectsTab />, output: <OutputTab />, recipe: <RecipeTab />, templates: <TemplatesTab /> }[tab];
   void num;
   // A phone: the shared phone layout (StudioShell → PhoneStudio): the picture on top, the sections
   // as the bottom bar's tabs, Templates and Surprise me as its Presets, the layers a tab of their own.

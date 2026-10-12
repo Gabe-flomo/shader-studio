@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.183',
+    date: '2026-10-11',
+    title: 'Combine, modify, recover',
+    highlights: [
+      { area: 'Studio', text: '2D Scene Builder: shapes glow like SDFs by default (Filled and Outline optional), a Combine tab (smooth union, subtract, intersect, xor) and Modify cards.' },
+      { area: 'Studio', text: '2D Scene Builder: glow types (Soft, Gaussian, Neon, Rim…), effect order now truly matters, grids live in the Grid builder, and formula lines are highlighted.' },
+      { area: 'Desktop', text: 'Crash recovery always offers your work after a crash or blank window, and saves a crash report you can show, copy or reveal. Autosaves are .playfiles.' },
+    ],
+  },
+  {
     id: '2026.10.182',
     date: '2026-10-11',
     title: 'Desktop polish',

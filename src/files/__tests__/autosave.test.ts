@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   AutosaveScheduler, CHANGE_DEBOUNCE_MS, CHANGE_MAX_WAIT_MS, buildSnapshot, graphHasContent, newSessionMarker, parseAutosaveMode,
   parsePluginCrash, parseSessionMarker, parseSnapshot, planRotation, recoverDecision, snapshotFileName, snapshotFileTime,
+  graphWork, pendingAtLaunch, pendingOnPageLoad,
   type SessionMarker, type SnapshotMeta, type Timers,
 } from '../autosave';
 
@@ -113,7 +114,7 @@ describe('the scheduler', () => {
 
 describe('snapshots', () => {
   it('names sort by time, and the newest 3 are kept', () => {
-    const files = [1000000000001, 1000000000005, 1000000000003, 1000000000002].map(snapshotFileName);
+    const files = [1000000000001, 1000000000005, 1000000000003, 1000000000002].map(t => snapshotFileName(t));
     const { keep, remove } = planRotation([...files, 'session.json', 'autosave-x.json']);
     expect(keep.map(snapshotFileTime)).toEqual([1000000000005, 1000000000003, 1000000000002]);
     expect(remove).toEqual([snapshotFileName(1000000000001)]);
@@ -169,8 +170,76 @@ describe('the recover decision', () => {
   it('reads markers defensively', () => {
     expect(parseSessionMarker('{"id":"a","cleanExit":true,"lastSaveAt":5}')).toMatchObject({ id: 'a', cleanExit: true, lastSaveAt: 5 });
     expect(parseSessionMarker('nope')).toBeNull();
+    expect(parseSessionMarker({ id: 'a', reason: 'rust-panic', appVersion: '2026.10.183' })).toMatchObject({ reason: 'rust-panic', appVersion: '2026.10.183', cleanExit: false });
     expect(parseSessionMarker({ id: '' })).toBeNull();
     expect(parsePluginCrash({ name: 'X' })).toBeNull();
     expect(parsePluginCrash({ code: 'aufx/abcd/efgh' })).toMatchObject({ name: 'aufx/abcd/efgh', at: 0 });
+  });
+
+  it('offers the newest autosave with work in it when the newest is a blank canvas, and lists the others', () => {
+    const blank: SnapshotMeta = { ...snap, file: snapshotFileName(9000, 'playfile'), at: 9000, work: 0 };
+    const work: SnapshotMeta = { ...snap, file: snapshotFileName(8000, 'playfile'), at: 8000, work: 12 };
+    const older: SnapshotMeta = { ...snap, file: snapshotFileName(7000), at: 7000, work: 10 };
+    const d = recoverDecision(prev, [older, blank, work], null, fmt);
+    expect(d.offer).toBe(true);
+    if (!d.offer) return;
+    expect(d.snapshot.file).toBe(work.file);
+    expect(d.skippedEmpty).toBe(1);
+    expect(d.others.map(o => o.file)).toEqual([blank.file, older.file]);
+    expect(d.message).toContain('The newest autosave was empty');
+    // Only blank canvases: nothing to offer.
+    expect(recoverDecision(prev, [blank], null, fmt)).toMatchObject({ offer: false, reason: 'empty' });
+    // Another session's autosaves never stand in for this one's.
+    expect(recoverDecision(prev, [{ ...work, session: 's0' }, blank], null, fmt)).toMatchObject({ offer: false, reason: 'empty' });
+  });
+
+  it('a blank canvas (the Output node alone) has no work; nodes, groups and a Play setup do', () => {
+    expect(graphWork({ nodes: [{ id: 'n2', type: 'output' }], looseGroups: [] })).toBe(0);
+    expect(graphWork({ nodes: [{ type: 'output' }, { type: 'uv' }, { type: 'sin' }] })).toBe(2);
+    expect(graphWork({ nodes: [{ type: 'output' }], looseGroups: [{}], play: { layers: [] } })).toBe(2);
+    const s = parseSnapshot('autosave-1791771862664.json', JSON.stringify({ format: 'playfield-autosave', version: 1, at: 1, session: 'a', project: { name: null, dirty: true }, graph: { nodes: [{ id: 'n2', type: 'output' }], looseGroups: [] } }));
+    expect(s?.work).toBe(0);
+  });
+});
+
+describe('the session marker: clean vs unclean, across versions', () => {
+  const marker = (o: Partial<SessionMarker> = {}): SessionMarker => ({ ...newSessionMarker('s1', 1000, '2026.10.182'), ...o });
+
+  it('an unclean last launch is pending, whatever version wrote it or this one is', () => {
+    const p = pendingAtLaunch(marker({ appVersion: '2026.10.100' }), null);
+    expect(p).toMatchObject({ id: 's1', cleanExit: false, reason: 'unknown', appVersion: '2026.10.100' });
+    // A marker from before reasons and versions existed.
+    const old = parseSessionMarker('{"id":"old","startedAt":5,"cleanExit":false,"lastSaveAt":0}');
+    expect(pendingAtLaunch(old, null)).toMatchObject({ id: 'old', reason: 'unknown' });
+    // A known reason is kept.
+    expect(pendingAtLaunch(marker({ reason: 'web-content-terminated' }), null)?.reason).toBe('web-content-terminated');
+  });
+
+  it('a clean quit is not pending, but one still waiting from before is', () => {
+    expect(pendingAtLaunch(marker({ cleanExit: true }), null)).toBeNull();
+    const waiting = marker({ id: 's0', reason: 'web-content-terminated' });
+    expect(pendingAtLaunch(marker({ cleanExit: true }), waiting)?.id).toBe('s0');
+    expect(pendingAtLaunch(marker({ id: 's2' }), waiting)?.id).toBe('s2');
+    expect(pendingAtLaunch(null, null)).toBeNull();
+  });
+
+  it('a page that died inside the running app is pending: a known crash, or no clean unload', () => {
+    const current = marker();
+    expect(pendingOnPageLoad({ loads: 0, pageClean: false, crashReason: null, current })).toBeNull();
+    expect(pendingOnPageLoad({ loads: 1, pageClean: true, crashReason: null, current })).toBeNull();
+    expect(pendingOnPageLoad({ loads: 1, pageClean: false, crashReason: null, current })).toMatchObject({ id: 's1', reason: 'page-reloaded' });
+    expect(pendingOnPageLoad({ loads: 1, pageClean: true, crashReason: 'web-content-terminated', current })).toMatchObject({ cleanExit: false, reason: 'web-content-terminated' });
+  });
+
+  it('the user’s crash: a session whose page died, then quit cleanly, is still offered', () => {
+    // The 19:14 session: its web content process died (pending), then the app was quit (clean marker).
+    const pending = pendingOnPageLoad({ loads: 1, pageClean: true, crashReason: 'web-content-terminated', current: marker() })!;
+    const next = pendingAtLaunch(marker({ cleanExit: true }), pending);
+    const snaps: SnapshotMeta[] = [
+      { file: 'autosave-1791774262570.playfile', at: 1791774262570, session: 's1', project: { name: null, version: null, dirty: true }, work: 14 },
+      { file: 'autosave-1791771862664.json', at: 1791771862664, session: 's1', project: { name: null, version: null, dirty: true }, work: 0 },
+    ];
+    const d = recoverDecision(next, snaps, null, () => '20:04');
+    expect(d.offer && d.snapshot.at).toBe(1791774262570);
   });
 });

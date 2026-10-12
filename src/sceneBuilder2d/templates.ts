@@ -34,16 +34,6 @@ export const TEMPLATES_2D: Template2D[] = [
     recipe: 'polar-repeat 6 · mirror x · smooth-union(circle r=0.12 at=(0.35,0.1), rounded-box size=(0.2,0.05) round=0.04 at=(0.55,0.2) rot=30) k=0.08 color=pink · glow 0.006 · tone aces · background night',
   },
   {
-    key: 'rippleGrid', label: 'Morphing ripple grid',
-    blurb: 'A grid of cells whose shapes melt from circles into squares as ripples from the four corners pass through, coloured by the wave.',
-    recipe: 'grid 14 shape=circle shape=box ripple=corners freq=9 speed=0.35 target=morph amount=0.9 · glow 0.006 · tone aces · bloom 0.4 · background night',
-  },
-  {
-    key: 'mouseGrid', label: 'Ripples that follow the mouse',
-    blurb: 'Diamonds in a checker with rings, swelling as waves spread from the middle and from wherever the mouse is.',
-    recipe: 'grid 16 shape=diamond shape=ring assign=checker ripple=centre ripple=mouse freq=10 speed=0.5 target=size amount=0.7 · glow 0.005 · tone aces · background navy',
-  },
-  {
     key: 'pieces', label: 'Picture in pieces',
     blurb: 'A picture rebuilt from circles, each its colour at home, that scatter on a noise field and flow back together. Pick the picture under Pictures.',
     recipe: 'texture picture · pieces picture count=36 · tone aces · background night',
@@ -65,8 +55,25 @@ export const TEMPLATES_2D: Template2D[] = [
   },
 ];
 
+/**
+ * Older starting points with a grid of cells. Grids are made in the Grid builder now, so the 2D
+ * builder no longer offers these; they still read and build (old scenes and recipes with a grid).
+ */
+export const GRID_TEMPLATES_2D: Template2D[] = [
+  {
+    key: 'rippleGrid', label: 'Morphing ripple grid',
+    blurb: 'A grid of cells whose shapes melt from circles into squares as ripples from the four corners pass through, coloured by the wave.',
+    recipe: 'grid 14 shape=circle shape=box ripple=corners freq=9 speed=0.35 target=morph amount=0.9 · glow 0.006 · tone aces · bloom 0.4 · background night',
+  },
+  {
+    key: 'mouseGrid', label: 'Ripples that follow the mouse',
+    blurb: 'Diamonds in a checker with rings, swelling as waves spread from the middle and from wherever the mouse is.',
+    recipe: 'grid 16 shape=diamond shape=ring assign=checker ripple=centre ripple=mouse freq=10 speed=0.5 target=size amount=0.7 · glow 0.005 · tone aces · background navy',
+  },
+];
+
 export function templateScene(key: string): Scene2D {
-  const t = TEMPLATES_2D.find(x => x.key === key);
+  const t = TEMPLATES_2D.find(x => x.key === key) ?? GRID_TEMPLATES_2D.find(x => x.key === key);
   if (!t) throw new Error(`No 2D template ${key}`);
   return parseRecipe2D(t.recipe).scene;
 }
