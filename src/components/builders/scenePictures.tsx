@@ -8,6 +8,7 @@
  *  - Grid simulation: Conway's Life running on a small board (gridRules/cpu.ts);
  *  - 3D scene: a torus, a ball and a box from the 3D builder's own thumbnail marcher;
  *  - Splat scene: a point cloud dissolving and coming back (the Splat builder's own mini cloud);
+ *  - Time Cube: frames of the test clip's street stacked into a box, the slice sweeping through (timeCubeBuilder/picture.ts);
  *  - Warp: a grid bent by a moving sine warp (the Warp Builder's warped-grid picture).
  */
 import { useEffect, useRef } from 'react';
@@ -19,6 +20,8 @@ import { COUNT_PRESETS } from '../../gridRules/spec';
 import { KindPicture } from '../agentBuilder/pictures';
 import { MiniCloud } from '../splatBuilder/MiniCloud';
 import { animateFor, newEffect } from '../../splatBuilder/spec';
+import { drawTimeCube } from '../../timeCubeBuilder/picture';
+import { presetSpec } from '../../timeCubeBuilder/presets';
 
 /** The Splat scene's picture: a dissolve sweeping through the cloud, with a glowing edge. */
 const SPLAT_PICTURE = [{ ...newEffect('dissolve', 'k1', { edge: 0.08, glow: 5, drift: 0.4 }), animate: animateFor('dissolve', 'amount', 0.12) }];
@@ -180,6 +183,18 @@ function WarpPicture({ width, height }: { width: number; height: number }) {
   return <canvas ref={ref} width={width} height={height} style={fluid(width, height)} />;
 }
 
+/** A box of time: the street's frames stacked, the slice sweeping there and back. */
+function TimeCubePicture({ width, height }: { width: number; height: number }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const spec = useRef(presetSpec('box'));
+  useTicker(12, t => {
+    const g = ref.current?.getContext('2d');
+    if (!g) return;
+    try { drawTimeCube(g, width, height, spec.current, 0.5 - 0.45 * Math.cos(t * 0.6)); } catch { /* a picture is a nicety */ }
+  });
+  return <canvas ref={ref} width={width} height={height} style={fluid(width, height)} />;
+}
+
 /** A kind's picture for the kind page. */
 export function ScenePicture({ kind, width = 240, height = 136 }: { kind: SceneKind; width?: number; height?: number }) {
   if (kind === '2d') return <TwoDPicture width={width} height={height} />;
@@ -187,6 +202,7 @@ export function ScenePicture({ kind, width = 240, height = 136 }: { kind: SceneK
   if (kind === 'simulation') return <GridPicture width={width} height={height} />;
   if (kind === '3d') return <ThreeDPicture width={width} height={height} />;
   if (kind === 'splat') return <SplatPicture width={width} height={height} />;
+  if (kind === 'timecube') return <TimeCubePicture width={width} height={height} />;
   if (kind === 'warp') return <WarpPicture width={width} height={height} />;
   return <span style={{ display: 'block', borderRadius: 10, overflow: 'hidden', width: '100%', maxWidth: width }}><KindPicture kind="trail" width={width} height={height} /></span>;
 }

@@ -11,7 +11,9 @@
  *    editor. The Grid builder's "Make it a simulation" jumps there too, and "Pattern grid" jumps back;
  *  - 3D scene → the 3D Scene Builder (sceneBuilder), on a new scene or on a build's saved spec;
  *  - Splat scene → the Splat builder (splatBuilder), on a new scan (built at once: its picture is the main preview's)
- *    or on a build's saved spec.
+ *    or on a build's saved spec;
+ *  - Time Cube → the Time Cube builder (timeCubeBuilder): a Time Cube shown as a Time Cube View or a Frame Stack,
+ *    built at once like a splat scene, or a build as it is now.
  *
  * Opening the Scene builder: a graph a builder made reopens that scene ("Edit this one / Start
  * over / Add another", the Agent Builder's prompt for every kind); any other graph goes to the
@@ -36,8 +38,12 @@ import { useSplatBuilder } from '../splatBuilder/store';
 import { closeSplatBuilder } from '../splatBuilder/actions';
 import { EFFECT_INFO, scanName } from '../splatBuilder/spec';
 import { useWarpBuilder } from '../warpBuilder/store';
+import { findTcBuild, tcMetaOf, timeCubeOfBuild } from '../timeCubeBuilder/apply';
+import { useTimeCubeBuilder } from '../timeCubeBuilder/store';
+import { closeTimeCubeBuilder } from '../timeCubeBuilder/actions';
+import { sourceName } from '../timeCubeBuilder/spec';
 
-export type SceneKind = '2d' | 'agents' | 'grid' | 'simulation' | '3d' | 'splat' | 'warp';
+export type SceneKind = '2d' | 'agents' | 'grid' | 'simulation' | '3d' | 'splat' | 'timecube' | 'warp';
 
 export interface SceneKindInfo {
   id: SceneKind;
@@ -57,6 +63,7 @@ export const SCENE_KINDS: readonly SceneKindInfo[] = [
   { id: 'simulation', title: 'Grid simulation', line: 'Cells that follow a rule every step: Life, sand, heat, Wireworld, smooth patterns', icon: 'loop', builder: 'Grid Rules' },
   { id: '3d', title: '3D scene', line: 'Shapes in space, combined and bent, lit and seen through a camera', icon: 'cube', builder: '3D Scene Builder' },
   { id: 'splat', title: 'Splat scene', line: 'A Gaussian splat scan, placed, dissolved, exploded or tinted, in a world of its own', icon: 'spark', builder: 'Splat builder' },
+  { id: 'timecube', title: 'Time Cube', line: 'A video as a box of time or a stack of cards: slices, flow, colour keys, a camera', icon: 'layers', builder: 'Time Cube builder' },
   { id: 'warp', title: 'Warp', line: 'Bend space by dragging tiles: sin onto X, a slider, the clock. Blocks stack, warp on warp', icon: 'wave', builder: 'Warp Builder' },
 ];
 
@@ -100,6 +107,11 @@ export function builtScenes(nodes: readonly GraphNode[]): BuiltScene[] {
     const fx = ms.spec.effects.filter(e => e.on).map(e => EFFECT_INFO[e.kind]?.label).filter(Boolean);
     out.push({ kind: 'splat', id: n.id, label: labelOf(n, 'Splat scene'), detail: `${scanName(ms.spec.scan.source)}${fx.length ? ` · ${fx.join(', ')}` : ''}` });
   }
+  for (const n of nodes) {
+    if (!tcMetaOf(n)) continue;
+    const b = findTcBuild(nodes, n.id);
+    out.push({ kind: 'timecube', id: n.id, label: labelOf(n, 'Time Cube'), detail: `${sourceName(n.params)} · ${b?.byRole.has('stack') ? 'a stack of cards' : 'a box of time'}` });
+  }
   return out;
 }
 
@@ -116,7 +128,8 @@ export function selectedBuiltScene(nodes: readonly GraphNode[], selected: readon
     const s3 = sceneOfBuild(nodes as GraphNode[], id);
     const sg = gridSceneOfBuild(nodes, id);
     const ss = splatSceneOfBuild(nodes, id);
-    const hit = all.find(b => b.id === s2 || b.id === s3 || b.id === sg || b.id === ss);
+    const tc = timeCubeOfBuild(nodes, id);
+    const hit = all.find(b => b.id === s2 || b.id === s3 || b.id === sg || b.id === ss || b.id === tc);
     if (hit) return hit;
   }
   return null;
@@ -141,6 +154,9 @@ export function builtSceneIds(nodes: readonly GraphNode[], b: Pick<BuiltScene, '
   } else if (b.kind === 'splat') {
     const found = findSplatBuild(nodes, b.id);
     if (found) for (const n of found.byRole.values()) seeds.push(n.id);
+  } else if (b.kind === 'timecube') {
+    const found = findTcBuild(nodes, b.id);
+    if (found) for (const n of found.byRole.values()) seeds.push(n.id);
   }
   const ids = new Set<string>();
   for (const s of seeds) for (const id of agentSetupIds(nodes, s)) ids.add(id);
@@ -158,6 +174,7 @@ export function openSceneKind(): SceneKind | null {
   if (useSceneBuilder.getState().open) return '3d';
   if (useGridBuilder.getState().open) return 'grid';
   if (useSplatBuilder.getState().open) return 'splat';
+  if (useTimeCubeBuilder.getState().open) return 'timecube';
   if (useWarpBuilder.getState().open) return 'warp';
   if (w.agentBuilder) return 'agents';
   if (w.gridRules) return 'simulation';
@@ -170,6 +187,7 @@ export function closeSceneKinds(): void {
   if (useSceneBuilder.getState().open) useSceneBuilder.getState().close();
   if (useGridBuilder.getState().open) useGridBuilder.getState().close();
   if (useSplatBuilder.getState().open) closeSplatBuilder();
+  if (useTimeCubeBuilder.getState().open) closeTimeCubeBuilder();
   if (useWarpBuilder.getState().open) useWarpBuilder.getState().close();
   if (useBuilderWindows.getState().agentBuilder) closeAgentBuilder();
   if (useBuilderWindows.getState().gridRules) closeGridRulesEditor();

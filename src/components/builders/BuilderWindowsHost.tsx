@@ -1,5 +1,5 @@
 /**
- * BuilderWindowsHost — draws the Scene builder's own pages (SceneBuilderShell), the Grid builder, the Splat builder, the Grid Rules editor, the Agent Rules editor, the Agent Builder and the Expression
+ * BuilderWindowsHost — draws the Scene builder's own pages (SceneBuilderShell), the Grid builder, the Splat builder, the Time Cube builder, the Grid Rules editor, the Agent Rules editor, the Agent Builder and the Expression
  * Builder when one is open (builders/windows.ts, exprBuilder/store.ts), whoever opened it: the card's own button, the node browser's Builders
  * section, the Do… bar, a Recipe chip. Mounted once beside the desktop graph (NodeGraph) and once
  * on a phone (PhoneOverlays), where the windows are full screen. While it is mounted the main
@@ -20,6 +20,7 @@ import { finishBuilder } from '../../builders/finish';
 import { useGridBuilder } from '../../gridScene/store';
 import { useSplatBuilder } from '../../splatBuilder/store';
 import { useWarpBuilder } from '../../warpBuilder/store';
+import { useTimeCubeBuilder } from '../../timeCubeBuilder/store';
 
 /** The Agent Builder's Done (and close): back to the graph, framed on the group it is building. */
 const finishAgentBuilder = () => finishBuilder(closeAgentBuilder, [useBuilderWindows.getState().agentBuilder?.groupId]);
@@ -37,6 +38,8 @@ const GridSceneBuilder = lazyWithSuspense<Record<string, never>>(() => import('.
 const SplatBuilder = lazyWithSuspense<Record<string, never>>(() => import('../splatBuilder/SplatBuilder').then(m => ({ default: m.SplatBuilder })));
 // The Warp Builder (the Scene builder's Warp kind, and the 2D builder's "Open in Warp Builder") loads only when it opens.
 const WarpBuilder = lazyWithSuspense<Record<string, never>>(() => import('../warpBuilder/WarpBuilder').then(m => ({ default: m.WarpBuilder })));
+// The Time Cube builder (the Scene builder's Time Cube kind) loads only when it opens.
+const TimeCubeBuilder = lazyWithSuspense<Record<string, never>>(() => import('../timeCubeBuilder/TimeCubeBuilder').then(m => ({ default: m.TimeCubeBuilder })));
 const ExpressionBuilderModal = lazyWithSuspense<Record<string, never>>(() => import('../exprBuilder/ExpressionBuilderModal').then(m => ({ default: m.ExpressionBuilderModal })));
 
 export function BuilderWindowsHost() {
@@ -48,6 +51,7 @@ export function BuilderWindowsHost() {
   const gridSceneOpen = useGridBuilder(s => s.open);
   const splatOpen = useSplatBuilder(s => s.open);
   const warpOpen = useWarpBuilder(s => s.open);
+  const timeCubeOpen = useTimeCubeBuilder(s => s.open);
   // The builder's preview comes first: the main preview waits while one with its own is open.
   useEffect(() => watchBuilderPreview(), []);
   const builderGroupOk = useNodeGraphStore(s => !builder?.groupId || s.nodes.some(nd => nd.id === builder.groupId && isRulesGroup(nd)));
@@ -69,6 +73,7 @@ export function BuilderWindowsHost() {
       {gridSceneOpen && <GridSceneBuilder />}
       {splatOpen && <SplatBuilder />}
       {warpOpen && <WarpBuilder />}
+      {timeCubeOpen && <TimeCubeBuilder />}
       {shell && <SceneBuilderShell key={`${shell.page}:${shell.note ?? ''}:${shell.keep ? 1 : 0}`} page={shell} />}
     </>
   );
