@@ -24,19 +24,46 @@ streaks stay short.
 
 | Control | What it does |
 | --- | --- |
-| Mode | **Average**: a zoom blur, the streaks in place of the picture. **Brightest**: the brightest colour along each streak, laid over the picture where it is brighter (CC's light-ray mode). **Add**: the streaks' light added over the picture (god rays). |
+| Mode | **Average**: a zoom blur, the streaks in place of the picture. **Brightest**: the brightest colour along each streak (CC's light-ray mode), each read weighed by its fade before the max, screened over the picture by Opacity. **Add**: the streaks' light added over the picture (god rays). |
 | Zoom | **Out** from the centre (the streaks fly outward: each pixel reads toward the centre) or **In** (they pull in toward it). |
 | Length | How long the streaks are: the farthest copy is 1 + Length times bigger. 1 reads from half way to the centre; 3 and up is a light-speed burst. Long streaks cost the same. |
 | Centre | Where the streaks come from. The node has a **Centre** socket (picture coordinates: wire Mouse UV or any point) and Centre X / Y sliders; Play's effect has Centre X / Y from 0 to 1, as Ripple's. |
 | Threshold, Knee | Only parts brighter than Threshold streak, fading in over ±Knee (a smoothstep on the brightness). 0 streaks everything. |
 | Intensity | How strong the streaks are. In Average, below 1 mixes the picture back. |
-| Decay | How much each streak fades along its length: the far end weighs e^(−4 · Decay) of the near end. |
+| Opacity | Brightest and Add: how much of the rays shows (default 0.6). Brightest is a screen, `orig + (1 − orig) · rays · Opacity`, so it only lightens and what is behind a ray shows through; Add adds `rays · Opacity`. Average ignores it. |
+| Decay | How much each streak fades along its length. Average and Add: the far end weighs e^(−4 · Decay) of the near end. Brightest: a smooth tail that always fades out (below). |
 | Falloff | How much the effect fades with the distance from the centre: e^(−4 · Falloff · d²), d in picture heights. |
 | Tint | The streaks' colour. |
 
 On the node every number and the tint is also a socket (#829): wire an LFO into Length, a
 hand into Centre. The node's outputs are **Color** and **Alpha** (the picture with the streaks)
 and **Rays** (the streaks alone, tinted, to add or screen over something else).
+
+## Brightest's soft tail
+
+Brightest used to take the plain max along the streak, so a ray held the full brightness of its
+source and stopped dead where the streak ended, covering what was under it. Now:
+
+- **Each read is weighed by a fade before the max**, `e^(−rate · t)` with t its distance along the
+  streak (log units). At Length the weight is `e^(−(0.7 + 3 · Decay))`: half at Decay 0, 30 % at
+  0.17, 11 % at the default 0.5.
+- **The reads run on five Lengths** (`RF_TAIL_REACH`), so the fade isn't cut off: at the end it is
+  3 % at Decay 0 and 0.2 % at 0.17. Length now says where the ray has faded to the weights above,
+  not where it stops.
+- **Composited as a screen** with **Opacity** (0.6 by default): `orig + (1 − orig) · rays · Opacity`.
+  A white ray at 0.6 leaves 40 % of what is behind it, and a fading ray fades into the picture.
+- Still exact across the passes: an exponential weight multiplies, and a max of weighted maxes is
+  the weighted max of all 4096 reads. The tests check that the brightness behind a bright edge falls
+  monotonically with no step, and that the pass-by-pass max equals the direct one.
+
+![Before: Brightest on a photo, Length 0.76, Centre 0.28 / 0, Threshold 0.35, Knee 0.42, Decay 0.17: a hard-edged copy of the sun and solid streaks](radial-fast-blur/brightest-before.jpg)
+
+![After, same settings with the default Opacity 0.6: soft rays fading out, the hills showing through](radial-fast-blur/brightest-after.jpg)
+
+**Older graphs and stacks** saved with Brightest pick this up as they load: Opacity takes its
+default (0.6) and Decay keeps its number, which now sets the soft tail. So their rays get softer
+and see-through. Set Opacity to 1 and Decay to 0 for the strongest rays. Average is unchanged.
+Add only gains Opacity, which defaults to 0.6, so set it to 1 to get back the old brightness.
 
 ## Fast: the log-step zoom
 

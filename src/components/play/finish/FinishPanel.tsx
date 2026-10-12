@@ -706,7 +706,7 @@ function RaysEditor({ e, k, onPatch }: { e: FinishEffect; k: RowKit; onPatch: (c
     <>
       {k.row('Mode', <Segmented size="sm" ariaLabel="Light rays mode" value={String(Math.round(num(e, 'mode')))} onChange={v => onPatch({ mode: Number(v) })} options={RAYS_MODES} />, 'Average: a zoom blur. Brightest: light rays. Add: glowing rays.')}
       {k.row('Zoom', <Segmented size="sm" ariaLabel="Light rays zoom direction" value={String(Math.round(num(e, 'direction')))} onChange={v => onPatch({ direction: Number(v) })} options={RAYS_DIRECTIONS} />, 'Out from the centre, or into it.')}
-      {k.nums('length', 'cx', 'cy', 'threshold', 'knee', 'intensity', 'decay', 'falloff')}
+      {k.nums('length', 'cx', 'cy', 'threshold', 'knee', 'intensity', ...(Math.round(num(e, 'mode')) === 0 ? [] : ['opacity']), 'decay', 'falloff')}
       {k.colour('Tint', ['tintR', 'tintG', 'tintB'], 'The streaks’ colour: white keeps the colours of what streaks.')}
       {k.note(<>After Effects’ CC Radial Fast Blur: the picture blurred along lines from a centre. <b>Brightest</b> with a <b>Threshold</b> throws rays from bright shapes and text. Fast at any Length: four small passes, each reading the one before eight times further apart. Map the pointer or a hand onto Centre X / Y to aim it.</>)}
     </>

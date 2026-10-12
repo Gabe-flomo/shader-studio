@@ -16,13 +16,13 @@
 import type { GraphNode, NodeDefinition } from '../../types/nodeGraph';
 import { p, pv3, withParamSockets } from './helpers';
 import { passPxUniform, texUv } from './passes';
-import { RF_BASE_GLSL, RF_GLSL2, RF_PASSES } from '../../play/kit/rays.js';
+import { RF_BASE_GLSL, RF_GLSL2, RF_OPACITY, RF_PASSES } from '../../play/kit/rays.js';
 
 const TEX_HINT = 'A Pass\'s Texture (or a Shader Texture, a picture). Unwired, this reads black.';
 const UV_HINT = 'Where to read, in picture coordinates. Leave empty for this pixel; wire a warp to bend the read.';
 
 /** The sliders a wire can drive (#829): every number and the tint. */
-export const RFB_SOCKETS = ['length', 'centerX', 'centerY', 'threshold', 'knee', 'intensity', 'decay', 'falloff', 'tint'] as const;
+export const RFB_SOCKETS = ['length', 'centerX', 'centerY', 'threshold', 'knee', 'intensity', 'opacity', 'decay', 'falloff', 'tint'] as const;
 
 const MODE_HELP = 'Average: the classic zoom blur, the picture smeared along lines from the centre (in place of the picture). Brightest: the brightest colour along each streak, laid over the picture where it is brighter: CC Radial Fast Blur\'s light rays, best with a Threshold. Add: the streaks\' light added over the picture, for glowing god rays.';
 
@@ -39,12 +39,13 @@ const paramDefs: NodeDefinition['paramDefs'] = {
   threshold: { label: 'Threshold', type: 'float', min: 0, max: 1.5, step: 0.01, hint: 'Only parts brighter than this streak. 0 streaks everything (a zoom blur); 0.5 and up gives rays from the bright parts only.' },
   knee: { label: 'Knee', type: 'float', min: 0, max: 0.5, step: 0.01, hint: 'How softly the streaks fade in round Threshold: 0 a hard cut.' },
   intensity: { label: 'Intensity', type: 'float', min: 0, max: 4, step: 0.01, hint: 'How strong the streaks are. In Average, 1 shows only the blur and below 1 mixes the picture back.' },
-  decay: { label: 'Decay', type: 'float', min: 0, max: 1, step: 0.01, hint: 'How much the streaks fade along their length: 0 even, 1 a bright head with a faint tail.' },
+  opacity: { label: 'Opacity', type: 'float', min: 0, max: 1, step: 0.01, hint: 'Brightest and Add: how much of the rays shows over the picture. Below 1, what is behind them shows through. (Average ignores it.)' },
+  decay: { label: 'Decay', type: 'float', min: 0, max: 1, step: 0.01, hint: 'How much the streaks fade along their length. Brightest always tails off smoothly (2 % at the far end at 0); higher keeps the rays shorter and softer. Average and Add: 0 even, 1 a bright head with a faint tail.' },
   falloff: { label: 'Falloff', type: 'float', min: 0, max: 4, step: 0.01, hint: 'How much the effect fades with the distance from the centre: 0 the same everywhere, 2 mostly round the centre.' },
   tint: { label: 'Tint', type: 'vec3color', hint: 'Colour the streaks are multiplied by (white keeps the picture\'s own).' },
 };
 
-const defaultParams = { mode: 'brightest', direction: 'out', length: 0.6, centerX: 0, centerY: 0, threshold: 0.35, knee: 0.15, intensity: 1, decay: 0.5, falloff: 0, tint: [1, 1, 1] };
+const defaultParams = { mode: 'brightest', direction: 'out', length: 0.6, centerX: 0, centerY: 0, threshold: 0.35, knee: 0.15, intensity: 1, opacity: RF_OPACITY, decay: 0.5, falloff: 0, tint: [1, 1, 1] };
 
 const modeNum = (v: unknown) => (v === 'average' ? 0 : v === 'add' ? 2 : 1);
 const dirNum = (v: unknown) => (v === 'in' ? '-1.0' : '1.0');
@@ -92,12 +93,12 @@ export const RadialFastBlurNode: NodeDefinition = withParamSockets({
       hidden
         ? `    vec4 ${id}_r = texture2D(${hidden}, ${id}_uv);\n`
         // One pass where hidden passes can't go: 48 reads, each pixel starting at its own fraction of a step.
-        : `    vec4 ${id}_r = rfSingle(${tex}, ${id}_uv, ${id}_c, ${len}, ${dirNum(P.direction)}, rfDecayRate(${len}, ${p(P.decay, 0.5)}), ${mode === 1 ? '1.0' : '0.0'}, ${p(P.threshold, 0.35)}, ${p(P.knee, 0.15)}, rfIGN(gl_FragCoord.xy));\n`,
+        : `    vec4 ${id}_r = rfSingle(${tex}, ${id}_uv, ${id}_c, ${len}, ${dirNum(P.direction)}, rfDecayRate(${len}, ${p(P.decay, 0.5)}, ${mode === 1 ? '1.0' : '0.0'}), ${mode === 1 ? '1.0' : '0.0'}, ${p(P.threshold, 0.35)}, ${p(P.knee, 0.15)}, rfIGN(gl_FragCoord.xy));\n`,
       `    float ${id}_amt = ${p(P.intensity, 1)} * rfFalloff(${id}_uv, ${id}_c, u_resolution.x / u_resolution.y, ${p(P.falloff, 0)});\n`,
-      `    vec4 ${id}_o = rfComposite(${id}_src, ${id}_r, ${mode}.0, ${id}_amt, ${pv3(P.tint, [1, 1, 1])});\n`,
+      `    vec4 ${id}_o = rfComposite(${id}_src, ${id}_r, ${mode}.0, ${id}_amt, ${pv3(P.tint, [1, 1, 1])}, ${p(P.opacity, RF_OPACITY)});\n`,
       // ±½ of an 8-bit step of noise, so a long faint streak over black doesn't band on screen.
       `    ${id}_o.rgb = max(${id}_o.rgb + (rfIGN(gl_FragCoord.xy + 0.5) - 0.5) / 255.0, 0.0);\n`,
-      `    vec3 ${id}_rays = ${id}_r.rgb * ${pv3(P.tint, [1, 1, 1])} * ${id}_amt;\n`,
+      `    vec3 ${id}_rays = ${id}_r.rgb * ${pv3(P.tint, [1, 1, 1])} * ${id}_amt${mode === 0 ? '' : ` * ${p(P.opacity, RF_OPACITY)}`};\n`,
     ];
     return { code: lines.join(''), outputVars: { color: `${id}_o.rgb`, alpha: `${id}_o.a`, rays: `${id}_rays` } };
   },
@@ -134,7 +135,7 @@ export const RadialFastBlurStageNode: NodeDefinition = {
     const len = p(P.length, 0.6);
     const code = [
       `    vec2 ${id}_c = ${centreOf({ ...node, params: P }, inputVars.center)};\n`,
-      `    vec4 ${out} = rfPass(${src}, vUv, ${id}_c, rfStep(${len}, ${k}.0), ${dirNum(P.direction)}, rfDecayRate(${len}, ${p(P.decay, 0.5)}), ${modeNum(P.mode) === 1 ? '1.0' : '0.0'}, ${k === 0 ? p(P.threshold, 0.35) : '0.0'}, ${p(P.knee, 0.15)});\n`,
+      `    vec4 ${out} = rfPass(${src}, vUv, ${id}_c, rfStep(${len}, ${k}.0, ${modeNum(P.mode) === 1 ? '1.0' : '0.0'}), ${dirNum(P.direction)}, rfDecayRate(${len}, ${p(P.decay, 0.5)}, ${modeNum(P.mode) === 1 ? '1.0' : '0.0'}), ${modeNum(P.mode) === 1 ? '1.0' : '0.0'}, ${k === 0 ? p(P.threshold, 0.35) : '0.0'}, ${p(P.knee, 0.15)});\n`,
     ].join('');
     return { code, outputVars: { color: `${out}.rgb`, alpha: `${out}.a` } };
   },

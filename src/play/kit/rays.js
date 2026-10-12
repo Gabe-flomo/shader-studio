@@ -49,20 +49,39 @@ export function rfSpan(length) {
   return Math.log(1 + Math.max(0, rfNum(length, 0)));
 }
 
+/**
+ * Brightest's tail. Each read along the streak is weighed e^(−rate·t) BEFORE the max, so a ray fades
+ * smoothly from its source instead of holding its brightness and stopping where the streak ends. So
+ * that the fade can run on past Length instead of being cut off, Brightest reads RF_TAIL_REACH times
+ * as far: at Length the weight is e^(−(RF_TAIL_BASE + RF_TAIL_DECAY·Decay)) (half at Decay 0,
+ * 30 % at 0.17), at the end of the reads its fifth power (3 % at Decay 0, 0.2 % at 0.17). An exponential
+ * multiplies across the log-step passes, so the max stays exact.
+ */
+export const RF_TAIL_REACH = 5;
+export const RF_TAIL_BASE = 0.7;
+export const RF_TAIL_DECAY = 3;
+/** The default Opacity: how much of the rays shows over the picture in Brightest and Add. */
+export const RF_OPACITY = 0.6;
+
+/** How far the reads go, in log units: the span (Average, Add) or RF_TAIL_REACH spans (Brightest). */
+export function rfReach(length, useMax = false) {
+  return rfSpan(length) * (useMax ? RF_TAIL_REACH : 1);
+}
+
 /** Pass k's step: log units between its reads (k = 0 the finest). */
-export function rfStep(length, k, passes = RF_PASSES, taps = RF_TAPS) {
+export function rfStep(length, k, passes = RF_PASSES, taps = RF_TAPS, useMax = false) {
   const n = rfEffective(passes, taps);
-  return n > 1 ? rfSpan(length) / (n - 1) * Math.pow(taps, k) : 0;
+  return n > 1 ? rfReach(length, useMax) / (n - 1) * Math.pow(taps, k) : 0;
 }
 
 /**
  * Every offset (log units) the passes read together, ascending: what `passes` × `taps` add up to.
- * For the tests: RF_TAPS^RF_PASSES offsets, evenly spaced from 0 to the span.
+ * For the tests: RF_TAPS^RF_PASSES offsets, evenly spaced from 0 to the reach.
  */
-export function rfOffsets(length, passes = RF_PASSES, taps = RF_TAPS) {
+export function rfOffsets(length, passes = RF_PASSES, taps = RF_TAPS, useMax = false) {
   let out = [0];
   for (let k = 0; k < passes; k++) {
-    const s = rfStep(length, k, passes, taps);
+    const s = rfStep(length, k, passes, taps, useMax);
     const next = [];
     for (const o of out) for (let j = 0; j < taps; j++) next.push(o + j * s);
     out = next;
@@ -70,10 +89,26 @@ export function rfOffsets(length, passes = RF_PASSES, taps = RF_TAPS) {
   return out.sort((a, b) => a - b);
 }
 
-/** Decay's rate along the streak, per log unit: the far end weighs e^(−4·Decay) of the near end. */
-export function rfDecayRate(length, decay) {
+/**
+ * Decay's rate along the streak, per log unit. Average and Add (averages): the far end weighs
+ * e^(−4·Decay) of the near end, as before. Brightest (`useMax`): the tail above, always fading out.
+ */
+export function rfDecayRate(length, decay, useMax = false) {
   const s = rfSpan(length);
-  return s > 1e-6 ? 4 * Math.max(0, rfNum(decay, 0)) / s : 0;
+  if (!(s > 1e-6)) return 0;
+  const d = Math.max(0, rfNum(decay, 0));
+  return (useMax ? RF_TAIL_BASE + RF_TAIL_DECAY * d : 4 * d) / s;
+}
+
+/**
+ * Brightest along one streak on the CPU, as the passes compute it (the tests): `f(t)` is the picture's
+ * brightness t log units along the streak from this pixel; the max of f(t)·e^(−rate·t) over the reads.
+ */
+export function rfBrightest(f, length, decay) {
+  const rate = rfDecayRate(length, decay, true);
+  let m = 0;
+  for (const t of rfOffsets(length, RF_PASSES, RF_TAPS, true)) m = Math.max(m, f(t) * Math.exp(-rate * t));
+  return m;
 }
 
 /** How much of a colour of brightness `luma` streaks: 1 with Threshold 0, else a soft knee of ±Knee round it. */
@@ -85,12 +120,13 @@ export function rfKnee(luma, threshold, knee) {
 }
 
 /** The composite on the CPU (one channel, premultiplied), as the GLSL does it: for the tests. */
-export function rfCompositePixel(orig, rays, mode, amount) {
+export function rfCompositePixel(orig, rays, mode, amount, opacity = RF_OPACITY) {
   const m = typeof mode === 'string' ? RF_MODES.indexOf(mode) : mode;
   const a = Math.max(0, amount);
+  const o = Math.min(1, Math.max(0, rfNum(opacity, RF_OPACITY)));
   if (m <= 0) return orig + (rays * Math.max(a, 1) - orig) * Math.min(a, 1);
-  if (m === 1) return Math.max(orig, rays * a);
-  return orig + rays * a;
+  if (m === 1) return orig + Math.max(0, 1 - orig) * rays * a * o;
+  return orig + rays * a * o;
 }
 
 /**
@@ -105,20 +141,29 @@ float rfKnee(vec3 c, float thr, float knee) {
   return smoothstep(thr - k, thr + k, dot(c, vec3(0.2126, 0.7152, 0.0722)));
 }
 float rfSpan(float len) { return log(1.0 + max(len, 0.0)); }
-// Pass k's step: the span over ${rfEffective()} - 1 reads, times ${RF_TAPS}^k.
-float rfStep(float len, float k) { return rfSpan(len) / ${(rfEffective() - 1).toFixed(1)} * pow(${RF_TAPS.toFixed(1)}, k); }
-float rfDecayRate(float len, float decay) { float s = rfSpan(len); return s > 1e-6 ? 4.0 * max(decay, 0.0) / s : 0.0; }
+// How far the reads go: the span, or ${RF_TAIL_REACH} spans for Brightest's tail (useMax).
+float rfReach(float len, float useMax) { return rfSpan(len) * (useMax > 0.5 ? ${RF_TAIL_REACH.toFixed(1)} : 1.0); }
+// Pass k's step: the reach over ${rfEffective()} - 1 reads, times ${RF_TAPS}^k.
+float rfStep(float len, float k, float useMax) { return rfReach(len, useMax) / ${(rfEffective() - 1).toFixed(1)} * pow(${RF_TAPS.toFixed(1)}, k); }
+// Average and Add: the far end weighs e^(-4 Decay). Brightest (useMax): e^(-(${RF_TAIL_BASE} + ${RF_TAIL_DECAY} Decay)) at Length, a tail fading on past it.
+float rfDecayRate(float len, float decay, float useMax) {
+  float s = rfSpan(len);
+  float d = max(decay, 0.0);
+  return s > 1e-6 ? (useMax > 0.5 ? ${RF_TAIL_BASE.toFixed(2)} + ${RF_TAIL_DECAY.toFixed(1)} * d : 4.0 * d) / s : 0.0;
+}
 // How much shows at uv (0-1) with the centre c: 1 at the centre, fading with the distance (picture heights) by Falloff.
 float rfFalloff(vec2 uv, vec2 c, float aspect, float falloff) { vec2 d = (uv - c) * vec2(aspect, 1.0); return exp(-max(falloff, 0.0) * 4.0 * dot(d, d)); }
 // The light over the picture, both premultiplied. mode 0 Average (the zoom blur in place of the picture),
-// 1 Brightest (lighten: the rays where they are brighter), 2 Add (the rays' light added).
-vec4 rfComposite(vec4 orig, vec4 rays, float mode, float amount, vec3 tint) {
+// 1 Brightest (the brightest along each streak, screened over the picture by Opacity: it only lightens, what is
+// behind shows through, and a ray that fades along its length fades into the picture), 2 Add (the rays' light added, times Opacity). Average ignores Opacity.
+vec4 rfComposite(vec4 orig, vec4 rays, float mode, float amount, vec3 tint, float opacity) {
   float a = max(amount, 0.0);
+  float o = clamp(opacity, 0.0, 1.0);
   vec4 r = vec4(rays.rgb * tint, rays.a);
   if (mode < 0.5) return mix(orig, vec4(r.rgb * max(a, 1.0), r.a), min(a, 1.0));
   vec4 l = vec4(r.rgb * a, r.a * min(a, 1.0));
-  if (mode < 1.5) return vec4(max(orig.rgb, l.rgb), max(orig.a, l.a));
-  return vec4(orig.rgb + l.rgb, orig.a + l.a * (1.0 - orig.a));
+  if (mode < 1.5) return vec4(orig.rgb + l.rgb * max(vec3(1.0) - orig.rgb, 0.0) * o, orig.a + l.a * o * (1.0 - orig.a));
+  return vec4(orig.rgb + l.rgb * o, orig.a + l.a * o * (1.0 - orig.a));
 }
 `;
 
@@ -152,7 +197,7 @@ export function rfGlsl(T = 'texture2D', read) {
   return `vec4 rfPass${sfx}(${sig}vec2 uv, vec2 c, float stp, float dir, float rate, float useMax, float thr, float knee) {${body(RF_TAPS, 'float(j) * stp')}
 }
 vec4 rfSingle${sfx}(${sig}vec2 uv, vec2 c, float len, float dir, float rate, float useMax, float thr, float knee, float jit) {
-  float stp = rfSpan(len) / ${RF_SINGLE_TAPS.toFixed(1)};${body(RF_SINGLE_TAPS, 'min((float(j) + jit) * stp, rfSpan(len))')}
+  float stp = rfReach(len, useMax) / ${RF_SINGLE_TAPS.toFixed(1)};${body(RF_SINGLE_TAPS, 'min((float(j) + jit) * stp, rfReach(len, useMax))')}
 }
 `;
 }

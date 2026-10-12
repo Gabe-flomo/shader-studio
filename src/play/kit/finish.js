@@ -34,7 +34,7 @@ import { FN_TONE_GLSL, FN_TONE_FUNCTIONS, FN_CRT_MASK_GLSL } from './finishGlsl.
 import { BL_BASE_GLSL, blGlsl, blCubicGlsl } from './blur.js';
 import { gyAtlas } from './glyphs.js';
 import { DM_GLSL, DM_HINTS, DM_CHANNELS, DM_BEHAVIOURS, dmChannelGlsl, dmBoxOf } from './displace.js';
-import { RF_BASE_GLSL, RF_PASSES, rfGlsl } from './rays.js';
+import { RF_BASE_GLSL, RF_OPACITY, RF_PASSES, rfGlsl } from './rays.js';
 
 // ── The catalogue ────────────────────────────────────────────────────────────
 
@@ -188,16 +188,17 @@ export const FN_EFFECTS = {
       FN_P('threshold', 'Threshold', 0, 1.5, 0.01, 0.35, 'Only parts brighter than this streak: 0 streaks everything (a zoom blur).'),
       FN_P('knee', 'Knee', 0, 0.5, 0.01, 0.15, 'How softly the streaks fade in round Threshold.'),
       FN_P('intensity', 'Intensity', 0, 4, 0.01, 1, 'How strong the streaks are. In Average, below 1 mixes the picture back.'),
-      FN_P('decay', 'Decay', 0, 1, 0.01, 0.5, 'How much the streaks fade along their length: 0 even, 1 a bright head and a faint tail.'),
+      FN_P('opacity', 'Opacity', 0, 1, 0.01, RF_OPACITY, 'Brightest and Add: how much of the rays shows over the picture. Below 1, what is behind them shows through. (Average ignores it.)'),
+      FN_P('decay', 'Decay', 0, 1, 0.01, 0.5, 'How much the streaks fade along their length. Brightest always tails off smoothly; higher keeps the rays shorter and softer.'),
       FN_P('falloff', 'Falloff', 0, 4, 0.01, 0, 'How much the effect fades away from the centre: 0 the same everywhere.'),
       FN_P('tintR', 'Tint R', 0, 1, 0.01, 1, '', true), FN_P('tintG', 'Tint G', 0, 1, 0.01, 1, '', true), FN_P('tintB', 'Tint B', 0, 1, 0.01, 1, '', true),
     ],
     colours: [{ label: 'Tint', keys: ['tintR', 'tintG', 'tintB'], hint: 'The streaks’ colour: white keeps the colours of what streaks.' }],
     presets: [
-      { name: 'Light rays', values: { mode: 1, direction: 0, length: 0.6, threshold: 0.35, knee: 0.15, intensity: 1, decay: 0.5, falloff: 0 } },
-      { name: 'God rays', values: { mode: 2, direction: 0, length: 1.2, threshold: 0.5, knee: 0.2, intensity: 1.4, decay: 0.7, falloff: 0.3 } },
+      { name: 'Light rays', values: { mode: 1, direction: 0, length: 0.6, threshold: 0.35, knee: 0.15, intensity: 1, opacity: RF_OPACITY, decay: 0.5, falloff: 0 } },
+      { name: 'God rays', values: { mode: 2, direction: 0, length: 1.2, threshold: 0.5, knee: 0.2, intensity: 1.4, opacity: 1, decay: 0.7, falloff: 0.3 } },
       { name: 'Zoom burst', values: { mode: 0, direction: 0, length: 0.35, threshold: 0, knee: 0.15, intensity: 1, decay: 0, falloff: 0 } },
-      { name: 'Warp speed', values: { mode: 1, direction: 0, length: 3, threshold: 0.2, knee: 0.1, intensity: 1, decay: 0.85, falloff: 0 } },
+      { name: 'Warp speed', values: { mode: 1, direction: 0, length: 3, threshold: 0.2, knee: 0.1, intensity: 1, opacity: 0.8, decay: 0.4, falloff: 0 } },
       { name: 'Pull in', values: { mode: 0, direction: 1, length: 0.4, threshold: 0, knee: 0.15, intensity: 1, decay: 0.3, falloff: 0 } },
     ],
     note: 'After Effects’ CC Radial Fast Blur. Brightest with a Threshold throws rays from bright shapes and text; Average is a zoom blur; Add glows. Map the pointer or a hand onto Centre X / Y to aim it.',
@@ -2286,7 +2287,7 @@ vec4 fetch(vec2 q) {
     if (k === 'rays') op(e, `{
     // Light rays (play/kit/rays.js): the streaks over the picture, premultiplied, faded away from the centre by Falloff.
     vec2 rc = vec2(rays_cx, rays_cy);
-    vec4 P = rfComposite(vec4(c * a, a), texture(uRays, q), rays_mode, rays_intensity * rfFalloff(q, rc, uAspect, rays_falloff), vec3(rays_tintR, rays_tintG, rays_tintB));
+    vec4 P = rfComposite(vec4(c * a, a), texture(uRays, q), rays_mode, rays_intensity * rfFalloff(q, rc, uAspect, rays_falloff), vec3(rays_tintR, rays_tintG, rays_tintB), rays_opacity);
     a = clamp(P.a, 0.0, 1.0);
     c = a > 1e-5 ? P.rgb / a : vec3(0.0);
   }`);
@@ -2656,7 +2657,7 @@ out vec4 fragColor;
 void main() {
   vec2 p = gl_FragCoord.xy / uRes;
   float len = rays_length;
-  vec4 v = rfPassR(p, vec2(rays_cx, rays_cy), rfStep(len, uK), rays_direction > 0.5 ? -1.0 : 1.0, rfDecayRate(len, rays_decay), abs(rays_mode - 1.0) < 0.5 ? 1.0 : 0.0, uK < 0.5 ? rays_threshold : 0.0, rays_knee);
+  vec4 v = rfPassR(p, vec2(rays_cx, rays_cy), rfStep(len, uK, abs(rays_mode - 1.0) < 0.5 ? 1.0 : 0.0), rays_direction > 0.5 ? -1.0 : 1.0, rfDecayRate(len, rays_decay, abs(rays_mode - 1.0) < 0.5 ? 1.0 : 0.0), abs(rays_mode - 1.0) < 0.5 ? 1.0 : 0.0, uK < 0.5 ? rays_threshold : 0.0, rays_knee);
   // A little noise (under half an 8-bit step) so long, faint streaks don't band in an 8-bit target.
   v.rgb = max(v.rgb + (rfIGN(gl_FragCoord.xy + uK * 17.0) - 0.5) / 510.0, 0.0);
   fragColor = v;

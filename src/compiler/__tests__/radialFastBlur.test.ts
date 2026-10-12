@@ -13,7 +13,7 @@ import { n } from '../../store/graphBuilder';
 import { hasHiddenBlur, planRays } from '../blurPasses';
 import { getNodeDefinition } from '../../nodes/definitions';
 import type { GraphNode } from '../../types/nodeGraph';
-import { RF_PASSES, RF_TAPS, rfCompositePixel, rfDecayRate, rfEffective, rfKnee, rfOffsets, rfSpan, rfStep } from '../../play/kit/rays.js';
+import { RF_OPACITY, RF_PASSES, RF_TAPS, rfBrightest, rfCompositePixel, rfDecayRate, rfEffective, rfKnee, rfOffsets, rfReach, rfSpan, rfStep } from '../../play/kit/rays.js';
 import { FN_EFFECTS, FN_KINDS, fnBuildFinal, fnDefaultEffect, fnSegments } from '../../play/kit/finish.js';
 import { FX_BY_KIND } from '../../builders/look/effects';
 import { newStackItem } from '../../builders/look/stack';
@@ -93,9 +93,66 @@ describe('the threshold and the composite', () => {
   it('Average replaces, Brightest lightens, Add adds', () => {
     expect(rfCompositePixel(0.2, 0.6, 'average', 1)).toBeCloseTo(0.6);
     expect(rfCompositePixel(0.2, 0.6, 'average', 0.5)).toBeCloseTo(0.4);
-    expect(rfCompositePixel(0.8, 0.6, 'brightest', 1)).toBeCloseTo(0.8);
-    expect(rfCompositePixel(0.2, 0.6, 'brightest', 1)).toBeCloseTo(0.6);
-    expect(rfCompositePixel(0.2, 0.6, 'add', 0.5)).toBeCloseTo(0.5);
+    expect(rfCompositePixel(0.8, 0.6, 'brightest', 1, 1)).toBeCloseTo(0.8 + 0.2 * 0.6);
+    expect(rfCompositePixel(0.2, 1, 'brightest', 1, 1)).toBeCloseTo(1);
+    expect(rfCompositePixel(0.2, 0.6, 'add', 0.5, 1)).toBeCloseTo(0.5);
+  });
+
+  it('Opacity blends Brightest\'s rays over the picture (a screen), scales Add, and leaves Average alone', () => {
+    expect(RF_OPACITY).toBeGreaterThanOrEqual(0.5);
+    expect(RF_OPACITY).toBeLessThanOrEqual(0.6);
+    // Brightest: orig + (1 − orig) · rays · opacity: a full white ray at 0.6 leaves 40 % of what is behind it.
+    expect(rfCompositePixel(0.2, 1, 'brightest', 1, 0.6)).toBeCloseTo(0.2 + 0.8 * 0.6);
+    expect(rfCompositePixel(0.2, 1, 'brightest', 1, 0)).toBeCloseTo(0.2);
+    expect(rfCompositePixel(0.2, 1, 'brightest', 1)).toBeCloseTo(0.2 + 0.8 * RF_OPACITY);
+    // It only lightens, never past white, and a fading ray fades into the picture continuously.
+    for (const o of [0.3, 0.6, 1]) for (const orig of [0, 0.4, 0.9]) {
+      let prev = rfCompositePixel(orig, 0, 'brightest', 1, o);
+      expect(prev).toBeCloseTo(orig);
+      for (let r = 0.05; r <= 1.0001; r += 0.05) {
+        const v = rfCompositePixel(orig, r, 'brightest', 1, o);
+        expect(v).toBeGreaterThanOrEqual(prev - 1e-12);
+        expect(v).toBeLessThanOrEqual(1 + 1e-12);
+        expect(v - prev).toBeLessThan(0.051);
+        prev = v;
+      }
+    }
+    expect(rfCompositePixel(0.2, 0.5, 'add', 1, 0.5)).toBeCloseTo(0.45);
+    for (const o of [0, 0.3, 1]) expect(rfCompositePixel(0.2, 0.6, 'average', 1, o)).toBeCloseTo(0.6);
+  });
+
+  it('Brightest fades smoothly along a ray, from its source to nothing (no step), exact across the passes', () => {
+    // A bright point 0.05 log units along: the ray behind it, at a pixel t log units further, sees it at t.
+    const len = 0.76;
+    for (const decay of [0, 0.17, 0.5]) {
+      const rate = rfDecayRate(len, decay, true);
+      // Brightest reads five Lengths, fading all the way.
+      // At Length a soft tail is still there; at the end of the reads (five Lengths) it is 3 % at most.
+      expect(Math.exp(-rate * rfSpan(len))).toBeGreaterThan(0.1 * Math.exp(-3 * decay));
+      expect(Math.exp(-rate * rfReach(len, true))).toBeLessThanOrEqual(0.035);
+      // Brightness of the ray at distances d from a bright source (a step: 1 up to the source, 0 past it).
+      const prof: number[] = [];
+      for (let i = 0; i <= 600; i++) {
+        const d = (i / 600) * rfReach(len, true) * 1.1;
+        prof.push(rfBrightest(t => (t >= d ? 1 : 0), len, decay));
+      }
+      for (let i = 1; i < prof.length; i++) {
+        expect(prof[i]).toBeLessThanOrEqual(prof[i - 1] + 1e-12); // monotonic
+        expect(prof[i - 1] - prof[i]).toBeLessThan(0.035); // no step anywhere, the end included
+      }
+      expect(prof[0]).toBeCloseTo(1);
+      expect(prof[prof.length - 1]).toBe(0);
+    }
+    // The pass-by-pass weighted max equals one max over the 4096 reads (the weights multiply).
+    const rate = rfDecayRate(1.2, 0.3, true), f = (t: number) => 0.5 + 0.5 * Math.sin(9 * t);
+    let level = (t: number) => f(t);
+    for (let k = 0; k < RF_PASSES; k++) {
+      const prev = level, st = rfStep(1.2, k, RF_PASSES, RF_TAPS, true);
+      level = (t: number) => Math.max(...Array.from({ length: RF_TAPS }, (_, j) => prev(t + j * st) * Math.exp(-rate * j * st)));
+    }
+    expect(level(0)).toBeCloseTo(rfBrightest(f, 1.2, 0.3), 10);
+    // Average and Add keep their old decay.
+    expect(rfDecayRate(1, 0.5)).toBeCloseTo(2 / rfSpan(1), 10);
   });
 });
 
@@ -118,7 +175,7 @@ describe('the node', () => {
       expect(hidden.map(x => x.label)).toEqual([1, 2, 3, 4].map(k => `Radial Fast Blur · streak ${k}/4`));
       expect(hidden.every(x => x.format === 'half')).toBe(true);
       // The first streak pass applies Threshold; later ones read the pass before.
-      expect(hidden[0].fragmentShader).toMatch(/rfPass\(u_pass_\w+, vUv, \w+, rfStep\([^)]*, 0\.0\)/);
+      expect(hidden[0].fragmentShader).toMatch(/rfPass\(u_pass_\w+, vUv, \w+, rfStep\([^,]*, 0\.0, [01]\.0\)/);
       expect(hidden[1].fragmentShader).toContain(`u_pass_${hidden[0].slug}`);
       // Brightest takes the max along the streak; the others average.
       expect(hidden[2].fragmentShader).toContain(mode === 'brightest' ? ', 1.0, 0.0,' : ', 0.0, 0.0,');
@@ -195,7 +252,7 @@ describe('the Finish effect', () => {
   it('is a Light rays effect with the same controls', () => {
     expect(FN_KINDS).toContain('rays');
     const keys = FN_EFFECTS.rays.params.map(p => p.key);
-    expect(keys).toEqual(['mode', 'direction', 'length', 'cx', 'cy', 'threshold', 'knee', 'intensity', 'decay', 'falloff', 'tintR', 'tintG', 'tintB']);
+    expect(keys).toEqual(['mode', 'direction', 'length', 'cx', 'cy', 'threshold', 'knee', 'intensity', 'opacity', 'decay', 'falloff', 'tintR', 'tintG', 'tintB']);
     expect(fnDefaultEffect('rays', 'r')).toMatchObject({ kind: 'rays', mode: 1, length: 0.6, threshold: 0.35 });
   });
 
