@@ -15,8 +15,8 @@ import {
 import type { SpaceOp } from '../sceneBuilder2d/spec';
 import { mulberry32 } from '../lib/surprise/rng';
 import {
-  HOLE, HOLE_TEXT, appendTo, holePaths, moveTile, opAt, paramsIn, removeAt, replaceAt, textToTile, tileAt, tileText, wrapAt,
-  type Tile, type TileOp, type TilePath, type VarName,
+  HOLE, HOLE_TEXT, appendTo, childrenOf, holePaths, isBool, moveTile, opAt, paramsIn, removeAt, replaceAt, slotKind, textToTile, tileAt, tileText, withChildren, wrapAt,
+  type CmpOp, type LogicOp, type Tile, type TileOp, type TilePath, type VarName,
 } from './tiles';
 
 export type PreviewMode = 'checker' | 'ring' | 'vectors' | 'heat';
@@ -85,6 +85,8 @@ export function nameForNumber(root: Tile | null, path: TilePath, taken: Iterable
   const grand = path.length > 1 ? tileAt(root, path.slice(0, -2)) : null;
   if (parent?.k === 'op' && parent.op === '*' && grand?.k === 'call' && ['sin', 'cos', 'tan', 'fract', 'floor', 'mod', 'valueNoise'].includes(grand.fn)) base = 'freq';
   else if (parent?.k === 'call' && (parent.fn === 'rotate')) base = 'angle';
+  else if (parent?.k === 'cmp') base = 'edge';
+  else if (parent?.k === 'if') base = path[path.length - 1] === 2 ? 'b' : path[path.length - 1] === 3 ? 'width' : 'a';
   else if (parent?.k === 'op' && parent.op === '*' && path.length === 1) base = 'amp';
   else if (parent?.k === 'op' && parent.op === '*' && t_isTime(parent)) base = 'speed';
   else if (parent?.k === 'op' && (parent.op === '+' || parent.op === '-')) base = 'shift';
@@ -99,7 +101,7 @@ const t_isTime = (op: Tile) => op.k === 'op' && [op.a, op.b].some(s => s.k === '
 /** A sensible starting value for a slider by its name. */
 export function valueForName(name: string): number {
   const b = name.replace(/\d+$/, '');
-  return b === 'amp' ? 0.1 : b === 'freq' ? 7 : b === 'speed' ? 1 : b === 'angle' ? 0.5 : b === 'power' ? 2 : b === 'amount' ? 0.5 : b === 'shift' ? 0.25 : 0.5;
+  return b === 'amp' ? 0.1 : b === 'freq' ? 7 : b === 'speed' ? 1 : b === 'angle' ? 0.5 : b === 'power' ? 2 : b === 'amount' ? 0.5 : b === 'shift' ? 0.25 : b === 'edge' ? 0 : b === 'width' ? 0.05 : b === 'b' ? 0 : 0.5;
 }
 
 /** Drop the number tile at `path`: a new slider, read there by name. Returns its name. */
@@ -115,16 +117,7 @@ export function dropNumber(block: SpaceBlock, line: number, path: TilePath, valu
 
 /** Put a tile at a path ([] on an empty row: the row). */
 export function placeTile(root: Tile | null, path: TilePath, tile: Tile): Tile {
-  if (!root || !path.length) return tile;
-  const kids = (t: Tile): Tile[] => (t.k === 'call' ? t.args : t.k === 'op' ? [t.a, t.b] : t.k === 'neg' || t.k === 'swz' ? [t.a] : []);
-  const rebuild = (t: Tile, i: number, c: Tile): Tile => {
-    if (t.k === 'call') { const args = t.args.slice(); args[i] = c; return { ...t, args }; }
-    if (t.k === 'op') return i === 0 ? { ...t, a: c } : { ...t, b: c };
-    if (t.k === 'neg' || t.k === 'swz') return { ...t, a: c };
-    return t;
-  };
-  const go = (t: Tile, p: TilePath): Tile => (p.length ? rebuild(t, p[0], go(kids(t)[p[0]] ?? HOLE, p.slice(1))) : tile);
-  return go(root, path);
+  return replaceAt(root, path, tile);
 }
 
 // ── Checking ─────────────────────────────────────────────────────────────────
@@ -233,7 +226,28 @@ export type TileDrag =
   | { from: 'palette'; kind: 'num' }
   | { from: 'palette'; kind: 'fn'; fn: string }
   | { from: 'palette'; kind: 'op'; op: TileOp }
+  | { from: 'palette'; kind: 'if' }
+  | { from: 'palette'; kind: 'cmp'; op: CmpOp }
+  | { from: 'palette'; kind: 'logic'; op: LogicOp }
+  | { from: 'palette'; kind: 'not' }
   | { from: 'row'; block: number; line: number; path: TilePath };
+
+/** What a drag gives: a condition (`bool`: comparisons, and/or/not) or a value (the rest). */
+export function dragKind(spec: WarpSpec, drag: TileDrag): 'bool' | 'value' {
+  if (drag.from === 'row') return isBool(tileAt(rowTile(spec.blocks[drag.block]?.block ?? { lines: [], params: [], times: 1 }, drag.line), drag.path)) ? 'bool' : 'value';
+  return drag.kind === 'cmp' || drag.kind === 'logic' || drag.kind === 'not' ? 'bool' : 'value';
+}
+
+/**
+ * Whether a drop may land there (the type rule): a condition slot takes only conditions, and a
+ * value slot (a row, a function's argument, the If's then/else) only values.
+ */
+export function dropAllowed(spec: WarpSpec, to: TileTarget, drag: TileDrag): boolean {
+  const block = spec.blocks[to.block]?.block;
+  if (!block?.lines[to.line]) return false;
+  const want = to.path ? slotKind(rowTile(block, to.line), to.path) : 'value';
+  return dragKind(spec, drag) === want;
+}
 
 /** Where it lands: a tile in a row, or the row itself (`path` null: the end of the row). */
 export interface TileTarget { block: number; line: number; path: TilePath | null }
@@ -256,6 +270,7 @@ export function dropTile(spec: WarpSpec, to: TileTarget, drag: TileDrag): WarpSe
   const line = item?.block.lines[to.line];
   if (!item || !line) return null;
   const block = item.block;
+  if (!dropAllowed(spec, to, drag)) return null;
   const root = rowTile(block, to.line);
   const atPath: TilePath = to.path ?? [];
   const at = to.path ? tileAt(root, to.path) : root;
@@ -292,7 +307,18 @@ export function dropTile(spec: WarpSpec, to: TileTarget, drag: TileDrag): WarpSe
     return { block: to.block, line: to.line, path: landed };
   }
 
-  if (drag.kind === 'fn') {
+  if (drag.kind === 'if') {
+    // A filled tile goes in the then slot: if _ then tile else _ (the condition first).
+    next = replaceAt(root, atPath, { k: 'if', cond: HOLE, a: filled && at ? at : HOLE, b: HOLE });
+  } else if (drag.kind === 'cmp') {
+    // On a comparison: change its sign. On another condition: `cond and _ > _`. Empty: `_ > _`.
+    const c: Tile = { k: 'cmp', op: drag.op, a: HOLE, b: HOLE };
+    next = replaceAt(root, atPath, !filled || !at ? c : at.k === 'cmp' ? { ...at, op: drag.op } : { k: 'logic', op: '&&', a: at, b: c });
+  } else if (drag.kind === 'logic') {
+    next = replaceAt(root, atPath, { k: 'logic', op: drag.op, a: filled && at ? at : HOLE, b: HOLE });
+  } else if (drag.kind === 'not') {
+    next = replaceAt(root, atPath, { k: 'not', a: filled && at ? at : HOLE });
+  } else if (drag.kind === 'fn') {
     next = wrapAt(root, atPath, drag.fn);
   } else if (drag.kind === 'op') {
     next = opAt(root, atPath, drag.op);
@@ -321,15 +347,12 @@ export function dropTile(spec: WarpSpec, to: TileTarget, drag: TileDrag): WarpSe
 }
 
 /** The same row with every empty slot read as 0 (the palette's pictures of what a drop would do). */
-export function fillHoles(t: Tile | null): Tile | null {
+export function fillHoles(t: Tile | null, slot: 'bool' | 'value' = 'value'): Tile | null {
   if (!t) return t;
-  switch (t.k) {
-    case 'hole': return { k: 'num', value: 0 };
-    case 'call': return { ...t, args: t.args.map(a => fillHoles(a)!) };
-    case 'op': return { ...t, a: fillHoles(t.a)!, b: fillHoles(t.b)! };
-    case 'neg': case 'swz': return { ...t, a: fillHoles(t.a)! };
-    default: return t;
-  }
+  // An empty condition reads as x > 0 (a split down the middle), an empty value as 0.
+  if (t.k === 'hole') return slot === 'bool' ? { k: 'cmp', op: '>', a: { k: 'var', name: 'x' }, b: { k: 'num', value: 0 } } : { k: 'num', value: 0 };
+  const boolKids = t.k === 'logic' || t.k === 'not';
+  return withChildren(t, childrenOf(t).map((c, i) => fillHoles(c, boolKids || (t.k === 'if' && i === 0) ? 'bool' : 'value')!));
 }
 
 /** The block as it would be with `fn` wrapped round the tile at `path` of row `line` (palette pictures). */
@@ -337,5 +360,24 @@ export function blockWithWrap(block: SpaceBlock, line: number, path: TilePath, f
   const b = cloneBlock(block);
   if (!b.lines[line]) return b;
   b.lines[line].rhs = tileText(fillHoles(wrapAt(rowTile(b, line), path, fn)));
+  return b;
+}
+
+/**
+ * The If tile's picture: the picked tile kept on one side of a split and left out (0) on the other,
+ * `if x > 0 then tile else 0`, so you see where the condition cuts. A condition tile's picture: the
+ * row with the picked tile behind `if <that comparison> …` on x and 0.
+ */
+export function blockWithIf(block: SpaceBlock, line: number, path: TilePath, cond?: CmpOp | LogicOp | '!'): SpaceBlock {
+  const b = cloneBlock(block);
+  const root = rowTile(b, line);
+  if (!b.lines[line] || slotKind(root, path) === 'bool') return b;
+  const at = tileAt(root, path) ?? HOLE;
+  const x: Tile = { k: 'var', name: 'x' }, y: Tile = { k: 'var', name: 'y' }, zero: Tile = { k: 'num', value: 0 };
+  const c: Tile = !cond ? { k: 'cmp', op: '>', a: x, b: zero }
+    : cond === '!' ? { k: 'not', a: { k: 'cmp', op: '>', a: x, b: zero } }
+      : cond === '&&' || cond === '||' ? { k: 'logic', op: cond, a: { k: 'cmp', op: '>', a: x, b: zero }, b: { k: 'cmp', op: '>', a: y, b: zero } }
+        : { k: 'cmp', op: cond, a: x, b: zero };
+  b.lines[line].rhs = tileText(fillHoles(replaceAt(root, path, { k: 'if', cond: c, a: at, b: zero })));
   return b;
 }

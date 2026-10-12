@@ -36,17 +36,18 @@ import {
   type BlockOp, type BlockTarget, type SpaceBlock, type TrapKind,
 } from '../../sceneBuilder2d/blocks';
 import {
-  FN_TILES, OP_TILES, VAR_TILES, duplicateAt, fnLabel, hasCode, numText, opLabel, removeAt, replaceAt, samePath, swapAt, textToTile, tileAt, tileText, varLabel,
+  CMP_TILES, FN_TILES, LOGIC_TILES, OP_TILES, VAR_TILES, canSoft, cmpLabel, duplicateAt, isBool, setSoft, fnLabel, hasCode, numText, opLabel, removeAt, replaceAt, samePath, swapAt, textToTile, tileAt, tileText, varLabel,
   type FnTile, type Tile, type TilePath,
 } from '../../warpBuilder/tiles';
 import {
-  PREVIEW_MODES, ROW_LABEL, addRow, blockWithWrap, dropTile, nameForNumber, newWarpBlock, nextItemId, rowProblems, rowTile, setRowTile,
+  PREVIEW_MODES, ROW_LABEL, addRow, blockWithIf, blockWithWrap, dragKind, dropAllowed, dropTile, nameForNumber, newWarpBlock, nextItemId, rowProblems, rowTile, setRowTile,
   type PreviewMode, type TileDrag, type TileTarget,
 } from '../../warpBuilder/spec';
 import { useWarpBuilder, type WarpSel } from '../../warpBuilder/store';
 import { finishWarpBuilder, sendWarpTo2D } from '../../warpBuilder/actions';
 import { WarpPreview } from './WarpPreview';
 import { usePhoneDialog } from '../ui/phoneDialog';
+import { toast } from '../ui/toastStore';
 
 // ── Dragging ─────────────────────────────────────────────────────────────────
 
@@ -75,17 +76,37 @@ function apply(to: TileTarget, drag: TileDrag): void {
 function applyToSelection(drag: TileDrag): void {
   const { sel, spec } = useWarpBuilder.getState();
   if (!spec.blocks.length) useWarpBuilder.getState().edit(d => { d.blocks.push({ id: nextItemId(d), block: newWarpBlock() }); });
-  apply(sel ? { block: sel.block, line: sel.line, path: sel.path } : { block: 0, line: 0, path: null }, drag);
+  const to: TileTarget = sel ? { block: sel.block, line: sel.line, path: sel.path } : { block: 0, line: 0, path: null };
+  if (!dropAllowed(useWarpBuilder.getState().spec, to, drag)) {
+    toast.info(dragKind(useWarpBuilder.getState().spec, drag) === 'bool' ? 'A condition goes in an If' : 'The condition takes a comparison', {
+      message: dragKind(useWarpBuilder.getState().spec, drag) === 'bool'
+        ? 'Comparisons, and, or and not go in the If tile’s condition (or inside and / or / not). Pick that slot first.'
+        : 'The If tile’s condition is true or false: put a comparison there (>, <, =…), then values in its two slots.',
+    });
+    return;
+  }
+  apply(to, drag);
 }
 
-function useDropZone(onDrop: (d: TileDrag) => void) {
+/**
+ * A drop target at `to`. A drop the slot can't take (a value on the If's condition, a condition on
+ * a value) isn't offered: the drag shows "no drop" there.
+ */
+function useDropZone(to: TileTarget) {
   const [over, setOver] = useState(false);
+  const ok = (d: TileDrag | null) => !!d && dropAllowed(useWarpBuilder.getState().spec, to, d);
   return {
     over,
     props: {
-      onDragOver: (e: DragEvent) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = dragging?.from === 'row' ? 'move' : 'copy'; if (!over) setOver(true); },
+      onDragOver: (e: DragEvent) => {
+        e.stopPropagation();
+        if (dragging && !ok(dragging)) { e.dataTransfer.dropEffect = 'none'; return; }
+        e.preventDefault();
+        e.dataTransfer.dropEffect = dragging?.from === 'row' ? 'move' : 'copy';
+        if (!over) setOver(true);
+      },
       onDragLeave: (e: DragEvent) => { e.stopPropagation(); setOver(false); },
-      onDrop: (e: DragEvent) => { e.preventDefault(); e.stopPropagation(); setOver(false); const d = readDrag(e); endDrag(); if (d) onDrop(d); },
+      onDrop: (e: DragEvent) => { e.preventDefault(); e.stopPropagation(); setOver(false); const d = readDrag(e); endDrag(); if (d && ok(d)) apply(to, d); },
     },
   };
 }
@@ -98,7 +119,7 @@ function TileChip({ tile, path, block, line, params }: { tile: Tile; path: TileP
   const tk = useTokens();
   const sel = useWarpBuilder(s => s.sel);
   const picked = !!sel && sel.block === block && sel.line === line && samePath(sel.path, path);
-  const drop = useDropZone(d => apply({ block, line, path }, d));
+  const drop = useDropZone({ block, line, path });
   const kids = (list: Tile[], from = 0) => list.map((c, i) => <TileChip key={i} tile={c} path={[...path, from + i]} block={block} line={line} params={params} />);
   const base: CSSProperties = {
     display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 5px', minHeight: 26, borderRadius: 7, cursor: 'grab',
@@ -142,6 +163,22 @@ function TileChip({ tile, path, block, line, params }: { tile: Tile; path: TileP
       style = { ...base, background: 'transparent' };
       body = <><span style={{ color: tk.text.secondary }}>−</span>{kids([tile.a])}</>;
       break;
+    case 'cmp': case 'logic': {
+      const word = tile.k === 'cmp' ? cmpLabel(tile.op) : tile.op === '&&' ? 'and' : 'or';
+      style = { ...base, padding: '1px 4px', background: alpha('#e07a5f', 0.12), boxShadow: `${base.boxShadow ? `${base.boxShadow}, ` : ''}inset 0 0 0 1px ${alpha('#e07a5f', 0.35)}` };
+      body = <>{kids([tile.a])}<b style={{ padding: '0 2px', color: '#e8957f', fontSize: tile.k === 'cmp' ? 14 : 12 }}>{word}</b>{kids([tile.b], 1)}</>;
+      break;
+    }
+    case 'not':
+      style = { ...base, padding: '1px 4px', background: alpha('#e07a5f', 0.12) };
+      body = <><b style={{ color: '#e8957f' }}>not</b>{kids([tile.a])}</>;
+      break;
+    case 'if': {
+      const kw = (w: string) => <b style={{ color: '#e8957f', font: `700 11.5px ${fontFamily.ui}`, padding: '0 2px' }}>{w}</b>;
+      style = { ...base, padding: '3px 6px', gap: 4, flexWrap: 'wrap', whiteSpace: 'normal', background: alpha('#e07a5f', 0.08), boxShadow: `${base.boxShadow ? `${base.boxShadow}, ` : ''}inset 0 0 0 1.5px ${alpha('#e07a5f', 0.45)}` };
+      body = <>{kw('if')}{kids([tile.cond])}{kw('then')}{kids([tile.a], 1)}{kw('else')}{kids([tile.b], 2)}{tile.soft && <>{kw('smooth')}{kids([tile.soft], 3)}</>}</>;
+      break;
+    }
     case 'swz':
       style = { ...base, background: 'transparent' };
       body = <>{kids([tile.a])}<span style={{ color: tk.text.secondary }}>.{tile.field}</span></>;
@@ -164,7 +201,7 @@ function RowView({ block, line, item }: { block: number; line: number; item: Spa
   const problem = rowProblems(item)[line];
   const [text, setText] = useState(false);
   const edit = useWarpBuilder(s => s.edit);
-  const drop = useDropZone(d => apply({ block, line, path: null }, d));
+  const drop = useDropZone({ block, line, path: null });
   // On a phone the tiles get a line of their own, under the pickers.
   const narrowRow = usePhoneDialog();
   const vars = useMemo(() => [{ name: 'x', type: 'float' }, { name: 'y', type: 'float' }, { name: 'uv', type: 'vec2' }, { name: 't', type: 'float' }, ...(item.loop ? LOOP_BLOCK_NAMES.map(v => ({ name: v.name, type: v.type })) : []), ...item.params.map(p => ({ name: p.name, type: 'float' }))], [item.params, item.loop]);
@@ -245,7 +282,7 @@ function PaletteTile({ drag, label, hint, colour, children, wide, bar }: { drag:
   const tk = useTokens();
   const [hover, setHover] = useState(false);
   return (
-    <button type="button" draggable data-palette-tile={drag.from === 'palette' ? (drag.kind === 'var' ? drag.name : drag.kind === 'fn' ? drag.fn : drag.kind === 'op' ? drag.op : 'num') : ''}
+    <button type="button" draggable data-palette-tile={drag.from === 'palette' ? (drag.kind === 'var' ? drag.name : drag.kind === 'fn' ? drag.fn : drag.kind === 'op' ? drag.op : drag.kind === 'cmp' ? `cmp${drag.op}` : drag.kind === 'logic' ? drag.op : drag.kind === 'not' ? 'not' : drag.kind === 'if' ? 'if' : 'num') : ''}
       title={`${hint}. Drag onto a row or a slot, or click to put it on the picked tile.`}
       onDragStart={e => startDrag(e, drag)} onDragEnd={endDrag} onClick={() => applyToSelection(drag)}
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
@@ -261,6 +298,27 @@ function PaletteTile({ drag, label, hint, colour, children, wide, bar }: { drag:
 }
 
 /** A function's picture: what wrapping the picked tile would do to the warp, or (on an empty row) its curve. */
+function IfPicture({ cond }: { cond?: Parameters<typeof blockWithIf>[3] }) {
+  const sel = useWarpBuilder(s => s.sel);
+  const item = useWarpBuilder(s => (sel ? s.spec.blocks[sel.block]?.block : undefined));
+  const size = 40;
+  if (item && sel && item.lines[sel.line]?.rhs.trim()) {
+    const b = blockWithIf(item, sel.line, sel.path, cond);
+    return <WarpCanvas map={() => blockMap(b, 0)} k={`if${cond ?? ''}:${JSON.stringify(b)}`} size={size} title={`The picked tile only where the condition holds: ${b.lines[sel.line].rhs}`} />;
+  }
+  // A split: one side lit, the other dark (x > 0, or the comparison's own region).
+  const inside = (x: number, y: number) => {
+    const X = x > 0, Y = y > 0;
+    switch (cond) { case '<': case '<=': return !X; case '==': return Math.abs(x) < 0.26; case '!=': return Math.abs(x) >= 0.26; case '&&': return X && Y; case '||': return X || Y; case '!': return !X; default: return X; }
+  };
+  const cells: ReactNode[] = [];
+  for (let j = 0; j < 8; j++) for (let i = 0; i < 8; i++) {
+    const x = (i + 0.5) / 4 - 1, y = 1 - (j + 0.5) / 4;
+    cells.push(<rect key={`${i}:${j}`} x={i * 5} y={j * 5} width={5} height={5} fill={inside(x, y) ? '#e8957f' : '#1e2434'} />);
+  }
+  return <svg width={size} height={size} style={{ borderRadius: 6, flexShrink: 0 }} aria-hidden>{cells}</svg>;
+}
+
 function FnPicture({ f }: { f: FnTile }) {
   const sel = useWarpBuilder(s => s.sel);
   const item = useWarpBuilder(s => (sel ? s.spec.blocks[sel.block]?.block : undefined));
@@ -295,6 +353,15 @@ function Palette() {
             <FnPicture f={f} />
           </PaletteTile>
         ))}
+      </div>
+      <StudioLabel meta="split space by a condition">If</StudioLabel>
+      <PaletteTile wide drag={{ from: 'palette', kind: 'if' }} hint="If a condition holds, one value, else another: cond ? a : b. Its condition takes comparisons (and, or, not)"
+        label={<span style={{ font: `600 12px ${fontFamily.ui}` }}><b style={{ color: '#e8957f' }}>if</b> ▢ <b style={{ color: '#e8957f' }}>then</b> ▢ <b style={{ color: '#e8957f' }}>else</b> ▢</span>}>
+        <IfPicture />
+      </PaletteTile>
+      <div style={grid(3)}>
+        {CMP_TILES.map(c => <PaletteTile key={c.op} drag={{ from: 'palette', kind: 'cmp', op: c.op }} label={<span style={{ fontSize: 15, color: '#e8957f' }}>{c.label}</span>} hint={`${c.blurb}: a condition, _ ${c.label} _ (for the If’s condition)`}><IfPicture cond={c.op} /></PaletteTile>)}
+        {LOGIC_TILES.map(c => <PaletteTile key={c.op} drag={c.op === '!' ? { from: 'palette', kind: 'not' } : { from: 'palette', kind: 'logic', op: c.op }} label={<span style={{ color: '#e8957f' }}>{c.label}</span>} hint={`${c.blurb} (conditions only)`}><IfPicture cond={c.op} /></PaletteTile>)}
       </div>
       <BuilderNote style={{ fontSize: 11 }}>Variables, the number tile and the operators are in the bar under the preview, beside the rows.</BuilderNote>
     </div>
@@ -361,10 +428,32 @@ function PickedTile() {
           })}>Make a slider</Button>
         </>
       )}
+      {tile.k === 'if' && (
+        <div data-warp-if-soft style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <Segmented ariaLabel="Hard or smooth edge" size="sm" value={tile.soft ? 'smooth' : 'hard'}
+            onChange={v => {
+              if (v === 'hard') { set(r => replaceAt(r, sel.path, setSoft(tile, null)!)); return; }
+              edit(d => {
+                const b = d.blocks[sel.block].block;
+                const r = rowTile(b, sel.line);
+                const now = tileAt(r, sel.path);
+                if (!now || !canSoft(now)) return;
+                let name = 'width', i = 2;
+                while (b.params.some(p => p.name === name)) name = `width${i++}`;
+                b.params.push({ name, value: 0.05, min: 0, max: 0.5 });
+                setRowTile(b, sel.line, replaceAt(r, sel.path, setSoft(now, { k: 'param', name })!));
+              });
+            }}
+            options={[{ value: 'hard' as const, label: 'Hard' }, { value: 'smooth' as const, label: 'Smooth' }]} />
+          <BuilderNote style={{ fontSize: 11 }}>{tile.soft
+            ? 'Smooth: a soft step across the edge, width wide (mix with smoothstep), so it doesn’t alias.'
+            : canSoft(tile) ? 'Hard: cond ? a : b. Smooth blends across the edge instead.' : 'Smooth needs one comparison with <, >, ≤ or ≥ as the condition.'}</BuilderNote>
+        </div>
+      )}
       {param && <NumRow label={<span style={{ fontFamily: fontFamily.mono }}>{param.name}</span>} value={param.value} min={param.min} max={param.max} step={(param.max - param.min) > 20 ? 0.1 : 0.005}
         onChange={v => edit(d => { const q = d.blocks[sel.block].block.params.find(x => x.name === param.name); if (q) { q.value = v; q.min = Math.min(q.min, v); q.max = Math.max(q.max, v); } }, `warp:p:${param.name}`)} />}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-        <Button size="sm" variant="ghost" icon="copy" data-warp-duplicate onClick={() => set(r => duplicateAt(r, sel.path))} title="Duplicate this term: tile + tile (⌘D)">Duplicate</Button>
+        {!isBool(tile) && <Button size="sm" variant="ghost" icon="copy" data-warp-duplicate onClick={() => set(r => duplicateAt(r, sel.path))} title="Duplicate this term: tile + tile (⌘D)">Duplicate</Button>}
         {tile.k === 'op' && <Button size="sm" variant="ghost" icon="bidir" onClick={() => set(r => swapAt(r, sel.path))} title="Swap the two sides">Swap</Button>}
         <Button size="sm" variant="ghost" icon="trash" onClick={() => { set(r => removeAt(r, sel.path)); useWarpBuilder.getState().select({ ...sel, path: sel.path.slice(0, -1) }); }} title="Take it out (Delete)">Delete</Button>
       </div>
