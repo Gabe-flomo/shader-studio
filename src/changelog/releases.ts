@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.197',
+    date: '2026-10-12',
+    title: 'Solid walkers',
+    highlights: [
+      { area: 'Studio', text: '3D Draw agents: a Shape setting draws walkers as cubes, spheres, rods, tiles or voxels, with Flat, Faces or Lit shading and an outline option.' },
+      { area: 'Studio', text: 'Cheap by design: a cost note, Max shapes, Draw every Nth, Distant as dots and Half resolution. A million Faces cubes take about 10 ms. Try Voxel slime.' },
+      { area: 'Studio', text: 'Draw agents and Splat Scene cameras get Orthographic and Reverse perspective, matching the March Camera. In both builders too.' },
+    ],
+  },
+  {
     id: '2026.10.196',
     date: '2026-10-12',
     title: 'Feedback texture',
