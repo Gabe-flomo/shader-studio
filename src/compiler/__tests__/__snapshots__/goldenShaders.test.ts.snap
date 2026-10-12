@@ -1162,16 +1162,30 @@ exports[`golden shaders: every Play example exports the same bundle > pianoRollS
 }
 `;
 
+exports[`golden shaders: every Play example exports the same bundle > piecesBallAction 1`] = `
+{
+  "bundle": "044ec63e554a3c0b468070bbaa83:15776",
+  "missing": [],
+}
+`;
+
 exports[`golden shaders: every Play example exports the same bundle > piecesBalls3D 1`] = `
 {
-  "bundle": "0b4b82ba4aa87b198673c742796e:20680",
+  "bundle": "0f6d44b593411d131253e758922d:29403",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > piecesBallsDepth 1`] = `
+{
+  "bundle": "1ffafc1c4f73eb12e86c95bfbe50:47540",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > piecesScatterReturn 1`] = `
 {
-  "bundle": "1ce50c07becc1501800a00310791:12292",
+  "bundle": "0a30aa90130c800dc9ac9142524e:15643",
   "missing": [],
 }
 `;
@@ -13899,16 +13913,147 @@ exports[`golden shaders: every example compiles as it did > pianoRollScale 1`] =
 }
 `;
 
+exports[`golden shaders: every example compiles as it did > piecesBallAction 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "062a6bc52b4deb1a2bdad3ecea5f:10085",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "0c2dde5c9878e00eb6efbfd92a2e:206",
+  "paramBindings": "193eab33139d91169284a8f4e32e:1009",
+  "paramUniforms": [
+    "u_p_lfox0_amplitude",
+    "u_p_lfox0_freq",
+    "u_p_lfox0_offset",
+    "u_p_lfox0_phase",
+    "u_p_piecesx0_amount",
+    "u_p_piecesx0_aspect",
+    "u_p_piecesx0_background",
+    "u_p_piecesx0_blur",
+    "u_p_piecesx0_count",
+    "u_p_piecesx0_dimFloor",
+    "u_p_piecesx0_focus",
+    "u_p_piecesx0_instability",
+    "u_p_piecesx0_scatter",
+    "u_p_piecesx0_scatterSize",
+    "u_p_piecesx0_scatterTurn",
+    "u_p_piecesx0_search",
+    "u_p_piecesx0_seed",
+    "u_p_piecesx0_shading",
+    "u_p_piecesx0_size",
+    "u_p_piecesx0_softness",
+    "u_p_piecesx0_spin",
+    "u_p_piecesx0_stagger",
+    "u_p_piecesx0_turn",
+    "u_p_scatterx0_burst",
+    "u_p_scatterx0_rest",
+  ],
+  "paramValues": "16824c5f6c078b154d51bd4766e6:703",
+  "passes": [
+    {
+      "filter": "linear",
+      "format": "half",
+      "fragmentShader": "precision highp float;
+#define PI 3.1415926538
+#define TAU 6.2831853072
+
+uniform vec2 u_resolution;
+uniform float u_time;
+uniform vec2 u_mouse;
+uniform sampler2D u_fontTexture;
+
+varying vec2 vUv;
+
+// ── Always-available helpers (noise, rotation) ───────────────────────────────
+vec2 noiseHash2(vec2 p) {
+    p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+    return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+}
+float noiseHash1(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+float valueNoise(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(noiseHash1(i), noiseHash1(i+vec2(1,0)), u.x),
+               mix(noiseHash1(i+vec2(0,1)), noiseHash1(i+vec2(1,1)), u.x), u.y);
+}
+vec2 rotate(vec2 v, float angle) {
+    // Hoisted: the angle is usually a uniform expression, and the compiler
+    // can't share the four trig calls when the argument isn't a plain value.
+    float s = sin(angle), c = cos(angle);
+    return vec2(v.x * c - v.y * s, v.x * s + v.y * c);
+}
+mat2 rot2D(float a) { float s=sin(a), c=cos(a); return mat2(c,-s,s,c); }
+// ─────────────────────────────────────────────────────────────────────────
+
+
+
+void main() {
+    vec2 g_uv = (vUv - 0.5) * 2.0;
+    g_uv.x *= u_resolution.x / u_resolution.y;
+    // Time: turns the rings.
+    float time_0_c2_time = u_time;
+    // UV inside the Shader Texture: its own square, −1 to 1.
+    vec2 uv_0_c2_uv = (vUv - 0.5) * 2.0;
+    uv_0_c2_uv.x *= u_resolution.x / u_resolution.y;
+    // Kaleidoscope: the angle folded into six mirrored wedges, rings rolling out (bent by a wave), crossed by petals. The colour runs gold, ember and sky blue with the pattern and the radius (h), drifting slowly; dark between the bands.
+    // Kept below 1 (× 0.85) so the glowing balls brighten it without washing out to white; faded out past the edge.
+    vec3 kaleidoscope_0_result;
+    {
+        vec2 p = uv_0_c2_uv;
+        float t = time_0_c2_time;
+        float r = length(p);
+        float a = abs(mod(atan(p.x, p.y) + t * 0.05, 1.0471976) - 0.5235988);
+        vec2 q = r * vec2(cos(a), sin(a));
+        float rings = sin(r * 11.0 - t * 0.9 + 1.6 * sin(q.y * 7.0 + t * 0.3));
+        float petals = sin(q.x * 8.0 + t * 0.5) * sin(q.y * 13.0 - t * 0.4);
+        float v = rings + 0.6 * petals;
+        float h = fract(0.18 * v + 0.55 * r - 0.02 * t);
+        vec3 gold = vec3(1.0, 0.68, 0.16);
+        vec3 ember = vec3(0.95, 0.28, 0.06);
+        vec3 sky = vec3(0.12, 0.5, 1.0);
+        vec3 hue = h < 0.33 ? gold + (ember - gold) * (h * 3.0) : h < 0.66 ? ember + (sky - ember) * (h * 3.0 - 1.0) : sky + (gold - sky) * (h * 3.0 - 2.0);
+        kaleidoscope_0_result = hue * 0.85 * smoothstep(-0.2, 0.8, v) * (1.0 - smoothstep(0.85, 1.4, r));
+    }
+    gl_FragColor = vec4(kaleidoscope_0_result, 1.0);
+}",
+      "label": "Kaleidoscope",
+      "live": true,
+      "nodeId": "kal",
+      "nodeIds": [
+        "kRings",
+        "kTime",
+        "kUv",
+      ],
+      "previous": false,
+      "reads": [],
+      "readsPrevious": [],
+      "scale": 1,
+      "size": 1024,
+      "slug": "kaleidoscope_0_c2",
+      "wrap": "clamp",
+    },
+  ],
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
 exports[`golden shaders: every example compiles as it did > piecesBalls3D 1`] = `
 {
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "008f4c2a3cd3d716e57234f531b4:16484",
+  "fragmentShader": "00ea9893df99630b0302f13995e3:23652",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "1baf46f7c091d604588b3a75ce94:533",
-  "paramBindings": "0e97431f85673202a75640d8944f:1974",
+  "paramBindings": "1f16d51bc5a428184d363bc6cf54:2890",
   "paramUniforms": [
     "u_p_marchcamerx0_aperture",
     "u_p_marchcamerx0_camAngle",
@@ -13927,20 +14072,36 @@ exports[`golden shaders: every example compiles as it did > piecesBalls3D 1`] = 
     "u_p_marchloopgx0_maxDist",
     "u_p_marchloopgx0_stepScale",
     "u_p_onexballx0xsgxpieceballsx0_aspect",
+    "u_p_onexballx0xsgxpieceballsx0_blur",
     "u_p_onexballx0xsgxpieceballsx0_count",
+    "u_p_onexballx0xsgxpieceballsx0_focus",
+    "u_p_onexballx0xsgxpieceballsx0_instability",
     "u_p_onexballx0xsgxpieceballsx0_jitter",
     "u_p_onexballx0xsgxpieceballsx0_lift",
+    "u_p_onexballx0xsgxpieceballsx0_scatter",
+    "u_p_onexballx0xsgxpieceballsx0_scatterDepth",
+    "u_p_onexballx0xsgxpieceballsx0_scatterSize",
+    "u_p_onexballx0xsgxpieceballsx0_seed",
     "u_p_onexballx0xsgxpieceballsx0_size",
+    "u_p_onexballx0xsgxpieceballsx0_twist",
     "u_p_onexballx0xsgxpieceballsx0_wave",
     "u_p_onexballx0xsgxpieceballsx0_waveFreq",
     "u_p_onexballx0xsgxpieceballsx0_waveSpeed",
     "u_p_onexballx0xsgxrepeatcellx0_seed",
     "u_p_onexballx0xsgxwavex0_amp",
     "u_p_pieceballsx0xc2_aspect",
+    "u_p_pieceballsx0xc2_blur",
     "u_p_pieceballsx0xc2_count",
+    "u_p_pieceballsx0xc2_focus",
+    "u_p_pieceballsx0xc2_instability",
     "u_p_pieceballsx0xc2_jitter",
     "u_p_pieceballsx0xc2_lift",
+    "u_p_pieceballsx0xc2_scatter",
+    "u_p_pieceballsx0xc2_scatterDepth",
+    "u_p_pieceballsx0xc2_scatterSize",
+    "u_p_pieceballsx0xc2_seed",
     "u_p_pieceballsx0xc2_size",
+    "u_p_pieceballsx0xc2_twist",
     "u_p_pieceballsx0xc2_wave",
     "u_p_pieceballsx0xc2_waveFreq",
     "u_p_pieceballsx0xc2_waveSpeed",
@@ -13952,7 +14113,86 @@ exports[`golden shaders: every example compiles as it did > piecesBalls3D 1`] = 
     "u_p_repeatscenx0_countY",
     "u_p_repeatscenx0_countZ",
   ],
-  "paramValues": "1441afcf4bb8e113db84b475390f:1490",
+  "paramValues": "095d27f92ea1611576374da1a09e:2128",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {
+    "u_tex_tex_0": "photo",
+  },
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > piecesBallsDepth 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "17b5d4508b05321beca9160eb354:41913",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "0d99f3702c68b4009acb17248e44:420",
+  "paramBindings": "184b314e1742471fea528a60905e:2787",
+  "paramUniforms": [
+    "u_p_ballsx0xsgxpieceballsx0_aspect",
+    "u_p_ballsx0xsgxpieceballsx0_blur",
+    "u_p_ballsx0xsgxpieceballsx0_count",
+    "u_p_ballsx0xsgxpieceballsx0_focus",
+    "u_p_ballsx0xsgxpieceballsx0_instability",
+    "u_p_ballsx0xsgxpieceballsx0_jitter",
+    "u_p_ballsx0xsgxpieceballsx0_lift",
+    "u_p_ballsx0xsgxpieceballsx0_scatter",
+    "u_p_ballsx0xsgxpieceballsx0_scatterDepth",
+    "u_p_ballsx0xsgxpieceballsx0_scatterSize",
+    "u_p_ballsx0xsgxpieceballsx0_seed",
+    "u_p_ballsx0xsgxpieceballsx0_size",
+    "u_p_ballsx0xsgxpieceballsx0_twist",
+    "u_p_ballsx0xsgxpieceballsx0_wave",
+    "u_p_ballsx0xsgxpieceballsx0_waveFreq",
+    "u_p_ballsx0xsgxpieceballsx0_waveSpeed",
+    "u_p_ballsx0xsgxpieceballsx0_width",
+    "u_p_cstx0_value",
+    "u_p_cstx0xc2_value",
+    "u_p_lfox0_amplitude",
+    "u_p_lfox0_freq",
+    "u_p_lfox0_offset",
+    "u_p_lfox0_phase",
+    "u_p_marchcamerx0_aperture",
+    "u_p_marchcamerx0_camAngle",
+    "u_p_marchcamerx0_camDist",
+    "u_p_marchcamerx0_camElevation",
+    "u_p_marchcamerx0_focalDist",
+    "u_p_marchcamerx0_fov",
+    "u_p_marchcamerx0_lensSpeed",
+    "u_p_marchcamerx0_rotSpeed",
+    "u_p_marchcamerx0_targetX",
+    "u_p_marchcamerx0_targetY",
+    "u_p_marchcamerx0_targetZ",
+    "u_p_marchloopgx0_albedo",
+    "u_p_marchloopgx0_bg",
+    "u_p_marchloopgx0_jitter",
+    "u_p_marchloopgx0_maxDist",
+    "u_p_marchloopgx0_stepScale",
+    "u_p_pieceballsx0xc2_aspect",
+    "u_p_pieceballsx0xc2_blur",
+    "u_p_pieceballsx0xc2_count",
+    "u_p_pieceballsx0xc2_focus",
+    "u_p_pieceballsx0xc2_instability",
+    "u_p_pieceballsx0xc2_jitter",
+    "u_p_pieceballsx0xc2_lift",
+    "u_p_pieceballsx0xc2_scatter",
+    "u_p_pieceballsx0xc2_scatterDepth",
+    "u_p_pieceballsx0xc2_scatterSize",
+    "u_p_pieceballsx0xc2_seed",
+    "u_p_pieceballsx0xc2_size",
+    "u_p_pieceballsx0xc2_twist",
+    "u_p_pieceballsx0xc2_wave",
+    "u_p_pieceballsx0xc2_waveFreq",
+    "u_p_pieceballsx0xc2_waveSpeed",
+    "u_p_pieceballsx0xc2_width",
+  ],
+  "paramValues": "0e30b92c32be8d0d4c321d66277e:2013",
   "passes": null,
   "success": true,
   "textureUniforms": {
@@ -13968,11 +14208,11 @@ exports[`golden shaders: every example compiles as it did > piecesScatterReturn 
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "00a4e351f89a8c0606b85b6f11d7:10411",
+  "fragmentShader": "167d50f3ea80920c3ec99437308d:13002",
   "isStateful": false,
   "liveUniforms": {},
-  "nodeSlugs": "1f293f0dd2b2000c88a866194bae:167",
-  "paramBindings": "05ad2b1cd5897e0b2fc3b4932064:680",
+  "nodeSlugs": "194ae2333d4eb016c994d89ac6f8:191",
+  "paramBindings": "10ca0069c506780749284ed380d4:1075",
   "paramUniforms": [
     "u_p_lfox0_amplitude",
     "u_p_lfox0_freq",
@@ -13981,18 +14221,27 @@ exports[`golden shaders: every example compiles as it did > piecesScatterReturn 
     "u_p_piecesx0_amount",
     "u_p_piecesx0_aspect",
     "u_p_piecesx0_background",
+    "u_p_piecesx0_blur",
     "u_p_piecesx0_count",
+    "u_p_piecesx0_dimFloor",
+    "u_p_piecesx0_focus",
+    "u_p_piecesx0_instability",
+    "u_p_piecesx0_scatter",
+    "u_p_piecesx0_scatterSize",
+    "u_p_piecesx0_scatterTurn",
     "u_p_piecesx0_search",
+    "u_p_piecesx0_seed",
     "u_p_piecesx0_size",
     "u_p_piecesx0_softness",
     "u_p_piecesx0_spin",
     "u_p_piecesx0_stagger",
     "u_p_piecesx0_turn",
+    "u_p_scatterx0_reach",
     "u_p_vectorfielx0_scale",
     "u_p_vectorfielx0_speed",
     "u_p_vectorfielx0_strength",
   ],
-  "paramValues": "1e8f46e7c99eff0e2b9a36abf9e9:473",
+  "paramValues": "0340c1fdf40d1a02867d3c06784e:729",
   "passes": null,
   "success": true,
   "textureUniforms": {

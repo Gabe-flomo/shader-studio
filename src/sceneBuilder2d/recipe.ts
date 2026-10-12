@@ -665,6 +665,9 @@ class Parser {
         case 'picture': case 'texture': break;
         case 'count': case 'across': { const n = this.num(a, key); if (n !== null) p.count = Math.max(2, Math.round(n)); break; }
         case 'size': case 'amount': case 'speed': case 'swirl': { const n = this.num(a, key); if (n !== null) p[key] = n; break; }
+        case 'scatter': case 'seed': case 'dim': { const n = this.num(a, key); if (n !== null) p[key] = n; break; }
+        case 'scatter-turn': { const n = this.num(a, key); if (n !== null) p.scatterTurn = n; break; }
+        case 'scatter-size': { const n = this.num(a, key); if (n !== null) p.scatterSize = n; break; }
         case 'shape': { const v = pick(a, PIECE_SHAPES, 'A piece\'s shape'); if (v) p.shape = v; break; }
         case 'colour': case 'color': { const v = pick(a, ['flat', 'piece'] as const, key); if (v) p.colour = v; break; }
         case 'size-by': { const v = pick(a, PIECES_SIZE_BYS, 'size-by'); if (v) p.sizeBy = v; break; }

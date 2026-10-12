@@ -1461,6 +1461,16 @@ exports[`golden outputs: examples > pianoRollScale 1`] = `
 }
 `;
 
+exports[`golden outputs: examples > piecesBallAction 1`] = `
+{
+  "f": "- x120",
+  "g": "- x120",
+  "i": "- x120",
+  "s": "- x120",
+  "z": "- x120",
+}
+`;
+
 exports[`golden outputs: examples > piecesBalls3D 1`] = `
 {
   "a": "- x120",
@@ -1470,10 +1480,20 @@ exports[`golden outputs: examples > piecesBalls3D 1`] = `
 }
 `;
 
+exports[`golden outputs: examples > piecesBallsDepth 1`] = `
+{
+  "a": "- x120",
+  "b": "- x120",
+  "c": "- x120",
+  "d": "- x120",
+}
+`;
+
 exports[`golden outputs: examples > piecesScatterReturn 1`] = `
 {
   "f": "- x120",
   "s": "- x120",
+  "t": "- x120",
   "w": "- x120",
   "z": "- x120",
 }

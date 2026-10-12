@@ -2960,7 +2960,7 @@ Examples:
 Words: `picture-balls`, `ball-action`, `pieces-3d`
 
 ```
-picture-balls [width] across= lift= ball= wave= jitter= at= rot= color= shine= name= texture= map= tiles= sharp= tex-offset= tex-rot= bump= [glass]
+picture-balls [width] across= lift= ball= wave= jitter= scatter= depth-scatter= twist= instability= focus= blur= at= rot= color= shine= name= texture= map= tiles= sharp= tex-offset= tex-rot= bump= [glass]
 ```
 
 | Slot | What |
@@ -2971,6 +2971,12 @@ picture-balls [width] across= lift= ball= wave= jitter= at= rot= color= shine= n
 | ball | Ball size · 1 touches the neighbours. · default 0.9 · random: 0.45–1.2 |
 | wave | Wave · A ring wave rolling out from the middle. · default 0 · random: -0.3333333333333333–0.3333333333333333 |
 | jitter | Jitter · A random push forward or back per ball. · default 0 · random: 0–0.3333333333333333 |
+| scatter | Scatter · A random push per ball in every direction (X, Y and Z), the same each frame: a little breaks the grid up. · default 0 · random: 0–0.16666666666666666 |
+| depth-scatter | Depth scatter · A random push per ball towards or away from the camera only. · default 0 · random: -0.6666666666666666–0.6666666666666666 |
+| twist | Twist · Turns the balls round the middle, degrees per unit out: the outer balls turn most. · default 0 · random: -60–60 |
+| instability | Instability · Every ball wobbles round its place, each at its own pace. · default 0 · random: 0–0.08333333333333333 |
+| focus | Focus · The depth (z) where the balls are sharp. Pairs with Blur. · default 0 · random: -1–1 |
+| blur | Blur · Depth of field: out of focus, balls spread into soft discs that keep their light (0: everything sharp). · default 0 · random: 0–0.6666666666666666 |
 | at | random: (-0.6…0.6)×3 |
 | rot | random: (-45…45)×3 |
 | color | random: a harmonious colour |

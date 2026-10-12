@@ -646,17 +646,25 @@ function emitPieces(b: B, pc: PiecesSpec, pos: Ref, behind: Ref): Ref {
       'normalize(uv - m + 1e-5) * amount * exp(-length(uv - m) * 4.0)', 'The offset field: away from the mouse, strongest near it (amount at the pointer, fading over a quarter of the frame). Pieces reads it at each home.', 'vec2'), 'result');
   }
   let amount: Ref | null = null;
-  if (offset && pc.speed > 0) {
+  let scatter: Ref | null = null;
+  const scat = pc.scatter ?? 0;
+  if ((offset || scat > 0) && pc.speed > 0) {
     const lfo = mk(c, 'lfo', 'pieces:lfo', { waveform: 'sine', freq: pc.speed, amplitude: 0.5, offset: 0.5 }, { time: b.getTime() },
       `An LFO from 0 to 1 and back, ${fmt(pc.speed)} times a second: the picture breaks up and comes home.`);
-    amount = ref(expr(c, 'pieces:ease', 'Ease', [{ name: 'v', type: 'float', from: ref(lfo, 'value') }], 'smoothstep(0.15, 0.95, v)',
-      'The LFO eased: it rests at 0 a moment (the picture whole) before it scatters again. It is Pieces\' Amount.', 'float'), 'result');
+    const ease = ref(expr(c, 'pieces:ease', 'Ease', [{ name: 'v', type: 'float', from: ref(lfo, 'value') }], 'smoothstep(0.15, 0.95, v)',
+      `The LFO eased: it rests at 0 a moment (the picture whole) before it scatters again. It is Pieces' Amount${scat > 0 ? ' and, times Scatter, its Scatter' : ''}.`, 'float'), 'result');
+    if (offset) amount = ease;
+    if (scat > 0) {
+      scatter = ref(expr(c, 'pieces:scatter', 'Scatter', [{ name: 'v', type: 'float', from: ease }, { name: 'scatter', type: 'float', slider: { value: scat, min: 0, max: 1 } }], 'scatter * v',
+        'Scatter on the LFO: every piece\'s own random push (its direction and distance from the Seed), scaled by the eased LFO, so the pieces fly apart and land back home.', 'float'), 'result');
+    }
   }
   const node = mk(c, 'pieces', 'pieces', {
     shape: pc.shape, count: pc.count, size: pc.size, colourMode: pc.colour, sizeBy: pc.sizeBy, minSize: pc.sizeBy === 'none' ? 0.15 : 0, amount: 1,
     aspect: t?.src.aspect ?? 0,
-  }, { uv: pos, picture: t?.out, offset, amount, background: behind },
-  `Picture in pieces: “${pc.tex}” rebuilt from ${pc.count} ${pc.shape === 'glyph' ? 'glyphs' : `${pc.shape}s`} across, each the picture's colour ${pc.colour === 'piece' ? 'round its home (it carries its piece)' : 'at its home'}${pc.sizeBy !== 'none' ? `, sized by its ${pc.sizeBy}` : ''}. ${offset ? 'The offset moves them, and with them the picture.' : 'Wire a field into Offset ƒ to move them.'} What is behind shows between them (Background).`);
+    scatter: scat, seed: pc.seed ?? 1, scatterTurn: pc.scatterTurn ?? 0, scatterSize: pc.scatterSize ?? 0, dimFloor: pc.dim ?? 0,
+  }, { uv: pos, picture: t?.out, offset, amount, background: behind, scatter },
+  `Picture in pieces: “${pc.tex}” rebuilt from ${pc.count} ${pc.shape === 'glyph' ? 'glyphs' : `${pc.shape}s`} across, each the picture's colour ${pc.colour === 'piece' ? 'round its home (it carries its piece)' : 'at its home'}${pc.sizeBy !== 'none' ? `, sized by its ${pc.sizeBy}` : ''}${scat > 0 ? `, scattered up to ${fmt(scat)} each its own way (Seed ${fmt(pc.seed ?? 1)})` : ''}. ${offset ? 'The offset moves them, and with them the picture.' : 'Wire a field into Offset ƒ to move them.'} What is behind shows between them (Background).`);
   return ref(node, 'color');
 }
 

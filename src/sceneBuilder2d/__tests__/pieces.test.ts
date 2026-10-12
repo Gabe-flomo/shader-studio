@@ -74,3 +74,45 @@ describe('3D Scene Builder: Picture as balls', () => {
     expect(balls && balls.type === 'shape' && balls.tex?.tex).toBe('picture');
   });
 });
+
+describe('Scatter in the builders', () => {
+  it('2D: scatter, seed, scatter-turn, scatter-size and dim read, print back and build (Scatter on the Pace\'s LFO)', () => {
+    const recipe = 'texture pond aspect=1.5 · pieces pond count=90 shape=ball move=none scatter=0.05 seed=4 scatter-turn=30 scatter-size=0.2 dim=0.1';
+    const r = parseRecipe2D(recipe);
+    expect(r.errors).toEqual([]);
+    expect(r.scene.pieces).toMatchObject({ shape: 'ball', move: 'none', scatter: 0.05, seed: 4, scatterTurn: 30, scatterSize: 0.2, dim: 0.1 });
+    expect(canonicalScene(parseRecipe2D(printRecipe2D(r.scene)).scene)).toEqual(canonicalScene(r.scene));
+    const built = buildStandalone2D(r.scene);
+    const pieces = built.nodes.find(n => n.type === 'pieces')!;
+    expect(pieces.params).toMatchObject({ scatter: 0.05, seed: 4, scatterTurn: 30, scatterSize: 0.2, dimFloor: 0.1 });
+    expect(pieces.inputs.scatter.connection).toBeTruthy(); // Scatter × the eased LFO
+    expect(pieces.inputs.offset.connection).toBeFalsy();
+    const c = compileGraph({ nodes: built.nodes });
+    expect(c.errors ?? []).toEqual([]);
+  });
+
+  it('2D: an older recipe without them builds with no scatter at all', () => {
+    const { scene } = parseRecipe2D('texture pond · pieces pond move=noise');
+    const pieces = buildStandalone2D(scene).nodes.find(n => n.type === 'pieces')!;
+    expect(pieces.params).toMatchObject({ shape: 'circle', scatter: 0, scatterSize: 0, scatterTurn: 0, dimFloor: 0 });
+    expect(pieces.inputs.scatter.connection).toBeFalsy();
+  });
+
+  it('3D: picture-balls scatter, depth-scatter, twist and instability round-trip and reach both Balls (scene and colour)', () => {
+    const spec = parseRecipe([
+      'surface', 'texture picture',
+      'picture-balls width=4 across=51 lift=0.5 ball=0.92 scatter=0.02 depth-scatter=0.5 twist=10 instability=0.01 texture=picture name=Picture',
+      'camera dist=3.1 angle=0 elev=8',
+    ].join('\n')).spec;
+    expect(printRecipe(parseRecipe(printRecipe(spec)).spec)).toBe(printRecipe(spec));
+    expect(printRecipe(spec)).toMatch(/depth-scatter=0\.5/);
+    const built = buildStandaloneGraph(spec);
+    const all = (nodes: GraphNode[]): GraphNode[] => nodes.flatMap(n => [n, ...((n.params.subgraph as SubgraphData | undefined)?.nodes ? all((n.params.subgraph as SubgraphData).nodes) : [])]);
+    const balls = all(built.nodes).filter(n => n.type === 'pieceBalls');
+    expect(balls.length).toBe(2);
+    for (const b of balls) expect(b.params).toMatchObject({ scatter: 0.02, scatterDepth: 0.5, twist: 10, instability: 0.01 });
+    const r = compileGraph({ nodes: built.nodes });
+    expect(r.errors ?? []).toEqual([]);
+    expect(r.fragmentShader).toMatch(/pieces_rand4/);
+  });
+});
