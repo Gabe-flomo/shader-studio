@@ -37,6 +37,7 @@ import {
 } from '../../splatBuilder/spec';
 import { tileName } from '../ui/textFit';
 import { removeKeys } from '../builders/removable';
+import { dragByHandle, dragHandle } from '../../lib/dragGuard';
 
 const edit = (fn: (d: SplatBuilderSpec) => void, key?: string) => useSplatBuilder.getState().edit(fn, key);
 const r3 = (v: number) => Math.round(v * 1000) / 1000;
@@ -330,7 +331,7 @@ function EffectCard({ e, index, count }: { e: EffectSpec; index: number; count: 
   const keys = custom ? [] : Object.keys(getNodeDefinition(EFFECT_TYPE[e.kind])?.paramDefs ?? {}).filter(k => k !== 'on' && k !== 'relative');
   const up = (fn: (x: EffectSpec) => void) => edit(d => { const x = d.effects.find(y => y.id === e.id); if (x) fn(x); });
   return (
-    <div data-splat-effect={e.id} data-splat-effect-kind={e.kind} draggable {...removeKeys(() => edit(d => { d.effects = d.effects.filter(x => x.id !== e.id); }), info.label)}
+    <div data-splat-effect={e.id} data-splat-effect-kind={e.kind} {...dragByHandle} {...removeKeys(() => edit(d => { d.effects = d.effects.filter(x => x.id !== e.id); }), info.label)}
       onDragStart={ev => { ev.dataTransfer.setData('text/x-splat-effect', e.id); ev.dataTransfer.effectAllowed = 'move'; }}
       onDragOver={ev => { if (ev.dataTransfer.types.includes('text/x-splat-effect')) { ev.preventDefault(); setDragOver(true); } }}
       onDragLeave={() => setDragOver(false)}
@@ -341,7 +342,10 @@ function EffectCard({ e, index, count }: { e: EffectSpec; index: number; count: 
       }}>
       <div onClick={() => useSplatBuilder.getState().setPicked(picked ? null : e.id)}
         style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 6px 6px 8px', minHeight: 42, cursor: 'pointer' }}>
-        <Icon name="grip" size={13} style={{ color: tk.text.faint, cursor: 'grab', flexShrink: 0 }} />
+        {/* The only place a drag starts (lib/dragGuard.ts): dragging a slider inside the card moves the slider. */}
+        <span {...dragHandle} title="Drag to change the order" onClick={ev => ev.stopPropagation()} style={{ display: 'inline-flex', alignSelf: 'stretch', alignItems: 'center', padding: '0 4px', margin: '-6px -4px -6px -6px', color: tk.text.faint, flexShrink: 0 }}>
+          <Icon name="grip" size={13} />
+        </span>
         <span style={{ width: 18, height: 18, borderRadius: 5, background: alpha(tk.accent.base, 0.14), color: tk.accent.text, fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{index + 1}</span>
         <span data-muted={!e.on || undefined} style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1, ...(e.on ? {} : MUTED_DIM) }}>
           <b style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>{info.label}{!e.on && <MutedTag />}</b>
@@ -414,7 +418,7 @@ export function EffectsSection() {
         <div data-splat-stack style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {effects.map((e, i) => <EffectCard key={e.id} e={e} index={i} count={effects.length} />)}
         </div>
-        {effects.length > 1 && <BuilderNote>Drag a card onto another to put it before that one. Order matters: an Opacity floor after a Dissolve brings dissolved splats back.</BuilderNote>}
+        {effects.length > 1 && <BuilderNote>Drag a card by its grip onto another to put it before that one. Order matters: an Opacity floor after a Dissolve brings dissolved splats back.</BuilderNote>}
       </Group>
     </>
   );

@@ -71,6 +71,19 @@ input, textarea, [contenteditable]:not([contenteditable="false"]), pre, code, [d
   -webkit-touch-callout: none;
 }
 
+/* Desktop app (lib/desktopPolish.ts sets data-desktop): WKWebView natively drags pictures, links and
+   the controls inside a draggable card (a ghost image with a green +). Only what the app marks
+   draggable drags; card reordering starts from the grip (lib/dragGuard.ts). */
+[data-desktop] :is(img, a, svg, video, canvas, button, input, textarea, select, [role="slider"], [role="switch"]):not([draggable="true"]) {
+  -webkit-user-drag: none;
+}
+[data-desktop] [draggable="true"] {
+  -webkit-user-drag: element;
+}
+/* Handle-only cards (lib/dragGuard.ts): the grip shows it can be dragged. */
+[data-drag-handle] { cursor: grab; }
+[data-drag-handle]:active { cursor: grabbing; }
+
 /* The node graph's zoom layer where it hands off to layout zoom (WebKit: the desktop app, Safari).
    WebKit fits the system font's letter spacing to the size it is drawn at, so under layout zoom a 12px
    label set at 160% is laid out as 19px text and comes out narrower than the same label scaled: text

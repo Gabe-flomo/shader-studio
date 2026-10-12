@@ -68,7 +68,7 @@ export function ViewportLegend({ entries, lit, focused, note, onHover, onFocus, 
       style={{
         position: 'absolute', left: 12, top: 12, width: open ? LEGEND_W : undefined, maxHeight: 'calc(100% - 24px)', overflowY: 'auto', boxSizing: 'border-box',
         background: alpha(tk.bg.panel, 0.94), borderRadius: radius.lg, boxShadow: `${tk.shadow.float}, inset 0 0 0 1px ${tk.border.default}`, color: tk.text.primary,
-        backdropFilter: 'blur(6px)', pointerEvents: 'auto',
+        backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', pointerEvents: 'auto',
       }}>
       <button type="button" data-legend-toggle aria-expanded={open} onClick={toggle} title={open ? 'Fold the legend' : 'What is drawn on the picture'}
         style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', padding: '8px 10px', border: 0, background: 'none', cursor: 'pointer', color: tk.text.faint, font: `700 10.5px ${fontFamily.ui}`, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
