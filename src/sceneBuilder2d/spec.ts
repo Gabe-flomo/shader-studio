@@ -338,7 +338,7 @@ export const TONE_MODES = ['none', 'aces', 'agx', 'hable', 'reinhard2', 'tanh', 
 export type ToneMode = typeof TONE_MODES[number];
 
 export type GlowMode = 'off' | 'all' | 'selected';
-export const COLOUR_BYS = ['layer', 'length', 'angle', 'x', 'y', 'time', 'distance'] as const;
+export const COLOUR_BYS = ['layer', 'length', 'angle', 'x', 'y', 'time', 'distance', 'trap'] as const;
 export type ColourBy = typeof COLOUR_BYS[number];
 
 export interface LookSpec {
