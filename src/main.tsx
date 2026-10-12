@@ -23,6 +23,8 @@ import { nodePreviewRenderer } from './lib/nodePreviewRenderer'
 import { loadExampleGraphs } from './store/exampleIndex'
 import { installCameraKeeper } from './lib/cameraKeeper'
 import { installTouchGuards } from './lib/touchGuards'
+import { installDragGuard } from './lib/dragGuard'
+import { installDesktopPolish } from './lib/desktopPolish'
 import { installStorageLimit } from './files/storageLimitApp'
 import { installViewportWatcher } from './lib/viewport'
 import { resolveNodeAliases } from './nodes/definitions/aliases'
@@ -46,6 +48,10 @@ dropRetiredExperimentData()
 installCameraKeeper()
 // Long presses on touch screens: no browser menu over the app's own.
 installTouchGuards()
+// Card reordering drags only from a card's grip, never from a slider inside it (WebKit), and the
+// desktop app's WKWebView evened out with Chrome (native menu, image drags, pinch).
+installDragGuard()
+installDesktopPolish()
 installStorageLimit()
 installViewportWatcher()
 // Function cards: click / hover / ⌥-click a function name in any code (docs/expression-explainer.md).
