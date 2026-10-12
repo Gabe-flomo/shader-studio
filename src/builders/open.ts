@@ -35,6 +35,7 @@ import { editGridSceneInBuilder, openNewGridScene } from '../gridScene/actions';
 import { builderRecipeOf } from './recipe';
 import type { BuilderAction } from './doBuilders';
 import { editSplatSceneInBuilder, openNewSplatScene } from '../splatBuilder/actions';
+import { openNewWarpBuilder } from '../warpBuilder/actions';
 
 /**
  * What a new Grid Rules node starts with (newGridRules): params over its defaults, and a drawn start
@@ -105,6 +106,7 @@ export function startSceneKind(kind: SceneKind, o: { at?: { x: number; y: number
   else if (kind === 'grid') openNewGridScene(o.at);
   else if (kind === 'simulation') newGridRules();
   else if (kind === 'splat') openNewSplatScene(o.at);
+  else if (kind === 'warp') openNewWarpBuilder();
   else openAgentBuilder(null, { fromShell: o.fromShell });
 }
 

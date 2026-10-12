@@ -165,6 +165,11 @@ uv   = abs(uv) - offset
   part by part: a copy of uv multiplied back into uv), **Blend** (`mix(a, b, amount)`). Each side
   is a full block (pick it *From library*). **Split** undoes it into A then B in a chain.
 
+- **Open in Warp Builder** (the wave button on a block, or *Open stack in Warp Builder* beside
+  Empty block): the block, or every block of the stack, opens in the Warp Builder
+  ([warp-builder.md](warp-builder.md)) as rows of tiles. **Done: back to 2D** writes them back in
+  place; other transforms in the stack stay where they are.
+
 ### The library
 
 37 blocks in eight categories, each with a name, a line on what it does, a thumbnail of a grid

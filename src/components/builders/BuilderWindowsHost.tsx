@@ -19,6 +19,7 @@ import type { SceneBuilderShell as SceneBuilderShellT } from './SceneBuilderShel
 import { finishBuilder } from '../../builders/finish';
 import { useGridBuilder } from '../../gridScene/store';
 import { useSplatBuilder } from '../../splatBuilder/store';
+import { useWarpBuilder } from '../../warpBuilder/store';
 
 /** The Agent Builder's Done (and close): back to the graph, framed on the group it is building. */
 const finishAgentBuilder = () => finishBuilder(closeAgentBuilder, [useBuilderWindows.getState().agentBuilder?.groupId]);
@@ -34,6 +35,8 @@ const SceneBuilderShell = lazyWithSuspense<PropsOf<typeof SceneBuilderShellT>>((
 const GridSceneBuilder = lazyWithSuspense<Record<string, never>>(() => import('../gridScene/GridSceneBuilder').then(m => ({ default: m.GridSceneBuilder })));
 // The Splat builder (the Scene builder's Splat scene) loads only when it opens.
 const SplatBuilder = lazyWithSuspense<Record<string, never>>(() => import('../splatBuilder/SplatBuilder').then(m => ({ default: m.SplatBuilder })));
+// The Warp Builder (the Scene builder's Warp kind, and the 2D builder's "Open in Warp Builder") loads only when it opens.
+const WarpBuilder = lazyWithSuspense<Record<string, never>>(() => import('../warpBuilder/WarpBuilder').then(m => ({ default: m.WarpBuilder })));
 const ExpressionBuilderModal = lazyWithSuspense<Record<string, never>>(() => import('../exprBuilder/ExpressionBuilderModal').then(m => ({ default: m.ExpressionBuilderModal })));
 
 export function BuilderWindowsHost() {
@@ -44,6 +47,7 @@ export function BuilderWindowsHost() {
   const shell = useBuilderWindows(s => s.sceneShell);
   const gridSceneOpen = useGridBuilder(s => s.open);
   const splatOpen = useSplatBuilder(s => s.open);
+  const warpOpen = useWarpBuilder(s => s.open);
   // The builder's preview comes first: the main preview waits while one with its own is open.
   useEffect(() => watchBuilderPreview(), []);
   const builderGroupOk = useNodeGraphStore(s => !builder?.groupId || s.nodes.some(nd => nd.id === builder.groupId && isRulesGroup(nd)));
@@ -64,6 +68,7 @@ export function BuilderWindowsHost() {
 
       {gridSceneOpen && <GridSceneBuilder />}
       {splatOpen && <SplatBuilder />}
+      {warpOpen && <WarpBuilder />}
       {shell && <SceneBuilderShell key={`${shell.page}:${shell.note ?? ''}:${shell.keep ? 1 : 0}`} page={shell} />}
     </>
   );
