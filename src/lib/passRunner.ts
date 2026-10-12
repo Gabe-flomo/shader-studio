@@ -77,10 +77,14 @@ export class PassTargets {
     if (t && t.key === key) return t;
     if (t) { t.cur.dispose(); t.prev?.dispose(); }
     const [tw, th] = ppSize(w, h, p.scale, p.size);
-    const filter = p.filter === 'nearest' ? THREE.NearestFilter : THREE.LinearFilter;
+    // Full float (32-bit, for data): only where the GPU can draw into it, else half float. Smooth reads of
+    // it need OES_texture_float_linear; without that it reads exact texels.
+    const ext = this.renderer.extensions;
+    const full = p.format === 'float' && this.halfFloat && ext.has('EXT_color_buffer_float');
+    const filter = p.filter === 'nearest' || (full && !ext.has('OES_texture_float_linear')) ? THREE.NearestFilter : THREE.LinearFilter;
     const make = () => {
       const rt = new THREE.WebGLRenderTarget(tw, th, {
-        type: p.format === 'byte' || !this.halfFloat ? THREE.UnsignedByteType : THREE.HalfFloatType,
+        type: p.format === 'byte' || !this.halfFloat ? THREE.UnsignedByteType : full ? THREE.FloatType : THREE.HalfFloatType,
         format: THREE.RGBAFormat, depthBuffer: false, stencilBuffer: false,
         minFilter: filter, magFilter: filter, wrapS: WRAP[p.wrap], wrapT: WRAP[p.wrap],
       });

@@ -17,7 +17,7 @@ export interface PreviewPass {
   size?: number;
   scale: number;
   filter: 'linear' | 'nearest';
-  format: 'half' | 'byte';
+  format: 'half' | 'byte' | 'float';
 }
 
 type Uniforms = Record<string, number | number[]>;
@@ -87,7 +87,7 @@ export function makePreviewPasses(gl: WebGL2RenderingContext, vs: string, specs:
     const f = p.spec.filter === 'nearest' ? gl.NEAREST : gl.LINEAR;
     for (let i = 0; i < 2; i++) {
       gl.bindTexture(gl.TEXTURE_2D, p.tex[i]);
-      if (half && p.spec.format === 'half') gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, w, h, 0, gl.RGBA, gl.HALF_FLOAT, null);
+      if (half && p.spec.format !== 'byte') gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, w, h, 0, gl.RGBA, gl.HALF_FLOAT, null);
       else gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, f);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, f);
@@ -168,7 +168,7 @@ export function makePreviewPasses(gl: WebGL2RenderingContext, vs: string, specs:
 }
 
 /** A compile's Pass programs as a preview draws them (the live ones, in order): a builder's effects stack makes these. */
-export function previewPassesOf(passes: ReadonlyArray<{ slug: string; fragmentShader: string; scale: number; filter: 'linear' | 'nearest'; format: 'half' | 'byte'; live: boolean; size?: number }> | undefined): PreviewPass[] | undefined {
+export function previewPassesOf(passes: ReadonlyArray<{ slug: string; fragmentShader: string; scale: number; filter: 'linear' | 'nearest'; format: 'half' | 'byte' | 'float'; live: boolean; size?: number }> | undefined): PreviewPass[] | undefined {
   const out = (passes ?? []).filter(p => p.live).map(p => ({ slug: p.slug, fs: p.fragmentShader, scale: p.scale, filter: p.filter, format: p.format, ...(p.size ? { size: p.size } : {}) }));
   return out.length ? out : undefined;
 }

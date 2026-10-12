@@ -3762,7 +3762,7 @@ function PassThumbViz({ node }: { node: GraphNode }) {
   return (
     <div style={{ ...vizContainer(), padding: 4 }}>
       <canvas ref={ref} width={128} height={72} style={{ display: 'block', maxWidth: '100%', maxHeight: 120, margin: '0 auto', background: '#000', borderRadius: 3 }} />
-      <div style={{ fontSize: '9px', color: pal.overlay0, fontFamily: MONO, marginTop: 3 }}>texture · scale {scaleText} · {node.params.format === 'byte' ? '8-bit' : 'half float'}{passRepeat(node.params.repeat) > 1 ? ` · ×${passRepeat(node.params.repeat)} a frame` : ''}</div>
+      <div style={{ fontSize: '9px', color: pal.overlay0, fontFamily: MONO, marginTop: 3 }}>texture · scale {scaleText} · {node.params.format === 'byte' ? '8-bit' : node.params.format === 'float' ? 'full float' : 'half float'}{passRepeat(node.params.repeat) > 1 ? ` · ×${passRepeat(node.params.repeat)} a frame` : ''}</div>
       {live && <div style={{ fontSize: '9px', color: pal.overlay0, fontFamily: MONO }}>{live}</div>}
     </div>
   );
@@ -5213,6 +5213,7 @@ function NodeInlineVizSwitch({ node, onEnterGroup }: { node: GraphNode; onEnterG
     case 'prevFrame':
     case 'textureInput':     return <TextureBadgeViz         node={node} />;
     case 'pass':             return <PassThumbViz            node={node} />;
+    case 'dataTexture':      return <PassThumbViz            node={node} />;
     case 'agentsGroup':      return <AgentsGroupViz          node={node} onEnterGroup={onEnterGroup} />;
     case 'trailField':       return <TrailThumbViz           node={node} />;
     case 'vec2Const':        return <Vec2ConstViz            node={node} />;

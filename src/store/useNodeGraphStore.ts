@@ -6,6 +6,7 @@ import { requireFeature } from '../lib/plan';
 import { create } from 'zustand';
 import type { GraphNode, InputSocket, OutputSocket, DataType } from '../types/nodeGraph';
 import { VECTORIZABLE_NODES, swizzleTypes } from '../nodes/definitions/math';
+import { retypeDataTexture } from '../nodes/definitions/dataTexture';
 import { migrateNodeParams, GROUP_PORT_SENTINEL } from '../types/nodeGraph';
 import { LAYOUT_VERSION, needsLayoutSpread, spreadLegacyLayout } from './legacyLayout';
 import { askText } from '../components/ui/dialogStore';
@@ -573,6 +574,8 @@ function probeValuesEqual(a: Record<string, number[]>, b: Record<string, number[
 function retypeSwizzle(n: GraphNode): GraphNode {
   // A Data card's sockets follow its settings the same way (mode, output groups).
   if (n.type === 'data') return retypeDataNode(n);
+  // A Data Texture's sockets follow its fields and reads; Read channels' output its channels.
+  if (n.type === 'dataTexture' || n.type === 'readChannels') return retypeDataTexture(n);
   // A Transform card's sockets follow its Dimension (vec2 / vec3 / vec4).
   if (n.type === 'transform') return retypeTransform(n);
   if (n.type !== 'swizzle') return n;
@@ -3883,6 +3886,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     };
     // A Transform's sockets follow its Dimension.
     if (type === 'transform') newNode = retypeTransform(newNode);
+    // A Data Texture's sockets follow its fields and reads; Read channels' output its channels.
+    if (type === 'dataTexture' || type === 'readChannels') newNode = retypeDataTexture(newNode);
 
     const { activeGroupId, activeGroupPath } = get();
     // Inside a Scene Group: a shape is wired from Scene Pos and into the scene's

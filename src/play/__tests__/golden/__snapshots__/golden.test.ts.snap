@@ -2195,6 +2195,12 @@ exports[`golden outputs: examples > ttColourKey 1`] = `
 }
 `;
 
+exports[`golden outputs: examples > ttDataAdvect 1`] = `
+{
+  "speed": "- x120",
+}
+`;
+
 exports[`golden outputs: examples > ttDistanceRings 1`] = `
 {
   "level": "- x120",

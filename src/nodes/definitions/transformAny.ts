@@ -77,12 +77,15 @@ export function retypeTransform(n: GraphNode): GraphNode {
   return { ...n, inputs, outputs: want.outputs };
 }
 
+import { dataTextureSockets } from './dataTexture';
+
 /**
  * The sockets a new node of `type` should start with, given its params: a Transform's follow its
  * Dimension, everything else has its definition's. For node factories (builders, recipes, the Do
  * bar), which wire the new node straight away, before any load-time sync would run.
  */
 export function startingSockets(type: string, def: Pick<NodeDefinition, 'inputs' | 'outputs'>, params: Record<string, unknown>): { inputs: Record<string, InputSocket>; outputs: Record<string, OutputSocket> } {
+  if (type === 'dataTexture') return dataTextureSockets({ params });
   return type === 'transform' ? transformSockets(transformDim({ params })) : { inputs: def.inputs, outputs: def.outputs };
 }
 

@@ -18,7 +18,8 @@ export interface PassProgram {
   readsPrevious: string[];
   /** Size relative to the picture: 1, 0.5, 0.25 or 0.125. */
   scale: number;
-  format: 'half' | 'byte';
+  /** Float: 32-bit (RGBA32F), for data such as positions; half where the GPU can't draw into it. */
+  format: 'half' | 'byte' | 'float';
   filter: 'linear' | 'nearest';
   wrap: 'clamp' | 'repeat' | 'mirror';
   /** Something samples this Pass's Previous output: it keeps a second (ping-pong) texture. */

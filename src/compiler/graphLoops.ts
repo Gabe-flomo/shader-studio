@@ -41,6 +41,8 @@ export function isFrameDelayWire(c: { nodeId: string; outputKey: string }, byId:
   if (src.type === PASS && (c.outputKey === 'previous' || c.outputKey === 'step' || c.outputKey === 'steps')) return true;
   // A Feedback (texture) is a buffer: a loop back into it reads the buffer a frame ago (compiler/feedbackExpand.ts).
   if (src.type === FEEDBACK_TYPE && !src.bypassed) return true;
+  // So is a Data Texture: a read of it that feeds it sees last frame (compiler/dataTextureExpand.ts).
+  if (src.type === 'dataTexture' && !src.bypassed) return true;
   return isAgentEngineOnly(src);
 }
 
