@@ -37,6 +37,7 @@ class CameraInput {
   private fellBack = false;
   private deviceListeners = new Set<() => void>();
   private watchingDevices = false;
+  private settingsListeners = new Set<() => void>();
 
   getStatus(): CameraStatus { return this.status; }
 
@@ -79,10 +80,24 @@ class CameraInput {
     return () => { this.deviceListeners.delete(cb); };
   }
 
+  /**
+   * Told when the chosen camera or the resolution changes, from anywhere: Play's camera chip
+   * and the Texture node's (docs/texture-node.md) show the same setting, so each follows the other.
+   */
+  onSettings(cb: () => void): () => void {
+    this.settingsListeners.add(cb);
+    return () => { this.settingsListeners.delete(cb); };
+  }
+
+  private settingsChanged(): void {
+    for (const l of this.settingsListeners) l();
+  }
+
   /** Pick a camera (or '' for the default). If the camera is on, it switches now. */
   async setDevice(id: string): Promise<CameraStatus> {
     this.deviceId = id;
     save(DEVICE_KEY, id);
+    this.settingsChanged();
     return this.status === 'on' ? this.restart() : this.status;
   }
 
@@ -90,6 +105,7 @@ class CameraInput {
   async setResolution(r: CameraResolution): Promise<CameraStatus> {
     this.resolution = r;
     save(RES_KEY, r);
+    this.settingsChanged();
     return this.status === 'on' ? this.restart() : this.status;
   }
 
