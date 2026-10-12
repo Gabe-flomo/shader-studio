@@ -314,6 +314,59 @@ float tcFootprint(vec3 rd, vec3 gd, vec3 gn, float px) {
     return px * clamp(length(w), 1.0, 12.0);
 }`;
 
+/**
+ * Space (docs/timecube-space.md): a hash per repeated copy, and the built-in space warps. A warp works in a frame
+ * whose z is the box's time axis (ax as in tcUvt: 0 depth, 1 width, 2 height; tcTimeFrame swaps it in and back out),
+ * so Twist turns the frames round the line of time and Bend curves time upward. wp = (amount, frequency, phase, 0):
+ * Twist and Bend breathe with the phase, Wave and Noise travel with it. mode 1 twist, 2 bend, 3 wave, 4 noise; always
+ * a literal, so the compiler folds the choice.
+ */
+const TC_SPACE = `float tcHash3(vec3 c) {
+    return fract(sin(dot(c, vec3(127.1, 311.7, 74.7))) * 43758.5453);
+}
+vec3 tcTimeFrame(vec3 p, float ax) {
+    return ax < 0.5 ? p : ax < 1.5 ? p.zyx : p.xzy;
+}
+vec3 tcSpaceWarp(vec3 p, float mode, vec4 wp, float ax) {
+    vec3 q = tcTimeFrame(p, ax);
+    if (mode < 1.5) {
+        float a = wp.x * cos(wp.z) * 3.14159265 * wp.y * q.z;
+        float c = cos(a), s = sin(a);
+        q.xy = vec2(c * q.x - s * q.y, s * q.x + c * q.y);
+    } else if (mode < 2.5) {
+        float a = wp.x * cos(wp.z) * wp.y * q.z;
+        float c = cos(a), s = sin(a);
+        q.zy = vec2(c * q.z - s * q.y, s * q.z + c * q.y);
+    } else if (mode < 3.5) {
+        float w = 6.2831853 * wp.y * q.z + wp.z;
+        q.y += 0.25 * wp.x * sin(w);
+        q.x += 0.15 * wp.x * sin(0.7 * w + 1.3);
+    } else {
+        vec3 s = q * (2.0 * wp.y) + wp.z;
+        q += 0.2 * wp.x * vec3(sin(1.7 * s.y + cos(2.3 * s.z)), sin(1.9 * s.z + cos(2.1 * s.x)), sin(2.2 * s.x + cos(1.6 * s.y)));
+    }
+    return tcTimeFrame(q, ax);
+}`;
+
+/**
+ * The globals a Time Cube Shape (in a Scene Group wired into Time Cube View's Space) talks to the view through: the
+ * view sets the box (g_tcB, g_tcR) before it measures the scene; the shape keeps the nearest box's own point (g_tcQ)
+ * and its Repeat Scene cell (g_tcCell), with that box's distance (g_tcBest) to compare against.
+ */
+export const TC_SPACE_GLOBALS = ['g_tcB', 'g_tcR', 'g_tcBest', 'g_tcQ', 'g_tcCell'];
+export const TC_SPACE_DECL = 'vec3 g_tcB = vec3(0.0);\nfloat g_tcR = 0.0;\nfloat g_tcBest = 1e9;\nvec3 g_tcQ = vec3(0.0);\nvec3 g_tcCell = vec3(0.0);';
+
+/** A scene function's name, or '' when it is none (unwired, or an empty Scene Group's MISSING_SCENE). */
+const liveScene = (name: string | undefined) => (name && !/^MISSING_SCENE/.test(name) ? name : '');
+
+const WARP_CODE: Record<string, string> = { twist: '1.0', bend: '2.0', wave: '3.0', noise: '4.0' };
+/** How far each warp can stretch space, per unit of Amount × Frequency ($_Rw: the reach from the warp's axis). */
+const WARP_STRETCH: Record<string, string> = { twist: '3.14159265 * $_Rw', bend: '$_Rw', wave: '2.3', noise: '2.5' };
+const REP_MASK: Record<string, string> = {
+  x: 'vec3(1.0, 0.0, 0.0)', y: 'vec3(0.0, 1.0, 0.0)', z: 'vec3(0.0, 0.0, 1.0)',
+  xz: 'vec3(1.0, 0.0, 1.0)', xy: 'vec3(1.0, 1.0, 0.0)', xyz: 'vec3(1.0)',
+};
+
 const axisOf = (v: unknown) =>(v === 'x' || v === 'y' ? v : 'z');
 const AXIS_CODE: Record<string, string> = { z: '0.0', x: '1.0', y: '2.0' };
 const STEPS: Record<string, number> = { draft: 96, good: 160, best: 288 };
@@ -411,7 +464,18 @@ const VIEW_DEFAULTS = {
   keyAnimate: false, keyHueShift: 0, keyHueDrift: 0, pulse: 0, pulseDir: 'forward', pulseSpeed: 0.25, pulsePhase: 0, pulseCount: 3, pulseWidth: 0.15, pulseSoftness: 0.5,
   outline: 'off', edgeWidth: 1, edgeOpacity: 0.6, sliceEdge: 0, edgeColor: [0.92, 0.93, 0.96],
   camDist: 3.8, camAngle: 0.6, camElevation: 0.4, rotSpeed: 0, ortho: 0, fov: 1.8, camX: 0, camY: 0, camZ: 0,
+  repeat: false, repAxes: 'xz', repGap: 0.5, repCount: 0, repMirror: false, copyTime: 0, copyTimeBy: 'step', copyHue: 0, copySpin: 0,
+  warp: 'off', warpWhere: 'each', warpAmount: 0.5, warpFreq: 1, warpSpeed: 0, farDist: 30, spaceFog: 0.3, spaceStep: 0.6,
 };
+
+/** The Space section's settings (docs/timecube-space.md): off, the view compiles exactly as it did without them. */
+export const SPACE_PARAM_KEYS = ['repeat', 'repAxes', 'repGap', 'repCount', 'repMirror', 'copyTime', 'copyTimeBy', 'copyHue', 'copySpin',
+  'warp', 'warpWhere', 'warpAmount', 'warpFreq', 'warpSpeed', 'farDist', 'spaceFog', 'spaceStep'];
+
+/** Is the view drawing in space (repeated, warped, or through a wired Space scene)? Then it marches the space, not one box. */
+export function spaceOn(P: Record<string, unknown>, spaceWired = false): boolean {
+  return P.repeat === true || (typeof P.warp === 'string' && P.warp in WARP_CODE) || spaceWired;
+}
 
 const VIEW_PARAMS: Record<string, ParamDef> = {
   timeMode:     { section: 'Slice', label: 'Time', type: 'select', options: [{ value: 'slice', label: 'Slice (Offset scans the box)' }, { value: 'flow', label: 'Flow (the video flows through the box)' }], hint: 'Slice: the box stands still and Offset moves the crisp frame through it. Flow: the crisp frame stays at Frame position and the video flows through the box past it, wrapping round.' },
@@ -515,6 +579,37 @@ const VIEW_PARAMS: Record<string, ParamDef> = {
   camZ:         { section: 'Camera', label: 'Translate Z', type: 'float', min: -5, max: 5, step: 0.01, hint: 'Moves the camera and the point it looks at along the box\'s depth (time, when frames stack in depth): fly through the box.' },
   ortho:        { section: 'Camera', label: 'Flatten (isometric)', type: 'float', min: 0, max: 1, step: 0.01, hint: 'From perspective (0) to orthographic (1): parallel edges stay parallel, like an isometric drawing.' },
   fov:          { section: 'Camera', label: 'Zoom', type: 'float', min: 0.5, max: 5, step: 0.01, hint: 'Lens length: higher is zoomed in, with less perspective. With a March Camera wired, set it to that camera\'s FOV so lines stay the same width.' },
+
+  // Space (docs/timecube-space.md): the box in repeated or warped space. Repeat and Warp are switches (one recompile);
+  // their sliders are then live. Off, and with nothing wired into Space, the view is drawn exactly as before.
+  repeat: { section: 'Repeat', label: 'Repeat the box', type: 'bool', hint: 'Copies of the box on a grid, as far as you can see or a set number each side (one recompile; the sliders below are then live). Highlights, Frame motion, the shadow and box-edge outlines are left out in space.' },
+  repAxes: { section: 'Repeat', label: 'Repeat along', type: 'select', showWhen: { param: 'repeat', value: 'true' }, options: [
+    { value: 'xz', label: 'A floor (X and Z)' }, { value: 'x', label: 'A row (X, side to side)' }, { value: 'z', label: 'A line into the distance (Z)' },
+    { value: 'y', label: 'A tower (Y, up)' }, { value: 'xy', label: 'A wall (X and Y)' }, { value: 'xyz', label: 'Everywhere (X, Y and Z)' },
+  ], hint: 'Which ways the copies go.' },
+  repGap: { section: 'Repeat', label: 'Gap', type: 'float', min: 0, max: 6, step: 0.01, showWhen: { param: 'repeat', value: 'true' }, hint: 'Space between neighbouring boxes, in frame heights (times Box size). 0 packs them edge to edge.' },
+  repCount: { section: 'Repeat', label: 'Copies each side', type: 'float', min: 0, max: 20, step: 1, showWhen: { param: 'repeat', value: 'true' }, hint: 'How many copies each side of the middle one. 0 goes on forever (up to Far).' },
+  repMirror: { section: 'Repeat', label: 'Mirror every other', type: 'bool', showWhen: { param: 'repeat', value: 'true' }, hint: 'Flips every other copy, so neighbours face each other: a kaleidoscope hall.' },
+  copySpin: { section: 'Repeat', label: 'Turn per copy°', type: 'float', min: 0, max: 180, step: 0.5, showWhen: { param: 'repeat', value: 'true' }, hint: 'Turns each copy round its upright axis by a random angle up to this either way. The grid spaces out to fit the turned boxes. (With a Repeat Scene in Space, turn copies inside its Scene Group: a Rotate driven by Repeat Cell.)' },
+  // Per copy: the view's own Repeat, or a Repeat Scene in the wired Space (its cell).
+  copyTime: { section: 'Copies', label: 'Time per copy', type: 'float', min: -1, max: 1, step: 0.005, hint: 'Moves each copy\'s slice (in Flow, its flow) along by this much of the clip, so each copy shows a different moment. Copies of Repeat the box, or of a Repeat Scene wired into Space.' },
+  copyTimeBy: { section: 'Copies', label: 'Time steps by', type: 'select', options: [
+    { value: 'step', label: 'Place (one step per copy)' }, { value: 'distance', label: 'Distance from the middle' }, { value: 'random', label: 'Random per copy' },
+  ], hint: 'How Time per copy is shared out: copy by copy across the grid, in rings out from the middle copy, or at random.' },
+  copyHue: { section: 'Copies', label: 'Hue per copy', type: 'float', min: 0, max: 1, step: 0.01, hint: 'Turns each copy\'s colours round the colour wheel by a random amount up to this (1 = all the way round).' },
+  warp: { section: 'Warp', label: 'Warp', type: 'select', options: [
+    { value: 'off', label: 'Off' }, { value: 'twist', label: 'Twist (frames turn along time)' }, { value: 'bend', label: 'Bend (time curves up)' },
+    { value: 'wave', label: 'Wave (time snakes)' }, { value: 'noise', label: 'Noise (wobbly space)' },
+  ], hint: 'Warps the space the box is in (one recompile; the sliders below are then live). For any other warp, wire a Scene Group with a Time Cube Shape into Space.' },
+  warpWhere: { section: 'Warp', label: 'Warp what', type: 'select', showWhen: { param: 'warp', value: ['twist', 'bend', 'wave', 'noise'] }, options: [
+    { value: 'each', label: 'Each box (every copy the same)' }, { value: 'space', label: 'The whole space (copies differ)' },
+  ], hint: 'Each box: every copy is warped alike, round its own middle. The whole space: the warp runs through the grid, so copies far from the middle are warped most.' },
+  warpAmount: { section: 'Warp', label: 'Warp amount', type: 'float', min: -2, max: 2, step: 0.01, showWhen: { param: 'warp', value: ['twist', 'bend', 'wave', 'noise'] }, hint: 'How strong the warp is. Twist 1 turns half a turn per frame height of time.' },
+  warpFreq: { section: 'Warp', label: 'Warp frequency', type: 'float', min: 0.05, max: 6, step: 0.01, showWhen: { param: 'warp', value: ['twist', 'bend', 'wave', 'noise'] }, hint: 'How tightly it repeats along time: more waves, a tighter twist.' },
+  warpSpeed: { section: 'Warp', label: 'Warp speed', type: 'float', min: -4, max: 4, step: 0.01, showWhen: { param: 'warp', value: ['twist', 'bend', 'wave', 'noise'] }, hint: 'Animates it: Twist and Bend breathe back and forth, Wave and Noise travel along time (radians a second).' },
+  farDist:      { section: 'Space', label: 'Far', type: 'float', min: 2, max: 120, step: 0.5, hint: 'In space (Repeat, a Warp or Space wired): how far rays look, in frame heights. Further shows more copies and costs more.' },
+  spaceFog:     { section: 'Space', label: 'Fog', type: 'float', min: 0, max: 2, step: 0.01, hint: 'In space: fades far copies into the Background, so an endless grid fades out instead of turning to grain.' },
+  spaceStep:    { section: 'Space', label: 'Step (wired Space)', type: 'float', min: 0.1, max: 1, step: 0.01, hint: 'With a Scene Group wired into Space: how far the ray steps of the distance its warps report, like a March Loop\'s Step Scale. Lower it if a strong warp tears or speckles the boxes; higher is faster.' },
 };
 
 /**
@@ -598,6 +693,7 @@ export const TimeCubeViewNode: NodeDefinition = {
     rd: { type: 'vec3', label: 'Ray Dir', hint: 'A March Camera\'s Ray Dir.' },
     background: { type: 'vec3', label: 'Background', hint: 'What is behind the box: e.g. a March Loop\'s Color, so the box sits in that scene.' },
     sceneDist: { type: 'float', label: 'Scene distance', hint: 'A March Loop\'s Distance (with the same camera): scene surfaces nearer than the box hide it.' },
+    space: { type: 'scene3d', label: 'Space', hint: 'A Scene Group with a Time Cube Shape in it: the box drawn wherever that shape is, through the group\'s warps (Twist, Bend, the Warp Builder…) and a Repeat Scene. See docs/timecube-space.md.' },
   },
   outputs: {
     color: { type: 'vec3', label: 'Color', hint: 'The box over the background.' },
@@ -626,7 +722,9 @@ export const TimeCubeViewNode: NodeDefinition = {
   },
   paramDefs: VIEW_PARAMS,
   assignable: false,
-  glslFunctions: [TC_TILE, TC_SAMPLE, TC_FRAMES, TC_DEPTH, TC_FEATHER, TC_HUESAT, TC_KEY, TC_UVT, TC_SHAPE, TC_MOTION, TC_HUETURN, TC_PULSE, TC_RAYSEG, TC_MARCH],
+  glslFunctions: [TC_TILE, TC_SAMPLE, TC_FRAMES, TC_DEPTH, TC_FEATHER, TC_HUESAT, TC_KEY, TC_UVT, TC_SHAPE, TC_MOTION, TC_HUETURN, TC_PULSE, TC_RAYSEG, TC_MARCH, TC_SPACE],
+  // The globals a Time Cube Shape in the wired Space scene writes (the compiler also adds them when only a shape is used).
+  declarationsFor: (node: GraphNode) => (node.inputs?.space?.connection ? [TC_SPACE_DECL] : []),
   generateGLSL: (node: GraphNode, inputVars) => {
     const id = node.id, P = node.params;
     const D = VIEW_DEFAULTS as Record<string, unknown>;
@@ -650,7 +748,11 @@ export const TimeCubeViewNode: NodeDefinition = {
     // Optional features are switched on by a toggle (one recompile); their sliders are then live. Off,
     // their code is left out of the march, which keeps the plain view as fast as it was.
     const ANIM = keyAnimOn(P);
-    const HL = P.highlights === true, MOT = P.motion === true;
+    // Space (docs/timecube-space.md): repeated or warped, or through a wired Space scene, the view marches the space
+    // instead of one box. Highlights and Frame motion are left out there (their exact per-box sheets need the box).
+    const spaceFn = liveScene(inputVars.space);
+    const SPACE = spaceOn(P, !!spaceFn);
+    const HL = P.highlights === true && !SPACE, MOT = P.motion === true && !SPACE;
     const lay = volLayout(V), inset = volPx(V);
     const slice = inputVars.slice ?? f('slice');
     const wired = !!(inputVars.ro && inputVars.rd);
@@ -870,7 +972,158 @@ export const TimeCubeViewNode: NodeDefinition = {
       '        }\n',
       '    }\n',
     ].join('');
-    const lines = [
+    /**
+     * The march through space (docs/timecube-space.md). Each step maps the ray's point into a box's own space: the
+     * whole-space warp, the repeat (which copy, mirrored, turned), the per-box warp, then the shape (the box, or the
+     * wired Space scene's Time Cube Shape). Outside a box it sphere-traces (steps shortened by how much the warps
+     * stretch space, and by half a cell when repeated, so a turned or warped neighbour is never stepped over); inside
+     * it steps through the frames front to back as the plain view does, reading each sample at its own box point, so
+     * twist, bend and any wired warp bend the frames too. The slice frame is drawn where a box's side of the slice flips
+     * between two samples. Bounded: Quality's steps plus 160 for the gaps.
+     */
+    function spaceMarch(): string[] {
+      const REP = P.repeat === true;
+      const warp = typeof P.warp === 'string' && P.warp in WARP_CODE ? P.warp : 'off';
+      const where = P.warpWhere === 'space' ? 'space' : 'each';
+      const mask = REP_MASK[String(P.repAxes)] ?? REP_MASK.xz;
+      const by = P.copyTimeBy === 'random' ? 'tcHash3($_cv)' : P.copyTimeBy === 'distance' ? 'length($_cv)' : '($_cv.x + $_cv.y + $_cv.z)';
+      const warpAt = (w: string) => (warp !== 'off' && where === w ? [`        $_mp = tcSpaceWarp($_mp, ${WARP_CODE[warp]}, $_wp, ${AX});\n`] : []);
+      // The clip time read at box time z, per copy: in Flow each copy's flow is moved along by its time.
+      const tAt = (z: string) => (flow ? `fract(${z} + $_fsh + $_vt)` : z);
+      const sampleSp = (w: string) => `tcSample(${V}, ${lay}, ${inset}, vec3(${w}.xy, ${tAt(`${w}.z`)}))`;
+      const tintSp = `            $_col = mix($_col, mix(${c3('tintFrom')}, ${c3('tintTo')}, smoothstep(0.0, 1.0, ${tintCoord})), clamp(${f('tintAmount')}, 0.0, 1.0));\n`;
+      /** A colour turned round the wheel by its copy's hue, then fogged toward the background by distance. */
+      const finish = (c: string, ind: string) => [
+        `${ind}${c} = mix(clamp(tcHueTurn(${c}, $_hu), 0.0, 1.0), $_bgc, $_fg);\n`,
+      ].join('');
+      return [
+        `    vec3 $_bgc = ${bg};\n`,
+        // A bulge makes the box's distance overshoot; so do the warps, by how much they can stretch space.
+        '    float $_ks = 1.0 / (1.0 + 2.0 * $_rb.y / $_mnB);\n',
+        ...(warp !== 'off' ? [
+          `    vec4 $_wp = vec4(${f('warpAmount')}, max(${f('warpFreq')}, 0.01), u_time * ${f('warpSpeed')}, 0.0);\n`,
+          `    float $_Rw = ${where === 'space' ? '3.0 * length($_B)' : 'length($_B)'};\n`,
+          `    $_ks /= 1.0 + abs($_wp.x) * $_wp.y * ${WARP_STRETCH[warp]};\n`,
+        ] : []),
+        '    float $_mxs = 1e3;\n',
+        ...(REP ? [
+          `    float $_spin = radians(${f('copySpin')});\n`,
+          '    vec3 $_Bc = $_B + $_rb.y;\n',
+          // Turned copies need room for their corners: a cell as wide as the box's diagonal across X and Z.
+          '    if ($_spin != 0.0) $_Bc.xz = vec2(length($_Bc.xz));\n',
+          `    vec3 $_cell = 2.0 * $_Bc + max(${f('repGap')}, 0.0) * $_sz;\n`,
+          `    float $_rn = max(floor(${f('repCount')} + 0.5), 0.0);\n`,
+          `    vec3 $_cm = $_cell + (1.0 - ${mask}) * 1e3;\n`,
+          '    $_mxs = 0.5 * min($_cm.x, min($_cm.y, $_cm.z));\n',
+        ] : []),
+        ...(warp !== 'off' ? ['    $_mxs = min($_mxs, length($_B));\n'] : []),
+        ...(spaceFn ? ['    g_tcB = $_B;\n', '    g_tcR = min($_rb.x, $_mnB);\n', `    $_ks *= clamp(${f('spaceStep')}, 0.05, 1.0);\n`] : []),
+        `    float $_far = min(max(${f('farDist')}, 0.1), $_scn);\n`,
+        `    float $_fog = 0.1 * max(${f('spaceFog')}, 0.0);\n`,
+        `    float $_dl = length(2.0 * $_B) / ${steps}.0;\n`,
+        `    float $_tl = 2.0 * ${timeLen};\n`,
+        '    float $_j = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));\n',
+        `    float $_dc0 = clamp(${f('darkClear')}, -1.0, 1.0);\n`,
+        '    vec4 $_acc = vec4(0.0);\n',
+        '    float $_md = 1e3, $_tS = 0.0, $_t = 0.0;\n',
+        '    bool $_in = false;\n',
+        '    vec3 $_wP = vec3(0.0), $_cP = vec3(0.0);\n',
+        '    float $_gP = 0.0, $_dP = 0.0;\n',
+        `    for (int $_i = 0; $_i < ${steps + 160}; $_i++) {\n`,
+        '        if ($_t > $_far || $_acc.a > 0.995) break;\n',
+        '        vec3 $_mp = $_ro + $_rd * $_t;\n',
+        ...warpAt('space'),
+        '        vec3 $_cv = vec3(0.0);\n',
+        ...(REP ? [
+          `        $_cv = floor($_mp / $_cell + 0.5) * ${mask};\n`,
+          '        if ($_rn > 0.5) $_cv = clamp($_cv, -$_rn, $_rn);\n',
+          '        $_mp -= $_cv * $_cell;\n',
+          ...(P.repMirror === true ? ['        $_mp *= 1.0 - 2.0 * mod($_cv, 2.0);\n'] : []),
+          '        if ($_spin != 0.0) {\n',
+          '            float $_sa = $_spin * (2.0 * tcHash3($_cv + 3.17) - 1.0);\n',
+          '            float $_sc = cos($_sa), $_ss = sin($_sa);\n',
+          '            $_mp.xz = vec2($_sc * $_mp.x - $_ss * $_mp.z, $_ss * $_mp.x + $_sc * $_mp.z);\n',
+          '        }\n',
+        ] : []),
+        ...warpAt('each'),
+        ...(spaceFn ? [
+          // The wired scene: its Time Cube Shape keeps the nearest box's own point and its Repeat Scene cell.
+          '        g_tcBest = 1e9; g_tcQ = $_mp; g_tcCell = vec3(0.0);\n',
+          `        ${spaceFn}($_mp);\n`,
+          '        float $_d = g_tcBest;\n',
+          '        vec3 $_q = g_tcQ;\n',
+          '        $_cv += g_tcCell;\n',
+        ] : [
+          '        float $_d = tcShape($_mp, $_B, $_rb);\n',
+          '        vec3 $_q = $_mp;\n',
+        ]),
+        // The distance as measured sets the rim, the skin and inside / outside; the step is shortened (ks) for warps.
+        '        if ($_d < $_md) { $_md = $_d; $_tS = $_t; }\n',
+        `        float $_px = ${pixAt('$_t')};\n`,
+        // Outside every box: step toward the nearest one.
+        '        if ($_d > 0.5 * $_px) { $_in = false; $_t += clamp($_d * $_ks, 0.5 * $_px, $_mxs); continue; }\n',
+        // Inside: a stretch of frames. The first stretch into a box is a random part of a step, so neighbouring rays
+        // read at different depths (fine grain, not rings).
+        '        float $_len = $_in ? $_dl : (0.2 + 0.8 * $_j) * $_dl;\n',
+        '        vec3 $_qv = ($_q + $_B) * $_iB;\n',
+        `        vec3 $_wv = tcUvt($_qv, ${AX});\n`,
+        `        float $_vt = ${f('copyTime')} * ${by};\n`,
+        flow ? '        float $_slc = $_sl0;\n' : '        float $_slc = $_vt == 0.0 ? $_sl0 : fract($_sl0 + $_vt);\n',
+        '        float $_g = $_wv.z - $_kx * ($_wv.x - 0.5) - $_ky * ($_wv.y - 0.5);\n',
+        '        float $_gv = $_g;\n',
+        `        float $_hu = ${f('copyHue')} * tcHash3($_cv + 7.31);\n`,
+        '        float $_fg = 1.0 - exp(-$_fog * $_t);\n',
+        // The slice frame, where this box's side of the slice flips since the last sample.
+        '        if ($_in && $_cv == $_cP && ($_gP - $_slc) * ($_g - $_slc) < 0.0) {\n',
+        '            float $_u = ($_gP - $_slc) / ($_gP - $_g);\n',
+        '            vec3 $_ws = mix($_wP, $_wv, $_u);\n',
+        '            float $_ds = mix($_dP, $_d, $_u);\n',
+        `            vec3 $_sc = ${look(sampleSp('$_ws'))};\n`,
+        finish('$_sc', '            '),
+        '            float $_sin = 1.0 - smoothstep(-max($_fe, $_px), 0.5 * $_px, $_ds);\n',
+        `            float $_so = $_ew > 0.0 ? clamp(${f('sliceEdge')}, 0.0, 1.0) * (1.0 - smoothstep(0.5 * $_ew * $_px, (0.5 * $_ew + 1.0) * $_px, abs($_ds))) : 0.0;\n`,
+        `            float $_sa = max(clamp(${f('sliceOpacity')}, 0.0, 1.0) * $_sin, $_so);\n`,
+        `            $_sc = mix($_sc, ${edgeCol}, $_so / max($_sa, 1e-4));\n`,
+        '            $_acc.rgb += (1.0 - $_acc.a) * $_sa * $_sc;\n',
+        '            $_acc.a += (1.0 - $_acc.a) * $_sa;\n',
+        '        }\n',
+        `        float $_ob = tcFeather($_g, $_g, $_slc, $_tf, ${f('before')}, ${f('after')});\n`,
+        `        vec3 $_sq = vec3($_wv.xy, ${tAt('$_wv.z')});\n`,
+        ...(keyMode === 'off'
+          ? [`        vec3 $_c = tcSample(${V}, ${lay}, ${inset}, $_sq);\n`]
+          : [
+            '        vec3 $_c0, $_c1;\n',
+            `        float $_fwt = tcFrames(${V}, ${lay}, ${inset}, $_sq, $_c0, $_c1);\n`,
+            '        vec3 $_c = mix($_c0, $_c1, $_fwt);\n',
+          ]),
+        '        float $_op = $_ob;\n',
+        `        float $_lv = dot($_c, ${LUMA});\n`,
+        '        $_op *= 1.0 - abs($_dc0) + abs($_dc0) * ($_dc0 >= 0.0 ? smoothstep(0.02, 0.4, $_lv) : 1.0 - smoothstep(0.6, 0.98, $_lv));\n',
+        keyLines.replace(/^ {12}/gm, '        '),
+        // The box's skin: soft over Edge softness (at least a pixel), so its surface is anti-aliased.
+        '        float $_al = (1.0 - exp(-tcDepth($_op) * $_len / $_tl)) * smoothstep(-0.5 * $_px, max($_fe, $_px), -$_d);\n',
+        `        vec3 $_col = ${look('$_c')};\n`,
+        tintSp.replace(/^ {12}/gm, '        '),
+        finish('$_col', '        '),
+        '        $_acc.rgb += (1.0 - $_acc.a) * $_al * $_col;\n',
+        '        $_acc.a += (1.0 - $_acc.a) * $_al;\n',
+        '        $_in = true; $_wP = $_wv; $_gP = $_g; $_dP = $_d; $_cP = $_cv;\n',
+        '        $_t += $_len;\n',
+        '    }\n',
+        '    vec3 $_color = $_acc.rgb + (1.0 - $_acc.a) * $_bgc;\n',
+        '    float $_alpha = $_acc.a;\n',
+        // The rim glow round the nearest box the ray passes (or the shallowest it goes into), faded by the fog.
+        '    float $_rim = $_tS > $_scn ? 0.0 : clamp($_rimS * exp(-abs($_md) / $_rw), 0.0, 1.0) * exp(-$_fog * $_tS);\n',
+        `    $_color = mix($_color, ${c3('rimColor')}, $_rim);\n`,
+        '    $_alpha = max($_alpha, $_rim);\n',
+        ...(outline === 'silhouette' ? [
+          `    float $_eo = clamp(${f('edgeOpacity')}, 0.0, 1.0) * tcLine(abs($_md), ${pixAt('$_tS')}, $_ew) * exp(-$_fog * $_tS);\n`,
+          `    $_color = mix($_color, ${edgeCol}, $_eo);\n`,
+          '    $_alpha = max($_alpha, $_eo);\n',
+        ] : []),
+      ];
+    }
+    const head = [
       ...camera,
       `    float $_pix = 2.0 / (u_resolution.y * max(${f('fov')}, 0.05));\n`,
       `    float $_asp = ${lay}.w;\n`,
@@ -938,6 +1191,10 @@ export const TimeCubeViewNode: NodeDefinition = {
         ...(pulseDir === 'bounce' ? [`    $_pph = (1.0 - abs(1.0 - mod($_pph, 2.0))) * max(${f('pulseCount')}, 1.0);\n`] : []),
         `    vec4 $_pp = vec4(max(floor(${f('pulseCount')} + 0.5), 1.0), ${f('pulseWidth')}, ${f('pulseSoftness')}, $_pph);\n`,
       ]),
+    ];
+    if (SPACE) return { code: [...head, ...spaceMarch()].join('').replace(/\$_/g, `${id}_`), outputVars: { color: `${id}_color`, alpha: `${id}_alpha` } };
+    const lines = [
+      ...head,
       '    vec4 $_acc = vec4(0.0);\n',
       '    float $_eF = 0.0, $_eB = 0.0;\n',
       // The search box: the shape's reach plus room (mg) for its soft edge, glow and outline.
@@ -1093,6 +1350,63 @@ export const TimeCubeViewNode: NodeDefinition = {
       '    $_alpha = max($_alpha, $_eF * $_eo);\n',
     ];
     return { code: lines.join('').replace(/\$_/g, `${id}_`), outputVars: { color: `${id}_color`, alpha: `${id}_alpha` } };
+  },
+};
+
+// ── Time Cube Shape (in a Scene Group) ───────────────────────────────────────
+
+export const TIME_CUBE_SHAPE_TYPE = 'timeCubeShape';
+
+/**
+ * The Time Cube View's box as a shape for a Scene Group (docs/timecube-space.md). Wire the group into the view's Space
+ * socket: the view then draws its box wherever this shape is, through every warp before it in the group (Twist 3D,
+ * Bend 3D, a Warp Builder group…) and a Repeat Scene round the group. The view sets the box's size (g_tcB) before it
+ * measures the scene; the shape keeps the point it measured at (the box's own point, g_tcQ) and its Repeat Scene cell
+ * when it is the nearest box so far. Measured by anything else (a March Loop), it is a rounded box of its own Size.
+ */
+export const TimeCubeShapeNode: NodeDefinition = {
+  type: TIME_CUBE_SHAPE_TYPE,
+  label: 'Time Cube Shape',
+  category: '3D Primitives',
+  aliases: ['Time box shape', 'Time cube in a scene', 'Video box shape', 'Time cube SDF'],
+  description: 'A Time Cube View\'s box as a shape in a Scene Group. Warp its Position (Twist 3D, Bend 3D, Noise, a Warp Builder group…) and repeat the group (Repeat Scene), then wire the Scene Group into the Time Cube View\'s Space socket: the view draws the box of frames wherever this shape is, bent and copied as the scene is.',
+  brief: {
+    summary: 'The box of time as a shape for the 3D tools: whatever the Scene Group does to space, the Time Cube View draws its frames through.',
+    start: [
+      'Inside a Scene Group: Scene Pos → (any warps) → Time Cube Shape → Scene Output.',
+      'Wire the Scene Group (or a Repeat Scene round it) into a Time Cube View\'s Space socket.',
+      'The view sets the box\'s size (its Time stretch, Box size and Corner roundness); this card\'s Size is only used when something else measures the scene.',
+    ],
+  },
+  inputs: {
+    pos: { type: 'vec3', label: 'Position', hint: 'The point to measure, warped as you like: Scene Pos, or a warp\'s output.' },
+  },
+  outputs: {
+    dist: { type: 'float', label: 'Distance', hint: 'The distance to the box. Wire it into Scene Output.' },
+  },
+  defaultParams: { size: 1, roundness: 0.4 },
+  paramDefs: {
+    size: { label: 'Size (alone)', type: 'float', min: 0.1, max: 4, step: 0.01, hint: 'The box\'s size when no Time Cube View sets it (in a March Loop on its own). Wired into a Time Cube View\'s Space, the view\'s Box settings win.' },
+    roundness: { label: 'Roundness (alone)', type: 'float', min: 0, max: 1, step: 0.01, hint: 'Corner roundness when no Time Cube View sets it.' },
+  },
+  assignable: false,
+  glslFunctions: [TC_SHAPE],
+  declarationsFor: () => [TC_SPACE_DECL],
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+    const pos = inputVars.pos || 'vec3(0.0)';
+    const size = p(node.params.size, 1), round = p(node.params.roundness, 0.4);
+    return {
+      code: [
+        // The view's box (its 16:9 default, Time stretch 1.6, when no view has set it).
+        `    vec3 ${id}_B = g_tcB.x > 0.0 ? g_tcB : 0.5 * ${size} * vec3(1.7777778, 1.0, 1.6);\n`,
+        `    float ${id}_r = g_tcB.x > 0.0 ? g_tcR : clamp(${round}, 0.0, 1.0) * min(${id}_B.x, min(${id}_B.y, ${id}_B.z));\n`,
+        `    float ${id}_dist = tcRoundBox(${pos}, ${id}_B, ${id}_r);\n`,
+        // The nearest box so far keeps its own point and its copy (Repeat Scene's cell), for the view to read.
+        `    if (${id}_dist < g_tcBest) { g_tcBest = ${id}_dist; g_tcQ = ${pos}; g_tcCell = g_cell3; }\n`,
+      ].join(''),
+      outputVars: { dist: `${id}_dist` },
+    };
   },
 };
 

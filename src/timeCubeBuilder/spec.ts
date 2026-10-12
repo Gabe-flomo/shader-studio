@@ -15,9 +15,9 @@ import { isParamVisible } from '../compiler/uniformPatcher';
 export type Params = Record<string, unknown>;
 export type TcDisplay = 'cube' | 'stack';
 export type TcRole = 'source' | 'view' | 'stack' | 'drive';
-export type TcSection = 'source' | 'shape' | 'time' | 'colour' | 'motion' | 'camera' | 'look';
+export type TcSection = 'source' | 'shape' | 'time' | 'colour' | 'motion' | 'space' | 'camera' | 'look';
 
-export const TC_SECTIONS: TcSection[] = ['source', 'shape', 'time', 'colour', 'motion', 'camera', 'look'];
+export const TC_SECTIONS: TcSection[] = ['source', 'shape', 'time', 'colour', 'motion', 'space', 'camera', 'look'];
 
 /** The node type of each role. */
 export const ROLE_TYPE: Record<TcRole, string> = { source: 'timeCube', view: 'timeCubeView', stack: 'frameStack', drive: 'lfo' };
@@ -89,7 +89,7 @@ const SECTION_OF: Record<'source' | 'view' | 'stack', Record<string, TcSection>>
   source: { Stack: 'source', 'Frames from': 'source', Order: 'source' },
   view: {
     Slice: 'time', Shape: 'shape', Box: 'shape', Glow: 'colour', Look: 'colour', 'Colour key': 'colour', 'Key: everything else': 'colour', 'Key: animate': 'colour',
-    Highlights: 'motion', 'Frame motion': 'motion', Outline: 'look', Camera: 'camera',
+    Highlights: 'motion', 'Frame motion': 'motion', Repeat: 'space', Copies: 'space', Warp: 'space', Space: 'space', Outline: 'look', Camera: 'camera',
   },
   stack: { Layout: 'shape', Shape: 'shape', Cards: 'shape', Scan: 'time', Playback: 'time', Order: 'time', Scatter: 'motion', Highlights: 'motion', Focus: 'look', Camera: 'camera' },
 };
@@ -100,7 +100,7 @@ const PARAM_SECTION: Record<'source' | 'view' | 'stack', Record<string, TcSectio
   stack: { brightness: 'colour', contrast: 'colour', borderColor: 'colour', edgeColor: 'colour', shading: 'colour', hlColor: 'colour', hlTint: 'colour', background: 'look' },
 };
 /** The card section a setting shows under, renamed where the builder's section says it better. */
-const GROUP_NAME: Record<string, string> = { Look: 'Picture', Playback: 'Playback', Glow: 'Glow & tint', Box: 'Box', Stack: 'Frames', Order: 'Frame order' };
+const GROUP_NAME: Record<string, string> = { Space: 'Far & fog', Copies: 'Each copy', Look: 'Picture', Playback: 'Playback', Glow: 'Glow & tint', Box: 'Box', Stack: 'Frames', Order: 'Frame order' };
 
 export interface ParamGroup { role: 'source' | 'view' | 'stack'; title: string; keys: string[] }
 
@@ -128,7 +128,7 @@ export function groupsFor(section: TcSection, display: TcDisplay): ParamGroup[] 
   return out;
 }
 
-const TITLES: Record<TcSection, string> = { source: 'Source', shape: 'Shape', time: 'Time', colour: 'Colour', motion: 'Highlights & motion', camera: 'Camera', look: 'Look' };
+const TITLES: Record<TcSection, string> = { source: 'Source', shape: 'Shape', time: 'Time', colour: 'Colour', motion: 'Highlights & motion', space: 'Space', camera: 'Camera', look: 'Look' };
 export const sectionTitle = (s: TcSection) => TITLES[s];
 
 /** Every param key of a role that some builder section shows (the tests check none is left out). */
@@ -164,6 +164,14 @@ export function sectionSummary(spec: TimeCubeSpec, s: TcSection): string {
     case 'colour': return cube ? (v.keyMode && v.keyMode !== 'off' ? `Key: ${short(optLabel('view', 'keyMode', v.keyMode))}` : `Rim ${f2(v.rimStrength)} · tint ${f2(v.tintAmount)}`) : `Contrast ${f2(st.contrast)} · border ${f2(st.border)}`;
     case 'motion': return cube ? [v.highlights ? `${f2(v.hlCount)} highlights` : 'No highlights', v.motion ? 'frames move' : ''].filter(Boolean).join(' · ')
       : [Number(st.hlCount) > 0 ? `${f2(st.hlCount)} highlights` : 'No highlights', Number(st.spread) > 0 ? `spread ${f2(st.spread)}` : ''].filter(Boolean).join(' · ');
+    case 'space': {
+      if (!cube) return 'The box only (Cube)';
+      const parts = [
+        v.repeat === true ? `repeat ${short(optLabel('view', 'repAxes', v.repAxes)).toLowerCase()}${Number(v.repCount) > 0 ? ` · ${f2(v.repCount)} each side` : ''}` : '',
+        typeof v.warp === 'string' && v.warp !== 'off' ? short(optLabel('view', 'warp', v.warp)).toLowerCase() : '',
+      ].filter(Boolean);
+      return parts.length ? parts.join(' · ') : 'One box, no warp';
+    }
     case 'camera': {
       const p = cube ? v : st;
       const lens = cube ? (Number(v.ortho) >= 0.99 ? 'flat' : 'perspective') : short(optLabel('stack', 'projection', st.projection)).toLowerCase();
