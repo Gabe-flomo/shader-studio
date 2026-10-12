@@ -7,6 +7,7 @@
 import { create } from 'zustand';
 import { starterGridScene, type GridSceneSpec } from './spec';
 import { surpriseGridScene } from './surprise';
+import { keepDrafts } from '../builders/drafts';
 
 export type GridSection = 'shapes' | 'motion' | 'patterns' | 'rules' | 'look';
 export const GRID_SECTIONS: GridSection[] = ['shapes', 'motion', 'patterns', 'rules', 'look'];
@@ -119,3 +120,6 @@ export const useGridBuilder = create<GridBuilderState>((set, get) => ({
     set({ surpriseSeed: seed, brush: get().spec.shapes[0]?.id ?? 'erase' });
   },
 }));
+
+// Unbuilt edits are kept as a draft through a close, a reload or a crash (builders/drafts.ts).
+keepDrafts('grid', useGridBuilder, s => s.spec);

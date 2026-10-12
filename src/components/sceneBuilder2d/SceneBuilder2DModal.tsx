@@ -4,12 +4,12 @@
  * Left: the layers (shapes and combine groups, top to bottom = back to front). Middle: the tabs
  * (Space, Shapes, Look, Output, Recipe, Templates). Right: a live preview of what Build makes.
  * Build puts the graph on the canvas (or rebuilds the scene it was opened from, keeping the user's
- * own edits where it can); Done closes.
+ * own edits where it can) and stays open; Done builds (or rebuilds) and then closes.
  */
 import { OFFER_PIECES } from '../../nodes/notOffered';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useSceneBuilder2D, type Builder2DTab } from '../../sceneBuilder2d/store';
-import { buildFromBuilder2D } from '../../sceneBuilder2d/actions';
+import { buildFromBuilder2D, scene2dBuilder } from '../../sceneBuilder2d/actions';
 import {
   COLOUR_BYS, LOOK_MUTES_2D, MAX_DUP, MAX_LEVELS, MOTIONS, OUTPUT_SHOWS, SHAPES, SHAPE_BY_KIND, SPACES, SPACE_BY_KIND, TONE_MODES,
   COMBINE_CHOICES_2D, OP_GLYPH_2D, SHAPE_STYLES, allShapes, findItem, itemName, itemSummary, styleOf, newBlockOp, starterScene, newCombineOp, newDup, newGroup, newMotion, newShape, newSpaceOp, nextId, num, opLabel, spaceSummary,
@@ -47,8 +47,7 @@ import { newSeed } from '../../lib/surprise';
 import { SCENE_WINDOW, SceneCrumb } from '../builders/SceneCrumb';
 import { useThrottled } from '../builders/useBuilderPreview';
 import { BuilderSlider } from '../builders/BuilderSlider';
-import { finishBuilder } from '../../builders/finish';
-import { scene2dBuildIds } from '../../builders/finishScenes';
+import { buildStaying, closeBuilding, doneBuilding } from '../../builders/finish';
 import { TexturePicker } from '../builders/TexturePicker';
 import { MUTED_DIM, MuteToggle, MutedTag } from '../builders/MuteToggle';
 import { soloIn, soloKeys } from '../../builders/mute';
@@ -1098,7 +1097,6 @@ export function SceneBuilder2DModal() {
   const shapes = useSceneBuilder2D(s => allShapes(s.scene).length);
   const spaceCount = useSceneBuilder2D(s => s.scene.space.length);
   const gridSize = useSceneBuilder2D(s => (s.scene.grid ? `${s.scene.grid.cols} × ${s.scene.grid.rows}` : null));
-  const close = useSceneBuilder2D(s => s.close);
   const undo = useSceneBuilder2D(s => s.undo);
   const redo = useSceneBuilder2D(s => s.redo);
   const canUndo = useSceneBuilder2D(s => s.past.length > 0);
@@ -1137,20 +1135,25 @@ export function SceneBuilder2DModal() {
       });
     }} />
   );
-  const done = () => finishBuilder(close, scene2dBuildIds(useSceneBuilder2D.getState().targetSceneId));
+  // Done builds (or rebuilds) first and closes only when that worked; Build builds and stays (builders/finish.ts).
+  const done = () => void doneBuilding(scene2dBuilder);
+  const build = () => void buildStaying(scene2dBuilder);
+  const closeAsking = () => void closeBuilding(scene2dBuilder);
+  const doneTitle = editing ? 'Rebuild the scene with your edits, then close and show it on the graph' : 'Build the scene into the graph, then close and show it';
+  const buildTitle = editing ? 'Rebuild the scene it was built as, and keep the builder open' : 'Add the graph to the canvas and show it on the Output, and keep the builder open';
   const body = { space: <SpaceTab />, shapes: <ShapesTab />, combine: <CombineTab />, modify: <ModifyTab />, depth: <DepthTab />, look: <LookTab />, effects: <EffectsTab />, output: <OutputTab />, recipe: <RecipeTab />, templates: <TemplatesTab /> }[tab];
   void num;
   // A phone: the shared phone layout (StudioShell → PhoneStudio): the picture on top, the sections
   // as the bottom bar's tabs, Templates and Surprise me as its Presets, the layers a tab of their own.
   if (phone) return (
     <StudioShell prefsKey="scene-builder-2d" icon="mask" iconColor={tk.kind.fn} title={editing ? 'Your 2D scene' : 'A new 2D scene'} crumb={<SceneCrumb kind="2d" />}
-      onClose={close}
+      onClose={closeAsking}
       actions={<>
         <IconButton icon="undo" size="sm" label="Undo" disabled={!canUndo} onClick={undo} />
         <IconButton icon="redo" size="sm" label="Redo" disabled={!canRedo} onClick={redo} />
-        <Button size="sm" data-scene2d-done onClick={done}>Done</Button>
+        <Button size="sm" icon="rebuild" data-scene2d-build disabled={!shapes && !gridSize} onClick={build} title={buildTitle}>{editing ? 'Rebuild' : 'Build'}</Button>
       </>}
-      primary={{ label: editing ? 'Rebuild' : 'Build', onClick: () => { if (shapes || gridSize) buildFromBuilder2D(false); }, title: editing ? 'Rebuild the scene it was built as' : 'Add the graph to the canvas and show it on the Output' }}
+      primary={{ label: 'Done', onClick: done, title: doneTitle }}
       nav={<>{TABS.filter(t => t.id !== 'templates').map(t => <StudioNavItem key={t.id} id={t.id} icon={t.icon} label={t.label} selected={tab === t.id} onClick={() => setTab(t.id)} />)}</>}
       phonePanels={[{ id: 'layers', label: 'Layers', icon: 'layers', content: <LayerList /> }]}
       surprise={surpriseBar} presets={<TemplatesTab />}
@@ -1166,7 +1169,7 @@ export function SceneBuilder2DModal() {
       subtitle={`2D Scene Builder · ${editing ? 'editing a built scene' : 'a new scene'} · ${spaceCount} space · ${shapes} shape${shapes === 1 ? '' : 's'}${gridSize ? ` · a ${gridSize} grid` : ''}`}
       icon="mask"
       iconColor={tk.kind.fn}
-      onClose={close}
+      onClose={closeAsking}
       tabs={{ items: TABS, value: tab, onChange: id => setTab(id as Builder2DTab), ariaLabel: '2D Scene Builder sections' }}
       left={{ label: 'Layers', icon: 'layers', width: 260, content: <LayerList /> }}
       right={{ label: 'Preview', icon: 'eye', width: 340, content: <PreviewPanel /> }}
@@ -1176,12 +1179,12 @@ export function SceneBuilder2DModal() {
         <IconButton icon="redo" label="Redo" shortcut="cmd+shift+z" disabled={!canRedo} onClick={redo} />
       </>}
       footer={<>
-        {editing && <Button icon="copy" onClick={() => buildFromBuilder2D(true)} title="Leave the built scene as it is and build this one beside it">Build as a new copy</Button>}
-        <BuilderNote>{editing ? 'Rebuild replaces the scene it was built as, keeping settings you changed on its nodes.' : 'Build adds the graph to the canvas and shows it on the Output.'}</BuilderNote>
+        {editing && <Button icon="copy" onClick={() => void buildStaying({ label: '2D scene', build: () => buildFromBuilder2D(true) })} title="Leave the built scene as it is and build this one beside it">Build as a new copy</Button>}
+        <BuilderNote>{editing ? 'Rebuild replaces the scene it was built as (keeping settings you changed on its nodes) and stays open. Done rebuilds and closes.' : 'Build adds the graph to the canvas and stays open. Done builds and closes.'}</BuilderNote>
         <span style={{ flex: 1 }} />
-        {dirty && <BuilderNote style={{ color: tk.text.faint }}>Not built yet</BuilderNote>}
-        <Button onClick={done}>Done</Button>
-        <Button variant="primary" icon="rebuild" disabled={!shapes && !gridSize} onClick={() => buildFromBuilder2D(false)}>{editing ? 'Rebuild' : 'Build'}</Button>
+        {(dirty || !editing) && (shapes > 0 || !!gridSize) && <BuilderNote data-scene2d-unbuilt style={{ color: tk.text.faint }}>{editing ? 'Changed · Done rebuilds it' : 'Not built yet · Done builds it'}</BuilderNote>}
+        <Button icon="rebuild" data-scene2d-build disabled={!shapes && !gridSize} onClick={build} title={buildTitle}>{editing ? 'Rebuild' : 'Build'}</Button>
+        <Button variant="primary" icon="check" data-scene2d-done onClick={done} title={doneTitle}>Done</Button>
       </>}
     >
       <div style={{ padding: '14px 16px' }}>{body}</div>
