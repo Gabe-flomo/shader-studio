@@ -8,7 +8,7 @@
  * opening the gallery never stalls, at the screen's pixel density, and kept for the session.
  */
 import { useEffect, useState, type DragEvent } from 'react';
-import { GALLERY_SHAPES, renderThumbnail, type GalleryShape } from '../../sceneBuilder/thumbnails';
+import { OFFERED_GALLERY_SHAPES, renderThumbnail, type GalleryShape } from '../../sceneBuilder/thumbnails';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
 import { tileName } from '../ui/textFit';
@@ -116,7 +116,7 @@ export function ShapeGallery({ onPick, size = PX, minTile = 76 }: { onPick: (g: 
   return (
     <div role="list" aria-label="Shapes" data-shape-gallery
       style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fill, minmax(${minTile}px, 1fr))`, gap: 4 }}>
-      {GALLERY_SHAPES.map(g => <div role="listitem" key={g.key} style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}><Tile g={g} onPick={onPick} size={size} /></div>)}
+      {OFFERED_GALLERY_SHAPES.map(g => <div role="listitem" key={g.key} style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}><Tile g={g} onPick={onPick} size={size} /></div>)}
     </div>
   );
 }

@@ -4,8 +4,8 @@
  * These are obscurity, not security. They are plain strings in the app's
  * bundle: anyone who reads the app's code (a minute with the developer tools,
  * or `strings` on the desktop binary) has them, and with them can decrypt any
- * .playfile or sealed node pack the app ever wrote. What they buy is that a
- * .playfile isn't a ZIP any archive tool opens, and a sealed node's GLSL
+ * .play file or sealed node pack the app ever wrote. What they buy is that a
+ * .play file isn't a ZIP any archive tool opens, and a sealed node's GLSL
  * isn't text in a file: casual opening, extraction and importing elsewhere
  * stop working, and a changed file is refused. They don't stop a determined
  * person, and nothing about them should be described as protection against
@@ -19,7 +19,7 @@
  * here so that swap touches one file.
  */
 
-/** The .playfile container (v2): mixed with each file's own salt through HKDF. */
+/** The .play file container (v2): mixed with each file's own salt through HKDF. */
 export const PLAYFILE_CONTAINER_SECRET = 'playfield/playfile-container/v2/b7e3d2c1-5a48-4f6e-9c0d-1e2f3a4b5c6d';
 
 /** Sealed node packs (v1): mixed with each node's own salt through HKDF. */

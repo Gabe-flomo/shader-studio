@@ -2,7 +2,7 @@
  * videoActions.ts — a video onto a Texture node (docs/texture-node.md): a dropped or picked
  * file, one from the video library, or one fetched by URL. The file is kept in the video
  * library (`params.videoId`), never in the graph itself: videos are too big for a saved
- * graph's storage (a series keeps 3 MB of history). A .playfile carries the file
+ * graph's storage (a series keeps 3 MB of history). A .play file carries the file
  * (playfile/bundle.ts videoIdsIn). A graph opened where the library doesn't have it shows
  * the video as missing, with Re-link.
  */

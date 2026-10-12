@@ -1,6 +1,6 @@
 # Node packs
 
-A node pack is a set of your node types in one `.playfile`
+A node pack is a set of your node types in one `.play`
 ([playfile-format.md](playfile-format.md)), signed by you and optionally
 sealed, with the things that show how to use them alongside: example graphs,
 presentations, GLSL shaders, background images and notes. Making one is Pro
@@ -99,7 +99,7 @@ major. Reusing a version that has gone out already is flagged. After the
 download the project remembers the export (version, time, signer, sealed, size)
 and moves to that version.
 
-The file is written by the one `.playfile` writer:
+The file is written by the one `.play` writer:
 
 ```
 manifest.json
@@ -145,4 +145,4 @@ namespacing; dependency collection (source graphs, linked presentations,
 unresolved nodes); validation; versions and re-export; assembly; a sealed pack
 compiling on another machine; the import recording the pack's category and
 examples (renamed ones too); a newer version updating in place; and Video
-layers' files travelling in `.playfile` exports.
+layers' files travelling in `.play` exports.

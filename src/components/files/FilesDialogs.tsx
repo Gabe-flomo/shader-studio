@@ -83,13 +83,13 @@ export function DownloadDialog({ inv, ids, onClose }: { inv: Inventory; ids: str
   for (const n of sum.items) bySection.set(n.section, (bySection.get(n.section) ?? 0) + 1);
 
   return (
-    <Modal title={`Download ${plural(sum.items.length, 'item')}`} subtitle="A .playfile that opens anywhere, or a ZIP that Install reads back" icon="export" onClose={onClose} width={480}
+    <Modal title={`Download ${plural(sum.items.length, 'item')}`} subtitle="A .play file that opens anywhere, or a ZIP that Install reads back" icon="export" onClose={onClose} width={480}
       footer={<>
         <span style={{ flex: 1, font: `500 12px ${fontFamily.mono}`, color: tk.text.muted }}>≈ {formatSize(sum.size)}</span>
         <Button variant="ghost" onClick={onClose}>Cancel</Button>
         {isTauri() && <Button disabled={busy || !sum.items.length} icon="folder" onClick={() => { void go('folder'); }}>Save to folder…</Button>}
         <Button disabled={busy || !sum.items.length} icon="folder" onClick={() => { void go('download'); }}>{isTauri() ? 'Save ZIP…' : 'ZIP'}</Button>
-        <Button variant="primary" disabled={busy || !sum.items.length} icon="export" onClick={() => { void goPlayfile(); }}>{isTauri() ? 'Save .playfile…' : '.playfile'}</Button>
+        <Button variant="primary" disabled={busy || !sum.items.length} icon="export" onClick={() => { void goPlayfile(); }}>{isTauri() ? 'Save .play file…' : '.play file'}</Button>
       </>}>
       <div style={{ padding: '14px 20px 18px', display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>

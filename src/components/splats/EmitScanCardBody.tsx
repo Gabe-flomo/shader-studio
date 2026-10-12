@@ -1,7 +1,7 @@
 /**
  * The Emit card's scan, when its Shape is Splat scan (docs/splat-scene.md "Agents as splats"): which scan the walkers
  * are born from (a drop, the file picker, the library or a generated ball), and how it read. The scan is kept like a
- * Splat Scene's (videoId, so .playfile bundles carry it).
+ * Splat Scene's (videoId, so .play file bundles carry it).
  */
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';

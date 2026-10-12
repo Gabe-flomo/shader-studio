@@ -19,6 +19,7 @@ import { LEARN3D_EXAMPLE_INDEX, LEARN3D_EXAMPLE_KEYS } from './learn3dExampleInd
 import { CURVED_EXAMPLE_INDEX, CURVED_EXAMPLE_KEYS } from './curvedSpaceExampleIndex';
 import { REPEAT_SCENE_EXAMPLE_INDEX, REPEAT_SCENE_EXAMPLE_KEYS } from './repeatSceneExampleIndex';
 import { PIECES_EXAMPLE_INDEX, PIECES_EXAMPLE_KEYS } from './piecesExampleIndex';
+import { OFFER_PIECES } from '../nodes/notOffered';
 import { CURVE_TRACE_EXAMPLE_INDEX, CURVE_TRACE_2D_KEYS, CURVE_TRACE_3D_KEYS } from './curveTraceExampleIndex';
 import { COMBO_EXAMPLE_INDEX } from './comboExamples';
 import { MATRIX_EXAMPLE_INDEX, MATRIX_EXAMPLE_KEYS } from './matrixExamples';
@@ -276,6 +277,9 @@ export async function loadExampleGraphs(): Promise<Record<string, ExampleGraph>>
   return mod.EXAMPLE_GRAPHS;
 }
 
+/** Examples in no folder on purpose (hidden, not deleted): they still open by key. Pieces and Balls (nodes/notOffered.ts). */
+export const HIDDEN_EXAMPLE_KEYS: readonly string[] = OFFER_PIECES ? [] : PIECES_EXAMPLE_KEYS;
+
 // ── Example folders ──────────────────────────────────────────────────────────
 // Groups example keys into categories for the desktop NodePalette's Examples
 // browser and the mobile examples picker (App.tsx) — one taxonomy, shared, so
@@ -298,7 +302,8 @@ export const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: string
   { label: "Effects & Lens",    color: ctp.mauve, keys: ['echoTrails','feedbackSmear','crtTv','lensBarrel', ...RAYS_EXAMPLE_KEYS] },
   { label: "Space & Texture",   color: ctp.flamingo, keys: ['waveTextureDemo','waveInterference','magicTextureDemo','neonFloorGrid','spaceAtlas'] },
   { label: "Grid",              color: ctp.sky, keys: [...GRID_EXAMPLE_KEYS, ...LEARN_GRID_KEYS, 'gridNeighborDisplaced','gridMetaballs','gridBreathing','gridDensityWave','gridLavaLamp','beatGrid'] },
-  { label: "Pictures in pieces", color: ctp.sky, keys: PIECES_EXAMPLE_KEYS },
+  // Pieces and Balls are hidden, not deleted (nodes/notOffered.ts): the examples still open by key (What's new links).
+  ...(HIDDEN_EXAMPLE_KEYS.length ? [] : [{ label: "Pictures in pieces", color: ctp.sky, keys: PIECES_EXAMPLE_KEYS }]),
   { label: "Matrices",          color: ctp.peach, keys: MATRIX_EXAMPLE_KEYS },
   { label: "Data",              color: ctp.teal, keys: DATA_EXAMPLE_KEYS },
   { label: "Halftone",          color: '#a6e3d5', keys: ['cmykNoise','webcamCmyk'] },

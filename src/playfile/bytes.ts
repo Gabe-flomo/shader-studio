@@ -1,5 +1,5 @@
 /**
- * Small byte helpers for the .playfile container: text, base64, hex,
+ * Small byte helpers for the .play file container: text, base64, hex,
  * SHA-256 and the canonical JSON a signature covers. Synchronous and free of
  * the DOM, so the reader, the writer and sealing run the same in tests.
  */

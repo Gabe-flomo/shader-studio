@@ -2,7 +2,7 @@
  * library.ts — splat scans in the library (docs/splat-scene.md "Files").
  *
  * A scan is kept like a video: its bytes in the library's file store (lib/backgroundLibrary.ts, the `videos` store),
- * the node naming it by `videoId`. So it travels the way videos do: in .playfile bundles (bundle.ts videoIdsIn finds
+ * the node naming it by `videoId`. So it travels the way videos do: in .play file bundles (bundle.ts videoIdsIn finds
  * `videoId`), library ZIPs, the backup folder and the workspace folder (shared between the browser and the desktop
  * app). Video lists leave scans out (isSplatType). Each format has its own type, `model/x-splat-<format>`.
  */

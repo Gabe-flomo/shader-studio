@@ -39,7 +39,7 @@ export interface AeUnitRef {
 export interface AeZone {
   /**
    * A kept sound's id (lib/backgroundLibrary.ts, the Library's Sounds). Named like a drum pad's
-   * sample, so the Library's "used by", clean-up and .playfile bundling find it (lib/videoUsage.ts).
+   * sample, so the Library's "used by", clean-up and .play file bundling find it (lib/videoUsage.ts).
    */
   sampleId: string;
   name: string;

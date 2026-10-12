@@ -177,8 +177,8 @@ describe('the recover decision', () => {
   });
 
   it('offers the newest autosave with work in it when the newest is a blank canvas, and lists the others', () => {
-    const blank: SnapshotMeta = { ...snap, file: snapshotFileName(9000, 'playfile'), at: 9000, work: 0 };
-    const work: SnapshotMeta = { ...snap, file: snapshotFileName(8000, 'playfile'), at: 8000, work: 12 };
+    const blank: SnapshotMeta = { ...snap, file: snapshotFileName(9000, 'play'), at: 9000, work: 0 };
+    const work: SnapshotMeta = { ...snap, file: snapshotFileName(8000, 'play'), at: 8000, work: 12 };
     const older: SnapshotMeta = { ...snap, file: snapshotFileName(7000), at: 7000, work: 10 };
     const d = recoverDecision(prev, [older, blank, work], null, fmt);
     expect(d.offer).toBe(true);

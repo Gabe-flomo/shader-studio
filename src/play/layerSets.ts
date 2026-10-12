@@ -28,7 +28,7 @@
  *   layer kinds    the saved kinds the set's Script layers are made from
  *   media          pictures are inside the layers already; videos and sounds
  *                  are named by library id or linked-folder reference
- *                  (listed in `media`; a .playfile export bundles them)
+ *                  (listed in `media`; a .play file export bundles them)
  *
  * Anything that touches the set but names something outside is left out and
  * listed ("Not included: mapping Lows → Radius (Radius isn't in the set)").
@@ -39,7 +39,7 @@
  * is one undo step for the caller.
  *
  * Stored like drum kits: one list in localStorage (`shader-studio:layer-sets`),
- * so sets travel in library ZIPs, `.playfile` library items (with the videos
+ * so sets travel in library ZIPs, `.play` library items (with the videos
  * and sounds they name), profile ZIPs and the workspace folder, and show on
  * the Files page under Presets → Layer sets. Pure over a KV.
  */

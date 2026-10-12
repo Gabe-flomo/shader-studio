@@ -2,7 +2,7 @@
  * projection.ts — projection mapping for the output window (docs/projection.md).
  *
  * A Play's mapping setup travels in its record (`play.projection`), so it is
- * saved with the graph and carried in .playfile; presets (per venue or
+ * saved with the graph and carried in .play file; presets (per venue or
  * projector) are kept on this device.
  *
  * Coordinates:

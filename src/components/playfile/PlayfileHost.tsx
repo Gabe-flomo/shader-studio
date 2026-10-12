@@ -1,12 +1,12 @@
 /**
- * PlayfileHost — the .playfile dialogs, mounted once beside the app:
+ * PlayfileHost — the .play file dialogs, mounted once beside the app:
  *
  *   Open (preview → import → result): what's inside, who signed it, what's
  *     sealed, what clashes (keep both or replace), then the import.
  *   Node pack: export node types as a signed pack, optionally sealed.
- *   The export format menu: ".playfile" or the readable format, at a button.
+ *   The export format menu: ".play" or the readable format, at a button.
  *
- * It also opens .playfile files dropped anywhere on the window, and (desktop)
+ * It also opens .play files dropped anywhere on the window, and (desktop)
  * files opened with the app (the file association) or dropped on it.
  */
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
@@ -26,7 +26,7 @@ import { formatSize } from '../../utils/library';
 import { errorMessage } from '../../utils/fileIO';
 import { isStorageLimitError } from '../../files/storageLimit';
 import { useBreakpoint, isMobile } from '../../hooks/useBreakpoint';
-import { isContainerName, KIND_LAYOUT, PLAYFILE_EXT, type ItemKind } from '../../playfile/format';
+import { isContainerName, KIND_LAYOUT, PLAYFILE_EXT, PLAYFILE_LABEL, type ItemKind } from '../../playfile/format';
 import type { Choice, ImportRow, ImportSummary, Pick } from '../../playfile/importer';
 import { currentAuthorName, exportNodePack, openPlayfileBytes, runImport, usePlayfileUi, type OpenImport } from '../../playfile/app';
 import { existingAuthorKey, setAuthorName, trustedFor } from '../../playfile/signing';
@@ -56,7 +56,7 @@ export function PlayfileHost() {
   const importing = usePlayfileUi(s => s.importing);
   const pack = usePlayfileUi(s => s.pack);
 
-  // A .playfile dropped anywhere opens its preview (pages with their own drop handling call preventDefault first).
+  // A .play file dropped anywhere opens its preview (pages with their own drop handling call preventDefault first).
   useEffect(() => {
     const over = (e: DragEvent) => { if (e.dataTransfer?.types.includes('Files')) e.preventDefault(); };
     const drop = (e: DragEvent) => {
@@ -317,7 +317,7 @@ function NodePackDialog({ ids, onClose }: { ids: string[]; onClose: () => void }
   };
   return (
     <Modal title="Export a node pack" subtitle={`${plural(defs.length, 'node type')} as one ${PLAYFILE_EXT} file, signed by you`} icon="nodes" onClose={onClose} width={480}
-      footer={<><span style={{ flex: 1 }} /><Button variant="ghost" onClick={onClose}>Cancel</Button><Button variant="primary" icon="export" disabled={busy || !defs.length} onClick={() => { void go(); }}>{busy ? 'Exporting…' : `Export ${PLAYFILE_EXT}`}</Button></>}>
+      footer={<><span style={{ flex: 1 }} /><Button variant="ghost" onClick={onClose}>Cancel</Button><Button variant="primary" icon="export" disabled={busy || !defs.length} onClick={() => { void go(); }}>{busy ? 'Exporting…' : `Export ${PLAYFILE_LABEL}`}</Button></>}>
       <div style={{ padding: '14px 20px 18px', display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
           {defs.map(d => <span key={d.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 9px', borderRadius: 7, background: tk.bg.field, font: `500 12px ${fontFamily.ui}`, color: tk.text.secondary }}>{d.sealed && <Icon name="lock" size={11} />}{d.label}</span>)}

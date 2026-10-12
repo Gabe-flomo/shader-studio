@@ -130,13 +130,13 @@ export function MobileTopBar({ page, onPageChange, onRecord, onClear }: {
             page === 'present'
               ? { label: 'Back to the Studio', icon: 'nodes', onSelect: () => onPageChange('studio') }
               : { label: 'Present', icon: 'slides', hint: 'Teach with your Plays: steps of text, pictures, sliders and code', onSelect: () => onPageChange('present') },
-            { label: 'Import a file', icon: 'import', hint: 'A .playfile, a graph, or a .present.json (opens on Present)', onSelect: () => { void importAnyFile(onPageChange); } },
+            { label: 'Import a file', icon: 'import', hint: 'A .play file, a graph, or a .present.json (opens on Present)', onSelect: () => { void importAnyFile(onPageChange); } },
             page === 'glsl'
               ? { label: 'Back to the Studio', icon: 'nodes', onSelect: () => onPageChange('studio') }
               : { label: 'GLSL editor', icon: 'code', hint: 'Write a shader by hand; its Code Explorer shows how functions are used', onSelect: () => onPageChange('glsl') },
             { label: 'Import a GLSL shader', icon: 'code', onSelect: async () => { reportGlslImport(await importGlslFromFile()); } },
             { label: `Convert GLSL to nodes${pro('convert')}`, icon: 'nodes', hint: 'Paste a shader, preview the nodes it becomes, make it real', onSelect: () => onPageChange('convert') },
-            { label: 'Export this graph', icon: 'export', hint: 'As a .playfile, with what it uses', onSelect: () => offerGraphExport(null) },
+            { label: 'Export this graph', icon: 'export', hint: 'As a .play file, with what it uses', onSelect: () => offerGraphExport(null) },
             { label: 'Builder: functions and node packs', icon: 'nodes', hint: 'Plot functions, make node packs (full screen)', onSelect: () => { void import('../nodePacks/builderWindow').then(m => m.popOutBuilder()); } },
             page === 'files'
               ? { label: 'Back to the Studio', icon: 'nodes', onSelect: () => onPageChange('studio') }

@@ -18,6 +18,7 @@
  *    key (and by meaning: radius ↔ r…), keyframes and input expressions go
  *    with their socket, and Play targets on a renamed param are retargeted.
  */
+import { isOffered } from './notOffered';
 import type { DataType, GraphNode, InputSocket, NodeDefinition } from '../types/nodeGraph';
 import type { PlayRecord } from '../types/play';
 import { NODE_REGISTRY, getNodeDefinition } from './definitions';
@@ -57,7 +58,7 @@ const NO_SWITCH_CATEGORIES = new Set([
 const NO_SWITCH_TYPES = new Set(['customFn', 'exprNode', 'group', 'constants', 'data']);
 
 function switchableDef(def: NodeDefinition | undefined): def is NodeDefinition {
-  if (!def || def.deprecated || def.anchored) return false;
+  if (!def || def.deprecated || def.anchored || !isOffered(def.type)) return false;
   if (NO_SWITCH_CATEGORIES.has(def.category) || NO_SWITCH_TYPES.has(def.type)) return false;
   if (def.syncSockets || def.paramDefsFor || def.textureSlots?.length) return false;
   if (def.defaultParams && 'subgraph' in def.defaultParams) return false;

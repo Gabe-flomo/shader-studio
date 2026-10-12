@@ -80,7 +80,7 @@ function PresetsStrip() {
   const select = useSceneBuilder(s => s.select);
   const seed = useSceneSurprise(s => s.seed);
   const busy = useSceneSurprise(s => s.busy);
-  const thumbs = useSpecThumbs(SCENE_TEMPLATES.map(t => ({ key: `template:${t.key}`, spec: () => parseRecipe(t.recipe).spec })));
+  const thumbs = useSpecThumbs(SCENE_TEMPLATES.filter(t => !t.hidden).map(t => ({ key: `template:${t.key}`, spec: () => parseRecipe(t.recipe).spec })));
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -89,7 +89,7 @@ function PresetsStrip() {
           title="A whole random scene: 2–6 shapes, combines, sometimes modifiers, a look, colours and a camera (one undo step). The same seed makes the same scene." />
       </span>
       <div data-scene-presets style={{ display: 'flex', gap: 12 }}>
-        {SCENE_TEMPLATES.map(t => (
+        {SCENE_TEMPLATES.filter(t => !t.hidden).map(t => (
           <PresetCard key={t.key} id={t.key} label={t.label} hint={t.blurb} src={thumbs[`template:${t.key}`]}
             onClick={() => { const s = parseRecipe(t.recipe).spec; replace(s); select(s.root.children[0]?.id ?? null); }} />
         ))}

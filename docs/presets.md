@@ -100,7 +100,7 @@ Play** on the set's Files item page. `loadLayerSet`:
 ### Storage and files
 
 One list in localStorage, `shader-studio:layer-sets` (like drum kits), so sets
-travel in library ZIPs, `.playfile` library items, profile ZIPs (merged by id
+travel in library ZIPs, `.play` library items, profile ZIPs (merged by id
 and name, like the other preset lists) and the workspace folder
 (`presets/layer sets/*.set.json`). Each set:
 
@@ -119,10 +119,10 @@ and name, like the other preset lists) and the workspace folder
 `play` is shaped like a Play record, so `parsePlayRecord` checks it on every
 read (a hand-edited or damaged set loads what is valid).
 
-**As a file**: a set's item page (or its ⋯ menu) → **Export as .playfile…**
+**As a file**: a set's item page (or its ⋯ menu) → **Export as a .play file…**
 writes it as a `library` item, with the **videos and sounds its layers name**
 as `video` items (`videoIdsIn` finds `videoId` / `sampleId` / linked
-`libraryId` in the set's JSON). Importing the `.playfile` elsewhere puts the
+`libraryId` in the set's JSON). Importing the `.play` elsewhere puts the
 set in that device's list (a clash keeps both, "Name (2)") and the media in its
 library under the same ids, so the loaded layers find them. Library ZIPs and
 profile ZIPs keep linked-folder files as references (Relink… on a computer
@@ -191,7 +191,7 @@ preset of Audio Units has nothing to give there.
 `shader-studio:rack-presets`, one list, the same travel as layer sets
 (`presets/racks/*.rack.json` in the workspace folder). A preset's samples
 (sample player zones, a Granulator's sound) are named by `sampleId`, so a
-`.playfile` export bundles them.
+`.play` export bundles them.
 
 ## See also
 

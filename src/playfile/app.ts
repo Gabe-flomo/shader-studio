@@ -1,5 +1,5 @@
 /**
- * The app's side of .playfile: opening one (the preview dialog, then the
+ * The app's side of .play files: opening one (the preview dialog, then the
  * import), and every export that writes one. The container itself is
  * reader.ts / writer.ts; choosing what goes in is bundle.ts; what an import
  * does is importer.ts. This module wires them to the app's storage, the
@@ -186,7 +186,7 @@ export interface ExportOptions extends BundleOptions {
   success?: string;
 }
 
-/** Write chosen things (Files page ids) as one .playfile. */
+/** Write chosen things (Files page ids) as one .play file. */
 export async function exportPlayfile(ids: string[], opts: ExportOptions): Promise<FileResult> {
   try {
     const { kv, inv } = await inventoryWith(opts.overlay);
@@ -229,7 +229,7 @@ export async function videosFor(items: readonly WriteItem[]): Promise<{ items: W
 }
 
 
-/** The open graph (or its Play setup) as a .playfile, with what it uses. */
+/** The open graph (or its Play setup) as a .play file, with what it uses. */
 export async function exportCurrentGraph(asPlay: boolean, opts: { linked?: boolean; series?: boolean } = {}): Promise<FileResult> {
   const { useNodeGraphStore } = await import('../store/useNodeGraphStore');
   const st = useNodeGraphStore.getState();
@@ -262,7 +262,7 @@ export function currentGraphLinks(name: string | null | undefined): string[] {
   } catch { return []; }
 }
 
-/** A saved presentation as a .playfile: its Plays, pictures and fonts inside, and the graphs it was made from. */
+/** A saved presentation as a .play file: its Plays, pictures and fonts inside, and the graphs it was made from. */
 export function exportPresentationPlayfile(name: string, doc?: unknown): Promise<FileResult> {
   return exportPlayfile([`pres:${name}`], { fileName: name, overlay: doc ? { [PRESENTATION_KEY_PREFIX + name]: JSON.stringify(doc) } : undefined, success: `Exported “${name}”` });
 }

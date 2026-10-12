@@ -1148,7 +1148,7 @@ interface NodeGraphState {
   /** Save one node type (or all of them) as a shareable .json file. */
   exportUserNodes: (ids?: string[]) => Promise<FileResult>;
   /** Pick a .json exported from any Playfield and register the node types in it. */
-  /** A .playfile node pack opens its preview (`deferred`: the dialog imports); an older node .json imports straight away. */
+  /** A .play file node pack opens its preview (`deferred`: the dialog imports); an older node .json imports straight away. */
   importUserNodesFromFile: () => Promise<FileResult & { imported?: string[]; replaced?: string[]; deferred?: boolean }>;
 }
 
@@ -3047,7 +3047,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
   exportUserNodes: async (ids) => {
     // Sharing nodes as a file is making a node pack (Pro; importing one is Free), and node types
-    // only leave as a signed .playfile pack (docs/accounts-and-plans.md decision 5): the dialog
+    // only leave as a signed .play file pack (docs/accounts-and-plans.md decision 5): the dialog
     // asks whether to seal it, then writes it.
     if (!requireFeature('nodes.pack')) return { ok: false, cancelled: true, error: 'Making node packs is part of Pro' };
     if (exportUserNodes(ids).nodes.length === 0) return { ok: false, error: 'No node types to export yet.' };

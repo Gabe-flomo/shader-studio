@@ -1,5 +1,5 @@
 /**
- * A node pack project → the items of a `.playfile` (docs/node-packs.md).
+ * A node pack project → the items of a `.play` (docs/node-packs.md).
  * Pure apart from what `env` does (reading a background's bytes, embedding a
  * presentation's pictures), so tests run it on a map.
  *

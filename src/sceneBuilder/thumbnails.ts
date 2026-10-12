@@ -279,6 +279,8 @@ export const GALLERY_SHAPES: GalleryShape[] = SHAPES.flatMap(s => [
   { key: s.kind, kind: s.kind, label: s.label, blurb: s.blurb },
   ...(VARIANTS[s.kind] ? [{ ...VARIANTS[s.kind], kind: s.kind }] : []),
 ]);
+/** The gallery's tiles: every shape but the hidden ones (ShapeDef.hidden; their thumbnails stay for old scenes). */
+export const OFFERED_GALLERY_SHAPES: GalleryShape[] = GALLERY_SHAPES.filter(g => !SHAPES.find(s => s.kind === g.kind)?.hidden);
 
 const GALLERY_SDF = new Map<string, Sdf>(GALLERY_SHAPES.map(g => [g.key, g.size ? makeSdf(SHAPES.find(s => s.kind === g.kind)!, g.size) : THUMB_SDF[g.kind]]));
 

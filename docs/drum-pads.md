@@ -13,7 +13,7 @@ Sixteen pads, drawn like the hardware: pads 1–4 along the bottom, 13–16 on t
 
 Each pad plays one of:
 
-- **A file of your own** (WAV, MP3, OGG, M4A, AIFF, FLAC). It goes into the media library in IndexedDB (the `videos` store of `shader-studio-backgrounds`, where Video layers' files live). The pad keeps only the file's library id, name and size (`sampleId`, `fileName`, `bytes`). So samples travel wherever videos do: library ZIPs (`backgrounds/videos.json` and `backgrounds/videos/`), the workspace and backup folders, profiles, and `.playfile`s (a pad's `sampleId` is collected like a Video layer's `videoId`, `playfile/bundle.ts videoIdsIn`). A sample this browser doesn't have is shown as **missing**, and the pad asks for it again.
+- **A file of your own** (WAV, MP3, OGG, M4A, AIFF, FLAC). It goes into the media library in IndexedDB (the `videos` store of `shader-studio-backgrounds`, where Video layers' files live). The pad keeps only the file's library id, name and size (`sampleId`, `fileName`, `bytes`). So samples travel wherever videos do: library ZIPs (`backgrounds/videos.json` and `backgrounds/videos/`), the workspace and backup folders, profiles, and .play files (a pad's `sampleId` is collected like a Video layer's `videoId`, `playfile/bundle.ts videoIdsIn`). A sample this browser doesn't have is shown as **missing**, and the pad asks for it again.
 
 In the Library's **Backgrounds** window samples have a **Sounds** tab: each with a small waveform (drawn once, `ensureSoundWave` in `lib/backgroundLibrary.ts`, which also notes the length), size, length and which setups use it; rename, download, delete (a used one says which pads ask for it again; Undo puts it back) and **Clean up** for the unused. The Files page lists them under **Backgrounds → Sounds** (`soundsSource` in `files/videosSource.ts`, "used by" from pads' `sampleId`). Storage is unchanged: videos and sounds share the store and one ZIP manifest (`backgrounds/videos.json`), which the Files page's two sources merge when both write it, and each installs only its own kind.
 
@@ -99,17 +99,17 @@ Drum pads are a layer, so they're Pro (`play.layers`). On Free the layer isn't i
 A **kit** is the whole layer as a preset (`src/play/drumKits.ts`): every pad (its sample or generated drum, name, mode, loop, reverse, choke), each pad's numbers (start, end, pitch, volume, pan, ADSR, velocity), Keys / MIDI (base note, channel) / Pad grid, Volume and the layer's effect chain. In the editor's **Kit** section (`layers/DrumKitRow.tsx`):
 
 - **Save kit…** names it and keeps it on this device. A kit with the same name is replaced (its id stays).
-- **Load kit…** opens a sheet: the **built-in** kits (**808-ish**, **Acoustic-ish** with a touch of reverb, **Percussion**; all generated drums, so they need no files and sound the same everywhere) and the **saved** ones, each with a line ("12 pads · 3 samples · Filter → Reverb"). **Replace pads** makes the layer the kit: pads, numbers, settings, Volume and effect chain (loaded effects get new ids, so they never collide with the layer's controls; a kit without a chain removes the layer's). **Merge into empty** puts the kit's sounds (with their numbers) on this layer's empty pads only and leaves everything else alone. A saved kit's **…** menu has **Rename…**, **Save as a .playfile…** and **Delete…**.
+- **Load kit…** opens a sheet: the **built-in** kits (**808-ish**, **Acoustic-ish** with a touch of reverb, **Percussion**; all generated drums, so they need no files and sound the same everywhere) and the **saved** ones, each with a line ("12 pads · 3 samples · Filter → Reverb"). **Replace pads** makes the layer the kit: pads, numbers, settings, Volume and effect chain (loaded effects get new ids, so they never collide with the layer's controls; a kit without a chain removes the layer's). **Merge into empty** puts the kit's sounds (with their numbers) on this layer's empty pads only and leaves everything else alone. A saved kit's **…** menu has **Rename…**, **Save as a .play file…** and **Delete…**.
 
 Samples are referenced by their library id. A kit whose sample this device doesn't have says "N samples missing on this device" in the list; loaded, those pads show **missing** (the same status as any pad whose file is gone) and ask for the file again.
 
 Kits are stored as one list in localStorage (`shader-studio:drum-kits`) like the Finish stack's presets, so they:
 
-- show on the **Files page** under **Presets → Drum kits** (remove with Undo, download, **Save as a .playfile…**, which bundles the samples the kit uses as `video` items — the importer now takes sounds as well as videos);
-- travel in **library ZIPs** and profile ZIPs (`drum kits.json`, kind `drum kits`, part of the Presets set) and in `.playfile` **library items** (a kit's `sampleId`s are collected like a Video layer's `videoId`, so the samples come along);
+- show on the **Files page** under **Presets → Drum kits** (remove with Undo, download, **Save as a .play file…**, which bundles the samples the kit uses as `video` items — the importer now takes sounds as well as videos);
+- travel in **library ZIPs** and profile ZIPs (`drum kits.json`, kind `drum kits`, part of the Presets set) and in `.play` **library items** (a kit's `sampleId`s are collected like a Video layer's `videoId`, so the samples come along);
 - sync into the **workspace folder** as `presets/drum kits/<Name>.kit.json`.
 
-Node packs don't carry kits yet (a kit travels on its own as a `.playfile`).
+Node packs don't carry kits yet (a kit travels on its own as a `.play`).
 
 `src/play/__tests__/drumKits.test.ts`: the save/load round trip, merge against replace, missing samples, the built-in kits, the Files page listing, bundling with samples, and the importer taking sounds.
 

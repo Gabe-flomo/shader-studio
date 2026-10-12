@@ -42,10 +42,11 @@
     "fileAssociations": [
       {
         "ext": [
+          "play",
           "playfile"
         ],
-        "name": "Playfield file",
-        "description": "Playfield file",
+        "name": "Play file",
+        "description": "Play file",
         "role": "Editor",
         "rank": "Owner",
         "mimeType": "application/x-playfile",

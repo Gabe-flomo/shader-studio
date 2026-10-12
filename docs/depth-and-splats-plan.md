@@ -216,7 +216,7 @@ Not yet: pieces as walkers with Return home (waits for the agents-as-splats card
 Built (docs/splat-scene.md):
 - **Loading:** `.ply` (3DGS, with SH up to degree 3), `.splat`, `.spz` versions 1–3, parsed in a worker; dropped on the
   card, picked, or taken from the library / workspace. Kept in the library by reference (the videos store, type
-  `model/x-splat-*`), so .playfile bundles, ZIPs and the workspace carry it. `.ksplat` and `.spz` v4 are refused with a
+  `model/x-splat-*`), so .play file bundles, ZIPs and the workspace carry it. `.ksplat` and `.spz` v4 are refused with a
   message.
 - **Rendering:** our own small renderer (no Spark / GaussianSplats3D: their per-splat hooks don't fit node-made
   modifiers, and ours is ~600 lines): instanced quads from the projected 3D covariance (EWA), a counting sort in the

@@ -4,7 +4,7 @@ import { parseAudioFxTarget, readAudioFxValue } from '../../types/playAudioFx';
 import { compileGraph } from '../../compiler/graphCompiler';
 import { getNodeDefinition, resolveNodeAliases } from '../../nodes/definitions';
 import { EXAMPLE_GRAPHS } from '../exampleGraphs';
-import { EXAMPLE_FOLDERS, EXAMPLE_INDEX } from '../exampleIndex';
+import { EXAMPLE_FOLDERS, EXAMPLE_INDEX, HIDDEN_EXAMPLE_KEYS } from '../exampleIndex';
 import { PLAY_EXAMPLE_KEYS } from '../playExampleIndex';
 import { PASS_EXAMPLE_KEYS } from '../passExamples';
 import type { GraphNode } from '../../types/nodeGraph';
@@ -34,7 +34,7 @@ describe('bundled examples', () => {
   it('are all listed in the index and filed in exactly one folder', () => {
     expect(Object.keys(EXAMPLE_INDEX).sort()).toEqual(keys.sort());
     const filed = EXAMPLE_FOLDERS.flatMap(f => f.keys);
-    const missing = keys.filter(k => k !== 'blank' && !filed.includes(k));
+    const missing = keys.filter(k => k !== 'blank' && !filed.includes(k) && !HIDDEN_EXAMPLE_KEYS.includes(k));
     expect(missing, 'examples no folder shows').toEqual([]);
     expect(filed.filter((k, i) => filed.indexOf(k) !== i), 'filed twice').toEqual([]);
     expect(filed.filter(k => !EXAMPLE_GRAPHS[k]), 'folder points at a missing example').toEqual([]);

@@ -180,7 +180,7 @@ export function seriesHistory(name: string): GraphVersion[] {
 }
 
 /**
- * A whole series arriving from a .playfile: its earlier versions become this name's history.
+ * A whole series arriving from a .play file: its earlier versions become this name's history.
  * Only for a name with no history of its own (an import never mixes two series' pasts).
  */
 export function adoptSeriesHistory(name: string, history: unknown): number {

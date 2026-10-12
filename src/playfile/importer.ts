@@ -1,5 +1,5 @@
 /**
- * Importing a .playfile: what each item would become here (the preview), and
+ * Importing a .play file: what each item would become here (the preview), and
  * then bringing in the chosen ones.
  *
  *   planImport(contents, env)      rows: one per graph, Play setup,

@@ -194,22 +194,22 @@ export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }:
         {!iconOnly && <Divider />}
         {iconOnly ? (
           <>
-            <IconButton icon="import" label="Import a .playfile, graph or presentation file" shortcut={shortcuts.import}
+            <IconButton icon="import" label="Import a .play file, graph or presentation file" shortcut={shortcuts.import}
               onClick={() => { void importAnyFile(onPageChange); }} />
             <IconButton icon="code" label="Import a GLSL shader as a node"
               onClick={async () => { reportGlslImport(await importGlslFromFile()); }} />
-            <IconButton icon="export" label="Export this graph as a .playfile" shortcut={shortcuts.export}
+            <IconButton icon="export" label="Export this graph as a .play file" shortcut={shortcuts.export}
               onClick={e => offerGraphExport(e.currentTarget)} />
           </>
         ) : (
           <>
-            <Tooltip label="Import a .playfile, a graph file, or a .present.json (opens on the Present page)" shortcut={shortcuts.import}>
+            <Tooltip label="Import a .play file, a graph file, or a .present.json (opens on the Present page)" shortcut={shortcuts.import}>
               <Button size="sm" icon="import" onClick={() => { void importAnyFile(onPageChange); }}>Import</Button>
             </Tooltip>
             <Tooltip label="Import a GLSL fragment shader (Shadertoy or raw) as a node, wired UV → shader → Output">
               <Button size="sm" icon="code" onClick={async () => { reportGlslImport(await importGlslFromFile()); }}>GLSL</Button>
             </Tooltip>
-            <Tooltip label="Export this graph as a .playfile, with what it uses" shortcut={shortcuts.export}>
+            <Tooltip label="Export this graph as a .play file, with what it uses" shortcut={shortcuts.export}>
               <Button size="sm" icon="export" onClick={e => offerGraphExport(e.currentTarget)}>Export</Button>
             </Tooltip>
           </>

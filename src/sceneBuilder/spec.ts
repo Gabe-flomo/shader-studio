@@ -14,6 +14,7 @@
  * Pure data: no React, no store.
  */
 
+import { OFFER_PIECES } from '../nodes/notOffered';
 import type { OutputSpec } from './output';
 import type { TexSource } from '../builders/textures';
 import type { DepthBakeInfo } from '../nodes/definitions/depth';
@@ -58,6 +59,8 @@ export interface ShapeDef {
   /** A 4D shape: built as Lift to 4D (slice `w`, this direction) → Rotate 4D in xw (`spin`) → the shape, measured from p4. */
   fourD?: { slice: 'face' | 'edge' | 'corner' };
   blurb: string;
+  /** Not offered (the gallery, the kind menu, the recipe reference), but still read and built: Picture balls (nodes/notOffered.ts). */
+  hidden?: boolean;
 }
 
 const P = (key: string, label: string, param: ParamDef['param'], def: number | Vec3, min: number, max: number, step = 0.01, extra: Partial<ParamDef> = {}): ParamDef =>
@@ -105,7 +108,8 @@ export const SHAPES: ShapeDef[] = [
   { kind: 'schwarz-p', label: 'Schwarz-P', aliases: ['schwarz'], type: 'schwarzPField', posKey: 'pos', distKey: 'surface', field: true, stepHint: 0.6, blurb: 'A lattice of round chambers, cut to a ball.',
     params: [P('freq', 'Frequency', 'frequency', 3.5, 0.1, 10), P('t', 'Thickness', 'thickness', 0.3, 0.001, 0.5, 0.005), P('ball', 'Ball radius', '', 1.1, 0, 5, 0.01)] },
   // A picture rebuilt from balls (docs/pieces.md): give it a picture (texture=) and each ball takes its colour and lift from it.
-  { kind: 'picture-balls', label: 'Picture balls', aliases: ['ball-action', 'pieces-3d'], type: 'pieceBalls', posKey: 'pos', distKey: 'dist', stepHint: 0.9,
+  // Hidden, not deleted (nodes/notOffered.ts): old specs and recipes with it still build.
+  { kind: 'picture-balls', label: 'Picture balls', aliases: ['ball-action', 'pieces-3d'], type: 'pieceBalls', posKey: 'pos', distKey: 'dist', stepHint: 0.9, hidden: !OFFER_PIECES,
     blurb: 'A picture rebuilt from balls (CC Ball Action): each ball takes the picture\'s colour at its home and comes forward by its brightness. Give it a picture.',
     params: [
       P('width', 'Width', 'width', 3, 0.2, 20, 0.01, { hint: 'How wide the picture is.' }),

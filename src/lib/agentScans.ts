@@ -59,7 +59,7 @@ async function load(key: string, source: string, count: number, flip: boolean): 
   const e = entries.get(key)!;
   try {
     const f = demoFile(source) ?? await getSplatFile(source);
-    if (!f) { e.status = { state: 'missing', count: 0, total: 0, message: 'The scan isn’t on this device. Load it again (or open the .playfile that carries it).' }; changed(key); return; }
+    if (!f) { e.status = { state: 'missing', count: 0, total: 0, message: 'The scan isn’t on this device. Load it again (or open the .play file that carries it).' }; changed(key); return; }
     const bytes = await f.blob.arrayBuffer();
     const workerKey = `agents:${key}`;
     const r = await loadSplats(workerKey, bytes, f.name, count, 0);

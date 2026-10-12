@@ -1,5 +1,5 @@
 /**
- * Reading a .playfile: the one place a container is opened (writer.ts makes
+ * Reading a .play file: the one place a container is opened (writer.ts makes
  * them). It checks everything before anything is imported and never runs
  * anything inside: sizes against limits (the file, each item, the total, the
  * number of entries), every path (no `..`, no absolute paths), the manifest's
@@ -48,7 +48,7 @@ export interface PlayfileContents {
 const isZip = (b: Uint8Array) => b.length > 3 && b[0] === 0x50 && b[1] === 0x4b && b[2] === 0x03 && b[3] === 0x04;
 
 /**
- * A quick look: is this a .playfile? A v2 container by its magic (what's inside
+ * A quick look: is this a .play file? A v2 container by its magic (what's inside
  * is checked when it's opened); a v1 ZIP by its manifest, which is all this
  * reads.
  */
@@ -107,7 +107,7 @@ async function readPlayfileZip(bytes: Uint8Array, limits: PlayfileLimits): Promi
   }
 
   const rawManifest = files[MANIFEST_PATH];
-  if (!rawManifest) throw new PlayfileError('It has no manifest.json, so it isn’t a .playfile.');
+  if (!rawManifest) throw new PlayfileError('It has no manifest.json, so it isn’t a .play file.');
   let m: unknown;
   try { m = JSON.parse(strFromU8(rawManifest)); } catch { throw new PlayfileError('Its manifest.json isn’t readable JSON.'); }
   const manifest = checkManifest(m, limits);

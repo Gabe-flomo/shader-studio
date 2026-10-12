@@ -84,7 +84,7 @@ export function SaveSetDialog({ play, layerIds, onClose }: { play: PlayRecord; l
             )}
             {cap.play.audioReaders && <li>{cap.play.audioReaders.readers.length} audio reader{cap.play.audioReaders.readers.length === 1 ? '' : 's'} on a set layer’s sound</li>}
             {cap.backgroundMatte && <li>The Background’s matte</li>}
-            {cap.media.map(m => <li key={m.id}>{m.kind === 'video' ? 'Video' : m.kind === 'font' ? 'Font' : 'Sound'} “{m.name}”{m.linked ? ' (a linked-folder file: kept as a link)' : ' (from the library; a .playfile export takes it along)'}</li>)}
+            {cap.media.map(m => <li key={m.id}>{m.kind === 'video' ? 'Video' : m.kind === 'font' ? 'Font' : 'Sound'} “{m.name}”{m.linked ? ' (a linked-folder file: kept as a link)' : ' (from the library; a .play file export takes it along)'}</li>)}
           </ul>
         </div>
 

@@ -14,7 +14,7 @@ Both are **Pro** (`play.output` and `play.projection` in `src/lib/plan.ts`). On 
 5. Drag the four corners (in the editor's preview or on the projector itself) until the grid sits on the wall. The arrow keys nudge the grabbed corner by 1 projector pixel, Shift by 10. ⌘Z undoes.
 6. Switch the pattern back to **Picture** and press **H** to hide the handles.
 
-The mapping saves with the Play (in its record, `play.projection`), so it goes wherever the Play goes, including `.playfile`. **Presets** keep a mapping on this computer under a name and a venue or projector, to load into any Play.
+The mapping saves with the Play (in its record, `play.projection`), so it goes wherever the Play goes, including `.play`. **Presets** keep a mapping on this computer under a name and a venue or projector, to load into any Play.
 
 ## The Mapping editor
 

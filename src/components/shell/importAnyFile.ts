@@ -1,6 +1,6 @@
 /**
  * importAnyFile — the top bar's Import: one button for the files Playfield
- * makes. A `.playfile` opens its preview (what's inside, then import); the
+ * makes. A `.play` opens its preview (what's inside, then import); the
  * older formats keep opening as before: a graph (or Play) file opens in the
  * Studio, a `.present.json` on the Present page as a new presentation, a
  * library.json or library/profile ZIP merges into the library. The kind is
@@ -47,8 +47,8 @@ export async function importText(text: string, navigate: (p: Page) => void, file
 }
 
 /**
- * Import a file's bytes: a .playfile (v2 envelope or v1 ZIP) opens its preview;
- * a file named .playfile that is neither is refused as not a Playfield file;
+ * Import a file's bytes: a .play file (v2 envelope or v1 ZIP) opens its preview;
+ * a file named .play (or .playfile) that is neither is refused as not a Playfield file;
  * a ZIP is a library or profile; anything else is read as text.
  */
 export async function importBytes(name: string, bytes: Uint8Array, navigate: (p: Page) => void): Promise<ImportedAs> {

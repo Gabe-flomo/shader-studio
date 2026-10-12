@@ -1,7 +1,7 @@
-# The `.playfile` format
+# The `.play` format
 
 Playfield's one file format (milestones 3 and 4 of
-[accounts-and-plans.md](accounts-and-plans.md)). A `.playfile` is a ZIP with a
+[accounts-and-plans.md](accounts-and-plans.md)). A `.play` file is a ZIP with a
 `manifest.json` and one file per item, wrapped since **container v2** in an
 encrypted envelope so that only Playfield opens it (see
 [Container v2](#container-v2-the-envelope)). It carries a graph, a Play setup,
@@ -30,10 +30,19 @@ are in `src/components/playfile/`.
 
 ## Names
 
-The extension is **`.playfile`** and the manifest says `format: "playfile"`.
-While it was being built the format was briefly called `.playfield` and
-`.play`, so files with `format: "playfield"` or `"play"` (and those extensions)
-are read too.
+The extension is **`.play`** (the UI calls them ".play files"); the manifest
+still says `format: "playfile"`. Until 2026.10.183 the app wrote **`.playfile`**
+("the 'file' in the name is redundant"), and those files open everywhere a
+`.play` does: drops, Import and Install, the file pickers, Finder double-click
+and crash recovery. While it was being built the format was briefly called
+`.playfield` too, so files with `format: "playfield"` or `"play"` (and that
+extension) are read as well.
+
+One constant sets what's written: `PLAYFILE_EXT` in `src/playfile/format.ts`
+(`playfileName` in writer.ts swaps an old ending). `isContainerName` and
+`CONTAINER_ACCEPT` there list what opens; the desktop's `is_container`
+(`src-tauri/src/playfile.rs`) and `valid_snapshot_name`
+(`src-tauri/src/recovery.rs`) take both.
 
 ## Layout
 
@@ -235,10 +244,10 @@ items; they come along so they're in the recipient's library too.
 
 ## Where the app writes one
 
-Every download offers `.playfile` first and the readable format it always had
+Every download offers `.play` first and the readable format it always had
 as the other:
 
-| Where | `.playfile` | Other option | Plan |
+| Where | `.play` | Other option | Plan |
 |---|---|---|---|
 | Top bar Export (and the phone menu, the shortcut) | the graph + what it uses | readable JSON | Free |
 | Play → Export a play file | the Play setup + what it uses | readable JSON play file | Free |
@@ -253,7 +262,7 @@ as the other:
 | Node types (My nodes, a node's card, Library → Only published nodes) | a node pack only (signed, optionally sealed) | — | Pro (`nodes.pack`) |
 | Builder → Node packs → Export | the pack: its nodes, examples and extras (signed, optionally sealed) | — | Pro (`nodes.pack`) |
 
-Deliberately not `.playfile`: rendered video and frames (`.mp4`, `.mov`,
+Deliberately not `.play`: rendered video and frames (`.mp4`, `.mov`,
 `.webm`, `.png`), "Put it on a website" and "Export as a web page" (they're
 HTML pages meant for a browser), the OSC bridge script, and backup ZIPs made
 before Install → Replace (they're for Install).
@@ -265,13 +274,15 @@ Install.
 
 ## Opening
 
-- **Import** (top bar, phone menu, the shortcut) accepts `.playfile` and every
+- **Import** (top bar, phone menu, the shortcut) accepts `.play` (and `.playfile`) and every
   older format (graph and play JSON, `.present.json`, `library.json`, library
   and profile ZIPs), telling them apart by content.
-- **Files → Install…** and the node list's import take `.playfile` too.
-- **Drop** a `.playfile` anywhere on the window (browser and desktop).
-- **Desktop:** `.playfile` is registered with the app (`bundle.fileAssociations`
-  in `src-tauri/tauri.conf.json`, UTI `com.shaderstudio.playfile` conforming to
+- **Files → Install…** and the node list's import take `.play` too.
+- **Drop** a `.play` file anywhere on the window (browser and desktop).
+- **Desktop:** `.play` and `.playfile` are registered with the app (one
+  `bundle.fileAssociations` entry with both extensions in
+  `src-tauri/tauri.conf.json`, UTI `com.shaderstudio.playfile` (kept, so
+  existing installs keep their icon) conforming to
   `public.data` only, MIME `application/x-playfile`: not an archive type, so
   Finder and Archive Utility don't offer to expand it), so double-clicking one
   or dropping it on the Dock icon opens it. `RunEvent::Opened` (macOS) keeps
@@ -282,7 +293,7 @@ Install.
   registered by the bundle, but a file passed on the command line isn't read
   yet.
 
-Importing a `.playfile` is Free; a `profile` item inside one needs Pro, like
+Importing a `.play` file is Free; a `profile` item inside one needs Pro, like
 Install.
 
 ## The workspace folder
@@ -295,7 +306,7 @@ stored form, so a sealed node's file holds its encrypted blob, not its code.
 
 ## Container v2: the envelope
 
-Since container v2 a `.playfile` is no longer a ZIP that any archive tool
+Since container v2 a `.play` file is no longer a ZIP that any archive tool
 opens. Renaming one to `.zip` shows nothing; `unzip`, 7-Zip, Finder and
 Archive Utility refuse it, and another app can't import its contents. The
 bytes are:
@@ -339,7 +350,7 @@ offset  size  field
 
 ### What it stops, and what it doesn't (be honest about it)
 
-It stops the casual paths: opening a `.playfile` as an archive, extracting a
+It stops the casual paths: opening a `.play` file as an archive, extracting a
 graph or a node pack out of one, importing its contents into another app or a
 script, and passing off a changed file as the original (the tag refuses it).
 

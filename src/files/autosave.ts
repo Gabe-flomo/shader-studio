@@ -71,14 +71,18 @@ export interface Snapshot extends SnapshotMeta {
   graph: Record<string, unknown>;
 }
 
-/** `autosave-<ms>.playfile` (the desktop, since 2026.10.183) or `autosave-<ms>.json` (the browser's IndexedDB, and older desktop ones). */
-const FILE_RE = /^autosave-(\d{10,16})\.(json|playfile)$/;
+/**
+ * `autosave-<ms>.play` (the desktop), `autosave-<ms>.playfile` (the desktop in
+ * 2026.10.183, still read) or `autosave-<ms>.json` (the browser's IndexedDB, and older desktop ones).
+ */
+const FILE_RE = /^autosave-(\d{10,16})\.(json|play|playfile)$/;
 
-export function snapshotFileName(at: number, ext: 'json' | 'playfile' = 'json'): string {
+export function snapshotFileName(at: number, ext: 'json' | 'play' = 'json'): string {
   return `autosave-${Math.max(0, Math.floor(at))}.${ext}`;
 }
 
-export const isPlayfileSnapshot = (file: string): boolean => file.endsWith('.playfile');
+/** A container snapshot: `.play`, or `.playfile` from 2026.10.183. */
+export const isPlayfileSnapshot = (file: string): boolean => file.endsWith('.play') || file.endsWith('.playfile');
 
 /** The time in a snapshot's file name, null when it isn't one. */
 export function snapshotFileTime(file: string): number | null {

@@ -30,9 +30,9 @@ Stored per device as `shader-studio:settings:autosave`. Nothing is written when 
 
 Exactly what Save writes (the graph file, `graphFileJson(false)`: nodes, loose groups, the Play setup, datasets, layout version) with which project it was.
 
-**Desktop: `autosave-<ms>.playfile`** (since 2026.10.183). A real .playfile (src/playfile/writer.ts, the encrypted v2 envelope) holding one `graph` item named "<project> (autosave)"; the snapshot's own fields (`format`, `at`, `session`, `project`) ride in that item's manifest `meta.autosave`. **Show in Finder** → double-click opens it in Playfield like any .playfile (Import shows what's inside). It's a **light** playfile: Video layers' files are referenced by their id in this device's videos library and are not bundled, so an autosave every minute stays a few KB. Older `autosave-<ms>.json` files still list and recover (`readAnySnapshot` reads both).
+**Desktop: `autosave-<ms>.play`** (2026.10.183 wrote `autosave-<ms>.playfile`; those still list, recover and open). A real .play file (src/playfile/writer.ts, the encrypted v2 envelope) holding one `graph` item named "<project> (autosave)"; the snapshot's own fields (`format`, `at`, `session`, `project`) ride in that item's manifest `meta.autosave`. **Show in Finder** → double-click opens it in Playfield like any .playfile (Import shows what's inside). It's a **light** playfile: Video layers' files are referenced by their id in this device's videos library and are not bundled, so an autosave every minute stays a few KB. Older `autosave-<ms>.json` files still list and recover (`readAnySnapshot` reads both).
 
-**Browser: JSON** in IndexedDB, the envelope below; **Download** on an autosave's row in App settings gives it as a .playfile (`snapshotAsPlayfile`).
+**Browser: JSON** in IndexedDB, the envelope below; **Download** on an autosave's row in App settings gives it as a .play file (`snapshotAsPlayfile`).
 
 ```json
 { "format": "playfield-autosave", "version": 1, "at": 1727520000000, "session": "1727519000000-4242",
@@ -40,7 +40,7 @@ Exactly what Save writes (the graph file, `graphFileJson(false)`: nodes, loose g
   "graph": { "nodes": [ … ], "looseGroups": [], "play": { … }, "layout": 3 } }
 ```
 
-The **newest 3** are kept, .playfile and .json together (older ones are removed after each write).
+The **newest 3** are kept, .play, .playfile and .json together (older ones are removed after each write).
 
 - **Desktop:** `~/Library/Application Support/com.shaderstudio.app/autosave/`, written atomically (a temp file, synced, then renamed over), so a crash mid-write leaves the previous file whole. Not in the workspace folder and not counted as your saved work.
 - **Browser:** IndexedDB (`shader-studio-autosave`), each write one transaction.
@@ -79,7 +79,7 @@ Kept on this device only; nothing is ever sent anywhere.
 | Piece | File |
 | --- | --- |
 | Cadence, keep-3, snapshot format, the marker, pending sessions, the recover decision (pure) | `src/files/autosave.ts` |
-| Snapshots as .playfile (write, read, download) | `src/files/autosavePlayfile.ts` |
+| Snapshots as .play files (write, read, download) | `src/files/autosavePlayfile.ts` |
 | Crash reports: shape, names, keep-20, storage, Show/Copy/Reveal, Report a problem | `src/files/crashReports.ts` |
 | The log ring buffer and error capture | `src/lib/crashLog.ts` |
 | The outermost error boundary; the report viewer and list | `src/components/crash/` |
@@ -94,9 +94,9 @@ Kept on this device only; nothing is ever sent anywhere.
 
 - `src/files/__tests__/autosave.test.ts`: the cadence (5 min and 1 min ticks only when changed; on every change 2 s after the last, within 10 s of a stream; off; switching modes; waiting while held; a failed write stays pending), keep-3 rotation, the snapshot round trip, and the recover decision (offered; names the plug-in; not after a clean quit, without a snapshot, for another session, with nothing unsaved, or after a later save).
 - `src/files/__tests__/autosave.test.ts` also: the newest autosave with work is offered when the newest is a blank canvas (others listed); markers clean vs unclean across versions; a page that died is pending; the 2026-10-11 case (page died, then a clean quit) is offered.
-- `src/files/__tests__/autosavePlayfile.test.ts`: an autosave is a valid .playfile that re-opens identically (as a snapshot and through the ordinary reader), carries no media, old JSON autosaves still recover, a JSON one downloads as a .playfile, keep-3 across both kinds.
+- `src/files/__tests__/autosavePlayfile.test.ts`: an autosave is a valid .play file (an old `autosave-<ms>.playfile` still recovers) that re-opens identically (as a snapshot and through the ordinary reader), carries no media, old JSON autosaves still recover, a JSON one downloads as a .playfile, keep-3 across both kinds.
 - `src/files/__tests__/crashReports.test.ts`: the report's shape, names matching Rust's, keep-20 rotation, the ring buffer, console/error/rejection capture, WebGL context loss.
-- `cargo test --lib recovery crash`: snapshot names (.playfile and .json), atomic writes, notes merge; pending at launch whatever the version, a leftover kept through a clean launch, a page load after an unclean page, a page crash surviving a clean quit; report names and keep-20.
+- `cargo test --lib recovery crash`: snapshot names (.play, .playfile and .json), atomic writes, notes merge; pending at launch whatever the version, a leftover kept through a clean launch, a page load after an unclean page, a page crash surviving a clean quit; report names and keep-20.
 
 ## For the owner to try
 
@@ -104,7 +104,7 @@ Kept on this device only; nothing is ever sent anywhere.
 2. Force-quit the app (⌥⌘Esc → Force Quit, or `kill -9`). Relaunch: "Recover your work?" names “Untitled” and the time. **Recover**: the graph and its Play setup are back, the Save button shows unsaved changes.
 3. Save the project as "Test", change it, wait for an autosave, force-quit, relaunch, Recover: it opens as "Test" with unsaved changes.
 4. Save, then quit normally (⌘Q) and relaunch: no dialog. Force-quit right after a save with nothing changed: no dialog either.
-5. **Show in Files** in the dialog opens App settings; **Show in Finder** there opens the autosave folder. Double-click the newest `autosave-….playfile`: Playfield opens it like any .playfile.
+5. **Show in Files** in the dialog opens App settings; **Show in Finder** there opens the autosave folder. Double-click the newest `autosave-….play`: Playfield opens it like any .play file.
 7. With `localStorage['shader-studio:dev'] = '1'`, App settings → Crash reports → Developer: **Web process killed**: the window reloads (not blank) and offers Recover, with "A crash report was saved" and Show / Copy / Reveal. Then **Force quit (SIGKILL)** and relaunch: the same. Quit with ⌘Q right after a Web process kill, before answering: the next launch still offers it.
 8. **JS fatal**: the plain "Playfield hit an error" page; Reload offers Recover. Help → **Report a problem…** saves or copies the bundle.
 6. In a browser: the same with the tab (closing the tab normally never offers recovery; a crashed tab or a killed browser does).

@@ -493,7 +493,7 @@ pub fn run() {
             if let tauri::RunEvent::Exit = &_event {
                 recovery::clean_exit(_app);
             }
-            // A .playfile opened with the app (Finder, the Dock): kept for the web side to take
+            // A .play (or older .playfile) file opened with the app (Finder, the Dock): kept for the web side to take
             // at launch, and announced for when it's already running (src/playfile.rs).
             #[cfg(any(target_os = "macos", target_os = "ios"))]
             if let tauri::RunEvent::Opened { urls } = &_event {

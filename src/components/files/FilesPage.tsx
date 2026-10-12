@@ -74,7 +74,7 @@ import { OPEN_APP_SETTINGS, takeAppSettingsRequest } from '../../files/recovery'
 const VIDEO_PREFIX = 'ext:videos:';
 
 const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
-/** A saved drum kit (Presets → Drum kits): it can leave as a .playfile with its samples. */
+/** A saved drum kit (Presets → Drum kits): it can leave as a .play file with its samples. */
 const isDrumKit = (n: FileNode) => n.kind === 'preset' && n.id.startsWith('dkit:');
 const exportKit = async (n: FileNode) => reportFileResult(await exportPlayfile([n.id], { fileName: n.label, dependencies: false, success: `Exported the kit “${n.label}”` }), { failTitle: 'Couldn’t export the kit' });
 /** A saved layer set or rack preset (Presets → Layer sets / Racks, docs/presets.md): it can be added to Play from here. */
@@ -187,7 +187,7 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
   };
 
   const preview = async (picked: { name: string; bytes: Uint8Array }) => {
-    // A .playfile opens its own preview (importing one is Free; a profile inside it needs Pro there).
+    // A .play file opens its own preview (importing one is Free; a profile inside it needs Pro there).
     if (isPlayfile(picked.bytes)) { await openPlayfileBytes(picked.name, picked.bytes); return; }
     if (!requireFeature('files.install')) return;
     try {
@@ -292,7 +292,7 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
 
   const menuItems = (n: FileNode | null): MenuItem[] => {
     if (!n) return [
-      { label: 'Save as a .playfile…', icon: 'export', hint: 'One file: open it here or on another computer, see what’s inside, pick what comes in', onSelect: () => { void exportEverythingPlayfile(); } },
+      { label: 'Save as a .play file…', icon: 'export', hint: 'One file: open it here or on another computer, see what’s inside, pick what comes in', onSelect: () => { void exportEverythingPlayfile(); } },
       { label: 'Save as a ZIP…', icon: 'export', hint: 'One file: install it here or on another computer', onSelect: () => everything('download') },
       ...(isTauri() ? [{ label: 'Save to a folder…', icon: 'folder' as const, hint: 'The same files, unpacked into a folder you choose', onSelect: () => everything('folder') }] : []),
     ];
@@ -300,7 +300,7 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
     const scopeOf = n.membership?.scope;
     if (n.kind === 'graph') items.push({ label: 'Open in the Studio', icon: 'nodes', onSelect: () => { void openGraph(n.label); } });
     if (n.kind === 'presentation') items.push({ label: 'Open on Present', icon: 'slides', onSelect: () => { rememberLast(n.label); onNavigate?.('present'); } });
-    if (isDrumKit(n)) items.push({ label: 'Save as a .playfile…', icon: 'export', hint: 'The kit with the samples it uses, in one file that opens anywhere', onSelect: () => { void exportKit(n); } });
+    if (isDrumKit(n)) items.push({ label: 'Save as a .play file…', icon: 'export', hint: 'The kit with the samples it uses, in one file that opens anywhere', onSelect: () => { void exportKit(n); } });
     const set = layerSetOf(n), rackP = rackPresetOf(n);
     if (set) items.push({ label: 'Add to Play', icon: 'play', hint: 'Its layers, wired, at the top of the list in a folder of its own', onSelect: () => { addLayerSetToPlay(set, { afterSelected: false }); onNavigate?.('play'); } });
     if (rackP) items.push({ label: 'Add as a track', icon: 'play', hint: 'A new rack in the Audio engine', onSelect: () => { applyRackPresetToPlay(rackP); onNavigate?.('play'); } });
@@ -365,7 +365,7 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
       actions={<>
         {node.kind === 'graph' && <Button size="sm" icon="nodes" onClick={() => { void openGraph(node.label); }}>Open in the Studio</Button>}
         {node.kind === 'presentation' && <Button size="sm" icon="slides" onClick={() => { rememberLast(node.label); onNavigate?.('present'); }}>Open on Present</Button>}
-        {isDrumKit(node) && <Button size="sm" icon="export" onClick={() => { void exportKit(node); }} title="The kit with the samples it uses, in one file that opens anywhere">Save as a .playfile…</Button>}
+        {isDrumKit(node) && <Button size="sm" icon="export" onClick={() => { void exportKit(node); }} title="The kit with the samples it uses, in one file that opens anywhere">Save as a .play file…</Button>}
         {!node.private && !node.part && <Button size="sm" icon="export" onClick={() => openDownload([node.id])}>Download…</Button>}
         {node.ref && <Button size="sm" variant="ghost" icon="trash" onClick={() => { void remove([node.id], node.size > 40_000); }}>Remove…</Button>}
       </>} />
@@ -480,8 +480,8 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
           <div style={{ flex: 1, minWidth: 0 }}>
             <Breadcrumbs path={view !== 'browse' ? specialCrumb(view) : path} onOpen={id => { if (id === 'nodes') setNodeType(null); else open(id); }} />
           </div>
-          <Button size="sm" icon="import" onClick={() => { void startInstall(); }} title="Open a .playfile, a profile or a partial ZIP: see what’s inside, then bring it in">Install…<ProBadgeFor feature="files.install" /></Button>
-          <Button size="sm" variant="primary" icon="export" onClick={e => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); downloadMenu(r.right - 260, r.bottom + 4); }} title="Everything saved here: one .playfile, or one ZIP with a manifest">Download everything<ProBadgeFor feature="files.everything" /></Button>
+          <Button size="sm" icon="import" onClick={() => { void startInstall(); }} title="Open a .play file, a profile or a partial ZIP: see what’s inside, then bring it in">Install…<ProBadgeFor feature="files.install" /></Button>
+          <Button size="sm" variant="primary" icon="export" onClick={e => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); downloadMenu(r.right - 260, r.bottom + 4); }} title="Everything saved here: one .play file, or one ZIP with a manifest">Download everything<ProBadgeFor feature="files.everything" /></Button>
           </>}
         </div>
         {banner}

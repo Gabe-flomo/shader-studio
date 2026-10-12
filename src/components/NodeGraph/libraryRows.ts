@@ -5,9 +5,12 @@
  * (NodeSearchPalette.tsx), so the two always list the same categories.
  */
 import { getNodesByCategory, getOfferedDefinitions } from '../../nodes/definitions';
+import { NOT_OFFERED } from '../../nodes/notOffered';
 
 // ── Nodes hidden from browser ─────────────────────────────────────────────────
 export const HIDDEN_NODES = new Set([
+  // Hidden, not deleted: Pieces and Balls (nodes/notOffered.ts; one flag brings them back).
+  ...NOT_OFFERED,
   // Texture (textureInput) is the one card for pictures, videos and the webcam; its Source switch makes a videoInput.
   'videoInput',
   'output', 'vec4Output', 'loopIndex',

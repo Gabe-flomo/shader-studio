@@ -175,7 +175,7 @@ function Intro({ canPack, onCreate }: { canPack: boolean; onCreate: () => void }
   return (
     <div style={{ maxWidth: 520, margin: '0 auto', padding: '40px 24px', display: 'flex', flexDirection: 'column', gap: 12, color: tk.text.secondary, fontSize: 13, lineHeight: 1.55 }}>
       <b style={{ fontSize: 17, color: tk.text.primary }}>Node packs</b>
-      <span>A node pack is a set of your nodes in one <code>.playfile</code>: signed by you, sealed if you like, with the graphs that show how they’re used, GLSL, presentations, images and notes alongside.</span>
+      <span>A node pack is a set of your nodes in one <code>.play file</code>: signed by you, sealed if you like, with the graphs that show how they’re used, GLSL, presentations, images and notes alongside.</span>
       <span>Write nodes from scratch, or turn saved graphs, groups, Custom Functions and Expression Blocks into nodes. Whoever opens the pack finds its nodes in the node list under the pack’s name, with its examples a click away.</span>
       {!canPack && <span style={{ color: tk.text.muted }}>Making node packs is part of Pro. Opening one is free.</span>}
       <span><Button variant="primary" icon="plus" onClick={onCreate}>New node pack<ProBadgeFor feature="nodes.pack" /></Button></span>
@@ -384,7 +384,7 @@ function PackEditor({ initial, narrow }: { initial: PackProject; narrow: boolean
         <Field aria-label="Pack name" value={p.name} onChange={e => update({ name: e.target.value })} style={{ flex: 1, minWidth: 160, fontSize: 15 }} height={36} />
         <Field aria-label="Version" mono value={p.version} onChange={e => update({ version: e.target.value })} leading={<span style={{ color: tk.text.faint, fontSize: 12 }}>v</span>} style={{ width: 96 }} height={36} />
         <Button variant="primary" icon="export" onClick={() => { if (requireFeature('nodes.pack')) setExporting(true); }}
-          title={errorCount ? `${plural(errorCount, 'thing')} to fix first` : 'Build the .playfile: a summary first, then the download'}>
+          title={errorCount ? `${plural(errorCount, 'thing')} to fix first` : 'Build the .play file: a summary first, then the download'}>
           Export…<ProBadgeFor feature="nodes.pack" />
         </Button>
         <IconButton icon="more" label="More" onClick={e => {

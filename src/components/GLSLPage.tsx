@@ -447,7 +447,7 @@ export function GLSLPage({ onConvert }: { onConvert?: (code: string, guided?: bo
           <IconButton icon="search" label="Discover functions: extract from this file, or search the saved shaders" size="sm" onClick={() => setDiscoverOpen(true)} />
           <IconButton icon="code" label="Code Explorer: how written code uses a function, across your code and the examples" size="sm" active={explorerOpen} onClick={toggleExplorer} />
           <IconButton icon="info" label="Explain the selection, or the statement at the caret, in plain words" size="sm" active={!!explainSpan} data-glsl-action="explain" onMouseDown={e => e.preventDefault()} onClick={explainSelection} />
-          <IconButton icon="export" label="Download every saved shader: one .playfile, or .glsl files in a ZIP (notes as a comment at the top), easy to share or to send for help" size="sm" onClick={e => offerSetExport(e.currentTarget, 'glsl')} />
+          <IconButton icon="export" label="Download every saved shader: one .play file, or .glsl files in a ZIP (notes as a comment at the top), easy to share or to send for help" size="sm" onClick={e => offerSetExport(e.currentTarget, 'glsl')} />
           <IconButton icon="graphs" label="Load the node graph's compiled shader into the editor" size="sm" onClick={() => {
             // A graph built with a sealed node pack keeps that code hidden here too.
             if (nodeGraphShader && redactSealedCode(nodeGraphShader) !== nodeGraphShader) { toast.info('This graph uses a sealed node pack', { message: 'Its code stays hidden, so the graph’s shader can’t be opened here.' }); return; }

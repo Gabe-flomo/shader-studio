@@ -5,7 +5,7 @@
 //!
 //!   session.json              this launch: { id, startedAt, cleanExit, project, lastSaveAt, reason, appVersion }
 //!   pending-recovery.json     a session that went down, kept until the page has answered for it
-//!   autosave/autosave-<ms>.playfile   snapshots (older ones .json), written atomically (temp + rename)
+//!   autosave/autosave-<ms>.play   snapshots (2026.10.183's .playfile and older .json still read), written atomically (temp + rename)
 //!
 //! At launch the previous `session.json` is read; if it didn't end cleanly it
 //! becomes `pending-recovery.json` (with `reason: "unknown"` when nothing saw it
@@ -105,10 +105,15 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     })
 }
 
-/// A snapshot's file name: `autosave-<digits>.playfile` (or an older `.json`), nothing else.
+/// A container snapshot's extension: `.play`, or `.playfile` (2026.10.183).
+fn is_container_snapshot(name: &str) -> bool {
+    name.ends_with(".play") || name.ends_with(".playfile")
+}
+
+/// A snapshot's file name: `autosave-<digits>.play` (or an older `.playfile` / `.json`), nothing else.
 pub fn valid_snapshot_name(name: &str) -> bool {
     name.strip_prefix("autosave-")
-        .and_then(|r| r.strip_suffix(".playfile").or_else(|| r.strip_suffix(".json")))
+        .and_then(|r| r.strip_suffix(".play").or_else(|| r.strip_suffix(".playfile")).or_else(|| r.strip_suffix(".json")))
         .is_some_and(|d| (10..=16).contains(&d.len()) && d.bytes().all(|b| b.is_ascii_digit()))
 }
 
@@ -263,7 +268,7 @@ fn snapshot_path(app: &AppHandle, name: &str) -> Result<PathBuf, String> {
     Ok(autosave_dir(app)?.join(name))
 }
 
-/// A snapshot: a .playfile's bytes as base64 (`base64: true`), or an old-style JSON text.
+/// A snapshot: a .play file's bytes as base64 (`base64: true`), or an old-style JSON text.
 #[tauri::command]
 pub async fn autosave_write(app: AppHandle, name: String, body: String, base64: Option<bool>) -> Result<(), String> {
     let bytes = if base64.unwrap_or(false) {
@@ -283,11 +288,11 @@ pub async fn autosave_list(app: AppHandle) -> Result<Vec<String>, String> {
     Ok(rd.filter_map(|e| e.ok()).filter_map(|e| e.file_name().to_str().map(str::to_string)).filter(|n| valid_snapshot_name(n)).collect())
 }
 
-/// A snapshot: a .playfile as base64, a .json as its text.
+/// A snapshot: a .play file as base64, a .json as its text.
 #[tauri::command]
 pub async fn autosave_read(app: AppHandle, name: String) -> Result<String, String> {
     let path = snapshot_path(&app, &name)?;
-    if name.ends_with(".playfile") {
+    if is_container_snapshot(&name) {
         use base64::Engine;
         let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
         return Ok(base64::engine::general_purpose::STANDARD.encode(bytes));
@@ -325,7 +330,9 @@ mod tests {
     #[test]
     fn only_snapshot_names_are_accepted() {
         assert!(valid_snapshot_name("autosave-1727520000000.json"));
+        assert!(valid_snapshot_name("autosave-1727520000000.play"));
         assert!(valid_snapshot_name("autosave-1727520000000.playfile"));
+        assert!(!valid_snapshot_name("autosave-1727520000000.play.tmp"));
         assert!(!valid_snapshot_name("autosave-1727520000000.playfile.tmp"));
         assert!(!valid_snapshot_name("autosave-17.json"));
         assert!(!valid_snapshot_name("autosave-../../x.json"));

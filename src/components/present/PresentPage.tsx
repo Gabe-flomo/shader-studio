@@ -169,7 +169,7 @@ function Header({ compact, list, onExport, onBrowse }: { compact: boolean; list:
         const t = await askText('Save a copy', { label: 'Title of the copy', initial: `${name ?? doc.title} copy`, confirmLabel: 'Save the copy' });
         if (t) { const n = saveCopy(t); if (n) toast.success(`Saved a copy: “${n}”`, { message: 'The copy is open now.' }); }
       } },
-      { label: 'Download as .playfile', icon: 'export' as const, hint: 'Every Play, picture and font in it, and the graphs it was made from: opens in Playfield anywhere', onSelect: () => { if (name) void exportPresentationPlayfile(name, doc).then(r => reportFileResult(r, { failTitle: 'Couldn’t download the presentation' })); } },
+      { label: 'Download as a .play file', icon: 'export' as const, hint: 'Every Play, picture and font in it, and the graphs it was made from: opens in Playfield anywhere', onSelect: () => { if (name) void exportPresentationPlayfile(name, doc).then(r => reportFileResult(r, { failTitle: 'Couldn’t download the presentation' })); } },
       { label: 'Download as .present.json', icon: 'code' as const, hint: 'A readable presentation file with every Play in it', onSelect: () => void exportPresentationFile() },
       { label: 'Export as a web page…', icon: 'code' as const, hint: 'One HTML file, slides or one long page', onSelect: onExport },
       'separator' as const,

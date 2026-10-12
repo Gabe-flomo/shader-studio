@@ -28,7 +28,7 @@ Three ways to load it:
 In the library, by reference, like a video: the bytes go into the library's file store (`lib/backgroundLibrary.ts`, the
 `videos` store, type `model/x-splat-<format>`), and the node keeps only `videoId`, `fileName` and `bytes`. So a scan:
 
-- travels in **.playfile** bundles (`playfile/bundle.ts` finds `videoId`; past 200 MB the export asks first, as for
+- travels in **.play file** bundles (`playfile/bundle.ts` finds `videoId`; past 200 MB the export asks first, as for
   videos), in library ZIPs, the backup folder and the workspace folder;
 - is left out of every *video* list (Video layers, Time Cube, Texture, the Library's videos: `listVideos()` skips
   `isSplatType`), and counts towards storage with the videos.
@@ -309,7 +309,7 @@ liquids read as volumes (and a scan reads as a scan).
 Emit's Shape **Splat scan**: each splat is born as a walker, walker i from splat i, at its place (the scan's core box
 fitted to Size round X, Y, Z; 2D seen from the front), in its colour, its **home** (x, y, z) and its **size** (w) kept in
 More memory. The card picks the scan (Load…, From the library, a generated ball; kept by `videoId` like the Splat
-Scene's, so .playfiles carry it). **Up is** turns most scans over; **Skip below** leaves out faint floaters.
+Scene's, so .play files carry it). **Up is** turns most scans over; **Skip below** leaves out faint floaters.
 
 - The engine reads the scan through the splat worker, thinned evenly to the group's count, into an RGBA32F texture
   (lib/agentScans.ts, lib/splats/walkers.ts: two texels a splat) the Emit reads at birth. Until it arrives no walker is

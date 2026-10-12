@@ -1,5 +1,5 @@
 /**
- * What goes into a .playfile when something is exported: the chosen things
+ * What goes into a .play file when something is exported: the chosen things
  * as items, and (optionally) what they depend on, so the file opens on
  * another machine with nothing missing.
  *

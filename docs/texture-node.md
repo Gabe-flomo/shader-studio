@@ -33,7 +33,7 @@ file, and the node keeps the link as its source (`params._imageUrl`).
   Address).
 
 **Source:** a picture that came from a link shows it on the card under **Source**, with a button that copies
-it. The link is saved with the graph, in its versions and in a .playfile, next to the stored picture. A
+it. The link is saved with the graph, in its versions and in a .play file, next to the stored picture. A
 picture loaded any other way (a file, the library, a screenshot) has no source.
 
 ### Pasting a picture
@@ -75,13 +75,13 @@ Tiling, wrap and the crop only add shader code when set. Every graph saved befor
 ## Saved graphs keep their pictures
 
 Before this node, a picture lived only in memory, and the node kept a 96 px thumbnail. So a reload, a
-saved version or a .playfile opened without it. Now a picture is kept twice:
+saved version or a .play file opened without it. Now a picture is kept twice:
 
 1. **In the image library** at full size. Its id is in `params.libraryId`, the field Files' *Used by* and
-   .playfile dependencies already follow, so exporting the graph brings the picture along.
+   .play file dependencies already follow, so exporting the graph brings the picture along.
 2. **In the node** as `params._imageSrc`: a JPEG data URL (PNG when it has transparency). It's at most
    **1024 px** on its long side and **400,000 characters** (about 300 KB). If it doesn't fit, it's tried at
-   768, 512 and 384 px. This makes the graph complete on its own: in every saved version, in a .playfile,
+   768, 512 and 384 px. This makes the graph complete on its own: in every saved version, in a .play file,
    and on another computer.
 
 Opening a graph uses the library's full-size copy when this browser has it, and the embedded copy
@@ -99,7 +99,7 @@ versions. The full-size picture is in IndexedDB, where size isn't a problem.
 Videos are **never embedded**. Even a short clip is several MB, more than a graph's whole history budget.
 
 - A video is kept in the video library, and the node names it in `params.videoId`, as before.
-- A .playfile carries the video file itself (playfile/bundle.ts `videoIdsIn`), so an export opens with its
+- A .play file carries the video file itself (playfile/bundle.ts `videoIdsIn`), so an export opens with its
   video elsewhere.
 - When the library doesn't have it (another browser, a cleared library), the card says
   **Missing: name.mp4 isn't in this browser's library** and offers **Re-link…** (pick the file) and

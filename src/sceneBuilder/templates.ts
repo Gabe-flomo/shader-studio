@@ -2,6 +2,7 @@
  * templates.ts — Scene Builder starting points, written as recipes (so every
  * template is also a test of the recipe language and of the graph builder).
  */
+import { OFFER_PIECES } from '../nodes/notOffered';
 import { parseRecipe } from './recipe';
 import type { SceneSpec } from './spec';
 
@@ -10,6 +11,8 @@ export interface SceneTemplate {
   label: string;
   blurb: string;
   recipe: string;
+  /** Not listed (it still loads by key): Picture as balls (nodes/notOffered.ts). */
+  hidden?: boolean;
 }
 
 export const SCENE_TEMPLATES: SceneTemplate[] = [
@@ -68,7 +71,7 @@ export const SCENE_TEMPLATES: SceneTemplate[] = [
     ].join('\n'),
   },
   {
-    key: 'balls', label: 'Picture as balls',
+    key: 'balls', label: 'Picture as balls', hidden: !OFFER_PIECES,
     blurb: 'CC Ball Action: a picture rebuilt from balls, each the picture\'s colour at its home and lifted towards you by its brightness, with a wave rolling through. Pick the picture under Pictures, or drop one on its Texture node once built.',
     recipe: [
       'surface',

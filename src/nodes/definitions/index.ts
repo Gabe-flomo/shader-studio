@@ -1,4 +1,5 @@
 // ─── Node Definitions — thin aggregator ──────────────────────────────────────
+import { isOffered } from '../notOffered';
 import { NODE_ALIASES } from './aliases';
 export { NODE_ALIASES, resolveNodeAliases, resolveSubgraphAliases, aliasParams } from './aliases';
 export type { NodeAlias } from './aliases';
@@ -858,9 +859,10 @@ export function getNodeDefinitionFor(node: GraphNode): NodeDefinition | undefine
 }
 
 /** Every definition that can be offered for adding: built-ins plus user nodes.
- *  Deprecated ones stay in the registry (saved graphs still load) but aren't listed. */
+ *  Deprecated ones, and hidden ones (nodes/notOffered.ts: Pieces, Balls), stay in the registry
+ *  (saved graphs still load) but aren't listed. */
 export function getOfferedDefinitions(): NodeDefinition[] {
-  return [...Object.values(NODE_REGISTRY), ...getAllUserNodeDefinitions()].filter(n => !n.deprecated);
+  return [...Object.values(NODE_REGISTRY), ...getAllUserNodeDefinitions()].filter(n => !n.deprecated && isOffered(n.type));
 }
 
 export function getNodesByCategory(category: string): NodeDefinition[] {

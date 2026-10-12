@@ -71,7 +71,7 @@ export function AutosaveSettings() {
         ))}
         {!snaps.length && <Row label="No autosaves yet" detail={mode === 'off' ? 'Autosave is off.' : 'One is written once the open project changes.'} />}
         {isTauri() && snaps.length > 0 && (
-          <Row label="Autosave folder" detail="In the app’s own data folder. Each autosave is a .playfile: double-click one to open it in Playfield.">
+          <Row label="Autosave folder" detail="In the app’s own data folder. Each autosave is a .play file: double-click one to open it in Playfield.">
             <Button size="sm" variant="ghost" icon="folder" onClick={reveal}>Show in Finder</Button>
           </Row>
         )}

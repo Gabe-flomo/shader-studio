@@ -77,14 +77,14 @@ Previews are cached in IndexedDB (`shader-studio-linked`, store `thumbs`) keyed 
 
 ## Exports and sharing
 
-- **.playfile** (Export as .playfile, a Play setup, a kit, a presentation): the linked files the items use (drum pad samples, Video layers, Background videos) are **bundled** like library videos (`videosFor` → `videoZipFiles(ids)`, with the usual "Include N videos (size)?" ask past 200 MB). Importing keeps them as **library media** under the same id (the `linked:` reference), so the setup finds them without the folder, and they count toward the storage limit there.
-- **Library ZIP, Export everything, profile ZIP, backup and workspace folders**: linked files are **left as references** (the folders stay yours and may be large). On another computer those setups show the files as missing with **Relink…**; to take the files along, export a .playfile instead. The Linked folders view says so.
+- **.play file** (Export as a .play file, a Play setup, a kit, a presentation): the linked files the items use (drum pad samples, Video layers, Background videos) are **bundled** like library videos (`videosFor` → `videoZipFiles(ids)`, with the usual "Include N videos (size)?" ask past 200 MB). Importing keeps them as **library media** under the same id (the `linked:` reference), so the setup finds them without the folder, and they count toward the storage limit there.
+- **Library ZIP, Export everything, profile ZIP, backup and workspace folders**: linked files are **left as references** (the folders stay yours and may be large). On another computer those setups show the files as missing with **Relink…**; to take the files along, export a .play file instead. The Linked folders view says so.
 - Embedded pictures (backgrounds, image layers, sprites) travel inside the setup as always.
 - Web exports: drum pad samples and videos opened this session go in as before (they're remembered when loaded); a linked font shows the preset font.
 
 ## Storage limit
 
-Linked files aren't stored, so they don't count (`docs/storage-limit.md`). Only their small previews are cached. A .playfile import of linked files makes them library media, which does count.
+Linked files aren't stored, so they don't count (`docs/storage-limit.md`). Only their small previews are cached. A .play file import of linked files makes them library media, which does count.
 
 ## Not covered (yet)
 

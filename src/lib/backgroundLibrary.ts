@@ -678,7 +678,7 @@ export function resetBackgroundCache(): void { cache = null; dbPromise = null; }
 // file in a linked folder, read from disk in place (files/linkedFolders.ts),
 // never copied here. getVideo/hasVideo/getImage/hasImage/imageUrl read it from
 // the folder; when the folder isn't here they fall back to a library record with
-// that same id (a .playfile carried the file, and the import kept it).
+// that same id (a .play file carried the file, and the import kept it).
 
 export interface LibraryVideoMeta {
   id: string;

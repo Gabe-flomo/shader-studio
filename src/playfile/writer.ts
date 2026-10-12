@@ -93,7 +93,7 @@ export async function writePlayfileZip(items: WriteItem[], opts: WriteOptions = 
   return { bytes: zipSync(zipped, { level: 6 }), manifest };
 }
 
-/** `name.playfile`, safe as a file name. */
+/** `name.play`, safe as a file name (an old `.playfile` / `.playfield` ending is swapped). */
 export function playfileName(name: string): string {
   return `${fileSafeName(name).replace(/\.(playfile|playfield|play)$/i, '')}${PLAYFILE_EXT}`;
 }

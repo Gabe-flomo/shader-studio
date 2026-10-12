@@ -25,7 +25,7 @@ Code: `src/components/files/*` (the views) over `src/files/*` (the models, pure 
 | save | `saveGraph` (the store), saving a GLSL shader (GLSLPage), a custom function preset, a Function Builder function |
 | render | `saveRecording` (stills, MediaRecorder video, PNG sequences) and the desktop ffmpeg export |
 | take | `keepTake` in `lib/takes.ts` (a take kept in the graph's Play setup) |
-| import | a `.playfile` import, a profile install, a library ZIP, a graph JSON, a GLSL file |
+| import | a `.play` import, a profile install, a library ZIP, a graph JSON, a GLSL file |
 | presentation | creating/adopting a presentation, and the autosave, once per presentation every five minutes |
 
 `activityTotals(events, now, days)` gives per-kind counts and one bucket per local calendar day; `calendarBuckets(events, year, month)` the month's events by day. The log dispatches `files-activity-changed` on the window after a record so an open home refreshes. Tests: `src/files/__tests__/activity.test.ts`.
@@ -50,14 +50,14 @@ Posters are drawn one at a time, only while the tab is visible, and an all-black
 `ItemPage.tsx`, for a graph, Play, presentation, GLSL shader, custom function preset, Function Builder function, preset, published node, sketch or palette (`ITEM_KINDS` in `src/files/itemCode.ts`). A panel on a desktop; on a phone it opens in a sheet over where you are. It shows:
 
 - the title and kind (a graph with a Play setup says so), size and when it was saved;
-- **actions**: Open (in the Studio / Play / Present / the GLSL page / the Function Builder), Export as .playfile, Export readable (a graph's readable JSON, a shader's `.glsl`, a sketch's `.js`, otherwise JSON), Duplicate (a copy beside it, "… copy", with Undo; `src/files/duplicate.ts`) and Delete (with Undo, through the same path as the tree);
+- **actions**: Open (in the Studio / Play / Present / the GLSL page / the Function Builder), Export as a .play file, Export readable (a graph's readable JSON, a shader's `.glsl`, a sketch's `.js`, otherwise JSON), Duplicate (a copy beside it, "… copy", with Undo; `src/files/duplicate.ts`) and Delete (with Undo, through the same path as the tree);
 - the **picture**: a graph's, Play's, presentation's or shader's poster; for a function, the live plot or field from the Present code-preview harness (`present/snippetHarness.ts`, loaded lazily) with the function's numbers as sliders that update it;
 - the **code**, folded to its first lines with Expand;
 - **where it's used** and what it uses (the same cards as the tree view);
 - **notes and credits**: a Play's notes and source credit, a function's comment, a shader's note, how many node comments are inside;
 - what's **inside** (a graph's earlier versions and Play setup), as rows that open.
 
-Layer sets and rack presets (Presets → Layer sets / Racks, docs/presets.md) open as item pages too: **Add to Play** / **Add as a track** is their Open, a set shows the poster it was saved with, the files its layers use (linked-folder ones as links) and what was left out when it was saved, and **Export as .playfile** takes a set's videos and sounds along.
+Layer sets and rack presets (Presets → Layer sets / Racks, docs/presets.md) open as item pages too: **Add to Play** / **Add as a track** is their Open, a set shows the poster it was saved with, the files its layers use (linked-folder ones as links) and what was left out when it was saved, and **Export as a .play file** takes a set's videos and sounds along.
 
 ## Node pages
 

@@ -397,7 +397,7 @@ function SourceSettings({ it, tk, busy, onSet, onFile, onLinked, onLibrary, onGr
           ))}
           {missing && linked && note(linkedProblem(it.libraryId!) ? linkedMissingText(it.libraryId!, it.name) : 'Reading it from its linked folder…', linkedProblem(it.libraryId!) ? 'warning' : 'faint')}
           {missing && !linked && note(`“${it.name}” (${sizeText(it.bytes ?? 0)}) was too big to save. Load it again to use it.`, 'warning')}
-          {!missing && linked && note('Plays from its linked folder, read-only: not copied into the setup or the library. A .playfile export takes a copy along.')}
+          {!missing && linked && note('Plays from its linked folder, read-only: not copied into the setup or the library. A .play file export takes a copy along.')}
           {!missing && !it.src && !linked && note(`Over ${sizeText(BACKGROUND_VIDEO_KEEP)}, so it plays until you reload: saves, play files and web pages leave it out. Trim or compress it to keep it.`, 'warning')}
           {el?.error && note('This browser can’t play that video. Try an MP4 (H.264) or a WebM.', 'warning')}
           {!missing && note('It follows the clock: pause the preview and it pauses; ↺ starts it over. Only the showing video plays.')}

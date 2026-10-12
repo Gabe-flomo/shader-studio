@@ -282,7 +282,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
   const importUserNodes = async () => {
     const r = await importUserNodesFromFile();
     if (!r.ok) { reportFileResult(r, { failTitle: 'Couldn’t import node types' }); return; }
-    if (r.deferred) return; // a .playfile: its preview dialog imports
+    if (r.deferred) return; // a .play file: its preview dialog imports
     const parts = [
       r.imported?.length ? `${r.imported.length} new: ${r.imported.join(', ')}` : '',
       r.replaced?.length ? `${r.replaced.length} updated: ${r.replaced.join(', ')}` : '',
@@ -585,7 +585,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
               <span style={{ display: 'flex', gap: 2 }}>
                 <IconButton icon="import" label="Import node types: a node pack (.playfile) or an older .json" size="sm" onClick={importUserNodes} />
                 {userNodes.length > 0 && (
-                  <IconButton icon="export" label={canPack ? 'Export node types as a node pack (.playfile, signed, optionally sealed)' : 'Export node types as a node pack (Pro: making node packs)'} size="sm"
+                  <IconButton icon="export" label={canPack ? 'Export node types as a node pack (.play file, signed, optionally sealed)' : 'Export node types as a node pack (Pro: making node packs)'} size="sm"
                     onClick={async () => reportFileResult(await exportUserNodes(), { failTitle: 'Couldn’t export node types' })} />
                 )}
               </span>

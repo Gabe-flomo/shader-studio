@@ -1,6 +1,6 @@
 /**
  * Node packs (docs/node-packs.md): a set of node types made in the Builder's
- * pack workspace and shared as one `.playfile`, with the graphs that show how
+ * pack workspace and shared as one `.play`, with the graphs that show how
  * they're used, GLSL, presentations, images and notes alongside.
  *
  * Two shapes live here:

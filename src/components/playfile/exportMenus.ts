@@ -1,12 +1,12 @@
 /**
- * Every download the app offers. Graphs and Play setups export as `.playfile` only (a readable JSON
- * file still opens); other things keep `.playfile` first and their readable format as the other
+ * Every download the app offers. Graphs and Play setups export as `.play` only (a readable JSON
+ * file still opens); other things keep `.play` first and their readable format as the other
  * (docs/playfile-format.md, "Where the app writes one"). Each `offer…` opens the small format menu at
  * the button that asked; the plan's gates stay as they were for each export.
  */
 import { requireFeature } from '../../lib/plan';
 import { seriesHistory } from '../../store/graphVersions';
-import { PLAYFILE_EXT } from '../../playfile/format';
+import { PLAYFILE_LABEL } from '../../playfile/format';
 import { currentGraphLinks, exportCurrentGraph, exportPlayfile, exportPresentationPlayfile, openNodePackDialog } from '../../playfile/app';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { reportFileResult } from '../shell/reportFileResult';
@@ -16,7 +16,7 @@ import type { DownloadSetId } from '../../utils/library';
 type Anchor = Element | { x: number; y: number } | null;
 const report = (failTitle: string) => (r: Parameters<typeof reportFileResult>[0]) => reportFileResult(r, { failTitle });
 
-/** ".playfile", and when the open graph is linked to presentations, ".playfile without them" too. */
+/** ".play", and when the open graph is linked to presentations, ".play file without them" too. */
 function playfileChoices(asPlay: boolean, hint: string) {
   const current = useNodeGraphStore.getState().currentGraph;
   const links = currentGraphLinks(current?.name);
@@ -24,19 +24,19 @@ function playfileChoices(asPlay: boolean, hint: string) {
   // A saved series with earlier versions: this version, or the whole series in one file.
   const earlier = current ? seriesHistory(current.name).length : 0;
   if (!links.length && earlier) return [
-    { label: `As ${PLAYFILE_EXT}: this version (${current!.major}.${current!.minor})`, icon: 'export' as const, hint, run: async () => report(fail)(await exportCurrentGraph(asPlay)) },
-    { label: `As ${PLAYFILE_EXT}: the whole series (${earlier + 1} versions)`, icon: 'export' as const, hint: 'Every saved version, families and notes included: opening it brings the series back', run: async () => report(fail)(await exportCurrentGraph(asPlay, { series: true })) },
+    { label: `As a ${PLAYFILE_LABEL}: this version (${current!.major}.${current!.minor})`, icon: 'export' as const, hint, run: async () => report(fail)(await exportCurrentGraph(asPlay)) },
+    { label: `As a ${PLAYFILE_LABEL}: the whole series (${earlier + 1} versions)`, icon: 'export' as const, hint: 'Every saved version, families and notes included: opening it brings the series back', run: async () => report(fail)(await exportCurrentGraph(asPlay, { series: true })) },
   ];
-  if (!links.length) return [{ label: `As ${PLAYFILE_EXT}`, icon: 'export' as const, hint, run: async () => report(fail)(await exportCurrentGraph(asPlay)) }];
+  if (!links.length) return [{ label: `As a ${PLAYFILE_LABEL}`, icon: 'export' as const, hint, run: async () => report(fail)(await exportCurrentGraph(asPlay)) }];
   return [
-    { label: `As ${PLAYFILE_EXT}, with ${links.length === 1 ? 'its linked presentation' : `its ${links.length} linked presentations`}`, icon: 'export' as const, hint, run: async () => report(fail)(await exportCurrentGraph(asPlay, { linked: true })) },
-    { label: `As ${PLAYFILE_EXT}, without linked presentations`, icon: 'export' as const, hint: 'Just this and what it uses', run: async () => report(fail)(await exportCurrentGraph(asPlay, { linked: false })) },
+    { label: `As a ${PLAYFILE_LABEL}, with ${links.length === 1 ? 'its linked presentation' : `its ${links.length} linked presentations`}`, icon: 'export' as const, hint, run: async () => report(fail)(await exportCurrentGraph(asPlay, { linked: true })) },
+    { label: `As a ${PLAYFILE_LABEL}, without linked presentations`, icon: 'export' as const, hint: 'Just this and what it uses', run: async () => report(fail)(await exportCurrentGraph(asPlay, { linked: false })) },
   ];
 }
 
 /** The Studio's Export (top bar, phone menu, the shortcut). */
 export function offerGraphExport(anchor: Anchor): void {
-  // Graphs export as .playfile only (a JSON graph still opens; saving it again writes a .playfile).
+  // Graphs export as a .play file only (a JSON graph still opens; saving it again writes a .playfile).
   offerOrRun(anchor, playfileChoices(false, 'The graph and what it uses (published nodes, functions, images), in one file that opens anywhere'), 'Export this graph');
 }
 
@@ -54,7 +54,7 @@ export function offerPlayExport(anchor: Anchor): void {
 /** A presentation (the open one when `name` is its name, or a saved one). */
 export function offerPresentationExport(anchor: Anchor, name?: string): void {
   chooseExportFormat(anchor, [
-    { label: `As ${PLAYFILE_EXT}`, icon: 'export', hint: 'The presentation with its Plays, pictures and fonts, and the graphs it was made from', run: async () => {
+    { label: `As a ${PLAYFILE_LABEL}`, icon: 'export', hint: 'The presentation with its Plays, pictures and fonts, and the graphs it was made from', run: async () => {
       const { usePresentation } = await import('../present/presentationStore');
       const st = usePresentation.getState();
       const n = name ?? st.name;
@@ -89,12 +89,12 @@ export function offerSetExport(anchor: Anchor, set: DownloadSetId): void {
   };
   const zip = async () => { const { exportSet } = await import('../../utils/libraryActions'); await exportSet(set); };
   chooseExportFormat(anchor, [
-    { label: `As ${PLAYFILE_EXT}`, icon: 'export', hint: 'One file: open it in Playfield to see what’s inside and pick what to bring in', run: playfile },
+    { label: `As a ${PLAYFILE_LABEL}`, icon: 'export', hint: 'One file: open it in Playfield to see what’s inside and pick what to bring in', run: playfile },
     { label: 'As a ZIP of readable files', icon: 'folder', hint: set === 'glsl' ? 'Plain .glsl files in folders, plus a library.json' : 'The files in folders, plus a library.json that imports them back', run: zip },
   ], `Download ${SET_NAMES[set].toLowerCase()}`);
 }
 
-/** Everything saved (Pro, like Download everything): one .playfile. Settings stay with the app. */
+/** Everything saved (Pro, like Download everything): one .play file. Settings stay with the app. */
 export async function exportEverythingPlayfile(): Promise<void> {
   if (!requireFeature('files.everything')) return;
   report('Couldn’t export everything')(await exportPlayfile(['section:graphs', 'section:presentations', 'section:glsl', 'section:functions', 'section:nodes', 'section:presets', 'section:scripts', 'section:backgrounds'], { fileName: `Playfield library ${new Date().toISOString().slice(0, 10)}`, success: 'Exported everything' }));
@@ -103,7 +103,7 @@ export async function exportEverythingPlayfile(): Promise<void> {
 /** The Studio's custom function presets (the Functions list's Export). */
 export function offerCustomFunctionsExport(anchor: Anchor): void {
   chooseExportFormat(anchor, [
-    { label: `As ${PLAYFILE_EXT}`, icon: 'export', hint: 'The Functions library (custom function presets and the Builder’s functions), in one file', run: async () => report('Couldn’t export the functions')(await exportPlayfile(['section:functions'], { fileName: 'Custom functions', dependencies: false, success: 'Exported the custom functions' })) },
+    { label: `As a ${PLAYFILE_LABEL}`, icon: 'export', hint: 'The Functions library (custom function presets and the Builder’s functions), in one file', run: async () => report('Couldn’t export the functions')(await exportPlayfile(['section:functions'], { fileName: 'Custom functions', dependencies: false, success: 'Exported the custom functions' })) },
     { label: 'As readable JSON', icon: 'code', hint: 'custom-fns.json, as before', run: async () => { await useNodeGraphStore.getState().exportCustomFns(); } },
   ], 'Export custom functions');
 }

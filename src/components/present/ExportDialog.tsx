@@ -90,7 +90,7 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
     <Modal
       title="Export the presentation" subtitle={doc.title} icon="export" onClose={onClose} width={500}
       footer={<>
-        <Button variant="ghost" icon="export" onClick={e => { offerPresentationExport(e.currentTarget); }} title="The presentation with every Play in it, to open in Playfield anywhere: a .playfile, or a readable .present.json">Presentation file</Button>
+        <Button variant="ghost" icon="export" onClick={e => { offerPresentationExport(e.currentTarget); }} title="The presentation with every Play in it, to open in Playfield anywhere: a .play file, or a readable .present.json">Presentation file</Button>
         <span style={{ flex: 1 }} />
         <Button variant="primary" icon="code" disabled={busy || !ready} onClick={save}>{busy ? 'Building…' : !ready ? 'Gathering pictures…' : 'Save the web page'}</Button>
       </>}

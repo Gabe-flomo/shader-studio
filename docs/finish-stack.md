@@ -1086,7 +1086,7 @@ controls and mappings (same names).
 unique ids, one `fx:out`, plain JSON params, wires only to nodes that are there
 (`in` is the inputs node, never stored). A node effect also has `node: <type>`.
 Your effects keep `graph` the same way (`SavedEffect.graph`), so it travels in
-library ZIPs, `.playfile` libraries, profiles and the workspace folder's
+library ZIPs, `.play` libraries, profiles and the workspace folder's
 `presets/finish effects/<Name>.effect.json`. A sealed node pack drops the graph
 with the code sealed. `graph` is a reserved name for a setting.
 
@@ -1151,7 +1151,7 @@ effects with their code).
 | --- | --- |
 | Library ZIPs (`library.json`, and readable `finish stack presets.json`, `finish effects.json`, `finish looks.json`) | the three lists, merged on import like palettes |
 | Profile ZIPs, Install | the same keys, merged as lists |
-| `.playfile` | a `library` item when chosen on the Files page (or a whole library); effects also inside node packs |
+| `.play` | a `library` item when chosen on the Files page (or a whole library); effects also inside node packs |
 | Files page | Presets → Finish stack presets, Finish effects (Your effects), Finish looks |
 | Workspace folder | `presets/finish stacks/<Name>.finish.json`, `presets/finish effects/<Name>.effect.json` |
 | Node packs | Builder → Node packs → Extras → **A Finish effect…**: carried in the `nodes` item's `finishEffects`, sealed with the pack; on import they go into Your effects (tagged with the pack) |

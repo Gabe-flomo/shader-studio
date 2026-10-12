@@ -1089,7 +1089,7 @@ export function formatRecipe(src: string): string {
 export const RECIPE_VOCABULARY = {
   modes: ['surface', 'volumetric', 'glass', 'gi'],
   combines: ['union', 'smooth-union', 'subtract', 'smooth-subtract', 'intersect', 'smooth-intersect'],
-  shapes: SHAPES.map(s => ({ kind: s.kind, keys: [...s.params.map(p => p.key), ...(shapeDims(s) ? (shapeDims(s)!.vector ? DIM_WORDS : ['size']) : [])] })),
+  shapes: SHAPES.filter(s => !s.hidden).map(s => ({ kind: s.kind, keys: [...s.params.map(p => p.key), ...(shapeDims(s) ? (shapeDims(s)!.vector ? DIM_WORDS : ['size']) : [])] })),
   warps: WARPS.map(w => ({ kind: w.kind === 'noise' ? 'warp' : w.kind, keys: [...(w.axes ? [w.axes.key] : []), ...w.params.map(p => p.key), ...(w.select ? [w.select.key] : [])] })),
   settings: ['sun dir=(x,y,z) color=…', 'sky (r,g,b)', 'bounce (r,g,b)', 'shadows 16 | off', 'ao 0.06 | off', 'fog 0.3 color=…', 'background (r,g,b) | top=… bottom=… | picture=…', `tone ${TONE_MODES.join('|')}`, 'camera perspective|orthographic|reverse dist angle elev orbit zoom flatten reverse converge x y z', 'quality steps dist step jitter', 'texture name node= aspect=', `shape … texture=name map=${TEX_MAPS.join('|')} tiles=2 sharp=4 tex-offset=(0.25,0) tex-rot=30 bump=1`],
   colours: Object.keys(COLOR_NAMES),

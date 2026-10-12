@@ -1,7 +1,7 @@
 /**
  * The pack workspace's side of the app: storage, the node registry, the
  * compiler (does each node compile? its thumbnail), and the export (signed
- * with this author's key, sealed when asked) through the one .playfile writer.
+ * with this author's key, sealed when asked) through the one .play file writer.
  */
 import type { GraphNode } from '../types/nodeGraph';
 import type { UserNodeDefinition } from '../types/userNode';

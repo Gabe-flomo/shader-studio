@@ -250,7 +250,7 @@ class SplatEngine {
         })()
         : await getSplatFile(s.file);
       if (s.gen !== gen) return;
-      if (!f) { s.status = { ...idle(), state: 'missing', fileName: name, message: `The scan${name ? ` “${name}”` : ''} isn’t on this device. Load it again (or open the .playfile that carries it).` }; this.changed(); return; }
+      if (!f) { s.status = { ...idle(), state: 'missing', fileName: name, message: `The scan${name ? ` “${name}”` : ''} isn’t on this device. Load it again (or open the .play file that carries it).` }; this.changed(); return; }
       s.status = { ...s.status, fileName: f.name, bytes: f.bytes };
       this.changed();
       const bytes = await f.blob.arrayBuffer();
