@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.194',
+    date: '2026-10-12',
+    title: 'Halls of time',
+    highlights: [
+      { area: 'Studio', text: 'Time Cube in space: repeat the box into rows, floors or endless halls, each copy at its own moment, and twist, bend or wave the space around it.' },
+      { area: 'Studio', text: 'New Time Cube Shape node: wire it through Repeat Scene, Twist 3D or a Warp Builder group into Time Cube View\'s Space. Try the Infinite hall preset.' },
+      { area: 'Studio', text: 'Warp Builder: right-click an empty slot for a short menu (Number, x, y, uv, time…). Function tiles show a small graph instead of a live picture: faster.' },
+    ],
+  },
+  {
     id: '2026.10.193',
     date: '2026-10-12',
     title: 'Ball action clip',
