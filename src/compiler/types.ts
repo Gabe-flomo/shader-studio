@@ -264,6 +264,8 @@ export interface CompilationResult {
   fragmentShader: string;
   success: boolean;
   errors?: string[];
+  /** The graph has a loop (compiler/graphLoops.ts): its nodes and the wire that closes it, for the error's fix buttons. */
+  loop?: import('./graphLoops').GraphLoop;
   /** Maps nodeId → { outputKey → glslVarName } — used by ShaderCanvas node-probe. */
   nodeOutputVars: Map<string, Record<string, string>>;
   /**

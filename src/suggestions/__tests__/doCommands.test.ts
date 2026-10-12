@@ -17,6 +17,7 @@ import type { GraphNode } from '../../types/nodeGraph';
 import { classify, clausesOf, didYouMean, execCommand, type CommandPlan } from '../doCommands';
 import { lex, readRef } from '../doRefs';
 import { scratchGraph } from '../doScratch';
+import { densityLoopGraph } from '../../compiler/__tests__/fixtures/densityLoopGraph';
 import { ACTIONS } from '../../lang/vocabulary';
 import { BUILDER_COMMANDS, COMMAND_VERBS, RECIPES, actionExamples, commandReference, searchReference } from '../../lang/commands';
 import { readBuilderCommand } from '../../builders/doBuilders';
@@ -273,6 +274,11 @@ describe('type checks', () => {
   it('refuses combining a colour as a distance, loops, and switches that drop wires', () => {
     expect(run('union the palette with the circle', scratchGraph('mixed')).clauses[0].message).toMatch(/Type check: Union takes two distances/);
     expect(run('connect the glow to the circle', scratchGraph('glow')).clauses[0].message).toMatch(/loop/);
+    // The same guard as wiring by hand: names the loop, with the tip for a Draw agents' own Density.
+    const density = run('connect the stops palette to the over of draw agents', densityLoopGraph({ loop: false })).clauses[0];
+    expect(density.status).not.toBe('ok');
+    expect(density.message).toContain('That would make a loop: Draw agents → Stops Palette → Draw agents');
+    expect(density.message).toContain('Palette by density');
     const sw = run('switch the circle to a palette', scratchGraph('circle'));
     expect(sw.clauses[0].message).toMatch(/Can’t switch Circle SDF to Palette/);
   });

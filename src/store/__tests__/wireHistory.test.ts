@@ -74,14 +74,16 @@ describe('wire memory', () => {
   });
 
   it('double-click on an output removes every wire leaving it, in one undo step, and remembers them', () => {
-    // a second wire from the circle, so the output feeds two inputs
-    useNodeGraphStore.getState().connectNodes('circ', 'distance', 'circ', 'radius');
+    // a second wire from the circle, so the output feeds two inputs (into another node: into its own
+    // Radius would be a loop, which connectNodes refuses)
+    useNodeGraphStore.setState(s => ({ nodes: [...s.nodes, node('f2v2', 'floatToVec3', { input: { type: 'float', label: 'Float' } }, { rgb: { type: 'vec3', label: 'Color' } })] }));
+    useNodeGraphStore.getState().connectNodes('circ', 'distance', 'f2v2', 'input');
     const before = useNodeGraphStore.getState().wireHistory.length;
     const removed = useNodeGraphStore.getState().disconnectOutput('circ', 'distance');
     expect(removed).toBe(2);
     const st = useNodeGraphStore.getState();
     expect(st.nodes.find(n => n.id === 'f2v')!.inputs.input.connection).toBeUndefined();
-    expect(st.nodes.find(n => n.id === 'circ')!.inputs.radius.connection).toBeUndefined();
+    expect(st.nodes.find(n => n.id === 'f2v2')!.inputs.input.connection).toBeUndefined();
     expect(st.wireHistory.length).toBe(before + 2);
     expect(st.pastWiresFor('f2v', st.nodes).map(w => w.fromNodeId)).toEqual(['circ']);
     expect(useNodeGraphStore.getState().disconnectOutput('circ', 'distance')).toBe(0);

@@ -26,6 +26,7 @@ import type { GraphNode, NodeGraph } from '../types/nodeGraph';
 import type { AgentDepositProgram, AgentDrawProgram, AgentGroupProgram, AgentParam, AgentTrailProgram, CompilationResult, PassProgram } from './types';
 import { VERTEX_SHADER } from './types';
 import { topologicalSort } from './topoSort';
+import { findLoop, loopMessage } from './graphLoops';
 import { validateGraph } from './validate';
 import { generateFragmentShader } from './shaderAssembler';
 import { computeNodeSlug } from './nodeSlug';
@@ -225,7 +226,10 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
     });
     let sortedAll: GraphNode[];
     try { sortedAll = topologicalSort(withoutPrevious); } catch {
-      return failure(['This graph has a loop. A loop through a Pass must come out of its Previous output (the picture from the frame before).']);
+      // Name the loop's nodes (compiler/graphLoops.ts); mention a Pass only when one is in it.
+      const loop = findLoop(nodes);
+      if (loop) return { ...failure([loopMessage(nodes, loop)]), loop };
+      return failure(['This graph has a loop: a node feeds itself within one frame. A loop through a Pass must come out of its Previous output (the picture from the frame before).']);
     }
     const used = new Set<string>();
     const slugs = new Map<string, string>();

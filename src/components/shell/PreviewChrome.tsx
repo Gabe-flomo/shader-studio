@@ -299,11 +299,24 @@ function TimeReadout() {
   return <span ref={timeReadoutRef} style={{ margin: '0 4px 0 6px', color: tk.text.primary, fontVariantNumeric: 'tabular-nums' }}>0.00s</span>;
 }
 
+/** A loop in the graph (compiler/graphLoops.ts): select its nodes, or remove the wire that closes it. */
+function LoopFixes({ onDone }: { onDone: () => void }) {
+  const selectLoop = useNodeGraphStore(s => s.selectLoop);
+  const breakLoop = useNodeGraphStore(s => s.breakLoop);
+  return (
+    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+      <Button size="sm" variant="secondary" style={{ height: 28 }} onClick={() => { selectLoop(); onDone(); }}>Select the loop</Button>
+      <Button size="sm" variant="secondary" style={{ height: 28 }} onClick={() => { breakLoop(); onDone(); }}>Remove the wire that closes it</Button>
+    </div>
+  );
+}
+
 /** "● N errors" — opens the graph and GLSL compile errors. Hidden when there are none. */
 function ErrorPill() {
   const tk = useTokens();
   const graph = useNodeGraphStore(s => s.compilationErrors);
   const glsl = useNodeGraphStore(s => s.glslErrors);
+  const loop = useNodeGraphStore(s => s.graphLoop);
   const anchor = useRef<HTMLSpanElement>(null);
   const [open, setOpen] = useState(false);
   const count = graph.length + glsl.length;
@@ -342,6 +355,7 @@ function ErrorPill() {
           </div>
           <div style={{ padding: '10px 14px 12px', display: 'flex', flexDirection: 'column', gap: 12, maxHeight: 260, overflow: 'auto' }}>
             {section('GRAPH', graph)}
+            {loop && <LoopFixes onDone={() => setOpen(false)} />}
             {section('GLSL', glsl)}
           </div>
         </Popover>

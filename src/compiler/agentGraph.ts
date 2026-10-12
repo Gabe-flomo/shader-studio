@@ -26,7 +26,7 @@ import { typesCompatible } from '../lib/typesCompatible';
 import { fieldChainProblems, fieldInputKeys } from './fieldSockets';
 import { topologicalSort } from './topoSort';
 import { computeNodeSlug } from './nodeSlug';
-import { AGENT_TIERS, AGENTS_GROUP_TYPE, DRAW_COLOR_BY, DRAW_STYLES, GP_PALETTE_NAMES, isAgent3d, TRAIL_RESOLUTIONS, TRAIL_VOLUMES, withAgentSpace } from '../nodes/definitions/agents';
+import { AGENT_TIERS, AGENTS_GROUP_TYPE, DRAW_COLOR_BY, DRAW_PICTURE_PARAMS, DRAW_STYLES, GP_PALETTE_NAMES, isAgent3d, TRAIL_RESOLUTIONS, TRAIL_VOLUMES, withAgentSpace } from '../nodes/definitions/agents';
 
 /** Node types that send a graph down this path (at any depth). */
 export const AGENTS_FAMILY = new Set([AGENTS_GROUP_TYPE, 'trailField', 'drawAgents', 'agentDeposit', 'agentEmit']);
@@ -76,6 +76,8 @@ export function engineParams(n: GraphNode, slug: string): { params: Record<strin
   for (const [key, pd] of Object.entries(def.paramDefs ?? {})) {
     // Settings only a 3D group has (the camera, a volume's size) are left out in 2D: its spec is as it always was.
     if (pd.showWhen?.param === 'agentSpace' && !d3) continue;
+    // Draw agents' Background is drawn by the picture's program, not the engine: its spec is as it always was.
+    if (n.type === 'drawAgents' && DRAW_PICTURE_PARAMS.has(key)) continue;
     const v = patchedNode.params[key] ?? def.defaultParams?.[key];
     if (typeof v === 'number' || typeof v === 'string' || (Array.isArray(v) && v.every(x => typeof x === 'number'))) params[key] = v as AgentParam | number[];
   }

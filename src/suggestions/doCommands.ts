@@ -31,6 +31,7 @@ import { getNodeDefinition, getNodeDefinitionFor } from '../nodes/definitions';
 import { VECTORIZABLE_NODES } from '../nodes/definitions/math';
 import { planSwitch, applySwitchToList, switchOptions, type SwitchContext } from '../nodes/switchNode';
 import { typesCompatible } from '../lib/typesCompatible';
+import { loopIfWired, loopPath, loopTip } from '../compiler/graphLoops';
 import { checkWire } from '../lang/typeCheck';
 import { ACTIONS, COLOURS, PARAMS, SHAPES, TARGETS, PLACES, colourOf, editDistance, matchAt, numberOf, plural } from '../lang/vocabulary';
 import { COMMAND_VERBS, RELATIVE_STEP, RELATIVE_WORDS } from '../lang/commands';
@@ -251,9 +252,6 @@ function upstream(nodes: GraphNode[], id: string): Set<string> {
   }
   return seen;
 }
-
-/** Whether wiring `from` into `to` would make a loop. */
-const makesLoop = (nodes: GraphNode[], from: string, to: string) => from === to || upstream(nodes, from).has(to);
 
 function setWire(nodes: GraphNode[], to: string, key: string, from: Wired | null): GraphNode[] {
   return nodes.map(nd => (nd.id === to
@@ -830,7 +828,9 @@ function execConnect(c: ClauseCtx, rest: Tok[], opts: { reconnect?: boolean } = 
     typeCheck(c, from, out!.key, to, first);
   }
   typeCheck(c, from, out!.key, to, inKey!);
-  if (makesLoop(c.run.nodes, fromId, toId)) fail(`That would make a loop: ${nodeName(to)} already feeds ${nodeName(from)}.`);
+  // The same check as wiring by hand (compiler/graphLoops.ts): a Pass's Previous may close a loop.
+  const loop = loopIfWired(c.run.nodes, fromId, out!.key, toId, inKey!);
+  if (loop) fail(`That would make a loop: ${loopPath(c.run.nodes, loop)}. ${loopTip(c.run.nodes, loop) ?? `${nodeName(to)} already feeds ${nodeName(from)}.`}`);
   const prev = to.inputs[inKey!].connection;
   if (prev && prev.nodeId === fromId && prev.outputKey === out!.key && !opts.reconnect) fail(`${nodeName(from)} is already wired to ${nodeName(to)} · ${to.inputs[inKey!].label}.`);
   if (prev && (prev.nodeId !== fromId || prev.outputKey !== out!.key)) notes.push(`Replaces the wire from ${nodeName(c.run.nodes.find(x => x.id === prev.nodeId))}.`);
