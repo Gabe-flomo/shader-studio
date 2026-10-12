@@ -7,16 +7,15 @@
  * looked for elsewhere. The sample inputs ("With base = …") drive the CPU pictures and ranges.
  *
  * No worded sentences here: the rule-based wording (explain.ts) stays for the Code explorer, the
- * Do bar and the model's prompt, but this panel shows values instead.
+ * Do bar and the Explain rows, but this panel shows values instead.
  */
 import { useEffect, useMemo, useState } from 'react';
-import { allNodes, buildUpRows, transferPlot, workedSteps, workedVars, showValue, type ExplainContext, type Explanation, type LineExplanation, type UseQuery, type Value, type WorkedVar } from '../../lib/glslPatterns';
+import { allNodes, buildUpRows, transferPlot, workedSteps, workedVars, showValue, type Explanation, type LineExplanation, type UseQuery, type Value, type WorkedVar } from '../../lib/glslPatterns';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Icon } from '../ui/Icon';
 import { GlslCode, type CodeSpan } from './GlslCode';
 import { TransferPlotView } from './TransferPlotView';
-import { ExplainMore } from './ExplainMore';
 import { BuildUpView } from './BuildUpView';
 import type { BuildUpHost } from './buildUpHost';
 
@@ -32,11 +31,6 @@ export interface ExplainViewProps {
    * host to step through: selecting the result row calls it.
    */
   onShowPicture?: () => void;
-  /**
-   * Offer "Explain" (the on-device language model, docs/explain-model.md) for this line: its names' types, and where
-   * it is. Absent: no such action here (the Expression Block's rows put their own Explain beside the line).
-   */
-  explainMore?: { ctx?: ExplainContext; where?: string };
   /** Where the line lives (an Expression Block): wiring-aware pictures and step-through on the ▶ preview. */
   buildUp?: BuildUpHost;
   /** Changes when ▶ on the line opened this view: the build-up takes focus, ready to step. */
@@ -59,7 +53,7 @@ export function varSpans(ex: Explanation | LineExplanation): Array<{ start: numb
   return out;
 }
 
-export function ExplainView({ ex, onMakeNode, onFindUses, editable, onShowPicture, explainMore, buildUp, focusSignal }: ExplainViewProps) {
+export function ExplainView({ ex, onMakeNode, onFindUses, editable, onShowPicture, buildUp, focusSignal }: ExplainViewProps) {
   const tk = useTokens();
   const [hover, setHover] = useState<{ start: number; end: number } | null>(null);
   const [hoverVar, setHoverVar] = useState<string | null>(null);
@@ -159,7 +153,6 @@ export function ExplainView({ ex, onMakeNode, onFindUses, editable, onShowPictur
           )}
         </div>
       )}
-      {explainMore && <ExplainMore text={ex.source} ctx={explainMore.ctx} where={explainMore.where} />}
     </div>
   );
 }

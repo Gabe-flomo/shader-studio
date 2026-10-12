@@ -26,8 +26,7 @@ import { HowUsedButton } from '../codeExplorer/HowUsedButton';
 import { useCustomFnJump } from '../codeExplorer/useCodeJumpFocus';
 import { StatementsExplain } from '../explain/StatementsExplain';
 import { useExplainDialogs } from '../explain/useExplainDialogs';
-import { customFnContext, customFnUseHere, scopeNodes } from '../explain/hosts';
-import { ExplainScopeProvider } from '../explain/ExplainScope';
+import { customFnContext, customFnUseHere } from '../explain/hosts';
 import { useFnCardScope } from '../explain/functionCard/fnCardStore';
 import { MakeSliderButton } from '../code/MakeSlider';
 import { applyCodeSlider, useLiteralOffer } from '../code/codeSliderActions';
@@ -78,7 +77,6 @@ export function CustomFnModal({ node, onClose }: Props) {
   const explainCtx = useMemo(() => customFnContext(node), [node.params.inputs, node.params.body, node.inputs]);
   const explainDialogs = useExplainDialogs({ onJumped: onClose });
   // Explain is told which function this is (its neighbours in the graph) and the whole body around a statement
-  const explainScope = useMemo(() => ({ nodeId: node.id, kind: 'Custom Function', getNodes: scopeNodes, enclosing: () => `${glslFns ? `${glslFns}\n` : ''}${body}` }), [node.id, body, glslFns]);
   const completions = useMemo(
     () => buildCompletions((rawInputs as Array<{ name: string; type: DataType }> | undefined) ?? []),
     [rawInputs],
@@ -272,7 +270,6 @@ export function CustomFnModal({ node, onClose }: Props) {
   };
 
   return (
-    <ExplainScopeProvider value={explainScope}>
     <Modal
       title="Custom Function"
       subtitle={`${labelParam} · Custom Function node`}
@@ -439,7 +436,6 @@ export function CustomFnModal({ node, onClose }: Props) {
         </SidePanel>
       </div>
     </Modal>
-    </ExplainScopeProvider>
   );
 }
 

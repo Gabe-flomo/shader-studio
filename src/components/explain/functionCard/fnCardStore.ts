@@ -62,8 +62,6 @@ export interface NodeCardRequest {
   opener: HTMLElement | null;
   /** The node's longer info (sockets, connections). */
   onMore?: () => void;
-  /** Opened by the node's Explain button: ask the local model straight away. */
-  explain?: boolean;
 }
 
 export type CardRequest = FunctionCardRequest | NodeCardRequest;
@@ -119,10 +117,10 @@ export function useFnCardScope(scope: FnScope): { ref: (el: HTMLElement | null) 
 }
 
 /** The ⓘ on a canvas node: opens its card, or closes it when it is this node's. */
-export function toggleNodeCard(button: HTMLElement | null, nodeId: string, onMore?: () => void, explain = false): void {
+export function toggleNodeCard(button: HTMLElement | null, nodeId: string, onMore?: () => void): void {
   const cur = useFnCard.getState().req;
-  if (cur?.kind === 'node' && cur.nodeId === nodeId && !!cur.explain === explain) { closeFunctionCard(); return; }
+  if (cur?.kind === 'node' && cur.nodeId === nodeId) { closeFunctionCard(); return; }
   const r = button?.getBoundingClientRect();
   const anchor = r ? { left: r.left, top: r.top, width: r.width, height: r.height } : { left: 16, top: 16, width: 0, height: 0 };
-  openNodeCard({ nodeId, anchor, focus: true, opener: button, onMore, explain });
+  openNodeCard({ nodeId, anchor, focus: true, opener: button, onMore });
 }
