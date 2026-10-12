@@ -11,6 +11,8 @@ export interface PlanPass {
   repeat?: number;
   /** A Shader Texture's fixed square size in pixels. */
   size?: number;
+  /** MRT (docs/render-targets.md): the extra targets' settings; part of the target key. */
+  extra?: ReadonlyArray<{ format: string; filter: string }>;
   /** A Shader Texture's Update ('change' / 'once'); absent: every frame. */
   update?: 'change' | 'once';
   /** Slugs of the passes it reads this frame. */
@@ -20,7 +22,7 @@ export function ppSize(w: number, h: number, scale: number, size?: number): [num
 export function ppDrawn<T extends Pick<PlanPass, 'live'>>(passes: readonly T[]): T[];
 export function ppRepeat(p: Pick<PlanPass, 'repeat'>): number;
 export function ppPixel(w: number, h: number): [number, number];
-export function ppTargetKey(p: Pick<PlanPass, 'scale' | 'format' | 'filter' | 'wrap' | 'previous' | 'size'>, w: number, h: number): string;
+export function ppTargetKey(p: Pick<PlanPass, 'scale' | 'format' | 'filter' | 'wrap' | 'previous' | 'size' | 'extra'>, w: number, h: number): string;
 export function ppStaged<T extends Pick<PlanPass, 'afterAgents' | 'beforeParticles'>>(drawn: readonly T[], stage?: 'pre' | 'post', part?: 'particles' | 'rest'): T[];
 export function ppSplitsForParticles(drawn: readonly Pick<PlanPass, 'beforeParticles'>[]): boolean;
 export function ppPrevBound<T extends Pick<PlanPass, 'afterAgents' | 'beforeParticles'>>(drawn: readonly T[], stage?: 'pre' | 'post', part?: 'particles' | 'rest'): T[];
