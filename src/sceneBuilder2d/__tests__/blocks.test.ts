@@ -143,7 +143,7 @@ describe('the library', () => {
     const node = nodes.find(n => n.params._sbRole === 'p1')!;
     expect(node.type).toBe('exprNode');
     expect(node.params.outputType).toBe('vec2');
-    expect((node.params.lines as unknown[]).length).toBe(e.lines.length * (e.times ?? 1));
+    expect((node.params.lines as unknown[]).length).toBe(e.loop ? e.lines.length + (e.trap ? 1 : 0) : e.lines.length * (e.times ?? 1));
     for (const p of e.params) expect(node.params[p.name]).toBe(p.value);
     expect(String(node.params.__comment)).toContain(e.blurb);
   });

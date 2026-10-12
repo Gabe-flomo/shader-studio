@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.186',
+    date: '2026-10-11',
+    title: 'Loops',
+    highlights: [
+      { area: 'Studio', text: 'Expression Blocks can loop: Before, looped lines (i, fi, n, k), Break when and After. Iterations is a live slider, and you can step through each pass.' },
+      { area: 'Studio', text: '2D Scene Builder looped space blocks: Kali, IFS kaleidoscope, Mandelbox, iterated warp, Apollonian, Julia, spirals and log-polar zoom, with orbit traps.' },
+      { area: 'Studio', text: 'New examples: Julia escape time, fbm octaves and a Kali fold, each a single looped Expression Block.' },
+    ],
+  },
+  {
     id: '2026.10.185',
     date: '2026-10-11',
     title: 'Done means built',

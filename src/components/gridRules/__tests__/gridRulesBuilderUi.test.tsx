@@ -21,6 +21,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import type { GraphNode } from '../../../types/nodeGraph';
 import { useNodeGraphStore } from '../../../store/useNodeGraphStore';
 import { GridRulesEditor } from '../GridRulesEditor';
+import { sharePercent } from '../TryBoard';
 import { COUNT_PRESETS, GRID_DEFAULTS, SMOOTH_PRESETS, presetPatch } from '../../../gridRules/spec';
 import { BLOCK_PRESETS, NOT_EMPTY, PATTERN_PRESETS } from '../../../gridRules/stencils';
 import { useBuilderWindows } from '../../../builders/windows';
@@ -49,6 +50,8 @@ const $$ = (sel: string) => [...document.body.querySelectorAll(sel)];
 const params = () => useNodeGraphStore.getState().nodes.find(n => n.id === 'g1')!.params;
 const nav = () => $$('[data-studio-panel="nav"] [data-studio-section]').map(b => b.getAttribute('data-studio-section'));
 const gen = () => $('[data-try-gen]')?.textContent;
+/** The step and the live count (the strip shows percents; the count rides on the element). */
+const genLive = () => `${gen()!.split(' · ')[0]} · ${$('[data-try-gen]')?.getAttribute('data-try-live')} live`;
 /** A press on the try board at cell (x, row from the top): jsdom lays out nothing, so a cell is 2 px from 0. */
 const press = (x: number, row: number) => {
   const surface = $('[data-try-surface]')!;
@@ -100,23 +103,61 @@ describe('the Grid Rules builder', () => {
     expect($('[data-rule-sentence]')?.textContent).toMatch(/^Cells are born with 3 or 6 neighbours/);
   });
 
+  it('the try board header: step · alive % · dead %, the key on every tab, markers always on, no toggle', () => {
+    // A laid-out stage, so cells are big enough for the markers (jsdom lays out nothing).
+    const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ x: 0, y: 0, left: 0, top: 0, right: 900, bottom: 900, width: 900, height: 900, toJSON: () => ({}) } as DOMRect);
+    mount(<GridRulesEditor nodeId="g1" onClose={() => {}} />);
+    click($('[data-try-clear]'));
+    const header = $('[data-try-header]')!;
+    expect(header).toBeTruthy();
+    expect(gen()).toBe('Start · 0% · 100%');
+    expect(($('[data-try-alive]') as HTMLElement).style.color).toBe('rgb(63, 191, 127)');
+    expect(($('[data-try-dead]') as HTMLElement).style.color).toBe('rgb(255, 90, 90)');
+    const canvas = $('[data-try-surface] canvas') as HTMLCanvasElement;
+    const cell = parseFloat(canvas.style.width) / canvas.width;
+    expect(cell).toBeGreaterThanOrEqual(6);
+    const at = (x: number, row: number) => ({ bubbles: true, button: 0, clientX: x * cell + 1, clientY: row * cell + 1 });
+    for (const x of [10, 11, 12]) act(() => {
+      $('[data-try-surface]')!.dispatchEvent(new MouseEvent('pointerdown', at(x, 5)));
+      $('[data-try-surface]')!.dispatchEvent(new MouseEvent('pointerup', at(x, 5)));
+    });
+    // Three cells on a big board: never 0%.
+    expect(gen()).toBe('Start · <1% · >99%');
+    expect(sharePercent(34, 100)).toBe('34%');
+    expect(sharePercent(66, 100)).toBe('66%');
+    // No toggle: the next-step markers are always drawn (a blinker: two born, two die).
+    expect($('[data-try-show-next]')).toBeNull();
+    expect(header.querySelector('input, [role="switch"], [role="checkbox"]')).toBeNull();
+    const marks = () => $$('[data-try-surface] svg circle[stroke="#3fbf7f"]').length;
+    expect(marks()).toBe(2);
+    expect(header.querySelector('[data-try-key]')?.textContent).toMatch(/born.*dies/);
+    // The pointer cell's note sits in the strip's centre.
+    act(() => { $('[data-try-surface]')!.dispatchEvent(new MouseEvent('pointermove', at(11, 4))); });
+    expect(header.querySelector('[data-try-note]')?.textContent).toMatch(/comes alive|→/);
+    // Another tab: the strip, the key and the markers stay.
+    click($('[data-studio-section="look"]'));
+    expect($('[data-try-header] [data-try-key]')).toBeTruthy();
+    expect(marks()).toBe(2);
+    rect.mockRestore();
+  });
+
   it('the try board: clear, draw a blinker, step forward and back, then Use as the start', () => {
     mount(<GridRulesEditor nodeId="g1" onClose={() => {}} />);
     click($('[data-try-clear]'));
-    expect(gen()).toBe('Start · 0 live');
+    expect(genLive()).toBe('Start · 0 live');
     press(10, 5); press(11, 5); press(12, 5);
-    expect(gen()).toBe('Start · 3 live');
+    expect(genLive()).toBe('Start · 3 live');
     // Pressing a live cell erases it; pressing again draws it back.
     press(12, 5);
-    expect(gen()).toBe('Start · 2 live');
+    expect(genLive()).toBe('Start · 2 live');
     press(12, 5);
     click($('[data-try-forward]'));
-    expect(gen()).toBe('Step 1 · 3 live');
+    expect(genLive()).toBe('Step 1 · 3 live');
     click($('[data-try-forward]'));
-    expect(gen()).toBe('Step 2 · 3 live');
+    expect(genLive()).toBe('Step 2 · 3 live');
     click($('[data-try-back]'));
     click($('[data-try-back]'));
-    expect(gen()).toBe('Start · 3 live');
+    expect(genLive()).toBe('Start · 3 live');
     expect(($('[data-try-back]') as HTMLButtonElement).disabled).toBe(true);
     click($('[data-try-use-start]'));
     expect(params().start).toBe('cells');

@@ -11993,6 +11993,79 @@ exports[`golden shaders: every example compiles as it did > lookBuilt 1`] = `
 }
 `;
 
+exports[`golden shaders: every example compiles as it did > loopFbm 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "14c2482a775d241e061b6621f6f1:3271",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "1d36fc0b515934198bc439ad6d57:81",
+  "paramBindings": "096df7933d5fea1b785cc36a99fb:152",
+  "paramUniforms": [
+    "u_p_fbmxoctavesx0_gain",
+    "u_p_fbmxoctavesx0_loopN",
+    "u_p_fbmxoctavesx0_scale",
+  ],
+  "paramValues": "035b23ed21ed19187329bd1bf27f:92",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > loopJulia 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "090d8442f2c7530d918b62c52167:3332",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "154d505908041a134ed2c480ba41:92",
+  "paramBindings": "159241499ffa3b114eeb21e40f93:163",
+  "paramUniforms": [
+    "u_p_juliaxescapextimx0_cx",
+    "u_p_juliaxescapextimx0_cy",
+    "u_p_juliaxescapextimx0_loopN",
+  ],
+  "paramValues": "1456d929dc77cd1bb59fbe3b15da:108",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > loopKali 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "1fe46c1f29d48212b9ef95327161:3188",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "16b0da5173452a13ef65e833ee50:82",
+  "paramBindings": "0230757151f3c5099a4441d404bf:187",
+  "paramUniforms": [
+    "u_p_kalixfoldx0_cx",
+    "u_p_kalixfoldx0_cy",
+    "u_p_kalixfoldx0_loopN",
+    "u_p_kalixfoldx0_zoom",
+  ],
+  "paramValues": "124e940bf8c13812e701cf0259b3:115",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
 exports[`golden shaders: every example compiles as it did > magicTextureDemo 1`] = `
 {
   "audioUniforms": {},

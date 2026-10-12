@@ -2,6 +2,7 @@ import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
 import { f, p, pv3, zeroFor, withParamSockets } from './helpers';
 import { PALETTE_GLSL_FN } from './color';
 import { MARCH_STEP_REF_KEY, stepWeightGlsl } from '../../compiler/marchJitter';
+import { allBlockLines, clampCount, loopCode, loopCountValue, loopMax, loopOf } from '../exprLoop';
 // Shared with the Play page's Finish stack (play/kit/finish.js), so both tone-map and mask the same way.
 import { FN_CRT_MASK_GLSL, FN_TONE_FUNCTIONS, FN_TONE_GLSL, FN_TONE_JODIE_GLSL } from '../../play/kit/finishGlsl.js';
 import { BL_BASE_GLSL, BL_PREV_GLSL } from '../../play/kit/blur.js';
@@ -750,10 +751,21 @@ export const ExprBlockNode: NodeDefinition = {
     // ── Per-line format (lines + result) ─────────────────────────────────────
     const lines = node.params.lines as Array<{ lhs: string; op: string; rhs: string; off?: boolean }> | undefined;
     const resultExpr = (node.params.result as string | undefined)?.trim() || '';
+    const loop = loopOf(node.params);
 
     if (unwiredSampler) {
       stmts.push(`        // a picture input is not wired: the block gives ${outDefault}\n`);
       stmts.push(`        ${outVar} = ${outDefault};\n`);
+    } else if (Array.isArray(lines) && loop) {
+      // Loop mode (nodes/exprLoop.ts): Before, the lines N times, Break when, After, then Return
+      const declared = new Set<string>([...(Array.isArray(dynamicInputs) ? dynamicInputs.map(i => i.name) : []), 't', 'p']);
+      const max = loopMax(loop);
+      const nParam = node.params.loopN;
+      const count = typeof nParam === 'string' && nParam.trim() ? nParam : clampCount(loopCountValue(node.params), max);
+      for (const l of loopCode({ before: loop.before ?? [], body: lines, after: loop.after ?? [], breakWhen: loop.breakWhen, max, count, declared, countVar: `${id}_n`, map: withSamplers })) {
+        for (const t of l.text.split('\n')) stmts.push(`        ${'    '.repeat(l.depth)}${t}\n`);
+      }
+      stmts.push(`        ${outVar} = ${withSamplers(resultExpr) || outDefault};\n`);
     } else if (Array.isArray(lines)) {
       // New format: lines array is present (may be empty — just a result expression)
       for (const line of lines) {
@@ -793,7 +805,7 @@ export const ExprBlockNode: NodeDefinition = {
     const localType = (name: string): string => {
       const inp = Array.isArray(dynamicInputs) ? dynamicInputs.find(i => i.name === name) : undefined;
       if (inp) return inp.type;
-      for (const l of Array.isArray(lines) ? lines : []) { const m = /^\s*(float|vec[234]|int|bool)\s+(\w+)/.exec(l.lhs); if (m && m[2] === name) return m[1]; }
+      for (const l of Array.isArray(lines) ? allBlockLines(node.params) : []) { const m = /^\s*(float|vec[234]|int|bool|mat[234])\s+(\w+)/.exec(l.lhs); if (m && m[2] === name) return m[1]; }
       return outType;
     };
     const exposedDecls: string[] = [];
