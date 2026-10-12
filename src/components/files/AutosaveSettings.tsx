@@ -10,7 +10,7 @@ import { Select } from '../ui/Select';
 import { askConfirm } from '../ui/dialogStore';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { AUTOSAVE_MODES, type AutosaveMode } from '../../files/autosave';
-import { formatClock, restoreSnapshot, useAutosave } from '../../files/recovery';
+import { downloadSnapshot, formatClock, restoreSnapshot, useAutosave } from '../../files/recovery';
 import { crashedPlugins, usePluginSettings } from '../../lib/pluginSettings';
 import { TIMEOUT_NOTE, loadAnyway, retryPlugin } from '../../lib/pluginSafety';
 import { cardStyle } from './fileUiShared';
@@ -64,13 +64,14 @@ export function AutosaveSettings() {
           </Row>
         </div>
         {snaps.map(s => (
-          <Row key={s.file} label={`${s.project.name ?? 'Untitled'}${s.project.dirty ? ' · unsaved changes' : ''}`} detail={`Autosaved ${formatClock(s.at)}`}>
+          <Row key={s.file} label={`${s.project.name ?? 'Untitled'}${s.project.dirty ? ' · unsaved changes' : ''}`} detail={`Autosaved ${formatClock(s.at)}${s.work === 0 ? ' · empty canvas' : ''}${s.file.endsWith('.playfile') ? ' · .playfile' : ''}`}>
             <Button size="sm" variant="ghost" icon="history" onClick={() => { void open(s.file); }}>Open</Button>
+            {!isTauri() && <Button size="sm" variant="ghost" icon="save" onClick={() => { void downloadSnapshot(s.file); }}>Download</Button>}
           </Row>
         ))}
         {!snaps.length && <Row label="No autosaves yet" detail={mode === 'off' ? 'Autosave is off.' : 'One is written once the open project changes.'} />}
         {isTauri() && snaps.length > 0 && (
-          <Row label="Autosave folder" detail="In the app’s own data folder">
+          <Row label="Autosave folder" detail="In the app’s own data folder. Each autosave is a .playfile: double-click one to open it in Playfield.">
             <Button size="sm" variant="ghost" icon="folder" onClick={reveal}>Show in Finder</Button>
           </Row>
         )}
