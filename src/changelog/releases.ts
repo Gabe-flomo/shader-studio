@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.190',
+    date: '2026-10-12',
+    title: 'If tiles',
+    highlights: [
+      { area: 'Studio', text: 'Warp Builder: an If tile (if condition then … else …) with comparison tiles (> < ≥ ≤ = ≠) and and/or/not. A Smooth switch blends the edge instead of cutting.' },
+    ],
+  },
+  {
     id: '2026.10.189',
     date: '2026-10-12',
     title: 'Warp Builder',
