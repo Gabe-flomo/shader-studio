@@ -25,9 +25,11 @@ export interface TryRun {
   at: number;
   /** The generation of frames[0] (frames dropped off the front still count). */
   first: number;
+  /** Step 0's board (as dealt, or as drawn on at step 0): what a reset goes back to, kept when step 0 drops off `frames`. */
+  start: CpuBoard;
 }
 
-export const tryStart = (board: CpuBoard): TryRun => ({ frames: [board], at: 0, first: 0 });
+export const tryStart = (board: CpuBoard): TryRun => ({ frames: [board], at: 0, first: 0, start: board });
 export const tryBoardOf = (run: TryRun): CpuBoard => run.frames[run.at];
 /** The generation shown: 0 is the start. */
 export const tryGeneration = (run: TryRun) => run.first + run.at;
@@ -36,6 +38,7 @@ export const canBack = (run: TryRun) => run.at > 0;
 /** One generation on: the next kept frame, or a new step. `n` steps at once (play at speed). */
 export function tryForward(params: Record<string, unknown>, run: TryRun, n = 1): TryRun {
   let { frames, at, first } = run;
+  const { start } = run;
   for (let k = 0; k < n; k++) {
     if (at < frames.length - 1) { at++; continue; }
     const next = cpuStep(params, frames[at]);
@@ -43,7 +46,7 @@ export function tryForward(params: Record<string, unknown>, run: TryRun, n = 1):
     at++;
     if (frames.length > MAX_FRAMES) { const drop = frames.length - MAX_FRAMES; frames = frames.slice(drop); at -= drop; first += drop; }
   }
-  return { frames, at, first };
+  return { frames, at, first, start };
 }
 
 /** One generation back (the start stays the start). */
@@ -54,8 +57,15 @@ export const tryRewind = (run: TryRun): TryRun => ({ ...run, at: 0 });
 
 /** The frame shown, changed (a drawing): the frames after it go. */
 export function tryEdit(run: TryRun, board: CpuBoard): TryRun {
-  return { frames: [...run.frames.slice(0, run.at), board], at: run.at, first: run.first };
+  return { frames: [...run.frames.slice(0, run.at), board], at: run.at, first: run.first, start: run.first + run.at === 0 ? board : run.start };
 }
+
+/**
+ * A true reset (↺, lib/runtimeReset.ts): back to step 0's board with every step after it dropped, so
+ * the step counter, the alive / dead shares and what plays next are a fresh open's. "Back to the first
+ * kept" (tryRewind) stopped at the oldest of the last MAX_FRAMES, not at step 0, and kept the frames.
+ */
+export const tryReset = (run: TryRun): TryRun => tryStart(run.start);
 
 /**
  * A copy of a board with cell (x, y up) set to `state` (Smooth: its value; a second channel cleared),

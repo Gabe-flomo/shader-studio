@@ -44,6 +44,7 @@ import { TakesList } from './play/TakesList';
 import { TAKE_MAX_SECONDS, type PlayTake } from '../types/play';
 import { Select } from './ui/Select';
 import { holdAutosave } from '../files/recovery';
+import { resetRuntime } from '../lib/runtimeReset';
 
 // ── Progress bar ──────────────────────────────────────────────────────────────
 
@@ -670,7 +671,7 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
   const handleStart = () => {
     if ((midiLength || clockSongs) && fromTop && !offline) {
       // The clock (and the MIDI file and songs on it) from 0, running.
-      window.dispatchEvent(new CustomEvent('reset-time'));
+      resetRuntime();
       useNodeGraphStore.getState().setTimePlaying(true);
     }
     if (mode === 'ffmpeg') handleStartFfmpeg();

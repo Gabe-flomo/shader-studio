@@ -13,7 +13,7 @@ vi.hoisted(() => {
 import { cpuBoard, cpuStep } from '../cpu';
 import { BLOCK_PRESETS, PATTERN_PRESETS, readBlocks, readPatterns } from '../stencils';
 import { GRID_DEFAULTS, LOOKS, SMOOTH_PRESETS, gridTypeDefaults, presetPatch, stepsPerSecond } from '../spec';
-import { MAX_FRAMES, blockRects, changesBetween, clearedBoard, liveNeighbours, paintCell, patternMatches, tryBack, tryBoardOf, tryEdit, tryForward, tryGeneration, tryRewind, tryStart } from '../tryRun';
+import { MAX_FRAMES, blockRects, changesBetween, clearedBoard, liveNeighbours, paintCell, patternMatches, tryBack, tryBoardOf, tryEdit, tryForward, tryGeneration, tryReset, tryRewind, tryStart } from '../tryRun';
 import { MAX_START, drawnCount, readStartCells, stampedAt, startCellAt, startCellsFromBoard, startCellsFromGrid, startCellsHash } from '../startCells';
 import { blockExample, comboBoard, comboStep, gridOfBoard, patternExample, patternSentence } from '../ruleExamples';
 import { SMOOTH_WORDS, halfLifeSteps, smoothDemo } from '../smoothWords';
@@ -51,6 +51,31 @@ describe('stepping through', () => {
     run = tryRewind(run);
     expect(tryGeneration(run)).toBe(0);
     expect(tryBack(run)).toBe(run); // the start stays the start
+  });
+
+  it('↺ (tryReset) is a true reset: step 0\'s board and nothing after it, even once step 0 has dropped off the kept frames', () => {
+    const fresh = tryStart(blinker());
+    let run = tryForward(LIFE, fresh, MAX_FRAMES + 25);
+    expect(run.first).toBeGreaterThan(0);
+    // The old ⏮ (back to the first kept) stopped short of the start.
+    expect(tryGeneration(tryRewind(run))).toBe(run.first);
+    expect(run.first).toBe(26);
+    run = tryReset(run);
+    expect(tryGeneration(run)).toBe(0);
+    expect(run.frames).toHaveLength(1);
+    expect(gridOfBoard(tryBoardOf(run))).toEqual(gridOfBoard(tryBoardOf(fresh)));
+    expect(run).toEqual(fresh);
+    // Playing on from it steps as a fresh board does.
+    expect(gridOfBoard(tryBoardOf(tryForward(LIFE, run, 3)))).toEqual(gridOfBoard(tryBoardOf(tryForward(LIFE, fresh, 3))));
+  });
+
+  it('a drawing at step 0 is the start a reset goes back to; one at a later step is not', () => {
+    const drawn = paintCell(blinker(), 0, 0, 1);
+    let run = tryEdit(tryStart(blinker()), drawn);
+    run = tryForward(LIFE, run, 4);
+    expect(tryBoardOf(tryReset(run))).toBe(drawn);
+    run = tryEdit(run, paintCell(tryBoardOf(run), 4, 4, 1));
+    expect(tryBoardOf(tryReset(run))).toBe(drawn);
   });
 
   it('drawing changes the frame shown and drops the frames after it', () => {

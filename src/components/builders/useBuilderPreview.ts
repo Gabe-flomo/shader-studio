@@ -7,12 +7,14 @@
  *  - a compile whose shaders are the same as the last one's, comments aside (a slider moved a
  *    value the graph keeps as a uniform) only sets the uniforms: no new program, nothing relinked;
  *  - the canvas draws every animation frame at the screen's pixel density (up to 2×), not 30 a
- *    second at CSS pixels; paused, it draws only when something changed.
+ *    second at CSS pixels; paused, it draws only when something changed;
+ *  - ↺ (lib/runtimeReset.ts resetRuntime) starts it over: clock 0, Pass memory cleared.
  */
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { makeProgram, type Compiled } from '../sceneBuilder/previewGl';
 import { bindPreviewTextures } from './previewTextures';
 import { makePreviewPasses } from './previewPasses';
+import { onRuntimeReset } from '../../lib/runtimeReset';
 
 /** The quickest compiles follow a drag (about 20 a second). */
 export const COMPILE_EVERY_MS = 50;
@@ -136,7 +138,17 @@ export function useBuilderPreview(canvasRef: RefObject<HTMLCanvasElement | null>
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     };
     raf = requestAnimationFrame(frame);
+    // ↺ (lib/runtimeReset.ts): the picture's clock and frame count at 0 and its Pass memory cleared, drawn
+    // at once even while paused: the frame a fresh open draws.
+    const offReset = onRuntimeReset(() => {
+      clock.current = 0;
+      frames = 0;
+      last = 0;
+      passes?.reset();
+      uniforms.current.dirty = true;
+    });
     return () => {
+      offReset();
       cancelAnimationFrame(raf);
       pictures.dispose();
       passes?.dispose();
