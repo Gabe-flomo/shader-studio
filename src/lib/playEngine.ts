@@ -1564,20 +1564,7 @@ class PlayEngine implements InputSource {
     this.tickAudioTriggers();
     this.tickZoneTriggers();
     // A clock sent back (rewind): axis swaps start on A again.
-    if (time < this.lastTime - 1e-6) {
-      for (const st of this.pairState.values()) st.swap = sgSwapNew();
-      // Increments start over from their start, so the same timeline steps the same way again.
-      for (const [id, st] of this.incStates) { const m = this.mappingOf(id); incReset(st, m ? this.incStart(m) : st.start, true); }
-      // Conditions forget the lowest and highest seen (has never reached, percent of the range seen).
-      for (const st of this.condStates.values()) sgCondRewind(st);
-      for (const st of this.incCond.values()) sgCondRewind(st);
-      for (const st of this.pairState.values()) { sgCondRewind(st.condA); sgCondRewind(st.condB); }
-      // Captures, rolls and signals on their way are forgotten, so the same timeline plays the same way again.
-      this.sigPayload.clear();
-      sgLinkClear(this.links);
-      for (const st of this.sigShape.values()) sgShapeRewind(st);
-      rtRewind(this.rt);
-    }
+    if (time < this.lastTime - 1e-6) this.rewind();
     this.lastTime = time;
     lap?.('inputs');
     this.tickConditionTriggers(dt);
@@ -1861,6 +1848,37 @@ class PlayEngine implements InputSource {
     if (m.source.kind === 'position') { const p = this.anchorAt(m.source.anchor); if (p) { ua = clamp01(p.x); ub = clamp01(p.y); } }
     else { ua = ub = m.source.source.kind === 'trigger' ? this.triggerStates.get(m.id)?.value ?? 0 : this.readSource(m.source.source); }
     return { ua, ub, axis: st?.swap.axis ?? 'a', a: st?.a, b: st?.b };
+  }
+
+  /** The clock went back: what the timeline built up starts over, so the same timeline plays the same way again. */
+  private rewind(): void {
+    for (const st of this.pairState.values()) st.swap = sgSwapNew();
+    // Increments start over from their start, so the same timeline steps the same way again.
+    for (const [id, st] of this.incStates) { const m = this.mappingOf(id); incReset(st, m ? this.incStart(m) : st.start, true); }
+    // Conditions forget the lowest and highest seen (has never reached, percent of the range seen).
+    for (const st of this.condStates.values()) sgCondRewind(st);
+    for (const st of this.incCond.values()) sgCondRewind(st);
+    for (const st of this.pairState.values()) { sgCondRewind(st.condA); sgCondRewind(st.condB); }
+    // Captures, rolls and signals on their way are forgotten, so the same timeline plays the same way again.
+    this.sigPayload.clear();
+    sgLinkClear(this.links);
+    for (const st of this.sigShape.values()) sgShapeRewind(st);
+    rtRewind(this.rt);
+  }
+
+  /**
+   * A true reset (lib/runtimeReset.ts): everything a rewind starts over, and the smoothing too:
+   * every route's and pair axis's smoothed value is forgotten, so the first frame after it lands on
+   * its target as a fresh open does instead of gliding there from where it was. Look actions let go.
+   * Live inputs (keys held, MIDI, hands) and the controls' values are not touched.
+   */
+  resetRuntime(): void {
+    this.rewind();
+    this.rt.smooth.clear();
+    for (const st of this.pairState.values()) { st.a = undefined; st.b = undefined; }
+    this.lastTime = -Infinity;
+    this.resetLooks();
+    inputBus.wake();
   }
 
   /** Start every axis swap on A again (the editor's button; a rewind does it too). */

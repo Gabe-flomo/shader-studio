@@ -5,7 +5,7 @@
  *
  *  - Draw: click or drag to place cells of the picked state; a cell already that state is erased
  *    (drag on to keep erasing). Smooth: a drop of value.
- *  - Step: ⏮ back to the start, ◀ one generation back, ▶ play / pause, ▶| one forward (← → and
+ *  - Step: ↺ start over (a true reset, lib/runtimeReset.ts: step 0's board, the kept steps dropped), ◀ one generation back, ▶ play / pause, ▶| one forward (← → and
  *    Space when the board has focus). Slow · Medium · As built.
  *  - The header strip along the board's top edge (every tab): "Step 59 · 34% · 66%" (alive green,
  *    dead red), what the pointer cell will do in the centre, the born / dies key on the right.
@@ -29,6 +29,7 @@ import { GRID_DEFAULTS, countsAsRanges, gridShape, maxCount, countsOf } from '..
 import { TEST_PATTERNS, countLabel, rangeCounts, type TestPattern } from '../../gridRules/explain';
 import { blockRects, boardLife, canBack, changesBetween, liveNeighbours, neighbourCells, patternMatches, tryGeneration } from '../../gridRules/tryRun';
 import { TRY_SPEEDS, drawingOf, useTryRun, type TrySpeed } from './useTryRun';
+import { resetRuntime } from '../../lib/runtimeReset';
 import { drawnCount } from '../../gridRules/startCells';
 import { DEFAULT_START_TEXT, MAX_TEXT_CHARS, cleanStartText, readStartText, textStampCells } from '../../gridRules/textCells';
 import { Field } from '../ui/Field';
@@ -368,7 +369,7 @@ export function TryBoard({ params, nodeParams, focus, hood, onUseAsStart }: {
           </span>
         )}
         {sep}
-        <IconButton icon="reset" size="sm" label="Back to the first step kept" onClick={t.rewind} disabled={!canBack(t.run)} data-try-rewind />
+        <IconButton icon="reset" size="sm" label="Start over: back to step 0, every step after it cleared" onClick={() => resetRuntime()} data-try-rewind data-try-reset />
         <IconButton icon="chevL" size="sm" label="One step back (←)" onClick={t.back} disabled={!canBack(t.run)} data-try-back />
         <IconButton icon={t.playing ? 'pause' : 'play'} size="sm" label={t.playing ? 'Pause (Space)' : 'Play (Space)'} active={t.playing} onClick={() => t.setPlaying(!t.playing)} data-try-play />
         <IconButton icon="chevR" size="sm" label="One step forward (→)" onClick={t.forward} data-try-forward />

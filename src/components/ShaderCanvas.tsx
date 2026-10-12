@@ -45,6 +45,7 @@ import { previewMirrored, sendPreviewFrame, setPreviewCanvas, setPreviewWake } f
 import { builderFocused } from '../builders/builderFocus';
 import { usePreviewSizeOverride } from '../lib/previewSize';
 import { emitTimeTick } from '../lib/timeTick';
+import { onRuntimeReset } from '../lib/runtimeReset';
 import { gateFrame, newDrawGate, newOfflineHold, offlineFrame, posterizeTime, resolveFrameRate, useFrameRate, type EffectiveFrameRate } from '../lib/frameRate';
 import { startRefreshDetection } from '../lib/refreshRate';
 import { outputTap } from '../lib/outputTap';
@@ -2623,17 +2624,40 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     window.addEventListener('pointercancel', handleButtonUp, true);
     window.addEventListener('blur', handleButtonUp);
 
-    // Reset time to 0 when 'reset-time' is fired (e.g. from Time node button)
-    const handleResetTime = () => {
+    // ↺ (lib/runtimeReset.ts resetRuntime: the footer, the Time node, every builder's viewport): a true
+    // reset. The next frame is the one a fresh open draws: the clock and frame count at 0, every texture
+    // that carries a frame into the next one as it was made (feedback, echo, Pass Previous, agents),
+    // the simulations' own counters and the Play side's smoothing and layers started over.
+    // Play / pause is left as it is.
+    const resetPreviewRuntime = () => {
       virtualTime = 0;
       lastRafTime = null;
+      frameCount = 0;
+      echoFrame = 0;
+      lastAgentFrame = 0;
       setUniform(material, 'u_time', 0);
+      setUniform(material, 'u_frameDt', 0);
+      emitTimeTick(0);
+      // Feedback (u_prevFrame): the ping-pong pair goes and is made again, cleared, on the next frame.
+      if (pingPongA.current) { pingPongA.current.dispose(); pingPongA.current = null; }
+      if (pingPongB.current) { pingPongB.current.dispose(); pingPongB.current = null; }
+      pingPongIdx.current = 0;
+      if (material.uniforms.u_prevFrame) material.uniforms.u_prevFrame.value = null;
+      // Echo: the ring of past pictures goes too (and its samplers read nothing, as before the first frame).
+      disposeEchoRing();
+      for (let i = 0; i < 6; i++) { const u = material.uniforms[`u_echo${i}`]; if (u) u.value = null; }
+      // Particles nodes, Pass Previous buffers (Grid Rules boards and rule memory), agents and their snapshots.
       resetGpuParticles();
       passTargets?.clearPrevious();
       agentTargets?.resetAll();
+      agentRunner?.resetRuntime();
+      // Play: mappings' smoothing, delays, steps and conditions; the layers' particles, bodies and strokes.
+      playEngine.resetRuntime();
+      playOverlay.resetLayers();
+      idleFrames = 0;
       requestRender();
     };
-    window.addEventListener('reset-time', handleResetTime);
+    const unregisterReset = onRuntimeReset(resetPreviewRuntime);
     // An Agents group's ↺ Start over (lib/agentRunner.ts restartAgents): draw a frame so it shows even while paused.
     const handleAgentsRestart = () => requestRender();
     window.addEventListener('agents-restart', handleAgentsRestart);
@@ -2693,7 +2717,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       window.removeEventListener('pointerup', handleButtonUp, true);
       window.removeEventListener('pointercancel', handleButtonUp, true);
       window.removeEventListener('blur', handleButtonUp);
-      window.removeEventListener('reset-time', handleResetTime);
+      unregisterReset();
       window.removeEventListener('agents-restart', handleAgentsRestart);
       window.removeEventListener('seek-time', handleSeekTime);
       window.removeEventListener('step-time', handleStepTime);

@@ -20,6 +20,7 @@ import {
 import { compileSpec } from './previewGl';
 import { DEPTH_VIEW_LABELS, useDepthView } from '../../builders/depthPreview';
 import { useBuilderPreview, useThrottled } from '../builders/useBuilderPreview';
+import { PreviewClock } from '../builders/PreviewClock';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily } from '../../theme/tokens';
 import { Icon } from '../ui/Icon';
@@ -230,10 +231,7 @@ export function SceneViewport({ onPicked }: { onPicked?: (id: string) => void })
         {shape && <span data-viewport-picked style={chip}>{itemName(spec, shape)}{live ? ` · ${live}` : ' · drag the arrows to move, the square to size'}</span>}
         {!shape && shapes > 0 && <span style={{ ...chip, color: '#b8b8c8' }}>Drag to turn the camera · scroll to zoom · click a shape to pick it</span>}
       </div>
-      <button type="button" onPointerDown={e => e.stopPropagation()} onClick={() => setPaused(p => !p)} title={paused ? 'Play the preview' : 'Pause the preview'}
-        style={{ position: 'absolute', right: 12, top: 12, height: 26, padding: '0 10px', border: 0, borderRadius: 8, background: 'rgba(13,13,18,0.72)', color: '#e8e8f0', font: `600 11.5px ${fontFamily.ui}`, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
-        <Icon name={paused ? 'play' : 'pause'} size={12} />{paused ? 'Play' : 'Pause'}
-      </button>
+      <PreviewClock paused={paused} onPause={() => setPaused(p => !p)} style={{ position: 'absolute', right: 12, top: 12 }} />
       {shapes === 0 && (
         <span style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', fontSize: 13, color: '#b8b8c8', textAlign: 'center', maxWidth: 320, pointerEvents: 'none' }}>
           Nothing to see yet: add a shape under Shapes, pick a preset below, or press Surprise me.

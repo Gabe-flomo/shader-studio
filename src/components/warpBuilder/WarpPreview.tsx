@@ -5,6 +5,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { previewShader, previewUniforms } from '../../warpBuilder/preview';
+import { onRuntimeReset } from '../../lib/runtimeReset';
 import type { PreviewMode, WarpSpec } from '../../warpBuilder/spec';
 
 const VERT = `#version 300 es
@@ -28,6 +29,8 @@ export function WarpPreview({ spec, mode, upTo, playing, onTime, seek }: {
   live.current.playing = playing;
   const [error, setError] = useState<string | null>(null);
   useEffect(() => { if (seek) live.current.t = seek.t; }, [seek]);
+  // ↺ (lib/runtimeReset.ts): back to t = 0, shown at once (the readout too).
+  useEffect(() => onRuntimeReset(() => { live.current.t = 0; onTimeRef.current?.(0); }), []);
   const onTimeRef = useRef(onTime);
   useEffect(() => { onTimeRef.current = onTime; });
 

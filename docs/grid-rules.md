@@ -79,7 +79,7 @@ again when the kind of rule, the template or the start changes.
 - **Text stamp** (the **T** button): type words and pick how many cells tall; pointing at the board
   outlines the cells the letters will cover, and a click stamps them in the picked state (Shift-click
   erases them). The letters are the stroke font's, rasterised as a text start is (below).
-- **Step through:** ⏮ back to the first step kept, ◀ one generation back, ▶ play or pause,
+- **Step through:** ↺ start over (a true reset, docs/true-reset.md: step 0's board, the kept steps dropped), ◀ one generation back, ▶ play or pause,
   ▶| one forward (← → and Space when the board has focus). The last 400 frames are kept, so back
   shows the very frame you saw, not a new step. Drawing on a frame keeps it and drops the frames
   after it. A rule edit keeps the frame shown and drops the ones after it too.

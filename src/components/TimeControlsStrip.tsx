@@ -3,6 +3,7 @@ import { useNodeGraphStore } from '../store/useNodeGraphStore';
 import { useCtp, type CtpPalette } from '../theme/nodePalette';
 import { Icon } from './ui/Icon';
 import { REBUILD_TOOLTIP, rebuildWithToast } from './shell/rebuildAction';
+import { resetRuntime } from '../lib/runtimeReset';
 
 const btnStyleFor = (tc: CtpPalette): React.CSSProperties => ({
   background: `${tc.base}99`,
@@ -42,8 +43,8 @@ export function TimeControlsStrip({ direction = 'row' }: { direction?: 'row' | '
         onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = tc.surface2; }}
       >{timePlaying ? '⏸' : '▶'}</button>
       <button
-        onClick={() => window.dispatchEvent(new CustomEvent('reset-time'))}
-        title="Reset time to 0"
+        onClick={resetRuntime}
+        title="Start over: time 0, every frame cleared"
         style={btnStyleFor(tc)}
         onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = tc.yellow; }}
         onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = tc.surface2; }}

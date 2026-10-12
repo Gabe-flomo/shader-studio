@@ -16,6 +16,7 @@
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useBuilderPreview, useThrottled } from '../builders/useBuilderPreview';
+import { PreviewClock } from '../builders/PreviewClock';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
@@ -755,10 +756,7 @@ function Viewport() {
       <div style={{ position: 'relative', flex: 1, minHeight: 0, borderRadius: radius.md, overflow: 'hidden', background: tk.bg.render }}>
         <canvas ref={canvasRef} data-grid-preview aria-label="Live preview of the grid scene" style={{ width: '100%', height: '100%', display: 'block' }} />
         {error && <div role="alert" style={{ position: 'absolute', inset: 0, padding: 12, overflow: 'auto', color: '#f38ba8', font: `500 11px ${fontFamily.mono}`, background: 'rgba(13,13,18,0.86)' }}>{error}</div>}
-        <button type="button" onClick={() => setPaused(p => !p)} title={paused ? 'Play the preview' : 'Pause the preview'}
-          style={{ position: 'absolute', right: 8, bottom: 8, height: 26, padding: '0 10px', border: 0, borderRadius: 6, background: 'rgba(0,0,0,0.45)', color: '#fff', font: `600 11.5px ${fontFamily.ui}`, cursor: 'pointer' }}>
-          {paused ? 'Play' : 'Pause'}
-        </button>
+        <PreviewClock paused={paused} onPause={() => setPaused(p => !p)} style={{ position: 'absolute', right: 8, bottom: 8 }} />
       </div>
       <span data-grid-stats style={{ fontSize: 11.5, color: tk.text.muted }}>
         {error ? 'The preview could not draw this grid.' : `Live: the graph Build makes (${compiled.nodes} nodes, ${placed} drawn cells), compiled in ${Math.round(compiled.ms)} ms. Sliders are uniforms on the built nodes.`}

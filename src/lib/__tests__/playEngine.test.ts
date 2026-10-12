@@ -134,6 +134,24 @@ describe('play engine on the bus', () => {
     expect(inputBus.tick(1 / 60, 0).get(uniform)).toBe(4);
   });
 
+  it('a true reset (↺, lib/runtimeReset.ts) forgets the smoothing: the next frame lands where a fresh open\'s first frame does', () => {
+    const r = compileGraph({ nodes: [floatNode('node_3', 0), outputNode('node_3', 'value')] });
+    inputBus.setParamBindings(r.paramBindings);
+    const uniform = r.paramBindings['node_3::value'];
+    playEngine.setRecord({ ...RECORD, controls: [RECORD.controls[0]], mappings: [{ ...RECORD.mappings[0], smoothMs: 500 }] });
+    midiEngine.handleBytes(0xb0, 74, 0);
+    for (let i = 0; i < 5; i++) inputBus.tick(1 / 60, i / 60); // settled at 2
+    midiEngine.handleBytes(0xb0, 74, 127);
+    const gliding = inputBus.tick(1 / 60, 5 / 60).get(uniform) as number;
+    expect(gliding).toBeGreaterThan(2);
+    expect(gliding).toBeLessThan(3); // half a second's glide towards 4 has barely begun
+    // Control: the clock sent back alone (the old ↺) keeps gliding from where it was.
+    expect(inputBus.tick(1 / 60, 0).get(uniform) as number).toBeLessThan(4);
+    playEngine.resetRuntime();
+    // Fresh: the first reading lands on its target at once (as "first frame snaps" above).
+    expect(inputBus.tick(1 / 60, 0).get(uniform)).toBe(4);
+  });
+
   it('writes one colour channel over the slider colour, in place', () => {
     const nodes = [colorNode('node_4', [0.2, 0.4, 0.6]), outputNode('node_4', 'color')];
     const r = compileGraph({ nodes });

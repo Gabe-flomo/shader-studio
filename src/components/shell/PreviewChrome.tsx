@@ -13,6 +13,7 @@ import { REBUILD_TOOLTIP, rebuildWithToast } from './rebuildAction';
 import { PREVIEW_QUALITIES, usePreviewQuality } from '../../lib/previewQuality';
 import { Segmented, Toggle } from '../ui/Choice';
 import { FRAME_RATE_MODES, FRAME_RATE_PRESETS, clampFps, frameRateLabel, resolveFrameRate, useFrameRate, type FrameRateMode, type FrameRateSetting } from '../../lib/frameRate';
+import { resetRuntime } from '../../lib/runtimeReset';
 
 // Header and footer bars for the shader preview. The picture itself is a render surface and
 // stays dark in both themes (callers wrap it in ThemeOverrideContext 'dark'), but these bars
@@ -270,7 +271,7 @@ export function PreviewFooter({ idleHint }: { idleHint: string }) {
   return (
     <div style={{ height: 44, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 2, padding: '0 10px 0 8px', background: tk.bg.panel, borderTop: `1px solid ${tk.border.default}`, font: mono, color: tk.text.faint }}>
       <IconButton icon={timePlaying ? 'pause' : 'play'} label={timePlaying ? 'Pause' : 'Play'} shortcut="space" size="sm" onClick={() => setTimePlaying(!timePlaying)} />
-      <IconButton icon="reset" label="Reset time to 0" size="sm" onClick={() => window.dispatchEvent(new CustomEvent('reset-time'))} />
+      <IconButton icon="reset" label="Start over: time 0, every frame cleared" size="sm" onClick={resetRuntime} />
       <IconButton icon="rebuild" label={REBUILD_TOOLTIP} shortcut={rebuildShortcut} size="sm" onClick={() => { void rebuildWithToast(); }} />
       <TimeReadout />
       <span style={{ flex: 1, minWidth: 8 }} />
