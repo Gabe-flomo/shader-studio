@@ -2164,6 +2164,16 @@ exports[`golden outputs: examples > timeCubeFlyThrough 1`] = `
 }
 `;
 
+exports[`golden outputs: examples > timeCubeHall 1`] = `
+{
+  "ang": "- x120",
+  "fog": "- x120",
+  "gap": "- x120",
+  "hue": "- x120",
+  "time": "- x120",
+}
+`;
+
 exports[`golden outputs: examples > timeCubePulse 1`] = `
 {
   "ang": "- x120",

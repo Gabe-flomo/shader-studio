@@ -36,6 +36,7 @@ import { frozenValueOf } from '../nodes/sliderFreeze';
 import { marchJitterDecl, MARCH_STEP_REF_KEY } from './marchJitter';
 import { curvedMarch } from './curvedSpace';
 import { CELL3_DECL, CELL3_GLOBAL, CELL3SIZE_GLOBAL } from '../nodes/definitions/repeatScene';
+import { TC_SPACE_DECL } from '../nodes/definitions/timeCube';
 import { safeMarchLines, safeMarchSteps, stepsHeatmap, warpSafetyOf } from './warpSafety';
 import {
   getKeyframeConfig, generateKeyframeGLSL, isKeyframeBypassed,
@@ -4366,6 +4367,8 @@ export class ShaderAssembler {
     const mainBody = this.mainCode.join('') + (this.stepsView ? `    gl_FragColor = vec4(${this.stepsView}, 1.0);\n` : '');
     // Repeat Cell outside a Repeat Scene (or in a path that skips declarationsFor) still needs its global.
     if (!this.declarations.has(CELL3_DECL) && [CELL3_GLOBAL, CELL3SIZE_GLOBAL].some(g => mainBody.includes(g) || [...this.functions].some(f => f.includes(g)))) this.declarations.add(CELL3_DECL);
+    // A Time Cube Shape inside a Scene Group (docs/timecube-space.md) talks to its Time Cube View through globals.
+    if (!this.declarations.has(TC_SPACE_DECL) && [...this.functions].some(f => f.includes('g_tcBest'))) this.declarations.add(TC_SPACE_DECL);
     // Data uniforms and their row helpers first, so any function can call them.
     const functionCode = pruneUnusedGlslFunctions(dataBlocksFirst(dedupeGlslFunctions(Array.from(this.functions))), mainBody).join('\n');
     const paramUniformDecls = Object.entries(this.paramUniforms)

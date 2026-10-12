@@ -102,7 +102,23 @@ export function drawTimeCube(g: CanvasRenderingContext2D, w: number, h: number, 
   g.fillRect(0, 0, w, h);
   const own = spec.drive.on ? spec.drive.offset : num(spec.display === 'cube' ? p.slice : p.scan, 0.5);
   const at = Math.max(0, Math.min(1, t ?? own));
-  if (spec.display === 'cube') cube(g, w, h, p, at); else cards(g, w, h, p, at);
+  if (spec.display !== 'cube') { cards(g, w, h, p, at); return; }
+  // Space (docs/timecube-space.md): repeated, small copies going back (each its own moment when Time per copy is set);
+  // warped, the box leans and squeezes a little.
+  const warped = typeof p.warp === 'string' && p.warp !== 'off';
+  const copies: Array<[number, number, number]> = p.repeat !== true ? [[0, 0, 1]]
+    : p.repAxes === 'z' ? [[0.2, -0.16, 0.5], [0.05, -0.04, 0.62], [-0.12, 0.1, 0.78]]
+      : p.repAxes === 'x' ? [[-0.3, 0, 0.5], [0, 0, 0.5], [0.3, 0, 0.5]]
+        : [[-0.28, -0.2, 0.42], [0.08, -0.2, 0.42], [-0.12, 0.12, 0.55], [0.26, 0.12, 0.55]];
+  copies.forEach(([dx, dy, s], i) => {
+    g.save();
+    g.translate(w / 2 + dx * w, h / 2 + dy * h);
+    if (warped) g.transform(1, 0, p.warp === 'bend' ? -0.25 : 0.18, 1, 0, 0);
+    g.scale(s, warped ? s * 0.9 : s);
+    g.translate(-w / 2, -h / 2);
+    cube(g, w, h, p, Math.max(0, Math.min(1, at + i * num(p.copyTime, 0))));
+    g.restore();
+  });
 }
 
 /** A picture of `spec` as a data URL (null where there is no 2D canvas, as in tests). */

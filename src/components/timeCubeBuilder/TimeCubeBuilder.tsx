@@ -49,6 +49,7 @@ export const SECTION_INFO: Record<TcSection, { icon: IconName; line: string }> =
   time: { icon: 'clock', line: 'The slice or the scan, flow and playback, and an LFO to move it' },
   colour: { icon: 'sun', line: 'Glow, tint, brightness, a colour key that keeps one colour through time' },
   motion: { icon: 'spark', line: 'Highlighted frames, frames that move, cards that scatter' },
+  space: { icon: 'grid', line: 'Repeat the box into a hall of copies, each at its own moment; twist, bend or wave the space it is in' },
   camera: { icon: 'camera', line: 'Where you look from, the lens, a slow orbit, flying through' },
   look: { icon: 'eye', line: 'Outlines, shadow, focus, quality and the background' },
 };
@@ -201,6 +202,7 @@ function Panel({ section, spec }: { section: TcSection; spec: TimeCubeSpec }) {
   if (section === 'source') return <SourcePanel spec={spec} />;
   if (section === 'shape') return <ShapePanel spec={spec} />;
   if (section === 'time') return <><DriveCard spec={spec} /><Groups groups={groupsFor('time', spec.display)} spec={spec} section="time" /></>;
+  if (section === 'space' && spec.display !== 'cube') return <BuilderNote>Space repeats and warps the box of time: choose “A box of time” in Shape to use it.</BuilderNote>;
   return <Groups groups={groupsFor(section, spec.display)} spec={spec} section={section} />;
 }
 

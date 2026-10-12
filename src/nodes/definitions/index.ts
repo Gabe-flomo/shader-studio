@@ -17,7 +17,7 @@ import { DepthCompositeNode, DepthLightNode, PictureEnvironmentNode } from './de
 import { DepthMixNode } from './depthMix';
 import { SplatProbeOutNode, SplatSceneNode } from './splatScene';
 import { SetSplatNode, SplatAttributesNode, SplatColorNode, SplatCropNode, SplatDissolveNode, SplatExplodeNode, SplatLookNode, SplatModOutNode, SplatPointsNode, SplatWaveNode } from './splatModifiers';
-import { TimeCubeNode, TimeCubeViewNode, TimeSliceNode } from './timeCube';
+import { TimeCubeNode, TimeCubeShapeNode, TimeCubeViewNode, TimeSliceNode } from './timeCube';
 import { FrameStackNode } from './frameStack';
 export { BakedNode };
 import { MidiInputNode } from './midi';
@@ -364,6 +364,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   timeCube: TimeCubeNode,
   timeSlice: TimeSliceNode,
   timeCubeView: TimeCubeViewNode,
+  timeCubeShape: TimeCubeShapeNode,
   // Frame Stack (docs/frame-stack.md): a Time Cube's frames as cards to arrange
   frameStack: FrameStackNode,
   midiInput: MidiInputNode,

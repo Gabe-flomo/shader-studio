@@ -204,6 +204,11 @@ outline. The settings are grouped into sections, and each section folds:
 | | Translate X, Y, Z | Move the camera and the point it looks at together through the scene (world units: the frame is 1 high), so Angle, Elevation and Orbit speed still turn round the moved point. Z runs along the box's depth (time, when frames stack in depth): fly through the box. No input sockets; like every camera setting they are live uniforms on Play's list, to map to LFOs, MIDI or hands. With a March Camera wired they do nothing (move that camera instead). |
 | | Flatten (isometric) | From perspective (0) to orthographic (1). With Elevation 0.62 and Angle 0.79 it is the isometric view. |
 
+**Space** (Repeat, Each copy, Warp, Far & fog, and the **Space** socket): the box repeated on a grid (each copy at its
+own moment), warped (twist, bend, wave, noise), or drawn through a Scene Group with a **Time Cube Shape** in it, so
+Repeat Scene, Twist 3D, Bend 3D and Warp Builder groups apply. Off, the view compiles exactly as before. See
+[timecube-space.md](timecube-space.md).
+
 **Removed** (October 2026): the camera's **Swing**, the key's **Lightning**,
 the **Focus** (depth of field) section and the **Frame effects** section
 (Frame Stack keeps its own Focus). A graph saved with them still loads and
