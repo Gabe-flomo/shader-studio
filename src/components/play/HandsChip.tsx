@@ -12,7 +12,7 @@
  *               open the camera).
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { useTokens } from '../../theme/themeStore';
+import { useThemeMode, useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { handFeed, type HandStatus } from '../../lib/handFeed';
 import { loadPct } from '../../lib/trackerCache';
@@ -26,6 +26,7 @@ import { Icon } from '../ui/Icon';
 import { Popover } from '../ui/Popover';
 import { RulerSlider } from '../ui/RulerSlider';
 import { usePlayUi } from './playUi';
+import { handThemeHex, isThemeColour } from '../../play/handStyle';
 import { CameraChip } from './chips';
 import { TrackSource, TrackerChip, trackerText, useFromVideo, useModelNote, useTrackerStatus } from './TrackingChips';
 
@@ -115,12 +116,20 @@ export function HandsChip({ settings = true }: { settings?: boolean }) {
 /** "Show hand on picture" with its colour: the Camera layer's section, and the top of the settings. */
 export function ShowHandToggle() {
   const [hands, set] = useHandSettings();
-  const hex = `#${hands.colour.map(c => Math.round(c * 255).toString(16).padStart(2, '0')).join('')}`;
+  const tk = useTokens();
+  const themed = isThemeColour(hands.colour);
+  const pair = handThemeHex(useThemeMode());
+  // The theme's two colours (right hand, left hand) until a colour is picked
+  const hex = themed ? pair.right : `#${hands.colour.map(c => Math.round(c * 255).toString(16).padStart(2, '0')).join('')}`;
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
       <Toggle checked={hands.overlay} onChange={overlay => set({ overlay })} label="Show hand on picture" />
       <span style={{ flex: 1 }} />
-      <label title="Colour of the hand on the picture" style={{ position: 'relative', width: 26, height: 22, borderRadius: radius.sm, background: hex, cursor: 'pointer', boxShadow: `inset 0 0 0 1px ${alpha('#000000', 0.15)}`, opacity: hands.overlay ? 1 : 0.5, flexShrink: 0 }}>
+      {!themed && (
+        <button type="button" data-hand-colour-reset="" onClick={() => set({ colour: DEFAULT_HANDS.colour })} title="Back to the theme’s colours: right hand in the accent, left in violet"
+          style={{ border: 0, background: 'none', padding: 0, color: tk.accent.text, cursor: 'pointer', font: `600 11.5px ${fontFamily.ui}` }}>Theme</button>
+      )}
+      <label data-hand-colour={themed ? 'theme' : 'custom'} title={themed ? 'Colour of the hands on the picture: the theme’s (right hand, left hand). Pick one for both' : 'Colour of the hands on the picture'} style={{ position: 'relative', width: 26, height: 22, borderRadius: radius.sm, background: themed ? `linear-gradient(135deg, ${pair.left} 50%, ${pair.right} 50%)` : hex, cursor: 'pointer', boxShadow: `inset 0 0 0 1px ${alpha('#000000', 0.15)}`, opacity: hands.overlay ? 1 : 0.5, flexShrink: 0 }}>
         <input type="color" aria-label="Colour of the hand on the picture" value={hex} onChange={e => { const h = e.target.value; set({ colour: [parseInt(h.slice(1, 3), 16) / 255, parseInt(h.slice(3, 5), 16) / 255, parseInt(h.slice(5, 7), 16) / 255] }); }} style={{ position: 'absolute', inset: 0, opacity: 0, width: '100%', height: '100%', cursor: 'pointer' }} />
       </label>
     </div>

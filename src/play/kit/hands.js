@@ -483,36 +483,175 @@ export function hdPoint(st, side, point) {
   return { x: h.pts[i * 3], y: h.pts[i * 3 + 1] };
 }
 
-// ── Drawing the skeleton (setup aid) ─────────────────────────────────────────
+// ── Drawing the hands (setup aid) ────────────────────────────────────────────
+//
+// Fluid rather than rigid: the drawn landmarks get a light One-Euro of their own (between tracker frames the hand
+// glides to where it was seen, and fast moves barely lag), each finger is a Catmull-Rom spline through its joints
+// that bends with them, its thickness tapers from the knuckle to the tip and grows as a joint comes towards the
+// camera (z), all scaled by the hand's size on the picture. Joints are round dots, the palm a soft fill, the
+// fingers glow a little, and a fingertip lights up as it pinches against the thumb. Left and right hands each have
+// their own colour (the app passes its theme's two accents; the exported runtime uses the same pair by default).
 
-/** Bones and landmark dots for every hand in view, in `rgb` (0..1), with an L / R tag at the wrist. */
-export function hdDraw(ctx, st, W, H, dpr, rgb) {
+/** Each finger's joints, from where it leaves the palm to its tip (the thumb leaves from the wrist). */
+export const HD_CHAINS = [[0, 1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12], [13, 14, 15, 16], [17, 18, 19, 20]];
+/** The palm's outline. */
+export const HD_PALM = [0, 1, 5, 9, 13, 17];
+/** The drawing's own smoothing (One-Euro, coordinates in picture units): quick to follow, quiet at rest. */
+export const HD_DRAW_EURO = { minCutoff: 4, beta: 20 };
+/** Hand colours when the host gives none: the app's dark-theme accents (right: accent blue, left: violet). */
+export const HD_DEFAULT_PALETTE = { right: [0x89 / 255, 0xb4 / 255, 0xfa / 255], left: [0xcb / 255, 0xa6 / 255, 0xf7 / 255] };
+/** The old single default colour: a setup that still has it gets the two-colour palette. */
+export const HD_LEGACY_COLOUR = [0.35, 1, 0.75];
+
+/**
+ * Catmull-Rom (uniform) through `pts` (each [x, y, …], any number of channels): `n` samples per segment, ending
+ * on the last point. The curve passes through every point; the ends repeat their point as the outside control.
+ */
+export function hdSpline(pts, n) {
+  const m = pts.length;
+  if (m < 2) return pts.map(p => p.slice());
+  const out = [];
+  for (let i = 0; i < m - 1; i++) {
+    const p0 = pts[Math.max(0, i - 1)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(m - 1, i + 2)];
+    for (let s = 0; s < n; s++) {
+      const t = s / n, t2 = t * t, t3 = t2 * t;
+      const q = new Array(p1.length);
+      for (let k = 0; k < p1.length; k++) {
+        q[k] = 0.5 * (2 * p1[k] + (p2[k] - p0[k]) * t + (2 * p0[k] - 5 * p1[k] + 4 * p2[k] - p3[k]) * t2 + (3 * p1[k] - p0[k] - 3 * p2[k] + p3[k]) * t3);
+      }
+      out.push(q);
+    }
+  }
+  out.push(pts[m - 1].slice());
+  return out;
+}
+
+/**
+ * The hand's landmarks for drawing, smoothed again over draw time with `HD_DRAW_EURO` (the tracking's own filter
+ * already ran). `f` keeps the filter's state between calls ({ euro, out }); a hand that left starts fresh.
+ */
+export function hdSmoothPts(f, pts, now) {
+  if (!f.euro || f.euro.length !== pts.length) { f.euro = Array.from({ length: pts.length }, () => ({ x: 0, dx: 0, t: -1 })); f.out = new Float64Array(pts.length); }
+  for (let j = 0; j < pts.length; j++) f.out[j] = hdEuroStep(f.euro[j], pts[j], now, HD_DRAW_EURO.minCutoff, HD_DRAW_EURO.beta);
+  return f.out;
+}
+
+/** How lit a fingertip is (0..1) from its pinch distance to the thumb (in palm sizes): from 0.45 down to 0.15. */
+export const hdTipGlow = ratio => hdClamp((0.45 - ratio) / 0.3);
+
+const hdMix = (c, d, t) => [c[0] + (d[0] - c[0]) * t, c[1] + (d[1] - c[1]) * t, c[2] + (d[2] - c[2]) * t];
+const hdCss = (c, a) => 'rgba(' + Math.round(c[0] * 255) + ',' + Math.round(c[1] * 255) + ',' + Math.round(c[2] * 255) + ',' + a + ')';
+const hdSameRgb = (a, b) => !!a && Math.abs(a[0] - b[0]) < 0.01 && Math.abs(a[1] - b[1]) < 0.01 && Math.abs(a[2] - b[2]) < 0.01;
+
+/** The two hands' colours: the host's palette, else a chosen colour (left a lighter shade of it), else the default pair. */
+export function hdPalette(rgb, palette) {
+  if (palette && palette.left && palette.right) return palette;
+  if (rgb && !hdSameRgb(rgb, HD_LEGACY_COLOUR)) return { right: rgb, left: hdMix(rgb, [1, 1, 1], 0.4) };
+  return HD_DEFAULT_PALETTE;
+}
+
+/** Drawing filters per hand slot (the state's left / right objects). */
+const hdDrawFilters = new WeakMap();
+const hdNow = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
+
+/** One finger as a tapered ribbon with round ends, added to the current path. `s` holds [x, y, width] samples. */
+function hdRibbon(ctx, s) {
+  const n = s.length;
+  const L = [], R = [];
+  for (let i = 0; i < n; i++) {
+    const a = s[Math.max(0, i - 1)], b = s[Math.min(n - 1, i + 1)];
+    let nx = -(b[1] - a[1]), ny = b[0] - a[0];
+    const len = Math.hypot(nx, ny) || 1;
+    nx /= len; ny /= len;
+    const w = s[i][2] / 2;
+    L.push([s[i][0] + nx * w, s[i][1] + ny * w]);
+    R.push([s[i][0] - nx * w, s[i][1] - ny * w]);
+  }
+  ctx.moveTo(L[0][0], L[0][1]);
+  for (let i = 1; i < n; i++) ctx.lineTo(L[i][0], L[i][1]);
+  for (let i = n - 1; i >= 0; i--) ctx.lineTo(R[i][0], R[i][1]);
+  ctx.closePath();
+  // Round ends
+  for (const e of [s[0], s[n - 1]]) { ctx.moveTo(e[0] + e[2] / 2, e[1]); ctx.arc(e[0], e[1], e[2] / 2, 0, Math.PI * 2); }
+}
+
+/**
+ * Every hand in view: a soft palm, curved tapering fingers with a slight glow, round joints, fingertips that light
+ * up on a pinch, and an L / R tag at the wrist. `rgb` is the setup's colour; `palette` ({ left, right, font? },
+ * 0..1 colours) the host's theme colours, which win.
+ */
+export function hdDraw(ctx, st, W, H, dpr, rgb, palette) {
   if (!st || !st.live) return;
-  const c = rgb || [0.35, 1, 0.75];
-  const css = a => 'rgba(' + Math.round(c[0] * 255) + ',' + Math.round(c[1] * 255) + ',' + Math.round(c[2] * 255) + ',' + a + ')';
+  const pal = hdPalette(rgb, palette);
+  const now = hdNow();
   ctx.save();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
   for (const side of ['left', 'right']) {
     const h = st[side];
-    if (!h.present) continue;
-    const px = i => h.pts[i * 3] * W, py = i => (1 - h.pts[i * 3 + 1]) * H;
-    ctx.lineCap = 'round'; ctx.lineWidth = 2.2 * dpr; ctx.strokeStyle = css(0.8);
+    if (!h.present) { hdDrawFilters.delete(h); continue; }
+    let f = hdDrawFilters.get(h);
+    if (!f) { f = {}; hdDrawFilters.set(h, f); }
+    const P = hdSmoothPts(f, h.pts, now);
+    const c = pal[side];
+    const light = hdMix(c, [1, 1, 1], 0.55);
+    const palm = Math.max(1e-3, (h.d && h.d.palm) || 0.15);
+    // Width at a finger's root, from the hand's size on the picture
+    const base = Math.max(2.5 * dpr, Math.min(22 * dpr, palm * H * 0.15));
+    const x = i => P[i * 3] * W, y = i => (1 - P[i * 3 + 1]) * H;
+    // Nearer the camera than the wrist (z below 0) draws thicker
+    const depth = i => Math.max(0.65, Math.min(1.5, 1 - (P[i * 3 + 2] / palm) * 0.45));
+    // The palm: a soft fill, rounded through its outline's midpoints
+    const m = HD_PALM.length;
+    const mid = k => { const a = HD_PALM[k % m], b = HD_PALM[(k + 1) % m]; return [(x(a) + x(b)) / 2, (y(a) + y(b)) / 2]; };
     ctx.beginPath();
-    for (const [a, b] of HD_BONES) { ctx.moveTo(px(a), py(a)); ctx.lineTo(px(b), py(b)); }
-    ctx.stroke();
-    for (let i = 0; i < 21; i++) {
-      const tip = i === 4 || i === 8 || i === 12 || i === 16 || i === 20;
-      ctx.fillStyle = tip ? '#ffffff' : css(1);
-      ctx.beginPath(); ctx.arc(px(i), py(i), (tip ? 4 : 3) * dpr, 0, Math.PI * 2); ctx.fill();
-      if (tip) { ctx.lineWidth = 1.5 * dpr; ctx.strokeStyle = css(1); ctx.stroke(); }
+    const start = mid(m - 1);
+    ctx.moveTo(start[0], start[1]);
+    for (let k = 0; k < m; k++) { const q = mid(k); ctx.quadraticCurveTo(x(HD_PALM[k]), y(HD_PALM[k]), q[0], q[1]); }
+    ctx.closePath();
+    ctx.fillStyle = hdCss(c, 0.18);
+    ctx.fill();
+    // The fingers: one path, filled once with a soft glow
+    ctx.beginPath();
+    for (const chain of HD_CHAINS) {
+      const k = chain.length - 1;
+      const nodes = chain.map((i, j) => [x(i), y(i), base * (1 - 0.45 * (j / k)) * (i === 0 ? 1.15 : 1) * depth(i)]);
+      hdRibbon(ctx, hdSpline(nodes, 6));
     }
-    ctx.font = '600 ' + Math.round(11 * dpr) + 'px system-ui, sans-serif';
+    ctx.shadowColor = hdCss(c, 0.6); ctx.shadowBlur = 10 * dpr;
+    ctx.fillStyle = hdCss(c, 0.82);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    // Joints: round dots in a lighter shade
+    ctx.fillStyle = hdCss(light, 0.95);
+    ctx.beginPath();
+    for (let i = 0; i < 21; i++) {
+      if (i === 4 || i === 8 || i === 12 || i === 16 || i === 20) continue;
+      const r = base * 0.3 * depth(i);
+      ctx.moveTo(x(i) + r, y(i)); ctx.arc(x(i), y(i), r, 0, Math.PI * 2);
+    }
+    ctx.fill();
+    // Fingertips: light up as each pinches (the thumb with the closest one)
+    const ratios = (h.d && h.d.pinchRatio) || [];
+    const glows = [0, 1, 2, 3].map(k => hdTipGlow(ratios[k] == null ? 1 : ratios[k]));
+    const tips = [[4, Math.max(...glows)], [8, glows[0]], [12, glows[1]], [16, glows[2]], [20, glows[3]]];
+    for (const [i, g] of tips) {
+      const r = base * (0.36 + 0.16 * g) * depth(i);
+      if (g > 0) { ctx.shadowColor = hdCss(hdMix(c, [1, 1, 1], 0.3), 0.9); ctx.shadowBlur = (6 + 16 * g) * dpr; }
+      ctx.fillStyle = hdCss(hdMix(light, [1, 1, 1], g), 1);
+      ctx.beginPath(); ctx.arc(x(i), y(i), r, 0, Math.PI * 2); ctx.fill();
+      ctx.shadowBlur = 0;
+      if (g > 0) { ctx.lineWidth = 1.5 * dpr; ctx.strokeStyle = hdCss([1, 1, 1], 0.5 + 0.5 * g); ctx.stroke(); }
+    }
+    // L / R under the wrist, in the hand's colour
+    ctx.font = '650 ' + Math.round(10.5 * dpr) + 'px ' + ((palette && palette.font) || 'system-ui, sans-serif');
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    const tx = px(0), ty = py(0) + 14 * dpr;
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    const tx = x(0), ty = y(0) + base * 0.8 + 11 * dpr;
+    ctx.fillStyle = hdCss(c, 0.92);
     ctx.beginPath(); ctx.arc(tx, ty, 9 * dpr, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#ffffff';
+    const lum = 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+    ctx.fillStyle = lum > 0.55 ? 'rgba(17,17,27,0.9)' : '#ffffff';
     ctx.fillText(side === 'left' ? 'L' : 'R', tx, ty + 0.5 * dpr);
   }
   ctx.restore();

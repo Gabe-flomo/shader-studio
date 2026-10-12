@@ -2,7 +2,7 @@ import type { PlayLayer, PlayRecord, ActionKind, BackgroundItem } from '../../ty
 import type { BqPlan } from './queue.js';
 import type { KitBackground } from './layers.js';
 export type { KitBackground } from './layers.js';
-import type { HdState } from './hands.js';
+import type { HdPalette, HdState } from './hands.js';
 import type { TkSubject } from './tracks.js';
 
 export interface KitPointer { x: number; y: number; over: boolean; down: boolean }
@@ -57,7 +57,7 @@ export interface KitEnv {
   /** Hand tracking is running (has seen a camera frame): a hand out of view is then "lost" for path shapes. Without it, a hand null that never saw its hand rests where it was placed. */
   handsLive?: boolean;
   /** Hand tracking: draw the hands' skeleton with the markers (null or absent: don't). */
-  hands?: { state: HdState; colour: [number, number, number] } | null;
+  hands?: { state: HdState; colour: [number, number, number]; palette?: HdPalette | null } | null;
   /** Face and pose tracking: a landmark for a null following it (null while nothing is in view). */
   track?: (kind: 'face' | 'pose', point: number) => { x: number; y: number } | null;
   /** That tracker has seen a frame. */
