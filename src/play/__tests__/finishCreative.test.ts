@@ -119,7 +119,8 @@ describe('creative effects: passes', () => {
     const one = fnBuildFinal([fx('ascii'), fx('chroma')]);
     expect(one.segments).toBe(1);
     expect(one.src).toContain('vec4 fnSample(vec2 q, vec2 p)');
-    expect(one.src).toContain('oR += o; oB -= o;');
+    // Chromatic aberration reads through its spectral taps (play/kit/chroma.js) there too.
+    expect(one.src).toMatch(/vec4 fnSample\(vec2 q, vec2 p\) \{\n  vec4 s;\n  \{\n    s = caReadR\(q, /);
     expect(one.src).toContain('fnGlyph(gi, fract(P / cell))');
   });
 

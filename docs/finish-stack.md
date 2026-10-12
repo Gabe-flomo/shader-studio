@@ -61,8 +61,9 @@ effect), so dragging a slider or a mapping never recompiles.
    curvature, Glitch's blocks and tears, Ripple, Water, Displace, Mosaic and
    Mirror bend where the picture is read. (Water's surface is stepped before
    the passes, in passes of its own: see Water.)
-2. **Sampling**: chromatic aberration and Glitch's colour split read red and
-   blue at offset points; time displacement chooses which frame each point reads.
+2. **Sampling**: chromatic aberration reads the picture at taps across the
+   spectrum (see [chromatic-aberration.md](chromatic-aberration.md)) and Glitch's
+   colour split reads red and blue at offset points; time displacement chooses which frame each point reads.
 3. **Colour**, in the stack's order: grade, vignette, CRT mask, bloom, halation,
    grain, flicker, Glitch's colour blocks, gradient map, posterize, edges,
    light leaks, pixel sort, halftone, ASCII, the temporal effects (feedback,
@@ -141,7 +142,7 @@ worst difference 1.4 / 255.
 | Effect | Numbers |
 | --- | --- |
 | Lens distortion | Distortion (barrel/pincushion), Edges (r⁴), Fill frame (auto-zoom so a barrel never shows past the edge) |
-| Chromatic aberration | Amount, Falloff (radial) |
+| Chromatic aberration | Look (Spectral, Channel split), Geometry (Lateral, Axial, Directional), Amount, Falloff (Lateral), Samples, Blur, Centre X / Y, Angle (Directional), Distortion; presets Lens, Cheap lens, Prism, Halo, RGB split. See [chromatic-aberration.md](chromatic-aberration.md). |
 | Vignette | Amount, Size, Roundness, Feather, Colour |
 | CRT | Curvature, Scanlines, Mask, Cell size, Stagger, Glow, Pulse. The mask is the CRT Mask node's GLSL. |
 | Bloom | Amount, Threshold, Radius, Tint |

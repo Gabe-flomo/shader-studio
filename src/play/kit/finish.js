@@ -35,6 +35,7 @@ import { BL_BASE_GLSL, blGlsl, blCubicGlsl } from './blur.js';
 import { gyAtlas } from './glyphs.js';
 import { DM_GLSL, DM_HINTS, DM_CHANNELS, DM_BEHAVIOURS, dmChannelGlsl, dmBoxOf } from './displace.js';
 import { RF_BASE_GLSL, RF_OPACITY, RF_PASSES, rfGlsl } from './rays.js';
+import { CA_BASE_GLSL, CA_TAPS, caGlsl } from './chroma.js';
 
 // ── The catalogue ────────────────────────────────────────────────────────────
 
@@ -130,13 +131,30 @@ export const FN_EFFECTS = {
       FN_P('fit', 'Fill frame', 0, 1, 0.01, 1, 'Zooms in so a barrel never shows past the picture’s edge.'),
     ],
   },
+  // Chromatic aberration (play/kit/chroma.js): what the first pass reads, spectral taps by default.
   chroma: {
     label: 'Chromatic aberration', group: 'Lens & screen', icon: 'spark',
-    summary: 'Red and blue split apart toward the edges',
+    summary: 'Smooth rainbow fringes toward the edges, like a real lens',
     params: [
-      FN_P('amount', 'Amount', 0, 1, 0.01, 0.35, 'How far red and blue separate at the corners.'),
-      FN_P('falloff', 'Falloff', 0.5, 4, 0.05, 1.6, 'Higher keeps the middle clean and pushes the fringes to the edges.'),
+      FN_P('amount', 'Amount', 0, 1, 0.01, 0.35, 'How far the colours separate toward the edges (red one way, violet the other).'),
+      FN_P('falloff', 'Falloff', 0.5, 4, 0.05, 1.6, 'Lateral: higher keeps the middle clean and pushes the fringes to the edges.'),
+      FN_P('style', 'Look', 0, 1, 1, 0, '0 Spectral (many taps across the spectrum that add up to white: smooth rainbow fringes), 1 Channel split (red and blue copies, green still).', true),
+      FN_P('geometry', 'Geometry', 0, 2, 1, 0, '0 Lateral (outward from the centre), 1 Axial (a coloured defocus halo round highlights), 2 Directional (a prism, along Angle).', true),
+      FN_P('samples', 'Samples', 3, 16, 1, CA_TAPS, 'Spectral: taps across the spectrum. More is a smoother rainbow and slower.'),
+      FN_P('blur', 'Blur', 0, 2, 0.01, 0.3, 'Each colour softened by how far it moved, so the fringe melts in. 0 is crisp.'),
+      FN_P('cx', 'Centre X', 0, 1, 0.01, 0.5, 'The lens’s centre (0 left, 1 right). Map a hand or the pointer onto it.'),
+      FN_P('cy', 'Centre Y', 0, 1, 0.01, 0.5, 'The lens’s centre (0 bottom, 1 top).'),
+      FN_P('angle', 'Angle', -180, 180, 1, 0, 'Directional: which way red goes, in degrees (0 right, 90 up).'),
+      FN_P('distortion', 'Distortion', -1, 1, 0.01, 0, 'Bends each colour differently toward the edges: above 0 red bulges out and violet in. 0 is off.'),
     ],
+    presets: [
+      { name: 'Lens', values: { style: 0, geometry: 0, amount: 0.35, falloff: 1.6, samples: CA_TAPS, blur: 0.3, distortion: 0 } },
+      { name: 'Cheap lens', values: { style: 0, geometry: 0, amount: 0.8, falloff: 1.2, samples: 14, blur: 0.6, distortion: 0.3 } },
+      { name: 'Prism', values: { style: 0, geometry: 2, amount: 0.5, samples: 16, blur: 0.2, angle: 0, distortion: 0 } },
+      { name: 'Halo', values: { style: 0, geometry: 1, amount: 0.4, samples: CA_TAPS, blur: 0, distortion: 0 } },
+      { name: 'RGB split', values: { style: 1, geometry: 2, amount: 0.25, blur: 0, angle: 0, distortion: 0 } },
+    ],
+    note: 'Spectral reads the picture at many taps across the spectrum, each moved by its wavelength and weighed so they add up to white: edges fringe in a smooth rainbow instead of three copies. Blur softens each colour by how far it moved.',
   },
   vignette: {
     label: 'Vignette', group: 'Lens & screen', icon: 'eye',
@@ -2464,24 +2482,33 @@ vec4 fetch(vec2 q) {
     c = ct;
   }`);
   }
-  // What is read at q: chromatic aberration and Glitch's colour split pull red and blue apart.
+  // What is read at q: chromatic aberration (play/kit/chroma.js: spectral taps, or a red / blue split) and
+  // Glitch's colour split pull the colours apart.
   const splits = [];
+  let chromaRead = '';
   for (const e of first ? effects : []) {
     const w = weight.get(e);
     const ww = w ? ` * ${w}(p)` : '';
-    if (e.kind === 'chroma') splits.push(`{
-    vec2 d = q - 0.5;
-    float sc = chroma_amount * 0.018 * pow(length(d * vec2(uAspect, 1.0)) * 1.25, chroma_falloff) / max(length(d * vec2(uAspect, 1.0)), 1e-4) * length(d * vec2(uAspect, 1.0));
-    vec2 o = normalize(d + 1e-6) * sc${ww};
-    oR += o; oB -= o;
-  }`);
+    // Amount 1 moves red 0.018 of the picture's height at the corner, as it always has: Lateral's distances are
+    // half heights, the old ones 0.625 × that, hence the 0.625^Falloff.
+    if (e.kind === 'chroma') chromaRead = `caReadR(q, vec2(chroma_cx, chroma_cy), 1.0 / uRes, uAspect, chroma_style, chroma_geometry, chroma_amount * 0.018 * uRes.y * (chroma_geometry < 0.5 ? pow(0.625, chroma_falloff) : 1.0)${ww}, chroma_samples, chroma_blur, chroma_falloff, radians(chroma_angle), chroma_distortion${ww}, caIGN(gl_FragCoord.xy))`;
     if (e.kind === 'glitch') splits.push(`{
     float s = floor(uTime * glitch_speed);
     vec2 o = vec2((fnHash(vec3(floor(q.y * glitch_blocks), s, 9.0)) - 0.5) * glitch_split * glitch_amount * 0.06, 0.0)${ww};
     oR += o; oB -= o;
   }`);
   }
-  const sample = splits.length
+  // With chromatic aberration its taps read through fnCaFetch: the picture, or (with Glitch's split too) the split picture.
+  if (chromaRead) {
+    src += CA_BASE_GLSL + (splits.length
+      ? 'vec2 gCaR, gCaB;\nvec4 fnCaFetch(vec2 q) { vec4 m = fetch(q); return vec4(fetch(q + gCaR).r, m.g, fetch(q + gCaB).b, m.a); }\n'
+      : 'vec4 fnCaFetch(vec2 q) { return fetch(q); }\n') + caGlsl('texture', x => `fnCaFetch(${x})`);
+  }
+  const sample = chromaRead
+    ? `{
+    ${splits.length ? `vec2 oR = vec2(0.0), oB = vec2(0.0);\n    ${splits.join('\n    ')}\n    gCaR = oR; gCaB = oB;\n    ` : ''}s = ${chromaRead};
+  }`
+    : splits.length
     ? `{
     vec2 oR = vec2(0.0), oB = vec2(0.0);
     ${splits.join('\n    ')}

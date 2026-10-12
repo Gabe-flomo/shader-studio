@@ -53,13 +53,18 @@ They are built after the grade.
   one read.
 - **Reads round a pixel**: Blur (Blur (texture)), Glow (Glow (texture), Bloom chain, then Add),
   Light rays / Radial blur (Radial Fast Blur: see [radial-fast-blur.md](radial-fast-blur.md)),
-  Chromatic aberration (Chromatic Aberration (texture)) and Displace by a picture (Displace
+  Chromatic aberration (Chromatic Aberration (lens): see [chromatic-aberration.md](chromatic-aberration.md))
+  and Displace by a picture (Displace
   (texture), with the picture chosen in the shared texture picker or a Shader Texture). Each reads
   the Pass with its own node, at the bent point if moves came before it.
 - **Light rays / Radial blur** is CC Radial Fast Blur: Mode (Brightest: light rays; Average: a
   zoom blur; Add: glowing rays), Length, Threshold, Intensity, Opacity, Decay, Falloff, Zoom (out from or
   into the centre), Centre X / Y and Tint, the node's own controls. Its four streak passes are
   hidden passes, so they don't count towards the six Passes; long streaks cost the same.
+- **Chromatic aberration** has Look (Spectral: smooth rainbow fringes from many taps across the
+  spectrum; Channel split: red and blue copies), Amount (pixels), Direction (Radial, Axial: a halo
+  round highlights, Directional), Angle, Falloff, Blur, Samples, Distortion and Centre X / Y. Old
+  recipes (`chroma 6 mode=directional angle=30`) build the new node with the same Amount.
 - **On the colour**: CRT mask (CRT Mask) has slot mask, aperture grille or shadow mask (dots), plus
   cell size, strength, scanlines, curvature and vignette.
 
@@ -83,7 +88,7 @@ circle r=0.3 slot=2 · background slot=1 · palette fire
 palette #1b1f3b #e94f37 #f6c90e name=Dusk
 grade saturation 1.3 · grade levels blacks=0.05 · grade lgg gain=(1.1,1,0.9) · grade hue 40 off
 crt mask=aperture size=4 strength=0.7 curve=0.05 vignette=0.35 scanlines=0.3
-chroma 6 mode=directional angle=30
+chroma 6 mode=directional angle=30 · chroma 4 look=split blur=0
 fx displace 0.12 scale=2 speed=0.2 · fx displace picture=clouds pixels=40
 fx swirl 2 · fx ripple 0.02 freq=12 · fx lens 0.2 · fx pixelate 0.03 · fx kaleido 8 rotate=15
 fx blur 4 · fx glow 1.2 threshold=0.5 radius=16

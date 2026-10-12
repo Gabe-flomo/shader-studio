@@ -371,13 +371,15 @@ export const GlowTextureNode: NodeDefinition = {
  * blue the other and green where it is, so edges fringe red and blue as through a cheap lens.
  * Radial pushes outward from the centre (more toward the edges, as a lens does); Directional
  * pushes every pixel the same way (an old video signal, a misregistered print).
+ * Kept for saved graphs: the builders and Play's Finish use Chromatic Aberration (lens) (chromaLens.ts),
+ * whose Channel split look with Blur 0 is this node's maths.
  */
 export const ChromaTextureNode: NodeDefinition = withParamSockets({
   type: 'chromaTexture',
-  label: 'Chromatic Aberration (texture)',
+  label: 'RGB Split (texture)',
   category: 'Passes',
-  aliases: ['RGB split', 'RGB shift', 'Chroma', 'Colour fringe', 'Color fringe', 'Chromatic aberration', 'Lens fringe'],
-  description: 'Splits a Pass\'s texture (or any texture) into red, green and blue and reads them a little apart: red pushed one way, blue the other, green where it is. Radial pushes outward from the centre, growing toward the edges like a lens; Directional pushes every pixel the same way, like a misaligned video signal. Amount is in picture pixels. Put a Pass before it (the picture you want split) and use its Color as the picture after.',
+  aliases: ['Chromatic Aberration (texture)', 'RGB shift', 'Channel split'],
+  description: 'The older chromatic aberration (Chromatic Aberration (lens) is the newer one, with smooth spectral fringes). Splits a Pass\'s texture (or any texture) into red, green and blue and reads them a little apart: red pushed one way, blue the other, green where it is. Radial pushes outward from the centre, growing toward the edges like a lens; Directional pushes every pixel the same way, like a misaligned video signal. Amount is in picture pixels. Put a Pass before it (the picture you want split) and use its Color as the picture after.',
   inputs: {
     texture: { type: 'texture', label: 'Texture', hint: TEX_HINT },
     uv: { type: 'vec2', label: 'UV', hint: UV_HINT },

@@ -3,7 +3,7 @@
  * the finished picture, as stacked cards built after the scene in the order shown.
  *
  *   Displace (by noise, or by a picture) · Swirl · Ripple · Lens · Pixelate · Kaleidoscope ·
- *   Blur · Glow · Light rays / Radial blur · Chromatic aberration · CRT mask
+ *   Blur · Glow · Light rays / Radial blur · Chromatic aberration (spectral) · CRT mask
  *
  * How they build. An effect that moves the picture (Displace, Swirl, Pixelate, Kaleidoscope, CRT
  * curvature…) changes WHERE the picture is read: the picture so far goes into a Pass, and the next
@@ -101,13 +101,19 @@ export const FX_KINDS: StackKindDef[] = [
     ],
   },
   {
-    kind: 'chroma', label: 'Chromatic aberration', words: ['chroma', 'chromatic', 'rgb-split', 'aberration'], nodes: ['chromaTexture'],
-    blurb: 'Red and blue pulled apart at the edges, like a cheap lens or a worn video signal.',
+    kind: 'chroma', label: 'Chromatic aberration', words: ['chroma', 'chromatic', 'rgb-split', 'aberration'], nodes: ['chromaLens'],
+    blurb: 'A lens\'s colour fringes: smooth rainbow edges growing toward the frame\'s edges (Spectral), or a clean red / blue split (Chromatic Aberration (lens)).',
     params: [
-      { key: 'amount', label: 'Amount', hint: 'How far apart red and blue are, in screen pixels (at the frame\'s edge for Radial).', type: 'num', def: 4, min: 0, max: 40, step: 0.25, primary: true, node: '', param: 'amount', aliases: ['px'] },
-      { key: 'mode', label: 'Direction', hint: 'Radial: outward from the centre, growing to the edges (a lens). Directional: the same way everywhere (a video signal).', type: 'select', def: 'radial', options: sel(['radial', 'Radial (lens)'], ['directional', 'Directional']), node: '', param: 'mode' },
+      { key: 'amount', label: 'Amount', hint: 'How far the colours move, in screen pixels: red one way, blue the other (at the frame\'s top and bottom edge for Radial).', type: 'num', def: 4, min: 0, max: 40, step: 0.25, primary: true, node: '', param: 'amount', aliases: ['px'] },
+      { key: 'look', label: 'Look', hint: 'Spectral: many taps across the spectrum that add up to white, so edges fringe in a smooth rainbow. Channel split: red and blue copies, green still (a clean, graphic look).', type: 'select', def: 'spectral', options: sel(['spectral', 'Spectral'], ['split', 'Channel split']), node: '', param: 'mode' },
+      { key: 'mode', label: 'Direction', hint: 'Radial: outward from the centre, growing to the edges (a lens). Axial: no shift, a coloured defocus halo round highlights. Directional: the same way everywhere (a prism, a video signal).', type: 'select', def: 'radial', options: sel(['radial', 'Radial (lens)'], ['axial', 'Axial (halo)'], ['directional', 'Directional (prism)']), node: '', param: 'geometry' },
       { key: 'angle', label: 'Angle', hint: 'Which way red goes, in degrees: 0 right, 90 up.', type: 'num', def: 0, min: -180, max: 180, step: 1, showWhen: { key: 'mode', is: ['directional'] }, node: '', param: 'angle', aliases: ['dir'] },
-      { key: 'falloff', label: 'Falloff', hint: 'How the split grows from the centre: 0 the same everywhere, 2 only near the edges.', type: 'num', def: 1, min: 0, max: 3, showWhen: { key: 'mode', is: ['radial'] }, node: '', param: 'falloff' },
+      { key: 'falloff', label: 'Falloff', hint: 'How the fringes grow from the centre: 0 the same everywhere, 2 only near the edges.', type: 'num', def: 1, min: 0, max: 3, showWhen: { key: 'mode', is: ['radial'] }, node: '', param: 'falloff' },
+      { key: 'blur', label: 'Blur', hint: 'Each colour softened by how far it moved, so the fringe melts in. 0 is crisp.', type: 'num', def: 0.3, min: 0, max: 2, node: '', param: 'blur', aliases: ['soft'] },
+      { key: 'samples', label: 'Samples', hint: 'Spectral: taps across the spectrum. More is a smoother rainbow and slower.', type: 'num', def: 12, min: 3, max: 16, step: 1, integer: true, showWhen: { key: 'look', is: ['spectral'] }, node: '', param: 'samples', aliases: ['taps'] },
+      { key: 'distortion', label: 'Distortion', hint: 'Bends each colour differently toward the edges: above 0 red bulges out and violet in. 0 is off.', type: 'num', def: 0, min: -1, max: 1, node: '', param: 'distortion', aliases: ['bend'] },
+      { key: 'cx', label: 'Centre X', hint: 'The lens\'s centre, across (0 the middle, ±1.8 the sides).', type: 'num', def: 0, min: -2, max: 2, step: 0.01, showWhen: { key: 'mode', is: ['radial', 'axial'] }, node: '', param: 'centerX', aliases: ['x'] },
+      { key: 'cy', label: 'Centre Y', hint: 'The lens\'s centre, up and down (0 the middle, 1 the top).', type: 'num', def: 0, min: -1, max: 1, step: 0.01, showWhen: { key: 'mode', is: ['radial', 'axial'] }, node: '', param: 'centerY', aliases: ['y'] },
     ],
   },
   {
@@ -233,8 +239,13 @@ export function emitEffects(c: Ctx, items: readonly StackItem[] | undefined, col
           node = mk(c, 'blurTexture', role, { method: 'smooth', radius: n('radius') }, { texture: tex, uv: point }, `${step}: a Gaussian blur of ${fmt(n('radius'))} pixels over the whole picture.`);
           cur = ref(node, 'color');
         } else if (it.kind === 'chroma') {
-          node = mk(c, 'chromaTexture', role, { mode: s('mode'), amount: n('amount'), angle: n('angle'), falloff: n('falloff') }, { texture: tex, uv: point },
-            `${step}: red and blue read ${fmt(n('amount'))} pixels apart${s('mode') === 'radial' ? ', outward from the centre' : `, at ${fmt(n('angle'))}°`}.`);
+          // The builder's Direction (radial / axial / directional, as recipes have always said it) is the node's Geometry.
+          const geometry = s('mode') === 'directional' ? 'directional' : s('mode') === 'axial' ? 'axial' : 'lateral';
+          node = mk(c, 'chromaLens', role, {
+            mode: s('look'), geometry, amount: n('amount'), samples: Math.round(n('samples')), blur: n('blur'), falloff: n('falloff'),
+            centerX: n('cx'), centerY: n('cy'), angle: n('angle'), distortion: n('distortion'),
+          }, { texture: tex, uv: point },
+            `${step}: ${s('look') === 'split' ? 'red and blue copies' : `${Math.round(n('samples'))} taps across the spectrum`} ${geometry === 'axial' ? `defocused up to ${fmt(n('amount'))} pixels round the highlights` : `moved ${fmt(n('amount'))} pixels${geometry === 'lateral' ? ', outward from the centre' : `, at ${fmt(n('angle'))}°`}`}${n('blur') > 0 ? `, each softened by ${fmt(n('blur'))} × how far it moved` : ''}.`);
           cur = ref(node, 'color');
         } else {
           const here = point ? ref(mk(c, 'sampleTexture', `${role}:here`, {}, { texture: tex, uv: point }, 'The picture at the bent point: what the glow is added to.'), 'color') : cur;

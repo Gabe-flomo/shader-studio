@@ -60,7 +60,7 @@ const TYPE_ABBREV: Record<string, string> = {
   lumaRadius: 'lrad', rgbToCMYK: 'cmyk', cmykHalftone: 'cmykht',
   // Passes (render to texture)
   pass: 'pass', passOutput: 'pout', sampleTexture: 'smp', edgesTexture: 'edges', blurTexture: 'tblur',
-  glowTexture: 'tglow', radialFastBlur: 'trays', radialFastBlurStage: 'trays', chromaTexture: 'tchroma', displaceTexture: 'tdisp', displacementMap: 'dmap',
+  glowTexture: 'tglow', radialFastBlur: 'trays', radialFastBlurStage: 'trays', chromaTexture: 'tchroma', chromaLens: 'tca', displaceTexture: 'tdisp', displacementMap: 'dmap',
   // Texture tools
   textureMask: 'tmask', textureLevels: 'tlevels', textureFlow: 'tflow', textureNeighbours: 'tnbr', textureChange: 'tchange',
   distanceShape: 'dshape', textureFade: 'tfade', readTexture: 'tread',
