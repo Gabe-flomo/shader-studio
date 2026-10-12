@@ -28,7 +28,7 @@ export {
   type Generalised, type GenInput, type GenChoices, type BuiltFunction, type GeneraliseContext,
 } from './generalise';
 export { compileExpr, evaluate, evaluateFunction, type Value, type EvalEnv } from './evaluate';
-export { workedVars, workedSteps, workedBlock, freeNames, showValue, type WorkedVar, type WorkedStep, type BlockInput, type BlockLineNumbers } from './worked';
+export { workedVars, workedSteps, workedBlock, workedLoop, WORKED_LOOP_CAP, freeNames, showValue, type WorkedVar, type WorkedStep, type BlockInput, type BlockLineNumbers, type WorkedLoop, type LoopPass } from './worked';
 export { findUses, matchesInLine, codeLines, provenance, exprBlockEnv, customFnEnv, type UseSource, type UseHit, type UseQuery } from './findUses';
 export { toExprPreset, toPublishNode, exprPresetParams, insertFunction, callInCustomFn } from './saveFlows';
 export { literalAt, nameForLiteral, literalToSlider, namesIn, type LiteralSpan, type MadeSlider, type LiteralNameContext } from './literalSlider';

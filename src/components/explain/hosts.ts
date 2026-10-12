@@ -12,6 +12,7 @@ import type { DataType, GraphNode } from '../../types/nodeGraph';
 import type { ExprPreset } from '../../types/exprPreset';
 import { getActiveNodes, useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { getUserNode } from '../../nodes/userNodes/userNodeRegistry';
+import { loopCodeText, loopOf } from '../../nodes/exprLoop';
 import { customFnEnv, exprBlockEnv, exprPresetParams, roleOfSourceNode, callInCustomFn, type BuiltFunction, type GeneraliseContext, type GlslType, type RoleEnv } from '../../lib/glslPatterns';
 
 /** What was made: a saved Expression Block preset, or a published node type. */
@@ -47,6 +48,12 @@ export function exprBlockRoles(node: GraphNode, nodes: GraphNode[] = scopeNodes(
 
 /** An Expression Block's code as it compiles: its lines, then Return (what Explain is told about the surroundings). */
 export function exprBlockCode(node: GraphNode): string {
+  if (loopOf(node.params)) {
+    // Loop mode: the real for loop (nodes/exprLoop.ts), then Return
+    const declared = new Set<string>([...((node.params.inputs as Array<{ name: string }> | undefined) ?? []).map(i => i.name), 't', 'p']);
+    const ret = typeof node.params.result === 'string' ? node.params.result.trim() : '';
+    return [...loopCodeText(node.params, declared).filter(l => !/^\s*\/\/ off:/.test(l)), ...(ret ? [`return ${ret}`] : [])].join('\n');
+  }
   const lines = (node.params.lines as Array<{ lhs?: string; op?: string; rhs?: string; off?: boolean }> | undefined) ?? [];
   const out = lines.filter(l => l.rhs?.trim() && !l.off).map(l => `${l.lhs ?? ''} ${l.op || '='} ${l.rhs}`.trim());
   const ret = typeof node.params.result === 'string' ? node.params.result.trim() : '';

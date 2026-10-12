@@ -187,7 +187,7 @@ export function sameValue(a: unknown, b: unknown, tol = 2.5e-3): boolean {
 /** Settings the printer never compares: notes, the label (renamed), insides, bookkeeping. */
 export const PARAM_SKIP = new Set(['__comment', 'label', 'subgraph', '_groupOriginal', '_schemaVersion', '_sbBuild', '_sbRole', '_sbName', 'sceneBuilder', '__foldedFrom', '__foldedLabel', 'surfacedParams']);
 const MEDIA_KEYS = /^(_fileName|_hasFile|_imageAspect|_isPlaying|_loop|_speed|_bands|_soloedBand|_ccs)$|image|video|audio|file|dataset|media|url|src$/i;
-const CODE_KEYS = /^(code|glsl|expr|result|lines|body|source|fn|func|script)$/i;
+const CODE_KEYS = /^(code|glsl|expr|result|lines|body|source|fn|func|script|loop)$/i;
 const CODE_TYPES = new Set(['exprNode', 'customFunction', 'customNode', 'glslNode']);
 
 /** Why a setting can't be written as a Do… bar value, or null when it can (and how). */

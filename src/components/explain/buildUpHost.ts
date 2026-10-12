@@ -21,6 +21,7 @@ import { inject } from '../../lib/nodePreview/previewGlsl';
 import { startLineProbe } from '../code/LinePreview';
 import { HEAVY_TYPE, parseExpr, allNodes, type BuildUpRow, type GraphCost } from '../../lib/glslPatterns';
 import { scopeNodes } from './hosts';
+import { loopOf } from '../../nodes/exprLoop';
 
 /** A row's rendered values: RGBA floats, w × h, row 0 at the bottom. */
 export interface RowField { data: Float32Array; w: number; h: number }
@@ -131,9 +132,14 @@ export function rowsCopy(node: GraphNode, at: number | 'return', exprs: Array<{ 
   const lines = (node.params.lines as Line[] | undefined) ?? [];
   const above = at === 'return' ? lines : lines.slice(0, at);
   const extra = exprs.map((e, i) => ({ lhs: `${e.type} pv_s${i}`, op: '=', rhs: e.expr }));
+  // Loop mode: Return's rows read what the loop (and After) left; a looped line's rows run in the loop, without After
+  const loop = loopOf(node.params);
+  const code = loop && at === 'return'
+    ? { loop: { ...loop, after: [...(loop.after ?? []), ...extra] } }
+    : { lines: [...above, ...extra], ...(loop ? { loop: { ...loop, after: [] } } : {}) };
   return {
     ...node,
-    params: { ...node.params, lines: [...above, ...extra], result: '', outputs: extra.map((_, i) => `pv_s${i}`) },
+    params: { ...node.params, ...code, result: '', outputs: extra.map((_, i) => `pv_s${i}`) },
     // Only the result stays a socket: the preview graph draws it; the rows are read by name
     outputs: { result: node.outputs?.result ?? { type: ((node.params.outputType as string) || 'float') as never, label: 'Result' } } as GraphNode['outputs'],
   };

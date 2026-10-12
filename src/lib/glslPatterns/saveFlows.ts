@@ -29,9 +29,12 @@ export function toExprPreset(g: Generalised, built: BuiltFunction, label: string
 }
 
 /** The node params an Expression Block preset places with (shared by the palette and "Use it here too"). */
-export function exprPresetParams(p: Pick<ExprPreset, 'label' | 'inputs' | 'outputType' | 'lines' | 'result' | 'comment' | 'values'>): Record<string, unknown> {
+export function exprPresetParams(p: Pick<ExprPreset, 'label' | 'inputs' | 'outputType' | 'lines' | 'result' | 'comment' | 'values' | 'loop' | 'loopN'>): Record<string, unknown> {
   return {
     label: p.label, inputs: p.inputs, outputType: p.outputType, lines: p.lines, result: p.result,
+    // Loop mode (nodes/exprLoop.ts): its sections and Iterations
+    ...(p.loop ? { loop: p.loop } : {}),
+    ...(typeof p.loopN === 'number' ? { loopN: p.loopN } : {}),
     ...(p.comment ? { __comment: p.comment } : {}),
     ...(p.values ?? {}),
   };

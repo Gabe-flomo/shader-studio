@@ -7,6 +7,7 @@
  * goes. The code explorer (docs/code-explorer-plan.md) will index everything later; this is the
  * place to swap that index in.
  */
+import { allBlockLines, LOOP_VARS, loopOf } from '../../nodes/exprLoop';
 import type { GraphNode } from '../../types/nodeGraph';
 import { allNodes, type Expr, type GlslType } from './ast';
 import { parseLine, splitStatements } from './parse';
@@ -51,7 +52,9 @@ export function exprBlockEnv(node: GraphNode): TypeEnv {
   const inputs = node.params?.inputs;
   if (Array.isArray(inputs)) for (const i of inputs as Array<{ name?: string; type?: string }>) if (i?.name) env[i.name] = (i.type ?? 'float') as GlslType;
   if (!('t' in env)) env.t = 'float';
-  const lines = node.params?.lines;
+  // Loop mode: the loop's own names, and the Before / After lines' variables too (nodes/exprLoop.ts)
+  if (node.params && loopOf(node.params)) for (const v of LOOP_VARS) if (!(v.name in env)) env[v.name] = v.type as GlslType;
+  const lines = node.params ? allBlockLines(node.params) : undefined;
   if (Array.isArray(lines)) for (const l of lines as Array<{ lhs?: string }>) { const m = /^\s*(float|vec[234]|int|mat[234])\s+([A-Za-z_]\w*)/.exec(l?.lhs ?? ''); if (m && !(m[2] in env)) env[m[2]] = m[1] as GlslType; }
   if (!('p' in env)) env.p = ((node.params?.outputType as string) || 'vec3') as GlslType;
   return env;
