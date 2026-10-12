@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.191',
+    date: '2026-10-12',
+    title: 'Readable code',
+    highlights: [
+      { area: 'Studio', text: 'Generated code: a Readable view names variables after your nodes and sliders, groups lines by node, and folds away plumbing. Exact is one click away.' },
+      { area: 'Studio', text: 'Click a line in the code to select its node; select a node to highlight its lines. Copy takes the view you see, and Readable still compiles.' },
+    ],
+  },
+  {
     id: '2026.10.190',
     date: '2026-10-12',
     title: 'If tiles',
