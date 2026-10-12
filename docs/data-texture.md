@@ -25,7 +25,24 @@ One node, three parts on its card:
   - **Size** and **Edges**, as on a Pass.
 
 **Texture** and **Previous** are the texture itself and the texture a frame ago, for any texture node
-(Read channels, Sample, Levels…). The card shows the texture's raw values as a picture.
+(Read channels, Sample, Levels…).
+
+### Preview
+
+The card shows the texture, in one of four views (`lib/thumbView.ts`):
+
+- **Raw:** the stored colour, clipped to 0…1.
+- **Range:** each channel from Min…Max to black…white, so negative and large values show.
+- **Channels:** r, g, b and a side by side as tinted greys, each from Min…Max.
+- **Arrows:** r and g as a vector field: an arrow per cell, over its length in grey. Min…Max sets the scale.
+
+**Open ↗** pops out a window: the same view large, the **exact stored value under the cursor** (read
+from the texture at its full precision, with Range storage undone and each channel named after the
+input it holds), the inputs and outputs editor, and the storage settings. The view and its Min…Max
+are saved on the node (`previewView`, `previewMin`, `previewMax`) and never reach the shader.
+
+The runner draws a card's canvas under the node's id and the window's under `<id>#big`, so both
+draw while the window is open.
 
 ### Simulations: a read that feeds the node sees last frame
 
@@ -73,5 +90,5 @@ as half float.
 
 - **Several targets in one node** (multiple render targets): one draw writing several textures, each
   with its own four channels and precision, each its own Texture output, counting as one Pass.
-- **A bigger editor**, opened from the card like an Expression Block's.
-- **Preview modes:** per channel, false colour, vectors as arrows. The card shows raw values now.
+- **Combining textures:** a separate node that takes several textures and treats them as one bundle,
+  as an alternative to several targets in one Data Texture.

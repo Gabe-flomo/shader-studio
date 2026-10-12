@@ -571,7 +571,7 @@ export function buildTextureToolExamples(): Record<string, ExampleGraph> {
       }),
       { ...n('dataTexture', 'data', 640, 300, {
         label: 'Positions', fields: [{ name: 'position', type: 'vec2', channels: 'rg' }], reads: [{ name: 'position', channels: 'rg' }],
-        format: 'float', read: 'exact',
+        format: 'float', read: 'exact', previewView: 'range', previewMin: -2, previewMax: 2,
         ...note([
           'Data Texture: one vec2 per texel, written into r and g, kept at full float so the positions stay exact frame after frame (half float would drift in steps).',
           'Read: Exact texel, so a read never blends two positions.',

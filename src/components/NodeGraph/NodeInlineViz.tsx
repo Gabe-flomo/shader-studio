@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
+import { DataTextureThumb } from './DataTextureView';
 import type { GraphNode, SubgraphData, DataType } from '../../types/nodeGraph';
 import { paletteNodePreset } from '../../nodes/definitions/color';
 import { scopeValueRegistry, floatValueRegistry, vectorValueRegistry } from '../../lib/scopeRegistry';
@@ -5213,7 +5214,7 @@ function NodeInlineVizSwitch({ node, onEnterGroup }: { node: GraphNode; onEnterG
     case 'prevFrame':
     case 'textureInput':     return <TextureBadgeViz         node={node} />;
     case 'pass':             return <PassThumbViz            node={node} />;
-    case 'dataTexture':      return <PassThumbViz            node={node} />;
+    case 'dataTexture':      return <DataTextureThumb        node={node} />;
     case 'agentsGroup':      return <AgentsGroupViz          node={node} onEnterGroup={onEnterGroup} />;
     case 'trailField':       return <TrailThumbViz           node={node} />;
     case 'vec2Const':        return <Vec2ConstViz            node={node} />;
