@@ -21,7 +21,7 @@ Recipe and Templates.
 - **Recipe**: the whole scene as one line of the Playfield language, e.g. `kaleidoscope 8 · ring r=0.3 th=0.02 color=cyan @orbit(0.12 speed=0.12) · glow 0.008 · tone aces`. Edit and Apply, or paste one.
 - **Templates**: starting points (two with a picture with depth).
 - **Surprise me** (header): a whole random scene from a seed (see below). The seed shows beside it; type one and press Enter to make that scene again.
-- **Preview** (right): the graph Build makes, compiled and drawn live.
+- **Preview** (right): the graph Build makes, compiled and drawn live. Under it, **Quick controls** ([below](#quick-controls)) and the node count.
 
 ## Style
 
@@ -264,6 +264,27 @@ Tests: `src/sceneBuilder2d/__tests__/blocks.test.ts` (reading lines and operator
 every library entry checks, runs, draws and compiles, chaining, the four combines, Random's three,
 recipes) and `src/components/sceneBuilder2d/__tests__/spaceBlocks.test.tsx` (the library, Random,
 errors as you type, Make a slider, three lines at most).
+
+## Quick controls
+
+Under the preview, a short list of the sliders you use most, as mini sliders that change the value live.
+
+- **Pin** any builder slider: the small sliders icon at the end of its row (it shows on hover), or right-click →
+  **Add to quick controls** (under the Play menu). E.g. a shape's Position X and Y, its Rotate, a block's slider, a
+  grade or effect setting. A slider that sets several values at once can't be pinned (it says so).
+- **The list:** each pin is a mini slider named after the layer and the setting ("Circle · Position X"); ↑ ↓
+  reorder, × removes it (its Play control, if it has one, stays on Play). A pin whose layer was deleted says so.
+- **Play controls:** each pin becomes a Play control on the node param it builds, found the same way the slider's
+  right-click Play menu finds it. Before the scene is built it waits ("on Build"); Build, Rebuild and Done (which
+  builds) attach it ("Play"). A setting built into the shader rather than a node slider stays "builder only". A
+  pinned Position or Rotate keeps its shape's placing Transform even at rest, so Play has a param to move.
+- **Open in Play** builds what isn't built (as Done does, closing the builder), makes every pin a Play control and
+  opens Play on its Controls page.
+
+The pins are saved with the scene (`quick` in its spec; `src/sceneBuilder2d/quick.ts`), so they come back when the
+build is edited again. Each pin keeps where its value lives in the scene (found when it is pinned, by trying the
+slider on a copy of the scene: `probeEdit` in `store.ts`) and the param its Play control drives
+(`src/sceneBuilder2d/quickPlay.ts`). 2D Scene Builder only for now.
 
 ## Muting
 
