@@ -142,7 +142,7 @@ export function caRow(f, x, amount, n = CA_TAPS, mode = 'spectral') {
   return out;
 }
 
-const fl = n => (Number.isInteger(n) ? `${n}.0` : `${n}`);
+const caFl = n => (Number.isInteger(n) ? `${n}.0` : `${n}`);
 
 /** Helpers that don't read a texture (any GLSL version): the spectrum and a dither. */
 export const CA_BASE_GLSL = `// Chromatic Aberration (play/kit/chroma.js).
@@ -182,10 +182,10 @@ export function caGlsl(T = 'texture2D', read) {
   if (geom > 1.5) { dir = vec2(cos(angle), sin(angle)); mag = amount; }
   else if (geom < 0.5) { dir = dl > 1e-6 ? dA / dl : vec2(0.0); mag = r > 1e-5 ? amount * pow(r, max(falloff, 0.0)) : (falloff <= 0.0 ? amount : 0.0); }
   float axial = geom > 0.5 && geom < 1.5 ? 1.0 : 0.0;
-  float n = mode > 0.5 ? 3.0 : clamp(floor(samples + 0.5), ${fl(CA_MIN_TAPS)}, ${fl(CA_MAX_TAPS)});
-  float S = (blur > 0.0 || axial > 0.5) ? ${fl(CA_SUB)} : 1.0;
+  float n = mode > 0.5 ? 3.0 : clamp(floor(samples + 0.5), ${caFl(CA_MIN_TAPS)}, ${caFl(CA_MAX_TAPS)});
+  float S = (blur > 0.0 || axial > 0.5) ? ${caFl(CA_SUB)} : 1.0;
   // Distortion: each colour scaled about the centre by 1 + this × its shift.
-  float bend = distortion * ${fl(CA_DIST)} * r * r;
+  float bend = distortion * ${caFl(CA_DIST)} * r * r;
   vec2 d0 = uv - c;
   vec2 rot = vec2(cos(jit * 6.28318), sin(jit * 6.28318));
   const mat2 GOLD = mat2(-0.73736, 0.67549, -0.67549, -0.73736);
