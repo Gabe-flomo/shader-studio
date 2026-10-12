@@ -96,15 +96,62 @@ the clock onto that (`y × freq + t`) and # onto the sin (`× amp`).
 
 - `uv.x` reads as `x`; `length(uv)` and `atan(y, x)` read as the `r` and `θ` tiles.
 - Unary minus on a number is a negative number tile.
+- `cond ? a : b` reads as the **If** tile; `>`, `<`, `>=`, `<=`, `==` and `!=` as comparison
+  tiles; `&&`, `||` and `!` as and, or and not. `mix(F, T, smoothstep(R - w, R + w, L))` reads
+  as a smooth If (see below).
 - Whatever the tiles don't cover stays a **code tile** holding its text (shown amber). Click it to
   edit its text. This covers:
-  - comparisons and ternaries (`x > 0.0 ? … : …`);
+  - `^^`;
   - indexing;
   - names that aren't variables or sliders (PI, TAU);
   - text that doesn't parse.
 
 Nothing is lost: a round trip from text to tiles and back is the same warp. The tests check this
 at sample points for every library block.
+
+## If and conditions
+
+The left column's **If** section has:
+
+- **The If tile**, a small block: **if** [condition] **then** [value] **else** [value]. It prints
+  as `cond ? a : b`.
+- **Comparisons** (`>`, `<`, `≥`, `≤`, `=`, `≠`), each with two value slots, so `x > #` is a
+  comparison, x and the number tile.
+- **and**, **or** and **not**, to combine conditions.
+
+How they drop (the type rule):
+
+- **The condition slot takes only conditions:** comparisons, and, or, not. A value dropped there
+  is refused (the drag shows no drop; a click says why).
+- **Then, else and rows take only values;** a condition dropped there is refused. Then and else
+  take the row's type: numbers on X and Y, two numbers (`uv`, `vec2(…)`) on UV.
+- **If on a filled tile:** the tile goes in *then*, and the condition is picked next.
+- **A comparison on a comparison** changes its sign (`>` → `<`). On another condition it adds
+  `and _ > _`.
+- **and / or / not on a condition** wrap it.
+- **Numbers** dropped in a comparison are named `edge`; in then and else, `a` and `b`.
+- **Ifs nest:** an If in an else slot makes `c1 ? a : c2 ? b : c`.
+
+**Smooth.** With the If tile picked, **Hard / Smooth** in the inspector turns it into
+`mix(false, true, smoothstep(edge - width, edge + width, value))`. `width` is a new slider (0.05),
+and the edge blends instead of aliasing.
+
+- Smooth needs one comparison with `<`, `>`, `≤` or `≥` as the condition.
+- It is written as `value > edge`: a `<` swaps then and else, which is the same warp.
+- Hard is the default. Back to Hard drops the width slider.
+
+**Pictures:**
+
+- The If tile's picture is the picked tile kept where `x > 0` and left out (0) elsewhere: a split.
+- Each comparison's and and/or/not's picture is that split for its own condition (`x < 0`,
+  `x > 0 && y > 0`…).
+- On an empty row, they show the split region itself.
+
+**The checker:** the space-block checker (glslPatterns' type check) already accepts ternaries,
+comparisons and `&& || !`, and the CPU evaluator runs them. So the 2D builder, the thumbnails,
+the preview and the build all agree.
+
+![A smooth If: sin waves on one side of x = edge, the plain grid on the other](warp-builder/8-if-smooth.png)
 
 ## The stack and the preview
 
@@ -173,7 +220,7 @@ an icon.
   - store.ts, actions.ts;
   - src/components/warpBuilder/.
 - **Tests:** src/warpBuilder/__tests__/warpBuilder.test.ts covers:
-  - tiles ↔ lines round-trips;
+  - tiles ↔ lines round-trips (and src/warpBuilder/__tests__/warpIf.test.ts for If, comparisons, and/or/not, the smooth If and drops into its slots);
   - every library block read into tiles, checked and the same warp;
   - building `uv.x += 0.1·sin(y·7+t)` by drops;
   - sliders, Run ×, mute and hover not changing the shader;
