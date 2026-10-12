@@ -77,6 +77,12 @@ function ChoiceDialog({ req }: { req: ChoiceRequest }) {
       </>}
     >
       {req.message && <p style={{ margin: 0, padding: '16px 20px 20px', color: tk.text.secondary, lineHeight: 1.5 }}>{req.message}</p>}
+      {(req.note || req.links?.length) && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, padding: '0 20px 18px', marginTop: req.message ? -8 : 16 }}>
+          {req.note && <span style={{ fontSize: 12.5, color: tk.text.muted, marginRight: 4 }}>{req.note}</span>}
+          {req.links?.map(l => <Button key={l.label} size="sm" variant="ghost" onClick={l.onClick}>{l.label}</Button>)}
+        </div>
+      )}
     </Modal>
   );
 }

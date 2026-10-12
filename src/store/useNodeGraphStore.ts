@@ -1,4 +1,5 @@
 import { isPlayfile } from '../playfile/reader';
+import { logEvent } from '../lib/crashLog';
 import { recordActivity } from '../files/activity';
 import { CONTAINER_ACCEPT } from '../playfile/format';
 import { requireFeature } from '../lib/plan';
@@ -5046,6 +5047,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     const compileT0 = performance.now();
     const result = compileGraph({ nodes: graphNodes });
     recordGraphCompile(performance.now() - compileT0);
+    logEvent(result.success ? `compile: ${graphNodes.length} nodes` : `compile failed: ${(result.errors ?? []).slice(0, 2).join('; ').slice(0, 300)}`);
 
     // Patch MLG node.outputs with dynamic acc* sockets discovered at compile time.
     // Preserves any existing acc* labels already stored in the graph (e.g. from saved examples).
