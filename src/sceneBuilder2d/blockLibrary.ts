@@ -15,7 +15,7 @@
  * are sliders), and how many times it runs. The tests check every entry parses, type-checks,
  * runs on the CPU (for its thumbnail) and compiles into the graph.
  */
-import { cloneBlock, type BlockLine, type BlockOp, type BlockParam, type BlockTarget, type SpaceBlock } from './blocks';
+import { cloneBlock, type BlockLine, type BlockOp, type BlockParam, type BlockTarget, type SpaceBlock, type TrapKind } from './blocks';
 
 export type BlockCategory = 'trig' | 'exp' | 'waves' | 'twist' | 'mirror' | 'fractal' | 'noise' | 'tiles';
 
@@ -39,6 +39,10 @@ export interface BlockEntry {
   lines: BlockLine[];
   params: BlockParam[];
   times?: number;
+  /** Looped (blocks.ts `loop`): Iterations is a live slider; uv0, fi, k and n are there. */
+  loop?: boolean;
+  /** The orbit trap it starts with (a looped block; off when absent). */
+  trap?: TrapKind;
 }
 
 const L = (target: BlockTarget, op: BlockOp, rhs: string): BlockLine => ({ target, op, rhs });
@@ -118,6 +122,28 @@ export const BLOCK_LIBRARY: BlockEntry[] = [
   { id: 'apollonian', name: 'Inversion repeats', category: 'fractal', blurb: 'Repeat, then turn each cell inside out through a circle: Apollonian bubbles.',
     lines: [L('uv', '=', 'fract(uv * 0.5 + 0.5) * 2 - 1'), L('uv', '*=', 'k / max(dot(uv, uv), 0.001)')], params: [N('k', 1.2, 0.5, 2)], times: 4 },
 
+  // ── Looped (an Expression Block in Loop mode: Iterations is a live slider, and an orbit trap can shade the look) ──
+  { id: 'kali-loop', name: 'Kali loop', category: 'fractal', loop: true, trap: 'point', blurb: 'Kali’s fold in a real loop: Iterations is live, and the orbit trap shades where the fold came close to the centre.',
+    lines: [L('uv', '=', 'abs(uv) / max(dot(uv, uv), 0.001) - vec2(cx, cy)')], params: [N('cx', 0.8, 0.1, 1.5), N('cy', 0.6, 0.1, 1.5)], times: 8 },
+  { id: 'ifs-kaleido', name: 'IFS kaleidoscope', category: 'mirror', loop: true, blurb: 'Fold both axes, turn (a little more each pass) and grow, again and again: a kaleidoscope of branches.',
+    lines: [L('uv', '=', 'abs(uv) - offset'), L('uv', '=', 'rot2D(angle + k * twist + t * speed) * uv'), L('uv', '*=', 'grow')],
+    params: [N('offset', 0.35, 0, 1), N('angle', 0.7, -3.14, 3.14), N('twist', 0.4, -3, 3), N('grow', 1.25, 0.5, 2), N('speed', 0, -1, 1)], times: 6 },
+  { id: 'mandelbox', name: 'Mandelbox 2D', category: 'fractal', loop: true, trap: 'cross', blurb: 'Box fold (clamp and reflect), sphere fold (turn the small radii inside out), scale and add the start back: the Mandelbox, flat.',
+    lines: [L('uv', '=', 'clamp(uv, -1, 1) * 2 - uv'), L('uv', '*=', 'clamp(1 / max(dot(uv, uv), 0.0001), 1, 1 / (minR * minR))'), L('uv', '=', 'uv * scale + uv0')],
+    params: [N('scale', -1.8, -3, 3), N('minR', 0.5, 0.1, 1)], times: 8 },
+  { id: 'warp-loop', name: 'Iterated warp', category: 'noise', loop: true, blurb: 'Noise pushes space, then pushes the pushed space again, each pass a fresh noise: domain warping as deep as Iterations.',
+    lines: [L('uv', '+=', 'amount * (vec2(valueNoise(uv * scale + fi * 1.7 + t * speed), valueNoise(uv * scale + vec2(5.2, 1.3) + fi * 2.3)) - 0.5)')],
+    params: [N('amount', 0.5, 0, 2), N('scale', 2, 0.2, 10), N('speed', 0.2, -2, 2)], times: 4 },
+  { id: 'apollonian-loop', name: 'Apollonian loop', category: 'fractal', loop: true, trap: 'ring', blurb: 'Repeat into cells, then turn each cell inside out through a circle, pass after pass: Apollonian bubbles in bubbles.',
+    lines: [L('uv', '=', 'fract(uv * 0.5 + 0.5) * 2 - 1'), L('uv', '*=', 'radius / max(dot(uv, uv), 0.001)')], params: [N('radius', 1.2, 0.5, 2)], times: 5 },
+  { id: 'julia', name: 'Julia z² + c', category: 'fractal', loop: true, trap: 'point', blurb: 'Square the point as a complex number and add c, again and again: the Julia set (points that fly off are held at radius 4).',
+    lines: [L('uv', '=', 'vec2(x * x - y * y, 2 * x * y) + vec2(cx, cy)'), L('uv', '*=', 'min(1, 4 / max(length(uv), 0.0001))')], params: [N('cx', -0.8, -1.5, 1.5), N('cy', 0.156, -1.5, 1.5)], times: 12 },
+  { id: 'spiral-repeats', name: 'Spiral repeats', category: 'twist', loop: true, blurb: 'Whatever lies outside the circle is turned and shrunk back inside, pass after pass: the middle repeats outward in a spiral.',
+    lines: [L('uv', '=', 'length(uv) > outer ? rot2D(angle) * uv / grow : uv')], params: [N('outer', 0.6, 0.1, 2), N('grow', 2, 1.1, 4), N('angle', 0.5, -3.14, 3.14)], times: 6 },
+  { id: 'log-polar-zoom', name: 'Log-polar zoom', category: 'exp', loop: true, blurb: 'An endless zoom: what lies inside the inner circle is blown up to fill it again, pass after pass, and time slides one ring into the next.',
+    lines: [L('uv', '*=', 'fi < 0.5 ? pow(inner, fract(t * speed)) : 1'), L('uv', '=', 'length(uv) < inner ? rot2D(turn) * uv / inner : uv')],
+    params: [N('inner', 0.5, 0.1, 0.9), N('turn', 0.3, -3.14, 3.14), N('speed', 0.3, -2, 2)], times: 8 },
+
   // ── Noise warps ──
   { id: 'noise-push', name: 'Noise push', category: 'noise', blurb: 'Smooth noise pushes every point a little: organic, flowing edges.',
     lines: [L('uv', '+=', 'amount * (vec2(valueNoise(uv * scale + t * speed), valueNoise(uv * scale + vec2(17.3, 4.1) - t * speed)) - 0.5)')],
@@ -146,7 +172,7 @@ export const BLOCK_BY_ID: Record<string, BlockEntry> = Object.fromEntries(BLOCK_
 
 /** A fresh block from a library entry. */
 export function blockFromEntry(e: BlockEntry): SpaceBlock {
-  return cloneBlock({ lib: e.id, name: e.name, lines: e.lines, params: e.params, times: e.times ?? 1 });
+  return cloneBlock({ lib: e.id, name: e.name, lines: e.lines, params: e.params, times: e.times ?? 1, ...(e.loop ? { loop: true, trap: e.trap ?? null } : {}) });
 }
 
 /** Does the block still say what its library entry says (only the slider values may differ)? */
@@ -156,7 +182,7 @@ export function isLibraryBlock(b: SpaceBlock): BlockEntry | null {
   const sameLines = e.lines.length === b.lines.filter(l => l.rhs.trim()).length
     && e.lines.every((l, i) => { const m = b.lines.filter(x => x.rhs.trim())[i]; return m && m.target === l.target && m.op === l.op && m.rhs.trim() === l.rhs; });
   const sameParams = e.params.length === b.params.length && e.params.every(p => b.params.some(q => q.name === p.name));
-  return sameLines && sameParams ? e : null;
+  return sameLines && sameParams && !!b.loop === !!e.loop ? e : null;
 }
 
 /**

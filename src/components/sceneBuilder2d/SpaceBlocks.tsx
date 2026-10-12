@@ -14,8 +14,8 @@
 import { ExprLineInput } from '../builders/ExprLineInput';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  BLOCK_OPS, BLOCK_TARGETS, COMBINE_MODES, MAX_LINES, MAX_TIMES, blockMap, checkBlock, emptyLine, paramNameProblem, rangeFor,
-  type BlockOp, type BlockTarget, type CombineMode, type CombineSpec, type SpaceBlock,
+  BLOCK_OPS, BLOCK_TARGETS, COMBINE_MODES, LOOP_BLOCK_NAMES, MAX_LINES, MAX_LOOP_TIMES, MAX_TIMES, TRAP_KINDS, blockMap, checkBlock, clampTimes, emptyLine, paramNameProblem, rangeFor,
+  type BlockOp, type BlockTarget, type CombineMode, type CombineSpec, type SpaceBlock, type TrapKind,
 } from '../../sceneBuilder2d/blocks';
 import { BLOCK_CATEGORIES, BLOCK_LIBRARY, blockFromEntry, isLibraryBlock, randomChoices, type BlockCategory, type BlockEntry } from '../../sceneBuilder2d/blockLibrary';
 import { MY_BLOCKS, MY_BLOCKS_LABEL, sceneOpFromSaved, type SavedBlock } from '../../sceneBuilder2d/savedBlocks';
@@ -118,7 +118,7 @@ export function BlockEditor({ block, update, idBase }: { block: SpaceBlock; upda
   };
   const nameProblem = newName.trim() ? paramNameProblem(newName.trim(), taken) : null;
   // What a line can name: the point, time and the block's sliders (autocomplete).
-  const vars = useMemo(() => [{ name: 'x', type: 'float' }, { name: 'y', type: 'float' }, { name: 'uv', type: 'vec2' }, { name: 't', type: 'float' }, ...block.params.map(p => ({ name: p.name, type: 'float' }))], [block.params]);
+  const vars = useMemo(() => [{ name: 'x', type: 'float' }, { name: 'y', type: 'float' }, { name: 'uv', type: 'vec2' }, { name: 't', type: 'float' }, ...(block.loop ? LOOP_BLOCK_NAMES.map(v => ({ name: v.name, type: v.type })) : []), ...block.params.map(p => ({ name: p.name, type: 'float' }))], [block.params, block.loop]);
 
   return (
     <div data-block-editor={idBase} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -152,7 +152,7 @@ export function BlockEditor({ block, update, idBase }: { block: SpaceBlock; upda
           {block.lines.length < MAX_LINES && (
             <Button size="sm" variant="ghost" icon="plus" onClick={() => update(b => { b.lines.push(emptyLine(b.lines.length === 0 ? 'uv.x' : b.lines.length === 1 ? 'uv.y' : 'uv')); })}>Line</Button>
           )}
-          <BuilderNote style={{ fontSize: 11 }}>x, y = uv.x, uv.y as they are now · t = time · whole numbers are fine</BuilderNote>
+          <BuilderNote style={{ fontSize: 11 }}>x, y = uv.x, uv.y as they are now · t = time{block.loop ? ' · uv0 = the point before the block · fi, k, n = the pass' : ''} · whole numbers are fine</BuilderNote>
         </div>
       </div>
       {chk.errors.map((e, i) => <div key={i} role="alert" style={{ fontSize: 11.5, color: tk.status.danger }}>{e}</div>)}
@@ -175,8 +175,23 @@ export function BlockEditor({ block, update, idBase }: { block: SpaceBlock; upda
         </div>
       )}
       {nameProblem && <BuilderNote style={{ color: tk.status.danger }}>{nameProblem}</BuilderNote>}
-      <NumRow label="Run ×" hint="Runs the lines this many times over: folds and repeats become fractals." value={block.times} min={1} max={MAX_TIMES} integer
-        onChange={v => update(b => { b.times = Math.max(1, Math.min(MAX_TIMES, Math.round(v))); }, `${idBase}:times`)} />
+      {block.loop ? (
+        <>
+          <NumRow label="Iterations" hint={`The lines run in a loop on the block's node (Loop mode): Iterations is a live slider there too, up to ${MAX_LOOP_TIMES}, without recompiling.`} value={block.times} min={1} max={MAX_LOOP_TIMES} integer
+            onChange={v => update(b => { b.times = clampTimes(v, true); }, `${idBase}:times`)} />
+          <div data-block-trap={idBase} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ width: 82, flexShrink: 0, fontSize: 12, color: tk.text.muted }} title="During the loop, the closest the point came to a shape: the block's trap output, a shade 1 where it came close. Look → Colour by trap reads it.">Orbit trap</span>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <Select ariaLabel="Orbit trap" height={28} value={block.trap ?? 'off'} options={[{ value: 'off', label: 'Off' }, ...TRAP_KINDS.map(k => ({ value: k.kind, label: `${k.label}: ${k.blurb}` }))]}
+                onChange={v => update(b => { b.trap = v === 'off' ? null : v as TrapKind; })} />
+            </span>
+          </div>
+          {block.trap && <BuilderNote style={{ fontSize: 11 }}>Shade the scene by it: Look → Colour by → trap.</BuilderNote>}
+        </>
+      ) : (
+        <NumRow label="Run ×" hint="Runs the lines this many times over: folds and repeats become fractals." value={block.times} min={1} max={MAX_TIMES} integer
+          onChange={v => update(b => { b.times = Math.max(1, Math.min(MAX_TIMES, Math.round(v))); }, `${idBase}:times`)} />
+      )}
       {saving
         ? <SaveBlockForm src={{ block }} onCancel={() => setSaving(false)} onSaved={name => { update(b => { b.my = name; b.name = name; delete b.lib; }); setSaving(false); }} />
         : (
@@ -313,7 +328,7 @@ export function BlockLibrary({ onPick, onPickCombine, compact = false }: { onPic
       {cat !== MY_BLOCKS && <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fill, minmax(${compact ? 200 : 230}px, 1fr))`, gap: 6, maxHeight: compact ? 260 : undefined, overflow: compact ? 'auto' : undefined }}>
         {shown.map(e => (
           <button key={e.id} type="button" data-block-entry={e.id} style={tileStyle} onClick={() => onPick(blockFromEntry(e))}
-            title={`${e.lines.map(l => `${l.target} ${l.op} ${l.rhs}`).join('\n')}${e.times && e.times > 1 ? `\n(run ×${e.times})` : ''}`}>
+            title={`${e.lines.map(l => `${l.target} ${l.op} ${l.rhs}`).join('\n')}${e.loop ? `\n(a loop, ${e.times ?? 1} iterations, live${e.trap ? `; orbit trap: ${e.trap}` : ''})` : e.times && e.times > 1 ? `\n(run ×${e.times})` : ''}`}>
             <WarpCanvas map={() => blockMap(blockFromEntry(e), 1)} k={`lib:${e.id}`} size={thumb} />
             <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
               <span style={{ font: `600 12.5px ${fontFamily.ui}` }}>{e.name}</span>

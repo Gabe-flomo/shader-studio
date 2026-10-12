@@ -225,6 +225,45 @@ and `uv` returned. Its note says what the block does, that `x`/`y` were written 
 and which sliders are live. A combine is three Expression Blocks: A and B (both wired from the same
 uv) and the join (`a`, `b`, `uv` in; Amount a slider for Blend).
 
+### Looped blocks and orbit traps
+
+Eight library blocks are **looped**. They are built on the Expression Block's Loop mode
+(docs/expression-block.md, "Loop"):
+
+- **Kali loop**
+- **IFS kaleidoscope** (fold and rotate, a little more each pass)
+- **Mandelbox 2D** (box fold, sphere fold, scale, add the start back)
+- **Iterated warp**
+- **Apollonian loop**
+- **Julia z² + c** (escaped points are held at radius 4, so the numbers stay finite)
+- **Spiral repeats**
+- **Log-polar zoom** (an endless zoom: the inner circle blown up to fill it, again and again)
+
+How they differ from other blocks:
+
+- **Iterations** replaces Run ×. It goes from 1 to 64 (`MAX_LOOP_TIMES`). The lines are written
+  once inside the node's `for` loop, compiled to 64, so Iterations is a live slider on the block's
+  node as well as in the builder.
+- **Extra names:** a looped block's lines can also read `uv0` (the point before the block), `fi`,
+  `k` and `n` (the pass). A slider can't take these names, or `trap`.
+- **Orbit trap** (Off, Point, Cross or Ring) records, over the passes, the closest the point came
+  to the centre, the axes or the unit circle. The node outputs it as `trap`, a shade calculated as
+  `exp(−3·distance)`: 1 where the orbit came close.
+  - **Look → Colour by → trap** reads the palette with the trap of the last looped block that has
+    one, including the A or B side of a combine. With no trap in the stack, it colours by distance
+    from the centre and gives a warning.
+  - A muted block's trap goes to 0, live, through the mute gate's `__muteTo`.
+  - Kali loop, Mandelbox, Apollonian loop and Julia start with a trap on.
+- **Everything else works as for other blocks:** chaining, combines, mute, Save block (the saved
+  block keeps `loop`, `trap` and Iterations) and the warped-grid thumbnail (`blockMap` runs the
+  passes on the CPU with `uv0`, `fi`, `k` and `n`).
+- **In a recipe:**
+  - `space-block mandelbox times=20 trap=point`
+  - a written looped block: `space-block {uv = abs(uv) * 1.2 - uv0 * k} loop=on trap=cross times=30`
+  - a library block prints `trap=` only when it differs from the entry; `trap=off` turns it off.
+
+Tests: `src/sceneBuilder2d/__tests__/loopBlocks.test.ts`.
+
 ### In a recipe
 
 ```
