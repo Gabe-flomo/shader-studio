@@ -11,6 +11,9 @@ import { loadShortcutMap } from '../hooks/useShortcuts';
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
 import { glslErrorLines } from '../compiler/nodeErrors';
 import { useFnCardScope } from './explain/functionCard/fnCardStore';
+import { Segmented } from './ui/Choice';
+import { readableGlsl, shaderLineNodes, type ReadableMeta } from '../compiler/readableGlsl';
+import { fragmentCompiles, loadCodeView, saveCodeView, type CodeView } from './code/readableView';
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -31,7 +34,33 @@ export function CodePanel({ code: compiled, onClose, highlightNodeId, nodeSlugMa
   const tk = useTokens();
   // Sealed node packs' code is shown as a comment (line for line, so error marks still line up).
   const userNodesVersion = useUserNodesVersion();
-  const code = useMemo(() => (compiled ? redactSealedCode(compiled) : compiled), [compiled, userNodesVersion]);
+  const exactCode = useMemo(() => (compiled ? redactSealedCode(compiled) : compiled), [compiled, userNodesVersion]);
+  // Readable / Exact (docs/readable-code.md): Exact is the compiled code; Readable renames, groups and
+  // tidies it. The choice lasts for the session.
+  const [view, setViewState] = useState<CodeView>(loadCodeView);
+  const setView = (v: CodeView) => { setViewState(v); saveCodeView(v); };
+  const paramBindings = useNodeGraphStore(s => s.paramBindings);
+  const nodeOutputVars = useNodeGraphStore(s => s.nodeOutputVarMap);
+  const shown = useMemo(() => {
+    const meta: ReadableMeta | null = nodeSlugMap ? { nodes: useNodeGraphStore.getState().nodes, nodeSlugMap, paramBindings, nodeOutputVars } : null;
+    const exact = { code: exactCode, lineNodes: exactCode && meta ? shaderLineNodes(exactCode, meta) : [], sourceLines: null as string[] | null, note: null as string | null };
+    if (view !== 'readable' || !exactCode || !meta) return exact;
+    // Sealed node packs stay hidden: their code is never renamed into view.
+    if (exactCode !== compiled) return { ...exact, note: 'Readable isn’t available while a sealed node pack is in the graph — showing Exact.' };
+    try {
+      const r = readableGlsl(exactCode, meta);
+      // If the GPU rejects Readable while Exact compiles, show Exact (never a broken copy).
+      if (fragmentCompiles(r.code) === false && fragmentCompiles(exactCode) !== false) {
+        return { ...exact, note: 'Readable didn’t compile here — showing Exact.' };
+      }
+      return { code: r.code, lineNodes: r.lineNodes, sourceLines: r.sourceLines, note: null };
+    } catch {
+      return { ...exact, note: 'Readable couldn’t be made for this graph — showing Exact.' };
+    }
+  }, [exactCode, compiled, view, nodeSlugMap, paramBindings, nodeOutputVars]);
+  const code = shown.code;
+  const focusNode = useNodeGraphStore(s => s.focusNode);
+  const clickedSelect = useRef(false);
   const mode = useThemeMode();
   const pal = mode === 'dark' ? C : C_LIGHT;
   const [copied, setCopied] = useState(false);
@@ -84,12 +113,15 @@ export function CodePanel({ code: compiled, onClose, highlightNodeId, nodeSlugMa
     : null;
   const prefix = highlightSlug ? nodeSlicePrefix(highlightSlug) : null;
 
-  const lines = code ? code.split('\n') : ['// No shader compiled yet'];
+  const lines = code ? code.replace(/\n$/, '').split('\n') : ['// No shader compiled yet'];
+  // A line is the selected node's when the compiler's map says so, or (as before) it names the node's slug.
+  const isNodeLine = (i: number) => !!highlightNodeId && (shown.lineNodes[i] === highlightNodeId || (!!prefix && (shown.sourceLines?.[i] ?? lines[i]).includes(prefix)));
 
   // GLSL compile errors marked on their lines, with ↑/↓ to step through them
   const glslErrors = useNodeGraphStore(s => s.glslErrors);
   const glslErrorSource = useNodeGraphStore(s => s.glslErrorSource);
-  const errorLines = code ? glslErrorLines(code, glslErrorSource, glslErrors) : new Map<number, string[]>();
+  // Errors are marked on Exact's lines (the code that runs); Readable's lines don't line up with them.
+  const errorLines = code && shown.sourceLines === null ? glslErrorLines(code, glslErrorSource, glslErrors) : new Map<number, string[]>();
   const errorIdxs = [...errorLines.keys()].sort((a, b) => a - b);
   const lineEls = useRef(new Map<number, HTMLDivElement>());
   const [errorCursor, setErrorCursor] = useState(0);
@@ -108,12 +140,12 @@ export function CodePanel({ code: compiled, onClose, highlightNodeId, nodeSlugMa
 
   // Pre-compute scroll target: prefer first match inside void main
   const scrollToLineIdx = (() => {
-    if (!prefix) return -1;
+    if (!highlightNodeId) return -1;
     let firstAny = -1;
     let inMain = false;
     for (let i = 0; i < lines.length; i++) {
       if (lines[i].trimStart().startsWith('void main')) inMain = true;
-      if (lines[i].includes(prefix)) {
+      if (isNodeLine(i)) {
         if (firstAny === -1) firstAny = i;
         if (inMain) return i;
       }
@@ -123,11 +155,13 @@ export function CodePanel({ code: compiled, onClose, highlightNodeId, nodeSlugMa
 
   useEffect(() => {
     if (!highlightNodeId) return;
+    // A click on a line selected this node: the line is already in view.
+    if (clickedSelect.current) { clickedSelect.current = false; return; }
     const t = setTimeout(() => {
       firstMatchRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }, 40);
     return () => clearTimeout(t);
-  }, [highlightNodeId]);
+  }, [highlightNodeId, view]);
 
   const setFirstMatch = useCallback((el: HTMLDivElement | null) => {
     firstMatchRef.current = el;
@@ -162,6 +196,14 @@ export function CodePanel({ code: compiled, onClose, highlightNodeId, nodeSlugMa
             <span style={{ width: 1, height: 18, background: tk.border.default, margin: '0 2px' }} />
           </>
         )}
+        {shown.note && <span style={{ color: tk.text.muted, font: `11.5px ${fontFamily.ui}` }}>{shown.note}</span>}
+        <Segmented<CodeView>
+          size="sm"
+          ariaLabel="Code view"
+          value={view}
+          onChange={setView}
+          options={[{ value: 'readable', label: 'Readable' }, { value: 'exact', label: 'Exact' }]}
+        />
         <Button size="sm" variant="ghost" icon={copied ? 'check' : 'copy'} onClick={handleCopy} style={{ height: 28 }}>{copied ? 'Copied' : 'Copy'}</Button>
         <IconButton icon="chevD" label="Hide generated code" shortcut={shortcuts.toggleCode} size="sm" onClick={onClose} />
       </CodeBarRow>
@@ -169,7 +211,8 @@ export function CodePanel({ code: compiled, onClose, highlightNodeId, nodeSlugMa
       {/* Code content */}
       <div {...fnScope} style={{ flex: 1, overflow: 'auto', padding: '6px 0', font: `11.5px/1.62 ${fontFamily.mono}` }}>
         {lines.map((line, i) => {
-          const isMatch = !!(prefix && line.includes(prefix));
+          const isMatch = isNodeLine(i);
+          const lineNode = shown.lineNodes[i] ?? null;
           const lineErrors = errorLines.get(i);
           const tokens = tokenizeLine(line || ' ', pal);
           const row = (
@@ -179,7 +222,14 @@ export function CodePanel({ code: compiled, onClose, highlightNodeId, nodeSlugMa
                 if (i === scrollToLineIdx) setFirstMatch(el);
                 if (lineErrors && el) lineEls.current.set(i, el); else lineEls.current.delete(i);
               }}
-              style={{ display: 'flex', whiteSpace: 'pre', background: lineErrors ? alpha(tk.status.danger, 0.08) : isMatch ? tk.bg.selected : 'transparent', transition: 'background 0.15s' }}
+              onClick={lineNode ? () => {
+                // A click (not a drag-select) on a line selects its node in the graph.
+                if (window.getSelection()?.toString()) return;
+                if (lineNode === highlightNodeId) return;
+                clickedSelect.current = true;
+                focusNode(lineNode);
+              } : undefined}
+              style={{ display: 'flex', whiteSpace: 'pre', cursor: lineNode ? 'pointer' : undefined, background: lineErrors ? alpha(tk.status.danger, 0.08) : isMatch ? tk.bg.selected : 'transparent', transition: 'background 0.15s' }}
             >
               <span style={{ width: gutter, flexShrink: 0, textAlign: 'right', paddingRight: 14, color: lineErrors ? tk.status.danger : isMatch ? tk.accent.base : tk.text.disabled, userSelect: 'none', fontWeight: lineErrors ? 700 : undefined }}>{i + 1}</span>
               <span data-fn-code="" style={{ paddingRight: 16 }}>
