@@ -221,8 +221,8 @@ export interface AgentDrawProgram {
 }
 
 /**
- * A Splat Scene node's probe (compiler/splatGraph.ts): a program of the picture's kind drawn over 8 × 1 texels: the
- * camera's eye and three rays, and the scan's placement, read by its raster pass (lib/splats/engine.ts).
+ * A Splat Scene node's probe (compiler/splatGraph.ts): a program of the picture's kind drawn over 10 × 1 texels: the
+ * camera's eye and three rays, the scan's placement, and the ray origins half right and up, read by its raster pass (lib/splats/engine.ts).
  */
 export interface SplatProbeProgram {
   nodeId: string;

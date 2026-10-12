@@ -12,6 +12,7 @@ are unchanged). The CPU versions of the maths live in `src/lib/curvedSpace.ts` a
 | Hyperbolic space (k < 0) | the same slider | **Space curvature** |
 | Reverse perspective | March Camera | **Perspective** = Reverse, **Reverse strength**, **Converge at** |
 | Orthographic | March Camera | **Perspective** = Orthographic (same as Flatten 1) |
+| Both, for walkers and splats | Draw agents (3D), Splat Scene (its March Camera), the Agents and Splat builders | the same **Perspective** (docs/camera-projections.md) |
 
 Examples: the **Curved space** folder (Spherical world, Hyperbolic tunnel, Reverse perspective room).
 

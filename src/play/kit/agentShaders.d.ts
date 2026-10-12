@@ -27,3 +27,4 @@ export const AG_NB_BIN_FRAG: string;
 export const AG_SPLAT_VERT: string;
 export const AG_SPLAT_FRAG: string;
 export const AG_SPLAT_RESOLVE_FRAG: string;
+export const AG_CAM_GLSL: string;

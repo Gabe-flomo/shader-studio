@@ -61,6 +61,7 @@ export function LookSection({ groupId, set, sp, update, draw, d3, intro, onFocus
   const species = set.species[sp];
   const usesPalette = by === 'speed' || by === 'age' || by === 'heading' || by === 'single';
   const cam = (k: keyof typeof CAMERA_3D) => num(draw?.params[k], CAMERA_3D[k]);
+  const proj = draw?.params.projection === 'orthographic' || draw?.params.projection === 'reverse' ? draw.params.projection : 'normal';
   return (
     <>
       {intro}
@@ -136,11 +137,23 @@ export function LookSection({ groupId, set, sp, update, draw, d3, intro, onFocus
           {draw ? <>
             {CAMERA_CONTROLS.filter(c => !c.fold).map(c => (
               <SliderSetting key={c.key} id={c.key} label={c.label} value={cam(c.key)} min={c.key === 'camDist' ? 0.3 : c.key === 'fov' ? 0.5 : c.key === 'camElevation' ? -89 : -180} max={c.key === 'camDist' ? 12 : c.key === 'fov' ? 5 : c.key === 'camElevation' ? 89 : 180} step={c.step} onFocus={onFocus}
-                onChange={v => setSetupParam(draw.id, { [c.key]: v })} />
+                param={{ nodeId: draw.id, key: c.key }} onChange={v => setSetupParam(draw.id, { [c.key]: v })} />
             ))}
+            <SettingRow id="projection" label="Perspective" hint={PERSPECTIVE_HINT} onFocus={onFocus}>
+              <ChipRow label="Perspective" value={proj} onChange={v => setSetupParam(draw.id, { projection: v === 'normal' ? undefined : v })}
+                options={PERSPECTIVES} />
+            </SettingRow>
+            {proj === 'reverse' && <>
+              <SliderSetting id="reverseStrength" label="Reverse strength" hint="0 = orthographic, 1 = the rays meet exactly at Converge at. The point it looks at keeps its size." value={num(draw.params.reverseStrength, 1)} min={0} max={1} step={0.01} defaultValue={1} onFocus={onFocus}
+                param={{ nodeId: draw.id, key: 'reverseStrength' }} onChange={v => setSetupParam(draw.id, { reverseStrength: v })} />
+              <SliderSetting id="reverseDist" label="Converge at" hint="How far in front of the camera the rays meet. Nearer than this, walkers look bigger the farther away they are; past it the picture flips." value={num(draw.params.reverseDist, 8)} min={0.5} max={50} step={0.1} defaultValue={8} onFocus={onFocus}
+                param={{ nodeId: draw.id, key: 'reverseDist' }} onChange={v => setSetupParam(draw.id, { reverseDist: v })} />
+            </>}
+            <SliderSetting id="ortho" label="Flatten" hint="Blends the Perspective toward orthographic (1). A slider, so it can be animated." value={cam('ortho')} min={0} max={1} step={0.01} defaultValue={0} onFocus={onFocus}
+              param={{ nodeId: draw.id, key: 'ortho' }} onChange={v => setSetupParam(draw.id, { ortho: v })} />
             {CAMERA_CONTROLS.filter(c => c.fold).map(c => (
               <SliderSetting key={c.key} id={c.key} label={c.label} value={cam(c.key)} min={c.key === 'maxBlur' ? 1 : 0} max={c.key === 'maxBlur' ? 32 : 4} step={c.step} onFocus={onFocus}
-                onChange={v => setSetupParam(draw.id, { [c.key]: v })} />
+                param={{ nodeId: draw.id, key: c.key }} onChange={v => setSetupParam(draw.id, { [c.key]: v })} />
             ))}
           </> : <span style={{ fontSize: 12, color: tk.text.muted }}>Draw the walkers (above) for a camera.</span>}
           <SettingRow id="shape3d" label="Around a shape" hint="A ray-marched shape in the middle of the box: the walkers flow round it and are drawn through its camera." onFocus={onFocus}>
@@ -177,6 +190,13 @@ function ShapeSettings({ draw, onFocus }: { draw: GraphNode; onFocus: (s: string
     </>}
   </>;
 }
+// Draw agents' Perspective (the March Camera's: docs/camera-projections.md).
+const PERSPECTIVES = [
+  { value: 'normal', label: 'Normal' },
+  { value: 'orthographic', label: 'Orthographic' },
+  { value: 'reverse', label: 'Reverse' },
+] as const;
+const PERSPECTIVE_HINT = 'How the camera sees depth, as on the March Camera. Normal: far walkers smaller. Orthographic: no change of size with distance, like an isometric drawing. Reverse: far walkers bigger.';
 
 function PaletteBar({ colours }: { colours: string[] }) {
   return <span data-palette-bar style={{ width: 72, height: 10, borderRadius: 5, background: `linear-gradient(90deg, ${colours.join(', ')})`, boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.2)' }} />;

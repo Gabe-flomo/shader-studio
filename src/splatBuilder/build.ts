@@ -19,7 +19,7 @@ import { emptySpec, newShape, type SceneSpec, type ShapeSpec } from '../sceneBui
 import { scaleSize } from '../sceneBuilder/viewMath';
 import { findTex, standInId } from '../builders/textures';
 import { SPLAT_MODIFIER_NOTES } from '../nodes/recipes/splatModifierRecipes';
-import { EFFECT_INFO, EFFECT_TYPE, LIGHT_INFO, type CameraSpec, type SplatBuilderSpec } from './spec';
+import { EFFECT_INFO, EFFECT_TYPE, LIGHT_INFO, SPLAT_REVERSE_DEFAULTS, type CameraSpec, type SplatBuilderSpec } from './spec';
 
 export const SP_ROLE = '_spRole';
 export const SP_BUILD = '_spBuild';
@@ -64,10 +64,20 @@ function mk(list: GraphNode[], idFor: (role: string) => string, type: string, ro
   return node;
 }
 
-/** The March Camera's params for the builder's camera. */
-export function cameraParams(c: CameraSpec): Record<string, number> {
-  return { camDist: c.dist, camAngle: rad(c.angle), camElevation: rad(c.elev), rotSpeed: rad(c.turntable), fov: c.fov, targetX: c.target[0], targetY: c.target[1], targetZ: c.target[2] };
+/** The March Camera's params for the builder's camera (its Perspective only when not Normal: an older build is as it was). */
+export function cameraParams(c: CameraSpec): Record<string, number | string> {
+  const proj: Record<string, number | string> = c.projection === 'orthographic' ? { projection: 'orthographic' }
+    : c.projection === 'reverse' ? { projection: 'reverse', reverseStrength: c.reverse ?? SPLAT_REVERSE_DEFAULTS.reverse, reverseDist: c.converge ?? SPLAT_REVERSE_DEFAULTS.converge }
+      : {};
+  return { camDist: c.dist, camAngle: rad(c.angle), camElevation: rad(c.elev), rotSpeed: rad(c.turntable), fov: c.fov, targetX: c.target[0], targetY: c.target[1], targetZ: c.target[2], ...proj };
 }
+
+/** The camera's note's words for its Perspective. */
+const projectionNote = (c: CameraSpec): string => (c.projection === 'orthographic'
+  ? ' Orthographic: its rays run parallel, so the scan keeps its size however far it is (an isometric look); the splats are projected without dividing by depth.'
+  : c.projection === 'reverse'
+    ? ` Reverse perspective: its rays start spread out and meet ${c.converge ?? SPLAT_REVERSE_DEFAULTS.converge} in front (strength ${c.reverse ?? SPLAT_REVERSE_DEFAULTS.reverse}), so the far side of the scan looks bigger.`
+    : '');
 
 /** The 3D Scene Builder's spec for the world round the scan: its floor and shapes, the light, the background, the camera. */
 export function worldSceneSpec(spec: SplatBuilderSpec): SceneSpec {
@@ -81,7 +91,8 @@ export function worldSceneSpec(spec: SplatBuilderSpec): SceneSpec {
     shadows: W.shadows ? 16 : 0, fog: W.fog, fogColor: null,
     bg: [...B.color], bg2: B.kind === 'gradient' ? [...B.color2] : null, bgTex: B.kind === 'picture' ? B.picture : null, tone: 'aces',
   };
-  s.camera = { dist: spec.camera.dist, angle: spec.camera.angle, elev: spec.camera.elev, orbit: spec.camera.turntable, zoom: spec.camera.fov, flatten: 0, x: spec.camera.target[0], y: spec.camera.target[1], z: spec.camera.target[2] };
+  s.camera = { dist: spec.camera.dist, angle: spec.camera.angle, elev: spec.camera.elev, orbit: spec.camera.turntable, zoom: spec.camera.fov, flatten: 0, x: spec.camera.target[0], y: spec.camera.target[1], z: spec.camera.target[2],
+    ...(spec.camera.projection === 'orthographic' ? { projection: 'orthographic' as const } : spec.camera.projection === 'reverse' ? { projection: 'reverse' as const, reverse: spec.camera.reverse ?? SPLAT_REVERSE_DEFAULTS.reverse, converge: spec.camera.converge ?? SPLAT_REVERSE_DEFAULTS.converge } : {}) };
   s.quality = { ...s.quality, maxDist: Math.max(20, spec.camera.dist * 4) };
   if (spec.textures?.length) s.textures = spec.textures;
   return s;
@@ -123,7 +134,7 @@ export function buildSplatGraph(spec: SplatBuilderSpec, idFor: (role: string) =>
   } else {
     if (spec.world.on) warnings.push('The world has no floor and no shapes: add one under Scene, or turn the world off.');
     camera = mk(nodes, idFor, 'marchCamera', 'camera', cameraParams(C), {},
-      'The camera: it turns round the scan (Angle, Elevation) at Distance, looking at Target. Every pixel becomes a ray from here; the Splat Scene draws the scan through the same camera.');
+      `The camera: it turns round the scan (Angle, Elevation) at Distance, looking at Target. Every pixel becomes a ray from here; the Splat Scene draws the scan through the same camera.${projectionNote(C)}`);
     const pic = B.kind === 'picture' ? findTex(spec.textures, B.picture) : undefined;
     if (B.kind === 'picture' && !pic) warnings.push('The background picture is missing: pick one under Scene.');
     if (pic) {

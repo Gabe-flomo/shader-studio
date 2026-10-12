@@ -92,14 +92,16 @@ has **Add a splat scan** (the sparkle icon), which adds a Splat Scene wired the 
 A raster pass before the picture (`lib/splats/engine.ts`, `render.ts`, `shaders.ts`), not a per-pixel shader:
 
 1. **The probe.** The compiler makes a small program per Splat Scene (`compiler/splatGraph.ts`): the chain wired into
-   Ray Origin, Ray Dir, Position, Rotation and Scale, ending in the node itself, drawn over 8 × 1 float texels: the eye,
-   the rays at the picture's centre, half a height right and half up, and the scan's model matrix (with Splat size and
-   Opacity). It uses the picture's own uniforms, so sliders, Play and time drive it. Nodes that read `vUv` directly (the
+   Ray Origin, Ray Dir, Position, Rotation and Scale, ending in the node itself, drawn over 10 × 1 float texels: the eye,
+   the rays at the picture's centre, half a height right and half up, the scan's model matrix (with Splat size and
+   Opacity), and the ray origins half right and half up (an Orthographic or Reverse March Camera spreads them out:
+   docs/camera-projections.md). It uses the picture's own uniforms, so sliders, Play and time drive it. Nodes that read `vUv` directly (the
    UV node a March Camera is often wired from) read the probe's point.
 2. **The splats.** One instanced quad per splat (WebGL2, `RGBA32UI` textures: centre, colour, covariance as half
    floats; harmonics as bytes in a second texture). The vertex shader rebuilds the camera from the probe (forward is the
-   centre ray; right / up and the lens come from how far the side rays lean), places the covariance in the world
-   (M Σ Mᵀ), and projects it with the EWA Jacobian (Kerbl et al. 2023): Σ₂ = J W Σ Wᵀ Jᵀ + 0.3 px². The quad spans
+   centre ray; right / up and the lens come from how far the side rays lean, or the origins spread), places the
+   covariance in the world (M Σ Mᵀ), and projects it with the EWA Jacobian (Kerbl et al. 2023): Σ₂ = J W Σ Wᵀ Jᵀ +
+   0.3 px², J the Jacobian of the camera's projection (Normal, Orthographic or Reverse: docs/camera-projections.md). The quad spans
    √(2λ) along the ellipse's axes, and the fragment weighs exp(−|v|²), alpha capped at 0.99, as 3DGS does. A splat is culled only when its whole quad is off the picture (`math.ts splatOffscreen`); it
    used to be culled by its centre past 1.3 × the picture's half-size, which clipped big splats at the edges. With SH
    degree > 0, the view-dependent colour is added from the view direction in the scan's own space.

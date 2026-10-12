@@ -275,9 +275,10 @@ describe('Draw agents\' camera: the unified vocabulary', () => {
     }
     close(cam.focus, ref.focus, 6);
   });
-  it('a scene camera is read at the four points gpSceneCamera needs; the draw rebuilds it as gpSceneCamera does', () => {
-    expect(AG_PROBE_POINTS).toEqual([[0, 0, 0], [0, 0, 1], [0.5, 0, 1], [0, 0.5, 1]]);
-    expect(AG_DRAW3_VERT).toContain('lens = 0.5 / tan(acos(cy));');
+  it('a scene camera is read at the four points gpSceneCamera needs, and the two ray origins an orthographic or reverse camera spreads', () => {
+    expect(AG_PROBE_POINTS).toEqual([[0, 0, 0], [0, 0, 1], [0.5, 0, 1], [0, 0.5, 1], [0.5, 0, 0], [0, 0.5, 0]]);
+    // The draw rebuilds it with agSceneCam (cameraProjections.test.ts checks it against the March Camera).
+    expect(AG_DRAW3_VERT).toContain('agSceneCam(u_cam, eye, f, r, u, lens, cd, proj);');
   });
 });
 

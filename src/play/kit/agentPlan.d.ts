@@ -54,9 +54,11 @@ export const AG_VOL_MAX_W: number;
 export interface AgVolLayout { nx: number; ny: number; nz: number; tx: number; ty: number; w: number; h: number }
 export function agVolLayout(rows: number, w: number, h: number): AgVolLayout;
 export function agVolUniform(L: AgVolLayout): [number, number, number, number];
-export interface AgCamera3 { eye: number[]; fwd: number[]; right: number[]; up: number[]; dist: number; lens: number; ortho: number; focus: number; focusShare: number; coc: number; cap: number }
+export interface AgCamera3 { eye: number[]; fwd: number[]; right: number[]; up: number[]; dist: number; lens: number; ortho: number; proj?: number[]; focus: number; focusShare: number; coc: number; cap: number }
 export function agCamera3(d: { mirror?: boolean; params: Record<string, unknown> }, read: AgRead, time: number, h: number): AgCamera3;
-export function agProject3(cam: AgCamera3, xyz: number[]): { x: number; y: number; depth: number };
+export function agProject3(cam: Pick<AgCamera3, 'eye' | 'fwd' | 'right' | 'up' | 'dist' | 'lens' | 'ortho' | 'proj'>, xyz: number[]): { x: number; y: number; depth: number };
+export function agProjection(P: Record<string, unknown>, read: AgRead, dist: number): [number, number];
+export function agCamW(cam: Pick<AgCamera3, 'dist' | 'ortho' | 'proj'>, z: number): number;
 export const AG_PROBE_POINTS: number[][];
 export const AG_GROUP_READS: readonly ['alive', 'speed', 'spread', 'centroidX', 'centroidY', 'group1', 'group2', 'group3', 'group4'];
 export type AgGroupRead = typeof AG_GROUP_READS[number];
@@ -70,3 +72,6 @@ export function agNbTile(d3: boolean): [number, number];
 export function agNbCells(d3: boolean): number;
 export function agNbLayout(d3: boolean, aspect: number, radius: unknown, most: unknown): { nx: number; ny: number; nz: number; slots: number; uniform: [number, number, number, number] };
 export function agNbPasses(d3: boolean, slots: number): Array<{ count: boolean; atlas: number; x: number; prevAtlas: number; prevX: number }>;
+/** What agProject3 needs of a camera. */
+export type AgProjectCamera = Pick<AgCamera3, 'eye' | 'fwd' | 'right' | 'up' | 'dist' | 'lens' | 'ortho' | 'proj'>;
+export function agSceneCamera(texels: number[][]): AgProjectCamera & { proj: [number, number] };

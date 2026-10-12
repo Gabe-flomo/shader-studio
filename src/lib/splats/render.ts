@@ -3,7 +3,7 @@
  * order, and the instanced draw into two half-float targets (colour, and distance), which the node samples.
  *
  * Per frame (SplatPass.draw): the probe program (the picture's uniforms, compiler/splatGraph.ts) draws the camera and
- * placement into 8 × 1 float texels; the splats draw with them, in the last order the worker sent. The probe's texels
+ * placement into 10 × 1 float texels; the splats draw with them, in the last order the worker sent. The probe's texels
  * are read back without stalling (a pixel-pack buffer and a fence, polled next frame), only to decide when to sort.
  *
  * With a Modifier wired (docs/splat-scene.md "Per-splat modifiers"), the modifier program draws after the probe, one
@@ -13,6 +13,9 @@
 import * as THREE from 'three';
 import { SPLAT_DEPTH_FRAG, SPLAT_DEPTH_VERT, SPLAT_FRAG, SPLAT_VERT, SPLAT_VERT_MOD } from './shaders';
 import { PACK_WIDTH, SH_WIDTH, type PackedSplats } from './pack';
+
+/** The probe's texels (compiler/splatGraph.ts): the first 8 are read back for the sort; 8–9 are the ray origins half right and up. */
+export const SPLAT_PROBE_TEXELS = 10;
 
 /** The modifier targets' width (compiler/splatGraph.ts SPLAT_MOD_WIDTH): one texel per splat. */
 export const MOD_WIDTH = 2048;
@@ -99,7 +102,7 @@ export class SplatPass {
     for (const t of this.target.textures) { t.generateMipmaps = false; t.userData.canvas8 = blankCanvas(); }
     this.target.textures[0].name = 'splat-color';
     this.target.textures[1].name = 'splat-depth';
-    this.probeTarget = new THREE.WebGLRenderTarget(8, 1, { type: this.floatProbe ? THREE.FloatType : THREE.HalfFloatType, format: THREE.RGBAFormat, depthBuffer: false, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
+    this.probeTarget = new THREE.WebGLRenderTarget(SPLAT_PROBE_TEXELS, 1, { type: this.floatProbe ? THREE.FloatType : THREE.HalfFloatType, format: THREE.RGBAFormat, depthBuffer: false, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
     this.probeTarget.texture.generateMipmaps = false;
     this.quadMesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2));
     this.quadMesh.frustumCulled = false;

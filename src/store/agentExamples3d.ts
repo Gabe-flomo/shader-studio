@@ -7,6 +7,7 @@
  *  - Swarm round a torus: a ray-marched torus, the swarm colliding with it through Collide (3D
  *    scene) and drawn through the scene's own camera, hidden behind it (Depth);
  *  - Galaxy in 3D: stars on tilted orbits round a flat disc, the camera above it;
+ *  - Reverse-perspective swarm: a box full of walkers through the camera's Reverse perspective (far bigger);
  *  - Fireflies in the dark: depth of field (a shallow focus, out-of-focus fireflies as bokeh);
  *  - Shapes (docs/particle-shapes.md): Voxel slime (the 3D slime as voxels, Faces + edges), Rod swarm
  *    (the 3D flock as rods along their flight, Lit), Cube storm (tumbling cubes in a swirl, Flat).
@@ -81,6 +82,10 @@ export const AGENT_3D_EXAMPLE_INDEX: Record<string, { label: string; description
   agent3dCubeStorm: {
     label: 'Cube storm',
     description: 'Cubes caught in a storm: a swirl round the middle and curl noise toss tens of thousands of small cubes, each tumbling on its own axis, drawn Flat (no lighting at all, a graphic look) in a stormy palette. Solid cubes hide each other, so the storm has real depth.',
+  },
+  agent3dReverse: {
+    label: 'Reverse-perspective swarm',
+    description: 'A swarm filling the box, seen through Draw agents\' camera in Reverse perspective (the March Camera\'s): the far side of the box is drawn bigger than the near side, like a Byzantine icon, while the camera circles. Switch Perspective to Normal or Orthographic to compare, or slide Flatten to blend toward orthographic.',
   },
   agent3dFireflies: {
     label: 'Fireflies in the dark',
@@ -541,6 +546,52 @@ export function galaxy3dNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
   return nodes;
 }
 
+// ── Reverse-perspective swarm (docs/camera-projections.md) ──────────────────
+
+/** A box full of walkers on slow currents, seen in Reverse perspective: far bigger than near. */
+export function reverse3dNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
+  const X = (dx: number) => x + dx, Y = (dy: number) => y + dy;
+  const inputs = n('agentInputs', 'rvIn', 0, 160, {
+    _groupOriginal: true, extraInputs: [],
+    ...note(['Agent Inputs: this walker as the step begins; the forces to the right read its position from here by themselves.']),
+  });
+  const curl = n('agentCurl', 'rvCurl', 420, 40, {
+    strength: 0.35, size: 0.8, evolve: 0.1,
+    ...note(['Curl noise in 3D: slow, wide currents that keep the walkers spread through the whole box, so its shape (and the way the camera draws it) reads.']),
+  });
+  const integrate = n('agentIntegrate', 'rvMove', 840, 40, {
+    drag: 1.2, maxSpeed: 0.5, mass: 1, edges: 'wrap',
+    ...note(['Integrate: the walkers follow the currents lazily (Drag 1.2); Wrap keeps them inside the box, so its faces stay sharp-edged walls of walkers.']),
+  }, { force: ['rvCurl', 'force'] });
+  const output = n('agentOutput', 'rvOut', 1260, 100, {
+    _groupOriginal: true,
+    ...note(['Agent Output: Position and Velocity from Integrate.']),
+  }, { position: ['rvMove', 'position'], velocity: ['rvMove', 'velocity'] });
+  const emit = n('agentEmit', 'rvEmit', X(0), Y(0), {
+    mode: 'fill', shape: 'screen', heading: 'random', x: 0, y: 0, z: 0, size: 1, life: 0, speed: 0.05, speedVar: 0.5, spread: 1,
+    ...note(['Emit, Fill: every walker is born at once anywhere in the box (Whole picture: across, up and 2 deep), so the box is full from the start.']),
+  });
+  const group = agentsGroup('reverse3d', X(420), Y(0), 'rvEmit', [inputs, curl, integrate, output], {
+    label: 'Swarm', space: '3d', tier: '64k', preroll: 1,
+    ...note(['Agents with Space 3D: 65,536 walkers (64k) in the box. Inside: Curl noise → Integrate.']),
+  });
+  const back = backdrop('rv', X(420), Y(420), 'Gold ground', [0.05, 0.03, 0.012], [0.11, 0.07, 0.025], [0.03, 0.02, 0.006], ['Result: a dark warm gold, darker at the bottom, as behind an icon.']);
+  const draw = n('drawAgents', 'rvDraw', X(840), Y(0), {
+    style: 'glow', colorBy: 'heading', palette: 'ab', colorA: [1, 0.78, 0.38], colorB: [0.35, 0.6, 1], scaleBy: 'walker', size: 1.6, brightness: 0.9, glow: 0.8, fade: 'off', lights: '0',
+    camDist: 3.2, camAngle: 30, camElevation: 24, rotSpeed: 8, fov: 1.6, ortho: 0, camX: 0, camY: 0, camZ: 0, drift: 0, focus: 1, blur: 0, maxBlur: 7,
+    projection: 'reverse', reverseStrength: 1, reverseDist: 8,
+    ...note([
+      'Draw agents in 3D, Perspective Reverse (the March Camera\'s): as if the camera\'s rays started spread out across the picture and met 8 in front of it (Converge at), so a walker is drawn bigger the farther away it is. The far faces of the box come out larger than the near ones, the way icons and some old Chinese paintings draw a table.',
+      'Reverse strength 1: the rays meet exactly at Converge at; 0 would be orthographic. Whatever the strength, the middle of the box (where the camera looks) keeps its size.',
+      'Flatten blends whichever Perspective is chosen toward orthographic: a slider, so Play can sweep it.',
+      'Try: Perspective Normal, then Orthographic, to see the same box three ways; Converge at 6 for a stronger effect (nearer still, the far side of the box passes where the rays cross and the picture flips); Flatten 0.5.',
+    ]),
+  }, { agents: ['reverse3d', 'agents'], over: ['rvBack', 'result'] });
+  const nodes = [emit, group, ...back, draw];
+  if (withOutput) nodes.push(n('output', 'rvOutput', X(1260), Y(0), { ...note(['Output: the swarm, far side bigger, over the gold ground is the picture.']) }, { color: ['rvDraw', 'color'] }));
+  return nodes;
+}
+
 // ── Fireflies in the dark (depth of field) ───────────────────────────────────
 
 /** Fireflies: slow 3D currents, a camera among them with a shallow focus, out-of-focus ones as bokeh. */
@@ -686,6 +737,7 @@ export function buildAgent3dExamples(): Record<string, ExampleGraph> {
     agent3dFlock: { ...AGENT_3D_EXAMPLE_INDEX.agent3dFlock, counter: 40, nodes: flock3dNodes(0, 200) },
     agent3dTorus: { ...AGENT_3D_EXAMPLE_INDEX.agent3dTorus, counter: 40, nodes: torus3dNodes(0, 1000) },
     agent3dGalaxy: { ...AGENT_3D_EXAMPLE_INDEX.agent3dGalaxy, counter: 40, nodes: galaxy3dNodes(0, 200) },
+    agent3dReverse: { ...AGENT_3D_EXAMPLE_INDEX.agent3dReverse, counter: 40, nodes: reverse3dNodes(0, 200) },
     agent3dFireflies: { ...AGENT_3D_EXAMPLE_INDEX.agent3dFireflies, counter: 40, nodes: fireflies3dNodes(0, 200) },
     agent3dVoxelSlime: { ...AGENT_3D_EXAMPLE_INDEX.agent3dVoxelSlime, counter: 40, nodes: voxelSlime3dNodes(0, 200) },
     agent3dRodSwarm: { ...AGENT_3D_EXAMPLE_INDEX.agent3dRodSwarm, counter: 40, nodes: rodSwarm3dNodes(0, 200) },

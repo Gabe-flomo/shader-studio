@@ -11,8 +11,8 @@
  *
  * The camera: the Ray Origin and Ray Dir wired in (the March Camera's), read by a small probe program the compiler
  * makes (compiler/splatGraph.ts: the chain into Ray Origin, Ray Dir, Position, Rotation and Scale, ending in this node
- * as SplatProbeOut). It writes eight texels: the eye; the rays at the picture's centre, half a height right and half
- * up; the model's three columns (with Splat size and Opacity) and its offset. The splat shader rebuilds the camera
+ * as SplatProbeOut). It writes ten texels: the eye; the rays at the picture's centre, half a height right and half
+ * up; the model's three columns (with Splat size and Opacity) and its offset; the ray origins half right and half up. The splat shader rebuilds the camera
  * and the placement from those, on the GPU, with no lag; the engine reads them back a frame later only to sort.
  * Sliders, Play mappings and keyframes on Position / Rotation / Scale are live uniforms the probe shares.
  *
@@ -217,9 +217,9 @@ export const SplatSceneNode: NodeDefinition = {
 
 /**
  * The probe's end (made by compiler/splatGraph.ts; never in a graph): the Splat Scene node itself, compiled into a
- * small program over an 8 × 1 target. Same id and params as the node, so its slider uniforms are the node's own.
+ * small program over a 10 × 1 target. Same id and params as the node, so its slider uniforms are the node's own.
  * Texel 0 the eye, 1–3 the rays at g_uv (0, 0), (0.5, 0), (0, 0.5) (the compiler sets g_uv per texel), 4–6 the
- * model's columns (w: Splat size, Opacity, 0), 7 its offset.
+ * model's columns (w: Splat size, Opacity, 0), 7 its offset, 8–9 the ray origins at (0.5, 0) and (0, 0.5).
  */
 export const SplatProbeOutNode: NodeDefinition = {
   type: SPLAT_PROBE_TYPE,
@@ -262,7 +262,9 @@ export const SplatProbeOutNode: NodeDefinition = {
         `    else if (${id}_i == 4) ${id}_o = vec4(${id}_M[0], ${p(P.splatSize, 1)});\n`,
         `    else if (${id}_i == 5) ${id}_o = vec4(${id}_M[1], ${p(P.opacity, 1)});\n`,
         `    else if (${id}_i == 6) ${id}_o = vec4(${id}_M[2], 0.0);\n`,
-        `    else ${id}_o = vec4(${pos}${pivot}, 1.0);\n`,
+        `    else if (${id}_i == 7) ${id}_o = vec4(${pos}${pivot}, 1.0);\n`,
+        // The ray origins half right and half up: an Orthographic or Reverse camera's spread out (docs/camera-projections.md).
+        `    else ${id}_o = vec4(${ro}, 1.0);\n`,
         `    gl_FragColor = ${id}_o;\n`,
       ].join(''),
       outputVars: {},

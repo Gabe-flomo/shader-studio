@@ -17,6 +17,7 @@
 import * as THREE from 'three';
 import { MAP_STOPS, type Rgb } from '../agentBuilder/hood';
 import { HOOD_ATLAS_MS, pokeHood, type HoodRequest } from './agentHood';
+import { AG_CAM_GLSL } from '../play/kit/agentShaders.js';
 
 /** The runner's read-only view of one group's live state (AgentRunner.stateView). */
 export interface AgentStateView {
@@ -37,7 +38,7 @@ export interface AgentStateView {
   /** The trail its Deposit fills (a volume: its front view). */
   readonly trail: Readonly<{ nodeId: string; texture: THREE.Texture; w: number; h: number; velocity: boolean }> | null;
   /** 3D: the camera its first live Draw agents sees through (`scene`: a scene's camera texture, when probed). */
-  readonly camera: Readonly<{ eye: number[]; fwd: number[]; right: number[]; up: number[]; lens: number; ortho: number; dist: number; scene: THREE.Texture | null }> | null;
+  readonly camera: Readonly<{ eye: number[]; fwd: number[]; right: number[]; up: number[]; lens: number; ortho: number; proj?: number[]; dist: number; scene: THREE.Texture | null }> | null;
 }
 
 const MAX_TILES = 24;
@@ -57,27 +58,23 @@ function stopsGlsl(name: string, stops: Rgb[]): string {
 const PROJECT = `uniform highp sampler2D u_cam;
 uniform int u_deep, u_camSrc;
 uniform float u_aspect, u_lens, u_ortho, u_camDist;
+uniform vec2 u_proj;
 uniform vec3 u_eye, u_fwd, u_right, u_up;
+${AG_CAM_GLSL}
 vec4 hoodProject(vec3 p) {
   if (u_deep == 0) return vec4(p.x / u_aspect, p.y, 1.0, 0.0);
   vec3 eye = u_eye, f = u_fwd, r = u_right, u = u_up;
   float lens = u_lens, cd = u_camDist, fl = clamp(u_ortho, 0.0, 1.0);
+  vec2 proj = u_proj;
   if (u_camSrc == 1) {
-    eye = texelFetch(u_cam, ivec2(0, 0), 0).xyz;
-    f = normalize(texelFetch(u_cam, ivec2(1, 0), 0).xyz);
-    vec3 rx = normalize(texelFetch(u_cam, ivec2(2, 0), 0).xyz), ry = normalize(texelFetch(u_cam, ivec2(3, 0), 0).xyz);
-    float cx = dot(rx, f), cy = clamp(dot(ry, f), -0.9999, 0.9999);
-    lens = 0.5 / tan(acos(cy));
-    r = normalize(rx - cx * f);
-    u = normalize(ry - cy * f);
-    u = normalize(u - dot(r, u) * r);
-    cd = max(0.1, dot(-eye, f));
+    agSceneCam(u_cam, eye, f, r, u, lens, cd, proj);
     fl = 0.0;
   }
   vec3 d = p - eye;
   float z = dot(d, f);
   if (z < 0.06 && fl < 0.999) return vec4(0.0);
-  float w = mix(z, cd, fl);
+  float w = agCamW(z, cd, proj, fl);
+  if (abs(w) < 1e-3) return vec4(0.0);
   vec2 q = vec2(dot(d, r), dot(d, u)) * lens / w;
   return vec4(q.x / u_aspect, q.y, 1.0, z);
 }`;
@@ -212,7 +209,7 @@ interface Read { rt: THREE.WebGLRenderTarget; W: number; H: number; float: boole
 interface Slot { atlas?: Read; atlasAt: number; atlasStep: number; atlasSpecs: unknown; probe?: Read; probeIndex: number; probeStep: number; pick?: Read; picking: boolean }
 
 const camUniforms = () => ({
-  u_cam: { value: null }, u_deep: { value: 0 }, u_camSrc: { value: 0 }, u_aspect: { value: 1 }, u_lens: { value: 1.8 }, u_ortho: { value: 0 }, u_camDist: { value: 3 },
+  u_cam: { value: null }, u_deep: { value: 0 }, u_camSrc: { value: 0 }, u_aspect: { value: 1 }, u_lens: { value: 1.8 }, u_ortho: { value: 0 }, u_proj: { value: new THREE.Vector2(0, 1) }, u_camDist: { value: 3 },
   u_eye: { value: new THREE.Vector3() }, u_fwd: { value: new THREE.Vector3(0, 0, -1) }, u_right: { value: new THREE.Vector3(1, 0, 0) }, u_up: { value: new THREE.Vector3(0, 1, 0) },
 });
 
@@ -363,6 +360,7 @@ export class AgentHoodGpu {
     (u.u_eye.value as THREE.Vector3).fromArray(c.eye); (u.u_fwd.value as THREE.Vector3).fromArray(c.fwd);
     (u.u_right.value as THREE.Vector3).fromArray(c.right); (u.u_up.value as THREE.Vector3).fromArray(c.up);
     u.u_lens.value = c.lens; u.u_ortho.value = c.ortho; u.u_camDist.value = c.dist;
+    (u.u_proj.value as THREE.Vector2).fromArray(c.proj ?? [0, 1]);
   }
 
   private draw(rt: THREE.WebGLRenderTarget, scene: THREE.Scene, depth = false): void {

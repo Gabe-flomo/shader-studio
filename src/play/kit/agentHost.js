@@ -480,7 +480,7 @@ export function ahCreate(gl, spec, env) {
   };
 
   /**
-   * A 3D Draw agents' look at a ray-marched scene: its camera probe read at four points into 4 × 1
+   * A 3D Draw agents' look at a ray-marched scene: its camera probe read at AG_PROBE_POINTS into 6 × 1
    * texels (the origin; the rays at the centre, half a picture right and half up), and its Depth at
    * half the picture's size. As the app's runner does; null until linked.
    */
@@ -488,13 +488,14 @@ export function ahCreate(gl, spec, env) {
     const pr = probes.get(d.slug);
     if (!pr || !pr.camera) return null;
     if (!s.cam) {
-      const t = tex(gl.RGBA32F, gl.RGBA, gl.FLOAT, gl.NEAREST, gl.CLAMP_TO_EDGE, 4, 1);
-      s.cam = { t, fb: fbOf([t]), w: 4, h: 1 };
+      const n = AG_PROBE_POINTS.length;
+      const t = tex(gl.RGBA32F, gl.RGBA, gl.FLOAT, gl.NEAREST, gl.CLAMP_TO_EDGE, n, 1);
+      s.cam = { t, fb: fbOf([t]), w: n, h: 1 };
     }
     if (pr.depth && !s.depth) s.depth = look(Math.ceil(s.w / 2), Math.ceil(s.h / 2), gl.NEAREST, gl.CLAMP_TO_EDGE);
     const P = pr.camera;
     gl.bindFramebuffer(gl.FRAMEBUFFER, s.cam.fb);
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < AG_PROBE_POINTS.length; i++) {
       const [x, y, k] = AG_PROBE_POINTS[i];
       vec4s.set(d.probe.uniform, [x, y, k, 0]);
       gl.viewport(i, 0, 1, 1);
@@ -533,7 +534,7 @@ export function ahCreate(gl, spec, env) {
     set('u_pal', L.pal ? [].concat(...L.pal.slice(0, 4)) : new Array(12).fill(0));
     set('u_colA', L.colA.slice(0, 3)); set('u_colB', L.colB.slice(0, 3)); set('u_viewSize', [s.w, s.h]);
     set('u_eye', cam.eye); set('u_fwd', cam.fwd); set('u_right', cam.right); set('u_up', cam.up);
-    set('u_lens', cam.lens); set('u_ortho', seen ? 0 : cam.ortho); set('u_camDist', cam.dist);
+    set('u_lens', cam.lens); set('u_ortho', seen ? 0 : cam.ortho); set('u_proj', cam.proj); set('u_camDist', cam.dist);
     set('u_focus', seen ? cam.focusShare : cam.focus); set('u_coc', cam.coc); set('u_cap', cam.cap);
     set('u_camSrc', seen ? 1 : 0); set('u_depth', seen && seen.depth ? 1 : 0);
     const lightVals = [], lightCols = [], lz = [];
