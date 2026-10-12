@@ -35,6 +35,7 @@ import { Toggle } from '../ui/Choice';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
 import { Preview2D, compileScene2D } from './Preview2D';
+import { useDepthView } from '../../builders/depthPreview';
 import { StudioNavItem, StudioShell } from '../builders/studio/StudioShell';
 import { usePhoneDialog } from '../ui/phoneDialog';
 import { DepthTab } from './DepthTab';
@@ -1071,7 +1072,9 @@ function PreviewPanel() {
   const live = useSceneBuilder2D(s => s.scene);
   // One compile for the picture and the node count, following a drag at most every 50 ms.
   const scene = useThrottled(live);
-  const c = useMemo(() => compileScene2D(scene), [scene]);
+  const view = useDepthView(s => (scene.depth ? s.view : 'result'));
+  const heat = useDepthView(s => s.heat);
+  const c = useMemo(() => compileScene2D(scene, { view, heat }), [scene, view, heat]);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '16px 14px' }}>
       <BuilderLabel>Preview</BuilderLabel>
