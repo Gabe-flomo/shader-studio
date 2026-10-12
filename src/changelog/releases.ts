@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.189',
+    date: '2026-10-12',
+    title: 'Warp Builder',
+    highlights: [
+      { area: 'Studio', text: 'Warp Builder: build space warps by dragging tiles (x, y, t, numbers, sin, abs, noise…) onto X and Y rows, watching a checkerboard, ring, vectors or heat view.' },
+      { area: 'Studio', text: 'Warp Builder: stack blocks, loop them, save to My blocks, and move warps both ways with the 2D Scene Builder (Open in Warp Builder / Send to 2D).' },
+    ],
+  },
+  {
     id: '2026.10.188',
     date: '2026-10-11',
     title: 'Hands, restyled',
