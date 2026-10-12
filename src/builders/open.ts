@@ -36,6 +36,7 @@ import { builderRecipeOf } from './recipe';
 import type { BuilderAction } from './doBuilders';
 import { editSplatSceneInBuilder, openNewSplatScene } from '../splatBuilder/actions';
 import { openNewWarpBuilder } from '../warpBuilder/actions';
+import { editTimeCubeInBuilder, openNewTimeCube } from '../timeCubeBuilder/actions';
 
 /**
  * What a new Grid Rules node starts with (newGridRules): params over its defaults, and a drawn start
@@ -106,6 +107,7 @@ export function startSceneKind(kind: SceneKind, o: { at?: { x: number; y: number
   else if (kind === 'grid') openNewGridScene(o.at);
   else if (kind === 'simulation') newGridRules();
   else if (kind === 'splat') openNewSplatScene(o.at);
+  else if (kind === 'timecube') openNewTimeCube(o.at);
   else if (kind === 'warp') openNewWarpBuilder();
   else openAgentBuilder(null, { fromShell: o.fromShell });
 }
@@ -116,6 +118,7 @@ export function editBuiltScene(b: Pick<BuiltScene, 'kind' | 'id'>): boolean {
   if (b.kind === '3d') return editSceneInBuilder(b.id);
   if (b.kind === '2d') return editScene2DInBuilder(b.id);
   if (b.kind === 'splat') return editSplatSceneInBuilder(b.id);
+  if (b.kind === 'timecube') return editTimeCubeInBuilder(b.id);
   if (b.kind === 'grid' && useNodeGraphStore.getState().nodes.some(nd => nd.id === b.id && nd.type !== 'gridRules')) return editGridSceneInBuilder(b.id);
   if (b.kind === 'grid' || b.kind === 'simulation') {
     const st = useNodeGraphStore.getState();

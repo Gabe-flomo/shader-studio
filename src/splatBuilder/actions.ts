@@ -68,7 +68,7 @@ export function splatBuildIds(scanId: string | null | undefined): string[] {
  * A param the picture has no uniform for (a mode, a string) compiles at once. Groups (the world's materials) take
  * theirs through updateNodeParams, which passes a group's `inner::param` keys on to its inside.
  */
-function writeParams(diff: NonNullable<ReturnType<typeof paramDiff>>): void {
+export function writeParams(diff: NonNullable<ReturnType<typeof paramDiff>>): void {
   const st = useNodeGraphStore.getState();
   const groups = new Set(st.nodes.filter(n => n.type === 'group' || n.type === 'agentsGroup').map(n => n.id));
   const by = new Map<string, Record<string, unknown>>();

@@ -22,6 +22,10 @@ import { useSplatBuilder } from '../../../splatBuilder/store';
 import { applySplatScene } from '../../../splatBuilder/apply';
 import { starterSplatScene } from '../../../splatBuilder/spec';
 import { closeSplatBuilder } from '../../../splatBuilder/actions';
+import { useTimeCubeBuilder } from '../../../timeCubeBuilder/store';
+import { applyTimeCube } from '../../../timeCubeBuilder/apply';
+import { presetSpec } from '../../../timeCubeBuilder/presets';
+import { closeTimeCubeBuilder } from '../../../timeCubeBuilder/actions';
 import { applyScene } from '../../../sceneBuilder/apply';
 import { templateSpec } from '../../../sceneBuilder/templates';
 import { applyScene2D } from '../../../sceneBuilder2d/apply';
@@ -89,6 +93,11 @@ function buildOf(kind: SceneKind): string {
     useNodeGraphStore.setState({ nodes: r.nodes });
     return r.scanId;
   }
+  if (kind === 'timecube') {
+    const r = applyTimeCube(nodes(), presetSpec('box'), { nextId });
+    useNodeGraphStore.setState({ nodes: r.nodes });
+    return r.sourceId;
+  }
   return makeAgentGroup(START_CARDS[0], '2d')!.groupId;
 }
 
@@ -101,6 +110,7 @@ beforeEach(() => {
   useSceneBuilder2D.setState({ open: false, targetSceneId: null });
   useGridBuilder.setState({ open: false, targetSceneId: null });
   useSplatBuilder.setState({ open: false, targetId: null });
+  useTimeCubeBuilder.setState({ open: false, targetId: null });
   resetBuilderSliderRanges();
 });
 
@@ -111,7 +121,7 @@ describe('the kind page', () => {
     expect($('[data-studio-title]')?.textContent).toBe('Scene builder');
     expect($('[data-studio-kind]')?.textContent).toBe('What kind of scene?');
     const cards = [...document.querySelectorAll('[data-scene-kind]')];
-    expect(cards.map(c => c.getAttribute('data-scene-kind'))).toEqual(['2d', 'agents', 'grid', 'simulation', '3d', 'splat', 'warp']);
+    expect(cards.map(c => c.getAttribute('data-scene-kind'))).toEqual(['2d', 'agents', 'grid', 'simulation', '3d', 'splat', 'timecube', 'warp']);
     for (const c of cards) {
       expect(c.querySelector('canvas')).toBeTruthy();
       expect(c.textContent).toContain(SCENE_KINDS.find(k => k.id === c.getAttribute('data-scene-kind'))!.line);
@@ -130,6 +140,8 @@ describe('the kind page', () => {
     ['agents', () => useBuilderWindows.getState().agentBuilder?.groupId === null && useBuilderWindows.getState().agentBuilder?.fromShell === true],
     // A Splat scene is built at once (its picture is the main preview's): the builder opens on the new Splat Scene.
     ['splat', () => useSplatBuilder.getState().open && nodes().some(x => x.id === useSplatBuilder.getState().targetId && x.type === 'splatScene')],
+    // A Time Cube is built at once too: the builder opens on the new Time Cube (shown by a Time Cube View).
+    ['timecube', () => useTimeCubeBuilder.getState().open && nodes().some(x => x.id === useTimeCubeBuilder.getState().targetId && x.type === 'timeCube') && nodes().some(x => x.type === 'timeCubeView')],
   ])('picking %s turns the window into its builder', (kind, isOpen) => {
     act(() => openBuilder('scenes'));
     mount(<Shell />);
@@ -203,7 +215,7 @@ describe('entry points that open one kind go straight to it', () => {
 });
 
 describe('a graph no builder made: clear by default, or keep it', () => {
-  it.each<SceneKind>(['2d', 'agents', 'grid', 'simulation', '3d', 'splat'])('%s: Clear and start over is the default; the clear is an undo step of its own', kind => {
+  it.each<SceneKind>(['2d', 'agents', 'grid', 'simulation', '3d', 'splat', 'timecube'])('%s: Clear and start over is the default; the clear is an undo step of its own', kind => {
     useNodeGraphStore.setState({ nodes: handGraph() });
     act(() => openBuilder('scenes'));
     expect(useBuilderWindows.getState().sceneShell).toEqual({ page: 'kinds' });
@@ -217,7 +229,7 @@ describe('a graph no builder made: clear by default, or keep it', () => {
     for (let i = 0; i < 3 && !nodes().some(x => x.id === 'uv'); i++) undo();
     expect(nodes().map(x => x.id).sort()).toEqual(['out', 'uv']);
   });
-  it.each<SceneKind>(['2d', 'agents', 'grid', 'simulation', '3d', 'splat'])('%s: Keep my graph keeps it', kind => {
+  it.each<SceneKind>(['2d', 'agents', 'grid', 'simulation', '3d', 'splat', 'timecube'])('%s: Keep my graph keeps it', kind => {
     useNodeGraphStore.setState({ nodes: handGraph() });
     act(() => openBuilder('scenes'));
     mount(<Shell />);
@@ -229,7 +241,7 @@ describe('a graph no builder made: clear by default, or keep it', () => {
 });
 
 describe('a graph a builder made: reopen it as it was built', () => {
-  it.each<SceneKind>(['2d', 'agents', 'simulation', '3d', 'splat'])('%s: found, and Edit this one opens its builder on the build', kind => {
+  it.each<SceneKind>(['2d', 'agents', 'simulation', '3d', 'splat', 'timecube'])('%s: found, and Edit this one opens its builder on the build', kind => {
     const id = buildOf(kind);
     expect(builtScenes(nodes()).map(b => [b.kind, b.id])).toEqual([[kind, id]]);
     act(() => openBuilder('scenes'));
@@ -253,11 +265,16 @@ describe('a graph a builder made: reopen it as it was built', () => {
       expect(useSplatBuilder.getState().targetId).toBe(id);
       expect(useSplatBuilder.getState().spec).toEqual(starterSplatScene());
       closeSplatBuilder();
+    } else if (kind === 'timecube') {
+      expect(useTimeCubeBuilder.getState().open).toBe(true);
+      expect(useTimeCubeBuilder.getState().targetId).toBe(id);
+      expect(useTimeCubeBuilder.getState().spec).toEqual(presetSpec('box'));
+      closeTimeCubeBuilder();
     } else {
       expect(useBuilderWindows.getState().agentBuilder).toEqual({ groupId: id });
     }
   });
-  it.each<SceneKind>(['2d', 'agents', 'simulation', '3d', 'splat'])('%s: Start over takes the build away (one undo step), then the kinds', kind => {
+  it.each<SceneKind>(['2d', 'agents', 'simulation', '3d', 'splat', 'timecube'])('%s: Start over takes the build away (one undo step), then the kinds', kind => {
     const id = buildOf(kind);
     const before = nodes().map(x => x.id).sort();
     act(() => openBuilder('scenes'));
@@ -270,7 +287,7 @@ describe('a graph a builder made: reopen it as it was built', () => {
     undo();
     expect(nodes().map(x => x.id).sort()).toEqual(before);
   });
-  it.each<SceneKind>(['2d', 'agents', 'simulation', '3d', 'splat'])('%s: Add another goes to the kinds, keeping the graph', kind => {
+  it.each<SceneKind>(['2d', 'agents', 'simulation', '3d', 'splat', 'timecube'])('%s: Add another goes to the kinds, keeping the graph', kind => {
     const id = buildOf(kind);
     act(() => openBuilder('scenes'));
     mount(<Shell />);
