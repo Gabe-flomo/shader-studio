@@ -18,6 +18,8 @@
  *  - Fade (feedback): the decay of a feedback Pass, max(old × d − e, 0), with a tail in seconds
  *    (frame-rate independent through u_frameDt) and a tint per channel.
  *  - Read (texture): Sample with the read bent: zoom, turn and move round a pivot, pushed by a flow.
+ *  - Feedback (texture) (textureFeedback.ts): a Pass, Fade and Read in one node, texture in, trailed
+ *    texture out; the compiler opens it into a Pass (compiler/feedbackExpand.ts).
  *
  * Every node takes a `texture` input (any texture: a Pass and its Previous, Texture Input, Video
  * Input, Baked, Motion (texture), a Trail field's or Draw agents' Image) and an optional UV in
@@ -584,6 +586,7 @@ export const TextureFadeNode: NodeDefinition = withParamSockets({
     tint: { label: 'Tint', type: 'vec3color', hint: 'Each channel\'s tail, as a share of Tail: white fades evenly; less red fades red first, so tails cool to blue.' },
     combine: { label: 'Fresh paint', type: 'select', hint: 'How the fresh paint meets the faded picture.', options: [
       { value: 'add', label: 'Add (light builds up)' }, { value: 'max', label: 'Brighter of the two' }, { value: 'over', label: 'Over (replace where painted)' },
+      { value: 'screen', label: 'Screen (soft add)' },
     ] },
   },
   assignable: false,
@@ -594,6 +597,8 @@ export const TextureFadeNode: NodeDefinition = withParamSockets({
     const tex = inputVars.texture;
     const fresh = inputVars.fresh ?? 'vec3(0.0)';
     const combine = sel(P.combine, 'add');
+    // Screen: 1 − (1 − a)(1 − b), on the 0–1 range (light adds but never past white).
+    const screen = `(1.0 - (1.0 - clamp(${id}_faded, 0.0, 1.0)) * (1.0 - clamp(${fresh}, 0.0, 1.0)))`;
     const lines = [
       `    vec4 ${id}_old = ${tex ? `texture2D(${tex}, ${texUv(inputVars.uv ?? 'g_uv')})` : 'vec4(0.0)'};\n`,
       `    float ${id}_dt = ${FRAME_DT_UNIFORM} > 0.0 ? ${FRAME_DT_UNIFORM} : 1.0 / 60.0;\n`,
@@ -601,7 +606,7 @@ export const TextureFadeNode: NodeDefinition = withParamSockets({
       `    vec3 ${id}_keep = exp(${LN_HUNDREDTH} * ${id}_dt / ${id}_tail);\n`,
       `    vec3 ${id}_faded = max(${id}_old.rgb * ${id}_keep - ${p(P.clean, 0.2)} * ${id}_dt, 0.0);\n`,
       `    float ${id}_alpha = ${id}_old.a * exp(${LN_HUNDREDTH} * ${id}_dt / max(${p(P.tail, 1.5)}, 0.001));\n`,
-      `    vec3 ${id}_color = ${combine === 'max' ? `max(${id}_faded, ${fresh})` : combine === 'over' ? `mix(${id}_faded, ${fresh}, clamp(max(${fresh}.r, max(${fresh}.g, ${fresh}.b)), 0.0, 1.0))` : `${id}_faded + ${fresh}`};\n`,
+      `    vec3 ${id}_color = ${combine === 'max' ? `max(${id}_faded, ${fresh})` : combine === 'over' ? `mix(${id}_faded, ${fresh}, clamp(max(${fresh}.r, max(${fresh}.g, ${fresh}.b)), 0.0, 1.0))` : combine === 'screen' ? screen : `${id}_faded + ${fresh}`};\n`,
     ];
     return { code: lines.join(''), outputVars: { color: `${id}_color`, alpha: `${id}_alpha` } };
   },

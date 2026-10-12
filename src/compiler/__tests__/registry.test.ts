@@ -51,6 +51,8 @@ const CONNECTION_GATED = new Set([
   ...['length', 'centerX', 'centerY', 'threshold', 'knee', 'intensity', 'opacity', 'decay', 'falloff', 'tint'].map(k => `radialFastBlur.${k}`),
   // Texture tools (docs/texture-tools.md) likewise read nothing until a texture is wired; Read's Flow amount needs Flow
   'textureFlow.reach', 'textureNeighbours.spacing', 'textureChange.amount', 'textureChange.level', 'textureChange.width', 'readTexture.flowAmount',
+  // Feedback (texture)'s Flow strength needs a Flow, as Read's does (its step is the same Read)
+  'textureFeedback.flowAmount', 'textureFeedbackStep.flowAmount',
   // The Agents engine reads these from the uniform table (lib/agentRunner.ts), not the picture's shader
   'trailField.diffuse', 'trailField.halfLife',
   'drawAgents.size', 'drawAgents.brightness', 'drawAgents.glow', 'drawAgents.colorA', 'drawAgents.colorB',

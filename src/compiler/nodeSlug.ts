@@ -63,7 +63,7 @@ const TYPE_ABBREV: Record<string, string> = {
   glowTexture: 'tglow', radialFastBlur: 'trays', radialFastBlurStage: 'trays', chromaTexture: 'tchroma', chromaLens: 'tca', deepGlowTexture: 'tdglow', deepGlowTextureStage: 'tdglow', displaceTexture: 'tdisp', displacementMap: 'dmap',
   // Texture tools
   textureMask: 'tmask', textureLevels: 'tlevels', textureFlow: 'tflow', textureNeighbours: 'tnbr', textureChange: 'tchange',
-  distanceShape: 'dshape', textureFade: 'tfade', readTexture: 'tread',
+  distanceShape: 'dshape', textureFade: 'tfade', readTexture: 'tread', textureFeedback: 'tfb', textureFeedbackStep: 'tfb',
   // Misc
   expr: 'expr', customFn: 'cfn', scope: 'scope',
   sineLFO: 'lfo', squareLFO: 'slfo', sawtoothLFO: 'sawlfo',

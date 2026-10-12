@@ -195,14 +195,14 @@ export const TYPE_STAGE: Record<string, StageOf> = {
   glassScene: 'march', sceneBuilder: 'march', timeCubeView: 'march', frameStack: 'march', volumeGlow: 'light',
   // Passes.
   pass: 'pass', blurTexture: 'rule', displaceTexture: 'rule', jumpFloodTexture: 'rule', displacementMap: 'bend',
-  textureFade: 'rule', textureNeighbours: 'rule', gridRules: 'rule', echo: 'pass',
+  textureFade: 'rule', textureFeedback: 'pass', textureNeighbours: 'rule', gridRules: 'rule', echo: 'pass',
   // Simulation: the Agents family, step by step.
   agentSense: 'sense', agentNeighbours: 'sense', agentSteer: 'steer',
   agentGravity: 'steer', agentWind: 'steer', agentCurl: 'steer', agentAttract: 'steer', agentVortex: 'steer', agentFlow: 'steer', agentSoundKick: 'steer',
   agentDeposit: 'deposit', trailField: 'trail', drawAgents: 'draw',
   agentInputs: 'any', agentOutput: 'any', agentBySpecies: 'any',
   // Output: the hidden ends of passes keep their stage.
-  blurStage: 'rule', radialFastBlurStage: 'rule', deepGlowTextureStage: 'rule', gridRulesStep: 'rule', curveTraceBeamStep: 'rule',
+  blurStage: 'rule', radialFastBlurStage: 'rule', deepGlowTextureStage: 'rule', gridRulesStep: 'rule', curveTraceBeamStep: 'rule', textureFeedbackStep: 'rule',
   // Interpolation that makes masks.
   smoothstep: 'any',
   // A picked colour is a constant (a tint fed anywhere), not a colouring step.

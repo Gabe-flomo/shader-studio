@@ -2204,6 +2204,33 @@ exports[`golden outputs: examples > ttDistanceRings 1`] = `
 }
 `;
 
+exports[`golden outputs: examples > ttFeedbackCamera 1`] = `
+{
+  "hue": "- x120",
+  "rise": "- x120",
+  "tail": "- x120",
+  "tint": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > ttFeedbackFlow 1`] = `
+{
+  "curl": "- x120",
+  "fresh": "- x120",
+  "push": "- x120",
+  "tail": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > ttFeedbackTunnel 1`] = `
+{
+  "hue": "- x120",
+  "tail": "- x120",
+  "turn": "- x120",
+  "zoom": "- x120",
+}
+`;
+
 exports[`golden outputs: examples > ttGrowShrink 1`] = `
 {
   "grow": "- x120",

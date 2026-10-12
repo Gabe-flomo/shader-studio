@@ -49,6 +49,18 @@ export const TEXTURE_TOOL_EXAMPLE_INDEX: Record<string, { label: string; descrip
     label: 'Texture tools 7 · Outline and rings from a jump flood', play: true,
     description: 'Mask\'s Seed output starts a jump flood of a photo\'s bright parts; Outline (distance) draws a line round them and moving rings outside them from the flood\'s Distance.',
   },
+  ttFeedbackTunnel: {
+    label: 'Texture tools 8 · Zoom tunnel with Feedback', play: true,
+    description: 'The classic video-feedback tunnel in one node: Feedback (texture) keeps the Ball action clip\'s last frames, each a little zoomed and turned, so the balls stream outwards in a spiral and drift through the hues as they fade.',
+  },
+  ttFeedbackFlow: {
+    label: 'Texture tools 9 · Trails pushed by their own flow', play: true,
+    description: 'Feedback (texture) on the Ball action clip, with Flow (texture) reading the trail itself and pushing it along its own contours every frame: the trails curl into smoke. The loop back into the node reads its buffer a frame ago.',
+  },
+  ttFeedbackCamera: {
+    label: 'Texture tools 10 · Camera echo trails', play: true,
+    description: 'Echo trails for a camera: Feedback (texture) on a Video Input rising slowly and shifting hue, screened over the live picture. Plays the Ball action clip until you set the Video Input\'s Source to Webcam.',
+  },
 };
 
 /** The ordered keys, for the Texture tools folder. */
@@ -423,6 +435,109 @@ export function buildTextureToolExamples(): Record<string, ExampleGraph> {
 **How it is built.** Mask's Seed output starts the flood in a Pass repeated 10 times (guide 1.13). A last Jump flood reads the finished Distance; two Outline (distance) nodes draw a line and moving rings from it, added over the dimmed photo.
 
 **Try.** Switch the rings node to Glow or Inside (grown shape). Move the outline further out with Outline distance. Change the Mask's Level to flood from other parts of the photo.`),
+  };
+
+  // ── 8 · Video → Feedback (zoom + turn + hue drift) → Levels ──
+  g.ttFeedbackTunnel = {
+    ...TEXTURE_TOOL_EXAMPLE_INDEX.ttFeedbackTunnel,
+    counter: 20,
+    nodes: [
+      n('videoInput', 'vid', 40, 300, { ...BALL_VIDEO_PARAMS, ...note([
+        'Video Input: the built-in Ball action clip (glowing balls on black), looping. Choose a video or the camera on this card for yours.',
+        'Its Texture output goes straight into Feedback: no Pass of your own needed.',
+      ]) }),
+      n('textureFeedback', 'tunnel', 340, 300, { label: 'Tunnel', tail: 2.5, clean: 0.03, tint: [0.8, 0.95, 1], amount: 1, blend: 'max',
+        zoom: 1.025, turn: 1.2, hueDrift: 45, ...note([
+          'Feedback (texture): keeps last frame in a buffer of its own and lays the video over it, every frame.',
+          'Zoom 1.025 and Turn 1.2°: each frame the old picture grows 2.5% and turns a little round the Pivot (the centre), so the trails stream outwards in a spiral: the tunnel.',
+          'Tail 2.5: seconds for a trail to fade to 1% (the same at any frame rate). Tint fades red a little faster. Blend Max keeps the brighter of trail and video, so the balls stay crisp on top. Hue drift 45: older trails turn through the colours.',
+          'Press ↺ to clear the buffer.',
+        ]) },
+        { texture: ['vid', 'texture'] }),
+      n('textureLevels', 'tone', 640, 300, { gain: 1.2, rollOff: 0.4,
+        ...note('Levels (texture): reads Feedback\'s Texture output like any texture. Gain 1.2 brightens the trail; Roll-off 0.4 bends the brightest overlaps down so they don\'t clip.') },
+        { texture: ['tunnel', 'texture'] }),
+      n('output', 'out', 940, 300, note('Output: the tunnel, drawn after the Feedback buffer each frame.'), { color: ['tone', 'color'] }),
+    ],
+    play: playRecord([
+      ctl('zoom', 'tunnel::zoom', 'Zoom', 0.95, 1.06, 0.0005),
+      ctl('turn', 'tunnel::turn', 'Turn', -6, 6, 0.05),
+      ctl('tail', 'tunnel::tail', 'Trail length (s)', 0.1, 8, 0.05),
+      ctl('hue', 'tunnel::hueDrift', 'Hue drift', -180, 180, 1),
+    ], `**What it shows.** Video feedback in one node. Feedback (texture) is a Pass, a Fade and a Read wired for you: last frame is kept, drifted (zoom, turn, move), faded with a tail in seconds, and the new picture laid over it.
+
+**How it is built.** Video Input → Feedback (texture) → Levels → Output. Feedback's Texture output is a texture like any other, so Levels (or Glow, Mask, another Feedback) reads it.
+
+**Try.** Zoom below 1 for a tunnel that sinks inwards. Turn 0 and Move Y 2 for trails that rise. Blend Add for light that builds up. Move the Pivot off-centre. Press ↺ to start the trail over.`),
+  };
+
+  // ── 9 · Video → Feedback, with Flow (texture) on the Feedback's own Texture pushing it ──
+  g.ttFeedbackFlow = {
+    ...TEXTURE_TOOL_EXAMPLE_INDEX.ttFeedbackFlow,
+    counter: 20,
+    nodes: [
+      n('videoInput', 'vid', 40, 300, { ...BALL_VIDEO_PARAMS, ...note('Video Input: the built-in Ball action clip, looping. Choose a video or the camera on this card for yours.') }),
+      n('textureFlow', 'curl', 340, 560, { channel: 'brightness', direction: 'along', length: 'unit', strength: 0.004, reach: 3,
+        ...note([
+          'Flow (texture): reads the trail itself (Feedback\'s Texture) and gives the direction along its contours (Along: the slope turned 90°), Strength long.',
+          'Wired back into the same Feedback this is a loop, and that is fine: a loop into Feedback reads its buffer as it was a frame ago.',
+        ]) },
+        { texture: ['smoke', 'texture'] }),
+      n('textureFeedback', 'smoke', 640, 300, { label: 'Smoke', tail: 3, clean: 0.02, tint: [1, 0.8, 0.6], amount: 0.6, blend: 'add',
+        zoom: 1.004, flowAmount: 1, hueDrift: -20, ...note([
+          'Feedback (texture): the video laid over last frame, which is pushed along Flow every frame (Flow strength 1: as Flow gives it) and grown 0.4% by Zoom.',
+          'Pushed along its own contours, the trail swirls round itself and curls like smoke. Tail 3 s; Tint fades blue and green first, so old smoke warms to orange. Fresh 0.6 keeps the added light from blowing out.',
+        ]) },
+        { texture: ['vid', 'texture'], flow: ['curl', 'flow'] }),
+      n('textureLevels', 'tone', 940, 300, { gain: 1, rollOff: 0.6,
+        ...note('Levels (texture): Roll-off 0.6 tames the brightest stacked smoke (x / (1 + 0.6x)).') },
+        { texture: ['smoke', 'texture'] }),
+      n('output', 'out', 1240, 300, note('Output: the smoke trails.'), { color: ['tone', 'color'] }),
+    ],
+    play: playRecord([
+      ctl('push', 'smoke::flowAmount', 'Flow strength', -4, 4, 0.01),
+      ctl('curl', 'curl::strength', 'Curl', 0, 0.02, 0.0002),
+      ctl('tail', 'smoke::tail', 'Trail length (s)', 0.1, 8, 0.05),
+      ctl('fresh', 'smoke::amount', 'Fresh', 0, 2, 0.01),
+    ], `**What it shows.** Feedback (texture)'s Flow input: a direction that pushes the whole trail every frame. Here the direction comes from the trail itself, through Flow (texture), so the trails curl along their own contours.
+
+**How it is built.** Video Input → Feedback (texture) → Levels → Output. Feedback's Texture also goes to Flow (texture), Along the contours, whose Flow comes back into Feedback's Flow. A loop into Feedback is allowed: it reads the buffer a frame ago.
+
+**Try.** Flow strength negative to curl the other way. Set Flow's Direction to Uphill and the trails gather into ridges. Wire a noise's vec2 into Flow instead for wind.`),
+  };
+
+  // ── 10 · Camera (Video Input) → Feedback (rise + hue drift) → Screen over the live picture ──
+  g.ttFeedbackCamera = {
+    ...TEXTURE_TOOL_EXAMPLE_INDEX.ttFeedbackCamera,
+    counter: 20,
+    nodes: [
+      n('videoInput', 'cam', 40, 300, { ...BALL_VIDEO_PARAMS, ...note([
+        'Video Input: plays the built-in Ball action clip. Set Source to Webcam on this card to use your camera instead: the trails follow you.',
+      ]) }),
+      n('textureFeedback', 'echo', 340, 300, { label: 'Echo', tail: 1.2, clean: 0.05, tint: [0.7, 0.9, 1], amount: 0.8, blend: 'screen',
+        moveY: 1.5, zoom: 0.998, hueDrift: 120, ...note([
+          'Feedback (texture): the camera\'s last frames, each moved up 1.5 picture pixels and shrunk a hair, so echoes rise and gather.',
+          'Blend Screen lays the fresh picture over the echoes softly (it never passes white). Hue drift 120°/s: each echo is a different colour from the one before. Tail 1.2 s keeps the echoes short.',
+        ]) },
+        { texture: ['cam', 'texture'] }),
+      n('textureLevels', 'echoes', 640, 300, { outWhite: 0.85,
+        ...note('Levels (texture): the echoes a little dimmer (Out white 0.85), so the live picture stands out on top.') },
+        { texture: ['echo', 'texture'] }),
+      n('blendModes', 'over', 940, 300, { mode: 'screen', opacity: 1,
+        ...note('Blend: the live camera screened over the echoes, so you stay sharp in front of your own trail.') },
+        { base: ['echoes', 'color'], blend: ['cam', 'color'] }),
+      n('output', 'out', 1240, 300, note('Output: you, with rising rainbow echoes.'), { color: ['over', 'result'] }),
+    ],
+    play: playRecord([
+      ctl('tail', 'echo::tail', 'Echo length (s)', 0.1, 6, 0.05),
+      ctl('rise', 'echo::moveY', 'Rise', -6, 6, 0.05),
+      ctl('hue', 'echo::hueDrift', 'Hue drift', -360, 360, 1),
+      colourCtl('tint', 'echo::tint', 'Fade tint'),
+    ], `**What it shows.** Echo trails on a live camera: Feedback (texture) keeps the frames before, moved and recoloured, and the live picture is laid over them.
+
+**How it is built.** Video Input → Feedback (texture) (Move Y, Hue drift, Blend Screen) → Levels → Blend (Screen) with the live video → Output.
+
+**Try.** Set the Video Input's Source to Webcam and wave. Rise 0 and Zoom 1.02 for a tunnel behind you. Tail 4 for long ghosts. Blend Over on the Feedback keeps only the brightest echo.`),
   };
 
   return g;
