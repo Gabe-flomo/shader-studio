@@ -1,8 +1,8 @@
 /**
- * autosavePlayfile.ts — autosaves as .playfile (docs/crash-recovery.md "What a
- * snapshot is"). The desktop writes `autosave-<ms>.playfile`: the app's own
- * project file, so Reveal in Finder → double-click opens it in Playfield like
- * any other .playfile. Older `autosave-<ms>.json` files (and the browser's
+ * autosavePlayfile.ts — autosaves as .play files (docs/crash-recovery.md "What a
+ * snapshot is"). The desktop writes `autosave-<ms>.play` (2026.10.183 wrote
+ * `.play`, still read): the app's own project file, so Reveal in Finder →
+ * double-click opens it in Playfield like any other .play file. Older `autosave-<ms>.json` files (and the browser's
  * IndexedDB, which keeps the JSON shape) still read through parseSnapshot.
  *
  * "Light": the file holds one graph item (exactly what Save writes: nodes,
@@ -14,27 +14,28 @@
 import { writePlayfile } from '../playfile/writer';
 import { readPlayfile } from '../playfile/reader';
 import { fromUtf8 } from '../playfile/bytes';
+import { PLAYFILE_EXT } from '../playfile/format';
 import { SNAPSHOT_FORMAT, isPlayfileSnapshot, parseSnapshot, snapshotFileName, snapshotFrom, type ProjectInfo, type Snapshot } from './autosave';
 
 const itemName = (project: ProjectInfo) => `${project.name ?? 'Untitled'} (autosave)`;
 
-/** A snapshot as a .playfile: `{ file: autosave-<ms>.playfile, bytes }`. */
+/** A snapshot as a .play file: `{ file: autosave-<ms>.play, bytes }`. */
 export async function buildSnapshotPlayfile(graphJson: string, project: ProjectInfo, session: string, at: number): Promise<{ file: string; bytes: Uint8Array }> {
   JSON.parse(graphJson); // a broken graph file never becomes an autosave
   const { bytes } = await writePlayfile([{
     kind: 'graph', name: itemName(project), data: graphJson,
     meta: { autosave: { format: SNAPSHOT_FORMAT, version: 1, at, session, project } },
   }], { created: new Date(at) });
-  return { file: snapshotFileName(at, 'playfile'), bytes };
+  return { file: snapshotFileName(at, 'play'), bytes };
 }
 
-/** Any snapshot's .playfile (an old JSON one, or one from the browser): for Download. */
+/** Any snapshot as a .play file (an old JSON one, or one from the browser): for Download. */
 export async function snapshotAsPlayfile(snap: Snapshot): Promise<{ name: string; bytes: Uint8Array }> {
   const { bytes } = await buildSnapshotPlayfile(JSON.stringify(snap.graph), snap.project, snap.session, snap.at);
-  return { name: `${snap.project.name ?? 'Untitled'} autosave ${new Date(snap.at).toISOString().slice(0, 16).replace(/[:T]/g, '-')}.playfile`, bytes };
+  return { name: `${snap.project.name ?? 'Untitled'} autosave ${new Date(snap.at).toISOString().slice(0, 16).replace(/[:T]/g, '-')}${PLAYFILE_EXT}`, bytes };
 }
 
-/** A .playfile autosave's bytes, or null when it isn't one (or holds no graph). */
+/** A .play (or older .playfile) autosave's bytes, or null when it isn't one (or holds no graph). */
 export async function parseSnapshotPlayfile(file: string, bytes: Uint8Array): Promise<Snapshot | null> {
   try {
     const c = await readPlayfile(bytes);
@@ -48,7 +49,7 @@ export async function parseSnapshotPlayfile(file: string, bytes: Uint8Array): Pr
   } catch { return null; }
 }
 
-/** Either kind of snapshot file: a .playfile's bytes, or a .json's text. */
+/** Either kind of snapshot file: a .play file's bytes, or a .json's text. */
 export async function readAnySnapshot(file: string, data: Uint8Array | string): Promise<Snapshot | null> {
   if (isPlayfileSnapshot(file)) return parseSnapshotPlayfile(file, typeof data === 'string' ? new TextEncoder().encode(data) : data);
   return parseSnapshot(file, typeof data === 'string' ? data : fromUtf8(data));

@@ -1,5 +1,5 @@
 /**
- * The small export format menu (".playfile" or the readable format), opened
+ * The small export format menu (".play" or the readable format), opened
  * at the button that asked; PlayfileHost renders it.
  */
 import { create } from 'zustand';
@@ -9,8 +9,8 @@ import type { IconName } from '../ui/iconPaths';
 export const useFormatMenu = create<{ at: { x: number; y: number } | null; items: MenuItem[]; title?: string }>(() => ({ at: null, items: [] }));
 
 /**
- * Offer ".playfile" and the readable format at a button (or a point).
- * Each option is `[label, hint, run]`; the first is the .playfile one.
+ * Offer ".play" and the readable format at a button (or a point).
+ * Each option is `[label, hint, run]`; the first is the .play file one.
  */
 export function chooseExportFormat(anchor: Element | { x: number; y: number } | null, options: Array<{ label: string; hint?: string; icon?: IconName; run: () => unknown }>, title = 'Export'): void {
   let at = { x: window.innerWidth / 2 - 130, y: window.innerHeight / 2 - 60 };

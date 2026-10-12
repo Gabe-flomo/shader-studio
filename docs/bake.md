@@ -135,7 +135,7 @@ extra.
 
 The Library and the Files page count a Baked node as a use of its video, so
 **Clean up** doesn't delete it. Baked nodes stored inside another Baked node
-count too. `.playfile` bundles carry the video like a Video layer's, because
+count too. `.play` bundles carry the video like a Video layer's, because
 both use the `videoId` key.
 
 ## Time sync

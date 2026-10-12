@@ -10,7 +10,7 @@
  *                   "+ Add effect → Your effects"
  *
  * Both are lists in localStorage (like the palette presets), so they travel
- * in library ZIPs, `.playfile` library items, profile ZIPs and the workspace
+ * in library ZIPs, `.play` library items, profile ZIPs and the workspace
  * folder, and show on the Files page (Presets). Pure functions over a KV so
  * the tests and the importers can use them without a browser.
  */

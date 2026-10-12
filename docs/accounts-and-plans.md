@@ -82,7 +82,7 @@ layer greyed out with "needs Pro", and nothing is ever deleted.
 ## 5. One Playfield file format
 
 Today there are several: `.present.json`, play files, library ZIPs, graph JSON,
-`.glsl`. The plan is one container, **`.playfile`** (built: its spec is
+`.glsl`. The plan is one container, **`.play`** (built: its spec is
 [playfile-format.md](playfile-format.md); it was called `.playfield` here at
 first):
 
@@ -91,7 +91,7 @@ first):
   signatures. The typed payloads sit inside, and a single file can carry
   several kinds, such as a presentation bundled with its graphs, GLSL files
   and images.
-- The app opens any `.playfile` and says what's inside before importing, the
+- The app opens any `.play` and says what's inside before importing, the
   same way the Files page's Install works today.
 - **Node packs** (`kind: nodes`) can be **signed** by their author, so you know
   who made them, and optionally **sealed**:
@@ -108,12 +108,12 @@ first):
 ## 6. Sharing and hosting
 
 - **No hosted links to Plays or files.** You share by sending the file (the
-  `.playfile` bundle). Nothing is stored on a server.
+  `.play` bundle). Nothing is stored on a server.
 - **The app moves off GitHub Pages** to its own domain. GitHub Pages can hold the
   landing page.
 - **Later: a community site** (separate from the app) hosting **presentations**
   as lessons. Each one can bundle downloadable files (graphs, GLSL,
-  `.playfile` packs) that open in Shader Studio. A marketplace for node packs
+  `.play` packs) that open in Shader Studio. A marketplace for node packs
   could follow. Both are out of scope for the first version.
 
 ## 7. Decisions (27 Sep 2026)
@@ -136,7 +136,7 @@ first):
 5. **File formats:**
    - Graphs, groups, presentations, GLSL and the rest can still be exported as
      readable JSON, and anyone can share or sell those.
-   - **Nodes are only exported as `.playfile` node packs**: signed, and
+   - **Nodes are only exported as `.play` node packs**: signed, and
      optionally sealed. Importing packs works on Free.
 6. **Sealed packs:** signature plus encryption at rest, and a little beyond
    "good enough"; see section 9 for how far protection can go.
@@ -223,8 +223,8 @@ makes it impossible for software that runs on the buyer's machine.
    if its files were modified): modest, and easy to overdo.
 5. **Periodic online checks** (decided: every 7 days, with a 30-day offline
    grace): stronger against shared licences while keeping "works offline".
-6. **The `.playfile` envelope** (shipped: container v2,
-   [playfile-format.md](playfile-format.md), "Container v2"): a `.playfile` is
+6. **The `.play` envelope** (shipped: container v2,
+   [playfile-format.md](playfile-format.md), "Container v2"): a `.play` is
    no longer a ZIP any archive tool opens; it's encrypted (AES-256-GCM, a key
    per file from an app-embedded secret and the file's salt) and a changed file
    is refused. This is obscurity, like sealing: it stops casual opening,
@@ -272,11 +272,11 @@ sign-in.
    Pro features move into their own lazily-loaded code chunks. The desktop
    build encrypts those chunks, and Rust decrypts them for a valid licence.
    The web app serves them only after sign-in.
-3. **The `.playfile` container: done** ([playfile-format.md](playfile-format.md)).
+3. **The `.play` container: done** ([playfile-format.md](playfile-format.md)).
    The manifest, the one reader and writer with their checks, open anything
    (Import, Install, drop on the window, the desktop file association), the
    preview with keep both / replace, bundles that bring what a graph or
-   presentation uses, and `.playfile` offered at every download next to the
+   presentation uses, and `.play` offered at every download next to the
    readable format. The old formats still open. Not yet: reading a file passed
    on the command line on Windows and Linux.
 4. **Node packs: done** (same doc). Signed with a per-author Ed25519 key

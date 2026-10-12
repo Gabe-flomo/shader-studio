@@ -1,5 +1,5 @@
 /**
- * The export summary: what goes in the .playfile (each item and its size),
+ * The export summary: what goes in the .play file (each item and its size),
  * what's sealed, who signs it and with which key, the version it carries
  * (bumped when this version has gone out already), then the download.
  */
@@ -13,7 +13,7 @@ import { Icon } from '../ui/Icon';
 import { Callout } from '../ui/Callout';
 import { toast } from '../ui/toastStore';
 import { formatSize } from '../../utils/library';
-import { KIND_LAYOUT, PLAYFILE_EXT } from '../../playfile/format';
+import { KIND_LAYOUT, PLAYFILE_EXT, PLAYFILE_LABEL } from '../../playfile/format';
 import { bumpVersion, compareVersions, nextExportVersion, parseVersion, type Validation } from '../../nodePacks/assemble';
 import { exportPreparedPack, preparePackExport, type PreparedExport } from '../../nodePacks/app';
 import type { PackProject } from '../../nodePacks/types';
@@ -67,7 +67,7 @@ export function PackExportDialog({ project, validation, onClose, onExported }: {
       footer={<>
         <span style={{ flex: 1, font: `500 12px ${fontFamily.mono}`, color: tk.text.muted }}>{prep ? formatSize(prep.totalBytes) : ''}</span>
         <Button variant="ghost" onClick={onClose}>Cancel</Button>
-        <Button variant="primary" icon="export" disabled={!prep || busy || !versionOk || errors.length > 0} onClick={() => { void go(); }}>{busy ? 'Exporting…' : `Download ${PLAYFILE_EXT}`}</Button>
+        <Button variant="primary" icon="export" disabled={!prep || busy || !versionOk || errors.length > 0} onClick={() => { void go(); }}>{busy ? 'Exporting…' : `Download ${PLAYFILE_LABEL}`}</Button>
       </>}>
       <div style={{ padding: '14px 20px 18px', display: 'flex', flexDirection: 'column', gap: 12 }}>
         {errors.length > 0 && (

@@ -26,6 +26,7 @@ import {
 import { buildSnapshotPlayfile, readAnySnapshot, snapshotAsPlayfile } from './autosavePlayfile';
 import { APP_VERSION } from './appVersion';
 import { fromBase64, toBase64 } from '../playfile/bytes';
+import { PLAYFILE_MIME } from '../playfile/format';
 import { copyCrashReport, latestCrashReport, primeCrashEnv, revealCrashReport, saveCrashReport, showCrashReport, useCrashReports } from './crashReports';
 import { lastCapturedError, onContextLoss, persistNow } from '../lib/crashLog';
 
@@ -39,16 +40,16 @@ async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T
 // ── Where snapshots live ─────────────────────────────────────────────────────
 
 interface SnapshotStore {
-  /** Does it write .playfile snapshots (the desktop) or JSON ones (IndexedDB)? */
+  /** Does it write .play snapshots (the desktop) or JSON ones (IndexedDB)? */
   playfile: boolean;
   list(): Promise<string[]>;
-  /** A .playfile's bytes, a .json's text. */
+  /** A .play file's bytes, a .json's text. */
   read(file: string): Promise<Uint8Array | string>;
   write(file: string, body: Uint8Array | string): Promise<void>;
   remove(file: string): Promise<void>;
 }
 
-// A .playfile crosses the bridge as base64 (an autosave is a few KB: no media is bundled).
+// A .play file crosses the bridge as base64 (an autosave is a few KB: no media is bundled).
 const tauriStore: SnapshotStore = {
   playfile: true,
   list: () => invoke<string[]>('autosave_list'),
@@ -295,14 +296,14 @@ export function formatClock(ms: number, now = Date.now()): string {
   return new Date(now).toDateString() === d.toDateString() ? time : `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })} ${time}`;
 }
 
-/** An autosave as a .playfile, saved where you choose (the browser's are kept as JSON; the desktop's are .playfile already). */
+/** An autosave as a .play file, saved where you choose (the browser's are kept as JSON; the desktop's are .play files already). */
 export async function downloadSnapshot(file: string): Promise<void> {
   let snap: Snapshot | null = null;
   try { snap = await readAnySnapshot(file, await snapshots().read(file)); } catch { snap = null; }
   if (!snap) { toast.error('That autosave can’t be read'); return; }
   const { name, bytes } = await snapshotAsPlayfile(snap);
   const { saveBinaryFile } = await import('../utils/fileIO');
-  await saveBinaryFile(bytes, name, 'application/x-playfile');
+  await saveBinaryFile(bytes, name, PLAYFILE_MIME);
 }
 
 /** Reasons a report was already written for, by the page (a fatal error) or by Rust (a panic). */

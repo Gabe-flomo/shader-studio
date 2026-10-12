@@ -28,7 +28,7 @@ Choke points:
 
 - **localStorage saves** — `safeSetItem` (`utils/fileIO.ts`) compares the new value's length with what the key holds now and asks `roomNow(delta)`. That covers graphs (with their Play setup and takes), presentations, GLSL shaders, scripts and layer kinds (now routed through `safeSetItem`), every preset list, drum kits, and the importers that write through it.
 - **Uploads into the media library** — `addImage` and `addVideoFile` (images, videos, sounds and drum-pad samples all go through these) `await ensureRoom(blob.size)` first.
-- **Imports** — `runImport` (`.playfile`, node packs) adds up the ticked rows' bytes; `runInstall` (library/profile ZIPs) adds up the snapshot and its files (a *replace* first frees what is here, so only the difference counts).
+- **Imports** — `runImport` (`.play`, node packs) adds up the ticked rows' bytes; `runInstall` (library/profile ZIPs) adds up the snapshot and its files (a *replace* first frees what is here, so only the difference counts).
 - **Takes** — `keepTake` (`lib/takes.ts`) checks the take's JSON length (its audio frames included) before it is added to the setup.
 
 `ensureRoom` throws a `StorageLimitError` after showing the toast; callers that would show their own error toast check `isStorageLimitError` and stay quiet.

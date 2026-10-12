@@ -34,9 +34,9 @@ Saving asks exactly that: **Minor** (default, Enter), **Major**, or **New graph*
 4. **Versions list.** Grouped by major (Family 1, Family 2…), newest first inside each. Rename a family ("2: warmer palette") with an optional label per major.
 5. **Name chip.** Shows "Curves 2.3" with the dirty dot.
 6. **Export.**
-   - `.playfile` carries the series: all versions, or the current one (a choice in Export).
+   - `.play` carries the series: all versions, or the current one (a choice in Export).
    - "Load a version" works from Files.
-   - A `.playfile` with a series imports as a series.
+   - A `.play` with a series imports as a series.
 7. **Cap.** 30 versions is too few for a series. Make it per series (say 200), still dropping the oldest *minor* versions first and never a family's first or latest.
 8. **Later (Play):** a layer that cycles through a series' versions (majors, or one family's minors) as backgrounds: "pattern stacking" over iterations of one idea.
 
@@ -67,7 +67,7 @@ Saving asks exactly that: **Minor** (default, Enter), **Major**, or **New graph*
 - The name chip and the versions list show 2.3 numbers; the list is grouped by family.
 
 - Files shows versions as 2.3 in Family folders (#698).
-- `.playfile`: export this version or the whole series; a whole series imports with its versions under a new name (#700).
+- `.play`: export this version or the whole series; a whole series imports with its versions under a new name (#700).
 - Play Background: the graph picker can queue a series' every version, or the newest of each family, as sources ("Curves 2.3"), so Change background steps through iterations of one idea.
 
 ## Saved graphs by time (2026-10-10)
@@ -97,7 +97,7 @@ Not crash recovery (docs/crash-recovery.md keeps snapshots of unsaved work outsi
 1. The store (IndexedDB, migration, size limit) with tests, with no UI change yet.
 2. The save menu and name chip ("Curves 2.3").
 3. The Files Series view, and opening any version.
-4. `.playfile` export of a whole series or one version.
+4. `.play` export of a whole series or one version.
 5. Later: the Play layer that cycles a series' versions.
 ## Questions (answered above)
 

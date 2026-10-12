@@ -494,7 +494,7 @@ function App() {
     return useToastStore.subscribe(clear);
   }, [page]);
 
-  // Opening a .playfile shows what came in on its page (src/playfile/app.ts).
+  // Opening a .play file shows what came in on its page (src/playfile/app.ts).
   useEffect(() => {
     const go = (e: Event) => { const p = (e as CustomEvent<Page>).detail; if (p) setPage(p); };
     window.addEventListener('playfile-open-page', go);

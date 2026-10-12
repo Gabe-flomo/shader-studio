@@ -77,7 +77,7 @@ export function ItemPage({ inv, node, compact, onOpen, onMenu, primary, onExport
       {/* Actions */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: compact ? -2 : -6, paddingLeft: compact ? 0 : 54 }}>
         {primary && <Button size="sm" variant="primary" icon={primary.icon} onClick={primary.onClick}>{primary.label}</Button>}
-        {onExportPlayfile && <Button size="sm" icon="export" onClick={onExportPlayfile} title="This and what it uses, in one file that opens anywhere">Export as .playfile…</Button>}
+        {onExportPlayfile && <Button size="sm" icon="export" onClick={onExportPlayfile} title="This and what it uses, in one file that opens anywhere">Export as a .play file…</Button>}
         {onExportReadable && <Button size="sm" icon="code" onClick={onExportReadable} title="A file you can read and edit">Export readable…</Button>}
         {onDuplicate && <Button size="sm" icon="copy" onClick={onDuplicate}>Duplicate</Button>}
         {onRemove && <Button size="sm" variant="ghost" icon="trash" onClick={onRemove}>Delete…</Button>}
@@ -111,7 +111,7 @@ export function ItemPage({ inv, node, compact, onOpen, onMenu, primary, onExport
           {(v.media as Array<{ id?: unknown; name?: unknown; kind?: unknown; linked?: unknown }>).length > 0 && <>
             <span style={capsLabel(tk)}>Files its layers use</span>
             {(v.media as Array<{ id?: unknown; name?: unknown; kind?: unknown; linked?: unknown }>).map(m => (
-              <span key={String(m.id)} style={{ fontSize: 12, color: tk.text.secondary }}>{String(m.kind) === 'video' ? 'Video' : String(m.kind) === 'font' ? 'Font' : 'Sound'} “{String(m.name || m.id)}”{m.linked ? ' · a linked-folder file (kept as a link)' : ' · from the library (a .playfile export takes it along)'}</span>
+              <span key={String(m.id)} style={{ fontSize: 12, color: tk.text.secondary }}>{String(m.kind) === 'video' ? 'Video' : String(m.kind) === 'font' ? 'Font' : 'Sound'} “{String(m.name || m.id)}”{m.linked ? ' · a linked-folder file (kept as a link)' : ' · from the library (a .play file export takes it along)'}</span>
             ))}
           </>}
           {(v.excluded as unknown[]).length > 0 && <>

@@ -6,7 +6,7 @@
  * listing the built-in kits (generated drums) and the saved ones, each with
  * Replace (every pad, the numbers, the settings and the effect chain) or
  * Merge (the kit's sounds land on this layer's empty pads). A saved kit can
- * be renamed, exported as a .playfile with its samples, or deleted. A kit
+ * be renamed, exported as a .play file with its samples, or deleted. A kit
  * whose samples this device lacks says so; loaded, those pads show "missing".
  */
 import { useEffect, useState, useSyncExternalStore } from 'react';
@@ -56,7 +56,7 @@ export function DrumKitRow({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
           <Button size="sm" icon="save" onClick={() => { void save(); }} title="Keep every pad, its numbers, the kit’s settings and its effect chain as a preset on this device">Save kit…</Button>
           <Button size="sm" icon="import" onClick={() => setOpen(true)} title="Load a built-in or saved kit into this layer">Load kit…</Button>
         </>
-      ), 'A kit is the whole layer as a preset: every pad’s sound and settings, its numbers, Keys/MIDI/Pad grid, Volume and the effect chain. Samples are named by their library id, so a kit made here plays here; exported as a .playfile it takes its samples along.')}
+      ), 'A kit is the whole layer as a preset: every pad’s sound and settings, its numbers, Keys/MIDI/Pad grid, Volume and the effect chain. Samples are named by their library id, so a kit made here plays here; exported as a .play file it takes its samples along.')}
       {open && <KitSheet layer={l} ctx={ctx} onClose={() => setOpen(false)} />}
     </>
   );
@@ -111,7 +111,7 @@ function KitSheet({ layer: l, ctx, onClose }: { layer: DrumPadLayer; ctx: Editor
       {menu && (
         <Menu x={menu.x} y={menu.y} minWidth={220} title={menu.kit.name} onClose={() => setMenu(null)} items={[
           { label: 'Rename…', icon: 'edit', onSelect: () => { void rename(menu.kit); } },
-          { label: 'Save as a .playfile…', icon: 'export', hint: 'The kit with the samples it uses, in one file that opens anywhere', onSelect: () => { void exportKit(menu.kit); } },
+          { label: 'Save as a .play file…', icon: 'export', hint: 'The kit with the samples it uses, in one file that opens anywhere', onSelect: () => { void exportKit(menu.kit); } },
           'separator',
           { label: 'Delete…', icon: 'trash', danger: true, onSelect: () => { void remove(menu.kit); } },
         ]} />

@@ -1,5 +1,5 @@
 /**
- * Signing .playfile files (docs/playfile-format.md, "Signing").
+ * Signing .play file files (docs/playfile-format.md, "Signing").
  *
  * Each author has one Ed25519 key pair, made the first time they export a
  * node pack. The private key is a 32-byte seed kept on this device: in the

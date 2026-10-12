@@ -1,7 +1,7 @@
-//! .playfile support on the desktop (docs/playfile-format.md, "Desktop"):
+//! .play file support on the desktop (older .playfile files too) (docs/playfile-format.md, "Desktop"):
 //!
 //! - Files opened with the app (double-click in Finder, dropped on the Dock
-//!   icon: the `.playfile` file association in tauri.conf.json) arrive as a
+//!   icon: the `.play` / `.playfile` file association in tauri.conf.json) arrive as a
 //!   `RunEvent::Opened`. They're kept until the web side asks
 //!   (`opened_files_take`, for a launch by a file) and announced as an
 //!   `open-files` event (for a file opened while the app runs).
@@ -46,7 +46,7 @@ pub fn opened_files_take(state: tauri::State<OpenedFiles>) -> Vec<String> {
 #[tauri::command]
 pub fn open_file_read(path: String) -> Result<Response, String> {
     if !is_container(&path) {
-        return Err("Only .playfile files open this way.".into());
+        return Err("Only .play files open this way.".into());
     }
     let meta = std::fs::metadata(&path).map_err(|e| format!("Couldn't read it: {e}"))?;
     if !meta.is_file() {
@@ -88,6 +88,7 @@ mod tests {
 
     #[test]
     fn only_container_files() {
+        assert!(is_container("/Users/a/Downloads/My pack.play"));
         assert!(is_container("/Users/a/Downloads/My pack.playfile"));
         assert!(is_container("/x/OLD.PLAYFIELD"));
         assert!(!is_container("/etc/passwd"));

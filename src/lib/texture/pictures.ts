@@ -3,14 +3,14 @@
  * (docs/texture-node.md, "Saved graphs keep their pictures").
  *
  * Before, the picture was held only in memory (the store's `nodeTextures`) and the node
- * kept a 96 px thumbnail: a reload, a saved version or a .playfile opened without it.
+ * kept a 96 px thumbnail: a reload, a saved version or a .play file opened without it.
  * Now a picture is kept twice:
  *
  * - **in the image library** (lib/backgroundLibrary.ts) at full size, its id in
- *   `params.libraryId` (the field Files' Used by and .playfile dependencies already follow);
+ *   `params.libraryId` (the field Files' Used by and .play file dependencies already follow);
  * - **in the node** as `params._imageSrc`: a data URL at most EMBED_SIDE on its long side
  *   and EMBED_MAX_CHARS long (JPEG unless it has transparency), so the graph is complete on
- *   its own: in its saved versions, in a .playfile, on another computer.
+ *   its own: in its saved versions, in a .play file, on another computer.
  *
  * Opening a graph (`createPictureRestorer().sync`) uses the library's full-size copy when
  * this browser has it, and the embedded one otherwise.

@@ -341,7 +341,7 @@ class PlayBackground {
     }
     if (this.linkedTried.has(ref) || typeof URL === 'undefined') return '';
     this.linkedTried.add(ref);
-    // getVideo: the linked file, or the library's copy when a .playfile import brought it (the folder isn't on this computer).
+    // getVideo: the linked file, or the library's copy when a .play file import brought it (the folder isn't on this computer).
     void getVideo(ref).then(got => {
       if (!got) { this.emit(); return; }
       this.linked.set(ref, URL.createObjectURL(got.blob));

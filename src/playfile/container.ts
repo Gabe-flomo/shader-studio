@@ -1,5 +1,5 @@
 /**
- * The .playfile container envelope (format v2, docs/playfile-format.md
+ * The .play file container envelope (format v2, docs/playfile-format.md
  * "Container v2"): a fixed header, then the v1 ZIP deflated and encrypted
  * with AES-256-GCM. An archive tool sees noise; the reader sees a ZIP again.
  *

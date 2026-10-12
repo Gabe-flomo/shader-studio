@@ -10,7 +10,7 @@
  * a kit whose sample this device doesn't have shows those pads as missing.
  *
  * One list in localStorage (`shader-studio:drum-kits`), so kits travel in
- * library ZIPs, `.playfile` library items, profile ZIPs and the workspace
+ * library ZIPs, `.play` library items, profile ZIPs and the workspace
  * folder, and show on the Files page (Presets → Drum kits). Pure functions
  * over a KV: the tests and the importers use them without a browser.
  */

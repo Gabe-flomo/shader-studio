@@ -9,7 +9,7 @@ import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import { readPlayfile, isPlayfile } from '../reader';
 import { writePlayfile, writePlayfileZip, playfileName } from '../writer';
 import { forceContainerBackend, HEADER_BYTES, isContainer, unwrapContainer, wrapContainer } from '../container';
-import { CONTAINER_VERSION, DEFAULT_LIMITS, isSafePath, ITEM_KINDS, type PlayfileLimits } from '../format';
+import { CONTAINER_ACCEPT, CONTAINER_VERSION, DEFAULT_LIMITS, isContainerName, isSafePath, ITEM_KINDS, PLAYFILE_EXT, type PlayfileLimits } from '../format';
 import { canonicalJson, sha256Hex } from '../bytes';
 import { fingerprint, forceEd25519Backend, newSeed, publicKeyOf, signerFromSeed, trustAuthor, trustedFor, type SmallKV } from '../signing';
 import { minifyGlsl, sealDefinition, unsealDefinition, storedForm } from '../sealing';
@@ -62,7 +62,16 @@ describe('writing and reading', () => {
     const { manifest } = await writePlayfile([{ kind: 'graph', name: 'A/B', data: '{}' }, { kind: 'graph', name: 'A/B', data: '{}' }, { kind: 'graph', name: '../../etc', data: '{}' }]);
     expect(manifest.items.map(i => i.path)).toEqual(['graphs/A-B.graph.json', 'graphs/A-B (2).graph.json', 'graphs/-..-etc.graph.json']);
     expect(manifest.items.every(i => isSafePath(i.path))).toBe(true);
-    expect(playfileName('My: show.playfield')).toBe('My- show.playfile');
+    expect(playfileName('My: show.playfield')).toBe('My- show.play');
+    expect(playfileName('Old.playfile')).toBe('Old.play');
+    expect(playfileName('Rings')).toBe('Rings.play');
+  });
+
+  it('writes .play and still opens .playfile (and .playfield) by name', () => {
+    expect(PLAYFILE_EXT).toBe('.play');
+    for (const n of ['a.play', 'b.PLAYFILE', 'c.playfile', 'd.playfield']) expect(isContainerName(n)).toBe(true);
+    for (const n of ['a.play.json', 'graph.json', 'x.player', 'playfile']) expect(isContainerName(n)).toBe(false);
+    for (const e of ['.play', '.playfile']) expect(CONTAINER_ACCEPT.split(',')).toContain(e);
   });
 
   it('refuses an empty file list, non-ZIPs and ZIPs without a manifest', async () => {

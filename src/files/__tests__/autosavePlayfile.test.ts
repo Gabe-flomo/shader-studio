@@ -1,11 +1,11 @@
 /**
- * Autosaves as .playfile (docs/crash-recovery.md "What a snapshot is"): the
- * file is a valid .playfile that re-opens identically, as a snapshot and
+ * Autosaves as .play files (docs/crash-recovery.md "What a snapshot is"): the
+ * file is a valid .play file that re-opens identically, as a snapshot and
  * through the ordinary .playfile reader; old JSON autosaves still recover.
  */
 import { describe, expect, it } from 'vitest';
 import { buildSnapshotPlayfile, parseSnapshotPlayfile, readAnySnapshot, snapshotAsPlayfile } from '../autosavePlayfile';
-import { buildSnapshot, planRotation, snapshotFileName } from '../autosave';
+import { buildSnapshot, isPlayfileSnapshot, planRotation, snapshotFileName, snapshotFileTime } from '../autosave';
 import { isPlayfile, readPlayfile } from '../../playfile/reader';
 import { fromUtf8 } from '../../playfile/bytes';
 
@@ -21,10 +21,10 @@ const graph = {
 const graphJson = JSON.stringify(graph);
 const project = { name: 'Rings', version: 4, dirty: true };
 
-describe('autosaves as .playfile', () => {
-  it('writes a valid .playfile that re-opens identically', async () => {
+describe('autosaves as .play files', () => {
+  it('writes a valid .play file that re-opens identically', async () => {
     const { file, bytes } = await buildSnapshotPlayfile(graphJson, project, 's1', 1_791_774_262_570);
-    expect(file).toBe('autosave-1791774262570.playfile');
+    expect(file).toBe('autosave-1791774262570.play');
     expect(isPlayfile(bytes)).toBe(true);
     const snap = await parseSnapshotPlayfile(file, bytes);
     expect(snap).toMatchObject({ file, at: 1_791_774_262_570, session: 's1', project, work: 2 });
@@ -55,12 +55,20 @@ describe('autosaves as .playfile', () => {
     expect((await readAnySnapshot(file, new TextEncoder().encode(body)))!.graph).toEqual(graph);
   });
 
-  it('a JSON autosave downloads as a .playfile that reads back the same', async () => {
+  it('an autosave from 2026.10.183 (autosave-<ms>.playfile) still recovers', async () => {
+    const { bytes } = await buildSnapshotPlayfile(graphJson, project, 's1', 1_791_774_262_570);
+    const old = 'autosave-1791774262570.playfile';
+    expect(snapshotFileTime(old)).toBe(1_791_774_262_570);
+    expect(isPlayfileSnapshot(old)).toBe(true);
+    expect((await readAnySnapshot(old, bytes))!.graph).toEqual(graph);
+  });
+
+  it('a JSON autosave downloads as a .play file that reads back the same', async () => {
     const { file, body } = buildSnapshot(graphJson, project, 's0', 5000);
     const snap = (await readAnySnapshot(file, body))!;
     const { name, bytes } = await snapshotAsPlayfile(snap);
-    expect(name.endsWith('.playfile')).toBe(true);
-    const back = await parseSnapshotPlayfile(snapshotFileName(5000, 'playfile'), bytes);
+    expect(name.endsWith('.play')).toBe(true);
+    const back = await parseSnapshotPlayfile(snapshotFileName(5000, 'play'), bytes);
     expect(back!.graph).toEqual(graph);
     expect(back!.project).toEqual(project);
   });
@@ -70,10 +78,10 @@ describe('autosaves as .playfile', () => {
     expect(await readAnySnapshot('autosave-1000000000000.json', 'not json')).toBeNull();
   });
 
-  it('keeps the newest 3 across .playfile and .json', () => {
-    const files = ['autosave-1000000000001.json', 'autosave-1000000000004.playfile', 'autosave-1000000000003.playfile', 'autosave-1000000000002.json', 'session.json'];
+  it('keeps the newest 3 across .play, .playfile and .json', () => {
+    const files = ['autosave-1000000000001.json', 'autosave-1000000000004.play', 'autosave-1000000000003.playfile', 'autosave-1000000000002.json', 'session.json'];
     expect(planRotation(files)).toEqual({
-      keep: ['autosave-1000000000004.playfile', 'autosave-1000000000003.playfile', 'autosave-1000000000002.json'],
+      keep: ['autosave-1000000000004.play', 'autosave-1000000000003.playfile', 'autosave-1000000000002.json'],
       remove: ['autosave-1000000000001.json'],
     });
   });

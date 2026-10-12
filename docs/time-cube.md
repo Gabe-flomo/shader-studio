@@ -119,7 +119,7 @@ layers and Baked nodes use), its name, and its size and length (`_meta`). The
 frames themselves are not saved. They are decoded again when the graph opens.
 
 The Library and Files pages count the node as a use of its video, so **Clean
-up** keeps the video. `.playfile` bundles carry it like a Video layer's.
+up** keeps the video. `.play` bundles carry it like a Video layer's.
 
 ### Time Cube View (3D Scene)
 
