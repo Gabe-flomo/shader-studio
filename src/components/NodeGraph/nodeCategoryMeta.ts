@@ -1,3 +1,4 @@
+import { NOT_OFFERED } from '../../nodes/notOffered';
 import { ctp } from '../../theme/palette';
 // Shared node-category metadata — split out from NodeSearchPalette.tsx so
 // that file can keep exporting only its component (Vite's fast-refresh
@@ -34,4 +35,6 @@ export const CATEGORY_COLORS: Record<string, string> = Object.fromEntries(
 // ── Types to hide from node listings (internal / special) ─────────────────────
 export const HIDDEN_TYPES = new Set(['group', 'forwardCamera', 'marchPos', 'marchDist', 'marchOutput', 'scenePos', 'sceneOutput', 'spaceWarpGroup', 'passOutput', 'blurStage', 'radialFastBlurStage', 'gridRulesStep', 'curveTraceBeamStep', 'baked', 'agentInputs', 'agentOutput', 'agentStepOut', 'trailStepOut', 'agentProbeOut', 'splatProbeOut', 'agentGridOut',
   // The Texture node's video / webcam side: Texture (textureInput) is offered, its Source switch makes this one.
-  'videoInput']);
+  'videoInput',
+  // Hidden, not deleted: Pieces and Balls (nodes/notOffered.ts; one flag brings them back).
+  ...NOT_OFFERED]);

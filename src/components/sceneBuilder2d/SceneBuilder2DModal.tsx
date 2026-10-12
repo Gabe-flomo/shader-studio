@@ -6,6 +6,7 @@
  * Build puts the graph on the canvas (or rebuilds the scene it was opened from, keeping the user's
  * own edits where it can); Done closes.
  */
+import { OFFER_PIECES } from '../../nodes/notOffered';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useSceneBuilder2D, type Builder2DTab } from '../../sceneBuilder2d/store';
 import { buildFromBuilder2D } from '../../sceneBuilder2d/actions';
@@ -594,6 +595,7 @@ function ItemInspector({ id }: { id: string }) {
 
 export function ShapesTab() {
   const tk = useTokens();
+  const hasPieces = useSceneBuilder2D(s => !!s.scene.pieces);
   const selectedId = useSceneBuilder2D(s => s.selectedId);
   const select = useSceneBuilder2D(s => s.select);
   const add = (kind: string) => {
@@ -612,8 +614,11 @@ export function ShapesTab() {
           </button>
         ))}
       </div>
-      <BuilderLabel hint="Pictures made of shapes: a picture rebuilt from pieces (a Pieces node), drawn over the layers.">Pictures</BuilderLabel>
-      <PiecesCard />
+      {/* Picture in pieces is hidden, not deleted (nodes/notOffered.ts): only a scene that already has one shows its card. */}
+      {(OFFER_PIECES || hasPieces) && <>
+        <BuilderLabel hint="Pictures made of shapes: a picture rebuilt from pieces (a Pieces node), drawn over the layers.">Pictures</BuilderLabel>
+        <PiecesCard />
+      </>}
       <OlderGridCard />
       <BuilderLabel hint="A GLSL function float f(vec2 p[, float t]) that measures a shape: negative inside, positive outside. It becomes a Custom Function node.">Function shapes</BuilderLabel>
       <FunctionPicker role="shape" onPick={f => {
@@ -1050,7 +1055,7 @@ function TemplatesTab() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <BuilderNote>Starting points. Loading one replaces the form (Undo brings yours back).</BuilderNote>
-      {TEMPLATES_2D.map(t => (
+      {TEMPLATES_2D.filter(t => !t.hidden).map(t => (
         <Card key={t.key} id={`tpl2-${t.key}`} title={t.label} summary={t.blurb}
           actions={<Button size="sm" onClick={() => useSceneBuilder2D.getState().replace(templateScene(t.key))}>Load</Button>}>
           <BuilderNote>{t.blurb}</BuilderNote>

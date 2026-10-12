@@ -17,7 +17,7 @@ import { findTex, withSource } from '../../builders/textures';
 import { randomShapeAction, randomiseThisAction } from './surpriseActions';
 import { addModifier, addShape, addWarp, duplicateItem, moveBy, moveItem, moveModifierTo, moveWarp, removeItem, removeWarp, soloItem, soloWarp, toggleItemMute, toggleLookMute, toggleWarpMute, ungroup } from '../../sceneBuilder/edit';
 import { MUTED_DIM, MuteToggle, MutedTag } from '../builders/MuteToggle';
-import { GALLERY_SHAPES, type GalleryShape } from '../../sceneBuilder/thumbnails';
+import { OFFERED_GALLERY_SHAPES, type GalleryShape } from '../../sceneBuilder/thumbnails';
 import { ShapeGallery, ShapeThumb } from './ShapeGallery';
 import { NO_DRAG, OP_GLYPH } from './controls';
 import { Icon } from '../ui/Icon';
@@ -180,7 +180,7 @@ export function ShapeInspector({ sh, sizes, kindPicker = true }: { sh: ShapeSpec
   return <>
     <Row label="Name" hint="Optional: what the notes, the tree and the recipe call it."><Field value={sh.name} placeholder={def.label} aria-label="Shape name" onChange={e => set(s => { s.name = e.target.value; }, `name:${sh.id}`)} /></Row>
     {kindPicker && <Row label="Shape" hint="Its kind. Changing it resets the size settings to the new kind's.">
-      <Select ariaLabel="Shape kind" value={sh.kind} options={SHAPES.map(s => ({ value: s.kind, label: s.label }))}
+      <Select ariaLabel="Shape kind" value={sh.kind} options={SHAPES.filter(s => !s.hidden || s.kind === sh.kind).map(s => ({ value: s.kind, label: s.label }))}
         onChange={k => set(s => { s.kind = k; s.size = defaultSize(k); })} style={{ width: '100%' }} />
     </Row>}
     <BuilderNote>{def.blurb}</BuilderNote>
@@ -329,7 +329,7 @@ export function ShapesTab() {
     <Pane>
       <BuilderLabel meta={`${shapes.length} shape${shapes.length === 1 ? '' : 's'}`}>Shapes</BuilderLabel>
       {shapes.length === 0 ? <EmptyHelp id="shapes" onExample={insert} /> : <BuilderHelp id="shapes" onExample={insert} />}
-      <Card id="gallery" title="Add a shape" defaultOpen summary={`${GALLERY_SHAPES.length} shapes: click to add${NO_DRAG ? '' : ', or drag into the Scene tree'}`}>
+      <Card id="gallery" title="Add a shape" defaultOpen summary={`${OFFERED_GALLERY_SHAPES.length} shapes: click to add${NO_DRAG ? '' : ', or drag into the Scene tree'}`}>
         <BuilderNote>{NO_DRAG ? 'Tap a shape to add it beside the selection (into it, if it is a group).' : 'Click a shape to add it beside the selection (into it, if it is a group), or drag it onto a row of the Scene tree.'}</BuilderNote>
         <ShapeGallery onPick={add} />
         <Button size="sm" icon="dice" style={{ alignSelf: 'flex-start' }} onClick={() => randomShapeAction()} data-random-shape
@@ -989,7 +989,7 @@ export function TemplatesTab() {
       <BuilderHelp id="templates" />
       <BuilderNote>A template fills the whole form (Undo brings back what was there). Each is a recipe you can read and change.</BuilderNote>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 10 }}>
-        {SCENE_TEMPLATES.map(t => (
+        {SCENE_TEMPLATES.filter(t => !t.hidden).map(t => (
           <button key={t.key} type="button" data-template={t.key}
             onClick={() => { const s = parseRecipe(t.recipe).spec; replace(s); select(s.root.children[0]?.id ?? null); setTab('shapes'); }}
             style={{ textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 6, padding: 12, borderRadius: radius.control, border: `1px solid ${tk.border.default}`, background: tk.bg.panel, cursor: 'pointer', color: tk.text.primary }}>

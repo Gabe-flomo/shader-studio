@@ -9,6 +9,22 @@ Code: `src/nodes/definitions/pieces.ts` (both nodes), `src/sceneBuilder2d/pieces
 `src/store/piecesExamples.ts`. Tests: `src/nodes/__tests__/pieces.test.ts`, `src/compiler/__tests__/piecesExamples.test.ts`,
 `src/sceneBuilder2d/__tests__/pieces.test.ts`.
 
+## Hidden (since 2026-10-11)
+
+Pieces and Balls are **hidden, not deleted**. Nothing offers them any more: not the node browser, search, the Do bar,
+Switch to or starter recipes; not the 2D Scene Builder's Shapes → Pictures card ("Picture in pieces") or its template;
+not the 3D Scene Builder's "Picture balls" shape (gallery, kind menu, recipe reference) or its "Picture as balls"
+template; and the "Pictures in pieces" examples folder is gone (the examples still open by key, from What's new links).
+
+All the code stays. Graphs, scenes and recipes that already use them load, build and render unchanged: the nodes are
+still registered (no DEPRECATED badge), a 2D scene that has a Picture in pieces still shows its card to edit, and the
+builders still read `pieces …` and `picture-balls …` in recipes.
+
+**To bring them back**, set `OFFER_PIECES = true` in `src/nodes/notOffered.ts`. Every place that offers nodes reads
+`NOT_OFFERED` / `isOffered` from there (`getOfferedDefinitions`, `HIDDEN_TYPES`, `HIDDEN_NODES`, Switch to), and the
+builders' templates, shape list and examples folder read the flag. Test: `src/nodes/__tests__/notOffered.test.ts`
+(update its first case when you flip the flag).
+
 ## Pieces (2D, Grid)
 
 | Input | What it does |

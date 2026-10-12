@@ -22,6 +22,7 @@
  * everything else in the recipe still applies. printRecipe writes the shortest recipe that parses
  * back to the same scene: only what differs from the defaults.
  */
+import { OFFER_PIECES } from '../nodes/notOffered';
 import { Cursor } from '../lang/parse';
 import { lineCol } from '../lang/lex';
 import type { Arg as AstArg, Item as AstItem, Modifier } from '../lang/ast';
@@ -1052,7 +1053,7 @@ export const RECIPE_VOCABULARY_2D = {
   textures: ['texture brick node=node_4 aspect=1.5', 'picture brick h=0.6 fit=cover', 'circle r=0.4 fill=brick fit=tile tiles=3', 'background picture=brick fit=cover [still]', `grid 12 picture=brick picture-mode=${GRID_PIC_MODES.join('|')}`],
   depth: ['depth-picture pond [fit=cover] [size | size=(0.4,1.6)] [space=shift|zoom|turn shift=0.15 dir=0 focus=0] [look=top|occlude|fog|mix|light] [with=add|screen|over|tint] [picture=1] [range=(0,1)] [curve=1] [at=0.5 soft=0.05] [fog=1 haze=0.6 fog-color=] [light=3 own=0.5 glow=0.35] [near=picture|scene mix=1] [gradient=sunset gradient-on=scene|picture|both gradient-how=multiply|colorize|add gradient-amount=0.8 cycles=1 phase=0 flow=0.1]'],
   grid: [`grid 12 [rows] shape=${GRID_SHAPES.join('|')} assign=${GRID_ASSIGNS.join('|')} size=0.7 ripple=centre|corners|mouse|(x,y) freq=8 speed=0.4 target=${GRID_TARGETS.join('|')} amount=0.5 by=${GRID_COLOUR_BYS.join('|')} color= color2= glow=off picture=brick picture-mode=${GRID_PIC_MODES.join('|')}`],
-  pieces: [PIECES_VOCABULARY],
+  pieces: OFFER_PIECES ? [PIECES_VOCABULARY] : [],
   motion: ['@orbit(0.3 speed=0.25)', '@bob(0.15 dir=90)', '@spin(0.25)', '@pulse(0.25 speed=0.5)'],
   ring: ['@ring(6 r=0.5)', '@ring(6 r=0.5 inner=(5,0.2))', '@ring(6 r=0.5 levels=3 factor=1.6)'],
   modify: MODS.map(m => (m.kind === 'custom' ? '@fd("d - amp * sin(d * 40.0)" amp=0.05)' : `@${m.words[0]}${m.params.length ? `(${m.params.map((p, i) => (i ? `${p.key}=${p.def}` : String(p.def))).join(' ')})` : ''}`)),

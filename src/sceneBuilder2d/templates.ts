@@ -2,6 +2,7 @@
  * templates.ts — starting points for the 2D Scene Builder (the Recipe tab's examples) and the
  * three "2D: Scene Builder" examples, each one recipe (docs/scene-builder-2d-plan.md).
  */
+import { OFFER_PIECES } from '../nodes/notOffered';
 import { parseRecipe2D } from './recipe';
 import type { Scene2D } from './spec';
 
@@ -10,6 +11,8 @@ export interface Template2D {
   label: string;
   blurb: string;
   recipe: string;
+  /** Not listed (it still loads by key): Picture in pieces (nodes/notOffered.ts). */
+  hidden?: boolean;
 }
 
 export const TEMPLATES_2D: Template2D[] = [
@@ -34,7 +37,7 @@ export const TEMPLATES_2D: Template2D[] = [
     recipe: 'polar-repeat 6 · mirror x · smooth-union(circle r=0.12 at=(0.35,0.1), rounded-box size=(0.2,0.05) round=0.04 at=(0.55,0.2) rot=30) k=0.08 color=pink · glow 0.006 · tone aces · background night',
   },
   {
-    key: 'pieces', label: 'Picture in pieces',
+    key: 'pieces', label: 'Picture in pieces', hidden: !OFFER_PIECES,
     blurb: 'A picture rebuilt from circles, each its colour at home, that scatter on a noise field and flow back together. Pick the picture under Pictures.',
     recipe: 'texture picture · pieces picture count=36 · tone aces · background night',
   },
