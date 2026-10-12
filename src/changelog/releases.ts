@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.195',
+    date: '2026-10-12',
+    title: 'True reset',
+    highlights: [
+      { area: 'Studio', text: 'Reset is a true reset everywhere: feedback, trails, agents, step bars and smoothing all start over, so the first frame matches a fresh open.' },
+      { area: 'Studio', text: 'Wires that would make a loop are refused, with the loop named and a "Use last frame\'s instead" fix. Old graphs with a loop say where it is and can remove it.' },
+      { area: 'Studio', text: 'Draw agents: a Background setting, Palette by density, colours the space behind the walkers from their own density.' },
+    ],
+  },
+  {
     id: '2026.10.194',
     date: '2026-10-12',
     title: 'Halls of time',
