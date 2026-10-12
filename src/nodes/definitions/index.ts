@@ -154,6 +154,7 @@ export { GpuParticlesNode } from './gpuParticles';
 export { ShaderTextureNode, ShaderTextureOutputNode } from './shaderTexture';
 export { RadialFastBlurNode, RadialFastBlurStageNode } from './radialFastBlur';
 export { ChromaLensNode } from './chromaLens';
+export { DeepGlowTextureNode, DeepGlowTextureStageNode } from './deepGlow';
 export { PassNode, PassOutputNode, SampleTextureNode, EdgesTextureNode, BlurTextureNode, GlowTextureNode, ChromaTextureNode, DisplaceTextureNode, DisplacementMapNode, JumpFloodTextureNode } from './passes';
 export { TextureMaskNode, TextureLevelsNode, TextureFlowNode, TextureNeighboursNode, TextureChangeNode, DistanceShapeNode, TextureFadeNode, ReadTextureNode } from './textureTools';
 export { AgentsGroupNode, AgentInputsNode, AgentOutputNode, AgentStepOutNode, AgentSenseNode, AgentSteerNode, AgentMoveNode, AgentBySpeciesNode, AgentEmitNode, AgentDepositNode, TrailFieldNode, TrailStepOutNode, AgentProbeOutNode, DrawAgentsNode, SlimeMoldPresetNode, ParticlesPresetNode, CurlSmokePresetNode, SoundBurstPresetNode, MultiSlimePresetNode, AntsPresetNode, BoidsPresetNode, StrandsPresetNode, GrowPicturePresetNode, GalaxyPresetNode, MyceliumPresetNode, SandPlatePresetNode } from './agents';
@@ -294,6 +295,7 @@ import { GpuParticlesNode } from './gpuParticles';
 import { BlurStageNode } from './blurStage';
 import { RadialFastBlurNode, RadialFastBlurStageNode } from './radialFastBlur';
 import { ChromaLensNode } from './chromaLens';
+import { DeepGlowTextureNode, DeepGlowTextureStageNode } from './deepGlow';
 import { GridRulesNode, GridRulesStepNode, MouseButtonNode } from './gridRules';
 import { ShaderTextureNode, ShaderTextureOutputNode } from './shaderTexture';
 import { PassNode, PassOutputNode, SampleTextureNode, EdgesTextureNode, BlurTextureNode, GlowTextureNode, ChromaTextureNode, DisplaceTextureNode, DisplacementMapNode, JumpFloodTextureNode } from './passes';
@@ -554,6 +556,8 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   glowTexture: GlowTextureNode,
   chromaTexture: ChromaTextureNode,
   chromaLens: ChromaLensNode,
+  deepGlowTexture: DeepGlowTextureNode,
+  deepGlowTextureStage: DeepGlowTextureStageNode,
   displaceTexture: DisplaceTextureNode,
   displacementMap: DisplacementMapNode,
   jumpFloodTexture: JumpFloodTextureNode,

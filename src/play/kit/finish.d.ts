@@ -2,7 +2,7 @@
 export interface FnParam { key: string; label: string; min: number; max: number; step: number; value: number; hint: string; hidden: boolean }
 export type FnKind = 'grade' | 'lens' | 'chroma' | 'vignette' | 'crt' | 'bloom' | 'halation' | 'grain' | 'flicker' | 'shake' | 'time'
   | 'glitch' | 'ripple' | 'water' | 'displace' | 'mosaic' | 'mirror' | 'gradmap' | 'posterize' | 'edges' | 'feedback' | 'echo'
-  | 'pixelsort' | 'halftone' | 'ascii' | 'leaks' | 'datamosh' | 'motionx' | 'rays';
+  | 'pixelsort' | 'halftone' | 'ascii' | 'leaks' | 'datamosh' | 'motionx' | 'rays' | 'deepglow';
 /** A starting point for an effect: it sets numbers, and (`set`) a choice or two (Water's Source and Shape). */
 export interface FnPreset { name: string; values: Readonly<Record<string, number>>; set?: Readonly<Record<string, string>> }
 /** A colour kept as three hidden numbers, edited as one swatch. */
@@ -11,11 +11,17 @@ export interface FnColour { label: string; keys: readonly [string, string, strin
 export interface FnEffectDef { label: string; group: string; icon: string; summary: string; params: FnParam[]; presets?: readonly FnPreset[]; colours?: readonly FnColour[]; note?: string }
 export const FN_EFFECTS: Readonly<Record<FnKind, FnEffectDef>>;
 export const FN_KINDS: readonly FnKind[];
+/** Retired kinds and their replacement (Bloom → Deep Glow): not offered, but old stacks keep and draw them. */
+export const FN_RETIRED: Readonly<Partial<Record<FnKind, FnKind>>>;
+/** The kinds the Add menu offers (every kind but the retired). */
+export const FN_OFFERED_KINDS: readonly FnKind[];
+/** A retired effect as its replacement, of about the same strength (same id, on/off and Where); null when it isn't retired. */
+export function fnUpgradeEffect<T extends { id: string; kind: string; [key: string]: unknown }>(e: T | null | undefined): (T & { kind: FnKind }) | null;
 /** Effects that read around each point after the effects above them: each starts a pass of its own (fnSegments). */
 export const FN_STAGE_KINDS: readonly FnKind[];
 /** Effects that keep frames of their own between draws (Datamosh, Motion extract): each heads a pass of its own. */
 export const FN_TEMPORAL_KINDS: readonly FnKind[];
-/** Effects that run passes of their own over their pass's input first (Light rays): each heads a pass of its own. */
+/** Effects that run passes of their own over their pass's input first (Light rays, Deep Glow): each heads a pass of its own. */
 export const FN_PREPASS_KINDS: readonly FnKind[];
 /** What Feedback and Echo keep (their Source). */
 export const FN_SOURCE_MAPS: readonly ['picture', 'layer', 'moving', 'bright'];
@@ -179,7 +185,7 @@ export interface FnRing { readonly size: number; readonly count: number; readonl
 export function fnRing(size: number): FnRing;
 export function fnRingSize(quality: string, W: number, H: number): { frames: number; w: number; h: number; bytes: number };
 
-export function fnBuildFinal(effects: readonly FnEffect[], opts?: { tone?: string; hueCurves?: boolean; timeMap?: string; curves?: boolean; segment?: number }): { src: string; glow: boolean; time: boolean; feedback: boolean; echo: boolean; mosh: boolean; mx: boolean; rays: boolean; maps: string[]; water: boolean; lut: boolean; ascAtlas: boolean; psTrail: boolean; custom: string[]; segments: number };
+export function fnBuildFinal(effects: readonly FnEffect[], opts?: { tone?: string; hueCurves?: boolean; timeMap?: string; curves?: boolean; segment?: number }): { src: string; glow: boolean; time: boolean; feedback: boolean; echo: boolean; mosh: boolean; mx: boolean; rays: boolean; deepglow: boolean; maps: string[]; water: boolean; lut: boolean; ascAtlas: boolean; psTrail: boolean; custom: string[]; segments: number };
 
 export interface FnInput {
   finish: FnFinish;

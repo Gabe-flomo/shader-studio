@@ -51,7 +51,8 @@ They are built after the grade.
   curvature (CRT Screen). Each one changes *where* the picture is read. The picture so far goes
   into a Pass, and the next read of it is at the bent point. A run of moves shares one Pass and
   one read.
-- **Reads round a pixel**: Blur (Blur (texture)), Glow (Glow (texture), Bloom chain, then Add),
+- **Reads round a pixel**: Blur (Blur (texture)), Deep Glow (Deep Glow (texture): see
+  [deep-glow.md](deep-glow.md)),
   Light rays / Radial blur (Radial Fast Blur: see [radial-fast-blur.md](radial-fast-blur.md)),
   Chromatic aberration (Chromatic Aberration (lens): see [chromatic-aberration.md](chromatic-aberration.md))
   and Displace by a picture (Displace
@@ -65,6 +66,12 @@ They are built after the grade.
   spectrum; Channel split: red and blue copies), Amount (pixels), Direction (Radial, Axial: a halo
   round highlights, Directional), Angle, Falloff, Blur, Samples, Distortion and Centre X / Y. Old
   recipes (`chroma 6 mode=directional angle=30`) build the new node with the same Amount.
+- **Deep Glow** is After Effects-style bloom: a hot core and a long tail from a half-float mip
+  chain of hidden passes. Its controls are Intensity, Radius (pixels), Threshold, Knee, Chromatic
+  spread, Preserve colour, Composite (Add or Screen) and Tint.
+- **Glow is retired** for Deep Glow. It is no longer offered, but a scene that has a Glow card keeps
+  it and builds it as before (Glow (texture), Bloom chain, then Add). The card shows
+  **Upgrade to Deep Glow**, which swaps it in place with about the same strength.
 - **On the colour**: CRT mask (CRT Mask) has slot mask, aperture grille or shadow mask (dots), plus
   cell size, strength, scanlines, curvature and vignette.
 
@@ -72,7 +79,7 @@ The effects use at most six Pass nodes; past that, an effect is left out with a 
 builder preview draws the Pass programs itself (`components/builders/previewPasses.ts`).
 
 **Bloom and Scanlines** are no longer finish options. The older Bloom read the frame before, so
-moving things smeared; Glow is the same-frame kind. CRT mask has scanlines with the tube's mask.
+moving things smeared; Deep Glow is the same-frame kind. CRT mask has scanlines with the tube's mask.
 A scene made with them keeps them: they still build as before, and the Finish card shows them
 under *older effects* until they are set to 0. The recipe still reads `bloom 0.5` and
 `scanlines 0.3`, and prints them back while they are set.
@@ -91,13 +98,13 @@ crt mask=aperture size=4 strength=0.7 curve=0.05 vignette=0.35 scanlines=0.3
 chroma 6 mode=directional angle=30 · chroma 4 look=split blur=0
 fx displace 0.12 scale=2 speed=0.2 · fx displace picture=clouds pixels=40
 fx swirl 2 · fx ripple 0.02 freq=12 · fx lens 0.2 · fx pixelate 0.03 · fx kaleido 8 rotate=15
-fx blur 4 · fx glow 1.2 threshold=0.5 radius=16
+fx blur 4 · fx deepglow 1.5 radius=300 spread=0.4 · fx glow 1.2 threshold=0.5 radius=16
 fx rays 1.2 mode=average threshold=0 · fx rays 0.8 threshold=0.5 cx=0.3 tint=#ffcc88
 ```
 
 ## Surprise me
 
-Now and then, Surprise me colours the shapes from a library palette's slots, adds a same-frame Glow
+Now and then, Surprise me colours the shapes from a library palette's slots, adds a Deep Glow
 and a touch of grade (saturation, levels). Rarely, it adds one effect that suits a glowing scene: a
 little chromatic aberration or a CRT mask. It never sets Bloom or Scanlines.
 

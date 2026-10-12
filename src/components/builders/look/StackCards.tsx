@@ -18,7 +18,7 @@ import { TexturePicker } from '../TexturePicker';
 import { Row } from '../../sceneBuilder/controls';
 import type { TexSource } from '../../../builders/textures';
 import {
-  moveStackItem, newStackItem, nextStackId, paramShown, placeStackItem, stackSummary, stackValue,
+  moveStackItem, newStackItem, nextStackId, paramShown, placeStackItem, stackOffered, stackSummary, stackUpgrade, stackValue,
   type LookParam, type StackItem, type StackKindDef,
 } from '../../../builders/look/stack';
 import type { Vec3 } from '../../../builders/look/palette';
@@ -134,6 +134,14 @@ function StackCard({ it, def, index, count, props }: { it: StackItem; def: Stack
       {open && (
         <div style={{ padding: '4px 12px 12px', display: 'flex', flexDirection: 'column', gap: 6, borderTop: `1px solid ${tk.border.subtle}`, ...(it.on ? {} : MUTED_DIM) }}>
           <BuilderNote>{def.blurb}</BuilderNote>
+          {def.retired && (
+            // A retired kind (Glow): it still builds as before; one click swaps it for its replacement, keeping its place.
+            <div data-look-retired={it.kind} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <BuilderNote style={{ flex: 1, minWidth: 160 }}>{def.label} is retired: it still builds as before. {def.retired.label} is the newer one.</BuilderNote>
+              <Button size="sm" variant="secondary" data-look-upgrade={it.id}
+                onClick={() => props.onEdit(items => items.map(x => (x.id === it.id ? stackUpgrade(x, Object.fromEntries(props.defs.map(d => [d.kind, d]))) ?? x : x)))}>Upgrade to {def.retired.label}</Button>
+            </div>
+          )}
           {def.params.filter(p => paramShown(it, p, def)).map(p => (
             <ParamRow key={p.key} p={p} it={it} play={props.playParam?.(it, p.key)} set={(v, key) => up(x => { x.params[p.key] = v; }, key)} />
           ))}
@@ -157,7 +165,7 @@ export function StackCards(props: StackCardsProps) {
   return (
     <div data-look-stack={props.name} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-        {props.defs.map(d => (
+        {stackOffered(props.defs).map(d => (
           <Button key={d.kind} size="sm" variant="ghost" icon="plus" title={d.blurb} data-look-add={d.kind}
             onClick={() => props.onEdit(items => [...items, newStackItem(d, nextStackId(items, props.idPrefix))])}>{d.label}</Button>
         ))}
