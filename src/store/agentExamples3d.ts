@@ -7,7 +7,9 @@
  *  - Swarm round a torus: a ray-marched torus, the swarm colliding with it through Collide (3D
  *    scene) and drawn through the scene's own camera, hidden behind it (Depth);
  *  - Galaxy in 3D: stars on tilted orbits round a flat disc, the camera above it;
- *  - Fireflies in the dark: depth of field (a shallow focus, out-of-focus fireflies as bokeh).
+ *  - Fireflies in the dark: depth of field (a shallow focus, out-of-focus fireflies as bokeh);
+ *  - Shapes (docs/particle-shapes.md): Voxel slime (the 3D slime as voxels, Faces + edges), Rod swarm
+ *    (the 3D flock as rods along their flight, Lit), Cube storm (tumbling cubes in a swirl, Flat).
  *
  * Every node, inside the group (and inside the scene and the march) too, carries a plain-language
  * note, and every Expression Block explains each named line, which examples.test.ts checks. All of
@@ -67,6 +69,18 @@ export const AGENT_3D_EXAMPLE_INDEX: Record<string, { label: string; description
   agent3dGalaxy: {
     label: 'Galaxy in 3D',
     description: 'A spiral galaxy you can fly round: stars on their own circular orbits in a thin disc, crowding into two turning spiral arms, a puffy bulge in the middle. The camera looks down at it from above and slowly circles; a little depth of field softens the near and far stars.',
+  },
+  agent3dVoxelSlime: {
+    label: 'Voxel slime',
+    description: 'The 3D slime mold drawn as voxels: every walker snapped to a grid and drawn as a solid cube, one cube per filled cell, shaded by face (top light, sides mid, bottom dark) with thin dark edges. The tubes of the network read as blocky Minecraft-like structures, cheap to draw because each filled cell is one cube and Faces shading needs no lighting.',
+  },
+  agent3dRodSwarm: {
+    label: 'Rod swarm',
+    description: 'The 3D flock drawn as solid rods pointing along their flight, lit by a key light with a rim: every bird a little stick that stretches the faster it flies, so the flocks read as streams of needles wheeling through the box.',
+  },
+  agent3dCubeStorm: {
+    label: 'Cube storm',
+    description: 'Cubes caught in a storm: a swirl round the middle and curl noise toss tens of thousands of small cubes, each tumbling on its own axis, drawn Flat (no lighting at all, a graphic look) in a stormy palette. Solid cubes hide each other, so the storm has real depth.',
   },
   agent3dFireflies: {
     label: 'Fireflies in the dark',
@@ -578,6 +592,92 @@ export function fireflies3dNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
   return nodes;
 }
 
+// ── Shapes (docs/particle-shapes.md) ─────────────────────────────────────────
+
+/** An example's Draw agents (by id) with new settings and a new note; the rest of the graph as it was. */
+function withDraw(nodes: GraphNode[], id: string, params: Record<string, unknown>, lines: string[]): GraphNode[] {
+  return nodes.map(nd => (nd.id === id ? { ...nd, params: { ...nd.params, ...params, ...note(lines) } } : nd));
+}
+
+/** Voxel slime: the 3D slime mold, drawn as voxels (Faces + edges, one cube per cell). */
+export function voxelSlime3dNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
+  return withDraw(slime3dNodes(x, y, withOutput), 's3Draw', {
+    style: 'points', shape: 'voxel', shading: 'facesEdges', voxelGrid: 0.03, voxelDedupe: 'on', edgeWidth: 0.12, shapeSizeBy: 'fixed',
+    colorBy: 'single', palette: 'ab', colorA: [0.95, 0.62, 0.3], colorB: [0.3, 0.62, 1.0], brightness: 0.5, scaleBy: 'walker', fade: 'off',
+    camDist: 3.6, camAngle: 25, camElevation: 28, rotSpeed: 6, blur: 0,
+  }, [
+    'Draw agents with Shape Voxel: every walker snapped to a grid 0.03 wide and drawn as a solid cube filling its cell. One per cell On: a quick pass finds which walker owns each cell, so a cell crowded with a hundred walkers still costs one cube.',
+    'Shading Faces + edges: each face a fixed brightness (top light, sides mid, bottom dark) with a thin dark outline. No lighting maths, and One per cell keeps a crowded cell to one cube, so it stays cheap with a quarter of a million walkers; it is the best look for voxels.',
+    'One colour (Colour A, warm clay): the faces\' brightness alone shapes the blocks. Brightness 0.5 is the colour itself.',
+    'Try: Voxel grid 0.06 for chunky blocks; Colour by Heading for a speckled mix; Shading Flat for the cheapest look; One per cell Off to see how much more overlapping cubes cost (Performance panel).',
+  ]);
+}
+
+/** Rod swarm: the 3D flock, drawn as rods along their flight (Lit). */
+export function rodSwarm3dNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
+  return withDraw(flock3dNodes(x, y, withOutput), 'f3Draw', {
+    style: 'points', shape: 'rod', shading: 'lit', facing: 'motion', shapeSize: 0.006, rodLength: 5, rodStretch: 0.6, ambient: 0.28, rim: 0.5, maxShapes: 40960,
+    colorBy: 'heading', palette: 'ab', colorA: [1.0, 0.72, 0.4], colorB: [0.45, 0.75, 1.0], brightness: 0.55, scaleBy: 'walker', fade: 'off',
+    camDist: 2.6, blur: 0,
+  }, [
+    'Draw agents with Shape Rod: a bird is a solid stick 5 times longer than thick (Rod length), pointing along its flight (Facing: along motion), and longer the faster it flies (Stretch with speed 0.6).',
+    'Max shapes 40960: of the 262,144 birds about one in seven is drawn, spread over the whole flock, so each rod can be seen on its own (all of them pack the flocks solid). Every bird still flies.',
+    'Shading Lit: a key light from above left of the camera, Ambient 0.28 on the dark side and a Rim of light round each rod\'s outline, so the streams read as round and solid. A rod is shaded once per face, so Lit costs no more than Flat; the count is what costs (the note under Shape).',
+    'Try: Max shapes 0 to draw every bird (watch the note under Shape); Size 0.01 for thicker rods; Shading Lit + edges for outlined sticks.',
+  ]);
+}
+
+/** Cube storm: cubes tossed by a swirl and curl noise, each tumbling on its own axis, drawn Flat. */
+export function cubeStorm3dNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
+  const X = (dx: number) => x + dx, Y = (dy: number) => y + dy;
+  const inputs = n('agentInputs', 'csIn', 0, 160, {
+    _groupOriginal: true, extraInputs: [],
+    ...note(['Agent Inputs: this cube as the step begins; the forces to the right read its position from here by themselves.']),
+  });
+  const curl = n('agentCurl', 'csCurl', 420, 40, {
+    strength: 0.5, size: 0.5, evolve: 0.4,
+    ...note(['Curl noise in 3D: gusty currents (Strength 0.5) that churn as they change (Evolve 0.4), tossing the cubes about.', 'Try: Strength 1.5 for a wilder storm.']),
+  });
+  const swirl = n('agentAttract', 'csSwirl', 840, 40, {
+    target: 'point', x: 0, y: 0, z: 0, strength: 0.9, reach: 1.2, swirl: 3, falloff: 'far',
+    ...note(['Attract / Repel with Swirl 3: a pull toward the middle (Strength 0.9, everywhere: Falloff Far) that also stirs everything round it, the eye of the storm. Added to the currents.']),
+  }, { also: ['csCurl', 'force'] });
+  const integrate = n('agentIntegrate', 'csMove', 1260, 40, {
+    drag: 0.9, maxSpeed: 1.4, mass: 1, edges: 'bounce',
+    ...note(['Integrate: the cubes speed up with the forces and Drag 0.9 keeps them from running away. Bounce turns back any that reach the box\'s walls.']),
+  }, { force: ['csSwirl', 'force'] });
+  const output = n('agentOutput', 'csOut', 1680, 100, {
+    _groupOriginal: true,
+    ...note(['Agent Output: Position and Velocity from Integrate.']),
+  }, { position: ['csMove', 'position'], velocity: ['csMove', 'velocity'] });
+  const emit = n('agentEmit', 'csEmit', X(0), Y(0), {
+    mode: 'fill', shape: 'ball', heading: 'random', x: 0, y: 0, z: 0, size: 0.7, life: 0, speed: 0.2, speedVar: 0.5, spread: 1,
+    ...note(['Emit, Fill: every cube is born at once somewhere in a ball 0.7 round the middle, moving a little in a random direction.']),
+  });
+  const group = agentsGroup('cubeStorm', X(420), Y(0), 'csEmit', [inputs, curl, swirl, integrate, output], {
+    label: 'Cube storm', space: '3d', tier: '64k', preroll: 2,
+    ...note([
+      'Agents with Space 3D: 65,536 cubes (64k), 2 steps a frame. Inside (double-click): Curl noise → Attract / Repel (the swirl) → Integrate.',
+      'Try: Count 256k for a denser storm; the note under Draw agents\' Shape says what it costs.',
+    ]),
+  });
+  const back = backdrop('cs', X(420), Y(420), 'Storm sky', [0.02, 0.022, 0.03], [0.07, 0.08, 0.1], [0.03, 0.03, 0.035], ['Result: slate grey, lighter at the top, with a faint glow in the middle.']);
+  const draw = n('drawAgents', 'csDraw', X(840), Y(0), {
+    style: 'points', shape: 'cube', shading: 'flat', facing: 'tumble', spin: 3, shapeSize: 0.014, shapeSizeBy: 'speed',
+    colorBy: 'speed', palette: 'ab', colorA: [0.85, 0.88, 0.95], colorB: [0.95, 0.45, 0.2], speedRef: 1.6, brightness: 0.5, scaleBy: 'walker', fade: 'off', lights: '0',
+    camDist: 3.0, camAngle: 0, camElevation: 18, rotSpeed: 8, fov: 1.8, ortho: 0, camX: 0, camY: 0, camZ: 0, drift: 0.05, focus: 1, blur: 0, maxBlur: 7,
+    ...note([
+      'Draw agents with Shape Cube: every walker a solid cube that hides the ones behind it. Facing Tumble: each spins on its own random axis (Spin speed 3, each a little faster or slower).',
+      'Shading Flat: no lighting at all, just the palette colour, a graphic look. Solid cubes overlapping still read as 3D because near ones hide far ones.',
+      'Colour by speed, pale slow to orange fast (Fast is 1.6), and Size by speed: the fast ones bigger.',
+      'Try: Shading Faces for a 3D look at no extra cost (a cube is shaded once per face); Facing Along motion so they fly face first.',
+    ]),
+  }, { agents: ['cubeStorm', 'agents'], over: ['csBack', 'result'] });
+  const nodes = [emit, group, ...back, draw];
+  if (withOutput) nodes.push(n('output', 'csOutput', X(1260), Y(0), { ...note(['Output: the cube storm over the storm sky is the picture.']) }, { color: ['csDraw', 'color'] }));
+  return nodes;
+}
+
 export const AGENT_3D_EXAMPLE_KEYS = Object.keys(AGENT_3D_EXAMPLE_INDEX);
 
 export function buildAgent3dExamples(): Record<string, ExampleGraph> {
@@ -587,5 +687,8 @@ export function buildAgent3dExamples(): Record<string, ExampleGraph> {
     agent3dTorus: { ...AGENT_3D_EXAMPLE_INDEX.agent3dTorus, counter: 40, nodes: torus3dNodes(0, 1000) },
     agent3dGalaxy: { ...AGENT_3D_EXAMPLE_INDEX.agent3dGalaxy, counter: 40, nodes: galaxy3dNodes(0, 200) },
     agent3dFireflies: { ...AGENT_3D_EXAMPLE_INDEX.agent3dFireflies, counter: 40, nodes: fireflies3dNodes(0, 200) },
+    agent3dVoxelSlime: { ...AGENT_3D_EXAMPLE_INDEX.agent3dVoxelSlime, counter: 40, nodes: voxelSlime3dNodes(0, 200) },
+    agent3dRodSwarm: { ...AGENT_3D_EXAMPLE_INDEX.agent3dRodSwarm, counter: 40, nodes: rodSwarm3dNodes(0, 200) },
+    agent3dCubeStorm: { ...AGENT_3D_EXAMPLE_INDEX.agent3dCubeStorm, counter: 40, nodes: cubeStorm3dNodes(0, 200) },
   };
 }

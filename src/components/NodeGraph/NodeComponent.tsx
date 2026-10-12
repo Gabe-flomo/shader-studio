@@ -21,6 +21,7 @@ if (typeof document !== 'undefined' && !document.getElementById('gs-anim')) {
 }
 import type { GraphNode, DataType, NodeDefinition, ParamDef } from '../../types/nodeGraph';
 import { TYPE_COLORS } from './typeColors';
+import { ShapeCostNote } from './ShapeCostNote';
 import { getNodeDefinitionFor } from '../../nodes/definitions';
 import { extendRangePatch, hasCustomRange, paramSliderRange, resetRangePatch } from '../../nodes/sliderRange';
 import { frozenValueOf } from '../../nodes/sliderFreeze';
@@ -2693,6 +2694,10 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   for (const [k, pd] of Object.entries(paramDefs)) if (pd.section) sectionKeys.set(pd.section, [...(sectionKeys.get(pd.section) ?? []), k]);
   const firstSection = sectionKeys.keys().next().value as string | undefined;
   const sectionFolded = (name: string) => name !== def?.pinnedSection && (name !== firstSection) !== !!foldedSections[`${node.id}:sec:${name}`];
+  // A note under one setting's row (Draw agents' Shape: its cost note).
+  const withParamNote = (key: string, row: React.ReactNode): React.ReactNode => (
+    row && node.type === 'drawAgents' && key === 'shape' ? <React.Fragment key={key}>{row}<ShapeCostNote node={node} /></React.Fragment> : row
+  );
   const withSection = (key: string, pd: ParamDef, render: () => React.ReactNode): React.ReactNode => {
     if (!pd.section) return render();
     const keys = sectionKeys.get(pd.section) ?? [];
@@ -3749,7 +3754,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         {!collapsed && node.type !== 'matConst' && Object.keys(paramDefs).length > 0 && Object.keys(node.inputs).length > 0 && sectionRule}
         {/* ── Particles: one-click looks ── */}
         {!collapsed && node.type === 'gpuParticles' && <ParticlePresets node={node} />}
-        {!collapsed && node.type !== 'matConst' && Object.entries(paramDefs).map(([key, paramDef]) => withSection(key, paramDef, () => {
+        {!collapsed && node.type !== 'matConst' && Object.entries(paramDefs).map(([key, paramDef]) => withSection(key, paramDef, () => withParamNote(key, (() => {
           // A Stops Palette's count and colours are one gradient bar with the stops built in, not a row each.
           if (node.type === 'stopPalette') {
             if (key === 'stops') return <StopPaletteStops key={key} node={node} touch={isTouchDevice} />;
@@ -3957,7 +3962,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           }
 
           return null;
-        }))}
+        })())))}
 
         {/* ── Palette tools: presets, paste, copy / convert ── */}
         {!collapsed && (node.type === 'palette' || node.type === 'stopPalette') && <PaletteTools node={node} />}

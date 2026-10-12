@@ -99,6 +99,9 @@ export interface GraphNode {
   carryMode?: boolean;
 }
 
+/** A param's showWhen: it shows when `param` has one of `value`, and `and` holds too. */
+export interface ShowWhen { param: string; value: string | string[]; and?: ShowWhen }
+
 // Editable parameter definition (used to render inline controls on the node card)
 export interface ParamDef {
   label: string;
@@ -122,7 +125,8 @@ export interface ParamDef {
   options?: { value: string; label: string }[];
   // Conditionally show this param only when another param matches a value
   // `and` adds a second condition that must hold too (Transform's Pivot Z: Apply mode and 3D or 4D).
-  showWhen?: { param: string; value: string | string[]; and?: { param: string; value: string | string[] } };
+  // `and` can itself carry an `and` (Draw agents' Spin: Facing tumble, a box Shape, and 3D).
+  showWhen?: ShowWhen;
   /**
    * The value is baked into the GLSL as a constant (loop bounds, array sizes)
    * rather than becoming a live uniform; changing it recompiles. Prefer this

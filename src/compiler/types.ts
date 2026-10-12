@@ -207,6 +207,11 @@ export interface AgentDrawProgram {
   /** The camera's right is the Particles node's way round (Open as nodes), not the March Camera's. */
   mirror?: boolean;
   /**
+   * 3D, Shape not Dot (lib/agentShapes.ts): each walker drawn as this solid shape with a depth buffer;
+   * its settings (Shading, Size, Facing…) are in params. Absent for dots: their spec is as it always was.
+   */
+  shape?: 'cube' | 'sphere' | 'rod' | 'tile' | 'voxel';
+  /**
    * A ray-marched scene's camera (Camera from and Camera ray wired) and its Depth: small programs of
    * the picture's kind. `camera` is evaluated at g_uv = probe.uniform.xy (it writes Camera from when
    * .z is 0, else Camera ray) into 4 × 1 texels: the origin, then the rays at (0, 0), (0.5, 0) and

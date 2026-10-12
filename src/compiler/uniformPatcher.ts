@@ -1,4 +1,4 @@
-import type { GraphNode, NodeDefinition, DataType, ParamDef } from '../types/nodeGraph';
+import type { GraphNode, NodeDefinition, DataType, ParamDef, ShowWhen } from '../types/nodeGraph';
 import { getKeyframeConfig, generateKeyframeGLSL, isKeyframeBypassed } from './keyframes';
 import { loopOf } from '../nodes/exprLoop';
 
@@ -43,11 +43,11 @@ export function isParamVisible(
   const sw = paramDef.showWhen;
   if (!sw) return true;
   // A gate param an older save never had (e.g. palette's `preset`) reads as its default.
-  const holds = (c: { param: string; value: string | string[] }) => {
+  const holds = (c: ShowWhen): boolean => {
     const v = String(params[c.param] ?? defaults?.[c.param]);
-    return Array.isArray(c.value) ? c.value.includes(v) : c.value === v;
+    return (Array.isArray(c.value) ? c.value.includes(v) : c.value === v) && (!c.and || holds(c.and));
   };
-  return holds(sw) && (!sw.and || holds(sw.and));
+  return holds(sw);
 }
 
 /** Default GLSL zero literal for a given type. */

@@ -149,8 +149,8 @@ describe('the compile: a Scene is read only by the grid program', () => {
 
 describe('the "Agents in 3D" examples', () => {
   const graphs = buildAgent3dExamples();
-  it('five of them: slime, flock, a torus, a galaxy, depth of field', () => {
-    expect(AGENT_3D_EXAMPLE_KEYS).toEqual(['agent3dSlime', 'agent3dFlock', 'agent3dTorus', 'agent3dGalaxy', 'agent3dFireflies']);
+  it('eight of them: slime, flock, a torus, a galaxy, depth of field, and three shapes', () => {
+    expect(AGENT_3D_EXAMPLE_KEYS).toEqual(['agent3dSlime', 'agent3dFlock', 'agent3dTorus', 'agent3dGalaxy', 'agent3dVoxelSlime', 'agent3dRodSwarm', 'agent3dCubeStorm', 'agent3dFireflies']);
   });
   it.each(AGENT_3D_EXAMPLE_KEYS)('%s compiles; its group is 3D; it draws through a camera', key => {
     const r = compileGraph({ nodes: graphs[key].nodes });

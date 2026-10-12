@@ -6,7 +6,8 @@
  *  - Colour: by kind (and the kinds' states, named and coloured here), speed, age, heading, one
  *    colour, a trail channel, or a memory (phase 4); the palette;
  *  - The trail: what the picture shows (the trail, one channel, walker density) and its palette;
- *  - 3D: the camera (the old Look tab's controls) and a shape to flow round.
+ *  - 3D: Shape (dots, or solid cubes, spheres, rods, tiles, voxels) with its Shading and size; the camera
+ *    (the old Look tab's controls) and a shape to flow round.
  * Every change shows on the live picture; the legend says what the colour means (look.ts).
  */
 import { useState } from 'react';
@@ -20,7 +21,8 @@ import { Icon } from '../ui/Icon';
 import type { GraphNode } from '../../types/nodeGraph';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { type AgentRuleSet, MAX_STATES } from '../../agentRules/spec';
-import { AG_PALETTE_OPTIONS } from '../../nodes/definitions/agents';
+import { AG_PALETTE_OPTIONS, DRAW_SHAPE_PARAM, DRAW_SHAPE_PARAMS } from '../../nodes/definitions/agents';
+import { ShapeCostNote } from '../NodeGraph/ShapeCostNote';
 import { AGENT_VIEWS, agentsViewOf, type AgentsView } from '../../agentRules/outputs';
 import { setGroupShape, setGroupView } from '../../agentRules/storeActions';
 import { CAMERA_3D, CAMERA_CONTROLS, SHAPE_KINDS, shapeOf, type ShapeKind } from '../../agentRules/space3d';
@@ -79,8 +81,9 @@ export function LookSection({ groupId, set, sp, update, draw, d3, intro, onFocus
             </SettingRow>
             <SliderSetting id="stretch" label="Stretch" hint="How much longer a splat is along its motion, at full speed (Fast is): 0 round." value={num(draw.params.stretch, 1.5)} min={0} max={8} step={0.01} onFocus={onFocus} onChange={v => setSetupParam(draw.id, { stretch: v })} param={{ nodeId: draw.id, key: 'stretch' }} />
             <SliderSetting id="opacity" label="Opacity" hint="How much each splat covers at its middle: where many overlap the cloud turns solid." value={num(draw.params.opacity, 0.6)} min={0} max={1} step={0.01} onFocus={onFocus} onChange={v => setSetupParam(draw.id, { opacity: v })} param={{ nodeId: draw.id, key: 'opacity' }} />
-          </> : <SliderSetting id="dsize" label="Size" hint={MORE_HINTS.size} value={num(draw.params.size, 1.5)} min={0.25} max={8} step={0.05} onFocus={onFocus} onChange={v => setSetupParam(draw.id, { size: v })} param={{ nodeId: draw.id, key: 'size' }} />}
+          </> : (!d3 || String(draw.params.shape ?? 'dot') === 'dot') && <SliderSetting id="dsize" label="Size" hint={MORE_HINTS.size} value={num(draw.params.size, 1.5)} min={0.25} max={8} step={0.05} onFocus={onFocus} onChange={v => setSetupParam(draw.id, { size: v })} param={{ nodeId: draw.id, key: 'size' }} />}
           <SliderSetting id="brightness" label="Brightness" hint={MORE_HINTS.brightness} value={num(draw.params.brightness, 0.5)} min={0} max={3} step={0.01} onFocus={onFocus} onChange={v => setSetupParam(draw.id, { brightness: v })} param={{ nodeId: draw.id, key: 'brightness' }} />
+          {d3 && <ShapeSettings draw={draw} onFocus={onFocus} />}
           {String(draw.params.style) === 'streaks' && <SliderSetting id="streak" label="Streak length" hint="How long each streak is (seconds of travel × 0.12)." value={num(draw.params.streak, 0.25)} min={0} max={4} step={0.01} onFocus={onFocus} onChange={v => setSetupParam(draw.id, { streak: v })} param={{ nodeId: draw.id, key: 'streak' }} />}
         </> : <>
           <span style={{ fontSize: 12, color: tk.text.muted, lineHeight: 1.45 }}>No Draw agents shows this group: the trail is the picture. Draw the walkers over it to see them.</span>
@@ -148,6 +151,31 @@ export function LookSection({ groupId, set, sp, update, draw, d3, intro, onFocus
       )}
     </>
   );
+}
+
+/**
+ * 3D: Shape (Dot, or solid cubes, spheres, rods, tiles, voxels: docs/particle-shapes.md) and, for a solid
+ * shape, its Shading, size (Voxel: the grid) and the cost note. Everything else is on the Draw agents card.
+ */
+function ShapeSettings({ draw, onFocus }: { draw: GraphNode; onFocus: (s: string | undefined) => void }) {
+  const shape = String(draw.params.shape ?? 'dot');
+  const key = shape === 'voxel' ? 'voxelGrid' : 'shapeSize';
+  const pd = DRAW_SHAPE_PARAMS[key];
+  return <>
+    <SettingRow id="shape" label="Shape" hint={DRAW_SHAPE_PARAM.hint} onFocus={onFocus}>
+      <Select ariaLabel="Shape" value={shape} options={DRAW_SHAPE_PARAM.options!} onChange={v => setSetupParam(draw.id, { shape: v })} />
+    </SettingRow>
+    {shape !== 'dot' && <>
+      <ShapeCostNote node={draw} />
+      <SettingRow id="shading" label="Shading" hint={DRAW_SHAPE_PARAMS.shading.hint} onFocus={onFocus}>
+        <ChipRow label="Shading" value={String(draw.params.shading ?? 'faces')} onChange={v => setSetupParam(draw.id, { shading: v })}
+          options={DRAW_SHAPE_PARAMS.shading.options!.map(o => ({ value: o.value, label: o.label.replace(' (cheapest)', '') }))} />
+      </SettingRow>
+      <SliderSetting id={key} label={shape === 'voxel' ? 'Voxel grid' : 'Shape size'} hint={pd.hint}
+        value={num(draw.params[key], key === 'voxelGrid' ? 0.04 : 0.012)} min={pd.min ?? 0.001} max={key === 'voxelGrid' ? 0.25 : 0.1} step={0.001} onFocus={onFocus}
+        onChange={v => setSetupParam(draw.id, { [key]: v })} param={{ nodeId: draw.id, key }} />
+    </>}
+  </>;
 }
 
 function PaletteBar({ colours }: { colours: string[] }) {

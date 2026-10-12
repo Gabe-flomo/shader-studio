@@ -68,8 +68,13 @@ function ahSet(gl, us, name, v) {
 export function ahCreate(gl, spec, env) {
   const unsupported = ahUnsupported(gl);
   // Draw agents' Splats look and an Emit's splat scan are the app's only (docs/splat-scene.md "Agents as splats"):
-  // a page draws splats as points, and its scans read empty (no walker is born from one).
-  const groups = spec.groups || [], deposits = spec.deposits || [], trails = spec.trails || [], draws = (spec.draws || []).map(d => (d.style === 'splats' ? { ...d, style: 'points' } : d));
+  // a page draws splats as points, and its scans read empty (no walker is born from one). So are 3D Shapes
+  // (docs/particle-shapes.md): a page draws each walker as its Style's dot.
+  const groups = spec.groups || [], deposits = spec.deposits || [], trails = spec.trails || [];
+  const draws = (spec.draws || []).map(d => {
+    const { shape: _shape, ...rest } = d;
+    return rest.style === 'splats' ? { ...rest, style: 'points' } : rest;
+  });
   // Every sampler the agents fill starts blank (the app's empty texture), every `_px` at one pixel.
   for (const g of groups) for (const k of ['A', 'B', 'C', 'D', 'E']) if (g.u[k]) env.textures.set(g.u[k], null);
   for (const t of trails) { env.textures.set(t.u.tex, null); env.vec2s.set(t.u.tex + '_px', [1, 1]); if (t.stepShader) env.textures.set(t.u.src, null); }
