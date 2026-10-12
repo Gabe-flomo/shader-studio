@@ -9,9 +9,9 @@ import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import type { GraphNode } from '../../types/nodeGraph';
 import { addVideoFile, isAudioType, listVideos, type LibraryVideoMeta } from '../../lib/backgroundLibrary';
-import { timeCubes, timeCubePlan, timeCubeSource } from '../../lib/timeCube/volumes';
+import { timeCubes, timeCubePlan, timeCubeSource, timeCubeSourceName } from '../../lib/timeCube/volumes';
 import { capText, formatBytes, stackSettingsOf } from '../../lib/timeCube/plan';
-import { DEMO_LABEL, probeVideo } from '../../lib/timeCube/frames';
+import { BALL_LABEL, DEMO_LABEL, probeVideo } from '../../lib/timeCube/frames';
 import { buildEstimate, combineSettingsOf } from '../../lib/timeCube/order';
 import { clipParams, defaultClip, isIdentity } from '../../lib/media/clip';
 import { lazyWithSuspense, type PropsOf } from '../lazyWithSuspense';
@@ -98,7 +98,7 @@ export function TimeCubeCardBody({ node, touch = false }: { node: GraphNode; tou
     padding: touch ? '8px 10px' : '4px 9px', border: 0, borderRadius: radius.sm, cursor: 'pointer',
     background: tk.bg.field, color: tk.text.primary, font: `600 11.5px ${fontFamily.ui}`,
   } as const;
-  const name = src?.kind === 'library' ? (typeof node.params.fileName === 'string' && node.params.fileName) || 'A Library video' : DEMO_LABEL;
+  const name = timeCubeSourceName(node);
   const building = status?.state === 'building' || status?.state === 'waiting';
   // What the clip keeps, in a line.
   const clipSummary = (() => {
@@ -133,13 +133,14 @@ export function TimeCubeCardBody({ node, touch = false }: { node: GraphNode; tou
 
       {plan?.capped && <span style={{ ...small, color: tk.status.warningText }}>{capText(plan)}</span>}
       {plan && comb.combine !== 'pick' && (() => {
-        const est = buildEstimate(plan.frames, comb.sub, src?.kind !== 'library');
-        return <span style={small}>{`Reads ${est.decoded} frames (${comb.sub} for each)${src?.kind === 'library' ? `: about ${est.seconds < 90 ? `${Math.max(1, Math.round(est.seconds))} s` : `${Math.round(est.seconds / 60)} min`} to build` : ''}.`}</span>;
+        const est = buildEstimate(plan.frames, comb.sub, src?.kind === 'demo');
+        return <span style={small}>{`Reads ${est.decoded} frames (${comb.sub} for each)${src?.kind !== 'demo' ? `: about ${est.seconds < 90 ? `${Math.max(1, Math.round(est.seconds))} s` : `${Math.round(est.seconds / 60)} min`} to build` : ''}.`}</span>;
       })()}
 
       {picking && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: 6, borderRadius: radius.md, background: tk.bg.subtle, maxHeight: 220, overflowY: 'auto' }}>
-          <button type="button" style={{ ...btn, textAlign: 'left' }} onClick={() => { updateNodeParams(node.id, { source: 'demo', videoId: '', fileName: '', _meta: undefined }); setPicking(false); }}>{DEMO_LABEL}</button>
+          <button type="button" style={{ ...btn, textAlign: 'left', background: src?.kind === 'ball' ? tk.bg.selected : tk.bg.field }} onClick={() => { updateNodeParams(node.id, { source: 'ball', videoId: '', fileName: '', _meta: undefined }); setPicking(false); }}>{BALL_LABEL}</button>
+          <button type="button" style={{ ...btn, textAlign: 'left', background: src?.kind === 'demo' ? tk.bg.selected : tk.bg.field }} onClick={() => { updateNodeParams(node.id, { source: 'demo', videoId: '', fileName: '', _meta: undefined }); setPicking(false); }}>{DEMO_LABEL}</button>
           <button type="button" style={{ ...btn, textAlign: 'left' }} onClick={() => fileRef.current?.click()}>From a file…</button>
           <input ref={fileRef} type="file" accept="video/*" style={{ display: 'none' }} onChange={e => { void onFile(e.target.files?.[0]); e.target.value = ''; }} />
           {videos === null && <span style={small}>Loading the Library…</span>}

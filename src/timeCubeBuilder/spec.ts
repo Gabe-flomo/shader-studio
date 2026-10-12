@@ -67,7 +67,7 @@ export const displayRole = (d: TcDisplay): 'view' | 'stack' => (d === 'cube' ? '
 
 export const defaultDrive = (display: TcDisplay = 'cube'): TcDrive => ({ on: true, target: display === 'cube' ? 'slice' : 'scan', waveform: 'triangle', freq: 0.07, offset: 0.5, amplitude: 0.47 });
 
-/** A new scene: the test clip as a box of time, the slice sweeping (the Time Cube folder's first example). */
+/** A new scene: the Ball action clip as a box of time, the slice sweeping (the Time Cube folder's first example). */
 export function blankSpec(display: TcDisplay = 'cube'): TimeCubeSpec {
   return { v: 1, display, source: defaultsOf('source'), view: defaultsOf('view'), stack: defaultsOf('stack'), drive: defaultDrive(display) };
 }
@@ -148,7 +148,7 @@ const short = (s: string) => s.replace(/\s*\(.*\)\s*$/, '');
 
 export function sourceName(source: Params): string {
   if (source.source === 'library') return (typeof source.fileName === 'string' && source.fileName) || 'A Library video';
-  return 'Test clip';
+  return source.source === 'ball' ? 'Ball action' : 'Test clip';
 }
 
 export function sectionSummary(spec: TimeCubeSpec, s: TcSection): string {

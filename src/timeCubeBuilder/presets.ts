@@ -23,7 +23,7 @@ export const TC_PRESETS: readonly TcPreset[] = [
   { key: 'pill', label: 'Soft pill', blurb: 'A pastel pill on white, seen flat, the video playing on its face.', example: 'timeCubeSoftPill', display: 'cube' },
   { key: 'highlights', label: 'Highlights loop', blurb: 'Six outlined frames lifted out of the box, travelling with the slice.', example: 'timeCubeHighlights', display: 'cube' },
   { key: 'flow', label: 'Flow', blurb: 'The video flows through the box past a fixed frame; frames lift as they pass.', example: 'timeCubeFlow', display: 'cube' },
-  { key: 'key', label: 'Isolate a colour', blurb: 'The red car kept as a solid ribbon through time; the rest a grey ghost.', example: 'timeCubeKey', display: 'cube' },
+  { key: 'key', label: 'Isolate a colour', blurb: 'The amber balls kept as solid trails through time; the rest a grey ghost.', example: 'timeCubeKey', display: 'cube' },
   { key: 'exposure', label: 'Long exposure', blurb: 'Each frame the brightest of six: light trails, sorted by brightness.', example: 'timeCubeLongExposure', display: 'cube' },
   { key: 'iso', label: 'Isometric cards', blurb: 'The frames as a long diagonal stack of cards; the scan lifts one out.', example: 'frameStackIsometric', display: 'stack' },
   { key: 'ring', label: 'Ring of frames', blurb: 'Cards on edge round a ring, white borders, the camera circling.', example: 'frameStackRing', display: 'stack' },
@@ -39,7 +39,7 @@ const allExamples = () => (examples ??= { ...buildTimeCubeExamples(), ...buildFr
 
 const made = new Map<string, TimeCubeSpec>();
 
-/** A preset's scene, as its example has it (on the test clip). */
+/** A preset's scene, as its example has it (on the Ball action clip). */
 export function presetSpec(key: string): TimeCubeSpec {
   if (!made.has(key)) made.set(key, readPreset(key));
   return structuredClone(made.get(key)!);

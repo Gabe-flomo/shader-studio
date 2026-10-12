@@ -233,13 +233,16 @@ describe('frame order and frames from (the source)', () => {
   it('the defaults keep the old volume keys; a reorder keeps the same frames (base key) so nothing is decoded again', () => {
     expect(combineKey(combineSettingsOf({}))).toBe('');
     expect(orderKey(orderSettingsOf({}))).toBe('');
-    const plain = n('timeCube', 'a', 0, 0);
+    // A test-clip node saved before Ball action shipped keeps its key.
+    const plain = n('timeCube', 'a', 0, 0, { source: 'demo' });
     expect(volumeKey(plain)).toBe('demo|256x144|9x15|128|0.0000-4.0000');
-    const sorted = n('timeCube', 'b', 0, 0, { order: 'sort', sortBy: 'motion' });
+    const sorted = n('timeCube', 'b', 0, 0, { source: 'demo', order: 'sort', sortBy: 'motion' });
     expect(volumeKey(sorted)).not.toBe(volumeKey(plain));
     expect(baseVolumeKey(sorted)).toBe(baseVolumeKey(plain));
-    const avg = n('timeCube', 'c', 0, 0, { combine: 'average', subFrames: 6 });
+    const avg = n('timeCube', 'c', 0, 0, { source: 'demo', combine: 'average', subFrames: 6 });
     expect(baseVolumeKey(avg)).toBe('demo|256x144|9x15|128|0.0000-4.0000|c:averagex6');
+    // A new node reads Ball action: the same layout, its own key.
+    expect(volumeKey(n('timeCube', 'd', 0, 0))).toBe('ball|256x144|9x15|128|0.0000-10.4000');
     expect(buildEstimate(128, 6, false)).toEqual({ decoded: 768, seconds: 768 * 0.026 });
   });
 });

@@ -3,7 +3,7 @@
  * (docs/time-cube.md), the way a 3D node added on its own gets a scene round
  * it (nodes/smart3d.ts):
  *
- * - its Volume comes from the nearest Time Cube, or a new one (the test clip)
+ * - its Volume comes from the nearest Time Cube, or a new one (the Ball action clip)
  *   to its left;
  * - a Time Cube View in a graph that already ray-marches a scene joins it:
  *   the March Camera's rays, the loop's Color behind the box and the loop's
@@ -43,10 +43,10 @@ export function planTimeCubeAdd(type: string, nodes: GraphNode[], position: { x:
   let source = near(nodes.filter(n => n.type === 'timeCube'), position);
   if (!source) {
     source = instantiateNode(nextId(), 'timeCube', srcDef, { x: position.x - 440, y: position.y }, {
-      __comment: 'Time Cube: stacks a video\'s frames into a box of time. It starts with the built-in test clip; press Choose video to use yours.',
+      __comment: 'Time Cube: stacks a video\'s frames into a box of time. It starts with the built-in Ball action clip; press Choose video to use yours.',
     });
     out.push(source);
-    said.push('a Time Cube (the test clip; Choose video on it for yours) feeds it');
+    said.push('a Time Cube (the Ball action clip; Choose video on it for yours) feeds it');
   } else said.push(`it reads ${typeof source.params.label === 'string' && source.params.label ? source.params.label : 'the Time Cube'}`);
   let node = wire(instantiateNode(nextId(), type, def, position), 'volume', source.id, 'volume');
 

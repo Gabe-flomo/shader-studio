@@ -8,7 +8,7 @@
  *  - Grid simulation: Conway's Life running on a small board (gridRules/cpu.ts);
  *  - 3D scene: a torus, a ball and a box from the 3D builder's own thumbnail marcher;
  *  - Splat scene: a point cloud dissolving and coming back (the Splat builder's own mini cloud);
- *  - Time Cube: frames of the test clip's street stacked into a box, the slice sweeping through (timeCubeBuilder/picture.ts);
+ *  - Time Cube: frames of the Ball action clip stacked into a box, the slice sweeping through (timeCubeBuilder/picture.ts);
  *  - Warp: a grid bent by a moving sine warp (the Warp Builder's warped-grid picture).
  */
 import { useEffect, useRef } from 'react';
@@ -183,7 +183,7 @@ function WarpPicture({ width, height }: { width: number; height: number }) {
   return <canvas ref={ref} width={width} height={height} style={fluid(width, height)} />;
 }
 
-/** A box of time: the street's frames stacked, the slice sweeping there and back. */
+/** A box of time: the Ball action clip's frames stacked, the slice sweeping there and back. */
 function TimeCubePicture({ width, height }: { width: number; height: number }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const spec = useRef(presetSpec('box'));

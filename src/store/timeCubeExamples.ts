@@ -1,8 +1,9 @@
 /**
  * timeCubeExamples.ts — the Time cube examples (docs/time-cube.md). Each
- * uses the built-in test clip (a red car crossing a street, painted by
- * lib/timeCube/frames.ts), so they work offline and need no file: choose
- * your own video on the Time Cube card.
+ * uses the built-in Ball action clip (public/media/ball-action.mp4, see
+ * lib/builtinVideos.ts), so they need no file of yours: choose your own
+ * video on the Time Cube card. Where the video can't be decoded (tests) the
+ * painted test clip stands in (lib/timeCube/frames.ts).
  *
  * Every node carries a comment saying what it is and why it's there.
  */
@@ -30,7 +31,7 @@ export const TIME_CUBE_EXAMPLE_INDEX: Record<string, { label: string; descriptio
   timeCubePulse: {
     label: 'Time cube: pulsing key',
     play: true,
-    description: 'On black, only the red of the car shows, in bands that pulse through the box of time. On Play, turn the key colour round the wheel (a slow LFO already does), widen the tolerance, speed the pulse or turn the camera.',
+    description: 'On black, only the amber of the balls shows, in bands that pulse through the box of time. On Play, turn the key colour round the wheel (a slow LFO already does), widen the tolerance, speed the pulse or turn the camera.',
   },
   timeCubeFlyThrough: {
     label: 'Time cube: fly-through',
@@ -39,15 +40,15 @@ export const TIME_CUBE_EXAMPLE_INDEX: Record<string, { label: string; descriptio
   },
   timeCubeLongExposure: {
     label: 'Time cube: long exposure',
-    description: 'Each stacked frame is the brightest of six frames from its slot of time, like a long exposure: the car, the ball and the lamps leave trails. The frames are then sorted by brightness, darkest first.',
+    description: 'Each stacked frame is the brightest of six frames from its slot of time, like a long exposure: the swirling balls leave trails of light. The frames are then sorted by brightness, darkest first.',
   },
   timeCubeKey: {
     label: 'Time cube: isolate a colour',
-    description: 'The same box with a colour key on red: the red car stays solid, a red ribbon through time, while the rest of the street turns to a grey ghost.',
+    description: 'The same box with a colour key on amber: the amber balls stay solid, trails of colour through time, while the rest of the clip turns to a grey ghost.',
   },
   timeCubeSlitScan: {
     label: 'Slit-scan from a time cube',
-    description: 'A flat cut through the box of time, tilted so each column of the picture comes from a different moment: moving things stretch and bend. No 3D needed.',
+    description: 'A flat cut through the box of time, tilted so each column of the picture comes from a different moment: the swirling rings stretch and bend. No 3D needed.',
   },
 };
 
@@ -59,7 +60,7 @@ const meta = (k: string) => ({ label: TIME_CUBE_EXAMPLE_INDEX[k].label, descript
 
 const CUBE_NOTE = [
   'Time Cube: stacks the frames of a video into a box of time, one frame behind the next.',
-  'This one uses the built-in test clip (a red car crossing a street). Press Choose video on this card to use one of yours from the Library or a file.',
+  'This one uses the built-in Ball action clip (10 s of glowing balls swirling into mandala patterns, shipped with the app). Press Choose video on this card to use one of yours from the Library or a file.',
   'Frames and Frame size set how detailed the box is; the card shows how much memory it takes.',
 ].join('\n');
 
@@ -178,7 +179,7 @@ export function buildTimeCubeExamples(): Record<string, ExampleGraph> {
     layers: [],
     notes: `**What it shows.** A Time Cube View keyed on one colour, on black: only the keyed colour shows, and only in **pulses** travelling through the box of time. The crisp frame is the slice.
 
-**Try.** **Key hue shift** turns the key colour round the colour wheel: a slow LFO already rocks it a little either side of red, inside the hue range, so the car stays keyed while its shade shifts. Drag it further (or map a MIDI knob to it) to key the ball's blue or the hills' green instead. **Key hue drift** keeps it turning on its own. **Hue range** widens what counts as the colour. **Pulse speed**, **Pulse width** and **Pulse softness** shape the travelling bands; **Camera angle** turns the view round the box. Every one is a live uniform, so mapping them to LFOs or MIDI costs nothing.`,
+**Try.** **Key hue shift** turns the key colour round the colour wheel: a slow LFO already rocks it a little either side of red, inside the hue range, so the amber rings stay keyed while their shade shifts. Drag it further (or map a MIDI knob to it) to key the cyan balls or the red specks instead. **Key hue drift** keeps it turning on its own. **Hue range** widens what counts as the colour. **Pulse speed**, **Pulse width** and **Pulse softness** shape the travelling bands; **Camera angle** turns the view round the box. Every one is a live uniform, so mapping them to LFOs or MIDI costs nothing.`,
   };
 
   const pulse: ExampleGraph = {
@@ -188,13 +189,13 @@ export function buildTimeCubeExamples(): Record<string, ExampleGraph> {
       n('timeCube', 'tuSource', 80, 160, { ...note(CUBE_NOTE) }),
       n('timeCubeView', 'tuView', 440, 160, {
         slice: 0.82, before: 0.37, after: 0.45, sliceOpacity: 1, depth: 2.2, quality: 'best',
-        keyMode: 'hue', keyColor: [0.85, 0.1, 0.1], keyTolerance: 0.1, keySoftness: 0.05, keyOpacity: 1, othersOpacity: 0, othersGrey: 1,
+        keyMode: 'hue', keyColor: [1, 0.55, 0.12], keyTolerance: 0.1, keySoftness: 0.05, keyOpacity: 1, othersOpacity: 0, othersGrey: 1,
         keyAnimate: true, pulse: 1, pulseDir: 'forward', pulseSpeed: 0.35, pulseCount: 4, pulseWidth: 0.3, pulseSoftness: 0.6,
         background: [0, 0, 0], rimStrength: 0.18, rimWidth: 0.03, rimColor: [0.35, 0.45, 0.7], roundness: 0.15, feather: 0.06,
         camAngle: 0.95, camElevation: 0.5, camDist: 4.6, rotSpeed: 0,
         ...note([
-          'Time Cube View keyed on red (Key: a hue), on black. Others 0 hides everything that isn\'t red, so only the car shows, and the slice frame (Offset 0.82) stays vivid.',
-          'Pulse 1: the red shows only in four bands (Pulse count) that travel from the first frame to the last (Pulse speed 0.35 bands a second, width 0.3, soft edges).',
+          'Time Cube View keyed on amber (Key: a hue), on black. Others 0 hides everything that isn\'t amber, so only the amber balls show, and the slice frame (Offset 0.82) stays vivid.',
+          'Pulse 1: the amber shows only in four bands (Pulse count) that travel from the first frame to the last (Pulse speed 0.35 bands a second, width 0.3, soft edges).',
           'A faint blue Rim glow marks the box\'s edge in the dark. The camera holds still at Angle 0.95; turn it from Play. On Play the key colour, hue shift and drift, tolerance, pulse and camera angle are on the panel; an LFO rocks the hue shift.',
         ].join('\n')),
       }, { volume: ['tuSource', 'volume'] }),
@@ -255,9 +256,9 @@ export function buildTimeCubeExamples(): Record<string, ExampleGraph> {
       n('timeCube', 'teSource', 80, 160, {
         frames: 64, combine: 'max', subFrames: 6, order: 'sort', sortBy: 'brightness', invert: false,
         ...note([
-          'Time Cube with Frames from: Brightest. Each of the 64 stacked frames is read six times across its slot of time (Sub-frames 6) and keeps the brightest of the six at every pixel, like a long exposure: the car, the ball and the blinking lamps leave trails.',
+          'Time Cube with Frames from: Brightest. Each of the 64 stacked frames is read six times across its slot of time (Sub-frames 6) and keeps the brightest of the six at every pixel, like a long exposure: the swirling balls leave trails of light.',
           'Frame order: Sort by brightness, darkest first. Changing the order rearranges the frames already read: nothing is decoded again.',
-          'The card says how many frames it reads (here 384, painted in a moment; a real video takes about 26 ms a frame).',
+          'The card says how many frames it reads (here 384; a video takes about 26 ms a frame, so this one builds in about ten seconds).',
         ].join('\n')),
       }),
       n('lfo', 'teSweep', 80, 420, {
@@ -283,12 +284,12 @@ export function buildTimeCubeExamples(): Record<string, ExampleGraph> {
       }),
       n('timeCubeView', 'tkView', 440, 160, {
         before: 0.37, after: 0.45, sliceOpacity: 0.55, quality: 'best', depth: 2.2, camAngle: 1.05, camElevation: 0.55, camDist: 5, rotSpeed: 0.06,
-        keyMode: 'hue', keyColor: [0.85, 0.1, 0.1], keyTolerance: 0.07, keySoftness: 0.05, keyOpacity: 1, othersOpacity: 0.7, othersGrey: 0.85,
+        keyMode: 'hue', keyColor: [1, 0.55, 0.12], keyTolerance: 0.07, keySoftness: 0.05, keyOpacity: 1, othersOpacity: 0.7, othersGrey: 0.85,
         background: [0.03, 0.03, 0.04],
         ...note([
-          'Time Cube View with a colour key: Key is set to a hue (red, Tolerance 0.07), so anything red in any frame stays solid (Key opacity 1).',
-          'Everything else is multiplied by Others (0.7) and drained of colour (Others grey): a grey ghost of the street.',
-          'The car drives left to right, so through time it leaves a red ribbon slanting across the box. The box is stretched in time (Time stretch 2.2) to show the slant.',
+          'Time Cube View with a colour key: Key is set to a hue (amber, Tolerance 0.07), so anything amber in any frame stays solid (Key opacity 1).',
+          'Everything else is multiplied by Others (0.7) and drained of colour (Others grey): a grey ghost of the clip.',
+          'The amber rings swell, turn and break apart from frame to frame, so through time they leave twisting trails of colour through the box. The box is stretched in time (Time stretch 2.2) to show them.',
         ].join('\n')),
       }, { volume: ['tkSource', 'volume'], slice: ['tkSweep', 'value'] }),
       n('output', 'tkOut', 820, 160, OUT_NOTE, { color: ['tkView', 'color'] }),
@@ -302,13 +303,13 @@ export function buildTimeCubeExamples(): Record<string, ExampleGraph> {
       n('timeCube', 'tsSource', 80, 160, { ...note(CUBE_NOTE) }),
       n('lfo', 'tsSweep', 80, 420, {
         waveform: 'sawtooth', freq: 0.2, amplitude: 0.5, offset: 0.5,
-        ...note('LFO (sawtooth): runs the cut from the first frame to the last every 5 s, like playing the video, then jumps back.'),
+        ...note('LFO (sawtooth): runs the cut from the first frame to the last every 5 s, like playing the video at double speed, then jumps back.'),
       }),
       n('timeSlice', 'tsSlice', 440, 160, {
         mode: 'plane', tiltX: 40, timeEdge: 'loop',
         ...note([
           'Time Slice: a flat cut through the box of time, as a picture.',
-          'Tilt X 40° tips the cut so time runs across the picture: the left edge is earlier, the right edge later. That is slit-scan: the car, moving the same way, comes out stretched; the bouncing ball bends.',
+          'Tilt X 40° tips the cut so time runs across the picture: the left edge is earlier, the right edge later. That is slit-scan: the turning rings of balls come out stretched and bent into new shapes.',
           'Past the ends is set to Loop, so the cut wraps round instead of holding on the first or last frame. Try Cut: Row through time for a strip of one line of the video over time.',
         ].join('\n')),
       }, { volume: ['tsSource', 'volume'], slice: ['tsSweep', 'value'] }),

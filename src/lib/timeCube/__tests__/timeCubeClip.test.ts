@@ -214,6 +214,7 @@ describe('the volume key follows the clip', () => {
   });
   it('the default clip keeps the key a Start / End node had', () => {
     expect(volumeKey(node())).toBe(volumeKey(node({ segments: undefined, start: 0, end: 0 })));
-    expect(volumeKey(node())).toContain('|0.0000-4.0000');
+    expect(volumeKey(node())).toContain('|0.0000-10.4000');
+    expect(volumeKey(node({ source: 'demo' }))).toContain('|0.0000-4.0000');
   });
 });

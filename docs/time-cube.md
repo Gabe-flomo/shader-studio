@@ -23,9 +23,15 @@ Choose a video on the card:
 
 - **Choose video** lists the Library's videos;
 - **From a file…** adds a file to the Library first;
-- **Test clip** is a built-in clip of a red car crossing a street. It is
-  painted, not decoded, so it needs no file. It is the default and the one
-  the examples use.
+- **Ball action** is a built-in video: 10.4 s of glowing balls swirling into
+  mandala patterns (960 × 540 H.264, 5.8 MB, `public/media/ball-action.mp4`,
+  `lib/builtinVideos.ts`). It ships with the app, needs no file of yours, and
+  is the default and the one the examples use (`source: 'ball'`).
+- **Test clip** is a painted clip of a red car crossing a street. It is
+  painted, not decoded. Ball action falls back to it where the video can't
+  be decoded (node and jsdom tests, a failed load), stretched over Ball
+  action's length; graphs saved before Ball action shipped keep it
+  (`source: 'demo'`).
 
 The node decodes the planned frames into one texture (see "How it works") and
 shows its progress, with **Cancel**. After a cancel, an error or a missing
@@ -237,7 +243,7 @@ No 3D is involved.
 ## Adding them
 
 - **Time Cube View or Time Slice** on the top level reads the nearest Time
-  Cube. If there is none, a new one (the test clip) is added to its left.
+  Cube. If there is none, a new one (the Ball action clip) is added to its left.
 - **A View in a graph that already ray-marches a scene** joins the scene
   (`lib/timeCube/autoWire.ts`):
   - the March Camera's rays;
@@ -277,7 +283,7 @@ These need a recompile:
 Each node in them has a note.
 
 - **Time cube: a video as a box of time**
-  - Test clip → View, with the camera orbiting slowly.
+  - Ball action → View, with the camera orbiting slowly.
   - A triangle LFO (0.5 ± 0.47, 14 s a round trip) sweeps the slice.
   - The soft look: Corner roundness 0.4, Edge softness 0.2, a faint lilac rim
     glow, no outline.
@@ -299,12 +305,12 @@ Each node in them has a note.
     it, wrapping round. Frames lift as they pass the frame; four frames of the
     clip, outlined in blue, ride the flow.
 - **Time cube: pulsing key** (a Play example)
-  - On black, only the car's red shows, in four bands pulsing through time,
-    The slice frame stays vivid.
+  - On black, only the balls' amber shows, in four bands pulsing through
+    time. The slice frame stays vivid.
   - Play panel: Key colour, Key hue shift (a slow LFO rocks it, inside the
-    hue range so the car stays keyed), Key hue drift, Hue range, Pulse speed,
-    width and softness, Camera angle. The camera holds still looking across
-    the car's path, so its red ribbon through time shows.
+    hue range so the amber stays keyed), Key hue drift, Hue range, Pulse
+    speed, width and softness, Camera angle. The camera holds still, looking
+    across the box so the amber trails through time show.
 - **Time cube: fly-through** (a Play example; it replaces the depth-of-field
   example)
   - A long box (Time stretch 3) and a close camera looking along its depth.
@@ -317,21 +323,25 @@ Each node in them has a note.
     −0.6.
 - **Time cube: long exposure**
   - Each of 64 frames is the brightest of six from its slot (Frames from:
-    Brightest), so the car, the ball and the lamps leave trails; the frames are
+    Brightest), so the swirling balls leave trails of light; the frames are
     then sorted by brightness.
 - **Time cube: isolate a colour**
-  - The Key is a hue: red, Tolerance 0.07.
-  - The red car leaves a solid red ribbon slanting through the box (Time
+  - The Key is a hue: amber, Tolerance 0.07.
+  - The amber rings leave solid, twisting trails through the box (Time
     stretch 2.2).
-  - The rest of the street is a grey ghost: Others 0.7, Others grey 0.85.
+  - The rest of the clip is a grey ghost: Others 0.7, Others grey 0.85.
 - **Slit-scan from a time cube**
   - A Time Slice tilted 40° across X, wrapping in time.
   - A sawtooth LFO runs it through the clip every 5 s.
-  - The car comes out stretched and the bouncing ball bent.
+  - The turning rings of balls come out stretched and bent.
 
-All of them use the built-in test clip. The repository has no sample video, and
-a painted clip works offline, in tests and in exported pages with no file to
-carry. The clip shows a street:
+All of them use the built-in Ball action clip: glowing amber, cyan and red
+balls on black, forming rings and mandalas that swell, turn and break apart
+(a lively stretch of a longer render, trimmed so its ends look alike and it
+loops). Exported pages carry the frames as an image, so they need no file.
+
+In tests (no video decoding) the painted test clip stands in. It shows a
+street:
 
 - a red car (the only red thing) driving left to right;
 - a blue ball bouncing the other way;
@@ -640,6 +650,8 @@ Building a volume:
 
 - **Test clip:** about 12 ms for 128 frames; Frames from multiplies it by
   Sub-frames (still well under a second).
+- **Ball action:** a video like any other (below); fetched once from the
+  build (5.8 MB) and kept for the session.
 - **A video:** about 26 ms a frame by seeking, times Sub-frames when combining.
   A 3 s, 640 × 360 VP8 WebM took 3.3 s for 128 frames. Files with keyframes far
   apart decode more slowly.
@@ -662,8 +674,8 @@ Building a volume:
   cached for undo.
 - **8-bit colour**, like the video.
 - **Exported web pages:**
-  - The atlas travels as one JPEG (quality 0.92). The default test clip adds
-    about 1.1 MB to the page.
+  - The atlas travels as one JPEG (quality 0.92). The painted test clip adds
+    about 1.1 MB to the page; a busy video like Ball action more.
   - An atlas whose JPEG is over 3 MB is scaled to 2048 px on its longest
     side. The frames get smaller, the layout still holds, and the export
     dialog says "scaled to 2048 px".
@@ -702,8 +714,9 @@ Building a volume:
   - Frames are decoded in playing order, so a reversed segment seeks
     backwards, which is slower in some browsers.
   - The speed ramp is a fixed quadratic, per segment.
-- **A key matches colours, not objects.** The red car's dark windows and
-  wheels don't match red, so its ribbon has holes where you see through them.
+- **A key matches colours, not objects.** The amber balls' bright white
+  cores don't match amber, so their trails have holes where you see through
+  them.
 
 ## Code
 

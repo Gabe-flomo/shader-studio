@@ -15,11 +15,15 @@ import type { PlayRecord } from '../types/play';
 import { colourCtl, ctl, n } from './graphBuilder';
 import { slimeMoldNodes } from './agentExamples';
 import RIDGES_AT_DUSK from './playAssets/ridges-at-dusk.jpg?inline';
+import { BALL_VIDEO } from '../lib/builtinVideos';
+
+/** A Video Input's params playing the built-in Ball action clip (lib/builtinVideos.ts), looping. */
+const BALL_VIDEO_PARAMS = { videoId: BALL_VIDEO.id, _fileName: BALL_VIDEO.name, _hasFile: true, _isPlaying: true, _loop: true, _speed: 1 };
 
 export const TEXTURE_TOOL_EXAMPLE_INDEX: Record<string, { label: string; description: string; play: true }> = {
   ttVideoOutline: {
     label: 'Texture tools 1 · Glowing outline from a video', play: true,
-    description: 'A video (or the camera) becomes a glowing outline: Mask keeps its bright parts, Neighbours (Range) finds the mask\'s edge, Glow (texture) spreads it, Levels dims the video underneath. Choose a video or the camera on the Video Input.',
+    description: 'A video (the built-in Ball action clip, or yours, or the camera) becomes a glowing outline: Mask keeps its bright parts, Neighbours (Range) finds the mask\'s edge, Glow (texture) spreads it, Levels dims the video underneath. Choose another video or the camera on the Video Input.',
   },
   ttMotionTrails: {
     label: 'Texture tools 2 · Motion trails with Fade', play: true,
@@ -31,7 +35,7 @@ export const TEXTURE_TOOL_EXAMPLE_INDEX: Record<string, { label: string; descrip
   },
   ttColourKey: {
     label: 'Texture tools 4 · Colour key on a video', play: true,
-    description: 'Mask (texture) in Colour key mode picks the green out of a video (a green screen); Mix puts a drifting background where the key is. Choose a video or the camera on the Video Input.',
+    description: 'Mask (texture) in Colour key mode picks one colour out of a video: here the black behind the built-in Ball action clip\'s glowing balls, so a drifting background shows through the gaps. Pick green and choose a green-screen video (or the camera) for the classic key.',
   },
   ttReactionLevels: {
     label: 'Texture tools 5 · Reaction-diffusion, shaped and coloured', play: true,
@@ -97,10 +101,10 @@ export function buildTextureToolExamples(): Record<string, ExampleGraph> {
     ...TEXTURE_TOOL_EXAMPLE_INDEX.ttVideoOutline,
     counter: 40,
     nodes: [
-      n('videoInput', 'vid', 40, 300, note([
-        'Video Input: the moving picture. Press Choose video (or the camera) on this card: until then it is black.',
+      n('videoInput', 'vid', 40, 300, { ...BALL_VIDEO_PARAMS, ...note([
+        'Video Input: the moving picture, here the built-in Ball action clip (glowing balls swirling into mandalas), looping. Press Choose video (or the camera) on this card for yours.',
         'Its Texture output is the video itself as a texture, read by Mask and Levels without a copy Pass.',
-      ])),
+      ]) }),
       n('textureMask', 'vidMask', 340, 160, { source: 'brightness', threshold: 'soft', level: 0.45, width: 0.15,
         ...note('Mask (texture): 1 where the video is brighter than Level, fading in over Width (a soft threshold, so the mask doesn\'t flicker). Raise Level to keep only the brightest parts (a lit face in front of a dark room).') },
         { texture: ['vid', 'texture'] }),
@@ -219,32 +223,32 @@ export function buildTextureToolExamples(): Record<string, ExampleGraph> {
     ...TEXTURE_TOOL_EXAMPLE_INDEX.ttColourKey,
     counter: 40,
     nodes: [
-      n('videoInput', 'vid', 40, 200, note([
-        'Video Input: a video shot against a green screen (or the camera in front of anything green). Press Choose video on this card: until then it is black.',
+      n('videoInput', 'vid', 40, 200, { ...BALL_VIDEO_PARAMS, ...note([
+        'Video Input: the built-in Ball action clip, glowing balls on black, looping. Press Choose video on this card for a green-screen video of yours (or the camera in front of anything green).',
         'Its Texture output goes to Mask; its Color output to Mix.',
-      ])),
-      n('textureMask', 'key', 340, 200, { source: 'key', key: [0.1, 0.75, 0.2], tolerance: 0.3, softness: 0.15, threshold: 'off',
+      ]) }),
+      n('textureMask', 'key', 340, 200, { source: 'key', key: [0, 0, 0], tolerance: 0.3, softness: 0.15, threshold: 'off',
         ...note([
           'Mask (texture), Colour key: how close each pixel is to the Key colour. 1 within Tolerance, fading to 0 over Key softness (soft hair and motion blur keep their fringe).',
-          'Threshold Off: the soft match is the mask as it is. Pick the screen\'s own green with the Key colour swatch.',
+          'Key colour black: the clip\'s dark background is keyed out, the bright balls kept. Threshold Off: the soft match is the mask as it is. For a green screen, pick the screen\'s own green with the Key colour swatch.',
         ]) },
         { texture: ['vid', 'texture'] }),
       n('uv', 'uv', 40, 520, note('UV: this pixel\'s place, for the background noise.')),
       n('time', 'time', 40, 700, note('Time: drifts the background.')),
-      n('fbm', 'bgNoise', 340, 560, { scale: 1.6, time_scale: 0.2, ...note('Fractal Noise: a drifting backdrop to put behind the person (any picture works: a Texture Input, a 3D scene).') }, { uv: ['uv', 'uv'], time: ['time', 'time'] }),
+      n('fbm', 'bgNoise', 340, 560, { scale: 1.6, time_scale: 0.2, ...note('Fractal Noise: a drifting backdrop to put behind what the key keeps (any picture works: a Texture Input, a 3D scene).') }, { uv: ['uv', 'uv'], time: ['time', 'time'] }),
       n('palette', 'bg', 640, 560, { scale: 1.2, phase: [0.6, 0.7, 0.8], ...note('Palette: colours the backdrop.') }, { value: ['bgNoise', 'value'] }),
       colourMix('comp', 940, 260, { t: 0.5, ...note('Mix: the video where the key is 0, the backdrop where it is 1 (Blend is the key mask).') }, { a: ['vid', 'color'], b: ['bg', 'color'], t: ['key', 'mask'] }),
-      n('output', 'out', 1240, 260, note('Output: the video with the green swapped for the backdrop.'), { color: ['comp', 'result'] }),
+      n('output', 'out', 1240, 260, note('Output: the video with the keyed colour (here the black) swapped for the backdrop.'), { color: ['comp', 'result'] }),
     ],
     play: playRecord([
       ctl('tol', 'key::tolerance', 'Tolerance', 0, 1, 0.005),
       ctl('soft', 'key::softness', 'Key softness', 0, 0.6, 0.005),
       colourCtl('keyColour', 'key::key', 'Key colour'),
-    ], `**What it shows.** A green screen with one node: Mask (texture) in Colour key mode gives a soft mask of the key colour.
+    ], `**What it shows.** A colour key with one node: Mask (texture) in Colour key mode gives a soft mask of the key colour. Here it keys the black behind the Ball action clip, so the balls float over a drifting backdrop.
 
 **How it is built.** The Video Input's Texture goes into Mask (Colour key); its Color and a noise backdrop go into Mix, with the mask as the blend.
 
-**Try.** Choose a video or the camera. Pick the key colour from your screen, then raise Tolerance until the green is gone and Key softness until the edges look natural. Turn on Invert to keep only the green.`),
+**Try.** Raise Tolerance to eat into the dim balls too. Choose a green-screen video or the camera, pick the key colour from your screen, then raise Tolerance until the green is gone and Key softness until the edges look natural. Turn on Invert to keep only the keyed colour.`),
   };
 
   // ── 5 · Reaction-diffusion with Neighbours (Difference) → Levels → Stops Palette ──

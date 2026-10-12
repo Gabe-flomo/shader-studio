@@ -13,8 +13,10 @@ import {
   sliceSide, sliceTime, stackSettingsOf, stepAlpha, tileOrigin, voxelOpacity, type KeySettings, type StackSettings, type VoxelLook,
   OPACITY_KNEE, OPACITY_REF, legacyOpticalDepth, migrateOpacity, opacityForDepth, slabOpacity,
 } from '../plan';
-import { DEMO_META } from '../frames';
-import { timeCubeMeta, timeCubePlan, volumeKey } from '../volumes';
+import { BALL_META, DEMO_META } from '../frames';
+import { timeCubeMeta, timeCubePlan, timeCubeSource, timeCubeSourceName, timeCubeVideoId, volumeKey } from '../volumes';
+import { BALL_VIDEO_ID, builtinVideoBlob, builtinVideoUrl, canDecodeVideo } from '../../builtinVideos';
+import { getVideo, hasVideo } from '../../backgroundLibrary';
 import { compileGraph } from '../../../compiler/graphCompiler';
 import { buildTimeCubeExamples } from '../../../store/timeCubeExamples';
 import { n } from '../../../store/graphBuilder';
@@ -362,11 +364,19 @@ describe('adding a view or a slice', () => {
 });
 
 describe('the source node', () => {
-  it('the test clip needs no file; a library video needs its size before it can plan', () => {
-    const demo = n('timeCube', 'a', 0, 0);
+  it('Ball action (the default) and the test clip need no file; a library video needs its size before it can plan', () => {
+    const ball = n('timeCube', 'z', 0, 0);
+    expect(timeCubeSource(ball)).toEqual({ kind: 'ball' });
+    expect(timeCubeMeta(ball)).toEqual(BALL_META);
+    expect(timeCubePlan(ball)?.frames).toBe(128);
+    expect(volumeKey(ball)).toMatch(/^ball\|256x144\|/);
+    expect(timeCubeVideoId(timeCubeSource(ball))).toBe(BALL_VIDEO_ID);
+    expect(timeCubeSourceName(ball)).toMatch(/Ball action/);
+    const demo = n('timeCube', 'a', 0, 0, { source: 'demo' });
     expect(timeCubeMeta(demo)).toEqual(DEMO_META);
     expect(timeCubePlan(demo)?.frames).toBe(128);
     expect(volumeKey(demo)).toMatch(/^demo\|256x144\|/);
+    expect(timeCubeVideoId(timeCubeSource(demo))).toBeNull();
     const lib = n('timeCube', 'b', 0, 0, { source: 'library', videoId: 'vid_1' });
     expect(timeCubePlan(lib)).toBeNull();
     expect(volumeKey(lib)).toBeNull();
@@ -379,5 +389,21 @@ describe('the source node', () => {
 
   it('counts as a use of its Library video (Clean up keeps it)', () => {
     expect(bakedVideoIds([n('timeCube', 'a', 0, 0, { source: 'library', videoId: 'vid_9' }), n('timeCube', 'b', 0, 0)])).toEqual(['vid_9']);
+  });
+});
+
+describe('the built-in Ball action video', () => {
+  it('has the same 16:9 shape as the test clip, so the examples keep their layout', () => {
+    expect(BALL_META.width / BALL_META.height).toBeCloseTo(DEMO_META.width / DEMO_META.height, 6);
+    expect(builtinVideoUrl(BALL_VIDEO_ID)).toMatch(/media\/ball-action\.mp4$/);
+  });
+  it('is never fetched where videos cannot be decoded (tests): the cube paints the test clip instead', async () => {
+    expect(canDecodeVideo()).toBe(false);
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    expect(await builtinVideoBlob(BALL_VIDEO_ID)).toBeNull();
+    expect(await getVideo(BALL_VIDEO_ID)).toBeNull();
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+    expect(await hasVideo(BALL_VIDEO_ID)).toBe(true);
   });
 });

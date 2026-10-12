@@ -44,7 +44,7 @@ import {
 } from '../../timeCubeBuilder/spec';
 
 export const SECTION_INFO: Record<TcSection, { icon: IconName; line: string }> = {
-  source: { icon: 'import', line: 'The video (or the test clip), its clip, how many frames and how they are read' },
+  source: { icon: 'import', line: 'The video (Ball action, built in, until you choose one), its clip, how many frames and how they are read' },
   shape: { icon: 'cube', line: 'A box of time or a stack of cards: its shape, size and layout' },
   time: { icon: 'clock', line: 'The slice or the scan, flow and playback, and an LFO to move it' },
   colour: { icon: 'sun', line: 'Glow, tint, brightness, a colour key that keeps one colour through time' },
@@ -150,7 +150,7 @@ function SourcePanel({ spec }: { spec: TimeCubeSpec }) {
     {node ? (
       <div data-tc-source-card style={{ margin: '0 -12px' }}><TimeCubeCardBody node={node} /></div>
     ) : <BuilderNote>Building… ({sourceName(spec.source)})</BuilderNote>}
-    <BuilderNote>The Time Cube reads a video: the built-in test clip, one from the Library, or a file (Choose video). Edit clip… trims it, keeps several segments, crops and turns it.</BuilderNote>
+    <BuilderNote>The Time Cube reads a video: the built-in Ball action clip, one from the Library, or a file (Choose video). Edit clip… trims it, keeps several segments, crops and turns it.</BuilderNote>
     <Groups groups={groupsFor('source', spec.display)} spec={spec} section="source" />
   </>;
 }

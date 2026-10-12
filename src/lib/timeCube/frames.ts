@@ -1,6 +1,8 @@
 /**
  * Filling a Time cube's atlas (docs/time-cube.md): a video's frames, seeked
- * and drawn one by one, or the built-in test clip, painted.
+ * and drawn one by one (a Library video, or the built-in Ball action clip,
+ * lib/builtinVideos.ts), or the painted test clip (the fallback where the
+ * Ball action video can't be decoded: tests, or a failed load).
  *
  * Video frames are read the way Bake's offline render reads a Baked node's
  * video (lib/bakedVideos.ts seek): a muted <video>, `currentTime` set, wait
@@ -10,6 +12,7 @@
  */
 import { tileOrigin, type StackPlan, type VideoMeta } from './plan';
 import { drawClipFrame, isIdentity, type ClipTransform } from '../media/clip';
+import { BALL_VIDEO } from '../builtinVideos';
 
 export class TimeCubeCancelled extends Error {
   constructor() { super('Cancelled'); this.name = 'TimeCubeCancelled'; }
@@ -77,9 +80,13 @@ export async function decodeVideoFrames(blob: Blob, plan: StackPlan, ctx: Canvas
   } finally { release(el, url); }
 }
 
-// ── The test clip ────────────────────────────────────────────────────────────
+// ── The built-in clips ───────────────────────────────────────────────────────
 
-/** The built-in clip: a street, 4 seconds, 16:9. Painted, not decoded, so examples work offline and in tests. */
+/** Ball action (the default source): glowing balls swirling into mandalas, 10.4 s, 16:9. A real video, shipped with the app. */
+export const BALL_META: VideoMeta = { width: BALL_VIDEO.width, height: BALL_VIDEO.height, duration: BALL_VIDEO.duration };
+export const BALL_LABEL = 'Ball action (built in)';
+
+/** The test clip: a street, 4 seconds, 16:9. Painted, not decoded, so it works offline and in tests (and stands in for Ball action there). */
 export const DEMO_META: VideoMeta = { width: 640, height: 360, duration: 4 };
 export const DEMO_LABEL = 'Test clip: a red car crossing a street (built in)';
 
@@ -185,10 +192,10 @@ export function paintDemoFrameXf(g: CanvasRenderingContext2D, t: number, xf: Cli
   drawClipFrame(g, c, sw, sh, xf, x, y, w, h);
 }
 
-/** The test clip, painted at any time. */
-export function demoReader(): FrameReader {
+/** The test clip, painted at any time (times scaled by `timeScale`: a stand-in for a longer clip plays it stretched to fit). */
+export function demoReader(timeScale = 1): FrameReader {
   const scratch: { c?: HTMLCanvasElement } = {};
-  return { draw: async (t, g, x, y, w, h, _signal, xf) => paintDemoFrameXf(g, t, xf, x, y, w, h, scratch), close: () => {} };
+  return { draw: async (t, g, x, y, w, h, _signal, xf) => paintDemoFrameXf(g, t * timeScale, xf, x, y, w, h, scratch), close: () => {} };
 }
 
 /** A video, seeked frame by frame (as decodeVideoFrames). */
@@ -214,13 +221,13 @@ export async function openVideoReader(blob: Blob): Promise<FrameReader> {
   };
 }
 
-/** Paint every planned frame of the test clip into the atlas. Yields to the page now and then. */
-export async function paintDemoFrames(plan: StackPlan, ctx: CanvasRenderingContext2D, onFrame: (done: number) => void, signal: AbortSignal): Promise<void> {
+/** Paint every planned frame of the test clip into the atlas (times scaled by `timeScale`). Yields to the page now and then. */
+export async function paintDemoFrames(plan: StackPlan, ctx: CanvasRenderingContext2D, onFrame: (done: number) => void, signal: AbortSignal, timeScale = 1): Promise<void> {
   const scratch: { c?: HTMLCanvasElement } = {};
   for (let i = 0; i < plan.frames; i++) {
     if (signal.aborted) throw new TimeCubeCancelled();
     const { x, y } = tileOrigin(plan, i);
-    paintDemoFrameXf(ctx, plan.times[i], plan.xf, x, y, plan.tileW, plan.tileH, scratch);
+    paintDemoFrameXf(ctx, plan.times[i] * timeScale, plan.xf, x, y, plan.tileW, plan.tileH, scratch);
     onFrame(i + 1);
     if (i % 16 === 15) await new Promise(r => setTimeout(r, 0));
   }
