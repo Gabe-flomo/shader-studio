@@ -16,26 +16,31 @@ import type { GraphNode } from '../../types/nodeGraph';
 import { getVideo } from '../../lib/backgroundLibrary';
 import { clipParams, clipSettingsOf, cubeSequence, type ClipSettings } from '../../lib/media/clip';
 import { MAX_FRAMES, MIN_FRAMES, capText, formatBytes, planFrameStack, stackSettingsOf } from '../../lib/timeCube/plan';
-import { DEMO_LABEL, paintDemoFrame } from '../../lib/timeCube/frames';
-import { timeCubeMeta, timeCubeSource, timeCubes } from '../../lib/timeCube/volumes';
+import { BALL_META, DEMO_META, paintDemoFrame } from '../../lib/timeCube/frames';
+import { timeCubeMeta, timeCubeSource, timeCubeSourceName, timeCubeVideoId, timeCubes } from '../../lib/timeCube/volumes';
 import { buildEstimate, combineSettingsOf, frameOrder, orderSettingsOf } from '../../lib/timeCube/order';
 import { ClipEditor, type ClipFrameSource } from '../media/ClipEditor';
 import { explicitSegments } from '../media/clipEditorParts';
 
 const PAINTED: ClipFrameSource = { kind: 'painted', paint: paintDemoFrame };
+/** Ball action where its video can't be opened: the test clip stretched over its length (as the cube builds it). */
+const BALL_PAINTED: ClipFrameSource = { kind: 'painted', paint: (g, t, x, y, w, h) => paintDemoFrame(g, t * (DEMO_META.duration / BALL_META.duration), x, y, w, h) };
 
 export function TimeCubeClipModal({ node, onClose }: { node: GraphNode; onClose: () => void }) {
   const tk = useTokens();
   const updateNodeParams = useNodeGraphStore(s => s.updateNodeParams);
   const meta = timeCubeMeta(node);
   const src = timeCubeSource(node);
-  const [source, setSource] = useState<ClipFrameSource | 'loading' | 'missing'>(src?.kind === 'library' ? 'loading' : PAINTED);
+  const videoId = timeCubeVideoId(src);
+  const [source, setSource] = useState<ClipFrameSource | 'loading' | 'missing'>(videoId ? 'loading' : PAINTED);
   useEffect(() => {
-    if (src?.kind !== 'library') return;
+    if (!videoId) { setSource(PAINTED); return; }
     let live = true;
-    getVideo(src.videoId).then(v => { if (live) setSource(v ? { kind: 'video', blob: v.blob } : 'missing'); }).catch(() => { if (live) setSource('missing'); });
+    // Ball action that can't be had here falls back to the painted clip, as the cube itself does.
+    const none = () => (src?.kind === 'ball' ? BALL_PAINTED : 'missing');
+    getVideo(videoId).then(v => { if (live) setSource(v ? { kind: 'video', blob: v.blob } : none()); }).catch(() => { if (live) setSource(none()); });
     return () => { live = false; };
-  }, [src?.kind, src?.kind === 'library' ? src.videoId : '']); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [videoId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [draft, setDraft] = useState<ClipSettings>(() => {
     const c = clipSettingsOf(node.params);
@@ -60,9 +65,9 @@ export function TimeCubeClipModal({ node, onClose }: { node: GraphNode; onClose:
     onClose();
   };
 
-  const name = src?.kind === 'library' ? (typeof node.params.fileName === 'string' && node.params.fileName) || 'A Library video' : DEMO_LABEL;
+  const name = timeCubeSourceName(node);
   const small = { fontSize: 11.5, color: tk.text.muted } as const;
-  const est = plan ? buildEstimate(plan.frames, comb.sub, src?.kind !== 'library') : null;
+  const est = plan ? buildEstimate(plan.frames, comb.sub, src?.kind === 'demo') : null;
 
   const side = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -83,7 +88,7 @@ export function TimeCubeClipModal({ node, onClose }: { node: GraphNode; onClose:
     <>
       <span style={{ ...small, flex: 1, minWidth: 220, display: 'flex', flexDirection: 'column', gap: 2 }}>
         {plan && <b style={{ color: tk.text.secondary, fontWeight: 600 }}>{`${plan.frames} frames · ${plan.tileW}×${plan.tileH} · ${formatBytes(plan.bytes)} on the GPU`}</b>}
-        {plan && est && <span>{plan.capped ? capText(plan) + ' ' : ''}{`Reads ${est.decoded} frames${src?.kind === 'library' ? `, about ${est.seconds < 90 ? `${Math.max(1, Math.round(est.seconds))} s` : `${Math.round(est.seconds / 60)} min`}` : ''}. Apply rebuilds the cube.`}</span>}
+        {plan && est && <span>{plan.capped ? capText(plan) + ' ' : ''}{`Reads ${est.decoded} frames${src?.kind !== 'demo' ? `, about ${est.seconds < 90 ? `${Math.max(1, Math.round(est.seconds))} s` : `${Math.round(est.seconds / 60)} min`}` : ''}. Apply rebuilds the cube.`}</span>}
       </span>
       <Button variant="ghost" onClick={onClose}>Cancel</Button>
       <Button variant="primary" onClick={apply} disabled={!plan}>Apply</Button>

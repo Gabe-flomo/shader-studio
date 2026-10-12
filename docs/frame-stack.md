@@ -20,7 +20,7 @@ each frame as its own thin card, and you arrange and animate the cards:
 **Frame Stack** is in the 3D Scene category. Wire a Time Cube's **Volume**
 into it and its **Color** into the Output. When you add one on its own, it
 works like Time Cube View: it reads the nearest Time Cube (or brings one with
-the test clip), and in a graph that already ray-marches a scene it joins it
+the Ball action clip), and in a graph that already ray-marches a scene it joins it
 (the March Camera's rays, the loop's picture behind, the loop's distance in
 front).
 
@@ -94,7 +94,7 @@ only Layout starts open.
 
 ## Examples (Frame Stack folder)
 
-Every example uses the built-in test clip, and every node carries a note.
+Every example uses the built-in Ball action clip (see time-cube.md), and every node carries a note.
 
 - **Frame stack: isometric cards.** A long diagonal stack on a light page,
   isometric lens. The scan opens a gap and pulls one card out.

@@ -1,6 +1,7 @@
 /**
  * timeCubes — builds and keeps each Time Cube node's volume (docs/time-cube.md):
- * the frames of its video (or the test clip) laid out on one atlas canvas,
+ * the frames of its video (the built-in Ball action clip, a Library video, or
+ * the painted test clip) laid out on one atlas canvas,
  * handed to the shader as the node's texture.
  *
  * - `sync(nodes)`: on every graph change (ShaderCanvas). Each Time Cube node
@@ -18,8 +19,9 @@
 import * as THREE from 'three';
 import type { GraphNode, SubgraphData } from '../../types/nodeGraph';
 import { getVideo } from '../backgroundLibrary';
+import { BALL_VIDEO_ID } from '../builtinVideos';
 import { planFrameStack, stackSettingsOf, tileOrigin, type StackPlan, type VideoMeta } from './plan';
-import { DEMO_META, TimeCubeCancelled, decodeVideoFrames, demoReader, openVideoReader, paintDemoFrames, probeVideo, type FrameReader } from './frames';
+import { BALL_LABEL, BALL_META, DEMO_LABEL, DEMO_META, TimeCubeCancelled, decodeVideoFrames, demoReader, openVideoReader, paintDemoFrames, probeVideo, type FrameReader } from './frames';
 import { deepTexture, reorderDeep } from './deep';
 import {
   combineFramesFloat, combineKey, combineSettingsOf, frameMotion, frameOrder, frameStat, orderKey, orderSettingsOf, subFrameTimes,
@@ -37,15 +39,35 @@ export interface TimeCubeStatus {
   message?: string;
 }
 
-/** The video a Time Cube node reads: the test clip, or a library video by id. */
-export function timeCubeSource(node: GraphNode): { kind: 'demo' } | { kind: 'library'; videoId: string } | null {
+export type TimeCubeSource = { kind: 'ball' } | { kind: 'demo' } | { kind: 'library'; videoId: string };
+
+/**
+ * The video a Time Cube node reads: the built-in Ball action clip (`source: 'ball'`, the default), the painted
+ * test clip (`'demo'`, and graphs saved before Ball action shipped), or a library video by id.
+ */
+export function timeCubeSource(node: GraphNode): TimeCubeSource | null {
+  if (node.params.source === 'ball') return { kind: 'ball' };
   if (node.params.source !== 'library') return { kind: 'demo' };
   const id = typeof node.params.videoId === 'string' ? node.params.videoId : '';
   return id ? { kind: 'library', videoId: id } : null;
 }
 
+/** What the card and the clip editor call a node's video. */
+export function timeCubeSourceName(node: GraphNode): string {
+  const src = timeCubeSource(node);
+  if (src?.kind === 'ball') return BALL_LABEL;
+  if (src?.kind === 'demo') return DEMO_LABEL;
+  return (typeof node.params.fileName === 'string' && node.params.fileName) || 'A Library video';
+}
+
+/** The library id a node's video is read by (Ball action's built-in id), or null for the painted test clip. */
+export function timeCubeVideoId(src: TimeCubeSource | null): string | null {
+  return src?.kind === 'library' ? src.videoId : src?.kind === 'ball' ? BALL_VIDEO_ID : null;
+}
+
 /** A video's size and length as the node keeps it (`_meta`, written when the video is chosen). */
 export function timeCubeMeta(node: GraphNode): VideoMeta | null {
+  if (node.params.source === 'ball') return BALL_META;
   if (node.params.source !== 'library') return DEMO_META;
   const m = node.params._meta as Partial<VideoMeta> | undefined;
   return m && typeof m.width === 'number' && m.width > 0 && typeof m.height === 'number' && m.height > 0 && typeof m.duration === 'number'
@@ -62,7 +84,7 @@ export function timeCubePlan(node: GraphNode): StackPlan | null {
 export function baseVolumeKey(node: GraphNode): string | null {
   const src = timeCubeSource(node), plan = timeCubePlan(node);
   if (!src || !plan) return null;
-  const who = src.kind === 'demo' ? 'demo' : `vid:${src.videoId}`;
+  const who = src.kind === 'library' ? `vid:${src.videoId}` : src.kind;
   return `${who}|${plan.tileW}x${plan.tileH}|${plan.cols}x${plan.rows}|${plan.frames}|${plan.clipKey}${combineKey(combineSettingsOf(node.params))}${stackSettingsOf(node.params).deep ? '|16' : ''}`;
 }
 
@@ -260,20 +282,33 @@ class TimeCubes {
         const ctx = base.getContext('2d', { willReadFrequently: false });
         if (!ctx) throw new Error('No 2D canvas here.');
         ctx.fillStyle = '#000'; ctx.fillRect(0, 0, base.width, base.height);
+        // Ball action: the video when this page can decode it, else the painted test clip stretched over its length.
+        const ballFallback = BALL_META.duration > 0 ? DEMO_META.duration / BALL_META.duration : 1;
+        const blobOf = async (): Promise<Blob | null | 'missing'> => {
+          const id = timeCubeVideoId(src);
+          if (!id) return null;
+          const got = await getVideo(id).catch(() => null);
+          return got ? got.blob : src.kind === 'ball' ? null : 'missing';
+        };
+        const missing = () => { v.status = { state: 'missing', done: 0, total, message: 'This video is not in this browser\'s Library. Choose it again.' }; };
+        const scale = src.kind === 'ball' ? ballFallback : 1;
         if (comb.combine === 'pick') {
-          if (src.kind === 'demo') await paintDemoFrames(plan, ctx, progress, signal);
-          else {
-            const got = await getVideo(src.videoId).catch(() => null);
-            if (!got) { v.status = { state: 'missing', done: 0, total, message: 'This video is not in this browser\'s Library. Choose it again.' }; return; }
-            await decodeVideoFrames(got.blob, plan, ctx, progress, signal);
+          const blob = await blobOf();
+          if (blob === 'missing') { missing(); return; }
+          let painted = !blob;
+          if (blob) {
+            try { await decodeVideoFrames(blob, plan, ctx, progress, signal); }
+            catch (err) { if (err instanceof TimeCubeCancelled || src.kind !== 'ball') throw err; painted = true; }
           }
+          if (painted) await paintDemoFrames(plan, ctx, progress, signal, scale);
         } else {
+          const blob = await blobOf();
+          if (blob === 'missing') { missing(); return; }
           let reader: FrameReader;
-          if (src.kind === 'demo') reader = demoReader();
+          if (!blob) reader = demoReader(scale);
           else {
-            const got = await getVideo(src.videoId).catch(() => null);
-            if (!got) { v.status = { state: 'missing', done: 0, total, message: 'This video is not in this browser\'s Library. Choose it again.' }; return; }
-            reader = await openVideoReader(got.blob);
+            try { reader = await openVideoReader(blob); }
+            catch (err) { if (src.kind !== 'ball') throw err; reader = demoReader(scale); }
           }
           if (plan.bytes > plan.atlasW * plan.atlasH * 4) v.deep = new Float32Array(plan.atlasW * plan.atlasH * 4);
           try { await combineInto(reader, plan, comb, timeCubeMeta(node)?.duration ?? 0, ctx, progress, signal, v.deep); }

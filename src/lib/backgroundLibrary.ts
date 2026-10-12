@@ -70,6 +70,7 @@ import { klFillAt } from '../play/kit/layers.js';
 import { ensureRoom } from '../files/storageLimit';
 import { isLinkedRef, mimeOf } from '../files/linkedRefs';
 import { onLinkedChange, resolveLinked, statLinked } from '../files/linkedFolders';
+import { BUILTIN_VIDEOS, builtinVideoBlob, isBuiltinVideo } from './builtinVideos';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -771,6 +772,12 @@ export async function listVideos(o: { withSplats?: boolean } = {}): Promise<Libr
 /** A kept video's file, or null when this browser doesn't have it. */
 export async function getVideo(id: string): Promise<(LibraryVideoMeta & { blob: Blob }) | null> {
   if (!id) return null;
+  // A video that ships with the app (lib/builtinVideos.ts): fetched from the build, never kept here.
+  if (isBuiltinVideo(id)) {
+    const blob = await builtinVideoBlob(id);
+    const b = BUILTIN_VIDEOS[id];
+    return blob ? { id, name: b.name, type: b.type, bytes: blob.size, createdAt: 0, width: b.width, height: b.height, duration: b.duration, blob } : null;
+  }
   if (isLinkedRef(id)) {
     const got = await resolveLinked(id);
     if (got.ok) return { id, name: got.name, type: got.type || videoMimeOf(got.name) || 'video/mp4', bytes: got.size, createdAt: got.mtime, blob: got.blob };
@@ -781,6 +788,7 @@ export async function getVideo(id: string): Promise<(LibraryVideoMeta & { blob: 
 
 export async function hasVideo(id: string): Promise<boolean> {
   if (!id) return false;
+  if (isBuiltinVideo(id)) return true;
   if (isLinkedRef(id) && await statLinked(id)) return true;
   return hasLibraryVideo(id);
 }

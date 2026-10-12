@@ -68,7 +68,7 @@ export function specOfBuild(graph: readonly GraphNode[], sourceId: string): Time
 const NOTES: Record<TcRole, (s: TimeCubeSpec) => string> = {
   source: s => [
     'Time Cube (made by the Time Cube builder): stacks the frames of a video into one texture, a box of time.',
-    `It reads ${s.source.source === 'library' ? `"${String(s.source.fileName || 'a Library video')}"` : 'the built-in test clip (a red car crossing a street)'}. Choose another video in the builder's Source section or on this card; Edit clip… trims it.`,
+    `It reads ${s.source.source === 'library' ? `"${String(s.source.fileName || 'a Library video')}"` : s.source.source === 'ball' ? 'the built-in Ball action clip (glowing balls swirling into mandalas)' : 'the built-in test clip (a red car crossing a street)'}. Choose another video in the builder's Source section or on this card; Edit clip… trims it.`,
     'Frames and Frame size set how detailed it is; the card shows how much memory it takes.',
   ].join('\n'),
   view: () => [

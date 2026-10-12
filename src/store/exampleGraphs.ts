@@ -6553,7 +6553,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
   // ── Webcam CMYK ──
   webcamCmyk: {
     label: 'Webcam CMYK',
-    description: 'Video Input (choose a file or the camera) sampled through Pixelate, then CMYK Halftone prints it as four rotated dot screens. Swap the halftone for Grid UV → Luma Radius → Dot Mask for a single-ink version.',
+    description: 'Video Input (the built-in Ball action clip; choose a file or the camera for yours) sampled through Pixelate, then CMYK Halftone prints it as four rotated dot screens. Swap the halftone for Grid UV → Luma Radius → Dot Mask for a single-ink version.',
     counter: 5,
     nodes: [
       {
@@ -6585,7 +6585,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           alpha: { type: 'float', label: 'Alpha' },
           uv: { type: 'vec2', label: 'UV (pass-through)' },
         },
-        params: { _fileName: '', _hasFile: false, _isPlaying: false, _loop: true, _speed: 1 },
+        params: { videoId: 'builtin:ball-action', _fileName: 'Ball action', _hasFile: true, _isPlaying: true, _loop: true, _speed: 1 },
       },
       {
         id: 'half',

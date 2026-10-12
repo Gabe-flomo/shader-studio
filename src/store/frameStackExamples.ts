@@ -1,7 +1,7 @@
 /**
  * frameStackExamples.ts — the Frame Stack examples (docs/frame-stack.md):
- * a Time Cube's frames as cards. Each uses the built-in test clip (a red car
- * crossing a street), so they work offline and need no file: choose your own
+ * a Time Cube's frames as cards. Each uses the built-in Ball action clip
+ * (lib/builtinVideos.ts), so they need no file of yours: choose your own
  * video on the Time Cube card.
  *
  * Every node carries a comment saying what it is and why it's there.
@@ -46,7 +46,7 @@ const note = (text: string) => ({ __comment: text });
 
 const CUBE_NOTE = [
   'Time Cube: decodes a video into frames (one texture holding them all). The Frame Stack draws each frame as a card.',
-  'This one uses the built-in test clip (a red car crossing a street). Press Choose video on this card to use one of yours from the Library or a file.',
+  'This one uses the built-in Ball action clip (10 s of glowing balls swirling into mandala patterns, shipped with the app). Press Choose video on this card to use one of yours from the Library or a file.',
 ].join('\n');
 
 const OUT_NOTE = note('Output: the picture.');

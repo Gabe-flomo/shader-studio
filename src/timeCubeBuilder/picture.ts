@@ -1,7 +1,7 @@
 /**
  * picture.ts — a small CPU drawing of a Time Cube builder scene (docs/timecube-builder.md), for the presets strip and
- * the Scene builder's kind page, so neither costs the GPU anything: the test clip's street (sky, road, the red car
- * crossing) on a few frames, stacked as a box of time or laid out as cards, in the scene's own colours, with the
+ * the Scene builder's kind page, so neither costs the GPU anything: the Ball action clip (rings of glowing balls
+ * turning on dark) on a few frames, stacked as a box of time or laid out as cards, in the scene's own colours, with the
  * slice (or the scan) at `t`.
  */
 import type { Params, TimeCubeSpec } from './spec';
@@ -12,20 +12,23 @@ const css = (c: C3, a = 1) => `rgba(${c.map(x => Math.round(Math.max(0, Math.min
 const mix = (a: C3, b: C3, k: number): C3 => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
 const num = (v: unknown, fb: number) => (typeof v === 'number' && Number.isFinite(v) ? v : fb);
 
-/** One frame of the street at time `u` (0–1), in a w × h box at the origin. */
+/** One frame of the Ball action clip at time `u` (0–1), in a w × h box at the origin: rings of glowing balls turning on dark. */
 function frame(g: CanvasRenderingContext2D, w: number, h: number, u: number, o: { tint: C3; tintK: number; key: boolean; alpha: number; grey: number }) {
-  const sky = mix(mix([0.55, 0.72, 0.9], [0.5, 0.5, 0.5], o.grey), o.tint, o.tintK);
-  const road = mix([0.32, 0.33, 0.36], o.tint, o.tintK);
   const a = o.alpha;
-  if (!o.key) {
-    g.fillStyle = css(sky, a); g.fillRect(0, 0, w, h * 0.62);
-    g.fillStyle = css(road, a); g.fillRect(0, h * 0.62, w, h * 0.38);
-    g.fillStyle = css(mix([1, 0.85, 0.4], [0.7, 0.7, 0.7], o.grey), a); g.beginPath(); g.arc(w * (0.2 + 0.6 * u), h * 0.25, h * 0.09, 0, Math.PI * 2); g.fill();
-  } else {
-    g.fillStyle = css([0.4, 0.4, 0.42], a * 0.25); g.fillRect(0, 0, w, h);
+  g.fillStyle = css(mix(o.key ? [0.4, 0.4, 0.42] : [0.03, 0.04, 0.08], o.tint, o.tintK * 0.3), o.key ? a * 0.25 : a);
+  g.fillRect(0, 0, w, h);
+  const cx = w / 2, cy = h / 2, r0 = Math.min(w, h) * 0.42, dot = Math.max(1, h * 0.05);
+  const ORANGE: C3 = [1, 0.62, 0.2], CYAN: C3 = [0.35, 0.8, 1];
+  // Two rings of balls turning opposite ways: the outer one amber (what the key examples pick out), the inner one cyan.
+  for (const [ring, n, turn, c] of [[1, 10, 1, ORANGE], [0.5, 6, -1.6, CYAN]] as const) {
+    const keyed = c === ORANGE;
+    const colour = mix(mix(c, [0.6, 0.6, 0.6], keyed ? 0 : o.grey), o.tint, o.tintK);
+    g.fillStyle = css(colour, o.key && !keyed ? a * 0.3 : o.key ? Math.min(1, a * 2 + 0.3) : a);
+    for (let i = 0; i < n; i++) {
+      const th = (i / n) * Math.PI * 2 + u * turn * Math.PI;
+      g.beginPath(); g.arc(cx + Math.cos(th) * r0 * ring * 1.5, cy + Math.sin(th) * r0 * ring, dot * (keyed ? 1 : 0.8), 0, Math.PI * 2); g.fill();
+    }
   }
-  g.fillStyle = css([0.86, 0.13, 0.12], o.key ? Math.min(1, a * 2 + 0.3) : a);
-  g.fillRect(w * (0.05 + 0.7 * u), h * 0.55, w * 0.22, h * 0.14);
 }
 
 function cube(g: CanvasRenderingContext2D, W: number, H: number, v: Params, slice: number) {

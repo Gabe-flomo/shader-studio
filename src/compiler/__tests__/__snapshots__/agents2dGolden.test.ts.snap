@@ -1068,10 +1068,10 @@ exports[`2D agents and pass graphs compile as they did before 3D > ttVideoOutlin
 {
   "agents": "1fe1f0024152e81521f99e5e13c1:4",
   "errors": null,
-  "fragmentShader": "09a4904703bcfa0ba8b609794626:6079",
+  "fragmentShader": "14adba72f2a70a087abdde66e288:6149",
   "paramBindings": "070657987790aa155ca735250af5:889",
   "paramUniforms": "1497fa153b3a551c454dac8ab491:622",
-  "passes": "07b0f1530e82410f73f58e027c94:29674",
+  "passes": "0c4556f7a0e18d1b113df21987ad:29744",
   "success": true,
   "textureUniforms": "167d269bbddad80189e9f9473b28:2",
   "web": null,

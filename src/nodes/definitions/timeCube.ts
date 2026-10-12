@@ -1,14 +1,14 @@
 import type { GraphNode, NodeDefinition, ParamDef } from '../../types/nodeGraph';
 import { p, pv3 } from './helpers';
 import { planFrameStack, stackSettingsOf, FRAME_WIDTHS, MAX_FRAMES, MIN_FRAMES } from '../../lib/timeCube/plan';
-import { DEMO_META } from '../../lib/timeCube/frames';
+import { BALL_META, DEMO_META } from '../../lib/timeCube/frames';
 import { segmentsFromStartEnd } from '../../lib/media/clip';
 import { KNEE_EASE, migrateOpacity, OD_SOLID, OPACITY_KNEE, OPACITY_REF } from '../../lib/timeCube/plan';
 
 /**
  * Time cube (docs/time-cube.md): a video as a box of time.
  *
- * - **Time Cube** (`timeCube`): picks a video (or the built-in test clip) and
+ * - **Time Cube** (`timeCube`): picks a video (the built-in Ball action clip by default) and
  *   stacks its frames into a volume: one atlas texture (`u_tex_<slug>`,
  *   bound from the store's nodeTextures by lib/timeCube/volumes.ts) plus two
  *   defines for its layout. Its Volume output is that sampler's name.
@@ -40,7 +40,8 @@ const fx = (n: number) => (Number.isInteger(n) ? `${n}.0` : `${+n.toFixed(6)}`);
 
 /** The defines a Time Cube node's volume needs, from its plan (the test clip's when its video's size isn't known yet). */
 export function timeCubeDeclarations(node: GraphNode): string[] {
-  const meta = node.params.source === 'library' ? (node.params._meta as { width?: number; height?: number; duration?: number } | undefined) : DEMO_META;
+  const meta = node.params.source === 'library' ? (node.params._meta as { width?: number; height?: number; duration?: number } | undefined)
+    : node.params.source === 'ball' ? BALL_META : DEMO_META;
   const plan = planFrameStack(
     meta && typeof meta.width === 'number' && typeof meta.height === 'number' ? { width: meta.width, height: meta.height, duration: Number(meta.duration) || 0 } : DEMO_META,
     stackSettingsOf(node.params),
@@ -336,13 +337,13 @@ export const TimeCubeNode: NodeDefinition = {
   label: 'Time Cube',
   category: 'Sources',
   aliases: ['Video volume', 'Space-time cube', 'Video cube', 'Frame stack', 'Slit-scan'],
-  description: 'Stacks a video\'s frames into a box of time: frame after frame, one behind the other. Wire its Volume into Time Cube View (the box in 3D) or Time Slice (a cut through it, for slit-scan). Uses the built-in test clip until you choose a video.',
+  description: 'Stacks a video\'s frames into a box of time: frame after frame, one behind the other. Wire its Volume into Time Cube View (the box in 3D) or Time Slice (a cut through it, for slit-scan). Starts with the built-in Ball action clip until you choose a video.',
   inputs: {},
   outputs: {
     volume: { type: 'volume', label: 'Volume', hint: 'The stacked frames. Wire into Time Cube View or Time Slice.' },
   },
   defaultParams: {
-    source: 'demo', videoId: '', fileName: '', frames: 128, frameWidth: '256', spacing: 'count', step: 0.1,
+    source: 'ball', videoId: '', fileName: '', frames: 128, frameWidth: '256', spacing: 'count', step: 0.1,
     // The clip editor's settings (lib/media/clip.ts). An out at or before its in runs to the end of the video.
     segments: [{ in: 0, out: 0 }], clip: { distribute: 'proportional', ramp: 'none', crop: { x: 0, y: 0, w: 1, h: 1 }, rotate: 0, flipX: false, flipY: false },
     _schemaVersion: TIME_CUBE_SOURCE_VERSION,
