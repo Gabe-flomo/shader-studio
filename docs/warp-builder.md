@@ -16,15 +16,17 @@ opens here.
 
 ## The page
 
-- **Left: the palette.**
+- **Left: the functions:** sin, cos, tan, abs, fract, floor, mod, pow, exp, log, sqrt, sign,
+  smoothstep, min, max, mix, length, atan, noise (`valueNoise`) and rotate. Each function tile
+  has a picture:
+  - when the picked row has tiles, a warped grid of what wrapping the picked tile in that function
+    would do;
+  - on an empty row, the function's curve.
+- **The tile bar**, a compact strip between the preview and the blocks. It stays put while the
+  blocks scroll; on a narrow window or a phone it scrolls sideways. It holds:
   - **Variables:** `x`, `y`, `uv`, `t` (with a clock), `r` (`length(uv)`) and `θ`
     (`atan(y, x)`). A looped block also offers `i` (the pass, `fi`), `k`, `n` and `uv0`.
-  - **The number tile (#):** a live slider.
-  - **Functions:** sin, cos, tan, abs, fract, floor, mod, pow, exp, log, sqrt, sign, smoothstep,
-    min, max, mix, length, atan, noise (`valueNoise`) and rotate. Each function tile has a picture:
-    - when the picked row has tiles, a warped grid of what wrapping the picked tile in that function
-      would do;
-    - on an empty row, the function's curve.
+  - **The number tile (# slider):** a live slider.
   - **Operators:** + − × ÷.
 - **Middle: the preview** of the whole stack, big and moving. The view switch has four views:
   - **Checkerboard** (the default): a warped grid;
@@ -155,8 +157,9 @@ Surprise me makes a random block from the seed, and the same seed always makes t
 
 ## On a phone
 
-The palette is the **Tiles** tab, and taps replace dragging: tap a tile in a row to pick it, then
-tap a palette tile. The tiles of a row go on a line of their own under its pickers. Send to 2D is
+The functions are the **Tiles** tab. The tile bar (variables, #, operators) stays under the
+preview as a strip that scrolls sideways. Taps replace dragging: tap a tile in a row to pick it,
+then tap a tile in the bar or the Tiles tab. The tiles of a row go on a line of their own under its pickers. Send to 2D is
 an icon.
 
 ![On a phone](warp-builder/7-phone.png)

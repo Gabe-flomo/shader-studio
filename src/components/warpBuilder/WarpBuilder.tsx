@@ -241,7 +241,7 @@ function BlockCard({ index }: { index: number }) {
 
 // ── The palette ──────────────────────────────────────────────────────────────
 
-function PaletteTile({ drag, label, hint, colour, children, wide }: { drag: TileDrag; label: ReactNode; hint: string; colour?: string; children?: ReactNode; wide?: boolean }) {
+function PaletteTile({ drag, label, hint, colour, children, wide, bar }: { drag: TileDrag; label: ReactNode; hint: string; colour?: string; children?: ReactNode; wide?: boolean; /** In the tile bar: small and in a row. */ bar?: boolean }) {
   const tk = useTokens();
   const [hover, setHover] = useState(false);
   return (
@@ -250,7 +250,7 @@ function PaletteTile({ drag, label, hint, colour, children, wide }: { drag: Tile
       onDragStart={e => startDrag(e, drag)} onDragEnd={endDrag} onClick={() => applyToSelection(drag)}
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
       style={{
-        display: 'flex', flexDirection: wide ? 'row' : 'column', alignItems: 'center', gap: wide ? 8 : 3, padding: wide ? '4px 8px' : '6px 4px', border: 0, borderRadius: radius.md, cursor: 'grab',
+        display: 'flex', flexDirection: wide ? 'row' : 'column', alignItems: 'center', gap: wide ? 8 : 3, padding: bar ? '0 10px' : wide ? '4px 8px' : '6px 4px', height: bar ? 32 : undefined, justifyContent: 'center', flexShrink: bar ? 0 : undefined, border: 0, borderRadius: radius.md, cursor: 'grab',
         background: hover ? tk.bg.hover : tk.bg.field, color: colour ?? tk.text.primary, font: `700 12.5px ${fontFamily.mono}`, minWidth: 0,
         boxShadow: `inset 0 0 0 1px ${tk.border.subtle}`,
       }}>
@@ -285,18 +285,9 @@ function FnPicture({ f }: { f: FnTile }) {
 }
 
 function Palette() {
-  const loop = useWarpBuilder(s => { const b = s.sel ? s.spec.blocks[s.sel.block]?.block : s.spec.blocks[0]?.block; return !!b?.loop; });
   const grid = (cols: number): CSSProperties => ({ display: 'grid', gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gap: 5 });
   return (
     <div data-warp-palette style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '14px 12px 24px' }}>
-      <StudioLabel meta="drag or click">Variables</StudioLabel>
-      <div style={grid(3)}>
-        {VAR_TILES.filter(v => !v.loop || loop).map(v => (
-          <PaletteTile key={v.name} drag={{ from: 'palette', kind: 'var', name: v.name }} label={<>{v.name === 't' && <Icon name="clock" size={13} />}{v.label}</>} hint={v.blurb} colour={varColour(v.name)} />
-        ))}
-      </div>
-      <StudioLabel meta="a live slider">Number</StudioLabel>
-      <PaletteTile wide drag={{ from: 'palette', kind: 'num' }} label={<><span>#</span><span style={{ font: `500 11.5px ${fontFamily.ui}` }}>a slider · on a filled tile it multiplies</span></>} hint="A number you can drag live: a slider named from where it lands (amp, freq…)" />
       <StudioLabel meta="pictures: what each would do">Functions</StudioLabel>
       <div style={grid(3)}>
         {FN_TILES.map(f => (
@@ -305,10 +296,29 @@ function Palette() {
           </PaletteTile>
         ))}
       </div>
-      <StudioLabel>Operators</StudioLabel>
-      <div style={grid(4)}>
-        {OP_TILES.map(o => <PaletteTile key={o.op} drag={{ from: 'palette', kind: 'op', op: o.op }} label={<span style={{ fontSize: 16 }}>{o.label}</span>} hint={`${o.blurb}: tile ${o.label} an empty slot`} />)}
-      </div>
+      <BuilderNote style={{ fontSize: 11 }}>Variables, the number tile and the operators are in the bar under the preview, beside the rows.</BuilderNote>
+    </div>
+  );
+}
+
+/**
+ * The tile bar: variables, the number tile and the operators, in one compact strip between the
+ * preview and the blocks. It stays put while the blocks scroll; on a narrow window it scrolls sideways.
+ */
+function TileBar() {
+  const tk = useTokens();
+  const loop = useWarpBuilder(s => { const b = s.sel ? s.spec.blocks[s.sel.block]?.block : s.spec.blocks[0]?.block; return !!b?.loop; });
+  const sep = <span aria-hidden style={{ width: 1, alignSelf: 'stretch', margin: '2px 4px', background: tk.border.subtle, flexShrink: 0 }} />;
+  return (
+    <div data-warp-tilebar role="toolbar" aria-label="Tiles: drag onto a row, or click to put on the picked tile"
+      style={{ flexShrink: 0, height: 46, boxSizing: 'border-box', display: 'flex', alignItems: 'center', gap: 4, padding: '0 10px', overflowX: 'auto', overflowY: 'hidden', whiteSpace: 'nowrap', borderTop: `1px solid ${tk.border.subtle}`, background: tk.bg.panel }}>
+      {VAR_TILES.filter(v => !v.loop || loop).map(v => (
+        <PaletteTile key={v.name} bar drag={{ from: 'palette', kind: 'var', name: v.name }} label={<>{v.name === 't' && <Icon name="clock" size={13} />}{v.label}</>} hint={v.blurb} colour={varColour(v.name)} />
+      ))}
+      {sep}
+      <PaletteTile bar drag={{ from: 'palette', kind: 'num' }} label={<><span>#</span><span style={{ font: `500 11px ${fontFamily.ui}`, color: tk.text.muted }}>slider</span></>} hint="A number you can drag live: a slider named from where it lands (amp, freq…). On a filled tile it multiplies it" />
+      {sep}
+      {OP_TILES.map(o => <PaletteTile key={o.op} bar drag={{ from: 'palette', kind: 'op', op: o.op }} label={<span style={{ fontSize: 15 }}>{o.label}</span>} hint={`${o.blurb}: tile ${o.label} an empty slot`} />)}
     </div>
   );
 }
@@ -448,7 +458,8 @@ function Viewport() {
           <IconButton icon="reset" size="sm" label="Back to t = 0" onClick={() => setSeek(s => ({ t: 0, n: (s?.n ?? 0) + 1 }))} />
         </div>
       </div>
-      <div data-warp-stack style={{ flex: '1 1 45%', minHeight: 180, overflowY: 'auto', padding: 12, display: 'flex', flexDirection: 'column', gap: 6, borderTop: `1px solid ${tk.border.subtle}`, background: tk.bg.subtle }}>
+      <TileBar />
+      <div data-warp-stack style={{ flex: '1 1 45%', minHeight: 180, overflowY: 'auto', padding: 12, display: 'flex', flexDirection: 'column', gap: 6, background: tk.bg.subtle }}>
         {spec.blocks.map((b, i) => (
           <div key={b.id} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {i > 0 && <span aria-hidden style={{ alignSelf: 'center', font: `600 10.5px ${fontFamily.mono}`, color: tk.text.faint }}>↓ warps the result</span>}
