@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.180',
+    date: '2026-10-11',
+    title: 'Map a hand from the card',
+    highlights: [
+      { area: 'Studio', text: 'Texture webcam: live hand chips (pinch, openness, palm, roll, nearness). Click one, then any slider, and it becomes a Play control mapped to your hand.' },
+      { area: 'Studio', text: 'The camera picker on a Texture card and on the Play page now stay in sync.' },
+    ],
+  },
+  {
     id: '2026.10.179',
     date: '2026-10-11',
     title: 'Softer rays',
