@@ -23,6 +23,7 @@ import {
 } from '../../../builders/look/stack';
 import type { Vec3 } from '../../../builders/look/palette';
 import { removeKeys } from '../removable';
+import { dragByHandle, dragHandle } from '../../../lib/dragGuard';
 
 export type LazyParam = () => { nodeId: string; key: string } | { missing: string };
 
@@ -96,7 +97,7 @@ function StackCard({ it, def, index, count, props }: { it: StackItem; def: Stack
   const up = (fn: (x: StackItem) => void, key?: string) => props.onEdit(items => edited(items, it.id, fn), key && `${props.name}:${it.id}:${key}`);
   const pictureShown = def.picture && (!def.picture.showWhen || def.picture.showWhen.is.includes(String(it.params[def.picture.showWhen.key])));
   return (
-    <div data-look-stack-card={it.id} data-look-kind={it.kind} draggable {...removeKeys(() => props.onEdit(items => items.filter(x => x.id !== it.id)), def.label)}
+    <div data-look-stack-card={it.id} data-look-kind={it.kind} {...dragByHandle} {...removeKeys(() => props.onEdit(items => items.filter(x => x.id !== it.id)), def.label)}
       onDragStart={ev => { ev.dataTransfer.setData(mime, it.id); ev.dataTransfer.effectAllowed = 'move'; }}
       onDragOver={ev => { if (ev.dataTransfer.types.includes(mime)) { ev.preventDefault(); setDragOver(true); } }}
       onDragLeave={() => setDragOver(false)}
@@ -106,7 +107,10 @@ function StackCard({ it, def, index, count, props }: { it: StackItem; def: Stack
         boxShadow: dragOver ? `inset 0 3px 0 ${tk.accent.base}, inset 0 0 0 1px ${tk.border.default}` : `inset 0 0 0 1px ${tk.border.default}`,
       }}>
       <div onClick={() => setOpen(o => !o)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 6px 6px 8px', minHeight: 42, cursor: 'pointer' }}>
-        <Icon name="grip" size={13} style={{ color: tk.text.faint, cursor: 'grab', flexShrink: 0 }} />
+        {/* The only place a drag starts (lib/dragGuard.ts): dragging a slider inside the card moves the slider. */}
+        <span {...dragHandle} title="Drag to change the order" onClick={ev => ev.stopPropagation()} style={{ display: 'inline-flex', alignSelf: 'stretch', alignItems: 'center', padding: '0 4px', margin: '-6px -4px -6px -6px', color: tk.text.faint, flexShrink: 0 }}>
+          <Icon name="grip" size={13} />
+        </span>
         <span style={{ width: 18, height: 18, borderRadius: 5, background: alpha(tk.accent.base, 0.14), color: tk.accent.text, fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{index + 1}</span>
         <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
           <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
@@ -164,7 +168,7 @@ export function StackCards(props: StackCardsProps) {
         <div onDragOver={ev => { if (ev.dataTransfer.types.includes(mime)) { ev.preventDefault(); setEndOver(true); } }} onDragLeave={() => setEndOver(false)}
           onDrop={ev => { ev.preventDefault(); setEndOver(false); const id = ev.dataTransfer.getData(mime); if (id) props.onEdit(items => placeStackItem(items, id, null)); }}
           style={{ height: 18, borderRadius: radius.sm, boxShadow: endOver ? `inset 0 3px 0 ${tk.accent.base}` : 'none' }}>
-          <BuilderNote style={{ fontSize: 11 }}>Drag a card to change the order: the top one is applied first.</BuilderNote>
+          <BuilderNote style={{ fontSize: 11 }}>Drag a card by its grip to change the order: the top one is applied first.</BuilderNote>
         </div>
       )}
     </div>

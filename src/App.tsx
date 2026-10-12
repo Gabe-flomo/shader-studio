@@ -158,7 +158,7 @@ function AudioMasterVolumeWidget() {
       background: 'rgba(17,17,27,0.92)', border: `1px solid ${tc.surface1}`,
       borderRadius: '8px', padding: '6px 10px',
       display: 'flex', alignItems: 'center', gap: '8px',
-      backdropFilter: 'blur(8px)',
+      backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
       boxShadow: '0 2px 12px rgba(0,0,0,0.5)',
     }}>
       <span style={{ fontSize: '11px', color: tc.sky }}>♫</span>
@@ -266,7 +266,7 @@ function HistogramOverlay({ data }: { data: HistogramData }) {
   return (
     <div style={{
       position: 'absolute', bottom: 0, left: 0, right: 0, height: '84px',
-      background: 'rgba(17,17,27,0.92)', backdropFilter: 'blur(4px)',
+      background: 'rgba(17,17,27,0.92)', backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
       borderTop: `1px solid ${ctp.surface0}66`,
       display: 'flex', flexDirection: 'column',
       padding: '5px 8px 3px',
@@ -367,7 +367,7 @@ function CanvasHintOverlay() {
   return (
     <div style={{
       position: 'absolute', top: 8, right: 8, zIndex: 22,
-      background: 'rgba(24,24,37,0.80)', backdropFilter: 'blur(8px)',
+      background: 'rgba(24,24,37,0.80)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
       borderRadius: '6px', padding: '4px 8px',
       display: 'flex', alignItems: 'center', gap: '6px',
       fontSize: '10px', fontFamily: 'monospace', color: ctp.surface2,
