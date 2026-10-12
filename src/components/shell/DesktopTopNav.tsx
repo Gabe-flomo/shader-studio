@@ -256,6 +256,7 @@ function OverflowMenu({ mode, toggleTheme, rebuildShortcut }: { mode: ThemeMode;
               onClick={() => { void rebuildWithToast(); setOpen(false); }} />
             <OverflowRow icon="book" label="Do… bar commands" onClick={() => { requestPage('studio'); openCommandsRef(); setOpen(false); }} />
             <OverflowRow icon="keyboard" label="Keyboard shortcuts" onClick={() => { requestPage('shortcuts'); setOpen(false); }} />
+            <OverflowRow icon="warning" label="Report a problem…" onClick={() => { setOpen(false); void import('../../files/crashReports').then(m => m.reportProblem()); }} />
             <OverflowRow icon={mode === 'light' ? 'moon' : 'sun'} label={mode === 'light' ? 'Switch to dark theme' : 'Switch to light theme'}
               onClick={() => { toggleTheme(); setOpen(false); }} />
           </div>

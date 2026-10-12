@@ -32,6 +32,7 @@ import { goToMappings, goToRailCategory, usePlaySplit } from './components/play/
 import { TimeControlsStrip } from './components/TimeControlsStrip';
 import { REBUILD_TOOLTIP, rebuildWithToast } from './components/shell/rebuildAction';
 import { useFunctionBuilder } from './components/FunctionBuilder/useFunctionBuilder';
+import { logEvent, setCrashContext } from './lib/crashLog';
 import { NAVIGATE_EVENT, type Page } from './components/page';
 import { useLinkedPresentationWatcher } from './components/shell/linkedPresentationWatcher';
 import { can, openProSheet, requireFeature } from './lib/plan';
@@ -465,6 +466,8 @@ function App() {
   const [isDragging, setIsDragging]     = useState(false);
   const [showCode, setShowCode]         = useState(false);
   const [page, setPageRaw]              = useState<Page>('studio');
+  // The open page, for crash reports (docs/crash-recovery.md).
+  useEffect(() => { setCrashContext('page', page); logEvent(`page: ${page}`); }, [page]);
   // Every page switch goes through the plan: Convert is Pro, and on Free asking for it opens the Pro sheet instead.
   const setPage = useCallback((next: Page | ((p: Page) => Page)) => {
     setPageRaw(prev => {

@@ -13,6 +13,7 @@ mod linked;
 mod osc_listener;
 mod output_window;
 mod recovery;
+mod crash;
 
 // ── FFmpeg session state ──────────────────────────────────────────────────────
 
@@ -429,10 +430,51 @@ pub fn run() {
             recovery::autosave_read,
             recovery::autosave_remove,
             recovery::autosave_reveal,
+            recovery::session_recovery_done,
+            recovery::session_page_hide,
+            recovery::session_page_crashed,
+            crash::crash_report_write,
+            crash::crash_report_list,
+            crash::crash_report_read,
+            crash::crash_report_remove,
+            crash::crash_report_reveal,
+            crash::crash_env,
+            crash::crash_simulate,
         ])
         .setup(|app| {
             // Crash recovery (docs/crash-recovery.md): the previous launch's marker is kept for the page, this one's written.
             recovery::start(app.handle());
+            // Crash reports (src/crash.rs): a Rust panic writes one; WebKit's content process dying
+            // reloads the page into the Recover dialog instead of leaving the window blank.
+            crash::install_panic_hook(app.handle());
+            #[cfg(target_os = "macos")]
+            crash::webkit::install(app.handle());
+            // Help → Report a problem… (the page bundles the latest report and its log; nothing is sent).
+            #[cfg(target_os = "macos")]
+            {
+                use tauri::menu::{Menu, MenuItem, Submenu};
+                let handle = app.handle();
+                let menu = Menu::default(handle)?;
+                let item = MenuItem::with_id(handle, "report-problem", "Report a problem…", true, None::<&str>)?;
+                let mut added = false;
+                for kind in menu.items()? {
+                    if let Some(sub) = kind.as_submenu() {
+                        if sub.text().map(|t| t == "Help").unwrap_or(false) {
+                            sub.append(&item)?;
+                            added = true;
+                        }
+                    }
+                }
+                if !added {
+                    menu.append(&Submenu::with_items(handle, "Help", true, &[&item])?)?;
+                }
+                app.set_menu(menu)?;
+                app.on_menu_event(|app, ev| {
+                    if ev.id().as_ref() == "report-problem" {
+                        let _ = app.emit("report-problem", ());
+                    }
+                });
+            }
             // Plug-ins: the trial results, and the marker a crash while loading one left (audio_engine/safety.rs).
             audio_engine::safety::start(app.handle());
             if cfg!(debug_assertions) {
