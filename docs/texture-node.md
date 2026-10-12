@@ -115,13 +115,38 @@ Choosing Webcam:
   layers, so it doesn't cover the picture. It carries the camera, the mirror and hand tracking, as any
   Camera layer does.
 - **Shows a mini Play on the card:**
-  - Play's own camera chip: on/off, which camera, 720p / 1080p;
+  - Play's own camera chip: on/off, which camera, 720p / 1080p. It is the same setting as Play's
+    (lib/cameraInput.ts, remembered on this computer): a pick on the card shows on Play's chip and the
+    other way round, even with both on screen (`cameraInput.onSettings`);
   - **Mirror**: the layer's mirror, and a flip in the node's shader;
   - Play's hand-tracking chip (Enable / Stop);
   - **Hands → Map a hand to…**: pick any slider in the graph. Play's mini mapper opens with its Hands
     section open: fingertip, pinch, openness, palm, roll, nearness. The mapping is an ordinary Play mapping,
     run by Play's engine whether or not Play is open. The card lists the hand mappings, and Play → Mappings
     tunes them.
+
+### Map mode (hand signals)
+
+With hand tracking on, the card shows the hand signals as chips, each with its live value: **Pinch,
+Openness, Palm X, Palm Y, Roll, Nearness** (either hand: the right one when it's in view), then any other
+hand signal the setup already maps.
+
+1. Click a chip. Map mode starts: the cursor becomes a crosshair, every slider row on every card is
+   outlined as a target, and a banner says what is being mapped.
+2. Click any slider on any card (inside groups too). The slider becomes a Play control if it isn't one
+   (one that is keeps its control), and a mapping from the signal is added across the slider's whole range,
+   linear, with 120 ms of smoothing. It's the same wiring as Play's mini mapper (`mapSourceTo`), so Play's
+   engine runs it whether or not Play is open.
+3. A toast says so: *Pinch → Circle · Radius mapped · edit in Play*. Map mode ends after one mapping.
+
+**Esc** or a second click on the chip leaves map mode. A click off the slider rows does what it always does
+(pan, select). A colour row, or a slider a wire has taken over, can't take a signal: a toast says why. The
+card never edits a mapping: range, curve and smoothing are tuned in **Play → Mappings**.
+
+How it works: `lib/texture/signalMap.ts` (the chips, the wiring, the map-mode store) and
+`components/NodeGraph/SignalMap.tsx` (the chips, and one layer in NodeGraph that, while map mode is on,
+adds a stylesheet and capture-phase listeners over the rows the cards already mark with `data-node-id` and
+`data-param-key`, so no card re-renders).
 
 The camera stays on while a webcam Texture node or a Camera layer uses it (lib/cameraKeeper.ts).
 
@@ -164,6 +189,7 @@ video). Keeping them made the change safe, and saved graphs compile to the same 
 | Pasting a picture (⌘V) | `src/lib/texture/texturePaste.ts` (reading the clipboard, the target), `texturePasteHost.ts`; the listener is in `NodeGraph.tsx` |
 | Videos onto the node | `src/lib/texture/videoActions.ts` |
 | Webcam texture and Camera layer | `src/lib/texture/webcam.ts`, `webcamHost.ts` |
+| Hand signal chips and map mode | `src/lib/texture/signalMap.ts`, `src/components/NodeGraph/SignalMap.tsx` |
 | Generate depth, placement | `src/lib/texture/generateDepth.ts` |
 | Card | `src/components/NodeGraph/TextureCardBody.tsx`, `TextureImageEditModal.tsx` (header and sockets in `NodeComponent.tsx`) |
 | GLSL | `src/nodes/definitions/sources.ts` |
@@ -171,6 +197,9 @@ video). Keeping them made the change safe, and saved graphs compile to the same 
 
 ## Limits and next
 
+- **Face and body chips:** the card's mini Play has hand tracking only, so map mode offers hand signals.
+  The wiring takes any Play source, so Face and Pose chips (with their trackers' chips on the card) are a
+  small follow-up.
 - **Webcam depth:** Live depth from the webcam runs every 4th frame (the Depth engine tells a webcam from a video
   file, so it no longer asks for a bake).
 - **Files → Used by** describes a graph whose Texture node uses a library picture as "Its Play setup (a

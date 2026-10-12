@@ -8,7 +8,8 @@
  * - **Video:** click or drop a file, the library, or a URL (when the site allows it); the clip
  *   editor for trim, segments, speed, loop, crop; a missing file says so and offers Re-link.
  * - **Webcam:** Play's own camera and hand-tracking controls, the mirror, and "Map a hand to…"
- *   (Play's mini mapper, onto any slider in the graph).
+ *   (Play's mini mapper, onto any slider in the graph). With hands on, the hand signals as live
+ *   chips: one click starts map mode, a click on any slider maps it (SignalMap.tsx).
  * - **Generate depth:** a Depth node wired to this texture (and a Depth Composite in a 3D graph).
  *
  * Every hook here runs whatever the source, so switching it never changes the hook order.
@@ -26,6 +27,8 @@ import { toast } from '../ui/toastStore';
 import { CameraChip } from '../play/chips';
 import { HandsChip } from '../play/HandsChip';
 import { MiniMapper } from '../play/MiniMapper';
+import { useTrackerStatus } from '../play/TrackingChips';
+import { SignalChips } from './SignalMap';
 import { sourceLabel } from '../../play/playSources';
 import { candidateLabel, collectPlayCandidates } from '../../play/playControls';
 import { videoEngine } from '../../lib/videoEngine';
@@ -58,6 +61,7 @@ export function TextureCardBody({ node, onEditClip }: { node: GraphNode; onEditC
   const setPlay = useNodeGraphStore(s => s.setPlay);
   const nodes = useNodeGraphStore(s => s.nodes);
   const paramBindings = useNodeGraphStore(s => s.paramBindings);
+  const handsOn = useTrackerStatus('hands').status === 'on';
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [url, setUrl] = useState('');
@@ -267,6 +271,10 @@ export function TextureCardBody({ node, onEditClip }: { node: GraphNode; onEditC
           <CameraChip />
           <Toggle checked={mirror} onChange={m => { setPlay(pl => setCameraMirror(pl, m)); updateNodeParams(node.id, mirrorParams(m), { immediate: true }); }} label="Mirror" />
           <HandsChip settings={false} />
+          {handsOn && <>
+            <span style={label}>Hand signals: click one, then any slider</span>
+            <SignalChips />
+          </>}
           <span ref={mapRef} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <span style={label}>Hands →</span>
             <Select ariaLabel="Map a hand to" height={24} value={mapTarget} onChange={v => setMapTarget(v)} style={{ flex: 1, minWidth: 0 }}
