@@ -86,6 +86,8 @@ if (import.meta.env.DEV) {
     nodePreviewPrefs: () => import('./lib/nodePreview/showAs').then(m => m.useNodePreviewPrefs),
     previewPerf: () => import('./lib/nodePreview/previewBus').then(m => m.previewPerf),
     perfSnapshot: () => import('./lib/perfStats').then(m => m.getPerfSnapshot()),
+    /** Draw agents' Shapes outside the app (docs/particle-shapes.md): `(await shapes()).shapesBench({ count: 200_000, shape: 'cube' })`. */
+    shapes: () => import('./dev/shapesBench'),
     /** Every registered node type, for registry-wide checks (the node-preview audit). */
     nodeTypes: () => import('./nodes/definitions').then(m => Object.values(m.NODE_REGISTRY).filter(d => !d.deprecated).map(d => ({ type: d.type, label: d.label, category: d.category, outputs: Object.fromEntries(Object.entries(d.outputs).map(([k, o]) => [k, o.type])) }))),
     /** The MIDI monitor's log (`midiMonitor.text()`), and the rack keyboard (`rackKeyboard.active()`). */

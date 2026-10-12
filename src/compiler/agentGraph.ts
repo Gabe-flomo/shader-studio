@@ -27,6 +27,7 @@ import { fieldChainProblems, fieldInputKeys } from './fieldSockets';
 import { topologicalSort } from './topoSort';
 import { computeNodeSlug } from './nodeSlug';
 import { AGENT_TIERS, AGENTS_GROUP_TYPE, DRAW_COLOR_BY, DRAW_PICTURE_PARAMS, DRAW_STYLES, GP_PALETTE_NAMES, isAgent3d, TRAIL_RESOLUTIONS, TRAIL_VOLUMES, withAgentSpace } from '../nodes/definitions/agents';
+import { SHAPE_ONLY, shapeOf } from '../lib/agentShapes';
 
 /** Node types that send a graph down this path (at any depth). */
 export const AGENTS_FAMILY = new Set([AGENTS_GROUP_TYPE, 'trailField', 'drawAgents', 'agentDeposit', 'agentEmit']);
@@ -279,8 +280,12 @@ const REVERSE_ONLY = new Set(['reverseStrength', 'reverseDist']);
 
 /** The engine's view of a Draw agents node. */
 export function drawSpec(n: GraphNode, slug: string, groupSlug: string, params: Record<string, AgentParam | number[]>): Omit<AgentDrawProgram, 'live'> {
+  // Shapes (3D only): the shape, and its settings only then; dots keep the spec they always had.
+  const shape = isAgent3d(n) ? shapeOf(n.params.shape) : 'dot';
+  const kept = Object.fromEntries(Object.entries(params).filter(([k]) => (n.params.style === 'splats' || !SPLAT_ONLY.has(k)) && (shape !== 'dot' || !SHAPE_ONLY.has(k)) && (n.params.projection === 'reverse' || !REVERSE_ONLY.has(k))));
   return {
     ...(isAgent3d(n) ? { space3d: true, ...(n.params.camMirror === true ? { mirror: true } : {}) } : {}),
+    ...(shape !== 'dot' ? { shape } : {}),
     nodeId: n.id, slug, group: groupSlug,
     style: choice(n.params.style, DRAW_STYLES, 'points'),
     // State (Agent Rules, docs/agent-rules.md) is the walker's own Colour: the rules set it to its state's colour.
@@ -291,7 +296,7 @@ export function drawSpec(n: GraphNode, slug: string, groupSlug: string, params: 
     fade: choice(n.params.fade, ['on', 'off'] as const, 'on') === 'on',
     scaleBy: choice(n.params.scaleBy, ['walker', 'crowd'] as const, 'walker'),
     // The Splats look's settings only when it draws splats: every other drawing's spec is as it always was.
-    params: Object.fromEntries(Object.entries(params).filter(([k]) => (n.params.style === 'splats' || !SPLAT_ONLY.has(k)) && (n.params.projection === 'reverse' || !REVERSE_ONLY.has(k)))),
+    params: kept,
   };
 }
 

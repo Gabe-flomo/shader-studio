@@ -46,6 +46,8 @@ import {
   AG_SPLAT_FRAG, AG_SPLAT_RESOLVE_FRAG, AG_SPLAT_VERT,
 } from '../play/kit/agentShaders.js';
 import { splatSizeByIndex } from './agentSplats';
+import { AgentShapeRenderer } from './agentShapeRenderer';
+import { SHAPE_DEFAULTS, facingOf, shadingOf, shapeSizeByIndex, sphereDetailOf } from './agentShapes';
 import { CanvasProbeRegistry } from './canvasProbeRegistry';
 import { agentReadingsWanted, publishAgentReadings, setAgentGroups } from './agentReadings';
 import { hoodRequests, pokeHood } from './agentHood';
@@ -251,23 +253,28 @@ export class AgentTargets {
 
   /** A Draw agents node's targets for a picture of w × h. */
   draw(d: AgentDrawProgram, w: number, h: number): DrawState {
-    const key = `${w}x${h}:${d.style}`;
+    // Shapes (3D): drawn with a depth buffer, at half size when Half resolution is on.
+    const half = !!d.shape && d.params.halfRes === 'on';
+    if (half) { w = Math.max(1, Math.ceil(w / 2)); h = Math.max(1, Math.ceil(h / 2)); }
+    const key = `${w}x${h}:${d.style}${d.shape ? `:${d.shape}` : ''}`;
     let s = this.draws.get(d.slug);
     if (s && s.key === key) return s;
     if (s) this.disposeDraw(s);
     const type = this.halfFloat ? THREE.HalfFloatType : THREE.UnsignedByteType;
     const rt = (a: number, b: number) => new THREE.WebGLRenderTarget(Math.max(1, a), Math.max(1, b), { type, format: THREE.RGBAFormat, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false, stencilBuffer: false });
-    const acc = rt(w, h);
+    const acc = d.shape
+      ? new THREE.WebGLRenderTarget(Math.max(1, w), Math.max(1, h), { type, format: THREE.RGBAFormat, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: true, stencilBuffer: false })
+      : rt(w, h);
     const glow: THREE.WebGLRenderTarget[] = [];
     let out = acc;
-    if (d.style === 'splats') {
+    if (d.style === 'splats' && !d.shape) {
       // Two half-float targets, the same blend (colour added, cover multiplied): AG_SPLAT_VERT's note.
       const oit = new THREE.WebGLRenderTarget(Math.max(1, w), Math.max(1, h), { type, format: THREE.RGBAFormat, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false, stencilBuffer: false, count: 2 });
       s = { key, w, h, acc, glow, out, oit };
       this.draws.set(d.slug, s);
       return s;
     }
-    if (d.style !== 'points') {
+    if (d.style !== 'points' && (!d.shape || d.style === 'glow' || d.style === 'streaks')) {
       // GP's glow: ¼ and 1/16 size, each blurred (scratch + result), then composed over the points.
       const w1 = Math.ceil(w / 4), h1 = Math.ceil(h / 4), w2 = Math.ceil(w1 / 4), h2 = Math.ceil(h1 / 4);
       glow.push(rt(w1, h1), rt(w1, h1), rt(w2, h2), rt(w2, h2));
@@ -429,6 +436,8 @@ export class AgentRunner {
     },
   });
   private splatResolveMat = raw(AG_FULL_VERT, AG_SPLAT_RESOLVE_FRAG, { u_t0: { value: null }, u_t1: { value: null } }, false);
+  // Draw agents' Shapes (3D, Shape not Dot): solid shapes over the same empty geometry (lib/agentShapes.ts).
+  private shapes: AgentShapeRenderer;
   private splatScene = new THREE.Scene();
   private splatMesh: THREE.Mesh;
   /** Scans the Emits give birth from (lib/agentScans.ts): which groups to start over when one arrives. */
@@ -547,6 +556,7 @@ export class AgentRunner {
     this.spot = new THREE.Points(this.pointGeometry, this.spotMat);
     this.spot.frustumCulled = false;
     this.spotScene.add(this.spot);
+    this.shapes = new AgentShapeRenderer(this.pointGeometry);
     this.splatMesh = new THREE.Mesh(this.pointGeometry, this.splatMat);
     this.splatMesh.frustumCulled = false;
     this.splatScene.add(this.splatMesh);
@@ -982,9 +992,10 @@ export class AgentRunner {
         const timed = o.timer?.begin(`agents:${g.label} draw`) ?? false;
         const ds = targets.draw(d, w, h);
         const seen = d.space3d && d.probe ? this.probe(targets, ds, d) : null;
-        u[agentDrawUniform(d.slug)].value = (d.style === 'splats' ? this.drawSplats(ds, d, g, gs, aspect, o.time, seen)
+        u[agentDrawUniform(d.slug)].value = (d.space3d && d.shape ? this.drawShapes(ds, d, g, gs, aspect, o.time, seen)
+          : d.style === 'splats' ? this.drawSplats(ds, d, g, gs, aspect, o.time, seen)
           : d.space3d ? this.draw3(ds, d, g, gs, aspect, o.time, seen) : this.draw(ds, d, g, gs, aspect, o.time)).texture;
-        if (d.style === 'splats') u[`${agentDrawUniform(d.slug)}_dist`].value = ds.oit?.textures[1] ?? null;
+        if (d.style === 'splats') u[`${agentDrawUniform(d.slug)}_dist`].value = d.shape ? null : ds.oit?.textures[1] ?? null;
         if (timed) o.timer!.end();
       }
       // 5. Readings for Play, for the groups something reads (live only: a render has no Play to read them).
@@ -1402,6 +1413,33 @@ export class AgentRunner {
     return s.acc;
   }
 
+  /**
+   * Draw agents' Shapes (lib/agentShapes.ts, docs/particle-shapes.md): every walker a solid shape through the built-in
+   * camera or a scene's (`seen`, hidden behind its Depth), with a depth buffer, into acc (premultiplied: colour, cover).
+   * Glow and Streaks still glow round them. Every number is read live from its slider.
+   */
+  private drawShapes(s: DrawState, d: AgentDrawProgram, g: AgentGroupProgram, gs: GroupState, aspect: number, time: number, seen: { cam: THREE.Texture; depth: THREE.Texture | null } | null): THREE.WebGLRenderTarget {
+    const n = g.side * g.side;
+    const look = agDrawLook(d, n, s.h, this.reader, this.colourReader);
+    const cam = agCamera3(d, this.reader, time, s.h);
+    const P = d.params, D = SHAPE_DEFAULTS;
+    const tex = gs.rt[gs.cur].textures;
+    this.shapes.draw(this.host.renderer, s.acc, {
+      a: tex[0], b: tex[1], c: g.stateC ? tex[2] : null, e: g.stateC && g.stateE && tex.length >= 5 ? tex[4] : null, side: g.side, species: g.species,
+    }, {
+      shape: d.shape!, shading: shadingOf(P.shading), facing: facingOf(P.facing), detail: sphereDetailOf(P.sphereDetail),
+      size: this.read(P.shapeSize, D.shapeSize), sizeBy: shapeSizeByIndex(P.shapeSizeBy), rodLength: this.read(P.rodLength, D.rodLength), rodStretch: this.read(P.rodStretch, D.rodStretch),
+      spin: this.read(P.spin, D.spin), grid: this.read(P.voxelGrid, D.voxelGrid), dedupe: P.voxelDedupe !== 'off',
+      every: this.read(P.every, D.every), maxShapes: this.read(P.maxShapes, D.maxShapes), farDots: this.read(P.farDots, D.farDots),
+      ambient: this.read(P.ambient, D.ambient), rim: this.read(P.rim, D.rim), edgeWidth: this.read(P.edgeWidth, D.edgeWidth),
+      // Brightness 0.5 is the palette's own colour (a solid shape isn't a sum of light).
+      colorBy: look.colorBy, bright: Math.max(0, this.read(P.brightness, 0.5)) * 2, speedRef: look.speedRef, fade: look.fade,
+      usePal: look.usePal, rainbow: look.rainbow, pal: look.pal, colA: look.colA, colB: look.colB,
+    }, cam, aspect, time, seen);
+    if (d.style !== 'glow' && d.style !== 'streaks') return s.acc;
+    return this.glowCompose(s, { ...look, ink: false }, [], aspect);
+  }
+
   /** The Particles node's glow, unchanged, and the compose with the lights' halos (shared by the 2D and 3D draws). */
   private glowCompose(s: DrawState, look: { glow: number; halo: number; ink: boolean }, lights: Array<{ x: number; y: number; reach: number; power: number; colour: number[] }>, aspect: number): THREE.WebGLRenderTarget {
     const [d1, b1, d2, b2] = s.glow;
@@ -1817,6 +1855,7 @@ export class AgentRunner {
     this.scanOff();
     this.splatMat.dispose();
     this.splatResolveMat.dispose();
+    this.shapes.dispose();
     this.hood?.dispose();
     this.hood = null;
     this.snapshots?.dispose();

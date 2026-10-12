@@ -26,6 +26,7 @@ import type { GraphNode, NodeDefinition, ParamDef } from '../../types/nodeGraph'
 import { fieldFn, p, pv3 } from './helpers';
 import { GP_PALETTES } from '../../play/kit/gpuParticles.js';
 import { AG_TRAIL_MEAN_GLSL } from '../../play/kit/agentShaders.js';
+import { SHAPE_COST_TIP, SHAPE_DEFAULTS, shapeOf } from '../../lib/agentShapes';
 
 // ── Names shared by the compiler, the engine and the nodes ──────────────────
 
@@ -1481,6 +1482,57 @@ export const DRAW_CAMERA_PARAMS: Record<string, ParamDef> = {
   maxBlur: { label: 'Max blur', type: 'float', min: 1, max: 32, step: 0.5, section: 'Camera', hint: 'The widest a blurred walker draws (pixels of a 720-high picture). Wider ones are thinned at random, each survivor heavier, so blur costs no fill rate.', ...in3d },
 };
 
+/**
+ * Draw agents' Shapes (3D only; docs/particle-shapes.md): every walker a solid cube, sphere, rod, tile
+ * or voxel with a depth buffer, instead of a soft dot. Shape sits in Look (its cost note under it);
+ * the rest in their own Shape section, each shown only for the shapes it changes.
+ */
+const SOLID = ['cube', 'sphere', 'rod', 'tile', 'voxel'];
+const in3dShape = (value: string | string[], and?: ParamDef['showWhen']): ParamDef['showWhen'] =>
+  ({ param: 'shape', value, and: { param: 'agentSpace', value: '3d', ...(and ? { and } : {}) } });
+export const DRAW_SHAPE_PARAM: ParamDef = {
+  label: 'Shape', type: 'select', section: 'Look',
+  hint: `3D: what each walker is drawn as. Dot: the soft dot of Style. Cube, Sphere, Rod (a long box), Tile (a flat square) or Voxel (a cube snapped to a grid): solid shapes that hide each other (and hide behind a scene's Depth). Shapes cost more than dots. ${SHAPE_COST_TIP}`,
+  help: `Dot is today's look (Style decides how it glows). Every other shape is real geometry drawn per walker with a depth buffer, so near shapes hide far ones, and with a ray-marched scene wired (Camera from, Camera ray, Depth) the scene hides them too. Their colour is Colour by and the palette; Brightness 0.5 is the palette's own colour. Shapes cost more than dots: the note under Shape says roughly how many are drawn and what a frame of them costs, amber when it is a lot. To keep it cheap: the count matters most, so Max shapes or Draw every to draw fewer; Shading without edges (Flat, Faces and Lit cost the same on boxes: they shade once per face; Faces is the best look for voxels); Distant as dots; Half resolution; and for spheres Detail Impostor (a flat disc shaded as a ball, 6 vertices: Smooth costs about 14 times as much). Depth of field and the lights don't apply to shapes.`,
+  options: [
+    { value: 'dot', label: 'Dot' }, { value: 'cube', label: 'Cube' }, { value: 'sphere', label: 'Sphere' }, { value: 'rod', label: 'Rod (long box)' },
+    { value: 'tile', label: 'Tile (flat square)' }, { value: 'voxel', label: 'Voxel (cube on a grid)' },
+  ],
+  showWhen: { param: 'agentSpace', value: '3d' },
+};
+export const DRAW_SHAPE_PARAMS: Record<string, ParamDef> = {
+  shading: { label: 'Shading', type: 'select', section: 'Shape', hint: 'How the shapes are lit. Flat: the palette colour, no lighting. Faces: a fixed brightness per face (top light, sides mid, bottom dark): the 3D read for nothing extra. Lit: a key light from above left, Ambient and a Rim. + edges: a thin dark outline on box and tile edges (good for voxels, about 40 % more). Boxes, rods, tiles and voxels are shaded once per face, so Flat, Faces and Lit cost the same on them; Lit spheres cost a little more.', options: [
+    { value: 'flat', label: 'Flat' }, { value: 'faces', label: 'Faces' }, { value: 'facesEdges', label: 'Faces + edges' }, { value: 'lit', label: 'Lit' }, { value: 'litEdges', label: 'Lit + edges' },
+  ], showWhen: in3dShape(SOLID) },
+  shapeSize: { label: 'Size', type: 'float', min: 0.001, max: 0.2, step: 0.001, section: 'Shape', hint: 'Half the width of each shape, in picture units (the picture is 2 tall). Far ones look smaller, as real objects do.', showWhen: in3dShape(['cube', 'sphere', 'rod', 'tile']) },
+  shapeSizeBy: { label: 'Size by', type: 'select', section: 'Shape', hint: 'Fixed: all Size. Speed: faster ones bigger. Age: shrinking to 15 % over its life. A memory: Size × one of its More memory numbers (Voxel: of its cell).', options: [
+    { value: 'fixed', label: 'Fixed' }, { value: 'speed', label: 'Speed' }, { value: 'age', label: 'Age (shrink with age)' },
+    { value: 'memX', label: 'More memory x' }, { value: 'memY', label: 'More memory y' }, { value: 'memZ', label: 'More memory z' }, { value: 'memW', label: 'More memory w' },
+  ], showWhen: in3dShape(SOLID) },
+  facing: { label: 'Facing', type: 'select', section: 'Shape', hint: 'Which way each shape turns. Along motion: its long side along its velocity (rods point where they go). Tumble: each spins on its own random axis. Aligned: square to the box. Face camera: turned to the camera, like a sprite.', options: [
+    { value: 'motion', label: 'Along motion' }, { value: 'tumble', label: 'Tumble (random spin)' }, { value: 'aligned', label: 'Aligned' }, { value: 'camera', label: 'Face camera' },
+  ], showWhen: in3dShape(['cube', 'rod', 'tile']) },
+  spin: { label: 'Spin speed', type: 'float', min: 0, max: 10, step: 0.01, section: 'Shape', hint: 'Tumble: how fast they spin, in radians a second (each a little faster or slower than this).', showWhen: { param: 'facing', value: 'tumble', and: in3dShape(['cube', 'rod', 'tile']) } },
+  rodLength: { label: 'Rod length', type: 'float', min: 1, max: 20, step: 0.1, section: 'Shape', hint: 'Rod: how many times longer than thick.', showWhen: in3dShape('rod') },
+  rodStretch: { label: 'Stretch with speed', type: 'float', min: 0, max: 8, step: 0.01, section: 'Shape', hint: 'Rod: longer the faster it goes, per Fast is of speed (0: always Rod length).', showWhen: in3dShape('rod') },
+  voxelGrid: { label: 'Voxel grid', type: 'float', min: 0.01, max: 0.25, step: 0.001, section: 'Shape', hint: 'Voxel: the grid\'s cell size (picture units). Each walker is a cube filling its cell; smaller is finer and draws more of them.', showWhen: in3dShape('voxel') },
+  voxelDedupe: { label: 'One per cell', type: 'select', section: 'Shape', hint: 'Voxel: On draws one cube per filled cell (a cheap pass finds which walker owns it), so a crowded cell costs one cube, not hundreds. Off overlaps them.', options: [
+    { value: 'on', label: 'On' }, { value: 'off', label: 'Off' },
+  ], showWhen: in3dShape('voxel') },
+  sphereDetail: { label: 'Sphere detail', type: 'select', section: 'Shape', hint: 'Impostor: a flat disc facing the camera shaded as a ball, with its own depth (6 vertices: the cheapest). Low: a 48-triangle half-ball. Smooth: 192 triangles (by far the most expensive).', options: [
+    { value: 'impostor', label: 'Impostor (cheapest)' }, { value: 'low', label: 'Low poly' }, { value: 'smooth', label: 'Smooth' },
+  ], showWhen: in3dShape('sphere') },
+  ambient: { label: 'Ambient', type: 'float', min: 0, max: 1, step: 0.01, section: 'Shape', hint: 'Lit: how bright the side away from the light is.', showWhen: { param: 'shading', value: ['lit', 'litEdges'], and: in3dShape(SOLID) } },
+  rim: { label: 'Rim', type: 'float', min: 0, max: 2, step: 0.01, section: 'Shape', hint: 'Lit: a light round each shape\'s outline.', showWhen: { param: 'shading', value: ['lit', 'litEdges'], and: in3dShape(SOLID) } },
+  edgeWidth: { label: 'Edge width', type: 'float', min: 0, max: 0.5, step: 0.01, section: 'Shape', hint: '+ edges: how wide the outline is, as a share of the face.', showWhen: { param: 'shading', value: ['facesEdges', 'litEdges'], and: in3dShape(['cube', 'rod', 'tile', 'voxel']) } },
+  every: { label: 'Draw every', type: 'float', min: 1, max: 64, step: 1, section: 'Shape', hint: 'Draw only every Nth walker (1: all of them). The rest still move; they just aren\'t drawn.', showWhen: in3dShape(SOLID) },
+  maxShapes: { label: 'Max shapes', type: 'float', min: 0, max: 1048576, step: 1024, section: 'Shape', hint: 'At most this many shapes, spread over all the walkers (0: no cap). The surest way to keep shapes cheap.', showWhen: in3dShape(SOLID) },
+  farDots: { label: 'Distant as dots', type: 'float', min: 0, max: 20, step: 0.01, section: 'Shape', hint: 'Shapes farther from the camera than this are drawn as a flat square of their size (0: off).', showWhen: in3dShape(SOLID) },
+  halfRes: { label: 'Half resolution', type: 'select', section: 'Shape', hint: 'Draw the shapes at half the picture\'s size and scale them up: a quarter of the pixels, softer edges.', options: [
+    { value: 'off', label: 'Off' }, { value: 'on', label: 'On' },
+  ], showWhen: in3dShape(SOLID) },
+};
+
 /** Draw agents' settings the picture's program reads (Background), never the engine. */
 export const DRAW_PICTURE_PARAMS = new Set(['background', 'bgPalette', 'bgGain']);
 
@@ -1519,6 +1571,7 @@ export const DrawAgentsNode: NodeDefinition = {
   defaultParams: {
     style: 'points', colorBy: 'heading', palette: 'ab', size: 1.5, brightness: 0.5, glow: 1, scaleBy: 'walker', streak: 0.25, fade: 'on', speedRef: 0.5,
     splatSize: 0.012, stretch: 1.5, sizeBy: 'fixed', memScale: 1, opacity: 0.6,
+    ...SHAPE_DEFAULTS,
     colorA: [1, 0.75, 0.35], colorB: [0.25, 0.55, 1], paper: [0.95, 0.95, 0.94],
     background: 'over', bgPalette: 'ember', bgGain: 1,
     lights: '0', lightColor: [1, 0.55, 0.25], lightPower: 1.6, lightReach: 0.3, halo: 0.5, lightMotion: 'orbit', lightOrbit: 0.5, lightX: 0, lightY: 0,
@@ -1528,7 +1581,8 @@ export const DrawAgentsNode: NodeDefinition = {
     style: { label: 'Style', type: 'select', section: 'Look', hint: 'Points: soft dots. Glow: dots with a wide glow. Streaks: short lines along each walker\'s motion, glowing. Ink: dark ink laid on paper, bleeding a little. Splats: soft Gaussians stretched along their motion, laid over each other like a volume (clouds, smoke, liquids; a splat scan).', options: [
       { value: 'points', label: 'Points' }, { value: 'glow', label: 'Glow' }, { value: 'streaks', label: 'Streaks' }, { value: 'ink', label: 'Ink' }, { value: 'splats', label: 'Splats (soft Gaussians)' },
     ] },
-    size: { label: 'Size', type: 'float', min: 0.25, max: 16, step: 0.25, section: 'Look', hint: 'Dot size in pixels (The crowd: pixels of a 720-pixel-high picture).', showWhen: { param: 'style', value: ['points', 'glow', 'streaks', 'ink'] } },
+    shape: DRAW_SHAPE_PARAM,
+    size: { label: 'Size', type: 'float', min: 0.25, max: 16, step: 0.25, section: 'Look', hint: 'Dot size in pixels (The crowd: pixels of a 720-pixel-high picture).', showWhen: { param: 'style', value: ['points', 'glow', 'streaks', 'ink'], and: { param: 'shape', value: 'dot' } } },
     splatSize: { label: 'Splat size', type: 'float', min: 0.001, max: 0.3, step: 0.001, section: 'Look', hint: 'Splats: how wide each Gaussian is (its sigma), in picture units (the picture is 2 tall). In 3D it shrinks with distance, as a real object does.', showWhen: { param: 'style', value: 'splats' } },
     stretch: { label: 'Stretch', type: 'float', min: 0, max: 8, step: 0.01, section: 'Look', hint: 'Splats: how much longer a splat is along its motion, per Fast is of speed: 0 round, 2 three times as long at Fast is.', showWhen: { param: 'style', value: 'splats' } },
     sizeBy: { label: 'Size by', type: 'select', section: 'Look', hint: 'Splats: Fixed: every splat Splat size. Speed: faster ones bigger. A memory: one of its More memory numbers × Memory scale (Emit from a splat scan keeps each splat\'s own size in w).', options: [
@@ -1570,7 +1624,8 @@ export const DrawAgentsNode: NodeDefinition = {
     lightOrbit: { label: 'Orbit size', type: 'float', min: 0.1, max: 1.2, step: 0.01, section: 'Lights', hint: 'How far from the centre the lights go (picture units).', showWhen: { param: 'lights', value: ['1', '2', '3', '4'] } },
     lightX: { label: 'Centre X', type: 'float', min: -2, max: 2, step: 0.01, section: 'Lights', hint: 'The centre the lights move round, across.', showWhen: { param: 'lights', value: ['1', '2', '3', '4'] } },
     lightY: { label: 'Centre Y', type: 'float', min: -1, max: 1, step: 0.01, section: 'Lights', hint: 'The centre the lights move round, up.', showWhen: { param: 'lights', value: ['1', '2', '3', '4'] } },
-    // 3D only: the camera (after the look, so the look stays the card's first section).
+    // 3D only: the shapes' settings (Shape isn't Dot), then the camera (after the look, so the look stays the card's first section).
+    ...DRAW_SHAPE_PARAMS,
     ...DRAW_CAMERA_PARAMS,
   },
   assignable: false,
@@ -1599,7 +1654,8 @@ export const DrawAgentsNode: NodeDefinition = {
     // Ink and Splats are premultiplied (colour × cover, cover): they cover what is under them. Light adds to the picture.
     const color = style === 'ink'
       ? `${over ?? pv3(node.params.paper, [0.95, 0.95, 0.94])} * (1.0 - clamp(${id}_s.a, 0.0, 1.0)) + max(${id}_s.rgb, vec3(0.0))`
-      : style === 'splats'
+      // Shapes (3D, Shape not Dot) are solid: premultiplied like Splats, covering what is under them.
+      : style === 'splats' || (isAgent3d(node) && shapeOf(node.params.shape) !== 'dot')
         ? `${over ?? 'vec3(0.0)'} * (1.0 - clamp(${id}_s.a, 0.0, 1.0)) + max(${id}_s.rgb, vec3(0.0))`
         : `${over ?? 'vec3(0.0)'} + max(${id}_s.rgb, vec3(0.0))`;
     const dist = style === 'splats'
