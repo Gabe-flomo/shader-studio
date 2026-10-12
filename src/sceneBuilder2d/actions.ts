@@ -10,6 +10,7 @@ import { applyScene2D, find2dBuild, scene2dOfBuild } from './apply';
 import { allShapes, starterScene } from './spec';
 import { clearDraft, hasUnbuiltEdits, reopenDraft } from '../builders/drafts';
 import type { BuildingBuilder } from '../builders/finish';
+import { attachQuickControls } from './quickPlay';
 
 /** Open the builder on a new scene (Build adds it beside what is on the canvas). */
 export function openNewSceneBuilder2D(at?: { x: number; y: number }): void {
@@ -69,6 +70,8 @@ export function buildFromBuilder2D(asNew = false): boolean {
   // Pictures that had no node got one: the builder reads them from now on.
   if (JSON.stringify(result.spec.textures ?? []) !== JSON.stringify(sb.scene.textures ?? [])) useSceneBuilder2D.setState(s => ({ scene: { ...s.scene, textures: result.spec.textures } }));
   sb.markBuilt();
+  // Quick controls waiting for a build become Play controls now (quickPlay.ts).
+  attachQuickControls(useSceneBuilder2D.getState().scene.quick);
   const notes = [
     ...(result.kept.length ? [`Kept ${result.kept.length} setting${result.kept.length === 1 ? '' : 's'} you changed on the nodes.`] : []),
     ...result.warnings,

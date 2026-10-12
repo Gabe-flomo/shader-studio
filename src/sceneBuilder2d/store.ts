@@ -42,6 +42,18 @@ interface Builder2DState {
 }
 
 let lastCoalesce: { key: string; at: number } | null = null;
+/** probeEdit: while set, edit() works on a copy and leaves it here instead of changing the scene. */
+let probing: { result: Scene2D | null } | null = null;
+
+/**
+ * What `run` (a slider's onChange) would make of the scene, without making it: its edit is applied to a copy, which
+ * comes back (null when it edited nothing). Quick controls use it to find the value a slider sets (quick.ts).
+ */
+export function probeEdit(run: () => void): Scene2D | null {
+  const was = probing;
+  probing = { result: null };
+  try { run(); return probing.result; } finally { probing = was; }
+}
 const HISTORY = 100;
 
 export const useSceneBuilder2D = create<Builder2DState>((set, get) => ({
@@ -64,6 +76,7 @@ export const useSceneBuilder2D = create<Builder2DState>((set, get) => ({
   }),
   close: () => set({ open: false }),
   edit: (fn, coalesce) => {
+    if (probing) { const copy = structuredClone(probing.result ?? get().scene); fn(copy); probing.result = copy; return; }
     const { scene, past } = get();
     const next = structuredClone(scene);
     fn(next);
