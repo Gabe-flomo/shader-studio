@@ -125,11 +125,11 @@ describe('real counts over the bundled examples (docs/code-explorer-plan.md §9)
     expect(functionReport(ix, 'fract').patterns.slice(0, 3).map(p => p.l2)).toContain('fract(_ * #)');
     expect(functionReport(ix, 'length').patterns.slice(0, 2).map(p => p.l2)).toContain('length(_)');
   });
-  it('step is the most-called function in written code', () => {
-    // step, or level with it (mix has caught up as the examples grew: a tie sorts either way).
+  it('step is among the most-called functions in written code', () => {
+    // step, or near it: mix caught up as the examples grew, and the 2D Scene Builder's examples
+    // now draw each shape as its glow (pow and max in every Glow shape block).
     const top = summarise(ix).top;
-    const step = top.find(t => t.key === 'step')!;
-    expect(step.count).toBe(top[0].count);
+    expect(top.slice(0, 3).map(t => t.key)).toContain('step');
   });
 });
 

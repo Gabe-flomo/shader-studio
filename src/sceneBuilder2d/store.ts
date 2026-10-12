@@ -4,11 +4,12 @@
  * node graph (actions.ts joins the two), like the 3D builder's store.
  */
 import { create } from 'zustand';
-import { starterScene, type Scene2D } from './spec';
+import { starterScene, withExplicitStyles, type Scene2D } from './spec';
 import { surpriseScene2D } from './surprise';
 
-export type Builder2DTab = 'space' | 'shapes' | 'grid' | 'depth' | 'look' | 'effects' | 'output' | 'recipe' | 'templates';
-export const BUILDER_2D_TABS: Builder2DTab[] = ['space', 'shapes', 'grid', 'depth', 'look', 'effects', 'output', 'recipe', 'templates'];
+/** The window's tabs. Grids are made in the Grid builder; a scene that has one shows it under Shapes (read-only). */
+export type Builder2DTab = 'space' | 'shapes' | 'combine' | 'depth' | 'look' | 'effects' | 'output' | 'recipe' | 'templates';
+export const BUILDER_2D_TABS: Builder2DTab[] = ['space', 'shapes', 'combine', 'depth', 'effects', 'look', 'output', 'recipe', 'templates'];
 
 interface Builder2DState {
   open: boolean;
@@ -54,8 +55,9 @@ export const useSceneBuilder2D = create<Builder2DState>((set, get) => ({
   dirty: false,
   surpriseSeed: null,
 
+  // A loaded scene keeps its look: layers made before styles are written out as Filled.
   openWith: (scene, o = {}) => set({
-    open: true, scene: structuredClone(scene), past: [], future: [], dirty: false,
+    open: true, scene: structuredClone(withExplicitStyles(scene)), past: [], future: [], dirty: false,
     targetSceneId: o.targetSceneId ?? null, at: o.at ?? null, tab: o.tab ?? 'shapes',
     selectedId: scene.layers[0]?.id ?? null,
   }),
