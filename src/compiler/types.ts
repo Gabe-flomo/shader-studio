@@ -20,6 +20,8 @@ export interface PassProgram {
   scale: number;
   /** Float: 32-bit (RGBA32F), for data such as positions; half where the GPU can't draw into it. */
   format: 'half' | 'byte' | 'float';
+  /** MRT (docs/render-targets.md): more targets drawn in the same draw, each with its own precision and filter. */
+  extra?: Array<{ format: 'half' | 'byte' | 'float'; filter: 'linear' | 'nearest' }>;
   filter: 'linear' | 'nearest';
   wrap: 'clamp' | 'repeat' | 'mirror';
   /** Something samples this Pass's Previous output: it keeps a second (ping-pong) texture. */

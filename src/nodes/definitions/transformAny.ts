@@ -78,6 +78,7 @@ export function retypeTransform(n: GraphNode): GraphNode {
 }
 
 import { dataTextureSockets } from './dataTexture';
+import { renderTargetsSockets } from './renderTargets';
 
 /**
  * The sockets a new node of `type` should start with, given its params: a Transform's follow its
@@ -86,6 +87,7 @@ import { dataTextureSockets } from './dataTexture';
  */
 export function startingSockets(type: string, def: Pick<NodeDefinition, 'inputs' | 'outputs'>, params: Record<string, unknown>): { inputs: Record<string, InputSocket>; outputs: Record<string, OutputSocket> } {
   if (type === 'dataTexture') return dataTextureSockets({ params });
+  if (type === 'renderTargets') return renderTargetsSockets({ params });
   return type === 'transform' ? transformSockets(transformDim({ params })) : { inputs: def.inputs, outputs: def.outputs };
 }
 

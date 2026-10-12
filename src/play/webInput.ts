@@ -11,7 +11,7 @@
  */
 import { unsupportedFeatures, type GraphFeatures, type PlayHtmlInput, type PlayMedia, type WebAgents, type WebPass } from './exportHtml';
 import type { AgentsSpec, PassProgram } from '../compiler/types';
-import { passIterUniform, passPrevUniform, passUniform } from '../nodes/definitions/passes';
+import { passIterUniform, passPrevTargetUniform, passPrevUniform, passTargetUniform, passUniform } from '../nodes/definitions/passes';
 import { agentDrawUniform, agentNbUniforms, agentStateUniform, agentStepUniform, agentWindowUniform, trailStepUniforms, trailUniform, trailVolUniform } from '../nodes/definitions/agents';
 import { AG_BESSEL_UNIFORM, listenUniforms, sceneGridUniforms } from '../nodes/definitions/agentForces';
 import { MOTION_MAP_UNIFORM } from '../nodes/definitions/motionMap';
@@ -59,7 +59,12 @@ export function webPasses(passes: readonly PassProgram[]): WebPass[] {
     // A Shader Texture's fixed size and Update (docs/texture-builder.md); only present when set.
     ...(p.size ? { size: p.size } : {}),
     ...(p.update ? { update: p.update, reads: p.reads } : {}),
-    u: { tex: passUniform(p.slug), prev: passPrevUniform(p.slug), ...(p.repeat ? { iter: passIterUniform(p.slug) } : {}) },
+    // MRT (docs/render-targets.md): the extra targets' settings and sampler names; only present when set.
+    ...(p.extra?.length ? { extra: p.extra } : {}),
+    u: {
+      tex: passUniform(p.slug), prev: passPrevUniform(p.slug), ...(p.repeat ? { iter: passIterUniform(p.slug) } : {}),
+      ...(p.extra?.length ? { extra: p.extra.map((_, i) => ({ tex: passTargetUniform(p.slug, i + 1), prev: passPrevTargetUniform(p.slug, i + 1) })) } : {}),
+    },
   }));
 }
 

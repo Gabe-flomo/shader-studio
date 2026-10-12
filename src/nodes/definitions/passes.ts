@@ -35,6 +35,26 @@ export const passPxUniform = (sampler: string) => `${sampler}_px`;
  * Declared only by a Pass whose Repeat is above 1.
  */
 export const passIterUniform = (slug: string) => `u_passiter_${slug}`;
+
+/**
+ * Several targets in one draw (MRT, docs/render-targets.md): a Pass whose `__extra` lists more targets
+ * draws them all at once. Target k (1…3) is its `texture<k>` / `previous<k>` output, sampled as these.
+ */
+export const MAX_EXTRA_TARGETS = 3;
+export const passTargetUniform = (slug: string, k: number) => (k === 0 ? passUniform(slug) : `${passUniform(slug)}_${k}`);
+export const passPrevTargetUniform = (slug: string, k: number) => (k === 0 ? passPrevUniform(slug) : `${passPrevUniform(slug)}_${k}`);
+export interface ExtraTarget { format: 'half' | 'byte' | 'float'; filter: 'linear' | 'nearest' }
+/** A Pass's extra targets (0 to 3), each with its own precision and filter. */
+export function passExtraTargets(params: Record<string, unknown>): ExtraTarget[] {
+  const raw = Array.isArray(params.__extra) ? (params.__extra as Partial<ExtraTarget>[]) : [];
+  return raw.slice(0, MAX_EXTRA_TARGETS).map(t => ({
+    format: t?.format === 'byte' || t?.format === 'float' ? t.format : 'half',
+    filter: t?.filter === 'nearest' ? 'nearest' : 'linear',
+  }));
+}
+/** The output keys of an extra target: texture1 / previous1… */
+export const isPassPreviousKey = (k: string) => /^previous[1-3]?$/.test(k);
+export const isPassTextureKey = (k: string) => /^texture[1-3]?$/.test(k);
 /** Most times a Pass can repeat in a frame. */
 export const MAX_PASS_REPEAT = 64;
 /** A Pass's Repeat as a whole number, 1 to MAX_PASS_REPEAT (1 when unset). */
@@ -92,9 +112,14 @@ export const PassNode: NodeDefinition = {
   // Compiled as a source only (see the file comment): node.id is the slug.
   declarationsFor: (node: GraphNode) => {
     const tex = passUniform(node.id), prev = passPrevUniform(node.id);
+    const extra = passExtraTargets(node.params).flatMap((_, i) => {
+      const t = passTargetUniform(node.id, i + 1), pv = passPrevTargetUniform(node.id, i + 1);
+      return [`uniform sampler2D ${t};`, `uniform vec2 ${passPxUniform(t)};`, `uniform sampler2D ${pv};`, `uniform vec2 ${passPxUniform(pv)};`];
+    });
     return [
       `uniform sampler2D ${tex};`, `uniform vec2 ${passPxUniform(tex)};`,
       `uniform sampler2D ${prev};`, `uniform vec2 ${passPxUniform(prev)};`,
+      ...extra,
       // Repeat (phase 7): only a repeated Pass declares its step, so every other program reads as before.
       ...(passRepeat(node.params.repeat) > 1 ? [`uniform vec2 ${passIterUniform(node.id)};`] : []),
     ];
@@ -112,6 +137,10 @@ export const PassNode: NodeDefinition = {
         // Repeat: the step drawing now (a uniform the host sets before each draw), and how many.
         step: passRepeat(node.params.repeat) > 1 ? `${passIterUniform(id)}.x` : '0.0',
         steps: `${passRepeat(node.params.repeat)}.0`,
+        // MRT: each extra target's texture and its frame before.
+        ...Object.fromEntries(passExtraTargets(node.params).flatMap((_, i) => [
+          [`texture${i + 1}`, passTargetUniform(id, i + 1)], [`previous${i + 1}`, passPrevTargetUniform(id, i + 1)],
+        ])),
       },
     };
   },
@@ -128,8 +157,11 @@ export const PassOutputNode: NodeDefinition = {
     alpha: { type: 'float', label: 'Alpha', defaultValue: 1 },
   },
   outputs: {},
-  generateGLSL: (_node: GraphNode, inputVars) => ({
-    code: `    gl_FragColor = vec4(${inputVars.color || 'vec3(0.0)'}, ${inputVars.alpha || '1.0'});\n`,
+  // MRT: one more fragment output per extra target (location 0 is three.js's own, gl_FragColor).
+  declarationsFor: (node: GraphNode) => passExtraTargets(node.params).map((_, i) => `layout(location = ${i + 1}) out highp vec4 pc_mrt${i + 1};`),
+  generateGLSL: (node: GraphNode, inputVars) => ({
+    code: `    gl_FragColor = vec4(${inputVars.color || 'vec3(0.0)'}, ${inputVars.alpha || '1.0'});\n`
+      + passExtraTargets(node.params).map((_, i) => `    pc_mrt${i + 1} = ${inputVars[`mrt${i + 1}`] || 'vec4(0.0)'};\n`).join(''),
     outputVars: {},
   }),
 };

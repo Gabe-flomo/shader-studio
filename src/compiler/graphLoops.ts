@@ -38,11 +38,13 @@ export interface GraphLoop {
 export function isFrameDelayWire(c: { nodeId: string; outputKey: string }, byId: ReadonlyMap<string, GraphNode>): boolean {
   const src = byId.get(c.nodeId);
   if (!src) return false;
-  if (src.type === PASS && (c.outputKey === 'previous' || c.outputKey === 'step' || c.outputKey === 'steps')) return true;
+  if (src.type === PASS && (/^previous[1-3]?$/.test(c.outputKey) || c.outputKey === 'step' || c.outputKey === 'steps')) return true;
   // A Feedback (texture) is a buffer: a loop back into it reads the buffer a frame ago (compiler/feedbackExpand.ts).
   if (src.type === FEEDBACK_TYPE && !src.bypassed) return true;
   // So is a Data Texture: a read of it that feeds it sees last frame (compiler/dataTextureExpand.ts).
   if (src.type === 'dataTexture' && !src.bypassed) return true;
+  // A Render Targets node's Previous outputs are its targets a frame ago (compiler/renderTargetsExpand.ts).
+  if (src.type === 'renderTargets' && !src.bypassed && /^previous[1-3]?$/.test(c.outputKey)) return true;
   return isAgentEngineOnly(src);
 }
 

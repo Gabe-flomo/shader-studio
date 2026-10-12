@@ -156,7 +156,9 @@ export interface WebPass {
   update?: 'change' | 'once';
   reads?: string[];
   /** u_pass_<slug> and u_passprev_<slug> (each with its `_px`); iter, a repeated pass's step uniform. */
-  u: { tex: string; prev: string; iter?: string };
+  /** MRT (docs/render-targets.md): the extra targets drawn in the same draw. Only when set. */
+  extra?: Array<{ format: 'half' | 'byte' | 'float'; filter: 'linear' | 'nearest' }>;
+  u: { tex: string; prev: string; iter?: string; extra?: Array<{ tex: string; prev: string }> };
 }
 
 /**

@@ -16,7 +16,19 @@
  */
 import * as THREE from 'three';
 import type { PassProgram } from '../compiler/types';
-import { passIterUniform, passPrevUniform, passPxUniform, passUniform } from '../nodes/definitions/passes';
+import { passIterUniform, passPrevTargetUniform, passPrevUniform, passPxUniform, passTargetUniform, passUniform } from '../nodes/definitions/passes';
+
+type Uniforms0 = Record<string, THREE.IUniform>;
+/** A pass's textures as its samplers: every target of `rt` (MRT: textures[k] is target k), or none. */
+function bindCur(u: Uniforms0, slug: string, rt: THREE.WebGLRenderTarget | null): void {
+  if (u[passUniform(slug)]) u[passUniform(slug)].value = rt ? rt.textures[0] : null;
+  for (let k = 1; rt ? k < rt.textures.length : k <= 3; k++) { const n = passTargetUniform(slug, k); if (u[n]) u[n].value = rt ? rt.textures[k] : null; }
+}
+/** Its frame before, the same way. */
+function bindPrev(u: Uniforms0, slug: string, rt: THREE.WebGLRenderTarget): void {
+  if (u[passPrevUniform(slug)]) u[passPrevUniform(slug)].value = rt.textures[0];
+  for (let k = 1; k < rt.textures.length; k++) { const n = passPrevTargetUniform(slug, k); if (u[n]) u[n].value = rt.textures[k]; }
+}
 import { THUMB_FS, THUMB_MODES, bigThumbKey, drawArrows, readTexel, thumbViewOf } from './thumbView';
 import { ppDrawn, ppKeeps, ppPixel, ppPrevBound, ppRepeat, ppSize, ppSplitsForParticles, ppStaged, ppTargetKey } from '../play/kit/passPlan.js';
 import { CanvasProbeRegistry } from './canvasProbeRegistry';
@@ -89,6 +101,16 @@ export class PassTargets {
         type: p.format === 'byte' || !this.halfFloat ? THREE.UnsignedByteType : full ? THREE.FloatType : THREE.HalfFloatType,
         format: THREE.RGBAFormat, depthBuffer: false, stencilBuffer: false,
         minFilter: filter, magFilter: filter, wrapS: WRAP[p.wrap], wrapT: WRAP[p.wrap],
+        // MRT (docs/render-targets.md): one attachment per target, drawn in the same draw.
+        count: 1 + (p.extra?.length ?? 0),
+      });
+      // Each extra target keeps its own precision and filter.
+      (p.extra ?? []).forEach((x, i) => {
+        const tex = rt.textures[i + 1];
+        const xFull = x.format === 'float' && this.halfFloat && ext.has('EXT_color_buffer_float');
+        tex.type = x.format === 'byte' || !this.halfFloat ? THREE.UnsignedByteType : xFull ? THREE.FloatType : THREE.HalfFloatType;
+        const f = x.filter === 'nearest' || (xFull && !ext.has('OES_texture_float_linear')) ? THREE.NearestFilter : THREE.LinearFilter;
+        tex.minFilter = f; tex.magFilter = f;
       });
       this.renderer.setRenderTarget(rt); this.renderer.clear();
       return rt;
@@ -172,7 +194,9 @@ export class PassRunner {
   private ensureUniforms(): void {
     const u = this.host.uniforms();
     for (const { spec } of this.entries) {
-      for (const name of [passUniform(spec.slug), passPrevUniform(spec.slug)]) {
+      const names = [passUniform(spec.slug), passPrevUniform(spec.slug)];
+      (spec.extra ?? []).forEach((_, i) => names.push(passTargetUniform(spec.slug, i + 1), passPrevTargetUniform(spec.slug, i + 1)));
+      for (const name of names) {
         if (!u[name]) u[name] = { value: null };
         const px = passPxUniform(name);
         if (!u[px] || !(u[px].value instanceof THREE.Vector2)) u[px] = { value: new THREE.Vector2(1, 1) };
@@ -274,9 +298,11 @@ export class PassRunner {
     const fresh = new Set(ppPrevBound(drawn, stage, part).map(d => d.slug));
     for (const d of drawn) {
       const t = targets.ensure(d, w, h);
-      if (t.prev && fresh.has(d.slug)) u[passPrevUniform(d.slug)].value = t.prev.texture;
-      (u[passPxUniform(passUniform(d.slug))].value as THREE.Vector2).set(pxX, pxY);
-      (u[passPxUniform(passPrevUniform(d.slug))].value as THREE.Vector2).set(pxX, pxY);
+      if (t.prev && fresh.has(d.slug)) bindPrev(u, d.slug, t.prev);
+      for (let k = 0; k <= (d.extra?.length ?? 0); k++) {
+        (u[passPxUniform(passTargetUniform(d.slug, k))].value as THREE.Vector2).set(pxX, pxY);
+        (u[passPxUniform(passPrevTargetUniform(d.slug, k))].value as THREE.Vector2).set(pxX, pxY);
+      }
     }
     const res = u.u_resolution?.value as THREE.Vector2 | undefined;
     const rx = res?.x ?? w, ry = res?.y ?? h;
@@ -287,12 +313,12 @@ export class PassRunner {
     for (const d of ppStaged(drawn, stage, part)) {
       const t = targets.get(d.slug)!;
       const e = d.entry;
-      if (!e.ready || e.failed || (compiling.size > 0 && d.reads.some(r => compiling.has(r)))) { u[passUniform(d.slug)].value = null; continue; }
+      if (!e.ready || e.failed || (compiling.size > 0 && d.reads.some(r => compiling.has(r)))) { bindCur(u, d.slug, null); continue; }
       res?.set(t.w, t.h);
       // A Shader Texture on Update On change / Once (docs/texture-builder.md): keep the picture it has when
       // nothing it reads changed since it was drawn into this target.
       const sig = d.update ? this.drawSig(e, t, u) : undefined;
-      if (sig !== undefined && ppKeeps(d, t.drawn, sig)) { u[passUniform(d.slug)].value = t.cur.texture; continue; }
+      if (sig !== undefined && ppKeeps(d, t.drawn, sig)) { bindCur(u, d.slug, t.cur); continue; }
       t.drawn = sig;
       this.mesh.material = e.material;
       const timed = timer?.begin(`pass:${d.slug}`) ?? false;
@@ -301,10 +327,10 @@ export class PassRunner {
       const iter = n > 1 ? u[passIterUniform(d.slug)]?.value as THREE.Vector2 | undefined : undefined;
       for (let i = 0; i < n; i++) {
         if (iter) iter.set(i, n);
-        if (i > 0 && t.prev) u[passPrevUniform(d.slug)].value = t.prev.texture;
+        if (i > 0 && t.prev) bindPrev(u, d.slug, t.prev);
         renderer.setRenderTarget(t.cur);
         renderer.render(this.scene, camera);
-        u[passUniform(d.slug)].value = t.cur.texture;
+        bindCur(u, d.slug, t.cur);
         // Ping-pong: this frame's picture is the next frame's Previous (and the next repeat's).
         if (t.prev) { const c = t.cur; t.cur = t.prev; t.prev = c; }
       }
@@ -376,7 +402,9 @@ export class PassRunner {
   dispose(): void {
     for (const e of this.entries) this.drop(e);
     const u = this.boundTo;
-    if (u) for (const { spec } of this.entries) { if (u[passUniform(spec.slug)]) u[passUniform(spec.slug)].value = null; if (u[passPrevUniform(spec.slug)]) u[passPrevUniform(spec.slug)].value = null; }
+    if (u) for (const { spec } of this.entries) {
+      for (let k = 0; k <= (spec.extra?.length ?? 0); k++) for (const name of [passTargetUniform(spec.slug, k), passPrevTargetUniform(spec.slug, k)]) if (u[name]) u[name].value = null;
+    }
     this.entries = [];
     this.thumbRt?.dispose();
     this.thumbMat.dispose();

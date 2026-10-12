@@ -16,6 +16,13 @@ function phWrap(gl, w) {
   return w === 'repeat' ? gl.REPEAT : w === 'mirror' ? gl.MIRRORED_REPEAT : gl.CLAMP_TO_EDGE;
 }
 
+/** Every sampler name a pass has: its texture and frame before, and each extra target's (MRT). */
+function phNames(e) {
+  const out = [e.u.tex, e.u.prev];
+  for (const x of e.u.extra || []) out.push(x.tex, x.prev);
+  return out;
+}
+
 /**
  * passes: the bundle's graphPasses, in drawing order: { slug, label, fragmentShader, scale,
  * format, filter, wrap, previous, live, afterAgents?, beforeParticles?, repeat?, size?, update?, reads?, u: { tex, prev, iter? } } (u: the sampler names;
@@ -40,14 +47,14 @@ export function phCreate(gl, passes, env) {
   });
   // Every pass's sampler starts blank (as an empty texture in the app), its `_px` at one pixel.
   for (const e of entries) {
-    env.textures.set(e.u.tex, null); env.textures.set(e.u.prev, null);
-    env.vec2s.set(e.u.tex + '_px', [1, 1]); env.vec2s.set(e.u.prev + '_px', [1, 1]);
+    for (const n of phNames(e)) { env.textures.set(n, null); env.vec2s.set(n + '_px', [1, 1]); }
     // Repeat: its step ([step, count]), only for a repeated pass (it alone declares it).
     if (e.u.iter) env.vec2s.set(e.u.iter, [0, ppRepeat(e)]);
   }
   const targets = new Map();
 
-  const makeTarget = (p, w, h) => {
+  /** One texture of a target, with its own precision and filter. */
+  const makeTex = (p, w, h) => {
     const byte = p.format === 'byte' || !env.halfFloat;
     // Full float (32-bit, for data) where the GPU can draw into it, else half; exact texels without float filtering.
     const full = !byte && p.format === 'float' && !!gl.getExtension('EXT_color_buffer_float');
@@ -58,13 +65,26 @@ export function phCreate(gl, passes, env) {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filter); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filter);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrap); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, wrap);
     gl.texImage2D(gl.TEXTURE_2D, 0, byte ? gl.RGBA8 : full ? gl.RGBA32F : gl.RGBA16F, w, h, 0, gl.RGBA, byte ? gl.UNSIGNED_BYTE : full ? gl.FLOAT : gl.HALF_FLOAT, null);
+    return tex;
+  };
+  /** A target: its first texture, and (MRT, docs/render-targets.md) one more per extra target, all drawn at once. */
+  const makeTarget = (p, w, h) => {
+    const tex = makeTex(p, w, h);
+    const extra = (p.extra || []).map(x => makeTex({ ...p, format: x.format, filter: x.filter }, w, h));
     const fb = gl.createFramebuffer();
     gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+    extra.forEach((x, i) => gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + i + 1, gl.TEXTURE_2D, x, 0));
+    if (extra.length) gl.drawBuffers([gl.COLOR_ATTACHMENT0, ...extra.map((_, i) => gl.COLOR_ATTACHMENT0 + i + 1)]);
     gl.viewport(0, 0, w, h); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
-    return { tex, fb };
+    return { tex, extra, fb };
   };
-  const drop = t => { for (const rt of [t.cur, t.prev]) if (rt) { gl.deleteFramebuffer(rt.fb); gl.deleteTexture(rt.tex); } };
+  const drop = t => { for (const rt of [t.cur, t.prev]) if (rt) { gl.deleteFramebuffer(rt.fb); gl.deleteTexture(rt.tex); rt.extra.forEach(x => gl.deleteTexture(x)); } };
+  /** A target's textures as a pass's samplers (cur: Texture outputs, prev: Previous outputs). */
+  const bind = (d, rt, which) => {
+    env.textures.set(which === 'prev' ? d.u.prev : d.u.tex, rt ? rt.tex : null);
+    (d.u.extra || []).forEach((x, i) => env.textures.set(which === 'prev' ? x.prev : x.tex, rt ? rt.extra[i] : null));
+  };
   /** A pass's targets for a picture of w × h, made (cleared) when its size or settings change. */
   const ensure = (p, w, h) => {
     const key = ppTargetKey(p, w, h);
@@ -97,29 +117,28 @@ export function phCreate(gl, passes, env) {
       const fresh = new Set(ppPrevBound(drawn, stage, part).map(d => d.slug));
       for (const d of drawn) {
         const t = ensure(d, w, h);
-        if (t.prev && fresh.has(d.slug)) env.textures.set(d.u.prev, t.prev.tex);
-        env.vec2s.set(d.u.tex + '_px', px.slice());
-        env.vec2s.set(d.u.prev + '_px', px.slice());
+        if (t.prev && fresh.has(d.slug)) bind(d, t.prev, 'prev');
+        for (const n of phNames(d)) env.vec2s.set(n + '_px', px.slice());
       }
       for (const d of ppStaged(drawn, stage, part)) {
         const t = targets.get(d.slug);
-        if (!d.program) { env.textures.set(d.u.tex, null); continue; }
+        if (!d.program) { bind(d, null, 'cur'); continue; }
         // A Shader Texture on Update Once keeps its picture once drawn (its target is made again on a resize
         // or settings change, and starts over). On a page On change draws every frame: the page has no cheap
         // view of the values a program reads, so it never risks a stale texture.
         const sig = d.update === 'once' ? 'once' : undefined;
-        if (sig && ppKeeps(d, t.drawn, sig)) { env.textures.set(d.u.tex, t.cur.tex); continue; }
+        if (sig && ppKeeps(d, t.drawn, sig)) { bind(d, t.cur, 'cur'); continue; }
         // Repeat (phase 7): N draws, each reading the one before through Previous.
         const n = ppRepeat(d);
         for (let i = 0; i < n; i++) {
           if (d.u.iter) env.vec2s.set(d.u.iter, [i, n]);
-          if (i > 0 && t.prev) env.textures.set(d.u.prev, t.prev.tex);
+          if (i > 0 && t.prev) bind(d, t.prev, 'prev');
           gl.bindFramebuffer(gl.FRAMEBUFFER, t.cur.fb);
           gl.viewport(0, 0, t.w, t.h);
           env.use(d.program, t.w, t.h);
           env.quad();
           env.done();
-          env.textures.set(d.u.tex, t.cur.tex);
+          bind(d, t.cur, 'cur');
           // Ping-pong: this frame's picture is the next frame's Previous (and the next repeat's).
           if (t.prev) { const c = t.cur; t.cur = t.prev; t.prev = c; }
         }
