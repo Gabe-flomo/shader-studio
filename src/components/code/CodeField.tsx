@@ -303,7 +303,7 @@ export interface CharRect { left: number; top: number; bottom: number }
  * autocomplete as CodeField. Styled like the app's Field.
  */
 export function CodeInput({
-  value, onChange, completions, ariaLabel, placeholder, height = 34, style, inputRef, onFocus, onBlur, onKeyDown, onSelect,
+  value, onChange, completions, ariaLabel, placeholder, height = 34, style, inputRef, onFocus, onBlur, onKeyDown, onSelect, inputAttrs, invalid,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -319,6 +319,10 @@ export function CodeInput({
   onKeyDown?: (e: React.KeyboardEvent<HTMLInputElement>) => void;
   /** The caret or selection moved (click, keys, select): read it from the element. */
   onSelect?: (el: HTMLInputElement) => void;
+  /** Extra attributes on the input (data-… hooks). */
+  inputAttrs?: Record<string, string | number>;
+  /** Draws the field's edge in the error colour (its checker's message is shown by the caller). */
+  invalid?: boolean;
 }) {
   const tk = useTokens();
   const pal = useThemeMode() === 'dark' ? C : C_LIGHT;
@@ -347,7 +351,7 @@ export function CodeInput({
   return (
     <span style={{
       position: 'relative', height, minWidth: 0, display: 'flex', alignItems: 'center', padding: '0 10px', borderRadius: radius.control,
-      background: focused ? tk.bg.panel : tk.bg.field, boxShadow: focused ? `inset 0 0 0 1.5px ${tk.accent.base}` : 'none', overflow: 'hidden',
+      background: focused ? tk.bg.panel : tk.bg.field, boxShadow: invalid ? `inset 0 0 0 1.5px ${tk.status.danger}` : focused ? `inset 0 0 0 1.5px ${tk.accent.base}` : 'none', overflow: 'hidden',
       ...style,
     }}>
       {/* Highlight layer under a transparent input */}
@@ -365,6 +369,8 @@ export function CodeInput({
         aria-expanded={ac.state.open}
         data-captures-escape={ac.state.open || undefined}
         data-fn-card="edit"
+        aria-invalid={invalid || undefined}
+        {...inputAttrs}
         value={value}
         spellCheck={false}
         autoCapitalize="off"

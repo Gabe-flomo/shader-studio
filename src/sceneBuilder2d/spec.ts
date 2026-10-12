@@ -23,6 +23,8 @@ import { blockSummary, cloneBlock, COMBINE_BY_MODE, type CombineMode, type Combi
 import type { TexSource, TexUse } from '../builders/textures';
 import type { StackItem } from '../builders/look/stack';
 import type { DepthPic2D } from './depth';
+import type { DistMod } from './modify';
+import type { GlowType } from '../nodes/definitions/combiners';
 
 export type Vec2 = [number, number];
 export type Vec3 = [number, number, number];
@@ -215,7 +217,40 @@ export const MAX_LEVELS = 6;
 
 // ── Items ───────────────────────────────────────────────────────────────────
 
-export type CombineOp = 'union' | 'subtract' | 'intersect';
+export type CombineOp = 'union' | 'subtract' | 'intersect' | 'xor';
+
+/**
+ * The Combine choices, as the builder offers them (docs/scene-builder-2d.md, "Combine"): an op and
+ * whether it is smooth (a blend radius k above 0). Xor has no smooth form.
+ */
+export const COMBINE_CHOICES_2D: Array<{ key: string; op: CombineOp; smooth: boolean; label: string; glyph: string; blurb: string }> = [
+  { key: 'union', op: 'union', smooth: false, label: 'Union', glyph: '∪', blurb: 'Joins the shapes: wherever any of them is. min(a, b).' },
+  { key: 'smooth-union', op: 'union', smooth: true, label: 'Smooth union', glyph: '∪~', blurb: 'Melts the shapes together where they meet, like drops of liquid; Smooth is how wide the melted joint is. Their colours blend there too.' },
+  { key: 'subtract', op: 'subtract', smooth: false, label: 'Subtract', glyph: '−', blurb: 'Cuts every later shape out of the first. max(a, −b).' },
+  { key: 'smooth-subtract', op: 'subtract', smooth: true, label: 'Smooth subtract', glyph: '−~', blurb: 'A cut whose edges are rounded over Smooth.' },
+  { key: 'intersect', op: 'intersect', smooth: false, label: 'Intersect', glyph: '∩', blurb: 'Keeps only where the shapes overlap. max(a, b).' },
+  { key: 'smooth-intersect', op: 'intersect', smooth: true, label: 'Smooth intersect', glyph: '∩~', blurb: 'The overlap with its corners rounded over Smooth.' },
+  { key: 'xor', op: 'xor', smooth: false, label: 'Xor', glyph: '⊕', blurb: 'Either shape but not both: the overlap is cut away. max(min(a, b), −max(a, b)).' },
+];
+export const OP_GLYPH_2D: Record<CombineOp, string> = { union: '∪', subtract: '−', intersect: '∩', xor: '⊕' };
+
+/**
+ * How a top-level layer is drawn (docs/scene-builder-2d.md, "Style"):
+ *   glow     the distance field's own glow: the colour runs out into a soft glow (the Grid builder's
+ *            Soft), with no flat fill pasted over it; a layer that doesn't glow is the crisp shape;
+ *   filled   a flat filled shape, with the Look's halo glow round it (every scene made before styles);
+ *   outline  a glowing line along the edge, abs(distance) through the glow.
+ */
+export type ShapeStyle = 'glow' | 'filled' | 'outline';
+export const SHAPE_STYLES: Array<{ style: ShapeStyle; label: string; blurb: string }> = [
+  { style: 'glow', label: 'Glow', blurb: 'The shape as its distance field reads: its colour running out into a soft glow (Look → Glow sets how far). No flat fill on top.' },
+  { style: 'filled', label: 'Filled', blurb: 'A flat filled shape, with the Look\'s glow as a bright halo round it.' },
+  { style: 'outline', label: 'Outline', blurb: 'A glowing line along the edge (the glow of abs(distance)).' },
+];
+/** A layer's style: absent is Filled (scenes made before styles had it). */
+export const styleOf = (it: Pick<ItemBase, 'style'>): ShapeStyle => it.style ?? 'filled';
+/** What a new item of this kind starts as: a picture layer Filled, anything else Glow. */
+export const defaultStyle = (it: Item): ShapeStyle => (it.type === 'shape' && it.kind === 'picture' ? 'filled' : 'glow');
 
 interface ItemBase {
   id: string;
@@ -243,6 +278,12 @@ interface ItemBase {
   mask?: TexMask | null;
   /** Switched off for now (builders/mute.ts): drawn as nothing, by a live uniform; settings kept. */
   muted?: boolean;
+  /** How a top-level layer is drawn; absent: Filled (scenes made before styles). New items are Glow. */
+  style?: ShapeStyle;
+  /** This layer's glow type instead of the Look's (combiners.ts GLOW_TYPES). */
+  glowType?: GlowType | null;
+  /** Modify: operations on its distance, top to bottom, before it is drawn (modify.ts). */
+  mods?: DistMod[];
 }
 
 /** A layer shown only where a picture is bright: the picture over the whole frame, its brightness against `cut`. */
@@ -263,6 +304,8 @@ export interface GroupSpec extends ItemBase {
   /** Blend radius: 0 is the hard operation, above 0 the smooth one. */
   k: number;
   children: Item[];
+  /** Colour from its shapes, blended by the combine's smooth weight (else the group's own colour). */
+  mix?: boolean;
 }
 
 export type Item = ShapeSpec | GroupSpec;
@@ -302,7 +345,11 @@ export interface LookSpec {
   bg: Vec3;
   /** A picture behind every layer, read at the warped point (`warp`) or the screen's. */
   bgTex?: (TexUse & { warp: boolean }) | null;
-  glow: { mode: GlowMode; amount: number; falloff: number; tint: Vec3 | null };
+  /**
+   * `type`: the glow formula (combiners.ts GLOW_TYPES). Absent: Soft for Glow-style layers and Halo
+   * round Filled ones (as before types).
+   */
+  glow: { mode: GlowMode; amount: number; falloff: number; tint: Vec3 | null; type?: GlowType };
   colour: { by: ColourBy; palette: string; scale: number; speed: number };
   tone: ToneMode;
   /**
@@ -386,11 +433,21 @@ const base = (id: string, over: Partial<ItemBase>): ItemBase => ({
 });
 
 export function newShape(kind: string, id: string, over: Partial<ShapeSpec> = {}): ShapeSpec {
-  return { ...base(id, over), type: 'shape', kind, size: defaultSize(kind), ...over } as ShapeSpec;
+  // A picture layer is filled with its picture; every other new shape is drawn as its glow.
+  return { ...base(id, over), type: 'shape', kind, size: defaultSize(kind), style: kind === 'picture' ? 'filled' : 'glow', ...over } as ShapeSpec;
 }
 
 export function newGroup(id: string, over: Partial<GroupSpec> = {}): GroupSpec {
-  return { ...base(id, over), type: 'group', op: 'union', k: 0, children: [], ...over } as GroupSpec;
+  return { ...base(id, over), type: 'group', op: 'union', k: 0, children: [], style: 'glow', ...over } as GroupSpec;
+}
+
+/**
+ * A scene as loaded (a built scene reopened, a saved spec): every top-level layer's style written
+ * out, so one made before styles stays Filled however the defaults change.
+ */
+export function withExplicitStyles(spec: Scene2D): Scene2D {
+  if (spec.layers.every(it => it.style)) return spec;
+  return { ...spec, layers: spec.layers.map(it => (it.style ? it : { ...it, style: 'filled' as const })) };
 }
 
 export function newSpaceOp(kind: string, id: string, values: SpaceOp['values'] = {}): SpaceOp {
@@ -451,12 +508,12 @@ export function findItem(spec: Scene2D, id: string): { item: Item; parent: Group
 /** The ids already used by items, motions and space transforms. */
 function usedIds(spec: Scene2D): Set<string> {
   const used = new Set<string>(spec.space.map(s => s.id));
-  walkItems(spec.layers, it => { used.add(it.id); for (const m of it.motion) used.add(m.id); });
+  walkItems(spec.layers, it => { used.add(it.id); for (const m of it.motion) used.add(m.id); for (const x of it.mods ?? []) used.add(x.id); });
   return used;
 }
 
 /** A fresh id that nothing in `spec` has yet: `s3`, `g2`, `m5` (motion), `p1` (space). */
-export function nextId(spec: Scene2D | null, prefix: 's' | 'g' | 'm' | 'p'): string {
+export function nextId(spec: Scene2D | null, prefix: 's' | 'g' | 'm' | 'p' | 'x'): string {
   const used = spec ? usedIds(spec) : new Set<string>();
   for (let i = 1; ; i++) if (!used.has(`${prefix}${i}`)) return `${prefix}${i}`;
 }
@@ -472,6 +529,7 @@ export function itemName(spec: Scene2D | null, it: Item): string {
 }
 
 export function opLabel(g: Pick<GroupSpec, 'op' | 'k'>): string {
+  if (g.op === 'xor') return 'Xor';
   const base = g.op === 'union' ? 'Union' : g.op === 'subtract' ? 'Subtract' : 'Intersect';
   return g.k > 0 ? `Smooth ${base.toLowerCase()}` : base;
 }
@@ -516,16 +574,24 @@ export function canonicalScene(spec: Scene2D): Scene2D {
   if (!out.look.custom?.length) delete out.look.custom;
   if (!out.look.customName) delete out.look.customName;
   if (out.look.bgSlot == null) delete out.look.bgSlot;
-  walkItems(out.layers, it => { if (!it.fill) delete it.fill; if (!it.mask) delete it.mask; if (it.slot == null) delete it.slot; });
+  walkItems(out.layers, (it, parent) => {
+    if (!it.fill) delete it.fill; if (!it.mask) delete it.mask; if (it.slot == null) delete it.slot;
+    // A style is a top-level layer's (absent there: Filled); a nested item's isn't used.
+    if (parent) delete it.style; else it.style = styleOf(it);
+    if (it.type === 'group' && !it.mix) delete it.mix;
+    if (!it.glowType) delete it.glowType;
+    if (!it.mods?.length) delete it.mods;
+  });
   if (!out.depth) delete out.depth;
   else delete out.depth.bake;
-  let s = 0, g = 0, m = 0, p = 0;
+  let s = 0, g = 0, m = 0, p = 0, xi = 0;
   out.look.grade?.forEach((x, i) => { x.id = `gr${i + 1}`; });
   out.effects?.forEach((x, i) => { x.id = `fx${i + 1}`; });
   for (const op of out.space) op.id = `p${++p}`;
   walkItems(out.layers, it => {
     it.id = it.type === 'group' ? `g${++g}` : `s${++s}`;
     for (const mo of it.motion) mo.id = `m${++m}`;
+    for (const x of it.mods ?? []) x.id = `x${++xi}`;
   });
   return out;
 }

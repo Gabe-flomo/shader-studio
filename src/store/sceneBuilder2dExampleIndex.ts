@@ -2,7 +2,7 @@
  * sceneBuilder2dExampleIndex.ts — names and descriptions for the "2D: Scene Builder" folder, kept apart
  * from the graphs (sceneBuilder2dExamples.ts) so the examples browser can list them without building them.
  */
-import { TEMPLATES_2D } from '../sceneBuilder2d/templates';
+import { GRID_TEMPLATES_2D, TEMPLATES_2D } from '../sceneBuilder2d/templates';
 
 export const SCENE_BUILDER_2D_EXAMPLE_ROWS: Array<{ key: string; template: string; label: string; picture?: boolean }> = [
   { key: 'sb2Kaleidoscope', template: 'kaleidoscope', label: '2D: Scene Builder · Kaleidoscope of glowing rings' },
@@ -17,7 +17,7 @@ export const SCENE_BUILDER_2D_EXAMPLE_ROWS: Array<{ key: string; template: strin
 
 export const SCENE_BUILDER_2D_EXAMPLE_KEYS = SCENE_BUILDER_2D_EXAMPLE_ROWS.map(r => r.key);
 
-const blurb = (template: string) => TEMPLATES_2D.find(t => t.key === template)?.blurb ?? '';
+const blurb = (template: string) => [...TEMPLATES_2D, ...GRID_TEMPLATES_2D].find(t => t.key === template)?.blurb ?? '';
 const recipeOf = (template: string) => TEMPLATES_2D.find(t => t.key === template)?.recipe ?? '';
 
 export const SCENE_BUILDER_2D_EXAMPLE_INDEX: Record<string, { label: string; description: string }> = Object.fromEntries(

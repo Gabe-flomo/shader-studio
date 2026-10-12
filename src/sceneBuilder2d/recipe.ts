@@ -32,6 +32,8 @@ import { BUILT_IN_FUNCTIONS, builtInFunction } from './functions';
 import { COMBINE_MODES, checkBlock, clampTimes, linesText, parseBlockText, rangeFor, type CombineMode, type SpaceBlock } from './blocks';
 import { BLOCK_BY_ID, BLOCK_LIBRARY, blockFromEntry, isLibraryBlock } from './blockLibrary';
 import { findSavedBlock, loadSavedBlocks, sceneOpFromSaved } from './savedBlocks';
+import { MOD_BY_KIND, MOD_WORDS, MODS, newMod, type DistMod, type ModKind } from './modify';
+import { GLOW_TYPES, type GlowType } from '../nodes/definitions/combiners';
 import { PIECES_MOVES, PIECES_SIZE_BYS, PIECES_VOCABULARY, defaultPieces, printPieces, type PiecesSpec } from './pieces';
 import { PIECE_SHAPES } from '../nodes/definitions/pieces';
 import { GRID_ASSIGNS, GRID_COLOUR_BYS, GRID_PIC_MODES, GRID_SHAPES, GRID_TARGETS, RIPPLE_FROMS, defaultGrid, printGrid, type GridPicMode, type GridShape, type GridSpec } from './grid';
@@ -43,8 +45,8 @@ import { parseDepthArgs, printDepth } from './depth';
 import { TEX_FITS, findTex, newTexUse, texSlug, type TexFit, type TexSource, type TexUse } from '../builders/textures';
 import {
   COLOUR_BYS, DEFAULT_COLOR, DEFAULT_LOOK, LOOK_MUTES_2D, MAX_DUP, MAX_LEVELS, MOTIONS, MOTION_BY_KIND, SHAPES, SHAPE_BY_KIND, SHOW_WORDS, SPACES, SPACE_BY_KIND, TONE_MODES,
-  defaultSize, defaultSpaceValues, emptyScene, newBlockOp, newCombineOp, newDup, newGroup, newMotion, newShape, newSpaceOp, walkItems,
-  type ColourBy, type CombineOp, type DupSpec, type Item, type MotionKind, type ParamDef, type Scene2D, type ShapeSpec, type SpaceDef, type SpaceOp, type ToneMode, type Vec2, type Vec3,
+  defaultSize, defaultSpaceValues, emptyScene, styleOf, defaultStyle, newBlockOp, newCombineOp, newDup, newGroup, newMotion, newShape, newSpaceOp, walkItems,
+  type ColourBy, type CombineOp, type ShapeStyle, type DupSpec, type Item, type MotionKind, type ParamDef, type Scene2D, type ShapeSpec, type SpaceDef, type SpaceOp, type ToneMode, type Vec2, type Vec3,
 } from './spec';
 
 export interface ParseResult2D {
@@ -62,7 +64,9 @@ const OP_WORDS: Record<string, { op: CombineOp; smooth: boolean }> = {
   'smooth-subtract': { op: 'subtract', smooth: true }, 'smooth-cut': { op: 'subtract', smooth: true },
   intersect: { op: 'intersect', smooth: false }, intersection: { op: 'intersect', smooth: false }, both: { op: 'intersect', smooth: false },
   'smooth-intersect': { op: 'intersect', smooth: true },
+  xor: { op: 'xor', smooth: false }, 'exclusive-or': { op: 'xor', smooth: false },
 };
+const STYLE_WORDS: Record<string, ShapeStyle> = { glow: 'glow', glowing: 'glow', soft: 'glow', filled: 'filled', fill: 'filled', flat: 'filled', solid: 'filled', outline: 'outline', line: 'outline', edge: 'outline' };
 export const DEFAULT_SMOOTH_K = 0.1;
 
 const SHAPE_WORDS: Record<string, string> = Object.fromEntries(SHAPES.flatMap(s => [[s.kind, s.kind], ...s.aliases.map(a => [a, s.kind])]));
@@ -89,7 +93,7 @@ class Parser {
   errors: RecipeError[] = [];
   warnings: string[] = [];
   private c: Cursor;
-  private ids = { s: 0, g: 0, m: 0, p: 0 };
+  private ids = { s: 0, g: 0, m: 0, p: 0, x: 0 };
   /** A shape asked for glow (a bare `glow` flag) before any `glow` clause said how. */
   private flagged = false;
 
@@ -278,7 +282,8 @@ class Parser {
         if (word === 'outline' || word === 'hollow') { it.hollow = 0.02; continue; }
         if (it.type === 'group') {
           if (a.value.k === 'num') { it.k = Math.max(0, a.value.v); continue; }
-          this.fail(a, 'A combine takes k= (its blend radius), name= and the settings every item takes.');
+          if (word === 'mix' || word === 'mix-colours' || word === 'mix-colors' || word === 'blend-colours' || word === 'blend-colors') { it.mix = true; continue; }
+          this.fail(a, 'A combine takes k= (its blend radius), mix (blend its shapes\' colours), name= and the settings every item takes.');
           continue;
         }
         if (it.kind === 'fnshape' && !it.fn && (a.value.k === 'word' || a.value.k === 'str')) {
@@ -302,17 +307,28 @@ class Parser {
       if (key === 'inflate' || key === 'fatten') { const v = this.num(a, 'inflate'); if (v !== null) it.inflate = Math.max(0, v); continue; }
       if (key === 'outline' || key === 'hollow') { const v = this.num(a, 'outline'); if (v !== null) it.hollow = Math.max(0, v); continue; }
       if (key === 'glow') { it.glow = !(a.value.k === 'word' && /^(no|off|false)$/i.test(a.value.v)) && !(a.value.k === 'num' && a.value.v === 0); if (it.glow) this.flagged = true; continue; }
+      if (key === 'glow-type' || key === 'glowtype') {
+        const w = this.word(a);
+        if (w && (GLOW_TYPES as readonly string[]).includes(w)) it.glowType = w as GlowType; else this.fail(a, `glow-type is ${GLOW_TYPES.join(', ')}.`);
+        continue;
+      }
+      if (key === 'style' || key === 'look') {
+        const w = this.word(a);
+        const st = w ? STYLE_WORDS[w] : undefined;
+        if (st) it.style = st; else this.fail(a, 'style is glow, filled or outline.');
+        continue;
+      }
       if (key === 'k' || key === 'blend' || key === 'smooth') {
         if (it.type === 'group') { const v = this.num(a, 'k'); if (v !== null) it.k = Math.max(0, v); } else this.fail(a, 'k is for a combine.');
         continue;
       }
       if (it.type === 'group') {
-        this.fail(a, `A combine takes k=, name= and the settings every item takes (at, rot, scale, color, inflate, outline).`);
+        this.fail(a, `A combine takes k=, mix, name= and the settings every item takes (at, rot, scale, color, style, inflate, outline).`);
         continue;
       }
       const p = def!.params.find(q => q.key.toLowerCase() === key) ?? (key === 'radius' ? def!.params.find(q => q.key === 'r') : undefined);
       if (!p) {
-        const s = suggest(a.key!, [...def!.params.map(q => q.key), 'at', 'rot', 'scale', 'color', 'inflate', 'outline', 'name', 'glow']);
+        const s = suggest(a.key!, [...def!.params.map(q => q.key), 'at', 'rot', 'scale', 'color', 'style', 'inflate', 'outline', 'name', 'glow']);
         this.fail(a, `${def!.label} has no setting “${a.key}”.${s ? ` Did you mean “${s}”?` : ` It takes ${def!.params.map(q => q.key).join(', ')}.`}`);
         continue;
       }
@@ -328,6 +344,7 @@ class Parser {
   private modifier(it: Item, m: Modifier) {
     const name = m.name.toLowerCase();
     if (name === 'ring' || name === 'array' || name === 'radial') { this.ring(it, m); return; }
+    if (MOD_WORDS[name]) { this.distMod(it, MOD_WORDS[name], m); return; }
     const d = MOTION_BY_KIND[name];
     if (!d) {
       const s = suggest(name, MOTION_WORDS);
@@ -357,6 +374,29 @@ class Parser {
     }
     if (it.motion.some(x => x.kind === d.kind)) this.warnings.push(`${d.label} twice on one item: both apply.`);
     it.motion.push(mo);
+  }
+
+  /** `@onion(0.02 count=3)`, `@ripples(30 speed=2)`, `@fd("d - amp * sin(d * 40.0)" amp=0.05)`… (modify.ts). */
+  private distMod(it: Item, kind: ModKind, m: Modifier) {
+    const def = MOD_BY_KIND[kind];
+    const mo = newMod(kind, `x${++this.ids.x}`);
+    const mu = takeMuted(m.args);
+    if (mu.muted) mo.muted = true;
+    let pos = 0;
+    for (const a of mu.rest) {
+      const key = a.key?.toLowerCase() ?? null;
+      if (kind === 'custom') {
+        if (!key && (a.value.k === 'str' || a.value.k === 'word')) { mo.expr = a.value.v; continue; }
+        if (key) { const v = this.num(a, key); if (v !== null) mo.values[a.key!] = v; continue; }
+        this.fail(a, '@fd takes its line in quotes, then its sliders by name: @fd("d - amp * sin(d * 40.0)" amp=0.05).');
+        continue;
+      }
+      const p = key ? def.params.find(q => q.key === key) : def.params[pos++];
+      if (!p) { this.fail(a, `@${def.words[0]} ${def.params.length ? `takes ${def.params.map(q => q.key).join(', ')}` : 'takes nothing'}.`); continue; }
+      const v = this.num(a, p.key);
+      if (v !== null) mo.values[p.key] = p.integer ? Math.round(v) : v;
+    }
+    (it.mods ??= []).push(mo);
   }
 
   private ring(it: Item, m: Modifier) {
@@ -454,7 +494,8 @@ class Parser {
     // Ids in tree order, so a recipe always parses to the same ids.
     let s = 0, g = 0, mo = 0, p = 0;
     for (const op of scene.space) op.id = `p${++p}`;
-    walkItems(scene.layers, it => { it.id = it.type === 'group' ? `g${++g}` : `s${++s}`; for (const m of it.motion) m.id = `m${++mo}`; });
+    let xi = 0;
+    walkItems(scene.layers, it => { it.id = it.type === 'group' ? `g${++g}` : `s${++s}`; for (const m of it.motion) m.id = `m${++mo}`; for (const x of it.mods ?? []) x.id = `x${++xi}`; });
     if (this.textures.length) scene.textures = this.textures;
     return { scene, errors: this.errors, warnings: this.warnings };
   }
@@ -715,6 +756,7 @@ class Parser {
           else if (key === 'amount' || key === 'intensity') { const v = this.num(a, 'amount'); if (v !== null) L.glow.amount = Math.max(0.0005, v); }
           else if (key === 'falloff' || key === 'power') { const v = this.num(a, 'falloff'); if (v !== null) L.glow.falloff = Math.max(0.1, v); }
           else if (key === 'color' || key === 'colour' || key === 'tint') { const c = this.colour(a); if (c) L.glow.tint = c; }
+          else if (key === 'type') { const w = this.word(a); if (w && (GLOW_TYPES as readonly string[]).includes(w)) L.glow.type = w as GlowType; else this.fail(a, `glow type= is ${GLOW_TYPES.join(', ')}.`); }
           else this.fail(a, 'glow takes all or selected, an amount, falloff= and color=. Turn it off with glow off.');
         }
         return;
@@ -869,6 +911,23 @@ function printMotion(m: { kind: MotionKind; speed: number; amount: number; phase
   return `@${m.kind}(${parts.join(' ')})`;
 }
 
+/** `@onion(0.02 count=3)`: the first number bare, the rest by name where they differ from the default. */
+function printMod(m: DistMod): string {
+  const def = MOD_BY_KIND[m.kind];
+  const parts: string[] = [];
+  if (m.kind === 'custom') {
+    parts.push(`"${(m.expr ?? '').replace(/"/g, '\'')}"`, ...Object.entries(m.values).map(([k, v]) => `${k}=${fmt(v)}`));
+  } else {
+    def.params.forEach((p, i) => {
+      const v = m.values[p.key] ?? p.def;
+      if (i === 0) parts.push(fmt(v));
+      else if (round(v) !== round(p.def)) parts.push(`${p.key}=${fmt(v)}`);
+    });
+  }
+  if (m.muted) parts.push('muted');
+  return `@${def.words[0]}${parts.length ? `(${parts.join(' ')})` : ''}`;
+}
+
 function printRing(d: DupSpec): string {
   const parts = [String(d.count), `r=${fmt(d.radius)}`];
   if (d.inner) parts.push(`inner=(${d.inner.count},${fmt(d.inner.radius)})`);
@@ -887,9 +946,14 @@ function printTexture(s: TexSource): string {
   return ['texture', fmtName(s.name), ...(s.node ? [`node=${fmtName(s.node)}`] : []), ...(s.aspect && round(s.aspect) !== 1 ? [`aspect=${fmt(s.aspect)}`] : []), ...(s.kind === 'shader' ? ['kind=shader'] : [])].join(' ');
 }
 
-/** An item as recipe text. `indent` (the pretty form): a combine's items each on their own line. */
-function printItem(it: Item, indent: string | null = null): string {
+/**
+ * An item as recipe text. `indent` (the pretty form): a combine's items each on their own line.
+ * `top`: a layer (its style is printed; a nested item's isn't used).
+ */
+function printItem(it: Item, indent: string | null = null, top = true): string {
   const common: string[] = [];
+  // Glow is the default (Filled for a picture layer); a layer with no style (made before styles) is Filled and says so.
+  if (top && styleOf(it) !== defaultStyle(it)) common.push(`style=${styleOf(it)}`);
   const picture = it.type === 'shape' && it.kind === 'picture';
   if (it.fill) common.push(...(picture ? [] : [`fill=${fmtName(it.fill.tex)}`]), ...printUse(it.fill));
   if (it.mask) common.push(`mask=${fmtName(it.mask.tex)}`, ...(round(it.mask.cut) !== 0.5 ? [`mask-cut=${fmt(it.mask.cut)}`] : []), ...(it.mask.invert ? ['mask-invert'] : []));
@@ -903,14 +967,17 @@ function printItem(it: Item, indent: string | null = null): string {
   if (it.glow) common.push('glow');
   if (it.name) common.push(`name=${fmtName(it.name)}`);
   if (it.muted) common.push('muted');
-  const mods = [...it.motion.map(printMotion), ...(it.dup ? [printRing(it.dup)] : [])];
+  const mods = [...it.motion.map(printMotion), ...(it.dup ? [printRing(it.dup)] : []), ...(it.mods ?? []).map(printMod)];
+  if (it.glowType) common.push(`glow-type=${it.glowType}`);
   if (it.type === 'group') {
     const inner = indent === null
-      ? it.children.map(c => printItem(c)).join(', ')
-      : `\n${it.children.map(c => `${indent}  ${printItem(c, `${indent}  `)}`).join(',\n')}\n${indent}`;
-    const head = `${it.k > 0 ? 'smooth-' : ''}${it.op}(${inner})`;
+      ? it.children.map(c => printItem(c, null, false)).join(', ')
+      : `\n${it.children.map(c => `${indent}  ${printItem(c, `${indent}  `, false)}`).join(',\n')}\n${indent}`;
+    const xor = it.op === 'xor';
+    const head = `${it.k > 0 && !xor ? 'smooth-' : ''}${it.op}(${inner})`;
     const extra: string[] = [];
-    if (it.k > 0 && round(it.k) !== DEFAULT_SMOOTH_K) extra.push(`k=${fmt(it.k)}`);
+    if (it.k > 0 && (xor || round(it.k) !== DEFAULT_SMOOTH_K)) extra.push(`k=${fmt(it.k)}`);
+    if (it.mix) extra.push('mix');
     return [head, ...extra, ...common, ...mods].join(' ');
   }
   const def = SHAPE_BY_KIND[it.kind];
@@ -944,6 +1011,7 @@ export function printRecipe2D(scene: Scene2D, opts: { multiline?: boolean; prett
     if (!valueEq(L.glow.amount, D.glow.amount)) g.push(fmt(L.glow.amount));
     if (!valueEq(L.glow.falloff, D.glow.falloff)) g.push(`falloff=${fmt(L.glow.falloff)}`);
     if (L.glow.tint) g.push(`color=${colourText(L.glow.tint)}`);
+    if (L.glow.type) g.push(`type=${L.glow.type}`);
     clauses.push(g.join(' ') + muted('glow'));
   }
   if (L.colour.by !== 'layer') {
@@ -978,16 +1046,17 @@ export function formatRecipe2D(src: string): string {
 export const RECIPE_VOCABULARY_2D = {
   space: SPACES.map(s => ({ kind: s.kind, keys: [...(s.select ? [s.select.key] : []), ...s.params.map(p => p.key)] })),
   blocks: [`space-block ${BLOCK_LIBRARY[0].id} amp=0.1`, 'space-block {uv.x += amp * sin(y * 6 + t)} amp=0.1 times=1', `combine-blocks ${COMBINE_MODES.map(m => m.mode).join('|')} a=… b=… amount=0.5 a_k=… b_k=…`],
-  combines: ['union', 'smooth-union', 'subtract', 'smooth-subtract', 'intersect', 'smooth-intersect'],
+  combines: ['union', 'smooth-union', 'subtract', 'smooth-subtract', 'intersect', 'smooth-intersect', 'xor', 'smooth-union(circle color=red, circle at=(0.3,0) color=blue) k=0.15 mix'],
   shapes: SHAPES.map(s => ({ kind: s.kind, keys: s.params.map(p => p.key) })),
-  itemKeys: ['at=(x,y)', 'rot=30', 'scale=1.5', 'color=teal', 'inflate=0.02', 'outline=0.02', 'glow', 'name="Sun"', 'fill=brick fit=cover|contain|stretch|tile tiles=3 zoom=1.5', 'mask=brick mask-cut=0.5 mask-invert'],
+  itemKeys: ['at=(x,y)', 'rot=30', 'scale=1.5', 'color=teal', 'style=glow|filled|outline', 'inflate=0.02', 'outline=0.02', 'glow', 'name="Sun"', 'fill=brick fit=cover|contain|stretch|tile tiles=3 zoom=1.5', 'mask=brick mask-cut=0.5 mask-invert'],
   textures: ['texture brick node=node_4 aspect=1.5', 'picture brick h=0.6 fit=cover', 'circle r=0.4 fill=brick fit=tile tiles=3', 'background picture=brick fit=cover [still]', `grid 12 picture=brick picture-mode=${GRID_PIC_MODES.join('|')}`],
   depth: ['depth-picture pond [fit=cover] [size | size=(0.4,1.6)] [space=shift|zoom|turn shift=0.15 dir=0 focus=0] [look=top|occlude|fog|mix|light] [with=add|screen|over|tint] [picture=1] [range=(0,1)] [curve=1] [at=0.5 soft=0.05] [fog=1 haze=0.6 fog-color=] [light=3 own=0.5 glow=0.35] [near=picture|scene mix=1] [gradient=sunset gradient-on=scene|picture|both gradient-how=multiply|colorize|add gradient-amount=0.8 cycles=1 phase=0 flow=0.1]'],
   grid: [`grid 12 [rows] shape=${GRID_SHAPES.join('|')} assign=${GRID_ASSIGNS.join('|')} size=0.7 ripple=centre|corners|mouse|(x,y) freq=8 speed=0.4 target=${GRID_TARGETS.join('|')} amount=0.5 by=${GRID_COLOUR_BYS.join('|')} color= color2= glow=off picture=brick picture-mode=${GRID_PIC_MODES.join('|')}`],
   pieces: [PIECES_VOCABULARY],
   motion: ['@orbit(0.3 speed=0.25)', '@bob(0.15 dir=90)', '@spin(0.25)', '@pulse(0.25 speed=0.5)'],
   ring: ['@ring(6 r=0.5)', '@ring(6 r=0.5 inner=(5,0.2))', '@ring(6 r=0.5 levels=3 factor=1.6)'],
-  look: ['glow [selected] [amount] falloff= color=', `colour by ${COLOUR_BYS.join('|')} palette= scale= speed=`, `tone ${TONE_MODES.join('|')}`, 'background colour [picture=brick fit= tiles= still]', 'vignette 0.5', 'grain 0.05', 'palette fire | palette #1b1f3b #e94f37 #f6c90e name=Dusk', 'background slot=1 · circle slot=2', 'grade saturation 1.3 · grade levels blacks=0.05', 'output distance|mask|space palette='],
+  modify: MODS.map(m => (m.kind === 'custom' ? '@fd("d - amp * sin(d * 40.0)" amp=0.05)' : `@${m.words[0]}${m.params.length ? `(${m.params.map((p, i) => (i ? `${p.key}=${p.def}` : String(p.def))).join(' ')})` : ''}`)),
+  look: [`glow [selected] [amount] falloff= color= type=${GLOW_TYPES.join('|')}`, `circle glow-type=${GLOW_TYPES.join('|')}`, `colour by ${COLOUR_BYS.join('|')} palette= scale= speed=`, `tone ${TONE_MODES.join('|')}`, 'background colour [picture=brick fit= tiles= still]', 'vignette 0.5', 'grain 0.05', 'palette fire | palette #1b1f3b #e94f37 #f6c90e name=Dusk', 'background slot=1 · circle slot=2', 'grade saturation 1.3 · grade levels blacks=0.05', 'output distance|mask|space palette='],
   effects: ['crt mask=aperture size=4 strength=0.8 curve=0.04 vignette=0.35', 'chroma 4 mode=directional angle=30', 'fx displace 0.12 scale=2 · fx displace picture=clouds pixels=24', 'fx pixelate 0.025 · fx kaleido 6 · fx swirl 2 · fx ripple · fx lens 0.2', 'fx blur 4 · fx glow 0.8 threshold=0.6'],
   colours: Object.keys(COLOUR_TABLE),
   palettes: PALETTES.map(p => p.key),

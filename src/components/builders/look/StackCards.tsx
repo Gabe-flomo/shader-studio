@@ -43,6 +43,8 @@ export interface StackCardsProps {
   onAddSource?: (src: TexSource) => void;
   /** What to say when the stack is empty. */
   empty: string;
+  /** A short tag on a card (e.g. the Pass it takes, "pass 2 of 6"), or null. */
+  badge?: (it: StackItem) => string | null;
 }
 
 const edited = (items: StackItem[], id: string, fn: (x: StackItem) => void) => items.map(x => {
@@ -94,6 +96,7 @@ function StackCard({ it, def, index, count, props }: { it: StackItem; def: Stack
   const [open, setOpen] = useState(index === count - 1);
   const [dragOver, setDragOver] = useState(false);
   const mime = `text/x-look-${props.name}`;
+  const badge = props.badge?.(it) ?? null;
   const up = (fn: (x: StackItem) => void, key?: string) => props.onEdit(items => edited(items, it.id, fn), key && `${props.name}:${it.id}:${key}`);
   const pictureShown = def.picture && (!def.picture.showWhen || def.picture.showWhen.is.includes(String(it.params[def.picture.showWhen.key])));
   return (
@@ -108,7 +111,7 @@ function StackCard({ it, def, index, count, props }: { it: StackItem; def: Stack
       }}>
       <div onClick={() => setOpen(o => !o)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 6px 6px 8px', minHeight: 42, cursor: 'pointer' }}>
         {/* The only place a drag starts (lib/dragGuard.ts): dragging a slider inside the card moves the slider. */}
-        <span {...dragHandle} title="Drag to change the order" onClick={ev => ev.stopPropagation()} style={{ display: 'inline-flex', alignSelf: 'stretch', alignItems: 'center', padding: '0 4px', margin: '-6px -4px -6px -6px', color: tk.text.faint, flexShrink: 0 }}>
+        <span {...dragHandle} data-look-stack-grip={it.id} title="Drag to change the order: the top card is applied first" onClick={ev => ev.stopPropagation()} style={{ display: 'inline-flex', alignSelf: 'stretch', alignItems: 'center', padding: '0 4px', margin: '-6px -4px -6px -6px', color: tk.text.faint, flexShrink: 0 }}>
           <Icon name="grip" size={13} />
         </span>
         <span style={{ width: 18, height: 18, borderRadius: 5, background: alpha(tk.accent.base, 0.14), color: tk.accent.text, fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{index + 1}</span>
@@ -116,6 +119,7 @@ function StackCard({ it, def, index, count, props }: { it: StackItem; def: Stack
           <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
             <b style={{ fontSize: 13, ...(it.on ? {} : MUTED_DIM) }}>{def.label}</b>
             {!it.on && <MutedTag />}
+            {badge && <span data-look-stack-badge style={{ fontSize: 10.5, color: tk.text.muted, padding: '1px 6px', borderRadius: 4, background: tk.bg.field, whiteSpace: 'nowrap' }}>{badge}</span>}
           </span>
           <span data-look-stack-summary style={{ fontSize: 11.5, color: tk.text.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{stackSummary(it, def)}</span>
         </span>
@@ -171,6 +175,7 @@ export function StackCards(props: StackCardsProps) {
         ))}
       </div>
       {props.items.length === 0 && <BuilderNote>{props.empty}</BuilderNote>}
+      {props.items.length > 0 && <BuilderNote style={{ fontSize: 11 }}>Applied top to bottom: 1 first, each working on what the ones above made.</BuilderNote>}
       {props.items.map((it, i) => byKind[it.kind] && <StackCard key={it.id} it={it} def={byKind[it.kind]} index={i} count={props.items.length} props={props} />)}
       {props.items.length > 1 && (
         <div onDragOver={ev => { if (ev.dataTransfer.types.includes(mime)) { ev.preventDefault(); setEndOver(true); } }} onDragLeave={() => setEndOver(false)}

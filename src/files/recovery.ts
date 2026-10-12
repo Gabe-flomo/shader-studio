@@ -19,10 +19,15 @@ import { toast } from '../components/ui/toastStore';
 import { requestPage } from '../components/page';
 import { installPluginSafety } from '../lib/pluginSafety';
 import {
-  AUTOSAVE_KEY, AutosaveScheduler, buildSnapshot, graphHasContent, newSessionMarker, parseAutosaveMode, parseSessionMarker,
-  parseSnapshot, planRotation, recoverDecision, snapshotFileTime, type AutosaveMode, type PluginCrash, type ProjectInfo,
+  AUTOSAVE_KEY, AutosaveScheduler, buildSnapshot, graphHasContent, graphWork, isPlayfileSnapshot, newSessionMarker, parseAutosaveMode, parseSessionMarker,
+  pendingAtLaunch, planRotation, reasonWords, recoverDecision, snapshotFileTime, type AutosaveMode, type PluginCrash, type ProjectInfo,
   type SessionMarker, type Snapshot, type SnapshotMeta,
 } from './autosave';
+import { buildSnapshotPlayfile, readAnySnapshot, snapshotAsPlayfile } from './autosavePlayfile';
+import { APP_VERSION } from './appVersion';
+import { fromBase64, toBase64 } from '../playfile/bytes';
+import { copyCrashReport, latestCrashReport, primeCrashEnv, revealCrashReport, saveCrashReport, showCrashReport, useCrashReports } from './crashReports';
+import { lastCapturedError, onContextLoss, persistNow } from '../lib/crashLog';
 
 const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
@@ -34,16 +39,21 @@ async function invoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T
 // ── Where snapshots live ─────────────────────────────────────────────────────
 
 interface SnapshotStore {
+  /** Does it write .playfile snapshots (the desktop) or JSON ones (IndexedDB)? */
+  playfile: boolean;
   list(): Promise<string[]>;
-  read(file: string): Promise<string>;
-  write(file: string, body: string): Promise<void>;
+  /** A .playfile's bytes, a .json's text. */
+  read(file: string): Promise<Uint8Array | string>;
+  write(file: string, body: Uint8Array | string): Promise<void>;
   remove(file: string): Promise<void>;
 }
 
+// A .playfile crosses the bridge as base64 (an autosave is a few KB: no media is bundled).
 const tauriStore: SnapshotStore = {
+  playfile: true,
   list: () => invoke<string[]>('autosave_list'),
-  read: name => invoke<string>('autosave_read', { name }),
-  write: (name, body) => invoke<void>('autosave_write', { name, body }),
+  read: async name => { const r = await invoke<string>('autosave_read', { name }); return isPlayfileSnapshot(name) ? fromBase64(r) : r; },
+  write: (name, body) => invoke<void>('autosave_write', typeof body === 'string' ? { name, body } : { name, body: toBase64(body), base64: true }),
   remove: name => invoke<void>('autosave_remove', { name }),
 };
 
@@ -69,8 +79,9 @@ function idbStore(): SnapshotStore {
     });
   };
   return {
+    playfile: false,
     list: async () => (await run<IDBValidKey[]>('readonly', s => s.getAllKeys())).map(String),
-    read: async file => (await run<{ body?: string } | undefined>('readonly', s => s.get(file) as IDBRequest<{ body?: string } | undefined>))?.body ?? '',
+    read: async file => (await run<{ body?: string | Uint8Array } | undefined>('readonly', s => s.get(file) as IDBRequest<{ body?: string | Uint8Array } | undefined>))?.body ?? '',
     write: async (file, body) => { await run('readwrite', s => s.put({ file, body })); },
     remove: async file => { await run('readwrite', s => s.delete(file)); },
   };
@@ -83,34 +94,60 @@ const snapshots = () => store ??= isTauri() ? tauriStore : idbStore();
 
 const SESSION_KEY = 'shader-studio:session';
 
+const PENDING_KEY = 'shader-studio:session:pending';
+
 interface SessionBackend {
+  /** This session, and the one to offer recovery for (kept until `done`). */
   start(): Promise<{ current: SessionMarker; previous: SessionMarker | null }>;
   note(n: { project?: ProjectInfo; lastSaveAt?: number }): void;
+  /** The offer was made or wasn't needed: forget the pending one. */
+  done(): void;
+  /** This page is going away cleanly (a reload, the tab closing). */
+  pageHide(): void;
+  /** This page is going down (a fatal error): the next page load offers recovery. */
+  pageCrashed(reason: string): Promise<void>;
 }
 
+/**
+ * The desktop: Rust keeps the marker (recovery.rs). The previous launch's, if it
+ * didn't end cleanly, waits in `pending-recovery.json` until the page answers;
+ * a page that dies inside a running app (WebKit's content process killed, a
+ * fatal error) is pending too, so the reload offers recovery.
+ */
 const tauriSession: SessionBackend = {
   start: async () => {
     const r = await invoke<{ current: unknown; previous: unknown }>('session_start');
-    return { current: parseSessionMarker(r.current) ?? newSessionMarker(`s${Date.now()}`, Date.now()), previous: parseSessionMarker(r.previous) };
+    return { current: parseSessionMarker(r.current) ?? newSessionMarker(`s${Date.now()}`, Date.now(), APP_VERSION), previous: parseSessionMarker(r.previous) };
   },
   note: n => { void invoke('session_note', { note: n }).catch(() => { /* the marker is a best effort */ }); },
+  done: () => { void invoke('session_recovery_done').catch(() => { /* asked again next launch */ }); },
+  pageHide: () => { void invoke('session_page_hide').catch(() => { /* treated as a crash on reload */ }); },
+  pageCrashed: async reason => { await invoke('session_page_crashed', { reason }).catch(() => { /* best effort */ }); },
 };
 
 function browserSession(): SessionBackend {
   let current: SessionMarker | null = null;
+  let crashed = false;
   const put = () => { try { if (current) localStorage.setItem(SESSION_KEY, JSON.stringify(current)); } catch { /* storage full or blocked */ } };
   return {
     start: async () => {
       let previous: SessionMarker | null = null;
+      let leftover: SessionMarker | null = null;
       try { previous = parseSessionMarker(localStorage.getItem(SESSION_KEY)); } catch { /* none */ }
-      current = newSessionMarker(`s${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`, Date.now());
+      try { leftover = parseSessionMarker(localStorage.getItem(PENDING_KEY)); } catch { /* none */ }
+      const pending = pendingAtLaunch(previous, leftover);
+      try { if (pending) localStorage.setItem(PENDING_KEY, JSON.stringify(pending)); } catch { /* storage full */ }
+      current = newSessionMarker(`s${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`, Date.now(), APP_VERSION);
       put();
-      // Closing or reloading the tab is a clean exit; a browser or tab crash isn't.
-      window.addEventListener('pagehide', () => { if (current) { current.cleanExit = true; put(); } });
+      // Closing or reloading the tab is a clean exit; a browser or tab crash (or a fatal error) isn't.
+      window.addEventListener('pagehide', () => { if (current && !crashed) { current.cleanExit = true; put(); } });
       // Back from the back/forward cache: running again.
       window.addEventListener('pageshow', e => { if (e.persisted && current) { current.cleanExit = false; put(); } });
-      return { current, previous };
+      return { current, previous: pending };
     },
+    done: () => { try { localStorage.removeItem(PENDING_KEY); } catch { /* none */ } },
+    pageHide: () => { /* the pagehide listener above */ },
+    pageCrashed: async reason => { crashed = true; if (current) { current.cleanExit = false; current.reason = reason; put(); } },
     note: n => {
       if (!current) return;
       if (n.project) current.project = n.project;
@@ -180,8 +217,8 @@ async function readMeta(files: string[]): Promise<SnapshotMeta[]> {
   const out: SnapshotMeta[] = [];
   for (const f of planRotation(files).keep) {
     try {
-      const snap = parseSnapshot(f, await snapshots().read(f));
-      if (snap) out.push({ file: snap.file, at: snap.at, session: snap.session, project: snap.project });
+      const snap = await readAnySnapshot(f, await snapshots().read(f));
+      if (snap) out.push({ file: snap.file, at: snap.at, session: snap.session, project: snap.project, work: snap.work });
     } catch { /* unreadable: skipped */ }
   }
   return out;
@@ -197,14 +234,17 @@ async function writeSnapshot(): Promise<void> {
   const key = `${JSON.stringify(project)}\n${graphJson}`;
   if (key === lastBody) return; // nothing changed since the last snapshot
   const at = Math.max(Date.now(), (useAutosave.getState().snapshots[0]?.at ?? 0) + 1);
-  const { file, body } = buildSnapshot(graphJson, project, session.id, at);
+  const store = snapshots();
+  const { file, body } = store.playfile
+    ? await (async () => { const p = await buildSnapshotPlayfile(graphJson, project, session!.id, at); return { file: p.file, body: p.bytes as Uint8Array | string }; })()
+    : buildSnapshot(graphJson, project, session.id, at);
   try {
-    await snapshots().write(file, body);
+    await store.write(file, body);
     lastBody = key;
     const files = await snapshots().list();
     const { remove } = planRotation(files);
     for (const f of remove) { try { await snapshots().remove(f); } catch { /* next time */ } }
-    const meta: SnapshotMeta = { file, at, session: session.id, project };
+    const meta: SnapshotMeta = { file, at, session: session.id, project, work: graphWork(graph) };
     useAutosave.setState(s => ({ lastAt: at, error: '', snapshots: [meta, ...s.snapshots.filter(x => x.file !== file && !remove.includes(x.file))].slice(0, 3) }));
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -219,7 +259,7 @@ async function writeSnapshot(): Promise<void> {
 /** Put a snapshot back: the project as it was, still unsaved (an untitled one stays untitled). */
 export async function restoreSnapshot(file: string): Promise<boolean> {
   let snap: Snapshot | null = null;
-  try { snap = parseSnapshot(file, await snapshots().read(file)); } catch { snap = null; }
+  try { snap = await readAnySnapshot(file, await snapshots().read(file)); } catch { snap = null; }
   if (!snap) { toast.error('That autosave can’t be read'); return false; }
   const st = useNodeGraphStore.getState();
   const r = st.importGraph(JSON.stringify(snap.graph), { recovered: true });
@@ -255,20 +295,88 @@ export function formatClock(ms: number, now = Date.now()): string {
   return new Date(now).toDateString() === d.toDateString() ? time : `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })} ${time}`;
 }
 
+/** An autosave as a .playfile, saved where you choose (the browser's are kept as JSON; the desktop's are .playfile already). */
+export async function downloadSnapshot(file: string): Promise<void> {
+  let snap: Snapshot | null = null;
+  try { snap = await readAnySnapshot(file, await snapshots().read(file)); } catch { snap = null; }
+  if (!snap) { toast.error('That autosave can’t be read'); return; }
+  const { name, bytes } = await snapshotAsPlayfile(snap);
+  const { saveBinaryFile } = await import('../utils/fileIO');
+  await saveBinaryFile(bytes, name, 'application/x-playfile');
+}
+
+/** Reasons a report was already written for, by the page (a fatal error) or by Rust (a panic). */
+const REPORTED = new Set(['js-fatal', 'rust-panic']);
+
 async function offerRecovery(previous: SessionMarker | null, list: SnapshotMeta[], crash: PluginCrash | null): Promise<void> {
-  const d = recoverDecision(previous, list[0] ?? null, crash, ms => formatClock(ms));
+  const unclean = !!previous && !previous.cleanExit;
+  // A crash report for the session that went down: written now from what it left behind
+  // (its log lines in localStorage), unless the page or Rust wrote one as it went.
+  let report: string | null = null;
+  if (unclean && previous) {
+    const reason = previous.reason ?? 'unknown';
+    if (REPORTED.has(reason)) {
+      useCrashReports.getState().refresh();
+      report = await latestCrashReport();
+    } else {
+      report = await saveCrashReport(reason, { previous: true, crashedAppVersion: previous.appVersion, session: { id: previous.id, startedAt: previous.startedAt } });
+    }
+  }
+  const links = report ? [
+    { label: 'Show report', onClick: () => { void showCrashReport(report!); } },
+    { label: 'Copy report', onClick: () => { void copyCrashReport(report!); } },
+    { label: isTauri() ? 'Reveal in Finder' : 'Download report', onClick: () => { void revealCrashReport(report!); } },
+  ] : undefined;
+  const d = recoverDecision(previous, list, crash, ms => formatClock(ms));
   if (!d.offer) {
     if (crash) toast.warning(`${crash.name} closed Playfield last time`, { message: 'It’s switched off in Settings → Plugins; Try again there when it’s been updated.', sticky: true });
+    else if (report && previous) {
+      toast.warning('Playfield closed unexpectedly last time', {
+        message: `${reasonWords(previous.reason)}. Nothing unsaved was lost. A crash report was saved.`,
+        action: { label: 'Show report', onClick: () => { void showCrashReport(report!); } },
+      });
+    }
+    backend?.done();
     return;
   }
+  const others = d.others.length ? ` Other autosaves from then: ${d.others.map(o => formatClock(o.at)).join(', ')} (Files → App settings lists them).` : '';
+  const why = previous?.reason && previous.reason !== 'unknown' ? ` ${reasonWords(previous.reason)}.` : '';
   const choice = await askChoice(d.title, [
     { id: 'recover', label: 'Recover', variant: 'primary' },
     { id: 'files', label: 'Show in Files', variant: 'ghost' },
     { id: 'discard', label: 'Discard', variant: 'danger' },
-  ], { message: d.message });
+  ], { message: d.message + why + others, ...(report ? { note: 'A crash report was saved.', links } : {}) });
+  backend?.done();
   if (choice === 'recover') await restoreSnapshot(d.snapshot.file);
   else if (choice === 'files') showAutosavesInFiles();
   // Discard: nothing is removed; the old snapshots rotate out as new ones are written.
+}
+
+// ── A page going down ────────────────────────────────────────────────────────
+
+let crashing = false;
+/**
+ * A fatal error (the page went blank): write a report, mark the session so the
+ * next page load offers recovery, and reload into that offer.
+ */
+export async function crashPage(reason: string, error?: { message: string; stack?: string } | null, opts: { reload?: boolean } = {}): Promise<void> {
+  if (crashing) return;
+  crashing = true;
+  await saveCrashReport(reason, { error: error ?? lastCapturedError() });
+  persistNow();
+  await (backend ?? (isTauri() ? tauriSession : null))?.pageCrashed(reason);
+  if (opts.reload !== false) location.reload();
+}
+
+let lastContextReport = 0;
+function watchPage(): void {
+  window.addEventListener('pagehide', () => { if (!crashing) backend?.pageHide(); });
+  // WebGL context loss: a report (at most one every 10 minutes); the app restores the context itself.
+  onContextLoss(() => {
+    if (Date.now() - lastContextReport < 600_000) return;
+    lastContextReport = Date.now();
+    void saveCrashReport('webgl-context-lost');
+  });
 }
 
 // ── Starting ─────────────────────────────────────────────────────────────────
@@ -280,8 +388,10 @@ export async function startRecovery(): Promise<void> {
   if (started) return;
   started = true;
   backend = isTauri() ? tauriSession : browserSession();
+  watchPage();
+  primeCrashEnv();
   let previous: SessionMarker | null = null;
-  try { ({ current: session, previous } = await backend.start()); } catch { session = newSessionMarker(`s${Date.now()}`, Date.now()); }
+  try { ({ current: session, previous } = await backend.start()); } catch { session = newSessionMarker(`s${Date.now()}`, Date.now(), APP_VERSION); }
   const crash = await installPluginSafety().catch(() => null);
   let list: SnapshotMeta[] = [];
   try { list = await readMeta(await snapshots().list()); } catch { list = []; }

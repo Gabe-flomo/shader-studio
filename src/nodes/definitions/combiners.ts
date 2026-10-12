@@ -79,11 +79,41 @@ export const AddColorNode: NodeDefinition = {
 
 // ── Compound / smart combiners ────────────────────────────────────────────────
 
+/**
+ * Glow types: how a distance becomes glow (Glow Layer's Type, and the 2D Scene Builder's Look → Glow
+ * type, which writes the same formulas into its Expression Blocks). i is the amount (how far the glow
+ * reaches, in picture units), p the falloff. Every type but Halo and Rim is 1 inside the shape.
+ */
+export const GLOW_TYPES = ['halo', 'soft', 'exp', 'gauss', 'neon', 'rim', 'invsq'] as const;
+export type GlowType = typeof GLOW_TYPES[number];
+export const GLOW_TYPE_LABELS: Record<GlowType, { label: string; blurb: string }> = {
+  halo: { label: 'Halo (inverse distance)', blurb: 'amount ÷ |distance|: a bright rim round the edge that falls off slowly. The classic glow; it goes past 1 at the edge.' },
+  soft: { label: 'Soft', blurb: 'amount ÷ (distance outside + amount): the shape\'s colour inside and at the edge, fading out from there. One shape.' },
+  exp: { label: 'Exponential', blurb: 'exp(−distance ÷ 3·amount): a glow that dies away evenly, with no long tail.' },
+  gauss: { label: 'Gaussian', blurb: 'exp(−(distance ÷ 4·amount)²): a broad, soft bloom with a flat top that ends cleanly.' },
+  neon: { label: 'Neon', blurb: 'A bright core line on the edge plus a soft halo: a neon tube.' },
+  rim: { label: 'Rim (edge only)', blurb: 'Only the edge glows, inside and out: the middle stays dark.' },
+  invsq: { label: 'Inverse square', blurb: '1 ÷ (1 + (distance ÷ amount)²): like light from a lamp, bright near and quickly gone.' },
+};
+/** The glow (a float, 0 far away) for distance `d`, amount `i` and falloff `p`, as GLSL. */
+export function glowFormula(type: string, d: string, i: string, pw: string): string {
+  const x = `(max(${d}, 0.0) / max(${i}, 1.0e-5))`;
+  switch (type) {
+    case 'soft': return `pow(1.0 / (1.0 + ${x}), ${pw})`;
+    case 'exp': return `exp(-0.35 * ${x} * ${pw})`;
+    case 'gauss': return `exp(-0.0625 * ${x} * ${x} * ${pw})`;
+    case 'neon': return `(0.6 * pow(1.0 / (1.0 + ${x}), ${pw}) + 1.2 * exp(-abs(${d}) / max(0.35 * ${i}, 1.0e-5)))`;
+    case 'rim': return `pow(1.0 / (1.0 + abs(${d}) / max(${i}, 1.0e-5)), ${pw})`;
+    case 'invsq': return `pow(1.0 / (1.0 + ${x} * ${x}), ${pw})`;
+    default: return `pow(${i} / max(abs(${d}), 0.0001), ${pw})`;
+  }
+}
+
 export const GlowLayerNode: NodeDefinition = {
   type: 'glowLayer',
   label: 'Glow Layer',
   category: 'Combiners',
-  description: 'The classic SDF glow pattern: intensity / |d|. Converts a signed distance field into a colored glow halo. Intensity controls brightness, Power sharpens the falloff.',
+  description: 'Turns a signed distance field into a coloured glow. Type picks the formula: Halo (the classic intensity / |d|), Soft, Exponential, Gaussian, Neon, Rim or Inverse square. Intensity is how far it reaches, Power sharpens the falloff.',
   inputs: {
     d:         { type: 'float', label: 'SDF' },
     color:     { type: 'vec3',  label: 'Color' },
@@ -91,10 +121,12 @@ export const GlowLayerNode: NodeDefinition = {
     power:     { type: 'float', label: 'Power' },
   },
   outputs: { result: { type: 'vec3', label: 'Glow' } },
-  defaultParams: { intensity: 0.01, power: 1.0 },
+  defaultParams: { intensity: 0.01, power: 1.0, mode: 'halo' },
   paramDefs: {
-    intensity: { label: 'Intensity', type: 'float', min: 0.001, max: 0.2,  step: 0.001 },
-    power:     { label: 'Power',     type: 'float', min: 0.1,   max: 4.0,  step: 0.05  },
+    mode:      { label: 'Type', type: 'select', options: GLOW_TYPES.map(t => ({ value: t, label: GLOW_TYPE_LABELS[t].label })),
+      hint: GLOW_TYPES.map(t => `${GLOW_TYPE_LABELS[t].label}: ${GLOW_TYPE_LABELS[t].blurb}`).join('\n') },
+    intensity: { label: 'Intensity', type: 'float', min: 0.001, max: 0.2,  step: 0.001, hint: 'The amount: how far the glow reaches.' },
+    power:     { label: 'Power',     type: 'float', min: 0.1,   max: 4.0,  step: 0.05, hint: 'The falloff: bigger fades faster.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id      = node.id;
@@ -104,7 +136,7 @@ export const GlowLayerNode: NodeDefinition = {
     const pVar    = inputVars.power     || p(node.params.power, 1.0);
     return {
       code: [
-        `    float ${id}_g = pow(${iVar} / max(abs(${dVar}), 0.0001), ${pVar});\n`,
+        `    float ${id}_g = ${glowFormula(String(node.params.mode ?? 'halo'), dVar, iVar, pVar)};\n`,
         `    vec3 ${id}_result = ${cVar} * ${id}_g;\n`,
       ].join(''),
       outputVars: { result: `${id}_result` },

@@ -21,8 +21,8 @@ import { ROLE_KEY, mk, ref, tidy, type Ctx, type Ref } from '../sceneBuilder/bui
 import { fmt } from '../sceneBuilder/recipe';
 import { PALETTE_BY_KEY } from '../sceneBuilder/output';
 import {
-  MOTION_BY_KIND, SHAPE_BY_KIND, SPACE_BY_KIND, hasShapes, itemName, num, opLabel,
-  type DupSpec, type Item, type MotionSpec, type Scene2D, type ShapeSpec, type SpaceOp, type Vec2, type Vec3,
+  MOTION_BY_KIND, SHAPE_BY_KIND, SPACE_BY_KIND, hasShapes, itemName, num, opLabel, styleOf,
+  type DupSpec, type GroupSpec, type Item, type MotionSpec, type Scene2D, type ShapeSpec, type SpaceOp, type Vec2, type Vec3,
 } from './spec';
 import { colourText } from '../lang/colours';
 import { GRID_LABELS, gridProgram, type GridSpec } from './grid';
@@ -31,6 +31,8 @@ import { callBody, type FnRef } from './functions';
 import { COMBINE_BY_MODE, blockGlslLines, checkBlock, clampTimes, type SpaceBlock } from './blocks';
 import { BLOCK_BY_ID } from './blockLibrary';
 import { FAR, gateChain, gateNode } from '../builders/mute';
+import { MOD_BY_KIND, customParams, modGlsl, modReads } from './modify';
+import { glowFormula, GLOW_TYPE_LABELS, type GlowType } from '../nodes/definitions/combiners';
 import { DEPTH_LOOK_LABELS, depthMixParams, depthSummary, type DepthPic2D } from './depth';
 import { DEPTH_MIX_COMBINE_LABELS, DEPTH_SPACE_LABELS } from '../nodes/definitions/depthMix';
 import { FIT_LABELS, LUMA, findTex, fitLines, glf, newTexUse, picUv, sampleWrap, standInId, standIns, type TexSource, type TexUse } from '../builders/textures';
@@ -73,6 +75,10 @@ interface B {
   local: Map<string, Ref>;
   /** Depth → size: the Depth Mix Scale every top-level layer grows by (depth.ts), or null. */
   depthGrow?: Ref | null;
+  /** A shape's own colour (its Color node or palette slot), for a combine that blends its shapes' colours; null when colour comes from elsewhere. */
+  colourOf?: ((it: Item) => Ref) | null;
+  /** A combine's colour, blended from its shapes by the smooth weight (groups with `mix`). */
+  mixCol: Map<string, Ref>;
 }
 
 // ── Pictures (builders/textures.ts) ─────────────────────────────────────────
@@ -273,6 +279,44 @@ function spaceNode(b: B, op: SpaceOp, pos: Ref): Ref {
 // ── Items ───────────────────────────────────────────────────────────────────
 
 const TYPE_OF_OP = { union: 'sdfUnion', subtract: 'sdfSubtract', intersect: 'sdfIntersect' } as const;
+/** A role inside the current scope (a ring's sizes draw a group's children again under a prefix). */
+const scoped = (c: Ctx, role: string) => `${c.rolePrefix ?? ''}${role}`;
+
+/** What one combine does, for its node's note. */
+function opWords(it: GroupSpec, names: string[], i: number): string {
+  const before = i ? ' (and the ones before)' : '';
+  switch (it.op) {
+    case 'union': return `${it.k > 0 ? 'melts' : 'joins'} ${names[0]}${before} and ${names[i + 1]}`;
+    case 'subtract': return `cuts ${names[i + 1]} out of ${names[0]}${i ? ' (and the cuts before)' : ''}`;
+    case 'intersect': return `keeps only where ${names[0]}${before} and ${names[i + 1]} overlap`;
+    default: return `keeps ${names[0]}${before} and ${names[i + 1]} but not where they overlap`;
+  }
+}
+
+/**
+ * One combine of two distances: the Union, Subtract or Intersect node (its Blend radius a live
+ * param), or for Xor an Expression Block. Returns the distance and the blend weight (1: a's side).
+ */
+function emitOp(b: B, it: GroupSpec, role: string, a: Ref, d: Ref, note: string): { dist: Ref; blend: Ref } {
+  const { c } = b;
+  if (it.op === 'xor') {
+    const n = expr(c, scoped(c, role), 'Xor', [{ name: 'a', type: 'float', from: a }, { name: 'b', type: 'float', from: d }],
+      'max(min(a, b), -max(a, b))', `${note} Xor is either shape but not both: max(min(a, b), −max(a, b)), so where they overlap is outside. blend is 1 where a is the nearer, for the colour.`,
+      'float', [{ lhs: 'float blend', op: '=', rhs: 'step(a, b)' }], [{ name: 'blend', type: 'float', label: 'Blend' }]);
+    return { dist: ref(n, 'result'), blend: ref(n, 'blend') };
+  }
+  const n = mk(c, TYPE_OF_OP[it.op], role, { k: it.k }, { a, b: d }, note);
+  return { dist: ref(n, 'dist'), blend: ref(n, 'blend') };
+}
+
+/** Two colours joined by a combine's blend weight (1: a). Subtract keeps a's colour: the cut takes nothing of the cutter's. */
+function mixColour(b: B, role: string, op: GroupSpec['op'], ca: Ref, cb: Ref, w: Ref, name: string): Ref {
+  if (op === 'subtract') return ca;
+  const { c } = b;
+  return ref(expr(c, scoped(c, role), 'Combine colour', [
+    { name: 'a', type: 'vec3', from: ca }, { name: 'b', type: 'vec3', from: cb }, { name: 'w', type: 'float', from: w },
+  ], 'mix(b, a, w)', `The colour of ${name} where its shapes join: w is the combine's blend weight (1 on the first shape's side, 0 on the other's, in between across a smooth join), so the colours run into each other as the shapes do. Change Blend radius on the combine and the colour follows.`), 'result');
+}
 
 function motionWords(m: MotionSpec): string {
   const d = MOTION_BY_KIND[m.kind];
@@ -372,6 +416,37 @@ function shapeNode(b: B, sh: ShapeSpec, pos: Ref, name: string, sfx = ''): Ref {
 }
 
 /**
+ * Modify (modify.ts): each operation on the item's distance as an Expression Block, d in, d out,
+ * its numbers sliders (live, wireable). A muted one passes d through (live); one that doesn't check
+ * is left out with a warning.
+ */
+function emitMods(b: B, it: Item, d: Ref, name: string): Ref {
+  const { c } = b;
+  for (const m of it.mods ?? []) {
+    const def = MOD_BY_KIND[m.kind];
+    if (!def) { c.warnings.push(`${name}: a modify “${m.kind}” isn't known; left out.`); continue; }
+    const g = modGlsl(m);
+    if ('error' in g) { c.warnings.push(`${name}'s ${def.label} was left out: ${g.error}`); continue; }
+    const reads = modReads(m);
+    const local = b.local.get(it.id);
+    const sliders = m.kind === 'custom'
+      ? customParams(m).map(p => ({ name: p.name, type: 'float' as const, slider: { value: p.value, min: p.min, max: p.max } }))
+      : def.params.map(p => ({ name: p.key, type: 'float' as const, slider: { value: m.values[p.key] ?? p.def, min: p.min, max: p.max } }));
+    const node = expr(c, scoped(c, `${it.id}:mod:${m.id}`), def.label, [
+      { name: 'd', type: 'float', from: d },
+      ...(reads.uv && local ? [{ name: 'uv', type: 'vec2' as const, from: local }] : []),
+      ...(reads.t ? [{ name: 't', type: 'float' as const, from: b.getTime() }] : []),
+      ...(m.kind === 'onion' ? sliders.filter(x => x.name !== 'count') : sliders),
+    ], g.result,
+    `Modify ${name}: ${def.label}. ${def.blurb} d is its distance (negative inside), and the result is the distance it is drawn with.${sliders.length ? ` The numbers (${sliders.filter(x => x.name !== 'count').map(x => `${x.name} ${fmt(x.slider.value)}`).join(', ')}) are live sliders: drag them, or wire them, without recompiling.` : ''}${m.kind === 'onion' && (m.values.count ?? 1) > 1 ? ` Done ${Math.round(m.values.count)} times, each ring half as wide, ring inside ring.` : ''}${m.kind === 'custom' ? ' x and y are the point (uv.x, uv.y), t is time.' : ''}`,
+    'float', g.lines);
+    gateNode(node, m.muted, { from: 'd' });
+    d = ref(node, 'result');
+  }
+  return d;
+}
+
+/**
  * An item's distance from `pos`: placement (Motion 2D → Transform), the ring array, the shape or the
  * combine of its children, Round and Outline, and the distance put right for any scaling.
  */
@@ -412,6 +487,7 @@ function emitItem(b: B, it: Item, pos: Ref, depth: number): Ref | null {
   const dup = it.dup && !it.dup.muted && it.dup.count >= 2 ? it.dup : null;
   const levels = dup ? Math.max(1, Math.min(6, Math.round(dup.levels))) : 1;
   const branches: Ref[] = [];
+  const levelCols: Ref[] = [];
   for (let k = 0; k < levels; k++) {
     const br = dup ? emitRing(b, it, { ...dup, levels }, start, k, name) : start;
     if (k === 0) b.local.set(it.id, br.pos);
@@ -427,11 +503,17 @@ function emitItem(b: B, it: Item, pos: Ref, depth: number): Ref | null {
       if (!parts.length) return null;
       dist = parts[0].d;
       const names = parts.map(x => `‘${itemName(spec, x.ch)}’`);
-      parts.slice(1).forEach(({ d }, i) => {
-        const n = mk(c, TYPE_OF_OP[it.op], `${it.id}:op${i + 1}${sfx}`, { k: it.k }, { a: dist!, b: d },
-          `${opLabel(it)} in ${name}: ${it.op === 'union' ? `${it.k > 0 ? 'melts' : 'joins'} ${names[0]}${i ? ' (and the ones before)' : ''} and ${names[i + 1]}` : it.op === 'subtract' ? `cuts ${names[i + 1]} out of ${names[0]}${i ? ' (and the cuts before)' : ''}` : `keeps only where ${names[0]}${i ? ' (and the ones before)' : ''} and ${names[i + 1]} overlap`}.${it.k > 0 ? ` Blend radius ${fmt(it.k)} is how wide the join is.` : ''}`);
-        dist = ref(n, 'dist');
+      // Its colour from its shapes, blended by each combine's weight (Look → colour by each layer's).
+      const colOf = it.mix && b.colourOf ? (ch: Item): Ref => b.mixCol.get(ch.id) ?? b.colourOf!(ch) : null;
+      let col: Ref | null = colOf ? colOf(parts[0].ch) : null;
+      parts.slice(1).forEach(({ ch, d }, i) => {
+        const role = `${it.id}:op${i + 1}${sfx}`;
+        const o = emitOp(b, it, role, dist!, d,
+          `${opLabel(it)} in ${name}: ${opWords(it, names, i)}.${it.k > 0 && it.op !== 'xor' ? ` Blend radius ${fmt(it.k)} is how wide the join is (live: drag it on the node).` : ''}${col ? ' Its Blend output (the 0–1 weight) blends the shapes\' colours.' : ''}`);
+        dist = o.dist;
+        if (col && colOf) col = mixColour(b, `${it.id}:col${i + 1}${sfx}`, it.op, col, colOf(ch), o.blend, name);
       });
+      if (col) levelCols.push(col);
     }
     if (it.inflate > 0) dist = ref(mk(c, 'sdfOffset', `${it.id}:inflate${sfx}`, { amount: -it.inflate }, { sdf: dist }, `Inflate on ${name}: an Offset of ${fmt(-it.inflate)} grows the edge out by ${fmt(it.inflate)} and rounds its corners.`), 'result');
     if (it.hollow > 0) dist = ref(mk(c, 'sdfOnion', `${it.id}:hollow${sfx}`, { r: it.hollow }, { dist }, `Outline on ${name}: Onion turns the solid into a line ${fmt(it.hollow)} thick, abs(distance) − ${fmt(it.hollow)}.`), 'dist');
@@ -442,9 +524,14 @@ function emitItem(b: B, it: Item, pos: Ref, depth: number): Ref | null {
     branches.push(dist!);
   }
   let out = branches[0];
+  let outCol: Ref | null = levelCols[0] ?? null;
   branches.slice(1).forEach((d, i) => {
-    out = ref(mk(c, 'sdfUnion', `${it.id}:sizes${i + 1}`, { k: 0 }, { a: out, b: d }, `Joins the ring of ${name} at size ${i + 2} to the sizes before it: the same ring repeated at bigger scales.`), 'dist');
+    const u = mk(c, 'sdfUnion', `${it.id}:sizes${i + 1}`, { k: 0 }, { a: out, b: d }, `Joins the ring of ${name} at size ${i + 2} to the sizes before it: the same ring repeated at bigger scales.`);
+    out = ref(u, 'dist');
+    if (outCol && levelCols[i + 1]) outCol = mixColour(b, `${it.id}:sizecol${i + 1}`, 'union', outCol, levelCols[i + 1], ref(u, 'blend'), name);
   });
+  if (outCol) b.mixCol.set(it.id, outCol);
+  out = emitMods(b, it, out, name);
   // Muted (builders/mute.ts): its distance is far away, by a live uniform, so it draws nothing and
   // every union, cut and glow ignores it.
   gateNode(c.nodes.find(n => n.id === out.nodeId), it.muted, { to: FAR });
@@ -481,7 +568,7 @@ const DRIVERS: Record<string, { code: string; what: string }> = {
 export function buildScene2D(spec: Scene2D, idFor: (role: string) => string = role => `sb2_${role.replace(/[^A-Za-z0-9]/g, '_')}`): Build2DResult {
   const c: Ctx = { spec: undefined as never, idFor, nodes: [], warnings: [] };
   const L = spec.look;
-  const b: B = { c, spec, time: null, local: new Map(), getTime: () => {
+  const b: B = { c, spec, time: null, local: new Map(), mixCol: new Map(), getTime: () => {
     if (!b.time) b.time = ref(mk(c, 'time', 'time', {}, {}, 'Time in seconds: it drives every motion, spin and drifting warp in this scene.'), 'time');
     return b.time;
   } };
@@ -501,6 +588,33 @@ export function buildScene2D(spec: Scene2D, idFor: (role: string) => string = ro
   if (depthPic?.shapes && spec.depth?.space.on) pos = ref(depthPic.shapes, 'uv');
   b.depthGrow = depthPic?.shapes && spec.depth?.size.on ? ref(depthPic.shapes, 'scale') : null;
 
+  // The palette's slots in use: one Color node each, wired to every part that takes it, so changing
+  // the palette (or that node) recolours them all (builders/look/palette.ts).
+  const swatches = paletteSwatches(L.colour.palette, L.custom);
+  const slots = new Map<number, Ref>();
+  const slotRef = (slot: number): Ref => {
+    const n = ((Math.round(slot) % swatches.length) + swatches.length) % swatches.length;
+    let r = slots.get(n);
+    if (!r) {
+      const colour = slotColour(swatches, n);
+      r = ref(mk(c, 'colorPicker', `palette:slot${n + 1}`, { color: colour }, {}, `Palette slot ${n + 1} of ${paletteLabel(L.colour.palette, L.customName)}, ${col(colour)}: every part coloured from this slot reads it, so changing it here (or the palette in the builder) recolours them all.`), 'rgb');
+      slots.set(n, r);
+    }
+    return r;
+  };
+  // A combine that blends its shapes' colours (`mix`) reads each shape's own colour: its slot or a
+  // Color node of its own. Only when every layer has its own colour (Look → colour by each layer's).
+  const own = new Map<string, Ref>();
+  b.colourOf = L.colour.by !== 'layer' ? null : it => {
+    if (it.slot != null) return slotRef(it.slot);
+    let r = own.get(it.id);
+    if (!r) {
+      r = ref(mk(c, 'colorPicker', `${it.id}:color`, { color: [...it.color] }, {}, `‘${itemName(spec, it)}’'s colour, ${col(it.color)}: its combine blends it with the others' by the smooth weight.`), 'rgb');
+      own.set(it.id, r);
+    }
+    return r;
+  };
+
   // Distances, one per layer.
   const layers = spec.layers.map(it => ({ it, d: emitItem(b, it, pos, 0) })).filter((x): x is { it: Item; d: Ref } => x.d !== null);
 
@@ -516,20 +630,6 @@ export function buildScene2D(spec: Scene2D, idFor: (role: string) => string = ro
       `Colours every layer: ${driver ? driver.what : 'time'} read through a palette${speed ? `, moving at ${fmt(speed)}` : ''}.`, L.custom, L.customName);
   }
 
-  // The palette's slots in use: one Color node each, wired to every part that takes it, so changing
-  // the palette (or that node) recolours them all (builders/look/palette.ts).
-  const swatches = paletteSwatches(L.colour.palette, L.custom);
-  const slots = new Map<number, Ref>();
-  const slotRef = (slot: number): Ref => {
-    const n = ((Math.round(slot) % swatches.length) + swatches.length) % swatches.length;
-    let r = slots.get(n);
-    if (!r) {
-      const colour = slotColour(swatches, n);
-      r = ref(mk(c, 'colorPicker', `palette:slot${n + 1}`, { color: colour }, {}, `Palette slot ${n + 1} of ${paletteLabel(L.colour.palette, L.customName)}, ${col(colour)}: every part coloured from this slot reads it, so changing it here (or the palette in the builder) recolours them all.`), 'rgb');
-      slots.set(n, r);
-    }
-    return r;
-  };
   let acc: Ref = L.bgSlot != null ? slotRef(L.bgSlot)
     : ref(mk(c, 'colorPicker', 'bg', { color: [...L.bg] }, {}, `The background colour, ${col(L.bg)}: what shows where no shape is.`), 'rgb');
   if (L.bgTex) {
@@ -552,7 +652,8 @@ export function buildScene2D(spec: Scene2D, idFor: (role: string) => string = ro
     if (sharedColour) fill = sharedColour;
     else if (by === 'distance') {
       fill = paletteNode(c, `${it.id}:palette`, L.colour.palette, d, anim, L.colour.scale, L.colour.speed, `Colours ${name} by its distance field, so it comes out in bands that follow its outline.`, L.custom, L.customName);
-    } else if (it.slot != null) fill = slotRef(it.slot);
+    } else if (it.type === 'group' && b.mixCol.has(it.id)) fill = b.mixCol.get(it.id)!;
+    else if (it.slot != null) fill = slotRef(it.slot);
     else fill = ref(mk(c, 'colorPicker', `${it.id}:color`, { color: [...it.color] }, {}, `${name}'s colour, ${col(it.color)}.`), 'rgb');
     // A picture fill: read at the layer's own point, so the picture moves, turns and repeats with it.
     const t = it.fill ? texFor(b, it.fill.tex, name) : null;
@@ -565,15 +666,49 @@ export function buildScene2D(spec: Scene2D, idFor: (role: string) => string = ro
         + 'It is read at the layer\'s own point (after its place, motion and ring of copies), so the picture moves, turns and repeats with it and bends with every space transform above.'), 'result');
     }
     const glows = L.glow.mode === 'all' || (L.glow.mode === 'selected' && it.glow);
-    if (glows) {
+    const style = styleOf(it);
+    // The glow formula: the layer's own type, the Look's, or Soft for a Glow-style layer and Halo round a Filled one.
+    const gtype = (fallback: GlowType): GlowType => it.glowType ?? L.glow.type ?? fallback;
+    if (style === 'outline') {
+      // Outline: a glowing line along the edge, the glow of abs(distance).
+      acc = ref(expr(c, `${it.id}:outline`, 'Glow outline', [
+        { name: 'bg', type: 'vec3', from: acc }, { name: 'd', type: 'float', from: d }, { name: 'color', type: 'vec3', from: glowTint ?? fill },
+        { name: 'amount', type: 'float', slider: { value: L.glow.amount, min: 0.0005, max: 0.05 } },
+        { name: 'falloff', type: 'float', slider: { value: L.glow.falloff, min: 0.5, max: 3 } },
+      ], 'bg + color * pow(amount / (abs(d) + max(amount, 1.0e-5)), falloff)',
+      `${name} drawn as its outline (Style: Outline): its colour × (amount ÷ (distance from the edge + amount)) ^ falloff, added to what is behind. It is brightest on the edge and fades both ways, so the shape reads as a glowing line. Amount and falloff are live (Look → Glow sets them for the scene).`), 'result');
+    } else if (style === 'glow' && glows) {
+      // Glow (the default): the shape is its glow, colour × (amount ÷ (distance outside + amount)) ^ falloff:
+      // its own colour inside and at the edge, fading out from there (the Grid builder's Soft). No fill
+      // is painted over it. Muting the glow (once it has been muted) shows the crisp shape instead.
+      const crisp = L.mute?.glow !== undefined
+        ? ref(mk(c, 'sdfFill', `${it.id}:fill`, {}, { d, fillColor: fill, background: acc }, `${name} as a crisp shape: what shows while the Look's glow is muted (the glow node passes it through).`), 'result')
+        : null;
+      const g = expr(c, `${it.id}:glow`, 'Glow shape', [
+        { name: 'bg', type: 'vec3', from: acc }, { name: 'd', type: 'float', from: d }, { name: 'color', type: 'vec3', from: fill },
+        { name: 'amount', type: 'float', slider: { value: L.glow.amount, min: 0.0005, max: 0.05 } },
+        { name: 'falloff', type: 'float', slider: { value: L.glow.falloff, min: 0.5, max: 3 } },
+        ...(crisp ? [{ name: 'crisp', type: 'vec3' as const, from: crisp }] : []),
+      ], `bg + color * ${glowFormula(gtype('soft'), 'd', 'amount', 'falloff')}`,
+      `${name} drawn as its glow (Style: Glow, type ${GLOW_TYPE_LABELS[gtype('soft')].label}): ${GLOW_TYPE_LABELS[gtype('soft')].blurb} The glow is added to what is behind; with Soft (the default) it is the shape's own colour inside and at the edge, fading out from there, so the shape and its glow read as one, the way a distance field glows (the Grid builder's Soft glow). No flat fill is painted over it. Amount (how far it reaches) and falloff (how fast it fades) are live sliders.`);
+      if (crisp) gateNode(g, L.mute?.glow, { from: 'crisp' });
+      acc = ref(g, 'result');
+    } else if (style === 'glow') {
+      // Glow style on a layer that doesn't glow (Look → Glow off, or not marked): the crisp shape.
+      acc = ref(mk(c, 'sdfFill', `${it.id}:fill`, {}, { d, fillColor: fill, background: acc },
+        `Paints ${name} over what is behind it: its distance field's edge, anti-aliased by one pixel. It glows when Look → Glow is on for it.`), 'result');
+    } else if (glows) {
       const glowFrom = acc;
-      const g = mk(c, 'glowLayer', `${it.id}:glow`, { intensity: L.glow.amount, power: L.glow.falloff }, { d, color: glowTint ?? fill },
+      const ht = gtype('halo');
+      const g = mk(c, 'glowLayer', `${it.id}:glow`, { intensity: L.glow.amount, power: L.glow.falloff, ...(ht !== 'halo' ? { mode: ht } : {}) }, { d, color: glowTint ?? fill },
         `The glow of ${name}: its colour × (${fmt(L.glow.amount)} ÷ distance) ^ ${fmt(L.glow.falloff)}. A bigger Intensity reaches further; a bigger Power makes it fall off faster. It is added to what is behind, then the shape is painted over it.`);
       acc = ref(mk(c, 'addColor', `${it.id}:addglow`, {}, { a: acc, b: ref(g, 'result') }, `Adds ${name}'s glow to what is behind it. Light adds up, so it can go past 1; Tone Map brings it back.`), 'result');
       gateChain(c.nodes, glowFrom, acc, L.mute?.glow);
     }
-    acc = ref(mk(c, 'sdfFill', `${it.id}:fill`, {}, { d, fillColor: fill, background: acc },
-      `Paints ${name} over what is behind it: inside the distance is negative, so the fill colour shows there; the edge is anti-aliased by one pixel.`), 'result');
+    if (style === 'filled') {
+      acc = ref(mk(c, 'sdfFill', `${it.id}:fill`, {}, { d, fillColor: fill, background: acc },
+        `Paints ${name} over what is behind it (Style: Filled): inside the distance is negative, so the fill colour shows there; the edge is anti-aliased by one pixel.`), 'result');
+    }
     // A picture mask: the layer (and its glow) only where the picture is bright.
     const m = it.mask ? texFor(b, it.mask.tex, `${name}'s mask`) : null;
     if (m && it.mask) {

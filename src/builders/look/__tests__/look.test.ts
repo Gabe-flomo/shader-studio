@@ -76,14 +76,18 @@ describe('Effects page', () => {
     expect(warnings).toEqual([]);
     expect(types(nodes).some(t => def.nodes.includes(t))).toBe(true);
   });
-  it('a run of moves shares one Pass and one read; Blur reads the bent point itself', () => {
+  it('a run of moves shares one Pass and one read; Blur after them blurs the moved picture', () => {
     const s = starterScene();
     s.effects = ['swirl', 'pixelate', 'kaleido', 'blur', 'crt'].map((k, i) => newStackItem(FX_BY_KIND[k], `fx${i + 1}`));
     const { nodes } = compiles(s);
-    // swirl+pixelate+kaleido+blur: one Pass; CRT curvature: a second.
-    expect(types(nodes).filter(t => t === 'pass')).toHaveLength(2);
+    // swirl+pixelate+kaleido: one Pass and one read; Blur: a Pass of the moved picture; CRT curvature: a third.
+    expect(types(nodes).filter(t => t === 'pass')).toHaveLength(3);
     const blur = nodes.find(n => n.type === 'blurTexture')!;
-    expect(nodes.find(n => n.id === blur.inputs.uv.connection?.nodeId)?.type).toBe('kaleidoSpace');
+    expect(blur.inputs.uv.connection).toBeUndefined();
+    const blurPass = nodes.find(n => n.id === blur.inputs.texture.connection?.nodeId)!;
+    const read = nodes.find(n => n.id === blurPass.inputs.color.connection?.nodeId)!;
+    expect(read.type).toBe('sampleTexture');
+    expect(nodes.find(n => n.id === read.inputs.uv.connection?.nodeId)?.type).toBe('kaleidoSpace');
   });
   it('every effect together, and noise displacement, compile', () => {
     const s = withPicture(starterScene());
