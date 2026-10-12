@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.198',
+    date: '2026-10-12',
+    title: 'Data Texture',
+    highlights: [
+      { area: 'Studio', text: 'Data Texture: store up to four inputs (float to vec4) in the channels you pick, at full float, half or 8-bit, and read them back as typed outputs.' },
+      { area: 'Studio', text: 'A read that feeds the node sees last frame, so it can run a simulation. Read channels reads any texture. Try Texture tools 11.' },
+    ],
+  },
+  {
     id: '2026.10.197',
     date: '2026-10-12',
     title: 'Solid walkers',
