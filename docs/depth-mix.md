@@ -80,6 +80,27 @@ A scene that reads *Depth UV* (or *Scale*) and is wired back into the same node'
 builder makes two: **Depth Mix for the shapes** (no scene; its Scale and Depth UV feed the shapes) and **Depth Mix**
 (the scene and the picture together, by the look). Each slider is live on the node it belongs to.
 
+## Seeing the depth
+
+The 2D Scene Builder's **Depth** tab (its **Preview** card) and the 3D Scene Builder's **Picture with depth** card
+have a preview switch: **Result | Picture | Depth | Shaped depth**. It changes only the builder's own preview (the
+2D Preview, the 3D viewport); Build always makes the result. A chip on the preview names the view; click it (or
+leave the tab) to go back to the result.
+
+- **Picture:** the picture alone, as it covers the frame.
+- **Depth:** the raw depth from the Depth node, greyscale (white near, black far) or, with **Heat map**, red near
+  and blue far.
+- **Shaped depth:** the depth after the **Depth range** and **Curve** (2D: Depth Mix's Shaped depth output, what
+  every look and effect reads); in 3D, the picture's distance through **Nearest** and **Farthest** (near bright).
+- When they are on (2D), the depth-only effects too: **Gradient** (the gradient over depth alone), **Size** (Size by
+  depth's factor, Size far dark … Size near bright) and **Space** (Space by depth's shift: grey is none, the colour
+  is the direction).
+
+Each view is the graph the preview already compiles, with one Expression Block in front of its Output, so it reads
+the same Depth node and the same depth texture as the build (generated, live on the canvas, or the brightness
+stand-in) and follows a slider while it moves. **Side by side** adds a strip of every view, small; click one to show
+it big. Code: `src/builders/depthPreview.ts` (`withDepthView`), `src/components/builders/DepthViewSwitch.tsx`.
+
 ## Examples
 
 **2D: Scene Builder** folder, on the "ridges at dusk" still (its depth needs the model: a one-time download on
