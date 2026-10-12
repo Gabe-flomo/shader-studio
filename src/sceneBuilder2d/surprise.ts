@@ -118,7 +118,7 @@ const SLOT_PALETTES = ['sunset', 'teal', 'warm', 'haze', 'ice', 'heat', 'fire'];
 
 /**
  * The palette, grade and effects, now and then and lightly: shapes coloured from a library
- * palette's slots, a same-frame glow (Bloom is no longer offered), a touch of grade, and once in a
+ * palette's slots, a Deep Glow (Bloom and Glow are no longer offered), a touch of grade, and once in a
  * while one effect that suits a glowing scene (a little chromatic aberration, a CRT mask).
  */
 function finish(rng: Rng, s: Scene2D) {
@@ -133,7 +133,7 @@ function finish(rng: Rng, s: Scene2D) {
   if (rng.chance(0.15)) grade.push(newStackItem(GRADE_BY_KIND.levels, `gr${grade.length + 1}`, { blacks: r3(rng.float(0.01, 0.05)), whites: 1, curve: r3(rng.float(0.3, 0.6)) }));
   if (grade.length) L.grade = grade;
   const fx: StackItem[] = [];
-  if (rng.chance(0.3)) fx.push(newStackItem(FX_BY_KIND.glow, 'fx1', { intensity: r3(rng.float(0.4, 0.9)), threshold: r3(rng.float(0.45, 0.7)), radius: Math.round(rng.float(10, 24)) }));
+  if (rng.chance(0.3)) fx.push(newStackItem(FX_BY_KIND.deepglow, 'fx1', { intensity: r3(rng.float(0.5, 1)), threshold: r3(rng.float(0.45, 0.7)), radius: Math.round(rng.float(60, 200)) }));
   const roll = rng.float(0, 1);
   if (roll < 0.1) fx.push(newStackItem(FX_BY_KIND.chroma, `fx${fx.length + 1}`, { amount: r3(rng.float(1.5, 4)) }));
   else if (roll < 0.17) fx.push(newStackItem(FX_BY_KIND.crt, `fx${fx.length + 1}`, { mask: rng.pick(['slot', 'aperture']), size: rng.pick([4, 5, 6]), strength: r3(rng.float(0.4, 0.7)), curve: r3(rng.float(0.02, 0.05)) }));

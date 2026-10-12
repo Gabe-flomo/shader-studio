@@ -43,6 +43,10 @@ const CONNECTION_GATED = new Set([
   'sampleTexture.offsetX', 'sampleTexture.offsetY', 'edgesTexture.strength', 'edgesTexture.width', 'blurTexture.radius', 'jumpFloodTexture.reach',
   'glowTexture.threshold', 'glowTexture.knee', 'glowTexture.tint', 'glowTexture.tail', 'glowTexture.radius', 'glowTexture.intensity', 'displaceTexture.amount',
   'chromaTexture.amount', 'chromaTexture.angle', 'chromaTexture.falloff',
+  // Chromatic Aberration (lens): nothing to fringe until a texture is wired.
+  ...['amount', 'samples', 'blur', 'falloff', 'centerX', 'centerY', 'angle', 'distortion'].map(k => `chromaLens.${k}`),
+  // Deep Glow: nothing to glow until a texture is wired.
+  ...['radius', 'intensity', 'threshold', 'knee', 'spread', 'preserve', 'tint'].map(k => `deepGlowTexture.${k}`),
   // Radial Fast Blur: nothing to streak until a texture is wired.
   ...['length', 'centerX', 'centerY', 'threshold', 'knee', 'intensity', 'opacity', 'decay', 'falloff', 'tint'].map(k => `radialFastBlur.${k}`),
   // Texture tools (docs/texture-tools.md) likewise read nothing until a texture is wired; Read's Flow amount needs Flow

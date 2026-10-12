@@ -57,6 +57,24 @@ export interface StackKindDef {
   nodes: string[];
   /** Reads a picture (the shared texture picker). */
   picture?: { showWhen?: { key: string; is: string[] } };
+  /**
+   * Retired: no longer offered (no Add button), but a scene that has it keeps it and builds it as
+   * before; its card offers to swap it for `by` (a kind in the same stack) with these settings.
+   */
+  retired?: { by: string; label: string; params: (it: StackItem) => Record<string, StackValue> };
+}
+
+/** The kinds a stack offers: every one but the retired. */
+export function stackOffered(defs: readonly StackKindDef[]): StackKindDef[] {
+  return defs.filter(d => !d.retired);
+}
+
+/** A retired item swapped for its replacement (same id, place and on/off), or null when it isn't retired. */
+export function stackUpgrade(it: StackItem, byKind: Readonly<Record<string, StackKindDef>>): StackItem | null {
+  const r = byKind[it.kind]?.retired;
+  const to = r ? byKind[r.by] : undefined;
+  if (!r || !to) return null;
+  return { ...newStackItem(to, it.id, r.params(it)), on: it.on };
 }
 
 /** A new item's settings: every param's default. */

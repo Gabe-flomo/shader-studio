@@ -55,6 +55,8 @@ import type { CpSaved } from './kit/clipPlay.js';
 import finishGlslSource from './kit/finishGlsl.js?raw';
 import blurSource from './kit/blur.js?raw';
 import raysSource from './kit/rays.js?raw';
+import chromaSource from './kit/chroma.js?raw';
+import deepglowSource from './kit/deepglow.js?raw';
 import finishSource from './kit/finish.js?raw';
 import waterLayerSource from './kit/waterLayer.js?raw';
 import audioFxSource from './kit/audioFx.js?raw';
@@ -523,7 +525,7 @@ export const KIT_FILES: { name: string; src: string; group?: KitGroup }[] = [
   { name: 'face', src: faceSource, group: 'trackers' }, { name: 'pose', src: poseSource, group: 'trackers' },
   { name: 'queue', src: queueSource }, { name: 'data', src: dataSource, group: 'data' }, { name: 'midi', src: midiSource, group: 'midi' },
   { name: 'clipPlay', src: clipPlaySource }, { name: 'kit', src: kitSource },
-  { name: 'finishGlsl', src: finishGlslSource, group: 'finish' }, { name: 'blur', src: blurSource, group: 'blur' }, { name: 'rays', src: raysSource, group: 'blur' },
+  { name: 'finishGlsl', src: finishGlslSource, group: 'finish' }, { name: 'blur', src: blurSource, group: 'blur' }, { name: 'rays', src: raysSource, group: 'blur' }, { name: 'chroma', src: chromaSource, group: 'blur' }, { name: 'deepglow', src: deepglowSource, group: 'blur' },
   { name: 'finish', src: finishSource, group: 'finish' }, { name: 'waterLayer', src: waterLayerSource, group: 'finish' },
   { name: 'signals', src: signalsSource }, { name: 'routes', src: routesSource }, { name: 'increment', src: incrementSource },
   { name: 'audioFx', src: audioFxSource, group: 'audioFx' }, { name: 'drumPads', src: drumPadsSource, group: 'drums' },

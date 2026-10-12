@@ -68,7 +68,9 @@ describe('Where in the pass', () => {
 
   it('a colour split and Time displacement are scaled by their Where', () => {
     const chroma = fnBuildFinal([fx('chroma', 'c', { where: 'picture' })]).src;
-    expect(chroma).toMatch(/vec2 o = normalize\(d \+ 1e-6\) \* sc \* fnW0\(p\);/);
+    // Chromatic aberration's shift (and its Distortion) are scaled by the weight.
+    expect(chroma).toContain('pow(0.625, chroma_falloff) : 1.0) * fnW0(p), chroma_samples');
+    expect(chroma).toContain('chroma_distortion * fnW0(p), caIGN(');
     const time = fnBuildFinal([fx('time', 't', { map: 'layer', layerId: 'L', where: 'motion' })], { timeMap: 'layer' });
     expect(time.maps).toEqual(['layer:L', 'motion']);
     expect(time.src).toContain('float fnTimeMap(vec2 q) { return fnM0(q); }');
