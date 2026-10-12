@@ -35,7 +35,8 @@ import { BlockLibrary } from '../sceneBuilder2d/SpaceBlocks';
 import { backToSceneKinds } from '../../builders/sceneKinds';
 import { useBuilderRecipeRequest } from '../../builders/windows';
 import { pickingKey, useGridBuilder, type GridSection } from '../../gridScene/store';
-import { SIM_RULES, buildFromGridBuilder, finishGridBuilder, makeSimulation, simulationOf } from '../../gridScene/actions';
+import { SIM_RULES, buildFromGridBuilder, finishGridBuilder, gridSceneBuilder, makeSimulation, simulationOf } from '../../gridScene/actions';
+import { buildStaying, closeBuilding } from '../../builders/finish';
 import { Popover } from '../ui/Popover';
 import { MAX_SEARCH, gridProgram, searchCapped } from '../../gridScene/glsl';
 import { GRID_TEMPLATES } from '../../gridScene/templates';
@@ -878,7 +879,7 @@ export function GridSceneBuilder() {
   return (
     <StudioShell prefsKey="grid-builder" icon="grid" title="Grid builder" crumb={<SceneCrumb kind="grid" onBack={back} />}
       kind={`${size} · ${editing ? 'editing a built grid' : 'a new grid'}${dirty ? ' · not built yet' : ''}`}
-      onClose={() => useGridBuilder.getState().close()}
+      onClose={() => void closeBuilding(gridSceneBuilder)}
       onEscape={() => { if (useGridBuilder.getState().picking) { useGridBuilder.getState().setPicking(null); return true; } return false; }}
       surprise={
         <SurpriseBar seed={seed} title="A random grid from a new seed: cells, shapes, motion, a pattern, maybe a warp and a rule (one undo step)" onSurprise={s => {
@@ -896,9 +897,9 @@ export function GridSceneBuilder() {
         <IconButton icon="undo" label="Undo" shortcut="cmd+z" size="sm" disabled={!canUndo} onClick={undo} />
         <IconButton icon="redo" label="Redo" shortcut="cmd+shift+z" size="sm" disabled={!canRedo} onClick={redo} />
         <SimulationButton hasSim={hasSim} />
-        <Button size="sm" icon="rebuild" data-grid-build onClick={() => buildFromGridBuilder(false)} title={editing ? 'Rebuild the grid in the graph (keeps settings you changed on its nodes)' : 'Build the grid into the graph now'}>{editing ? 'Rebuild' : 'Build'}</Button>
+        <Button size="sm" icon="rebuild" data-grid-build onClick={() => void buildStaying({ label: 'grid scene', build: () => buildFromGridBuilder(false) })} title={editing ? 'Rebuild the grid in the graph (keeps settings you changed on its nodes) and keep the builder open' : 'Build the grid into the graph now and keep the builder open'}>{editing ? 'Rebuild' : 'Build'}</Button>
       </>}
-      primary={{ label: 'Done', onClick: finishGridBuilder, title: 'Build what changed, close, and show it on the graph' }}
+      primary={{ label: 'Done', onClick: () => void finishGridBuilder(), title: 'Done: build (or rebuild) what changed into the graph, then close and show it' }}
       nav={<LeftPanel />} navWidth={318} phoneNav={{ label: 'Draw', icon: 'edit' }}
       inspector={<Inspector />} inspectorWidth={360}
       presets={<Presets />}>
