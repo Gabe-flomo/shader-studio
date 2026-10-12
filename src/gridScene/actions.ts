@@ -14,7 +14,8 @@ import { intoView } from '../components/NodeGraph/spawnPoint';
 import { toast } from '../components/ui/toastStore';
 import { n } from '../store/graphBuilder';
 import { COUNT_PRESETS, LOOKS, STAGES_PRESETS, presetPatch } from '../gridRules/spec';
-import { finishBuilder } from '../builders/finish';
+import { doneBuilding, type BuildingBuilder } from '../builders/finish';
+import { clearDraft, hasUnbuiltEdits, reopenDraft } from '../builders/drafts';
 import { closeGridRulesEditor, openGridRulesEditor } from '../builders/windows';
 import { useGridBuilder } from './store';
 import { applyGridScene, findGridBuild, gridFinalOf, gridSceneOfBuild } from './apply';
@@ -26,7 +27,11 @@ export const FROM_GRID_KEY = '_gridSceneFrom';
 
 /** Open the builder on a new scene (Build or Done adds it). */
 export function openNewGridScene(at?: { x: number; y: number }): void {
-  useGridBuilder.getState().openWith(starterGridScene(), { at: at ?? null });
+  const fresh = () => useGridBuilder.getState().openWith(starterGridScene(), { at: at ?? null });
+  // A new grid left unbuilt last time comes back (builders/drafts.ts).
+  if (reopenDraft({ kind: 'grid', store: useGridBuilder, target: null, original: starterGridScene(), label: 'grid scene', startFresh: fresh,
+    open: (spec, was) => useGridBuilder.getState().openWith(spec, { at: at ?? was }) })) return;
+  fresh();
 }
 
 /** Open the builder on the Grid scene `nodeId` belongs to. False when it isn't one. */
@@ -35,7 +40,10 @@ export function editGridSceneInBuilder(nodeId: string): boolean {
   const sceneId = gridSceneOfBuild(nodes, nodeId);
   const found = sceneId ? findGridBuild(nodes, sceneId) : null;
   if (!found) return false;
-  useGridBuilder.getState().openWith(found.meta.spec, { targetSceneId: sceneId });
+  const asBuilt = () => useGridBuilder.getState().openWith(found.meta.spec, { targetSceneId: sceneId });
+  // Edits to this grid left unbuilt last time come back (builders/drafts.ts).
+  if (!reopenDraft({ kind: 'grid', store: useGridBuilder, target: sceneId, original: found.meta.spec, label: 'grid scene', startFresh: asBuilt,
+    open: spec => useGridBuilder.getState().openWith(spec, { targetSceneId: sceneId }) })) asBuilt();
   return true;
 }
 
@@ -72,13 +80,30 @@ export function buildFromGridBuilder(asNew = false, o: { quiet?: boolean; keepOu
   return result.sceneId;
 }
 
-/** Done: build what isn't built yet, close, and frame it on the graph. */
-export function finishGridBuilder(): void {
+/** Whether Done has to build: not built yet (or its build is gone), or changed since. */
+function needsGridBuild(): boolean {
   const gb = useGridBuilder.getState();
-  const nodes = useNodeGraphStore.getState().nodes;
-  const built = !!gb.targetSceneId && !!findGridBuild(nodes, gb.targetSceneId);
-  const id = gb.dirty || !built ? buildFromGridBuilder(false, { quiet: true }) : gb.targetSceneId;
-  finishBuilder(() => useGridBuilder.getState().close(), gridSceneBuildIds(id));
+  const built = !!gb.targetSceneId && !!findGridBuild(useNodeGraphStore.getState().nodes, gb.targetSceneId);
+  return gb.dirty || !built;
+}
+
+/**
+ * The Grid builder as builders/finish.ts drives it: Done builds (or rebuilds, same ids) and then
+ * closes, a failed build stays open; ✕ and Esc ask about unbuilt edits.
+ */
+export const gridSceneBuilder: BuildingBuilder = {
+  label: 'grid scene',
+  needsBuild: needsGridBuild,
+  unbuiltEdits: () => hasUnbuiltEdits(useGridBuilder.getState()) && needsGridBuild(),
+  build: () => buildFromGridBuilder(false, { quiet: true }),
+  close: () => useGridBuilder.getState().close(),
+  ids: () => gridSceneBuildIds(useGridBuilder.getState().targetSceneId),
+  discard: () => clearDraft('grid', useGridBuilder.getState().targetSceneId),
+};
+
+/** Done: build what isn't built yet, close, and frame it on the graph. A failed build stays open. */
+export function finishGridBuilder(): Promise<boolean> {
+  return doneBuilding(gridSceneBuilder);
 }
 
 // ── The jump to Grid Rules and back ───────────────────────────────────────────

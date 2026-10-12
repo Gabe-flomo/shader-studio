@@ -11,6 +11,7 @@ import { META_KEY, metaOf, type SceneBuilderMeta } from './build';
 import { applyScene, checkEdits, sceneOfBuild } from './apply';
 import { describeGraph } from './recognize';
 import { useSceneBuilder } from './store';
+import { reopenDraft } from '../builders/drafts';
 
 /** The builder scene a node belongs to (its Scene Group's id), if any. */
 export function builderSceneOf(nodeId: string): string | null {
@@ -24,7 +25,10 @@ export function editSceneInBuilder(nodeId: string): boolean {
   const scene = sceneId ? nodes.find(n => n.id === sceneId) : null;
   const meta = scene?.params[META_KEY] as SceneBuilderMeta | undefined;
   if (!sceneId || !meta) return false;
-  useSceneBuilder.getState().openWith(meta.spec, { targetSceneId: sceneId, tab: 'shapes' });
+  const asBuilt = () => useSceneBuilder.getState().openWith(meta.spec, { targetSceneId: sceneId, tab: 'shapes' });
+  // Edits to this scene left unbuilt last time come back (builders/drafts.ts).
+  if (!reopenDraft({ kind: '3d', store: useSceneBuilder, target: sceneId, original: meta.spec, label: '3D scene', startFresh: asBuilt,
+    open: spec => useSceneBuilder.getState().openWith(spec, { targetSceneId: sceneId, tab: 'shapes' }) })) asBuilt();
   return true;
 }
 

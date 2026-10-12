@@ -7,6 +7,7 @@
 import { create } from 'zustand';
 import { starterSpec, type SceneSpec } from './spec';
 import type { DescribeResult } from './recognize';
+import { keepDrafts, reopenDraft } from '../builders/drafts';
 
 /**
  * Where the window is. The studio's sections (sections.ts SCENE_SECTIONS: mode, shapes, combine, warps, light, camera,
@@ -111,5 +112,12 @@ export const useSceneBuilder = create<SceneBuilderState>((set, get) => ({
 
 /** Open the builder on a fresh scene (the node browser's "New 3D scene…"). */
 export function openNewSceneBuilder(at?: { x: number; y: number }): void {
-  useSceneBuilder.getState().openWith(starterSpec(), { at: at ?? null, tab: 'templates' });
+  const fresh = () => useSceneBuilder.getState().openWith(starterSpec(), { at: at ?? null, tab: 'templates' });
+  // A new scene left unbuilt last time comes back (builders/drafts.ts).
+  if (reopenDraft({ kind: '3d', store: useSceneBuilder, target: null, original: starterSpec(), label: '3D scene', startFresh: fresh,
+    open: (spec, was) => useSceneBuilder.getState().openWith(spec as SceneSpec, { at: at ?? was, tab: 'shapes' }) })) return;
+  fresh();
 }
+
+// Unbuilt edits are kept as a draft through a close, a reload or a crash (builders/drafts.ts).
+keepDrafts('3d', useSceneBuilder, s => s.spec);
