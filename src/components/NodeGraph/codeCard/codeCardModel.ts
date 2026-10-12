@@ -14,6 +14,7 @@
  */
 import type { GraphNode } from '../../../types/nodeGraph';
 import { DETAIL_MODES, modesFor, pickPreviewOutput, previewableOutputs } from '../../../lib/nodePreview/showAs';
+import { loopCodeText, loopOf } from '../../../nodes/exprLoop';
 
 export type CardPageId = 'code' | 'preview' | 'note';
 export const CARD_PAGE_ORDER: readonly CardPageId[] = ['code', 'preview', 'note'];
@@ -54,6 +55,14 @@ export function codeLinesFor(node: GraphNode): string[] {
   const outType = (node.params.outputType as string) || 'vec3';
   const lines = node.params.lines as ExprLine[] | undefined;
   const out: string[] = [];
+  if (Array.isArray(lines) && loopOf(node.params)) {
+    // Loop mode: Before, a real GLSL for loop, After (nodes/exprLoop.ts), then Return
+    const declared = new Set<string>([...((node.params.inputs as Array<{ name: string }> | undefined) ?? []).map(i => i.name), 't', 'p']);
+    out.push(...loopCodeText(node.params, declared));
+    const result = (node.params.result as string | undefined)?.trim() || '';
+    out.push(...`return ${result || zeroOf(outType)};`.split('\n'));
+    return out;
+  }
   if (Array.isArray(lines)) {
     for (const l of lines) {
       if (!l || !l.lhs || !l.rhs) continue;

@@ -1,5 +1,6 @@
 import type { GraphNode, NodeDefinition, DataType, ParamDef } from '../types/nodeGraph';
 import { getKeyframeConfig, generateKeyframeGLSL, isKeyframeBypassed } from './keyframes';
+import { loopOf } from '../nodes/exprLoop';
 
 /** Node types whose params must remain as baked compile-time constants.
  *
@@ -125,6 +126,14 @@ export function patchNodeParamsForUniforms(
       patchedParams[inp.name] = uniformName;
       uniforms[uniformName] = val;
       bindings[paramBindingKey(bindingId, inp.name)] = uniformName;
+    }
+    // A looped Expression Block's Iterations (nodes/exprLoop.ts): the loop is compiled to its Max
+    // and stops at this uniform, so a drag never recompiles.
+    if (node.type === 'exprNode' && loopOf(node.params) && typeof node.params.loopN === 'number') {
+      const uniformName = `u_p_${safeId}_loopN`;
+      patchedParams.loopN = uniformName;
+      uniforms[uniformName] = node.params.loopN;
+      bindings[paramBindingKey(bindingId, 'loopN')] = uniformName;
     }
     return { patchedNode: { ...node, params: patchedParams }, uniforms, bindings };
   }

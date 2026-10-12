@@ -17,6 +17,7 @@
  * exists in the preview compile (store buildPreviewGraph), the value runner and the Show as UI,
  * which all ask `probedNode`.
  */
+import { loopOf } from '../../nodes/exprLoop';
 import { create } from 'zustand';
 import type { GraphNode } from '../../types/nodeGraph';
 
@@ -175,10 +176,16 @@ export function applyProbe(node: GraphNode, target: ProbeTarget): { node: GraphN
   if (target.kind === 'expr') {
     // The lines above the step's line, then the step as a variable of its own
     const above = target.line === 'return' ? lines : lines.slice(0, target.line);
+    const step = { lhs: `${r.type} ${PROBE_STEP}`, op: '=', rhs: target.code };
+    // Loop mode: a step of Return reads what the loop (and After) left; a looped line's step runs in the loop, without After
+    const loop = loopOf(node.params);
+    const params = loop && target.line === 'return'
+      ? { ...node.params, loop: { ...loop, after: [...(loop.after ?? []), step] } }
+      : { ...node.params, lines: [...above, step], ...(loop ? { loop: { ...loop, after: [] } } : {}) };
     return {
       node: {
         ...node,
-        params: { ...node.params, lines: [...above, { lhs: `${r.type} ${PROBE_STEP}`, op: '=', rhs: target.code }], result: '', outputs: [PROBE_STEP] },
+        params: { ...params, result: '', outputs: [PROBE_STEP] },
         outputs: { [PROBE_STEP]: { type: r.type as never, label: target.step } } as GraphNode['outputs'],
       },
       outputKey: PROBE_STEP,
@@ -188,7 +195,7 @@ export function applyProbe(node: GraphNode, target: ProbeTarget): { node: GraphN
   return {
     node: {
       ...node,
-      params: { ...node.params, lines: kept, result: '', outputs: [r.name] },
+      params: { ...node.params, lines: kept, result: '', outputs: [r.name], ...(loopOf(node.params) ? { loop: { ...loopOf(node.params)!, after: [] } } : {}) },
       outputs: { [r.name]: { type: r.type as never, label } } as GraphNode['outputs'],
     },
     outputKey: r.name,

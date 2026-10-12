@@ -14,6 +14,7 @@
  */
 import type { GraphNode } from '../types/nodeGraph';
 import { codeLinesFor, fnNameFrom } from '../components/NodeGraph/codeCard/codeCardModel';
+import { loopCode, loopCountValue, loopMax, loopOf } from './exprLoop';
 
 type Line = { lhs: string; op?: string; rhs: string; off?: boolean };
 type InputDef = { name: string; type: string; slider?: { min: number; max: number } | null; carry?: boolean; [k: string]: unknown };
@@ -22,7 +23,8 @@ const zeroOf = (t: string) => (t === 'float' ? '0.0' : t === 'int' ? '0' : t ===
 const DECL = /^\s*(float|int|bool|vec[234]|mat[234])\s+([A-Za-z_]\w*)\s*$/;
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-const linesOf = (node: GraphNode): Line[] => (Array.isArray(node.params.lines) ? (node.params.lines as Line[]) : []).filter(l => l && l.lhs?.trim() && l.rhs?.trim());
+const usable = (l: Line | undefined): l is Line => !!l && !!l.lhs?.trim() && !!l.rhs?.trim();
+const linesOf = (node: GraphNode): Line[] => (Array.isArray(node.params.lines) ? (node.params.lines as Line[]) : []).filter(usable);
 const inputsOf = (node: GraphNode): InputDef[] => (Array.isArray(node.params.inputs) ? (node.params.inputs as InputDef[]) : []).filter(i => i && typeof i.name === 'string' && i.name.trim());
 
 /** The block's code as plain GLSL lines (off lines kept as comments), ending in `return …;`. */
@@ -62,14 +64,17 @@ export function exprBlockToCustomFn(node: GraphNode): ToCustomFn {
   const exposedInput = exposed.find(n => inputNames.has(n));
   if (exposedInput) return { ok: false, reason: `It also outputs its input “${exposedInput}”, which a Custom Function can’t.` };
 
+  const loop = loopOf(node.params);
+  const sections = loop ? { before: (loop.before ?? []).filter(usable), after: (loop.after ?? []).filter(usable) } : { before: [], after: [] };
+  const every = [...sections.before, ...lines, ...sections.after];
   // Inputs a line writes to get a local copy: `uv *= 2.0` reads `uv_v *= 2.0` after `vec2 uv_v = uv;`
   const written = new Set<string>();
-  for (const l of lines) {
+  for (const l of every) {
     if (l.off || DECL.test(l.lhs)) continue;
     const root = /^\s*([A-Za-z_]\w*)/.exec(l.lhs)?.[1];
     if (root && inputNames.has(root)) written.add(root);
   }
-  const allText = [...lines.map(l => `${l.lhs} ${l.rhs}`), String(node.params.result ?? '')].join('\n');
+  const allText = [...every.map(l => `${l.lhs} ${l.rhs}`), String(node.params.result ?? ''), loop?.breakWhen ?? ''].join('\n');
   const taken = new Set([...inputNames, ...(allText.match(/[A-Za-z_]\w*/g) ?? [])]);
   const local: Record<string, string> = {};
   for (const n of written) { let v = `${n}_v`, k = 2; while (taken.has(v)) v = `${n}_v${k++}`; taken.add(v); local[n] = v; }
@@ -79,15 +84,35 @@ export function exprBlockToCustomFn(node: GraphNode): ToCustomFn {
   const exposedTypes: Record<string, string> = {};
   const body: string[] = [];
   const declaredHere = new Set<string>();
-  for (const l of lines) {
+  // A line as the function writes it: renamed locals, an exposed local's declaration without its type
+  const rewrite = (l: Line): Line => {
     let lhs = l.lhs.trim();
     const d = DECL.exec(lhs);
     if (d) {
       declaredHere.add(d[2]);
       if (exposed.includes(d[2])) { exposedTypes[d[2]] = d[1]; lhs = d[2]; }
     }
-    const stmt = `${renameLocals(lhs)} ${l.op || '='} ${renameLocals(l.rhs.trim())};`;
-    body.push(l.off ? `// off: ${stmt.replace(/\n/g, ' ')}` : stmt);
+    return { ...l, lhs: renameLocals(lhs), rhs: renameLocals(l.rhs.trim()) };
+  };
+  let iterInput: InputDef | null = null;
+  if (loop) {
+    // The loop as a real for loop; Iterations becomes a slider input of the function (still live)
+    let iterName = 'iterations', k = 2;
+    while (taken.has(iterName)) iterName = `iterations${k++}`;
+    const max = loopMax(loop);
+    iterInput = { name: iterName, type: 'float', slider: { min: 1, max } };
+    const declared = new Set<string>([...inputNames, ...Object.values(local), 't', 'p', ...exposed]);
+    const code = loopCode({
+      before: sections.before.map(rewrite), body: lines.map(rewrite), after: sections.after.map(rewrite),
+      breakWhen: loop.breakWhen ? renameLocals(loop.breakWhen) : undefined, max, count: iterName, declared, countVar: 'loop_n',
+    });
+    for (const c of code) body.push(...c.text.split('\n').map(t => `${'  '.repeat(c.depth)}${t}`));
+  } else {
+    for (const l of lines) {
+      const r = rewrite(l);
+      const stmt = `${r.lhs} ${l.op || '='} ${r.rhs};`;
+      body.push(l.off ? `// off: ${stmt.replace(/\n/g, ' ')}` : stmt);
+    }
   }
   const result = (typeof node.params.result === 'string' ? node.params.result.trim() : '') || zeroOf(outType);
   body.push(`return ${renameLocals(result)};`);
@@ -99,8 +124,8 @@ export function exprBlockToCustomFn(node: GraphNode): ToCustomFn {
   for (const [from, to] of Object.entries(local)) pre.push(`${inputs.find(i => i.name === from)!.type} ${to} = ${from};`);
 
   const outputs = exposed.map(n => ({ name: n, type: exposedTypes[n] ?? node.outputs?.[n]?.type ?? outType }));
-  const { lines: _l, result: _r, expr: _e, outputs: _o, fnBuilderFns: _f, fnBuilderActiveId: _a, ...keep } = node.params as Record<string, unknown>;
-  void _l; void _r; void _e; void _o; void _f; void _a;
+  const { lines: _l, result: _r, expr: _e, outputs: _o, fnBuilderFns: _f, fnBuilderActiveId: _a, loop: _lp, loopN: _ln, ...keep } = node.params as Record<string, unknown>;
+  void _l; void _r; void _e; void _o; void _f; void _a; void _lp; void _ln;
   const label = typeof node.params.label === 'string' && node.params.label.trim() && node.params.label !== 'Expression Block' ? node.params.label : 'Custom Function';
   return {
     ok: true,
@@ -110,7 +135,8 @@ export function exprBlockToCustomFn(node: GraphNode): ToCustomFn {
       params: {
         ...keep,
         label,
-        inputs,
+        inputs: iterInput ? [...inputs, iterInput] : inputs,
+        ...(iterInput ? { [iterInput.name]: loopCountValue(node.params) } : {}),
         outputType: outType,
         body: [...pre, ...body].join('\n'),
         glslFunctions: typeof node.params.glslFunctions === 'string' ? node.params.glslFunctions : '',

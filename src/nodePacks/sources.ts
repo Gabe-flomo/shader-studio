@@ -16,7 +16,7 @@ export function customFnNode(p: CustomFnPreset): GraphNode {
 
 /** An Expression Block preset as the node it places. */
 export function exprNode(p: ExprPreset): GraphNode {
-  return presetNode('exprNode', p.inputs, p.outputType, { label: p.label, inputs: p.inputs, outputType: p.outputType, lines: p.lines, result: p.result });
+  return presetNode('exprNode', p.inputs, p.outputType, { label: p.label, inputs: p.inputs, outputType: p.outputType, lines: p.lines, result: p.result, ...(p.loop ? { loop: p.loop } : {}), ...(typeof p.loopN === 'number' ? { loopN: p.loopN } : {}) });
 }
 
 function presetNode(type: 'customFn' | 'exprNode', inputs: Array<{ name: string; type: DataType; slider?: { min: number; max: number } | null }>, outputType: DataType, params: Record<string, unknown>): GraphNode {

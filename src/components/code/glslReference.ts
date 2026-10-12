@@ -95,8 +95,10 @@ export interface Completion {
 }
 
 /** Everything a code field can complete, given the node's own variables. */
-export function buildCompletions(variables: ReadonlyArray<{ name: string; type: DataType | string }>): Completion[] {
+export function buildCompletions(variables: ReadonlyArray<{ name: string; type: DataType | string }>, builtins: ReadonlyArray<{ name: string; type: string; doc: string }> = []): Completion[] {
   const vars: Completion[] = variables.filter(v => v.name).map(v => ({ kind: 'var', name: v.name, type: v.type, detail: '', doc: `Input ${v.name} (${v.type}).`, insert: v.name }));
+  // Names the place gives (a loop's i, fi, n, k): listed with the variables, with what they mean
+  for (const b of builtins) if (!vars.some(v => v.name === b.name)) vars.push({ kind: 'var', name: b.name, type: b.type, detail: '', doc: b.doc, insert: b.name });
   const refs: Completion[] = GLSL_REFERENCE.map(r => r.sig
     ? { kind: 'fn', name: r.name, detail: r.sig, type: r.returns, doc: r.doc, insert: `${r.name}()` }
     : { kind: 'const', name: r.name, type: r.returns, doc: r.doc, insert: r.name });
