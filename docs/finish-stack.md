@@ -145,7 +145,7 @@ worst difference 1.4 / 255.
 | Vignette | Amount, Size, Roundness, Feather, Colour |
 | CRT | Curvature, Scanlines, Mask, Cell size, Stagger, Glow, Pulse. The mask is the CRT Mask node's GLSL. |
 | Bloom | Amount, Threshold, Radius, Tint |
-| Light rays | Mode, Zoom, Length, Centre X / Y, Threshold, Knee, Intensity, Decay, Falloff, Tint; presets Light rays, God rays, Zoom burst, Warp speed, Pull in. See below. |
+| Light rays | Mode, Zoom, Length, Centre X / Y, Threshold, Knee, Intensity, Opacity (Brightest, Add), Decay, Falloff, Tint; presets Light rays, God rays, Zoom burst, Warp speed, Pull in. See below. |
 | Halation | Amount, Reach, Threshold, Highlight headroom, Warmth, Growth, Conserve; presets Subtle, Classic cine (the measured reference, and the defaults), Strong |
 | Film grain | Amount, Size (px at 1080p), Colour, Response (to brightness), Frames a second (0 holds it) |
 | Flicker | Amount, Speed |

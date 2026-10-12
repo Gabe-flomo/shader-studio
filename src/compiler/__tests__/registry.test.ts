@@ -44,7 +44,7 @@ const CONNECTION_GATED = new Set([
   'glowTexture.threshold', 'glowTexture.knee', 'glowTexture.tint', 'glowTexture.tail', 'glowTexture.radius', 'glowTexture.intensity', 'displaceTexture.amount',
   'chromaTexture.amount', 'chromaTexture.angle', 'chromaTexture.falloff',
   // Radial Fast Blur: nothing to streak until a texture is wired.
-  ...['length', 'centerX', 'centerY', 'threshold', 'knee', 'intensity', 'decay', 'falloff', 'tint'].map(k => `radialFastBlur.${k}`),
+  ...['length', 'centerX', 'centerY', 'threshold', 'knee', 'intensity', 'opacity', 'decay', 'falloff', 'tint'].map(k => `radialFastBlur.${k}`),
   // Texture tools (docs/texture-tools.md) likewise read nothing until a texture is wired; Read's Flow amount needs Flow
   'textureFlow.reach', 'textureNeighbours.spacing', 'textureChange.amount', 'textureChange.level', 'textureChange.width', 'readTexture.flowAmount',
   // The Agents engine reads these from the uniform table (lib/agentRunner.ts), not the picture's shader

@@ -91,7 +91,8 @@ export const FX_KINDS: StackKindDef[] = [
       { key: 'length', label: 'Length', hint: 'How long the streaks are: 0.2 a smear, 1 half way to the centre, 3 a light-speed burst. Long streaks cost the same.', type: 'num', def: 0.6, min: 0, max: 4, primary: true, node: '', param: 'length', aliases: ['amount', 'len'] },
       { key: 'threshold', label: 'Threshold', hint: 'Only parts brighter than this streak: 0 everything (a zoom blur), 0.5 rays from the bright parts.', type: 'num', def: 0.35, min: 0, max: 1.5, node: '', param: 'threshold', aliases: ['thr'] },
       { key: 'intensity', label: 'Intensity', hint: 'How strong the streaks are.', type: 'num', def: 1, min: 0, max: 4, node: '', param: 'intensity' },
-      { key: 'decay', label: 'Decay', hint: 'How much the streaks fade along their length: 0 even, 1 a bright head and a faint tail.', type: 'num', def: 0.5, min: 0, max: 1, node: '', param: 'decay' },
+      { key: 'opacity', label: 'Opacity', hint: 'Brightest and Add: how much of the rays shows over the picture. Below 1, what is behind them shows through.', type: 'num', def: 0.6, min: 0, max: 1, showWhen: { key: 'mode', is: ['brightest', 'add'] }, node: '', param: 'opacity', aliases: ['mix'] },
+      { key: 'decay', label: 'Decay', hint: 'How much the streaks fade along their length. Brightest always tails off smoothly; higher keeps the rays shorter and softer.', type: 'num', def: 0.5, min: 0, max: 1, node: '', param: 'decay' },
       { key: 'falloff', label: 'Falloff', hint: 'How much the effect fades away from the centre: 0 the same everywhere.', type: 'num', def: 0, min: 0, max: 4, node: '', param: 'falloff' },
       { key: 'direction', label: 'Zoom', hint: 'Out: the streaks fly outward from the centre. In: they pull in toward it.', type: 'select', def: 'out', options: sel(['out', 'Out from the centre'], ['in', 'Into the centre']), node: '', param: 'direction', aliases: ['dir'] },
       { key: 'cx', label: 'Centre X', hint: 'Where the streaks come from, across (0 the middle, ±1.8 the sides).', type: 'num', def: 0, min: -2, max: 2, step: 0.01, node: '', param: 'centerX', aliases: ['x'] },
@@ -218,7 +219,7 @@ export function emitEffects(c: Ctx, items: readonly StackItem[] | undefined, col
         const mode = s('mode');
         node = mk(c, 'radialFastBlur', role, {
           mode, direction: s('direction'), length: n('length'), centerX: n('cx'), centerY: n('cy'), threshold: n('threshold'), knee: 0.15,
-          intensity: n('intensity'), decay: n('decay'), falloff: n('falloff'), tint: stackValue(it, P('tint')),
+          intensity: n('intensity'), opacity: n('opacity'), decay: n('decay'), falloff: n('falloff'), tint: stackValue(it, P('tint')),
         }, { texture: tex, uv: point },
           `${step}: streaks ${s('direction') === 'in' ? 'into' : 'out from'} the centre, Length ${fmt(n('length'))}${mode === 'average' ? ' (a zoom blur)' : mode === 'add' ? ', added as light' : ', the brightest along each (light rays)'}${n('threshold') > 0 ? `, from the parts brighter than ${fmt(n('threshold'))}` : ''}. Four small hidden passes, so long streaks stay cheap.`);
         cur = ref(node, 'color');

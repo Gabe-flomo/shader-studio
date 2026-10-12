@@ -57,7 +57,7 @@ They are built after the grade.
   (texture), with the picture chosen in the shared texture picker or a Shader Texture). Each reads
   the Pass with its own node, at the bent point if moves came before it.
 - **Light rays / Radial blur** is CC Radial Fast Blur: Mode (Brightest: light rays; Average: a
-  zoom blur; Add: glowing rays), Length, Threshold, Intensity, Decay, Falloff, Zoom (out from or
+  zoom blur; Add: glowing rays), Length, Threshold, Intensity, Opacity, Decay, Falloff, Zoom (out from or
   into the centre), Centre X / Y and Tint, the node's own controls. Its four streak passes are
   hidden passes, so they don't count towards the six Passes; long streaks cost the same.
 - **On the colour**: CRT mask (CRT Mask) has slot mask, aperture grille or shadow mask (dots), plus
