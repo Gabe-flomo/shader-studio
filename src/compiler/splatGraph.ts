@@ -6,7 +6,7 @@
  * must be known before the picture's program runs. The probe is a small program of the picture's kind: the chain
  * wired into the node's Ray Origin, Ray Dir, Position, Rotation and Scale, ending in the node itself as
  * SplatProbeOut (same id and params, so its slider uniforms are the node's: the engine draws it with the picture's
- * own uniforms). Drawn over an 8 × 1 target, texel x reads g_uv (0, 0), except texel 2 (0.5, 0) and texel 3 (0, 0.5).
+ * own uniforms). Drawn over a 10 × 1 target, texel x reads g_uv (0, 0), except texels 2 and 8 (0.5, 0) and 3 and 9 (0, 0.5).
  *
  * The modifier program is the chain wired into the node's Modifier (splat nodes: nodes/definitions/splatModifiers.ts,
  * and any ordinary nodes between them), ending in SplatModOut. Also of the picture's kind, the way an Agents group's
@@ -28,7 +28,7 @@ const PIXEL_PRELUDE = '    vec2 g_uv = (vUv - 0.5) * 2.0;\n    g_uv.x *= u_resol
  * The probe's g_uv per texel, and its 0–1 place (nodes that read vUv directly, such as the UV node a March Camera is
  * often wired from, read this instead of the texel's own vUv).
  */
-export const SPLAT_PROBE_PRELUDE = '    int splatProbeTexel = int(gl_FragCoord.x);\n    vec2 g_uv = splatProbeTexel == 2 ? vec2(0.5, 0.0) : splatProbeTexel == 3 ? vec2(0.0, 0.5) : vec2(0.0);\n    vec2 splatProbeUv = g_uv / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5;\n';
+export const SPLAT_PROBE_PRELUDE = '    int splatProbeTexel = int(gl_FragCoord.x);\n    vec2 g_uv = splatProbeTexel == 2 || splatProbeTexel == 8 ? vec2(0.5, 0.0) : splatProbeTexel == 3 || splatProbeTexel == 9 ? vec2(0.0, 0.5) : vec2(0.0);\n    vec2 splatProbeUv = g_uv / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5;\n';
 
 /** The probe's text from the picture-kind program: its prelude, and vUv read as the probe's point inside main(). */
 export function toSplatProbe(fs: string): string {

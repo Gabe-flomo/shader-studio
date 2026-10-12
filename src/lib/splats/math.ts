@@ -15,6 +15,21 @@
  *
  * Distance (for compositing with ray-marched scenes): |p − eye|, the same as the March Loop's Distance along a
  * normalised ray.
+ *
+ * Orthographic and Reverse (the March Camera's Perspective; docs/camera-projections.md). Every March Camera is an
+ * affine family of rays: the ray at g_uv = (u, v) leaves eye + a·(u·right + v·up) and heads along
+ * forward + b·(u·right + v·up) (per axis: ax, bx across, ay, by up). A point t = W (p − eye) = (x, y, z) is on the
+ * ray with u = x / (a + b·z): by depth z the rays have spread to w(z) = a + b·z per unit of g_uv.
+ *  - Normal (pinhole): a = 0, b = 1 / f, so u = f·x / z, the formula above.
+ *  - Orthographic: a = Distance / f, b = 0, so u = x / a: no division by depth (no perspective divide), and the
+ *    Jacobian is the affine J = [[1/a, 0, 0], [0, 1/a, 0]]: a splat is the same size wherever it is.
+ *  - Reverse (strength s, Converge at C): a = Distance / (f·m), b = −s·a / C, m = max(1 − s·Distance / C, 0.2), so
+ *    w(z) = a·(1 − s·z / C) shrinks with depth and far splats grow. Its Jacobian is that of u = x / (a + b·z):
+ *      ∂u/∂x = 1 / w,  ∂u/∂y = 0,  ∂u/∂z = −b·x / w² = +s·a·x / (C·w²)   (the pinhole's −f·x / z², sign flipped),
+ *    so J = [[1/wx, 0, −bx·x/wx²], [0, 1/wy, −by·y/wy²]]: the pinhole's with z / f put back as w. Past z = C / s,
+ *    w < 0 and the picture flips (the march's rays have crossed); Σ2 is quadratic in J, so the ellipse is unchanged.
+ * Distance then runs from the ray's own origin (eye + u·a·right + v·a·up), as the March Loop measures it. The sort
+ * along forward stays right for all three: along every one of these rays, depth along forward grows.
  */
 
 export type Vec3 = [number, number, number];
@@ -48,8 +63,17 @@ export function covariance3d(scale: Vec3, quat: [number, number, number, number]
 
 export const covToMat3 = (c: readonly number[]): Mat3 => [c[0], c[1], c[2], c[1], c[3], c[4], c[2], c[4], c[5]];
 
-/** The camera the vertex shader rebuilds from the probe: its eye, axes, and lens per axis (f along x and y). */
-export interface SplatCamera { eye: Vec3; right: Vec3; up: Vec3; forward: Vec3; fx: number; fy: number }
+/**
+ * The camera the vertex shader rebuilds from the probe: its eye, axes, and lens per axis (f along x and y). With
+ * `ax` / `ay` (how far the ray origins spread per unit of g_uv) and `bx` / `by` (how far the rays lean per unit
+ * forward; absent: 1 / f), any of the March Camera's projections (see the top of the file).
+ */
+export interface SplatCamera { eye: Vec3; right: Vec3; up: Vec3; forward: Vec3; fx: number; fy: number; ax?: number; ay?: number; bx?: number; by?: number }
+
+/** A camera's (a, b) per axis: the origins' spread and the rays' lean per unit of g_uv. */
+export function cameraSpread(cam: SplatCamera): { ax: number; ay: number; bx: number; by: number } {
+  return { ax: cam.ax ?? 0, ay: cam.ay ?? 0, bx: cam.bx ?? 1 / cam.fx, by: cam.by ?? 1 / cam.fy };
+}
 
 const dot = (a: readonly number[], b: readonly number[]) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 const sub = (a: readonly number[], b: readonly number[]): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
@@ -58,26 +82,55 @@ const len = (a: readonly number[]) => Math.hypot(a[0], a[1], a[2]);
 const nrm = (a: readonly number[]): Vec3 => { const l = len(a) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
 
 /**
- * The camera from the probe's four readings (as the vertex shader does): the eye; the ray at the picture's centre
- * (forward); the rays half a picture-height right (g_uv (0.5, 0)) and up (0, 0.5). A pinhole ray at (u, 0) is
- * ∝ u · right + f · forward, so right is the part across forward and f = u · (along) / (across).
+ * The camera from the probe's readings (as the vertex shader does): the eye; the ray at the picture's centre
+ * (forward); the rays half a picture-height right (g_uv (0.5, 0)) and up (0, 0.5); and, when given, the ray origins
+ * there (`ox`, `oy`). A pinhole ray at (u, 0) is ∝ u · right + f · forward, so right is the part across forward and
+ * f = u · (along) / (across). When the origins spread (more than 5% of the rays' spread at depth `zc`, the scan's:
+ * less is a lens's aperture jitter), right and up are the way they spread, a their spread per unit of g_uv, and b
+ * the rays' lean along them (0: Orthographic; negative: Reverse).
  */
-export function cameraFromProbe(eye: Vec3, center: Vec3, rx: Vec3, ry: Vec3): SplatCamera {
+export function cameraFromProbe(eye: Vec3, center: Vec3, rx: Vec3, ry: Vec3, ox?: Vec3, oy?: Vec3, zc = 1): SplatCamera {
   const forward = nrm(center);
-  const ax = dot(rx, forward), px = sub(rx, scl(forward, ax));
-  const ay = dot(ry, forward), py = sub(ry, scl(forward, ay));
+  const fxa = dot(rx, forward), px = sub(rx, scl(forward, fxa));
+  const fya = dot(ry, forward), py = sub(ry, scl(forward, fya));
   const lx = len(px), ly = len(py);
-  return {
-    eye, forward,
-    right: lx > 1e-9 ? scl(px, 1 / lx) : [1, 0, 0],
-    up: ly > 1e-9 ? scl(py, 1 / ly) : [0, 1, 0],
-    fx: lx > 1e-9 ? 0.5 * ax / lx : 1.5,
-    fy: ly > 1e-9 ? 0.5 * ay / ly : 1.5,
+  const across = (o: Vec3 | undefined): Vec3 => {
+    if (!o) return [0, 0, 0];
+    const d = sub(o, eye);
+    return sub(d, scl(forward, dot(d, forward)));
   };
+  const sxv = across(ox), syv = across(oy);
+  const z = Math.max(Math.abs(zc), 1);
+  const sx = 2 * len(sxv), sy = 2 * len(syv);
+  const spreadX = sx > 0.05 * (sx + 2 * lx / Math.max(fxa, 1e-6) * z);
+  const spreadY = sy > 0.05 * (sy + 2 * ly / Math.max(fya, 1e-6) * z);
+  const right: Vec3 = spreadX ? nrm(sxv) : lx > 1e-9 ? scl(px, 1 / lx) : [1, 0, 0];
+  const up: Vec3 = spreadY ? nrm(syv) : ly > 1e-9 ? scl(py, 1 / ly) : [0, 1, 0];
+  const cam: SplatCamera = {
+    eye, forward, right, up,
+    fx: lx > 1e-9 ? 0.5 * fxa / lx : 1.5,
+    fy: ly > 1e-9 ? 0.5 * fya / ly : 1.5,
+  };
+  if (spreadX || spreadY) {
+    cam.ax = spreadX ? 2 * dot(sxv, right) : 0;
+    cam.ay = spreadY ? 2 * dot(syv, up) : 0;
+    cam.bx = 2 * dot(rx, right) / Math.max(fxa, 1e-6);
+    cam.by = 2 * dot(ry, up) / Math.max(fya, 1e-6);
+  }
+  return cam;
 }
 
-/** The March Camera's camera for its sliders (scene3d.ts MarchCameraNode, pinhole, no flatten): for tests and the CPU. */
-export function marchCamera(o: { camDist?: number; camAngle?: number; camElevation?: number; fov?: number; target?: Vec3; time?: number; rotSpeed?: number } = {}): SplatCamera {
+/** The March Camera's Perspective (scene3d.ts): absent is Normal. */
+export type MarchProjection = 'normal' | 'orthographic' | 'reverse';
+
+/**
+ * The March Camera's camera for its sliders (scene3d.ts MarchCameraNode, no aperture): for tests and the CPU. With a
+ * `projection` (and Reverse's `reverseStrength`, `reverseDist`) or a Flatten (`ortho`), its rays' (a, b) as the node's
+ * GLSL makes them: Flatten moves the origins out by ortho·Distance / f and leans the rays (1 − ortho) / f; Reverse
+ * moves them out a further Distance / (f·m) and aims every ray at Converge at along forward (strength s), so they
+ * lean −s·(that spread) / C.
+ */
+export function marchCamera(o: { camDist?: number; camAngle?: number; camElevation?: number; fov?: number; target?: Vec3; time?: number; rotSpeed?: number; projection?: MarchProjection; reverseStrength?: number; reverseDist?: number; ortho?: number } = {}): SplatCamera {
   const dist = o.camDist ?? 3, ang = (o.camAngle ?? 0.6) + (o.time ?? 0) * (o.rotSpeed ?? 0), elev = o.camElevation ?? 0.3, fov = o.fov ?? 1.5;
   const ta = o.target ?? [0, 0, 0];
   const horiz: Vec3 = [Math.sin(ang), 0, Math.cos(ang)];
@@ -87,12 +140,32 @@ export function marchCamera(o: { camDist?: number; camAngle?: number; camElevati
   // right = cross(cup, forward); up = cross(forward, right)
   const right = nrm([cup[1] * forward[2] - cup[2] * forward[1], cup[2] * forward[0] - cup[0] * forward[2], cup[0] * forward[1] - cup[1] * forward[0]]);
   const up: Vec3 = [forward[1] * right[2] - forward[2] * right[1], forward[2] * right[0] - forward[0] * right[2], forward[0] * right[1] - forward[1] * right[0]];
-  return { eye, right, up, forward, fx: fov, fy: fov };
+  const cam: SplatCamera = { eye, right, up, forward, fx: fov, fy: fov };
+  if (o.projection !== 'orthographic' && o.projection !== 'reverse' && o.ortho === undefined) return cam;
+  const F = Math.max(fov, 0.05);
+  const fl = o.projection === 'orthographic' ? 1 : Math.max(0, Math.min(1, o.ortho ?? 0));
+  let a = fl * dist / F, b = (1 - fl) / F;
+  if (o.projection === 'reverse') {
+    const s = Math.max(0, Math.min(1, o.reverseStrength ?? 1)), C = Math.max(o.reverseDist ?? 8, 0.1);
+    const ar = dist / F / Math.max(1 - s * dist / C, 0.2);
+    a += ar;
+    b = -s * ar / C;
+  }
+  cam.ax = a; cam.ay = a; cam.bx = b; cam.by = b;
+  return cam;
 }
 
 /** The camera's ray through picture point g_uv (as the March Camera makes it). */
 export function cameraRay(cam: SplatCamera, u: number, v: number): Vec3 {
-  return nrm([0, 1, 2].map(k => u * cam.right[k] + v * cam.up[k] + cam.fx * cam.forward[k]) as Vec3);
+  if (cam.bx === undefined && cam.by === undefined) return nrm([0, 1, 2].map(k => u * cam.right[k] + v * cam.up[k] + cam.fx * cam.forward[k]) as Vec3);
+  const { bx, by } = cameraSpread(cam);
+  return nrm([0, 1, 2].map(k => u * bx * cam.right[k] + v * by * cam.up[k] + cam.forward[k]) as Vec3);
+}
+
+/** Where the camera's ray through picture point g_uv starts: the eye for a pinhole, spread out for the others. */
+export function cameraRayOrigin(cam: SplatCamera, u: number, v: number): Vec3 {
+  const { ax, ay } = cameraSpread(cam);
+  return [0, 1, 2].map(k => cam.eye[k] + u * ax * cam.right[k] + v * ay * cam.up[k]) as Vec3;
 }
 
 export interface Projected {
@@ -118,6 +191,7 @@ export function projectSplat(center: Vec3, cov: readonly number[], cam: SplatCam
   const x = dot(t, cam.right), y = dot(t, cam.up), z = dot(t, cam.forward);
   if (z < near) return null;
   const k = heightPx / 2;
+  if (cam.ax !== undefined || cam.bx !== undefined) return projectSplatAffine(t, x, y, z, cov, cam, k);
   // Rows of J W (pixels): J = k f [[1/z, 0, −x/z²], [0, 1/z, −y/z²]] times W (rows right, up, forward).
   const j0 = [0, 1, 2].map(i => k * cam.fx * (cam.right[i] / z - x * cam.forward[i] / (z * z)));
   const j1 = [0, 1, 2].map(i => k * cam.fy * (cam.up[i] / z - y * cam.forward[i] / (z * z)));
@@ -127,6 +201,27 @@ export function projectSplat(center: Vec3, cov: readonly number[], cam: SplatCam
   const a = dot(j0, Sj0) + 0.3, b = dot(j0, Sj1), c = dot(j1, Sj1) + 0.3;
   const { major, minor } = ellipseAxes(a, b, c);
   return { uv: [cam.fx * x / z, cam.fy * y / z], z, dist: len(t), cov2: [a, b, c], major, minor };
+}
+
+/**
+ * projectSplat for any affine camera (Orthographic, Reverse, Flatten; see the top of the file): g_uv = (x / wx, y / wy)
+ * with w = a + b·z, J = k [[1/wx, 0, −bx·x/wx²], [0, 1/wy, −by·y/wy²]] (an orthographic camera's is the affine
+ * k [[1/a, 0, 0], [0, 1/a, 0]]), and the distance from the ray's own origin. Null where the rays cross (w ≈ 0).
+ */
+function projectSplatAffine(t: Vec3, x: number, y: number, z: number, cov: readonly number[], cam: SplatCamera, k: number): Projected | null {
+  const { ax, ay, bx, by } = cameraSpread(cam);
+  const wx = ax + bx * z, wy = ay + by * z;
+  if (Math.abs(wx) < 1e-6 || Math.abs(wy) < 1e-6) return null;
+  const j0 = [0, 1, 2].map(i => k * (cam.right[i] / wx - bx * x * cam.forward[i] / (wx * wx)));
+  const j1 = [0, 1, 2].map(i => k * (cam.up[i] / wy - by * y * cam.forward[i] / (wy * wy)));
+  const S = covToMat3(cov);
+  const Sj0 = [0, 1, 2].map(r => S[r * 3] * j0[0] + S[r * 3 + 1] * j0[1] + S[r * 3 + 2] * j0[2]);
+  const Sj1 = [0, 1, 2].map(r => S[r * 3] * j1[0] + S[r * 3 + 1] * j1[1] + S[r * 3 + 2] * j1[2]);
+  const a = dot(j0, Sj0) + 0.3, b = dot(j0, Sj1), c = dot(j1, Sj1) + 0.3;
+  const { major, minor } = ellipseAxes(a, b, c);
+  const u = x / wx, v = y / wy;
+  const dist = len(sub(t, [0, 1, 2].map(i => u * ax * cam.right[i] + v * ay * cam.up[i])));
+  return { uv: [u, v], z, dist, cov2: [a, b, c], major, minor };
 }
 
 /** The ellipse of a 2 × 2 covariance [[a, b], [b, c]]: √(2λ) along each eigenvector, capped at 1024 px. */

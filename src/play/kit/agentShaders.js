@@ -189,6 +189,46 @@ out vec4 o_col;
 void main() { o_col = vec4(vec3(1.0, 0.72, 0.32) * u_gain, 1.0); }`;
 
 /**
+ * Draw agents' Perspective in GLSL (agentPlan.js agProjection; docs/camera-projections.md): u_proj = (A / D, B) of
+ * W(z) = A + B·z, the depth a point's offset is divided by ((0, 1) Normal, (1, 0) Orthographic, Reverse in between
+ * and below), blended toward D by Flatten. agRayDist is a point's distance from its own ray's origin (the scene's
+ * Depth's kind). agSceneCam rebuilds a ray-marched scene's camera from its probe (AG_PROBE_POINTS: the origin; the
+ * rays at the centre, half right, half up; the origins half right and half up) as the same affine family: a ray
+ * leaves from eye + uv·a heading along forward + uv·b. A pinhole's rays lean (a = 0, b > 0); an orthographic one's
+ * origins spread (b = 0); a reverse one's spread while its rays lean in (b < 0). Right and up come from the origins
+ * when they spread (more than 5% of the picture's width at the world's centre: less is a lens's aperture jitter),
+ * else from the rays, as before. Then lens = D / (a + b·D) and proj = (a, b·D) / (a + b·D), D the distance to the
+ * world's centre, so lens / W(z) = 1 / (a + b·z) exactly: a walker lands where the scene's ray through it starts.
+ */
+export const AG_CAM_GLSL = `float agCamW(float z, float cd, vec2 proj, float fl) { return mix(proj.x * cd + proj.y * z, cd, fl); }
+float agRayDist(vec3 d, vec3 f, float z, float cd, vec2 proj) {
+  if (proj.x == 0.0) return length(d);
+  float w0 = proj.x * cd + proj.y * z;
+  return length((d - z * f) * (proj.y * z / (abs(w0) > 1e-6 ? w0 : 1e-6)) + z * f);
+}
+void agSceneCam(highp sampler2D cam, out vec3 eye, out vec3 f, out vec3 r, out vec3 u, out float lens, out float cd, out vec2 proj) {
+  eye = texelFetch(cam, ivec2(0, 0), 0).xyz;
+  f = normalize(texelFetch(cam, ivec2(1, 0), 0).xyz);
+  vec3 rx = normalize(texelFetch(cam, ivec2(2, 0), 0).xyz), ry = normalize(texelFetch(cam, ivec2(3, 0), 0).xyz);
+  vec3 ox = texelFetch(cam, ivec2(4, 0), 0).xyz - eye, oy = texelFetch(cam, ivec2(5, 0), 0).xyz - eye;
+  ox -= dot(ox, f) * f; oy -= dot(oy, f) * f;
+  vec3 px = rx - dot(rx, f) * f, py = ry - dot(ry, f) * f;
+  cd = max(0.1, dot(-eye, f));
+  float sx = 2.0 * length(ox), sy = 2.0 * length(oy);
+  float lx = 2.0 * length(px) / max(dot(rx, f), 1e-4) * cd, ly = 2.0 * length(py) / max(dot(ry, f), 1e-4) * cd;
+  bool spreadX = sx > 0.05 * (sx + lx), spreadY = sy > 0.05 * (sy + ly);
+  r = normalize(spreadX ? ox : px);
+  u = normalize(spreadY ? oy : py);
+  u = normalize(u - dot(r, u) * r);
+  float a = spreadY ? 2.0 * dot(oy, u) : 0.0;
+  float b = 2.0 * dot(ry, u) / max(dot(ry, f), 1e-4);
+  float wc = a + b * cd;
+  wc = abs(wc) > 1e-4 ? wc : 1e-4;
+  lens = cd / wc;
+  proj = vec2(a, b * cd) / wc;
+}`;
+
+/**
  * The Agent Builder's species spotlight: every u_stride-th live walker of species u_only (-1: all)
  * as one additive point of u_px pixels in u_col × u_gain, where the picture shows it: 2D at
  * (x / aspect, y); 3D (u_deep 1) through the Draw agents camera as AG_DRAW3_VERT places it (the
@@ -204,6 +244,8 @@ uniform int u_side, u_stride, u_species, u_stateC, u_only, u_deep, u_camSrc;
 uniform float u_aspect, u_px;
 uniform vec3 u_eye, u_fwd, u_right, u_up;
 uniform float u_lens, u_ortho, u_camDist;
+uniform vec2 u_proj;
+${AG_CAM_GLSL}
 void spotCull() { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); gl_PointSize = 0.0; }
 void main() {
   int id = gl_VertexID * u_stride;
@@ -219,22 +261,16 @@ void main() {
   if (u_deep == 0) { gl_Position = vec4(A.x / u_aspect, A.y, 0.0, 1.0); return; }
   vec3 eye = u_eye, f = u_fwd, r = u_right, u = u_up;
   float lens = u_lens, cd = u_camDist, fl = clamp(u_ortho, 0.0, 1.0);
+  vec2 proj = u_proj;
   if (u_camSrc == 1) {
-    eye = texelFetch(u_cam, ivec2(0, 0), 0).xyz;
-    f = normalize(texelFetch(u_cam, ivec2(1, 0), 0).xyz);
-    vec3 rx = normalize(texelFetch(u_cam, ivec2(2, 0), 0).xyz), ry = normalize(texelFetch(u_cam, ivec2(3, 0), 0).xyz);
-    float cx = dot(rx, f), cy = clamp(dot(ry, f), -0.9999, 0.9999);
-    lens = 0.5 / tan(acos(cy));
-    r = normalize(rx - cx * f);
-    u = normalize(ry - cy * f);
-    u = normalize(u - dot(r, u) * r);
-    cd = max(0.1, dot(-eye, f));
+    agSceneCam(u_cam, eye, f, r, u, lens, cd, proj);
     fl = 0.0;
   }
   vec3 d = A.xyz - eye;
   float z = dot(d, f);
   if (z < 0.06 && fl < 0.999) { spotCull(); return; }
-  float w = mix(z, cd, fl);
+  float w = agCamW(z, cd, proj, fl);
+  if (abs(w) < 1e-3) { spotCull(); return; }
   vec2 q = vec2(dot(d, r), dot(d, u)) * lens / w;
   gl_Position = vec4(q.x / u_aspect, q.y, 0.0, 1.0);
 }`;
@@ -430,6 +466,8 @@ uniform vec4 u_lightZ;
 uniform vec3 u_lightCol[4];
 uniform vec3 u_eye, u_fwd, u_right, u_up;
 uniform float u_lens, u_ortho, u_camDist, u_focus, u_coc, u_cap;
+uniform vec2 u_proj;
+${AG_CAM_GLSL}
 // The lights are in the walkers' space (GP_LIGHTS reads this).
 const int u_deep = 1;
 out vec4 v_col;
@@ -463,17 +501,10 @@ void main() {
 ${GP_LIGHTS}
   vec3 eye = u_eye, f = u_fwd, r = u_right, u = u_up;
   float lens = u_lens, cd = u_camDist, focus = u_focus;
+  vec2 proj = u_proj;
   if (u_camSrc == 1) {
-    // A ray-marched scene's camera: its origin, and its rays at the centre, half a picture right and half up.
-    eye = texelFetch(u_cam, ivec2(0, 0), 0).xyz;
-    f = normalize(texelFetch(u_cam, ivec2(1, 0), 0).xyz);
-    vec3 rx = normalize(texelFetch(u_cam, ivec2(2, 0), 0).xyz), ry = normalize(texelFetch(u_cam, ivec2(3, 0), 0).xyz);
-    float cx = dot(rx, f), cy = clamp(dot(ry, f), -0.9999, 0.9999);
-    lens = 0.5 / tan(acos(cy));
-    r = normalize(rx - cx * f);
-    u = normalize(ry - cy * f);
-    u = normalize(u - dot(r, u) * r);
-    cd = max(0.1, dot(-eye, f));
+    // A ray-marched scene's camera, rebuilt from its probe (AG_CAM_GLSL agSceneCam).
+    agSceneCam(u_cam, eye, f, r, u, lens, cd, proj);
     focus = max(0.05, u_focus * cd);
   }
   vec3 pos = A.xyz - B.xyz * (u_thread * float(end));
@@ -481,13 +512,15 @@ ${GP_LIGHTS}
   float z = dot(d, f);
   float fl = clamp(u_ortho, 0.0, 1.0);
   if (z < 0.06 && fl < 0.999) { agCull(); return; }
-  float w = mix(z, cd, fl);
+  float w = agCamW(z, cd, proj, fl);
+  if (abs(w) < 1e-3) { agCull(); return; }
   vec2 q = vec2(dot(d, r), dot(d, u)) * lens / w;
-  v_dist = length(d);
-  float s = u_size * (1.0 + 0.35 * min(near, 4.0)) * cd / w;
+  v_dist = agRayDist(d, f, z, cd, proj);
+  float s = u_size * (1.0 + 0.35 * min(near, 4.0)) * cd / abs(w);
   float wt = fade * u_bright;
   // Depth of field: the circle of confusion. The point grows to it and keeps its light, so out of focus is haze.
-  float coc = u_coc * abs(z - focus) / max(z, 0.06);
+  // It spreads as 1 / W of the projection chosen (z for Normal), before Flatten.
+  float coc = u_coc * abs(z - focus) / max(abs(proj.x * cd + proj.y * z), 0.06);
   float se = max(s, coc);
   float sharp = 1.0 / (1.0 + coc * coc * 0.25);
   float share = u_prim == 1 ? sharp : u_thread > 0.0 ? 1.0 - sharp : 1.0;
@@ -500,7 +533,7 @@ ${GP_LIGHTS}
     wt /= keep;
   }
   // Very near the lens a walker fades rather than filling the screen.
-  wt *= mix(smoothstep(0.06, 0.4, z), 1.0, fl);
+  wt *= mix(smoothstep(0.06, 0.4, z), 1.0, max(fl, clamp(1.0 - proj.y, 0.0, 1.0)));
   gl_Position = vec4(q.x / u_aspect, q.y, 0.0, 1.0);
   gl_PointSize = clamp(se, 1.0, 64.0);
   wt *= u_prim == 1 ? 1.0 : min(1.0, se * se);
@@ -605,6 +638,8 @@ uniform vec3 u_pal[4];
 uniform vec2 u_viewSize;
 uniform vec3 u_eye, u_fwd, u_right, u_up;
 uniform float u_lens, u_ortho, u_camDist;
+uniform vec2 u_proj;
+${AG_CAM_GLSL}
 out vec4 v_col;
 out vec2 v_pos;
 out float v_dist;
@@ -655,30 +690,26 @@ void main() {
     float lens = u_lens;
     cd = u_camDist;
     float fl = clamp(u_ortho, 0.0, 1.0);
+    vec2 proj = u_proj;
     if (u_camSrc == 1) {
       // A ray-marched scene's camera, rebuilt from its probe as AG_DRAW3_VERT does.
-      eye = texelFetch(u_cam, ivec2(0, 0), 0).xyz;
-      f = normalize(texelFetch(u_cam, ivec2(1, 0), 0).xyz);
-      vec3 rx = normalize(texelFetch(u_cam, ivec2(2, 0), 0).xyz), ry = normalize(texelFetch(u_cam, ivec2(3, 0), 0).xyz);
-      float cx = dot(rx, f), cy = clamp(dot(ry, f), -0.9999, 0.9999);
-      lens = 0.5 / tan(acos(cy));
-      r = normalize(rx - cx * f);
-      u = normalize(ry - cy * f);
-      u = normalize(u - dot(r, u) * r);
-      cd = max(0.1, dot(-eye, f));
+      agSceneCam(u_cam, eye, f, r, u, lens, cd, proj);
       fl = 0.0;
     }
     vec3 d = A.xyz - eye;
     z = dot(d, f);
     if (z < 0.06 && fl < 0.999) { agCull(); return; }
-    float w = mix(z, cd, fl);
+    float w = agCamW(z, cd, proj, fl);
+    if (abs(w) < 1e-3) { agCull(); return; }
     float x = dot(d, r), y = dot(d, u);
     ndc = vec2(x, y) * lens / w;
     ndc.x /= u_aspect;
-    v_dist = length(d);
-    // The EWA Jacobian (pixels per world unit), the perspective part fading out with Flatten.
-    vec3 j0 = kpx * lens * (r / w - (1.0 - fl) * x * f / (w * w));
-    vec3 j1 = kpx * lens * (u / w - (1.0 - fl) * y * f / (w * w));
+    v_dist = agRayDist(d, f, z, cd, proj);
+    // The EWA Jacobian (pixels per world unit) of x·L / W(z), W = A + B·z: L (r / W − B·x·f / W²), B the
+    // projection's (1 Normal, 0 Orthographic, negative Reverse) times 1 − Flatten.
+    float bz = (1.0 - fl) * proj.y;
+    vec3 j0 = kpx * lens * (r / w - bz * x * f / (w * w));
+    vec3 j1 = kpx * lens * (u / w - bz * y * f / (w * w));
     ca = dot(j0, S * j0) + 0.3; cb = dot(j0, S * j1); cc = dot(j1, S * j1) + 0.3;
   } else {
     ndc = vec2(A.x / u_aspect, A.y);

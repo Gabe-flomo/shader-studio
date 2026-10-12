@@ -220,7 +220,20 @@ export interface CameraSpec {
   /** Degrees a second round the scan (0: still). */
   turntable: number;
   target: Vec3;
+  /**
+   * The March Camera's Perspective (docs/camera-projections.md): absent is Normal (far things smaller); Orthographic
+   * (parallel rays, an isometric look); Reverse (far things bigger), with `reverse` its strength and `converge` how
+   * far in front the rays meet.
+   */
+  projection?: SplatProjection;
+  reverse?: number;
+  converge?: number;
 }
+
+export const SPLAT_PROJECTIONS = ['normal', 'orthographic', 'reverse'] as const;
+export type SplatProjection = typeof SPLAT_PROJECTIONS[number];
+/** Reverse perspective's starting strength and Converge at (the March Camera's defaults). */
+export const SPLAT_REVERSE_DEFAULTS = { reverse: 1, converge: 8 } as const;
 
 export const TONES = ['none', 'aces', 'agx', 'oklab', 'hable'] as const;
 export type Tone = typeof TONES[number];
@@ -325,7 +338,7 @@ export function sectionSummary(spec: SplatBuilderSpec, s: SplatSection): string 
     }
     case 'camera': {
       const c = spec.camera;
-      return `${r2(c.dist)} away · ${Math.round(c.angle)}°${c.turntable ? ` · turntable ${r2(c.turntable)}°/s` : ''}`;
+      return `${r2(c.dist)} away · ${Math.round(c.angle)}°${c.projection === 'orthographic' ? ' · orthographic' : c.projection === 'reverse' ? ' · reverse' : ''}${c.turntable ? ` · turntable ${r2(c.turntable)}°/s` : ''}`;
     }
     case 'look': {
       const l = spec.look;

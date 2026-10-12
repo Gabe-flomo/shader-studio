@@ -2,12 +2,13 @@
  * shaders.ts — the splat raster pass's GLSL (docs/splat-scene.md "How it draws"; the maths in math.ts, tested there).
  *
  * One instanced quad per splat, in back-to-front order (the `splatIndex` attribute). The vertex shader:
- *  1. reads the splat (pack.ts layout) and the probe's 8 texels (the camera's eye and three rays; the model's columns,
- *     Splat size, Opacity and offset: compiler/splatGraph.ts);
- *  2. rebuilds the camera: forward is the centre ray, right / up the parts of the side rays across it, and the lens
- *     from how far across they lean (math.ts cameraFromProbe);
- *  3. places the centre and the covariance in the world (M Σ Mᵀ), projects them (EWA: J W Σ Wᵀ Jᵀ + 0.3 px²), and
- *     spans the quad √(2λ) along the ellipse's axes;
+ *  1. reads the splat (pack.ts layout) and the probe's 10 texels (the camera's eye and three rays; the model's
+ *     columns, Splat size, Opacity and offset; the ray origins half right and half up: compiler/splatGraph.ts);
+ *  2. rebuilds the camera: forward is the centre ray; right / up the way the origins spread across it (Orthographic,
+ *     Reverse) or else the parts of the side rays across it (Normal); and per axis how far the origins spread (a)
+ *     and the rays lean (b) per unit of g_uv (math.ts cameraFromProbe);
+ *  3. places the centre and the covariance in the world (M Σ Mᵀ), projects them (EWA: J W Σ Wᵀ Jᵀ + 0.3 px², with
+ *     the Jacobian of the camera's projection: math.ts projectSplat), and spans the quad √(2λ) along the ellipse's axes;
  *  4. with SH degree > 0 adds the view-dependent colour (the 3DGS basis, the view direction in the scan's own space).
  * The fragment shader weighs exp(−|v|²) and writes the premultiplied colour and, to the second target, the distance
  * weighted the same way (Σ αᵢ Tᵢ dᵢ: divided by alpha it is the splats' distance at the pixel).
@@ -72,13 +73,22 @@ void main() {
   vec3 F = normalize(texelFetch(u_probe, ivec2(1, 0), 0).xyz);
   vec3 rx = texelFetch(u_probe, ivec2(2, 0), 0).xyz;
   vec3 ry = texelFetch(u_probe, ivec2(3, 0), 0).xyz;
-  vec3 px = rx - F * dot(rx, F), py = ry - F * dot(ry, F);
-  float lx = max(length(px), 1e-9), ly = max(length(py), 1e-9);
-  vec3 R = px / lx, U = py / ly;
-  float fx = 0.5 * dot(rx, F) / lx, fy = 0.5 * dot(ry, F) / ly;
   vec4 c0 = texelFetch(u_probe, ivec2(4, 0), 0), c1 = texelFetch(u_probe, ivec2(5, 0), 0), c2 = texelFetch(u_probe, ivec2(6, 0), 0);
   mat3 M = mat3(c0.xyz, c1.xyz, c2.xyz);
   vec3 T = texelFetch(u_probe, ivec2(7, 0), 0).xyz;
+  // The camera as an affine family of rays (math.ts cameraFromProbe): the ray at g_uv leaves eye + uv·a and heads
+  // along F + uv·b, per axis. Normal: a = 0, b = 1 / lens. Orthographic: b = 0. Reverse: b < 0 (the rays lean in).
+  vec3 ox = texelFetch(u_probe, ivec2(8, 0), 0).xyz - eye, oy = texelFetch(u_probe, ivec2(9, 0), 0).xyz - eye;
+  ox -= F * dot(ox, F); oy -= F * dot(oy, F);
+  vec3 px = rx - F * dot(rx, F), py = ry - F * dot(ry, F);
+  float lx = max(length(px), 1e-9), ly = max(length(py), 1e-9);
+  // Origins that spread less than 5% of the rays' spread at the scan are a lens's aperture jitter: a pinhole.
+  float zc = max(abs(dot(T - eye, F)), 1.0);
+  float sx = 2.0 * length(ox), sy = 2.0 * length(oy);
+  bool spreadX = sx > 0.05 * (sx + 2.0 * lx / max(dot(rx, F), 1e-6) * zc), spreadY = sy > 0.05 * (sy + 2.0 * ly / max(dot(ry, F), 1e-6) * zc);
+  vec3 R = spreadX ? ox / max(length(ox), 1e-9) : px / lx, U = spreadY ? oy / max(length(oy), 1e-9) : py / ly;
+  float ax = spreadX ? 2.0 * dot(ox, R) : 0.0, ay = spreadY ? 2.0 * dot(oy, U) : 0.0;
+  float bx = 2.0 * dot(rx, R) / max(dot(rx, F), 1e-6), by = 2.0 * dot(ry, U) / max(dot(ry, F), 1e-6);
   float sizeMul = c0.w, opacityMul = c1.w;
 
   vec3 w = M * p + T;
@@ -96,15 +106,22 @@ void main() {
   vec3 t = w - eye;
   float x = dot(t, R), y = dot(t, U), z = dot(t, F);
   if (z < 0.05) { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); return; }
-  vec2 uv = vec2(fx * x, fy * y) / z;
+  // uv = x / W: W = a + b·z, the spread of the rays at depth z (z / lens for a pinhole). Reverse past where its rays
+  // cross: W < 0, the picture flips, as the march's does.
+  float wx = ax + bx * z, wy = ay + by * z;
+  if (abs(wx) < 1e-6 || abs(wy) < 1e-6) { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); return; }
+  vec2 uv = vec2(x / wx, y / wy);
+  // From the ray's own origin (eye + uv·a): the March Loop's Distance, and the view direction for the harmonics.
+  vec3 tv = t - uv.x * ax * R - uv.y * ay * U;
   vec2 ndc = vec2(uv.x * u_view.y / u_view.x, uv.y);
 
   vec2 u1 = unpackHalf2x16(b.x), u2 = unpackHalf2x16(b.y), u3 = unpackHalf2x16(b.z);
   mat3 S = mat3(u1.x, u1.y, u2.x, u1.y, u2.y, u3.x, u2.x, u3.x, u3.y) * (0.25 * sizeMul * sizeMul * sMul * sMul);
   mat3 Sw = M * S * transpose(M);
   float k = 0.5 * u_view.y;
-  vec3 j0 = k * fx * (R / z - x * F / (z * z));
-  vec3 j1 = k * fy * (U / z - y * F / (z * z));
+  // The Jacobian of uv = x / (a + b·z): (1 / W) R − (b·x / W²) F, per axis (math.ts projectSplat).
+  vec3 j0 = k * (R / wx - bx * x * F / (wx * wx));
+  vec3 j1 = k * (U / wy - by * y * F / (wy * wy));
   float ca = dot(j0, Sw * j0) + 0.3, cb = dot(j0, Sw * j1), cc = dot(j1, Sw * j1) + 0.3;
   float mid = 0.5 * (ca + cc), rad = length(vec2(0.5 * (ca - cc), cb));
   float l1 = mid + rad, l2 = max(mid - rad, 0.1);
@@ -121,7 +138,7 @@ void main() {
 
   if (u_shDeg > 0) {
     // The view direction in the scan's own space (M may scale and flip).
-    vec3 d = normalize(inverse(M) * normalize(t));
+    vec3 d = normalize(inverse(M) * normalize(tv));
     float dx = d.x, dy = d.y, dz = d.z;
     vec3 add = SH_C1 * (-dy * shAt(i, 0) + dz * shAt(i, 1) - dx * shAt(i, 2));
     if (u_shDeg > 1) {
@@ -140,7 +157,7 @@ void main() {
   col.a = min(col.a * opacityMul, 1.0);
   vColor = col;
   vPos = position.xy;
-  vDist = length(t);
+  vDist = length(tv);
   vDot = dotPx;
   vec2 off = (position.x * major + position.y * minor) * 2.0 / u_view;
   gl_Position = vec4(ndc + off, 0.0, 1.0);

@@ -369,6 +369,7 @@ export function agCamera3(d, read, time, h) {
     eye, fwd, right, up, dist,
     lens: Math.max(0.05, read(P.fov, 1.8)),
     ortho: Math.max(0, Math.min(1, read(P.ortho, 0))),
+    proj: agProjection(P, read, dist),
     focus: Math.max(0.05, read(P.focus, 1) * dist),
     focusShare: Math.max(0.05, read(P.focus, 1)),
     coc: Math.max(0, read(P.blur, 0)) * 52 * px,
@@ -376,17 +377,81 @@ export function agCamera3(d, read, time, h) {
   };
 }
 
+/*
+ * Draw agents' Perspective (docs/camera-projections.md): the March Camera's Normal / Orthographic / Reverse, done
+ * forward (point → picture) since walkers are drawn, not marched. Every one of the March Camera's ray families is
+ * affine in g_uv: a ray leaves from eye + uv·a (across the picture) heading along forward + uv·b, so the point at
+ * depth z (along forward) and offset x across it is on the ray with uv = x / (a + b·z). With the lens L
+ * (Zoom) that is uv = x·L / W(z), W(z) = A + B·z, A = L·a and B = L·b, and each projection is its (A, B):
+ *   Normal        a = 0,          b = 1/L               → W = z                      (pinhole);
+ *   Orthographic  a = D/L,        b = 0                 → W = D                      (D: Distance; parallel rays);
+ *   Reverse       a = D/(L·m),    b = −s·a/C            → W = (D/m)·(1 − s·z/C)      (s strength, C Converge at,
+ *                 m = max(1 − s·D/C, 0.2): the March Camera's own, so the looked-at point keeps its size).
+ * W shrinks with depth in Reverse, so far walkers are bigger; past z = C/s it turns negative and the picture
+ * flips, as the march's crossed rays do. Flatten then blends W toward D (orthographic) whichever is chosen.
+ * proj = (A / D, B): the shaders' u_proj, (0, 1) for Normal, so a camera without it is the old one.
+ */
+export function agProjection(P, read, dist) {
+  const mode = P.projection;
+  if (mode === 'orthographic') return [1, 0];
+  if (mode !== 'reverse') return [0, 1];
+  const s = Math.max(0, Math.min(1, read(P.reverseStrength, 1)));
+  const C = Math.max(0.1, read(P.reverseDist, 8));
+  const m = Math.max(1 - s * dist / C, 0.2);
+  return [1 / m, -s * dist / (m * C)];
+}
+
+/** W(z) for agCamera3's camera: its projection's A + B·z, blended toward Distance by Flatten (shaders: agCamW). */
+export function agCamW(cam, z) {
+  const p = cam.proj ?? [0, 1];
+  const w0 = p[0] * cam.dist + p[1] * z;
+  return w0 + (cam.dist - w0) * cam.ortho;
+}
+
+/**
+ * The shaders' agSceneCam (agentShaders.js AG_CAM_GLSL) in JS, for the tests: a scene camera rebuilt from its probe's
+ * texels (AG_PROBE_POINTS order: origin, rays at the centre / half right / half up, origins half right / half up) as
+ * agCamera3's shape ({ eye, fwd, right, up, lens, dist, ortho 0, proj }), so agProject3 projects through it.
+ */
+export function agSceneCamera(texels) {
+  const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  const scl = (a, s) => [a[0] * s, a[1] * s, a[2] * s];
+  const len = a => Math.hypot(a[0], a[1], a[2]);
+  const eye = texels[0], f = ag3Norm(texels[1]);
+  const rx = ag3Norm(texels[2]), ry = ag3Norm(texels[3]);
+  let ox = sub(texels[4], eye), oy = sub(texels[5], eye);
+  ox = sub(ox, scl(f, ag3Dot(ox, f))); oy = sub(oy, scl(f, ag3Dot(oy, f)));
+  const px = sub(rx, scl(f, ag3Dot(rx, f))), py = sub(ry, scl(f, ag3Dot(ry, f)));
+  const cd = Math.max(0.1, -ag3Dot(eye, f));
+  const sx = 2 * len(ox), sy = 2 * len(oy);
+  const lx = 2 * len(px) / Math.max(ag3Dot(rx, f), 1e-4) * cd, ly = 2 * len(py) / Math.max(ag3Dot(ry, f), 1e-4) * cd;
+  const spreadX = sx > 0.05 * (sx + lx), spreadY = sy > 0.05 * (sy + ly);
+  const right = ag3Norm(spreadX ? ox : px);
+  let up = ag3Norm(spreadY ? oy : py);
+  up = ag3Norm(sub(up, scl(right, ag3Dot(right, up))));
+  const a = spreadY ? 2 * ag3Dot(oy, up) : 0;
+  const b = 2 * ag3Dot(ry, up) / Math.max(ag3Dot(ry, f), 1e-4);
+  let wc = a + b * cd;
+  if (Math.abs(wc) <= 1e-4) wc = 1e-4;
+  return { eye, fwd: f, right, up, dist: cd, lens: cd / wc, ortho: 0, proj: [a / wc, b * cd / wc] };
+}
+
 /** Where a point lands through agCamera3's camera: picture units (x ±aspect, y ±1) and its depth (≤ 0: behind it). */
 export function agProject3(cam, xyz) {
   const d = [xyz[0] - cam.eye[0], xyz[1] - cam.eye[1], xyz[2] - cam.eye[2]];
   const z = ag3Dot(d, cam.fwd);
   if (z < 0.06 && cam.ortho < 0.999) return { x: 0, y: 0, depth: -1 };
-  const w = z + (cam.dist - z) * cam.ortho;
+  const w = agCamW(cam, z);
+  if (Math.abs(w) < 1e-3) return { x: 0, y: 0, depth: -1 };
   return { x: ag3Dot(d, cam.right) * cam.lens / w, y: ag3Dot(d, cam.up) * cam.lens / w, depth: w };
 }
 
-/** The four points a scene camera probe reads its chain at (g_uv), and what each pixel holds (0 origin, 1 ray). */
-export const AG_PROBE_POINTS = [[0, 0, 0], [0, 0, 1], [0.5, 0, 1], [0, 0.5, 1]];
+/**
+ * The points a scene camera probe reads its chain at (g_uv), and what each pixel holds (0 origin, 1 ray): the origin
+ * and the rays at the centre, half a picture right and half up (all a pinhole needs), then the origins half right
+ * and half up, so an orthographic or reverse camera's spread-out origins are seen too (AG_CAM_GLSL agSceneCam).
+ */
+export const AG_PROBE_POINTS = [[0, 0, 0], [0, 0, 1], [0.5, 0, 1], [0, 0.5, 1], [0.5, 0, 0], [0, 0.5, 0]];
 
 /*
  * Readings (P6): what a group's walkers add up to, for Play (sensors on `ag:<group node id>`).

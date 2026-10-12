@@ -1,0 +1,1424 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`camera projections: defaults compile as before > 3D slime (Draw agents' own camera) 1`] = `
+{
+  "draws": [
+    {
+      "colorBy": "heading",
+      "fade": false,
+      "group": "d_slime_mold_3",
+      "lightMotion": "orbit",
+      "lights": 0,
+      "live": true,
+      "nodeId": "s3Draw",
+      "palette": "ab",
+      "params": {
+        "blur": "u_p_drawagentsx3_blur",
+        "brightness": "u_p_drawagentsx3_brightness",
+        "camAngle": "u_p_drawagentsx3_camAngle",
+        "camDist": "u_p_drawagentsx3_camDist",
+        "camElevation": "u_p_drawagentsx3_camElevation",
+        "camX": "u_p_drawagentsx3_camX",
+        "camY": "u_p_drawagentsx3_camY",
+        "camZ": "u_p_drawagentsx3_camZ",
+        "colorA": "u_p_drawagentsx3_colorA",
+        "colorB": "u_p_drawagentsx3_colorB",
+        "colorBy": "heading",
+        "drift": "u_p_drawagentsx3_drift",
+        "fade": "off",
+        "focus": "u_p_drawagentsx3_focus",
+        "fov": "u_p_drawagentsx3_fov",
+        "glow": "u_p_drawagentsx3_glow",
+        "halo": 0.5,
+        "lightColor": [
+          1,
+          0.55,
+          0.25,
+        ],
+        "lightMotion": "orbit",
+        "lightOrbit": 0.5,
+        "lightPower": 1.6,
+        "lightReach": 0.3,
+        "lightX": 0,
+        "lightY": 0,
+        "lights": "0",
+        "maxBlur": "u_p_drawagentsx3_maxBlur",
+        "ortho": "u_p_drawagentsx3_ortho",
+        "palette": "ab",
+        "paper": [
+          0.95,
+          0.95,
+          0.94,
+        ],
+        "rotSpeed": "u_p_drawagentsx3_rotSpeed",
+        "scaleBy": "crowd",
+        "size": "u_p_drawagentsx3_size",
+        "speedRef": "u_p_drawagentsx3_speedRef",
+        "streak": 0.25,
+        "style": "glow",
+      },
+      "scaleBy": "crowd",
+      "slug": "drawagents_3",
+      "space3d": true,
+      "style": "glow",
+    },
+  ],
+  "errors": null,
+  "fragmentShader": "precision highp float;
+#define PI 3.1415926538
+#define TAU 6.2831853072
+
+uniform vec2 u_resolution;
+uniform float u_time;
+uniform vec2 u_mouse;
+uniform sampler2D u_fontTexture;
+uniform float u_p_trailfieldx3_diffuse;
+uniform float u_p_trailfieldx3_halfLife;
+uniform float u_p_trailfieldx3_gain;
+uniform float u_p_drawagentsx3_size;
+uniform float u_p_drawagentsx3_brightness;
+uniform float u_p_drawagentsx3_glow;
+uniform vec3 u_p_drawagentsx3_colorA;
+uniform vec3 u_p_drawagentsx3_colorB;
+uniform float u_p_drawagentsx3_speedRef;
+uniform float u_p_drawagentsx3_camDist;
+uniform float u_p_drawagentsx3_camAngle;
+uniform float u_p_drawagentsx3_camElevation;
+uniform float u_p_drawagentsx3_rotSpeed;
+uniform float u_p_drawagentsx3_fov;
+uniform float u_p_drawagentsx3_ortho;
+uniform float u_p_drawagentsx3_camX;
+uniform float u_p_drawagentsx3_camY;
+uniform float u_p_drawagentsx3_camZ;
+uniform float u_p_drawagentsx3_drift;
+uniform float u_p_drawagentsx3_focus;
+uniform float u_p_drawagentsx3_blur;
+uniform float u_p_drawagentsx3_maxBlur;
+uniform sampler2D u_trail_trailfield_3;
+uniform vec2 u_trail_trailfield_3_px;
+uniform sampler2D u_agdraw_drawagents_3;
+uniform vec2 u_agdraw_drawagents_3_px;
+
+varying vec2 vUv;
+
+// ── Always-available helpers (noise, rotation) ───────────────────────────────
+vec2 noiseHash2(vec2 p) {
+    p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+    return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+}
+float noiseHash1(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+float valueNoise(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(noiseHash1(i), noiseHash1(i+vec2(1,0)), u.x),
+               mix(noiseHash1(i+vec2(0,1)), noiseHash1(i+vec2(1,1)), u.x), u.y);
+}
+vec2 rotate(vec2 v, float angle) {
+    // Hoisted: the angle is usually a uniform expression, and the compiler
+    // can't share the four trig calls when the argument isn't a plain value.
+    float s = sin(angle), c = cos(angle);
+    return vec2(v.x * c - v.y * s, v.x * s + v.y * c);
+}
+mat2 rot2D(float a) { float s=sin(a), c=cos(a); return mat2(c,-s,s,c); }
+// ─────────────────────────────────────────────────────────────────────────
+
+vec2 agUv(vec2 q) { return q / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5; }
+
+void main() {
+    vec2 g_uv = (vUv - 0.5) * 2.0;
+    g_uv.x *= u_resolution.x / u_resolution.y;
+    // Trail field, filled by a 3D group: a volume, 96 rows tall and 96 slices deep (171 cells across at 16:9). Each step every cell becomes the average of itself and its 6 neighbours, and half fades in 0.1 s.
+    // Its Image goes back into the group for Sense, read in 3D. Its Amount here would be the volume seen from the front; this example shows the walkers through a camera instead.
+    // Try: Volume 128 for finer tubes (more memory and time), 64 for a fast, coarse one; Half-life 0.3 for thicker, slower tubes.
+    vec4 trailfield_3_t = texture2D(u_trail_trailfield_3, agUv(g_uv));
+    // UV: where each pixel is on the picture, for the backdrop behind the walkers.
+    vec2 uv_3_uv = (vUv - 0.5) * 2.0;
+    uv_3_uv.x *= u_resolution.x / u_resolution.y;
+    // Night (an Expression Block): the backdrop the walkers are drawn over.
+    // h: 0 at the bottom of the picture, 1 at the top. halo: 1 in the middle, fading out, a faint glow behind the walkers.
+    // Result: near-black, dark plum at the bottom to deep blue at the top, with the glow in the middle.
+    vec3 night_3_result;
+    {
+        vec2 uv = uv_3_uv;
+        float t = u_time;
+        vec3 p = vec3(0.0);
+        float h = uv.y * 0.5 + 0.5;
+        float halo = exp(-dot(uv, uv) * 1.5);
+        night_3_result = mix(vec3(0.010, 0.006, 0.012), vec3(0.004, 0.008, 0.020), h) + vec3(0.030, 0.012, 0.020) * halo;
+    }
+    // Draw agents in 3D: every walker as a soft glowing dot, coloured by heading (amber one way, blue the other), seen through a camera 3.8 from the middle that circles the box at 6° a second, 15° above it.
+    // Blur 0.2 with Focus 1: the middle of the box is sharp, the near and far walkers a little soft, which makes the depth read.
+    // Try: Flatten 1 for an isometric view; Orbit speed 0 and drag Angle to look from the side; Elevation 89 to look straight down.
+    vec4 drawagents_3_s = texture2D(u_agdraw_drawagents_3, agUv(g_uv));
+    vec3 drawagents_3_color = night_3_result + max(drawagents_3_s.rgb, vec3(0.0));
+    // Output: the walkers, drawn through the camera over the night backdrop, are the picture.
+    gl_FragColor = vec4(drawagents_3_color, 1.0);
+}",
+  "paramUniforms": {
+    "u_p_agentdeposx3_amount": 4,
+    "u_p_agentdeposx3_size": 1,
+    "u_p_agentemitx3_burst": 0,
+    "u_p_agentemitx3_life": 0,
+    "u_p_agentemitx3_lifeVar": 0.2,
+    "u_p_agentemitx3_rate": 20000,
+    "u_p_agentemitx3_share": 1,
+    "u_p_agentemitx3_size": 0.6,
+    "u_p_agentemitx3_speed": 0,
+    "u_p_agentemitx3_speedVar": 0,
+    "u_p_agentemitx3_spread": 0,
+    "u_p_agentemitx3_x": 0,
+    "u_p_agentemitx3_y": 0,
+    "u_p_agentmovex3_speed": 1.2,
+    "u_p_agentsensex3_angle": 30,
+    "u_p_agentsensex3_distance": 0.15,
+    "u_p_agentsensex3_weight": 1,
+    "u_p_agentsteerx3_jitter": 0.1,
+    "u_p_agentsteerx3_turn": 30,
+    "u_p_crowdingx3_sat": 40,
+    "u_p_drawagentsx3_blur": 0.2,
+    "u_p_drawagentsx3_brightness": 2.2,
+    "u_p_drawagentsx3_camAngle": 15,
+    "u_p_drawagentsx3_camDist": 3.8,
+    "u_p_drawagentsx3_camElevation": 15,
+    "u_p_drawagentsx3_camX": 0,
+    "u_p_drawagentsx3_camY": 0,
+    "u_p_drawagentsx3_camZ": 0,
+    "u_p_drawagentsx3_colorA": [
+      1,
+      0.55,
+      0.2,
+    ],
+    "u_p_drawagentsx3_colorB": [
+      0.35,
+      0.65,
+      1,
+    ],
+    "u_p_drawagentsx3_drift": 0,
+    "u_p_drawagentsx3_focus": 1,
+    "u_p_drawagentsx3_fov": 1.8,
+    "u_p_drawagentsx3_glow": 0.9,
+    "u_p_drawagentsx3_maxBlur": 7,
+    "u_p_drawagentsx3_ortho": 0,
+    "u_p_drawagentsx3_rotSpeed": 6,
+    "u_p_drawagentsx3_size": 1.4,
+    "u_p_drawagentsx3_speedRef": 0.5,
+    "u_p_dxslimexmoldx3_preroll": 4,
+    "u_p_dxslimexmoldx3_restart": 0,
+    "u_p_dxslimexmoldx3_seed": 1,
+    "u_p_dxslimexmoldx3_stepsPerFrame": 2,
+    "u_p_trailfieldx3_diffuse": 1,
+    "u_p_trailfieldx3_gain": 0.04,
+    "u_p_trailfieldx3_halfLife": 0.1,
+  },
+  "splats": [],
+}
+`;
+
+exports[`camera projections: defaults compile as before > Splat builder's starting scene 1`] = `
+{
+  "draws": [],
+  "errors": null,
+  "fragmentShader": "precision highp float;
+#define PI 3.1415926538
+#define TAU 6.2831853072
+
+uniform vec2 u_resolution;
+uniform float u_time;
+uniform vec2 u_mouse;
+uniform sampler2D u_fontTexture;
+uniform float u_p_marchcamerx0_camDist;
+uniform float u_p_marchcamerx0_camAngle;
+uniform float u_p_marchcamerx0_camElevation;
+uniform float u_p_marchcamerx0_rotSpeed;
+uniform float u_p_marchcamerx0_fov;
+uniform float u_p_marchcamerx0_targetX;
+uniform float u_p_marchcamerx0_targetY;
+uniform float u_p_marchcamerx0_targetZ;
+uniform float u_p_marchcamerx0_aperture;
+uniform float u_p_marchcamerx0_focalDist;
+uniform float u_p_marchcamerx0_lensSpeed;
+uniform vec3 u_p_colorpickex0_color;
+uniform vec3 u_p_colorpickex0xc2_color;
+uniform vec3 u_p_splatx0_position;
+uniform vec3 u_p_splatx0_rotation;
+uniform float u_p_splatx0_scale;
+uniform float u_p_splatx0_splatSize;
+uniform float u_p_splatx0_opacity;
+uniform float u_p_splatx0_softness;
+uniform float u_p_splatx0_hitAt;
+uniform sampler2D u_tex_splat_0_color;
+uniform sampler2D u_tex_splat_0_depth;
+
+varying vec2 vUv;
+
+// ── Always-available helpers (noise, rotation) ───────────────────────────────
+vec2 noiseHash2(vec2 p) {
+    p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+    return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+}
+float noiseHash1(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+float valueNoise(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(noiseHash1(i), noiseHash1(i+vec2(1,0)), u.x),
+               mix(noiseHash1(i+vec2(0,1)), noiseHash1(i+vec2(1,1)), u.x), u.y);
+}
+vec2 rotate(vec2 v, float angle) {
+    // Hoisted: the angle is usually a uniform expression, and the compiler
+    // can't share the four trig calls when the argument isn't a plain value.
+    float s = sin(angle), c = cos(angle);
+    return vec2(v.x * c - v.y * s, v.x * s + v.y * c);
+}
+mat2 rot2D(float a) { float s=sin(a), c=cos(a); return mat2(c,-s,s,c); }
+// ─────────────────────────────────────────────────────────────────────────
+
+
+
+void main() {
+    vec2 g_uv = (vUv - 0.5) * 2.0;
+    g_uv.x *= u_resolution.x / u_resolution.y;
+    // The camera: it turns round the scan (Angle, Elevation) at Distance, looking at Target. Every pixel becomes a ray from here; the Splat Scene draws the scan through the same camera.
+    float marchcamer_0_ang   = u_p_marchcamerx0_camAngle + u_time * u_p_marchcamerx0_rotSpeed;
+    float marchcamer_0_elev  = u_p_marchcamerx0_camElevation;
+    vec3  marchcamer_0_ta    = vec3(u_p_marchcamerx0_targetX, u_p_marchcamerx0_targetY, u_p_marchcamerx0_targetZ);
+    vec3  marchcamer_0_horiz = vec3(sin(marchcamer_0_ang), 0.0, cos(marchcamer_0_ang));
+    vec3  marchcamer_0_ro0   = marchcamer_0_ta + u_p_marchcamerx0_camDist * (cos(marchcamer_0_elev)*marchcamer_0_horiz + sin(marchcamer_0_elev)*vec3(0.0,1.0,0.0));
+    vec3  marchcamer_0_fwd   = normalize(marchcamer_0_ta - marchcamer_0_ro0);
+    vec3  marchcamer_0_cup   = normalize(-sin(marchcamer_0_elev)*marchcamer_0_horiz + cos(marchcamer_0_elev)*vec3(0.0,1.0,0.0));
+    vec3  marchcamer_0_rgt   = normalize(cross(marchcamer_0_cup, marchcamer_0_fwd));
+    vec3  marchcamer_0_up2   = cross(marchcamer_0_fwd, marchcamer_0_rgt);
+    vec3  marchcamer_0_rd0   = normalize(g_uv.x * marchcamer_0_rgt + g_uv.y * marchcamer_0_up2 + u_p_marchcamerx0_fov * marchcamer_0_fwd);
+    float marchcamer_0_h1    = fract(sin(dot(g_uv, vec2(127.1, 311.7))) * 43758.5453);
+    float marchcamer_0_h2    = fract(sin(dot(g_uv, vec2(269.5, 183.3))) * 43758.5453);
+    float marchcamer_0_lr    = u_p_marchcamerx0_aperture * sqrt(marchcamer_0_h1);
+    float marchcamer_0_lth   = 6.28318 * marchcamer_0_h2 + u_time * u_p_marchcamerx0_lensSpeed;
+    vec3  marchcamer_0_ro    = marchcamer_0_ro0 + marchcamer_0_lr * (cos(marchcamer_0_lth) * marchcamer_0_rgt + sin(marchcamer_0_lth) * marchcamer_0_up2);
+    vec3  marchcamer_0_rd    = normalize((marchcamer_0_ro0 + marchcamer_0_rd0 * max(u_p_marchcamerx0_focalDist, 0.05)) - marchcamer_0_ro);
+    // The top of the background gradient (looking up).
+    vec3 colorpicke_0_rgb = u_p_colorpickex0_color;
+    float colorpicke_0_r = colorpicke_0_rgb.x;
+    float colorpicke_0_g = colorpicke_0_rgb.y;
+    float colorpicke_0_b = colorpicke_0_rgb.z;
+    // The bottom of the background gradient (looking down).
+    vec3 colorpicke_0_c2_rgb = u_p_colorpickex0xc2_color;
+    float colorpicke_0_c2_r = colorpicke_0_c2_rgb.x;
+    float colorpicke_0_c2_g = colorpicke_0_c2_rgb.y;
+    float colorpicke_0_c2_b = colorpicke_0_c2_rgb.z;
+    // The background: a gradient by which way each ray points, from Bottom (straight down) to Top (straight up). It turns with the camera.
+    vec3 sky_gradient_0_result;
+    {
+        vec3 rd = marchcamer_0_rd;
+        vec3 top = colorpicke_0_rgb;
+        vec3 bottom = colorpicke_0_c2_rgb;
+        float t = u_time;
+        vec3 p = vec3(0.0);
+        sky_gradient_0_result = mix(bottom, top, clamp(rd.y * 0.5 + 0.5, 0.0, 1.0));
+    }
+    // Splat Scene: a generated example scan (no file). Load your own in the Splat builder's Scan section, or drop a .ply, .splat or .spz on this card.
+    // Seen through the March Camera, so it sits in the same space as the background.
+    // Made by the Splat builder: right-click → Edit in Splat builder, or open the Scene builder and pick Edit this one.
+    // splat-scene u_tex_splat_0_color
+    vec4 splat_0_c = texture2D(u_tex_splat_0_color, vUv);
+    vec4 splat_0_d = texture2D(u_tex_splat_0_depth, vUv);
+    float splat_0_a = clamp(splat_0_c.a, 0.0, 1.0);
+    float splat_0_sd = splat_0_d.a > 1e-4 ? splat_0_d.r / splat_0_d.a : 100000.0;
+    float splat_0_sh = step(u_p_splatx0_hitAt, splat_0_a);
+    float splat_0_sceneHit = step(0.5, 1.0);
+    float splat_0_sceneD = mix(100000.0, 100000.0, splat_0_sceneHit);
+    float splat_0_soft = max(u_p_splatx0_softness, 1e-4);
+    float splat_0_front = smoothstep(-splat_0_soft, splat_0_soft, splat_0_sd - splat_0_sceneD) * splat_0_sceneHit;
+    vec3 splat_0_over = splat_0_c.rgb + (1.0 - splat_0_a) * sky_gradient_0_result;
+    vec3 splat_0_col = mix(splat_0_over, sky_gradient_0_result, splat_0_front);
+    gl_FragColor = vec4(splat_0_col, 1.0);
+}",
+  "paramUniforms": {
+    "u_p_colorpickex0_color": [
+      0.09,
+      0.1,
+      0.14,
+    ],
+    "u_p_colorpickex0xc2_color": [
+      0.02,
+      0.02,
+      0.03,
+    ],
+    "u_p_marchcamerx0_aperture": 0,
+    "u_p_marchcamerx0_camAngle": 0.436332,
+    "u_p_marchcamerx0_camDist": 3.6,
+    "u_p_marchcamerx0_camElevation": 0.20944,
+    "u_p_marchcamerx0_focalDist": 3,
+    "u_p_marchcamerx0_fov": 1.5,
+    "u_p_marchcamerx0_lensSpeed": 0,
+    "u_p_marchcamerx0_rotSpeed": 0,
+    "u_p_marchcamerx0_targetX": 0,
+    "u_p_marchcamerx0_targetY": 0,
+    "u_p_marchcamerx0_targetZ": 0,
+    "u_p_splatx0_hitAt": 0.5,
+    "u_p_splatx0_opacity": 1,
+    "u_p_splatx0_position": [
+      0,
+      0,
+      0,
+    ],
+    "u_p_splatx0_rotation": [
+      0,
+      0,
+      0,
+    ],
+    "u_p_splatx0_scale": 1,
+    "u_p_splatx0_softness": 0.05,
+    "u_p_splatx0_splatSize": 1,
+  },
+  "splats": [
+    {
+      "modifier": null,
+      "nodeId": "sp_scan",
+      "paramUniforms": {
+        "u_p_marchcamerx0_aperture": 0,
+        "u_p_marchcamerx0_camAngle": 0.436332,
+        "u_p_marchcamerx0_camDist": 3.6,
+        "u_p_marchcamerx0_camElevation": 0.20944,
+        "u_p_marchcamerx0_focalDist": 3,
+        "u_p_marchcamerx0_fov": 1.5,
+        "u_p_marchcamerx0_lensSpeed": 0,
+        "u_p_marchcamerx0_rotSpeed": 0,
+        "u_p_marchcamerx0_targetX": 0,
+        "u_p_marchcamerx0_targetY": 0,
+        "u_p_marchcamerx0_targetZ": 0,
+        "u_p_splatx0_hitAt": 0.5,
+        "u_p_splatx0_opacity": 1,
+        "u_p_splatx0_position": [
+          0,
+          0,
+          0,
+        ],
+        "u_p_splatx0_rotation": [
+          0,
+          0,
+          0,
+        ],
+        "u_p_splatx0_scale": 1,
+        "u_p_splatx0_softness": 0.05,
+        "u_p_splatx0_splatSize": 1,
+      },
+    },
+  ],
+}
+`;
+
+exports[`camera projections: defaults compile as before > Splat modifiers example 1`] = `
+{
+  "draws": [],
+  "errors": null,
+  "fragmentShader": "precision highp float;
+#define PI 3.1415926538
+#define TAU 6.2831853072
+
+uniform vec2 u_resolution;
+uniform float u_time;
+uniform vec2 u_mouse;
+uniform sampler2D u_fontTexture;
+uniform float u_p_mulx0_b;
+uniform float u_p_mkv3x0_r;
+uniform float u_p_mkv3x0_g;
+uniform float u_p_mkv3x0_b;
+uniform vec3 u_p_splatx0_position;
+uniform vec3 u_p_splatx0_rotation;
+uniform float u_p_splatx0_scale;
+uniform float u_p_splatx0_splatSize;
+uniform float u_p_splatx0_opacity;
+uniform float u_p_splatx0_softness;
+uniform float u_p_splatx0_hitAt;
+uniform sampler2D u_tex_splat_0_color;
+uniform sampler2D u_tex_splat_0_depth;
+
+varying vec2 vUv;
+
+// ── Always-available helpers (noise, rotation) ───────────────────────────────
+vec2 noiseHash2(vec2 p) {
+    p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+    return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+}
+float noiseHash1(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+float valueNoise(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(noiseHash1(i), noiseHash1(i+vec2(1,0)), u.x),
+               mix(noiseHash1(i+vec2(0,1)), noiseHash1(i+vec2(1,1)), u.x), u.y);
+}
+vec2 rotate(vec2 v, float angle) {
+    // Hoisted: the angle is usually a uniform expression, and the compiler
+    // can't share the four trig calls when the argument isn't a plain value.
+    float s = sin(angle), c = cos(angle);
+    return vec2(v.x * c - v.y * s, v.x * s + v.y * c);
+}
+mat2 rot2D(float a) { float s=sin(a), c=cos(a); return mat2(c,-s,s,c); }
+// ─────────────────────────────────────────────────────────────────────────
+
+
+
+void main() {
+    vec2 g_uv = (vUv - 0.5) * 2.0;
+    g_uv.x *= u_resolution.x / u_resolution.y;
+    // Time: the clock, in seconds.
+    float time_0_time = u_time;
+    // Time × 10: the scan's turn in degrees, 10 a second.
+    // Why: turning shows the scan (and what the modifiers do to it) from every side.
+    float mul_0_result = time_0_time * u_p_mulx0_b;
+    // Make Vec3: the turn as the Splat Scene's Rotation (X, Y, Z in degrees): only Y moves.
+    vec3 mkv3_0_rgb = vec3(u_p_mkv3x0_r, mul_0_result, u_p_mkv3x0_b);
+    // Splat Scene: a generated scan (a lumpy ball of 150 000 splats; drop a .ply, .splat or .spz here for a real one).
+    // Its Modifier takes the chain: Set Splat → Explode → Wave, applied in that order to every splat before it is drawn.
+    // Unwired Ray Origin / Ray Dir: a camera 3 back, looking at the middle.
+    // splat-scene u_tex_splat_0_color
+    vec4 splat_0_c = texture2D(u_tex_splat_0_color, vUv);
+    vec4 splat_0_d = texture2D(u_tex_splat_0_depth, vUv);
+    float splat_0_a = clamp(splat_0_c.a, 0.0, 1.0);
+    float splat_0_sd = splat_0_d.a > 1e-4 ? splat_0_d.r / splat_0_d.a : 100000.0;
+    float splat_0_sh = step(u_p_splatx0_hitAt, splat_0_a);
+    gl_FragColor = vec4(splat_0_c.rgb, 1.0);
+}",
+  "paramUniforms": {
+    "u_p_lfox0_amplitude": 0.5,
+    "u_p_lfox0_freq": 0.12,
+    "u_p_lfox0_offset": 0.5,
+    "u_p_lfox0_phase": 0,
+    "u_p_mkv3x0_b": 0,
+    "u_p_mkv3x0_g": 0,
+    "u_p_mkv3x0_r": 0,
+    "u_p_mulx0_b": 10,
+    "u_p_splatexplox0_center": [
+      0,
+      0,
+      0,
+    ],
+    "u_p_splatexplox0_distance": 1.1,
+    "u_p_splatexplox0_returnHome": 0,
+    "u_p_splatexplox0_scatter": 0.45,
+    "u_p_splatexplox0_spin": 0.35,
+    "u_p_splatexplox0_stagger": 0.6,
+    "u_p_splatsetx0_amount": 1,
+    "u_p_splatwavex0_amplitude": 0.025,
+    "u_p_splatwavex0_frequency": 4,
+    "u_p_splatwavex0_speed": 0.7,
+    "u_p_splatx0_hitAt": 0.5,
+    "u_p_splatx0_opacity": 1,
+    "u_p_splatx0_position": [
+      0,
+      0,
+      0,
+    ],
+    "u_p_splatx0_rotation": [
+      0,
+      0,
+      0,
+    ],
+    "u_p_splatx0_scale": 1,
+    "u_p_splatx0_softness": 0.05,
+    "u_p_splatx0_splatSize": 1,
+  },
+  "splats": [
+    {
+      "modifier": {
+        "audioUniforms": {},
+        "fragmentShader": "precision highp float;
+#define PI 3.1415926538
+#define TAU 6.2831853072
+
+uniform vec2 u_resolution;
+uniform float u_time;
+uniform vec2 u_mouse;
+uniform sampler2D u_fontTexture;
+uniform float u_p_lfox0_freq;
+uniform float u_p_lfox0_phase;
+uniform float u_p_lfox0_amplitude;
+uniform float u_p_lfox0_offset;
+uniform float u_p_splatsetx0_amount;
+uniform float u_p_splatexplox0_returnHome;
+uniform float u_p_splatexplox0_distance;
+uniform vec3 u_p_splatexplox0_center;
+uniform float u_p_splatexplox0_scatter;
+uniform float u_p_splatexplox0_stagger;
+uniform float u_p_splatexplox0_spin;
+uniform float u_p_splatwavex0_amplitude;
+uniform float u_p_splatwavex0_frequency;
+uniform float u_p_splatwavex0_speed;
+
+precision highp int;
+uniform highp usampler2D u_spd_smScan;
+uniform highp sampler2D u_spp_smScan;
+uniform float u_spn_smScan;
+uniform vec4 u_spb_smScan;
+layout(location = 1) out highp vec4 splatModOut1;
+mat3 sp_base; vec3 sp_local; vec3 sp_T; float sp_index; float sp_rand; float sp_count; float sp_radius; vec3 sp_mid; vec3 sp_midW; float sp_unit;
+varying vec2 vUv;
+
+// ── Always-available helpers (noise, rotation) ───────────────────────────────
+vec2 noiseHash2(vec2 p) {
+    p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+    return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+}
+float noiseHash1(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+float valueNoise(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(noiseHash1(i), noiseHash1(i+vec2(1,0)), u.x),
+               mix(noiseHash1(i+vec2(0,1)), noiseHash1(i+vec2(1,1)), u.x), u.y);
+}
+vec2 rotate(vec2 v, float angle) {
+    // Hoisted: the angle is usually a uniform expression, and the compiler
+    // can't share the four trig calls when the argument isn't a plain value.
+    float s = sin(angle), c = cos(angle);
+    return vec2(v.x * c - v.y * s, v.x * s + v.y * c);
+}
+mat2 rot2D(float a) { float s=sin(a), c=cos(a); return mat2(c,-s,s,c); }
+// ─────────────────────────────────────────────────────────────────────────
+
+float spHash31(vec3 p) {
+    p = fract(p * vec3(0.1031, 0.1030, 0.0973));
+    p += dot(p, p.yxz + 33.33);
+    return fract((p.x + p.y) * p.z);
+}
+
+
+float spNoise3(vec3 p) {
+    vec3 i = floor(p), f = fract(p);
+    vec3 u = f * f * (3.0 - 2.0 * f);
+    float a = mix(spHash31(i), spHash31(i + vec3(1.0, 0.0, 0.0)), u.x);
+    float b = mix(spHash31(i + vec3(0.0, 1.0, 0.0)), spHash31(i + vec3(1.0, 1.0, 0.0)), u.x);
+    float c = mix(spHash31(i + vec3(0.0, 0.0, 1.0)), spHash31(i + vec3(1.0, 0.0, 1.0)), u.x);
+    float d = mix(spHash31(i + vec3(0.0, 1.0, 1.0)), spHash31(i + vec3(1.0, 1.0, 1.0)), u.x);
+    return mix(mix(a, b, u.y), mix(c, d, u.y), u.z);
+}
+
+
+
+
+vec3 spNoise33(vec3 p) {
+    return vec3(spNoise3(p), spNoise3(p + vec3(31.7, 11.3, 5.9)), spNoise3(p + vec3(63.1, 47.9, 23.3)));
+}
+
+
+
+
+mat3 spRotY(float a) { float c = cos(a), s = sin(a); return mat3(c, 0.0, -s, 0.0, 1.0, 0.0, s, 0.0, c); }
+
+void main() {
+    int sp_i = int(gl_FragCoord.y) * 2048 + int(gl_FragCoord.x);
+    uvec4 sp_a = texelFetch(u_spd_smScan, ivec2((sp_i & 1023) << 1, sp_i >> 10), 0);
+    uvec4 sp_b = texelFetch(u_spd_smScan, ivec2(((sp_i & 1023) << 1) | 1, sp_i >> 10), 0);
+    vec4 sp_c0 = texelFetch(u_spp_smScan, ivec2(4, 0), 0), sp_c1 = texelFetch(u_spp_smScan, ivec2(5, 0), 0), sp_c2 = texelFetch(u_spp_smScan, ivec2(6, 0), 0);
+    mat3 sp_M = mat3(sp_c0.xyz, sp_c1.xyz, sp_c2.xyz);
+    sp_T = texelFetch(u_spp_smScan, ivec2(7, 0), 0).xyz;
+    vec3 sp_p = uintBitsToFloat(sp_a.xyz);
+    float sp_scale = length(sp_c0.xyz);
+    sp_local = sp_p * vec3(1.0, -1.0, -1.0) * sp_scale;
+    vec4 sp_rgba = vec4(float(sp_a.w & 255u), float((sp_a.w >> 8) & 255u), float((sp_a.w >> 16) & 255u), float(sp_a.w >> 24)) / 255.0;
+    vec2 sp_u1 = unpackHalf2x16(sp_b.x), sp_u2 = unpackHalf2x16(sp_b.y), sp_u3 = unpackHalf2x16(sp_b.z);
+    sp_radius = sqrt(max(0.25 * (sp_u1.x + sp_u2.y + sp_u3.y), 0.0) / 3.0) * sp_c0.w * sp_scale;
+    uint sp_h = uint(sp_i) * 747796405u + 2891336453u;
+    sp_h = ((sp_h >> ((sp_h >> 28u) + 4u)) ^ sp_h) * 277803737u;
+    sp_h = (sp_h >> 22u) ^ sp_h;
+    sp_rand = float(sp_h >> 8u) / 16777216.0;
+    sp_index = float(sp_i);
+    sp_count = u_spn_smScan;
+    sp_mid = u_spb_smScan.xyz * vec3(1.0, -1.0, -1.0) * sp_scale;
+    sp_midW = sp_M * u_spb_smScan.xyz + sp_T;
+    sp_unit = max(u_spb_smScan.w * sp_scale, 1e-4);
+    sp_base = mat3(sp_M * sp_p + sp_T, sp_rgba.rgb, vec3(sp_rgba.a, 1.0, 0.0));
+    vec2 g_uv = vec2(0.0);
+    vec2 splatModUv = vec2(0.5);
+    // LFO: a slow sine from 0 to 1, once every eight seconds.
+    // Why: wired into Explode's Amount socket, it blows the scan apart and brings it home again, over and over.
+    float lfo_0_value = sin(u_time * u_p_lfox0_freq * 6.2831853 + u_p_lfox0_phase) * u_p_lfox0_amplitude + u_p_lfox0_offset;
+    // Splat Attributes: one splat as numbers. "In the scan" is where it sits in the scan (scene units, +Y up), so whatever reads it sticks to the scan as it turns; Color is its own colour.
+    // Why: the start of a chain of ordinary nodes that runs once for every splat.
+    mat3 splatattri_0_i = sp_base;
+    // Colour by height (an Expression Block): blue at the bottom of the scan, orange at the top, mixed 60/40 with each splat's own colour.
+    // h: the splat's height in the scan (y), from about −0.85 to 0.85, turned into 0–1.
+    // Result: a blue→orange ramp by h, mixed over the splat's colour c by 0.6. Try: 1.0 instead of 0.6 for the pure ramp.
+    vec3 colour_by_height_0_result;
+    {
+        vec3 p = sp_local;
+        vec3 c = splatattri_0_i[1];
+        float t = u_time;
+        float h = clamp(p.y * 0.6 + 0.5, 0.0, 1.0);
+        colour_by_height_0_result = mix(c, mix(vec3(0.15, 0.45, 1.0), vec3(1.0, 0.45, 0.15), h), 0.6);
+    }
+    // Set Splat: the Expression Block's colour becomes the splat's colour. Its other sockets are unwired, so position, opacity and size stay as they were.
+    mat3 splatset_0_i = sp_base;
+    vec3 splatset_0_p = splatset_0_i[0];
+    vec3 splatset_0_c = colour_by_height_0_result;
+    vec3 splatset_0_l = vec3(splatset_0_i[2].x, splatset_0_i[2].y, splatset_0_i[2].z);
+    float splatset_0_k = clamp(u_p_splatsetx0_amount, 0.0, 1.0);
+    mat3 splatset_0_s = mat3(mix(splatset_0_i[0], splatset_0_p, splatset_0_k), mix(splatset_0_i[1], splatset_0_c, splatset_0_k), mix(splatset_0_i[2], splatset_0_l, splatset_0_k));
+    // Splat Explode: blows the splats out from the centre (each a little after the last: Stagger 0.6), turning as they go (Spin).
+    // Its Amount comes from the LFO (the socket beside the slider). The engine sorts the splats by where they have moved to, so they still blend far to near.
+    mat3 splatexplo_0_i = splatset_0_s;
+    vec3 splatexplo_0_c = u_p_splatexplox0_center;
+    float splatexplo_0_r = sp_rand;
+    float splatexplo_0_st = clamp(u_p_splatexplox0_stagger, 0.0, 1.0);
+    float splatexplo_0_out = smoothstep(0.0, 1.0, clamp(clamp(lfo_0_value, 0.0, 1.0) * (1.0 + splatexplo_0_st) - splatexplo_0_r * splatexplo_0_st, 0.0, 1.0));
+    float splatexplo_0_home = smoothstep(0.0, 1.0, clamp(clamp(u_p_splatexplox0_returnHome, 0.0, 1.0) * (1.0 + splatexplo_0_st) - (1.0 - splatexplo_0_r) * splatexplo_0_st, 0.0, 1.0));
+    float splatexplo_0_k = splatexplo_0_out * (1.0 - splatexplo_0_home);
+    vec3 splatexplo_0_rel = splatexplo_0_i[0] - splatexplo_0_c;
+    vec3 splatexplo_0_rnd = vec3(spHash31(vec3(splatexplo_0_r * 113.1, splatexplo_0_r * 71.7, 1.3)), spHash31(vec3(splatexplo_0_r * 57.3, 2.9, splatexplo_0_r * 91.1)), spHash31(vec3(3.7, splatexplo_0_r * 37.9, splatexplo_0_r * 19.3))) * 2.0 - 1.0;
+    vec3 splatexplo_0_dir = normalize(mix(splatexplo_0_rel / max(length(splatexplo_0_rel), 1e-4), splatexplo_0_rnd / max(length(splatexplo_0_rnd), 1e-4), clamp(u_p_splatexplox0_scatter, 0.0, 1.0)) + vec3(1e-5));
+    vec3 splatexplo_0_moved = splatexplo_0_rel + splatexplo_0_dir * (u_p_splatexplox0_distance * splatexplo_0_k * (0.6 + 0.8 * fract(splatexplo_0_r * 7.31)));
+    mat3 splatexplo_0_s = splatexplo_0_i;
+    splatexplo_0_s[0] = splatexplo_0_c + spRotY(u_p_splatexplox0_spin * 6.2831853 * splatexplo_0_k) * splatexplo_0_moved;
+    // Splat Wave, Wobble: every splat drifts a little through slow noise, so the surface shimmers even at rest.
+    // Try: Kind Wave and Amplitude 0.08 for ripples running across the scan; Twist for a spiral.
+    mat3 splatwave_0_i = splatexplo_0_s;
+    mat3 splatwave_0_s = splatwave_0_i;
+    splatwave_0_s[0] += (spNoise33(sp_local * u_p_splatwavex0_frequency + vec3((u_time * u_p_splatwavex0_speed), (u_time * u_p_splatwavex0_speed) * 0.83, (u_time * u_p_splatwavex0_speed) * 0.61)) * 2.0 - 1.0) * u_p_splatwavex0_amplitude;
+    mat3 splatmodou_0_s = splatwave_0_s;
+    float splatmodou_0_size = max(splatmodou_0_s[2].y, 0.0);
+    float splatmodou_0_enc = splatmodou_0_s[2].z > 0.0 ? -max(splatmodou_0_s[2].z * splatmodou_0_size, 0.25) : splatmodou_0_size;
+    gl_FragColor = vec4(splatmodou_0_s[0], splatmodou_0_enc);
+    splatModOut1 = vec4(max(splatmodou_0_s[1], 0.0), clamp(splatmodou_0_s[2].x, 0.0, 4.0));
+}",
+        "liveUniforms": {},
+        "moves": {
+          "always": true,
+          "gates": [
+            "u_p_splatwavex0_amplitude",
+          ],
+        },
+        "nodeId": "smScan",
+        "paramBindings": {
+          "smExplode::center": "u_p_splatexplox0_center",
+          "smExplode::distance": "u_p_splatexplox0_distance",
+          "smExplode::returnHome": "u_p_splatexplox0_returnHome",
+          "smExplode::scatter": "u_p_splatexplox0_scatter",
+          "smExplode::spin": "u_p_splatexplox0_spin",
+          "smExplode::stagger": "u_p_splatexplox0_stagger",
+          "smPulse::amplitude": "u_p_lfox0_amplitude",
+          "smPulse::freq": "u_p_lfox0_freq",
+          "smPulse::offset": "u_p_lfox0_offset",
+          "smPulse::phase": "u_p_lfox0_phase",
+          "smSet::amount": "u_p_splatsetx0_amount",
+          "smWave::amplitude": "u_p_splatwavex0_amplitude",
+          "smWave::frequency": "u_p_splatwavex0_frequency",
+          "smWave::speed": "u_p_splatwavex0_speed",
+        },
+        "paramUniforms": {
+          "u_p_lfox0_amplitude": 0.5,
+          "u_p_lfox0_freq": 0.12,
+          "u_p_lfox0_offset": 0.5,
+          "u_p_lfox0_phase": 0,
+          "u_p_splatexplox0_center": [
+            0,
+            0,
+            0,
+          ],
+          "u_p_splatexplox0_distance": 1.1,
+          "u_p_splatexplox0_returnHome": 0,
+          "u_p_splatexplox0_scatter": 0.45,
+          "u_p_splatexplox0_spin": 0.35,
+          "u_p_splatexplox0_stagger": 0.6,
+          "u_p_splatsetx0_amount": 1,
+          "u_p_splatwavex0_amplitude": 0.025,
+          "u_p_splatwavex0_frequency": 4,
+          "u_p_splatwavex0_speed": 0.7,
+        },
+        "textureUniforms": {},
+        "uniforms": {
+          "box": "u_spb_smScan",
+          "count": "u_spn_smScan",
+          "data": "u_spd_smScan",
+          "probe": "u_spp_smScan",
+        },
+        "videoUniforms": {},
+      },
+      "nodeId": "smScan",
+      "paramUniforms": {
+        "u_p_mkv3x0_b": 0,
+        "u_p_mkv3x0_g": 0,
+        "u_p_mkv3x0_r": 0,
+        "u_p_mulx0_b": 10,
+        "u_p_splatx0_hitAt": 0.5,
+        "u_p_splatx0_opacity": 1,
+        "u_p_splatx0_position": [
+          0,
+          0,
+          0,
+        ],
+        "u_p_splatx0_rotation": [
+          0,
+          0,
+          0,
+        ],
+        "u_p_splatx0_scale": 1,
+        "u_p_splatx0_softness": 0.05,
+        "u_p_splatx0_splatSize": 1,
+      },
+    },
+  ],
+}
+`;
+
+exports[`camera projections: defaults compile as before > torus in 3D (Draw agents through a March Camera's probe) 1`] = `
+{
+  "draws": [
+    {
+      "colorBy": "speedFast",
+      "fade": true,
+      "group": "swarm_3",
+      "lightMotion": "orbit",
+      "lights": 0,
+      "live": true,
+      "nodeId": "tsDraw",
+      "palette": "ice",
+      "params": {
+        "blur": "u_p_drawagentsx0_blur",
+        "brightness": "u_p_drawagentsx0_brightness",
+        "camAngle": "u_p_drawagentsx0_camAngle",
+        "camDist": "u_p_drawagentsx0_camDist",
+        "camElevation": "u_p_drawagentsx0_camElevation",
+        "camX": "u_p_drawagentsx0_camX",
+        "camY": "u_p_drawagentsx0_camY",
+        "camZ": "u_p_drawagentsx0_camZ",
+        "colorA": "u_p_drawagentsx0_colorA",
+        "colorB": "u_p_drawagentsx0_colorB",
+        "colorBy": "speedFast",
+        "drift": "u_p_drawagentsx0_drift",
+        "fade": "on",
+        "focus": "u_p_drawagentsx0_focus",
+        "fov": "u_p_drawagentsx0_fov",
+        "glow": "u_p_drawagentsx0_glow",
+        "halo": 0.5,
+        "lightColor": [
+          1,
+          0.55,
+          0.25,
+        ],
+        "lightMotion": "orbit",
+        "lightOrbit": 0.5,
+        "lightPower": 1.6,
+        "lightReach": 0.3,
+        "lightX": 0,
+        "lightY": 0,
+        "lights": "0",
+        "maxBlur": "u_p_drawagentsx0_maxBlur",
+        "ortho": "u_p_drawagentsx0_ortho",
+        "palette": "ice",
+        "paper": [
+          0.95,
+          0.95,
+          0.94,
+        ],
+        "rotSpeed": "u_p_drawagentsx0_rotSpeed",
+        "scaleBy": "crowd",
+        "size": "u_p_drawagentsx0_size",
+        "speedRef": "u_p_drawagentsx0_speedRef",
+        "streak": 0.25,
+        "style": "glow",
+      },
+      "probe": {
+        "camera": "precision highp float;
+#define PI 3.1415926538
+#define TAU 6.2831853072
+
+uniform vec2 u_resolution;
+uniform float u_time;
+uniform vec2 u_mouse;
+uniform sampler2D u_fontTexture;
+uniform float u_p_marchcamerx0_camDist;
+uniform float u_p_marchcamerx0_camAngle;
+uniform float u_p_marchcamerx0_camElevation;
+uniform float u_p_marchcamerx0_rotSpeed;
+uniform float u_p_marchcamerx0_fov;
+uniform float u_p_marchcamerx0_targetX;
+uniform float u_p_marchcamerx0_targetY;
+uniform float u_p_marchcamerx0_targetZ;
+uniform float u_p_marchcamerx0_aperture;
+uniform float u_p_marchcamerx0_focalDist;
+uniform float u_p_marchcamerx0_lensSpeed;
+uniform vec4 u_agPr_drawagents_0;
+
+varying vec2 vUv;
+
+// ── Always-available helpers (noise, rotation) ───────────────────────────────
+vec2 noiseHash2(vec2 p) {
+    p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+    return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+}
+float noiseHash1(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+float valueNoise(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(noiseHash1(i), noiseHash1(i+vec2(1,0)), u.x),
+               mix(noiseHash1(i+vec2(0,1)), noiseHash1(i+vec2(1,1)), u.x), u.y);
+}
+vec2 rotate(vec2 v, float angle) {
+    // Hoisted: the angle is usually a uniform expression, and the compiler
+    // can't share the four trig calls when the argument isn't a plain value.
+    float s = sin(angle), c = cos(angle);
+    return vec2(v.x * c - v.y * s, v.x * s + v.y * c);
+}
+mat2 rot2D(float a) { float s=sin(a), c=cos(a); return mat2(c,-s,s,c); }
+// ─────────────────────────────────────────────────────────────────────────
+
+
+
+void main() {
+    vec2 g_uv = u_agPr_drawagents_0.xy;
+    // Time: the clock, so the camera circles the torus (Rot Speed) the same way in the preview and in a recording.
+    float time_0_time = u_time;
+    // March Camera: 3.6 from the middle, 24° above it, circling at 0.12 radians a second. Its Ray Origin and Ray Dir go to the March Loop and to Draw agents (Camera from, Camera ray), so the swarm is seen through the same camera as the torus.
+    float marchcamer_0_ang   = u_p_marchcamerx0_camAngle + time_0_time * u_p_marchcamerx0_rotSpeed;
+    float marchcamer_0_elev  = u_p_marchcamerx0_camElevation;
+    vec3  marchcamer_0_ta    = vec3(u_p_marchcamerx0_targetX, u_p_marchcamerx0_targetY, u_p_marchcamerx0_targetZ);
+    vec3  marchcamer_0_horiz = vec3(sin(marchcamer_0_ang), 0.0, cos(marchcamer_0_ang));
+    vec3  marchcamer_0_ro0   = marchcamer_0_ta + u_p_marchcamerx0_camDist * (cos(marchcamer_0_elev)*marchcamer_0_horiz + sin(marchcamer_0_elev)*vec3(0.0,1.0,0.0));
+    vec3  marchcamer_0_fwd   = normalize(marchcamer_0_ta - marchcamer_0_ro0);
+    vec3  marchcamer_0_cup   = normalize(-sin(marchcamer_0_elev)*marchcamer_0_horiz + cos(marchcamer_0_elev)*vec3(0.0,1.0,0.0));
+    vec3  marchcamer_0_rgt   = normalize(cross(marchcamer_0_cup, marchcamer_0_fwd));
+    vec3  marchcamer_0_up2   = cross(marchcamer_0_fwd, marchcamer_0_rgt);
+    vec3  marchcamer_0_rd0   = normalize(g_uv.x * marchcamer_0_rgt + g_uv.y * marchcamer_0_up2 + u_p_marchcamerx0_fov * marchcamer_0_fwd);
+    float marchcamer_0_h1    = fract(sin(dot(g_uv, vec2(127.1, 311.7))) * 43758.5453);
+    float marchcamer_0_h2    = fract(sin(dot(g_uv, vec2(269.5, 183.3))) * 43758.5453);
+    float marchcamer_0_lr    = u_p_marchcamerx0_aperture * sqrt(marchcamer_0_h1);
+    float marchcamer_0_lth   = 6.28318 * marchcamer_0_h2 + time_0_time * u_p_marchcamerx0_lensSpeed;
+    vec3  marchcamer_0_ro    = marchcamer_0_ro0 + marchcamer_0_lr * (cos(marchcamer_0_lth) * marchcamer_0_rgt + sin(marchcamer_0_lth) * marchcamer_0_up2);
+    vec3  marchcamer_0_rd    = normalize((marchcamer_0_ro0 + marchcamer_0_rd0 * max(u_p_marchcamerx0_focalDist, 0.05)) - marchcamer_0_ro);
+    gl_FragColor = u_agPr_drawagents_0.z < 0.5 ? vec4(marchcamer_0_ro, 1.0) : vec4(normalize(marchcamer_0_rd), 1.0);
+}",
+        "depth": "precision highp float;
+#define PI 3.1415926538
+#define TAU 6.2831853072
+
+uniform vec2 u_resolution;
+uniform float u_time;
+uniform vec2 u_mouse;
+uniform sampler2D u_fontTexture;
+uniform float u_p_torusx0xsgxtorx0_majorR;
+uniform float u_p_torusx0xsgxtorx0_minorR;
+uniform float u_p_marchcamerx0_camDist;
+uniform float u_p_marchcamerx0_camAngle;
+uniform float u_p_marchcamerx0_camElevation;
+uniform float u_p_marchcamerx0_rotSpeed;
+uniform float u_p_marchcamerx0_fov;
+uniform float u_p_marchcamerx0_targetX;
+uniform float u_p_marchcamerx0_targetY;
+uniform float u_p_marchcamerx0_targetZ;
+uniform float u_p_marchcamerx0_aperture;
+uniform float u_p_marchcamerx0_focalDist;
+uniform float u_p_marchcamerx0_lensSpeed;
+uniform float u_p_marchloopgx0_maxDist;
+uniform float u_p_marchloopgx0_stepScale;
+uniform float u_p_marchloopgx0_jitter;
+uniform vec3 u_p_marchloopgx0_bg;
+uniform vec3 u_p_marchloopgx0_albedo;
+
+varying vec2 vUv;
+
+// ── Always-available helpers (noise, rotation) ───────────────────────────────
+vec2 noiseHash2(vec2 p) {
+    p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+    return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+}
+float noiseHash1(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+float valueNoise(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(noiseHash1(i), noiseHash1(i+vec2(1,0)), u.x),
+               mix(noiseHash1(i+vec2(0,1)), noiseHash1(i+vec2(1,1)), u.x), u.y);
+}
+vec2 rotate(vec2 v, float angle) {
+    // Hoisted: the angle is usually a uniform expression, and the compiler
+    // can't share the four trig calls when the argument isn't a plain value.
+    float s = sin(angle), c = cos(angle);
+    return vec2(v.x * c - v.y * s, v.x * s + v.y * c);
+}
+mat2 rot2D(float a) { float s=sin(a), c=cos(a); return mat2(c,-s,s,c); }
+// ─────────────────────────────────────────────────────────────────────────
+
+
+
+
+
+float sdf3d_torus(vec3 p, float R, float r) {
+    return length(vec2(length(p.xz) - R, p.y)) - r;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+float mapScene_torus_0(vec3 p) {
+    float torus_0_sg_tor_0_dist = sdf3d_torus(p, u_p_torusx0xsgxtorx0_majorR, u_p_torusx0xsgxtorx0_minorR);
+    float torus_0_sg_sceneoutpu_0_dist = torus_0_sg_tor_0_dist;
+    return torus_0_sg_sceneoutpu_0_dist;
+}
+vec3 marchBody_marchloopg_0(vec3 marchloopg_0_mp, float marchloopg_0_bt, vec3 marchloopg_0_ro, vec3 marchloopg_0_rd) {
+    vec3 marchloopg_0_ml_mlo_0_pos = marchloopg_0_mp;
+    return marchloopg_0_mp;
+}
+float marchIGN(vec2 px) {
+  return fract(52.9829189 * fract(dot(px, vec2(0.06711056, 0.00583715))));
+}
+
+void main() {
+    vec2 g_uv = (vUv - 0.5) * 2.0;
+    g_uv.x *= u_resolution.x / u_resolution.y;
+    // Time: the clock, so the camera circles the torus (Rot Speed) the same way in the preview and in a recording.
+    float time_0_time = u_time;
+    // March Camera: 3.6 from the middle, 24° above it, circling at 0.12 radians a second. Its Ray Origin and Ray Dir go to the March Loop and to Draw agents (Camera from, Camera ray), so the swarm is seen through the same camera as the torus.
+    float marchcamer_0_ang   = u_p_marchcamerx0_camAngle + time_0_time * u_p_marchcamerx0_rotSpeed;
+    float marchcamer_0_elev  = u_p_marchcamerx0_camElevation;
+    vec3  marchcamer_0_ta    = vec3(u_p_marchcamerx0_targetX, u_p_marchcamerx0_targetY, u_p_marchcamerx0_targetZ);
+    vec3  marchcamer_0_horiz = vec3(sin(marchcamer_0_ang), 0.0, cos(marchcamer_0_ang));
+    vec3  marchcamer_0_ro0   = marchcamer_0_ta + u_p_marchcamerx0_camDist * (cos(marchcamer_0_elev)*marchcamer_0_horiz + sin(marchcamer_0_elev)*vec3(0.0,1.0,0.0));
+    vec3  marchcamer_0_fwd   = normalize(marchcamer_0_ta - marchcamer_0_ro0);
+    vec3  marchcamer_0_cup   = normalize(-sin(marchcamer_0_elev)*marchcamer_0_horiz + cos(marchcamer_0_elev)*vec3(0.0,1.0,0.0));
+    vec3  marchcamer_0_rgt   = normalize(cross(marchcamer_0_cup, marchcamer_0_fwd));
+    vec3  marchcamer_0_up2   = cross(marchcamer_0_fwd, marchcamer_0_rgt);
+    vec3  marchcamer_0_rd0   = normalize(g_uv.x * marchcamer_0_rgt + g_uv.y * marchcamer_0_up2 + u_p_marchcamerx0_fov * marchcamer_0_fwd);
+    float marchcamer_0_h1    = fract(sin(dot(g_uv, vec2(127.1, 311.7))) * 43758.5453);
+    float marchcamer_0_h2    = fract(sin(dot(g_uv, vec2(269.5, 183.3))) * 43758.5453);
+    float marchcamer_0_lr    = u_p_marchcamerx0_aperture * sqrt(marchcamer_0_h1);
+    float marchcamer_0_lth   = 6.28318 * marchcamer_0_h2 + time_0_time * u_p_marchcamerx0_lensSpeed;
+    vec3  marchcamer_0_ro    = marchcamer_0_ro0 + marchcamer_0_lr * (cos(marchcamer_0_lth) * marchcamer_0_rgt + sin(marchcamer_0_lth) * marchcamer_0_up2);
+    vec3  marchcamer_0_rd    = normalize((marchcamer_0_ro0 + marchcamer_0_rd0 * max(u_p_marchcamerx0_focalDist, 0.05)) - marchcamer_0_ro);
+    float marchloopg_0_jh = marchIGN(gl_FragCoord.xy);
+    float marchloopg_0_t   = 0.001 + u_p_marchloopgx0_jitter * marchloopg_0_jh * (u_p_marchloopgx0_maxDist / float(80));
+    float marchloopg_0_hit = 0.0;
+    int   marchloopg_0_si  = 80;
+    for (int marchloopg_0_i = 0; marchloopg_0_i < 80; marchloopg_0_i++) {
+        vec3  marchloopg_0_rp_raw = marchcamer_0_ro + marchloopg_0_t * marchcamer_0_rd;
+        vec3  marchloopg_0_rp = marchBody_marchloopg_0(marchloopg_0_rp_raw, marchloopg_0_t, marchcamer_0_ro, marchcamer_0_rd);
+        float marchloopg_0_d  = mapScene_torus_0(marchloopg_0_rp);
+        if (marchloopg_0_d < 0.0005) { marchloopg_0_hit = 1.0; marchloopg_0_si = marchloopg_0_i; break; }
+        marchloopg_0_t += marchloopg_0_d * u_p_marchloopgx0_stepScale;
+        if (marchloopg_0_t > u_p_marchloopgx0_maxDist) { marchloopg_0_si = marchloopg_0_i; break; }
+    }
+    float marchloopg_0_iter      = float(marchloopg_0_si) / float(80);
+    float marchloopg_0_iterCount = float(marchloopg_0_si);
+    vec3  marchloopg_0_hp_raw  = marchcamer_0_ro + marchloopg_0_t * marchcamer_0_rd;
+    vec3  marchloopg_0_hp  = marchBody_marchloopg_0(marchloopg_0_hp_raw, marchloopg_0_t, marchcamer_0_ro, marchcamer_0_rd);
+    float marchloopg_0_e   = 0.001;
+    vec3  marchloopg_0_n   = normalize(vec3(
+        mapScene_torus_0(marchBody_marchloopg_0(marchloopg_0_hp_raw+vec3(marchloopg_0_e,0.0,0.0), marchloopg_0_t, marchcamer_0_ro, marchcamer_0_rd)) - mapScene_torus_0(marchBody_marchloopg_0(marchloopg_0_hp_raw-vec3(marchloopg_0_e,0.0,0.0), marchloopg_0_t, marchcamer_0_ro, marchcamer_0_rd)),
+        mapScene_torus_0(marchBody_marchloopg_0(marchloopg_0_hp_raw+vec3(0.0,marchloopg_0_e,0.0), marchloopg_0_t, marchcamer_0_ro, marchcamer_0_rd)) - mapScene_torus_0(marchBody_marchloopg_0(marchloopg_0_hp_raw-vec3(0.0,marchloopg_0_e,0.0), marchloopg_0_t, marchcamer_0_ro, marchcamer_0_rd)),
+        mapScene_torus_0(marchBody_marchloopg_0(marchloopg_0_hp_raw+vec3(0.0,0.0,marchloopg_0_e), marchloopg_0_t, marchcamer_0_ro, marchcamer_0_rd)) - mapScene_torus_0(marchBody_marchloopg_0(marchloopg_0_hp_raw-vec3(0.0,0.0,marchloopg_0_e), marchloopg_0_t, marchcamer_0_ro, marchcamer_0_rd))
+    ));
+    float marchloopg_0_dist   = marchloopg_0_t;
+    float marchloopg_0_depth  = clamp(marchloopg_0_t / u_p_marchloopgx0_maxDist, 0.0, 1.0);
+    vec3  marchloopg_0_normal = marchloopg_0_n * marchloopg_0_hit;
+    vec3  marchloopg_0_bg     = u_p_marchloopgx0_bg;
+    vec3  marchloopg_0_ld     = normalize(vec3(1.5, 2.0, 1.0));
+    float marchloopg_0_diff   = max(0.0, dot(marchloopg_0_n, marchloopg_0_ld));
+    vec3  marchloopg_0_alb    = u_p_marchloopgx0_albedo;
+    vec3  marchloopg_0_color  = marchloopg_0_hit > 0.5 ? marchloopg_0_alb * (0.15 + 0.85 * marchloopg_0_diff) : marchloopg_0_bg;
+    gl_FragColor = vec4(0.0, 0.0, clamp(marchloopg_0_dist, 0.0, 60000.0), 1.0);
+}",
+        "uniform": "u_agPr_drawagents_0",
+      },
+      "scaleBy": "crowd",
+      "slug": "drawagents_0",
+      "space3d": true,
+      "style": "glow",
+    },
+  ],
+  "errors": null,
+  "fragmentShader": "precision highp float;
+#define PI 3.1415926538
+#define TAU 6.2831853072
+
+uniform vec2 u_resolution;
+uniform float u_time;
+uniform vec2 u_mouse;
+uniform sampler2D u_fontTexture;
+uniform float u_p_torusx0xsgxtorx0_majorR;
+uniform float u_p_torusx0xsgxtorx0_minorR;
+uniform vec3 u_p_colorpickex0_color;
+uniform float u_p_marchcamerx0_camDist;
+uniform float u_p_marchcamerx0_camAngle;
+uniform float u_p_marchcamerx0_camElevation;
+uniform float u_p_marchcamerx0_rotSpeed;
+uniform float u_p_marchcamerx0_fov;
+uniform float u_p_marchcamerx0_targetX;
+uniform float u_p_marchcamerx0_targetY;
+uniform float u_p_marchcamerx0_targetZ;
+uniform float u_p_marchcamerx0_aperture;
+uniform float u_p_marchcamerx0_focalDist;
+uniform float u_p_marchcamerx0_lensSpeed;
+uniform float u_p_marchloopgx0_maxDist;
+uniform float u_p_marchloopgx0_stepScale;
+uniform float u_p_marchloopgx0_jitter;
+uniform vec3 u_p_marchloopgx0_bg;
+uniform vec3 u_p_marchloopgx0_albedo;
+uniform float u_p_multilightx0_sunDirX;
+uniform float u_p_multilightx0_sunDirY;
+uniform float u_p_multilightx0_sunDirZ;
+uniform float u_p_multilightx0_sunR;
+uniform float u_p_multilightx0_sunG;
+uniform float u_p_multilightx0_sunB;
+uniform float u_p_multilightx0_skyR;
+uniform float u_p_multilightx0_skyG;
+uniform float u_p_multilightx0_skyB;
+uniform float u_p_multilightx0_bounceR;
+uniform float u_p_multilightx0_bounceG;
+uniform float u_p_multilightx0_bounceB;
+uniform float u_p_drawagentsx0_size;
+uniform float u_p_drawagentsx0_brightness;
+uniform float u_p_drawagentsx0_glow;
+uniform vec3 u_p_drawagentsx0_colorA;
+uniform vec3 u_p_drawagentsx0_colorB;
+uniform float u_p_drawagentsx0_speedRef;
+uniform float u_p_drawagentsx0_camDist;
+uniform float u_p_drawagentsx0_camAngle;
+uniform float u_p_drawagentsx0_camElevation;
+uniform float u_p_drawagentsx0_rotSpeed;
+uniform float u_p_drawagentsx0_fov;
+uniform float u_p_drawagentsx0_ortho;
+uniform float u_p_drawagentsx0_camX;
+uniform float u_p_drawagentsx0_camY;
+uniform float u_p_drawagentsx0_camZ;
+uniform float u_p_drawagentsx0_drift;
+uniform float u_p_drawagentsx0_focus;
+uniform float u_p_drawagentsx0_blur;
+uniform float u_p_drawagentsx0_maxBlur;
+uniform sampler2D u_agdraw_drawagents_0;
+uniform vec2 u_agdraw_drawagents_0_px;
+
+varying vec2 vUv;
+
+// ── Always-available helpers (noise, rotation) ───────────────────────────────
+vec2 noiseHash2(vec2 p) {
+    p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+    return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+}
+float noiseHash1(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+float valueNoise(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(noiseHash1(i), noiseHash1(i+vec2(1,0)), u.x),
+               mix(noiseHash1(i+vec2(0,1)), noiseHash1(i+vec2(1,1)), u.x), u.y);
+}
+vec2 rotate(vec2 v, float angle) {
+    // Hoisted: the angle is usually a uniform expression, and the compiler
+    // can't share the four trig calls when the argument isn't a plain value.
+    float s = sin(angle), c = cos(angle);
+    return vec2(v.x * c - v.y * s, v.x * s + v.y * c);
+}
+mat2 rot2D(float a) { float s=sin(a), c=cos(a); return mat2(c,-s,s,c); }
+// ─────────────────────────────────────────────────────────────────────────
+
+
+
+
+
+float sdf3d_torus(vec3 p, float R, float r) {
+    return length(vec2(length(p.xz) - R, p.y)) - r;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+float mapScene_torus_0(vec3 p) {
+    float torus_0_sg_tor_0_dist = sdf3d_torus(p, u_p_torusx0xsgxtorx0_majorR, u_p_torusx0xsgxtorx0_minorR);
+    float torus_0_sg_sceneoutpu_0_dist = torus_0_sg_tor_0_dist;
+    return torus_0_sg_sceneoutpu_0_dist;
+}
+vec3 marchBody_marchloopg_0(vec3 marchloopg_0_mp, float marchloopg_0_bt, vec3 marchloopg_0_ro, vec3 marchloopg_0_rd) {
+    vec3 marchloopg_0_ml_mlo_0_pos = marchloopg_0_mp;
+    return marchloopg_0_mp;
+}
+float marchIGN(vec2 px) {
+  return fract(52.9829189 * fract(dot(px, vec2(0.06711056, 0.00583715))));
+}
+vec3 multiLight(
+  vec3 baseColor, vec3 normal, float ao, float shadow,
+  vec3 sunDir, vec3 sunColor, vec3 skyColor, vec3 bounceColor
+) {
+  vec3 sun = normalize(sunDir);
+  float sunDiff    = clamp(dot(normal, sun), 0.0, 1.0);
+  float skyDiff    = clamp(0.5 + 0.5 * normal.y, 0.0, 1.0);
+  float bounceDiff = clamp(0.5 - 0.5 * dot(normal, sun), 0.0, 1.0);
+  vec3 light = sunDiff    * sunColor    * shadow
+             + skyDiff    * skyColor    * ao
+             + bounceDiff * bounceColor * ao;
+  return max(baseColor * light, vec3(0.0));
+}
+vec3 toneACES(vec3 c) {
+  return clamp((c*(2.51*c+0.03))/(c*(2.43*c+0.59)+0.14), 0.0, 1.0);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// OkLab: compress perceptual lightness L with a soft shoulder above the knee, scale chroma with it so the hue
+// and its saturation ratio hold, then ease chroma out near white so the result stays inside the gamut.
+
+
+vec2 agUv(vec2 q) { return q / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5; }
+
+void main() {
+    vec2 g_uv = (vUv - 0.5) * 2.0;
+    g_uv.x *= u_resolution.x / u_resolution.y;
+    // Time: the clock, so the camera circles the torus (Rot Speed) the same way in the preview and in a recording.
+    float time_0_time = u_time;
+    // Color Picker: the torus's colour, a cool dark grey that lets the swarm's light stand out.
+    vec3 colorpicke_0_rgb = u_p_colorpickex0_color;
+    float colorpicke_0_r = colorpicke_0_rgb.x;
+    float colorpicke_0_g = colorpicke_0_rgb.y;
+    float colorpicke_0_b = colorpicke_0_rgb.z;
+    // March Camera: 3.6 from the middle, 24° above it, circling at 0.12 radians a second. Its Ray Origin and Ray Dir go to the March Loop and to Draw agents (Camera from, Camera ray), so the swarm is seen through the same camera as the torus.
+    float marchcamer_0_ang   = u_p_marchcamerx0_camAngle + time_0_time * u_p_marchcamerx0_rotSpeed;
+    float marchcamer_0_elev  = u_p_marchcamerx0_camElevation;
+    vec3  marchcamer_0_ta    = vec3(u_p_marchcamerx0_targetX, u_p_marchcamerx0_targetY, u_p_marchcamerx0_targetZ);
+    vec3  marchcamer_0_horiz = vec3(sin(marchcamer_0_ang), 0.0, cos(marchcamer_0_ang));
+    vec3  marchcamer_0_ro0   = marchcamer_0_ta + u_p_marchcamerx0_camDist * (cos(marchcamer_0_elev)*marchcamer_0_horiz + sin(marchcamer_0_elev)*vec3(0.0,1.0,0.0));
+    vec3  marchcamer_0_fwd   = normalize(marchcamer_0_ta - marchcamer_0_ro0);
+    vec3  marchcamer_0_cup   = normalize(-sin(marchcamer_0_elev)*marchcamer_0_horiz + cos(marchcamer_0_elev)*vec3(0.0,1.0,0.0));
+    vec3  marchcamer_0_rgt   = normalize(cross(marchcamer_0_cup, marchcamer_0_fwd));
+    vec3  marchcamer_0_up2   = cross(marchcamer_0_fwd, marchcamer_0_rgt);
+    vec3  marchcamer_0_rd0   = normalize(g_uv.x * marchcamer_0_rgt + g_uv.y * marchcamer_0_up2 + u_p_marchcamerx0_fov * marchcamer_0_fwd);
+    float marchcamer_0_h1    = fract(sin(dot(g_uv, vec2(127.1, 311.7))) * 43758.5453);
+    float marchcamer_0_h2    = fract(sin(dot(g_uv, vec2(269.5, 183.3))) * 43758.5453);
+    float marchcamer_0_lr    = u_p_marchcamerx0_aperture * sqrt(marchcamer_0_h1);
+    float marchcamer_0_lth   = 6.28318 * marchcamer_0_h2 + time_0_time * u_p_marchcamerx0_lensSpeed;
+    vec3  marchcamer_0_ro    = marchcamer_0_ro0 + marchcamer_0_lr * (cos(marchcamer_0_lth) * marchcamer_0_rgt + sin(marchcamer_0_lth) * marchcamer_0_up2);
+    vec3  marchcamer_0_rd    = normalize((marchcamer_0_ro0 + marchcamer_0_rd0 * max(u_p_marchcamerx0_focalDist, 0.05)) - marchcamer_0_ro);
+    float marchloopg_0_jh = marchIGN(gl_FragCoord.xy);
+    float marchloopg_0_t   = 0.001 + u_p_marchloopgx0_jitter * marchloopg_0_jh * (u_p_marchloopgx0_maxDist / float(80));
+    float marchloopg_0_hit = 0.0;
+    int   marchloopg_0_si  = 80;
+    for (int marchloopg_0_i = 0; marchloopg_0_i < 80; marchloopg_0_i++) {
+        vec3  marchloopg_0_rp_raw = marchcamer_0_ro + marchloopg_0_t * marchcamer_0_rd;
+        vec3  marchloopg_0_rp = marchBody_marchloopg_0(marchloopg_0_rp_raw, marchloopg_0_t, marchcamer_0_ro, marchcamer_0_rd);
+        float marchloopg_0_d  = mapScene_torus_0(marchloopg_0_rp);
+        if (marchloopg_0_d < 0.0005) { marchloopg_0_hit = 1.0; marchloopg_0_si = marchloopg_0_i; break; }
+        marchloopg_0_t += marchloopg_0_d * u_p_marchloopgx0_stepScale;
+        if (marchloopg_0_t > u_p_marchloopgx0_maxDist) { marchloopg_0_si = marchloopg_0_i; break; }
+    }
+    float marchloopg_0_iter      = float(marchloopg_0_si) / float(80);
+    float marchloopg_0_iterCount = float(marchloopg_0_si);
+    vec3  marchloopg_0_hp_raw  = marchcamer_0_ro + marchloopg_0_t * marchcamer_0_rd;
+    vec3  marchloopg_0_hp  = marchBody_marchloopg_0(marchloopg_0_hp_raw, marchloopg_0_t, marchcamer_0_ro, marchcamer_0_rd);
+    float marchloopg_0_e   = 0.001;
+    vec3  marchloopg_0_n   = normalize(vec3(
+        mapScene_torus_0(marchBody_marchloopg_0(marchloopg_0_hp_raw+vec3(marchloopg_0_e,0.0,0.0), marchloopg_0_t, marchcamer_0_ro, marchcamer_0_rd)) - mapScene_torus_0(marchBody_marchloopg_0(marchloopg_0_hp_raw-vec3(marchloopg_0_e,0.0,0.0), marchloopg_0_t, marchcamer_0_ro, marchcamer_0_rd)),
+        mapScene_torus_0(marchBody_marchloopg_0(marchloopg_0_hp_raw+vec3(0.0,marchloopg_0_e,0.0), marchloopg_0_t, marchcamer_0_ro, marchcamer_0_rd)) - mapScene_torus_0(marchBody_marchloopg_0(marchloopg_0_hp_raw-vec3(0.0,marchloopg_0_e,0.0), marchloopg_0_t, marchcamer_0_ro, marchcamer_0_rd)),
+        mapScene_torus_0(marchBody_marchloopg_0(marchloopg_0_hp_raw+vec3(0.0,0.0,marchloopg_0_e), marchloopg_0_t, marchcamer_0_ro, marchcamer_0_rd)) - mapScene_torus_0(marchBody_marchloopg_0(marchloopg_0_hp_raw-vec3(0.0,0.0,marchloopg_0_e), marchloopg_0_t, marchcamer_0_ro, marchcamer_0_rd))
+    ));
+    float marchloopg_0_dist   = marchloopg_0_t;
+    float marchloopg_0_depth  = clamp(marchloopg_0_t / u_p_marchloopgx0_maxDist, 0.0, 1.0);
+    vec3  marchloopg_0_normal = marchloopg_0_n * marchloopg_0_hit;
+    vec3  marchloopg_0_bg     = u_p_marchloopgx0_bg;
+    vec3  marchloopg_0_ld     = normalize(vec3(1.5, 2.0, 1.0));
+    float marchloopg_0_diff   = max(0.0, dot(marchloopg_0_n, marchloopg_0_ld));
+    vec3  marchloopg_0_alb    = u_p_marchloopgx0_albedo;
+    vec3  marchloopg_0_color  = marchloopg_0_hit > 0.5 ? marchloopg_0_alb * (0.15 + 0.85 * marchloopg_0_diff) : marchloopg_0_bg;
+    // Multi-Light: the torus lit by a sun from above and a faint blue sky; misses (Hit 0) stay black.
+    vec3 multilight_0_color = marchloopg_0_hit > 0.5 ? multiLight(colorpicke_0_rgb, marchloopg_0_normal, 1.0, 1.0, vec3(u_p_multilightx0_sunDirX, u_p_multilightx0_sunDirY, u_p_multilightx0_sunDirZ), vec3(u_p_multilightx0_sunR, u_p_multilightx0_sunG, u_p_multilightx0_sunB), vec3(u_p_multilightx0_skyR, u_p_multilightx0_skyG, u_p_multilightx0_skyB), vec3(u_p_multilightx0_bounceR, u_p_multilightx0_bounceG, u_p_multilightx0_bounceB)) : vec3(0.0);
+    // Tone Map: keeps the lit torus from clipping; its colour is what the swarm is drawn over.
+    vec3 tone_0_color = toneACES(multilight_0_color);
+    // Draw agents in 3D through the scene's camera: Camera from and Camera ray are the March Camera's, so the swarm stands in the scene; Depth is the March Loop's Distance, so walkers behind the torus are hidden.
+    // Colour by Speed, fast first, on the Ice palette: the fast ones whipping through the hole pale, the slower ones deep blue. Blur 0.25 softens the near and far ones.
+    // Try: unwire Depth to see the walkers behind the torus too.
+    vec4 drawagents_0_s = texture2D(u_agdraw_drawagents_0, agUv(g_uv));
+    vec3 drawagents_0_color = tone_0_color + max(drawagents_0_s.rgb, vec3(0.0));
+    // Output: the swarm drawn into the lit torus scene is the picture.
+    gl_FragColor = vec4(drawagents_0_color, 1.0);
+}",
+  "paramUniforms": {
+    "u_p_agentagex0_span": 1,
+    "u_p_agentcollix0_bounce": 0.2,
+    "u_p_agentcollix0_cushion": 0.18,
+    "u_p_agentcollix0_friction": 0.02,
+    "u_p_agentcollix0_margin": 0.03,
+    "u_p_agentcollix0_reach": 1.6,
+    "u_p_agentcollix0_x": 0,
+    "u_p_agentcollix0_y": 0,
+    "u_p_agentcollix0_z": 0,
+    "u_p_agentcurlx0_evolve": 0.3,
+    "u_p_agentcurlx0_size": 1.4,
+    "u_p_agentcurlx0_strength": 0.6,
+    "u_p_agentemitx0_burst": 0,
+    "u_p_agentemitx0_life": 8,
+    "u_p_agentemitx0_lifeVar": 0.5,
+    "u_p_agentemitx0_rate": 20000,
+    "u_p_agentemitx0_share": 1,
+    "u_p_agentemitx0_size": 1,
+    "u_p_agentemitx0_speed": 0.3,
+    "u_p_agentemitx0_speedVar": 0.4,
+    "u_p_agentemitx0_spread": 0,
+    "u_p_agentemitx0_x": 0,
+    "u_p_agentemitx0_y": 0,
+    "u_p_agentemitx0_z": 0,
+    "u_p_agentintegx0_drag": 1.2,
+    "u_p_agentintegx0_mass": 1,
+    "u_p_agentintegx0_maxSpeed": 3,
+    "u_p_colorpickex0_color": [
+      0.32,
+      0.34,
+      0.4,
+    ],
+    "u_p_drawagentsx0_blur": 0.25,
+    "u_p_drawagentsx0_brightness": 2.4,
+    "u_p_drawagentsx0_camAngle": 0,
+    "u_p_drawagentsx0_camDist": 3.2,
+    "u_p_drawagentsx0_camElevation": 15,
+    "u_p_drawagentsx0_camX": 0,
+    "u_p_drawagentsx0_camY": 0,
+    "u_p_drawagentsx0_camZ": 0,
+    "u_p_drawagentsx0_colorA": [
+      1,
+      0.75,
+      0.35,
+    ],
+    "u_p_drawagentsx0_colorB": [
+      0.25,
+      0.55,
+      1,
+    ],
+    "u_p_drawagentsx0_drift": 0,
+    "u_p_drawagentsx0_focus": 1,
+    "u_p_drawagentsx0_fov": 1.8,
+    "u_p_drawagentsx0_glow": 1,
+    "u_p_drawagentsx0_maxBlur": 7,
+    "u_p_drawagentsx0_ortho": 0,
+    "u_p_drawagentsx0_rotSpeed": 0,
+    "u_p_drawagentsx0_size": 1.5,
+    "u_p_drawagentsx0_speedRef": 2.5,
+    "u_p_marchcamerx0_aperture": 0,
+    "u_p_marchcamerx0_camAngle": 0.4,
+    "u_p_marchcamerx0_camDist": 3.6,
+    "u_p_marchcamerx0_camElevation": 0.42,
+    "u_p_marchcamerx0_focalDist": 3,
+    "u_p_marchcamerx0_fov": 1.6,
+    "u_p_marchcamerx0_lensSpeed": 0,
+    "u_p_marchcamerx0_rotSpeed": 0.12,
+    "u_p_marchcamerx0_targetX": 0,
+    "u_p_marchcamerx0_targetY": 0,
+    "u_p_marchcamerx0_targetZ": 0,
+    "u_p_marchloopgx0_albedo": [
+      0.6,
+      0.7,
+      0.9,
+    ],
+    "u_p_marchloopgx0_bg": [
+      0.02,
+      0.022,
+      0.035,
+    ],
+    "u_p_marchloopgx0_jitter": 1,
+    "u_p_marchloopgx0_maxDist": 20,
+    "u_p_marchloopgx0_stepScale": 1,
+    "u_p_multilightx0_bounceB": 0.02,
+    "u_p_multilightx0_bounceG": 0.03,
+    "u_p_multilightx0_bounceR": 0.05,
+    "u_p_multilightx0_skyB": 0.16,
+    "u_p_multilightx0_skyG": 0.1,
+    "u_p_multilightx0_skyR": 0.08,
+    "u_p_multilightx0_sunB": 0.7,
+    "u_p_multilightx0_sunDirX": 0.6,
+    "u_p_multilightx0_sunDirY": 0.8,
+    "u_p_multilightx0_sunDirZ": 0.3,
+    "u_p_multilightx0_sunG": 0.9,
+    "u_p_multilightx0_sunR": 1,
+    "u_p_smokeringxflowx0_hold": 6,
+    "u_p_smokeringxflowx0_ringR": 0.85,
+    "u_p_smokeringxflowx0_roll": 2.4,
+    "u_p_smokeringxflowx0_shell": 0.2,
+    "u_p_smokeringxflowx0_spin": 0.7,
+    "u_p_swarmx3_preroll": 5,
+    "u_p_swarmx3_restart": 0,
+    "u_p_swarmx3_seed": 1,
+    "u_p_swarmx3_stepsPerFrame": 2,
+    "u_p_torusx0xsgxtorx0_majorR": 0.85,
+    "u_p_torusx0xsgxtorx0_minorR": 0.3,
+  },
+  "splats": [],
+}
+`;
