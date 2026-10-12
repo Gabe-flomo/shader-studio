@@ -46,9 +46,8 @@ import {
 import { useWarpBuilder } from '../../warpBuilder/store';
 import { finishWarpBuilder, sendWarpTo2D } from '../../warpBuilder/actions';
 import { COND_GLYPHS, FN_GLYPHS, GLYPH_SIZE, type CondGlyph } from '../../warpBuilder/glyphs';
-import { applyTile, slotMenuGroups } from '../../warpBuilder/slotMenu';
-import { ContextMenuArea } from '../ui/ContextMenuArea';
-import type { MenuItem } from '../ui/Menu';
+import { applyTile } from '../../warpBuilder/slotMenu';
+import { SlotMenu } from './SlotMenu';
 import { WarpPreview } from './WarpPreview';
 import { usePhoneDialog } from '../ui/phoneDialog';
 import { toast } from '../ui/toastStore';
@@ -71,30 +70,6 @@ const readDrag = (e: DragEvent): TileDrag | null => {
 
 /** Drop (or click-apply) a tile: one undo step, then pick what the drop says to pick next. */
 function apply(to: TileTarget, drag: TileDrag): void { applyTile(to, drag); }
-
-/** The empty-slot menu (right-click): Number, the variables, then the rest, as a drop would fill it. */
-function slotMenuItems(to: TileTarget): MenuItem[] {
-  const items: MenuItem[] = [];
-  for (const g of slotMenuGroups(to)) {
-    if (g.heading) items.push({ heading: g.heading });
-    for (const o of g.options) {
-      items.push({
-        label: o.label, hint: o.hint,
-        onSelect: () => {
-          applyTile(to, o.drag);
-          // A number: the picked tile's text box takes the keys, so it can be typed straight away.
-          if (o.drag.from === 'palette' && o.drag.kind === 'num') {
-            window.setTimeout(() => {
-              const el = document.querySelector<HTMLInputElement>('[data-warp-picked] input[aria-label="The picked tile as text"]');
-              el?.focus(); el?.select();
-            }, 30);
-          }
-        },
-      });
-    }
-  }
-  return items;
-}
 
 /** A palette tile clicked: it lands on the picked tile, or the end of the first row. */
 function applyToSelection(drag: TileDrag): void {
@@ -144,6 +119,7 @@ function TileChip({ tile, path, block, line, params }: { tile: Tile; path: TileP
   const sel = useWarpBuilder(s => s.sel);
   const picked = !!sel && sel.block === block && sel.line === line && samePath(sel.path, path);
   const drop = useDropZone({ block, line, path });
+  const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
   const kids = (list: Tile[], from = 0) => list.map((c, i) => <TileChip key={i} tile={c} path={[...path, from + i]} block={block} line={line} params={params} />);
   const base: CSSProperties = {
     display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 5px', minHeight: 26, borderRadius: 7, cursor: 'grab',
@@ -218,7 +194,12 @@ function TileChip({ tile, path, block, line, params }: { tile: Tile; path: TileP
   );
   // An empty slot: right-click (or long-press) lists what can fill it.
   return tile.k === 'hole'
-    ? <ContextMenuArea style={{ display: 'inline-flex' }} minWidth={200} items={() => slotMenuItems({ block, line, path })}>{chip}</ContextMenuArea>
+    ? (
+      <span style={{ display: 'inline-flex' }} onContextMenu={e => { e.preventDefault(); e.stopPropagation(); setMenuAt({ x: e.clientX, y: e.clientY }); }}>
+        {chip}
+        {menuAt && <SlotMenu x={menuAt.x} y={menuAt.y} to={{ block, line, path }} onClose={() => setMenuAt(null)} />}
+      </span>
+    )
     : chip;
 }
 

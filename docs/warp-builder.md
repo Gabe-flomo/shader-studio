@@ -156,7 +156,7 @@ the preview and the build all agree.
 ## Filling a slot from a menu
 
 Right-click (or long-press) an empty slot, the dashed **drop** tile, for a list of what can fill it.
-The order: **Number** (a slider, with its text box focused so you can type the value), the
+A compact menu (flat Number and variables; Operators, Functions and Compare fold open in place, names only, descriptions in tooltips). The order: **Number** (a slider, with its text box focused so you can type the value), the
 **variables** (x, y, uv, time and the rest, in the palette's order; i, k, n and uv0 only in a looped
 block), then the **operators**, the **functions**, **If**, and the conditions where the slot is a
 condition. A slot only lists what it can take. Arrow keys and Enter work; Escape or a click outside

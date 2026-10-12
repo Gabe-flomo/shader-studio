@@ -27,7 +27,7 @@ export function slotMenuGroups(to: TileTarget): SlotGroup[] {
     { heading: 'Functions', options: FN_TILES.map(f => ({ label: f.label, hint: f.blurb, drag: pal({ kind: 'fn', fn: f.fn }) })) },
     { heading: 'If', options: [{ label: 'if … then … else', hint: 'Split space by a condition', drag: pal({ kind: 'if' }) }] },
     {
-      heading: 'Conditions',
+      heading: 'Compare',
       options: [
         ...CMP_TILES.map(c => ({ label: c.label, hint: c.blurb, drag: pal({ kind: 'cmp', op: c.op }) })),
         ...LOGIC_TILES.map(c => ({ label: c.label, hint: c.blurb, drag: c.op === '!' ? pal({ kind: 'not' }) : pal({ kind: 'logic', op: c.op }) })),

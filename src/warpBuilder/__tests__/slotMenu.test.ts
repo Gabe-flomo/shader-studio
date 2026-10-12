@@ -63,7 +63,7 @@ describe('the empty-slot menu', () => {
     spec.blocks[0].block.lines[0].rhs = '_ > 0 ? 1 : 0';
     useWarpBuilder.getState().openWith(spec);
     const only = slotMenuGroups({ block: 0, line: 0, path: [0] });
-    expect(only.map(g => g.heading)).toEqual(['Conditions']);
+    expect(only.map(g => g.heading)).toEqual(['Compare']);
   });
 
   it('picking an item fills the slot as a drop would, in one undo step', () => {
