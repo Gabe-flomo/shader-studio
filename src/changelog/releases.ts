@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.181',
+    date: '2026-10-11',
+    title: 'Ball action',
+    highlights: [
+      { area: 'Studio', text: 'Pieces: Scatter (seeded, with turn and size), Instability, Dim floor, and a Ball shape that glows from its centre. Example: Pieces: ball action.' },
+      { area: 'Studio', text: 'Balls (3D): Scatter in X, Y and Z, Scatter depth, Twist and Instability; balls can now move sideways without being cut off.' },
+      { area: 'Studio', text: 'Pieces and Balls get Focus and Blur like the particle camera. 3D sideways scatter and Blur are slow for now.' },
+    ],
+  },
+  {
     id: '2026.10.180',
     date: '2026-10-11',
     title: 'Map a hand from the card',
