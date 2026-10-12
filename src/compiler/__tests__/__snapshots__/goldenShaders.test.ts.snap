@@ -254,7 +254,7 @@ exports[`golden shaders: every Play example exports the same bundle > finishData
 
 exports[`golden shaders: every Play example exports the same bundle > finishGrade 1`] = `
 {
-  "bundle": "02b12fe3ed07020e5fe2dbe12049:5327",
+  "bundle": "0b5e364953f6b70186df145d557a:5417",
   "missing": [],
 }
 `;
@@ -324,7 +324,7 @@ exports[`golden shaders: every Play example exports the same bundle > finishTime
 
 exports[`golden shaders: every Play example exports the same bundle > finishWater 1`] = `
 {
-  "bundle": "197ab67f6af71f12af6e804fd1d2:121036",
+  "bundle": "06b22d4e31a40d1a5dbf25659dbd:121126",
   "missing": [],
 }
 `;

@@ -524,6 +524,7 @@ function editorFor(e: FinishEffect, k: RowKit, touch: boolean, layers: LayerRef[
       </>
     );
     case 'rays': return <RaysEditor e={e} k={k} onPatch={onPatch} />;
+    case 'chroma': return <ChromaEditor e={e} k={k} onPatch={onPatch} />;
     case 'feedback': return <FeedbackEditor e={e} k={k} layers={layers} onPatch={onPatch} />;
     case 'echo': return <EchoEditor e={e} k={k} layers={layers} onPatch={onPatch} />;
     case 'custom': return <CustomEditor e={e} k={k} touch={touch} onReplace={onReplace} onEdit={onEdit} />;
@@ -709,6 +710,30 @@ function RaysEditor({ e, k, onPatch }: { e: FinishEffect; k: RowKit; onPatch: (c
       {k.nums('length', 'cx', 'cy', 'threshold', 'knee', 'intensity', ...(Math.round(num(e, 'mode')) === 0 ? [] : ['opacity']), 'decay', 'falloff')}
       {k.colour('Tint', ['tintR', 'tintG', 'tintB'], 'The streaks’ colour: white keeps the colours of what streaks.')}
       {k.note(<>After Effects’ CC Radial Fast Blur: the picture blurred along lines from a centre. <b>Brightest</b> with a <b>Threshold</b> throws rays from bright shapes and text. Fast at any Length: four small passes, each reading the one before eight times further apart. Map the pointer or a hand onto Centre X / Y to aim it.</>)}
+    </>
+  );
+}
+
+const CHROMA_LOOKS = [
+  { value: '0', label: 'Spectral', title: 'Many taps across the spectrum that add up to white: smooth rainbow fringes' },
+  { value: '1', label: 'Channel split', title: 'Red and blue copies pushed apart, green still: a clean, graphic split' },
+];
+const CHROMA_GEOMETRIES = [
+  { value: '0', label: 'Lateral', title: 'Outward from the centre, growing to the edges (a lens)' },
+  { value: '1', label: 'Axial', title: 'No shift: red and violet out of focus, a coloured halo round highlights' },
+  { value: '2', label: 'Directional', title: 'Every pixel spread along Angle (a prism)' },
+];
+
+/** Chromatic aberration (play/kit/chroma.js): Look and Geometry as choices, then the numbers that geometry uses. */
+function ChromaEditor({ e, k, onPatch }: { e: FinishEffect; k: RowKit; onPatch: (c: Partial<FinishEffect>) => void }) {
+  const geom = Math.round(num(e, 'geometry'));
+  const spectral = Math.round(num(e, 'style')) === 0;
+  return (
+    <>
+      {k.row('Look', <Segmented size="sm" ariaLabel="Chromatic aberration look" value={String(spectral ? 0 : 1)} onChange={v => onPatch({ style: Number(v) })} options={CHROMA_LOOKS} />, 'Spectral: smooth rainbow fringes. Channel split: red and blue copies.')}
+      {k.row('Geometry', <Segmented size="sm" ariaLabel="Chromatic aberration geometry" value={String(geom)} onChange={v => onPatch({ geometry: Number(v) })} options={CHROMA_GEOMETRIES} />, 'Lateral: outward from the centre. Axial: a halo round highlights. Directional: a prism.')}
+      {k.nums('amount', ...(geom === 0 ? ['falloff'] : []), ...(spectral ? ['samples'] : []), 'blur', ...(geom === 2 ? ['angle'] : ['cx', 'cy']), 'distortion')}
+      {k.note(<>A lens bends each wavelength a little differently. <b>Spectral</b> reads the picture at many taps across the spectrum, each moved by its wavelength and weighed so they add up to white: edges fringe in a smooth rainbow, not three copies. <b>Blur</b> softens each colour by how far it moved, so the fringe melts in.</>)}
     </>
   );
 }
