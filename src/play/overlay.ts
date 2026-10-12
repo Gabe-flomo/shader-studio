@@ -18,6 +18,8 @@ import { playPerfOn, recordPlayLayer, recordPlayStage } from '../lib/perfStats';
 import type { ActionKind, PlayLayer, PlayRecord } from '../types/play';
 import { DEFAULT_HANDS, emptyPlayRecord, isLookAction } from '../types/play';
 import { DEFAULT_FACE, DEFAULT_POSE } from '../types/playTracking';
+import { handPalette } from './handStyle';
+import { useThemeStore } from '../theme/themeStore';
 import { playEngine } from '../lib/playEngine';
 import { liveAudio } from '../lib/liveAudio';
 import { layerAudio } from '../lib/layerAudio';
@@ -736,7 +738,8 @@ class PlayOverlay {
     const st = playEngine.handState();
     if (!st.live) return null;
     const h = this.record.hands ?? DEFAULT_HANDS;
-    return h.overlay ? { state: st, colour: h.colour } : null;
+    // In the app's theme colours (handStyle.ts): right hand in the accent, left in violet
+    return h.overlay ? { state: st, colour: h.colour, palette: handPalette(useThemeStore.getState().mode, h.colour) } : null;
   }
 
   /** The face and the body over the picture, each with its own Show on picture switch and colour. */
