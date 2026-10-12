@@ -707,9 +707,9 @@ export const FN_HALATION_PRESETS = [
 FN_EFFECTS.halation.presets = FN_HALATION_PRESETS;
 
 /** The kinds in the Add menu's order. Each kind appears at most once in a stack. */
-export const FN_KINDS = ['grade', 'lens', 'chroma', 'vignette', 'crt', 'bloom', 'deepglow', 'halation', 'grain', 'flicker', 'shake', 'time',
+export const FN_KINDS = ['grade', 'lens', 'chroma', 'vignette', 'crt', 'bloom', 'halation', 'grain', 'flicker', 'shake', 'time',
   'glitch', 'ripple', 'water', 'displace', 'mosaic', 'mirror', 'gradmap', 'posterize', 'edges', 'feedback', 'echo', 'pixelsort', 'halftone', 'ascii', 'leaks',
-  'datamosh', 'motionx', 'rays'];
+  'datamosh', 'motionx', 'rays', 'deepglow'];
 /**
  * Retired kinds and what replaces them: not offered in the Add menu (FN_OFFERED_KINDS), but a stack that
  * has one keeps it, loads and draws it as before, and its card offers the upgrade (fnUpgradeEffect).

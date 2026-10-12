@@ -97,7 +97,7 @@ export function dgCompositePixel(c, glow, mode) {
   return m === 1 ? 1 - (1 - c) * (1 - Math.min(Math.max(glow, 0), 1)) : c + glow;
 }
 
-const fl = n => (Number.isInteger(n) ? `${n}.0` : `${n}`);
+const dgFl = n => (Number.isInteger(n) ? `${n}.0` : `${n}`);
 
 /**
  * Helpers that don't read a texture (any GLSL version): the soft knee, the weights, a dither and the
@@ -116,9 +116,9 @@ vec3 dgKeep(vec3 c, float thr, float knee) {
 float dgReach(float radius, float s) { return max(1.0, log2(max(radius, 1.0) * s)); }
 // Level k's weight per channel: each level ${DG_TAIL} stops below the one before, cut off over the level past the reach (red's reach Spread levels further, blue's less).
 vec3 dgW(float k, float reach, float spread) {
-  vec3 r = vec3(reach) + vec3(1.0, 0.0, -1.0) * spread * ${fl(DG_SPREAD_LEVELS)};
+  vec3 r = vec3(reach) + vec3(1.0, 0.0, -1.0) * spread * ${dgFl(DG_SPREAD_LEVELS)};
   vec3 cut = k <= 1.0 ? vec3(1.0) : clamp(r - k + 1.0, 0.0, 1.0);
-  return cut * exp2(-${fl(DG_TAIL)} * (k - 1.0));
+  return cut * exp2(-${dgFl(DG_TAIL)} * (k - 1.0));
 }
 vec3 dgWSum(float reach, float spread, float levels) {
   vec3 s = vec3(0.0);
@@ -169,7 +169,7 @@ vec3 dgSingle(sampler2D s, vec2 uv, vec2 t, float radius, float thr, float knee,
   vec3 acc = vec3(0.0);
   float ws = 0.0;
   for (int i = 0; i < ${DG_SINGLE_TAPS}; i++) {
-    float f = (float(i) + jit) / ${fl(DG_SINGLE_TAPS)};
+    float f = (float(i) + jit) / ${dgFl(DG_SINGLE_TAPS)};
     float a = float(i) * 2.39996 + jit * 6.28318;
     float w = exp(-4.0 * f);
     acc += dgKeep(${T}(s, uv + vec2(cos(a), sin(a)) * radius * f * f * t).rgb, thr, knee) * w;
