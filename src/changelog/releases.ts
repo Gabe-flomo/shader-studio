@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.193',
+    date: '2026-10-12',
+    title: 'Ball action clip',
+    highlights: [
+      { area: 'Studio', text: 'Examples that use a video now play a built-in Ball action clip: Time Cube, Frame Stack, Time Slice, Texture tools and Webcam CMYK.' },
+      { area: 'Studio', text: 'New Time Cubes start with Ball action too. Choose video still offers the old painted test clip, and saved graphs that use it keep it.' },
+    ],
+  },
+  {
     id: '2026.10.192',
     date: '2026-10-12',
     title: 'Time Cube builder',
