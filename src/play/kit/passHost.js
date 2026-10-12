@@ -49,12 +49,15 @@ export function phCreate(gl, passes, env) {
 
   const makeTarget = (p, w, h) => {
     const byte = p.format === 'byte' || !env.halfFloat;
-    const filter = p.filter === 'nearest' ? gl.NEAREST : gl.LINEAR, wrap = phWrap(gl, p.wrap);
+    // Full float (32-bit, for data) where the GPU can draw into it, else half; exact texels without float filtering.
+    const full = !byte && p.format === 'float' && !!gl.getExtension('EXT_color_buffer_float');
+    const smooth = p.filter !== 'nearest' && (!full || !!gl.getExtension('OES_texture_float_linear'));
+    const filter = smooth ? gl.LINEAR : gl.NEAREST, wrap = phWrap(gl, p.wrap);
     const tex = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, tex);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filter); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filter);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrap); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, wrap);
-    gl.texImage2D(gl.TEXTURE_2D, 0, byte ? gl.RGBA8 : gl.RGBA16F, w, h, 0, gl.RGBA, byte ? gl.UNSIGNED_BYTE : gl.HALF_FLOAT, null);
+    gl.texImage2D(gl.TEXTURE_2D, 0, byte ? gl.RGBA8 : full ? gl.RGBA32F : gl.RGBA16F, w, h, 0, gl.RGBA, byte ? gl.UNSIGNED_BYTE : full ? gl.FLOAT : gl.HALF_FLOAT, null);
     const fb = gl.createFramebuffer();
     gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);

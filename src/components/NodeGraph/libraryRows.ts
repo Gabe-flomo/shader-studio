@@ -35,6 +35,7 @@ export const HIDDEN_NODES = new Set([
   'curveTraceBeamStep',
   // One frame of a Feedback (texture) buffer (compiler/feedbackExpand.ts).
   'textureFeedbackStep',
+  'dataTexturePack',
   // Made by Bake… (lib/bake): a node's frozen render, never added by hand.
   'baked',
   // An Agents group's anchors (made with the group) and its update shader's end (compiler/agentGraph.ts).

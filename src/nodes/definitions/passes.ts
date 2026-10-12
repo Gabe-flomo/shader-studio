@@ -78,8 +78,8 @@ export const PassNode: NodeDefinition = {
       { value: '1', label: '1 (full size)' }, { value: '0.5', label: '½' }, { value: '0.25', label: '¼' }, { value: '0.125', label: '⅛' },
       { value: '0.0625', label: '1/16' }, { value: '0.03125', label: '1/32' },
     ] },
-    format: { label: 'Format', type: 'select', hint: 'Half float keeps brightness above 1, so glows don\'t clip. 8-bit uses half the memory.', options: [
-      { value: 'half', label: 'Half float' }, { value: 'byte', label: '8-bit' },
+    format: { label: 'Format', type: 'select', hint: 'Half float keeps brightness above 1, so glows don\'t clip. 8-bit uses half the memory. Full float keeps data (positions, velocities) exact, at twice half float\'s memory.', options: [
+      { value: 'half', label: 'Half float' }, { value: 'byte', label: '8-bit' }, { value: 'float', label: 'Full float (32-bit, for data)' },
     ] },
     filter: { label: 'Filter', type: 'select', hint: 'Linear blends between texels; Nearest keeps them sharp (pixel art).', options: [
       { value: 'linear', label: 'Linear' }, { value: 'nearest', label: 'Nearest' },

@@ -61,6 +61,10 @@ export const TEXTURE_TOOL_EXAMPLE_INDEX: Record<string, { label: string; descrip
     label: 'Texture tools 10 · Camera echo trails', play: true,
     description: 'Echo trails for a camera: Feedback (texture) on a Video Input rising slowly and shifting hue, screened over the live picture. Plays the Ball action clip until you set the Video Input\'s Source to Webcam.',
   },
+  ttDataAdvect: {
+    label: 'Texture tools 11 · Data Texture: positions that drift', play: true,
+    description: 'A simulation kept in a Data Texture: every texel stores a position (full float, exact reads). Each frame an Expression Block reads last frame\'s position, pushes it along a swirling flow and writes it back; a second one draws a checkerboard at the stored positions, so the board is smeared by the flow. ↺ starts it over.',
+  },
 };
 
 /** The ordered keys, for the Texture tools folder. */
@@ -538,6 +542,66 @@ export function buildTextureToolExamples(): Record<string, ExampleGraph> {
 **How it is built.** Video Input → Feedback (texture) (Move Y, Hue drift, Blend Screen) → Levels → Blend (Screen) with the live video → Output.
 
 **Try.** Set the Video Input's Source to Webcam and wave. Rise 0 and Zoom 1.02 for a tunnel behind you. Tail 4 for long ghosts. Blend Over on the Feedback keeps only the brightest echo.`),
+  };
+
+
+  // ── 11 · Data Texture: a position per texel, advected by a flow, drawn as a smeared checkerboard ──
+  g.ttDataAdvect = {
+    ...TEXTURE_TOOL_EXAMPLE_INDEX.ttDataAdvect,
+    counter: 20,
+    nodes: [
+      n('uv', 'uvn', 40, 200, note('UV: this pixel\'s place in the picture. The simulation starts with every texel holding its own place.')),
+      n('time', 'clock', 40, 420, note('Time: turns the flow slowly, so the swirls change.')),
+      n('constant', 'speed', 40, 600, { label: 'Speed', value: 0.004, ...note('Speed: how far each position moves along the flow every frame (picture units). A Play control.') }),
+      expr('advect', 340, 300, {
+        label: 'Step', outputType: 'vec2',
+        inputs: [['prev', 'vec2', ['data', 'out0']], ['uv', 'vec2', ['uvn', 'uv']], ['t', 'float', ['clock', 'time']], ['speed', 'float', ['speed', 'value']]],
+        lines: [
+          ['vec2 flow', 'vec2(sin(prev.y * 3.0 + t * 0.7), cos(prev.x * 3.0 - t * 0.5))'],
+          ['float fresh', 'step(dot(prev, prev), 1e-10)'],
+        ],
+        result: 'mix(prev + speed * flow, uv, fresh)',
+        note: [
+          'Expression Block: one step of the simulation.',
+          'prev is the Data Texture\'s position output; this block feeds the Data Texture, so prev is last frame\'s value (the loop is a frame delay).',
+          'flow: a swirl that depends on where the position is (sin and cos of its other coordinate) and slowly on time.',
+          'fresh: 1 where nothing is stored yet (the texture starts at 0, and ↺ clears it), so the first frame writes this pixel\'s own place.',
+          'Result: last position pushed along the flow by Speed (or the start).',
+        ],
+      }),
+      { ...n('dataTexture', 'data', 640, 300, {
+        label: 'Positions', fields: [{ name: 'position', type: 'vec2', channels: 'rg' }], reads: [{ name: 'position', channels: 'rg' }],
+        format: 'float', read: 'exact',
+        ...note([
+          'Data Texture: one vec2 per texel, written into r and g, kept at full float so the positions stay exact frame after frame (half float would drift in steps).',
+          'Read: Exact texel, so a read never blends two positions.',
+          'Its position output read by Step (which feeds it) is last frame; read by Look it is this frame.',
+        ]) }, { in0: ['advect', 'result'] }) },
+      expr('look', 940, 300, {
+        label: 'Look', outputType: 'vec3',
+        inputs: [['p', 'vec2', ['data', 'out0']], ['uv', 'vec2', ['uvn', 'uv']]],
+        lines: [
+          ['vec2 c', 'step(0.5, fract(p * 4.0))'],
+          ['float board', 'abs(c.x - c.y)'],
+          ['float moved', 'smoothstep(0.0, 0.4, length(p - uv))'],
+        ],
+        result: 'mix(vec3(0.07, 0.08, 0.16), vec3(1.0, 0.72, 0.3), board) * (0.55 + 0.45 * moved)',
+        note: [
+          'Expression Block: draws a checkerboard at each stored position, so the board is carried by the flow.',
+          'c: for x and y, 1 in the upper half of each of 4 squares per unit along that axis, 0 in the lower half.',
+          'board: 1 on the light squares, where the two halves differ.',
+          'moved: brighter where the position has travelled far from its pixel.',
+        ],
+      }),
+      n('output', 'out', 1240, 300, note('Output: the smeared checkerboard.'), { color: ['look', 'result'] }),
+    ],
+    play: playRecord([
+      ctl('speed', 'speed::value', 'Speed', 0, 0.02, 0.0005),
+    ], `**What it shows.** A Data Texture keeping a simulation's state: a position per texel, stored exactly (full float) and read back as a vec2.
+
+**How it is built.** UV and Time → Step (Expression Block) → Data Texture (position → r g) → Look (Expression Block) → Output. Step also reads the Data Texture's position output: because it feeds the node, that read is last frame's, so each frame moves every position a little further.
+
+**Try.** ↺ to start over. Set Precision to Half float and watch the motion turn steppy. Turn up Speed, or change 4.0 in Look for a finer board.`),
   };
 
   return g;

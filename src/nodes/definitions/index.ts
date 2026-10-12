@@ -159,6 +159,7 @@ export { DeepGlowTextureNode, DeepGlowTextureStageNode } from './deepGlow';
 export { PassNode, PassOutputNode, SampleTextureNode, EdgesTextureNode, BlurTextureNode, GlowTextureNode, ChromaTextureNode, DisplaceTextureNode, DisplacementMapNode, JumpFloodTextureNode } from './passes';
 export { TextureMaskNode, TextureLevelsNode, TextureFlowNode, TextureNeighboursNode, TextureChangeNode, DistanceShapeNode, TextureFadeNode, ReadTextureNode } from './textureTools';
 export { TextureFeedbackNode, TextureFeedbackStepNode } from './textureFeedback';
+export { DataTextureNode, DataTexturePackNode, ReadChannelsNode } from './dataTexture';
 export { AgentsGroupNode, AgentInputsNode, AgentOutputNode, AgentStepOutNode, AgentSenseNode, AgentSteerNode, AgentMoveNode, AgentBySpeciesNode, AgentEmitNode, AgentDepositNode, TrailFieldNode, TrailStepOutNode, AgentProbeOutNode, DrawAgentsNode, SlimeMoldPresetNode, ParticlesPresetNode, CurlSmokePresetNode, SoundBurstPresetNode, MultiSlimePresetNode, AntsPresetNode, BoidsPresetNode, StrandsPresetNode, GrowPicturePresetNode, GalaxyPresetNode, MyceliumPresetNode, SandPlatePresetNode } from './agents';
 export { AgentGravityNode, AgentWindNode, AgentCurlNode, AgentAttractNode, AgentVortexNode, AgentFlowNode, AgentSoundKickNode, AgentIntegrateNode, AgentAgeNode, AgentCollideNode, AgentChladniNode } from './agentForces';
 export { AgentNeighboursNode } from './agentNeighbours';
@@ -303,6 +304,7 @@ import { ShaderTextureNode, ShaderTextureOutputNode } from './shaderTexture';
 import { PassNode, PassOutputNode, SampleTextureNode, EdgesTextureNode, BlurTextureNode, GlowTextureNode, ChromaTextureNode, DisplaceTextureNode, DisplacementMapNode, JumpFloodTextureNode } from './passes';
 import { TextureMaskNode, TextureLevelsNode, TextureFlowNode, TextureNeighboursNode, TextureChangeNode, DistanceShapeNode, TextureFadeNode, ReadTextureNode } from './textureTools';
 import { TextureFeedbackNode, TextureFeedbackStepNode } from './textureFeedback';
+import { DataTextureNode, DataTexturePackNode, ReadChannelsNode } from './dataTexture';
 import { AgentsGroupNode, AgentInputsNode, AgentOutputNode, AgentStepOutNode, AgentSenseNode, AgentSteerNode, AgentMoveNode, AgentBySpeciesNode, AgentEmitNode, AgentDepositNode, TrailFieldNode, TrailStepOutNode, AgentProbeOutNode, DrawAgentsNode, SlimeMoldPresetNode, ParticlesPresetNode, CurlSmokePresetNode, SoundBurstPresetNode, MultiSlimePresetNode, AntsPresetNode, BoidsPresetNode, StrandsPresetNode, GrowPicturePresetNode, GalaxyPresetNode, MyceliumPresetNode, SandPlatePresetNode } from './agents';
 import { AgentNeighboursNode } from './agentNeighbours';
 import { AgentRideCurveNode } from './agentRideCurve';
@@ -577,6 +579,9 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   // Feedback (texture): a Pass, Fade and Read in one node (compiler/feedbackExpand.ts opens it).
   textureFeedback: TextureFeedbackNode,
   textureFeedbackStep: TextureFeedbackStepNode,
+  dataTexture: DataTextureNode,
+  dataTexturePack: DataTexturePackNode,
+  readChannels: ReadChannelsNode,
   // Agents (slime mold and walkers built from nodes): docs/agents-plan.md
   agentsGroup: AgentsGroupNode,
   agentInputs: AgentInputsNode,

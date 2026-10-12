@@ -44,6 +44,7 @@ import { GRID_TYPE, expandGridRules } from './gridRulesExpand';
 import { expandCurveBeams, isBeamTrace } from './curveBeamExpand';
 import { expandShaderTextures, hasShaderTexture } from './shaderTextureExpand';
 import { expandFeedback, isFeedbackNode } from './feedbackExpand';
+import { expandDataTextures, isDataTexture } from './dataTextureExpand';
 import { SHADER_TEXTURE_TYPE } from '../nodes/definitions/shaderTexture';
 
 export const PASS_TYPE = 'pass';
@@ -61,7 +62,7 @@ export function hasPassNode(nodes: GraphNode[]): boolean {
     // So is a Curve Trace in Draw: Beam, into its screen Pass (compiler/curveBeamExpand.ts).
     // So is a Shader Texture, into its inside and a Pass (compiler/shaderTextureExpand.ts).
     // And a Feedback (texture), into its step and buffer Pass (compiler/feedbackExpand.ts).
-    if (n.type === PASS_TYPE || n.type === GRID_TYPE || n.type === SHADER_TEXTURE_TYPE || isBeamTrace(n) || isFeedbackNode(n)) return true;
+    if (n.type === PASS_TYPE || n.type === GRID_TYPE || n.type === SHADER_TEXTURE_TYPE || isBeamTrace(n) || isFeedbackNode(n) || isDataTexture(n)) return true;
     const sg = n.params?.subgraph as Sub;
     if (sg?.nodes && hasPassNode(sg.nodes)) return true;
   }
@@ -207,10 +208,11 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
     // Curve Trace in Draw: Beam: each opened into its screen Pass and step (compiler/curveBeamExpand.ts); without one, unchanged.
     const beams = expandCurveBeams(gridOnly.nodes);
     // Feedback (texture): each opened into its step and buffer Pass (compiler/feedbackExpand.ts); without one, unchanged.
-    const feedback = expandFeedback(beams.nodes);
+    // Data Textures: each opened into its pack, its Pass and a Read channels per output (compiler/dataTextureExpand.ts).
+    const feedback = expandFeedback(expandDataTextures(beams.nodes));
     const grid = beams.bindAs.size || feedback.bindAs.size
       ? { nodes: feedback.nodes, bindAs: new Map([...gridOnly.bindAs, ...beams.bindAs, ...feedback.bindAs]) }
-      : gridOnly;
+      : feedback.nodes !== beams.nodes ? { nodes: feedback.nodes, bindAs: gridOnly.bindAs } : gridOnly;
     // With agents: every node of (or wired into) a 3D group marked for its space (a 2D graph is left as it is).
     const nodes = agents ? syncAgentSpaces(grid.nodes, getNodeDefinition) : grid.nodes;
 
@@ -457,7 +459,7 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
         nodeId: id, slug, label, fragmentShader: r.fragmentShader,
         reads: [...[...c.reads].map(r2 => slugs.get(r2)!), ...(hidden.reads.get(id) ?? [])], readsPrevious: [...c.readsPrevious].map(r2 => slugs.get(r2)!),
         scale: PASS_SCALES[String(pass.params.scale ?? '1')] ?? 1,
-        format: sel(pass.params.format, ['half', 'byte'] as const, 'half'),
+        format: sel(pass.params.format, ['half', 'byte', 'float'] as const, 'half'),
         filter: sel(pass.params.filter, ['linear', 'nearest'] as const, 'linear'),
         wrap: sel(pass.params.wrap, ['clamp', 'repeat', 'mirror'] as const, 'clamp'),
         previous: previousRead.has(id), live: live.has(id),

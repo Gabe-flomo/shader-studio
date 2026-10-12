@@ -140,7 +140,7 @@ export interface WebPass {
   label: string;
   fragmentShader: string;
   scale: number;
-  format: 'half' | 'byte';
+  format: 'half' | 'byte' | 'float';
   filter: 'linear' | 'nearest';
   wrap: 'clamp' | 'repeat' | 'mirror';
   previous: boolean;
