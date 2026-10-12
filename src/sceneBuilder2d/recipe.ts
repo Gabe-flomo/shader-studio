@@ -43,8 +43,8 @@ import { parseDepthArgs, printDepth } from './depth';
 import { TEX_FITS, findTex, newTexUse, texSlug, type TexFit, type TexSource, type TexUse } from '../builders/textures';
 import {
   COLOUR_BYS, DEFAULT_COLOR, DEFAULT_LOOK, LOOK_MUTES_2D, MAX_DUP, MAX_LEVELS, MOTIONS, MOTION_BY_KIND, SHAPES, SHAPE_BY_KIND, SHOW_WORDS, SPACES, SPACE_BY_KIND, TONE_MODES,
-  defaultSize, defaultSpaceValues, emptyScene, newBlockOp, newCombineOp, newDup, newGroup, newMotion, newShape, newSpaceOp, walkItems,
-  type ColourBy, type CombineOp, type DupSpec, type Item, type MotionKind, type ParamDef, type Scene2D, type ShapeSpec, type SpaceDef, type SpaceOp, type ToneMode, type Vec2, type Vec3,
+  defaultSize, defaultSpaceValues, emptyScene, styleOf, defaultStyle, newBlockOp, newCombineOp, newDup, newGroup, newMotion, newShape, newSpaceOp, walkItems,
+  type ColourBy, type CombineOp, type ShapeStyle, type DupSpec, type Item, type MotionKind, type ParamDef, type Scene2D, type ShapeSpec, type SpaceDef, type SpaceOp, type ToneMode, type Vec2, type Vec3,
 } from './spec';
 
 export interface ParseResult2D {
@@ -62,7 +62,9 @@ const OP_WORDS: Record<string, { op: CombineOp; smooth: boolean }> = {
   'smooth-subtract': { op: 'subtract', smooth: true }, 'smooth-cut': { op: 'subtract', smooth: true },
   intersect: { op: 'intersect', smooth: false }, intersection: { op: 'intersect', smooth: false }, both: { op: 'intersect', smooth: false },
   'smooth-intersect': { op: 'intersect', smooth: true },
+  xor: { op: 'xor', smooth: false }, 'exclusive-or': { op: 'xor', smooth: false },
 };
+const STYLE_WORDS: Record<string, ShapeStyle> = { glow: 'glow', glowing: 'glow', soft: 'glow', filled: 'filled', fill: 'filled', flat: 'filled', solid: 'filled', outline: 'outline', line: 'outline', edge: 'outline' };
 export const DEFAULT_SMOOTH_K = 0.1;
 
 const SHAPE_WORDS: Record<string, string> = Object.fromEntries(SHAPES.flatMap(s => [[s.kind, s.kind], ...s.aliases.map(a => [a, s.kind])]));
@@ -278,7 +280,8 @@ class Parser {
         if (word === 'outline' || word === 'hollow') { it.hollow = 0.02; continue; }
         if (it.type === 'group') {
           if (a.value.k === 'num') { it.k = Math.max(0, a.value.v); continue; }
-          this.fail(a, 'A combine takes k= (its blend radius), name= and the settings every item takes.');
+          if (word === 'mix' || word === 'mix-colours' || word === 'mix-colors' || word === 'blend-colours' || word === 'blend-colors') { it.mix = true; continue; }
+          this.fail(a, 'A combine takes k= (its blend radius), mix (blend its shapes\' colours), name= and the settings every item takes.');
           continue;
         }
         if (it.kind === 'fnshape' && !it.fn && (a.value.k === 'word' || a.value.k === 'str')) {
@@ -302,17 +305,23 @@ class Parser {
       if (key === 'inflate' || key === 'fatten') { const v = this.num(a, 'inflate'); if (v !== null) it.inflate = Math.max(0, v); continue; }
       if (key === 'outline' || key === 'hollow') { const v = this.num(a, 'outline'); if (v !== null) it.hollow = Math.max(0, v); continue; }
       if (key === 'glow') { it.glow = !(a.value.k === 'word' && /^(no|off|false)$/i.test(a.value.v)) && !(a.value.k === 'num' && a.value.v === 0); if (it.glow) this.flagged = true; continue; }
+      if (key === 'style' || key === 'look') {
+        const w = this.word(a);
+        const st = w ? STYLE_WORDS[w] : undefined;
+        if (st) it.style = st; else this.fail(a, 'style is glow, filled or outline.');
+        continue;
+      }
       if (key === 'k' || key === 'blend' || key === 'smooth') {
         if (it.type === 'group') { const v = this.num(a, 'k'); if (v !== null) it.k = Math.max(0, v); } else this.fail(a, 'k is for a combine.');
         continue;
       }
       if (it.type === 'group') {
-        this.fail(a, `A combine takes k=, name= and the settings every item takes (at, rot, scale, color, inflate, outline).`);
+        this.fail(a, `A combine takes k=, mix, name= and the settings every item takes (at, rot, scale, color, style, inflate, outline).`);
         continue;
       }
       const p = def!.params.find(q => q.key.toLowerCase() === key) ?? (key === 'radius' ? def!.params.find(q => q.key === 'r') : undefined);
       if (!p) {
-        const s = suggest(a.key!, [...def!.params.map(q => q.key), 'at', 'rot', 'scale', 'color', 'inflate', 'outline', 'name', 'glow']);
+        const s = suggest(a.key!, [...def!.params.map(q => q.key), 'at', 'rot', 'scale', 'color', 'style', 'inflate', 'outline', 'name', 'glow']);
         this.fail(a, `${def!.label} has no setting “${a.key}”.${s ? ` Did you mean “${s}”?` : ` It takes ${def!.params.map(q => q.key).join(', ')}.`}`);
         continue;
       }
@@ -887,9 +896,14 @@ function printTexture(s: TexSource): string {
   return ['texture', fmtName(s.name), ...(s.node ? [`node=${fmtName(s.node)}`] : []), ...(s.aspect && round(s.aspect) !== 1 ? [`aspect=${fmt(s.aspect)}`] : []), ...(s.kind === 'shader' ? ['kind=shader'] : [])].join(' ');
 }
 
-/** An item as recipe text. `indent` (the pretty form): a combine's items each on their own line. */
-function printItem(it: Item, indent: string | null = null): string {
+/**
+ * An item as recipe text. `indent` (the pretty form): a combine's items each on their own line.
+ * `top`: a layer (its style is printed; a nested item's isn't used).
+ */
+function printItem(it: Item, indent: string | null = null, top = true): string {
   const common: string[] = [];
+  // Glow is the default (Filled for a picture layer); a layer with no style (made before styles) is Filled and says so.
+  if (top && styleOf(it) !== defaultStyle(it)) common.push(`style=${styleOf(it)}`);
   const picture = it.type === 'shape' && it.kind === 'picture';
   if (it.fill) common.push(...(picture ? [] : [`fill=${fmtName(it.fill.tex)}`]), ...printUse(it.fill));
   if (it.mask) common.push(`mask=${fmtName(it.mask.tex)}`, ...(round(it.mask.cut) !== 0.5 ? [`mask-cut=${fmt(it.mask.cut)}`] : []), ...(it.mask.invert ? ['mask-invert'] : []));
@@ -906,11 +920,13 @@ function printItem(it: Item, indent: string | null = null): string {
   const mods = [...it.motion.map(printMotion), ...(it.dup ? [printRing(it.dup)] : [])];
   if (it.type === 'group') {
     const inner = indent === null
-      ? it.children.map(c => printItem(c)).join(', ')
-      : `\n${it.children.map(c => `${indent}  ${printItem(c, `${indent}  `)}`).join(',\n')}\n${indent}`;
-    const head = `${it.k > 0 ? 'smooth-' : ''}${it.op}(${inner})`;
+      ? it.children.map(c => printItem(c, null, false)).join(', ')
+      : `\n${it.children.map(c => `${indent}  ${printItem(c, `${indent}  `, false)}`).join(',\n')}\n${indent}`;
+    const xor = it.op === 'xor';
+    const head = `${it.k > 0 && !xor ? 'smooth-' : ''}${it.op}(${inner})`;
     const extra: string[] = [];
-    if (it.k > 0 && round(it.k) !== DEFAULT_SMOOTH_K) extra.push(`k=${fmt(it.k)}`);
+    if (it.k > 0 && (xor || round(it.k) !== DEFAULT_SMOOTH_K)) extra.push(`k=${fmt(it.k)}`);
+    if (it.mix) extra.push('mix');
     return [head, ...extra, ...common, ...mods].join(' ');
   }
   const def = SHAPE_BY_KIND[it.kind];
@@ -978,9 +994,9 @@ export function formatRecipe2D(src: string): string {
 export const RECIPE_VOCABULARY_2D = {
   space: SPACES.map(s => ({ kind: s.kind, keys: [...(s.select ? [s.select.key] : []), ...s.params.map(p => p.key)] })),
   blocks: [`space-block ${BLOCK_LIBRARY[0].id} amp=0.1`, 'space-block {uv.x += amp * sin(y * 6 + t)} amp=0.1 times=1', `combine-blocks ${COMBINE_MODES.map(m => m.mode).join('|')} a=… b=… amount=0.5 a_k=… b_k=…`],
-  combines: ['union', 'smooth-union', 'subtract', 'smooth-subtract', 'intersect', 'smooth-intersect'],
+  combines: ['union', 'smooth-union', 'subtract', 'smooth-subtract', 'intersect', 'smooth-intersect', 'xor', 'smooth-union(circle color=red, circle at=(0.3,0) color=blue) k=0.15 mix'],
   shapes: SHAPES.map(s => ({ kind: s.kind, keys: s.params.map(p => p.key) })),
-  itemKeys: ['at=(x,y)', 'rot=30', 'scale=1.5', 'color=teal', 'inflate=0.02', 'outline=0.02', 'glow', 'name="Sun"', 'fill=brick fit=cover|contain|stretch|tile tiles=3 zoom=1.5', 'mask=brick mask-cut=0.5 mask-invert'],
+  itemKeys: ['at=(x,y)', 'rot=30', 'scale=1.5', 'color=teal', 'style=glow|filled|outline', 'inflate=0.02', 'outline=0.02', 'glow', 'name="Sun"', 'fill=brick fit=cover|contain|stretch|tile tiles=3 zoom=1.5', 'mask=brick mask-cut=0.5 mask-invert'],
   textures: ['texture brick node=node_4 aspect=1.5', 'picture brick h=0.6 fit=cover', 'circle r=0.4 fill=brick fit=tile tiles=3', 'background picture=brick fit=cover [still]', `grid 12 picture=brick picture-mode=${GRID_PIC_MODES.join('|')}`],
   depth: ['depth-picture pond [fit=cover] [size | size=(0.4,1.6)] [space=shift|zoom|turn shift=0.15 dir=0 focus=0] [look=top|occlude|fog|mix|light] [with=add|screen|over|tint] [picture=1] [range=(0,1)] [curve=1] [at=0.5 soft=0.05] [fog=1 haze=0.6 fog-color=] [light=3 own=0.5 glow=0.35] [near=picture|scene mix=1] [gradient=sunset gradient-on=scene|picture|both gradient-how=multiply|colorize|add gradient-amount=0.8 cycles=1 phase=0 flow=0.1]'],
   grid: [`grid 12 [rows] shape=${GRID_SHAPES.join('|')} assign=${GRID_ASSIGNS.join('|')} size=0.7 ripple=centre|corners|mouse|(x,y) freq=8 speed=0.4 target=${GRID_TARGETS.join('|')} amount=0.5 by=${GRID_COLOUR_BYS.join('|')} color= color2= glow=off picture=brick picture-mode=${GRID_PIC_MODES.join('|')}`],

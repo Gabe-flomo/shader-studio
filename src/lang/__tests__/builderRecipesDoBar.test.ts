@@ -16,7 +16,7 @@ import { compileGraph } from '../../compiler/graphCompiler';
 import { getNodeDefinition } from '../../nodes/definitions';
 import { detectDialect, readLine, readsCanonically, sceneNodes, scene2dNodes, splatNodes, agentsNodes, picturesToFill } from '../run';
 import { parseRecipe2D, printRecipe2D } from '../../sceneBuilder2d/recipe';
-import { TEMPLATES_2D } from '../../sceneBuilder2d/templates';
+import { GRID_TEMPLATES_2D, TEMPLATES_2D } from '../../sceneBuilder2d/templates';
 import { surpriseScene2D } from '../../sceneBuilder2d/surprise';
 import { find2dBuild } from '../../sceneBuilder2d/apply';
 import { SCENE_TEMPLATES, templateSpec } from '../../sceneBuilder/templates';
@@ -102,7 +102,7 @@ describe('Do… bar: the 2D Scene Builder recipe', () => {
   });
 
   it('a 2D grid scene (it starts with grid) is a 2D recipe, not Grid Rules', () => {
-    const t = TEMPLATES_2D.find(x => x.key === 'rippleGrid')!;
+    const t = GRID_TEMPLATES_2D.find(x => x.key === 'rippleGrid')!;
     expect(detectDialect(t.recipe).dialect).toBe('scene2d');
     expect(detectDialect('grid life').dialect).toBe('grid');
   });

@@ -4,9 +4,10 @@ A builder for flat pictures, like the 3D Scene Builder: pick shapes, bend the sp
 
 ## The window
 
-- **Layers** (left): shapes and combine groups, painted top to bottom (the last is on top). Select one to edit it; move it earlier or later, delete it, join it with the next layer (∪ with next, − next) or ungroup.
+- **Layers** (left): shapes and combine groups, painted top to bottom (the last is on top). Select one to edit it; move it earlier or later, delete it, join it with the next layer (∪ with next, − next, or **Combine…** for the rest) or ungroup.
 - **Space**: transforms applied to the picture's coordinates before the shapes measure them, top to bottom. At the top, a big **space view** (a grid seen through the whole stack; it stays in view as the stack scrolls, and hovering a transform shows the space after it). Then the stack: **space blocks** (below), and the built-in transforms (zoom, rotate with spin, move, pixelate, tile, mirror tile, mirror, kaleidoscope, polar repeat, polar, swirl, noise warp, wave, fisheye, invert; folded under *Built-in transforms*), and functions (*Add a function*). Each shows a thumbnail of a grid or checkerboard through it.
-- **Shapes**: a gallery of 17 shapes (circle, ring, box, rounded box, triangle, diamond, pentagon, hexagon, octagon, star, burst, hexagram, heart, cross, ellipse, moon, vesica). The selected layer's inspector has its size, colour and glow; **Place** (position, rotate, scale, round, outline only); **Motion** (orbit, bob, spin, pulse, with speed, amount, direction and phase); **Duplicate** (a ring of copies, rings of rings, and the whole ring repeated at bigger sizes).
+- **Shapes**: a gallery of 17 shapes (circle, ring, box, rounded box, triangle, diamond, pentagon, hexagon, octagon, star, burst, hexagram, heart, cross, ellipse, moon, vesica), then **Pictures** (Picture in pieces, below) and function shapes. The selected layer's inspector has its size, **Style** ([below](#style)), colour and glow; **Place** (position, rotate, scale, round, outline only); **Motion** (orbit, bob, spin, pulse, with speed, amount, direction and phase); **Duplicate** (a ring of copies, rings of rings, and the whole ring repeated at bigger sizes).
+- **Combine**: the layers as a tree of combines, and the seven ways to join shapes ([below](#combine)).
 - **Depth**: a picture with depth the shapes interact with (below, [Picture with depth](#picture-with-depth)).
 - **Look** ([builder-look.md](builder-look.md)): the scene's **palette** (the app's palettes as swatch strips, the palette library's saved ones, or one of your own made right there and saved to the library); the background and each layer can take a **palette slot** instead of a free colour, so changing the palette recolours them; colour by (each layer's colour, or length, angle, x, y, time or distance through the palette); glow on all shapes or only layers marked Glow; the **grade**, a stack of the app's colour-grading nodes in order; tone map, vignette, grain. Bloom and Scanlines are no longer offered (a scene made with them keeps them, under *older effects*): **Effects → Glow** and **CRT mask** replace them.
 - **Effects** ([builder-look.md](builder-look.md#effects)): shader effects on the finished picture as stacked cards, dragged into order: Displace (by noise, or by a picture through the shared picker or a Shader Texture), Swirl, Ripple, Lens, Pixelate, Kaleidoscope, Blur, Glow, Chromatic aberration and CRT mask.
@@ -15,6 +16,64 @@ A builder for flat pictures, like the 3D Scene Builder: pick shapes, bend the sp
 - **Templates**: starting points (two with a picture with depth).
 - **Surprise me** (header): a whole random scene from a seed (see below). The seed shows beside it; type one and press Enter to make that scene again.
 - **Preview** (right): the graph Build makes, compiled and drawn live.
+
+## Style
+
+How a layer is drawn, per layer (Shapes → **Style**; `style=` in a recipe):
+
+- **Glow** (the default for every new shape): the shape as its distance field reads, its colour
+  running out into a soft glow, colour × (amount ÷ (distance outside + amount)) ^ falloff. That is
+  its own colour inside and at the edge and fades out from there, so the shape and its glow are one
+  shape, with **no flat fill pasted over it**. It is the Grid builder's **Soft** glow
+  ([grid-builder.md](grid-builder.md)), so the two builders look alike. Built as one Expression Block,
+  *Glow shape*, with Amount and Falloff as live sliders (the Look's Glow sets them). A layer that
+  doesn't glow (Look → Glow off, or Only layers marked Glow and it isn't) is the crisp shape alone
+  (one SDF Fill). Once the Look's glow has been muted, the glow node passes a crisp fill through
+  while muted, live.
+- **Filled**: a flat filled shape (SDF Fill) with the Look's glow as a halo round it (Glow Layer,
+  amount ÷ |distance|): the look every scene had before styles. Picture layers start Filled.
+- **Outline**: a glowing line along the edge, the glow of abs(distance) (*Glow outline*). The Look's
+  glow tint colours it.
+
+Scenes made before styles have no `style` on their layers: they build exactly as before, as Filled.
+Reopened (Edit in 2D Scene Builder), the style is written out as Filled, and their recipe says
+`style=filled`, so the look stays whatever the default is. A nested item's style isn't used: the
+layer it is in draws it.
+
+## Combine
+
+The **Combine** tab joins shapes into one distance field, like the 3D builder's Combine
+([scene-builder-3d.md](scene-builder-3d.md)):
+
+- **The tree**: every layer, a combine shown as a badge (∪ union, − subtract, ∩ intersect, ⊕ xor,
+  with its smooth amount) over the items inside it, indented. Click a row to pick it.
+- **Join with the next layer**: seven picture buttons (hover each for what it does): Union, Smooth
+  union, Subtract, Smooth subtract, Intersect, Smooth intersect, Xor. The picked item and the one
+  after it become a combine. **› Into the combine above** and **‹ Out of its combine** move items
+  in and out.
+- **A combine**: its operator (the same seven buttons), **Smooth** (the blend radius k: 0 is the
+  hard combine, above 0 the smooth one; Xor has none) and **Colour**: *Blend the shapes' colours*
+  (new combines) or one colour for the group (combines from before). **Ungroup** takes it apart.
+  The Shapes inspector shows the same controls for a selected combine, and a colour for each shape
+  inside a blending one.
+
+Each shape's place, motion, ring of copies and Round / Outline apply first; the combine then joins
+the distances. What Build makes: the **Union**, **Subtract** and **Intersect** nodes (each takes a
+Blend radius, k, as a param: a live uniform, so dragging Smooth never recompiles; their Blend
+output is the 0–1 weight), and for Xor an Expression Block, max(min(a, b), −max(a, b)), with a
+blend output. A combine that blends colours gets one *Combine colour* Expression Block per join,
+mix(b, a, w) with w the join's Blend: the colours run into each other across a smooth join as the
+shapes do. Subtract keeps the first shape's colour (a cut takes nothing of the cutter's). Rings at
+several sizes are joined the same way.
+
+In a recipe: `union( )`, `smooth-union( )`, `subtract( )`, `smooth-subtract( )`, `intersect( )`,
+`smooth-intersect( )`, `xor( )`, then `k=` (the smooth amount, 0.1 unless given) and `mix` (blend
+the shapes' colours):
+
+```
+smooth-union(circle r=0.3 at=(-0.15,0) color=coral, circle r=0.3 at=(0.15,0) color=sky) k=0.15 mix
+xor(box size=0.3, circle r=0.25 at=(0.2,0)) style=outline
+```
 
 ## Space blocks
 
@@ -159,7 +218,7 @@ shared rules: ⊘ on the card, Alt-click solos, one undo step, saved with the sc
 | A layer or a shape in a combine (the layer list's ⊘, or its card) | Live: its distance is pushed far away (so unions, cuts and glows ignore it) and, for a layer, the picture behind passes through. |
 | A motion (Shapes → Motion) | Left out of the build. |
 | A ring of copies (Duplicate) | Left out: one copy. |
-| The grid (Grid → Cells) | Live: the picture under the grid passes through. |
+| The grid of an older scene (Shapes → Grid) | Live: the picture under the grid passes through. |
 | Glow, tone map, bloom, vignette, grain, scanlines (Look) | Live: each effect's node passes its colour through. |
 | The picture in pieces | Live: the picture under it passes through. |
 | A Grade card (Look) or an Effects card | Left out of the build (the card's existing off flag, now the ⊘ with Alt-click solo; `muted` in a recipe reads as `off`). |
@@ -185,7 +244,7 @@ its pictures by name; each use reads its node.
   Off reads the screen.
 - **Mask** (the Picture card): the layer and its glow only where a picture over the whole frame is
   bright (**Cut**, live), or dark (**Invert**).
-- **Grid picture** (Grid → **Picture**): the grid's shapes carry a picture, cut up into them, in one
+- **Grid picture** (older scenes' grids): the grid's shapes carry a picture, cut up into them, in one
   of the Grid builder's modes ([grid-builder.md](grid-builder.md#pictures-in-pieces)): **In each
   shape** (the whole picture in every shape), **Mask** (the picture over the whole frame, read at the
   screen's point: the shapes are windows onto it), **Matte: colour** (each shape the picture's colour
@@ -260,6 +319,20 @@ depth-picture pond space=shift shift=0.6 dir=90 focus=0.3 gradient=sunset cycles
 node's: blue-teal, rainbow, warm, lemon, sunset, fire, forest, purple-haze, deep-purple, psychedelic. A recipe
 doesn't carry a generated depth; Apply on the Recipe tab keeps it for the same picture.
 
+## Grids are in the Grid builder
+
+The 2D builder no longer makes grids: grids are built in the **Grid builder** (Scene builder → Grid,
+[grid-builder.md](grid-builder.md)). There is no Grid tab, the grid templates are gone from
+Templates, and Surprise me never makes one. **Picture in pieces** (a Pieces node, not a grid) moved
+to Shapes → **Pictures**.
+
+A scene made with a grid still loads and builds exactly as before. On reopening, Shapes shows a card,
+*Grid (from an older scene)*: "This scene has a grid: edit it in the Grid builder". The Grid builder
+draws its grids cell by cell, so this one can't be carried over: it stays in the scene read-only,
+with its mute and Remove, and **Open the Grid builder** starts a new grid there. The recipe keeps
+reading and printing `grid …` clauses. The two grid templates live on as `GRID_TEMPLATES_2D` (and as
+their examples) for older scenes and tests.
+
 ## Surprise me
 
 The header's **Surprise me** makes a good-looking random scene from a seed, as one undo step
@@ -270,7 +343,7 @@ The header's **Surprise me** makes a good-looking random scene from a seed, as o
   their sliders varied the way Random varies them. A stack that sends points to NaN or flings the
   grid far away is dealt again. Tangent tear and Pixel steps are left out (they look broken more
   often than good at random).
-- **Shapes:** one to three glowing shapes (rings, stars, bursts, hexagons, outlines…) in colours
+- **Shapes:** one to three glowing shapes (Glow style) (rings, stars, bursts, hexagons, outlines…) in colours
   from one harmonious palette; later ones as a ring of copies (sometimes rings of rings or several
   sizes); motion (orbit, bob, spin, pulse) on most.
 - **Look:** glow on all, a dark ground near the palette's hue, ACES tone mapping (AgX lifted the
