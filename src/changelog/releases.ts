@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.185',
+    date: '2026-10-11',
+    title: 'Done means built',
+    highlights: [
+      { area: 'Studio', text: 'Fixed: Done in the 2D Scene Builder closed without building. Done now builds (or rebuilds) your edits, then closes; a failed build keeps the window open.' },
+      { area: 'Studio', text: 'Closing a builder with unbuilt edits asks Build, Discard or Keep editing, and drafts are saved, so reopening brings back your last edits.' },
+    ],
+  },
+  {
     id: '2026.10.184',
     date: '2026-10-11',
     title: 'Real lens fringes, deep glow',

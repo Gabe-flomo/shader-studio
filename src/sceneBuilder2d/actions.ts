@@ -7,11 +7,17 @@ import { intoView } from '../components/NodeGraph/spawnPoint';
 import { toast } from '../components/ui/toastStore';
 import { useSceneBuilder2D } from './store';
 import { applyScene2D, find2dBuild, scene2dOfBuild } from './apply';
-import { starterScene } from './spec';
+import { allShapes, starterScene } from './spec';
+import { clearDraft, hasUnbuiltEdits, reopenDraft } from '../builders/drafts';
+import type { BuildingBuilder } from '../builders/finish';
 
 /** Open the builder on a new scene (Build adds it beside what is on the canvas). */
 export function openNewSceneBuilder2D(at?: { x: number; y: number }): void {
-  useSceneBuilder2D.getState().openWith(starterScene(), { at: at ?? null });
+  const fresh = () => useSceneBuilder2D.getState().openWith(starterScene(), { at: at ?? null });
+  // A new scene left unbuilt last time comes back (builders/drafts.ts).
+  if (reopenDraft({ kind: '2d', store: useSceneBuilder2D, target: null, original: starterScene(), label: '2D scene', startFresh: fresh,
+    open: (scene, was) => useSceneBuilder2D.getState().openWith(scene, { at: at ?? was }) })) return;
+  fresh();
 }
 
 /** The 2D build a node belongs to (its UV node's id), if the 2D builder made it. */
@@ -25,7 +31,10 @@ export function editScene2DInBuilder(nodeId: string): boolean {
   const sceneId = scene2dOfBuild(nodes, nodeId);
   const found = sceneId ? find2dBuild(nodes, sceneId) : null;
   if (!found) return false;
-  useSceneBuilder2D.getState().openWith(found.meta.spec, { targetSceneId: sceneId });
+  const asBuilt = () => useSceneBuilder2D.getState().openWith(found.meta.spec, { targetSceneId: sceneId });
+  // Edits to this scene left unbuilt last time come back (builders/drafts.ts).
+  if (!reopenDraft({ kind: '2d', store: useSceneBuilder2D, target: sceneId, original: found.meta.spec, label: '2D scene', startFresh: asBuilt,
+    open: scene => useSceneBuilder2D.getState().openWith(scene, { targetSceneId: sceneId }) })) asBuilt();
   return true;
 }
 
@@ -69,3 +78,32 @@ export function buildFromBuilder2D(asNew = false): boolean {
   });
   return true;
 }
+
+/** Whether the scene has to be built: not built yet (or its build is gone), or changed since. Nothing to build without shapes or a grid. */
+function needsBuild2D(): boolean {
+  const sb = useSceneBuilder2D.getState();
+  if (!allShapes(sb.scene).length && !sb.scene.grid) return false;
+  const built = !!sb.targetSceneId && !!find2dBuild(useNodeGraphStore.getState().nodes, sb.targetSceneId);
+  return !built || sb.dirty;
+}
+
+/** The top-level nodes of the builder's build (what Done frames). */
+function builtIds2D(): string[] {
+  const id = useSceneBuilder2D.getState().targetSceneId;
+  const b = id ? find2dBuild(useNodeGraphStore.getState().nodes, id) : null;
+  return b ? [b.scene.id, ...[...b.byRole.values()].map(n => n.id)] : [];
+}
+
+/**
+ * The 2D builder as builders/finish.ts drives it: Done builds (or rebuilds, same ids) and then closes,
+ * a failed build stays open; ✕ and Esc ask about unbuilt edits.
+ */
+export const scene2dBuilder: BuildingBuilder = {
+  label: '2D scene',
+  needsBuild: needsBuild2D,
+  unbuiltEdits: () => hasUnbuiltEdits(useSceneBuilder2D.getState()) && needsBuild2D(),
+  build: () => buildFromBuilder2D(false),
+  close: () => useSceneBuilder2D.getState().close(),
+  ids: builtIds2D,
+  discard: () => clearDraft('2d', useSceneBuilder2D.getState().targetSceneId),
+};

@@ -37,7 +37,8 @@ import { DescribeTab, RecipeTab, preferRecipeAsText } from './tabs';
 import { SectionHead, SectionPanel } from './sectionPanels';
 import { SceneViewport } from './SceneViewport';
 import { useSpecThumbs } from './specThumbs';
-import { finishBuilder } from '../../builders/finish';
+import { closeBuilding, doneBuilding, type BuildingBuilder } from '../../builders/finish';
+import { clearDraft, hasUnbuiltEdits } from '../../builders/drafts';
 import { focusRecipeEditor, useBuilderRecipeRequest } from '../../builders/windows';
 import { scene3dBuildIds } from '../../builders/finishScenes';
 
@@ -46,28 +47,34 @@ const MODE_LABEL = { surface: 'Surface', volumetric: 'Volumetric glow', glass: '
 /** Sections a shape picked in the viewport can be edited in; from any other, a pick goes to Shapes. */
 const SHAPE_SECTIONS: Array<SceneSection | 'describe'> = ['shapes', 'combine', 'warps', 'light'];
 
-/** Build what is in the form when it isn't built yet (or its build is gone). False when the build was cancelled. */
-async function buildIfNeeded(): Promise<boolean> {
+/** Whether the form has to be built: not built yet (or its build is gone), or changed since. Nothing to build without shapes. */
+function needsBuild(): boolean {
   const sb = useSceneBuilder.getState();
-  if (!allShapes(sb.spec).length) return true;
+  if (!allShapes(sb.spec).length) return false;
   const built = !!sb.targetSceneId && useNodeGraphStore.getState().nodes.some(n => n.id === sb.targetSceneId);
-  if (built && !sb.dirty) return true;
-  return buildFromBuilder(false);
+  return !built || sb.dirty;
 }
 
-/** Done: build if needed, close, and frame the scene on the graph. */
+/** The 3D builder as builders/finish.ts drives it: Done builds first, ✕ and Esc ask about unbuilt edits. */
+export const scene3dBuilder: BuildingBuilder = {
+  label: '3D scene',
+  needsBuild,
+  unbuiltEdits: () => hasUnbuiltEdits(useSceneBuilder.getState()) && needsBuild(),
+  build: () => buildFromBuilder(false),
+  close: () => useSceneBuilder.getState().close(),
+  ids: () => scene3dBuildIds(useSceneBuilder.getState().targetSceneId),
+  discard: () => clearDraft('3d', useSceneBuilder.getState().targetSceneId),
+};
+
+/** Done: build (or rebuild) if needed, close, and frame the scene on the graph. A failed build stays open. */
 export async function doneAction(): Promise<void> {
-  if (!(await buildIfNeeded())) return;
-  const sb = useSceneBuilder.getState();
-  finishBuilder(sb.close, scene3dBuildIds(sb.targetSceneId));
+  await doneBuilding(scene3dBuilder);
 }
 
 /** Open as nodes: build if needed, close, and open the Scene Group (its shapes, combines and warps as nodes). */
 export async function openAsNodesAction(): Promise<void> {
-  if (!(await buildIfNeeded())) return;
-  const sb = useSceneBuilder.getState();
-  const id = sb.targetSceneId;
-  sb.close();
+  if (!(await doneBuilding({ ...scene3dBuilder, ids: () => [] }))) return;
+  const id = useSceneBuilder.getState().targetSceneId;
   if (id && useNodeGraphStore.getState().nodes.some(n => n.id === id)) {
     const st = useNodeGraphStore.getState();
     if (st.activeGroupPath.length) st.exitToRoot();
@@ -103,7 +110,6 @@ export function SceneBuilderModal() {
   const tab = useSceneBuilder(s => s.tab);
   const setTab = useSceneBuilder(s => s.setTab);
   const spec = useSceneBuilder(s => s.spec);
-  const close = useSceneBuilder(s => s.close);
   const undo = useSceneBuilder(s => s.undo);
   const redo = useSceneBuilder(s => s.redo);
   const canUndo = useSceneBuilder(s => s.past.length > 0);
@@ -166,7 +172,7 @@ export function SceneBuilderModal() {
     <StudioShell prefsKey="scene-builder-3d" icon="cube" iconColor={tk.kind.fn}
       title={editing ? 'Your 3D scene' : 'A new 3D scene'} crumb={<SceneCrumb kind="3d" />}
       kind={`${shapes} shape${shapes === 1 ? '' : 's'} · ${MODE_LABEL[spec.look.mode]} · ${!editing ? 'not built yet: Done builds it' : dirty ? 'changed: Done rebuilds it' : 'built'}`}
-      onClose={close}
+      onClose={() => void closeBuilding(scene3dBuilder)}
       onEscape={() => { if (hood) { setHood(false); return true; } return false; }}
       actions={<>
         <IconButton icon="undo" size="sm" label="Undo" shortcut="cmd+z" disabled={!canUndo} onClick={undo} />
@@ -177,11 +183,11 @@ export function SceneBuilderModal() {
         <IconButton icon="fn" size="sm" data-open-as-nodes disabled={!shapes} label="Open as nodes: build it and open its Scene Group (every node with a note)" onClick={() => void openAsNodesAction()} />
         <IconButton icon="more" size="sm" data-build-menu label="More: build now, or build a new copy" onClick={e => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setMore({ x: Math.max(8, r.right - 260), y: r.bottom + 4 }); }} />
         {more && <Menu x={more.x} y={more.y} onClose={() => setMore(null)} items={[
-          { label: editing ? 'Rebuild now' : 'Build now', icon: 'rebuild', hint: editing ? 'Replaces the scene it was built as, keeping settings you changed on its nodes' : 'Adds the graph to the canvas and shows it on the Output', disabled: !shapes, onSelect: () => void buildFromBuilder(false) },
+          { label: editing ? 'Rebuild now' : 'Build now', icon: 'rebuild', hint: editing ? 'Replaces the scene it was built as, keeping settings you changed on its nodes; the builder stays open' : 'Adds the graph to the canvas and shows it on the Output; the builder stays open', disabled: !shapes, onSelect: () => void buildFromBuilder(false) },
           ...(editing ? [{ label: 'Build as a new copy', icon: 'copy' as IconName, hint: 'Leave the built scene as it is and build this one beside it', onSelect: () => void buildFromBuilder(true) }] : []),
         ]} />}
       </>}
-      primary={{ label: 'Done', onClick: () => void doneAction(), title: editing ? 'Rebuild the scene if it changed, close, and show it on the graph' : 'Build the scene, close, and show it on the graph' }}
+      primary={{ label: 'Done', onClick: () => void doneAction(), title: editing ? 'Done: rebuild the scene with your edits, then close and show it on the graph' : 'Done: build the scene into the graph, then close and show it' }}
       nav={nav} phoneSettingsTitle={hood ? 'Under the hood' : undefined} inspector={inspector} inspectorWidth={hood ? 480 : 400} navWidth={236} presets={<PresetsStrip />}>
       <SceneViewport onPicked={() => { if (!SHAPE_SECTIONS.includes(section)) pick('shapes'); }} />
     </StudioShell>

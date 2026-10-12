@@ -6,6 +6,7 @@
 import { create } from 'zustand';
 import { starterScene, withExplicitStyles, type Scene2D } from './spec';
 import { surpriseScene2D } from './surprise';
+import { keepDrafts } from '../builders/drafts';
 
 /** The window's tabs. Grids are made in the Grid builder; a scene that has one shows it under Shapes (read-only). */
 export type Builder2DTab = 'space' | 'shapes' | 'combine' | 'modify' | 'depth' | 'look' | 'effects' | 'output' | 'recipe' | 'templates';
@@ -98,3 +99,6 @@ export const useSceneBuilder2D = create<Builder2DState>((set, get) => ({
     set({ surpriseSeed: seed, selectedId: first?.id ?? null });
   },
 }));
+
+// Unbuilt edits are kept as a draft through a close, a reload or a crash (builders/drafts.ts).
+keepDrafts('2d', useSceneBuilder2D, s => s.scene);
