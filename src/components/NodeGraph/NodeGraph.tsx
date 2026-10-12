@@ -316,10 +316,20 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
   const glslErrors      = useNodeGraphStore(s => s.glslErrors);
   const glslErrorSource = useNodeGraphStore(s => s.glslErrorSource);
   const nodeSlugMap     = useNodeGraphStore(s => s.nodeSlugMap);
-  const nodeErrors = useMemo(
-    () => buildNodeErrors({ compilationErrors, glslErrors, glslSource: glslErrorSource, slugs: nodeSlugMap }),
-    [compilationErrors, glslErrors, glslErrorSource, nodeSlugMap],
-  );
+  const graphLoop       = useNodeGraphStore(s => s.graphLoop);
+  const nodeErrors = useMemo(() => {
+    const map = buildNodeErrors({ compilationErrors, glslErrors, glslSource: glslErrorSource, slugs: nodeSlugMap });
+    // A loop (compiler/graphLoops.ts): each of its cards says so, and the input that closes it is painted.
+    if (graphLoop) {
+      for (const id of new Set(graphLoop.nodeIds)) {
+        const closes = graphLoop.closing.toNodeId === id;
+        const list = map.get(id) ?? [];
+        list.push({ message: closes ? 'This input closes a loop: the error panel can remove the wire' : 'Part of a loop: a node can’t use its own result in the same frame', ...(closes ? { socket: graphLoop.closing.toInputKey } : {}) });
+        map.set(id, list);
+      }
+    }
+    return map;
+  }, [compilationErrors, glslErrors, glslErrorSource, nodeSlugMap, graphLoop]);
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId: string | null; paramKey?: string } | null>(null);
   const [emptyRuleDismissed, setEmptyRuleDismissed] = useState<Set<string>>(() => new Set());

@@ -1469,6 +1469,25 @@ export const DRAW_CAMERA_PARAMS: Record<string, ParamDef> = {
   maxBlur: { label: 'Max blur', type: 'float', min: 1, max: 32, step: 0.5, section: 'Camera', hint: 'The widest a blurred walker draws (pixels of a 720-high picture). Wider ones are thinned at random, each survivor heavier, so blur costs no fill rate.', ...in3d },
 };
 
+/** Draw agents' settings the picture's program reads (Background), never the engine. */
+export const DRAW_PICTURE_PARAMS = new Set(['background', 'bgPalette', 'bgGain']);
+
+/**
+ * Draw agents' Background palette at `t` (0 none … 1 crowded) as a GLSL expression: a Particles
+ * palette runs from its last stop (thin) to its first (crowded), Colour A → B from B to A, Rainbow round the hues.
+ */
+function bgPaletteAt(node: GraphNode, t: string): string {
+  const name = sel(node.params.bgPalette, ['ab', ...GP_PALETTE_NAMES], 'ember');
+  if (name === 'ab') return `mix(${pv3(node.params.colorB, [0.25, 0.55, 1])}, ${pv3(node.params.colorA, [1, 0.75, 0.35])}, ${t})`;
+  const stops = (GP_PALETTES as Record<string, number[][] | null>)[name];
+  if (!stops) return `clamp(abs(fract(${t} + vec3(0.0, 2.0, 1.0) / 3.0) * 6.0 - 3.0) - 1.0, 0.0, 1.0)`;
+  const c = stops.map(s => pv3(s, [0, 0, 0]));
+  const k = `(1.0 - clamp(${t}, 0.0, 1.0)) * ${(c.length - 1).toFixed(1)}`;
+  let expr = c[0];
+  for (let i = 1; i < c.length; i++) expr = `mix(${expr}, ${c[i]}, clamp(${k} - ${(i - 1).toFixed(1)}, 0.0, 1.0))`;
+  return expr;
+}
+
 export const DrawAgentsNode: NodeDefinition = {
   type: 'drawAgents',
   label: 'Draw agents',
@@ -1477,7 +1496,7 @@ export const DrawAgentsNode: NodeDefinition = {
   description: 'Draws every walker of an Agents group over the picture wired into Over, with the Particles node\'s looks: soft dots (Points), dots with a glow (Glow), short lines along their motion (Streaks), or dark ink on paper (Ink), lit by up to four moving lights. Colour by species, speed, heading or age, with Colour A → B or one of the Particles palettes. A 3D group is seen through a camera (Distance, Angle, Elevation, Orbit speed, Zoom, Flatten, Translate) with depth of field, or through a ray-marched scene\'s camera wired into Camera from and Camera ray.',
   inputs: {
     agents: { type: 'agents', label: 'Agents', hint: 'An Agents group\'s output.' },
-    over: { type: 'vec3', label: 'Over', hint: 'The picture to draw on. Unwired: black (Ink: Paper).' },
+    over: { type: 'vec3', label: 'Over', hint: 'The picture to draw on. Unwired: black (Ink: Paper). It can’t come from this node’s own Density or Image (that is a loop): to colour the background by where the walkers are, set Background to Palette by density.' },
   },
   outputs: {
     color: { type: 'vec3', label: 'Color', hint: 'Over with the walkers drawn on it.' },
@@ -1489,6 +1508,7 @@ export const DrawAgentsNode: NodeDefinition = {
     style: 'points', colorBy: 'heading', palette: 'ab', size: 1.5, brightness: 0.5, glow: 1, scaleBy: 'walker', streak: 0.25, fade: 'on', speedRef: 0.5,
     splatSize: 0.012, stretch: 1.5, sizeBy: 'fixed', memScale: 1, opacity: 0.6,
     colorA: [1, 0.75, 0.35], colorB: [0.25, 0.55, 1], paper: [0.95, 0.95, 0.94],
+    background: 'over', bgPalette: 'ember', bgGain: 1,
     lights: '0', lightColor: [1, 0.55, 0.25], lightPower: 1.6, lightReach: 0.3, halo: 0.5, lightMotion: 'orbit', lightOrbit: 0.5, lightX: 0, lightY: 0,
     ...DRAW_CAMERA_DEFAULTS,
   },
@@ -1522,6 +1542,11 @@ export const DrawAgentsNode: NodeDefinition = {
     colorB: { label: 'Colour B', type: 'vec3color', section: 'Colour' },
     speedRef: { label: 'Fast is', type: 'float', min: 0.01, max: 8, step: 0.01, section: 'Colour', hint: 'Colour by Speed: the speed that reaches the end of the palette (Speed, fast first: its start), in picture units a second.' },
     paper: { label: 'Paper', type: 'vec3color', section: 'Colour', hint: 'Ink: the paper\'s colour when nothing is wired into Over.', showWhen: { param: 'style', value: 'ink' } },
+    background: { label: 'Background', type: 'select', section: 'Colour', hint: 'What the walkers are drawn over. Over: the picture wired into Over (black when unwired). Palette by density: a palette run by this node\'s own Density, bright where the walkers crowd and dark where there are none, so the background follows them (wiring Density back into Over would be a loop).', options: [
+      { value: 'over', label: 'Over (the wired picture)' }, { value: 'density', label: 'Palette by density' },
+    ] },
+    bgPalette: { label: 'Background palette', type: 'select', section: 'Colour', hint: 'The palette the density runs along: its first colour where they crowd, its last where they thin out, fading to black where there are none. Colour A → B: A where they crowd.', options: AG_PALETTE_OPTIONS, showWhen: { param: 'background', value: 'density' } },
+    bgGain: { label: 'Background gain', type: 'float', min: 0, max: 16, step: 0.01, section: 'Colour', hint: 'How quickly the density reaches the palette\'s first colour: higher fills the background in where only a few walkers pass.', showWhen: { param: 'background', value: 'density' } },
     lights: { label: 'Lights', type: 'select', section: 'Lights', hint: 'Point lights that move round the picture: walkers near one glow brighter and larger, with a halo round each light (Glow, Streaks, Ink).', options: [
       { value: '0', label: 'None' }, { value: '1', label: '1' }, { value: '2', label: '2' }, { value: '3', label: '3' }, { value: '4', label: '4' },
     ] },
@@ -1548,17 +1573,28 @@ export const DrawAgentsNode: NodeDefinition = {
     const id = node.id;
     const tex = agentDrawUniform(id);
     const style = sel(node.params.style, [...DRAW_STYLES], 'points');
+    // Background: Palette by density: a palette run by this node's own Density, in place of Over (wiring
+    // Density back into Over is a loop). Bright where they crowd (its first colour), black where there are none.
+    const byDensity = node.params.background === 'density';
+    const bg = byDensity ? `${id}_bg` : null;
+    const bgCode = byDensity
+      ? `    float ${id}_bt = 1.0 - exp(-max(${id}_s.a, 0.0) * max(${p(node.params.bgGain, 1)}, 0.0));
+`
+        + `    vec3 ${id}_bg = ${bgPaletteAt(node, `${id}_bt`)} * ${id}_bt;
+`
+      : '';
+    const over = bg ?? v.over;
     // Ink and Splats are premultiplied (colour × cover, cover): they cover what is under them. Light adds to the picture.
     const color = style === 'ink'
-      ? `${v.over ?? pv3(node.params.paper, [0.95, 0.95, 0.94])} * (1.0 - clamp(${id}_s.a, 0.0, 1.0)) + max(${id}_s.rgb, vec3(0.0))`
+      ? `${over ?? pv3(node.params.paper, [0.95, 0.95, 0.94])} * (1.0 - clamp(${id}_s.a, 0.0, 1.0)) + max(${id}_s.rgb, vec3(0.0))`
       : style === 'splats'
-        ? `${v.over ?? 'vec3(0.0)'} * (1.0 - clamp(${id}_s.a, 0.0, 1.0)) + max(${id}_s.rgb, vec3(0.0))`
-        : `${v.over ?? 'vec3(0.0)'} + max(${id}_s.rgb, vec3(0.0))`;
+        ? `${over ?? 'vec3(0.0)'} * (1.0 - clamp(${id}_s.a, 0.0, 1.0)) + max(${id}_s.rgb, vec3(0.0))`
+        : `${over ?? 'vec3(0.0)'} + max(${id}_s.rgb, vec3(0.0))`;
     const dist = style === 'splats'
       ? `    vec4 ${id}_t = texture2D(${tex}_dist, agUv(g_uv));\n    float ${id}_dist = ${id}_t.r > 1e-6 ? ${id}_t.g / ${id}_t.r : 100000.0;\n`
       : '';
     return {
-      code: `    vec4 ${id}_s = texture2D(${tex}, agUv(g_uv));\n    vec3 ${id}_color = ${color};\n${dist}`,
+      code: `    vec4 ${id}_s = texture2D(${tex}, agUv(g_uv));\n${bgCode}    vec3 ${id}_color = ${color};\n${dist}`,
       outputVars: { color: `${id}_color`, density: `max(${id}_s.a, 0.0)`, texture: tex, distance: dist ? `${id}_dist` : '100000.0' },
     };
   },

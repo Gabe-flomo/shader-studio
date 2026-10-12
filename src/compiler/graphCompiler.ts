@@ -18,6 +18,7 @@ import type { NodeGraph } from '../types/nodeGraph';
 import type { CompilationResult } from './types';
 import { VERTEX_SHADER } from './types';
 import { topologicalSort } from './topoSort';
+import { findLoop, loopMessage } from './graphLoops';
 import { validateGraph } from './validate';
 import { generateFragmentShader } from './shaderAssembler';
 import { compilePassGraph, hasPassNode } from './passGraph';
@@ -75,7 +76,15 @@ function compileProgram(graph: NodeGraph): CompilationResult {
       };
     }
 
-    // 2. Topological sort
+    // 2. Topological sort (a loop is named, with its nodes, for the error's fix buttons)
+    const loop = findLoop(nodes);
+    if (loop) {
+      return {
+        vertexShader: '', fragmentShader: '', success: false, errors: [loopMessage(nodes, loop)], loop,
+        nodeOutputVars: EMPTY_OUTPUT_VARS, paramUniforms: {}, paramBindings: {}, textureUniforms: {},
+        audioUniforms: {}, liveUniforms: {}, videoUniforms: {}, isStateful: false,
+      };
+    }
     const sortedNodes = topologicalSort(nodes);
 
     // 3. Assemble fragment shader

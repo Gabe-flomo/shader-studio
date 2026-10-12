@@ -91,6 +91,36 @@ function suggestTintedOutput(nodeId: string): void {
   });
 }
 
+/**
+ * How a wire can go through the frame before instead (store wireThroughLastFrame): 'texture' when the
+ * input takes a texture (the Pass's Previous straight in), 'sample' when it takes a colour (through a
+ * Sample (texture)), null when it can't (inside a group, or types that don't fit a Pass's colour).
+ */
+export function lastFramePlan(nodes: GraphNode[], sourceNodeId: string, sourceOutputKey: string, targetNodeId: string, targetInputKey: string): 'texture' | 'sample' | null {
+  const from = nodes.find(n => n.id === sourceNodeId), to = nodes.find(n => n.id === targetNodeId);
+  const outType = from?.outputs[sourceOutputKey]?.type, inType = to?.inputs[targetInputKey]?.type;
+  if (!outType || !inType || outType === 'texture' || !typesCompatible(outType, 'vec3')) return null;
+  if (inType === 'texture') return 'texture';
+  return typesCompatible('vec3', inType) ? 'sample' : null;
+}
+
+/** A refused wire: say which loop it would make, what to do instead, and offer the frame before when it fits. */
+function refuseLoop(scope: GraphNode[], loop: GraphLoop, topLevel: boolean): void {
+  const { fromNodeId, fromOutputKey, toNodeId, toInputKey } = loop.closing;
+  const tip = loopTip(scope, loop);
+  const canDelay = topLevel && lastFramePlan(scope, fromNodeId, fromOutputKey, toNodeId, toInputKey) !== null;
+  toast.warning(`That would make a loop: ${loopPath(scope, loop)}`, {
+    message: tip ?? `A node can’t use its own result in the same frame.${canDelay ? ' To use what it was a frame ago, go through a Pass’s Previous.' : ''}`,
+    ...(canDelay ? {
+      action: {
+        label: 'Use last frame’s instead',
+        onClick: () => { useNodeGraphStore.getState().wireThroughLastFrame(fromNodeId, fromOutputKey, toNodeId, toInputKey); },
+        stillValid: () => { const s = useNodeGraphStore.getState(); return s.nodes.some(n => n.id === fromNodeId) && s.nodes.some(n => n.id === toNodeId); },
+      },
+    } : {}),
+  });
+}
+
 /** The title of the "open Play" notice; the app clears it while the Play page is open. */
 export const PLAY_SETUP_TOAST = 'This graph has a Play setup';
 
@@ -156,6 +186,8 @@ import { collapseToGroup } from './groupCollapse';
 import { paletteNodeCoeffs, STOP_PALETTE_MAX } from '../nodes/definitions/color';
 import { autoFitCosineStops, fitCosineStops } from '../lib/palette';
 import { compileGraph } from '../compiler/graphCompiler';
+import { loopIfWired, loopPath, loopTip, type GraphLoop } from '../compiler/graphLoops';
+import { n as buildNode } from './graphBuilder';
 import { recordGraphCompile } from '../lib/perfStats';
 import { convertFragmentShader } from '../nodes/userNodes/glslImport';
 import { paramBindingKey } from '../compiler/uniformPatcher';
@@ -963,12 +995,27 @@ interface NodeGraphState {
   updateNodeInputs: (nodeId: string, inputs: Record<string, import('../types/nodeGraph').InputSocket>) => void;
   setPreviewNodeId: (id: string | null) => void;
 
+  /**
+   * Wire an output into an input. Refused (false, with a notice naming the loop) when the wire would
+   * make a loop the picture can't be drawn in (compiler/graphLoops.ts); a Pass's Previous may close one.
+   */
   connectNodes: (
     sourceNodeId: string,
     sourceOutputKey: string,
     targetNodeId: string,
     targetInputKey: string
-  ) => void;
+  ) => boolean;
+  /**
+   * The same wire through the frame before: a Pass takes the output and a Sample (texture) reads its
+   * Previous into the input. One undo step; top level only. False when the types don't allow it.
+   */
+  wireThroughLastFrame: (sourceNodeId: string, sourceOutputKey: string, targetNodeId: string, targetInputKey: string) => boolean;
+  /** The loop the last compile found (its nodes and the wire that closes it), for the error's fix buttons. */
+  graphLoop: GraphLoop | null;
+  /** Select the nodes of the loop the last compile found. */
+  selectLoop: () => void;
+  /** Remove the wire that closes the loop the last compile found (one undo step). */
+  breakLoop: () => void;
 
   disconnectInput: (nodeId: string, inputKey: string) => void;
   /**
@@ -1774,6 +1821,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   vertexShader: '',
   fragmentShader: '',
   compilationErrors: [],
+  graphLoop: null,
   paramUniforms: {},
   paramBindings: {},
   play: emptyPlayRecord(),
@@ -4213,6 +4261,17 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
   connectNodes: (sourceNodeId, sourceOutputKey, targetNodeId, targetInputKey) => {
     {
+      // A wire that would make a loop is refused, named, with a fix when one fits (compiler/graphLoops.ts).
+      const st = get();
+      const topLevel = st.nodes.some(n => n.id === targetNodeId);
+      const scope = topLevel ? st.nodes : (st.activeGroupPath.length ? getActiveNodes(st.nodes, st.activeGroupPath) ?? [] : []);
+      const loop = loopIfWired(scope, sourceNodeId, sourceOutputKey, targetNodeId, targetInputKey);
+      if (loop) {
+        refuseLoop(scope, loop, topLevel);
+        return false;
+      }
+    }
+    {
       // A wire you make teaches the suggestions (suggestions/learning.ts, recency-weighted).
       const a = nodeInScope(get(), sourceNodeId), b = nodeInScope(get(), targetNodeId);
       if (a && b) recordWireBetween(a.type, sourceOutputKey, b.type, targetInputKey);
@@ -4277,6 +4336,64 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       });
       const newTop = setActiveNodes(state.nodes, path, newActiveNodes);
       return { nodes: newTop ?? state.nodes };
+    });
+    get().compile();
+    return true;
+  },
+
+  wireThroughLastFrame: (sourceNodeId, sourceOutputKey, targetNodeId, targetInputKey) => {
+    const st = get();
+    const plan = lastFramePlan(st.nodes, sourceNodeId, sourceOutputKey, targetNodeId, targetInputKey);
+    if (!plan) return false;
+    idGenerator.syncFromGraph(st.nodes); // never reuse an id already in the graph
+    const passId = idGenerator.next(), sampleId = idGenerator.next();
+    const from = st.nodes.find(n => n.id === sourceNodeId)!, to = st.nodes.find(n => n.id === targetNodeId)!;
+    const midX = (from.position.x + to.position.x) / 2, midY = Math.max(from.position.y, to.position.y) + 320;
+    const pass = buildNode('pass', passId, midX - 220, midY, {
+      label: 'Last frame',
+      __comment: `Pass: keeps ${nodeName(from)} as a picture, so ${nodeName(to)} can read it from the frame before through Previous (a loop within one frame can't be drawn).`,
+    }, { color: [sourceNodeId, sourceOutputKey] });
+    const sample = buildNode('sampleTexture', sampleId, midX + 220, midY, {
+      __comment: `Sample (texture): the Last frame Pass's Previous, ${nodeName(from)} one frame ago, into ${nodeName(to)}.`,
+    }, { texture: [passId, 'previous'] });
+    const wire = plan === 'texture' ? { nodeId: passId, outputKey: 'previous' } : { nodeId: sampleId, outputKey: 'color' };
+    undoManager.push(st.nodes, { label: `Wired ${nodeName(from)} → ${nodeName(to)} through last frame`, nodeIds: [sourceNodeId, targetNodeId] });
+    const nodes = [
+      ...st.nodes.map(n => (n.id === targetNodeId ? { ...n, inputs: { ...n.inputs, [targetInputKey]: { ...n.inputs[targetInputKey], connection: wire } } } : n)),
+      pass, ...(plan === 'texture' ? [] : [sample]),
+    ];
+    set({ nodes, selectedNodeIds: [passId], selectedNodeId: passId });
+    get().compile();
+    return true;
+  },
+
+  selectLoop: () => {
+    const loop = get().graphLoop;
+    if (!loop) return;
+    const ids = [...new Set(loop.nodeIds)];
+    // The loop is on the top level (that is what compiles): leave a group to show it.
+    for (let i = 0; i < 8 && get().activeGroupPath.length; i++) get().exitGroup();
+    // Focus brings the first into view (and selects it alone); then the whole loop is selected.
+    if (ids[0]) get().focusNode(ids[0]);
+    set({ selectedNodeIds: ids, selectedNodeId: ids[0] ?? null });
+  },
+
+  breakLoop: () => {
+    const loop = get().graphLoop;
+    if (!loop) return;
+    const { toNodeId, toInputKey, fromNodeId } = loop.closing;
+    const st = get();
+    const target = st.nodes.find(n => n.id === toNodeId);
+    if (!target?.inputs[toInputKey]?.connection) return;
+    undoManager.push(st.nodes, { label: `Removed the wire that closed a loop (${nodeName(st.nodes.find(n => n.id === fromNodeId))} → ${nodeName(target)})`, nodeIds: [toNodeId] });
+    set({
+      nodes: st.nodes.map(n => {
+        if (n.id !== toNodeId) return n;
+        const input = { ...n.inputs[toInputKey] };
+        delete input.connection;
+        return { ...n, inputs: { ...n.inputs, [toInputKey]: input } };
+      }),
+      wireHistory: rememberWire(st.wireHistory, { fromNodeId, fromOutputKey: loop.closing.fromOutputKey, toNodeId, toInputKey }),
     });
     get().compile();
   },
@@ -5124,6 +5241,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       vertexShader: result.vertexShader,
       fragmentShader: result.fragmentShader,
       compilationErrors: result.errors ?? [],
+      graphLoop: result.loop ?? null,
       nodeOutputVarMap: result.nodeOutputVars,
       paramUniforms: result.paramUniforms,
       paramBindings: result.paramBindings,
