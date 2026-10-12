@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.188',
+    date: '2026-10-11',
+    title: 'Hands, restyled',
+    highlights: [
+      { area: 'Play', text: 'The hand overlay is smoother and matches the app: curved, tapering fingers, round joints, a soft palm, theme colours, and fingertips that glow on a pinch.' },
+      { area: 'Studio', text: 'The on-device explanation model is gone (589 KB lighter). Explain keeps its pattern names, sentences, explain view and step-through.' },
+    ],
+  },
+  {
     id: '2026.10.187',
     date: '2026-10-11',
     title: 'Quick controls',
