@@ -31,6 +31,8 @@ import { callBody, type FnRef } from './functions';
 import { COMBINE_BY_MODE, blockGlslLines, checkBlock, clampTimes, type SpaceBlock } from './blocks';
 import { BLOCK_BY_ID } from './blockLibrary';
 import { FAR, gateChain, gateNode } from '../builders/mute';
+import { MOD_BY_KIND, customParams, modGlsl, modReads } from './modify';
+import { glowFormula, GLOW_TYPE_LABELS, type GlowType } from '../nodes/definitions/combiners';
 import { DEPTH_LOOK_LABELS, depthMixParams, depthSummary, type DepthPic2D } from './depth';
 import { DEPTH_MIX_COMBINE_LABELS, DEPTH_SPACE_LABELS } from '../nodes/definitions/depthMix';
 import { FIT_LABELS, LUMA, findTex, fitLines, glf, newTexUse, picUv, sampleWrap, standInId, standIns, type TexSource, type TexUse } from '../builders/textures';
@@ -414,6 +416,37 @@ function shapeNode(b: B, sh: ShapeSpec, pos: Ref, name: string, sfx = ''): Ref {
 }
 
 /**
+ * Modify (modify.ts): each operation on the item's distance as an Expression Block, d in, d out,
+ * its numbers sliders (live, wireable). A muted one passes d through (live); one that doesn't check
+ * is left out with a warning.
+ */
+function emitMods(b: B, it: Item, d: Ref, name: string): Ref {
+  const { c } = b;
+  for (const m of it.mods ?? []) {
+    const def = MOD_BY_KIND[m.kind];
+    if (!def) { c.warnings.push(`${name}: a modify “${m.kind}” isn't known; left out.`); continue; }
+    const g = modGlsl(m);
+    if ('error' in g) { c.warnings.push(`${name}'s ${def.label} was left out: ${g.error}`); continue; }
+    const reads = modReads(m);
+    const local = b.local.get(it.id);
+    const sliders = m.kind === 'custom'
+      ? customParams(m).map(p => ({ name: p.name, type: 'float' as const, slider: { value: p.value, min: p.min, max: p.max } }))
+      : def.params.map(p => ({ name: p.key, type: 'float' as const, slider: { value: m.values[p.key] ?? p.def, min: p.min, max: p.max } }));
+    const node = expr(c, scoped(c, `${it.id}:mod:${m.id}`), def.label, [
+      { name: 'd', type: 'float', from: d },
+      ...(reads.uv && local ? [{ name: 'uv', type: 'vec2' as const, from: local }] : []),
+      ...(reads.t ? [{ name: 't', type: 'float' as const, from: b.getTime() }] : []),
+      ...(m.kind === 'onion' ? sliders.filter(x => x.name !== 'count') : sliders),
+    ], g.result,
+    `Modify ${name}: ${def.label}. ${def.blurb} d is its distance (negative inside), and the result is the distance it is drawn with.${sliders.length ? ` The numbers (${sliders.filter(x => x.name !== 'count').map(x => `${x.name} ${fmt(x.slider.value)}`).join(', ')}) are live sliders: drag them, or wire them, without recompiling.` : ''}${m.kind === 'onion' && (m.values.count ?? 1) > 1 ? ` Done ${Math.round(m.values.count)} times, each ring half as wide, ring inside ring.` : ''}${m.kind === 'custom' ? ' x and y are the point (uv.x, uv.y), t is time.' : ''}`,
+    'float', g.lines);
+    gateNode(node, m.muted, { from: 'd' });
+    d = ref(node, 'result');
+  }
+  return d;
+}
+
+/**
  * An item's distance from `pos`: placement (Motion 2D → Transform), the ring array, the shape or the
  * combine of its children, Round and Outline, and the distance put right for any scaling.
  */
@@ -498,6 +531,7 @@ function emitItem(b: B, it: Item, pos: Ref, depth: number): Ref | null {
     if (outCol && levelCols[i + 1]) outCol = mixColour(b, `${it.id}:sizecol${i + 1}`, 'union', outCol, levelCols[i + 1], ref(u, 'blend'), name);
   });
   if (outCol) b.mixCol.set(it.id, outCol);
+  out = emitMods(b, it, out, name);
   // Muted (builders/mute.ts): its distance is far away, by a live uniform, so it draws nothing and
   // every union, cut and glow ignores it.
   gateNode(c.nodes.find(n => n.id === out.nodeId), it.muted, { to: FAR });
@@ -633,6 +667,8 @@ export function buildScene2D(spec: Scene2D, idFor: (role: string) => string = ro
     }
     const glows = L.glow.mode === 'all' || (L.glow.mode === 'selected' && it.glow);
     const style = styleOf(it);
+    // The glow formula: the layer's own type, the Look's, or Soft for a Glow-style layer and Halo round a Filled one.
+    const gtype = (fallback: GlowType): GlowType => it.glowType ?? L.glow.type ?? fallback;
     if (style === 'outline') {
       // Outline: a glowing line along the edge, the glow of abs(distance).
       acc = ref(expr(c, `${it.id}:outline`, 'Glow outline', [
@@ -653,8 +689,8 @@ export function buildScene2D(spec: Scene2D, idFor: (role: string) => string = ro
         { name: 'amount', type: 'float', slider: { value: L.glow.amount, min: 0.0005, max: 0.05 } },
         { name: 'falloff', type: 'float', slider: { value: L.glow.falloff, min: 0.5, max: 3 } },
         ...(crisp ? [{ name: 'crisp', type: 'vec3' as const, from: crisp }] : []),
-      ], 'bg + color * pow(amount / (max(d, 0.0) + max(amount, 1.0e-5)), falloff)',
-      `${name} drawn as its glow (Style: Glow): its colour × (amount ÷ (distance outside it + amount)) ^ falloff, added to what is behind. Inside and at the edge that is its own colour, and it fades out from the edge, so the shape and its glow read as one, the way a distance field glows (the Grid builder's Soft glow). No flat fill is painted over it. Amount (how far it reaches) and falloff (how fast it fades) are live sliders.`);
+      ], `bg + color * ${glowFormula(gtype('soft'), 'd', 'amount', 'falloff')}`,
+      `${name} drawn as its glow (Style: Glow, type ${GLOW_TYPE_LABELS[gtype('soft')].label}): ${GLOW_TYPE_LABELS[gtype('soft')].blurb} The glow is added to what is behind; with Soft (the default) it is the shape's own colour inside and at the edge, fading out from there, so the shape and its glow read as one, the way a distance field glows (the Grid builder's Soft glow). No flat fill is painted over it. Amount (how far it reaches) and falloff (how fast it fades) are live sliders.`);
       if (crisp) gateNode(g, L.mute?.glow, { from: 'crisp' });
       acc = ref(g, 'result');
     } else if (style === 'glow') {
@@ -663,7 +699,8 @@ export function buildScene2D(spec: Scene2D, idFor: (role: string) => string = ro
         `Paints ${name} over what is behind it: its distance field's edge, anti-aliased by one pixel. It glows when Look → Glow is on for it.`), 'result');
     } else if (glows) {
       const glowFrom = acc;
-      const g = mk(c, 'glowLayer', `${it.id}:glow`, { intensity: L.glow.amount, power: L.glow.falloff }, { d, color: glowTint ?? fill },
+      const ht = gtype('halo');
+      const g = mk(c, 'glowLayer', `${it.id}:glow`, { intensity: L.glow.amount, power: L.glow.falloff, ...(ht !== 'halo' ? { mode: ht } : {}) }, { d, color: glowTint ?? fill },
         `The glow of ${name}: its colour × (${fmt(L.glow.amount)} ÷ distance) ^ ${fmt(L.glow.falloff)}. A bigger Intensity reaches further; a bigger Power makes it fall off faster. It is added to what is behind, then the shape is painted over it.`);
       acc = ref(mk(c, 'addColor', `${it.id}:addglow`, {}, { a: acc, b: ref(g, 'result') }, `Adds ${name}'s glow to what is behind it. Light adds up, so it can go past 1; Tone Map brings it back.`), 'result');
       gateChain(c.nodes, glowFrom, acc, L.mute?.glow);

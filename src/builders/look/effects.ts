@@ -176,6 +176,16 @@ export function emitEffects(c: Ctx, items: readonly StackItem[] | undefined, col
     }
     point = null;
   };
+  /**
+   * The Pass a read (blur, glow, rays, chroma, displace by a picture) works on. After moves, the
+   * picture is read at the bent point first and drawn into a new Pass, so the read works on the
+   * moved picture: kaleidoscope → rays streaks the folded picture, rays → kaleidoscope folds the
+   * rays (reading the old Pass at the bent point would give the second either way).
+   */
+  const readPass = (role: string, what: string): Ref | null => {
+    if (point) flush();
+    return passFor(role, what);
+  };
   list.forEach((it, i) => {
     const def = FX_BY_KIND[it.kind];
     const role = fxRole(it);
@@ -196,7 +206,7 @@ export function emitEffects(c: Ctx, items: readonly StackItem[] | undefined, col
         if (s('by') === 'picture') {
           const map = it.tex ? opts.texture(it.tex, 'Displace') : null;
           if (!map) { if (!it.tex) c.warnings.push('Displace by a picture has no picture: pick one on its card.'); break; }
-          const tex = passFor(role, 'displace');
+          const tex = readPass(role, 'displace');
           if (!tex) break;
           node = mk(c, 'displaceTexture', role, { amount: n('pixels') }, { texture: tex, map, uv: point },
             `${step}: the picture read where the picture “${it.tex}” pushes it: its red sideways, its green up and down (mid-grey stays), up to ${fmt(n('pixels'))} pixels.`);
@@ -214,7 +224,7 @@ export function emitEffects(c: Ctx, items: readonly StackItem[] | undefined, col
       case 'pixelate': bend('pixelate', { pixelSize: n('size') }, {}, 'uv', 'uv', `blocks ${fmt(n('size'))} across.`); break;
       case 'kaleido': bend('kaleidoSpace', { segments: Math.round(n('segments')), rotate: rad(n('rotate')) }, {}, 'input', 'output', `${Math.round(n('segments'))} mirrored wedges${n('rotate') ? `, turned ${fmt(n('rotate'))}°` : ''}.`); break;
       case 'rays': {
-        const tex = passFor(role, 'light rays');
+        const tex = readPass(role, 'light rays');
         if (!tex) break;
         const mode = s('mode');
         node = mk(c, 'radialFastBlur', role, {
@@ -227,7 +237,7 @@ export function emitEffects(c: Ctx, items: readonly StackItem[] | undefined, col
         break;
       }
       case 'blur': case 'glow': case 'chroma': {
-        const tex = passFor(role, def.label.toLowerCase());
+        const tex = readPass(role, def.label.toLowerCase());
         if (!tex) break;
         if (it.kind === 'blur') {
           node = mk(c, 'blurTexture', role, { method: 'smooth', radius: n('radius') }, { texture: tex, uv: point }, `${step}: a Gaussian blur of ${fmt(n('radius'))} pixels over the whole picture.`);
@@ -267,8 +277,8 @@ export function emitEffects(c: Ctx, items: readonly StackItem[] | undefined, col
         break;
       }
     }
-    // A run of bends stays one bent point: the next bend bends it further, Blur, Glow, Chromatic
-    // aberration and Displace by a picture read the Pass there themselves, CRT mask reads it first.
+    // A run of bends stays one bent point: the next bend bends it further. A read after bends works
+    // on the bent picture in a Pass of its own (readPass); CRT mask reads the bent picture first.
   });
   flush();
   return cur;

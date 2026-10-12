@@ -4,10 +4,16 @@ A builder for flat pictures, like the 3D Scene Builder: pick shapes, bend the sp
 
 ## The window
 
+The sections in the left nav run as a pipeline, top to bottom: **Space** (bend the coordinates) →
+**Shapes** (choose them) → **Combine** (join them) → **Modify** (change their distance) → Depth →
+**Effects** (shader effects on the finished picture) → **Look** (colour, grade, glow) → Output, then
+Recipe and Templates.
+
 - **Layers** (left): shapes and combine groups, painted top to bottom (the last is on top). Select one to edit it; move it earlier or later, delete it, join it with the next layer (∪ with next, − next, or **Combine…** for the rest) or ungroup.
 - **Space**: transforms applied to the picture's coordinates before the shapes measure them, top to bottom. At the top, a big **space view** (a grid seen through the whole stack; it stays in view as the stack scrolls, and hovering a transform shows the space after it). Then the stack: **space blocks** (below), and the built-in transforms (zoom, rotate with spin, move, pixelate, tile, mirror tile, mirror, kaleidoscope, polar repeat, polar, swirl, noise warp, wave, fisheye, invert; folded under *Built-in transforms*), and functions (*Add a function*). Each shows a thumbnail of a grid or checkerboard through it.
 - **Shapes**: a gallery of 17 shapes (circle, ring, box, rounded box, triangle, diamond, pentagon, hexagon, octagon, star, burst, hexagram, heart, cross, ellipse, moon, vesica), then **Pictures** (Picture in pieces, below) and function shapes. The selected layer's inspector has its size, **Style** ([below](#style)), colour and glow; **Place** (position, rotate, scale, round, outline only); **Motion** (orbit, bob, spin, pulse, with speed, amount, direction and phase); **Duplicate** (a ring of copies, rings of rings, and the whole ring repeated at bigger sizes).
 - **Combine**: the layers as a tree of combines, and the seven ways to join shapes ([below](#combine)).
+- **Modify**: operations on the selected shape's or combine's distance before it is drawn ([below](#modify)).
 - **Depth**: a picture with depth the shapes interact with (below, [Picture with depth](#picture-with-depth)).
 - **Look** ([builder-look.md](builder-look.md)): the scene's **palette** (the app's palettes as swatch strips, the palette library's saved ones, or one of your own made right there and saved to the library); the background and each layer can take a **palette slot** instead of a free colour, so changing the palette recolours them; colour by (each layer's colour, or length, angle, x, y, time or distance through the palette); glow on all shapes or only layers marked Glow; the **grade**, a stack of the app's colour-grading nodes in order; tone map, vignette, grain. Bloom and Scanlines are no longer offered (a scene made with them keeps them, under *older effects*): **Effects → Glow** and **CRT mask** replace them.
 - **Effects** ([builder-look.md](builder-look.md#effects)): shader effects on the finished picture as stacked cards, dragged into order: Displace (by noise, or by a picture through the shared picker or a Shader Texture), Swirl, Ripple, Lens, Pixelate, Kaleidoscope, Blur, Glow, Chromatic aberration and CRT mask.
@@ -39,6 +45,59 @@ Scenes made before styles have no `style` on their layers: they build exactly as
 Reopened (Edit in 2D Scene Builder), the style is written out as Filled, and their recipe says
 `style=filled`, so the look stays whatever the default is. A nested item's style isn't used: the
 layer it is in draws it.
+
+## Glow types
+
+How a distance becomes glow (Look → Glow → **Type**, or one layer's own under Shapes → **Glow
+type**). The same formulas are the **Glow Layer** node's **Type** (`combiners.ts`,
+`GLOW_TYPES` / `glowFormula`), so the node and the builder share them. i is the amount, p the
+falloff, x = distance outside ÷ i:
+
+| Type | Formula | Looks like |
+| --- | --- | --- |
+| Halo (inverse distance) | (i ÷ \|d\|)^p | a bright rim, slow tail (the classic glow, what Filled layers always had) |
+| Soft | (1 ÷ (1 + x))^p | the colour inside running out into its glow: one shape (Glow style's default) |
+| Exponential | exp(−0.35 · x · p) | an even glow with no long tail |
+| Gaussian | exp(−(x ÷ 4)² · p) | a broad flat-topped bloom that ends cleanly |
+| Neon | 0.6 · soft + 1.2 · exp(−\|d\| ÷ 0.35i) | a bright core line on the edge plus a halo |
+| Rim (edge only) | (1 ÷ (1 + \|d\| ÷ i))^p | only the edge, inside and out |
+| Inverse square | (1 ÷ (1 + x²))^p | lamp-like, bright near and soon gone |
+
+With no type chosen, Glow-style layers use Soft and Filled layers' halo uses Halo, exactly as
+before types. Amount and falloff are live sliders on the built node (Glow style: the *Glow shape*
+Expression Block; Filled: the Glow Layer); changing the type rebuilds. Recipe: `glow type=neon`,
+and on a layer `glow-type=gauss`.
+
+## Modify
+
+Operations on a shape's (or a combine's) **distance** d, negative inside and positive outside,
+which change how it looks before it is drawn. Pick a layer, then add cards; they apply top to
+bottom (numbered), after the item's place, motion, copies and combine. Each is an **Expression
+Block** (d in, d out) whose numbers are sliders: live, and wireable on the node. ⊘ mutes one (live),
+arrows reorder, Alt-click solos.
+
+| Card | What it does | Recipe |
+| --- | --- | --- |
+| Ring (onion) | abs(d) − width: a disc into a ring; Count repeats it, ring inside ring | `@onion(0.02 count=3)` |
+| Invert | −d: inside and outside swap | `@negate` |
+| Ripples | d + amount · sin(d · freq − t · speed): rings near the edge, travelling | `@ripples(40 speed=2 amount=0.06)` |
+| Grow / shrink | d − r: the edge moves out (rounding) or in | `@grow(0.03)` |
+| Repeat rings | the distance repeated every Period: contour rings all the way out | `@bands(0.12 width=0.01)` |
+| Displace | d pushed by smooth noise at the point (Scale, Speed) | `@displace(0.05 scale=4 speed=0.3)` |
+| Fold (abs) | abs(d) | `@abs` |
+| f(d) | your own line, d = …, checked as you type like a space block: d, x, y, uv, t, PI, TAU and its sliders | `@fd("d - amp * sin(d * 40.0)" amp=0.05)` |
+
+A line that doesn't check is left out of the build with a warning. Code: `src/sceneBuilder2d/modify.ts`;
+tests: `src/sceneBuilder2d/__tests__/modifyGlow.test.ts`.
+
+## Expression lines
+
+Every expression line in the builders (a space block's lines, Modify's f(d), the Grid builder's
+math-path x and y) is the Expression Block's own line editor (`components/builders/ExprLineInput`
+over `code/CodeField`'s CodeInput): the shared GLSL highlighter and colours, the same autocomplete
+(the line's names and the GLSL reference), bracket marks, hover help naming the functions it calls
+with what they do, the checker's error drawn on the field's edge, and on a space block, Make a slider
+from the number under the caret. The target and operator selects stay as they were.
 
 ## Combine
 

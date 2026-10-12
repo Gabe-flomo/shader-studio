@@ -15,6 +15,10 @@ import {
   type CombineOp, type GlowMode, type GroupSpec, type ShapeStyle, type Item, type LookMute2D, type MotionKind, type ParamDef, type Scene2D, type ShapeSpec, type Show2D, type ToneMode, type Vec2, type Vec3,
 } from '../../sceneBuilder2d/spec';
 import { DEFAULT_SMOOTH_K, parseRecipe2D, printRecipe2D } from '../../sceneBuilder2d/recipe';
+import { GLOW_TYPES, GLOW_TYPE_LABELS, type GlowType } from '../../nodes/definitions/combiners';
+import { MODS, MOD_BY_KIND, checkCustom, modSummary, newMod, type DistMod, type ModKind } from '../../sceneBuilder2d/modify';
+import { ExprLineInput } from '../builders/ExprLineInput';
+import { paramNameProblem } from '../../sceneBuilder2d/blocks';
 import { TEMPLATES_2D, templateScene } from '../../sceneBuilder2d/templates';
 import { renderShapeThumbnail, renderSpaceThumbnail } from '../../sceneBuilder2d/thumbnails';
 import { BUILT_IN_FUNCTIONS, findFunctions, functionsFromGraphs, type FnEntry, type FnRole } from '../../sceneBuilder2d/functions';
@@ -53,7 +57,8 @@ import { FIT_LABELS, TEX_FITS, newTexUse, withSource, type TexFit, type TexSourc
 import { find2dBuild } from '../../sceneBuilder2d/apply';
 import { paletteLabel, paletteSwatches, swatchGradient } from '../../builders/look/palette';
 import { GRADE_BY_KIND, GRADE_KINDS, gradeParamTarget } from '../../builders/look/grade';
-import { FX_KINDS, fxParamTarget } from '../../builders/look/effects';
+import { FX_KINDS, MAX_FX_PASSES, fxParamTarget } from '../../builders/look/effects';
+import { buildScene2D } from '../../sceneBuilder2d/build';
 import type { StackItem } from '../../builders/look/stack';
 import { StackCards, type LazyParam } from '../builders/look/StackCards';
 import { PaletteCardBody, SlotColourRow } from '../builders/look/PaletteCard';
@@ -62,6 +67,7 @@ const TABS: Array<{ id: Builder2DTab; label: string; icon: IconName; gapBefore?:
   { id: 'space', label: 'Space', icon: 'wave' },
   { id: 'shapes', label: 'Shapes', icon: 'mask' },
   { id: 'combine', label: 'Combine', icon: 'link' },
+  { id: 'modify', label: 'Modify', icon: 'sliders' },
   { id: 'depth', label: 'Depth', icon: 'layers' },
   { id: 'effects', label: 'Effects', icon: 'spark' },
   { id: 'look', label: 'Look', icon: 'sun' },
@@ -520,6 +526,10 @@ function ItemInspector({ id }: { id: string }) {
         {f.parent?.mix && it.type === 'shape' && <SlotColourRow label="Colour" value={it.color} slot={it.slot} swatches={paletteSwatches(scene.look.colour.palette, scene.look.custom)}
           onColour={v => upd(x => { x.color = v; }, 'color')} onSlot={s => upd(x => { if (s == null) delete x.slot; else x.slot = s; })} />}
         {!f.parent && <Row label="Glow"><Toggle checked={it.glow} onChange={v => upd(x => { x.glow = v; })} label="Glows when Look → Glow is Selected" /></Row>}
+        {!f.parent && <Row label="Glow type" hint={GLOW_TYPES.map(t => `${GLOW_TYPE_LABELS[t].label}: ${GLOW_TYPE_LABELS[t].blurb}`).join('\n')}>
+          <Select ariaLabel="Layer glow type" value={it.glowType ?? ''} options={[{ value: '', label: 'The Look\'s' }, ...GLOW_TYPES.map(t => ({ value: t, label: GLOW_TYPE_LABELS[t].label }))]}
+            onChange={v => upd(x => { if (v) x.glowType = v as GlowType; else delete x.glowType; })} />
+        </Row>}
       </Card>
       {!f.parent && <PictureCard id={id} it={it} />}
       <Card id={`it2-${id}-place`} title="Place" summary={`at ${it.at.map(n => +n.toFixed(2)).join(', ')} · ${Math.round(it.rot)}° · ×${+it.scale.toFixed(2)}`}>
@@ -683,6 +693,88 @@ function OlderGridCard() {
   );
 }
 
+/** One Modify card's body: its sliders, or for f(d) its line (the Expression Block editor) and sliders. */
+function ModBody({ id, m, i }: { id: string; m: DistMod; i: number }) {
+  const tk = useTokens();
+  const [newName, setNewName] = useState('');
+  const upd = (fn: (x: DistMod) => void, key?: string) => edit(d => { const f = findItem(d, id); const x = f?.item.mods?.[i]; if (x) fn(x); }, key && `${id}:mod:${m.id}:${key}`);
+  const def = MOD_BY_KIND[m.kind];
+  if (m.kind !== 'custom') {
+    return <>{def.params.map(p => (
+      <NumRow key={p.key} label={p.label} hint={p.hint} integer={p.integer} value={m.values[p.key] ?? p.def} defaultValue={p.def} min={p.min} max={p.max} step={p.step}
+        onChange={v => upd(x => { x.values[p.key] = p.integer ? Math.round(v) : v; }, p.key)} lazyParam={p.key === 'count' ? undefined : play2d(`${id}:mod:${m.id}`, p.key)} />
+    ))}</>;
+  }
+  const chk = checkCustom(m);
+  const names = Object.keys(m.values);
+  const vars = [{ name: 'd', type: 'float' }, { name: 'x', type: 'float' }, { name: 'y', type: 'float' }, { name: 'uv', type: 'vec2' }, { name: 't', type: 'float' }, ...names.map(n => ({ name: n, type: 'float' }))];
+  const why = newName.trim() ? paramNameProblem(newName.trim(), ['d', 'x', 'y', 'uv', 't', 'PI', 'TAU', ...names]) : null;
+  return (
+    <>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ font: `600 12px ${fontFamily.mono}`, color: tk.text.muted }}>d =</span>
+        <ExprLineInput ariaLabel="f(d)" attrs={{ 'data-mod-fd': '' }} value={m.expr ?? ''} vars={vars} invalid={!chk.ok} placeholder="e.g. abs(d) - 0.02" onChange={v => upd(x => { x.expr = v; }, 'expr')} />
+      </div>
+      {!chk.ok && <div role="alert" data-mod-error style={{ fontSize: 11.5, color: tk.status.danger }}>{chk.error}</div>}
+      {names.map(n => {
+        const r = m.sliders?.find(s => s.name === n);
+        return (
+          <div key={n} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <NumRow label={<span style={{ fontFamily: fontFamily.mono }}>{n}</span>} value={m.values[n]} min={r?.min ?? Math.min(0, m.values[n] * 2)} max={r?.max ?? Math.max(1, m.values[n] * 2)}
+                onChange={v => upd(x => { x.values[n] = v; }, `s:${n}`)} lazyParam={play2d(`${id}:mod:${m.id}`, n)} />
+            </div>
+            <IconButton icon="close" size="sm" label={`Remove slider ${n}`} onClick={() => upd(x => { delete x.values[n]; x.sliders = x.sliders?.filter(s => s.name !== n); })} />
+          </div>
+        );
+      })}
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        <input aria-label="New slider name" placeholder="New slider (e.g. amp)" value={newName} onChange={e => setNewName(e.target.value)}
+          style={{ height: 26, padding: '0 8px', borderRadius: radius.sm, border: `1px solid ${why ? tk.status.danger : tk.border.default}`, background: tk.bg.field, color: tk.text.primary, font: `500 12px ${fontFamily.mono}`, width: 160 }} />
+        <Button size="sm" variant="ghost" icon="plus" disabled={!newName.trim() || !!why} onClick={() => { const n = newName.trim(); upd(x => { x.values[n] = 0.1; }); setNewName(''); }}>Slider</Button>
+        {why && <span style={{ fontSize: 11, color: tk.status.danger }}>{why}</span>}
+      </div>
+    </>
+  );
+}
+
+/**
+ * Modify: operations on the selected shape's (or combine's) distance, before it is drawn: a stack
+ * of cards, top to bottom (modify.ts). Every number is a live slider on its Expression Block.
+ */
+export function ModifyTab() {
+  const scene = useSceneBuilder2D(s => s.scene);
+  const selectedId = useSceneBuilder2D(s => s.selectedId);
+  const sel = selectedId ? findItem(scene, selectedId) : null;
+  if (!sel) return <BuilderNote>Pick a shape or a combine on the left: Modify changes its distance before it is drawn (a disc into rings, ripples, a wobbly edge…).</BuilderNote>;
+  const it = sel.item;
+  const id = it.id;
+  const mods = it.mods ?? [];
+  const add = (kind: ModKind) => edit(d => { const f = findItem(d, id); if (f) (f.item.mods ??= []).push(newMod(kind, nextId(d, 'x'))); });
+  const move = (i: number, dir: -1 | 1) => edit(d => { const l = findItem(d, id)?.item.mods; const j = i + dir; if (!l || j < 0 || j >= l.length) return; [l[i], l[j]] = [l[j], l[i]]; });
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <BuilderNote>Changes how ‘{itemName(scene, it)}’ looks by changing its distance d (negative inside, positive outside) before it is drawn, after its place, motion, copies{it.type === 'group' ? ' and combine' : ''}. Applied top to bottom; each is an Expression Block whose numbers are live sliders you can drag or wire.</BuilderNote>
+      {mods.map((m, i) => (
+        <Card key={m.id} id={`mod2-${id}-${m.id}`} defaultOpen title={`${i + 1}. ${MOD_BY_KIND[m.kind]?.label ?? m.kind}`} summary={modSummary(m)}
+          mute={{ muted: !!m.muted, what: MOD_BY_KIND[m.kind]?.label ?? m.kind, onToggle: () => edit(d => { const x = findItem(d, id)?.item.mods?.[i]; if (x) x.muted = !x.muted; }), onSolo: () => edit(d => { const l = findItem(d, id)?.item.mods; if (l) soloIn(l, m.id); }) }}
+          onRemove={() => edit(d => { findItem(d, id)?.item.mods?.splice(i, 1); })} removeLabel={`Remove ${MOD_BY_KIND[m.kind]?.label}`}
+          actions={<>
+            <IconButton icon="chevU" label="Earlier" size="sm" disabled={i === 0} onClick={() => move(i, -1)} />
+            <IconButton icon="chevD" label="Later" size="sm" disabled={i === mods.length - 1} onClick={() => move(i, 1)} />
+          </>}>
+          <BuilderNote>{MOD_BY_KIND[m.kind]?.blurb}</BuilderNote>
+          <ModBody id={id} m={m} i={i} />
+        </Card>
+      ))}
+      <BuilderLabel hint="Each adds a card at the bottom of the stack. Hover a button for what it does.">Add</BuilderLabel>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+        {MODS.map(md => <Button key={md.kind} size="sm" variant="ghost" icon="plus" title={md.blurb} data-mod-add={md.kind} onClick={() => add(md.kind)}>{md.label}</Button>)}
+      </div>
+    </div>
+  );
+}
+
 /**
  * Combine: the layers as a tree of combines (union, smooth union, subtract, intersect, xor), like the
  * 3D builder's. Pick a layer, then join it with the next one; a combine's operator, smooth amount and
@@ -843,6 +935,11 @@ function LookTab() {
         </Row>
         {look.glow.mode !== 'off' && (
           <>
+            <Row label="Type" hint={GLOW_TYPES.map(t => `${GLOW_TYPE_LABELS[t].label}: ${GLOW_TYPE_LABELS[t].blurb}`).join('\n')}>
+              <Select ariaLabel="Glow type" value={look.glow.type ?? ''} options={[{ value: '', label: 'Soft (Glow style), Halo (Filled)' }, ...GLOW_TYPES.map(t => ({ value: t, label: GLOW_TYPE_LABELS[t].label }))]}
+                onChange={v => set(l => { if (v) l.glow.type = v as GlowType; else delete l.glow.type; })} />
+            </Row>
+            {look.glow.type && <BuilderNote>{GLOW_TYPE_LABELS[look.glow.type].blurb}</BuilderNote>}
             <NumRow label="Amount" value={look.glow.amount} defaultValue={DEFAULT_SCENE_2D.look.glow.amount} min={0.001} max={0.05} step={0.0005} onChange={v => set(l => { l.glow.amount = v; }, 'ga')} />
             <NumRow label="Falloff" value={look.glow.falloff} defaultValue={DEFAULT_SCENE_2D.look.glow.falloff} min={0.5} max={3} onChange={v => set(l => { l.glow.falloff = v; }, 'gf')} />
           </>
@@ -878,10 +975,24 @@ function LookTab() {
 function EffectsTab() {
   const effects = useSceneBuilder2D(s => s.scene.effects) ?? [];
   const sources = useSceneBuilder2D(s => s.scene.textures) ?? [];
+  const scene = useThrottled(useSceneBuilder2D(s => s.scene));
+  // The Passes the effects take (each move after a read starts a new one), as a tag on the card that takes one.
+  const passOf = useMemo(() => {
+    const out = new Map<string, number>();
+    let n = 0;
+    for (const node of buildScene2D(scene).nodes) {
+      const role = String(node.params._sbRole ?? '');
+      const m = /^fx:(.+):pass$/.exec(role);
+      if (m && node.type === 'pass') out.set(m[1], ++n);
+    }
+    return out;
+  }, [scene]);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <BuilderNote>Shader effects on the finished picture, top to bottom: each one works on what the ones above made. Moves (Displace, Swirl, Pixelate, Kaleidoscope, CRT curvature) bend where the picture is read; Blur, Glow and Chromatic aberration read round each pixel; CRT mask works on the colour. They build as real nodes after the Look's grade.</BuilderNote>
+      {passOf.size > 0 && <BuilderNote style={{ fontSize: 11 }}>Passes: {passOf.size} of {MAX_FX_PASSES} used, {MAX_FX_PASSES - passOf.size} left. A move (swirl, kaleidoscope…) after a read (blur, glow, rays…) takes a new one, so it bends what the reads made.</BuilderNote>}
       <StackCards name="fx" idPrefix="fx" items={effects} defs={FX_KINDS} playParam={fxPlay} sources={sources} onAddSource={addSource}
+        badge={it => (passOf.has(it.id) ? `pass ${passOf.get(it.id)} of ${MAX_FX_PASSES}` : null)}
         empty="No effects yet: add one above."
         onEdit={(fn, key) => edit(d => { const next = fn([...(d.effects ?? [])]); if (next.length) d.effects = next; else delete d.effects; }, key && `fx:${key}`)} />
     </div>
@@ -1022,7 +1133,7 @@ export function SceneBuilder2DModal() {
     }} />
   );
   const done = () => finishBuilder(close, scene2dBuildIds(useSceneBuilder2D.getState().targetSceneId));
-  const body = { space: <SpaceTab />, shapes: <ShapesTab />, combine: <CombineTab />, depth: <DepthTab />, look: <LookTab />, effects: <EffectsTab />, output: <OutputTab />, recipe: <RecipeTab />, templates: <TemplatesTab /> }[tab];
+  const body = { space: <SpaceTab />, shapes: <ShapesTab />, combine: <CombineTab />, modify: <ModifyTab />, depth: <DepthTab />, look: <LookTab />, effects: <EffectsTab />, output: <OutputTab />, recipe: <RecipeTab />, templates: <TemplatesTab /> }[tab];
   void num;
   // A phone: the shared phone layout (StudioShell → PhoneStudio): the picture on top, the sections
   // as the bottom bar's tabs, Templates and Surprise me as its Presets, the layers a tab of their own.
