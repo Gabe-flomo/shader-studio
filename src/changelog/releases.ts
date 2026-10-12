@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.182',
+    date: '2026-10-11',
+    title: 'Desktop polish',
+    highlights: [
+      { area: 'Desktop', text: 'Fixed: dragging a slider could drag its whole card away as a ghost. Cards now reorder from their grip, and drag-and-drop works on desktop.' },
+      { area: 'Desktop', text: 'No more native Reload/Inspect menu or draggable images in the app; pinch zooms the graph and the keyframe editor.' },
+    ],
+  },
+  {
     id: '2026.10.181',
     date: '2026-10-11',
     title: 'Ball action',
