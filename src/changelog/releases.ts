@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.192',
+    date: '2026-10-12',
+    title: 'Time Cube builder',
+    highlights: [
+      { area: 'Studio', text: 'Scene builder: a Time Cube kind. The live box or stack of frames in the middle, every Time Cube and Frame Stack control at the side, 10 presets below.' },
+      { area: 'Studio', text: 'Sliders move the real nodes with no recompile. Animate any of slice, flow, scan, spread, morph or shuffle with an LFO; Surprise me is one undo.' },
+    ],
+  },
+  {
     id: '2026.10.191',
     date: '2026-10-12',
     title: 'Readable code',
