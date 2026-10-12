@@ -17,11 +17,13 @@
 import * as THREE from 'three';
 import type { PassProgram } from '../compiler/types';
 import { passIterUniform, passPrevUniform, passPxUniform, passUniform } from '../nodes/definitions/passes';
+import { THUMB_FS, THUMB_MODES, bigThumbKey, drawArrows, readTexel, thumbViewOf } from './thumbView';
 import { ppDrawn, ppKeeps, ppPixel, ppPrevBound, ppRepeat, ppSize, ppSplitsForParticles, ppStaged, ppTargetKey } from '../play/kit/passPlan.js';
 import { CanvasProbeRegistry } from './canvasProbeRegistry';
 
 /** Pass cards register a canvas here (by node id); the live runner draws their thumbnails into it. */
 export const passThumbRegistry = new CanvasProbeRegistry();
+
 
 type Uniforms = Record<string, THREE.IUniform>;
 
@@ -146,8 +148,8 @@ export class PassRunner {
   private thumbBuf: Uint8Array | null = null;
   private thumbMat = new THREE.ShaderMaterial({
     vertexShader: 'varying vec2 vUv;\nvoid main() { vUv = uv; gl_Position = vec4(position, 1.0); }',
-    fragmentShader: 'precision highp float;\nuniform sampler2D t;\nvarying vec2 vUv;\nvoid main() { vec4 c = texture2D(t, vUv); gl_FragColor = vec4(clamp(c.rgb, 0.0, 1.0), 1.0); }',
-    uniforms: { t: { value: null } }, depthTest: false, depthWrite: false,
+    fragmentShader: THUMB_FS,
+    uniforms: { t: { value: null }, mode: { value: 0 }, lo: { value: 0 }, hi: { value: 1 } }, depthTest: false, depthWrite: false,
   });
 
   constructor(host: PassRunnerHost) {
@@ -322,26 +324,40 @@ export class PassRunner {
     return sig;
   }
 
-  /** Thumbnails for the Pass cards that are showing (the live runner, every few frames). */
+  /**
+   * Thumbnails for the Pass cards that are showing (the live runner, every few frames), and a Data
+   * Texture's big view (`<id>#big`). A canvas's dataset picks the view (thumbView.ts): Raw, Range,
+   * Channels or Arrows, its Min…Max, its width, and a point to read exactly (`probe`).
+   */
   drawThumbnails(targets: PassTargets): void {
-    const { renderer, camera } = this.host;
     for (const { spec } of this.entries) {
-      const canvas = passThumbRegistry.get(spec.nodeId);
-      if (!canvas) continue;
-      const t = targets.get(spec.slug);
+      for (const key of [spec.nodeId, bigThumbKey(spec.nodeId)]) {
+        const canvas = passThumbRegistry.get(key);
+        if (canvas) this.drawThumb(canvas, targets.get(spec.slug));
+      }
+    }
+  }
+
+  private drawThumb(canvas: HTMLCanvasElement, t: ReturnType<PassTargets['get']>): void {
+    const { renderer, camera } = this.host;
+    {
       const tex = t ? (t.prev ?? t.cur).texture : null;
+      const view = thumbViewOf(canvas.dataset);
       // After the swap, prev holds the picture just drawn.
-      const W = 128, H = Math.max(8, Math.round(128 * (t ? t.h / t.w : 9 / 16)));
-      if (!this.thumbRt || this.thumbRt.height !== H) {
+      const W = view.width, H = Math.max(8, Math.round(W * (t ? t.h / t.w : 9 / 16)));
+      if (!this.thumbRt || this.thumbRt.height !== H || this.thumbRt.width !== W) {
         this.thumbRt?.dispose();
         this.thumbRt = new THREE.WebGLRenderTarget(W, H, { type: THREE.UnsignedByteType, depthBuffer: false });
         this.thumbBuf = new Uint8Array(W * H * 4);
       }
       if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
       const ctx = canvas.getContext('2d');
-      if (!ctx) continue;
-      if (!tex) { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); continue; }
+      if (!ctx) return;
+      if (!tex) { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); return; }
       this.thumbMat.uniforms.t.value = tex;
+      this.thumbMat.uniforms.mode.value = THUMB_MODES.indexOf(view.mode);
+      this.thumbMat.uniforms.lo.value = view.lo;
+      this.thumbMat.uniforms.hi.value = view.hi;
       this.mesh.material = this.thumbMat;
       renderer.setRenderTarget(this.thumbRt);
       renderer.render(this.scene, camera);
@@ -349,8 +365,11 @@ export class PassRunner {
       renderer.setRenderTarget(null);
       const img = ctx.createImageData(W, H);
       for (let y = 0; y < H; y++) img.data.set(this.thumbBuf!.subarray((H - 1 - y) * W * 4, (H - y) * W * 4), y * W * 4);
-      ctx.putImageData(img, 0, 0);
+      if (view.mode === 'arrows') drawArrows(ctx, img, view);
+      else ctx.putImageData(img, 0, 0);
       canvas.dataset.size = t ? `${t.w}×${t.h}` : '';
+      // A point to read exactly (the big view's cursor): the stored texel, at full precision.
+      if (t && view.probe) canvas.dataset.probeValue = readTexel(renderer, t.prev ?? t.cur, view.probe[0], view.probe[1]).map(v => v.toPrecision(5)).join(',');
     }
   }
 

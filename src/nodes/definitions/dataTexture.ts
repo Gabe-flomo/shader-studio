@@ -119,6 +119,8 @@ const READ_DEF: NonNullable<NodeDefinition['paramDefs']>[string] = {
 const DATA_DEFAULTS = {
   fields: DEFAULT_FIELDS, reads: DEFAULT_READS,
   format: 'float', read: 'exact', wrap: 'clamp', scale: '1', storage: 'raw', rangeMin: -1, rangeMax: 1,
+  // The card's preview (components/NodeGraph/DataTextureView.tsx): never in the shader.
+  previewView: 'raw', previewMin: -1, previewMax: 1,
 };
 
 const DATA_PARAM_DEFS: NonNullable<NodeDefinition['paramDefs']> = {
