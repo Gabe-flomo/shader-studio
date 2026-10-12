@@ -11,6 +11,7 @@ kind you pick turns the window into that kind's builder:
 | **Grid simulation** | Grid Rules ([grid-rules.md](grid-rules.md)), directly: a new Grid Rules node, its editor open | cells that follow a rule every step: Life, sand, heat, Wireworld, smooth patterns |
 | **3D scene** | the 3D Scene Builder ([scene-builder-3d.md](scene-builder-3d.md)) | ray-marched shapes, combined, bent, lit and seen through a camera |
 | **Splat scene** | the Splat builder ([splat-builder.md](splat-builder.md)) | a Gaussian splat scan, placed, with stacked effects (dissolve, explode, wave, grade, crop, points), optionally in a ray-marched world |
+| **Warp** | the Warp Builder ([warp-builder.md](warp-builder.md)) | space warps built by dragging tiles (sin onto X, a slider, the clock), stacked block on block; Done makes a small graph, or sends the blocks to the 2D Scene Builder |
 
 Each builder keeps its own code and docs. The Scene builder only routes between them
 (`src/builders/sceneKinds.ts`, `src/components/builders/SceneBuilderShell.tsx`).

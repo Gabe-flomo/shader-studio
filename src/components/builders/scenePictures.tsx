@@ -7,11 +7,12 @@
  *  - Grid scene: shapes on cells, breathing in a wave across the grid;
  *  - Grid simulation: Conway's Life running on a small board (gridRules/cpu.ts);
  *  - 3D scene: a torus, a ball and a box from the 3D builder's own thumbnail marcher;
- *  - Splat scene: a point cloud dissolving and coming back (the Splat builder's own mini cloud).
+ *  - Splat scene: a point cloud dissolving and coming back (the Splat builder's own mini cloud);
+ *  - Warp: a grid bent by a moving sine warp (the Warp Builder's warped-grid picture).
  */
 import { useEffect, useRef } from 'react';
 import type { SceneKind } from '../../builders/sceneKinds';
-import { shapeSdf } from '../../sceneBuilder2d/thumbnails';
+import { renderWarpThumbnail, shapeSdf } from '../../sceneBuilder2d/thumbnails';
 import { renderThumbnail } from '../../sceneBuilder/thumbnails';
 import { cpuColours, cpuSeed, cpuStep, type CpuBoard } from '../../gridRules/cpu';
 import { COUNT_PRESETS } from '../../gridRules/spec';
@@ -164,6 +165,21 @@ function ThreeDPicture({ width, height }: { width: number; height: number }) {
   return <canvas ref={ref} width={width} height={height} style={fluid(width, height)} />;
 }
 
+/** A grid bent by a travelling sine warp: x moves with a wave of y, y with a wave of x. */
+function WarpPicture({ width, height }: { width: number; height: number }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useTicker(12, t => {
+    const c = ref.current, ctx = c?.getContext('2d');
+    if (!c || !ctx) return;
+    const s = c.width;
+    const px = renderWarpThumbnail((x, y) => [x + 0.12 * Math.sin(y * 6 + t * 1.4), y + 0.1 * Math.sin(x * 5 - t)], s, 2.6);
+    try {
+      ctx.putImageData(new ImageData(new Uint8ClampedArray(px), s, s), 0, Math.round((c.height - s) / 2));
+    } catch { /* a picture is a nicety */ }
+  });
+  return <canvas ref={ref} width={width} height={height} style={fluid(width, height)} />;
+}
+
 /** A kind's picture for the kind page. */
 export function ScenePicture({ kind, width = 240, height = 136 }: { kind: SceneKind; width?: number; height?: number }) {
   if (kind === '2d') return <TwoDPicture width={width} height={height} />;
@@ -171,5 +187,6 @@ export function ScenePicture({ kind, width = 240, height = 136 }: { kind: SceneK
   if (kind === 'simulation') return <GridPicture width={width} height={height} />;
   if (kind === '3d') return <ThreeDPicture width={width} height={height} />;
   if (kind === 'splat') return <SplatPicture width={width} height={height} />;
+  if (kind === 'warp') return <WarpPicture width={width} height={height} />;
   return <span style={{ display: 'block', borderRadius: 10, overflow: 'hidden', width: '100%', maxWidth: width }}><KindPicture kind="trail" width={width} height={height} /></span>;
 }

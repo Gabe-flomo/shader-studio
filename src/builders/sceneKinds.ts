@@ -35,8 +35,9 @@ import { findSplatBuild, splatMetaOf, splatSceneOfBuild } from '../splatBuilder/
 import { useSplatBuilder } from '../splatBuilder/store';
 import { closeSplatBuilder } from '../splatBuilder/actions';
 import { EFFECT_INFO, scanName } from '../splatBuilder/spec';
+import { useWarpBuilder } from '../warpBuilder/store';
 
-export type SceneKind = '2d' | 'agents' | 'grid' | 'simulation' | '3d' | 'splat';
+export type SceneKind = '2d' | 'agents' | 'grid' | 'simulation' | '3d' | 'splat' | 'warp';
 
 export interface SceneKindInfo {
   id: SceneKind;
@@ -56,6 +57,7 @@ export const SCENE_KINDS: readonly SceneKindInfo[] = [
   { id: 'simulation', title: 'Grid simulation', line: 'Cells that follow a rule every step: Life, sand, heat, Wireworld, smooth patterns', icon: 'loop', builder: 'Grid Rules' },
   { id: '3d', title: '3D scene', line: 'Shapes in space, combined and bent, lit and seen through a camera', icon: 'cube', builder: '3D Scene Builder' },
   { id: 'splat', title: 'Splat scene', line: 'A Gaussian splat scan, placed, dissolved, exploded or tinted, in a world of its own', icon: 'spark', builder: 'Splat builder' },
+  { id: 'warp', title: 'Warp', line: 'Bend space by dragging tiles: sin onto X, a slider, the clock. Blocks stack, warp on warp', icon: 'wave', builder: 'Warp Builder' },
 ];
 
 export const sceneKindInfo = (k: SceneKind): SceneKindInfo => SCENE_KINDS.find(x => x.id === k)!;
@@ -156,6 +158,7 @@ export function openSceneKind(): SceneKind | null {
   if (useSceneBuilder.getState().open) return '3d';
   if (useGridBuilder.getState().open) return 'grid';
   if (useSplatBuilder.getState().open) return 'splat';
+  if (useWarpBuilder.getState().open) return 'warp';
   if (w.agentBuilder) return 'agents';
   if (w.gridRules) return 'simulation';
   return null;
@@ -167,6 +170,7 @@ export function closeSceneKinds(): void {
   if (useSceneBuilder.getState().open) useSceneBuilder.getState().close();
   if (useGridBuilder.getState().open) useGridBuilder.getState().close();
   if (useSplatBuilder.getState().open) closeSplatBuilder();
+  if (useWarpBuilder.getState().open) useWarpBuilder.getState().close();
   if (useBuilderWindows.getState().agentBuilder) closeAgentBuilder();
   if (useBuilderWindows.getState().gridRules) closeGridRulesEditor();
 }

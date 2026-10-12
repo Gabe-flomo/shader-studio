@@ -39,6 +39,7 @@ import { StudioNavItem, StudioShell } from '../builders/studio/StudioShell';
 import { usePhoneDialog } from '../ui/phoneDialog';
 import { DepthTab } from './DepthTab';
 import { BlockEditor, BlockLibrary, CombineEditor, SpaceView, WarpCanvas } from './SpaceBlocks';
+import { openWarpFrom2D } from '../../warpBuilder/actions';
 import { blockMap, combineMap, emptyBlock, type CombineSpec, type SpaceBlock } from '../../sceneBuilder2d/blocks';
 import { BLOCK_BY_ID } from '../../sceneBuilder2d/blockLibrary';
 import { SurpriseBar } from '../surprise/SurpriseBar';
@@ -369,6 +370,7 @@ function SpaceTab() {
             {block ? (
               <Card id={`sp2-${op.id}`} onRemove={drop} removeLabel={`Remove ${sum.label}`} defaultOpen title={sum.label} summary={sum.value} mute={mute}
                 actions={<>
+                  <IconButton icon="wave" label="Open in Warp Builder: build it from tiles (Done brings it back here)" size="sm" data-open-warp={op.id} onClick={() => openWarpFrom2D([op.id])} />
                   <IconButton icon="link" label="Combine with another block (add, subtract, multiply, blend)" size="sm"
                     onClick={() => edit(d => { const b = d.space[i].block; if (b) d.space[i] = newCombineOp(d.space[i].id, b, emptyBlock(), 'add'); })} />
                   {order}
@@ -420,6 +422,8 @@ function SpaceTab() {
         <BuilderLabel hint="A block is up to three lines like an Expression Block: uv.x, uv.y or uv, then =, +=, -= or *=, then any expression of x, y, uv and t. Blocks chain: each one's uv feeds the next. Link (on a block) combines two blocks instead.">Add a block</BuilderLabel>
         <span style={{ flex: 1 }} />
         <Button size="sm" variant="ghost" icon="plus" onClick={() => addBlock(emptyBlock())}>Empty block</Button>
+        <Button size="sm" variant="ghost" icon="wave" data-open-warp-stack onClick={() => openWarpFrom2D(null)}
+          title="Open every block of the stack in the Warp Builder (drag tiles instead of typing; Done brings them back here, in place)">{scene.space.some(o => o.kind === 'block') ? 'Open stack in Warp Builder' : 'Warp Builder'}</Button>
       </div>
       <BlockLibrary onPick={addBlock} onPickCombine={c => edit(d => { const op = newCombineOp(nextId(d, 'p'), c.a, c.b, c.mode, c.amount); if (c.my) op.combine!.my = c.my; d.space.push(op); })} />
       <Card id="sp2-builtins" title="Built-in transforms" summary="zoom, rotate, tile, mirror, kaleidoscope… as their own nodes">

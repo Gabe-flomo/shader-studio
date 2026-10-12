@@ -14,13 +14,14 @@ import { useSceneBuilder } from '../sceneBuilder/store';
 import { useSceneBuilder2D } from '../sceneBuilder2d/store';
 import { useGridBuilder } from '../gridScene/store';
 import { useSplatBuilder } from '../splatBuilder/store';
+import { useWarpBuilder } from '../warpBuilder/store';
 import { useBuilderWindows } from './windows';
 import { setBuilderFocus } from './builderFocus';
 
 /** Whether an open builder window wants the main preview held now. */
 export function builderHoldsPreview(): boolean {
   const w = useBuilderWindows.getState();
-  return useSceneBuilder.getState().open || useSceneBuilder2D.getState().open || useGridBuilder.getState().open || !!w.gridRules || !!w.sceneShell;
+  return useSceneBuilder.getState().open || useSceneBuilder2D.getState().open || useGridBuilder.getState().open || useWarpBuilder.getState().open || !!w.gridRules || !!w.sceneShell;
 }
 
 /** Whether a builder whose picture is the main preview (the Splat builder, the Agent Builder) is open now. */
@@ -42,6 +43,6 @@ export function watchBuilderPreview(): () => void {
     setBuilderFocus(builderMirrorsPreview());
   };
   sync();
-  const subs = [useSceneBuilder.subscribe(sync), useSceneBuilder2D.subscribe(sync), useGridBuilder.subscribe(sync), useBuilderWindows.subscribe(sync), useSplatBuilder.subscribe(sync)];
+  const subs = [useSceneBuilder.subscribe(sync), useSceneBuilder2D.subscribe(sync), useGridBuilder.subscribe(sync), useBuilderWindows.subscribe(sync), useSplatBuilder.subscribe(sync), useWarpBuilder.subscribe(sync)];
   return () => { for (const u of subs) u(); release?.(); release = null; setBuilderFocus(false); };
 }
