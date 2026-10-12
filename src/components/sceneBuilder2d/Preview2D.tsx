@@ -11,6 +11,7 @@ import type { Scene2D } from '../../sceneBuilder2d/spec';
 import type { Compiled } from '../sceneBuilder/previewGl';
 import { previewPassesOf } from '../builders/previewPasses';
 import { useBuilderPreview, useThrottled } from '../builders/useBuilderPreview';
+import { PreviewClock } from '../builders/PreviewClock';
 import { useTokens } from '../../theme/themeStore';
 import { registerPreviewDepth } from '../builders/previewTextures';
 import { fontFamily, radius } from '../../theme/tokens';
@@ -68,10 +69,7 @@ export function Preview2D({ scene, compiled: given, height = 260 }: {
             {DEPTH_VIEW_LABELS[view].label} ×
           </button>
         )}
-        <button type="button" onClick={() => setPaused(p => !p)} title={paused ? 'Play the preview' : 'Pause the preview'}
-          style={{ position: 'absolute', right: 6, bottom: 6, height: 24, padding: '0 8px', border: 0, borderRadius: 6, background: 'rgba(0,0,0,0.45)', color: '#fff', font: `600 11px ${fontFamily.ui}`, cursor: 'pointer' }}>
-          {paused ? 'Play' : 'Pause'}
-        </button>
+        <PreviewClock size="sm" paused={paused} onPause={() => setPaused(p => !p)} style={{ position: 'absolute', right: 6, bottom: 6 }} />
       </div>
       <span style={{ fontSize: 11.5, color: tk.text.muted }}>{error ? 'The preview could not draw this scene.' : `Live: the graph Build makes (${compiled.nodes} nodes), compiled in ${Math.round(compiled.ms)} ms`}</span>
     </div>

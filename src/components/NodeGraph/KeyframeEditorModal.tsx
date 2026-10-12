@@ -15,6 +15,7 @@ import type { IconName } from '../ui/iconPaths';
 import { Modal } from '../ui/Modal';
 import { RulerSlider } from '../ui/RulerSlider';
 import { subscribeTimeTick } from '../../lib/timeTick';
+import { resetRuntime } from '../../lib/runtimeReset';
 
 const MAX_KEYFRAMES = 8;
 const HANDLE_R = 6;
@@ -1296,7 +1297,7 @@ function TimeCluster() {
   return (
     <span style={{ display: 'flex', alignItems: 'center', gap: 2, background: tk.bg.field, borderRadius: 10, padding: '3px 10px 3px 3px', marginRight: 6 }}>
       <IconButton icon={timePlaying ? 'pause' : 'play'} label={timePlaying ? 'Pause' : 'Play'} size="sm" onClick={() => setTimePlaying(!timePlaying)} />
-      <IconButton icon="reset" label="Reset time to 0" size="sm" onClick={() => window.dispatchEvent(new CustomEvent('reset-time'))} />
+      <IconButton icon="reset" label="Start over: time 0, every frame cleared" size="sm" onClick={resetRuntime} />
       <span style={{ font: `600 12px ${fontFamily.mono}`, color: tk.text.primary, marginLeft: 4, fontVariantNumeric: 'tabular-nums' }}>{time.toFixed(2)}s</span>
     </span>
   );

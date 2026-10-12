@@ -30,6 +30,7 @@ import { builtScenes } from '../../../builders/sceneKinds';
 import { buildFromGridBuilder, simulationFromGrid } from '../../../gridScene/actions';
 import { useGridBuilder } from '../../../gridScene/store';
 import { starterGridScene } from '../../../gridScene/spec';
+import { resetRuntime } from '../../../lib/runtimeReset';
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 HTMLCanvasElement.prototype.getContext = (() => null) as unknown as HTMLCanvasElement['getContext'];
@@ -87,6 +88,25 @@ describe('the Grid Rules builder', () => {
     // A preset is one click.
     click($('[data-preset="highLife"]'));
     expect(params().bornMask).toBe((1 << 3) | (1 << 6));
+  });
+
+  it('↺ on the try board is a true reset: step 0, the board as dealt, nothing kept to step back to; the app\'s ↺ does it too', () => {
+    mount(<GridRulesEditor nodeId="g1" onClose={() => {}} />);
+    const start = genLive();
+    expect(start).toMatch(/^Start · /);
+    for (let k = 0; k < 6; k++) click($('[data-try-forward]'));
+    expect(gen()).toMatch(/^Step 6 · /);
+    click($('[data-try-reset]'));
+    expect(genLive()).toBe(start);
+    expect(($('[data-try-back]') as HTMLButtonElement).disabled).toBe(true);
+    // Stepping on from it gives what stepping from the fresh board gave (nothing kept from before).
+    click($('[data-try-forward]'));
+    const one = genLive();
+    for (let k = 0; k < 3; k++) click($('[data-try-forward]'));
+    act(() => resetRuntime());
+    expect(genLive()).toBe(start);
+    click($('[data-try-forward]'));
+    expect(genLive()).toBe(one);
   });
 
   it('Born & Survive: a 3×3 picture on every switch, one live sentence', () => {

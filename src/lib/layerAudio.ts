@@ -14,6 +14,7 @@
  * recording lines up with the song.
  */
 import { audioEngine } from './audioEngine';
+import { resetRuntime } from './runtimeReset';
 
 type Raw = { wave: Float32Array; freq: Float32Array; sampleRate: number };
 
@@ -28,7 +29,7 @@ export const layerAudio = {
   /** Load a song; the clock starts over so it plays from the top. */
   async load(layerId: string, file: File): Promise<void> {
     await audioEngine.loadAudio(key(layerId), await file.arrayBuffer(), file.name);
-    window.dispatchEvent(new CustomEvent('reset-time'));
+    resetRuntime();
     audioEngine.startAudio(key(layerId), 0);
     changed();
   },

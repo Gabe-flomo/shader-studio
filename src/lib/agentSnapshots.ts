@@ -73,6 +73,15 @@ export function stepAgentsBack(): void {
   wakePreview();
 }
 
+/**
+ * A true reset (lib/runtimeReset.ts): steps still queued are dropped, and the bar shows nothing to go
+ * back to (the runner clears its snapshots: AgentSnapshots.startedOver).
+ */
+export function forgetAgentSteps(): void {
+  ops = [];
+  publish({ ...info, kept: 0, first: null, pending: 0 });
+}
+
 export const agentStepInfo = (): AgentStepInfo => info;
 export function onAgentStepInfo(fn: () => void): () => void { listeners.add(fn); return () => { listeners.delete(fn); }; }
 

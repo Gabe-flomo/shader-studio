@@ -34,7 +34,7 @@ import { agentDrawUniform, agentNbUniforms, agentScanUniforms, agentStateUniform
 import { agentScanKey, onAgentScan, pruneAgentScans, wantAgentScan } from './agentScans';
 import { AG_BESSEL_UNIFORM, listenUniforms, sceneGridUniforms } from '../nodes/definitions/agentForces';
 import {
-  AG_MAX_STEPS, AG_OFFLINE_CHUNK, AG_PROBE_POINTS, AG_STEP_HZ, agCamera3, agDrawLook, agGovern, agGovernorState, agGroupState, agGroupSteps, agHear, agKeep, agLights, agLiveState,
+  AG_MAX_STEPS, AG_OFFLINE_CHUNK, AG_PROBE_POINTS, AG_STEP_HZ, agCamera3, agDrawLook, agGovern, agGovernorState, agGroupState, agGroupSteps, agHear, agKeep, agLights,
   agListenState, agNbLayout, agNbPasses, agNbTile, agProject3, agReadDecode, agReadPlan, agRestartGroup, agStepTime, agStepWindow, agTrailSize, agVolLayout, agVolUniform, type AgGroupState, type AgListenState, type AgVolLayout,
   AG_NB_SLOTS,
 } from '../play/kit/agentPlan.js';
@@ -49,7 +49,7 @@ import { splatSizeByIndex } from './agentSplats';
 import { CanvasProbeRegistry } from './canvasProbeRegistry';
 import { agentReadingsWanted, publishAgentReadings, setAgentGroups } from './agentReadings';
 import { hoodRequests, pokeHood } from './agentHood';
-import { AgentSnapshots, agentSteppingArmed } from './agentSnapshots';
+import { AgentSnapshots, agentSteppingArmed, forgetAgentSteps } from './agentSnapshots';
 import type { AgentHoodGpu, AgentStateView } from './agentHoodGpu';
 
 type Uniforms = Record<string, THREE.IUniform>;
@@ -302,10 +302,19 @@ export class AgentTargets {
     return rt;
   }
 
-  /** Start everything over: every group dead at step 0, every trail empty. */
+  /**
+   * Start everything over, as a fresh open has it (lib/runtimeReset.ts): every group dead at step 0
+   * with its whole schedule new (the live clock, Burst and Start over edges, births, its listeners),
+   * every trail and volume empty, every ping-pong back on its first texture.
+   */
   resetAll(): void {
-    for (const g of this.groups.values()) { this.restartGroup(g); g.live = agLiveState(); }
-    for (const t of this.trails.values()) this.clearTrail(t);
+    for (const g of this.groups.values()) {
+      this.clear(g.rt[0]); this.clear(g.rt[1]);
+      this.dropListen(g);
+      Object.assign(g, agGroupState(), { cur: 0 });
+    }
+    for (const t of this.trails.values()) { this.clear(t.rt[0]); this.clear(t.rt[1]); if (t.proj) this.clear(t.proj); t.cur = 0; }
+    this.renderer.setRenderTarget(null);
   }
 
   /** Drop what the spec no longer has. */
@@ -1761,6 +1770,24 @@ export class AgentRunner {
   private snapshots: AgentSnapshots | null = null;
   private hoodLoading = false;
   private disposed = false;
+  /**
+   * A true reset (lib/runtimeReset.ts), with targets.resetAll(): the runner's own memory of the
+   * last frames goes too: the step governor (how many steps a frame it allows), the live clock it
+   * last saw, the snapshots a transport steps back through (they are of the run before), start-over
+   * requests still waiting (everything starts over now) and the cards' step counts (0).
+   */
+  resetRuntime(): void {
+    this.gov = agGovernorState();
+    this.lastTime = 0;
+    this.liveRuns = 0;
+    this.frames = 0;
+    this.snapshots?.startedOver();
+    forgetAgentSteps();
+    restartRequests.clear();
+    restartAll = false;
+    for (const [id, st] of stats) stats.set(id, { ...st, step: 0 });
+  }
+
   /** Whether the hood still holds targets (ShaderCanvas calls drawHood once more after the last one closes, to free them). */
   get hoodHeld(): boolean { return !!this.hood?.busy; }
 

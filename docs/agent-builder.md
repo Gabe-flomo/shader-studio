@@ -63,7 +63,7 @@ If no frame arrives (the preview is hidden in this layout), the viewport says so
 
 ### Stepping
 
-A bar under the viewport steps through the simulation, as the Grid Rules try board does: **⏮** back to the oldest step kept, **◀** one step back, **▶ / ⏸** play and pause (the preview's own clock, so everything else pauses too), **▶|** one step forward. With the bar focused, ← → and Space do the same; **Shift+→** (or Shift-click ▶|) runs a whole frame's steps at once (the group's Steps a frame). **Step N** is the group's own step count, the number the group card shows.
+A bar under the viewport steps through the simulation, as the Grid Rules try board does: **↺** start over (a true reset, docs/true-reset.md: step 0, the walkers born again, trails and kept steps cleared), **◀** one step back, **▶ / ⏸** play and pause (the preview's own clock, so everything else pauses too), **▶|** one step forward. With the bar focused, ← → and Space do the same; **Shift+→** (or Shift-click ▶|) runs a whole frame's steps at once (the group's Steps a frame). **Step N** is the group's own step count, the number the group card shows.
 
 - A step is one fixed tick of every Agents group in the graph (1/60 s of simulated time: sense, steer, move, deposit, then the trails spread and fade). The live runner runs it at its next frame, the same step the clock would run, and the clock carries on from there when you play again (no catch-up, no wait). Stepping is deterministic: the rule is a function of the state, the step and the seed.
 - Pressing ◀ or ▶| while playing pauses first.

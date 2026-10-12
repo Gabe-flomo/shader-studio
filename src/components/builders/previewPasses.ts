@@ -46,6 +46,8 @@ export interface PreviewPasses {
   draw: (values: Uniforms | null, t: number, w: number, h: number) => void;
   /** Bind the passes' textures for the final program. */
   bindFinal: (prog: WebGLProgram) => void;
+  /** Start every pass's memory over (a true reset, lib/runtimeReset.ts): both targets are made again, cleared, at the next draw. */
+  reset: () => void;
   dispose: () => void;
 }
 
@@ -160,6 +162,7 @@ export function makePreviewPasses(gl: WebGL2RenderingContext, vs: string, specs:
       if (!cache) { cache = { locs: new Map() }; finalLocs.set(prog, cache); }
       bindAll(prog, cache, null);
     },
+    reset: () => { for (const p of live) { p.w = 0; p.h = 0; p.cur = 0; } },
     dispose,
   };
 }

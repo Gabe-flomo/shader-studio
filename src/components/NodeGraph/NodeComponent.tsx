@@ -158,6 +158,7 @@ import { SwitchNodePicker } from './SwitchNodePicker';
 import { showsSwitchPill } from './switchPickerModel';
 import { SwitchToTransformButton } from './SwitchToTransformButton';
 import { TO_TRANSFORM_TYPES } from '../../nodes/toTransform';
+import { resetRuntime } from '../../lib/runtimeReset';
 
 function adaptiveStep(value: number, baseStep: number): number {
   const abs = Math.abs(value);
@@ -4066,7 +4067,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                   <span ref={timeReadoutRef} style={{ font: `600 11.5px ${fontFamily.mono}`, color: tk.text.primary, background: tk.bg.field, borderRadius: 6, padding: '2px 7px', fontVariantNumeric: 'tabular-nums' }}>
                     {(useNodeGraphStore.getState().currentTime ?? 0).toFixed(2)}s
                   </span>
-                  <CardButton icon="reset" label="Reset time to 0" onClick={() => window.dispatchEvent(new CustomEvent('reset-time'))} />
+                  <CardButton icon="reset" label="Start over: time 0, every frame cleared" onClick={resetRuntime} />
                 </span>
               )}
               <span style={{ color: tk.text.secondary, fontSize: isTouchDevice ? 13.5 : 12.5 }}>{output.label}</span>

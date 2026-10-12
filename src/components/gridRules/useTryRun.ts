@@ -14,7 +14,8 @@ import { makeRng } from '../../lib/surprise';
 import { startCellsFromGrid, startCellsHash, type StartCells } from '../../gridRules/startCells';
 import { patternBoard, type TestPattern } from '../../gridRules/explain';
 import { headingOfValue } from '../../gridRules/stack';
-import { clearedBoard, paintCell, tryBack, tryBoardOf, tryEdit, tryForward, tryRewind, tryStart, type TryRun } from '../../gridRules/tryRun';
+import { clearedBoard, paintCell, tryBack, tryBoardOf, tryEdit, tryForward, tryReset, tryRewind, tryStart, type TryRun } from '../../gridRules/tryRun';
+import { onRuntimeReset } from '../../lib/runtimeReset';
 
 export type TrySpeed = 'slow' | 'medium' | 'built';
 export const TRY_SPEEDS: Array<{ value: TrySpeed; label: string; hint: string }> = [
@@ -56,6 +57,8 @@ export interface TryControls {
   forward: () => void;
   back: () => void;
   rewind: () => void;
+  /** ↺, a true reset: step 0's board, every later step dropped (lib/runtimeReset.ts calls it too). */
+  reset: () => void;
   /** A new deal of the start (another roll of the dice for noise). */
   deal: () => void;
   clear: () => void;
@@ -105,6 +108,9 @@ export function useTryRun(nodeParams: Record<string, unknown>): TryControls {
     return () => cancelAnimationFrame(raf);
   }, [playing, speed]);
 
+  // The app's ↺ (lib/runtimeReset.ts): the try board starts over with everything else.
+  useEffect(() => onRuntimeReset(() => setRun(tryReset)), []);
+
   const paint = useCallback((cells: Array<[number, number]>, state: number, heading = 0) => {
     setPlaying(false);
     setRun(r => {
@@ -120,6 +126,7 @@ export function useTryRun(nodeParams: Record<string, unknown>): TryControls {
     forward: () => { setPlaying(false); setRun(r => tryForward(live.current, r)); },
     back: () => { setPlaying(false); setRun(tryBack); },
     rewind: () => { setPlaying(false); setRun(tryRewind); },
+    reset: () => setRun(tryReset),
     deal: () => { setPlaying(false); setDealNo(d => d + 1); },
     clear: () => { setPlaying(false); setRun(r => tryEdit(r, clearedBoard(tryBoardOf(r)))); },
     pattern: p => { setPlaying(false); setRun(tryStart(patternBoard(p, size.w, size.h, makeRng(dealNo).next))); },

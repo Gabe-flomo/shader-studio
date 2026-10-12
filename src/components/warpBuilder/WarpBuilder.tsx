@@ -51,6 +51,8 @@ import { SlotMenu } from './SlotMenu';
 import { WarpPreview } from './WarpPreview';
 import { usePhoneDialog } from '../ui/phoneDialog';
 import { toast } from '../ui/toastStore';
+import { resetRuntime } from '../../lib/runtimeReset';
+import { RESET_LABEL } from '../builders/PreviewClock';
 
 // ── Dragging ─────────────────────────────────────────────────────────────────
 
@@ -524,12 +526,11 @@ function Viewport() {
   // The clock ticks ten times a second: only its readout re-renders, not the viewport, tile bar and rows.
   const readout = useRef<((t: number) => void) | null>(null);
   const onTime = useCallback((v: number) => readout.current?.(v), []);
-  const [seek, setSeek] = useState<{ t: number; n: number } | undefined>();
   const edit = useWarpBuilder(s => s.edit);
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
       <div style={{ position: 'relative', flex: '1 1 55%', minHeight: 240 }}>
-        <WarpPreview spec={spec} mode={mode} upTo={hover} playing={playing} onTime={onTime} seek={seek} />
+        <WarpPreview spec={spec} mode={mode} upTo={hover} playing={playing} onTime={onTime} />
         <div style={{ position: 'absolute', top: 10, left: 10, right: 10, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <span style={{ background: alpha('#000', 0.45), borderRadius: 10, padding: 2 }}>
             <Segmented ariaLabel="Preview" size="sm" value={mode} onChange={(m: PreviewMode) => useWarpBuilder.getState().setMode(m)}
@@ -541,7 +542,7 @@ function Viewport() {
         <div style={{ position: 'absolute', bottom: 10, left: 10, display: 'flex', alignItems: 'center', gap: 6, padding: '2px 8px 2px 2px', borderRadius: 10, background: alpha('#000', 0.45), color: '#fff' }}>
           <IconButton icon={playing ? 'pause' : 'play'} size="sm" label={playing ? 'Pause time' : 'Play time'} onClick={() => setPlaying(!playing)} />
           <TimeReadout bind={readout} />
-          <IconButton icon="reset" size="sm" label="Back to t = 0" onClick={() => setSeek(s => ({ t: 0, n: (s?.n ?? 0) + 1 }))} />
+          <IconButton icon="reset" size="sm" label={RESET_LABEL} onClick={() => resetRuntime()} data-warp-reset />
         </div>
       </div>
       <TileBar />
