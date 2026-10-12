@@ -35,9 +35,12 @@ import { Toggle } from '../ui/Choice';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
 import { Preview2D, compileScene2D } from './Preview2D';
+import { useDepthView } from '../../builders/depthPreview';
 import { StudioNavItem, StudioShell } from '../builders/studio/StudioShell';
 import { usePhoneDialog } from '../ui/phoneDialog';
 import { DepthTab } from './DepthTab';
+import { QUICK_PIN_API, QuickControls } from './QuickControls';
+import { QuickPinContext } from '../builders/quickPinContext';
 import { BlockEditor, BlockLibrary, CombineEditor, SpaceView, WarpCanvas } from './SpaceBlocks';
 import { blockMap, combineMap, emptyBlock, type CombineSpec, type SpaceBlock } from '../../sceneBuilder2d/blocks';
 import { BLOCK_BY_ID } from '../../sceneBuilder2d/blockLibrary';
@@ -533,8 +536,8 @@ function ItemInspector({ id }: { id: string }) {
       </Card>
       {!f.parent && <PictureCard id={id} it={it} />}
       <Card id={`it2-${id}-place`} title="Place" summary={`at ${it.at.map(n => +n.toFixed(2)).join(', ')} · ${Math.round(it.rot)}° · ×${+it.scale.toFixed(2)}`}>
-        <Vec2Row label="Position" value={it.at} min={-2} max={2} onChange={v => upd(x => { x.at = v; }, 'at')} />
-        <NumRow label="Rotate" unit="°" value={it.rot} defaultValue={0} min={-180} max={180} step={0.5} onChange={v => upd(x => { x.rot = v; }, 'rot')} />
+        <Vec2Row label="Position" value={it.at} min={-2} max={2} onChange={v => upd(x => { x.at = v; }, 'at')} lazyParam={ax => play2d(`${id}:place`, 'xy'[ax])} />
+        <NumRow label="Rotate" unit="°" value={it.rot} defaultValue={0} min={-180} max={180} step={0.5} onChange={v => upd(x => { x.rot = v; }, 'rot')} lazyParam={play2d(`${id}:place`, 'rotate')} />
         <NumRow label="Scale" value={it.scale} defaultValue={1} min={0.05} max={4} onChange={v => upd(x => { x.scale = v; }, 'scale')} />
         <NumRow label="Round" hint="Grows the edge outward, rounding corners." value={it.inflate} defaultValue={0} min={0} max={0.3} step={0.002} onChange={v => upd(x => { x.inflate = v; }, 'inflate')} />
         <NumRow label="Outline only" hint="Above 0: only an outline this thick." value={it.hollow} defaultValue={0} min={0} max={0.2} step={0.002} onChange={v => upd(x => { x.hollow = v; }, 'hollow')} />
@@ -880,14 +883,15 @@ function Effect({ m, children }: { m: ReturnType<typeof lookMute> | null; childr
 const play2d = (role: string, key: string): LazyParam => play2dAny(role, [key]);
 /** As play2d, for a setting whose param on the built node may go by one of a few names (the first it has). */
 function play2dAny(role: string, keys: readonly string[]): LazyParam {
-  return () => {
+  // Tagged with what it reads, so a Quick control pinned from the slider finds the same param after a Build (quick.ts).
+  return Object.assign(() => {
     const id = useSceneBuilder2D.getState().targetSceneId;
     const b = id ? find2dBuild(useNodeGraphStore.getState().nodes, id) : null;
     const n = b?.byRole.get(role);
     if (!n) return { missing: 'Not built yet: Build, then right-click to add it to Play.' };
     const key = keys.find(k => k in n.params);
     return key ? { nodeId: n.id, key } : { missing: 'Built into the node rather than a slider on it: change it here.' };
-  };
+  }, { target: { role, keys: [...keys] } });
 }
 const gradePlay = (it: StackItem, key: string) => { const t = gradeParamTarget(it, key); return t ? play2d(t.role, t.param) : undefined; };
 const fxPlay = (it: StackItem, key: string) => { const t = fxParamTarget(it, key); return t ? play2d(t.role, t.param) : undefined; };
@@ -1071,13 +1075,15 @@ function PreviewPanel() {
   const live = useSceneBuilder2D(s => s.scene);
   // One compile for the picture and the node count, following a drag at most every 50 ms.
   const scene = useThrottled(live);
-  const c = useMemo(() => compileScene2D(scene), [scene]);
+  const view = useDepthView(s => (scene.depth ? s.view : 'result'));
+  const heat = useDepthView(s => s.heat);
+  const c = useMemo(() => compileScene2D(scene, { view, heat }), [scene, view, heat]);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '16px 14px' }}>
       <BuilderLabel>Preview</BuilderLabel>
       <Preview2D scene={scene} compiled={c} />
-      <BuilderLabel meta={`${c.nodes} nodes`}>What Build makes</BuilderLabel>
-      <BuilderNote>UV → {scene.space.length ? `${scene.space.length} space transform${scene.space.length === 1 ? '' : 's'} (blocks as Expression Blocks with sliders) → ` : ''}{allShapes(scene).length} shape{allShapes(scene).length === 1 ? '' : 's'} with their placing, motion and copies{scene.grid ? ' and a grid (one Expression Block, line by line)' : ''}{scene.depth ? ` → a picture with depth (Depth node, Depth Mix: ${scene.depth.look === 'top' ? 'on top' : scene.depth.look})` : ''} → colour and glow{scene.look.tone !== 'none' ? ' → Tone Map' : ''} → the Output. Every node gets a note.</BuilderNote>
+      <BuilderLabel meta={`${c.nodes} nodes`}>Quick controls</BuilderLabel>
+      <QuickControls />
     </div>
   );
 }
@@ -1187,7 +1193,7 @@ export function SceneBuilder2DModal() {
         <Button variant="primary" icon="check" data-scene2d-done onClick={done} title={doneTitle}>Done</Button>
       </>}
     >
-      <div style={{ padding: '14px 16px' }}>{body}</div>
+      <QuickPinContext.Provider value={QUICK_PIN_API}><div style={{ padding: '14px 16px' }}>{body}</div></QuickPinContext.Provider>
     </BuilderWindow>
   );
 }

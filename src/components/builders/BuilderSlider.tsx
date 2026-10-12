@@ -12,6 +12,8 @@
  *    card has: Add to (or Remove from) Play controls. A builder that edits a recipe (the 3D Scene
  *    Builder) passes `lazyParam` instead: the node it built, looked up when the menu opens
  *    (sceneBuilder/paramMap.ts), or why there is none yet.
+ *  - in a builder that keeps Quick controls (quickPinContext.ts: the 2D Scene Builder), a small pin on hover and
+ *    "Add to quick controls" in the right-click menu pin it under the preview.
  *  - in a builder on a phone (PhoneStudio) it takes the touch size: a 40 px track, dragged with a
  *    finger, double tap to reset.
  */
@@ -22,6 +24,9 @@ import { isSymmetricRange } from '../ui/rulerMath';
 import { ContextMenuArea } from '../ui/ContextMenuArea';
 import { paramPlayItems } from './paramPlayMenu';
 import { widenedRanges as widened } from './builderSliderRanges';
+import { QuickPinContext } from './quickPinContext';
+import type { MenuItem } from '../ui/Menu';
+import { Icon } from '../ui/Icon';
 
 
 /**
@@ -68,21 +73,33 @@ export function BuilderSlider({ value, min, max, step, integer, onChange, ariaLa
       bipolar={bipolar ?? isSymmetricRange(lo, hi)} trackMinWidth={TRACK_MIN}
       onRange={rangeKey ? (a, b) => { widened.set(rangeKey, { min: a, max: b }); bump(n => n + 1); } : undefined} />
   );
+  const quick = useContext(QuickPinContext);
+  const pinIt = quick ? () => quick.pin({ label: ariaLabel, value, min: lo, max: hi, step, integer, onChange, lazyParam }) : null;
+  const quickItems: MenuItem[] = pinIt ? ['separator', { label: 'Add to quick controls', icon: 'sliders', hint: 'Under the preview', onSelect: pinIt }] : [];
+  const shown: ReactNode = pinIt ? (
+    <span data-quick-pin-row style={{ display: 'flex', flex: 1, minWidth: 0, alignItems: 'center', gap: 2 }}>
+      {slider}
+      <button type="button" data-quick-pin title="Add to quick controls (under the preview)" aria-label={`Add ${ariaLabel} to quick controls`} onClick={pinIt}
+        style={{ flexShrink: 0, width: 18, height: 18, padding: 0, border: 0, borderRadius: 4, background: 'none', color: 'inherit', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Icon name="sliders" size={12} />
+      </button>
+    </span>
+  ) : slider;
   if (!param && lazyParam) {
     const items = () => {
       const p = lazyParam();
-      return 'missing' in p ? [{ heading: 'Play' }, { label: p.missing, disabled: true, onSelect: () => {} }] : paramPlayItems(p.nodeId, p.key);
+      return [...('missing' in p ? [{ heading: 'Play' }, { label: p.missing, disabled: true, onSelect: () => {} }] as MenuItem[] : paramPlayItems(p.nodeId, p.key)), ...quickItems];
     };
     return (
       <ContextMenuArea items={items} style={{ display: 'flex', flex: 1, minWidth: 0 }}>
-        <span data-builder-lazy-param style={{ display: 'flex', flex: 1, minWidth: 0 }}>{slider}</span>
+        <span data-builder-lazy-param style={{ display: 'flex', flex: 1, minWidth: 0 }}>{shown}</span>
       </ContextMenuArea>
     );
   }
-  if (!param) return <>{slider}</>;
+  if (!param) return pinIt ? <ContextMenuArea items={() => quickItems.slice(1)} style={{ display: 'flex', flex: 1, minWidth: 0 }}>{shown}</ContextMenuArea> : <>{slider}</>;
   return (
-    <ContextMenuArea items={() => paramPlayItems(param.nodeId, param.key)} style={{ display: 'flex', flex: 1, minWidth: 0 }}>
-      <span data-builder-param={`${param.nodeId}::${param.key}`} style={{ display: 'flex', flex: 1, minWidth: 0 }}>{slider}</span>
+    <ContextMenuArea items={() => [...paramPlayItems(param.nodeId, param.key), ...quickItems]} style={{ display: 'flex', flex: 1, minWidth: 0 }}>
+      <span data-builder-param={`${param.nodeId}::${param.key}`} style={{ display: 'flex', flex: 1, minWidth: 0 }}>{shown}</span>
     </ContextMenuArea>
   );
 }

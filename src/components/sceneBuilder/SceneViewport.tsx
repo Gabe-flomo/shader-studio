@@ -18,6 +18,7 @@ import {
   AXES, axisMove, cameraBasis, pickShape, planeMove, project, pxToUv, reachOf, scaleSize, shapeCenter, tidy, unitsPerUv, uvToPx, type CamBasis,
 } from '../../sceneBuilder/viewMath';
 import { compileSpec } from './previewGl';
+import { DEPTH_VIEW_LABELS, useDepthView } from '../../builders/depthPreview';
 import { useBuilderPreview, useThrottled } from '../builders/useBuilderPreview';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily } from '../../theme/tokens';
@@ -59,7 +60,10 @@ export function SceneViewport({ onPicked }: { onPicked?: (id: string) => void })
 
   // The picture: compiles follow a drag (a compile every 50 ms at most; uniforms only when the shaders stay the same).
   const shown = useThrottled(spec);
-  const compiled = useMemo(() => compileSpec(shown), [shown]);
+  // The Picture with depth card's preview switch: the picture, the depth, the shaped depth… instead of the result.
+  const view = useDepthView(s => (shown.depth ? s.view : 'result'));
+  const heat = useDepthView(s => s.heat);
+  const compiled = useMemo(() => compileSpec(shown, { view, heat }), [shown, view, heat]);
   const error = useBuilderPreview(canvasRef, compiled, paused, clock);
   // Build's warnings, a few times a second.
   const counted = useThrottled(spec, 300);
@@ -219,6 +223,10 @@ export function SceneViewport({ onPicked }: { onPicked?: (id: string) => void })
       )}
       {/* Labels and controls over the picture. */}
       <div style={{ position: 'absolute', left: 12, top: 12, display: 'flex', gap: 6, alignItems: 'center', pointerEvents: 'none', flexWrap: 'wrap', right: 120 }}>
+        {view !== 'result' && (
+          <button type="button" data-depth-view-chip={view} onPointerDown={e => e.stopPropagation()} onClick={() => useDepthView.getState().setView('result')} title="Showing a depth view: back to the result"
+            style={{ ...chip, border: 0, cursor: 'pointer', pointerEvents: 'all', font: `600 11.5px ${fontFamily.ui}` }}>{DEPTH_VIEW_LABELS[view].label} ×</button>
+        )}
         {shape && <span data-viewport-picked style={chip}>{itemName(spec, shape)}{live ? ` · ${live}` : ' · drag the arrows to move, the square to size'}</span>}
         {!shape && shapes > 0 && <span style={{ ...chip, color: '#b8b8c8' }}>Drag to turn the camera · scroll to zoom · click a shape to pick it</span>}
       </div>

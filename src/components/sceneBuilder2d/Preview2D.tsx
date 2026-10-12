@@ -14,12 +14,20 @@ import { useBuilderPreview, useThrottled } from '../builders/useBuilderPreview';
 import { useTokens } from '../../theme/themeStore';
 import { registerPreviewDepth } from '../builders/previewTextures';
 import { fontFamily, radius } from '../../theme/tokens';
+import { DEPTH_VIEW_LABELS, useDepthView, withDepthView, type DepthView } from '../../builders/depthPreview';
 
-export function compileScene2D(scene: Scene2D): Compiled {
+/** What a picture with depth's preview switch asks for (builders/depthPreview.ts); absent: the result. */
+export type ViewAsk = { view: DepthView; heat?: boolean };
+
+export function compileScene2D(scene: Scene2D, ask?: ViewAsk): Compiled {
   const t0 = performance.now();
   try {
     const g = buildStandalone2D(scene, { idFor: role => `pv2_${role.replace(/[^A-Za-z0-9]/g, '_')}` });
-    const r = compileGraph({ nodes: g.nodes });
+    const d = scene.depth;
+    const nodes = ask && ask.view !== 'result' && d
+      ? withDepthView(g.nodes, g.outputId, ask.view, { heat: ask.heat, size: [d.size.far, d.size.near], spaceAmount: d.space.amount }) ?? g.nodes
+      : g.nodes;
+    const r = compileGraph({ nodes });
     registerPreviewDepth(g.nodes);
     if (!r.success) return { vs: '', fs: '', uniforms: {}, nodes: g.nodes.length, error: (r.errors ?? []).join('; ') || 'The graph did not compile.', ms: performance.now() - t0 };
     return { vs: r.vertexShader, fs: r.fragmentShader, uniforms: r.paramUniforms as Record<string, number | number[]>, nodes: g.nodes.length, error: null, ms: performance.now() - t0, textures: r.textureUniforms, passes: previewPassesOf(r.passes) };
@@ -40,7 +48,10 @@ export function Preview2D({ scene, compiled: given, height = 260 }: {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   // Follows a drag (a compile every 50 ms at most); a value kept as a uniform only sets it (useBuilderPreview).
   const shown = useThrottled(scene);
-  const own = useMemo(() => (given ? null : compileScene2D(shown)), [given, shown]);
+  // The Depth tab's preview switch: the picture, the depth, the shaped depth… instead of the result.
+  const view = useDepthView(s => (scene.depth ? s.view : 'result'));
+  const heat = useDepthView(s => s.heat);
+  const own = useMemo(() => (given ? null : compileScene2D(shown, { view, heat })), [given, shown, view, heat]);
   const compiled = given ?? own!;
   const [paused, setPaused] = useState(false);
   const error = useBuilderPreview(canvasRef, compiled, paused);
@@ -50,6 +61,12 @@ export function Preview2D({ scene, compiled: given, height = 260 }: {
         <canvas ref={canvasRef} data-scene2d-preview aria-label="Live preview of the 2D scene" style={{ width: '100%', height: '100%', display: 'block' }} />
         {error && (
           <div style={{ position: 'absolute', inset: 0, padding: 12, overflow: 'auto', color: '#f38ba8', font: `500 11px ${fontFamily.mono}`, background: 'rgba(13,13,18,0.86)' }}>{error}</div>
+        )}
+        {view !== 'result' && (
+          <button type="button" data-depth-view-chip={view} onClick={() => useDepthView.getState().setView('result')} title="Showing a depth view: back to the result"
+            style={{ position: 'absolute', left: 6, top: 6, height: 22, padding: '0 8px', border: 0, borderRadius: 6, background: 'rgba(0,0,0,0.55)', color: '#fff', font: `600 11px ${fontFamily.ui}`, cursor: 'pointer' }}>
+            {DEPTH_VIEW_LABELS[view].label} ×
+          </button>
         )}
         <button type="button" onClick={() => setPaused(p => !p)} title={paused ? 'Play the preview' : 'Pause the preview'}
           style={{ position: 'absolute', right: 6, bottom: 6, height: 24, padding: '0 8px', border: 0, borderRadius: 6, background: 'rgba(0,0,0,0.45)', color: '#fff', font: `600 11px ${fontFamily.ui}`, cursor: 'pointer' }}>
