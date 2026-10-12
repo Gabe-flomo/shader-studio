@@ -26,6 +26,7 @@ import { learnedNext, rankTables } from '../../suggestions';
 import { nudgeByStage } from '../../structure/boost';
 import { currentStageTarget } from '../../structure/hintsStore';
 import { RecipeOffer } from './RecipeOffer';
+import { SignalMapLayer } from './SignalMap';
 import { openRecipeOffer, useRecipeOffer } from '../../store/recipeOfferStore';
 import { askConfirm, askText } from '../ui/dialogStore';
 import { toast } from '../ui/toastStore';
@@ -2384,6 +2385,8 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
         );
       })()}
 
+      {/* A webcam Texture node's map mode: a hand signal waiting for a slider (SignalMap.tsx) */}
+      <SignalMapLayer />
       {/* Starter recipes for a node just added (nodes/recipes): a small offer beside it */}
       <FreezeBehindBuilder>
         <RecipeOffer nodes={displayNodes} canvasRef={canvasRef} pan={pan} zoom={zoom} />

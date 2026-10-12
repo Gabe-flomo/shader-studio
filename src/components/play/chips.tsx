@@ -194,8 +194,10 @@ export function CameraChip() {
     const refresh = () => { void cameraInput.devices().then(setDevices); };
     const offStatus = cameraInput.onStatus(st => { setStatus(st); setDeviceId(cameraInput.getDeviceId()); if (st === 'on') refresh(); });
     const offDevices = cameraInput.onDevices(refresh);
+    // The same setting shows on Play's chip and a webcam Texture node's: a pick on either moves both.
+    const offSettings = cameraInput.onSettings(() => { setDeviceId(cameraInput.getDeviceId()); setRes(cameraInput.getResolution()); });
     refresh();
-    return () => { offStatus(); offDevices(); };
+    return () => { offStatus(); offDevices(); offSettings(); };
   }, []);
   const colour = status === 'on' ? tk.status.success : status === 'requesting' ? tk.status.warning : status === 'denied' ? tk.status.danger : tk.text.disabled;
   const text = status === 'on' ? (cameraInput.getLabel() || 'Camera on') : status === 'requesting' ? 'Asking…' : status === 'denied' ? (EMBEDDED ? 'Blocked by this page' : 'Blocked or no camera') : status === 'unsupported' ? 'Not available here' : 'Camera off';
