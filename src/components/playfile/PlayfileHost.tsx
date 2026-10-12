@@ -71,7 +71,9 @@ export function PlayfileHost() {
     return () => { window.removeEventListener('dragover', over); window.removeEventListener('drop', drop); };
   }, []);
 
-  // Desktop: files opened with the app (Finder, the Dock) and files dropped on the window.
+  // Desktop: files opened with the app (Finder, the Dock). The main window has Tauri's drop handler off
+  // (tauri.conf.json dragDropEnabled: false: on, it swallowed every HTML5 drag and drop on macOS), so a
+  // dropped file arrives through the window listener above; the drop event here is for windows that keep it.
   useEffect(() => {
     if (!isTauri()) return;
     let off: Array<() => void> = [];

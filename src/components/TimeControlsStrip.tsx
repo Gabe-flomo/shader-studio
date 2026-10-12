@@ -13,7 +13,7 @@ const btnStyleFor = (tc: CtpPalette): React.CSSProperties => ({
   height: '26px',
   fontSize: '12px',
   cursor: 'pointer',
-  backdropFilter: 'blur(4px)',
+  backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
