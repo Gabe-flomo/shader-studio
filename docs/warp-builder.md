@@ -153,6 +153,22 @@ the preview and the build all agree.
 
 ![A smooth If: sin waves on one side of x = edge, the plain grid on the other](warp-builder/8-if-smooth.png)
 
+## Filling a slot from a menu
+
+Right-click (or long-press) an empty slot, the dashed **drop** tile, for a list of what can fill it.
+The order: **Number** (a slider, with its text box focused so you can type the value), the
+**variables** (x, y, uv, time and the rest, in the palette's order; i, k, n and uv0 only in a looped
+block), then the **operators**, the **functions**, **If**, and the conditions where the slot is a
+condition. A slot only lists what it can take. Arrow keys and Enter work; Escape or a click outside
+closes it. Picking is the same code path as a drop (`applyTile`, src/warpBuilder/slotMenu.ts): one undo step.
+
+## The palette
+
+The function, If and comparison tiles carry **static graphs** (src/warpBuilder/glyphs.ts): thin axes
+and the curve y = f(x), computed once when the module loads. The palette draws nothing live and reads
+no store, so it never re-renders while the preview runs. The clock readout ("t = …") is its own small
+component, so the 10 Hz time tick re-renders only that.
+
 ## The stack and the preview
 
 - **Blocks:** each block has a mute (the 2D builder's mute), earlier/later, duplicate and remove.
@@ -217,6 +233,7 @@ an icon.
   - src/warpBuilder/tiles.ts: tiles, text ↔ tiles, editing;
   - spec.ts: the stack, dropping, number tiles, Surprise, to and from the 2D space;
   - preview.ts: the preview shader;
+  - slotMenu.ts: the empty-slot menu; glyphs.ts: the palette's static graphs;
   - store.ts, actions.ts;
   - src/components/warpBuilder/.
 - **Tests:** src/warpBuilder/__tests__/warpBuilder.test.ts covers:

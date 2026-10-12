@@ -14,7 +14,7 @@
  * edit writes the block's lines (warpBuilder/spec.ts dropTile), so the 2D builder, My blocks and
  * the library read the same text.
  */
-import { useEffect, useMemo, useState, type CSSProperties, type DragEvent, type ReactNode } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type ReactNode } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { StudioShell, StudioLabel } from '../builders/studio/StudioShell';
@@ -40,11 +40,15 @@ import {
   type FnTile, type Tile, type TilePath,
 } from '../../warpBuilder/tiles';
 import {
-  PREVIEW_MODES, ROW_LABEL, addRow, blockWithIf, blockWithWrap, dragKind, dropAllowed, dropTile, nameForNumber, newWarpBlock, nextItemId, rowProblems, rowTile, setRowTile,
+  PREVIEW_MODES, ROW_LABEL, addRow, dragKind, dropAllowed, nameForNumber, newWarpBlock, nextItemId, rowProblems, rowTile, setRowTile,
   type PreviewMode, type TileDrag, type TileTarget,
 } from '../../warpBuilder/spec';
-import { useWarpBuilder, type WarpSel } from '../../warpBuilder/store';
+import { useWarpBuilder } from '../../warpBuilder/store';
 import { finishWarpBuilder, sendWarpTo2D } from '../../warpBuilder/actions';
+import { COND_GLYPHS, FN_GLYPHS, GLYPH_SIZE, type CondGlyph } from '../../warpBuilder/glyphs';
+import { applyTile, slotMenuGroups } from '../../warpBuilder/slotMenu';
+import { ContextMenuArea } from '../ui/ContextMenuArea';
+import type { MenuItem } from '../ui/Menu';
 import { WarpPreview } from './WarpPreview';
 import { usePhoneDialog } from '../ui/phoneDialog';
 import { toast } from '../ui/toastStore';
@@ -66,10 +70,30 @@ const readDrag = (e: DragEvent): TileDrag | null => {
 };
 
 /** Drop (or click-apply) a tile: one undo step, then pick what the drop says to pick next. */
-function apply(to: TileTarget, drag: TileDrag): void {
-  let sel: WarpSel | null = null;
-  useWarpBuilder.getState().edit(d => { sel = dropTile(d, to, drag); });
-  if (sel) useWarpBuilder.getState().select(sel);
+function apply(to: TileTarget, drag: TileDrag): void { applyTile(to, drag); }
+
+/** The empty-slot menu (right-click): Number, the variables, then the rest, as a drop would fill it. */
+function slotMenuItems(to: TileTarget): MenuItem[] {
+  const items: MenuItem[] = [];
+  for (const g of slotMenuGroups(to)) {
+    if (g.heading) items.push({ heading: g.heading });
+    for (const o of g.options) {
+      items.push({
+        label: o.label, hint: o.hint,
+        onSelect: () => {
+          applyTile(to, o.drag);
+          // A number: the picked tile's text box takes the keys, so it can be typed straight away.
+          if (o.drag.from === 'palette' && o.drag.kind === 'num') {
+            window.setTimeout(() => {
+              const el = document.querySelector<HTMLInputElement>('[data-warp-picked] input[aria-label="The picked tile as text"]');
+              el?.focus(); el?.select();
+            }, 30);
+          }
+        },
+      });
+    }
+  }
+  return items;
 }
 
 /** A palette tile clicked: it lands on the picked tile, or the end of the first row. */
@@ -184,7 +208,7 @@ function TileChip({ tile, path, block, line, params }: { tile: Tile; path: TileP
       body = <>{kids([tile.a])}<span style={{ color: tk.text.secondary }}>.{tile.field}</span></>;
       break;
   }
-  return (
+  const chip = (
     <span role="button" tabIndex={0} draggable data-tile={tile.k} data-tile-path={path.join('.')} title={tileText(tile)} style={style}
       onDragStart={e => startDrag(e, { from: 'row', block, line, path })} onDragEnd={endDrag}
       onClick={e => { e.stopPropagation(); useWarpBuilder.getState().select({ block, line, path }); }}
@@ -192,6 +216,10 @@ function TileChip({ tile, path, block, line, params }: { tile: Tile; path: TileP
       {body}
     </span>
   );
+  // An empty slot: right-click (or long-press) lists what can fill it.
+  return tile.k === 'hole'
+    ? <ContextMenuArea style={{ display: 'inline-flex' }} minWidth={200} items={() => slotMenuItems({ block, line, path })}>{chip}</ContextMenuArea>
+    : chip;
 }
 
 function RowView({ block, line, item }: { block: number; line: number; item: SpaceBlock }) {
@@ -297,56 +325,36 @@ function PaletteTile({ drag, label, hint, colour, children, wide, bar }: { drag:
   );
 }
 
-/** A function's picture: what wrapping the picked tile would do to the warp, or (on an empty row) its curve. */
-function IfPicture({ cond }: { cond?: Parameters<typeof blockWithIf>[3] }) {
-  const sel = useWarpBuilder(s => s.sel);
-  const item = useWarpBuilder(s => (sel ? s.spec.blocks[sel.block]?.block : undefined));
-  const size = 40;
-  if (item && sel && item.lines[sel.line]?.rhs.trim()) {
-    const b = blockWithIf(item, sel.line, sel.path, cond);
-    return <WarpCanvas map={() => blockMap(b, 0)} k={`if${cond ?? ''}:${JSON.stringify(b)}`} size={size} title={`The picked tile only where the condition holds: ${b.lines[sel.line].rhs}`} />;
-  }
-  // A split: one side lit, the other dark (x > 0, or the comparison's own region).
-  const inside = (x: number, y: number) => {
-    const X = x > 0, Y = y > 0;
-    switch (cond) { case '<': case '<=': return !X; case '==': return Math.abs(x) < 0.26; case '!=': return Math.abs(x) >= 0.26; case '&&': return X && Y; case '||': return X || Y; case '!': return !X; default: return X; }
-  };
-  const cells: ReactNode[] = [];
-  for (let j = 0; j < 8; j++) for (let i = 0; i < 8; i++) {
-    const x = (i + 0.5) / 4 - 1, y = 1 - (j + 0.5) / 4;
-    cells.push(<rect key={`${i}:${j}`} x={i * 5} y={j * 5} width={5} height={5} fill={inside(x, y) ? '#e8957f' : '#1e2434'} />);
-  }
-  return <svg width={size} height={size} style={{ borderRadius: 6, flexShrink: 0 }} aria-hidden>{cells}</svg>;
-}
-
-function FnPicture({ f }: { f: FnTile }) {
-  const sel = useWarpBuilder(s => s.sel);
-  const item = useWarpBuilder(s => (sel ? s.spec.blocks[sel.block]?.block : undefined));
+/**
+ * A tile's static graph (warpBuilder/glyphs.ts): thin axes and the curve in the tile's colour. Memoised and
+ * store-free, so the palette never re-renders or draws anything live.
+ */
+const Glyph = memo(function Glyph({ path, axisX, axisY, colour, cond }: { path: string; axisX: number; axisY: number; colour: string; cond?: boolean }) {
   const tk = useTokens();
-  const size = 40;
-  if (item && sel && item.lines[sel.line]?.rhs.trim()) {
-    const b = blockWithWrap(item, sel.line, sel.path, f.fn);
-    return <WarpCanvas map={() => blockMap(b, 0)} k={`${f.fn}:${JSON.stringify(b)}`} size={size} title={`${f.label} round the picked tile: ${b.lines[sel.line].rhs}`} />;
-  }
-  const pts: string[] = [];
-  for (let i = 0; i <= 40; i++) {
-    const x = -Math.PI + (i / 40) * 2 * Math.PI;
-    const y = Math.max(-3, Math.min(3, f.curve(x)));
-    pts.push(`${(i / 40) * size},${size / 2 - (y / 3) * (size / 2 - 3)}`);
-  }
+  const size = GLYPH_SIZE;
   return (
-    <svg width={size} height={size} style={{ borderRadius: 6, background: '#1e2434', flexShrink: 0 }} aria-hidden>
-      <line x1={0} y1={size / 2} x2={size} y2={size / 2} stroke={alpha(tk.text.muted, 0.4)} strokeWidth={1} />
-      <polyline points={pts.join(' ')} fill="none" stroke="#9fb0ff" strokeWidth={1.6} />
+    <svg data-warp-glyph width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ borderRadius: 6, background: tk.bg.panel, flexShrink: 0 }} aria-hidden>
+      {!cond && <path d={`M4 ${axisY}H${size - 4}M${axisX} 4V${size - 4}`} stroke={alpha(tk.text.muted, 0.4)} strokeWidth={1} fill="none" />}
+      <path d={path} fill="none" stroke={colour} strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
-}
+});
+
+const FnPicture = memo(function FnPicture({ f }: { f: FnTile }) {
+  const tk = useTokens();
+  const g = FN_GLYPHS[f.fn];
+  return <Glyph path={g.path} axisX={g.axisX} axisY={g.axisY} colour={tk.accent.text} cond={g.rotate} />;
+});
+
+const IfPicture = memo(function IfPicture({ cond }: { cond?: CondGlyph }) {
+  return <Glyph path={COND_GLYPHS[cond ?? 'if']} axisX={0} axisY={0} colour="#e8957f" cond />;
+});
 
 function Palette() {
   const grid = (cols: number): CSSProperties => ({ display: 'grid', gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gap: 5 });
   return (
     <div data-warp-palette style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '14px 12px 24px' }}>
-      <StudioLabel meta="pictures: what each would do">Functions</StudioLabel>
+      <StudioLabel meta="graphs: the shape of each">Functions</StudioLabel>
       <div style={grid(3)}>
         {FN_TILES.map(f => (
           <PaletteTile key={f.fn} drag={{ from: 'palette', kind: 'fn', fn: f.fn }} label={f.label} hint={`${f.label}: ${f.blurb}`}>
@@ -520,19 +528,27 @@ function Inspector() {
 
 // ── The window ───────────────────────────────────────────────────────────────
 
+const TimeReadout = memo(function TimeReadout({ bind }: { bind: { current: ((t: number) => void) | null } }) {
+  const [t, setT] = useState(0);
+  useEffect(() => { bind.current = setT; return () => { bind.current = null; }; }, [bind]);
+  return <span data-warp-clock style={{ font: `600 11.5px ${fontFamily.mono}` }}>t = {t.toFixed(1)}</span>;
+});
+
 function Viewport() {
   const tk = useTokens();
   const spec = useWarpBuilder(s => s.spec);
   const mode = useWarpBuilder(s => s.mode);
   const hover = useWarpBuilder(s => s.hover);
   const [playing, setPlaying] = useState(true);
-  const [t, setT] = useState(0);
+  // The clock ticks ten times a second: only its readout re-renders, not the viewport, tile bar and rows.
+  const readout = useRef<((t: number) => void) | null>(null);
+  const onTime = useCallback((v: number) => readout.current?.(v), []);
   const [seek, setSeek] = useState<{ t: number; n: number } | undefined>();
   const edit = useWarpBuilder(s => s.edit);
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
       <div style={{ position: 'relative', flex: '1 1 55%', minHeight: 240 }}>
-        <WarpPreview spec={spec} mode={mode} upTo={hover} playing={playing} onTime={setT} seek={seek} />
+        <WarpPreview spec={spec} mode={mode} upTo={hover} playing={playing} onTime={onTime} seek={seek} />
         <div style={{ position: 'absolute', top: 10, left: 10, right: 10, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <span style={{ background: alpha('#000', 0.45), borderRadius: 10, padding: 2 }}>
             <Segmented ariaLabel="Preview" size="sm" value={mode} onChange={(m: PreviewMode) => useWarpBuilder.getState().setMode(m)}
@@ -543,7 +559,7 @@ function Viewport() {
         </div>
         <div style={{ position: 'absolute', bottom: 10, left: 10, display: 'flex', alignItems: 'center', gap: 6, padding: '2px 8px 2px 2px', borderRadius: 10, background: alpha('#000', 0.45), color: '#fff' }}>
           <IconButton icon={playing ? 'pause' : 'play'} size="sm" label={playing ? 'Pause time' : 'Play time'} onClick={() => setPlaying(!playing)} />
-          <span style={{ font: `600 11.5px ${fontFamily.mono}` }}>t = {t.toFixed(1)}</span>
+          <TimeReadout bind={readout} />
           <IconButton icon="reset" size="sm" label="Back to t = 0" onClick={() => setSeek(s => ({ t: 0, n: (s?.n ?? 0) + 1 }))} />
         </div>
       </div>
