@@ -166,12 +166,12 @@ export function PlayCanvas({ slotId, source, aspect, pointer, startTime, paused,
 
 
   const ratio = aspectRatio(aspect);
-  const overBtn: CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 6, height: 28, border: 0, borderRadius: 8, padding: '0 10px', background: alpha('#0b0b10', 0.7), color: '#fff', font: `600 12px ${fontFamily.ui}`, cursor: 'pointer', backdropFilter: 'blur(6px)', whiteSpace: 'nowrap' };
+  const overBtn: CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 6, height: 28, border: 0, borderRadius: 8, padding: '0 10px', background: alpha('#0b0b10', 0.7), color: '#fff', font: `600 12px ${fontFamily.ui}`, cursor: 'pointer', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', whiteSpace: 'nowrap' };
   const picture = still ?? source?.poster ?? null;
   const note = (icon: 'info' | 'pause' | 'warning', text: string, action?: ReactNode) => (
     <div style={{
       position: 'absolute', left: 10, bottom: 10, right: 10, display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px',
-      borderRadius: radius.md, background: alpha('#0b0b10', 0.78), color: '#e8e8ef', font: `500 12px/1.35 ${fontFamily.ui}`, backdropFilter: 'blur(6px)',
+      borderRadius: radius.md, background: alpha('#0b0b10', 0.78), color: '#e8e8ef', font: `500 12px/1.35 ${fontFamily.ui}`, backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
     }}>
       <Icon name={icon} size={14} style={{ flexShrink: 0, color: icon === 'warning' ? '#f5c46b' : alpha('#ffffff', 0.7) }} />
       <span style={{ flex: 1, minWidth: 0 }}>{text}</span>

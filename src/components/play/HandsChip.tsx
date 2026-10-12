@@ -267,7 +267,7 @@ export function HandsPill() {
         position: 'absolute', left: 10, bottom: 10, zIndex: 3, display: 'inline-flex', alignItems: 'center', gap: 7,
         height: 30, padding: '0 12px 0 10px', border: 0, borderRadius: 999, cursor: busy ? 'default' : 'pointer',
         background: alpha('#000000', 0.62), color: '#ffffff', font: `600 12px ${fontFamily.ui}`,
-        boxShadow: `inset 0 0 0 1px ${alpha('#ffffff', 0.16)}`, backdropFilter: 'blur(6px)',
+        boxShadow: `inset 0 0 0 1px ${alpha('#ffffff', 0.16)}`, backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
       }}
     >
       <Icon name="hand" size={15} />

@@ -43,7 +43,7 @@ export function PhoneFullscreenChrome({ showEnter }: { showEnter: boolean }) {
       <div data-phone-fs-bar="" style={{
         position: 'absolute', top: 'max(8px, env(safe-area-inset-top, 0px))', right: 'max(8px, env(safe-area-inset-right, 0px))', zIndex: 6,
         display: 'flex', alignItems: 'center', gap: 6, padding: '4px 4px 4px 12px', borderRadius: 999,
-        background: 'rgba(12,12,18,0.72)', color: '#f2f2f7', font: `600 12.5px ${fontFamily.ui}`, backdropFilter: 'blur(8px)',
+        background: 'rgba(12,12,18,0.72)', color: '#f2f2f7', font: `600 12.5px ${fontFamily.ui}`, backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
         opacity: bar ? 1 : 0, pointerEvents: bar ? 'auto' : 'none', transition: 'opacity 180ms ease',
       }}>
         <span>Full screen</span>
