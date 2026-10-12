@@ -23,7 +23,6 @@ import { StorageLimitControl } from './StorageLimitControl';
 import { AutosaveSettings } from './AutosaveSettings';
 import { CrashReportsSettings } from '../crash/CrashReports';
 import { ImageModelSetting } from './ImageModelSetting';
-import { ExplanationModelSettings } from './ExplanationModelSettings';
 import { TrackerModelsSettings } from './TrackerModelsSettings';
 import { useStorageLimit } from './useStorageLimit';
 import { DEFAULT_STORAGE_LIMIT, limitLabel } from '../../files/storageLimit';
@@ -90,7 +89,6 @@ export function AppSettingsView({ inv, node, compact }: { inv: Inventory; node: 
       <CrashReportsSettings />
       <BackgroundSettings compact={compact} />
       <TrackerModelsSettings />
-      <ExplanationModelSettings />
 
       <section aria-label="Image model" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 4px', minHeight: 28 }}>

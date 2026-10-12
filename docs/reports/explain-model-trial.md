@@ -1,5 +1,7 @@
 # Explanation model trial (2026-10-08)
 
+> **Historical.** The on-device explanation model was removed on 2026-10-11 (docs/retired-experiments.md): it didn't work well enough to be useful. Kept as the record of the trial.
+
 Question: can a small local language model give better line-by-line explanations of shader code than the rule-based explainer, which mostly restates the line?
 
 ## Setup

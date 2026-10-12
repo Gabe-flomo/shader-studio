@@ -124,7 +124,7 @@ like yours: a 3D world-space seed feeding a colour gets "colour by space" moves 
 4. **Provenance.** Every move links to the shaders that use it ("used in: Fractal Rings, Spiral
    Tunnel…"), via Find uses.
 5. **Surprise me.** A random chain drawn from the order statistics, for the current seed.
-6. **The local model** only explains the finished expression (docs/explain-model.md).
+6. ~~**The local model** only explains the finished expression~~ (the on-device language model was removed on 2026-10-11; docs/retired-experiments.md).
 
 ## 5. Semantic graphs (later)
 

@@ -14,7 +14,6 @@
  *    replaces it in this picture only, and in the CPU numbers of the steps (worked.ts), so they agree.
  *  - Time: when the line moves with time (timeNames.ts), the picture's own clock (play, scrub, speed)
  *    and a filmstrip of it across a few seconds (ExplainLiveCanvas.tsx).
- *  - Explain with the model: the on-device model's line explanation (ExplainMore, docs/explain-model.md).
  *
  * The saved graph is never touched: the picture is a copy of the block (liveRender.ts).
  */
@@ -33,7 +32,6 @@ import { ColorSwatch } from '../ui/ColorPicker';
 import { NumberInput } from '../NodeGraph/NumberInput';
 import { GlslCode, type CodeSpan } from './GlslCode';
 import { ExplainText } from './ExplainText';
-import { ExplainMore } from './ExplainMore';
 import { BuildUpView, newFocusSignal } from './BuildUpView';
 import { varSpans } from './ExplainView';
 import { ExplainLiveCanvas } from './ExplainLiveCanvas';
@@ -169,7 +167,6 @@ export function LineExplainView({ node, at, stops, ctx, onGo, onBack, onFindUses
   const prev = idx > 0 ? stops[idx - 1] : null;
   const next = idx >= 0 && idx < stops.length - 1 ? stops[idx + 1] : null;
   const where = at === 'return' ? 'Return' : `Line ${at + 1} of ${lines.length}`;
-  const whereWords = at === 'return' ? 'the Return line (the block’s result)' : `line ${at + 1} of ${lines.length}`;
 
   // Try values: what a name is when live, and what it starts at when set by hand
   const inputs = (node.params.inputs as InputDef[] | undefined) ?? [];
@@ -224,7 +221,7 @@ export function LineExplainView({ node, at, stops, ctx, onGo, onBack, onFindUses
       </div>
 
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexWrap: 'wrap', overflowY: 'auto' }}>
-        {/* The line, its steps, and the model's explanation */}
+        {/* The line, its pattern and sentence, and its steps */}
         <div style={{ ...pane, flex: '1 1 420px' }}>
           <div data-explain-code="" style={{ font: `500 14px/1.6 ${fontFamily.mono}`, padding: '10px 12px', borderRadius: radius.lg, background: tk.bg.subtle, border: `1px solid ${tk.border.subtle}`, overflowX: 'auto' }}>
             <GlslCode code={text} spans={spans} vars={varMap} onVarHover={setHoverVar} />
@@ -246,8 +243,6 @@ export function LineExplainView({ node, at, stops, ctx, onGo, onBack, onFindUses
               <BuildUpView rows={rows} vars={vars} ranges={ranges} host={host} activeVar={hoverVar}
                 onHoverSpan={setHover} onHoverVar={setHoverVar} selected={selRow?.key ?? null} onSelect={setSelected}
                 canMake={canMake} onMakeNode={onMakeNode} onFindUses={onFindUses} idioms={idioms} focusSignal={focusSignal} />
-              <SectionHead>The model</SectionHead>
-              <ExplainMore key={text} text={text} ctx={ctx} where={whereWords} label="Explain with the model" />
             </>
           ) : (
             <span style={{ font: `500 12.5px ${fontFamily.ui}`, color: tk.text.muted }}>{text.trim() ? `Can’t read this line yet (${ex.error}).` : 'This line is gone or empty.'}</span>

@@ -29,11 +29,11 @@ Each setting is drawn at 64 × 64 at five points (0, ¼, ½, ¾, 1) across its i
 
 Ties break on the target path, so the same renders give the same list. The run is time-boxed to about 2.5 s (settings not reached are not offered, and the panel says so), draws on its own offscreen WebGL2 canvas in chunks with a pause between (the preview's frame loop is never touched), and is cached per graph version (`controlFinderRun.ts`).
 
-## Friendlier names (seam for the explanation model)
+## Friendlier names (a seam, unused)
 
 `src/play/suggestControls.ts` exports `setControlNamer(fn)` and `nameControl(context)`. `context` is `{ nodeLabel, groupLabel?, paramLabel, paramHint?, min, max, value }`; the function returns `{ label, hint }` (for example "Softness" and "how far the glow spreads") or null. When a namer is registered the panel shows the label and hint and Add to Play uses the label. Without one the deterministic label is used. A namer that throws or takes over two seconds is ignored.
 
-TODO: the local explanation model (PR `claude/explain-model`, not merged) should call `setControlNamer` when it finishes loading. Nothing here depends on that branch.
+Nothing registers a namer today: the on-device explanation model that was meant to was removed on 2026-10-11 (docs/retired-experiments.md).
 
 ## Tests
 
