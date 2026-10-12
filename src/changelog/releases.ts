@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.196',
+    date: '2026-10-12',
+    title: 'Feedback texture',
+    highlights: [
+      { area: 'Studio', text: 'Feedback (texture): one node for trails on any texture. Tail, Clean, Tint, Zoom, Turn, Move, Flow, Hue drift and Blend, all live. Reset clears it.' },
+      { area: 'Studio', text: 'New Texture tools examples on the Ball action clip: a zoom tunnel, trails pushed by their own flow, and a camera echo.' },
+    ],
+  },
+  {
     id: '2026.10.195',
     date: '2026-10-12',
     title: 'True reset',
