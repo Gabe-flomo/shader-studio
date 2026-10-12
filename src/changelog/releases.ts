@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.179',
+    date: '2026-10-11',
+    title: 'Softer rays',
+    highlights: [
+      { area: 'Studio', text: 'Light rays, Brightest: a new Opacity (0.6) lets objects show through, and each ray fades out smoothly instead of stopping. Average is unchanged.' },
+    ],
+  },
+  {
     id: '2026.10.178',
     date: '2026-10-11',
     title: 'Polish',
