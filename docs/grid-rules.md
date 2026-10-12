@@ -85,14 +85,18 @@ again when the kind of rule, the template or the start changes.
   after it. A rule edit keeps the frame shown and drops the ones after it too.
 - **Speed of the try:** Slow (3 steps a second), Medium (10) or **As built** (the node's own pace,
   up to 240). Smooth starts As built.
-- **The step counter** ("Step 12 · 34 live") and, pointing at a cell, what the rule makes of it:
-  "empty + 3 neighbours → comes alive", a dying cell's stage, a cell's state and the next one, a
-  Smooth cell's values.
+- **The header strip** along the board's top edge, part of the panel and shown on every tab: on
+  the left the step and the board's shares, "Step 12 · 34% · 66%" (alive in green, dead in red; a
+  few cells read <1%, never 0%; Smooth shows the step only); on the right the key of the marks
+  (○ born ✕ dies, and the amber changes dot outside plain counting). In the centre, pointing at (or
+  dragging over) a cell says what the rule makes of it: "empty + 3 neighbours → comes alive", a
+  dying cell's stage, a cell's state and the next one, a Smooth cell's values. On a narrow (phone)
+  board that note drops to a second line of the strip.
 - **Pictures for the section being edited:**
-  - Born & Survive and Neighbourhood: what the next step does, a green ring where a cell is born, a
-    red cross where one dies (Stages: an amber dot where it changes stage); the switch in the
-    corner turns them off. Pointing at a cell outlines the cells it counts (your own
-    neighbourhood's too), and the note under the step counter gives its count, weights included.
+  - On every tab, always on: what the next step does, a green ring where a cell is born, a red
+    cross where one dies (Stages: an amber dot where it changes stage); hidden while playing.
+    Pointing at a cell outlines the cells it counts (your own neighbourhood's too), and the note in
+    the strip's centre gives its count, weights included.
   - Pointing at a **count switch** lights the cells it stands for: the empty cells with that many
     live neighbours (Born) or the live ones (Survive).
   - Stencils: pointing at a rule lights the cells it matches now, with "Rule 2 matches 14 cells

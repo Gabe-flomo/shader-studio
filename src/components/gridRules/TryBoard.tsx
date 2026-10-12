@@ -7,8 +7,9 @@
  *    (drag on to keep erasing). Smooth: a drop of value.
  *  - Step: ⏮ back to the start, ◀ one generation back, ▶ play / pause, ▶| one forward (← → and
  *    Space when the board has focus). Slow · Medium · As built.
- *  - Pictures over the board, for the section being edited: what the next step does (born, dies),
- *    the cells a hovered cell counts and what they make of it, the cells a hovered count switch
+ *  - The header strip along the board's top edge (every tab): "Step 59 · 34% · 66%" (alive green,
+ *    dead red), what the pointer cell will do in the centre, the born / dies key on the right.
+ *  - Pictures over the board: what the next step does (born, dies; always on), the cells a hovered cell counts and what they make of it, the cells a hovered count switch
  *    stands for, the cells a stencil matches, the 2×2 blocks of the next step.
  *  - Under the hood: every cell's numbers.
  *  - Use as the start: the cells on the board become the node's start (stamped in the middle).
@@ -21,7 +22,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Button, IconButton } from '../ui/Button';
-import { Segmented, Toggle } from '../ui/Choice';
+import { Segmented } from '../ui/Choice';
 import { Select } from '../ui/Select';
 import { cpuColours, cpuStep, cpuStepUpTo } from '../../gridRules/cpu';
 import { GRID_DEFAULTS, countsAsRanges, gridShape, maxCount, countsOf } from '../../gridRules/spec';
@@ -56,6 +57,14 @@ export function stateColour(p: P, k: number): string {
   return rgbCss(p[key], GRID_DEFAULTS[key] as number[]);
 }
 
+/** A share as a whole percent; a few cells never read 0% (nor all-but-a-few 100%). */
+export function sharePercent(part: number, total: number): string {
+  if (total <= 0 || part <= 0) return '0%';
+  if (part >= total) return '100%';
+  const p = (part / total) * 100;
+  return p < 1 ? '<1%' : p > 99 ? '>99%' : `${Math.round(p)}%`;
+}
+
 export function TryBoard({ params, nodeParams, focus, hood, onUseAsStart }: {
   params: P; nodeParams: P; focus: TryFocus; hood: boolean;
   onUseAsStart: (cells: ReturnType<typeof drawingOf>) => void;
@@ -73,7 +82,6 @@ export function TryBoard({ params, nodeParams, focus, hood, onUseAsStart }: {
   const [head, setHead] = useState(0);
   const heading = arrows ? head : 0;
   const [hover, setHover] = useState<[number, number] | null>(null);
-  const [showNext, setShowNext] = useState(true);
   // The Text stamp: words (the node's text start's to begin with) and their height in cells.
   const [stamp, setStamp] = useState<{ on: boolean; text: string; size: number }>(() => {
     const st = readStartText(params.startText);
@@ -185,8 +193,8 @@ export function TryBoard({ params, nodeParams, focus, hood, onUseAsStart }: {
       const x = i % B.w, y = Math.floor(i / B.w);
       overlay.push(<rect key={`k${i}`} x={px(x) + 1} y={py(y) + 1} width={cell - 2} height={cell - 2} rx={2} fill={ink(kind === 'born' ? '#3fbf7f' : kind === 'dies' ? '#ff5a5a' : '#f0b43c', 0.3)} stroke={kind === 'born' ? '#3fbf7f' : kind === 'dies' ? '#ff5a5a' : '#f0b43c'} strokeWidth={2} />);
     }
-  } else if (showNext && changes && cell >= 6 && (focus.section === 'rule' || focus.section === 'neighbourhood' || focus.section === 'stack')) {
-    // What the next step does: a green ring where a cell is born, a red cross where one dies.
+  } else if (changes && cell >= 6) {
+    // What the next step does, on every tab: a green ring where a cell is born, a red cross where one dies.
     for (const [i, kind] of changes) {
       const x = i % B.w, y = Math.floor(i / B.w);
       const cx = px(x) + cell / 2, cy = py(y) + cell / 2, r = cell * 0.3;
@@ -265,32 +273,41 @@ export function TryBoard({ params, nodeParams, focus, hood, onUseAsStart }: {
     }
   }
 
+  // The header strip's numbers: the share of the board alive (green) and dead (red), whole percents.
+  const alivePct = sharePercent(life.live, B.w * B.h), deadPct = sharePercent(B.w * B.h - life.live, B.w * B.h);
+  const narrow = stage.w > 0 && stage.w < 520;
+  const note = hoverNote ?? matchNote;
   const sep = <span style={{ width: 1, height: 22, background: tk.border.subtle, flexShrink: 0 }} />;
   const drawn = drawingOf(params, B);
   return (
     <div data-try-board style={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', background: tk.bg.render }}>
+      {/* The header strip: part of the panel, along the board's top edge, on every tab. Left the step
+          and the alive · dead shares, centre what the pointer cell does, right the key of the marks. */}
+      <div data-try-header style={{
+        flexShrink: 0, display: 'grid', alignItems: 'center', columnGap: 12, rowGap: 2, padding: '5px 12px', minHeight: 28,
+        gridTemplateColumns: narrow ? 'auto minmax(0, 1fr)' : 'minmax(0, 1fr) auto minmax(0, 1fr)',
+        gridTemplateAreas: narrow ? '"gen key" "note note"' : '"gen note key"',
+        borderBottom: `1px solid ${tk.border.subtle}`, background: tk.bg.subtle, fontSize: 12, color: tk.text.secondary,
+      }}>
+        <span data-try-gen data-try-live={smooth ? undefined : life.live} style={{ gridArea: 'gen', font: `600 12px ${fontFamily.mono}`, color: tk.text.primary, whiteSpace: 'nowrap' }}>
+          {gen === 0 ? 'Start' : `Step ${gen}`}
+          {!smooth && <> · <span data-try-alive title={`${life.live} of ${B.w * B.h} cells alive`} style={{ color: '#3fbf7f' }}>{alivePct}</span> · <span data-try-dead title={`${B.w * B.h - life.live} cells dead`} style={{ color: '#ff5a5a' }}>{deadPct}</span></>}
+        </span>
+        <span data-try-note aria-live="polite" title={note ?? undefined} style={{ gridArea: 'note', textAlign: 'center', color: tk.text.primary, lineHeight: 1.35, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: narrow ? 'normal' : 'nowrap', minWidth: 0 }}>{note ?? ''}</span>
+        {!smooth && (
+          <span data-try-key style={{ gridArea: 'key', justifySelf: 'end', display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11.5, whiteSpace: 'nowrap' }}>
+            <svg width={12} height={12} aria-hidden><circle cx={6} cy={6} r={4} fill="none" stroke="#3fbf7f" strokeWidth={1.6} /></svg> born
+            <svg width={12} height={12} aria-hidden style={{ marginLeft: 4 }}><path d="M2 2L10 10M10 2L2 10" stroke="#ff5a5a" strokeWidth={1.6} /></svg> dies
+            {s.type !== 'count' && <><svg width={12} height={12} aria-hidden style={{ marginLeft: 4 }}><circle cx={6} cy={6} r={3} fill="#f0b43c" /></svg> changes</>}
+          </span>
+        )}
+      </div>
       <div ref={stageRef} tabIndex={0} onKeyDown={onKey} aria-label="Try board: draw cells, then step through" style={{ flex: 1, minHeight: 0, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', outline: 'none' }}>
         <div data-try-surface style={{ position: 'relative', width: W, height: H, cursor: stamp.on ? 'copy' : 'crosshair', touchAction: 'none', boxShadow: `0 0 0 1px ${tk.border.default}` }}
           onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} onPointerLeave={() => setHover(null)}>
           <canvas ref={canvasRef} width={B.w} height={B.h} aria-label="The try board" style={{ width: W, height: H, imageRendering: 'pixelated', display: 'block' }} />
           <svg width={W} height={H} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>{overlay}</svg>
         </div>
-        {/* Top left: what this is, and the generation. */}
-        <div style={{ position: 'absolute', left: 12, top: 10, display: 'flex', flexDirection: 'column', gap: 4, pointerEvents: 'none', maxWidth: '60%' }}>
-          <span data-try-gen style={{ font: `600 12px ${fontFamily.mono}`, color: tk.text.primary, background: alpha(tk.bg.panel, 0.85), padding: '3px 8px', borderRadius: radius.sm, alignSelf: 'flex-start' }}>
-            {gen === 0 ? 'Start' : `Step ${gen}`}{smooth ? '' : ` · ${life.live} live`}
-          </span>
-          {(hoverNote || matchNote) && <span data-try-note style={{ fontSize: 12, color: tk.text.primary, background: alpha(tk.bg.panel, 0.85), padding: '4px 8px', borderRadius: radius.sm, alignSelf: 'flex-start', lineHeight: 1.4 }}>{hoverNote ?? matchNote}</span>}
-        </div>
-        {/* Top right: the legend of the marks. */}
-        {!smooth && (focus.section === 'rule' || focus.section === 'neighbourhood' || focus.section === 'stack') && !focus.count && (
-          <div style={{ position: 'absolute', right: 12, top: 10, display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5, color: tk.text.secondary, background: alpha(tk.bg.panel, 0.85), padding: '4px 8px', borderRadius: radius.sm }}>
-            <span data-try-show-next style={{ display: 'inline-flex' }}><Toggle checked={showNext} onChange={setShowNext} label="Next step:" /></span>
-            <svg width={12} height={12}><circle cx={6} cy={6} r={4} fill="none" stroke="#3fbf7f" strokeWidth={1.6} /></svg> born
-            <svg width={12} height={12}><path d="M2 2L10 10M10 2L2 10" stroke="#ff5a5a" strokeWidth={1.6} /></svg> dies
-            {s.type !== 'count' && <><svg width={12} height={12}><circle cx={6} cy={6} r={3} fill="#f0b43c" /></svg> changes</>}
-          </div>
-        )}
         {hood && (
           <div data-try-hood style={{ position: 'absolute', right: 12, bottom: 12, width: 270, padding: 12, borderRadius: radius.card, background: alpha(tk.bg.panel, 0.95), boxShadow: `inset 0 0 0 1px ${tk.border.default}`, fontSize: 12, lineHeight: 1.5, color: tk.text.secondary, display: 'flex', flexDirection: 'column', gap: 6 }}>
             <b style={{ color: tk.text.primary, fontSize: 13 }}>Under the hood</b>
