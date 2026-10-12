@@ -47,7 +47,7 @@ import { scene2dBuildIds } from '../../builders/finishScenes';
 import { TexturePicker } from '../builders/TexturePicker';
 import { MUTED_DIM, MuteToggle, MutedTag } from '../builders/MuteToggle';
 import { soloIn, soloKeys } from '../../builders/mute';
-import { PIECES_LABELS, PIECES_MOVES, PIECES_SIZE_BYS, defaultPieces, type PiecesSpec } from '../../sceneBuilder2d/pieces';
+import { PIECES_LABELS, PIECES_MOVES, PIECES_SIZE_BYS, defaultPieces, startPieces, type PiecesSpec } from '../../sceneBuilder2d/pieces';
 import { PIECE_SHAPES } from '../../nodes/definitions/pieces';
 import { FIT_LABELS, TEX_FITS, newTexUse, withSource, type TexFit, type TexSource, type TexUse } from '../../builders/textures';
 import { find2dBuild } from '../../sceneBuilder2d/apply';
@@ -584,7 +584,7 @@ function PiecesCard() {
       onRemove={pieces ? () => edit(d => { d.pieces = null; }) : undefined} removeLabel="Remove the picture in pieces">
       <BuilderNote>A picture rebuilt from pieces, each the picture's colour at its home, drawn over the layers and the grid. Move the pieces and the picture moves: they scatter and flow back home.</BuilderNote>
       <TexturePicker id="pieces" sources={sources} value={pieces?.tex} onAdd={addSource} none="No picture in pieces"
-        onChange={name => edit(d => { d.pieces = name ? { ...(d.pieces ?? defaultPieces(name)), tex: name } : null; })} />
+        onChange={name => edit(d => { d.pieces = name ? { ...(d.pieces ?? startPieces(name)), tex: name } : null; })} />
       {pieces && (
         <>
           <Row label="Shape">
@@ -601,11 +601,18 @@ function PiecesCard() {
           <Row label="Move">
             <Select ariaLabel="What moves the pieces" value={pieces.move} options={PIECES_MOVES.map(k => ({ value: k, label: PIECES_LABELS.move[k] }))} onChange={v => set(p => { p.move = v as PiecesSpec['move']; })} />
           </Row>
+          <NumRow label="Scatter" hint="A random push for every piece, each its own way (picture units: 1 is half the frame's height). A little (0.01) breaks the grid up, CC Ball Action style." value={pieces.scatter ?? 0} defaultValue={0} min={0} max={1} onChange={v => set(p => { p.scatter = v; }, 'scatter')} />
+          {(pieces.scatter ?? 0) > 0 && <>
+            <NumRow label="Seed" integer hint="Another random layout." value={pieces.seed ?? 1} defaultValue={1} min={0} max={100} onChange={v => set(p => { p.seed = Math.round(v); }, 'seed')} />
+            <NumRow label="Scatter turn" hint="Up to this many degrees of random turn per piece." value={pieces.scatterTurn ?? 0} defaultValue={0} min={0} max={180} onChange={v => set(p => { p.scatterTurn = v; }, 'scatterTurn')} />
+          </>}
+          <NumRow label="Scatter size" hint="Random size per piece: 0.3 makes them 70%–130% of Size." value={pieces.scatterSize ?? 0} defaultValue={0} min={0} max={1} onChange={v => set(p => { p.scatterSize = v; }, 'scatterSize')} />
+          <NumRow label="Dim floor" hint="Lifts the darkest colours, so dark parts of the picture stay as dim pieces." value={pieces.dim ?? 0} defaultValue={0} min={0} max={0.5} onChange={v => set(p => { p.dim = v; }, 'dim')} />
           {pieces.move !== 'none' && <>
-            <NumRow label="Scatter" hint="How far the pieces fly: a share of the frame's height." value={pieces.amount} defaultValue={D.amount} min={0} max={1.5} onChange={v => set(p => { p.amount = v; }, 'amount')} />
-            <NumRow label="Pace" hint="Scatters a second (0: they stay scattered)." value={pieces.speed} defaultValue={D.speed} min={0} max={1} onChange={v => set(p => { p.speed = v; }, 'speed')} />
+            <NumRow label="Fly" hint="How far the moving field carries the pieces: a share of the frame's height." value={pieces.amount} defaultValue={D.amount} min={0} max={1.5} onChange={v => set(p => { p.amount = v; }, 'amount')} />
             {pieces.move !== 'mouse' && <NumRow label="Swirl size" hint="The noise's scale: smaller is broader swirls." value={pieces.swirl} defaultValue={D.swirl} min={0.1} max={5} onChange={v => set(p => { p.swirl = v; }, 'swirl')} />}
           </>}
+          {(pieces.move !== 'none' || (pieces.scatter ?? 0) > 0) && <NumRow label="Pace" hint="Scatters a second: an LFO eases the move and the Scatter out and back (0: they stay scattered)." value={pieces.speed} defaultValue={D.speed} min={0} max={1} onChange={v => set(p => { p.speed = v; }, 'speed')} />}
         </>
       )}
     </Card>

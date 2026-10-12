@@ -19,7 +19,26 @@ describe('Pieces examples', () => {
     expect(r.errors ?? []).toEqual([]);
     const live = new Set(collectPlayCandidates(nodes, r.paramBindings).map(c => c.target));
     for (const c of EXAMPLE_GRAPHS[key].play!.controls) expect(live.has(c.target), `${c.label} → ${c.target}`).toBe(true);
-    expect(EXAMPLE_GRAPHS[key].images?.photo).toMatch(/^data:image\//);
+    if (nodes.some(nd => nd.type === 'textureInput')) expect(EXAMPLE_GRAPHS[key].images?.photo).toMatch(/^data:image\//);
+  });
+
+  it('Ball action: the kaleidoscope is a pass the glowing balls read, scattered from an LFO', () => {
+    const r = compileGraph({ nodes: resolveNodeAliases(EXAMPLE_GRAPHS.piecesBallAction.nodes, getNodeDefinition) });
+    expect(r.passes?.length).toBe(1);
+    expect(r.passes![0]).toMatchObject({ nodeId: 'kal', size: 1024 });
+    expect(r.fragmentShader).toContain(`uniform sampler2D u_pass_${r.passes![0].slug};`);
+    expect(r.fragmentShader).toMatch(/pieces_rand4\(\w+_cid, \w+_seed\)/);
+    expect(r.fragmentShader).toMatch(/\w+_glow = /);
+  });
+
+  it('Balls scattered in depth: the scene searches its neighbours, the colour Balls agrees', () => {
+    const r = compileGraph({ nodes: resolveNodeAliases(EXAMPLE_GRAPHS.piecesBallsDepth.nodes, getNodeDefinition) });
+    const fs = r.fragmentShader;
+    const fn = fs.slice(fs.indexOf('float mapScene_'), fs.indexOf('\n}', fs.indexOf('float mapScene_')));
+    expect(fn).toMatch(/for \(int \w+_jj = 0; \w+_jj < 7;/);
+    expect(fn).toMatch(/\w+_kcoc = /);
+    // The colour's Balls, after the loop, searches the same way.
+    expect(fs.slice(fs.indexOf('\n}', fs.indexOf('float mapScene_')))).toMatch(/for \(int \w+_jj = 0; \w+_jj < 7;[\s\S]*_kcoc = /);
   });
 
   it('the balls read the picture inside the repeated scene function', () => {

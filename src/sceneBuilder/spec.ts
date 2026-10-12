@@ -114,6 +114,12 @@ export const SHAPES: ShapeDef[] = [
       P('ball', 'Ball size', 'size', 0.9, 0.1, 1.2, 0.01, { hint: '1 touches the neighbours.' }),
       P('wave', 'Wave', 'wave', 0, -1, 1, 0.01, { hint: 'A ring wave rolling out from the middle.' }),
       P('jitter', 'Jitter', 'jitter', 0, 0, 2, 0.01, { hint: 'A random push forward or back per ball.' }),
+      P('scatter', 'Scatter', 'scatter', 0, 0, 1, 0.001, { hint: 'A random push per ball in every direction (X, Y and Z), the same each frame: a little breaks the grid up.' }),
+      P('depth-scatter', 'Depth scatter', 'scatterDepth', 0, -2, 2, 0.01, { hint: 'A random push per ball towards or away from the camera only.' }),
+      P('twist', 'Twist', 'twist', 0, -180, 180, 0.5, { hint: 'Turns the balls round the middle, degrees per unit out: the outer balls turn most.' }),
+      P('instability', 'Instability', 'instability', 0, 0, 0.5, 0.001, { hint: 'Every ball wobbles round its place, each at its own pace.' }),
+      P('focus', 'Focus', 'focus', 0, -3, 3, 0.01, { hint: 'The depth (z) where the balls are sharp. Pairs with Blur.' }),
+      P('blur', 'Blur', 'blur', 0, 0, 4, 0.01, { hint: 'Depth of field: out of focus, balls spread into soft discs that keep their light (0: everything sharp).' }),
     ] },
   // 4D shapes (docs/4d.md): sliced into the scene. W moves the slice; Spin turns the shape in the xw plane, so the slice morphs.
   { kind: 'hypersphere', label: 'Hypersphere', aliases: ['4d-ball', '4d-sphere'], type: 'hypersphereSDF', posKey: 'p4', distKey: 'dist', fourD: { slice: 'face' }, blurb: 'A 4D ball: its slice is a ball that grows and shrinks as W moves.',
