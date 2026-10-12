@@ -2,14 +2,14 @@
  * Step through a looped Expression Block's passes (docs/expression-block.md, "Loop"): a scrubber
  * over the passes and, for the pass it is on, every variable the loop writes, at the sample pixel
  * and across the picture. Measured on the CPU (lib/glslPatterns/worked.ts `workedLoop`), from the
- * same sample inputs the explain model uses (explainModel/inputs.ts `describeInputs`): a slider's
+ * same sample inputs as the build-up (lib/sampleInputs.ts `describeInputs`): a slider's
  * value, a UV's spread, the clock at 2 s. A line the CPU can't evaluate (a texture read, a helper
  * function) shows a dash, and so does anything built from it.
  */
 import { useMemo, useState } from 'react';
 import type { GraphNode } from '../../types/nodeGraph';
 import { showValue, workedLoop, WORKED_LOOP_CAP, type BlockInput, type Value, type WorkedLoop } from '../../lib/glslPatterns';
-import { describeInputs } from '../../explainModel/inputs';
+import { describeInputs } from '../../lib/sampleInputs';
 import { clampCount, loopCountValue, loopMax, loopOf, type ExprLoopLine } from '../../nodes/exprLoop';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';

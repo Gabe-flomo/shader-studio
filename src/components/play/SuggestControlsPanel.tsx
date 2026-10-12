@@ -56,7 +56,7 @@ export function SuggestControlsPanel({ anchorRef, onClose, offerOpenPlay = false
 
   useEffect(() => { void runControlFinder(); }, []);
   useEffect(() => { setChecked(new Set((suggestions ?? []).slice(0, PRE_CHECKED).map(s => s.target))); }, [suggestions]);
-  // A friendlier name from the local explanation model, when one is registered (play/suggestControls.ts).
+  // A friendlier name, when a namer is registered (play/suggestControls.ts; none is today).
   useEffect(() => {
     if (!suggestions || !hasControlNamer()) return;
     let live = true;

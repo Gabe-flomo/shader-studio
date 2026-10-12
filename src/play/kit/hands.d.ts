@@ -65,4 +65,16 @@ export function hdHandFor(st: HdState, side: string): HdHand;
 export function hdRead(st: HdState, side: string, read: string, point: number, axis: string, gesture: string): number | null;
 export function hdGate(st: HdState, side: string, gesture: string): boolean;
 export function hdPoint(st: HdState, side: string, point: number): { x: number; y: number } | null;
-export function hdDraw(ctx: CanvasRenderingContext2D, st: HdState, W: number, H: number, dpr: number, rgb?: [number, number, number]): void;
+export type HdRgb = [number, number, number];
+/** The two hands' colours (0..1), and the tag's font. */
+export interface HdPalette { left: HdRgb; right: HdRgb; font?: string }
+export const HD_CHAINS: number[][];
+export const HD_PALM: number[];
+export const HD_DRAW_EURO: { minCutoff: number; beta: number };
+export const HD_DEFAULT_PALETTE: HdPalette;
+export const HD_LEGACY_COLOUR: HdRgb;
+export function hdSpline(pts: number[][], n: number): number[][];
+export function hdSmoothPts(f: { euro?: { x: number; dx: number; t: number }[]; out?: Float64Array }, pts: ArrayLike<number>, now: number): Float64Array;
+export function hdTipGlow(ratio: number): number;
+export function hdPalette(rgb?: HdRgb | null, palette?: HdPalette | null): HdPalette;
+export function hdDraw(ctx: CanvasRenderingContext2D, st: HdState, W: number, H: number, dpr: number, rgb?: HdRgb, palette?: HdPalette | null): void;

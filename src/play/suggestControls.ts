@@ -1,6 +1,6 @@
 /**
- * suggestControls.ts — turning Suggest controls' picks into Play controls, and the seam for the
- * local explanation model's friendlier names (docs/suggest-controls.md).
+ * suggestControls.ts — turning Suggest controls' picks into Play controls, and a seam for
+ * friendlier names (unused today; docs/suggest-controls.md).
  */
 import type { PlayRecord } from '../types/play';
 import { playId } from './playControls';
@@ -32,8 +32,7 @@ let namer: ControlNamer | null = null;
 
 /**
  * Register (or clear with null) the function that names suggested controls.
- * TODO(claude/explain-model): the local explanation model registers itself here when it loads;
- * until then nothing does and the labels are "Node · Setting".
+ * Nothing registers one today, so the labels are "Node · Setting".
  */
 export function setControlNamer(fn: ControlNamer | null): void { namer = fn; }
 export const hasControlNamer = (): boolean => namer !== null;

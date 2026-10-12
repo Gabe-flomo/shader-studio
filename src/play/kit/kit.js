@@ -1445,7 +1445,7 @@ export function createLayerKit() {
     // 7. Null markers on top of everything, and the tracked hands' skeleton (a setup aid) when the host asks for it.
     // With `guides` (a context of the same size) they go there instead, above whatever the host lays over the layers.
     const gx = env.guides || ctx;
-    if (env.hands) hdDraw(gx, env.hands.state, W, H, dpr, env.hands.colour);
+    if (env.hands) hdDraw(gx, env.hands.state, W, H, dpr, env.hands.colour, env.hands.palette);
     if (env.tracks) for (const t of env.tracks) (t.kind === 'face' ? fcDraw : psDraw)(gx, t.state, W, H, dpr, t.colour);
     if (env.markers) for (const l of vis) if (l.kind === 'null') klDrawNull(gx, l, env.value(l, 'x'), env.value(l, 'y'), env.value(l, 'size'), dpr, W, H, l.role && l.role !== 'none' ? env.value(l, 'radius') * H : 0);
     // A relationship's forces (its Show forces switch): with the guides, never in the finished picture.
