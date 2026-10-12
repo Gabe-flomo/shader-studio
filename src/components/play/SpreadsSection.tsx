@@ -17,6 +17,7 @@ import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Button, IconButton } from '../ui/Button';
 import { Toggle } from '../ui/Choice';
+import { RulerSlider } from '../ui/RulerSlider';
 import { Field } from '../ui/Field';
 import { Icon } from '../ui/Icon';
 import { Select } from '../ui/Select';
@@ -95,8 +96,10 @@ function SpreadCard({ sp, play, nodes, update }: {
             <div style={rowStyle}>
               {label('Points')}
               {sp.curveY.map((y, i) => (
-                <input key={i} type="range" min={0} max={1} step={0.01} value={y} aria-label={`Point ${i + 1}`} style={{ width: 70 }}
-                  onChange={e => { const ys = [...(sp.curveY ?? [])]; ys[i] = Number(e.target.value); update(p => patchSpread(p, sp.id, { curveY: ys })); }} />
+                <span key={i} data-spread-point={i} style={{ width: 132, display: 'flex' }}>
+                  <RulerSlider value={y} min={0} max={1} step={0.01} hard ariaLabel={`Point ${i + 1}`}
+                    onChange={v => { const ys = [...(sp.curveY ?? [])]; ys[i] = v; update(p => patchSpread(p, sp.id, { curveY: ys })); }} />
+                </span>
               ))}
             </div>
           )}

@@ -1466,10 +1466,11 @@ export function AddColorsViz({ node }: { node: GraphNode }) {
       <span style={{ fontSize: '12px', color: pal.overlay0 }}>+</span>
       <div ref={bRef} style={sw} />
       <span style={{ fontSize: '9px', color: pal.surface2 }}>B</span>
-      {scale !== null && <span style={{ fontSize: '9px', color: pal.yellow }}>×{scale.toFixed(2)}</span>}
+      {scale !== null && <span style={{ fontSize: '9px', color: pal.yellow, fontVariantNumeric: 'tabular-nums', minWidth: '5ch' }}>×{scale.toFixed(2)}</span>}
       <span style={{ fontSize: '12px', color: pal.overlay0 }}>=</span>
       <div ref={rRef} style={sw} />
-      <span ref={rLabelRef} style={{ fontSize: '9px', color: pal.overlay0, marginLeft: 2 }} />
+      {/* Written every frame: fixed-width digits and a set width keep the row still. */}
+      <span ref={rLabelRef} style={{ fontSize: '9px', color: pal.overlay0, marginLeft: 2, fontVariantNumeric: 'tabular-nums', minWidth: '18ch' }} />
     </div>
   );
 }
@@ -3841,7 +3842,7 @@ function AgentsGroupViz({ node, onEnterGroup }: { node: GraphNode; onEnterGroup?
           style={{ display: 'block', width: '100%', maxHeight: 140, objectFit: 'contain', margin: '0 auto 6px', background: '#000', borderRadius: 3 }} />
       )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '10px', color: pal.overlay0, fontFamily: MONO, marginBottom: 6 }}>
-        <span style={{ flex: 1 }}>{count.toLocaleString('en-US')} agents · {spf} step{spf === 1 ? '' : 's'} a frame{stepMs != null ? ` · ${stepMs.toFixed(2)} ms a step` : ''}{behind}</span>
+        <span data-agents-stats style={{ flex: 1, minWidth: '24ch', fontVariantNumeric: 'tabular-nums' }}>{count.toLocaleString('en-US')} agents · {spf} step{spf === 1 ? '' : 's'} a frame{stepMs != null ? ` · ${stepMs.toFixed(2)} ms a step` : ''}{behind}</span>
         <button type="button" onClick={() => setCardFlag('__dots', !dotsOn)}
           title={dotsOn
             ? 'Hide the live view of where the walkers are. It costs little (about 0.1 ms a frame on an M3 Pro: a sample of at most 65,536 walkers drawn every tenth frame, read back without waiting) and pauses by itself while the card is off screen.'

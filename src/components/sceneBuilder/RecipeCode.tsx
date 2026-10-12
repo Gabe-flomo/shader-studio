@@ -63,6 +63,13 @@ export function RecipeCode({ text, style, errors, wordKind, help }: { text: stri
             const off = offsetAtPoint(e.clientX, e.clientY, starts[i]);
             wh.hover(before + text, before.length + off, () => { const b = span.getBoundingClientRect(); return { left: b.left, top: b.top, bottom: b.bottom }; });
           } : undefined}
+          onPointerUp={help ? e => {
+            // A touch screen has no hover: a tap opens the word's help at once.
+            if (e.pointerType !== 'touch' && e.pointerType !== 'pen') return;
+            const span = e.currentTarget;
+            const off = offsetAtPoint(e.clientX, e.clientY, starts[i]);
+            wh.tap(before + text, before.length + off, () => { const b = span.getBoundingClientRect(); return { left: b.left, top: b.top, bottom: b.bottom }; });
+          } : undefined}
           style={{ color: recipeColour(pal, r.kind), ...(r.error ? { textDecoration: `wavy underline ${tk.status.danger}`, textDecorationSkipInk: 'none' } : {}) }}>
           {r.swatch && <Swatch rgb={r.swatch} />}{r.text}
         </span>

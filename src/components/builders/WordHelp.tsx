@@ -6,7 +6,8 @@
  * is (helpAt) and when the help opens and closes (hoverIntent).
  *
  *  - useWordHelp({ dialect, onReplace }): feed it `hover(text, offset, rect)` as the pointer moves
- *    over a text (and `leave()`); render its `popover`.
+ *    over a text (and `leave()`), and `tap(...)` the same on a touch tap or caret placement (it
+ *    opens at once, and a tap elsewhere closes it); render its `popover`.
  *  - <HelpCard>: the help itself (an entry, a setting or a value), also used by the Language guide.
  *  - inputOffsetAt: the character under the pointer in a one-line input (the Do… bar).
  */
@@ -168,11 +169,28 @@ export function useWordHelp({ dialect, onReplace }: { dialect: Dialect; onReplac
     if (!rect) { intent.out(); return; }
     intent.over(`${at.from}:${at.word}:${at.kind}`, { at, rect });
   };
+  // A tap, or the caret placed on a word (a touch screen has no hover): its help opens straight away.
+  const tap = (text: string, offset: number | null, rectOf: (from: number, to: number) => WordRect | null) => {
+    const at = offset === null ? null : helpAt(dialect, text, offset);
+    const rect = at && rectOf(at.from, at.to);
+    if (!at || !rect) { intent.close(); return; }
+    intent.openNow(`${at.from}:${at.word}:${at.kind}`, { at, rect });
+  };
+  // Opened by a tap, it closes on a tap anywhere else (there is no pointer leaving to close it).
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => {
+      if (e.pointerType !== 'touch' && e.pointerType !== 'pen') return;
+      if (!(e.target as Element | null)?.closest?.('[data-word-help]')) intent.close();
+    };
+    window.addEventListener('pointerdown', onDown, true);
+    return () => window.removeEventListener('pointerdown', onDown, true);
+  }, [open, intent]);
   const popover = open ? (
     <HelpPopover dialect={dialect} at={open.at} rect={open.rect} onEnter={() => intent.enterPopover()} onLeave={() => intent.leavePopover()}
       onPick={onReplace ? text => { onReplace(open.at.from, open.at.to, text); intent.close(); } : undefined} />
   ) : null;
-  return { hover, leave: () => intent.out(), close: () => intent.close(), popover, open: !!open };
+  return { hover, tap, leave: () => intent.out(), close: () => intent.close(), popover, open: !!open };
 }
 
 let measureCtx: CanvasRenderingContext2D | null = null;

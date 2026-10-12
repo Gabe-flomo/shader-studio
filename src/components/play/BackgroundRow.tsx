@@ -54,6 +54,7 @@ import { askText } from '../ui/dialogStore';
 import { usePlayUi } from './playUi';
 import { GraphSourcePicker } from './GraphSourcePicker';
 import { IMAGE_ACCEPT, VIDEO_ACCEPT, baseName, imageSource, loadBackgroundImage, readDataUrl, sizeText, videoSource } from './backgroundFiles';
+import { clampLines } from '../ui/textFit';
 
 const FITS: { value: BackgroundFit; label: string }[] = [
   { value: 'cover', label: 'Fill (crop)' },
@@ -276,10 +277,10 @@ export function BackgroundRow({ play, onChange }: { play: PlayRecord; onChange: 
           </Tooltip>
           <button
             type="button" onClick={() => usePlayUi.getState().reveal(layer.id)} title="Open the Background layer"
-            style={{ display: 'flex', alignItems: 'center', gap: 7, flex: 1, minWidth: 0, height: 26, padding: '0 10px 0 8px', borderRadius: radius.md, border: 0, cursor: 'pointer', background: alpha(tk.accent.base, 0.1), color: tk.text.primary, textAlign: 'left' }}
+            style={{ display: 'flex', alignItems: 'center', gap: 7, flex: 1, minWidth: 0, minHeight: 26, padding: '2px 10px 2px 8px', borderRadius: radius.md, border: 0, cursor: 'pointer', background: alpha(tk.accent.base, 0.1), color: tk.text.primary, textAlign: 'left' }}
           >
             <Icon name="slides" size={14} style={{ color: tk.accent.base, flexShrink: 0 }} />
-            <span style={{ font: `600 12px ${fontFamily.ui}`, flexShrink: 0, minWidth: 0, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{layer.label}</span>
+            <span title={layer.label} style={{ font: `600 12px/1.25 ${fontFamily.ui}`, flexShrink: 1, maxWidth: '100%', ...clampLines(2) }}>{layer.label}</span>
             <span style={{ font: `11.5px ${fontFamily.ui}`, color: tk.text.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{what}</span>
             <span style={{ flex: 1 }} />
             <Icon name="chevR" size={13} style={{ color: tk.text.faint, flexShrink: 0 }} />

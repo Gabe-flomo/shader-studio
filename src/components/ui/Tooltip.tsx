@@ -12,7 +12,7 @@ const MARGIN = 8;
  * sits on top of a drag). `shortcut` renders as a keycap next to the label.
  */
 export function Tooltip({
-  label, description, shortcut, placement = 'bottom', delay = 400, disabled = false, grow = false, children,
+  label, description, shortcut, placement = 'bottom', delay = 400, disabled = false, grow = false, block = false, children,
 }: {
   label: ReactNode;
   description?: ReactNode;
@@ -22,6 +22,8 @@ export function Tooltip({
   disabled?: boolean;
   /** Let the anchor fill a flex row (for wide controls like the ruler). */
   grow?: boolean;
+  /** The anchor is a full-width block (a list row): the row keeps its width. */
+  block?: boolean;
   children: ReactNode;
 }) {
   const tk = useTokens();
@@ -40,6 +42,16 @@ export function Tooltip({
   const hide = () => { cancel(); setOpen(false); setPos(null); };
 
   useEffect(() => cancel, []);
+
+  // Opened by a tap, it closes on a tap anywhere else (no pointer leaves to close it).
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => {
+      if (!anchorRef.current?.contains(e.target as Node)) { cancel(); setOpen(false); setPos(null); }
+    };
+    window.addEventListener('pointerdown', onDown, true);
+    return () => window.removeEventListener('pointerdown', onDown, true);
+  }, [open]);
 
   useLayoutEffect(() => {
     if (!open || !anchorRef.current || !tipRef.current) return;
@@ -62,10 +74,16 @@ export function Tooltip({
       ref={anchorRef}
       // An empty title stops the browser's own tooltip from an ancestor's `title` showing next to this one.
       title={disabled ? undefined : ''}
-      style={{ display: 'inline-flex', ...(grow ? { flex: 1, minWidth: 0 } : null) }}
+      style={{ display: block ? 'flex' : 'inline-flex', ...(block ? { width: '100%' } : null), ...(grow ? { flex: 1, minWidth: 0 } : null) }}
       onMouseEnter={show}
       onMouseLeave={hide}
-      onPointerDown={hide}
+      onPointerDown={e => {
+        // A touch screen has no hover: a tap on something that has a description opens it (as HintMark's "?" does);
+        // otherwise, as with a mouse, pressing hides the tip so it never sits on top of a drag.
+        // A second tap closes it.
+        if (e.pointerType === 'touch' && description && !disabled && !open) { cancel(); setOpen(true); return; }
+        hide();
+      }}
       onFocus={show}
       onBlur={hide}
     >

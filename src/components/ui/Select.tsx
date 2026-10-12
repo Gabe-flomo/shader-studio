@@ -2,6 +2,7 @@ import type { CSSProperties } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
 import { Icon } from './Icon';
+import { clampLines } from './textFit';
 
 /** `group`: options in a row with the same group sit under one heading (an <optgroup>). */
 export interface SelectOption { value: string; label: string; group?: string; disabled?: boolean }
@@ -23,17 +24,21 @@ export function Select({
 }) {
   const tk = useTokens();
   const current = options.find(o => o.value === value)?.label ?? value;
+  // A long choice wraps to a second line (the box grows from `height`) rather than being cut short; the full text is the title.
   return (
     <span
+      data-select-face
+      title={current}
       style={{
-        position: 'relative', height, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0 6px 0 10px', minWidth: 0,
+        position: 'relative', minHeight: height, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '2px 6px 2px 10px', minWidth: 0, boxSizing: 'border-box',
         borderRadius: radius.md, background: tk.bg.field, color: tk.text.primary,
-        font: `500 12.5px ${mono ? fontFamily.mono : fontFamily.ui}`, ...style,
+        font: `500 12.5px/1.2 ${mono ? fontFamily.mono : fontFamily.ui}`, ...style,
       }}
     >
-      <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{current}</span>
+      <span data-select-label style={{ flex: 1, ...clampLines(2) }}>{current}</span>
       <Icon name="chevD" size={14} style={{ color: tk.text.faint, flexShrink: 0 }} />
       <select
+        title={current}
         aria-label={ariaLabel}
         value={value}
         onChange={e => onChange(e.target.value)}

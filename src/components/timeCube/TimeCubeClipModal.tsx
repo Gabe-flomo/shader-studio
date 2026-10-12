@@ -10,6 +10,7 @@ import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily } from '../../theme/tokens';
+import { RulerSlider } from '../ui/RulerSlider';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import type { GraphNode } from '../../types/nodeGraph';
 import { getVideo } from '../../lib/backgroundLibrary';
@@ -68,10 +69,9 @@ export function TimeCubeClipModal({ node, onClose }: { node: GraphNode; onClose:
       <span style={{ font: `600 10.5px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase', color: tk.text.faint }}>Frames</span>
       {settings.spacing === 'count' ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <input type="range" min={MIN_FRAMES} max={MAX_FRAMES} step={1} value={frames} onChange={e => setFrames(Number(e.target.value))} style={{ flex: 1 }} aria-label="Frames" />
-          <input type="number" min={MIN_FRAMES} max={MAX_FRAMES} value={frames}
-            onChange={e => { const v = Math.round(Number(e.target.value)); if (Number.isFinite(v)) setFrames(Math.min(MAX_FRAMES, Math.max(MIN_FRAMES, v))); }}
-            style={{ width: 56, height: 26, border: `1px solid ${tk.border.default}`, borderRadius: 6, background: tk.bg.field, color: tk.text.primary, font: `12px ${fontFamily.ui}`, padding: '0 6px' }} />
+          {/* The app's ruler: its chip takes a typed count, held to the limits. */}
+          <RulerSlider value={frames} min={MIN_FRAMES} max={MAX_FRAMES} step={1} integer hard ariaLabel="Frames"
+            onChange={v => setFrames(Math.min(MAX_FRAMES, Math.max(MIN_FRAMES, Math.round(v))))} />
         </div>
       ) : (
         <span style={small}>{`One frame every ${settings.step.toFixed(2)} s of kept video (Spacing on the card).`}</span>

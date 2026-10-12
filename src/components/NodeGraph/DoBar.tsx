@@ -483,6 +483,12 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
             wordHelp.hover(text, hit ? hit.offset : null, (from, to) => hit!.rectOf(from, to));
           }}
           onMouseLeave={() => wordHelp.leave()}
+          onPointerUp={e => {
+            // A touch tap has no hover: the word under it shows its help at once.
+            if (e.pointerType !== 'touch' && e.pointerType !== 'pen') return;
+            const hit = inputOffsetAt(e.currentTarget, e.clientX);
+            wordHelp.tap(text, hit ? hit.offset : null, (from, to) => hit!.rectOf(from, to));
+          }}
           placeholder="Do… e.g. circle with a glow · repeat 6 times around · tone map it"
           aria-label="Do"
           data-do-input

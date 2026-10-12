@@ -107,6 +107,7 @@ export function LanguageTab({ dialect, printed, read, title = 'Recipe', note, ex
         onBlur={() => { setFocused(false); setCaret(null); if (dirty && !r.errors.length) apply(); }}
         onSelect={el => setCaret(el.selectionStart)}
         onHoverChar={(off, rectOf) => wordHelp.hover(text, off, rectOf)}
+        onTapChar={(off, rectOf) => wordHelp.tap(text, off, rectOf)}
         anchor={assistHere}
         invalid={r.errors.length > 0} minHeight={140} maxHeight={420} />
       {wordHelp.popover}
