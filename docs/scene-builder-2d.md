@@ -403,6 +403,8 @@ The **Depth** tab: a picture with depth the shapes interact with ([depth-mix.md]
   kept as an image beside the picture and Build puts it on the Depth node (Update: Baked). Without it, the built
   Depth node works the depth out live. The preview shows the generated depth, or the depth a Depth node on the canvas
   already has for the picture, or else the picture's brightness as a stand-in (the tab says which).
+- **Preview:** Result | Picture | Depth | Shaped depth (plus Gradient, Size and Space when they are on), a heat-map
+  toggle and a side-by-side strip: what the depth effects work from, in the Preview ([depth-mix.md](depth-mix.md#seeing-the-depth)).
 - **Size by depth** (every layer grows on near things: *Size far*, *Size near*) and **Space by depth** (the point
   every shape is measured from moves by depth: *Move by* Shift, Zoom or Turn, *Amount*, *Direction*, *Focus*): two
   cards, each switched on and off by the shared ⊘ mute like every other card (off keeps the settings). Either, both

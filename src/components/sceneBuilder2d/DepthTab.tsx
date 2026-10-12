@@ -1,7 +1,7 @@
 /**
  * DepthTab — the 2D Scene Builder's "Depth" tab (docs/scene-builder-2d.md, "Picture with depth"; docs/depth-mix.md):
  * a picture with depth the shapes interact with. Pick the picture (the shared picker), generate its depth on this
- * device, then choose how the shapes respond (size, space) and how the scene and the picture go together (on top,
+ * device, see it (the Preview switch: Result, Picture, Depth, Shaped depth; builders/depthPreview.ts), then choose how the shapes respond (size, space) and how the scene and the picture go together (on top,
  * occlude, fog, mix, light), with a gradient laid along depth. Every setting is a live slider on the Depth Mix nodes
  * Build makes.
  */
@@ -20,6 +20,9 @@ import { TexturePicker } from '../builders/TexturePicker';
 import { DepthGenerateRow } from '../builders/DepthGenerateRow';
 import { Card, ColourRow, NumRow, Row } from '../sceneBuilder/controls';
 import { Select } from '../ui/Select';
+import { DepthViewSwitch } from '../builders/DepthViewSwitch';
+import { DEPTH_VIEW_LABELS, depthViewsFor, useDepthView } from '../../builders/depthPreview';
+import { compileScene2D } from './Preview2D';
 
 const D = newDepthPic('');
 const edit = (fn: (d: Scene2D) => void, key?: string) => useSceneBuilder2D.getState().edit(fn, key);
@@ -34,6 +37,8 @@ export function DepthTab() {
   const depth = useSceneBuilder2D(s => s.scene.depth) ?? null;
   const sources = useSceneBuilder2D(s => s.scene.textures) ?? [];
   const src = depth ? findTex(sources, depth.tex) : undefined;
+  const scene = useSceneBuilder2D(s => s.scene);
+  const view = useDepthView(s => s.view);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <BuilderNote>A picture with depth the shapes interact with: they grow on near things, move by depth, hide behind what is near, fade into the distance or light the picture. Its depth is worked out on this device.</BuilderNote>
@@ -51,6 +56,11 @@ export function DepthTab() {
           </>
         )}
       </Card>
+      {depth && (
+        <Card id="depth2-preview" defaultOpen title="Preview" summary={DEPTH_VIEW_LABELS[view].label}>
+          <DepthViewSwitch views={depthViewsFor({ gradient: !!depth.gradient, size: depth.size.on, space: depth.space.on })} source={scene} compile={compileScene2D} />
+        </Card>
+      )}
       {depth && <DepthSettings d={depth} />}
     </div>
   );
