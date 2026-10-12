@@ -1,4 +1,5 @@
 import type { DataType } from './nodeGraph';
+import type { ExprLoop } from '../nodes/exprLoop';
 
 /** A saved ExprBlock preset that can be reused across graphs. */
 export interface ExprPreset {
@@ -18,6 +19,10 @@ export interface ExprPreset {
   lines: Array<{ lhs: string; op: string; rhs: string }>;
   /** Return expression */
   result: string;
+  /** Loop mode: its Before / After lines, Break when and Max iterations (nodes/exprLoop.ts) */
+  loop?: ExprLoop;
+  /** Loop mode: Iterations */
+  loopN?: number;
   /** The node's comment when it was saved; restored on the node when placed */
   comment?: string;
   /** Slider inputs' starting values, by input name (presets made with "Make a node from this") */

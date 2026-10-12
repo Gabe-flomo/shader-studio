@@ -16,7 +16,7 @@
 import { zlibSync } from 'fflate';
 import { safeSetItem, type FileResult } from '../utils/fileIO';
 import {
-  BLOCK_OPS, BLOCK_TARGETS, COMBINE_MODES, MAX_LINES, blockMap, checkBlock, clampTimes, cloneBlock, combineMap,
+  BLOCK_OPS, BLOCK_TARGETS, COMBINE_MODES, MAX_LINES, TRAP_KINDS, blockMap, checkBlock, clampTimes, cloneBlock, combineMap,
   type BlockLine, type BlockParam, type CombineSpec, type SpaceBlock,
 } from './blocks';
 import { BLOCK_CATEGORIES, type BlockCategory } from './blockLibrary';
@@ -127,7 +127,9 @@ export function parseSpaceBlock(raw: unknown): SpaceBlock | null {
   const r = raw as Record<string, unknown>;
   const lines = (Array.isArray(r.lines) ? r.lines : []).map(parseLine).filter((l): l is BlockLine => !!l).slice(0, MAX_LINES);
   const params = (Array.isArray(r.params) ? r.params : []).map(parseParam).filter((p): p is BlockParam => !!p);
-  const out: SpaceBlock = { lines, params: params.filter((p, i) => params.findIndex(q => q.name === p.name) === i), times: clampTimes(r.times) };
+  const out: SpaceBlock = { lines, params: params.filter((p, i) => params.findIndex(q => q.name === p.name) === i), times: clampTimes(r.times, r.loop === true) };
+  // A looped block (Iterations up to 64) and its orbit trap
+  if (r.loop === true) { out.loop = true; out.trap = TRAP_KINDS.find(k => k.kind === r.trap)?.kind ?? null; }
   if (str(r.name).trim()) out.name = str(r.name).trim().slice(0, 60);
   if (str(r.lib)) out.lib = str(r.lib);
   if (str(r.my)) out.my = str(r.my).slice(0, 60);

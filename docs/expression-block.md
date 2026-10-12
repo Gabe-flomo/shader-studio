@@ -48,6 +48,49 @@ since a Custom Function's inputs are the upstream values themselves. Exposed lin
 the function's extra outputs. A block whose inputs carry between loop iterations, or that outputs
 one of its own inputs, stays a block (a message says why).
 
+## Loop
+
+The **Loop** switch beside Lines runs the lines N times. The block then has three groups of lines,
+top to bottom, and Return after them:
+
+| Part | Runs | What it is for |
+|---|---|---|
+| **Before the loop** | once | Start values for what the loop updates: `vec2 z = uv * 1.4`, `float acc = 0.0`. |
+| **The looped lines** (in the bracket) | N times | The step: `z = vec2(z.x*z.x - z.y*z.y, 2.0*z.x*z.y) + c`. |
+| **Break when** (optional) | after each pass | A bool: true stops the loop there (`dot(z, z) > 4.0`). |
+| **After the loop** (optional) | once | Finish what the loop built: `float s = esc / n`. |
+
+- **Names in the loop:** `i` (int, 0 at the first pass), `fi` (`float(i)`), `n` (Iterations as a
+  float; it is there after the loop too) and `k` (`i / (n − 1)`, 0 to 1 across the passes; 0 when
+  n is 1). They autocomplete and are drawn bold while Loop is on. An input or line that takes one
+  of these names gets a warning.
+- **Variables carry:** everything lives in the block's scope, so an input or a Before variable keeps
+  what the last pass left in it. A looped line that declares a variable (`float d = …`) is hoisted:
+  declared once before the loop (zero), assigned each pass, readable in After, Return and Also
+  outputs.
+- **Iterations** is a live slider, in the bracket's header and on the card. The loop compiles to
+  `for (int i = 0; i < MAX; i++) { if (i >= N) break; … }`, N a uniform (rounded, clamped to
+  0…MAX), so a drag never recompiles. **Max iterations** (beside it; 128 by default, up to 1024) is
+  the compiled bound: changing it recompiles. Typing a count past Max raises Max.
+- **Step through the passes** (under the bracket) scrubs pass by pass and shows every variable the
+  loop writes after that pass: its value at a sample pixel and its spread across the picture,
+  measured on the CPU from the same sample inputs Explain uses (`workedLoop`,
+  lib/glslPatterns/worked.ts; explain/LoopPasses.tsx). A line the CPU can't evaluate (a texture,
+  a helper function) shows a dash.
+- **Copy as code** writes a real GLSL `for` loop; **Copy as a GLSL function** wraps it; **Turn into
+  a Custom Function** keeps the loop in the body and makes Iterations a slider input
+  (`iterations`), still live. The card's Code page shows the same loop. Line previews (▶) of a
+  looped line run the loop without After; the Return preview runs everything.
+- **Off** keeps Before, After and Break when for later; the lines then run once, as before.
+- **Where it compiles:** the picture, passes, an Agents group's update program and a Splat Scene's
+  per-splat modifier program (all compile blocks the same way). Saved with the graph and in
+  Expression Block presets (`loop`, `loopN`). The Do… bar prints the loop as a code gap, like the
+  lines.
+
+All of it comes from one place, `nodes/exprLoop.ts` (`loopCode`), used by the node's GLSL, the card
+and Copy as code, so they can't drift. Examples: **Loop: Julia set**, **Loop: fbm** and **Loop: Kali
+fold** in the Functions folder (store/exprLoopExamples.ts).
+
 ## Make a slider
 
 Put the caret on a number in a line, in Return, or in a Custom Function's body (or select it) and
@@ -82,3 +125,8 @@ has no inputs to hold a slider (its shader declares its own uniforms), so it doe
   the palette, is remembered across editors and sessions, and ⌘] still works.
 - `src/components/NodeGraph/__tests__/codeCard.test.ts`: the pages, the merged note and the
   migration.
+- `src/nodes/__tests__/exprLoop.test.ts`: Loop's code per section, hoisted and carried variables,
+  Break when, Iterations live (a uniform, the same shader) against Max (a recompile), the clamp,
+  name clashes, Copy as code / as a function / Turn into a Custom Function, autocomplete and types,
+  save round-trip and presets, the examples, the pass-by-pass numbers, and compiling in an Agents
+  group and a Splat Scene's modifier program.

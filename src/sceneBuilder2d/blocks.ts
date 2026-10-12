@@ -30,6 +30,28 @@ export const BLOCK_TARGETS: readonly BlockTarget[] = ['uv.x', 'uv.y', 'uv'];
 export const BLOCK_OPS: readonly BlockOp[] = ['=', '+=', '-=', '*='];
 export const MAX_LINES = 3;
 export const MAX_TIMES = 8;
+/** A looped block's most Iterations (its Expression Block's Max iterations: the slider runs to it live). */
+export const MAX_LOOP_TIMES = 64;
+
+/**
+ * An orbit trap: during a looped block's passes, the closest the point came to a shape. Its shade
+ * (exp(−3·distance), 1 where the orbit came close) is the block node's `trap` output, and Look →
+ * Colour by trap reads it.
+ */
+export type TrapKind = 'point' | 'cross' | 'ring';
+export const TRAP_KINDS: Array<{ kind: TrapKind; label: string; glsl: string; blurb: string }> = [
+  { kind: 'point', label: 'Point', glsl: 'length(uv)', blurb: 'the closest the point came to the centre' },
+  { kind: 'cross', label: 'Cross', glsl: 'min(abs(uv.x), abs(uv.y))', blurb: 'the closest the point came to either axis' },
+  { kind: 'ring', label: 'Ring', glsl: 'abs(length(uv) - 1.0)', blurb: 'the closest the point came to the unit circle' },
+];
+export const TRAP_BY_KIND = Object.fromEntries(TRAP_KINDS.map(k => [k.kind, k])) as Record<TrapKind, typeof TRAP_KINDS[number]>;
+/** Names a looped block's lines can read besides x, y, uv and t: the point before the block, and the loop's own. */
+export const LOOP_BLOCK_NAMES: ReadonlyArray<{ name: string; type: 'float' | 'vec2'; doc: string }> = [
+  { name: 'uv0', type: 'vec2', doc: 'The point before the block: Mandelbox and Julia-style loops add it back each pass.' },
+  { name: 'fi', type: 'float', doc: 'The pass, 0 at the first.' },
+  { name: 'k', type: 'float', doc: 'How far through the loop: 0 at the first pass, 1 at the last.' },
+  { name: 'n', type: 'float', doc: 'How many passes run (Iterations).' },
+];
 
 export interface BlockLine {
   target: BlockTarget;
@@ -50,8 +72,15 @@ export interface SpaceBlock {
   name?: string;
   lines: BlockLine[];
   params: BlockParam[];
-  /** Run the lines this many times (1–8): fractal folds and repeats. */
+  /** Run the lines this many times (1–8; a looped block's Iterations, 1–64): fractal folds and repeats. */
   times: number;
+  /**
+   * Looped: built as an Expression Block in Loop mode (nodes/exprLoop.ts), the lines once inside a
+   * `for` loop, so Iterations (`times`) is a live slider on its node; uv0, fi, k and n are there.
+   */
+  loop?: boolean;
+  /** A looped block's orbit trap (its node's `trap` output; Look → Colour by trap). */
+  trap?: TrapKind | null;
 }
 
 export type CombineMode = 'add' | 'subtract' | 'multiply' | 'blend';
@@ -174,7 +203,7 @@ export interface LineCheck {
  * Check one line against the block's numbers: it parses, every name is known (x, y, uv, t, PI,
  * TAU, a slider), every call is a function GLSL (or Playfield) has, and the types fit the target.
  */
-export function checkLine(line: BlockLine, params: readonly BlockParam[]): LineCheck {
+export function checkLine(line: BlockLine, params: readonly BlockParam[], looped = false): LineCheck {
   const rhs = line.rhs.trim();
   if (!rhs) return { ok: true, empty: true };
   if (!BLOCK_TARGETS.includes(line.target)) return { ok: false, empty: false, error: `${line.target} isn't a target: use uv.x, uv.y or uv.` };
@@ -182,12 +211,12 @@ export function checkLine(line: BlockLine, params: readonly BlockParam[]): LineC
   const parsed = parseExpr(rhs);
   if (!parsed.ok) return { ok: false, empty: false, error: `Can't read “${rhs.slice(0, 40)}”: ${parsed.error.replace(/^Unexpected/, 'unexpected')}.` };
   const names = new Set(params.map(p => p.name));
-  const known = ['x', 'y', 'uv', 't', ...Object.keys(CONSTANTS), ...names];
+  const known = ['x', 'y', 'uv', 't', ...Object.keys(CONSTANTS), ...names, ...(looped ? LOOP_BLOCK_NAMES.map(v => v.name) : [])];
   const nodes = allNodes(parsed.expr);
   for (const n of nodes) {
     if (n.kind === 'ident' && !known.includes(n.name)) {
       const s = suggest(n.name, known);
-      return { ok: false, empty: false, error: `“${n.name}” isn't known. Use x, y, uv, t, PI, TAU${names.size ? ` or a slider (${[...names].join(', ')})` : ' or add a slider by that name'}.${s ? ` Did you mean “${s}”?` : ''}` };
+      return { ok: false, empty: false, error: `“${n.name}” isn't known. Use x, y, uv, t, PI, TAU${looped ? ', uv0, fi, k, n' : ''}${names.size ? ` or a slider (${[...names].join(', ')})` : ' or add a slider by that name'}.${s ? ` Did you mean “${s}”?` : ''}` };
     }
     if (n.kind === 'call') {
       if (NO_CALL.has(n.callee)) return { ok: false, empty: false, error: `${n.callee}() can't be used in a space block.` };
@@ -201,7 +230,7 @@ export function checkLine(line: BlockLine, params: readonly BlockParam[]): LineC
   const glsl = toGlsl(rhs, parsed.expr);
   const again = parseExpr(glsl);
   if (!again.ok) return { ok: false, empty: false, error: again.error };
-  const env = { uv: 'vec2', t: 'float', ...Object.fromEntries(params.map(p => [p.name, 'float'])) } as const;
+  const env = { uv: 'vec2', t: 'float', ...(looped ? Object.fromEntries(LOOP_BLOCK_NAMES.map(v => [v.name, v.type])) : {}), ...Object.fromEntries(params.map(p => [p.name, 'float'])) } as const;
   const tc = checkTypes(again.expr, env as never);
   if (!tc.ok) return { ok: false, empty: false, error: plainType(tc.errors[0] ?? 'the types don’t fit') };
   const ty = tc.type;
@@ -253,9 +282,10 @@ export function checkBlock(block: SpaceBlock): BlockCheck {
   for (const p of block.params) {
     const why = paramNameProblem(p.name, seen);
     if (why) errors.push(`Slider ${p.name}: ${why}`);
+    else if (block.loop && (LOOP_BLOCK_NAMES.some(v => v.name === p.name) || p.name === 'trap')) errors.push(`Slider ${p.name}: “${p.name}” is the loop’s own name in a looped block.`);
     seen.push(p.name);
   }
-  const lines = block.lines.map(l => checkLine(l, block.params));
+  const lines = block.lines.map(l => checkLine(l, block.params, !!block.loop));
   const used = new Set(lines.flatMap(l => (l.expr ? allNodes(l.expr).filter(n => n.kind === 'ident').map(n => (n as { name: string }).name) : [])));
   const unused = block.params.map(p => p.name).filter(n => !used.has(n));
   return { ok: !errors.length && lines.every(l => l.ok), lines, errors, unused };
@@ -266,11 +296,33 @@ export function blockGlslLines(block: SpaceBlock): Array<{ lhs: string; op: stri
   const chk = checkBlock(block);
   if (!chk.ok) return null;
   const once = block.lines.map((l, i) => ({ l, c: chk.lines[i] })).filter(x => !x.c.empty).map(x => ({ lhs: x.l.target, op: x.l.op, rhs: x.c.glsl! }));
+  // A looped block's lines run inside its node's loop: written once
+  if (block.loop) return once.map(x => ({ ...x }));
   const times = clampTimes(block.times);
   return Array.from({ length: times }, () => once).flat().map(x => ({ ...x }));
 }
 
-export const clampTimes = (n: unknown) => Math.max(1, Math.min(MAX_TIMES, Math.round(typeof n === 'number' && Number.isFinite(n) ? n : 1)));
+/** Run ×: 1–8, or a looped block's Iterations, 1–64. */
+export const clampTimes = (n: unknown, looped = false) => Math.max(1, Math.min(looped ? MAX_LOOP_TIMES : MAX_TIMES, Math.round(typeof n === 'number' && Number.isFinite(n) ? n : 1)));
+
+/** Does a looped block read the point before it (uv0)? */
+export function blockReadsUv0(block: SpaceBlock): boolean {
+  return !!block.loop && block.lines.some(l => { const r = parseExpr(l.rhs || '0'); return r.ok && allNodes(r.expr).some(n => n.kind === 'ident' && n.name === 'uv0'); });
+}
+
+/**
+ * A looped block's Expression Block loop (nodes/exprLoop.ts): Before (uv0, the trap's start), After
+ * (the trap's shade), and the trap's line added to the looped lines. Null for a block that isn't looped.
+ */
+export function blockLoopParts(block: SpaceBlock): { before: Array<{ lhs: string; op: string; rhs: string }>; extra: Array<{ lhs: string; op: string; rhs: string }>; after: Array<{ lhs: string; op: string; rhs: string }> } | null {
+  if (!block.loop) return null;
+  const trap = block.trap ? TRAP_BY_KIND[block.trap] : null;
+  return {
+    before: [...(blockReadsUv0(block) ? [{ lhs: 'vec2 uv0', op: '=', rhs: 'uv' }] : []), ...(trap ? [{ lhs: 'float trap', op: '=', rhs: '1e3' }] : [])],
+    extra: trap ? [{ lhs: 'trap', op: '=', rhs: `min(trap, ${trap.glsl})` }] : [],
+    after: trap ? [{ lhs: 'trap', op: '=', rhs: 'exp(-3.0 * trap)' }] : [],
+  };
+}
 
 /** The time names a block reads: does it move? */
 export function blockUsesTime(block: SpaceBlock): boolean {
@@ -293,14 +345,16 @@ export function blockMap(block: SpaceBlock, t = 0): Map2 {
   try {
     steps = block.lines.map((l, i) => ({ l, c: chk.lines[i] })).filter(x => !x.c.empty).map(x => ({ target: x.l.target, op: x.l.op, run: compileExpr(x.c.expr!) }));
   } catch { return ident; }
-  const times = clampTimes(block.times);
+  const times = clampTimes(block.times, !!block.loop);
   const base: EvalEnv = { t, ...CONSTANTS, ...Object.fromEntries(block.params.map(p => [p.name, p.value])) };
   return (x0, y0) => {
     let ux = x0, uy = y0;
     try {
       for (let k = 0; k < times; k++) {
+        // A looped block's own names: the point before it and the pass
+        const loopEnv: EvalEnv = block.loop ? { uv0: [x0, y0], fi: k, n: times, k: k / Math.max(times - 1, 1) } : {};
         for (const s of steps) {
-          const env: EvalEnv = { ...base, uv: [ux, uy] };
+          const env: EvalEnv = { ...base, ...loopEnv, uv: [ux, uy] };
           const v = s.run(env);
           if (s.target === 'uv') {
             const vx = Array.isArray(v) ? v[0] : v, vy = Array.isArray(v) ? v[1] : v;
@@ -343,3 +397,8 @@ export function blockSummary(block: SpaceBlock): string {
 
 /** A plain copy of a block (lines and params cloned). */
 export const cloneBlock = (b: SpaceBlock): SpaceBlock => ({ ...b, lines: b.lines.map(l => ({ ...l })), params: b.params.map(p => ({ ...p })) });
+
+/** What a looped block's trap does, in words (its node's note, the editor). */
+export function trapWords(kind: TrapKind): string {
+  return `${TRAP_BY_KIND[kind].label} trap: ${TRAP_BY_KIND[kind].blurb} over the passes, as a shade (1 close, fading out)`;
+}
