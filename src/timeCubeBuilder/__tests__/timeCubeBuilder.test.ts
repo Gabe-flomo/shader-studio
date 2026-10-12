@@ -18,7 +18,7 @@ import { paramBindingKey } from '../../compiler/uniformPatcher';
 import { applyTimeCube, findTcBuild, specOfBuild } from '../apply';
 import { TC_PRESETS, presetNow, presetSpec, withPreset } from '../presets';
 import { surpriseTimeCube } from '../surprise';
-import { DRIVE_TARGETS, TC_SECTIONS, blankSpec, defsOf, groupsFor, shownKeys, visibleNow, type TcDisplay, type TimeCubeSpec } from '../spec';
+import { DRIVE_TARGETS, TC_SECTIONS, blankSpec, defsOf, groupsFor, sectionSummary, shownKeys, visibleNow, type TcDisplay, type TimeCubeSpec } from '../spec';
 import { useTimeCubeBuilder } from '../store';
 import { adoptFromGraph, closeTimeCubeBuilder, editTimeCubeInBuilder, finishTimeCubeBuilder, openNewTimeCube, syncTimeCubeBuilder } from '../actions';
 import { SCENE_KINDS, builtSceneIds, builtScenes, selectedBuiltScene, openSceneKind } from '../../builders/sceneKinds';
@@ -51,9 +51,24 @@ describe('the sections hold every setting the nodes have', () => {
     expect([...got].sort()).toEqual(want);
     expect(new Set(got).size).toBe(got.length);
   });
-  it('the sections are Source, Shape, Time, Colour, Highlights & motion, Camera, Look; each has settings for both displays', () => {
-    expect(TC_SECTIONS).toEqual(['source', 'shape', 'time', 'colour', 'motion', 'camera', 'look']);
-    for (const s of TC_SECTIONS) for (const d of ['cube', 'stack'] as TcDisplay[]) expect(groupsFor(s, d).length, `${s} ${d}`).toBeGreaterThan(0);
+  it('the sections are Source, Shape, Time, Colour, Highlights & motion, Space, Camera, Look; each has settings for both displays (Space: the box only)', () => {
+    expect(TC_SECTIONS).toEqual(['source', 'shape', 'time', 'colour', 'motion', 'space', 'camera', 'look']);
+    for (const s of TC_SECTIONS) for (const d of ['cube', 'stack'] as TcDisplay[]) {
+      if (s === 'space' && d === 'stack') expect(groupsFor(s, d)).toEqual([]);
+      else expect(groupsFor(s, d).length, `${s} ${d}`).toBeGreaterThan(0);
+    }
+  });
+  it('Space holds Repeat, Each copy, Warp and Far & fog, from the View', () => {
+    expect(groupsFor('space', 'cube').map(g => `${g.role}:${g.title}`)).toEqual(['view:Repeat', 'view:Each copy', 'view:Warp', 'view:Far & fog']);
+    expect(groupsFor('space', 'cube')[0].keys[0]).toBe('repeat');
+  });
+  it('the Space presets switch on Repeat and Warp (Infinite hall of cubes, Twisted time, Time train)', () => {
+    expect(presetSpec('hall').view).toMatchObject({ repeat: true, repAxes: 'xz', repCount: 0 });
+    expect(presetSpec('twisted').view).toMatchObject({ warp: 'twist' });
+    expect(presetSpec('train').view).toMatchObject({ repeat: true, repAxes: 'z', warp: 'wave', warpWhere: 'space' });
+    expect(sectionSummary(presetSpec('hall'), 'space')).toBe('repeat a floor');
+    expect(sectionSummary(presetSpec('twisted'), 'space')).toBe('twist');
+    expect(sectionSummary(blankSpec('cube'), 'space')).toBe('One box, no warp');
   });
 });
 
@@ -119,7 +134,7 @@ describe('live in the graph', () => {
     expect(nodes().map(x => x.type)).toEqual(['output']);
   });
 
-  it.each(TC_SECTIONS.flatMap(s => (['cube', 'stack'] as TcDisplay[]).map(d => [s, d])))('%s (%s): a slider writes its node\'s param, no rewire', (section, display) => {
+  it.each(TC_SECTIONS.flatMap(s => (['cube', 'stack'] as TcDisplay[]).filter(d => !(s === 'space' && d === 'stack')).map(d => [s, d])))('%s (%s): a slider writes its node\'s param, no rewire', (section, display) => {
     const start = blankSpec(display as TcDisplay);
     // Sections whose settings sit behind a switch: switched on.
     if (section === 'motion' && display === 'cube') start.view.highlights = true;

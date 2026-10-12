@@ -52,6 +52,7 @@ card's summary ("4 controls · 1 changed", "Off").
 | **Time** | **Animate with an LFO** (what it moves, wave, speed, middle, reach); Slice (slice or flow, offset, before / after opacity, feather, slice face, tilts) | the LFO; Scan, Playback (what each card shows, speed, shift, delay), Order (shuffle) |
 | **Colour** | Glow & tint (rim glow, side tint), Picture (brightness, contrast, dark is clear), Colour key with its "everything else" and animate (the hue shift and drift are colour shifting) | brightness, contrast, border, edge and highlight colours, shading |
 | **Highlights & motion** | Highlights (switch, count, spacing, start, thickness, how they move, opacity, tint, outline, others, send through), Frame motion | Scatter (spread, offset, turn, seed, drift), Highlights |
+| **Space** | Repeat (switch, along, gap, copies each side, mirror every other, turn per copy), Each copy (time per copy, how it steps, hue per copy), Warp (twist, bend, wave or noise; each box or the whole space; amount, frequency, speed), Far & fog (far, fog, step for a wired Space). See [timecube-space.md](timecube-space.md) | a note: Space is for the box |
 | **Camera** | distance, angle, elevation, orbit, translate X / Y / Z, flatten, zoom | lens, distance, view size, angle, elevation, orbit, zoom |
 | **Look** | shadow, quality, background; Outline | Focus (depth of field), background |
 
@@ -66,7 +67,7 @@ node can stack.
 
 ## Presets
 
-Ten, read straight from the Time Cube and Frame Stack example folders (`timeCubeBuilder/presets.ts`): each is its
+Thirteen, read straight from the Time Cube and Frame Stack example folders (`timeCubeBuilder/presets.ts`): each is its
 example's Time Cube frames, its View's or Frame Stack's settings and the LFO it wires. **Your video and its clip
 stay**; the other display's settings stay too.
 
@@ -78,6 +79,9 @@ stay**; the other display's settings stay too.
 | Flow | Time cube: flow |
 | Isolate a colour | Time cube: isolate a colour |
 | Long exposure | Time cube: long exposure |
+| Infinite hall of cubes | Time cube: infinite hall |
+| Twisted time | Time cube: twisted time |
+| Time train | Time cube: time train |
 | Isometric cards | Frame stack: isometric cards |
 | Ring of frames | Frame stack: ring of frames |
 | Drift apart | Frame stack: drift apart and back |

@@ -9,6 +9,7 @@
  */
 import type { ExampleGraph } from './exampleIndex';
 import type { PlayMapping, PlayRecord } from '../types/play';
+import type { SubgraphData } from '../types/nodeGraph';
 import { colourCtl, ctl, n } from './graphBuilder';
 
 export const TIME_CUBE_EXAMPLE_INDEX: Record<string, { label: string; description: string; play?: true }> = {
@@ -49,6 +50,23 @@ export const TIME_CUBE_EXAMPLE_INDEX: Record<string, { label: string; descriptio
   timeCubeSlitScan: {
     label: 'Slit-scan from a time cube',
     description: 'A flat cut through the box of time, tilted so each column of the picture comes from a different moment: the swirling rings stretch and bend. No 3D needed.',
+  },
+  timeCubeHall: {
+    label: 'Time cube: infinite hall',
+    play: true,
+    description: 'The box of time repeated across an endless floor, fading into fog. Each copy\'s slice is a little later the further it is from the middle, so the moment ripples outward through the hall. The camera circles slowly.',
+  },
+  timeCubeTwisted: {
+    label: 'Time cube: twisted time',
+    description: 'One long box of time whose frames turn along the line of time: the space it sits in is twisted, and the twist breathes back and forth, so the frames wring and unwind while the slice sweeps.',
+  },
+  timeCubeTrain: {
+    label: 'Time cube: time train',
+    description: 'A line of boxes going off into the distance, the space they are in rippling in a travelling wave so the line snakes like a train. Each box is a little later in the clip than the one before it.',
+  },
+  timeCubeSceneSpace: {
+    label: 'Time cube: Repeat Scene and 3D warps',
+    description: 'The 3D tools on a box of time: a Time Cube Shape inside a Scene Group, twisted by a Twist 3D node and repeated by Repeat Scene, wired into the view\'s Space socket. Each copy is at its own moment and hue.',
   },
 };
 
@@ -317,8 +335,132 @@ export function buildTimeCubeExamples(): Record<string, ExampleGraph> {
     ],
   };
 
+  // ── Space (docs/timecube-space.md): the box repeated and warped ─────────────
+
+  const hallPlay: PlayRecord = {
+    version: 1,
+    controls: [
+      ctl('time', 'thaView::copyTime', 'Time per copy', -0.3, 0.3, 0.005),
+      ctl('gap', 'thaView::repGap', 'Gap', 0, 3, 0.01),
+      ctl('fog', 'thaView::spaceFog', 'Fog', 0, 1.5, 0.01),
+      ctl('hue', 'thaView::copyHue', 'Hue per copy', 0, 1, 0.01),
+      ctl('ang', 'thaView::camAngle', 'Camera angle', -3.14, 3.14, 0.01),
+    ],
+    mappings: [],
+    layers: [],
+    notes: `**What it shows.** One Time Cube View with **Repeat the box** on: copies across an endless floor (Repeat along: a floor, Copies each side 0 = forever), fading into the background with **Fog**. **Time per copy** moves each copy's slice along by distance from the middle, so the moment ripples outward ring by ring.
+
+**Try.** Drag **Time per copy** through 0: every copy at the same moment, then the ripple runs the other way. **Gap** spreads them out; **Hue per copy** colours each copy differently. On the card, Time steps by: Random scatters the moments; Mirror every other flips neighbours to face each other.`,
+  };
+
+  const hall: ExampleGraph = {
+    ...meta('timeCubeHall'),
+    counter: 20,
+    nodes: [
+      n('timeCube', 'thaSource', 80, 160, { ...note(CUBE_NOTE) }),
+      n('lfo', 'thaSweep', 80, 420, {
+        waveform: 'triangle', freq: 0.05, amplitude: 0.42, offset: 0.5,
+        ...note('LFO (triangle): sweeps the slice slowly through the clip and back, one round trip every 20 s. Every copy follows it, each a little behind or ahead (Time per copy).'),
+      }),
+      n('timeCubeView', 'thaView', 440, 160, {
+        repeat: true, repAxes: 'xz', repGap: 0.8, repCount: 0, copyTime: 0.07, copyTimeBy: 'distance', farDist: 40, spaceFog: 0.45,
+        before: 0.3, after: 1, timeFeather: 10, roundness: 0.35, feather: 0.12, rimStrength: 0.25, rimWidth: 0.05, quality: 'draft',
+        camDist: 7.5, camAngle: 0.6, camElevation: 0.45, rotSpeed: 0.04, fov: 1.6, background: [0.025, 0.025, 0.04],
+        ...note([
+          'Time Cube View with Repeat the box on (Space section): the box copied across a floor (Repeat along: X and Z), forever (Copies each side 0), 0.8 frame heights apart (Gap).',
+          'In space the view marches the ray from box to box: between boxes it jumps straight to the next one; inside one it steps through the frames as a single box would. Far 40 is how far it looks; Fog 0.45 fades the far copies into the Background so the endless grid doesn\'t turn to grain.',
+          'Time per copy 0.07, stepped by Distance from the middle: each ring of copies out from the middle has its slice 0.07 of the clip later, so the moment ripples outward.',
+          'Quality Draft (96 steps a box) keeps a hall of boxes quick: rays crossing several boxes share the budget.',
+        ].join('\n')),
+      }, { volume: ['thaSource', 'volume'], slice: ['thaSweep', 'value'] }),
+      n('output', 'thaOut', 820, 160, OUT_NOTE, { color: ['thaView', 'color'] }),
+    ],
+    play: hallPlay,
+  };
+
+  const twisted: ExampleGraph = {
+    ...meta('timeCubeTwisted'),
+    counter: 20,
+    nodes: [
+      n('timeCube', 'ttwSource', 80, 160, { ...note(CUBE_NOTE) }),
+      n('lfo', 'ttwSweep', 80, 420, {
+        waveform: 'sine', freq: 0.06, amplitude: 0.4, offset: 0.5,
+        ...note('LFO: moves the slice back and forth through the middle of the clip.'),
+      }),
+      n('timeCubeView', 'ttwView', 440, 160, {
+        warp: 'twist', warpWhere: 'each', warpAmount: 0.22, warpFreq: 1, warpSpeed: 0.5,
+        depth: 2.4, before: 0.3, after: 0.9, timeFeather: 8, roundness: 0.3, feather: 0.1, rimStrength: 0.35, rimWidth: 0.06,
+        camDist: 5.2, camAngle: 0.5, camElevation: 0.32, rotSpeed: 0.05, background: [0.04, 0.035, 0.06],
+        ...note([
+          'Time Cube View with Warp: Twist (Space section). The space the box is in turns round the line of time, so each frame is turned a little more than the one before: Amount 0.22 turns the last frame about 95° from the first in this long box (Time stretch 2.4).',
+          'Warp speed 0.5 makes the twist breathe: it winds one way, unwinds, and winds the other way, every 12 s or so.',
+          'The frames are read where the twist puts them, so the picture turns with them, and the slice is still one frame of the clip, twisted.',
+          'Other warps on the same card: Bend curves time upward, Wave snakes it, Noise wobbles it. For any warp you can build, put a Time Cube Shape in a Scene Group and wire it into Space (the "Repeat Scene and 3D warps" example).',
+        ].join('\n')),
+      }, { volume: ['ttwSource', 'volume'], slice: ['ttwSweep', 'value'] }),
+      n('output', 'ttwOut', 820, 160, OUT_NOTE, { color: ['ttwView', 'color'] }),
+    ],
+  };
+
+  const train: ExampleGraph = {
+    ...meta('timeCubeTrain'),
+    counter: 20,
+    nodes: [
+      n('timeCube', 'ttrSource', 80, 160, { ...note(CUBE_NOTE) }),
+      n('timeCubeView', 'ttrView', 440, 160, {
+        timeMode: 'flow', framePos: 0.1, flowSpeed: 0.04, before: 0.1, after: 0.9,
+        repeat: true, repAxes: 'z', repGap: 0.35, repCount: 0, copyTime: 0.04, copyTimeBy: 'step',
+        warp: 'wave', warpWhere: 'space', warpAmount: 1.2, warpFreq: 0.12, warpSpeed: 1.4,
+        farDist: 45, spaceFog: 0.35, roundness: 0.4, feather: 0.12, rimStrength: 0.3, rimWidth: 0.05, quality: 'draft',
+        camDist: 6, camAngle: 0.75, camElevation: 0.3, rotSpeed: 0, fov: 1.5, background: [0.03, 0.03, 0.05],
+        ...note([
+          'Time Cube View in Flow (the clip flows through each box past its front frame) with Repeat the box along Z: a line of boxes going off into the distance, 0.35 apart, forever.',
+          'Time per copy 0.04, stepped by Place: each box is 0.04 of the clip later than the one in front of it, so the same moment travels back along the train.',
+          'Warp: Wave on The whole space: the space the line is in snakes up and down along it (Amount 1.2, one wave every eight or so frame heights: Frequency 0.12), and Warp speed 1.4 sends the wave travelling, so the train rolls over it.',
+          'Fog 0.35 fades the far boxes away; Quality Draft keeps a long line quick.',
+        ].join('\n')),
+      }, { volume: ['ttrSource', 'volume'] }),
+      n('output', 'ttrOut', 820, 160, OUT_NOTE, { color: ['ttrView', 'color'] }),
+    ],
+  };
+
+  const sceneSub: SubgraphData = { inputPorts: [], outputPorts: [], nodes: [
+    n('scenePos', 'tssPos', 0, 200, { _groupOriginal: true, ...note('Scene Pos: the point being measured, already moved into its copy\'s cell by the Repeat Scene outside.') }),
+    n('twist3D', 'tssTwist', 300, 200, { k: 0.9, ...note('Twist 3D: turns space round the upright (Y) axis, more the higher you go (0.9 radians a frame height), so each box is wrung top to bottom. Any warp can go here: Bend 3D, a noise displacement, a Warp Builder group.') }, { pos: ['tssPos', 'pos'] }),
+    n('timeCubeShape', 'tssShape', 600, 200, { ...note('Time Cube Shape: the Time Cube View\'s box, as a shape. It measures the twisted point, and keeps it for the view, which reads the frames there: the picture twists with the box.') }, { pos: ['tssTwist', 'pos'] }),
+    n('sceneOutput', 'tssOut', 900, 200, { _groupOriginal: true, ...note('Scene Output: the distance to the twisted box.') }, { dist: ['tssShape', 'dist'] }),
+  ] };
+
+  const sceneSpace: ExampleGraph = {
+    ...meta('timeCubeSceneSpace'),
+    counter: 20,
+    nodes: [
+      n('timeCube', 'tssSource', 80, 160, { ...note(CUBE_NOTE) }),
+      n('sceneGroup', 'tssScene', 80, 460, {
+        label: 'Twisted box', subgraph: sceneSub,
+        ...note('Scene Group: a Time Cube Shape behind a Twist 3D. Open it to change the warp; any 3D warp node (or a Warp Builder group) can sit between Scene Pos and the shape.'),
+      }),
+      n('repeatScene', 'tssRep', 360, 460, {
+        cellX: 3.4, cellY: 50, cellZ: 3.2, countX: 2, countY: 0, countZ: 1, neighbours: 'off',
+        ...note('Repeat Scene: the twisted box in a 5 × 3 grid (2 copies each side along X, 1 along Z; Cell Y 50 keeps it one layer). Neighbours Off is enough: every copy stays inside its 3.4 × 3.2 cell.'),
+      }, { scene: ['tssScene', 'scene'] }),
+      n('timeCubeView', 'tssView', 640, 160, {
+        copyTime: 0.35, copyTimeBy: 'random', copyHue: 0.3, spaceStep: 0.6, farDist: 30, spaceFog: 0.15,
+        before: 0.28, after: 0.95, roundness: 0.3, feather: 0.1, rimStrength: 0.3, rimWidth: 0.05, quality: 'draft',
+        camDist: 8.5, camAngle: 0.5, camElevation: 0.5, rotSpeed: 0.05, background: [0.03, 0.03, 0.045],
+        ...note([
+          'Time Cube View with the Repeat Scene wired into Space: the view draws its box wherever the scene\'s Time Cube Shape is, through the scene\'s twist and its repeat. The Box settings here (Time stretch, Box size, Corner roundness) set the shape\'s size.',
+          'Time per copy 0.35 at Random and Hue per copy 0.3 (Space section) use each Repeat Scene copy\'s cell: every box shows its own moment in its own colours.',
+          'Step (wired Space) 0.6: a twist stretches space, so the ray steps 60% of the distance the scene reports, so it never steps through a box. Lower it for a stronger twist.',
+        ].join('\n')),
+      }, { volume: ['tssSource', 'volume'], space: ['tssRep', 'scene'] }),
+      n('output', 'tssOutput', 1020, 160, OUT_NOTE, { color: ['tssView', 'color'] }),
+    ],
+  };
+
   return {
     timeCubeBox: box, timeCubeSoftPill: pill, timeCubeHighlights: highlights, timeCubeFlow: flow, timeCubePulse: pulse,
     timeCubeFlyThrough: fly, timeCubeLongExposure: longExposure, timeCubeKey: key, timeCubeSlitScan: slit,
+    timeCubeHall: hall, timeCubeTwisted: twisted, timeCubeTrain: train, timeCubeSceneSpace: sceneSpace,
   };
 }
