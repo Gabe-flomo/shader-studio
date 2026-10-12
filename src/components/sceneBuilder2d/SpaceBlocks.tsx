@@ -11,6 +11,7 @@
  *
  * The pure work is sceneBuilder2d/blocks.ts and blockLibrary.ts; this is the form.
  */
+import { ExprLineInput } from '../builders/ExprLineInput';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   BLOCK_OPS, BLOCK_TARGETS, COMBINE_MODES, MAX_LINES, MAX_TIMES, blockMap, checkBlock, emptyLine, paramNameProblem, rangeFor,
@@ -96,7 +97,7 @@ export function BlockEditor({ block, update, idBase }: { block: SpaceBlock; upda
   const taken = [...TAKEN_ALWAYS, ...block.params.map(p => p.name)];
 
   /** The caret (or selection) on a number offers Make a slider. */
-  const caret = (i: number, el: HTMLTextAreaElement) => {
+  const caret = (i: number, el: HTMLInputElement) => {
     const lit = literalAt(el.value, el.selectionStart ?? 0, el.selectionEnd ?? 0);
     setOffer(lit ? { line: i, lit } : null);
   };
@@ -116,6 +117,8 @@ export function BlockEditor({ block, update, idBase }: { block: SpaceBlock; upda
     setNewName('');
   };
   const nameProblem = newName.trim() ? paramNameProblem(newName.trim(), taken) : null;
+  // What a line can name: the point, time and the block's sliders (autocomplete).
+  const vars = useMemo(() => [{ name: 'x', type: 'float' }, { name: 'y', type: 'float' }, { name: 'uv', type: 'vec2' }, { name: 't', type: 'float' }, ...block.params.map(p => ({ name: p.name, type: 'float' }))], [block.params]);
 
   return (
     <div data-block-editor={idBase} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -133,15 +136,11 @@ export function BlockEditor({ block, update, idBase }: { block: SpaceBlock; upda
                   <Select ariaLabel={`Line ${i + 1} operator`} mono height={28} value={l.op} options={BLOCK_OPS.map(x => ({ value: x, label: x }))}
                     onChange={v => update(b => { b.lines[i].op = v as BlockOp; })} />
                 </span>
-                <textarea aria-label={`Line ${i + 1} expression`} data-block-rhs={i} value={l.rhs} spellCheck={false} rows={Math.max(1, Math.ceil(l.rhs.length / 44))}
-                  placeholder={i === 0 ? 'e.g. amp * sin(y * 6 + t)' : 'leave empty: as it is'}
-                  onChange={e => { const v = e.target.value.replace(/\n/g, ' '); update(b => { b.lines[i].rhs = v; }, `${idBase}:rhs${i}`); }}
-                  onSelect={e => caret(i, e.currentTarget)} onKeyDown={e => { if (e.key === 'Enter') e.preventDefault(); }} onKeyUp={e => caret(i, e.currentTarget)} onClick={e => caret(i, e.currentTarget)}
-                  onBlur={() => setTimeout(() => setOffer(o => (o?.line === i ? null : o)), 150)}
-                  style={{
-                    flex: 1, minWidth: 0, minHeight: 28, padding: '5px 8px', resize: 'none', lineHeight: '16px', borderRadius: radius.sm, boxSizing: 'border-box',
-                    border: `1px solid ${c && !c.ok ? tk.status.danger : tk.border.default}`, background: tk.bg.field, color: tk.text.primary, font: `500 12px ${fontFamily.mono}`,
-                  }} />
+                <ExprLineInput ariaLabel={`Line ${i + 1} expression`} attrs={{ 'data-block-rhs': i }} value={l.rhs} vars={vars}
+                  placeholder={i === 0 ? 'e.g. amp * sin(y * 6 + t)' : 'leave empty: as it is'} invalid={!!c && !c.ok}
+                  onChange={v => update(b => { b.lines[i].rhs = v; }, `${idBase}:rhs${i}`)}
+                  onCaret={el => caret(i, el)}
+                  onBlur={() => setTimeout(() => setOffer(o => (o?.line === i ? null : o)), 150)} />
                 <IconButton icon="close" label="Remove this line" size="sm" onClick={() => update(b => { b.lines.splice(i, 1); })} />
               </div>
               {c && !c.ok && <div role="alert" data-block-error={i} style={{ fontSize: 11.5, color: tk.status.danger, paddingLeft: 146 }}>{c.error}</div>}

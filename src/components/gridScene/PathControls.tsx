@@ -16,6 +16,7 @@ import { fontFamily } from '../../theme/tokens';
 import { Button, IconButton } from '../ui/Button';
 import { Select } from '../ui/Select';
 import { Field } from '../ui/Field';
+import { ExprLineInput } from '../builders/ExprLineInput';
 import { Card, NumRow, Row } from '../sceneBuilder/controls';
 import { BuilderNote } from '../builders/BuilderWindow';
 import { paramNameProblem } from '../../sceneBuilder2d/blocks';
@@ -45,6 +46,8 @@ export function MathPathControls({ shape, onEdit }: { shape: GShape; onEdit: Edi
   const tk = useTokens();
   const m = shape.motion.math ?? defaultMath();
   const problems = m.kind === 'formula' ? formulaProblems(m) : [];
+  // What the formula can name (autocomplete): t, x (in the y line) and its sliders.
+  const mathVars = [{ name: 't', type: 'float' }, { name: 'x', type: 'float' }, ...m.params.map(p => ({ name: p.name, type: 'float' }))];
   const [newName, setNewName] = useState('');
   const nameWhy = newName ? paramNameProblem(newName, m.params.map(p => p.name)) : null;
   return (
@@ -81,10 +84,10 @@ export function MathPathControls({ shape, onEdit }: { shape: GShape; onEdit: Edi
           </Row>
           <BuilderNote>t runs 0 → 1 round the cycle; PI and TAU, the sliders below by name, and x in the y line (the x just worked out). The point is in pad units: X and Y stretch it into cells.</BuilderNote>
           <Row label="x =">
-            <Field mono aria-label="x of t" data-math-x value={m.x} invalid={problems.some(p => p.startsWith('x'))} onChange={e => onEdit(d => { d.x = e.target.value; }, `mathx${shape.id}`)} />
+            <ExprLineInput ariaLabel="x of t" attrs={{ 'data-math-x': '' }} value={m.x} vars={mathVars} invalid={problems.some(p => p.startsWith('x'))} onChange={v => onEdit(d => { d.x = v; }, `mathx${shape.id}`)} />
           </Row>
           <Row label="y =">
-            <Field mono aria-label="y of t" data-math-y value={m.y} invalid={problems.some(p => p.startsWith('y'))} onChange={e => onEdit(d => { d.y = e.target.value; }, `mathy${shape.id}`)} />
+            <ExprLineInput ariaLabel="y of t" attrs={{ 'data-math-y': '' }} value={m.y} vars={mathVars} invalid={problems.some(p => p.startsWith('y'))} onChange={v => onEdit(d => { d.y = v; }, `mathy${shape.id}`)} />
           </Row>
           {problems.length > 0 && (
             <span data-math-problem style={{ fontSize: 11.5, color: tk.status.warningText, lineHeight: 1.4 }}>{problems[0]} (it moves round a circle until this is fixed)</span>

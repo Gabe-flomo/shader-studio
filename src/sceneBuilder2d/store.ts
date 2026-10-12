@@ -8,8 +8,8 @@ import { starterScene, withExplicitStyles, type Scene2D } from './spec';
 import { surpriseScene2D } from './surprise';
 
 /** The window's tabs. Grids are made in the Grid builder; a scene that has one shows it under Shapes (read-only). */
-export type Builder2DTab = 'space' | 'shapes' | 'combine' | 'depth' | 'look' | 'effects' | 'output' | 'recipe' | 'templates';
-export const BUILDER_2D_TABS: Builder2DTab[] = ['space', 'shapes', 'combine', 'depth', 'effects', 'look', 'output', 'recipe', 'templates'];
+export type Builder2DTab = 'space' | 'shapes' | 'combine' | 'modify' | 'depth' | 'look' | 'effects' | 'output' | 'recipe' | 'templates';
+export const BUILDER_2D_TABS: Builder2DTab[] = ['space', 'shapes', 'combine', 'modify', 'depth', 'effects', 'look', 'output', 'recipe', 'templates'];
 
 interface Builder2DState {
   open: boolean;

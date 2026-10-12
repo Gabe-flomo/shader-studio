@@ -34,8 +34,8 @@ function mount(ui: React.ReactElement) {
 afterEach(() => { for (const m of mounted.splice(0)) { act(() => m.root.unmount()); m.host.remove(); } });
 
 const click = (el: Element | null) => { expect(el).toBeTruthy(); act(() => { (el as HTMLElement).click(); }); };
-function type(el: HTMLTextAreaElement, value: string) {
-  const set = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!;
+function type(el: HTMLInputElement | HTMLTextAreaElement, value: string) {
+  const set = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), 'value')!.set!;
   act(() => { set.call(el, value); el.dispatchEvent(new Event('input', { bubbles: true })); });
 }
 
@@ -79,16 +79,19 @@ describe('the block editor', () => {
 
   it('says why a line does not check, as you type', () => {
     const host = mount(<Harness start={start} />);
-    const input = host.querySelector('[data-block-rhs="0"]') as HTMLTextAreaElement;
+    const input = host.querySelector('[data-block-rhs="0"]') as HTMLInputElement;
     type(input, 'sin(y + t) * ampp');
     expect(host.querySelector('[data-block-error="0"]')?.textContent).toMatch(/“ampp” isn't known/);
+    // The line is the Expression Block's own editor: highlighted, its edge in the error colour.
+    expect(input.tagName).toBe('INPUT');
+    expect(input.getAttribute('aria-invalid')).toBe('true');
     type(input, 'sin(y + t) * 0.2');
     expect(host.querySelector('[data-block-error="0"]')).toBeNull();
   });
 
   it('turns a number into a slider', () => {
     const host = mount(<Harness start={{ ...start, lines: [{ target: 'uv.x', op: '+=', rhs: 'sin(y * 6.0)' }] }} />);
-    const input = host.querySelector('[data-block-rhs="0"]') as HTMLTextAreaElement;
+    const input = host.querySelector('[data-block-rhs="0"]') as HTMLInputElement;
     act(() => { input.focus(); input.setSelectionRange(9, 9); input.click(); });
     click(host.querySelector('[data-make-slider]'));
     const state = JSON.parse(host.querySelector('[data-state]')!.textContent!) as SpaceBlock;

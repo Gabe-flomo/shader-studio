@@ -55,7 +55,14 @@ They are built after the grade.
   Light rays / Radial blur (Radial Fast Blur: see [radial-fast-blur.md](radial-fast-blur.md)),
   Chromatic aberration (Chromatic Aberration (texture)) and Displace by a picture (Displace
   (texture), with the picture chosen in the shared texture picker or a Shader Texture). Each reads
-  the Pass with its own node, at the bent point if moves came before it.
+  a Pass with its own node. After moves, the moved picture is drawn into a new Pass first and the
+  read works on that, so the order shows: **Kaleidoscope → Light rays** streaks the folded picture,
+  **Light rays → Kaleidoscope** folds the rays. (Before, a read after moves read the old Pass at
+  the bent point, which is the same picture as the other order: the rays were folded either way.)
+  Each such read takes one more of the six Passes; the 2D builder's Effects page says how many are
+  used and tags each card that takes one ("pass 2 of 6").
+- **The order on the page**: cards are numbered and applied top to bottom ("1 first"); drag a card
+  by its grip to move it, or use its arrows.
 - **Light rays / Radial blur** is CC Radial Fast Blur: Mode (Brightest: light rays; Average: a
   zoom blur; Add: glowing rays), Length, Threshold, Intensity, Opacity, Decay, Falloff, Zoom (out from or
   into the centre), Centre X / Y and Tint, the node's own controls. Its four streak passes are

@@ -15,7 +15,7 @@ vi.hoisted(() => {
 
 import { act, type ReactElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { CombineTab, ShapesTab } from '../SceneBuilder2DModal';
+import { CombineTab, ModifyTab, ShapesTab } from '../SceneBuilder2DModal';
 import { useSceneBuilder2D } from '../../../sceneBuilder2d/store';
 import { emptyScene, newShape } from '../../../sceneBuilder2d/spec';
 import { templateScene } from '../../../sceneBuilder2d/templates';
@@ -65,5 +65,26 @@ describe('the Combine tab', () => {
     expect(useSceneBuilder2D.getState().scene.layers).toHaveLength(1);
     expect(g.type === 'group' && g.op === 'union' && g.k > 0 && g.mix && g.children.length === 2).toBe(true);
     expect(host.querySelectorAll('[aria-label="Combine operator"] button')).toHaveLength(7);
+  });
+});
+
+describe('the Modify tab', () => {
+  it('adds operations to the selected shape as numbered cards; f(d) is the Expression Block line editor, checked as you type', () => {
+    const s = emptyScene();
+    s.layers.push(newShape('circle', 's1'));
+    useSceneBuilder2D.getState().openWith(s);
+    useSceneBuilder2D.getState().select('s1');
+    const host = mount(<ModifyTab />);
+    act(() => (host.querySelector('[data-mod-add="onion"]') as HTMLButtonElement).click());
+    act(() => (host.querySelector('[data-mod-add="custom"]') as HTMLButtonElement).click());
+    const mods = useSceneBuilder2D.getState().scene.layers[0].mods!;
+    expect(mods.map(m => m.kind)).toEqual(['onion', 'custom']);
+    expect(host.textContent).toContain('1. Ring (onion)');
+    expect(host.textContent).toContain('2. f(d)');
+    const input = host.querySelector('[data-mod-fd]') as HTMLInputElement;
+    expect(input.tagName).toBe('INPUT');
+    const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+    act(() => { set.call(input, 'sinn(d)'); input.dispatchEvent(new Event('input', { bubbles: true })); });
+    expect(host.querySelector('[data-mod-error]')?.textContent).toMatch(/sin\(\)/);
   });
 });

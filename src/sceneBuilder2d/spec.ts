@@ -23,6 +23,8 @@ import { blockSummary, cloneBlock, COMBINE_BY_MODE, type CombineMode, type Combi
 import type { TexSource, TexUse } from '../builders/textures';
 import type { StackItem } from '../builders/look/stack';
 import type { DepthPic2D } from './depth';
+import type { DistMod } from './modify';
+import type { GlowType } from '../nodes/definitions/combiners';
 
 export type Vec2 = [number, number];
 export type Vec3 = [number, number, number];
@@ -278,6 +280,10 @@ interface ItemBase {
   muted?: boolean;
   /** How a top-level layer is drawn; absent: Filled (scenes made before styles). New items are Glow. */
   style?: ShapeStyle;
+  /** This layer's glow type instead of the Look's (combiners.ts GLOW_TYPES). */
+  glowType?: GlowType | null;
+  /** Modify: operations on its distance, top to bottom, before it is drawn (modify.ts). */
+  mods?: DistMod[];
 }
 
 /** A layer shown only where a picture is bright: the picture over the whole frame, its brightness against `cut`. */
@@ -339,7 +345,11 @@ export interface LookSpec {
   bg: Vec3;
   /** A picture behind every layer, read at the warped point (`warp`) or the screen's. */
   bgTex?: (TexUse & { warp: boolean }) | null;
-  glow: { mode: GlowMode; amount: number; falloff: number; tint: Vec3 | null };
+  /**
+   * `type`: the glow formula (combiners.ts GLOW_TYPES). Absent: Soft for Glow-style layers and Halo
+   * round Filled ones (as before types).
+   */
+  glow: { mode: GlowMode; amount: number; falloff: number; tint: Vec3 | null; type?: GlowType };
   colour: { by: ColourBy; palette: string; scale: number; speed: number };
   tone: ToneMode;
   /**
@@ -498,12 +508,12 @@ export function findItem(spec: Scene2D, id: string): { item: Item; parent: Group
 /** The ids already used by items, motions and space transforms. */
 function usedIds(spec: Scene2D): Set<string> {
   const used = new Set<string>(spec.space.map(s => s.id));
-  walkItems(spec.layers, it => { used.add(it.id); for (const m of it.motion) used.add(m.id); });
+  walkItems(spec.layers, it => { used.add(it.id); for (const m of it.motion) used.add(m.id); for (const x of it.mods ?? []) used.add(x.id); });
   return used;
 }
 
 /** A fresh id that nothing in `spec` has yet: `s3`, `g2`, `m5` (motion), `p1` (space). */
-export function nextId(spec: Scene2D | null, prefix: 's' | 'g' | 'm' | 'p'): string {
+export function nextId(spec: Scene2D | null, prefix: 's' | 'g' | 'm' | 'p' | 'x'): string {
   const used = spec ? usedIds(spec) : new Set<string>();
   for (let i = 1; ; i++) if (!used.has(`${prefix}${i}`)) return `${prefix}${i}`;
 }
@@ -569,16 +579,19 @@ export function canonicalScene(spec: Scene2D): Scene2D {
     // A style is a top-level layer's (absent there: Filled); a nested item's isn't used.
     if (parent) delete it.style; else it.style = styleOf(it);
     if (it.type === 'group' && !it.mix) delete it.mix;
+    if (!it.glowType) delete it.glowType;
+    if (!it.mods?.length) delete it.mods;
   });
   if (!out.depth) delete out.depth;
   else delete out.depth.bake;
-  let s = 0, g = 0, m = 0, p = 0;
+  let s = 0, g = 0, m = 0, p = 0, xi = 0;
   out.look.grade?.forEach((x, i) => { x.id = `gr${i + 1}`; });
   out.effects?.forEach((x, i) => { x.id = `fx${i + 1}`; });
   for (const op of out.space) op.id = `p${++p}`;
   walkItems(out.layers, it => {
     it.id = it.type === 'group' ? `g${++g}` : `s${++s}`;
     for (const mo of it.motion) mo.id = `m${++m}`;
+    for (const x of it.mods ?? []) x.id = `x${++xi}`;
   });
   return out;
 }
