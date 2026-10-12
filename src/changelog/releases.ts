@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.184',
+    date: '2026-10-11',
+    title: 'Real lens fringes, deep glow',
+    highlights: [
+      { area: 'Studio', text: 'Chromatic Aberration rebuilt: smooth spectral rainbow fringes, channel split, blur that grows with the shift, and lateral, axial or prism lenses.' },
+      { area: 'Studio', text: 'Deep Glow replaces Glow and Bloom: a long, natural tail with hot cores. Old Glow cards offer Upgrade to Deep Glow.' },
+      { area: 'Files', text: 'Projects now save as .play files (.playfile still opens). Pieces and Balls are hidden from the library and builders for now.' },
+    ],
+  },
+  {
     id: '2026.10.183',
     date: '2026-10-11',
     title: 'Combine, modify, recover',
