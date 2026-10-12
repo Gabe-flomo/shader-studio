@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.199',
+    date: '2026-10-12',
+    title: 'Data Texture views',
+    highlights: [
+      { area: 'Studio', text: 'Data Texture cards show the texture: Raw, Range, Channels or Arrows (r g as a vector field), with a Min…Max for the view.' },
+      { area: 'Studio', text: 'Open ↗ pops out a big view with the exact stored value under the cursor, the inputs and outputs editor, and the storage settings.' },
+    ],
+  },
+  {
     id: '2026.10.198',
     date: '2026-10-12',
     title: 'Data Texture',
