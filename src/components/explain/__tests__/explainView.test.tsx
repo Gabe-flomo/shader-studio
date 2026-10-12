@@ -27,8 +27,7 @@ import { useNodeGraphStore } from '../../../store/useNodeGraphStore';
 import { useLineProbe } from '../../../lib/nodePreview/lineProbe';
 import { buildUpRows, explainLine } from '../../../lib/glslPatterns';
 import { previewHeld } from '../../../lib/previewHold';
-import { EXPLAIN_MODEL } from '../../../explainModel/config';
-import { useExplainModel } from '../../../explainModel/client';
+import { ExplainRow } from '../ExplainRow';
 import { exprBlockBuildUp } from '../buildUpHost';
 import { liveProgram, liveUniformValues, rawRange } from '../liveRender';
 import { LineFold } from '../LineFold';
@@ -73,7 +72,6 @@ let el: HTMLDivElement;
 beforeEach(() => {
   useLineProbe.getState().set(null);
   useNodeGraphStore.setState({ nodes: graph(), activeGroupPath: [], previewNodeId: null });
-  useExplainModel.setState({ enabled: false, downloaded: false, downloadedIds: [], activeId: EXPLAIN_MODEL.id, loadedId: null, busyId: null, status: 'idle', progress: null, error: null });
   el = document.createElement('div');
   document.body.appendChild(el);
   root = createRoot(el);
@@ -113,15 +111,14 @@ describe('the fold under a line', () => {
     expect(lead.length).toBeGreaterThan(5);
     expect(lead.length).toBeLessThan(200); // a sentence, not the working
     expect(q('[data-buildup]')).toBeNull();
-    expect(q('[data-explain-more]')).toBeNull(); // no model here
     click('[data-explain-action="open-view"]');
     expect(opened).toEqual([1]);
   });
 
-  it('the editor has no per-line model button; Explain the block is still there; ▶ keeps the picture under the line and opens its fold', () => {
+  it('the editor has no model button; ▶ keeps the picture under the line and opens its fold', () => {
     act(() => root.render(<ExprBlockModal node={blockOf()} onClose={() => {}} />));
-    const explains = [...document.querySelectorAll('[data-explain-action="explain"]')].map(b => b.textContent);
-    expect(explains).toEqual(['Explain the block']);
+    expect(document.querySelectorAll('[data-explain-action="explain"]')).toHaveLength(0);
+    expect(document.body.textContent).not.toMatch(/local model|language model/i);
     expect(document.querySelectorAll('[data-line-fold]')).toHaveLength(4); // three lines and Return
     click('[data-probe=\'{"kind":"line","index":2}\']');
     expect(document.querySelectorAll('[data-line-preview]')).toHaveLength(1);
@@ -194,10 +191,9 @@ describe('the explain view', () => {
     act(() => { list.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
     expect(live().dataset.liveRow).toBe('result');
     expect(q('[data-explain-view-page]')).not.toBeNull(); // the first Escape only cleared the step
-    // The model's explanation of this line
-    expect(q('[data-explain-view-page] [data-explain-action="explain"]')!.textContent).toBe('Explain with the model');
-    click('[data-explain-view-page] [data-explain-action="explain"]');
-    expect(q('[data-explain-offer]')).not.toBeNull(); // no model: the download offer
+    // No model section: the pattern sentence is the only wording
+    expect(q('[data-explain-view-page] [data-explain-action="explain"]')).toBeNull();
+    expect(q('[data-explain-view-page]')!.textContent).not.toMatch(/The model|local model/);
   });
 
   it('values set by hand: off Live, then Reset makes every name live again', async () => {
@@ -265,5 +261,18 @@ describe('the live program', () => {
     const d = new Float32Array([0.25, 9, 9, 1, NaN, 0, 0, 1, -0.5, 0, 0, 1]);
     expect(rawRange(d, 1)).toEqual([-0.5, 0.25]);
     expect(rawRange(new Float32Array([NaN, NaN, 0, 1]), 1)).toBeNull();
+  });
+});
+
+describe('the Explain row (a Custom Function statement)', () => {
+  it('shows the pattern name and its sentence, no model action; the build-up stays folded', () => {
+    act(() => root.render(<ExplainRow text="float z = 1.0 - dot(p, p)" exprStart={10} ctx={{ types: { p: 'vec2' } }} />));
+    expect(q('[data-explain-action="explain"]')).toBeNull();
+    expect(q('[data-explain-pattern]')!.textContent).toBe('Flipping a mask');
+    expect(q('[data-explain-lead]')!.textContent!.length).toBeGreaterThan(10);
+    expect(q('[data-explain-summary]')!.textContent).toMatch(/^p → \d steps? → z$/);
+    expect(q('[data-explain-view]')).toBeNull();
+    click('[data-explain-toggle]');
+    expect(q('[data-explain-view]')).not.toBeNull();
   });
 });

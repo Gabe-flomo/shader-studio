@@ -32,9 +32,7 @@ import { useExprBlockJump } from '../codeExplorer/useCodeJumpFocus';
 import { LineFold } from '../explain/LineFold';
 import { ExplainViewBoundary } from '../explain/ExplainViewBoundary';
 import { useExplainDialogs } from '../explain/useExplainDialogs';
-import { exprBlockContext, exprBlockUseHere, exprBlockCode, scopeNodes } from '../explain/hosts';
-import { ExplainScopeProvider } from '../explain/ExplainScope';
-import { ExplainMore } from '../explain/ExplainMore';
+import { exprBlockContext, exprBlockUseHere, scopeNodes } from '../explain/hosts';
 import { useFnCardScope } from '../explain/functionCard/fnCardStore';
 import type { GeneraliseContext } from '../../lib/glslPatterns';
 import { lineConcepts } from '../../lib/glslPatterns/explain';
@@ -164,7 +162,6 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
   // What the viewed line knows (the names earlier lines made), like its fold
   const viewCtx = viewAt === null ? explainCtx : viewAt === 'return' ? (lineCtxs[lineCtxs.length - 1] ?? explainCtx) : (lineCtxs[viewAt] ?? explainCtx);
   // Explain is told which block this is (its neighbours in the graph) and the whole code around a line
-  const explainScope = useMemo(() => ({ nodeId: node.id, kind: 'Expression Block', getNodes: scopeNodes, enclosing: () => exprBlockCode(scopeNodes().find(n => n.id === node.id) ?? node) }), [node]);
 
   // ── Undo / Redo ──────────────────────────────────────────────────────────────
   const history      = useRef<Snapshot[]>([{ lines, result, inputs: customInputs, loop }]);
@@ -413,7 +410,6 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
   const showCarry = (inp: InputDef) => insideLoop || !!inp.carry;
 
   return (
-    <ExplainScopeProvider value={explainScope}>
     <Modal
       title="Expression Block"
       subtitle={`${label} · ${customInputs.length} ${customInputs.length === 1 ? 'input' : 'inputs'} → ${outputType}${loopOn ? ` · loops ×${clampCount(loopCountValue(node.params), loopMax(loop))}` : ''}`}
@@ -663,7 +659,6 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
             <LinePreviewPanel node={node} at={{ kind: 'return' }} />
             {result.trim() ? <LineExplain index="return" line={{ lhs: '', op: '', rhs: result }} ctx={lineCtxs[lineCtxs.length - 1] ?? explainCtx} openRequest={explainOpen?.at === 'return' ? explainOpen.seq : undefined} onOpenView={setViewAt} /> : null}
             <Note>The final expression of type {outputType} that the block outputs.</Note>
-            {(lines.some(l => l.rhs.trim() && !l.off) || result.trim()) && <ExplainMore mode="block" text={exprBlockCode(node)} ctx={explainCtx} />}
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -696,7 +691,6 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
       )}
       {fnMenu && <Menu x={fnMenu.x} y={fnMenu.y} minWidth={280} items={fnMenuItems} onClose={() => setFnMenu(null)} />}
     </Modal>
-    </ExplainScopeProvider>
   );
 }
 

@@ -10,7 +10,8 @@ import { fontFamily } from '../../theme/tokens';
 import { IconButton } from '../ui/Button';
 import { ExplainView } from './ExplainView';
 import { useExplainDialogs } from './useExplainDialogs';
-import { ExplainScopeProvider } from './ExplainScope';
+import { ExplainText } from './ExplainText';
+import { linePattern } from './LineFold';
 
 export function GlslExplainPanel({ code, span, setCode, onClose }: {
   code: string;
@@ -26,9 +27,8 @@ export function GlslExplainPanel({ code, span, setCode, onClose }: {
   const ctx: GeneraliseContext = useMemo(() => ({ types: typesFromCode(code) }), [code]);
   const ex = useMemo(() => explainLine(span.text, ctx), [span.text, ctx]);
   const stale = code.slice(span.start, span.end) !== span.text;
-  const scope = useMemo(() => ({ kind: 'GLSL page', enclosing: () => codeRef.current }), []);
+  const pattern = ex.ok ? linePattern(ex) : undefined;
   return (
-    <ExplainScopeProvider value={scope}>
     <div data-glsl-explain="" style={{ borderTop: `1px solid ${tk.border.subtle}`, padding: '10px 12px', maxHeight: 340, overflowY: 'auto', flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <span style={{ font: `650 10.5px ${fontFamily.ui}`, letterSpacing: '0.08em', textTransform: 'uppercase', color: tk.text.faint, flex: 1 }}>
@@ -36,8 +36,14 @@ export function GlslExplainPanel({ code, span, setCode, onClose }: {
         </span>
         <IconButton icon="close" label="Close the explanation" size="sm" onClick={onClose} />
       </div>
+      {ex.ok && (
+        <span data-explain-lead="" style={{ font: `500 12.5px/1.55 ${fontFamily.ui}`, color: tk.text.secondary }}>
+          {pattern && <strong data-explain-pattern="" style={{ color: tk.text.primary, fontWeight: 650 }}>{pattern}. </strong>}
+          <ExplainText segs={ex.leadSegs} />
+        </span>
+      )}
       {ex.ok ? (
-        <ExplainView ex={ex} explainMore={{ ctx, where: 'the selected code' }} editable={stale ? { start: 0, end: 0 } : { start: ex.line.exprStart, end: span.text.length }}
+        <ExplainView ex={ex} editable={stale ? { start: 0, end: 0 } : { start: ex.line.exprStart, end: span.text.length }}
           onFindUses={dialogs.findUses}
           onMakeNode={rel => {
             const abs = { start: span.start + rel.start, end: span.start + rel.end };
@@ -57,6 +63,5 @@ export function GlslExplainPanel({ code, span, setCode, onClose }: {
       )}
       {dialogs.dialogs}
     </div>
-    </ExplainScopeProvider>
   );
 }

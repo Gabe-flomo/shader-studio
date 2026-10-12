@@ -35,3 +35,31 @@ Stored data is not read any more. At start-up the app removes `shader-studio:tas
 Generated results and learned taste added a lot of machinery, and the results did not feel better than
 a good random line you can read and edit. Local models will be used for explanations and suggestions
 instead, which is what the kept image model is ready for.
+
+# Removed 2026-10-11: the on-device explanation model
+
+The local language model behind Explain (Qwen2.5-Coder 1.5B by default, Qwen3 4B and OLMo 3 7B optional,
+run with transformers.js on WebGPU or WebAssembly) didn't work well enough to be useful, and is removed.
+
+## Removed
+
+- `src/explainModel` (config, client, worker, prompts, answer parsing, confidence, cache) and its tests.
+- The Explain / Explain the block / Explain this function / Explain this node buttons, the download offer,
+  "Explained by a local model" answers, confidence dots, Double-check, Compare models and "Facts it was given"
+  (`ExplainMore.tsx`, `ExplainAnswer.tsx`, `ExplainScope.tsx`); the node card's Explain (spark) button.
+- Settings, App settings, Explanation model (`ExplanationModelSettings.tsx`).
+- docs/explain-model.md. The trial reports (docs/reports/explain-model-trial.md, explain-prompt-context.md)
+  are kept, marked historical.
+
+Stored data is not read any more. At start-up the app removes the `shader-studio:settings:useExplainModel`,
+`explainModelDownloaded` (and `explainModelDownloaded:<id>`) and `explainModelActive` keys, and that model's
+downloaded files from the browser's `transformers-cache` (the image and depth models' files stay).
+
+## Kept
+
+- The Explain rows: the pattern's name and one sentence (LineFold, ExplainRow, the GLSL page's panel).
+- The explain view: live pictures, the step / build-up view, Try values, the loop pass scrubber.
+- Worked examples and line previews.
+- The sample inputs the pictures use, moved from `explainModel/inputs.ts` to `src/lib/sampleInputs.ts`.
+- The image model (`src/imageModel`) and depth models: not language models. `@huggingface/transformers` stays
+  for them.

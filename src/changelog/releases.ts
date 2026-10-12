@@ -721,7 +721,7 @@ export const RELEASES: Release[] = [
     date: '2026-10-09',
     title: 'Explain, rebuilt',
     highlights: [
-      { area: 'Studio', text: 'Expression Block lines have a Build-up: each input and step as a small picture with its range. Click a row or ← → to show it on the preview.', link: { kind: 'doc', path: 'docs/explain-model.md' } },
+      { area: 'Studio', text: 'Expression Block lines have a Build-up: each input and step as a small picture with its range. Click a row or ← → to show it on the preview.', link: { kind: 'doc', path: 'docs/expression-explainer.md' } },
       { area: 'Studio', text: 'Explain always asks the on-device model: each line in plain words, then what the whole block does. It reads measured values and where each input comes from.' },
       { area: 'Studio', text: 'A bigger optional model, Olmo 3 7B (3.8 GB, WebGPU), for machines with 16 GB or more. Save and Load now sit beside the graph name in the top bar.' },
     ],
@@ -924,7 +924,7 @@ export const RELEASES: Release[] = [
     date: '2026-10-08',
     title: 'Model step-by-steps',
     highlights: [
-      { area: 'Studio', text: 'Explain these steps: with the explanation model downloaded, a line\'s step-by-step can be explained by the model, a sentence per step with a confidence dot.', link: { kind: 'doc', path: 'docs/explain-model.md' } },
+      { area: 'Studio', text: 'Explain these steps: with the explanation model downloaded, a line\'s step-by-step can be explained by the model, a sentence per step with a confidence dot.', link: { kind: 'doc', path: 'docs/retired-experiments.md' } },
       { area: 'Studio', text: 'Settings: turn on Explain step-by-steps with it automatically to have the model explain steps as soon as you open them.' },
     ],
   },
@@ -1033,7 +1033,7 @@ export const RELEASES: Release[] = [
     date: '2026-10-08',
     title: 'Explain with confidence',
     highlights: [
-      { area: 'Studio', text: 'Explain more is more careful: it only sees the code and what feeds each input, not node names, and each answer gets a confidence dot with a not sure tag.', link: { kind: 'doc', path: 'docs/explain-model.md' } },
+      { area: 'Studio', text: 'Explain more is more careful: it only sees the code and what feeds each input, not node names, and each answer gets a confidence dot with a not sure tag.', link: { kind: 'doc', path: 'docs/retired-experiments.md' } },
       { area: 'Studio', text: 'Pick your explanation model in Settings: the fast Qwen2.5-Coder 1.5B or Qwen3 4B, which thinks first and is better at maths. Compare models shows both answers.' },
     ],
   },
@@ -1051,7 +1051,7 @@ export const RELEASES: Release[] = [
     date: '2026-10-08',
     title: 'Explain more (experimental)',
     highlights: [
-      { area: 'Studio', text: 'Experimental: an optional local model (1.4 GB, on your device) adds Explain more under code explanations, plus Explain this node and Explain this block.', link: { kind: 'doc', path: 'docs/explain-model.md' } },
+      { area: 'Studio', text: 'Experimental: an optional local model (1.4 GB, on your device) adds Explain more under code explanations, plus Explain this node and Explain this block.', link: { kind: 'doc', path: 'docs/retired-experiments.md' } },
       { area: 'Studio', text: 'Its answers are labelled and can be wrong; they sit under the built-in explanation with the facts it was given. Download or remove it in Settings.' },
     ],
   },

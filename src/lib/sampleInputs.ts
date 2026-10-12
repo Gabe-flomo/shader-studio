@@ -1,9 +1,7 @@
 /**
- * inputs.ts — what a code node's inputs ARE, traced to what feeds them (docs/explain-model.md "Fact-only context").
- *
- * A small model that is told "this comes from the node called 'Moonlight'" explains moonlight. So an input is
- * described only by its type and by the upstream node's TYPE, the output it comes from and what that output means,
- * never by a user-given node label or title:
+ * sampleInputs.ts — what a code node's inputs ARE, traced to what feeds them, and the sample values the Explain
+ * pictures and the loop pass scrubber (LoopPasses.tsx) draw them with. An input is described by its type and by the
+ * upstream node's TYPE, the output it comes from and what that output means, never by a user-given label:
  *
  *   uv:  vec2, from a UV node (vec2): pixel position, centred: (0,0) is the middle of the picture, …
  *   n:   vec3, from the Normal output of a March Loop node (vec3, unit length): the direction the surface faces …
@@ -12,10 +10,10 @@
  *
  * Each input also says how the measurements (worked.ts `workedBlock`) draw it: a fixed value, a known range (a
  * slider's min/max, a source's documented output), a unit-length direction, or, when nothing says, an assumed 0..1
- * (flagged, so the prompt can say so). Pure: the node registry is injected (`NodeDescriber`).
+ * (flagged). Pure: the node registry is injected (`NodeDescriber`).
  */
 import { GROUP_PORT_SENTINEL, type GraphNode } from '../types/nodeGraph';
-import type { BlockInput, Value } from '../lib/glslPatterns';
+import type { BlockInput, Value } from './glslPatterns';
 
 /** What the node registry knows about a node type (injected so this file stays pure). */
 export interface TypeInfo {
