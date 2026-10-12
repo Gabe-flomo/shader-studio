@@ -13,6 +13,7 @@ import type { ExampleGraph } from './exampleIndex';
 import type { GraphNode } from '../types/nodeGraph';
 import type { PlayRecord } from '../types/play';
 import { colourCtl, ctl, n } from './graphBuilder';
+import { retypeDataTexture } from '../nodes/definitions/dataTexture';
 import { slimeMoldNodes } from './agentExamples';
 import RIDGES_AT_DUSK from './playAssets/ridges-at-dusk.jpg?inline';
 import { BALL_VIDEO } from '../lib/builtinVideos';
@@ -65,6 +66,10 @@ export const TEXTURE_TOOL_EXAMPLE_INDEX: Record<string, { label: string; descrip
     label: 'Texture tools 11 · Data Texture: positions that drift', play: true,
     description: 'A simulation kept in a Data Texture: every texel stores a position (full float, exact reads). Each frame an Expression Block reads last frame\'s position, pushes it along a swirling flow and writes it back; a second one draws a checkerboard at the stored positions, so the board is smeared by the flow. ↺ starts it over.',
   },
+  ttRenderTargets: {
+    label: 'Texture tools 12 · Render Targets: motion and paint in one draw', play: true,
+    description: 'Two textures from one draw (multiple render targets): a state target holds each texel\'s position and velocity at full float, a paint target a colour trail. Step works out the new motion, Paint colours it by direction, and both are written together by Render Targets. Each reads its own target a frame ago.',
+  },
 };
 
 /** The ordered keys, for the Texture tools folder. */
@@ -79,8 +84,8 @@ function playRecord(controls: PlayRecord['controls'], notes: string): PlayRecord
 
 /** An Expression Block: named inputs (wired as given), lines `type name = rhs`, a result; its note explains every named line. */
 function expr(id: string, x: number, y: number, o: {
-  label: string; outputType: 'float' | 'vec2' | 'vec3';
-  inputs: Array<[name: string, type: 'float' | 'vec2' | 'vec3', from: [string, string]]>;
+  label: string; outputType: 'float' | 'vec2' | 'vec3' | 'vec4';
+  inputs: Array<[name: string, type: 'float' | 'vec2' | 'vec3' | 'vec4', from: [string, string]]>;
   lines: Array<[lhs: string, rhs: string]>;
   result: string; note: string[];
 }): GraphNode {
@@ -544,6 +549,85 @@ export function buildTextureToolExamples(): Record<string, ExampleGraph> {
 **Try.** Set the Video Input's Source to Webcam and wave. Rise 0 and Zoom 1.02 for a tunnel behind you. Tail 4 for long ghosts. Blend Over on the Feedback keeps only the brightest echo.`),
   };
 
+
+
+  // ── 12 · Render Targets: state (position + velocity) and paint, written in one draw ──
+  g.ttRenderTargets = {
+    ...TEXTURE_TOOL_EXAMPLE_INDEX.ttRenderTargets,
+    counter: 20,
+    nodes: [
+      n('uv', 'uvn', 40, 160, note('UV: this pixel\'s place. Every texel starts holding its own place, at rest.')),
+      n('time', 'clock', 40, 340, note('Time: turns the pull slowly, so the swirls change.')),
+      n('constant', 'pullAmt', 40, 520, { label: 'Pull', value: 0.0015, ...note('Pull: how hard the swirl pulls each texel\'s position every frame. A Play control.') }),
+      retypeDataTexture(n('readChannels', 'readState', 40, 700, { channels: 'rgba', read: 'exact',
+        ...note('Read channels: the state target as it was last frame (Render Targets\' state (last frame) output), all four channels: position in r g, velocity in b a. Exact, so two texels never blend.') },
+        { texture: ['rt', 'previous'] })),
+      retypeDataTexture(n('readChannels', 'readPaint', 40, 900, { channels: 'rgb', read: 'smooth',
+        ...note('Read channels: the paint target as it was last frame (its paint (last frame) output), as a colour.') },
+        { texture: ['rt', 'previous1'] })),
+      expr('stepMotion', 380, 300, {
+        label: 'Step', outputType: 'vec4',
+        inputs: [['s', 'vec4', ['readState', 'value']], ['uv', 'vec2', ['uvn', 'uv']], ['t', 'float', ['clock', 'time']], ['k', 'float', ['pullAmt', 'value']]],
+        lines: [
+          ['vec2 pos', 's.xy'],
+          ['vec2 vel', 's.zw'],
+          ['float fresh', 'step(dot(pos, pos), 1e-10)'],
+          ['vec2 pull', 'vec2(sin(pos.y * 2.5 + t * 0.6), cos(pos.x * 2.5 - t * 0.4))'],
+          ['vec2 v2', 'vel * 0.96 + pull * k'],
+        ],
+        result: 'mix(vec4(pos + v2, v2), vec4(uv, 0.0, 0.0), fresh)',
+        note: [
+          'Expression Block: one step of motion for every texel, from last frame\'s state.',
+          'pos: where the texel\'s point is (r g). vel: how fast it moves (b a).',
+          'fresh: 1 where nothing is stored yet (the targets start at 0, and ↺ clears them), so the first frame starts every point at its own place, at rest.',
+          'pull: a swirl that depends on where the point is, turning slowly with time.',
+          'v2: the velocity, slowed a little (0.96) and pulled by the swirl times Pull.',
+          'Result: the new position and velocity together, one vec4 for the state target.',
+        ],
+      }),
+      expr('paint', 380, 760, {
+        label: 'Paint', outputType: 'vec3',
+        inputs: [['next', 'vec4', ['stepMotion', 'result']], ['prev', 'vec3', ['readPaint', 'value']]],
+        lines: [
+          ['float speed', 'clamp(length(next.zw) * 25.0, 0.0, 1.0)'],
+          ['float stripe', 'smoothstep(0.35, 0.5, abs(fract((next.x + next.y) * 5.0) - 0.5))'],
+          ['float turn', 'atan(next.w, next.z) / 6.2832'],
+          ['vec3 hue', '0.5 + 0.5 * cos(6.2832 * (turn + vec3(0.0, 0.33, 0.67)))'],
+        ],
+        result: 'max(prev * 0.96, hue * speed * stripe * 0.9)',
+        note: [
+          'Expression Block: the paint target, from the motion Step just worked out (in the same draw, so it is worked out once for both targets).',
+          'speed: how fast the point moves, 0 to 1. turn: its direction as a fraction of a full turn.',
+          'stripe: thin diagonal stripes drawn at each point\'s position, so the motion carries them and you see the flow.',
+          'hue: a colour for that direction, round the colour wheel.',
+          'Result: last frame\'s paint fading (0.96), or the new striped colour where it is brighter.',
+        ],
+      }),
+      { ...n('renderTargets', 'rt', 760, 500, {
+        label: 'Motion + paint',
+        targets: [
+          { name: 'state', type: 'vec4', format: 'float', read: 'exact' },
+          { name: 'paint', type: 'vec3', format: 'half', read: 'smooth' },
+        ],
+        ...note([
+          'Render Targets: two textures written in one draw (multiple render targets).',
+          'Target 1, state: a vec4 (position, velocity) at full float with exact reads: positions must stay exact frame after frame.',
+          'Target 2, paint: a colour at half float, read smoothly: it is a picture.',
+          'Everything feeding the node (both Expression Blocks, the reads) is worked out once per pixel for both targets. Its last-frame outputs feed Step and Paint, which is how it keeps state.',
+        ]) }, { in0: ['stepMotion', 'result'], in1: ['paint', 'result'] }) },
+      retypeDataTexture(n('readChannels', 'readOut', 1100, 500, { channels: 'rgb', read: 'smooth',
+        ...note('Read channels: the paint target this frame, as a colour for the Output.') },
+        { texture: ['rt', 'texture1'] })),
+      n('output', 'out', 1400, 500, note('Output: the paint trails.'), { color: ['readOut', 'value'] }),
+    ],
+    play: playRecord([
+      ctl('pull', 'pullAmt::value', 'Pull', 0, 0.006, 0.0001),
+    ], `**What it shows.** Multiple render targets: one Render Targets node writes two textures in the same draw, a state (position and velocity, full float) and a paint colour (half float).
+
+**How it is built.** Read channels nodes read each target as it was last frame. Step works out the new motion; Paint colours it by direction and fades the old paint. Both feed Render Targets, which draws them together. A third Read channels shows the paint.
+
+**Try.** ↺ to start over. Turn up Pull. Change the paint target to 8-bit and watch the faint trails band.`),
+  };
 
   // ── 11 · Data Texture: a position per texel, advected by a flow, drawn as a smeared checkerboard ──
   g.ttDataAdvect = {

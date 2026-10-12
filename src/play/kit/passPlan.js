@@ -75,7 +75,9 @@ export function ppPixel(w, h) {
  */
 export function ppTargetKey(p, w, h) {
   const [tw, th] = ppSize(w, h, p.scale, p.size);
-  return `${tw}x${th}:${p.format}:${p.filter}:${p.wrap}:${p.previous ? 2 : 1}`;
+  // MRT: the extra targets' settings too (docs/render-targets.md).
+  const extra = (p.extra || []).map(t => `${t.format}/${t.filter}`).join(',');
+  return `${tw}x${th}:${p.format}:${p.filter}:${p.wrap}:${p.previous ? 2 : 1}${extra ? `:${extra}` : ''}`;
 }
 
 /**

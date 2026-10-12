@@ -145,6 +145,7 @@ import { StageTag } from '../structure/stageUi';
 import { BakedCardBody } from '../bake/BakedCardBody';
 import { TimeCubeCardBody } from '../timeCube/TimeCubeCardBody';
 import { DataTextureCardBody } from './DataTextureCardBody';
+import { RenderTargetsCardBody } from './RenderTargetsCardBody';
 import { DepthCardBody } from '../depth/DepthCardBody';
 import { DepthLightCardBody } from '../depth/DepthLightCardBody';
 import { SplatSceneCardBody } from '../splats/SplatSceneCardBody';
@@ -3223,7 +3224,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
       })()}
 
       {/* A Pass's texture, always shown: drawn every few frames by lib/passRunner.ts */}
-      {(node.type === 'pass' || node.type === 'dataTexture') && <NodeInlineViz node={node} />}
+      {(node.type === 'pass' || node.type === 'dataTexture' || node.type === 'renderTargets') && <NodeInlineViz node={node} />}
       {/* The Agents family (docs/agents-plan.md): the group's numbers and Open rule, a Trail's texture */}
       {(node.type === 'agentsGroup' || node.type === 'trailField') && <NodeInlineViz node={node} onEnterGroup={onEnterGroup} />}
       {node.type === 'shaderTexture' && <ShaderTextureCardBody node={node} onEnterGroup={onEnterGroup} />}
@@ -3972,6 +3973,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         {!collapsed && node.type === 'gridRules' && <GridRulesCardBody node={node} touch={isTouchDevice} onOpen={() => openGridRulesEditor(node.id)} />}
         {!collapsed && node.type === 'timeCube' && <TimeCubeCardBody node={node} touch={isTouchDevice} />}
         {!collapsed && node.type === 'dataTexture' && <DataTextureCardBody node={node} touch={isTouchDevice} />}
+        {!collapsed && node.type === 'renderTargets' && <RenderTargetsCardBody node={node} touch={isTouchDevice} />}
         {!collapsed && node.type === 'depth' && <DepthCardBody node={node} touch={isTouchDevice} />}
         {!collapsed && node.type === 'depthLight' && <DepthLightCardBody node={node} touch={isTouchDevice} />}
         {!collapsed && node.type === 'splatScene' && <SplatSceneCardBody node={node} />}

@@ -30,7 +30,7 @@ import { findLoop, loopMessage } from './graphLoops';
 import { validateGraph } from './validate';
 import { generateFragmentShader } from './shaderAssembler';
 import { computeNodeSlug } from './nodeSlug';
-import { PASS_SCALES, passRepeat } from '../nodes/definitions/passes';
+import { PASS_SCALES, isPassPreviousKey, passExtraTargets, passRepeat } from '../nodes/definitions/passes';
 import { getNodeDefinition, getNodeDefinitionFor } from '../nodes/definitions';
 import { emitScanSource, isAgent3d, syncAgentSpaces, trailUniform, withAgentSpace } from '../nodes/definitions/agents';
 import {
@@ -45,6 +45,7 @@ import { expandCurveBeams, isBeamTrace } from './curveBeamExpand';
 import { expandShaderTextures, hasShaderTexture } from './shaderTextureExpand';
 import { expandFeedback, isFeedbackNode } from './feedbackExpand';
 import { expandDataTextures, isDataTexture } from './dataTextureExpand';
+import { expandRenderTargets, isRenderTargets } from './renderTargetsExpand';
 import { SHADER_TEXTURE_TYPE } from '../nodes/definitions/shaderTexture';
 
 export const PASS_TYPE = 'pass';
@@ -62,7 +63,7 @@ export function hasPassNode(nodes: GraphNode[]): boolean {
     // So is a Curve Trace in Draw: Beam, into its screen Pass (compiler/curveBeamExpand.ts).
     // So is a Shader Texture, into its inside and a Pass (compiler/shaderTextureExpand.ts).
     // And a Feedback (texture), into its step and buffer Pass (compiler/feedbackExpand.ts).
-    if (n.type === PASS_TYPE || n.type === GRID_TYPE || n.type === SHADER_TEXTURE_TYPE || isBeamTrace(n) || isFeedbackNode(n) || isDataTexture(n)) return true;
+    if (n.type === PASS_TYPE || n.type === GRID_TYPE || n.type === SHADER_TEXTURE_TYPE || isBeamTrace(n) || isFeedbackNode(n) || isDataTexture(n) || isRenderTargets(n)) return true;
     const sg = n.params?.subgraph as Sub;
     if (sg?.nodes && hasPassNode(sg.nodes)) return true;
   }
@@ -121,7 +122,7 @@ function collect(starts: Array<{ nodeId: string; outputKey: string }>, byId: Map
       }
     }
     if (src.type === PASS_TYPE) {
-      if (c.outputKey === 'previous') out.readsPrevious.add(src.id);
+      if (isPassPreviousKey(c.outputKey)) out.readsPrevious.add(src.id);
       else if (isStepKey(c.outputKey)) { /* Repeat's Step / Steps: a uniform and a number, not a read */ }
       else {
         if (src.id === self) throw new Error(`Node ${src.id}: this loop feeds a Pass its own picture; wire its Previous output instead`);
@@ -209,7 +210,8 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
     const beams = expandCurveBeams(gridOnly.nodes);
     // Feedback (texture): each opened into its step and buffer Pass (compiler/feedbackExpand.ts); without one, unchanged.
     // Data Textures: each opened into its pack, its Pass and a Read channels per output (compiler/dataTextureExpand.ts).
-    const feedback = expandFeedback(expandDataTextures(beams.nodes));
+    // Render Targets: each opened into its pack and one Pass with extra targets (compiler/renderTargetsExpand.ts).
+    const feedback = expandFeedback(expandRenderTargets(expandDataTextures(beams.nodes)));
     const grid = beams.bindAs.size || feedback.bindAs.size
       ? { nodes: feedback.nodes, bindAs: new Map([...gridOnly.bindAs, ...beams.bindAs, ...feedback.bindAs]) }
       : feedback.nodes !== beams.nodes ? { nodes: feedback.nodes, bindAs: gridOnly.bindAs } : gridOnly;
@@ -226,7 +228,7 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
     // 1. Slugs, once for the whole graph, in the usual sort order (Previous wires left out, so feedback isn't a cycle;
     //    with agents, the wires out of a group, Deposit or Emit too, so a Trail read back by its group isn't one either).
     const cut = (c: { nodeId: string; outputKey: string } | undefined) => !!c && (
-      ((c.outputKey === 'previous' || isStepKey(c.outputKey)) && byId.get(c.nodeId)?.type === PASS_TYPE) || (agents && isAgentLoopWire(c, byId)));
+      ((isPassPreviousKey(c.outputKey) || isStepKey(c.outputKey)) && byId.get(c.nodeId)?.type === PASS_TYPE) || (agents && isAgentLoopWire(c, byId)));
     const withoutPrevious = nodes.map(n => {
       const wires = Object.entries(n.inputs);
       if (!wires.some(([, i]) => cut(i.connection))) return n;
@@ -440,11 +442,17 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
     for (const id of order) {
       const pass = byId.get(id)!;
       const c = passLists.get(id)!;
+      const extra = passExtraTargets(pass.params);
       const sink: GraphNode = {
-        id: `${id}__out`, type: 'passOutput', position: { x: 0, y: 0 }, params: {}, outputs: {},
+        id: `${id}__out`, type: 'passOutput', position: { x: 0, y: 0 }, params: extra.length ? { __extra: extra } : {}, outputs: {},
         inputs: {
           color: { type: 'vec3', label: 'Color', ...(pass.inputs.color?.connection ? { connection: pass.inputs.color.connection } : {}) },
           alpha: { type: 'float', label: 'Alpha', ...(pass.inputs.alpha?.connection ? { connection: pass.inputs.alpha.connection } : { defaultValue: 1 }) },
+          // MRT: what each extra target draws (docs/render-targets.md).
+          ...Object.fromEntries(extra.map((_, i) => {
+            const c = pass.inputs[`mrt${i + 1}`]?.connection;
+            return [`mrt${i + 1}`, { type: 'vec4' as const, label: `Target ${i + 2}`, ...(c ? { connection: c } : {}) }];
+          })),
         },
       };
       const fixedSize = passFixedSize(pass.params.__size);
@@ -463,6 +471,7 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
         filter: sel(pass.params.filter, ['linear', 'nearest'] as const, 'linear'),
         wrap: sel(pass.params.wrap, ['clamp', 'repeat', 'mirror'] as const, 'clamp'),
         previous: previousRead.has(id), live: live.has(id),
+        ...(extra.length ? { extra } : {}),
         nodeIds: [...c.nodes.values()].filter(n => n.type !== PASS_TYPE).map(n => n.id),
         ...(agents ? { afterAgents: afterAgents.has(id) } : {}),
         ...(beforeParticles.has(id) ? { beforeParticles: true } : {}),
