@@ -33,7 +33,7 @@ export const CATEGORY_COLORS: Record<string, string> = Object.fromEntries(
 );
 
 // ── Types to hide from node listings (internal / special) ─────────────────────
-export const HIDDEN_TYPES = new Set(['group', 'forwardCamera', 'marchPos', 'marchDist', 'marchOutput', 'scenePos', 'sceneOutput', 'spaceWarpGroup', 'passOutput', 'blurStage', 'radialFastBlurStage', 'deepGlowTextureStage', 'gridRulesStep', 'curveTraceBeamStep', 'baked', 'agentInputs', 'agentOutput', 'agentStepOut', 'trailStepOut', 'agentProbeOut', 'splatProbeOut', 'agentGridOut',
+export const HIDDEN_TYPES = new Set(['group', 'forwardCamera', 'marchPos', 'marchDist', 'marchOutput', 'scenePos', 'sceneOutput', 'spaceWarpGroup', 'passOutput', 'blurStage', 'radialFastBlurStage', 'deepGlowTextureStage', 'gridRulesStep', 'curveTraceBeamStep', 'textureFeedbackStep', 'baked', 'agentInputs', 'agentOutput', 'agentStepOut', 'trailStepOut', 'agentProbeOut', 'splatProbeOut', 'agentGridOut',
   // The Texture node's video / webcam side: Texture (textureInput) is offered, its Source switch makes this one.
   'videoInput',
   // Hidden, not deleted: Pieces and Balls (nodes/notOffered.ts; one flag brings them back).

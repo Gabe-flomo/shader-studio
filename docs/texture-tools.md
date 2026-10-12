@@ -36,8 +36,9 @@ wired, so the same node shapes a Jump flood distance, an Edges strength or any n
 | **Neighbours (texture)** | Average, Difference from average (Laplacian), Max (grow, dilate), Min (shrink, erode), Range (max − min). Size 3 / 5 / 7 / 9, Spacing, Strength | Color, Value, Alpha | Nuke Erode / Dilate, AE Minimax, TD Convolve |
 | **Change (texture)** | Measure: Brightness, Colour. Amount, Threshold, Softness | Motion (mask), Change (signed), Direction (normal flow), Color | Frame difference, Nuke Difference |
 | **Outline (distance)** | Draw: Outline (width), Glow (reach), Rings (spacing, thickness, fade, speed), Inside (grown shape), Outside. Offset, Softness, Tint. Takes Distance (Jump flood, any SDF or float), or a texture holding one in red | Mask, Light (tint × mask) | AE Stroke / Offset Path, a distance-field iso line |
-| **Fade (feedback)** | Tail (seconds to 1%), Clean (per second), Tint (per-channel tail), Fresh paint: Add, Brighter of the two, Over | Color, Alpha | TD Feedback TOP + Level, AE Echo decay |
+| **Fade (feedback)** | Tail (seconds to 1%), Clean (per second), Tint (per-channel tail), Fresh paint: Add, Brighter of the two, Over, Screen | Color, Alpha | TD Feedback TOP + Level, AE Echo decay |
 | **Read (texture)** | Zoom, Turn, Move X / Y, Pivot X / Y, Flow (input) and Flow amount, Edges: As the texture, Clamp, Repeat, Mirror | Color, Alpha, UV (the bent place) | TD Transform TOP, Nuke Transform / STMap |
+| **Feedback (texture)** | Tail, Clean, Tint, Fresh, Blend (Add, Over, Brighter, Screen), Hue drift; Zoom, Turn, Move X / Y, Pivot X / Y, Flow strength; Resolution, Edges. Inputs: Texture, UV, Flow, Fresh | Texture (the trailed picture), Color, Alpha | TD Feedback TOP, a video-feedback loop |
 
 Sample (texture) is unchanged: Read is the version with the bend built in.
 
@@ -95,6 +96,31 @@ Fade, and set by every host: the Studio preview (the clock's step while playing)
 renders (the render's 1 / fps) and exported web pages (`play-runtime.js`). A host that doesn't
 set it reads 0, which Fade treats as 1/60 s.
 
+## Feedback (texture)
+
+Trails on any texture in one node: texture in, trailed texture out. Before it, a trail took a
+Pass (its Previous is last frame), Fade (feedback) and Read (texture); Feedback is those three
+wired for you (`nodes/definitions/textureFeedback.ts`).
+
+- **What it does each frame.** It reads its own buffer from the frame before at a bent place
+  (Zoom, Turn, Move, round the Pivot, pushed by Flow × Flow strength: Read's maths), fades it
+  (Tail in seconds, Clean, Tint: Fade's maths), lays the fresh picture over it (the Texture at
+  UV, or the Fresh colour if wired, times **Fresh**, by **Blend**: Add, Over, Brighter, Screen),
+  then turns the colour round the colour wheel by **Hue drift** degrees per second.
+- **How it compiles.** `compiler/feedbackExpand.ts` opens it before the pass cut into a step
+  (`<id>__fbstep`, Read's and Fade's own GLSL generators under sub-ids) and a Pass with the
+  node's id, which reads its own Previous. Each Feedback is its own Pass, with its own buffer,
+  so several keep several (a graph still has at most 8 Passes, counting these). **Resolution**
+  and **Edges** are the Pass's Scale and Edges.
+- **Live.** The step binds its sliders to the node (`__bindAs`), so every slider is a uniform
+  (and a Play target): a drag never recompiles. Blend, Resolution and Edges recompile.
+- **↺.** The buffer is a Pass's Previous, so the true reset (`lib/runtimeReset.ts`) clears it.
+- **Loops.** A wire out of a Feedback is a frame delay for the loop check (`isFrameDelayWire`
+  in `compiler/graphLoops.ts`): its trail can come back into it (Flow (texture) on its own
+  Texture into its Flow). Such reads take the buffer as it was a frame ago (Texture becomes
+  the Pass's Previous, Color and Alpha a read of it).
+- **Bypassed**, it passes the picture through with no trail.
+
 ## Change on a video
 
 A Pass has a Previous (last frame) and Change compares Texture with it. A Video Input, Texture
@@ -135,6 +161,9 @@ Pass's Texture and Previous. The starter offer on Change (**Motion in a video**)
 5. **Reaction-diffusion, shaped and coloured.** Neighbours (Difference from average) as the Laplacian; Levels (Channel: Green) → Stops Palette.
 6. **Grow and shrink a mask.** Neighbours Max and Min on a photo → Mask on each Value → two Mix nodes.
 7. **Outline and rings from a jump flood.** Mask's Seed → repeated Pass → Jump flood → two Outline (distance) nodes.
+8. **Zoom tunnel with Feedback.** The Ball action clip → Feedback (Zoom 1.025, Turn 1.2°, Hue drift) → Levels.
+9. **Trails pushed by their own flow.** The clip → Feedback, with Flow (texture) on the Feedback's own Texture back into its Flow: a loop the node allows.
+10. **Camera echo trails.** A Video Input (the clip until Source is set to Webcam) → Feedback (rising, Screen, Hue drift) → Levels → Blend (Screen) with the live picture.
 
 Examples 1 and 4 are black until a video (or the camera) is chosen on their Video Input. Every
 node has a note; the Expression Blocks left (the Gray-Scott step, the flood's reach and start)

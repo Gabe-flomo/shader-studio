@@ -37,7 +37,7 @@ export interface OrderNotice {
 
 const OUTPUTS = new Set(['output', 'vec4Output']);
 /** Nodes that read a previous frame: anything around them is feedback. */
-const FEEDBACK = new Set(['pass', 'prevFrame', 'echo', 'textureFade', 'gridRules', 'motionBlur']);
+const FEEDBACK = new Set(['pass', 'prevFrame', 'echo', 'textureFade', 'textureFeedback', 'gridRules', 'motionBlur']);
 /** Nodes whose inside says nothing about order. */
 const OPAQUE = new Set(['exprNode', 'customFn', 'forLoop', 'loopCarry']);
 const NOISE = new Set(['fbm', 'voronoi', 'noiseFloat', 'scatter', 'waveTexture', 'magicTexture', 'chaosLayers', 'turbulence']);

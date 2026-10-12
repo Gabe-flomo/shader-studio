@@ -4,8 +4,9 @@
  * A picture is drawn in one go, so a node can't read its own result: the compile sorts the nodes and
  * a loop has no order. Two kinds of wire carry the frame before (or the engine's side of a step)
  * and so may close a loop legally, the same ones the compile leaves out of its sort
- * (compiler/passGraph.ts): a Pass's Previous (and Repeat's Step / Steps), and a wire out of an
- * Agents group, Deposit or Emit (the engine runs those between frames).
+ * (compiler/passGraph.ts): a Pass's Previous (and Repeat's Step / Steps), a wire out of an Agents
+ * group, Deposit or Emit (the engine runs those between frames), and a wire out of a Feedback
+ * (texture), whose buffer a loop reads as it was a frame ago (compiler/feedbackExpand.ts).
  *
  * Used in three places:
  * - wiring (store connectNodes, the Do bar's connect): `loopIfWired` refuses a wire that would close one;
@@ -18,6 +19,7 @@ import { isAgentEngineOnly } from './agentGraph';
 import { GRID_TYPE } from './gridRulesExpand';
 import { isBeamTrace } from './curveBeamExpand';
 import { SHADER_TEXTURE_TYPE } from '../nodes/definitions/shaderTexture';
+import { FEEDBACK_TYPE } from '../nodes/definitions/textureFeedback';
 
 const PASS = 'pass';
 
@@ -37,6 +39,8 @@ export function isFrameDelayWire(c: { nodeId: string; outputKey: string }, byId:
   const src = byId.get(c.nodeId);
   if (!src) return false;
   if (src.type === PASS && (c.outputKey === 'previous' || c.outputKey === 'step' || c.outputKey === 'steps')) return true;
+  // A Feedback (texture) is a buffer: a loop back into it reads the buffer a frame ago (compiler/feedbackExpand.ts).
+  if (src.type === FEEDBACK_TYPE && !src.bypassed) return true;
   return isAgentEngineOnly(src);
 }
 
@@ -46,7 +50,7 @@ export function isFrameDelayWire(c: { nodeId: string; outputKey: string }, byId:
  * it for the compile to judge.
  */
 function mayHideFrameDelay(n: GraphNode): boolean {
-  if (n.type === GRID_TYPE || n.type === SHADER_TEXTURE_TYPE || isBeamTrace(n)) return true;
+  if (n.type === GRID_TYPE || n.type === SHADER_TEXTURE_TYPE || isBeamTrace(n) || n.type === FEEDBACK_TYPE) return true;
   const sg = n.params?.subgraph as SubgraphData | undefined;
   return !!sg?.nodes?.some(x => x.type === PASS || mayHideFrameDelay(x));
 }
