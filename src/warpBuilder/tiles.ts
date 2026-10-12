@@ -15,6 +15,8 @@ import { allNodes, parseExpr, sourceOf, type Expr } from '../lib/glslPatterns';
 /** Variable tiles. `r` is length(uv), `theta` is atan(y, x); fi, k, n and uv0 only in a looped block. */
 export type VarName = 'x' | 'y' | 'uv' | 't' | 'r' | 'theta' | 'fi' | 'k' | 'n' | 'uv0';
 export type TileOp = '+' | '-' | '*' | '/';
+export type CmpOp = '>' | '<' | '>=' | '<=' | '==' | '!=';
+export type LogicOp = '&&' | '||';
 
 export type Tile =
   | { k: 'var'; name: VarName }
@@ -25,7 +27,18 @@ export type Tile =
   | { k: 'neg'; a: Tile }
   | { k: 'swz'; a: Tile; field: string }
   | { k: 'hole' }
-  | { k: 'code'; text: string };
+  | { k: 'code'; text: string }
+  /** A comparison: true or false (the If tile's condition). */
+  | { k: 'cmp'; op: CmpOp; a: Tile; b: Tile }
+  /** and / or of two conditions. */
+  | { k: 'logic'; op: LogicOp; a: Tile; b: Tile }
+  /** not a condition. */
+  | { k: 'not'; a: Tile }
+  /**
+   * if cond then a else b: `cond ? a : b`. With `soft` (a width), the smooth version: the condition
+   * is `L > R` and it prints as `mix(b, a, smoothstep(R - w, R + w, L))`, so the edge doesn't alias.
+   */
+  | { k: 'if'; cond: Tile; a: Tile; b: Tile; soft?: Tile };
 
 /** Where a tile sits in its row: child indices from the root. [] is the root. */
 export type TilePath = number[];
@@ -52,6 +65,18 @@ export const OP_TILES: ReadonlyArray<{ op: TileOp; label: string; blurb: string 
   { op: '+', label: '+', blurb: 'Add' }, { op: '-', label: '−', blurb: 'Subtract' }, { op: '*', label: '×', blurb: 'Multiply' }, { op: '/', label: '÷', blurb: 'Divide' },
 ];
 export const opLabel = (op: TileOp) => OP_TILES.find(o => o.op === op)!.label;
+
+export const CMP_TILES: ReadonlyArray<{ op: CmpOp; label: string; blurb: string }> = [
+  { op: '>', label: '>', blurb: 'More than' }, { op: '<', label: '<', blurb: 'Less than' },
+  { op: '>=', label: '≥', blurb: 'At least' }, { op: '<=', label: '≤', blurb: 'At most' },
+  { op: '==', label: '=', blurb: 'Exactly equal' }, { op: '!=', label: '≠', blurb: 'Not equal' },
+];
+export const cmpLabel = (op: CmpOp) => CMP_TILES.find(o => o.op === op)!.label;
+export const LOGIC_TILES: ReadonlyArray<{ op: LogicOp | '!'; label: string; blurb: string }> = [
+  { op: '&&', label: 'and', blurb: 'Both conditions hold' }, { op: '||', label: 'or', blurb: 'Either condition holds' }, { op: '!', label: 'not', blurb: 'The condition doesn’t hold' },
+];
+/** A tile that is true or false: a comparison, and/or, not. */
+export const isBool = (t: Tile | null | undefined) => !!t && (t.k === 'cmp' || t.k === 'logic' || t.k === 'not');
 
 const num = (value: number): Tile => ({ k: 'num', value });
 const call = (fn: string, ...args: Tile[]): Tile => ({ k: 'call', fn, args });
@@ -90,8 +115,10 @@ export const FN_BY_NAME: Record<string, FnTile> = Object.fromEntries(FN_TILES.ma
 export const fnLabel = (fn: string) => FN_BY_NAME[fn]?.label ?? fn;
 
 /** A tile's type, roughly: vec2 or float (for the noise and rotate wraps). */
-export function tileType(t: Tile): 'float' | 'vec2' {
+export function tileType(t: Tile): 'float' | 'vec2' | 'bool' {
   switch (t.k) {
+    case 'cmp': case 'logic': case 'not': return 'bool';
+    case 'if': return t.a.k !== 'hole' ? tileType(t.a) : tileType(t.b);
     case 'var': return t.name === 'uv' || t.name === 'uv0' ? 'vec2' : 'float';
     case 'op': return tileType(t.a) === 'vec2' || tileType(t.b) === 'vec2' ? 'vec2' : 'float';
     case 'neg': return tileType(t.a);
@@ -112,7 +139,7 @@ export function numText(v: number): string {
   return String(parseFloat(v.toPrecision(6)));
 }
 
-const PREC: Record<TileOp, number> = { '+': 6, '-': 6, '*': 7, '/': 7 };
+const PREC: Record<TileOp | CmpOp | LogicOp, number> = { '+': 6, '-': 6, '*': 7, '/': 7, '<': 5, '>': 5, '<=': 5, '>=': 5, '==': 4, '!=': 4, '&&': 3, '||': 1 };
 
 /** The right-hand side a tile stands for (empty slots as `_`). */
 export function tileText(t: Tile | null): string {
@@ -127,10 +154,22 @@ export function tileText(t: Tile | null): string {
       case 'swz': return `${p(n.a, 9)}.${n.field}`;
       case 'neg': { const s = `-${p(n.a, 8)}`; return min > 8 ? `(${s})` : s; }
       case 'code': return min === 0 || /^[\w.]+(\([^()]*\))?$/.test(n.text.trim()) ? n.text.trim() : `(${n.text.trim()})`;
-      case 'op': {
+      case 'op': case 'cmp': case 'logic': {
         const pr = PREC[n.op];
         const s = `${p(n.a, pr)} ${n.op} ${p(n.b, pr + 1)}`;
         return min > pr ? `(${s})` : s;
+      }
+      case 'not': return `!${p(n.a, 8)}`;
+      case 'if': {
+        const c = n.cond;
+        if (n.soft && c.k === 'cmp') {
+          // Smooth: a soft step across L = R, `soft` wide (the condition is normalised to L > R).
+          const L = p(c.a, 0), R = p(c.b, 6), w = p(n.soft, 7);
+          const up = c.op === '>' || c.op === '>=';
+          return `mix(${p(up ? n.b : n.a, 0)}, ${p(up ? n.a : n.b, 0)}, smoothstep(${R} - ${w}, ${R} + ${w}, ${L}))`;
+        }
+        const s = `${p(c, 1)} ? ${p(n.a, 1)} : ${p(n.b, 0)}`;
+        return min > 0 ? `(${s})` : s;
       }
     }
   };
@@ -161,13 +200,18 @@ export function textToTile(text: string, params: readonly string[] = []): Tile |
         if (VAR_NAMES.has(e.name) && e.name !== 'r' && e.name !== 'theta') return { k: 'var', name: e.name as VarName };
         return { k: 'code', text: e.name };
       case 'call':
+        if (e.callee === 'mix' && e.args.length === 3) { const soft = softIf(e); if (soft) return soft; }
         if (e.callee === 'length' && e.args.length === 1 && e.args[0].kind === 'ident' && e.args[0].name === 'uv') return { k: 'var', name: 'r' };
         if (e.callee === 'atan' && e.args.length === 2 && isXY(e.args[0], 'y') && isXY(e.args[1], 'x')) return { k: 'var', name: 'theta' };
         return { k: 'call', fn: e.callee, args: e.args.map(from) };
       case 'binary':
         if (e.op === '+' || e.op === '-' || e.op === '*' || e.op === '/') return { k: 'op', op: e.op, a: from(e.left), b: from(e.right) };
+        if (e.op === '<' || e.op === '>' || e.op === '<=' || e.op === '>=' || e.op === '==' || e.op === '!=') return { k: 'cmp', op: e.op, a: from(e.left), b: from(e.right) };
+        if (e.op === '&&' || e.op === '||') return { k: 'logic', op: e.op, a: from(e.left), b: from(e.right) };
         return { k: 'code', text: sourceOf(e, src) };
+      case 'ternary': return { k: 'if', cond: from(e.test), a: from(e.then), b: from(e.else) };
       case 'unary':
+        if (e.op === '!') return { k: 'not', a: from(e.arg) };
         if (e.op === '+') return from(e.arg);
         if (e.op === '-') return e.arg.kind === 'num' ? { k: 'num', value: -e.arg.value } : { k: 'neg', a: from(e.arg) };
         return { k: 'code', text: sourceOf(e, src) };
@@ -176,6 +220,16 @@ export function textToTile(text: string, params: readonly string[] = []): Tile |
         return { k: 'swz', a: from(e.object), field: e.field };
       default: return { k: 'code', text: sourceOf(e, src) };
     }
+  };
+  /** `mix(F, T, smoothstep(R - w, R + w, L))`: the smooth If (if L > R then T else F, w wide). */
+  const softIf = (e: Extract<Expr, { kind: 'call' }>): Tile | null => {
+    const s = e.args[2];
+    if (s.kind !== 'call' || s.callee !== 'smoothstep' || s.args.length !== 3) return null;
+    const [lo, hi, v] = s.args;
+    if (lo.kind !== 'binary' || lo.op !== '-' || hi.kind !== 'binary' || hi.op !== '+') return null;
+    const same = (a: Expr, b: Expr) => sourceOf(a, src).replace(/\s+/g, '') === sourceOf(b, src).replace(/\s+/g, '');
+    if (!same(lo.left, hi.left) || !same(lo.right, hi.right)) return null;
+    return { k: 'if', cond: { k: 'cmp', op: '>', a: from(v), b: from(lo.left) }, a: from(e.args[1]), b: from(e.args[0]), soft: from(lo.right) };
   };
   return from(parsed.expr);
 }
@@ -204,19 +258,50 @@ function codeNames(text: string): string[] {
 export function childrenOf(t: Tile): Tile[] {
   switch (t.k) {
     case 'call': return t.args;
-    case 'op': return [t.a, t.b];
-    case 'neg': case 'swz': return [t.a];
+    case 'op': case 'cmp': case 'logic': return [t.a, t.b];
+    case 'neg': case 'swz': case 'not': return [t.a];
+    case 'if': return t.soft ? [t.cond, t.a, t.b, t.soft] : [t.cond, t.a, t.b];
     default: return [];
   }
 }
-function withChildren(t: Tile, kids: Tile[]): Tile {
+export function withChildren(t: Tile, kids: Tile[]): Tile {
   switch (t.k) {
     case 'call': return { ...t, args: kids };
-    case 'op': return { ...t, a: kids[0], b: kids[1] };
-    case 'neg': case 'swz': return { ...t, a: kids[0] };
+    case 'op': case 'cmp': case 'logic': return { ...t, a: kids[0], b: kids[1] };
+    case 'neg': case 'swz': case 'not': return { ...t, a: kids[0] };
+    case 'if': return { ...t, cond: kids[0], a: kids[1], b: kids[2], ...(t.soft ? { soft: kids[3] } : {}) };
     default: return t;
   }
 }
+
+/**
+ * What a slot takes: `bool` (the If tile's condition, and/or, not) or `value` (everything else,
+ * a whole row too).
+ */
+export function slotKind(root: Tile | null, path: TilePath): 'bool' | 'value' {
+  if (!path.length) return 'value';
+  const parent = tileAt(root, path.slice(0, -1));
+  const i = path[path.length - 1];
+  if (!parent) return 'value';
+  if (parent.k === 'if') return i === 0 ? 'bool' : 'value';
+  return parent.k === 'logic' || parent.k === 'not' ? 'bool' : 'value';
+}
+
+/**
+ * The If tile's smooth switch. On: the condition must be one comparison with <, >, <= or >=; it
+ * is written as L > R (a < swaps the branches) and `width` is the soft edge. Off: a hard `?:`.
+ * Null when the condition can't be smooth.
+ */
+export function setSoft(t: Tile, width: Tile | null): Tile | null {
+  if (t.k !== 'if') return null;
+  if (!width) { const { soft: _soft, ...hard } = t; return hard; }
+  const c = t.cond;
+  if (c.k !== 'cmp' || c.op === '==' || c.op === '!=') return null;
+  const up = c.op === '>' || c.op === '>=';
+  return { k: 'if', cond: { ...c, op: '>' }, a: up ? t.a : t.b, b: up ? t.b : t.a, soft: width };
+}
+/** Whether an If tile's condition can be smooth. */
+export const canSoft = (t: Tile | null) => !!t && t.k === 'if' && t.cond.k === 'cmp' && t.cond.op !== '==' && t.cond.op !== '!=';
 export function forEachTile(t: Tile, visit: (n: Tile, path: TilePath) => void, path: TilePath = []): void {
   visit(t, path);
   childrenOf(t).forEach((c, i) => forEachTile(c, visit, [...path, i]));
@@ -250,8 +335,11 @@ export function removeAt(root: Tile | null, path: TilePath): Tile | null {
   const parent = tileAt(root, parentPath);
   if (!parent) return root;
   const i = path[path.length - 1];
-  if (parent.k === 'op') return replaceAt(root, parentPath, i === 0 ? parent.b : parent.a);
+  if (parent.k === 'op' || parent.k === 'logic') return replaceAt(root, parentPath, i === 0 ? parent.b : parent.a);
   if (parent.k === 'neg' || parent.k === 'swz') return removeAt(root, parentPath);
+  if (parent.k === 'not') return replaceAt(root, parentPath, HOLE);
+  // The smooth width: the If goes back to hard.
+  if (parent.k === 'if' && i === 3) return replaceAt(root, parentPath, setSoft(parent, null)!);
   return replaceAt(root, path, HOLE);
 }
 

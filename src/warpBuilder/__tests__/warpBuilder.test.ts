@@ -57,11 +57,11 @@ describe('tiles ↔ lines', () => {
     expect(sameMap(a, b)).toBe(true);
   });
 
-  it('r and θ are length(uv) and atan(y, x); uv.x reads as x; a ternary stays a code tile', () => {
+  it('r and θ are length(uv) and atan(y, x); uv.x reads as x; an index stays a code tile', () => {
     expect(textToTile('length(uv)')).toEqual({ k: 'var', name: 'r' });
     expect(textToTile('atan(uv.y, uv.x)')).toEqual({ k: 'var', name: 'theta' });
     expect(textToTile('uv.x')).toEqual({ k: 'var', name: 'x' });
-    expect(hasCode(textToTile('x > 0.0 ? 1.0 : -1.0'))).toBe(true);
+    expect(hasCode(textToTile('uv[0] * 2.0'))).toBe(true);
     expect(textToTile('sin(')).toEqual({ k: 'code', text: 'sin(' });
     expect(textToTile('')).toBeNull();
   });
