@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.200',
+    date: '2026-10-12',
+    title: 'Render Targets',
+    highlights: [
+      { area: 'Studio', text: 'Render Targets (MRT): up to four textures from one draw, each with its own type, precision and read. Counts as one Pass.' },
+      { area: 'Studio', text: 'Each target has a last-frame output, so a simulation can keep motion in one target and colour in another. Try Texture tools 12.' },
+    ],
+  },
+  {
     id: '2026.10.199',
     date: '2026-10-12',
     title: 'Data Texture views',
