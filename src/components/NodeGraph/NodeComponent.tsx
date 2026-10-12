@@ -1,4 +1,5 @@
 import React, { useRef, useState, useCallback, useEffect, useMemo } from 'react';
+import { LOOP_MAX_CAP, loopCountValue, loopMax, loopOf } from '../../nodes/exprLoop';
 import { REMOVED_NODE_TYPES, removedNodeMessage } from '../../nodes/definitions/removedNodes';
 import { audioAccept, isAudioFile, notAudioMessage } from '../../lib/audioAccept';
 
@@ -4011,6 +4012,18 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             );
           });
         })()}
+
+        {/* ── A looped Expression Block's Iterations (nodes/exprLoop.ts): a uniform, so a drag never recompiles ── */}
+        {!collapsed && node.type === 'exprNode' && loopOf(node.params) && (
+          <div data-loop-iterations="" style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 8, minHeight: 36, padding: '4px 12px 4px 16px' }} onMouseDown={e => e.stopPropagation()}>
+            <ParamLabel>Iterations</ParamLabel>
+            <RulerSlider value={loopCountValue(node.params)} min={1} max={loopMax(loopOf(node.params))} step={1} integer defaultValue={8}
+              onChange={v => updateNodeParams(node.id, { loopN: Math.round(v) }, { immediate: true })}
+              onType={v => updateNodeParams(node.id, { loopN: Math.round(v) }, { immediate: true })}
+              onRange={(_, hi) => { const l = loopOf(node.params)!; if (hi > loopMax(l)) updateNodeParams(node.id, { loop: { ...l, max: Math.min(LOOP_MAX_CAP, Math.ceil(hi)) } }); }}
+              ariaLabel="Iterations" touch={isTouchDevice} />
+          </div>
+        )}
 
         {/* ── Outputs (always visible) ── */}
         {/* ── Constants: the fixed entries (live ones are sliders above) ── */}

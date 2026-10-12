@@ -47,6 +47,9 @@ import { nameForLiteral } from '../../lib/glslPatterns/literalSlider';
 import { exprBlockFunctionText, exprBlockLinesText, exprBlockToCustomFn } from '../../nodes/exprToCustomFn';
 import { madeByFunctionBuilder, noteOf } from './codeCard/codeCardModel';
 import { setActiveNodes, switchScopeFor } from '../../store/useNodeGraphStore';
+import { allBlockLines, clampCount, LOOP_MAX_CAP, LOOP_VAR_NAMES, LOOP_VARS, loopCountValue, loopMax, loopNameClashes, loopOf, loopOnPatch, type ExprLoop } from '../../nodes/exprLoop';
+import { RulerSlider } from '../ui/RulerSlider';
+import { LoopPasses } from '../explain/LoopPasses';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -84,8 +87,8 @@ interface Props {
   onClose: () => void;
 }
 
-/** One step of the editor's own undo: the code, and the inputs (Make a slider adds one). */
-type Snapshot = { lines: WarpLine[]; result: string; inputs?: InputDef[] };
+/** One step of the editor's own undo: the code, the loop's sections, and the inputs (Make a slider adds one). */
+type Snapshot = { lines: WarpLine[]; result: string; inputs?: InputDef[]; loop?: ExprLoop };
 
 /** The expression field last focused: reference-panel clicks insert there. */
 interface InsertTarget {
@@ -116,9 +119,10 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
   const candidates = useMemo(() => {
     const out: Array<{ name: string; type: DataType }> = [];
     for (const i of (node.params.inputs as Array<{ name: string; type: DataType }> | undefined) ?? []) if (i.name && !out.some(o => o.name === i.name)) out.push({ name: i.name, type: i.type });
-    for (const l of (node.params.lines as Array<{ lhs: string }> | undefined) ?? []) { const m = /^\s*(float|vec[234])\s+([A-Za-z_]\w*)/.exec(l.lhs); if (m && !out.some(o => o.name === m[2])) out.push({ name: m[2], type: m[1] as DataType }); }
+    // Every section's typed lines (Before, the looped lines, After): all of them are in scope after the block ran
+    for (const l of allBlockLines(node.params)) { const m = /^\s*(float|vec[234])\s+([A-Za-z_]\w*)/.exec(l.lhs); if (m && !out.some(o => o.name === m[2])) out.push({ name: m[2], type: m[1] as DataType }); }
     return out.filter(o => o.name !== 'result');
-  }, [node.params.inputs, node.params.lines]);
+  }, [node.params.inputs, node.params.lines, node.params.loop]);
   const exposedOutputs = (names: string[]) => names.map(n => candidates.find(c => c.name === n)).filter((c): c is { name: string; type: DataType } => !!c);
   const toggleExposed = (name: string) => {
     const next = exposed.includes(name) ? exposed.filter(n => n !== name) : [...exposed, name];
@@ -131,8 +135,17 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
   const [showSaveInput, setShowSaveInput]   = useState(false);
   const [savePresetName, setSavePresetName] = useState('');
 
+  // Loop mode (nodes/exprLoop.ts): Before, the looped lines, Break when, After
+  const loop = node.params.loop as ExprLoop | undefined;
+  const loopOn = !!loopOf(node.params);
+  const loopBefore: WarpLine[] = (loop?.before as WarpLine[] | undefined) ?? [];
+  const loopAfter: WarpLine[] = (loop?.after as WarpLine[] | undefined) ?? [];
+  const setLoop = (patch: Partial<ExprLoop>) => updateNodeParams(node.id, { loop: { ...(loop ?? { on: false }), ...patch } });
+  const special = loopOn ? LOOP_VAR_NAMES : undefined;
+
   const rawInputs = node.params.inputs;
-  const completions = useMemo(() => buildCompletions((rawInputs as InputDef[] | undefined) ?? []), [rawInputs]);
+  // The loop's i, fi, n and k complete (and highlight) only while Loop is on
+  const completions = useMemo(() => buildCompletions((rawInputs as InputDef[] | undefined) ?? [], loopOn ? LOOP_VARS : []), [rawInputs, loopOn]);
   // The explainer: types and roles of the block's names (inputs, typed lines, what feeds them)
   // eslint-disable-next-line react-hooks/exhaustive-deps -- the inputs, lines and wiring are what it reads
   const explainCtx = useMemo(() => exprBlockContext(node), [node.params.inputs, node.params.lines, node.params.outputType, node.inputs]);
@@ -154,14 +167,14 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
   const explainScope = useMemo(() => ({ nodeId: node.id, kind: 'Expression Block', getNodes: scopeNodes, enclosing: () => exprBlockCode(scopeNodes().find(n => n.id === node.id) ?? node) }), [node]);
 
   // ── Undo / Redo ──────────────────────────────────────────────────────────────
-  const history      = useRef<Snapshot[]>([{ lines, result, inputs: customInputs }]);
+  const history      = useRef<Snapshot[]>([{ lines, result, inputs: customInputs, loop }]);
   const historyIndex = useRef(0);
   const [historyPos, setHistoryPos] = useState(0);
   const [historyLen, setHistoryLen] = useState(1);
 
   const pushHistory = (snap: Snapshot) => {
     const trimmed = history.current.slice(0, historyIndex.current + 1);
-    trimmed.push({ ...snap, inputs: snap.inputs ?? trimmed[trimmed.length - 1]?.inputs ?? customInputs });
+    trimmed.push({ ...snap, inputs: snap.inputs ?? trimmed[trimmed.length - 1]?.inputs ?? customInputs, loop: 'loop' in snap ? snap.loop : (node.params.loop as ExprLoop | undefined) });
     history.current      = trimmed;
     historyIndex.current = trimmed.length - 1;
     setHistoryPos(historyIndex.current);
@@ -170,7 +183,7 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
 
   /** Put a snapshot back: the code, and the inputs when they differ (a slider made since). */
   const restore = (snap: Snapshot) => {
-    updateNodeParams(node.id, { lines: snap.lines, result: snap.result });
+    updateNodeParams(node.id, { lines: snap.lines, result: snap.result, ...(JSON.stringify(snap.loop) !== JSON.stringify(node.params.loop) ? { loop: snap.loop } : {}) });
     const cur = (node.params.inputs as InputDef[] | undefined) ?? [];
     if (snap.inputs && JSON.stringify(snap.inputs) !== JSON.stringify(cur)) {
       updateNodeParams(node.id, { inputs: snap.inputs });
@@ -276,7 +289,7 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
 
   const handleSavePreset = (name: string) => {
     const presetLabel = name.trim() || label;
-    saveExprPreset({ label: presetLabel, inputs: customInputs, outputType, lines, result, comment: typeof node.params.__comment === 'string' && node.params.__comment.trim() ? node.params.__comment.trim() : undefined });
+    saveExprPreset({ label: presetLabel, inputs: customInputs, outputType, lines, result, ...(loop ? { loop } : {}), ...(typeof node.params.loopN === 'number' ? { loopN: node.params.loopN } : {}), comment: typeof node.params.__comment === 'string' && node.params.__comment.trim() ? node.params.__comment.trim() : undefined });
     setShowSaveInput(false);
     setSavePresetName('');
     toast.success(`Saved “${presetLabel}” to Expression Blocks`);
@@ -324,9 +337,10 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
   const handleAnyBlur = () => {
     const currentLines  = (node.params.lines  as WarpLine[] | undefined) ?? [];
     const currentResult = (node.params.result as string     | undefined) ?? 'p';
+    const currentLoop   = node.params.loop as ExprLoop | undefined;
     const last = history.current[historyIndex.current];
-    if (JSON.stringify(last.lines) !== JSON.stringify(currentLines) || last.result !== currentResult) {
-      pushHistory({ lines: currentLines, result: currentResult });
+    if (JSON.stringify(last.lines) !== JSON.stringify(currentLines) || last.result !== currentResult || JSON.stringify(last.loop) !== JSON.stringify(currentLoop)) {
+      pushHistory({ lines: currentLines, result: currentResult, loop: currentLoop });
     }
   };
 
@@ -340,6 +354,7 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
   const exprProps = (value: string, set: (v: string) => void, snap: (v: string) => Snapshot, where: ExprSliderWhere) => ({
     value,
     completions,
+    special,
     onChange: (v: string) => { set(v); if (target.current) target.current.value = v; },
     onFocus: (el: HTMLInputElement) => { target.current = { el, value, set, snap }; },
     onBlur: handleAnyBlur,
@@ -401,7 +416,7 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
     <ExplainScopeProvider value={explainScope}>
     <Modal
       title="Expression Block"
-      subtitle={`${label} · ${customInputs.length} ${customInputs.length === 1 ? 'input' : 'inputs'} → ${outputType}`}
+      subtitle={`${label} · ${customInputs.length} ${customInputs.length === 1 ? 'input' : 'inputs'} → ${outputType}${loopOn ? ` · loops ×${clampCount(loopCountValue(node.params), loopMax(loop))}` : ''}`}
       icon="expr"
       iconColor={tk.kind.expr}
       width={1200}
@@ -539,7 +554,39 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
         {/* ── Lines + return ── */}
         <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 18 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <SectionLabel meta="run top to bottom">Lines</SectionLabel>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span style={{ flex: 1 }}><SectionLabel meta={loopOn ? 'Before, the loop, After' : 'run top to bottom'}>Lines</SectionLabel></span>
+              <span data-expr-loop-toggle="" title={loopOn ? 'Loop is on: the looped lines run Iterations times. Off keeps Before and After for later.' : 'Run the lines N times: i, fi, n and k count the passes, and every variable carries from one pass to the next'}>
+                <Toggle checked={loopOn} onChange={v => { const patch = loopOnPatch(node.params, v); updateNodeParams(node.id, patch); pushHistory({ lines, result, loop: patch.loop as ExprLoop }); }} label="Loop" />
+              </span>
+            </span>
+            {loopOn && loopNameClashes(node.params).length > 0 && (
+              <Note>⚠ {loopNameClashes(node.params).join(', ')} {loopNameClashes(node.params).length === 1 ? 'is' : 'are'} the loop’s own {loopNameClashes(node.params).length === 1 ? 'name' : 'names'}: rename {loopNameClashes(node.params).length === 1 ? 'it' : 'them'} so the lines read the loop’s value.</Note>
+            )}
+            {loopOn && (
+              <SectionLines title="Before the loop" meta="runs once: start values for what the loop updates" lines={loopBefore} kind="before"
+                completions={completions} special={special} onChange={next => setLoop({ before: next })} onBlur={handleAnyBlur} onKeyDown={handleAnyKeyDown}
+                empty="Optional. Declare what the loop builds up here: float acc = 0.0, vec2 z = uv." />
+            )}
+            <div data-loop-body={loopOn ? '' : undefined} style={loopOn ? { display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 0 10px 12px', borderLeft: `3px solid ${tk.kind.expr}`, borderRadius: 2, background: `linear-gradient(90deg, ${tk.bg.hover}, transparent 60%)` } : { display: 'contents' }}>
+            {loopOn && (
+              <div data-loop-header="" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <span style={{ font: `700 10.5px ${fontFamily.ui}`, letterSpacing: '0.08em', textTransform: 'uppercase', color: tk.kind.expr }}>Loop ×</span>
+                <span style={{ flex: '1 1 200px', minWidth: 160 }}>
+                  <RulerSlider value={loopCountValue(node.params)} min={1} max={loopMax(loop)} step={1} integer defaultValue={8} ariaLabel="Iterations"
+                    onChange={v => updateNodeParams(node.id, { loopN: Math.round(v) }, { immediate: true })}
+                    onType={v => updateNodeParams(node.id, { loopN: Math.round(v) }, { immediate: true })}
+                    onRange={(_, hi) => { if (hi > loopMax(loop)) setLoop({ max: Math.min(LOOP_MAX_CAP, Math.ceil(hi)) }); }} />
+                </span>
+                <span title={`The compiled bound: Iterations goes up to it live, and changing it recompiles (1–${LOOP_MAX_CAP})`} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: tk.text.muted }}>
+                  Max iterations
+                  <NumberInput value={loopMax(loop)} step={1} onCommit={v => setLoop({ max: Math.max(1, Math.min(LOOP_MAX_CAP, Math.round(v))) })} style={smallField(tk)} />
+                </span>
+                <span style={{ flexBasis: '100%', fontSize: 12, color: tk.text.muted }}>
+                  In these lines: {LOOP_VARS.map((v, k) => <Fragment key={v.name}>{k ? ', ' : ''}<code title={v.doc} style={{ font: `700 11.5px ${fontFamily.mono}`, color: tk.text.primary }}>{v.name}</code></Fragment>)} · every variable keeps its value from one pass to the next.
+                </span>
+              </div>
+            )}
             {lines.map((line, i) => (
               <Fragment key={i}>
               <div data-line-off={line.off ? '' : undefined}
@@ -580,8 +627,22 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
               {line.rhs.trim() && !line.off && <LineExplain index={i} line={line} ctx={lineCtxs[i] ?? explainCtx} openRequest={explainOpen?.at === i ? explainOpen.seq : undefined} onOpenView={setViewAt} />}
               </Fragment>
             ))}
-            {lines.length === 0 && <Note>No lines yet. Each line assigns to a variable, top to bottom.</Note>}
-            <AddRow onClick={addLine}>Add line</AddRow>
+            {lines.length === 0 && <Note>{loopOn ? 'No looped lines yet. They run once per pass, top to bottom.' : 'No lines yet. Each line assigns to a variable, top to bottom.'}</Note>}
+            <AddRow onClick={addLine}>{loopOn ? 'Add a looped line' : 'Add line'}</AddRow>
+            {loopOn && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ width: 92, flexShrink: 0, fontSize: 12, color: tk.text.muted }} title="A bool, checked after each pass: true stops the loop (optional)">Break when</span>
+                <CodeInput ariaLabel="Break when" placeholder="optional: dot(z, z) > 4.0" style={{ flex: 1 }} value={loop?.breakWhen ?? ''} completions={completions} special={special}
+                  onChange={v => setLoop({ breakWhen: v })} onBlur={handleAnyBlur} onKeyDown={handleAnyKeyDown} />
+              </div>
+            )}
+            {loopOn && <PassesFold node={node} />}
+            </div>
+            {loopOn && (
+              <SectionLines title="After the loop" meta="runs once, before Return" lines={loopAfter} kind="after"
+                completions={completions} special={special} onChange={next => setLoop({ after: next })} onBlur={handleAnyBlur} onKeyDown={handleAnyKeyDown}
+                empty="Optional. Finish what the loop built: col = col / n, d = sqrt(d)." />
+            )}
             {/* The inputs' previews (no line to sit under), and the probe's housekeeping */}
             <LinePreviewPanel node={node} at="rest" />
           </div>
@@ -700,5 +761,56 @@ function AddRow({ onClick, children }: { onClick: () => void; children: React.Re
     >
       <Icon name="plus" size={15} />{children}
     </button>
+  );
+}
+
+/** The Before / After lines of a looped block: one assignment each, no preview or explain of their own. */
+function SectionLines({ title, meta, lines, kind, completions, special, onChange, onBlur, onKeyDown, empty }: {
+  title: string; meta: string; lines: WarpLine[]; kind: 'before' | 'after';
+  completions: ReturnType<typeof buildCompletions>; special?: ReadonlySet<string>;
+  onChange: (next: WarpLine[]) => void; onBlur: () => void; onKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void; empty: string;
+}) {
+  const tk = useTokens();
+  const set = (i: number, patch: Partial<WarpLine>) => onChange(lines.map((l, j) => (j === i ? { ...l, ...patch } : l)));
+  return (
+    <div data-loop-section={kind} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <span style={{ display: 'flex', alignItems: 'baseline', gap: 8, fontSize: 12, color: tk.text.muted }}>
+        <span style={{ fontWeight: 600, color: tk.text.secondary }}>{title}</span><span>{meta}</span>
+      </span>
+      {lines.map((line, i) => (
+        <div key={i} data-line-off={line.off ? '' : undefined}
+          onKeyDownCapture={e => { if ((e.metaKey || e.ctrlKey) && e.key === '/') { e.preventDefault(); e.stopPropagation(); onChange(toggleLineOff(lines, i)); } }}
+          style={{ display: 'grid', gridTemplateColumns: '22px 110px 64px minmax(0, 1fr) auto', gap: 6, alignItems: 'center', opacity: line.off ? 0.45 : 1 }}>
+          <button type="button" aria-pressed={!!line.off} title={line.off ? 'Off: skipped (kept as a comment). Click or ⌘/ to switch it back on' : 'Click or ⌘/ to switch it off without deleting it'}
+            onClick={() => onChange(toggleLineOff(lines, i))}
+            style={{ border: 0, background: 'none', padding: 0, cursor: 'pointer', textAlign: 'right', font: `600 11px ${fontFamily.mono}`, color: line.off ? tk.status.warningText : tk.text.disabled }}>{line.off ? '//' : '·'}</button>
+          <CodeInput ariaLabel={`${title} line ${i + 1} target`} placeholder="float acc" value={line.lhs} completions={completions} special={special} onChange={v => set(i, { lhs: v })} onBlur={onBlur} onKeyDown={onKeyDown} />
+          <Select ariaLabel={`${title} line ${i + 1} operator`} mono height={34} value={line.op} options={OPS.map(op => ({ value: op, label: op }))} onChange={v => set(i, { op: v })} />
+          <CodeInput ariaLabel={`${title} line ${i + 1} expression`} placeholder="expression…" value={line.rhs} completions={completions} special={special} onChange={v => set(i, { rhs: v })} onBlur={onBlur} onKeyDown={onKeyDown} />
+          <span style={{ display: 'flex', alignItems: 'center' }}>
+            <IconButton icon="chevU" label="Move up" size="sm" tooltip={false} disabled={i === 0} onClick={() => onChange(moveItem(lines, i, i - 1))} />
+            <IconButton icon="chevD" label="Move down" size="sm" tooltip={false} disabled={i === lines.length - 1} onClick={() => onChange(moveItem(lines, i, i + 1))} />
+            <IconButton icon="close" label="Remove line" size="sm" tone="danger" tooltip={false} onClick={() => onChange(lines.filter((_, j) => j !== i))} />
+          </span>
+        </div>
+      ))}
+      {lines.length === 0 && <span style={{ fontSize: 12, color: tk.text.faint }}>{empty}</span>}
+      <AddRow onClick={() => onChange([...lines, { lhs: kind === 'before' ? 'float acc' : 'p', op: '=', rhs: '' }])}>{kind === 'before' ? 'Add a line before the loop' : 'Add a line after the loop'}</AddRow>
+    </div>
+  );
+}
+
+/** Step through the passes (explain/LoopPasses.tsx): folded until asked for, so nothing is measured until then. */
+function PassesFold({ node }: { node: GraphNode }) {
+  const tk = useTokens();
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <button type="button" data-loop-passes-toggle="" aria-expanded={open} onClick={() => setOpen(o => !o)}
+        style={{ alignSelf: 'flex-start', border: 0, background: 'none', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, font: `500 12.5px ${fontFamily.ui}`, color: tk.accent.base }}>
+        <Icon name={open ? 'chevD' : 'chevR'} size={13} />Step through the passes
+      </button>
+      {open && <LoopPasses node={node} nodes={scopeNodes()} />}
+    </div>
   );
 }

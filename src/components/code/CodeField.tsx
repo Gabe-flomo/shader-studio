@@ -303,7 +303,7 @@ export interface CharRect { left: number; top: number; bottom: number }
  * autocomplete as CodeField. Styled like the app's Field.
  */
 export function CodeInput({
-  value, onChange, completions, ariaLabel, placeholder, height = 34, style, inputRef, onFocus, onBlur, onKeyDown, onSelect, inputAttrs, invalid,
+  value, onChange, completions, ariaLabel, placeholder, height = 34, style, inputRef, onFocus, onBlur, onKeyDown, onSelect, inputAttrs, invalid, special,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -323,6 +323,8 @@ export function CodeInput({
   inputAttrs?: Record<string, string | number>;
   /** Draws the field's edge in the error colour (its checker's message is shown by the caller). */
   invalid?: boolean;
+  /** Names drawn as built-ins of the place they're in (a loop's i, fi, n, k), not as plain names. */
+  special?: ReadonlySet<string>;
 }) {
   const tk = useTokens();
   const pal = useThemeMode() === 'dark' ? C : C_LIGHT;
@@ -357,7 +359,7 @@ export function CodeInput({
       {/* Highlight layer under a transparent input */}
       <span aria-hidden style={{ ...text, position: 'absolute', left: 10, right: 10, overflow: 'hidden', pointerEvents: 'none' }}>
         <span style={{ display: 'inline-block', position: 'relative', transform: `translateX(${-scrollX}px)` }}>{value
-          ? tokenizeLine(value, pal).map((t, i) => <span key={i} style={{ color: t.color }}>{t.text}</span>)
+          ? tokenizeLine(value, pal).map((t, i) => <span key={i} data-special={special?.has(t.text) && t.color === pal.ident ? '' : undefined} style={{ color: special?.has(t.text) && t.color === pal.ident ? pal.typeInt : t.color, fontWeight: special?.has(t.text) && t.color === pal.ident ? 700 : undefined }}>{t.text}</span>)
           : <span style={{ color: tk.text.faint }}>{placeholder}</span>}
           <BracketMarks text={value} caret={caret} charW={charWidth()} lineH={Math.round(FONT_SIZE * 1.4)} padY={-Math.round(FONT_SIZE * 0.2)} fontSize={FONT_SIZE} />
         </span>

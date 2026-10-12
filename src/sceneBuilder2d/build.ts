@@ -28,7 +28,8 @@ import { colourText } from '../lang/colours';
 import { GRID_LABELS, gridProgram, type GridSpec } from './grid';
 import type { PiecesSpec } from './pieces';
 import { callBody, type FnRef } from './functions';
-import { COMBINE_BY_MODE, blockGlslLines, checkBlock, clampTimes, type SpaceBlock } from './blocks';
+import { COMBINE_BY_MODE, MAX_LOOP_TIMES, blockGlslLines, blockLoopParts, checkBlock, clampTimes, trapWords, type SpaceBlock } from './blocks';
+import { MUTE_TO_PARAM } from '../builders/mute';
 import { BLOCK_BY_ID } from './blockLibrary';
 import { FAR, gateChain, gateNode } from '../builders/mute';
 import { MOD_BY_KIND, customParams, modGlsl, modReads } from './modify';
@@ -79,6 +80,8 @@ interface B {
   colourOf?: ((it: Item) => Ref) | null;
   /** A combine's colour, blended from its shapes by the smooth weight (groups with `mix`). */
   mixCol: Map<string, Ref>;
+  /** The last looped block's orbit trap (its node's `trap` output): Look → Colour by trap reads it. */
+  trap?: Ref | null;
 }
 
 // ── Pictures (builders/textures.ts) ─────────────────────────────────────────
@@ -176,17 +179,27 @@ function blockNode(b: B, role: string, block: SpaceBlock, pos: Ref, where: strin
     c.warnings.push(`${where} “${name}” was left out: ${why}`);
     return null;
   }
-  const times = clampTimes(block.times);
+  const loop = blockLoopParts(block);
+  const times = clampTimes(block.times, !!block.loop);
   const entry = block.lib ? BLOCK_BY_ID[block.lib] : undefined;
   const sliders = block.params.map(p => `${p.name} ${fmt(p.value)}`);
   const note = `${name} (${where}): ${entry ? entry.blurb : 'a transform block written in the 2D Scene Builder.'} `
-    + `Each line changes uv, the point every shape below looks from, top to bottom${times > 1 ? `; the ${lines.length / times} line${lines.length / times === 1 ? ' is' : 's are'} written out ${times} times, so the fold runs ${times} times over` : ''}. `
+    + (loop
+      ? `Each line changes uv, the point every shape below looks from, and the lines run in a loop: Loop is on, Iterations (${times}) is a live slider on this node, up to Max iterations. uv0 is the point before the block; fi, k and n count the passes.${block.trap ? ` ${trapWords(block.trap)}: the trap output, which Look → Colour by trap reads.` : ''} `
+      : `Each line changes uv, the point every shape below looks from, top to bottom${times > 1 ? `; the ${lines.length / times} line${lines.length / times === 1 ? ' is' : 's are'} written out ${times} times, so the fold runs ${times} times over` : ''}. `)
     + 'In the builder x and y stand for uv.x and uv.y (written out here), t is time in seconds, and whole numbers are written as floats. '
     + `${sliders.length ? `The sliders (${sliders.join(', ')}) are live: drag them on the node without recompiling.` : 'It has no sliders: select a number in a line to make one.'}`;
   const node = expr(c, role, name, [
     { name: 'uv', type: 'vec2', from: pos },
     ...block.params.map(p => ({ name: p.name, type: 'float' as const, slider: { value: p.value, min: p.min, max: p.max } })),
-  ], 'uv', note, 'vec2', lines);
+  ], 'uv', note, 'vec2', loop ? [...lines, ...loop.extra] : lines, block.loop && block.trap ? [{ name: 'trap', type: 'float', label: 'Trap' }] : []);
+  if (loop) {
+    // Loop mode (nodes/exprLoop.ts): compiled to MAX_LOOP_TIMES, Iterations a uniform
+    node.params.loop = { on: true, max: MAX_LOOP_TIMES, before: loop.before, after: loop.after };
+    node.params.loopN = times;
+    // Muted, the trap is 0 (no shade), live like the rest of the mute (compiler/muteGate.ts)
+    if (block.trap) { node.params[MUTE_TO_PARAM] = '0.0'; b.trap = ref(node, 'trap'); }
+  }
   return ref(node, 'result');
 }
 
@@ -625,12 +638,15 @@ export function buildScene2D(spec: Scene2D, idFor: (role: string) => string = ro
   const by = L.colour.by;
   let sharedColour: Ref | null = null;
   const anim = by === 'time' ? b.getTime() : L.colour.speed ? b.getTime() : null;
+  if (by === 'trap' && !b.trap) c.warnings.push('Colour by trap needs a looped space block with its orbit trap on (Kali loop, Julia, Mandelbox…): colouring by distance from the centre instead.');
   if (by !== 'layer' && by !== 'distance') {
-    const driver = by === 'time' ? null : DRIVERS[by];
-    const value = driver ? ref(expr(c, 'drive', `Colour by ${by}`, [{ name: 'uv', type: 'vec2', from: pos }], driver.code, `The number the palette is read with: ${driver.what}, in the warped space. Colour → by ${by}.`, 'float'), 'result') : null;
+    // By trap: the last looped block's orbit trap, a shade (1 where its passes came close)
+    const trap = by === 'trap' ? b.trap ?? null : null;
+    const driver = by === 'time' || trap ? null : DRIVERS[by === 'trap' ? 'length' : by];
+    const value = trap ?? (driver ? ref(expr(c, 'drive', `Colour by ${by}`, [{ name: 'uv', type: 'vec2', from: pos }], driver.code, `The number the palette is read with: ${driver.what}, in the warped space. Colour → by ${by}.`, 'float'), 'result') : null);
     const speed = by === 'time' ? (L.colour.speed || 0.2) : L.colour.speed;
     sharedColour = paletteNode(c, 'palette', L.colour.palette, value ?? ref(mk(c, 'constant', 'drive', { value: 0 }, {}, 'Nothing drives the palette but time.'), 'value'), anim, L.colour.scale, speed,
-      `Colours every layer: ${driver ? driver.what : 'time'} read through a palette${speed ? `, moving at ${fmt(speed)}` : ''}.`, L.custom, L.customName);
+      `Colours every layer: ${trap ? 'the orbit trap of the last looped space block (1 where its passes came close to the trap, fading out)' : driver ? driver.what : 'time'} read through a palette${speed ? `, moving at ${fmt(speed)}` : ''}.`, L.custom, L.customName);
   }
 
   let acc: Ref = L.bgSlot != null ? slotRef(L.bgSlot)

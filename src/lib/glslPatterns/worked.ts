@@ -254,3 +254,83 @@ export function workedBlock(statements: readonly string[], inputs: readonly Bloc
     return { target: p.line.target?.split('.')[0], value: at[i], ranges: spread[i] };
   });
 }
+
+// ── A looped block, pass by pass ──────────────────────────────────────────────
+
+/** One pass of a looped block: each variable after the pass, at the sample pixel and across the picture. */
+export interface LoopPass {
+  /** The pass, 0 at the first. */
+  i: number;
+  /** Each variable after this pass at the sample pixel (null where the CPU can't). */
+  values: Record<string, Value | null>;
+  /** Each variable's spread across the picture after this pass, one [min, max] per component. */
+  ranges: Record<string, Array<[number, number]> | null>;
+  /** Break when was true after this pass at the sample pixel: the loop stopped here. */
+  broke?: boolean;
+}
+
+export interface WorkedLoop {
+  /** The variables the loop's lines write (and Before's), in the order they first appear. */
+  names: string[];
+  /** Their values before the first pass (after Before). */
+  start: Record<string, Value | null>;
+  /** One entry per pass that ran at the sample pixel (a Break when stops it early). */
+  passes: LoopPass[];
+}
+
+/** The most passes the CPU walks through (the scrubber's end). */
+export const WORKED_LOOP_CAP = 256;
+
+/**
+ * A looped Expression Block (nodes/exprLoop.ts) measured on the CPU, pass by pass: Before once, then the
+ * looped lines `n` times with i, fi, n and k set, stopping where Break when is true. Each pass records every
+ * variable at the sample pixel (the inputs' `value`s) and its spread over `samples` draws of the inputs (each
+ * draw stops at its own Break). A line the evaluator can't do has no numbers, nor anything built from it.
+ */
+export function workedLoop(o: { before: readonly string[]; body: readonly string[]; breakWhen?: string; n: number; inputs: readonly BlockInput[]; extra?: EvalEnv; samples?: number }): WorkedLoop {
+  const parse = (ss: readonly string[]) => ss.map(s => parseLine(s)).flatMap(p => (p.ok ? [p.line] : []));
+  const before = parse(o.before);
+  const body = parse(o.body);
+  const brk = o.breakWhen?.trim() ? parseLine(o.breakWhen.trim().replace(/;\s*$/, '')) : null;
+  const brkExpr = brk && brk.ok ? brk.line.expr : null;
+  const n = Math.max(0, Math.min(WORKED_LOOP_CAP, Math.round(o.n)));
+  const names: string[] = [];
+  for (const l of [...before, ...body]) { const b = l.target?.split('.')[0]; if (b && !names.includes(b)) names.push(b); }
+  const draw = rng(0x6d2b79f5);
+  const pick = (i: BlockInput, sample: boolean): Value => {
+    if (!sample || i.fixed) return i.value;
+    const d = dims(i.type);
+    if (i.unit && d > 1) return unitVec(d, draw);
+    const one = () => i.range[0] + (i.range[1] - i.range[0]) * draw();
+    return d === 1 ? one() : Array.from({ length: d }, one);
+  };
+  const envs: EvalEnv[] = Array.from({ length: 1 + (o.samples ?? 48) }, (_, s) => ({ ...(o.extra ?? {}), ...Object.fromEntries(o.inputs.map(i => [i.name, pick(i, s > 0)])) }));
+  for (const e of envs) runBlock(before, e);
+  const snap = (e: EvalEnv) => Object.fromEntries(names.map(k => [k, k in e ? e[k] : null]));
+  const start = snap(envs[0]);
+  const stopped = envs.map(() => false);
+  const passes: LoopPass[] = [];
+  for (let i = 0; i < n; i++) {
+    envs.forEach((e, s) => {
+      if (stopped[s]) return;
+      Object.assign(e, { i, fi: i, n, k: i / Math.max(n - 1, 1) });
+      runBlock(body, e);
+      if (brkExpr) { const b = tryEval(brkExpr, e); if (b !== null && flatOf(b)[0]) stopped[s] = true; }
+    });
+    const ranges: LoopPass['ranges'] = {};
+    for (const k of names) {
+      let r: Array<[number, number]> | null = null;
+      for (let s = 1; s < envs.length; s++) {
+        const v = envs[s][k];
+        if (v === undefined) continue;
+        const f = flatOf(v);
+        if (!r) r = f.map(x => [x, x] as [number, number]);
+        else f.forEach((x, c) => { if (r![c]) { r![c][0] = Math.min(r![c][0], x); r![c][1] = Math.max(r![c][1], x); } });
+      }
+      ranges[k] = r;
+    }
+    passes.push({ i, values: snap(envs[0]), ranges, ...(stopped[0] ? { broke: true } : {}) });
+    if (stopped[0]) break;
+  }
+  return { names, start, passes };
+}

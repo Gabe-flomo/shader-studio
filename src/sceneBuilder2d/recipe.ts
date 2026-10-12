@@ -30,7 +30,7 @@ import { COLOUR_TABLE, colourText } from '../lang/colours';
 import { suggest } from '../lang/fuzzy';
 import { PALETTE_BY_KEY, PALETTES } from '../sceneBuilder/output';
 import { BUILT_IN_FUNCTIONS, builtInFunction } from './functions';
-import { COMBINE_MODES, checkBlock, clampTimes, linesText, parseBlockText, rangeFor, type CombineMode, type SpaceBlock } from './blocks';
+import { COMBINE_MODES, TRAP_KINDS, checkBlock, clampTimes, linesText, parseBlockText, rangeFor, type CombineMode, type SpaceBlock, type TrapKind } from './blocks';
 import { BLOCK_BY_ID, BLOCK_LIBRARY, blockFromEntry, isLibraryBlock } from './blockLibrary';
 import { findSavedBlock, loadSavedBlocks, sceneOpFromSaved } from './savedBlocks';
 import { MOD_BY_KIND, MOD_WORDS, MODS, newMod, type DistMod, type ModKind } from './modify';
@@ -535,13 +535,26 @@ class Parser {
     if (!b) return null;
     if (my && src) { b.my = my; b.name = my; }
     const at = (src ?? myArg)!;
+    let times: number | null = null;
     for (const a of args) {
       if (!a.key || a === src || a === myArg) continue;
       const key = a.key;
       if (prefix && !key.startsWith(prefix)) continue;
       const k = key.slice(prefix.length);
       if (a.op !== '=') { this.fail(a, `${a.key}${a.op}: in a recipe, write ${a.key}=… .`); continue; }
-      if (k === 'times') { const n = this.num(a, 'times'); if (n !== null) b.times = clampTimes(n); continue; }
+      if (k === 'times') { const n = this.num(a, 'times'); if (n !== null) times = n; continue; }
+      // A looped block (blocks.ts `loop`): loop=on, and its orbit trap, trap=point|cross|ring|off
+      if (k === 'loop' || k === 'trap') {
+        const w = a.value.k === 'word' || a.value.k === 'str' ? a.value.v.toLowerCase() : a.value.k === 'num' ? String(a.value.v) : '';
+        if (k === 'loop') {
+          if (['on', 'true', '1'].includes(w)) b.loop = true;
+          else if (['off', 'false', '0'].includes(w)) { delete b.loop; delete b.trap; }
+          else this.fail(a, 'loop is on or off.');
+        } else if (w === 'off' || w === 'none') b.trap = null;
+        else if (TRAP_KINDS.some(x => x.kind === w)) { b.trap = w as TrapKind; b.loop = true; }
+        else this.fail(a, `trap is ${TRAP_KINDS.map(x => x.kind).join(', ')} or off.`);
+        continue;
+      }
       if (k === 'name') { if (a.value.k === 'str' || a.value.k === 'word') b.name = a.value.v; continue; }
       const n = this.num(a, k);
       if (n === null) continue;
@@ -550,6 +563,8 @@ class Parser {
       if (b.lib || (b.my && !src)) { const s = suggest(k, b.params.map(q => q.name)); this.fail(a, `${b.name} has no slider “${k}”.${s ? ` Did you mean “${s}”?` : ` It has ${b.params.map(q => q.name).join(', ') || 'none'}.`}`); continue; }
       b.params.push({ name: k, value: n, ...rangeFor(n) });
     }
+    if (times !== null) b.times = clampTimes(times, !!b.loop);
+    else b.times = clampTimes(b.times, !!b.loop);
     if (!b.lib && !b.name) b.name = prefix ? `Block ${prefix[0].toUpperCase()}` : 'Block';
     const chk = checkBlock(b);
     if (!chk.ok) {
@@ -855,12 +870,15 @@ function printBlock(b: SpaceBlock, prefix = ''): { source: string; keys: string[
   const keys: string[] = [];
   if (e) {
     for (const p of b.params) { const d = e.params.find(q => q.name === p.name); if (!d || !valueEq(d.value, p.value)) keys.push(`${prefix}${p.name}=${fmt(p.value)}`); }
-    if (clampTimes(b.times) !== (e.times ?? 1)) keys.push(`${prefix}times=${clampTimes(b.times)}`);
+    if (clampTimes(b.times, !!b.loop) !== (e.times ?? 1)) keys.push(`${prefix}times=${clampTimes(b.times, !!b.loop)}`);
+    if ((b.trap ?? null) !== (e.trap ?? null)) keys.push(`${prefix}trap=${b.trap ?? 'off'}`);
     if (b.name && b.name !== e.name) keys.push(`${prefix}name=${fmtName(b.name)}`);
     return { source: e.id, keys };
   }
   for (const p of b.params) keys.push(`${prefix}${p.name}=${fmt(p.value)}`);
-  if (clampTimes(b.times) > 1) keys.push(`${prefix}times=${clampTimes(b.times)}`);
+  if (b.loop) keys.push(`${prefix}loop=on`);
+  if (b.loop && b.trap) keys.push(`${prefix}trap=${b.trap}`);
+  if (clampTimes(b.times, !!b.loop) > 1) keys.push(`${prefix}times=${clampTimes(b.times, !!b.loop)}`);
   const auto = prefix ? `Block ${prefix[0].toUpperCase()}` : 'Block';
   if (b.my && !prefix) keys.unshift(`my=${fmtName(b.my)}`);
   if (b.name && b.name !== auto && !(b.my && !prefix && b.name === b.my)) keys.push(`${prefix}name=${fmtName(b.name)}`);
