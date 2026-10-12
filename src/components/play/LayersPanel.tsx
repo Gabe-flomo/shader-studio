@@ -77,6 +77,7 @@ import { dragFileCount, dragHasFiles } from '../../play/layerDrop';
 import { addDroppedLayers, dropLabel } from './dropLayers';
 import { appDropMakers } from './dropMakers';
 import { startOverMenuItem } from '../../play/startOver';
+import { clampLines } from '../ui/textFit';
 
 const KIND = BUILTIN_LAYER;
 
@@ -928,7 +929,7 @@ function LayerRow({ layer: l, layers, play, onChangePlay, canUp, canDown, touch,
         {editing ? (
           <Field autoFocus value={draft} onChange={e => setDraft(e.target.value)} onBlur={commit} onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { setDraft(l.label); setEditing(false); } }} height={26} style={{ flex: 1 }} />
         ) : (
-          <button type="button" title={headerOnly ? 'Edit' : 'Rename'} onClick={() => { if (headerOnly) return; setDraft(l.label); setEditing(true); }} style={{ flex: 1, minWidth: 0, textAlign: 'left', border: 0, background: 'none', padding: 0, cursor: headerOnly ? 'pointer' : 'text', color: tk.text.primary, font: `600 12.5px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.label}</button>
+          <button type="button" title={headerOnly ? 'Edit' : 'Rename'} onClick={() => { if (headerOnly) return; setDraft(l.label); setEditing(true); }} style={{ flex: 1, minWidth: 0, textAlign: 'left', border: 0, background: 'none', padding: 0, cursor: headerOnly ? 'pointer' : 'text', color: tk.text.primary, font: `600 12.5px/1.25 ${fontFamily.ui}`, ...clampLines(2) }}>{l.label}</button>
         )}
         {relNest && (
           <>

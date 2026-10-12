@@ -11,6 +11,7 @@ import { useEffect, useState, type DragEvent } from 'react';
 import { GALLERY_SHAPES, renderThumbnail, type GalleryShape } from '../../sceneBuilder/thumbnails';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
+import { tileName } from '../ui/textFit';
 
 /** The drag type a gallery tile carries (its gallery key). */
 export const SHAPE_DRAG = 'application/x-scene-shape';
@@ -105,7 +106,7 @@ function Tile({ g, onPick, size }: { g: GalleryShape; onPick: (g: GalleryShape) 
           ? <img src={src} alt="" width={size} height={size} draggable={false} style={{ width: size, height: size, display: 'block' }} />
           : <span aria-hidden style={{ width: size * 0.5, height: size * 0.5, borderRadius: '50%', background: tk.bg.field }} />}
       </span>
-      <span style={{ maxWidth: '100%', font: `500 11px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.label}</span>
+      <span data-tile-name title={g.label} style={{ maxWidth: '100%', font: `500 11px ${fontFamily.ui}`, ...tileName }}>{g.label}</span>
     </button>
   );
 }

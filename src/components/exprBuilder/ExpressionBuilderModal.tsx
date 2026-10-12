@@ -42,6 +42,8 @@ import type { HelpExample } from '../builders/helpContent';
 import type { BuilderSectionTab } from '../builders/builderLayout';
 import { Button } from '../ui/Button';
 import { Icon } from '../ui/Icon';
+import { NEST_INDENT, nestedSectionStyle } from '../ui/nesting';
+import { HintMark } from '../builders/BuilderHelp';
 import { Select } from '../ui/Select';
 import { RulerSlider } from '../ui/RulerSlider';
 import { useTokens } from '../../theme/themeStore';
@@ -378,15 +380,19 @@ function MoveSection({ id, title, tiles: ranked, defaultOpen, cat, chain, at, hi
   const toggle = () => setOpen(o => { writeFold(id, !o); return !o; });
   return (
     <section data-xb-section={id} data-open={open ? '' : undefined} style={{ borderTop: `1px solid ${tk.border.subtle}`, paddingTop: 8 }}>
-      <button type="button" aria-expanded={open} onClick={toggle} title={hint}
-        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, border: 0, background: 'transparent', padding: '4px 0', cursor: 'pointer', color: tk.text.primary, textAlign: 'left' }}>
-        <Icon name={open ? 'chevD' : 'chevR'} size={14} style={{ color: tk.text.faint }} />
-        <b style={{ font: `600 13px ${fontFamily.ui}` }}>{title}</b>
-        <span style={{ font: `500 11.5px ${fontFamily.ui}`, color: tk.text.faint }}>{tiles.length}</span>
-        {!open && <span data-xb-summary="" style={{ marginLeft: 'auto', color: tk.text.muted, fontSize: 11.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 420 }}>{summary}</span>}
-      </button>
+      {/* The hint is a "?" beside the title (a native title shows late, and never on a touch screen). */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <button type="button" aria-expanded={open} onClick={toggle}
+          style={{ display: 'flex', alignItems: 'center', gap: 8, border: 0, background: 'transparent', padding: '4px 0', cursor: 'pointer', color: tk.text.primary, textAlign: 'left' }}>
+          <Icon name={open ? 'chevD' : 'chevR'} size={14} style={{ color: tk.text.faint }} />
+          <b style={{ font: `600 13px ${fontFamily.ui}` }}>{title}</b>
+          <span style={{ font: `500 11.5px ${fontFamily.ui}`, color: tk.text.faint }}>{tiles.length}</span>
+        </button>
+        <HintMark text={hint} />
+        {!open && <span data-xb-summary="" onClick={toggle} style={{ marginLeft: 'auto', cursor: 'pointer', color: tk.text.muted, fontSize: 11.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 420, minWidth: 0 }}>{summary}</span>}
+      </div>
       {open && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '8px 0 6px' }}>
+        <div data-nested-section="true" style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '8px 0 6px', ...nestedSectionStyle(tk.border.subtle, -NEST_INDENT + 7) }}>
           {id !== 'same' && <BuilderHelp id={id} />}
           <TileGrid tiles={shown} cat={cat} chain={chain} at={at} onWhere={onWhere} />
           {(tiles.length > limit || hidden.length > 0) && (

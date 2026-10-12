@@ -17,7 +17,7 @@ import { useState, type ReactNode } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Button, IconButton } from '../ui/Button';
-import { Segmented } from '../ui/Choice';
+import { Segmented, Toggle } from '../ui/Choice';
 import { BuilderSlider } from '../builders/BuilderSlider';
 import { HintLabel } from '../builders/BuilderWindow';
 import { MuteToggle, MutedBody, MutedTag } from '../builders/MuteToggle';
@@ -30,6 +30,7 @@ import { STENCIL_PLACES, blockExample, patternExample, patternSentence } from '.
 import { stateColour } from './TryBoard';
 import { soloOff } from '../../gridRules/stack';
 import { BlocksTogether, FlipGrid, ruleColour } from './RulePictures';
+import { removeKeys } from '../builders/removable';
 
 type P = Record<string, unknown>;
 type Setter = (patch: P, immediate?: boolean) => void;
@@ -88,16 +89,17 @@ function CellChoices({ p, value, after = false, anyOk = true, onPick, place }: {
 }
 
 /** A rule's card: its colour, title, actions (mute, order, remove); pointing at it reports the hover. Shared with StackForm.tsx. Off is the builders' mute: the MUTED tag, the body dimmed. */
-export function RuleCard({ index, title, off, children, actions, onHover }: { index: number; title: string; off?: boolean; children: ReactNode; actions: ReactNode; onHover?: (on: boolean) => void }) {
+export function RuleCard({ index, title, off, children, actions, onHover, onRemove }: { index: number; title: string; off?: boolean; children: ReactNode; actions: ReactNode; onHover?: (on: boolean) => void; onRemove?: () => void }) {
   const tk = useTokens();
   return (
-    <div data-rule-card={index} onPointerEnter={() => onHover?.(true)} onPointerLeave={() => onHover?.(false)}
-      style={{ borderRadius: radius.card, boxShadow: `inset 0 0 0 1px ${tk.border.default}`, padding: 12, display: 'flex', flexDirection: 'column', gap: 10, background: tk.bg.panel }}>
+    <div data-rule-card={index} onPointerEnter={() => onHover?.(true)} onPointerLeave={() => onHover?.(false)} {...removeKeys(onRemove, title)}
+      style={{ outline: 'none', borderRadius: radius.card, boxShadow: `inset 0 0 0 1px ${tk.border.default}`, padding: 12, display: 'flex', flexDirection: 'column', gap: 10, background: tk.bg.panel }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <span style={{ width: 10, height: 10, borderRadius: 3, background: ruleColour(index), flexShrink: 0 }} />
-        <b style={{ font: `600 13px ${fontFamily.ui}`, flex: 1 }}>{title}</b>
+        {/* The title gives way before the actions, so the remove at the end is never pushed out of the panel. */}
+        <b title={title} style={{ font: `600 13px ${fontFamily.ui}`, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</b>
         {off && <MutedTag />}
-        {actions}
+        <span style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>{actions}</span>
       </div>
       <MutedBody muted={!!off} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>{children}</MutedBody>
     </div>
@@ -111,7 +113,7 @@ export function ListActions({ i, n, off, onMove, onDelete, onToggle, onSolo, wha
       <MuteToggle muted={off} onToggle={() => onToggle(off)} onSolo={onSolo} what={what} />
       <IconButton icon="chevU" size="sm" label="Try this rule earlier" disabled={i === 0} onClick={() => onMove(-1)} />
       <IconButton icon="chevD" size="sm" label="Try this rule later" disabled={i === n - 1} onClick={() => onMove(1)} />
-      <IconButton icon="trash" size="sm" tone="danger" label="Remove this rule" onClick={onDelete} />
+      <IconButton icon="trash" size="sm" tone="danger" label={`Remove ${what} (Delete)`} data-rule-remove={i} onClick={onDelete} />
     </>
   );
 }
@@ -161,6 +163,7 @@ export function PatternsForm({ p, set, onHoverRule, nodeId }: { p: P; set: Sette
         const ex = patternExample(r, states);
         return (
           <RuleCard key={i} index={i} title={`Rule ${i + 1}`} off={r.off} onHover={on => onHoverRule?.(on ? i : null)}
+            onRemove={() => { setPicked(null); save(rules.filter((_, k) => k !== i)); }}
             actions={<ListActions i={i} n={rules.length} off={!!r.off} onMove={d => { setPicked(null); save(move(rules, i, d)); }} onDelete={() => { setPicked(null); save(rules.filter((_, k) => k !== i)); }} onToggle={on => edit(i, { off: !on })} onSolo={() => { setPicked(null); save(soloOff(rules, i)); }} />}>
             <span data-rule-sentence-stencil style={{ fontSize: 12.5, lineHeight: 1.45 }}>{patternSentence(r)}</span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
@@ -182,9 +185,8 @@ export function PatternsForm({ p, set, onHoverRule, nodeId }: { p: P; set: Sette
             {pick === 9 && <CellChoices p={p} value={r.becomes} place="Becomes" anyOk={false} onPick={v => edit(i, { becomes: v })} />}
             <Segmented<PatternSymmetry> ariaLabel="Orientations" size="sm" value={r.symmetry} onChange={v => edit(i, { symmetry: v })}
               options={[{ value: 'none', label: 'As drawn' }, { value: 'rotate', label: 'Turned any way' }, { value: 'all', label: 'Turned or mirrored' }]} />
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: tk.text.secondary, flexWrap: 'wrap' }}>
-              <input type="checkbox" checked={!!r.count} onChange={e => edit(i, { count: e.target.checked ? { state: 1, min: 1, max: 2 } : null })} />
-              {'and '}
+            <div data-stencil-count={i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: tk.text.secondary, flexWrap: 'wrap' }}>
+              <Toggle checked={!!r.count} onChange={on => edit(i, { count: on ? { state: 1, min: 1, max: 2 } : null })} label="and" />
               {r.count ? (
                 <>
                   <NumberBox value={r.count.min} max={8} onChange={v => edit(i, { count: { ...r.count!, min: v } })} label="from" />
@@ -194,7 +196,7 @@ export function PatternsForm({ p, set, onHoverRule, nodeId }: { p: P; set: Sette
                   <NumberBox value={r.count.state} max={top} onChange={v => edit(i, { count: { ...r.count!, state: v } })} label="state" />
                 </>
               ) : 'a count of the cells round it'}
-            </label>
+            </div>
           </RuleCard>
         );
       })}
@@ -259,6 +261,7 @@ export function BlocksForm({ p, set, nodeId }: { p: P; set: Setter; nodeId?: str
         const pick = picked && picked[0] === i ? picked : null;
         return (
           <RuleCard key={i} index={i} title={`Rule ${i + 1}`} off={r.off}
+            onRemove={() => { setPicked(null); save(rules.filter((_, k) => k !== i)); }}
             actions={<ListActions i={i} n={rules.length} off={!!r.off} onMove={d => { setPicked(null); save(move(rules, i, d)); }} onDelete={() => { setPicked(null); save(rules.filter((_, k) => k !== i)); }} onToggle={on => edit(i, { off: !on })} onSolo={() => { setPicked(null); save(soloOff(rules, i)); }} />}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
               {grid2(i, 'before', r.before)}
@@ -274,7 +277,7 @@ export function BlocksForm({ p, set, nodeId }: { p: P; set: Setter; nodeId?: str
             <Segmented<BlockSymmetry> ariaLabel="Orientations" size="sm" value={r.symmetry} onChange={v => edit(i, { symmetry: v })}
               options={[{ value: 'none', label: 'As drawn' }, { value: 'mirror', label: 'Mirrored too' }, { value: 'rotate', label: 'Turned any way' }]} />
             <Row label="Chance" hint="The share of the blocks it fits that it changes each step (rolled once per block).">
-              <BuilderSlider ariaLabel="Chance" value={r.chance} min={0} max={1} step={0.01} defaultValue={1} onChange={v => edit(i, { chance: v })} />
+              <BuilderSlider ariaLabel="Chance" value={r.chance} min={0} max={1} step={0.01} defaultValue={1} onChange={v => edit(i, { chance: v })} rangeKey="grid:blockChance" />
             </Row>
             <span style={{ fontSize: 11.5, color: keeps ? tk.status.success : tk.status.warningText }}>{keeps ? '✓ Keeps every cell: it only moves them' : 'Makes or removes cells'}</span>
           </RuleCard>

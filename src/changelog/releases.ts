@@ -39,6 +39,25 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.178',
+    date: '2026-10-11',
+    title: 'Polish',
+    highlights: [
+      { area: 'Studio', text: 'Fixed: a wired UV (or Baked, Group Output and group param input) couldn\'t be disconnected by clicking its socket.' },
+      { area: 'Studio', text: 'Every builder card can be removed: the trash stays in view, 2D layers each get a ×, and Delete removes the focused card.' },
+      { area: 'Studio', text: 'Help opens on tap on phones, long names and select values wrap, live numbers no longer jitter, sub-sections are indented, and switches match.' },
+    ],
+  },
+  {
+    id: '2026.10.177',
+    date: '2026-10-11',
+    title: 'Choosing a source',
+    highlights: [
+      { area: 'Studio', text: 'Agent Builder: Where has External…, which asks what kind of source (graph, group, picture, texture, or create new) and then shows only that choice.' },
+      { area: 'Studio', text: 'A picked source shrinks to a thumbnail with Change and ×. The same flow for Born, Only when, field regions, slopes, walls and food.' },
+    ],
+  },
+  {
     id: '2026.10.176',
     date: '2026-10-11',
     title: 'Calmer explanations',

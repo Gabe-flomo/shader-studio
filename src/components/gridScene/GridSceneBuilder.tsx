@@ -61,6 +61,8 @@ import { cleanStartText, MAX_TEXT_CHARS } from '../../gridRules/textCells';
 import { compileGridScene, drawGlyph, gridPicture, rgb } from './glyphs';
 import { TexturePicker } from '../builders/TexturePicker';
 import { withSource, type TexSource } from '../../builders/textures';
+import { liveNumber, tileName } from '../ui/textFit';
+import { removeKeys } from '../builders/removable';
 
 const edit = (fn: (d: GridSceneSpec) => void, key?: string) => useGridBuilder.getState().edit(fn, key);
 /** Adds a picture to the scene's list (the shared picker's onAdd, docs/grid-builder.md "Textures"). */
@@ -100,7 +102,7 @@ function Tiles<T extends string>({ items, value, onPick, label, render, cols = 5
               boxShadow: on ? `inset 0 0 0 1px ${alpha(tk.accent.base, 0.5)}` : 'none', minWidth: 0,
             }}>
             {render?.(v)}
-            <span style={{ maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label(v)}</span>
+            <span data-tile-name style={{ maxWidth: '100%', ...tileName }}>{label(v)}</span>
           </button>
         );
       })}
@@ -257,15 +259,15 @@ function DrawModeRow() {
       {draw.mode === 'repeat' && (
         <div style={{ display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr)', alignItems: 'center', gap: '6px 10px' }}>
           <span style={lbl} title="The tile's size: it repeats every this many cells across">Period X</span>
-          <BuilderSlider value={draw.period[0]} min={1} max={cols} integer ariaLabel="Repeat period X" defaultValue={2} onChange={v => set(d => { d.period = [v, d.period[1]]; }, 'rpx')} />
+          <BuilderSlider value={draw.period[0]} min={1} max={cols} integer ariaLabel="Repeat period X" rangeKey="grid:periodX" lazyParam={gridPlay('grid', 'periodX')} defaultValue={2} onChange={v => set(d => { d.period = [v, d.period[1]]; }, 'rpx')} />
           <span style={lbl} title="…and down">Period Y</span>
-          <BuilderSlider value={draw.period[1]} min={1} max={rows} integer ariaLabel="Repeat period Y" defaultValue={2} onChange={v => set(d => { d.period = [d.period[0], v]; }, 'rpy')} />
+          <BuilderSlider value={draw.period[1]} min={1} max={rows} integer ariaLabel="Repeat period Y" rangeKey="grid:periodY" lazyParam={gridPlay('grid', 'periodY')} defaultValue={2} onChange={v => set(d => { d.period = [d.period[0], v]; }, 'rpy')} />
           <span style={lbl} title="Where the tile starts, in cells">Offset X</span>
-          <BuilderSlider value={draw.offset[0]} min={0} max={cols - 1} integer ariaLabel="Repeat offset X" defaultValue={0} onChange={v => set(d => { d.offset = [v, d.offset[1]]; }, 'rox')} />
+          <BuilderSlider value={draw.offset[0]} min={0} max={cols - 1} integer ariaLabel="Repeat offset X" rangeKey="grid:offsetX" lazyParam={gridPlay('grid', 'offsetX')} defaultValue={0} onChange={v => set(d => { d.offset = [v, d.offset[1]]; }, 'rox')} />
           <span style={lbl} title="Where the tile starts, in cells">Offset Y</span>
-          <BuilderSlider value={draw.offset[1]} min={0} max={rows - 1} integer ariaLabel="Repeat offset Y" defaultValue={0} onChange={v => set(d => { d.offset = [d.offset[0], v]; }, 'roy')} />
+          <BuilderSlider value={draw.offset[1]} min={0} max={rows - 1} integer ariaLabel="Repeat offset Y" rangeKey="grid:offsetY" lazyParam={gridPlay('grid', 'offsetY')} defaultValue={0} onChange={v => set(d => { d.offset = [d.offset[0], v]; }, 'roy')} />
           <span style={lbl} title="Each row of tiles slides this many cells across: bricks and staggers">Row shift</span>
-          <BuilderSlider value={draw.shift} min={-4} max={4} integer ariaLabel="Repeat row shift" defaultValue={0} onChange={v => set(d => { d.shift = v; }, 'rsh')} />
+          <BuilderSlider value={draw.shift} min={-4} max={4} integer ariaLabel="Repeat row shift" rangeKey="grid:shift" lazyParam={gridPlay('grid', 'shift')} defaultValue={0} onChange={v => set(d => { d.shift = v; }, 'rsh')} />
         </div>
       )}
     </div>
@@ -304,9 +306,9 @@ function LeftPanel() {
       </span>
       <div style={{ display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr)', alignItems: 'center', gap: '6px 10px' }}>
         <span style={{ fontSize: 12, color: tk.text.secondary }}>Columns</span>
-        <BuilderSlider value={cols} min={MIN_CELLS} max={MAX_CELLS} integer ariaLabel="Columns" defaultValue={10} onChange={v => edit(d => resizeGrid(d, v, d.rows), 'cols')} />
+        <BuilderSlider value={cols} min={MIN_CELLS} max={MAX_CELLS} integer ariaLabel="Columns" rangeKey="grid:cols" defaultValue={10} onChange={v => edit(d => resizeGrid(d, v, d.rows), 'cols')} />
         <span style={{ fontSize: 12, color: tk.text.secondary }}>Rows</span>
-        <BuilderSlider value={rows} min={MIN_CELLS} max={MAX_CELLS} integer ariaLabel="Rows" defaultValue={10} onChange={v => edit(d => resizeGrid(d, d.cols, v), 'rows')} />
+        <BuilderSlider value={rows} min={MIN_CELLS} max={MAX_CELLS} integer ariaLabel="Rows" rangeKey="grid:rows" defaultValue={10} onChange={v => edit(d => resizeGrid(d, d.cols, v), 'rows')} />
       </div>
       <div style={{ display: 'flex', gap: 6 }}>
         <Button size="sm" variant="ghost" icon="trash" disabled={!placed} onClick={() => edit(d => { d.cells = []; })} title="Clear every cell (undo brings them back)">Clear cells</Button>
@@ -358,7 +360,8 @@ function ShapesSection() {
       {sh && (
         <Card id="gs-shape" defaultOpen title={`Shape ${sh.id}`} summary={SHAPE_LABELS[sh.kind]}
           mute={{ muted: !!sh.muted, what: `shape ${sh.id}`, onToggle: () => editShape(sh.id, s => { s.muted = !s.muted; }), onSolo: () => edit(d => soloIn(d.shapes, sh.id)) }}
-          actions={shapes.length > 1 ? <IconButton icon="trash" size="sm" label={`Remove shape ${sh.id} (its cells and rules go too)`} onClick={() => { edit(d => removeShape(d, sh.id)); setBrush(useGridBuilder.getState().spec.shapes[0]?.id ?? 'erase'); }} /> : undefined}>
+          onRemove={shapes.length > 1 ? () => { edit(d => removeShape(d, sh.id)); setBrush(useGridBuilder.getState().spec.shapes[0]?.id ?? 'erase'); } : undefined}
+          removeLabel={`Remove shape ${sh.id} (its cells and rules go too)`}>
           <Tiles items={SHAPE_KINDS} value={sh.kind} label={k => SHAPE_LABELS[k]} onPick={k => editShape(sh.id, s => { s.kind = k; })}
             render={k => <Glyph kind={k} color={sh.color} size={20} />} />
           {sh.kind === 'picture' && !sh.tex && <BuilderNote>A square that shows a picture: pick it below.</BuilderNote>}
@@ -434,11 +437,12 @@ function MotionSection() {
               ? <DrawnPathPad shape={sh} onEdit={editDrawn} />
               : <XYPad value={m.xy} shape={sh} range={m.path === 'travel' || m.path === 'hop' ? 3 : 2} onChange={v => editM(s => { s.motion.xy = v; }, `xy${sh.id}`)} />}
             <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <span style={{ fontSize: 11.5, color: usesX ? undefined : 'GrayText' }}>X (cells)</span>
+              <span style={{ fontSize: 11.5, color: usesX ? undefined : tk.text.faint }}>X (cells)</span>
               <BuilderSlider value={m.xy[0]} min={-3} max={3} disabled={!usesX} ariaLabel="Move X" defaultValue={0} lazyParam={gridPlay(sh.id, 'moveX')} onChange={v => editM(s => { s.motion.xy = [v, s.motion.xy[1]]; }, `mx${sh.id}`)} />
-              <span style={{ fontSize: 11.5, color: usesY ? undefined : 'GrayText' }}>Y (cells, up)</span>
+              <span style={{ fontSize: 11.5, color: usesY ? undefined : tk.text.faint }}>Y (cells, up)</span>
               <BuilderSlider value={m.xy[1]} min={-3} max={3} disabled={!usesY} ariaLabel="Move Y" defaultValue={0} lazyParam={gridPlay(sh.id, 'moveY')} onChange={v => editM(s => { s.motion.xy = [s.motion.xy[0], v]; }, `my${sh.id}`)} />
-              <span data-motion-length style={{ fontSize: 11.5, color: tk.text.muted }}>Length {reach.toFixed(2)} cells{m.angle || m.angleSpin ? ' (the Angle keeps it)' : ''}</span>
+              <span data-motion-length style={{ fontSize: 11.5, color: tk.text.muted }}>Length <span style={liveNumber(4, 'right')}>{reach.toFixed(2)}</span> cells</span>
+              {(m.angle || m.angleSpin) ? <span style={{ fontSize: 11.5, color: tk.text.faint }}>The Angle keeps the length.</span> : null}
             </div>
           </div>
           {drawn && <DrawnPathControls shape={sh} onEdit={editDrawn} />}
@@ -537,13 +541,13 @@ function PatternsSection() {
         actions={<Button size="sm" variant="ghost" icon="plus" data-add-warp disabled={warps.length >= MAX_WARPS} onClick={() => setAdding(a => !a)}>{adding ? 'Close' : 'Add'}</Button>}>
         <BuilderNote>Space blocks from the 2D Scene Builder's library: they bend the space the whole grid lives in, lines and all. Top to bottom.</BuilderNote>
         {warps.map((w, i) => (
-          <div key={`${w.lib ?? 'w'}-${i}`} data-warp={i} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div key={`${w.lib ?? 'w'}-${i}`} data-warp={i} {...removeKeys(() => edit(d => { d.warps.splice(i, 1); }), w.name ?? `warp ${i + 1}`)} style={{ display: 'flex', flexDirection: 'column', gap: 4, outline: 'none' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <b style={{ flex: 1, fontSize: 12.5, ...(w.muted ? MUTED_DIM : {}) }}>{w.name ?? `Warp ${i + 1}`}</b>
+              <b style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 12.5, ...(w.muted ? MUTED_DIM : {}) }}>{w.name ?? `Warp ${i + 1}`}</b>
               {w.muted && <MutedTag />}
               <MuteToggle muted={!!w.muted} what={w.name ?? `warp ${i + 1}`} onToggle={() => edit(d => { d.warps[i].muted = !d.warps[i].muted; })}
                 onSolo={() => edit(d => soloWarp(d, i))} />
-              <IconButton icon="trash" size="sm" label={`Remove ${w.name ?? 'the warp'}`} onClick={() => edit(d => { d.warps.splice(i, 1); })} />
+              <IconButton icon="trash" size="sm" tone="danger" label={`Remove ${w.name ?? 'the warp'}`} data-warp-remove={i} onClick={() => edit(d => { d.warps.splice(i, 1); })} />
             </div>
             {w.params.map((pp, j) => (
               <NumRow key={pp.name} label={pp.name} value={pp.value} min={pp.min} max={pp.max} onChange={v => edit(d => { d.warps[i].params[j].value = v; }, `w${i}${pp.name}`)} />
@@ -635,10 +639,8 @@ function RulesSection() {
         const clauses = ruleClauses(r);
         return (
           <Card key={r.id} id={`gs-rule-${r.id}`} defaultOpen title={<span data-rule={r.id}>{ruleText(r)}</span>} summary={problem ?? undefined}
-            actions={<>
-              <Toggle checked={r.on} onChange={v => setR(r.id, x => { x.on = v; })} label="" />
-              <IconButton icon="trash" size="sm" label="Remove the rule" onClick={() => edit(d => { d.rules = d.rules.filter(x => x.id !== r.id); })} />
-            </>}>
+            mute={{ muted: !r.on, what: 'the rule', onToggle: () => setR(r.id, x => { x.on = !x.on; }) }}
+            onRemove={() => edit(d => { d.rules = d.rules.filter(x => x.id !== r.id); })} removeLabel="Remove the rule">
             <Row label="When">
               <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.4fr)', gap: 6 }}>
                 <Select ariaLabel="When shape" value={r.when.a} options={shapeOpts} onChange={v => setR(r.id, x => { x.when.a = v; })} />
@@ -684,6 +686,18 @@ function RulesSection() {
   );
 }
 
+/** A group's header inside a card: its name and its mute switch (the group's settings dim while it is off). */
+function GroupHead({ label, muted, onToggle }: { label: string; muted: boolean; onToggle: () => void }) {
+  const tk = useTokens();
+  return (
+    <div data-group-head={label} style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+      <b style={{ flex: 1, fontSize: 12, fontWeight: 600, color: tk.text.secondary, ...(muted ? MUTED_DIM : {}) }}>{label}</b>
+      {muted && <MutedTag />}
+      <MuteToggle muted={muted} what={label.toLowerCase()} onToggle={onToggle} />
+    </div>
+  );
+}
+
 function LookSection() {
   const look = useGridBuilder(s => s.spec.look);
   const span = useGridBuilder(s => s.spec.span);
@@ -692,28 +706,21 @@ function LookSection() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <Card id="gs-ground" defaultOpen title="Ground" summary={look.lines ? 'lines' : 'no lines'}>
         <ColourRow label="Background" value={look.bg} onChange={v => setL(l => { l.bg = v; }, 'bg')} />
-        <Row label="Grid lines"><Toggle checked={look.lines} onChange={v => setL(l => { l.lines = v; })} label={look.lines ? 'On' : 'Off'} /></Row>
-        {look.lines && (
-          <>
-            <ColourRow label="Line colour" value={look.lineColor} onChange={v => setL(l => { l.lineColor = v; }, 'lc')} />
-            <NumRow label="Line width" hint="In cells." value={look.lineWidth} min={0.005} max={0.2} step={0.005} defaultValue={DEFAULT_LOOK.lineWidth} onChange={v => setL(l => { l.lineWidth = v; }, 'lw')} />
-          </>
-        )}
+        <GroupHead label="Grid lines" muted={!look.lines} onToggle={() => setL(l => { l.lines = !l.lines; })} />
+        <div data-muted={!look.lines || undefined} style={{ display: 'flex', flexDirection: 'column', gap: 6, ...(look.lines ? {} : MUTED_DIM) }}>
+          <ColourRow label="Line colour" value={look.lineColor} onChange={v => setL(l => { l.lineColor = v; }, 'lc')} />
+          <NumRow label="Line width" hint="In cells." value={look.lineWidth} min={0.005} max={0.2} step={0.005} defaultValue={DEFAULT_LOOK.lineWidth} onChange={v => setL(l => { l.lineWidth = v; }, 'lw')} />
+        </div>
         <NumRow label="Grid size" hint="From the centre to the grid's taller edge (1 reaches the top of the picture)." value={span} min={0.3} max={1.6} defaultValue={0.9} onChange={v => edit(d => { d.span = v; }, 'span')} />
-      </Card>
-      <Card id="gs-glow" defaultOpen title="Glow" summary={look.glow ? 'on' : 'off'}>
-        <Row label="Glow"><Toggle checked={look.glow} onChange={v => setL(l => { l.glow = v; })} label={look.glow ? 'On' : 'Off'} /></Row>
-        {look.glow && (
-          <>
-            <Row label="Style" hint="Soft: the shape's colour runs out into its glow, one shape. Halo: a bright rim round a flat shape.">
-              <Select ariaLabel="Glow style" value={look.glowStyle ?? 'soft'} options={[{ value: 'soft', label: 'Soft (one shape)' }, { value: 'halo', label: 'Halo (rim round the shape)' }]}
-                onChange={v => setL(l => { l.glowStyle = v === 'halo' ? 'halo' : undefined; })} />
-            </Row>
-            <NumRow label="Amount" value={look.glowAmount} min={0.0005} max={0.05} step={0.0005} defaultValue={DEFAULT_LOOK.glowAmount} lazyParam={gridPlay('glow', look.glowStyle === 'halo' ? 'intensity' : 'amount')} onChange={v => setL(l => { l.glowAmount = v; }, 'ga')} />
-            <NumRow label="Falloff" value={look.glowFalloff} min={0.5} max={3} defaultValue={DEFAULT_LOOK.glowFalloff} lazyParam={gridPlay('glow', look.glowStyle === 'halo' ? 'power' : 'falloff')} onChange={v => setL(l => { l.glowFalloff = v; }, 'gf')} />
-          </>
-        )}
         <Row label="Tone map"><Select ariaLabel="Tone map" value={look.tone} options={[{ value: 'aces', label: 'ACES' }, { value: 'none', label: 'None' }]} onChange={v => setL(l => { l.tone = v as 'aces' | 'none'; })} /></Row>
+      </Card>
+      <Card id="gs-glow" defaultOpen title="Glow" mute={{ muted: !look.glow, what: 'the glow', onToggle: () => setL(l => { l.glow = !l.glow; }) }}>
+        <Row label="Style" hint="Soft: the shape's colour runs out into its glow, one shape. Halo: a bright rim round a flat shape.">
+          <Select ariaLabel="Glow style" value={look.glowStyle ?? 'soft'} options={[{ value: 'soft', label: 'Soft (one shape)' }, { value: 'halo', label: 'Halo (rim round the shape)' }]}
+            onChange={v => setL(l => { l.glowStyle = v === 'halo' ? 'halo' : undefined; })} />
+        </Row>
+        <NumRow label="Amount" value={look.glowAmount} min={0.0005} max={0.05} step={0.0005} defaultValue={DEFAULT_LOOK.glowAmount} lazyParam={gridPlay('glow', look.glowStyle === 'halo' ? 'intensity' : 'amount')} onChange={v => setL(l => { l.glowAmount = v; }, 'ga')} />
+        <NumRow label="Falloff" value={look.glowFalloff} min={0.5} max={3} defaultValue={DEFAULT_LOOK.glowFalloff} lazyParam={gridPlay('glow', look.glowStyle === 'halo' ? 'power' : 'falloff')} onChange={v => setL(l => { l.glowFalloff = v; }, 'gf')} />
       </Card>
     </div>
   );

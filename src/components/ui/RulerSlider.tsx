@@ -7,6 +7,7 @@ import {
   valueAfterDrag,
 } from './rulerMath';
 import { Tooltip } from './Tooltip';
+import { claimWheel, ownsWheel } from './wheelOwner';
 
 /**
  * The redesign's float control: a value chip (click to type) and a ruler that scrolls under a
@@ -27,37 +28,9 @@ import { Tooltip } from './Tooltip';
  * `keyframed` greys the ruler out and stops edits: the value is animated, so the chip shows the
  * live value and hovering explains why.
  */
-/**
- * Which slider, if any, a trackpad swipe belongs to. A swipe is a run of wheel
- * events with short gaps (its momentum included); who owns it is settled at its
- * first event. A slider owns it only when the swipe starts on it and the pointer
- * was moved onto that slider (and rested a moment) beforehand. So a two-finger
- * pan that passes over sliders, or starts where a pan left a slider under a
- * still pointer, stays a pan.
- */
-const SWIPE_GAP_MS = 200;
-const SETTLE_MS = 200;
-const wheel = { owner: null as Element | null, armed: null as Element | null, armedAt: 0, lastAt: 0, installed: false };
-
-function installWheelGestures(): void {
-  if (wheel.installed || typeof window === 'undefined') return;
-  wheel.installed = true;
-  // Capture runs before the slider's own listener sees the event.
-  window.addEventListener('wheel', e => {
-    const now = performance.now();
-    if (now - wheel.lastAt > SWIPE_GAP_MS) {
-      const on = (e.target as Element | null)?.closest?.('[data-ruler-track]') ?? null;
-      wheel.owner = on && on === wheel.armed && now - wheel.armedAt >= SETTLE_MS ? on : null;
-      // A pan moves things under the pointer: nothing is armed until the pointer moves again.
-      if (!wheel.owner) wheel.armed = null;
-    }
-    wheel.lastAt = now;
-  }, { capture: true, passive: true });
-}
-
 export function RulerSlider({
   value, min, max, step = 0.01, defaultValue, onChange, integer = false, keyframed, disabled = false,
-  ariaLabel, touch = false, onType, onRange, hard = false, unit: unitProp, bipolar = false, trackMinWidth = 0,
+  ariaLabel, touch = false, onType, onRange, hard = false, unit: unitProp, bipolar = false, trackMinWidth = 0, display,
 }: {
   value: number;
   min: number;
@@ -102,6 +75,11 @@ export function RulerSlider({
    * bidirectional slider and the builders' symmetric ones use it.
    */
   bipolar?: boolean;
+  /**
+   * The slider runs on an inner scale (a log scale: LogRulerSlider) while the chip shows and takes the real value:
+   * `show` writes an inner value as the real one, `parse` turns a typed real value into the inner one.
+   */
+  display?: { show: (inner: number) => string; parse: (typed: number) => number };
 }) {
   const tk = useTokens();
   const locked = disabled || !!keyframed;
@@ -118,7 +96,8 @@ export function RulerSlider({
   const range = held ?? rangeIncluding(value, grown.min, grown.max);
   ({ min, max } = range);
   // Typing sets the range (rangeAfterTyping); the typed number itself is kept as typed.
-  const commitTyped = (n: number) => {
+  const commitTyped = (typed: number) => {
+    const n = display ? display.parse(typed) : typed;
     const r = rangeAfterTyping(n, min, max, hard);
     if (r.extended) { setTyped({ min: r.min, max: r.max, base }); onRange?.(r.min, r.max); }
     (onType ?? onChange)(r.value);
@@ -126,42 +105,32 @@ export function RulerSlider({
   const unit = (typeof unitProp === 'function' ? unitProp(min, max) : unitProp) ?? rulerUnit(min, max, integer);
   const effectiveStep = integer ? 1 : step;
   const h = touch ? 40 : 28;
-  const fmt = useCallback((n: number) => formatValue(n, effectiveStep, integer), [effectiveStep, integer]);
+  const show = display?.show;
+  const fmt = useCallback((n: number) => (show ? show(n) : formatValue(n, effectiveStep, integer)), [effectiveStep, integer, show]);
 
   const trackRef = useRef<HTMLDivElement>(null);
   const live = useRef({ value, locked, unit, min, max, step: effectiveStep, integer, onChange });
   useEffect(() => { live.current = { value, locked, unit, min, max, step: effectiveStep, integer, onChange }; });
 
   // Horizontal wheel/trackpad nudges the value, but only a swipe that belongs to this
-  // slider (see wheelGesture): a pan that slides over it moves the view, not the value.
+  // slider (see wheelOwner): a pan that slides over it moves the view, not the value.
   // Needs a non-passive listener to preventDefault.
   useEffect(() => {
     const el = trackRef.current;
     if (!el) return;
-    installWheelGestures();
     const onWheel = (e: WheelEvent) => {
       const s = live.current;
-      if (s.locked || Math.abs(e.deltaX) <= Math.abs(e.deltaY) || wheel.owner !== el) return;
+      if (s.locked || Math.abs(e.deltaX) <= Math.abs(e.deltaY) || !ownsWheel(el)) return;
       e.preventDefault();
       e.stopPropagation(); // the swipe is the slider's: the canvas behind must not pan with it
       const next = s.integer ? countAfterDrag(s.value, e.deltaX, e.shiftKey) : valueAfterDrag(s.value, -e.deltaX, s.unit, e.shiftKey);
       s.onChange(clampToStep(next, s.min, s.max, s.step));
     };
-    // Arm on a real pointer move over the track: content panned under a still pointer doesn't count.
-    const onMove = (e: PointerEvent) => {
-      if (e.pointerType !== 'mouse' || (!e.movementX && !e.movementY)) return;
-      if (wheel.armed !== el) { wheel.armed = el; wheel.armedAt = performance.now(); }
-    };
-    const onLeave = () => { if (wheel.armed === el) wheel.armed = null; };
     el.addEventListener('wheel', onWheel, { passive: false });
-    el.addEventListener('pointermove', onMove);
-    el.addEventListener('pointerleave', onLeave);
+    const release = claimWheel(el, '[data-ruler-track]');
     return () => {
       el.removeEventListener('wheel', onWheel);
-      el.removeEventListener('pointermove', onMove);
-      el.removeEventListener('pointerleave', onLeave);
-      if (wheel.armed === el) wheel.armed = null;
-      if (wheel.owner === el) wheel.owner = null;
+      release();
     };
   }, []);
 
@@ -249,6 +218,7 @@ export function RulerSlider({
       aria-valuemin={min}
       aria-valuemax={max}
       aria-valuenow={value}
+      aria-valuetext={display ? display.show(value) : undefined}
       aria-disabled={locked || undefined}
       tabIndex={locked ? -1 : 0}
       onPointerDown={onPointerDown}
@@ -289,6 +259,7 @@ export function RulerSlider({
     </div>
   );
 
+  const ends = display ? `${display.show(min)} – ${display.show(max)}` : `${min} – ${max}`;
   const chipStyle: CSSProperties = {
     minWidth: 48, width: 56, height: 26, boxSizing: 'border-box', padding: '0 6px', border: 0, borderRadius: radius.md,
     textAlign: 'center', outline: 'none', flexShrink: 0,
@@ -306,7 +277,7 @@ export function RulerSlider({
           }}
         >
           <svg width="9" height="9" viewBox="0 0 10 10" aria-hidden="true"><path d="M5 0.8L9.2 5 5 9.2 0.8 5Z" fill={tk.status.warning} /></svg>
-          {formatValue(value, effectiveStep, integer)}
+          {fmt(value)}
         </span>
       ) : (
         <NumberInput
@@ -314,7 +285,7 @@ export function RulerSlider({
           format={fmt}
           onCommit={commitTyped}
           disabled={disabled}
-          title={hard ? `${ariaLabel} (${min} – ${max})` : `${ariaLabel} (${min} – ${max}): type a number past the end to widen the range`}
+          title={hard ? `${ariaLabel} (${ends})` : `${ariaLabel} (${ends}): type a number past the end to widen the range`}
           style={chipStyle}
         />
       )}

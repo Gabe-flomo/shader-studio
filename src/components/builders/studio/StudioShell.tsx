@@ -28,6 +28,8 @@ import { Icon } from '../../ui/Icon';
 import type { IconName } from '../../ui/iconPaths';
 import { Segmented } from '../../ui/Choice';
 import { portalGuard } from '../../ui/portalGuard';
+import { Tooltip } from '../../ui/Tooltip';
+import { clampLines, tileName } from '../../ui/textFit';
 import { usePhoneDialog } from '../../ui/phoneDialog';
 import { SidePanel, useNarrowWindow } from '../../code/SidePanels';
 import { BUILDER_RECIPE_EVENT } from '../../../builders/windows';
@@ -178,7 +180,7 @@ export function StudioShell(p: StudioShellProps) {
 
   // Top bar: Back · name · kind ……… panels · 2D | 3D · actions · primary · close
   const topBar = (
-    <div data-studio-topbar style={{ height: phone ? 52 : 60, flexShrink: 0, display: 'flex', alignItems: 'center', gap: phone ? 4 : 8, padding: phone ? '0 6px' : '0 12px', borderBottom: `1px solid ${tk.border.subtle}`, minWidth: 0 }}>
+    <div data-studio-topbar style={{ minHeight: phone ? 52 : 60, flexShrink: 0, display: 'flex', alignItems: 'center', gap: phone ? 4 : 8, padding: phone ? '0 6px' : '0 12px', borderBottom: `1px solid ${tk.border.subtle}`, minWidth: 0 }}>
       {p.onBack && <IconButton icon="chevL" label={p.backLabel ?? 'Back'} onClick={p.onBack} data-studio-back />}
       {!phone && (
         <span style={{ width: 32, height: 32, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: alpha(tile, 0.12), color: tile, marginLeft: p.onBack ? 0 : 4 }}>
@@ -187,8 +189,8 @@ export function StudioShell(p: StudioShellProps) {
       )}
       <span style={{ display: 'flex', flexDirection: 'column', gap: p.crumb ? 0 : 1, minWidth: phone ? 120 : 0, flexShrink: phone ? 0 : 1, maxWidth: phone ? '55%' : undefined, marginRight: 'auto', paddingLeft: phone && !p.onBack ? 6 : 0 }}>
         {p.crumb && <span data-studio-crumb style={{ fontSize: 11, lineHeight: '14px', color: tk.text.muted, display: 'flex', minWidth: 0, overflow: phone ? 'hidden' : undefined }}>{p.crumb}</span>}
-        <b data-studio-title style={{ fontSize: 15, fontWeight: 650, letterSpacing: '-0.01em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</b>
-        {p.kind && !(phone && p.crumb) && <span data-studio-kind style={{ fontSize: 12, color: tk.text.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.kind}</span>}
+        <b data-studio-title title={typeof p.title === 'string' ? p.title : undefined} style={{ fontSize: 15, fontWeight: 650, letterSpacing: '-0.01em', lineHeight: 1.2, ...clampLines(2) }}>{p.title}</b>
+        {p.kind && !(phone && p.crumb) && <span data-studio-kind style={{ fontSize: 12, color: tk.text.muted, lineHeight: 1.25 }}>{p.kind}</span>}
       </span>
       <span style={{ display: 'flex', alignItems: 'center', gap: phone ? 2 : 6, minWidth: 0, overflowX: phone ? 'auto' : undefined, scrollbarWidth: 'none' }}>
         {!phone && p.nav !== undefined && foldButton('nav', 'panelLeft', 'the sections', sc('['))}
@@ -285,8 +287,8 @@ export function StudioNavItem({ icon, label, summary, selected, onClick, hint, d
   });
   useLayoutEffect(() => () => reg?.drop(id), [reg, id]);
   if (reg) return <span hidden data-studio-nav-slot={id} />;
-  return (
-    <button type="button" data-studio-section={id} aria-current={selected || undefined} title={hint} onClick={onClick}
+  const item = (
+    <button type="button" data-studio-section={id} aria-current={selected || undefined} onClick={onClick}
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
       style={{
         display: 'flex', alignItems: 'center', gap: 10, width: '100%', minHeight: 44, padding: '6px 10px', border: 0, borderRadius: radius.control, cursor: 'pointer', textAlign: 'left',
@@ -302,14 +304,15 @@ export function StudioNavItem({ icon, label, summary, selected, onClick, hint, d
       </span>
     </button>
   );
+  return hint ? <Tooltip label={label} description={hint} placement="right" block>{item}</Tooltip> : item;
 }
 
 /** A picture card in the presets strip: a thumbnail (or a placeholder while it renders) and a name. */
 export function PresetCard({ id, label, hint, src, onClick, active = false }: { id: string; label: string; hint?: string; src?: string | null; onClick: () => void; active?: boolean }) {
   const tk = useTokens();
   const [hover, setHover] = useState(false);
-  return (
-    <button type="button" data-preset={id} title={hint} onClick={onClick} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+  const card = (
+    <button type="button" data-preset={id} onClick={onClick} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
       style={{
         flexShrink: 0, width: 132, padding: 0, border: 0, borderRadius: radius.control, cursor: 'pointer', textAlign: 'left', background: 'none',
         display: 'flex', flexDirection: 'column', gap: 6, color: tk.text.secondary, font: `500 12px ${fontFamily.ui}`,
@@ -320,7 +323,8 @@ export function PresetCard({ id, label, hint, src, onClick, active = false }: { 
       }}>
         {src ? <img src={src} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} /> : null}
       </span>
-      <span style={{ padding: '0 2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: active ? tk.accent.text : undefined }}>{label}</span>
+      <span data-preset-name title={label} style={{ padding: '0 2px', ...tileName, color: active ? tk.accent.text : undefined }}>{label}</span>
     </button>
   );
+  return hint ? <Tooltip label={label} description={hint} placement="top">{card}</Tooltip> : card;
 }

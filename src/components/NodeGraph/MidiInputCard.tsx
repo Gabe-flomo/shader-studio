@@ -4,6 +4,7 @@ import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { useCtp } from '../../theme/nodePalette';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
+import { BuilderSlider } from '../builders/BuilderSlider';
 import { TYPE_COLORS } from './typeColors';
 import { registerSocket, getView } from './socketRegistry';
 import { startNodeMouseDrag } from './nodeDrag';
@@ -190,10 +191,11 @@ export function MidiInputCard({ node, isSelected, isMultiSelected, dimmed, onSta
         </div>
         <div style={rowStyle}>
           <span style={labelStyle}>Smoothing</span>
-          <input type="range" min={0} max={500} step={1} value={smoothMs}
-            onChange={e => updateNodeParams(node.id, { smooth_ms: parseFloat(e.target.value) }, { immediate: true })}
-            style={{ flex: 1, accentColor: tc.sky, cursor: 'pointer' }} />
-          <span style={{ fontSize: 10, color: tc.overlay0, fontFamily: 'monospace', width: 42, textAlign: 'right' }}>{smoothMs} ms</span>
+          {/* The app's ruler (ms), with the node card's Play menu on right-click. */}
+          <span data-midi-smoothing style={{ flex: 1, minWidth: 0, display: 'flex' }}>
+            <BuilderSlider value={smoothMs} min={0} max={500} step={1} integer ariaLabel="Smoothing (ms)" defaultValue={20}
+              onChange={v => updateNodeParams(node.id, { smooth_ms: v }, { immediate: true })} param={{ nodeId: node.id, key: 'smooth_ms' }} />
+          </span>
         </div>
         <div style={rowStyle}>
           <span style={labelStyle}>Active</span>

@@ -9,6 +9,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Icon } from '../ui/Icon';
+import { NEST_INDENT, nestedSectionStyle } from '../ui/nesting';
 import { useFoldState } from '../NodeGraph/foldState';
 import type { IconName } from '../ui/iconPaths';
 import { rememberTab, rememberedTab, validTab, type BuilderSectionTab } from './builderLayout';
@@ -92,7 +93,8 @@ export function BuilderFold({ foldKey, title, summary, children }: { foldKey: st
         <b style={{ font: `600 13px ${fontFamily.ui}` }}>{title}</b>
         {!open && <span style={{ marginLeft: 'auto', color: tk.text.muted, fontSize: 11.5, fontVariantNumeric: 'tabular-nums', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 320 }}>{summary}</span>}
       </button>
-      {open && <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '8px 0 4px' }}>{children}</div>}
+      {/* The body hangs off a guide line under the chevron, so what belongs to the fold reads at a glance. */}
+      {open && <div data-nested-section="true" style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '8px 0 4px', ...nestedSectionStyle(tk.border.subtle, -NEST_INDENT + 7) }}>{children}</div>}
     </section>
   );
 }

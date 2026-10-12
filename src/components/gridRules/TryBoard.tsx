@@ -21,7 +21,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Button, IconButton } from '../ui/Button';
-import { Segmented } from '../ui/Choice';
+import { Segmented, Toggle } from '../ui/Choice';
 import { Select } from '../ui/Select';
 import { cpuColours, cpuStep, cpuStepUpTo } from '../../gridRules/cpu';
 import { GRID_DEFAULTS, countsAsRanges, gridShape, maxCount, countsOf } from '../../gridRules/spec';
@@ -284,13 +284,12 @@ export function TryBoard({ params, nodeParams, focus, hood, onUseAsStart }: {
         </div>
         {/* Top right: the legend of the marks. */}
         {!smooth && (focus.section === 'rule' || focus.section === 'neighbourhood' || focus.section === 'stack') && !focus.count && (
-          <label style={{ position: 'absolute', right: 12, top: 10, display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5, color: tk.text.secondary, background: alpha(tk.bg.panel, 0.85), padding: '4px 8px', borderRadius: radius.sm }}>
-            <input type="checkbox" checked={showNext} onChange={e => setShowNext(e.target.checked)} data-try-show-next />
-            Next step:
+          <div style={{ position: 'absolute', right: 12, top: 10, display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5, color: tk.text.secondary, background: alpha(tk.bg.panel, 0.85), padding: '4px 8px', borderRadius: radius.sm }}>
+            <span data-try-show-next style={{ display: 'inline-flex' }}><Toggle checked={showNext} onChange={setShowNext} label="Next step:" /></span>
             <svg width={12} height={12}><circle cx={6} cy={6} r={4} fill="none" stroke="#3fbf7f" strokeWidth={1.6} /></svg> born
             <svg width={12} height={12}><path d="M2 2L10 10M10 2L2 10" stroke="#ff5a5a" strokeWidth={1.6} /></svg> dies
             {s.type !== 'count' && <><svg width={12} height={12}><circle cx={6} cy={6} r={3} fill="#f0b43c" /></svg> changes</>}
-          </label>
+          </div>
         )}
         {hood && (
           <div data-try-hood style={{ position: 'absolute', right: 12, bottom: 12, width: 270, padding: 12, borderRadius: radius.card, background: alpha(tk.bg.panel, 0.95), boxShadow: `inset 0 0 0 1px ${tk.border.default}`, fontSize: 12, lineHeight: 1.5, color: tk.text.secondary, display: 'flex', flexDirection: 'column', gap: 6 }}>

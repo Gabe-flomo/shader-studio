@@ -53,7 +53,7 @@ function esc(s: string) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').
 export function CodeField({
   value, onChange, completions, title = 'GLSL', actions, textareaRef, onKeyDown, onBlur, onFocus, onSelect, placeholder,
   ariaLabel, grow = false, minHeight = 120, maxHeight, invalid = false, style, tokenize = tokenizeLine, members, autoIndent = false, flash,
-  highlight, keyFirst, onHoverChar, anchor,
+  highlight, keyFirst, onHoverChar, onTapChar, anchor,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -88,6 +88,8 @@ export function CodeField({
   keyFirst?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => boolean;
   /** The pointer is over character `offset` (null: over no character), for word help; `rectOf` says where a span of the text is on screen. */
   onHoverChar?: (offset: number | null, rectOf: (from: number, to: number) => CharRect) => void;
+  /** A touch tap put the caret on character `offset` (a touch screen has no hover), for word help. */
+  onTapChar?: (offset: number | null, rectOf: (from: number, to: number) => CharRect) => void;
   /** Something to show anchored under a character (the caller's suggestions, at the word being typed). */
   anchor?: { at: number; content: ReactNode } | null;
 }) {
@@ -260,6 +262,7 @@ export function CodeField({
             onKeyUp={trackCaret}
             onMouseMove={onHoverChar ? e => onHoverChar(offsetAt(e.clientX, e.clientY), rectOf) : undefined}
             onMouseLeave={onHoverChar ? () => onHoverChar(null, rectOf) : undefined}
+            onPointerUp={onTapChar ? e => { if (e.pointerType === 'touch' || e.pointerType === 'pen') onTapChar(offsetAt(e.clientX, e.clientY), rectOf); } : undefined}
             onFocus={e => { setFocused(true); onFocus?.(e.currentTarget); }}
             onBlur={() => { setFocused(false); ac.close(); setCaret(null); onBlur?.(); }}
             style={{

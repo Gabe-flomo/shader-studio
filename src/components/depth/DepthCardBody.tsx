@@ -15,6 +15,9 @@ import { formatDepthBytes, isMetricModel, licenceLine } from '../../depthModel/c
 import { depthModelOptions, effectiveDepthModel, setDepthExperimental, useDepthExperimental } from '../../depthModel/experimental';
 import { depthOfferBytes, downloadDepthModel, probeLikelyBackend, useDepthModels } from '../../depthModel/client';
 import { Button } from '../ui/Button';
+import { Toggle } from '../ui/Choice';
+import { Icon } from '../ui/Icon';
+import { NEST_INDENT, nestedSectionStyle } from '../ui/nesting';
 import { lazyWithSuspense, type PropsOf } from '../lazyWithSuspense';
 import type { DepthCompare as DepthCompareT } from './DepthCompare';
 
@@ -127,16 +130,15 @@ export function DepthCardBody({ node }: { node: GraphNode; touch?: boolean }) {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         <button type="button" onClick={() => setOpenExp(o => !o)} aria-expanded={openExp}
           style={{ all: 'unset', cursor: 'pointer', fontSize: 11.5, color: tk.text.muted, display: 'flex', gap: 6, alignItems: 'center' }}>
-          <span style={{ display: 'inline-block', transform: openExp ? 'rotate(90deg)' : 'none', transition: 'transform 0.12s' }}>▸</span>
+          <Icon name={openExp ? 'chevD' : 'chevR'} size={12} />
           Experimental models{experimental ? `: on (${spec.short})` : ''}
         </button>
         {openExp && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 8, borderRadius: radius.md, background: tk.bg.subtle }}>
-            <label style={{ ...line, display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer' }}>
-              <input type="checkbox" checked={experimental} data-testid="depth-experimental"
-                onChange={e => { setDepthExperimental(e.target.checked); useNodeGraphStore.getState().compile(); }} style={{ margin: 0, accentColor: tk.accent.base }} />
-              Experimental depth models (every Depth node, this browser)
-            </label>
+          <div data-nested-section="true" style={{ display: 'flex', flexDirection: 'column', gap: 6, ...nestedSectionStyle(tk.border.subtle, -NEST_INDENT + 6) }}>
+            <span data-testid="depth-experimental" style={{ display: 'flex' }}>
+              <Toggle checked={experimental} fullWidth label="Experimental depth models (every Depth node, this browser)"
+                onChange={on => { setDepthExperimental(on); useNodeGraphStore.getState().compile(); }} />
+            </span>
             {experimental ? (
               <>
                 <select value={spec.id} data-testid="depth-model-picker" aria-label="Depth model" onChange={e => updateNodeParams(node.id, { model: e.target.value })}

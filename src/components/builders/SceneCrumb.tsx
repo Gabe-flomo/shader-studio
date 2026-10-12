@@ -4,7 +4,7 @@
  * window's title. "Scene builder" goes back to the kind page; the kind's own sections are the
  * window's tabs (2D, 3D, Grid) or its left nav (Agents).
  */
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { radius } from '../../theme/tokens';
 import { Icon } from '../ui/Icon';
@@ -15,16 +15,16 @@ export const SCENE_WINDOW = { width: 1440, height: 900 } as const;
 
 export function SceneCrumb({ kind, leaf, onBack = backToSceneKinds }: { kind: SceneKind; leaf?: ReactNode; onBack?: () => void }) {
   const tk = useTokens();
+  const [hover, setHover] = useState(false);
   const sep = <Icon name="chevR" size={12} style={{ color: tk.text.faint, flexShrink: 0 }} />;
   return (
     <span data-scene-crumb={kind} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 0, maxWidth: '100%' }}>
       <button type="button" data-scene-crumb-back onClick={onBack} title="Back to “What kind of scene?” (what you built stays in the graph)"
         style={{
           border: 0, background: 'none', padding: '1px 4px', margin: '0 -4px', borderRadius: radius.sm, cursor: 'pointer', flexShrink: 0,
-          font: 'inherit', fontWeight: 550, color: tk.text.muted, textDecoration: 'underline', textDecorationColor: tk.border.default, textUnderlineOffset: 3,
+          font: 'inherit', fontWeight: 550, color: hover ? tk.accent.text : tk.text.muted, textDecoration: 'underline', textDecorationColor: tk.border.default, textUnderlineOffset: 3,
         }}
-        onMouseEnter={e => { e.currentTarget.style.color = tk.accent.text; }}
-        onMouseLeave={e => { e.currentTarget.style.color = tk.text.muted; }}>
+        onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}>
         Scene builder
       </button>
       {sep}

@@ -26,6 +26,7 @@ import { useTokens } from '../../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../../theme/tokens';
 import { Icon } from '../../ui/Icon';
 import type { IconName } from '../../ui/iconPaths';
+import { clampLines } from '../../ui/textFit';
 
 /** True inside a PhoneStudio: builder sliders take their touch size (BuilderSlider). */
 export const PhoneStudioContext = createContext(false);
@@ -170,7 +171,7 @@ export function PhoneStudio(p: PhoneStudioProps) {
                       <Icon name="chevL" size={16} />{p.presetsLabel ?? 'Presets'}
                     </button>
                   )}
-                  <b data-phone-sheet-title style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 650, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: p.presets !== undefined ? 'center' : 'left', paddingLeft: p.presets !== undefined ? 0 : 6 }}>{title}</b>
+                  <b data-phone-sheet-title style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 650, lineHeight: 1.2, ...clampLines(2), textAlign: p.presets !== undefined ? 'center' : 'left', paddingLeft: p.presets !== undefined ? 0 : 6 }}>{title}</b>
                   {hint ? (
                     <button type="button" data-phone-help aria-pressed={help} aria-label={help ? 'Hide the help' : `What ${title} does`} onClick={() => setHelp(h => !h)}
                       style={{ width: 40, height: 40, border: 0, borderRadius: 20, background: help ? tk.bg.selected : 'none', color: help ? tk.accent.text : tk.text.muted, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>

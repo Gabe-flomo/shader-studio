@@ -35,6 +35,8 @@ import {
   animateFor, effectSummary, moveEffect, newEffect, nextEffectId, placeEffect, qualityOf, scanName, soloEffect, toggleEffectMute,
   type EffectKind, type EffectSpec, type ParamValue, type PropKind, type SplatBuilderSpec, type SplatSection, type Vec3,
 } from '../../splatBuilder/spec';
+import { tileName } from '../ui/textFit';
+import { removeKeys } from '../builders/removable';
 
 const edit = (fn: (d: SplatBuilderSpec) => void, key?: string) => useSplatBuilder.getState().edit(fn, key);
 const r3 = (v: number) => Math.round(v * 1000) / 1000;
@@ -64,8 +66,12 @@ function Num({ label, value, min, max, step = 0.01, onChange, hint, play, rangeK
   );
 }
 
-function Vec({ label, value, min, max, step = 0.01, onChange, hint, axes = ['X', 'Y', 'Z'], defaultValue }: {
+function Vec({ label, value, min, max, step = 0.01, onChange, hint, axes = ['X', 'Y', 'Z'], defaultValue, play, rangeKey }: {
   label: string; value: Vec3; min: number; max: number; step?: number; onChange: (v: Vec3) => void; hint?: string; axes?: [string, string, string]; defaultValue?: Vec3;
+  /** An axis's built node and param, for the right-click Play menu (as Num's `play`). */
+  play?: (axis: 0 | 1 | 2) => [string, string];
+  /** Remembers a typed-wider range, per axis (`${rangeKey}:X`). */
+  rangeKey?: string;
 }) {
   const tk = useTokens();
   return (
@@ -76,6 +82,7 @@ function Vec({ label, value, min, max, step = 0.01, onChange, hint, axes = ['X',
             <span style={{ font: `600 10.5px ${fontFamily.mono}`, color: tk.text.faint, width: 10 }}>{axes[i]}</span>
             <div style={{ flex: 1, minWidth: 0 }}>
               <BuilderSlider value={v} min={min} max={max} step={step} ariaLabel={`${label} ${axes[i]}`} defaultValue={defaultValue?.[i]}
+                rangeKey={rangeKey && `${rangeKey}:${axes[i]}`} lazyParam={play ? playParam(...play(i as 0 | 1 | 2)) : undefined}
                 onChange={n => { const next = [...value] as Vec3; next[i] = n; onChange(next); }} />
             </div>
           </div>
@@ -89,15 +96,17 @@ function Colour({ label, value, onChange, hint }: { label: string; value: Vec3; 
   return <Row label={label} hint={hint}><ColorSwatch value={value} label={label} onChange={c => onChange([c[0], c[1], c[2]])} /></Row>;
 }
 
-function Group({ title, children, meta }: { title: string; children: ReactNode; meta?: ReactNode }) {
+function Group({ title, children, meta, mute }: { title: string; children: ReactNode; meta?: ReactNode; mute?: { muted: boolean; onToggle: () => void; what?: string } }) {
   const tk = useTokens();
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+    <div data-splat-group={title} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: tk.text.faint }}>
-        <span style={{ flex: 1 }}>{title}</span>{meta}
+        <span style={{ flex: 1, ...(mute?.muted ? MUTED_DIM : {}) }}>{title}</span>{meta}
+        {mute?.muted && <MutedTag />}
+        {mute && <MuteToggle muted={mute.muted} what={mute.what ?? title.toLowerCase()} onToggle={mute.onToggle} />}
       </span>
       {/* A group inside a section is stepped in under its title (components/ui/nesting.ts). */}
-      <div data-nested-section="true" style={{ display: 'flex', flexDirection: 'column', gap: 6, ...nestedSectionStyle(tk.border.subtle, -NEST_INDENT + 4) }}>
+      <div data-nested-section="true" data-muted={mute?.muted || undefined} style={{ display: 'flex', flexDirection: 'column', gap: 6, ...nestedSectionStyle(tk.border.subtle, -NEST_INDENT + 4), ...(mute?.muted ? MUTED_DIM : {}) }}>
         {children}
       </div>
     </div>
@@ -257,8 +266,8 @@ export function PlaceSection() {
         <BuilderNote>Up is {place.up === 'y' ? '+Y (as it comes)' : '−Y (the 3DGS way, most scans)'}.</BuilderNote>
       </Group>
       <Group title="Where">
-        <Vec label="Position" value={place.position} min={-5} max={5} defaultValue={[0, 0, 0]} onChange={v => edit(d => { d.place.position = v; }, 'place:pos')} />
-        <Vec label="Turn" value={place.rotation} min={-180} max={180} step={0.5} defaultValue={[0, 0, 0]} onChange={v => edit(d => { d.place = keepTurn(d, v, box); }, 'place:rot')} hint="Degrees: X, then Y, then Z. Its middle stays where it is." />
+        <Vec label="Position" value={place.position} min={-5} max={5} defaultValue={[0, 0, 0]} rangeKey="splat:place:pos" onChange={v => edit(d => { d.place.position = v; }, 'place:pos')} />
+        <Vec label="Turn" value={place.rotation} min={-180} max={180} step={0.5} defaultValue={[0, 0, 0]} rangeKey="splat:place:rot" onChange={v => edit(d => { d.place = keepTurn(d, v, box); }, 'place:rot')} hint="Degrees: X, then Y, then Z. Its middle stays where it is." />
         <Num label="Scale" value={place.scale} min={0.05} max={5} defaultValue={1} play={['scan', 'scale']} onChange={v => edit(d => { d.place = { ...d.place, ...sized(d, v, box) }; }, 'place:scale')} />
       </Group>
       <Group title="The splats">
@@ -303,7 +312,7 @@ function ParamControl({ e, k }: { e: EffectSpec; k: string }) {
     );
   }
   if (def.type === 'vec3color') return <Colour label={label} hint={def.hint} value={(v as Vec3) ?? [1, 1, 1]} onChange={set} />;
-  if (def.type === 'vec3') return <Vec label={label} hint={def.hint} value={(v as Vec3) ?? [0, 0, 0]} min={def.min ?? -5} max={def.max ?? 5} step={def.step ?? 0.01} onChange={set} />;
+  if (def.type === 'vec3') return <Vec label={label} hint={def.hint} value={(v as Vec3) ?? [0, 0, 0]} min={def.min ?? -5} max={def.max ?? 5} step={def.step ?? 0.01} rangeKey={`splat:${e.kind}:${k}`} onChange={set} />;
   if (typeof v !== 'number') return null;
   const dflt = getNodeDefinition(EFFECT_TYPE[e.kind])?.defaultParams?.[k];
   return <Num label={label} hint={def.hint} value={v} min={def.min ?? 0} max={def.max ?? 1} step={def.step ?? 0.01} defaultValue={typeof dflt === 'number' ? dflt : undefined}
@@ -321,13 +330,13 @@ function EffectCard({ e, index, count }: { e: EffectSpec; index: number; count: 
   const keys = custom ? [] : Object.keys(getNodeDefinition(EFFECT_TYPE[e.kind])?.paramDefs ?? {}).filter(k => k !== 'on' && k !== 'relative');
   const up = (fn: (x: EffectSpec) => void) => edit(d => { const x = d.effects.find(y => y.id === e.id); if (x) fn(x); });
   return (
-    <div data-splat-effect={e.id} data-splat-effect-kind={e.kind} draggable
+    <div data-splat-effect={e.id} data-splat-effect-kind={e.kind} draggable {...removeKeys(() => edit(d => { d.effects = d.effects.filter(x => x.id !== e.id); }), info.label)}
       onDragStart={ev => { ev.dataTransfer.setData('text/x-splat-effect', e.id); ev.dataTransfer.effectAllowed = 'move'; }}
       onDragOver={ev => { if (ev.dataTransfer.types.includes('text/x-splat-effect')) { ev.preventDefault(); setDragOver(true); } }}
       onDragLeave={() => setDragOver(false)}
       onDrop={ev => { ev.preventDefault(); setDragOver(false); const id = ev.dataTransfer.getData('text/x-splat-effect'); if (id && id !== e.id) edit(d => { d.effects = placeEffect(d.effects, id, e.id); }); }}
       style={{
-        borderRadius: radius.control, background: tk.bg.panel, flexShrink: 0, overflow: 'hidden',
+        borderRadius: radius.control, background: tk.bg.panel, flexShrink: 0, overflow: 'hidden', outline: 'none',
         boxShadow: dragOver ? `inset 0 3px 0 ${tk.accent.base}, inset 0 0 0 1px ${tk.border.default}` : `inset 0 0 0 1px ${picked ? tk.accent.base : tk.border.default}`,
       }}>
       <div onClick={() => useSplatBuilder.getState().setPicked(picked ? null : e.id)}
@@ -338,7 +347,7 @@ function EffectCard({ e, index, count }: { e: EffectSpec; index: number; count: 
           <b style={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>{info.label}{!e.on && <MutedTag />}</b>
           <span data-splat-effect-summary style={{ fontSize: 11.5, color: tk.text.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{effectSummary(e)}</span>
         </span>
-        <span onClick={ev => ev.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+        <span onClick={ev => ev.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
           <MuteToggle muted={!e.on} what={info.label} onToggle={() => edit(d => toggleEffectMute(d.effects, e.id))} onSolo={() => edit(d => soloEffect(d.effects, e.id))} />
           <IconButton icon="chevU" size="sm" label="Earlier (applied before)" disabled={index === 0} onClick={() => edit(d => { d.effects = moveEffect(d.effects, e.id, -1); })} data-effect-up />
           <IconButton icon="chevD" size="sm" label="Later (applied after)" disabled={index === count - 1} onClick={() => edit(d => { d.effects = moveEffect(d.effects, e.id, 1); })} data-effect-down />
@@ -395,7 +404,7 @@ export function EffectsSection() {
             <button key={k} type="button" data-splat-add={k} title={EFFECT_INFO[k].line} onClick={() => add(k)}
               style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: 4, border: 0, borderRadius: radius.sm, background: tk.bg.field, color: tk.text.secondary, cursor: 'pointer', font: `500 11px ${fontFamily.ui}`, minWidth: 0 }}>
               <MiniCloud effects={preview[k]} bg={bg} width={64} height={40} fps={12} small label={EFFECT_INFO[k].label} />
-              <span style={{ maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{EFFECT_INFO[k].label}</span>
+              <span data-tile-name style={{ maxWidth: '100%', ...tileName }}>{EFFECT_INFO[k].label}</span>
             </button>
           ))}
         </div>
@@ -426,28 +435,28 @@ export function SceneSection() {
   return (
     <>
       <Row label="A world" hint="Ray-marched shapes and a floor round the scan, lit; the nearer one wins at each pixel.">
-        <Toggle checked={world.on} onChange={on => edit(d => { d.world.on = on; })} label={world.on ? 'The scan in a world' : 'Just the scan'} />
+        <span data-splat-world style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <MuteToggle muted={!world.on} what="the world" onToggle={() => edit(d => { d.world.on = !d.world.on; })} />
+          <span style={{ fontSize: 12, color: tk.text.secondary }}>{world.on ? 'The scan in a world' : 'Just the scan'}</span>
+        </span>
       </Row>
       {world.on && (
         <>
-          <Group title="Floor">
-            <Row label="Floor"><Toggle checked={world.floor.on} onChange={on => edit(d => { d.world.floor.on = on; })} /></Row>
-            {world.floor.on && <>
-              <Num label="Height" value={world.floor.y} min={-3} max={1} defaultValue={-1} onChange={v => edit(d => { d.world.floor.y = v; }, 'floor:y')} />
-              <Colour label="Colour" value={world.floor.color} onChange={v => edit(d => { d.world.floor.color = v; }, 'floor:c')} />
-            </>}
+          <Group title="Floor" mute={{ muted: !world.floor.on, what: 'the floor', onToggle: () => edit(d => { d.world.floor.on = !d.world.floor.on; }) }}>
+            <Num label="Height" value={world.floor.y} min={-3} max={1} defaultValue={-1} onChange={v => edit(d => { d.world.floor.y = v; }, 'floor:y')} />
+            <Colour label="Colour" value={world.floor.color} onChange={v => edit(d => { d.world.floor.color = v; }, 'floor:c')} />
           </Group>
           <Group title="Shapes">
             <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
               {PROP_KINDS.map(k => <Button key={k} size="sm" variant="ghost" icon="plus" data-splat-prop={k} onClick={() => addProp(k)}>{PROP_LABELS[k]}</Button>)}
             </div>
             {world.props.map((p, i) => (
-              <div key={p.id} data-splat-prop-card={p.id} style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: 8, borderRadius: radius.control, boxShadow: `inset 0 0 0 1px ${tk.border.default}` }}>
+              <div key={p.id} data-splat-prop-card={p.id} {...removeKeys(() => edit(d => { d.world.props.splice(i, 1); }), PROP_LABELS[p.kind])} style={{ outline: 'none', display: 'flex', flexDirection: 'column', gap: 4, padding: 8, borderRadius: radius.control, boxShadow: `inset 0 0 0 1px ${tk.border.default}` }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <Select ariaLabel="Shape" value={p.kind} onChange={v => edit(d => { d.world.props[i].kind = v as PropKind; })} options={PROP_KINDS.map(k => ({ value: k, label: PROP_LABELS[k] }))} style={{ flex: 1 }} />
-                  <IconButton icon="trash" size="sm" label="Remove the shape" onClick={() => edit(d => { d.world.props.splice(i, 1); })} />
+                  <IconButton icon="trash" size="sm" tone="danger" label="Remove the shape (Delete)" data-splat-prop-remove={p.id} onClick={() => edit(d => { d.world.props.splice(i, 1); })} />
                 </div>
-                <Vec label="Where" value={p.at} min={-4} max={4} onChange={v => edit(d => { d.world.props[i].at = v; }, `prop:${p.id}:at`)} />
+                <Vec label="Where" value={p.at} min={-4} max={4} rangeKey="splat:prop:at" onChange={v => edit(d => { d.world.props[i].at = v; }, `prop:${p.id}:at`)} />
                 <Num label="Size" value={p.size} min={0.05} max={2} onChange={v => edit(d => { d.world.props[i].size = v; }, `prop:${p.id}:size`)} />
                 <Colour label="Colour" value={p.color} onChange={v => edit(d => { d.world.props[i].color = v; }, `prop:${p.id}:c`)} />
               </div>
@@ -455,7 +464,7 @@ export function SceneSection() {
           </Group>
           <Group title="Light">
             <Segmented ariaLabel="Light" fill size="sm" value={world.light} onChange={v => edit(d => { d.world.light = v; })} options={LIGHTS.map(l => ({ value: l, label: LIGHT_INFO[l].label }))} />
-            <Row label="Shadows"><Toggle checked={world.shadows} onChange={on => edit(d => { d.world.shadows = on; })} /></Row>
+            <Row label="Shadows"><MuteToggle muted={!world.shadows} what="the shadows" onToggle={() => edit(d => { d.world.shadows = !d.world.shadows; })} /></Row>
             <Num label="Fog" value={world.fog} min={0} max={0.3} step={0.001} defaultValue={0} onChange={v => edit(d => { d.world.fog = v; }, 'fog')} />
           </Group>
         </>
@@ -516,7 +525,7 @@ export function CameraSection() {
         <Toggle checked={c.turntable !== 0} onChange={on => edit(d => { d.camera.turntable = on ? 8 : 0; })} />
       </Row>
       {c.turntable !== 0 && <Num label="Turn speed" unit="°/s" value={c.turntable} min={-45} max={45} step={0.5} defaultValue={8} onChange={v => edit(d => { d.camera.turntable = v; }, 'cam:turn')} />}
-      <Vec label="Looks at" value={c.target} min={-4} max={4} defaultValue={[0, 0, 0]} onChange={v => edit(d => { d.camera.target = v; }, 'cam:target')} />
+      <Vec label="Looks at" value={c.target} min={-4} max={4} defaultValue={[0, 0, 0]} rangeKey="splat:cam:target" onChange={v => edit(d => { d.camera.target = v; }, 'cam:target')} />
       <div><Button size="sm" variant="ghost" icon="target" onClick={() => edit(d => { d.camera.target = scanCenter(d.place, box).map(r3) as Vec3; })}>Look at the scan</Button></div>
     </>
   );
@@ -530,13 +539,10 @@ export function LookSection() {
         <Segmented ariaLabel="Tone" fill size="sm" wrap value={l.tone} onChange={v => edit(d => { d.look.tone = v; })} options={TONES.map(t => ({ value: t, label: TONE_LABELS[t] }))} />
         <BuilderNote>{l.tone === 'none' ? 'The scan’s colours as captured.' : 'Rolls bright colours off instead of clipping them: glowing edges and highlights stay soft.'}</BuilderNote>
       </Group>
-      <Group title="Bloom">
-        <Row label="Bloom"><Toggle checked={l.bloom.on} onChange={on => edit(d => { d.look.bloom.on = on; })} /></Row>
-        {l.bloom.on && <>
-          <Num label="Intensity" value={l.bloom.intensity} min={0} max={5} defaultValue={0.5} play={['bloom', 'intensity']} onChange={v => edit(d => { d.look.bloom.intensity = v; }, 'bloom:i')} />
-          <Num label="Threshold" value={l.bloom.threshold} min={0} max={2} defaultValue={0.8} play={['bloom', 'threshold']} onChange={v => edit(d => { d.look.bloom.threshold = v; }, 'bloom:t')} />
-          <Num label="Radius" unit="px" value={l.bloom.radius} min={1} max={128} step={1} defaultValue={32} play={['bloom', 'radius']} onChange={v => edit(d => { d.look.bloom.radius = v; }, 'bloom:r')} />
-        </>}
+      <Group title="Bloom" mute={{ muted: !l.bloom.on, what: 'the bloom', onToggle: () => edit(d => { d.look.bloom.on = !d.look.bloom.on; }) }}>
+        <Num label="Intensity" value={l.bloom.intensity} min={0} max={5} defaultValue={0.5} play={['bloom', 'intensity']} onChange={v => edit(d => { d.look.bloom.intensity = v; }, 'bloom:i')} />
+        <Num label="Threshold" value={l.bloom.threshold} min={0} max={2} defaultValue={0.8} play={['bloom', 'threshold']} onChange={v => edit(d => { d.look.bloom.threshold = v; }, 'bloom:t')} />
+        <Num label="Radius" unit="px" value={l.bloom.radius} min={1} max={128} step={1} defaultValue={32} play={['bloom', 'radius']} onChange={v => edit(d => { d.look.bloom.radius = v; }, 'bloom:r')} />
       </Group>
     </>
   );

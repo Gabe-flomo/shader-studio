@@ -87,6 +87,7 @@ describe('Follow a field', () => {
     settle();
     // Phase 3: a layer's region is picked in the Where picker: a circle drawn on the picture.
     click($('[data-where-open="layer1-where"]'));
+    click($('[data-setting="layer1-mask"] [data-where-way="create"]'));
     click($('[data-setting="layer1-mask"] [data-where-make="circle"]'));
     act(() => { $('[data-where-draw]')!.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: 400, clientY: 300 })); });
     act(() => { $('[data-where-draw]')!.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, clientX: 400, clientY: 300 })); });

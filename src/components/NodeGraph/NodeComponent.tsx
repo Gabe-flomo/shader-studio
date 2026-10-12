@@ -120,6 +120,8 @@ import { Button, IconButton } from '../ui/Button';
 import { Icon } from '../ui/Icon';
 import { nestedSectionStyle } from '../ui/nesting';
 import { RulerSlider } from '../ui/RulerSlider';
+import { LogRulerSlider } from '../ui/LogRulerSlider';
+import { BuilderSlider } from '../builders/BuilderSlider';
 import { Select } from '../ui/Select';
 import { Toggle } from '../ui/Choice';
 import { ColorSwatch } from '../ui/ColorPicker';
@@ -208,16 +210,8 @@ interface Props {
   onSocketHover?: (info: { nodeId: string; key: string; dir: 'in' | 'out' } | null) => void;
 }
 
-// Maps slider position (0–1000) to Hz using a dampened log scale (power=0.6)
-// Feels smoother than pure log but still covers 20Hz–20kHz
-function sliderToHz(v: number): number {
-  const t = v / 1000;
-  return Math.round(20 * Math.pow(1000, Math.pow(t, 0.6)));
-}
-function hzToSlider(hz: number): number {
-  const ratio = Math.log(Math.max(20, Math.min(20000, hz)) / 20) / Math.log(1000);
-  return Math.round(Math.pow(Math.max(0, ratio), 1 / 0.6) * 1000);
-}
+/** A band centre as the chip shows it: 440, 1.2k. */
+const formatHz = (hz: number) => (hz >= 1000 ? `${(hz / 1000).toFixed(1)}k` : `${Math.round(hz)}`);
 
 let zCounter = 10; // incremented each time a node is brought to front
 const LFO_TYPES    = new Set(['lfo']);
@@ -294,7 +288,7 @@ function NodeTooltip({ def, node, allNodes }: { def: NodeDefinition; node: Graph
       if (type === 'float') {
         const decoded = floatValueRegistry.get(`__preview__${connKey}`);
         if (decoded !== undefined) {
-          return <span style={{ color: tc.yellow, fontFamily: fontFamily.mono, fontSize: 11 }}>{decoded.toFixed(3)}</span>;
+          return <span style={{ color: tc.yellow, fontFamily: fontFamily.mono, fontSize: 11, fontVariantNumeric: 'tabular-nums', minWidth: '6ch', textAlign: 'right', display: 'inline-block' }}>{decoded.toFixed(3)}</span>;
         }
       } else if (type === 'vec2' || type === 'vec3') {
         const vals = vectorValueRegistry.get(`__preview__${connKey}`);
@@ -302,7 +296,7 @@ function NodeTooltip({ def, node, allNodes }: { def: NodeDefinition; node: Graph
           const formatted = type === 'vec2'
             ? `(${vals[0].toFixed(2)}, ${vals[1].toFixed(2)})`
             : `(${vals[0].toFixed(2)}, ${vals[1].toFixed(2)}, ${vals[2].toFixed(2)})`;
-          return <span style={{ color: tc.yellow, fontFamily: fontFamily.mono, fontSize: 11 }}>{formatted}</span>;
+          return <span style={{ color: tc.yellow, fontFamily: fontFamily.mono, fontSize: 11, fontVariantNumeric: 'tabular-nums', minWidth: type === 'vec2' ? '12ch' : '18ch', textAlign: 'right', display: 'inline-block' }}>{formatted}</span>;
         }
       }
       return <span style={{ color: tc.surface1, fontSize: '10px' }}>← {srcLabel ?? src?.type}</span>;
@@ -577,6 +571,21 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   const updateNodeOutputs  = useNodeGraphStore(s => s.updateNodeOutputs);
   const updateNodeInputs   = useNodeGraphStore(s => s.updateNodeInputs);
   const disconnectInput    = useNodeGraphStore(s => s.disconnectInput);
+  // An input socket on a custom card (Texture's UV, Group Output's Position, a param socket) behaves as every card's:
+  // a left click on a wired socket takes the wire off (one undo step), on an open one finishes a wire being dragged;
+  // a tap does the same on a touch screen.
+  const inSocketUp = (key: string) => (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (e.button !== 0) return;
+    if (!isConnectionDragging && node.inputs[key]?.connection) disconnectInput(node.id, key);
+    else onEndConnection(node.id, key);
+  };
+  const inSocketTouch = (key: string) => (e: React.TouchEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (pendingMobileConnection) onTapInputSocket?.(node.id, key);
+    else if (node.inputs[key]?.connection) disconnectInput(node.id, key);
+  };
   const setPreviewNodeId   = useNodeGraphStore(s => s.setPreviewNodeId);
   const toggleBypass       = useNodeGraphStore(s => s.toggleBypass);
   const setNodeAssignOp      = useNodeGraphStore(s => s.setNodeAssignOp);
@@ -993,8 +1002,9 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
               <div
                 data-socket="in"
                 ref={el => { registerSocket(node.id, 'in', 'uv', el); }}
-                onMouseUp={e => { e.stopPropagation(); onEndConnection(node.id, 'uv'); }}
-                onTouchEnd={e => { e.stopPropagation(); e.preventDefault(); onTapInputSocket?.(node.id, 'uv'); }}
+                data-texture-uv-socket=""
+                onMouseUp={inSocketUp('uv')}
+                onTouchEnd={inSocketTouch('uv')}
                 style={{
                   width: isTouchDevice ? 22 : 12, height: isTouchDevice ? 22 : 12,
                   borderRadius: '50%',
@@ -1242,14 +1252,11 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             {/* Shared range */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <span style={{ fontSize: '10px', color: tc.surface2, width: '60px', flexShrink: 0 }}>Range Hz</span>
-              <input
-                type="range" min={0} max={10000} step={1}
-                value={freqRange}
-                disabled={mode === 'full'}
-                onChange={e => updateNodeParams(node.id, { freq_range: parseFloat(e.target.value) }, { immediate: true })}
-                style={{ flex: 1, accentColor: tc.sky, cursor: mode === 'full' ? 'default' : 'pointer', opacity: mode === 'full' ? 0.3 : 1 }}
-              />
-              <span style={{ fontSize: '10px', color: tc.overlay0, fontFamily: 'monospace', width: '42px', textAlign: 'right' }}>±{freqRange}</span>
+              {/* The app's ruler, with the node card's Play menu on right-click. */}
+              <span data-audio-range style={{ flex: 1, minWidth: 0, display: 'flex' }}>
+                <BuilderSlider value={freqRange} min={0} max={10000} step={1} integer ariaLabel="Range Hz" disabled={mode === 'full'} defaultValue={200}
+                  onChange={v => updateNodeParams(node.id, { freq_range: v }, { immediate: true })} param={{ nodeId: node.id, key: 'freq_range' }} />
+              </span>
             </div>
             {/* Band list */}
             {mode !== 'full' && bands.map((center, i) => (
@@ -1267,18 +1274,13 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                   title={soloedBand === i ? 'Un-solo' : 'Solo this band'}
                   style={{ background: 'none', border: 'none', color: soloedBand === i ? tc.yellow : tc.surface1, cursor: 'pointer', fontSize: '9px', padding: '0', lineHeight: 1, flexShrink: 0, fontWeight: 700 }}
                 >S</button>
-                <input
-                  type="range" min={0} max={1000} step={1}
-                  value={hzToSlider(center)}
-                  onChange={e => {
-                    const newHz = sliderToHz(parseInt(e.target.value));
-                    const newBands = bands.map((c, idx) => idx === i ? newHz : c);
-                    updateNodeParams(node.id, { _bands: newBands }, { immediate: true });
-                  }}
-                  style={{ flex: 1, accentColor: tc.sky, cursor: 'pointer' }}
-                />
-                <span style={{ fontSize: '10px', color: tc.overlay0, fontFamily: 'monospace', width: '38px', textAlign: 'right' }}>
-                  {center >= 1000 ? `${(center/1000).toFixed(1)}k` : `${center}`}
+                {/* A band's centre on a log scale (20 Hz – 20 kHz): a drag moves by octaves, not by hertz. */}
+                <span data-audio-band={i} style={{ flex: 1, minWidth: 0, display: 'flex' }}>
+                  <LogRulerSlider value={center} min={20} max={20000} step={1} ariaLabel={`Band ${i + 1} centre (Hz)`} format={formatHz}
+                    onChange={hz => {
+                      const newBands = bands.map((c, idx) => idx === i ? hz : c);
+                      updateNodeParams(node.id, { _bands: newBands }, { immediate: true });
+                    }} />
                 </span>
               </div>
             ))}
@@ -1324,9 +1326,9 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
       <div
         data-socket={dir}
         ref={el => { registerSocket(node.id, dir, key, el); }}
-        onMouseUp={dir === 'in' ? e => { e.stopPropagation(); onEndConnection(node.id, key); } : undefined}
+        onMouseUp={dir === 'in' ? inSocketUp(key) : undefined}
         onMouseDown={dir === 'out' ? e => { e.stopPropagation(); onStartConnection(node.id, key, e); } : undefined}
-        onTouchEnd={e => { e.stopPropagation(); e.preventDefault(); if (dir === 'in') onTapInputSocket?.(node.id, key); else onTapOutputSocket?.(node.id, key); }}
+        onTouchEnd={dir === 'in' ? inSocketTouch(key) : e => { e.stopPropagation(); e.preventDefault(); onTapOutputSocket?.(node.id, key); }}
         style={{
           width: isTouchDevice ? 22 : 12, height: isTouchDevice ? 22 : 12, borderRadius: '50%', flexShrink: 0, touchAction: 'manipulation',
           background: dir === 'out' || connected ? TYPE_COLORS[type] ?? '#888' : '#333', border: `2px solid ${TYPE_COLORS[type] ?? '#888'}`,
@@ -1477,14 +1479,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '0 10px 0 0' }}>
             <div
               ref={el => { registerSocket(node.id, 'in', 'value', el); }}
-              onMouseUp={e => {
-                e.stopPropagation();
-                if (node.inputs.value?.connection && !isConnectionDragging) {
-                  disconnectInput(node.id, 'value');
-                } else {
-                  onEndConnection(node.id, 'value');
-                }
-              }}
+              onMouseUp={inSocketUp('value')}
+              onTouchEnd={inSocketTouch('value')}
               style={{
                 width: 12, height: 12, borderRadius: '50%',
                 background: node.inputs.value?.connection ? TYPE_COLORS['float'] : '#333',
@@ -1670,7 +1666,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           >
             <div
               ref={el => { if (el) registerSocket(node.id, 'in', 'pos', el); }}
-              onMouseUp={() => onEndConnection(node.id, 'pos')}
+              onMouseUp={inSocketUp('pos')}
+              onTouchEnd={inSocketTouch('pos')}
               style={{
                 width: 12, height: 12, borderRadius: '50%', boxSizing: 'border-box', marginLeft: -6, flexShrink: 0, cursor: 'crosshair',
                 background: isConnected ? posColor : (hoveredInput === 'pos' ? posColor : tk.bg.panel), border: `2px solid ${posColor}`,
@@ -1766,7 +1763,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           onMouseDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()}>
           <ParamSocket color={TYPE_COLORS.float} wired={wired} touch={isTouchDevice}
             register={el => { registerSocket(node.id, 'in', o.psKey, el); }}
-            onMouseUp={e => { e.stopPropagation(); onEndConnection(node.id, o.psKey); }} />
+            onMouseUp={inSocketUp(o.psKey)} />
           {o.reveal ? (
             <ParamLabel muted={wired} title="Open this node in the group" onClick={() => revealNode(o.reveal!.path, o.reveal!.nodeId)}>{o.label}</ParamLabel>
           ) : (
@@ -2564,7 +2561,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           {activeGroupId && (
             <ParamSocket color={TYPE_COLORS.float} wired touch={isTouchDevice}
               register={el => { registerSocket(node.id, 'in', paramInputKey, el); }}
-              onMouseUp={e => { e.stopPropagation(); onEndConnection(node.id, paramInputKey); }} />
+              onMouseUp={inSocketUp(paramInputKey)} />
           )}
           {labelNode(true)}
           <WiredChip source={paramInputConn!} expr={srcExpr} />
@@ -2582,7 +2579,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           {activeGroupId && (
             <ParamSocket color={TYPE_COLORS.float} wired={false} touch={isTouchDevice}
               register={el => { registerSocket(node.id, 'in', paramInputKey, el); }}
-              onMouseUp={e => { e.stopPropagation(); onEndConnection(node.id, paramInputKey); }} />
+              onMouseUp={inSocketUp(paramInputKey)} />
           )}
           {labelNode(false)}
           {drive && <PlayDriveChip drive={drive} />}
@@ -2625,7 +2622,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         {activeGroupId && (
           <ParamSocket color={TYPE_COLORS.float} wired={false} touch={isTouchDevice}
             register={el => { registerSocket(node.id, 'in', paramInputKey, el); }}
-            onMouseUp={e => { e.stopPropagation(); onEndConnection(node.id, paramInputKey); }} />
+            onMouseUp={inSocketUp(paramInputKey)} />
         )}
         {labelNode(false)}
         {drive && <PlayDriveChip drive={drive} />}

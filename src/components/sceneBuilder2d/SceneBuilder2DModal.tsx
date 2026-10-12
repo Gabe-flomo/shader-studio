@@ -109,7 +109,13 @@ function Thumb({ make, size = 44, k }: { make: () => Uint8ClampedArray; size?: n
   return <canvas ref={ref} width={size} height={size} style={{ width: size, height: size, borderRadius: 6, display: 'block', flexShrink: 0 }} />;
 }
 
-function Vec2Row({ label, value, min, max, step = 0.01, onChange, hint, defaultValue }: { label: ReactNode; value: Vec2; min: number; max: number; step?: number; onChange: (v: Vec2) => void; hint?: string; defaultValue?: Vec2 }) {
+function Vec2Row({ label, value, min, max, step = 0.01, onChange, hint, defaultValue, rangeKey, lazyParam }: {
+  label: ReactNode; value: Vec2; min: number; max: number; step?: number; onChange: (v: Vec2) => void; hint?: string; defaultValue?: Vec2;
+  /** Remembers a typed-wider range per axis (`${rangeKey}:X`). */
+  rangeKey?: string;
+  /** The built node's param for an axis, found when the slider's menu opens (right-click → Play). */
+  lazyParam?: (axis: 0 | 1) => LazyParam;
+}) {
   const tk = useTokens();
   return (
     <Row label={label} hint={hint}>
@@ -119,6 +125,7 @@ function Vec2Row({ label, value, min, max, step = 0.01, onChange, hint, defaultV
             <span style={{ font: `600 10.5px ${fontFamily.mono}`, color: tk.text.faint, width: 10 }}>{ax}</span>
             <div style={{ flex: 1, minWidth: 0 }}>
               <NumOnly value={value[i]} min={min} max={max} step={step} label={`${typeof label === 'string' ? label : 'value'} ${ax}`} defaultValue={defaultValue?.[i]}
+                rangeKey={rangeKey && `${rangeKey}:${ax}`} lazyParam={lazyParam?.(i as 0 | 1)}
                 onChange={n => { const next = [...value] as Vec2; next[i] = n; onChange(next); }} />
             </div>
           </div>
@@ -128,19 +135,22 @@ function Vec2Row({ label, value, min, max, step = 0.01, onChange, hint, defaultV
   );
 }
 
-function NumOnly({ value, min, max, step, onChange, label, defaultValue }: { value: number; min: number; max: number; step: number; onChange: (n: number) => void; label: string; defaultValue?: number }) {
-  return <BuilderSlider value={value} min={min} max={max} step={step} onChange={onChange} ariaLabel={label} defaultValue={defaultValue} />;
+function NumOnly({ value, min, max, step, onChange, label, defaultValue, rangeKey, lazyParam }: {
+  value: number; min: number; max: number; step: number; onChange: (n: number) => void; label: string; defaultValue?: number; rangeKey?: string; lazyParam?: LazyParam;
+}) {
+  return <BuilderSlider value={value} min={min} max={max} step={step} onChange={onChange} ariaLabel={label} defaultValue={defaultValue} rangeKey={rangeKey} lazyParam={lazyParam} />;
 }
 
 /** One catalogue setting (number or x/y pair) bound to a value map. */
 function ParamControl({ p, value, onChange, keyBase }: { p: ParamDef; value: number | Vec2 | string | undefined; onChange: (v: number | Vec2) => void; keyBase: string }) {
   if (Array.isArray(p.def)) {
     const v = Array.isArray(value) ? value as Vec2 : [...p.def] as Vec2;
-    return <Vec2Row label={p.label} hint={p.hint} value={v} min={p.min} max={p.max} step={p.step} onChange={onChange} defaultValue={p.def as Vec2} />;
+    return <Vec2Row label={p.label} hint={p.hint} value={v} min={p.min} max={p.max} step={p.step} onChange={onChange} defaultValue={p.def as Vec2}
+      rangeKey={`2d:${keyBase}:${p.key}`} lazyParam={axis => play2dAny(keyBase, [`${p.key}${'XY'[axis]}`, 'xy'[axis]])} />;
   }
   const v = typeof value === 'number' ? value : p.def;
-  void keyBase;
-  return <NumRow label={p.label} hint={p.hint} value={v} min={p.min} max={p.max} step={p.step} unit={p.deg ? '°' : undefined} integer={p.step === 1} onChange={onChange} defaultValue={p.def} />;
+  return <NumRow label={p.label} hint={p.hint} value={v} min={p.min} max={p.max} step={p.step} unit={p.deg ? '°' : undefined} integer={p.step === 1} onChange={onChange} defaultValue={p.def}
+    rangeKey={`2d:${keyBase}:${p.key}`} lazyParam={play2dAny(keyBase, [p.key])} />;
 }
 
 const tile = (tk: ReturnType<typeof useTokens>, on = false): React.CSSProperties => ({
@@ -168,11 +178,12 @@ function LayerList() {
     if (j < 0 || j >= list.length) return;
     [list[f.index], list[j]] = [list[j], list[f.index]];
   });
-  const remove = () => edit(d => {
-    const f = selectedId ? findItem(d, selectedId) : null;
+  const removeId = (id: string) => edit(d => {
+    const f = findItem(d, id);
     if (!f) return;
     (f.parent ? f.parent.children : d.layers).splice(f.index, 1);
   });
+  const remove = () => { if (selectedId) removeId(selectedId); };
   const groupWithNext = (op: CombineOp) => edit(d => {
     const f = selectedId ? findItem(d, selectedId) : null;
     if (!f) return;
@@ -197,15 +208,18 @@ function LayerList() {
         {rows.map(({ it, depth }) => (
           <div key={it.id} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <button type="button" role="option" aria-selected={it.id === selectedId} onClick={() => select(it.id)}
+            onKeyDown={e => { if ((e.key === 'Delete' || e.key === 'Backspace') && it.id === selectedId) { e.preventDefault(); remove(); } }}
             style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6, padding: `5px 8px 5px ${8 + depth * 14}px`, border: 0, borderRadius: radius.sm, cursor: 'pointer', textAlign: 'left',
               background: it.id === selectedId ? tk.bg.selected : 'transparent', color: tk.text.primary, font: `500 12.5px ${fontFamily.ui}`, ...(it.muted ? MUTED_DIM : {}) }}>
             {it.type === 'group'
               ? <span style={{ width: 16, textAlign: 'center', font: `700 13px ${fontFamily.mono}`, color: tk.accent.text }}>{OP_GLYPH[it.op]}</span>
               : <span style={{ width: 12, height: 12, borderRadius: 3, background: rgbCss(it.color), flexShrink: 0, boxShadow: `inset 0 0 0 1px ${tk.border.default}` }} />}
             <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{itemName(scene, it)}</span>
-            {itemSummary(it) && <span style={{ fontSize: 11, color: tk.text.faint, whiteSpace: 'nowrap' }}>{itemSummary(it)}</span>}
+            {it.id === selectedId && itemSummary(it) && <span data-layer-summary style={{ fontSize: 11, color: tk.text.faint, whiteSpace: 'nowrap' }}>{itemSummary(it)}</span>}
           </button>
           <MuteToggle muted={!!it.muted} {...itemMute(it.id, `‘${itemName(scene, it)}’`)} />
+          {/* Every layer has its remove on its row (Delete removes the selected one too). */}
+          <IconButton icon="close" size="sm" tone="danger" label={`Remove ‘${itemName(scene, it)}’ (Delete)`} data-layer-remove={it.id} onClick={() => { select(it.id); removeId(it.id); }} />
           </div>
         ))}
       </div>
@@ -314,13 +328,14 @@ function SpaceTab() {
         const order = <>
           <IconButton icon="chevU" label="Earlier" size="sm" disabled={i === 0} onClick={() => move(i, -1)} />
           <IconButton icon="chevD" label="Later" size="sm" disabled={i === scene.space.length - 1} onClick={() => move(i, 1)} />
-          <IconButton icon="trash" label="Remove" size="sm" onClick={() => edit(d => { d.space.splice(i, 1); })} />
         </>;
+        // The op's remove: the card's own trash at the end of its header, and Delete while it has focus.
+        const drop = () => edit(d => { d.space.splice(i, 1); });
         return (
           <div key={op.id} onMouseEnter={() => setHover(i)} onMouseLeave={() => setHover(h => (h === i ? null : h))} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             {i > 0 && <span aria-hidden style={{ alignSelf: 'center', font: `600 10.5px ${fontFamily.mono}`, color: tk.text.faint }}>↓ uv</span>}
             {block ? (
-              <Card id={`sp2-${op.id}`} defaultOpen title={sum.label} summary={sum.value} mute={mute}
+              <Card id={`sp2-${op.id}`} onRemove={drop} removeLabel={`Remove ${sum.label}`} defaultOpen title={sum.label} summary={sum.value} mute={mute}
                 actions={<>
                   <IconButton icon="link" label="Combine with another block (add, subtract, multiply, blend)" size="sm"
                     onClick={() => edit(d => { const b = d.space[i].block; if (b) d.space[i] = newCombineOp(d.space[i].id, b, emptyBlock(), 'add'); })} />
@@ -335,7 +350,7 @@ function SpaceTab() {
                 </div>
               </Card>
             ) : comb ? (
-              <Card id={`sp2-${op.id}`} defaultOpen title={sum.label} summary={sum.value} mute={mute}
+              <Card id={`sp2-${op.id}`} onRemove={drop} removeLabel={`Remove ${sum.label}`} defaultOpen title={sum.label} summary={sum.value} mute={mute}
                 actions={<>
                   <Button size="sm" variant="ghost" title="Undo the combine: A and B become two blocks in a chain (A, then B)"
                     onClick={() => edit(d => { const c = d.space[i].combine; if (!c) return; const id2 = nextId(d, 'p'); d.space.splice(i, 1, newBlockOp(d.space[i].id, c.a), newBlockOp(id2, c.b)); })}>Split</Button>
@@ -347,7 +362,7 @@ function SpaceTab() {
                 </div>
               </Card>
             ) : def && (
-              <Card id={`sp2-${op.id}`} defaultOpen title={def.label} summary={sum.value} actions={order} mute={mute}>
+              <Card id={`sp2-${op.id}`} onRemove={drop} removeLabel={`Remove ${sum.label}`} defaultOpen title={def.label} summary={sum.value} actions={order} mute={mute}>
                 <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
                   <Thumb k={JSON.stringify(op)} make={() => renderSpaceThumbnail(op, 64)} size={64} />
                   <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -566,7 +581,7 @@ function PiecesCard() {
   return (
     <Card id="pieces2" defaultOpen={!!pieces} title="Picture in pieces"
       mute={pieces ? { muted: !!pieces.muted, what: 'the picture in pieces', onToggle: () => set(p => { p.muted = !p.muted; }) } : undefined} summary={pieces ? `${pieces.tex} · ${pieces.count} ${pieces.shape}s · ${PIECES_LABELS.move[pieces.move].toLowerCase()}` : 'none'}
-      actions={pieces ? <IconButton icon="trash" label="Remove the picture in pieces" size="sm" onClick={() => edit(d => { d.pieces = null; })} /> : undefined}>
+      onRemove={pieces ? () => edit(d => { d.pieces = null; }) : undefined} removeLabel="Remove the picture in pieces">
       <BuilderNote>A picture rebuilt from pieces, each the picture's colour at its home, drawn over the layers and the grid. Move the pieces and the picture moves: they scatter and flow back home.</BuilderNote>
       <TexturePicker id="pieces" sources={sources} value={pieces?.tex} onAdd={addSource} none="No picture in pieces"
         onChange={name => edit(d => { d.pieces = name ? { ...(d.pieces ?? defaultPieces(name)), tex: name } : null; })} />
@@ -622,7 +637,7 @@ function GridCells() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <Card id="grid2-cells" defaultOpen title="Cells" summary={`${grid.cols} × ${grid.rows}`}
         mute={{ muted: !!grid.muted, what: 'the grid', onToggle: () => set(g => { g.muted = !g.muted; }) }}
-        actions={<IconButton icon="trash" label="Remove the grid" size="sm" onClick={() => edit(d => { d.grid = null; })} />}>
+        onRemove={() => edit(d => { d.grid = null; })} removeLabel="Remove the grid">
         <NumRow label="Columns" integer value={grid.cols} defaultValue={DEFAULT_GRID.cols} min={1} max={48} onChange={v => set(g => { g.cols = Math.round(v); }, 'cols')} />
         <NumRow label="Rows" integer value={grid.rows} defaultValue={DEFAULT_GRID.rows} min={1} max={48} onChange={v => set(g => { g.rows = Math.round(v); }, 'rows')} />
         <NumRow label="Span" hint="Half the grid's width: 1 reaches the top edge." value={grid.span} defaultValue={DEFAULT_GRID.span} min={0.1} max={3} onChange={v => set(g => { g.span = v; }, 'span')} />
@@ -703,12 +718,18 @@ function Effect({ m, children }: { m: ReturnType<typeof lookMute> | null; childr
   );
 }
 /** The node a builder setting builds, looked up when its slider's menu opens (right-click → Play). */
-const play2d = (role: string, key: string): LazyParam => () => {
-  const id = useSceneBuilder2D.getState().targetSceneId;
-  const b = id ? find2dBuild(useNodeGraphStore.getState().nodes, id) : null;
-  const n = b?.byRole.get(role);
-  return n ? { nodeId: n.id, key } : { missing: 'Not built yet: Build, then right-click to add it to Play.' };
-};
+const play2d = (role: string, key: string): LazyParam => play2dAny(role, [key]);
+/** As play2d, for a setting whose param on the built node may go by one of a few names (the first it has). */
+function play2dAny(role: string, keys: readonly string[]): LazyParam {
+  return () => {
+    const id = useSceneBuilder2D.getState().targetSceneId;
+    const b = id ? find2dBuild(useNodeGraphStore.getState().nodes, id) : null;
+    const n = b?.byRole.get(role);
+    if (!n) return { missing: 'Not built yet: Build, then right-click to add it to Play.' };
+    const key = keys.find(k => k in n.params);
+    return key ? { nodeId: n.id, key } : { missing: 'Built into the node rather than a slider on it: change it here.' };
+  };
+}
 const gradePlay = (it: StackItem, key: string) => { const t = gradeParamTarget(it, key); return t ? play2d(t.role, t.param) : undefined; };
 const fxPlay = (it: StackItem, key: string) => { const t = fxParamTarget(it, key); return t ? play2d(t.role, t.param) : undefined; };
 

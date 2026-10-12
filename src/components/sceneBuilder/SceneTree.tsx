@@ -15,8 +15,9 @@
 import { useRef, useState, type DragEvent } from 'react';
 import { useSceneBuilder } from '../../sceneBuilder/store';
 import {
-  addShape, canMoveInto, canMoveOut, insertShape, moveBy, moveIntoPrevious, moveItem, moveOut, wrapItems,
+  addShape, canMoveInto, canMoveOut, insertShape, moveBy, moveIntoPrevious, moveItem, moveOut, removeItem, wrapItems,
 } from '../../sceneBuilder/edit';
+import { removeKeys } from '../builders/removable';
 import { SHAPE_BY_KIND, findItem, itemName, modifierSummary, opLabel, type GroupSpec, type SceneItem, type SceneSpec } from '../../sceneBuilder/spec';
 import { GALLERY_SHAPES, type GalleryShape } from '../../sceneBuilder/thumbnails';
 import { useTokens } from '../../theme/themeStore';
@@ -28,6 +29,7 @@ import { BuilderLabel, EmptyHelp } from '../builders/BuilderWindow';
 import { parseRecipe } from '../../sceneBuilder/recipe';
 import { NO_DRAG, OP_GLYPH, rgbCss } from './controls';
 import { SHAPE_DRAG, ShapeGallery, ShapeThumb } from './ShapeGallery';
+import { clampLines } from '../ui/textFit';
 
 type Where = 'before' | 'after' | 'into';
 type DragState = { id: string | null; over: { id: string; where: Where } | null };
@@ -145,6 +147,7 @@ function TreeRow({ spec, item, depth, drag, setDrag, picked, onPick }: {
     <div role="treeitem" aria-selected={selected} aria-expanded={item.type === 'group' ? true : undefined} style={{ display: 'flex', flexDirection: 'column' }}>
       <div
         data-tree-item={item.id}
+        {...removeKeys(isRoot ? undefined : () => { edit(d => removeItem(d, item.id)); select(null); }, itemName(spec, item))}
         draggable={!isRoot && !NO_DRAG}
         onDragStart={e => { e.dataTransfer.setData('text/plain', item.id); e.dataTransfer.effectAllowed = 'move'; setDrag({ id: item.id, over: null }); }}
         onDragEnd={() => setDrag({ id: null, over: null })}
@@ -155,7 +158,7 @@ function TreeRow({ spec, item, depth, drag, setDrag, picked, onPick }: {
         onMouseEnter={() => setHover(true)}
         onMouseLeave={() => setHover(false)}
         style={{
-          position: 'relative', display: 'flex', alignItems: 'center', gap: 7, minHeight: item.type === 'group' ? 34 : 38, padding: `3px 6px 3px ${indent}px`,
+          position: 'relative', outline: 'none', display: 'flex', alignItems: 'center', gap: 7, minHeight: item.type === 'group' ? 34 : 38, padding: `3px 6px 3px ${indent}px`,
           borderRadius: radius.md, cursor: isRoot ? 'default' : NO_DRAG ? 'pointer' : 'grab', userSelect: 'none',
           background: selected ? tk.bg.selected : isPicked ? tk.bg.hover : over === 'into' ? tk.bg.hover : 'none',
           boxShadow: over === 'into' || isPicked ? `inset 0 0 0 1.5px ${tk.accent.base}` : 'none',
@@ -167,7 +170,7 @@ function TreeRow({ spec, item, depth, drag, setDrag, picked, onPick }: {
           <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
             <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
               <OpBadge g={item} />
-              <span style={{ minWidth: 0, fontSize: 12, fontWeight: 600, color: tk.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <span title={isRoot ? undefined : item.name || undefined} style={{ minWidth: 0, fontSize: 12, fontWeight: 600, lineHeight: 1.25, color: tk.text.primary, ...clampLines(2) }}>
                 {isRoot ? 'Scene' : item.name || ''}
               </span>
               <span style={{ fontSize: 11, color: tk.text.faint, whiteSpace: 'nowrap' }}>{item.children.length}</span>
@@ -183,7 +186,7 @@ function TreeRow({ spec, item, depth, drag, setDrag, picked, onPick }: {
               {item.kind !== 'custom' && <span title="Its colour" style={{ position: 'absolute', right: -2, bottom: -1, width: 9, height: 9, borderRadius: '50%', background: rgbCss(item.color), boxShadow: `0 0 0 1.5px ${tk.bg.panel}` }} />}
             </span>
             <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-              <span style={{ fontSize: 12.5, fontWeight: 500, color: tk.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <span title={itemName(spec, item)} style={{ fontSize: 12.5, fontWeight: 500, lineHeight: 1.25, color: tk.text.primary, ...clampLines(2) }}>
                 {itemName(spec, item)}
                 {item.name && <span style={{ color: tk.text.faint, fontWeight: 400 }}> · {SHAPE_BY_KIND[item.kind]?.label ?? item.label ?? 'custom'}</span>}
                 {item.glass && spec.look.mode === 'glass' && <span style={{ color: tk.text.faint, fontWeight: 400 }}> · glass</span>}

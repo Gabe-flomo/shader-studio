@@ -137,7 +137,7 @@ function Column({ mode }: { mode: ThemeMode }) {
 
       <Section title="Chips · keycaps">
         <div style={row}>
-          <Chip onClick={() => {}}>sin(f)</Chip>
+          <Chip>sin(f)</Chip>
           <Chip active>length(v2)</Chip>
           <Chip dot={TYPE_COLORS.float}>sharp</Chip>
           <Chip dot={TYPE_COLORS.vec2}>uv</Chip>
