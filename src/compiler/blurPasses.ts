@@ -17,12 +17,17 @@
 import type { GraphNode } from '../types/nodeGraph';
 import { blBloomPlan, blSmoothPlan } from '../play/kit/blur.js';
 import { RF_PASSES } from '../play/kit/rays.js';
+import { dgLevels, dgScales } from '../play/kit/deepglow.js';
 
 export const BLUR_NODE_TYPES = new Set(['blurTexture', 'glowTexture']);
 /** Radial Fast Blur (Light rays): its log-step passes are hidden passes too (planRays). */
 export const RAYS_NODE_TYPE = 'radialFastBlur';
+/** Deep Glow: its mip chain is hidden passes too (planDeepGlow). */
+export const DEEP_GLOW_NODE_TYPE = 'deepGlowTexture';
 /** Every node type with hidden passes. */
-export const HIDDEN_PASS_TYPES = new Set([...BLUR_NODE_TYPES, RAYS_NODE_TYPE]);
+export const HIDDEN_PASS_TYPES = new Set([...BLUR_NODE_TYPES, RAYS_NODE_TYPE, DEEP_GLOW_NODE_TYPE]);
+/** Node types whose sliders are sockets of their own (withParamSockets): every hidden pass computes what is wired into them. */
+export const SOCKETED_HIDDEN_TYPES = new Set([RAYS_NODE_TYPE, DEEP_GLOW_NODE_TYPE]);
 /** Most hidden passes a graph's blurs and glows may add; a node past it draws in one pass (its Fast look). */
 export const MAX_HIDDEN_PASSES = 48;
 
@@ -53,7 +58,7 @@ export interface BlurStagePlan {
 }
 
 export interface BlurPlan {
-  method: Exclude<BlurMethod, 'fast'> | 'rays';
+  method: Exclude<BlurMethod, 'fast'> | 'rays' | 'deepGlow';
   /** The internal node type each stage compiles as (blurStage when absent). */
   stageType?: string;
   stages: BlurStagePlan[];
@@ -141,10 +146,40 @@ export function planRays(srcScale: number): BlurPlan {
   return { method: 'rays', stageType: 'radialFastBlurStage', stages, out: `r${RF_PASSES - 1}`, outScale: s, cubic: false };
 }
 
+/**
+ * A Deep Glow's mip chain (play/kit/deepglow.js): the prefilter (Threshold, halved: d1, reading the
+ * node's own texture), downs to the smallest level, then ups back to d1's size, each adding the level
+ * below (upsampled) to its own weighed level. 2 × levels − 1 passes; the node reads u1.
+ */
+export function planDeepGlow(srcScale: number): BlurPlan {
+  const s = srcScale > 0 ? srcScale : 1;
+  const levels = dgLevels(s);
+  const scales = dgScales(s, levels);
+  const stages: BlurStagePlan[] = [];
+  for (let k = 1; k <= levels; k++) {
+    stages.push({
+      key: `d${k}`, scale: scales[k - 1], label: `${k === 1 ? 'threshold' : 'down'} ${SCALE_NAME(scales[k - 1])}`,
+      reads: [k === 1 ? 'source' : `d${k - 1}`],
+      params: { __stage: k === 1 ? 'pre' : 'down', __srcScale: k === 1 ? s : scales[k - 2] },
+      samplers: k === 1 ? {} : { __src: `d${k - 1}` },
+    });
+  }
+  for (let k = levels - 1; k >= 1; k--) {
+    const lowKey = k === levels - 1 ? `d${levels}` : `u${k + 1}`;
+    stages.push({
+      key: `u${k}`, scale: scales[k - 1], label: `up ${SCALE_NAME(scales[k - 1])}`,
+      reads: [`d${k}`, lowKey],
+      params: { __stage: 'up', __level: k, __levels: levels, __bloomScale: s, __lowScale: scales[k], ...(lowKey.startsWith('d') ? { __lowRaw: true } : {}) },
+      samplers: { __cur: `d${k}`, __low: lowKey },
+    });
+  }
+  return { method: 'deepGlow', stageType: 'deepGlowTextureStage', stages, out: 'u1', outScale: scales[0], cubic: false, levels };
+}
+
 /** A hidden stage's slug: the node's slug and the stage key (no double underscores: GLSL reserves them). */
 export const hiddenSlug = (nodeSlug: string, key: string) => `${nodeSlug.replace(/_+$/, '')}Bl${key}`;
 
 /** Does the graph have a Smooth or Bloom-chain Blur / Glow (texture) with a Texture wired (top level)? Then it compiles as a pass graph. */
 export function hasHiddenBlur(nodes: readonly GraphNode[]): boolean {
-  return nodes.some(n => (n.type === RAYS_NODE_TYPE || (BLUR_NODE_TYPES.has(n.type) && blurMethod(n) !== 'fast')) && !!n.inputs.texture?.connection);
+  return nodes.some(n => (SOCKETED_HIDDEN_TYPES.has(n.type) || (BLUR_NODE_TYPES.has(n.type) && blurMethod(n) !== 'fast')) && !!n.inputs.texture?.connection);
 }

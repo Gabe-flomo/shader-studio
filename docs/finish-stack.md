@@ -145,7 +145,8 @@ worst difference 1.4 / 255.
 | Chromatic aberration | Look (Spectral, Channel split), Geometry (Lateral, Axial, Directional), Amount, Falloff (Lateral), Samples, Blur, Centre X / Y, Angle (Directional), Distortion; presets Lens, Cheap lens, Prism, Halo, RGB split. See [chromatic-aberration.md](chromatic-aberration.md). |
 | Vignette | Amount, Size, Roundness, Feather, Colour |
 | CRT | Curvature, Scanlines, Mask, Cell size, Stagger, Glow, Pulse. The mask is the CRT Mask node's GLSL. |
-| Bloom | Amount, Threshold, Radius, Tint |
+| Deep Glow | Radius (pixels at 1080p), Intensity, Threshold, Knee, Chromatic spread, Preserve colour, Composite (Add, Screen), Tint; presets Deep glow, Subtle, Neon, Hot core, Dreamy. Heads a pass of its own and runs its mip chain over that pass's input first. See [deep-glow.md](deep-glow.md). |
+| Bloom (retired) | Amount, Threshold, Radius, Tint. No longer in the Add menu: a stack that has it keeps it and draws it as before, and its card offers **Upgrade to Deep Glow**. |
 | Light rays | Mode, Zoom, Length, Centre X / Y, Threshold, Knee, Intensity, Opacity (Brightest, Add), Decay, Falloff, Tint; presets Light rays, God rays, Zoom burst, Warp speed, Pull in. See below. |
 | Halation | Amount, Reach, Threshold, Highlight headroom, Warmth, Growth, Conserve; presets Subtle, Classic cine (the measured reference, and the defaults), Strong |
 | Film grain | Amount, Size (px at 1080p), Colour, Response (to brightness), Frames a second (0 holds it) |

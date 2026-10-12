@@ -3,7 +3,8 @@
  * the finished picture, as stacked cards built after the scene in the order shown.
  *
  *   Displace (by noise, or by a picture) · Swirl · Ripple · Lens · Pixelate · Kaleidoscope ·
- *   Blur · Glow · Light rays / Radial blur · Chromatic aberration (spectral) · CRT mask
+ *   Blur · Deep Glow · Light rays / Radial blur · Chromatic aberration (spectral) · CRT mask
+ *   (Glow is retired for Deep Glow: not offered, but old scenes keep it and build it as before)
  *
  * How they build. An effect that moves the picture (Displace, Swirl, Pixelate, Kaleidoscope, CRT
  * curvature…) changes WHERE the picture is read: the picture so far goes into a Pass, and the next
@@ -15,7 +16,9 @@
 import type { GraphNode } from '../../types/nodeGraph';
 import { mk, ref, type Ctx, type Ref } from '../../sceneBuilder/build';
 import { fmt } from '../../sceneBuilder/recipe';
-import { numOf, stackValue, type LookParam, type StackItem, type StackKindDef } from './stack';
+import { numOf, stackOffered, stackUpgrade, stackValue, type LookParam, type StackItem, type StackKindDef } from './stack';
+
+const num = (v: unknown, d: number) => (typeof v === 'number' && isFinite(v) ? v : d);
 
 const sel = (...o: Array<[string, string]>) => o.map(([value, label]) => ({ value, label }));
 
@@ -77,10 +80,26 @@ export const FX_KINDS: StackKindDef[] = [
   {
     kind: 'glow', label: 'Glow', words: ['glow', 'bloom', 'halo'], nodes: ['glowTexture', 'addColor'],
     blurb: 'Bright parts bleed soft light round them, in the same frame (Glow (texture), Bloom chain).',
+    // Retired for Deep Glow: not offered, but a scene that has it builds it as before (and can upgrade).
+    retired: { by: 'deepglow', label: 'Deep Glow', params: it => ({ intensity: num(it.params.intensity, 0.8), threshold: num(it.params.threshold, 0.6), radius: Math.round(Math.min(800, Math.max(4, num(it.params.radius, 16) * 4))) }) },
     params: [
       { key: 'intensity', label: 'Intensity', hint: 'How bright the glow is.', type: 'num', def: 0.8, min: 0, max: 4, primary: true, node: '', param: 'intensity', aliases: ['amount'] },
       { key: 'threshold', label: 'Threshold', hint: 'How bright a part must be to glow: 0 everything, 0.8 only the brightest.', type: 'num', def: 0.6, min: 0, max: 2, node: '', param: 'threshold' },
       { key: 'radius', label: 'Radius', hint: 'How far the glow spreads, in screen pixels (its tail reaches further).', type: 'num', def: 16, min: 1, max: 64, step: 0.5, node: '', param: 'radius', aliases: ['r'] },
+    ],
+  },
+  {
+    kind: 'deepglow', label: 'Deep Glow', words: ['deepglow', 'deep-glow', 'glow-deep'], nodes: ['deepGlowTexture'],
+    blurb: 'A bloom like After Effects\' Deep Glow: bright parts get a hot core and a long, natural tail (Deep Glow (texture)).',
+    params: [
+      { key: 'intensity', label: 'Intensity', hint: 'How bright the glow is (its exposure).', type: 'num', def: 1, min: 0, max: 4, primary: true, node: '', param: 'intensity', aliases: ['amount', 'exposure'] },
+      { key: 'radius', label: 'Radius', hint: 'How far the tail reaches, in screen pixels. The core stays hot; a big Radius adds a long, soft falloff. Costs the same at any size.', type: 'num', def: 120, min: 4, max: 800, step: 1, node: '', param: 'radius', aliases: ['r'] },
+      { key: 'threshold', label: 'Threshold', hint: 'How bright a part must be to glow: 0 everything, 0.8 only the brightest.', type: 'num', def: 0.6, min: 0, max: 2, node: '', param: 'threshold', aliases: ['thr'] },
+      { key: 'knee', label: 'Knee', hint: 'How softly the glow fades in round Threshold: 0 a hard cut.', type: 'num', def: 0.3, min: 0, max: 1, node: '', param: 'knee' },
+      { key: 'spread', label: 'Chromatic spread', hint: 'Red reaches a little further and blue a little less: warm edges round a white core. 0 is off.', type: 'num', def: 0, min: 0, max: 1, node: '', param: 'spread', aliases: ['chroma'] },
+      { key: 'preserve', label: 'Preserve colour', hint: '1 keeps the glow the colour of what glows; 0 lets its hot core bloom to white.', type: 'num', def: 0.5, min: 0, max: 1, node: '', param: 'preserve' },
+      { key: 'composite', label: 'Composite', hint: 'Add: the glow\'s light added (it can pass white). Screen: softer, never past white.', type: 'select', def: 'add', options: sel(['add', 'Add'], ['screen', 'Screen']), node: '', param: 'composite', aliases: ['mode'] },
+      { key: 'tint', label: 'Tint', hint: 'The glow\'s colour: white keeps the picture\'s own.', type: 'colour', def: [1, 1, 1], node: '', param: 'tint' },
     ],
   },
   {
@@ -132,6 +151,10 @@ export const FX_KINDS: StackKindDef[] = [
 
 export const FX_BY_KIND: Record<string, StackKindDef> = Object.fromEntries(FX_KINDS.map(d => [d.kind, d]));
 export const FX_WORDS: Record<string, string> = Object.fromEntries(FX_KINDS.flatMap(d => d.words.map(w => [w, d.kind])));
+/** The effects the page offers (Glow is retired for Deep Glow: old scenes keep it). */
+export const fxOffered = () => stackOffered(FX_KINDS);
+/** An old Glow card swapped for a Deep Glow of about the same strength (same id, place, on/off); null for any other card. */
+export const fxUpgrade = (it: StackItem): StackItem | null => stackUpgrade(it, FX_BY_KIND);
 
 /** How many Pass nodes the effects may add (a graph has room for 8, the scene's pictures need some). */
 export const MAX_FX_PASSES = 6;
@@ -238,6 +261,18 @@ export function emitEffects(c: Ctx, items: readonly StackItem[] | undefined, col
           intensity: n('intensity'), opacity: n('opacity'), decay: n('decay'), falloff: n('falloff'), tint: stackValue(it, P('tint')),
         }, { texture: tex, uv: point },
           `${step}: streaks ${s('direction') === 'in' ? 'into' : 'out from'} the centre, Length ${fmt(n('length'))}${mode === 'average' ? ' (a zoom blur)' : mode === 'add' ? ', added as light' : ', the brightest along each (light rays)'}${n('threshold') > 0 ? `, from the parts brighter than ${fmt(n('threshold'))}` : ''}. Four small hidden passes, so long streaks stay cheap.`);
+        cur = ref(node, 'color');
+        pass = null; point = null;
+        break;
+      }
+      case 'deepglow': {
+        const tex = passFor(role, 'deep glow');
+        if (!tex) break;
+        node = mk(c, 'deepGlowTexture', role, {
+          intensity: n('intensity'), radius: n('radius'), threshold: n('threshold'), knee: n('knee'), spread: n('spread'), preserve: n('preserve'),
+          composite: s('composite'), tint: stackValue(it, P('tint')),
+        }, { texture: tex, uv: point },
+          `${step}: the parts brighter than ${fmt(n('threshold'))} glow with a hot core and a tail reaching ${fmt(n('radius'))} pixels, at ${fmt(n('intensity'))}${s('composite') === 'screen' ? ', screened' : ', added'} over the picture. A small mip chain of hidden passes, so a wide glow stays cheap.`);
         cur = ref(node, 'color');
         pass = null; point = null;
         break;

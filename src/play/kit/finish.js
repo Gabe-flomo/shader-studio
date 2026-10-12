@@ -36,6 +36,7 @@ import { gyAtlas } from './glyphs.js';
 import { DM_GLSL, DM_HINTS, DM_CHANNELS, DM_BEHAVIOURS, dmChannelGlsl, dmBoxOf } from './displace.js';
 import { RF_BASE_GLSL, RF_OPACITY, RF_PASSES, rfGlsl } from './rays.js';
 import { CA_BASE_GLSL, CA_TAPS, caGlsl } from './chroma.js';
+import { DG_BASE_GLSL, DG_LEVELS, dgGlsl } from './deepglow.js';
 
 // ── The catalogue ────────────────────────────────────────────────────────────
 
@@ -191,6 +192,31 @@ export const FN_EFFECTS = {
       FN_P('tintR', 'Tint R', 0, 1, 0.01, 1, '', true), FN_P('tintG', 'Tint G', 0, 1, 0.01, 1, '', true), FN_P('tintB', 'Tint B', 0, 1, 0.01, 1, '', true),
     ],
     colours: [{ label: 'Tint', keys: ['tintR', 'tintG', 'tintB'], hint: 'The glow’s colour: white keeps the colours of what glows.' }],
+  },
+  // Deep Glow (play/kit/deepglow.js): heads a pass of its own (FN_PREPASS_KINDS), whose input it runs
+  // through a half-float mip chain first (deepGlowPass); the pass then lays the glow over the picture.
+  deepglow: {
+    label: 'Deep Glow', group: 'Film', icon: 'sun',
+    summary: 'A hot core and a long, natural tail round bright parts',
+    params: [
+      FN_P('radius', 'Radius', 4, 800, 1, 120, 'How far the tail reaches, in pixels of a 1080p picture. The core stays hot; a big Radius adds a long, soft falloff. Costs the same at any size.'),
+      FN_P('intensity', 'Intensity', 0, 4, 0.01, 1, 'How bright the glow is (its exposure).'),
+      FN_P('threshold', 'Threshold', 0, 1.5, 0.01, 0.6, 'How bright a part has to be to glow (its brightest channel; 1 = white).'),
+      FN_P('knee', 'Knee', 0, 1, 0.01, 0.3, 'How softly the glow fades in round Threshold: 0 a hard cut.'),
+      FN_P('spread', 'Chromatic spread', 0, 1, 0.01, 0, 'Red reaches a little further and blue a little less: warm edges round a white core.'),
+      FN_P('preserve', 'Preserve colour', 0, 1, 0.01, 0.5, '1 keeps the glow the colour of what glows; 0 lets its hot core bloom to white.'),
+      FN_P('composite', 'Composite', 0, 1, 1, 0, '0 Add (the glow’s light added), 1 Screen (softer, never past white).', true),
+      FN_P('tintR', 'Tint R', 0, 1, 0.01, 1, '', true), FN_P('tintG', 'Tint G', 0, 1, 0.01, 1, '', true), FN_P('tintB', 'Tint B', 0, 1, 0.01, 1, '', true),
+    ],
+    colours: [{ label: 'Tint', keys: ['tintR', 'tintG', 'tintB'], hint: 'The glow’s colour: white keeps the colours of what glows.' }],
+    presets: [
+      { name: 'Deep glow', values: { radius: 120, intensity: 1, threshold: 0.6, knee: 0.3, spread: 0, preserve: 0.5 } },
+      { name: 'Subtle', values: { radius: 80, intensity: 0.5, threshold: 0.75, knee: 0.3, spread: 0, preserve: 0.6 } },
+      { name: 'Neon', values: { radius: 60, intensity: 1.6, threshold: 0.3, knee: 0.3, spread: 0, preserve: 1 } },
+      { name: 'Hot core', values: { radius: 160, intensity: 1.4, threshold: 0.7, knee: 0.2, spread: 0.5, preserve: 0 } },
+      { name: 'Dreamy', values: { radius: 400, intensity: 0.8, threshold: 0.4, knee: 0.5, spread: 0.3, preserve: 0.4 } },
+    ],
+    note: 'After Effects’ Deep Glow: the bright parts are halved again and again and built back up, many radii summed with an exponential falloff, so the glow has a hot core and a long tail that fades out naturally. Fast at any Radius.',
   },
   // Light rays (Radial Fast Blur, play/kit/rays.js): heads a pass of its own (FN_PREPASS_KINDS), whose
   // input it streaks in RF_PASSES log-step passes first; the pass then lays the streaks over the picture.
@@ -627,7 +653,7 @@ export const FN_TEMPORAL_KINDS = ['feedback', 'echo', 'datamosh', 'motionx'];
  * streaks), so each heads a pass of its own (fnSegments) and streaks the picture as the effects above
  * it left it.
  */
-export const FN_PREPASS_KINDS = ['rays'];
+export const FN_PREPASS_KINDS = ['rays', 'deepglow'];
 /**
  * What Feedback and Echo keep (their Source): the picture as the effects above left it, one layer
  * (drawn alone, hidden or not: only its own trail, over the untouched picture), the parts that moved
@@ -683,7 +709,31 @@ FN_EFFECTS.halation.presets = FN_HALATION_PRESETS;
 /** The kinds in the Add menu's order. Each kind appears at most once in a stack. */
 export const FN_KINDS = ['grade', 'lens', 'chroma', 'vignette', 'crt', 'bloom', 'halation', 'grain', 'flicker', 'shake', 'time',
   'glitch', 'ripple', 'water', 'displace', 'mosaic', 'mirror', 'gradmap', 'posterize', 'edges', 'feedback', 'echo', 'pixelsort', 'halftone', 'ascii', 'leaks',
-  'datamosh', 'motionx', 'rays'];
+  'datamosh', 'motionx', 'rays', 'deepglow'];
+/**
+ * Retired kinds and what replaces them: not offered in the Add menu (FN_OFFERED_KINDS), but a stack that
+ * has one keeps it, loads and draws it as before, and its card offers the upgrade (fnUpgradeEffect).
+ */
+export const FN_RETIRED = { bloom: 'deepglow' };
+/** The kinds the Add menu offers, in its order. */
+export const FN_OFFERED_KINDS = FN_KINDS.filter(k => !FN_RETIRED[k]);
+/**
+ * A retired effect as its replacement (same id, on/off and Where), of about the same strength: Bloom's
+ * Amount becomes Intensity, its Threshold stays, its 0–1 Radius becomes 60–400 pixels, its Tint stays.
+ * Null for an effect that isn't retired.
+ */
+export function fnUpgradeEffect(e) {
+  if (!e || !FN_RETIRED[e.kind]) return null;
+  const v = (k, d) => (typeof e[k] === 'number' && isFinite(e[k]) ? e[k] : d);
+  const out = fnDefaultEffect(FN_RETIRED[e.kind], e.id);
+  out.enabled = e.enabled !== false;
+  for (const k of ['where', 'whereLayer', 'whereInvert']) if (e[k] !== undefined) out[k] = e[k];
+  out.intensity = Math.round(Math.min(4, v('amount', 0.6) * 1.5) * 100) / 100;
+  out.threshold = v('threshold', 0.7);
+  out.radius = Math.round(60 + Math.min(1, Math.max(0, v('radius', 0.5))) * 340);
+  out.tintR = v('tintR', 1); out.tintG = v('tintG', 1); out.tintB = v('tintB', 1);
+  return out;
+}
 export const FN_TONE_MODES = ['none', 'aces', 'agx', 'hable', 'reinhard2', 'unreal', 'lottes', 'uchimura', 'tanh', 'oklab'];
 export const FN_TIME_MAPS = ['slit', 'luma', 'noise', 'radial', 'layer'];
 /**
@@ -2114,6 +2164,8 @@ export function fnBuildFinal(effects, opts = {}) {
       + 'vec4 fnEcAt(vec2 q, int k) { return fnEcMask(texture(uEcR, vec3(q, uEcL[k])), texture(uEcR, vec3(q, uEcM[k]))); }\n';
   }
   if (mosh) src += '// Datamosh: the held picture, moved block by block this frame (premultiplied).\nuniform sampler2D uMosh;\n';
+  const deepglow = has('deepglow');
+  if (deepglow) src += '// Deep Glow: the top of its mip chain (half size), drawn by the renderer before this pass (deepGlowPass), its texel and levels.\nuniform sampler2D uDeepGlow;\nuniform vec2 uDgTexel;\nuniform float uDgLevels;\n' + DG_BASE_GLSL + dgGlsl('texture');
   const rays = has('rays');
   if (rays) src += '// Light rays: the streaks, drawn by the renderer before this pass (raysPass), premultiplied.\nuniform sampler2D uRays;\n' + RF_BASE_GLSL;
   if (mx) src += '// Motion extract: the ring of past frames, the layers holding now and Delay frames ago, and its size.\nuniform sampler2DArray uMxRing;\nuniform vec2 uMxAt, uMxTex;\n';
@@ -2372,6 +2424,15 @@ vec4 fetch(vec2 q) {
     vec3 x = toLin(c);
     c = toSrgb(x + (1.0 - x) * (1.0 - exp(-b * bloom_amount * 1.5)));
   }`);
+    if (k === 'deepglow') op(e, `{
+    // Deep Glow (play/kit/deepglow.js): the chain's top read through the dual-filter tent, divided by the levels' weights,
+    // laid over the picture in linear light, premultiplied (so it also glows over what is transparent).
+    vec3 g = dgUp(uDeepGlow, q, uDgTexel).rgb / max(dgWSum(dgReach(deepglow_radius * uRes.y / 1080.0, 1.0), deepglow_spread, uDgLevels), vec3(1e-4));
+    vec3 y = dgComposite(toLin(c) * a, g, deepglow_intensity, vec3(deepglow_tintR, deepglow_tintG, deepglow_tintB), deepglow_preserve, deepglow_composite);
+    float na = clamp(max(a, max(y.r, max(y.g, y.b))), 0.0, 1.0);
+    c = na > 1e-5 ? toSrgb(y / na) : vec3(0.0);
+    a = na;
+  }`);
     if (k === 'halation') op(e, `{
     // The tight bleed (a max-spread of the red source, half size) plus the Reach tail (a blur: the eighth level, widening to the sixteenth); fnHalPixel does the same.
     vec3 hm = glowDec(texture(uHM, p).rgb);
@@ -2548,7 +2609,7 @@ vec4 fetch(vec2 q) {
   fragColor = vec4(c * a, a);`}
 }
 `;
-  return { src, glow, time, feedback, echo, mosh, mx, rays, maps, water, lut: has('grade'), ascAtlas: mine.some(fnAsciiTyped), psTrail: mine.some(fnSortTrails), custom: customs.filter(e => mine.includes(e)).map(e => e.id), segments: segs.length };
+  return { src, glow, time, feedback, echo, mosh, mx, rays, deepglow, maps, water, lut: has('grade'), ascAtlas: mine.some(fnAsciiTyped), psTrail: mine.some(fnSortTrails), custom: customs.filter(e => mine.includes(e)).map(e => e.id), segments: segs.length };
 }
 
 const FN_PREFILTER = (bloom, halation, crtGlow) => `${FN_COMMON}
@@ -2688,6 +2749,29 @@ void main() {
   // A little noise (under half an 8-bit step) so long, faint streaks don't band in an 8-bit target.
   v.rgb = max(v.rgb + (rfIGN(gl_FragCoord.xy + uK * 17.0) - 0.5) / 510.0, 0.0);
   fragColor = v;
+}
+`;
+
+/**
+ * Deep Glow's chain (play/kit/deepglow.js), one program for its three kinds of pass: uStage 0 the
+ * prefilter (this pass's input, in linear light, over Threshold, halved), 1 a down (uPrev halved), 2 an
+ * up (level uLevel: uPrev × its weight + the level below, uLow, through the tent; uLowRaw: uLow is the
+ * smallest level, weighed too). Half float when it can.
+ */
+const FN_DG_STAGE = () => `${FN_COMMON}${FN_TMP_SRC}${fnDefines('deepglow')}${DG_BASE_GLSL}
+uniform sampler2D uPrev, uLow;
+uniform vec2 uDst, uTexel, uLowTexel;
+uniform float uStage, uLevel, uLevels, uLowRaw;
+vec4 fnDgLin(vec2 p) { vec4 s = fnSrc(p); return vec4(toLin(s.a > 1e-5 ? s.rgb / s.a : vec3(0.0)) * s.a, s.a); }
+${dgGlsl('texture', q => `fnDgLin(${q})`)}${dgGlsl('texture')}
+out vec4 fragColor;
+void main() {
+  vec2 p = gl_FragCoord.xy / uDst;
+  if (uStage < 0.5) { fragColor = dgPreR(p, uTexel, deepglow_threshold, deepglow_knee); return; }
+  if (uStage < 1.5) { fragColor = dgDown(uPrev, p, uTexel); return; }
+  float reach = dgReach(deepglow_radius * uSrcRes.y / 1080.0, 1.0);
+  vec3 low = dgUp(uLow, p, uLowTexel).rgb * (uLowRaw > 0.5 ? dgW(uLevels, reach, deepglow_spread) : vec3(1.0));
+  fragColor = vec4(texture(uPrev, p).rgb * dgW(uLevel, reach, deepglow_spread) + low, 1.0);
 }
 `;
 
@@ -3666,6 +3750,50 @@ export function fnCreate(canvasIn) {
   // Pixel sort's trail: its sorted picture from the frame before (full size, 8-bit, premultiplied).
   let psT = null; // { key, tex, fb, valid, lastT }
   function dropRays() { if (!raysT) return; for (const t of raysT.st) dropTarget(t); raysT = null; }
+  let dgT = null; // Deep Glow's chain: { w, h, levels, d: [levels], u: [levels - 1], out, texel }
+  function dropDg() { if (!dgT) return; for (const t of [...dgT.d, ...dgT.u]) dropTarget(t); dgT = null; }
+  /**
+   * Deep Glow's chain for this draw, just before the pass it heads (`pi`), over that pass's input (the
+   * pass before, or the picture): the prefilter to half size, downs to the smallest level, ups back.
+   */
+  function deepGlowPass(e, pi, input, W, H, pixelsMode, value) {
+    // Levels: DG_LEVELS, fewer while the smallest would be under 2 pixels.
+    const levels = Math.max(2, Math.min(DG_LEVELS, Math.floor(Math.log2(Math.max(4, Math.min(W, H)) / 2))));
+    if (!dgT || dgT.w !== W || dgT.h !== H || dgT.levels !== levels) {
+      dropDg();
+      const size = k => [Math.max(1, Math.ceil(W / 2 ** k)), Math.max(1, Math.ceil(H / 2 ** k))];
+      const d = [], u = [];
+      for (let k = 1; k <= levels; k++) d.push(target(...size(k), 1, floatGlow));
+      for (let k = 1; k < levels; k++) u.push(target(...size(k), 1, floatGlow));
+      dgT = { w: W, h: H, levels, d, u, out: null, texel: [1 / d[0].w, 1 / d[0].h] };
+    }
+    const prog = compile('deepglow', FN_DG_STAGE());
+    if (!prog) return false;
+    const fromStage = pi > 0 && !!stageT;
+    gl.useProgram(prog.prog);
+    common(prog, W, H, input, W, H, pixelsMode);
+    gl.uniform1f(loc(prog, 'uFromStage'), fromStage ? 1 : 0);
+    bindTex(prog, 'uSrcTex', 2, fromStage ? stageT[(pi - 1) % 2].texs[0] : clearTex);
+    gl.uniform1f(loc(prog, 'uFromMap'), 0);
+    bindTex(prog, 'uMap', 3, clearTex);
+    const ul = loc(prog, 'U_deepglow'); if (ul) gl.uniform4fv(ul, packed(e, value));
+    gl.uniform1f(loc(prog, 'uLevels'), levels);
+    const run = (t, stage, texel) => { gl.uniform2f(loc(prog, 'uDst'), t.w, t.h); gl.uniform1f(loc(prog, 'uStage'), stage); gl.uniform2f(loc(prog, 'uTexel'), texel[0], texel[1]); draw(t.fb, t.w, t.h); };
+    bindTex(prog, 'uPrev', 4, clearTex); bindTex(prog, 'uLow', 5, clearTex);
+    run(dgT.d[0], 0, [1 / W, 1 / H]);
+    for (let k = 1; k < levels; k++) { const prev = dgT.d[k - 1]; bindTex(prog, 'uPrev', 4, prev.texs[0]); run(dgT.d[k], 1, [1 / prev.w, 1 / prev.h]); }
+    for (let k = levels - 1; k >= 1; k--) {
+      const low = k === levels - 1 ? dgT.d[levels - 1] : dgT.u[k];
+      bindTex(prog, 'uPrev', 4, dgT.d[k - 1].texs[0]);
+      bindTex(prog, 'uLow', 5, low.texs[0]);
+      gl.uniform2f(loc(prog, 'uLowTexel'), 1 / low.w, 1 / low.h);
+      gl.uniform1f(loc(prog, 'uLevel'), k);
+      gl.uniform1f(loc(prog, 'uLowRaw'), k === levels - 1 ? 1 : 0);
+      run(dgT.u[k - 1], 2, [1 / low.w, 1 / low.h]);
+    }
+    dgT.out = dgT.u[0].texs[0];
+    return true;
+  }
   /**
    * Light rays' streaks for this draw, just before the pass it heads (`pi`): RF_PASSES log-step passes
    * over that pass's input (the pass before, or the picture), into two targets in turn.
@@ -3794,6 +3922,7 @@ export function fnCreate(canvasIn) {
     if (!ran.some(fnSortTrails)) dropPs();
     if (!ran.some(e => e.kind === 'water')) dropWater();
     if (!ran.some(e => e.kind === 'rays')) dropRays();
+    if (!ran.some(e => e.kind === 'deepglow')) dropDg();
     const asc = ran.find(fnAsciiTyped);
     if (asc) ensureAscii(asc); else dropAscii();
     if (ran.some(fnSortTrails)) { const P = ensurePs(W, H); if (input.first) { P.valid = false; P.lastT = null; } }
@@ -3831,6 +3960,7 @@ export function fnCreate(canvasIn) {
       const head = segs[pi] && segs[pi][0];
       if (head && FN_TEMPORAL_KINDS.includes(head.kind)) temporalPass(head, pi, input, W, H, pixelsMode, value, built.maps);
       if (head && head.kind === 'rays') raysPass(head, pi, input, W, H, pixelsMode, value);
+      if (head && head.kind === 'deepglow') deepGlowPass(head, pi, input, W, H, pixelsMode, value);
       gl.useProgram(fin.prog);
       common(fin, W, H, input, W, H, pixelsMode);
       let ci = 0;
@@ -3891,6 +4021,11 @@ export function fnCreate(canvasIn) {
         gl.uniform1f(loc(fin, 'uPsKeep'), Math.pow(Math.max(0, Math.min(0.98, typeof tv === 'number' ? tv : 0)), dt * 60));
       }
       if (b.rays) bindTex(fin, 'uRays', unit++, raysT && raysT.out ? raysT.out : clearTex);
+      if (b.deepglow) {
+        bindTex(fin, 'uDeepGlow', unit++, dgT && dgT.out ? dgT.out : clearTex);
+        gl.uniform2f(loc(fin, 'uDgTexel'), dgT ? dgT.texel[0] : 1, dgT ? dgT.texel[1] : 1);
+        gl.uniform1f(loc(fin, 'uDgLevels'), dgT ? dgT.levels : 2);
+      }
       if (b.water) {
         bindTex(fin, 'uWater', unit++, wT && wT.out ? wT.out : clearTex);
         gl.uniform2f(loc(fin, 'uWTex'), wT ? wT.w : 1, wT ? wT.h : 1);
@@ -3962,7 +4097,7 @@ export function fnCreate(canvasIn) {
       dropTarget(outT);
       if (stageT) for (const t of stageT) dropTarget(t);
       if (ringT) { gl.deleteTexture(ringT.tex); gl.deleteFramebuffer(ringT.fb); }
-      dropMosh(); dropFb(); dropPs(); dropAscii(); dropWater(); dropRays(); dropTarget(packT); packT = null; for (const k of [...rings.keys()]) dropRing(k);
+      dropMosh(); dropFb(); dropPs(); dropAscii(); dropWater(); dropRays(); dropDg(); dropTarget(packT); packT = null; for (const k of [...rings.keys()]) dropRing(k);
       const lose = gl.getExtension('WEBGL_lose_context');
       if (lose) lose.loseContext();
     },

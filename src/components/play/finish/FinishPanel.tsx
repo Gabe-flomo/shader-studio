@@ -53,7 +53,7 @@ import {
   finishParamOf, finishParamsOf, finishTarget, lookFromGrade, newCustomEffect, newFinishEffect, patchFinishEffect, withCustomCode,
   type FinishCompare, type FinishEffect, type FinishHost, type FinishKind, type PlayFinish,
 } from '../../../types/playFinish';
-import { FN_COMPARE_PARAMS, FN_SORT_MOTION, fnCheckCustom, fnDefaultCompare, fnParseCustom, fnRingSize, type FnParam, type FnPreset } from '../../../play/kit/finish.js';
+import { FN_COMPARE_PARAMS, FN_RETIRED, FN_SORT_MOTION, fnUpgradeEffect, fnCheckCustom, fnDefaultCompare, fnParseCustom, fnRingSize, type FnParam, type FnPreset } from '../../../play/kit/finish.js';
 
 const TONE_OPTIONS = [
   { value: 'none', label: 'None' }, { value: 'aces', label: 'ACES' }, { value: 'agx', label: 'AgX' }, { value: 'hable', label: 'Hable' },
@@ -190,6 +190,8 @@ function PictureFinish({ play, onChange, touch, wide = false }: {
   const sections: PickerSection[] = useMemo(() => {
     const groups = new Map<string, PickerSection['items'][number][]>();
     for (const k of FINISH_KINDS) {
+      // Retired kinds (Bloom, for Deep Glow) aren't offered; a stack that has one keeps it.
+      if (FN_RETIRED[k]) continue;
       const d = FINISH_EFFECTS[k];
       const inStack = finish.effects.some(e => e.kind === k);
       const list = groups.get(d.group) ?? [];
@@ -525,6 +527,15 @@ function editorFor(e: FinishEffect, k: RowKit, touch: boolean, layers: LayerRef[
     );
     case 'rays': return <RaysEditor e={e} k={k} onPatch={onPatch} />;
     case 'chroma': return <ChromaEditor e={e} k={k} onPatch={onPatch} />;
+    case 'deepglow': return <DeepGlowEditor e={e} k={k} onPatch={onPatch} />;
+    case 'bloom': return (
+      <>
+        {finishParamsOf(e).filter(p => !p.hidden).map(p => k.num(p.key))}
+        {k.colour('Tint', ['tintR', 'tintG', 'tintB'], 'The glow’s colour: white keeps the colours of what glows.')}
+        {k.row('Upgrade', <Button size="sm" variant="secondary" icon="sun" data-finish-upgrade={e.id} onClick={() => { const up = fnUpgradeEffect(e); if (up) onReplace(up as FinishEffect); }}>Upgrade to Deep Glow</Button>, 'Swaps this Bloom for a Deep Glow of about the same strength, in the same place.')}
+        {k.note(<>Bloom is retired: it still draws as before, but it is no longer offered. <b>Deep Glow</b> is the newer glow: a hot core with a long, natural tail.</>)}
+      </>
+    );
     case 'feedback': return <FeedbackEditor e={e} k={k} layers={layers} onPatch={onPatch} />;
     case 'echo': return <EchoEditor e={e} k={k} layers={layers} onPatch={onPatch} />;
     case 'custom': return <CustomEditor e={e} k={k} touch={touch} onReplace={onReplace} onEdit={onEdit} />;
@@ -734,6 +745,23 @@ function ChromaEditor({ e, k, onPatch }: { e: FinishEffect; k: RowKit; onPatch: 
       {k.row('Geometry', <Segmented size="sm" ariaLabel="Chromatic aberration geometry" value={String(geom)} onChange={v => onPatch({ geometry: Number(v) })} options={CHROMA_GEOMETRIES} />, 'Lateral: outward from the centre. Axial: a halo round highlights. Directional: a prism.')}
       {k.nums('amount', ...(geom === 0 ? ['falloff'] : []), ...(spectral ? ['samples'] : []), 'blur', ...(geom === 2 ? ['angle'] : ['cx', 'cy']), 'distortion')}
       {k.note(<>A lens bends each wavelength a little differently. <b>Spectral</b> reads the picture at many taps across the spectrum, each moved by its wavelength and weighed so they add up to white: edges fringe in a smooth rainbow, not three copies. <b>Blur</b> softens each colour by how far it moved, so the fringe melts in.</>)}
+    </>
+  );
+}
+
+const DG_COMPOSITES = [
+  { value: '0', label: 'Add', title: 'The glow’s light added over the picture (it can pass white)' },
+  { value: '1', label: 'Screen', title: 'Softer: never past white' },
+];
+
+/** Deep Glow (play/kit/deepglow.js): its numbers, Composite as a choice, and Tint. */
+function DeepGlowEditor({ e, k, onPatch }: { e: FinishEffect; k: RowKit; onPatch: (c: Partial<FinishEffect>) => void }) {
+  return (
+    <>
+      {k.nums('radius', 'intensity', 'threshold', 'knee', 'spread', 'preserve')}
+      {k.row('Composite', <Segmented size="sm" ariaLabel="Deep Glow composite" value={String(Math.round(num(e, 'composite')))} onChange={v => onPatch({ composite: Number(v) })} options={DG_COMPOSITES} />, 'Add: the glow’s light added. Screen: softer, never past white.')}
+      {k.colour('Tint', ['tintR', 'tintG', 'tintB'], 'The glow’s colour: white keeps the colours of what glows.')}
+      {k.note(<>After Effects’ Deep Glow: the bright parts are halved again and again and built back up, many radii summed with an exponential falloff, so the glow has a <b>hot core</b> and a <b>long tail</b> that fades out naturally. <b>Chromatic spread</b> warms its edges; <b>Preserve colour</b> 0 blooms the core to white. Fast at any Radius: about 15 tiny passes.</>)}
     </>
   );
 }
