@@ -16,6 +16,8 @@ import { type AgentRule, type AgentRuleSet, defaultRule, describeRule, kindOf } 
 import { type EditCtx, RuleLines, channelOptionsOf } from '../agentRules/RuleEditors';
 import { CardGlyph } from './BehaviourCard';
 import { MuteToggle, MutedTag, MUTED_DIM } from '../builders/MuteToggle';
+import { clampLines } from '../ui/textFit';
+import { removeKeys } from '../builders/removable';
 
 export type AdvancedView = 'advanced' | 'all';
 
@@ -76,14 +78,14 @@ function AdvancedRuleCard({ i, n, rule, ctx, onChange, onMove, onDuplicate, onRe
   const [open, setOpen] = useState(true);
   const text = describeRule(ctx.set, ctx.s, rule);
   return (
-    <section data-card={`rule-${i}`} data-advanced-rule={i}
-      style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 12, borderRadius: radius.card, background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${rule.off ? tk.border.subtle : tk.border.default}` }}>
+    <section data-card={`rule-${i}`} data-advanced-rule={i} {...removeKeys(onRemove, `rule ${i + 1}`)}
+      style={{ outline: 'none', display: 'flex', flexDirection: 'column', gap: 10, padding: 12, borderRadius: radius.card, background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${rule.off ? tk.border.subtle : tk.border.default}` }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <CardGlyph kind="advanced" size={32} />
-        <button type="button" aria-expanded={open} onClick={() => setOpen(v => !v)} title={text}
+        <button type="button" aria-expanded={open} onClick={() => setOpen(v => !v)}
           style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, flex: 1, padding: 0, border: 0, background: 'none', cursor: 'pointer', textAlign: 'left', color: tk.text.primary }}>
           <b style={{ fontSize: 13, fontWeight: 650 }}>Rule {i + 1}</b>
-          <span data-advanced-text style={{ fontSize: 11.5, color: rule.off ? tk.text.faint : tk.text.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{text}</span>
+          <span data-advanced-text style={{ fontSize: 11.5, lineHeight: 1.35, color: rule.off ? tk.text.faint : tk.text.muted, ...clampLines(2) }}>{text}</span>
         </button>
         {rule.off && <MutedTag />}
         <span data-rule-switch={i}><MuteToggle muted={!!rule.off} what={`rule ${i + 1}`} onToggle={() => onChange({ ...rule, off: !rule.off })} /></span>
@@ -93,7 +95,7 @@ function AdvancedRuleCard({ i, n, rule, ctx, onChange, onMove, onDuplicate, onRe
         <IconButton icon="chevU" label="Move up" size="sm" disabled={i === 0} onClick={() => onMove(i - 1)} />
         <IconButton icon="chevD" label="Move down" size="sm" disabled={i === n - 1} onClick={() => onMove(i + 1)} />
         <IconButton icon="plus" label="Duplicate this rule" size="sm" onClick={onDuplicate} />
-        <IconButton icon="close" label="Take this rule away" size="sm" tone="danger" onClick={onRemove} data-rule-remove={i} />
+        <IconButton icon="close" label="Take this rule away (Delete)" size="sm" tone="danger" onClick={onRemove} data-rule-remove={i} />
       </div>
       {open && <div style={{ display: 'flex', flexDirection: 'column', gap: 8, ...(rule.off ? MUTED_DIM : {}) }}><RuleLines rule={rule} ctx={ctx} onChange={onChange} /></div>}
     </section>

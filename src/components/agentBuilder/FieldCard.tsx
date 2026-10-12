@@ -12,6 +12,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Icon } from '../ui/Icon';
+import { NEST_INDENT, nestedSectionStyle } from '../ui/nesting';
 import { Segmented } from '../ui/Choice';
 import {
   type FieldKind, type FieldLayer, type FieldSpec, FIELD_GALLERY, FIELD_KINDS, MAX_LAYERS, OWN_EXAMPLES,
@@ -26,6 +27,7 @@ import type { WherePick } from '../../agentBuilder/whereActions';
 import { whereNow } from '../../agentBuilder/whereActions';
 import { WhereFocusContext, WherePicker } from './WherePicker';
 import { useContext } from 'react';
+import { removeKeys } from '../builders/removable';
 
 /** The Where picker for a field's layers: a layer's region (its mask), and the slope layer's Field ƒ. */
 export interface FieldWhere { mask: (k: number, pick: WherePick | null, slot?: number) => void; slope: (pick: WherePick | null) => void }
@@ -100,7 +102,7 @@ function LayerRow({ k, layer: l, d3, open, onOpen, onPatch, onRemove, onFocus, w
   const bad = l.kind === 'own' && ownParts(l, d3).some(p => !p.check.ok);
   const focus = (s: string | undefined) => onFocus(s === undefined ? undefined : `layer${k}`);
   return (
-    <div data-field-layer-row={k} data-setting={`layer${k}`} onPointerEnter={() => onFocus(`layer${k}`)}
+    <div data-field-layer-row={k} data-setting={`layer${k}`} onPointerEnter={() => onFocus(`layer${k}`)} {...removeKeys(onRemove, info.label)}
       style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '8px 10px', borderRadius: radius.md, background: tk.bg.field, ...(l.off ? MUTED_DIM : {}), boxShadow: open ? `inset 0 0 0 1px ${alpha(colour, 0.6)}` : 'none' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <button type="button" data-field-layer-open={k} aria-expanded={open} onClick={onOpen}
@@ -108,9 +110,12 @@ function LayerRow({ k, layer: l, d3, open, onOpen, onPatch, onRemove, onFocus, w
           <Icon name={open ? 'chevD' : 'chevR'} size={12} />
           <span style={{ width: 9, height: 9, borderRadius: '50%', background: colour, flexShrink: 0 }} />
           <b style={{ font: `600 12.5px ${fontFamily.ui}`, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{info.label}</b>
-          <span style={{ font: `500 11.5px ${fontFamily.ui}`, color: bad ? tk.status.danger : tk.text.muted, whiteSpace: 'nowrap' }}>
-            {bad ? 'fix it' : `× ${Math.round(l.weight * 100) / 100}${l.mask ? ` · ${l.mask.outside ? 'outside' : 'inside'}` : ''}${l.animate?.speed ? ` · ${l.animate.mode}` : ''}`}
-          </span>
+          {/* The summary says what the open card shows anyway, so it's only there while folded. */}
+          {(bad || !open) && (
+            <span data-field-layer-summary={k} style={{ font: `500 11.5px ${fontFamily.ui}`, color: bad ? tk.status.danger : tk.text.muted, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums', minWidth: '5ch' }}>
+              {bad ? 'fix it' : `× ${Math.round(l.weight * 100) / 100}${l.mask ? ` · ${l.mask.outside ? 'outside' : 'inside'}` : ''}${l.animate?.speed ? ` · ${l.animate.mode}` : ''}`}
+            </span>
+          )}
         </button>
         <span data-field-layer-switch={k}><MuteToggle muted={!!l.off} what={info.label} onToggle={() => onPatch({ off: l.off ? undefined : true })} /></span>
         <button type="button" data-field-layer-remove={k} aria-label={`Take ${info.label} away`} title={`Take ${info.label} away`} onClick={onRemove}
@@ -161,7 +166,7 @@ function Extras({ k, layer: l, onPatch, onFocus, where }: { k: number; layer: Fi
         style={{ alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 4, padding: 0, border: 0, background: 'none', cursor: 'pointer', color: tk.text.muted, font: `600 11.5px ${fontFamily.ui}` }}>
         <Icon name={open ? 'chevD' : 'chevR'} size={12} />Turn, mask, animate
       </button>
-      {open && <>
+      {open && <div data-nested-section="true" style={{ display: 'flex', flexDirection: 'column', gap: 10, ...nestedSectionStyle(tk.border.subtle, -NEST_INDENT + 6) }}>
         <SliderSetting id={`layer${k}-rotate`} label="Turn its flow (°)" hint="Turn every arrow of this layer: a vortex turned 60° spirals in." value={l.rotate ?? 0} min={-180} max={180} step={1} onFocus={onFocus} onChange={v => onPatch({ rotate: v || undefined })} />
         {where && (!m || m.region) ? (
           <SettingRow id={`layer${k}-mask`} label="Only in a region" hint="A shape, mask or texture of your graph, or one you draw on the picture: the layer acts only inside (or outside) it." onFocus={onFocus}>
@@ -191,7 +196,7 @@ function Extras({ k, layer: l, onPatch, onFocus, where }: { k: number; layer: Fi
         {an && <SliderSetting id={`layer${k}-aspeed`} label={an.mode === 'spin' ? 'Turns (° a second)' : 'Drifts (a second)'} value={an.speed} min={an.mode === 'spin' ? -180 : 0} max={an.mode === 'spin' ? 180 : 1} step={an.mode === 'spin' ? 1 : 0.005} onFocus={onFocus}
           onChange={v => onPatch({ animate: { ...an, speed: v } })} />}
         {an?.mode === 'drift' && <SliderSetting id={`layer${k}-aangle`} label="Toward (°)" value={an.angle ?? 0} min={-180} max={180} step={1} onFocus={onFocus} onChange={v => onPatch({ animate: { ...an, angle: v } })} />}
-      </>}
+      </div>}
     </div>
   );
 }

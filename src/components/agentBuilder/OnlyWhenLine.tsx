@@ -92,10 +92,11 @@ function ConditionChip({ id, set, sp, c, lead, open, onOpen, onChange, onFocus, 
     <div data-only-when={id} data-only-when-kind={c.kind} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
         <button type="button" data-only-when-chip={id} aria-expanded={open} onClick={() => onOpen(!open)} title="Only when: this card only acts on a walker while this holds"
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0, height: 24, padding: '0 6px 0 9px', border: 0, borderRadius: 999, cursor: 'pointer',
-            background: alpha(tk.accent.base, 0.12), color: tk.accent.text, font: `600 11.5px ${fontFamily.ui}` }}>
-          <span style={{ opacity: 0.75, fontWeight: 500 }}>{lead}</span>
-          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{text}</span>
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minWidth: 0, minHeight: 24, padding: '3px 6px 3px 9px', border: 0, borderRadius: 12, cursor: 'pointer', textAlign: 'left',
+            background: alpha(tk.accent.base, 0.12), color: tk.accent.text, font: `600 11.5px/1.3 ${fontFamily.ui}` }}>
+          <span style={{ opacity: 0.75, fontWeight: 500, flexShrink: 0 }}>{lead}</span>
+          {/* The condition wraps inside the pill rather than being cut off. */}
+          <span data-only-when-text style={{ minWidth: 0, whiteSpace: 'normal', overflowWrap: 'break-word' }}>{text}</span>
           <Icon name={open ? 'chevU' : 'chevD'} size={11} />
         </button>
         <button type="button" data-only-when-clear={id} aria-label="Always (take the only when away)" title="Take this condition away" onClick={() => onChange(null)}

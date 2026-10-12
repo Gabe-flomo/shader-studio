@@ -26,7 +26,7 @@ import { setGroupShape, setGroupView } from '../../agentRules/storeActions';
 import { CAMERA_3D, CAMERA_CONTROLS, SHAPE_KINDS, shapeOf, type ShapeKind } from '../../agentRules/space3d';
 import { setSetupParam } from '../../agentBuilder/actions';
 import { COLOUR_BY, STYLES, TRAIL_PALETTES, type ColourBy, colourByOf, cssOf, drawColourBy, paletteColours, setColourBy, stopsOf } from '../../agentBuilder/look';
-import { addDrawAgents, setTrailPalette, trailPaletteOf } from '../../agentBuilder/lookActions';
+import { addDrawAgents, removeDrawAgents, setTrailPalette, trailPaletteOf } from '../../agentBuilder/lookActions';
 import { channelSwatches } from '../../agentBuilder/trailChannels';
 import { MORE_HINTS } from '../../agentBuilder/sections';
 import { BehaviourCard, ChipRow, SettingRow, SliderSetting } from './BehaviourCard';
@@ -63,6 +63,7 @@ export function LookSection({ groupId, set, sp, update, draw, d3, intro, onFocus
     <>
       {intro}
       <BehaviourCard id="look" picture="look" title="Drawn as" hint="How each walker is drawn over the picture (Draw agents)."
+        onRemove={draw && hasTrail && draw.inputs.over?.connection ? () => { flush(); removeDrawAgents(groupId); } : undefined}
         summary={draw ? `${STYLES.find(x => x.value === draw.params.style)?.label ?? 'Dots'} · size ${String(draw.params.style) === 'splats' ? r3(num(draw.params.splatSize, 0.012)) : r3(num(draw.params.size, 1.5))}` : 'the trail is the picture'}>
         {draw ? <>
           <SettingRow id="style" label="Style" hint={MORE_HINTS.style} onFocus={onFocus}>

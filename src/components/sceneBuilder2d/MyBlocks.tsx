@@ -17,6 +17,7 @@ import { reportFileResult } from '../shell/reportFileResult';
 import { BuilderNote } from '../builders/BuilderWindow';
 import { Button, IconButton } from '../ui/Button';
 import { Select } from '../ui/Select';
+import { Toggle } from '../ui/Choice';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
 
@@ -65,9 +66,7 @@ export function SaveBlockForm({ src, onSaved, onCancel }: { src: { block?: Space
       <input aria-label="What it does" placeholder="What it does, in a line (optional)" value={blurb} onChange={e => setBlurb(e.target.value)} style={field} />
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <span style={{ width: 190 }}><Select ariaLabel="Category" height={28} value={category} options={CATEGORY_OPTIONS} onChange={v => setCategory(v as SavedCategory)} /></span>
-        <label style={{ display: 'flex', gap: 5, alignItems: 'center', fontSize: 12, color: tk.text.secondary, cursor: 'pointer' }}>
-          <input type="checkbox" aria-label="Random may offer it" checked={random} onChange={e => setRandom(e.target.checked)} /> Random may offer it
-        </label>
+        <Toggle checked={random} onChange={setRandom} label="Random may offer it" />
       </div>
       {!ok && <BuilderNote style={{ color: tk.status.danger }}>A line doesn’t check yet: fix it before saving.</BuilderNote>}
       {replaces && <BuilderNote>Replaces your saved “{replaces.name}”.</BuilderNote>}

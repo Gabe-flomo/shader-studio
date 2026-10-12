@@ -26,6 +26,7 @@ import { readClipboardPicture } from '../../lib/texture/texturePaste';
 import { URL_MESSAGES, TextureUrlError } from '../../lib/texture/pictures';
 import { textureNodes, texNodeLabel, type TexSource } from '../../builders/textures';
 import { newShaderTexture, pictureFromBlob, pictureFromLibrary, pictureFromUrl, sourceFor, type PickedTexture } from '../../builders/textureActions';
+import { clampLines } from '../ui/textFit';
 
 const THUMB: CSSProperties = { width: 44, height: 30, borderRadius: 5, objectFit: 'cover', flexShrink: 0, display: 'block' };
 
@@ -129,7 +130,7 @@ export function PictureWays({ onPicked, list, inScene = [], graph = true, shader
                 onClick={() => { const src = sourceFor(g.id, list); if (src) onPicked({ nodeId: g.id, source: src }); }}
                 style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 8px 3px 3px', borderRadius: radius.md, border: `1px solid ${tk.border.default}`, background: tk.bg.panel, color: tk.text.primary, cursor: 'pointer', font: `500 11.5px ${fontFamily.ui}`, maxWidth: 200 }}>
                 <TexThumb nodeId={g.id} w={32} h={22} />
-                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.label}</span>
+                <span title={g.label} style={{ ...clampLines(2), lineHeight: 1.25, textAlign: 'left' }}>{g.label}</span>
               </button>
             ))}
           </div>
@@ -165,7 +166,7 @@ export function TexturePicker({ id, sources, value, onChange, onAdd, allowNone =
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
         <TexThumb nodeId={cur?.node} />
         <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
-          <span style={{ fontSize: 12.5, fontWeight: 600, color: cur ? tk.text.primary : tk.text.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cur ? cur.name : none}</span>
+          <span data-texture-name title={cur?.name} style={{ fontSize: 12.5, fontWeight: 600, lineHeight: 1.25, color: cur ? tk.text.primary : tk.text.muted, ...clampLines(2) }}>{cur ? cur.name : none}</span>
           {cur && <span style={{ fontSize: 10.5, color: missing || !cur.node ? tk.status.warningText : tk.text.faint }}>
             {!cur.node ? 'An empty Texture node is made on Build: drop a picture on it' : missing ? 'Its node is gone: pick another' : cur.kind === 'shader' ? 'Shader Texture' : 'Texture node'}
           </span>}

@@ -15,6 +15,8 @@ import { Icon } from '../ui/Icon';
 import { Tooltip } from '../ui/Tooltip';
 import { BuilderSlider } from '../builders/BuilderSlider';
 import { fineUnit } from '../ui/rulerMath';
+import { NEST_INDENT, nestedSectionStyle } from '../ui/nesting';
+import { removeKeys } from '../builders/removable';
 
 export type CardPicture = 'born' | 'senses' | 'turning' | 'moving' | 'trail' | 'advanced'
   | 'gravity' | 'wind' | 'curl' | 'field' | 'attract' | 'drag' | 'home' | 'fade' | 'die' | 'life' | 'look' | 'neighbours'
@@ -158,8 +160,8 @@ export function BehaviourCard({ id, picture, title, hint, summary, learn, guide,
   const [moreOpen, setMoreOpen] = useState(false);
   const off = on === false;
   return (
-    <section data-card={id} data-card-on={on === undefined ? undefined : String(on)} data-muted={off || undefined}
-      style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 14, borderRadius: radius.card, background: tk.bg.panel, boxShadow: `inset 0 0 0 ${hot ? 1.5 : 1}px ${hot ? alpha(tk.accent.base, 0.55) : tk.border.default}` }}>
+    <section data-card={id} data-card-on={on === undefined ? undefined : String(on)} data-muted={off || undefined} {...removeKeys(onRemove, title)}
+      style={{ outline: 'none', display: 'flex', flexDirection: 'column', gap: 12, padding: 14, borderRadius: radius.card, background: tk.bg.panel, boxShadow: `inset 0 0 0 ${hot ? 1.5 : 1}px ${hot ? alpha(tk.accent.base, 0.55) : tk.border.default}` }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         {handle}
         <span style={{ display: 'flex', ...(off ? MUTED_DIM : {}) }}><CardGlyph kind={picture} /></span>
@@ -188,7 +190,7 @@ export function BehaviourCard({ id, picture, title, hint, summary, learn, guide,
             style={{ alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 4, padding: 0, border: 0, background: 'none', cursor: 'pointer', color: tk.text.muted, font: `600 11.5px ${fontFamily.ui}` }}>
             <Icon name={moreOpen ? 'chevD' : 'chevR'} size={12} />More
           </button>
-          {moreOpen && <div style={{ display: 'flex', flexDirection: 'column', gap: 12, ...(off ? MUTED_DIM : {}) }}>{more}</div>}
+          {moreOpen && <div data-nested-section="true" style={{ display: 'flex', flexDirection: 'column', gap: 12, ...nestedSectionStyle(tk.border.subtle, -NEST_INDENT + 6), ...(off ? MUTED_DIM : {}) }}>{more}</div>}
         </div>
       )}
       {footer}

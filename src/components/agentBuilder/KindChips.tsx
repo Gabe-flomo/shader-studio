@@ -74,7 +74,7 @@ export function KindChips({ set, sp, onSelect, update }: {
               <Icon name="trash" size={12} />
             </button>
           )}
-          <span style={{ fontSize: 11, color: tk.text.faint, marginLeft: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>its own cards below</span>
+          <span style={{ fontSize: 11, color: tk.text.faint, marginLeft: 2, whiteSpace: 'nowrap', flexShrink: 0 }}>its own cards below</span>
         </div>
       )}
     </div>
