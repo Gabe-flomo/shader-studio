@@ -62,6 +62,8 @@ export interface SnapshotMeta {
   /** The session (app launch) that wrote it. */
   session: string;
   project: ProjectInfo;
+  /** How much is in it (graphWork): 0 is a blank canvas (an Output node alone). Missing: not known, treated as work. */
+  work?: number;
 }
 
 export interface Snapshot extends SnapshotMeta {
@@ -69,11 +71,14 @@ export interface Snapshot extends SnapshotMeta {
   graph: Record<string, unknown>;
 }
 
-const FILE_RE = /^autosave-(\d{10,16})\.json$/;
+/** `autosave-<ms>.playfile` (the desktop, since 2026.10.183) or `autosave-<ms>.json` (the browser's IndexedDB, and older desktop ones). */
+const FILE_RE = /^autosave-(\d{10,16})\.(json|playfile)$/;
 
-export function snapshotFileName(at: number): string {
-  return `autosave-${Math.max(0, Math.floor(at))}.json`;
+export function snapshotFileName(at: number, ext: 'json' | 'playfile' = 'json'): string {
+  return `autosave-${Math.max(0, Math.floor(at))}.${ext}`;
 }
+
+export const isPlayfileSnapshot = (file: string): boolean => file.endsWith('.playfile');
 
 /** The time in a snapshot's file name, null when it isn't one. */
 export function snapshotFileTime(file: string): number | null {
@@ -111,8 +116,25 @@ export function parseSnapshot(file: string, text: string): Snapshot | null {
   if (o.format !== SNAPSHOT_FORMAT) return null;
   const g = o.graph;
   if (!g || typeof g !== 'object' || !Array.isArray((g as Record<string, unknown>).nodes)) return null;
+  return snapshotFrom(file, o, g as Record<string, unknown>);
+}
+
+/** A snapshot from its envelope fields (`at`, `session`, `project`) and its graph. */
+export function snapshotFrom(file: string, o: Record<string, unknown>, graph: Record<string, unknown>): Snapshot {
   const at = typeof o.at === 'number' && Number.isFinite(o.at) ? o.at : snapshotFileTime(file) ?? 0;
-  return { file, at, session: typeof o.session === 'string' ? o.session : '', project: projectOf(o.project), graph: g as Record<string, unknown> };
+  return { file, at, session: typeof o.session === 'string' ? o.session : '', project: projectOf(o.project), graph, work: graphWork(graph) };
+}
+
+/**
+ * How much work a graph holds: its nodes other than the Output node, its loose
+ * groups, and a Play setup with anything in it. 0 is the blank canvas a new
+ * project starts with (the 346-byte autosave), never worth offering.
+ */
+export function graphWork(graph: Record<string, unknown>): number {
+  const nodes = Array.isArray(graph.nodes) ? graph.nodes as Array<{ type?: unknown }> : [];
+  const groups = Array.isArray(graph.looseGroups) ? graph.looseGroups.length : 0;
+  const play = graph.play && typeof graph.play === 'object' && Object.keys(graph.play).length > 0 ? 1 : 0;
+  return nodes.filter(n => !n || n.type !== 'output').length + groups + play;
 }
 
 /** A project worth a snapshot: something on the canvas or in the Play setup. */
@@ -133,10 +155,18 @@ export interface SessionMarker {
   project: ProjectInfo;
   /** The last real Save in this session (ms, 0 none). */
   lastSaveAt: number;
+  /**
+   * Why it ended, when something saw it go (crashReasons.ts): 'web-content-terminated',
+   * 'rust-panic', 'js-fatal', 'page-reloaded'; 'unknown' when the next launch found it
+   * still running (a force quit, a kill, the app replaced, a power loss).
+   */
+  reason?: string;
+  /** The app version that ran it. Informational only: recovery never depends on it matching. */
+  appVersion?: string;
 }
 
-export function newSessionMarker(id: string, now: number): SessionMarker {
-  return { id, startedAt: now, cleanExit: false, project: { name: null, version: null, dirty: false }, lastSaveAt: 0 };
+export function newSessionMarker(id: string, now: number, appVersion?: string): SessionMarker {
+  return { id, startedAt: now, cleanExit: false, project: { name: null, version: null, dirty: false }, lastSaveAt: 0, ...(appVersion ? { appVersion } : {}) };
 }
 
 export function parseSessionMarker(raw: unknown): SessionMarker | null {
@@ -146,7 +176,47 @@ export function parseSessionMarker(raw: unknown): SessionMarker | null {
   const o = v as Record<string, unknown>;
   if (typeof o.id !== 'string' || !o.id) return null;
   const num = (x: unknown) => (typeof x === 'number' && Number.isFinite(x) ? x : 0);
-  return { id: o.id, startedAt: num(o.startedAt), cleanExit: o.cleanExit === true, project: projectOf(o.project), lastSaveAt: num(o.lastSaveAt) };
+  return {
+    id: o.id, startedAt: num(o.startedAt), cleanExit: o.cleanExit === true, project: projectOf(o.project), lastSaveAt: num(o.lastSaveAt),
+    ...(typeof o.reason === 'string' && o.reason ? { reason: o.reason.slice(0, 80) } : {}),
+    ...(typeof o.appVersion === 'string' && o.appVersion ? { appVersion: o.appVersion.slice(0, 40) } : {}),
+  };
+}
+
+/**
+ * The browser's (and the tests') version of what the desktop's recovery.rs does
+ * at launch: the marker to offer recovery for. The last launch's when it didn't
+ * end cleanly (with 'unknown' as its reason when nothing saw it go), else one
+ * still waiting from before (a launch that went down again before the page
+ * answered). Never depends on the app version.
+ */
+export function pendingAtLaunch(previous: SessionMarker | null, leftover: SessionMarker | null): SessionMarker | null {
+  if (previous && !previous.cleanExit) return { ...previous, reason: previous.reason ?? 'unknown' };
+  return leftover && !leftover.cleanExit ? leftover : null;
+}
+
+/**
+ * A page load inside a running session (the desktop process keeps going): if
+ * the page before it went without a clean unload, or something saw it die,
+ * the session is offered as if it had crashed.
+ */
+export function pendingOnPageLoad(o: { loads: number; pageClean: boolean; crashReason: string | null; current: SessionMarker }): SessionMarker | null {
+  if (o.crashReason) return { ...o.current, cleanExit: false, reason: o.crashReason };
+  if (o.loads > 0 && !o.pageClean) return { ...o.current, cleanExit: false, reason: 'page-reloaded' };
+  return null;
+}
+
+/** A crash reason in words, for the Recover dialog and reports. */
+export function reasonWords(reason: string | undefined): string {
+  switch (reason) {
+    case 'web-content-terminated': return 'Its web content process stopped (WebKit), so the window went blank';
+    case 'rust-panic': return 'The app’s native side hit an error (a Rust panic)';
+    case 'js-fatal': return 'An error stopped the page';
+    case 'page-reloaded': return 'The page reloaded before it closed cleanly';
+    case 'webgl-context-lost': return 'The graphics (WebGL) context was lost';
+    case 'unknown': case undefined: return 'It was force-quit, killed, replaced by a new build, or the Mac lost power';
+    default: return reason;
+  }
 }
 
 /** A plug-in that was loading when the app went down (the engine's `loading-plugin.json`). */
@@ -171,30 +241,40 @@ export function parsePluginCrash(raw: unknown): PluginCrash | null {
 }
 
 export type RecoverDecision =
-  | { offer: false; reason: 'no-session' | 'clean' | 'no-snapshot' | 'other-session' | 'nothing-unsaved' | 'saved-since' }
-  | { offer: true; snapshot: SnapshotMeta; title: string; message: string };
+  | { offer: false; reason: 'no-session' | 'clean' | 'no-snapshot' | 'other-session' | 'nothing-unsaved' | 'saved-since' | 'empty' }
+  | { offer: true; snapshot: SnapshotMeta; others: SnapshotMeta[]; skippedEmpty: number; title: string; message: string };
 
 const stageWords = (s?: string) => (s === 'window' ? 'opening the window of' : s === 'preset' ? 'restoring the settings of' : 'loading');
+const hasWork = (s: SnapshotMeta) => s.work === undefined || s.work > 0;
 
 /**
- * Offer to recover? Only when the last session didn't end cleanly, and the
- * newest snapshot is from that session, had unsaved changes, and is newer than
- * the session's last real save.
+ * Offer to recover? Only when the last session didn't end cleanly, and that
+ * session's newest autosave with work in it (a blank canvas is skipped) had
+ * unsaved changes and is newer than the session's last real save. `others`
+ * are the session's other autosaves, newest first, for the dialog to list.
  */
-export function recoverDecision(prev: SessionMarker | null, newest: SnapshotMeta | null, crash: PluginCrash | null, formatTime: (ms: number) => string): RecoverDecision {
+export function recoverDecision(prev: SessionMarker | null, snaps: SnapshotMeta | readonly SnapshotMeta[] | null, crash: PluginCrash | null, formatTime: (ms: number) => string): RecoverDecision {
+  const list = (snaps === null ? [] : Array.isArray(snaps) ? [...snaps] : [snaps as SnapshotMeta]).sort((a, b) => b.at - a.at);
   if (!prev) return { offer: false, reason: 'no-session' };
   if (prev.cleanExit) return { offer: false, reason: 'clean' };
-  if (!newest) return { offer: false, reason: 'no-snapshot' };
-  if (newest.session !== prev.id) return { offer: false, reason: 'other-session' };
-  if (!newest.project.dirty) return { offer: false, reason: 'nothing-unsaved' };
-  if (prev.lastSaveAt && prev.lastSaveAt >= newest.at) return { offer: false, reason: 'saved-since' };
-  const name = newest.project.name ?? 'Untitled';
+  if (!list.length) return { offer: false, reason: 'no-snapshot' };
+  const mine = list.filter(s => s.session === prev.id);
+  if (!mine.length) return { offer: false, reason: 'other-session' };
+  const pick = mine.find(hasWork);
+  if (!pick) return { offer: false, reason: 'empty' };
+  if (!pick.project.dirty) return { offer: false, reason: 'nothing-unsaved' };
+  if (prev.lastSaveAt && prev.lastSaveAt >= pick.at) return { offer: false, reason: 'saved-since' };
+  const skippedEmpty = mine.indexOf(pick);
+  const name = pick.project.name ?? 'Untitled';
   const what = crash ? ` while ${stageWords(crash.stage)} ${crash.name}, with “${name}” open` : ` while “${name}” was open`;
   return {
     offer: true,
-    snapshot: newest,
+    snapshot: pick,
+    others: mine.filter(s => s !== pick),
+    skippedEmpty,
     title: 'Recover your work?',
-    message: `Playfield closed unexpectedly${what} (last autosaved ${formatTime(newest.at)}).`
+    message: `Playfield closed unexpectedly${what} (last autosaved ${formatTime(pick.at)}).`
+      + (skippedEmpty ? ` The newest autosave${skippedEmpty > 1 ? 's were' : ' was'} empty, so this is the latest one with your work.` : '')
       + (crash ? ` ${crash.name} has been switched off in Settings → Plugins; you can try it again there.` : ''),
   };
 }

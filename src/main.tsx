@@ -1,4 +1,10 @@
 import { createRoot } from 'react-dom/client'
+// First of all: console warnings/errors, uncaught errors and app events into the crash log (docs/crash-recovery.md).
+import { installCrashCapture, logEvent, onCapturedError } from './lib/crashLog'
+import { CrashBoundary } from './components/crash/CrashBoundary'
+import { CrashReportViewerHost } from './components/crash/CrashReports'
+import { installCrashSimulator } from './dev/simulateCrash'
+import { useBuilderWindows } from './builders/windows'
 // First: every Play record the app opens is turned into rules (types/play.ts parsePlayRecord).
 import './play/rules'
 import './index.css'
@@ -42,6 +48,9 @@ import { tape, useTape } from './lib/tape'
 import { audioEngine } from './lib/audioEngine'
 import { padGrid } from './lib/padGrid'
 import { dropRetiredExperimentData } from './lib/retiredExperiments'
+
+installCrashCapture()
+installCrashSimulator()
 
 // The webcam turns off as soon as no layer or hand tracking uses it.
 dropRetiredExperimentData()
@@ -117,7 +126,7 @@ if (import.meta.env.DEV) {
 // Dev-only component gallery for the redesign primitives: open the app with #ui.
 // import.meta.env.DEV is false in production builds, so the gallery isn't bundled.
 function startApp() {
-  root.render(<><App /><Toaster /><BackgroundsHost /><LinkedPickerHost /><DialogHost /><NodeDragGhost /><ProSheetHost /><PlayfileHost /><BuilderWindowHost /><PerformanceBar /><FunctionCardHost /></>)
+  root.render(<><CrashBoundary><App /></CrashBoundary><CrashReportViewerHost /><Toaster /><BackgroundsHost /><LinkedPickerHost /><DialogHost /><NodeDragGhost /><ProSheetHost /><PlayfileHost /><BuilderWindowHost /><PerformanceBar /><FunctionCardHost /></>)
   // Songs stop when the graph that owns them is closed or they're deleted.
   void import('./lib/audioSync').then(m => m.startAudioSync())
   // Text layers' fonts from linked folders (docs/linked-folders.md) are read from disk.
@@ -128,6 +137,18 @@ function startApp() {
   // Crash recovery (docs/crash-recovery.md): after the blank graph is up, offer to recover a crashed
   // session's unsaved work, then autosave the open project on the setting's cadence.
   window.setTimeout(() => { void import('./files/recovery').then(m => m.startRecovery()) }, 1000)
+  // An uncaught error that leaves the page blank (React unmounted the app) is a crash: report it and offer Reload → Recover.
+  onCapturedError(e => {
+    window.setTimeout(() => {
+      if (document.getElementById('root')?.childElementCount === 0) void import('./files/recovery').then(m => m.crashPage('js-fatal', e, { reload: false }))
+    }, 0)
+  })
+  // Builders opened, for the crash log.
+  useBuilderWindows.subscribe((s, prev) => {
+    for (const k of ['gridRules', 'agentRules', 'agentBuilder', 'sceneShell'] as const) if (s[k] && !prev[k]) logEvent(`builder: ${k}`)
+  })
+  // Help → Report a problem… (the desktop's menu).
+  if ('__TAURI_INTERNALS__' in window) void import('@tauri-apps/api/event').then(({ listen }) => listen('report-problem', () => { void import('./files/crashReports').then(m => m.reportProblem()) }))
   // Autosave as versions (docs/graph-series-plan.md): a named graph's changes become a new minor version every few minutes.
   void import('./files/versionAutosaveApp').then(m => m.startVersionAutosave())
 }
