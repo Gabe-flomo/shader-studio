@@ -23,6 +23,7 @@ import { blockSummary, cloneBlock, COMBINE_BY_MODE, type CombineMode, type Combi
 import type { TexSource, TexUse } from '../builders/textures';
 import type { StackItem } from '../builders/look/stack';
 import type { DepthPic2D } from './depth';
+import type { QuickPin } from './quick';
 import type { DistMod } from './modify';
 import type { GlowType } from '../nodes/definitions/combiners';
 
@@ -391,6 +392,8 @@ export interface Scene2D {
   effects?: StackItem[];
   /** A picture with depth the shapes interact with (depth.ts, docs/depth-mix.md), or none. */
   depth?: DepthPic2D | null;
+  /** Quick controls: builder sliders pinned under the preview, Play controls once built (quick.ts). */
+  quick?: QuickPin[];
 }
 
 // ── Defaults ────────────────────────────────────────────────────────────────
@@ -582,6 +585,7 @@ export function canonicalScene(spec: Scene2D): Scene2D {
     if (!it.glowType) delete it.glowType;
     if (!it.mods?.length) delete it.mods;
   });
+  if (!out.quick?.length) delete out.quick;
   if (!out.depth) delete out.depth;
   else delete out.depth.bake;
   let s = 0, g = 0, m = 0, p = 0, xi = 0;

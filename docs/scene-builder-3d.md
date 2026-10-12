@@ -815,6 +815,8 @@ depth" from the March Loop card ([depth-node.md](depth-node.md#add-a-picture-wit
 - **How:** **In the picture** (Depth Composite: the nearer one shows at each pixel), **…lit by the scene** (+ Depth
   Light: the scene's glowing shapes light the picture, its objects shadow it), **…lit, and reflected** (+ Picture
   Environment: the objects mirror the picture and take its colour).
+- **Preview:** Result | Picture | Depth | Shaped depth in the viewport (Shaped depth is the picture's distance through
+  Nearest and Farthest, near bright), with a heat-map toggle and a side-by-side strip ([depth-mix.md](depth-mix.md#seeing-the-depth)).
 - **Nearest** / **Farthest** (where, in scene units, the picture's near and far things are) and **Edge softness**.
 - **Face the picture** turns the camera to angle 0, height 0, no orbit: a photo is seen from the front.
 

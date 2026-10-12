@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.187',
+    date: '2026-10-11',
+    title: 'Quick controls',
+    highlights: [
+      { area: 'Studio', text: '2D Scene Builder: pin any slider to Quick controls under the preview; each becomes a Play control on Build, and Open in Play takes you there.' },
+      { area: 'Studio', text: 'Depth preview: see the Picture, the raw Depth (or a heat map) or the Shaped depth the effects read, in the 2D Depth tab and the 3D card.' },
+      { area: 'Studio', text: 'Grid Rules: a slim strip shows the step and alive/dead share in green and red; born and dies markers are always on.' },
+    ],
+  },
+  {
     id: '2026.10.186',
     date: '2026-10-11',
     title: 'Loops',

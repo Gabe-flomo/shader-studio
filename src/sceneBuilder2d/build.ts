@@ -476,7 +476,9 @@ function emitItem(b: B, it: Item, pos: Ref, depth: number): Ref | null {
   const baseScale = it.scale * unit;
   // Depth → size: every top-level layer grows by the picture's depth (its Transform's Grow).
   const depthGrow = depth === 0 ? b.depthGrow ?? null : null;
-  const placed = it.at[0] !== 0 || it.at[1] !== 0 || it.rot !== 0 || baseScale !== 1 || motions.length > 0 || !!depthGrow;
+  // A placing pinned to Quick controls (quick.ts) is built even at rest, so its Play control has a param to drive.
+  const pinned = !!spec.quick?.some(q => q.play?.role === `${it.id}:place`);
+  const placed = it.at[0] !== 0 || it.at[1] !== 0 || it.rot !== 0 || baseScale !== 1 || motions.length > 0 || !!depthGrow || pinned;
   let start: Branch = { pos, scales: [] };
   if (placed) {
     const mo = emitMotion(b, it, name);
@@ -492,6 +494,7 @@ function emitItem(b: B, it: Item, pos: Ref, depth: number): Ref | null {
     if (it.rot) bits.push(`turned ${fmt(it.rot)}°`);
     if (baseScale !== 1) bits.push(def?.unit ? `sized ${fmt(unit)} (a ${def.label.toLowerCase()} has no radius of its own, so its size is this node's Scale)` : `scaled ${fmt(it.scale)}×`);
     if (motions.length) bits.push('moved by its motion');
+    if (pinned && !bits.length) bits.push('at rest for now (its place is a Quick control, so Play can move it)');
     if (depthGrow) bits.push('grown by the picture\'s depth (Grow is wired from Depth Mix\'s Scale: bigger on near things)');
     const pl = mk(c, 'transform', `${it.id}:place`, { dim: '2', x: it.at[0], y: it.at[1], rotate: it.rot, scale: baseScale }, wires,
       `Places ${name}: ${bits.join(', ')}. Transform gives the shape a new view of space: the shape is measured from the point as it sees it, so it ends up where the node says. Its Scale output multiplies the distance back to the picture's units.`);

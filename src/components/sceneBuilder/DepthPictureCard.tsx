@@ -2,7 +2,8 @@
  * DepthPictureCard — "Picture with depth" in the 3D Scene Builder (docs/scene-builder-3d.md, "A picture with depth"):
  * the objects stand in a photo. Pick the picture, generate its depth on this device, and choose how far it goes: in
  * the picture (Depth Composite), lit by the scene (+ Depth Light), and reflected (+ Picture Environment). The same
- * three as "Add a picture with depth" on a March Loop card, as plain choices.
+ * three as "Add a picture with depth" on a March Loop card, as plain choices. The Preview switch shows the viewport
+ * the picture, its raw depth or its shaped depth (through Nearest / Farthest) instead (builders/depthPreview.ts).
  */
 import { useSceneBuilder } from '../../sceneBuilder/store';
 import { DEPTH_PIC_3D_HOWS, newDepthPic3D, type DepthPic3D, type DepthPic3DHow } from '../../sceneBuilder/spec';
@@ -13,6 +14,10 @@ import { BuilderNote } from '../builders/BuilderWindow';
 import { Card, NumRow, Row } from './controls';
 import { Select } from '../ui/Select';
 import { Button } from '../ui/Button';
+import { DepthViewSwitch } from '../builders/DepthViewSwitch';
+import { depthViewsFor } from '../../builders/depthPreview';
+import { compileSpec } from './previewGl';
+import { useTokens } from '../../theme/themeStore';
 
 const D = newDepthPic3D('');
 
@@ -20,6 +25,8 @@ export function DepthPictureCard() {
   const depth = useSceneBuilder(s => s.spec.depth) ?? null;
   const textures = useSceneBuilder(s => s.spec.textures) ?? [];
   const camera = useSceneBuilder(s => s.spec.camera);
+  const spec = useSceneBuilder(s => s.spec);
+  const tk = useTokens();
   const edit = useSceneBuilder(s => s.edit);
   const setD = (fn: (d: DepthPic3D) => void, key?: string) => edit(s => { if (s.depth) fn(s.depth); }, key && `depth:${key}`);
   const src = depth ? findTex(textures, depth.tex) : undefined;
@@ -39,6 +46,11 @@ export function DepthPictureCard() {
           </Row>
           <BuilderNote>{how!.blurb}</BuilderNote>
           <DepthGenerateRow pictureNode={src?.node} source={depth.tex} bake={depth.bake} onBake={info => setD(d => { d.bake = info; })} />
+          <div data-depth3d-preview style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <span style={{ fontSize: 12.5, color: tk.text.secondary }}>Preview</span>
+            <DepthViewSwitch views={depthViewsFor()} source={spec} compile={compileSpec}
+              notes={{ shaped: 'The picture\'s distance through Nearest and Farthest (near bright): what the objects are measured against.' }} />
+          </div>
           <NumRow label="Nearest" hint="How far from the camera, in scene units, the nearest thing in the picture is." value={depth.near} defaultValue={D.near} min={0.1} max={20} onChange={v => setD(d => { d.near = v; }, 'near')} />
           <NumRow label="Farthest" hint="How far the farthest thing in the picture is. Further spreads the picture deeper." value={depth.far} defaultValue={D.far} min={0.2} max={100} step={0.1} onChange={v => setD(d => { d.far = v; }, 'far')} />
           <NumRow label="Edge softness" hint="How gently the objects fade in at the picture's edges (hides halos round hair)." value={depth.soft} defaultValue={D.soft} min={0} max={1} step={0.005} onChange={v => setD(d => { d.soft = v; }, 'soft')} />
