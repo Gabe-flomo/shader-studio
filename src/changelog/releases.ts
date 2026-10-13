@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.202',
+    date: '2026-10-13',
+    title: 'Particles that stay',
+    highlights: [
+      { area: 'Studio', text: 'Particle presets start with Fade and Dies off, so particles live for ever. Turn either card on in Life when you want them to go.' },
+      { area: 'Studio', text: 'Feedback (texture) cards show their trail live, and no longer report a false shader error from their preview.' },
+    ],
+  },
+  {
     id: '2026.10.201',
     date: '2026-10-13',
     title: 'Calmer agents',
