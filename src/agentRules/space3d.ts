@@ -163,9 +163,10 @@ const curl3d = (): AgentRuleSet => base({
       { when: [{ kind: 'always' }], do: [
         { kind: 'force', field: 'curl', strength: 1.2 },
         { kind: 'drag', amount: 0.4 },
-        { kind: 'fade', seconds: 6 },
       ] },
-      { when: [{ kind: 'age', cmp: '>', seconds: 6 }], do: [{ kind: 'die' }] },
+      // Fade and die start switched off: the particles live for ever until you turn them on.
+      { when: [{ kind: 'always' }], do: [{ kind: 'fade', seconds: 6 }], off: true },
+      { when: [{ kind: 'age', cmp: '>', seconds: 6 }], do: [{ kind: 'die' }], off: true },
     ],
   }],
 });

@@ -128,9 +128,9 @@ describe('particles', () => {
     vi.useFakeTimers();
     start('particles');
     click($('[data-studio-section="life"]'));
-    expect($('[data-diagram="life"]')?.getAttribute('data-dies')).toBe('3.2');
+    // Dies starts off (the sparks live for ever); its slider still sets when, for when it is turned on.
+    expect($('[data-diagram="life"]')?.getAttribute('data-dies')).toBe('');
     key($('[data-card-slot="die#0"] [data-setting="dieAfter"] [data-ruler-track]'), 'End');
-    expect($('[data-diagram="life"]')?.getAttribute('data-dies')).toBe('20');
     settle();
     expect(groupRules(group()!).species[0].rules.find(r => r.do[0].kind === 'die')!.when).toEqual([{ kind: 'age', cmp: '>', seconds: 20 }]);
   });

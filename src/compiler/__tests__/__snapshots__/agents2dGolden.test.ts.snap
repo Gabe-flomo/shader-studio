@@ -324,7 +324,7 @@ exports[`2D agents and pass graphs compile as they did before 3D > agentRulesFir
 
 exports[`2D agents and pass graphs compile as they did before 3D > agentRulesParticles 1`] = `
 {
-  "agents": "0ed6cb37cae8d1179b2c76b36216:17778",
+  "agents": "1d0f216224f0201e073a91e951c2:16182",
   "errors": null,
   "fragmentShader": "04af75c037f3d40f0db98cf47584:3881",
   "paramBindings": "1ebb79549dfccb12f1127929943b:1841",
@@ -332,7 +332,7 @@ exports[`2D agents and pass graphs compile as they did before 3D > agentRulesPar
   "passes": "167d269bbddad80189e9f9473b28:2",
   "success": true,
   "textureUniforms": "167d269bbddad80189e9f9473b28:2",
-  "web": "118f21ae724d96135beed029ed2d:17842",
+  "web": "0127d7a2678703058b0964356d89:16267",
 }
 `;
 
