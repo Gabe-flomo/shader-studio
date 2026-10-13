@@ -186,10 +186,10 @@ function emitFor(kind: AgentRuleStart, id: string, x: number, y: number): GraphN
 /** Draw agents for a rule, over `over` (what the Output showed) when given. */
 function drawFor(kind: AgentRuleStart, id: string, x: number, y: number, groupId: string, over: Conn | null): GraphNode {
   const d = n('drawAgents', id, x, y, {
-    style: 'glow', colorBy: kind === 'particles' ? 'speed' : 'heading', palette: kind === 'particles' ? 'ember' : 'ab', scaleBy: 'crowd', size: 1.5, brightness: 1, glow: 1, fade: 'on', lights: '0',
+    style: 'points', colorBy: kind === 'particles' ? 'speed' : 'heading', palette: kind === 'particles' ? 'ember' : 'ab', scaleBy: 'crowd', size: 1.5, brightness: 1, glow: 1, fade: 'on', lights: '0',
     ...note([
-      'Draw agents: draws every walker as a small glowing dot' + (over ? ', over the picture the Output showed before' : '') + '.',
-      'Try: Style Streaks for motion trails; Colour by Species, Speed or Age; Brightness for a denser look.',
+      'Draw agents: draws every walker as a small dot' + (over ? ', over the picture the Output showed before' : '') + '.',
+      'Try: Style Glow for a soft glow, Streaks for motion trails; Colour by Species, Speed or Age; Brightness for a denser look.',
     ]),
   }, { agents: [groupId, 'agents'] });
   if (over) d.inputs.over = { ...d.inputs.over, connection: over };

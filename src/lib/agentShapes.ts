@@ -20,6 +20,7 @@
  *    16 × 6 quads: 144 or 576 vertices.
  */
 import { gpFade, gpPaletteGlsl } from '../play/kit/gpuParticles.js';
+import { AG_CAM_GLSL } from '../play/kit/agentShaders.js';
 
 export const SHAPES = ['dot', 'cube', 'sphere', 'rod', 'tile', 'voxel'] as const;
 export type ShapeKind = typeof SHAPES[number];
@@ -263,6 +264,8 @@ uniform vec2 u_viewSize;
 uniform vec3 u_eye, u_fwd, u_right, u_up, u_boxHalf;
 uniform ivec3 u_gridN;
 uniform float u_lens, u_ortho, u_camDist;
+uniform vec2 u_proj;
+${AG_CAM_GLSL}
 out vec3 v_col;
 out vec3 v_n;
 out vec4 v_face;
@@ -328,16 +331,10 @@ void main() {
   // The camera: the built-in one, or a scene's from its probe.
   vec3 eye = u_eye, f = u_fwd, r = u_right, u = u_up;
   float lens = u_lens, cd = u_camDist, fl = clamp(u_ortho, 0.0, 1.0);
+  // Perspective (Normal / Orthographic / Reverse, docs/camera-projections.md): the dots' own maths (AG_CAM_GLSL).
+  vec2 proj = u_proj;
   if (u_camSrc == 1) {
-    eye = texelFetch(u_cam, ivec2(0, 0), 0).xyz;
-    f = normalize(texelFetch(u_cam, ivec2(1, 0), 0).xyz);
-    vec3 rx = normalize(texelFetch(u_cam, ivec2(2, 0), 0).xyz), ry = normalize(texelFetch(u_cam, ivec2(3, 0), 0).xyz);
-    float cx = dot(rx, f), cy = clamp(dot(ry, f), -0.9999, 0.9999);
-    lens = 0.5 / tan(acos(cy));
-    r = normalize(rx - cx * f);
-    u = normalize(ry - cy * f);
-    u = normalize(u - dot(r, u) * r);
-    cd = max(0.1, dot(-eye, f));
+    agSceneCam(u_cam, eye, f, r, u, lens, cd, proj);
     fl = 0.0;
   }
   v_R = r; v_U = u; v_F = f;
@@ -352,7 +349,7 @@ void main() {
   vec3 d = P - eye;
   float z = dot(d, f);
   if (fl < 0.999 && z < 0.06 + rad) { agCull(); return; }
-  float W = mix(z, cd, fl);
+  float W = agCamW(z, cd, proj, fl);
   vec2 ndc = vec2(dot(d, r) / u_aspect, dot(d, u)) * lens / W;
   float m = 1.05 + rad * lens / W;
   if (abs(ndc.x) > m + 1.0 / u_aspect || abs(ndc.y) > m) { agCull(); return; }
@@ -425,7 +422,7 @@ void main() {
   v_col = agShade(v_col, normalize(n), r, u, f, ${v.cls === 'box' || v.cls === 'tile'});
 #endif
   vec3 dd = pos - eye;
-  float zz = dot(dd, f), WW = mix(zz, cd, fl);
+  float zz = dot(dd, f), WW = agCamW(zz, cd, proj, fl);
   v_dist = length(dd);
   gl_Position = vec4(dot(dd, r) * lens / u_aspect, dot(dd, u) * lens, (clamp(zz / SHAPE_FAR, 0.0, 1.0) * 2.0 - 1.0) * WW, WW);
 }`;
