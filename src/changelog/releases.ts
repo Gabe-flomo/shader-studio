@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.201',
+    date: '2026-10-13',
+    title: 'Calmer agents',
+    highlights: [
+      { area: 'Studio', text: 'Agents and particles start as plain dots (Glow is one click away), and particles start without a trail: raise Deposit Amount for one.' },
+      { area: 'Studio', text: 'Solid agent shapes (cubes, rods, voxels) now follow the camera\'s Orthographic and Reverse perspective, like dots and splats.' },
+    ],
+  },
+  {
     id: '2026.10.200',
     date: '2026-10-12',
     title: 'Render Targets',
