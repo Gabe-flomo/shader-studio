@@ -310,7 +310,7 @@ exports[`2D agents and pass graphs compile as they did before 3D > agentRulesDla
 
 exports[`2D agents and pass graphs compile as they did before 3D > agentRulesFireflies 1`] = `
 {
-  "agents": "1ee8397fa634d716ff4b971dff5b:22547",
+  "agents": "1d898976bdeefc1790a0560a06b1:22551",
   "errors": null,
   "fragmentShader": "1619001bd587ff14740051694fdd:3970",
   "paramBindings": "1066ddf4b2c0341bfefc197fc9e7:1851",
@@ -318,21 +318,21 @@ exports[`2D agents and pass graphs compile as they did before 3D > agentRulesFir
   "passes": "167d269bbddad80189e9f9473b28:2",
   "success": true,
   "textureUniforms": "167d269bbddad80189e9f9473b28:2",
-  "web": "11f492ae3c50151027988f139160:22462",
+  "web": "0cb6e484529c8c1fc220affe0719:22466",
 }
 `;
 
 exports[`2D agents and pass graphs compile as they did before 3D > agentRulesParticles 1`] = `
 {
-  "agents": "06dc9606af6bc904db33e6c1d68c:17774",
+  "agents": "0ed6cb37cae8d1179b2c76b36216:17778",
   "errors": null,
   "fragmentShader": "04af75c037f3d40f0db98cf47584:3881",
   "paramBindings": "1ebb79549dfccb12f1127929943b:1841",
-  "paramUniforms": "15496e1e97b605080d017259c5ed:1263",
+  "paramUniforms": "0b6a6253aee6531cd8b6848aa2ff:1260",
   "passes": "167d269bbddad80189e9f9473b28:2",
   "success": true,
   "textureUniforms": "167d269bbddad80189e9f9473b28:2",
-  "web": "013277853ba03306016f4e7644eb:17838",
+  "web": "118f21ae724d96135beed029ed2d:17842",
 }
 `;
 
@@ -366,7 +366,7 @@ exports[`2D agents and pass graphs compile as they did before 3D > agentRulesSca
 
 exports[`2D agents and pass graphs compile as they did before 3D > agentRulesSir 1`] = `
 {
-  "agents": "15b884f6491b5f1281d11f6b363b:22463",
+  "agents": "185657cd47fd6401655b0e3eff3b:22467",
   "errors": null,
   "fragmentShader": "1b3a98bcedb064099be7cf2a9a32:3569",
   "paramBindings": "17596d2b1a28840a789adeae4551:1839",
@@ -374,7 +374,7 @@ exports[`2D agents and pass graphs compile as they did before 3D > agentRulesSir
   "passes": "167d269bbddad80189e9f9473b28:2",
   "success": true,
   "textureUniforms": "167d269bbddad80189e9f9473b28:2",
-  "web": "0942944684570016a87745b3c9ba:22360",
+  "web": "1f7b8952b35c441578abeaac5068:22364",
 }
 `;
 

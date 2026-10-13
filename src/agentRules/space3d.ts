@@ -177,7 +177,7 @@ export const RULES_TEMPLATES_3D: Rules3dTemplate[] = [
     emit: { mode: 'fill', shape: 'ball', heading: 'outward', x: 0, y: 0, z: 0, size: 0.5, life: 0 },
     deposit: { amount: 4, size: 1, what: 'trail' },
     trail: { volume: '96', diffuse: 1, halfLife: 0.1, edges: 'wrap', gain: 0.04, kernel: '3' },
-    draw: { style: 'glow', colorBy: 'heading', palette: 'ab', colorA: [1, 0.55, 0.2], colorB: [0.35, 0.65, 1], scaleBy: 'crowd', size: 1.4, brightness: 2.2, glow: 0.9, fade: 'off', lights: '0', ...CAMERA_3D },
+    draw: { style: 'points', colorBy: 'heading', palette: 'ab', colorA: [1, 0.55, 0.2], colorB: [0.35, 0.65, 1], scaleBy: 'crowd', size: 1.4, brightness: 2.2, glow: 0.9, fade: 'off', lights: '0', ...CAMERA_3D },
     notes: {
       group: [
         'Space 3D: 262,144 walkers (256k) in a box as deep as the picture is tall. Sensors 0.15 ahead and Speed 1.2: a volume\'s cells are coarse (96 rows), so a 3D slime looks and walks about five times further than a flat one, or it can\'t see past its own trail and balls up.',
@@ -215,7 +215,7 @@ export const RULES_TEMPLATES_3D: Rules3dTemplate[] = [
     emit: { mode: 'fill', shape: 'ball', heading: 'random', x: 0, y: 0, z: 0, size: 0.8, life: 0 },
     deposit: { amount: 0.4, size: 1, what: 'trail' },
     trail: { volume: '64', diffuse: 1, halfLife: 0.1, edges: 'wrap', gain: 0.04, kernel: '3' },
-    draw: { style: 'glow', colorBy: 'agent', palette: 'ab', scaleBy: 'crowd', size: 1.5, brightness: 1.6, glow: 1.1, fade: 'off', lights: '0', ...CAMERA_3D, camDist: 3.2, camAngle: 30, camElevation: 38, rotSpeed: 4, drift: 0.08, blur: 0.35, maxBlur: 8 },
+    draw: { style: 'points', colorBy: 'agent', palette: 'ab', scaleBy: 'crowd', size: 1.5, brightness: 1.6, glow: 1.1, fade: 'off', lights: '0', ...CAMERA_3D, camDist: 3.2, camAngle: 30, camElevation: 38, rotSpeed: 4, drift: 0.08, blur: 0.35, maxBlur: 8 },
     notes: {
       group: [
         'Space 3D, Kind Swarm: 65,536 walkers (64k). Orbit circles the centre round an axis through it square to the picture, at any depth, so the swarm makes a thick ring; Neighbours (0.08, a ball in 3D) keep them apart and together.',
@@ -232,9 +232,9 @@ export const RULES_TEMPLATES_3D: Rules3dTemplate[] = [
     key: 'curl3d', label: 'Particles: 3D curl smoke', set: curl3d, tier: '64k', preroll: 4,
     blurb: 'Particles born in a small ball, carried by 3D curl noise into folding sheets and threads, slowed by drag; each fades over six seconds and is born again.',
     emit: { mode: 'respawn', shape: 'ball', heading: 'random', x: 0, y: 0, z: 0, size: 0.25, life: 0, speed: 0.3, speedVar: 0.5, spread: 1 },
-    deposit: { amount: 0.3, size: 1, what: 'trail' },
+    deposit: { amount: 0, size: 1, what: 'trail' },
     trail: { volume: '64', diffuse: 1, halfLife: 0.1, edges: 'clamp', gain: 0.04, kernel: '3' },
-    draw: { style: 'glow', colorBy: 'agent', palette: 'ab', scaleBy: 'crowd', size: 1.3, brightness: 1.4, glow: 1, fade: 'off', lights: '0', ...CAMERA_3D, camDist: 3.4, camElevation: 10, rotSpeed: 8, blur: 0.3 },
+    draw: { style: 'points', colorBy: 'agent', palette: 'ab', scaleBy: 'crowd', size: 1.3, brightness: 1.4, glow: 1, fade: 'off', lights: '0', ...CAMERA_3D, camDist: 3.4, camElevation: 10, rotSpeed: 8, blur: 0.3 },
     notes: {
       group: [
         'Space 3D, Kind Particles: 65,536 particles (64k), no sensing. Always: curl noise pushes (in a 3D group it is the Particles engine\'s 3D curl, so streams fold into sheets), drag slows, and the colour fades over 6 s; older than 6 s: die, and Emit\'s Keep full brings it straight back.',
@@ -275,7 +275,7 @@ RULES_TEMPLATES_3D.push({
   emit: { mode: 'fill', shape: 'sphere', heading: 'random', x: 0, y: 0, z: 0, size: 1, life: 0 },
   deposit: { amount: 4, size: 1, what: 'trail' },
   trail: { volume: '96', diffuse: 1, halfLife: 0.1, edges: 'wrap', gain: 0.04, kernel: '3' },
-  draw: { style: 'glow', colorBy: 'heading', palette: 'ab', colorA: [1, 0.55, 0.2], colorB: [0.35, 0.65, 1], scaleBy: 'crowd', size: 1.4, brightness: 2.2, glow: 0.9, fade: 'off', lights: '0', ...CAMERA_3D, blur: 0.25 },
+  draw: { style: 'points', colorBy: 'heading', palette: 'ab', colorA: [1, 0.55, 0.2], colorB: [0.35, 0.65, 1], scaleBy: 'crowd', size: 1.4, brightness: 2.2, glow: 0.9, fade: 'off', lights: '0', ...CAMERA_3D, blur: 0.25 },
   notes: {
     group: [
       'Space 3D, round a shape: the 3D slime (sensors 0.15 ahead, Speed 1.2) with Collide (3D scene) after Move, reading the Torus scene through the group\'s Scene socket, so the walkers can\'t go into the torus and their network wraps round it.',

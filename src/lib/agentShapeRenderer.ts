@@ -22,7 +22,7 @@ export interface ShapeDrawState {
   a: THREE.Texture; b: THREE.Texture; c: THREE.Texture | null; e: THREE.Texture | null;
   side: number; species: number;
 }
-export interface ShapeCamera { eye: number[]; fwd: number[]; right: number[]; up: number[]; lens: number; ortho: number; dist: number }
+export interface ShapeCamera { eye: number[]; fwd: number[]; right: number[]; up: number[]; lens: number; ortho: number; dist: number; proj?: number[] }
 
 const v3 = () => ({ value: new THREE.Vector3() });
 
@@ -76,7 +76,7 @@ export class AgentShapeRenderer {
         u_viewSize: { value: new THREE.Vector2(1, 1) },
         u_eye: v3(), u_fwd: { value: new THREE.Vector3(0, 0, -1) }, u_right: { value: new THREE.Vector3(1, 0, 0) }, u_up: { value: new THREE.Vector3(0, 1, 0) }, u_boxHalf: v3(),
         u_gridN: { value: new THREE.Vector3(1, 1, 1) },
-        u_lens: { value: 1.8 }, u_ortho: { value: 0 }, u_camDist: { value: 3 },
+        u_lens: { value: 1.8 }, u_ortho: { value: 0 }, u_camDist: { value: 3 }, u_proj: { value: new THREE.Vector2(0, 1) },
         u_ambient: { value: 0.3 }, u_rim: { value: 0.35 }, u_edgeW: { value: 0.12 },
       },
     });
@@ -151,6 +151,7 @@ export class AgentShapeRenderer {
     (u.u_eye.value as THREE.Vector3).fromArray(cam.eye); (u.u_fwd.value as THREE.Vector3).fromArray(cam.fwd);
     (u.u_right.value as THREE.Vector3).fromArray(cam.right); (u.u_up.value as THREE.Vector3).fromArray(cam.up);
     u.u_lens.value = cam.lens; u.u_ortho.value = scene ? 0 : cam.ortho; u.u_camDist.value = cam.dist;
+    (u.u_proj.value as THREE.Vector2).fromArray(cam.proj ?? [0, 1]);
     u.u_camSrc.value = scene ? 1 : 0; u.u_cam.value = scene?.cam ?? null;
     u.u_depth.value = scene?.depth ? 1 : 0; u.u_field.value = scene?.depth ?? null;
     u.u_ambient.value = look.ambient; u.u_rim.value = look.rim; u.u_edgeW.value = look.edgeWidth;

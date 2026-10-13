@@ -439,11 +439,11 @@ export function rulesTemplateNodes(key: string, p: string, x = 0, y = 0, withOut
         'Try: gravity at −60° for a slanting fountain, curl noise 1.5 for smoke, drag 0 for sparks that fly far.',
       ],
       emits: [{ mode: 'respawn', shape: 'disc', heading: 'up', x: 0, y: -0.85, size: 0.03, speed: 1.1, speedVar: 0.35, spread: 0.18, life: 0, ...note(['Emit: Keep full: every spark is born at the fountain (a small disc near the bottom), shot upward at 1.1 ± 35% with a little spread, and born again there the moment it dies. The rules\' "apply a force" take it from there.']) }],
-      depositAmount: 0.35, depositWhy: 'Deposit: each spark leaves a faint mark where it flies: the glowing trails under them.',
+      depositAmount: 0, depositWhy: 'Deposit: off by default (Amount 0), so the sparks fly without a trail. Raise Amount for glowing trails under them.',
       trail: { resolution: '512', diffuse: 0.6, halfLife: 0.12, edges: 'clamp', gain: 0.25 },
       trailWhy: ['Trail field: the sparks\' paths, 512 rows, spreading a little and gone in a fraction of a second: short glowing tails.'],
       picture: t => ({ nodes: [palette(`${p}Colour`, X(1680), Y(0), t, [[0.01, 0.01, 0.02], [0.18, 0.05, 0.02], [0.6, 0.22, 0.05], [1, 0.75, 0.35]], ['Stops Palette: the sparks\' trails as embers on a dark ground.'])], out: [`${p}Colour`, 'color'] }),
-      draw: { style: 'glow', colorBy: 'state', palette: 'ab', size: 1.5, brightness: 0.45, glow: 0.7, scaleBy: 'walker', fade: 'off', lights: '0', ...note(['Draw agents, Colour by State: each spark in its state\'s orange, dimmed by its age ("fade with age" in the rules), glowing.']) },
+      draw: { style: 'points', colorBy: 'state', palette: 'ab', size: 1.5, brightness: 0.45, glow: 0.7, scaleBy: 'walker', fade: 'off', lights: '0', ...note(['Draw agents, Colour by State: each spark in its state\'s orange, dimmed by its age ("fade with age" in the rules), glowing.']) },
     }, withOutput);
     case 'scanWalkers': return setup(x, y, {
       p, set: scanWalkers(false), label: 'Scan to walkers (rules)', tier: '256k', steps: 1, preroll: 0,
@@ -518,7 +518,7 @@ export function rulesTemplateNodes(key: string, p: string, x = 0, y = 0, withOut
       trail: { resolution: '512', diffuse: 0.3, halfLife: 0.5, edges: 'wrap', gain: 0.4 },
       trailWhy: ['Trail field: the germs, 512 rows, spreading a little and fading in 0.5 s, so they linger behind the sick.'],
       picture: t => ({ nodes: [palette(`${p}Colour`, X(1680), Y(0), t, [[0.015, 0.015, 0.025], [0.12, 0.03, 0.04], [0.35, 0.06, 0.06]], ['Stops Palette: germs as a faint red haze on a dark ground.'])], out: [`${p}Colour`, 'color'] }),
-      draw: { style: 'glow', colorBy: 'state', palette: 'ab', size: 1.5, brightness: 0.5, glow: 0.5, scaleBy: 'walker', fade: 'off', lights: '0', ...note(['Draw agents, Colour by State: healthy blue, sick red, recovered green.']) },
+      draw: { style: 'points', colorBy: 'state', palette: 'ab', size: 1.5, brightness: 0.5, glow: 0.5, scaleBy: 'walker', fade: 'off', lights: '0', ...note(['Draw agents, Colour by State: healthy blue, sick red, recovered green.']) },
     }, withOutput);
     case 'termites': return setup(x, y, {
       p, set: termites(), label: 'Termites (rules)', tier: '64k', steps: 8, preroll: 0, nodeVersion: 'Simulations: agents → Termites and wood chips (chips exactly conserved)',
@@ -546,7 +546,7 @@ export function rulesTemplateNodes(key: string, p: string, x = 0, y = 0, withOut
       trail: { resolution: '512', diffuse: 0.5, halfLife: 0.05, edges: 'wrap', gain: 0.5 },
       trailWhy: ['Trail field: the light of the flashes. It spreads a little and is gone in a few steps, so a firefly sees a flash only while it happens.', 'Pre-roll 0: they start out of step; watch them fall into step in the first few seconds (Start over to see it again).'],
       picture: t => ({ nodes: [palette(`${p}Colour`, X(1680), Y(0), t, [[0.0, 0.01, 0.02], [0.1, 0.18, 0.05], [0.6, 0.65, 0.2], [1, 1, 0.7]], ['Stops Palette: the flashes\' light on a night sky.'])], out: [`${p}Colour`, 'color'] }),
-      draw: { style: 'glow', colorBy: 'state', palette: 'ab', size: 2, brightness: 0.8, glow: 0.8, scaleBy: 'walker', fade: 'off', lights: '0', ...note(['Draw agents, Colour by State: dim green while dark, bright yellow while flashing.']) },
+      draw: { style: 'points', colorBy: 'state', palette: 'ab', size: 2, brightness: 0.8, glow: 0.8, scaleBy: 'walker', fade: 'off', lights: '0', ...note(['Draw agents, Colour by State: dim green while dark, bright yellow while flashing.']) },
     }, withOutput);
     case 'dla': {
       const uv = n('uv', `${p}Uv`, X(-420), Y(420), { ...note(['UV: where each pixel (inside the group: each walker) is, for Seed.']) });
