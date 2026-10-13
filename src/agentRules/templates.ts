@@ -93,10 +93,11 @@ const particles = (): AgentRuleSet => base({
         { kind: 'force', field: 'gravity', strength: 0.75, angle: -90 },
         { kind: 'force', field: 'curl', strength: 0.6 },
         { kind: 'drag', amount: 0.35 },
-        { kind: 'fade', seconds: 3.2 },
       ] },
       { when: [{ kind: 'always' }], do: [{ kind: 'force', field: 'mouse', strength: -1.2 }], off: true },
-      { when: [{ kind: 'age', cmp: '>', seconds: 3.2 }], do: [{ kind: 'die' }] },
+      // Fade and die start switched off: the sparks live for ever until you turn them on.
+      { when: [{ kind: 'always' }], do: [{ kind: 'fade', seconds: 3.2 }], off: true },
+      { when: [{ kind: 'age', cmp: '>', seconds: 3.2 }], do: [{ kind: 'die' }], off: true },
     ],
   }],
 });

@@ -62,9 +62,9 @@ describe('particles, flocks, crowds and orbiters as cards', () => {
     }
   });
 
-  it('the spark fountain reads as Forces (gravity, curl, drag; the mouse push off), Life (fade, dies after 3.2 s) and nothing Advanced', () => {
+  it('the spark fountain reads as Forces (gravity, curl, drag; the mouse push off), Life (fade, dies after 3.2 s: both off, so they live for ever) and nothing Advanced', () => {
     const b = readBehaviours(tpl('particles'), 0, kindCards('particles'));
-    expect(b.cards.map(c => [c.key, c.on])).toEqual([['gravity#0', true], ['curl#0', true], ['drag#0', true], ['fade#0', true], ['attract#0', false], ['die#0', true]]);
+    expect(b.cards.map(c => [c.key, c.on])).toEqual([['gravity#0', true], ['curl#0', true], ['drag#0', true], ['attract#0', false], ['fade#0', false], ['die#0', false]]);
     expect(b.cards.find(c => c.card === 'die')!.when).toEqual({ kind: 'age', cmp: '>', seconds: 3.2 });
     expect(b.advanced).toEqual([]);
   });

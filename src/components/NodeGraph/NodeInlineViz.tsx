@@ -5216,6 +5216,7 @@ function NodeInlineVizSwitch({ node, onEnterGroup }: { node: GraphNode; onEnterG
     case 'pass':             return <PassThumbViz            node={node} />;
     case 'dataTexture':      return <DataTextureThumb        node={node} />;
     case 'renderTargets':    return <PassThumbViz            node={node} />;
+    case 'textureFeedback':  return <PassThumbViz            node={node} />;
     case 'agentsGroup':      return <AgentsGroupViz          node={node} onEnterGroup={onEnterGroup} />;
     case 'trailField':       return <TrailThumbViz           node={node} />;
     case 'vec2Const':        return <Vec2ConstViz            node={node} />;
