@@ -29,6 +29,7 @@
  * with it and a render of its own hears the same stand-in Beat at the same steps.
  */
 import * as THREE from 'three';
+import { passUniform } from '../nodes/definitions/passes';
 import type { AgentDrawProgram, AgentGroupProgram, AgentParam, AgentsSpec, AgentTrailProgram } from '../compiler/types';
 import { agentDrawUniform, agentNbUniforms, agentScanUniforms, agentStateUniform, agentStepUniform, agentWindowUniform, trailStepUniforms, trailUniform, trailVolUniform } from '../nodes/definitions/agents';
 import { agentScanKey, onAgentScan, pruneAgentScans, wantAgentScan } from './agentScans';
@@ -406,6 +407,7 @@ export class AgentRunner {
     u_aspect: { value: 1 }, u_size: { value: 1.5 }, u_bright: { value: 0.5 }, u_speedRef: { value: 0.5 },
     u_colA: { value: new THREE.Vector3(1, 1, 1) }, u_colB: { value: new THREE.Vector3(1, 1, 1) },
     u_prim: { value: 0 }, u_depth: { value: 0 }, u_field: { value: null }, u_viewSize: { value: new THREE.Vector2(1, 1) },
+    u_sprite: { value: null }, u_useSprite: { value: 0 }, u_spriteOwn: { value: 1 },
     u_ink: { value: 0 }, u_fade: { value: 1 }, u_usePal: { value: 0 }, u_rainbow: { value: 0 }, u_thread: { value: 0 },
     u_pal: { value: [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()] },
     u_lights: { value: 0 }, u_lightZ: { value: new THREE.Vector4() },
@@ -449,6 +451,7 @@ export class AgentRunner {
     u_aspect: { value: 1 }, u_size: { value: 1.5 }, u_bright: { value: 0.5 }, u_speedRef: { value: 0.5 },
     u_colA: { value: new THREE.Vector3(1, 1, 1) }, u_colB: { value: new THREE.Vector3(1, 1, 1) },
     u_prim: { value: 0 }, u_depth: { value: 0 }, u_field: { value: null }, u_viewSize: { value: new THREE.Vector2(1, 1) },
+    u_sprite: { value: null }, u_useSprite: { value: 0 }, u_spriteOwn: { value: 1 },
     u_ink: { value: 0 }, u_fade: { value: 1 }, u_usePal: { value: 0 }, u_rainbow: { value: 0 }, u_thread: { value: 0 },
     u_pal: { value: [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()] },
     u_lights: { value: 0 }, u_lightZ: { value: new THREE.Vector4() },
@@ -1205,6 +1208,7 @@ export class AgentRunner {
     du.u_bright.value = look.bright;
     du.u_speedRef.value = look.speedRef;
     du.u_prim.value = lines ? 1 : 0;
+    this.bindSprite(du, d);
     du.u_thread.value = look.thread;
     du.u_ink.value = ink ? 1 : 0;
     du.u_fade.value = look.fade ? 1 : 0;
@@ -1296,6 +1300,14 @@ export class AgentRunner {
    * built-in camera (kit/agentPlan.js agCamera3) or a scene's (`seen`), with depth of field; then
    * the same glow and compose, the lights' halos where they land through the camera.
    */
+  /** Draw agents' Sprite (docs/agent-sprites.md): its Pass's texture this frame, or the soft dot. */
+  private bindSprite(du: Record<string, THREE.IUniform>, d: AgentDrawProgram): void {
+    const tex = d.sprite ? (this.host.uniforms()[passUniform(d.sprite)]?.value as THREE.Texture | null | undefined) ?? null : null;
+    du.u_sprite.value = tex;
+    du.u_useSprite.value = tex ? 1 : 0;
+    du.u_spriteOwn.value = d.params.spriteColour === 'tint' ? 0 : 1;
+  }
+
   private draw3(s: DrawState, d: AgentDrawProgram, g: AgentGroupProgram, gs: GroupState, aspect: number, time: number, seen: { cam: THREE.Texture; depth: THREE.Texture | null } | null): THREE.WebGLRenderTarget {
     const { renderer } = this.host;
     const prevColor = renderer.getClearColor(new THREE.Color()), prevAlpha = renderer.getClearAlpha();
@@ -1307,6 +1319,7 @@ export class AgentRunner {
     const look = agDrawLook(d, n, s.h, this.reader, this.colourReader);
     const cam = agCamera3(d, this.reader, time, s.h);
     const du = this.draw3Mat.uniforms;
+    this.bindSprite(du, d);
     du.u_a.value = gs.rt[gs.cur].textures[0];
     du.u_b.value = gs.rt[gs.cur].textures[1];
     du.u_c.value = g.stateC ? gs.rt[gs.cur].textures[2] : null;

@@ -8,7 +8,7 @@ exports[`GP engine shaders are unchanged > GP_COVER 1`] = `"1676f7fcad732f1a2549
 
 exports[`GP engine shaders are unchanged > GP_DOWN 1`] = `"19e5d43cd3eb75021df1566999b5:372"`;
 
-exports[`GP engine shaders are unchanged > GP_DRAW_FRAG 1`] = `"1237b27f74181d06cc1421dad991:567"`;
+exports[`GP engine shaders are unchanged > GP_DRAW_FRAG 1`] = `"0e94c21ae5e27c025cb07d300a75:1078"`;
 
 exports[`GP engine shaders are unchanged > GP_DRAW_VERT 1`] = `"0b2e4f36bf77d50053c622ab1cbb:4489"`;
 
