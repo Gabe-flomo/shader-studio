@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.208',
+    date: '2026-10-14',
+    title: 'Small fixes',
+    highlights: [
+      { area: 'Studio', text: 'Help tooltips stay on screen; Warp Builder vector arrows fit their cells; function cards are no longer covered by a second tip.' },
+      { area: 'Studio', text: 'Draw agents\' Sprite takes any texture now: a picture, video or the camera works straight away.' },
+    ],
+  },
+  {
     id: '2026.10.207',
     date: '2026-10-13',
     title: 'Sprites',
