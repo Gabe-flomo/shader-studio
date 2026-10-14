@@ -725,6 +725,10 @@ export function QualityRows() {
       {Q.stepScale !== 'auto' && <NumRow label="" value={Q.stepScale} min={0.3} max={1} step={0.05} onChange={v => edit(d => { d.quality.stepScale = v; }, 'q:step')} />}
       {hints.length > 0 && <BuilderNote>Asking for smaller steps: {hints.map(h => `${h.why} (${h.value})`).join('; ')}.</BuilderNote>}
       <NumRow label="Jitter" hint="Starts each pixel's ray a little way along so steps don't line up into rings." value={Q.jitter} defaultValue={DEFAULT_SPEC.quality.jitter} min={0} max={1} onChange={v => edit(d => { d.quality.jitter = v; }, 'q:jitter')} play={{ at: 'quality', key: 'jitter' }} />
+      <Row label="Voxels" hint="Draws the scene as cubes on a grid, lit face by face. Any shapes work. Not with the GI-lit look, Volumetric or Warp safety (those draw as before).">
+        <Toggle checked={!!Q.voxel} label={Q.voxel ? 'On' : 'Off'} onChange={v => edit(d => { if (v) d.quality.voxel = d.quality.voxel || 0.08; else delete d.quality.voxel; })} />
+      </Row>
+      {!!Q.voxel && <NumRow label="Voxel size" hint="Each cube's size in scene units. Smaller is finer and takes more steps." value={Q.voxel} defaultValue={0.08} min={0.01} max={0.5} step={0.005} onChange={v => edit(d => { d.quality.voxel = Math.max(0.005, v); }, 'q:voxel')} play={{ at: 'quality', key: 'voxel' }} />}
       <Row label="Warp safety" hint="Stops twisted, bent or folded space from tearing: Auto learns the stretch, Careful also measures it each step, High takes shorter steps too. Slower in that order.">
         <Segmented size="sm" ariaLabel="Warp safety" value={Q.warp ?? 'off'}
           options={[{ value: 'off', label: 'Off' }, { value: 'auto', label: 'Auto' }, { value: 'careful', label: 'Careful' }, { value: 'high', label: 'High' }]}

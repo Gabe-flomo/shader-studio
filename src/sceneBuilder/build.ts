@@ -848,7 +848,7 @@ export function buildSceneGraph(spec: SceneSpec, idFor: (role: string) => string
     tidy(inner, 0, 180);
     return { nodes: inner, inputPorts: [], outputPorts: [] };
   };
-  const loopParams = { maxSteps: Q.steps, maxDist: Q.maxDist, stepScale: step, jitter: Q.jitter, bg: [...L.bg], ...(Q.warp ? { warpSafety: Q.warp } : {}) };
+  const loopParams = { maxSteps: Q.steps, maxDist: Q.maxDist, stepScale: step, jitter: Q.jitter, bg: [...L.bg], ...(Q.warp ? { warpSafety: Q.warp } : {}), ...(Q.voxel ? { voxels: true, voxelSize: Q.voxel } : {}) };
 
   let final: Ref;
   let march: MarchRefs | null = null;

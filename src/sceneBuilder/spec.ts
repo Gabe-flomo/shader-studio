@@ -419,6 +419,8 @@ export interface QualitySpec {
   jitter: number;
   /** The loop's Warp safety (docs/warp-safety.md); absent = off. */
   warp?: 'auto' | 'careful' | 'high';
+  /** Voxels (docs/march-voxels.md): the scene drawn as cubes this size; absent = off. */
+  voxel?: number;
 }
 
 export interface SceneSpec {

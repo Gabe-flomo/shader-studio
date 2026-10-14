@@ -282,7 +282,7 @@ const REVERSE_ONLY = new Set(['reverseStrength', 'reverseDist']);
 export function drawSpec(n: GraphNode, slug: string, groupSlug: string, params: Record<string, AgentParam | number[]>): Omit<AgentDrawProgram, 'live'> {
   // Shapes (3D only): the shape, and its settings only then; dots keep the spec they always had.
   const shape = isAgent3d(n) ? shapeOf(n.params.shape) : 'dot';
-  const kept = Object.fromEntries(Object.entries(params).filter(([k]) => (n.params.style === 'splats' || !SPLAT_ONLY.has(k)) && (shape !== 'dot' || !SHAPE_ONLY.has(k)) && (n.params.projection === 'reverse' || !REVERSE_ONLY.has(k)) && (!!n.inputs.sprite?.connection || k !== 'spriteColour')));
+  const kept = Object.fromEntries(Object.entries(params).filter(([k]) => (n.params.style === 'splats' || !SPLAT_ONLY.has(k)) && (shape !== 'dot' || !SHAPE_ONLY.has(k)) && (n.params.projection === 'reverse' || !REVERSE_ONLY.has(k)) && (!!n.inputs.sprite?.connection || (k !== 'spriteColour' && k !== 'spriteSize'))));
   return {
     ...(isAgent3d(n) ? { space3d: true, ...(n.params.camMirror === true ? { mirror: true } : {}) } : {}),
     ...(shape !== 'dot' ? { shape } : {}),

@@ -3074,7 +3074,44 @@ export class ShaderAssembler {
             prelude: [accumDecls, mlBodyAccumulators.map(a => `    ${a.type} ${a.varName}_q = ${a.initExpr};\n`).join(''), curved.decl, jitterDecl],
           });
 
-          const marchLoopLines = mlSafe ? safeLoop() : mlVolumetric ? [
+          // Voxels (docs/march-voxels.md): only on a straight, surface march; anything else marches as before.
+          const mlVoxels = node.params.voxels === true && !mlSafe && !mlVolumetric && mlHasScene && curved.decl === '';
+          const mlVoxelSize = fmtP(node.params.voxelSize, 0.08);
+          const S = nodeSlug;
+          const voxelLoop = (): string[] => [
+            accumDecls,
+            `    float ${S}_t   = 0.0;\n`,
+            `    float ${S}_hit = 0.0;\n`,
+            `    int   ${S}_si  = ${mlMaxSteps * 2};\n`,
+            `    float ${S}_vs  = max(${mlVoxelSize}, 0.002);\n`,
+            `    vec3  ${S}_vd  = ${mlRd} + vec3(equal(${mlRd}, vec3(0.0))) * 1e-6;\n`,
+            `    vec3  ${S}_vst = sign(${S}_vd);\n`,
+            `    vec3  ${S}_vdt = ${S}_vs / abs(${S}_vd);\n`,
+            `    vec3  ${S}_vn  = vec3(0.0, 1.0, 0.0);\n`,
+            `    vec3  ${S}_vc  = floor(${mlRo} / ${S}_vs);\n`,
+            `    vec3  ${S}_vtm = ((${S}_vc + max(${S}_vst, 0.0)) * ${S}_vs - ${mlRo}) / ${S}_vd;\n`,
+            `    for (int ${S}_i = 0; ${S}_i < ${mlMaxSteps * 2}; ${S}_i++) {\n`,
+            // The scene at this cell's centre: inside, the cell is solid.
+            `        vec3  ${S}_rp_raw = (${S}_vc + 0.5) * ${S}_vs;\n`,
+            `        vec3  ${S}_rp = ${warpPos(`${S}_rp_raw`, `${S}_t`)};\n`,
+            `        float ${S}_d  = ${callScene(`${S}_rp`)};\n`,
+            `        if (${S}_d < 0.0) { ${S}_hit = 1.0; ${S}_si = ${S}_i; break; }\n`,
+            // Far from anything: every cell within d − 1.74 voxels of this centre is empty, so jump ahead.
+            `        if (${S}_d > 2.5 * ${S}_vs) {\n`,
+            `            ${S}_t += ${S}_d - 1.75 * ${S}_vs;\n`,
+            `            ${S}_vc = floor((${mlRo} + ${mlRd} * ${S}_t) / ${S}_vs);\n`,
+            `            ${S}_vtm = ((${S}_vc + max(${S}_vst, 0.0)) * ${S}_vs - ${mlRo}) / ${S}_vd;\n`,
+            `        } else if (${S}_vtm.x < ${S}_vtm.y && ${S}_vtm.x < ${S}_vtm.z) {\n`,
+            `            ${S}_t = ${S}_vtm.x; ${S}_vc.x += ${S}_vst.x; ${S}_vtm.x += ${S}_vdt.x; ${S}_vn = vec3(-${S}_vst.x, 0.0, 0.0);\n`,
+            `        } else if (${S}_vtm.y < ${S}_vtm.z) {\n`,
+            `            ${S}_t = ${S}_vtm.y; ${S}_vc.y += ${S}_vst.y; ${S}_vtm.y += ${S}_vdt.y; ${S}_vn = vec3(0.0, -${S}_vst.y, 0.0);\n`,
+            `        } else {\n`,
+            `            ${S}_t = ${S}_vtm.z; ${S}_vc.z += ${S}_vst.z; ${S}_vtm.z += ${S}_vdt.z; ${S}_vn = vec3(0.0, 0.0, -${S}_vst.z);\n`,
+            `        }\n`,
+            `        if (${S}_t > ${mlMaxDist}) { ${S}_si = ${S}_i; break; }\n`,
+            `    }\n`,
+          ];
+          const marchLoopLines = mlVoxels ? voxelLoop() : mlSafe ? safeLoop() : mlVolumetric ? [
             // Volumetric mode: no hit detection, runs all steps.
             // If scene connected: step by max(sdf, passthrough). If not: step by passthrough (pure density).
             accumDecls,
@@ -3111,12 +3148,14 @@ export class ShaderAssembler {
           ];
           const marchCode = [
             ...marchLoopLines,
-            `    float ${nodeSlug}_iter      = float(${nodeSlug}_si) / float(${mlSafeSteps});\n`,
+            `    float ${nodeSlug}_iter      = float(${nodeSlug}_si) / float(${mlVoxels ? mlMaxSteps * 2 : mlSafeSteps});\n`,
             `    float ${nodeSlug}_iterCount = float(${nodeSlug}_si);\n`,
             `    vec3  ${nodeSlug}_hp_raw  = ${curved.at(`${nodeSlug}_t`)};\n`,
             `    vec3  ${nodeSlug}_hp  = ${warpPos(`${nodeSlug}_hp_raw`, `${nodeSlug}_t`)};\n`,
-            // Normal estimation: skip in volumetric mode (no surface) or when no scene is connected
-            ...(mlVolumetric || !mlHasScene ? [
+            // Normal estimation: skip in volumetric mode (no surface) or when no scene is connected; voxels use their face.
+            ...(mlVoxels ? [
+              `    vec3  ${nodeSlug}_n   = ${nodeSlug}_vn;\n`,
+            ] : mlVolumetric || !mlHasScene ? [
               `    vec3  ${nodeSlug}_n   = vec3(0.0, 1.0, 0.0);\n`,
             ] : [
               `    float ${nodeSlug}_e   = 0.001;\n`,

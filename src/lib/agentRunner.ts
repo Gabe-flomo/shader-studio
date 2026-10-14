@@ -1306,6 +1306,8 @@ export class AgentRunner {
     du.u_sprite.value = tex;
     du.u_useSprite.value = tex ? 1 : 0;
     du.u_spriteOwn.value = d.params.spriteColour === 'tint' ? 0 : 1;
+    // A sprite is a picture: its own size in pixels (Size is a dot's), up to the 64 px a point can be.
+    if (tex) du.u_size.value = Math.max(2, Math.min(64, this.read(d.params.spriteSize, 24)));
   }
 
   private draw3(s: DrawState, d: AgentDrawProgram, g: AgentGroupProgram, gs: GroupState, aspect: number, time: number, seen: { cam: THREE.Texture; depth: THREE.Texture | null } | null): THREE.WebGLRenderTarget {
@@ -1319,13 +1321,13 @@ export class AgentRunner {
     const look = agDrawLook(d, n, s.h, this.reader, this.colourReader);
     const cam = agCamera3(d, this.reader, time, s.h);
     const du = this.draw3Mat.uniforms;
-    this.bindSprite(du, d);
     du.u_a.value = gs.rt[gs.cur].textures[0];
     du.u_b.value = gs.rt[gs.cur].textures[1];
     du.u_c.value = g.stateC ? gs.rt[gs.cur].textures[2] : null;
     du.u_stateC.value = g.stateC ? 1 : 0;
     du.u_side.value = g.side; du.u_species.value = g.species; du.u_aspect.value = aspect;
     du.u_colorBy.value = look.colorBy; du.u_size.value = look.size; du.u_bright.value = look.bright; du.u_speedRef.value = look.speedRef;
+    this.bindSprite(du, d);
     du.u_thread.value = look.thread; du.u_ink.value = look.ink ? 1 : 0; du.u_fade.value = look.fade ? 1 : 0;
     du.u_usePal.value = look.usePal ? 1 : 0; du.u_rainbow.value = look.rainbow ? 1 : 0;
     if (look.pal) (du.u_pal.value as THREE.Vector3[]).forEach((v, i) => v.fromArray(look.pal![i]));

@@ -26,7 +26,7 @@ export type SpecPath =
   | { at: 'warp'; itemId: string; warpId: string; key: string; part?: 0 | 1 | 2 }
   | { at: 'camera'; key: CameraNumKey }
   | { at: 'look'; key: LookKey; part?: 0 | 1 | 2 }
-  | { at: 'quality'; key: 'steps' | 'maxDist' | 'jitter' };
+  | { at: 'quality'; key: 'steps' | 'maxDist' | 'jitter' | 'voxel' };
 
 export type LookKey = 'glow.density' | 'glow.falloff' | 'glow.shell' | 'glow.exposure' | 'glass.ior' | 'glass.dispersion'
   | 'gi.strength' | 'gi.metal' | 'gi.rough' | 'gi.spec' | 'shadows' | 'ao' | 'fog' | 'sunDir';
@@ -57,7 +57,7 @@ const LOOK: Record<LookKey, ParamTarget | ((mode: string, part: number) => Param
   sunDir: (_mode, part) => ({ role: 'sun', key: ['r', 'g', 'b'][part] }),
 };
 
-const QUALITY = { steps: 'maxSteps', maxDist: 'maxDist', jitter: 'jitter' } as const;
+const QUALITY = { steps: 'maxSteps', maxDist: 'maxDist', jitter: 'jitter', voxel: 'voxelSize' } as const;
 
 /** The role and param a value builds, or null when it builds none of its own (a colour picked in Materials, an angle on a select). */
 export function paramTarget(spec: SceneSpec, path: SpecPath): ParamTarget | null {
