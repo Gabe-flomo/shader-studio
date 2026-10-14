@@ -1636,6 +1636,9 @@ precision highp int;
 uniform int u_prim, u_depth;
 uniform highp sampler2D u_field;
 uniform vec2 u_viewSize;
+// Sprites (Draw agents' Sprite, docs/agent-sprites.md): each point drawn as a texture, tinted or in its own colours.
+uniform highp sampler2D u_sprite;
+uniform int u_useSprite, u_spriteOwn;
 in vec4 v_col;
 in float v_dist;
 out vec4 o;
@@ -1643,6 +1646,13 @@ void main() {
   // A scene's depth (the probe's .b, the distance along each pixel's ray): behind it, hidden.
   if (u_depth == 1 && v_dist > texture(u_field, gl_FragCoord.xy / u_viewSize).b) discard;
   float g = 1.0;
+  if (u_prim == 0 && u_useSprite == 1) {
+    vec4 s = texture(u_sprite, vec2(gl_PointCoord.x, 1.0 - gl_PointCoord.y));
+    if (s.a <= 0.001) discard;
+    float lit = max(max(v_col.r, v_col.g), v_col.b);
+    o = u_spriteOwn == 1 ? vec4(s.rgb * lit, v_col.a) * s.a : vec4(v_col.rgb * s.rgb, v_col.a) * s.a;
+    return;
+  }
   if (u_prim == 0) {
     vec2 c = gl_PointCoord * 2.0 - 1.0;
     float r2 = dot(c, c);

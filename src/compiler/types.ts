@@ -214,6 +214,8 @@ export interface AgentDrawProgram {
    * its settings (Shading, Size, Facing…) are in params. Absent for dots: their spec is as it always was.
    */
   shape?: 'cube' | 'sphere' | 'rod' | 'tile' | 'voxel';
+  /** Sprite (docs/agent-sprites.md): the slug of the Pass whose texture each point is drawn as. */
+  sprite?: string;
   /**
    * A ray-marched scene's camera (Camera from and Camera ray wired) and its Depth: small programs of
    * the picture's kind. `camera` is evaluated at g_uv = probe.uniform.xy (it writes Camera from when

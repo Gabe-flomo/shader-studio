@@ -362,6 +362,9 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
           liveAgents.add(id);
           const g = groupOf(id);
           if (g) queue.push(g);
+          // Its Sprite's Pass draws too (before the agents: it reads nothing of theirs).
+          const sp = n.inputs.sprite?.connection?.nodeId;
+          if (sp && byId.get(sp)?.type === PASS_TYPE) queue.push(sp);
         } else if (n.type === 'agentsGroup') {
           liveAgents.add(id);
           const a = agentLists.get(id);
@@ -595,6 +598,13 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
         const params = engine(d);
         if (!g || !groupIds.has(g)) continue;
         const spec: AgentDrawProgram = { ...drawSpec(d, slugOf(d.id), slugOf(g), params), live: liveAgents.has(d.id) };
+        // Sprite (docs/agent-sprites.md): a Pass's Texture; anything else asks for a Pass in between.
+        const spriteFrom = d.inputs.sprite?.connection;
+        if (spriteFrom) {
+          const src = byId.get(spriteFrom.nodeId);
+          if (src?.type === PASS_TYPE && spriteFrom.outputKey === 'texture') spec.sprite = slugOf(src.id);
+          else errors.push(`Node ${d.id}: Draw agents' Sprite takes a Pass's Texture: wire the picture or video into a Pass, and the Pass's Texture into Sprite`);
+        }
         if (drawSeesScene(d)) {
           // A ray-marched scene's camera (and its depth): small programs of the picture's kind, compiled from what is wired in.
           const probeOf = (mode: 'camera' | 'depth') => {
