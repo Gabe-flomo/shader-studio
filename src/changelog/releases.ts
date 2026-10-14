@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.209',
+    date: '2026-10-14',
+    title: 'Voxels',
+    highlights: [
+      { area: 'Studio', text: 'March Loop: Voxels draws any 3D scene as cubes on a grid, lit face by face, with a live Voxel size. In the 3D Scene Builder under Quality too.' },
+      { area: 'Studio', text: 'Draw agents: Sprite size sets how big each picture is (24 px by default, up to 64), so sprites no longer look like dots.' },
+    ],
+  },
+  {
     id: '2026.10.208',
     date: '2026-10-14',
     title: 'Small fixes',
