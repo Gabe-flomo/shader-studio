@@ -49,7 +49,8 @@ const MODE_GLSL: Record<PreviewMode, string> = {
   vec2 D = warpAll(c) - c;
   float len = length(D);
   vec2 dir = len > 1e-5 ? D / len : vec2(0.0);
-  float show = min(len, cell * 0.9);
+  // Inside its own cell (a cell draws only its own pixels): from the centre to just short of the edge.
+  float show = min(len, cell * 0.42);
   vec2 tip = c + dir * show;
   float dl = sdSeg(p, c, tip);
   vec2 side = vec2(-dir.y, dir.x);

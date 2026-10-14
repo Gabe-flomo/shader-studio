@@ -39,9 +39,9 @@ export function ExprLineInput({ value, onChange, vars, ariaLabel, placeholder, i
   height?: number;
 }) {
   const completions = useMemo(() => buildCompletions(vars), [vars]);
-  const help = functionHelp(value);
   return (
-    <span title={help || undefined} style={{ flex: 1, minWidth: 0, display: 'flex' }}>
+    // No title here: hovering a function name opens its function card, which a native tooltip would cover.
+    <span style={{ flex: 1, minWidth: 0, display: 'flex' }}>
       <CodeInput value={value} onChange={v => onChange(v.replace(/\n/g, ' '))} completions={completions} ariaLabel={ariaLabel} placeholder={placeholder}
         height={height} invalid={invalid} inputAttrs={attrs} onSelect={onCaret} onBlur={onBlur} style={{ flex: 1 }} />
     </span>

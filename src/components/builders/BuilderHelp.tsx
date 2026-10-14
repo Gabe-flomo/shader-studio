@@ -12,7 +12,8 @@
  * A BuilderWindow tells its children which builder they are in (BuilderHelpContext), so a new
  * builder only has to add its entries to helpContent.ts.
  */
-import { createContext, useContext, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { createContext, useContext, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { NextStageLine } from '../structure/BuilderFlowStrip';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
@@ -62,23 +63,47 @@ export function useTips(builder?: string) {
 
 /** The consistent "?": hover, focus or a tap (a touch screen has no hover) shows the hint. */
 /** The tooltip is drawn here (no native `title`, which the browser would draw on top of it). */
+/** Where a hint's tooltip goes: right of its "?", or left when that would leave the window; kept inside it. */
+export function hintTipPlace(mark: { left: number; right: number; top: number }, view: { w: number; h: number }, tip = { w: 240, h: 80 }): { left: number; top: number } {
+  const gap = 6, edge = 8;
+  const right = mark.right + gap;
+  const left = right + tip.w <= view.w - edge ? right : Math.max(edge, mark.left - gap - tip.w);
+  const top = Math.min(Math.max(edge, mark.top - 4), Math.max(edge, view.h - edge - tip.h));
+  return { left, top };
+}
+
 export function HintMark({ text, style }: { text: string; style?: React.CSSProperties }) {
   const tk = useTokens();
-  const [show, setShow] = useState(false);
+  const [at, setAt] = useState<{ left: number; top: number } | null>(null);
+  const markRef = useRef<HTMLSpanElement>(null);
+  const tipRef = useRef<HTMLSpanElement>(null);
+  const open = () => {
+    const r = markRef.current?.getBoundingClientRect();
+    if (r) setAt(hintTipPlace(r, { w: window.innerWidth, h: window.innerHeight }));
+  };
+  // Once drawn, its real height keeps it inside the window's bottom too.
+  useLayoutEffect(() => {
+    const tip = tipRef.current, r = markRef.current?.getBoundingClientRect();
+    if (!at || !tip || !r) return;
+    const next = hintTipPlace(r, { w: window.innerWidth, h: window.innerHeight }, { w: tip.offsetWidth, h: tip.offsetHeight });
+    if (next.left !== at.left || next.top !== at.top) setAt(next);
+  }, [at]);
   return (
     <span style={{ position: 'relative', display: 'inline-flex', flexShrink: 0, ...style }}>
-      <span role="img" tabIndex={0} aria-label={`Help: ${text}`} data-hint={text}
-        onMouseEnter={() => setShow(true)} onMouseLeave={() => setShow(false)} onFocus={() => setShow(true)} onBlur={() => setShow(false)}
-        onClick={() => setShow(true)}
+      <span ref={markRef} role="img" tabIndex={0} aria-label={`Help: ${text}`} data-hint={text}
+        onMouseEnter={open} onMouseLeave={() => setAt(null)} onFocus={open} onBlur={() => setAt(null)}
+        onClick={open}
         style={{
           width: 14, height: 14, borderRadius: 7, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'help',
           font: `700 9.5px ${fontFamily.ui}`, color: tk.text.faint, boxShadow: `inset 0 0 0 1px ${tk.border.strong}`, userSelect: 'none',
         }}>?</span>
-      {show && (
-        <span role="tooltip" style={{
-          position: 'absolute', left: 18, top: -4, zIndex: 20, width: 240, padding: '6px 8px', borderRadius: radius.md, pointerEvents: 'none',
+      {/* On the page itself, above every panel: a panel's edge (overflow) never cuts it off. */}
+      {at && typeof document !== 'undefined' && createPortal(
+        <span ref={tipRef} role="tooltip" data-hint-tip style={{
+          position: 'fixed', left: at.left, top: at.top, zIndex: 5000, width: 240, padding: '6px 8px', borderRadius: radius.md, pointerEvents: 'none',
           background: tk.bg.panel, color: tk.text.secondary, boxShadow: tk.shadow.popover, font: `12px/1.4 ${fontFamily.ui}`, whiteSpace: 'normal', textTransform: 'none', letterSpacing: 0, fontWeight: 400,
-        }}>{text}</span>
+        }}>{text}</span>,
+        document.body,
       )}
     </span>
   );
