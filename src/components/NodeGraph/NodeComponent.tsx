@@ -162,6 +162,9 @@ import { showsSwitchPill } from './switchPickerModel';
 import { SwitchToTransformButton } from './SwitchToTransformButton';
 import { TO_TRANSFORM_TYPES } from '../../nodes/toTransform';
 import { resetRuntime } from '../../lib/runtimeReset';
+import { toast } from '../ui/toastStore';
+/** A Mac: ⌘-click hides a group slider (Ctrl-click is a right-click there). */
+const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 
 function adaptiveStep(value: number, baseStep: number): number {
   const abs = Math.abs(value);
@@ -1764,8 +1767,28 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
       const wired = !!node.inputs[o.psKey]?.connection;
       const wire = node.inputs[o.psKey]?.connection;
       const drive = playDriven.get(driveKey(o.overrideKey));
+      // ⌘-click (Ctrl-click off a Mac, where Ctrl-click is a right-click for the Play menu) hides an inner
+      // node's slider from the group card, as the Group Param Picker does; the toast offers it back.
+      const hideable = o.overrideKey.includes('::');
+      const hideClick = (e: React.MouseEvent) => {
+        if (!hideable || !(isMac ? e.metaKey : e.ctrlKey)) return;
+        e.preventDefault(); e.stopPropagation();
+        const prev: string[] = Array.isArray(node.params.hiddenParams) ? (node.params.hiddenParams as string[]) : [];
+        if (prev.includes(o.overrideKey)) return;
+        updateNodeParams(node.id, { hiddenParams: [...prev, o.overrideKey] });
+        toast.info(`Hid ${o.label} from the group`, {
+          message: 'Show hidden sliders again from the group card\'s parameter picker.',
+          action: { label: 'Show it again', onClick: () => {
+            const now = useNodeGraphStore.getState().nodes.find(n => n.id === node.id);
+            const list: string[] = Array.isArray(now?.params.hiddenParams) ? (now!.params.hiddenParams as string[]) : [];
+            updateNodeParams(node.id, { hiddenParams: list.filter(k => k !== o.overrideKey) });
+          } },
+        });
+      };
       return (
         <div key={o.rowKey} data-param-key={o.overrideKey} style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 8, minHeight: 36, padding: '4px 10px 4px 14px' }}
+          title={hideable ? `${isMac ? '⌘' : 'Ctrl'}-click to hide this slider from the group` : undefined}
+          onMouseDownCapture={hideClick}
           onMouseDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()}>
           <ParamSocket color={TYPE_COLORS.float} wired={wired} touch={isTouchDevice}
             register={el => { registerSocket(node.id, 'in', o.psKey, el); }}
