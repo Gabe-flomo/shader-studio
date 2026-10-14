@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.207',
+    date: '2026-10-13',
+    title: 'Sprites',
+    highlights: [
+      { area: 'Studio', text: 'Draw agents: a Sprite input draws every walker as a picture, a video or a shader (through a Pass) instead of a dot, in 2D and 3D. Own colours or tinted.' },
+    ],
+  },
+  {
     id: '2026.10.206',
     date: '2026-10-13',
     title: 'Built-in effects',
