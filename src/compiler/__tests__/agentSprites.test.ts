@@ -44,9 +44,14 @@ describe('Draw agents: Sprite', () => {
     expect(pass.live).toBe(true);
   });
 
-  it('a texture straight from a picture asks for a Pass in between', () => {
+  it('a texture straight from a picture works: a hidden Pass goes in between', () => {
     const r = compile(withSprite('picture'));
-    expect((r.errors ?? []).join(' ')).toMatch(/Sprite takes a Pass's Texture/);
+    expect(r.errors ?? []).toEqual([]);
+    const d = r.agents!.draws[0];
+    const hidden = r.passes!.find(p => p.nodeId === 'rpDraw__sprite');
+    expect(hidden).toBeTruthy();
+    expect(d.sprite).toBe(hidden!.slug);
+    expect(hidden!.live).toBe(true);
   });
 
   it('the point shader draws the sprite, own colours or tinted', () => {

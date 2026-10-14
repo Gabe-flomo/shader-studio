@@ -46,6 +46,7 @@ import { expandShaderTextures, hasShaderTexture } from './shaderTextureExpand';
 import { expandFeedback, isFeedbackNode } from './feedbackExpand';
 import { expandDataTextures, isDataTexture } from './dataTextureExpand';
 import { expandRenderTargets, isRenderTargets } from './renderTargetsExpand';
+import { expandSpriteSources } from './spriteExpand';
 import { SHADER_TEXTURE_TYPE } from '../nodes/definitions/shaderTexture';
 
 export const PASS_TYPE = 'pass';
@@ -211,7 +212,8 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
     // Feedback (texture): each opened into its step and buffer Pass (compiler/feedbackExpand.ts); without one, unchanged.
     // Data Textures: each opened into its pack, its Pass and a Read channels per output (compiler/dataTextureExpand.ts).
     // Render Targets: each opened into its pack and one Pass with extra targets (compiler/renderTargetsExpand.ts).
-    const feedback = expandFeedback(expandRenderTargets(expandDataTextures(beams.nodes)));
+    // Draw agents' Sprite from a texture that isn't a Pass's: a hidden Pass in between (compiler/spriteExpand.ts).
+    const feedback = expandFeedback(expandRenderTargets(expandDataTextures(expandSpriteSources(beams.nodes))));
     const grid = beams.bindAs.size || feedback.bindAs.size
       ? { nodes: feedback.nodes, bindAs: new Map([...gridOnly.bindAs, ...beams.bindAs, ...feedback.bindAs]) }
       : feedback.nodes !== beams.nodes ? { nodes: feedback.nodes, bindAs: gridOnly.bindAs } : gridOnly;
@@ -603,7 +605,7 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
         if (spriteFrom) {
           const src = byId.get(spriteFrom.nodeId);
           if (src?.type === PASS_TYPE && spriteFrom.outputKey === 'texture') spec.sprite = slugOf(src.id);
-          else errors.push(`Node ${d.id}: Draw agents' Sprite takes a Pass's Texture: wire the picture or video into a Pass, and the Pass's Texture into Sprite`);
+          else errors.push(`Node ${d.id}: Draw agents' Sprite couldn't read that texture`);
         }
         if (drawSeesScene(d)) {
           // A ray-marched scene's camera (and its depth): small programs of the picture's kind, compiled from what is wired in.

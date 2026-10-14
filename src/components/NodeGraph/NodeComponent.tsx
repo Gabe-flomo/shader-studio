@@ -163,6 +163,7 @@ import { SwitchToTransformButton } from './SwitchToTransformButton';
 import { TO_TRANSFORM_TYPES } from '../../nodes/toTransform';
 import { resetRuntime } from '../../lib/runtimeReset';
 import { toast } from '../ui/toastStore';
+import { Tooltip } from '../ui/Tooltip';
 /** A Mac: ⌘-click hides a group slider (Ctrl-click is a right-click there). */
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 
@@ -3506,14 +3507,16 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                   ) : slotName}
                   {isField && (
                     // A badge, not a button: it sits inside the label, whose click disconnects, so it swallows its own clicks.
+                    <Tooltip label="Field input" description={FIELD_SOCKET_TIP} placement="top">
                     <span
-                      title={FIELD_SOCKET_TIP}
+                      data-field-badge
                       onMouseDown={e => e.stopPropagation()}
                       onMouseUp={e => e.stopPropagation()}
                       onClick={e => e.stopPropagation()}
                       onTouchEnd={e => { e.stopPropagation(); e.preventDefault(); }}
                       style={{ marginLeft: 5, padding: '0 4px', borderRadius: 4, font: `600 10px ${fontFamily.mono}`, color: tk.kind.expr, background: alpha(tk.kind.expr, 0.14), verticalAlign: 1, cursor: 'help' }}
                     >ƒ</span>
+                    </Tooltip>
                   )}
                   {isExternal && <span title="Wired from outside the group" style={{ marginLeft: 5, verticalAlign: -2, display: 'inline-flex' }}><Icon name="lock" size={12} /></span>}
                   {frozenHere !== undefined && !isConnected && (
