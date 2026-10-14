@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.203',
+    date: '2026-10-13',
+    title: 'Gliding voxels',
+    highlights: [
+      { area: 'Studio', text: 'Voxel agents glide between grid cells instead of jumping: a new Glide setting (0 snaps, 1 always easing), also in the Agents builder\'s Look.' },
+    ],
+  },
+  {
     id: '2026.10.202',
     date: '2026-10-13',
     title: 'Particles that stay',
