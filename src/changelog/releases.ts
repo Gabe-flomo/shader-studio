@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.205',
+    date: '2026-10-13',
+    title: 'Tidy group cards',
+    highlights: [
+      { area: 'Studio', text: 'Groups: ⌘-click a slider on the group card (Ctrl-click on Windows) to hide it. The toast has Show it again; the parameter picker lists hidden ones.' },
+    ],
+  },
+  {
     id: '2026.10.204',
     date: '2026-10-13',
     title: 'Your scene presets',
