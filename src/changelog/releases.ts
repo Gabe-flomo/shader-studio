@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.204',
+    date: '2026-10-13',
+    title: 'Your scene presets',
+    highlights: [
+      { area: 'Studio', text: '3D Scene Builder: + Save this scene keeps it as a named preset with a picture of it. Yours sit next to four built-ins and load only in the builder.' },
+    ],
+  },
+  {
     id: '2026.10.203',
     date: '2026-10-13',
     title: 'Gliding voxels',
