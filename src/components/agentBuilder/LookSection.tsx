@@ -187,6 +187,11 @@ function ShapeSettings({ draw, onFocus }: { draw: GraphNode; onFocus: (s: string
       <SliderSetting id={key} label={shape === 'voxel' ? 'Voxel grid' : 'Shape size'} hint={pd.hint}
         value={num(draw.params[key], key === 'voxelGrid' ? 0.04 : 0.012)} min={pd.min ?? 0.001} max={key === 'voxelGrid' ? 0.25 : 0.1} step={0.001} onFocus={onFocus}
         onChange={v => setSetupParam(draw.id, { [key]: v })} param={{ nodeId: draw.id, key }} />
+      {shape === 'voxel' && (
+        <SliderSetting id="voxelGlide" label="Glide" hint={DRAW_SHAPE_PARAMS.voxelGlide.hint}
+          value={num(draw.params.voxelGlide, 0.5)} min={0} max={1} step={0.01} onFocus={onFocus}
+          onChange={v => setSetupParam(draw.id, { voxelGlide: v })} param={{ nodeId: draw.id, key: 'voxelGlide' }} />
+      )}
     </>}
   </>;
 }

@@ -38,13 +38,13 @@ export const SHAPE_SIZE_BY = ['fixed', 'speed', 'age', 'memX', 'memY', 'memZ', '
  * 3D and Shape isn't Dot, so every other drawing's spec is as it always was.
  */
 export const SHAPE_ONLY = new Set([
-  'shape', 'shading', 'shapeSize', 'shapeSizeBy', 'facing', 'spin', 'rodLength', 'rodStretch', 'voxelGrid', 'voxelDedupe',
+  'shape', 'shading', 'shapeSize', 'shapeSizeBy', 'facing', 'spin', 'rodLength', 'rodStretch', 'voxelGrid', 'voxelDedupe', 'voxelGlide',
   'sphereDetail', 'every', 'maxShapes', 'farDots', 'halfRes', 'ambient', 'rim', 'edgeWidth',
 ]);
 
 export const SHAPE_DEFAULTS = {
   shape: 'dot', shading: 'faces', shapeSize: 0.012, shapeSizeBy: 'fixed', facing: 'motion', spin: 1, rodLength: 4, rodStretch: 0,
-  voxelGrid: 0.04, voxelDedupe: 'on', sphereDetail: 'impostor', every: 1, maxShapes: 0, farDots: 0, halfRes: 'off',
+  voxelGrid: 0.04, voxelDedupe: 'on', voxelGlide: 0.5, sphereDetail: 'impostor', every: 1, maxShapes: 0, farDots: 0, halfRes: 'off',
   ambient: 0.3, rim: 0.35, edgeWidth: 0.12,
 };
 
@@ -257,7 +257,7 @@ uniform highp sampler2D u_e;
 uniform highp sampler2D u_cam;
 uniform highp sampler2D u_owner;
 uniform int u_side, u_species, u_colorBy, u_fade, u_usePal, u_rainbow, u_stateC, u_stateE, u_camSrc, u_sizeBy, u_stride, u_facing, u_voxel, u_dedupe, u_tiles;
-uniform float u_aspect, u_bright, u_speedRef, u_size, u_rodLen, u_rodStretch, u_spin, u_time, u_grid, u_far, u_ambient, u_rim;
+uniform float u_aspect, u_bright, u_speedRef, u_size, u_rodLen, u_rodStretch, u_spin, u_time, u_grid, u_far, u_ambient, u_rim, u_glide;
 uniform vec3 u_colA, u_colB;
 uniform vec3 u_pal[4];
 uniform vec2 u_viewSize;
@@ -324,7 +324,10 @@ void main() {
   if (u_voxel == 1) {
     ivec3 cell = agCell(P);
     if (u_dedupe == 1 && agCellIn(cell) && texelFetch(u_owner, agCellTexel(cell), 0).r != float(id)) { agCull(); return; }
-    P = (vec3(cell) + 0.5) * u_grid - u_boxHalf;
+    // Glide: hold the cell, then ease into the next over the last u_glide of the crossing (0: snap, 1: always easing).
+    vec3 q = (P + u_boxHalf) / u_grid;
+    vec3 ease = u_glide > 0.0 ? smoothstep(vec3(1.0 - u_glide), vec3(1.0), fract(q)) : vec3(0.0);
+    P = (floor(q) + 0.5 + ease) * u_grid - u_boxHalf;
     s = 0.5 * u_grid * min(f0, 1.0);
   }
   if (!(s > 1e-6)) { agCull(); return; }

@@ -14,7 +14,7 @@ import {
 export interface ShapeDrawLook {
   shape: ShapeKind; shading: Shading; facing: Facing; detail: SphereDetail;
   size: number; sizeBy: number; rodLength: number; rodStretch: number; spin: number;
-  grid: number; dedupe: boolean; every: number; maxShapes: number; farDots: number;
+  grid: number; dedupe: boolean; glide?: number; every: number; maxShapes: number; farDots: number;
   ambient: number; rim: number; edgeWidth: number;
   colorBy: number; bright: number; speedRef: number; fade: boolean; usePal: boolean; rainbow: boolean; pal: number[][] | null; colA: number[]; colB: number[];
 }
@@ -71,7 +71,7 @@ export class AgentShapeRenderer {
         u_stateC: { value: 0 }, u_stateE: { value: 0 }, u_camSrc: { value: 0 }, u_sizeBy: { value: 0 }, u_stride: { value: 1 }, u_facing: { value: 0 },
         u_voxel: { value: 0 }, u_dedupe: { value: 0 }, u_tiles: { value: 1 }, u_depth: { value: 0 },
         u_aspect: { value: 1 }, u_bright: { value: 1 }, u_speedRef: { value: 0.5 }, u_size: { value: 0.02 }, u_rodLen: { value: 0 }, u_rodStretch: { value: 0 },
-        u_spin: { value: 1 }, u_time: { value: 0 }, u_grid: { value: 0.04 }, u_far: { value: 0 },
+        u_spin: { value: 1 }, u_time: { value: 0 }, u_grid: { value: 0.04 }, u_glide: { value: 0.5 }, u_far: { value: 0 },
         u_colA: v3(), u_colB: v3(), u_pal: { value: [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()] },
         u_viewSize: { value: new THREE.Vector2(1, 1) },
         u_eye: v3(), u_fwd: { value: new THREE.Vector3(0, 0, -1) }, u_right: { value: new THREE.Vector3(1, 0, 0) }, u_up: { value: new THREE.Vector3(0, 1, 0) }, u_boxHalf: v3(),
@@ -141,7 +141,7 @@ export class AgentShapeRenderer {
     u.u_rodLen.value = look.shape === 'rod' ? Math.max(0.05, look.rodLength) : 0; u.u_rodStretch.value = look.rodStretch;
     u.u_facing.value = ['motion', 'tumble', 'aligned', 'camera'].indexOf(look.facing);
     u.u_spin.value = look.spin; u.u_time.value = time;
-    u.u_voxel.value = voxel ? 1 : 0; u.u_dedupe.value = dedupe ? 1 : 0; u.u_grid.value = g; u.u_tiles.value = grid.tiles;
+    u.u_voxel.value = voxel ? 1 : 0; u.u_dedupe.value = dedupe ? 1 : 0; u.u_grid.value = g; u.u_glide.value = Math.min(1, Math.max(0, look.glide ?? 0.5)); u.u_tiles.value = grid.tiles;
     u.u_owner.value = dedupe ? this.owner!.texture : null;
     (u.u_gridN.value as THREE.Vector3).set(grid.nx, grid.ny, grid.nz);
     (u.u_boxHalf.value as THREE.Vector3).set(aspect, 1, 1);

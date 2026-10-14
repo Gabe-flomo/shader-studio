@@ -1429,7 +1429,7 @@ export class AgentRunner {
     }, {
       shape: d.shape!, shading: shadingOf(P.shading), facing: facingOf(P.facing), detail: sphereDetailOf(P.sphereDetail),
       size: this.read(P.shapeSize, D.shapeSize), sizeBy: shapeSizeByIndex(P.shapeSizeBy), rodLength: this.read(P.rodLength, D.rodLength), rodStretch: this.read(P.rodStretch, D.rodStretch),
-      spin: this.read(P.spin, D.spin), grid: this.read(P.voxelGrid, D.voxelGrid), dedupe: P.voxelDedupe !== 'off',
+      spin: this.read(P.spin, D.spin), grid: this.read(P.voxelGrid, D.voxelGrid), dedupe: P.voxelDedupe !== 'off', glide: this.read(P.voxelGlide, D.voxelGlide),
       every: this.read(P.every, D.every), maxShapes: this.read(P.maxShapes, D.maxShapes), farDots: this.read(P.farDots, D.farDots),
       ambient: this.read(P.ambient, D.ambient), rim: this.read(P.rim, D.rim), edgeWidth: this.read(P.edgeWidth, D.edgeWidth),
       // Brightness 0.5 is the palette's own colour (a solid shape isn't a sum of light).

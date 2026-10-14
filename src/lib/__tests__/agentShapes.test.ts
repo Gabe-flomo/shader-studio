@@ -285,3 +285,27 @@ describe('Shapes: a true reset', () => {
     expect(uniforms[agentDrawUniform(d.slug)].value).toBe(ds.acc.texture);
   });
 });
+
+describe('voxel Glide', () => {
+  it('is a shape setting, 0.5 by default, read live and in every voxel-capable shader', () => {
+    expect(SHAPE_ONLY.has('voxelGlide')).toBe(true);
+    expect(DrawAgentsNode.paramDefs!.voxelGlide).toMatchObject({ min: 0, max: 1 });
+    const boxes = allShapeVariants().filter(v => shapeShaders(v).vertex.includes('u_voxel == 1'));
+    expect(boxes.length).toBeGreaterThan(0);
+    for (const v of boxes) expect(shapeShaders(v).vertex).toContain('smoothstep(vec3(1.0 - u_glide), vec3(1.0), fract(q))');
+  });
+
+  it('moves continuously across a cell edge (the JS mirror of the shader)', () => {
+    const glide = (x: number, w: number) => {
+      const f = x - Math.floor(x);
+      const e = w > 0 ? Math.min(1, Math.max(0, (f - (1 - w)) / w)) : 0;
+      return Math.floor(x) + 0.5 + e * e * (3 - 2 * e);
+    };
+    // Just below and just above the edge between cells 2 and 3 land at the same place.
+    expect(glide(2.9999, 0.5)).toBeCloseTo(glide(3.0001, 0.5), 2);
+    // Glide 0 snaps: the middle of the cell until the edge.
+    expect(glide(2.9, 0)).toBe(2.5);
+    // In the held part of the cell it sits at the centre.
+    expect(glide(2.3, 0.5)).toBe(2.5);
+  });
+});
