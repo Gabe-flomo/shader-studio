@@ -1561,7 +1561,7 @@ export const DrawAgentsNode: NodeDefinition = {
   description: 'Draws every walker of an Agents group over the picture wired into Over, with the Particles node\'s looks: soft dots (Points), dots with a glow (Glow), short lines along their motion (Streaks), or dark ink on paper (Ink), lit by up to four moving lights. Colour by species, speed, heading or age, with Colour A → B or one of the Particles palettes. A 3D group is seen through a camera (Distance, Angle, Elevation, Orbit speed, Zoom, Flatten, Translate) with depth of field, or through a ray-marched scene\'s camera wired into Camera from and Camera ray.',
   inputs: {
     agents: { type: 'agents', label: 'Agents', hint: 'An Agents group\'s output.' },
-    sprite: { type: 'texture', label: 'Sprite', hint: 'Draw each walker as this picture instead of a dot: a Pass\'s Texture (a picture or video through a Pass, a Shader Texture, a Feedback). Size sets how big. Points style only.' },
+    sprite: { type: 'texture', label: 'Sprite', hint: 'Draw each walker as this picture instead of a dot: a Pass\'s Texture (a picture or video through a Pass, a Shader Texture, a Feedback). Sprite size sets how big. Points style only.' },
     over: { type: 'vec3', label: 'Over', hint: 'The picture to draw on. Unwired: black (Ink: Paper). It can’t come from this node’s own Density or Image (that is a loop): to colour the background by where the walkers are, set Background to Palette by density.' },
   },
   outputs: {
@@ -1572,7 +1572,7 @@ export const DrawAgentsNode: NodeDefinition = {
   },
   defaultParams: {
     style: 'points', colorBy: 'heading', palette: 'ab', size: 1.5, brightness: 0.5, glow: 1, scaleBy: 'walker', streak: 0.25, fade: 'on', speedRef: 0.5,
-    splatSize: 0.012, stretch: 1.5, sizeBy: 'fixed', memScale: 1, opacity: 0.6, spriteColour: 'own',
+    splatSize: 0.012, stretch: 1.5, sizeBy: 'fixed', memScale: 1, opacity: 0.6, spriteColour: 'own', spriteSize: 24,
     ...SHAPE_DEFAULTS,
     colorA: [1, 0.75, 0.35], colorB: [0.25, 0.55, 1], paper: [0.95, 0.95, 0.94],
     background: 'over', bgPalette: 'ember', bgGain: 1,
@@ -1598,6 +1598,7 @@ export const DrawAgentsNode: NodeDefinition = {
     ] },
     glow: { label: 'Glow', type: 'float', min: 0, max: 4, step: 0.01, section: 'Look', hint: 'How strong the glow is (Glow and Streaks; Ink: how far it bleeds).' },
     streak: { label: 'Streak', type: 'float', min: 0, max: 4, step: 0.01, section: 'Look', hint: 'Streaks (and Ink above 0): how long each line is, in seconds of travel × 0.12 (the Particles node\'s Thread).', showWhen: { param: 'style', value: ['streaks', 'ink'] } },
+    spriteSize: { label: 'Sprite size', type: 'float', min: 2, max: 64, step: 1, compileTime: true, section: 'Look', hint: 'With a Sprite wired: each picture\'s size in pixels (Size is for dots). Up to 64.' },
     spriteColour: { label: 'Sprite colours', type: 'select', section: 'Look', hint: 'With a Sprite wired: Own keeps the picture\'s colours (brightened by Brightness); Tint colours it by Colour by, like the dots.', options: [{ value: 'own', label: 'Own colours' }, { value: 'tint', label: 'Tinted' }] },
     fade: { label: 'Fade with age', type: 'select', section: 'Look', hint: 'Walkers with a Life fade in at birth and out toward its end.', options: [{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }] },
     colorBy: { label: 'Colour by', type: 'select', section: 'Colour', hint: 'What picks each walker\'s colour along the palette (or between Colour A and B).', options: [

@@ -581,6 +581,7 @@ export const MarchLoopGroupNode: NodeDefinition = {
     maxSteps: 80, maxDist: 20.0, stepScale: 1.0,
     // Jitter on (even pattern) for new loops; saved graphs keep their own jitter and the old pattern.
     volumetric: false, passthrough: 0.1, jitter: 1.0, jitterNoise: 'even', animateJitter: false,
+    voxels: false, voxelSize: 0.08,
     bg: [0.0, 0.0, 0.0],
     albedo: [0.6, 0.7, 0.9],
   },
@@ -590,6 +591,8 @@ export const MarchLoopGroupNode: NodeDefinition = {
     stepScale:   { label: 'Step Scale',  type: 'float' as const,   min: 0.3,  max: 1.0,   step: 0.05, hint: 'Fraction of the SDF distance to step each iteration. Lower = safer for thin features but slower. Not used in volumetric mode.' },
     ...WARP_SAFETY_PARAMS,
     curvature:   { label: 'Space curvature', type: 'float' as const, min: -1.0, max: 1.0, step: 0.01, hint: 'Bends the rays like a curved universe. 0 = flat, ordinary space. Above 0 (spherical): rays curve back toward each other, so things shrink with distance, then grow again past the halfway point, and the far side of the world looms large. Below 0 (hyperbolic): rays spread, a fisheye tunnel where repeated things shrink fast. Left at 0 and never touched, the loop is built exactly as before.' },
+    voxels:      { label: 'Voxels',      type: 'bool'  as const, hint: 'Draws the scene as cubes on a grid (Voxel size): the ray walks the grid cell by cell and a cell is solid where the scene is inside at its centre, lit by its faces. Any Scene Group works. Not with Volumetric, Space curvature or Warp safety (those march as before).' },
+    voxelSize:   { label: 'Voxel size',  type: 'float' as const, min: 0.01, max: 0.5, step: 0.005, showWhen: { param: 'voxels', value: 'true' }, hint: 'The size of each cube, in scene units. Smaller is finer and takes more steps (raise Max Steps if far parts go missing).' },
     volumetric:  { label: 'Volumetric',  type: 'bool'  as const,                                       hint: 'When on, the ray passes through the scene accumulating color at every step. No hit detection. Use with marchSceneDist + accumulator nodes in the body.' },
     passthrough: { label: 'Passthrough', type: 'float' as const,   min: 0.001, max: 0.5,  step: 0.005, showWhen: { param: 'volumetric', value: 'true' }, hint: 'Minimum step size in volumetric mode. Prevents the ray from stalling at zero-distance surfaces. Also caps 1/vol to avoid blowout.' },
     jitter:      { label: 'Jitter',      type: 'float' as const,   min: 0.0,  max: 1.0,   step: 0.01,  hint: 'Starts each pixel\'s ray a little way along, by a different amount, so the steps of neighbouring rays don\'t line up into rings (banding). 1 = spread over one step, 0 = off.' },
