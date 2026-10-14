@@ -15,7 +15,7 @@ const queue: Array<{ key: string; spec: SceneSpec; w: number; h: number }> = [];
 const listeners = new Set<() => void>();
 let pumping = false;
 
-function draw(spec: SceneSpec, w: number, h: number): string | null {
+function draw(spec: SceneSpec, w: number, h: number, type: 'image/png' | 'image/jpeg' = 'image/png'): string | null {
   const c = compileSpec(spec);
   if (c.error) return null;
   const px = programPixels(c.vs, c.fs, c.uniforms, [0.5], w, h, c.textures);
@@ -28,7 +28,12 @@ function draw(spec: SceneSpec, w: number, h: number): string | null {
   // GL rows run bottom up.
   for (let y = 0; y < h; y++) img.data.set(px[0].subarray((h - 1 - y) * w * 4, (h - y) * w * 4), y * w * 4);
   ctx.putImageData(img, 0, 0);
-  return canvas.toDataURL('image/png');
+  return canvas.toDataURL(type, 0.85);
+}
+
+/** A picture of a scene as it is now, through its own camera (a saved preset's picture): a JPEG data URL, or null. */
+export function snapshotSpec(spec: SceneSpec, w = 264, h = 152): string | null {
+  try { return draw(spec, w, h, 'image/jpeg'); } catch { return null; }
 }
 
 function pump() {

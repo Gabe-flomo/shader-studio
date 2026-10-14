@@ -19,7 +19,10 @@ import { useEffect, useState } from 'react';
 import { useSceneBuilder } from '../../sceneBuilder/store';
 import { buildFromBuilder, describeIntoBuilder } from '../../sceneBuilder/actions';
 import { allShapes } from '../../sceneBuilder/spec';
-import { parseRecipe } from '../../sceneBuilder/recipe';
+import { parseRecipe, printRecipe } from '../../sceneBuilder/recipe';
+import { useUserScenePresets } from '../../sceneBuilder/userPresets';
+import { toast } from '../ui/toastStore';
+import { fontFamily, radius } from '../../theme/tokens';
 import { SCENE_TEMPLATES } from '../../sceneBuilder/templates';
 import { SCENE_SECTIONS, sectionOfTab, sectionSummary, type SceneSection } from '../../sceneBuilder/sections';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
@@ -36,7 +39,7 @@ import { PresetCard, StudioLabel, StudioNavItem, StudioShell } from '../builders
 import { DescribeTab, RecipeTab, preferRecipeAsText } from './tabs';
 import { SectionHead, SectionPanel } from './sectionPanels';
 import { SceneViewport } from './SceneViewport';
-import { useSpecThumbs } from './specThumbs';
+import { snapshotSpec, useSpecThumbs } from './specThumbs';
 import { closeBuilding, doneBuilding, type BuildingBuilder } from '../../builders/finish';
 import { clearDraft, hasUnbuiltEdits } from '../../builders/drafts';
 import { focusRecipeEditor, useBuilderRecipeRequest } from '../../builders/windows';
@@ -82,24 +85,64 @@ export async function openAsNodesAction(): Promise<void> {
   }
 }
 
+/** The built-in presets the strip keeps (the rest of its room is for yours): GI-lit, volumetric, and two more. */
+export const STRIP_TEMPLATE_KEYS = ['room', 'orb', 'blobs', 'glass'] as const;
+
 function PresetsStrip() {
+  const tk = useTokens();
   const replace = useSceneBuilder(s => s.replace);
   const select = useSceneBuilder(s => s.select);
+  const spec = useSceneBuilder(s => s.spec);
   const seed = useSceneSurprise(s => s.seed);
   const busy = useSceneSurprise(s => s.busy);
-  const thumbs = useSpecThumbs(SCENE_TEMPLATES.filter(t => !t.hidden).map(t => ({ key: `template:${t.key}`, spec: () => parseRecipe(t.recipe).spec })));
+  const mine = useUserScenePresets(s => s.presets);
+  const addPreset = useUserScenePresets(s => s.add);
+  const removePreset = useUserScenePresets(s => s.remove);
+  const [naming, setNaming] = useState<string | null>(null);
+  const builtIns = STRIP_TEMPLATE_KEYS.map(k => SCENE_TEMPLATES.find(t => t.key === k)).filter((t): t is (typeof SCENE_TEMPLATES)[number] => !!t && !t.hidden);
+  const thumbs = useSpecThumbs(builtIns.map(t => ({ key: `template:${t.key}`, spec: () => parseRecipe(t.recipe).spec })));
+  const load = (recipe: string) => { const s = parseRecipe(recipe).spec; replace(s); select(s.root.children[0]?.id ?? null); };
+  const saveNow = () => {
+    const name = (naming ?? '').trim() || `My scene ${mine.length + 1}`;
+    const { stored } = addPreset(name, printRecipe(spec), snapshotSpec(spec));
+    setNaming(null);
+    if (stored) toast.success(`Saved "${name}" to your presets.`);
+    else toast.warning(`Saved "${name}" for now: this browser's storage is full, so it won't be here after a reload.`);
+  };
+  const tile = { flexShrink: 0, width: 132, height: 76, borderRadius: radius.md, border: `1px dashed ${tk.border.strong}`, background: 'transparent', color: tk.text.muted, font: `600 12px ${fontFamily.ui}`, cursor: 'pointer' } as const;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <span style={{ flex: 1 }}><StudioLabel meta="click to start from one · undo takes it back">Presets</StudioLabel></span>
+        <span style={{ flex: 1 }}><StudioLabel meta="click to start from one · undo takes it back · yours are saved here, not as graphs">Presets</StudioLabel></span>
         <SurpriseBar seed={seed} busy={busy} onSurprise={s => void surpriseSceneAction(s)}
           title="A whole random scene: 2–6 shapes, combines, sometimes modifiers, a look, colours and a camera (one undo step). The same seed makes the same scene." />
       </span>
-      <div data-scene-presets style={{ display: 'flex', gap: 12 }}>
-        {SCENE_TEMPLATES.filter(t => !t.hidden).map(t => (
-          <PresetCard key={t.key} id={t.key} label={t.label} hint={t.blurb} src={thumbs[`template:${t.key}`]}
-            onClick={() => { const s = parseRecipe(t.recipe).spec; replace(s); select(s.root.children[0]?.id ?? null); }} />
+      <div data-scene-presets style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 2 }}>
+        {builtIns.map(t => (
+          <PresetCard key={t.key} id={t.key} label={t.label} hint={t.blurb} src={thumbs[`template:${t.key}`]} onClick={() => load(t.recipe)} />
         ))}
+        {mine.map(p => (
+          <span key={p.id} data-user-preset={p.id} style={{ position: 'relative', flexShrink: 0 }}>
+            <PresetCard id={p.id} label={p.name} src={p.thumb} onClick={() => load(p.recipe)} />
+            <button type="button" aria-label={`Delete ${p.name}`} title="Delete this preset"
+              onClick={() => { removePreset(p.id); toast.info(`Deleted "${p.name}".`); }}
+              style={{ position: 'absolute', top: 4, right: 4, width: 20, height: 20, borderRadius: 10, border: 0, background: 'rgba(0,0,0,0.55)', color: '#fff', font: `600 12px ${fontFamily.ui}`, cursor: 'pointer', lineHeight: '20px', padding: 0 }}>×</button>
+          </span>
+        ))}
+        {naming === null ? (
+          <button type="button" data-save-preset style={tile} onClick={() => setNaming('')} title="Save this scene as a preset, with a picture of it">+ Save this scene</button>
+        ) : (
+          <form data-save-preset-form onSubmit={e => { e.preventDefault(); saveNow(); }}
+            style={{ ...tile, border: `1px solid ${tk.accent.base}`, cursor: 'default', display: 'flex', flexDirection: 'column', gap: 6, padding: 8, boxSizing: 'border-box', height: 'auto' }}>
+            <input autoFocus aria-label="Preset name" placeholder={`My scene ${mine.length + 1}`} value={naming} onChange={e => setNaming(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); setNaming(null); } }}
+              style={{ width: '100%', boxSizing: 'border-box', padding: '3px 6px', borderRadius: radius.sm, border: `1px solid ${tk.border.default}`, background: tk.bg.field, color: tk.text.primary, font: `500 12px ${fontFamily.ui}` }} />
+            <span style={{ display: 'flex', gap: 6 }}>
+              <button type="submit" style={{ flex: 1, border: 0, borderRadius: radius.sm, background: tk.accent.base, color: '#fff', font: `600 11.5px ${fontFamily.ui}`, padding: '3px 0', cursor: 'pointer' }}>Save</button>
+              <button type="button" onClick={() => setNaming(null)} style={{ border: 0, borderRadius: radius.sm, background: tk.bg.field, color: tk.text.secondary, font: `600 11.5px ${fontFamily.ui}`, padding: '3px 8px', cursor: 'pointer' }}>Cancel</button>
+            </span>
+          </form>
+        )}
       </div>
     </div>
   );

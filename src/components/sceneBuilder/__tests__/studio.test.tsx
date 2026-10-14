@@ -75,7 +75,9 @@ describe('the sections', () => {
     for (const s of SCENE_SECTIONS) expect($(`[data-studio-section="${s.id}"]`)).toBeTruthy();
     expect($('[data-studio-section="describe"]')).toBeTruthy();
     expect($('[data-scene-viewport]')).toBeTruthy();
-    expect(document.querySelectorAll('[data-scene-presets] [data-preset]').length).toBeGreaterThanOrEqual(6);
+    // Four built-ins (the GI-lit room, the volumetric orb and two more), then your own, then Save this scene.
+    expect(document.querySelectorAll('[data-scene-presets] [data-preset]').length).toBe(4);
+    expect($('[data-save-preset]')).toBeTruthy();
     for (const a of ['data-hood-toggle', 'data-surprise-top', 'data-open-as-nodes', 'data-studio-primary']) expect($(`[${a}]`)).toBeTruthy();
     expect($('[data-studio-primary]')?.textContent).toBe('Done');
   });
