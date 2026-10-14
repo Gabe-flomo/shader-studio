@@ -48,6 +48,7 @@ import { HistoryPanel, CountBadge, UnreadDot } from '../history/HistoryPanel';
 import { useUnseenActivity } from '../ui/activityStore';
 import { OPEN_WHATS_NEW, useWhatsNewUnread } from '../../changelog/releaseNotes';
 import { SwapSuggestions } from './SwitchNodePicker';
+import { COMPOUND_EFFECTS, compoundSubgraph } from '../../store/compoundEffects';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type TabId = 'nodes' | 'favorites' | 'graphs' | 'presets' | 'builder' | 'functions' | 'expressions' | 'keyframes' | 'history';
@@ -259,6 +260,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
   const graphNodes        = useNodeGraphStore(s => s.nodes);
   const groupPresets      = useNodeGraphStore(s => s.groupPresets);
   const instantiateGroupPreset = useNodeGraphStore(s => s.instantiateGroupPreset);
+  const placeSubgraphAsGroup = useNodeGraphStore(s => s.placeSubgraphAsGroup);
   const deleteGroupPreset = useNodeGraphStore(s => s.deleteGroupPreset);
   const deleteUserNode     = useNodeGraphStore(s => s.deleteUserNode);
   const openUserNodeSource = useNodeGraphStore(s => s.openUserNodeSource);
@@ -619,6 +621,17 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
       case 'presets':
         return (
           <>
+            <TabSectionHeader label="Built-in effects" />
+            {COMPOUND_EFFECTS.map(c => {
+              const put = (pos: { x: number; y: number }) => placeSubgraphAsGroup(c.label, compoundSubgraph(c), pos, c.description);
+              const place = () => { put(placeAt()); onNodeAdded?.(); };
+              return (
+                <ItemRow key={c.id} label={c.label} icon="presets" color={tabColor('presets')}
+                  drag={{ label: c.label, place: pos => put(pos) }} onDragDone={onNodeAdded}
+                  selected={selectedSaved === c.id} onClick={() => toggleSaved(c.id)} onDoubleClick={() => place()}
+                  preview={<SavedItemPreview name={c.label} kind="Group" signature="built in · a group you can open" comment={c.description} onAdd={() => place()} />} />
+              );
+            })}
             <TabSectionHeader label="Group presets" />
             <FolderableList
               scopeKey="presets:group"
