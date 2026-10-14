@@ -1519,6 +1519,7 @@ export const DRAW_SHAPE_PARAMS: Record<string, ParamDef> = {
   voxelDedupe: { label: 'One per cell', type: 'select', section: 'Shape', hint: 'Voxel: On draws one cube per filled cell (a cheap pass finds which walker owns it), so a crowded cell costs one cube, not hundreds. Off overlaps them.', options: [
     { value: 'on', label: 'On' }, { value: 'off', label: 'Off' },
   ], showWhen: in3dShape('voxel') },
+  voxelGlide: { label: 'Glide', type: 'float', min: 0, max: 1, step: 0.01, section: 'Shape', hint: 'Voxel: how a cube moves to the next cell. 0 jumps cell to cell; higher holds it in its cell, then eases it across over that share of the way (1: always easing). Smooth motion while staying on the grid.', showWhen: in3dShape('voxel') },
   sphereDetail: { label: 'Sphere detail', type: 'select', section: 'Shape', hint: 'Impostor: a flat disc facing the camera shaded as a ball, with its own depth (6 vertices: the cheapest). Low: a 48-triangle half-ball. Smooth: 192 triangles (by far the most expensive).', options: [
     { value: 'impostor', label: 'Impostor (cheapest)' }, { value: 'low', label: 'Low poly' }, { value: 'smooth', label: 'Smooth' },
   ], showWhen: in3dShape('sphere') },
