@@ -64,6 +64,14 @@ The same read for any texture: a Pass, a picture, a video, a Data Texture's Text
 pattern of one to four of r g b a; the output is a float, vec2, vec3 or vec4 to match. Read and
 Values work as on the Data Texture.
 
+## Read neighbours (texture)
+
+The four texels round this one, read exactly, in one node: **Here**, **Left**, **Right**, **Up** and **Down**
+for the channels you pick (typed like Read channels), **Distance** texels away. **Laplacian** is
+Left + Right + Up + Down − 4 × Here: how curved the field is, which is what makes waves travel and heat
+spread. **Gradient** is (Right − Left, Up − Down) / 2 of the first channel: which way it rises, for shading
+and flow. It replaces the four Sample nodes a simulation stencil used to take (the Ripples effect uses it).
+
 ## How it compiles
 
 `compiler/dataTextureExpand.ts` opens each Data Texture before the pass compile:

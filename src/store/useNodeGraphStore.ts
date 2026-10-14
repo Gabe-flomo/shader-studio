@@ -8,6 +8,7 @@ import type { GraphNode, InputSocket, OutputSocket, DataType } from '../types/no
 import { VECTORIZABLE_NODES, swizzleTypes } from '../nodes/definitions/math';
 import { retypeDataTexture } from '../nodes/definitions/dataTexture';
 import { retypeRenderTargets } from '../nodes/definitions/renderTargets';
+import { retypeReadNeighbours } from '../nodes/definitions/readNeighbours';
 import { migrateNodeParams, GROUP_PORT_SENTINEL } from '../types/nodeGraph';
 import { LAYOUT_VERSION, needsLayoutSpread, spreadLegacyLayout } from './legacyLayout';
 import { askText } from '../components/ui/dialogStore';
@@ -578,6 +579,7 @@ function retypeSwizzle(n: GraphNode): GraphNode {
   // A Data Texture's sockets follow its fields and reads; Read channels' output its channels.
   if (n.type === 'dataTexture' || n.type === 'readChannels') return retypeDataTexture(n);
   if (n.type === 'renderTargets') return retypeRenderTargets(n);
+  if (n.type === 'readNeighbours') return retypeReadNeighbours(n);
   // A Transform card's sockets follow its Dimension (vec2 / vec3 / vec4).
   if (n.type === 'transform') return retypeTransform(n);
   if (n.type !== 'swizzle') return n;
@@ -3891,6 +3893,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     // A Data Texture's sockets follow its fields and reads; Read channels' output its channels.
     if (type === 'dataTexture' || type === 'readChannels') newNode = retypeDataTexture(newNode);
     if (type === 'renderTargets') newNode = retypeRenderTargets(newNode);
+    if (type === 'readNeighbours') newNode = retypeReadNeighbours(newNode);
 
     const { activeGroupId, activeGroupPath } = get();
     // Inside a Scene Group: a shape is wired from Scene Pos and into the scene's
