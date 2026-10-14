@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.206',
+    date: '2026-10-13',
+    title: 'Built-in effects',
+    highlights: [
+      { area: 'Studio', text: 'Presets › Built-in effects: Long exposure, Trails where it moves, Datamosh, Kaleidoscope feedback and Ripples, ready-made groups you can open.' },
+      { area: 'Studio', text: 'Read neighbours (texture): the four texels round a pixel, read exactly, with the Laplacian and Gradient worked out. One node instead of four Samples.' },
+    ],
+  },
+  {
     id: '2026.10.205',
     date: '2026-10-13',
     title: 'Tidy group cards',
