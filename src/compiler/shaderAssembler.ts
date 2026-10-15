@@ -671,6 +671,11 @@ export interface ShaderAssemblerOptions {
    * the picture's, so the Mouse reads `u_pictureRes` (the picture's size, set by the pass runners) instead.
    */
   pictureRes?: boolean;
+  /**
+   * The Value at point Pass (compiler/probeExpand.ts): GLSL that sets g_uv to each texel's point before the graph
+   * runs. Its u_resolution reads as the picture's (u_pictureRes), so aspect-dependent nodes see the picture.
+   */
+  pinUv?: string;
 }
 
 /** See ShaderAssemblerOptions.agentProgram. */
@@ -849,6 +854,7 @@ export class ShaderAssembler {
   /** Pass programs: the picture's scale (ShaderAssemblerOptions.pictureScale). */
   private pictureScale = 1;
   private pictureRes = false;
+  private pinUv = '';
   /** Texture Input / Video nodes (original ids) whose Texture output something reads (phase 7). */
   private textureOutWired: Set<string> = new Set();
   // ── Field sockets (see compileFieldFunction) ──
@@ -885,6 +891,8 @@ export class ShaderAssembler {
     this.agentEye = opts?.agentEye === true;
     this.pictureScale = opts?.pictureScale ?? 1;
     this.pictureRes = opts?.pictureRes === true;
+    this.pinUv = opts?.pinUv ?? '';
+    if (this.pinUv) { this.declarations.add('uniform vec2 u_pictureRes;'); this.declarations.add('#define u_resolution u_pictureRes'); }
     this.textureOutWired = wiredTextureOutputs(allNodes);
     if (opts?.slugs) {
       this.fixedSlugs = opts.slugs;
@@ -4473,7 +4481,7 @@ ${functionCode}
 void main() {
     vec2 g_uv = (vUv - 0.5) * 2.0;
     g_uv.x *= u_resolution.x / u_resolution.y;
-${mainBody}}`.trim();
+${this.pinUv}${mainBody}}`.trim();
 
     return {
       fragmentShader: this.agentProgram ? toAgentProgram(fragmentShader, this.agentProgram) : this.agentEye ? toAgentEyeProgram(fragmentShader) : fragmentShader,

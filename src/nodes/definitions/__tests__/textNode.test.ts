@@ -41,4 +41,11 @@ describe('Text', () => {
     const r = compileGraph({ nodes: [node('t', 'text', { text: '' }), out('t', 'color')] }) as CompilationResult;
     expect(r.errors ?? []).toEqual([]);
   });
+
+  it('Value\'s socket shows from the start (any single float wires in); the others come out on demand', () => {
+    const def = getNodeDefinition('text')!;
+    expect(def.inputs.value.type).toBe('float');
+    expect(def.socketsOnDemand?.value).toBeUndefined();
+    expect(def.socketsOnDemand?.size).toEqual(['size']);
+  });
 });

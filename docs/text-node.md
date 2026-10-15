@@ -9,6 +9,11 @@ Type `{}` in the text where a number should go: it shows the **Value** input (a 
 Analyze reading, a Blob Track's Count, a Timer, a Counter, an LFO. **Decimals** sets the places after the point;
 **Number width** keeps that many characters for it, right-aligned, so the line doesn't shift as it changes.
 
+A wired Value is read once, at the text's Position (**Value at: The text's position**, through a Value at point,
+docs/value-at-point.md), so a value that differs pixel to pixel (an SDF's distance, a noise) shows as one steady
+number. **Value at: Each pixel** shows each pixel's own value: glitchy, on purpose. The Value socket shows on the card
+from the start.
+
 ## Settings
 
 | Setting | What it does |
