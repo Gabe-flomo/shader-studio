@@ -15,6 +15,7 @@ import { BakedNode } from './baked';
 import { DepthNode } from './depth';
 import { BlobTrackNode } from './blobTrack';
 import { CacheNode, CacheReadNode } from './cache';
+import { AnalyzeNode } from './analyze';
 import { MEMORY_NODES, MemoryPackNode, MemoryReadNode } from './memory';
 import { DepthCompositeNode, DepthLightNode, PictureEnvironmentNode } from './depthScene';
 import { DepthMixNode } from './depthMix';
@@ -345,6 +346,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   blobTrack: BlobTrackNode,
   cache: CacheNode,
   cacheRead: CacheReadNode,
+  analyze: AnalyzeNode,
   ...MEMORY_NODES,
   memoryPack: MemoryPackNode,
   memoryRead: MemoryReadNode,

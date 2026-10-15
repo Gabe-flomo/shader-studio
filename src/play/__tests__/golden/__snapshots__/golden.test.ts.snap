@@ -2193,6 +2193,12 @@ exports[`golden outputs: examples > timeCubePulse 1`] = `
 }
 `;
 
+exports[`golden outputs: examples > ttAnalyze 1`] = `
+{
+  "gain": "- x120",
+}
+`;
+
 exports[`golden outputs: examples > ttBlobStamp 1`] = `
 {
   "level": "- x120",
