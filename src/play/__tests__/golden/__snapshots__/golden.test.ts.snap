@@ -2332,6 +2332,21 @@ exports[`golden outputs: examples > ttRenderTargets 1`] = `
 }
 `;
 
+exports[`golden outputs: examples > ttSegmentClick 1`] = `
+{
+  "grow": "- x120",
+  "thr": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > ttSegmentPeople 1`] = `
+{
+  "grow": "- x120",
+  "soft": "- x120",
+  "thr": "- x120",
+}
+`;
+
 exports[`golden outputs: examples > ttTrailFlow 1`] = `
 {
   "reach": "- x120",
