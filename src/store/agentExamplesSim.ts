@@ -566,22 +566,12 @@ export function infectionNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     'Agent Inputs: this person as the step begins. Memory is what they carried over: x is their state (0 just born, 1 susceptible, 2 infected, 3 recovered and immune), y the seconds they have been in it.',
     'Infection is an input added to the group: the Trail field from outside, as it was one step ago: how much infection the infected have breathed into the air at each place.',
   ]);
-  const channel = expr('irChannel', 0, 560, {
-    label: 'Infection channel',
-    inputs: [],
-    lines: [],
-    result: 'vec4(0.0, 1.0, 0.0, 0.0)',
-    outputType: 'vec4',
-    note: [
-      'Infection channel (an Expression Block): picks the trail\'s second channel for Sense. The infection lives there, not in the first, because on the step they are born all walkers lay one unit in the first channel (their species\'), and that burst must not count as everyone coughing at once.',
-    ],
-  });
   const air = n('agentSense', 'irAir', 420, 100, {
-    angle: 45, distance: 0.02, weight: 1, width: '1',
+    angle: 45, distance: 0.02, weight: 1, width: '1', smell: 'ch2',
     ...note([
-      'Sense, used only as a reader: Here is how much infection is in the air where this person stands (the second channel, picked by Infection channel). Its sensors and Steer are not used: people don\'t walk toward or away from it (try a second Sense and Steer, Away, for a cautious crowd).',
+      'Sense, used only as a reader: Here is how much infection is in the air where this person stands. Smell is Channel 2 only: the infection lives there, not in the first, because on the step they are born all walkers lay one unit in the first channel (their species\'), and that burst must not count as everyone coughing at once. Its sensors and Steer are not used: people don\'t walk toward or away from it (try a second Sense and Steer, Away, for a cautious crowd).',
     ]),
-  }, { texture: ['irIn', 'air'], channels: ['irChannel', 'result'] });
+  }, { texture: ['irIn', 'air'] });
   const sir = expr('irRule', 840, 100, {
     label: 'S → I → R',
     inputs: [
@@ -647,7 +637,7 @@ export function infectionNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     mode: 'fill', shape: 'screen', heading: 'random',
     ...note(['Emit: everyone starts at a random place on the picture, all at once (Fill). Memory starts at 0: the rule makes them susceptible, or one of the first cases, on their first step.']),
   });
-  let group = agentsGroup('epidemic', X(420), Y(0), 'irEmit', [inputs, channel, air, sir, wander, move, output], {
+  let group = agentsGroup('epidemic', X(420), Y(0), 'irEmit', [inputs, air, sir, wander, move, output], {
     label: 'Epidemic', tier: '256k', stepsPerFrame: 2, seed: 3, preroll: 0,
     ...note([
       'Agents: 262,144 people (256k), 2 steps a frame. Inside (double-click): Sense reads the infection in the air, S → I → R keeps each person\'s state in Memory, Wander and Move walk them about.',
@@ -660,7 +650,7 @@ export function infectionNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     ...note(['Deposit: each infected person breathes one unit of infection into the trail\'s second channel every step (the rule\'s deposit); the others nothing.']),
   }, { agents: ['epidemic', 'agents'] });
   const trail = n('trailField', 'irTrail', X(1260), Y(0), {
-    resolution: '512', diffuse: 1, halfLife: 0.1, edges: 'wrap', gain: 1.5, kernel: '5',
+    resolution: '512', diffuse: 1, halfLife: 0.1, edges: 'wrap', gain: 1.5, kernel: '5', names: 'births, infection',
     ...note([
       'Trail field: the infection in the air, 512 rows. It spreads a few pixels (5×5) and is gone in a fraction of a second (half-life 0.1 s): only people near an infected person are exposed.',
       'Try: Half-life 1 for an infection that lingers in the air: it jumps further and the waves get wider.',
@@ -874,7 +864,7 @@ export function predatorPreyNodes(x = 0, y = 0, withOutput = true): GraphNode[] 
     ...note(['Deposit (scent): every walker\'s deposit into the Scent trail: channel 3 for live prey, channel 4 for live predators (its channel 1, the grazing, is negative and is kept at 0 there).']),
   }, { agents: ['predprey', 'agents'] });
   const scent = n('trailField', 'ppScent', X(1260), Y(0), {
-    resolution: '512', diffuse: 1, halfLife: 0.15, edges: 'wrap', gain: 0.3, kernel: '5',
+    resolution: '512', diffuse: 1, halfLife: 0.15, edges: 'wrap', gain: 0.3, kernel: '5', names: 'prey births, predator births, prey scent, predator scent',
     ...note([
       'Trail field (scent): where prey (channel 3) and predators (channel 4) are, spread a few pixels and gone in a fraction of a second: a map of the herds and the hunting packs.',
       'Channels 1 and 2 only ever hold the one unit every walker lays on the step it is born (its species\' channel): nothing reads them.',
@@ -898,7 +888,7 @@ export function predatorPreyNodes(x = 0, y = 0, withOutput = true): GraphNode[] 
     ],
   });
   const grass = n('trailField', 'ppGrass', X(1260), Y(420), {
-    resolution: '512', diffuse: 0.05, halfLife: 3, edges: 'wrap', gain: 1, kernel: '3',
+    resolution: '512', diffuse: 0.05, halfLife: 3, edges: 'wrap', gain: 1, kernel: '3', names: 'grass',
     ...note([
       'Trail field (grass): the pasture, channel 1. It grows back (Add: Regrowth), creeps a little (Diffuse 0.05) and withers when left long (half-life 3 s), so on its own it settles at about 1.5. Prey graze it down where they gather.',
       'Its other channels collect the scent deposits too and are never read.',

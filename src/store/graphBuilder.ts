@@ -6,6 +6,7 @@
  * uses. Used by the Learn folder (learnExamples.ts) and the generated Node
  * Combos (comboExamples.ts).
  */
+import { retypeTrailField } from '../nodes/definitions/agents';
 import type { GraphNode, GroupInputPort, GroupOutputPort } from '../types/nodeGraph';
 import { GROUP_PORT_SENTINEL } from '../types/nodeGraph';
 import type { PlayControl, PlayRecord } from '../types/play';
@@ -30,7 +31,9 @@ export function n(type: string, id: string, x: number, y: number, params: Record
   for (const k of Object.keys(wires)) if (!inputs[k]) throw new Error(`learnExamples: ${type} has no input ${k}`);
   const outputs: GraphNode['outputs'] = {};
   for (const [k, v] of Object.entries(sockets.outputs ?? {})) outputs[k] = { type: v.type, label: v.label };
-  return { id, type, position: { x, y }, inputs, outputs, params: { ...(def.defaultParams ?? {}), ...params }, ...extra };
+  const node: GraphNode = { id, type, position: { x, y }, inputs, outputs, params: { ...(def.defaultParams ?? {}), ...params }, ...extra };
+  // A Trail field's channel outputs take its Channel names.
+  return type === 'trailField' ? retypeTrailField(node) : node;
 }
 
 /** An iterated group: ports in and out, a subgraph, and how many times it runs. */
