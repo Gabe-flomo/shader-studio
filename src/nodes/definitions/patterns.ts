@@ -197,12 +197,16 @@ export const MetaballsNode: NodeDefinition = withParamSockets({
 
 const LISSAJOUS_GLSL_FN = `
 float lissajousSDF(vec2 p, float a, float b, float delta, float thickness) {
+    // The distance to the curve as 128 short segments (not their end points, which left a chain of beads).
     float minD = 1e10;
-    for (float t = 0.0; t < 128.0; t++) {
+    vec2 prev = vec2(0.45 * sin(delta), 0.0);
+    for (float t = 1.0; t <= 128.0; t++) {
         float tt = t / 128.0 * 6.28318 * 2.0;
         vec2 curve = vec2(0.45 * sin(a * tt + delta), 0.45 * sin(b * tt));
-        float d = length(p - curve);
-        if (d < minD) minD = d;
+        vec2 pa = p - prev, ba = curve - prev;
+        float h = clamp(dot(pa, ba) / max(dot(ba, ba), 1e-12), 0.0, 1.0);
+        minD = min(minD, length(pa - ba * h));
+        prev = curve;
     }
     return minD - thickness;
 }`;

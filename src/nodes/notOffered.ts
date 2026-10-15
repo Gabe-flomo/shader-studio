@@ -13,7 +13,13 @@ export const OFFER_PIECES = false;
 /** The Pieces family's node types. */
 export const PIECES_TYPES: readonly string[] = ['pieces', 'pieceBalls'];
 
+/**
+ * Retired for good: Ride a curve (its curves built in) gave way on 2026-10-15 to Ride a path, which rides
+ * any wired shape's outline (agentRidePath.ts); saved graphs with a Ride a curve still load and run.
+ */
+export const RETIRED_TYPES: readonly string[] = ['agentRideCurve'];
+
 /** Registered types that are never offered for adding (their saved nodes still work). */
-export const NOT_OFFERED: ReadonlySet<string> = new Set(OFFER_PIECES ? [] : PIECES_TYPES);
+export const NOT_OFFERED: ReadonlySet<string> = new Set([...(OFFER_PIECES ? [] : PIECES_TYPES), ...RETIRED_TYPES]);
 
 export const isOffered = (type: string): boolean => !NOT_OFFERED.has(type);

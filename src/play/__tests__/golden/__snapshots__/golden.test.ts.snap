@@ -14,11 +14,20 @@ exports[`golden outputs: examples > agentRideHarmonograph 1`] = `
 exports[`golden outputs: examples > agentRideMorph 1`] = `
 {
   "again": "- x120",
+  "depth": "- x120",
   "rate": "- x120",
   "speed": "- x120",
   "width": "- x120",
-  "xb": "- x120",
-  "yb": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > agentRidePath 1`] = `
+{
+  "again": "- x120",
+  "level": "- x120",
+  "shape": "- x120",
+  "speed": "- x120",
+  "width": "- x120",
 }
 `;
 

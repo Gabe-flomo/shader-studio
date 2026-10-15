@@ -226,29 +226,43 @@ exports[`2D agents and pass graphs compile as they did before 3D > agentParticle
 
 exports[`2D agents and pass graphs compile as they did before 3D > agentRideHarmonograph 1`] = `
 {
-  "agents": "19630e1761835e1e60e9e59a6b0c:14057",
+  "agents": "01123ad1bd9c081b18275b030fe7:18889",
   "errors": null,
   "fragmentShader": "066ca53d25cc630070142a943d1a:4211",
-  "paramBindings": "0fd7ed270212031824596903dd6c:2263",
-  "paramUniforms": "1587aecfb06927167f9cb1f3ed6c:1608",
+  "paramBindings": "1d561dcc3961d90c8be2dcce31af:2193",
+  "paramUniforms": "0d6b5726efe5741a72b072b8143b:1582",
   "passes": "167d269bbddad80189e9f9473b28:2",
   "success": true,
   "textureUniforms": "167d269bbddad80189e9f9473b28:2",
-  "web": "09fbe149a7865b07d1a98fc122fc:14260",
+  "web": "1495d39f2a24ed1e2b32d91c06c5:19084",
 }
 `;
 
 exports[`2D agents and pass graphs compile as they did before 3D > agentRideMorph 1`] = `
 {
-  "agents": "179810d1f50ca30902ca1eb7e1d1:15726",
+  "agents": "0414886f5f414501615861cedf5f:20824",
   "errors": null,
   "fragmentShader": "0af8defccdc75e0a3e35bdd525cc:2149",
-  "paramBindings": "1fb8d50f4ae58919df78878c0b4c:1950",
-  "paramUniforms": "1d53e6d367f0590c0ad8c1e6344a:1360",
+  "paramBindings": "1d6acd351de52b14880442868001:1747",
+  "paramUniforms": "0dd0e22b5e1ee306a0bdf2da4177:1250",
   "passes": "167d269bbddad80189e9f9473b28:2",
   "success": true,
   "textureUniforms": "167d269bbddad80189e9f9473b28:2",
-  "web": "09470dfcadd9941543eca81a6f52:15851",
+  "web": "1125e693e1bd68177655965b448a:20941",
+}
+`;
+
+exports[`2D agents and pass graphs compile as they did before 3D > agentRidePath 1`] = `
+{
+  "agents": "12f06773acdd020954451d23d07e:22187",
+  "errors": null,
+  "fragmentShader": "01ee86544218e104254558716fd0:2146",
+  "paramBindings": "12e7762f017dea0e47aaa9843884:1945",
+  "paramUniforms": "02203e0e4cc2ab189de8fe6c334a:1375",
+  "passes": "167d269bbddad80189e9f9473b28:2",
+  "success": true,
+  "textureUniforms": "167d269bbddad80189e9f9473b28:2",
+  "web": "186b3b0674ffc41b3a6d0803ec59:22288",
 }
 `;
 

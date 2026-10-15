@@ -94,7 +94,7 @@ What can't be read inside: a chain that reads the previous frame (Echo, Bloom, t
 | **Collide** | After Integrate: keeps walkers out of a shape (its distance into Shape ƒ); they slide round it. Bounce, Friction. |
 | **Collide (3D scene)** | In a 3D group, after Integrate: keeps walkers out of a ray-marched scene (a Scene through a port on the group), read on a coarse 48-cell grid; they bounce off or slide along its surfaces. Scene size, X / Y / Z, Margin, Cushion, Bounce, Friction. |
 | **Chladni** | After Integrate (or alone): sand on a vibrating plate gathers on its still lines. Square or round; N and M, or the sound, pick the figure. |
-| **Ride a curve** | Instead of forces: locks walkers onto a parametric curve (Curve Trace's), each keeping its own place along it in Memory. Speed, Spread, Ribbon width, Loop. See **Ride a curve** below. |
+| **Ride a path** | Instead of forces: walkers ride the outline of any shape wired into Path ƒ, as a band. Speed, Level, Ribbon width, Wander. See **Ride a path** below. |
 
 **Sound.** Sound kick and Chladni listen to **Sound from**: the **Level** slider (map Live audio or a track to it in Play), the **Mic**, or the Play page's **Audio engine** (its master or a track). **Beat** is a silent stand-in kick at a tempo while you build: it only moves numbers, and it is part of the simulation, so a recording matches the preview. Set it to 0 when real sound drives Level.
 
@@ -109,9 +109,15 @@ four more numbers in a fifth state texture, E (`a_mem2`, Agent Inputs' and Agent
 sockets). The Agent Builder's named memories live there (docs/agent-builder.md "Memory"). A group that
 never reads or sets More memory compiles without E, exactly as before.
 
-## Ride a curve: walkers on a parametric curve
+## Ride a path: walkers on a shape's outline
 
-A **Ride a curve** node (Inside: moving) puts every walker on a curve and moves it along. The curve is **Curve Trace**'s (docs/curve-trace.md), with the same settings and the same code: each axis a Sine, Triangle, Square or Saw with its frequency, phase, size and offset, or Custom GLSL in `t` and `time`; **Motion** Lateral (Lissajous), Rotary or Counter (two circles, stars and flowers); **Damping**; **Turns**; **Morph** into a second figure (the B frequencies). Wire its Position and Velocity into Agent Output and that is the whole rule.
+**Ride a path** has no shapes of its own: it rides whatever is wired into it. Wire any shape into **Path ƒ**, a field socket like Collide's Shape: a Circle SDF's Distance, a union of shapes, a Lissajous Curve, a Chladni Field, Metaballs, noise, an Expression Block blending several. Each walker rides where the shape equals **Level** (0: its edge; a little above, just outside it; below, inside). Every step it is pulled onto the outline (Newton steps along the shape's slope, at most 0.15 each, so a walker born far away comes in over a few frames), slides along it perpendicular to the slope by **Speed** (picture units a second, with Speed variation and Direction), is pulled back on, then sits across it in its lane (Ribbon width, Wander). Nothing is kept in Memory: where it is now is its place, so the shape can move or change and the walkers follow. A line's distance (a Lissajous Curve's) never goes below 0, so ride it at a Level a little above 0. A shape whose code reads the pixel (screen derivatives, like Chladni Pattern's) can't go inside an Agents group; use Chladni Field. In 3D the outline is the picture's at the walker's own depth (a prism). Along is the angle round the middle (an outline has no start). Unwired, the walkers stay where they are.
+
+**Examples** (Examples → *Simulation*), all on Ride a path: **Riding outlines** (a Circle SDF, a Lissajous Curve and a Chladni Field blended by one Shape slider into Path ƒ; the walkers follow as it melts from one into the next), **Walkers on a harmonograph** (a 3 : 2 Lissajous ridden by 256k walkers as a band, streaks coloured by speed over the trail they lay) and **Morphing ribbon** (an LFO sweeps a 3 : 2 Lissajous Curve's phase, folding and unfolding it; each walker coloured by Along).
+
+**Ride a curve (hidden).** Before Ride a path, **Ride a curve** had Curve Trace's curves built in. It is no longer offered (searching its name finds Ride a path), but saved graphs with one still load and run as before. What it did, for reference:
+
+It put every walker on a curve and moved it along. The curve is **Curve Trace**'s (docs/curve-trace.md), with the same settings and the same code: each axis a Sine, Triangle, Square or Saw with its frequency, phase, size and offset, or Custom GLSL in `t` and `time`; **Motion** Lateral (Lissajous), Rotary or Counter (two circles, stars and flowers); **Damping**; **Turns**; **Morph** into a second figure (the B frequencies). Wire its Position and Velocity into Agent Output and that is the whole rule.
 
 **How it works.** Agents are "push": each walker carries its own state. The node keeps the walker's place along the curve in **Memory.x**, adds its speed every step and stands it at curve(t). That is three evaluations of the curve per walker (the point, and either side of it for the tangent), with no search over the curve's segments and no buffer, so it costs about what a force does at any count. Curve Trace, drawing the same curve as a distance field, has to find the nearest of hundreds of segments at every pixel.
 
@@ -124,7 +130,6 @@ A **Ride a curve** node (Inside: moving) puts every walker on a curve and moves 
 - **Sockets**: Speed, Ribbon width, Morph amount, X / Y frequency and phase take wires (an LFO into Morph amount, Time into a phase to turn the figure). Every slider is a Play control.
 - **3D**: in a 3D group the curve gets **Z** (its own wave, frequency, phase, size and offset, and a Z frequency B), as Curve Trace 3D's; the box is the picture across and up and ±1 deep.
 
-**Examples** (Examples → *Simulation*): **Walkers on a harmonograph** (a 3 : 2 Lissajous ridden by 256k walkers as a band, streaks coloured by speed over the trail they lay) and **Morphing ribbon** (an LFO morphs the figure from 3 : 2 into 5 : 4 and back; each walker coloured by Along).
 
 ## Neighbours: walkers that see each other
 

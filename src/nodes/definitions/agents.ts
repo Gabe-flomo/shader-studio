@@ -82,8 +82,10 @@ export const AGENT_INSIDE_TYPES = new Set([
   'agentCollideScene',
   // The walkers near this one, through the group's grid (docs/agents-group.md "Neighbours").
   'agentNeighbours',
-  // Walkers locked onto a parametric curve (agentRideCurve.ts).
+  // Walkers locked onto a parametric curve (agentRideCurve.ts; hidden, kept for saved graphs).
   'agentRideCurve',
+  // Walkers riding a wired shape's outline (agentRidePath.ts).
+  'agentRidePath',
 ]);
 /** The starters in the Simulation category: each builds a whole working setup (store/agentExamples.ts). */
 export const AGENT_PRESET_TYPES = new Set([
@@ -179,6 +181,7 @@ export const AGENT_3D_SOCKETS: Record<string, { in?: string[]; out?: string[] }>
   agentCollideScene: { in: ['position', 'velocity'], out: ['position', 'velocity'] },
   agentNeighbours: { in: ['position'], out: ['centre', 'heading', 'push'] },
   agentRideCurve: { out: ['position', 'velocity', 'heading'] },
+  agentRidePath: { out: ['position', 'velocity', 'heading'] },
   agentEmit: { in: ['position'] },
 };
 /** Draw agents' sockets in 3D only: a ray-marched scene's camera and depth (docs/agents-group.md "3D"). */
