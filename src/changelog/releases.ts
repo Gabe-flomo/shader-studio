@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.212',
+    date: '2026-10-14',
+    title: 'Cache',
+    highlights: [
+      { area: 'Studio', text: 'Cache (Texture tools) keeps the last frames of any texture on the GPU: delay it, freeze it, loop through it, like TouchDesigner\'s Cache TOP.' },
+      { area: 'Studio', text: 'Cache Read takes more delays from the same frames, and a Delay map reads each pixel from its own moment (Time Machine).' },
+    ],
+  },
+  {
     id: '2026.10.211',
     date: '2026-10-14',
     title: 'Blob Track motion',
