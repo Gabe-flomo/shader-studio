@@ -174,6 +174,7 @@ export { AgentsGroupNode, AgentInputsNode, AgentOutputNode, AgentStepOutNode, Ag
 export { AgentGravityNode, AgentWindNode, AgentCurlNode, AgentAttractNode, AgentVortexNode, AgentFlowNode, AgentSoundKickNode, AgentIntegrateNode, AgentAgeNode, AgentCollideNode, AgentChladniNode } from './agentForces';
 export { AgentNeighboursNode } from './agentNeighbours';
 export { AgentRideCurveNode } from './agentRideCurve';
+export { AgentRidePathNode } from './agentRidePath';
 
 // Math
 export {
@@ -320,6 +321,7 @@ import { ReadNeighboursNode } from './readNeighbours';
 import { AgentsGroupNode, AgentInputsNode, AgentOutputNode, AgentStepOutNode, AgentSenseNode, AgentSteerNode, AgentMoveNode, AgentBySpeciesNode, AgentEmitNode, AgentDepositNode, TrailFieldNode, TrailStepOutNode, AgentProbeOutNode, DrawAgentsNode, SlimeMoldPresetNode, ParticlesPresetNode, CurlSmokePresetNode, SoundBurstPresetNode, MultiSlimePresetNode, AntsPresetNode, BoidsPresetNode, StrandsPresetNode, GrowPicturePresetNode, GalaxyPresetNode, MyceliumPresetNode, SandPlatePresetNode } from './agents';
 import { AgentNeighboursNode } from './agentNeighbours';
 import { AgentRideCurveNode } from './agentRideCurve';
+import { AgentRidePathNode } from './agentRidePath';
 import { AgentGravityNode, AgentWindNode, AgentCurlNode, AgentAttractNode, AgentVortexNode, AgentFlowNode, AgentSoundKickNode, AgentIntegrateNode, AgentAgeNode, AgentCollideNode, AgentChladniNode, AgentCollideSceneNode, AgentGridOutNode } from './agentForces';
 
 // Every setting of the Agents family has a "?" on its card: its hint, unless it has a fuller help of its own.
@@ -632,6 +634,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   agentCollideScene: AgentCollideSceneNode,
   agentNeighbours: AgentNeighboursNode,
   agentRideCurve: AgentRideCurveNode,
+  agentRidePath: AgentRidePathNode,
   agentGridOut: AgentGridOutNode,
   multiSlimePreset: MultiSlimePresetNode,
   antsPreset: AntsPresetNode,

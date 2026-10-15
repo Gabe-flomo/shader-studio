@@ -3,8 +3,8 @@
  * locked onto Curve Trace's curve. It compiles in 2D and 3D with every wave and motion; its real
  * emitted GLSL, run on the CPU (glslEval.ts), puts a walker on the curve at its own place, moves
  * that place by its speed, loops it, and gives it the tangent × speed as its velocity; the group
- * keeps the place in Memory (Agent Output's Memory routed by itself when unwired); the examples
- * compile with their Play controls live.
+ * keeps the place in Memory (Agent Output's Memory routed by itself when unwired). Hidden since Ride a
+ * path replaced it (agentRidePath.test.ts); saved graphs with one still compile.
  */
 import { describe, expect, it, vi } from 'vitest';
 
@@ -14,14 +14,10 @@ vi.hoisted(() => {
 
 import { compileGraph } from '../graphCompiler';
 import { agentStepNodes } from '../agentGraph';
-import { getNodeDefinition, resolveNodeAliases } from '../../nodes/definitions';
+import { getNodeDefinition } from '../../nodes/definitions';
 import { withAgentSpace } from '../../nodes/definitions/agents';
 import { n } from '../../store/graphBuilder';
 import { agentsGroup } from '../../store/agentExampleKit';
-import { EXAMPLE_GRAPHS } from '../../store/exampleGraphs';
-import { EXAMPLE_FOLDERS } from '../../store/exampleIndex';
-import { RIDE_CURVE_EXAMPLE_KEYS } from '../../store/agentRideCurveExamples';
-import { collectPlayCandidates } from '../../play/playControls';
 import { runGlsl, type Env, type Val } from './glslEval';
 import type { GraphNode } from '../../types/nodeGraph';
 
@@ -177,27 +173,5 @@ describe('Ride a curve on the CPU', () => {
     const c = [0.9 * Math.sin(3 * 1.5 + 1.5708), 0.7 * Math.sin(2 * 1.5), 0.5 * Math.sin(5 * 1.5 + 0.7854)];
     // h3 = 0.75: radius 0.1 × √0.75 from the curve.
     expect(Math.hypot(...r.p.map((x, i) => x - c[i]))).toBeCloseTo(0.1 * Math.sqrt(0.75), 4);
-  });
-});
-
-describe('Ride a curve examples', () => {
-  it('are in the Simulation folder', () => {
-    const keys = EXAMPLE_FOLDERS.find(f => f.label === 'Simulation')!.keys;
-    for (const k of RIDE_CURVE_EXAMPLE_KEYS) expect(keys).toContain(k);
-    expect(RIDE_CURVE_EXAMPLE_KEYS).toEqual(['agentRideHarmonograph', 'agentRideMorph']);
-  });
-  it.each(RIDE_CURVE_EXAMPLE_KEYS)('%s compiles, every program live, its Play controls live', k => {
-    const nodes = resolveNodeAliases(EXAMPLE_GRAPHS[k].nodes, getNodeDefinition);
-    const r = compileGraph({ nodes });
-    expect(r.errors).toBeUndefined();
-    expect(r.agents!.groups.every(g => g.live)).toBe(true);
-    expect(r.agents!.trails.every(t => t.live)).toBe(true);
-    expect(r.agents!.groups[0].stateC).toBe(true);
-    const live = new Set(collectPlayCandidates(nodes, r.paramBindings).map(c => c.target));
-    for (const c of EXAMPLE_GRAPHS[k].play!.controls) expect(live.has(c.target), `${c.label} → ${c.target}`).toBe(true);
-  });
-  it('the morphing ribbon\'s Morph amount comes from the LFO', () => {
-    const fs = compileGraph({ nodes: EXAMPLE_GRAPHS.agentRideMorph.nodes }).agents!.groups[0].fragmentShader;
-    expect(fs).toMatch(/mix\(vec2\([^;]*, vec2\([^;]*, clamp\(\w+_value, 0\.0, 1\.0\)\)/);
   });
 });

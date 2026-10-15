@@ -3,7 +3,7 @@
  * nothing offers them, and graphs, scenes and recipes that already use them still load, build and compile.
  */
 import { describe, expect, it } from 'vitest';
-import { NOT_OFFERED, OFFER_PIECES, PIECES_TYPES } from '../notOffered';
+import { NOT_OFFERED, OFFER_PIECES, PIECES_TYPES, RETIRED_TYPES } from '../notOffered';
 import { getNodeDefinition, getOfferedDefinitions } from '../definitions';
 import { switchFamiliesFor } from '../switchNode';
 import { HIDDEN_TYPES } from '../../components/NodeGraph/nodeCategoryMeta';
@@ -26,7 +26,7 @@ import { buildStandaloneGraph } from '../../sceneBuilder/build';
 describe('Pieces and Balls: hidden, not deleted', () => {
   it('is the shipped setting (one flag brings them back)', () => {
     expect(OFFER_PIECES).toBe(false);
-    expect([...NOT_OFFERED].sort()).toEqual([...PIECES_TYPES].sort());
+    expect([...NOT_OFFERED].sort()).toEqual([...PIECES_TYPES, ...RETIRED_TYPES].sort());
   });
 
   it('are still registered, so saved graphs load', () => {
