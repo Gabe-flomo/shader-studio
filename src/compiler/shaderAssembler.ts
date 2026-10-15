@@ -1,5 +1,6 @@
 import { DEPTH_TYPE, depthSampler } from '../nodes/definitions/depth';
 import { BLOB_TRACK_TYPE } from '../nodes/definitions/blobTrack';
+import { CACHE_TYPE } from '../nodes/definitions/cache';
 import { LINK_AT, LINK_COL, LINK_TOKEN_RE, linkColourSource, linkUniformToken, moveKeys, translateChain } from '../nodes/sceneLink';
 import { GROUP_PORT_SENTINEL } from '../types/nodeGraph';
 import { dataBlocksFirst } from '../data/dataGlsl';
@@ -788,6 +789,12 @@ export class ShaderAssembler {
   private audioUniforms: Record<string, string> = {};
   // Float uniforms the input bus writes each frame: name → `${nodeId}::${channel}`.
   private liveUniforms: Record<string, string> = {};
+  /** A Cache's atlas sampler and its two per-frame floats, set by lib/cache/engine.ts. */
+  private registerCache(slug: string, nodeId: string): void {
+    this.textureUniforms[`u_cache_${slug}`] = nodeId;
+    this.liveUniforms[`u_cache_${slug}_head`] = `${nodeId}::cacheHead`;
+    this.liveUniforms[`u_cache_${slug}_filled`] = `${nodeId}::cacheFilled`;
+  }
   private videoUniforms: Record<string, string> = {};
   /** Per-instance top-level declarations (NodeDefinition.declarationsFor), in order, each once. */
   private declarations = new Set<string>();
@@ -1005,6 +1012,8 @@ export class ShaderAssembler {
         }
         // Blob Track (docs/blob-track.md): its blobs, a small float texture filled by lib/blobs/engine.ts.
         if (node.type === BLOB_TRACK_TYPE) this.textureUniforms[`u_tex_${nodeSlug}`] = node.id;
+        // Cache (docs/cache-node.md): its frames atlas, and the newest tile and count filled (lib/cache/engine.ts).
+        if (node.type === CACHE_TYPE) this.registerCache(nodeSlug, node.id);
         // Nodes with their own image slots (published user nodes): one
         // sampler per slot, bound from nodeTextures["<id>::<slot>"].
         def.textureSlots?.forEach(slot => {
@@ -1528,6 +1537,7 @@ export class ShaderAssembler {
                 else this.textureUniforms[`u_tex_${subNode.id}`] = originalId;
               }
               if (subNode.type === BLOB_TRACK_TYPE) this.textureUniforms[`u_tex_${subNode.id}`] = originalId;
+              if (subNode.type === CACHE_TYPE) this.registerCache(subNode.id, originalId);
               subDef.textureSlots?.forEach(slot => { this.textureUniforms[`u_tex_${subNode.id}_${slot}`] = `${originalId}::${slot}`; });
               const { patchedNode: patchedSub, uniforms: subUniforms, bindings: subBindings } = patchNodeParamsForUniforms(effectiveSubNode, subDef, fn => this.functions.add(fn), originalId);
               Object.assign(this.paramUniforms, subUniforms);

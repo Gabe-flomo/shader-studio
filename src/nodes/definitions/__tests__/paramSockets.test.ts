@@ -41,7 +41,7 @@ function showing(def: NodeDefinition, key: string): Record<string, unknown> {
 }
 
 /** Texture tools read nothing until a texture is wired: a Pass of a circle. */
-const TEXTURE_TYPES = new Set(['displaceTexture', 'chromaTexture', 'edgesTexture', 'sampleTexture', 'textureChange', 'textureFlow', 'textureNeighbours', 'readTexture', 'textureLevels', 'textureMask', 'distanceShape', 'textureFade', 'radialFastBlur', 'chromaLens', 'deepGlowTexture', 'textureFeedback', 'textureFeedbackStep']);
+const TEXTURE_TYPES = new Set(['displaceTexture', 'chromaTexture', 'edgesTexture', 'sampleTexture', 'textureChange', 'textureFlow', 'textureNeighbours', 'readTexture', 'textureLevels', 'textureMask', 'distanceShape', 'textureFade', 'radialFastBlur', 'chromaLens', 'deepGlowTexture', 'textureFeedback', 'textureFeedbackStep', 'cache', 'cacheRead']);
 const picture = (): GraphNode[] => [
   n('uv', 'uv', 0, 0),
   n('circleSDF', 'circ', 0, 0, { radius: 0.4 }, { position: ['uv', 'uv'] }),
@@ -54,6 +54,9 @@ const NEEDS: Record<string, Record<string, [string, string]>> = {
   'textureFeedback.flowAmount': { flow: ['uv', 'uv'] },
   'textureFeedbackStep.flowAmount': { flow: ['uv', 'uv'] },
   'displaceTexture.amount': { map: ['pa', 'texture'] },
+  'cache.reach': { delayMap: ['circ', 'distance'] },
+  'cacheRead.reach': { delayMap: ['circ', 'distance'], cache: ['ca', 'cache'] },
+  'cacheRead.delay': { cache: ['ca', 'cache'] },
 };
 
 /** The graph: node `n1` of `type`, slider `key` wired from `src` (or not), its output on the picture. */
@@ -72,7 +75,8 @@ function graphFor(type: string, key: string, wired: boolean): GraphNode[] {
       n('output', 'out', 0, 0, {}, { color: ['scan', 'color'] }),
     ];
   }
-  const tex = TEXTURE_TYPES.has(type) ? picture() : [];
+  // Cache Read reads a Cache's frames: one recording the picture.
+  const tex = TEXTURE_TYPES.has(type) ? [...picture(), ...(type === 'cacheRead' ? [n('cache', 'ca', 0, 0, {}, { texture: ['pa', 'texture'] })] : [])] : [];
   const texWire: Record<string, [string, string]> = tex.length && def.inputs.texture ? { texture: ['pa', 'texture'] } : {};
   return [...tex, src, n(type, 'n1', 0, 0, params, { ...texWire, ...wire }), n('output', 'out', 0, 0, {}, { color: ['n1', pickOutput(def)] })];
 }

@@ -36,6 +36,8 @@ const CONNECTION_GATED = new Set([
   'splatScene.softness',
   // Blob Track: the Stamp settings only with a Stamp texture wired
   'blobTrack.stampScale', 'blobTrack.stampSpin',
+  // Cache: Map reach only with a Delay map; Cache Read reads nothing until a Cache is wired
+  'cache.reach', 'cacheRead.delay', 'cacheRead.reach',
   // Picture Environment reads nothing until a picture's Texture is wired
   'pictureEnvironment.fov', 'pictureEnvironment.blur', 'pictureEnvironment.strength',
   // GI Lit March Group: the PBR lighting block is only emitted once a scene is wired

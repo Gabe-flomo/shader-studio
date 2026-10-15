@@ -2203,6 +2203,20 @@ exports[`golden outputs: examples > ttBlobTrack 1`] = `
 }
 `;
 
+exports[`golden outputs: examples > ttCacheTimeMachine 1`] = `
+{
+  "delay": "- x120",
+  "reach": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > ttCacheTimeRgb 1`] = `
+{
+  "b": "- x120",
+  "g": "- x120",
+}
+`;
+
 exports[`golden outputs: examples > ttColourKey 1`] = `
 {
   "keyColour": "- x120",
