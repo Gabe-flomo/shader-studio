@@ -716,11 +716,12 @@ export function buildTextureToolExamples(): Record<string, ExampleGraph> {
         { texture: ['vid', 'texture'] }),
       n('blobTrack', 'blobs', 940, 160, { minSize: 0.002, maxSize: 0.4, maxBlobs: 10, maxJump: 0.15, memory: 10, smoothing: 0.5,
         boxStyle: 'brackets', boxColour: 'line', marker: 'cross', markerColor: [0, 0, 0], labels: 'xy', labelColor: [1, 0.2, 0.38], textSize: 13, lineWidth: 2, lineColor: [0.78, 1, 0.22],
-        connect: 'chain', bend: 0.45, arrows: true, flow: 0,
+        connect: 'chain', bend: 0.45, arrows: true, flow: 0, motion: 'jump', jumpRate: 5, scatter: 0.15, flicker: 0.15,
         ...note([
           'Blob Track: reads the mask back small each frame, splits it into separate blobs and follows them, so each keeps its ID while it moves.',
           'Min size drops specks; Max jump is how far a blob may move in a frame and keep its ID; Memory keeps a lost blob\'s ID for a few frames.',
           'Marks: Boxes Corner brackets, Centre Cross, Labels x / y (the centre in preview pixels), and Connect Chain: a curved arrow from each blob to the next newer one. Bend arcs the curves; Flow runs dots along them.',
+          'Motion Jump: each mark holds, then snaps to its blob at random moments (Scatter lands it a little off), flickers out now and then, and its connection re-picks a partner each step. Try Pulse (marks parked, packets flowing) or Follow (gliding).',
           'Marks is the drawing, Marks alpha where it is: Look lays them over the video.',
         ]) },
         { texture: ['maskPass', 'texture'] }),
@@ -740,11 +741,11 @@ export function buildTextureToolExamples(): Record<string, ExampleGraph> {
       ctl('level', 'vidMask::level', 'What counts as bright', 0, 1, 0.005),
       ctl('bend', 'blobs::bend', 'Curve bend', -1, 1, 0.01),
       ctl('lines', 'blobs::lineWidth', 'Line width', 0.5, 8, 0.5),
-    ], `**What it shows.** Blob tracking as TouchDesigner's Blob Track TOP does it, drawn as a tracking overlay: separate shapes in a mask found and followed, each with an ID that stays with it.
+    ], `**What it shows.** Blob tracking as TouchDesigner's Blob Track TOP does it, drawn as a jumpy tracking overlay: separate shapes in a mask found and followed, each with an ID that stays with it.
 
 **How it is built.** Video → Mask → Pass (½) → Blob Track. Blob Track reads the mask back at 160 px each frame, splits it into 8-connected blobs on the CPU and matches them to last frame's by nearest centre. Its Marks (corner brackets, crosses, x / y labels, curved arrows in ID order) are mixed over the video by Marks alpha.
 
-**Try.** Choose the camera on the Video Input and hold up a light. Move *What counts as bright* until each shape is its own bracket. On Blob Track: Connect Nearest or All pairs for a web, Flow for moving dots, Labels ID.`),
+**Try.** Choose the camera on the Video Input and hold up a light. Move *What counts as bright* until each shape is its own bracket. On Blob Track: Motion Pulse for data flowing between parked marks, Line colour by Gradient, Line style Dashed, Labels Hex code, Wobble.`),
   };
 
   // ── 14 · Video → Mask → Pass → Blob Track with a photo stamped on every blob ──
