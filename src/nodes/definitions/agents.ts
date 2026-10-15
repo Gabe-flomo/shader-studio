@@ -613,7 +613,7 @@ export const AgentSenseNode: NodeDefinition = {
   inputs: {
     texture: { type: 'texture', label: 'Trail image', hint: 'What to smell: a Trail field\'s Image (or a Pass), wired in from outside through an input added on Agent Inputs. Read as it was one step ago.' },
     field: { type: 'float', label: 'Field ƒ', field: true, hint: 'Any chain of nodes, read as a function of position at each sensor (noise, a shape\'s distance, a picture\'s brightness). Added to the texture\'s reading.' },
-    channels: { type: 'vec4', label: 'Channels', hint: 'How much each trail channel counts. Unwired: +1 for this walker\'s own species, −0.5 for the others (one species: just the first channel).' },
+    channels: { type: 'vec4', label: 'Channels', hint: 'How much each trail channel counts, four weights (overrides Smell). Unwired: as Smell says.' },
     angle: { type: 'float', label: 'Angle', hint: 'Degrees between the centre sensor and each side one.' },
     distance: { type: 'float', label: 'Distance', hint: 'How far ahead the sensors are, in picture units (the picture is 2 tall).' },
     position: { type: 'vec2', label: 'Position', hint: THIS_AGENT },
@@ -626,8 +626,13 @@ export const AgentSenseNode: NodeDefinition = {
     gradient: { type: 'vec2', label: 'Gradient', hint: 'Which way the reading rises, at the walker (picture units; in 3D a vec3).' },
     sample: { type: 'vec4', label: 'Channels here', hint: 'The Trail image\'s four channels where the walker stands, unweighted (in 3D, read from the volume): a velocity Deposit\'s flow and count, for flocking.' },
   },
-  defaultParams: { angle: 45, distance: 0.03, weight: 1, width: '1', cone: 'plane' },
+  defaultParams: { angle: 45, distance: 0.03, weight: 1, width: '1', cone: 'plane', smell: 'own' },
   paramDefs: {
+    smell: { label: 'Smell', type: 'select', hint: 'Which of the trail\'s channels to follow. Own species: +1 for its own channel, −0.5 for the others. One channel: just that one (a Trail field\'s Channel names say what each holds). All: everything together. Wiring Channels (four weights) overrides this.', options: [
+      { value: 'own', label: 'Own species (others repel a little)' },
+      { value: 'ch1', label: 'Channel 1 only' }, { value: 'ch2', label: 'Channel 2 only' }, { value: 'ch3', label: 'Channel 3 only' }, { value: 'ch4', label: 'Channel 4 only' },
+      { value: 'all', label: 'All channels' },
+    ] },
     cone: { label: 'Sensors (3D)', type: 'select', hint: '3D: where the side sensors sit on the cone round the heading.', help: 'Turning plane: the left and right sensors lie in a plane through the heading that turns at random every step, so over a few steps they sweep the whole cone (3 reads, Steer turns in that plane). Ring of 4: four sensors round the cone every step, and Steer turns in the plane of the strongest pair (5 reads: steadier, a little slower).', options: [
       { value: 'plane', label: 'Turning plane (3 reads)' }, { value: 'ring', label: 'Ring of 4 (5 reads)' },
     ], showWhen: { param: 'agentSpace', value: '3d' } },
@@ -649,7 +654,7 @@ export const AgentSenseNode: NodeDefinition = {
     const tex = v.texture;
     const fn = fieldFn(v.field);
     const five = sel(node.params.width, ['1', '5'], '1') === '5';
-    const chan = v.channels ?? 'a_ownChannels';
+    const chan = v.channels ?? smellWeights(node);
     const ang = v.angle ? `radians(${v.angle})` : `radians(${p(node.params.angle, 45)})`;
     const dist = v.distance ?? p(node.params.distance, 0.03);
     const at = (q: string) => {
@@ -682,6 +687,15 @@ export const AgentSenseNode: NodeDefinition = {
   },
 };
 
+/** Sense's Smell as channel weights (Channels wired overrides it). */
+function smellWeights(node: GraphNode): string {
+  const s = sel(node.params.smell, ['own', 'ch1', 'ch2', 'ch3', 'ch4', 'all'], 'own');
+  if (s === 'all') return 'vec4(1.0)';
+  if (s === 'own') return 'a_ownChannels';
+  const i = Number(s[2]) - 1;
+  return `vec4(${[0, 1, 2, 3].map(k => (k === i ? '1.0' : '0.0')).join(', ')})`;
+}
+
 /**
  * Sense in 3D: the centre sensor Distance ahead along the heading, the side ones Angle off it on
  * the cone round it. Turning plane: left and right in the plane through the heading and this
@@ -694,7 +708,7 @@ function sense3d(node: GraphNode, v: Record<string, string>): { code: string; ou
   const tex = v.texture;
   const vol = node.params.__vol === true && !!tex;
   const fn = fieldFn(v.field);
-  const chan = v.channels ?? 'a_ownChannels';
+  const chan = v.channels ?? smellWeights(node);
   const ang = v.angle ? `radians(${v.angle})` : `radians(${p(node.params.angle, 45)})`;
   const dist = v.distance ?? p(node.params.distance, 0.03);
   const w = p(node.params.weight, 1);
@@ -1311,6 +1325,25 @@ export const AgentDepositNode: NodeDefinition = {
   generateGLSL: () => ({ code: '', outputVars: {} }),
 };
 
+/** A Trail field's four channel names (its Channel names setting, comma-separated): blanks are "Channel N". */
+export function trailChannelNames(node: GraphNode): string[] {
+  const given = String(node.params.names ?? '').split(',').map(s => s.trim());
+  return [0, 1, 2, 3].map(i => given[i] || `Channel ${i + 1}`);
+}
+
+/** A Trail field's channel outputs carry its channel names, so wires and Expression Blocks read "Grass", not "Channel 1". */
+export function retypeTrailField(node: GraphNode): GraphNode {
+  const names = trailChannelNames(node);
+  const outputs = { ...node.outputs };
+  let changed = false;
+  names.forEach((name, i) => {
+    const key = `ch${i + 1}`;
+    const out = outputs[key];
+    if (out && out.label !== name) { outputs[key] = { ...out, label: name }; changed = true; }
+  });
+  return changed ? { ...node, outputs } : node;
+}
+
 export const TrailFieldNode: NodeDefinition = {
   type: 'trailField',
   label: 'Trail field',
@@ -1332,8 +1365,9 @@ export const TrailFieldNode: NodeDefinition = {
     ch4: { type: 'float', label: 'Channel 4', hint: 'Trail channel 4 here (a rules group\'s birth marks), scaled to 0–1 by Gain.' },
     texture: { type: 'texture', label: 'Image', hint: 'The whole trail as an image (a texture): back into the Agents group for Sense (through an input you add on Agent Inputs), or into Glow, Blur or Sample (texture), or a Texture tool: Flow for a direction along the trail, Mask or Levels to shape it.' },
   },
-  defaultParams: { resolution: '0.5', diffuse: 1, halfLife: 0.12, edges: 'wrap', gain: 0.15, kernel: '3', volume: '96' },
+  defaultParams: { resolution: '0.5', diffuse: 1, halfLife: 0.12, edges: 'wrap', gain: 0.15, kernel: '3', volume: '96', names: '' },
   paramDefs: {
+    names: { label: 'Channel names', type: 'string', hint: 'What each of the four channels holds, comma-separated (for example: grass, prey scent, predator scent). The channel outputs take these names, so wires and Expression Blocks read Grass instead of Channel 1. Blank: Channel 1–4 (one per species).' },
     volume: { label: 'Volume', type: 'select', hint: '3D (a 3D group deposits here): the volume\'s rows and slices; its columns follow the picture\'s shape.', help: 'In 3D the trail is a volume over the walkers\' box: this many rows and as many slices deep (columns follow the picture\'s shape, so 96 at 16:9 is 171 × 96 × 96, about 1.6 million cells). Sense reads it in 3D; Amount, Channels and Image are the volume seen from the front, summed through its depth. Bigger is finer and costs more memory and time (160: 7 million cells, about 110 MB with its copy).', options: [
       { value: '64', label: '64 (fast)' }, { value: '96', label: '96' }, { value: '128', label: '128' }, { value: '160', label: '160 (fine, heavy)' },
     ], showWhen: { param: 'agentSpace', value: '3d' } },
@@ -1352,6 +1386,7 @@ export const TrailFieldNode: NodeDefinition = {
     gain: { label: 'Gain', type: 'float', min: 0, max: 4, step: 0.001, hint: 'Scales Amount: 1 − e^(−trail × gain).' },
   },
   assignable: false,
+  syncSockets: retypeTrailField,
   // Compiled as a source only (the compiler strips its Deposit wire): node.id is the slug.
   // The sampling nodes (Sample, Blur, Glow, Edges (texture)) also read the picture's pixel size, `<sampler>_px`, as for a Pass.
   declarationsFor: (node: GraphNode) => [`uniform sampler2D ${trailUniform(node.id)};`, `uniform vec2 ${trailUniform(node.id)}_px;`],

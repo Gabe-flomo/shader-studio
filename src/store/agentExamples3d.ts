@@ -199,20 +199,12 @@ export function flock3dNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     'Agent Inputs: this bird as the step begins: its Velocity goes to Flock.',
     'Trail is an input added to the group: the flow volume from outside (the birds\' velocities, blurred, and how many there are), as it was one step ago.',
   ]);
-  const count = expr('f3Count', 420, 460, {
-    label: 'Count channel',
-    inputs: [],
-    lines: [],
-    result: 'vec4(0.0, 0.0, 0.0, 1.0)',
-    outputType: 'vec4',
-    note: ['Count channel (an Expression Block): picks the volume\'s fourth channel, the count of birds (in 3D a velocity deposit fills x, y, z and counts in the fourth), so Sense measures how crowded it is.'],
-  });
   const sense = n('agentSense', 'f3Sense', 840, 360, {
-    angle: 30, distance: 0.2, weight: 1, width: '1', cone: 'plane',
+    angle: 30, distance: 0.2, weight: 1, width: '1', cone: 'plane', smell: 'ch4',
     ...note([
-      'Sense: reads the crowd (Count channel) round the bird, 0.2 away (about 6 cells of the 64-row volume). Its Gradient, which way the crowd thickens in 3D, goes to Flock; its Channels here, the flow where the bird is (summed velocities and the count), too.',
+      'Sense: reads the crowd round the bird (Smell Channel 4 only: in 3D a velocity deposit fills x, y, z and counts birds in the fourth), 0.2 away (about 6 cells of the 64-row volume). Its Gradient, which way the crowd thickens in 3D, goes to Flock; its Channels here, the flow where the bird is (summed velocities and the count), too.',
     ]),
-  }, { texture: ['f3In', 'trail'], channels: ['f3Count', 'result'] });
+  }, { texture: ['f3In', 'trail'] });
   const flock = expr('f3Flock', 1260, 100, {
     label: 'Flock',
     inputs: [
@@ -263,7 +255,7 @@ export function flock3dNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     mode: 'fill', shape: 'screen', heading: 'random', speed: 0.5, speedVar: 0.2,
     ...note(['Emit: every bird starts somewhere in the box, flying in a random direction at about 0.5. The flocks sort themselves out within seconds.']),
   });
-  let group = agentsGroup('flock3d', X(420), Y(0), 'f3Emit', [inputs, count, sense, flock, curl, integrate, output], {
+  let group = agentsGroup('flock3d', X(420), Y(0), 'f3Emit', [inputs, sense, flock, curl, integrate, output], {
     label: '3D flock', space: '3d', tier: '64k', preroll: 6,
     ...note([
       'Agents with Space 3D: 65,536 birds (64k) in a box as deep as the picture is tall, 2 steps a frame. The rule inside (double-click) is Flock → Curl noise → Integrate.',

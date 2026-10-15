@@ -351,20 +351,12 @@ export function boidsNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     'Agent Inputs: this bird as the step begins: its Velocity goes to Flock.',
     'Trail is an input added to the group: the flow field from outside (the birds\' velocities, blurred), as it was one step ago.',
   ]);
-  const count = expr('bdCount', 420, 460, {
-    label: 'Count channel',
-    inputs: [],
-    lines: [],
-    result: 'vec4(0.0, 0.0, 1.0, 0.0)',
-    outputType: 'vec4',
-    note: ['Count channel (an Expression Block): picks the trail\'s third channel, the count of birds, for Sense: so Sense measures how crowded it is, not how they move.'],
-  });
   const sense = n('agentSense', 'bdSense', 840, 360, {
-    angle: 30, distance: 0.06, weight: 1, width: '1',
+    angle: 30, distance: 0.06, weight: 1, width: '1', smell: 'ch3',
     ...note([
-      'Sense: reads the crowd (Count channel) around the bird. Its Gradient output, which way the crowd thickens, goes to Flock.',
+      'Sense: reads the crowd around the bird: Smell Channel 3 only, the trail\'s count of birds (a velocity Deposit puts the velocity in channels 1 and 2 and a count in 3), so it measures how crowded it is, not how they move. Its Gradient output, which way the crowd thickens, goes to Flock.',
     ]),
-  }, { texture: ['bdIn', 'trail'], channels: ['bdCount', 'result'] });
+  }, { texture: ['bdIn', 'trail'] });
   const flow = n('sampleTexture', 'bdFlow', 840, 40, {
     ...note([
       'Sample (texture): the flow field where the bird is: red and green are the summed velocities of the birds around it, blue how many there are.',
@@ -420,7 +412,7 @@ export function boidsNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     mode: 'fill', shape: 'screen', heading: 'random', speed: 0.3, speedVar: 0.2,
     ...note(['Emit: every bird starts somewhere on the picture, flying in a random direction at about 0.3. The flocks sort themselves out within seconds.']),
   });
-  let group = agentsGroup('boids', X(420), Y(0), 'bdEmit', [inputs, count, sense, flow, flock, curl, integrate, output], {
+  let group = agentsGroup('boids', X(420), Y(0), 'bdEmit', [inputs, sense, flow, flock, curl, integrate, output], {
     label: 'Boids', tier: '256k', preroll: 6,
     ...note([
       'Agents: 262,144 birds (256k), 2 steps a frame. The rule inside (double-click) is Flock → Curl noise → Integrate.',
@@ -437,7 +429,7 @@ export function boidsNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     ]),
   }, { agents: ['boids', 'agents'] });
   const trail = n('trailField', 'bdTrail', X(1260), Y(0), {
-    resolution: '512', diffuse: 1, halfLife: 0.08, edges: 'wrap', gain: 0.1, kernel: '5',
+    resolution: '512', diffuse: 1, halfLife: 0.08, edges: 'wrap', gain: 0.1, kernel: '5', names: 'flow x, flow y, crowd',
     ...note([
       'Trail field: the flow field, 512 rows, spread by the 5×5 blur every step and fading fast (half-life 0.08 s), so it is the birds\' motion right now, blurred over a few body lengths.',
       'It keeps negative numbers (velocities point both ways) because a Velocity deposit goes into it.',
