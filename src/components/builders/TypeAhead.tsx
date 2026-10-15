@@ -104,7 +104,7 @@ export function AssistList({ items, active, onPick, onHover, footer, variant = '
 export interface PickerItem { value: string; label: string; hint?: string; example?: string; words?: string[] }
 
 /** A combobox over a fixed list: type to filter (by name, words and hint), Enter or click to pick. */
-export function TypeAheadPicker({ items, onPick, placeholder, ariaLabel, width = 150 }: { items: PickerItem[]; onPick: (value: string) => void; placeholder: string; ariaLabel: string; width?: number }) {
+export function TypeAheadPicker({ items, onPick, placeholder, ariaLabel, width = 150, accent = false }: { items: PickerItem[]; onPick: (value: string) => void; placeholder: string; ariaLabel: string; width?: number; /** A quiet accent text button until focused ("+ Add condition"). */ accent?: boolean }) {
   const tk = useTokens();
   const [q, setQ] = useState('');
   const [open, setOpen] = useState(false);
@@ -113,10 +113,21 @@ export function TypeAheadPicker({ items, onPick, placeholder, ariaLabel, width =
   const shown = pickerAssist(q, items.map(it => ({ ...it, words: [...(it.words ?? []), ...(it.hint ? it.hint.toLowerCase().split(/[^a-z]+/).filter(w => w.length > 3) : [])] })), 20);
   useEffect(() => setActive(0), [q]);
   const take = (v: string) => { onPick(v); setQ(''); setOpen(false); ref.current?.blur(); };
+  // Accent: a quiet "+ Add …" text button that turns into the search field when pressed (or focused).
+  const [editing, setEditing] = useState(false);
+  useEffect(() => { if (editing) ref.current?.focus(); }, [editing]);
+  if (accent && !editing && !open && !q) {
+    return (
+      <button type="button" data-type-ahead-button={ariaLabel} aria-label={ariaLabel} onClick={() => setEditing(true)} onFocus={() => setEditing(true)}
+        style={{ height: 26, padding: '0 4px', border: 0, background: 'none', cursor: 'pointer', color: tk.accent.base, font: `600 12px ${fontFamily.ui}` }}>
+        {placeholder}
+      </button>
+    );
+  }
   return (
     <span style={{ position: 'relative', display: 'inline-flex' }}>
       <input ref={ref} value={q} placeholder={placeholder} aria-label={ariaLabel} role="combobox" aria-expanded={open} data-type-ahead={ariaLabel}
-        onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 120)}
+        onFocus={() => setOpen(true)} onBlur={() => setTimeout(() => { setOpen(false); setEditing(false); }, 120)}
         onChange={e => { setQ(e.target.value); setOpen(true); }}
         onKeyDown={e => {
           if (e.key === 'ArrowDown') { e.preventDefault(); setActive(a => Math.min(a + 1, shown.length - 1)); }

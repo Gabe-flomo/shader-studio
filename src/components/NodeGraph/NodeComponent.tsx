@@ -38,6 +38,7 @@ import type { CustomFnModal as CustomFnModalT } from './CustomFnModal';
 import type { ExprBlockModal as ExprBlockModalT } from './ExprBlockModal';
 import { openAgentRulesEditor } from '../../agentRules/storeActions';
 import { inputHintOf, inputLabelOf, inputTexts } from '../../lib/inputNames';
+import { wireSourceLabel } from '../../lib/wireSource';
 import { InputNamesModal } from './InputNamesModal';
 import type { ConstantsModal as ConstantsModalT } from './ConstantsModal';
 import { constantsItems } from '../../nodes/definitions/constants';
@@ -3483,9 +3484,12 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                     opacity: socketOpacity,
                     fontStyle: isExternal ? 'italic' : undefined,
                   }}
+                  // A wire whose other end is off-screen still says what feeds it; Alt-click goes there.
+                  title={isConnected && input.connection ? `From ${wireSourceLabel(useNodeGraphStore.getState().nodes, input.connection.nodeId, input.connection.outputKey) ?? input.connection.nodeId}. Click to disconnect · Alt-click to go to it` : undefined}
                   onMouseUp={(e) => {
                     e.stopPropagation();
                     if (isExternal) return;
+                    if (isConnected && e.altKey && input.connection) { useNodeGraphStore.getState().focusNode(input.connection.nodeId); return; }
                     if (isConnected) {
                       disconnectInput(node.id, key);
                     } else {
@@ -4032,6 +4036,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
             return (
               <div
                 key={inp.name}
+                // Marked like any slider row, so hand-tracking quick map and Play's right-click menu reach it.
+                data-param-key={inp.name}
                 style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 8, minHeight: 36, padding: '4px 12px 4px 16px' }}
                 onMouseDown={e => e.stopPropagation()}
               >

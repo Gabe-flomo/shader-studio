@@ -200,7 +200,11 @@ export async function renderBlockRows(node: GraphNode, nodes: readonly GraphNode
   const key = `${djb2(fs)}|${shape}|${w}|${JSON.stringify(compiled.paramUniforms)}`;
   let fields = cache.get(key);
   if (!fields) {
-    const uniforms = { ...uniformsOf(compiled.paramUniforms), u_time: { value: useNodeGraphStore.getState().currentTime ?? 0 } };
+    const st = useNodeGraphStore.getState();
+    const uniforms: Record<string, THREE.IUniform> = { ...uniformsOf(compiled.paramUniforms), u_time: { value: st.currentTime ?? 0 } };
+    // Its textures from the store (an image, a video, an engine's texture): uploaded into the snapshot renderer too.
+    for (const [name, id] of Object.entries(compiled.textureUniforms)) uniforms[name] = { value: st.nodeTextures[id] ?? null };
+    for (const [name, id] of Object.entries(compiled.videoUniforms)) uniforms[name] = { value: st.videoTextures[id] ?? null };
     const r = await nodePreviewRenderer.renderValues(fs, uniforms, w, h, distinct.length);
     if (!r) return null;
     measured.set(nodeId, r.ms);
