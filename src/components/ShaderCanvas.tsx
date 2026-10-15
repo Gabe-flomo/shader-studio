@@ -24,6 +24,7 @@ import { timeCubes } from '../lib/timeCube/volumes';
 import { bakedVideos } from '../lib/bakedVideos';
 import { depthEngine } from '../lib/depth/engine';
 import { blobEngine } from '../lib/blobs/engine';
+import { cacheEngine } from '../lib/cache/engine';
 import { playDrumPads } from '../play/drumPads';
 import { compiledQueueGraph, onQueueGraphsChange } from '../play/queueGraphs';
 import type { BackgroundItem } from '../types/play';
@@ -446,6 +447,24 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       if (s.fragmentShader !== prev.fragmentShader || s.passes !== prev.passes || s.textureUniforms !== prev.textureUniforms) program(s);
     });
     return () => { off(); blobEngine.setHost(null); };
+  }, []);
+  // Cache nodes (docs/cache-node.md): their frames atlas comes in through the store's node textures; each compile
+  // says which texture each one records.
+  useEffect(() => {
+    cacheEngine.setHost({
+      setTexture: (id, tex) => useNodeGraphStore.getState().setNodeTexture(id, tex),
+      requestRender: () => requestRenderRef.current(),
+    });
+    const program = (s: ReturnType<typeof useNodeGraphStore.getState>) =>
+      cacheEngine.setProgram([s.fragmentShader, ...(s.passes ?? []).map(p => p.fragmentShader)], s.textureUniforms);
+    const st0 = useNodeGraphStore.getState();
+    cacheEngine.sync(st0.nodes);
+    program(st0);
+    const off = useNodeGraphStore.subscribe((s, prev) => {
+      if (s.nodes !== prev.nodes) cacheEngine.sync(s.nodes);
+      if (s.fragmentShader !== prev.fragmentShader || s.passes !== prev.passes || s.textureUniforms !== prev.textureUniforms) program(s);
+    });
+    return () => { off(); cacheEngine.setHost(null); };
   }, []);
   // Splat Scene nodes (docs/splat-scene.md): their scans are drawn before the picture into two textures each, bound as
   // the node's `::color` and `::depth` slots; each compile brings their probe programs (the camera).
@@ -1533,6 +1552,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         agentRunner?.contextLost();
         depthEngine.contextLost();
         blobEngine.contextLost();
+        cacheEngine.contextLost();
         splatEngine.contextLost();
         // The Particles engines keep raw GL objects: let them go now (the restore makes new ones).
         releaseGpuParticlesRenderer(renderer);
@@ -1893,6 +1913,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
             if (hoodWanted() || agentRunner!.hoodHeld) agentRunner!.drawHood(agentTargets!);
           }
         }
+        // Cache nodes (docs/cache-node.md): this frame of each source into its atlas, after the Passes drew it.
+        if (cacheEngine.wants()) cacheEngine.beforeFrame({ renderer, uniforms: material.uniforms, playing });
         if (isStatefulRef.current) {
           // Ping-pong: render to write RT, blit to screen with dithering
           ensurePingPong();

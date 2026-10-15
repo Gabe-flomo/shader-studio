@@ -78,6 +78,14 @@ export const TEXTURE_TOOL_EXAMPLE_INDEX: Record<string, { label: string; descrip
     label: 'Texture tools 14 · Blob Track: a picture on every blob', play: true,
     description: 'Blob Track\'s Stamp puts a picture on every blob it follows, cut round and turned a different way for each ID, over the dimmed video; Nearest rings them. Wire any texture into Stamp: a photo, a video, a Shader Texture, a sprite sheet with Sheet cells.',
   },
+  ttCacheTimeRgb: {
+    label: 'Texture tools 15 · Cache: red now, green and blue from the past', play: true,
+    description: 'A Cache keeps the last 32 frames of a video on the GPU; two Cache Reads take frames 8 and 16 back from the same recording. Red is now, green a moment ago, blue longer ago: whatever moves splits into colours, whatever stays put stays white.',
+  },
+  ttCacheTimeMachine: {
+    label: 'Texture tools 16 · Cache: Time Machine', play: true,
+    description: 'A Cache with a Delay map (TouchDesigner\'s Time Machine): every pixel is read from its own moment. Here the centre is now and the picture reaches further into the past towards the edges, so motion bends and smears outwards.',
+  },
 };
 
 /** The ordered keys, for the Texture tools folder. */
@@ -805,6 +813,82 @@ export function buildTextureToolExamples(): Record<string, ExampleGraph> {
 **How it is built.** Video → Mask → Pass (½) → Blob Track, with a photo wired into Stamp. Look mixes Stamped over the dimmed video by Stamp alpha and adds rings from Nearest.
 
 **Try.** Load your own image on the photo node. Wire a Video Input or a Shader Texture into Stamp instead. Set Fit to Box to stretch each picture to its blob.`),
+  };
+
+  // ── 15 · Video → Cache (32 frames) → two Cache Reads: R now, G 8 frames back, B 16 back ──
+  g.ttCacheTimeRgb = {
+    ...TEXTURE_TOOL_EXAMPLE_INDEX.ttCacheTimeRgb,
+    counter: 40,
+    nodes: [
+      n('videoInput', 'vid', 40, 300, { ...BALL_VIDEO_PARAMS, ...note([
+        'Video Input: the built-in Ball action clip, looping. Choose the camera on this card to see yourself in time.',
+        'Its Texture output is what the Cache records.',
+      ]) }),
+      n('cache', 'ca', 340, 300, { frames: '32', size: '512', record: true, every: 1, delay: 0, smooth: true,
+        ...note([
+          'Cache: keeps the last 32 frames of the video on the GPU (one 512 px wide tile each, in one texture, about 21 MB), recording a frame every frame while the clock runs.',
+          'Its Color is the newest frame (Delay 0). Its Cache output is the whole recording, for the Cache Reads.',
+          'Record off freezes what it has; Delay reads further back; Clear on the card forgets it.',
+        ]) }, { texture: ['vid', 'texture'] }),
+      n('cacheRead', 'past1', 640, 160, { delay: 8, smooth: true, ...note('Cache Read: the same recording, 8 frames back (about a seventh of a second at 60 fps). Nothing is recorded twice.') }, { cache: ['ca', 'cache'] }),
+      n('cacheRead', 'past2', 640, 460, { delay: 16, smooth: true, ...note('Cache Read: 16 frames back.') }, { cache: ['ca', 'cache'] }),
+      expr('look', 940, 300, {
+        label: 'Look', outputType: 'vec3',
+        inputs: [['now', 'vec3', ['ca', 'color']], ['a', 'vec3', ['past1', 'color']], ['b', 'vec3', ['past2', 'color']]],
+        lines: [],
+        result: 'vec3(now.r, a.g, b.b)',
+        note: [
+          'Expression Block: one colour channel from each moment.',
+          'Result: red from now, green from 8 frames back, blue from 16 back. Where nothing moved the three agree and the picture keeps its colour; where something moved, it splits into red, green and blue ghosts.',
+        ],
+      }),
+      n('output', 'out', 1240, 300, note('Output: the video split in time.'), { color: ['look', 'result'] }),
+    ],
+    play: playRecord([
+      ctl('g', 'past1::delay', 'Green delay (frames)', 0, 31, 0.1),
+      ctl('b', 'past2::delay', 'Blue delay (frames)', 0, 31, 0.1),
+    ], `**What it shows.** A live frame buffer (TouchDesigner's Cache TOP and Cache Select): the last frames of a video kept on the GPU and read back by how long ago.
+
+**How it is built.** Video → Cache (32 frames) → two Cache Reads at 8 and 16 frames back, from the same recording. Look takes red from now, green and blue from the past.
+
+**Try.** Choose the camera and wave. Turn the delays up for wider ghosts. Turn Record off on the Cache to freeze it, then wire an LFO into Delay to loop through the frozen frames.`),
+  };
+
+  // ── 16 · Video → Cache with a Delay map: centre now, edges further back (Time Machine) ──
+  g.ttCacheTimeMachine = {
+    ...TEXTURE_TOOL_EXAMPLE_INDEX.ttCacheTimeMachine,
+    counter: 40,
+    nodes: [
+      n('videoInput', 'vid', 40, 300, { ...BALL_VIDEO_PARAMS, ...note([
+        'Video Input: the built-in Ball action clip, looping. Choose the camera on this card to see yourself in time.',
+        'Its Texture output is what the Cache records.',
+      ]) }),
+      n('uv', 'uv', 40, 620, note('UV: this pixel\'s place in the picture, for the delay map.')),
+      expr('map', 340, 620, {
+        label: 'Delay map', outputType: 'float',
+        inputs: [['uv', 'vec2', ['uv', 'uv']]],
+        lines: [],
+        result: 'clamp(length(uv) * 0.75, 0.0, 1.0)',
+        note: [
+          'Expression Block: how far back each pixel is read, 0–1.',
+          'Result: 0 at the centre (now), growing with the distance from it, 1 a little past the top and bottom edges (the oldest frame). Any grey picture works: a gradient, noise, a Depth, a mask.',
+        ],
+      }),
+      n('cache', 'ca', 640, 300, { frames: '64', size: '384', record: true, every: 1, delay: 0, reach: 1, smooth: true,
+        ...note([
+          'Cache: the last 64 frames of the video. With a Delay map wired, each pixel is read Delay plus map × Map reach × 63 frames back: Time Machine.',
+          'Smooth blends between frames, so the delay changes smoothly across the picture instead of in bands.',
+        ]) }, { texture: ['vid', 'texture'], delayMap: ['map', 'result'] }),
+      n('output', 'out', 940, 300, note('Output: the video, now in the middle and the past at the edges.'), { color: ['ca', 'color'] }),
+    ],
+    play: playRecord([
+      ctl('reach', 'ca::reach', 'How far back the edges reach', 0, 1, 0.01),
+      ctl('delay', 'ca::delay', 'Delay everything (frames)', 0, 63, 0.1),
+    ], `**What it shows.** Time Machine: every pixel of a video read from its own moment, by a grey map.
+
+**How it is built.** Video → Cache (64 frames) with a Delay map: the distance from the centre. The centre is now; the edges are up to 63 frames back.
+
+**Try.** Choose the camera and move: you bend outwards in time. Change the map (a horizontal gradient for a slit-scan sweep, Fractal Noise for a time-melt).`),
   };
 
   return g;
