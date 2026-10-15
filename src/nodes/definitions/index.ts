@@ -13,6 +13,7 @@ import { VideoInputNode } from './sources';
 export { VideoInputNode };
 import { BakedNode } from './baked';
 import { DepthNode } from './depth';
+import { BlobTrackNode } from './blobTrack';
 import { DepthCompositeNode, DepthLightNode, PictureEnvironmentNode } from './depthScene';
 import { DepthMixNode } from './depthMix';
 import { SplatProbeOutNode, SplatSceneNode } from './splatScene';
@@ -339,6 +340,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   baked: BakedNode,
   // Depth (docs/depth-node.md): a picture's depth from an on-device model
   depth: DepthNode,
+  blobTrack: BlobTrackNode,
   // Depth Mix (docs/depth-mix.md): a picture with depth and a scene put together (size, space, occlude, fog, light, mix)
   depthMix: DepthMixNode,
   // Depth in 3D scenes (docs/depth-node.md): a picture with depth inside a ray-marched scene

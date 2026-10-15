@@ -86,7 +86,7 @@ export function depthSources(shaders: readonly string[]): Map<string, string> {
 
 // ── GPU copy of a texture, read back small ──────────────────────────────────
 
-class Grabber {
+export class Grabber {
   private scene = new THREE.Scene();
   private camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   private mat = new THREE.ShaderMaterial({
