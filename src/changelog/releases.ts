@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.221',
+    date: '2026-10-15',
+    title: "Ride a path",
+    highlights: [
+      { area: 'Studio', text: "Ride a path: wire any shape into Path \u0192 (a circle, a Lissajous Curve, a Chladni Field, text) and walkers ride its outline as a band, following it as it moves." },
+      { area: 'Studio', text: "New example, Riding outlines: one slider melts a circle into a Lissajous into a Chladni plate. The other ride examples now use a Lissajous Curve." },
+      { area: 'Studio', text: "Lissajous Curve draws a smooth line: its distance is measured to the curve itself, no more beads." },
+    ],
+  },
+  {
     id: '2026.10.220',
     date: '2026-10-15',
     title: "Clearer rules, truer Explain",
