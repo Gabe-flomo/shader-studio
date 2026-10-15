@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.216',
+    date: '2026-10-14',
+    title: "Text",
+    highlights: [
+      { area: 'Studio', text: "Text (2D Primitives) draws words in the picture; type {} for a live number from its Value input, like a Timer, a Counter or an Analyze reading." },
+    ],
+  },
+  {
     id: '2026.10.215',
     date: '2026-10-14',
     title: "Optical Flow",
