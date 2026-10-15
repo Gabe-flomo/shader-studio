@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.219',
+    date: '2026-10-15',
+    title: "Value at point",
+    highlights: [
+      { area: 'Studio', text: "Value at point reads a value that changes across the picture (an SDF, a noise) once, at a point. Text does it for a wired Value, so readouts stay steady." },
+    ],
+  },
+  {
     id: '2026.10.218',
     date: '2026-10-14',
     title: "Segment",
