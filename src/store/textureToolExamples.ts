@@ -98,6 +98,14 @@ export const TEXTURE_TOOL_EXAMPLE_INDEX: Record<string, { label: string; descrip
     label: 'Texture tools 19 · Blob Track in 3D', play: true,
     description: 'Blob Track with Space 3D: each ball\'s marks stand at a depth (bigger balls nearer), the whole tracking overlay slowly orbits (an LFO turns its Yaw), stems drop to the flat picture, and labels read x / y / z. Wire a Depth node\'s texture into Depth for real depth from a photo or the camera.',
   },
+  ttSegmentPeople: {
+    label: 'Texture tools 20 · Segment: cut yourself out', play: true,
+    description: 'Segment (People) finds the people in a video, on this device, no green screen: the cut-out goes over a moving colour field with a glowing outline from its Edge. Set the Video Input to the camera (the built-in clip has no people, so it guesses the middle shape).',
+  },
+  ttSegmentClick: {
+    label: 'Texture tools 21 · Segment: click to select', play: true,
+    description: 'Segment (Click) cuts out whatever is under a point and follows it as it moves: here a ball cluster in the Ball action clip. Press Pick on preview on the Segment card and click anything to select it; everything else fades to grey.',
+  },
 };
 
 /** The ordered keys, for the Texture tools folder. */
@@ -1023,6 +1031,80 @@ export function buildTextureToolExamples(): Record<string, ExampleGraph> {
 **How it is built.** Video → Mask → Pass → Blob Track (Space 3D), an LFO on its Yaw. Depth comes from blob size (nothing wired into Depth).
 
 **Try.** Wire a Depth node (Texture: the video) into Blob Track's Depth for real depth. Set Labels to x / y / z, turn Stems off, wire Mouse X into Yaw to steer.`),
+  };
+
+  // ── 20 · Video → Segment (People) → cut-out over a moving colour field, outlined by its Edge ──
+  g.ttSegmentPeople = {
+    ...TEXTURE_TOOL_EXAMPLE_INDEX.ttSegmentPeople,
+    counter: 40,
+    nodes: [
+      n('videoInput', 'vid', 40, 300, { ...BALL_VIDEO_PARAMS, ...note('Video Input: the built-in Ball action clip, looping. Choose the camera on this card to segment yourself.') }),
+      n('segment', 'seg', 340, 300, { mode: 'people', threshold: 0.5, softness: 0.12, grow: 1, smoothing: 0.4, ...note([
+        'Segment, People: a small model (MediaPipe Selfie Segmenter, on this device) finds the people in each frame: Mask is 1 on them.',
+        'Threshold and Softness shape the edge; Grow widens it a pixel; Smoothing 0.4 calms flicker between frames.',
+        'Cut-out is the video there; Edge is bright along the outline.',
+      ]) }, { texture: ['vid', 'texture'] }),
+      n('uv', 'uv', 340, 620, note('UV: this pixel\'s place in the picture, for the colour field.')),
+      n('time', 'clock', 340, 780, note('Time: seconds, to move the colour field.')),
+      expr('look', 680, 400, {
+        label: 'Look', outputType: 'vec3',
+        inputs: [['cut', 'vec3', ['seg', 'cutout']], ['m', 'float', ['seg', 'mask']], ['edge', 'float', ['seg', 'edge']], ['uv', 'vec2', ['uv', 'uv']], ['t', 'float', ['clock', 'time']]],
+        lines: [
+          ['vec3 field', '0.5 + 0.5 * cos(6.28318 * (uv.x * 0.3 + uv.y * 0.2 + t * 0.08 + vec3(0.0, 0.33, 0.67)))'],
+          ['vec3 glow', 'edge * vec3(0.3, 0.9, 1.0) * 1.5'],
+        ],
+        result: 'mix(field * 0.6, cut, m) + glow',
+        note: [
+          'Expression Block: the cut-out over a new background.',
+          'field: a slow colour gradient drifting across the picture: the new background.',
+          'glow: a cyan line along the mask\'s Edge.',
+          'Result: the background where the mask is 0, the person where it is 1, and the outline on top.',
+        ],
+      }),
+      n('output', 'out', 980, 400, note('Output: the people cut out over a moving colour field.'), { color: ['look', 'result'] }),
+    ],
+    play: playRecord([
+      ctl('thr', 'seg::threshold', 'Threshold', 0, 1, 0.01),
+      ctl('soft', 'seg::softness', 'Edge softness', 0, 0.5, 0.005),
+      ctl('grow', 'seg::grow', 'Grow', -20, 20, 0.5),
+    ], `**What it shows.** Segment: people found and cut out of a video on this device, with no green screen.
+
+**How it is built.** Video → Segment (People) → Look: the Cut-out mixed over a moving gradient by Mask, with a glowing line from Edge.
+
+**Try.** Choose the camera on the Video Input. Turn Invert on (on Segment) to keep the room and lose the person. Wire Mask texture into Blob Track, a Cache or Particles' Emit from.`),
+  };
+
+  // ── 21 · Video → Segment (Click, Follow) → the selected thing in colour, the rest grey ──
+  g.ttSegmentClick = {
+    ...TEXTURE_TOOL_EXAMPLE_INDEX.ttSegmentClick,
+    counter: 40,
+    nodes: [
+      n('videoInput', 'vid', 40, 300, { ...BALL_VIDEO_PARAMS, ...note('Video Input: the built-in Ball action clip, looping. Choose the camera on this card to segment yourself.') }),
+      n('segment', 'seg', 340, 300, { mode: 'click', pointX: 0.5, pointY: 0.55, follow: true, threshold: 0.5, softness: 0.1, smoothing: 0.3, ...note([
+        'Segment, Click: a small model (MediaPipe MagicTouch, on this device) cuts out whatever is under the point. Press Pick on preview on this card, then click something on the picture.',
+        'Follow: each frame it looks where the object is now (the middle of its mask), so the selection moves with it.',
+      ]) }, { texture: ['vid', 'texture'] }),
+      n('textureLevels', 'grey', 340, 620, { outWhite: 0.35, ...note('Levels (texture): the video dim, for everything that isn\'t selected (Look takes its colour out).') }, { texture: ['vid', 'texture'] }),
+      expr('look', 680, 400, {
+        label: 'Look', outputType: 'vec3',
+        inputs: [['cut', 'vec3', ['seg', 'cutout']], ['m', 'float', ['seg', 'mask']], ['edge', 'float', ['seg', 'edge']], ['grey', 'vec3', ['grey', 'color']]],
+        lines: [],
+        result: 'mix(vec3(dot(grey, vec3(0.2126, 0.7152, 0.0722))), cut * 1.15, m) + edge * vec3(1.0, 0.6, 0.2)',
+        note: [
+          'Expression Block: the selected thing in full colour, the rest grey, with an orange outline.',
+          'Result: the dim video\'s brightness (grey) where Mask is 0, the cut-out (a little brighter) where it is 1, plus Edge in orange.',
+        ],
+      }),
+      n('output', 'out', 980, 400, note('Output: the selected object in colour.'), { color: ['look', 'result'] }),
+    ],
+    play: playRecord([
+      ctl('thr', 'seg::threshold', 'Threshold', 0, 1, 0.01),
+      ctl('grow', 'seg::grow', 'Grow', -20, 20, 0.5),
+    ], `**What it shows.** Segment's Click mode: pick anything on the picture and it is cut out and followed as it moves.
+
+**How it is built.** Video → Segment (Click, Follow) → Look: colour where Mask is 1, grey elsewhere, an orange Edge.
+
+**Try.** Press Pick on preview on the Segment card and click another part of the picture. Turn Follow off to keep looking at the same spot.`),
   };
 
   return g;

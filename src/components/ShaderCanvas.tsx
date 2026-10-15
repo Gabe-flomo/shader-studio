@@ -25,7 +25,9 @@ import { bakedVideos } from '../lib/bakedVideos';
 import { depthEngine } from '../lib/depth/engine';
 import { blobEngine } from '../lib/blobs/engine';
 import { cacheEngine } from '../lib/cache/engine';
+import { consumePreviewPick, previewPickOwner } from '../lib/previewPick';
 import { analyzeEngine } from '../lib/analyze/engine';
+import { segmentEngine } from '../lib/segment/engine';
 import { playDrumPads } from '../play/drumPads';
 import { compiledQueueGraph, onQueueGraphsChange } from '../play/queueGraphs';
 import type { BackgroundItem } from '../types/play';
@@ -484,6 +486,24 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       if (s.fragmentShader !== prev.fragmentShader || s.passes !== prev.passes || s.textureUniforms !== prev.textureUniforms) program(s);
     });
     return () => { off(); analyzeEngine.setHost(null); };
+  }, []);
+  // Segment nodes (docs/segment-node.md): their masks come in through the store's node textures; each compile
+  // says which texture each one reads.
+  useEffect(() => {
+    segmentEngine.setHost({
+      setTexture: (id, tex) => useNodeGraphStore.getState().setNodeTexture(id, tex),
+      requestRender: () => requestRenderRef.current(),
+    });
+    const program = (s: ReturnType<typeof useNodeGraphStore.getState>) =>
+      segmentEngine.setProgram([s.fragmentShader, ...(s.passes ?? []).map(p => p.fragmentShader)], s.textureUniforms);
+    const st0 = useNodeGraphStore.getState();
+    segmentEngine.sync(st0.nodes);
+    program(st0);
+    const off = useNodeGraphStore.subscribe((s, prev) => {
+      if (s.nodes !== prev.nodes) segmentEngine.sync(s.nodes);
+      if (s.fragmentShader !== prev.fragmentShader || s.passes !== prev.passes || s.textureUniforms !== prev.textureUniforms) program(s);
+    });
+    return () => { off(); segmentEngine.setHost(null); };
   }, []);
   // Splat Scene nodes (docs/splat-scene.md): their scans are drawn before the picture into two textures each, bound as
   // the node's `::color` and `::depth` slots; each compile brings their probe programs (the camera).
@@ -1573,6 +1593,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         blobEngine.contextLost();
         cacheEngine.contextLost();
         analyzeEngine.contextLost();
+        segmentEngine.contextLost();
         splatEngine.contextLost();
         // The Particles engines keep raw GL objects: let them go now (the restore makes new ones).
         releaseGpuParticlesRenderer(renderer);
@@ -2009,6 +2030,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         if (blobEngine.wants(playing)) blobEngine.afterFrame({ renderer, uniforms: material.uniforms, canvas: renderer.domElement, playing });
         // Analyze nodes (docs/analyze-node.md): their pictures read back small and measured.
         if (analyzeEngine.wants(playing)) analyzeEngine.afterFrame({ renderer, uniforms: material.uniforms, canvas: renderer.domElement, playing });
+        // Segment nodes (docs/segment-node.md): a frame of each one's source for its model (the picture never waits).
+        if (segmentEngine.wants(playing)) segmentEngine.afterFrame({ renderer, uniforms: material.uniforms, canvas: renderer.domElement, playing });
 
         // Check for GLSL errors after first few renders
         const newErrors = flushGlErrors();
@@ -2668,6 +2691,11 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       if (e.button !== 0 || !insidePicture(e)) return;
       const t = e.target as Element | null;
       if (t !== renderer.domElement && t?.closest?.('button, input, select, textarea, a, [role="slider"], [role="button"], [contenteditable="true"]')) return;
+      // A node picking a point on the picture (Segment's Pick, lib/previewPick.ts) takes this press.
+      if (previewPickOwner()) {
+        const r = renderer.domElement.getBoundingClientRect();
+        if (consumePreviewPick([(e.clientX - r.left) / r.width, 1 - (e.clientY - r.top) / r.height])) { e.preventDefault(); e.stopPropagation(); return; }
+      }
       buttonHeld = true;
       handleMouseMove(e);
       setUniform(material, 'u_mousebtn', 1);
