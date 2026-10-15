@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.217',
+    date: '2026-10-14',
+    title: "Blob Track in 3D",
+    highlights: [
+      { area: 'Studio', text: "Blob Track Space 3D: each blob's marks stand at its depth (a Depth map or its size), turned by Yaw and Pitch in perspective, with stems and x / y / z labels." },
+    ],
+  },
+  {
     id: '2026.10.216',
     date: '2026-10-14',
     title: "Text",
