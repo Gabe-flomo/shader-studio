@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.214',
+    date: '2026-10-14',
+    title: 'Analyze',
+    highlights: [
+      { area: 'Studio', text: 'Analyze (Texture tools) measures a whole picture into numbers: average colour and brightness, how much is lit and where, its brightest point, contrast and motion.' },
+    ],
+  },
+  {
     id: '2026.10.213',
     date: '2026-10-14',
     title: 'Memory nodes',
