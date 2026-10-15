@@ -2187,6 +2187,22 @@ exports[`golden outputs: examples > timeCubePulse 1`] = `
 }
 `;
 
+exports[`golden outputs: examples > ttBlobStamp 1`] = `
+{
+  "level": "- x120",
+  "scale": "- x120",
+  "spin": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > ttBlobTrack 1`] = `
+{
+  "bend": "- x120",
+  "level": "- x120",
+  "lines": "- x120",
+}
+`;
+
 exports[`golden outputs: examples > ttColourKey 1`] = `
 {
   "keyColour": "- x120",

@@ -70,6 +70,14 @@ export const TEXTURE_TOOL_EXAMPLE_INDEX: Record<string, { label: string; descrip
     label: 'Texture tools 12 · Render Targets: motion and paint in one draw', play: true,
     description: 'Two textures from one draw (multiple render targets): a state target holds each texel\'s position and velocity at full float, a paint target a colour trail. Step works out the new motion, Paint colours it by direction, and both are written together by Render Targets. Each reads its own target a frame ago.',
   },
+  ttBlobTrack: {
+    label: 'Texture tools 13 · Blob Track: a tracking overlay', play: true,
+    description: 'Blob Track finds the separate bright shapes in a video\'s mask and follows them, each with an ID that stays with it, and draws the tracking-overlay look: corner brackets, crosses, x / y labels and curved arrows connecting the blobs in ID order. Set the Video Input to the camera and hold up a light.',
+  },
+  ttBlobStamp: {
+    label: 'Texture tools 14 · Blob Track: a picture on every blob', play: true,
+    description: 'Blob Track\'s Stamp puts a picture on every blob it follows, cut round and turned a different way for each ID, over the dimmed video; Nearest rings them. Wire any texture into Stamp: a photo, a video, a Shader Texture, a sprite sheet with Sheet cells.',
+  },
 };
 
 /** The ordered keys, for the Texture tools folder. */
@@ -686,6 +694,116 @@ export function buildTextureToolExamples(): Record<string, ExampleGraph> {
 **How it is built.** UV and Time → Step (Expression Block) → Data Texture (position → r g) → Look (Expression Block) → Output. Step also reads the Data Texture's position output: because it feeds the node, that read is last frame's, so each frame moves every position a little further.
 
 **Try.** ↺ to start over. Set Precision to Half float and watch the motion turn steppy. Turn up Speed, or change 4.0 in Look for a finer board.`),
+  };
+
+  // ── 13 · Video → Mask → Pass → Blob Track (brackets, crosses, x / y labels, curved arrows) over the video ──
+  g.ttBlobTrack = {
+    ...TEXTURE_TOOL_EXAMPLE_INDEX.ttBlobTrack,
+    counter: 40,
+    nodes: [
+      n('videoInput', 'vid', 40, 300, { ...BALL_VIDEO_PARAMS, ...note([
+        'Video Input: the built-in Ball action clip, looping. Choose the camera on this card to track yourself (a torch, a lit hand, a bright object on a dark wall).',
+        'Its Texture output feeds Mask and Levels.',
+      ]) }),
+      n('textureMask', 'vidMask', 340, 160, { source: 'brightness', threshold: 'soft', level: 0.35, width: 0.1,
+        ...note('Mask (texture): 1 where the video is brighter than Level. This is what Blob Track looks at: each separate white shape becomes a blob. Raise Level to split shapes that touch.') },
+        { texture: ['vid', 'texture'] }),
+      n('pass', 'maskPass', 640, 160, { label: 'Pass · mask', scale: '0.5',
+        ...note('Pass: holds the mask as a texture (Blob Track reads a texture, not one pixel). Half size is plenty: Blob Track reads it back at 160 px anyway.') },
+        { color: ['vidMask', 'mask'] }),
+      n('textureLevels', 'back', 940, 560, { outWhite: 0.6,
+        ...note('Levels (texture): the video a little dimmed, a backdrop for the tracking.') },
+        { texture: ['vid', 'texture'] }),
+      n('blobTrack', 'blobs', 940, 160, { minSize: 0.002, maxSize: 0.4, maxBlobs: 10, maxJump: 0.15, memory: 10, smoothing: 0.5,
+        boxStyle: 'brackets', boxColour: 'line', marker: 'cross', markerColor: [0, 0, 0], labels: 'xy', labelColor: [1, 0.2, 0.38], textSize: 13, lineWidth: 2, lineColor: [0.78, 1, 0.22],
+        connect: 'chain', bend: 0.45, arrows: true, flow: 0,
+        ...note([
+          'Blob Track: reads the mask back small each frame, splits it into separate blobs and follows them, so each keeps its ID while it moves.',
+          'Min size drops specks; Max jump is how far a blob may move in a frame and keep its ID; Memory keeps a lost blob\'s ID for a few frames.',
+          'Marks: Boxes Corner brackets, Centre Cross, Labels x / y (the centre in preview pixels), and Connect Chain: a curved arrow from each blob to the next newer one. Bend arcs the curves; Flow runs dots along them.',
+          'Marks is the drawing, Marks alpha where it is: Look lays them over the video.',
+        ]) },
+        { texture: ['maskPass', 'texture'] }),
+      expr('look', 1260, 360, {
+        label: 'Look', outputType: 'vec3',
+        inputs: [['back', 'vec3', ['back', 'color']], ['marks', 'vec3', ['blobs', 'marks']], ['a', 'float', ['blobs', 'marksAlpha']]],
+        lines: [],
+        result: 'mix(back, marks, a)',
+        note: [
+          'Expression Block: the marks over the video.',
+          'Result: the dimmed video, mixed to the marks by Marks alpha (1 on a line, a bracket, a cross or a label).',
+        ],
+      }),
+      n('output', 'out', 1560, 360, note('Output: the video with its blobs bracketed, labelled and linked.'), { color: ['look', 'result'] }),
+    ],
+    play: playRecord([
+      ctl('level', 'vidMask::level', 'What counts as bright', 0, 1, 0.005),
+      ctl('bend', 'blobs::bend', 'Curve bend', -1, 1, 0.01),
+      ctl('lines', 'blobs::lineWidth', 'Line width', 0.5, 8, 0.5),
+    ], `**What it shows.** Blob tracking as TouchDesigner's Blob Track TOP does it, drawn as a tracking overlay: separate shapes in a mask found and followed, each with an ID that stays with it.
+
+**How it is built.** Video → Mask → Pass (½) → Blob Track. Blob Track reads the mask back at 160 px each frame, splits it into 8-connected blobs on the CPU and matches them to last frame's by nearest centre. Its Marks (corner brackets, crosses, x / y labels, curved arrows in ID order) are mixed over the video by Marks alpha.
+
+**Try.** Choose the camera on the Video Input and hold up a light. Move *What counts as bright* until each shape is its own bracket. On Blob Track: Connect Nearest or All pairs for a web, Flow for moving dots, Labels ID.`),
+  };
+
+  // ── 14 · Video → Mask → Pass → Blob Track with a photo stamped on every blob ──
+  g.ttBlobStamp = {
+    ...TEXTURE_TOOL_EXAMPLE_INDEX.ttBlobStamp,
+    counter: 40,
+    images: { bsPhoto: RIDGES_AT_DUSK },
+    nodes: [
+      n('videoInput', 'vid', 40, 300, { ...BALL_VIDEO_PARAMS, ...note([
+        'Video Input: the built-in Ball action clip, looping. Choose the camera on this card to track yourself (a torch, a lit hand, a bright object on a dark wall).',
+        'Its Texture output feeds Mask and Levels.',
+      ]) }),
+      n('textureMask', 'vidMask', 340, 160, { source: 'brightness', threshold: 'soft', level: 0.35, width: 0.1,
+        ...note('Mask (texture): 1 where the video is brighter than Level. This is what Blob Track looks at: each separate white shape becomes a blob. Raise Level to split shapes that touch.') },
+        { texture: ['vid', 'texture'] }),
+      n('pass', 'maskPass', 640, 160, { label: 'Pass · mask', scale: '0.5',
+        ...note('Pass: holds the mask as a texture (Blob Track reads a texture, not one pixel). Half size is plenty: Blob Track reads it back at 160 px anyway.') },
+        { color: ['vidMask', 'mask'] }),
+      n('textureLevels', 'back', 940, 560, { outWhite: 0.6,
+        ...note('Levels (texture): the video a little dimmed, a backdrop for the tracking.') },
+        { texture: ['vid', 'texture'] }),
+      photo('bsPhoto', 640, 420, 'Blob Track\'s Stamp: the picture put on every blob. Load your own image, or wire a video, a Pass or a Shader Texture into Stamp instead.'),
+      n('blobTrack', 'blobs', 940, 160, { minSize: 0.002, maxSize: 0.4, maxBlobs: 16, maxJump: 0.15, memory: 10, smoothing: 0.5,
+        boxStyle: 'none', marker: 'none', stampFit: 'circle', stampScale: 1.25, stampSpin: 1,
+        ...note([
+          'Blob Track: reads the mask back small each frame, splits it into separate blobs and follows them, so each keeps its ID while it moves.',
+          'Min size drops specks; Max jump is how far a blob may move in a frame and keep its ID; Memory keeps a lost blob\'s ID for a few frames.',
+          'Stamp: the photo on every blob. Fit Circle keeps its shape and cuts it round; Scale 1.25 makes it a little bigger than the blob; Spin by ID turns each one differently (and keeps it turned while it is followed).',
+          'Stamped is the pictures, Stamp alpha where they are. Sheet cells splits a sprite sheet so each blob shows its own cell.',
+        ]) },
+        { texture: ['maskPass', 'texture'], stamp: ['bsPhoto', 'texture'] }),
+      n('time', 'clock', 940, 820, note('Time: seconds, to move the rings outwards.')),
+      expr('look', 1260, 360, {
+        label: 'Look', outputType: 'vec3',
+        inputs: [
+          ['back', 'vec3', ['back', 'color']], ['stamped', 'vec3', ['blobs', 'stamped']], ['a', 'float', ['blobs', 'stampAlpha']],
+          ['near', 'float', ['blobs', 'nearest']], ['t', 'float', ['clock', 'time']],
+        ],
+        lines: [
+          ['float rings', '(0.5 + 0.5 * cos(near * 40.0 - t * 6.0)) * exp(-near * 5.0) * (1.0 - a)'],
+        ],
+        result: 'mix(back * 0.6, stamped, a) + rings * vec3(1.0, 0.55, 0.25) * 0.35',
+        note: [
+          'Expression Block: the stamps over the video, ringed.',
+          'rings: ripples moving outwards from every blob, from Nearest (the distance to the nearest blob\'s centre), fading with distance, not over the stamps.',
+          'Result: the video darker, the stamped photos over it by Stamp alpha, and warm rings added.',
+        ],
+      }),
+      n('output', 'out', 1560, 360, note('Output: a photo riding on every ball.'), { color: ['look', 'result'] }),
+    ],
+    play: playRecord([
+      ctl('level', 'vidMask::level', 'What counts as bright', 0, 1, 0.005),
+      ctl('scale', 'blobs::stampScale', 'Stamp size', 0.1, 4, 0.01),
+      ctl('spin', 'blobs::stampSpin', 'Spin by ID', 0, 1, 0.01),
+    ], `**What it shows.** Blob Track's Stamp: a picture on every followed blob, sized to it, each turned its own way by its ID.
+
+**How it is built.** Video → Mask → Pass (½) → Blob Track, with a photo wired into Stamp. Look mixes Stamped over the dimmed video by Stamp alpha and adds rings from Nearest.
+
+**Try.** Load your own image on the photo node. Wire a Video Input or a Shader Texture into Stamp instead. Set Fit to Box to stretch each picture to its blob.`),
   };
 
   return g;

@@ -1,4 +1,5 @@
 import { DEPTH_TYPE, depthSampler } from '../nodes/definitions/depth';
+import { BLOB_TRACK_TYPE } from '../nodes/definitions/blobTrack';
 import { LINK_AT, LINK_COL, LINK_TOKEN_RE, linkColourSource, linkUniformToken, moveKeys, translateChain } from '../nodes/sceneLink';
 import { GROUP_PORT_SENTINEL } from '../types/nodeGraph';
 import { dataBlocksFirst } from '../data/dataGlsl';
@@ -1002,6 +1003,8 @@ export class ShaderAssembler {
           if (depthSampler(node, nodeSlug).startsWith('u_vid_')) this.videoUniforms[`u_vid_${nodeSlug}`] = node.id;
           else this.textureUniforms[`u_tex_${nodeSlug}`] = node.id;
         }
+        // Blob Track (docs/blob-track.md): its blobs, a small float texture filled by lib/blobs/engine.ts.
+        if (node.type === BLOB_TRACK_TYPE) this.textureUniforms[`u_tex_${nodeSlug}`] = node.id;
         // Nodes with their own image slots (published user nodes): one
         // sampler per slot, bound from nodeTextures["<id>::<slot>"].
         def.textureSlots?.forEach(slot => {
@@ -1524,6 +1527,7 @@ export class ShaderAssembler {
                 if (depthSampler(subNode).startsWith('u_vid_')) this.videoUniforms[`u_vid_${subNode.id}`] = originalId;
                 else this.textureUniforms[`u_tex_${subNode.id}`] = originalId;
               }
+              if (subNode.type === BLOB_TRACK_TYPE) this.textureUniforms[`u_tex_${subNode.id}`] = originalId;
               subDef.textureSlots?.forEach(slot => { this.textureUniforms[`u_tex_${subNode.id}_${slot}`] = `${originalId}::${slot}`; });
               const { patchedNode: patchedSub, uniforms: subUniforms, bindings: subBindings } = patchNodeParamsForUniforms(effectiveSubNode, subDef, fn => this.functions.add(fn), originalId);
               Object.assign(this.paramUniforms, subUniforms);

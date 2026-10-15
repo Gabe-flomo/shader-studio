@@ -23,6 +23,7 @@ import { playVideoLayers } from '../play/videoLayers';
 import { timeCubes } from '../lib/timeCube/volumes';
 import { bakedVideos } from '../lib/bakedVideos';
 import { depthEngine } from '../lib/depth/engine';
+import { blobEngine } from '../lib/blobs/engine';
 import { playDrumPads } from '../play/drumPads';
 import { compiledQueueGraph, onQueueGraphsChange } from '../play/queueGraphs';
 import type { BackgroundItem } from '../types/play';
@@ -427,6 +428,24 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       if (s.fragmentShader !== prev.fragmentShader || s.passes !== prev.passes || s.textureUniforms !== prev.textureUniforms || s.videoUniforms !== prev.videoUniforms) program(s);
     });
     return () => { off(); depthEngine.setHost(null); depthEngine.setVideoElements(null); };
+  }, []);
+  // Blob Track nodes (docs/blob-track.md): their blobs come in through the store's node textures; each compile
+  // says which texture each one reads.
+  useEffect(() => {
+    blobEngine.setHost({
+      setTexture: (id, tex) => useNodeGraphStore.getState().setNodeTexture(id, tex),
+      requestRender: () => requestRenderRef.current(),
+    });
+    const program = (s: ReturnType<typeof useNodeGraphStore.getState>) =>
+      blobEngine.setProgram([s.fragmentShader, ...(s.passes ?? []).map(p => p.fragmentShader)], s.textureUniforms);
+    const st0 = useNodeGraphStore.getState();
+    blobEngine.sync(st0.nodes);
+    program(st0);
+    const off = useNodeGraphStore.subscribe((s, prev) => {
+      if (s.nodes !== prev.nodes) blobEngine.sync(s.nodes);
+      if (s.fragmentShader !== prev.fragmentShader || s.passes !== prev.passes || s.textureUniforms !== prev.textureUniforms) program(s);
+    });
+    return () => { off(); blobEngine.setHost(null); };
   }, []);
   // Splat Scene nodes (docs/splat-scene.md): their scans are drawn before the picture into two textures each, bound as
   // the node's `::color` and `::depth` slots; each compile brings their probe programs (the camera).
@@ -1513,6 +1532,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         passRunner?.contextLost();
         agentRunner?.contextLost();
         depthEngine.contextLost();
+        blobEngine.contextLost();
         splatEngine.contextLost();
         // The Particles engines keep raw GL objects: let them go now (the restore makes new ones).
         releaseGpuParticlesRenderer(renderer);
@@ -1943,6 +1963,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         // Depth nodes (docs/depth-node.md): a frame of each one's source for its model, read now while the picture is
         // still in the drawing buffer. Only for nodes whose model is downloaded; the worker never holds the frame up.
         if (depthEngine.wants()) depthEngine.afterFrame({ renderer, uniforms: material.uniforms, canvas: renderer.domElement, playing });
+        // Blob Track nodes (docs/blob-track.md): their masks read back small, blobs found and followed on the CPU.
+        if (blobEngine.wants(playing)) blobEngine.afterFrame({ renderer, uniforms: material.uniforms, canvas: renderer.domElement, playing });
 
         // Check for GLSL errors after first few renders
         const newErrors = flushGlErrors();

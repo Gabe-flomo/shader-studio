@@ -147,6 +147,7 @@ import { TimeCubeCardBody } from '../timeCube/TimeCubeCardBody';
 import { DataTextureCardBody } from './DataTextureCardBody';
 import { RenderTargetsCardBody } from './RenderTargetsCardBody';
 import { DepthCardBody } from '../depth/DepthCardBody';
+import { BlobTrackCardBody } from '../blobs/BlobTrackCardBody';
 import { DepthLightCardBody } from '../depth/DepthLightCardBody';
 import { SplatSceneCardBody } from '../splats/SplatSceneCardBody';
 import { ScatterReachNote } from './ScatterReachNote';
@@ -4001,6 +4002,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         {!collapsed && node.type === 'dataTexture' && <DataTextureCardBody node={node} touch={isTouchDevice} />}
         {!collapsed && node.type === 'renderTargets' && <RenderTargetsCardBody node={node} touch={isTouchDevice} />}
         {!collapsed && node.type === 'depth' && <DepthCardBody node={node} touch={isTouchDevice} />}
+        {!collapsed && node.type === 'blobTrack' && <BlobTrackCardBody node={node} />}
         {!collapsed && node.type === 'depthLight' && <DepthLightCardBody node={node} touch={isTouchDevice} />}
         {!collapsed && node.type === 'splatScene' && <SplatSceneCardBody node={node} />}
         {!collapsed && (node.type === 'pieces' || node.type === 'pieceBalls') && <ScatterReachNote node={node} />}

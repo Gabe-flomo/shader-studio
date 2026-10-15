@@ -34,6 +34,8 @@ const CONNECTION_GATED = new Set([
   'depthLight.glowColor', 'depthLight.glowIntensity', 'depthLight.glowReach', 'depthLight.shadowSoftness', 'depthLight.lightRadius',
   // Splat Scene: Edge softness only with a Scene wired
   'splatScene.softness',
+  // Blob Track: the Stamp settings only with a Stamp texture wired
+  'blobTrack.stampScale', 'blobTrack.stampSpin',
   // Picture Environment reads nothing until a picture's Texture is wired
   'pictureEnvironment.fov', 'pictureEnvironment.blur', 'pictureEnvironment.strength',
   // GI Lit March Group: the PBR lighting block is only emitted once a scene is wired
