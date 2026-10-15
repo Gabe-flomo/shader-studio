@@ -180,4 +180,20 @@ describe('Blob Track: the node', () => {
       if (motion === 'pulse') expect(r.fragmentShader).toMatch(/u_time, [0-9.]+, 1\.0, bt_h/);
     }
   });
+
+  it('3D: marks stand at each blob\'s depth (a Depth map, or its size), turned and in perspective, with stems; Position 3D and x / y / z labels', () => {
+    const flat = compileGraph({ nodes: [node('bt', 'blobTrack', { space: '3d', labels: 'xyz', connect: 'chain', stems: true }), out('bt', 'marks')] }) as CompilationResult;
+    expect(flat.errors ?? []).toEqual([]);
+    expect(flat.fragmentShader).toMatch(/clamp\(sqrt\(\w+_M\[i\]\.y\) \* 3\.0, 0\.0, 1\.0\)/);
+    expect(flat.fragmentShader).toMatch(/radians\(u_p_\w+_yaw\)/);
+    expect(flat.fragmentShader).toContain('bt_seg(');
+    expect(flat.fragmentShader).toMatch(/bt_label\([^;]*, 4, floor\(b\.x \* u_resolution\.x\)/);
+    const img = node('img', 'textureInput');
+    const bt = node('bt', 'blobTrack', { space: '3d' });
+    bt.inputs.depthMap = { ...bt.inputs.depthMap, connection: { nodeId: 'img', outputKey: 'texture' } };
+    const withDepth = compileGraph({ nodes: [img, bt, out('bt', 'marks')] }) as CompilationResult;
+    expect(withDepth.errors ?? []).toEqual([]);
+    expect(withDepth.fragmentShader).toMatch(/texture2D\(u_tex_\w+, clamp\(\w+_B\[i\]\.xy, 0\.0, 1\.0\)\)\.r/);
+    expect(withDepth.fragmentShader).toMatch(/vec3 \w+_pos3 = vec3\(/);
+  });
 });

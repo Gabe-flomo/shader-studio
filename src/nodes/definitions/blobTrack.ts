@@ -36,6 +36,7 @@ const MARKS = 'Marks';
 const LINKS = 'Connections';
 const STAMP = 'Stamp';
 const MOTION = 'Motion';
+const SPACE = 'Space';
 
 /**
  * The drawing helpers every Blob Track shares (pixel units): a quadratic Bézier's distance (Inigo Quilez's exact
@@ -114,7 +115,7 @@ float bt_glyph(int code, vec2 lp) {
 }
 int bt_ndig(float n) { return n >= 1000.0 ? 4 : n >= 100.0 ? 3 : n >= 10.0 ? 2 : 1; }
 int bt_digit(float n, int d, int j) { return 48 + int(mod(floor(n / pow(10.0, float(d - 1 - j)) + 0.0001), 10.0)); }
-int bt_labelChar(int mode, int k, float a, float b) {
+int bt_labelChar(int mode, int k, float a, float b, float c) {
   if (mode == 3) {
     if (k == 0) return 48;
     if (k == 1) return 120;
@@ -136,14 +137,24 @@ int bt_labelChar(int mode, int k, float a, float b) {
   if (j == 2) return 58;
   if (j == 3) return 32;
   j -= 4;
-  return j < db ? bt_digit(b, db, j) : 32;
+  if (j < db) return bt_digit(b, db, j);
+  if (mode != 4) return 32;
+  // x / y / z: then " z: " and c.
+  j -= db;
+  int dc = bt_ndig(c);
+  if (j == 0) return 32;
+  if (j == 1) return 122;
+  if (j == 2) return 58;
+  if (j == 3) return 32;
+  j -= 4;
+  return j < dc ? bt_digit(c, dc, j) : 32;
 }
-float bt_label(vec2 p, vec2 origin, float h, int mode, float a, float b) {
+float bt_label(vec2 p, vec2 origin, float h, int mode, float a, float b, float c) {
   float cw = h * 0.6;
   vec2 q = (p - origin) / vec2(cw, h);
-  if (q.y < 0.0 || q.y > 1.0 || q.x < 0.0 || q.x > 16.0) return 0.0;
+  if (q.y < 0.0 || q.y > 1.0 || q.x < 0.0 || q.x > 24.0) return 0.0;
   int k = int(floor(q.x));
-  int code = bt_labelChar(mode, k, a, b);
+  int code = bt_labelChar(mode, k, a, b, c);
   vec2 lp = vec2(fract(q.x), q.y), o = 0.25 / vec2(cw, h);
   return 0.25 * (bt_glyph(code, lp - o) + bt_glyph(code, lp + vec2(o.x, -o.y)) + bt_glyph(code, lp + vec2(-o.x, o.y)) + bt_glyph(code, lp + o));
 }`;
@@ -158,12 +169,14 @@ export const BlobTrackNode: NodeDefinition = withParamSockets({
   description: 'Finds the separate bright shapes (blobs) in a mask and follows them, each keeping its ID while it moves. Wire a mask into Mask: a keyed video, Depth\'s near mask through a Pass, a threshold, a difference of frames. Count is how many; Position, Size, Area and ID are the picked blob\'s (Pick: 0 is the oldest). Marks draws boxes or brackets, crosses, x/y labels and curved connections between blobs (the tracking-overlay look); Stamp puts a picture on every blob. Up to 16 blobs.',
   inputs: {
     texture: { type: 'texture', label: 'Mask', hint: 'The mask to find blobs in: white shapes on black. A Texture Input, Video Input, Baked or a Pass. Empty: the picture itself (a frame late).' },
+    depthMap: { type: 'texture', label: 'Depth', hint: 'A depth map for the blobs\' Z (red: 1 near), such as the Depth node\'s Depth texture. Unwired: Z from each blob\'s size (bigger is nearer).' },
     stamp: { type: 'texture', label: 'Stamp', hint: 'A picture put on every blob: an image, a video, a Pass or a Shader Texture. With Sheet cells, a grid of pictures, one per blob by its ID.' },
     uv: { type: 'vec2', label: 'UV', hint: 'Where Overlay, Marks, Stamped, Inside and Nearest are measured. Empty: this pixel.' },
   },
   outputs: {
     count: { type: 'float', label: 'Count', hint: 'How many blobs are seen now.' },
     position: { type: 'vec2', label: 'Position', hint: 'The picked blob\'s centre, in picture coordinates (as UV): wire into a shape\'s centre to follow it.' },
+    position3d: { type: 'vec3', label: 'Position 3D', hint: 'The picked blob\'s centre with its depth: x, y in picture coordinates, z its Depth (0 far … 1 near) times Depth scale.' },
     size: { type: 'vec2', label: 'Size', hint: 'The picked blob\'s box, width and height in picture units.' },
     area: { type: 'float', label: 'Area', hint: 'How much of the frame the picked blob covers, 0–1.' },
     id: { type: 'float', label: 'ID', hint: 'The picked blob\'s ID: it stays the same while the blob is followed. New blobs count up from 1.' },
@@ -185,6 +198,7 @@ export const BlobTrackNode: NodeDefinition = withParamSockets({
     connect: 'off', bend: 0.35, arrows: true, flow: 0, lineStyle: 'solid', lineColourBy: 'line', wobble: 0, maxLink: 0, padding: 0,
     motion: 'follow', jumpRate: 4, scatter: 0.15, flicker: 0.2, hold: 2, pulseRate: 0.8,
     stampFit: 'square', stampScale: 1, stampCells: '1', stampSpin: 0,
+    space: '2d', depthScale: 0.8, yaw: 25, pitch: 15, perspective: 3, stems: true,
   },
   paramDefs: {
     threshold: { label: 'Threshold', type: 'float', min: 0, max: 1, step: 0.01, section: FIND, compileTime: true, hint: 'How bright a pixel must be to count as part of a blob.' },
@@ -211,10 +225,10 @@ export const BlobTrackNode: NodeDefinition = withParamSockets({
     ] },
     markerColor: { label: 'Centre colour', type: 'vec3color', section: MARKS, showWhen: { param: 'marker', value: ['dot', 'cross'] }, hint: 'The centre markers\' colour.' },
     labels: { label: 'Labels', type: 'select', section: MARKS, hint: 'Text by each box: its ID, or its centre\'s x / y in preview pixels (from the top left).', options: [
-      { value: 'none', label: 'None' }, { value: 'id', label: 'ID (#3)' }, { value: 'xy', label: 'x / y' }, { value: 'hex', label: 'Hex code (0x3FA9C2)' },
+      { value: 'none', label: 'None' }, { value: 'id', label: 'ID (#3)' }, { value: 'xy', label: 'x / y' }, { value: 'xyz', label: 'x / y / z' }, { value: 'hex', label: 'Hex code (0x3FA9C2)' },
     ] },
-    labelColor: { label: 'Label colour', type: 'vec3color', section: MARKS, showWhen: { param: 'labels', value: ['id', 'xy', 'hex'] }, hint: 'The labels\' colour.' },
-    textSize: { label: 'Text size', type: 'float', min: 6, max: 48, step: 1, section: MARKS, showWhen: { param: 'labels', value: ['id', 'xy', 'hex'] }, hint: 'The labels\' height in pixels.' },
+    labelColor: { label: 'Label colour', type: 'vec3color', section: MARKS, showWhen: { param: 'labels', value: ['id', 'xy', 'xyz', 'hex'] }, hint: 'The labels\' colour.' },
+    textSize: { label: 'Text size', type: 'float', min: 6, max: 48, step: 1, section: MARKS, showWhen: { param: 'labels', value: ['id', 'xy', 'xyz', 'hex'] }, hint: 'The labels\' height in pixels.' },
     padding: { label: 'Box padding', type: 'float', min: -20, max: 60, step: 1, section: MARKS, hint: 'Grows each box (and its brackets and label) by this many pixels; negative shrinks it.' },
     lineWidth: { label: 'Line width', type: 'float', min: 0.5, max: 8, step: 0.5, section: MARKS, hint: 'Boxes, markers and connections: the line width in pixels.' },
     lineColor: { label: 'Line colour', type: 'vec3color', section: MARKS, hint: 'The connections\' colour, and the boxes\' with Box colour: Line colour.' },
@@ -240,6 +254,14 @@ export const BlobTrackNode: NodeDefinition = withParamSockets({
     flicker: { label: 'Flicker', type: 'float', min: 0, max: 0.9, step: 0.01, section: MOTION, showWhen: { param: 'motion', value: 'jump' }, hint: 'How often a mark (and its lines) blinks out for a step. 0: never.' },
     hold: { label: 'Hold', type: 'float', min: 0.1, max: 20, step: 0.1, section: MOTION, compileTime: true, showWhen: { param: 'motion', value: 'pulse' }, hint: 'Seconds the marks stay put before they are placed on the blobs again.' },
     pulseRate: { label: 'Pulse rate', type: 'float', min: 0, max: 4, step: 0.05, section: MOTION, showWhen: { param: 'motion', value: 'pulse' }, hint: 'Box pulses a second (each box on its own beat). Flow sets how fast the packets run.' },
+    space: { label: 'Space', type: 'select', section: SPACE, hint: '3D: each blob\'s marks stand at its depth (from Depth, or its size), and the whole overlay is turned by Yaw and Pitch and seen in perspective.', options: [
+      { value: '2d', label: 'Flat (2D)' }, { value: '3d', label: '3D' },
+    ] },
+    depthScale: { label: 'Depth scale', type: 'float', min: 0, max: 3, step: 0.01, section: SPACE, hint: 'How far forward a blob at depth 1 stands, in picture units (and Position 3D\'s z).' },
+    yaw: { label: 'Yaw°', type: 'float', min: -180, max: 180, step: 0.5, section: SPACE, showWhen: { param: 'space', value: '3d' }, hint: 'Turns the 3D overlay left and right. Wire an LFO to orbit it.' },
+    pitch: { label: 'Pitch°', type: 'float', min: -90, max: 90, step: 0.5, section: SPACE, showWhen: { param: 'space', value: '3d' }, hint: 'Tilts it up and down.' },
+    perspective: { label: 'Perspective', type: 'float', min: 1, max: 20, step: 0.1, section: SPACE, showWhen: { param: 'space', value: '3d' }, hint: 'The camera\'s distance: small is a strong perspective, large nearly flat.' },
+    stems: { label: 'Stems', type: 'bool', section: SPACE, showWhen: { param: 'space', value: '3d' }, hint: 'A thin line from each mark down to where it would be flat, so the depth reads.' },
     stampFit: { label: 'Fit', type: 'select', section: STAMP, hint: 'Box: stretched to each blob\'s box. Square: the picture\'s own shape, as big as the blob. Circle: Square, cut round.', options: [
       { value: 'box', label: 'Box (stretch)' }, { value: 'square', label: 'Square' }, { value: 'circle', label: 'Circle' },
     ] },
@@ -263,7 +285,9 @@ export const BlobTrackNode: NodeDefinition = withParamSockets({
     const lw = p(P.lineWidth, 2);
     const boxStyle = P.boxStyle === 'brackets' || P.boxStyle === 'none' ? P.boxStyle : 'box';
     const marker = P.marker === 'cross' || P.marker === 'none' ? P.marker : 'dot';
-    const labels = P.labels === 'id' ? 1 : P.labels === 'xy' ? 2 : P.labels === 'hex' ? 3 : 0;
+    const labels = P.labels === 'id' ? 1 : P.labels === 'xy' ? 2 : P.labels === 'hex' ? 3 : P.labels === 'xyz' ? 4 : 0;
+    const space3d = P.space === '3d';
+    const depthTex = inputVars.depthMap;
     const motion = P.motion === 'jump' || P.motion === 'pulse' ? P.motion : 'follow';
     const rate = motion === 'jump' ? p(P.jumpRate, 4) : '4.0';
     // Jump: a blob's step (its own clock) and whether it shows this step.
@@ -285,6 +309,24 @@ export const BlobTrackNode: NodeDefinition = withParamSockets({
     add(`vec4 ${v('B')}[${N}]; vec4 ${v('M')}[${N}]; vec4 ${v('D')}[${N}];`);
     add(`int ${v('n')} = 0;`);
     add(`for (int i = 0; i < ${N}; i++) { ${v('B')}[i] = texelFetch(${S}, ivec2(i, 0), 0); ${v('M')}[i] = texelFetch(${S}, ivec2(i, 1), 0); ${v('D')}[i] = texelFetch(${S}, ivec2(i, 2), 0); if (${v('M')}[i].w > 0.5) ${v('n')} = i + 1; }`);
+    // Each blob's depth Z (0 far … 1 near): the Depth map at its centre, or its size (bigger is nearer).
+    add(`float ${v('Z')}[${N}];`);
+    add(`for (int i = 0; i < ${N}; i++) ${v('Z')}[i] = ${depthTex ? `texture2D(${depthTex}, clamp(${v('B')}[i].xy, 0.0, 1.0)).r` : `clamp(sqrt(${v('M')}[i].y) * 3.0, 0.0, 1.0)`};`);
+    if (space3d) {
+      // 3D: each mark stands at its depth; the overlay is turned by Yaw then Pitch and seen in perspective from Perspective
+      // away. G: where it would be flat (for the stems).
+      add(`vec4 ${v('G')}[${N}];`);
+      add(`{ float yw = radians(${p(P.yaw, 25)}), pt = radians(${p(P.pitch, 15)}), fl = max(${p(P.perspective, 3)}, 1.0);`);
+      add(`  mat2 ry = mat2(cos(yw), -sin(yw), sin(yw), cos(yw)), rx = mat2(cos(pt), -sin(pt), sin(pt), cos(pt));`);
+      add(`  for (int i = 0; i < ${N}; i++) {`);
+      add(`    vec3 q = vec3((${v('D')}[i].xy * 2.0 - 1.0) * ${v('asp')}, ${v('Z')}[i] * ${p(P.depthScale, 0.8)});`);
+      add(`    vec3 g = vec3(q.xy, 0.0);`);
+      add(`    q.xz = ry * q.xz; q.yz = rx * q.yz; g.xz = ry * g.xz; g.yz = rx * g.yz;`);
+      add(`    float sq = fl / max(fl - q.z, 0.05), sg = fl / max(fl - g.z, 0.05);`);
+      add(`    ${v('G')}[i] = vec4((g.xy * sg / ${v('asp')} + 1.0) * 0.5, sg, 0.0);`);
+      add(`    ${v('D')}[i] = vec4((q.xy * sq / ${v('asp')} + 1.0) * 0.5, ${v('D')}[i].zw * sq);`);
+      add(`  } }`);
+    }
     add(`vec4 ${v('pb')} = ${v('pk')} >= 0 && ${v('pk')} < ${v('n')} ? ${v('B')}[clamp(${v('pk')}, 0, ${N - 1})] : vec4(0.0);`);
     add(`vec4 ${v('pi')} = ${v('pk')} >= 0 && ${v('pk')} < ${v('n')} ? ${v('M')}[clamp(${v('pk')}, 0, ${N - 1})] : vec4(0.0);`);
     add(`float ${v('in')} = 0.0, ${v('near')} = 1.0e3;`);
@@ -349,6 +391,10 @@ export const BlobTrackNode: NodeDefinition = withParamSockets({
     add(`  float pl = ${motion === 'pulse' ? `exp(-fract(u_time * ${p(P.pulseRate, 0.8)} + bt_h(vec2(m.x, 1.3))) * 5.0)` : '0.0'};`);
     add(`  vec2 c = dm.xy * u_resolution, hs = dm.zw * u_resolution * 0.5 + ${p(P.padding, 0)} + pl * 6.0, q = abs(${v('px')} - c);`);
     add(`  float e = max(q.x - hs.x, q.y - hs.y);`);
+    if (space3d && P.stems !== false) {
+      add(`  { float sd = bt_seg(${v('px')}, c, ${v('G')}[i].xy * u_resolution); float sl = (1.0 - smoothstep(${lw} * 0.25, ${lw} * 0.25 + 1.0, sd)) * 0.6 * vis;`);
+      add(`    ${v('mc')} = mix(${v('mc')}, ${lineC}, sl); ${v('ma')} = max(${v('ma')}, sl); }`);
+    }
     if (boxStyle !== 'none') {
       const colour = P.boxColour === 'line' ? lineC : `(0.55 + 0.45 * cos(6.28318 * (m.x * 0.161 + vec3(0.0, 0.33, 0.67))))`;
       add(`  float ln = 1.0 - smoothstep(${lw} * 0.5, ${lw} * 0.5 + 1.0, abs(e));`);
@@ -365,7 +411,7 @@ export const BlobTrackNode: NodeDefinition = withParamSockets({
     if (labels) {
       // Above the box's top-left corner; x / y in preview pixels from the top left, like a screen.
       add(`  float th = ${p(P.textSize, 14)};`);
-      add(`  float tx = bt_label(${v('px')}, c + vec2(-hs.x, hs.y + 3.0), th, ${labels}, ${labels === 2 ? 'floor(c.x)' : 'm.x'}, ${labels === 2 ? 'floor(u_resolution.y - c.y)' : labels === 3 && motion === 'jump' ? stepOf('m.x') : '0.0'}) * vis;`);
+      add(`  float tx = bt_label(${v('px')}, c + vec2(-hs.x, hs.y + 3.0), th, ${labels}, ${labels === 2 ? 'floor(c.x)' : labels === 4 ? 'floor(b.x * u_resolution.x)' : 'm.x'}, ${labels === 2 ? 'floor(u_resolution.y - c.y)' : labels === 4 ? 'floor((1.0 - b.y) * u_resolution.y)' : labels === 3 && motion === 'jump' ? stepOf('m.x') : '0.0'}, ${labels === 4 ? `floor(${v('Z')}[i] * 100.0)` : '0.0'}) * vis;`);
       add(`  ${v('mc')} = mix(${v('mc')}, ${pv3(P.labelColor, [1, 0.25, 0.4])}, tx); ${v('ma')} = max(${v('ma')}, tx);`);
     }
     add(`}`);
@@ -373,13 +419,14 @@ export const BlobTrackNode: NodeDefinition = withParamSockets({
     add(`vec3 ${v('ov')} = mix(mix(${v('base')}, ${v('sc')}, ${v('sa')}), ${v('mc')}, ${v('ma')});`);
     add(`vec2 ${v('pos')} = (${v('pb')}.xy * 2.0 - 1.0) * ${v('asp')};`);
     add(`vec2 ${v('size')} = ${v('pb')}.zw * 2.0 * ${v('asp')};`);
+    add(`vec3 ${v('pos3')} = vec3(${v('pos')}, (${v('pk')} >= 0 && ${v('pk')} < ${v('n')} ? ${v('Z')}[clamp(${v('pk')}, 0, ${N - 1})] : 0.0) * ${p(P.depthScale, 0.8)});`);
     add(`float ${v('cnt')} = float(${v('n')});`);
     return {
       code: L.join(''),
       outputVars: {
-        count: v('cnt'), position: v('pos'), size: v('size'), area: `${v('pi')}.y`, id: `${v('pi')}.x`, found: `${v('pi')}.w`,
+        count: v('cnt'), position: v('pos'), position3d: v('pos3'), size: v('size'), area: `${v('pi')}.y`, id: `${v('pi')}.x`, found: `${v('pi')}.w`,
         inside: v('in'), nearest: v('near'), overlay: v('ov'), marks: v('mc'), marksAlpha: v('ma'), stamped: v('sc'), stampAlpha: v('sa'), texture: S,
       },
     };
   },
-}, ['pick', 'lineWidth', 'bend', 'flow', 'textSize']);
+}, ['pick', 'lineWidth', 'bend', 'flow', 'textSize', 'yaw', 'pitch']);
