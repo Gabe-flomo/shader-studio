@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.222',
+    date: '2026-10-15',
+    title: "Looks",
+    highlights: [
+      { area: 'Studio', text: "Looks: twelve standard finishes (vignette, grain, tone map, colour pop, glowing line, duotone\u2026) as Expression Blocks you can read and tweak." },
+      { area: 'Studio', text: "Find them in the Expressions tab under Looks, or type a Look's name (or just \"look\") in the node search." },
+    ],
+  },
+  {
     id: '2026.10.221',
     date: '2026-10-15',
     title: "Ride a path",
