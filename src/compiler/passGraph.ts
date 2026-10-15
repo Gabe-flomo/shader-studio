@@ -49,6 +49,7 @@ import { expandRenderTargets, isRenderTargets } from './renderTargetsExpand';
 import { expandSpriteSources } from './spriteExpand';
 import { MEMORY_PASS_ID, expandMemory, isMemoryNode } from './memoryExpand';
 import { expandOpticalFlow, isOpticalFlow } from './opticalFlowExpand';
+import { PROBE_PASS_ID, expandProbes, expandTextProbes, isProbe, pinUvGlsl, textNeedsProbe } from './probeExpand';
 import { SHADER_TEXTURE_TYPE } from '../nodes/definitions/shaderTexture';
 
 export const PASS_TYPE = 'pass';
@@ -66,7 +67,7 @@ export function hasPassNode(nodes: GraphNode[]): boolean {
     // So is a Curve Trace in Draw: Beam, into its screen Pass (compiler/curveBeamExpand.ts).
     // So is a Shader Texture, into its inside and a Pass (compiler/shaderTextureExpand.ts).
     // And a Feedback (texture), into its step and buffer Pass (compiler/feedbackExpand.ts).
-    if (n.type === PASS_TYPE || n.type === GRID_TYPE || n.type === SHADER_TEXTURE_TYPE || isBeamTrace(n) || isFeedbackNode(n) || isDataTexture(n) || isRenderTargets(n) || isMemoryNode(n) || isOpticalFlow(n)) return true;
+    if (n.type === PASS_TYPE || n.type === GRID_TYPE || n.type === SHADER_TEXTURE_TYPE || isBeamTrace(n) || isFeedbackNode(n) || isDataTexture(n) || isRenderTargets(n) || isMemoryNode(n) || isOpticalFlow(n) || isProbe(n) || textNeedsProbe(n)) return true;
     const sg = n.params?.subgraph as Sub;
     if (sg?.nodes && hasPassNode(sg.nodes)) return true;
   }
@@ -217,7 +218,8 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
     // Draw agents' Sprite from a texture that isn't a Pass's: a hidden Pass in between (compiler/spriteExpand.ts).
     // Memory nodes (Lag, Spring, Envelope…): all in one shared Pass, a texel each (compiler/memoryExpand.ts).
     // Optical Flow: each opened into its source Pass, its step and its flow Pass (compiler/opticalFlowExpand.ts).
-    const flows = expandOpticalFlow(beams.nodes);
+    // Value at point (and a Text's wired Value): one shared Pass reading each value at its point (compiler/probeExpand.ts).
+    const flows = expandOpticalFlow(expandProbes(expandTextProbes(beams.nodes)));
     const feedback = expandFeedback(expandRenderTargets(expandDataTextures(expandSpriteSources(expandMemory(flows.nodes)))));
     const grid = beams.bindAs.size || feedback.bindAs.size || flows.bindAs.size
       ? { nodes: feedback.nodes, bindAs: new Map([...gridOnly.bindAs, ...beams.bindAs, ...flows.bindAs, ...feedback.bindAs]) }
@@ -413,8 +415,10 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
     for (const c of [finalList, ...passLists.values()]) for (const r of c.readsPrevious) previousRead.add(r);
 
     // 4. Compile each list with today's compiler.
-    const compileList = (list: GraphNode[], pictureScale?: number, pictureRes?: boolean) => generateFragmentShader(topologicalSort(list), list, {
+    const compileList = (list: GraphNode[], pictureScale?: number, pictureRes?: boolean, pinUv?: string) => generateFragmentShader(topologicalSort(list), list, {
       slugs,
+      // The Value at point Pass: g_uv pinned to each texel's point.
+      ...(pinUv ? { pinUv } : {}),
       // The memory Pass (compiler/memoryExpand.ts): fixed size, so the Mouse reads the picture's size.
       ...(pictureRes ? { pictureRes: true } : {}),
       // A pass program's size relative to the picture (read only by a wired Texture Input / Video Texture).
@@ -468,7 +472,7 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
         },
       };
       const fixedSize = passFixedSize(pass.params.__size);
-      const r = compileList(hidden.annotate([...c.nodes.values(), sink], id), fixedSize ? 1 : PASS_SCALES[String(pass.params.scale ?? '1')] ?? 1, id === MEMORY_PASS_ID);
+      const r = compileList(hidden.annotate([...c.nodes.values(), sink], id), fixedSize ? 1 : PASS_SCALES[String(pass.params.scale ?? '1')] ?? 1, id === MEMORY_PASS_ID, id === PROBE_PASS_ID && Array.isArray(pass.params.__pinUv) ? pinUvGlsl(pass.params.__pinUv as [number, number][]) : undefined);
       absorb(r);
       for (const [nid, vars] of r.nodeOutputVars) if (nid !== sink.id && !passVars.has(nid)) passVars.set(nid, vars);
       const slug = slugs.get(id)!;

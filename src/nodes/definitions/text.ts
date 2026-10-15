@@ -72,10 +72,13 @@ export const TextNode: NodeDefinition = withParamSockets({
     mask: { type: 'float', label: 'Mask', hint: '1 on the letters, 0 elsewhere, soft at the edges.' },
     color: { type: 'vec3', label: 'Color', hint: 'The letters in Colour, black elsewhere.' },
   },
-  defaultParams: { text: 'Playfield {}', value: 0, decimals: 2, numWidth: 6, size: 0.12, spacing: 1, lineHeight: 1.2, align: 'center', posX: 0, posY: 0.06, color: [1, 1, 1] },
+  defaultParams: { text: 'Playfield {}', value: 0, valueAt: 'text', decimals: 2, numWidth: 6, size: 0.12, spacing: 1, lineHeight: 1.2, align: 'center', posX: 0, posY: 0.06, color: [1, 1, 1] },
   paramDefs: {
     text: { label: 'Text', type: 'string', hint: 'The words. {} is replaced by Value; \\n starts a new line. Letters, digits and ASCII symbols.' },
-    value: { label: 'Value', type: 'float', min: -1000, max: 1000, step: 0.01, hint: 'The number shown where {} is. Wire a reading into it.' },
+    value: { label: 'Value', type: 'float', min: -1000, max: 1000, step: 0.01, hint: 'The number shown where {} is. Its socket takes any single float: an Analyze reading, a Counter, a Timer, an LFO, a Blob Track Count.' },
+    valueAt: { label: 'Value at', type: 'select', hint: 'With a wire into Value: Text reads it once, at the text\'s Position, so a value that changes across the picture (an SDF, a noise) shows as one steady number. Each pixel: every pixel of the letters shows its own value (a glitchy look).', options: [
+      { value: 'text', label: 'The text\'s position' }, { value: 'pixel', label: 'Each pixel' },
+    ] },
     decimals: { label: 'Decimals', type: 'int', min: 0, max: 6, step: 1, hint: 'Places after the point.' },
     numWidth: { label: 'Number width', type: 'int', min: 1, max: 16, step: 1, hint: 'Characters kept for the number (right-aligned), so the text doesn\'t shift as it changes.' },
     size: { label: 'Size', type: 'float', min: 0.01, max: 1, step: 0.005, hint: 'A line\'s height, in picture units (the picture is 2 high).' },
@@ -131,4 +134,4 @@ export const TextNode: NodeDefinition = withParamSockets({
     ].join('');
     return { code, outputVars: { mask: `${id}_m`, color: `(${pv3(P.color, [1, 1, 1])} * ${id}_m)` } };
   },
-}, ['value', 'size', 'spacing', 'posX', 'posY']);
+}, ['value', 'size', 'spacing', 'posX', 'posY'], ['value']);

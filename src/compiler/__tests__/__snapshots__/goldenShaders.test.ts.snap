@@ -1122,7 +1122,7 @@ exports[`golden shaders: every Play example exports the same bundle > memBeat 1`
 
 exports[`golden shaders: every Play example exports the same bundle > memReadout 1`] = `
 {
-  "bundle": "15b9035bbe541d035b4cbf773030:12561",
+  "bundle": "198f21accb23b90a5ec0d5230137:15106",
   "missing": [],
 }
 `;
@@ -12739,10 +12739,10 @@ exports[`golden shaders: every example compiles as it did > memReadout 1`] = `
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "1527f5091d68531ea7f8571d91b2:7159",
+  "fragmentShader": "16e1d2ce38c72b1208b65f770cbe:7031",
   "isStateful": false,
   "liveUniforms": {},
-  "nodeSlugs": "07752d2103d1b313fa2c288c3874:232",
+  "nodeSlugs": "0f99eca661d0941af34ae59fe6f4:362",
   "paramBindings": "1fbdb06bcd4a0e1cb4b1d93d2f49:686",
   "paramUniforms": [
     "u_p_lfox0_amplitude",
@@ -12870,6 +12870,84 @@ void main() {
       "scale": 1,
       "size": 3,
       "slug": "memory_0",
+      "wrap": "clamp",
+    },
+    {
+      "filter": "nearest",
+      "format": "float",
+      "fragmentShader": "precision highp float;
+#define PI 3.1415926538
+#define TAU 6.2831853072
+
+uniform vec2 u_resolution;
+uniform float u_time;
+uniform vec2 u_mouse;
+uniform sampler2D u_fontTexture;
+uniform vec2 u_pictureRes;
+#define u_resolution u_pictureRes
+uniform sampler2D u_pass_memory_0;
+uniform vec2 u_pass_memory_0_px;
+uniform sampler2D u_passprev_memory_0;
+uniform vec2 u_passprev_memory_0_px;
+
+varying vec2 vUv;
+
+// ── Always-available helpers (noise, rotation) ───────────────────────────────
+vec2 noiseHash2(vec2 p) {
+    p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+    return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+}
+float noiseHash1(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+float valueNoise(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(noiseHash1(i), noiseHash1(i+vec2(1,0)), u.x),
+               mix(noiseHash1(i+vec2(0,1)), noiseHash1(i+vec2(1,1)), u.x), u.y);
+}
+vec2 rotate(vec2 v, float angle) {
+    // Hoisted: the angle is usually a uniform expression, and the compiler
+    // can't share the four trig calls when the argument isn't a plain value.
+    float s = sin(angle), c = cos(angle);
+    return vec2(v.x * c - v.y * s, v.x * s + v.y * c);
+}
+mat2 rot2D(float a) { float s=sin(a), c=cos(a); return mat2(c,-s,s,c); }
+// ─────────────────────────────────────────────────────────────────────────
+
+
+
+void main() {
+    vec2 g_uv = (vUv - 0.5) * 2.0;
+    g_uv.x *= u_resolution.x / u_resolution.y;
+    { int pin_i = int(floor(gl_FragCoord.x)); g_uv = (pin_i == 0 ? vec2(0.00000, 0.22000) : (pin_i == 1 ? vec2(0.00000, -0.20000) : g_uv)); }
+    vec4 memoryread_0_c2_m = texelFetch(u_pass_memory_0, ivec2(1, 0), 0);
+    float memoryread_0_c2_count = memoryread_0_c2_m.x;
+    float memoryread_0_c2_fraction = clamp((memoryread_0_c2_m.x - 0.0) / max(99.0 - 0.0, 1e-4), 0.0, 1.0);
+    vec4 memoryread_0_m = texelFetch(u_pass_memory_0, ivec2(0, 0), 0);
+    float memoryread_0_seconds = memoryread_0_m.x;
+    float memoryread_0_fraction = clamp(memoryread_0_m.x / 10.0, 0.0, 1.0);
+    float memoryread_0_done = 0.0;
+    int probepack_0_i = int(floor(gl_FragCoord.x));
+    float probepack_0_o = (probepack_0_i == 0 ? memoryread_0_seconds : (probepack_0_i == 1 ? memoryread_0_c2_count : 0.0));
+    gl_FragColor = vec4(vec3(probepack_0_o), 1.0);
+}",
+      "label": "Values at points",
+      "live": true,
+      "nodeId": "__probe",
+      "nodeIds": [
+        "__probe__pack",
+        "count",
+        "timer",
+      ],
+      "previous": false,
+      "reads": [
+        "memory_0",
+      ],
+      "readsPrevious": [],
+      "scale": 1,
+      "size": 2,
+      "slug": "values_at_points_0",
       "wrap": "clamp",
     },
   ],
