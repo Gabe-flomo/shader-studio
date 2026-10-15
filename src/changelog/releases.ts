@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.215',
+    date: '2026-10-14',
+    title: "Optical Flow",
+    highlights: [
+      { area: 'Studio', text: "Optical Flow (Texture tools) finds which way each part of a moving picture moves: wire its Flow into Feedback (texture), Displace, particles or agents." },
+    ],
+  },
+  {
     id: '2026.10.214',
     date: '2026-10-14',
     title: 'Analyze',
