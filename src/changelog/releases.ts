@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.220',
+    date: '2026-10-15',
+    title: "Clearer rules, truer Explain",
+    highlights: [
+      { area: 'Studio', text: "Agent rules read like a filter: When all of these are true, then do these. Rules can be renamed and fold to a one-line summary." },
+      { area: 'Studio', text: "Explain shows values from memory nodes, Passes and videos; its line stays pinned. Quick map reaches Expression Block sliders." },
+    ],
+  },
+  {
     id: '2026.10.219',
     date: '2026-10-15',
     title: "Value at point",
