@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.210',
+    date: '2026-10-14',
+    title: 'Blob Track',
+    highlights: [
+      { area: 'Studio', text: 'Blob Track (Texture tools) finds the bright shapes in a mask and follows them, each keeping its ID as it moves, like TouchDesigner\'s Blob Track.' },
+      { area: 'Studio', text: 'Blob Track Marks: boxes or corner brackets, crosses, ID or x / y labels, and curved connections between blobs with arrows and flowing dots.' },
+      { area: 'Studio', text: 'Blob Track Stamp: any picture, video or shader on every blob: fitted, cut round, a sprite-sheet cell per ID. Examples: Texture tools 13 and 14.' },
+    ],
+  },
+  {
     id: '2026.10.209',
     date: '2026-10-14',
     title: 'Voxels',
