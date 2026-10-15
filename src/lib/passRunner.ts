@@ -293,6 +293,9 @@ export class PassRunner {
     const drawn = ppDrawn(this.entries.map(e => ({ ...e.spec, entry: e })));
     targets.prune(new Set(drawn.map(d => d.slug)));
     const [pxX, pxY] = ppPixel(w, h);
+    // The picture's size, for programs whose u_resolution is their own fixed size (the memory Pass's Mouse).
+    if (!u.u_pictureRes) u.u_pictureRes = { value: new THREE.Vector2() };
+    (u.u_pictureRes.value as THREE.Vector2).set(w, h);
     // Every pass's previous frame first: a pass earlier in the order may read a later one's Previous.
     // (Not a pass an earlier call this frame drew: its sampler keeps the frame before: ppPrevBound.)
     const fresh = new Set(ppPrevBound(drawn, stage, part).map(d => d.slug));

@@ -15,6 +15,7 @@ import { BakedNode } from './baked';
 import { DepthNode } from './depth';
 import { BlobTrackNode } from './blobTrack';
 import { CacheNode, CacheReadNode } from './cache';
+import { MEMORY_NODES, MemoryPackNode, MemoryReadNode } from './memory';
 import { DepthCompositeNode, DepthLightNode, PictureEnvironmentNode } from './depthScene';
 import { DepthMixNode } from './depthMix';
 import { SplatProbeOutNode, SplatSceneNode } from './splatScene';
@@ -344,6 +345,9 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   blobTrack: BlobTrackNode,
   cache: CacheNode,
   cacheRead: CacheReadNode,
+  ...MEMORY_NODES,
+  memoryPack: MemoryPackNode,
+  memoryRead: MemoryReadNode,
   // Depth Mix (docs/depth-mix.md): a picture with depth and a scene put together (size, space, occlude, fog, light, mix)
   depthMix: DepthMixNode,
   // Depth in 3D scenes (docs/depth-node.md): a picture with depth inside a ray-marched scene

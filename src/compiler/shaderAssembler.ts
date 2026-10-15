@@ -664,6 +664,11 @@ export interface ShaderAssemblerOptions {
    * Only the pass path passes it, and it is read only when such a texture output is wired.
    */
   pictureScale?: number;
+  /**
+   * A fixed-size pass program (the memory Pass, compiler/memoryExpand.ts): its u_resolution has nothing to do with
+   * the picture's, so the Mouse reads `u_pictureRes` (the picture's size, set by the pass runners) instead.
+   */
+  pictureRes?: boolean;
 }
 
 /** See ShaderAssemblerOptions.agentProgram. */
@@ -841,6 +846,7 @@ export class ShaderAssembler {
   private agentEye = false;
   /** Pass programs: the picture's scale (ShaderAssemblerOptions.pictureScale). */
   private pictureScale = 1;
+  private pictureRes = false;
   /** Texture Input / Video nodes (original ids) whose Texture output something reads (phase 7). */
   private textureOutWired: Set<string> = new Set();
   // ── Field sockets (see compileFieldFunction) ──
@@ -876,6 +882,7 @@ export class ShaderAssembler {
     this.agentProgram = opts?.agentProgram;
     this.agentEye = opts?.agentEye === true;
     this.pictureScale = opts?.pictureScale ?? 1;
+    this.pictureRes = opts?.pictureRes === true;
     this.textureOutWired = wiredTextureOutputs(allNodes);
     if (opts?.slugs) {
       this.fixedSlugs = opts.slugs;
@@ -4313,7 +4320,8 @@ export class ShaderAssembler {
         }
         // The Mouse node in a pass program (a Pass at ½, ¼…): u_mouse is in picture pixels, u_resolution the pass's size.
         // Only when its UV, X or Y is read (Pixels stays the picture's): a graph that reads Pixels compiles as before.
-        if (node.type === 'mouse' && this.pictureScale !== 1 && this.allNodes.some(o => Object.values(o.inputs ?? {}).some(i => i.connection?.nodeId === node.id && i.connection.outputKey !== 'px'))) sluggedNode = { ...sluggedNode, params: { ...sluggedNode.params, __pictureScale: this.pictureScale } };
+        if (node.type === 'mouse' && this.pictureRes) { sluggedNode = { ...sluggedNode, params: { ...sluggedNode.params, __pictureRes: true } }; this.declarations.add('uniform vec2 u_pictureRes;'); }
+        else if (node.type === 'mouse' && this.pictureScale !== 1 && this.allNodes.some(o => Object.values(o.inputs ?? {}).some(i => i.connection?.nodeId === node.id && i.connection.outputKey !== 'px'))) sluggedNode = { ...sluggedNode, params: { ...sluggedNode.params, __pictureScale: this.pictureScale } };
         // A node the compiler made for another (a Grid Rules step, compiler/gridRulesExpand.ts) binds its sliders to that node's id.
         const bindId = typeof node.params.__bindAs === 'string' && node.params.__bindAs ? node.params.__bindAs : node.id;
         const { patchedNode, uniforms: nodeUniforms, bindings: nodeBindings } = patchNodeParamsForUniforms(sluggedNode, def, fn => this.functions.add(fn), bindId);

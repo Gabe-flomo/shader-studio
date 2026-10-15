@@ -47,6 +47,7 @@ import { expandFeedback, isFeedbackNode } from './feedbackExpand';
 import { expandDataTextures, isDataTexture } from './dataTextureExpand';
 import { expandRenderTargets, isRenderTargets } from './renderTargetsExpand';
 import { expandSpriteSources } from './spriteExpand';
+import { MEMORY_PASS_ID, expandMemory, isMemoryNode } from './memoryExpand';
 import { SHADER_TEXTURE_TYPE } from '../nodes/definitions/shaderTexture';
 
 export const PASS_TYPE = 'pass';
@@ -64,7 +65,7 @@ export function hasPassNode(nodes: GraphNode[]): boolean {
     // So is a Curve Trace in Draw: Beam, into its screen Pass (compiler/curveBeamExpand.ts).
     // So is a Shader Texture, into its inside and a Pass (compiler/shaderTextureExpand.ts).
     // And a Feedback (texture), into its step and buffer Pass (compiler/feedbackExpand.ts).
-    if (n.type === PASS_TYPE || n.type === GRID_TYPE || n.type === SHADER_TEXTURE_TYPE || isBeamTrace(n) || isFeedbackNode(n) || isDataTexture(n) || isRenderTargets(n)) return true;
+    if (n.type === PASS_TYPE || n.type === GRID_TYPE || n.type === SHADER_TEXTURE_TYPE || isBeamTrace(n) || isFeedbackNode(n) || isDataTexture(n) || isRenderTargets(n) || isMemoryNode(n)) return true;
     const sg = n.params?.subgraph as Sub;
     if (sg?.nodes && hasPassNode(sg.nodes)) return true;
   }
@@ -213,7 +214,8 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
     // Data Textures: each opened into its pack, its Pass and a Read channels per output (compiler/dataTextureExpand.ts).
     // Render Targets: each opened into its pack and one Pass with extra targets (compiler/renderTargetsExpand.ts).
     // Draw agents' Sprite from a texture that isn't a Pass's: a hidden Pass in between (compiler/spriteExpand.ts).
-    const feedback = expandFeedback(expandRenderTargets(expandDataTextures(expandSpriteSources(beams.nodes))));
+    // Memory nodes (Lag, Spring, Envelope…): all in one shared Pass, a texel each (compiler/memoryExpand.ts).
+    const feedback = expandFeedback(expandRenderTargets(expandDataTextures(expandSpriteSources(expandMemory(beams.nodes)))));
     const grid = beams.bindAs.size || feedback.bindAs.size
       ? { nodes: feedback.nodes, bindAs: new Map([...gridOnly.bindAs, ...beams.bindAs, ...feedback.bindAs]) }
       : feedback.nodes !== beams.nodes ? { nodes: feedback.nodes, bindAs: gridOnly.bindAs } : gridOnly;
@@ -408,8 +410,10 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
     for (const c of [finalList, ...passLists.values()]) for (const r of c.readsPrevious) previousRead.add(r);
 
     // 4. Compile each list with today's compiler.
-    const compileList = (list: GraphNode[], pictureScale?: number) => generateFragmentShader(topologicalSort(list), list, {
+    const compileList = (list: GraphNode[], pictureScale?: number, pictureRes?: boolean) => generateFragmentShader(topologicalSort(list), list, {
       slugs,
+      // The memory Pass (compiler/memoryExpand.ts): fixed size, so the Mouse reads the picture's size.
+      ...(pictureRes ? { pictureRes: true } : {}),
       // A pass program's size relative to the picture (read only by a wired Texture Input / Video Texture).
       ...(pictureScale !== undefined && pictureScale !== 1 ? { pictureScale } : {}),
       // The eye preview of a node inside an Agents group: its chain is in this picture (agentEyeNodes).
@@ -461,7 +465,7 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
         },
       };
       const fixedSize = passFixedSize(pass.params.__size);
-      const r = compileList(hidden.annotate([...c.nodes.values(), sink], id), fixedSize ? 1 : PASS_SCALES[String(pass.params.scale ?? '1')] ?? 1);
+      const r = compileList(hidden.annotate([...c.nodes.values(), sink], id), fixedSize ? 1 : PASS_SCALES[String(pass.params.scale ?? '1')] ?? 1, id === MEMORY_PASS_ID);
       absorb(r);
       for (const [nid, vars] of r.nodeOutputVars) if (nid !== sink.id && !passVars.has(nid)) passVars.set(nid, vars);
       const slug = slugs.get(id)!;

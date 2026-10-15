@@ -112,6 +112,8 @@ export function phCreate(gl, passes, env) {
       const keep = new Set(drawn.map(d => d.slug));
       for (const [slug, t] of targets) if (!keep.has(slug)) { drop(t); targets.delete(slug); }
       const px = ppPixel(w, h);
+      // The picture's size, for programs whose u_resolution is their own fixed size (the memory Pass's Mouse).
+      env.vec2s.set('u_pictureRes', [w, h]);
       // Every pass's previous frame first: a pass earlier in the order may read a later one's Previous.
       // (Not a pass an earlier call this frame drew: its sampler keeps the frame before: ppPrevBound.)
       const fresh = new Set(ppPrevBound(drawn, stage, part).map(d => d.slug));
