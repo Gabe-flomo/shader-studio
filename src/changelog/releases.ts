@@ -43,7 +43,7 @@ export const RELEASES: Release[] = [
     date: '2026-10-14',
     title: 'Analyze',
     highlights: [
-      { area: 'Studio', text: 'Analyze (Texture tools) measures a whole picture into numbers: average colour and brightness, how much is lit and where, its brightest point, contrast and motion.' },
+      { area: 'Studio', text: 'Analyze (Texture tools) measures a picture into numbers: average colour and brightness, how much is lit and where, its brightest point, contrast and motion.' },
     ],
   },
   {
