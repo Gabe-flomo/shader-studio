@@ -86,6 +86,10 @@ export const TEXTURE_TOOL_EXAMPLE_INDEX: Record<string, { label: string; descrip
     label: 'Texture tools 16 · Cache: Time Machine', play: true,
     description: 'A Cache with a Delay map (TouchDesigner\'s Time Machine): every pixel is read from its own moment. Here the centre is now and the picture reaches further into the past towards the edges, so motion bends and smears outwards.',
   },
+  ttAnalyze: {
+    label: 'Texture tools 17 · Analyze: a video steers a shape', play: true,
+    description: 'Analyze measures the Ball action clip every frame: its average colour paints the backdrop, the middle of its bright part (Centre) moves a ring, how much is lit (Coverage) sizes it, and how much changed (Motion) makes it flare. Choose the camera and wave a light.',
+  },
 };
 
 /** The ordered keys, for the Texture tools folder. */
@@ -889,6 +893,55 @@ export function buildTextureToolExamples(): Record<string, ExampleGraph> {
 **How it is built.** Video → Cache (64 frames) with a Delay map: the distance from the centre. The centre is now; the edges are up to 63 frames back.
 
 **Try.** Choose the camera and move: you bend outwards in time. Change the map (a horizontal gradient for a slit-scan sweep, Fractal Noise for a time-melt).`),
+  };
+
+  // ── 17 · Video → Analyze → a ring at the light's centre, sized by coverage, flaring with motion ──
+  g.ttAnalyze = {
+    ...TEXTURE_TOOL_EXAMPLE_INDEX.ttAnalyze,
+    counter: 40,
+    nodes: [
+      n('videoInput', 'vid', 40, 300, { ...BALL_VIDEO_PARAMS, ...note([
+        'Video Input: the built-in Ball action clip, looping. Choose the camera on this card to steer the ring with a light or your hand.',
+        'Its Texture output is what Analyze measures.',
+      ]) }),
+      n('analyze', 'an', 340, 300, { resolution: '64', threshold: 0.45, smoothing: 0.6, motionGain: 12, ...note([
+        'Analyze: reads the video back at 64 px each frame and measures it into numbers, one for the whole picture.',
+        'Colour: the average colour. Centre: the middle of the part brighter than Threshold. Coverage: how much is that bright. Motion: how much changed since the last frame (times Motion gain).',
+        'Smoothing 0.6 calms the numbers so the ring glides instead of jittering.',
+      ]) }, { texture: ['vid', 'texture'] }),
+      n('textureLevels', 'back', 340, 620, { outWhite: 0.35, ...note('Levels (texture): the video dimmed, to show what is being measured.') }, { texture: ['vid', 'texture'] }),
+      n('uv', 'uv', 340, 860, note('UV: this pixel\'s place in the picture.')),
+      expr('look', 700, 400, {
+        label: 'Look', outputType: 'vec3',
+        inputs: [
+          ['uv', 'vec2', ['uv', 'uv']], ['video', 'vec3', ['back', 'color']], ['avg', 'vec3', ['an', 'color']],
+          ['c', 'vec2', ['an', 'centre']], ['cover', 'float', ['an', 'coverage']], ['mo', 'float', ['an', 'motion']],
+        ],
+        lines: [
+          ['float r', '0.08 + sqrt(cover) * 0.6'],
+          ['float ring', '1.0 - smoothstep(0.006, 0.012 + mo * 0.02, abs(length(uv - c) - r))'],
+          ['float flare', 'exp(-abs(length(uv - c) - r) * 10.0) * clamp(mo, 0.0, 2.0)'],
+          ['vec3 tint', 'normalize(avg + 0.001) * 1.2'],
+        ],
+        result: 'avg * 0.6 + video * 0.5 + (ring + flare * 0.6) * tint',
+        note: [
+          'Expression Block: the numbers drawn.',
+          'r: the ring\'s radius grows with Coverage (its square root, so a little light already shows).',
+          'ring: a ring round Centre, thicker while things move.',
+          'flare: a glow round it, as bright as Motion.',
+          'tint: the average colour at full strength, so the ring takes the video\'s colour.',
+          'Result: the average colour as a backdrop, the dimmed video, and the ring over both.',
+        ],
+      }),
+      n('output', 'out', 1000, 400, note('Output: the video measured and drawn as a ring.'), { color: ['look', 'result'] }),
+    ],
+    play: playRecord([
+      ctl('gain', 'an::motionGain', 'Motion gain', 0, 40, 0.5),
+    ], `**What it shows.** Analyze (TouchDesigner's Analyze TOP and TOP to CHOP): a whole picture measured into numbers you wire like any other.
+
+**How it is built.** Video → Analyze → Look. The average colour fills the backdrop, the lit part's Centre places a ring, Coverage sizes it, Motion makes it flare.
+
+**Try.** Choose the camera: hold up a light and move it, the ring follows. Wire Brightness into a Lag, then into anything, for a smooth light meter. Wire Motion into an Envelope's Gate to flash on movement.`),
   };
 
   return g;
