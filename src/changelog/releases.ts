@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.213',
+    date: '2026-10-14',
+    title: 'Memory nodes',
+    highlights: [
+      { area: 'Studio', text: 'Memory nodes (Animation): Lag, Spring, Envelope (ADSR), Timer, Counter, Sample & Hold and Speed remember a number from frame to frame.' },
+      { area: 'Studio', text: 'Smooth a jittery value, bounce to a target, swell and fade on a beat, count triggers, time a sequence. Examples in the new Memory folder.' },
+    ],
+  },
+  {
     id: '2026.10.212',
     date: '2026-10-14',
     title: 'Cache',
