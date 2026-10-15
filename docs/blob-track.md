@@ -21,7 +21,7 @@ near mask through a Pass, a frame difference (Change). Left empty, it reads the 
 | Overlay | Everything at once, to check what is found: the mask dimmed, the stamps, then the marks. |
 | Marks, Marks alpha | The boxes, centre markers, labels and connections in their colours, and where they are: mix any picture to Marks by Marks alpha. |
 | Stamped, Stamp alpha | The Stamp picture on every blob, and where it is. |
-| Blob data | The blobs as a 16 × 2 float texture (below). |
+| Blob data | The blobs as a 16 × 3 float texture (below). |
 
 **Pick** chooses the blob the single-blob outputs report: 0 is the oldest one seen now (the lowest ID),
 1 the next, and so on. It is a live slider and a socket.
@@ -45,6 +45,22 @@ near mask through a Pass, a frame difference (Change). Left empty, it reads the 
   A pair is always drawn from the older blob to the newer, so a pair found twice is one curve. **Bend** arcs
   the lines (a quadratic Bézier, its exact distance), **Arrows** puts an arrowhead halfway along, pointing
   older → newer, and **Flow** runs three dots along each line.
+  **Line style** (solid, dashed, dotted), **Line colour by** (Line colour, the older blob's ID colour, or a
+  gradient from one blob's colour to the other's), **Wobble** (moving noise shakes the lines) and **Max link**
+  (connections longer than this share of the picture's height are left out). Labels can also be a **Hex code**
+  (`0x3FA9C2`, from the ID; re-rolled each step in Jump). **Box padding** grows the boxes.
+- **Motion:** where the marks (boxes, centres, labels, connections, stamps) are drawn.
+  - **Follow:** on their blobs, gliding with them.
+  - **Jump:** each mark holds, then snaps to its blob at random moments, each blob on its own clock about
+    **Jump rate** times a second, landing **Scatter** off it. **Flicker** blinks marks out for a step, and
+    Chain / Nearest connections re-pick a random partner each step (All pairs stays all pairs).
+  - **Pulse:** the marks stay put for **Hold** seconds, then are placed again together. Packets with tails run
+    along the connections, older → newer, at **Flow** speed (the rest of each line dims), and each box pulses
+    on its own beat (**Pulse rate**).
+
+  The holding is done by the engine (`placeMarks` in `lib/blobs/track.ts`) into row 2 of the blob texture;
+  Position, Size, Inside and Nearest always follow the blobs themselves. For your own warp of the marks,
+  wire one into **UV**.
 - **Stamp:** wire a texture into **Stamp** and it is drawn on every blob. **Fit:** Box (stretched to the box),
   Square (the picture's shape, as big as the blob) or Circle (Square, cut round). **Scale**, **Sheet cells**
   (a 2 × 2 … 8 × 8 sprite sheet, each blob showing one cell by its ID) and **Spin by ID** (each blob's stamp
@@ -60,9 +76,9 @@ The finding runs on the CPU, outside the shader (`lib/blobs/engine.ts`), like th
    one's box, centre (the mean of its pixels) and area, and drops those outside Min…Max size.
 3. Blobs are matched to the last frame's tracks by nearest centre, closest pairs first, no further than
    Max jump. Unmatched blobs get new IDs; unmatched tracks are remembered for Memory frames.
-4. The result is uploaded to the node's own float texture (`u_tex_<node>`, BLOB_SLOTS × 2 texels):
+4. The result is uploaded to the node's own float texture (`u_tex_<node>`, BLOB_SLOTS × 3 texels):
    row 0 holds the centre x, y and box width, height (0–1 texture coordinates), row 1 the ID, area, age in
-   frames and 1 for a blob. The shader loops over the 16 slots for Count, the picked blob and the Overlay.
+   frames and 1 for a blob, row 2 where its marks are drawn (held in Jump and Pulse). The shader loops over the 16 slots for Count, the picked blob and the Overlay.
 
 It runs every frame while the preview plays, and once after any change while paused. At 160 px it takes
 a few milliseconds a frame in the dev build, most of it the GPU readback; the card shows the count, the size

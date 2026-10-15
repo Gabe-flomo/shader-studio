@@ -7,13 +7,13 @@
  * - `afterFrame(ctx)`: right after the preview draws, while playing (or once after a change while paused): the
  *   source is copied small on the GPU and read back (lib/depth/engine.ts Grabber; the picture is read from the
  *   canvas), the blobs are found and matched on the CPU (lib/blobs/track.ts), and the result is uploaded to the
- *   node's float texture (BLOB_SLOTS × 2) through the store's `nodeTextures`.
+ *   node's float texture (BLOB_SLOTS × BLOB_ROWS: the blobs, and where their marks are drawn in Jump / Pulse) through the store's `nodeTextures`.
  */
 import * as THREE from 'three';
 import type { GraphNode, SubgraphData } from '../../types/nodeGraph';
 import { BLOB_SOURCE_MARK, BLOB_TRACK_TYPE, blobResolutionOf } from '../../nodes/definitions/blobTrack';
 import { Grabber } from '../depth/engine';
-import { BLOB_SLOTS, blobGrabSize, emptyTrackState, findBlobs, maskOf, packBlobs, trackBlobs, visibleTracks, type MaskChannel, type Track, type TrackState } from './track';
+import { BLOB_ROWS, BLOB_SLOTS, blobGrabSize, emptyMarkState, emptyTrackState, findBlobs, maskOf, packBlobs, placeMarks, trackBlobs, visibleTracks, type MarkMotion, type MarkState, type MaskChannel, type Track, type TrackState } from './track';
 
 export type BlobState = 'idle' | 'no-source' | 'running' | 'error';
 
@@ -63,7 +63,7 @@ export function blobSources(shaders: readonly string[]): Map<string, string> {
 }
 
 /** The settings the CPU side reads, as one key: a change runs the node again even while paused. */
-const settingsKey = (n: GraphNode) => JSON.stringify(['threshold', 'channel', 'invert', 'resolution', 'minSize', 'maxSize', 'maxBlobs', 'maxJump', 'memory', 'smoothing'].map(k => n.params[k]));
+const settingsKey = (n: GraphNode) => JSON.stringify(['threshold', 'channel', 'invert', 'resolution', 'minSize', 'maxSize', 'maxBlobs', 'maxJump', 'memory', 'smoothing', 'motion', 'jumpRate', 'scatter', 'hold'].map(k => n.params[k]));
 
 const num = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
 
@@ -81,6 +81,7 @@ interface Slot {
   status: BlobStatus;
   track: TrackState;
   visible: Track[];
+  marks: MarkState;
   tex: THREE.DataTexture | null;
   key: string;
   dirty: boolean;
@@ -120,7 +121,7 @@ class BlobEngine {
     let rerun = false;
     for (const [id, n] of want) {
       let s = this.slots.get(id);
-      if (!s) { s = { node: n, status: idleStatus(), track: emptyTrackState(), visible: [], tex: null, key: '', dirty: true }; this.slots.set(id, s); rerun = true; }
+      if (!s) { s = { node: n, status: idleStatus(), track: emptyTrackState(), visible: [], marks: emptyMarkState(), tex: null, key: '', dirty: true }; this.slots.set(id, s); rerun = true; }
       s.node = n;
       const key = settingsKey(n);
       if (key !== s.key) { s.key = key; s.dirty = true; rerun = true; }
@@ -191,7 +192,7 @@ class BlobEngine {
   private upload(id: string, s: Slot): void {
     let tex = s.tex;
     if (!tex) {
-      tex = new THREE.DataTexture(new Float32Array(BLOB_SLOTS * 2 * 4), BLOB_SLOTS, 2, THREE.RGBAFormat, THREE.FloatType);
+      tex = new THREE.DataTexture(new Float32Array(BLOB_SLOTS * BLOB_ROWS * 4), BLOB_SLOTS, BLOB_ROWS, THREE.RGBAFormat, THREE.FloatType);
       tex.minFilter = THREE.NearestFilter; tex.magFilter = THREE.NearestFilter;
       tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
       tex.generateMipmaps = false;
@@ -201,7 +202,10 @@ class BlobEngine {
       s.tex = tex;
       this.host?.setTexture(id, tex);
     }
-    packBlobs(s.visible, tex.image.data as Float32Array<ArrayBuffer>);
+    const P = s.node.params;
+    const motion: MarkMotion = P.motion === 'jump' || P.motion === 'pulse' ? P.motion : 'follow';
+    const marks = placeMarks(s.marks, s.visible, motion, performance.now() / 1000, { jumpRate: num(P.jumpRate, 4), scatter: num(P.scatter, 0.15), hold: num(P.hold, 2) });
+    packBlobs(s.visible, tex.image.data as Float32Array<ArrayBuffer>, marks);
     tex.needsUpdate = true;
   }
 }

@@ -155,17 +155,87 @@ export function trackBlobs(state: TrackState, blobs: readonly Blob[], opts: Trac
 export const visibleTracks = (state: TrackState, max = BLOB_SLOTS): Track[] =>
   state.tracks.filter(t => t.missed === 0).slice(0, Math.min(max, BLOB_SLOTS));
 
+export type MarkMotion = 'follow' | 'jump' | 'pulse';
+
+/** Where a blob's marks are drawn: its box, held between jumps (centre and size, 0–1). */
+export interface MarkBox { cx: number; cy: number; w: number; h: number }
+
+export interface MarkState {
+  boxes: Map<number, MarkBox>;
+  /** Jump: when each track's marks next snap (seconds). */
+  next: Map<number, number>;
+  /** Pulse: when the marks were last placed (seconds). */
+  placed: number;
+}
+
+export const emptyMarkState = (): MarkState => ({ boxes: new Map(), next: new Map(), placed: -Infinity });
+
+export interface MarkOptions {
+  /** Jump: snaps per second, per blob (on average). */
+  jumpRate?: number;
+  /** Jump: how far a snap lands off its blob, as a share of the blob's size. */
+  scatter?: number;
+  /** Pulse: seconds the marks stay put before they are placed again. */
+  hold?: number;
+}
+
+const boxOf = (t: Track): MarkBox => ({ cx: t.cx, cy: t.cy, w: t.x1 - t.x0, h: t.y1 - t.y0 });
+
 /**
- * The shader's data: BLOB_SLOTS × 2 RGBA floats. Row 0: centre x, y and box width, height (0–1);
- * row 1: ID, area, age (frames) and 1 for a blob (0 for an empty slot).
+ * Where each visible track's marks go this frame (the shader draws boxes, labels and connections there).
+ * Follow: on the blob. Jump: held, then snapped to the blob (Scatter off it) at random moments, each blob on
+ * its own clock, about Jump rate times a second. Pulse: all held for Hold seconds, then placed again together.
+ * A new blob's marks start on it. `rand` is Math.random unless a test fixes it.
  */
-export function packBlobs(tracks: readonly Track[], out: Float32Array<ArrayBuffer> = new Float32Array(BLOB_SLOTS * 2 * 4)): Float32Array<ArrayBuffer> {
+export function placeMarks(state: MarkState, tracks: readonly Track[], motion: MarkMotion, now: number, opts: MarkOptions = {}, rand: () => number = Math.random): MarkBox[] {
+  const live = new Set(tracks.map(t => t.id));
+  for (const id of [...state.boxes.keys()]) if (!live.has(id)) { state.boxes.delete(id); state.next.delete(id); }
+  if (motion === 'follow') {
+    state.boxes.clear(); state.next.clear();
+    return tracks.map(boxOf);
+  }
+  if (motion === 'pulse') {
+    const hold = Math.max(0.05, opts.hold ?? 2);
+    const again = now - state.placed >= hold;
+    if (again) state.placed = now;
+    return tracks.map(t => {
+      let b = state.boxes.get(t.id);
+      if (!b || again) { b = boxOf(t); state.boxes.set(t.id, b); }
+      return b;
+    });
+  }
+  const rate = Math.max(0.05, opts.jumpRate ?? 4), scatter = Math.max(0, opts.scatter ?? 0);
+  return tracks.map(t => {
+    let b = state.boxes.get(t.id);
+    const due = state.next.get(t.id) ?? -Infinity;
+    if (!b || now >= due) {
+      const o = boxOf(t);
+      b = { ...o, cx: o.cx + (rand() - 0.5) * scatter * o.w, cy: o.cy + (rand() - 0.5) * scatter * o.h };
+      state.boxes.set(t.id, b);
+      // Uneven holds (0.3–1.7 × the mean) so the blobs don't snap in step.
+      state.next.set(t.id, now + (0.3 + 1.4 * rand()) / rate);
+    }
+    return b;
+  });
+}
+
+/** Rows of the shader's data texture. */
+export const BLOB_ROWS = 3;
+
+/**
+ * The shader's data: BLOB_SLOTS × BLOB_ROWS RGBA floats. Row 0: centre x, y and box width, height (0–1);
+ * row 1: ID, area, age (frames) and 1 for a blob (0 for an empty slot); row 2: where its marks are drawn
+ * (centre and size, as row 0; the blob itself when no marks are given).
+ */
+export function packBlobs(tracks: readonly Track[], out: Float32Array<ArrayBuffer> = new Float32Array(BLOB_SLOTS * BLOB_ROWS * 4), marks?: readonly MarkBox[]): Float32Array<ArrayBuffer> {
   out.fill(0);
   const n = Math.min(tracks.length, BLOB_SLOTS);
   for (let i = 0; i < n; i++) {
-    const t = tracks[i], a = i * 4, b = (BLOB_SLOTS + i) * 4;
+    const t = tracks[i], a = i * 4, b = (BLOB_SLOTS + i) * 4, c = (2 * BLOB_SLOTS + i) * 4;
     out[a] = t.cx; out[a + 1] = t.cy; out[a + 2] = t.x1 - t.x0; out[a + 3] = t.y1 - t.y0;
     out[b] = t.id; out[b + 1] = t.area; out[b + 2] = t.age; out[b + 3] = 1;
+    const m = marks?.[i] ?? boxOf(t);
+    out[c] = m.cx; out[c + 1] = m.cy; out[c + 2] = m.w; out[c + 3] = m.h;
   }
   return out;
 }

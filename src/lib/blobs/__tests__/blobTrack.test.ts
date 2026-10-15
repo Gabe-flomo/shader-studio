@@ -5,7 +5,7 @@ vi.hoisted(() => {
   (globalThis as { localStorage?: unknown }).localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {}, key: () => null, length: 0, clear: () => {} };
 });
 
-import { BLOB_SLOTS, emptyTrackState, findBlobs, maskOf, packBlobs, trackBlobs, visibleTracks } from '../track';
+import { BLOB_ROWS, BLOB_SLOTS, emptyMarkState, emptyTrackState, findBlobs, maskOf, packBlobs, placeMarks, trackBlobs, visibleTracks } from '../track';
 import { blobSources, stepBlobs } from '../engine';
 import { compileGraph } from '../../../compiler/graphCompiler';
 import type { CompilationResult } from '../../../compiler/types';
@@ -87,10 +87,37 @@ describe('Blob Track: following', () => {
   it('packs centre and size in row 0, ID, area, age and 1 in row 1', () => {
     const st = trackBlobs(emptyTrackState(), [{ cx: 0.25, cy: 0.75, x0: 0.2, y0: 0.7, x1: 0.3, y1: 0.8, area: 0.01 }]);
     const d = packBlobs(visibleTracks(st));
-    expect(d.length).toBe(BLOB_SLOTS * 8);
+    expect(d.length).toBe(BLOB_SLOTS * BLOB_ROWS * 4);
+    // Row 2: where the marks go (the blob itself without marks).
+    expect([...d.slice(BLOB_SLOTS * 8, BLOB_SLOTS * 8 + 4)].map(v => +v.toFixed(3))).toEqual([0.25, 0.75, 0.1, 0.1]);
     expect([...d.slice(0, 4)].map(v => +v.toFixed(3))).toEqual([0.25, 0.75, 0.1, 0.1]);
     expect([...d.slice(BLOB_SLOTS * 4, BLOB_SLOTS * 4 + 4)].map(v => +v.toFixed(3))).toEqual([1, 0.01, 0, 1]);
     expect(d[4 * BLOB_SLOTS + 7]).toBe(0);
+  });
+});
+
+describe('Blob Track: where the marks go (Motion)', () => {
+  const track = (id: number, cx: number) => ({ id, age: 0, missed: 0, cx, cy: 0.5, x0: cx - 0.05, y0: 0.45, x1: cx + 0.05, y1: 0.55, area: 0.01 });
+  it('Follow: on the blob', () => {
+    const st = emptyMarkState();
+    expect(placeMarks(st, [track(1, 0.3)], 'follow', 0)[0].cx).toBeCloseTo(0.3);
+  });
+  it('Jump: held between snaps, each blob on its own clock, Scatter off the blob', () => {
+    const st = emptyMarkState(), r = () => 0.5;
+    expect(placeMarks(st, [track(1, 0.3)], 'jump', 0, { jumpRate: 2 }, r)[0].cx).toBeCloseTo(0.3);
+    // Next snap at (0.3 + 1.4 × 0.5) / 2 = 0.5 s: before it the mark stays.
+    expect(placeMarks(st, [track(1, 0.4)], 'jump', 0.4, { jumpRate: 2 }, r)[0].cx).toBeCloseTo(0.3);
+    expect(placeMarks(st, [track(1, 0.4)], 'jump', 0.6, { jumpRate: 2 }, r)[0].cx).toBeCloseTo(0.4);
+    const off = placeMarks(emptyMarkState(), [track(1, 0.3)], 'jump', 0, { scatter: 1 }, () => 1)[0];
+    expect(off.cx).toBeCloseTo(0.35);
+  });
+  it('Pulse: all held for Hold seconds, then placed again together; a new blob starts on itself', () => {
+    const st = emptyMarkState();
+    placeMarks(st, [track(1, 0.3)], 'pulse', 0, { hold: 1 });
+    const mid = placeMarks(st, [track(1, 0.5), track(2, 0.8)], 'pulse', 0.5, { hold: 1 });
+    expect(mid[0].cx).toBeCloseTo(0.3);
+    expect(mid[1].cx).toBeCloseTo(0.8);
+    expect(placeMarks(st, [track(1, 0.5)], 'pulse', 1.1, { hold: 1 })[0].cx).toBeCloseTo(0.5);
   });
 });
 
@@ -141,5 +168,16 @@ describe('Blob Track: the node', () => {
     const S = Object.keys(r.textureUniforms).find(k => r.textureUniforms[k] === 'img')!;
     expect(r.fragmentShader).toContain(`textureLod(${S}, lu, 0.0)`);
     expect(r.fragmentShader).toMatch(/mod\(bid - 1\.0, 16\.0\)/);
+  });
+
+  it('Motion, line styles, colour by, wobble, max link and hex labels compile; Jump re-picks partners, Pulse runs packets', () => {
+    for (const motion of ['follow', 'jump', 'pulse']) for (const connect of ['chain', 'nearest2', 'all']) {
+      const bt = node('bt', 'blobTrack', { motion, connect, lineStyle: 'dashed', lineColourBy: 'gradient', wobble: 0.5, maxLink: 0.5, labels: 'hex', boxStyle: 'brackets', padding: 4 });
+      const r = compileGraph({ nodes: [bt, out('bt', 'marks')] }) as CompilationResult;
+      expect(r.errors ?? [], `${motion} ${connect}`).toEqual([]);
+      expect(r.fragmentShader).toContain('ivec2(i, 2)');
+      if (motion === 'jump' && connect !== 'all') expect(r.fragmentShader).toMatch(/if \(j1 >= i\) j1\+\+;/);
+      if (motion === 'pulse') expect(r.fragmentShader).toMatch(/u_time, [0-9.]+, 1\.0, bt_h/);
+    }
   });
 });
