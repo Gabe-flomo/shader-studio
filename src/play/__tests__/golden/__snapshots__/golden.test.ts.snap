@@ -2297,6 +2297,13 @@ exports[`golden outputs: examples > ttMotionTrails 1`] = `
 }
 `;
 
+exports[`golden outputs: examples > ttOpticalFlow 1`] = `
+{
+  "smooth": "- x120",
+  "strength": "- x120",
+}
+`;
+
 exports[`golden outputs: examples > ttReactionLevels 1`] = `
 {
   "feed": "- x120",

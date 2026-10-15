@@ -48,6 +48,7 @@ import { expandDataTextures, isDataTexture } from './dataTextureExpand';
 import { expandRenderTargets, isRenderTargets } from './renderTargetsExpand';
 import { expandSpriteSources } from './spriteExpand';
 import { MEMORY_PASS_ID, expandMemory, isMemoryNode } from './memoryExpand';
+import { expandOpticalFlow, isOpticalFlow } from './opticalFlowExpand';
 import { SHADER_TEXTURE_TYPE } from '../nodes/definitions/shaderTexture';
 
 export const PASS_TYPE = 'pass';
@@ -65,7 +66,7 @@ export function hasPassNode(nodes: GraphNode[]): boolean {
     // So is a Curve Trace in Draw: Beam, into its screen Pass (compiler/curveBeamExpand.ts).
     // So is a Shader Texture, into its inside and a Pass (compiler/shaderTextureExpand.ts).
     // And a Feedback (texture), into its step and buffer Pass (compiler/feedbackExpand.ts).
-    if (n.type === PASS_TYPE || n.type === GRID_TYPE || n.type === SHADER_TEXTURE_TYPE || isBeamTrace(n) || isFeedbackNode(n) || isDataTexture(n) || isRenderTargets(n) || isMemoryNode(n)) return true;
+    if (n.type === PASS_TYPE || n.type === GRID_TYPE || n.type === SHADER_TEXTURE_TYPE || isBeamTrace(n) || isFeedbackNode(n) || isDataTexture(n) || isRenderTargets(n) || isMemoryNode(n) || isOpticalFlow(n)) return true;
     const sg = n.params?.subgraph as Sub;
     if (sg?.nodes && hasPassNode(sg.nodes)) return true;
   }
@@ -215,9 +216,11 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
     // Render Targets: each opened into its pack and one Pass with extra targets (compiler/renderTargetsExpand.ts).
     // Draw agents' Sprite from a texture that isn't a Pass's: a hidden Pass in between (compiler/spriteExpand.ts).
     // Memory nodes (Lag, Spring, Envelope…): all in one shared Pass, a texel each (compiler/memoryExpand.ts).
-    const feedback = expandFeedback(expandRenderTargets(expandDataTextures(expandSpriteSources(expandMemory(beams.nodes)))));
-    const grid = beams.bindAs.size || feedback.bindAs.size
-      ? { nodes: feedback.nodes, bindAs: new Map([...gridOnly.bindAs, ...beams.bindAs, ...feedback.bindAs]) }
+    // Optical Flow: each opened into its source Pass, its step and its flow Pass (compiler/opticalFlowExpand.ts).
+    const flows = expandOpticalFlow(beams.nodes);
+    const feedback = expandFeedback(expandRenderTargets(expandDataTextures(expandSpriteSources(expandMemory(flows.nodes)))));
+    const grid = beams.bindAs.size || feedback.bindAs.size || flows.bindAs.size
+      ? { nodes: feedback.nodes, bindAs: new Map([...gridOnly.bindAs, ...beams.bindAs, ...flows.bindAs, ...feedback.bindAs]) }
       : feedback.nodes !== beams.nodes ? { nodes: feedback.nodes, bindAs: gridOnly.bindAs } : gridOnly;
     // With agents: every node of (or wired into) a 3D group marked for its space (a 2D graph is left as it is).
     const nodes = agents ? syncAgentSpaces(grid.nodes, getNodeDefinition) : grid.nodes;

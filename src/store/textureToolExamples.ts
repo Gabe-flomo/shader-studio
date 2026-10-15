@@ -90,6 +90,10 @@ export const TEXTURE_TOOL_EXAMPLE_INDEX: Record<string, { label: string; descrip
     label: 'Texture tools 17 · Analyze: a video steers a shape', play: true,
     description: 'Analyze measures the Ball action clip every frame: its average colour paints the backdrop, the middle of its bright part (Centre) moves a ring, how much is lit (Coverage) sizes it, and how much changed (Motion) makes it flare. Choose the camera and wave a light.',
   },
+  ttOpticalFlow: {
+    label: 'Texture tools 18 · Optical Flow: trails that follow the motion', play: true,
+    description: 'Optical Flow finds which way each part of the Ball action clip moves; its Flow pushes a Feedback (texture) trail, so the smears stream along the real movement. The flow\'s own colour view (hue is direction) glows on top. Choose the camera and wave.',
+  },
 };
 
 /** The ordered keys, for the Texture tools folder. */
@@ -942,6 +946,37 @@ export function buildTextureToolExamples(): Record<string, ExampleGraph> {
 **How it is built.** Video → Analyze → Look. The average colour fills the backdrop, the lit part's Centre places a ring, Coverage sizes it, Motion makes it flare.
 
 **Try.** Choose the camera: hold up a light and move it, the ring follows. Wire Brightness into a Lag, then into anything, for a smooth light meter. Wire Motion into an Envelope's Gate to flash on movement.`),
+  };
+
+  // ── 18 · Video → Optical Flow → Feedback (texture) pushed by the flow, the flow's view on top ──
+  g.ttOpticalFlow = {
+    ...TEXTURE_TOOL_EXAMPLE_INDEX.ttOpticalFlow,
+    counter: 40,
+    nodes: [
+      n('videoInput', 'vid', 40, 300, { ...BALL_VIDEO_PARAMS, ...note([
+        'Video Input: the built-in Ball action clip, looping. Choose the camera on this card and move: the trails follow you.',
+        'Its Texture output is what Optical Flow watches and what the trail is made of.',
+      ]) }),
+      n('opticalFlow', 'flow', 340, 160, { resolution: '0.25', window: '5', strength: 3, smoothing: 0.6, minSpeed: 0.001, viewGain: 40, ...note([
+        'Optical Flow: compares each frame with the last (at a quarter size, over a 5 × 5 window) and finds which way each part moved: Flow, in picture units a frame.',
+        'Strength 3 exaggerates it so the trails stream further; Smoothing 0.6 steadies it; Min speed ignores the tiniest jitter.',
+        'View is the flow as colour: hue is the direction, brightness the speed.',
+      ]) }, { texture: ['vid', 'texture'] }),
+      n('textureFeedback', 'trail', 640, 300, { label: 'Trail', tail: 1.6, clean: 0.03, tint: [1, 0.85, 0.7], amount: 0.7, blend: 'add', flowAmount: 1, ...note([
+        'Feedback (texture): the video laid over last frame, which is pushed along Flow every frame: each smear moves the way that part of the picture is moving.',
+        'Tail 1.6 s; Tint fades blue first, so old smears warm.',
+      ]) }, { texture: ['vid', 'texture'], flow: ['flow', 'flow'] }),
+      n('addColor', 'mixView', 940, 300, { scale: 0.35, ...note('Add Colors: the trail plus the flow\'s colour view, a third as bright, so you can see the directions it finds.') }, { a: ['trail', 'color'], b: ['flow', 'color'] }),
+      n('output', 'out', 1240, 300, note('Output: motion trails that follow the movement.'), { color: ['mixView', 'result'] }),
+    ],
+    play: playRecord([
+      ctl('strength', 'flow::strength', 'Flow strength', 0, 10, 0.05),
+      ctl('smooth', 'flow::smoothing', 'Flow smoothing', 0, 0.95, 0.01),
+    ], `**What it shows.** Optical Flow (TouchDesigner's Optical Flow TOP): which way each part of a video moves, as a vector at every pixel.
+
+**How it is built.** Video → Optical Flow → Feedback (texture)'s Flow: last frame's trail is pushed along the measured motion before the video is laid over it. The flow's View (hue = direction) is added on top.
+
+**Try.** Choose the camera and wave your hand. Turn up Flow strength. Wire Flow into Displace (texture) to bend a picture along the motion, or Speed into a Mask to light up only what moves.`),
   };
 
   return g;
