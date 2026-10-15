@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.218',
+    date: '2026-10-14',
+    title: "Segment",
+    highlights: [
+      { area: 'Studio', text: "Segment (Texture tools) cuts people, objects or a thing you click out of a picture or video as a mask, on this device, with no green screen." },
+    ],
+  },
+  {
     id: '2026.10.217',
     date: '2026-10-14',
     title: "Blob Track in 3D",
