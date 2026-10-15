@@ -108,9 +108,11 @@ export const MouseNode: NodeDefinition = {
     // Pixels stays in picture pixels, as before.
     const sc = typeof node.params.__pictureScale === 'number' && node.params.__pictureScale !== 1 ? node.params.__pictureScale : null;
     const m = sc ? `(u_mouse * ${Number.isInteger(sc) ? `${sc}.0` : sc})` : 'u_mouse';
+    // In a fixed-size pass (the memory Pass) the picture's own size comes in as u_pictureRes.
+    const R = node.params.__pictureRes === true ? 'u_pictureRes' : 'u_resolution';
     return {
       code: [
-        `    vec2 ${id}_uv = (${m} / u_resolution.y - vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5) * 2.0;\n`,
+        `    vec2 ${id}_uv = (${m} / ${R}.y - vec2(${R}.x / ${R}.y, 1.0) * 0.5) * 2.0;\n`,
         `    float ${id}_x = ${id}_uv.x;\n`,
         `    float ${id}_y = ${id}_uv.y;\n`,
         `    vec2 ${id}_px = u_mouse;\n`,

@@ -35,6 +35,8 @@ export const HIDDEN_NODES = new Set([
   'curveTraceBeamStep',
   // One frame of a Feedback (texture) buffer (compiler/feedbackExpand.ts).
   'textureFeedbackStep',
+  // The shared memory Pass's program and a memory node's read (compiler/memoryExpand.ts).
+  'memoryPack', 'memoryRead',
   'dataTexturePack',
   'renderTargetsPack',
   // Made by Bake… (lib/bake): a node's frozen render, never added by hand.

@@ -27,6 +27,7 @@ import { buildFrameStackExamples } from './frameStackExamples';
 import { buildFourDExamples } from './fourDExamples';
 import { buildFourDProjectionExamples } from './fourDProjectionExamples';
 import { buildTextureToolExamples } from './textureToolExamples';
+import { buildMemoryExamples } from './memoryExamples';
 import { buildRaysExamples } from './raysExamples';
 import { buildSimGridExamples } from './simGridExamples';
 import { buildGridRulesExamples } from './gridRulesExamples';
@@ -12660,7 +12661,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
 };
 
 // The Learn folder is built from the node definitions at load; its last lesson reuses a graph above.
-Object.assign(EXAMPLE_GRAPHS, buildLearnExamples(EXAMPLE_GRAPHS), buildLearn3dExamples(), buildCurvedSpaceExamples(), buildRepeatSceneExamples(), buildPiecesExamples(), buildCurveTraceExamples(), buildComboExamples(), buildMatrixExamples(), buildDataExamples(), buildGridExamples(), buildConvertExamples(), buildPassExamples(), buildAgentExamples(), buildAgentShaderExamples(), buildAgent3dExamples(), buildSimAgentExamples(), buildRideCurveExamples(), buildAgentSketchExamples(), buildBakeExamples(EXAMPLE_GRAPHS), buildExprLoopExamples(), buildSplatExamples(EXAMPLE_GRAPHS), buildTimeCubeExamples(), buildFrameStackExamples(), buildFourDExamples(), buildFourDProjectionExamples(), buildTextureToolExamples(), buildRaysExamples(), buildSimGridExamples(), buildSceneBuilderExamples(), buildSceneBuilder2DExamples(), buildAgentRuleExamples(), buildGridRulesExamples());
+Object.assign(EXAMPLE_GRAPHS, buildLearnExamples(EXAMPLE_GRAPHS), buildLearn3dExamples(), buildCurvedSpaceExamples(), buildRepeatSceneExamples(), buildPiecesExamples(), buildCurveTraceExamples(), buildComboExamples(), buildMatrixExamples(), buildDataExamples(), buildGridExamples(), buildConvertExamples(), buildPassExamples(), buildAgentExamples(), buildAgentShaderExamples(), buildAgent3dExamples(), buildSimAgentExamples(), buildRideCurveExamples(), buildAgentSketchExamples(), buildBakeExamples(EXAMPLE_GRAPHS), buildExprLoopExamples(), buildSplatExamples(EXAMPLE_GRAPHS), buildTimeCubeExamples(), buildFrameStackExamples(), buildFourDExamples(), buildFourDProjectionExamples(), buildTextureToolExamples(), buildMemoryExamples(), buildRaysExamples(), buildSimGridExamples(), buildSceneBuilderExamples(), buildSceneBuilder2DExamples(), buildAgentRuleExamples(), buildGridRulesExamples());
 
 // Every example's Play setup is in the rules shape (implementation guide, phase 9): authored with actions,
 // a signal's When and links where that reads easiest, opened as the rules they play as.
