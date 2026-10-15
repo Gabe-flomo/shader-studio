@@ -5,7 +5,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   BASELINE_NOISY_MS, GpuFrameAccumulator, frameSegments, getPerfSnapshot, median, percentile,
-  recordGpuResults, flushGpuFrame, resetFrameHistory, shaderReading, timerHealth,
+  recordGpuResults, flushGpuFrame, resetFrameHistory, shaderReading, timerHealth, SEGMENT_STALE_MS,
 } from '../perfStats';
 import { GpuTimer } from '../gpuTimer';
 
@@ -133,5 +133,21 @@ describe('GpuTimer isolation', () => {
       { name: 'shader', ms: 2, frame: 7, isolated: true },
     ]);
     vi.unstubAllGlobals();
+  });
+});
+
+describe('Where the frame goes: only passes that still run', () => {
+  it('drops a pass that has stopped reporting (another example\'s group) after a few seconds', () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(1_000_000);
+      recordGpuResults([r('Old group step', 2, 900, true), r('Live step', 1, 900, true)]);
+      expect(getPerfSnapshot().passes.map(p => p.name)).toEqual(expect.arrayContaining(['Old group step', 'Live step']));
+      vi.setSystemTime(1_000_000 + SEGMENT_STALE_MS + 500);
+      recordGpuResults([r('Live step', 1, 901, true)]);
+      const names = getPerfSnapshot().passes.map(p => p.name);
+      expect(names).toContain('Live step');
+      expect(names).not.toContain('Old group step');
+    } finally { vi.useRealTimers(); }
   });
 });

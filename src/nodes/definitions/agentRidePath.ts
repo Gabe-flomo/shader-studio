@@ -71,9 +71,10 @@ export const AgentRidePathNode: NodeDefinition = {
     const width = v.width ?? p(P.width, 0.04);
     const wander = p(P.wander, 0), rate = p(P.wanderRate, 0.25);
     const at = (q: string) => `(${fn}(${q}, vec2(0.0), 1.0, 0.0) - ${id}_lv)`;
-    const grad = (q: string) => `(vec2(${at(`${q} + vec2(${id}_e, 0.0)`)} - ${at(`${q} - vec2(${id}_e, 0.0)`)}, ${at(`${q} + vec2(0.0, ${id}_e)`)} - ${at(`${q} - vec2(0.0, ${id}_e)`)}) / (2.0 * ${id}_e))`;
-    // Newton steps onto the outline, each at most 0.15 so a walker far off comes in over a few frames.
-    const pull = (n: number) => Array.from({ length: n }, () => `      { vec2 g = ${grad(`${id}_q`)}; float d = ${at(`${id}_q`)}; vec2 st = g * d / max(dot(g, g), 1e-8); float sl = length(st); ${id}_q = ${id}_q - (sl > 0.15 ? st * (0.15 / sl) : st); }\n`).join('');
+    // One Newton step onto the outline (at most 0.15, so a walker far off comes in over a few frames): three
+    // lookups of the shape (here, and a little across and up: its slope), the slope kept for the walker's normal.
+    // A walker on the outline last step needs only a nudge, so three steps a frame hold it (the shape is the cost).
+    const pull = () => `      { float f0 = ${at(`${id}_q`)}; ${id}_g = vec2(${at(`${id}_q + vec2(${id}_e, 0.0)`)} - f0, ${at(`${id}_q + vec2(0.0, ${id}_e)`)} - f0) / ${id}_e; vec2 st = ${id}_g * f0 / max(dot(${id}_g, ${id}_g), 1e-8); float sl = length(st); ${id}_q -= sl > 0.15 ? st * (0.15 / sl) : st; }\n`;
     const lines = [
       `    // Ride a path: slide along where Path ƒ equals Level, pulled back onto it every step.\n`,
       `    ${vt} ${id}_p; ${vt} ${id}_v; float ${id}_along;\n`,
@@ -84,13 +85,12 @@ export const AgentRidePathNode: NodeDefinition = {
       `      float ${id}_h2 = agRnd(${id}_r), ${id}_h3 = agRnd(${id}_r), ${id}_h4 = agRnd(${id}_r), ${id}_h5 = agRnd(${id}_r), ${id}_h6 = agRnd(${id}_r);\n`,
       `      vec2 ${id}_q = ${d3 ? 'a_pos.xy' : 'a_pos'};\n`,
       `      float ${id}_sp = ${v.speed ?? p(P.speed, 0.25)} * (1.0 + ${p(P.speedVar, 0.3)} * (2.0 * ${id}_h2 - 1.0))${P.direction === 'both' ? ` * (${id}_h6 < 0.5 ? -1.0 : 1.0)` : ''};\n`,
-      pull(4),
-      `      vec2 ${id}_g = ${grad(`${id}_q`)};\n`,
+      `      vec2 ${id}_g = vec2(0.0, 1.0);\n`,
+      pull(), pull(),
       `      vec2 ${id}_n = length(${id}_g) > 1e-6 ? normalize(${id}_g) : vec2(0.0, 1.0);\n`,
       `      vec2 ${id}_T = vec2(-${id}_n.y, ${id}_n.x);\n`,
       `      ${id}_q += ${id}_T * ${id}_sp * a_dt;\n`,
-      pull(2),
-      `      ${id}_g = ${grad(`${id}_q`)};\n`,
+      pull(),
       `      ${id}_n = length(${id}_g) > 1e-6 ? normalize(${id}_g) : ${id}_n;\n`,
       // Across the outline: its own lane (−1…1), or swaying across the band with Wander.
       `      float ${id}_off = ${width} * mix(2.0 * ${id}_h3 - 1.0, sin(a_age * ${rate} * 6.2831853 * (0.6 + 0.8 * ${id}_h4) + 6.2831853 * ${id}_h5), clamp(${wander}, 0.0, 1.0));\n`,

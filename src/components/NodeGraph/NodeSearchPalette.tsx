@@ -15,8 +15,6 @@
  */
 import { useState, useEffect, useRef, useCallback, useMemo, type ReactNode } from 'react';
 import { getOfferedDefinitions, getNodeDefinition } from '../../nodes/definitions';
-import { lookDef, matchLooks } from '../../nodes/lookPresets';
-import { exprPresetParams } from '../../lib/glslPatterns/saveFlows';
 import { useUserNodesVersion } from '../../nodes/userNodes/useUserNodes';
 import type { GraphNode, NodeDefinition } from '../../types/nodeGraph';
 import type { GroupPreset } from '../../types/groupPreset';
@@ -225,10 +223,6 @@ function SearchPanel({ onClose, spawnPosition, filterOutputType, filterInputType
       if (presets.length) out.push({ id: 'presets', label: 'Group presets', layout: 'list', items: presets.map(p => ({ kind: 'preset', key: `p:${p.id}`, preset: p })) });
       out.push({ id: 'top', label: 'Matches', note: matches.length ? String(matches.length) : undefined, layout: 'grid', group: 'matches', items: matches.slice(0, TOP_COUNT).map(m => nodeItem(m.def)) });
       out.push({ id: 'more', layout: 'list', group: 'matches', items: matches.slice(TOP_COUNT).map(m => nodeItem(m.def)) });
-      // The standard Looks (nodes/lookPresets.ts): Expression Blocks placed ready-made, after the nodes.
-      const looks = wiring ? [] : matchLooks(q);
-      const exprDef = getNodeDefinition('exprNode');
-      if (looks.length && exprDef) out.push({ id: 'looks', label: 'Looks', layout: 'grid', items: looks.map(p => nodeItem(lookDef(exprDef, p), { key: `l:${p.id}`, params: exprPresetParams(p), why: 'Look' })) });
       out.push({ id: 'related', label: 'Related', note: ctx.fromLabel && usuallyNext.length ? `with ${ctx.fromLabel}` : undefined, layout: 'grid', group: 'related', items: related.map(r => nodeItem(r.def, { why: r.why, key: `r:${r.def.type}` })) });
       return out;
     }
