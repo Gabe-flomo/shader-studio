@@ -61,6 +61,11 @@ near mask through a Pass, a frame difference (Change). Left empty, it reads the 
   The holding is done by the engine (`placeMarks` in `lib/blobs/track.ts`) into row 2 of the blob texture;
   Position, Size, Inside and Nearest always follow the blobs themselves. For your own warp of the marks,
   wire one into **UV**.
+- **Space:** Flat (2D) or **3D**. In 3D each blob gets a depth Z (0 far … 1 near): from a texture wired into
+  **Depth** (red, 1 near: the Depth node's Depth texture), or from its size when nothing is wired (bigger is
+  nearer). Its marks stand **Depth scale** forward, the whole overlay is turned by **Yaw** and **Pitch** (sockets:
+  wire an LFO to orbit) and seen from **Perspective** away; **Stems** drop from each mark to where it is flat.
+  Labels gain **x / y / z** (pixels, and Z × 100). **Position 3D** is the picked blob's centre with its depth.
 - **Stamp:** wire a texture into **Stamp** and it is drawn on every blob. **Fit:** Box (stretched to the box),
   Square (the picture's shape, as big as the blob) or Circle (Square, cut round). **Scale**, **Sheet cells**
   (a 2 × 2 … 8 × 8 sprite sheet, each blob showing one cell by its ID) and **Spin by ID** (each blob's stamp
@@ -92,5 +97,5 @@ it reads at and the time.
 - Not yet: Play sources from blobs, per-blob outputs beyond the picked one (use Blob data), blob outlines.
 
 Examples: Texture tools 13 · Blob Track: a tracking overlay (brackets, crosses, x / y labels, curved arrows),
-and 14 · a picture on every blob (Stamp). Code: `src/nodes/definitions/blobTrack.ts`, `src/lib/blobs/`.
+14 · a picture on every blob (Stamp), and 19 · Blob Track in 3D. Code: `src/nodes/definitions/blobTrack.ts`, `src/lib/blobs/`.
 Tests: `src/lib/blobs/__tests__/blobTrack.test.ts`.

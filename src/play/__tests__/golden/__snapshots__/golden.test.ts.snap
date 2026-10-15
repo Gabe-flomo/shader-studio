@@ -2205,6 +2205,14 @@ exports[`golden outputs: examples > ttAnalyze 1`] = `
 }
 `;
 
+exports[`golden outputs: examples > ttBlob3d 1`] = `
+{
+  "depth": "- x120",
+  "persp": "- x120",
+  "pitch": "- x120",
+}
+`;
+
 exports[`golden outputs: examples > ttBlobStamp 1`] = `
 {
   "level": "- x120",

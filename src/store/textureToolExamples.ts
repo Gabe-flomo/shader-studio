@@ -94,6 +94,10 @@ export const TEXTURE_TOOL_EXAMPLE_INDEX: Record<string, { label: string; descrip
     label: 'Texture tools 18 · Optical Flow: trails that follow the motion', play: true,
     description: 'Optical Flow finds which way each part of the Ball action clip moves; its Flow pushes a Feedback (texture) trail, so the smears stream along the real movement. The flow\'s own colour view (hue is direction) glows on top. Choose the camera and wave.',
   },
+  ttBlob3d: {
+    label: 'Texture tools 19 · Blob Track in 3D', play: true,
+    description: 'Blob Track with Space 3D: each ball\'s marks stand at a depth (bigger balls nearer), the whole tracking overlay slowly orbits (an LFO turns its Yaw), stems drop to the flat picture, and labels read x / y / z. Wire a Depth node\'s texture into Depth for real depth from a photo or the camera.',
+  },
 };
 
 /** The ordered keys, for the Texture tools folder. */
@@ -977,6 +981,48 @@ export function buildTextureToolExamples(): Record<string, ExampleGraph> {
 **How it is built.** Video → Optical Flow → Feedback (texture)'s Flow: last frame's trail is pushed along the measured motion before the video is laid over it. The flow's View (hue = direction) is added on top.
 
 **Try.** Choose the camera and wave your hand. Turn up Flow strength. Wire Flow into Displace (texture) to bend a picture along the motion, or Speed into a Mask to light up only what moves.`),
+  };
+
+  // ── 19 · Video → Mask → Pass → Blob Track in 3D (depth from size), orbited by an LFO on Yaw ──
+  g.ttBlob3d = {
+    ...TEXTURE_TOOL_EXAMPLE_INDEX.ttBlob3d,
+    counter: 40,
+    nodes: [
+      n('videoInput', 'vid', 40, 300, { ...BALL_VIDEO_PARAMS, ...note('Video Input: the built-in Ball action clip, looping. Choose the camera on this card to float your own tracking in 3D.') }),
+      n('textureMask', 'vidMask', 340, 160, { source: 'brightness', threshold: 'soft', level: 0.35, width: 0.1,
+        ...note('Mask (texture): 1 where the video is brighter than Level: each bright ball becomes a blob.') },
+        { texture: ['vid', 'texture'] }),
+      n('pass', 'maskPass', 640, 160, { label: 'Pass · mask', scale: '0.5', ...note('Pass: the mask as a texture, for Blob Track to read.') }, { color: ['vidMask', 'mask'] }),
+      n('lfo', 'orbit', 640, 460, { waveform: 'sine', freq: 0.06, amplitude: 40, offset: 0, ...note('LFO: a slow swing, ±40°, about once every 17 seconds: it turns the 3D overlay (Blob Track\'s Yaw).') }),
+      n('blobTrack', 'blobs', 940, 300, { minSize: 0.002, maxSize: 0.4, maxBlobs: 12, maxJump: 0.15, memory: 10, smoothing: 0.5,
+        space: '3d', depthScale: 1.2, pitch: 18, perspective: 3, stems: true,
+        boxStyle: 'brackets', boxColour: 'line', marker: 'cross', markerColor: [1, 1, 1], labels: 'xyz', labelColor: [1, 0.3, 0.45], textSize: 12, lineWidth: 2, lineColor: [0.78, 1, 0.22],
+        connect: 'nearest', bend: 0.3, arrows: true, flow: 0.6, lineColourBy: 'line', motion: 'follow',
+        ...note([
+          'Blob Track, Space 3D: each blob\'s marks stand at its depth. Nothing is wired into Depth, so the depth comes from each blob\'s size: bigger is nearer. Wire a Depth node\'s Depth texture into it for real depth.',
+          'Depth scale 1.2: how far forward the nearest stands. Yaw (wired from the LFO) and Pitch 18° turn the overlay; Perspective 3 is the camera distance.',
+          'Stems drop from each mark to where it is in the flat picture. Labels x / y / z: its place in pixels and its depth (0–100).',
+        ]) },
+        { texture: ['maskPass', 'texture'], yaw: ['orbit', 'value'] }),
+      n('textureLevels', 'back', 940, 620, { outWhite: 0.3, ...note('Levels (texture): the video dimmed, a flat backdrop under the floating marks.') }, { texture: ['vid', 'texture'] }),
+      expr('look', 1260, 360, {
+        label: 'Look', outputType: 'vec3',
+        inputs: [['back', 'vec3', ['back', 'color']], ['marks', 'vec3', ['blobs', 'marks']], ['a', 'float', ['blobs', 'marksAlpha']]],
+        lines: [],
+        result: 'mix(back, marks, a)',
+        note: ['Expression Block: the marks over the dimmed video, mixed by Marks alpha.'],
+      }),
+      n('output', 'out', 1560, 360, note('Output: the tracking overlay floating in front of the video.'), { color: ['look', 'result'] }),
+    ],
+    play: playRecord([
+      ctl('depth', 'blobs::depthScale', 'Depth', 0, 3, 0.01),
+      ctl('pitch', 'blobs::pitch', 'Tilt', -90, 90, 0.5),
+      ctl('persp', 'blobs::perspective', 'Perspective', 1, 20, 0.1),
+    ], `**What it shows.** Blob Track's tracking overlay in 3D: every blob's brackets, label and links stand at its depth, turned and seen in perspective.
+
+**How it is built.** Video → Mask → Pass → Blob Track (Space 3D), an LFO on its Yaw. Depth comes from blob size (nothing wired into Depth).
+
+**Try.** Wire a Depth node (Texture: the video) into Blob Track's Depth for real depth. Set Labels to x / y / z, turn Stems off, wire Mouse X into Yaw to steer.`),
   };
 
   return g;
