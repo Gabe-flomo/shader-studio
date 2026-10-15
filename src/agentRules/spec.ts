@@ -152,6 +152,8 @@ export type MemoryOp = 'add' | 'set' | 'toggle' | 'reset' | 'place' | 'smell' | 
 export interface AgentMemory { id: string; name: string; type: MemoryType; start?: number; fade?: number }
 
 export interface AgentRule {
+  /** Its name in the editor ("Get sick"); absent: "Rule 2". Never reaches the shader. */
+  name?: string;
   /** All must hold (an empty list: always). */
   when: RuleCondition[];
   do: RuleAction[];

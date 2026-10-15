@@ -6,7 +6,7 @@
 import React from 'react';
 import { fieldName } from '../../agentRules/fields';
 import { useTokens } from '../../theme/themeStore';
-import { fontFamily, radius } from '../../theme/tokens';
+import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { IconButton } from '../ui/Button';
 import { Toggle } from '../ui/Choice';
 import { Icon } from '../ui/Icon';
@@ -53,7 +53,6 @@ export function RuleCard({ i, n, rule, ctx, lines, onChange, onMove, onRemove, o
 
 /** A rule's When … and Do … lines (each piece editable, + and… / + do… to add) and its "Stop after this rule". */
 export function RuleLines({ rule, ctx, onChange }: { rule: AgentRule; ctx: EditCtx; onChange: (r: AgentRule) => void }) {
-  const { tk } = ctx;
   const when = rule.when.length ? rule.when : [{ kind: 'always' } as RuleCondition];
   const setWhen = (list: RuleCondition[]) => onChange({ ...rule, when: list.length ? list : [{ kind: 'always' }] });
   return (
@@ -61,27 +60,26 @@ export function RuleLines({ rule, ctx, onChange }: { rule: AgentRule; ctx: EditC
       <Line word="When">
         {when.map((c, j) => (
           <React.Fragment key={j}>
-            {j > 0 && <span style={{ color: tk.text.faint, fontSize: 12 }}>and</span>}
-            <Piece hint={CONDITION_HELP[c.kind].hint} onRemove={rule.when.length > 1 || c.kind !== 'always' ? () => setWhen(when.filter((_, k) => k !== j)) : undefined}>
+            <Piece lead={j > 0 ? 'and' : 'If'} hint={CONDITION_HELP[c.kind].hint} onRemove={rule.when.length > 1 || c.kind !== 'always' ? () => setWhen(when.filter((_, k) => k !== j)) : undefined}>
               <ConditionEditor c={c} ctx={ctx} onChange={x => setWhen(when.map((y, k) => (k === j ? x : y)))} />
             </Piece>
           </React.Fragment>
         ))}
-        <TypeAheadPicker ariaLabel="Add a condition" placeholder="+ and… (type)" width={140}
+        <AddRow><TypeAheadPicker ariaLabel="Add a condition" placeholder="+ Add condition" width={150} accent
           items={conditionKindsFor(ctx.kind).map(k => ({ value: k.kind, label: k.label, hint: CONDITION_HELP[k.kind].hint, example: CONDITION_HELP[k.kind].example, words: [k.kind] }))}
-          onPick={k => setWhen([...when.filter(x => x.kind !== 'always'), newCondition(k as RuleCondition['kind'])])} />
+          onPick={k => setWhen([...when.filter(x => x.kind !== 'always'), newCondition(k as RuleCondition['kind'])])} /></AddRow>
       </Line>
-      <Line word="Do">
+      <Line word="Then">
         {rule.do.map((a, j) => (
-          <Piece key={j} hint={ACTION_HELP[a.kind].hint} onRemove={() => onChange({ ...rule, do: rule.do.filter((_, k) => k !== j) })}>
+          <Piece key={j} lead={j > 0 ? 'then' : 'Do'} hint={ACTION_HELP[a.kind].hint} onRemove={() => onChange({ ...rule, do: rule.do.filter((_, k) => k !== j) })}>
             <ActionEditor a={a} ctx={ctx} onChange={x => onChange({ ...rule, do: rule.do.map((y, k) => (k === j ? x : y)) })} />
           </Piece>
         ))}
-        <TypeAheadPicker ariaLabel="Add an action" placeholder="+ do… (type)" width={130}
+        <AddRow><TypeAheadPicker ariaLabel="Add an action" placeholder="+ Add action" width={150} accent
           items={actionKindsFor(ctx.kind).map(k => ({ value: k.kind, label: k.label, hint: ACTION_HELP[k.kind].hint, example: ACTION_HELP[k.kind].example, words: [k.kind] }))}
-          onPick={k => onChange({ ...rule, do: [...rule.do, newAction(k as RuleAction['kind'])] })} />
+          onPick={k => onChange({ ...rule, do: [...rule.do, newAction(k as RuleAction['kind'])] })} /></AddRow>
       </Line>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingLeft: 28 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <Toggle checked={!!rule.stop} onChange={v => onChange({ ...rule, stop: v })} label="Stop after this rule" />
         <HintMark text="When this rule applies, the rules below it are skipped for that walker this step." />
       </div>
@@ -221,26 +219,49 @@ export function ActionEditor({ a, ctx, onChange }: { a: RuleAction; ctx: EditCtx
 
 // ── Small pieces ─────────────────────────────────────────────────────────────
 
+/**
+ * A rule's When or Then, laid out like a filter builder: a tinted group with its caption, then one row a piece,
+ * each led by a word in a narrow gutter (If / and, Do / then) so the fields line up, then its Add button.
+ */
 export function Line({ word, children }: { word: string; children: React.ReactNode }) {
   const tk = useTokens();
+  const when = word === 'When';
+  const hue = when ? tk.kind.expr : tk.accent.base;
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-      <span title={word === 'When' ? 'When: the condition checked every step for each walker. All must hold.' : 'Do: what the walker does when the condition holds, in order.'} style={{ width: 36, flexShrink: 0, paddingTop: 6, font: `700 11px ${fontFamily.ui}`, letterSpacing: '0.06em', textTransform: 'uppercase', color: word === 'When' ? tk.kind.expr : tk.accent.base, cursor: 'help' }}>{word}</span>
-      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>{children}</div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '8px 8px 6px', borderRadius: radius.md, background: alpha(hue, 0.06), boxShadow: `inset 0 0 0 1px ${alpha(hue, 0.18)}` }}>
+      <span title={when ? 'Checked every step for each walker. All must hold.' : 'What the walker does when they hold, in order.'}
+        style={{ font: `600 11.5px ${fontFamily.ui}`, color: tk.text.secondary, cursor: 'help', paddingBottom: 2 }}>
+        {when ? 'When all of these are true' : 'Then do these, in order'}
+      </span>
+      {children}
     </div>
   );
 }
 
-export function Piece({ children, onRemove, hint }: { children: React.ReactNode; onRemove?: () => void; hint?: string }) {
+/** One condition or action, a row: its lead word in the gutter, its fields, and its ? and × (on hover or focus; always on touch). */
+export function Piece({ children, onRemove, hint, lead }: { children: React.ReactNode; onRemove?: () => void; hint?: string; lead?: string }) {
   const tk = useTokens();
+  const [hot, setHot] = React.useState(false);
+  const show = hot || IS_TOUCH;
   return (
-    <span style={{ display: 'inline-flex', flexWrap: 'wrap', alignItems: 'center', gap: 4, padding: '2px 4px 2px 8px', borderRadius: radius.md, background: tk.bg.field, minHeight: 30, maxWidth: '100%', boxSizing: 'border-box' }}>
-      {children}
-      {hint && <HintMark text={hint} />}
-      {onRemove && <button type="button" aria-label="Remove" title="Remove" onClick={onRemove} style={{ width: 20, height: 20, padding: 0, border: 0, background: 'none', color: tk.text.faint, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Icon name="close" size={12} /></button>}
+    <span onMouseEnter={() => setHot(true)} onMouseLeave={() => setHot(false)} onFocus={() => setHot(true)} onBlur={() => setHot(false)}
+      style={{ display: 'flex', alignItems: 'flex-start', gap: 6, minHeight: 30, width: '100%', boxSizing: 'border-box', padding: '2px 0', borderRadius: radius.sm, background: hot ? alpha(tk.text.primary, 0.03) : 'transparent' }}>
+      <span style={{ width: 30, flexShrink: 0, paddingTop: 6, textAlign: 'right', font: `500 11.5px ${fontFamily.ui}`, color: tk.text.faint }}>{lead ?? ''}</span>
+      <span style={{ flex: 1, minWidth: 0, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4 }}>{children}</span>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2, paddingTop: 4, opacity: show ? 1 : 0, transition: 'opacity 120ms' }}>
+        {hint && <HintMark text={hint} />}
+        {onRemove && <button type="button" aria-label="Remove" title="Remove" onClick={onRemove} style={{ width: 20, height: 20, padding: 0, border: 0, background: 'none', color: tk.text.faint, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}><Icon name="close" size={12} /></button>}
+      </span>
     </span>
   );
 }
+
+/** The Add row under a group: in the gutter's line, an accent "+ Add …" picker. */
+function AddRow({ children }: { children: React.ReactNode }) {
+  return <span data-rule-add-row="" style={{ display: 'flex', gap: 6, paddingLeft: 36 }}>{children}</span>;
+}
+
+const IS_TOUCH = typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
 
 
 export function Word({ children }: { children: React.ReactNode }) {

@@ -223,7 +223,8 @@ export function LineExplainView({ node, at, stops, ctx, onGo, onBack, onFindUses
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexWrap: 'wrap', overflowY: 'auto' }}>
         {/* The line, its pattern and sentence, and its steps */}
         <div style={{ ...pane, flex: '1 1 420px' }}>
-          <div data-explain-code="" style={{ font: `500 14px/1.6 ${fontFamily.mono}`, padding: '10px 12px', borderRadius: radius.lg, background: tk.bg.subtle, border: `1px solid ${tk.border.subtle}`, overflowX: 'auto' }}>
+          {/* The line stays pinned at the top while the steps scroll under it (the pane's 16 px padding above it). */}
+          <div data-explain-code="" style={{ font: `500 14px/1.6 ${fontFamily.mono}`, padding: '10px 12px', borderRadius: radius.lg, background: tk.bg.subtle, border: `1px solid ${tk.border.subtle}`, overflowX: 'auto', position: 'sticky', top: -16, zIndex: 2, boxShadow: `0 6px 12px -8px ${tk.border.default}` }}>
             <GlslCode code={text} spans={spans} vars={varMap} onVarHover={setHoverVar} />
           </div>
           {ex.ok ? (

@@ -81,6 +81,35 @@ function collectColourCandidates(nodes: GraphNode[]): PlayCandidate[] {
 }
 
 /**
+ * Expression Block and Custom Function sliders (their float inputs with a slider, not wired): each is a uniform
+ * (`nodeId::name`), so it can be a Play control and a quick-map target like any slider. Top level and one group in.
+ */
+function collectExprSliderCandidates(nodes: GraphNode[]): PlayCandidate[] {
+  const out: PlayCandidate[] = [];
+  const visit = (list: GraphNode[], prefix: string, groupLabel: string | undefined, overrides: Record<string, unknown>) => {
+    for (const node of list) {
+      if (node.type !== 'exprNode' && node.type !== 'customFn') continue;
+      const inputs = (node.params.inputs as Array<{ name: string; type?: string; slider?: { min: number; max: number } | null; hidden?: boolean }> | undefined) ?? [];
+      for (const inp of inputs) {
+        if (inp.slider == null || inp.hidden || (inp.type && inp.type !== 'float')) continue;
+        if (node.inputs[inp.name]?.connection) continue;
+        const over = overrides[`${node.id}::${inp.name}`];
+        const value = typeof over === 'number' ? over : typeof node.params[inp.name] === 'number' ? node.params[inp.name] as number : (inp.slider.min + inp.slider.max) / 2;
+        const range = inp.slider.max - inp.slider.min || 1;
+        out.push({ target: `${prefix}${node.id}::${inp.name}`, kind: 'float', nodeLabel: labelOf(node), groupLabel, paramLabel: inp.name, min: inp.slider.min, max: inp.slider.max, step: range <= 2 ? 0.001 : range <= 10 ? 0.01 : 0.1, value });
+      }
+    }
+  };
+  visit(nodes, '', undefined, {});
+  for (const g of nodes) {
+    if (g.type !== 'group' && g.type !== 'agentsGroup' && g.type !== 'sceneGroup') continue;
+    const inner = g.params.subgraph as SubgraphData | undefined;
+    if (inner) visit(inner.nodes, `${g.id}::`, labelOf(g), g.params);
+  }
+  return out;
+}
+
+/**
  * Every param in the graph that can be a Play control right now. `paramBindings`
  * is the last compile's `nodeId::paramKey → uniform` map: a param not in it is
  * baked, so it is left out.
@@ -108,7 +137,7 @@ export function collectPlayCandidates(nodes: GraphNode[], paramBindings: Record<
     }
   }
   const seen = new Set(floats.map(c => c.target));
-  return [...floats, ...nested.filter(c => !seen.has(c.target)), ...collectColourCandidates(nodes)]
+  return [...floats, ...nested.filter(c => !seen.has(c.target)), ...collectExprSliderCandidates(nodes).filter(c => !seen.has(c.target)), ...collectColourCandidates(nodes)]
     .filter(c => bindingKeyOf(c.target) in paramBindings)
     // A Scene Group's setting that a wire takes over (a wired port, or a ps_ socket) is replaced in the shader: no control.
     .filter(c => {

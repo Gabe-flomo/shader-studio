@@ -8,13 +8,12 @@
  */
 import { useState } from 'react';
 import { useTokens } from '../../theme/themeStore';
-import { alpha, fontFamily, radius } from '../../theme/tokens';
+import { fontFamily, radius } from '../../theme/tokens';
 import { IconButton } from '../ui/Button';
 import { Segmented } from '../ui/Choice';
 import { Icon } from '../ui/Icon';
 import { type AgentRule, type AgentRuleSet, defaultRule, describeRule, kindOf } from '../../agentRules/spec';
 import { type EditCtx, RuleLines, channelOptionsOf } from '../agentRules/RuleEditors';
-import { CardGlyph } from './BehaviourCard';
 import { MuteToggle, MutedTag, MUTED_DIM } from '../builders/MuteToggle';
 import { clampLines } from '../ui/textFit';
 import { removeKeys } from '../builders/removable';
@@ -40,7 +39,9 @@ export function AdvancedRules({ set, sp, advanced, update, view, onView, intro }
   const ctx: EditCtx = { set, s: sp, tk, channelOptions: channelOptionsOf(set), kind: kindOf(set) };
   const shownIdx = view === 'all' ? rules.map((_, i) => i) : advanced.map(a => a.rule).filter(i => i < rules.length);
   const setRules = (next: AgentRule[]) => update(withRules(set, sp, next));
-  const add = () => { setRules([...rules, defaultRule()]); onView('all'); };
+  // A rule just added starts open (to fill it in); the others start folded.
+  const [justAdded, setJustAdded] = useState<number | null>(null);
+  const add = () => { setJustAdded(rules.length); setRules([...rules, defaultRule()]); onView('all'); };
   return (
     <div data-advanced-rules={view} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {intro}
@@ -52,7 +53,7 @@ export function AdvancedRules({ set, sp, advanced, update, view, onView, intro }
         </span>
       )}
       {shownIdx.map(i => (
-        <AdvancedRuleCard key={i} i={i} n={rules.length} rule={rules[i]} ctx={ctx}
+        <AdvancedRuleCard key={i} i={i} n={rules.length} rule={rules[i]} ctx={ctx} startOpen={i === justAdded}
           onChange={r => setRules(rules.map((x, j) => (j === i ? r : x)))}
           onMove={to => setRules(move(rules, i, to))}
           onDuplicate={() => setRules([...rules.slice(0, i + 1), structuredClone(rules[i]), ...rules.slice(i + 1)])}
@@ -69,35 +70,58 @@ export function AdvancedRules({ set, sp, advanced, update, view, onView, intro }
   );
 }
 
-/** One rule as a builder card: its number and sentence, on/off, move, duplicate, take away; then its When … Do … lines. */
-function AdvancedRuleCard({ i, n, rule, ctx, onChange, onMove, onDuplicate, onRemove }: {
-  i: number; n: number; rule: AgentRule; ctx: EditCtx;
+/**
+ * One rule as a builder card, folded to its name and sentence until opened: its order (#2: rules run top to bottom),
+ * its name (double-click or the pencil to rename; empty goes back to "Rule 2"), on/off; open, move, duplicate, take
+ * away, and its When … Then … lines.
+ */
+function AdvancedRuleCard({ i, n, rule, ctx, onChange, onMove, onDuplicate, onRemove, startOpen = false }: {
+  i: number; n: number; rule: AgentRule; ctx: EditCtx; startOpen?: boolean;
   onChange: (r: AgentRule) => void; onMove: (to: number) => void; onDuplicate: () => void; onRemove: () => void;
 }) {
   const tk = useTokens();
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(startOpen);
+  const [naming, setNaming] = useState(false);
   const text = describeRule(ctx.set, ctx.s, rule);
+  const title = rule.name?.trim() || `Rule ${i + 1}`;
+  const commitName = (v: string) => { setNaming(false); const t = v.trim(); if (t !== (rule.name ?? '')) onChange(t ? { ...rule, name: t } : (({ name: _n, ...r }) => r)(rule)); };
   return (
     <section data-card={`rule-${i}`} data-advanced-rule={i} {...removeKeys(onRemove, `rule ${i + 1}`)}
       style={{ outline: 'none', display: 'flex', flexDirection: 'column', gap: 10, padding: 12, borderRadius: radius.card, background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${rule.off ? tk.border.subtle : tk.border.default}` }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <CardGlyph kind="advanced" size={32} />
-        <button type="button" aria-expanded={open} onClick={() => setOpen(v => !v)}
-          style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, flex: 1, padding: 0, border: 0, background: 'none', cursor: 'pointer', textAlign: 'left', color: tk.text.primary }}>
-          <b style={{ fontSize: 13, fontWeight: 650 }}>Rule {i + 1}</b>
-          <span data-advanced-text style={{ fontSize: 11.5, lineHeight: 1.35, color: rule.off ? tk.text.faint : tk.text.muted, ...clampLines(2) }}>{text}</span>
-        </button>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+        <span title={`Runs ${i + 1}${n > 1 ? ` of ${n}` : ''}: rules run top to bottom, every step`}
+          style={{ flexShrink: 0, minWidth: 24, height: 22, marginTop: 1, borderRadius: radius.sm, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', font: `650 11px ${fontFamily.mono}`, color: tk.text.muted, background: tk.bg.field }}>#{i + 1}</span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, flex: 1 }}>
+          {naming ? (
+            <input autoFocus defaultValue={rule.name ?? ''} placeholder={`Rule ${i + 1}`} aria-label="Rule name" data-rule-name-input={i}
+              onKeyDown={e => { if (e.key === 'Enter') commitName((e.target as HTMLInputElement).value); if (e.key === 'Escape') { e.stopPropagation(); setNaming(false); } }}
+              onBlur={e => commitName(e.target.value)}
+              style={{ font: `650 13px ${fontFamily.ui}`, padding: '2px 6px', borderRadius: radius.sm, border: `1px solid ${tk.border.strong}`, background: tk.bg.field, color: tk.text.primary, minWidth: 0 }} />
+          ) : (
+            <button type="button" aria-expanded={open} onClick={() => setOpen(v => !v)} onDoubleClick={() => setNaming(true)} title="Open or fold · double-click to rename"
+              style={{ padding: 0, border: 0, background: 'none', cursor: 'pointer', textAlign: 'left', color: tk.text.primary, display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
+              <Icon name={open ? 'chevD' : 'chevR'} size={12} style={{ color: tk.text.faint, flexShrink: 0 }} />
+              <b data-rule-title={i} style={{ fontSize: 13, fontWeight: 650, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</b>
+            </button>
+          )}
+          <span data-advanced-text style={{ fontSize: 11.5, lineHeight: 1.35, color: rule.off ? tk.text.faint : tk.text.muted, ...clampLines(open ? 4 : 2) }}>{text}</span>
+        </div>
         {rule.off && <MutedTag />}
         <span data-rule-switch={i}><MuteToggle muted={!!rule.off} what={`rule ${i + 1}`} onToggle={() => onChange({ ...rule, off: !rule.off })} /></span>
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 2, marginTop: -4 }}>
-        <span style={{ flex: 1, font: `600 10.5px ${fontFamily.ui}`, letterSpacing: '0.06em', textTransform: 'uppercase', color: alpha(tk.text.faint, 0.9) }}>runs {i + 1} of {n}</span>
-        <IconButton icon="chevU" label="Move up" size="sm" disabled={i === 0} onClick={() => onMove(i - 1)} />
-        <IconButton icon="chevD" label="Move down" size="sm" disabled={i === n - 1} onClick={() => onMove(i + 1)} />
-        <IconButton icon="plus" label="Duplicate this rule" size="sm" onClick={onDuplicate} />
-        <IconButton icon="close" label="Take this rule away (Delete)" size="sm" tone="danger" onClick={onRemove} data-rule-remove={i} />
-      </div>
-      {open && <div style={{ display: 'flex', flexDirection: 'column', gap: 8, ...(rule.off ? MUTED_DIM : {}) }}><RuleLines rule={rule} ctx={ctx} onChange={onChange} /></div>}
+      {open && (
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 2, marginTop: -4 }}>
+            <IconButton icon="edit" label="Rename this rule" size="sm" onClick={() => setNaming(true)} data-rule-rename={i} />
+            <span style={{ flex: 1 }} />
+            <IconButton icon="chevU" label="Move up (runs earlier)" size="sm" disabled={i === 0} onClick={() => onMove(i - 1)} />
+            <IconButton icon="chevD" label="Move down (runs later)" size="sm" disabled={i === n - 1} onClick={() => onMove(i + 1)} />
+            <IconButton icon="plus" label="Duplicate this rule" size="sm" onClick={onDuplicate} />
+            <IconButton icon="close" label="Take this rule away (Delete)" size="sm" tone="danger" onClick={onRemove} data-rule-remove={i} />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, ...(rule.off ? MUTED_DIM : {}) }}><RuleLines rule={rule} ctx={ctx} onChange={onChange} /></div>
+        </>
+      )}
     </section>
   );
 }

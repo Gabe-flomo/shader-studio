@@ -22,6 +22,7 @@ import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
 import { uniformsOf } from './buildUpHost';
 import { compsOf, rawRange, type LiveProgram } from './liveRender';
+import { PassRunner, PassTargets } from '../../lib/passRunner';
 
 const VERT = `
 varying vec2 vUv;
@@ -117,6 +118,10 @@ export function ExplainLiveCanvas({ program, values, sel, size, rowKey, timeName
     const stripCanvas = document.createElement('canvas');
     stripCanvas.width = stripCanvas.height = STRIP_PX;
 
+    // The graph's hidden Passes (a Pass, the memory nodes', a Data Texture…), drawn here before each frame:
+    // this canvas has its own WebGL context, so the preview's pass textures can't be borrowed.
+    let passRunner: PassRunner | null = null;
+    let passTargets: PassTargets | null = null;
     const build = (p: LiveProgram) => {
       if (mesh) { scene.remove(mesh); material?.dispose(); }
       failed = false;
@@ -130,6 +135,23 @@ export function ExplainLiveCanvas({ program, values, sel, size, rowKey, timeName
           u_pvSel: { value: 0 }, u_pvRaw: { value: 0 }, u_pvRange: { value: new THREE.Vector2(0, 1) }, u_pvComps: { value: 1 },
         },
       });
+      // Its textures from the store (an image, a video, Blob Track's / Segment's / Analyze's numbers): three.js
+      // uploads each into this context too. Clock-driven inputs it can't run here read 0.
+      const st = useNodeGraphStore.getState();
+      const mu = material.uniforms;
+      for (const [name, id] of Object.entries(p.textures)) mu[name] = { value: st.nodeTextures[id] ?? null };
+      for (const [name, id] of Object.entries(p.videos)) mu[name] = { value: st.videoTextures[id] ?? null };
+      for (const name of p.liveNames) if (!mu[name]) mu[name] = { value: 0 };
+      mu.u_frameDt = { value: 0 };
+      mu.u_pictureRes = { value: new THREE.Vector2(1, 1) };
+      if (p.passes.length) {
+        passRunner ??= new PassRunner({ renderer, geometry, camera, uniforms: () => material!.uniforms, onReady: () => {}, onLinkFailed: () => {} });
+        passTargets ??= new PassTargets(renderer, true);
+        passRunner.update(p.passes, p.vertexShader);
+      } else if (passRunner) {
+        passRunner.dispose(); passRunner = null;
+        passTargets?.dispose(); passTargets = null;
+      }
       mesh = new THREE.Mesh(geometry, material);
       scene.add(mesh);
       builtKey = p.key;
@@ -161,9 +183,16 @@ export function ExplainLiveCanvas({ program, values, sel, size, rowKey, timeName
       for (const [k, v] of Object.entries(vals)) setUniform(u, k, v);
       // The picture's clock moves by the frame's time × its speed while playing
       const c = clock.current!;
-      if (lastNow !== null && c.playing) c.t += ((now - lastNow) / 1000) * c.speed;
+      const dt = lastNow !== null && c.playing ? ((now - lastNow) / 1000) * c.speed : 0;
+      c.t += dt;
       lastNow = now;
       u.u_time.value = c.t;
+      if (u.u_frameDt) u.u_frameDt.value = Math.min(dt, 0.1);
+      // The hidden Passes first, at the picture's size (they set u_resolution to their own while drawing).
+      if (passRunner && passTargets) {
+        (u.u_resolution.value as THREE.Vector2).set(canvas.width, canvas.height);
+        passRunner.run(passTargets, canvas.width, canvas.height);
+      }
       if (now - lastLabel > 100) {
         lastLabel = now;
         if (timeLabelRef.current) timeLabelRef.current.textContent = `${c.t.toFixed(2)} s`;
@@ -266,6 +295,8 @@ export function ExplainLiveCanvas({ program, values, sel, size, rowKey, timeName
       geometry.dispose();
       rangeTarget.dispose();
       stripTarget.dispose();
+      passRunner?.dispose();
+      passTargets?.dispose();
       // Give the context back: the view is closing, the main canvas takes the GPU again
       renderer.dispose();
       renderer.forceContextLoss();

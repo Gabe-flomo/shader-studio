@@ -17,6 +17,7 @@
  * then to measure the range. Pure: compiled here, drawn by ExplainLiveCanvas.tsx.
  */
 import type { GraphNode } from '../../types/nodeGraph';
+import type { PassProgram } from '../../compiler/types';
 import { compileNodePreviewGraph } from '../../lib/compileNodePreviewShader';
 import { inject } from '../../lib/nodePreview/previewGlsl';
 import type { Value } from '../../lib/glslPatterns';
@@ -38,6 +39,16 @@ export interface LiveProgram {
   overrideUniforms: Record<string, string>;
   /** Changes only when the program does (not with an override's value). */
   key: string;
+  /**
+   * What the picture reads besides its own uniforms: the graph's hidden Passes (a Pass, the memory nodes'
+   * shared Pass, a Data Texture…), drawn by the canvas's own pass runner before each frame, and the samplers
+   * bound from the store (an image, a video, an engine's texture: uniform → node id).
+   */
+  passes: PassProgram[];
+  vertexShader: string;
+  textures: Record<string, string>;
+  videos: Record<string, string>;
+  liveNames: string[];
 }
 
 /** Components shown for a type: 1 (grey), 2 (red / green) or 3 (colour). */
@@ -108,6 +119,11 @@ export function liveProgram(
     slotTypes: distinct.map(d => d.type),
     overrideUniforms,
     key: `${djb2(fs)}|${fs.length}`,
+    passes: compiled.passes ?? [],
+    vertexShader: compiled.vertexShader,
+    textures: compiled.textureUniforms,
+    videos: compiled.videoUniforms,
+    liveNames: [...Object.keys(compiled.liveUniforms), ...Object.keys(compiled.audioUniforms)],
   };
 }
 
