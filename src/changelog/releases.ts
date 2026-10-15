@@ -39,6 +39,16 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.223',
+    date: '2026-10-15',
+    title: "Lighter riding",
+    highlights: [
+      { area: 'Studio', text: "Ride a path does about a quarter of the work it did, so Riding outlines and the Lissajous examples no longer heat up the machine." },
+      { area: 'Studio', text: "Looks are gone: they repeated nodes that already exist. Agent-specific finishing nodes are being planned instead." },
+      { area: 'Studio', text: "Performance panel: passes from examples you've closed no longer linger in Where the frame goes." },
+    ],
+  },
+  {
     id: '2026.10.222',
     date: '2026-10-15',
     title: "Looks",
