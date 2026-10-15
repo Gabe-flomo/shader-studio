@@ -17,6 +17,10 @@ export const MEMORY_EXAMPLE_INDEX: Record<string, { label: string; description: 
     label: 'Memory 2 · A beat with Envelope and Counter', play: true,
     description: 'A square LFO is a steady beat. An Envelope turns each beat into a quick swell and a slow fade (attack, decay, sustain, release) that sizes and lights a ring; a Counter counts the beats 0–7 and steps the ring\'s colour round a palette.',
   },
+  memReadout: {
+    label: 'Memory 3 · A timer and a beat counter, as text', play: true,
+    description: 'Text nodes show live numbers: {} in the text is the Value input. One shows a Timer\'s seconds (looping every 10), the other a Counter counting the beats of a square LFO, flashed by an Envelope.',
+  },
 };
 
 export const MEMORY_EXAMPLE_KEYS = Object.keys(MEMORY_EXAMPLE_INDEX);
@@ -128,6 +132,40 @@ export function buildMemoryExamples(): Record<string, ExampleGraph> {
 **How it is built.** Square LFO → Envelope (gate) → the ring's size and light; the same LFO → Counter (0–7, wrap) → Palette → its colour.
 
 **Try.** Change the beat. On the Envelope, a long Release makes beats blur together; Trigger mode needs only a tap. Wire a MIDI Input's Gate or a Mouse button into the Envelope instead.`),
+  };
+
+  // ── 3 · Timer → Text "time {} s"; square LFO → Counter → Text "beat {}", flashed by an Envelope ──
+  g.memReadout = {
+    ...MEMORY_EXAMPLE_INDEX.memReadout,
+    counter: 40,
+    nodes: [
+      n('timer', 'timer', 40, 160, { length: 10, loop: true, ...note('Timer: counts seconds, 0 → 10, then starts over (Loop).') }),
+      n('text', 'clock', 340, 160, { text: 'time {} s', decimals: 2, numWidth: 5, size: 0.16, align: 'center', posX: 0, posY: 0.3, color: [0.9, 0.95, 1], ...note([
+        'Text: "time {} s". {} is replaced by Value: here the Timer\'s Seconds, with 2 decimals, in 5 characters so the line doesn\'t shift as the digits change.',
+      ]) }, { value: ['timer', 'seconds'] }),
+      n('lfo', 'beat', 40, 460, { waveform: 'square', freq: 2, amplitude: 1, offset: 0, ...note('LFO, Square: a beat, two a second.') }),
+      n('counter', 'count', 340, 400, { stepBy: 1, min: 0, max: 99, limit: 'wrap', ...note('Counter: adds 1 on each beat, up to 99, then wraps to 0.') }, { trigger: ['beat', 'value'] }),
+      n('envelope', 'flash', 340, 620, { mode: 'trigger', attack: 0.01, decay: 0.3, ...note('Envelope, Trigger: a quick flash on each beat (Attack, then Decay to 0).') }, { gate: ['beat', 'value'] }),
+      n('text', 'beats', 640, 420, { text: 'beat {}', decimals: 0, numWidth: 2, size: 0.3, align: 'center', posX: 0, posY: -0.05, color: [1, 0.55, 0.2], ...note('Text: "beat {}", Value from the Counter, no decimals, big and orange.') }, { value: ['count', 'count'] }),
+      expr('look', 940, 300, {
+        label: 'Look', outputType: 'vec3',
+        inputs: [['a', 'vec3', ['clock', 'color']], ['b', 'vec3', ['beats', 'color']], ['f', 'float', ['flash', 'value']]],
+        lines: [],
+        result: 'vec3(0.04, 0.05, 0.08) + a + b * (0.5 + f)',
+        note: [
+          'Expression Block: both texts on a dark background.',
+          'Result: the timer in white, the beat count in orange, brighter on each beat by the Envelope.',
+        ],
+      }),
+      n('output', 'out', 1240, 300, note('Output: a clock and a beat counter.'), { color: ['look', 'result'] }),
+    ],
+    play: playRecord([
+      ctl('tempo', 'beat::freq', 'Beats a second', 0.2, 8, 0.05),
+    ], `**What it shows.** Text nodes showing live numbers from memory nodes: {} in the text is replaced by the Value input.
+
+**How it is built.** Timer → Text ("time {} s"). Square LFO → Counter → Text ("beat {}"), flashed by an Envelope on each beat.
+
+**Try.** Change the beat. Wire an Analyze reading or a Blob Track's Count into a Text's Value for a live readout over a video.`),
   };
 
   return g;

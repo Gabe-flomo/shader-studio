@@ -1352,6 +1352,12 @@ exports[`golden outputs: examples > memBeat 1`] = `
 }
 `;
 
+exports[`golden outputs: examples > memReadout 1`] = `
+{
+  "tempo": "- x120",
+}
+`;
+
 exports[`golden outputs: examples > motionReveal 1`] = `
 {
   "feather": "- x120",
