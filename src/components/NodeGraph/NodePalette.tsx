@@ -17,7 +17,6 @@ import { FnThumbnail } from '../code/FnThumbnail';
 import type { GraphNode } from '../../types/nodeGraph';
 import type { ExprPreset } from '../../types/exprPreset';
 import { exprPresetParams } from '../../lib/glslPatterns/saveFlows';
-import { LOOK_PRESETS } from '../../nodes/lookPresets';
 import type { GroupPreset } from '../../types/groupPreset';
 import { useUserNodes } from '../../nodes/userNodes/useUserNodes';
 import { graphToSubgraph } from '../../nodes/userNodes/graphToSubgraph';
@@ -714,20 +713,6 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
 
       case 'expressions':
         return (
-          <>
-          {/* The standard Looks (nodes/lookPresets.ts): built in, so no rename or delete; place one and save it to keep a change. */}
-          <TabSectionHeader label="Looks" />
-          {LOOK_PRESETS.map(p => (
-            <ItemRow key={p.id} label={p.label} icon="expr" color={tabColor('expressions')} hint={p.comment?.split('\n')[0]}
-              drag={{ label: p.label, type: 'exprNode', place: pos => addNode('exprNode', pos, exprPresetParams(p)) }} onDragDone={onNodeAdded}
-              selected={selectedSaved === p.id} onClick={() => toggleSaved(p.id)}
-              onDoubleClick={() => { addNode('exprNode', placeAt(), exprPresetParams(p)); onNodeAdded?.(); }}
-              preview={<SavedItemPreview name={p.label} kind="Expression Block · Look"
-                signature={`${signatureOf(p.label, p.outputType, p.inputs)} = ${p.result}`}
-                comment={p.comment}
-                onAdd={() => { addNode('exprNode', placeAt(), exprPresetParams(p)); onNodeAdded?.(); }} />} />
-          ))}
-          <TabSectionHeader label="Saved" />
           <FolderableList
             scopeKey="expressions"
             color={tabColor('expressions')}
@@ -751,7 +736,6 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
             }}
             emptyHint={<EmptyHint>Open an Expression Block node and save it as a preset.</EmptyHint>}
           />
-          </>
         );
 
       case 'keyframes':

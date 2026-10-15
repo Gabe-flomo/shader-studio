@@ -21,7 +21,7 @@ import { agentsGroup, expr, note } from './agentExampleKit';
 export const RIDE_CURVE_EXAMPLE_INDEX: Record<string, { label: string; description: string; play: true }> = {
   agentRideHarmonograph: {
     label: 'Walkers on a harmonograph',
-    description: 'A quarter of a million walkers ride a 3 : 2 Lissajous Curve (a harmonograph\'s fifth) as a band, each in its own lane, drawn as streaks coloured by speed over the glowing trail they lay.',
+    description: 'Sixty-five thousand walkers ride a 3 : 2 Lissajous Curve (a harmonograph\'s fifth) as a band, each in its own lane, drawn as streaks coloured by speed over the glowing trail they lay.',
     play: true,
   },
   agentRidePath: {
@@ -84,10 +84,10 @@ export function rideHarmonographNodes(x = 0, y = 0, withOutput = true): GraphNod
     ]),
   }, { position: ['rhRide', 'position'], velocity: ['rhRide', 'velocity'] });
   const group = agentsGroup('rideHarmono', X(420), Y(0), 'rhEmit', [inputs, lis, ride, output], {
-    label: 'Harmonograph riders',
+    label: 'Harmonograph riders', tier: '64k',
     ...note([
-      'Agents: 262,144 walkers (256k), 2 steps a frame. Inside (double-click): a Lissajous Curve wired into Ride a path\'s Path ƒ.',
-      'Try: Count 1M for a denser band; Steps per frame 4 to ride twice as fast.',
+      'Agents: 65,536 walkers (64k), 2 steps a frame (each step asks the Lissajous Curve, 128 segments, where its line is: more walkers cost a lot). Inside (double-click): a Lissajous Curve wired into Ride a path\'s Path ƒ.',
+      'Try: Count 256k for a denser band (four times the work); Steps per frame 4 to ride twice as fast.',
     ]),
   });
   const deposit = n('agentDeposit', 'rhDeposit', X(840), Y(260), {
@@ -132,7 +132,7 @@ const harmonographPlay = play([
   inner('wander', 'rideHarmono', 'rhRide', 'wander', 'Wander', 0, 1, 0.01),
   inner('phase', 'rideHarmono', 'rhLis', 'delta', 'Figure phase', 0, 6.28, 0.01),
   ctl('again', 'rideHarmono::restart', 'Start over', 0, 1),
-], `**What it shows.** A quarter of a million walkers riding a 3 : 2 Lissajous figure, the fifth of a harmonograph chart, as a band, each in its own lane across it, drawn as streaks over the trail they lay.
+], `**What it shows.** Sixty-five thousand walkers riding a 3 : 2 Lissajous figure, the fifth of a harmonograph chart, as a band, each in its own lane across it, drawn as streaks over the trail they lay.
 
 **How it's built.** Inside the Agents group, a **Lissajous Curve** wired into **Ride a path**'s Path ƒ. Every step each walker is pulled onto the curve's outline, slides along it by its own speed and sits in its lane. Agent Output takes its Position and Velocity. Outside, Deposit and a Trail lay the glow, and Draw agents draws streaks coloured by speed.
 
@@ -278,9 +278,9 @@ export function rideMorphNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     ]),
   }, { position: ['rmRide', 'position'], velocity: ['rmRide', 'velocity'], colour: ['rmColour', 'result'] });
   const group = agentsGroup('rideMorph', X(420), Y(0), 'rmEmit', [inputs, lfo, lis, ride, colour, output], {
-    label: 'Morphing ribbon',
+    label: 'Morphing ribbon', tier: '64k',
     ...note([
-      'Agents: 262,144 walkers (256k), 2 steps a frame. Inside (double-click): an LFO turns a Lissajous Curve\'s phase, wired into Ride a path\'s Path ƒ; Colour along colours each walker.',
+      'Agents: 65,536 walkers (64k), 2 steps a frame (each step asks the Lissajous Curve, 128 segments, where its line is: more walkers cost a lot). Inside (double-click): an LFO turns a Lissajous Curve\'s phase, wired into Ride a path\'s Path ƒ; Colour along colours each walker.',
     ]),
   });
   const draw = n('drawAgents', 'rmDraw', X(840), Y(0), {

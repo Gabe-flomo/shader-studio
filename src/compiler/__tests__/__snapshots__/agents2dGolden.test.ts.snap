@@ -226,7 +226,7 @@ exports[`2D agents and pass graphs compile as they did before 3D > agentParticle
 
 exports[`2D agents and pass graphs compile as they did before 3D > agentRideHarmonograph 1`] = `
 {
-  "agents": "01123ad1bd9c081b18275b030fe7:18889",
+  "agents": "11d4012c8bdbc301dee4e9c7e5c4:15049",
   "errors": null,
   "fragmentShader": "066ca53d25cc630070142a943d1a:4211",
   "paramBindings": "1d561dcc3961d90c8be2dcce31af:2193",
@@ -234,13 +234,13 @@ exports[`2D agents and pass graphs compile as they did before 3D > agentRideHarm
   "passes": "167d269bbddad80189e9f9473b28:2",
   "success": true,
   "textureUniforms": "167d269bbddad80189e9f9473b28:2",
-  "web": "1495d39f2a24ed1e2b32d91c06c5:19084",
+  "web": "1257bfa208c9f30b0c351ef64db7:15244",
 }
 `;
 
 exports[`2D agents and pass graphs compile as they did before 3D > agentRideMorph 1`] = `
 {
-  "agents": "0414886f5f414501615861cedf5f:20824",
+  "agents": "09cdcaf4291c541ec42e9b19abe5:16984",
   "errors": null,
   "fragmentShader": "0af8defccdc75e0a3e35bdd525cc:2149",
   "paramBindings": "1d6acd351de52b14880442868001:1747",
@@ -248,13 +248,13 @@ exports[`2D agents and pass graphs compile as they did before 3D > agentRideMorp
   "passes": "167d269bbddad80189e9f9473b28:2",
   "success": true,
   "textureUniforms": "167d269bbddad80189e9f9473b28:2",
-  "web": "1125e693e1bd68177655965b448a:20941",
+  "web": "17fd65b1dbf288040f77ca71a23c:17101",
 }
 `;
 
 exports[`2D agents and pass graphs compile as they did before 3D > agentRidePath 1`] = `
 {
-  "agents": "12f06773acdd020954451d23d07e:22187",
+  "agents": "11ba2bd284537f131ea19ab6b3a6:18522",
   "errors": null,
   "fragmentShader": "01ee86544218e104254558716fd0:2146",
   "paramBindings": "12e7762f017dea0e47aaa9843884:1945",
@@ -262,7 +262,7 @@ exports[`2D agents and pass graphs compile as they did before 3D > agentRidePath
   "passes": "167d269bbddad80189e9f9473b28:2",
   "success": true,
   "textureUniforms": "167d269bbddad80189e9f9473b28:2",
-  "web": "186b3b0674ffc41b3a6d0803ec59:22288",
+  "web": "14accf2c0d958519f1baeca3c018:18623",
 }
 `;
 

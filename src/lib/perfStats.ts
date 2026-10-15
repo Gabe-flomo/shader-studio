@@ -48,6 +48,10 @@ const readbacks = new Ring(HISTORY);
 const passes = new Map<string, Ring>();
 /** Segments timed on isolated frames (flushed first, so each counts only its own work). */
 const isoPasses = new Map<string, Ring>();
+/** When each segment last reported: a pass that has stopped (another example's group, a removed node) drops out of the list. */
+const lastSeen = new Map<string, number>();
+/** Seconds without a reading before a segment is dropped (isolated frames come about twice a second). */
+export const SEGMENT_STALE_MS = 3000;
 const compileTimes: number[] = []; // timestamps of graph compiles, for a per-minute rate
 let graphCompileMs: number | null = null;
 let gpuCompileMs: number | null = null;
@@ -123,7 +127,9 @@ function ringOf(map: Map<string, Ring>, name: string, size: number): Ring {
 /** Resolved GPU timer queries. Call flushGpuFrame() once the timer has nothing outstanding. */
 export function recordGpuResults(results: readonly GpuResult[]): void {
   if (!results.length) return;
+  const now = Date.now();
   for (const r of results) {
+    if (r.name !== 'baseline') lastSeen.set(r.name, now);
     if (r.name === 'baseline') baseline.push(r.ms);
     else if (r.isolated) {
       ringOf(isoPasses, r.name, ISOLATED_HISTORY).push(r.ms);
@@ -250,6 +256,14 @@ export interface PerfSnapshot {
 
 const valuesOf = (m: Map<string, Ring>) => new Map([...m].map(([k, r]) => [k, r.values] as const));
 
+/** Has this segment reported lately? (Its old readings are forgotten once it hasn't.) */
+function isLive(name: string, now: number): boolean {
+  const seen = lastSeen.get(name);
+  if (seen !== undefined && now - seen <= SEGMENT_STALE_MS) return true;
+  passes.delete(name); isoPasses.delete(name); lastSeen.delete(name);
+  return false;
+}
+
 export function getPerfSnapshot(): PerfSnapshot {
   const now = Date.now();
   return {
@@ -257,7 +271,7 @@ export function getPerfSnapshot(): PerfSnapshot {
     gpu: { last: gpu.last, avg: gpu.avg, p95: gpu.percentile(0.95), history: gpu.values },
     shader: { ...shaderReading(shaderIso.values, baseline.values), history: shaderIso.values },
     timer: timerHealth(baseline.values),
-    passes: frameSegments(valuesOf(passes), valuesOf(isoPasses)).map(s => ({ name: s.name, avg: s.ms, isolated: s.isolated })),
+    passes: frameSegments(valuesOf(passes), valuesOf(isoPasses)).filter(s => isLive(s.name, now)).map(s => ({ name: s.name, avg: s.ms, isolated: s.isolated })),
     probeMs: probes.avg,
     readbacks: readbacks.avg,
     fps, width, height, gpuTimer,
