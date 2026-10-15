@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.211',
+    date: '2026-10-14',
+    title: 'Blob Track motion',
+    highlights: [
+      { area: 'Studio', text: 'Blob Track Motion: Jump makes the marks hold, snap and flicker like a classic tracking overlay; Pulse parks them while data packets flow between.' },
+      { area: 'Studio', text: 'Blob Track styling: dashed or dotted lines, lines coloured by ID or as a gradient, Wobble, Max link, Box padding and hex-code labels.' },
+    ],
+  },
+  {
     id: '2026.10.210',
     date: '2026-10-14',
     title: 'Blob Track',
