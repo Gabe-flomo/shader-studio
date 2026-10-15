@@ -37,6 +37,8 @@ export const HIDDEN_NODES = new Set([
   'textureFeedbackStep',
   // The shared memory Pass's program and a memory node's read (compiler/memoryExpand.ts).
   'memoryPack', 'memoryRead',
+  // An Optical Flow's step and read (compiler/opticalFlowExpand.ts).
+  'opticalFlowStep', 'opticalFlowRead',
   'dataTexturePack',
   'renderTargetsPack',
   // Made by Bake… (lib/bake): a node's frozen render, never added by hand.

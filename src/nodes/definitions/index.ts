@@ -16,6 +16,7 @@ import { DepthNode } from './depth';
 import { BlobTrackNode } from './blobTrack';
 import { CacheNode, CacheReadNode } from './cache';
 import { AnalyzeNode } from './analyze';
+import { OpticalFlowNode, OpticalFlowReadNode, OpticalFlowStepNode } from './opticalFlow';
 import { MEMORY_NODES, MemoryPackNode, MemoryReadNode } from './memory';
 import { DepthCompositeNode, DepthLightNode, PictureEnvironmentNode } from './depthScene';
 import { DepthMixNode } from './depthMix';
@@ -347,6 +348,9 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   cache: CacheNode,
   cacheRead: CacheReadNode,
   analyze: AnalyzeNode,
+  opticalFlow: OpticalFlowNode,
+  opticalFlowStep: OpticalFlowStepNode,
+  opticalFlowRead: OpticalFlowReadNode,
   ...MEMORY_NODES,
   memoryPack: MemoryPackNode,
   memoryRead: MemoryReadNode,
