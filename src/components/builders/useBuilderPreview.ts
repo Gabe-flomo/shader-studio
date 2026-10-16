@@ -8,12 +8,14 @@
  *    value the graph keeps as a uniform) only sets the uniforms: no new program, nothing relinked;
  *  - the canvas draws every animation frame at the screen's pixel density (up to 2×), not 30 a
  *    second at CSS pixels; paused, it draws only when something changed;
- *  - ↺ (lib/runtimeReset.ts resetRuntime) starts it over: clock 0, Pass memory cleared.
+ *  - ↺ (lib/runtimeReset.ts resetRuntime) starts it over: clock 0, Pass memory cleared;
+ *  - the pointer is u_mouse (drawing-buffer pixels, 0 at the bottom left) and the button u_mousebtn,
+ *    as on the Studio's canvas, so a grid's brush, ripples and the Mouse node work in the preview.
  */
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { makeProgram, type Compiled } from '../sceneBuilder/previewGl';
 import { bindPreviewTextures } from './previewTextures';
-import { makePreviewPasses } from './previewPasses';
+import { makePreviewPasses, type PreviewMouse } from './previewPasses';
 import { onRuntimeReset } from '../../lib/runtimeReset';
 
 /** The quickest compiles follow a drag (about 20 a second). */
@@ -108,6 +110,38 @@ export function useBuilderPreview(canvasRef: RefObject<HTMLCanvasElement | null>
     let frames = 0;
     const uRes = gl.getUniformLocation(prog, 'u_resolution');
     const uTime = gl.getUniformLocation(prog, 'u_time');
+    const uMouse = gl.getUniformLocation(prog, 'u_mouse');
+    const uMouseBtn = gl.getUniformLocation(prog, 'u_mousebtn');
+    // The pointer, read by the shaders like the Studio canvas's (no capture, nothing prevented: a
+    // viewport's own drags, an orbit or a gizmo, carry on as before). Paused, a move still redraws.
+    const mouse: PreviewMouse = { x: 0, y: 0, btn: 0 };
+    let mouseDirty = true;
+    const place = (e: PointerEvent) => {
+      const r = canvas.getBoundingClientRect();
+      if (!r.width || !r.height) return;
+      mouse.x = (e.clientX - r.left) / r.width * canvas.width;
+      mouse.y = (1 - (e.clientY - r.top) / r.height) * canvas.height;
+      mouseDirty = true;
+    };
+    // Over the picture, by its rectangle: a layer drawn over it (a gizmo, a hint) doesn't hide the pointer
+    const inside = (e: PointerEvent) => {
+      const r = canvas.getBoundingClientRect();
+      return e.clientX >= r.left && e.clientX < r.right && e.clientY >= r.top && e.clientY < r.bottom;
+    };
+    const onMove = (e: PointerEvent) => { if (mouse.btn || inside(e)) place(e); };
+    const onDown = (e: PointerEvent) => {
+      if (e.button !== 0 || !inside(e)) return;
+      const t = e.target as Element | null;
+      // A control over the picture is pressed, not the picture
+      if (t !== canvas && t?.closest?.('button, input, select, textarea, a, [role="slider"], [role="button"]')) return;
+      place(e);
+      mouse.btn = 1;
+    };
+    const onUp = () => { if (mouse.btn) { mouse.btn = 0; mouseDirty = true; } };
+    window.addEventListener('pointerdown', onDown);
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
     let raf = 0, last = 0, sized = '';
     const frame = (now: number) => {
       raf = requestAnimationFrame(frame);
@@ -122,10 +156,11 @@ export function useBuilderPreview(canvasRef: RefObject<HTMLCanvasElement | null>
       const resized = size !== sized;
       if (resized) { sized = size; if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; } }
       const u = uniforms.current;
-      if (!running && !u.dirty && !resized) return;
+      if (!running && !u.dirty && !resized && !mouseDirty) return;
+      mouseDirty = false;
       if (passes) {
         // The passes first (their own programs and targets), then back to the picture's program.
-        passes.draw(u.dirty ? u.values : null, clock.current, w, h);
+        passes.draw(u.dirty ? u.values : null, clock.current, w, h, mouse);
         gl.useProgram(prog);
         gl.bindVertexArray(vao);
         passes.bindFinal(prog);
@@ -134,6 +169,8 @@ export function useBuilderPreview(canvasRef: RefObject<HTMLCanvasElement | null>
       gl.viewport(0, 0, w, h);
       gl.uniform2f(uRes, w, h);
       gl.uniform1f(uTime, clock.current);
+      if (uMouse) gl.uniform2f(uMouse, mouse.x, mouse.y);
+      if (uMouseBtn) gl.uniform1f(uMouseBtn, mouse.btn);
       pictures.refresh(frames++);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     };
@@ -149,6 +186,10 @@ export function useBuilderPreview(canvasRef: RefObject<HTMLCanvasElement | null>
     });
     return () => {
       offReset();
+      window.removeEventListener('pointerdown', onDown);
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
       cancelAnimationFrame(raf);
       pictures.dispose();
       passes?.dispose();

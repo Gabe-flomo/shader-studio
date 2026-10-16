@@ -45,21 +45,35 @@ export interface LineFoldProps {
   openRequest?: number;
   /** Open the full explain view of this line. */
   onOpenView: () => void;
+  /**
+   * This line is shown in the line preview (its ▶ is lit). The fold follows it: it opens when the
+   * preview comes onto the line and folds again when the preview is turned off or moves away,
+   * unless it was opened by hand.
+   */
+  probing?: boolean;
 }
 
-export const LineFold = memo(function LineFold({ text, ctx, indent = 0, openRequest, onOpenView }: LineFoldProps) {
+export const LineFold = memo(function LineFold({ text, ctx, indent = 0, openRequest, onOpenView, probing = false }: LineFoldProps) {
   const tk = useTokens();
   const [open, setOpen] = useState(false);
+  // Opened by the preview (▶), not by hand: it folds again when the preview leaves the line
+  const [byPreview, setByPreview] = useState(false);
   // A new open request (▶ pressed) opens it: adjusted while rendering, not in an effect
   const [seenRequest, setSeenRequest] = useState(openRequest);
-  if (openRequest !== seenRequest) { setSeenRequest(openRequest); if (openRequest) setOpen(true); }
+  if (openRequest !== seenRequest) { setSeenRequest(openRequest); if (openRequest && !open) { setOpen(true); setByPreview(true); } }
+  const [seenProbing, setSeenProbing] = useState(probing);
+  if (probing !== seenProbing) {
+    setSeenProbing(probing);
+    if (probing && !open) { setOpen(true); setByPreview(true); }
+    else if (!probing && byPreview) { setOpen(false); setByPreview(false); }
+  }
   const ex = useMemo(() => explainLine(text, ctx), [text, ctx]);
   if (!ex.ok && ex.error === 'Nothing to explain') return null;
   const pattern = ex.ok ? linePattern(ex) : undefined;
   return (
     <div data-line-fold={ex.ok ? '' : 'error'} style={{ marginLeft: indent, display: 'flex', flexDirection: 'column', gap: 6 }}>
       {ex.ok ? (
-        <button type="button" aria-expanded={open} data-explain-toggle="" onClick={() => setOpen(o => !o)} title={open ? 'Fold' : 'What this line does, in short'}
+        <button type="button" aria-expanded={open} data-explain-toggle="" onClick={() => { setOpen(o => !o); setByPreview(false); }} title={open ? 'Fold' : 'What this line does, in short'}
           style={{ display: 'flex', alignItems: 'center', gap: 5, height: 24, padding: '0 6px', border: 0, borderRadius: radius.sm, background: 'none', cursor: 'pointer', alignSelf: 'flex-start', color: tk.text.faint, font: `600 11.5px ${fontFamily.ui}` }}>
           <Icon name={open ? 'chevD' : 'chevR'} size={11} />Explain
         </button>

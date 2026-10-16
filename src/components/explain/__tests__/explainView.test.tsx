@@ -115,6 +115,21 @@ describe('the fold under a line', () => {
     expect(opened).toEqual([1]);
   });
 
+  it('follows the line preview: opens with ▶, folds when the preview is turned off, stays when opened by hand', () => {
+    const fold = (probing: boolean) => <LineFold text="float z = 1.0 - dot(p, p)" ctx={{ types: { p: 'vec2' } }} onOpenView={() => {}} probing={probing} />;
+    act(() => root.render(fold(false)));
+    expect(q('[data-line-fold-body]')).toBeNull();
+    act(() => root.render(fold(true)));
+    expect(q('[data-line-fold-body]')).not.toBeNull();
+    act(() => root.render(fold(false)));
+    expect(q('[data-line-fold-body]')).toBeNull();
+    // Opened by hand: turning a preview on and off leaves it open
+    click('[data-explain-toggle]');
+    act(() => root.render(fold(true)));
+    act(() => root.render(fold(false)));
+    expect(q('[data-line-fold-body]')).not.toBeNull();
+  });
+
   it('the editor has no model button; ▶ keeps the picture under the line and opens its fold', () => {
     act(() => root.render(<ExprBlockModal node={blockOf()} onClose={() => {}} />));
     expect(document.querySelectorAll('[data-explain-action="explain"]')).toHaveLength(0);
