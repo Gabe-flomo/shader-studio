@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.226',
+    date: '2026-10-15',
+    title: "Channel tools",
+    highlights: [
+      { area: 'Studio', text: "Channel: pick one channel of any data, compare it with another (A \u2212 B, A \u00f7 B), and shape it (0\u20131, remap, threshold) with no code." },
+      { area: 'Studio', text: "Shuffle puts any channel into red, green, blue or alpha; Channel Colours gives each channel its own colour over a background." },
+    ],
+  },
+  {
     id: '2026.10.225',
     date: '2026-10-15',
     title: "Height Light",
