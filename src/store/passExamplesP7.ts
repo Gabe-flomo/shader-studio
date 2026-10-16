@@ -123,16 +123,12 @@ export function buildPassExamplesP7(): Record<string, ExampleGraph> {
           'result: 1 inside a shape, 0 outside (a hard edge: the seeds are the shape\'s pixels).',
         ],
       }),
-      expr('jfSeed', 620, 120, {
-        label: 'Seeds', outputType: 'vec3',
-        inputs: [['inside', 'float', ['jfShape', 'result']], ['uv', 'vec2', ['uv', 'uv']]],
-        lines: [],
-        result: 'inside > 0.5 ? vec3(uv, 1.0) : vec3(0.0)',
-        note: [
-          'Seeds: what the jump flood starts from. A pixel inside a shape stores its own place (x, y in red and green) and 1 in blue ("I know a seed"); every other pixel stores 0 ("none known yet").',
-          'result: the seed colour. It needs the half-float Pass: places can be negative or above 1, which 8-bit would clip.',
-        ],
-      }),
+      n('textureMask', 'jfSeed', 620, 120, { threshold: 'hard', level: 0.5,
+        ...note([
+          'Mask: the Shapes number (Value) cut at 0.5 (Hard). Its Seed output is what the jump flood starts from: a pixel inside a shape stores its own place (x, y in red and green) and 1 in blue ("I know a seed"); every other pixel stores 0 ("none known yet").',
+          'Seeds need the half-float Pass: places can be negative or above 1, which 8-bit would clip.',
+        ]) },
+        { value: ['jfShape', 'result'] }),
       expr('jfReach', 620, 420, {
         label: 'Reach this step', outputType: 'float',
         inputs: [['stepNow', 'float', ['jfPass', 'step']], ['stepCount', 'float', ['jfPass', 'steps']]],
@@ -151,7 +147,7 @@ export function buildPassExamplesP7(): Record<string, ExampleGraph> {
         { texture: ['jfPass', 'previous'], reach: ['jfReach', 'result'] }),
       expr('jfStep', 1180, 200, {
         label: 'Start, then flood', outputType: 'vec3',
-        inputs: [['seed', 'vec3', ['jfSeed', 'result']], ['flood', 'vec3', ['jfFlood', 'seed']], ['stepNow', 'float', ['jfPass', 'step']]],
+        inputs: [['seed', 'vec3', ['jfSeed', 'seed']], ['flood', 'vec3', ['jfFlood', 'seed']], ['stepNow', 'float', ['jfPass', 'step']]],
         lines: [],
         result: 'stepNow < 0.5 ? seed : flood',
         note: [
@@ -169,34 +165,29 @@ export function buildPassExamplesP7(): Record<string, ExampleGraph> {
       n('jumpFloodTexture', 'jfRead', 1740, 200, { reach: 2,
         ...note('Jump flood (texture), once more in the picture: reads the finished field at full size with a reach of one texel, so the distance is smooth instead of blocky. Distance is how far this pixel is from the nearest shape, in picture units.') },
         { texture: ['jfPass', 'texture'] }),
-      n('constant', 'jfWidth', 1740, 520, { value: 1, label: 'Glow width',
-        ...note('How far the glow reaches round the shapes. A constant so Play can drive it: see the Glow width control.') }),
-      expr('jfLook', 2020, 260, {
-        label: 'Contour glow', outputType: 'vec3',
-        inputs: [['d', 'float', ['jfRead', 'distance']], ['width', 'float', ['jfWidth', 'value']], ['inside', 'float', ['jfShape', 'result']]],
-        lines: [
-          ['float glow', 'exp(-d * 9.0 / max(width, 0.05))'],
-          ['float rings', '0.5 + 0.5 * cos(d * 60.0 - t * 4.0)'],
-          ['float fade', 'exp(-d * 2.2)'],
-          ['vec3 hue', '0.5 + 0.5 * cos(6.2832 * (d * 0.7 + vec3(0.0, 0.33, 0.67)) - t * 0.3)'],
-        ],
-        result: 'mix(hue * (glow * 1.3 + rings * fade * 0.3), vec3(1.0), inside)',
-        note: [
-          'Contour glow: draws the distance field. Every effect here only needs the distance, which is what the jump flood gave each pixel.',
-          'glow: a soft light falling off with the distance; Glow width stretches it.',
-          'rings: contour lines every 0.1 of distance, moving outwards with the clock (t).',
-          'fade: the rings dim far from the shapes.',
-          'hue: the colour cycles with the distance, so each ring has its own.',
-          'result: the coloured glow and rings, and the shapes themselves in white (inside is the Shapes mask at full size, sharper than the field\'s ½-size seeds).',
-        ],
-      }),
-      n('output', 'out', 2300, 260, note('Output: the distance field drawn as glowing contour rings. This program runs after the Pass has drawn its ten repeats.'), { color: ['jfLook', 'result'] }),
+      n('distanceShape', 'jfGlow', 2020, 120, { mode: 'glow', offset: 0, reach: 0.33,
+        ...note('Outline (distance), Glow: a soft light falling off with the distance from the shapes. Reach stretches it.') },
+        { distance: ['jfRead', 'distance'] }),
+      n('distanceShape', 'jfRings', 2020, 360, { mode: 'rings', offset: 0, spacing: 0.105, thickness: 0.012, softness: 0.012, fade: 2.2, speed: 0.64,
+        ...note('Outline (distance), Rings: contour lines every 0.1 of distance, moving outwards (Speed) and dimming far from the shapes (Fade).') },
+        { distance: ['jfRead', 'distance'] }),
+      n('multiply', 'jfRingsDim', 2300, 360, { b: 0.3, ...note('Multiply: the rings at 30%, faint lines under the glow.') }, { a: ['jfRings', 'mask'] }),
+      n('add', 'jfLight', 2300, 200, { ...note('Add: the glow and the faint rings together, how much light each pixel gets.') }, { a: ['jfGlow', 'mask'], b: ['jfRingsDim', 'result'] }),
+      n('palette', 'jfHue', 2300, 560, { scale: 0.7, speed: -0.05, offset: [0.5, 0.5, 0.5], amplitude: [0.5, 0.5, 0.5], freq: [1, 1, 1], phase: [0, 0.33, 0.67],
+        ...note('Palette: the colour cycles with the distance (Angle), so each ring has its own; Time on Angle offset makes the colours drift.') },
+        { value: ['jfRead', 'distance'], anim: ['jfTime', 'time'] }),
+      n('time', 'jfTime', 2020, 600, { ...note('Time: drifts the colours and moves the rings.') }),
+      n('colorize', 'jfColour', 2580, 260, { gain: 1.3, ...note('Colorize: the light (Field) in the Palette\'s colour, on black.') }, { field: ['jfLight', 'result'], color: ['jfHue', 'color'] }),
+      n('colorize', 'jfLook', 2860, 260, { color: [1, 1, 1],
+        ...note('Colorize: the shapes themselves in white over the glow (Field is the Shapes mask at full size, sharper than the field\'s ½-size seeds).') },
+        { field: ['jfShape', 'result'], background: ['jfColour', 'color'] }),
+      n('output', 'out', 3140, 260, note('Output: the distance field drawn as glowing contour rings. This program runs after the Pass has drawn its ten repeats.'), { color: ['jfLook', 'color'] }),
     ],
     play: playRecord([
-      ctl('width', 'jfWidth::value', 'Glow width', 0.2, 4, 0.05),
+      ctl('width', 'jfGlow::reach', 'Glow reach', 0.05, 1.5, 0.01),
     ], `**What it shows.** A Pass that repeats. With **Repeat** above 1 a Pass draws several times each frame, and each draw reads the one before through its **Previous** output; its **Step** output says which repeat is drawing. That is what a jump flood needs: ten rounds of "look further away, keep the nearest seed".
 
-**How it is built.** Shapes → Seeds (each shape pixel stores its own place). The Pass (½ size, Nearest, Repeat 10) stores the seeds on step 0, then Jump flood (texture) reads its Previous at a reach that halves every step (Reach this step, from the Pass's Step and Steps). Afterwards every pixel knows the nearest shape point; Jump flood once more at full size gives the distance, and Contour glow draws it.
+**How it is built.** Shapes → Mask's Seed output (each shape pixel stores its own place). The Pass (½ size, Nearest, Repeat 10) stores the seeds on step 0, then Jump flood (texture) reads its Previous at a reach that halves every step (Reach this step, from the Pass's Step and Steps). Afterwards every pixel knows the nearest shape point; Jump flood once more at full size gives the distance, and two **Outline (distance)** nodes draw it as a glow and moving rings, coloured by a Palette.
 
 **Try.** Set the Pass's Repeat to 5: the reach no longer covers the picture and the field breaks into blocks far from the shapes. Set its Filter to Linear to see why Nearest matters. Swap Shapes for your own mask (a Texture Input's alpha, text, a 3D render) to give anything a distance glow.`),
   };
