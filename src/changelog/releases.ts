@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.227',
+    date: '2026-10-15',
+    title: "Smell and Crowd limit",
+    highlights: [
+      { area: 'Studio', text: "Sense: Smell picks which trail channel to follow, and Crowd limit makes crowded trail pull less; thirteen examples lose their code blocks for them." },
+      { area: 'Studio', text: "Trail field: name its channels (grass, prey scent\u2026) and its outputs and wires use those names." },
+    ],
+  },
+  {
     id: '2026.10.226',
     date: '2026-10-15',
     title: "Channel tools",
