@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.238',
+    date: '2026-10-15',
+    title: "Sharper, baked masks",
+    highlights: [
+      { area: 'Studio', text: "Segment: Edge refine snaps the mask to the picture's own edges, and Bake works out a video's masks once so they play smoothly and export exactly." },
+    ],
+  },
+  {
     id: '2026.10.237',
     date: '2026-10-15',
     title: "Random per cell",
