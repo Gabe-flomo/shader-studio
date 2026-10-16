@@ -26,7 +26,8 @@ import { getNodeDefinitionFor } from '../../nodes/definitions';
 import { extendRangePatch, hasCustomRange, paramSliderRange, resetRangePatch } from '../../nodes/sliderRange';
 import { frozenValueOf } from '../../nodes/sliderFreeze';
 import { isAssignable, legacyAssignOp } from '../../nodes/assignable';
-import { useNodeGraphStore } from '../../store/useNodeGraphStore';
+import { useNodeGraphStore, getActiveNodes } from '../../store/useNodeGraphStore';
+import { channelNamesFor, namedChannelOptions } from '../../nodes/channelNames';
 import { openRecipeOffer } from '../../store/recipeOfferStore';
 import { PICTURE_DEPTH_SET, SPLAT_SCENE_SET } from '../../nodes/recipes';
 import { nodeJumpSignal, takeNodeJump, useCodeJump } from '../../codeExplorer/jumpStore';
@@ -663,6 +664,18 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   );
 
   const def = getNodeDefinitionFor(node);
+  // A Trail field's Channel names on the selects that pick a channel (nodes/channelNames.ts): a string, so
+  // the card re-renders only when the names it shows change.
+  const channelNamesKey = useNodeGraphStore(s => {
+    const keys = [...new Set(Object.values(def?.paramDefs ?? {}).flatMap(d => d.channelsFrom ?? []))];
+    if (!keys.length) return '';
+    const path = s.activeGroupPath;
+    const here = (path.length ? getActiveNodes(s.nodes, path) : s.nodes) ?? s.nodes;
+    const outer = path.length ? (getActiveNodes(s.nodes, path.slice(0, -1)) ?? s.nodes) : null;
+    const group = path.length && outer ? outer.find(n => n.id === path[path.length - 1]) ?? null : null;
+    return (channelNamesFor(here.find(n => n.id === node.id) ?? node, keys, here, outer, group) ?? []).join('\u0001');
+  });
+  const channelNames = channelNamesKey ? channelNamesKey.split('\u0001') : null;
   // The inputs the card shows (Input names… names these).
   const inputNameKeys = Object.keys(node.inputs).filter(k => !def || Object.keys(def.inputs).length === 0 || k in def.inputs);
   // A builder mute (builders/mute.ts) is a bypass too: the node passes its input through, by a uniform.
@@ -2332,7 +2345,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                   return (
                     <div key={paramKey} data-param-key={paramKey} style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 36, padding: '4px 10px 4px 14px' }}>
                       <ParamLabel title={paramDef.hint} help={paramDef.help}>{paramDef.label}</ParamLabel>
-                      <Select ariaLabel={paramDef.label} value={val} options={paramDef.options ?? []}
+                      <Select ariaLabel={paramDef.label} value={val} options={paramDef.channelsFrom ? namedChannelOptions(paramDef.options ?? [], channelNames) : (paramDef.options ?? [])}
                         onChange={v => updateNodeParams(node.id, { [paramKey]: v }, { immediate: true })} style={{ flex: 1, minWidth: 0 }} />
                     </div>
                   );
@@ -3949,7 +3962,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                 <Select
                   ariaLabel={paramDef.label}
                   value={val}
-                  options={paramDef.options ?? []}
+                  options={paramDef.channelsFrom ? namedChannelOptions(paramDef.options ?? [], channelNames) : (paramDef.options ?? [])}
                   onChange={v => updateNodeParams(node.id, { [key]: v }, { immediate: true })}
                   style={{ flex: 1 }}
                 />

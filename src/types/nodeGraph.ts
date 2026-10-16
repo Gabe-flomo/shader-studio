@@ -123,6 +123,8 @@ export interface ParamDef {
   trigger?: boolean;
   // Options for 'select' type
   options?: { value: string; label: string }[];
+  /** A select picking a channel: the inputs whose wire may come from a Trail field, whose Channel names then label the options (nodes/channelNames.ts). */
+  channelsFrom?: string[];
   // Conditionally show this param only when another param matches a value
   // `and` adds a second condition that must hold too (Transform's Pivot Z: Apply mode and 3D or 4D).
   // `and` can itself carry an `and` (Draw agents' Spin: Facing tumble, a box Shape, and 3D).

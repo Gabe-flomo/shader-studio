@@ -45,7 +45,7 @@ export const HeightLightNode: NodeDefinition = withParamSockets({
   paramDefs: {
     channel: { label: 'Channel', type: 'select', section: 'Height', hint: 'Which channel of the Texture is the height (a Trail field\'s channels are 1–4), or its brightness.', options: [
       { value: '1', label: 'Channel 1' }, { value: '2', label: 'Channel 2' }, { value: '3', label: 'Channel 3' }, { value: '4', label: 'Channel 4' }, { value: 'bright', label: 'Brightness' },
-    ] },
+    ], channelsFrom: ['texture'] },
     low: { label: 'Range low', type: 'float', min: -10, max: 10, step: 0.01, section: 'Height', hint: 'The height that counts as lowest (Low colour, Height 0). Typing beyond the slider widens it.' },
     high: { label: 'Range high', type: 'float', min: -10, max: 10, step: 0.01, section: 'Height', hint: 'The height that counts as highest (High colour, Height 1). A Trail of sand might reach 5 or 10.' },
     relief: { label: 'Relief', type: 'float', min: 0, max: 1, step: 0.001, section: 'Height', hint: 'How tall the highest point stands, in picture units (the picture is 2 tall): more is steeper slopes, deeper shadows.' },

@@ -632,7 +632,7 @@ export const AgentSenseNode: NodeDefinition = {
       { value: 'own', label: 'Own species (others repel a little)' },
       { value: 'ch1', label: 'Channel 1 only' }, { value: 'ch2', label: 'Channel 2 only' }, { value: 'ch3', label: 'Channel 3 only' }, { value: 'ch4', label: 'Channel 4 only' },
       { value: 'all', label: 'All channels' },
-    ] },
+    ], channelsFrom: ['texture'] },
     crowding: { label: 'Crowding', type: 'select', hint: 'Off: the more it smells, the more it pulls. Limit: past Crowd limit, more smell pulls less (r · e^(−r / limit)), as slime mold can\'t pack its tubes without end: networks keep reorganising instead of collapsing into a few huge veins.', options: [
       { value: 'off', label: 'Off' }, { value: 'limit', label: 'Limit' },
     ] },
