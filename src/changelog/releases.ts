@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.230',
+    date: '2026-10-15',
+    title: "Show data",
+    highlights: [
+      { area: 'Studio', text: "Show data: see what a number, a direction or four channels hold, as a heat map, direction colours, or channels side by side." },
+    ],
+  },
+  {
     id: '2026.10.229',
     date: '2026-10-15',
     title: "Nodes, not code",
