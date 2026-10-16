@@ -167,6 +167,7 @@ export { DeepGlowTextureNode, DeepGlowTextureStageNode } from './deepGlow';
 export { PassNode, PassOutputNode, SampleTextureNode, EdgesTextureNode, BlurTextureNode, GlowTextureNode, ChromaTextureNode, DisplaceTextureNode, DisplacementMapNode, JumpFloodTextureNode } from './passes';
 export { TextureMaskNode, TextureLevelsNode, TextureFlowNode, TextureNeighboursNode, TextureChangeNode, DistanceShapeNode, TextureFadeNode, ReadTextureNode } from './textureTools';
 export { HeightLightNode } from './heightLight';
+export { RandomFromIdNode } from './randomFromId';
 export { ShowDataNode } from './showData';
 export { ChannelNode, ShuffleNode, ChannelColoursNode } from './channelTools';
 export { TextureFeedbackNode, TextureFeedbackStepNode } from './textureFeedback';
@@ -318,6 +319,7 @@ import { ShaderTextureNode, ShaderTextureOutputNode } from './shaderTexture';
 import { PassNode, PassOutputNode, SampleTextureNode, EdgesTextureNode, BlurTextureNode, GlowTextureNode, ChromaTextureNode, DisplaceTextureNode, DisplacementMapNode, JumpFloodTextureNode } from './passes';
 import { TextureMaskNode, TextureLevelsNode, TextureFlowNode, TextureNeighboursNode, TextureChangeNode, DistanceShapeNode, TextureFadeNode, ReadTextureNode } from './textureTools';
 import { HeightLightNode } from './heightLight';
+import { RandomFromIdNode } from './randomFromId';
 import { ShowDataNode } from './showData';
 import { ChannelNode, ShuffleNode, ChannelColoursNode } from './channelTools';
 import { TextureFeedbackNode, TextureFeedbackStepNode } from './textureFeedback';
@@ -610,6 +612,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   textureChange: TextureChangeNode,
   distanceShape: DistanceShapeNode,
   heightLight: HeightLightNode,
+  randomFromId: RandomFromIdNode,
   showData: ShowDataNode,
   channelPick: ChannelNode,
   channelShuffle: ShuffleNode,

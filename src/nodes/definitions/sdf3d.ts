@@ -432,7 +432,7 @@ export const VoxelizeNode: NodeDefinition = {
   description:
     'Snaps 3D space to a cube grid. Cell Pos is the position inside the current cell (centred on 0), Cell ID the integer ' +
     'cell coordinates, Cell Center that cell\'s centre in world space, Edge the distance to the nearest wall of the cell. ' +
-    'Box 3D on Cell Pos gives one cube per cell; a Hash or Noise on Cell ID decides which cells are solid — for an empty cell ' +
+    'Box 3D on Cell Pos gives one cube per cell; Random (from ID) or a Noise on Cell ID decides which cells are solid — for an empty cell ' +
     'return Edge (Mix by the solid mask) so the ray marches on to the next cell. Same habits as the 2D Grid: Cell UV → Cell Pos, Cell ID → Cell ID.',
   inputs: {
     pos:  { type: 'vec3',  label: 'Position' },
@@ -440,7 +440,7 @@ export const VoxelizeNode: NodeDefinition = {
   },
   outputs: {
     cellPos:    { type: 'vec3',  label: 'Cell Pos',    hint: 'Position relative to the cell centre, in ±Cell Size / 2. Feed a Box 3D or Sphere 3D.' },
-    cellID:     { type: 'vec3',  label: 'Cell ID',     hint: 'Integer cell coordinates (floor(pos / size)). Hash it to vary or drop cells; a Palette on it colours per cube.' },
+    cellID:     { type: 'vec3',  label: 'Cell ID',     hint: 'Integer cell coordinates (floor(pos / size)). Random (from ID) on it gives each cell its own number, to vary or drop cells; a Palette on that colours per cube.' },
     cellCenter: { type: 'vec3',  label: 'Cell Center', hint: 'World-space centre of the cell.' },
     edge:       { type: 'float', label: 'Edge',        hint: 'Distance from the position to the nearest wall of its cell. Return it for empty cells so the march skips ahead; for an exact voxel traversal, wire the camera\'s Ray Dir into the Scene Group and step to the cell exit along it (see 3D: Voxel Terrain).' },
   },

@@ -129,39 +129,20 @@ export function buildPassExamplesP7(): Record<string, ExampleGraph> {
           'Seeds need the half-float Pass: places can be negative or above 1, which 8-bit would clip.',
         ]) },
         { value: ['jfShape', 'result'] }),
-      expr('jfReach', 620, 420, {
-        label: 'Reach this step', outputType: 'float',
-        inputs: [['stepNow', 'float', ['jfPass', 'step']], ['stepCount', 'float', ['jfPass', 'steps']]],
-        lines: [],
-        result: 'exp2(stepCount - stepNow)',
-        note: [
-          'Reach this step: how far the jump flood looks on each repeat, in picture pixels. stepNow is the Pass\'s Step output (which repeat is drawing, 0 to 9) and stepCount its Steps output (its Repeat, 10).',
-          'result: 2 to the power (stepCount − stepNow): 512 picture pixels on step 1, then 256, 128 … down to 2 on step 9 (one texel of the ½-size Pass). Halving the reach each time is the "jump" in jump flood: ten steps cover a picture a thousand pixels across.',
-        ],
-      }),
-      n('jumpFloodTexture', 'jfFlood', 900, 360, {
+      n('jumpFloodTexture', 'jfFlood', 900, 260, {
         ...note([
-          'Jump flood (texture): one step of the flood. It reads the Pass\'s Previous (its own last repeat) here and at 8 places Reach pixels away, and keeps the nearest seed any of them knows.',
-          'After the reach has halved down to one texel, every pixel holds the nearest point of the shapes.',
+          'Jump flood (texture): one step of the flood. It reads the Pass\'s Previous (its own last repeat) here and at 8 places round it, and keeps the nearest seed any of them knows.',
+          'Step and Steps come from the Pass, so its reach works itself out: 2^(Steps − Step) picture pixels, 1024 on step 0 (unused: that step only lays the seeds), 512 on step 1, halving down to 2 on step 9. Halving each time is the "jump": ten steps cover a picture a thousand pixels across.',
+          'Start is the seeds: on step 0 its Seed output gives those (the shapes as they are this frame), on every later step the flood\'s result, and that goes straight back into the Pass.',
         ]) },
-        { texture: ['jfPass', 'previous'], reach: ['jfReach', 'result'] }),
-      expr('jfStep', 1180, 200, {
-        label: 'Start, then flood', outputType: 'vec3',
-        inputs: [['seed', 'vec3', ['jfSeed', 'seed']], ['flood', 'vec3', ['jfFlood', 'seed']], ['stepNow', 'float', ['jfPass', 'step']]],
-        lines: [],
-        result: 'stepNow < 0.5 ? seed : flood',
-        note: [
-          'Start, then flood: what the Pass stores on each repeat. On step 0 the seeds (the shapes as they are this frame), on every later step the flood\'s result.',
-          'result: the seeds on the first repeat, the nearest seed found after it.',
-        ],
-      }),
+        { texture: ['jfPass', 'previous'], step: ['jfPass', 'step'], steps: ['jfPass', 'steps'], start: ['jfSeed', 'seed'] }),
       n('pass', 'jfPass', 1460, 200, {
         label: 'Pass · jump flood', scale: '0.5', format: 'half', filter: 'nearest', repeat: 10,
         ...note([
           'Pass with Repeat 10: drawn ten times each frame, and each time its Previous output is the repeat just before (on the first, the last repeat of the frame before). Its Step output says which repeat is drawing.',
           'Half size: the flood runs on a quarter of the pixels; Filter Nearest keeps the stored places exact (Linear would blend two places into a wrong one); Half float keeps them signed. The card shows 10 × the time of one draw.',
         ]) },
-        { color: ['jfStep', 'result'] }),
+        { color: ['jfFlood', 'seed'] }),
       n('jumpFloodTexture', 'jfRead', 1740, 200, { reach: 2,
         ...note('Jump flood (texture), once more in the picture: reads the finished field at full size with a reach of one texel, so the distance is smooth instead of blocky. Distance is how far this pixel is from the nearest shape, in picture units.') },
         { texture: ['jfPass', 'texture'] }),
@@ -187,7 +168,7 @@ export function buildPassExamplesP7(): Record<string, ExampleGraph> {
       ctl('width', 'jfGlow::reach', 'Glow reach', 0.05, 1.5, 0.01),
     ], `**What it shows.** A Pass that repeats. With **Repeat** above 1 a Pass draws several times each frame, and each draw reads the one before through its **Previous** output; its **Step** output says which repeat is drawing. That is what a jump flood needs: ten rounds of "look further away, keep the nearest seed".
 
-**How it is built.** Shapes → Mask's Seed output (each shape pixel stores its own place). The Pass (½ size, Nearest, Repeat 10) stores the seeds on step 0, then Jump flood (texture) reads its Previous at a reach that halves every step (Reach this step, from the Pass's Step and Steps). Afterwards every pixel knows the nearest shape point; Jump flood once more at full size gives the distance, and two **Outline (distance)** nodes draw it as a glow and moving rings, coloured by a Palette.
+**How it is built.** Shapes → Mask's Seed output (each shape pixel stores its own place). The Pass (½ size, Nearest, Repeat 10) stores the seeds on step 0, then Jump flood (texture) reads its Previous at a reach that halves every step (it reads the Pass's Step and Steps itself, and passes the seeds through on step 0). Afterwards every pixel knows the nearest shape point; Jump flood once more at full size gives the distance, and two **Outline (distance)** nodes draw it as a glow and moving rings, coloured by a Palette.
 
 **Try.** Set the Pass's Repeat to 5: the reach no longer covers the picture and the field breaks into blocks far from the shapes. Set its Filter to Linear to see why Nearest matters. Swap Shapes for your own mask (a Texture Input's alpha, text, a 3D render) to give anything a distance glow.`),
   };
