@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.234',
+    date: '2026-10-15',
+    title: "Clearer beginner examples",
+    highlights: [
+      { area: 'Studio', text: "Learn 3D's distance lesson and the Curves & Shapes examples now draw with nodes you can click into; more examples have notes on every node." },
+    ],
+  },
+  {
     id: '2026.10.233',
     date: '2026-10-15',
     title: "Clearer agent labels",
