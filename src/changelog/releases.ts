@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.233',
+    date: '2026-10-15',
+    title: "Clearer agent labels",
+    highlights: [
+      { area: 'Studio', text: "Draw agents' Over is now Background, and Trail field's Image and Gain are now Texture and Exposure: the same settings, clearer names." },
+    ],
+  },
+  {
     id: '2026.10.232',
     date: '2026-10-15',
     title: "Shuffle grid",
