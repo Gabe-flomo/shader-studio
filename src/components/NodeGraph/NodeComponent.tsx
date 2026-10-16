@@ -3268,7 +3268,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
       {/* A Pass's texture, always shown: drawn every few frames by lib/passRunner.ts */}
       {(node.type === 'pass' || node.type === 'dataTexture' || node.type === 'renderTargets' || node.type === 'textureFeedback') && <NodeInlineViz node={node} />}
       {/* The Agents family (docs/agents-plan.md): the group's numbers and Open rule, a Trail's texture */}
-      {(node.type === 'agentsGroup' || node.type === 'trailField') && <NodeInlineViz node={node} onEnterGroup={onEnterGroup} />}
+      {(node.type === 'agentsGroup' || node.type === 'trailField' || node.type === 'channelShuffle') && <NodeInlineViz node={node} onEnterGroup={onEnterGroup} />}
       {node.type === 'shaderTexture' && <ShaderTextureCardBody node={node} onEnterGroup={onEnterGroup} />}
       {node.type === 'agentOutput' && (
         <div style={{ padding: '8px 14px', fontSize: 11.5, lineHeight: 1.45, color: tk.text.faint, borderBottom: `1px solid ${tk.border.subtle}` }}>

@@ -125,12 +125,8 @@ export const ShuffleNode: NodeDefinition = {
     alpha: { type: 'float', label: 'Alpha', hint: 'The fourth channel.' },
   },
   defaultParams: { r: 'a1', g: 'a2', b: 'a3', a: 'a4' },
-  paramDefs: {
-    r: { label: 'Red from', type: 'select', hint: 'What goes into the first channel (red).', options: FROM_OPTIONS },
-    g: { label: 'Green from', type: 'select', hint: 'What goes into the second channel (green).', options: FROM_OPTIONS },
-    b: { label: 'Blue from', type: 'select', hint: 'What goes into the third channel (blue).', options: FROM_OPTIONS },
-    a: { label: 'Alpha from', type: 'select', hint: 'What goes into the fourth channel (alpha).', options: FROM_OPTIONS },
-  },
+  // Set with the card's click grid (NodeInlineViz ShuffleGridViz): which channel goes into each of R, G, B, A.
+  paramDefs: {},
   generateGLSL: (node: GraphNode, v) => {
     const id = node.id;
     const A = v.a ?? (v.textureA ? `texture2D(${v.textureA}, ${texUv(v.uv ?? 'g_uv')})` : 'vec4(0.0)');

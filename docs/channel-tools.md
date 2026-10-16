@@ -21,7 +21,7 @@ Outputs **Value** and **Mask** (the same, kept between 0 and 1).
 
 ## Shuffle
 
-Builds four new channels from one or two inputs, A and B: **Red from**, **Green from**, **Blue from**, **Alpha from** each pick a channel of A or B, or 0 or 1. "Put channel 3 in red, channel 1 in green" is two choices. It is After Effects' Shift Channels, Nuke's Shuffle and TouchDesigner's Reorder. Outputs **Color**, **Channels** and **Alpha**.
+Builds four new channels from one or two inputs, A and B, with a click grid on the card. The rows are R, G, B and A; the columns are A's channels 1–4, B's 1–4 (shown once B is wired) and 0 or 1. Click where each channel comes from: "put channel 3 in red, channel 1 in green" is two clicks. It is After Effects' Shift Channels, Nuke's Shuffle and TouchDesigner's Reorder. Outputs **Color**, **Channels** and **Alpha**.
 
 ## Channel Colours
 

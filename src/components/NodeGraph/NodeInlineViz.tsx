@@ -3922,6 +3922,46 @@ function AgentsGroupViz({ node, onEnterGroup }: { node: GraphNode; onEnterGroup?
 
 // ─── Trail field: its texture (lib/agentRunner.ts draws it every few frames) ──
 
+// ─── Shuffle: a click grid, which channel goes into red, green, blue and alpha ─
+
+const SHUFFLE_ROWS = [{ key: 'r', label: 'R', tint: '#e5564d' }, { key: 'g', label: 'G', tint: '#48b06a' }, { key: 'b', label: 'B', tint: '#4b84e0' }, { key: 'a', label: 'A', tint: '#9aa0aa' }] as const;
+const SHUFFLE_DEFAULT: Record<string, string> = { r: 'a1', g: 'a2', b: 'a3', a: 'a4' };
+
+function ShuffleGridViz({ node }: { node: GraphNode }) {
+  const updateNodeParams = useNodeGraphStore(s => s.updateNodeParams);
+  // B's columns show when B is wired or a row already takes from it.
+  const usesB = !!node.inputs.b?.connection || SHUFFLE_ROWS.some(r => String(node.params[r.key] ?? '').startsWith('b'));
+  const cols = [...['a1', 'a2', 'a3', 'a4'], ...(usesB ? ['b1', 'b2', 'b3', 'b4'] : []), '0', '1'];
+  const head = (c: string) => (c === '0' || c === '1' ? c : `${c[0].toUpperCase()}${c[1]}`);
+  const cell: React.CSSProperties = { width: 22, height: 20, borderRadius: 4, border: `1px solid ${pal.surface1}`, padding: 0, cursor: 'pointer' };
+  return (
+    <div data-shuffle-grid style={{ ...vizContainer(), padding: '6px 10px 8px' }} onMouseDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()}>
+      <div style={{ fontSize: '10px', color: pal.overlay0, marginBottom: 4 }}>Click where each channel comes from (A or B's channel 1–4, or 0 / 1).</div>
+      <div style={{ display: 'grid', gridTemplateColumns: `18px repeat(${cols.length}, 22px)`, gap: 3, alignItems: 'center', fontFamily: MONO, fontSize: '10px' }}>
+        <span />
+        {cols.map(c => <span key={c} style={{ textAlign: 'center', color: pal.overlay0 }}>{head(c)}</span>)}
+        {SHUFFLE_ROWS.map(r => {
+          const now = String(node.params[r.key] ?? SHUFFLE_DEFAULT[r.key]);
+          return (
+            <React.Fragment key={r.key}>
+              <span style={{ color: r.tint, fontWeight: 700 }}>{r.label}</span>
+              {cols.map(c => {
+                const on = now === c;
+                return (
+                  <button key={c} type="button" data-shuffle-cell={`${r.key}:${c}`} aria-pressed={on}
+                    aria-label={`${r.label} from ${head(c)}`} title={`${r.label} from ${c === '0' ? 'nothing (0)' : c === '1' ? 'full (1)' : `${c[0].toUpperCase()}'s channel ${c[1]}`}`}
+                    onClick={() => updateNodeParams(node.id, { [r.key]: c }, { immediate: true })}
+                    style={{ ...cell, background: on ? r.tint : 'transparent', borderColor: on ? r.tint : pal.surface1 }} />
+                );
+              })}
+            </React.Fragment>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function TrailThumbViz({ node }: { node: GraphNode }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
@@ -5246,6 +5286,7 @@ function NodeInlineVizSwitch({ node, onEnterGroup }: { node: GraphNode; onEnterG
     case 'textureFeedback':  return <PassThumbViz            node={node} />;
     case 'agentsGroup':      return <AgentsGroupViz          node={node} onEnterGroup={onEnterGroup} />;
     case 'trailField':       return <TrailThumbViz           node={node} />;
+    case 'channelShuffle':   return <ShuffleGridViz          node={node} />;
     case 'vec2Const':        return <Vec2ConstViz            node={node} />;
     case 'matConst':         return <MatrixGridViz           node={node} />;
 
