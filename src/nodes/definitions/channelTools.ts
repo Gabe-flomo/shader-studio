@@ -47,11 +47,11 @@ export const ChannelNode: NodeDefinition = withParamSockets({
     channel: '1', compare: 'off', channelB: '2', shape: 'soft', exposure: 1, inLow: 0, inHigh: 1, outLow: 0, outHigh: 1, threshold: 0.5, softness: 0.05, invert: false,
   },
   paramDefs: {
-    channel: { label: 'Channel', type: 'select', section: 'Read', hint: 'Which channel is A: a Trail field\'s channels are 1–4 (its Channel names say what each holds).', options: CHANNEL_OPTIONS },
+    channel: { label: 'Channel', type: 'select', section: 'Read', hint: 'Which channel is A: a Trail field\'s channels are 1–4 (its Channel names say what each holds).', options: CHANNEL_OPTIONS, channelsFrom: ['channels', 'texture'] },
     compare: { label: 'Compare', type: 'select', section: 'Read', hint: 'Set A against another channel, B, before shaping it.', options: [
       { value: 'off', label: 'Off (A alone)' }, { value: 'minus', label: 'A − B' }, { value: 'ratio', label: 'A ÷ B' }, { value: 'larger', label: 'The larger of A, B' }, { value: 'smaller', label: 'The smaller of A, B' },
     ] },
-    channelB: { label: 'Channel B', type: 'select', section: 'Read', showWhen: { param: 'compare', value: ['minus', 'ratio', 'larger', 'smaller'] }, hint: 'Which channel is B (of Compare with when it is wired, else of the same input as A).', options: CHANNEL_OPTIONS },
+    channelB: { label: 'Channel B', type: 'select', section: 'Read', showWhen: { param: 'compare', value: ['minus', 'ratio', 'larger', 'smaller'] }, hint: 'Which channel is B (of Compare with when it is wired, else of the same input as A).', options: CHANNEL_OPTIONS, channelsFrom: ['other', 'channels', 'texture'] },
     shape: { label: 'Shape', type: 'select', section: 'Shape', hint: 'Raw: the number as it is. 0–1: a soft curve that reaches 1 without clipping (1 − e^(−value × Exposure)), as Trail field\'s Amount. Remap: one range onto another. Threshold: 0 below, 1 above, with a soft edge.', options: [
       { value: 'raw', label: 'Raw' }, { value: 'soft', label: '0–1 (soft)' }, { value: 'remap', label: 'Remap' }, { value: 'threshold', label: 'Threshold' },
     ] },

@@ -2,7 +2,7 @@
 
 Three Texture tools for the four channels of data that trails, Data textures and Passes carry, with no code needed. Source: `src/nodes/definitions/channelTools.ts`.
 
-A **channel** is one of the four numbers stored at each pixel. In a picture they are red, green, blue and alpha. In a Trail field they are whatever the walkers laid: one per species, grass and scent, flow and crowd. A Trail field's **Channel names** say which is which.
+A **channel** is one of the four numbers stored at each pixel. In a picture they are red, green, blue and alpha. In a Trail field they are whatever the walkers laid: one per species, grass and scent, flow and crowd. A Trail field's **Channel names** say which is which, and they show on every dropdown that picks a channel downstream (Channel, Height Light, Sense's Smell, even inside an Agents group): "Channel 2 only · infection".
 
 ## Channel
 
