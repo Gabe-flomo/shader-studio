@@ -421,7 +421,7 @@ export function boidsNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
   const sky = n('uv', 'bdUv', X(840), Y(380), { ...note(['UV: where each pixel is, for the evening sky behind the birds.']) });
   const skyCol = n('gradient', 'bdSky', X(1260), Y(380), {
     mode: 'linear_y', color_a: [0.16, 0.07, 0.1], color_b: [0.03, 0.05, 0.12],
-    ...note(['Gradient (Evening sky): dusky rose at the bottom of the picture to deep blue at the top (Linear Y), the background the birds are drawn over (Draw agents\' Over).']),
+    ...note(['Gradient (Evening sky): dusky rose at the bottom of the picture to deep blue at the top (Linear Y), the background the birds are drawn over (Draw agents\' Background).']),
   }, { uv: ['bdUv', 'uv'] });
   const draw = n('drawAgents', 'bdDraw', X(1680), Y(0), {
     style: 'streaks', colorBy: 'heading', palette: 'ab', colorA: [1.0, 0.72, 0.4], colorB: [0.45, 0.75, 1.0],

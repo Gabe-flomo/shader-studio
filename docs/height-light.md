@@ -26,4 +26,4 @@ It reads the height at this pixel and on four sides of it, Spacing apart. Slope 
 
 ## Example
 
-**Sand drift** (Simulation: agents): the dunes are the Trail field (how deep the sand is) lit by Height Light. That goes into Draw agents' Over as the background, and Draw agents only adds the blowing grains on top.
+**Sand drift** (Simulation: agents): the dunes are the Trail field (how deep the sand is) lit by Height Light. That goes into Draw agents' Background as the background, and Draw agents only adds the blowing grains on top.
