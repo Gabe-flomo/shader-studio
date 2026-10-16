@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.228',
+    date: '2026-10-15',
+    title: "Clearer agent examples",
+    highlights: [
+      { area: 'Studio', text: "Agent examples lose code blocks that only drew a dark backdrop; visible skies are Gradient nodes, and painters and termites use Channel Colours." },
+    ],
+  },
+  {
     id: '2026.10.227',
     date: '2026-10-15',
     title: "Smell and Crowd limit",
