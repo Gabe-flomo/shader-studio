@@ -166,6 +166,7 @@ export { ChromaLensNode } from './chromaLens';
 export { DeepGlowTextureNode, DeepGlowTextureStageNode } from './deepGlow';
 export { PassNode, PassOutputNode, SampleTextureNode, EdgesTextureNode, BlurTextureNode, GlowTextureNode, ChromaTextureNode, DisplaceTextureNode, DisplacementMapNode, JumpFloodTextureNode } from './passes';
 export { TextureMaskNode, TextureLevelsNode, TextureFlowNode, TextureNeighboursNode, TextureChangeNode, DistanceShapeNode, TextureFadeNode, ReadTextureNode } from './textureTools';
+export { HeightLightNode } from './heightLight';
 export { TextureFeedbackNode, TextureFeedbackStepNode } from './textureFeedback';
 export { DataTextureNode, DataTexturePackNode, ReadChannelsNode } from './dataTexture';
 export { RenderTargetsNode, RenderTargetsPackNode } from './renderTargets';
@@ -314,6 +315,7 @@ import { GridRulesNode, GridRulesStepNode, MouseButtonNode } from './gridRules';
 import { ShaderTextureNode, ShaderTextureOutputNode } from './shaderTexture';
 import { PassNode, PassOutputNode, SampleTextureNode, EdgesTextureNode, BlurTextureNode, GlowTextureNode, ChromaTextureNode, DisplaceTextureNode, DisplacementMapNode, JumpFloodTextureNode } from './passes';
 import { TextureMaskNode, TextureLevelsNode, TextureFlowNode, TextureNeighboursNode, TextureChangeNode, DistanceShapeNode, TextureFadeNode, ReadTextureNode } from './textureTools';
+import { HeightLightNode } from './heightLight';
 import { TextureFeedbackNode, TextureFeedbackStepNode } from './textureFeedback';
 import { DataTextureNode, DataTexturePackNode, ReadChannelsNode } from './dataTexture';
 import { RenderTargetsNode, RenderTargetsPackNode } from './renderTargets';
@@ -603,6 +605,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   textureNeighbours: TextureNeighboursNode,
   textureChange: TextureChangeNode,
   distanceShape: DistanceShapeNode,
+  heightLight: HeightLightNode,
   textureFade: TextureFadeNode,
   readTexture: ReadTextureNode,
   // Feedback (texture): a Pass, Fade and Read in one node (compiler/feedbackExpand.ts opens it).

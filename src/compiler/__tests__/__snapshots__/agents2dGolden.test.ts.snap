@@ -858,9 +858,9 @@ exports[`2D agents and pass graphs compile as they did before 3D > simAgentSandD
 {
   "agents": "1c629f4836d1061bea32268c998f:22888",
   "errors": null,
-  "fragmentShader": "08817c5b19035b0a7081426f9745:5666",
-  "paramBindings": "09aeaa8fb85bf6107605945be0f1:1769",
-  "paramUniforms": "1773d9104c7662039976737e4cea:1189",
+  "fragmentShader": "088ff83cbe90d004dbdbf8c57696:5639",
+  "paramBindings": "1f050f05c090ec15f66364410a89:2115",
+  "paramUniforms": "0ef8b66ecd54d80671cd25018a73:1452",
   "passes": "167d269bbddad80189e9f9473b28:2",
   "success": true,
   "textureUniforms": "167d269bbddad80189e9f9473b28:2",
