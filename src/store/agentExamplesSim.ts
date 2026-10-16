@@ -212,25 +212,20 @@ export function dlaNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
       'Add: the Seed. Its Image goes back into the group (Cluster); its Amount glows under the picture.',
     ]),
   }, { deposit: ['dlaDeposit', 'deposit'], add: ['dlaSeed', 'result'] });
-  const glow = expr('dlaGlow', X(1680), Y(520), {
-    label: 'Cluster glow',
-    inputs: [{ name: 'amount', type: 'float' }, { name: 'uv', type: 'vec2' }],
-    lines: [['vec3 deep', 'vec3(0.01, 0.02, 0.05) + vec3(0.0, 0.02, 0.04) * (1.0 - length(uv) * 0.6)']],
-    result: 'deep + vec3(1.0, 0.45, 0.35) * amount * 0.35',
-    outputType: 'vec3',
-    wires: { amount: ['dlaTrail', 'amount'], uv: ['dlaUv', 'uv'] },
-    note: [
-      'Cluster glow (an Expression Block): the picture under the walkers, deep sea blue, with a faint warm glow where the cluster\'s smell is.',
-      'deep: a dark blue, a little lighter in the middle.',
-    ],
-  });
+  const glow = n('colorize', 'dlaGlow', X(1680), Y(420), {
+    color: [1, 0.45, 0.35], background: [0.01, 0.03, 0.07], gain: 0.35,
+    ...note([
+      'Colorize: the coral\'s glow. Field is the trail\'s Amount (where walkers have stuck and lit it), Colour coral, Background deep blue: Background where there is no trail, coral where there is, Gain 0.35 keeping it soft.',
+      'It goes into Draw agents\' Over: the background the walkers are drawn over.',
+    ]),
+  }, { field: ['dlaTrail', 'amount'] });
   const draw = n('drawAgents', 'dlaDraw', X(2100), Y(0), {
     style: 'points', colorBy: 'agent', size: 1.5, brightness: 0.9, scaleBy: 'walker', fade: 'off', lights: '0',
     ...note([
       'Draw agents: every walker as a dot in its own Colour (Colour by Agent): the free ones a dim blue haze, the stuck ones coral by when they joined.',
       'Try: Brightness 0.3 to hide the haze; Style Glow for lightning.',
     ]),
-  }, { agents: ['dla', 'agents'], over: ['dlaGlow', 'result'] });
+  }, { agents: ['dla', 'agents'], over: ['dlaGlow', 'color'] });
   const nodes = [emit, group, uv, seed, deposit, trail, glow, draw];
   if (withOutput) nodes.push(n('output', 'dlaOutput', X(2520), Y(0), { ...note(['Output: the coral over its glow is the picture.']) }, { color: ['dlaDraw', 'color'] }));
   return nodes;
@@ -510,23 +505,22 @@ export function firefliesNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     ]),
   }, { deposit: ['ffDeposit', 'deposit'] });
   const uv = n('uv', 'ffUv', X(840), Y(420), { ...note(['UV: where each pixel is, for the night backdrop.']) });
-  const night = expr('ffNight', X(1680), Y(420), {
-    label: 'Night meadow',
-    inputs: [{ name: 'uv', type: 'vec2' }, { name: 'light', type: 'float' }],
-    lines: [['float h', 'uv.y * 0.5 + 0.5']],
-    result: 'mix(vec3(0.01, 0.025, 0.015), vec3(0.01, 0.015, 0.04), h) + vec3(0.35, 0.5, 0.1) * light * 0.6',
-    outputType: 'vec3',
-    wires: { uv: ['ffUv', 'uv'], light: ['ffTrail', 'amount'] },
-    note: [
-      'Night meadow (an Expression Block): dark green grass at the bottom to a dark blue sky at the top, lit faintly where flashes are.',
-      'h: 0 at the bottom of the picture, 1 at the top.',
-    ],
-  });
+  const sky = n('gradient', 'ffSky', X(1260), Y(560), {
+    mode: 'linear_y', color_a: [0.01, 0.025, 0.015], color_b: [0.01, 0.015, 0.04],
+    ...note(['Gradient: the night, a black-green meadow at the bottom of the picture to night blue at the top (Linear Y).']),
+  }, { uv: ['ffUv', 'uv'] });
+  const night = n('colorize', 'ffNight', X(1680), Y(420), {
+    color: [0.35, 0.5, 0.1], gain: 0.6,
+    ...note([
+      'Colorize: the light of the flashes pooled on the ground. Field is the trail\'s Amount (where fireflies flashed lately), Colour yellow-green, Background the night Gradient.',
+      'It goes into Draw agents\' Over: the background the fireflies are drawn over.',
+    ]),
+  }, { field: ['ffTrail', 'amount'], background: ['ffSky', 'color'] });
   const draw = n('drawAgents', 'ffDraw', X(2100), Y(0), {
     style: 'glow', colorBy: 'agent', size: 3, brightness: 1.6, glow: 1, scaleBy: 'walker', fade: 'off', lights: '0',
     ...note(['Draw agents, Glow: each firefly as a glowing dot in its own Colour: dim at rest, bright yellow-green as it flashes, so you see the flashes ripple and then beat together.']),
-  }, { agents: ['fireflies', 'agents'], over: ['ffNight', 'result'] });
-  const nodes = [emit, group, deposit, trail, uv, night, draw];
+  }, { agents: ['fireflies', 'agents'], over: ['ffNight', 'color'] });
+  const nodes = [emit, group, deposit, trail, uv, sky, night, draw];
   if (withOutput) nodes.push(n('output', 'ffOutput', X(2520), Y(0), { ...note(['Output: the fireflies over the night meadow are the picture.']) }, { color: ['ffDraw', 'color'] }));
   return nodes;
 }
@@ -1266,26 +1260,26 @@ export function crowdNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
       'Trail field: the crowd map, 512 rows: channel 1 right-walkers, channel 2 left-walkers, spread a few pixels and gone in a fraction of a second: where people are now.',
     ]),
   }, { deposit: ['cwDeposit', 'deposit'] });
-  const floor = expr('cwFloor', X(1680), Y(420), {
-    label: 'Floor plan',
-    inputs: [{ name: 'd', type: 'float' }, { name: 'ch', type: 'vec4' }],
-    lines: [
-      ['float solid', '1.0 - smoothstep(0.0, 0.006, d)'],
-      ['vec3 trails', 'vec3(1.0, 0.5, 0.15) * (1.0 - exp(-ch.r * 0.15)) + vec3(0.15, 0.55, 1.0) * (1.0 - exp(-ch.g * 0.15))'],
-    ],
-    result: 'mix(vec3(0.03, 0.035, 0.045) + trails * 0.35, vec3(0.2, 0.21, 0.24), solid)',
-    outputType: 'vec3',
-    wires: { d: ['cwCorridor', 'result'], ch: ['cwTrail', 'channels'] },
-    note: [
-      'Floor plan (an Expression Block): the corridor under the walkers.',
-      'solid: 1 inside a wall or pillar (drawn grey). trails: the crowd map, orange where right-walkers are and blue where left-walkers are, faint, so the lanes show as streaks.',
-    ],
-  });
+  const footfall = n('channelColours', 'cwFoot', X(1680), Y(260), {
+    mode: 'glow', background: [0.03, 0.035, 0.045],
+    on1: true, colour1: [0.35, 0.175, 0.05], exposure1: 0.15,
+    on2: true, colour2: [0.05, 0.19, 0.35], exposure2: 0.15,
+    on3: false, on4: false,
+    ...note(['Channel Colours: the crowd map. Channel 1 (right-walkers) in orange, channel 2 (left-walkers) in blue, added like light over the dark floor, so lanes show in their colours.']),
+  }, { channels: ['cwTrail', 'channels'] });
+  const wallMask = n('distanceShape', 'cwWallMask', X(1680), Y(560), {
+    mode: 'inside', offset: 0, softness: 0.006,
+    ...note(['Outline (distance), Inside: the walls and pillars as a mask, 1 inside them, from the corridor\'s distance.']),
+  }, { distance: ['cwCorridor', 'result'] });
+  const floor = n('colorize', 'cwFloor', X(2100), Y(420), {
+    color: [0.2, 0.21, 0.24],
+    ...note(['Colorize: grey walls (Field: the wall mask) laid over the crowd map (Background). It goes into Draw agents\' Over, the floor plan the walkers are drawn on.']),
+  }, { field: ['cwWallMask', 'mask'], background: ['cwFoot', 'color'] });
   const draw = n('drawAgents', 'cwDraw', X(2100), Y(0), {
     style: 'points', colorBy: 'agent', size: 2, brightness: 0.9, scaleBy: 'walker', fade: 'off', lights: '0',
     ...note(['Draw agents: every walker as a dot in its own Colour: orange right, blue left, darker where they are stuck in a crowd.']),
-  }, { agents: ['crowd', 'agents'], over: ['cwFloor', 'result'] });
-  const nodes = [uv, corridor, emitR, emitL, group, deposit, trail, floor, draw];
+  }, { agents: ['crowd', 'agents'], over: ['cwFloor', 'color'] });
+  const nodes = [uv, corridor, emitR, emitL, group, deposit, trail, footfall, wallMask, floor, draw];
   if (withOutput) nodes.push(n('output', 'cwOutput', X(2520), Y(0), { ...note(['Output: the crowd in its corridor is the picture.']) }, { color: ['cwDraw', 'color'] }));
   return nodes;
 }

@@ -181,26 +181,18 @@ export function shaderRingsNodes(x = 0, y = 0): GraphNode[] {
       'Add: wired from Rings to food. Any chain of nodes can go here: it is read at each trail pixel, every step, so the rings are always fresh food. That is the whole trick: an SDF becomes something to eat.',
     ]),
   }, { deposit: ['srDeposit', 'deposit'], add: ['srFood', 'result'] });
-  const look = expr('srLook', X(1680), Y(0), {
-    label: 'Veins by ring',
-    inputs: [{ name: 'a', type: 'float' }, { name: 'index', type: 'float' }, { name: 'on', type: 'float' }],
-    lines: [
-      ['vec3 hue', '0.55 + 0.45 * cos(6.2831853 * (index * 0.085 + vec3(0.0, 0.33, 0.67)))'],
-      ['vec3 veins', 'hue * a * 1.5'],
-      ['vec3 guide', 'vec3(0.6, 0.7, 1.0) * on * 0.05'],
-    ],
-    result: 'veins + guide + vec3(0.008, 0.006, 0.018)',
-    outputType: 'vec3',
-    wires: { a: ['srTrail', 'amount'], index: ['srRings', 'index'], on: ['srFood', 'on'] },
-    note: [
-      'Veins by ring (an Expression Block): the picture.',
-      'hue: a colour for each ring (index), walking round the colour wheel from the middle out. veins: the trail\'s Amount in that colour.',
-      'guide: the rings themselves, very faint, so you can see where the food is.',
-      'Result: the veins and the faint rings over near-black.',
-    ],
-  });
-  const output2 = n('output', 'srOutput', X(2100), Y(0), { ...note(['Output: the veins, coloured ring by ring, are the picture.']) }, { color: ['srLook', 'result'] });
-  return [emit, uv, centre, rings, food, group, deposit, trail, look, output2];
+  const hue = n('palette', 'srHue', X(1680), Y(260), {
+    scale: 0.085, offset: [0.55, 0.55, 0.55], amplitude: [0.45, 0.45, 0.45], freq: [1, 1, 1], phase: [0, 0.33, 0.67],
+    ...note(['Palette: a colour for each ring. Angle is the ring\'s Index (from Rings), Scale 0.085 walks a little way round the colour wheel per ring, from the middle out.']),
+  }, { value: ['srRings', 'index'] });
+  const look = n('colorize', 'srLook', X(2100), Y(0), {
+    background: [0.008, 0.006, 0.018], gain: 1.5,
+    ...note([
+      'Colorize: the picture. Field is the trail\'s Amount (the veins), Colour the ring\'s Palette colour, so each ring\'s veins have their own colour, over near-black.',
+    ]),
+  }, { field: ['srTrail', 'amount'], color: ['srHue', 'color'] });
+  const output2 = n('output', 'srOutput', X(2520), Y(0), { ...note(['Output: the veins, coloured ring by ring, are the picture.']) }, { color: ['srLook', 'color'] });
+  return [emit, uv, centre, rings, food, group, deposit, trail, hue, look, output2];
 }
 
 // ── 2. SDF walls ─────────────────────────────────────────────────────────────
