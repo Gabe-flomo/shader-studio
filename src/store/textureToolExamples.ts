@@ -150,6 +150,15 @@ const photo = (id: string, x: number, y: number, why: string, wires: Record<stri
     `Its Texture output is the image itself as a texture. ${why}`,
   ]) }, wires);
 
+/** Mix on colours (Mix's sockets typed vec3, as Mix Vec3 was): a picture blended into another by a 0–1 mask. */
+function mixColour(id: string, x: number, y: number, params: Record<string, unknown>, wires: Record<string, [string, string]>): GraphNode {
+  const node = n('mix', id, x, y, { outputType: 'vec3', ...params }, wires);
+  node.inputs.a = { ...node.inputs.a, type: 'vec3' };
+  node.inputs.b = { ...node.inputs.b, type: 'vec3' };
+  node.outputs = { result: { type: 'vec3', label: 'Result' } };
+  return node;
+}
+
 export function buildTextureToolExamples(): Record<string, ExampleGraph> {
   const g: Record<string, ExampleGraph> = {};
 
@@ -443,7 +452,7 @@ export function buildTextureToolExamples(): Record<string, ExampleGraph> {
         inputs: [['stepNow', 'float', ['drFlood', 'step']], ['stepCount', 'float', ['drFlood', 'steps']]],
         lines: [],
         result: 'exp2(stepCount - stepNow)',
-        note: ['Reach this round: how far the flood looks, in picture pixels. stepNow is the Pass\'s Step, stepCount its Steps (Repeat).', 'result: 1024 pixels on the first round, halving every round down to 2.'],
+        note: ['Reach this round: how far the flood looks, in picture pixels. stepNow is the Pass\'s Step, stepCount its Steps (Repeat).', 'result: 1024 pixels on round 0 (which only lays the seeds, so it goes unused), 512 on round 1, halving every round down to 2.'],
       }),
       n('jumpFloodTexture', 'drStep', 940, 400, { ...note('Jump flood (texture): one round of the flood on the Pass\'s Previous (the round before): keeps the nearest seed any of 9 reads knows.') },
         { texture: ['drFlood', 'previous'], reach: ['drReach', 'result'] }),
@@ -753,16 +762,8 @@ export function buildTextureToolExamples(): Record<string, ExampleGraph> {
           'Marks is the drawing, Marks alpha where it is: Look lays them over the video.',
         ]) },
         { texture: ['maskPass', 'texture'] }),
-      expr('look', 1260, 360, {
-        label: 'Look', outputType: 'vec3',
-        inputs: [['back', 'vec3', ['back', 'color']], ['marks', 'vec3', ['blobs', 'marks']], ['a', 'float', ['blobs', 'marksAlpha']]],
-        lines: [],
-        result: 'mix(back, marks, a)',
-        note: [
-          'Expression Block: the marks over the video.',
-          'Result: the dimmed video, mixed to the marks by Marks alpha (1 on a line, a bracket, a cross or a label).',
-        ],
-      }),
+      mixColour('look', 1260, 360, { ...note('Mix: the marks over the dimmed video, mixed by Marks alpha (1 on a line, a bracket, a cross or a label, 0 elsewhere).') },
+        { a: ['back', 'color'], b: ['blobs', 'marks'], t: ['blobs', 'marksAlpha'] }),
       n('output', 'out', 1560, 360, note('Output: the video with its blobs bracketed, labelled and linked.'), { color: ['look', 'result'] }),
     ],
     play: playRecord([
@@ -1013,13 +1014,8 @@ export function buildTextureToolExamples(): Record<string, ExampleGraph> {
         ]) },
         { texture: ['maskPass', 'texture'], yaw: ['orbit', 'value'] }),
       n('textureLevels', 'back', 940, 620, { outWhite: 0.3, ...note('Levels (texture): the video dimmed, a flat backdrop under the floating marks.') }, { texture: ['vid', 'texture'] }),
-      expr('look', 1260, 360, {
-        label: 'Look', outputType: 'vec3',
-        inputs: [['back', 'vec3', ['back', 'color']], ['marks', 'vec3', ['blobs', 'marks']], ['a', 'float', ['blobs', 'marksAlpha']]],
-        lines: [],
-        result: 'mix(back, marks, a)',
-        note: ['Expression Block: the marks over the dimmed video, mixed by Marks alpha.'],
-      }),
+      mixColour('look', 1260, 360, { ...note('Mix: the marks over the dimmed video, mixed by Marks alpha (1 on a line, a bracket, a cross or a label, 0 elsewhere).') },
+        { a: ['back', 'color'], b: ['blobs', 'marks'], t: ['blobs', 'marksAlpha'] }),
       n('output', 'out', 1560, 360, note('Output: the tracking overlay floating in front of the video.'), { color: ['look', 'result'] }),
     ],
     play: playRecord([

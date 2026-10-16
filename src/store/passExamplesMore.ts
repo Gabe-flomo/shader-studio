@@ -212,54 +212,29 @@ export function buildPassExamplesMore(): Record<string, ExampleGraph> {
           'zoomed: this pixel pulled 0.7% towards the centre (reading inwards pushes the picture out).',
           'turned: that point turned by Swirl (a 2D rotation), so the trails curl.',
           'wobble: a tiny wavy push that changes with t, so the trails ripple like smoke.',
-          'result: the point to read, wired into Sample (texture)\'s UV.',
+          'result: the point to read, wired into Fade (feedback)\'s UV.',
         ],
       }),
-      n('sampleTexture', 'echo', 620, 420, {
-        ...note('Sample (texture) reads the Trails pass\'s Previous output (its own picture from the frame before) at the drifted point. This is the feedback: the Pass sees what it drew last frame.') },
-        { texture: ['trails', 'previous'], uv: ['drift', 'result'] }),
-      n('constant', 'decay', 620, 620, { value: 0.975, label: 'Decay',
-        ...note('How much of last frame survives: 0.975 keeps 97.5% each frame, so a trail fades to half in about 27 frames. Closer to 1: longer trails. A constant so Play can drive it.') }),
-      expr('feed', 900, 260, {
-        label: 'Fade and add', outputType: 'vec3',
-        inputs: [['fresh', 'vec3', ['lights', 'result']], ['old', 'vec3', ['echo', 'color']], ['decay', 'float', ['decay', 'value']]],
-        lines: [
-          ['vec3 faded', 'max(old * decay - 0.004, vec3(0.0))'],
-          ['vec3 aged', 'faded * vec3(0.985, 0.995, 1.0)'],
-        ],
-        result: 'fresh + aged',
-        note: [
-          'What: the next picture for the Trails pass: last frame\'s, faded, with this frame\'s lights painted on top.',
-          'faded: the old picture times Decay, minus a tiny bit, so it dies away completely (no haze builds up) unless the lights paint it again.',
-          'aged: the faded picture cooled a little each frame (red fades first, then green), so old trails turn bluish as they fade.',
-          'result: this frame\'s lights added over the aged trails.',
-        ],
-      }),
+      n('textureFade', 'feed', 900, 260, {
+        tail: 3, clean: 0.24, tint: [0.63, 0.83, 1], combine: 'add',
+        ...note('Fade (feedback): the next picture for the Trails pass. It reads the pass\'s Previous (its own picture from the frame before) at the drifted point, fades it and adds this frame\'s lights (Fresh) on top. Tail 3: a lone trail fades to 1% in 3 seconds. Clean takes a little off each second so it really reaches black. Tint gives red a shorter tail than blue, so old trails cool to blue.') },
+        { texture: ['trails', 'previous'], uv: ['drift', 'result'], fresh: ['lights', 'result'] }),
       n('pass', 'trails', 1180, 260, { label: 'Trails',
         ...note('Trails: the Pass that keeps the picture. What is wired into it is drawn into its texture; its Previous output (read by Sample (texture) on the left) hands that picture back next frame, which closes the loop. Half float, so the bright cores above 1 aren\'t clipped while they fade.') },
-        { color: ['feed', 'result'] }),
-      expr('tone', 1440, 260, {
-        label: 'Soft highlights', outputType: 'vec3',
-        inputs: [['hdr', 'vec3', ['trails', 'color']]],
-        lines: [['vec3 soft', 'hdr / (1.0 + hdr * 0.5)']],
-        result: 'pow(soft, vec3(0.85))',
-        note: [
-          'What: brings the trails\' bright parts (above 1) back into range smoothly, so the lights\' cores don\'t flatten to white.',
-          'hdr: the Trails pass at this pixel (its Color output).',
-          'soft: a gentle roll-off: dim values stay as they are, bright ones bend down towards 2.',
-          'result: a slight lift of the mid-tones, so the faint ends of the trails show.',
-        ],
-      }),
-      outNode(1700, 260, ['tone', 'result'], 'the trails, toned. The Trails pass draws first each frame; this program reads it.'),
+        { color: ['feed', 'color'] }),
+      n('toneMap', 'tone', 1440, 260, { mode: 'reinhard2',
+        ...note('Tone Map (Reinhard2): brings the trails\' bright parts (above 1) back into range smoothly, so the lights\' cores don\'t flatten to white.') },
+        { color: ['trails', 'color'] }),
+      outNode(1700, 260, ['tone', 'color'], 'the trails, toned. The Trails pass draws first each frame; this program reads it.'),
     ],
     play: playRecord([
-      ctl('decay', 'decay::value', 'Decay (trail length)', 0.8, 0.995, 0.001),
+      ctl('decay', 'feed::tail', 'Tail (seconds)', 0.2, 10, 0.01),
       ctl('swirl', 'swirl::value', 'Swirl', -0.03, 0.03, 0.0005),
     ], `**What it shows.** Feedback in a Pass. The Trails pass reads its own picture from the frame before (its **Previous** output), warps it a little, fades it and adds three moving lights on top. What it draws comes back next frame, so the lights leave trails that drift, spiral and cool as they fade.
 
-**How it is built.** Three lights (an Expression Block) are this frame's paint. Drift the old picture computes where to read last frame's picture (a little nearer the centre and turned by Swirl); Sample (texture) reads the Trails pass's Previous there. Fade and add multiplies it by Decay and adds the lights; that goes into the Trails pass, whose Previous closes the loop. Soft highlights tones the result for the output.
+**How it is built.** Three lights (an Expression Block) are this frame's paint. Drift the old picture computes where to read last frame's picture (a little nearer the centre and turned by Swirl). **Fade (feedback)** reads the Trails pass's Previous there, fades it and adds the lights; that goes into the Trails pass, whose Previous closes the loop. **Tone Map** softens the bright cores for the output.
 
-**Try.** Decay 0.99 for long comet tails, 0.9 for short sparks. Swirl negative turns the other way; 0 makes them stream straight out. Set the Trails pass to ½ for softer, cheaper trails. Replace the lights with anything (a shape, a video, the mouse) and it leaves trails too.`),
+**Try.** Tail 8 for long comet tails, 0.5 for short sparks. Swirl negative turns the other way; 0 makes them stream straight out. Set the Trails pass to ½ for softer, cheaper trails. Replace the lights with anything (a shape, a video, the mouse) and it leaves trails too.`),
   };
 
   // ── 4 · Reaction-diffusion (Gray-Scott) at ½: state from the frame before → step → Pass ──
@@ -398,25 +373,12 @@ export function buildPassExamplesMore(): Record<string, ExampleGraph> {
         { color: ['sign', 'result'] }),
       n('constant', 'threshold', 620, 480, { value: 1, label: 'Threshold',
         ...note('Threshold: how bright a part must be to glow. 1 is white: only the neon tubes (above white) pass; 0.05 lets the bricks glow too. A constant so Play can drive it.') }),
-      expr('bright', 880, 260, {
-        label: 'Keep the bright parts', outputType: 'vec3',
-        inputs: [['picture', 'vec3', ['passPicture', 'color']], ['threshold', 'float', ['threshold', 'value']]],
-        lines: [
-          ['float luma', 'dot(picture, vec3(0.299, 0.587, 0.114))'],
-          ['float keep', 'smoothstep(threshold, threshold + 0.25, luma)'],
-        ],
-        result: 'picture * keep',
-        note: [
-          'What: the threshold: keeps only the parts of the picture brighter than Threshold and makes the rest black. Only these will glow.',
-          'picture: Pass A at this pixel.',
-          'luma: its brightness (the eye weights green most).',
-          'keep: 0 below Threshold, 1 a quarter above it, a soft ramp between, so the glow doesn\'t flicker at the cut.',
-          'result: the picture where it is bright, black elsewhere.',
-        ],
-      }),
+      n('textureMask', 'bright', 880, 260, { source: 'brightness', threshold: 'soft', width: 0.25,
+        ...note('Mask: the threshold. It reads Pass A\'s colour (Color), keeps the parts brighter than Level (the Threshold constant) and makes the rest black: only these will glow. Soft with Width 0.25, so the glow doesn\'t flicker at the cut. Its Color output is the picture where it is bright.') },
+        { color: ['passPicture', 'color'], level: ['threshold', 'value'] }),
       n('pass', 'passBright', 1140, 260, { label: 'Pass B · bright parts', scale: '0.5',
         ...note('Pass B stores only the bright parts, at ½ size. The two blurs after it read around each pixel, so they need it as a texture; at ½ they do a quarter of the work and come out softer. Turn on its eye (or Pass B\'s Color into the Output) to see what passes the threshold.') },
-        { color: ['bright', 'result'] }),
+        { color: ['bright', 'color'] }),
       n('blurTexture', 'near', 1400, 160, { method: 'smooth', radius: 7,
         ...note('Blur (texture), narrow: a tight halo round each tube (7 picture pixels).') },
         { texture: ['passBright', 'texture'] }),
@@ -428,32 +390,22 @@ export function buildPassExamplesMore(): Record<string, ExampleGraph> {
         { texture: ['passSoft', 'texture'] }),
       n('constant', 'glowGain', 1660, 640, { value: 1.6, label: 'Glow',
         ...note('Glow: how strong the glow is. A constant so Play can drive it.') }),
-      expr('over', 1920, 260, {
-        label: 'Glow over the picture', outputType: 'vec3',
-        inputs: [['picture', 'vec3', ['passPicture', 'color']], ['near', 'vec3', ['near', 'color']], ['far', 'vec3', ['far', 'color']], ['gain', 'float', ['glowGain', 'value']]],
-        lines: [
-          ['vec3 glow', '(near * 0.6 + far * 1.8) * gain'],
-          ['vec3 lit', 'picture + glow + picture * glow * 2.0'],
-        ],
-        result: 'lit / (1.0 + lit * 0.18)',
-        note: [
-          'What: adds the glow over the original picture (a composite; Blend Modes: Add or Add Colors work too).',
-          'picture: Pass A at this pixel, the sharp original.',
-          'near: the tight halo.',
-          'far: the wide bloom, from Pass C.',
-          'gain: the Glow constant.',
-          'glow: both halos mixed (the wide one counts more: it is spread thinner), times Glow.',
-          'lit: the picture with the glow added, plus the glow tinting the picture itself, as neon light falls on the bricks next to it.',
-          'result: a soft roll-off so the tubes\' cores don\'t clip to flat white.',
-        ],
-      }),
-      outNode(2180, 260, ['over', 'result'], 'the picture with only its bright parts glowing. Pass A, Pass B and Pass C draw first; this program reads them.'),
+      n('addColor', 'halos', 1920, 420, { scale: 3,
+        ...note('Add Colors: the two halos together, the wide bloom counting three times the tight one (it is spread thinner).') },
+        { a: ['near', 'color'], b: ['far', 'color'] }),
+      n('addColor', 'lit', 2180, 260, {
+        ...note('Add Colors: the glow over the sharp picture (Pass A), times Glow (the constant, on Scale).') },
+        { a: ['passPicture', 'color'], b: ['halos', 'result'], scale: ['glowGain', 'value'] }),
+      n('toneMap', 'over', 2440, 260, { mode: 'reinhard2',
+        ...note('Tone Map (Reinhard2): a soft roll-off so the tubes\' cores don\'t clip to flat white.') },
+        { color: ['lit', 'result'] }),
+      outNode(2700, 260, ['over', 'color'], 'the picture with only its bright parts glowing. Pass A, Pass B and Pass C draw first; this program reads them.'),
     ],
     play: playRecord([
       ctl('threshold', 'threshold::value', 'Threshold', 0, 3, 0.01),
       ctl('glow', 'glowGain::value', 'Glow', 0, 5, 0.05),
       ctl('wide', 'far::radius', 'Bloom width', 0, 64, 0.5),
-    ], `**What it shows.** Glow only the bright parts, in the same frame: the picture goes into Pass A; an Expression Block keeps what is brighter than Threshold; Pass B (½) stores that; Blur (texture) spreads it into a tight halo, Pass C (⅛) stores the halo and a second Blur (texture) spreads that into a wide bloom; both are added back over Pass A. The older Bloom reads last frame's picture; this one is the frame you see.
+    ], `**What it shows.** Glow only the bright parts, in the same frame: the picture goes into Pass A; a **Mask** keeps what is brighter than Threshold; Pass B (½) stores that; Blur (texture) spreads it into a tight halo, Pass C (⅛) stores the halo and a second Blur (texture) spreads that into a wide bloom; both are added back over Pass A. The older Bloom reads last frame's picture; this one is the frame you see.
 
 **How to inspect a pass.** Every Pass is a texture you can look into:
 - Turn on the **eye** on *Keep the bright parts* (or on Pass B) to see only what passes the threshold; on *far* to see the bloom alone. The eye works on any card, inside a pass or after it.

@@ -35,7 +35,7 @@ function floodRecipe(mode: 'outline' | 'glow' | 'rings', ctx: RecipeContext): Re
         'Why: its Seed output is what a jump flood starts from: each pixel inside the mask stores its own place. Change Level to pick other shapes.',
       ) }, { color: pic.out }),
       expr('reach', col(-1), 420, 'Reach this round', 'float', [['stepNow', 'float', ['flood', 'step']], ['stepCount', 'float', ['flood', 'steps']]], 'exp2(stepCount - stepNow)',
-        'Reach this round: how far the flood looks, in picture pixels: 1024 on the first round, halving every round down to 2.\nstepNow is the Pass\'s Step (which repeat is drawing), stepCount its Steps (Repeat).'),
+        'Reach this round: how far the flood looks, in picture pixels: 1024 on round 0 (which only lays the seeds, so it goes unused), 512 on round 1, halving every round down to 2.\nstepNow is the Pass\'s Step (which repeat is drawing), stepCount its Steps (Repeat).'),
       expr('start', col(1), 0, 'Start, then flood', 'vec3', [['seed', 'vec3', ['shape', 'seed']], ['found', 'vec3', [SELF, 'seed']], ['stepNow', 'float', ['flood', 'step']]], 'stepNow < 0.5 ? seed : found',
         'Start, then flood: the seeds on the first round, the nearest seed found on every later one.'),
       n('pass', 'flood', col(2), 0, { label: 'Pass · jump flood', scale: '0.5', format: 'half', filter: 'nearest', repeat: 10, ...note(

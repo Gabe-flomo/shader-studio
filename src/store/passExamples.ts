@@ -16,7 +16,7 @@ import { buildPassExamplesTexture, PASS_EXAMPLE_INDEX_TEXTURE } from './passExam
 export const PASS_EXAMPLE_INDEX: Record<string, { label: string; description: string; play: true }> = {
   passEdgeGlow: {
     label: 'Passes 1 · Edge glow', play: true,
-    description: 'Render to texture, chained: a picture is drawn into a Pass, Edges (texture) finds its outlines by reading the pixels around each one, a second Pass at half size holds the edges, Blur (texture) spreads them into a glow, and an Expression Block lays the glow over the original. Every step is in the same frame.',
+    description: 'Render to texture, chained: a picture is drawn into a Pass, Edges (texture) finds its outlines by reading the pixels around each one, a second Pass at half size holds the edges, Blur (texture) spreads them into a glow, and two Add Colors and a Tone Map lay the glow over the original. Every step is in the same frame.',
   },
   // Passes 2 to 5 (passExamplesMore.ts): particles born on edges, feedback trails, reaction-diffusion, glow the bright parts.
   ...PASS_EXAMPLE_INDEX_MORE,
@@ -42,38 +42,15 @@ export function buildPassExamples(): Record<string, ExampleGraph> {
   const graphs: Record<string, ExampleGraph> = {};
 
   // ── 1 · Edge glow: picture → Pass → Edges → Pass (½) → Blur → over the picture ──
-  const composite = n('exprNode', 'glowOver', 2380, 300, {
-    label: 'Glow over picture',
-    inputs: [
-      { name: 'picture', type: 'vec3', slider: null },
-      { name: 'glow', type: 'vec3', slider: null },
-      { name: 'edges', type: 'vec3', slider: null },
-      { name: 'gain', type: 'float', slider: null },
-    ],
-    outputType: 'vec3',
-    lines: [
-      { lhs: 'vec3 base', op: '=', rhs: 'picture * 0.6' },
-      { lhs: 'vec3 halo', op: '=', rhs: 'glow * gain' },
-      { lhs: 'vec3 lit', op: '=', rhs: 'base + halo + edges * 0.5' },
-    ],
-    result: 'lit / (1.0 + lit * 0.25)',
-    expr: 'lit / (1.0 + lit * 0.25)',
-    ...note([
-      'What: lays the blurred edges over the original picture as a glow (the composite).',
-      'Why an Expression Block: four small steps read better as code than as four Add / Multiply cards.',
-      'base = picture * 0.6: dim the picture a little so the glow stands out against it.',
-      'halo = glow * gain: the blurred edges, as bright as the Glow gain constant says (above 1 is fine: Pass B is half float).',
-      'lit = base + halo + edges * 0.5: add the glow, plus half of the sharp edges so the outlines keep a crisp core.',
-      'result = lit / (1 + lit * 0.25): a soft roll-off so the brightest overlaps don\'t clip to flat white.',
-    ].join('\n')),
-  });
-  composite.inputs = {
-    picture: { type: 'vec3', label: 'picture', connection: { nodeId: 'passPicture', outputKey: 'color' } },
-    glow: { type: 'vec3', label: 'glow', connection: { nodeId: 'blur', outputKey: 'color' } },
-    edges: { type: 'vec3', label: 'edges', connection: { nodeId: 'sharpEdges', outputKey: 'color' } },
-    gain: { type: 'float', label: 'gain', connection: { nodeId: 'glowGain', outputKey: 'value' } },
-  };
-  composite.outputs = { result: { type: 'vec3', label: 'Result' } };
+  // The composite, with nodes: the glow (× Glow gain) and half the sharp edges added over the picture, then a soft roll-off.
+  const composite = [
+    n('addColor', 'glowAdd', 2120, 200, { ...note('Add Colors: the blurred edges (Pass B, blurred) added over the picture as a glow, as bright as the Glow gain constant (on Scale; above 1 is fine, Pass B is half float).') },
+      { a: ['passPicture', 'color'], b: ['blur', 'color'], scale: ['glowGain', 'value'] }),
+    n('addColor', 'withEdges', 2380, 200, { scale: 0.5, ...note('Add Colors: half of the sharp edges on top, so the outlines keep a crisp core.') },
+      { a: ['glowAdd', 'result'], b: ['sharpEdges', 'color'] }),
+    n('toneMap', 'glowOver', 2640, 300, { mode: 'reinhard2', ...note('Tone Map (Reinhard2): a soft roll-off so the brightest overlaps don\'t clip to flat white.') },
+      { color: ['withEdges', 'result'] }),
+  ];
 
   graphs.passEdgeGlow = {
     ...PASS_EXAMPLE_INDEX.passEdgeGlow,
@@ -106,9 +83,9 @@ export function buildPassExamples(): Record<string, ExampleGraph> {
         ...note('Sample (texture) reads Pass B at this pixel, unblurred: the sharp outline, added back on top of the glow so the edges keep a bright core.') },
         { texture: ['passEdges', 'texture'] }),
       n('constant', 'glowGain', 1860, 640, { value: 2.2, label: 'Glow gain',
-        ...note('How bright the glow is. A constant (not a slider inside the Expression Block) so Play can drive it: see the Glow control.') }),
-      composite,
-      n('output', 'out', 2640, 300, note('Output: the final picture, the glow laid over the picture. This program runs last, after Pass A and Pass B have drawn their textures.'), { color: ['glowOver', 'result'] }),
+        ...note('How bright the glow is. A constant so Play can drive it (it goes to the first Add Colors\' Scale): see the Glow control.') }),
+      ...composite,
+      n('output', 'out', 2900, 300, note('Output: the final picture, the glow laid over the picture. This program runs last, after Pass A and Pass B have drawn their textures.'), { color: ['glowOver', 'color'] }),
     ],
     play: playRecord([
       ctl('gain', 'glowGain::value', 'Glow', 0, 6, 0.05),
@@ -117,7 +94,7 @@ export function buildPassExamples(): Record<string, ExampleGraph> {
       ctl('width', 'edges::width', 'Edge width', 0.5, 6, 0.25),
     ], `**What it shows.** Render to texture, chained like TouchDesigner TOPs. A shader can't normally look at the pixel next to the one it is drawing, so it can't find edges and then blur them. Pass nodes fix that: whatever is wired into a Pass is drawn into a texture first, and the nodes after it can read that texture anywhere.
 
-**How it is built.** Noise → Palette → Posterize makes the picture. Pass A stores it. Edges (texture) reads Pass A around each pixel and keeps the outlines. Pass B (at ½ size) stores the outlines. Blur (texture) spreads them into a glow, Sample (texture) reads them sharp, and an Expression Block adds both over the picture (read back from Pass A, so the noise isn't computed twice). Texture wires are dashed.
+**How it is built.** Noise → Palette → Posterize makes the picture. Pass A stores it. Edges (texture) reads Pass A around each pixel and keeps the outlines. Pass B (at ½ size) stores the outlines. Blur (texture) spreads them into a glow, Sample (texture) reads them sharp, and two Add Colors add both over the picture (read back from Pass A, so the noise isn't computed twice), with a Tone Map to soften the brightest overlaps. Texture wires are dashed.
 
 **Try.** Raise Glow width: at ½ size it stays cheap. Set Pass B's Scale to ¼ for a softer, cheaper glow, or to 1 for a tighter one. Wire Pass A's Color straight to the Output to see the picture alone, or Pass B's to see just the edges. Swap the noise for a Texture Input to outline a photo.`),
   };
