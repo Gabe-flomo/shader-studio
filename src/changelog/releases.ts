@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.231',
+    date: '2026-10-15',
+    title: "Named channels everywhere",
+    highlights: [
+      { area: 'Studio', text: "Dropdowns that pick a channel (Channel, Height Light, Sense's Smell) show the Trail field's channel names, even inside an Agents group." },
+    ],
+  },
+  {
     id: '2026.10.230',
     date: '2026-10-15',
     title: "Show data",
