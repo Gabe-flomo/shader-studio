@@ -262,7 +262,7 @@ export function buildPassExamplesP7(): Record<string, ExampleGraph> {
         ],
         result: 'tubes * 1.6',
         note: [
-          'Neon sign: three thin tubes of light on black: a pink ring, a blue square and a gold wave. They are what the two glow groups blur.',
+          'A test picture, not the lesson: anything bright works here. Neon sign: three thin tubes of light on black: a pink ring, a blue square and a gold wave. They are what the two glow groups blur.',
           'ringD: the distance to the ring\'s line.',
           'squareD: the distance to the square\'s outline.',
           'waveD: the distance to a wavy line along the bottom, rippling with the clock (t).',

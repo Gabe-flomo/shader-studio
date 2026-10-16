@@ -684,7 +684,15 @@ export function describeGraph(nodes: GraphNode[]): DescribeResult | null {
   const compose = nodes.find(n => roleOf(n) === 'compose') ?? byType('mix').find(n => r.src(n, 't')?.id === renderer.id);
   const bgSrc = compose ? r.src(compose, 'a') : undefined;
   if (compose) r.read.add(compose.id);
-  if (bgSrc?.type === 'exprNode' && roleOf(bgSrc) === 'bg') {
+  if (bgSrc?.type === 'gradient' && roleOf(bgSrc) === 'bg') {
+    // The sky: a Gradient (Linear Y on Ray Dir) from Bottom (Color A) to Top (Color B).
+    const top = colourOf(r.src(bgSrc, 'color_b')), bottom = colourOf(r.src(bgSrc, 'color_a'));
+    if (top) L.bg = top;
+    L.bg2 = bottom;
+    r.read.add(bgSrc.id);
+    for (const k of ['color_a', 'color_b']) { const s = r.src(bgSrc, k); if (s) r.read.add(s.id); }
+  } else if (bgSrc?.type === 'exprNode' && roleOf(bgSrc) === 'bg') {
+    // Graphs built before 2026.10.236: the sky as an Expression Block.
     const top = colourOf(r.src(bgSrc, 'top')), bottom = colourOf(r.src(bgSrc, 'bottom'));
     if (top) L.bg = top;
     L.bg2 = bottom;

@@ -182,8 +182,15 @@ export function buildRig(ctx: RecipeContext, r: Rig): RecipeBuild {
     ) }, { color: lit, depth: [SELF, 'depth'], hit }));
     lit = ['fog', 'color'];
   }
-  add(expr('compose', col(x++), y0, 'On the background', [['background', 'vec3', [SELF, 'color']], ['lit', 'vec3', lit], ['hit', 'float', hit]], 'mix(background, lit, hit)',
-    'The lit surface where a ray hit, the loop\'s own Color (its Background) where it missed.\nWhy: change the background on the March Loop as before.'));
+  // On the background: a Mix on colours (the lit surface where a ray hit, the loop's own Color where it missed).
+  const compose = n('mix', 'compose', col(x++), y0, { outputType: 'vec3', ...note(
+    'Mix: the lit surface where a ray hit (Blend is Hit, 1 on a surface), the loop\'s own Color (its Background) where it missed.',
+    'Why: change the background on the March Loop as before.',
+  ) }, { a: [SELF, 'color'], b: lit, t: hit });
+  compose.inputs.a = { ...compose.inputs.a, type: 'vec3' };
+  compose.inputs.b = { ...compose.inputs.b, type: 'vec3' };
+  compose.outputs = { result: { type: 'vec3', label: 'Result' } };
+  add(compose);
   add(n('toneMap', 'tone', col(x), y0, { mode: 'aces', ...note(
     'Tone Map (ACES): brings bright light (above 1) back into range smoothly, like film.',
   ) }, { color: ['compose', 'result'] }));

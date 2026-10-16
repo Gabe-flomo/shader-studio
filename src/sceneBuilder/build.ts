@@ -835,9 +835,8 @@ export function buildSceneGraph(spec: SceneSpec, idFor: (role: string) => string
     if (!L.bg2) return ref(mk(ctx, 'colorPicker', 'bg', { color: [...L.bg] }, {}, 'The background: what rays that miss every shape see.'), 'rgb');
     const top = mk(ctx, 'colorPicker', 'bg:top', { color: [...L.bg] }, {}, 'The top of the background gradient (looking up).');
     const bottom = mk(ctx, 'colorPicker', 'bg:bottom', { color: [...L.bg2] }, {}, 'The bottom of the background gradient (looking down).');
-    return ref(exprBlock(ctx, 'bg', 'Sky gradient', [
-      { name: 'rd', type: 'vec3', from: ref(cam, 'rd') }, { name: 'top', type: 'vec3', from: ref(top, 'rgb') }, { name: 'bottom', type: 'vec3', from: ref(bottom, 'rgb') },
-    ], 'mix(bottom, top, clamp(rd.y * 0.5 + 0.5, 0.0, 1.0))', 'The background: a gradient by which way each ray points, from Bottom (straight down) to Top (straight up).'), 'result');
+    return ref(mk(ctx, 'gradient', 'bg', { mode: 'linear_y' }, { dir: ref(cam, 'rd'), color_a: ref(bottom, 'rgb'), color_b: ref(top, 'rgb') },
+      'The background (Gradient, Linear Y on the camera\'s Ray Dir): by which way each ray points, from Bottom (straight down) to Top (straight up), so it turns with the camera.'), 'color');
   };
 
   const loopNote = (what: string) => `The ray marcher: for every pixel it walks a ray from the camera, stepping by the scene's distance${what}. Max Steps ${Q.steps}, Max Dist ${fmt(Q.maxDist)}, Step Scale ${fmt(step)}${hints.length && step < 1 ? ` (smaller steps for ${hints[0].why})` : ''}.`;
