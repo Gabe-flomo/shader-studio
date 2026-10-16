@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.237',
+    date: '2026-10-15',
+    title: "Random per cell",
+    highlights: [
+      { area: 'Studio', text: "Random (from ID): a steady random number for each cell, copy or walker. Jump flood now works out its own reach, so a distance field needs no code." },
+    ],
+  },
+  {
     id: '2026.10.236',
     date: '2026-10-15',
     title: "Builders, with nodes",
