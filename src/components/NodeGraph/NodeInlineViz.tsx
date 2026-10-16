@@ -1,4 +1,7 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
+import { toast } from '../ui/toastStore';
+import { candidateFor, collectPlayCandidates } from '../../play/playControls';
+import { addCandidateControl } from '../play/layerOps';
 import { DataTextureThumb } from './DataTextureView';
 import type { GraphNode, SubgraphData, DataType } from '../../types/nodeGraph';
 import { paletteNodePreset } from '../../nodes/definitions/color';
@@ -3817,6 +3820,17 @@ function AgentsGroupViz({ node, onEnterGroup }: { node: GraphNode; onEnterGroup?
   // the inner slider's; right-click keeps the Play menu (data-param-key names the inner slider).
   const pinned = agentPinnedRows(node);
   const unpin = (path: string) => updateNodeParams(node.id, { pinned: ((node.params.pinned ?? []) as string[]).filter(p => p !== path) });
+  // The pinned sliders not on the Play panel yet (their targets: `group::inner::param`).
+  const playTargets = useNodeGraphStore(s => s.play.controls.map(c => c.target).join('\n'));
+  const unplayed = pinned.filter(r => !playTargets.split('\n').includes(`${node.id}::${r.path}`));
+  const addAllToPlay = () => {
+    const st = useNodeGraphStore.getState();
+    const candidates = collectPlayCandidates(st.nodes, st.paramBindings);
+    const picks = unplayed.map(r => candidateFor(candidates, node.id, r.path)).filter((c): c is NonNullable<typeof c> => !!c);
+    if (!picks.length) return;
+    st.setPlay(p => picks.reduce((acc, c) => addCandidateControl(acc, c), p));
+    toast.success(`${picks.length} control${picks.length === 1 ? '' : 's'} added to Play`);
+  };
   return (
     <div style={{ ...vizContainer(), padding: '6px 10px 8px' }} onMouseDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()}>
       {steps.length > 0 && (
@@ -3866,9 +3880,23 @@ function AgentsGroupViz({ node, onEnterGroup }: { node: GraphNode; onEnterGroup?
         <button type="button" style={button} title="Start the simulation over: everyone is born again at step 0" onClick={() => { restartAgents(node.id); window.dispatchEvent(new Event('agents-restart')); }}>↺ Start over</button>
       </div>
       <AgentRulesCardLink node={node} />
-      {pinned.length > 0 && (
-        <div style={{ marginTop: 8 }}>
-          <div style={{ fontSize: '9px', letterSpacing: '0.08em', textTransform: 'uppercase', color: pal.overlay0, marginBottom: 2 }}>Pinned</div>
+      {/* Controls: sliders from inside, pinned to the card (right-click a slider inside → Pin to the group card). */}
+      <div data-agents-controls style={{ marginTop: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+            <span style={{ flex: 1, fontSize: '9px', letterSpacing: '0.08em', textTransform: 'uppercase', color: pal.overlay0 }}>Controls</span>
+            {unplayed.length > 0 && (
+              <button type="button" data-agents-controls-play onClick={addAllToPlay}
+                title="Put every slider here on the Play panel (the ones already there are left as they are)"
+                style={{ height: 18, padding: '0 6px', border: `1px solid ${pal.surface1}`, borderRadius: 4, background: 'transparent', color: pal.overlay0, font: `500 10px ${MONO}`, cursor: 'pointer' }}>
+                Add {unplayed.length === pinned.length ? 'all' : unplayed.length} to Play
+              </button>
+            )}
+          </div>
+          {pinned.length === 0 && (
+            <div style={{ fontSize: '10px', lineHeight: 1.35, color: pal.overlay0 }}>
+              Inside the group, right-click any slider → <b style={{ fontWeight: 600 }}>Pin to the group card</b> to control it from here.
+            </div>
+          )}
           {pinned.map(r => (
             <div key={r.path} data-param-key={r.path} style={{ display: 'flex', alignItems: 'center', gap: 6, minHeight: 30 }}
               title={`${r.nodeLabel} · ${r.label} (inside the group). Right-click for Play.`}>
@@ -3887,8 +3915,7 @@ function AgentsGroupViz({ node, onEnterGroup }: { node: GraphNode; onEnterGroup?
                 style={{ width: 20, height: 20, padding: 0, border: 0, background: 'none', color: pal.overlay0, cursor: 'pointer', font: `600 12px ${MONO}` }}>×</button>
             </div>
           ))}
-        </div>
-      )}
+      </div>
     </div>
   );
 }
