@@ -9,7 +9,7 @@ export const GaussianFieldNode: NodeDefinition = withParamSockets({
   type: 'gaussianField',
   label: 'Gaussian Field',
   category: 'Field',
-  description: 'Computes a single Gaussian field emission: exp(-d²·k). 1.0 at center, falls off smoothly. Use with += carry in a looped group to accumulate from multiple sources. Use with Loop Carry (float, adding each pass) inside an iterated group, then Metaball Threshold.',
+  description: 'Computes a single Gaussian field emission: exp(−d² × Tightness). 1.0 at center, falls off smoothly. Use with += carry in a looped group to accumulate from multiple sources. Use with Loop Carry (float, adding each pass) inside an iterated group, then Metaball Threshold.',
   inputs: {
     pos:    { type: 'vec2', label: 'Position', hint: 'Pixel position in world space; defaults to UV.' },
     center: { type: 'vec2', label: 'Center', hint: 'Source point of the blob. Try Animated Cell Center.' },
@@ -240,7 +240,7 @@ export const DistanceFalloffNode: NodeDefinition = withParamSockets({
   type: 'distanceFalloff',
   label: 'Distance Falloff',
   category: 'Field',
-  description: 'Converts a distance value to a smooth 0–1 falloff. Bounded inverse square is the most useful: 1.0 at d=0, decays without blowing up.',
+  description: 'Converts a distance value to a smooth 0–1 falloff. Bounded inverse square is the most useful: 1.0 at Distance 0, decays without blowing up.',
   inputs: {
     distance: { type: 'float', label: 'Distance' },
   },
@@ -325,7 +325,7 @@ export const NoisyGridSDFNode: NodeDefinition = withParamSockets({
   type: 'noisyGridSDF',
   label: 'Noisy Grid SDF',
   category: 'Field',
-  description: 'Smooth-min of noise-displaced circle SDFs over a 3×3 or 5×5 neighborhood. SDF is negative inside circles, zero at edges. Circles merge organically when noise brings them close. Connect sdf → smoothstep for fill; smoothstep(0.5,−0.3,sdf) → palette for inner glow.',
+  description: 'Smooth-min of noise-displaced circle SDFs over a 3×3 or 5×5 neighborhood. SDF is negative inside circles, zero at edges. Circles merge organically when noise brings them close. Connect SDF → Smoothstep for fill; smoothstep(0.5, −0.3, SDF) → Palette for inner glow.',
   inputs: {
     gridPos: { type: 'vec2',  label: 'Grid Pos', hint: 'Wire Grid Pos from Grid.' },
     cellID:  { type: 'vec2',  label: 'Cell ID', hint: 'Wire Cell ID from Grid.' },

@@ -102,7 +102,7 @@ export const MandelbrotNode: NodeDefinition = {
     'Smooth coloring via IQ log/log formula. ',
     'Distance estimation from derivative tracking. ',
     'Orbit trap coloring (point, line, ring, cross). ',
-    'Wire Mouse UV → c_pos for interactive Julia morphing.',
+    'Wire Mouse UV → c (Julia) for interactive Julia morphing.',
   ].join(''),
   inputs: {
     uv:    { type: 'vec2',  label: 'UV'         },
@@ -647,7 +647,7 @@ export const NewtonFractalNode: NodeDefinition = withParamSockets({
   type: 'newtonFractal',
   label: 'Newton Fractal',
   category: 'Fractals',
-  description: 'Newton\'s method root-finding on complex polynomials. Color = which root + convergence speed.',
+  description: 'Newton\'s method root-finding on complex polynomials. The colour shows which root a point settles on and how fast.',
   inputs: {
     uv:   { type: 'vec2',  label: 'UV'     },
     time: { type: 'float', label: 'Time'   },
@@ -1007,7 +1007,7 @@ export const SphericalFoldFractalNode: NodeDefinition = withParamSockets({
   type: 'sphericalFoldFractal',
   label: 'Spherical Fold Fractal',
   category: 'Fractals',
-  description: 'Self-contained 3D raymarch. Each step runs an IFS that alternates spherical inversion with a box-fold; accumulated scale drives HSV brightness. Rotate the camera by animating time_speed.',
+  description: 'Self-contained 3D raymarch. Each step runs an IFS that alternates spherical inversion with a box-fold; accumulated scale drives HSV brightness. Rotate the camera by animating Time Speed.',
   inputs: {
     uv:   { type: 'vec2',  label: 'UV'   },
     time: { type: 'float', label: 'Time', hint: 'Wire Time to orbit the camera (with Time Speed above 0); unwired it is static.' },

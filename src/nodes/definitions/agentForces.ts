@@ -543,7 +543,7 @@ export const AgentIntegrateNode: NodeDefinition = {
   label: 'Integrate',
   category: 'Simulation',
   aliases: ['Physics step', 'Euler', 'Velocity', 'Drag', 'Newton'],
-  description: 'Turns the total force into motion, the Particles node\'s way: velocity += Force ÷ Mass × one step, slowed by Drag, capped at Max speed; then position += velocity × one step. At the picture\'s edges: Free, Wrap, Bounce, Slide or Die.',
+  description: 'Turns the total force into motion, the Particles node\'s way: Velocity += Force ÷ Mass × one step, slowed by Drag, capped at Max speed; then position += Velocity × one step. At the picture\'s edges: Free, Wrap, Bounce, Slide or Die.',
   inputs: {
     force: { type: 'vec2', label: 'Force', hint: 'The total force: the last force of the chain.' },
     velocity: { type: 'vec2', label: 'Velocity', hint: THIS_AGENT },

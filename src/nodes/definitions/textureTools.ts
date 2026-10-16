@@ -191,7 +191,7 @@ export const TextureMaskNode: NodeDefinition = withParamSockets({
     ] },
     level: { label: 'Level', type: 'float', min: 0, max: 1, step: 0.005, section: THRESHOLD_SECTION, showWhen: { param: 'threshold', value: ['hard', 'soft'] }, hint: 'The source value where the mask turns on.' },
     width: { label: 'Width', type: 'float', min: 0, max: 1, step: 0.005, section: THRESHOLD_SECTION, showWhen: { param: 'threshold', value: 'soft' }, hint: 'How wide the soft edge is: from Level to Level + Width.' },
-    invert: { label: 'Invert', type: 'bool', section: THRESHOLD_SECTION, hint: 'Swap inside and outside (1 − mask): keep everything but the key colour.' },
+    invert: { label: 'Invert', type: 'bool', section: THRESHOLD_SECTION, hint: 'Swap inside and outside (1 − Mask): keep everything but the key colour.' },
   },
   glslFunctions: [HUE_GLSL, SAT_GLSL],
   assignable: false,
@@ -228,7 +228,7 @@ export const TextureLevelsNode: NodeDefinition = withParamSockets({
   label: 'Levels (texture)',
   category: TEXTURE_TOOLS_CATEGORY,
   aliases: ['Level TOP', 'Grade (texture)', 'Gain and offset', 'Gamma', 'Roll-off', 'Remap (texture)', 'Pack signed', 'Unpack signed', 'Math TOP'],
-  description: 'Shapes the numbers a texture holds: Gain and Offset (v × gain + offset), an in range (what becomes 0 and 1), Gamma (pow: below 1 lifts faint values, above 1 crushes them), Roll-off (x / (1 + x·k): tames values above 1 so glows don\'t clip), an out range and Clamp. Signed unpacks a stored value (0.5 reads as 0) or packs a −1…1 value for an 8-bit texture. Works on a plain Value or Color too.',
+  description: 'Shapes the numbers a texture holds: Gain and Offset (number × Gain + Offset), an in range (what becomes 0 and 1), Gamma (pow: below 1 lifts faint values, above 1 crushes them), Roll-off (x / (1 + x·k): tames values above 1 so glows don\'t clip), an out range and Clamp. Signed unpacks a stored value (0.5 reads as 0) or packs a −1…1 value for an 8-bit texture. Works on a plain Value or Color too.',
   inputs: {
     texture: { type: 'texture', label: 'Texture', hint: TEX_HINT },
     uv: { type: 'vec2', label: 'UV', hint: UV_HINT },

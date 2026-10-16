@@ -128,7 +128,7 @@ const CAMERA_AXES: GraphNode['outputs'] = {
 
 export const MarchCameraNode: NodeDefinition = withParamSockets({
   type: 'marchCamera', label: 'March Camera', category: '3D Scene',
-  description: 'Camera setup for ray marching. Outputs ray origin (ro) and ray direction (rd). Connect to a March Loop Group.',
+  description: 'Camera setup for ray marching. Outputs Ray Origin and Ray Dir. Connect to a March Loop Group.',
   inputs: {
     uv:           { type: 'vec2',  label: 'UV' },
     time:         { type: 'float', label: 'Time' },
@@ -252,7 +252,7 @@ export const MarchCameraNode: NodeDefinition = withParamSockets({
 
 export const ForwardCameraNode: NodeDefinition = withParamSockets({
   type: 'forwardCamera', label: 'Camera (Forward)', category: '3D Scene', deprecated: true,
-  description: 'Fixed forward-facing camera. ro sits at (0,0,−camDist) and rd = normalize(vec3(uv, fov)). No orbit — all motion lives inside the MLG body warp.',
+  description: 'Fixed forward-facing camera. Ray Origin sits at (0, 0, −Cam Dist) and Ray Dir = normalize(vec3(UV, FOV)). No orbit — all motion lives inside the MLG body warp.',
   inputs: {
     uv:   { type: 'vec2',  label: 'UV' },
     time: { type: 'float', label: 'Time' },
@@ -469,7 +469,7 @@ export const VolumeGlowNode: NodeDefinition = withParamSockets({
   // Summed per march step with +=.
   assignable: true,
   aliases: ['Volumetric Glow', 'Density'],
-  description: 'Inside a March Loop Group: turns the scene distance at this step into a glow contribution, `density / (1 + falloff × max(d, 0))`, finite at d = 0 so it is safe to accumulate with `+=`. `Shell` hollows the shape so only a skin of the given thickness glows. Use with Scene Distance before it and Glow to Color after the loop. Replaces the Abs → Max → Divide chain.',
+  description: 'Inside a March Loop Group: turns the scene distance at this step into a glow contribution, `Density / (1 + Falloff × max(d, 0))`, finite at d = 0 so it is safe to accumulate with `+=`. `Shell` hollows the shape so only a skin of the given thickness glows. Use with Scene Distance before it and Glow to Color after the loop. Replaces the Abs → Max → Divide chain.',
   inputs: {
     dist: { type: 'float', label: 'Distance', hint: 'Wire Scene Distance (raw distance) from this step.' },
   },

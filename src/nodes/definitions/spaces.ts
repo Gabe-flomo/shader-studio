@@ -306,7 +306,7 @@ export const SphericalSpaceNode: NodeDefinition = {
   type: 'sphericalSpace',
   label: 'Spherical / Fisheye',
   category: '2D Space', subcategory: 'Warp',
-  description: 'Projects UV through a virtual sphere. Positive strength = fisheye barrel distortion (wide-angle). Negative strength = pincushion (telephoto). At ±1 approaches stereographic projection.',
+  description: 'Projects UV through a virtual sphere. Positive Strength: fisheye barrel distortion (wide-angle). Negative Strength: pincushion (telephoto). At ±1 approaches stereographic projection.',
   inputs: {
     input:    { type: 'vec2',  label: 'UV' },
     strength: { type: 'float', label: 'Strength' },
@@ -498,7 +498,7 @@ export const MagicTextureNode: NodeDefinition = withParamSockets({
   defaultParams: { scale: 4.0, depth: 4, distortion: 1.0 },
   paramDefs: {
     scale:      { label: 'Scale',      type: 'float', min: 0.5, max: 20.0, step: 0.1, hint: 'Zoom of the interference pattern. Higher = busier.' },
-    depth:      { label: 'Depth',      type: 'select', options: [1,2,3,4,5,6].map(n => ({ value: String(n), label: String(n) })), hint: 'Number of sine folds. More depth = more intricate, more chaotic.' },
+    depth:      { label: 'Depth',      type: 'select', options: [1,2,3,4,5,6].map(n => ({ value: String(n), label: String(n) })), hint: 'Number of sine folds. More Depth: more intricate, more chaotic.' },
     distortion: { label: 'Distortion', type: 'float', min: 0.0, max: 5.0, step: 0.1, hint: 'How strongly each fold feeds back. 1 is Blender\'s default; higher gets wild.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
@@ -603,7 +603,7 @@ export const Perspective2DNode: NodeDefinition = {
   type: 'perspective2d',
   label: 'Perspective 2D',
   category: '2D Space', subcategory: 'Basic',
-  description: 'Fake 3D perspective projection for 2D UVs. ratio=0: flat. ratio=1: mild. ratio=2+: dramatic. Use Y axis for floor, X for wall.',
+  description: 'Fake 3D perspective projection for 2D UVs. Ratio 0: flat, 1: mild, 2 and up: dramatic. Use Y axis for floor, X for wall.',
   inputs: {
     uv:    { type: 'vec2',  label: 'UV'    },
     ratio: { type: 'float', label: 'Ratio' },
@@ -759,7 +759,7 @@ export const AngularRepeat2DNode: NodeDefinition = {
   type: 'angularRepeat2D',
   label: 'Angular Repeat', aliases: ['radial repeat', 'polar repeat', 'opRepeatPolar'],
   category: '2D Space', subcategory: 'Repeat',
-  description: 'Repeats UV space N times radially around the origin — creates ring/gear/petal arrangements. Feed into any SDF or pattern. sectorID output identifies which copy (0..N-1).',
+  description: 'Repeats UV space N times radially around the origin — creates ring/gear/petal arrangements. Feed into any SDF or pattern. The Sector ID output says which copy (0..N-1).',
   inputs: {
     input: { type: 'vec2',  label: 'UV'    },
     count: { type: 'float', label: 'Count' },
@@ -856,7 +856,7 @@ export const TurbulenceNode: NodeDefinition = withParamSockets({
   label: 'Turbulence', aliases: ['xor warp', 'sine warp loop', 'fluid warp'],
   category: '2D Space', subcategory: 'Warp',
   description:
-    'Xor-style turbulence: p += strength · sin(rotate(p, d·rotate) · d · frequency + time) / d for a few octaves, d growing each pass. ' +
+    'Xor-style turbulence: p += Strength · sin(rotate(p, d · Rotate) · d · Frequency + Time) / d for a few octaves, d growing each pass. ' +
     'Fluid, wavy distortion; replaces a Loop Index group full of Rotate 2D + Sin. Feed the warped UV into an SDF, FBM or Palette.',
   inputs: {
     input:    { type: 'vec2',  label: 'UV' },
@@ -871,7 +871,7 @@ export const TurbulenceNode: NodeDefinition = withParamSockets({
     octaves:   { label: 'Octaves',   type: 'float', min: 1,   max: 12,   step: 1, compileTime: true,    hint: 'How many sine layers. 6–10 looks like water; each one costs a sin(). Recompiles when changed.' },
     strength:  { label: 'Strength',  type: 'float', min: 0.0, max: 1.0,  step: 0.01, hint: 'Displacement per octave (divided by d). 0.3 ripples, 0.8 melts.' },
     frequency: { label: 'Frequency', type: 'float', min: 0.1, max: 8.0,  step: 0.1,  hint: 'Wave frequency of the first octave. Higher = finer waves.' },
-    decay:     { label: 'Decay',     type: 'float', min: 0.3, max: 0.95, step: 0.01, hint: 'd /= decay each octave: 0.7 doubles the frequency roughly every two octaves.' },
+    decay:     { label: 'Decay',     type: 'float', min: 0.3, max: 0.95, step: 0.01, hint: 'd /= Decay each octave: 0.7 doubles the frequency roughly every two octaves.' },
     rotate:    { label: 'Rotate',    type: 'float', min: 0.0, max: 3.14, step: 0.01, hint: 'Radians of rotation per unit d. 0 keeps every octave axis-aligned (streaky); ~1 tangles them.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
@@ -925,7 +925,7 @@ export const ChaosLayersNode: NodeDefinition = withParamSockets({
     size:       { label: 'Point Size',  type: 'float', min: 0.1,  max: 1.0, step: 0.01,  hint: 'Radius of each point light inside its cell (1 = touches the cell edge).' },
     shift:      { label: 'Layer Shift', type: 'float', min: 0.0,  max: 5.0, step: 0.01,  hint: 'Offset added per layer so points don\'t stack. 2.618 (golden) is Xor\'s pick; 0 stacks them.' },
     layerScale: { label: 'Layer Scale', type: 'float', min: 0.0,  max: 2.0, step: 0.01,  hint: 'Each layer is 1 + this × i larger. Breaks the tiling; also gives the depth look.' },
-    waves:      { label: 'Waves',       type: 'float', min: 0.0,  max: 1.0, step: 0.01,  hint: 'p += waves·sin(p.yx): bends the grid axes. 0.2 is enough to hide lines on two layers; 1 is mush.' },
+    waves:      { label: 'Waves',       type: 'float', min: 0.0,  max: 1.0, step: 0.01,  hint: 'p += Waves · sin(p.yx): bends the grid axes. 0.2 is enough to hide lines on two layers; 1 is mush.' },
     cutout:     { label: 'Cutout',      type: 'float', min: 0.0,  max: 0.9, step: 0.01,  hint: 'Fraction of cells dropped by a white-noise sample per cell. Kills repetition when zoomed out.' },
     parallaxX:  { label: 'Parallax X',  type: 'float', min: -5.0, max: 5.0, step: 0.05,  hint: 'Scroll velocity, scaled by layer depth so far layers move slower. Needs Time wired.' },
     parallaxY:  { label: 'Parallax Y',  type: 'float', min: -5.0, max: 5.0, step: 0.05,  hint: 'Vertical scroll velocity per layer.' },

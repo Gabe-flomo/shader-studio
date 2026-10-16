@@ -52,7 +52,7 @@ export const ChannelNode: NodeDefinition = withParamSockets({
       { value: 'off', label: 'Off (A alone)' }, { value: 'minus', label: 'A − B' }, { value: 'ratio', label: 'A ÷ B' }, { value: 'larger', label: 'The larger of A, B' }, { value: 'smaller', label: 'The smaller of A, B' },
     ] },
     channelB: { label: 'Channel B', type: 'select', section: 'Read', showWhen: { param: 'compare', value: ['minus', 'ratio', 'larger', 'smaller'] }, hint: 'Which channel is B (of Compare with when it is wired, else of the same input as A).', options: CHANNEL_OPTIONS, channelsFrom: ['other', 'channels', 'texture'] },
-    shape: { label: 'Shape', type: 'select', section: 'Shape', hint: 'Raw: the number as it is. 0–1: a soft curve that reaches 1 without clipping (1 − e^(−value × Exposure)), as Trail field\'s Amount. Remap: one range onto another. Threshold: 0 below, 1 above, with a soft edge.', options: [
+    shape: { label: 'Shape', type: 'select', section: 'Shape', hint: 'Raw: the number as it is. 0–1: a soft curve that reaches 1 without clipping (1 − e^(−Value × Exposure)), as Trail field\'s Amount. Remap: one range onto another. Threshold: 0 below, 1 above, with a soft edge.', options: [
       { value: 'raw', label: 'Raw' }, { value: 'soft', label: '0–1 (soft)' }, { value: 'remap', label: 'Remap' }, { value: 'threshold', label: 'Threshold' },
     ] },
     exposure: { label: 'Exposure', type: 'float', min: 0, max: 10, step: 0.001, section: 'Shape', showWhen: { param: 'shape', value: 'soft' }, hint: 'How fast it rises to 1: higher shows faint amounts, lower keeps the strong ones apart.' },
@@ -62,7 +62,7 @@ export const ChannelNode: NodeDefinition = withParamSockets({
     outHigh: { label: 'To high', type: 'float', min: -10, max: 10, step: 0.001, section: 'Shape', showWhen: { param: 'shape', value: 'remap' }, hint: 'What From high becomes.' },
     threshold: { label: 'Threshold', type: 'float', min: -10, max: 10, step: 0.001, section: 'Shape', showWhen: { param: 'shape', value: 'threshold' }, hint: 'Where it turns from 0 to 1.' },
     softness: { label: 'Softness', type: 'float', min: 0, max: 5, step: 0.001, section: 'Shape', showWhen: { param: 'shape', value: 'threshold' }, hint: 'How wide the step is (0: hard).' },
-    invert: { label: 'Invert', type: 'bool', section: 'Shape', hint: 'Flip it: 1 − value (0–1, Threshold) or the negative (Raw, Remap).' },
+    invert: { label: 'Invert', type: 'bool', section: 'Shape', hint: 'Flip it: 1 − Value (0–1, Threshold) or the negative (Raw, Remap).' },
   },
   generateGLSL: (node: GraphNode, v) => {
     const id = node.id;
@@ -183,7 +183,7 @@ export const ChannelColoursNode: NodeDefinition = withParamSockets({
     ...Object.fromEntries([1, 2, 3, 4].flatMap(i => [
       [`on${i}`, { label: `Channel ${i}`, type: 'bool', section: `Channel ${i}`, showWhen: { param: 'mode', value: ['glow', 'paint'] }, hint: `Show channel ${i}.` }],
       [`colour${i}`, { label: 'Colour', type: 'vec3color', section: `Channel ${i}`, showWhen: { param: 'mode', value: ['glow', 'paint'] }, hint: `Channel ${i}'s colour.` }],
-      [`exposure${i}`, { label: 'Exposure', type: 'float', min: 0, max: 10, step: 0.001, section: `Channel ${i}`, showWhen: { param: 'mode', value: ['glow', 'paint'] }, hint: 'How fast this channel reaches full colour (1 − e^(−value × Exposure)): higher shows faint amounts.' }],
+      [`exposure${i}`, { label: 'Exposure', type: 'float', min: 0, max: 10, step: 0.001, section: `Channel ${i}`, showWhen: { param: 'mode', value: ['glow', 'paint'] }, hint: 'How fast this channel reaches full colour (1 − e^(−Value × Exposure)): higher shows faint amounts.' }],
     ])),
   },
   generateGLSL: (node: GraphNode, v) => {

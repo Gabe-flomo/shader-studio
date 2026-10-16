@@ -231,7 +231,7 @@ export const WaveTermNode: NodeDefinition = {
   paramDefs: {
     n:     { label: 'n',     type: 'float', min: -2,  max: 2,   step: 0.01 },
     m:     { label: 'm',     type: 'float', min: -2,  max: 2,   step: 0.01 },
-    scale: { label: 'Scale', type: 'float', min: 0.1, max: 4.0, step: 0.01, hint: 'With Bounded on, this is the term\'s physical size (bigger scale = smaller patch on screen). n/m only change the pattern inside that fixed edge, not the edge itself.' },
+    scale: { label: 'Scale', type: 'float', min: 0.1, max: 4.0, step: 0.01, hint: 'With Bounded on, this is the term\'s physical size (bigger Scale = smaller patch on screen). n/m only change the pattern inside that fixed edge, not the edge itself.' },
     aspect: {
       label: 'Aspect', type: 'select',
       hint: 'Square: n and m always mean the same number of repetitions per axis, so changing them reads as a uniform zoom. Fill: uses the raw viewport-stretched UV.',
@@ -300,7 +300,7 @@ export const ChladniFieldNode: NodeDefinition = {
   type: 'chladniField',
   label: 'Chladni Field',
   category: 'Science',
-  description: 'One-node Chladni pattern generator: n, m, and a Mix knob for the classic two-mode blend, plus a Square/Circular geometry switch. n/m/mix are wirable — animate them with a Sine LFO, or wire through a Quantize node for discrete stepped jumps. Outputs a raw scalar field — pipe into Field to Lines to draw it. The fast path for a good-looking pattern in one node; use Chladni Superposition when you want more than two modes stacked.',
+  description: 'One-node Chladni pattern generator: n, m, and a Mix knob for the classic two-mode blend, plus a Square/Circular geometry switch. n/m/Mix are wirable — animate them with a Sine LFO, or wire through a Quantize node for discrete stepped jumps. Outputs a raw scalar field — pipe into Field to Lines to draw it. The fast path for a good-looking pattern in one node; use Chladni Superposition when you want more than two modes stacked.',
   inputs: {
     uv:    { type: 'vec2',  label: 'UV'    },
     n:     { type: 'float', label: 'n'     },
@@ -318,7 +318,7 @@ export const ChladniFieldNode: NodeDefinition = {
     n:        { label: 'n',        type: 'float', min: -2,  max: 2,   step: 0.01 },
     m:        { label: 'm',        type: 'float', min: -2,  max: 2,   step: 0.01 },
     mix:      { label: 'Mix',      type: 'float', min: -2,  max: 2,   step: 0.01, hint: 'Square plate: weight of the swapped (m,n) mode relative to the primary (n,m) mode — 0 = pure grid, ±1 = classic X/diamond. Circular plate: phase rotation between the two degenerate rotational modes.' },
-    scale:    { label: 'Scale',    type: 'float', min: 0.1, max: 4.0, step: 0.01, hint: 'With Bounded on, this is the plate\'s physical size (bigger scale = smaller plate on screen). n/m only change the pattern inside that fixed edge, not the edge itself.' },
+    scale:    { label: 'Scale',    type: 'float', min: 0.1, max: 4.0, step: 0.01, hint: 'With Bounded on, this is the plate\'s physical size (bigger Scale = smaller plate on screen). n/m only change the pattern inside that fixed edge, not the edge itself.' },
     geometry: {
       label: 'Geometry', type: 'select',
       options: [
@@ -446,7 +446,7 @@ export const ChladniSuperpositionNode: NodeDefinition = withParamSockets({
     n6: CHLADNI_SUPERPOSITION_TERM_DEFAULTS[6].n, m6: CHLADNI_SUPERPOSITION_TERM_DEFAULTS[6].m, w6: CHLADNI_SUPERPOSITION_TERM_DEFAULTS[6].w,
   },
   paramDefs: {
-    scale:    { label: 'Scale',    type: 'float', min: 0.1, max: 4.0, step: 0.01, hint: 'With Bounded on, this is the plate\'s physical size (bigger scale = smaller plate on screen). Mode numbers only change the pattern inside that fixed edge, not the edge itself.' },
+    scale:    { label: 'Scale',    type: 'float', min: 0.1, max: 4.0, step: 0.01, hint: 'With Bounded on, this is the plate\'s physical size (bigger Scale = smaller plate on screen). Mode numbers only change the pattern inside that fixed edge, not the edge itself.' },
     geometry: {
       label: 'Geometry', type: 'select',
       options: [

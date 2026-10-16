@@ -54,7 +54,7 @@ export const AgentRideCurveNode: NodeDefinition = {
   label: 'Ride a curve',
   category: 'Simulation',
   aliases: ['Curve ride', 'Follow a curve', 'Ride curve', 'Lissajous walkers', 'Harmonograph walkers', 'On a curve'],
-  description: 'Locks walkers onto a parametric curve (Curve Trace\'s: Lissajous, harmonograph, rose, your own GLSL in t). Each walker keeps its own place along it in Memory, moves by its own speed, and sits across the curve within Ribbon width, so they flow as a band. Position, Velocity (the tangent × speed) and Heading go to Agent Output.',
+  description: 'Locks walkers onto a parametric curve (Curve Trace\'s: Lissajous, harmonograph, rose, your own GLSL in t). Each walker keeps its own place along it in Memory, moves by its own speed, and sits across the curve within Ribbon width, so they flow as a band. Position, Velocity (the tangent × Speed) and Heading go to Agent Output.',
   inputs: {
     speed: { type: 'float', label: 'Speed', hint: 'Overrides Speed (turns a second); each walker\'s variation still applies.' },
     width: { type: 'float', label: 'Ribbon width', hint: 'Overrides Ribbon width.' },

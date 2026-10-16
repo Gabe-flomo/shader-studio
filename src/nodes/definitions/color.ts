@@ -391,7 +391,7 @@ export const InvertNode: NodeDefinition = {
   type: 'invert',
   label: 'Invert',
   category: 'Color',
-  description: 'Invert a color (1 − color). Also works for inverting SDF signs or float ranges.',
+  description: 'Inverts Color (1 − Color). Also works for inverting SDF signs or float ranges.',
   inputs:  { color: { type: 'vec3', label: 'Color' } },
   outputs: { color: { type: 'vec3', label: 'Color' } },
   generateGLSL: (node: GraphNode, inputVars) => {

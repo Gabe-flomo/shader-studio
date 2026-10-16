@@ -18,7 +18,7 @@ export const MaskNode: NodeDefinition = {
   type: 'mask',
   label: 'Mask',
   category: 'Combiners',
-  description: 'Use a float SDF/mask to cut between two vec3 inputs. Threshold sets the cutoff; Edge Width softens it. Negative SDF values = inside = show A.',
+  description: 'Wire a float SDF or mask into Mask / SDF to cut between two vec3 inputs. Threshold sets the cutoff; Edge Width softens it. Negative SDF values = inside = show A.',
   inputs: {
     a:         { type: 'vec3',  label: 'Inside' },
     b:         { type: 'vec3',  label: 'Outside' },
@@ -113,7 +113,7 @@ export const GlowLayerNode: NodeDefinition = {
   type: 'glowLayer',
   label: 'Glow Layer',
   category: 'Combiners',
-  description: 'Turns a signed distance field into a coloured glow. Type picks the formula: Halo (the classic intensity / |d|), Soft, Exponential, Gaussian, Neon, Rim or Inverse square. Intensity is how far it reaches, Power sharpens the falloff.',
+  description: 'Turns a signed distance field into a coloured glow. Type picks the formula: Halo (the classic Intensity ÷ |SDF|), Soft, Exponential, Gaussian, Neon, Rim or Inverse square. Intensity is how far it reaches, Power sharpens the falloff.',
   inputs: {
     d:         { type: 'float', label: 'SDF' },
     color:     { type: 'vec3',  label: 'Color' },
@@ -352,7 +352,7 @@ export const Light2DNode: NodeDefinition = {
   type: 'light2d',
   label: 'Point Light 2D',
   category: 'Effects',
-  description: '2D point light with falloff models. Connect UV as pixel pos, light_pos as light center. Combine multiple lights with Add. Multiply combined light by scene color.',
+  description: '2D point light with falloff models. Connect UV as the pixel position and Light Pos as the light’s centre. Combine multiple lights with Add. Multiply combined light by scene color.',
   inputs: {
     uv:        { type: 'vec2',  label: 'UV'         },
     light_pos: { type: 'vec2',  label: 'Light Pos'  },

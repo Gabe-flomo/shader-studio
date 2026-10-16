@@ -532,7 +532,7 @@ export const PlaneSDF3DNode: NodeDefinition = {
   type: 'planeSDF3D',
   label: 'Plane 3D',
   category: '3D Primitives',
-  description: 'Infinite horizontal plane. Distance = p.y - height. Use as ground or ceiling.',
+  description: 'Infinite horizontal plane. Distance = Position.y − Height. Use as ground or ceiling.',
   inputs: {
     p:      { type: 'vec3',  label: 'Position' },
     height: { type: 'float', label: 'Height'   },
@@ -630,7 +630,7 @@ export const SinWarp3DNode: NodeDefinition = {
   type: 'sinWarp3D',
   label: 'Sin Warp 3D',
   category: '3D Transforms',
-  description: 'Sinusoidal domain warp. Distorts one axis by sin(another axis * frequency + time) * amplitude. Keep amplitude < 0.15 to avoid SDF metric artifacts.',
+  description: 'Sinusoidal domain warp. Distorts one axis by sin(another axis × Frequency + Time) × Amplitude. Keep Amplitude below 0.15 to avoid SDF metric artifacts.',
   inputs: {
     p:         { type: 'vec3',  label: 'Position'   },
     time:      { type: 'float', label: 'Time'        },
@@ -676,7 +676,7 @@ export const SinWarp3DNode: NodeDefinition = {
 
 export const RoundedBoxSDF3DNode: NodeDefinition = withParamSockets({
   type: 'roundedBoxSDF3D', label: 'Rounded Box', category: '3D Primitives',
-  description: 'Box SDF with rounded corners and edges. radius=0 is a plain box.',
+  description: 'Box SDF with rounded corners and edges. Radius 0 is a plain box.',
   inputs: { pos: { type: 'vec3', label: 'Position' }, radius: { type: 'float', label: 'Radius' } },
   outputs: { dist: { type: 'float', label: 'Distance' } },
   defaultParams: { sizeX: 0.4, sizeY: 0.4, sizeZ: 0.4, radius: 0.1 },
@@ -849,7 +849,7 @@ export const TriPrismSDF3DNode: NodeDefinition = withParamSockets({
 
 export const CappedConeSDF3DNode: NodeDefinition = withParamSockets({
   type: 'cappedConeSDF3D', label: 'Capped Cone', category: '3D Primitives',
-  description: 'Frustum/truncated cone. r1=bottom radius, r2=top radius.',
+  description: 'Frustum/truncated cone. Bottom Radius and Top Radius size its two ends.',
   inputs: { pos: { type: 'vec3', label: 'Position' } },
   outputs: { dist: { type: 'float', label: 'Distance' } },
   defaultParams: { height: 0.5, r1: 0.4, r2: 0.1 },
@@ -993,7 +993,7 @@ export const SDFIntersectNode: NodeDefinition = {
 
 export const SDFSubtractNode: NodeDefinition = {
   type: 'sdfSubtract', label: 'Subtract', category: 'SDF', subcategory: 'Combine', aliases: ['cut', 'smooth subtract', 'difference'],
-  description: 'Cuts B out of A (max(a, -b)). A blend radius above 0 softens the cut edge.',
+  description: 'Cuts Cutter out of Shape (max(Shape, −Cutter)). A blend radius above 0 softens the cut edge.',
   inputs: { a: { type: 'float', label: 'Shape' }, b: { type: 'float', label: 'Cutter' }, k: { type: 'float', label: 'Blend radius' } },
   outputs: { dist: { type: 'float', label: 'Distance' }, blend: { type: 'float', label: 'Blend' } },
   defaultParams: { k: 0.0 },
@@ -1016,7 +1016,7 @@ export const SDFSubtractNode: NodeDefinition = {
 
 export const SDFOnionNode: NodeDefinition = {
   type: 'sdfOnion', label: 'Onion', category: 'SDF', subcategory: 'Modify', aliases: ['shell', 'outline', 'ring'],
-  description: 'Turns a solid SDF into a shell of the given thickness (abs(d) - r).',
+  description: 'Turns a solid SDF into a shell of the given thickness (abs(d) − Thickness).',
   inputs: { dist: { type: 'float', label: 'Distance' }, r: { type: 'float', label: 'Thickness' } },
   outputs: { dist: { type: 'float', label: 'Distance' } },
   defaultParams: { r: 0.05 },
@@ -1161,7 +1161,7 @@ export const SpiralWarp3DNode: NodeDefinition = {
   type: 'spiralWarp3D',
   label: 'Spiral Warp 3D',
   category: '3D Transforms',
-  description: 'Rotate a 3D position around an axis by an angle proportional to distance from origin. Creates spiral/vortex distortion. Keep frequency < 1.5 to avoid artifacts. Wire MarchDist → angle for depth-driven spiral.',
+  description: 'Rotate a 3D position around an axis by an angle proportional to distance from origin. Creates spiral/vortex distortion. Keep Spiral Freq below 1.5 to avoid artifacts. Wire MarchDist → angle for depth-driven spiral.',
   inputs: {
     p:         { type: 'vec3',  label: 'Position'          },
     time:      { type: 'float', label: 'Time'               },
@@ -1364,7 +1364,7 @@ export const Kaleidoscope3DNode: NodeDefinition = {
   type: 'kaleidoscope3D',
   label: 'Kaleidoscope 3D',
   category: '3D Transforms',
-  description: 'Mirror-fold symmetry: Octahedral (abs+sort), Tetrahedral (3 diagonal planes), or Icosahedral (golden-ratio planes). More iterations = more fractal complexity.',
+  description: 'Mirror-fold symmetry: Octahedral (abs+sort), Tetrahedral (3 diagonal planes), or Icosahedral (golden-ratio planes). More Iterations: more fractal complexity.',
   inputs: {
     pos: { type: 'vec3', label: 'Position' },
   },
@@ -1419,7 +1419,7 @@ export const MobiusWarp3DNode: NodeDefinition = {
   type: 'mobiusWarp3D',
   label: 'Möbius Warp 3D',
   category: '3D Transforms',
-  description: 'Conformal Möbius (Blaschke) transform on the chosen plane. Warps space toward/away from focal point (cx,cy). Keep |(cx,cy)| < 1 for stability.',
+  description: 'Conformal Möbius (Blaschke) transform on the chosen plane. Warps space toward/away from the focal point (Center X, Center Y). Keep that point within 1 of the origin for stability.',
   inputs: {
     pos:   { type: 'vec3',  label: 'Position' },
     cx:    { type: 'float', label: 'Center X' },
@@ -1550,9 +1550,9 @@ export const GyroidFieldNode: NodeDefinition = {
   label: 'Gyroid Field',
   category: '3D Primitives',
   description:
-    'Gyroid implicit surface. dot(sin(p * freq), cos(p.yzx * freq)). ' +
-    'Not a true SDF — divide density by 0.33 to use as a march step. ' +
-    'Use the surface output (abs(density) - thickness) for shell shapes with RayMarch.',
+    'Gyroid implicit surface. dot(sin(p × Frequency), cos(p.yzx × Frequency)). ' +
+    'Not a true SDF — divide Density by 0.33 to use as a march step. ' +
+    'Use the surface output (abs(Density) − Thickness) for shell shapes with RayMarch.',
   inputs: {
     pos:       { type: 'vec3',  label: 'Position'  },
     frequency: { type: 'float', label: 'Frequency' },
@@ -1718,7 +1718,7 @@ export const Turbulence3DNode: NodeDefinition = withParamSockets({
     octaves:   { label: 'Octaves',   type: 'float', min: 1,   max: 12,   step: 1, compileTime: true,    hint: 'Sine layers per sample. 8–10 for water; every octave runs on every march step. Recompiles when changed.' },
     strength:  { label: 'Strength',  type: 'float', min: 0.0, max: 1.0,  step: 0.01, hint: 'Displacement per octave (divided by d).' },
     frequency: { label: 'Frequency', type: 'float', min: 0.1, max: 8.0,  step: 0.1,  hint: 'Wave frequency of the first octave.' },
-    decay:     { label: 'Decay',     type: 'float', min: 0.3, max: 0.95, step: 0.01, hint: 'd /= decay each octave; smaller decay = frequencies climb faster.' },
+    decay:     { label: 'Decay',     type: 'float', min: 0.3, max: 0.95, step: 0.01, hint: 'd /= Decay each octave; smaller Decay = frequencies climb faster.' },
     ax:        { label: 'Axis X',    type: 'float', min: -1.0, max: 1.0, step: 0.01, hint: 'Rotation axis each octave spins around (normalised for you).' },
     ay:        { label: 'Axis Y',    type: 'float', min: -1.0, max: 1.0, step: 0.01, hint: 'Rotation axis Y.' },
     az:        { label: 'Axis Z',    type: 'float', min: -1.0, max: 1.0, step: 0.01, hint: 'Rotation axis Z.' },
@@ -1753,7 +1753,7 @@ export const DomainWarp3DNode: NodeDefinition = withParamSockets({
   label: '3D Domain Warp',
   category: '3D Primitives',
   description:
-    'Warps a 3D position with FBM noise — p + fbm3(p * scale) * strength. ' +
+    'Warps a 3D position with FBM noise — p + fbm3(p × Scale) × Strength. ' +
     'Place between ray position and any SDF or Gyroid Field for organic turbulence.',
   inputs: {
     pos:      { type: 'vec3',  label: 'Position' },

@@ -300,7 +300,7 @@ export const UvTransform2dNode: NodeDefinition = {
   type: 'uvTransform2d',
   label: 'UV Transform 2D',
   category: '2D Space', subcategory: 'Basic',
-  description: 'Full 2D affine transform: translate + rotate + scale composed as a single mat2 multiply. More efficient than chaining three separate nodes. Rotation and scale apply relative to pivot.',
+  description: 'Full 2D affine transform: Translate, rotation and Scale composed as a single mat2 multiply. More efficient than chaining three separate nodes. Rotation and scale apply relative to pivot.',
   inputs: {
     uv:        { type: 'vec2',  label: 'UV'        },
     translate: { type: 'vec2',  label: 'Translate', axisParams: ['tx', 'ty'] },
