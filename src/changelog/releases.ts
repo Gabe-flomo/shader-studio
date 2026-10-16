@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.224',
+    date: '2026-10-15',
+    title: "Controls on the Agents card",
+    highlights: [
+      { area: 'Studio', text: "Agents groups have a Controls section: right-click any slider inside \u2192 Pin to the group card, then Add all to Play in one click." },
+    ],
+  },
+  {
     id: '2026.10.223',
     date: '2026-10-15',
     title: "Lighter riding",
