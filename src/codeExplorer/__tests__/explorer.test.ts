@@ -163,7 +163,7 @@ describe('provenance', () => {
   });
   it('carries graph, node, label, field and position', () => {
     const r = functionReport(indexOf(exampleRecords), 'smoothstep');
-    const inst = r.patterns.flatMap(p => p.variants.flatMap(v => v.instances)).find(i => i.prov.docId === 'example:gridDensityWave')!;
+    const inst = r.patterns.flatMap(p => p.variants.flatMap(v => v.instances)).find(i => i.prov.docId === 'example:particleImageDissolve')!;
     expect(inst.prov).toMatchObject({ sourceKind: 'expr', origin: 'example', field: 'result', nodeType: 'exprNode' });
     expect(inst.prov.nodeId).toBeTruthy();
     expect(inst.text.slice(inst.hs, inst.he)).toMatch(/^smoothstep\(/);

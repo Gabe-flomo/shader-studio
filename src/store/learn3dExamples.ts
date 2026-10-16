@@ -64,16 +64,6 @@ function loop(type: 'marchLoopGroup' | 'giLitMarchGroup', id: string, x: number,
   return n(type, id, x, y, { ...params, subgraph: body }, { ro: ['cam', 'ro'], rd: ['cam', 'rd'], scene: ['scene', 'scene'] });
 }
 
-/** An Expression Block with float inputs and a vec3 result. */
-function expr(id: string, x: number, y: number, label: string, wires: Record<string, Wire>, result: string, comment: string): GraphNode {
-  const base = n('exprNode', id, x, y, {
-    inputs: Object.keys(wires).map(name => ({ name, type: 'float', slider: null })),
-    outputType: 'vec3', lines: [], result, expr: 'a', label, ...note(comment),
-  });
-  const inputs: GraphNode['inputs'] = {};
-  for (const [k, [from, key]] of Object.entries(wires)) inputs[k] = { type: 'float', label: k, connection: { nodeId: from, outputKey: key } };
-  return { ...base, inputs, outputs: { result: { type: 'vec3', label: 'Result' } } };
-}
 
 /** Left half of the screen shows `left`, right half `right`: UV x > 0 picks. */
 function splitScreen(left: Wire, right: Wire, x: number, y: number): GraphNode[] {
@@ -113,16 +103,19 @@ lesson('learn3dDistance', [
   n('splitVec2', 'split', 240, 220, {}, { v: ['uv', 'uv'] }),
   n('makeVec3', 'pt', 460, 220, { b: 0, ...note('The 3D point being measured: x and y come from the screen, z is the Slice depth. The whole screen is a flat sheet through 3D space.') }, { r: ['split', 'x'], g: ['split', 'y'] }),
   n('sphereSDF3D', 'sph', 700, 220, { radius: 0.5, ...note('The same Sphere SDF 3D you put inside a Scene Group. It returns one number per point: how far that point is from the sphere\'s surface.') }, { pos: ['pt', 'rgb'] }),
-  expr('view', 960, 220, 'Distance view', { d: ['sph', 'dist'] },
-    'mix(mix(vec3(0.35, 0.6, 0.95), vec3(0.95, 0.6, 0.3), step(0.0, d)) * (1.0 - exp(-4.0 * abs(d))) * (0.8 + 0.2 * cos(60.0 * d)), vec3(1.0), 1.0 - smoothstep(0.0, 0.015, abs(d)))',
-    'A way of looking at a distance: orange where it is positive (outside), blue where negative (inside), darker near 0, a band every 0.1 units and white where it is exactly 0 (the surface).'),
-  out(['view', 'result'], 1220),
+  n('distanceShape', 'side', 960, 120, { mode: 'inside', offset: 0, softness: 0.006, ...note('Outline (distance), Inside: 1 where the distance is negative (inside the sphere), 0 outside.') }, { distance: ['sph', 'dist'] }),
+  n('colorize', 'base', 1200, 120, { color: [0.35, 0.6, 0.95], background: [0.95, 0.6, 0.3], ...note('Colorize: blue inside (where the mask is 1), orange outside (the Background).') }, { field: ['side', 'mask'] }),
+  n('distanceShape', 'bands', 960, 360, { mode: 'rings', offset: 0, spacing: 0.1, thickness: 0.008, softness: 0.004, fade: 0, speed: 0, tint: [0.35, 0.35, 0.35], ...note('Outline (distance), Rings: a faint line every 0.1 units of distance (outside the surface), like the contour lines of a map: count them to read how far a point is.') }, { distance: ['sph', 'dist'] }),
+  n('distanceShape', 'edge', 960, 560, { mode: 'outline', offset: 0, width: 0.012, softness: 0.004, tint: [1, 1, 1], ...note('Outline (distance), Outline: a white line where the distance is exactly 0, the surface itself.') }, { distance: ['sph', 'dist'] }),
+  n('addColor', 'withBands', 1440, 220, { ...note('Add Colors: the contour lines over the inside/outside colours.') }, { a: ['base', 'color'], b: ['bands', 'light'] }),
+  n('addColor', 'view', 1680, 220, { ...note('Add Colors: the white surface line on top. This chain only paints the number; it is a viewer, not part of any 3D scene.') }, { a: ['withBands', 'result'], b: ['edge', 'light'] }),
+  out(['view', 'result'], 1920),
 ], [
   ctl('z', 'pt::b', 'Slice depth (z)', -0.8, 0.8, 0.01),
   ctl('r', 'sph::radius', 'Radius', 0.1, 0.9, 0.01),
 ], `**What it shows.** In a ray marcher a shape is not a mesh, it is a function: give it any point in 3D and it answers "how far is this point from my surface?". Positive outside, negative inside, exactly 0 on the surface. That answer is the shape's *distance field*. This graph measures a sphere's field on a flat sheet through the middle of the sphere and paints the answer: orange outside, blue inside, a band for every 0.1 units, and a white line where the distance is 0. The white circle is the sphere's outline on this sheet.
 
-**How it is built.** UV → Split Vec2 → Make Vec3 builds a 3D point for every pixel: x and y from the screen, z from the **Slice depth** slider. **Sphere SDF 3D** measures it (the distance is simply length(point) − radius). The Expression Block named Distance view only paints the number; it is a viewer, not part of any 3D scene.
+**How it is built.** UV → Split Vec2 → Make Vec3 builds a 3D point for every pixel: x and y from the screen, z from the **Slice depth** slider. **Sphere SDF 3D** measures it (the distance is simply length(point) − radius). The nodes after it only paint the number, a viewer, not part of any 3D scene: **Outline (distance)** three ways (Inside for the blue/orange split, Rings for a line every 0.1 units, Outline for the white surface line), **Colorize** and two **Add Colors**.
 
 **Try.** Move **Slice depth (z)** toward ±0.5: the sheet moves off the sphere's centre, so the circle shrinks and then disappears, but the orange bands are still there: the distance exists everywhere, even where there is no surface. Change **Radius**. Count the bands between the white line and a point: that is how far a ray standing there could safely jump, the idea behind the next lesson.`);
 

@@ -255,7 +255,7 @@ export function buildTextureToolExamples(): Record<string, ExampleGraph> {
       ...slime,
       n('textureFlow', 'tfFlow', 1260, 420, { channel: 'red', direction: 'along', length: 'unit', strength: 0.025, reach: 4,
         ...note([
-          'Flow (texture): reads the Trail field\'s Image and works out, at every pixel, the direction along its veins (Along the contours: the slope turned 90°).',
+          'Flow (texture): reads the Trail field\'s Texture and works out, at every pixel, the direction along its veins (Along the contours: the slope turned 90°).',
           'Unit length: every arrow is Strength long wherever there is trail, so thin and thick veins push alike. Reach 4: the slope is measured 4 pixels apart, smoothing the grain.',
         ]) },
         { texture: ['slimeTrail', 'texture'] }),
@@ -270,7 +270,7 @@ export function buildTextureToolExamples(): Record<string, ExampleGraph> {
       ctl('veins', 'tfVeins::value', 'Veins', 0, 1.5, 0.01),
     ], `**What it shows.** An Agents trail is a texture like any other: Flow (texture) turns it into a direction field you can push anything with.
 
-**How it is built.** The Slime mold preset (Emit → Agents → Deposit → Trail field). The Trail field's Image goes into Flow, set to Along the contours; Flow's UV output (this pixel moved along the flow) is the photo's UV. Add Colors lays the coloured trail over it.
+**How it is built.** The Slime mold preset (Emit → Agents → Deposit → Trail field). The Trail field's Texture goes into Flow, set to Along the contours; Flow's UV output (this pixel moved along the flow) is the photo's UV. Add Colors lays the coloured trail over it.
 
 **Try.** Set Flow's Direction to Uphill and the photo is pulled into the veins instead of along them. Raise Comb strength for a liquid smear; negative turns the flow round.`),
   };

@@ -10,4 +10,4 @@
 
 **Auto** (the default) picks by what is wired: a vector shows Direction, Channels or a Texture shows Channels, and a number shows Heat.
 
-**Tips.** If everything is red, raise High. A Trail of sand reaches about 9, a Trail field's raw channels can reach hundreds, and a soft 0–1 output stays below 1. Show a Trail field's Image as Channels to see what each species or each deposit lays.
+**Tips.** If everything is red, raise High. A Trail of sand reaches about 9, a Trail field's raw channels can reach hundreds, and a soft 0–1 output stays below 1. Show a Trail field's Texture as Channels to see what each species or each deposit lays.

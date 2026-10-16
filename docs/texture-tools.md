@@ -21,7 +21,7 @@ for this pixel, wire a warp to bend the read). Any texture works:
 | Texture Input, Video Input | Texture |
 | Baked | Texture |
 | Motion (texture) | Texture |
-| Agents | Trail field's Image, Draw agents' Image |
+| Agents | Trail field's Texture, Draw agents' Image |
 
 **Mask** and **Levels** also take a plain **Value** (float) or **Color** (vec3) when Texture is not
 wired, so the same node shapes a Jump flood distance, an Edges strength or any number.

@@ -4,7 +4,7 @@
 
 ## What it reads
 
-- **Texture**: a Trail field's Image (sand, termites' chips), a Depth map, a Pass, a picture. **Channel** picks which channel is the height (a Trail field's channels are 1–4), or its brightness.
+- **Texture**: a Trail field's Texture (sand, termites' chips), a Depth map, a Pass, a picture. **Channel** picks which channel is the height (a Trail field's channels are 1–4), or its brightness.
 - **Height ƒ**: any float instead (noise, an SDF's Distance, a Grid Rules wave). It's a field socket, so the node reads the height a little to each side of the pixel. It wins over Texture.
 
 **Range low / high** say which heights count as lowest and highest. A Trail of sand reaches about 9, noise about 1. **Relief** is how tall the highest point stands, in picture units: more is steeper slopes and deeper shade. **Spacing** is how far to each side the slope is read, in pixels: wider is smoother.

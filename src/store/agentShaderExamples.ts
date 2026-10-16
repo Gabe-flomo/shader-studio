@@ -447,7 +447,7 @@ export function shaderNoiseFlowNodes(x = 0, y = 0): GraphNode[] {
     ...note([
       'Draw agents, Ink: each particle lays a short streak of ink (Streak 0.6) along its motion over the Paper, darker where many overlap.',
       'Colour by Heading between Colour A (indigo) and B (madder red): strands going one way are blue, the other way red, so the noise\'s eddies show as two-tone swirls.',
-      'Try: Colour by One colour for plain indigo ink; Style Glow on a dark Over for light trails.',
+      'Try: Colour by One colour for plain indigo ink; Style Glow on a dark Background for light trails.',
     ]),
   }, { agents: ['nfInk', 'agents'], over: ['nfPaper', 'result'] });
   const output2 = n('output', 'nfOutput', X(1680), Y(0), { ...note(['Output: the ink strands on the washed paper are the picture.']) }, { color: ['nfDraw', 'color'] });

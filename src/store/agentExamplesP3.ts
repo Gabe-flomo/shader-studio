@@ -105,7 +105,7 @@ export function multiSlimeNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     resolution: '1024', diffuse: 1, halfLife: 0.06, edges: 'wrap', gain: 0.04,
     ...note([
       'Trail field: three channels, one per species, 1024 rows tall; each step it spreads (3×3) and fades (half gone in 0.06 s).',
-      'Its Image goes back into the group for Sense (the "↺ last step" wire); its Channels go to Channel Colours, which colours the picture.',
+      'Its Texture goes back into the group for Sense (the "↺ last step" wire); its Channels go to Channel Colours, which colours the picture.',
     ]),
   }, { deposit: ['msDeposit', 'deposit'] });
   const colour = n('channelColours', 'msColour', X(1680), Y(0), {
@@ -506,7 +506,7 @@ export function strandsNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     ...note([
       'Draw agents, Ink: every walker lays a streak of ink along its motion (Streak 1.2) on warm paper; where strands crowd the ink goes dark.',
       'Colour by Heading between a blue-black and a rust: strands running one way read slightly cooler than those running the other, like combed silk.',
-      'Try: Style Streaks on a dark Over for glowing fibres.',
+      'Try: Style Streaks on a dark Background for glowing fibres.',
     ]),
   }, { agents: ['strands', 'agents'] });
   const nodes = [emit, group, deposit, trail, draw];

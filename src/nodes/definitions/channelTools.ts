@@ -35,7 +35,7 @@ export const ChannelNode: NodeDefinition = withParamSockets({
   description: 'One channel of a texture or of four Channels (a Trail field, a Data texture, a Pass), as a number you can use: Raw, softly scaled to 0–1, remapped, or cut at a threshold, optionally inverted. Compare sets it against another channel first (A − B, A ÷ B, the larger or smaller): prey scent minus predator scent, food over crowd.',
   inputs: {
     channels: { type: 'vec4', label: 'Channels', hint: 'Four channels: a Trail field\'s Channels, a Data texture read, any vec4. Wins over Texture.' },
-    texture: { type: 'texture', label: 'Texture', hint: 'A texture to read at this pixel (a Trail field\'s Image, a Pass, a picture), when Channels is not wired.' },
+    texture: { type: 'texture', label: 'Texture', hint: 'A texture to read at this pixel (a Trail field\'s Texture, a Pass, a picture), when Channels is not wired.' },
     other: { type: 'vec4', label: 'Compare with', hint: 'Where B comes from when comparing: another set of four channels. Empty: the same input as A.' },
     uv: { type: 'vec2', label: 'UV', hint: 'Where to read the Texture, in picture coordinates. Empty: this pixel.' },
   },
