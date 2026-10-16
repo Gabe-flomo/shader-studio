@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.236',
+    date: '2026-10-15',
+    title: "Builders, with nodes",
+    highlights: [
+      { area: 'Studio', text: "The 2D and 3D scene builders make their glows and skies with nodes (Glow Layer, Gradient) instead of code blocks, so every built scene is easier to read." },
+    ],
+  },
+  {
     id: '2026.10.235',
     date: '2026-10-15',
     title: "Passes, with nodes",
