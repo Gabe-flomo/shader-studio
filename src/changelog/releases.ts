@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.225',
+    date: '2026-10-15',
+    title: "Height Light",
+    highlights: [
+      { area: 'Studio', text: "Height Light: light any height map like terrain (a trail, depth, noise, an SDF) with a sun, relief and two colours. Sand drift's dunes now use it." },
+    ],
+  },
+  {
     id: '2026.10.224',
     date: '2026-10-15',
     title: "Controls on the Agents card",
