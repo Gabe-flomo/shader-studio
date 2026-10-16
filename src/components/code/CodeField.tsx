@@ -9,6 +9,7 @@ import { C, C_LIGHT, tokenizeLine, type Token } from '../glslSyntax';
 import { CompletionPopup } from './CompletionPopup';
 import type { Completion } from './glslReference';
 import { useCompletion, type MemberCompletions } from './useCompletion';
+import { nameAt } from '../../nodes/exprNameOrigin';
 
 const FONT_SIZE = 12.5;
 const LINE_H = 20;
@@ -303,7 +304,7 @@ export interface CharRect { left: number; top: number; bottom: number }
  * autocomplete as CodeField. Styled like the app's Field.
  */
 export function CodeInput({
-  value, onChange, completions, ariaLabel, placeholder, height = 34, style, inputRef, onFocus, onBlur, onKeyDown, onSelect, inputAttrs, invalid, special,
+  value, onChange, completions, ariaLabel, placeholder, height = 34, style, inputRef, onFocus, onBlur, onKeyDown, onSelect, inputAttrs, invalid, special, nameInfo,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -325,10 +326,16 @@ export function CodeInput({
   invalid?: boolean;
   /** Names drawn as built-ins of the place they're in (a loop's i, fi, n, k), not as plain names. */
   special?: ReadonlySet<string>;
+  /**
+   * What to say about a name the pointer rests on for two seconds (the Expression Block: the line
+   * that set it). Null: nothing to say, no tip.
+   */
+  nameInfo?: (name: string) => ReactNode | null;
 }) {
   const tk = useTokens();
   const pal = useThemeMode() === 'dark' ? C : C_LIGHT;
   const elRef = useRef<HTMLInputElement | null>(null);
+  const tip = useNameTip(nameInfo, value);
   const [focused, setFocused] = useState(false);
   const [scrollX, setScrollX] = useState(0);
   const setRefs = useCallback((el: HTMLInputElement | null) => {
@@ -391,6 +398,10 @@ export function CodeInput({
         onFocus={e => { setFocused(true); onFocus?.(e.currentTarget); }}
         onBlur={() => { setFocused(false); ac.close(); onBlur?.(); }}
         onClick={e => { ac.close(); trackCaret(e); }}
+        onMouseMove={nameInfo ? tip.move : undefined}
+        onMouseLeave={nameInfo ? tip.hide : undefined}
+        onMouseDown={nameInfo ? tip.hide : undefined}
+        onKeyDownCapture={nameInfo ? tip.hide : undefined}
         style={{ ...text, position: 'relative', flex: 1, minWidth: 0, padding: 0, border: 0, outline: 'none', background: 'transparent', color: 'transparent', caretColor: tk.accent.base }}
       />
       {ac.state.open && anchorXY && (
@@ -404,6 +415,53 @@ export function CodeInput({
           onPick={item => { if (elRef.current) ac.apply(elRef.current, item); }}
         />
       )}
+      {tip.shown && createPortal(
+        <div {...portalGuard} role="tooltip" data-name-tip={tip.shown.name} style={{
+          position: 'fixed', zIndex: 2100, left: Math.max(8, Math.min(tip.shown.x - 12, window.innerWidth - 428)), maxWidth: 420, boxSizing: 'border-box', pointerEvents: 'none',
+          padding: '8px 10px', borderRadius: radius.md, background: tk.bg.panel, boxShadow: tk.shadow.popover, border: `1px solid ${tk.border.default}`,
+          ...(window.innerHeight - tip.shown.y > 160 ? { top: tip.shown.y + 6 } : { bottom: window.innerHeight - tip.shown.top + 6 }),
+        }}>{tip.shown.content}</div>,
+        document.body,
+      )}
     </span>
   );
+}
+
+/** How long the pointer rests on a name before its tip shows. */
+export const NAME_TIP_MS = 2000;
+
+/**
+ * The resting-pointer tip over a one-line code field: the name under the pointer (by character
+ * width), shown after NAME_TIP_MS on the same name; moving to another name starts over; leaving,
+ * clicking or typing hides it.
+ */
+function useNameTip(nameInfo: ((name: string) => ReactNode | null) | undefined, value: string) {
+  const [shown, setShown] = useState<{ name: string; x: number; y: number; top: number; content: ReactNode } | null>(null);
+  const pending = useRef<{ name: string; timer: ReturnType<typeof setTimeout> } | null>(null);
+  const clear = () => { if (pending.current) clearTimeout(pending.current.timer); pending.current = null; };
+  useEffect(() => clear, []);
+  // The text changed under it: the tip may be about something that is gone
+  useEffect(() => { clear(); setShown(null); }, [value]);
+  const hide = useCallback(() => { clear(); setShown(null); }, []);
+  const move = useCallback((e: React.MouseEvent<HTMLInputElement>) => {
+    if (!nameInfo) return;
+    const el = e.currentTarget;
+    const r = el.getBoundingClientRect();
+    const at = Math.floor((e.clientX - r.left + el.scrollLeft) / charWidth());
+    const hit = /[A-Za-z_0-9]/.test(el.value[at] ?? '') ? nameAt(el.value, at) : null;
+    if (!hit) { hide(); return; }
+    if (pending.current?.name === hit.name || shown?.name === hit.name) return;
+    clear();
+    setShown(null);
+    const x = r.left + hit.start * charWidth() - el.scrollLeft, y = r.bottom, top = r.top;
+    pending.current = {
+      name: hit.name,
+      timer: setTimeout(() => {
+        pending.current = null;
+        const content = nameInfo(hit.name);
+        if (content) setShown({ name: hit.name, x, y, top, content });
+      }, NAME_TIP_MS),
+    };
+  }, [nameInfo, shown, hide]);
+  return { shown, move, hide };
 }

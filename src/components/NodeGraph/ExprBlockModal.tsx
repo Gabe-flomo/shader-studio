@@ -30,6 +30,8 @@ import { insertSnippet } from '../code/useCompletion';
 import { HowUsedButton } from '../codeExplorer/HowUsedButton';
 import { useExprBlockJump } from '../codeExplorer/useCodeJumpFocus';
 import { LineFold } from '../explain/LineFold';
+import { lineTarget, sameTarget, useLineProbe } from '../../lib/nodePreview/lineProbe';
+import { nameOrigins } from '../../nodes/exprNameOrigin';
 import { ExplainViewBoundary } from '../explain/ExplainViewBoundary';
 import { useExplainDialogs } from '../explain/useExplainDialogs';
 import { exprBlockContext, exprBlockUseHere, scopeNodes } from '../explain/hosts';
@@ -358,7 +360,24 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
     onKeyDown: handleAnyKeyDown,
     // A number under the caret offers Make a slider
     onSelect: (el: HTMLInputElement) => literal.track(el, where),
+    // Resting on a name for two seconds: the input it is and the lines above that set it
+    nameInfo: (name: string) => nameTip(name, where.kind === 'return' ? 'end' : where.index),
   });
+  const nameTip = (name: string, before: number | 'end') => {
+    if (special?.has(name)) return null;
+    const origins = nameOrigins(name, lines, customInputs, before);
+    if (!origins.length) return null;
+    return (
+      <span style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {origins.map((o, k) => (
+          <span key={k} style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+            <span style={{ font: `600 11px ${fontFamily.ui}`, color: tk.text.faint, whiteSpace: 'nowrap' }}>{o.kind === 'input' ? 'Input' : `Line ${o.index + 1}`}</span>
+            <span style={{ font: `500 12px ${fontFamily.mono}`, color: tk.text.primary, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{o.kind === 'input' ? `${o.type} ${o.name}` : o.text}</span>
+          </span>
+        ))}
+      </span>
+    );
+  };
 
   // Edit in the Function Builder: only on a block the Builder made (its fnBuilderFns, the bodies
   // authored there) and that hasn't grown lines since. The Builder writes one expression back, so
@@ -620,7 +639,7 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
               {sliderOfferAt({ kind: 'line', index: i, field: 'rhs' }, 28 + 110 + 64 + 12)}
               {/* ▶ on this line: its picture opens right here, not at the bottom */}
               <LinePreviewPanel node={node} at={{ kind: 'line', index: i }} />
-              {line.rhs.trim() && !line.off && <LineExplain index={i} line={line} ctx={lineCtxs[i] ?? explainCtx} openRequest={explainOpen?.at === i ? explainOpen.seq : undefined} onOpenView={setViewAt} />}
+              {line.rhs.trim() && !line.off && <LineExplain nodeId={node.id} index={i} line={line} ctx={lineCtxs[i] ?? explainCtx} openRequest={explainOpen?.at === i ? explainOpen.seq : undefined} onOpenView={setViewAt} />}
               </Fragment>
             ))}
             {lines.length === 0 && <Note>{loopOn ? 'No looped lines yet. They run once per pass, top to bottom.' : 'No lines yet. Each line assigns to a variable, top to bottom.'}</Note>}
@@ -657,7 +676,7 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
             </div>
             {sliderOfferAt({ kind: 'return' }, 0)}
             <LinePreviewPanel node={node} at={{ kind: 'return' }} />
-            {result.trim() ? <LineExplain index="return" line={{ lhs: '', op: '', rhs: result }} ctx={lineCtxs[lineCtxs.length - 1] ?? explainCtx} openRequest={explainOpen?.at === 'return' ? explainOpen.seq : undefined} onOpenView={setViewAt} /> : null}
+            {result.trim() ? <LineExplain nodeId={node.id} index="return" line={{ lhs: '', op: '', rhs: result }} ctx={lineCtxs[lineCtxs.length - 1] ?? explainCtx} openRequest={explainOpen?.at === 'return' ? explainOpen.seq : undefined} onOpenView={setViewAt} /> : null}
             <Note>The final expression of type {outputType} that the block outputs.</Note>
           </div>
 
@@ -699,15 +718,20 @@ export function ExprBlockModal({ node, insideLoop = false, onClose }: Props) {
  * what it does and Open explain view (LineFold.tsx). The model's line explanation and the build-up
  * live in the explain view, not here.
  */
-function LineExplain({ index, line, ctx, openRequest, onOpenView }: {
-  index: number | 'return'; line: WarpLine; ctx: GeneraliseContext;
+function LineExplain({ nodeId, index, line, ctx, openRequest, onOpenView }: {
+  nodeId: string; index: number | 'return'; line: WarpLine; ctx: GeneraliseContext;
   /** ▶ on this line was pressed (a counter): its fold opens. */
   openRequest?: number;
   onOpenView: (at: number | 'return') => void;
 }) {
   const head = index === 'return' ? 'return ' : `${line.lhs} ${line.op || '='} `;
   const open = useMemo(() => () => onOpenView(index), [onOpenView, index]);
-  return <LineFold text={head + line.rhs} ctx={ctx} indent={index === 'return' ? 0 : 28} openRequest={openRequest} onOpenView={open} />;
+  // Is this line in the line preview (▶ lit, or one of its steps shown)? The fold follows it.
+  const probing = useLineProbe(s => {
+    const t = s.probe && s.probe.nodeId === nodeId ? lineTarget(s.probe.target) : null;
+    return !!t && sameTarget(t, index === 'return' ? { kind: 'return' } : { kind: 'line', index });
+  });
+  return <LineFold text={head + line.rhs} ctx={ctx} indent={index === 'return' ? 0 : 28} openRequest={openRequest} onOpenView={open} probing={probing} />;
 }
 
 /** Where the explain view's ‹ › go: the lines that are on and written, then Return when there is one. */
