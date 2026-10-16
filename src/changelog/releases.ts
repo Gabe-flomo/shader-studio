@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.239',
+    date: '2026-10-16',
+    title: "Words that match the node",
+    highlights: [
+      { area: 'Studio', text: "Node cards and descriptions use the node's own names: Step says 0 while Value is below Threshold, as step(Threshold, Value)." },
+    ],
+  },
+  {
     id: '2026.10.238',
     date: '2026-10-15',
     title: "Sharper, baked masks",
