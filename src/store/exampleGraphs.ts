@@ -2140,16 +2140,15 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
       },
       {
         id: 'pr_sky',
-        type: 'exprNode',
+        type: 'gradient',
         position: { x: 300, y: 80 },
-        inputs: { uv: { type: 'vec2', label: 'uv (vec2)', connection: { nodeId: 'pr_uv', outputKey: 'uv' } } },
-        outputs: { result: { type: 'vec3', label: 'Result (vec3)' } },
-        params: { __comment: "The sky behind the rain: a dark blue gradient, lighter at the top (uv.y runs from -1 to 1).",
-          inputs: [{ name: 'uv', type: 'vec2', slider: null }],
-          outputType: 'vec3',
-          lines: [],
-          result: 'mix(vec3(0.01, 0.015, 0.03), vec3(0.04, 0.07, 0.12), uv.y * 0.5 + 0.5)',
-          expr: 'mix(vec3(0.01, 0.015, 0.03), vec3(0.04, 0.07, 0.12), uv.y * 0.5 + 0.5)',
+        inputs: {
+          uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'pr_uv', outputKey: 'uv' } },
+          color_a: { type: 'vec3', label: 'Color A' }, color_b: { type: 'vec3', label: 'Color B' }, t_offset: { type: 'float', label: 'T Offset' },
+        },
+        outputs: { color: { type: 'vec3', label: 'Color' } },
+        params: { __comment: 'Gradient: the sky behind the rain, dark blue at the bottom of the picture to a lighter blue at the top (Linear Y). It goes into the rain\'s Over.',
+          mode: 'linear_y', color_a: [0.01, 0.015, 0.03], color_b: [0.04, 0.07, 0.12], t_offset: 0,
         },
       },
       {
@@ -2157,7 +2156,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         type: 'gpuParticles',
         position: { x: 680, y: 120 },
         inputs: {
-          over: { type: 'vec3', label: 'Over', connection: { nodeId: 'pr_sky', outputKey: 'result' } },
+          over: { type: 'vec3', label: 'Over', connection: { nodeId: 'pr_sky', outputKey: 'color' } },
           uv: { type: 'vec2', label: 'UV' },
           emitAt: { type: 'vec2', label: 'Emitter', connection: { nodeId: 'pr_top', outputKey: 'xy' } },
         },
@@ -7038,7 +7037,6 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
     description: 'Sand on a vibrating square plate (Pattern: Chladni square): the sound picks the plate\'s modes and the sand gathers on the still lines between them, morphing from figure to figure. Load a song on the Audio Input card (its six bands, low to high, each add a mode); until then a stand-in beat steps through figures.',
     counter: 5,
     nodes: [
-      { id: 'uv', type: 'uv', position: { x: 60, y: 300 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: { __comment: 'Where each pixel is (the picture\'s centre is 0, its top and bottom ±1): the plate below is drawn from it.' } },
       {
         id: 'audio',
         type: 'audioInput',
@@ -7069,30 +7067,11 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         },
       },
       {
-        id: 'plate',
-        type: 'exprNode',
-        position: { x: 400, y: 300 },
-        inputs: { uv: { type: 'vec2', label: 'uv (vec2)', connection: { nodeId: 'uv', outputKey: 'uv' } } },
-        outputs: { result: { type: 'vec3', label: 'Result (vec3)' } },
-        params: {
-          inputs: [{ name: 'uv', type: 'vec2', slider: null }],
-          outputType: 'vec3',
-          lines: [
-            { lhs: 'float edge', op: '=', rhs: 'max(abs(uv.x), abs(uv.y))' },
-            { lhs: 'float onPlate', op: '=', rhs: '1.0 - smoothstep(0.70, 0.706, edge)' },
-            { lhs: 'vec3 metal', op: '=', rhs: 'vec3(0.045, 0.05, 0.06) * (0.75 + 0.35 * (uv.y * 0.5 + 0.5))' },
-          ],
-          result: 'metal * onPlate + vec3(0.008) * (1.0 - onPlate)',
-          expr: 'metal * onPlate + vec3(0.008) * (1.0 - onPlate)',
-          __comment: 'The dark metal plate behind the sand, wired into Over. edge: how far out a pixel is, square-wise. onPlate: 1 on the plate (as big as the particles\' Emitter size, 0.7), 0 off it. metal: a dim steel grey, a little lighter at the top.',
-        },
-      },
-      {
         id: 'sand',
         type: 'gpuParticles',
         position: { x: 760, y: 120 },
         inputs: {
-          over: { type: 'vec3', label: 'Over', connection: { nodeId: 'plate', outputKey: 'result' } },
+          over: { type: 'vec3', label: 'Over' },
           uv: { type: 'vec2', label: 'UV' },
           sound: { type: 'float', label: 'Sound level', connection: { nodeId: 'beat', outputKey: 'result' } },
         },
