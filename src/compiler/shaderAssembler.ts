@@ -2,7 +2,7 @@ import { DEPTH_TYPE, depthSampler } from '../nodes/definitions/depth';
 import { BLOB_TRACK_TYPE } from '../nodes/definitions/blobTrack';
 import { CACHE_TYPE } from '../nodes/definitions/cache';
 import { ANALYZE_TYPE } from '../nodes/definitions/analyze';
-import { SEGMENT_TYPE } from '../nodes/definitions/segment';
+import { SEGMENT_TYPE, segmentSampler } from '../nodes/definitions/segment';
 import { LINK_AT, LINK_COL, LINK_TOKEN_RE, linkColourSource, linkUniformToken, moveKeys, translateChain } from '../nodes/sceneLink';
 import { GROUP_PORT_SENTINEL } from '../types/nodeGraph';
 import { dataBlocksFirst } from '../data/dataGlsl';
@@ -1028,7 +1028,12 @@ export class ShaderAssembler {
           else this.textureUniforms[`u_tex_${nodeSlug}`] = node.id;
         }
         // Blob Track (docs/blob-track.md): its blobs, a small float texture filled by lib/blobs/engine.ts.
-        if (node.type === BLOB_TRACK_TYPE || node.type === ANALYZE_TYPE || node.type === SEGMENT_TYPE) this.textureUniforms[`u_tex_${nodeSlug}`] = node.id;
+        if (node.type === BLOB_TRACK_TYPE || node.type === ANALYZE_TYPE) this.textureUniforms[`u_tex_${nodeSlug}`] = node.id;
+        // Segment (docs/segment-node.md): its mask, filled by lib/segment/engine.ts (a baked video's plays as a video).
+        if (node.type === SEGMENT_TYPE) {
+          if (segmentSampler(nodeSlug, node).startsWith('u_vid_')) this.videoUniforms[`u_vid_${nodeSlug}`] = node.id;
+          else this.textureUniforms[`u_tex_${nodeSlug}`] = node.id;
+        }
         // Cache (docs/cache-node.md): its frames atlas, and the newest tile and count filled (lib/cache/engine.ts).
         if (node.type === CACHE_TYPE) this.registerCache(nodeSlug, node.id);
         // Nodes with their own image slots (published user nodes): one
@@ -1553,7 +1558,11 @@ export class ShaderAssembler {
                 if (depthSampler(subNode).startsWith('u_vid_')) this.videoUniforms[`u_vid_${subNode.id}`] = originalId;
                 else this.textureUniforms[`u_tex_${subNode.id}`] = originalId;
               }
-              if (subNode.type === BLOB_TRACK_TYPE || subNode.type === ANALYZE_TYPE || subNode.type === SEGMENT_TYPE) this.textureUniforms[`u_tex_${subNode.id}`] = originalId;
+              if (subNode.type === BLOB_TRACK_TYPE || subNode.type === ANALYZE_TYPE) this.textureUniforms[`u_tex_${subNode.id}`] = originalId;
+              if (subNode.type === SEGMENT_TYPE) {
+                if (segmentSampler(subNode.id, subNode).startsWith('u_vid_')) this.videoUniforms[`u_vid_${subNode.id}`] = originalId;
+                else this.textureUniforms[`u_tex_${subNode.id}`] = originalId;
+              }
               if (subNode.type === CACHE_TYPE) this.registerCache(subNode.id, originalId);
               subDef.textureSlots?.forEach(slot => { this.textureUniforms[`u_tex_${subNode.id}_${slot}`] = `${originalId}::${slot}`; });
               const { patchedNode: patchedSub, uniforms: subUniforms, bindings: subBindings } = patchNodeParamsForUniforms(effectiveSubNode, subDef, fn => this.functions.add(fn), originalId);

@@ -492,18 +492,20 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
   useEffect(() => {
     segmentEngine.setHost({
       setTexture: (id, tex) => useNodeGraphStore.getState().setNodeTexture(id, tex),
+      setVideoTexture: (id, tex) => useNodeGraphStore.getState().setVideoTexture(id, tex),
       requestRender: () => requestRenderRef.current(),
     });
+    segmentEngine.setVideoElements(id => videoEngine.element(id) ?? bakedVideos.element(id));
     const program = (s: ReturnType<typeof useNodeGraphStore.getState>) =>
-      segmentEngine.setProgram([s.fragmentShader, ...(s.passes ?? []).map(p => p.fragmentShader)], s.textureUniforms);
+      segmentEngine.setProgram([s.fragmentShader, ...(s.passes ?? []).map(p => p.fragmentShader)], s.textureUniforms, s.videoUniforms);
     const st0 = useNodeGraphStore.getState();
     segmentEngine.sync(st0.nodes);
     program(st0);
     const off = useNodeGraphStore.subscribe((s, prev) => {
       if (s.nodes !== prev.nodes) segmentEngine.sync(s.nodes);
-      if (s.fragmentShader !== prev.fragmentShader || s.passes !== prev.passes || s.textureUniforms !== prev.textureUniforms) program(s);
+      if (s.fragmentShader !== prev.fragmentShader || s.passes !== prev.passes || s.textureUniforms !== prev.textureUniforms || s.videoUniforms !== prev.videoUniforms) program(s);
     });
-    return () => { off(); segmentEngine.setHost(null); };
+    return () => { off(); segmentEngine.setHost(null); segmentEngine.setVideoElements(null); };
   }, []);
   // Splat Scene nodes (docs/splat-scene.md): their scans are drawn before the picture into two textures each, bound as
   // the node's `::color` and `::depth` slots; each compile brings their probe programs (the camera).
@@ -1877,6 +1879,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       bakedVideos.follow(elapsed, playing);
       // Baked depth videos keep to their source video (lib/depth/engine.ts).
       depthEngine.follow();
+      // Baked Segment masks too (lib/segment/engine.ts).
+      segmentEngine.follow();
       // Video Input nodes with clip settings: on their playlist for the clock (docs/clip-editor.md).
       videoEngine.follow(elapsed, playing);
       // Drum pads: the clock their hits are stamped with, and mapped numbers on sounding pads.

@@ -15,11 +15,14 @@
  */
 import * as THREE from 'three';
 import type { GraphNode, SubgraphData } from '../../types/nodeGraph';
-import { SEGMENT_SOURCE_MARK, SEGMENT_TYPE, segmentClassesOf, segmentModeOf, segmentSideOf, type SegmentModeName } from '../../nodes/definitions/segment';
+import { SEGMENT_SOURCE_MARK, SEGMENT_TYPE, segmentBakeId, segmentClassesOf, segmentModeOf, segmentPlaysBake, segmentSideOf, type SegmentBakeInfo, type SegmentModeName } from '../../nodes/definitions/segment';
 import { Grabber } from '../depth/engine';
+import { followSource } from '../depth/plan';
+import { getImage, getVideo } from '../backgroundLibrary';
+import { forgetMedia, rememberMedia } from '../mediaSources';
 
 export interface SegmentStatus {
-  state: 'idle' | 'loading' | 'no-source' | 'running' | 'error';
+  state: 'idle' | 'loading' | 'no-source' | 'running' | 'error' | 'baked' | 'needs-bake' | 'missing';
   ms: number | null;
   w: number;
   h: number;
@@ -31,6 +34,8 @@ export interface SegmentStatus {
 
 export interface SegmentHost {
   setTexture(nodeId: string, tex: THREE.Texture | null): void;
+  /** A baked mask video plays through the video textures (the store's videoTextures). */
+  setVideoTexture?(nodeId: string, tex: THREE.VideoTexture | null): void;
   requestRender(): void;
 }
 
@@ -101,6 +106,8 @@ interface Slot {
   tex: THREE.DataTexture | null;
   /** Click: where to look next frame (top-down 0–1), moved by Follow. */
   point: [number, number];
+  /** A baked mask playing instead of the model (Update: Baked). */
+  bake: { key: string; el: HTMLVideoElement | null; tex: THREE.Texture | null; url: string | null } | null;
 }
 
 const idleStatus = (): SegmentStatus => ({ state: 'idle', ms: null, w: 0, h: 0, delegate: null, cover: 0 });
@@ -124,15 +131,32 @@ class SegmentEngine {
   private jobs = new Map<number, (r: WorkerOut) => void>();
   private nextJob = 1;
   private lastNotify = 0;
+  /** Source video elements of baked nodes, from the hosts that play them; and the video samplers. */
+  private videoElementOf: ((nodeId: string) => HTMLVideoElement | null) | null = null;
+  private videoUniforms: Record<string, string> = {};
 
   contextLost(): void {
     this.grabber?.drop(); this.grabber = null;
-    for (const s of this.slots.values()) { s.tex?.dispose(); s.tex = null; }
+    for (const s of this.slots.values()) { s.tex?.dispose(); s.tex = null; s.bake?.tex?.dispose(); }
   }
 
   setHost(host: SegmentHost | null): void {
     this.host = host;
-    if (host) for (const [id, s] of this.slots) if (s.tex) host.setTexture(id, s.tex);
+    if (host) for (const [id, s] of this.slots) {
+      if (s.bake?.tex) (s.bake.el ? host.setVideoTexture?.(id, s.bake.tex as THREE.VideoTexture) : host.setTexture(id, s.bake.tex));
+      else if (s.tex) host.setTexture(id, s.tex);
+    }
+  }
+  /** How to find the video element a Video Input / Baked node plays (lib/videoEngine.ts, lib/bakedVideos.ts). */
+  setVideoElements(fn: ((nodeId: string) => HTMLVideoElement | null) | null): void { this.videoElementOf = fn; }
+
+  /** One frame through the model, for Bake (lib/segment/bake.ts): the confidence mask (top-down) and its size. */
+  segmentOnce(mode: SegmentModeName, classes: string[], point: [number, number], image: ImageData): Promise<{ mask: Float32Array; w: number; h: number; ms: number }> {
+    return new Promise((ok, no) => {
+      const job = this.nextJob++;
+      this.jobs.set(job, r => (r.type === 'mask' ? ok({ mask: r.mask, w: r.w, h: r.h, ms: r.ms }) : r.type === 'error' ? no(new Error(r.message)) : no(new Error('The segmentation model failed'))));
+      this.ensureWorker(mode).postMessage({ type: 'segment', job, mode, classes, point, t: performance.now(), image }, [image.data.buffer]);
+    });
   }
 
   onChange(fn: () => void): () => void { this.listeners.add(fn); return () => { this.listeners.delete(fn); }; }
@@ -142,23 +166,26 @@ class SegmentEngine {
 
   sync(nodes: readonly GraphNode[]): void {
     const want = new Map(segmentNodesIn(nodes).map(n => [n.id, n]));
-    for (const [id, s] of this.slots) if (!want.has(id)) { s.tex?.dispose(); this.slots.delete(id); this.host?.setTexture(id, null); }
+    for (const [id, s] of this.slots) if (!want.has(id)) { this.closeBake(id, s); s.tex?.dispose(); this.slots.delete(id); this.host?.setTexture(id, null); }
     let rerun = false;
     for (const [id, n] of want) {
       let s = this.slots.get(id);
       const point: [number, number] = [num(n.params.pointX, 0.5), 1 - num(n.params.pointY, 0.5)];
-      if (!s) { s = { node: n, status: idleStatus(), busy: false, framesSince: 0, key: '', dirty: true, mask: null, mw: 0, mh: 0, tex: null, point }; this.slots.set(id, s); rerun = true; }
+      if (!s) { s = { node: n, status: idleStatus(), busy: false, framesSince: 0, key: '', dirty: true, mask: null, mw: 0, mh: 0, tex: null, point, bake: null }; this.slots.set(id, s); rerun = true; }
       s.node = n;
+      this.syncBake(id, s);
+      if (n.params.update === 'baked' && !segmentPlaysBake(n) && s.status.state !== 'needs-bake') { s.status = { ...idleStatus(), state: 'needs-bake', message: 'Press Bake to work out the masks for the whole video first.' }; this.changed(); }
       const key = settingsKey(n);
       if (key !== s.key) { s.key = key; s.dirty = true; s.point = point; s.mask = null; rerun = true; }
     }
     if (rerun) this.host?.requestRender();
   }
 
-  setProgram(shaders: readonly string[], textureUniforms: Record<string, string>): void {
+  setProgram(shaders: readonly string[], textureUniforms: Record<string, string>, videoUniforms: Record<string, string> = {}): void {
     this.sources = segmentSources(shaders);
+    this.videoUniforms = videoUniforms;
     this.samplerNode.clear();
-    for (const sampler of this.sources.keys()) { const id = textureUniforms[sampler]; if (id) this.samplerNode.set(sampler, id); }
+    for (const sampler of this.sources.keys()) { const id = textureUniforms[sampler] ?? videoUniforms[sampler]; if (id) this.samplerNode.set(sampler, id); }
     for (const s of this.slots.values()) s.dirty = true;
     // Paused, nothing else draws a frame: ask for one so a still is segmented.
     if (this.samplerNode.size) this.host?.requestRender();
@@ -168,7 +195,7 @@ class SegmentEngine {
     if (!this.samplerNode.size) return false;
     for (const id of this.samplerNode.values()) {
       const s = this.slots.get(id);
-      if (s && !s.busy && (playing || s.dirty)) return true;
+      if (s && !s.busy && s.node.params.update !== 'baked' && (playing || s.dirty)) return true;
     }
     return false;
   }
@@ -198,7 +225,7 @@ class SegmentEngine {
   afterFrame(ctx: SegmentFrameContext): void {
     for (const [sampler, id] of this.samplerNode) {
       const s = this.slots.get(id);
-      if (!s || s.busy) continue;
+      if (!s || s.busy || s.node.params.update === 'baked') continue;
       s.framesSince++;
       const every = s.node.params.update === 'every' ? Math.max(1, Math.round(num(s.node.params.every, 2))) : 1;
       if (!ctx.playing && !s.dirty) continue;
@@ -259,6 +286,115 @@ class SegmentEngine {
     const now = performance.now();
     if (first || now - this.lastNotify > 250) { this.lastNotify = now; this.changed(); }
     if (!playing) this.host?.requestRender();
+  }
+
+  // ── Baked masks ────────────────────────────────────────────────────────────
+
+  private syncBake(id: string, s: Slot): void {
+    const b = segmentPlaysBake(s.node);
+    const key = b ? `${b.kind}:${segmentBakeId(b)}` : '';
+    if ((s.bake?.key ?? '') === key) return;
+    this.closeBake(id, s);
+    if (!b) { if (s.tex) this.host?.setTexture(id, s.tex); return; }
+    s.bake = { key, el: null, tex: null, url: null };
+    s.status = { ...idleStatus(), state: 'baked', message: 'Loading the baked masks…' };
+    this.changed();
+    void this.openBake(id, s, b);
+  }
+
+  private async openBake(id: string, s: Slot, b: SegmentBakeInfo): Promise<void> {
+    const mine = s.bake;
+    const fail = (state: SegmentStatus['state'], message: string) => { if (s.bake === mine) { s.status = { ...idleStatus(), state, message }; this.changed(); } };
+    try {
+      if (b.kind === 'image') {
+        const got = await getImage(segmentBakeId(b));
+        if (s.bake !== mine) return;
+        if (!got) return fail('missing', 'The baked mask isn’t in the library any more. Bake again.');
+        const bmp = await createImageBitmap(got.blob);
+        const c = document.createElement('canvas');
+        c.width = bmp.width; c.height = bmp.height;
+        c.getContext('2d')!.drawImage(bmp, 0, 0);
+        bmp.close?.();
+        const tex = new THREE.CanvasTexture(c);
+        tex.minFilter = THREE.LinearFilter; tex.generateMipmaps = false;
+        if (s.bake !== mine || !mine) return;
+        mine.tex = tex;
+        this.host?.setTexture(id, tex);
+      } else {
+        const got = await getVideo(segmentBakeId(b));
+        if (s.bake !== mine) return;
+        if (!got) return fail('missing', 'The baked mask video isn’t in the library any more. Bake again.');
+        const el = document.createElement('video');
+        el.muted = true; el.playsInline = true; el.preload = 'auto'; el.loop = false;
+        el.setAttribute('playsinline', ''); el.setAttribute('muted', '');
+        const url = URL.createObjectURL(got.blob);
+        el.src = url;
+        await new Promise<void>((ok, no) => { el.addEventListener('loadeddata', () => ok(), { once: true }); el.addEventListener('error', () => no(new Error('The mask video can’t be played here')), { once: true }); });
+        if (s.bake !== mine || !mine) { URL.revokeObjectURL(url); return; }
+        el.width = el.videoWidth; el.height = el.videoHeight;
+        const tex = new THREE.VideoTexture(el);
+        tex.minFilter = THREE.LinearFilter; tex.magFilter = THREE.LinearFilter; tex.generateMipmaps = false;
+        Object.assign(mine, { el, tex, url });
+        // Kept for web exports (lib/mediaSources.ts): the page plays it beside its source video.
+        rememberMedia(id, 'video', got.name, got.type, got.blob);
+        this.host?.setVideoTexture?.(id, tex);
+      }
+      s.status = { state: 'baked', ms: null, w: b.width, h: b.height, delegate: null, cover: 0 };
+      this.changed();
+      this.host?.requestRender();
+    } catch (e) {
+      fail('error', e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  private closeBake(id: string, s: Slot): void {
+    const b = s.bake;
+    if (!b) return;
+    s.bake = null;
+    if (b.el) { b.el.pause(); b.el.removeAttribute('src'); b.el.load(); this.host?.setVideoTexture?.(id, null); forgetMedia(id); }
+    else if (b.tex) this.host?.setTexture(id, s.tex);
+    b.tex?.dispose();
+    if (b.url) URL.revokeObjectURL(b.url);
+  }
+
+  /** The source video a baked node keeps to: the element of the Video Input / Baked node wired into it. */
+  private sourceVideo(id: string): HTMLVideoElement | null {
+    if (!this.videoElementOf) return null;
+    for (const [sampler, nodeId] of this.samplerNode) {
+      if (nodeId !== id) continue;
+      const src = this.sources.get(sampler);
+      const srcId = src ? this.videoUniforms[src] : undefined;
+      return srcId ? this.videoElementOf(srcId) : null;
+    }
+    return null;
+  }
+
+  /** Once a frame: baked mask videos follow their source video's time. */
+  follow(): void {
+    for (const [id, s] of this.slots) {
+      const el = s.bake?.el, b = segmentPlaysBake(s.node);
+      if (!el || !b || el.readyState < 1) continue;
+      const src = this.sourceVideo(id);
+      if (!src) continue;
+      const act = followSource({ time: src.currentTime, paused: src.paused, rate: src.playbackRate }, { time: el.currentTime, paused: el.paused }, b.fps, b.duration);
+      if (act.seek !== null) { el.currentTime = act.seek; (s.bake!.tex as THREE.VideoTexture).needsUpdate = true; }
+      if (el.playbackRate !== act.rate) el.playbackRate = act.rate;
+      if (act.play && el.paused) void el.play().catch(() => {});
+      else if (!act.play && !el.paused) el.pause();
+    }
+  }
+
+  /** Offline: each baked mask video on its source's frame, decoded, before the shader draws. */
+  async seek(): Promise<void> {
+    await Promise.all([...this.slots].map(async ([id, s]) => {
+      const el = s.bake?.el;
+      const src = el ? this.sourceVideo(id) : null;
+      if (!el || !src) return;
+      if (!el.paused) el.pause();
+      if (Math.abs(el.currentTime - src.currentTime) < 1e-4 && el.readyState >= 2) return;
+      await new Promise<void>(ok => { const t = setTimeout(ok, 4000); el.addEventListener('seeked', () => { clearTimeout(t); ok(); }, { once: true }); el.currentTime = src.currentTime; });
+      (s.bake!.tex as THREE.VideoTexture).needsUpdate = true;
+    }));
   }
 
   private upload(id: string, s: Slot): void {
