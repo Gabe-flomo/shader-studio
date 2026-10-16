@@ -94,6 +94,16 @@ versions. The full-size picture is in IndexedDB, where size isn't a problem.
 
 **Graphs saved before this change** have only the thumbnail. The card says to load the picture again.
 
+### Built-in pictures
+
+Two photos ship with the app under `public/media/` (lib/builtinImages.ts): **Room and cat** (1280 × 720) and
+**Walkway cat** (768 × 1024). A node names one by its id in `params.libraryId` (`builtin:room-and-cat`,
+`builtin:walkway-cat`), and `getImage` (lib/backgroundLibrary.ts) fetches it from the build, as `getVideo`
+does for the Ball action clip. Nothing is stored in the library and nothing is embedded: the id opens on
+the web build and in the desktop app alike, and a web export embeds the loaded picture like any other.
+The card's **Library** lists them after your own pictures, marked *(built in)*. The Pictures examples
+(store/pictureExamples.ts) open on them. Where pictures can't be decoded (tests) nothing is fetched.
+
 ### Videos
 
 Videos are **never embedded**. Even a short clip is several MB, more than a graph's whole history budget.

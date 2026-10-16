@@ -1176,6 +1176,48 @@ exports[`golden shaders: every Play example exports the same bundle > pianoRollS
 }
 `;
 
+exports[`golden shaders: every Play example exports the same bundle > picBlockSwap 1`] = `
+{
+  "bundle": "045c89eb1ab9080e6c6f7d4d2406:8271",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > picChannelColours 1`] = `
+{
+  "bundle": "1b1e9b7f07dcb4130b0373ec0580:6477",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > picChannelSplash 1`] = `
+{
+  "bundle": "0027982f60b74113f3b0bf7cd7dd:4066",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > picHeightRelief 1`] = `
+{
+  "bundle": "0d278b8187d92f0f2986d85bce16:6341",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > picShowData 1`] = `
+{
+  "bundle": "0d5e31608c040702ae6a888d72b3:10306",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > picShuffle 1`] = `
+{
+  "bundle": "1c74cb1f8b867800074b66e688d0:3405",
+  "missing": [],
+}
+`;
+
 exports[`golden shaders: every Play example exports the same bundle > piecesBallAction 1`] = `
 {
   "bundle": "044ec63e554a3c0b468070bbaa83:15776",
@@ -14544,6 +14586,209 @@ exports[`golden shaders: every example compiles as it did > pianoRollScale 1`] =
   "passes": null,
   "success": true,
   "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > picBlockSwap 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "0a6904a3b47199009a3df74dea5b:6761",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "15f8383b91a5541d2b708063cfb5:378",
+  "paramBindings": "0335230ce071590cdfa8f2c0bba0:596",
+  "paramUniforms": [
+    "u_p_addx0_b",
+    "u_p_addx2_b",
+    "u_p_amountx0_value",
+    "u_p_gridlayoutx0_columns",
+    "u_p_mulx0_b",
+    "u_p_mulx0xc2_b",
+    "u_p_mulx0xc3_b",
+    "u_p_mulx0xc4_b",
+    "u_p_randomfromx0_from",
+    "u_p_randomfromx0_seed",
+    "u_p_randomfromx0_to",
+    "u_p_randomfromx0xc2_from",
+    "u_p_randomfromx0xc2_seed",
+    "u_p_randomfromx0xc2_to",
+    "u_p_reachx0_value",
+    "u_p_stepx0_edge",
+    "u_p_subx0_b",
+  ],
+  "paramValues": "1d63da7bfc181f0ceaa47eb5ecdf:420",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {
+    "u_tex_tex_0": "photo",
+  },
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > picChannelColours 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "01c1c2ce489fe905094378ea8a5d:4818",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "0de17ac85bc1c1058474fca17267:118",
+  "paramBindings": "11cb520a3ac78612cad80db11a84:481",
+  "paramUniforms": [
+    "u_p_channelcolx0_background",
+    "u_p_channelcolx0_colour1",
+    "u_p_channelcolx0_colour2",
+    "u_p_channelcolx0_colour3",
+    "u_p_channelcolx0_colour4",
+    "u_p_channelcolx0_exposure1",
+    "u_p_channelcolx0_exposure2",
+    "u_p_channelcolx0_exposure3",
+    "u_p_channelcolx0_exposure4",
+    "u_p_mulx0_b",
+    "u_p_subx0_b",
+  ],
+  "paramValues": "09ce8768f1b9520616ebb6985a17:394",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {
+    "u_tex_tex_0": "photo",
+  },
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > picChannelSplash 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "13f5f3d6b3f3c1063be947d480e3:3335",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "08c50294a1bf381e1ee5dc51983d:105",
+  "paramBindings": "1ebf63b3efd3e60250bd4450c0e8:125",
+  "paramUniforms": [
+    "u_p_channelpicx0_softness",
+    "u_p_channelpicx0_threshold",
+    "u_p_mixx0_t",
+  ],
+  "paramValues": "0a179853e049691bde089ade7236:92",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {
+    "u_tex_tex_0": "photo",
+  },
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > picHeightRelief 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "032cc70782ae9c083fe71f3a45b1:5071",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "045d0f6888839e11cf7178d1654b:97",
+  "paramBindings": "139726433663c406ad7a2eeb2ac5:450",
+  "paramUniforms": [
+    "u_p_heightlighx0_ambient",
+    "u_p_heightlighx0_high",
+    "u_p_heightlighx0_highColour",
+    "u_p_heightlighx0_low",
+    "u_p_heightlighx0_lowColour",
+    "u_p_heightlighx0_relief",
+    "u_p_heightlighx0_spacing",
+    "u_p_heightlighx0_sunAngle",
+    "u_p_heightlighx0_sunHeight",
+    "u_p_mulx0_b",
+  ],
+  "paramValues": "13ff0d5e7d1ba709a41f1cb42987:342",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {
+    "u_tex_tex_0": "photo",
+  },
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > picShowData 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "110d5c2a9406e911d2c627af4d4d:8214",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "1d43b5f6306ed60276ecc9b25be3:274",
+  "paramBindings": "098adc54375f79117b92aaf69282:878",
+  "paramUniforms": [
+    "u_p_heightlighx0_ambient",
+    "u_p_heightlighx0_high",
+    "u_p_heightlighx0_highColour",
+    "u_p_heightlighx0_low",
+    "u_p_heightlighx0_lowColour",
+    "u_p_heightlighx0_relief",
+    "u_p_heightlighx0_spacing",
+    "u_p_heightlighx0_sunAngle",
+    "u_p_heightlighx0_sunHeight",
+    "u_p_lfox0_amplitude",
+    "u_p_lfox0_freq",
+    "u_p_lfox0_offset",
+    "u_p_lfox0_phase",
+    "u_p_mixx0_t",
+    "u_p_mulx0_b",
+    "u_p_showdatax0_high",
+    "u_p_showdatax0_low",
+    "u_p_showdatax0_scale",
+    "u_p_showdatax0xc2_high",
+    "u_p_showdatax0xc2_low",
+    "u_p_showdatax0xc2_scale",
+    "u_p_stepx0_edge",
+  ],
+  "paramValues": "09f7fd4435fe12184b38200712b5:649",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {
+    "u_tex_tex_0": "photo",
+  },
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > picShuffle 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "08b6df0022735c0abadc45858c77:2879",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "1d82906849cd00038046ef8221c5:79",
+  "paramBindings": "1dc2c0ddd9f3ec0beaea44fedec4:83",
+  "paramUniforms": [
+    "u_p_smpx0_offsetX",
+    "u_p_smpx0_offsetY",
+  ],
+  "paramValues": "0a33ccd5e53f2b0cc227164353fd:50",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {
+    "u_tex_tex_0": "photo",
+  },
   "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
   "videoUniforms": {},
 }

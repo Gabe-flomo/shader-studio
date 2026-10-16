@@ -39,6 +39,7 @@ import { FRAME_STACK_EXAMPLE_INDEX, FRAME_STACK_EXAMPLE_KEYS } from './frameStac
 import { FOURD_EXAMPLE_INDEX, FOURD_EXAMPLE_KEYS } from './fourDExamples';
 import { TEXTURE_TOOL_EXAMPLE_INDEX, TEXTURE_TOOL_EXAMPLE_KEYS } from './textureToolExamples';
 import { MEMORY_EXAMPLE_INDEX, MEMORY_EXAMPLE_KEYS } from './memoryExamples';
+import { PICTURE_EXAMPLE_INDEX, PICTURE_EXAMPLE_KEYS } from './pictureExamples';
 import { RAYS_EXAMPLE_INDEX, RAYS_EXAMPLE_KEYS } from './raysExamples';
 import { SIM_GRID_EXAMPLE_INDEX } from './simGridExamples';
 import { GRID_RULES_EXAMPLE_INDEX, simGridsFolderKeys } from './gridRulesExampleIndex';
@@ -259,6 +260,8 @@ export const EXAMPLE_INDEX: Record<string, ExampleIndexEntry> = {
   ...FOURD_EXAMPLE_INDEX,
   // Texture tools (textureToolExamples.ts, docs/texture-tools.md): Mask, Levels, Flow, Neighbours, Change, Outline, Fade, Read.
   ...TEXTURE_TOOL_EXAMPLE_INDEX,
+  // Pictures (pictureExamples.ts): Channel, Shuffle, Channel Colours, Height Light, Show data, Random (from ID), a pixel sort, on the built-in photos.
+  ...PICTURE_EXAMPLE_INDEX,
   // Memory (memoryExamples.ts, docs/memory-nodes.md): Lag, Spring, Envelope, Counter.
   ...MEMORY_EXAMPLE_INDEX,
   // Light rays (raysExamples.ts, docs/radial-fast-blur.md): Radial Fast Blur on text and on a burst of shapes.
@@ -299,6 +302,7 @@ export const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: string
   { label: "Color & Lighting",  color: ctp.peach, keys: [...LEARN_COLOR_KEYS, 'neonGlow','colorStopsCycle'] },
   { label: "Passes",            color: ctp.maroon, keys: PASS_EXAMPLE_KEYS },
   { label: "Texture tools",     color: ctp.flamingo, keys: TEXTURE_TOOL_EXAMPLE_KEYS },
+  { label: "Pictures",          color: ctp.flamingo, keys: PICTURE_EXAMPLE_KEYS },
   { label: "Memory",            color: ctp.flamingo, keys: MEMORY_EXAMPLE_KEYS },
   { label: "Simulation",        color: ctp.green, keys: [...AGENT_EXAMPLE_KEYS, ...RIDE_CURVE_EXAMPLE_KEYS] },
   { label: "Simulations: grids", color: ctp.green, keys: simGridsFolderKeys() },
