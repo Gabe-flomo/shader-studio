@@ -97,8 +97,10 @@ export function slimeMoldNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     ]),
   }), { trail: { type: 'texture', label: 'Trail' } });
   const sense = n('agentSense', 'slimeSense', 420, 100, {
+    crowding: 'limit', crowd: 60,
     angle: 22.5, distance: 0.035, weight: 1, width: '1',
     ...note([
+      'Crowding: Limit, Crowd limit 60: past 60, more smell pulls less (r · e^(−r / 60)), so the network keeps reorganising instead of collapsing into a few thick veins. Try a lower limit for a finer mesh, Crowding Off to watch it coarsen.',
       'Sense: sniffs the trail at three points 0.035 ahead (about 18 trail pixels): 22.5° to the left, straight on, and 22.5° to the right.',
       'Why: the walker can only turn toward what it can smell. Readings go through Crowding to Steer.',
       'A sensor angle smaller than Steer\'s turn (22.5° against 45°) keeps the network restless: veins branch, merge and pulse instead of settling.',
@@ -106,25 +108,6 @@ export function slimeMoldNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     ]),
   }, { texture: ['slimeIn', 'trail'] });
   // An ordinary node inside the rule: an Expression Block that makes very crowded trail less attractive.
-  const crowd = n('exprNode', 'slimeCrowd', 840, 100, {
-    label: 'Crowding',
-    inputs: [{ name: 'r', type: 'vec3', slider: null }, { name: 'sat', type: 'float', slider: { min: 1, max: 300 } }],
-    sat: 60,
-    outputType: 'vec3',
-    lines: [],
-    result: 'r * exp(-r / sat)',
-    expr: 'r * exp(-r / sat)',
-    ...note([
-      'Crowding (an ordinary Expression Block inside the rule): the trail\'s pull rises with the amount up to Sat (60) and falls off past it, as r · e^(−r / sat).',
-      'Why: real slime mold can\'t pack its tubes without limit. Without this, every walker ends up in a few huge veins and the network coarsens into a handful of loops; with it, the network keeps reorganising at a living size.',
-      'Try: Sat 30 for a finer, more even mesh; 150 (or unwire it and wire Sense straight into Steer) to watch the network coarsen.',
-    ]),
-  });
-  crowd.inputs = {
-    r: { type: 'vec3', label: 'r', connection: { nodeId: 'slimeSense', outputKey: 'readings' } },
-    sat: { type: 'float', label: 'sat' },
-  };
-  crowd.outputs = { result: { type: 'vec3', label: 'Result' } };
   const steer = n('agentSteer', 'slimeSteer', 1260, 100, {
     mode: 'jones', turn: 45, jitter: 0.15,
     ...note([
@@ -132,7 +115,7 @@ export function slimeMoldNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
       'Jitter 0.15 adds a small random wobble every step, which keeps the network exploring and pulsing instead of freezing.',
       'Try: Turn 20° for long smooth veins, 70° for a tight busy mesh; Jitter 0 for crisp still lines.',
     ]),
-  }, { readings: ['slimeCrowd', 'result'] });
+  }, { readings: ['slimeSense', 'readings'] });
   const move = n('agentMove', 'slimeMove', 1680, 100, {
     speed: 0.22, edges: 'wrap',
     ...note([
@@ -162,7 +145,7 @@ export function slimeMoldNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     ...n('agentsGroup', 'slime', X(420), Y(0), {
       label: 'Slime mold',
       tier: '256k', species: '1', stepsPerFrame: 2, seed: 1, preroll: 0,
-      subgraph: { nodes: [inputs, sense, crowd, steer, move, output], inputPorts: [], outputPorts: [] },
+      subgraph: { nodes: [inputs, sense, steer, move, output], inputPorts: [], outputPorts: [] },
       ...note([
         'Agents: 262,144 walkers (256k) that each run the rule inside this group (double-click it) every step, 2 steps a frame.',
         'Emit says where they are born; their Agents output goes to Deposit, so they leave trail.',

@@ -32,32 +32,21 @@ export function multiSlimeNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     'Trail is an input added to the group: the Trail field from outside, as it was one step ago, with one channel per species.',
   ]);
   const sense = n('agentSense', 'msSense', 420, 100, {
+    crowding: 'limit', crowd: 50,
     angle: 30, distance: 0.03, weight: 1, width: '1',
     ...note([
+      'Crowding: Limit, Crowd limit 50: past 50, more smell pulls less (r · e^(−r / 50)), so the network keeps reorganising instead of collapsing into a few thick veins. Try a lower limit for a finer mesh, Crowding Off to watch it coarsen.',
       'Sense: sniffs the trail 0.03 ahead, 30° to the left, straight on and 30° to the right.',
       'Its Channels are left unwired, which means: its own species\' trail counts +1 and the other two count −0.5. So each walker is drawn to its own kind and pushed away from the others: that is what keeps the three colours apart.',
       'Try: wire an Expression Block giving vec4(1.0, 1.0, 1.0, 0.0) into Channels and the three colonies merge into one network.',
     ]),
   }, { texture: ['msIn', 'trail'] });
-  const crowd = expr('msCrowd', 840, 100, {
-    label: 'Crowding',
-    inputs: [{ name: 'r', type: 'vec3' }, { name: 'sat', type: 'float', slider: { min: 1, max: 300 } }],
-    values: { sat: 50 },
-    lines: [],
-    result: 'r * exp(-r / sat)',
-    outputType: 'vec3',
-    wires: { r: ['msSense', 'readings'] },
-    note: [
-      'Crowding (an ordinary Expression Block inside the rule): the pull of a reading rises with it up to Sat (50) and falls off past it, as r · e^(−r / sat). A negative reading (the other species\' trail) only gets more negative, so rivals still repel.',
-      'Why: without it each colony collapses into a few thick rivers; with it the veins stay fine and keep reorganising.',
-    ],
-  });
   const steer = n('agentSteer', 'msSteer', 1260, 100, {
     mode: 'jones', turn: 40, jitter: 0.12,
     ...note([
       'Steer (Jones rule): straight on if the centre smells best, a random side if both sides beat it, otherwise 40° toward the better side. Jitter 0.12 keeps the network restless.',
     ]),
-  }, { readings: ['msCrowd', 'result'] });
+  }, { readings: ['msSense', 'readings'] });
   const speeds = n('agentBySpecies', 'msSpeed', 1260, 520, {
     a: 0.24, b: 0.2, c: 0.17,
     ...note([
@@ -96,7 +85,7 @@ export function multiSlimeNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     mode: 'fill', shape: 'disc', heading: 'outward', x: 0, y: 0.55, size: 0.12, species: '3', share: 1,
     ...note(['Emit (violet, species 3): the last third in a disc at the top, facing outward.']),
   });
-  let group = agentsGroup('multiSlime', X(420), Y(0), 'msEmitA', [inputs, sense, crowd, steer, speeds, move, output], {
+  let group = agentsGroup('multiSlime', X(420), Y(0), 'msEmitA', [inputs, sense, steer, speeds, move, output], {
     label: 'Three colonies', species: '3',
     ...note([
       'Agents: 262,144 walkers (256k) of 3 species, each running the rule inside (double-click) every step, 2 steps a frame.',
@@ -464,34 +453,22 @@ export function strandsNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     'Agent Inputs: this walker as the step begins. Trail is an input added to the group: the Trail field from outside, one step ago.',
   ]);
   const sense = n('agentSense', 'stSense', 420, 100, {
+    crowding: 'limit', crowd: 20,
     angle: 15, distance: 0.06, weight: 1, width: '1',
     ...note([
+      'Crowding: Limit, Crowd limit 20: past 20, more smell pulls less (r · e^(−r / 20)), so the network keeps reorganising instead of collapsing into a few thick veins. Try a lower limit for a finer mesh, Crowding Off to watch it coarsen.',
       'Sense: looks far ahead (0.06, about 30 trail pixels) and only 15° to each side.',
       'Why: far, narrow sensors make walkers follow a strand for a long way before they notice anything to the side, so strands grow long and parallel.',
       'Try: Distance 0.03 for shorter, curlier hair.',
     ]),
   }, { texture: ['stIn', 'trail'] });
-  const crowd = expr('stCrowd', 840, 420, {
-    label: 'Crowding',
-    inputs: [{ name: 'r', type: 'vec3' }, { name: 'sat', type: 'float', slider: { min: 1, max: 300 } }],
-    values: { sat: 20 },
-    lines: [],
-    result: 'r * exp(-r / sat)',
-    outputType: 'vec3',
-    wires: { r: ['stSense', 'readings'] },
-    note: [
-      'Crowding (an Expression Block): a strand\'s pull rises with its trail up to Sat (20) and falls past it, r · e^(−r / sat).',
-      'Why: without it every walker joins the strongest strand and the picture coarsens into one thick rope; with it strands stay many, fine and side by side.',
-      'Try: Sat 60 for fewer, bolder strands.',
-    ],
-  });
   const steer = n('agentSteer', 'stSteer', 840, 100, {
     mode: 'jones', turn: 12, jitter: 0.05,
     ...note([
       'Steer (Jones rule) with a small Turn (12°) and almost no Jitter: walkers bend gently instead of turning sharply, which combs the network into flowing strands.',
       'Try: Turn 25° to see strands knot into a mesh.',
     ]),
-  }, { readings: ['stCrowd', 'result'] });
+  }, { readings: ['stSense', 'readings'] });
   const drift = n('agentCurl', 'stDrift', 840, 760, {
     strength: 0.15, size: 0.6, evolve: 0.04,
     ...note([
@@ -513,7 +490,7 @@ export function strandsNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     mode: 'fill', shape: 'screen', heading: 'random',
     ...note(['Emit: every walker starts somewhere on the picture, facing anywhere; strands condense out of the noise within seconds.']),
   });
-  let group = agentsGroup('strands', X(420), Y(0), 'stEmit', [inputs, sense, crowd, steer, drift, move, output], {
+  let group = agentsGroup('strands', X(420), Y(0), 'stEmit', [inputs, sense, steer, drift, move, output], {
     label: 'Strands', preroll: 8,
     ...note([
       'Agents: 262,144 walkers (256k), 2 steps a frame, running the slime rule tuned for strands (double-click to see it): Sense → Crowding → Steer → Move, with a curl-noise drift.',
@@ -558,8 +535,10 @@ export function growPictureNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     'Agent Inputs: this walker as the step begins. Trail is an input added to the group: the Trail field from outside, one step ago, food included.',
   ]);
   const sense = n('agentSense', 'gpSense', 420, 100, {
+    crowding: 'limit', crowd: 15,
     angle: 30, distance: 0.025, weight: 1, width: '1',
     ...note([
+      'Crowding: Limit, Crowd limit 15: past 15, more smell pulls less (r · e^(−r / 15)), so the network keeps reorganising instead of collapsing into a few thick veins. Try a lower limit for a finer mesh, Crowding Off to watch it coarsen.',
       'Sense: sniffs the trail 0.025 ahead, 30° left and right. The trail holds both the slime\'s own marks and the food the picture paints in, so walkers are drawn to the bright parts.',
     ]),
   }, { texture: ['gpIn', 'trail'], channels: ['gpBoth', 'result'] });
@@ -571,23 +550,10 @@ export function growPictureNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     outputType: 'vec4',
     note: ['Smell both (an Expression Block): Sense\'s Channels. The slime\'s own trail (channel 1) and the food (channel 2) count the same, so walkers follow each other and the picture.'],
   });
-  const crowd = expr('gpCrowd', 840, 100, {
-    label: 'Crowding',
-    inputs: [{ name: 'r', type: 'vec3' }, { name: 'sat', type: 'float', slider: { min: 1, max: 300 } }],
-    values: { sat: 15 },
-    lines: [],
-    result: 'r * exp(-r / sat)',
-    outputType: 'vec3',
-    wires: { r: ['gpSense', 'readings'] },
-    note: [
-      'Crowding (an Expression Block): a reading\'s pull rises up to Sat (15) and falls past it, r · e^(−r / sat), so walkers spread over a food patch as a fine labyrinth instead of piling into one blob.',
-      'Try: Sat 40 and the moon fills in solid; 8 for an even finer maze.',
-    ],
-  });
   const steer = n('agentSteer', 'gpSteer', 1260, 100, {
     mode: 'jones', turn: 40, jitter: 0.12,
     ...note(['Steer (Jones rule): 40° toward the better smell; Jitter 0.12 keeps the veins exploring the dark between bright parts.']),
-  }, { readings: ['gpCrowd', 'result'] });
+  }, { readings: ['gpSense', 'readings'] });
   const move = n('agentMove', 'gpMove', 1680, 100, {
     speed: 0.2, edges: 'wrap',
     ...note(['Move: one step at 0.2 picture units a second; Wrap at the edges.']),
@@ -673,7 +639,7 @@ export function growPictureNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
       'Emit, Shape Field: every walker is born where Food (wired into Where ƒ) is above Threshold (0.15): on the moon, its halo, the rim and the stars.',
     ]),
   }, { where: ['gpFood', 'result'] });
-  let group = agentsGroup('growPicture', X(420), Y(0), 'gpEmit', [inputs, both, sense, crowd, steer, move, output], {
+  let group = agentsGroup('growPicture', X(420), Y(0), 'gpEmit', [inputs, both, sense, steer, move, output], {
     label: 'Slime on a picture', preroll: 6,
     ...note([
       'Agents: 262,144 walkers (256k), the slime rule (Sense → Crowding → Steer → Move), 2 steps a frame.',

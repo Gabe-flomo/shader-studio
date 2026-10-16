@@ -611,7 +611,7 @@ export const AgentSenseNode: NodeDefinition = {
   aliases: ['Sensor', 'Sniff', 'Smell trail'],
   description: 'Reads the trail (or any field) at three points ahead of the walker: Distance ahead, Angle to the left, straight on, and Angle to the right. Wire Readings into Steer. Texture takes a Trail field (through an input of the group); Field ƒ takes any chain of nodes as a function of position (noise, a shape, a picture) and is read at the same three points.',
   inputs: {
-    texture: { type: 'texture', label: 'Trail image', hint: 'What to smell: a Trail field\'s Image (or a Pass), wired in from outside through an input added on Agent Inputs. Read as it was one step ago.' },
+    texture: { type: 'texture', label: 'Texture', hint: 'What to smell: a Trail field\'s Image (or a Pass), wired in from outside through an input added on Agent Inputs. Read as it was one step ago.' },
     field: { type: 'float', label: 'Field ƒ', field: true, hint: 'Any chain of nodes, read as a function of position at each sensor (noise, a shape\'s distance, a picture\'s brightness). Added to the texture\'s reading.' },
     channels: { type: 'vec4', label: 'Channels', hint: 'How much each trail channel counts, four weights (overrides Smell). Unwired: as Smell says.' },
     angle: { type: 'float', label: 'Angle', hint: 'Degrees between the centre sensor and each side one.' },
@@ -626,13 +626,17 @@ export const AgentSenseNode: NodeDefinition = {
     gradient: { type: 'vec2', label: 'Gradient', hint: 'Which way the reading rises, at the walker (picture units; in 3D a vec3).' },
     sample: { type: 'vec4', label: 'Channels here', hint: 'The Trail image\'s four channels where the walker stands, unweighted (in 3D, read from the volume): a velocity Deposit\'s flow and count, for flocking.' },
   },
-  defaultParams: { angle: 45, distance: 0.03, weight: 1, width: '1', cone: 'plane', smell: 'own' },
+  defaultParams: { angle: 45, distance: 0.03, weight: 1, width: '1', cone: 'plane', smell: 'own', crowding: 'off', crowd: 60 },
   paramDefs: {
     smell: { label: 'Smell', type: 'select', hint: 'Which of the trail\'s channels to follow. Own species: +1 for its own channel, −0.5 for the others. One channel: just that one (a Trail field\'s Channel names say what each holds). All: everything together. Wiring Channels (four weights) overrides this.', options: [
       { value: 'own', label: 'Own species (others repel a little)' },
       { value: 'ch1', label: 'Channel 1 only' }, { value: 'ch2', label: 'Channel 2 only' }, { value: 'ch3', label: 'Channel 3 only' }, { value: 'ch4', label: 'Channel 4 only' },
       { value: 'all', label: 'All channels' },
     ] },
+    crowding: { label: 'Crowding', type: 'select', hint: 'Off: the more it smells, the more it pulls. Limit: past Crowd limit, more smell pulls less (r · e^(−r / limit)), as slime mold can\'t pack its tubes without end: networks keep reorganising instead of collapsing into a few huge veins.', options: [
+      { value: 'off', label: 'Off' }, { value: 'limit', label: 'Limit' },
+    ] },
+    crowd: { label: 'Crowd limit', type: 'float', min: 1, max: 300, step: 0.5, showWhen: { param: 'crowding', value: 'limit' }, hint: 'Where the pull peaks: lower makes a finer, more even mesh; higher lets veins grow thick.' },
     cone: { label: 'Sensors (3D)', type: 'select', hint: '3D: where the side sensors sit on the cone round the heading.', help: 'Turning plane: the left and right sensors lie in a plane through the heading that turns at random every step, so over a few steps they sweep the whole cone (3 reads, Steer turns in that plane). Ring of 4: four sensors round the cone every step, and Steer turns in the plane of the strongest pair (5 reads: steadier, a little slower).', options: [
       { value: 'plane', label: 'Turning plane (3 reads)' }, { value: 'ring', label: 'Ring of 4 (5 reads)' },
     ], showWhen: { param: 'agentSpace', value: '3d' } },
@@ -683,9 +687,15 @@ export const AgentSenseNode: NodeDefinition = {
       `    float ${id}_e = max(${id}_d * 0.25, 1e-4);\n`,
       `    vec2 ${id}_grad = vec2((${at(`(${id}_p + vec2(${id}_e, 0.0))`)}) - (${at(`(${id}_p - vec2(${id}_e, 0.0))`)}), (${at(`(${id}_p + vec2(0.0, ${id}_e))`)}) - (${at(`(${id}_p - vec2(0.0, ${id}_e))`)})) * ${p(node.params.weight, 1)} / (2.0 * ${id}_e);\n`,
     ].join('');
-    return { code, outputVars: { readings: `${id}_read`, here: `${id}_here`, gradient: `${id}_grad`, sample: tex ? `texture(${tex}, agUv(${id}_p))` : 'vec4(0.0)' } };
+    return { code: code + crowdLine(node, id), outputVars: { readings: `${id}_read`, here: `${id}_here`, gradient: `${id}_grad`, sample: tex ? `texture(${tex}, agUv(${id}_p))` : 'vec4(0.0)' } };
   },
 };
+
+/** Sense's Crowding: past Crowd limit, more smell pulls less (r · e^(−r / limit)), on the three readings. */
+function crowdLine(node: GraphNode, id: string): string {
+  if (node.params.crowding !== 'limit') return '';
+  return `    ${id}_read = ${id}_read * exp(-${id}_read / max(${p(node.params.crowd, 60)}, 1e-4));\n`;
+}
 
 /** Sense's Smell as channel weights (Channels wired overrides it). */
 function smellWeights(node: GraphNode): string {
@@ -750,7 +760,7 @@ function sense3d(node: GraphNode, v: Record<string, string>): { code: string; ou
   // Here and Gradient are read only where they are wired (expressions, not statements: a volume read is the step's biggest cost).
   const e = `${id}_e`;
   const grad = `(vec3((${at(`(${id}_p + vec3(${e}, 0.0, 0.0))`)}) - (${at(`(${id}_p - vec3(${e}, 0.0, 0.0))`)}), (${at(`(${id}_p + vec3(0.0, ${e}, 0.0))`)}) - (${at(`(${id}_p - vec3(0.0, ${e}, 0.0))`)}), (${at(`(${id}_p + vec3(0.0, 0.0, ${e}))`)}) - (${at(`(${id}_p - vec3(0.0, 0.0, ${e}))`)})) * ${w} / (2.0 * ${e}))`;
-  return { code: lines.join(''), outputVars: { readings: `${id}_read`, here: `((${at(`${id}_p`)}) * ${w})`, gradient: grad, sample: tex ? raw(`${id}_p`) : 'vec4(0.0)' } };
+  return { code: lines.join('') + crowdLine(node, id), outputVars: { readings: `${id}_read`, here: `((${at(`${id}_p`)}) * ${w})`, gradient: grad, sample: tex ? raw(`${id}_p`) : 'vec4(0.0)' } };
 }
 
 export const AgentSteerNode: NodeDefinition = {

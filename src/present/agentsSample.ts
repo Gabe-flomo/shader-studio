@@ -36,7 +36,7 @@ const SLIDE_CONTROLS: Record<string, PlayControl[]> = {
   slimeMold: [
     ctl('angle', 'slime::slimeSense::angle', 'Sense · Angle', 5, 90, 0.5),
     ctl('distance', 'slime::slimeSense::distance', 'Sense · Distance', 0.005, 0.15, 0.001),
-    ctl('sat', 'slime::slimeCrowd::sat', 'Crowding · sat', 1, 300, 1),
+    ctl('sat', 'slime::slimeSense::crowd', 'Crowd limit', 1, 300, 1),
     ctl('turn', 'slime::slimeSteer::turn', 'Steer · Turn', 0, 90, 0.5),
     ctl('jitter', 'slime::slimeSteer::jitter', 'Steer · Jitter', 0, 1, 0.01),
     ctl('speed', 'slime::slimeMove::speed', 'Move · Speed', 0.05, 1, 0.005),
@@ -216,14 +216,14 @@ Slime colours the **trail** (Trail → Palette → Output). Particles draw the *
 
 - **Agent Inputs** / **Agent Output**: the walker at the start and the end of the step. Agent Inputs lists **This walker** (its own values) and **From outside the group** (inputs you add, which are sockets on the Agents card: here the Trail). Anything unwired on Output stays "unchanged", so an empty group stands still.
 - **Sense**: three points [[control:distance]] ahead, [[control:angle]] to each side. It reads a texture (the trail) and/or any chain of nodes wired into **Field ƒ**.
-- **Crowding**: an ordinary Expression Block, $r\\,e^{-r/\\text{sat}}$ with sat = [[control:sat]]: trail that is very crowded smells *less* good.
+- **Crowding** (on Sense, Crowd limit [[control:sat]]): $r\\,e^{-r/\\text{limit}}$, so trail that is very crowded smells *less* good.
 - **Steer**, **Jones** mode: straight on if the centre wins, a random side if both sides beat it, otherwise [[control:turn]] toward the stronger side, plus a little [[control:jitter]]. (**Smooth** turns in proportion; **Away** runs from the strongest.)
 - **Move**: one step at [[control:speed]]; Wrap, Bounce or Slide at the edges, and **Obstacle ƒ** to turn back from a shape.
 - **By species**: one of four numbers, by the walker's kind.`, [
-        ['distance', 'Sense · Distance'], ['angle', 'Sense · Angle'], ['sat', 'Crowding · sat'], ['turn', 'Steer · Turn'], ['jitter', 'Steer · Jitter'], ['speed', 'Move · Speed'],
+        ['distance', 'Sense · Distance'], ['angle', 'Sense · Angle'], ['sat', 'Sense · Crowd limit'], ['turn', 'Steer · Turn'], ['jitter', 'Steer · Jitter'], ['speed', 'Move · Speed'],
       ]),
       glsl(dedent(slimeRule), 'The Slime mold preset’s rule, as the app compiles it: Sense, Steer and Move marked', slimeMarks),
-      text(`**Unwired means this walker.** A socket left empty reads the walker's own position, heading or age, and the card says so in faint type ("← this walker's position"). And any ordinary node that would read the pixel's position reads the walker's instead, so noise, a shape's distance, Time, Audio or an Expression Block can join the rule (Crowding is one).
+      text(`**Unwired means this walker.** A socket left empty reads the walker's own position, heading or age, and the card says so in faint type ("← this walker's position"). And any ordinary node that would read the pixel's position reads the walker's instead, so noise, a shape's distance, Time, Audio or an Expression Block can join the rule.
 
 **What can't go inside**, and the card says why: nodes that read the previous frame (Echo, Previous Frame, the blurs, Bloom), since a walker is not a pixel; programs of their own (Pass, another Agents group, Trail, Deposit, Emit, Draw agents, the Particles node, the Output); ray marches (Scene Group, March Loop, GI March, Space Warp), too costly per walker; and anything that reads screen derivatives or gl_FragCoord.`),
     ], 2),
@@ -275,11 +275,11 @@ A group only gets this extra state when its rule uses it; otherwise it compiles 
 - [[control:angle]] against [[control:turn]]: a sensor angle smaller than the turn keeps veins restless and looping; equal or wider gives calmer, rounder cells.
 - [[control:jitter]] adds **wander**: more branching, less crisp lines.
 - [[control:halfLife]] and [[control:diffuse]] decide how **long paths last** and how **thick** veins are.
-- [[control:deposit]] is how loud each walker is; it works with Crowding's [[control:sat]]. With sat at 300 crowding hardly bites and the network **coarsens** into a few thick loops; lower, it keeps a living size.
+- [[control:deposit]] is how loud each walker is; it works with Sense's Crowd limit, [[control:sat]]. With the limit at 300 crowding hardly bites and the network **coarsens** into a few thick loops; lower, it keeps a living size.
 - [[control:steps]] is **speed**.
 
 **Count** (density) and **Species** are on the group card, not sliders: they size the simulation's textures, so changing one starts it again.`, [
-        ['distance', 'Sense · Distance'], ['angle', 'Sense · Angle'], ['turn', 'Steer · Turn'], ['jitter', 'Steer · Jitter'], ['halfLife', 'Trail · Half-life'], ['diffuse', 'Trail · Diffuse'], ['deposit', 'Deposit · Amount'], ['sat', 'Crowding · sat'], ['steps', 'Steps per frame'],
+        ['distance', 'Sense · Distance'], ['angle', 'Sense · Angle'], ['turn', 'Steer · Turn'], ['jitter', 'Steer · Jitter'], ['halfLife', 'Trail · Half-life'], ['diffuse', 'Trail · Diffuse'], ['deposit', 'Deposit · Amount'], ['sat', 'Sense · Crowd limit'], ['steps', 'Steps per frame'],
       ]),
       text(`**For particles:** Curl noise's **Size** sets the eddies (bigger number, smaller swirls) and **Evolve** how fast the currents change; **Drag** decides between long loose flights and syrup; **Max speed** caps a blast. The chain's order never matters (forces add), but which forces you add does.
 
@@ -294,7 +294,7 @@ A group only gets this extra state when its rule uses it; otherwise it compiles 
 
 | Preset | Recipe |
 |---|---|
-| **Slime mold** | Sense (trail) → Crowding → Steer (Jones) → Move (wrap); Fill from a disc facing out; trail → amber palette |
+| **Slime mold** | Sense (trail, Crowding Limit) → Steer (Jones) → Move (wrap); Fill from a disc facing out; trail → amber palette |
 | **Particles** | Curl → Vortex → Attract (mouse) → Integrate; Keep full on a ring; Glow, Ember by age, four orbiting lights |
 | **Curl smoke** | a “Rising heat” force that cools with age → Curl → Wind → Integrate; Ink streaks on paper |
 | **Sound burst** | a “Spring back” force → Sound kick (Shockwave, Beat 120) → Curl → Integrate (bounce); Streaks by speed |
