@@ -41,6 +41,8 @@ const CONNECTION_GATED = new Set([
   // Optical Flow reads nothing until a texture is wired
   'opticalFlow.strength', 'opticalFlow.smoothing', 'opticalFlow.minSpeed', 'opticalFlow.viewGain',
   'opticalFlowStep.strength', 'opticalFlowStep.smoothing', 'opticalFlowStep.minSpeed', 'opticalFlowRead.viewGain',
+  // Show data: Scale only shows a wired Direction
+  'showData.scale',
   // Channel reads nothing until Channels or a Texture is wired
   'channelPick.exposure', 'channelPick.inLow', 'channelPick.inHigh', 'channelPick.outLow', 'channelPick.outHigh', 'channelPick.threshold', 'channelPick.softness',
   // Height Light lights nothing until a height (texture or field) is wired
