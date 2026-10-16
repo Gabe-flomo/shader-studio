@@ -2,7 +2,7 @@
  * Height Light (docs/height-light.md): shades any height map as terrain lit by a sun. Hillshade in a map
  * tool, Bump → Diffuse in Blender, Bevel & Emboss in After Effects, Normal Map + Phong in TouchDesigner.
  *
- * The height is either a texture (a Trail field's Image, a Depth map, a Pass, a picture: one channel, or its
+ * The height is either a texture (a Trail field's Texture, a Depth map, a Pass, a picture: one channel, or its
  * brightness) or any float field wired into Height ƒ (noise, an SDF, a Grid Rules wave): the node reads it a
  * little to each side of this pixel, so it knows the slope. From the slope, a normal; from the normal and the
  * sun, a shade. The surface colour runs from Low to High colour by the height (Range sets which heights are low
@@ -25,7 +25,7 @@ export const HeightLightNode: NodeDefinition = withParamSockets({
   aliases: ['Hillshade', 'Light a height map', 'Terrain shading', 'Relief', 'Bump', 'Emboss', 'Bevel', 'Normal map', 'Shade height', 'Light the trail', 'Dunes'],
   description: 'Lights a height map like terrain under a sun: a Trail (sand, chips), a Depth map, noise, an SDF, any float field or texture. It finds the slope at each pixel and shades it, the surface coloured from Low to High by height (or by a wired Colour). Color is the lit surface; Shade the light alone; Normal and Slope for your own lighting.',
   inputs: {
-    texture: { type: 'texture', label: 'Texture', hint: 'The height as a texture: a Trail field\'s Image, a Depth map, a Pass, a picture. Channel picks which part is the height.' },
+    texture: { type: 'texture', label: 'Texture', hint: 'The height as a texture: a Trail field\'s Texture, a Depth map, a Pass, a picture. Channel picks which part is the height.' },
     height: { type: 'float', label: 'Height ƒ', field: true, hint: 'The height as any float: noise, an SDF\'s Distance, a wave. Read a little to each side of this pixel for the slope. Wins over Texture.' },
     colour: { type: 'vec3', label: 'Colour', hint: 'The surface\'s own colour (a palette, a picture). Unwired: Low to High colour by height.' },
     uv: { type: 'vec2', label: 'UV', hint: 'Where to read, in picture coordinates. Empty: this pixel.' },

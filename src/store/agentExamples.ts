@@ -167,7 +167,7 @@ export function slimeMoldNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     resolution: '1024', diffuse: 1, halfLife: 0.05, edges: 'wrap', gain: 0.04,
     ...note([
       'Trail field: 1024 rows tall (the width follows the picture), so the network looks the same in a small preview and a 4K export. Each step it spreads (Diffuse 1: every pixel becomes the 3×3 average) and fades (half gone in 0.05 simulated seconds, about 3 steps).',
-      'Its Image goes back into the Agents group for Sense (the "↺ last step" wire); its Amount (0–1) colours the picture.',
+      'Its Texture goes back into the Agents group for Sense (the "↺ last step" wire); its Amount (0–1) colours the picture.',
       'Try: a longer Half-life for thick, slow rivers; a shorter one for fine lace. ½ picture is cheaper but packs the walkers tighter (thicker veins). Gain makes the picture brighter or darker without changing the simulation.',
     ]),
   }, { deposit: ['slimeDeposit', 'deposit'] });
@@ -397,7 +397,7 @@ export function curlSmokeNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     ...note([
       'Draw agents, Ink: each bit of smoke lays a short streak of dark ink (Streak 0.25, along its motion) on pale paper; where many overlap the ink goes dark, and a little bleeds round it (Glow).',
       'Brightness of The crowd: the ink is shared out so the plume looks the same at any count. Fade with age thins the smoke as it gets old.',
-      'Try: Style Glow with Palette Mono on a dark Over for white smoke.',
+      'Try: Style Glow with Palette Mono on a dark Background for white smoke.',
     ]),
   }, { agents: ['smoke', 'agents'] });
   const nodes = [emit, group, draw];

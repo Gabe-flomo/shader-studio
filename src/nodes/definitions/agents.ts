@@ -611,7 +611,7 @@ export const AgentSenseNode: NodeDefinition = {
   aliases: ['Sensor', 'Sniff', 'Smell trail'],
   description: 'Reads the trail (or any field) at three points ahead of the walker: Distance ahead, Angle to the left, straight on, and Angle to the right. Wire Readings into Steer. Texture takes a Trail field (through an input of the group); Field ƒ takes any chain of nodes as a function of position (noise, a shape, a picture) and is read at the same three points.',
   inputs: {
-    texture: { type: 'texture', label: 'Texture', hint: 'What to smell: a Trail field\'s Image (or a Pass), wired in from outside through an input added on Agent Inputs. Read as it was one step ago.' },
+    texture: { type: 'texture', label: 'Texture', hint: 'What to smell: a Trail field\'s Texture (or a Pass), wired in from outside through an input added on Agent Inputs. Read as it was one step ago.' },
     field: { type: 'float', label: 'Field ƒ', field: true, hint: 'Any chain of nodes, read as a function of position at each sensor (noise, a shape\'s distance, a picture\'s brightness). Added to the texture\'s reading.' },
     channels: { type: 'vec4', label: 'Channels', hint: 'How much each trail channel counts, four weights (overrides Smell). Unwired: as Smell says.' },
     angle: { type: 'float', label: 'Angle', hint: 'Degrees between the centre sensor and each side one.' },

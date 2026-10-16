@@ -149,7 +149,7 @@ export function slime3dNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     resolution: '0.5', volume: '96', diffuse: 1, halfLife: 0.1, edges: 'wrap', gain: 0.04, kernel: '3',
     ...note([
       'Trail field, filled by a 3D group: a volume, 96 rows tall and 96 slices deep (171 cells across at 16:9). Each step every cell becomes the average of itself and its 6 neighbours, and half fades in 0.1 s.',
-      'Its Image goes back into the group for Sense, read in 3D. Its Amount here would be the volume seen from the front; this example shows the walkers through a camera instead.',
+      'Its Texture goes back into the group for Sense, read in 3D. Its Amount here would be the volume seen from the front; this example shows the walkers through a camera instead.',
       'Try: Volume 128 for finer tubes (more memory and time), 64 for a fast, coarse one; Half-life 0.3 for thicker, slower tubes.',
     ]),
   }, { deposit: ['s3Deposit', 'deposit'] });

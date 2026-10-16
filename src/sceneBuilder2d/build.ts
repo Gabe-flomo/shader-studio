@@ -889,7 +889,8 @@ function emitGrid(b: B, g: GridSpec, pos: Ref, screen: Ref, behind: Ref, anim: R
   if (prog.usesMouse) inputs.push({ name: 'mouse', type: 'vec2', from: ref(mk(c, 'mouse', 'grid:mouse', {}, {}, 'The mouse position, in the same space as UV: one of the grid\'s ripples starts here, so the waves follow the pointer.'), 'uv') });
   inputs.push(
     { name: 'size', type: 'float', slider: { value: g.size, min: 0.05, max: 1.5 } },
-    { name: 'amount', type: 'float', slider: { value: g.amount, min: 0, max: 1.5 } },
+    // Amount only when the target reads it (Size, Turn, Push): Morph and Nothing don't, so no dead slider.
+    ...(['size', 'rotate', 'offset'].includes(g.target) ? [{ name: 'amount', type: 'float' as const, slider: { value: g.amount, min: 0, max: 1.5 } }] : []),
     { name: 'freq', type: 'float', slider: { value: g.freq, min: 0, max: 40 } },
     { name: 'speed', type: 'float', slider: { value: g.speed, min: -3, max: 3 } },
   );
@@ -897,8 +898,8 @@ function emitGrid(b: B, g: GridSpec, pos: Ref, screen: Ref, behind: Ref, anim: R
   const ge = expr(c, 'grid', 'Grid', inputs, prog.result,
     `The grid: ${g.cols} × ${g.rows} cells across ±${fmt(g.span)}, each holding a ${shapes.includes(',') ? `shape (${shapes}, given out ${GRID_LABELS.assign[g.assign].toLowerCase()})` : g.shapes[0]}. ` +
     `Line by line: cs is a cell's size; id which cell this point is in (column, row); inGrid is 1 inside the grid; cc the cell's centre and q the point measured from it. ` +
-    `w is the ripple: a sine of the distance from ${rip} to the cell's centre, moving with time (freq rings per unit, speed cycles a second), averaged, −1..1. ` +
-    `It changes ${g.target === 'none' ? 'nothing but the colour' : GRID_LABELS.target[g.target].toLowerCase()} by amount. s is the shape's size (size × half a cell); k which shape the cell gets; d0… each shape's distance; d the one the cell uses (0 inside the grid's edge, far outside it). ` +
+    `w is the ripple: a sine of the distance from ${rip} to the cell's centre (from corners, the nearest corner), moving with time (freq rings per unit, speed cycles a second)${g.ripples.length > 1 ? ', averaged over the ripples' : ''}, −1..1. ` +
+    (g.target === 'none' ? 'It changes nothing but the colour. ' : g.target === 'morph' ? 'It morphs each cell between the first two shapes as it passes. ' : `It changes ${GRID_LABELS.target[g.target].toLowerCase()} by amount. `) + `s is the shape's size (size × half a cell); k which shape the cell gets; d0… each shape's distance; d the one the cell uses (0 inside the grid's edge, far outside it). ` +
     'The result packs three numbers: x the distance, y the ripple 0..1, z the shape (or a random per-cell value) 0..1. The sliders are live.'
     + (g.pic && prog.place ? ` place is where its picture is read (${GRID_LABELS.pic[g.pic.mode].label.toLowerCase()}): ${g.pic.mode === 'matte' ? 'the cell\'s centre, one colour a shape' : g.pic.mode === 'piece' ? 'the cell\'s centre plus q, turned and pushed with the shape, m / s undoing its grow, so its piece goes with it' : 'q in the shape\'s own box, the whole picture in every shape'}.` : ''),
     'vec3', prog.lines, prog.place ? [{ name: 'place', type: 'vec2', label: 'Picture place' }] : []);

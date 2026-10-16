@@ -209,7 +209,7 @@ export function dlaNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     resolution: '1024', diffuse: 1, halfLife: 0.05, edges: 'wrap', gain: 0.6, kernel: '3',
     ...note([
       'Trail field: the cluster\'s smell, 1024 rows. It spreads a pixel or two (Diffuse 1) and fades fast (half-life 0.05 s), so it is a thin halo round the stuck walkers, refreshed every step because they never stop laying it.',
-      'Add: the Seed. Its Image goes back into the group (Cluster); its Amount glows under the picture.',
+      'Add: the Seed. Its Texture goes back into the group (Cluster); its Amount glows under the picture.',
     ]),
   }, { deposit: ['dlaDeposit', 'deposit'], add: ['dlaSeed', 'result'] });
   const glow = n('colorize', 'dlaGlow', X(1680), Y(420), {
@@ -373,7 +373,7 @@ export function termitesNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     resolution: String(ROWS), diffuse: 0, halfLife: 10000000, edges: 'wrap', gain: 1, kernel: '3',
     ...note([
       'Trail field: the wood chips, one number per cell (512 rows). Diffuse 0 (chips don\'t spread) and Half-life 100000 s (they never fade: typed past the slider\'s end): a board that only the termites change.',
-      'Its Image goes back into the group (Chips); its Channels draw the chips.',
+      'Its Texture goes back into the group (Chips); its Channels draw the chips.',
     ]),
   }, { deposit: ['tmDeposit', 'deposit'] });
   const ground = n('channelColours', 'tmGround', X(1680), Y(0), {
@@ -1061,7 +1061,7 @@ export function sandDriftNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     sunAngle: 127, sunHeight: 25, ambient: 0.12,
     lowColour: [0.42, 0.25, 0.13], highColour: [0.98, 0.78, 0.5],
     ...note([
-      'Height Light: the dunes. It reads the Trail field\'s Image (channel 1: how deep the sand is, 0 to about 9) as a height map and lights it with a low sun from the upper left, so windward faces glow and lee slopes fall into shade.',
+      'Height Light: the dunes. It reads the Trail field\'s Texture (channel 1: how deep the sand is, 0 to about 9) as a height map and lights it with a low sun from the upper left, so windward faces glow and lee slopes fall into shade.',
       'Range 0–9 sets which depths are Low colour (thin sand, dark brown) and High colour (deep sand, pale gold). Relief is how steep the dunes look; Spacing (in trail pixels) how smooth the light is.',
       'Try: Sun from 300 for evening light from the other side; Sun height 15 to rake across every ripple.',
     ]),

@@ -74,7 +74,7 @@ const PARAM_DEFS: NonNullable<NodeDefinition['paramDefs']> = {
 };
 
 const INPUTS: NodeDefinition['inputs'] = {
-  texture: { type: 'texture', label: 'Texture', hint: 'The picture to leave trails: any texture (Texture Input, Video Input, the camera, a Pass, Baked, a Trail field\'s Image…).' },
+  texture: { type: 'texture', label: 'Texture', hint: 'The picture to leave trails: any texture (Texture Input, Video Input, the camera, a Pass, Baked, a Trail field\'s Texture…).' },
   uv: { type: 'vec2', label: 'UV', hint: 'Where to read the picture and the trail, in picture coordinates. Leave empty for this pixel; wire a warp to bend both.' },
   flow: { type: 'vec2', label: 'Flow', hint: 'Pushes the trail along this every frame (picture units): Flow (texture)\'s Flow, a noise, a curl.' },
   fresh: { type: 'vec3', label: 'Fresh', hint: 'Optional: paint this colour instead of the Texture\'s (a shape, a mask times a colour). The Texture still sets the buffer\'s size.' },

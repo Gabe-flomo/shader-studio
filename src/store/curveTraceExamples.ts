@@ -25,7 +25,7 @@ function intervals(): GraphNode[] {
     n('constant', 'rb', 0, 200, { label: 'Ratio (bottom)', value: 2, ...note(['The second frequency (2 for a fifth).']) }),
     n('time', 'time', 0, 400, note(['Time: drifts the phase so the figures slowly turn.'])),
     n('constant', 'spd', 0, 600, { label: 'Drift speed', value: 0.1, ...note(['How fast the figures turn through their shapes (radians a second). 0 holds them still.']) }),
-    expr('drift', 300, 400, { label: 'Drift', inputs: [{ name: 't', type: 'float' }, { name: 'speed', type: 'float' }], lines: [], result: 't * speed', outputType: 'float', wires: { t: ['time', 'time'], speed: ['spd', 'value'] }, note: ['Drift: a slow phase change (Time × Drift speed), wired into the second wave or circle so every figure turns through its shapes.'] }),
+    n('multiply', 'drift', 300, 400, { label: 'Drift', ...note(['Multiply (Drift): Time × Drift speed, a slow phase change, wired into the second wave or circle so every figure turns through its shapes.']) }, { a: ['time', 'time'], b: ['spd', 'value'] }),
   ];
   cols.forEach((c, i) => {
     const amps = c.mode === 'lateral' ? lateral : rotary;
@@ -53,25 +53,23 @@ function intervals(): GraphNode[] {
   return nodes;
 }
 
-/** One big figure and a plain ink block: shared by the Pen and Morph examples. */
-function single(curve: GraphNode, extra: GraphNode[], inkNote: string, fadeTail: boolean): GraphNode[] {
+/** One big figure, inked with nodes: shared by the Pen and Morph examples. The line is Outline (distance)
+ * on the curve's Distance, coloured by a Palette run along it (Along); Pen also fades it toward its tail. */
+function single(curve: GraphNode, extra: GraphNode[], fadeTail: boolean): GraphNode[] {
   return [
     ...extra,
     curve,
-    expr('ink', 1000, 200, {
-      label: 'Ink', outputType: 'vec3',
-      inputs: [{ name: 'd', type: 'float' }, { name: 'a', type: 'float' }],
-      wires: { d: ['curve', 'distance'], a: ['curve', 'along'] },
-      lines: [
-        ['float w', 'fwidth(d) + 0.0005'],
-        ['float fade', fadeTail ? 'a * a' : '1.0'],
-        ['vec3 tint', '0.7 + 0.3 * cos(6.28318 * (a * 0.6 + vec3(0.55, 0.75, 0.95)))'],
-        ['float line', 'smoothstep(w, -w, d) + 0.0015 / max(abs(d), 0.0015) * 0.3'],
-      ],
-      result: 'vec3(0.03, 0.03, 0.04) + tint * line * fade',
-      note: [inkNote, 'Nothing here is fixed: the curve is a plain distance field, so swap this for any colouring or effect.'],
-    }),
-    out(['ink', 'result'], 1400, 200),
+    n('distanceShape', 'line', 900, 120, { mode: 'inside', offset: 0, softness: 0.002, ...note(['Outline (distance), Inside: the line itself, 1 where the curve\'s Distance is below 0 (within its Thickness), with a soft pixel edge.']) }, { distance: ['curve', 'distance'] }),
+    n('palette', 'tint', 900, 360, {
+      scale: 0.6, offset: [0.7, 0.7, 0.7], amplitude: [0.3, 0.3, 0.3], freq: [1, 1, 1], phase: [0.55, 0.75, 0.95],
+      ...note(['Palette: a colour that changes along the line. Angle is Along (0 at the start of the curve, 1 at the end), so the colour runs from one end of the line to the other.']),
+    }, { value: ['curve', 'along'] }),
+    ...(fadeTail ? [n('pow', 'fade', 900, 560, { exponent: 2, ...note(['Pow: Along², so the line is faint at the tail (Along near 0) and full at the pen\'s head (Along 1): the trail dies away behind the pen.']) }, { base: ['curve', 'along'] })] : []),
+    n('colorize', 'ink', 1200, 200, {
+      background: [0.03, 0.03, 0.04],
+      ...note([`Colorize: the line (Field) in the Palette\'s colour over near-black${fadeTail ? ', its Gain from Pow, so it fades toward the tail' : ''}. Nothing here is fixed: the curve is a plain distance field, so swap these for any colouring, glow or SDF tool.`]),
+    }, { field: ['line', 'mask'], color: ['tint', 'color'], ...(fadeTail ? { gain: ['fade', 'result'] as [string, string] } : {}) }),
+    out(['ink', 'color'], 1500, 200),
   ];
 }
 
@@ -82,7 +80,6 @@ function pen(): GraphNode[] {
       ...note(['Curve Trace, Draw: Pen. A head runs along a 3 : 2 Lissajous figure at Pen speed (turns a second), leaving Trail turns of line behind it.', 'Slow, you watch the figure being drawn. Raise Pen speed toward 3+ and Trail to 1 and it blurs into the whole, continuous figure, as on a fast pen or a scope.']),
     }),
     [],
-    'Ink: the line (a pixel-wide smoothstep on Distance) with a faint glow, faded along its length (Along is 0 at the tail and 1 at the head), so the trail dies away behind the pen.',
     true,
   );
 }
@@ -92,13 +89,11 @@ function morph(): GraphNode[] {
     n('curveTrace', 'curve', 500, 200, {
       morphOn: true, freqX: 3, freqY: 2, freqXB: 5, freqYB: 4, phaseX: 1.5708, ampX: 0.42, ampY: 0.42, thickness: 0.003, segments: 400,
       ...note(['Curve Trace with Morph on: figure A (X 3, Y 2: a fifth) and figure B (X 5, Y 4: a major third) are both worked out at every point along the curve and blended by Morph amount.', 'Both figures are closed, so every in-between shape is a smooth closed curve too.']),
-    }, { morph: ['flow', 'result'] }),
+    }, { morph: ['flow', 'value'] }),
     [
       n('time', 'time', 0, 200, note(['Time: drives the morph.'])),
-      n('constant', 'rate', 0, 400, { label: 'Morph speed', value: 0.3, ...note(['How fast it flows between the two figures (radians a second).']) }),
-      expr('flow', 250, 200, { label: 'Flow', inputs: [{ name: 't', type: 'float' }, { name: 'rate', type: 'float' }], lines: [], result: '0.5 - 0.5 * cos(t * rate)', outputType: 'float', wires: { t: ['time', 'time'], rate: ['rate', 'value'] }, note: ['Flow: eases back and forth between 0 (figure A) and 1 (figure B), wired into Morph amount.'] }),
+      n('lfo', 'flow', 250, 200, { label: 'Flow', waveform: 'sine', freq: 0.05, phase: 0, amplitude: 0.5, offset: 0.5, ...note(['LFO (Flow): a slow sine between 0 (figure A) and 1 (figure B), once every 20 seconds, wired into Morph amount. Frequency is the Morph speed.']) }, { time: ['time', 'time'] }),
     ],
-    'Ink: the line with a faint glow, tinted along its length (Along).',
     false,
   );
 }
@@ -113,22 +108,12 @@ function live(): GraphNode[] {
         'The line is the last Persistence seconds of the dot\'s path. At low frequencies that is a dot with a short tail; raise them and the same quarter second covers more and more of the figure until it is a solid line. At 0 Hz the dot rests in the middle.',
       ]),
     }),
-    expr('ink', 1000, 200, {
-      label: 'Ink', outputType: 'vec3',
-      inputs: [{ name: 'd', type: 'float' }, { name: 'a', type: 'float' }, { name: 'head', type: 'float' }],
-      wires: { d: ['curve', 'distance'], a: ['curve', 'along'], head: ['curve', 'head'] },
-      lines: [
-        ['float w', 'fwidth(d) + 0.0005'],
-        ['float trail', '(smoothstep(w, -w, d) + 0.0015 / max(abs(d), 0.0015) * 0.25) * (0.15 + 0.85 * a * a)'],
-        ['float dot', 'smoothstep(0.016, 0.008, head) + 0.004 / max(head, 0.004) * 0.6'],
-      ],
-      result: 'vec3(0.02, 0.025, 0.035) + vec3(0.55, 0.85, 1.0) * trail + vec3(1.0, 0.95, 0.85) * dot',
-      note: [
-        'Ink: the trail (a pixel-wide line on Distance with a faint glow) fading toward its tail (Along is 0 at the tail, 1 at the dot), and the dot itself drawn bright from Head.',
-        'Nothing here is fixed: Distance, Along and Head are plain numbers, so colour and style them however you like.',
-      ],
-    }),
-    out(['ink', 'result'], 1400, 200),
+    n('distanceShape', 'line', 900, 120, { mode: 'inside', offset: 0, softness: 0.002, ...note(['Outline (distance), Inside: the trail line, 1 where the curve\'s Distance is below 0.']) }, { distance: ['curve', 'distance'] }),
+    n('pow', 'fade', 900, 360, { exponent: 2, ...note(['Pow: Along², so the trail fades toward its tail (Along 0) and is full at the dot (Along 1).']) }, { base: ['curve', 'along'] }),
+    n('colorize', 'trail', 1200, 160, { color: [0.55, 0.85, 1], background: [0.02, 0.025, 0.035], ...note(['Colorize: the trail line in pale blue over near-black, its Gain from Pow so it fades toward the tail.']) }, { field: ['line', 'mask'], gain: ['fade', 'result'] }),
+    n('distanceShape', 'dot', 900, 560, { mode: 'inside', offset: 0.012, softness: 0.006, tint: [1, 0.95, 0.85], ...note(['Outline (distance), Inside, Offset 0.012: the dot itself. Head is how far this pixel is from the dot, so everything within 0.012 of it lights up.']) }, { distance: ['curve', 'head'] }),
+    n('addColor', 'ink', 1500, 200, { ...note(['Add Colors: the dot (Light) over the fading trail. Nothing here is fixed: Distance, Along and Head are plain numbers, so colour and style them however you like.']) }, { a: ['trail', 'color'], b: ['dot', 'light'] }),
+    out(['ink', 'result'], 1800, 200),
   ];
 }
 
@@ -222,7 +207,7 @@ export function buildCurveTraceExamples(): Record<string, ExampleGraph> {
     curveTraceMorph: {
       ...CURVE_TRACE_EXAMPLE_INDEX.curveTraceMorph, counter: 20, nodes: morph(),
       play: play([
-        ctl('r', 'rate::value', 'Morph speed', 0, 2, 0.01),
+        ctl('r', 'flow::freq', 'Morph speed (Hz)', 0, 0.3, 0.001),
         ctl('a', 'curve::freqXB', 'B: X frequency', 1, 9, 1),
         ctl('b', 'curve::freqYB', 'B: Y frequency', 1, 9, 1),
       ], `**What it shows.** One figure flowing into another: a fifth (3 : 2) morphing into a major third (5 : 4) and back.

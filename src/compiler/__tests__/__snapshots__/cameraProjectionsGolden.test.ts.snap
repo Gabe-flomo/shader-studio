@@ -130,7 +130,7 @@ void main() {
     vec2 g_uv = (vUv - 0.5) * 2.0;
     g_uv.x *= u_resolution.x / u_resolution.y;
     // Trail field, filled by a 3D group: a volume, 96 rows tall and 96 slices deep (171 cells across at 16:9). Each step every cell becomes the average of itself and its 6 neighbours, and half fades in 0.1 s.
-    // Its Image goes back into the group for Sense, read in 3D. Its Amount here would be the volume seen from the front; this example shows the walkers through a camera instead.
+    // Its Texture goes back into the group for Sense, read in 3D. Its Amount here would be the volume seen from the front; this example shows the walkers through a camera instead.
     // Try: Volume 128 for finer tubes (more memory and time), 64 for a fast, coarse one; Half-life 0.3 for thicker, slower tubes.
     vec4 trailfield_3_t = texture2D(u_trail_trailfield_3, agUv(g_uv));
     // Draw agents in 3D: every walker as a soft glowing dot, coloured by heading (amber one way, blue the other), seen through a camera 3.8 from the middle that circles the box at 6° a second, 15° above it.

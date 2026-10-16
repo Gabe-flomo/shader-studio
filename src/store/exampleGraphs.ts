@@ -624,7 +624,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         position: { x: 40, y: 260 },
         inputs: {},
         outputs: { uv: { type: 'vec2', label: 'UV' } },
-        params: {},
+        params: { __comment: 'UV: where each pixel is on the picture.' },
       },
       {
         id: 'group_1',
@@ -635,7 +635,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           in_uv0: { type: 'vec2', label: 'UV0', connection: { nodeId: 'uv_0', outputKey: 'uv' } },
         },
         outputs: { out_color: { type: 'vec3', label: 'Color' } },
-        params: {
+        params: { __comment: 'Ring Iteration: a Group that repeats its inside several times (Iterations on the group card). Each pass folds the picture into smaller tiles and adds another layer of glowing rings in its own colour (after kishimisu).',
           label: 'Ring Iteration',
           iterations: 4,
           subgraph: {
@@ -648,7 +648,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
                   input: { type: 'vec2', label: 'Input', connection: { nodeId: GROUP_PORT_SENTINEL, outputKey: 'in_uv' } },
                 },
                 outputs: { output: { type: 'vec2', label: 'Output' } },
-                params: { scale: 1.5 },
+                params: { __comment: 'Fract: keeps the part after the decimal point, so the picture repeats in tiles. Its ⟳ (carry) is on: each pass folds the last pass\'s result again, so the tiles get smaller.', scale: 1.5 },
                 carryMode: true,
               },
               {
@@ -657,7 +657,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
                 position: { x: 320, y: 200 },
                 inputs: { input: { type: 'vec2', label: 'Input', connection: { nodeId: 'fract_n', outputKey: 'output' } } },
                 outputs: { output: { type: 'float', label: 'Output' } },
-                params: { scale: 1 },
+                params: { __comment: 'Length: how far this pixel is from the middle of its tile.', scale: 1 },
               },
               {
                 id: 'len_o',
@@ -667,7 +667,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
                   input: { type: 'vec2', label: 'Input', connection: { nodeId: GROUP_PORT_SENTINEL, outputKey: 'in_uv0' } },
                 },
                 outputs: { output: { type: 'float', label: 'Output' } },
-                params: { scale: 1 },
+                params: { __comment: 'Length: how far this pixel is from the middle of the whole picture (UV0, the picture before folding).', scale: 1 },
               },
               {
                 id: 'exp_n',
@@ -675,7 +675,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
                 position: { x: 320, y: 360 },
                 inputs: { input: { type: 'float', label: 'Input', connection: { nodeId: 'len_o', outputKey: 'output' } } },
                 outputs: { output: { type: 'float', label: 'Output' } },
-                params: { scale: -1 },
+                params: { __comment: 'Exp: e to the power of the distance from the middle, so the rings grow further apart towards the edges.', scale: -1 },
               },
               {
                 id: 'd_val',
@@ -686,7 +686,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
                   b: { type: 'float', label: 'B', connection: { nodeId: 'exp_n', outputKey: 'output' } },
                 },
                 outputs: { result: { type: 'float', label: 'Result' } },
-                params: {},
+                params: { __comment: 'Multiply: the distance inside the tile × Exp: the number the rings are drawn from.' },
               },
               {
                 id: 'loop_i',
@@ -694,7 +694,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
                 position: { x: 120, y: 460 },
                 inputs: {},
                 outputs: { i: { type: 'float', label: 'i' } },
-                params: {},
+                params: { __comment: 'Loop Index: which pass this is (0, 1, 2…).' },
               },
               {
                 id: 'time_n',
@@ -702,7 +702,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
                 position: { x: 120, y: 540 },
                 inputs: {},
                 outputs: { time: { type: 'float', label: 'Time' } },
-                params: {},
+                params: { __comment: 'Time: seconds since the start, to make the rings ripple.' },
               },
               {
                 id: 'i_04',
@@ -710,7 +710,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
                 position: { x: 320, y: 460 },
                 inputs: { a: { type: 'float', label: 'A', connection: { nodeId: 'loop_i', outputKey: 'i' } } },
                 outputs: { result: { type: 'float', label: 'Result' } },
-                params: { b: 0.4 },
+                params: { __comment: 'Multiply: the pass number × 0.4, so each pass takes its own colour.', b: 0.4 },
               },
               {
                 id: 't_04',
@@ -718,7 +718,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
                 position: { x: 320, y: 540 },
                 inputs: { a: { type: 'float', label: 'A', connection: { nodeId: 'time_n', outputKey: 'time' } } },
                 outputs: { result: { type: 'float', label: 'Result' } },
-                params: { b: 0.4 },
+                params: { __comment: 'Multiply: Time × 0.4, so the colours drift slowly.', b: 0.4 },
               },
               {
                 id: 'it_add',
@@ -729,7 +729,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
                   b: { type: 'float', label: 'B', connection: { nodeId: 't_04', outputKey: 'result' } },
                 },
                 outputs: { result: { type: 'float', label: 'Result' } },
-                params: {},
+                params: { __comment: 'Add: the pass\'s colour shift plus the drift.' },
               },
               {
                 id: 'pal_t',
@@ -740,7 +740,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
                   b: { type: 'float', label: 'B', connection: { nodeId: 'it_add', outputKey: 'result' } },
                 },
                 outputs: { result: { type: 'float', label: 'Result' } },
-                params: {},
+                params: { __comment: 'Add: the distance from the middle plus that shift: where on the palette this pixel sits.' },
               },
               {
                 id: 'palette',
@@ -748,7 +748,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
                 position: { x: 920, y: 400 },
                 inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'pal_t', outputKey: 'result' } } },
                 outputs: { color: { type: 'vec3', label: 'Color' } },
-                params: { preset: '2' },
+                params: { __comment: 'Palette: the rings\' colour.', preset: '2' },
               },
               {
                 id: 'glow',
@@ -758,8 +758,8 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
                   d: { type: 'float', label: 'd (float)', connection: { nodeId: 'd_val', outputKey: 'result' } },
                   time: { type: 'float', label: 'time (float)', connection: { nodeId: 'time_n', outputKey: 'time' } },
                 },
-                outputs: { result: { type: 'vec3', label: 'Result (vec3)' } },
-                params: {
+                outputs: { result: { type: 'float', label: 'Result' } },
+                params: { __comment: 'Ring glow (an Expression Block): sin(d × 8 + time) / 8 crosses zero on every ring; 0.01 ÷ its size is bright right on a ring and dim between them; pow(…, 1.2) makes the rings thinner.',
                   inputs: [{ name: 'd', type: 'float', slider: null }, { name: 'time', type: 'float', slider: null }],
                   outputType: 'float',
                   lines: [],
@@ -776,7 +776,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
                   scale: { type: 'float', label: 'Scale', connection: { nodeId: 'glow', outputKey: 'result' } },
                 },
                 outputs: { result: { type: 'vec3', label: 'Result' } },
-                params: {},
+                params: { __comment: 'Multiply: the palette colour, lit by the ring glow. The group adds every pass\'s rings together.' },
                 assignOp: '+=',
               },
             ],
@@ -796,7 +796,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           color: { type: 'vec3', label: 'Color', connection: { nodeId: 'group_1', outputKey: 'out_color' } },
         },
         outputs: {},
-        params: {},
+        params: { __comment: 'Output: the rings are the picture.' },
       },
     ],
   },
@@ -812,7 +812,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         position: { x: 40, y: 260 },
         inputs: {},
         outputs: { uv: { type: 'vec2', label: 'UV' } },
-        params: {},
+        params: { __comment: 'UV: where each pixel is on the picture.' },
       },
       {
         id: 'time_0',
@@ -820,7 +820,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         position: { x: 40, y: 340 },
         inputs: {},
         outputs: { time: { type: 'float', label: 'Time' } },
-        params: {},
+        params: { __comment: 'Time: seconds since the start, to make the clouds drift.' },
       },
       {
         id: 'group_1',
@@ -831,7 +831,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           in_time: { type: 'float', label: 'Time', connection: { nodeId: 'time_0', outputKey: 'time' } },
         },
         outputs: { out_value: { type: 'float', label: 'Value' } },
-        params: {
+        params: { __comment: 'FBM Octave: a Group that repeats its inside once per octave. Each pass adds noise twice as fine and half as strong as the last: fractal Brownian motion (FBM), built by hand.',
           label: 'FBM Octave',
           iterations: 5,
           subgraph: {
@@ -844,7 +844,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
                   v: { type: 'vec2', label: 'Vec2', connection: { nodeId: GROUP_PORT_SENTINEL, outputKey: 'in_uv' } },
                 },
                 outputs: { result: { type: 'vec2', label: 'Result' } },
-                params: { scale: 2 },
+                params: { __comment: 'Multiply: the picture × 2 each pass (⟳ carry), so every octave\'s noise is twice as fine.', scale: 2 },
                 carryMode: true,
               },
               {
@@ -855,7 +855,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
                   a: { type: 'float', label: 'A', connection: { nodeId: GROUP_PORT_SENTINEL, outputKey: 'in_time' } },
                 },
                 outputs: { result: { type: 'float', label: 'Result' } },
-                params: { b: 0.15 },
+                params: { __comment: 'Multiply: Time × 0.15, so each octave drifts.', b: 0.15 },
               },
               {
                 id: 'fbm_n',
@@ -868,7 +868,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
                   time_scale: { type: 'float', label: 'Time Scale' },
                 },
                 outputs: { value: { type: 'float', label: 'Value' }, uv: { type: 'vec2', label: 'UV (pass-through)' } },
-                params: { octaves: 1, lacunarity: 2, gain: 0.5, scale: 1, time_scale: 0 },
+                params: { __comment: 'FBM with one octave: plain noise at this pass\'s scale.', octaves: 1, lacunarity: 2, gain: 0.5, scale: 1, time_scale: 0 },
               },
               {
                 id: 'loop_i',
@@ -876,15 +876,15 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
                 position: { x: 120, y: 420 },
                 inputs: {},
                 outputs: { i: { type: 'float', label: 'i' } },
-                params: {},
+                params: { __comment: 'Loop Index: which octave this is (0, 1, 2…).' },
               },
               {
                 id: 'amp',
                 type: 'exprNode',
                 position: { x: 320, y: 380 },
                 inputs: { i: { type: 'float', label: 'i (float)', connection: { nodeId: 'loop_i', outputKey: 'i' } } },
-                outputs: { result: { type: 'vec3', label: 'Result (vec3)' } },
-                params: {
+                outputs: { result: { type: 'float', label: 'Result' } },
+                params: { __comment: 'Octave strength (an Expression Block): 0.5 to the power of the octave, so each octave counts half as much as the one before (1, 0.5, 0.25…).',
                   inputs: [{ name: 'i', type: 'float', slider: null }],
                   outputType: 'float',
                   lines: [],
@@ -901,7 +901,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
                   b: { type: 'float', label: 'B', connection: { nodeId: 'amp', outputKey: 'result' } },
                 },
                 outputs: { result: { type: 'float', label: 'Result' } },
-                params: {},
+                params: { __comment: 'Multiply: this octave\'s noise × its strength. The group adds the octaves together.' },
                 assignOp: '+=',
               },
             ],
@@ -921,7 +921,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         position: { x: 500, y: 200 },
         inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'group_1', outputKey: 'out_value' } } },
         outputs: { color: { type: 'vec3', label: 'Color' } },
-        params: { preset: '5' },
+        params: { __comment: 'Palette: the summed noise as colour.', preset: '5' },
       },
       {
         id: 'out_3',
@@ -929,7 +929,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         position: { x: 720, y: 220 },
         inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'palette_2', outputKey: 'color' } } },
         outputs: {},
-        params: {},
+        params: { __comment: 'Output: the clouds are the picture.' },
       },
     ],
   },
@@ -2512,7 +2512,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         position: { x: 60, y: 80 },
         inputs: {},
         outputs: { uv: { type: 'vec2', label: 'UV' } },
-        params: {},
+        params: { __comment: 'UV: where each pixel is on the picture.' },
       },
       {
         id: 'time_1',
@@ -2520,19 +2520,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         position: { x: 60, y: 200 },
         inputs: {},
         outputs: { time: { type: 'float', label: 'Time' } },
-        params: {},
-      },
-      {
-        id: 'mouse_m',
-        type: 'mouse',
-        position: { x: 60, y: 320 },
-        inputs: {},
-        outputs: {
-          mouse: { type: 'vec2', label: 'Mouse' },
-          x: { type: 'float', label: 'Mouse X' },
-          y: { type: 'float', label: 'Mouse Y' },
-        },
-        params: {},
+        params: { __comment: 'Time: seconds since the start.' },
       },
       {
         id: 'cam_2',
@@ -2543,7 +2531,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
         },
         outputs: { ro: { type: 'vec3', label: 'Ray Origin' }, rd: { type: 'vec3', label: 'Ray Dir' } },
-        params: { camDist: 3, camAngle: 0, rotSpeed: 0, fov: 1.5 },
+        params: { __comment: 'March Camera: a camera 3 units back looking down the tunnel; each pixel gets a ray.', camDist: 3, camAngle: 0, rotSpeed: 0, fov: 1.5 },
       },
       {
         id: 'scene_3',
@@ -2551,7 +2539,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         position: { x: 500, y: 400 },
         inputs: {},
         outputs: { scene: { type: 'scene3d', label: 'Scene' } },
-        params: {
+        params: { __comment: 'Repeated Octahedra: the scene, a small octahedron repeated every 1 × 1 × 0.25 units, a corridor of them.',
           label: 'Repeated Octahedra',
           subgraph: {
             nodes: [
@@ -2561,7 +2549,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
                 position: { x: 60, y: 140 },
                 inputs: {},
                 outputs: { pos: { type: 'vec3', label: 'Position' } },
-                params: {},
+                params: { __comment: 'Scene Pos: the point being measured.' },
               },
               {
                 id: 'rep',
@@ -2569,7 +2557,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
                 position: { x: 240, y: 140 },
                 inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp', outputKey: 'pos' } } },
                 outputs: { pos: { type: 'vec3', label: 'Repeated Pos' } },
-                params: { cellX: 1, cellY: 1, cellZ: 0.25 },
+                params: { __comment: 'Repeat 3D: repeats space in cells (1 across, 1 up, 0.25 deep), so one octahedron becomes endless rows.', cellX: 1, cellY: 1, cellZ: 0.25 },
               },
               {
                 id: 'sd',
@@ -2577,7 +2565,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
                 position: { x: 440, y: 140 },
                 inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'rep', outputKey: 'pos' } } },
                 outputs: { dist: { type: 'float', label: 'Distance' } },
-                params: { size: 0.125 },
+                params: { __comment: 'Octahedron SDF: the distance to one small octahedron (size 0.125).', size: 0.125 },
               },
             ],
             inputPorts: [],
@@ -2606,7 +2594,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           depth: { type: 'float', label: 'Depth' },
           pos: { type: 'vec3', label: 'Hit Pos' },
         },
-        params: {
+        params: { __comment: 'March Loop Group: marches each ray into the scene; inside, every step bends the ray first, so the straight tunnel wiggles.',
           maxSteps: 80,
           maxDist: 100,
           stepScale: 1,
@@ -2624,7 +2612,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
                   marchPos: { type: 'vec3', label: 'March Pos' },
                   marchDist: { type: 'float', label: 'March Dist' },
                 },
-                params: { extraInputs: [] },
+                params: { __comment: 'March Loop Inputs: this step\'s position along the ray (March Pos) and how far the ray has gone (March Dist).', extraInputs: [] },
               },
               {
                 id: 'time_b',
@@ -2632,7 +2620,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
                 position: { x: 80, y: 340 },
                 inputs: {},
                 outputs: { time: { type: 'float', label: 'Time' } },
-                params: {},
+                params: { __comment: 'Time: to make the wiggle move.' },
               },
               {
                 id: 'mouse_b',
@@ -2644,7 +2632,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
                   x: { type: 'float', label: 'X' },
                   y: { type: 'float', label: 'Y' },
                 },
-                params: {},
+                params: { __comment: 'Mouse: its Y sets how fast the tunnel wiggles.' },
               },
               {
                 id: 'warp',
@@ -2654,13 +2642,10 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
                   p: { type: 'vec3', label: 'p (vec3)', connection: { nodeId: 'mli', outputKey: 'marchPos' } },
                   t: { type: 'float', label: 't (float)', connection: { nodeId: 'mli', outputKey: 'marchDist' } },
                   time: { type: 'float', label: 'time', connection: { nodeId: 'time_b', outputKey: 'time' } },
-                  mx: { type: 'float', label: 'mx (mouse x)', connection: { nodeId: 'mouse_b', outputKey: 'x' } },
                   my: { type: 'float', label: 'my (mouse y)', connection: { nodeId: 'mouse_b', outputKey: 'y' } },
-                  a: { type: 'float', label: 'a (float)' },
-                  b: { type: 'float', label: 'b (float)' },
                 },
                 outputs: { result: { type: 'vec3', label: 'Result (vec3)' } },
-                params: {
+                params: { __comment: 'Wiggle (an Expression Block): turns the point round the tunnel\'s axis more the further the ray has gone (t) and as time passes, then sways it up and down by a sine of the distance, faster with the mouse higher (my). Bending the ray each step bends the whole tunnel.',
                   lines: [
                     { lhs: 'p.xy', op: '=', rhs: 'p.xy * rot2D(t * 0.3 + time * 0.2)' },
                     { lhs: 'p.y', op: '+=', rhs: 'sin(t * (my + 1.0) * 0.5) * 0.35' },
@@ -2676,7 +2661,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
                 position: { x: 660, y: 220 },
                 inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'warp', outputKey: 'result' } } },
                 outputs: {},
-                params: { hiddenOutputs: [] },
+                params: { __comment: 'March Loop Output: the bent position goes on to the scene.', hiddenOutputs: [] },
               },
             ],
             inputPorts: [],
@@ -2693,7 +2678,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           b: { type: 'float', label: 'B' },
         },
         outputs: { result: { type: 'float', label: 'Result' } },
-        params: { b: 0.04 },
+        params: { __comment: 'Multiply: the distance travelled, scaled, for the colour.', b: 0.04 },
       },
       {
         id: 'muli_6',
@@ -2704,7 +2689,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           b: { type: 'float', label: 'B' },
         },
         outputs: { result: { type: 'float', label: 'Result' } },
-        params: { b: 0.005 },
+        params: { __comment: 'Multiply: the steps taken, scaled, for the colour.', b: 0.005 },
       },
       {
         id: 'add_7',
@@ -2715,7 +2700,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           b: { type: 'float', label: 'B', connection: { nodeId: 'muli_6', outputKey: 'result' } },
         },
         outputs: { result: { type: 'float', label: 'Result' } },
-        params: { b: 0 },
+        params: { __comment: 'Add: the two together: where on the palette this pixel sits.', b: 0 },
       },
       {
         id: 'pal_8',
@@ -2723,7 +2708,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         position: { x: 1400, y: 180 },
         inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'add_7', outputKey: 'result' } } },
         outputs: { color: { type: 'vec3', label: 'Color' } },
-        params: { offset: [0.5, 0.5, 0.5], amplitude: [0.5, 0.5, 0.5], freq: [1, 1, 1], phase: [0.3, 0.416, 0.557] },
+        params: { __comment: 'Palette: colour by distance and steps, so the tunnel glows in bands as it recedes.', offset: [0.5, 0.5, 0.5], amplitude: [0.5, 0.5, 0.5], freq: [1, 1, 1], phase: [0.3, 0.416, 0.557] },
       },
       {
         id: 'output_9',
@@ -2731,7 +2716,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         position: { x: 1640, y: 200 },
         inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'pal_8', outputKey: 'color' } } },
         outputs: {},
-        params: {},
+        params: { __comment: 'Output: the tunnel is the picture.' },
       },
     ],
   },
@@ -4815,7 +4800,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         position: { x: 40, y: 160 },
         inputs: {},
         outputs: { uv: { type: 'vec2', label: 'UV' } },
-        params: {},
+        params: { __comment: 'UV: where each pixel is on the picture.' },
       },
       {
         id: 'rg_time',
@@ -4823,7 +4808,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         position: { x: 40, y: 320 },
         inputs: {},
         outputs: { time: { type: 'float', label: 'Time' } },
-        params: {},
+        params: { __comment: 'Time: seconds since the start, to make the colours flow.' },
       },
       {
         id: 'rg_fn',
@@ -4834,7 +4819,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           time: { type: 'float', label: 'time', connection: { nodeId: 'rg_time', outputKey: 'time' } },
         },
         outputs: { result: { type: 'vec3', label: 'Result' } },
-        params: {
+        params: { __comment: 'Ring Glow (a Custom Function: GLSL you write, with its own inputs). l is the distance to a ring of radius 1; 0.1 ÷ l glows bright near the ring; sin(…) + vec3(0, 1, 2) shifts red, green and blue apart for the rainbow; tanh keeps it from blowing out. Open it to read and change the code.',
           label: 'Ring Glow',
           inputs: [{ name: 'uv', type: 'vec2', slider: null }, { name: 'time', type: 'float', slider: null }],
           outputType: 'vec3',
@@ -4848,7 +4833,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         position: { x: 540, y: 160 },
         inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'rg_fn', outputKey: 'result' } } },
         outputs: {},
-        params: {},
+        params: { __comment: 'Output: the ring is the picture.' },
       },
     ],
   },
@@ -5794,7 +5779,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         position: { x: 60, y: 260 },
         inputs: {},
         outputs: { uv: { type: 'vec2', label: 'UV' } },
-        params: {},
+        params: { __comment: 'UV: where each pixel is on the picture.' },
       },
       {
         id: 'gd_warp',
@@ -5802,7 +5787,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         position: { x: 280, y: 260 },
         inputs: { uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'gd_uv', outputKey: 'uv' } } },
         outputs: { warpedUV: { type: 'vec2', label: 'Warped UV' } },
-        params: { amplitude: 0.08, frequency: 3, axis: '2.0', animated: true },
+        params: { amplitude: 0.08, frequency: 3, axis: '2.0', animated: true, __comment: 'Grid Density Warp: squeezes and stretches the picture in a moving wave, so the grid of dots bunches up and spreads out as it passes.' },
       },
       {
         id: 'gd_grid',
@@ -5818,22 +5803,15 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           cell_size: { type: 'float', label: 'Cell Size' },
           aspect_ratio: { type: 'float', label: 'Aspect Ratio' },
         },
-        params: { columns: 28, _schemaVersion: 2 },
+        params: { columns: 28, _schemaVersion: 2, __comment: 'Grid Layout: 28 columns of cells over the warped picture. Cell UV is each cell\'s own little picture; Dist to Center how far the cell is from the middle.' },
       },
       {
         id: 'gd_draw',
-        type: 'exprNode',
+        type: 'circleSDF',
         position: { x: 780, y: 260 },
-        inputs: { cuv: { type: 'vec2', label: 'cuv', connection: { nodeId: 'gd_grid', outputKey: 'cellUV' } } },
-        outputs: { result: { type: 'float', label: 'Result' } },
-        params: {
-          inputs: [{ name: 'cuv', type: 'vec2', slider: null }],
-          outputType: 'float',
-          lines: [],
-          result: '1.0 - smoothstep(0.22, 0.28, length(cuv))',
-          expr: 'a',
-          label: 'dot',
-        },
+        inputs: { position: { type: 'vec2', label: 'UV', connection: { nodeId: 'gd_grid', outputKey: 'cellUV' } }, radius: { type: 'float', label: 'Radius' }, offset: { type: 'vec2', label: 'Center' } },
+        outputs: { distance: { type: 'float', label: 'Distance' } },
+        params: { radius: 0.25, posX: 0, posY: 0, __comment: 'Circle SDF: one dot in every cell. Its UV is the cell\'s own UV (from Grid Layout), so the same circle repeats in each cell.' },
       },
       {
         id: 'gd_pal',
@@ -5841,25 +5819,20 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         position: { x: 780, y: 420 },
         inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'gd_grid', outputKey: 'dist_to_center' } } },
         outputs: { color: { type: 'vec3', label: 'Color' } },
-        params: {},
+        params: { __comment: 'Palette: a colour for each cell, from how far it is from the middle (Dist to Center), so the colours ring outward.' },
       },
       {
         id: 'gd_col',
-        type: 'exprNode',
+        type: 'sdfFill',
         position: { x: 1020, y: 320 },
         inputs: {
-          dot: { type: 'float', label: 'dot', connection: { nodeId: 'gd_draw', outputKey: 'result' } },
-          col: { type: 'vec3', label: 'col', connection: { nodeId: 'gd_pal', outputKey: 'color' } },
+          d: { type: 'float', label: 'SDF', connection: { nodeId: 'gd_draw', outputKey: 'distance' } },
+          fillColor: { type: 'vec3', label: 'Fill', connection: { nodeId: 'gd_pal', outputKey: 'color' } },
+          strokeColor: { type: 'vec3', label: 'Stroke' }, background: { type: 'vec3', label: 'Background' },
+          strokeWidth: { type: 'float', label: 'Stroke Width' }, antialias: { type: 'float', label: 'Softness' },
         },
-        outputs: { result: { type: 'vec3', label: 'Result' } },
-        params: {
-          inputs: [{ name: 'dot', type: 'float', slider: null }, { name: 'col', type: 'vec3', slider: null }],
-          outputType: 'vec3',
-          lines: [],
-          result: 'dot * col',
-          expr: 'a',
-          label: 'colorize',
-        },
+        outputs: { result: { type: 'vec3', label: 'Color' }, alpha: { type: 'float', label: 'Alpha' } },
+        params: { strokeWidth: 0, antialias: 0.03, strokeAlign: 'center', aaMode: 'fixed', __comment: 'SDF Fill: fills each dot with the Palette\'s colour on black, with a soft edge (Softness 0.03).' },
       },
       {
         id: 'gd_out',
@@ -5867,7 +5840,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         position: { x: 1240, y: 320 },
         inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'gd_col', outputKey: 'result' } } },
         outputs: {},
-        params: {},
+        params: { __comment: 'Output: the dots are the picture.' },
       },
     ],
   },

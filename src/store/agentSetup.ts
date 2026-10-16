@@ -135,7 +135,7 @@ function particlesRule(): GraphNode[] {
 /** The inside of a slime rule: Sense the trail → Steer → Move, the trail coming in through the Trail port. */
 function slimeRule(): GraphNode[] {
   const inputs = n('agentInputs', 'in', 0, 160, { _groupOriginal: true, extraInputs: [{ key: 'trail', type: 'texture', label: 'Trail' }], ...note([
-    'Agent Inputs: this walker as each step begins. Trail comes from outside the group (the Trail field\'s Image, wired into the Agents card\'s Trail socket).',
+    'Agent Inputs: this walker as each step begins. Trail comes from outside the group (the Trail field\'s Texture, wired into the Agents card\'s Trail socket).',
   ]) });
   inputs.outputs = { ...inputs.outputs, trail: { type: 'texture', label: 'Trail' } };
   return [
@@ -202,7 +202,7 @@ function trailFor(prefix: string, x: number, y: number, groupId: string, over: C
     'Deposit: every walker leaves a little trail where it stands, every step. More walkers on a path leave more trail, which pulls in more walkers.',
   ]) }, { agents: [groupId, 'agents'] });
   const trail = n('trailField', `${prefix}Trail`, x + 420, y, { resolution: '512', diffuse: 1, halfLife: 0.05, edges: 'wrap', gain: 0.05, ...note([
-    'Trail field: the trail spreads (Diffuse) and fades (Half-life) every step. Its Image goes back into the Agents group (the "↺ last step" wire), so the walkers can smell it; its Amount colours the picture.',
+    'Trail field: the trail spreads (Diffuse) and fades (Half-life) every step. Its Texture goes back into the Agents group (the "↺ last step" wire), so the walkers can smell it; its Amount colours the picture.',
     'Try: a longer Half-life for thick, slow veins; Resolution 1024 rows for finer ones (with more walkers).',
   ]) }, { deposit: [`${prefix}Dep`, 'deposit'] });
   const colour = n('stopPalette', `${prefix}Colour`, x + 840, y, {
