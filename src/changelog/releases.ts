@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.229',
+    date: '2026-10-15',
+    title: "Nodes, not code",
+    highlights: [
+      { area: 'Studio', text: "More examples colour their trails with nodes you can click into (Colorize, Gradient, Palette, Channel Colours) instead of code blocks." },
+    ],
+  },
+  {
     id: '2026.10.228',
     date: '2026-10-15',
     title: "Clearer agent examples",
