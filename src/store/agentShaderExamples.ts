@@ -89,29 +89,18 @@ export function shaderRingsNodes(x = 0, y = 0): GraphNode[] {
     note: ['Smell both (an Expression Block): Sense\'s Channels. The slime\'s own trail (channel 1) and the rings\' food (channel 2) count the same, so walkers follow each other and the rings.'],
   });
   const sense = n('agentSense', 'srSense', 420, 100, {
+    crowding: 'limit', crowd: 20,
     angle: 30, distance: 0.03, weight: 1, width: '1',
     ...note([
+      'Crowding: Limit, Crowd limit 20: past 20, more smell pulls less (r · e^(−r / 20)), so the network keeps reorganising instead of collapsing into a few thick veins. Try a lower limit for a finer mesh, Crowding Off to watch it coarsen.',
       'Sense: sniffs the trail 0.03 ahead, 30° to the left, straight on and 30° to the right, in both channels (Smell both).',
       'Why the rings work: they are food in the trail, so a walker that strays off a ring smells it to one side and turns back.',
     ]),
   }, { texture: ['srIn', 'trail'], channels: ['srBoth', 'result'] });
-  const crowd = expr('srCrowd', 840, 100, {
-    label: 'Crowding',
-    inputs: [{ name: 'r', type: 'vec3' }, { name: 'sat', type: 'float', slider: { min: 1, max: 300 } }],
-    values: { sat: 20 },
-    lines: [],
-    result: 'r * exp(-r / sat)',
-    outputType: 'vec3',
-    wires: { r: ['srSense', 'readings'] },
-    note: [
-      'Crowding (an Expression Block): a reading\'s pull rises up to Sat (20) and falls past it, r · e^(−r / sat). A ring that is already full stops pulling, so the extra walkers wander off and build bridges to the next ring.',
-      'Try: Sat 8 for a finer web between the rings.',
-    ],
-  });
   const steer = n('agentSteer', 'srSteer', 1260, 100, {
     mode: 'jones', turn: 35, jitter: 0.2,
     ...note(['Steer (Jones rule): 35° toward the better smell, with some Jitter (0.2) so the bridges keep moving.']),
-  }, { readings: ['srCrowd', 'result'] });
+  }, { readings: ['srSense', 'readings'] });
   const move = n('agentMove', 'srMove', 1680, 100, {
     speed: 0.2, edges: 'wrap',
     ...note(['Move: one step at 0.2 picture units a second; Wrap at the edges.']),
@@ -172,7 +161,7 @@ export function shaderRingsNodes(x = 0, y = 0): GraphNode[] {
       'Try: Shape Field with Rings to food\'s on wired into Where ƒ (Threshold 0.5): every walker is born on a ring, and the rings are traced at once.',
     ]),
   });
-  let group = agentsGroup('srSlime', X(420), Y(0), 'srEmit', [inputs, both, sense, crowd, steer, move, output], {
+  let group = agentsGroup('srSlime', X(420), Y(0), 'srEmit', [inputs, both, sense, steer, move, output], {
     label: 'Slime on rings', tier: '256k', preroll: 4,
     ...note([
       'Agents: 262,144 walkers (256k), the slime rule inside (Sense → Crowding → Steer → Move), 2 steps a frame.',
@@ -228,28 +217,18 @@ export function shaderWallsNodes(x = 0, y = 0): GraphNode[] {
     'Trail and Walls are inputs added to the group: the Trail field (one step ago) and the shapes\' distance from outside. Walls is a chain, not a number: wherever it is wired inside, it is read at the walker\'s own position.',
   ]);
   const sense = n('agentSense', 'swSense', 420, 100, {
+    crowding: 'limit', crowd: 8,
     angle: 25, distance: 0.045, weight: 1, width: '1',
     ...note(['Sense: looks well ahead (0.045) at a narrow angle (25°), so the veins come out long and smooth.']),
   }, { texture: ['swIn', 'trail'] });
-  const crowd = expr('swCrowd', 840, 100, {
-    label: 'Crowding',
-    inputs: [{ name: 'r', type: 'vec3' }, { name: 'sat', type: 'float', slider: { min: 1, max: 300 } }],
-    values: { sat: 8 },
-    lines: [],
-    result: 'r * exp(-r / sat)',
-    outputType: 'vec3',
-    wires: { r: ['swSense', 'readings'] },
-    note: [
-      'Crowding (an Expression Block): a vein\'s pull rises up to Sat (8) and falls past it, r · e^(−r / sat), so the network stays a fine mesh that fills every gap between the shapes instead of merging into a few ropes.',
-    ],
-  });
   const steer = n('agentSteer', 'swSteer', 1260, 100, {
     mode: 'jones', turn: 14, jitter: 0.06,
     ...note(['Steer (Jones rule): small turns (14°) and little jitter, so the veins bend gently round the shapes instead of kinking.']),
-  }, { readings: ['swCrowd', 'result'] });
+  }, { readings: ['swSense', 'readings'] });
   const feel = n('agentSense', 'swFeel', 420, 520, {
     angle: 30, distance: 0.02, weight: 1, width: '1',
     ...note([
+      'Crowding: Limit, Crowd limit 8: past 8, more smell pulls less (r · e^(−r / 8)), so the network keeps reorganising instead of collapsing into a few thick veins. Try a lower limit for a finer mesh, Crowding Off to watch it coarsen.',
       'Sense (the walls): a second Sense with only Field ƒ wired, from the Walls input. Its Here output is how far the walker is from the nearest wall; its Gradient, which way is away from the wall. Both go to Drift.',
       'Why: a Sense can read any chain, not just a trail, and its Gradient is the shape\'s slope at the walker, worked out for you.',
     ]),
@@ -344,7 +323,7 @@ export function shaderWallsNodes(x = 0, y = 0): GraphNode[] {
     mode: 'fill', shape: 'field', threshold: 0.02, heading: 'random',
     ...note(['Emit, Shape Field: walkers are born anywhere the walls\' distance is above 0.02, so never inside a shape. Where ƒ takes any chain, like Obstacle ƒ.']),
   }, { where: ['swWalls', 'result'] });
-  let group = agentsGroup('swSlime', X(420), Y(0), 'swEmit', [inputs, sense, crowd, steer, feel, drift, move, output], {
+  let group = agentsGroup('swSlime', X(420), Y(0), 'swEmit', [inputs, sense, steer, feel, drift, move, output], {
     label: 'Slime round shapes', tier: '256k', preroll: 5,
     ...note([
       'Agents: 262,144 walkers (256k), 2 steps a frame: slime drifting slowly right.',
@@ -495,27 +474,19 @@ export function shaderPolarNodes(x = 0, y = 0): GraphNode[] {
     'Agent Inputs: this walker as the step begins. Trail and Spiral are inputs added to the group: the Trail field (one step ago) and the spiral chain from outside, read at the walker.',
   ]);
   const sense = n('agentSense', 'plSense', 420, 100, {
+    crowding: 'limit', crowd: 12,
     angle: 30, distance: 0.03, weight: 1, width: '1',
     ...note([
+      'Crowding: Limit, Crowd limit 12: past 12, more smell pulls less (r · e^(−r / 12)), so the network keeps reorganising instead of collapsing into a few thick veins. Try a lower limit for a finer mesh, Crowding Off to watch it coarsen.',
       'Sense: reads two things at its three sensors and adds them: the trail (Texture) and the spiral (Field ƒ, the chain from outside, read at each sensor\'s own position).',
       'Why both: the trail alone makes a network anywhere; the field tilts every choice toward the spiral\'s ridges, so the network grows along them.',
       'Try: unwire Field ƒ and the spiral is gone; raise Pull on Spiral field for walkers that ignore each other.',
     ]),
   }, { texture: ['plIn', 'trail'], field: ['plIn', 'spiral'] });
-  const crowd = expr('plCrowd', 840, 100, {
-    label: 'Crowding',
-    inputs: [{ name: 'r', type: 'vec3' }, { name: 'sat', type: 'float', slider: { min: 1, max: 300 } }],
-    values: { sat: 12 },
-    lines: [],
-    result: 'r * exp(-r / sat)',
-    outputType: 'vec3',
-    wires: { r: ['plSense', 'readings'] },
-    note: ['Crowding (an Expression Block): a reading\'s pull rises up to Sat (12) and falls past it, r · e^(−r / sat), so the walkers spread across an arm as a woven mesh instead of one thin rope along its crest.'],
-  });
   const steer = n('agentSteer', 'plSteer', 1260, 100, {
     mode: 'jones', turn: 30, jitter: 0.1,
     ...note(['Steer (Jones rule): 30° toward the better reading.']),
-  }, { readings: ['plCrowd', 'result'] });
+  }, { readings: ['plSense', 'readings'] });
   const move = n('agentMove', 'plMove', 1680, 100, {
     speed: 0.2, edges: 'wrap',
     ...note(['Move: one step at 0.2 picture units a second; Wrap at the edges.']),
@@ -560,7 +531,7 @@ export function shaderPolarNodes(x = 0, y = 0): GraphNode[] {
     mode: 'fill', shape: 'screen', heading: 'random',
     ...note(['Emit: every walker is born at once anywhere on the picture, facing any way; the spiral gathers them.']),
   });
-  let group = agentsGroup('plSlime', X(420), Y(0), 'plEmit', [inputs, sense, crowd, steer, move, output], {
+  let group = agentsGroup('plSlime', X(420), Y(0), 'plEmit', [inputs, sense, steer, move, output], {
     label: 'Spiral slime', tier: '256k', preroll: 5,
     ...note([
       'Agents: 262,144 walkers (256k), 2 steps a frame. Its Spiral input is wired from the spiral chain outside.',
@@ -737,23 +708,14 @@ export function shaderFeedbackNodes(x = 0, y = 0): GraphNode[] {
     'Agent Inputs: this walker as the step begins. Trail is an input added to the group: the Trail field from outside, one step ago.',
   ]);
   const sense = n('agentSense', 'fbSense', 420, 100, {
+    crowding: 'limit', crowd: 20,
     angle: 22.5, distance: 0.035, weight: 1, width: '1',
     ...note(['Sense: the Slime mold preset\'s: three sensors 0.035 ahead, 22.5° apart.']),
   }, { texture: ['fbIn', 'trail'] });
-  const crowd = expr('fbCrowd', 840, 100, {
-    label: 'Crowding',
-    inputs: [{ name: 'r', type: 'vec3' }, { name: 'sat', type: 'float', slider: { min: 1, max: 300 } }],
-    values: { sat: 20 },
-    lines: [],
-    result: 'r * exp(-r / sat)',
-    outputType: 'vec3',
-    wires: { r: ['fbSense', 'readings'] },
-    note: ['Crowding (an Expression Block): a reading\'s pull rises up to Sat (20) and falls past it, r · e^(−r / sat), so the network keeps reorganising.'],
-  });
   const steer = n('agentSteer', 'fbSteer', 1260, 100, {
     mode: 'jones', turn: 45, jitter: 0.15,
     ...note(['Steer (Jones rule): 45° toward the stronger side, Jitter 0.15.']),
-  }, { readings: ['fbCrowd', 'result'] });
+  }, { readings: ['fbSense', 'readings'] });
   const move = n('agentMove', 'fbMove', 1680, 100, {
     speed: 0.22, edges: 'wrap',
     ...note(['Move: one step at 0.22 picture units a second; Wrap at the edges.']),
@@ -767,9 +729,10 @@ export function shaderFeedbackNodes(x = 0, y = 0): GraphNode[] {
     mode: 'fill', shape: 'disc', heading: 'outward', x: 0, y: 0, size: 0.12,
     ...note(['Emit: every walker starts in a small disc in the middle, facing outward, so the slime spreads out across the picture as you watch.']),
   });
-  let group = agentsGroup('fbSlime', X(420), Y(0), 'fbEmit', [inputs, sense, crowd, steer, move, output], {
+  let group = agentsGroup('fbSlime', X(420), Y(0), 'fbEmit', [inputs, sense, steer, move, output], {
     label: 'Slime', tier: '256k', preroll: 2,
     ...note([
+      'Crowding: Limit, Crowd limit 20: past 20, more smell pulls less (r · e^(−r / 20)), so the network keeps reorganising instead of collapsing into a few thick veins. Try a lower limit for a finer mesh, Crowding Off to watch it coarsen.',
       'Agents: 262,144 walkers (256k), the Slime mold rule, 2 steps a frame. Pre-roll 2: the first veins are out when the picture appears; they keep spreading for about 10 s.',
       'Try: Start over to watch the picture change as the slime grows.',
     ]),
@@ -873,23 +836,14 @@ export function shaderOutlinesNodes(x = 0, y = 0): GraphNode[] {
     ]),
   }, { texture: ['olIn', 'outlines'] });
   const senseTrail = n('agentSense', 'olSense', 420, 100, {
+    crowding: 'limit', crowd: 25,
     angle: 30, distance: 0.02, weight: 1, width: '1',
     ...note(['Sense (the trail): the walkers\' own trail at the same three sensors, plus the outlines\' readings (Also).']),
   }, { texture: ['olIn', 'trail'], also: ['olSenseLines', 'readings'] });
-  const crowd = expr('olCrowd', 840, 100, {
-    label: 'Crowding',
-    inputs: [{ name: 'r', type: 'vec3' }, { name: 'sat', type: 'float', slider: { min: 1, max: 300 } }],
-    values: { sat: 25 },
-    lines: [],
-    result: 'r * exp(-r / sat)',
-    outputType: 'vec3',
-    wires: { r: ['olSense', 'readings'] },
-    note: ['Crowding (an Expression Block): a reading\'s pull rises up to Sat (25) and falls past it, r · e^(−r / sat), so walkers spread along a line instead of bunching on one spot.'],
-  });
   const steer = n('agentSteer', 'olSteer', 1260, 100, {
     mode: 'jones', turn: 40, jitter: 0.1,
     ...note(['Steer (Jones rule): 40° toward the better reading.']),
-  }, { readings: ['olCrowd', 'result'] });
+  }, { readings: ['olSense', 'readings'] });
   const move = n('agentMove', 'olMove', 1680, 100, {
     speed: 0.18, edges: 'wrap',
     ...note(['Move: one step at 0.18 picture units a second; Wrap at the edges.']),
@@ -941,6 +895,7 @@ export function shaderOutlinesNodes(x = 0, y = 0): GraphNode[] {
   const edges = n('edgesTexture', 'olEdges', X(1680), Y(420), {
     strength: 3, width: 1.5,
     ...note([
+      'Crowding: Limit, Crowd limit 25: past 25, more smell pulls less (r · e^(−r / 25)), so the network keeps reorganising instead of collapsing into a few thick veins. Try a lower limit for a finer mesh, Crowding Off to watch it coarsen.',
       'Edges (texture): where the picture\'s brightness changes sharply: the outline of every shape, 0–1.',
       'Try: Width 3 for bolder outlines the walkers find more easily; Strength 6 for faint edges in a photo.',
     ]),
@@ -967,7 +922,7 @@ export function shaderOutlinesNodes(x = 0, y = 0): GraphNode[] {
     mode: 'fill', shape: 'picture', threshold: 0.5, heading: 'random',
     ...note(['Emit, Shape Picture: every walker is born on an outline (the outlines Pass\'s Texture, wired into Picture, above Threshold 0.5).']),
   }, { picture: ['olOutlines', 'texture'] });
-  let group = agentsGroup('olSlime', X(420), Y(0), 'olEmit', [inputs, senseLines, senseTrail, crowd, steer, move, output], {
+  let group = agentsGroup('olSlime', X(420), Y(0), 'olEmit', [inputs, senseLines, senseTrail, steer, move, output], {
     label: 'Slime on outlines', tier: '256k', preroll: 4,
     ...note([
       'Agents: 262,144 walkers (256k), 2 steps a frame. Two added inputs: the Trail and the Outlines texture.',

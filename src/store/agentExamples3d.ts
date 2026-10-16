@@ -103,35 +103,23 @@ export function slime3dNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     'Trail is an input added to the group: the 3D Trail field from outside (a volume), as it was one step ago.',
   ]);
   const sense = n('agentSense', 's3Sense', 420, 100, {
+    crowding: 'limit', crowd: 40,
     angle: 30, distance: 0.15, weight: 1, width: '1', cone: 'plane',
     ...note([
+      'Crowding: Limit, Crowd limit 40: past 40, more smell pulls less (r · e^(−r / 40)), so the network keeps reorganising instead of collapsing into a few thick veins. Try a lower limit for a finer mesh, Crowding Off to watch it coarsen.',
       'Sense: sniffs the trail volume at three points 0.15 ahead (about 7 cells of the 96-row volume): straight on, and 30° off to either side.',
       'In 3D the side sensors lie on a cone round the heading: Sensors (3D) Turning plane puts them in a plane through the heading that turns at random every step, so over a few steps they sweep the whole cone, and Steer turns in that plane.',
       'Why so far: a volume\'s cells are much bigger than a 2D trail\'s pixels, so a 3D slime has to look further ahead to see past its own trail.',
       'Try: Sensors (3D) Ring of 4 for a steadier, more even network (5 reads instead of 3); Distance 0.25 for bigger cells.',
     ]),
   }, { texture: ['s3In', 'trail'] });
-  const crowd = expr('s3Crowd', 840, 420, {
-    label: 'Crowding',
-    inputs: [{ name: 'r', type: 'vec3' }, { name: 'sat', type: 'float', slider: { min: 1, max: 300 } }],
-    values: { sat: 40 },
-    lines: [],
-    result: 'r * exp(-r / sat)',
-    outputType: 'vec3',
-    wires: { r: ['s3Sense', 'readings'] },
-    note: [
-      'Crowding (an Expression Block): a tube\'s pull rises with its trail up to Sat (40) and falls past it, r · e^(−r / sat), as in the 2D Slime mold.',
-      'Why: without it every walker ends up in a few thick tubes; with it the network stays many, fine and branching.',
-      'Try: Sat 120 to watch the network coarsen into a few cables.',
-    ],
-  });
   const steer = n('agentSteer', 's3Steer', 840, 100, {
     mode: 'jones', turn: 30, jitter: 0.1,
     ...note([
       'Steer (Jones rule) in 3D: straight on if the centre smells strongest, a random side if both sides beat the centre, otherwise 30° toward the stronger side, in the plane Sense read this step.',
       'Try: Turn 15° for long smooth tubes; 60° for a tight, busy foam.',
     ]),
-  }, { readings: ['s3Crowd', 'result'] });
+  }, { readings: ['s3Sense', 'readings'] });
   const move = n('agentMove', 's3Move', 1260, 100, {
     speed: 1.2, edges: 'wrap', onObstacle: 'turn',
     ...note([
@@ -151,7 +139,7 @@ export function slime3dNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
       'Try: Shape Ball (Size 0.3) with Facing Outward to watch the network grow out from a seed.',
     ]),
   });
-  let group = agentsGroup('slime3d', X(420), Y(0), 's3Emit', [inputs, sense, crowd, steer, move, output], {
+  let group = agentsGroup('slime3d', X(420), Y(0), 's3Emit', [inputs, sense, steer, move, output], {
     label: '3D slime mold', space: '3d', preroll: 4,
     ...note([
       'Agents with Space 3D: 262,144 walkers (256k) in a box as deep as the picture is tall, 2 steps a frame. Inside (double-click): Sense → Crowding → Steer → Move, the slime rule in 3D.',
@@ -199,20 +187,12 @@ export function flock3dNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     'Agent Inputs: this bird as the step begins: its Velocity goes to Flock.',
     'Trail is an input added to the group: the flow volume from outside (the birds\' velocities, blurred, and how many there are), as it was one step ago.',
   ]);
-  const count = expr('f3Count', 420, 460, {
-    label: 'Count channel',
-    inputs: [],
-    lines: [],
-    result: 'vec4(0.0, 0.0, 0.0, 1.0)',
-    outputType: 'vec4',
-    note: ['Count channel (an Expression Block): picks the volume\'s fourth channel, the count of birds (in 3D a velocity deposit fills x, y, z and counts in the fourth), so Sense measures how crowded it is.'],
-  });
   const sense = n('agentSense', 'f3Sense', 840, 360, {
-    angle: 30, distance: 0.2, weight: 1, width: '1', cone: 'plane',
+    angle: 30, distance: 0.2, weight: 1, width: '1', cone: 'plane', smell: 'ch4',
     ...note([
-      'Sense: reads the crowd (Count channel) round the bird, 0.2 away (about 6 cells of the 64-row volume). Its Gradient, which way the crowd thickens in 3D, goes to Flock; its Channels here, the flow where the bird is (summed velocities and the count), too.',
+      'Sense: reads the crowd round the bird (Smell Channel 4 only: in 3D a velocity deposit fills x, y, z and counts birds in the fourth), 0.2 away (about 6 cells of the 64-row volume). Its Gradient, which way the crowd thickens in 3D, goes to Flock; its Channels here, the flow where the bird is (summed velocities and the count), too.',
     ]),
-  }, { texture: ['f3In', 'trail'], channels: ['f3Count', 'result'] });
+  }, { texture: ['f3In', 'trail'] });
   const flock = expr('f3Flock', 1260, 100, {
     label: 'Flock',
     inputs: [
@@ -263,7 +243,7 @@ export function flock3dNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     mode: 'fill', shape: 'screen', heading: 'random', speed: 0.5, speedVar: 0.2,
     ...note(['Emit: every bird starts somewhere in the box, flying in a random direction at about 0.5. The flocks sort themselves out within seconds.']),
   });
-  let group = agentsGroup('flock3d', X(420), Y(0), 'f3Emit', [inputs, count, sense, flock, curl, integrate, output], {
+  let group = agentsGroup('flock3d', X(420), Y(0), 'f3Emit', [inputs, sense, flock, curl, integrate, output], {
     label: '3D flock', space: '3d', tier: '64k', preroll: 6,
     ...note([
       'Agents with Space 3D: 65,536 birds (64k) in a box as deep as the picture is tall, 2 steps a frame. The rule inside (double-click) is Flock → Curl noise → Integrate.',
