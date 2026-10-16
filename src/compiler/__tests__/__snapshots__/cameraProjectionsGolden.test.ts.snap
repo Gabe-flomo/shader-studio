@@ -133,26 +133,11 @@ void main() {
     // Its Image goes back into the group for Sense, read in 3D. Its Amount here would be the volume seen from the front; this example shows the walkers through a camera instead.
     // Try: Volume 128 for finer tubes (more memory and time), 64 for a fast, coarse one; Half-life 0.3 for thicker, slower tubes.
     vec4 trailfield_3_t = texture2D(u_trail_trailfield_3, agUv(g_uv));
-    // UV: where each pixel is on the picture, for the backdrop behind the walkers.
-    vec2 uv_3_uv = (vUv - 0.5) * 2.0;
-    uv_3_uv.x *= u_resolution.x / u_resolution.y;
-    // Night (an Expression Block): the backdrop the walkers are drawn over.
-    // h: 0 at the bottom of the picture, 1 at the top. halo: 1 in the middle, fading out, a faint glow behind the walkers.
-    // Result: near-black, dark plum at the bottom to deep blue at the top, with the glow in the middle.
-    vec3 night_3_result;
-    {
-        vec2 uv = uv_3_uv;
-        float t = u_time;
-        vec3 p = vec3(0.0);
-        float h = uv.y * 0.5 + 0.5;
-        float halo = exp(-dot(uv, uv) * 1.5);
-        night_3_result = mix(vec3(0.010, 0.006, 0.012), vec3(0.004, 0.008, 0.020), h) + vec3(0.030, 0.012, 0.020) * halo;
-    }
     // Draw agents in 3D: every walker as a soft glowing dot, coloured by heading (amber one way, blue the other), seen through a camera 3.8 from the middle that circles the box at 6° a second, 15° above it.
     // Blur 0.2 with Focus 1: the middle of the box is sharp, the near and far walkers a little soft, which makes the depth read.
     // Try: Flatten 1 for an isometric view; Orbit speed 0 and drag Angle to look from the side; Elevation 89 to look straight down.
     vec4 drawagents_3_s = texture2D(u_agdraw_drawagents_3, agUv(g_uv));
-    vec3 drawagents_3_color = night_3_result + max(drawagents_3_s.rgb, vec3(0.0));
+    vec3 drawagents_3_color = vec3(0.0) + max(drawagents_3_s.rgb, vec3(0.0));
     // Output: the walkers, drawn through the camera over the night backdrop, are the picture.
     gl_FragColor = vec4(drawagents_3_color, 1.0);
 }",

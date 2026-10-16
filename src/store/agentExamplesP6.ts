@@ -116,28 +116,14 @@ export function galaxyNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
       'Try: Count 1M for a denser, smoother galaxy; Steps per frame 4 to spin it twice as fast.',
     ]),
   });
-  const uv = n('uv', 'gxUv', X(420), Y(420), { ...note(['UV: where each pixel is, for the glow behind the stars.']) });
-  const sky = expr('gxSky', X(840), Y(420), {
-    label: 'Deep space',
-    inputs: [{ name: 'uv', type: 'vec2' }],
-    lines: [['float r', 'length(uv)'], ['float glow', 'exp(-r * r * 9.0)']],
-    result: 'vec3(0.004, 0.006, 0.014) + vec3(1.0, 0.75, 0.45) * 0.08 * glow',
-    outputType: 'vec3',
-    wires: { uv: ['gxUv', 'uv'] },
-    note: [
-      'Deep space (an Expression Block): the dark behind the stars.',
-      'r: how far this pixel is from the centre. glow: 1 in the middle fading out quickly, the unresolved light of the bulge.',
-      'Result: near-black blue, with a faint warm haze round the core.',
-    ],
-  });
   const draw = n('drawAgents', 'gxDraw', X(1260), Y(0), {
     style: 'glow', colorBy: 'agent', palette: 'ab', scaleBy: 'crowd', size: 1.5, brightness: 1.7, glow: 1.3, fade: 'off', lights: '0',
     ...note([
       'Draw agents, Glow: every star a soft dot in its own colour (Colour by Agent: Star colour inside the group), with the Particles node\'s glow, so the crowded core and arms bloom.',
       'Try: Brightness 1 for a blazing core; Style Points for a crisp star field.',
     ]),
-  }, { agents: ['galaxy', 'agents'], over: ['gxSky', 'result'] });
-  const nodes = [bulge, disc, group, uv, sky, draw];
+  }, { agents: ['galaxy', 'agents'] });
+  const nodes = [bulge, disc, group, draw];
   if (withOutput) nodes.push(n('output', 'gxOutput', X(1680), Y(0), { ...note(['Output: the stars over deep space are the picture.']) }, { color: ['gxDraw', 'color'] }));
   return nodes;
 }
@@ -320,33 +306,14 @@ export function sandPlateNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
       'Pre-roll 3: the sand has found its first figure when the picture appears.',
     ]),
   });
-  const uv = n('uv', 'spUv', X(420), Y(380), { ...note(['UV: where each pixel is, for the plate under the sand.']) });
-  const metal = expr('spMetal', X(840), Y(380), {
-    label: 'Metal plate',
-    inputs: [{ name: 'uv', type: 'vec2' }],
-    lines: [
-      ['vec2 q', 'abs(uv) - vec2(0.92)'],
-      ['float edge', 'max(q.x, q.y)'],
-      ['float sheen', '0.5 + 0.5 * uv.y - 0.25 * uv.x'],
-    ],
-    result: 'edge < 0.0 ? vec3(0.07, 0.075, 0.085) * (0.6 + 0.6 * sheen) + vec3(0.25) * exp(edge * 120.0) : vec3(0.01, 0.01, 0.012)',
-    outputType: 'vec3',
-    wires: { uv: ['spUv', 'uv'] },
-    note: [
-      'Metal plate (an Expression Block): the dark brushed plate under the sand, with a thin bright rim.',
-      'q: how far outside the square (0.92 each way) the pixel is, along each axis. edge: the larger of the two: below 0 on the plate.',
-      'sheen: a soft gradient across the plate, brighter toward the top left, like light on metal.',
-      'Result: on the plate, dark grey-blue lit by sheen with a bright rim at its edge; off it, near black.',
-    ],
-  });
   const draw = n('drawAgents', 'spDraw', X(1260), Y(0), {
     style: 'glow', colorBy: 'speed', palette: 'gold', speedRef: 0.4, scaleBy: 'crowd', size: 1, brightness: 2, glow: 0.8, fade: 'off', lights: '0',
     ...note([
       'Draw agents, Glow: every grain a small soft dot, coloured by how fast it moves along the Gold palette (Fast is 0.4): grains resting on a line are pale gold, grains being shaken across the plate darker amber, so the figure stands out and you can see the sand run when it changes.',
       'Try: Palette Ice for frost; Brightness 2 for a glowing figure.',
     ]),
-  }, { agents: ['sand', 'agents'], over: ['spMetal', 'result'] });
-  const nodes = [emit, group, uv, metal, draw];
+  }, { agents: ['sand', 'agents'] });
+  const nodes = [emit, group, draw];
   if (withOutput) nodes.push(n('output', 'spOutput', X(1680), Y(0), { ...note(['Output: the sand on the plate is the picture.']) }, { color: ['spDraw', 'color'] }));
   return nodes;
 }

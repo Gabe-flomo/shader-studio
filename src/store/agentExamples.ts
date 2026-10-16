@@ -301,20 +301,6 @@ export function particlesNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
       'Try: Count 1M for a denser cloud (about 7 ms a frame at 1080p on an M3 Pro, drawing included); Steps per frame 1 to move at the Particles node\'s own pace (2 is twice as lively).',
     ]),
   });
-  const bg = n('uv', 'ptUv', X(420), Y(380), { ...note(['UV: where each pixel is, for the background glow (y −1 at the bottom to 1 at the top).']) });
-  const glow = expr('ptBg', X(840), Y(380), {
-    label: 'Ember glow',
-    inputs: [{ name: 'uv', type: 'vec2' }],
-    lines: [['float r', 'length(uv)'], ['float halo', 'exp(-r * r * 2.5)']],
-    result: 'vec3(0.012, 0.008, 0.01) + vec3(1.0, 0.32, 0.06) * 0.05 * halo',
-    outputType: 'vec3',
-    wires: { uv: ['ptUv', 'uv'] },
-    note: [
-      'Ember glow (an Expression Block): the dark background the particles are drawn over.',
-      'r: how far this pixel is from the middle. halo: 1 in the middle, fading out with distance (e^(−2.5·r²)).',
-      'Result: near-black, warmed with a faint orange where halo is high, as if the embers lit the air.',
-    ],
-  });
   const draw = n('drawAgents', 'ptDraw', X(1260), Y(0), {
     style: 'glow', colorBy: 'age', palette: 'ember', scaleBy: 'crowd', size: 2, brightness: 0.85, glow: 0.45, fade: 'on',
     lights: '4', lightColor: [1, 0.55, 0.25], lightPower: 1.6, lightReach: 0.3, halo: 0.5, lightMotion: 'orbit', lightOrbit: 0.48,
@@ -323,8 +309,8 @@ export function particlesNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
       'Four lights orbit the ring: particles near one shine brighter and larger, and each light has a halo. Brightness of The crowd keeps the cloud as bright at any count (0.7: every particle here is alive at once, where the Particles node keeps about two in three).',
       'Try: Style Streaks; Palette Ice or Aurora; Lights None for plain embers.',
     ]),
-  }, { agents: ['particles', 'agents'], over: ['ptBg', 'result'] });
-  const nodes = [emit, group, bg, glow, draw];
+  }, { agents: ['particles', 'agents'] });
+  const nodes = [emit, group, draw];
   if (withOutput) nodes.push(n('output', 'ptOutput', X(1680), Y(0), { ...note(['Output: the drawn particles over the glow are the picture.']) }, { color: ['ptDraw', 'color'] }));
   return nodes;
 }

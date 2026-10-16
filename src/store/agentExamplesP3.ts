@@ -419,18 +419,10 @@ export function boidsNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     ]),
   }, { deposit: ['bdDeposit', 'deposit'] });
   const sky = n('uv', 'bdUv', X(840), Y(380), { ...note(['UV: where each pixel is, for the evening sky behind the birds.']) });
-  const skyCol = expr('bdSky', X(1260), Y(380), {
-    label: 'Evening sky',
-    inputs: [{ name: 'uv', type: 'vec2' }],
-    lines: [['float h', 'uv.y * 0.5 + 0.5']],
-    result: 'mix(vec3(0.16, 0.07, 0.1), vec3(0.03, 0.05, 0.12), h)',
-    outputType: 'vec3',
-    wires: { uv: ['bdUv', 'uv'] },
-    note: [
-      'Evening sky (an Expression Block): the background, dusky red at the bottom to deep blue at the top.',
-      'h: 0 at the bottom of the picture, 1 at the top.',
-    ],
-  });
+  const skyCol = n('gradient', 'bdSky', X(1260), Y(380), {
+    mode: 'linear_y', color_a: [0.16, 0.07, 0.1], color_b: [0.03, 0.05, 0.12],
+    ...note(['Gradient (Evening sky): dusky rose at the bottom of the picture to deep blue at the top (Linear Y), the background the birds are drawn over (Draw agents\' Over).']),
+  }, { uv: ['bdUv', 'uv'] });
   const draw = n('drawAgents', 'bdDraw', X(1680), Y(0), {
     style: 'streaks', colorBy: 'heading', palette: 'ab', colorA: [1.0, 0.72, 0.4], colorB: [0.45, 0.75, 1.0],
     scaleBy: 'crowd', size: 1.5, brightness: 0.7, glow: 0.5, streak: 0.6, fade: 'off', lights: '0',
@@ -438,7 +430,7 @@ export function boidsNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
       'Draw agents, Streaks: every bird as a short glowing line along its flight, coloured by heading (warm gold flying one way, pale blue the other), so each flock shows as one colour wheeling through the others.',
       'Try: Palette Aurora; Streak 1.5 for long trails.',
     ]),
-  }, { agents: ['boids', 'agents'], over: ['bdSky', 'result'] });
+  }, { agents: ['boids', 'agents'], over: ['bdSky', 'color'] });
   const nodes = [emit, group, deposit, trail, sky, skyCol, draw];
   if (withOutput) nodes.push(n('output', 'bdOutput', X(2100), Y(0), { ...note(['Output: the birds over the evening sky are the picture.']) }, { color: ['bdDraw', 'color'] }));
   return nodes;
