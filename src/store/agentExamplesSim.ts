@@ -381,28 +381,20 @@ export function termitesNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
       'Its Image goes back into the group (Chips); its Channels draw the chips.',
     ]),
   }, { deposit: ['tmDeposit', 'deposit'] });
-  const uv = n('uv', 'tmUv', X(840), Y(420), { ...note(['UV: where each pixel is, for the soil\'s texture.']) });
-  const ground = expr('tmGround', X(1680), Y(420), {
-    label: 'Chips on soil',
-    inputs: [{ name: 'ch', type: 'vec4' }, { name: 'uv', type: 'vec2' }],
-    lines: [
-      ['float chips', 'clamp(ch.r, 0.0, 3.0)'],
-      ['vec3 soil', 'vec3(0.07, 0.055, 0.045) * (0.85 + 0.15 * sin(uv.x * 40.0) * sin(uv.y * 37.0))'],
-      ['vec3 wood', 'mix(vec3(0.75, 0.55, 0.3), vec3(1.0, 0.85, 0.55), clamp(chips - 1.0, 0.0, 1.0))'],
-    ],
-    result: 'mix(soil, wood, clamp(chips, 0.0, 1.0))',
-    outputType: 'vec3',
-    wires: { ch: ['tmTrail', 'channels'], uv: ['tmUv', 'uv'] },
-    note: [
-      'Chips on soil (an Expression Block): the picture under the termites.',
-      'chips: how many chips lie here (0 to 3). soil: dark brown earth with a faint ripple. wood: a chip\'s colour, paler where chips are stacked.',
-    ],
-  });
+  const ground = n('channelColours', 'tmGround', X(1680), Y(0), {
+    mode: 'paint', background: [0.07, 0.055, 0.045],
+    on1: true, colour1: [0.9, 0.7, 0.42], exposure1: 2,
+    on2: false, on3: false, on4: false,
+    ...note([
+      'Channel Colours, Paint: the chips. Channel 1 of the trail counts the wood chips lying here; Paint lays a chip\'s colour over the dark soil (Background) by how many (Exposure 2: one chip covers most of the ground).',
+      'Try: Exposure 0.7 so stacks show paler than single chips.',
+    ]),
+  }, { channels: ['tmTrail', 'channels'] });
   const draw = n('drawAgents', 'tmDraw', X(2100), Y(0), {
     style: 'points', colorBy: 'agent', size: 1.25, brightness: 0.8, scaleBy: 'walker', fade: 'off', lights: '0',
     ...note(['Draw agents: each termite as a small dot in its own Colour: pale when empty-handed, orange while it carries a chip. Try: Brightness 0 to watch only the chips.']),
-  }, { agents: ['termites', 'agents'], over: ['tmGround', 'result'] });
-  const nodes = [emit, group, deposit, trail, uv, ground, draw];
+  }, { agents: ['termites', 'agents'], over: ['tmGround', 'color'] });
+  const nodes = [emit, group, deposit, trail, ground, draw];
   if (withOutput) nodes.push(n('output', 'tmOutput', X(2520), Y(0), { ...note(['Output: termites over their chips are the picture.']) }, { color: ['tmDraw', 'color'] }));
   return nodes;
 }
@@ -1412,27 +1404,17 @@ export function painterNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
       'Try: Half-life 2 for fleeting strokes.',
     ]),
   }, { deposit: ['pbDeposit', 'deposit'] });
-  const paper = expr('pbPaper', X(1680), Y(420), {
-    label: 'Paint on paper',
-    inputs: [{ name: 'paint', type: 'vec4' }],
-    lines: [
-      ['float layers', 'max(paint.a, 0.0)'],
-      ['vec3 hue', 'paint.rgb / max(layers, 1e-3)'],
-      ['float cover', '1.0 - exp(-layers * 2.5)'],
-    ],
-    result: 'mix(vec3(0.035, 0.03, 0.045), hue * 1.1, cover)',
-    outputType: 'vec3',
-    wires: { paint: ['pbTrail', 'channels'] },
-    note: [
-      'Paint on paper (an Expression Block): turns the canvas into a picture: luminous inks on black.',
-      'layers: how much paint lies here (the fourth channel). hue: the paint\'s average colour (the colour channels over the layers). cover: how well the paper is covered, 0–1.',
-      'Result: near-black paper, covered by the paint\'s colour where there is paint.',
-    ],
-  });
+  const paper = n('channelColours', 'pbPaper', X(1680), Y(0), {
+    mode: 'average', background: [0.035, 0.03, 0.045], layers: 2.5,
+    ...note([
+      'Channel Colours, Average: the painting. Each bot lays its colour in the trail\'s channels 1–3 and one layer in channel 4, so channels 1–3 ÷ channel 4 is the paint\'s average colour, and channel 4 is how much paint lies here.',
+      'Cover 2.5: how fast the paint hides the near-black paper as layers pile up.',
+    ]),
+  }, { channels: ['pbTrail', 'channels'] });
   const draw = n('drawAgents', 'pbDraw', X(2100), Y(0), {
     style: 'points', colorBy: 'agent', size: 2, brightness: 0.6, scaleBy: 'walker', fade: 'off', lights: '0',
     ...note(['Draw agents: each painting bot as a small glint of its own colour at the tip of its stroke, so you can see the brushes at work; bots with their pens up are black and add nothing. Try: Brightness 0 for the painting alone.']),
-  }, { agents: ['painters', 'agents'], over: ['pbPaper', 'result'] });
+  }, { agents: ['painters', 'agents'], over: ['pbPaper', 'color'] });
   const nodes = [emit, group, deposit, trail, paper, draw];
   if (withOutput) nodes.push(n('output', 'pbOutput', X(2520), Y(0), { ...note(['Output: the painting is the picture.']) }, { color: ['pbDraw', 'color'] }));
   return nodes;

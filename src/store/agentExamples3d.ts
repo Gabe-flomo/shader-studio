@@ -33,24 +33,14 @@ function inputsWith(id: string, ports: Array<{ key: string; type: PortType; labe
   }), Object.fromEntries(ports.map(p => [p.key, { type: p.type, label: p.label }])));
 }
 
-/** A dark background from the picture's UV (an Expression Block): `top` and `bottom` mixed by height, a faint glow in the middle. */
-function backdrop(prefix: string, x: number, y: number, label: string, bottom: [number, number, number], top: [number, number, number], glow: [number, number, number], lines: string[]): GraphNode[] {
-  const f = (c: number[]) => `vec3(${c.map(v => v.toFixed(3)).join(', ')})`;
+/** A background for the walkers: a Gradient node from `bottom` to `top` up the picture (Linear Y, read at UV). */
+function backdrop(prefix: string, x: number, y: number, label: string, bottom: [number, number, number], top: [number, number, number], lines: string[]): GraphNode[] {
   return [
-    n('uv', `${prefix}Uv`, x, y, { ...note(['UV: where each pixel is on the picture, for the backdrop behind the walkers.']) }),
-    expr(`${prefix}Back`, x + 420, y, {
-      label,
-      inputs: [{ name: 'uv', type: 'vec2' }],
-      lines: [['float h', 'uv.y * 0.5 + 0.5'], ['float halo', 'exp(-dot(uv, uv) * 1.5)']],
-      result: `mix(${f(bottom)}, ${f(top)}, h) + ${f(glow)} * halo`,
-      outputType: 'vec3',
-      wires: { uv: [`${prefix}Uv`, 'uv'] },
-      note: [
-        `${label} (an Expression Block): the backdrop the walkers are drawn over.`,
-        'h: 0 at the bottom of the picture, 1 at the top. halo: 1 in the middle, fading out, a faint glow behind the walkers.',
-        ...lines,
-      ],
-    }),
+    n('uv', `${prefix}Uv`, x, y, { ...note(['UV: where each pixel is on the picture, for the background gradient.']) }),
+    n('gradient', `${prefix}Back`, x + 420, y, {
+      mode: 'linear_y', color_a: bottom, color_b: top,
+      ...note([`Gradient (${label}): the background the walkers are drawn over, Color A at the bottom of the picture to Color B at the top (Linear Y). It goes into Draw agents' Over.`, ...lines]),
+    }, { uv: [`${prefix}Uv`, 'uv'] }),
   ];
 }
 
@@ -163,7 +153,6 @@ export function slime3dNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
       'Try: Volume 128 for finer tubes (more memory and time), 64 for a fast, coarse one; Half-life 0.3 for thicker, slower tubes.',
     ]),
   }, { deposit: ['s3Deposit', 'deposit'] });
-  const back = backdrop('s3', X(840), Y(380), 'Night', [0.01, 0.006, 0.012], [0.004, 0.008, 0.02], [0.03, 0.012, 0.02], ['Result: near-black, dark plum at the bottom to deep blue at the top, with the glow in the middle.']);
   const draw = n('drawAgents', 's3Draw', X(1680), Y(0), {
     style: 'glow', colorBy: 'heading', palette: 'ab', colorA: [1.0, 0.55, 0.2], colorB: [0.35, 0.65, 1.0], scaleBy: 'crowd', size: 1.4, brightness: 2.2, glow: 0.9, fade: 'off', lights: '0',
     camDist: 3.8, camAngle: 15, camElevation: 15, rotSpeed: 6, fov: 1.8, ortho: 0, camX: 0, camY: 0, camZ: 0, drift: 0, focus: 1, blur: 0.2, maxBlur: 7,
@@ -172,8 +161,8 @@ export function slime3dNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
       'Blur 0.2 with Focus 1: the middle of the box is sharp, the near and far walkers a little soft, which makes the depth read.',
       'Try: Flatten 1 for an isometric view; Orbit speed 0 and drag Angle to look from the side; Elevation 89 to look straight down.',
     ]),
-  }, { agents: ['slime3d', 'agents'], over: ['s3Back', 'result'] });
-  const nodes = [emit, group, deposit, trail, ...back, draw];
+  }, { agents: ['slime3d', 'agents'] });
+  const nodes = [emit, group, deposit, trail, draw];
   if (withOutput) nodes.push(n('output', 's3Output', X(2100), Y(0), { ...note(['Output: the walkers, drawn through the camera over the night backdrop, are the picture.']) }, { color: ['s3Draw', 'color'] }));
   return nodes;
 }
@@ -267,7 +256,7 @@ export function flock3dNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
       'Try: Volume 96 for smaller, twitchier flocks.',
     ]),
   }, { deposit: ['f3Deposit', 'deposit'] });
-  const back = backdrop('f3', X(840), Y(380), 'Dusk', [0.17, 0.08, 0.1], [0.03, 0.05, 0.12], [0.02, 0.015, 0.01], ['Result: dusky rose at the bottom to deep blue at the top, like an evening sky.']);
+  const back = backdrop('f3', X(840), Y(380), 'Dusk', [0.17, 0.08, 0.1], [0.03, 0.05, 0.12], ['Dusky rose at the bottom to deep blue at the top, like an evening sky.']);
   const draw = n('drawAgents', 'f3Draw', X(1680), Y(0), {
     style: 'streaks', colorBy: 'heading', palette: 'ab', colorA: [1.0, 0.72, 0.4], colorB: [0.45, 0.75, 1.0], scaleBy: 'crowd', size: 1.5, brightness: 0.6, glow: 0.35, streak: 0.35, fade: 'off', lights: '0',
     camDist: 3.6, camAngle: 0, camElevation: 20, rotSpeed: 10, fov: 1.8, ortho: 0, camX: 0, camY: 0, camZ: 0, drift: 0.05, focus: 1, blur: 0.15, maxBlur: 7,
@@ -275,7 +264,7 @@ export function flock3dNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
       'Draw agents in 3D, Streaks: every bird as a short glowing line along its flight, coloured by heading, seen through a camera 3.6 away that orbits the box at 10° a second, 20° above it, with a little Drift.',
       'Try: Orbit speed 0 and Flatten 1 for a still, isometric view; Streak 1.2 for long trails.',
     ]),
-  }, { agents: ['flock3d', 'agents'], over: ['f3Back', 'result'] });
+  }, { agents: ['flock3d', 'agents'], over: ['f3Back', 'color'] });
   const nodes = [emit, group, deposit, trail, ...back, draw];
   if (withOutput) nodes.push(n('output', 'f3Output', X(2100), Y(0), { ...note(['Output: the birds, drawn through the orbiting camera over the dusk, are the picture.']) }, { color: ['f3Draw', 'color'] }));
   return nodes;
@@ -512,7 +501,6 @@ export function galaxy3dNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
       'Try: Count 1M for a denser, smoother galaxy.',
     ]),
   });
-  const back = backdrop('g3', X(420), Y(420), 'Deep space', [0.004, 0.006, 0.014], [0.002, 0.003, 0.008], [0.012, 0.009, 0.006], ['Result: near-black blue with a faint warm haze in the middle.']);
   const draw = n('drawAgents', 'g3Draw', X(1260), Y(0), {
     style: 'glow', colorBy: 'agent', palette: 'ab', scaleBy: 'crowd', size: 1.5, brightness: 1.8, glow: 1.3, fade: 'off', lights: '0',
     camDist: 2.7, camAngle: 30, camElevation: 38, rotSpeed: 4, fov: 1.8, ortho: 0, camX: 0, camY: 0, camZ: 0, drift: 0.08, focus: 1, blur: 0.4, maxBlur: 8,
@@ -520,8 +508,8 @@ export function galaxy3dNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
       'Draw agents in 3D: every star a soft dot in its own colour (Colour by Agent), seen from 38° above the disc by a camera 2.7 away that circles at 4° a second, drifting a little. Blur 0.4 softens the near and far stars.',
       'Try: Elevation 85 to look straight down on the spiral; Elevation 3 to see the disc edge-on, a thin line with a bulge; Translate Y 0.3 to fly over it.',
     ]),
-  }, { agents: ['galaxy3d', 'agents'], over: ['g3Back', 'result'] });
-  const nodes = [bulge, disc, group, ...back, draw];
+  }, { agents: ['galaxy3d', 'agents'] });
+  const nodes = [bulge, disc, group, draw];
   if (withOutput) nodes.push(n('output', 'g3Output', X(1680), Y(0), { ...note(['Output: the stars over deep space are the picture.']) }, { color: ['g3Draw', 'color'] }));
   return nodes;
 }
@@ -555,7 +543,7 @@ export function reverse3dNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     label: 'Swarm', space: '3d', tier: '64k', preroll: 1,
     ...note(['Agents with Space 3D: 65,536 walkers (64k) in the box. Inside: Curl noise → Integrate.']),
   });
-  const back = backdrop('rv', X(420), Y(420), 'Gold ground', [0.05, 0.03, 0.012], [0.11, 0.07, 0.025], [0.03, 0.02, 0.006], ['Result: a dark warm gold, darker at the bottom, as behind an icon.']);
+  const back = backdrop('rv', X(420), Y(420), 'Gold ground', [0.05, 0.03, 0.012], [0.11, 0.07, 0.025], ['A dark warm gold, darker at the bottom, as behind an icon.']);
   const draw = n('drawAgents', 'rvDraw', X(840), Y(0), {
     style: 'glow', colorBy: 'heading', palette: 'ab', colorA: [1, 0.78, 0.38], colorB: [0.35, 0.6, 1], scaleBy: 'walker', size: 1.6, brightness: 0.9, glow: 0.8, fade: 'off', lights: '0',
     camDist: 3.2, camAngle: 30, camElevation: 24, rotSpeed: 8, fov: 1.6, ortho: 0, camX: 0, camY: 0, camZ: 0, drift: 0, focus: 1, blur: 0, maxBlur: 7,
@@ -566,7 +554,7 @@ export function reverse3dNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
       'Flatten blends whichever Perspective is chosen toward orthographic: a slider, so Play can sweep it.',
       'Try: Perspective Normal, then Orthographic, to see the same box three ways; Converge at 6 for a stronger effect (nearer still, the far side of the box passes where the rays cross and the picture flips); Flatten 0.5.',
     ]),
-  }, { agents: ['reverse3d', 'agents'], over: ['rvBack', 'result'] });
+  }, { agents: ['reverse3d', 'agents'], over: ['rvBack', 'color'] });
   const nodes = [emit, group, ...back, draw];
   if (withOutput) nodes.push(n('output', 'rvOutput', X(1260), Y(0), { ...note(['Output: the swarm, far side bigger, over the gold ground is the picture.']) }, { color: ['rvDraw', 'color'] }));
   return nodes;
@@ -608,7 +596,6 @@ export function fireflies3dNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
       'Agents with Space 3D: room for 65,536 fireflies (64k; Emit\'s Rate decides how many glow), 2 steps a frame. Inside: Curl noise → Attract → Integrate, and Age / Life.',
     ]),
   });
-  const back = backdrop('ff', X(420), Y(420), 'Night wood', [0.006, 0.012, 0.01], [0.002, 0.004, 0.012], [0.006, 0.014, 0.01], ['Result: a black-green forest floor at the bottom to night blue at the top.']);
   const draw = n('drawAgents', 'ffDraw', X(840), Y(0), {
     style: 'glow', colorBy: 'age', palette: 'gold', scaleBy: 'walker', size: 3, brightness: 4, glow: 1.2, fade: 'on', lights: '0',
     camDist: 1.6, camAngle: 0, camElevation: 6, rotSpeed: 0, fov: 1.8, ortho: 0, camX: 0, camY: 0, camZ: 0, drift: 0.12, focus: 0.75, blur: 2, maxBlur: 24,
@@ -617,8 +604,8 @@ export function fireflies3dNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
       'Drift 0.12: the camera slowly circles, bobs and breathes on its own. Colour by Age on the Gold palette: pale when a firefly lights up, deep amber as it fades.',
       'Try: Blur 0 to see them all sharp; Focus 1.3 to focus behind the swarm.',
     ]),
-  }, { agents: ['fireflies', 'agents'], over: ['ffBack', 'result'] });
-  const nodes = [emit, group, ...back, draw];
+  }, { agents: ['fireflies', 'agents'] });
+  const nodes = [emit, group, draw];
   if (withOutput) nodes.push(n('output', 'ffOutput', X(1260), Y(0), { ...note(['Output: the fireflies, out of focus near and far, over the night wood are the picture.']) }, { color: ['ffDraw', 'color'] }));
   return nodes;
 }
@@ -692,7 +679,7 @@ export function cubeStorm3dNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
       'Try: Count 256k for a denser storm; the note under Draw agents\' Shape says what it costs.',
     ]),
   });
-  const back = backdrop('cs', X(420), Y(420), 'Storm sky', [0.02, 0.022, 0.03], [0.07, 0.08, 0.1], [0.03, 0.03, 0.035], ['Result: slate grey, lighter at the top, with a faint glow in the middle.']);
+  const back = backdrop('cs', X(420), Y(420), 'Storm sky', [0.02, 0.022, 0.03], [0.07, 0.08, 0.1], ['Slate grey, lighter at the top.']);
   const draw = n('drawAgents', 'csDraw', X(840), Y(0), {
     style: 'points', shape: 'cube', shading: 'flat', facing: 'tumble', spin: 3, shapeSize: 0.014, shapeSizeBy: 'speed',
     colorBy: 'speed', palette: 'ab', colorA: [0.85, 0.88, 0.95], colorB: [0.95, 0.45, 0.2], speedRef: 1.6, brightness: 0.5, scaleBy: 'walker', fade: 'off', lights: '0',
@@ -703,7 +690,7 @@ export function cubeStorm3dNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
       'Colour by speed, pale slow to orange fast (Fast is 1.6), and Size by speed: the fast ones bigger.',
       'Try: Shading Faces for a 3D look at no extra cost (a cube is shaded once per face); Facing Along motion so they fly face first.',
     ]),
-  }, { agents: ['cubeStorm', 'agents'], over: ['csBack', 'result'] });
+  }, { agents: ['cubeStorm', 'agents'], over: ['csBack', 'color'] });
   const nodes = [emit, group, ...back, draw];
   if (withOutput) nodes.push(n('output', 'csOutput', X(1260), Y(0), { ...note(['Output: the cube storm over the storm sky is the picture.']) }, { color: ['csDraw', 'color'] }));
   return nodes;
