@@ -116,30 +116,23 @@ export function multiSlimeNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     resolution: '1024', diffuse: 1, halfLife: 0.06, edges: 'wrap', gain: 0.04,
     ...note([
       'Trail field: three channels, one per species, 1024 rows tall; each step it spreads (3×3) and fades (half gone in 0.06 s).',
-      'Its Image goes back into the group for Sense (the "↺ last step" wire); its Channels colour the picture.',
+      'Its Image goes back into the group for Sense (the "↺ last step" wire); its Channels go to Channel Colours, which colours the picture.',
     ]),
   }, { deposit: ['msDeposit', 'deposit'] });
-  const colour = expr('msColour', X(1680), Y(0), {
-    label: 'Three colours',
-    inputs: [{ name: 'ch', type: 'vec4' }],
-    lines: [
-      ['vec3 k', '1.0 - exp(-max(ch.rgb, 0.0) * 0.035)'],
-      ['vec3 coral', 'vec3(1.0, 0.42, 0.22) * k.r'],
-      ['vec3 teal', 'vec3(0.12, 0.85, 0.78) * k.g'],
-      ['vec3 violet', 'vec3(0.62, 0.36, 1.0) * k.b'],
-    ],
-    result: 'coral + teal + violet + vec3(0.012, 0.012, 0.02)',
-    outputType: 'vec3',
-    wires: { ch: ['msTrail', 'channels'] },
-    note: [
-      'Three colours (an Expression Block): turns the three trail channels into three colours, added together over near-black.',
-      'k: each channel\'s trail softly scaled to 0–1 (1 − e^(−trail × 0.035)).',
-      'coral: species 1\'s trail in coral. teal: species 2\'s in teal. violet: species 3\'s in violet.',
-      'Try: other colours on the three lines; a larger 0.035 for brighter, thicker veins.',
-    ],
-  });
+  const colour = n('channelColours', 'msColour', X(1680), Y(0), {
+    mode: 'glow', background: [0.012, 0.012, 0.02],
+    on1: true, colour1: [1, 0.42, 0.22], exposure1: 0.035,
+    on2: true, colour2: [0.12, 0.85, 0.78], exposure2: 0.035,
+    on3: true, colour3: [0.62, 0.36, 1], exposure3: 0.035,
+    on4: false,
+    ...note([
+      'Channel Colours: each species\' trail (channels 1, 2, 3) in its own colour, coral, teal and violet, added together like light over near-black (Glow).',
+      'Exposure 0.035: how fast a channel reaches full colour as its trail thickens.',
+      'Try: other colours per channel; Exposure 0.1 for brighter, thicker veins; Mode Paint for ink-like layers.',
+    ]),
+  }, { channels: ['msTrail', 'channels'] });
   const nodes = [emitA, emitB, emitC, group, deposit, trail, colour];
-  if (withOutput) nodes.push(n('output', 'msOutput', X(2100), Y(0), { ...note(['Output: the three coloured trails are the picture.']) }, { color: ['msColour', 'result'] }));
+  if (withOutput) nodes.push(n('output', 'msOutput', X(2100), Y(0), { ...note(['Output: the three coloured trails are the picture.']) }, { color: ['msColour', 'color'] }));
   return nodes;
 }
 

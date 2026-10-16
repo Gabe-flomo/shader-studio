@@ -41,6 +41,8 @@ const CONNECTION_GATED = new Set([
   // Optical Flow reads nothing until a texture is wired
   'opticalFlow.strength', 'opticalFlow.smoothing', 'opticalFlow.minSpeed', 'opticalFlow.viewGain',
   'opticalFlowStep.strength', 'opticalFlowStep.smoothing', 'opticalFlowStep.minSpeed', 'opticalFlowRead.viewGain',
+  // Channel reads nothing until Channels or a Texture is wired
+  'channelPick.exposure', 'channelPick.inLow', 'channelPick.inHigh', 'channelPick.outLow', 'channelPick.outHigh', 'channelPick.threshold', 'channelPick.softness',
   // Height Light lights nothing until a height (texture or field) is wired
   'heightLight.low', 'heightLight.high', 'heightLight.relief', 'heightLight.spacing', 'heightLight.sunAngle', 'heightLight.sunHeight', 'heightLight.ambient', 'heightLight.lowColour', 'heightLight.highColour',
   // Ride a path rides nothing until a shape is wired into Path ƒ

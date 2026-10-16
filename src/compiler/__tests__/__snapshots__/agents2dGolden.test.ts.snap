@@ -184,15 +184,15 @@ exports[`2D agents and pass graphs compile as they did before 3D > agentGrowPict
 
 exports[`2D agents and pass graphs compile as they did before 3D > agentMultiSlime 1`] = `
 {
-  "agents": "07ddbb520a23271fd75023f29825:19938",
+  "agents": "07b85d3718d16411b224a7e78a4c:19968",
   "errors": null,
-  "fragmentShader": "02a396a3022e471dabf5f4e1174e:2844",
-  "paramBindings": "002f4c0bf0cef01899a045e36e26:2366",
-  "paramUniforms": "1a0e85b8f052f5095d99c909223a:1641",
+  "fragmentShader": "1deb474c734de3179fa942d1949f:3564",
+  "paramBindings": "0484294650713209492f92a9670d:2829",
+  "paramUniforms": "1afe4a051c9cfb02be13dcb456d2:2013",
   "passes": "167d269bbddad80189e9f9473b28:2",
   "success": true,
   "textureUniforms": "167d269bbddad80189e9f9473b28:2",
-  "web": "1e2de140f005430aee98b0743b1f:20037",
+  "web": "17b4be56b1f41c1d994ee169a862:20067",
 }
 `;
 
