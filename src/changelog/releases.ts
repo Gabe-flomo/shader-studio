@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.235',
+    date: '2026-10-15',
+    title: "Passes, with nodes",
+    highlights: [
+      { area: 'Studio', text: "The Passes examples use Fade (feedback), Mask, Outline and Tone Map nodes where they used to copy them in code blocks." },
+    ],
+  },
+  {
     id: '2026.10.234',
     date: '2026-10-15',
     title: "Clearer beginner examples",
