@@ -167,6 +167,7 @@ export { DeepGlowTextureNode, DeepGlowTextureStageNode } from './deepGlow';
 export { PassNode, PassOutputNode, SampleTextureNode, EdgesTextureNode, BlurTextureNode, GlowTextureNode, ChromaTextureNode, DisplaceTextureNode, DisplacementMapNode, JumpFloodTextureNode } from './passes';
 export { TextureMaskNode, TextureLevelsNode, TextureFlowNode, TextureNeighboursNode, TextureChangeNode, DistanceShapeNode, TextureFadeNode, ReadTextureNode } from './textureTools';
 export { HeightLightNode } from './heightLight';
+export { ChannelNode, ShuffleNode, ChannelColoursNode } from './channelTools';
 export { TextureFeedbackNode, TextureFeedbackStepNode } from './textureFeedback';
 export { DataTextureNode, DataTexturePackNode, ReadChannelsNode } from './dataTexture';
 export { RenderTargetsNode, RenderTargetsPackNode } from './renderTargets';
@@ -316,6 +317,7 @@ import { ShaderTextureNode, ShaderTextureOutputNode } from './shaderTexture';
 import { PassNode, PassOutputNode, SampleTextureNode, EdgesTextureNode, BlurTextureNode, GlowTextureNode, ChromaTextureNode, DisplaceTextureNode, DisplacementMapNode, JumpFloodTextureNode } from './passes';
 import { TextureMaskNode, TextureLevelsNode, TextureFlowNode, TextureNeighboursNode, TextureChangeNode, DistanceShapeNode, TextureFadeNode, ReadTextureNode } from './textureTools';
 import { HeightLightNode } from './heightLight';
+import { ChannelNode, ShuffleNode, ChannelColoursNode } from './channelTools';
 import { TextureFeedbackNode, TextureFeedbackStepNode } from './textureFeedback';
 import { DataTextureNode, DataTexturePackNode, ReadChannelsNode } from './dataTexture';
 import { RenderTargetsNode, RenderTargetsPackNode } from './renderTargets';
@@ -606,6 +608,9 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   textureChange: TextureChangeNode,
   distanceShape: DistanceShapeNode,
   heightLight: HeightLightNode,
+  channelPick: ChannelNode,
+  channelShuffle: ShuffleNode,
+  channelColours: ChannelColoursNode,
   textureFade: TextureFadeNode,
   readTexture: ReadTextureNode,
   // Feedback (texture): a Pass, Fade and Read in one node (compiler/feedbackExpand.ts opens it).
