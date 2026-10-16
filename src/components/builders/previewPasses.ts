@@ -10,6 +10,9 @@
 import { makeProgram } from '../sceneBuilder/previewGl';
 
 /** One Pass of a compiled preview: its program and texture settings (compiler PassProgram). */
+/** The pointer over a builder's preview: drawing-buffer pixels, 0 at the bottom left; btn 1 while the button is held. */
+export interface PreviewMouse { x: number; y: number; btn: number }
+
 export interface PreviewPass {
   slug: string;
   fs: string;
@@ -43,7 +46,8 @@ const prevU = (slug: string) => `u_passprev_${slug}`;
 
 export interface PreviewPasses {
   /** Draw every pass for a w × h canvas at time t (uniforms set when `values` is given). */
-  draw: (values: Uniforms | null, t: number, w: number, h: number) => void;
+  /** `mouse`: the pointer in the picture's drawing-buffer pixels (0 at the bottom left) and its button, as u_mouse / u_mousebtn. */
+  draw: (values: Uniforms | null, t: number, w: number, h: number, mouse?: PreviewMouse) => void;
   /** Bind the passes' textures for the final program. */
   bindFinal: (prog: WebGLProgram) => void;
   /** Start every pass's memory over (a true reset, lib/runtimeReset.ts): both targets are made again, cleared, at the next draw. */
@@ -127,7 +131,7 @@ export function makePreviewPasses(gl: WebGL2RenderingContext, vs: string, specs:
   };
 
   return {
-    draw: (values, t, w, h) => {
+    draw: (values, t, w, h, mouse) => {
       for (const p of live) {
         const tw = p.spec.size ?? Math.max(1, Math.round(w * p.spec.scale));
         const th = p.spec.size ?? Math.max(1, Math.round(h * p.spec.scale));
@@ -148,6 +152,13 @@ export function makePreviewPasses(gl: WebGL2RenderingContext, vs: string, specs:
         if (res) gl.uniform2f(res, p.w, p.h);
         const time = locOf(p, p.prog, 'u_time');
         if (time) gl.uniform1f(time, t);
+        if (mouse) {
+          // In the picture's pixels, as the Studio's passes get it (a pass at ½ scales by its own u_resolution)
+          const m = locOf(p, p.prog, 'u_mouse');
+          if (m) gl.uniform2f(m, mouse.x, mouse.y);
+          const b = locOf(p, p.prog, 'u_mousebtn');
+          if (b) gl.uniform1f(b, mouse.btn);
+        }
         // Its own Previous is the target drawn last; it draws into the other one.
         bindAll(p.prog, p, p);
         gl.bindFramebuffer(gl.FRAMEBUFFER, p.fb[p.cur ^ 1]);
