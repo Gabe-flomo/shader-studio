@@ -64,7 +64,7 @@ anywhere at run time; Click and Objects load only when first used.
 1. **Segment node, live**: People, Objects, Click (point on the preview or wired), all live for images, webcam and
    video; Threshold, Softness, Grow, Invert, Smoothing; Mask, Cut-out, Alpha, Mask texture, Edge; card with mode,
    class chips and a Pick button; examples (camera cut-out glow; click a ball and stamp it); docs; tests.
-2. **People parts**, **Edge refine**, **Bake** for videos.
+2. **Edge refine** and **Bake** for videos: shipped 2026-10-15. **People parts** still to come (opt-in download).
 3. **Video sizes** (agreed 2026-10-12): Video Input Preview size (Full / 1080 / 720 / 540, shrunk on the GPU),
    exports read the original size by default, pixel-unit settings scaled to a 1080 reference, cost readouts.
 4. A higher-quality still/bake mode (BiRefNet-class, opt-in download) if Phase 1–2 edges aren't enough.

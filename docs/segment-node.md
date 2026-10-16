@@ -30,9 +30,24 @@ person-like shape: use Objects or Click there.
 ## Settings
 
 - **Resolution:** Auto (the model's own) or 256 / 384 / 512 px on the long side.
-- **Update:** Live, or Every Nth frame. **Smoothing:** blends each mask with the last.
+- **Update:** Live, Every Nth frame, or **Baked** (see Bake below). **Smoothing:** blends each mask with the last.
 - **Threshold**, **Softness:** where the confidence becomes the mask, and how soft its edge. **Grow** (pixels;
   negative shrinks, the most or least confident of eight taps), **Invert**. These are live sliders and Play controls.
+- **Edge refine** (with a Texture wired): the model works at 256–512 px, so its edge is a little blocky. On, the mask
+  snaps to the picture's own edges: each pixel's mask is the mask round it (5 × 5 taps, **Refine reach** mask pixels
+  apart) weighted by how alike the picture's colour is there (a joint bilateral upsample), so mask from across an
+  edge in the picture counts for little and the outline follows hair, fingers and outlines at full size. **Colour
+  difference** is how different a colour must be to count as the other side of an edge.
+
+## Bake
+
+**Bake** on the card runs the model once over the whole video (or image) wired into Texture and keeps the masks
+beside it in the library, as Depth's Bake depth does: every frame at 30 fps (up to a minute), seeked exactly,
+smoothed as the node smooths; Click with Follow tracks its point from frame to frame. Video becomes a grey mask
+video, a still a grey PNG. Update then turns to **Baked**: the mask video plays in step with its source (it follows
+the source's time, and is seeked frame by frame in exports), no model runs, and recordings and web pages get the
+exact masks. Threshold, Softness, Grow, Invert and Edge refine still work live on the baked masks. **Live again**
+goes back to the model; **Use the bake** returns to it. A webcam can't be baked (record it first).
 
 The card shows the model's state, its time per frame, the size it reads at and how much of the frame it finds.
 
@@ -43,11 +58,10 @@ the GPU (the Grabber) and sent to that mode's worker (`lib/segment/segmentWorker
 last mask stays until the next arrives, then it is smoothed and uploaded to the node's 8-bit texture
 (`u_tex_<node>`), which the node reads, linearly filtered, and shapes in the shader.
 
-## Limits (phase 1)
+## Limits
 
-- Web pages and video exports don't segment yet (a blank mask). Bake for videos is phase 2.
-- People parts (hair, face, clothes), Edge refine (snapping the edge to the picture), and Click from a wired point
-  (a Blob Track's Position) are phase 2.
+- Live (not baked) Segment nodes give web pages a blank mask; bake the video for exact masks there.
+- People parts (hair, face, clothes) and Click from a wired point (a Blob Track's Position) are still to come.
 
 Examples: Texture tools 20 (cut yourself out) and 21 (click to select). Code: `src/nodes/definitions/segment.ts`,
 `src/lib/segment/`. Tests: `src/lib/segment/__tests__/segment.test.ts`.
