@@ -216,7 +216,7 @@ export function dlaNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     color: [1, 0.45, 0.35], background: [0.01, 0.03, 0.07], gain: 0.35,
     ...note([
       'Colorize: the coral\'s glow. Field is the trail\'s Amount (where walkers have stuck and lit it), Colour coral, Background deep blue: Background where there is no trail, coral where there is, Gain 0.35 keeping it soft.',
-      'It goes into Draw agents\' Over: the background the walkers are drawn over.',
+      'It goes into Draw agents\' Background: the background the walkers are drawn over.',
     ]),
   }, { field: ['dlaTrail', 'amount'] });
   const draw = n('drawAgents', 'dlaDraw', X(2100), Y(0), {
@@ -513,7 +513,7 @@ export function firefliesNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
     color: [0.35, 0.5, 0.1], gain: 0.6,
     ...note([
       'Colorize: the light of the flashes pooled on the ground. Field is the trail\'s Amount (where fireflies flashed lately), Colour yellow-green, Background the night Gradient.',
-      'It goes into Draw agents\' Over: the background the fireflies are drawn over.',
+      'It goes into Draw agents\' Background: the background the fireflies are drawn over.',
     ]),
   }, { field: ['ffTrail', 'amount'], background: ['ffSky', 'color'] });
   const draw = n('drawAgents', 'ffDraw', X(2100), Y(0), {
@@ -1068,7 +1068,7 @@ export function sandDriftNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
   }, { texture: ['sdTrail', 'texture'] });
   const draw = n('drawAgents', 'sdDraw', X(2520), Y(0), {
     style: 'points', colorBy: 'agent', size: 1, brightness: 0.25, scaleBy: 'walker', fade: 'off', lights: '0',
-    ...note(['Draw agents: the gusts that carry sand, as faint pale grains blowing over the dunes. The dunes themselves come in through Background (Over): Height Light, the Trail field lit. Empty gusts are black, so they add nothing. Try: Brightness 0 for the dunes alone.']),
+    ...note(['Draw agents: the gusts that carry sand, as faint pale grains blowing over the dunes. The dunes themselves come in through its Background input: Height Light, the Trail field lit. Empty gusts are black, so they add nothing. Try: Brightness 0 for the dunes alone.']),
   }, { agents: ['sandDrift', 'agents'], over: ['sdLight', 'color'] });
   const nodes = [emit, group, deposit, trail, light, draw];
   if (withOutput) nodes.push(n('output', 'sdOutput', X(2940), Y(0), { ...note(['Output: the dunes and the blowing sand are the picture.']) }, { color: ['sdDraw', 'color'] }));
@@ -1273,7 +1273,7 @@ export function crowdNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
   }, { distance: ['cwCorridor', 'result'] });
   const floor = n('colorize', 'cwFloor', X(2100), Y(420), {
     color: [0.2, 0.21, 0.24],
-    ...note(['Colorize: grey walls (Field: the wall mask) laid over the crowd map (Background). It goes into Draw agents\' Over, the floor plan the walkers are drawn on.']),
+    ...note(['Colorize: grey walls (Field: the wall mask) laid over the crowd map (Background). It goes into Draw agents\' Background, the floor plan the walkers are drawn on.']),
   }, { field: ['cwWallMask', 'mask'], background: ['cwFoot', 'color'] });
   const draw = n('drawAgents', 'cwDraw', X(2100), Y(0), {
     style: 'points', colorBy: 'agent', size: 2, brightness: 0.9, scaleBy: 'walker', fade: 'off', lights: '0',

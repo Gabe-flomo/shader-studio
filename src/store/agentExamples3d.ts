@@ -39,7 +39,7 @@ function backdrop(prefix: string, x: number, y: number, label: string, bottom: [
     n('uv', `${prefix}Uv`, x, y, { ...note(['UV: where each pixel is on the picture, for the background gradient.']) }),
     n('gradient', `${prefix}Back`, x + 420, y, {
       mode: 'linear_y', color_a: bottom, color_b: top,
-      ...note([`Gradient (${label}): the background the walkers are drawn over, Color A at the bottom of the picture to Color B at the top (Linear Y). It goes into Draw agents' Over.`, ...lines]),
+      ...note([`Gradient (${label}): the background the walkers are drawn over, Color A at the bottom of the picture to Color B at the top (Linear Y). It goes into Draw agents' Background.`, ...lines]),
     }, { uv: [`${prefix}Uv`, 'uv'] }),
   ];
 }

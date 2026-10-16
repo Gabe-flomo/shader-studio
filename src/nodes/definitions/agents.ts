@@ -1373,7 +1373,7 @@ export const TrailFieldNode: NodeDefinition = {
     ch2: { type: 'float', label: 'Channel 2', hint: 'Trail channel 2 here, scaled to 0–1 by Gain.' },
     ch3: { type: 'float', label: 'Channel 3', hint: 'Trail channel 3 here, scaled to 0–1 by Gain.' },
     ch4: { type: 'float', label: 'Channel 4', hint: 'Trail channel 4 here (a rules group\'s birth marks), scaled to 0–1 by Gain.' },
-    texture: { type: 'texture', label: 'Image', hint: 'The whole trail as an image (a texture): back into the Agents group for Sense (through an input you add on Agent Inputs), or into Glow, Blur or Sample (texture), or a Texture tool: Flow for a direction along the trail, Mask or Levels to shape it.' },
+    texture: { type: 'texture', label: 'Texture', hint: 'The whole trail as a texture: back into the Agents group for Sense (through an input you add on Agent Inputs), or into Glow, Blur or Sample (texture), or a Texture tool: Flow for a direction along the trail, Mask or Levels to shape it.' },
   },
   defaultParams: { resolution: '0.5', diffuse: 1, halfLife: 0.12, edges: 'wrap', gain: 0.15, kernel: '3', volume: '96', names: '' },
   paramDefs: {
@@ -1393,7 +1393,7 @@ export const TrailFieldNode: NodeDefinition = {
     edges: { label: 'Edges', type: 'select', hint: 'Wrap joins opposite edges (matches Move\'s Wrap); Clamp keeps them apart.', options: [
       { value: 'wrap', label: 'Wrap' }, { value: 'clamp', label: 'Clamp' },
     ] },
-    gain: { label: 'Gain', type: 'float', min: 0, max: 4, step: 0.001, hint: 'Scales Amount: 1 − e^(−trail × gain).' },
+    gain: { label: 'Exposure', type: 'float', min: 0, max: 4, step: 0.001, hint: 'How fast Amount and Channel 1–4 rise to 1 as the trail thickens: 1 − e^(−trail × Exposure). Higher shows faint trail.' },
   },
   assignable: false,
   syncSockets: retypeTrailField,
@@ -1610,7 +1610,7 @@ export const DrawAgentsNode: NodeDefinition = {
   inputs: {
     agents: { type: 'agents', label: 'Agents', hint: 'An Agents group\'s output.' },
     sprite: { type: 'texture', label: 'Sprite', hint: 'Draw each walker as this picture instead of a dot: a Pass\'s Texture (a picture or video through a Pass, a Shader Texture, a Feedback). Sprite size sets how big. Points style only.' },
-    over: { type: 'vec3', label: 'Over', hint: 'The picture to draw on. Unwired: black (Ink: Paper). It can’t come from this node’s own Density or Image (that is a loop): to colour the background by where the walkers are, set Background to Palette by density.' },
+    over: { type: 'vec3', label: 'Background', hint: 'The picture the walkers are drawn on top of (a lit trail, a gradient, a picture). Unwired: black (Ink: Paper). It can’t come from this node’s own Density or Image (that is a loop): to colour the background by where the walkers are, set the Background setting to Palette by density.' },
   },
   outputs: {
     color: { type: 'vec3', label: 'Color', hint: 'Over with the walkers drawn on it.' },
@@ -1660,8 +1660,8 @@ export const DrawAgentsNode: NodeDefinition = {
     colorB: { label: 'Colour B', type: 'vec3color', section: 'Colour' },
     speedRef: { label: 'Fast is', type: 'float', min: 0.01, max: 8, step: 0.01, section: 'Colour', hint: 'Colour by Speed: the speed that reaches the end of the palette (Speed, fast first: its start), in picture units a second.' },
     paper: { label: 'Paper', type: 'vec3color', section: 'Colour', hint: 'Ink: the paper\'s colour when nothing is wired into Over.', showWhen: { param: 'style', value: 'ink' } },
-    background: { label: 'Background', type: 'select', section: 'Colour', hint: 'What the walkers are drawn over. Over: the picture wired into Over (black when unwired). Palette by density: a palette run by this node\'s own Density, bright where the walkers crowd and dark where there are none, so the background follows them (wiring Density back into Over would be a loop).', options: [
-      { value: 'over', label: 'Over (the wired picture)' }, { value: 'density', label: 'Palette by density' },
+    background: { label: 'Background', type: 'select', section: 'Colour', hint: 'What the walkers are drawn over. The Background input: the picture wired into it (black when unwired). Palette by density: a palette run by this node\'s own Density, bright where the walkers crowd and dark where there are none, so the background follows them (wiring Density back into Background would be a loop).', options: [
+      { value: 'over', label: 'The Background input' }, { value: 'density', label: 'Palette by density' },
     ] },
     bgPalette: { label: 'Background palette', type: 'select', section: 'Colour', hint: 'The palette the density runs along: its first colour where they crowd, its last where they thin out, fading to black where there are none. Colour A → B: A where they crowd.', options: AG_PALETTE_OPTIONS, showWhen: { param: 'background', value: 'density' } },
     bgGain: { label: 'Background gain', type: 'float', min: 0, max: 16, step: 0.01, section: 'Colour', hint: 'How quickly the density reaches the palette\'s first colour: higher fills the background in where only a few walkers pass.', showWhen: { param: 'background', value: 'density' } },
