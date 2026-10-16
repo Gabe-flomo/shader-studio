@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.240',
+    date: '2026-10-16',
+    title: "Where a name was set",
+    highlights: [
+      { area: 'Studio', text: "Expression Blocks: rest on a name for 2 s to see the line that set it; a line's Explain folds with its preview." },
+      { area: 'Studio', text: "Builder previews follow the mouse: grid ripples, brushes and Mouse nodes respond inside the builders." },
+    ],
+  },
+  {
     id: '2026.10.239',
     date: '2026-10-16',
     title: "Words that match the node",
