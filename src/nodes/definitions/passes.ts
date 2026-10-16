@@ -572,7 +572,10 @@ export const JumpFloodTextureNode: NodeDefinition = {
   inputs: {
     texture: { type: 'texture', label: 'Texture', hint: 'A Pass whose pixels hold seeds (usually its own Previous). Unwired, nothing is found.' },
     uv: { type: 'vec2', label: 'UV', hint: UV_HINT },
-    reach: { type: 'float', label: 'Reach', hint: 'How far the 8 reads are, in picture pixels. In a repeated Pass wire a reach that halves each Step (from about half the picture down to 1 pass pixel).' },
+    reach: { type: 'float', label: 'Reach', hint: 'How far the 8 reads are, in picture pixels. Wins over Step and Steps.' },
+    step: { type: 'float', label: 'Step', hint: 'The repeated Pass\'s Step output (which repeat is drawing). With Steps wired too, Reach works itself out: 2^(Steps − Step), halving every repeat down to 2.' },
+    steps: { type: 'float', label: 'Steps', hint: 'The repeated Pass\'s Steps output (its Repeat).' },
+    start: { type: 'vec3', label: 'Start', hint: 'The seeds (Mask\'s Seed output): with Step wired, Seed gives these on step 0 and the flood after it, so it can go straight back into the Pass.' },
   },
   outputs: {
     seed: { type: 'vec3', label: 'Seed', hint: 'The nearest seed found: its place (x, y, picture coordinates) and 1 in z, or 0 everywhere when none was. Wire it back into the Pass.' },
@@ -591,7 +594,7 @@ export const JumpFloodTextureNode: NodeDefinition = {
     const code = [
       `    vec2 ${id}_here = ${here};\n`,
       `    vec2 ${id}_uv = ${texUv(here)};\n`,
-      `    vec2 ${id}_step = ${passPxUniform(tex)} * ${inputVars.reach ?? p(node.params.reach, 1)};\n`,
+      `    vec2 ${id}_step = ${passPxUniform(tex)} * ${inputVars.reach ?? (inputVars.step && inputVars.steps ? `exp2(${inputVars.steps} - ${inputVars.step})` : p(node.params.reach, 1))};\n`,
       `    vec3 ${id}_seed = vec3(0.0);\n`,
       `    float ${id}_best = 1e9;\n`,
       `    for (int ${id}_j = -1; ${id}_j <= 1; ${id}_j++) {\n`,
@@ -603,6 +606,8 @@ export const JumpFloodTextureNode: NodeDefinition = {
       `        }\n`,
       `    }\n`,
       `    float ${id}_dist = ${id}_seed.z > 0.5 ? sqrt(${id}_best) : 4.0;\n`,
+      // Step 0 lays the seeds (Start); every later step keeps the flood.
+      inputVars.start && inputVars.step ? `    ${id}_seed = ${inputVars.step} < 0.5 ? ${inputVars.start} : ${id}_seed;\n` : '',
     ].join('');
     return { code, outputVars: { seed: `${id}_seed`, distance: `${id}_dist` } };
   },

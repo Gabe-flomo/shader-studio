@@ -6,17 +6,6 @@ import type { GraphNode } from '../../types/nodeGraph';
 import type { RecipeContext, StarterRecipe, Wire } from './types';
 import { SELF, col, n, note, pictureFor } from './kit';
 
-/** An Expression Block with float / vec3 inputs wired from `ins`. */
-function expr(id: string, x: number, y: number, label: string, outputType: 'float' | 'vec3', ins: Array<[name: string, type: 'vec3' | 'float', from: Wire]>, result: string, comment: string): GraphNode {
-  const e = n('exprNode', id, x, y, {
-    label, inputs: ins.map(([name, type]) => ({ name, type, slider: null })),
-    outputType, lines: [], result, expr: result, __comment: comment,
-  });
-  e.inputs = Object.fromEntries(ins.map(([name, type, from]) => [name, { type, label: name, connection: { nodeId: from[0], outputKey: from[1] } }]));
-  e.outputs = { result: { type: outputType, label: 'Result' } };
-  return e;
-}
-
 /** A whole jump flood round the new Jump flood node, from what the Output shows; `mode` is what Outline (distance) draws. */
 function floodRecipe(mode: 'outline' | 'glow' | 'rings', ctx: RecipeContext): ReturnType<StarterRecipe['build']> {
   const pic = pictureFor(ctx, col(-3), 0);
@@ -27,26 +16,22 @@ function floodRecipe(mode: 'outline' | 'glow' | 'rings', ctx: RecipeContext): Re
   }[mode];
   const { why, ...params } = shape;
   return {
-    params: { reach: 1, ...note('Jump flood (texture): one round of the flood. It reads the Pass\'s Previous (the round before) here and 8 places Reach pixels away, and keeps the nearest shape point any of them knows.', 'Why: repeated 10 times with the reach halving each time, every pixel learns where the nearest shape is.') },
+    params: { reach: 1, ...note('Jump flood (texture): one round of the flood. It reads the Pass\'s Previous (the round before) here and 8 places round it, and keeps the nearest shape point any of them knows. Step and Steps (from the Pass) set how far: 512 picture pixels on round 1, halving every round. Start is the seeds, given on round 0.', 'Why: repeated 10 times with the reach halving each time, every pixel learns where the nearest shape is.') },
     nodes: [
       ...pic.nodes,
       n('textureMask', 'shape', col(-2), 0, { source: 'brightness', threshold: 'hard', level: 0.5, ...note(
         'Mask (texture), on the picture\'s colour: 1 where it is brighter than Level.',
         'Why: its Seed output is what a jump flood starts from: each pixel inside the mask stores its own place. Change Level to pick other shapes.',
       ) }, { color: pic.out }),
-      expr('reach', col(-1), 420, 'Reach this round', 'float', [['stepNow', 'float', ['flood', 'step']], ['stepCount', 'float', ['flood', 'steps']]], 'exp2(stepCount - stepNow)',
-        'Reach this round: how far the flood looks, in picture pixels: 1024 on round 0 (which only lays the seeds, so it goes unused), 512 on round 1, halving every round down to 2.\nstepNow is the Pass\'s Step (which repeat is drawing), stepCount its Steps (Repeat).'),
-      expr('start', col(1), 0, 'Start, then flood', 'vec3', [['seed', 'vec3', ['shape', 'seed']], ['found', 'vec3', [SELF, 'seed']], ['stepNow', 'float', ['flood', 'step']]], 'stepNow < 0.5 ? seed : found',
-        'Start, then flood: the seeds on the first round, the nearest seed found on every later one.'),
       n('pass', 'flood', col(2), 0, { label: 'Pass · jump flood', scale: '0.5', format: 'half', filter: 'nearest', repeat: 10, ...note(
         'Pass with Repeat 10: drawn ten times a frame, each reading the round before through Previous.',
         'Why: half size is a quarter of the work; Nearest keeps the stored places exact; Half float keeps them signed.',
-      ) }, { color: ['start', 'result'] }),
+      ) }, { color: [SELF, 'seed'] }),
       n('jumpFloodTexture', 'read', col(3), 0, { reach: 2, ...note('Jump flood (texture), once more, on the finished field: Distance is how far each pixel is from the nearest shape, in picture units.', 'Why: read at full size, so the distance is smooth.') }, { texture: ['flood', 'texture'] }),
       n('distanceShape', 'draw', col(4), 0, { mode, ...params, ...note(`Outline (distance): draws ${why}`) }, { distance: ['read', 'distance'] }),
       n('addColor', 'over', col(5), 0, note('Add Colors: the picture with the light from the distance added over it.'), { a: pic.out, b: ['draw', 'light'] }),
     ],
-    wire: { texture: ['flood', 'previous'], reach: ['reach', 'result'] },
+    wire: { texture: ['flood', 'previous'], step: ['flood', 'step'], steps: ['flood', 'steps'], start: ['shape', 'seed'] },
     show: ['over', 'result'],
   };
 }
