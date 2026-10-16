@@ -1080,34 +1080,21 @@ export function sandDriftNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
       'Diffuse 0: sand doesn\'t spread by itself (the trail is stored as half floats, which round each spread step\'s fractions down, so a spreading trail would slowly lose sand).',
     ]),
   }, { deposit: ['sdDeposit', 'deposit'] });
-  const relief = n('edgesTexture', 'sdRelief', X(1680), Y(420), {
-    strength: 0.08, width: 6,
+  const light = n('heightLight', 'sdLight', X(1680), Y(420), {
+    channel: '1', low: 0, high: 9, relief: 0.06, spacing: 4,
+    sunAngle: 127, sunHeight: 25, ambient: 0.12,
+    lowColour: [0.42, 0.25, 0.13], highColour: [0.98, 0.78, 0.5],
     ...note([
-      'Edges (texture): the slope of the sand, from its Image: Direction is which way it rises, Edges how steep it is. Desert lighting is made from it.',
+      'Height Light: the dunes. It reads the Trail field\'s Image (channel 1: how deep the sand is, 0 to about 9) as a height map and lights it with a low sun from the upper left, so windward faces glow and lee slopes fall into shade.',
+      'Range 0–9 sets which depths are Low colour (thin sand, dark brown) and High colour (deep sand, pale gold). Relief is how steep the dunes look; Spacing (in trail pixels) how smooth the light is.',
+      'Try: Sun from 300 for evening light from the other side; Sun height 15 to rake across every ripple.',
     ]),
   }, { texture: ['sdTrail', 'texture'] });
-  const light = expr('sdLight', X(2100), Y(420), {
-    label: 'Desert light',
-    inputs: [{ name: 'depth', type: 'vec4' }, { name: 'dir', type: 'vec2' }, { name: 'steep', type: 'float' }],
-    lines: [
-      ['float d', 'max(depth.r, 0.0)'],
-      ['float sun', 'dot(dir, normalize(vec2(-0.6, 0.8))) * steep'],
-      ['vec3 sand', 'mix(vec3(0.55, 0.33, 0.18), vec3(0.98, 0.78, 0.5), smoothstep(0.0, 9.0, d))'],
-    ],
-    result: 'sand * (0.8 - 0.9 * sun) * smoothstep(0.0, 0.5, d) + vec3(0.12, 0.08, 0.06) * (1.0 - smoothstep(0.0, 0.5, d))',
-    outputType: 'vec3',
-    wires: { depth: ['sdTrail', 'channels'], dir: ['sdRelief', 'direction'], steep: ['sdRelief', 'edges'] },
-    note: [
-      'Desert light (an Expression Block): shades the sand as if the sun were low in the upper left.',
-      'd: the sand\'s depth here. sun: how much this slope faces away from the sun (the slope\'s direction against the light\'s, times how steep): faces toward the sun are bright, lee slopes dark. sand: deeper sand paler.',
-      'Result: lit sand, and dark rock where it is bare.',
-    ],
-  });
   const draw = n('drawAgents', 'sdDraw', X(2520), Y(0), {
     style: 'points', colorBy: 'agent', size: 1, brightness: 0.25, scaleBy: 'walker', fade: 'off', lights: '0',
-    ...note(['Draw agents: the gusts that carry sand as faint pale grains blowing over the dunes; empty gusts are black, so they add nothing. Try: Brightness 0 for the dunes alone.']),
-  }, { agents: ['sandDrift', 'agents'], over: ['sdLight', 'result'] });
-  const nodes = [emit, group, deposit, trail, relief, light, draw];
+    ...note(['Draw agents: the gusts that carry sand, as faint pale grains blowing over the dunes. The dunes themselves come in through Background (Over): Height Light, the Trail field lit. Empty gusts are black, so they add nothing. Try: Brightness 0 for the dunes alone.']),
+  }, { agents: ['sandDrift', 'agents'], over: ['sdLight', 'color'] });
+  const nodes = [emit, group, deposit, trail, light, draw];
   if (withOutput) nodes.push(n('output', 'sdOutput', X(2940), Y(0), { ...note(['Output: the dunes and the blowing sand are the picture.']) }, { color: ['sdDraw', 'color'] }));
   return nodes;
 }
