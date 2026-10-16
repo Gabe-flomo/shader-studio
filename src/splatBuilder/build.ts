@@ -144,19 +144,9 @@ export function buildSplatGraph(spec: SplatBuilderSpec, idFor: (role: string) =>
     } else if (B.kind === 'gradient') {
       const top = mk(nodes, idFor, 'colorPicker', 'bg:top', { color: [...B.color] }, {}, 'The top of the background gradient (looking up).');
       const bottom = mk(nodes, idFor, 'colorPicker', 'bg:bottom', { color: [...B.color2] }, {}, 'The bottom of the background gradient (looking down).');
-      const def = getNodeDefinition('exprNode')!;
-      const g: GraphNode = {
-        id: idFor('bg'), type: 'exprNode', position: { x: 0, y: 0 },
-        inputs: { rd: { type: 'vec3', label: 'rd', connection: ref(camera, 'rd') }, top: { type: 'vec3', label: 'top', connection: ref(top, 'rgb') }, bottom: { type: 'vec3', label: 'bottom', connection: ref(bottom, 'rgb') } },
-        outputs: { result: { type: 'vec3', label: 'Result' } },
-        params: {
-          ...(def.defaultParams ?? {}), label: 'Sky gradient', outputType: 'vec3', lines: [], result: 'mix(bottom, top, clamp(rd.y * 0.5 + 0.5, 0.0, 1.0))', expr: 'mix(bottom, top, clamp(rd.y * 0.5 + 0.5, 0.0, 1.0))',
-          inputs: [{ name: 'rd', type: 'vec3', slider: null }, { name: 'top', type: 'vec3', slider: null }, { name: 'bottom', type: 'vec3', slider: null }],
-          __comment: 'The background: a gradient by which way each ray points, from Bottom (straight down) to Top (straight up). It turns with the camera.', [SP_ROLE]: 'bg',
-        },
-      };
-      nodes.push(g);
-      scene = ref(g, 'result');
+      const g = mk(nodes, idFor, 'gradient', 'bg', { mode: 'linear_y' }, { dir: ref(camera, 'rd'), color_a: ref(bottom, 'rgb'), color_b: ref(top, 'rgb') },
+        'The background (Gradient, Linear Y on the camera\'s Ray Dir): by which way each ray points, from Bottom (straight down) to Top (straight up). It turns with the camera.');
+      scene = ref(g, 'color');
     } else {
       scene = ref(mk(nodes, idFor, 'colorPicker', 'bg', { color: [...B.color] }, {}, 'The background: what shows where there is no scan.'), 'rgb');
     }

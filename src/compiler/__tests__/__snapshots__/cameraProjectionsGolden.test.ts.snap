@@ -226,6 +226,9 @@ uniform float u_p_marchcamerx0_focalDist;
 uniform float u_p_marchcamerx0_lensSpeed;
 uniform vec3 u_p_colorpickex0_color;
 uniform vec3 u_p_colorpickex0xc2_color;
+uniform vec3 u_p_gradx0_color_a;
+uniform vec3 u_p_gradx0_color_b;
+uniform float u_p_gradx0_t_offset;
 uniform vec3 u_p_splatx0_position;
 uniform vec3 u_p_splatx0_rotation;
 uniform float u_p_splatx0_scale;
@@ -261,7 +264,19 @@ vec2 rotate(vec2 v, float angle) {
 mat2 rot2D(float a) { float s=sin(a), c=cos(a); return mat2(c,-s,s,c); }
 // ─────────────────────────────────────────────────────────────────────────
 
-
+vec3 gradientBlend(vec2 uv, vec3 colorA, vec3 colorB, int mode, float offset) {
+    float t;
+    if (mode == 0) { t = uv.x * 0.5 + 0.5; }
+    else if (mode == 1) { t = uv.y * 0.5 + 0.5; }
+    else if (mode == 2) { t = length(uv); }
+    // Angular, seamless: the angle up from the bottom on either side (left half mirrors the right),
+    // so it runs Color A at the bottom to Color B at the top with no jump where atan wraps at ±π.
+    else if (mode == 3) { t = atan(uv.y, abs(uv.x)) / 3.14159265 + 0.5; }
+    // Angular, wrap: one full turn, 0 → 1, with a hard seam on the left where the angle wraps.
+    else if (mode == 5) { t = atan(uv.y, uv.x) / 6.28318 + 0.5; }
+    else { t = (uv.x + uv.y) * 0.5 * 0.7071 + 0.5; }
+    return mix(colorA, colorB, clamp(t + offset, 0.0, 1.0));
+}
 
 void main() {
     vec2 g_uv = (vUv - 0.5) * 2.0;
@@ -293,16 +308,8 @@ void main() {
     float colorpicke_0_c2_r = colorpicke_0_c2_rgb.x;
     float colorpicke_0_c2_g = colorpicke_0_c2_rgb.y;
     float colorpicke_0_c2_b = colorpicke_0_c2_rgb.z;
-    // The background: a gradient by which way each ray points, from Bottom (straight down) to Top (straight up). It turns with the camera.
-    vec3 sky_gradient_0_result;
-    {
-        vec3 rd = marchcamer_0_rd;
-        vec3 top = colorpicke_0_rgb;
-        vec3 bottom = colorpicke_0_c2_rgb;
-        float t = u_time;
-        vec3 p = vec3(0.0);
-        sky_gradient_0_result = mix(bottom, top, clamp(rd.y * 0.5 + 0.5, 0.0, 1.0));
-    }
+    // The background (Gradient, Linear Y on the camera's Ray Dir): by which way each ray points, from Bottom (straight down) to Top (straight up). It turns with the camera.
+    vec3 grad_0_color = gradientBlend(g_uv, colorpicke_0_c2_rgb, colorpicke_0_rgb, 1, u_p_gradx0_t_offset);
     // Splat Scene: a generated example scan (no file). Load your own in the Splat builder's Scan section, or drop a .ply, .splat or .spz on this card.
     // Seen through the March Camera, so it sits in the same space as the background.
     // Made by the Splat builder: right-click → Edit in Splat builder, or open the Scene builder and pick Edit this one.
@@ -316,8 +323,8 @@ void main() {
     float splat_0_sceneD = mix(100000.0, 100000.0, splat_0_sceneHit);
     float splat_0_soft = max(u_p_splatx0_softness, 1e-4);
     float splat_0_front = smoothstep(-splat_0_soft, splat_0_soft, splat_0_sd - splat_0_sceneD) * splat_0_sceneHit;
-    vec3 splat_0_over = splat_0_c.rgb + (1.0 - splat_0_a) * sky_gradient_0_result;
-    vec3 splat_0_col = mix(splat_0_over, sky_gradient_0_result, splat_0_front);
+    vec3 splat_0_over = splat_0_c.rgb + (1.0 - splat_0_a) * grad_0_color;
+    vec3 splat_0_col = mix(splat_0_over, grad_0_color, splat_0_front);
     gl_FragColor = vec4(splat_0_col, 1.0);
 }",
   "paramUniforms": {
@@ -331,6 +338,17 @@ void main() {
       0.02,
       0.03,
     ],
+    "u_p_gradx0_color_a": [
+      1,
+      0.2,
+      0.2,
+    ],
+    "u_p_gradx0_color_b": [
+      0.2,
+      0.2,
+      1,
+    ],
+    "u_p_gradx0_t_offset": 0,
     "u_p_marchcamerx0_aperture": 0,
     "u_p_marchcamerx0_camAngle": 0.436332,
     "u_p_marchcamerx0_camDist": 3.6,

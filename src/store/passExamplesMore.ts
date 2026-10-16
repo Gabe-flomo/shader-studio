@@ -93,7 +93,7 @@ export function buildPassExamplesMore(): Record<string, ExampleGraph> {
         ],
         result: 'mix(back, fill, inside)',
         note: [
-          'What: the picture whose outlines the particles are born on: three soft blobs (metaballs) that drift and merge, in lava colours on a dark backdrop. Any picture works here: a Texture Input, a Video, a 3D scene.',
+          'A test picture, not the lesson. What: the picture whose outlines the particles are born on: three soft blobs (metaballs) that drift and merge, in lava colours on a dark backdrop. Any picture works here: a Texture Input, a Video, a 3D scene.',
           'Why an Expression Block: a metaball field is one formula; as cards it would be a dozen.',
           't is the clock (the block reads Time itself), so the blobs move.',
           'a: the first blob\'s centre, on a slow loop round the picture.',
@@ -185,7 +185,7 @@ export function buildPassExamplesMore(): Record<string, ExampleGraph> {
         ],
         result: 'c1 + c2 + c3',
         note: [
-          'What: three small lights that wander the picture on looping paths. They are this frame\'s fresh paint; the trails are what the Pass keeps of them.',
+          'A test picture, not the lesson. What: three small lights that wander the picture on looping paths. They are this frame\'s fresh paint; the trails are what the Pass keeps of them.',
           't is the clock (the block reads Time itself).',
           'p1: where the orange light is now (a Lissajous loop).',
           'p2: where the blue light is now.',
@@ -355,7 +355,7 @@ export function buildPassExamplesMore(): Record<string, ExampleGraph> {
         ],
         result: 'wall + pink + cyan',
         note: [
-          'What: a neon sign on a dark brick wall: a pink ring and a cyan wave, their tubes 4 times brighter than white. The wall is dim, so only the tubes should glow.',
+          'A test picture, not the lesson. What: a neon sign on a dark brick wall: a pink ring and a cyan wave, their tubes 4 times brighter than white. The wall is dim, so only the tubes should glow.',
           't is the clock (the block reads Time itself).',
           'b: the picture scaled into bricks (5 across, 10 rows a picture height), every other row shifted half a brick.',
           'mortar: 1 on a brick\'s face, 0 in the thin mortar lines between bricks.',

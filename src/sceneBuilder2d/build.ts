@@ -703,15 +703,24 @@ export function buildScene2D(spec: Scene2D, idFor: (role: string) => string = ro
       const crisp = L.mute?.glow !== undefined
         ? ref(mk(c, 'sdfFill', `${it.id}:fill`, {}, { d, fillColor: fill, background: acc }, `${name} as a crisp shape: what shows while the Look's glow is muted (the glow node passes it through).`), 'result')
         : null;
-      const g = expr(c, `${it.id}:glow`, 'Glow shape', [
-        { name: 'bg', type: 'vec3', from: acc }, { name: 'd', type: 'float', from: d }, { name: 'color', type: 'vec3', from: fill },
-        { name: 'amount', type: 'float', slider: { value: L.glow.amount, min: 0.0005, max: 0.05 } },
-        { name: 'falloff', type: 'float', slider: { value: L.glow.falloff, min: 0.5, max: 3 } },
-        ...(crisp ? [{ name: 'crisp', type: 'vec3' as const, from: crisp }] : []),
-      ], `bg + color * ${glowFormula(gtype('soft'), 'd', 'amount', 'falloff')}`,
-      `${name} drawn as its glow (Style: Glow, type ${GLOW_TYPE_LABELS[gtype('soft')].label}): ${GLOW_TYPE_LABELS[gtype('soft')].blurb} The glow is added to what is behind; with Soft (the default) it is the shape's own colour inside and at the edge, fading out from there, so the shape and its glow read as one, the way a distance field glows (the Grid builder's Soft glow). No flat fill is painted over it. Amount (how far it reaches) and falloff (how fast it fades) are live sliders.`);
-      if (crisp) gateNode(g, L.mute?.glow, { from: 'crisp' });
-      acc = ref(g, 'result');
+      if (crisp) {
+        // Once the glow has been muted, one block keeps the crisp shape to pass through while muted.
+        const g = expr(c, `${it.id}:glow`, 'Glow shape', [
+          { name: 'bg', type: 'vec3', from: acc }, { name: 'd', type: 'float', from: d }, { name: 'color', type: 'vec3', from: fill },
+          { name: 'amount', type: 'float', slider: { value: L.glow.amount, min: 0.0005, max: 0.05 } },
+          { name: 'falloff', type: 'float', slider: { value: L.glow.falloff, min: 0.5, max: 3 } },
+          ...(crisp ? [{ name: 'crisp', type: 'vec3' as const, from: crisp }] : []),
+        ], `bg + color * ${glowFormula(gtype('soft'), 'd', 'amount', 'falloff')}`,
+        `${name} drawn as its glow (Style: Glow, type ${GLOW_TYPE_LABELS[gtype('soft')].label}): ${GLOW_TYPE_LABELS[gtype('soft')].blurb} The glow is added to what is behind; with Soft (the default) it is the shape's own colour inside and at the edge, fading out from there, so the shape and its glow read as one, the way a distance field glows (the Grid builder's Soft glow). No flat fill is painted over it. Amount (how far it reaches) and falloff (how fast it fades) are live sliders.`);
+        if (crisp) gateNode(g, L.mute?.glow, { from: 'crisp' });
+        acc = ref(g, 'result');
+      } else {
+        // Glow Layer (its Soft type is this formula) added over what is behind.
+        const gt = gtype('soft');
+        const g = mk(c, 'glowLayer', `${it.id}:glow`, { intensity: L.glow.amount, power: L.glow.falloff, mode: gt }, { d, color: fill },
+          `The glow of ${name} (Style: Glow, type ${GLOW_TYPE_LABELS[gt].label}): ${GLOW_TYPE_LABELS[gt].blurb} With Soft (the default) it is the shape's own colour inside and at the edge, fading out from there, so the shape and its glow read as one. Intensity is how far it reaches, Power how fast it fades; both live.`);
+        acc = ref(mk(c, 'addColor', `${it.id}:addglow`, {}, { a: acc, b: ref(g, 'result') }, `Adds ${name}'s glow to what is behind it. No flat fill is painted over it. Light adds up, so it can go past 1; Tone Map brings it back.`), 'result');
+      }
     } else if (style === 'glow') {
       // Glow style on a layer that doesn't glow (Look → Glow off, or not marked): the crisp shape.
       acc = ref(mk(c, 'sdfFill', `${it.id}:fill`, {}, { d, fillColor: fill, background: acc },

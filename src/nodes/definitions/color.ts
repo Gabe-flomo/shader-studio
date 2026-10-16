@@ -271,6 +271,7 @@ export const GradientNode: NodeDefinition = {
   description: 'Blend between two colors across UV space. Modes: Linear X, Linear Y, Radial (distance), Angular (round the centre, no seam), Angular full turn (with a seam where the angle wraps), Diagonal.',
   inputs: {
     uv:       { type: 'vec2',  label: 'UV'       },
+    dir:      { type: 'vec3',  label: 'Direction', hint: 'A 3D direction instead of UV (a camera\'s Ray Dir): its x and y are read like UV, so Linear Y runs from looking straight down to looking straight up, a sky that turns with the camera.' },
     color_a:  { type: 'vec3',  label: 'Color A'  },
     color_b:  { type: 'vec3',  label: 'Color B'  },
     t_offset: { type: 'float', label: 'T Offset' },
@@ -300,7 +301,7 @@ export const GradientNode: NodeDefinition = {
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id       = node.id;
-    const uvVar    = inputVars.uv       ?? 'vec2(0.0)';
+    const uvVar    = inputVars.uv ?? (inputVars.dir ? `(${inputVars.dir}).xy` : 'vec2(0.0)');
     const tOffset  = inputVars.t_offset ?? p(node.params.t_offset, 0.0);
     const modeStr  = (node.params.mode as string) ?? 'linear_x';
     const modeMap: Record<string, number> = { linear_x: 0, linear_y: 1, radial: 2, angular: 3, diagonal: 4, angularWrap: 5 };

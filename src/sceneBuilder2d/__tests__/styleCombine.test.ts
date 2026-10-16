@@ -46,13 +46,15 @@ describe('shape styles', () => {
     expect(styleOf(s.layers[0])).toBe('glow');
     const roles = byRole(s);
     expect(roles.has('s1:fill')).toBe(false);
-    expect(roles.has('s1:addglow')).toBe(false);
+    // A Glow Layer (Soft) added over what is behind: nodes, not a code block.
     const g = roles.get('s1:glow')!;
-    expect(g.type).toBe('exprNode');
-    expect(String(g.params.result)).toContain('max(d, 0.0)');
-    // Nothing after it paints the layer over again: the glow node is what the tone map reads.
+    expect(g.type).toBe('glowLayer');
+    expect(g.params.mode).toBe('soft');
+    const add = roles.get('s1:addglow')!;
+    expect(add.inputs.b.connection?.nodeId).toBe(g.id);
+    // Nothing after it paints the layer over again: the glow is what the tone map reads.
     const tone = roles.get('tone')!;
-    expect(tone.inputs.color.connection?.nodeId).toBe(g.id);
+    expect(tone.inputs.color.connection?.nodeId).toBe(add.id);
     compiles(s);
   });
 
