@@ -218,7 +218,7 @@ export const HypersphereSDFNode: NodeDefinition = {
   type: 'hypersphereSDF', label: 'Hypersphere SDF', category: CAT,
   aliases: ['4d sphere', '3-sphere', 'glome'],
   description:
-    'Signed distance to a 4D sphere (a hypersphere) at the origin: length(p4) - radius. Its 3D slice is always a sphere, but the size depends on w: ' +
+    'Signed distance to a 4D sphere (a hypersphere) at the origin: length(Point 4D) − Radius. Its 3D slice is always a sphere, but the size depends on w: ' +
     'radius at w = 0, shrinking to a point as w reaches the radius, and gone beyond. Sweep w and a sphere swells and shrinks.',
   inputs: {
     p4:     { type: 'vec4',  label: 'Point 4D' },
@@ -309,11 +309,11 @@ export const DuocylinderSDFNode = shapeNode({
   type: 'duocylinderSDF', label: 'Duocylinder SDF', fn: 'sdf4d_duocylinder',
   aliases: ['duocylinder', '4d cylinder', 'disc times disc'],
   description:
-    'A duocylinder: the product of two discs, one in the xy plane (radius 1) and one in the zw plane (radius 2). Its distance is max(length(p.xy) - r1, length(p.zw) - r2) inside and an exact ' +
-    'distance outside. Its slice at w is a cylinder along z with radius 1 and a height that shrinks as w grows: sqrt(r2² - w²) each way. Turn it in xw and yz together and it rolls.',
+    'A duocylinder: the product of two discs, one in the xy plane (radius 1) and one in the zw plane (radius 2). Its distance is max(length(p.xy) − Radius xy, length(p.zw) − Radius zw) inside and an exact ' +
+    'distance outside. Its slice at w is a cylinder along z with radius 1 and a height that shrinks as w grows: √(Radius zw² − w²) each way. Turn it in xw and yz together and it rolls.',
   params: {
     r1: { def: 0.7, label: 'Radius xy', min: 0.01, max: 5, step: 0.01, hint: 'Radius of the disc in the xy plane.' },
-    r2: { def: 0.55, label: 'Radius zw', min: 0.01, max: 5, step: 0.01, hint: 'Radius of the disc in the zw plane. The slice at w has half-height √(r2² − w²).' },
+    r2: { def: 0.55, label: 'Radius zw', min: 0.01, max: 5, step: 0.01, hint: 'Radius of the disc in the zw plane. The slice at w has half-height √(Radius zw² − w²).' },
   },
   glsl: `
 float sdf4d_duocylinder(vec4 p, float r1, float r2) {
@@ -388,8 +388,8 @@ export const DitorusSDFNode = shapeNode({
   type: 'ditorusSDF', label: 'Ditorus SDF', fn: 'sdf4d_ditorus',
   aliases: ['ditorus', 'tiger', 'tiger torus', 'duotorus', 'torus 4d'],
   description:
-    'A ditorus ("tiger"): a thickened torus that sits in 4D as the product of two circles, one of radius R1 in the xy plane and one of radius R2 in the zw plane. ' +
-    'length(vec2(length(p.xy) − R1, length(p.zw) − R2)) − r. Exact. Its slices are tori (and thin rings, and two-lobed shapes near the ends) that change as w moves or as it turns.',
+    'A ditorus ("tiger"): a thickened torus that sits in 4D as the product of two circles, one in the xy plane (Major radius xy) and one in the zw plane (Major radius zw), thickened by Minor radius: ' +
+    'length(vec2(length(p.xy) − Major radius xy, length(p.zw) − Major radius zw)) − Minor radius. Exact. Its slices are tori (and thin rings, and two-lobed shapes near the ends) that change as w moves or as it turns.',
   params: {
     R1: { def: 0.7, label: 'Major radius xy', min: 0.0, max: 5, step: 0.01, hint: 'Radius of the circle in the xy plane.' },
     R2: { def: 0.5, label: 'Major radius zw', min: 0.0, max: 5, step: 0.01, hint: 'Radius of the circle in the zw plane.' },
@@ -617,7 +617,7 @@ export const Twist4DNode: NodeDefinition = withParamSockets({
     plane: { label: 'Plane', type: 'select', hint: 'Which plane turns.', options: ROTATION_PLANES_4D.map(v => ({ value: v, label: v })) },
     along: { label: 'Along axis', type: 'select', hint: 'The coordinate the angle grows with. If it is in the plane, the first axis outside the plane is used.', options: AXIS_OPTIONS },
     amount: { label: 'Amount (deg/unit)', type: 'float', min: -360.0, max: 360.0, step: 0.5, hint: 'Degrees of turn per unit along the axis.' },
-    stepScale: { label: 'Step scale', type: 'float', min: 0.2, max: 1.0, step: 0.01, hint: 'Multiplies the distance coming back; 1 is no correction. A twist is not 1-Lipschitz: about 1 / (1 + amount in radians × shape size) is safe.',
+    stepScale: { label: 'Step scale', type: 'float', min: 0.2, max: 1.0, step: 0.01, hint: 'Multiplies the distance coming back; 1 is no correction. A twist is not 1-Lipschitz: about 1 / (1 + Amount in radians × shape size) is safe.',
                  help: 'The twist makes the true distance up to a factor (1 + k·r) shorter than the measured one, where k is the amount in radians per unit and r how far from the axis the shape reaches. Dropping the step scale to that reciprocal keeps the march from stepping into the surface.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {

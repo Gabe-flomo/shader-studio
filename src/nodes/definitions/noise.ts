@@ -260,7 +260,7 @@ export const FlowFieldNode: NodeDefinition = withParamSockets({
   type: 'flowField',
   label: 'Flow Field',
   category: 'Fractals',
-  description: 'Tyler Hobbs-style flow field — curves march step-by-step through a grid of noise-derived angles. field_mode: perlin (smooth), curl (swirling loops), quantized (rocky angular). Adjust curves, steps, and line_width for fur → long fluid strokes.',
+  description: 'Tyler Hobbs-style flow field — curves march step-by-step through a grid of noise-derived angles. Field Mode: perlin (smooth), curl (swirling loops), quantized (rocky angular). Adjust Curves, Steps/Curve and Line Width for fur → long fluid strokes.',
   inputs: {
     uv:    { type: 'vec2',  label: 'UV'   },
     time:  { type: 'float', label: 'Time', hint: 'Wire Time to animate; unwired the field is frozen.' },
@@ -402,7 +402,7 @@ export const CirclePackNode: NodeDefinition = withParamSockets({
   type: 'circlePack',
   label: 'Circle Pack',
   category: 'Fractals',
-  description: 'Tyler Hobbs-style brute-force circle packing. Hash-placed circles with collision avoidance. circle_mode: flat, gradient (radial falloff), ring (stroke), or noise-filled. Great as a standalone design or as starting positions for a Flow Field.',
+  description: 'Tyler Hobbs-style brute-force circle packing. Hash-placed circles with collision avoidance. Circle Mode: flat, gradient (radial falloff), ring (stroke), or noise-filled. Great as a standalone design or as starting positions for a Flow Field.',
   inputs: {
     uv:   { type: 'vec2',  label: 'UV'   },
     time: { type: 'float', label: 'Time', hint: 'Wire Time to pulse the circles (with Pulse Speed above 0).' },
@@ -559,7 +559,7 @@ export const NoiseFloatNode: NodeDefinition = withParamSockets({
   type: 'noiseFloat',
   label: 'Noise Float',
   category: 'Noise',
-  description: 'Outputs a float noise value (Out Min–Out Max, 0–1 by default) based on UV position and time. Wire into any float input — radius, brightness, angle, mix amount — to inject per-pixel randomness. Smooth=value noise (organic), Hash=raw hash (grain-like).',
+  description: 'Outputs a float noise value (Out Min–Out Max, 0–1 by default) based on UV position and time. Wire into any float input — radius, brightness, angle, mix amount — to inject per-pixel randomness. Smooth: value noise (organic). Hash: raw hash (grain-like).',
   inputs: {
     uv:   { type: 'vec2',  label: 'UV'   },
     time: { type: 'float', label: 'Time', hint: 'Wire Time to animate; unwired the noise is frozen.' },

@@ -55,7 +55,7 @@ export const SdfOffsetNode: NodeDefinition = {
   type: 'sdfOffset',
   label: 'Offset',
   category: 'SDF', subcategory: 'Modify', aliases: ['round', 'inflate', 'erode'],
-  description: 'Expands or shrinks a shape by offsetting the zero-crossing: sdf + amount. Negative = expand, positive = shrink. Rounds corners as a side effect.',
+  description: 'Expands or shrinks a shape by offsetting the zero-crossing: SDF + Amount. Negative = expand, positive = shrink. Rounds corners as a side effect.',
   inputs: {
     sdf:    { type: 'float', label: 'SDF'    },
     amount: { type: 'float', label: 'Amount' },

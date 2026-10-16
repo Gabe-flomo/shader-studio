@@ -73,7 +73,7 @@ export const DotMaskNode: NodeDefinition = {
   type: 'dotMask',
   label: 'Dot Mask',
   category: 'Halftone',
-  description: 'Generate a circular dot mask within a grid cell. Returns 1 inside the dot, 0 outside. Wire cellUV from a Grid UV node. Modulate Radius with a Luma Radius node to make dots grow with brightness. Use with Grid UV (Cell UV) and Luma Radius (Radius).',
+  description: 'Generate a circular dot mask within a grid cell. Returns 1 inside the dot, 0 outside. Wire Cell UV from a Grid UV node. Modulate Radius with a Luma Radius node to make dots grow with brightness. Use with Grid UV (Cell UV) and Luma Radius (Radius).',
   inputs: {
     cellUV:   { type: 'vec2',  label: 'Cell UV', hint: 'Wire Cell UV from Grid UV.' },
     radius:   { type: 'float', label: 'Radius' },

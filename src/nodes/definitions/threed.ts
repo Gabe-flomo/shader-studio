@@ -164,7 +164,7 @@ export const RaymarchNode: NodeDefinition = withParamSockets({
   description: [
     '3D raymarcher with configurable scene, camera, and lighting. ',
     'Scene: sphere, box, torus, or repeat+blend. ',
-    'Lighting: diffuse + specular Phong + ambient + fog. ',
+    'Lighting: diffuse, Phong specular, ambient light and fog. ',
     'Wire UV + Time for animated camera orbit. ',
     'Outputs: color, depth, normal, occlusion, fog mask.',
   ].join(''),
@@ -631,7 +631,7 @@ export const VolumeCloudsNode: NodeDefinition = withParamSockets({
   category: 'Fractals',
   description: [
     'Volumetric cloud slab via raymarching + turbulence density field. ',
-    'Beer\'s law absorption (absorptionR/G/B=0 → no change) and HG phase (phaseG=0 → isotropic = original behavior).',
+    'Beer\'s law absorption (Absorb R/G/B at 0 → no change) and HG phase (Phase G at 0 → isotropic = original behavior).',
   ].join(''),
   inputs: {
     uv:       { type: 'vec2',  label: 'UV'            },
@@ -1406,7 +1406,7 @@ export const GlassNode: NodeDefinition = withParamSockets({
   type: 'glass3d',
   label: 'Glass 3D',
   category: '3D Lighting',
-  description: 'Multi-sample glass with chromatic dispersion, Blinn-Phong lighting, and Fresnel. Wire rayDir from MarchCamera.rd, normal + hit from MarchLoopGroup. Exposes fresnel, refractedColor, and reflectedColor so you can mix/tint them downstream.',
+  description: 'Multi-sample glass with chromatic dispersion, Blinn-Phong lighting, and Fresnel. Wire Ray Dir from March Camera\'s rd, Normal and Hit from a March Loop Group. Exposes Fresnel, Refracted and Reflected so you can mix/tint them downstream.',
   inputs: {
     rayDir:    { type: 'vec3',  label: 'Ray Dir'    },
     normal:    { type: 'vec3',  label: 'Normal'     },
@@ -1519,7 +1519,7 @@ export const PhaseHGNode: NodeDefinition = withParamSockets({
   type: 'phaseHG',
   label: 'Phase (HG)',
   category: '3D Lighting',
-  description: 'Henyey-Greenstein phase function. Weights in-scattered light by the angle between view and light directions. Wire cosTheta = dot(-rd, lightDir). g=0: isotropic fog. g≈0.8: forward-scattering cloud. g<0: backlit haze.',
+  description: 'Henyey-Greenstein phase function. Weights in-scattered light by the angle between view and light directions. Wire cos(θ) = dot(−Ray Dir, Light Dir). g=0: isotropic fog. g≈0.8: forward-scattering cloud. g<0: backlit haze.',
   inputs: {
     cosTheta: { type: 'float', label: 'cos(θ)', hint: 'Wire this, or wire Ray Dir (and a Light Dir) below and it is computed for you.' },
     rayDir:   { type: 'vec3',  label: 'Ray Dir', hint: 'The camera ray direction. With Light Dir, replaces the Dot node.' },
@@ -1554,7 +1554,7 @@ export const FresnelSchlickNode: NodeDefinition = withParamSockets({
   type: 'fresnelSchlick',
   label: 'Fresnel (Schlick)',
   category: '3D Lighting',
-  description: 'Physical Schlick Fresnel approximation. Splits energy between reflection and refraction based on IOR and view angle. reflectW + refractW = 1. Wire cosTheta = dot(normal, -rd).',
+  description: 'Physical Schlick Fresnel approximation. Splits energy between reflection and refraction based on IOR and view angle. Reflect Weight + Refract Weight = 1. Wire cos(θ) = dot(Normal, −Ray Dir).',
   inputs: {
     cosTheta: { type: 'float', label: 'cos(θ)', hint: 'Wire this, or wire Normal and Ray Dir below and it is computed for you.' },
     normal:   { type: 'vec3',  label: 'Normal', hint: 'Surface normal from the March Loop Group. With Ray Dir wired, replaces the Dot node.' },
@@ -1664,7 +1664,7 @@ export const SpectralDispersionNode: NodeDefinition = withParamSockets({
   type: 'spectralDispersion',
   label: 'Spectral Dispersion',
   category: '3D Lighting',
-  description: '6-channel rygcbv dispersion. Splits IOR across Red/Yellow/Green/Cyan/Blue/Violet spectral bands for physically-inspired prismatic color separation. Wire rayDir, normal, hit, and bgColor from ray march nodes.',
+  description: '6-channel rygcbv dispersion. Splits IOR across Red/Yellow/Green/Cyan/Blue/Violet spectral bands for physically-inspired prismatic color separation. Wire Ray Dir, Normal, Hit and Background from ray march nodes.',
   inputs: {
     rayDir:  { type: 'vec3',  label: 'Ray Dir'    },
     normal:  { type: 'vec3',  label: 'Normal'     },
@@ -1726,7 +1726,7 @@ export const BlinnPhongNode: NodeDefinition = withParamSockets({
   type: 'blinnPhong',
   label: 'Blinn-Phong',
   category: '3D Lighting',
-  description: 'Blinn-Phong specular + diffuse light value. Outputs a scalar you can multiply into any color. Wire viewDir from MarchCamera.rd, normal from MarchLoopGroup, lightDir from a constant vec3.',
+  description: 'Blinn-Phong specular + diffuse light value. Outputs a scalar you can multiply into any color. Wire View Dir from March Camera\'s rd, Normal from a March Loop Group, Light Dir from a constant vec3.',
   inputs: {
     normal:   { type: 'vec3', label: 'Normal'    },
     viewDir:  { type: 'vec3', label: 'View Dir'  },
@@ -1738,7 +1738,7 @@ export const BlinnPhongNode: NodeDefinition = withParamSockets({
   paramDefs: {
     shininess:   { label: 'Shininess',   type: 'float', min: 2.0,  max: 256.0, step: 2.0, hint: 'Specular exponent — higher gives a tighter, more mirror-like highlight.' },
     diffuseness: { label: 'Diffuse',     type: 'float', min: 0.0,  max: 2.0,   step: 0.05, hint: 'Diffuse contribution weight. Controls how much the surface shading follows the light angle.' },
-    lightX:      { label: 'Light X',     type: 'float', min: -3.0, max: 3.0,   step: 0.1,  hint: 'Light direction X (used when no lightDir input is connected).' },
+    lightX:      { label: 'Light X',     type: 'float', min: -3.0, max: 3.0,   step: 0.1,  hint: 'Light direction X (used when nothing is wired into Light Dir).' },
     lightY:      { label: 'Light Y',     type: 'float', min: -3.0, max: 3.0,   step: 0.1,  hint: 'Light direction Y.' },
     lightZ:      { label: 'Light Z',     type: 'float', min: -3.0, max: 3.0,   step: 0.1,  hint: 'Light direction Z.' },
   },
@@ -1765,7 +1765,7 @@ export const GlassSceneNode: NodeDefinition = withParamSockets({
   type: 'glassScene',
   label: 'Glass Scene',
   category: '3D Scene',
-  description: 'Glass with a real scene background. Wire two SceneGroups — one for the glass geometry and one for what is seen through and around it. Background is optional; omitting it uses a sky gradient. Exposes fresnel, refractedColor, and reflectedColor outputs compatible with glass3d.',
+  description: 'Glass with a real scene background. Wire two SceneGroups — one for the glass geometry and one for what is seen through and around it. Background is optional; omitting it uses a sky gradient. Exposes Fresnel, Refracted and Reflected outputs, like Glass 3D.',
   inputs: {
     ro:         { type: 'vec3',    label: 'Ray Origin'  },
     rd:         { type: 'vec3',    label: 'Ray Dir'     },

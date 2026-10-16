@@ -61,7 +61,7 @@ const bipPost = (id: string, bip: boolean) =>
 
 export const ExpEaseNode: NodeDefinition = withParamSockets({
   type: 'expEase', label: 'Exp Ease', category: 'Shapers',
-  description: 'Exponential ease. a=0→strong ease-in, a=0.5→linear, a=1→strong ease-out.',
+  description: 'Exponential ease. Curve 0 → strong ease-in, 0.5 → linear, 1 → strong ease-out.',
   ...floatIO,
   defaultParams: { a: 0.5, bipolar: false },
   paramDefs: {
@@ -94,7 +94,7 @@ export const ExpEaseNode: NodeDefinition = withParamSockets({
 
 export const DoubleExpSeatNode: NodeDefinition = withParamSockets({
   type: 'doubleExpSeat', label: 'Exp Seat', category: 'Shapers',
-  description: 'Double-exponential seat. Low a = flat plateau; high a = strong dip.',
+  description: 'Double-exponential seat. Low Shape: a flat plateau; high Shape: a strong dip.',
   ...floatIO,
   defaultParams: { a: 0.5, bipolar: false },
   paramDefs: {
@@ -160,7 +160,7 @@ export const DoubleExpSigmoidNode: NodeDefinition = withParamSockets({
 
 export const LogisticSigmoidNode: NodeDefinition = withParamSockets({
   type: 'logisticSigmoid', label: 'Logistic Sigmoid', category: 'Shapers',
-  description: 'Classic logistic / smooth step. a=0→linear; a→1→sharp step at 0.5.',
+  description: 'Classic logistic / smooth step. Steepness 0 → linear; toward 1 → a sharp step at 0.5.',
   ...floatIO,
   defaultParams: { a: 0.7, bipolar: false },
   paramDefs: {
@@ -298,7 +298,7 @@ export const DoubleCircleSigmoidNode: NodeDefinition = withParamSockets({
 
 export const DoubleEllipticSigmoidNode: NodeDefinition = withParamSockets({
   type: 'doubleEllipticSigmoid', label: 'Elliptic Sigmoid', category: 'Shapers',
-  description: 'Asymmetric elliptic S-curve. a=inflection x, b=inflection y.',
+  description: 'Asymmetric elliptic S-curve. Inflect X and Inflect Y place the inflection point.',
   ...floatIO,
   defaultParams: { a: 0.5, b: 0.5, bipolar: false },
   paramDefs: {
@@ -335,7 +335,7 @@ export const DoubleEllipticSigmoidNode: NodeDefinition = withParamSockets({
 
 export const QuadBezierShaperNode: NodeDefinition = withParamSockets({
   type: 'quadBezierShaper', label: 'Quad Bezier', category: 'Shapers',
-  description: 'Quadratic bezier curve shaper. (a,b) is the single control point.',
+  description: 'Quadratic bezier curve shaper. (Control X, Control Y) is the single control point.',
   ...floatIO,
   glslFunction: QUAD_BEZIER_GLSL,
   defaultParams: { a: 0.5, b: 0.5, bipolar: false },
@@ -361,7 +361,7 @@ export const QuadBezierShaperNode: NodeDefinition = withParamSockets({
 
 export const CubicBezierShaperNode: NodeDefinition = withParamSockets({
   type: 'cubicBezierShaper', label: 'Cubic Bezier', category: 'Shapers',
-  description: 'Cubic bezier shaper. (a,b) = first control point, (c,d) = second. Same parameterization as CSS cubic-bezier().',
+  description: 'Cubic bezier shaper. (P1 X, P1 Y) is the first control point, (P2 X, P2 Y) the second. Same parameterization as CSS cubic-bezier().',
   ...floatIO,
   glslFunction: CUBIC_BEZIER_GLSL,
   defaultParams: { a: 0.25, b: 0.1, c: 0.25, d: 1.0, bipolar: false },

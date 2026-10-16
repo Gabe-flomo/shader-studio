@@ -25,7 +25,7 @@ function vt(node: GraphNode): string {
 }
 
 export const AddNode: NodeDefinition = {
-  type: 'add', label: 'Add', category: 'Math', subcategory: 'Arithmetic', description: 'Add two values (a + b). Works on floats, vec2 and vec3 — pick the type on the card.',
+  type: 'add', label: 'Add', category: 'Math', subcategory: 'Arithmetic', description: 'Adds A and B (A + B). Works on floats, vec2 and vec3 — pick the type on the card.',
   inputs: { a: { type: 'float', label: 'A' }, b: { type: 'float', label: 'B' } },
   outputs: { result: { type: 'float', label: 'Result' } },
   defaultParams: { b: 0.0 },
@@ -40,7 +40,7 @@ export const AddNode: NodeDefinition = {
 };
 
 export const SubtractNode: NodeDefinition = {
-  type: 'subtract', label: 'Subtract', category: 'Math', subcategory: 'Arithmetic', description: 'Subtract b from a (a - b). Works on floats, vec2 and vec3.',
+  type: 'subtract', label: 'Subtract', category: 'Math', subcategory: 'Arithmetic', description: 'Subtracts B from A (A − B). Works on floats, vec2 and vec3.',
   inputs: { a: { type: 'float', label: 'A' }, b: { type: 'float', label: 'B' } },
   outputs: { result: { type: 'float', label: 'Result' } },
   defaultParams: { b: 0.0 },
@@ -55,7 +55,7 @@ export const SubtractNode: NodeDefinition = {
 };
 
 export const MultiplyNode: NodeDefinition = {
-  type: 'multiply', label: 'Multiply', category: 'Math', subcategory: 'Arithmetic', description: 'Multiply two values (a × b). Works on floats, vec2 and vec3 — scale a colour by wiring it to A.',
+  type: 'multiply', label: 'Multiply', category: 'Math', subcategory: 'Arithmetic', description: 'Multiplies A by B (A × B). Works on floats, vec2 and vec3 — scale a colour by wiring it to A.',
   inputs: { a: { type: 'float', label: 'A' }, b: { type: 'float', label: 'B' } },
   outputs: { result: { type: 'float', label: 'Result' } },
   defaultParams: { b: 1.0 },
@@ -70,13 +70,13 @@ export const MultiplyNode: NodeDefinition = {
 };
 
 export const DivideNode: NodeDefinition = {
-  type: 'divide', label: 'Divide', category: 'Math', subcategory: 'Arithmetic', description: 'Divide a by b (a / b).',
+  type: 'divide', label: 'Divide', category: 'Math', subcategory: 'Arithmetic', description: 'Divides A by B (A ÷ B).',
   inputs: { a: { type: 'float', label: 'A' }, b: { type: 'float', label: 'B' } },
   outputs: { result: { type: 'float', label: 'Result' } },
   defaultParams: { b: 1.0, exact: false },
   paramDefs: {
     b: { label: 'B (divisor)', type: 'float', min: 0.0001, max: 10, step: 0.001 },
-    exact: exactDef('Off: divides by max(b, 0.0001), so a divisor at zero or below never gives inf. On: plain a / b, as GLSL does (a negative divisor flips the sign).'),
+    exact: exactDef('Off: never divides by less than 0.0001, so a divisor at zero or below never gives inf. On: plain A ÷ B, as GLSL does (a negative divisor flips the sign).'),
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const t = ot(node);
@@ -88,7 +88,7 @@ export const DivideNode: NodeDefinition = {
 };
 
 export const SinNode: NodeDefinition = {
-  type: 'sin', label: 'Sin', category: 'Math', subcategory: 'Trigonometry', description: 'Sine of input: amp * sin(input * freq).',
+  type: 'sin', label: 'Sin', category: 'Math', subcategory: 'Trigonometry', description: 'A wave from −Amp to Amp: Amp × sin(Input × Freq).',
   inputs: { input: { type: 'float', label: 'Input' }, freq: { type: 'float', label: 'Freq' }, amp: { type: 'float', label: 'Amp' } },
   outputs: { output: { type: 'float', label: 'Output' } },
   defaultParams: { input: 0.0, freq: 1.0, amp: 1.0 },
@@ -108,7 +108,7 @@ export const SinNode: NodeDefinition = {
 };
 
 export const CosNode: NodeDefinition = {
-  type: 'cos', label: 'Cos', category: 'Math', subcategory: 'Trigonometry', description: 'Cosine of input: amp * cos(input * freq).',
+  type: 'cos', label: 'Cos', category: 'Math', subcategory: 'Trigonometry', description: 'The same wave as Sin, a quarter turn ahead: Amp × cos(Input × Freq).',
   inputs: { input: { type: 'float', label: 'Input' }, freq: { type: 'float', label: 'Freq' }, amp: { type: 'float', label: 'Amp' } },
   outputs: { output: { type: 'float', label: 'Output' } },
   defaultParams: { input: 0.0, freq: 1.0, amp: 1.0 },
@@ -128,7 +128,7 @@ export const CosNode: NodeDefinition = {
 };
 
 export const TanNode: NodeDefinition = {
-  type: 'tan', label: 'Tan', category: 'Math', subcategory: 'Trigonometry', description: 'Tangent of input: amp * tan(input * freq). Approaches ±∞ at ±π/2.',
+  type: 'tan', label: 'Tan', category: 'Math', subcategory: 'Trigonometry', description: 'Amp × tan(Input × Freq): shoots off to ±∞ where Input × Freq reaches ±π/2.',
   inputs: { input: { type: 'float', label: 'Input' }, freq: { type: 'float', label: 'Freq' }, amp: { type: 'float', label: 'Amp' } },
   outputs: { output: { type: 'float', label: 'Output' } },
   defaultParams: { input: 0.0, freq: 1.0, amp: 1.0 },
@@ -148,7 +148,7 @@ export const TanNode: NodeDefinition = {
 };
 
 export const ExpNode: NodeDefinition = {
-  type: 'exp', label: 'Exp', category: 'Math', subcategory: 'Arithmetic', description: 'exp(input × scale).',
+  type: 'exp', label: 'Exp', category: 'Math', subcategory: 'Arithmetic', description: 'e raised to Input × Scale: exp(Input × Scale). 1 at 0, growing fast above and dying away toward 0 below.',
   inputs: { input: { type: 'float', label: 'Input' }, scale: { type: 'float', label: 'Scale' } },
   outputs: { output: { type: 'float', label: 'Output' } },
   defaultParams: { scale: 1.0 },
@@ -161,13 +161,13 @@ export const ExpNode: NodeDefinition = {
 };
 
 export const PowNode: NodeDefinition = {
-  type: 'pow', label: 'Pow', category: 'Math', subcategory: 'Arithmetic', description: 'base ^ exponent.',
+  type: 'pow', label: 'Pow', category: 'Math', subcategory: 'Arithmetic', description: 'Base raised to the power Exponent: pow(Base, Exponent). Above 1 it sharpens a 0…1 value, below 1 it softens it.',
   inputs: { base: { type: 'float', label: 'Base' }, exponent: { type: 'float', label: 'Exponent' } },
   outputs: { result: { type: 'float', label: 'Result' } },
   defaultParams: { exponent: 1.2, exact: false },
   paramDefs: {
     exponent: { label: 'Exponent', type: 'float', min: 0, max: 10, step: 0.01 },
-    exact: exactDef('Off: the base is clamped to 0 or more first. On: plain pow(base, exponent), as GLSL does (a negative base is undefined there).'),
+    exact: exactDef('Off: the base is clamped to 0 or more first. On: plain pow(Base, Exponent), as GLSL does (a negative base is undefined there).'),
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const t = ot(node), o = `${node.id}_result`;
@@ -180,7 +180,7 @@ export const PowNode: NodeDefinition = {
 };
 
 export const NegateNode: NodeDefinition = {
-  type: 'negate', label: 'Negate', category: 'Math', subcategory: 'Arithmetic', description: 'Negate a float (-x).',
+  type: 'negate', label: 'Negate', category: 'Math', subcategory: 'Arithmetic', description: 'Flips the sign of Input (−Input).',
   inputs: { input: { type: 'float', label: 'Input' } }, outputs: { output: { type: 'float', label: 'Output' } },
   generateGLSL: (node: GraphNode, inputVars) => {
     const t = ot(node), o = `${node.id}_output`;
@@ -238,7 +238,7 @@ export const MaxNode: NodeDefinition = {
 };
 
 export const ClampNode: NodeDefinition = {
-  type: 'clamp', label: 'Clamp', category: 'Math', subcategory: 'Comparison', description: 'Clamp a value between min and max. Use the type picker (f/v2/v3) to clamp vectors component-wise.',
+  type: 'clamp', label: 'Clamp', category: 'Math', subcategory: 'Comparison', description: 'Keeps Input between Min and Max: clamp(Input, Min, Max). Use the type picker (f/v2/v3) to clamp vectors component-wise.',
   inputs: { input: { type: 'float', label: 'Input' }, lo: { type: 'float', label: 'Min' }, hi: { type: 'float', label: 'Max' } },
   outputs: { result: { type: 'float', label: 'Result' } },
   defaultParams: { lo: 0.0, hi: 1.0 },
@@ -253,7 +253,7 @@ export const ClampNode: NodeDefinition = {
 };
 
 export const MixNode: NodeDefinition = {
-  type: 'mix', label: 'Mix', category: 'Math', subcategory: 'Interpolation', description: 'Linear interpolation: mix(a, b, t). Works on floats, vec2 and vec3 (colours).',
+  type: 'mix', label: 'Mix', category: 'Math', subcategory: 'Interpolation', description: 'A straight blend from A (Blend 0) to B (Blend 1): mix(A, B, Blend). Works on floats, vec2 and vec3 (colours).',
   inputs: { a: { type: 'float', label: 'A' }, b: { type: 'float', label: 'B' }, t: { type: 'float', label: 'Blend' } },
   outputs: { result: { type: 'float', label: 'Result' } },
   defaultParams: { t: 0.5 },
@@ -268,7 +268,7 @@ export const MixNode: NodeDefinition = {
 
 
 export const ModNode: NodeDefinition = {
-  type: 'mod', label: 'Modulo (Wrap)', aliases: ['Mod'], category: 'Math', subcategory: 'Modulo', description: 'Modulo: mod(x, period). Use the type picker (f/v2/v3) to apply component-wise on vectors.',
+  type: 'mod', label: 'Modulo (Wrap)', aliases: ['Mod'], category: 'Math', subcategory: 'Modulo', description: 'Wraps Input back to 0 every Period, a 0…Period ramp that repeats: mod(Input, Period). Use the type picker (f/v2/v3) to apply component-wise on vectors.',
   inputs: { input: { type: 'float', label: 'Input' }, period: { type: 'float', label: 'Period' } },
   outputs: { output: { type: 'float', label: 'Output' } },
   defaultParams: { period: 1.0 },
@@ -286,7 +286,7 @@ export const ModSelectNode: NodeDefinition = withParamSockets({
   type: 'modSelect',
   label: 'Mod Select',
   category: 'Math', subcategory: 'Modulo',
-  description: 'Outputs a mask when mod(value, period) < threshold*period. Use for even/odd rows, every-Nth column, or any periodic selection. Also outputs raw mod value and normalized phase 0–1.',
+  description: 'Outputs a mask where mod(Value, Period) is below Threshold × Period. Use for even/odd rows, every-Nth column, or any periodic selection. Also outputs raw mod value and normalized phase 0–1.',
   inputs: {
     value:  { type: 'float', label: 'Value'  },
     period: { type: 'float', label: 'Period' },
@@ -321,7 +321,7 @@ export const ModSelectNode: NodeDefinition = withParamSockets({
 }, ['threshold', 'softness']);
 
 export const Atan2Node: NodeDefinition = {
-  type: 'atan2', label: 'Vector Angle', aliases: ['Atan2'], category: 'Math', subcategory: 'Trigonometry', description: 'Polar angle: atan(y, x).',
+  type: 'atan2', label: 'Vector Angle', aliases: ['Atan2'], category: 'Math', subcategory: 'Trigonometry', description: 'The angle of the point (X, Y) around the origin, in radians: atan(Y, X).',
   inputs: { y: { type: 'float', label: 'Y' }, x: { type: 'float', label: 'X' } },
   outputs: { angle: { type: 'float', label: 'Angle' } },
   generateGLSL: (node: GraphNode, inputVars) => {
@@ -352,7 +352,7 @@ export const SqrtNode: NodeDefinition = {
   type: 'sqrt', label: 'Square Root', aliases: ['Sqrt'], category: 'Math', subcategory: 'Arithmetic', description: 'Square root.',
   inputs: { input: { type: 'float', label: 'Input' } }, outputs: { output: { type: 'float', label: 'Output' } },
   defaultParams: { exact: false },
-  paramDefs: { exact: exactDef('Off: the input is clamped to 0 or more first. On: plain sqrt(x), as GLSL does (a negative input is undefined there).') },
+  paramDefs: { exact: exactDef('Off: the input is clamped to 0 or more first. On: plain sqrt(Input), as GLSL does (a negative input is undefined there).') },
   generateGLSL: (node: GraphNode, inputVars) => {
     const t = ot(node), o = `${node.id}_output`;
     const x = inputVars.input || zeroFor(t);
@@ -544,7 +544,7 @@ export const FloatToVec3Node: NodeDefinition = {
 };
 
 export const FractRawNode: NodeDefinition = {
-  type: 'fractRaw', label: 'Fract (scalar)', category: 'Math', subcategory: 'Rounding', description: 'Raw fract(x) on a float.',
+  type: 'fractRaw', label: 'Fract (scalar)', category: 'Math', subcategory: 'Rounding', description: 'The fractional part of Input: fract(Input), a 0…1 ramp that starts again at every whole number.',
   inputs: { input: { type: 'float', label: 'Input' } }, outputs: { output: { type: 'float', label: 'Output' } },
   generateGLSL: (node: GraphNode, inputVars) => {
     const t = ot(node), o = `${node.id}_output`;
@@ -553,7 +553,7 @@ export const FractRawNode: NodeDefinition = {
 };
 
 export const SmoothstepNode: NodeDefinition = {
-  type: 'smoothstep', label: 'Smoothstep', category: 'Math', subcategory: 'Interpolation', description: 'smoothstep(edge0, edge1, x). Use the type picker (f/v2/v3) to smoothstep vectors component-wise.',
+  type: 'smoothstep', label: 'Smoothstep', category: 'Math', subcategory: 'Interpolation', description: 'A soft ramp from 0 to 1 as Value goes from Edge 0 to Edge 1: smoothstep(Edge 0, Edge 1, Value). Use the type picker (f/v2/v3) to smoothstep vectors component-wise.',
   inputs: { value: { type: 'float', label: 'Value' }, edge0: { type: 'float', label: 'Edge 0' }, edge1: { type: 'float', label: 'Edge 1' } },
   outputs: { result: { type: 'float', label: 'Result' } },
   defaultParams: { edge0: 0.0, edge1: 1.0 },
@@ -592,7 +592,7 @@ export const RemapNode: NodeDefinition = {
   type: 'remap',
   label: 'Remap',
   category: 'Math', subcategory: 'Interpolation',
-  description: 'Re-map a value from [inMin, inMax] to [outMin, outMax]. Smoothstep mode eases in/out. Clamp output keeps the result inside [outMin, outMax] even when the value falls outside the input range; off lets it extrapolate. Great for turning a 0–1 noise into any range you need.',
+  description: 'Re-maps Value from [In Min, In Max] to [Out Min, Out Max]. Smoothstep mode eases in/out. Clamp output keeps the result inside [Out Min, Out Max] even when the value falls outside the input range; off lets it extrapolate. Great for turning a 0–1 noise into any range you need.',
   inputs: {
     value:  { type: 'float', label: 'Value'      },
     inMin:  { type: 'float', label: 'In Min'     },
@@ -670,7 +670,7 @@ export const CrossProductNode: NodeDefinition = {
 };
 
 export const ReflectNode: NodeDefinition = {
-  type: 'reflect', label: 'Reflect', category: 'Math', subcategory: 'Vector Ops', description: 'Reflect incident vector I around normal N',
+  type: 'reflect', label: 'Reflect', category: 'Math', subcategory: 'Vector Ops', description: 'Bounces Incident off a surface whose normal is Normal: reflect(Incident, Normal).',
   inputs: { incident: { type: 'vec3', label: 'Incident' }, normal: { type: 'vec3', label: 'Normal' } },
   outputs: { result: { type: 'vec3', label: 'Result' } },
   defaultParams: {},
@@ -830,7 +830,7 @@ export const SignNode: NodeDefinition = {
 };
 
 export const StepNode: NodeDefinition = {
-  type: 'step', label: 'Step', category: 'Math', subcategory: 'Comparison', description: 'step(edge, x) — 0 if x < edge, else 1',
+  type: 'step', label: 'Step', category: 'Math', subcategory: 'Comparison', description: 'A hard switch: 0 while Value is below Threshold, 1 from Threshold on: step(Threshold, Value).',
   inputs: { edge: { type: 'float', label: 'Threshold' }, x: { type: 'float', label: 'Value' } },
   outputs: { result: { type: 'float', label: 'Result' } },
   defaultParams: { edge: 0.5 },
@@ -966,7 +966,7 @@ export const SelectNode: NodeDefinition = {
   type: 'select',
   label: 'Select',
   category: 'Conditionals',
-  description: 'Selects between two values using a mask (0 → ifFalse, 1 → ifTrue).',
+  description: 'Picks If False where Mask is 0 and If True where it is 1.',
   inputs: {
     mask:    { label: 'Mask',     type: 'float' },
     ifTrue:  { label: 'If True',  type: 'vec3' },

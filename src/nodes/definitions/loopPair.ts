@@ -99,7 +99,7 @@ export const LoopRippleStepNode: NodeDefinition = {
   label: 'Ripple Step',
   category: 'Loops',
   deprecated: true,
-  description: 'Applies one iteration of UV ripple distortion (vec2 carry). Each pass warps UV by sin/cos of scaled coordinates + time. Connect floats to scale/speed/strength to animate them. Use with Loop Carry inside an iterated group, or a Loop Start/End chain.',
+  description: 'Applies one iteration of UV ripple distortion (vec2 carry). Each pass warps UV by sin/cos of scaled coordinates + time. Connect floats to Scale/Speed/Strength to animate them. Use with Loop Carry inside an iterated group, or a Loop Start/End chain.',
 
   inputs: {
     uv:       { type: 'vec2',  label: 'UV' },
@@ -144,7 +144,7 @@ export const LoopRotateStepNode: NodeDefinition = {
   label: 'Rotate Step',
   category: 'Loops',
   deprecated: true,
-  description: 'Rotates a vec2 UV by `angle` radians each iteration (vec2 carry). Great for spiral and kaleidoscope effects. Wire floats to angle/scale to animate them. Use with Loop Carry inside an iterated group, or a Loop Start/End chain.',
+  description: 'Rotates a vec2 UV by Angle radians each iteration (vec2 carry). Great for spiral and kaleidoscope effects. Wire floats to Angle/Scale to animate them. Use with Loop Carry inside an iterated group, or a Loop Start/End chain.',
 
   inputs: {
     uv:    { type: 'vec2',  label: 'UV' },
@@ -184,7 +184,7 @@ export const LoopDomainFoldNode: NodeDefinition = {
   label: 'Domain Fold',
   category: 'Loops',
   deprecated: true,
-  description: 'Applies abs()-mirror fold + scale + offset each iteration (vec2 carry). Classic IFS/fractal technique. Wire floats to scale/offsetX/offsetY to animate them. Use with Loop Carry inside an iterated group, or a Loop Start/End chain.',
+  description: 'Applies an abs() mirror fold, Scale and offset each iteration (vec2 carry). Classic IFS/fractal technique. Wire floats to Scale/Offset X/Offset Y to animate them. Use with Loop Carry inside an iterated group, or a Loop Start/End chain.',
 
   inputs: {
     uv:      { type: 'vec2',  label: 'UV' },
@@ -225,7 +225,7 @@ export const LoopFloatAccumulateNode: NodeDefinition = {
   label: 'Float Accumulate',
   category: 'Loops',
   deprecated: true,
-  description: 'Accumulates a float carry by adding sin(carry × scale + time × speed) × amplitude each iteration. Wire floats to scale/speed/amplitude to animate them. Use with Loop Carry (float) inside an iterated group, or a Loop Start/End chain.',
+  description: 'Accumulates a float carry by adding sin(carry × Scale + time × Speed) × Amplitude each iteration. Wire floats to Scale/Speed/Amplitude to animate them. Use with Loop Carry (float) inside an iterated group, or a Loop Start/End chain.',
 
   inputs: {
     value:     { type: 'float', label: 'Value' },
@@ -271,7 +271,7 @@ export const LoopColorRingStepNode: NodeDefinition = {
   label: 'Color Ring Step',
   category: 'Loops',
   deprecated: true,
-  description: 'Fractal ring step with color accumulation (vec3 carry). Each iteration folds UV by (iter+1)×scale, computes a ring glow on the chosen shape SDF, and adds palette color shifted by iter_index. Wire any float to animatable params. Use with Loop Carry (vec3) inside an iterated group, or a Loop Start/End chain.',
+  description: 'Fractal ring step with color accumulation (vec3 carry). Each iteration folds UV by (iter+1) × UV Scale, computes a ring glow on the chosen shape SDF, and adds palette color shifted by iter_index. Wire any float to animatable params. Use with Loop Carry (vec3) inside an iterated group, or a Loop Start/End chain.',
 
   inputs: {
     color:     { type: 'vec3',  label: 'Color in', hint: 'Wire Loop Carry\'s Value (vec3): the color accumulated by earlier passes.' },

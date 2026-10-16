@@ -251,7 +251,7 @@ export const GlowToColorNode: NodeDefinition = withParamSockets({
   label: 'Glow to Color',
   category: 'Effects',
   aliases: ['Tanh Color', 'Exposure Tint'],
-  description: 'Turns an accumulated glow (any float, often the carry out of a March Loop Group) into a colour: `tint × tanh(glow × exposure)`. Tanh keeps bright cores from blowing out to white. Replaces the Multiply → Tanh → Make Vec3 → Multiply chain.',
+  description: 'Turns an accumulated glow (any float, often the carry out of a March Loop Group) into a colour: `Tint × tanh(Glow × Exposure)`. Tanh keeps bright cores from blowing out to white. Replaces the Multiply → Tanh → Make Vec3 → Multiply chain.',
   inputs: {
     glow: { type: 'float', label: 'Glow', hint: 'Accumulated brightness, any range.' },
     tint: { type: 'vec3',  label: 'Tint' },
@@ -283,7 +283,7 @@ export const NormalToColorNode: NodeDefinition = {
   label: 'Normal to Color',
   category: 'Color',
   aliases: ['Signed to Color', 'Vec3 to Color'],
-  description: 'Maps a signed vec3 (a normal, a position, a direction) onto colours: `v × 0.5 + 0.5`, so −1 → 0 and +1 → 1. `Abs` mode uses |v| instead. Replaces the Multiply(0.5) → Add(0.5) chain.',
+  description: 'Maps a signed vec3 (a normal, a position, a direction) onto colours: `Vector × 0.5 + 0.5`, so −1 → 0 and +1 → 1. `Abs` mode uses |Vector| instead. Replaces the Multiply(0.5) → Add(0.5) chain.',
   inputs: { v: { type: 'vec3', label: 'Vector' } },
   outputs: { color: { type: 'vec3', label: 'Color' } },
   defaultParams: { mode: 'remap' },
@@ -900,8 +900,8 @@ export const GravitationalLensNode: NodeDefinition = withParamSockets({
   category: 'Effects',
   description: [
     'Warps UV coordinates using a gravitational lens (inverse-square falloff). ',
-    'Wire uv_lensed into any shader\'s UV input — it samples the content at the displaced position. ',
-    'Wire lens_center to Mouse for interactive black-hole lensing. ',
+    'Wire Lensed UV into any shader\'s UV input — it samples the content at the displaced position. ',
+    'Wire Lens Center to Mouse for interactive black-hole lensing. ',
     'Modes: gravity (1/r²), fisheye (smooth barrel), ripple (animated wave). ',
     'Relativistic extras: Einstein radius sizing, gravitational redshift tint, photon ring glow, Kerr frame-dragging spin.',
   ].join(''),
@@ -1398,7 +1398,7 @@ export const GaussianBlurNode: NodeDefinition = withParamSockets({
   type: 'gaussianBlur',
   label: 'Gaussian Blur',
   category: 'Effects',
-  description: 'Smooth photographic blur. Wire your scene color + UV, then connect the result to Output. Converges to correct blur within 1–2 frames for static content.',
+  description: 'Smooth photographic blur. Wire your scene Color and UV, then connect the result to Output. Converges to correct blur within 1–2 frames for static content.',
   inputs: {
     color: { type: 'vec3', label: 'Color' },
     uv:    { type: 'vec2', label: 'UV'    },
@@ -1497,7 +1497,7 @@ export const BloomNode: NodeDefinition = withParamSockets({
   type: 'bloom',
   label: 'Bloom',
   category: 'Effects',
-  description: 'Real screen-space bloom, After Effects Deep Glow-style — a post effect on the FINAL rendered color (no SDF/distance value needed, just like Grain applies to the whole image regardless of source). Samples a wide disk of the previous frame with genuine inverse-square distance weighting (the same falloff shape as the original Deep Glow formula), giving a continuous tight-core-to-soft-edge falloff instead of a flat blurred smudge. Wire your final scene color + UV, generally right before Output. Because it reads the frame before, moving things lag and smear: right-click → Upgrade to same-frame glow swaps in a Pass and a Glow (texture) Bloom chain.',
+  description: 'Real screen-space bloom, After Effects Deep Glow-style — a post effect on the FINAL rendered color (no SDF/distance value needed, just like Grain applies to the whole image regardless of source). Samples a wide disk of the previous frame with genuine inverse-square distance weighting (the same falloff shape as the original Deep Glow formula), giving a continuous tight-core-to-soft-edge falloff instead of a flat blurred smudge. Wire your final scene Color and UV, generally right before Output. Because it reads the frame before, moving things lag and smear: right-click → Upgrade to same-frame glow swaps in a Pass and a Glow (texture) Bloom chain.',
   inputs: {
     color:     { type: 'vec3',  label: 'Color' },
     uv:        { type: 'vec2',  label: 'UV' },
@@ -1903,7 +1903,7 @@ export const DepthOfFieldNode: NodeDefinition = withParamSockets({
   type: 'depthOfField',
   label: 'Depth of Field',
   category: 'Effects',
-  description: 'Smooth post-process DoF. Wire color + dist from marchLoopGroup. Pixels far from the focal plane get a soft bokeh blur. Disc/Hex/Oct bokeh shapes.',
+  description: 'Smooth post-process DoF. Wire Color and Dist from a March Loop Group. Pixels far from the focal plane get a soft bokeh blur. Disc/Hex/Oct bokeh shapes.',
   inputs: {
     color: { type: 'vec3',  label: 'Color' },
     uv:    { type: 'vec2',  label: 'UV'    },
@@ -1921,7 +1921,7 @@ export const DepthOfFieldNode: NodeDefinition = withParamSockets({
   },
   paramDefs: {
     focalDist:  { label: 'Focal Dist',  type: 'float' as const, min: 0.1,  max: 50.0, step: 0.1,  hint: 'World-unit depth that stays sharp. Match your camera camDist for tight focus.' },
-    focalRange: { label: 'Focal Range', type: 'float' as const, min: 0.05, max: 20.0, step: 0.05, hint: 'Depth band around focalDist that stays sharp. Smaller = shallower DoF.' },
+    focalRange: { label: 'Focal Range', type: 'float' as const, min: 0.05, max: 20.0, step: 0.05, hint: 'Depth band around Focal Dist that stays sharp. Smaller = shallower DoF.' },
     maxBlur:    { label: 'Max Blur',    type: 'float' as const, min: 0.0,  max: 24.0, step: 0.5,  hint: 'Maximum bokeh disc radius in pixels.' },
     bokehShape: { label: 'Bokeh Shape', type: 'select' as const, options: [
       { value: 'disc', label: 'Disc (circular)' },
@@ -1961,7 +1961,7 @@ export const MotionBlurNode: NodeDefinition = withParamSockets({
   type: 'motionBlur',
   label: 'Motion Blur',
   category: 'Post Processing',
-  description: 'Temporal EMA blur: result = scene_weight * current + history_weight * previous. XorDev defaults (0.1 / 0.9) give smooth trails; raise scene_weight for snappier response.',
+  description: 'Temporal EMA blur: Result = Scene Weight × current + History Weight × previous. XorDev defaults (0.1 / 0.9) give smooth trails; raise Scene Weight for snappier response.',
   inputs: {
     color: { type: 'vec3', label: 'Color' },
     uv:    { type: 'vec2', label: 'UV'   },

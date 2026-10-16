@@ -64,7 +64,7 @@ export const WaveRadiusNode: NodeDefinition = withParamSockets({
   type: 'waveRadius',
   label: 'Wave Radius',
   category: 'Grid',
-  description: 'Outputs a time-animated radius: sin((distance − time) × speed × freq) × amp + base. Wire dist_to_center from Grid for a radial wave, or leave distance unconnected for uniform pulsing. Use with Grid (Dist to Center) and Neighbor Dist.',
+  description: 'Outputs a time-animated radius: sin((Distance − time) × Speed × Frequency) × Amplitude + Base. Wire Dist to Center from Grid for a radial wave, or leave Distance unconnected for uniform pulsing. Use with Grid (Dist to Center) and Neighbor Dist.',
   inputs: {
     distance: { type: 'float', label: 'Distance', hint: 'Wire Dist to Center from Grid for a radial wave; unwired every cell pulses together.' },
   },
@@ -103,7 +103,7 @@ export const NeighborDistNode: NodeDefinition = {
   type: 'neighborDist',
   label: 'Neighbor Dist',
   category: 'Grid',
-  description: 'Minimum distance to the nearest dot center across a 3×3 (or 5×5) neighborhood. Connect cellID for per-cell hash displacement (fixes clipping on scattered dots). Connect displacement for a uniform shift. Use with Grid (Cell UV and Cell ID).',
+  description: 'Minimum distance to the nearest dot center across a 3×3 (or 5×5) neighborhood. Connect Cell ID for per-cell hash displacement (fixes clipping on scattered dots). Connect displacement for a uniform shift. Use with Grid (Cell UV and Cell ID).',
   inputs: {
     uv:           { type: 'vec2',  label: 'UV' },
     cellID:       { type: 'vec2',  label: 'Cell ID', hint: 'Wire Cell ID from Grid for per-cell random scatter.' },
@@ -251,7 +251,7 @@ export const GridDensityWarpNode: NodeDefinition = withParamSockets({
   type: 'gridDensityWarp',
   label: 'Grid Density Warp',
   category: 'Grid',
-  description: 'Applies a wave warp to UV before grid or Fract, producing non-uniform cell density. Connect a Time node to animate. Keep amplitude < 1/(2*gridSize) to avoid cell folding. Use with Grid or Tile downstream of this node.',
+  description: 'Applies a wave warp to UV before grid or Fract, producing non-uniform cell density. Connect a Time node to animate. Keep Amplitude below 1 ÷ (2 × Grid Size) to avoid cell folding. Use with Grid or Tile downstream of this node.',
   inputs: {
     uv:   { type: 'vec2',  label: 'UV'   },
     time: { type: 'float', label: 'Time', hint: 'Wire Time to make the density bands travel; unwired they are fixed.' },
@@ -314,7 +314,7 @@ export const NeighborOffset2dNode: NodeDefinition = {
   type: 'neighborOffset2d',
   label: 'Neighbor Offset 2D',
   category: 'Grid',
-  description: 'Converts a flat Loop Index (0 to N²-1) to a 2D (dx,dy) offset. Use inside a looped group with radius=1 (9 iters) or radius=2 (25 iters) to iterate a cell neighborhood. Use with Loop Index inside an iterated group.',
+  description: 'Converts a flat Loop Index (0 to N²-1) to a 2D (dx,dy) offset. Use inside a looped group with Radius 1 (9 iterations) or Radius 2 (25) to iterate a cell neighborhood. Use with Loop Index inside an iterated group.',
   inputs: {
     idx: { type: 'float', label: 'Index', hint: 'Wire Loop Index here.' },
   },
@@ -350,7 +350,7 @@ export const AnimatedCellCenterNode: NodeDefinition = withParamSockets({
   type: 'animatedCellCenter',
   label: 'Animated Cell Center',
   category: 'Grid',
-  description: 'Returns an animated dot center position with per-cell sin oscillation. Phase is seeded by cellID for independent motion per cell. With Grid Size 1 the Center is in cells, the same units as Grid’s Grid Pos: wire Grid Pos into a Circle SDF’s UV and Center into its Center (not Cell UV, which restarts at every cell). Use with Grid (Cell ID and Grid Pos).',
+  description: 'Returns an animated dot center position with per-cell sin oscillation. Phase is seeded by Cell ID for independent motion per cell. With Grid Size 1 the Center is in cells, the same units as Grid’s Grid Pos: wire Grid Pos into a Circle SDF’s UV and Center into its Center (not Cell UV, which restarts at every cell). Use with Grid (Cell ID and Grid Pos).',
   inputs: {
     cellID: { type: 'vec2', label: 'Cell ID', hint: 'Wire Cell ID from Grid; it seeds each cell\'s phase.' },
   },
@@ -393,7 +393,7 @@ export const NeighborAttractCirclesNode: NodeDefinition = withParamSockets({
   type: 'neighborAttractCircles',
   label: 'Attract Circles',
   category: 'Grid',
-  description: 'Min-SDF of attractor-displaced circles over a 3×3 neighborhood. Circles follow the attractor without clipping at cell boundaries. Connect sdf → smoothstep for fill; attractAmount → palette for color. Use with Grid (Grid Pos, Cell ID and Cell Size).',
+  description: 'Min-SDF of attractor-displaced circles over a 3×3 neighborhood. Circles follow the attractor without clipping at cell boundaries. Connect SDF → Smoothstep for fill; Attract Amt → Palette for colour. Use with Grid (Grid Pos, Cell ID and Cell Size).',
   inputs: {
     gridPos:      { type: 'vec2',  label: 'Grid Pos', hint: 'Wire Grid Pos from Grid.' },
     cellID:       { type: 'vec2',  label: 'Cell ID', hint: 'Wire Cell ID from Grid.' },
