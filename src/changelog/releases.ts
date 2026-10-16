@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.232',
+    date: '2026-10-15',
+    title: "Shuffle grid",
+    highlights: [
+      { area: 'Studio', text: "Shuffle has a click grid: pick where red, green, blue and alpha come from with one click each." },
+    ],
+  },
+  {
     id: '2026.10.231',
     date: '2026-10-15',
     title: "Named channels everywhere",
