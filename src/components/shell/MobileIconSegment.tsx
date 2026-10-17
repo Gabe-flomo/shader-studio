@@ -8,12 +8,14 @@ import type { IconName } from '../ui/iconPaths';
  * option's `short` word sits under its icon (Preview / Both / Graph / Code), so the way between
  * the picture and the graph reads at a glance instead of being four bare pictograms.
  */
-export function MobileIconSegment<T extends string>({ value, options, onChange, ariaLabel, captions = false }: {
+export function MobileIconSegment<T extends string>({ value, options, onChange, ariaLabel, captions = false, dense = false }: {
   value: T;
   options: readonly { value: T; icon: IconName; label: string; short?: string }[];
   onChange: (value: T) => void;
   ariaLabel: string;
   captions?: boolean;
+  /** Narrower buttons, when two segments share the bar (the keyframe tools beside the layout). */
+  dense?: boolean;
 }) {
   const tk = useTokens();
   return (
@@ -31,7 +33,7 @@ export function MobileIconSegment<T extends string>({ value, options, onChange, 
             title={o.label}
             onClick={() => onChange(o.value)}
             style={{
-              width: caption ? 46 : 36, height: caption ? 40 : 32, padding: 0, border: 0, borderRadius: 8, cursor: 'pointer', touchAction: 'manipulation',
+              width: caption ? 46 : dense ? 32 : 36, height: caption ? 40 : 32, padding: 0, border: 0, borderRadius: 8, cursor: 'pointer', touchAction: 'manipulation',
               display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1,
               background: on ? tk.bg.panel : 'transparent', boxShadow: on ? '0 1px 2px rgba(20,20,30,0.1)' : 'none',
               color: on ? tk.text.primary : tk.text.faint,

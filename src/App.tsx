@@ -1052,6 +1052,8 @@ function App() {
     const showCanvasPane = mobileLayout !== 'graph' && mobileLayout !== 'code';
     const showGraphPane  = mobileLayout !== 'canvas' && mobileLayout !== 'code';
     const showCodePane   = mobileLayout === 'code';
+    // The bottom bar with more than the layout switch in it (keyframe tools, the error badge): Browse shows as its icon.
+    const bottomCrowded  = !!mobileKeyframeEditor || errorCount > 0;
     return (
       <div style={{ width: '100vw', height: APP_HEIGHT, position: 'relative', overflow: 'hidden', background: tc.crust, touchAction: 'none', display: 'flex', flexDirection: 'column' }}>
 
@@ -1132,7 +1134,8 @@ function App() {
           flexShrink: 0, zIndex: 25, boxSizing: 'border-box', minHeight: 64,
           background: tk.bg.panel, borderTop: `1px solid ${tk.border.default}`,
           padding: '10px calc(14px + env(safe-area-inset-right, 0px)) calc(10px + env(safe-area-inset-bottom, 0px)) calc(14px + env(safe-area-inset-left, 0px))',
-          display: 'flex', alignItems: 'center', gap: 8,
+          // Never past the screen's edge: if it still doesn't fit, Browse goes onto a second row.
+          display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', rowGap: 8,
         }}>
           <MobileIconSegment
             ariaLabel="Layout"
@@ -1140,6 +1143,7 @@ function App() {
             onChange={setMobileLayout}
             // Worded unless the keyframe tools need the room beside it.
             captions={!mobileKeyframeEditor}
+            dense={!!mobileKeyframeEditor}
             options={[
               { value: 'canvas', icon: 'layoutCanvas', label: 'Preview only', short: 'Preview' },
               { value: 'split', icon: 'layoutSplit', label: 'Preview and graph', short: 'Both' },
@@ -1151,6 +1155,7 @@ function App() {
           {/* Keyframe tools while the keyframe editor is open — no keyboard for V/C/X/D here */}
           {mobileKeyframeEditor && (
             <MobileIconSegment
+              dense
               ariaLabel="Keyframe tool"
               value={mobileKeyframeTool}
               onChange={setMobileKeyframeTool}
@@ -1168,12 +1173,12 @@ function App() {
             onClick={() => { setMobileExamplesTab('nodes'); setShowMobileExamples(true); }}
             aria-label="Browse examples, nodes and history"
             style={{
-              // Two segments side by side (the keyframe tools) leave room for the icon only at 360px.
-              height: 40, padding: mobileKeyframeEditor ? '0 11px' : '0 14px', border: 0, borderRadius: 12, cursor: 'pointer', flexShrink: 0, touchAction: 'manipulation',
+              // With the keyframe tools or the error badge beside the layout switch, a 360px phone has room for the icon only.
+              height: 40, padding: bottomCrowded ? '0 11px' : '0 14px', border: 0, borderRadius: 12, cursor: 'pointer', flexShrink: 0, touchAction: 'manipulation',
               display: 'flex', alignItems: 'center', gap: 7, background: tk.ink.base, color: tk.ink.text, font: `600 13px ${fontFamily.ui}`,
             }}
           >
-            <Icon name="spark" size={15} />{!mobileKeyframeEditor && 'Browse'}
+            <Icon name="spark" size={15} />{!bottomCrowded && 'Browse'}
             {(unseenActivity.count > 0 || unreadRelease) && (
               <span aria-label={unseenActivity.count > 0 ? `${unseenActivity.count} new ${unseenActivity.count === 1 ? 'notice' : 'notices'} in History` : 'New release notes in History'}
                 style={{ width: 8, height: 8, borderRadius: '50%', marginLeft: -2, background: unseenActivity.count > 0 && unseenActivity.error ? tk.status.danger : tk.accent.base, boxShadow: `0 0 0 2px ${tk.ink.base}` }} />
