@@ -371,7 +371,8 @@ function SearchPanel({ onClose, spawnPosition, filterOutputType, filterInputType
           position: 'fixed', zIndex: 901, display: 'flex', flexDirection: 'column', overflow: 'hidden',
           background: tk.bg.panel, color: tk.text.primary, font: `13px ${fontFamily.ui}`,
           ...(narrow
-            ? { inset: 0 }
+            // Full screen: clear of the notch / status bar and the home indicator in an installed app.
+            ? { inset: 0, paddingTop: 'env(safe-area-inset-top, 0px)', paddingBottom: 'env(safe-area-inset-bottom, 0px)', boxSizing: 'border-box' }
             : {
               top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
               width: 'min(1080px, calc(100vw - 48px))', height: 'min(620px, calc(100vh - 64px))',
@@ -400,16 +401,23 @@ function SearchPanel({ onClose, spawnPosition, filterOutputType, filterInputType
             placeholder={crumb ? 'Search all nodes…' : 'Search nodes, or pick a category…'}
             spellCheck={false}
             autoComplete="off"
-            style={{ flex: 1, minWidth: 120, height: 32, padding: '0 10px', borderRadius: radius.md, border: `1px solid ${tk.border.default}`, background: tk.bg.field, color: tk.text.primary, outline: 'none', font: `14px ${fontFamily.ui}` }}
+            style={{ flex: 1, minWidth: 120, height: narrow ? 38 : 32, padding: '0 10px', borderRadius: radius.md, border: `1px solid ${tk.border.default}`, background: tk.bg.field, color: tk.text.primary, outline: 'none', font: `${narrow ? 16 : 14}px ${fontFamily.ui}` }}
           />
+          {/* A phone: Cancel sits beside the field, where a thumb looks for it (not a small × after the filters). */}
+          {narrow && (
+            <button type="button" data-node-search-cancel onClick={onClose}
+              style={{ height: 38, padding: '0 4px', border: 0, background: 'none', cursor: 'pointer', flexShrink: 0, color: tk.accent.text, font: `600 14px ${fontFamily.ui}` }}>
+              Cancel
+            </button>
+          )}
           {wiring && (
             <span data-wire-filter title="Only nodes that fit the wire" style={chipStyle(tk)}>
               {filterInputType && <>takes {filterInputType}</>}{filterInputType && filterOutputType && ' · '}{filterOutputType && <>gives {filterOutputType}</>}
             </span>
           )}
-          <RelevanceToggle tk={tk} relevantOnly={relevantOnly} onChange={setRelevantOnly} flow={FLOWS[libCtx.flow].label} />
+          <RelevanceToggle tk={tk} tall={narrow} relevantOnly={relevantOnly} onChange={setRelevantOnly} flow={FLOWS[libCtx.flow].label} />
           <span style={{ fontSize: 11, color: tk.text.faint, whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{total} {searching ? (total === 1 ? 'match' : 'matches') : view.kind === 'home' ? 'categories' : total === 1 ? 'node' : 'nodes'}</span>
-          <IconButton icon="close" label="Close (Esc)" size="sm" onClick={onClose} />
+          {!narrow && <IconButton icon="close" label="Close (Esc)" size="sm" onClick={onClose} />}
         </div>
 
         {/* Body: the grid or results, and the preview */}
@@ -505,10 +513,10 @@ function SectionLabel({ tk, label, note, rule }: { tk: Tokens; label: string; no
   );
 }
 
-function RelevanceToggle({ tk, relevantOnly, onChange, flow }: { tk: Tokens; relevantOnly: boolean; onChange: (v: boolean) => void; flow: string }) {
+function RelevanceToggle({ tk, relevantOnly, onChange, flow, tall = false }: { tk: Tokens; relevantOnly: boolean; onChange: (v: boolean) => void; flow: string; /** A phone: thumb-sized. */ tall?: boolean }) {
   const seg = (on: boolean, label: string, value: boolean) => (
     <button key={label} onClick={() => onChange(value)} aria-pressed={on}
-      style={{ height: 24, padding: '0 9px', border: 0, borderRadius: radius.sm, cursor: 'pointer', whiteSpace: 'nowrap', font: `${on ? 600 : 500} 11.5px ${fontFamily.ui}`,
+      style={{ height: tall ? 32 : 24, padding: '0 9px', border: 0, borderRadius: radius.sm, cursor: 'pointer', whiteSpace: 'nowrap', font: `${on ? 600 : 500} 11.5px ${fontFamily.ui}`,
         background: on ? tk.bg.selected : 'transparent', color: on ? tk.accent.text : tk.text.muted }}>{label}</button>
   );
   return (
