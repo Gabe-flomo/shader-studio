@@ -2149,12 +2149,12 @@ export function MobileGraphBrowser() {
         {canRemove && (
           <button
             onClick={() => { removeNode(node.id); setFocusStack(stack => stack.slice(0, -1)); }}
-            style={{
-              height: 38, padding: '0 12px', border: 0, borderRadius: 11, cursor: 'pointer', touchAction: 'manipulation', flexShrink: 0,
-              background: `${tk.status.danger}1a`, color: tk.status.danger, font: `600 12.5px ${fontFamily.ui}`,
-            }}
+            aria-label="Remove this node"
+            title="Remove this node"
+            // An icon, not the word: on a 360–390px phone the word squeezed short names to "Circle …"
+            style={{ ...hb(false, ''), background: `${tk.status.danger}1a`, color: tk.status.danger, boxShadow: 'none' }}
           >
-            Remove
+            <Icon name="trash" size={17} />
           </button>
         )}
       </div>
