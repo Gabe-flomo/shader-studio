@@ -63,6 +63,13 @@ export const SEGMENT_CLASSES: readonly { key: string; label: string }[] = [
   { key: 'diningtable', label: 'Table' }, { key: 'pottedplant', label: 'Potted plant' }, { key: 'sofa', label: 'Sofa' }, { key: 'tv', label: 'TV / screen' },
 ];
 
+/** The kinds grouped for the card's Add list (Objects mode). */
+export const SEGMENT_CLASS_GROUPS: readonly { label: string; keys: readonly string[] }[] = [
+  { label: 'People & animals', keys: ['person', 'cat', 'dog', 'bird', 'horse', 'sheep', 'cow'] },
+  { label: 'Vehicles', keys: ['car', 'bus', 'bicycle', 'motorbike', 'train', 'boat', 'aeroplane'] },
+  { label: 'Things', keys: ['bottle', 'chair', 'diningtable', 'pottedplant', 'sofa', 'tv'] },
+];
+
 /** The chosen classes, from the comma list in params.classes. */
 export const segmentClassesOf = (n: GraphNode): string[] =>
   String(n.params.classes ?? 'person').split(',').map(s => s.trim().toLowerCase()).filter(k => SEGMENT_CLASSES.some(c => c.key === k));
@@ -99,7 +106,6 @@ export const SegmentNode: NodeDefinition = withParamSockets({
     mode: { label: 'Find', type: 'select', section: FIND, hint: 'People: everyone in the picture. Objects: the kinds you choose. Click: what is under the point you pick.', options: [
       { value: 'people', label: 'People' }, { value: 'objects', label: 'Objects' }, { value: 'click', label: 'Click (pick a point)' },
     ] },
-    classes: { label: 'Kinds', type: 'string', section: FIND, showWhen: { param: 'mode', value: 'objects' }, hint: 'Which kinds of object, comma-separated: person, cat, dog, bird, horse, car, bus, bicycle, bottle, chair, sofa, tv… (pick them on the card).' },
     pointX: { label: 'Point X', type: 'float', min: 0, max: 1, step: 0.001, section: FIND, compileTime: true, showWhen: { param: 'mode', value: 'click' }, hint: 'Where to find the object, across the picture (0 left, 1 right). Pick on the card sets it.' },
     pointY: { label: 'Point Y', type: 'float', min: 0, max: 1, step: 0.001, section: FIND, compileTime: true, showWhen: { param: 'mode', value: 'click' }, hint: 'Up the picture (0 bottom, 1 top).' },
     follow: { label: 'Follow', type: 'bool', section: FIND, showWhen: { param: 'mode', value: 'click' }, hint: 'In a moving picture, look next frame where the object is now (the middle of its mask), so it stays selected as it moves.' },

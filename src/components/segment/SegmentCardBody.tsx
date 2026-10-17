@@ -8,7 +8,7 @@ import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { useTokens } from '../../theme/themeStore';
 import type { GraphNode } from '../../types/nodeGraph';
 import { segmentEngine, type SegmentStatus } from '../../lib/segment/engine';
-import { SEGMENT_CLASSES, segmentBakeOf, segmentClassesOf, segmentModeOf } from '../../nodes/definitions/segment';
+import { SEGMENT_CLASSES, SEGMENT_CLASS_GROUPS, segmentBakeOf, segmentClassesOf, segmentModeOf } from '../../nodes/definitions/segment';
 import { armPreviewPick, cancelPreviewPick, onPreviewPickChange, previewPickOwner } from '../../lib/previewPick';
 import { Button } from '../ui/Button';
 
@@ -35,6 +35,7 @@ export function SegmentCardBody({ node }: { node: GraphNode }) {
   const line = { fontSize: 11.5, color: tk.text.muted, lineHeight: 1.45 } as const;
   const [bake, setBake] = useState<{ done: number; total: number; abort: AbortController } | null>(null);
   const [msg, setMsg] = useState('');
+  const [adding, setAdding] = useState(false);
   const baked = segmentBakeOf(node);
   const playsBake = node.params.update === 'baked';
   const startBake = async () => {
@@ -66,16 +67,44 @@ export function SegmentCardBody({ node }: { node: GraphNode }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '2px 0 4px' }}>
       <div style={{ ...line, color: st.state === 'error' ? tk.status.danger : tk.text.muted }}>{text}</div>
       {mode === 'objects' && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-          {SEGMENT_CLASSES.map(c => {
-            const on = chosen.has(c.key);
-            return (
-              <button key={c.key} type="button" onClick={() => toggle(c.key)} aria-pressed={on}
-                style={{ font: 'inherit', fontSize: 11, padding: '2px 7px', borderRadius: 999, cursor: 'pointer', border: `1px solid ${on ? tk.ink.base : tk.border.default}`, background: on ? tk.ink.base : 'transparent', color: on ? tk.ink.text : tk.text.primary }}>
-                {c.label}
-              </button>
-            );
-          })}
+        // The kinds it finds as chips (× takes one off), and + Add opening the rest, grouped: not all twenty at once
+        <div data-segment-kinds style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+            {[...chosen].map(k => {
+              const c = SEGMENT_CLASSES.find(x => x.key === k)!;
+              return (
+                <span key={k} data-segment-kind={k} style={{ display: 'inline-flex', alignItems: 'center', gap: 2, fontSize: 11, padding: '1px 3px 1px 8px', borderRadius: 999, background: tk.ink.base, color: tk.ink.text }}>
+                  {c.label}
+                  <button type="button" aria-label={`Stop finding ${c.label}`} onClick={() => toggle(k)}
+                    style={{ width: 16, height: 16, padding: 0, border: 0, borderRadius: 999, background: 'transparent', color: 'inherit', cursor: 'pointer', fontSize: 12, lineHeight: '16px' }}>×</button>
+                </span>
+              );
+            })}
+            {!chosen.size && <span style={line}>Nothing chosen: add a kind.</span>}
+            <button type="button" data-segment-add aria-expanded={adding} onClick={() => setAdding(a => !a)}
+              style={{ font: 'inherit', fontSize: 11, padding: '1px 8px', borderRadius: 999, cursor: 'pointer', border: `1px dashed ${tk.border.default}`, background: 'transparent', color: tk.text.secondary }}>
+              {adding ? 'Done' : '+ Add'}
+            </button>
+          </div>
+          {adding && (
+            <div data-segment-add-list style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '6px 8px', borderRadius: 6, border: `1px solid ${tk.border.subtle}` }}>
+              {SEGMENT_CLASS_GROUPS.map(g => (
+                <div key={g.label} style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 8px', alignItems: 'baseline' }}>
+                  <span style={{ fontSize: 10.5, color: tk.text.faint, width: '100%' }}>{g.label}</span>
+                  {g.keys.map(k => {
+                    const c = SEGMENT_CLASSES.find(x => x.key === k)!;
+                    const on = chosen.has(k);
+                    return (
+                      <button key={k} type="button" aria-pressed={on} onClick={() => toggle(k)}
+                        style={{ font: 'inherit', fontSize: 11.5, padding: 0, border: 0, background: 'none', cursor: 'pointer', color: on ? tk.ink.base : tk.text.primary, fontWeight: on ? 650 : 400 }}>
+                        {on ? '✓ ' : ''}{c.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
       {mode === 'click' && (
