@@ -101,8 +101,8 @@ describe('webmMuxer', () => {
 
 describe('desktop encoder (FFmpeg plumbing)', () => {
   it('starts FFmpeg with the bake codec at the frame size, sends raw frames, takes the file back', async () => {
-    const calls: { cmd: string; args?: Record<string, unknown> }[] = [];
-    const invoke = async <T,>(cmd: string, args?: Record<string, unknown>): Promise<T> => {
+    const calls: { cmd: string; args?: Record<string, unknown> | Uint8Array }[] = [];
+    const invoke = async <T,>(cmd: string, args?: Record<string, unknown> | Uint8Array): Promise<T> => {
       calls.push({ cmd, args });
       if (cmd === 'bake_temp_path') return '/tmp/playfield-bake-1-2.mp4' as T;
       if (cmd === 'bake_take_file') return new Uint8Array([0, 0, 0, 24, 102, 116, 121, 112]).buffer as T;
@@ -120,6 +120,8 @@ describe('desktop encoder (FFmpeg plumbing)', () => {
     // An alpha bake's frame is twice as tall (colour above alpha).
     expect(calls[1]).toEqual({ cmd: 'start_ffmpeg_encode', args: { outputPath: '/tmp/playfield-bake-1-2.mp4', width: 64, height: 72, fps: 30, codec: 'bake', audioWav: null } });
     expect(calls.filter(c => c.cmd === 'send_frame_rgba')).toHaveLength(plan.frames);
+    // Each frame is the request's raw body (binary), never wrapped in an object (Tauri would send that as JSON numbers).
+    expect(calls.filter(c => c.cmd === 'send_frame_rgba').every(c => c.args === frame)).toBe(true);
     expect(calls.slice(-2).map(c => c.cmd)).toEqual(['stop_ffmpeg_encode', 'bake_take_file']);
   });
 

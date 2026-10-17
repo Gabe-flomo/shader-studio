@@ -26,7 +26,7 @@ export interface BakeEncoder {
 
 export const inDesktopApp = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
-type Invoke = <T>(cmd: string, args?: Record<string, unknown>) => Promise<T>;
+type Invoke = <T>(cmd: string, args?: Record<string, unknown> | Uint8Array) => Promise<T>;
 
 /** The desktop encoder: FFmpeg reading raw frames, into a temporary file the app takes afterwards. */
 export async function desktopEncoder(plan: BakePlan, invoke?: Invoke): Promise<BakeEncoder> {
@@ -36,7 +36,8 @@ export async function desktopEncoder(plan: BakePlan, invoke?: Invoke): Promise<B
   let open = true;
   return {
     codec: 'h264', ext: 'mp4', mime: 'video/mp4',
-    addFrame: async (rgba) => { await call('send_frame_rgba', { data: rgba }); },
+    // The frame as the request's raw body: inside an object Tauri would send it as a JSON array of numbers.
+    addFrame: async (rgba) => { await call('send_frame_rgba', rgba); },
     finish: async () => {
       open = false;
       await call('stop_ffmpeg_encode');

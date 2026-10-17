@@ -106,10 +106,11 @@ export async function runFfmpegEncode(opts: FfmpegEncodeOptions): Promise<string
       // Read pixels into the reusable buffer
       opts.readPixels(pixelBuf, opts.width, opts.height);
 
-      // Send raw RGBA bytes to Rust → FFmpeg stdin.
-      // Pass the Uint8Array directly — Tauri v2 transfers typed arrays as binary
-      // (no Array.from conversion needed, which was an O(n) copy per frame).
-      await invoke('send_frame_rgba', { data: pixelBuf });
+      // Send raw RGBA bytes to Rust → FFmpeg stdin, as the request's body. Only a typed array passed as the whole
+      // payload travels as binary: one inside an object ({ data: pixelBuf }) is turned into a JSON array of numbers
+      // (Tauri's process-ipc-message-fn: Array.from + JSON.stringify, then serde on the Rust side), about half a
+      // second a 1080p frame, which was most of an export's time.
+      await invoke('send_frame_rgba', pixelBuf);
 
       opts.onProgress?.(i / totalFrames, i, totalFrames);
 

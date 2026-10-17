@@ -130,8 +130,12 @@ export function setSetupParam(nodeId: string | undefined, patch: Record<string, 
   const now = Date.now();
   const fresh = burst.key !== key || now - burst.at > 1500;
   burst = { key, at: now };
-  if (fresh) undoManager.batch(st.nodes, () => st.updateNodeParams(nodeId, patch), { label, nodeIds: [nodeId] });
-  else undoManager.quietly(() => st.updateNodeParams(nodeId, patch));
+  // Immediate, as a card's own slider is: a slider whose uniform is compiled (Draw agents' camera, Size,
+  // Brightness…) reaches the picture this frame without a recompile, anything else compiles now. Without it
+  // every tick re-armed a 500 ms compile, so nothing moved while a slider was dragged (Distance, Angle,
+  // Orbit speed "did nothing") and each pause recompiled the whole agents spec.
+  if (fresh) undoManager.batch(st.nodes, () => st.updateNodeParams(nodeId, patch, { immediate: true }), { label, nodeIds: [nodeId] });
+  else undoManager.quietly(() => st.updateNodeParams(nodeId, patch, { immediate: true }));
 }
 
 /** A preset onto the group: its rule set (rescaled in 3D, a shape's Collide kept), one undo step. */

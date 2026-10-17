@@ -149,8 +149,20 @@ fn start_ffmpeg_encode(
 #[tauri::command]
 fn send_frame_rgba(
     state: State<FfmpegState>,
-    data: Vec<u8>,
+    request: tauri::ipc::Request<'_>,
 ) -> Result<(), String> {
+    // The frame is the request's raw body (invoke('send_frame_rgba', bytes)). A JSON body ({ data: [...] }) still
+    // works, but it costs a number per byte: half a second a 1080p frame turned into JSON and parsed back, which was
+    // most of an export's time (a 25 s export took ~700 s whatever its size).
+    let parsed;
+    let data: &[u8] = match request.body() {
+        tauri::ipc::InvokeBody::Raw(b) => b,
+        tauri::ipc::InvokeBody::Json(v) => {
+            let field = v.get("data").cloned().unwrap_or(serde_json::Value::Null);
+            parsed = serde_json::from_value::<Vec<u8>>(field).map_err(|e| e.to_string())?;
+            &parsed
+        }
+    };
     let mut guard = state.0.lock().map_err(|e| e.to_string())?;
     let session   = guard.as_mut().ok_or("No active FFmpeg session")?;
 
@@ -162,7 +174,7 @@ fn send_frame_rgba(
         ));
     }
 
-    session.stdin.write_all(&data).map_err(|e| format!("FFmpeg stdin write error: {e}"))?;
+    session.stdin.write_all(data).map_err(|e| format!("FFmpeg stdin write error: {e}"))?;
     Ok(())
 }
 

@@ -12,7 +12,8 @@
  * The pure work is sceneBuilder2d/blocks.ts and blockLibrary.ts; this is the form.
  */
 import { ExprLineInput } from '../builders/ExprLineInput';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { PhoneStudioContext } from '../builders/studio/PhoneStudio';
 import {
   BLOCK_OPS, BLOCK_TARGETS, COMBINE_MODES, LOOP_BLOCK_NAMES, MAX_LINES, MAX_LOOP_TIMES, MAX_TIMES, TRAP_KINDS, blockMap, checkBlock, clampTimes, emptyLine, paramNameProblem, rangeFor,
   type BlockOp, type BlockTarget, type CombineMode, type CombineSpec, type SpaceBlock, type TrapKind,
@@ -55,14 +56,33 @@ export function SpaceView({ ops, upTo, hoverName }: { ops: SpaceOp[]; upTo: numb
   const [t, setT] = useState(0);
   const shown = upTo === null ? ops : ops.slice(0, upTo);
   const key = useMemo(() => JSON.stringify([shown, t]), [shown, t]);
-  const size = 196;
+  // On a phone (the builder's bottom sheet, components/builders/studio/PhoneStudio.tsx) the sheet is only part of
+  // the screen: a sticky 196 px picture with its notes beside it filled all of it, with nothing to fold it away.
+  // There it scrolls with the blocks, sits above its notes, and folds to one line.
+  const phone = useContext(PhoneStudioContext);
+  const [folded, setFolded] = useState(false);
+  const size = phone ? 150 : 196;
+  if (phone && folded) {
+    return (
+      <div data-space-view data-space-view-folded style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 12px', borderRadius: radius.card, background: tk.bg.field }}>
+        <b style={{ flex: 1, fontSize: 14, fontWeight: 650 }}>Space <span style={{ fontWeight: 500, fontSize: 12, color: tk.text.muted }}>{ops.length ? `· ${ops.length} transform${ops.length === 1 ? '' : 's'}` : ''}</span></b>
+        <Button size="sm" data-space-view-toggle onClick={() => setFolded(false)}>Show the grid</Button>
+      </div>
+    );
+  }
   return (
-    // Sticky: the picture stays in view while the blocks scroll under it (hover one to see the space after it).
-    <div data-space-view style={{ position: 'sticky', top: 0, zIndex: 2, margin: '-14px -16px 0', padding: '14px 16px 10px', background: tk.bg.panel, boxShadow: `0 1px 0 ${tk.border.subtle}` }}>
-    <div style={{ display: 'flex', gap: 14, alignItems: 'stretch', padding: 12, borderRadius: radius.card, background: tk.bg.field }}>
+    // Sticky (not on a phone): the picture stays in view while the blocks scroll under it (hover one to see the space after it).
+    <div data-space-view style={phone ? {} : { position: 'sticky', top: 0, zIndex: 2, margin: '-14px -16px 0', padding: '14px 16px 10px', background: tk.bg.panel, boxShadow: `0 1px 0 ${tk.border.subtle}` }}>
+    <div style={{ display: 'flex', flexDirection: phone ? 'column' : 'row', gap: phone ? 8 : 14, alignItems: phone ? 'center' : 'stretch', padding: 12, borderRadius: radius.card, background: tk.bg.field }}>
+      {phone && (
+        <span style={{ display: 'flex', alignItems: 'center', alignSelf: 'stretch', gap: 8 }}>
+          <b style={{ flex: 1, fontSize: 14, fontWeight: 650 }}>Space</b>
+          <Button size="sm" data-space-view-toggle onClick={() => setFolded(true)}>Hide the grid</Button>
+        </span>
+      )}
       <WarpCanvas map={() => stackMap(shown, t)} k={key} size={size} title="The space as a grid: every shape below looks from here" />
-      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <b style={{ fontSize: 14, fontWeight: 650 }}>Space</b>
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8, alignSelf: 'stretch' }}>
+        {!phone && <b style={{ fontSize: 14, fontWeight: 650 }}>Space</b>}
         <BuilderNote>
           {upTo !== null
             ? <>After <b>{hoverName}</b>: the grid as the transforms up to and including it leave it.</>
