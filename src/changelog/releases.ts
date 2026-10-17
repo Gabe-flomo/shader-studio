@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.248',
+    date: '2026-10-17',
+    title: "Curves",
+    highlights: [
+      { area: 'Studio', text: "Curves: drag points on Master, Red, Green, Blue and Alpha curves like After Effects; presets for contrast, invert, posterize and cross-process." },
+      { area: 'Studio', text: "Threshold: a soft or hard mask from brightness or one channel, with Level, Softness and Invert." },
+    ],
+  },
+  {
     id: '2026.10.247',
     date: '2026-10-17',
     title: "Measure shapes",
