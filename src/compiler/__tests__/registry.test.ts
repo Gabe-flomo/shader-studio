@@ -68,6 +68,11 @@ const CONNECTION_GATED = new Set([
   'textureFlow.reach', 'textureNeighbours.spacing', 'textureChange.amount', 'textureChange.level', 'textureChange.width', 'readTexture.flowAmount',
   // Feedback (texture)'s Flow strength needs a Flow, as Read's does (its step is the same Read)
   'textureFeedback.flowAmount', 'textureFeedbackStep.flowAmount',
+  // The Audio effects' numbers are uniforms so Play can drive them; lib/audioTools/engine.ts reads them (through the
+  // input bus) for Web Audio, and an exported page from the uniform table, never the shader.
+  'audioFilter.frequency', 'audioFilter.q', 'audioFilter.gain',
+  'audioResonator.root', 'audioResonator.decay', 'audioResonator.brightness', 'audioResonator.mix',
+  'audioSpectral.amount', 'audioSpectral.threshold', 'audioSpectral.mix',
   // The Agents engine reads these from the uniform table (lib/agentRunner.ts), not the picture's shader
   'trailField.diffuse', 'trailField.halfLife',
   'drawAgents.size', 'drawAgents.brightness', 'drawAgents.glow', 'drawAgents.colorA', 'drawAgents.colorB',

@@ -20,9 +20,11 @@
  *             normalize }) makes the page reconnect to a live feed and add its rows (needs the network)
  *   media:  { textures: { uniform: { src } }, videos: { uniform: { src, loop, speed, clip? } },
  *             audio: [{ id, src, uniforms, bands, range, mode }],   (src: a data URL, or null)
- *             audioTools?: { sources: [{ id, kind: 'file' | 'video', src, video?, playing, loop, trimIn, trimOut, gain, bands, sounds }],
+ *             audioTools?: { sources: [{ id, kind: 'file' | 'video', src, video?, playing, loop, trimIn, trimOut, gain, bands, sounds, quiet? }],
+ *               effects?: [{ id, upstreamId, rootId, heard, spec, w, h, drive }],
  *               listeners: [{ id, sourceId, spec, w, h }], uniforms: { uniform: '<id>::<channel>' }, textures: { sampler: id } } }
  *             the Audio nodes (docs/audio-tools.md): run once a frame with the app's own sums (kit/audioTools.js);
+ *             the effects (Filter, Resonator bank, Spectral) with the app's own Web Audio graph (kit/audioChain.js);
  *             a player shows "Tap to start sound" (browsers start sound after a gesture); any click or key starts it too
  *   play.display.source 'image' | 'video' | 'colour': that background (display.image,
  *             display.video, display.backdrop) in place of the shader, which then never
@@ -2512,9 +2514,22 @@ void main() {
     // own sums (kit/audioTools.js) fill the nodes' uniforms and textures. Sound starts on the visitor's first tap.
     const ATK = typeof SSKit !== 'undefined' && SSKit.audioTools ? SSKit.audioTools : null;
     const atCfg = ATK && !follow && media.audioTools ? media.audioTools : null;
-    const at = { ctx: null, out: null, started: false, srcs: new Map(), lis: [], byKey: new Map(), last: 0, silentF: new Float32Array(1024).fill(-200), silentW: new Float32Array(2048) };
+    const at = { ctx: null, out: null, started: false, srcs: new Map(), fx: new Map(), lis: [], byKey: new Map(), last: 0, silentF: new Float32Array(1024).fill(-200), silentW: new Float32Array(2048) };
+    const ACH = ATK && ATK.chain ? ATK.chain : null;
     if (atCfg) {
-      for (const c of atCfg.sources) at.srcs.set(c.id, { cfg: c, st: ATK.newSource(), probe: null, freq: new Float32Array(1024), wave: new Float32Array(2048), sr: 48000, active: false, level: 0, time: 0, node: null, el: null, startedAt: 0, win: null });
+      for (const c of atCfg.sources) at.srcs.set(c.id, { cfg: c, st: ATK.newSource(), probe: null, out: null, freq: new Float32Array(1024), wave: new Float32Array(2048), sr: 48000, active: false, level: 0, time: 0, node: null, el: null, startedAt: 0, win: null });
+      // The effects (kit/audioChain.js): built on the first tap with the sources, each fed by the sound it takes.
+      if (ACH) for (const e of atCfg.effects || []) {
+        const run = ACH.newRun(e.spec);
+        let tex = null;
+        const sampler = Object.keys(atCfg.textures).find(k => atCfg.textures[k] === e.id) || null;
+        if (sampler && run.data) {
+          tex = texture(gl.NEAREST, null);
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, run.w, run.h, 0, gl.RGBA, gl.UNSIGNED_BYTE, run.data);
+          imageTex.set(sampler, tex);
+        }
+        at.fx.set(e.id, { cfg: e, spec: Object.assign({}, e.spec), run, tex, fx: null, active: false, freq: run.freq, wave: run.wave, sr: 48000 });
+      }
       for (const u in atCfg.uniforms) { const k = atCfg.uniforms[u]; if (!at.byKey.has(k)) at.byKey.set(k, []); at.byKey.get(k).push(u); uniformValues[u] = 0; }
       for (const l of atCfg.listeners) {
         const run = ATK.newListener(l.spec.type, l.w, l.h);
@@ -2542,6 +2557,11 @@ void main() {
         if (!c.playing) continue;
         const probe = at.ctx.createAnalyser(); probe.fftSize = 2048; probe.smoothingTimeConstant = 0;
         s.sr = at.ctx.sampleRate;
+        // Its sound comes out here: read by the probe, taken by its effects, and played unless an effect is heard instead.
+        const out = at.ctx.createGain();
+        out.connect(probe);
+        if (!c.quiet) out.connect(at.out);
+        s.out = out;
         if (c.kind === 'file' && c.src) {
           at.ctx.decodeAudioData(dataBytes(c.src).buffer).then(buf => {
             if (!alive) return;
@@ -2550,7 +2570,7 @@ void main() {
             let b = c.trimOut > 0 ? Math.min(c.trimOut, d) : d;
             b = Math.max(b, Math.min(d, a + 0.05));
             const src = at.ctx.createBufferSource(); src.buffer = buf; src.loop = c.loop; src.loopStart = a; src.loopEnd = b;
-            src.connect(probe); src.connect(at.out);
+            src.connect(out);
             if (c.loop) src.start(0, a); else src.start(0, a, b - a);
             s.node = src; s.probe = probe; s.startedAt = at.ctx.currentTime; s.win = { a, b };
           }, () => { /* not decodable in this browser */ });
@@ -2559,12 +2579,29 @@ void main() {
           if (!v || !v.el) continue;
           try {
             const me = at.ctx.createMediaElementSource(v.el);
-            me.connect(probe); me.connect(at.out);
+            me.connect(out);
             v.el.muted = false;
             s.node = me; s.el = v.el; s.probe = probe;
           } catch (e) { /* this element's sound is taken */ }
         }
       }
+      // Each effect after the sound it takes (a source's, or another effect's built first), heard when the app's rule says.
+      const fxOut = (id, depth) => {
+        const s = at.srcs.get(id);
+        if (s) return s.out;
+        const f = at.fx.get(id);
+        if (!f || depth > 32) return null;
+        if (!f.fx) {
+          const from = fxOut(f.cfg.upstreamId, depth + 1);
+          if (!from) return null;
+          f.fx = ACH.build(at.ctx, f.spec);
+          from.connect(f.fx.input);
+          if (f.cfg.heard) f.fx.output.connect(at.out);
+          f.sr = at.ctx.sampleRate;
+        }
+        return f.fx.output;
+      };
+      for (const id of at.fx.keys()) fxOut(id, 0);
       if (at.ctx.state === 'suspended' && playing) at.ctx.resume();
       if (atTap) { atTap.remove(); atTap = null; }
     }
@@ -2592,8 +2629,21 @@ void main() {
         put(id + '::time', s.time);
         ATK.stepSource(s.st, c.bands, c.sounds, s.freq, s.sr, nowMs / 1000, dt, (ch, v) => put(id + '::' + ch, v));
       }
+      // The effects: their numbers (a Play control on the page moves them through their uniforms), sound and texture.
+      for (const f of at.fx.values()) {
+        const e = f.cfg, root = e.rootId ? at.srcs.get(e.rootId) : null;
+        for (const k in e.drive) { const v = uniformValues[e.drive[k]]; if (typeof v === 'number' && k in f.spec && typeof f.spec[k] === 'number') f.spec[k] = v; }
+        if (f.fx) f.fx.update(f.spec);
+        f.active = !!(f.fx && root && root.active);
+        const changed = ACH.step(f.run, f.fx, f.spec, f.active, dt, (ch, v) => put(e.id + '::' + ch, v));
+        f.sr = f.run.sr;
+        if (changed && f.tex) {
+          gl.bindTexture(gl.TEXTURE_2D, f.tex);
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, f.run.w, f.run.h, 0, gl.RGBA, gl.UNSIGNED_BYTE, f.run.data);
+        }
+      }
       for (const l of at.lis) {
-        const s = l.cfg.sourceId ? at.srcs.get(l.cfg.sourceId) : null;
+        const s = l.cfg.sourceId ? (at.srcs.get(l.cfg.sourceId) || at.fx.get(l.cfg.sourceId)) : null;
         const on = !!(s && s.active);
         const changed = ATK.stepListener(l.run, l.cfg.spec, on ? s.freq : at.silentF, on ? s.wave : at.silentW, s ? s.sr : 48000, on, nowMs, dt, (ch, v) => put(l.cfg.id + '::' + ch, v));
         if (changed && l.tex) {
@@ -3397,7 +3447,11 @@ void main() {
         if (!atCfg) return null;
         const uniforms = {};
         for (const u in atCfg.uniforms) uniforms[u] = uniformValues[u];
-        return { started: at.started, state: at.ctx ? at.ctx.state : 'none', sources: [...at.srcs.values()].map(s => ({ id: s.cfg.id, kind: s.cfg.kind, active: s.active, level: s.level, time: s.time })), uniforms };
+        return {
+          started: at.started, state: at.ctx ? at.ctx.state : 'none', sources: [...at.srcs.values()].map(s => ({ id: s.cfg.id, kind: s.cfg.kind, active: s.active, level: s.level, time: s.time })),
+          effects: [...at.fx.values()].map(f => ({ id: f.cfg.id, type: f.cfg.spec.type, built: !!f.fx, ready: !!(f.fx && f.fx.ready), heard: f.cfg.heard, active: f.active, level: f.run.level })),
+          uniforms,
+        };
       },
       usesCamera,
       // Replace one Script layer's code in this mount: it compiles and starts over on the next frame.

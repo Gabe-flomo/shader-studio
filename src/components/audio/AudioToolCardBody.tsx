@@ -13,9 +13,10 @@ import type { GraphNode } from '../../types/nodeGraph';
 import { audioToolsEngine, type AudioReadout } from '../../lib/audioTools/engine';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import {
-  AUDIO_BAND_TYPE, AUDIO_HIT_TYPE, AUDIO_SOURCE_TYPE, AUDIO_SPECTROGRAM_TYPE, AUDIO_SPECTRUM_TYPE, AUDIO_WAVEFORM_TYPE, audioSourceKind,
-  isAudioVideoNode, type AudioSourceKind,
+  AUDIO_BAND_TYPE, AUDIO_FILTER_TYPE, AUDIO_HIT_TYPE, AUDIO_RESONATOR_TYPE, AUDIO_SOURCE_TYPE, AUDIO_SPECTRAL_TYPE, AUDIO_SPECTROGRAM_TYPE, AUDIO_SPECTRUM_TYPE,
+  AUDIO_WAVEFORM_TYPE, audioSourceKind, effectSpecOf, isAudioFxType, isAudioVideoNode, type AudioSourceKind,
 } from '../../nodes/definitions/audioTools';
+import { acBiquadCoeffs, acBiquadMag, acNoteName, acResonatorNotes } from '../../play/kit/audioChain.js';
 import { liveAudio } from '../../lib/liveAudio';
 import { bandsOf, type AudioBandSpec } from '../../lib/audioTools/bands';
 import { xOfHz } from '../../lib/audioTools/dsp';
@@ -54,11 +55,66 @@ function drawSource(g: CanvasRenderingContext2D, w: number, h: number, r: AudioR
   g.fillStyle = ACCENT; g.fillRect(0, h - meter, w * r.level, meter);
 }
 
-function draw(type: string, g: CanvasRenderingContext2D, w: number, h: number, r: AudioReadout, img: { data: ImageData | null; hold?: Float32Array }, bands: readonly AudioBandSpec[]) {
+/** Frequency across a card, log 20 Hz – 20 kHz. */
+const hzAtX = (x: number) => 20 * Math.pow(1000, Math.max(0, Math.min(1, x)));
+const xOfHzCard = (hz: number) => Math.log(Math.max(20, hz) / 20) / Math.log(1000);
+const label = (g: CanvasRenderingContext2D, text: string, x: number, y: number, align: CanvasTextAlign = 'left') => {
+  g.fillStyle = '#cdd6f4'; g.font = '10px system-ui, sans-serif'; g.textAlign = align; g.textBaseline = 'top'; g.fillText(text, x, y);
+};
+
+/** Filter's card: its response (0 dB in the middle, ±24 dB), filled as loud as the sound coming out, and its Frequency. */
+function drawFilter(g: CanvasRenderingContext2D, w: number, h: number, r: AudioReadout, P: Record<string, unknown>) {
+  const spec = effectSpecOf({ id: '', type: AUDIO_FILTER_TYPE, params: P } as unknown as GraphNode);
+  const c = acBiquadCoeffs(spec.filterType, spec.frequency, spec.q, spec.gain, 48000);
+  const yOf = (db: number) => h / 2 - (Math.max(-24, Math.min(24, db)) / 24) * (h / 2 - 3);
+  g.fillStyle = DIM; g.fillRect(0, h / 2, w, 1);
+  g.beginPath(); g.moveTo(0, h);
+  for (let x = 0; x <= w; x += 2) g.lineTo(x, yOf(20 * Math.log10(Math.max(1e-6, acBiquadMag(c, hzAtX(x / w), 48000)))));
+  g.lineTo(w, h); g.closePath();
+  g.fillStyle = `rgba(180,190,254,${0.12 + 0.6 * r.level})`; g.fill();
+  g.beginPath();
+  for (let x = 0; x <= w; x += 2) { const y = yOf(20 * Math.log10(Math.max(1e-6, acBiquadMag(c, hzAtX(x / w), 48000)))); if (x) g.lineTo(x, y); else g.moveTo(x, y); }
+  g.strokeStyle = ACCENT; g.lineWidth = 1.5; g.stroke();
+  const fx = xOfHzCard(spec.frequency) * w;
+  g.fillStyle = HIT; g.fillRect(fx - 0.5, 0, 1, h);
+  const hz = spec.frequency >= 1000 ? `${(spec.frequency / 1000).toFixed(spec.frequency >= 10000 ? 0 : 1)} kHz` : `${Math.round(spec.frequency)} Hz`;
+  label(g, hz, fx > w - 50 ? fx - 4 : fx + 4, 2, fx > w - 50 ? 'right' : 'left');
+}
+
+/** Resonator bank's card: a bar per resonator (its note under it), the loudest outlined. */
+function drawResonator(g: CanvasRenderingContext2D, w: number, h: number, r: AudioReadout, P: Record<string, unknown>) {
+  const spec = effectSpecOf({ id: '', type: AUDIO_RESONATOR_TYPE, params: P } as unknown as GraphNode);
+  const notes = acResonatorNotes(spec.root, spec.scale, spec.count), n = notes.length;
+  const bw = w / n, bh = h - 13;
+  for (let k = 0; k < n; k++) {
+    const e = r.row?.[k] ?? 0, x = k * bw;
+    g.fillStyle = `hsla(${(k / n) * 300}, 70%, 70%, 0.18)`; g.fillRect(x + 1, 0, bw - 2, bh);
+    g.fillStyle = `hsl(${(k / n) * 300}, 70%, ${45 + 25 * e}%)`; g.fillRect(x + 1, bh - e * bh, bw - 2, e * bh);
+    if (k === r.count && e > 0.02) { g.strokeStyle = HIT; g.lineWidth = 1.5; g.strokeRect(x + 1.5, 0.75, bw - 3, bh - 1.5); }
+    label(g, spec.scale === 'harmonic' ? `×${k + 1}` : acNoteName(notes[k]), x + bw / 2, bh + 2, 'center');
+  }
+}
+
+function draw(type: string, g: CanvasRenderingContext2D, w: number, h: number, r: AudioReadout, img: { data: ImageData | null; hold?: Float32Array }, bands: readonly AudioBandSpec[], P: Record<string, unknown>) {
   g.fillStyle = BG;
   g.fillRect(0, 0, w, h);
   switch (type) {
     case AUDIO_SOURCE_TYPE: drawSource(g, w, h, r, bands, img); return;
+    case AUDIO_FILTER_TYPE: drawFilter(g, w, h, r, P); return;
+    case AUDIO_RESONATOR_TYPE: drawResonator(g, w, h, r, P); return;
+    case AUDIO_SPECTRAL_TYPE: {
+      const row = r.row;
+      if (row?.length) {
+        g.fillStyle = ACCENT;
+        const bw = w / row.length;
+        for (let i = 0; i < row.length; i++) { const v = row[i] * (h - 4); g.fillRect(i * bw, h - 3 - v, Math.max(1, bw - (bw > 3 ? 1 : 0)), v); }
+      }
+      g.fillStyle = DIM; g.fillRect(0, h - 2, w, 2);
+      g.fillStyle = ACCENT; g.fillRect(0, h - 2, w * r.level, 2);
+      const mode = P.mode === 'blur' ? 'Blur' : P.mode === 'gate' ? 'Gate' : P.freeze === true ? 'Frozen' : 'Freeze off';
+      label(g, mode, w - 4, 2, 'right');
+      return;
+    }
     case AUDIO_BAND_TYPE: {
       g.fillStyle = DIM; g.fillRect(0, 2, w, h - 4);
       g.fillStyle = ACCENT; g.fillRect(0, 2, w * r.level, h - 4);
@@ -123,8 +179,22 @@ function Readout({ node }: { node: GraphNode }) {
   useEffect(() => { bandsRef.current = bands; }, [bands]);
   // Bands moved while nothing plays: draw again.
   const bandsKey = bands.map(b => `${b.lo}-${b.hi}-${b.color}`).join(',');
-  const tall = node.type === AUDIO_SOURCE_TYPE || node.type === AUDIO_SPECTRUM_TYPE || node.type === AUDIO_WAVEFORM_TYPE || node.type === AUDIO_SPECTROGRAM_TYPE;
-  const height = node.type === AUDIO_SPECTROGRAM_TYPE ? 72 : tall ? 48 : node.type === AUDIO_HIT_TYPE ? 22 : 10;
+  // An effect's card draws its settings too (the Filter's curve, the bank's notes): a change draws again.
+  const paramsRef = useRef(node.params);
+  useEffect(() => { paramsRef.current = node.params; }, [node.params]);
+  const fx = isAudioFxType(node.type);
+  const paramsKey = fx ? JSON.stringify(node.params) : '';
+  const tall = node.type === AUDIO_SOURCE_TYPE || node.type === AUDIO_SPECTRUM_TYPE || node.type === AUDIO_WAVEFORM_TYPE || node.type === AUDIO_SPECTROGRAM_TYPE || fx;
+  const height = node.type === AUDIO_SPECTROGRAM_TYPE ? 72 : node.type === AUDIO_FILTER_TYPE || node.type === AUDIO_RESONATOR_TYPE ? 60 : tall ? 48 : node.type === AUDIO_HIT_TYPE ? 22 : 10;
+  // The Filter's curve is a log slider: drag across it to sweep Frequency evenly through the octaves.
+  const dragFreq = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (node.type !== AUDIO_FILTER_TYPE || (e.type === 'pointermove' && !(e.buttons & 1))) return;
+    e.stopPropagation();
+    if (e.type === 'pointerdown') e.currentTarget.setPointerCapture(e.pointerId);
+    const r = e.currentTarget.getBoundingClientRect();
+    const hz = Math.round(hzAtX((e.clientX - r.left) / Math.max(1, r.width)));
+    useNodeGraphStore.getState().updateNodeParams(node.id, { frequency: hz }, { immediate: true });
+  };
   useEffect(() => {
     const c = ref.current;
     if (!c) return;
@@ -143,10 +213,15 @@ function Readout({ node }: { node: GraphNode }) {
       const g = c.getContext('2d');
       if (!g) return;
       g.setTransform(dpr, 0, 0, dpr, 0, 0);
-      draw(node.type, g, w, h, r, img, bandsRef.current);
+      draw(node.type, g, w, h, r, img, bandsRef.current, paramsRef.current);
     });
-  }, [node.id, node.type, height, bandsKey]);
-  return <canvas ref={ref} style={{ width: '100%', height, display: 'block', borderRadius: 4 }} />;
+  }, [node.id, node.type, height, bandsKey, paramsKey]);
+  const filter = node.type === AUDIO_FILTER_TYPE;
+  return (
+    <canvas ref={ref} style={{ width: '100%', height, display: 'block', borderRadius: 4, cursor: filter ? 'ew-resize' : undefined, touchAction: filter ? 'none' : undefined }}
+      title={filter ? 'Drag across to sweep the Frequency (log: even through the octaves)' : undefined} data-audio-readout={node.type}
+      onPointerDown={filter ? dragFreq : undefined} onPointerMove={filter ? dragFreq : undefined} onMouseDown={filter ? e => e.stopPropagation() : undefined} />
+  );
 }
 
 // ── Audio Source's controls ────────────────────────────────────────────────────────────────────────────────

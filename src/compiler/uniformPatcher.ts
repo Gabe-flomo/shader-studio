@@ -23,7 +23,9 @@ export const SKIP_UNIFORM_TYPES = new Set([
   // per-frame uniforms written by the input bus, not params.
   'midiInput',
   // The Audio nodes (nodes/definitions/audioTools.ts): every setting is read by lib/audioTools/engine.ts.
-  'audioSource', 'audioBand', 'audioHit', 'audioSpectrum', 'audioSpectrogram', 'audioWaveform',
+  'audioSource', 'audioBand', 'audioHit', 'audioSpectrum', 'audioWaveform',
+  // (Spectrogram is not here: its Field's Scale, Offset and Gain are uniforms. The effects (Filter, Resonator bank,
+  // Spectral) neither: their numbers are uniforms too, so Play can drive them; lib/audioTools/engine.ts reads them.)
   // scope: min/max are read by ShaderCanvas (JS) to scale the waveform probe; the
   // node emits no GLSL of its own, so a uniform would be declared and never read.
   'scope',

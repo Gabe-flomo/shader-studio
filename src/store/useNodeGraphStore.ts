@@ -13,7 +13,8 @@ import { retypeReadNeighbours } from '../nodes/definitions/readNeighbours';
 import { retypeTrailField } from '../nodes/definitions/agents';
 import { retypeShuffle } from '../nodes/definitions/channelTools';
 import { retypeGlitch } from '../nodes/definitions/glitch';
-import { retypeAudioSource } from '../nodes/definitions/audioTools';
+import { AUDIO_FX_COMPILE_KEYS, isAudioFxType, retypeAudioSource } from '../nodes/definitions/audioTools';
+import { findNodeDeep } from '../lib/audioTools/graphWalk';
 import { audioToolsForWeb } from '../lib/audioTools/webExport';
 import { migrateNodeParams, GROUP_PORT_SENTINEL } from '../types/nodeGraph';
 import { LAYOUT_VERSION, needsLayoutSpread, spreadLegacyLayout } from './legacyLayout';
@@ -1765,7 +1766,7 @@ export function switchScopeFor(state: Pick<NodeGraphState, 'nodes' | 'activeGrou
  * picture (encoded from its decoded canvas), and the videos and songs
  * mediaSources.ts kept when they were loaded.
  */
-function webMedia(st: Pick<NodeGraphState, 'nodes' | 'textureUniforms' | 'nodeTextures' | 'videoUniforms' | 'audioUniforms' | 'play' | 'liveUniforms'>): PlayMedia {
+function webMedia(st: Pick<NodeGraphState, 'nodes' | 'textureUniforms' | 'nodeTextures' | 'videoUniforms' | 'audioUniforms' | 'play' | 'liveUniforms' | 'paramBindings'>): PlayMedia {
   const byId = new Map(st.nodes.map(n => [n.id, n]));
   const labelOf = (id: string, fallback: string) => {
     const n = byId.get(id);
@@ -1773,7 +1774,7 @@ function webMedia(st: Pick<NodeGraphState, 'nodes' | 'textureUniforms' | 'nodeTe
     return own || (n && getNodeDefinition(n.type)?.label) || fallback;
   };
   // The Audio nodes (docs/audio-tools.md): the page runs them with the app's own sums, filling their textures itself.
-  const audioTools = audioToolsForWeb({ nodes: st.nodes, liveUniforms: st.liveUniforms, textureUniforms: st.textureUniforms, videoUniforms: st.videoUniforms, mediaOf: mediaSource,
+  const audioTools = audioToolsForWeb({ nodes: st.nodes, liveUniforms: st.liveUniforms, textureUniforms: st.textureUniforms, videoUniforms: st.videoUniforms, paramBindings: st.paramBindings, mediaOf: mediaSource,
     labelOf: n => (typeof n.params.label === 'string' && n.params.label.trim()) || getNodeDefinition(n.type)?.label || 'Audio Source' });
   const textures: NonNullable<PlayMedia['textures']> = {};
   for (const [uniform, key] of Object.entries(st.textureUniforms)) {
@@ -4232,6 +4233,20 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     if (Object.keys(params).length > 0 && Object.keys(params).every(k => k.startsWith('__rand'))) return;
     // Read by a CPU engine each frame (the Audio Source's bands and trim): nothing to compile.
     if (options?.live) return;
+    // The Audio effects (Filter, Resonator bank, Spectral): lib/audioTools/engine.ts reads their settings every frame, so
+    // only a bank's Count (its texture's size) recompiles. Their numbers are uniforms too (Play and exported pages read
+    // them): keep those current.
+    const fxNode = findNodeDeep(get().nodes, nodeId);
+    if (fxNode && isAudioFxType(fxNode.type) && !Object.keys(params).some(k => AUDIO_FX_COMPILE_KEYS.has(k))) {
+      const { paramUniforms: cur, paramBindings: pb } = get();
+      const ups: Record<string, number> = {};
+      for (const [key, val] of Object.entries(params)) {
+        const u = pb[paramBindingKey(nodeId, key)];
+        if (typeof val === 'number' && u && u in cur) ups[u] = val;
+      }
+      if (Object.keys(ups).length) get().updateParamUniforms(ups);
+      return;
+    }
 
     // Optimisation: if every changed param already has a compiled uniform entry,
     // push the new values directly to ShaderCanvas via paramUniforms — no recompile.

@@ -16,23 +16,30 @@
  *   `sampleId`), so `sync` opens it again after a reload. Video: a Video node's element (lib/videoEngine.ts, or a
  *   Baked node's, lib/bakedVideos.ts) is routed through a MediaElementSource into the probe and on to the speakers.
  *
- * Nodes inside groups (plain, iterated, nested) are followed too (graphWalk.ts): an `audio` wire through a group's
+ * - Effects (Filter, Resonator bank, Spectral: play/kit/audioChain.js) take the sound of the node wired into them (a
+ *   source or another effect), built in its context; a listener wired to an effect hears what the effect made. What
+ *   plays: graphWalk.ts audioHearing (the last effect with Listen on in each chain; its source goes quiet).
+ *
+ * Nodes inside groups (plain, iterated, nested) are followed too (graphWalk.ts): an `audio` wire through a group
  * ports reaches its source, and every node is keyed by its own id, as the compiler binds it.
  */
 import * as THREE from 'three';
 import type { GraphNode } from '../../types/nodeGraph';
 import type { InputSource, InputWriter } from '../inputBus';
 import { inputBus } from '../inputBus';
-import { audioEngine } from '../audioEngine';
+import { audioEngine, trackChainId } from '../audioEngine';
+import { audioFxHost } from '../audioFx';
 import { liveAudio } from '../liveAudio';
 import { videoEngine } from '../videoEngine';
 import { bakedVideos } from '../bakedVideos';
 import { mediaElementSourceOf } from '../videoSound';
 import { getVideo } from '../backgroundLibrary';
 import {
-  AUDIO_HIT_TYPE, AUDIO_SOURCE_TYPE, AUDIO_TEXTURE_TYPES, audioSoundsOf, audioSourceKind, audioTextureSize, listenerSpecOf, type AudioSourceKind,
+  AUDIO_HIT_TYPE, AUDIO_SOURCE_TYPE, AUDIO_TEXTURE_TYPES, audioSoundsOf, audioSourceKind, audioTextureSize, effectSpecOf, isAudioFxType, listenerSpecOf,
+  type AudioSourceKind,
 } from '../../nodes/definitions/audioTools';
-import { collectAudioNodes, findNodeDeep } from './graphWalk';
+import { audioHearing, collectAudioNodes, findNodeDeep } from './graphWalk';
+import { acBuild, acNewRun, acStepEffect, acTextureSize, type AcEffect, type AcRun, type AcSpec } from '../../play/kit/audioChain.js';
 import { learnFromRing, learnFromSamples, newLearnListener, type AudioSoundSpec, type LearnListener, type LearnResult } from './learn';
 import { bandsOf, newBandRun, trimWindow, type AudioBandSpec, type BandRun } from './bands';
 import { atApplyGain, atNewListener, atStepListener, atStepSource, type AtListener } from '../../play/kit/audioTools.js';
@@ -78,6 +85,27 @@ interface SourceSlot {
   time: number;
   micSince: number;
   status: string;
+}
+
+/**
+ * An effect (Filter, Resonator bank, Spectral: play/kit/audioChain.js): its Web Audio nodes, built in the context of
+ * the sound it takes (`upstreamId`: a source or another effect), and its numbers and texture.
+ */
+interface FxSlot {
+  node: GraphNode;
+  upstreamId: string | null;
+  /** The Audio Source its chain starts at. */
+  rootId: string | null;
+  fx: AcEffect | null;
+  /** The upstream node the effect's input is connected to now. */
+  from: AudioNode | null;
+  /** Plays through the speakers (graphWalk audioHearing), and the way to take it off them. */
+  heard: boolean;
+  unplugOut: (() => void) | null;
+  spec: AcSpec;
+  run: AcRun;
+  tex: THREE.DataTexture | null;
+  active: boolean;
 }
 
 interface ListenSlot {
@@ -134,6 +162,11 @@ class AudioToolsEngine implements InputSource {
   private host: AudioToolsHost | null = null;
   private sources = new Map<string, SourceSlot>();
   private listeners = new Map<string, ListenSlot>();
+  private effects = new Map<string, FxSlot>();
+  /** Sources whose own sound is quiet because an effect after them is heard, and the file chains diverted for it. */
+  private dryMuted = new Set<string>();
+  private diverted = new Set<string>();
+  private sinks = new WeakMap<BaseAudioContext, GainNode>();
   private changeFns = new Set<() => void>();
   private lastTick = 0;
   private offBus: (() => void) | null = null;
@@ -146,6 +179,7 @@ class AudioToolsEngine implements InputSource {
     this.host = host;
     if (host) {
       for (const [id, l] of this.listeners) if (l.tex) host.setTexture(id, l.tex);
+      for (const [id, f] of this.effects) if (f.tex) host.setTexture(id, f.tex);
       this.offBus ??= inputBus.addSource(this);
     } else {
       this.offBus?.();
@@ -162,9 +196,11 @@ class AudioToolsEngine implements InputSource {
   readout(nodeId: string): AudioReadout | null {
     const s = this.sources.get(nodeId);
     if (s) return { level: s.level, peak: s.level, envelope: 0, count: 0, hitAt: 0, row: s.row, data: null, w: 0, h: 0, active: s.active };
+    const f = this.effects.get(nodeId);
+    if (f) { const r = f.run; return { level: r.level, peak: r.peak, envelope: 0, count: r.loudest, hitAt: 0, row: r.row, data: r.data, w: r.w, h: r.h, active: f.active }; }
     const l = this.listeners.get(nodeId);
     if (!l) return null;
-    const active = !!(l.sourceId && this.sources.get(l.sourceId)?.active);
+    const active = !!(l.sourceId && (this.sources.get(l.sourceId)?.active || this.effects.get(l.sourceId)?.active));
     const r = l.run;
     return {
       level: l.node.type === AUDIO_HIT_TYPE ? r.hit.strength : r.band.level, peak: r.band.peak, envelope: r.hit.envelope, count: r.hit.count,
@@ -194,20 +230,30 @@ class AudioToolsEngine implements InputSource {
     const audio = collectAudioNodes(nodes);
     const srcIds = new Set(audio.filter(r => r.node.type === AUDIO_SOURCE_TYPE).map(r => r.node.id));
     for (const [id, s] of this.sources) if (!srcIds.has(id)) this.dropSource(id, s);
-    for (const [id, l] of this.listeners) if (!audio.some(r => r.node.id === id && r.node.type !== AUDIO_SOURCE_TYPE)) this.dropListener(id, l);
-    // Sources first, so a listener finds its source's slot.
+    const isListener = (t: string) => t !== AUDIO_SOURCE_TYPE && !isAudioFxType(t);
+    for (const [id, l] of this.listeners) if (!audio.some(r => r.node.id === id && isListener(r.node.type))) this.dropListener(id, l);
+    for (const [id, f] of this.effects) if (!audio.some(r => r.node.id === id && isAudioFxType(r.node.type))) this.dropEffect(id, f);
+    // Sources first, then effects, so a listener finds the slot of the sound it takes.
     for (const r of audio) if (r.node.type === AUDIO_SOURCE_TYPE) this.syncSource(r.node);
-    for (const r of audio) if (r.node.type !== AUDIO_SOURCE_TYPE) this.syncListener(r.node, r.sourceId);
+    const hearing = audioHearing(audio, id => this.sources.get(id)?.kind ?? null);
+    this.dryMuted = hearing.dryMuted;
+    for (const r of audio) if (isAudioFxType(r.node.type)) this.syncEffect(r.node, r.sourceId, hearing.rootOf.get(r.node.id) ?? null, hearing.heard.has(r.node.id));
+    for (const r of audio) if (isListener(r.node.type)) this.syncListener(r.node, r.sourceId);
   }
 
   /** The graph last synced (the Video tab finds its video node in it). */
   private graph: readonly GraphNode[] = [];
 
   /** The ids of the nodes the engine runs now (for tests and checks): sources, and listeners with their source. */
-  slots(): { sources: string[]; listeners: Array<{ id: string; sourceId: string | null; texture: boolean }> } {
+  slots(): {
+    sources: string[]; listeners: Array<{ id: string; sourceId: string | null; texture: boolean }>;
+    effects: Array<{ id: string; upstreamId: string | null; rootId: string | null; heard: boolean; texture: boolean }>; dryMuted: string[];
+  } {
     return {
       sources: [...this.sources.keys()],
       listeners: [...this.listeners].map(([id, l]) => ({ id, sourceId: l.sourceId, texture: !!l.tex })),
+      effects: [...this.effects].map(([id, f]) => ({ id, upstreamId: f.upstreamId, rootId: f.rootId, heard: f.heard, texture: !!f.tex })),
+      dryMuted: [...this.dryMuted],
     };
   }
 
@@ -310,7 +356,7 @@ class AudioToolsEngine implements InputSource {
       this.listeners.set(n.id, l);
     }
     l.node = n;
-    l.sourceId = sourceId && this.sources.has(sourceId) ? sourceId : null;
+    l.sourceId = sourceId && (this.sources.has(sourceId) || this.effects.has(sourceId)) ? sourceId : null;
     if (AUDIO_TEXTURE_TYPES.has(n.type)) {
       const { w, h } = audioTextureSize(n);
       if (w !== l.run.w || h !== l.run.h || !l.tex) {
@@ -331,7 +377,43 @@ class AudioToolsEngine implements InputSource {
     }
   }
 
+  /** An effect's slot: settings, where it sits in its chain, whether it is heard; a texture sized for its spec. */
+  private syncEffect(n: GraphNode, upstreamId: string | null, rootId: string | null, heard: boolean): void {
+    const spec = effectSpecOf(n);
+    let f = this.effects.get(n.id);
+    if (!f) {
+      f = { node: n, upstreamId, rootId, fx: null, from: null, heard, unplugOut: null, spec, run: acNewRun(spec), tex: null, active: false };
+      this.effects.set(n.id, f);
+    }
+    f.node = n; f.upstreamId = upstreamId; f.rootId = rootId; f.heard = heard; f.spec = spec;
+    const { w, h } = acTextureSize(spec);
+    if (w !== f.run.w || h !== f.run.h) f.run = acNewRun(spec);
+    if (f.run.data && (!f.tex || f.tex.image.data !== f.run.data)) {
+      f.tex?.dispose();
+      const tex = new THREE.DataTexture(f.run.data, w, h, THREE.RGBAFormat, THREE.UnsignedByteType);
+      tex.minFilter = THREE.NearestFilter; tex.magFilter = THREE.NearestFilter;
+      tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+      tex.generateMipmaps = false;
+      tex.flipY = false;
+      tex.needsUpdate = true;
+      // An exported page fills its own (runtime/play-runtime.js, the same kit): the export encodes this blank.
+      tex.userData.canvas8 = blankCanvas();
+      f.tex = tex;
+      this.host?.setTexture(n.id, tex);
+    }
+  }
+
+  private dropEffect(id: string, f: FxSlot): void {
+    f.unplugOut?.();
+    try { if (f.from && f.fx) f.from.disconnect(f.fx.input); } catch { /* gone */ }
+    f.fx?.dispose();
+    f.tex?.dispose();
+    if (f.tex) this.host?.setTexture(id, null);
+    this.effects.delete(id);
+  }
+
   private dropSource(id: string, s: SourceSlot): void {
+    this.setDry(id, s, false);
     this.unplugVideo(s);
     try { s.probe?.disconnect(); } catch { /* gone */ }
     try { if (s.upstream && s.probe) s.upstream.disconnect(s.probe); } catch { /* gone */ }
@@ -393,7 +475,7 @@ class AudioToolsEngine implements InputSource {
   // ── Every frame ──────────────────────────────────────────────────────────────────────────────────────────
 
   wantsTick(): boolean {
-    return this.sources.size > 0 || this.listeners.size > 0;
+    return this.sources.size > 0 || this.listeners.size > 0 || this.effects.size > 0;
   }
 
   tickInputs(_dt: number, _time: number, write: InputWriter): void {
@@ -407,8 +489,75 @@ class AudioToolsEngine implements InputSource {
       write(`${id}::time`, s.time);
       // The card's spectrum, the bands' Value / Trigger, the learned sounds' Trigger / Match (play/kit/audioTools.js).
       atStepSource(s, s.bands, s.sounds, s.freq, s.sampleRate, nowMs / 1000, dt, (ch, v) => write(`${id}::${ch}`, v));
+      this.setDry(id, s, this.dryMuted.has(id));
     }
+    for (const [id, f] of this.effects) this.runEffect(id, f, dt, write);
     for (const [id, l] of this.listeners) this.runListener(id, l, nowMs, dt, write);
+  }
+
+  // ── Effects ──────────────────────────────────────────────────────────────────────────────────────────────
+
+  /** The Web Audio node a producer's sound comes out of (a source's, or an effect's output), or null with none now. */
+  private outOf(id: string | null): AudioNode | null {
+    if (!id) return null;
+    const f = this.effects.get(id);
+    if (f) return f.fx?.output ?? null;
+    const s = this.sources.get(id);
+    if (!s || s.node.params.playing === false) return null;
+    if (s.kind === 'mic') return liveAudio.tapNode();
+    if (s.kind === 'video') return s.videoIn;
+    return s.loaded ? audioEngine.getAnalyser(id) : null;
+  }
+
+  /**
+   * One frame of an effect: built in the context its sound lives in, joined to it, its numbers moved (a Play control
+   * driving one wins, through the input bus), joined to the speakers when it is heard, then its numbers and texture.
+   */
+  private runEffect(id: string, f: FxSlot, dt: number, write: InputWriter): void {
+    const from = this.outOf(f.upstreamId);
+    if (f.fx && from && f.fx.ctx !== from.context) {
+      f.unplugOut?.(); f.unplugOut = null;
+      try { if (f.from) f.from.disconnect(f.fx.input); } catch { /* gone */ }
+      f.fx.dispose(); f.fx = null; f.from = null;
+    }
+    const spec = effectSpecOf(f.node, key => inputBus.paramValue(`${id}::${key}`));
+    f.spec = spec;
+    if (!f.fx && from) f.fx = acBuild(from.context, spec);
+    if (from !== f.from) {
+      if (f.from && f.fx) { try { f.from.disconnect(f.fx.input); } catch { /* gone */ } }
+      if (from && f.fx) from.connect(f.fx.input);
+      f.from = from;
+    }
+    f.fx?.update(spec);
+    // Heard: through the master volume and the recording bus, as the songs are (a Mic's context never is).
+    const audible = !!(f.heard && f.fx && f.rootId && this.sources.get(f.rootId)?.kind !== 'mic');
+    if (audible && !f.unplugOut) f.unplugOut = audioEngine.connectOutside(f.fx!.output);
+    else if (!audible && f.unplugOut) { f.unplugOut(); f.unplugOut = null; }
+    const root = f.rootId ? this.sources.get(f.rootId) : undefined;
+    f.active = !!(root?.active && f.fx && from);
+    const changed = acStepEffect(f.run, f.fx, spec, f.active, dt, (ch, v) => write(`${id}::${ch}`, v));
+    if (changed && f.tex) f.tex.needsUpdate = true;
+  }
+
+  /** A gain to nowhere in a context: a diverted chain goes there (its analyser still reads it). */
+  private sinkOf(ctx: BaseAudioContext): GainNode {
+    let g = this.sinks.get(ctx);
+    if (!g) { g = ctx.createGain(); g.gain.value = 0; this.sinks.set(ctx, g); }
+    return g;
+  }
+
+  /** Quiet a source's own sound (an effect after it is heard) or let it play again. */
+  private setDry(id: string, s: SourceSlot, mute: boolean): void {
+    if (s.videoOut) s.videoOut.gain.value = mute ? 0 : 1;
+    // A file's chain goes to a sink instead of the mix (its analyser, which the effects take, still reads it).
+    if (mute && s.kind === 'file' && s.loaded && !this.diverted.has(id) && !audioFxHost.isDiverted(trackChainId(id))) {
+      const ctx = audioEngine.context();
+      audioFxHost.divert(ctx, trackChainId(id), this.sinkOf(ctx));
+      this.diverted.add(id);
+    } else if ((!mute || s.kind !== 'file') && this.diverted.has(id)) {
+      audioFxHost.divert(audioEngine.context(), trackChainId(id), null);
+      this.diverted.delete(id);
+    }
   }
 
   private readSource(s: SourceSlot): void {
@@ -452,7 +601,10 @@ class AudioToolsEngine implements InputSource {
   }
 
   private runListener(id: string, l: ListenSlot, nowMs: number, dt: number, write: InputWriter): void {
-    const s = l.sourceId ? this.sources.get(l.sourceId) : undefined;
+    const src = l.sourceId ? this.sources.get(l.sourceId) : undefined;
+    const f = l.sourceId && !src ? this.effects.get(l.sourceId) : undefined;
+    // The sound it takes: a source's frame, or an effect's (what the effect made).
+    const s = src ?? (f ? { active: f.active, freq: f.run.freq, wave: f.run.wave, sampleRate: f.run.sr } : undefined);
     const freq = s?.active ? s.freq : this.silentFreq, wave = s?.active ? s.wave : this.silentWave, sr = s?.sampleRate ?? 48000;
     // Band level, Hit, or a texture (play/kit/audioTools.js): a silent Spectrogram holds what it had (no upload).
     const changed = atStepListener(l.run, listenerSpecOf(l.node), freq, wave, sr, !!s?.active, nowMs, dt, (ch, v) => write(`${id}::${ch}`, v));
