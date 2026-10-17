@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.243',
+    date: '2026-10-17',
+    title: "Patch the channels",
+    highlights: [
+      { area: 'Studio', text: "Shuffle: drag one channel's cell onto another to distort it by it (multiply, add, subtract, divide or an expression), shown as a wire." },
+      { area: 'Studio', text: "Shuffle's A and B each switch between Channels and Texture on the card, so two textures, two vec4s or any mix work." },
+    ],
+  },
+  {
     id: '2026.10.242',
     date: '2026-10-17',
     title: "Overlay",
