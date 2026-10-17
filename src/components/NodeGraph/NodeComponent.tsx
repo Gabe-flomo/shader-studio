@@ -3277,6 +3277,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
       {node.type === 'shaderTexture' && <ShaderTextureCardBody node={node} onEnterGroup={onEnterGroup} />}
       {/* Curves: the card's graph editor (CurvesEditor.tsx) */}
       {node.type === 'curves' && <CurvesCardViz node={node} />}
+      {/* Audio Source: its File | Mic tabs first, above its settings, as the Texture node's (docs/audio-tools.md) */}
+      {!collapsed && node.type === 'audioSource' && <AudioToolCardBody node={node} />}
       {node.type === 'agentOutput' && (
         <div style={{ padding: '8px 14px', fontSize: 11.5, lineHeight: 1.45, color: tk.text.faint, borderBottom: `1px solid ${tk.border.subtle}` }}>
           What this walker becomes at the end of the step. Anything left unwired stays as it was, so an empty rule stands still.
@@ -4035,7 +4037,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         {!collapsed && node.type === 'blobTrack' && <BlobTrackCardBody node={node} />}
         {!collapsed && node.type === 'cache' && <CacheCardBody node={node} />}
         {!collapsed && node.type === 'analyze' && <AnalyzeCardBody node={node} />}
-        {!collapsed && isAudioToolType(node.type) && <AudioToolCardBody node={node} />}
+        {!collapsed && isAudioToolType(node.type) && node.type !== 'audioSource' && <AudioToolCardBody node={node} />}
         {!collapsed && node.type === 'segment' && <SegmentCardBody node={node} />}
         {!collapsed && node.type === 'depthLight' && <DepthLightCardBody node={node} touch={isTouchDevice} />}
         {!collapsed && node.type === 'splatScene' && <SplatSceneCardBody node={node} />}

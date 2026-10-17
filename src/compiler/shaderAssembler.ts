@@ -31,7 +31,7 @@ import { computeNodeSlug } from './nodeSlug';
 import { muteGate } from './muteGate';
 import { midiOutputKeys, midiUniformName, liveChannelKey } from '../lib/midiOutputs';
 import { audioUniformName } from './audioUniformNames';
-import { AUDIO_LIVE_CHANNELS, AUDIO_TEXTURE_TYPES, audioToolSampler, audioToolUniform, isAudioToolType } from '../nodes/definitions/audioTools';
+import { audioLiveChannels, AUDIO_TEXTURE_TYPES, audioToolSampler, audioToolUniform, isAudioToolType } from '../nodes/definitions/audioTools';
 import { coerce, coerceLossy } from '../lib/typesCompatible';
 import { VECTORIZABLE_NODES } from '../nodes/definitions/math';
 import { loopColour } from '../nodes/definitions/scene3d';
@@ -1052,7 +1052,7 @@ export class ShaderAssembler {
         // The Audio nodes (docs/audio-tools.md): their numbers come in through the input bus, their pictures of the
         // sound as node textures (lib/audioTools/engine.ts).
         if (isAudioToolType(node.type)) {
-          for (const ch of AUDIO_LIVE_CHANNELS[node.type] ?? []) this.liveUniforms[audioToolUniform(nodeSlug, ch)] = `${node.id}::${ch}`;
+          for (const ch of audioLiveChannels(node)) this.liveUniforms[audioToolUniform(nodeSlug, ch)] = `${node.id}::${ch}`;
           if (AUDIO_TEXTURE_TYPES.has(node.type)) this.textureUniforms[audioToolSampler(nodeSlug)] = node.id;
         }
         // Baked nodes (docs/bake.md) read their video the same way, bound by lib/bakedVideos.ts.

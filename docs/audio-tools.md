@@ -7,15 +7,44 @@ Every graph starts with one **Audio Source**. Wire its **Audio** output into the
 give you ordinary numbers and textures you can wire anywhere.
 
 ## Audio Source
-Where the sound comes from.
+Where the sound comes from. The card has tabs, like the Texture node's Image | Video | Webcam:
 
-- **Source**: *Test loop* (a two-bar drum loop with kick, snare, hi-hats and a voice, made when the graph opens,
-  so there's nothing to download), *File* (press **Pick file…** on the card), or *Microphone / input* (press
-  **Start**; the browser asks first. An audio interface or a virtual cable such as BlackHole works too).
-- **Play**: plays the file or loop out loud, or listens to the microphone. The **Pause** button on the card does the same.
-- **Loop** (File only): start again at the end.
-- **Gain**: how loud the listening nodes hear it, not how loud you hear it. Raise it for a quiet microphone.
-- Outputs: **Audio** (for the nodes below), **Level** (how loud it is right now, 0–1), **Time** (seconds played).
+- **File**: press **Load a sound…** and pick a song (mp3, wav, ogg, m4a…). Until then the card says
+  *Load a sound, or switch to Mic.* and everything listening hears silence.
+- **Mic**: press **Start** (the browser asks first). An audio interface or a virtual cable such as BlackHole works too.
+
+(A Video's sound will be a third tab later.)
+
+- **Play**: plays the file out loud, or listens to the Mic. The **Pause** button on the card does the same.
+- **Loop** (File only): start again at the end of the trim (or the file).
+- **Gain**: how loud the bands and the listening nodes hear it, not how loud you hear it. Raise it for a quiet microphone.
+- Outputs: **Audio** (for the nodes below), **Level** (how loud it is right now, 0–1), **Time** (seconds played),
+  and one output per band (below).
+
+The card shows a small live spectrum (bass on the left, log frequency) with your bands under it, and a thin level meter.
+
+### Open ↗: trim and bands
+**Open ↗** on the card opens a big window:
+
+- **Waveform**: the whole file. Drag the yellow **In** and **Out** handles (or drag across the waveform) to trim it:
+  playback loops inside the trim, and the white line is where it is now. Type exact **In** / **Out** seconds under it,
+  or press **Whole file**. On the Mic tab it's a live scrolling waveform instead.
+- **Spectrum**: live, log frequency, labelled in Hz. **Drag across it to add a band** over that range; drag a band's
+  edge to move it; click a band to pick it.
+- **Add a band**: Sub, Bass, Kick, Snare, Hi-hat, Vocals, Air. Kick, Snare and Hi-hat come as triggers with Hit's
+  ranges and onset settings; the others send their level.
+- **Each band** has a name and a colour, **Low** and **High** in Hz, and what it sends out:
+  - **Value**: the band's level, 0–1, with **Attack**, **Release** (rise and fall times in seconds) and **Gain**;
+  - **Trigger**: 1 for one frame on each hit in the band (**Sensitivity**, **Cooldown** in ms), exactly what
+    Envelope (Trigger mode), Counter and Sample & Hold count;
+  - or both. The row shows the band's live level and flashes on each hit.
+
+Every band becomes an **output on the Audio Source**, named after it: *Bass* for a Value, *Kick (trigger)* for a
+Trigger. Wire *Kick (trigger)* straight into an Envelope's Gate for a pulse on every kick. Removing a band (or
+switching off what it sends) takes its output away, and the wires from it go too.
+
+Moving a band or the trim, and its Attack / Release / Gain / Sensitivity / Cooldown, change the picture at once
+without recompiling; adding, removing or renaming a band recompiles (its outputs change).
 
 If you hear nothing, click anywhere in the app: browsers only start sound after a click.
 
@@ -53,8 +82,11 @@ The sound itself, like an oscilloscope: the last few milliseconds across the pic
 pixel's left-right place, −1 to 1 (0 is silence). **Samples** sets how much sound fits across (1024 ≈ 21 ms).
 
 ## Good to know
-- Each card shows a small live readout: a meter, a flash on each hit, the spectrum, the waterfall or the wave.
+- Each card shows a small live readout: Audio Source's spectrum, a meter, a flash on each hit, the spectrum, the waterfall or the wave.
+- The Audio examples open on the File tab with nothing loaded: load any song, or switch to Mic.
+- Bands, the trim and the tab are saved with the graph.
 - The Audio nodes work at the top level of the graph; inside a group they hear nothing yet.
 - Web pages exported from Playfield don't play the Audio nodes yet (they hear silence).
-- A picked file has to be picked again after a reload.
+- A loaded file has to be loaded again after a reload (the card names the file it had). Graphs from before this
+  change that used the built-in Test loop open on the File tab, empty.
 - The old **Audio Input** node is retired: it's no longer in the node list, but graphs that use it still work.

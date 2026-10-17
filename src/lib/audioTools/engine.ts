@@ -1,8 +1,9 @@
 /**
  * audioToolsEngine — runs the Audio nodes (docs/audio-tools.md, nodes/definitions/audioTools.ts).
  *
- * - `sync(nodes)`: on every graph change. Each Audio Source gets a slot (its sound: the test loop or a file through
- *   lib/audioEngine, the microphone through lib/liveAudio), each listening node one too (its state, its texture).
+ * - `sync(nodes)`: on every graph change. Each Audio Source gets a slot (its sound: a file through lib/audioEngine,
+ *   played within its trim, or the microphone through lib/liveAudio), each listening node one too (its state, its texture).
+ * - An Audio Source's own bands (lib/audioTools/bands.ts) run on its frame too and write `<id>::<band>_v` / `_t`.
  * - Once per rendered frame the input bus ticks it (`tickInputs`): each playing source's probe analyser (its own,
  *   FFT 2048, no smoothing, connected after the source's analyser) is read once, then every listening node runs its
  *   sums on that frame (dsp.ts) and writes its numbers by channel key (`<id>::level`), or fills its texture.
@@ -16,11 +17,11 @@ import type { InputSource, InputWriter } from '../inputBus';
 import { inputBus } from '../inputBus';
 import { audioEngine } from '../audioEngine';
 import { liveAudio } from '../liveAudio';
-import { renderTestLoop } from '../testLoop';
 import {
   AUDIO_BAND_TYPE, AUDIO_HIT_TYPE, AUDIO_SOURCE_TYPE, AUDIO_SPECTROGRAM_TYPE, AUDIO_SPECTRUM_TYPE, AUDIO_TEXTURE_TYPES,
   AUDIO_WAVEFORM_TYPE, audioBandOf, audioSourceKind, audioTextureSize, isAudioToolType, type AudioSourceKind,
 } from '../../nodes/definitions/audioTools';
+import { bandTriggerKey, bandValueKey, bandsOf, newBandRun, stepBandRun, trimWindow, type AudioBandSpec, type BandRun } from './bands';
 import {
   bandLevel, newBandState, newHitState, rmsLevel, scrollRows, spectrumBins, stepBand, stepHit, waveRow, writeRow,
   type BandState, type HitState, type SpectrumLayout,
@@ -37,11 +38,15 @@ export interface AudioToolsHost {
 interface SourceSlot {
   node: GraphNode;
   kind: AudioSourceKind;
-  /** What is loaded into the audio engine under this id. */
-  loaded: 'loop' | 'file' | null;
-  loading: boolean;
-  /** The settings last applied to playback (kind, Play, Loop): a change starts or stops it. */
+  /** A file is loaded into the audio engine under this id. */
+  loaded: boolean;
+  /** The settings last applied to playback (kind, Play, Loop, trim): a change starts or stops it. */
   applied: string;
+  /** The bands' running state, by band id. */
+  runs: Map<string, BandRun>;
+  bands: AudioBandSpec[];
+  /** The card's small spectrum: 0..1 on a log layout. */
+  row: Float32Array;
   upstream: AnalyserNode | null;
   probe: AnalyserNode | null;
   freq: Float32Array<ArrayBuffer>;
@@ -81,7 +86,24 @@ export interface AudioReadout {
   active: boolean;
 }
 
-let loopBuffer: Promise<AudioBuffer> | null = null;
+/** What the Audio Source's window draws (live objects: read them, don't keep them). */
+export interface AudioSourceView {
+  kind: AudioSourceKind;
+  active: boolean;
+  loaded: boolean;
+  freq: Float32Array;
+  wave: Float32Array;
+  sampleRate: number;
+  level: number;
+  /** Seconds into the file (or since the mic started). */
+  time: number;
+  duration: number;
+  /** Per band: its Value now, and when its last hit was (performance.now ms). */
+  bands: Map<string, { level: number; hitAt: number; count: number }>;
+}
+
+/** Bins in the card's spectrum. */
+export const CARD_SPECTRUM_BINS = 48;
 
 let blank: HTMLCanvasElement | null = null;
 function blankCanvas(): HTMLCanvasElement | undefined {
@@ -121,13 +143,25 @@ class AudioToolsEngine implements InputSource {
 
   readout(nodeId: string): AudioReadout | null {
     const s = this.sources.get(nodeId);
-    if (s) return { level: s.level, peak: s.level, envelope: 0, count: 0, hitAt: 0, row: null, data: null, w: 0, h: 0, active: s.active };
+    if (s) return { level: s.level, peak: s.level, envelope: 0, count: 0, hitAt: 0, row: s.row, data: null, w: 0, h: 0, active: s.active };
     const l = this.listeners.get(nodeId);
     if (!l) return null;
     const active = !!(l.sourceId && this.sources.get(l.sourceId)?.active);
     return {
       level: l.node.type === AUDIO_HIT_TYPE ? l.hit.strength : l.band.level, peak: l.band.peak, envelope: l.hit.envelope, count: l.hit.count,
       hitAt: l.hitAt, row: l.row, data: (l.tex?.image.data as Uint8Array | undefined) ?? null, w: l.w, h: l.h, active,
+    };
+  }
+
+  /** The Audio Source's window: its spectrum, wave, file and bands now. */
+  sourceView(nodeId: string): AudioSourceView | null {
+    const s = this.sources.get(nodeId);
+    if (!s) return null;
+    const bands = new Map<string, { level: number; hitAt: number; count: number }>();
+    for (const [id, r] of s.runs) bands.set(id, { level: r.band.level, hitAt: Number.isFinite(r.hitAt) ? r.hitAt * 1000 : -Infinity, count: r.hit.count });
+    return {
+      kind: s.kind, active: s.active, loaded: s.loaded, freq: s.freq, wave: s.wave, sampleRate: s.sampleRate, level: s.level, time: s.time,
+      duration: s.loaded ? audioEngine.duration(nodeId) : 0, bands,
     };
   }
 
@@ -148,38 +182,28 @@ class AudioToolsEngine implements InputSource {
     let s = this.sources.get(n.id);
     if (!s) {
       s = {
-        node: n, kind: audioSourceKind(n), loaded: null, loading: false, applied: '', upstream: null, probe: null,
+        node: n, kind: audioSourceKind(n), loaded: false, applied: '', upstream: null, probe: null, runs: new Map(), bands: [],
+        row: new Float32Array(CARD_SPECTRUM_BINS),
         freq: new Float32Array(FFT / 2), wave: new Float32Array(FFT), sampleRate: 48000, active: false, level: 0, time: 0, micSince: 0, status: '',
       };
       this.sources.set(n.id, s);
     }
     s.node = n;
     s.kind = audioSourceKind(n);
-    // Released by someone else (lib/audioSync.ts stops every song when another graph opens): load it again.
-    if (s.loaded && !audioEngine.isLoaded(n.id)) { s.loaded = null; s.applied = ''; }
-    if (s.kind === 'loop' && s.loaded !== 'loop' && !s.loading && typeof OfflineAudioContext !== 'undefined') {
-      s.loading = true;
-      this.setStatus(s, 'Making the test loop…');
-      const ctx = audioEngine.context();
-      loopBuffer ??= renderTestLoop(ctx.sampleRate);
-      const slot = s;
-      loopBuffer.then(buf => {
-        slot.loading = false;
-        if (this.sources.get(slot.node.id) !== slot || slot.kind !== 'loop') return;
-        audioEngine.loadBuffer(slot.node.id, buf, 'Test loop');
-        slot.loaded = 'loop';
-        slot.applied = '';
-        this.applyPlayback(slot);
-      }).catch(e => { slot.loading = false; this.setStatus(slot, `Could not make the test loop: ${e instanceof Error ? e.message : String(e)}`); });
-    }
-    if (s.kind === 'file' && s.loaded === 'loop') { audioEngine.removeAudio(n.id); s.loaded = null; }
+    s.bands = bandsOf(n.params);
+    // A band's state stays while it is edited; a removed band's goes.
+    for (const id of [...s.runs.keys()]) if (!s.bands.some(b => b.id === id)) s.runs.delete(id);
+    for (const b of s.bands) if (!s.runs.has(b.id)) s.runs.set(b.id, newBandRun());
+    // Released by someone else (lib/audioSync.ts stops every song when another graph opens): it has to be loaded again.
+    if (s.loaded && !audioEngine.isLoaded(n.id)) { s.loaded = false; s.applied = ''; }
     this.applyPlayback(s);
   }
 
   /** Start or stop the sound when its kind, Play or Loop changed (not every sync: a file that played to its end stays stopped). */
   private applyPlayback(s: SourceSlot): void {
     const id = s.node.id, playing = s.node.params.playing !== false, loop = s.node.params.loop !== false;
-    const key = `${s.kind}:${playing}:${loop}:${s.loaded}`;
+    const win = s.loaded ? trimWindow(audioEngine.duration(id), s.node.params.trimIn, s.node.params.trimOut) : null;
+    const key = `${s.kind}:${playing}:${loop}:${s.loaded}:${win ? `${win.start.toFixed(4)}-${win.end.toFixed(4)}` : ''}`;
     if (key === s.applied) { this.refreshStatus(s); return; }
     s.applied = key;
     if (s.kind === 'mic') {
@@ -188,9 +212,8 @@ class AudioToolsEngine implements InputSource {
       if (!playing) s.micSince = 0;
     } else if (s.loaded) {
       const want = playing && !audioEngine.isMasterPaused();
-      if (want && !audioEngine.isPlaying(id)) audioEngine.startAudio(id, audioEngine.position(id) ?? 0, s.kind === 'loop' || loop);
-      else if (!want && audioEngine.isPlaying(id)) audioEngine.stopAudio(id);
-      else if (want && s.kind === 'file') audioEngine.startAudio(id, audioEngine.position(id) ?? 0, loop); // Loop changed while playing
+      if (want) audioEngine.startAudio(id, audioEngine.position(id) ?? 0, loop, win ?? undefined); // started, or Loop / the trim changed while playing
+      else if (audioEngine.isPlaying(id)) audioEngine.stopAudio(id);
     }
     this.host?.requestRender();
     this.refreshStatus(s);
@@ -206,8 +229,10 @@ class AudioToolsEngine implements InputSource {
         : st === 'denied' ? 'The microphone was refused (or is busy).'
         : st === 'unsupported' ? 'This browser has no microphone input.'
         : 'Microphone off: press Start.';
-    } else if (s.loading) text = 'Making the test loop…';
-    else if (!s.loaded) text = s.kind === 'file' ? 'No file yet: pick one.' : 'No sound yet.';
+    } else if (!s.loaded) {
+      const was = typeof s.node.params._fileName === 'string' ? s.node.params._fileName : '';
+      text = was ? `Load "${was}" again (files aren't kept after a reload), or switch to Mic.` : 'Load a sound, or switch to Mic.';
+    }
     else text = `${audioEngine.getFileName(s.node.id) || 'Sound'} · ${audioEngine.isPlaying(s.node.id) ? 'playing' : 'stopped'}`;
     this.setStatus(s, text);
   }
@@ -265,15 +290,16 @@ class AudioToolsEngine implements InputSource {
 
   // ── Card actions ─────────────────────────────────────────────────────────────────────────────────────────
 
-  /** Load a picked file into a source (its Source must be File). Resolves with an error message, or null. */
-  async loadFile(nodeId: string, file: File): Promise<string | null> {
+  /** Load a picked file (or any audio Blob with a name) into a source. Resolves with an error message, or null. */
+  async loadFile(nodeId: string, file: Blob & { name: string }): Promise<string | null> {
     try {
       await audioEngine.loadAudio(nodeId, await file.arrayBuffer(), file.name);
     } catch (e) {
       return e instanceof Error ? e.message : String(e);
     }
     const s = this.sources.get(nodeId);
-    if (s) { s.loaded = 'file'; s.applied = ''; this.applyPlayback(s); }
+    if (s) { s.loaded = true; s.applied = ''; this.applyPlayback(s); }
+    this.changed();
     return null;
   }
 
@@ -300,6 +326,14 @@ class AudioToolsEngine implements InputSource {
       this.readSource(s);
       write(`${id}::level`, s.level);
       write(`${id}::time`, s.time);
+      spectrumBins(s.freq, s.sampleRate, s.row, 'log', -90, -20, 0.5);
+      for (const b of s.bands) {
+        const run = s.runs.get(b.id);
+        if (!run) continue;
+        stepBandRun(run, b, s.freq, s.sampleRate, nowMs / 1000, dt);
+        if (b.value) write(`${id}::${bandValueKey(b.id)}`, run.band.level);
+        if (b.trigger) write(`${id}::${bandTriggerKey(b.id)}`, run.hit.trigger);
+      }
     }
     for (const [id, l] of this.listeners) this.runListener(id, l, nowMs, dt, write);
   }

@@ -39,6 +39,8 @@ interface AudioNodeState {
   stoppedAt: number;
   /** A downsampled overview of the waveform, cached per resolution. */
   peaks?: { n: number; data: Float32Array };
+  /** The trim it plays within (an Audio Source's In / Out), and whether it loops there; unset: the whole song. */
+  win?: { start: number; end: number; loop: boolean };
 }
 
 class AudioEngine {
@@ -100,15 +102,6 @@ class AudioEngine {
     this.register(nodeId, buffer, fileName);
   }
 
-  /**
-   * Register an already decoded buffer for `nodeId` (an Audio Source's test loop, synthesised on the spot:
-   * lib/testLoop.ts). Nothing is remembered for web exports.
-   */
-  loadBuffer(nodeId: string, buffer: AudioBuffer, name: string): void {
-    this.getCtx();
-    this.register(nodeId, buffer, name);
-  }
-
   private register(nodeId: string, buffer: AudioBuffer, fileName: string): void {
     const audioCtx = this.getCtx();
     const analyser = audioCtx.createAnalyser();
@@ -145,8 +138,11 @@ class AudioEngine {
     });
   }
 
-  /** Play from `offset` seconds into the song (looping, unless `loop` is false: then it stops at its end). */
-  startAudio(nodeId: string, offset = 0, loop = true): void {
+  /**
+   * Play from `offset` seconds into the song (looping, unless `loop` is false: then it stops at its end). With `win`
+   * (an Audio Source's trim) it plays only between its start and end, looping there; an offset outside starts at the start.
+   */
+  startAudio(nodeId: string, offset = 0, loop = true, win?: { start: number; end: number }): void {
     const state = this.nodes.get(nodeId);
     if (!state) return;
     const audioCtx = this.getCtx();
@@ -177,8 +173,17 @@ class AudioEngine {
     source.connect(state.inlet);
 
     const dur = state.buffer.duration;
-    const off = dur > 0 ? ((offset % dur) + dur) % dur : 0;
-    source.start(0, off);
+    let off = dur > 0 ? ((offset % dur) + dur) % dur : 0;
+    if (win && dur > 0 && win.end > win.start) {
+      const w = { start: Math.max(0, Math.min(dur, win.start)), end: Math.max(0, Math.min(dur, win.end)) };
+      if (!(off >= w.start && off < w.end)) off = w.start;
+      state.win = { ...w, loop };
+      if (loop) { source.loopStart = w.start; source.loopEnd = w.end; source.start(0, off); }
+      else source.start(0, off, Math.max(0, w.end - off));
+    } else {
+      state.win = undefined;
+      source.start(0, off);
+    }
 
     state.source = source;
     state.isPlaying = true;
@@ -380,7 +385,10 @@ class AudioEngine {
   resumeAll(): void {
     this.masterPaused = false;
     for (const nodeId of this.pausedNodeIds) {
-      this.startAudio(nodeId);
+      // A trimmed song (an Audio Source's In / Out) picks up inside its trim, where it stopped.
+      const w = this.nodes.get(nodeId)?.win;
+      if (w) this.startAudio(nodeId, this.nodes.get(nodeId)!.stoppedAt, w.loop, w);
+      else this.startAudio(nodeId);
     }
     this.pausedNodeIds.clear();
   }
@@ -396,6 +404,14 @@ class AudioEngine {
     if (!state.isPlaying || !this.ctx) return state.stoppedAt;
     const dur = state.buffer.duration;
     const t = this.ctx.currentTime - state.startedAt;
+    const w = state.win;
+    if (w && w.end > w.start) {
+      // startedAt is when 0 would have played: past the window's end it goes round inside the window.
+      if (t < w.end) return Math.max(w.start, t);
+      if (!w.loop) return w.end;
+      const len = w.end - w.start;
+      return w.start + (((t - w.start) % len) + len) % len;
+    }
     return dur > 0 ? ((t % dur) + dur) % dur : 0;
   }
 

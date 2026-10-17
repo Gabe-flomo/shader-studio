@@ -1,0 +1,321 @@
+/**
+ * Audio Source's big window (docs/audio-tools.md), opened with Open ↗ on its card:
+ *
+ * - **The file's whole waveform** (decoded once: the audio engine's peaks) with In / Out handles to trim; playback
+ *   loops inside the trim, the playhead shows where it is. Mic: a live scrolling waveform instead.
+ * - **The live spectrum** (log frequency, labelled in Hz). Drag across it to add a band; drag a band's edge to move it.
+ * - **Quick bands** (Sub, Bass, Kick, Snare, Hi-hat, Vocals, Air) and **the band list**: each band's name, colour,
+ *   Low / High Hz, and what it sends out (Value with Attack / Release / Gain, Trigger with Sensitivity / Cooldown),
+ *   with its live level and a flash on each hit. Every band is an output on the node (lib/audioTools/bands.ts).
+ *
+ * Moving a band or the trim changes only what the engine reads (`live`: no recompile); adding, removing, renaming a
+ * band or changing what it sends changes the node's outputs, so those recompile.
+ */
+import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as RPointerEvent } from 'react';
+import { useNodeGraphStore } from '../../store/useNodeGraphStore';
+import { useTokens } from '../../theme/themeStore';
+import { fontFamily, radius } from '../../theme/tokens';
+import { audioSourceKind, type AudioSourceKind } from '../../nodes/definitions/audioTools';
+import { audioToolsEngine } from '../../lib/audioTools/engine';
+import { audioEngine } from '../../lib/audioEngine';
+import { liveAudio } from '../../lib/liveAudio';
+import { BAND_MAX_HZ, BAND_MIN_HZ, BAND_QUICK_PRESETS, MIN_TRIM, bandsOf, newBand, trimWindow, type AudioBandSpec } from '../../lib/audioTools/bands';
+import { hzAt, spectrumBins, xOfHz } from '../../lib/audioTools/dsp';
+import { Modal } from '../ui/Modal';
+import { Button } from '../ui/Button';
+import { Segmented, Toggle } from '../ui/Choice';
+import { NumberInput } from '../NodeGraph/NumberInput';
+import { addDrawer } from './drawLoop';
+
+const BG = '#11111b', ACCENT = '#b4befe', DIM = 'rgba(180,190,254,0.18)', GRID = 'rgba(205,214,244,0.12)', LABEL = 'rgba(205,214,244,0.6)';
+const HZ_LABELS = [50, 100, 200, 500, 1000, 2000, 5000, 10000];
+const xOf = (hz: number) => xOfHz(hz, 'log', BAND_MIN_HZ, BAND_MAX_HZ);
+const hzOf = (x: number) => Math.round(hzAt(Math.max(0, Math.min(1, x)), 'log', BAND_MIN_HZ, BAND_MAX_HZ));
+const fmtHz = (hz: number) => (hz >= 1000 ? `${+(hz / 1000).toFixed(hz >= 10000 ? 0 : 1)}k` : `${hz}`);
+const fmtSec = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toFixed(2).padStart(5, '0')}`;
+const SPEC_BINS = 160;
+const MIC_HISTORY = 400;
+
+/** Size a canvas to its box at the device pixel ratio; the 2D context in CSS pixels. */
+function fit(c: HTMLCanvasElement | null): { g: CanvasRenderingContext2D; w: number; h: number } | null {
+  if (!c) return null;
+  const dpr = Math.min(2, window.devicePixelRatio || 1), w = c.clientWidth, h = c.clientHeight;
+  if (!w || !h) return null;
+  if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
+  const g = c.getContext('2d');
+  if (!g) return null;
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { g, w, h };
+}
+
+type TrimDrag = { which: 'in' | 'out' | 'new'; anchor: number; start: number; end: number };
+type SpecDrag = { kind: 'new'; a: number; b: number } | { kind: 'edge'; id: string; edge: 'lo' | 'hi' };
+
+export function AudioSourceWindow({ nodeId, onClose, onLoad }: { nodeId: string; onClose: () => void; onLoad: () => void }) {
+  const tk = useTokens();
+  const node = useNodeGraphStore(s => s.nodes.find(n => n.id === nodeId));
+  const update = useNodeGraphStore(s => s.updateNodeParams);
+  const waveRef = useRef<HTMLCanvasElement>(null);
+  const specRef = useRef<HTMLCanvasElement>(null);
+  const meterRefs = useRef(new Map<string, HTMLCanvasElement>());
+  const [selected, setSelected] = useState<string | null>(null);
+  const trimDrag = useRef<TrimDrag | null>(null);
+  const specDrag = useRef<SpecDrag | null>(null);
+  const [, redraw] = useState(0);
+  // What the drawer reads (the latest node, without restarting the loop).
+  const latest = useRef({ bands: [] as AudioBandSpec[], trimIn: 0, trimOut: 0, selected: null as string | null });
+  const bands = node ? bandsOf(node.params) : [];
+  const trimIn = Number(node?.params.trimIn ?? 0), trimOut = Number(node?.params.trimOut ?? 0);
+  useEffect(() => { latest.current = { bands, trimIn, trimOut, selected }; });
+
+  useEffect(() => {
+    const row = new Float32Array(SPEC_BINS);
+    const mic = new Float32Array(MIC_HISTORY);
+    let micAt = 0, seen = -1;
+    return addDrawer(() => {
+      const v = audioToolsEngine.sourceView(nodeId);
+      if (!v) return;
+      const fresh = audioToolsEngine.frame !== seen;
+      seen = audioToolsEngine.frame;
+      const L = latest.current;
+      // ── Waveform ──
+      const wv = fit(waveRef.current);
+      if (wv) {
+        const { g, w, h } = wv;
+        g.fillStyle = BG; g.fillRect(0, 0, w, h);
+        const mid = h / 2;
+        if (v.kind === 'file' && v.loaded && v.duration > 0) {
+          const peaks = audioEngine.peaks(nodeId, Math.min(2000, Math.max(200, Math.round(w))));
+          const d = trimDrag.current;
+          const win = d ? { start: d.start, end: d.end } : trimWindow(v.duration, L.trimIn, L.trimOut);
+          const xa = (win.start / v.duration) * w, xb = (win.end / v.duration) * w;
+          if (peaks) {
+            const bw = w / peaks.length;
+            for (let i = 0; i < peaks.length; i++) {
+              const x = i * bw, inside = x >= xa && x <= xb, a = peaks[i] * (mid - 4);
+              g.fillStyle = inside ? ACCENT : DIM;
+              g.fillRect(x, mid - a, Math.max(1, bw), Math.max(1, a * 2));
+            }
+          }
+          g.fillStyle = 'rgba(17,17,27,0.55)'; g.fillRect(0, 0, xa, h); g.fillRect(xb, 0, w - xb, h);
+          for (const x of [xa, xb]) { g.fillStyle = '#f9e2af'; g.fillRect(x - 1, 0, 2, h); g.fillRect(x - 5, 0, 10, 8); }
+          const px = (v.time / v.duration) * w;
+          g.fillStyle = '#ffffff'; g.fillRect(px - 0.5, 0, 1.5, h);
+        } else if (v.kind === 'mic') {
+          if (fresh && v.active) {
+            let m = 0;
+            for (let i = 0; i < v.wave.length; i++) m = Math.max(m, Math.abs(v.wave[i]));
+            mic[micAt] = Math.min(1, m); micAt = (micAt + 1) % MIC_HISTORY;
+          }
+          const bw = w / MIC_HISTORY;
+          g.fillStyle = ACCENT;
+          for (let i = 0; i < MIC_HISTORY; i++) { const a = mic[(micAt + i) % MIC_HISTORY] * (mid - 4); g.fillRect(i * bw, mid - a, Math.max(1, bw), Math.max(1, a * 2)); }
+        } else {
+          g.fillStyle = LABEL; g.font = `12px ${fontFamily.ui}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+          g.fillText('Load a sound, or switch to Mic.', w / 2, mid);
+        }
+      }
+      // ── Spectrum ──
+      const sp = fit(specRef.current);
+      if (sp) {
+        const { g, w, h } = sp;
+        const axis = 16, sh = h - axis;
+        g.fillStyle = BG; g.fillRect(0, 0, w, h);
+        g.font = `10px ${fontFamily.ui}`; g.textAlign = 'center'; g.textBaseline = 'top';
+        for (const hz of HZ_LABELS) {
+          const x = xOf(hz) * w;
+          g.fillStyle = GRID; g.fillRect(x, 0, 1, sh);
+          g.fillStyle = LABEL; g.fillText(`${fmtHz(hz)} Hz`, x, sh + 3);
+        }
+        for (const b of L.bands) {
+          const x0 = xOf(b.lo) * w, x1 = xOf(b.hi) * w, lv = v.bands.get(b.id);
+          const flash = lv ? Math.max(0, 1 - (performance.now() - lv.hitAt) / 250) : 0;
+          g.fillStyle = `${b.color}${L.selected === b.id ? '40' : '26'}`; g.fillRect(x0, 0, x1 - x0, sh);
+          if (flash > 0) { g.fillStyle = `${b.color}${Math.round(flash * 120).toString(16).padStart(2, '0')}`; g.fillRect(x0, 0, x1 - x0, sh); }
+          if (lv) { g.fillStyle = b.color; g.fillRect(x0, sh - 4 - (sh - 20) * lv.level, x1 - x0, 2); }
+          g.fillStyle = b.color; g.fillRect(x0, 0, 1.5, sh); g.fillRect(x1 - 1.5, 0, 1.5, sh);
+          g.textAlign = 'left'; g.fillText(b.name, x0 + 4, 4); g.textAlign = 'center';
+        }
+        spectrumBins(v.freq, v.sampleRate, row, 'log', -90, -20, 0.5);
+        g.fillStyle = 'rgba(205,214,244,0.75)';
+        const bw = w / SPEC_BINS;
+        for (let i = 0; i < SPEC_BINS; i++) { const a = row[i] * (sh - 18); g.fillRect(i * bw, sh - a, Math.max(1, bw - 0.5), a); }
+        const d = specDrag.current;
+        if (d?.kind === 'new') {
+          const a = Math.min(d.a, d.b) * w, b = Math.max(d.a, d.b) * w;
+          g.fillStyle = 'rgba(249,226,175,0.25)'; g.fillRect(a, 0, b - a, sh);
+          g.fillStyle = '#f9e2af'; g.textAlign = 'center';
+          g.fillText(`${fmtHz(hzOf(Math.min(d.a, d.b)))}–${fmtHz(hzOf(Math.max(d.a, d.b)))} Hz`, (a + b) / 2, 4);
+        }
+      }
+      // ── Band meters ──
+      for (const b of L.bands) {
+        const m = fit(meterRefs.current.get(b.id) ?? null), lv = v.bands.get(b.id);
+        if (!m) continue;
+        const { g, w, h } = m;
+        g.fillStyle = BG; g.fillRect(0, 0, w, h);
+        g.fillStyle = DIM; g.fillRect(0, h / 2 - 3, w - h - 4, 6);
+        g.fillStyle = b.color; g.fillRect(0, h / 2 - 3, (w - h - 4) * (lv?.level ?? 0), 6);
+        const flash = lv && b.trigger ? Math.max(0, 1 - (performance.now() - lv.hitAt) / 250) : 0;
+        g.fillStyle = b.trigger ? `rgba(249,226,175,${0.15 + 0.85 * flash})` : 'transparent';
+        g.beginPath(); g.arc(w - h / 2, h / 2, h / 2 - 2, 0, Math.PI * 2); g.fill();
+      }
+    });
+  }, [nodeId]);
+
+  if (!node) return null;
+  const kind = audioSourceKind(node);
+  const view = audioToolsEngine.sourceView(nodeId);
+  const duration = view?.duration ?? 0;
+  const win = trimWindow(duration, node.params.trimIn, node.params.trimOut);
+  const playing = node.params.playing !== false;
+  const set = (p: Record<string, unknown>, live = false) => update(nodeId, p, live ? { immediate: true, live: true } : { immediate: true });
+  /** Bands: a move is live (no recompile); adding, removing, renaming or what a band sends changes the outputs. */
+  const setBands = (next: AudioBandSpec[], structural: boolean) => set({ bands: next }, !structural);
+  const patchBand = (id: string, p: Partial<AudioBandSpec>, structural = false) => setBands(bands.map(b => (b.id === id ? { ...b, ...p } : b)), structural);
+  const addBand = (preset: string | { lo: number; hi: number }) => { const b = newBand(bands, preset); setBands([...bands, b], true); setSelected(b.id); };
+
+  // ── Trim: drag a handle, or drag across to set a new trim ──
+  const secAt = (e: RPointerEvent<HTMLCanvasElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    return Math.max(0, Math.min(duration, ((e.clientX - r.left) / r.width) * duration));
+  };
+  const onWaveDown = (e: RPointerEvent<HTMLCanvasElement>) => {
+    if (kind !== 'file' || !(duration > 0)) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    const r = e.currentTarget.getBoundingClientRect(), t = secAt(e), px = (e.clientX - r.left);
+    const xa = (win.start / duration) * r.width, xb = (win.end / duration) * r.width;
+    const which = Math.abs(px - xa) <= 8 ? 'in' : Math.abs(px - xb) <= 8 ? 'out' : 'new';
+    trimDrag.current = { which, anchor: t, start: which === 'new' ? t : win.start, end: which === 'new' ? t : win.end };
+  };
+  const onWaveMove = (e: RPointerEvent<HTMLCanvasElement>) => {
+    const d = trimDrag.current;
+    if (!d) return;
+    const t = secAt(e);
+    if (d.which === 'in') d.start = Math.min(t, d.end - MIN_TRIM);
+    else if (d.which === 'out') d.end = Math.max(t, d.start + MIN_TRIM);
+    else { d.start = Math.min(d.anchor, t); d.end = Math.max(d.anchor, t); }
+  };
+  const onWaveUp = () => {
+    const d = trimDrag.current;
+    trimDrag.current = null;
+    if (!d) return;
+    // A click without a drag leaves the trim as it was.
+    if (d.which === 'new' && d.end - d.start < MIN_TRIM) return;
+    set({ trimIn: +Math.max(0, d.start).toFixed(4), trimOut: d.end >= duration - 1e-3 ? 0 : +d.end.toFixed(4) }, true);
+  };
+
+  // ── Spectrum: drag across empty space to add a band, drag a band's edge to move it, click a band to pick it ──
+  const xAt = (e: RPointerEvent<HTMLCanvasElement>) => { const r = e.currentTarget.getBoundingClientRect(); return Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)); };
+  const onSpecDown = (e: RPointerEvent<HTMLCanvasElement>) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    const r = e.currentTarget.getBoundingClientRect(), x = xAt(e), px = x * r.width;
+    for (const b of [...bands].reverse()) {
+      for (const edge of ['lo', 'hi'] as const) if (Math.abs(xOf(b[edge]) * r.width - px) <= 6) { specDrag.current = { kind: 'edge', id: b.id, edge }; setSelected(b.id); return; }
+    }
+    const inside = [...bands].reverse().find(b => x >= xOf(b.lo) && x <= xOf(b.hi));
+    if (inside) { setSelected(inside.id); return; }
+    specDrag.current = { kind: 'new', a: x, b: x };
+  };
+  const onSpecMove = (e: RPointerEvent<HTMLCanvasElement>) => {
+    const d = specDrag.current;
+    if (!d) return;
+    const x = xAt(e);
+    if (d.kind === 'new') { d.b = x; return; }
+    const b = bands.find(q => q.id === d.id);
+    if (!b) return;
+    const hz = hzOf(x);
+    patchBand(b.id, d.edge === 'lo' ? { lo: Math.min(hz, b.hi - 1) } : { hi: Math.max(hz, b.lo + 1) });
+  };
+  const onSpecUp = (e: RPointerEvent<HTMLCanvasElement>) => {
+    const d = specDrag.current;
+    specDrag.current = null;
+    if (d?.kind !== 'new') return;
+    const r = e.currentTarget.getBoundingClientRect();
+    if (Math.abs(d.b - d.a) * r.width < 6) return;
+    addBand({ lo: hzOf(Math.min(d.a, d.b)), hi: hzOf(Math.max(d.a, d.b)) });
+  };
+
+  const head: CSSProperties = { font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.06em', textTransform: 'uppercase', color: tk.text.faint };
+  const small: CSSProperties = { font: `500 11.5px ${fontFamily.ui}`, color: tk.text.muted };
+  const numStyle: CSSProperties = {
+    width: 54, font: `500 11.5px ${fontFamily.mono}`, color: tk.text.primary, background: tk.bg.panel,
+    border: `1px solid ${tk.border.default}`, borderRadius: radius.sm, padding: '2px 5px', boxSizing: 'border-box',
+  };
+  const field = (label: string, value: number, onCommit: (v: number) => void, o: { step?: number; min?: number; max?: number; title: string; disabled?: boolean }) => (
+    <label style={{ display: 'flex', alignItems: 'center', gap: 4, ...small, opacity: o.disabled ? 0.45 : 1 }} title={o.title}>
+      {label}<NumberInput value={value} step={o.step} min={o.min} max={o.max} disabled={o.disabled} style={numStyle} onCommit={onCommit} />
+    </label>
+  );
+
+  return (
+    <Modal title={typeof node.params.label === 'string' && node.params.label.trim() ? node.params.label.trim() : 'Audio Source'}
+      subtitle={kind === 'file' ? 'Audio Source · trim the file, pick frequency bands' : 'Audio Source · the Mic, and its frequency bands'}
+      icon="wave" width={1240} height={800} onClose={onClose} headerActions={<Button variant="primary" onClick={onClose}>Done</Button>}>
+      <div data-audio-source-window style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 16, height: '100%', boxSizing: 'border-box', overflowY: 'auto', font: `500 12px ${fontFamily.ui}` }}>
+        {/* Transport */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <div style={{ width: 160 }}>
+            <Segmented<AudioSourceKind> size="sm" fill ariaLabel="Source" value={kind} onChange={v => set({ source: v })} options={[{ value: 'file', label: 'File' }, { value: 'mic', label: 'Mic' }]} />
+          </div>
+          <Button size="sm" onClick={() => set({ playing: !playing })}>{playing ? 'Pause' : 'Play'}</Button>
+          {kind === 'file' && <Toggle checked={node.params.loop !== false} onChange={c => set({ loop: c })} label="Loop" />}
+          {field('Gain', Number(node.params.gain ?? 1), v => set({ gain: Math.max(0, v) }, true), { step: 0.05, min: 0, title: 'How loud the bands and the listening nodes hear it (not how loud you hear it).' })}
+          {kind === 'file' && <Button size="sm" onClick={onLoad}>{view?.loaded ? 'Replace…' : 'Load a sound…'}</Button>}
+          {kind === 'mic' && !liveAudio.isOn() && <Button size="sm" onClick={() => { void audioToolsEngine.startMic(nodeId); redraw(x => x + 1); }}>Start</Button>}
+          <span style={{ ...small, marginLeft: 'auto' }}>{audioToolsEngine.status(nodeId)}</span>
+        </div>
+
+        {/* Waveform + trim */}
+        <span style={head}>{kind === 'file' ? 'Waveform · drag the yellow handles (or across) to trim: it loops inside' : 'Live waveform'}</span>
+        <canvas ref={waveRef} data-audio-wave onPointerDown={onWaveDown} onPointerMove={onWaveMove} onPointerUp={onWaveUp}
+          style={{ width: '100%', height: 120, borderRadius: radius.md, display: 'block', cursor: kind === 'file' && duration > 0 ? 'ew-resize' : 'default', touchAction: 'none' }} />
+        {kind === 'file' && duration > 0 && <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          {field('In', +win.start.toFixed(3), v => set({ trimIn: Math.max(0, Math.min(v, win.end - MIN_TRIM)) }, true), { step: 0.01, min: 0, title: 'Where the trim starts, in seconds.' })}
+          {field('Out', +win.end.toFixed(3), v => set({ trimOut: v >= duration ? 0 : Math.max(win.start + MIN_TRIM, v) }, true), { step: 0.01, min: 0, title: 'Where the trim ends, in seconds.' })}
+          <span style={small}>{fmtSec(win.end - win.start)} of {fmtSec(duration)}</span>
+          <Button size="sm" disabled={win.start <= 0 && win.end >= duration} onClick={() => set({ trimIn: 0, trimOut: 0 }, true)}>Whole file</Button>
+        </div>}
+
+        {/* Spectrum + bands */}
+        <span style={head}>Spectrum · drag across it to add a band, drag a band's edge to move it</span>
+        <canvas ref={specRef} data-audio-spectrum onPointerDown={onSpecDown} onPointerMove={onSpecMove} onPointerUp={onSpecUp}
+          style={{ width: '100%', height: 200, borderRadius: radius.md, display: 'block', cursor: 'crosshair', touchAction: 'none' }} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <span style={small}>Add a band:</span>
+          {BAND_QUICK_PRESETS.map(p => (
+            <Button key={p.key} size="sm" data-band-preset={p.key} onClick={() => addBand(p.key)}
+              title={`${p.name}: ${fmtHz(p.lo)}–${fmtHz(p.hi)} Hz, sends ${p.trigger ? 'a Trigger on each hit' : 'its level'}`}>{p.name}</Button>
+          ))}
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {!bands.length && <span style={small}>No bands yet. Each band you add becomes an output on the Audio Source: its level (Value) or a Trigger on each hit in it.</span>}
+          {bands.map(b => (
+            <div key={b.id} data-band-row={b.id} onClick={() => setSelected(b.id)}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '6px 8px', borderRadius: radius.md, border: `1px solid ${selected === b.id ? b.color : tk.border.default}`, background: tk.bg.field }}>
+              <input type="color" value={b.color} onChange={e => patchBand(b.id, { color: e.target.value })} title="The band's colour" style={{ width: 22, height: 22, border: 0, padding: 0, background: 'none', cursor: 'pointer' }} />
+              <input defaultValue={b.name} key={`${b.id}:${b.name}`} aria-label="Band name" title="The band's name: its outputs take it"
+                onBlur={e => { const v = e.target.value.trim(); if (v && v !== b.name) patchBand(b.id, { name: v }, true); }}
+                onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                style={{ width: 84, font: `600 12px ${fontFamily.ui}`, color: tk.text.primary, background: 'transparent', border: `1px solid ${tk.border.default}`, borderRadius: radius.sm, padding: '2px 5px' }} />
+              {field('Low', b.lo, v => patchBand(b.id, { lo: Math.max(BAND_MIN_HZ, Math.min(v, b.hi - 1)) }), { step: 1, min: BAND_MIN_HZ, max: BAND_MAX_HZ, title: 'The band\'s bottom, in Hz.' })}
+              {field('High', b.hi, v => patchBand(b.id, { hi: Math.min(BAND_MAX_HZ, Math.max(v, b.lo + 1)) }), { step: 1, min: BAND_MIN_HZ, max: BAND_MAX_HZ, title: 'The band\'s top, in Hz.' })}
+              <span style={{ width: 1, alignSelf: 'stretch', background: tk.border.default }} />
+              <Toggle checked={b.value} onChange={c => patchBand(b.id, c || b.trigger ? { value: c } : { value: false, trigger: true }, true)} label="Value" />
+              {field('Attack', b.attack, v => patchBand(b.id, { attack: Math.max(0, v) }), { step: 0.01, min: 0, title: 'Seconds the Value takes to rise.', disabled: !b.value })}
+              {field('Release', b.release, v => patchBand(b.id, { release: Math.max(0, v) }), { step: 0.01, min: 0, title: 'Seconds the Value takes to fall back.', disabled: !b.value })}
+              {field('Gain', b.gain, v => patchBand(b.id, { gain: Math.max(0, v) }), { step: 0.05, min: 0, title: 'Scales the Value (it stops at 1).', disabled: !b.value })}
+              <span style={{ width: 1, alignSelf: 'stretch', background: tk.border.default }} />
+              <Toggle checked={b.trigger} onChange={c => patchBand(b.id, c || b.value ? { trigger: c } : { trigger: false, value: true }, true)} label="Trigger" />
+              {field('Sensitivity', b.sensitivity, v => patchBand(b.id, { sensitivity: Math.max(0, Math.min(1, v)) }), { step: 0.05, min: 0, max: 1, title: 'Higher catches quieter hits (and more false ones).', disabled: !b.trigger })}
+              {field('Cooldown', b.cooldown, v => patchBand(b.id, { cooldown: Math.max(40, v) }), { step: 10, min: 40, title: 'Milliseconds after a hit before the next can count.', disabled: !b.trigger })}
+              <canvas ref={c => { if (c) meterRefs.current.set(b.id, c); else meterRefs.current.delete(b.id); }} style={{ width: 84, height: 18, display: 'block', marginLeft: 'auto' }} title="The band now: its level, and a flash on each hit" />
+              <Button size="sm" variant="ghost" onClick={e => { e.stopPropagation(); setBands(bands.filter(q => q.id !== b.id), true); }} title="Remove the band (and its outputs' wires)">✕</Button>
+            </div>
+          ))}
+        </div>
+      </div>
+    </Modal>
+  );
+}

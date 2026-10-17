@@ -1,9 +1,17 @@
 /**
  * The Audio nodes in the compiler (docs/audio-tools.md): their numbers become live uniforms keyed by channel, their
  * pictures node textures with the `_px` define the texture tools read, the `audio` wire only joins Audio nodes,
- * every Audio example compiles, and the retired Audio Input is no longer offered.
+ * every Audio example compiles, and the retired Audio Input is no longer offered. Audio Source's bands are outputs
+ * that follow its params (added, renamed, removed: their wires go), and a phase-1 graph on the Test loop opens as File.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+vi.hoisted(() => {
+  vi.stubGlobal('localStorage', { getItem: () => null, setItem: () => {}, removeItem: () => {}, key: () => null, length: 0, clear: () => {} });
+});
+import { useNodeGraphStore } from '../../store/useNodeGraphStore';
+import { migrateNodeParams, type GraphNode } from '../../types/nodeGraph';
+import { newBand } from '../../lib/audioTools/bands';
 import { compileGraph } from '../graphCompiler';
 import { buildAudioExamples, AUDIO_EXAMPLE_KEYS } from '../../store/audioExamples';
 import { EXAMPLE_FOLDERS } from '../../store/exampleIndex';
@@ -24,16 +32,25 @@ describe('Audio nodes compile', () => {
     }
   });
 
-  it('numbers are live uniforms written by channel; Hit\'s Trigger feeds the Envelope and Counter', () => {
+  it('numbers are live uniforms written by channel; the Kick band\'s trigger feeds the Envelope and Counter', () => {
     const r = compileGraph({ nodes: ex.audioKickRing.nodes });
     const lu = Object.entries(r.liveUniforms);
-    for (const ch of ['trigger', 'envelope', 'count', 'strength']) expect(lu.some(([u, k]) => k === `kick::${ch}` && u.startsWith('u_aud_') && u.endsWith(`_${ch}`))).toBe(true);
-    expect(lu.some(([, k]) => k === 'src::level')).toBe(true);
-    expect(lu.some(([, k]) => k === 'bass::level')).toBe(true);
-    const trig = lu.find(([, k]) => k === 'kick::trigger')![0];
+    for (const ch of ['level', 'time', 'kick_t', 'bass_v']) expect(lu.some(([u, k]) => k === `src::${ch}` && u.startsWith('u_aud_') && u.endsWith(`_${ch}`)), ch).toBe(true);
+    const trig = lu.find(([, k]) => k === 'src::kick_t')![0];
     // The memory nodes run in their own pass: the trigger uniform is read there.
     const all = [r.fragmentShader, ...(r.passes ?? []).map(p => p.fragmentShader)].join('\n');
     expect(all).toContain(trig);
+  });
+
+  it('Hit\'s numbers are live uniforms too', () => {
+    const r = compileGraph({ nodes: [
+      n('audioSource', 'src', 0, 0),
+      n('audioHit', 'kick', 0, 0, {}, { audio: ['src', 'audio'] }),
+      n('envelope', 'env', 0, 0, { mode: 'trigger' }, { gate: ['kick', 'trigger'] }),
+      n('output', 'out', 0, 0, {}, { color: ['env', 'value'] }),
+    ] });
+    expect(r.errors ?? []).toEqual([]);
+    for (const ch of ['trigger', 'envelope', 'count', 'strength']) expect(Object.values(r.liveUniforms)).toContain(`kick::${ch}`);
   });
 
   it('pictures are node textures with a _px define, readable by Sample (texture)', () => {
@@ -68,5 +85,71 @@ describe('Audio nodes compile', () => {
     expect(offered).not.toContain('audioInput');
     expect(getNodeDefinition('audioInput')).toBeTruthy();
     for (const t of ['audioSource', 'audioBand', 'audioHit', 'audioSpectrum', 'audioSpectrogram', 'audioWaveform']) expect(offered).toContain(t);
+  });
+});
+
+describe('Audio Source bands are outputs', () => {
+  const st = () => useNodeGraphStore.getState();
+  const src = () => st().nodes.find(x => x.id === 'src')!;
+  const setUp = () => {
+    useNodeGraphStore.setState({ nodes: [
+      n('audioSource', 'src', 0, 0),
+      n('envelope', 'env', 0, 0, { mode: 'trigger' }),
+      n('output', 'out', 0, 0, {}, { color: ['env', 'value'] }),
+    ], activeGroupPath: [], activeGroupId: null });
+  };
+
+  it('adding, renaming and removing a band adds, renames and removes its sockets; a removed band\'s wires go', () => {
+    setUp();
+    expect(Object.keys(src().outputs)).toEqual(['audio', 'level', 'time']);
+    const kick = newBand([], 'kick');
+    st().updateNodeParams('src', { bands: [kick] }, { immediate: true });
+    expect(src().outputs[`${kick.id}_t`]?.label).toBe('Kick (trigger)');
+    expect(src().outputs[`${kick.id}_v`]).toBeUndefined();
+    // Wire it into the Envelope, then compile: it reads the band's live uniform.
+    const env = st().nodes.find(x => x.id === 'env')!;
+    useNodeGraphStore.setState({ nodes: st().nodes.map(x => x.id === 'env' ? { ...env, inputs: { ...env.inputs, gate: { ...env.inputs.gate, connection: { nodeId: 'src', outputKey: `${kick.id}_t` } } } } : x) });
+    const r = compileGraph({ nodes: st().nodes });
+    expect(r.errors ?? []).toEqual([]);
+    expect(Object.values(r.liveUniforms)).toContain(`src::${kick.id}_t`);
+    // Renamed, and Value switched on: both sockets, the wire kept.
+    st().updateNodeParams('src', { bands: [{ ...kick, name: 'Boom', value: true }] }, { immediate: true });
+    expect(src().outputs[`${kick.id}_t`]?.label).toBe('Boom (trigger)');
+    expect(src().outputs[`${kick.id}_v`]?.label).toBe('Boom');
+    expect(st().nodes.find(x => x.id === 'env')!.inputs.gate.connection?.outputKey).toBe(`${kick.id}_t`);
+    // Its Trigger switched off: that socket and its wire go.
+    st().updateNodeParams('src', { bands: [{ ...kick, name: 'Boom', value: true, trigger: false }] }, { immediate: true });
+    expect(src().outputs[`${kick.id}_t`]).toBeUndefined();
+    expect(st().nodes.find(x => x.id === 'env')!.inputs.gate.connection).toBeUndefined();
+    // Removed: back to the three fixed outputs.
+    st().updateNodeParams('src', { bands: [] }, { immediate: true });
+    expect(Object.keys(src().outputs)).toEqual(['audio', 'level', 'time']);
+  });
+
+  it('moving a band is live: the node changes, its sockets stay, nothing compiles', () => {
+    setUp();
+    const bass = newBand([], 'bass');
+    st().updateNodeParams('src', { bands: [bass] }, { immediate: true });
+    const outs = src().outputs;
+    const compile = vi.spyOn(st(), 'compile');
+    st().updateNodeParams('src', { bands: [{ ...bass, lo: 80, hi: 300 }] }, { immediate: true, live: true });
+    expect((src().params.bands as Array<{ lo: number }>)[0].lo).toBe(80);
+    expect(src().outputs).toBe(outs);
+    expect(compile).not.toHaveBeenCalled();
+    compile.mockRestore();
+  });
+
+  it('a phase-1 graph on the Test loop opens on File, empty, and compiles', () => {
+    const old: GraphNode = {
+      id: 'src', type: 'audioSource', position: { x: 0, y: 0 }, inputs: {},
+      outputs: { audio: { type: 'audio', label: 'Audio' }, level: { type: 'float', label: 'Level' }, time: { type: 'float', label: 'Time' } },
+      params: { source: 'loop', playing: true, loop: true, gain: 1, _fileName: '' },
+    };
+    const m = migrateNodeParams(old, getNodeDefinition);
+    expect(m.params.source).toBe('file');
+    expect(Object.keys(m.outputs)).toEqual(['audio', 'level', 'time']);
+    const r = compileGraph({ nodes: [m, n('audioBand', 'b', 0, 0, {}, { audio: ['src', 'audio'] }), n('output', 'out', 0, 0, {}, { color: ['b', 'level'] })] });
+    expect(r.errors ?? []).toEqual([]);
+    expect(r.success).toBe(true);
   });
 });
