@@ -7,8 +7,6 @@
  *
  * The trim is In / Out in seconds on the loaded file: playback loops between them.
  */
-import { bandLevel, newBandState, newHitState, stepBand, stepHit, type BandState, type HitState } from './dsp';
-
 export interface AudioBandSpec {
   id: string;
   name: string;
@@ -128,21 +126,13 @@ export function bandOutputs(bands: readonly AudioBandSpec[]): Array<{ key: strin
 
 // ── Running a band, once per frame ────────────────────────────────────────────────────────────────────────
 
-export interface BandRun { band: BandState; hit: HitState; hitAt: number }
-export const newBandRun = (): BandRun => ({ band: newBandState(), hit: newHitState(), hitAt: -Infinity });
-
 /**
- * One frame of a band on a dB spectrum: its Value (followed level) and Trigger (an onset in its range). `now` is
- * seconds on the wall clock, `dt` seconds since the last frame. Mutates and returns `run`.
+ * One frame of a band on a dB spectrum: its Value (followed level) and Trigger (an onset in its range), in
+ * play/kit/audioTools.js (an exported page runs the same). `now` is seconds on the wall clock, `dt` seconds since the
+ * last frame. stepBandRun mutates and returns `run`.
  */
-export function stepBandRun(run: BandRun, b: AudioBandSpec, freqDb: Float32Array, sampleRate: number, now: number, dt: number): BandRun {
-  run.band = stepBand(run.band, bandLevel(freqDb, sampleRate, b.lo, b.hi), dt, b.attack, b.release, b.gain);
-  if (b.trigger) {
-    stepHit(run.hit, freqDb, sampleRate, now, dt, { lo: b.lo, hi: b.hi, sensitivity: b.sensitivity, cooldownMs: b.cooldown, decay: 0.3 });
-    if (run.hit.trigger) run.hitAt = now;
-  } else run.hit.trigger = 0;
-  return run;
-}
+export { atNewBandRun as newBandRun, atStepBandRun as stepBandRun } from '../../play/kit/audioTools.js';
+export type { AtBandRun as BandRun } from '../../play/kit/audioTools.js';
 
 // ── Trim ─────────────────────────────────────────────────────────────────────────────────────────────────────
 

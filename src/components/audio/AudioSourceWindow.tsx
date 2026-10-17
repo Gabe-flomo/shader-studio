@@ -2,7 +2,7 @@
  * Audio Source's big window (docs/audio-tools.md), opened with Open ↗ on its card:
  *
  * - **The file's whole waveform** (decoded once: the audio engine's peaks) with In / Out handles to trim; playback
- *   loops inside the trim, the playhead shows where it is. Mic: a live scrolling waveform instead.
+ *   loops inside the trim, the playhead shows where it is. Mic and Video: a live scrolling waveform instead.
  * - **The live spectrum** (log frequency, labelled in Hz). Drag across it to add a band; drag a band's edge to move it.
  * - **Quick bands** (Sub, Bass, Kick, Snare, Hi-hat, Vocals, Air) and **the band list**: each band's name, colour,
  *   Low / High Hz, and what it sends out (Value with Attack / Release / Gain, Trigger with Sensitivity / Cooldown),
@@ -123,7 +123,7 @@ export function AudioSourceWindow({ nodeId, onClose, onLoad }: { nodeId: string;
           }
           const px = (v.time / v.duration) * w;
           g.fillStyle = '#ffffff'; g.fillRect(px - 0.5, 0, 1.5, h);
-        } else if (v.kind === 'mic') {
+        } else if (v.kind !== 'file') {
           if (fresh && v.active) {
             let m = 0;
             for (let i = 0; i < v.wave.length; i++) m = Math.max(m, Math.abs(v.wave[i]));
@@ -223,7 +223,7 @@ export function AudioSourceWindow({ nodeId, onClose, onLoad }: { nodeId: string;
   /** Where Learn takes the hit from: the selection, else the trim (a file), or the last seconds heard (`last`, the Mic). */
   const learnSpan = (): Span | null => (selection ?? (duration > 0 ? win : null));
   const learn = (o: { last?: boolean; relearn?: string } = {}) => {
-    const last = o.last || kind === 'mic';
+    const last = o.last || kind !== 'file';
     const span = last ? null : learnSpan();
     let r: LearnResult;
     if (!last && !span) r = { error: 'Load a sound first.' };
@@ -326,13 +326,13 @@ export function AudioSourceWindow({ nodeId, onClose, onLoad }: { nodeId: string;
 
   return (
     <Modal title={typeof node.params.label === 'string' && node.params.label.trim() ? node.params.label.trim() : 'Audio Source'}
-      subtitle={kind === 'file' ? 'Audio Source · trim the file, pick frequency bands, learn sounds' : 'Audio Source · the Mic, its frequency bands and learned sounds'}
+      subtitle={kind === 'file' ? 'Audio Source · trim the file, pick frequency bands, learn sounds' : kind === 'video' ? 'Audio Source · a video\'s sound, its frequency bands and learned sounds' : 'Audio Source · the Mic, its frequency bands and learned sounds'}
       icon="wave" width={1240} height={800} onClose={onClose} headerActions={<Button variant="primary" onClick={onClose}>Done</Button>}>
       <div data-audio-source-window style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 16, height: '100%', boxSizing: 'border-box', overflowY: 'auto', font: `500 12px ${fontFamily.ui}` }}>
         {/* Transport */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <div style={{ width: 160 }}>
-            <Segmented<AudioSourceKind> size="sm" fill ariaLabel="Source" value={kind} onChange={v => set({ source: v })} options={[{ value: 'file', label: 'File' }, { value: 'mic', label: 'Mic' }]} />
+          <div style={{ width: 220 }}>
+            <Segmented<AudioSourceKind> size="sm" fill ariaLabel="Source" value={kind} onChange={v => set({ source: v })} options={[{ value: 'file', label: 'File' }, { value: 'mic', label: 'Mic' }, { value: 'video', label: 'Video' }]} />
           </div>
           <Button size="sm" onClick={() => set({ playing: !playing })}>{playing ? 'Pause' : 'Play'}</Button>
           {kind === 'file' && <Toggle checked={node.params.loop !== false} onChange={c => set({ loop: c })} label="Loop" />}
@@ -408,7 +408,7 @@ export function AudioSourceWindow({ nodeId, onClose, onLoad }: { nodeId: string;
             title="Learn the strongest hit in the last two seconds heard">Learn last hit</Button>
           <span style={small}>{learnMsg || (kind === 'file'
             ? (selection ? 'Learn takes the strongest hit in the selection.' : 'Select one hit (Drag: Select) or trim to it, then press Learn.')
-            : 'Play the sound into the Mic, then press Learn last hit.')}</span>
+            : kind === 'video' ? 'Play the video, then press Learn last hit just after the sound.' : 'Play the sound into the Mic, then press Learn last hit.')}</span>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {sounds.map(snd => (

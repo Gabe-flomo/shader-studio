@@ -10,13 +10,16 @@ give you ordinary numbers and textures you can wire anywhere.
 Where the sound comes from. The card has tabs, like the Texture node's Image | Video | Webcam:
 
 - **File**: press **Load a sound…** and pick a song (mp3, wav, ogg, m4a…). Until then the card says
-  *Load a sound, or switch to Mic.* and everything listening hears silence.
+  *Load a sound, or switch to Mic.* and everything listening hears silence. The sound is kept in the media library
+  (with the videos), so it comes back by itself when you reload or open the graph again. **Library** lists every sound
+  kept there: **Use** puts one in the Audio Source, **✕** removes it from the library.
 - **Mic**: press **Start** (the browser asks first). An audio interface or a virtual cable such as BlackHole works too.
-
-(A Video's sound will be a third tab later.)
+- **Video**: pick a video node in the graph (a Texture node playing a video file, or a Baked node). Its own sound is
+  what the Audio nodes hear, in step with the picture: it plays and loops with the video (there is no trim). You hear it
+  through the speakers while Play is on. A video without a sound track reads silence; so does the webcam.
 
 - **Play**: plays the file out loud, or listens to the Mic. The **Pause** button on the card does the same.
-- **Loop** (File only): start again at the end of the trim (or the file).
+- **Loop** (File only): start again at the end of the trim (or the file). A Video loops as its video node does.
 - **Gain**: how loud the bands and the listening nodes hear it, not how loud you hear it. Raise it for a quiet microphone.
 - Outputs: **Audio** (for the nodes below), **Level** (how loud it is right now, 0–1), **Time** (seconds played),
   and one output per band (below).
@@ -113,7 +116,14 @@ pixel's left-right place, −1 to 1 (0 is silence). **Samples** sets how much so
 - The Audio nodes work inside groups too (plain, iterated, and a group inside a group): wire an Audio Source's Audio
   into the group and on to the nodes inside, or keep the Audio Source inside. In an Agents group, keep the Audio nodes
   outside and wire their numbers in.
-- Web pages exported from Playfield don't play the Audio nodes yet (they hear silence).
-- A loaded file has to be loaded again after a reload (the card names the file it had). Graphs from before this
-  change that used the built-in Test loop open on the File tab, empty.
+- **Web pages** exported from Playfield run the Audio nodes as the app does (the same sums, frame by frame): a File's
+  sound travels in the page (up to 6 MB; a bigger one is listed as left out), and a Video's sound plays from its video
+  (when that video is drawn in the picture, so the page carries it). Browsers only start sound after a tap, so the page
+  shows **Tap to start sound** on the picture (a background page starts it on the first click or key, silently waiting
+  until then). The Mic doesn't work on a web page: an Audio Source on its Mic tab stays silent there, and the export
+  dialog says so.
+- A loaded sound is kept in this browser's library, with the videos. Graphs saved as a
+  .playfield / .playfile carry the sound with them, like videos. On another computer without it, the card says
+  *"name" isn't in this browser's library*: load it again. Graphs from before this change that used the built-in Test
+  loop open on the File tab, empty.
 - The old **Audio Input** node is retired: it's no longer in the node list, but graphs that use it still work.

@@ -16,140 +16,31 @@
  * Match output holds the similarity of the last onset, falling to 0 in MATCH_FALL seconds. The trigger comes about
  * LEARN_WINDOW after the hit.
  */
-import { binHz, DB_FLOOR, hitThreshold, HIT_HISTORY, spectrumDb } from './dsp';
+import { spectrumDb } from './dsp';
+import {
+  AT_LEARN_WINDOW as LEARN_WINDOW, AT_LEARN_BANDS as LEARN_BANDS, AT_ENV_POINTS as ENV_POINTS, atFingerprintOf as fingerprintOf, atLearnBands as learnBands, atLearnFlux as learnFlux,
+  type AtFingerprint as Fingerprint, type AtLearnFrame as LearnFrame, type AtLearnListener as LearnListener,
+} from '../../play/kit/audioTools.js';
 
-export const LEARN_BANDS = 40;
-export const LEARN_MIN_HZ = 40;
-export const LEARN_MAX_HZ = 16000;
-/** Seconds of frames after an onset that make a fingerprint. */
-export const LEARN_WINDOW = 0.05;
-export const ENV_POINTS = 4;
-/** Seconds the Match output takes to fall from 1 to 0 after an onset. */
-export const MATCH_FALL = 0.5;
-/** How far under its loudest band a fingerprint's bands are floored, dB. */
-const FLOOR_DB = 60;
+/**
+ * The features and the live matcher live in play/kit/audioTools.js, so an exported page (runtime/play-runtime.js)
+ * matches learned sounds exactly as the app does; re-exported here under their app names.
+ */
+export {
+  AT_LEARN_BANDS as LEARN_BANDS, AT_LEARN_MIN_HZ as LEARN_MIN_HZ, AT_LEARN_MAX_HZ as LEARN_MAX_HZ, AT_LEARN_WINDOW as LEARN_WINDOW,
+  AT_ENV_POINTS as ENV_POINTS, AT_MATCH_FALL as MATCH_FALL, AT_LEARN_RING_SECONDS as LEARN_RING_SECONDS, AT_LEARN_ONSET as LEARN_ONSET,
+  atLearnBands as learnBands, atLearnFlux as learnFlux, atNewOnsetState as newOnsetState, atStepOnset as stepOnset,
+  atFingerprintOf as fingerprintOf, atSimilarity as similarity, atNewLearnListener as newLearnListener, atStepLearn as stepLearn,
+} from '../../play/kit/audioTools.js';
+export type {
+  AtLearnFrame as LearnFrame, AtOnsetState as OnsetState, AtFingerprint as Fingerprint, AtSoundRun as SoundRun, AtLearnListener as LearnListener,
+} from '../../play/kit/audioTools.js';
+
 /** The analysis the live path sees (engine.ts: FFT 2048), and the hop learning from a file uses (60 frames a second). */
 export const LEARN_FFT = 2048;
 export const LEARN_HOP_SECONDS = 1 / 60;
 /** The longest selection a file is learned from, in seconds. */
 export const LEARN_MAX_SELECTION = 20;
-/** Seconds of frames the engine keeps for "Learn last hit". */
-export const LEARN_RING_SECONDS = 2.5;
-
-/** The onset detector the matcher listens with: Sensitivity (as Hit's) and the shortest gap between two onsets. */
-export const LEARN_ONSET = { sensitivity: 0.6, cooldownMs: 80 };
-
-// ── Features ─────────────────────────────────────────────────────────────────────────────────────────────────
-
-const edges = (() => {
-  const e = new Float64Array(LEARN_BANDS + 1);
-  for (let i = 0; i <= LEARN_BANDS; i++) e[i] = LEARN_MIN_HZ * Math.pow(LEARN_MAX_HZ / LEARN_MIN_HZ, i / LEARN_BANDS);
-  return e;
-})();
-
-/** The power in each learn band of a dB spectrum (AnalyserNode's), as dB. A band narrower than a bin reads its nearest bin. */
-export function learnBands(freqDb: Float32Array, sampleRate: number, out = new Float32Array(LEARN_BANDS)): Float32Array {
-  const nb = freqDb.length, hz = binHz(sampleRate, nb);
-  const p = (i: number) => { const db = freqDb[Math.max(0, Math.min(nb - 1, i))]; return db > DB_FLOOR ? Math.pow(10, db / 10) : 0; };
-  for (let b = 0; b < LEARN_BANDS; b++) {
-    const a = Math.ceil(edges[b] / hz), z = Math.min(nb - 1, Math.floor(edges[b + 1] / hz));
-    let sum = 0, n = 0;
-    for (let i = a; i <= z; i++) { sum += p(i); n++; }
-    const pw = n ? sum / n : p(Math.round((edges[b] + edges[b + 1]) / 2 / hz));
-    out[b] = pw > 0 ? 10 * Math.log10(pw) : DB_FLOOR;
-  }
-  return out;
-}
-
-/** One analysis frame as the learner keeps it: when (seconds), its learn bands (dB), and the whole-spectrum flux. */
-export interface LearnFrame { t: number; bands: Float32Array; flux: number }
-
-/**
- * Spectral flux over the learn bands: how much each band rose since the last frame (log-compressed amplitude, as
- * Hit's), averaged with every band counting the same, so a kick's few low bands count as much as a clap's many.
- */
-const fluxUnit = (db: number): number => (db > DB_FLOOR ? Math.log1p(100 * Math.min(1, Math.pow(10, db / 20))) / Math.log1p(100) : 0);
-export function learnFlux(prev: Float32Array, cur: Float32Array): number {
-  let sum = 0;
-  for (let b = 0; b < LEARN_BANDS; b++) { const d = fluxUnit(cur[b]) - fluxUnit(prev[b]); if (d > 0) sum += d; }
-  return sum / LEARN_BANDS;
-}
-
-/** Onsets over the whole spectrum: the flux above a threshold that follows its recent mean (Hit's). */
-export interface OnsetState { prev: Float32Array | null; history: Float32Array; at: number; filled: number; last: number; flux: number; trigger: number }
-export const newOnsetState = (): OnsetState => ({ prev: null, history: new Float32Array(HIT_HISTORY), at: 0, filled: 0, last: -Infinity, flux: 0, trigger: 0 });
-export function stepOnset(s: OnsetState, bands: Float32Array, now: number): OnsetState {
-  s.trigger = 0;
-  s.flux = s.prev ? learnFlux(s.prev, bands) : 0;
-  s.prev = bands;
-  let mean = 0;
-  for (let i = 0; i < s.filled; i++) mean += s.history[i];
-  mean = s.filled ? mean / s.filled : 0;
-  const thr = hitThreshold(mean, LEARN_ONSET.sensitivity);
-  s.history[s.at] = s.flux;
-  s.at = (s.at + 1) % s.history.length;
-  s.filled = Math.min(s.history.length, s.filled + 1);
-  if (s.flux > thr && (now - s.last) * 1000 >= LEARN_ONSET.cooldownMs) { s.last = now; s.trigger = 1; }
-  return s;
-}
-
-export interface Fingerprint {
-  /** LEARN_BANDS values: centred dB, length 1. */
-  spec: number[];
-  /** ENV_POINTS values 0..1: loudness across the window, 1 = its loudest. */
-  env: number[];
-}
-
-const levelDb = (bands: Float32Array): number => {
-  let s = 0;
-  for (let i = 0; i < bands.length; i++) s += Math.pow(10, bands[i] / 10);
-  return s > 0 ? 10 * Math.log10(s) : DB_FLOOR;
-};
-
-/** The fingerprint of the frames after an onset (`frames[0]` is the onset), or null for silence. */
-export function fingerprintOf(frames: readonly LearnFrame[]): Fingerprint | null {
-  if (!frames.length) return null;
-  const t0 = frames[0].t;
-  const use = frames.filter(f => f.t - t0 <= LEARN_WINDOW + 1e-6);
-  // Average power, back to dB, floored under the loudest band, centred, length 1.
-  const pw = new Float64Array(LEARN_BANDS);
-  for (const f of use) for (let b = 0; b < LEARN_BANDS; b++) pw[b] += Math.pow(10, f.bands[b] / 10) / use.length;
-  const db = Array.from(pw, v => (v > 0 ? 10 * Math.log10(v) : DB_FLOOR));
-  const top = Math.max(...db);
-  if (!(top > DB_FLOOR + 1)) return null;
-  for (let b = 0; b < LEARN_BANDS; b++) db[b] = Math.max(db[b], top - FLOOR_DB);
-  const mean = db.reduce((a, v) => a + v, 0) / LEARN_BANDS;
-  let norm = 0;
-  for (let b = 0; b < LEARN_BANDS; b++) { db[b] -= mean; norm += db[b] * db[b]; }
-  norm = Math.sqrt(norm);
-  if (!(norm > 1e-6)) return null;
-  const spec = db.map(v => +(v / norm).toFixed(4));
-  // The envelope: each frame's level, read at ENV_POINTS moments (between frames: the nearer two, blended).
-  const lv = use.map(f => ({ t: f.t - t0, l: levelDb(f.bands) }));
-  const at = (t: number) => {
-    if (lv.length === 1 || t <= lv[0].t) return lv[0].l;
-    for (let i = 1; i < lv.length; i++) if (t <= lv[i].t) { const k = (t - lv[i - 1].t) / Math.max(1e-9, lv[i].t - lv[i - 1].t); return lv[i - 1].l * (1 - k) + lv[i].l * k; }
-    return lv[lv.length - 1].l;
-  };
-  const raw = Array.from({ length: ENV_POINTS }, (_, i) => at((LEARN_WINDOW * i) / (ENV_POINTS - 1)));
-  const peak = Math.max(...raw);
-  const env = raw.map(l => +Math.max(0, 1 + (l - peak) / 40).toFixed(4));
-  return { spec, env };
-}
-
-/** How alike two fingerprints are, 0..1: mostly the spectra's cosine, a little the envelopes'. */
-export function similarity(a: Fingerprint, b: { spec: readonly number[]; env: readonly number[] }): number {
-  if (a.spec.length !== b.spec.length || !a.spec.length) return 0;
-  let dot = 0;
-  for (let i = 0; i < a.spec.length; i++) dot += a.spec[i] * b.spec[i];
-  let envSim = 1;
-  if (a.env.length && a.env.length === b.env.length) {
-    let d = 0;
-    for (let i = 0; i < a.env.length; i++) d += Math.abs(a.env[i] - b.env[i]);
-    envSim = 1 - d / a.env.length;
-  }
-  return Math.max(0, Math.min(1, 0.85 * Math.max(0, dot) + 0.15 * envSim));
-}
 
 // ── Learning ─────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -278,67 +169,8 @@ export function soundOutputs(sounds: readonly AudioSoundSpec[]): Array<{ key: st
   return out;
 }
 
-// ── Listening, once per frame ────────────────────────────────────────────────────────────────────────────────
+// ── Listening, once per frame: newLearnListener and stepLearn (above, from the kit) ───────────────────────────
 
-export interface SoundRun {
-  /** 1 on the frame it fired. */
-  trigger: number;
-  /** The similarity at the last onset, falling to 0. */
-  match: number;
-  /** The similarity at the last onset, as it was. */
-  last: number;
-  lastFire: number;
-  /** When it last fired (seconds), for the window's flash. */
-  hitAt: number;
-  count: number;
-}
-const newSoundRun = (): SoundRun => ({ trigger: 0, match: 0, last: 0, lastFire: -Infinity, hitAt: -Infinity, count: 0 });
-
-export interface LearnListener {
-  onset: OnsetState;
-  pending: { t0: number; frames: LearnFrame[] } | null;
-  /** The last LEARN_RING_SECONDS of frames, oldest first. */
-  ring: LearnFrame[];
-  runs: Map<string, SoundRun>;
-  /** Onsets heard (for the window). */
-  onsets: number;
-}
-export const newLearnListener = (): LearnListener => ({ onset: newOnsetState(), pending: null, ring: [], runs: new Map(), onsets: 0 });
-
-/**
- * One frame: keep it in the ring, watch for an onset, and LEARN_WINDOW after one compare its fingerprint with every
- * learned sound. `now` is seconds on the wall clock, `dt` seconds since the last frame. Mutates `L`.
- */
-export function stepLearn(L: LearnListener, sounds: readonly AudioSoundSpec[], freqDb: Float32Array, sampleRate: number, now: number, dt: number): void {
-  for (const id of [...L.runs.keys()]) if (!sounds.some(s => s.id === id)) L.runs.delete(id);
-  for (const s of sounds) {
-    let r = L.runs.get(s.id);
-    if (!r) L.runs.set(s.id, (r = newSoundRun()));
-    r.trigger = 0;
-    r.match = Math.max(0, r.match - dt / MATCH_FALL);
-  }
-  const bands = learnBands(freqDb, sampleRate);
-  stepOnset(L.onset, bands, now);
-  const frame: LearnFrame = { t: now, bands, flux: L.onset.flux };
-  L.ring.push(frame);
-  while (L.ring.length && now - L.ring[0].t > LEARN_RING_SECONDS) L.ring.shift();
-  if (L.pending) {
-    L.pending.frames.push(frame);
-    if (now - L.pending.t0 >= LEARN_WINDOW - 1e-6) {
-      const fp = fingerprintOf(L.pending.frames);
-      L.pending = null;
-      if (fp) for (const s of sounds) {
-        if (!s.spec.length) continue;
-        const r = L.runs.get(s.id)!, sim = similarity(fp, s);
-        r.match = r.last = sim;
-        if (sim >= s.match && (now - r.lastFire) * 1000 >= s.cooldown) { r.trigger = 1; r.lastFire = r.hitAt = now; r.count++; }
-      }
-    }
-  } else if (L.onset.trigger) {
-    L.onsets++;
-    L.pending = { t0: now, frames: [frame] };
-  }
-}
 
 /** "Learn last hit": the strongest onset in the ring that has its whole window after it. */
 export function learnFromRing(L: LearnListener): LearnResult {

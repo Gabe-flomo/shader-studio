@@ -13,6 +13,7 @@ import type { GraphNode, NodeDefinition, ParamDef } from '../../types/nodeGraph'
 import { texUv } from './passes';
 import { bandOutputs, bandsOf } from '../../lib/audioTools/bands';
 import { soundOutputs, soundsOf, type AudioSoundSpec } from '../../lib/audioTools/learn';
+import type { AtListenerSpec } from '../../play/kit/audioTools.js';
 
 export const AUDIO_CATEGORY = 'Audio';
 
@@ -54,9 +55,13 @@ export const audioToolSampler = (slug: string): string => `u_tex_${slug}`;
 
 // ── Settings the engine reads ────────────────────────────────────────────────────────────────────────────────
 
-/** Audio Source's tabs. (A Video's sound is a later tab.) Phase 1's Test loop opens as File, empty. */
-export type AudioSourceKind = 'file' | 'mic';
-export const audioSourceKind = (node: GraphNode): AudioSourceKind => (node.params.source === 'mic' ? 'mic' : 'file');
+/** Audio Source's tabs: a File, the Mic, or a Video node's own sound. Phase 1's Test loop opens as File, empty. */
+export type AudioSourceKind = 'file' | 'mic' | 'video';
+export const audioSourceKind = (node: GraphNode): AudioSourceKind => (node.params.source === 'mic' ? 'mic' : node.params.source === 'video' ? 'video' : 'file');
+
+/** The graph's nodes whose video can sound for the Video tab: a Texture node playing a video file, or a Baked node. */
+export const AUDIO_VIDEO_NODE_TYPES: ReadonlySet<string> = new Set(['videoInput', 'baked']);
+export const isAudioVideoNode = (node: GraphNode): boolean => AUDIO_VIDEO_NODE_TYPES.has(node.type) && node.params.source !== 'webcam';
 
 /** Band level's bands, in Hz. */
 export const BAND_PRESETS: Record<string, { label: string; lo: number; hi: number }> = {
@@ -86,6 +91,21 @@ export function audioBandOf(node: GraphNode): { lo: number; hi: number } {
   if (p) return { lo: p.lo, hi: p.hi };
   const lo = Math.max(1, num(node.params.low, 60)), hi = Math.max(lo + 1, num(node.params.high, 250));
   return { lo, hi };
+}
+
+/**
+ * A listening node's settings for one frame (play/kit/audioTools.js atStepListener): the app's engine and an exported
+ * page read the same.
+ */
+export function listenerSpecOf(node: GraphNode): AtListenerSpec {
+  const P = node.params;
+  const { lo, hi } = node.type === AUDIO_BAND_TYPE || node.type === AUDIO_HIT_TYPE ? audioBandOf(node) : { lo: 0, hi: 0 };
+  return {
+    type: node.type, lo, hi,
+    attack: num(P.attack, 0.01), release: num(P.release, 0.15), gain: Math.max(0, num(P.gain, 1)),
+    sensitivity: num(P.sensitivity, 0.5), cooldown: num(P.cooldown, 120), decay: num(P.decay, 0.3),
+    layout: P.layout === 'linear' ? 'linear' : 'log', minDb: num(P.minDb, -90), maxDb: num(P.maxDb, -20), smoothing: num(P.smoothing, 0.5),
+  };
 }
 
 const pick = (v: unknown, allowed: readonly number[], d: number): number => {
@@ -148,7 +168,7 @@ const SOURCE_OUTPUTS = {
 export function retypeAudioSource(node: GraphNode): GraphNode {
   if (node.type !== AUDIO_SOURCE_TYPE) return node;
   let params = node.params;
-  if (params.source !== 'file' && params.source !== 'mic') params = { ...params, source: 'file' };
+  if (params.source !== 'file' && params.source !== 'mic' && params.source !== 'video') params = { ...params, source: 'file' };
   const outputs: GraphNode['outputs'] = {};
   for (const [k, s] of Object.entries(SOURCE_OUTPUTS)) outputs[k] = { type: s.type, label: s.label };
   for (const o of audioSourceExtraOutputs(params)) outputs[o.key] = { type: 'float', label: o.label };
@@ -164,13 +184,13 @@ export const AudioSourceNode: NodeDefinition = {
   type: AUDIO_SOURCE_TYPE,
   label: 'Audio Source',
   category: AUDIO_CATEGORY,
-  aliases: ['Audio', 'Sound', 'Music', 'Song', 'Microphone', 'Mic', 'Audio file', 'Audio In', 'Line in', 'Frequency bands', 'Kick trigger', 'Learn a sound', 'Sound match', 'Clap detect'],
-  description: 'Where the sound comes from: a File (Load a sound on the card) or the Mic (or an audio interface), picked with the tabs on the card. Open ↗ shows the whole file to trim, and a live spectrum where you pick frequency bands: each band becomes an output here, its level or a trigger on each hit in it. Learn a sound there too (select one clap, press Learn): it fires a trigger whenever a sound like it plays. Wire Audio into Band level, Hit, Spectrum, Spectrogram or Waveform; Level is how loud it is right now (0–1) and Time the seconds it has played.',
+  aliases: ['Audio', 'Sound', 'Music', 'Song', 'Microphone', 'Mic', 'Audio file', 'Audio In', 'Line in', 'Frequency bands', 'Kick trigger', 'Learn a sound', 'Sound match', 'Clap detect', 'Video sound'],
+  description: 'Where the sound comes from: a File (Load a sound on the card; it is kept in the library, so it comes back after a reload), the Mic (or an audio interface), or a Video node\'s own sound (the Video tab: a Texture node playing a video, or a Baked node), picked with the tabs on the card. Open ↗ shows the whole file to trim, and a live spectrum where you pick frequency bands: each band becomes an output here, its level or a trigger on each hit in it. Learn a sound there too (select one clap, press Learn): it fires a trigger whenever a sound like it plays. Wire Audio into Band level, Hit, Spectrum, Spectrogram or Waveform; Level is how loud it is right now (0–1) and Time the seconds it has played.',
   inputs: {},
   outputs: SOURCE_OUTPUTS,
-  defaultParams: { source: 'file', playing: true, loop: true, gain: 1, _fileName: '', bands: [], sounds: [], trimIn: 0, trimOut: 0 },
+  defaultParams: { source: 'file', playing: true, loop: true, gain: 1, _fileName: '', sampleId: '', videoNode: '', bands: [], sounds: [], trimIn: 0, trimOut: 0 },
   paramDefs: {
-    playing: { label: 'Play', type: 'bool', hint: 'Plays the file (heard through the speakers), or listens to the Mic.' },
+    playing: { label: 'Play', type: 'bool', hint: 'Plays the file or the video\'s sound (heard through the speakers), or listens to the Mic.' },
     loop: { label: 'Loop', type: 'bool', showWhen: { param: 'source', value: 'file' }, hint: 'Start again at the trim\'s end (or the file\'s). Off: it stops there.' },
     gain: { label: 'Gain', type: 'float', min: 0, max: 8, step: 0.01, hint: 'How loud the listening nodes and the bands hear it (not how loud you hear it): raise it for a quiet microphone.' },
   },

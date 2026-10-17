@@ -18,7 +18,8 @@ dialog, Download page, the store's `exportPlayHtml` and the Stage's Exact view a
 
 **Supported:** the shader with its time and resolution; the mouse position and clicks (`u_mouse`,
 `u_mousebtn`, Play mouse sources and click triggers); key presses (key sources and key triggers);
-previous-frame feedback, echo and Pass nodes; images (and small videos and songs in the full player);
+previous-frame feedback, echo and Pass nodes; images (and small videos and songs in the full player); the Audio nodes
+on a File's sound or a Video's (docs/audio-tools.md, kit group `audioTools`; "Tap to start sound");
 Play mappings driven by those, by time (LFOs, clocks, noise…) and by other controls. There is no
 scroll input: Play has no scroll source, so nothing reads one (a follow-up if wanted).
 
@@ -29,7 +30,7 @@ scroll input: Play has no scroll source, so nothing reads one (a follow-up if wa
 | Hand, face and pose tracking | hand / face / pose sources, gesture and proximity triggers, pair mappings on hand points, the trackers' settings, baked tracks and hand-model files | "Hand tracking won't work on a web page; those controls will hold their current value." (face, body alike) |
 | The camera | Camera layers and Motion layers reading it (removed), particles / glyphs / contours drawn from it (hidden), sensors and zones on those, controls on removed layers | "The camera won't work on a web page; …" |
 | MIDI | MIDI and pad sources, note triggers and actions, the pad grid, the MIDI file, drum pads' and racks' MIDI input (their keys and clicks stay) | "MIDI won't work on a web page; …" |
-| The microphone and live audio | live sources, audio triggers, readers on the live input, Audio layers (hidden), an Audio Input node with no song (its band mappings too) | "The microphone and live audio won't work on a web page; …" |
+| The microphone and live audio | live sources, audio triggers, readers on the live input, Audio layers (hidden), an Audio Input node with no song (its band mappings too), an Audio Source on its Mic tab (silent) | "The microphone and live audio won't work on a web page; …" |
 | The Depth node's model | nothing to remove: its live texture reads 0 on a page (a baked depth travels) | "The Depth node's model won't run on a web page, …" |
 | Splat Scene scans | nothing to remove: the scan's textures read empty on a page (docs/splat-scene.md) | "Splat Scene scans don't go onto web pages yet: the scan reads empty there …" |
 

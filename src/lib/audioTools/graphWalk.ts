@@ -72,3 +72,17 @@ export function findNodeDeep(nodes: readonly GraphNode[], id: string): GraphNode
   }
   return undefined;
 }
+
+/** Every node at any depth that `keep` takes (the Audio Source's Video tab lists the graph's video nodes). */
+export function collectNodesDeep(nodes: readonly GraphNode[], keep: (n: GraphNode) => boolean): GraphNode[] {
+  const out: GraphNode[] = [];
+  const walk = (list: readonly GraphNode[]) => {
+    for (const n of list) {
+      if (keep(n)) out.push(n);
+      const sg = subOf(n);
+      if (sg) walk(sg.nodes);
+    }
+  };
+  walk(nodes);
+  return out;
+}

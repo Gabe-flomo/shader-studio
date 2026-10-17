@@ -186,6 +186,8 @@ export function webExportScope(input: PlayHtmlInput): { input: PlayHtmlInput; fr
     delete media.tracks;
     // An Audio Input node with no song listens to the mic on a page: it stays at rest instead.
     if (media.audio?.some(a => !a.src)) { kinds.add('mic'); media.audio = media.audio.filter(a => a.src); }
+    // An Audio Source on its Mic tab: silent on a page (its bands, triggers and listening nodes stay at rest).
+    if (media.audioTools?.sources.some(a => a.kind === 'mic')) { kinds.add('mic'); media.audioTools = { ...media.audioTools, sources: media.audioTools.sources.filter(a => a.kind !== 'mic') }; }
     next.media = media;
   }
   // A Depth node's live model: its texture reads blank on a page (a baked depth plays as a video or travels as an image).
