@@ -1213,7 +1213,7 @@ exports[`golden shaders: every Play example exports the same bundle > picCurves 
 
 exports[`golden shaders: every Play example exports the same bundle > picGlitch 1`] = `
 {
-  "bundle": "11f22a13bfe6fc0a359e726178bd:6537",
+  "bundle": "0701c5180c5435117c33c923e188:6423",
   "missing": [],
 }
 `;
@@ -15175,7 +15175,7 @@ exports[`golden shaders: every example compiles as it did > picGlitch 1`] = `
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "0dcfe162361ec51e4b01a68917a5:5439",
+  "fragmentShader": "035a299a13abc90a44341be01531:5326",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "1f775924ba473302155986c3c0d6:118",

@@ -496,13 +496,12 @@ export function buildPictureExamples(): Record<string, ExampleGraph> {
         inputs: [['a', 'vec3', ['glitch', 'outA']], ['b', 'vec3', ['glitch', 'outB']], ['hit', 'float', ['glitch', 'hit']], ['uv', 'vec2', ['uvS', 'uv']]],
         lines: [
           ['vec3 both', 'uv.x < 0.0 ? a : b'],
-          ['float line', '1.0 - smoothstep(0.0, 0.006, abs(uv.x))'],
         ],
-        result: 'mix(both, vec3(1.0), line)',
+        result: 'both',
         note: [
           'Side by side: both outputs at once, to show the node gives two pictures back.',
           'both: A′ (the room, with bars of the cat) left of the middle, B′ (the cat, with bars of the room) right of it.',
-          'line: a thin white divider down the middle. hit is wired so you can try mix(both, vec3(1.0, 0.0, 0.3), hit * 0.3) to see the hit blocks.',
+          'hit is wired so you can try mix(both, vec3(1.0, 0.0, 0.3), hit * 0.3) as the result to tint the hit blocks.',
         ],
       }),
       n('uv', 'uvS', 380, 600, note('UV: this pixel\'s place; Side by side uses its X (negative on the left) to choose A′ or B′.')),
