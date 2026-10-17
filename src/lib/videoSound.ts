@@ -36,3 +36,19 @@ export const videoSound = {
   changed(): void { for (const fn of listeners) fn(); },
   subscribe(fn: () => void): () => void { listeners.add(fn); return () => { listeners.delete(fn); }; },
 };
+
+/** One MediaElementSource per element, ever: a second createMediaElementSource on the same element throws. */
+const elementSources = new WeakMap<HTMLMediaElement, MediaElementAudioSourceNode>();
+
+/**
+ * The element's sound in `ctx` (made once, then reused), for the Audio Source's Video tab (lib/audioTools/engine.ts):
+ * the graph's video nodes' elements. (Video layers keep their own, play/videoLayers.ts.) Null when the browser refuses.
+ */
+export function mediaElementSourceOf(ctx: AudioContext, el: HTMLMediaElement): MediaElementAudioSourceNode | null {
+  let src = elementSources.get(el);
+  if (!src) {
+    try { src = ctx.createMediaElementSource(el); } catch { return null; }
+    elementSources.set(el, src);
+  }
+  return src;
+}

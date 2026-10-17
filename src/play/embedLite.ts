@@ -49,7 +49,7 @@ export function liteBlockers(input: PlayHtmlInput): LiteBlocker[] {
   if (input.datasets && Object.keys(input.datasets).length) add('Data', 'data');
   if (input.handAssets || input.media?.tracks && Object.values(input.media.tracks).some(t => t?.src)) add('Tracking', 'trackers');
   if (Object.keys(input.media?.videos ?? {}).length) add('Video');
-  if (input.media?.audio?.length) add('Audio');
+  if (input.media?.audio?.length || input.media?.audioTools) add('Audio');
   // Play: anything that moves, draws over or sounds needs the player.
   const visible = play.layers.filter(l => l.visible !== false);
   for (const l of visible) add(`${l.kind[0].toUpperCase()}${l.kind.slice(1)} layers`, LAYER_FEATURE[l.kind]);

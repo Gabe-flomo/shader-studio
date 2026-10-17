@@ -75,6 +75,8 @@ import passHostSource from './kit/passHost.js?raw';
 import agentPlanSource from './kit/agentPlan.js?raw';
 import agentShadersSource from './kit/agentShaders.js?raw';
 import agentHostSource from './kit/agentHost.js?raw';
+import audioToolsSource from './kit/audioTools.js?raw';
+import type { AtBand, AtListenerSpec, AtSound } from './kit/audioTools.js';
 import type { AeGrainSample } from '../types/playAudioEngine';
 import type { AgentDepositProgram, AgentDrawProgram, AgentGroupProgram, AgentListener, AgentTrailProgram } from '../compiler/types';
 import { renderableFinish } from '../types/playFinish';
@@ -219,6 +221,33 @@ export interface PlayMedia {
    * loaded here, or are over TRACK_LIMIT).
    */
   tracks?: Partial<Record<TrackerKind, PlayMediaFile & { layerId: string }>>;
+  /**
+   * The Audio nodes (docs/audio-tools.md), run on the page by kit/audioTools.js as in the app: each Audio Source (a File
+   * carries its sound, a Video reads the video on `video`, its sampler uniform), each listening node with its settings,
+   * and the shader's uniforms (uniform → `<node id>::<channel>`) and samplers (sampler → node id) they fill.
+   */
+  audioTools?: PlayAudioTools;
+}
+
+export interface PlayAudioToolSource extends PlayMediaFile {
+  id: string;
+  kind: 'file' | 'mic' | 'video';
+  /** Video: the video node's sampler uniform (its element plays the sound); absent when that video isn't on the page. */
+  video?: string;
+  playing: boolean;
+  loop: boolean;
+  /** The trim, seconds (Out 0: the end). */
+  trimIn: number;
+  trimOut: number;
+  gain: number;
+  bands: AtBand[];
+  sounds: AtSound[];
+}
+export interface PlayAudioTools {
+  sources: PlayAudioToolSource[];
+  listeners: Array<{ id: string; sourceId: string | null; spec: AtListenerSpec; w: number; h: number }>;
+  uniforms: Record<string, string>;
+  textures: Record<string, string>;
 }
 
 export type EmbedMode = 'player' | 'background';
@@ -307,6 +336,12 @@ export function leftBehind(play: PlayRecord, media?: PlayMedia, opts: { graphs?:
   for (const v of Object.values(media?.videos ?? {})) {
     if (!v.src && v.bytes > 0) out.push({ what: `The video “${v.name}” (${sizeText(v.bytes)}) in ${v.label}`, why: `Videos over ${sizeText(VIDEO_LIMIT)} stay out of the page to keep it light, so that input shows black there. Trim or compress it under ${sizeText(VIDEO_LIMIT)} to bring it along.` });
   }
+  for (const a of media?.audioTools?.sources ?? []) {
+    if (a.kind === 'file' && !a.src) out.push(a.bytes > AUDIO_LIMIT
+      ? { what: `The sound “${a.name}” (${sizeText(a.bytes)}) in ${a.label}`, why: `Sounds over ${sizeText(AUDIO_LIMIT)} stay out of the page, so ${a.label} and the Audio nodes listening to it hear silence there. Trim or compress it under ${sizeText(AUDIO_LIMIT)} to bring it along.` }
+      : { what: `${a.name ? `The sound “${a.name}”` : 'The sound'} in ${a.label}`, why: 'No sound is open in it this session (none loaded, or still opening from the library), so the Audio nodes listening to it hear silence on the page. Load it, then export again.' });
+    if (a.kind === 'video' && !a.video) out.push({ what: `The video sound in ${a.label}`, why: 'Its video node isn’t drawn in the picture, so the page doesn’t carry that video and the Audio nodes listening to it hear silence. Wire the video into the picture to bring it along.' });
+  }
   for (const a of media?.audio ?? []) {
     if (!a.src && a.bytes > 0) out.push({ what: `The song “${a.name}” (${sizeText(a.bytes)}) in ${a.label}`, why: `Songs over ${sizeText(AUDIO_LIMIT)} stay out of the page, so ${a.label} listens to the visitor’s microphone instead, after they click Listen to audio.` });
   }
@@ -394,6 +429,7 @@ export function mediaCarried(media?: PlayMedia, hands?: HandAssets | 'pending', 
   for (const t of Object.values(media?.textures ?? {})) if (t.src) out.push({ what: `Image in ${t.label}${t.scaledTo ? ` (scaled to ${t.scaledTo} px)` : ''}`, bytes: t.src.length });
   for (const v of Object.values(media?.videos ?? {})) if (v.src) out.push({ what: `Video “${v.name}” in ${v.label}`, bytes: v.src.length });
   for (const a of media?.audio ?? []) if (a.src) out.push({ what: `Song “${a.name}” in ${a.label}`, bytes: a.src.length });
+  for (const a of media?.audioTools?.sources ?? []) if (a.src) out.push({ what: `Sound “${a.name}” in ${a.label}`, bytes: a.src.length });
   for (const l of play?.layers ?? []) {
     const f = l.kind === 'video' ? media?.layerVideos?.[l.id] : undefined;
     if (f?.src) out.push({ what: `Video “${f.name}” in ${f.label}`, bytes: f.src.length });
@@ -430,6 +466,14 @@ function runtimeMedia(m: PlayMedia) {
     // A Baked node's clock (docs/bake.md) and clip settings (docs/clip-editor.md) ride along: the page plays them as the app does.
     videos: map(m.videos, v => ({ src: v.src, loop: v.loop, speed: v.speed, ...(v.clock ? { clock: v.clock } : {}), ...(v.clip ? { clip: v.clip } : {}) })),
     audio: (m.audio ?? []).map(a => ({ id: a.id, src: a.src, uniforms: a.uniforms, bands: a.bands, range: a.range, mode: a.mode })),
+    // The Audio nodes: their sounds, settings and what they fill (kit/audioTools.js runs them on the page).
+    ...(m.audioTools ? { audioTools: {
+      ...m.audioTools,
+      sources: m.audioTools.sources.map(a => ({
+        id: a.id, kind: a.kind, src: a.src, ...(a.video ? { video: a.video } : {}), playing: a.playing, loop: a.loop, trimIn: a.trimIn, trimOut: a.trimOut, gain: a.gain,
+        bands: a.bands, sounds: a.sounds,
+      })),
+    } } : {}),
   };
 }
 
@@ -516,7 +560,7 @@ function runtimeOptions(o: EmbedOptions) {
  * bundle doesn't use (`kitGroupsFor`): a plain shader with a few layers
  * carries no Finish, particles, agents, audio engine, tracking or scripts.
  */
-export type KitGroup = 'script' | 'agentsCpu' | 'trackers' | 'midi' | 'data' | 'finish' | 'blur' | 'audioFx' | 'drums' | 'jfa' | 'gpuParticles' | 'passes' | 'agentsGpu';
+export type KitGroup = 'script' | 'agentsCpu' | 'trackers' | 'midi' | 'data' | 'finish' | 'blur' | 'audioFx' | 'drums' | 'jfa' | 'gpuParticles' | 'passes' | 'agentsGpu' | 'audioTools';
 export const KIT_FILES: { name: string; src: string; group?: KitGroup }[] = [
   { name: 'particle-sim', src: particleSource }, { name: 'geometry', src: geometrySource },
   { name: 'sketch3d', src: sketch3dSource, group: 'script' }, { name: 'p5', src: p5Source, group: 'script' },
@@ -536,14 +580,16 @@ export const KIT_FILES: { name: string; src: string; group?: KitGroup }[] = [
   { name: 'passPlan', src: passPlanSource }, { name: 'passHost', src: passHostSource, group: 'passes' },
   { name: 'agentPlan', src: agentPlanSource, group: 'agentsGpu' }, { name: 'agentShaders', src: agentShadersSource, group: 'agentsGpu' },
   { name: 'agentHost', src: agentHostSource, group: 'agentsGpu' },
+  { name: 'audioTools', src: audioToolsSource, group: 'audioTools' },
 ];
 /** Every kit file, in order (the full kit). */
 export const KIT_SOURCES = KIT_FILES.map(f => f.src);
-export const KIT_GROUPS: KitGroup[] = ['script', 'agentsCpu', 'trackers', 'midi', 'data', 'finish', 'blur', 'audioFx', 'drums', 'jfa', 'gpuParticles', 'passes', 'agentsGpu'];
+export const KIT_GROUPS: KitGroup[] = ['script', 'agentsCpu', 'trackers', 'midi', 'data', 'finish', 'blur', 'audioFx', 'drums', 'jfa', 'gpuParticles', 'passes', 'agentsGpu', 'audioTools'];
 /** What each group is, as the export dialog says it. */
 export const KIT_GROUP_NAMES: Record<KitGroup, string> = {
   script: 'Script layers (p5 and 3D)', agentsCpu: 'Agents layers', trackers: 'Hand, face and pose tracking', midi: 'MIDI (locks, note ranges and the pad grid)', data: 'Data', finish: 'Finish effects and Water layers',
   blur: 'Blur (for Finish and particles)', audioFx: 'Audio effects', drums: 'Drum pads and the Audio engine', jfa: 'The Layers node', gpuParticles: 'Particles', passes: 'Pass nodes', agentsGpu: 'Agents',
+  audioTools: 'The Audio nodes',
 };
 
 /** The kit's API the runtime reads (SSKit.*), each with the group it needs. */
@@ -569,6 +615,7 @@ const KIT_API: [string, string, KitGroup?, string?][] = [
   // The frame's order (passPlan.js) schedules particles and agents too: always in; only the Pass host is optional.
   ['passes', '{ create: phCreate, steps: ppFrameSteps }', 'passes', '{ create: null, steps: ppFrameSteps }'],
   ['agents', '{ create: ahCreate, unsupported: ahUnsupported }', 'agentsGpu'],
+  ['audioTools', '{ newSource: atNewSource, newListener: atNewListener, applyGain: atApplyGain, stepSource: atStepSource, stepListener: atStepListener }', 'audioTools'],
 ];
 
 /**
@@ -594,6 +641,7 @@ export function kitGroupsFor(bundle: ReturnType<typeof playBundle>): Set<KitGrou
   if (bundle.graphPasses?.length) g.add('passes');
   if (bundle.agents) g.add('agentsGpu');
   if (shaders.includes('// gpu-particles ')) g.add('gpuParticles');
+  if (bundle.media && 'audioTools' in bundle.media && bundle.media.audioTools) g.add('audioTools');
   return withKitDeps(g);
 }
 

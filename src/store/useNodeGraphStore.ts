@@ -13,6 +13,7 @@ import { retypeReadNeighbours } from '../nodes/definitions/readNeighbours';
 import { retypeTrailField } from '../nodes/definitions/agents';
 import { retypeShuffle } from '../nodes/definitions/channelTools';
 import { retypeAudioSource } from '../nodes/definitions/audioTools';
+import { audioToolsForWeb } from '../lib/audioTools/webExport';
 import { migrateNodeParams, GROUP_PORT_SENTINEL } from '../types/nodeGraph';
 import { LAYOUT_VERSION, needsLayoutSpread, spreadLegacyLayout } from './legacyLayout';
 import { askText } from '../components/ui/dialogStore';
@@ -1761,15 +1762,19 @@ export function switchScopeFor(state: Pick<NodeGraphState, 'nodes' | 'activeGrou
  * picture (encoded from its decoded canvas), and the videos and songs
  * mediaSources.ts kept when they were loaded.
  */
-function webMedia(st: Pick<NodeGraphState, 'nodes' | 'textureUniforms' | 'nodeTextures' | 'videoUniforms' | 'audioUniforms' | 'play'>): PlayMedia {
+function webMedia(st: Pick<NodeGraphState, 'nodes' | 'textureUniforms' | 'nodeTextures' | 'videoUniforms' | 'audioUniforms' | 'play' | 'liveUniforms'>): PlayMedia {
   const byId = new Map(st.nodes.map(n => [n.id, n]));
   const labelOf = (id: string, fallback: string) => {
     const n = byId.get(id);
     const own = n && typeof n.params.label === 'string' && n.params.label.trim();
     return own || (n && getNodeDefinition(n.type)?.label) || fallback;
   };
+  // The Audio nodes (docs/audio-tools.md): the page runs them with the app's own sums, filling their textures itself.
+  const audioTools = audioToolsForWeb({ nodes: st.nodes, liveUniforms: st.liveUniforms, textureUniforms: st.textureUniforms, videoUniforms: st.videoUniforms, mediaOf: mediaSource,
+    labelOf: n => (typeof n.params.label === 'string' && n.params.label.trim()) || getNodeDefinition(n.type)?.label || 'Audio Source' });
   const textures: NonNullable<PlayMedia['textures']> = {};
   for (const [uniform, key] of Object.entries(st.textureUniforms)) {
+    if (audioTools && uniform in audioTools.textures) continue;
     const [id, slot] = key.split('::');
     const label = slot ? `${labelOf(id, 'a node')} (${slot})` : labelOf(id, 'Texture Input');
     // A 16-bit Time Cube atlas is a half-float texture: the page gets its 8-bit canvas (time-cube deep.ts).
@@ -1844,7 +1849,7 @@ function webMedia(st: Pick<NodeGraphState, 'nodes' | 'textureUniforms' | 'nodeTe
     const data = size <= TRACK_LIMIT ? bakeBase64(b.bake.key) : null;
     tracks[kind] = { layerId: layer.id, label: `“${layer.label}”`, name: layer.fileName, src: data, bytes: data?.length ?? size };
   }
-  return { textures, videos, audio, ...(Object.keys(layerVideos).length ? { layerVideos } : {}), ...(Object.keys(layerPads).length ? { layerPads } : {}), ...(Object.keys(rackSamples).length ? { rackSamples } : {}), ...(Object.keys(tracks).length ? { tracks } : {}) };
+  return { textures, videos, audio, ...(audioTools ? { audioTools } : {}), ...(Object.keys(layerVideos).length ? { layerVideos } : {}), ...(Object.keys(layerPads).length ? { layerPads } : {}), ...(Object.keys(rackSamples).length ? { rackSamples } : {}), ...(Object.keys(tracks).length ? { tracks } : {}) };
 }
 
 export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({

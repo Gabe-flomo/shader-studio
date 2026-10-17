@@ -1,6 +1,6 @@
 /**
- * The Audio nodes' cards (docs/audio-tools.md): Audio Source's File | Mic tabs, its controls (play, load a sound,
- * start the microphone, Open ↗ for its window: AudioSourceWindow.tsx) and a small live readout on every Audio node —
+ * The Audio nodes' cards (docs/audio-tools.md): Audio Source's File | Mic | Video tabs, its controls (play, load a sound
+ * or pick one kept in the library, start the microphone, pick a video node, Open ↗ for its window: AudioSourceWindow.tsx) and a small live readout on every Audio node —
  * Audio Source's spectrum with its bands, a meter, a hit flash, a mini spectrum, a waterfall or a wave.
  *
  * The readouts draw into a canvas from one shared animation-frame loop (no React render per frame), and only when
@@ -14,13 +14,17 @@ import { audioToolsEngine, type AudioReadout } from '../../lib/audioTools/engine
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import {
   AUDIO_BAND_TYPE, AUDIO_HIT_TYPE, AUDIO_SOURCE_TYPE, AUDIO_SPECTROGRAM_TYPE, AUDIO_SPECTRUM_TYPE, AUDIO_WAVEFORM_TYPE, audioSourceKind,
-  type AudioSourceKind,
+  isAudioVideoNode, type AudioSourceKind,
 } from '../../nodes/definitions/audioTools';
 import { liveAudio } from '../../lib/liveAudio';
 import { bandsOf, type AudioBandSpec } from '../../lib/audioTools/bands';
 import { xOfHz } from '../../lib/audioTools/dsp';
 import { Button } from '../ui/Button';
 import { Segmented } from '../ui/Choice';
+import { Select } from '../ui/Select';
+import { Popover } from '../ui/Popover';
+import { addVideoFile, deleteVideo, getVideo, isAudioType, listVideos, subscribe as subscribeLibrary, type LibraryVideoMeta } from '../../lib/backgroundLibrary';
+import { collectNodesDeep } from '../../lib/audioTools/graphWalk';
 import { AudioSourceWindow } from './AudioSourceWindow';
 
 import { addDrawer } from './drawLoop';
@@ -155,36 +159,109 @@ function useEngineText(nodeId: string): string {
   return useSyncExternalStore(sub, () => audioToolsEngine.status(nodeId));
 }
 
-const TABS: Array<{ value: AudioSourceKind; label: string }> = [{ value: 'file', label: 'File' }, { value: 'mic', label: 'Mic' }];
+const TABS: Array<{ value: AudioSourceKind; label: string }> = [{ value: 'file', label: 'File' }, { value: 'mic', label: 'Mic' }, { value: 'video', label: 'Video' }];
 
-/** Audio Source's card: File | Mic tabs (as the Texture node's Image | Video | Webcam), Play, Load / Start, Open ↗. */
+/** Load a sound into an Audio Source and keep it in the library (so it comes back after a reload). An error, or null. */
+async function loadSound(nodeId: string, f: File): Promise<string | null> {
+  const err = await audioToolsEngine.loadFile(nodeId, f);
+  if (err) return err;
+  const meta = await addVideoFile(f).catch(() => null);
+  // A new file starts untrimmed.
+  useNodeGraphStore.getState().updateNodeParams(nodeId, { _fileName: f.name, sampleId: meta?.id ?? '', trimIn: 0, trimOut: 0 }, { immediate: true });
+  return null;
+}
+
+/** Open a sound kept in the library in an Audio Source. An error, or null. */
+async function loadLibrarySound(nodeId: string, id: string): Promise<string | null> {
+  const got = await getVideo(id).catch(() => null);
+  if (!got) return 'That sound isn\'t in this browser\'s library any more.';
+  const err = await audioToolsEngine.loadFile(nodeId, new File([got.blob], got.name, { type: got.type || got.blob.type }));
+  if (err) return err;
+  useNodeGraphStore.getState().updateNodeParams(nodeId, { _fileName: got.name, sampleId: id, trimIn: 0, trimOut: 0 }, { immediate: true });
+  return null;
+}
+
+const fmtLen = (s?: number) => (s && s > 0 ? `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}` : '');
+
+/** The sounds kept in the library: use one, or remove it. */
+function SoundLibrary({ anchorRef, current, onPick, onClose }: { anchorRef: React.RefObject<HTMLElement | null>; current: string; onPick: (id: string) => void; onClose: () => void }) {
+  const tk = useTokens();
+  const [items, setItems] = useState<LibraryVideoMeta[] | null>(null);
+  useEffect(() => {
+    let live = true;
+    const load = () => listVideos().then(l => { if (live) setItems(l.filter(v => isAudioType(v.type))); }, () => { if (live) setItems([]); });
+    load();
+    const off = subscribeLibrary(load);
+    return () => { live = false; off(); };
+  }, []);
+  return (
+    <Popover anchorRef={anchorRef} onClose={onClose} width={300} padding={8}>
+      <div data-sound-library style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 360, overflowY: 'auto', fontSize: 11.5 }} onKeyDown={e => e.stopPropagation()}>
+        <span style={{ color: tk.text.faint, fontSize: 11 }}>Sounds in the library (every sound you load is kept here)</span>
+        {items === null && <span style={{ color: tk.text.muted }}>Loading…</span>}
+        {items?.length === 0 && <span style={{ color: tk.text.muted }}>Nothing here yet. Sounds you load are kept here.</span>}
+        {items?.map(i => (
+          <div key={i.id} data-sound-item={i.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: 3, borderRadius: 4, border: `1px solid ${i.id === current ? tk.accent.base : tk.border.default}` }}>
+            {i.thumb ? <img src={i.thumb} alt="" style={{ width: 48, height: 24, objectFit: 'cover', borderRadius: 3 }} /> : <span style={{ width: 48 }} />}
+            <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: tk.text.secondary }} title={i.name}>{i.name}</span>
+            <span style={{ color: tk.text.faint }}>{fmtLen(i.duration)}</span>
+            <Button size="sm" onClick={() => onPick(i.id)} title="Play this sound in the Audio Source">Use</Button>
+            <Button size="sm" variant="ghost" onClick={() => { void deleteVideo(i.id); }} title="Remove it from the library (graphs that use it will ask for it again)">✕</Button>
+          </div>
+        ))}
+      </div>
+    </Popover>
+  );
+}
+
+/** The graph's video nodes, for the Video tab. */
+function useVideoNodes(): Array<{ value: string; label: string }> {
+  const nodes = useNodeGraphStore(s => s.nodes);
+  return useMemo(() => collectNodesDeep(nodes, isAudioVideoNode).map(n => {
+    const P = n.params;
+    const name = (typeof P.label === 'string' && P.label.trim()) || (typeof P._fileName === 'string' && P._fileName) || (typeof P.fileName === 'string' && P.fileName) || '';
+    return { value: n.id, label: `${n.type === 'baked' ? 'Baked' : 'Texture (video)'}${name ? `: ${name}` : ` ${n.id}`}` };
+  }), [nodes]);
+}
+
+/** Audio Source's card: File | Mic | Video tabs (as the Texture node's Image | Video | Webcam), Play, Load / Library / Start / a video, Open ↗. */
 function SourceControls({ node }: { node: GraphNode }) {
   const tk = useTokens();
   const text = useEngineText(node.id);
   const fileRef = useRef<HTMLInputElement>(null);
+  const libRef = useRef<HTMLSpanElement>(null);
   const [open, setOpen] = useState(false);
+  const [libOpen, setLibOpen] = useState(false);
+  const [err, setErr] = useState('');
   const kind = audioSourceKind(node);
   const playing = node.params.playing !== false;
+  const videos = useVideoNodes();
   const set = (p: Record<string, unknown>) => useNodeGraphStore.getState().updateNodeParams(node.id, p, { immediate: true });
   const loaded = useSyncExternalStore(useMemo(() => (fn: () => void) => audioToolsEngine.onChange(fn), []), () => !!audioToolsEngine.sourceView(node.id)?.loaded);
   const pickFile = async (f: File | undefined) => {
     if (!f) return;
-    const err = await audioToolsEngine.loadFile(node.id, f);
-    // A new file starts untrimmed.
-    if (!err) set({ _fileName: f.name, trimIn: 0, trimOut: 0 });
+    setErr((await loadSound(node.id, f)) ?? '');
   };
+  const videoNode = typeof node.params.videoNode === 'string' ? node.params.videoNode : '';
   const stop = (e: React.SyntheticEvent) => e.stopPropagation();
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '2px 0 6px' }} onPointerDown={stop} onMouseDown={stop} data-audio-source-card={kind}>
       <Segmented<AudioSourceKind> size="sm" fill ariaLabel="Source" value={kind} onChange={v => set({ source: v })} options={TABS} />
       <input ref={fileRef} type="file" accept="audio/*" style={{ display: 'none' }} onChange={e => { void pickFile(e.target.files?.[0]); e.target.value = ''; }} />
+      {kind === 'video' && (
+        <Select ariaLabel="Video node" value={videoNode} onChange={v => set({ videoNode: v })}
+          options={[{ value: '', label: videos.length ? 'Pick a video node…' : 'No video in the graph yet' }, ...videos]} />
+      )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
         <Button size="sm" onClick={() => set({ playing: !playing })} title={playing ? 'Stop' : 'Play'}>{playing ? 'Pause' : 'Play'}</Button>
-        {kind === 'file' && <Button size="sm" onClick={() => fileRef.current?.click()} title="Load an audio file (mp3, wav, ogg, m4a…)">{loaded ? 'Replace…' : 'Load a sound…'}</Button>}
+        {kind === 'file' && <Button size="sm" onClick={() => fileRef.current?.click()} title="Load an audio file (mp3, wav, ogg, m4a…); it is kept in the library">{loaded ? 'Replace…' : 'Load a sound…'}</Button>}
+        {kind === 'file' && <span ref={libRef}><Button size="sm" onClick={() => setLibOpen(o => !o)} aria-expanded={libOpen} title="Sounds kept in the library: use one, or remove it">Library</Button></span>}
         {kind === 'mic' && !liveAudio.isOn() && <Button size="sm" onClick={() => { void audioToolsEngine.startMic(node.id); }} title="Open the microphone or audio input (the browser asks first)">Start</Button>}
         <Button size="sm" onClick={() => setOpen(true)} title="Open the big window: the whole file to trim, and the spectrum to pick bands on">Open ↗</Button>
       </div>
-      <div style={{ fontSize: 11.5, color: tk.text.muted, lineHeight: 1.45 }}>{text}</div>
+      <div style={{ fontSize: 11.5, color: err ? tk.status.danger : tk.text.muted, lineHeight: 1.45 }}>{err || text}</div>
+      {libOpen && <SoundLibrary anchorRef={libRef} current={typeof node.params.sampleId === 'string' ? node.params.sampleId : ''} onClose={() => setLibOpen(false)}
+        onPick={id => { setLibOpen(false); void loadLibrarySound(node.id, id).then(e => setErr(e ?? '')); }} />}
       {open && createPortal(<AudioSourceWindow nodeId={node.id} onClose={() => setOpen(false)} onLoad={() => fileRef.current?.click()} />, document.body)}
     </div>
   );

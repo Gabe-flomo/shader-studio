@@ -43,8 +43,8 @@ waveform line). They open on the File tab, empty: load a sound or switch to Mic.
 
 ## Audio Source redesign (built)
 
-- **Tabs** File | Mic on the card (as the Texture node's), no Source dropdown; room for a "Video sound" tab later.
-  The `source` param is `file` or `mic`; a saved `loop` opens as `file` (retypeAudioSource, run on load).
+- **Tabs** File | Mic | Video on the card (as the Texture node's), no Source dropdown.
+  The `source` param is `file`, `mic` or `video`; a saved `loop` opens as `file` (retypeAudioSource, run on load).
 - **Card readout**: a 48-bin log spectrum with the bands' ranges under it, plus a thin level meter.
 - **Open ↗ window** (components/audio/AudioSourceWindow.tsx): the file's waveform (audioEngine.peaks, decoded
   once) with In / Out trim handles (params `trimIn` / `trimOut`, seconds; Out 0 = the end); playback loops inside
@@ -61,18 +61,52 @@ waveform line). They open on the File tab, empty: load a sound or switch to Mic.
 - The test loop's code is gone from the Audio nodes (lib/testLoop.ts stays: the Play page's Audio readers use it).
 
 ### Known gaps in Phase 1
-- Web export (the play runtime) doesn't run the Audio nodes yet: an exported page hears silence. The old
-  Audio Input's song is embedded in exports; porting lib/audioTools to the runtime is the follow-up.
-- A Video's sound as a source (the Play page's Video layers have one; the graph's Video node doesn't yet).
+- ~~Web export hears silence~~ (done, below: "On a web page").
+- ~~A Video's sound as a source~~ (done, below: "The Video tab").
 - ~~Audio nodes inside a group compile but hear nothing~~ (done): the engine walks every group's subgraph
   (lib/audioTools/graphWalk.ts), following an `audio` wire through group input and output ports to its source, and
   the compiler binds an inner node's live uniforms and texture to its original id (shaderAssembler registerAudioTool,
   at both group levels). Plain, iterated and nested groups. Agents groups: not done (their programs don't take live
   uniforms from inside); wire the numbers in from outside.
-- A loaded file isn't kept across reloads (same as Audio Input): the card names the file to load again. Keeping it
-  in the media library like videos needs an audio library store (backgroundLibrary has images and videos only).
+- ~~A loaded file isn't kept across reloads~~ (done, below: "Sounds kept in the library").
 - Desktop app (WKWebView): the microphone path is untested there.
 - Nice-to-haves not built: Loudness (LUFS-like), Centroid (brightness), Chroma (12 notes as three vec4s).
+
+## Sounds kept in the library (built)
+- A picked file goes into the media library's video store as an audio record (`addVideoFile`: drum pad samples live
+  there too, lib/backgroundLibrary.ts), and the Audio Source keeps its id as `params.sampleId`. `sampleId` (not a new
+  key) because playfile/bundle.ts `videoIdsIn` and lib/videoUsage.ts already follow `videoId` / `sampleId`, so a
+  .playfield / .playfile carries the sound, and the library's usage counts see it, with no new code. It travels the way
+  videos do (library ZIPs, backups, the workspace folder); the desktop path is untested.
+- On `sync`, a File source with a `sampleId` and nothing open reads it back (`getVideo`) and loads it as if picked: the
+  decoded waveform (audioEngine.peaks) and the web-export copy (mediaSources) come with it. Missing: the card says so.
+- The card's **Library** popover lists the store's sounds (waveform thumbnail, length): Use, or ✕ (deleteVideo).
+
+## The Video tab (built)
+- `source: 'video'`, `params.videoNode`: a Video Input (the Texture node playing a video file) or a Baked node, at any
+  depth. The engine finds its element (videoEngine.element / bakedVideos.element) and routes it once through a
+  MediaElementSource (lib/videoSound.ts `mediaElementSourceOf`, one per element) → an inlet the probe reads → a gain
+  joined to the speakers (audioEngine.connectOutside). The element is unmuted (after the page's first click when the
+  browser wants one); leaving the tab, Play off or removing the source unplugs it and mutes it again (the video node
+  plays muted). Time is the element's currentTime; a paused video reads silence. No trim: the video's own loop.
+  Learn works from the last hit heard (as the Mic's).
+- Not done: Video layers on the Play page as a source (they already feed Play's audio readers), the webcam's sound.
+
+## On a web page (built)
+- The per-frame sums moved to play/kit/audioTools.js (`at…` names): dsp.ts, bands.ts and learn.ts re-export them, the
+  engine's tickInputs calls `atStepSource` / `atStepListener`, and the export inlines the same file (kit group
+  `audioTools`, picked when the bundle has `media.audioTools`). So the page can't drift from the app.
+- The store's webMedia adds `media.audioTools` (lib/audioTools/webExport.ts): each source (a File's data URL from
+  mediaSources, a Video's sampler uniform, its bands, its learned sounds), each listening node's `listenerSpecOf`
+  and texture size, and the uniforms (`u_aud_*` → `<id>::<channel>`) and samplers they fill. The Audio nodes'
+  samplers no longer travel as blank images.
+- runtime/play-runtime.js: one AudioContext; per source a probe analyser (FFT 2048, no smoothing); a File plays its
+  decoded buffer looped inside the trim; a Video takes its page `<video>` through a MediaElementSource. Once a frame
+  (`tickAudioTools`) the same gain, sums and texture uploads as the app. A player shows "Tap to start sound"; any
+  click or key starts it; Pause suspends it. `handle.audioTools()` reads the values back (for checking a page).
+- Left out: the Mic (play/exportScope.ts drops Mic sources and lists "The microphone and live audio", as for every
+  other mic input; docs/web-export.md); a Video whose node isn't drawn (the page has no video for it); files over
+  6 MB (listed).
 
 ## Phase 2 — Learn a sound (built)
 Hit-by-example, in the Audio Source window (lib/audioTools/learn.ts, pure and tested on synthetic claps, stabs, kicks).

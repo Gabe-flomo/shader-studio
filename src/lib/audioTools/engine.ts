@@ -10,6 +10,11 @@
  * - Textures go to the picture through the store's node textures (`setHost`, ShaderCanvas), as Blob Track's do.
  *
  * - Learned sounds (lib/audioTools/learn.ts) listen on the source's frame too: `<id>::<sound>_t` / `_m`.
+ * - The per-frame sums (a source's bands and learned sounds, every listening node) are play/kit/audioTools.js
+ *   (atStepSource, atStepListener): an exported page runs the same code on the same frames.
+ * - File: a picked file is kept in the media library (lib/backgroundLibrary.ts, with the videos; the node keeps its
+ *   `sampleId`), so `sync` opens it again after a reload. Video: a Video node's element (lib/videoEngine.ts, or a
+ *   Baked node's, lib/bakedVideos.ts) is routed through a MediaElementSource into the probe and on to the speakers.
  *
  * Nodes inside groups (plain, iterated, nested) are followed too (graphWalk.ts): an `audio` wire through a group's
  * ports reaches its source, and every node is keyed by its own id, as the compiler binds it.
@@ -20,20 +25,17 @@ import type { InputSource, InputWriter } from '../inputBus';
 import { inputBus } from '../inputBus';
 import { audioEngine } from '../audioEngine';
 import { liveAudio } from '../liveAudio';
+import { videoEngine } from '../videoEngine';
+import { bakedVideos } from '../bakedVideos';
+import { mediaElementSourceOf } from '../videoSound';
+import { getVideo } from '../backgroundLibrary';
 import {
-  AUDIO_BAND_TYPE, AUDIO_HIT_TYPE, AUDIO_SOURCE_TYPE, AUDIO_SPECTROGRAM_TYPE, AUDIO_SPECTRUM_TYPE, AUDIO_TEXTURE_TYPES,
-  AUDIO_WAVEFORM_TYPE, audioBandOf, audioSoundsOf, audioSourceKind, audioTextureSize, type AudioSourceKind,
+  AUDIO_HIT_TYPE, AUDIO_SOURCE_TYPE, AUDIO_TEXTURE_TYPES, audioSoundsOf, audioSourceKind, audioTextureSize, listenerSpecOf, type AudioSourceKind,
 } from '../../nodes/definitions/audioTools';
-import { collectAudioNodes } from './graphWalk';
-import {
-  learnFromRing, learnFromSamples, newLearnListener, soundMatchKey, soundTriggerKey, stepLearn,
-  type AudioSoundSpec, type LearnListener, type LearnResult,
-} from './learn';
-import { bandTriggerKey, bandValueKey, bandsOf, newBandRun, stepBandRun, trimWindow, type AudioBandSpec, type BandRun } from './bands';
-import {
-  bandLevel, newBandState, newHitState, rmsLevel, scrollRows, spectrumBins, stepBand, stepHit, waveRow, writeRow,
-  type BandState, type HitState, type SpectrumLayout,
-} from './dsp';
+import { collectAudioNodes, findNodeDeep } from './graphWalk';
+import { learnFromRing, learnFromSamples, newLearnListener, type AudioSoundSpec, type LearnListener, type LearnResult } from './learn';
+import { bandsOf, newBandRun, trimWindow, type AudioBandSpec, type BandRun } from './bands';
+import { atApplyGain, atNewListener, atStepListener, atStepSource, type AtListener } from '../../play/kit/audioTools.js';
 
 const FFT = 2048;
 const num = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
@@ -58,7 +60,15 @@ interface SourceSlot {
   learn: LearnListener;
   /** The card's small spectrum: 0..1 on a log layout. */
   row: Float32Array;
-  upstream: AnalyserNode | null;
+  /** File: the library id being (or last) opened, and whether the library had it. */
+  restoring: string;
+  missing: boolean;
+  /** Video: the element whose sound is routed here, its inlet (the probe's upstream) and the gain to the speakers. */
+  videoEl: HTMLMediaElement | null;
+  videoIn: GainNode | null;
+  videoOut: GainNode | null;
+  videoUnplug: (() => void) | null;
+  upstream: AudioNode | null;
   probe: AnalyserNode | null;
   freq: Float32Array<ArrayBuffer>;
   wave: Float32Array<ArrayBuffer>;
@@ -73,14 +83,9 @@ interface SourceSlot {
 interface ListenSlot {
   node: GraphNode;
   sourceId: string | null;
-  band: BandState;
-  hit: HitState;
-  row: Float32Array;
+  /** Its running state (play/kit/audioTools.js): band, hit, row, texture bytes, size, last hit (performance.now ms). */
+  run: AtListener;
   tex: THREE.DataTexture | null;
-  w: number;
-  h: number;
-  /** When the last hit was (performance.now ms), for the card's flash. */
-  hitAt: number;
 }
 
 /** What a card draws (live objects: read them, don't keep them). */
@@ -160,9 +165,10 @@ class AudioToolsEngine implements InputSource {
     const l = this.listeners.get(nodeId);
     if (!l) return null;
     const active = !!(l.sourceId && this.sources.get(l.sourceId)?.active);
+    const r = l.run;
     return {
-      level: l.node.type === AUDIO_HIT_TYPE ? l.hit.strength : l.band.level, peak: l.band.peak, envelope: l.hit.envelope, count: l.hit.count,
-      hitAt: l.hitAt, row: l.row, data: (l.tex?.image.data as Uint8Array | undefined) ?? null, w: l.w, h: l.h, active,
+      level: l.node.type === AUDIO_HIT_TYPE ? r.hit.strength : r.band.level, peak: r.band.peak, envelope: r.hit.envelope, count: r.hit.count,
+      hitAt: r.hitAt, row: r.row, data: r.data, w: r.w, h: r.h, active,
     };
   }
 
@@ -176,7 +182,7 @@ class AudioToolsEngine implements InputSource {
     for (const [id, r] of s.learn.runs) sounds.set(id, { match: r.match, last: r.last, hitAt: Number.isFinite(r.hitAt) ? r.hitAt * 1000 : -Infinity, count: r.count });
     return {
       kind: s.kind, active: s.active, loaded: s.loaded, freq: s.freq, wave: s.wave, sampleRate: s.sampleRate, level: s.level, time: s.time,
-      duration: s.loaded ? audioEngine.duration(nodeId) : 0, bands, sounds,
+      duration: s.kind === 'file' && s.loaded ? audioEngine.duration(nodeId) : 0, bands, sounds,
     };
   }
 
@@ -184,6 +190,7 @@ class AudioToolsEngine implements InputSource {
 
   /** The graph changed: every Audio node at any depth (groups too) gets its slot; a removed one's goes. */
   sync(nodes: readonly GraphNode[]): void {
+    this.graph = nodes;
     const audio = collectAudioNodes(nodes);
     const srcIds = new Set(audio.filter(r => r.node.type === AUDIO_SOURCE_TYPE).map(r => r.node.id));
     for (const [id, s] of this.sources) if (!srcIds.has(id)) this.dropSource(id, s);
@@ -192,6 +199,9 @@ class AudioToolsEngine implements InputSource {
     for (const r of audio) if (r.node.type === AUDIO_SOURCE_TYPE) this.syncSource(r.node);
     for (const r of audio) if (r.node.type !== AUDIO_SOURCE_TYPE) this.syncListener(r.node, r.sourceId);
   }
+
+  /** The graph last synced (the Video tab finds its video node in it). */
+  private graph: readonly GraphNode[] = [];
 
   /** The ids of the nodes the engine runs now (for tests and checks): sources, and listeners with their source. */
   slots(): { sources: string[]; listeners: Array<{ id: string; sourceId: string | null; texture: boolean }> } {
@@ -207,7 +217,7 @@ class AudioToolsEngine implements InputSource {
       s = {
         node: n, kind: audioSourceKind(n), loaded: false, applied: '', upstream: null, probe: null, runs: new Map(), bands: [],
         sounds: [], learn: newLearnListener(),
-        row: new Float32Array(CARD_SPECTRUM_BINS),
+        row: new Float32Array(CARD_SPECTRUM_BINS), restoring: '', missing: false, videoEl: null, videoIn: null, videoOut: null, videoUnplug: null,
         freq: new Float32Array(FFT / 2), wave: new Float32Array(FFT), sampleRate: 48000, active: false, level: 0, time: 0, micSince: 0, status: '',
       };
       this.sources.set(n.id, s);
@@ -221,8 +231,29 @@ class AudioToolsEngine implements InputSource {
     s.sounds = audioSoundsOf(n.params);
     // Released by someone else (lib/audioSync.ts stops every song when another graph opens): it has to be loaded again.
     if (s.loaded && !audioEngine.isLoaded(n.id)) { s.loaded = false; s.applied = ''; }
+    if (s.kind !== 'video' && s.videoEl) this.unplugVideo(s);
+    this.restoreFile(s);
     this.applyPlayback(s);
   }
+
+  /** A File source whose sound isn't open but is kept in the library (`sampleId`): open it (a reload, a graph loaded). */
+  private restoreFile(s: SourceSlot): void {
+    const id = s.node.id, sampleId = typeof s.node.params.sampleId === 'string' ? s.node.params.sampleId : '';
+    if (s.kind !== 'file' || s.loaded || !sampleId || s.restoring === sampleId) return;
+    s.restoring = sampleId;
+    s.missing = false;
+    void (async () => {
+      const got = await getVideo(sampleId).catch(() => null);
+      // Replaced or gone meanwhile.
+      if (this.sources.get(id) !== s || s.node.params.sampleId !== sampleId || s.loaded) return;
+      if (!got) { s.missing = true; this.refreshStatus(s); return; }
+      const err = await this.loadFile(id, new File([got.blob], got.name, { type: got.type || got.blob.type }));
+      if (err) { s.missing = true; this.refreshStatus(s); }
+    })();
+  }
+
+  /** Is a File source's kept sound being opened from the library right now (for tests and the card)? */
+  restoringFrom(nodeId: string): string { const s = this.sources.get(nodeId); return s && !s.loaded && !s.missing ? s.restoring : ''; }
 
   /** Start or stop the sound when its kind, Play or Loop changed (not every sync: a file that played to its end stays stopped). */
   private applyPlayback(s: SourceSlot): void {
@@ -231,9 +262,9 @@ class AudioToolsEngine implements InputSource {
     const key = `${s.kind}:${playing}:${loop}:${s.loaded}:${win ? `${win.start.toFixed(4)}-${win.end.toFixed(4)}` : ''}`;
     if (key === s.applied) { this.refreshStatus(s); return; }
     s.applied = key;
-    if (s.kind === 'mic') {
+    if (s.kind !== 'file') {
       if (audioEngine.isPlaying(id)) audioEngine.stopAudio(id);
-      if (playing && !s.micSince) s.micSince = performance.now();
+      if (s.kind === 'mic' && playing && !s.micSince) s.micSince = performance.now();
       if (!playing) s.micSince = 0;
     } else if (s.loaded) {
       const want = playing && !audioEngine.isMasterPaused();
@@ -254,9 +285,13 @@ class AudioToolsEngine implements InputSource {
         : st === 'denied' ? 'The microphone was refused (or is busy).'
         : st === 'unsupported' ? 'This browser has no microphone input.'
         : 'Microphone off: press Start.';
+    } else if (s.kind === 'video') {
+      text = this.videoStatus(s);
     } else if (!s.loaded) {
       const was = typeof s.node.params._fileName === 'string' ? s.node.params._fileName : '';
-      text = was ? `Load "${was}" again (files aren't kept after a reload), or switch to Mic.` : 'Load a sound, or switch to Mic.';
+      const kept = typeof s.node.params.sampleId === 'string' && s.node.params.sampleId;
+      text = kept && !s.missing ? `Opening "${was || 'the sound'}" from the library…`
+        : was ? `"${was}" isn't in this browser's library: load it again, or switch to Mic.` : 'Load a sound, or switch to Mic.';
     }
     else text = `${audioEngine.getFileName(s.node.id) || 'Sound'} · ${audioEngine.isPlaying(s.node.id) ? 'playing' : 'stopped'}`;
     this.setStatus(s, text);
@@ -271,35 +306,33 @@ class AudioToolsEngine implements InputSource {
   private syncListener(n: GraphNode, sourceId: string | null): void {
     let l = this.listeners.get(n.id);
     if (!l) {
-      l = { node: n, sourceId: null, band: newBandState(), hit: newHitState(), row: new Float32Array(0), tex: null, w: 0, h: 0, hitAt: 0 };
+      l = { node: n, sourceId: null, run: atNewListener(n.type, 0, 0), tex: null };
       this.listeners.set(n.id, l);
     }
     l.node = n;
     l.sourceId = sourceId && this.sources.has(sourceId) ? sourceId : null;
     if (AUDIO_TEXTURE_TYPES.has(n.type)) {
       const { w, h } = audioTextureSize(n);
-      if (w !== l.w || h !== l.h || !l.tex) {
+      if (w !== l.run.w || h !== l.run.h || !l.tex) {
         l.tex?.dispose();
-        const tex = new THREE.DataTexture(new Uint8Array(w * h * 4), w, h, THREE.RGBAFormat, THREE.UnsignedByteType);
-        const d = tex.image.data as Uint8Array;
-        // Silence: 0 for a spectrum, 0.5 (the middle) for a waveform.
-        const quiet = n.type === AUDIO_WAVEFORM_TYPE ? 128 : 0;
-        for (let i = 0; i < d.length; i += 4) { d[i] = d[i + 1] = d[i + 2] = quiet; d[i + 3] = 255; }
+        // Silence: 0 for a spectrum, 0.5 (the middle) for a waveform (atNewListener fills it).
+        l.run = atNewListener(n.type, w, h);
+        const tex = new THREE.DataTexture(l.run.data!, w, h, THREE.RGBAFormat, THREE.UnsignedByteType);
         tex.minFilter = THREE.LinearFilter; tex.magFilter = THREE.LinearFilter;
         tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
         tex.generateMipmaps = false;
         tex.flipY = false;
         tex.needsUpdate = true;
-        // Web pages don't run the Audio nodes yet (docs/audio-tools-plan.md): the export encodes this blank.
+        // An exported page fills its own (runtime/play-runtime.js, the same kit sums): the export encodes this blank.
         tex.userData.canvas8 = blankCanvas();
-        l.tex = tex; l.w = w; l.h = h;
-        l.row = new Float32Array(w);
+        l.tex = tex;
         this.host?.setTexture(n.id, tex);
       }
     }
   }
 
   private dropSource(id: string, s: SourceSlot): void {
+    this.unplugVideo(s);
     try { s.probe?.disconnect(); } catch { /* gone */ }
     try { if (s.upstream && s.probe) s.upstream.disconnect(s.probe); } catch { /* gone */ }
     if (s.loaded) audioEngine.removeAudio(id);
@@ -372,21 +405,8 @@ class AudioToolsEngine implements InputSource {
       this.readSource(s);
       write(`${id}::level`, s.level);
       write(`${id}::time`, s.time);
-      spectrumBins(s.freq, s.sampleRate, s.row, 'log', -90, -20, 0.5);
-      for (const b of s.bands) {
-        const run = s.runs.get(b.id);
-        if (!run) continue;
-        stepBandRun(run, b, s.freq, s.sampleRate, nowMs / 1000, dt);
-        if (b.value) write(`${id}::${bandValueKey(b.id)}`, run.band.level);
-        if (b.trigger) write(`${id}::${bandTriggerKey(b.id)}`, run.hit.trigger);
-      }
-      stepLearn(s.learn, s.sounds, s.freq, s.sampleRate, nowMs / 1000, dt);
-      for (const snd of s.sounds) {
-        const r = s.learn.runs.get(snd.id);
-        if (!r) continue;
-        if (snd.trigger) write(`${id}::${soundTriggerKey(snd.id)}`, r.trigger);
-        if (snd.matchOut) write(`${id}::${soundMatchKey(snd.id)}`, r.match);
-      }
+      // The card's spectrum, the bands' Value / Trigger, the learned sounds' Trigger / Match (play/kit/audioTools.js).
+      atStepSource(s, s.bands, s.sounds, s.freq, s.sampleRate, nowMs / 1000, dt, (ch, v) => write(`${id}::${ch}`, v));
     }
     for (const [id, l] of this.listeners) this.runListener(id, l, nowMs, dt, write);
   }
@@ -394,7 +414,11 @@ class AudioToolsEngine implements InputSource {
   private readSource(s: SourceSlot): void {
     const id = s.node.id, playing = s.node.params.playing !== false;
     if (s.loaded && !audioEngine.isLoaded(id)) this.syncSource(s.node);
-    const upstream = !playing ? null : s.kind === 'mic' ? liveAudio.tapNode() : (audioEngine.isPlaying(id) ? audioEngine.getAnalyser(id) : null);
+    if (s.kind === 'video' && !playing) this.unplugVideo(s);
+    const upstream = !playing ? null
+      : s.kind === 'mic' ? liveAudio.tapNode()
+      : s.kind === 'video' ? this.videoUpstream(s)
+      : (audioEngine.isPlaying(id) ? audioEngine.getAnalyser(id) : null);
     if (upstream !== s.upstream) {
       if (s.upstream && s.probe) { try { s.upstream.disconnect(s.probe); } catch { /* gone */ } }
       s.upstream = upstream;
@@ -409,71 +433,108 @@ class AudioToolsEngine implements InputSource {
       }
       if (s.kind === 'mic') this.refreshStatus(s);
     }
-    s.active = !!upstream && !!s.probe;
+    // A video that is paused or still opening sounds nothing: silence, not its last frame.
+    s.active = !!upstream && !!s.probe && !(s.kind === 'video' && (!s.videoEl || s.videoEl.paused));
     if (s.active) {
       s.probe!.getFloatFrequencyData(s.freq);
       s.probe!.getFloatTimeDomainData(s.wave);
-      const gain = Math.max(0, num(s.node.params.gain, 1));
-      if (gain !== 1) {
-        const db = 20 * Math.log10(Math.max(1e-6, gain));
-        for (let i = 0; i < s.freq.length; i++) s.freq[i] += db;
-        for (let i = 0; i < s.wave.length; i++) s.wave[i] *= gain;
-      }
-      s.level = rmsLevel(s.wave);
+      s.level = atApplyGain(s.freq, s.wave, num(s.node.params.gain, 1));
     } else {
       s.freq.fill(-200);
       s.wave.fill(0);
       s.level = 0;
     }
-    s.time = s.kind === 'mic' ? (s.micSince && s.active ? (performance.now() - s.micSince) / 1000 : 0) : audioEngine.position(id) ?? 0;
+    s.time = s.kind === 'mic' ? (s.micSince && s.active ? (performance.now() - s.micSince) / 1000 : 0)
+      : s.kind === 'video' ? (s.videoEl?.currentTime ?? 0) : audioEngine.position(id) ?? 0;
+    if (s.kind === 'video') this.refreshStatus(s);
     // A file that played to its end: the card says so.
-    if (s.kind !== 'mic' && s.loaded && !audioEngine.isPlaying(id) && s.status.endsWith('playing')) this.refreshStatus(s);
+    if (s.kind === 'file' && s.loaded && !audioEngine.isPlaying(id) && s.status.endsWith('playing')) this.refreshStatus(s);
   }
 
   private runListener(id: string, l: ListenSlot, nowMs: number, dt: number, write: InputWriter): void {
     const s = l.sourceId ? this.sources.get(l.sourceId) : undefined;
     const freq = s?.active ? s.freq : this.silentFreq, wave = s?.active ? s.wave : this.silentWave, sr = s?.sampleRate ?? 48000;
-    const P = l.node.params;
-    switch (l.node.type) {
-      case AUDIO_BAND_TYPE: {
-        const { lo, hi } = audioBandOf(l.node);
-        l.band = stepBand(l.band, bandLevel(freq, sr, lo, hi), dt, num(P.attack, 0.01), num(P.release, 0.15), Math.max(0, num(P.gain, 1)));
-        write(`${id}::level`, l.band.level);
-        write(`${id}::peak`, l.band.peak);
-        return;
-      }
-      case AUDIO_HIT_TYPE: {
-        const { lo, hi } = audioBandOf(l.node);
-        stepHit(l.hit, freq, sr, nowMs / 1000, dt, { lo, hi, sensitivity: num(P.sensitivity, 0.5), cooldownMs: num(P.cooldown, 120), decay: num(P.decay, 0.3) });
-        if (l.hit.trigger) l.hitAt = nowMs;
-        write(`${id}::trigger`, l.hit.trigger);
-        write(`${id}::envelope`, l.hit.envelope);
-        write(`${id}::count`, l.hit.count);
-        write(`${id}::strength`, l.hit.strength);
-        return;
-      }
-    }
-    if (!l.tex) return;
-    // A silent source leaves the picture as it was (no upload) once it has gone quiet.
-    const data = l.tex.image.data as Uint8Array;
-    const layout: SpectrumLayout = P.layout === 'linear' ? 'linear' : 'log';
-    switch (l.node.type) {
-      case AUDIO_SPECTRUM_TYPE:
-        spectrumBins(freq, sr, l.row, layout, num(P.minDb, -90), num(P.maxDb, -20), num(P.smoothing, 0.5));
-        writeRow(data, 0, l.row, l.w);
-        break;
-      case AUDIO_SPECTROGRAM_TYPE:
-        if (!s?.active) return; // the history holds while nothing plays
-        spectrumBins(freq, sr, l.row, layout, num(P.minDb, -90), num(P.maxDb, -20));
-        scrollRows(data, l.w, l.h, l.row);
-        break;
-      case AUDIO_WAVEFORM_TYPE:
-        waveRow(wave, l.row);
-        writeRow(data, 0, l.row, l.w);
-        break;
-    }
-    l.tex.needsUpdate = true;
+    // Band level, Hit, or a texture (play/kit/audioTools.js): a silent Spectrogram holds what it had (no upload).
+    const changed = atStepListener(l.run, listenerSpecOf(l.node), freq, wave, sr, !!s?.active, nowMs, dt, (ch, v) => write(`${id}::${ch}`, v));
+    if (changed && l.tex) l.tex.needsUpdate = true;
   }
+
+  // ── The Video tab ────────────────────────────────────────────────────────────────────────────────────────
+
+  /** The video node a Video source listens to, and its element (null while it has none open). */
+  private videoOf(s: SourceSlot): { node: GraphNode | null; el: HTMLMediaElement | null } {
+    const vid = typeof s.node.params.videoNode === 'string' ? s.node.params.videoNode : '';
+    const node = vid ? findNodeDeep(this.graph, vid) ?? null : null;
+    if (!node) return { node: null, el: null };
+    return { node, el: (node.type === 'baked' ? bakedVideos.element(vid) : videoEngine.element(vid)) ?? null };
+  }
+
+  /** Route the video node's element into the probe (once per element) and on to the speakers; the probe's upstream. */
+  private videoUpstream(s: SourceSlot): AudioNode | null {
+    const { el } = this.videoOf(s);
+    if (el !== s.videoEl) {
+      this.unplugVideo(s);
+      if (el) this.plugVideo(s, el);
+    }
+    return s.videoIn;
+  }
+
+  private plugVideo(s: SourceSlot, el: HTMLMediaElement): void {
+    let ctx: AudioContext;
+    try { ctx = audioEngine.context(); } catch { return; }
+    const src = mediaElementSourceOf(ctx, el);
+    if (!src) return;
+    const inlet = ctx.createGain(), out = ctx.createGain();
+    src.connect(inlet);
+    inlet.connect(out);
+    out.gain.value = 1;
+    const unOut = audioEngine.connectOutside(out);
+    s.videoEl = el; s.videoIn = inlet; s.videoOut = out;
+    s.videoUnplug = () => {
+      unOut();
+      try { src.disconnect(inlet); } catch { /* gone */ }
+      try { inlet.disconnect(); out.disconnect(); } catch { /* gone */ }
+    };
+    // The video node plays muted: its sound now goes through here instead (a browser may want a click first).
+    unmuteWhenAllowed(el);
+    if (ctx.state === 'suspended') void ctx.resume().catch(() => {});
+  }
+
+  private unplugVideo(s: SourceSlot): void {
+    if (!s.videoEl) return;
+    s.videoUnplug?.();
+    s.videoEl.muted = true;
+    if (s.upstream && s.upstream === s.videoIn) {
+      if (s.probe) { try { s.upstream.disconnect(s.probe); } catch { /* gone */ } }
+      s.upstream = null;
+    }
+    s.videoEl = null; s.videoIn = null; s.videoOut = null; s.videoUnplug = null;
+  }
+
+  private videoStatus(s: SourceSlot): string {
+    const { node, el } = this.videoOf(s);
+    if (!node) {
+      return typeof s.node.params.videoNode === 'string' && s.node.params.videoNode
+        ? 'That video node is gone: pick another video.' : 'Pick a video node (a Texture node playing a video, or a Baked node).';
+    }
+    const P = node.params;
+    const label = (typeof P.label === 'string' && P.label.trim()) || (typeof P._fileName === 'string' && P._fileName) || (typeof P.fileName === 'string' && P.fileName) || 'the video';
+    if (!el) return `Waiting for ${label} to open its video.`;
+    if (s.node.params.playing === false) return `${label} · Play is off`;
+    return `${label} · ${el.paused ? 'paused' : 'playing'} (a video without sound reads silence)`;
+  }
+
+  /** Is a Video source routed to its video's element now (for tests)? */
+  videoRouted(nodeId: string): HTMLMediaElement | null { return this.sources.get(nodeId)?.videoEl ?? null; }
+}
+
+/** Unmute a video element now if the page has had a click, else on the next one (browsers block sound before). */
+function unmuteWhenAllowed(el: HTMLMediaElement): void {
+  const ua = typeof navigator !== 'undefined' ? (navigator as Navigator & { userActivation?: { hasBeenActive: boolean } }).userActivation : undefined;
+  if (!ua || ua.hasBeenActive || typeof window === 'undefined') { el.muted = false; return; }
+  const go = () => { window.removeEventListener('pointerdown', go, true); window.removeEventListener('keydown', go, true); el.muted = false; };
+  window.addEventListener('pointerdown', go, true);
+  window.addEventListener('keydown', go, true);
 }
 
 export const audioToolsEngine = new AudioToolsEngine();

@@ -19,7 +19,11 @@
  *             ({ transport: 'poll' | 'websocket' | 'sse', address, interval, mode, window, format?,
  *             normalize }) makes the page reconnect to a live feed and add its rows (needs the network)
  *   media:  { textures: { uniform: { src } }, videos: { uniform: { src, loop, speed, clip? } },
- *             audio: [{ id, src, uniforms, bands, range, mode }] }   (src: a data URL, or null)
+ *             audio: [{ id, src, uniforms, bands, range, mode }],   (src: a data URL, or null)
+ *             audioTools?: { sources: [{ id, kind: 'file' | 'video', src, video?, playing, loop, trimIn, trimOut, gain, bands, sounds }],
+ *               listeners: [{ id, sourceId, spec, w, h }], uniforms: { uniform: '<id>::<channel>' }, textures: { sampler: id } } }
+ *             the Audio nodes (docs/audio-tools.md): run once a frame with the app's own sums (kit/audioTools.js);
+ *             a player shows "Tap to start sound" (browsers start sound after a gesture); any click or key starts it too
  *   play.display.source 'image' | 'video' | 'colour': that background (display.image,
  *             display.video, display.backdrop) in place of the shader, which then never
  *             compiles or draws; the layers read the background as the picture
@@ -127,6 +131,7 @@
 .ssp-error{position:absolute;inset:auto 12px 12px 12px;padding:10px 12px;border-radius:8px;background:#3a1216;color:#ffb4b4;font-size:12px}
 .ssp-gpu{position:absolute;left:12px;bottom:12px;z-index:3;display:flex;align-items:center;gap:10px;padding:7px 11px;border-radius:8px;background:rgba(21,22,28,.94);color:#e6e7ec;font-size:12px;box-shadow:0 2px 12px rgba(0,0,0,.45),inset 0 0 0 1px #33353f;pointer-events:auto}
 .ssp-gpu .ssp-btn{padding:3px 9px}
+.ssp-tap{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);z-index:3;background:rgba(21,22,28,.92);box-shadow:0 2px 12px rgba(0,0,0,.45)}
 @media (max-width:720px){.ssp:not(.ssp-bg){flex-direction:column}.ssp:not(.ssp-bg):not(.ssp-bare) .ssp-stage{flex:0 0 56%}.ssp-panel{width:auto;flex:1;border-left:0;border-top:1px solid #26272f}}
 `;
 
@@ -569,6 +574,7 @@ void main() {
       hasSound: !!(inner && inner.hasSound),
       sound(audible) { carry.sound = !!audible; call('sound')(audible); },
       usesCamera: !!(inner && inner.usesCamera),
+      audioTools: call('audioTools'),
       setScript(layerId, code) { if (typeof layerId === 'string' && typeof code === 'string') carry.scripts.set(layerId, code); call('setScript')(layerId, code); },
       still: call('still'),
       programs: call('programs'),
@@ -2501,9 +2507,107 @@ void main() {
         for (let i = 0; i < a.uniforms.length; i++) if (a.uniforms[i] && a.levels[i] !== undefined) uniformValues[a.uniforms[i]] = a.levels[i];
       }
     }
+    // The Audio nodes (docs/audio-tools.md): each Audio Source's sound (a File's embedded data, or a Video node's own
+    // video), read once a frame through a probe analyser (FFT 2048, no smoothing, as the app's engine), then the app's
+    // own sums (kit/audioTools.js) fill the nodes' uniforms and textures. Sound starts on the visitor's first tap.
+    const ATK = typeof SSKit !== 'undefined' && SSKit.audioTools ? SSKit.audioTools : null;
+    const atCfg = ATK && !follow && media.audioTools ? media.audioTools : null;
+    const at = { ctx: null, out: null, started: false, srcs: new Map(), lis: [], byKey: new Map(), last: 0, silentF: new Float32Array(1024).fill(-200), silentW: new Float32Array(2048) };
+    if (atCfg) {
+      for (const c of atCfg.sources) at.srcs.set(c.id, { cfg: c, st: ATK.newSource(), probe: null, freq: new Float32Array(1024), wave: new Float32Array(2048), sr: 48000, active: false, level: 0, time: 0, node: null, el: null, startedAt: 0, win: null });
+      for (const u in atCfg.uniforms) { const k = atCfg.uniforms[u]; if (!at.byKey.has(k)) at.byKey.set(k, []); at.byKey.get(k).push(u); uniformValues[u] = 0; }
+      for (const l of atCfg.listeners) {
+        const run = ATK.newListener(l.spec.type, l.w, l.h);
+        let tex = null;
+        const sampler = Object.keys(atCfg.textures).find(k => atCfg.textures[k] === l.id) || null;
+        if (sampler && run.data) {
+          tex = texture(gl.LINEAR, null);
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, run.w, run.h, 0, gl.RGBA, gl.UNSIGNED_BYTE, run.data);
+          imageTex.set(sampler, tex);
+        }
+        at.lis.push({ cfg: l, run, tex });
+      }
+    }
+    const atAudible = () => !!atCfg && atCfg.sources.some(c => c.playing && ((c.kind === 'file' && c.src) || (c.kind === 'video' && c.video)));
+    function atStart() {
+      if (!atCfg) return;
+      if (at.started) { if (at.ctx && at.ctx.state === 'suspended' && playing) at.ctx.resume(); return; }
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      at.started = true;
+      at.ctx = new AC();
+      at.out = at.ctx.createGain(); at.out.gain.value = 0.8; at.out.connect(at.ctx.destination);
+      for (const s of at.srcs.values()) {
+        const c = s.cfg;
+        if (!c.playing) continue;
+        const probe = at.ctx.createAnalyser(); probe.fftSize = 2048; probe.smoothingTimeConstant = 0;
+        s.sr = at.ctx.sampleRate;
+        if (c.kind === 'file' && c.src) {
+          at.ctx.decodeAudioData(dataBytes(c.src).buffer).then(buf => {
+            if (!alive) return;
+            // The trim, as the app's (lib/audioTools/bands.ts trimWindow): Out 0 is the end; at least 0.05 s.
+            const d = buf.duration, a = Math.max(0, Math.min(c.trimIn || 0, Math.max(0, d - 0.05)));
+            let b = c.trimOut > 0 ? Math.min(c.trimOut, d) : d;
+            b = Math.max(b, Math.min(d, a + 0.05));
+            const src = at.ctx.createBufferSource(); src.buffer = buf; src.loop = c.loop; src.loopStart = a; src.loopEnd = b;
+            src.connect(probe); src.connect(at.out);
+            if (c.loop) src.start(0, a); else src.start(0, a, b - a);
+            s.node = src; s.probe = probe; s.startedAt = at.ctx.currentTime; s.win = { a, b };
+          }, () => { /* not decodable in this browser */ });
+        } else if (c.kind === 'video' && c.video) {
+          const v = videos.find(x => x.name === c.video);
+          if (!v || !v.el) continue;
+          try {
+            const me = at.ctx.createMediaElementSource(v.el);
+            me.connect(probe); me.connect(at.out);
+            v.el.muted = false;
+            s.node = me; s.el = v.el; s.probe = probe;
+          } catch (e) { /* this element's sound is taken */ }
+        }
+      }
+      if (at.ctx.state === 'suspended' && playing) at.ctx.resume();
+      if (atTap) { atTap.remove(); atTap = null; }
+    }
+    let atTap = null;
+    // Once a frame: each source's frame, then every listening node on its source's frame (the app's tickInputs).
+    function tickAudioTools() {
+      if (!atCfg) return false;
+      const nowMs = performance.now();
+      const dt = at.last ? Math.min(0.1, (nowMs - at.last) / 1000) : 1 / 60;
+      at.last = nowMs;
+      let any = false;
+      const put = (key, v) => { const us = at.byKey.get(key); if (us) for (const u of us) uniformValues[u] = v; };
+      for (const s of at.srcs.values()) {
+        const c = s.cfg, id = c.id;
+        s.active = !!s.probe && !!at.ctx && at.ctx.state === 'running' && !(s.el && s.el.paused);
+        if (s.active) {
+          s.probe.getFloatFrequencyData(s.freq);
+          s.probe.getFloatTimeDomainData(s.wave);
+          s.level = ATK.applyGain(s.freq, s.wave, c.gain);
+          any = true;
+        } else { s.freq.fill(-200); s.wave.fill(0); s.level = 0; }
+        if (s.el) s.time = s.el.currentTime;
+        else if (s.win && at.ctx) { const len = s.win.b - s.win.a, t = at.ctx.currentTime - s.startedAt; s.time = s.win.a + (c.loop ? ((t % len) + len) % len : Math.min(len, t)); }
+        put(id + '::level', s.level);
+        put(id + '::time', s.time);
+        ATK.stepSource(s.st, c.bands, c.sounds, s.freq, s.sr, nowMs / 1000, dt, (ch, v) => put(id + '::' + ch, v));
+      }
+      for (const l of at.lis) {
+        const s = l.cfg.sourceId ? at.srcs.get(l.cfg.sourceId) : null;
+        const on = !!(s && s.active);
+        const changed = ATK.stepListener(l.run, l.cfg.spec, on ? s.freq : at.silentF, on ? s.wave : at.silentW, s ? s.sr : 48000, on, nowMs, dt, (ch, v) => put(l.cfg.id + '::' + ch, v));
+        if (changed && l.tex) {
+          gl.bindTexture(gl.TEXTURE_2D, l.tex);
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, l.run.w, l.run.h, 0, gl.RGBA, gl.UNSIGNED_BYTE, l.run.data);
+        }
+      }
+      if (any) needsDraw = true;
+      return any;
+    }
     const setPlaying = on => {
       playing = on;
       if (song.ctx) { if (on) song.ctx.resume(); else song.ctx.suspend(); }
+      if (at.ctx) { if (on) at.ctx.resume(); else at.ctx.suspend(); }
       needsDraw = true;
     };
 
@@ -2534,6 +2638,18 @@ void main() {
       } else on(window, 'keydown', startDrums, true);
     }
     if (grains.ctx) { on(window, 'pointerdown', startGrains, true); on(window, 'keydown', startGrains, true); }
+    // The Audio nodes' sounds: browsers start sound only after a gesture. A player shows "Tap to start sound" on the
+    // picture; any click or key on the page starts it too (a background starts it silently that way).
+    if (atAudible()) {
+      on(window, 'pointerdown', atStart, true); on(window, 'keydown', atStart, true);
+      if (!bg) {
+        atTap = el('button', 'ssp-btn ssp-tap', 'Tap to start sound');
+        atTap.type = 'button';
+        atTap.title = 'The picture listens to its sound: browsers start sound only after a tap or a click';
+        atTap.addEventListener('click', e => { e.stopPropagation(); atStart(); });
+        stage.append(atTap);
+      }
+    }
     if (!follow && queueLayer && (queueLayer.sources || []).some(s => s.kind === 'video' && s.muted === false)) { on(window, 'pointerdown', () => { qSound = true; }, true); on(window, 'keydown', () => { qSound = true; }, true); }
     if (pointerOn) {
       on(stage, 'pointermove', e => {
@@ -3000,7 +3116,7 @@ void main() {
       if (bg && followPage) clampedMouse(shared.pageX, shared.pageY);
       let moved;
       if (follow) moved = applyFeed();
-      else { tickAudioNodes(); moved = tickMappings(dt); }
+      else { tickAudioNodes(); const heard = tickAudioTools(); moved = tickMappings(dt) || heard; }
       for (const sl of afxSlots) afxUpdate(sl);
       // Feedback and echo change with every frame drawn, so while paused they draw only when something changes (as in the app).
       if (!playing && (stateful || echoCfg || passFeedback) && !needsDraw && !moved && frame > 1) { refreshPanel(now); return; }
@@ -3103,6 +3219,7 @@ void main() {
         if (grains.ctx) grains.ctx.close();
         for (const u of blobUrls) URL.revokeObjectURL(u);
         if (song.ctx) song.ctx.close();
+        if (at.ctx) at.ctx.close();
         if (finishR) finishR.dispose();
         const lose = gl.getExtension('WEBGL_lose_context');
         if (lose) lose.loseContext();
@@ -3273,8 +3390,15 @@ void main() {
       },
       fire(id) { const c = controls.get(id); if (c) fireAction(c); },
       // The graph's own songs (Audio Input files): heard or silent. Browsers want a click first.
-      hasSound: songs.length > 0 || soundVideos.some(l => l.sound === 'play'),
-      sound(audible) { startSongs(!!audible); startVideoSound(); },
+      hasSound: songs.length > 0 || soundVideos.some(l => l.sound === 'play') || atAudible(),
+      sound(audible) { startSongs(!!audible); startVideoSound(); if (audible) atStart(); },
+      // The Audio nodes now (for checking a page): whether its sound started, each source's level and time, the uniforms.
+      audioTools() {
+        if (!atCfg) return null;
+        const uniforms = {};
+        for (const u in atCfg.uniforms) uniforms[u] = uniformValues[u];
+        return { started: at.started, state: at.ctx ? at.ctx.state : 'none', sources: [...at.srcs.values()].map(s => ({ id: s.cfg.id, kind: s.cfg.kind, active: s.active, level: s.level, time: s.time })), uniforms };
+      },
       usesCamera,
       // Replace one Script layer's code in this mount: it compiles and starts over on the next frame.
       setScript(layerId, code) {
