@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.244',
+    date: '2026-10-17',
+    title: "Show a band",
+    highlights: [
+      { area: 'Studio', text: "Histogram: click a bar or drag across several, and the preview shows only the pixels in that band of L, R, G or B; Esc shows all again." },
+    ],
+  },
+  {
     id: '2026.10.243',
     date: '2026-10-17',
     title: "Patch the channels",
