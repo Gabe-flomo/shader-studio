@@ -18,6 +18,7 @@ import { Select } from '../ui/Select';
 import { Button } from '../ui/Button';
 import { NumberInput } from './NumberInput';
 import { DataTextureCardBody } from './DataTextureCardBody';
+import { useViewport } from '../../lib/viewport';
 
 const VIEW_LABELS: Record<ThumbMode, string> = { raw: 'Raw', range: 'Range', channels: 'Channels', arrows: 'Arrows' };
 const VIEW_HINTS: Record<ThumbMode, string> = {
@@ -63,7 +64,8 @@ function ViewCanvas({ node, regKey, width, style, onProbe }: {
     }, 150);
     return () => clearInterval(t);
   }, [onProbe]);
-  const move = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  // Pointer events: a mouse hovering, or a finger touching and sliding (the reading stays when it lifts).
+  const move = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const c = ref.current;
     if (!c || !onProbe) return;
     const r = c.getBoundingClientRect();
@@ -73,8 +75,11 @@ function ViewCanvas({ node, regKey, width, style, onProbe }: {
     u = Math.min(1, Math.max(0, u)); v = Math.min(1, Math.max(0, v));
     c.dataset.probe = `${u.toFixed(4)},${v.toFixed(4)}`;
   };
-  const leave = () => { const c = ref.current; if (c) { delete c.dataset.probe; delete c.dataset.probeValue; } onProbe?.(null, null); };
-  return <canvas ref={ref} width={width} height={Math.round(width * 9 / 16)} onMouseMove={move} onMouseLeave={leave}
+  const leave = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (e.pointerType === 'touch') return;
+    const c = ref.current; if (c) { delete c.dataset.probe; delete c.dataset.probeValue; } onProbe?.(null, null);
+  };
+  return <canvas ref={ref} width={width} height={Math.round(width * 9 / 16)} onPointerMove={move} onPointerDown={move} onPointerLeave={leave}
     style={{ display: 'block', background: '#000', borderRadius: 3, imageRendering: 'pixelated', ...style }} />;
 }
 
@@ -134,6 +139,8 @@ export function DataTextureWindow({ nodeId, onClose }: { nodeId: string; onClose
   const node = useNodeGraphStore(s => s.nodes.find(n => n.id === nodeId));
   const update = useNodeGraphStore(s => s.updateNodeParams);
   const [probe, setProbe] = useState<{ v: number[]; at: [number, number] } | null>(null);
+  // A phone: one column (picture, then the editor and storage) that scrolls, instead of two side by side.
+  const phone = useViewport(v => v.phone);
   if (!node) return null;
   const defs = getNodeDefinition('dataTexture')!.paramDefs!;
   const label = typeof node.params.label === 'string' && node.params.label.trim() ? node.params.label.trim() : 'Data Texture';
@@ -158,21 +165,25 @@ export function DataTextureWindow({ nodeId, onClose }: { nodeId: string; onClose
   return (
     <Modal title={label} subtitle="Data Texture · what is stored, and how it reads back" icon="table" width={1180} height={720} onClose={onClose}
       headerActions={<Button variant="primary" onClick={onClose}>Done</Button>}>
-      <div style={{ display: 'flex', gap: 16, padding: 16, height: '100%', boxSizing: 'border-box', overflow: 'hidden' }}>
-        <div style={{ flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={phone
+        ? { display: 'flex', flexDirection: 'column', gap: 16, padding: 12, height: '100%', boxSizing: 'border-box', overflowY: 'auto' }
+        : { display: 'flex', gap: 16, padding: 16, height: '100%', boxSizing: 'border-box', overflow: 'hidden' }}>
+        <div style={phone ? { flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8 } : { flex: '1 1 0', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <ViewControls node={node} />
-          <ViewCanvas node={node} regKey={bigThumbKey(nodeId)} width={768} style={{ maxWidth: '100%', maxHeight: 'calc(100% - 110px)', width: 'auto', height: 'auto', alignSelf: 'center', cursor: 'crosshair' }}
+          <ViewCanvas node={node} regKey={bigThumbKey(nodeId)} width={768} style={phone
+              ? { width: '100%', height: 'auto', touchAction: 'none' }
+              : { maxWidth: '100%', maxHeight: 'calc(100% - 110px)', width: 'auto', height: 'auto', alignSelf: 'center', cursor: 'crosshair' }}
             onProbe={(v, at) => setProbe(v && at ? { v, at } : null)} />
           <div style={{ font: `500 12px ${fontFamily.mono}`, color: tk.text.secondary, minHeight: 36, lineHeight: 1.5 }}>
             {probe ? <>
               <div style={{ color: tk.text.faint }}>at ({probe.at[0].toFixed(3)}, {probe.at[1].toFixed(3)}){range ? ` · Range ${lo}…${hi} undone` : ''}</div>
               <div>{[...'rgba'].map((c, i) => <span key={c} style={{ marginRight: 14 }}><b>{c}</b> {fmt(decode(probe.v[i]))}{owner.has(c) ? <span style={{ color: tk.text.faint }}> {owner.get(c)}</span> : null}</span>)}</div>
-            </> : <span style={{ color: tk.text.faint }}>Hover the picture to read the stored value there, exactly.</span>}
+            </> : <span style={{ color: tk.text.faint }}>{phone ? 'Touch' : 'Hover'} the picture to read the stored value there, exactly.</span>}
           </div>
         </div>
-        <div style={{ flex: '0 0 400px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={phone ? { flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 12 } : { flex: '0 0 400px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ border: `1px solid ${tk.border.default}`, borderRadius: radius.md, paddingTop: 6 }}>
-            <DataTextureCardBody node={node} />
+            <DataTextureCardBody node={node} touch={phone} />
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, font: `500 12px ${fontFamily.ui}` }}>
             <span style={{ font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.06em', textTransform: 'uppercase', color: tk.text.faint }}>Storage</span>
