@@ -39,6 +39,7 @@ import { FRAME_STACK_EXAMPLE_INDEX, FRAME_STACK_EXAMPLE_KEYS } from './frameStac
 import { FOURD_EXAMPLE_INDEX, FOURD_EXAMPLE_KEYS } from './fourDExamples';
 import { TEXTURE_TOOL_EXAMPLE_INDEX, TEXTURE_TOOL_EXAMPLE_KEYS } from './textureToolExamples';
 import { MEMORY_EXAMPLE_INDEX, MEMORY_EXAMPLE_KEYS } from './memoryExamples';
+import { SEND_RECEIVE_EXAMPLE_INDEX, SEND_RECEIVE_EXAMPLE_KEYS } from './sendReceiveExamples';
 import { AUDIO_EXAMPLE_INDEX, AUDIO_EXAMPLE_KEYS } from './audioExamples';
 import { PICTURE_EXAMPLE_INDEX, PICTURE_EXAMPLE_KEYS } from './pictureExamples';
 import { RAYS_EXAMPLE_INDEX, RAYS_EXAMPLE_KEYS } from './raysExamples';
@@ -265,6 +266,8 @@ export const EXAMPLE_INDEX: Record<string, ExampleIndexEntry> = {
   ...PICTURE_EXAMPLE_INDEX,
   // Memory (memoryExamples.ts, docs/memory-nodes.md): Lag, Spring, Envelope, Counter.
   ...MEMORY_EXAMPLE_INDEX,
+  // Send & Receive (sendReceiveExamples.ts, docs/send-receive.md): wireless links across groups.
+  ...SEND_RECEIVE_EXAMPLE_INDEX,
   // Audio (audioExamples.ts, docs/audio-tools.md): Hit, Spectrum, Spectrogram, Waveform on the test loop.
   ...AUDIO_EXAMPLE_INDEX,
   // Light rays (raysExamples.ts, docs/radial-fast-blur.md): Radial Fast Blur on text and on a burst of shapes.
@@ -307,6 +310,7 @@ export const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: string
   { label: "Texture tools",     color: ctp.flamingo, keys: TEXTURE_TOOL_EXAMPLE_KEYS },
   { label: "Pictures",          color: ctp.flamingo, keys: PICTURE_EXAMPLE_KEYS },
   { label: "Memory",            color: ctp.flamingo, keys: MEMORY_EXAMPLE_KEYS },
+  { label: "Send & Receive",    color: ctp.flamingo, keys: SEND_RECEIVE_EXAMPLE_KEYS },
   { label: "Audio",             color: ctp.pink, keys: AUDIO_EXAMPLE_KEYS },
   { label: "Simulation",        color: ctp.green, keys: [...AGENT_EXAMPLE_KEYS, ...RIDE_CURVE_EXAMPLE_KEYS] },
   { label: "Simulations: grids", color: ctp.green, keys: simGridsFolderKeys() },

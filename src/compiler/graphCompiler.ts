@@ -25,10 +25,22 @@ import { compilePassGraph, hasPassNode } from './passGraph';
 import { hasAgentsNode } from './agentGraph';
 import { hasHiddenBlur } from './blurPasses';
 import { compileSplatProbes, hasSplatScene, pictureGraphOf } from './splatGraph';
+import { resolveSendReceive } from './sendReceive';
 
 const EMPTY_OUTPUT_VARS = new Map<string, Record<string, string>>();
 
-export function compileGraph(graph: NodeGraph): CompilationResult {
+export function compileGraph(input: NodeGraph): CompilationResult {
+  // Send / Receive (docs/send-receive.md): each Receive becomes a real wire to its Send, through group
+  // ports added for this compile, before anything else looks at the graph.
+  const sr = resolveSendReceive(input.nodes);
+  if (sr.errors.length) {
+    return {
+      vertexShader: '', fragmentShader: '', success: false, errors: sr.errors,
+      nodeOutputVars: EMPTY_OUTPUT_VARS, paramUniforms: {}, paramBindings: {}, textureUniforms: {},
+      audioUniforms: {}, liveUniforms: {}, videoUniforms: {}, isStateful: false,
+    };
+  }
+  const graph: NodeGraph = sr.nodes === input.nodes ? input : { ...input, nodes: sr.nodes };
   // A Splat Scene's Modifier chain runs in a program of its own (docs/splat-scene.md "Per-splat modifiers"): the
   // picture compiles without it.
   const result = compileProgram(pictureGraphOf(graph));

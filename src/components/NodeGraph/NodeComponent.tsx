@@ -149,6 +149,8 @@ import { BakedCardBody } from '../bake/BakedCardBody';
 import { TimeCubeCardBody } from '../timeCube/TimeCubeCardBody';
 import { DataTextureCardBody } from './DataTextureCardBody';
 import { RenderTargetsCardBody } from './RenderTargetsCardBody';
+import { SendReceiveCardBody } from './SendReceiveCardBody';
+import { SEND_CARRIES } from '../../nodes/definitions/sendReceive';
 import { DepthCardBody } from '../depth/DepthCardBody';
 import { BlobTrackCardBody } from '../blobs/BlobTrackCardBody';
 import { CacheCardBody } from '../cache/CacheCardBody';
@@ -3309,12 +3311,14 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           }
 
           const slotName = inputLabelOf(node, key, input.label);
+          // A Send takes any value it can carry (it retypes to it): numbers, vectors, textures.
+          const compat0 = (t: string) => node.type === 'send' && SEND_CARRIES.has(t);
 
           // Drag-highlight: compatible = glow, incompatible = dim
           let socketOpacity = 1;
           let socketGlow: string | undefined;
           if (draggingType) {
-            const compat = typesCompatible(draggingType, input.type as DataType);
+            const compat = compat0(draggingType) || typesCompatible(draggingType, input.type as DataType);
             socketOpacity = compat ? 1 : 0.25;
             socketGlow = compat ? `0 0 8px ${TYPE_COLORS[input.type] || '#888'}` : undefined;
           }
@@ -3478,7 +3482,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                 </div>
               )}
               {/* When dragging: show a drop-here indicator on compatible sockets (not external) */}
-              {!isExternal && draggingType && typesCompatible(draggingType, input.type as DataType) && (
+              {!isExternal && draggingType && (compat0(draggingType) || typesCompatible(draggingType, input.type as DataType)) && (
                 <div style={{
                   position: 'absolute',
                   left: '-3px',
@@ -4026,6 +4030,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         {!collapsed && node.type === 'timeCube' && <TimeCubeCardBody node={node} touch={isTouchDevice} />}
         {!collapsed && node.type === 'dataTexture' && <DataTextureCardBody node={node} touch={isTouchDevice} />}
         {!collapsed && node.type === 'renderTargets' && <RenderTargetsCardBody node={node} touch={isTouchDevice} />}
+        {!collapsed && (node.type === 'send' || node.type === 'receive') && <SendReceiveCardBody node={node} touch={isTouchDevice} />}
         {!collapsed && node.type === 'depth' && <DepthCardBody node={node} touch={isTouchDevice} />}
         {!collapsed && node.type === 'blobTrack' && <BlobTrackCardBody node={node} />}
         {!collapsed && node.type === 'cache' && <CacheCardBody node={node} />}
