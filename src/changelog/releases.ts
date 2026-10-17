@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.256',
+    date: '2026-10-17',
+    title: "Filters and resonators",
+    highlights: [
+      { area: 'Studio', text: "New Audio effects you can hear and see: Filter, a Resonator bank tuned to a scale (its notes' energies drive visuals) and Spectral freeze, blur, gate." },
+      { area: 'Studio', text: "Spectrogram has a Field output: use the sound's history like a noise field in Height Light, Ride a path or a threshold." },
+    ],
+  },
+  {
     id: '2026.10.255',
     date: '2026-10-17',
     title: "Bounds and Glitch",
