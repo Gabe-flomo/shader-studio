@@ -22,7 +22,7 @@ import { SceneCrumb } from '../builders/SceneCrumb';
 import { BuilderNote } from '../builders/BuilderWindow';
 import { MuteToggle } from '../builders/MuteToggle';
 import { ExprLineInput } from '../builders/ExprLineInput';
-import { NumRow } from '../sceneBuilder/controls';
+import { Card, NumRow } from '../sceneBuilder/controls';
 import { Button, IconButton } from '../ui/Button';
 import { Select } from '../ui/Select';
 import { Segmented } from '../ui/Choice';
@@ -41,13 +41,15 @@ import {
 } from '../../warpBuilder/tiles';
 import {
   PREVIEW_MODES, ROW_LABEL, addRow, dragKind, dropAllowed, nameForNumber, newWarpBlock, nextItemId, rowProblems, rowTile, setRowTile,
-  type PreviewMode, type TileDrag, type TileTarget,
+  type PreviewMode, type TileDrag, type TileTarget, type WarpSpec,
 } from '../../warpBuilder/spec';
 import { useWarpBuilder } from '../../warpBuilder/store';
 import { finishWarpBuilder, sendWarpTo2D } from '../../warpBuilder/actions';
 import { COND_GLYPHS, FN_GLYPHS, GLYPH_SIZE, type CondGlyph } from '../../warpBuilder/glyphs';
 import { applyTile } from '../../warpBuilder/slotMenu';
 import { SlotMenu } from './SlotMenu';
+import { UserPresets } from '../builders/UserPresets';
+import { presetTextToSpec, specToPresetText } from '../../builders/userPresets';
 import { WarpPreview } from './WarpPreview';
 import { usePhoneDialog } from '../ui/phoneDialog';
 import { toast } from '../ui/toastStore';
@@ -336,24 +338,26 @@ const IfPicture = memo(function IfPicture({ cond }: { cond?: CondGlyph }) {
 function Palette() {
   const grid = (cols: number): CSSProperties => ({ display: 'grid', gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gap: 5 });
   return (
-    <div data-warp-palette style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '14px 12px 24px' }}>
-      <StudioLabel meta="graphs: the shape of each">Functions</StudioLabel>
-      <div style={grid(3)}>
-        {FN_TILES.map(f => (
-          <PaletteTile key={f.fn} drag={{ from: 'palette', kind: 'fn', fn: f.fn }} label={f.label} hint={`${f.label}: ${f.blurb}`}>
-            <FnPicture f={f} />
-          </PaletteTile>
-        ))}
-      </div>
-      <StudioLabel meta="split space by a condition">If</StudioLabel>
-      <PaletteTile wide drag={{ from: 'palette', kind: 'if' }} hint="If a condition holds, one value, else another: cond ? a : b. Its condition takes comparisons (and, or, not)"
-        label={<span style={{ font: `600 12px ${fontFamily.ui}` }}><b style={{ color: '#e8957f' }}>if</b> ▢ <b style={{ color: '#e8957f' }}>then</b> ▢ <b style={{ color: '#e8957f' }}>else</b> ▢</span>}>
-        <IfPicture />
-      </PaletteTile>
-      <div style={grid(3)}>
-        {CMP_TILES.map(c => <PaletteTile key={c.op} drag={{ from: 'palette', kind: 'cmp', op: c.op }} label={<span style={{ fontSize: 15, color: '#e8957f' }}>{c.label}</span>} hint={`${c.blurb}: a condition, _ ${c.label} _ (for the If’s condition)`}><IfPicture cond={c.op} /></PaletteTile>)}
-        {LOGIC_TILES.map(c => <PaletteTile key={c.op} drag={c.op === '!' ? { from: 'palette', kind: 'not' } : { from: 'palette', kind: 'logic', op: c.op }} label={<span style={{ color: '#e8957f' }}>{c.label}</span>} hint={`${c.blurb} (conditions only)`}><IfPicture cond={c.op} /></PaletteTile>)}
-      </div>
+    <div data-warp-palette style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '14px 12px 24px' }}>
+      <Card id="warp:palette:fns" title="Functions" summary={`${FN_TILES.length} graphs: the shape of each`} defaultOpen>
+        <div style={grid(3)}>
+          {FN_TILES.map(f => (
+            <PaletteTile key={f.fn} drag={{ from: 'palette', kind: 'fn', fn: f.fn }} label={f.label} hint={`${f.label}: ${f.blurb}`}>
+              <FnPicture f={f} />
+            </PaletteTile>
+          ))}
+        </div>
+      </Card>
+      <Card id="warp:palette:if" title="If" summary="split space by a condition · comparisons, and, or, not">
+        <PaletteTile wide drag={{ from: 'palette', kind: 'if' }} hint="If a condition holds, one value, else another: cond ? a : b. Its condition takes comparisons (and, or, not)"
+          label={<span style={{ font: `600 12px ${fontFamily.ui}` }}><b style={{ color: '#e8957f' }}>if</b> ▢ <b style={{ color: '#e8957f' }}>then</b> ▢ <b style={{ color: '#e8957f' }}>else</b> ▢</span>}>
+          <IfPicture />
+        </PaletteTile>
+        <div style={grid(3)}>
+          {CMP_TILES.map(c => <PaletteTile key={c.op} drag={{ from: 'palette', kind: 'cmp', op: c.op }} label={<span style={{ fontSize: 15, color: '#e8957f' }}>{c.label}</span>} hint={`${c.blurb}: a condition, _ ${c.label} _ (for the If’s condition)`}><IfPicture cond={c.op} /></PaletteTile>)}
+          {LOGIC_TILES.map(c => <PaletteTile key={c.op} drag={c.op === '!' ? { from: 'palette', kind: 'not' } : { from: 'palette', kind: 'logic', op: c.op }} label={<span style={{ color: '#e8957f' }}>{c.label}</span>} hint={`${c.blurb} (conditions only)`}><IfPicture cond={c.op} /></PaletteTile>)}
+        </div>
+      </Card>
       <BuilderNote style={{ fontSize: 11 }}>Variables, the number tile and the operators are in the bar under the preview, beside the rows.</BuilderNote>
     </div>
   );
@@ -487,24 +491,44 @@ function BlockSettings() {
 }
 
 function Inspector() {
-  const [lib, setLib] = useState(false);
   const edit = useWarpBuilder(s => s.edit);
+  // The sections fold to a line (remembered per section); the picked tile is the primary one.
+  const picked = useWarpBuilder(s => {
+    if (!s.sel) return 'none picked';
+    const b = s.spec.blocks[s.sel.block]?.block;
+    const t = b ? tileAt(rowTile(b, s.sel.line), s.sel.path) : null;
+    return t ? tileText(t) || 'empty' : 'none picked';
+  });
+  const block = useWarpBuilder(s => {
+    const b = (s.sel ? s.spec.blocks[s.sel.block] : s.spec.blocks[0])?.block;
+    if (!b) return 'no blocks';
+    const n = b.params.length;
+    return `${b.name || 'Block'} · ${b.loop ? `loop ${b.times}` : `run ×${b.times}`}${n ? ` · ${n} slider${n === 1 ? '' : 's'}` : ''}`;
+  });
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '14px 14px 24px' }}>
-      <StudioLabel>Picked tile</StudioLabel>
-      <PickedTile />
-      <StudioLabel>Block</StudioLabel>
-      <BlockSettings />
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <StudioLabel meta="built-in and My blocks">Library</StudioLabel>
-        <span style={{ flex: 1 }} />
-        <Button size="sm" variant={lib ? 'secondary' : 'ghost'} icon="presets" data-warp-library onClick={() => setLib(!lib)}>{lib ? 'Hide' : 'Open'}</Button>
+    <div data-warp-inspector style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '14px 14px 24px' }}>
+      <Card id="warp:picked" title="Picked tile" summary={picked} defaultOpen><PickedTile /></Card>
+      <Card id="warp:block" title="Block" summary={block}><BlockSettings /></Card>
+      <Card id="warp:library" title="Library" summary="built-in and My blocks">
+        <BlockLibrary compact onPick={b => {
+          let at = 0;
+          edit(d => { at = d.blocks.length; d.blocks.push({ id: nextItemId(d), block: cloneBlock(b) }); });
+          useWarpBuilder.getState().select({ block: at, line: 0, path: [] });
+        }} />
+      </Card>
+    </div>
+  );
+}
+
+/** The presets strip: yours only (a Warp builder has no built-in scenes; the Library holds built-in blocks). */
+function Presets() {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <StudioLabel meta="your warps, saved here with a picture · undo takes a load back">Presets</StudioLabel>
+      <div data-warp-presets style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 2 }}>
+        <UserPresets kind="warp" noun="warp" getRecipe={() => specToPresetText(useWarpBuilder.getState().spec)}
+          onLoad={text => { const s = presetTextToSpec<WarpSpec>(text); if (s) { useWarpBuilder.getState().replace(s); useWarpBuilder.getState().select(null); } }} />
       </div>
-      {lib && <BlockLibrary compact onPick={b => {
-        let at = 0;
-        edit(d => { at = d.blocks.length; d.blocks.push({ id: nextItemId(d), block: cloneBlock(b) }); });
-        useWarpBuilder.getState().select({ block: at, line: 0, path: [] });
-      }} />}
     </div>
   );
 }
@@ -611,7 +635,8 @@ export function WarpBuilder() {
       surprise={<SurpriseBar seed={seed} title="A random tile expression from a new seed (one undo step)" onSurprise={s => useWarpBuilder.getState().surprise(s)} />}
       primary={{ label: from2d && !phone ? 'Done: back to 2D' : 'Done', onClick: finishWarpBuilder, title: from2d ? 'Write these blocks into the 2D scene\'s Space and go back to it' : 'Build a UV → the warp → the preview look, and show it on the graph' }}
       nav={<Palette />} navWidth={280} phoneNav={{ label: 'Tiles', icon: 'fn' }}
-      inspector={<Inspector />} inspectorWidth={360}>
+      inspector={<Inspector />} inspectorWidth={360}
+      presets={<Presets />}>
       <Viewport />
     </StudioShell>
   );

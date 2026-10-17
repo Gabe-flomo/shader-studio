@@ -26,6 +26,8 @@ import { BUILT_IN_FUNCTIONS, findFunctions, functionsFromGraphs, type FnEntry, t
 import { GRID_LABELS } from '../../sceneBuilder2d/grid';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { BuilderLabel, BuilderNote, BuilderWindow } from '../builders/BuilderWindow';
+import { UserPresets } from '../builders/UserPresets';
+import { presetTextToSpec, specToPresetText } from '../../builders/userPresets';
 import { focusRecipeEditor, useBuilderRecipeRequest } from '../../builders/windows';
 import { Card, NumRow, Row, rgbCss } from '../sceneBuilder/controls';
 import { Button, IconButton } from '../ui/Button';
@@ -1058,9 +1060,23 @@ function RecipeTab() {
   );
 }
 
+/** Your presets (builders/userPresets.ts): saved here with a picture of the preview, loaded only in this builder. */
+function MyPresets() {
+  return (
+    <div data-scene2d-my-presets style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+      <UserPresets kind="2d" canvasSelector="[data-scene2d-preview]"
+        getRecipe={() => specToPresetText(useSceneBuilder2D.getState().scene)}
+        onLoad={text => { const scene = presetTextToSpec<Scene2D>(text); if (scene) useSceneBuilder2D.getState().replace(scene); }} />
+    </div>
+  );
+}
+
 function TemplatesTab() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <BuilderLabel meta="saved here, not as graphs · undo takes a load back">Your presets</BuilderLabel>
+      <MyPresets />
+      <BuilderLabel>Built-in starting points</BuilderLabel>
       <BuilderNote>Starting points. Loading one replaces the form (Undo brings yours back).</BuilderNote>
       {TEMPLATES_2D.filter(t => !t.hidden).map(t => (
         <Card key={t.key} id={`tpl2-${t.key}`} title={t.label} summary={t.blurb}

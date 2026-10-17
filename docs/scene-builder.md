@@ -95,6 +95,43 @@ picked on the kind page reads *Scene builder › Grid simulation* and starts fro
 **Done** closes the window and frames what was built on the graph (`src/builders/finish.ts`); the
 kind page's × closes it with nothing to frame.
 
+### Folding sections
+
+The side panels fold away from the top bar (⌘[ and ⌘], and the presets strip's button), so the
+viewport takes the room; each builder remembers its own. Inside the panels every group of settings
+folds too, to its title and a one-line summary ("Glow · density 0.6", "Floor · height -1"): the
+primary one of a section starts open, the rest folded, and whatever you open or fold stays that way
+for that group, across tabs and reloads. One store does this for every builder
+(`src/builders/sectionFold.ts`, `useSectionOpen`), behind the folding cards (`Card` in
+`components/sceneBuilder/controls.tsx`), the small folds (`BuilderFold`) and the Splat builder's
+groups. The Warp builder's palette and inspector (Functions, If; Picked tile, Block, Library) fold
+the same way.
+
+### Your presets
+
+Every builder's presets strip (the 2D Scene Builder's **Templates** tab) ends with your own presets
+and **+ Save this scene**: name it, and the builder's scene is kept with a picture of the viewport as
+it is now. A preset is the builder's scene (its spec, or the 3D builder's recipe), not a graph: it
+loads only in the builder it was saved from (one undo step) and is built only when you build. The
+pencil renames one, × deletes it. The built-ins stay first (the 3D Scene Builder keeps four: the GI-lit
+room, the volumetric orb, the blobs and the glass); the Warp builder has only yours.
+
+| Builder | Kept as | Picture from |
+|---|---|---|
+| 3D Scene Builder | the recipe | the viewport, else a render of the recipe |
+| 2D Scene Builder | the scene | the Preview panel (a blank card while it is folded) |
+| Grid scene | the scene | the viewport, else the grid's own picture |
+| Grid Rules | the rule's settings (not the node) | the try board |
+| Warp builder | the blocks | the viewport |
+| Splat builder | the scene (the scan too) | the viewport, else a small cloud |
+| Time Cube | the cube or stack (the video too) | the viewport, else the cube's own picture |
+
+They live in this browser's local storage, one list per builder (`src/builders/userPresets.ts`;
+the 3D list keeps its old key, `playfield:scene-builder-presets`), at most 48 each; a picture that
+doesn't fit is dropped and the preset kept. The strip's cards and the save form are
+`components/builders/UserPresets.tsx`; the picture is `viewportThumb.ts` (the biggest canvas in the
+viewport, or the builder's own picture when the viewport reads back empty).
+
 ## On a phone
 
 **A new graph starts here.** The phone's ⋯ menu has **New graph…** (it used to be *Clear the graph…*):

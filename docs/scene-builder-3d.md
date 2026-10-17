@@ -347,6 +347,10 @@ the clauses that are fine. While you aren't typing, the text follows the form.
 
 Each template is a recipe, so reading one is a good way to learn the language.
 
+The strip keeps four of them (GI-lit room, glowing orb, blobs, glass); the rest of it is your own
+presets, saved with **+ Save this scene** (a name and a picture of the viewport): see "Your presets"
+in [scene-builder.md](scene-builder.md).
+
 **Describe (in the nav, under From the graph, and the top bar's search button).** See "Scene → words" below.
 
 **Preview (now the viewport).** The graph Build will make, compiled and drawn live by

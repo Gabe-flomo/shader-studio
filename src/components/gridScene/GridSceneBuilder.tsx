@@ -41,6 +41,8 @@ import { buildStaying, closeBuilding } from '../../builders/finish';
 import { Popover } from '../ui/Popover';
 import { MAX_SEARCH, gridProgram, searchCapped } from '../../gridScene/glsl';
 import { GRID_TEMPLATES } from '../../gridScene/templates';
+import { UserPresets } from '../builders/UserPresets';
+import { presetTextToSpec, specToPresetText } from '../../builders/userPresets';
 import {
   DO_KINDS, DO_LABELS, DRAW_MODES, DRAW_MODE_LABELS, MAX_CELLS, MAX_PLACED, PIC_MODES, PIC_MODE_LABELS, defaultDraw, drawOf, picModeOf, MAX_RULES, MAX_SHAPES, MAX_WARPS, MIN_CELLS, MOTION_LABELS, MOTION_PATHS, PATTERN_KINDS, PATTERN_LABELS,
   PATTERN_TARGETS, SHAPE_KINDS, SHAPE_LABELS, TARGET_LABELS, WHEN_KINDS, WHEN_LABELS, defaultLook, defaultPattern, newRule, newShape, nextShapeId,
@@ -768,8 +770,11 @@ function Viewport() {
 function Presets() {
   const pics = useMemo(() => Object.fromEntries(GRID_TEMPLATES.map(t => [t.key, gridPicture(t.make())])), []);
   return (
-    <div style={{ display: 'flex', gap: 12 }}>
+    <div data-grid-presets style={{ display: 'flex', gap: 12 }}>
       {GRID_TEMPLATES.map(t => <PresetCard key={t.key} id={t.key} label={t.label} hint={t.blurb} src={pics[t.key]} onClick={() => useGridBuilder.getState().replace(t.make())} />)}
+      <UserPresets kind="grid" getRecipe={() => specToPresetText(useGridBuilder.getState().spec)}
+        onLoad={text => { const spec = presetTextToSpec<GridSceneSpec>(text); if (spec) useGridBuilder.getState().replace(spec); }}
+        fallbackThumb={() => gridPicture(useGridBuilder.getState().spec)} />
     </div>
   );
 }

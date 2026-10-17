@@ -3,7 +3,8 @@
  * X / Y / Z row, a colour row and a folding card. Every change goes through
  * the builder store's `edit`, with a coalesce key so one drag is one undo step.
  */
-import { useState, type ReactNode } from 'react';
+import { useSectionOpen } from '../../builders/sectionFold';
+import type { ReactNode } from 'react';
 import { BuilderSlider, type BuilderSliderProps } from '../builders/BuilderSlider';
 import { ColorSwatch } from '../ui/ColorPicker';
 import { ColourModeSwitch, GradientSetting } from '../ui/GradientSetting';
@@ -109,8 +110,6 @@ export function GradientColourRow({ label, value, gradient, onChange, onGradient
   );
 }
 
-/** Which cards are open, kept while the app runs (a card the user opened stays open across tabs). */
-const openCards = new Map<string, boolean>();
 
 /** A card's mute switch (builders/mute.ts): its toggle, its solo (Alt-click) and what it is called. */
 export interface CardMute { muted: boolean; onToggle: () => void; onSolo?: () => void; what?: string }
@@ -129,19 +128,19 @@ export function Card({ id, title, summary, accent, actions, defaultOpen = false,
   removeLabel?: string;
 }) {
   const tk = useTokens();
-  const [open, setOpenState] = useState(() => openCards.get(id) ?? defaultOpen);
-  const setOpen = (v: boolean) => { openCards.set(id, v); setOpenState(v); };
+  // Open or folded is remembered per card, across tabs and reloads (builders/sectionFold.ts).
+  const [open, setOpen] = useSectionOpen(id, defaultOpen);
   return (
-    <div data-sb-card={id} {...removeKeys(onRemove, typeof title === 'string' ? title : id)} style={{ outline: 'none',
+    <div data-sb-card={id} data-open={open || undefined} {...removeKeys(onRemove, typeof title === 'string' ? title : id)} style={{ outline: 'none',
       borderRadius: radius.control, background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${selected ? tk.accent.base : tk.border.default}`, overflow: 'hidden', flexShrink: 0,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px 6px 10px', minHeight: 40, boxSizing: 'border-box', cursor: 'pointer' }}
-        onClick={() => { setOpen(!open); onHeaderClick?.(); }}>
+        aria-expanded={open} onClick={() => { setOpen(!open); onHeaderClick?.(); }}>
         <Icon name={open ? 'chevD' : 'chevR'} size={14} style={{ color: tk.text.faint, flexShrink: 0 }} />
         {accent && <span style={{ width: 10, height: 10, borderRadius: 3, background: accent, flexShrink: 0 }} />}
         <span style={{ fontWeight: 600, fontSize: 13, color: tk.text.primary, flexShrink: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', ...(mute?.muted ? MUTED_DIM : {}) }}>{title}</span>
         {mute?.muted && <MutedTag />}
-        <span style={{ flex: 1, minWidth: 0, fontSize: 12, color: tk.text.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{!open && summary}</span>
+        <span data-card-summary style={{ flex: 1, minWidth: 0, fontSize: 12, color: tk.text.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{!open && summary}</span>
         <span onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
           {mute && <MuteToggle muted={mute.muted} onToggle={mute.onToggle} onSolo={mute.onSolo} what={mute.what ?? (typeof title === 'string' ? title : 'this card')} />}
           {actions}
