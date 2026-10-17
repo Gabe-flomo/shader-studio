@@ -33,6 +33,7 @@ import { sourceLabel } from '../../play/playSources';
 import { candidateLabel, collectPlayCandidates } from '../../play/playControls';
 import { videoEngine } from '../../lib/videoEngine';
 import { listImages, listVideos, getImage, getVideo, isAudioType, type BackgroundImageMeta, type LibraryVideoMeta } from '../../lib/backgroundLibrary';
+import { BUILTIN_IMAGE_LIST, builtinImageUrl } from '../../lib/builtinImages';
 import { MediaLibraryGrid } from '../media/MediaLibraryGrid';
 import { KIND_LABEL, imageNameOf, textureKindOf, type TextureKind } from '../../lib/texture/textureSource';
 import { fetchMedia, TextureUrlError } from '../../lib/texture/pictures';
@@ -330,7 +331,9 @@ function LibraryPicker({ anchorRef, kind, onPick, onClose }: { anchorRef: React.
   useEffect(() => {
     let live = true;
     const load: Promise<Array<BackgroundImageMeta | LibraryVideoMeta>> = kind === 'image' ? listImages() : listVideos().then(l => l.filter(v => !isAudioType(v.type)));
-    load.then(l => { if (live) setItems(l.map(x => ({ id: x.id, name: x.name, thumb: x.thumb }))); }, () => { if (live) setItems([]); });
+    // Pictures that ship with the app (lib/builtinImages.ts) come after your own: there is always something to try.
+    const builtIn: LibItem[] = kind === 'image' ? BUILTIN_IMAGE_LIST.map(b => ({ id: b.id, name: `${b.name} (built in)`, thumb: builtinImageUrl(b.id) })) : [];
+    load.then(l => { if (live) setItems([...l.map(x => ({ id: x.id, name: x.name, thumb: x.thumb })), ...builtIn]); }, () => { if (live) setItems(builtIn); });
     return () => { live = false; };
   }, [kind]);
   // ↑/↓ look through them with a large preview (a video plays), Enter or double-click uses one (components/media).

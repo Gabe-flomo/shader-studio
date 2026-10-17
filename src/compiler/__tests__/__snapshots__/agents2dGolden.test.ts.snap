@@ -742,6 +742,20 @@ exports[`2D agents and pass graphs compile as they did before 3D > passSlimeEdge
 }
 `;
 
+exports[`2D agents and pass graphs compile as they did before 3D > picPixelSort 1`] = `
+{
+  "agents": "1fe1f0024152e81521f99e5e13c1:4",
+  "errors": null,
+  "fragmentShader": "17b9c1773014361d8d943870bfe1:2158",
+  "paramBindings": "00315a3999e27402bfe55981523f:514",
+  "paramUniforms": "16b3d89ad6e5130b0ee56e964fe0:344",
+  "passes": "0db73b3e082cb208d95a290dc466:8761",
+  "success": true,
+  "textureUniforms": "1c7688bcdb4e030cec0e647e7d03:25",
+  "web": null,
+}
+`;
+
 exports[`2D agents and pass graphs compile as they did before 3D > raysColourBurst 1`] = `
 {
   "agents": "1fe1f0024152e81521f99e5e13c1:4",

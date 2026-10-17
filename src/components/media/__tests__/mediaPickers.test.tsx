@@ -137,6 +137,8 @@ describe('Texture node Library button', () => {
     const list = listbox('Library pictures');
     expect(list).toBeTruthy();
     expect(document.activeElement).toBe(list);
+    // The built-in photos (lib/builtinImages.ts) are listed after the library's own.
+    expect(list.textContent).toMatch(/Room and cat \(built in\)[\s\S]*Walkway cat \(built in\)/);
     keyOn(list, 'ArrowDown');
     await flush();
     expect(document.querySelector('[data-media-preview="image"] img')?.getAttribute('alt')).toBe('Preview of Sunset');

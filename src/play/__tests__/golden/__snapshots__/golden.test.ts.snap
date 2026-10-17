@@ -1482,6 +1482,59 @@ exports[`golden outputs: examples > pianoRollScale 1`] = `
 }
 `;
 
+exports[`golden outputs: examples > picBlockSwap 1`] = `
+{
+  "amount": "- x120",
+  "reach": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > picChannelColours 1`] = `
+{
+  "c1": "- x120",
+  "c2": "- x120",
+  "c3": "- x120",
+  "e1": "- x120",
+  "e2": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > picChannelSplash 1`] = `
+{
+  "soft": "- x120",
+  "thr": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > picHeightRelief 1`] = `
+{
+  "amb": "- x120",
+  "relief": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > picPixelSort 1`] = `
+{
+  "high": "- x120",
+  "low": "- x120",
+  "vert": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > picShowData 1`] = `
+{
+  "hi": "- x120",
+  "lo": "- x120",
+  "sc": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > picShuffle 1`] = `
+{
+  "shift": "- x120",
+}
+`;
+
 exports[`golden outputs: examples > piecesBallAction 1`] = `
 {
   "f": "- x120",

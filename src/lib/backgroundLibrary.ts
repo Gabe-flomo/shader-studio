@@ -71,6 +71,7 @@ import { ensureRoom } from '../files/storageLimit';
 import { isLinkedRef, mimeOf } from '../files/linkedRefs';
 import { onLinkedChange, resolveLinked, statLinked } from '../files/linkedFolders';
 import { BUILTIN_VIDEOS, builtinVideoBlob, isBuiltinVideo } from './builtinVideos';
+import { BUILTIN_IMAGES, builtinImageBlob, isBuiltinImage } from './builtinImages';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -216,6 +217,12 @@ export async function listImages(): Promise<BackgroundImageMeta[]> {
 export function imageCountCached(): number { return cache?.length ?? 0; }
 
 export async function getImage(id: string): Promise<BackgroundImage | null> {
+  // A picture that ships with the app (lib/builtinImages.ts): fetched from the build, never kept here.
+  if (isBuiltinImage(id)) {
+    const blob = await builtinImageBlob(id);
+    const b = BUILTIN_IMAGES[id];
+    return blob ? { id, name: b.name, width: b.width, height: b.height, type: b.type, bytes: blob.size, createdAt: 0, thumb: '', blob } : null;
+  }
   if (isLinkedRef(id)) {
     const got = await resolveLinked(id);
     if (got.ok) return { id, name: got.name.replace(/\.[a-z0-9]{2,5}$/i, ''), width: 0, height: 0, type: got.type || 'image/png', bytes: got.size, createdAt: got.mtime, thumb: '', blob: got.blob };
@@ -226,6 +233,7 @@ export async function getImage(id: string): Promise<BackgroundImage | null> {
 }
 
 export async function hasImage(id: string): Promise<boolean> {
+  if (isBuiltinImage(id)) return true;
   if (isLinkedRef(id) && await statLinked(id)) return true;
   const n = await tx<number>('readonly', s => s.count(id));
   return n > 0;
