@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.253',
+    date: '2026-10-17',
+    title: "Smooth lens",
+    highlights: [
+      { area: 'Studio', text: "March Camera: Lens Smooth blurs by depth on the current frame, so depth of field is soft bokeh with no grain and no lag; Disc, Hex or Oct." },
+    ],
+  },
+  {
     id: '2026.10.252',
     date: '2026-10-17',
     title: "Learn a sound",
