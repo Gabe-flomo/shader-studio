@@ -107,12 +107,67 @@ const FROM_OPTIONS = [
 export const SHUFFLE_SLOTS = ['r', 'g', 'b', 'a'] as const;
 const fromOf = (v: unknown, fb: string) => (FROM_OPTIONS.some(o => o.value === String(v)) ? String(v) : fb);
 
+/**
+ * Distort wires (the Shuffle card's grid: drag one row's cell onto another's): the channel dropped
+ * onto is changed by the dragged one, `to = to op from`, like patching a modulation cable. Every
+ * wire reads the channels as shuffled (before any wire), so their order doesn't matter; a channel
+ * takes at most SHUFFLE_MAX_WIRES, applied in the order they were made.
+ */
+export type ShuffleSlot = typeof SHUFFLE_SLOTS[number];
+export type ShuffleOp = 'mul' | 'add' | 'sub' | 'div' | 'expr';
+export interface ShuffleWire { from: ShuffleSlot; to: ShuffleSlot; op: ShuffleOp; expr?: string }
+export const SHUFFLE_MAX_WIRES = 2;
+export const SHUFFLE_OPS: ReadonlyArray<{ value: ShuffleOp; label: string; glyph: string; hint: string }> = [
+  { value: 'mul', label: 'Multiply', glyph: '×', hint: 'The channel × the other: the other one masks or scales it.' },
+  { value: 'add', label: 'Add', glyph: '+', hint: 'The channel + the other: brighter where the other is.' },
+  { value: 'sub', label: 'Subtract', glyph: '−', hint: 'The channel − the other: carved out where the other is.' },
+  { value: 'div', label: 'Divide', glyph: '÷', hint: 'The channel ÷ the other (never by 0).' },
+  { value: 'expr', label: 'Expression', glyph: 'ƒ', hint: 'One line of GLSL: v is the channel being changed; r, g, b, a are the four shuffled channels.' },
+];
+/** A custom expression as it compiles: one line, GLSL-ish characters only; empty → v (unchanged). */
+export function cleanShuffleExpr(e: unknown): string {
+  const t = String(e ?? '').replace(/\s+/g, ' ').trim();
+  // GLSL-ish characters only (no ; or braces), and no keyword that ends the shader early
+  return t && /^[\w\s.+\-*/(),<>=!?:&|]*$/.test(t) && !/\b(discard|return)\b/.test(t) ? t : 'v';
+}
+const isSlot = (v: unknown): v is ShuffleSlot => (SHUFFLE_SLOTS as readonly unknown[]).includes(v);
+/** The node's wires, cleaned: known channels and ops, no channel onto itself, at most SHUFFLE_MAX_WIRES into one. */
+export function shuffleWiresOf(params: Record<string, unknown>): ShuffleWire[] {
+  const raw = Array.isArray(params.wires) ? params.wires as unknown[] : [];
+  const out: ShuffleWire[] = [];
+  for (const w of raw) {
+    if (!w || typeof w !== 'object') continue;
+    const { from, to, op, expr } = w as Record<string, unknown>;
+    if (!isSlot(from) || !isSlot(to) || from === to) continue;
+    if (out.some(o => o.from === from && o.to === to) || out.filter(o => o.to === to).length >= SHUFFLE_MAX_WIRES) continue;
+    const o = SHUFFLE_OPS.some(x => x.value === op) ? op as ShuffleOp : 'mul';
+    out.push(o === 'expr' ? { from, to, op: o, expr: String(expr ?? '') } : { from, to, op: o });
+  }
+  return out;
+}
+const SHUFFLE_GLSL = `
+float shufDiv(float a, float b) { return a / (abs(b) < 1e-4 ? (b < 0.0 ? -1e-4 : 1e-4) : b); }`;
+
+/** The wires' code: each one changes its channel in a copy, reading the channels as shuffled. */
+function distortLines(id: string, wires: ShuffleWire[]): string[] {
+  if (!wires.length) return [];
+  const L = [`    vec4 ${id}_s = ${id}_o;\n`];
+  for (const w of wires) {
+    const t = `${id}_o.${w.to}`, f = `${id}_s.${w.from}`;
+    const rhs = w.op === 'mul' ? `${t} * ${f}` : w.op === 'add' ? `${t} + ${f}` : w.op === 'sub' ? `${t} - ${f}` : w.op === 'div' ? `shufDiv(${t}, ${f})` : null;
+    if (rhs) { L.push(`    ${t} = ${rhs};\n`); continue; }
+    // Expression: v (this channel, as changed so far) and r, g, b, a (the channels as shuffled)
+    L.push(`    { float v = ${t}; float r = ${id}_s.r; float g = ${id}_s.g; float b = ${id}_s.b; float a = ${id}_s.a; ${t} = float(${cleanShuffleExpr(w.expr)}); }\n`);
+  }
+  return L;
+}
+
 export const ShuffleNode: NodeDefinition = {
   type: 'channelShuffle',
   label: 'Shuffle',
   category: TEXTURE_TOOLS_CATEGORY,
   aliases: ['Shuffle channels', 'Reorder channels', 'Swap channels', 'Shift channels', 'Channel mixer', 'Combine channels', 'Merge channels', 'Channels to colour', 'Swizzle'],
-  description: 'Builds four new channels (and a colour) from the channels of one or two inputs: put channel 3 in red, channel 1 in green, nothing in blue. After Effects\' Shift Channels, Nuke\'s Shuffle, TouchDesigner\'s Reorder.',
+  description: 'Builds four new channels (and a colour) from the channels of one or two inputs: put channel 3 in red, channel 1 in green, nothing in blue. Drag one row\'s cell onto another to distort that channel by it (multiply, add, subtract, divide or a one-line expression), like patching a cable. After Effects\' Shift Channels, Nuke\'s Shuffle, TouchDesigner\'s Reorder.',
   inputs: {
     a: { type: 'vec4', label: 'A', hint: 'Four channels: a Trail field\'s Channels, a Data texture read, any vec4. Wins over Texture A.' },
     textureA: { type: 'texture', label: 'Texture A', hint: 'Or a texture, read at this pixel.' },
@@ -125,8 +180,10 @@ export const ShuffleNode: NodeDefinition = {
     alpha: { type: 'float', label: 'Alpha', hint: 'The fourth channel.' },
   },
   defaultParams: { r: 'a1', g: 'a2', b: 'a3', a: 'a4' },
-  // Set with the card's click grid (NodeInlineViz ShuffleGridViz): which channel goes into each of R, G, B, A.
+  // Set with the card's click grid (NodeInlineViz ShuffleGridViz): which channel goes into each of R, G, B, A,
+  // and its distort wires (`wires`, ShuffleWire[]).
   paramDefs: {},
+  glslFunctions: [SHUFFLE_GLSL],
   generateGLSL: (node: GraphNode, v) => {
     const id = node.id;
     const A = v.a ?? (v.textureA ? `texture2D(${v.textureA}, ${texUv(v.uv ?? 'g_uv')})` : 'vec4(0.0)');
@@ -141,6 +198,7 @@ export const ShuffleNode: NodeDefinition = {
         `    vec4 ${id}_a = ${A};\n`,
         `    vec4 ${id}_b = ${B};\n`,
         `    vec4 ${id}_o = vec4(${slot('r', 'a1')}, ${slot('g', 'a2')}, ${slot('b', 'a3')}, ${slot('a', 'a4')});\n`,
+        ...distortLines(id, shuffleWiresOf(node.params)),
       ].join(''),
       outputVars: { color: `${id}_o.rgb`, channels: `${id}_o`, alpha: `${id}_o.a` },
     };

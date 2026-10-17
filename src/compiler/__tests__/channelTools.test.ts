@@ -11,6 +11,7 @@ vi.hoisted(() => {
 
 import { compileGraph } from '../graphCompiler';
 import { getNodeDefinition } from '../../nodes/definitions';
+import { cleanShuffleExpr, shuffleWiresOf } from '../../nodes/definitions/channelTools';
 import { n } from '../../store/graphBuilder';
 import { runGlsl, type Val } from './glslEval';
 
@@ -55,6 +56,34 @@ describe('Shuffle', () => {
     const r = run('channelShuffle', { r: 'a3', g: 'b2', b: '0', a: '1' }, { a: C, b: 'vec4(0.0, 9.0, 0.0, 0.0)' });
     expect(r.channels).toEqual([4, 9, 0, 1]);
     expect(r.color).toEqual([4, 9, 0]);
+  });
+  it('distort wires change the channel dropped onto, reading the channels as shuffled', () => {
+    // R = 2, G = 0.5, B = 4, A = 1. B × R, R + G (R reads B's original too: order doesn't matter), G − A
+    const r = run('channelShuffle', { wires: [{ from: 'r', to: 'b', op: 'mul' }, { from: 'g', to: 'r', op: 'add' }, { from: 'a', to: 'g', op: 'sub' }] }, { a: C });
+    expect(r.channels).toEqual([2.5, -0.5, 8, 1]);
+    // Two into one channel apply in order: B × R, then + A
+    expect(run('channelShuffle', { wires: [{ from: 'r', to: 'b', op: 'mul' }, { from: 'a', to: 'b', op: 'add' }] }, { a: C }).channels).toEqual([2, 0.5, 9, 1]);
+  });
+  it('wires are cleaned: no channel onto itself, no repeats, at most two into one, unknown ops multiply, bad expressions leave it', () => {
+    expect(shuffleWiresOf({ wires: [
+      { from: 'r', to: 'r', op: 'add' }, { from: 'g', to: 'b', op: 'what' }, { from: 'g', to: 'b', op: 'add' },
+      { from: 'r', to: 'b', op: 'add' }, { from: 'a', to: 'b', op: 'add' }, { from: 'x', to: 'b' },
+    ] })).toEqual([{ from: 'g', to: 'b', op: 'mul' }, { from: 'r', to: 'b', op: 'add' }]);
+    expect(cleanShuffleExpr('v * (1.0 + r)')).toBe('v * (1.0 + r)');
+    expect(cleanShuffleExpr('v; discard')).toBe('v');
+    expect(cleanShuffleExpr('discard')).toBe('v');
+    expect(cleanShuffleExpr('}')).toBe('v');
+    expect(cleanShuffleExpr('')).toBe('v');
+  });
+  it('Divide and Expression wires compile', () => {
+    const r = compileGraph({ nodes: [
+      n('makeVec4', 'v4', 0, 0, {}),
+      n('channelShuffle', 'c', 300, 0, { wires: [{ from: 'r', to: 'b', op: 'div' }, { from: 'g', to: 'a', op: 'expr', expr: 'mix(v, g, 0.5) * sin(r * 3.0)' }] }, { a: ['v4', 'xyzw'] }),
+      n('output', 'o', 600, 0, {}, { color: ['c', 'color'] }),
+    ] }) as unknown as { errors?: unknown; fragmentShader: string };
+    expect(r.errors, JSON.stringify(r.errors)).toBeUndefined();
+    expect(r.fragmentShader).toContain('shufDiv(');
+    expect(r.fragmentShader).toContain('mix(v, g, 0.5) * sin(r * 3.0)');
   });
 });
 

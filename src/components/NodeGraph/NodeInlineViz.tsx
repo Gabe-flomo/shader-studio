@@ -12,6 +12,7 @@ import { pal, setVizPalette, MONO, vizContainer, setupViz, imageSize, blitImage,
 import { GenericViz, GENERIC_VIZ_TYPES } from './vizGeneric';
 import { passThumbRegistry } from '../../lib/passRunner';
 import { passRepeat } from '../../nodes/definitions/passes';
+import { SHUFFLE_MAX_WIRES, SHUFFLE_OPS, cleanShuffleExpr, shuffleWiresOf, type ShuffleWire } from '../../nodes/definitions/channelTools';
 import { getPerfSnapshot } from '../../lib/perfStats';
 import { agentStatsFor, agentThumbRegistry, restartAgents, trailThumbRegistry, type AgentStats } from '../../lib/agentRunner';
 import { AGENT_TIERS } from '../../nodes/definitions/agents';
@@ -3934,10 +3935,84 @@ function ShuffleGridViz({ node }: { node: GraphNode }) {
   const cols = [...['a1', 'a2', 'a3', 'a4'], ...(usesB ? ['b1', 'b2', 'b3', 'b4'] : []), '0', '1'];
   const head = (c: string) => (c === '0' || c === '1' ? c : `${c[0].toUpperCase()}${c[1]}`);
   const cell: React.CSSProperties = { width: 22, height: 20, borderRadius: 4, border: `1px solid ${pal.surface1}`, padding: 0, cursor: 'pointer' };
+  const wires = shuffleWiresOf(node.params);
+  const setWires = (next: ShuffleWire[]) => updateNodeParams(node.id, { wires: next }, { immediate: true });
+  const tintOf = (k: string) => SHUFFLE_ROWS.find(r => r.key === k)!.tint;
+  const labelOf = (k: string) => k.toUpperCase();
+
+  // Where each row's lit cell is, inside the grid (offsets: right at any canvas zoom).
+  const gridRef = useRef<HTMLDivElement>(null);
+  const [, relayout] = useState(0);
+  useEffect(() => { relayout(n => n + 1); }, [cols.length, node.params.r, node.params.g, node.params.b, node.params.a]);
+  const centre = (row: string): { x: number; y: number } | null => {
+    const el = gridRef.current?.querySelector<HTMLElement>(`[data-shuffle-cell^="${row}:"][aria-pressed="true"]`);
+    return el ? { x: el.offsetLeft + el.offsetWidth / 2, y: el.offsetTop + el.offsetHeight / 2 } : null;
+  };
+
+  // Dragging a lit cell onto another row's lit cell patches a wire (pointer events; a click without a drag still picks).
+  const drag = useRef<{ from: string; x0: number; y0: number; moved: boolean } | null>(null);
+  const [ghost, setGhost] = useState<{ from: string; x: number; y: number } | null>(null);
+  const [editing, setEditing] = useState<{ from: string; to: string } | null>(null);
+  const local = (e: React.PointerEvent) => {
+    const g = gridRef.current!;
+    const r = g.getBoundingClientRect();
+    // Back from screen pixels to the grid's own (the canvas may be zoomed)
+    const k = g.offsetWidth ? r.width / g.offsetWidth : 1;
+    return { x: (e.clientX - r.left) / k, y: (e.clientY - r.top) / k };
+  };
+  const rowAt = (e: React.PointerEvent): string | null => {
+    const el = document.elementFromPoint(e.clientX, e.clientY)?.closest?.('[data-shuffle-cell]') as HTMLElement | null;
+    if (!el || el.getAttribute('aria-pressed') !== 'true') return null;
+    return el.dataset.shuffleCell!.split(':')[0];
+  };
+  const onDown = (row: string, on: boolean) => (e: React.PointerEvent) => {
+    e.stopPropagation();
+    if (!on || e.button !== 0) return;
+    drag.current = { from: row, x0: e.clientX, y0: e.clientY, moved: false };
+    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+  };
+  const onMove = (e: React.PointerEvent) => {
+    const d = drag.current;
+    if (!d) return;
+    if (!d.moved && Math.hypot(e.clientX - d.x0, e.clientY - d.y0) < 4) return;
+    d.moved = true;
+    setGhost({ from: d.from, ...local(e) });
+  };
+  const onUp = (e: React.PointerEvent) => {
+    const d = drag.current;
+    drag.current = null;
+    setGhost(null);
+    if (!d?.moved) return;
+    const to = rowAt(e);
+    if (!to || to === d.from) return;
+    const existing = wires.find(w => w.from === d.from && w.to === to);
+    if (!existing) {
+      if (wires.filter(w => w.to === to).length >= SHUFFLE_MAX_WIRES) {
+        toast.error(`${labelOf(to)} already has ${SHUFFLE_MAX_WIRES} wires`, { message: 'Right-click one of them to remove it first.' });
+        return;
+      }
+      setWires([...wires, { from: d.from as ShuffleWire['from'], to: to as ShuffleWire['to'], op: 'mul' }]);
+    }
+    setEditing({ from: d.from, to });
+  };
+  // A drag ends in a click on the cell it started from: that click mustn't pick
+  const suppressClick = useRef(false);
+
+  const editWire = editing && wires.find(w => w.from === editing.from && w.to === editing.to);
+  const patch = (p: Partial<ShuffleWire>) => editWire && setWires(wires.map(w => (w === editWire ? { ...w, ...p } : w)));
+  const ends = (w: ShuffleWire) => { const a = centre(w.from), b = centre(w.to); return a && b ? { a, b } : null; };
+  const path = (a: { x: number; y: number }, b: { x: number; y: number }) => {
+    // A cable that sags to the right, like a patch lead
+    const sag = 18 + Math.abs(b.y - a.y) * 0.35;
+    return `M${a.x} ${a.y} C${a.x + sag} ${a.y}, ${b.x + sag} ${b.y}, ${b.x} ${b.y}`;
+  };
+  const glyph = (op: string) => SHUFFLE_OPS.find(o => o.value === op)?.glyph ?? '×';
+
   return (
-    <div data-shuffle-grid style={{ ...vizContainer(), padding: '6px 10px 8px' }} onMouseDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()}>
-      <div style={{ fontSize: '10px', color: pal.overlay0, marginBottom: 4 }}>Click where each channel comes from (A or B's channel 1–4, or 0 / 1).</div>
-      <div style={{ display: 'grid', gridTemplateColumns: `18px repeat(${cols.length}, 22px)`, gap: 3, alignItems: 'center', fontFamily: MONO, fontSize: '10px' }}>
+    <div data-shuffle-grid style={{ ...vizContainer(), padding: '6px 10px 8px' }} onMouseDown={e => e.stopPropagation()} onPointerDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()}>
+      <div style={{ fontSize: '10px', color: pal.overlay0, marginBottom: 4 }}>Click where each channel comes from (A or B's channel 1–4, or 0 / 1). Drag a lit cell onto another to distort that channel by it; right-click a wire to change or remove it.</div>
+      <div ref={gridRef} style={{ position: 'relative', display: 'grid', gridTemplateColumns: `18px repeat(${cols.length}, 22px)`, gap: 3, alignItems: 'center', fontFamily: MONO, fontSize: '10px' }}
+        onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={() => { drag.current = null; setGhost(null); }}>
         <span />
         {cols.map(c => <span key={c} style={{ textAlign: 'center', color: pal.overlay0 }}>{head(c)}</span>)}
         {SHUFFLE_ROWS.map(r => {
@@ -3949,15 +4024,74 @@ function ShuffleGridViz({ node }: { node: GraphNode }) {
                 const on = now === c;
                 return (
                   <button key={c} type="button" data-shuffle-cell={`${r.key}:${c}`} aria-pressed={on}
-                    aria-label={`${r.label} from ${head(c)}`} title={`${r.label} from ${c === '0' ? 'nothing (0)' : c === '1' ? 'full (1)' : `${c[0].toUpperCase()}'s channel ${c[1]}`}`}
-                    onClick={() => updateNodeParams(node.id, { [r.key]: c }, { immediate: true })}
-                    style={{ ...cell, background: on ? r.tint : 'transparent', borderColor: on ? r.tint : pal.surface1 }} />
+                    aria-label={`${r.label} from ${head(c)}`} title={on ? `${r.label} comes from here. Drag onto another lit cell to distort that channel by ${r.label}` : `${r.label} from ${c === '0' ? 'nothing (0)' : c === '1' ? 'full (1)' : `${c[0].toUpperCase()}'s channel ${c[1]}`}`}
+                    onPointerDown={onDown(r.key, on)}
+                    onPointerUp={() => { if (ghost) suppressClick.current = true; }}
+                    onClick={() => { if (suppressClick.current) { suppressClick.current = false; return; } updateNodeParams(node.id, { [r.key]: c }, { immediate: true }); }}
+                    style={{ ...cell, position: 'relative', zIndex: 1, background: on ? r.tint : 'transparent', borderColor: on ? r.tint : pal.surface1, cursor: on ? 'grab' : 'pointer' }} />
                 );
               })}
             </React.Fragment>
           );
         })}
+        {/* The wires, over the grid: right-click (or click) one to change it */}
+        <svg data-shuffle-wires style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', overflow: 'visible', pointerEvents: 'none', zIndex: 2 }}>
+          {wires.map(w => {
+            const e = ends(w);
+            if (!e) return null;
+            const d = path(e.a, e.b);
+            const mx = (e.a.x + e.b.x) / 2 + 14 + Math.abs(e.b.y - e.a.y) * 0.26, my = (e.a.y + e.b.y) / 2;
+            const open = () => setEditing({ from: w.from, to: w.to });
+            return (
+              <g key={`${w.from}${w.to}`} data-shuffle-wire={`${w.from}>${w.to}`} style={{ pointerEvents: 'auto', cursor: 'context-menu' }}
+                onContextMenu={ev => { ev.preventDefault(); ev.stopPropagation(); open(); }} onClick={open}>
+                <title>{`${labelOf(w.to)} ${glyph(w.op)} ${labelOf(w.from)}${w.op === 'expr' ? `: ${w.expr ?? ''}` : ''} (right-click to change)`}</title>
+                <path d={d} fill="none" stroke="transparent" strokeWidth={10} />
+                <path d={d} fill="none" stroke={tintOf(w.from)} strokeWidth={2} strokeLinecap="round" opacity={0.9} />
+                <circle cx={e.b.x} cy={e.b.y} r={3} fill={tintOf(w.from)} />
+                <circle cx={mx} cy={my} r={7} fill={pal.base} stroke={tintOf(w.from)} strokeWidth={1.5} />
+                <text x={mx} y={my + 3.5} textAnchor="middle" fontSize={10} fontWeight={700} fill={pal.text}>{glyph(w.op)}</text>
+              </g>
+            );
+          })}
+          {ghost && (() => { const a = centre(ghost.from); return a ? <path d={path(a, ghost)} fill="none" stroke={tintOf(ghost.from)} strokeWidth={2} strokeDasharray="4 3" /> : null; })()}
+        </svg>
       </div>
+      {editWire && (
+        <div data-shuffle-wire-editor style={{ marginTop: 6, padding: 8, borderRadius: 6, background: pal.surface0, border: `1px solid ${pal.surface1}`, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
+            <span style={{ color: tintOf(editWire.to), fontWeight: 700 }}>{labelOf(editWire.to)}</span>
+            <span style={{ color: pal.overlay0 }}>is distorted by</span>
+            <span style={{ color: tintOf(editWire.from), fontWeight: 700 }}>{labelOf(editWire.from)}</span>
+            <span style={{ flex: 1 }} />
+            <button type="button" data-shuffle-wire-remove onClick={() => { setWires(wires.filter(w => w !== editWire)); setEditing(null); }}
+              style={{ font: 'inherit', fontSize: 10.5, padding: '2px 7px', borderRadius: 4, border: `1px solid ${pal.surface1}`, background: 'transparent', color: pal.red, cursor: 'pointer' }}>Remove</button>
+            <button type="button" aria-label="Close" onClick={() => setEditing(null)}
+              style={{ width: 20, height: 20, padding: 0, border: 0, background: 'none', color: pal.overlay0, cursor: 'pointer', font: `600 12px ${MONO}` }}>×</button>
+          </div>
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+            {SHUFFLE_OPS.map(o => (
+              <button key={o.value} type="button" data-shuffle-op={o.value} aria-pressed={editWire.op === o.value} title={o.hint}
+                onClick={() => patch(o.value === 'expr' ? { op: 'expr', expr: editWire.expr || `v * ${editWire.from}` } : { op: o.value })}
+                style={{ font: 'inherit', fontSize: 10.5, padding: '2px 7px', borderRadius: 999, cursor: 'pointer', border: `1px solid ${editWire.op === o.value ? tintOf(editWire.from) : pal.surface1}`, background: editWire.op === o.value ? tintOf(editWire.from) : 'transparent', color: editWire.op === o.value ? '#fff' : pal.text }}>
+                {o.glyph} {o.label}
+              </button>
+            ))}
+          </div>
+          {editWire.op === 'expr' ? (
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 10, color: pal.overlay0 }}>
+              <span>{labelOf(editWire.to)} = … (v is {labelOf(editWire.to)} now; r, g, b, a are the four channels)</span>
+              <input data-shuffle-expr defaultValue={editWire.expr ?? ''} key={`${editWire.from}${editWire.to}`} spellCheck={false}
+                onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                onBlur={e => patch({ expr: e.target.value })}
+                style={{ font: `500 11.5px ${MONO}`, padding: '4px 6px', borderRadius: 4, border: `1px solid ${pal.surface1}`, background: pal.base, color: pal.text }} />
+              {cleanShuffleExpr(editWire.expr) === 'v' && (editWire.expr ?? '').trim() !== 'v' && <span style={{ color: pal.peach }}>This can’t be used as it is (one line, no ; or braces): the channel is left as it is.</span>}
+            </label>
+          ) : (
+            <span style={{ fontSize: 10, color: pal.overlay0 }}>{SHUFFLE_OPS.find(o => o.value === editWire.op)?.hint}</span>
+          )}
+        </div>
+      )}
     </div>
   );
 }
