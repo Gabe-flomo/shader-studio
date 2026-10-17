@@ -1506,6 +1506,12 @@ exports[`golden outputs: examples > picChannelSplash 1`] = `
 }
 `;
 
+exports[`golden outputs: examples > picCurves 1`] = `
+{
+  "amount": "- x120",
+}
+`;
+
 exports[`golden outputs: examples > picHeightRelief 1`] = `
 {
   "amb": "- x120",
@@ -1532,6 +1538,13 @@ exports[`golden outputs: examples > picShowData 1`] = `
 exports[`golden outputs: examples > picShuffle 1`] = `
 {
   "shift": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > picThreshold 1`] = `
+{
+  "level": "- x120",
+  "soft": "- x120",
 }
 `;
 
