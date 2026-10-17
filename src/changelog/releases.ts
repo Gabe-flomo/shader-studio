@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.255',
+    date: '2026-10-17',
+    title: "Bounds and Glitch",
+    highlights: [
+      { area: 'Studio', text: "Bounds keeps a number or position inside a range with Clip, Wrap, Bounce or Soft; Direction flips a velocity at each wall." },
+      { area: 'Studio', text: "Glitch takes two pictures and gives two back: swap blocks, cross channels, displace by the other, bit flips, slice shift." },
+    ],
+  },
+  {
     id: '2026.10.254',
     date: '2026-10-17',
     title: "Sound that stays",
