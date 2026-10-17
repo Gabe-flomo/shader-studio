@@ -6,6 +6,8 @@ import { Kbd } from './Kbd';
 
 const GAP = 6;
 const MARGIN = 8;
+/** A touch held this long shows the tooltip (there is no hover on a phone). */
+export const LONG_PRESS_MS = 500;
 
 /**
  * Hover tooltip: dark, max 280px, shows after `delay` ms and hides on pointer down (so it never
@@ -31,6 +33,9 @@ export function Tooltip({
   const tipRef = useRef<HTMLDivElement>(null);
   const timer = useRef<number | undefined>(undefined);
   const [open, setOpen] = useState(false);
+  // Touch: where a press started, and whether it was held long enough to show the tip.
+  const pressAt = useRef<{ x: number; y: number } | null>(null);
+  const longPressed = useRef(false);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
 
   const cancel = () => { window.clearTimeout(timer.current); };
@@ -83,6 +88,23 @@ export function Tooltip({
         // A second tap closes it.
         if (e.pointerType === 'touch' && description && !disabled && !open) { cancel(); setOpen(true); return; }
         hide();
+        // Anything else on a touch screen: a long press shows the label (an icon button's name), and
+        // that press then doesn't also count as a tap. Not on wide anchors (sliders, list rows), whose
+        // own press-and-hold (a drag, a menu) comes first.
+        if (e.pointerType === 'touch' && !disabled && !grow && !block) {
+          pressAt.current = { x: e.clientX, y: e.clientY };
+          longPressed.current = false;
+          timer.current = window.setTimeout(() => { longPressed.current = true; setOpen(true); }, LONG_PRESS_MS);
+        }
+      }}
+      onPointerMove={e => {
+        const p = pressAt.current;
+        if (p && Math.hypot(e.clientX - p.x, e.clientY - p.y) > 8) { pressAt.current = null; if (!longPressed.current) cancel(); }
+      }}
+      onPointerUp={() => { pressAt.current = null; if (!longPressed.current) cancel(); }}
+      onPointerCancel={() => { pressAt.current = null; cancel(); }}
+      onClickCapture={e => {
+        if (longPressed.current) { longPressed.current = false; e.preventDefault(); e.stopPropagation(); }
       }}
       onFocus={show}
       onBlur={hide}
