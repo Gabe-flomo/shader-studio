@@ -515,9 +515,13 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
   );
   const controlsHeader = <PanelHeader
     title="Controls"
+    scroll={compact}
     hint={play.controls.length === 0 ? undefined : `${play.controls.length}`}
     extra={(
       <>
+        {/* A phone slides this row sideways: Add control and Suggest come first there, in sight. */}
+        {compact && addControlButtonEl}
+        {compact && <SuggestControlsButton compact={compact} />}
         <OpenPlayableButton compact={compact} />
         <IconButton icon="import" label="Import a play file (a graph with its Play panel and mappings)" onClick={async () => { reportFileResult(await importGraphFromFile(), { failTitle: 'Couldn’t import that file' }); }} />
         <IconButton icon="export" label="Export a play file: the graph, the panel and the mappings, exactly as they are now (.playfile)" disabled={play.controls.length === 0} onClick={e => offerPlayExport(e.currentTarget)} />
@@ -525,8 +529,8 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
         <IconButton icon="code" label={`Put it on a website: a player with controls, or the picture as a background, as a snippet or a page${websiteOk ? '' : ' (Pro)'}`} style={websiteOk ? undefined : { opacity: 0.5 }} onClick={() => { if (requireFeature('export.website')) setEmbedOpen(true); }} />
         <IconButton icon="record" label={`Record a performance: play for up to a minute, watch it back, render it frame by frame${takesOk ? '' : ' (Pro)'}`} style={takesOk ? undefined : { opacity: 0.5 }} onClick={() => useTakes.getState().openPerformance()} />
         <IconButton icon="play" label="Stage: the picture and its controls on their own, as people will play with it" onClick={() => useStage.getState().open('full')} />
-        <SuggestControlsButton compact={compact} />
-        {addControlButtonEl}
+        {!compact && <SuggestControlsButton compact={compact} />}
+        {!compact && addControlButtonEl}
         <span ref={pageMoreRef} style={{ display: 'inline-flex' }}>
           <IconButton icon="more" label="More" onClick={() => { const r = pageMoreRef.current?.getBoundingClientRect(); setPageMore(r ? { x: r.right - 200, y: r.bottom + 4 } : null); }} />
         </span>
@@ -970,22 +974,28 @@ function ControlGroup({ name, count, grid, children }: { name: string; count: nu
 
 // ── Header + empty state ─────────────────────────────────────────────────────
 
-function PanelHeader({ title, hint, extra, onClick, chevron }: { title: string; hint?: string; extra?: ReactNode; onClick?: () => void; chevron?: 'up' | 'down' }) {
+/**
+ * `scroll` (phones): one row, the tools sliding sideways under the title, instead of wrapping
+ * onto two more lines (a lone ⋯ on a third row at 360–390px).
+ */
+function PanelHeader({ title, hint, extra, onClick, chevron, scroll = false }: { title: string; hint?: string; extra?: ReactNode; onClick?: () => void; chevron?: 'up' | 'down'; scroll?: boolean }) {
   const tk = useTokens();
   return (
     <div
       onClick={onClick}
       style={{
-        minHeight: 44, flexShrink: 0, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '2px 8px', padding: '0 8px 0 14px',
+        minHeight: 44, flexShrink: 0, display: 'flex', alignItems: 'center', flexWrap: scroll ? 'nowrap' : 'wrap', gap: '2px 8px', padding: '0 8px 0 14px',
         borderBottom: `1px solid ${tk.border.default}`, background: tk.bg.panel, cursor: onClick ? 'pointer' : 'default', userSelect: 'none',
       }}
     >
       {chevron && <Icon name={chevron === 'up' ? 'chevU' : 'chevD'} size={14} style={{ color: tk.text.faint }} />}
-      <span style={{ font: `650 13px ${fontFamily.ui}` }}>{title}</span>
-      {hint && <span style={{ color: tk.text.faint, font: `500 11.5px ${fontFamily.mono}` }}>{hint}</span>}
+      <span style={{ font: `650 13px ${fontFamily.ui}`, ...(scroll ? { flexShrink: 0 } : null) }}>{title}</span>
+      {hint && <span style={{ color: tk.text.faint, font: `500 11.5px ${fontFamily.mono}`, ...(scroll ? { flexShrink: 0 } : null) }}>{hint}</span>}
       <span style={{ flex: 1 }} />
-      {/* Wraps onto a second line on narrow screens rather than running off the edge. */}
-      <span onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end', minHeight: 44, maxWidth: '100%' }}>{extra}</span>
+      {/* Wraps onto a second line on narrow screens rather than running off the edge (or, `scroll`, slides sideways). */}
+      <span onClick={e => e.stopPropagation()} data-header-tools={scroll ? 'scroll' : undefined} style={scroll
+        ? { display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'nowrap', flex: '0 1 auto', minWidth: 0, minHeight: 44, overflowX: 'auto', scrollbarWidth: 'none' }
+        : { display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end', minHeight: 44, maxWidth: '100%' }}>{extra}</span>
     </div>
   );
 }
