@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.259',
+    date: '2026-10-17',
+    title: "Your builder presets",
+    highlights: [
+      { area: 'Studio', text: "Every builder can save the scene as your own preset with a picture of it: load, rename or delete it later; presets stay in their builder." },
+      { area: 'Studio', text: "Builder sections fold to a one-line summary and remember it, so the viewport gets the room." },
+    ],
+  },
+  {
     id: '2026.10.258',
     date: '2026-10-17',
     title: "Agents builder, tidier",
