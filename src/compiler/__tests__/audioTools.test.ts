@@ -12,6 +12,7 @@ vi.hoisted(() => {
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { migrateNodeParams, type GraphNode } from '../../types/nodeGraph';
 import { newBand } from '../../lib/audioTools/bands';
+import { newSound } from '../../lib/audioTools/learn';
 import { compileGraph } from '../graphCompiler';
 import { buildAudioExamples, AUDIO_EXAMPLE_KEYS } from '../../store/audioExamples';
 import { EXAMPLE_FOLDERS } from '../../store/exampleIndex';
@@ -151,5 +152,52 @@ describe('Audio Source bands are outputs', () => {
     const r = compileGraph({ nodes: [m, n('audioBand', 'b', 0, 0, {}, { audio: ['src', 'audio'] }), n('output', 'out', 0, 0, {}, { color: ['b', 'level'] })] });
     expect(r.errors ?? []).toEqual([]);
     expect(r.success).toBe(true);
+  });
+});
+
+describe('Audio Source learned sounds are outputs', () => {
+  const st = () => useNodeGraphStore.getState();
+  const src = () => st().nodes.find(x => x.id === 'src')!;
+  const fp = { spec: Array.from({ length: 40 }, (_, i) => (i < 20 ? -0.1 : 0.1)), env: [1, 0.8, 0.6, 0.4] };
+
+  it('a learned sound adds Trigger and Match outputs read as live uniforms; Match and Re-learn are live', () => {
+    useNodeGraphStore.setState({ nodes: [
+      n('audioSource', 'src', 0, 0, { bands: [newBand([], 'kick')] }),
+      n('envelope', 'env', 0, 0, { mode: 'trigger' }),
+      n('output', 'out', 0, 0, {}, { color: ['env', 'value'] }),
+    ], activeGroupPath: [], activeGroupId: null });
+    const clap = { ...newSound([], fp, new Set(['b1'])), name: 'Clap' };
+    st().updateNodeParams('src', { sounds: [clap] }, { immediate: true });
+    expect(src().outputs[`${clap.id}_t`]?.label).toBe('Clap (trigger)');
+    expect(src().outputs[`${clap.id}_m`]?.label).toBe('Clap (match)');
+    // The band's outputs come first, then the sound's.
+    expect(Object.keys(src().outputs)).toEqual(['audio', 'level', 'time', 'b1_t', `${clap.id}_t`, `${clap.id}_m`]);
+    const env = st().nodes.find(x => x.id === 'env')!;
+    useNodeGraphStore.setState({ nodes: st().nodes.map(x => x.id === 'env' ? { ...env, inputs: { ...env.inputs, gate: { ...env.inputs.gate, connection: { nodeId: 'src', outputKey: `${clap.id}_t` } } } } : x) });
+    const r = compileGraph({ nodes: st().nodes });
+    expect(r.errors ?? []).toEqual([]);
+    expect(Object.values(r.liveUniforms)).toEqual(expect.arrayContaining([`src::${clap.id}_t`, `src::${clap.id}_m`]));
+    // Match, Cooldown and a new fingerprint: live, the sockets stay, nothing compiles.
+    const outs = src().outputs;
+    // (A spy left on the store by an earlier test keeps its calls: count from here.)
+    const compile = vi.spyOn(st(), 'compile');
+    compile.mockClear();
+    st().updateNodeParams('src', { sounds: [{ ...clap, match: 0.6, cooldown: 300, spec: [...fp.spec].reverse() }] }, { immediate: true, live: true });
+    expect(src().outputs).toBe(outs);
+    expect(compile).not.toHaveBeenCalled();
+    compile.mockRestore();
+    // Its Trigger off: that socket and its wire go; removed: back to the band's.
+    st().updateNodeParams('src', { sounds: [{ ...clap, trigger: false }] }, { immediate: true });
+    expect(src().outputs[`${clap.id}_t`]).toBeUndefined();
+    expect(st().nodes.find(x => x.id === 'env')!.inputs.gate.connection).toBeUndefined();
+    st().updateNodeParams('src', { sounds: [] }, { immediate: true });
+    expect(Object.keys(src().outputs)).toEqual(['audio', 'level', 'time', 'b1_t']);
+  });
+
+  it('the Learn a clap example opens with a Clap waiting to be learned, already wired', () => {
+    const s = ex.audioLearnClap.nodes.find(x => x.id === 'src')!;
+    expect(s.outputs.clap_t?.label).toBe('Clap (trigger)');
+    expect(s.outputs.clap_m?.label).toBe('Clap (match)');
+    expect(String(s.params.__comment)).toContain('Load a song, select one clap in the window, press Learn');
   });
 });

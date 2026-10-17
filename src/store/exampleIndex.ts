@@ -268,7 +268,7 @@ export const EXAMPLE_INDEX: Record<string, ExampleIndexEntry> = {
   ...MEMORY_EXAMPLE_INDEX,
   // Send & Receive (sendReceiveExamples.ts, docs/send-receive.md): wireless links across groups.
   ...SEND_RECEIVE_EXAMPLE_INDEX,
-  // Audio (audioExamples.ts, docs/audio-tools.md): Hit, Spectrum, Spectrogram, Waveform on the test loop.
+  // Audio (audioExamples.ts, docs/audio-tools.md): bands, Spectrum, Spectrogram, Waveform, a learned sound.
   ...AUDIO_EXAMPLE_INDEX,
   // Light rays (raysExamples.ts, docs/radial-fast-blur.md): Radial Fast Blur on text and on a burst of shapes.
   ...RAYS_EXAMPLE_INDEX,

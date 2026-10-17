@@ -12,6 +12,7 @@
 import type { GraphNode, NodeDefinition, ParamDef } from '../../types/nodeGraph';
 import { texUv } from './passes';
 import { bandOutputs, bandsOf } from '../../lib/audioTools/bands';
+import { soundOutputs, soundsOf, type AudioSoundSpec } from '../../lib/audioTools/learn';
 
 export const AUDIO_CATEGORY = 'Audio';
 
@@ -32,11 +33,17 @@ export const AUDIO_LIVE_CHANNELS: Record<string, readonly string[]> = {
   [AUDIO_HIT_TYPE]: ['trigger', 'envelope', 'count', 'strength'],
 };
 
-/** The numbers a node writes every frame: its fixed channels, and an Audio Source's band outputs. */
+/** An Audio Source's learned sounds (lib/audioTools/learn.ts), their ids kept clear of its bands'. */
+export const audioSoundsOf = (params: Record<string, unknown>): AudioSoundSpec[] => soundsOf(params, new Set(bandsOf(params).map(b => b.id)));
+
+/** An Audio Source's own outputs after Audio, Level and Time: its bands', then its learned sounds'. */
+export const audioSourceExtraOutputs = (params: Record<string, unknown>) => [...bandOutputs(bandsOf(params)), ...soundOutputs(audioSoundsOf(params))];
+
+/** The numbers a node writes every frame: its fixed channels, and an Audio Source's band and learned-sound outputs. */
 export function audioLiveChannels(node: GraphNode): string[] {
   const fixed = [...(AUDIO_LIVE_CHANNELS[node.type] ?? [])];
   if (node.type !== AUDIO_SOURCE_TYPE) return fixed;
-  return [...fixed, ...bandOutputs(bandsOf(node.params)).map(o => o.channel)];
+  return [...fixed, ...audioSourceExtraOutputs(node.params).map(o => o.channel)];
 }
 
 /** The nodes that hand the picture a texture. */
@@ -133,8 +140,9 @@ const SOURCE_OUTPUTS = {
 };
 
 /**
- * Audio Source's sockets follow its bands (lib/audioTools/bands.ts): Audio, Level and Time, then each band's Value
- * ("Bass") and Trigger ("Kick (trigger)"). Phase 1's Test loop opens as File (empty). Wires into an output that went
+ * Audio Source's sockets follow its bands (lib/audioTools/bands.ts) and learned sounds (lib/audioTools/learn.ts):
+ * Audio, Level and Time, then each band's Value ("Bass") and Trigger ("Kick (trigger)"), then each learned sound's
+ * Trigger and Match ("Clap (trigger)", "Clap (match)"). Phase 1's Test loop opens as File (empty). Wires into an output that went
  * away are dropped by the store.
  */
 export function retypeAudioSource(node: GraphNode): GraphNode {
@@ -143,7 +151,7 @@ export function retypeAudioSource(node: GraphNode): GraphNode {
   if (params.source !== 'file' && params.source !== 'mic') params = { ...params, source: 'file' };
   const outputs: GraphNode['outputs'] = {};
   for (const [k, s] of Object.entries(SOURCE_OUTPUTS)) outputs[k] = { type: s.type, label: s.label };
-  for (const o of bandOutputs(bandsOf(params))) outputs[o.key] = { type: 'float', label: o.label };
+  for (const o of audioSourceExtraOutputs(params)) outputs[o.key] = { type: 'float', label: o.label };
   const cur = node.outputs ?? {};
   const curKeys = Object.keys(cur);
   const same = Object.keys(outputs).length === curKeys.length
@@ -156,11 +164,11 @@ export const AudioSourceNode: NodeDefinition = {
   type: AUDIO_SOURCE_TYPE,
   label: 'Audio Source',
   category: AUDIO_CATEGORY,
-  aliases: ['Audio', 'Sound', 'Music', 'Song', 'Microphone', 'Mic', 'Audio file', 'Audio In', 'Line in', 'Frequency bands', 'Kick trigger'],
-  description: 'Where the sound comes from: a File (Load a sound on the card) or the Mic (or an audio interface), picked with the tabs on the card. Open ↗ shows the whole file to trim, and a live spectrum where you pick frequency bands: each band becomes an output here, its level or a trigger on each hit in it. Wire Audio into Band level, Hit, Spectrum, Spectrogram or Waveform; Level is how loud it is right now (0–1) and Time the seconds it has played.',
+  aliases: ['Audio', 'Sound', 'Music', 'Song', 'Microphone', 'Mic', 'Audio file', 'Audio In', 'Line in', 'Frequency bands', 'Kick trigger', 'Learn a sound', 'Sound match', 'Clap detect'],
+  description: 'Where the sound comes from: a File (Load a sound on the card) or the Mic (or an audio interface), picked with the tabs on the card. Open ↗ shows the whole file to trim, and a live spectrum where you pick frequency bands: each band becomes an output here, its level or a trigger on each hit in it. Learn a sound there too (select one clap, press Learn): it fires a trigger whenever a sound like it plays. Wire Audio into Band level, Hit, Spectrum, Spectrogram or Waveform; Level is how loud it is right now (0–1) and Time the seconds it has played.',
   inputs: {},
   outputs: SOURCE_OUTPUTS,
-  defaultParams: { source: 'file', playing: true, loop: true, gain: 1, _fileName: '', bands: [], trimIn: 0, trimOut: 0 },
+  defaultParams: { source: 'file', playing: true, loop: true, gain: 1, _fileName: '', bands: [], sounds: [], trimIn: 0, trimOut: 0 },
   paramDefs: {
     playing: { label: 'Play', type: 'bool', hint: 'Plays the file (heard through the speakers), or listens to the Mic.' },
     loop: { label: 'Loop', type: 'bool', showWhen: { param: 'source', value: 'file' }, hint: 'Start again at the trim\'s end (or the file\'s). Off: it stops there.' },

@@ -1979,6 +1979,140 @@ void main() {
 }
 `;
 
+exports[`golden shaders: every example compiles as it did > audioLearnClap 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "1ce3d336f0fdd604ae780ef022fa:4910",
+  "isStateful": false,
+  "liveUniforms": {
+    "u_aud_audiosourc_0_clap_m": "src::clap_m",
+    "u_aud_audiosourc_0_clap_t": "src::clap_t",
+    "u_aud_audiosourc_0_level": "src::level",
+    "u_aud_audiosourc_0_time": "src::time",
+  },
+  "nodeSlugs": "0556bac413d79a10a1f1fc3fe284:197",
+  "paramBindings": "05474c1e931b2f1976fc62033847:271",
+  "paramUniforms": [
+    "u_p_palx0_amplitude",
+    "u_p_palx0_anim",
+    "u_p_palx0_freq",
+    "u_p_palx0_offset",
+    "u_p_palx0_phase",
+    "u_p_palx0_scale",
+    "u_p_palx0_speed",
+    "u_p_palx0_value",
+  ],
+  "paramValues": "014117996d88081b095027d64c89:222",
+  "passes": [
+    {
+      "filter": "nearest",
+      "format": "float",
+      "fragmentShader": "precision highp float;
+#define PI 3.1415926538
+#define TAU 6.2831853072
+
+uniform vec2 u_resolution;
+uniform float u_time;
+uniform vec2 u_mouse;
+uniform sampler2D u_fontTexture;
+uniform float u_aud_audiosourc_0_level;
+uniform float u_aud_audiosourc_0_time;
+uniform float u_aud_audiosourc_0_clap_t;
+uniform float u_aud_audiosourc_0_clap_m;
+uniform sampler2D u_pass_memory_0;
+uniform vec2 u_pass_memory_0_px;
+uniform sampler2D u_passprev_memory_0;
+uniform vec2 u_passprev_memory_0_px;
+uniform float u_frameDt;
+
+varying vec2 vUv;
+
+// ── Always-available helpers (noise, rotation) ───────────────────────────────
+vec2 noiseHash2(vec2 p) {
+    p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+    return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+}
+float noiseHash1(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+float valueNoise(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(noiseHash1(i), noiseHash1(i+vec2(1,0)), u.x),
+               mix(noiseHash1(i+vec2(0,1)), noiseHash1(i+vec2(1,1)), u.x), u.y);
+}
+vec2 rotate(vec2 v, float angle) {
+    // Hoisted: the angle is usually a uniform expression, and the compiler
+    // can't share the four trig calls when the argument isn't a plain value.
+    float s = sin(angle), c = cos(angle);
+    return vec2(v.x * c - v.y * s, v.x * s + v.y * c);
+}
+mat2 rot2D(float a) { float s=sin(a), c=cos(a); return mat2(c,-s,s,c); }
+// ─────────────────────────────────────────────────────────────────────────
+
+
+
+void main() {
+    vec2 g_uv = (vUv - 0.5) * 2.0;
+    g_uv.x *= u_resolution.x / u_resolution.y;
+    // Audio Source: opens on the File tab with nothing loaded, so the picture waits in silence. Press Load a sound… on the card and pick any song, or switch to the Mic tab and press Start.
+    // Open ↗ on the card shows the whole file to trim (it loops inside the trim) and a live spectrum to pick bands on. If you hear nothing, click anywhere: browsers start sound only after a click.
+    // Load a song, select one clap in the window, press Learn: press Open ↗, switch the waveform to Drag: Select, drag across one clap, then press Learn on the Clap row (under Learned sounds).
+    // From then on Clap (trigger) is 1 for one frame whenever a sound like that clap plays, and Clap (match) says how close the last hit was (0–1, fading).
+    // Match on the row is how close a hit has to be to fire: raise it if other drums fire it too, lower it if it misses claps. On the Mic, clap into it and press Learn last hit.
+    int memorypack_0_i = int(floor(gl_FragCoord.x));
+    vec4 memorypack_0_s = texelFetch(u_passprev_memory_0, ivec2(memorypack_0_i, 0), 0);
+    float memorypack_0_dt = max(u_frameDt, 0.0);
+    if (memorypack_0_i == 0) {
+      vec4 s = memorypack_0_s; float dt = memorypack_0_dt;
+      if (s.w < 0.5) { s = vec4(0.0, 0.0, 0.0, 1.0); } else {
+        float gt = step(0.5, u_aud_audiosourc_0_clap_t);
+        if (gt > 0.5 && s.z < 0.5) s.y = 1.0;
+        if (abs(s.y - 1.0) < 0.5) { s.x += dt / max(0.005, 1e-4); if (s.x >= 1.0) { s.x = 1.0; s.y = 2.0; } }
+        else if (abs(s.y - 2.0) < 0.5) { float lv = 0.0; s.x = max(lv, s.x - dt * (1.0 - lv) / max(0.35, 1e-4)); if (s.x <= 0.0) s.y = 0.0; }
+        else if (abs(s.y - 3.0) < 0.5) { s.x = max(0.0, s.x - dt / max(0.6, 1e-4)); if (s.x <= 0.0) s.y = 0.0; }
+        s.z = gt;
+      }
+      memorypack_0_s = s;
+    }
+    else if (memorypack_0_i == 1) {
+      vec4 s = memorypack_0_s; float dt = memorypack_0_dt;
+      if (s.w < 0.5) { s = vec4(0.0, 0.0, 0.0, 1.0); } else {
+        if (0.0 > 0.5 && s.z < 0.5) s.x = 0.0;
+        if (u_aud_audiosourc_0_clap_t > 0.5 && s.y < 0.5) { s.x += 1.0; if (s.x > 5.0 + 1e-4) s.x = 0.0; else if (s.x < 0.0 - 1e-4) s.x = 5.0; }
+        s.y = step(0.5, u_aud_audiosourc_0_clap_t); s.z = step(0.5, 0.0);
+      }
+      memorypack_0_s = s;
+    }
+    gl_FragColor = vec4(memorypack_0_s.rgb, memorypack_0_s.a);
+}",
+      "label": "Memory",
+      "live": true,
+      "nodeId": "__memory",
+      "nodeIds": [
+        "__memory__pack",
+        "src",
+      ],
+      "previous": true,
+      "reads": [],
+      "readsPrevious": [
+        "memory_0",
+      ],
+      "scale": 1,
+      "size": 2,
+      "slug": "memory_0",
+      "wrap": "clamp",
+    },
+  ],
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
 exports[`golden shaders: every example compiles as it did > audioScope 1`] = `
 {
   "audioUniforms": {},

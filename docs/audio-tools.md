@@ -48,6 +48,31 @@ without recompiling; adding, removing or renaming a band recompiles (its outputs
 
 If you hear nothing, click anywhere in the app: browsers only start sound after a click.
 
+### Learn a sound
+Show it one clap (a cowbell, a word, one drum) and it fires whenever a sound like it plays.
+
+1. In the Open ↗ window, switch the waveform to **Drag: Select** and drag across one hit of the sound (green). With
+   nothing selected, the trim is used. A longer selection is fine: Learn takes the strongest hit inside it.
+2. Press **Learn** (under *Learned sounds*). On the Mic, play the sound and press **Learn last hit**: it takes the
+   strongest hit of the last two seconds heard (it works after a file played, too). A row still waiting to be
+   learned (the *Learn a clap* example's Clap) takes it; otherwise a new row is added.
+3. A row appears: **Sound 1** (rename it: *Clap*), its colour, a small picture of its fingerprint (its loudness from
+   low to high frequencies), and:
+   - **Match** (0–1, 0.8 to start): how alike a hit has to be to fire. Raise it if other drums fire it, lower it if it
+     misses some. The bar under the fingerprint shows how close the last hit was; the white tick is Match.
+   - **Cooldown**: milliseconds before it can fire again.
+   - What it sends: **Trigger** (1 for one frame when it fires, like a band's) and / or **Match** (how alike the last
+     hit was, 0–1, fading to 0 in half a second).
+   - **Re-learn** takes a new example from the selection (or the last hit, on the Mic); ✕ removes it.
+
+Each learned sound becomes outputs on the Audio Source: *Clap (trigger)* and *Clap (match)*. Its fingerprint is
+saved with the graph. Match, Cooldown and Re-learn change it at once, without recompiling.
+
+How it hears: every moment, the whole spectrum is watched for a hit (a sudden rise, as Hit does). Then the next 50 ms
+or so are compared with each learned sound: their loudness across 40 frequency bands (the overall loudness taken
+away, so a quiet clap matches a loud one) and a little of how fast they fade. So the trigger comes about 50 ms after
+the hit. Two sounds at exactly the same moment (a clap on a kick) mix, and match less well.
+
 ## Band level
 How loud one band of frequencies is, 0–1. Pick a **Band** (Sub, Bass, Low mid, Mid, High, Air) or *Custom* and
 set **Low** and **High** in Hz. **Attack** and **Release** are rise and fall times in seconds: a slow Release
@@ -85,7 +110,9 @@ pixel's left-right place, −1 to 1 (0 is silence). **Samples** sets how much so
 - Each card shows a small live readout: Audio Source's spectrum, a meter, a flash on each hit, the spectrum, the waterfall or the wave.
 - The Audio examples open on the File tab with nothing loaded: load any song, or switch to Mic.
 - Bands, the trim and the tab are saved with the graph.
-- The Audio nodes work at the top level of the graph; inside a group they hear nothing yet.
+- The Audio nodes work inside groups too (plain, iterated, and a group inside a group): wire an Audio Source's Audio
+  into the group and on to the nodes inside, or keep the Audio Source inside. In an Agents group, keep the Audio nodes
+  outside and wire their numbers in.
 - Web pages exported from Playfield don't play the Audio nodes yet (they hear silence).
 - A loaded file has to be loaded again after a reload (the card names the file it had). Graphs from before this
   change that used the built-in Test loop open on the File tab, empty.

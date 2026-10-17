@@ -20,6 +20,10 @@ export const AUDIO_EXAMPLE_INDEX: Record<string, { label: string; description: s
     label: 'Audio 3 · Spectrogram waterfall',
     description: 'Load a sound (or switch to Mic) on the Audio Source. Spectrogram keeps the last two seconds of the spectrum: the top is now and older moments slide down. Kicks show as bright blobs on the left, hi-hats as streaks on the right.',
   },
+  audioLearnClap: {
+    label: 'Audio 5 · Learn a clap',
+    description: 'Load a song, select one clap in the window, press Learn. The Audio Source learns that sound and fires a trigger whenever a sound like it plays: each clap bursts a star and steps its colour; how close the match was makes it glow.',
+  },
   audioScope: {
     label: 'Audio 4 · Waveform line',
     description: 'Load a sound (or switch to Mic) on the Audio Source. Waveform draws the sound itself, like an oscilloscope: the last 20 milliseconds as a line across the picture. Level makes it glow when it is loud.',
@@ -190,6 +194,49 @@ export function buildAudioExamples(): Record<string, ExampleGraph> {
         ],
       }),
       n('output', 'out', 1000, 300, note('Output: the oscilloscope.'), { color: ['look', 'result'] }),
+    ],
+  };
+
+  // ── 5 · A learned sound (Clap) → Envelope (burst) and Counter (colour); its Match → glow ──
+  g.audioLearnClap = {
+    ...AUDIO_EXAMPLE_INDEX.audioLearnClap,
+    counter: 40,
+    nodes: [
+      source(40, 300, {
+        // A learned sound with nothing learned yet: its outputs are here (and wired), it fires once you press Learn.
+        sounds: [{ id: 'clap', name: 'Clap', color: '#f9e2af', match: 0.8, cooldown: 150, trigger: true, matchOut: true, spec: [], env: [] }],
+      }, [
+        'Load a song, select one clap in the window, press Learn: press Open ↗, switch the waveform to Drag: Select, drag across one clap, then press Learn on the Clap row (under Learned sounds).',
+        'From then on Clap (trigger) is 1 for one frame whenever a sound like that clap plays, and Clap (match) says how close the last hit was (0–1, fading).',
+        'Match on the row is how close a hit has to be to fire: raise it if other drums fire it too, lower it if it misses claps. On the Mic, clap into it and press Learn last hit.',
+      ]),
+      n('envelope', 'env', 400, 160, { mode: 'trigger', attack: 0.005, decay: 0.35, ...note([
+        'Envelope, Trigger mode: each clap plays a quick rise and a fall to 0 (Decay).',
+        'Its Gate is the Clap (trigger): 1 for one frame on each clap the Audio Source recognises.',
+      ]) }, { gate: ['src', 'clap_t'] }),
+      n('counter', 'count', 400, 340, { stepBy: 1, min: 0, max: 5, limit: 'wrap', ...note('Counter: adds 1 on each clap, 0 → 5, then wraps round. Its Fraction picks the colour.') }, { trigger: ['src', 'clap_t'] }),
+      n('palette', 'hue', 700, 340, note('Palette: a colour for each count, round the wheel.'), { value: ['count', 'fraction'] }),
+      uvNode(700, 520),
+      expr('look', 1000, 300, {
+        label: 'Look', outputType: 'vec3',
+        inputs: [['uv', 'vec2', ['uv', 'uv']], ['e', 'float', ['env', 'value']], ['c', 'vec3', ['hue', 'color']], ['m', 'float', ['src', 'clap_m']]],
+        lines: [
+          ['float r', 'length(uv)'],
+          ['float arms', 'min(abs(uv.x), abs(uv.y))'],
+          ['float disc', 'smoothstep(0.02, 0.0, r - (0.08 + e * 0.15))'],
+          ['float star', 'disc + exp(-arms * 60.0) * e * smoothstep(0.7, 0.0, r)'],
+          ['float glow', 'exp(-r * 5.0) * m * 0.5'],
+        ],
+        result: 'vec3(0.02, 0.02, 0.04) + star * c * (0.3 + e) + glow * c',
+        note: [
+          'Expression Block: a star that bursts on each clap, in the count\'s colour.',
+          'r: this pixel\'s distance from the middle; arms: its distance from the nearer of the two centre lines.',
+          'disc: a dot in the middle that swells while the envelope is up.',
+          'star: the dot, plus four thin arms of light along the centre lines that flash with the envelope and fade outwards.',
+          'glow: a soft light in the middle, as bright as the last hit was close to the clap (Clap (match)).',
+        ],
+      }),
+      n('output', 'out', 1300, 300, note('Output: the star on each clap.'), { color: ['look', 'result'] }),
     ],
   };
 
