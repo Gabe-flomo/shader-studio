@@ -30,6 +30,7 @@ import { Select } from '../ui/Select';
 import { PresetCard, StudioLabel, StudioNavItem, StudioShell } from '../builders/studio/StudioShell';
 import { LiveViewport, type ViewRect } from '../builders/studio/LiveViewport';
 import { AgentTransport } from './AgentTransport';
+import { OrbitPad } from './OrbitPad';
 import { type AgentRuleSet, type ChannelRef, type RuleCondition, type WalkerKind, DEFAULT_NEIGHBOURS, kindOf, usesFlow, WALKER_KINDS, WALKER_KIND_KEYS } from '../../agentRules/spec';
 import { openGroupAsNodes, setGroupSpace } from '../../agentRules/storeActions';
 import { patchCard, readCards, sectionSummary, setCardOn, setEdges, setFlow, setNeighbours, setSensors, setSpeed, type RuleCard } from '../../agentBuilder/cards';
@@ -802,6 +803,8 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
   };
   // The region pointed at in a Where row stays drawn (with its handles) over whatever else the picture shows.
   const overlay = (b: { w: number; h: number; image: ViewRect }) => <>
+    {/* 3D: drag to turn, right-drag / Shift+drag to pan, scroll to zoom, double-click for the starting view (OrbitPad.tsx), under the diagrams. */}
+    {d3 && draw && !drawing && !hoodOpen && <OrbitPad drawId={draw.id} image={b.image} />}
     {baseOverlay(b)}
     {!drawing && !hoodOpen && whereShown?.region && <RegionOverlay shown={whereShown} drawing={null} box={b} onClose={() => setWhereShown(null)} />}
     {!drawing && !hoodOpen && !advanced && current === 'forces' && slopeField && <SlopeArrows groupId={groupId} box={b} flip={slopeField.flip} around={slopeField.around} />}

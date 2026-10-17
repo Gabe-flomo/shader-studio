@@ -61,6 +61,12 @@ The builder doesn't pause the main preview (`previewHold.ts`) as the explain vie
 
 If no frame arrives (the preview is hidden in this layout), the viewport says so.
 
+### Turning the 3D view
+
+In 3D the viewport is a camera you can hold, as the 3D Scene Builder's is: **drag** to turn round the point looked at (Angle sideways, Elevation up and down, ±89°), **right-drag**, **middle-drag**, **Shift+drag** or **two fingers** to pan (the walkers follow the pointer), **scroll** or **pinch** to come closer or go further (Distance, 0.3–40), and **double-click** for the view a new 3D group starts with (3.8 away, 15° round, 15° up, centred; Orbit speed, Zoom and depth of field are left as they are). Each gesture writes Draw agents' own camera settings — Angle, Elevation, Distance and Translate X / Y / Z (the point it looks at and turns round) — the same values the Look section's Camera card shows, so what you see is what the graph draws; a drag is one undo step. With Orbit speed on, a drag turns from wherever the camera has circled to. The gestures sit under the diagrams: their handles keep their own drags. 2D is unchanged (its drags draw regions and move handles). A Draw agents that looks through a wired scene's camera ignores these settings, so the gestures don't move it.
+
+Files: `src/builders/orbitMath.ts` (the gestures' numbers, shared with `SceneViewport.tsx`), `src/components/builders/studio/useOrbitGestures.ts` (pointer, wheel, touch and double-click), `src/agentBuilder/cameraGestures.ts` (gestures → camera params), `src/components/agentBuilder/OrbitPad.tsx`.
+
 ### Stepping
 
 A bar under the viewport steps through the simulation, as the Grid Rules try board does: **↺** start over (a true reset, docs/true-reset.md: step 0, the walkers born again, trails and kept steps cleared), **◀** one step back, **▶ / ⏸** play and pause (the preview's own clock, so everything else pauses too), **▶|** one step forward. With the bar focused, ← → and Space do the same; **Shift+→** (or Shift-click ▶|) runs a whole frame's steps at once (the group's Steps a frame). **Step N** is the group's own step count, the number the group card shows.
@@ -206,7 +212,7 @@ Every behaviour card that can be left out has a mute button in its header, the s
 
 Behaviour cards fold to one line: a chevron, the picture, the name and what it does with its key numbers ("Gravity · 0.4 down", "Drag · 2 /s"), the mute and ×. Collapsed by default, as the app's other editors are: a section's first card starts open and the others folded; in Neighbours and Life the section's own settings card (What it sees, Lives for) is the open one and every behaviour card starts folded; a trail follower's extra cards and Moving's Flow field start folded. **Open all / Fold all** sits over a section with more than one card, and a card just added (+ Gravity) opens. Focus shows its card open. What you open or fold is remembered per section and card (`forces:gravity#0`), between openings and (where the browser allows) between sessions. Folding is UI only: nothing in the rules changes.
 
-Files: `src/agentBuilder/cardFolds.ts` (the start rule, the remembered state, the folded line), `BehaviourCard.tsx` (`open` / `onOpen`), `SectionCards.tsx` (`cardSummary`, `directionWord`).
+Files: `src/agentBuilder/cardFolds.ts` (the start rule, the remembered state, the folded line, `directionWord`), `BehaviourCard.tsx` (`open` / `onOpen`), `SectionCards.tsx` (`cardSummary`).
 
 ## Dragging cards
 

@@ -18,6 +18,7 @@ import {
   AXES, axisMove, cameraBasis, pickShape, planeMove, project, pxToUv, reachOf, scaleSize, shapeCenter, tidy, unitsPerUv, uvToPx, type CamBasis,
 } from '../../sceneBuilder/viewMath';
 import { compileSpec } from './previewGl';
+import { orbitDrag, wheelZoom } from '../../builders/orbitMath';
 import { DEPTH_VIEW_LABELS, useDepthView } from '../../builders/depthPreview';
 import { useBuilderPreview, useThrottled } from '../builders/useBuilderPreview';
 import { PreviewClock } from '../builders/PreviewClock';
@@ -99,7 +100,7 @@ export function SceneViewport({ onPicked }: { onPicked?: (id: string) => void })
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       const sb = useSceneBuilder.getState();
-      const next = Math.min(50, Math.max(0.3, sb.spec.camera.dist * Math.exp(e.deltaY * 0.0015)));
+      const next = wheelZoom(sb.spec.camera.dist, e.deltaY, 0.3, 50);
       sb.edit(d => { d.camera.dist = tidy(next); }, 'cam:dist');
     };
     el.addEventListener('wheel', onWheel, { passive: false });
@@ -162,7 +163,8 @@ export function SceneViewport({ onPicked }: { onPicked?: (id: string) => void })
       setDrag({ ...d, moved: true });
     }
     if (d.kind === 'orbit') {
-      sb.edit(s => { s.camera.angle = tidy(d.angle - dx * 0.4); s.camera.elev = tidy(Math.max(-89, Math.min(89, d.elev + dy * 0.3))); });
+      const o = orbitDrag(d, dx, dy);
+      sb.edit(s => { s.camera.angle = tidy(o.angle); s.camera.elev = tidy(o.elev); });
       return;
     }
     const duv: [number, number] = [dx * 2 / h, -dy * 2 / h];
