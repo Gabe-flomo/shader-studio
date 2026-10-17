@@ -18,6 +18,7 @@ import { OFFER_PIECES } from '../nodes/notOffered';
 import type { OutputSpec } from './output';
 import type { TexSource } from '../builders/textures';
 import type { DepthBakeInfo } from '../nodes/definitions/depth';
+import type { ColourGradient } from '../lib/colourGradient';
 
 export type Vec3 = [number, number, number];
 
@@ -286,6 +287,8 @@ export interface ShapeSpec {
   /** Size settings by ParamDef key. */
   size: Record<string, number | Vec3>;
   color: Vec3;
+  /** Its colour as a gradient over the surface (docs/gradients.md); null / absent: the solid `color`. Surface and GI modes. */
+  gradient?: ColourGradient | null;
   /** 0 matt … 1 glossy highlight. */
   shine: number;
   /** In Glass mode: made of glass (the rest is seen through it). */

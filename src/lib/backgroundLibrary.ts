@@ -441,6 +441,10 @@ export const PALETTE_PRESETS: readonly Palette[] = [
   preset('ember', 'Ember', ['#0f0504', '#431008', '#9c2a0c', '#e0621a', '#f7b54a'], 0),
   preset('aurora', 'Aurora', ['#04141a', '#0a4b4a', '#2fb58c', '#8cf0b5', '#b9a3ff'], 200),
   preset('mono', 'Mono', ['#0a0a0a', '#f2f2f2'], 180),
+  // For gradient colour settings (docs/gradients.md), usable anywhere a palette is.
+  preset('sunset', 'Sunset', ['#2b1055', '#7a2a6b', '#d4466a', '#f58a4b', '#fdd36b']),
+  preset('fire', 'Fire', ['#120202', '#5c0a04', '#c42a06', '#f57c0f', '#ffd85a', '#fff6d8']),
+  preset('earth', 'Earth', ['#2a1d12', '#5a3d22', '#8b6a3e', '#7f8a4f', '#c9b98a']),
   preset('riso', 'Riso bands', ['#f3e9d2', '#ffb4a2', '#e5566f', '#2d6a6e', '#1f2a44'], 90, 'bands'),
   preset('shore', 'Shore bands', ['#e9dcc1', '#c9b28d', '#7fb7be', '#3f7f93', '#1c3d52'], 180, 'bands'),
 ];

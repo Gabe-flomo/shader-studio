@@ -170,6 +170,11 @@ export interface ParamDef {
    * switch is turned on, only to controls still at their default (anything you set is kept).
    */
   whenOn?: Record<string, unknown>;
+  /**
+   * A vec3color that can also be a gradient (lib/colourGradient.ts, docs/gradients.md): the
+   * drivers ("along" choices) this node's context provides. Unset: Solid only.
+   */
+  gradient?: readonly string[];
 }
 
 // Node definition (blueprint)

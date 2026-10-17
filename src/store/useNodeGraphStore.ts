@@ -193,7 +193,7 @@ import type { KeyframePreset } from '../types/keyframePreset';
 import { bakedInfo } from '../nodes/definitions/baked';
 import { getNodeDefinition, getNodeDefinitionFor, resolveNodeAliases, resolveSubgraphAliases, NODE_ALIASES, aliasParams, clearNodeDefinitionCache } from '../nodes/definitions';
 import { collapseToGroup } from './groupCollapse';
-import { paletteNodeCoeffs, STOP_PALETTE_MAX } from '../nodes/definitions/color';
+import { colorPickerSockets, paletteNodeCoeffs, STOP_PALETTE_MAX } from '../nodes/definitions/color';
 import { autoFitCosineStops, fitCosineStops } from '../lib/palette';
 import { compileGraph } from '../compiler/graphCompiler';
 import { loopIfWired, loopPath, loopTip, type GraphLoop } from '../compiler/graphLoops';
@@ -597,6 +597,8 @@ function retypeSwizzle(n: GraphNode): GraphNode {
   if (n.type === 'transform') return retypeTransform(n);
   // A Glitch's A and B: a texture or a colour (A is / B is).
   if (n.type === 'glitch') return retypeGlitch(n);
+  // A Color node's Point / Normal: there while its colour is a Gradient (docs/gradients.md).
+  if (n.type === 'colorPicker') return colorPickerSockets(n);
   if (n.type !== 'swizzle') return n;
   const { input, output } = swizzleTypes(n);
   const inp = n.inputs.input, out = n.outputs.output;

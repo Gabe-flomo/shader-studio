@@ -1,6 +1,7 @@
 import type { GraphNode, NodeDefinition, DataType, ParamDef, ShowWhen } from '../types/nodeGraph';
 import { getKeyframeConfig, generateKeyframeGLSL, isKeyframeBypassed } from './keyframes';
 import { loopOf } from '../nodes/exprLoop';
+import { gradientLiveKeys } from '../lib/colourGradient';
 
 /** Node types whose params must remain as baked compile-time constants.
  *
@@ -165,6 +166,18 @@ export function patchNodeParamsForUniforms(
     // vec3 / vec3color → a vec3 uniform, so a colour-picker drag is a uniform
     // write, not a recompile. The definition reads it through pv3().
     if (paramDef.type === 'vec3' || paramDef.type === 'vec3color') {
+      // A colour setting that is a gradient: its stops' colours and places and its range are
+      // uniforms too, so editing a stop never recompiles (lib/colourGradient.ts).
+      if (paramDef.gradient) {
+        for (const g of gradientLiveKeys(node.params, key)) {
+          const gv = node.params[g.key];
+          if (g.kind === 'vec3' ? !(Array.isArray(gv) && gv.length >= 3 && gv.slice(0, 3).every(n => typeof n === 'number')) : typeof gv !== 'number') continue;
+          const uniformName = `u_p_${safeId}_${g.key.replace(/_/g, 'x')}`;
+          patchedParams[g.key] = uniformName;
+          uniforms[uniformName] = g.kind === 'vec3' ? [(gv as number[])[0], (gv as number[])[1], (gv as number[])[2]] : gv as number;
+          bindings[paramBindingKey(bindingId, g.key)] = uniformName;
+        }
+      }
       const v = node.params[key];
       if (!Array.isArray(v) || v.length < 3 || !v.every(n => typeof n === 'number')) continue;
       const uniformName = `u_p_${safeId}_${key}`;

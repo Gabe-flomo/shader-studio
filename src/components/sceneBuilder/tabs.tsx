@@ -25,7 +25,7 @@ import { parseRecipe, printRecipe, type RecipeError, type RecipeHint } from '../
 import { freshSeed, type Resolved } from '../../lang/random';
 import { SCENE_TEMPLATES } from '../../sceneBuilder/templates';
 import { describeIntoBuilder } from '../../sceneBuilder/actions';
-import { Card, ColourRow, NumRow, Row, Vec3Row, rgbCss } from './controls';
+import { Card, ColourRow, GradientColourRow, NumRow, Row, Vec3Row, rgbCss } from './controls';
 import { BuilderHelp, BuilderLabel, BuilderNote, EmptyHelp } from '../builders/BuilderWindow';
 import type { HelpExample } from '../builders/helpContent';
 import { AssistList, SignatureLine, useTypeAhead } from '../builders/TypeAhead';
@@ -189,7 +189,9 @@ export function ShapeInspector({ sh, sizes, kindPicker = true }: { sh: ShapeSpec
       play={part => ({ at: 'place', id: sh.id, what: 'at', part })} />
     <Vec3Row label="Rotation" hint="Degrees about X, then Y, then Z." value={sh.rot} min={-180} max={180} step={0.5} onChange={v => set(s => { s.rot = v; }, `rot:${sh.id}`)}
       play={part => ({ at: 'place', id: sh.id, what: 'rot', part })} />
-    <ColourRow label="Colour" value={sh.color} hint={mode === 'surface' ? 'Its surface colour (Surface mode picks one per shape).' : 'Colours show in Surface mode; GI uses the first shape\'s, Volumetric its glow tint.'} onChange={v => set(s => { s.color = v; }, `color:${sh.id}`)} />
+    <GradientColourRow label="Colour" value={sh.color} gradient={sh.gradient} hint={mode === 'surface' ? 'Its surface colour (Surface mode picks one per shape): Solid, or a Gradient over its surface by height, normal, noise…' : 'Colours show in Surface mode; GI uses the first shape\'s (gradient too), Volumetric its glow tint.'}
+      onChange={v => set(s => { s.color = v; }, `color:${sh.id}`)}
+      onGradient={g => set(s => { s.gradient = g; }, `gradient:${sh.id}`)} />
     <NumRow label="Shine" hint="How strong its highlight is: 0 matt, 1 glossy (Surface mode)." value={sh.shine} min={0} max={1} onChange={v => set(s => { s.shine = v; }, `shine:${sh.id}`)} />
     {mode === 'glass' && <Row label="Glass" hint="In Glass mode: glass shapes refract the others."><Toggle checked={sh.glass} onChange={v => set(s => { s.glass = v; })} label={sh.glass ? 'Made of glass' : 'Seen through the glass'} /></Row>}
     <ShapePicture sh={sh} />

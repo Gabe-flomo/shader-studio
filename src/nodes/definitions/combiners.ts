@@ -1,5 +1,16 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { p } from './helpers';
+import { p, pv3 } from './helpers';
+import { DRIVERS_2D, PF_GRADIENT_GLSL, gradientColourGlsl, gradientOn } from '../../lib/colourGradient';
+
+/** A fill / glow colour setting the card can show when nothing is wired (docs/gradients.md). Absent: the old white, so saved graphs compile unchanged. */
+function ownColour(params: Record<string, unknown>, key: string, ctx: { value: string }, drivers: readonly string[]): string | null {
+  const g = gradientColourGlsl(params, key, ctx, drivers);
+  if (g) return g;
+  const v = params[key];
+  return typeof v === 'string' || Array.isArray(v) ? pv3(v, [1, 1, 1]) : null;
+}
+const GLOW_DRIVERS = ['surface', ...DRIVERS_2D] as const;
+const FILL_DRIVERS = ['inside', ...DRIVERS_2D] as const;
 
 // ── Basic SDF combiners ───────────────────────────────────────────────────────
 
@@ -127,11 +138,13 @@ export const GlowLayerNode: NodeDefinition = {
       hint: GLOW_TYPES.map(t => `${GLOW_TYPE_LABELS[t].label}: ${GLOW_TYPE_LABELS[t].blurb}`).join('\n') },
     intensity: { label: 'Intensity', type: 'float', min: 0.001, max: 0.2,  step: 0.001, hint: 'The amount: how far the glow reaches.' },
     power:     { label: 'Power',     type: 'float', min: 0.1,   max: 4.0,  step: 0.05, hint: 'The falloff: bigger fades faster.' },
+    color:     { label: 'Color', type: 'vec3color', gradient: GLOW_DRIVERS, hint: 'The glow\'s colour when nothing is wired to Color (white until you pick one). Gradient: by distance from the shape, or across the picture.' },
   },
+  glslFunctionsFor: node => (gradientOn(node.params, 'color') && !node.inputs.color?.connection ? [PF_GRADIENT_GLSL] : []),
   generateGLSL: (node: GraphNode, inputVars) => {
     const id      = node.id;
     const dVar    = inputVars.d         || '1.0';
-    const cVar    = inputVars.color     || 'vec3(1.0)';
+    const cVar    = inputVars.color     || ownColour(node.params, 'color', { value: `abs(${dVar})` }, GLOW_DRIVERS) || 'vec3(1.0)';
     const iVar    = inputVars.intensity || p(node.params.intensity, 0.01);
     const pVar    = inputVars.power     || p(node.params.power, 1.0);
     return {
@@ -249,11 +262,13 @@ export const SDFFillNode: NodeDefinition = {
       { value: 'inside',  label: 'Inside the edge' },
       { value: 'outside', label: 'Outside the edge' },
     ], hint: 'Where the stroke sits relative to the shape\'s edge.' },
+    fillColor:   { label: 'Fill', type: 'vec3color', gradient: FILL_DRIVERS, hint: 'The fill colour when nothing is wired to Fill (white until you pick one). Gradient: from the edge inwards, or across the picture.' },
   },
+  glslFunctionsFor: node => (gradientOn(node.params, 'fillColor') && !node.inputs.fillColor?.connection ? [PF_GRADIENT_GLSL] : []),
   generateGLSL: (node: GraphNode, inputVars) => {
     const id    = node.id;
     const dVar  = inputVars.d           || '1.0';
-    const fVar  = inputVars.fillColor   || 'vec3(1.0)';
+    const fVar  = inputVars.fillColor   || ownColour(node.params, 'fillColor', { value: `${id}_d` }, FILL_DRIVERS) || 'vec3(1.0)';
     const sVar  = inputVars.strokeColor || 'vec3(0.0)';
     const bgVar = inputVars.background  || 'vec3(0.0)';
     const swVar = inputVars.strokeWidth || p(node.params.strokeWidth, 0.0);

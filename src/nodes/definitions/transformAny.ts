@@ -25,6 +25,8 @@
  */
 import type { DataType, GraphNode, InputSocket, NodeDefinition, OutputSocket, ParamDef } from '../../types/nodeGraph';
 import { p } from './helpers';
+import { COLOR_PICKER_GRADIENT_INPUTS } from './color';
+import { gradientOn } from '../../lib/colourGradient';
 
 const DEG = '0.017453292519943295';
 
@@ -88,6 +90,7 @@ import { renderTargetsSockets } from './renderTargets';
 export function startingSockets(type: string, def: Pick<NodeDefinition, 'inputs' | 'outputs'>, params: Record<string, unknown>): { inputs: Record<string, InputSocket>; outputs: Record<string, OutputSocket> } {
   if (type === 'dataTexture') return dataTextureSockets({ params });
   if (type === 'renderTargets') return renderTargetsSockets({ params });
+  if (type === 'colorPicker' && gradientOn(params, 'color')) return { inputs: { ...def.inputs, ...COLOR_PICKER_GRADIENT_INPUTS }, outputs: def.outputs };
   return type === 'transform' ? transformSockets(transformDim({ params })) : { inputs: def.inputs, outputs: def.outputs };
 }
 
