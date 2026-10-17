@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.258',
+    date: '2026-10-17',
+    title: "Agents builder, tidier",
+    highlights: [
+      { area: 'Studio', text: "Agents builder: cards fold to a summary, Respawn re-seeds walkers and keeps the trail, and the 3D view orbits, pans and zooms." },
+      { area: 'Studio', text: "Built rules get real names (Follow trail, Keep apart) and become nodes you can click into (Turn toward, Wander, Avoid walls) instead of code." },
+    ],
+  },
+  {
     id: '2026.10.257',
     date: '2026-10-17',
     title: "Gradients anywhere",
