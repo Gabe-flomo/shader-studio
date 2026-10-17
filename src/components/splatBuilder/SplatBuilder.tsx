@@ -27,8 +27,10 @@ import { focusRecipeEditor, useBuilderRecipeRequest } from '../../builders/windo
 import { SPLAT_SECTIONS, useSplatBuilder } from '../../splatBuilder/store';
 import { closeSplatBuilder, finishSplatBuilder, openSplatAsNodes, syncSplatBuilder } from '../../splatBuilder/actions';
 import { SPLAT_TEMPLATES, withTemplate } from '../../splatBuilder/templates';
-import { EFFECT_INFO, scanName, sectionSummary, type SplatSection } from '../../splatBuilder/spec';
+import { EFFECT_INFO, normalizeSpec, scanName, sectionSummary, type SplatBuilderSpec, type SplatSection } from '../../splatBuilder/spec';
 import { SECTION_PANELS, RecipeSection } from './panels';
+import { UserPresets } from '../builders/UserPresets';
+import { presetTextToSpec, specToPresetText } from '../../builders/userPresets';
 import { SplatViewport, scanBoxNow, useScanBox } from './SplatViewport';
 import { fitPlace } from '../../splatBuilder/place';
 import { cloudPicture } from './MiniCloud';
@@ -100,6 +102,9 @@ function Presets() {
           active={effects === t.make().effects.map(e => e.kind).join(',') && effects !== ''}
           onClick={() => useSplatBuilder.getState().replace(withTemplate(useSplatBuilder.getState().spec, t))} />
       ))}
+      <UserPresets kind="splat" getRecipe={() => specToPresetText(useSplatBuilder.getState().spec)}
+        onLoad={text => { const s = presetTextToSpec<SplatBuilderSpec>(text); if (s) useSplatBuilder.getState().replace(normalizeSpec(s)); }}
+        fallbackThumb={() => { const s = useSplatBuilder.getState().spec; return cloudPicture(s.effects, s.background.color); }} />
     </div>
   );
 }

@@ -10,6 +10,7 @@ import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { getNodeDefinition } from '../../nodes/definitions';
 import { BuilderSlider } from '../builders/BuilderSlider';
 import { BuilderNote } from '../builders/BuilderWindow';
+import { useSectionOpen } from '../../builders/sectionFold';
 import { TexturePicker } from '../builders/TexturePicker';
 import { Row } from '../sceneBuilder/controls';
 import { ColorSwatch } from '../ui/ColorPicker';
@@ -97,19 +98,38 @@ function Colour({ label, value, onChange, hint }: { label: string; value: Vec3; 
   return <Row label={label} hint={hint}><ColorSwatch value={value} label={label} onChange={c => onChange([c[0], c[1], c[2]])} /></Row>;
 }
 
-function Group({ title, children, meta, mute }: { title: string; children: ReactNode; meta?: ReactNode; mute?: { muted: boolean; onToggle: () => void; what?: string } }) {
+/**
+ * A group of settings that folds to its title and a one-line summary (builders/sectionFold.ts:
+ * remembered per group; the section's primary group starts open, the rest folded).
+ */
+function Group({ title, children, meta, mute, summary, primary = false }: {
+  title: string; children: ReactNode; meta?: ReactNode; mute?: { muted: boolean; onToggle: () => void; what?: string };
+  /** What the group holds, shown while it is folded. */
+  summary?: string;
+  /** The section's primary group: open until you fold it. */
+  primary?: boolean;
+}) {
   const tk = useTokens();
+  const [open, setOpen] = useSectionOpen(`splat:${title}`, primary);
   return (
-    <div data-splat-group={title} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+    <div data-splat-group={title} data-open={open || undefined} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: tk.text.faint }}>
-        <span style={{ flex: 1, ...(mute?.muted ? MUTED_DIM : {}) }}>{title}</span>{meta}
+        <button type="button" aria-expanded={open} data-splat-group-toggle={title} onClick={() => setOpen(!open)}
+          style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6, padding: 0, border: 0, background: 'none', cursor: 'pointer', color: 'inherit', font: 'inherit', letterSpacing: 'inherit', textTransform: 'inherit', textAlign: 'left' }}>
+          <Icon name={open ? 'chevD' : 'chevR'} size={12} style={{ flexShrink: 0 }} />
+          <span style={{ flexShrink: 0, ...(mute?.muted ? MUTED_DIM : {}) }}>{title}</span>
+          {!open && summary && <span data-group-summary style={{ flex: 1, minWidth: 0, textTransform: 'none', letterSpacing: 0, fontWeight: 500, fontSize: 11.5, color: tk.text.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{summary}</span>}
+        </button>
+        {open && meta}
         {mute?.muted && <MutedTag />}
         {mute && <MuteToggle muted={mute.muted} what={mute.what ?? title.toLowerCase()} onToggle={mute.onToggle} />}
       </span>
       {/* A group inside a section is stepped in under its title (components/ui/nesting.ts). */}
-      <div data-nested-section="true" data-muted={mute?.muted || undefined} style={{ display: 'flex', flexDirection: 'column', gap: 6, ...nestedSectionStyle(tk.border.subtle, -NEST_INDENT + 4), ...(mute?.muted ? MUTED_DIM : {}) }}>
-        {children}
-      </div>
+      {open && (
+        <div data-nested-section="true" data-muted={mute?.muted || undefined} style={{ display: 'flex', flexDirection: 'column', gap: 6, ...nestedSectionStyle(tk.border.subtle, -NEST_INDENT + 4), ...(mute?.muted ? MUTED_DIM : {}) }}>
+          {children}
+        </div>
+      )}
     </div>
   );
 }
@@ -216,7 +236,7 @@ export function ScanSection() {
         </div>
       )}
       {msg && <BuilderNote>{msg}</BuilderNote>}
-      <Group title="Quality">
+      <Group title="Quality" summary={`${q ? QUALITY_PRESETS[q].label : 'your own mix'} · ${short(scan.maxSplats)} splats · SH ${scan.shDegree}`}>
         <Segmented ariaLabel="Quality" fill value={q ?? ('custom' as never)} onChange={(k: string) => {
           const p = QUALITY_PRESETS[k as keyof typeof QUALITY_PRESETS];
           if (p) edit(d => { d.scan.maxSplats = p.maxSplats; d.scan.shDegree = p.shDegree; d.scan.sort = p.sort; d.scan.resolution = p.resolution; });
@@ -257,7 +277,7 @@ export function PlaceSection() {
         <Button size="sm" variant="ghost" data-splat-centre onClick={() => set(d => { d.place = centrePlace(d.place, box); })} title="Its middle at the centre, its size as it is">Centre</Button>
         <Button size="sm" variant="ghost" data-splat-floor disabled={!box} onClick={() => box && set(d => { d.place = onFloorPlace(d.place, box, floorY); })} title={`Moved up or down so it stands on the floor (height ${floorY})`}>Stand on the floor</Button>
       </div>
-      <Group title="Which way is up">
+      <Group title="Which way is up" summary={place.up === 'y' ? '+Y up' : '−Y up'}>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           <Button size="sm" variant={place.up === 'y' ? 'secondary' : 'ghost'} data-splat-flip onClick={() => set(d => { d.place.up = d.place.up === 'y' ? 'minusY' : 'y'; })}
             title="Most scans come with y pointing down; this turns it over">Turn over</Button>
@@ -266,12 +286,12 @@ export function PlaceSection() {
         </div>
         <BuilderNote>Up is {place.up === 'y' ? '+Y (as it comes)' : '−Y (the 3DGS way, most scans)'}.</BuilderNote>
       </Group>
-      <Group title="Where">
+      <Group title="Where" primary summary={`at ${place.position.map(n => +n.toFixed(2)).join(', ')} · ×${+place.scale.toFixed(2)}`}>
         <Vec label="Position" value={place.position} min={-5} max={5} defaultValue={[0, 0, 0]} rangeKey="splat:place:pos" onChange={v => edit(d => { d.place.position = v; }, 'place:pos')} />
         <Vec label="Turn" value={place.rotation} min={-180} max={180} step={0.5} defaultValue={[0, 0, 0]} rangeKey="splat:place:rot" onChange={v => edit(d => { d.place = keepTurn(d, v, box); }, 'place:rot')} hint="Degrees: X, then Y, then Z. Its middle stays where it is." />
         <Num label="Scale" value={place.scale} min={0.05} max={5} defaultValue={1} play={['scan', 'scale']} onChange={v => edit(d => { d.place = { ...d.place, ...sized(d, v, box) }; }, 'place:scale')} />
       </Group>
-      <Group title="The splats">
+      <Group title="The splats" summary={`size ${+place.splatSize.toFixed(2)} · opacity ${+place.opacity.toFixed(2)}`}>
         <Num label="Splat size" value={place.splatSize} min={0.05} max={4} defaultValue={1} play={['scan', 'splatSize']} onChange={v => edit(d => { d.place.splatSize = v; }, 'place:size')} hint="Below 1 thins the scan into dots, above 1 softens it." />
         <Num label="Opacity" value={place.opacity} min={0} max={2} defaultValue={1} play={['scan', 'opacity']} onChange={v => edit(d => { d.place.opacity = v; }, 'place:op')} />
       </Group>
@@ -402,7 +422,7 @@ export function EffectsSection() {
   const preview = useMemo(() => Object.fromEntries(EFFECT_KINDS.map(k => [k, [newEffect(k, 'x')]])), []);
   return (
     <>
-      <Group title="Add an effect">
+      <Group title="Add an effect" primary={effects.length === 0} summary={`${EFFECT_KINDS.length} kinds, as pictures`}>
         <div data-splat-add-effects style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 6 }}>
           {EFFECT_KINDS.map(k => (
             <button key={k} type="button" data-splat-add={k} title={EFFECT_INFO[k].line} onClick={() => add(k)}
@@ -413,7 +433,7 @@ export function EffectsSection() {
           ))}
         </div>
       </Group>
-      <Group title="The stack" meta={<span style={{ fontSize: 11.5, color: tk.text.muted, textTransform: 'none', letterSpacing: 0, fontWeight: 500 }}>first applies first</span>}>
+      <Group title="The stack" primary summary={effects.length ? effects.map(e => EFFECT_INFO[e.kind].label).join(' → ') : 'none yet'} meta={<span style={{ fontSize: 11.5, color: tk.text.muted, textTransform: 'none', letterSpacing: 0, fontWeight: 500 }}>first applies first</span>}>
         {effects.length === 0 && <BuilderNote>No effects yet: add one above, pick a template below, or press Surprise me.</BuilderNote>}
         <div data-splat-stack style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {effects.map((e, i) => <EffectCard key={e.id} e={e} index={i} count={effects.length} />)}
@@ -446,11 +466,11 @@ export function SceneSection() {
       </Row>
       {world.on && (
         <>
-          <Group title="Floor" mute={{ muted: !world.floor.on, what: 'the floor', onToggle: () => edit(d => { d.world.floor.on = !d.world.floor.on; }) }}>
+          <Group title="Floor" summary={world.floor.on ? `height ${world.floor.y}` : 'off'} mute={{ muted: !world.floor.on, what: 'the floor', onToggle: () => edit(d => { d.world.floor.on = !d.world.floor.on; }) }}>
             <Num label="Height" value={world.floor.y} min={-3} max={1} defaultValue={-1} onChange={v => edit(d => { d.world.floor.y = v; }, 'floor:y')} />
             <Colour label="Colour" value={world.floor.color} onChange={v => edit(d => { d.world.floor.color = v; }, 'floor:c')} />
           </Group>
-          <Group title="Shapes">
+          <Group title="Shapes" summary={world.props.length ? `${world.props.length} shape${world.props.length === 1 ? '' : 's'}` : 'none'}>
             <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
               {PROP_KINDS.map(k => <Button key={k} size="sm" variant="ghost" icon="plus" data-splat-prop={k} onClick={() => addProp(k)}>{PROP_LABELS[k]}</Button>)}
             </div>
@@ -466,7 +486,7 @@ export function SceneSection() {
               </div>
             ))}
           </Group>
-          <Group title="Light">
+          <Group title="Light" summary={`${LIGHT_INFO[world.light].label}${world.shadows ? ' · shadows' : ''}${world.fog ? ' · fog' : ''}`}>
             <Segmented ariaLabel="Light" fill size="sm" value={world.light} onChange={v => edit(d => { d.world.light = v; })} options={LIGHTS.map(l => ({ value: l, label: LIGHT_INFO[l].label }))} />
             <Row label="Shadows"><MuteToggle muted={!world.shadows} what="the shadows" onToggle={() => edit(d => { d.world.shadows = !d.world.shadows; })} /></Row>
             <Num label="Fog" value={world.fog} min={0} max={0.3} step={0.001} defaultValue={0} onChange={v => edit(d => { d.world.fog = v; }, 'fog')} />
@@ -474,7 +494,7 @@ export function SceneSection() {
         </>
       )}
       <BlendGroup worldOn={world.on} />
-      <Group title="Background">
+      <Group title="Background" primary summary={bg.kind === 'picture' ? (bg.picture ?? 'a picture') : bg.kind === 'gradient' ? 'gradient' : 'colour'}>
         <Segmented ariaLabel="Background" fill size="sm" value={bg.kind} onChange={v => edit(d => { d.background.kind = v; })}
           options={[{ value: 'solid', label: 'Colour' }, { value: 'gradient', label: 'Gradient' }, { value: 'picture', label: 'Picture' }]} />
         {bg.kind !== 'picture' && <Colour label={bg.kind === 'gradient' ? 'Top' : 'Colour'} value={bg.color} onChange={v => edit(d => { d.background.color = v; }, 'bg:c')} />}
@@ -500,7 +520,7 @@ function BlendGroup({ worldOn }: { worldOn: boolean }) {
   const set = (k: string, v: number) => useNodeGraphStore.getState().updateNodeParams(scan.id, { [k]: v }, { immediate: true });
   const num = (k: string, d: number) => (typeof scan.params[k] === 'number' ? (scan.params[k] as number) : d);
   return (
-    <Group title="Blending with the world">
+    <Group title="Blending with the world" summary={worldOn ? `softness ${num('softness', 0.05)} · solid at ${num('hitAt', 0.5)}` : 'no world'}>
       {!worldOn && <BuilderNote>Add a world to blend the scan with it.</BuilderNote>}
       <div data-splat-blend aria-disabled={!worldOn} style={{ display: 'flex', flexDirection: 'column', gap: 6, ...(worldOn ? {} : { opacity: 0.45, pointerEvents: 'none' as const }) }}>
         <Num label="Edge softness" value={num('softness', 0.05)} min={0} max={1} step={0.005} defaultValue={0.05} play={['scan', 'softness']} onChange={v => set('softness', v)}
@@ -562,11 +582,11 @@ export function LookSection() {
   const l = useSplatBuilder(s => s.spec.look);
   return (
     <>
-      <Group title="Tone">
+      <Group title="Tone" primary summary={TONE_LABELS[l.tone]}>
         <Segmented ariaLabel="Tone" fill size="sm" wrap value={l.tone} onChange={v => edit(d => { d.look.tone = v; })} options={TONES.map(t => ({ value: t, label: TONE_LABELS[t] }))} />
         <BuilderNote>{l.tone === 'none' ? 'The scan’s colours as captured.' : 'Rolls bright colours off instead of clipping them: glowing edges and highlights stay soft.'}</BuilderNote>
       </Group>
-      <Group title="Bloom" mute={{ muted: !l.bloom.on, what: 'the bloom', onToggle: () => edit(d => { d.look.bloom.on = !d.look.bloom.on; }) }}>
+      <Group title="Bloom" summary={l.bloom.on ? `intensity ${l.bloom.intensity}` : 'off'} mute={{ muted: !l.bloom.on, what: 'the bloom', onToggle: () => edit(d => { d.look.bloom.on = !d.look.bloom.on; }) }}>
         <Num label="Intensity" value={l.bloom.intensity} min={0} max={5} defaultValue={0.5} play={['bloom', 'intensity']} onChange={v => edit(d => { d.look.bloom.intensity = v; }, 'bloom:i')} />
         <Num label="Threshold" value={l.bloom.threshold} min={0} max={2} defaultValue={0.8} play={['bloom', 'threshold']} onChange={v => edit(d => { d.look.bloom.threshold = v; }, 'bloom:t')} />
         <Num label="Radius" unit="px" value={l.bloom.radius} min={1} max={128} step={1} defaultValue={32} play={['bloom', 'radius']} onChange={v => edit(d => { d.look.bloom.radius = v; }, 'bloom:r')} />

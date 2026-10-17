@@ -23,6 +23,8 @@ import { LiveViewport } from '../builders/studio/LiveViewport';
 import { SceneCrumb } from '../builders/SceneCrumb';
 import { BuilderNote } from '../builders/BuilderWindow';
 import { Card, ColourRow, NumRow, Row } from '../sceneBuilder/controls';
+import { UserPresets } from '../builders/UserPresets';
+import { presetTextToSpec, specToPresetText } from '../../builders/userPresets';
 import { IconButton } from '../ui/Button';
 import { Segmented, Toggle } from '../ui/Choice';
 import { Select } from '../ui/Select';
@@ -245,6 +247,9 @@ function Presets() {
         <PresetCard key={p.key} id={p.key} label={p.label} hint={`${p.blurb} Your video stays.`} src={pics[p.key]} active={now === p.key}
           onClick={() => useTimeCubeBuilder.getState().replace(withPreset(useTimeCubeBuilder.getState().spec, p.key))} />
       ))}
+      <UserPresets kind="timecube" noun="time cube" getRecipe={() => specToPresetText(useTimeCubeBuilder.getState().spec)}
+        onLoad={text => { const s = presetTextToSpec<TimeCubeSpec>(text); if (s) useTimeCubeBuilder.getState().replace(s); }}
+        fallbackThumb={() => timeCubePicture(useTimeCubeBuilder.getState().spec)} />
     </div>
   );
 }

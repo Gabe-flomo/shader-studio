@@ -46,6 +46,8 @@ import { BuilderSlider } from '../builders/BuilderSlider';
 import { Select } from '../ui/Select';
 import { ColorSwatch } from '../ui/ColorPicker';
 import { PresetCard, StudioLabel, StudioNavItem, StudioShell } from '../builders/studio/StudioShell';
+import { UserPresets } from '../builders/UserPresets';
+import { presetTextToSpec, specToPresetText } from '../../builders/userPresets';
 import { DyingStages, NeighbourhoodPictures, PictureSwitches, RuleSentence } from './BornSurvive';
 import { BlocksForm, PatternsForm } from './StencilForms';
 import { StackForm } from './StackForm';
@@ -199,6 +201,9 @@ function GridRulesBuilder({ node, onClose }: { node: GraphNode; onClose: () => v
         {Object.entries(table).map(([key, pr]) => (
           <PresetCard key={key} id={key} label={pr.label} hint={pr.hint} src={thumbs[key]} active={current === key} onClick={() => set(presetPatch(pr), true)} />
         ))}
+        {/* Yours: the rule's settings (not the node), saved with a picture of the try board; any kind of rule. */}
+        <UserPresets kind="gridRules" noun="rule" getRecipe={() => specToPresetText(gridRulesPresetOf(params))}
+          onLoad={text => { const patch = presetTextToSpec<P>(text); if (patch) set(patch, true); }} />
       </div>
     </div>
   );
@@ -220,6 +225,11 @@ function GridRulesBuilder({ node, onClose }: { node: GraphNode; onClose: () => v
       <TryBoard params={params} nodeParams={node.params} focus={{ section, ...focus }} hood={hood} onUseAsStart={useAsStart} />
     </StudioShell>
   );
+}
+
+/** What a Grid Rules preset of yours keeps: the rule's settings (the recipe's keys), not runtime state or the node's label. */
+export function gridRulesPresetOf(params: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(RECIPE_KEYS.filter(k => k !== 'label' && params[k] !== undefined).map(k => [k, params[k]]));
 }
 
 /** The rule types by what they are. */

@@ -10,7 +10,7 @@ import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Icon } from '../ui/Icon';
 import { NEST_INDENT, nestedSectionStyle } from '../ui/nesting';
-import { useFoldState } from '../NodeGraph/foldState';
+import { useSectionOpen } from '../../builders/sectionFold';
 import type { IconName } from '../ui/iconPaths';
 import { rememberTab, rememberedTab, validTab, type BuilderSectionTab } from './builderLayout';
 
@@ -78,16 +78,15 @@ export function useRememberedTab(builder: string, tabs: BuilderSectionTab[], ini
 }
 
 /**
- * A folded group of rarely used settings, with a summary while folded. Folded by default; the
- * ones opened are remembered for the session (the fold store, by `foldKey`).
+ * A folded group of rarely used settings, with a summary while folded. Folded by default; open or
+ * folded is remembered per `foldKey`, across reloads (builders/sectionFold.ts, shared with the cards).
  */
 export function BuilderFold({ foldKey, title, summary, children }: { foldKey: string; title: string; summary: string; children: ReactNode }) {
   const tk = useTokens();
-  const open = useFoldState(s => !!s.folded[foldKey]);
-  const toggle = useFoldState(s => s.toggle);
+  const [open, setOpen] = useSectionOpen(foldKey);
   return (
     <section data-fold={foldKey} style={{ borderTop: `1px solid ${tk.border.subtle}`, paddingTop: 8 }}>
-      <button type="button" aria-expanded={open} onClick={() => toggle(foldKey)}
+      <button type="button" aria-expanded={open} onClick={() => setOpen(!open)}
         style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, border: 0, background: 'transparent', padding: '4px 0', cursor: 'pointer', color: tk.text.primary, textAlign: 'left' }}>
         <Icon name={open ? 'chevD' : 'chevR'} size={14} style={{ color: tk.text.faint }} />
         <b style={{ font: `600 13px ${fontFamily.ui}` }}>{title}</b>
