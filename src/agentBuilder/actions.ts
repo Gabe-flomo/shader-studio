@@ -152,6 +152,29 @@ export function applyBuilderPreset(groupId: string, key: string): AgentRuleSet |
   return set;
 }
 
+// ── Your presets (builders/userPresets.ts, kind 'agents'): the group's rules, saved as text ──
+
+/** A rules group's setup as preset text: its rules and the space they were made in. */
+export function agentPresetText(groupId: string): string {
+  const g = useNodeGraphStore.getState().nodes.find(x => x.id === groupId);
+  if (!g) return '';
+  return JSON.stringify({ space: g.params.space === '3d' ? '3d' : '2d', set: groupRules(g) });
+}
+
+/** Load preset text into a group (one undo step), rescaled when it was saved in the other space. Null when it can't be read. */
+export function applyAgentPresetText(groupId: string, text: string, label: string): AgentRuleSet | null {
+  const g = useNodeGraphStore.getState().nodes.find(x => x.id === groupId);
+  if (!g) return null;
+  let parsed: { space?: string; set?: AgentRuleSet };
+  try { parsed = JSON.parse(text); } catch { return null; }
+  if (!parsed?.set || typeof parsed.set !== 'object') return null;
+  const to = g.params.space === '3d' ? '3d' : '2d';
+  let set = parsed.set;
+  if ((parsed.space === '3d' ? '3d' : '2d') !== to) set = rescaleForSpace(set, to);
+  applyGroupRules(groupId, set, `Agent Builder: ${label}`, true);
+  return set;
+}
+
 // ── Opening the builder on a graph that already has groups; clearing the graph ──
 
 /** A builder group on the top level (a rules Agents group), as the "Edit this one / Start over / Add another" prompt lists it. */
