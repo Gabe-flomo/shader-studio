@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.241',
+    date: '2026-10-17',
+    title: "Pictures",
+    highlights: [
+      { area: 'Studio', text: "New Pictures examples on two built-in photos: Channel, Shuffle, Channel Colours, Height Light, Show data and a block swap." },
+      { area: 'Studio', text: "Pixel sort: a picture sorts itself by brightness, live, between a Low and High you set, along rows or columns." },
+    ],
+  },
+  {
     id: '2026.10.240',
     date: '2026-10-16',
     title: "Where a name was set",
