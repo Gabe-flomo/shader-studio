@@ -1197,6 +1197,13 @@ exports[`golden shaders: every Play example exports the same bundle > picChannel
 }
 `;
 
+exports[`golden shaders: every Play example exports the same bundle > picCurves 1`] = `
+{
+  "bundle": "03ce00f8e1f76e1fd486949c7b42:26228",
+  "missing": [],
+}
+`;
+
 exports[`golden shaders: every Play example exports the same bundle > picHeightRelief 1`] = `
 {
   "bundle": "0d278b8187d92f0f2986d85bce16:6341",
@@ -1214,6 +1221,13 @@ exports[`golden shaders: every Play example exports the same bundle > picShowDat
 exports[`golden shaders: every Play example exports the same bundle > picShuffle 1`] = `
 {
   "bundle": "1c74cb1f8b867800074b66e688d0:3405",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > picThreshold 1`] = `
+{
+  "bundle": "0eb71b7c2105a619ea21630940d4:6357",
   "missing": [],
 }
 `;
@@ -14915,6 +14929,68 @@ exports[`golden shaders: every example compiles as it did > picChannelSplash 1`]
 }
 `;
 
+exports[`golden shaders: every example compiles as it did > picCurves 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "0497d62ad97e2e13218829df45da:23042",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "03e34f09ebc10a06be3140e02f47:128",
+  "paramBindings": "12521f049be0cb133d731d2875ef:1481",
+  "paramUniforms": [
+    "u_p_curvesx0_ca0",
+    "u_p_curvesx0_ca1",
+    "u_p_curvesx0_caLin",
+    "u_p_curvesx0_cb0",
+    "u_p_curvesx0_cb1",
+    "u_p_curvesx0_cbLin",
+    "u_p_curvesx0_cg0",
+    "u_p_curvesx0_cg1",
+    "u_p_curvesx0_cgLin",
+    "u_p_curvesx0_cm0",
+    "u_p_curvesx0_cm1",
+    "u_p_curvesx0_cm2",
+    "u_p_curvesx0_cm3",
+    "u_p_curvesx0_cmLin",
+    "u_p_curvesx0_cr0",
+    "u_p_curvesx0_cr1",
+    "u_p_curvesx0_crLin",
+    "u_p_curvesx0xc2_ca0",
+    "u_p_curvesx0xc2_ca1",
+    "u_p_curvesx0xc2_caLin",
+    "u_p_curvesx0xc2_cb0",
+    "u_p_curvesx0xc2_cb1",
+    "u_p_curvesx0xc2_cb2",
+    "u_p_curvesx0xc2_cbLin",
+    "u_p_curvesx0xc2_cg0",
+    "u_p_curvesx0xc2_cg1",
+    "u_p_curvesx0xc2_cg2",
+    "u_p_curvesx0xc2_cg3",
+    "u_p_curvesx0xc2_cgLin",
+    "u_p_curvesx0xc2_cm0",
+    "u_p_curvesx0xc2_cm1",
+    "u_p_curvesx0xc2_cmLin",
+    "u_p_curvesx0xc2_cr0",
+    "u_p_curvesx0xc2_cr1",
+    "u_p_curvesx0xc2_cr2",
+    "u_p_curvesx0xc2_cr3",
+    "u_p_curvesx0xc2_crLin",
+    "u_p_lookxamountx0_value",
+    "u_p_mixx0_t",
+  ],
+  "paramValues": "1d1814c7609708050d058441e5cd:1261",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {
+    "u_tex_tex_0": "photo",
+  },
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
 exports[`golden shaders: every example compiles as it did > picHeightRelief 1`] = `
 {
   "audioUniforms": {},
@@ -15008,6 +15084,41 @@ exports[`golden shaders: every example compiles as it did > picShuffle 1`] = `
     "u_p_smpx0_offsetY",
   ],
   "paramValues": "0a33ccd5e53f2b0cc227164353fd:50",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {
+    "u_tex_tex_0": "photo",
+  },
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > picThreshold 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "0c068ceda3d0611a8cbce08f3f4f:5056",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "0e3132a8b5a27d1d9f0401e8dc0b:169",
+  "paramBindings": "0cd75fcc77052a0cc89b5aa820ca:464",
+  "paramUniforms": [
+    "u_p_mixx0_t",
+    "u_p_mulx0_b",
+    "u_p_thresholdx0_level",
+    "u_p_thresholdx0_softness",
+    "u_p_tlevelsx0_gain",
+    "u_p_tlevelsx0_gamma",
+    "u_p_tlevelsx0_inBlack",
+    "u_p_tlevelsx0_inWhite",
+    "u_p_tlevelsx0_offset",
+    "u_p_tlevelsx0_outBlack",
+    "u_p_tlevelsx0_outWhite",
+    "u_p_tlevelsx0_rollOff",
+  ],
+  "paramValues": "1f47a440ae333b1c919bb9a781b6:326",
   "passes": null,
   "success": true,
   "textureUniforms": {

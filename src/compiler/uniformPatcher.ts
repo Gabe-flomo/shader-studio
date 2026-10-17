@@ -139,14 +139,24 @@ export function patchNodeParamsForUniforms(
     }
     return { patchedNode: { ...node, params: patchedParams }, uniforms, bindings };
   }
-  if (!def.paramDefs) {
-    return { patchedNode: node, uniforms, bindings };
-  }
-
   // Sanitize node IDs: underscores in IDs create double-underscore sequences
   // like u_p_const__31_value which are reserved identifiers in GLSL ES.
   const safeId = node.id.replace(/_/g, 'x');
   const patchedParams = { ...node.params };
+  // Live params a custom card editor sets (Curves' points): float or vec3 uniforms, no paramDef.
+  for (const key of def.liveParamKeys?.(node.params) ?? []) {
+    const v = node.params[key];
+    const isVec3 = Array.isArray(v) && v.length >= 3 && v.slice(0, 3).every(n => typeof n === 'number');
+    if (typeof v !== 'number' && !isVec3) continue;
+    const uniformName = `u_p_${safeId}_${key}`;
+    patchedParams[key] = uniformName;
+    uniforms[uniformName] = isVec3 ? [(v as number[])[0], (v as number[])[1], (v as number[])[2]] : v as number;
+    bindings[paramBindingKey(bindingId, key)] = uniformName;
+  }
+  if (!def.paramDefs) {
+    return { patchedNode: Object.keys(uniforms).length ? { ...node, params: patchedParams } : node, uniforms, bindings };
+  }
+
   for (const [key, paramDef] of Object.entries(def.paramDefs)) {
     if (paramDef.compileTime) continue;        // baked by declaration (loop bounds…)
     if (!isParamVisible(paramDef, node.params, def.defaultParams)) continue; // hidden by showWhen → not read by the GLSL

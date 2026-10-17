@@ -1,6 +1,6 @@
 /**
  * pictureExamples.ts — the Pictures folder: one small example for each of the newer picture nodes
- * (Channel, Shuffle, Channel Colours, Height Light, Show data, Random (from ID)) and a real pixel sort,
+ * (Channel, Shuffle, Channel Colours, Height Light, Show data, Random (from ID), Curves, Threshold) and a real pixel sort,
  * each opening on one of the built-in photos (lib/builtinImages.ts): Room and cat (16:9) and Walkway
  * cat (portrait). Built from the node definitions (graphBuilder.ts).
  *
@@ -11,6 +11,7 @@ import type { ExampleGraph } from './exampleIndex';
 import type { GraphNode } from '../types/nodeGraph';
 import type { PlayRecord } from '../types/play';
 import { colourCtl, ctl, n } from './graphBuilder';
+import { curvesParams } from '../nodes/definitions/curves';
 import { builtinImageParams, ROOM_AND_CAT_ID, WALKWAY_CAT_ID } from '../lib/builtinImages';
 
 export const PICTURE_EXAMPLE_INDEX: Record<string, { label: string; description: string; play: true }> = {
@@ -41,6 +42,14 @@ export const PICTURE_EXAMPLE_INDEX: Record<string, { label: string; description:
   picPixelSort: {
     label: 'Pictures 7 · Pixel sort with a feedback Pass', play: true,
     description: 'A real, progressive pixel sort of the built-in Room and cat photo: every frame each pixel compares itself with its neighbour and the two swap if they are out of order by brightness, but only where both are between Low and High. The runs of pixels sort into streaks that grow as you watch. ↺ starts again from the photo. Choose your own picture on the Texture Input.',
+  },
+  picCurves: {
+    label: 'Pictures 8 · Curves: more contrast, then a cross-processed look', play: true,
+    description: 'Two Curves nodes grade the built-in Room and cat photo: the first bends Master into an S for more contrast, the second gives Red, Green and Blue curves of their own, the cross-processed film look (green-yellow highlights, blue shadows). Drag the points on either card; Look amount fades the grade in. Choose your own picture on the Texture Input.',
+  },
+  picThreshold: {
+    label: 'Pictures 9 · Threshold: a soft mask of the lamp light', play: true,
+    description: 'Threshold makes a soft mask of the lamp light in the built-in Room and cat photo (the paper lantern, the orb lamp and the string lights) from how warm and bright each pixel is, and the rest of the room drops to a dim copy: the lamps glow out of the dark. Level sets how much lamp light counts. Choose your own picture on the Texture Input.',
   },
 };
 
@@ -386,6 +395,83 @@ export function buildPictureExamples(): Record<string, ExampleGraph> {
 **How it is built.** An odd-even transposition sort in a feedback Pass. Each step, every pixel pairs with its left or right neighbour (which one alternates, kept in the Pass's alpha) and the two swap if the brighter comes first and both are inside the range. Five Sample (texture) nodes read the Pass's Previous exactly (the Pass is Nearest, full size): this pixel and its four neighbours. Repeat 4 does four steps a frame. On the first frame the Pass is empty, so the photo is copied in; ↺ empties it again.
 
 **Try.** Move Low and High while it runs: new runs start sorting from where they are. Set Vertical to 1 and press ↺ for streaks up and down. Raise the Pass's Repeat for a faster sort. Choose your own picture on the Texture Input, then press ↺.`),
+  };
+
+  // ── 8 · Curves: an S on Master, then a cross-process on Red, Green and Blue ──
+  g.picCurves = {
+    ...PICTURE_EXAMPLE_INDEX.picCurves,
+    counter: 40,
+    nodes: [
+      photo('photo', 40, 300, ROOM_AND_CAT_ID, 'stretch', 'Its Texture goes to the first Curves; its Color is the ungraded photo the Mix starts from.'),
+      n('curves', 'contrast', 340, 300, {
+        ...curvesParams({ m: [[0, 0], [0.25, 0.15], [0.72, 0.86], [1, 1]] }),
+        ...note([
+          'Curves (contrast): only Master is bent, into a gentle S. The bottom of the graph is the photo\'s brightness coming in, its height what goes out.',
+          'The point at 0.25 is pulled down (shadows darker), the one at 0.72 pushed up (highlights brighter): the middle of the curve gets steeper, and a steeper curve is more contrast. The ends stay at black and white.',
+          'Drag the points on the card: a flatter S is subtler; pull the 0.25 point up for a faded, matte look.',
+        ]) },
+        { texture: ['photo', 'texture'] }),
+      n('curves', 'cross', 680, 300, {
+        ...curvesParams({
+          r: [[0, 0], [0.25, 0.18], [0.75, 0.86], [1, 1]],
+          g: [[0, 0.04], [0.3, 0.26], [0.7, 0.8], [1, 0.96]],
+          b: [[0, 0.16], [0.5, 0.48], [1, 0.82]],
+        }),
+        ...note([
+          'Curves (cross-process): Master is left straight; Red, Green and Blue each get a different curve, so the colours shift differently in the shadows and the highlights. That is the look of slide film developed in the wrong chemicals.',
+          'Red: an S, punchier reds. Green: a softer S, lifted a touch at the bottom. Blue: the black end raised to 0.16 and the white end lowered to 0.82, so the shadows turn blue and the highlights yellow.',
+          'Click the Red, Green or Blue tab on the card to see each one; the others show faintly behind.',
+        ]) },
+        { color: ['contrast', 'color'] }),
+      n('constant', 'amount', 680, 40, { label: 'Look amount', value: 1, ...note('Look amount: 0 is the photo as it was, 1 the full grade. A Play control.') }),
+      mixColour('blend', 980, 300, { ...note('Mix: the photo (A) to the graded picture (B) by Look amount.') },
+        { a: ['photo', 'color'], b: ['cross', 'color'], t: ['amount', 'value'] }),
+      n('output', 'out', 1260, 300, note('Output: the graded photo.'), { color: ['blend', 'result'] }),
+    ],
+    play: playRecord([
+      ctl('amount', 'amount::value', 'Look amount', 0, 1, 0.01),
+    ], `**What it shows.** Curves reshapes the tones of a picture by a curve you draw: what comes in along the bottom, what goes out up the side. An S curve adds contrast; a different curve for each colour shifts the colours, here the cross-processed film look.
+
+**How it is built.** Texture Input → Curves (Master in an S) → Curves (Red, Green and Blue curves) → Mix with the photo by Look amount.
+
+**Try.** Drag points on the cards: click the curve to add one, drag one out of the box to remove it. Pick a preset (Invert, Posterize, Brighten) from Presets. Switch a curve to Linear for hard-edged steps. Choose your own picture on the Texture Input.`),
+  };
+
+  // ── 9 · Threshold: the lamp light kept, softly, the room dimmed ──
+  g.picThreshold = {
+    ...PICTURE_EXAMPLE_INDEX.picThreshold,
+    counter: 40,
+    nodes: [
+      photo('photo', 40, 300, ROOM_AND_CAT_ID, 'stretch', 'Its Color goes to the two Channel nodes (how warm, how bright), to Levels for the dimmed room, and to the Mix for the lamps in full.'),
+      n('channelPick', 'warm', 340, 40, { channel: '1', compare: 'minus', channelB: '3', shape: 'raw',
+        ...note('Channel: red minus blue (Compare A − B), Raw. Lamp light is warm, much redder than it is blue; the white door and the bluish walls come out near 0.') },
+        { channels: ['photo', 'color'] }),
+      n('channelPick', 'bright', 340, 300, { channel: 'bright', shape: 'raw',
+        ...note('Channel: the brightness of the photo, Raw.') },
+        { channels: ['photo', 'color'] }),
+      n('multiply', 'glowAmt', 640, 160, { ...note([
+        'Multiply: warm × bright, how much lamp light each pixel has. In this photo the lamps are not the brightest things (the door and the white stick are as bright), and the shadows of a warm room are warm too; together the two pick out the lamps.',
+      ]) }, { a: ['warm', 'value'], b: ['bright', 'value'] }),
+      n('threshold', 'lamps', 920, 160, { mode: 'brightness', level: 0.2, softness: 0.12, colorOut: 'masked',
+        ...note([
+          'Threshold: 1 where the lamp light (its Value) is above Level (0.2), 0 below. The paper lantern, the orb and the string lights pass; so does some of the warm yellow hat.',
+          'Softness 0.12 fades the cut over a range centred on Level (0.14 to 0.26), so the glow round each lamp fades out instead of ending at a hard edge. Read is ignored here: a plain Value is wired.',
+        ]) },
+        { value: ['glowAmt', 'result'] }),
+      n('textureLevels', 'dim', 920, 520, { outWhite: 0.22, ...note('Levels (texture): the photo with Out white at 0.22, a dark copy of the room for the lamps to glow out of.') },
+        { color: ['photo', 'color'] }),
+      mixColour('glow', 1220, 300, { ...note('Mix: the dark room (A) where the mask is 0, the photo itself (B) where Threshold\'s Mask is 1, and in between on the soft edge.') },
+        { a: ['dim', 'color'], b: ['photo', 'color'], t: ['lamps', 'mask'] }),
+      n('output', 'out', 1500, 300, note('Output: the lamps lit, the room in the dark.'), { color: ['glow', 'result'] }),
+    ],
+    play: playRecord([
+      ctl('level', 'lamps::level', 'Level (how much lamp light counts)', 0, 0.5, 0.005),
+      ctl('soft', 'lamps::softness', 'Softness', 0, 0.5, 0.005),
+    ], `**What it shows.** Threshold splits a number into what is above Level and what is below. With Softness the split is a gentle fade, so it makes a soft mask: here, of the lamp light.
+
+**How it is built.** Two Channel nodes read how warm (red − blue) and how bright each pixel is; Multiply gives how much lamp light it has. Threshold (Level 0.2, Softness 0.12) turns that into the Mask. Levels (texture) makes a dark copy of the photo; Mix picks the dark copy or the photo by the Mask.
+
+**Try.** Lower Level to 0.1 and the warm walls light up; Softness 0 cuts hard edges. Wire the photo's Texture into Threshold instead (it then reads Brightness) to see why brightness alone doesn't find these lamps. Set Color out to Black and white and wire Threshold's Color to the Output to see the mask itself. Choose your own picture on the Texture Input.`),
   };
 
   return g;

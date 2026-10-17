@@ -261,7 +261,7 @@ export const EXAMPLE_INDEX: Record<string, ExampleIndexEntry> = {
   ...FOURD_EXAMPLE_INDEX,
   // Texture tools (textureToolExamples.ts, docs/texture-tools.md): Mask, Levels, Flow, Neighbours, Change, Outline, Fade, Read.
   ...TEXTURE_TOOL_EXAMPLE_INDEX,
-  // Pictures (pictureExamples.ts): Channel, Shuffle, Channel Colours, Height Light, Show data, Random (from ID), a pixel sort, on the built-in photos.
+  // Pictures (pictureExamples.ts): Channel, Shuffle, Channel Colours, Height Light, Show data, Random (from ID), a pixel sort, Curves, Threshold, on the built-in photos.
   ...PICTURE_EXAMPLE_INDEX,
   // Memory (memoryExamples.ts, docs/memory-nodes.md): Lag, Spring, Envelope, Counter.
   ...MEMORY_EXAMPLE_INDEX,

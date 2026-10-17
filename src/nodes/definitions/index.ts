@@ -171,6 +171,7 @@ export { HeightLightNode } from './heightLight';
 export { RandomFromIdNode } from './randomFromId';
 export { ShowDataNode } from './showData';
 export { ChannelNode, ShuffleNode, ChannelColoursNode } from './channelTools';
+export { CurvesNode, ThresholdNode } from './curves';
 export { TextureFeedbackNode, TextureFeedbackStepNode } from './textureFeedback';
 export { DataTextureNode, DataTexturePackNode, ReadChannelsNode } from './dataTexture';
 export { RenderTargetsNode, RenderTargetsPackNode } from './renderTargets';
@@ -323,6 +324,7 @@ import { HeightLightNode } from './heightLight';
 import { RandomFromIdNode } from './randomFromId';
 import { ShowDataNode } from './showData';
 import { ChannelNode, ShuffleNode, ChannelColoursNode } from './channelTools';
+import { CurvesNode, ThresholdNode } from './curves';
 import { TextureFeedbackNode, TextureFeedbackStepNode } from './textureFeedback';
 import { DataTextureNode, DataTexturePackNode, ReadChannelsNode } from './dataTexture';
 import { RenderTargetsNode, RenderTargetsPackNode } from './renderTargets';
@@ -610,6 +612,8 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   // Texture tools (docs/texture-tools.md): shaping what a texture read gives
   textureMask: TextureMaskNode,
   textureLevels: TextureLevelsNode,
+  curves: CurvesNode,
+  threshold: ThresholdNode,
   textureFlow: TextureFlowNode,
   textureNeighbours: TextureNeighboursNode,
   textureChange: TextureChangeNode,

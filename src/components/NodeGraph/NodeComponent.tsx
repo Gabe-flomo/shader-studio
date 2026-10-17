@@ -1,3 +1,4 @@
+import { CurvesCardViz } from './CurvesEditor';
 import React, { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import { LOOP_MAX_CAP, loopCountValue, loopMax, loopOf } from '../../nodes/exprLoop';
 import { REMOVED_NODE_TYPES, removedNodeMessage } from '../../nodes/definitions/removedNodes';
@@ -3272,6 +3273,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
       {/* The Agents family (docs/agents-plan.md): the group's numbers and Open rule, a Trail's texture */}
       {(node.type === 'agentsGroup' || node.type === 'trailField' || node.type === 'channelShuffle') && <NodeInlineViz node={node} onEnterGroup={onEnterGroup} />}
       {node.type === 'shaderTexture' && <ShaderTextureCardBody node={node} onEnterGroup={onEnterGroup} />}
+      {/* Curves: the card's graph editor (CurvesEditor.tsx) */}
+      {node.type === 'curves' && <CurvesCardViz node={node} />}
       {node.type === 'agentOutput' && (
         <div style={{ padding: '8px 14px', fontSize: 11.5, lineHeight: 1.45, color: tk.text.faint, borderBottom: `1px solid ${tk.border.subtle}` }}>
           What this walker becomes at the end of the step. Anything left unwired stays as it was, so an empty rule stands still.

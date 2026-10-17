@@ -246,6 +246,12 @@ export interface NodeDefinition {
    * the static `paramDefs` stays what a fresh node has.
    */
   paramDefsFor?: (node: GraphNode) => Record<string, ParamDef>;
+  /**
+   * Params that are live uniforms without being paramDefs (no card control of their own): a number
+   * becomes a float uniform, an [x, y, z] a vec3 one, so a custom card editor's drag is a uniform
+   * write, not a recompile. Curves' points (nodes/definitions/curves.ts). Keys not in the params are skipped.
+   */
+  liveParamKeys?: (params: Record<string, unknown>) => string[];
 
   /**
    * Whether the card offers the assign operator (= += -= *= /=) in its header.
