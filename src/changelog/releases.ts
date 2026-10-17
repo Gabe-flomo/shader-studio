@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.252',
+    date: '2026-10-17',
+    title: "Learn a sound",
+    highlights: [
+      { area: 'Studio', text: "Audio Source: select one clap (or any sound) in the window and press Learn; it fires a trigger whenever a sound like it comes back." },
+      { area: 'Studio', text: "Audio nodes now work inside groups: Hit, Band level, Spectrum and the rest hear an Audio Source wired in from outside." },
+    ],
+  },
+  {
     id: '2026.10.251',
     date: '2026-10-17',
     title: "Faster exports, live builders",
