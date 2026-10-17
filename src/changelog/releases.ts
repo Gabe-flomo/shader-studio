@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.260',
+    date: '2026-10-17',
+    title: "ProRes",
+    highlights: [
+      { area: 'Studio', text: "Export ProRes .mov files, including 4444 with transparency for compositing, in the desktop app and in the browser." },
+    ],
+  },
+  {
     id: '2026.10.259',
     date: '2026-10-17',
     title: "Your builder presets",
