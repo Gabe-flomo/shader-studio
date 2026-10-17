@@ -61,12 +61,19 @@ The builder doesn't pause the main preview (`previewHold.ts`) as the explain vie
 
 If no frame arrives (the preview is hidden in this layout), the viewport says so.
 
+### Turning the 3D view
+
+In 3D the viewport is a camera you can hold, as the 3D Scene Builder's is: **drag** to turn round the point looked at (Angle sideways, Elevation up and down, ±89°), **right-drag**, **middle-drag**, **Shift+drag** or **two fingers** to pan (the walkers follow the pointer), **scroll** or **pinch** to come closer or go further (Distance, 0.3–40), and **double-click** for the view a new 3D group starts with (3.8 away, 15° round, 15° up, centred; Orbit speed, Zoom and depth of field are left as they are). Each gesture writes Draw agents' own camera settings — Angle, Elevation, Distance and Translate X / Y / Z (the point it looks at and turns round) — the same values the Look section's Camera card shows, so what you see is what the graph draws; a drag is one undo step. With Orbit speed on, a drag turns from wherever the camera has circled to. The gestures sit under the diagrams: their handles keep their own drags. 2D is unchanged (its drags draw regions and move handles). A Draw agents that looks through a wired scene's camera ignores these settings, so the gestures don't move it.
+
+Files: `src/builders/orbitMath.ts` (the gestures' numbers, shared with `SceneViewport.tsx`), `src/components/builders/studio/useOrbitGestures.ts` (pointer, wheel, touch and double-click), `src/agentBuilder/cameraGestures.ts` (gestures → camera params), `src/components/agentBuilder/OrbitPad.tsx`.
+
 ### Stepping
 
 A bar under the viewport steps through the simulation, as the Grid Rules try board does: **↺** start over (a true reset, docs/true-reset.md: step 0, the walkers born again, trails and kept steps cleared), **◀** one step back, **▶ / ⏸** play and pause (the preview's own clock, so everything else pauses too), **▶|** one step forward. With the bar focused, ← → and Space do the same; **Shift+→** (or Shift-click ▶|) runs a whole frame's steps at once (the group's Steps a frame). **Step N** is the group's own step count, the number the group card shows.
 
 - A step is one fixed tick of every Agents group in the graph (1/60 s of simulated time: sense, steer, move, deposit, then the trails spread and fade). The live runner runs it at its next frame, the same step the clock would run, and the clock carries on from there when you play again (no catch-up, no wait). Stepping is deterministic: the rule is a function of the state, the step and the seed.
 - Pressing ◀ or ▶| while playing pauses first.
+- **Respawn** (✦, or **R** with the bar focused) re-seeds the walkers without a reset: every walker of the group is born again from Born (the Emit's shape, size and facing) at the next step, as the Emit's Burst does, while the trail, the step count, the kept steps and the clock carry on. ↺ is still the true reset. Paused, Respawn runs that one step so the new walkers show. (`respawnAgents` in `lib/agentRunner.ts`: the request becomes the group's pending Burst; a trail is emptied only for a group that started over, `trailStartsOver`.)
 - **Back is limited.** While the builder is open the runner keeps a copy of the walkers' state textures and every trail's texture (and each group's schedule: births, Burst, what its listeners heard) before every frame that steps: a played frame (a few steps at once) or a step forward. ◀ puts back the newest copy at or before the step wanted and runs the steps between again, so back is always exactly one step, as far back as the oldest copy. The copies are GPU memory, as big as the state (a 256k-walker Slime mold with its 1024-row trail is about 23 MB), so at most 60 are kept and no more than 256 MB together; the bar says how many frames that is ("Keeps the last N frames") and how far back you can go. Nothing is copied while the builder is closed.
 - Starting over (↺, the clock reset) drops the copies. A group whose count or 2D/3D changed since a copy keeps its new state; a trail resized with the picture is left as it is. The picture's own feedback (a Feedback node, Echo) isn't part of the copies.
 
@@ -200,6 +207,12 @@ Every behaviour card that can be left out has a mute button in its header, the s
 - **Alt/Option-click** the mute solos the card in its section: the other cards there are muted. Alt-click it again turns them all back on (`soloCard`).
 - Each mute (or solo) is one undo step, and it is saved with the group, so it is still muted when the builder is opened again.
 - **Text:** a muted rule prints with `@off` in the agents dialect, as before. The builders' word `muted` (a bare `muted` at the end of the rule, or `@muted`) reads as `@off` too, and prints back as `@off`.
+
+## Folding cards
+
+Behaviour cards fold to one line: a chevron, the picture, the name and what it does with its key numbers ("Gravity · 0.4 down", "Drag · 2 /s"), the mute and ×. Collapsed by default, as the app's other editors are: a section's first card starts open and the others folded; in Neighbours and Life the section's own settings card (What it sees, Lives for) is the open one and every behaviour card starts folded; a trail follower's extra cards and Moving's Flow field start folded. **Open all / Fold all** sits over a section with more than one card, and a card just added (+ Gravity) opens. Focus shows its card open. What you open or fold is remembered per section and card (`forces:gravity#0`), between openings and (where the browser allows) between sessions. Folding is UI only: nothing in the rules changes.
+
+Files: `src/agentBuilder/cardFolds.ts` (the start rule, the remembered state, the folded line, `directionWord`), `BehaviourCard.tsx` (`open` / `onOpen`), `SectionCards.tsx` (`cardSummary`).
 
 ## Dragging cards
 

@@ -18,6 +18,7 @@ vi.hoisted(() => {
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { useNodeGraphStore } from '../../../store/useNodeGraphStore';
+import { useCardFolds } from '../../../agentBuilder/cardFolds';
 import { useBuilderWindows } from '../../../builders/windows';
 import { groupRules } from '../../../agentRules/apply';
 import { agentSpotRegistry } from '../../../lib/agentRunner';
@@ -39,6 +40,8 @@ afterEach(() => { for (const m of mounted.splice(0)) { act(() => m.root.unmount(
 const $ = (sel: string) => document.body.querySelector(sel);
 const $$ = (sel: string) => [...document.body.querySelectorAll(sel)];
 const click = (el: Element | null) => { expect(el).toBeTruthy(); act(() => { (el as HTMLElement).click(); }); };
+/** Open a folded card (cards past a section's first start folded: agentBuilder/cardFolds.ts). */
+const unfold = (key: string) => { const b = document.body.querySelector(`[data-card-fold="${key}"]`); if (b?.getAttribute('aria-expanded') === 'false') click(b); };
 const key = (el: Element | null, k: string) => { expect(el).toBeTruthy(); act(() => { el!.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true })); }); };
 const hover = (el: Element | null) => { expect(el).toBeTruthy(); act(() => { el!.dispatchEvent(new PointerEvent('pointerover', { bubbles: true })); el!.dispatchEvent(new PointerEvent('pointerenter', { bubbles: false })); }); };
 const group = () => useNodeGraphStore.getState().nodes.find(n => n.type === 'agentsGroup');
@@ -46,6 +49,7 @@ const settle = () => act(() => { vi.advanceTimersByTime(300); });
 
 beforeEach(() => {
   localStorage.clear();
+  useCardFolds.setState({ open: {} });
   Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1440 });
   useNodeGraphStore.setState({ nodes: [], activeGroupPath: [], selectedNodeId: null, selectedNodeIds: [] });
   useBuilderWindows.setState({ gridRules: null, agentRules: null, agentBuilder: null, recipe: null });
@@ -114,6 +118,7 @@ describe('particles', () => {
     expect($('[data-force="gravity"]')?.getAttribute('data-angle')).toBe('180');
     // Attract: the template's mouse push is off; switch it on, then pull toward a point.
     click($('[data-card-switch="attract#0"] button'));
+    unfold('attract#0');
     click($$('[data-card-slot="attract#0"] [aria-label="Toward"] button').find(b => b.textContent === 'A point') ?? null);
     key($('[data-card-slot="attract#0"] [data-setting="strength"] [data-ruler-track]'), 'End');
     expect($('[data-force="attract"]')?.getAttribute('data-pull')).toBe('in');
@@ -130,6 +135,7 @@ describe('particles', () => {
     click($('[data-studio-section="life"]'));
     // Dies starts off (the sparks live for ever); its slider still sets when, for when it is turned on.
     expect($('[data-diagram="life"]')?.getAttribute('data-dies')).toBe('');
+    unfold('die#0');
     key($('[data-card-slot="die#0"] [data-setting="dieAfter"] [data-ruler-track]'), 'End');
     settle();
     expect(groupRules(group()!).species[0].rules.find(r => r.do[0].kind === 'die')!.when).toEqual([{ kind: 'age', cmp: '>', seconds: 20 }]);
@@ -201,6 +207,7 @@ describe('"only when…"', () => {
     vi.useFakeTimers();
     start('flock');
     click($('[data-studio-section="steering"]'));
+    unfold('cohere#0');
     click($('[data-only-when-add="cohere#0"]'));
     click($$('[role="menuitem"]').find(b => b.textContent?.includes('older than')) ?? null);
     expect($('[data-only-when-chip="cohere#0"]')?.textContent).toContain('older than 2 s');

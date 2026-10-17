@@ -88,7 +88,7 @@ export function AgentRulesModal({ node, onClose }: { node: GraphNode; onClose: (
   // The lines each rule makes (for "Show the lines"), from the same generator the group runs.
   const lines = useMemo(() => {
     if (!showLines) return new Map<string, string>();
-    const inside = generateRulesInside(set, { groupId: node.id, d3 });
+    const inside = generateRulesInside(set, { groupId: node.id, d3, ruleNodes: false });
     const ids = ruleIds(node.id);
     const out = new Map<string, string>();
     set.species.forEach((x, si) => x.rules.forEach((_, ri) => {

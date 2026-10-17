@@ -268,105 +268,105 @@ exports[`2D agents and pass graphs compile as they did before 3D > agentRidePath
 
 exports[`2D agents and pass graphs compile as they did before 3D > agentRulesAnts 1`] = `
 {
-  "agents": "084c262c70de5f1bc59b534312f3:28250",
+  "agents": "1222f4d5d3a5470fb359dfb446e0:29595",
   "errors": null,
   "fragmentShader": "002ba2558d43821a9a020497763c:4678",
-  "paramBindings": "03ccc58d11304019e611ab6fa007:1631",
-  "paramUniforms": "1e9812cae9d9860a0b273f0052cf:1036",
+  "paramBindings": "09e97105abdcf113745942ecbf5a:1699",
+  "paramUniforms": "1c23070ecaca8e1bc4149626e134:1074",
   "passes": "167d269bbddad80189e9f9473b28:2",
   "success": true,
   "textureUniforms": "167d269bbddad80189e9f9473b28:2",
-  "web": "1f3c681c5eed8f08ea502a073b0a:28080",
+  "web": "099cc79532b4b81b7bda2981607c:29401",
 }
 `;
 
 exports[`2D agents and pass graphs compile as they did before 3D > agentRulesBoids 1`] = `
 {
-  "agents": "0d3d87df926dc30941070e0af29d:19914",
+  "agents": "1597dc73d64c54022c15d71f3ed7:20181",
   "errors": null,
   "fragmentShader": "18f86b6eecec8f09665c57c0e590:4191",
-  "paramBindings": "153026613520740104ac2d1106da:1863",
-  "paramUniforms": "0cb0714953a8ce01b4cb6eaaf8ad:1262",
+  "paramBindings": "176ba72af9172f0229db2355f62b:2222",
+  "paramUniforms": "192743674971fc172f57c55359e2:1451",
   "passes": "167d269bbddad80189e9f9473b28:2",
   "success": true,
   "textureUniforms": "167d269bbddad80189e9f9473b28:2",
-  "web": "1c087e9132414d066811876fe444:20085",
+  "web": "081fa1c45f5f270c2cdd5bc0c454:20277",
 }
 `;
 
 exports[`2D agents and pass graphs compile as they did before 3D > agentRulesCrowd 1`] = `
 {
-  "agents": "02fc3523b93b000dab189bc1a7a5:36521",
+  "agents": "160027633351a410ee7bd9b73057:40508",
   "errors": null,
   "fragmentShader": "0c9004dbbefc4b1403dddbd00769:3080",
-  "paramBindings": "024855eb0416de16401f18f999d5:2104",
-  "paramUniforms": "1387cf7485ccf00317fef5bd2479:1338",
+  "paramBindings": "088a1907e7087d059c7d5ab77a35:3133",
+  "paramUniforms": "142f62ff6637bf1bfad8a8a0e551:1924",
   "passes": "167d269bbddad80189e9f9473b28:2",
   "success": true,
   "textureUniforms": "167d269bbddad80189e9f9473b28:2",
-  "web": "11ccab3e64609a1e2ab4d1a82779:36608",
+  "web": "02175aaf02caac1e79d83259283f:40355",
 }
 `;
 
 exports[`2D agents and pass graphs compile as they did before 3D > agentRulesDla 1`] = `
 {
-  "agents": "0883f1fafad3400cd0f18d3001c6:20711",
+  "agents": "07ca2a5faf42db1a1d35195305fd:21471",
   "errors": null,
   "fragmentShader": "14b27027c9d6321b583b0ac53d63:3906",
-  "paramBindings": "15987b1652c8070c09492674a89b:1893",
-  "paramUniforms": "03f275a7343e5613dd979fb46701:1241",
+  "paramBindings": "111acf6af3be420ebc65db6aa21d:1952",
+  "paramUniforms": "12017b154e0f940862ca89912e96:1269",
   "passes": "167d269bbddad80189e9f9473b28:2",
   "success": true,
   "textureUniforms": "167d269bbddad80189e9f9473b28:2",
-  "web": "060430262777c516a5aff148f452:20658",
+  "web": "07f4dc156726c00f4f24b620e711:21393",
 }
 `;
 
 exports[`2D agents and pass graphs compile as they did before 3D > agentRulesFireflies 1`] = `
 {
-  "agents": "1cf4404c56bf841b2c9af289b3ae:22562",
+  "agents": "04bb258d2378be075b5ca1f28702:23772",
   "errors": null,
   "fragmentShader": "1619001bd587ff14740051694fdd:3970",
-  "paramBindings": "1066ddf4b2c0341bfefc197fc9e7:1851",
-  "paramUniforms": "091d3fa86791ae1c8aeeae658599:1234",
+  "paramBindings": "0a8fe9ddbdde18007f960130c0fd:1917",
+  "paramUniforms": "1f3048a52e18111adacc3f5296d0:1270",
   "passes": "167d269bbddad80189e9f9473b28:2",
   "success": true,
   "textureUniforms": "167d269bbddad80189e9f9473b28:2",
-  "web": "0d3ecc1462d2351369b90fd075b9:22477",
+  "web": "19845b5b84448a0f661b8e51c3f0:23663",
 }
 `;
 
 exports[`2D agents and pass graphs compile as they did before 3D > agentRulesParticles 1`] = `
 {
-  "agents": "030ea6c5a14fef16cdf028d10861:16193",
+  "agents": "1129ed2ba9eb9c03426f84f64759:16172",
   "errors": null,
   "fragmentShader": "04af75c037f3d40f0db98cf47584:3881",
-  "paramBindings": "1ebb79549dfccb12f1127929943b:1841",
-  "paramUniforms": "0b6a6253aee6531cd8b6848aa2ff:1260",
+  "paramBindings": "0c7cc54475b1fc0b369adc14d0d3:2075",
+  "paramUniforms": "0bb693dec4794112b3fde8a0e521:1381",
   "passes": "167d269bbddad80189e9f9473b28:2",
   "success": true,
   "textureUniforms": "167d269bbddad80189e9f9473b28:2",
-  "web": "11f7d4660c7f3c09257859f6f6a4:16278",
+  "web": "16772e1a1a5ed11f974e82c15e5f:16206",
 }
 `;
 
 exports[`2D agents and pass graphs compile as they did before 3D > agentRulesPredatorPrey 1`] = `
 {
-  "agents": "06ef49e9da55070debc2af7c26fb:29205",
+  "agents": "18ba0486e5e7a20b345d913ab156:30630",
   "errors": null,
   "fragmentShader": "0e37acdb1a124009379352a6ba18:3005",
-  "paramBindings": "1285a82ec3d956183484989e89d3:2140",
-  "paramUniforms": "065882a276893903fd54778c53c9:1367",
+  "paramBindings": "0577329afb2427083da559ec0237:2341",
+  "paramUniforms": "026539ed5ff3b10b4e1b8b5dcc31:1477",
   "passes": "167d269bbddad80189e9f9473b28:2",
   "success": true,
   "textureUniforms": "167d269bbddad80189e9f9473b28:2",
-  "web": "0549354a3c1d8a0a3291c17da88a:29132",
+  "web": "1364ed86d29d65053502dffc7338:30485",
 }
 `;
 
 exports[`2D agents and pass graphs compile as they did before 3D > agentRulesScan 1`] = `
 {
-  "agents": "0ffa2b95fc90a7159daf3e48d56c:18018",
+  "agents": "02d80e864da33f19d3b12110aaee:18258",
   "errors": null,
   "fragmentShader": "1c90c6118e3e6516f38f2951ca2c:3782",
   "paramBindings": "0a5ff2016d86f10785b599278406:1784",
@@ -374,63 +374,63 @@ exports[`2D agents and pass graphs compile as they did before 3D > agentRulesSca
   "passes": "167d269bbddad80189e9f9473b28:2",
   "success": true,
   "textureUniforms": "167d269bbddad80189e9f9473b28:2",
-  "web": "050215d878a77d1f6fa5abfce8e3:18102",
+  "web": "0688767310e8b90f42ba28447555:18342",
 }
 `;
 
 exports[`2D agents and pass graphs compile as they did before 3D > agentRulesSir 1`] = `
 {
-  "agents": "1b4ca442e7268d15de56a35cfac4:22478",
+  "agents": "0d830d7fe01e1c170832187a8cbe:22712",
   "errors": null,
   "fragmentShader": "1b3a98bcedb064099be7cf2a9a32:3569",
-  "paramBindings": "17596d2b1a28840a789adeae4551:1839",
-  "paramUniforms": "1c0f921aa56a55174f5d68843532:1207",
+  "paramBindings": "1a7bba9aac92b60dc5f1a221515c:1898",
+  "paramUniforms": "05b23016f8006612cef1599037a7:1235",
   "passes": "167d269bbddad80189e9f9473b28:2",
   "success": true,
   "textureUniforms": "167d269bbddad80189e9f9473b28:2",
-  "web": "196ad4b4361c8b1f4eb212756955:22375",
+  "web": "009404e10581cb1ee7256dca6768:22606",
 }
 `;
 
 exports[`2D agents and pass graphs compile as they did before 3D > agentRulesSlime 1`] = `
 {
-  "agents": "0b4a49c14230c300a6b505ed2653:15905",
+  "agents": "1950249d4f7fe00523de0f509af8:15758",
   "errors": null,
   "fragmentShader": "14179975075b7b104a2bb0b06e33:3574",
-  "paramBindings": "035afce97cd4e311e485ea301fa5:1624",
-  "paramUniforms": "0e1972bc1b0b0e0a8e5f2039b844:1073",
+  "paramBindings": "057fb5b77cf38e030b4bf95ca678:1807",
+  "paramUniforms": "187ed7d9887099045e74cec4ea20:1165",
   "passes": "167d269bbddad80189e9f9473b28:2",
   "success": true,
   "textureUniforms": "167d269bbddad80189e9f9473b28:2",
-  "web": "05b1571c69000711dd7b0f2d8486:15932",
+  "web": "0101dd9e088f65101abdd4cdba73:15734",
 }
 `;
 
 exports[`2D agents and pass graphs compile as they did before 3D > agentRulesSwarm 1`] = `
 {
-  "agents": "1735700ebb82c405a56ec52536eb:22373",
+  "agents": "0a54e60d4ed1201591fcad9cdee6:22969",
   "errors": null,
   "fragmentShader": "1f84acd33cef5f1e6f0676972917:3841",
-  "paramBindings": "1c27f86eba36210414eac80272cf:1814",
-  "paramUniforms": "15643d68956a260e2b6e23228b5b:1225",
+  "paramBindings": "1eadafec48ff4116c76bb25b572d:2235",
+  "paramUniforms": "1a218e4aced528028c9825c43b2f:1444",
   "passes": "167d269bbddad80189e9f9473b28:2",
   "success": true,
   "textureUniforms": "167d269bbddad80189e9f9473b28:2",
-  "web": "187e16eb79cc6e1c360a43175982:22502",
+  "web": "018c6658fe45211fdc5240343add:23023",
 }
 `;
 
 exports[`2D agents and pass graphs compile as they did before 3D > agentRulesTermites 1`] = `
 {
-  "agents": "127b3a33c5d5791e0bc9429e2f97:32593",
+  "agents": "09ad453512bfb6057bed886927f8:34854",
   "errors": null,
   "fragmentShader": "142eb3ee08b0b801439a799a5a94:3874",
-  "paramBindings": "19a7b6073acef818c1c60e9f9139:1798",
-  "paramUniforms": "17473442fc7a1f1cc8c8d7c57295:1198",
+  "paramBindings": "1cb12c12377382195cfa69cc2339:1866",
+  "paramUniforms": "1c712125cb56a313b07a26debf5c:1236",
   "passes": "167d269bbddad80189e9f9473b28:2",
   "success": true,
   "textureUniforms": "167d269bbddad80189e9f9473b28:2",
-  "web": "01b515a2a53e0706de046185fbda:32416",
+  "web": "1de1aabdbf22c7125391db2b6e62:34653",
 }
 `;
 

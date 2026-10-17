@@ -86,6 +86,8 @@ export const AGENT_INSIDE_TYPES = new Set([
   'agentRideCurve',
   // Walkers riding a wired shape's outline (agentRidePath.ts).
   'agentRidePath',
+  // Rule steps: the Agent Builder's common actions as nodes (agentRuleSteps.ts).
+  'agentTurnToward', 'agentFollowTrail', 'agentWander', 'agentOrbit', 'agentAvoidWalls', 'agentApplyForce', 'agentDrag', 'agentSlowInCrowd', 'agentLeaveTrail', 'agentFadeWithAge',
 ]);
 /** The starters in the Simulation category: each builds a whole working setup (store/agentExamples.ts). */
 export const AGENT_PRESET_TYPES = new Set([
@@ -183,6 +185,12 @@ export const AGENT_3D_SOCKETS: Record<string, { in?: string[]; out?: string[] }>
   agentRideCurve: { out: ['position', 'velocity', 'heading'] },
   agentRidePath: { out: ['position', 'velocity', 'heading'] },
   agentEmit: { in: ['position'] },
+  agentTurnToward: { in: ['heading', 'direction', 'target', 'position'], out: ['heading'] },
+  agentFollowTrail: { in: ['heading'], out: ['heading'] },
+  agentWander: { in: ['heading'], out: ['heading'] },
+  agentOrbit: { in: ['heading', 'position', 'target'], out: ['heading'] },
+  agentAvoidWalls: { in: ['heading', 'position'], out: ['heading'] },
+  agentApplyForce: { in: ['heading', 'position', 'force'], out: ['heading'] },
 };
 /** Draw agents' sockets in 3D only: a ray-marched scene's camera and depth (docs/agents-group.md "3D"). */
 export const DRAW_3D_INPUTS = {
@@ -337,6 +345,8 @@ const WALKER_SOCKETS: Record<string, string[]> = {
   agentSoundKick: ['position'], agentIntegrate: ['position', 'velocity'], agentCollide: ['position', 'velocity'],
   agentChladni: ['position', 'velocity'], agentAge: ['age', 'life'], agentCollideScene: ['position', 'velocity'],
   agentNeighbours: ['position'], agentRideCurve: ['memory'],
+  agentTurnToward: ['heading', 'position'], agentFollowTrail: ['heading'], agentWander: ['heading'], agentOrbit: ['heading', 'position'],
+  agentAvoidWalls: ['heading', 'position'], agentApplyForce: ['heading', 'position'], agentLeaveTrail: [], agentFadeWithAge: ['age'],
 };
 const OUTPUT_KEEPS: Record<string, string> = {
   position: 'unchanged', velocity: 'unchanged', heading: 'unchanged', speed: 'unchanged', memory: 'unchanged', colour: 'unchanged',

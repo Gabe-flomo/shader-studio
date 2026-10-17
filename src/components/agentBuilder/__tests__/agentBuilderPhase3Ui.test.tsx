@@ -18,6 +18,7 @@ vi.hoisted(() => {
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { useNodeGraphStore } from '../../../store/useNodeGraphStore';
+import { useCardFolds } from '../../../agentBuilder/cardFolds';
 import { useBuilderWindows } from '../../../builders/windows';
 import { groupRules } from '../../../agentRules/apply';
 import { n } from '../../../store/graphBuilder';
@@ -41,6 +42,8 @@ afterEach(() => { for (const m of mounted.splice(0)) { act(() => m.root.unmount(
 const $ = (sel: string) => document.body.querySelector(sel);
 const $$ = (sel: string) => [...document.body.querySelectorAll(sel)];
 const click = (el: Element | null) => { expect(el).toBeTruthy(); act(() => { (el as HTMLElement).click(); }); };
+/** Open a folded card (cards past a section's first start folded: agentBuilder/cardFolds.ts). */
+const unfold = (key: string) => { const b = document.body.querySelector(`[data-card-fold="${key}"]`); if (b?.getAttribute('aria-expanded') === 'false') click(b); };
 const pointer = (el: Element | null, type: string, x: number, y: number) => { expect(el).toBeTruthy(); act(() => { el!.dispatchEvent(new PointerEvent(type, { bubbles: true, clientX: x, clientY: y })); }); };
 const input = (el: Element | null, v: string) => {
   expect(el).toBeTruthy();
@@ -60,6 +63,7 @@ const settle = () => act(() => { vi.advanceTimersByTime(300); });
 
 beforeEach(() => {
   localStorage.clear();
+  useCardFolds.setState({ open: {} });
   Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1440 });
   // A circle in the graph to pick from.
   useNodeGraphStore.setState({ nodes: [n('circleSDF', 'gCircle', -900, 0, { radius: 0.35, posX: 0.4 })], activeGroupPath: [], selectedNodeId: null, selectedNodeIds: [] });
@@ -99,6 +103,7 @@ describe('the Where picker', () => {
     vi.useFakeTimers();
     start('flock');
     click($('[data-studio-section="steering"]'));
+    unfold('cohere#0');
     click($('[data-only-when-add="cohere#0"]'));
     click($$('[role="menuitem"]').find(b => b.textContent?.includes('inside / outside a region')) ?? null);
     click($('[data-only-when-picking="cohere#0"] [data-where-way="create"]'));

@@ -4,6 +4,10 @@
  * ▶ play / pause (the preview's clock), ▶| one step forward (Shift: a whole frame's steps). ← → and
  * Space when the bar has focus. The step counter is the group's own step.
  *
+ * Respawn (✦, R) is not a reset: every walker is born again from Born (the Emit) at the next step, as the
+ * Emit's Burst does, while the trail, the step count and the clock carry on (lib/agentRunner.ts respawnAgents).
+ * Paused, it runs that one step so the new walkers show.
+ *
  * ↺ is the app's true reset (lib/runtimeReset.ts), not a step back: step 0, every walker born again,
  * the trails, the kept snapshots and the clock started over, as a fresh open has them. (It used to go
  * back to the oldest snapshot kept, which after a while of playing was not the start.)
@@ -18,7 +22,7 @@ import { useTokens } from '../../theme/themeStore';
 import { fontFamily } from '../../theme/tokens';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { IconButton } from '../ui/Button';
-import { agentStatsFor, type AgentStats } from '../../lib/agentRunner';
+import { agentStatsFor, respawnAgents, type AgentStats } from '../../lib/agentRunner';
 import { agentStepInfo, armAgentStepping, onAgentStepInfo, stepAgents, stepAgentsBack } from '../../lib/agentSnapshots';
 import { BACK_MAX } from '../../agentBuilder/stepRun';
 import { resetRuntime } from '../../lib/runtimeReset';
@@ -48,12 +52,14 @@ export function AgentTransport({ groupId }: { groupId: string }) {
   const spf = stats?.stepsPerFrame ?? 1;
   const forward = (frame = false) => { if (playing) setPlaying(false); stepAgents(frame ? spf : 1); };
   const back = () => { if (playing) setPlaying(false); stepAgentsBack(); };
+  const respawn = () => { respawnAgents(groupId); if (!playing) stepAgents(1); };
   const onKey = (e: React.KeyboardEvent) => {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     // Handled here only: the app's time hotkeys (hooks/useTimeHotkeys.ts) would also seek the clock (←/→) or toggle it again (Space).
     if (e.key === 'ArrowRight') { e.preventDefault(); e.stopPropagation(); forward(e.shiftKey); }
     else if (e.key === 'ArrowLeft') { e.preventDefault(); e.stopPropagation(); if (canBack) back(); }
     else if (e.key === ' ') { e.preventDefault(); e.stopPropagation(); setPlaying(!playing); }
+    else if (!e.shiftKey && (e.key === 'r' || e.key === 'R')) { e.preventDefault(); e.stopPropagation(); respawn(); }
   };
 
   const reach = info.reach || BACK_MAX;
@@ -61,9 +67,10 @@ export function AgentTransport({ groupId }: { groupId: string }) {
     ? `Back as far as step ${info.first}`
     : playing ? 'Pause to step' : 'Step forward or play to keep steps to go back to';
   return (
-    <div data-agent-transport role="toolbar" aria-label="Step through the walkers (← → Space)" tabIndex={0} onKeyDown={onKey}
+    <div data-agent-transport role="toolbar" aria-label="Step through the walkers (← → Space, R respawns)" tabIndex={0} onKeyDown={onKey}
       style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', borderTop: `1px solid ${tk.border.subtle}`, background: tk.bg.subtle, flexWrap: 'wrap', rowGap: 6, outline: 'none' }}>
       <IconButton icon="reset" size="sm" label="Start over: back to step 0, every walker born again, the trails and kept steps cleared" onClick={() => resetRuntime()} data-agent-rewind data-agent-reset />
+      <IconButton icon="spark" size="sm" label="Respawn (R): every walker born again from Born, the trail kept (↺ starts everything over)" onClick={respawn} data-agent-respawn />
       <IconButton icon="chevL" size="sm" label="One step back (←)" onClick={back} disabled={!canBack} data-agent-back />
       <IconButton icon={playing ? 'pause' : 'play'} size="sm" label={playing ? 'Pause (Space)' : 'Play (Space)'} active={playing} onClick={() => setPlaying(!playing)} data-agent-play />
       <IconButton icon="chevR" size="sm" label={`One step forward (→; Shift: a whole frame, ${spf} steps)`} onClick={e => forward(e.shiftKey)} data-agent-forward />

@@ -182,6 +182,7 @@ export { ReadNeighboursNode } from './readNeighbours';
 export { AgentsGroupNode, AgentInputsNode, AgentOutputNode, AgentStepOutNode, AgentSenseNode, AgentSteerNode, AgentMoveNode, AgentBySpeciesNode, AgentEmitNode, AgentDepositNode, TrailFieldNode, TrailStepOutNode, AgentProbeOutNode, DrawAgentsNode, SlimeMoldPresetNode, ParticlesPresetNode, CurlSmokePresetNode, SoundBurstPresetNode, MultiSlimePresetNode, AntsPresetNode, BoidsPresetNode, StrandsPresetNode, GrowPicturePresetNode, GalaxyPresetNode, MyceliumPresetNode, SandPlatePresetNode } from './agents';
 export { AgentGravityNode, AgentWindNode, AgentCurlNode, AgentAttractNode, AgentVortexNode, AgentFlowNode, AgentSoundKickNode, AgentIntegrateNode, AgentAgeNode, AgentCollideNode, AgentChladniNode } from './agentForces';
 export { AgentNeighboursNode } from './agentNeighbours';
+export { AgentTurnTowardNode, AgentFollowTrailNode, AgentWanderNode, AgentOrbitNode, AgentAvoidWallsNode, AgentApplyForceNode, AgentDragNode, AgentSlowInCrowdNode, AgentLeaveTrailNode, AgentFadeWithAgeNode } from './agentRuleSteps';
 export { AgentRideCurveNode } from './agentRideCurve';
 export { AgentRidePathNode } from './agentRidePath';
 
@@ -337,6 +338,7 @@ import { RenderTargetsNode, RenderTargetsPackNode } from './renderTargets';
 import { ReadNeighboursNode } from './readNeighbours';
 import { AgentsGroupNode, AgentInputsNode, AgentOutputNode, AgentStepOutNode, AgentSenseNode, AgentSteerNode, AgentMoveNode, AgentBySpeciesNode, AgentEmitNode, AgentDepositNode, TrailFieldNode, TrailStepOutNode, AgentProbeOutNode, DrawAgentsNode, SlimeMoldPresetNode, ParticlesPresetNode, CurlSmokePresetNode, SoundBurstPresetNode, MultiSlimePresetNode, AntsPresetNode, BoidsPresetNode, StrandsPresetNode, GrowPicturePresetNode, GalaxyPresetNode, MyceliumPresetNode, SandPlatePresetNode } from './agents';
 import { AgentNeighboursNode } from './agentNeighbours';
+import { AgentTurnTowardNode, AgentFollowTrailNode, AgentWanderNode, AgentOrbitNode, AgentAvoidWallsNode, AgentApplyForceNode, AgentDragNode, AgentSlowInCrowdNode, AgentLeaveTrailNode, AgentFadeWithAgeNode } from './agentRuleSteps';
 import { AgentRideCurveNode } from './agentRideCurve';
 import { AgentRidePathNode } from './agentRidePath';
 import { AgentGravityNode, AgentWindNode, AgentCurlNode, AgentAttractNode, AgentVortexNode, AgentFlowNode, AgentSoundKickNode, AgentIntegrateNode, AgentAgeNode, AgentCollideNode, AgentChladniNode, AgentCollideSceneNode, AgentGridOutNode } from './agentForces';
@@ -667,6 +669,16 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   splatModOut: SplatModOutNode,
   agentCollideScene: AgentCollideSceneNode,
   agentNeighbours: AgentNeighboursNode,
+  agentTurnToward: AgentTurnTowardNode,
+  agentFollowTrail: AgentFollowTrailNode,
+  agentWander: AgentWanderNode,
+  agentOrbit: AgentOrbitNode,
+  agentAvoidWalls: AgentAvoidWallsNode,
+  agentApplyForce: AgentApplyForceNode,
+  agentDrag: AgentDragNode,
+  agentSlowInCrowd: AgentSlowInCrowdNode,
+  agentLeaveTrail: AgentLeaveTrailNode,
+  agentFadeWithAge: AgentFadeWithAgeNode,
   agentRideCurve: AgentRideCurveNode,
   agentRidePath: AgentRidePathNode,
   agentGridOut: AgentGridOutNode,

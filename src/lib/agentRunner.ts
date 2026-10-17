@@ -121,6 +121,29 @@ export function settleRestarts(stepped: readonly string[], live: readonly string
 /** Whether a start over is still waiting for group `nodeId` (tests, the card). */
 export const restartPending = (nodeId: string): boolean => restartAll || restartRequests.has(nodeId);
 
+/**
+ * Respawn requests (the Agent Builder's Respawn): every walker of the group born again from its Emit (Born)
+ * at the next step, as the Emit's Burst does, while the trails, the step count and the clock carry on.
+ * Unlike a start over (restartAgents), nothing else is cleared.
+ */
+const respawnRequests = new Set<string>();
+export function respawnAgents(nodeId: string): void { respawnRequests.add(nodeId); }
+/** Whether a respawn is still waiting for group `nodeId` (its rule not compiled yet). */
+export const respawnPending = (nodeId: string): boolean => respawnRequests.has(nodeId);
+/**
+ * A live frame takes group `nodeId`'s respawn request into its schedule state: a pending Burst, so its next step's
+ * birth window is everyone (kit/agentPlan.js agStepWindow). The state textures and the trails are left as they are.
+ */
+export function takeRespawn(s: Pick<AgGroupState, 'burstPending'>, nodeId: string): boolean {
+  if (!respawnRequests.delete(nodeId)) return false;
+  s.burstPending = true;
+  return true;
+}
+/** Whether trail `slug` starts empty this frame: only when a group depositing into it started over (a respawn doesn't). */
+export function trailStartsOver(slug: string, deposits: ReadonlyArray<{ trail: string; group: string }>, restarted: ReadonlySet<string>): boolean {
+  return deposits.some(d => d.trail === slug && restarted.has(d.group));
+}
+
 /** What one listening node (Sound kick, Chladni) has heard so far (kit/agentPlan.js), and its level history as a texture. */
 interface ListenState extends AgListenState { levelTex: THREE.DataTexture }
 /**
@@ -827,6 +850,8 @@ export class AgentRunner {
     for (const e of ready) {
       const g = e.spec;
       const s = targets.group(g);
+      // Respawn (the Agent Builder): born again at the next step, the trails kept.
+      if (o.live) takeRespawn(s, g.nodeId);
       // The schedule (kit/agentPlan.js, shared with web pages): Burst, Start over, the live clock or the offline step.
       const r = agGroupSteps(s, g, this.reader, { live: o.live, time: o.time, cap, restart: o.live && (restartAll || restartRequests.has(g.nodeId)) }, () => {
         targets.restartGroup(s); restarted.add(g.slug);
@@ -847,7 +872,7 @@ export class AgentRunner {
       if (!t.live) continue;
       const ts = targets.trail(t, w, h);
       trailState.set(t.slug, ts);
-      if (this.spec.deposits.some(d => d.trail === t.slug && restarted.has(d.group))) targets.clearTrail(ts);
+      if (trailStartsOver(t.slug, this.spec.deposits, restarted)) targets.clearTrail(ts);
     }
     const bindTrails = () => { for (const [slug, ts] of trailState) u[trailUniform(slug)].value = ts.rt[ts.cur].texture; };
     // A volume (3D) as the picture sees it: summed through its depth into its front view.

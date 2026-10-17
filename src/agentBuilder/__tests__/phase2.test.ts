@@ -128,7 +128,7 @@ describe('kinds of walker (species)', () => {
     s = patchAt(s, 2, readBehaviours(s, 2, kindCards('flock')).cards[0].at, { degrees: 30 });
     expect(readBehaviours(s, 2, kindCards('flock')).cards[0].action).toMatchObject({ degrees: 30 });
     expect(readBehaviours(s, 0, kindCards('flock')).cards[0].action).toMatchObject({ degrees: 12 });
-    expect(gen(s).filter(n => /^Rule 1 · /.test(String(n.params.label))).length).toBe(3);
+    expect(gen(s).filter(n => /_ru_r\d_1$/.test(n.id) && String(n.params.label).startsWith('When ')).length).toBe(3);
     // One kind always stays.
     const one = tpl('boids');
     expect(removeSpecies(one, 0)).toBe(one);
@@ -197,8 +197,10 @@ describe('dragging cards (rule order)', () => {
     const down = reorderCards(s, 0, cards, 0, 1);
     expect(down.species[0].rules.map(r => r.do.map(a => a.kind))).toEqual([['match'], ['separate'], ['cohere', 'wander']]);
     expect(readBehaviours(down, 0, kindCards('flock')).cards.map(c => c.card)).toEqual(['match', 'separate', 'cohere', 'wobble']);
-    // The generated blocks follow the order (a rule block per rule).
-    expect(gen(down).filter(n => /^Rule \d/.test(String(n.params.label))).length).toBe(3);
+    // The generated nodes follow the order (a rule's step nodes per rule, Match heading first).
+    const steps = gen(down).filter(n => /_ru_r1_\d+_a\d+$/.test(n.id));
+    expect(new Set(steps.map(n => n.id.replace(/_a\d+$/, ''))).size).toBe(3);
+    expect(steps.map(n => n.params.label)).toEqual(['Align with neighbours', 'Keep apart', 'Stay together', 'Wander']);
     // Same place: nothing changes.
     expect(reorderCards(s, 0, cards, 1, 1)).toBe(s);
   });

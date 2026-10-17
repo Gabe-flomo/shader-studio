@@ -71,6 +71,7 @@ const NEVER = new Set(['output', 'vec4Output', 'group', 'sceneGroup', 'spaceWarp
   'particlesPreset', 'curlSmokePreset', 'soundBurstPreset',
   'trailStepOut', 'agentProbeOut', 'splatProbeOut', 'agentCollideScene', 'agentGridOut', 'agentNeighbours', 'agentRideCurve', 'agentRidePath', 'multiSlimePreset', 'antsPreset', 'boidsPreset', 'strandsPreset', 'growPicturePreset',
   'galaxyPreset', 'myceliumPreset', 'sandPlatePreset',
+  'agentTurnToward', 'agentFollowTrail', 'agentWander', 'agentOrbit', 'agentAvoidWalls', 'agentApplyForce', 'agentDrag', 'agentSlowInCrowd', 'agentLeaveTrail', 'agentFadeWithAge',
   // Per-splat modifiers (docs/splat-scene.md): they read a modifier program's per-splat globals
   'splatAttributes', 'splatSet', 'splatDissolve', 'splatExplode', 'splatWave', 'splatColor', 'splatCrop', 'splatLook', 'splatPoints', 'splatModOut']);
 const DECL = /^\s*(float|vec[234]|mat[234]|int|bool)\s+([A-Za-z_]\w*)\s*=\s*(.+);\s*$/;
