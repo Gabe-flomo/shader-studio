@@ -1,4 +1,5 @@
 import { playableForPlan } from '../play/planGates';
+import { bandUniforms, useHistBand, type HistBand } from '../lib/histogramBand';
 import { effectivePreviewQuality, usePreviewQuality } from '../lib/previewQuality';
 import { currentPlan, usePlan } from '../lib/plan';
 import { useRef, useEffect, useState, useCallback } from 'react';
@@ -197,6 +198,9 @@ precision mediump float;
 #endif
 uniform sampler2D tInput;
 uniform float u_seed;
+// The histogram's picked band (lib/histogramBand.ts): channel 0 off, 1 luma, 2 r, 3 g, 4 b; lo..hi
+uniform float u_bandCh;
+uniform vec2 u_band;
 varying vec2 vUv;
 float hash(vec2 p) {
   vec3 p3 = fract(vec3(p.xyx) * 0.1031);
@@ -205,6 +209,13 @@ float hash(vec2 p) {
 }
 void main() {
   vec4 c = texture2D(tInput, vUv);
+  if (u_bandCh > 0.5) {
+    vec3 k = clamp(c.rgb, 0.0, 1.0);
+    float v = u_bandCh < 1.5 ? dot(k, vec3(0.299, 0.587, 0.114)) : u_bandCh < 2.5 ? k.r : u_bandCh < 3.5 ? k.g : k.b;
+    bool inside = v >= u_band.x && (v < u_band.y || (u_band.y >= 1.0 && v <= 1.0));
+    // Outside the band: a faint grey of the picture, so the band's pixels stand out in their own colours
+    if (!inside) c.rgb = vec3(dot(k, vec3(0.299, 0.587, 0.114)) * 0.12 + 0.02);
+  }
   vec2 px = gl_FragCoord.xy + fract(u_seed * vec2(0.7548777, 0.5698403)) * 512.0;
   float r1 = hash(px);
   float r2 = hash(px + vec2(0.37, 0.71));
@@ -215,6 +226,13 @@ void main() {
   vec3 amp = clamp(min(c.rgb, 1.0 - c.rgb) * 255.0, 0.0, 1.0);
   gl_FragColor = vec4(clamp(c.rgb + d * amp, 0.0, 1.0), c.a);
 }`.trim();
+
+/** The histogram band on the blit (live frames only; null for recordings and exports). */
+function setBlitBand(mat: THREE.ShaderMaterial, band: HistBand | null) {
+  const u = bandUniforms(band);
+  mat.uniforms.u_bandCh.value = u.ch;
+  (mat.uniforms.u_band.value as THREE.Vector2).set(u.lo, u.hi);
+}
 
 /** The dither blit's per-frame seed, kept small so the shader never sees a huge float. */
 const ditherSeed = (n: number): number => (n % 4096) + 0.5;
@@ -756,7 +774,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     const blitMat   = new THREE.ShaderMaterial({
       vertexShader:   FALLBACK_VERTEX,
       fragmentShader: BLIT_FRAG,
-      uniforms: { tInput: { value: null }, u_seed: { value: 0 } },
+      uniforms: { tInput: { value: null }, u_seed: { value: 0 }, u_bandCh: { value: 0 }, u_band: { value: new THREE.Vector2(0, 1) } },
       depthTest: false, depthWrite: false,
     });
     blitScene.add(new THREE.Mesh(blitGeo, blitMat));
@@ -1107,6 +1125,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       renderer.render(bgScene, camera);
       blitMat.uniforms.tInput.value = scratch.texture;
       blitMat.uniforms.u_seed.value = seed;
+      setBlitBand(blitMat, null); // recordings and exports never show the band
       renderer.setRenderTarget(into);
       renderer.render(blitScene, camera);
       renderer.setRenderTarget(null);
@@ -1172,6 +1191,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         copy: (from, into) => {
           blitMat.uniforms.tInput.value = from.texture;
           blitMat.uniforms.u_seed.value = 0;
+          setBlitBand(blitMat, null); // recordings and exports never show the band
           renderer.setRenderTarget(into);
           renderer.render(blitScene, camera);
         },
@@ -1292,6 +1312,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           // Blit with dithering into 8-bit readback RT
           blitMat.uniforms.tInput.value = picture.texture;
           blitMat.uniforms.u_seed.value = ditherSeed(Math.floor(time * 100.0));
+          setBlitBand(blitMat, null); // recordings and exports never show the band
           renderer.setRenderTarget(exportReadbackRT);
           renderer.render(blitScene, camera);
           renderer.setRenderTarget(null);
@@ -1667,6 +1688,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         echoRing.unshift(echoRing.pop()!);              // oldest slot becomes the newest
         blitMat.uniforms.tInput.value = frameTex;
         blitMat.uniforms.u_seed.value = 0;
+        setBlitBand(blitMat, null); // the echo ring keeps the picture, never the band
         renderer.setRenderTarget(echoRing[0]);
         renderer.render(blitScene, camera);
         renderer.setRenderTarget(null);
@@ -1983,6 +2005,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           pictureSegment('present');
           blitMat.uniforms.tInput.value = writeRT.texture;
           blitMat.uniforms.u_seed.value = ditherSeed(frameCount);
+          setBlitBand(blitMat, useHistBand.getState().band);
           renderer.setRenderTarget(null);
           renderer.render(blitScene, camera);
           gpuTimer.end();
@@ -2008,6 +2031,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           pictureSegment('present');
           blitMat.uniforms.tInput.value = floatRt.texture;
           blitMat.uniforms.u_seed.value = ditherSeed(frameCount);
+          setBlitBand(blitMat, useHistBand.getState().band);
           renderer.setRenderTarget(null);
           renderer.render(blitScene, camera);
           gpuTimer.end();
@@ -2676,6 +2700,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     });
 
     scheduleFrame();
+    // A histogram band picked or cleared: draw again (also while paused)
+    const offBand = useHistBand.subscribe(() => requestRender());
 
     const handleMouseMove = (e: MouseEvent) => {
       const rect = renderer.domElement.getBoundingClientRect();
@@ -2824,6 +2850,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       renderer.domElement.removeEventListener('webglcontextrestored', handleContextRestored);
       if (glContextLost) useNodeGraphStore.getState().setGlContextLost(false);
       renderer.domElement.removeEventListener('mousemove', handleMouseMove);
+      offBand();
       renderer.domElement.removeEventListener('mouseleave', handleMouseLeave);
       window.removeEventListener('pointerdown', handleButtonDown, true);
       window.removeEventListener('pointermove', handleButtonMove, true);

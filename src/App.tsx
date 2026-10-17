@@ -1,4 +1,5 @@
 import { offerGraphExport } from './components/playfile/exportMenus';
+import { useHistBand } from './lib/histogramBand';
 import { openDoBar } from './suggestions/doBarStore';
 import { doBarOrRecipe } from './builders/windows';
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
@@ -247,6 +248,47 @@ function HistogramOverlay({ data }: { data: HistogramData }) {
   };
 
   const channels = (['luma', 'r', 'g', 'b'] as HistChannel[]).filter(ch => active.has(ch));
+  // A band picked on the bars (click a bar, or drag across several): the preview shows only its pixels.
+  // It is for the channel switched on last (L when that is the only one).
+  const band = useHistBand(s => s.band);
+  const setBand = useHistBand(s => s.set);
+  const bandChannel = [...active].pop() ?? 'luma';
+  const bins = data.luma.length;
+  const pick = React.useRef<number | null>(null);
+  const [dragTo, setDragTo] = React.useState<number | null>(null);
+  React.useEffect(() => () => setBand(null), [setBand]);
+  React.useEffect(() => {
+    if (!band) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setBand(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [band, setBand]);
+  // The band follows the channel buttons: switching channels moves it to the new one
+  React.useEffect(() => { if (band && band.channel !== bandChannel) setBand({ ...band, channel: bandChannel }); }, [band, bandChannel, setBand]);
+  const binAt = (e: React.PointerEvent<HTMLDivElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    return Math.min(bins - 1, Math.max(0, Math.floor((e.clientX - r.left) / r.width * bins)));
+  };
+  const onBandDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    pick.current = binAt(e);
+    setDragTo(pick.current);
+  };
+  const onBandUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    const a = pick.current;
+    pick.current = null;
+    setDragTo(null);
+    if (a === null) return;
+    const b = binAt(e);
+    const lo = Math.min(a, b) / bins, hi = (Math.max(a, b) + 1) / bins;
+    // The same band again: clear it
+    if (band && band.channel === bandChannel && Math.abs(band.lo - lo) < 1e-6 && Math.abs(band.hi - hi) < 1e-6) setBand(null);
+    else setBand({ channel: bandChannel, lo, hi });
+  };
+  const shownBand = pick.current !== null && dragTo !== null
+    ? { lo: Math.min(pick.current, dragTo) / bins, hi: (Math.max(pick.current, dragTo) + 1) / bins }
+    : band;
   const allBins = channels.map(ch => data[ch]);
   const globalMax = Math.max(...allBins.flatMap(b => Array.from(b)), 0.001);
 
@@ -282,6 +324,16 @@ function HistogramOverlay({ data }: { data: HistogramData }) {
           </button>
         ))}
         <div style={{ flex: 1 }} />
+        {band ? (
+          <span data-hist-band style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: '9px', fontFamily: 'monospace', color: HIST_CH_COLORS[band.channel], marginRight: 6 }}
+            title="The preview shows only the pixels in this band (Esc or × to show all)">
+            {HIST_CH_LABELS[band.channel]} {band.lo.toFixed(3)}–{band.hi.toFixed(3)}
+            <button type="button" aria-label="Show every pixel again" onClick={() => setBand(null)}
+              style={{ padding: '0 4px', fontSize: '10px', lineHeight: '12px', border: `1px solid ${ctp.surface1}`, borderRadius: 3, background: 'transparent', color: ctp.text, cursor: 'pointer' }}>×</button>
+          </span>
+        ) : hoverInfo === null && (
+          <span style={{ fontSize: '9px', color: ctp.surface2, fontFamily: 'monospace', marginRight: 6 }}>click or drag the bars to show that band</span>
+        )}
         {hoverInfo !== null && (
           <span style={{ fontSize: '9px', color: ctp.text, fontFamily: 'monospace' }}>
             {(hoverInfo.binIdx / (data.luma.length - 1)).toFixed(3)}
@@ -301,10 +353,22 @@ function HistogramOverlay({ data }: { data: HistogramData }) {
 
       {/* Histogram bars — overlapping, one layer per active channel */}
       <div
-        style={{ flex: 1, position: 'relative', cursor: 'crosshair' }}
+        style={{ flex: 1, position: 'relative', cursor: 'crosshair', touchAction: 'none' }}
+        data-hist-bars
         onMouseMove={handleMouseMove}
         onMouseLeave={() => setHoverInfo(null)}
+        onPointerDown={onBandDown}
+        onPointerMove={e => { if (pick.current !== null) setDragTo(binAt(e)); }}
+        onPointerUp={onBandUp}
+        onPointerCancel={() => { pick.current = null; setDragTo(null); }}
       >
+        {/* The picked band (or the one being dragged) */}
+        {shownBand && (
+          <div style={{
+            position: 'absolute', top: 0, bottom: 0, left: `${shownBand.lo * 100}%`, width: `${(shownBand.hi - shownBand.lo) * 100}%`,
+            background: `${HIST_CH_COLORS[bandChannel]}26`, boxShadow: `inset 0 0 0 1px ${HIST_CH_COLORS[bandChannel]}`, borderRadius: 2, pointerEvents: 'none',
+          }} />
+        )}
         {channels.map(ch => (
           <div key={ch} style={{
             position: 'absolute', inset: 0,
