@@ -17,6 +17,7 @@ import { type EditCtx, RuleLines, channelOptionsOf } from '../agentRules/RuleEdi
 import { MuteToggle, MutedTag, MUTED_DIM } from '../builders/MuteToggle';
 import { clampLines } from '../ui/textFit';
 import { removeKeys } from '../builders/removable';
+import { ruleTitle } from '../../agentRules/ruleNames';
 
 export type AdvancedView = 'advanced' | 'all';
 
@@ -72,7 +73,7 @@ export function AdvancedRules({ set, sp, advanced, update, view, onView, intro }
 
 /**
  * One rule as a builder card, folded to its name and sentence until opened: its order (#2: rules run top to bottom),
- * its name (double-click or the pencil to rename; empty goes back to "Rule 2"), on/off; open, move, duplicate, take
+ * its name (double-click or the pencil to rename; empty goes back to the name from what it does, "Die when older than 6 s"), on/off; open, move, duplicate, take
  * away, and its When … Then … lines.
  */
 function AdvancedRuleCard({ i, n, rule, ctx, onChange, onMove, onDuplicate, onRemove, startOpen = false }: {
@@ -83,7 +84,7 @@ function AdvancedRuleCard({ i, n, rule, ctx, onChange, onMove, onDuplicate, onRe
   const [open, setOpen] = useState(startOpen);
   const [naming, setNaming] = useState(false);
   const text = describeRule(ctx.set, ctx.s, rule);
-  const title = rule.name?.trim() || `Rule ${i + 1}`;
+  const title = ruleTitle(ctx.set, ctx.s, rule);
   const commitName = (v: string) => { setNaming(false); const t = v.trim(); if (t !== (rule.name ?? '')) onChange(t ? { ...rule, name: t } : (({ name: _n, ...r }) => r)(rule)); };
   return (
     <section data-card={`rule-${i}`} data-advanced-rule={i} {...removeKeys(onRemove, `rule ${i + 1}`)}
@@ -93,7 +94,7 @@ function AdvancedRuleCard({ i, n, rule, ctx, onChange, onMove, onDuplicate, onRe
           style={{ flexShrink: 0, minWidth: 24, height: 22, marginTop: 1, borderRadius: radius.sm, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', font: `650 11px ${fontFamily.mono}`, color: tk.text.muted, background: tk.bg.field }}>#{i + 1}</span>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, flex: 1 }}>
           {naming ? (
-            <input autoFocus defaultValue={rule.name ?? ''} placeholder={`Rule ${i + 1}`} aria-label="Rule name" data-rule-name-input={i}
+            <input autoFocus defaultValue={rule.name ?? ''} placeholder={ruleTitle(ctx.set, ctx.s, { ...rule, name: undefined })} aria-label="Rule name" data-rule-name-input={i}
               onKeyDown={e => { if (e.key === 'Enter') commitName((e.target as HTMLInputElement).value); if (e.key === 'Escape') { e.stopPropagation(); setNaming(false); } }}
               onBlur={e => commitName(e.target.value)}
               style={{ font: `650 13px ${fontFamily.ui}`, padding: '2px 6px', borderRadius: radius.sm, border: `1px solid ${tk.border.strong}`, background: tk.bg.field, color: tk.text.primary, minWidth: 0 }} />
