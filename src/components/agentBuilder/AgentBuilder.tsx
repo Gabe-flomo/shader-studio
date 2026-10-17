@@ -14,6 +14,7 @@
  * unchanged. Born, the trail's Fades / Spreads and Look write the nodes round the group. Changes
  * apply live: a quarter of a second after you stop, one undo step a burst.
  */
+import { UserPresets } from '../builders/UserPresets';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { GraphNode } from '../../types/nodeGraph';
 import { useTokens } from '../../theme/themeStore';
@@ -42,7 +43,7 @@ import { START_CARDS, type StartCard } from '../../agentBuilder/kinds';
 import { presetsFor } from '../../agentBuilder/presets';
 import { SETTING_HINTS } from '../../agentBuilder/words';
 import { CARD_WORDS, KIND_SECTIONS, MORE_HINTS, type SectionId, isTrailKind, kindCards, sectionWordsOf } from '../../agentBuilder/sections';
-import { type BuilderGroup, applyBuilderPreset, builderGroups, clearableCount, clearGraphForBuilder, discardAgentGroup, endSetupBurst, makeAgentGroup, removeAgentSetup, setSetupParam, setupOf } from '../../agentBuilder/actions';
+import { type BuilderGroup, agentPresetText, applyAgentPresetText, applyBuilderPreset, builderGroups, clearableCount, clearGraphForBuilder, discardAgentGroup, endSetupBurst, makeAgentGroup, removeAgentSetup, setSetupParam, setupOf } from '../../agentBuilder/actions';
 import { BehaviourCard, ChipRow, SettingRow, SliderSetting } from './BehaviourCard';
 import { MuteToggle } from '../builders/MuteToggle';
 import { WalkerDiagram, type BornInfo } from './WalkerDiagram';
@@ -737,6 +738,9 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
       </span>
       <div style={{ display: 'flex', gap: 12 }}>
         {presets.map(p => <PresetCard key={p.key} id={p.key} label={p.label} hint={p.hint} src={thumbs[p.key]} active={preset === p.key} onClick={() => applyPreset(p.key)} />)}
+        {/* Yours: the rules as they are now, saved with a picture of the viewport */}
+        <UserPresets kind="agents" noun="setup" getRecipe={() => agentPresetText(groupId)}
+          onLoad={text => { flush(); const next = applyAgentPresetText(groupId, text, 'your preset'); if (next) { setSet(next); setSp(0); setPreset(null); setLit(null); } }} />
       </div>
     </div>
   );
