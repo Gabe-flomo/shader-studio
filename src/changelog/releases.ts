@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.261',
+    date: '2026-10-17',
+    title: "Agents presets",
+    highlights: [
+      { area: 'Studio', text: "The Agents builder can save your setup as a preset with a picture too; it loads into 2D or 3D groups." },
+    ],
+  },
+  {
     id: '2026.10.260',
     date: '2026-10-17',
     title: "ProRes",
