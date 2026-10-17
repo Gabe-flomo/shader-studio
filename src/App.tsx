@@ -24,6 +24,7 @@ import { MobileIconSegment } from './components/shell/MobileIconSegment';
 import { Button, IconButton } from './components/ui/Button';
 import { ThemeOverrideContext, useTokens } from './theme/themeStore';
 import { AspectPicker, CanvasFullscreenButton, PreviewFooter, PreviewHeader, PreviewQualityPicker, FrameRatePicker } from './components/shell/PreviewChrome';
+import { OverlayButton } from './components/PreviewOverlay';
 import { canvasFrameRef as canvasFrame, exitFullscreen, isFullscreenKey, isTyping, toggleFullscreenTarget, useFullscreen } from './lib/fullscreen';
 import { GuidesToggle } from './components/play/GuidesToggle';
 import { PANEL_WIDTHS, usePlayUi } from './components/play/playUi';
@@ -1492,6 +1493,7 @@ function App() {
               <PreviewHeader>
                 <AspectPicker onPanel />
                 <PreviewQualityPicker onPanel /><FrameRatePicker onPanel />
+                <OverlayButton />
                 <CanvasFullscreenButton plainF={page === 'play'} />
                 {page === 'play' && <GuidesToggle />}
                 {page === 'play' && <SplitButton />}

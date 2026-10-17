@@ -20,6 +20,7 @@ import { AspectPicker, PreviewQualityPicker, FrameRatePicker, CanvasFullscreenBu
 import { MobilePreviewPill } from './MobilePreviewPill';
 import { PhoneFullscreenChrome } from './PhoneFullscreen';
 import { IconButton } from '../ui/Button';
+import { OverlayButton } from '../PreviewOverlay';
 import { openRecord, usePreviewHost } from '../../lib/previewHost';
 import { clampCanvasWidth, type PageCanvasPage, usePageCanvas } from './pageCanvasStore';
 
@@ -106,6 +107,7 @@ export function PageCanvas({ page, tools, overlay, idleHint = 'Hover for colour'
           {tools && <span style={{ width: 8, flexShrink: 0 }} />}
           <AspectPicker onPanel />
           <PreviewQualityPicker onPanel /><FrameRatePicker onPanel />
+          <OverlayButton />
           <CanvasFullscreenButton />
           <IconButton icon="record" label="Record a video or take a Snapshot PNG of the picture" size="sm" onClick={openRecord} />
         </PreviewHeader>
