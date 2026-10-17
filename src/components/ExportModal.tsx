@@ -4,6 +4,9 @@ import { recordActivity } from '../files/activity';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { CanvasRecorder } from '../utils/CanvasRecorder';
 import { codecExt, runFfmpegEncode, type FfmpegCodec } from '../utils/ffmpegRecorder';
+import { PRORES_PROFILES, effectiveProResProfile, forceOpaque, formatBytes, proresEstimateBytes, proresNotes, type ProResProfileId } from '../utils/prores';
+import { encodeProResWasm } from '../utils/proresWasm';
+import { licenseUrl, thirdParty } from '../lib/thirdParty';
 import type { OfflineRenderHandle } from './ShaderCanvas';
 import { getGpuLimits, pickRecorderFormat, preferredRecorderFormat, type RecorderFormat } from '../utils/exportLimits';
 import { useTokens } from '../theme/themeStore';
@@ -74,19 +77,22 @@ function ProgressBar({ value }: { value: number }) {
 
 const inTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
-const CODEC_LABELS: Record<FfmpegCodec, string> = {
+/** The desktop's formats; ProRes then picks a profile (utils/prores.ts). */
+type DesktopFormat = 'h264' | 'prores' | 'ffv1';
+
+const CODEC_LABELS: Record<DesktopFormat, string> = {
   h264:   'H.264',
-  prores: 'ProRes 422 HQ',
-  prores4444: 'ProRes 4444',
+  prores: 'ProRes',
   ffv1:   'FFV1 (lossless)',
 };
 
-const CODEC_DESCRIPTIONS: Record<FfmpegCodec, string> = {
+const CODEC_DESCRIPTIONS: Record<DesktopFormat, string> = {
   h264:   'CRF 18 · .mp4 · best compatibility',
-  prores: 'Apple ProRes · .mov · editing master',
-  prores4444: 'With alpha · .mov · After Effects, Premiere, Resolve',
+  prores: 'Apple ProRes · .mov · 4444 keeps alpha',
   ffv1:   'Lossless · .mkv · largest file',
 };
+
+const PRORES_NOTICE = thirdParty('prores-wasm-encoder')!;
 
 // Output sizes. "Preview" is the canvas as shown; the rest are standard
 // short sides (720p, 1080p, 1440p, 2160p) laid out in the preview's shape,
@@ -176,7 +182,11 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
   const phone = usePhoneDialog();
   const previewAspect    = useNodeGraphStore(s => s.previewAspect);
   const setPreviewAspect = useNodeGraphStore(s => s.setPreviewAspect);
-  const [codec, setCodec]           = useState<FfmpegCodec>('h264');
+  const [codec, setCodec]           = useState<DesktopFormat>('h264');
+  // ProRes's profile (desktop and browser); a transparent export uses 4444 unless 4444 XQ is picked.
+  const [proresId, setProresId]     = useState<ProResProfileId>('hq');
+  // Browser (and the desktop's real-time mode): ProRes from the WASM encoder, frame by frame, instead of the recorder / PNGs.
+  const [webProres, setWebProres]   = useState(false);
   const [mode, setMode]             = useState<RecordMode>(inTauri && !external ? 'ffmpeg' : 'mediarecorder');
   // Named after the saved graph ("shader graph" when it isn't saved); rename it here.
   const [filename, setFilename]     = useState(() => recordingBaseName(useNodeGraphStore.getState().currentGraph?.name));
@@ -213,7 +223,9 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
   const savedPathRef = useRef('');
   const [muxing, setMuxing] = useState(false);
   const [withAudio, setWithAudio] = useState(true);
-  const sound = withAudio && tracks.length > 0;
+  // The browser's ProRes encoder (utils/proresWasm.ts) writes no audio track.
+  const wasmProres = webProres && mode === 'mediarecorder' && !external;
+  const sound = withAudio && tracks.length > 0 && !wasmProres;
   const clockSongs = tracks.some(t => t.clock);
   // A take: a recorded performance, rendered frame by frame from where it was recorded.
   const takes = useNodeGraphStore(s => s.play.takes) ?? NO_TAKES;
@@ -268,7 +280,8 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
   // the browser's video encoder. Check each option up front so ones that
   // can't work are disabled with a reason instead of failing silently.
   const [support, setSupport] = useState<Record<string, ScaleSupport> | null>(null);
-  const needsOfflineHandle = mode === 'ffmpeg';
+  // Frame-by-frame paths (FFmpeg, PNGs, browser ProRes) render offline: no recorder format needed.
+  const needsOfflineHandle = mode === 'ffmpeg' || wasmProres || ((transparent || !!take) && mode === 'mediarecorder');
   // Bumped when the preview is resized so output sizes are re-checked.
   const [sizeKey, setSizeKey] = useState('');
 
@@ -335,6 +348,15 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
   }, [support, resId, hiresOk]);
 
   const current = support?.[resId] ?? null;
+
+  // ProRes: the desktop's FFmpeg (transparent always, or picked) or the browser's encoder; its profile and notes.
+  const proresOn = mode === 'ffmpeg' ? (transparent || codec === 'prores') : wasmProres;
+  const proresInfo = effectiveProResProfile(proresId, transparent);
+  const proresEstimate = current ? proresEstimateBytes(proresInfo.id, current.width, current.height, fps, span.length) : 0;
+  const prNotes = proresNotes({ profile: proresId, transparent, ownAlpha, picture, wasm: wasmProres, hasSound: withAudio && tracks.length > 0, estimateBytes: proresEstimate });
+  const ffCodec: FfmpegCodec = proresOn ? proresInfo.ffmpegCodec : codec === 'ffv1' ? 'ffv1' : 'h264';
+  /** A ProRes frame that doesn't keep alpha is opaque (an alpha profile with Transparent off must not carry the shader's stray alpha). */
+  const settleAlpha = (rgba: Uint8Array) => { if (proresOn && !prNotes.keepsAlpha) forceOpaque(rgba); };
 
   const restoreScale = () => {
     playOverlay.stopCompositing();
@@ -514,7 +536,7 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
     const startT = performance.now();
 
     try {
-      const useCodec: FfmpegCodec = transparent ? 'prores4444' : codec;
+      const useCodec: FfmpegCodec = ffCodec;
       const target = await recordingPath(`${filename || 'shader graph'}.${codecExt(useCodec)}`);
       if (!target) { restoreScale(); setState('idle'); return; }
       // The songs mixed for the export's length, from the clock's 0 (where the frames start).
@@ -550,6 +572,7 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
         readPixels: (out, width, height) => {
           if (frameQueue ? planShowsThis(frameQueue) : !playBackground.active()) handleReadPixels(out, width, height);
           playOverlay.compositePixels(out, width, height, frameTime, 1 / fps, firstFrame, { transparent, picture, pointer: applier?.pointer(frameTime), actions: frameActs, seed: applier?.seed, audio: applier?.audio(frameTime) });
+          settleAlpha(out);
           firstFrame = false;
         },
         onProgress: (fraction, frame) => {
@@ -582,14 +605,16 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
     }
   };
 
-  // ── PNG sequence (transparent, frame by frame, in the browser) ─────────────
+  // ── Frame by frame in the browser: a PNG sequence or ProRes ───────────────
   //
-  // The browser's recorder can't keep an alpha channel, so a transparent
-  // export renders each frame offline (exact timing, like FFmpeg), writes it
-  // as a PNG with its alpha, and zips the sequence. After Effects and the
-  // like import it as footage; the song goes in the zip as a WAV beside it.
+  // The browser's recorder can't keep an alpha channel, so a transparent (or
+  // take) export renders each frame offline (exact timing, like FFmpeg). It
+  // either writes each frame as a PNG with its alpha and zips the sequence
+  // (After Effects and the like import it as footage; the song goes in the
+  // zip as a WAV beside it), or hands the frames to the ProRes WASM encoder
+  // (utils/proresWasm.ts: a .mov, 4444 with alpha; no sound).
 
-  const handleStartPngSequence = async () => {
+  const handleStartFrames = async (kind: 'png' | 'prores') => {
     if (!offlineRender) { setErrorMsg('Offline render not available.'); return; }
     if (!current || current.blocked) { setErrorMsg(current?.blocked ?? 'Still checking device limits…'); return; }
     const stale = staleSize();
@@ -606,53 +631,75 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
     const total = Math.max(1, Math.ceil(span.length * fps));
     const applier = take ? takeApplier(take, offlineRender) : null;
     const base = filename || 'shader graph';
-    const digits = Math.max(5, String(total).length);
-    const pixels = new Uint8Array(w * h * 4);
     const queueScratch = new Uint8Array(w * h * 4);
-    const frame = document.createElement('canvas');
-    frame.width = w; frame.height = h;
-    const fx = frame.getContext('2d')!;
     const startT = performance.now();
+    /** Frame `i` into `pixels`: rendered, read back (straight alpha, top row first) and the Play layers laid over it. */
+    const renderInto = async (i: number, pixels: Uint8Array) => {
+      if (abortRef.current) throw new Error('cancelled');
+      const t = span.from + i / fps;
+      const actions = applier?.apply(t) ?? [];
+      const queue = playOverlay.exportQueuePlan(t, i === 0, actions, applier?.seed);
+      await Promise.all([bakedVideos.seek(t), videoEngine.seek(t), timeCubes.settled()]);
+      await Promise.all([depthEngine.seek(), segmentEngine.seek()]);
+      await offlineRender?.settleSplats?.(t);
+      if (queue) { await queueFrame(offlineRender, queue, t, queueScratch); if (planShowsThis(queue)) { renderAtTime(t, { dt: 1 / fps, first: i === 0 }); readPixels(pixels, w, h); } }
+      else if (playBackground.active()) await playBackground.seek(t);
+      else { renderAtTime(t, { dt: 1 / fps, first: i === 0 }); readPixels(pixels, w, h); }
+      await playVideoLayers.seek(t);
+      playOverlay.compositePixels(pixels, w, h, t, 1 / fps, i === 0, { transparent, picture, pointer: applier?.pointer(t), actions, seed: applier?.seed, audio: applier?.audio(t) });
+    };
+    const progress = (done: number) => {
+      setCaptureProgress(done / total);
+      setFrameCount(done);
+      setElapsed((performance.now() - startT) / 1000);
+    };
     try {
-      const { Zip, ZipPassThrough } = await import('fflate');
-      const chunks: Uint8Array[] = [];
-      let zipError: Error | null = null;
-      const zip = new Zip((err, data) => { if (err) zipError = err; else chunks.push(data); });
-      const add = (name: string, bytes: Uint8Array) => { const f = new ZipPassThrough(`${base}/${name}`); zip.add(f); f.push(bytes, true); };
-      for (let i = 0; i < total; i++) {
-        if (abortRef.current) throw new Error('cancelled');
-        const t = span.from + i / fps;
-        const actions = applier?.apply(t) ?? [];
-        const queue = playOverlay.exportQueuePlan(t, i === 0, actions, applier?.seed);
-        await Promise.all([bakedVideos.seek(t), videoEngine.seek(t), timeCubes.settled()]);
-        await Promise.all([depthEngine.seek(), segmentEngine.seek()]);
-        await offlineRender?.settleSplats?.(t);
-        if (queue) { await queueFrame(offlineRender, queue, t, queueScratch); if (planShowsThis(queue)) { renderAtTime(t, { dt: 1 / fps, first: i === 0 }); readPixels(pixels, w, h); } }
-        else if (playBackground.active()) await playBackground.seek(t);
-        else { renderAtTime(t, { dt: 1 / fps, first: i === 0 }); readPixels(pixels, w, h); }
-        await playVideoLayers.seek(t);
-        playOverlay.compositePixels(pixels, w, h, t, 1 / fps, i === 0, { transparent, picture, pointer: applier?.pointer(t), actions, seed: applier?.seed, audio: applier?.audio(t) });
-        const img = fx.createImageData(w, h);
-        img.data.set(pixels);
-        fx.putImageData(img, 0, 0);
-        const png = await new Promise<Blob | null>(r => frame.toBlob(r, 'image/png'));
-        if (!png) throw new Error(`Couldn’t write frame ${i + 1} as a PNG.`);
-        add(`${base}_${String(i).padStart(digits, '0')}.png`, new Uint8Array(await png.arrayBuffer()));
-        setCaptureProgress((i + 1) / total);
-        setFrameCount(i + 1);
-        setElapsed((performance.now() - startT) / 1000);
+      let file: Blob;
+      let name: string;
+      if (kind === 'prores') {
+        file = await encodeProResWasm({
+          width: w, height: h, fps, totalFrames: total, profile: proresInfo,
+          frame: async (i, out) => { await renderInto(i, out); settleAlpha(out); },
+          onProgress: done => { if (!abortRef.current) progress(done); },
+        });
+        progress(total); // the time includes finishing the file
+        name = `${base}.mov`;
+      } else {
+        const digits = Math.max(5, String(total).length);
+        const pixels = new Uint8Array(w * h * 4);
+        const frame = document.createElement('canvas');
+        frame.width = w; frame.height = h;
+        const fx = frame.getContext('2d')!;
+        const { Zip, ZipPassThrough } = await import('fflate');
+        const chunks: Uint8Array[] = [];
+        let zipError: Error | null = null;
+        const zip = new Zip((err, data) => { if (err) zipError = err; else chunks.push(data); });
+        const add = (n: string, bytes: Uint8Array) => { const f = new ZipPassThrough(`${base}/${n}`); zip.add(f); f.push(bytes, true); };
+        for (let i = 0; i < total; i++) {
+          await renderInto(i, pixels);
+          const img = fx.createImageData(w, h);
+          img.data.set(pixels);
+          fx.putImageData(img, 0, 0);
+          const png = await new Promise<Blob | null>(r => frame.toBlob(r, 'image/png'));
+          if (!png) throw new Error(`Couldn’t write frame ${i + 1} as a PNG.`);
+          add(`${base}_${String(i).padStart(digits, '0')}.png`, new Uint8Array(await png.arrayBuffer()));
+          progress(i + 1);
+        }
+        if (sound) {
+          const mix = await mixSpan(span.from, span.length);
+          if (mix) add(`${base}.wav`, wavBytes(mix));
+        }
+        zip.end();
+        if (zipError) throw zipError;
+        file = new Blob(chunks as BlobPart[], { type: 'application/zip' });
+        name = `${base}.zip`;
       }
-      if (sound) {
-        const mix = await mixSpan(span.from, span.length);
-        if (mix) add(`${base}.wav`, wavBytes(mix));
-      }
-      zip.end();
-      if (zipError) throw zipError;
       applier?.release();
       restoreScale();
-      const where = await saveRecording(new Blob(chunks as BlobPart[], { type: 'application/zip' }), `${base}.zip`);
+      const where = await saveRecording(file, name);
       if (!where) { setState('idle'); return; }
       setOutputPath(where);
+      if (kind === 'prores') recordActivity('render', where.split(/[\\/]/).pop());
       setState('done');
     } catch (err) {
       applier?.release();
@@ -665,9 +712,9 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
 
   // ── Unified start/stop ────────────────────────────────────────────────────
 
-  // Transparent in the browser (or the desktop's real-time mode): a PNG sequence.
-  const pngSequence = (transparent || !!take) && mode === 'mediarecorder';
-  const offline = mode === 'ffmpeg' || pngSequence;
+  // Transparent (or a take) in the browser, or the desktop's real-time mode: a PNG sequence, unless ProRes is picked.
+  const pngSequence = (transparent || !!take) && mode === 'mediarecorder' && !wasmProres;
+  const offline = mode === 'ffmpeg' || pngSequence || wasmProres;
 
   const handleStart = () => {
     if ((midiLength || clockSongs) && fromTop && !offline) {
@@ -676,7 +723,8 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
       useNodeGraphStore.getState().setTimePlaying(true);
     }
     if (mode === 'ffmpeg') handleStartFfmpeg();
-    else if (pngSequence) handleStartPngSequence();
+    else if (wasmProres) handleStartFrames('prores');
+    else if (pngSequence) handleStartFrames('png');
     else handleStartMediaRecorder();
   };
 
@@ -776,7 +824,7 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
     : !!canvas && !!current && !current.blocked && !!current.format;
   const blockedScales = support ? RESOLUTIONS.filter(r => support[r.id]?.blocked) : [];
 
-  const ext = pngSequence ? 'zip' : mode === 'ffmpeg' ? codecExt(transparent ? 'prores4444' : codec) : (current?.format?.ext ?? preferred?.ext ?? 'webm');
+  const ext = pngSequence ? 'zip' : wasmProres ? 'mov' : mode === 'ffmpeg' ? codecExt(ffCodec) : (current?.format?.ext ?? preferred?.ext ?? 'webm');
   const resetToIdle = () => { setState('idle'); setCaptureProgress(0); setElapsed(0); setFrameCount(0); setErrorMsg(''); setOutputPath(''); };
 
   // The footer's buttons. On a phone the primary one spans a row of its own and the others
@@ -805,7 +853,7 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
     null, cancelBtn,
   ) : state === 'idle' ? footerRows(
     <Button variant="primary" disabled={!canStart} onClick={handleStart} style={tall}>
-      {mode === 'ffmpeg' ? 'Encode' : pngSequence ? 'Render PNGs' : <><span style={{ width: 8, height: 8, borderRadius: '50%', background: tk.status.danger }} />Start recording</>}
+      {mode === 'ffmpeg' ? 'Encode' : wasmProres ? 'Render ProRes' : pngSequence ? 'Render PNGs' : <><span style={{ width: 8, height: 8, borderRadius: '50%', background: tk.status.danger }} />Start recording</>}
     </Button>,
     <Button icon="camera" disabled={!canvas || nothingShows} onClick={handleScreenshot} title={transparent ? 'A PNG of this moment with its transparency' : undefined} style={wide}>Snapshot PNG</Button>,
     cancelBtn,
@@ -944,9 +992,9 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
                     : picture === 'luma'
                       ? 'Black becomes see-through and light stays: right for glows and particles on black. Dark colours turn faint, so for solid shapes end the graph with Output (RGBA) instead.'
                       : 'Only the Play layers are kept, over nothing: the shader picture is left out.'}
-                  {' '}{mode === 'ffmpeg'
-                    ? 'Saved as ProRes 4444 (.mov), which keeps the alpha.'
-                    : 'Saved as a PNG sequence in a .zip, rendered frame by frame (exact timing). In After Effects: File › Import, pick the first PNG and tick PNG Sequence.'}
+                  {' '}{mode === 'ffmpeg' || wasmProres
+                    ? `Saved as ProRes ${proresInfo.label.replace(' (alpha)', '')} (.mov), which keeps the alpha.`
+                    : 'Saved as a PNG sequence in a .zip, rendered frame by frame (exact timing). In After Effects: File › Import, pick the first PNG and tick PNG Sequence. Or pick ProRes under Format for one .mov.'}
                 </Help>
               ))}
             </Section>}
@@ -963,7 +1011,7 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
                 {take && (
                   <Help>
                     Renders {take.name} frame by frame: the clock from {take.from.toFixed(1)}s for {formatDuration(take.length)}, with every control, MIDI note, mouse move and action as you played them.
-                    {mode === 'ffmpeg' ? '' : ' In the browser that’s a PNG sequence (with the song as a WAV); the desktop app renders it straight to video.'}
+                    {mode === 'ffmpeg' ? '' : wasmProres ? ' In the browser that’s a ProRes .mov, with no sound; the desktop app renders it with its sound.' : ' In the browser that’s a PNG sequence (with the song as a WAV), or ProRes under Format; the desktop app renders it straight to video.'}
                   </Help>
                 )}
                 {liveFeeds && (
@@ -976,29 +1024,27 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
 
             {tracks.length > 0 && (
               <Section label="Sound">
-                <Toggle tall={phone} checked={withAudio} onChange={setWithAudio} label={`Include ${tracks.length === 1 ? `“${tracks[0].label}”` : `${tracks.length} ${tracks.some(t => t.video) ? 'sounds' : 'songs'}: ${tracks.map(t => t.label).join(', ')}`}`} />
+                <Toggle tall={phone} disabled={wasmProres} checked={withAudio && !wasmProres} onChange={setWithAudio} label={`Include ${tracks.length === 1 ? `“${tracks[0].label}”` : `${tracks.length} ${tracks.some(t => t.video) ? 'sounds' : 'songs'}: ${tracks.map(t => t.label).join(', ')}`}`} />
                 <Help>
-                  {pngSequence
+                  {wasmProres
+                    ? prNotes.audioNote ?? ''
+                    : pngSequence
                     ? 'Added to the zip as a WAV, lined up with frame 1.'
                     : mode === 'ffmpeg'
                       ? 'Mixed from the clock’s 0, lined up with the frames.'
                       : 'Recorded as it plays. Songs only: the microphone is never recorded.'}
-                  {hasEngine && (offline
+                  {hasEngine && !wasmProres && (offline
                     ? (take ? ' The Audio engine’s racks are rendered natively from the take’s notes and controls.' : ' The Audio engine plays only what a take recorded: render a take to hear its racks.')
                     : ' The Audio engine’s sound is tapped natively and added to the file when the recording stops.')}
                 </Help>
               </Section>
             )}
 
-            {mode === 'ffmpeg' && transparent && (
+            {mode === 'ffmpeg' && (
               <Section label="Codec">
-                <Help>{CODEC_LABELS.prores4444}: {CODEC_DESCRIPTIONS.prores4444}.</Help>
-              </Section>
-            )}
-            {mode === 'ffmpeg' && !transparent && (
-              <Section label="Codec">
+                {transparent ? <Help>ProRes keeps the alpha: pick 4444 or 4444 XQ below.</Help> : (
                 <div role="radiogroup" aria-label="Codec" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {(['h264', 'prores', 'ffv1'] as FfmpegCodec[]).map(c => {
+                  {(['h264', 'prores', 'ffv1'] as DesktopFormat[]).map(c => {
                     const on = codec === c;
                     return (
                       <button
@@ -1021,6 +1067,50 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
                     );
                   })}
                 </div>
+                )}
+              </Section>
+            )}
+
+            {mode === 'mediarecorder' && !external && (
+              <Section label="Format">
+                <Segmented
+                  fill
+                  tall={phone}
+                  ariaLabel="Format"
+                  value={webProres ? 'prores' : 'default'}
+                  onChange={v => setWebProres(v === 'prores')}
+                  options={[
+                    transparent || take
+                      ? { value: 'default', label: 'PNG sequence', sub: '.zip, frame by frame' }
+                      : { value: 'default', label: 'Real-time', sub: `.${current?.format?.ext ?? preferred?.ext ?? 'webm'}, as it plays` },
+                    { value: 'prores', label: 'ProRes', sub: '.mov, frame by frame' },
+                  ]}
+                />
+              </Section>
+            )}
+
+            {proresOn && (
+              <Section label="ProRes profile" meta={current ? `${formatBytes(proresEstimate)} for ${formatDuration(span.length)}` : undefined}>
+                <Select
+                  ariaLabel="ProRes profile"
+                  height={34}
+                  value={proresInfo.id}
+                  onChange={v => setProresId(v as ProResProfileId)}
+                  options={PRORES_PROFILES.filter(p => !transparent || p.alpha).map(p => ({ value: p.id, label: p.label }))}
+                />
+                <Help>
+                  {prNotes.keepsAlpha ? 'Keeps transparency. ' : ''}
+                  ProRes is large: about {formatBytes(proresEstimate).replace('≈ ', '')} at {displayW}×{displayH}, {fps} fps (a rough guide; busy pictures run bigger).
+                  {wasmProres ? ' Encoded in this browser, frame by frame.' : ''}
+                </Help>
+                {prNotes.warnings.map(w => <Callout key={w.title} tone="warning" title={w.title}>{w.text}</Callout>)}
+                {wasmProres && (
+                  <Help>
+                    Uses {PRORES_NOTICE.name} {PRORES_NOTICE.version} by {PRORES_NOTICE.author} ({PRORES_NOTICE.licence}), loaded only when you render.{' '}
+                    <a href={licenseUrl(PRORES_NOTICE)} target="_blank" rel="noreferrer" style={{ color: 'inherit' }}>Licence</a> ·{' '}
+                    <a href={PRORES_NOTICE.source} target="_blank" rel="noreferrer" style={{ color: 'inherit' }}>Source</a>
+                  </Help>
+                )}
               </Section>
             )}
 
@@ -1095,7 +1185,7 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
               ))}
             </Section>
 
-            {mode === 'mediarecorder' && !pngSequence && (
+            {mode === 'mediarecorder' && !offline && (
               <Section label="Bitrate">
                 <Segmented
                   fill
@@ -1110,7 +1200,7 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
 
             <Section label="File name">
               <Field mono value={filename} onChange={e => setFilename(e.target.value)} placeholder="shader graph" suffix={`.${ext}`} aria-label="File name" />
-              {mode === 'mediarecorder' && <Help>Records in real time and saves when recording stops. A name that’s taken in the folder gets (2), (3)…</Help>}
+              {!offline && <Help>Records in real time and saves when recording stops. A name that’s taken in the folder gets (2), (3)…</Help>}
             </Section>
 
             <Section label="Save to">

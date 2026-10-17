@@ -15,11 +15,14 @@
  *   4. stop_ffmpeg_encode  (closes stdin, waits for FFmpeg to finish)
  */
 
-/** prores4444 keeps the alpha channel (a transparent background). */
-export type FfmpegCodec = 'h264' | 'prores' | 'prores4444' | 'ffv1';
+/**
+ * The desktop's codecs (src-tauri/src/export_codecs.rs). The ProRes ones are its profiles (utils/prores.ts):
+ * 'prores' is 422 HQ; prores4444 and prores4444xq keep the alpha channel (a transparent background).
+ */
+export type FfmpegCodec = 'h264' | 'ffv1' | 'prores_proxy' | 'prores_lt' | 'prores_422' | 'prores' | 'prores4444' | 'prores4444xq';
 
 /** The file extension each codec writes. */
-export const codecExt = (c: FfmpegCodec): string => (c === 'prores' || c === 'prores4444' ? 'mov' : c === 'ffv1' ? 'mkv' : 'mp4');
+export const codecExt = (c: FfmpegCodec): string => (c.startsWith('prores') ? 'mov' : c === 'ffv1' ? 'mkv' : 'mp4');
 
 export interface FfmpegEncodeOptions {
   /** Width in pixels */
