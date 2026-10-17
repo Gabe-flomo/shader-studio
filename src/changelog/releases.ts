@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.246',
+    date: '2026-10-17',
+    title: "Audio in the graph",
+    highlights: [
+      { area: 'Studio', text: "New Audio nodes: Audio Source (test loop, a file or the mic), Band level, Hit (kick, snare, hi-hat triggers), Spectrum, Spectrogram, Waveform." },
+      { area: 'Studio', text: "Hit's Trigger plugs into Envelope and Counter; examples in the new Audio folder. Audio Input is retired (old graphs still work)." },
+    ],
+  },
+  {
     id: '2026.10.245',
     date: '2026-10-17',
     title: "Tidier Segment",
