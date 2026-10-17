@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.251',
+    date: '2026-10-17',
+    title: "Faster exports, live builders",
+    highlights: [
+      { area: 'Studio', text: "Video exports on the desktop send frames as raw bytes: a 1080p frame no longer spends half a second being converted, so exports are far faster." },
+      { area: 'Studio', text: "Agent Builder settings (3D camera, forces, shapes) apply as you drag; built scene groups jump to wired nodes from socket tips; phone 2D builder fix." },
+    ],
+  },
+  {
     id: '2026.10.250',
     date: '2026-10-17',
     title: "Audio Source, opened up",
