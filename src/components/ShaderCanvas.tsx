@@ -70,6 +70,9 @@ import { onRebuild } from '../lib/rebuild';
 import { buildPreviewUniforms } from './previewUniforms';
 import { DataTextureBinder } from '../data/dataTextures';
 import { ValuePreviewRunner, resolvePreviewTarget, type PreviewTarget } from '../lib/nodePreview/valuePreviewRunner';
+import { OverlayRunner } from '../lib/previewOverlay/overlayRunner';
+import { useOverlay } from '../lib/previewOverlay/overlayStore';
+import { PreviewOverlay } from './PreviewOverlay';
 import { useNodePreviewPrefs } from '../lib/nodePreview/showAs';
 import { PreviewValueOverlay } from './PreviewValueOverlay';
 import { REBUILD_TOOLTIP, rebuildWithToast } from './shell/rebuildAction';
@@ -1394,6 +1397,9 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     // a range, slice, grid, arrows… from its real value, read back asynchronously from a small target.
     const pvRunner = new ValuePreviewRunner(renderer, camera, compileQuietly, () => requestRender());
     let pvTarget: PreviewTarget | null = null;
+    // The preview Overlay (PreviewOverlay.tsx): its space / point read back the same way, never drawn here.
+    const ovRunner = new OverlayRunner(renderer, camera, compileQuietly, () => requestRender());
+    const unsubOverlay = useOverlay.subscribe(() => requestRender());
     const pvKeys: unknown[] = [];
     /** The previewed node's value target, recomputed only when something it depends on changed. */
     const previewTarget = (): PreviewTarget | null => {
@@ -2290,6 +2296,13 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           if (!t) pvTarget = null;
         }
 
+        // ── Overlay readback (throttled inside; asynchronous, one in flight; off clears) ──
+        if (!focus) {
+          ovRunner.sample(fragmentShaderRef.current, vertexShaderRef.current, material,
+            renderer.domElement.width || 1, renderer.domElement.height || 1, !dynamic,
+            useNodeGraphStore.getState().nodeOutputVarMap, fsDeclares);
+        }
+
         // ── Preview scope: waveform + upstream probes when 👁 is active (throttled like scopes) ──
         const previewId = previewNodeIdRef.current;
         if (previewId && !focus && (frameCount % PROBE_SAMPLE_EVERY === 0 || !dynamic)) {
@@ -2587,6 +2600,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       for (const t of costPassRts.values()) t.dispose();
       costPassRts.clear();
       pvRunner.reset();
+      ovRunner.reset();
       passTargets?.dispose(); offlinePassTargets?.dispose(); offlinePassTargets = null;
       agentTargets?.dispose(); offlineAgentTargets?.dispose(); offlineAgentTargets = null;
       // Textures: each is uploaded again the next time it's drawn.
@@ -2794,6 +2808,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       clockAtTeardown = virtualTime;
       unregisterRebuild();
       unsubRender();
+      unsubOverlay();
       unsubFrameRate();
       unsubWake();
       unsubBackground();
@@ -2835,6 +2850,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       scopeMatCache.forEach(disposeProbeMat);
       previewScopeMatCache.forEach(disposeProbeMat);
       pvRunner.dispose();
+      ovRunner.dispose();
       pingPongA.current?.dispose();
       pingPongB.current?.dispose();
       sceneRef.current = null;
@@ -3134,6 +3150,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         <CompareHandle />
         {/* The eye preview's "Show as" key, arrows and slice plot (docs/node-previews.md). */}
         <PreviewValueOverlay />
+        {/* The Overlay button's grid / position marker (PreviewOverlay.tsx): DOM only, never exported. */}
+        <PreviewOverlay />
       </div>
     </div>
   );
