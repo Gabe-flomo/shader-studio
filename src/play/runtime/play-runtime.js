@@ -574,6 +574,7 @@ void main() {
       hasSound: !!(inner && inner.hasSound),
       sound(audible) { carry.sound = !!audible; call('sound')(audible); },
       usesCamera: !!(inner && inner.usesCamera),
+      audioTools: call('audioTools'),
       setScript(layerId, code) { if (typeof layerId === 'string' && typeof code === 'string') carry.scripts.set(layerId, code); call('setScript')(layerId, code); },
       still: call('still'),
       programs: call('programs'),
