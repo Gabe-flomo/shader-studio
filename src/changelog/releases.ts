@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.245',
+    date: '2026-10-17',
+    title: "Tidier Segment",
+    highlights: [
+      { area: 'Studio', text: "Segment Objects shows the kinds it finds as chips; + Add opens a short grouped list instead of twenty chips at once." },
+    ],
+  },
+  {
     id: '2026.10.244',
     date: '2026-10-17',
     title: "Show a band",
