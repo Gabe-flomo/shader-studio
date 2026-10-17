@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.242',
+    date: '2026-10-17',
+    title: "Overlay",
+    highlights: [
+      { area: 'Studio', text: "Preview Overlay: see any space's grid with its real values over the picture (UV, pixels, warped), with a Warp blend from plain to warped." },
+      { area: 'Studio', text: "Overlay Position: mark a point like the Mouse in any space, with its (x, y) there, and an arrow when it is off-screen." },
+    ],
+  },
+  {
     id: '2026.10.241',
     date: '2026-10-17',
     title: "Pictures",
