@@ -17,6 +17,7 @@ vi.hoisted(() => {
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { useNodeGraphStore } from '../../../store/useNodeGraphStore';
+import { useCardFolds } from '../../../agentBuilder/cardFolds';
 import { useBuilderWindows } from '../../../builders/windows';
 import { groupRules } from '../../../agentRules/apply';
 import { AgentBuilder } from '../AgentBuilder';
@@ -30,6 +31,8 @@ afterEach(() => { for (const m of mounted.splice(0)) { act(() => m.root.unmount(
 const $ = (sel: string) => document.body.querySelector(sel);
 const $$ = (sel: string) => [...document.body.querySelectorAll(sel)];
 const click = (el: Element | null) => { expect(el).toBeTruthy(); act(() => { (el as HTMLElement).click(); }); };
+/** Open a folded card (cards past a section's first start folded: agentBuilder/cardFolds.ts). */
+const unfold = (key: string) => { const b = document.body.querySelector(`[data-card-fold="${key}"]`); if (b?.getAttribute('aria-expanded') === 'false') click(b); };
 const menuItem = (text: string) => $$('[role="menuitem"]').find(b => b.textContent?.startsWith(text)) ?? null;
 const group = () => useNodeGraphStore.getState().nodes.find(n => n.type === 'agentsGroup');
 const type = (el: Element | null, value: string) => {
@@ -43,6 +46,7 @@ const type = (el: Element | null, value: string) => {
 
 beforeEach(() => {
   localStorage.clear();
+  useCardFolds.setState({ open: {} });
   Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1440 });
   useNodeGraphStore.setState({ nodes: [], activeGroupPath: [], selectedNodeId: null, selectedNodeIds: [] });
   useBuilderWindows.setState({ gridRules: null, agentRules: null, agentBuilder: null, recipe: null });
@@ -120,6 +124,7 @@ describe('the Memory section', () => {
     expect($('[data-studio-section="advanced"] [data-studio-summary]')?.textContent).toBe('every rule as lines');
     click($('[data-studio-section="senses"]'));
     expect($$('[data-card-slot]').map(x => x.getAttribute('data-card-slot'))).toEqual(['senses#1']);
+    unfold('senses#1');
     expect($$('[data-only-when-chip]').map(x => x.textContent)).toEqual(expect.arrayContaining([expect.stringContaining('carrying is off'), expect.stringContaining('carrying is on')]));
     click($('[data-studio-section="memory"]'));
     expect($$('[data-memory]').map(x => x.getAttribute('data-memory'))).toEqual(['carrying', 'away']);

@@ -47,6 +47,7 @@ import { MuteToggle } from '../builders/MuteToggle';
 import { WalkerDiagram, type BornInfo } from './WalkerDiagram';
 import { KindDiagram, OnlyWhenOverlay } from './KindDiagram';
 import { SectionCards } from './SectionCards';
+import { cardFoldKey, cardIsOpen, useCardFolds } from '../../agentBuilder/cardFolds';
 import { OnlyWhenLine } from './OnlyWhenLine';
 import { KindChips } from './KindChips';
 import { SpeciesSpotlight } from './SpeciesSpotlight';
@@ -359,6 +360,9 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
     return () => clearTimeout(t);
   }, [set.species.length, groupId]);
 
+  // Folded cards (agentBuilder/cardFolds.ts): Moving's Flow field is a second card, folded until opened.
+  const folds = useCardFolds(st => st.open);
+  const setFold = useCardFolds(st => st.set);
   const s = Math.min(sp, set.species.length - 1);
   const cards = useMemo(() => readCards(set, s), [set, s]);
   const behaviours = useMemo(() => readBehaviours(set, s, kindCards(kind)), [set, s, kind]);
@@ -508,7 +512,7 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
     const list = cards.extras.filter(c => ids.includes(c.card));
     if (!list.length) return null;
     return <SectionCards section={{ id: current, cards: [] }} all={[]} extras={list} set={set} sp={s} update={update} cardsFor={kindCards(kind)}
-      focusCard={focusCard} hotCard={focus.card} onFocusSetting={onFocusSetting} d3={d3} />;
+      focusCard={focusCard} hotCard={focus.card} onFocusSetting={onFocusSetting} d3={d3} firstOpen={false} />;
   };
   const trailTimes = (c: RuleCard) => {
     const at = cards.at[c];
@@ -567,7 +571,8 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
   );
   // The flow field (Follow a flow field, curl noise as a force): its size and how fast it changes. Particles have it on their Curl card.
   const flowCard = usesFlow(set) && kind !== 'particles' ? (
-    <BehaviourCard id="flow" picture="curl" title="Flow field" hint="The curl-noise currents that Follow a flow field turns along." summary={`eddies ${r3(set.flow.size)} · changes ${r3(set.flow.evolve)}`}>
+    <BehaviourCard id="flow" picture="curl" title="Flow field" hint="The curl-noise currents that Follow a flow field turns along." summary={`eddies ${r3(set.flow.size)} · changes ${r3(set.flow.evolve)}`}
+      open={cardIsOpen(folds[cardFoldKey('moving', 'flow')], 1)} onOpen={o => setFold(cardFoldKey('moving', 'flow'), o)}>
       <SliderSetting id="flowSize" label="Eddies" hint={MORE_HINTS.flowSize} value={set.flow.size} min={0.2} max={4} step={0.05} onFocus={onFocusSetting} onChange={v => update(setFlow(set, { size: v }))} />
       <SliderSetting id="flowEvolve" label="Changes" hint={MORE_HINTS.flowEvolve} value={set.flow.evolve} min={0} max={1} step={0.01} onFocus={onFocusSetting} onChange={v => update(setFlow(set, { evolve: v }))} />
     </BehaviourCard>
@@ -615,7 +620,7 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
     const def = sections.find(x => x.id === id)!;
     return (
       <SectionCards section={def} all={behaviours.cards} set={set} sp={s} update={update} cardsFor={kindCards(kind)}
-        focusCard={focusCard} hotCard={focus.card} onFocusSetting={onFocusSetting} only={only} d3={d3}
+        focusCard={focusCard} hotCard={focus.card} onFocusSetting={onFocusSetting} only={only} d3={d3} firstOpen={!intro}
         intro={<>{sectionHeader(id)}{intro}</>} />
     );
   };

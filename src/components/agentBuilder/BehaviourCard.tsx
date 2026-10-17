@@ -2,7 +2,8 @@
  * The Agent Builder's behaviour cards (docs/agent-builder.md): a picture, a plain name with its
  * one-line hint on hover, a mute switch where the behaviour can be left out (the builders' shared
  * MuteToggle: a muted card is its rule switched off, so the build leaves it out), two or three settings,
- * a folded "More" for the rest, and "Learn more" (the field guide's paragraph, retold).
+ * a folded "More" for the rest, and "Learn more" (the field guide's paragraph, retold). A card given
+ * `onOpen` folds to its one-line head ("Gravity · 0.4 down", agentBuilder/cardFolds.ts).
  *
  * Settings tell the viewport which one is under the pointer or being dragged (`onFocus`), so its
  * diagram lights that part.
@@ -17,6 +18,7 @@ import { BuilderSlider } from '../builders/BuilderSlider';
 import { fineUnit } from '../ui/rulerMath';
 import { NEST_INDENT, nestedSectionStyle } from '../ui/nesting';
 import { removeKeys } from '../builders/removable';
+import { foldedLine } from '../../agentBuilder/cardFolds';
 
 export type CardPicture = 'born' | 'senses' | 'turning' | 'moving' | 'trail' | 'advanced'
   | 'gravity' | 'wind' | 'curl' | 'field' | 'attract' | 'drag' | 'home' | 'fade' | 'die' | 'life' | 'look' | 'neighbours'
@@ -135,7 +137,7 @@ export function CardGlyph({ kind, size = 40 }: { kind: CardPicture; size?: numbe
   );
 }
 
-export function BehaviourCard({ id, picture, title, hint, summary, learn, guide, on, onToggle, onSolo, children, more, footer, handle, onlyWhen, onRemove, hot = false }: {
+export function BehaviourCard({ id, picture, title, hint, summary, learn, guide, on, onToggle, onSolo, children, more, footer, handle, onlyWhen, onRemove, hot = false, open, onOpen }: {
   id: string; picture: CardPicture; title: string; hint: string; summary?: string;
   learn?: string; guide?: string;
   /** The card's switch (absent: the behaviour is always part of the walker). */
@@ -154,25 +156,42 @@ export function BehaviourCard({ id, picture, title, hint, summary, learn, guide,
   onRemove?: () => void;
   /** Its diagram is the one drawn (pointed at). */
   hot?: boolean;
+  /**
+   * Foldable (with `onOpen`): open shows everything, folded only its head with the one-line summary
+   * (agentBuilder/cardFolds.ts). Without `onOpen` the card is always open.
+   */
+  open?: boolean;
+  onOpen?: (open: boolean) => void;
 }) {
   const tk = useTokens();
   const [learnOpen, setLearnOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const off = on === false;
+  const foldable = !!onOpen;
+  const folded = foldable && open === false;
   return (
-    <section data-card={id} data-card-on={on === undefined ? undefined : String(on)} data-muted={off || undefined} {...removeKeys(onRemove, title)}
-      style={{ outline: 'none', display: 'flex', flexDirection: 'column', gap: 12, padding: 14, borderRadius: radius.card, background: tk.bg.panel, boxShadow: `inset 0 0 0 ${hot ? 1.5 : 1}px ${hot ? alpha(tk.accent.base, 0.55) : tk.border.default}` }}>
+    <section data-card={id} data-card-on={on === undefined ? undefined : String(on)} data-muted={off || undefined} data-card-folded={foldable ? String(folded) : undefined} {...removeKeys(onRemove, title)}
+      style={{ outline: 'none', display: 'flex', flexDirection: 'column', gap: 12, padding: folded ? '8px 12px' : 14, borderRadius: radius.card, background: tk.bg.panel, boxShadow: `inset 0 0 0 ${hot ? 1.5 : 1}px ${hot ? alpha(tk.accent.base, 0.55) : tk.border.default}` }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         {handle}
-        <span style={{ display: 'flex', ...(off ? MUTED_DIM : {}) }}><CardGlyph kind={picture} /></span>
-        <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, flex: 1 }}>
-          <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+        {foldable && (
+          <button type="button" data-card-fold={id} aria-expanded={!folded} aria-label={folded ? `Open ${title}` : `Fold ${title} to one line`} title={folded ? `Open ${title}` : `Fold ${title} to one line`}
+            onClick={() => onOpen!(folded)}
+            style={{ width: 20, height: 24, marginRight: -4, padding: 0, border: 0, borderRadius: 6, background: 'none', color: tk.text.faint, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Icon name={folded ? 'chevR' : 'chevD'} size={13} />
+          </button>
+        )}
+        <span style={{ display: 'flex', ...(off ? MUTED_DIM : {}) }} onClick={foldable ? () => onOpen!(folded) : undefined}><CardGlyph kind={picture} size={folded ? 28 : 40} /></span>
+        {/* Folded: one line, the name then what it does ("Gravity · 0.4 down"); a click on it opens the card. */}
+        <span title={folded ? foldedLine(title, summary, !off) : undefined} onClick={folded ? () => onOpen!(true) : undefined}
+          style={{ display: 'flex', flexDirection: folded ? 'row' : 'column', alignItems: folded ? 'baseline' : undefined, gap: folded ? 6 : 2, minWidth: 0, flex: 1, cursor: folded ? 'pointer' : undefined }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, flexShrink: 0 }}>
             <Tooltip label={title} description={hint} placement="bottom">
-              <b style={{ fontSize: 14, fontWeight: 650, cursor: 'help' }}>{title}</b>
+              <b style={{ fontSize: folded ? 13 : 14, fontWeight: 650, cursor: folded ? 'pointer' : 'help' }}>{title}</b>
             </Tooltip>
             {off && onToggle && <MutedTag />}
           </span>
-          {summary && <span data-card-summary style={{ fontSize: 11.5, color: tk.text.muted, fontVariantNumeric: 'tabular-nums', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{summary}</span>}
+          {summary && <span data-card-summary style={{ fontSize: 11.5, color: tk.text.muted, fontVariantNumeric: 'tabular-nums', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{folded ? `· ${summary}` : summary}</span>}
         </span>
         {onToggle && <span data-card-switch={id}><MuteToggle muted={off} onToggle={() => onToggle(off)} onSolo={onSolo} what={title} /></span>}
         {onRemove && (
@@ -182,6 +201,7 @@ export function BehaviourCard({ id, picture, title, hint, summary, learn, guide,
           </button>
         )}
       </div>
+      {!folded && <>
       {children && <div style={{ display: 'flex', flexDirection: 'column', gap: 12, ...(off ? MUTED_DIM : {}) }}>{children}</div>}
       {onlyWhen}
       {more && (
@@ -206,6 +226,7 @@ export function BehaviourCard({ id, picture, title, hint, summary, learn, guide,
           </>}
         </div>
       )}
+      </>}
     </section>
   );
 }

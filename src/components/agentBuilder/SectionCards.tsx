@@ -27,21 +27,22 @@ import { BehaviourCard, SettingRow, SliderSetting, type CardPicture } from './Be
 import { OnlyWhenLine } from './OnlyWhenLine';
 import { FieldSettings, type FieldWhere } from './FieldCard';
 import { fieldName } from '../../agentRules/fields';
+import { cardFoldKey, cardIsOpen, directionWord, useCardFolds } from '../../agentBuilder/cardFolds';
 
 type Act<K extends RuleAction['kind']> = Extract<RuleAction, { kind: K }>;
 const n = (v: number, d = 2) => String(Math.round(v * 10 ** d) / 10 ** d);
 
-/** A card's one-line summary under its name. */
+/** A card's one-line summary under its name (and its folded line: "Gravity · 0.4 down"). */
 export function cardSummary(c: CardRead): string {
   const a = c.action;
   switch (a.kind) {
     case 'force': {
-      if (a.field === 'gravity' || a.field === 'wind') return `${n(a.strength)} toward ${n(a.angle ?? (a.field === 'gravity' ? -90 : 0), 0)}°`;
+      if (a.field === 'gravity' || a.field === 'wind') return `${n(a.strength)} ${directionWord(a.angle ?? (a.field === 'gravity' ? -90 : 0))}`;
       if (a.field === 'curl') return `strength ${n(a.strength)}`;
       return `${a.strength < 0 ? 'pushes away' : 'pulls in'} ${n(Math.abs(a.strength))} · ${a.field === 'mouse' ? 'the mouse' : `(${n(a.x ?? 0)}, ${n(a.y ?? 0)})`}`;
     }
     case 'field': return `${fieldName(a.spec)} · ${a.grip ? 'rides it' : 'a force'}`;
-    case 'drag': return `loses ${n(a.amount)} a second`;
+    case 'drag': return `${n(a.amount)} /s`;
     case 'home': return `spring ${n(a.strength)} · after ${n(a.delay ?? 0, 1)} s`;
     case 'fade': return `black after ${n(a.seconds, 1)} s`;
     case 'die': return c.when?.kind === 'age' && c.when.cmp === '>' ? `at ${n(c.when.seconds)} s old` : c.when ? 'when its only when holds' : 'at once (give it an only when)';
@@ -57,7 +58,7 @@ export function cardSummary(c: CardRead): string {
   }
 }
 
-export function SectionCards({ section, all, set, sp, update, focusCard, hotCard, onFocusSetting, intro, cardsFor, only, d3 = false, extras }: {
+export function SectionCards({ section, all, set, sp, update, focusCard, hotCard, onFocusSetting, intro, cardsFor, only, d3 = false, extras, firstOpen = true }: {
   section: SectionDef;
   /** Every card of the kind (reading order). */
   all: readonly CardRead[];
@@ -76,15 +77,33 @@ export function SectionCards({ section, all, set, sp, update, focusCard, hotCard
   d3?: boolean;
   /** Show just these cards (trail followers' extra cards, a second Senses gated by a memory): no + chips. */
   extras?: readonly CardRead[];
+  /**
+   * The first card is the section's primary one and starts open (agentBuilder/cardFolds.ts); false when the
+   * section's own settings card (`intro`'s What it sees, Lives for) is the primary and every behaviour card starts folded.
+   */
+  firstOpen?: boolean;
 }) {
   const tk = useTokens();
   const cards = extras ?? all.filter(c => section.cards.includes(c.card));
+  const folds = useCardFolds(st => st.open);
+  const setFold = useCardFolds(st => st.set);
+  const foldKey = (c: CardRead) => cardFoldKey(section.id, c.key);
+  const isOpen = (c: CardRead, i: number) => !!only || cardIsOpen(folds[foldKey(c)], i, firstOpen);
   const missing = extras ? [] : section.cards.filter(id => !cards.some(c => c.card === id));
   const [drag, setDrag] = useState<{ from: number; over: number } | null>(null);
   const move = (i: number, j: number) => update(reorderCards(set, sp, cards, i, j));
   return (
     <div data-section-cards={section.id} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {!only && intro}
+      {!only && cards.length > 1 && (
+        <span data-card-folds style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginBottom: -6 }}>
+          {([['open', 'Open all', true], ['fold', 'Fold all', false]] as const).map(([k, label, o]) => (
+            <button key={k} type="button" data-card-folds-all={k} onClick={() => setFold(cards.map(foldKey), o)}
+              disabled={cards.every((c, i) => isOpen(c, i) === o)}
+              style={{ padding: 0, border: 0, background: 'none', cursor: 'pointer', color: tk.text.muted, font: `600 11px ${fontFamily.ui}`, opacity: cards.every((c, i) => isOpen(c, i) === o) ? 0.4 : 1 }}>{label}</button>
+          ))}
+        </span>
+      )}
       {cards.map((c, i) => {
         if (only && c.key !== only) return null;
         const words = CARD_WORDS[c.card];
@@ -109,7 +128,7 @@ export function SectionCards({ section, all, set, sp, update, focusCard, hotCard
             style={{ position: 'relative', opacity: drag?.from === i ? 0.45 : 1 }}>
             {line && <span style={{ position: 'absolute', left: 8, right: 8, [drag!.from < i ? 'bottom' : 'top']: -7, height: 3, borderRadius: 2, background: tk.accent.base }} />}
             <BehaviourCard id={c.key} picture={c.card as CardPicture} title={words.title} hint={words.hint} summary={cardSummary(c)}
-              hot={hotCard === c.key} handle={handle}
+              hot={hotCard === c.key} handle={handle} open={isOpen(c, i)} onOpen={only ? undefined : o => setFold(foldKey(c), o)}
               on={c.on} onToggle={on => update(setOnAt(set, sp, c.at, on))}
               onSolo={cards.length > 1 ? () => update(soloCard(set, sp, cardsFor, cards.map(x => x.key), c.key)) : undefined}
               onRemove={() => update(removeAt(set, sp, c.at))}
@@ -126,7 +145,7 @@ export function SectionCards({ section, all, set, sp, update, focusCard, hotCard
       {!only && missing.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
           {missing.map(id => (
-            <button key={id} type="button" data-card-add={id} title={CARD_WORDS[id].hint} onClick={() => update(addCard(set, sp, id, cardsFor).set)}
+            <button key={id} type="button" data-card-add={id} title={CARD_WORDS[id].hint} onClick={() => { setFold(cardFoldKey(section.id, `${id}#0`), true); update(addCard(set, sp, id, cardsFor).set); }}
               style={{ display: 'inline-flex', alignItems: 'center', gap: 5, height: 28, padding: '0 10px 0 8px', border: `1px dashed ${tk.border.default}`, borderRadius: 999, background: 'none', cursor: 'pointer', color: tk.text.secondary, font: `500 12px ${fontFamily.ui}` }}>
               <Icon name="plus" size={12} />{CARD_WORDS[id].title}
             </button>

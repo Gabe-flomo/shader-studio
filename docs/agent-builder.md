@@ -201,6 +201,12 @@ Every behaviour card that can be left out has a mute button in its header, the s
 - Each mute (or solo) is one undo step, and it is saved with the group, so it is still muted when the builder is opened again.
 - **Text:** a muted rule prints with `@off` in the agents dialect, as before. The builders' word `muted` (a bare `muted` at the end of the rule, or `@muted`) reads as `@off` too, and prints back as `@off`.
 
+## Folding cards
+
+Behaviour cards fold to one line: a chevron, the picture, the name and what it does with its key numbers ("Gravity · 0.4 down", "Drag · 2 /s"), the mute and ×. Collapsed by default, as the app's other editors are: a section's first card starts open and the others folded; in Neighbours and Life the section's own settings card (What it sees, Lives for) is the open one and every behaviour card starts folded; a trail follower's extra cards and Moving's Flow field start folded. **Open all / Fold all** sits over a section with more than one card, and a card just added (+ Gravity) opens. Focus shows its card open. What you open or fold is remembered per section and card (`forces:gravity#0`), between openings and (where the browser allows) between sessions. Folding is UI only: nothing in the rules changes.
+
+Files: `src/agentBuilder/cardFolds.ts` (the start rule, the remembered state, the folded line), `BehaviourCard.tsx` (`open` / `onOpen`), `SectionCards.tsx` (`cardSummary`, `directionWord`).
+
 ## Dragging cards
 
 In sections where order matters (Forces, Turning, Orbit, Orbiters' Neighbours) each card has a grip. Drag it to another place, or press ↑ / ↓ on it. The card's action moves into a rule of its own just before (or after) the card it is dropped on, and a rule shared with other cards is split there (`moveCard`, `reorderCards`).
