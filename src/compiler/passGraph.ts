@@ -51,6 +51,7 @@ import { MEMORY_PASS_ID, expandMemory, isMemoryNode } from './memoryExpand';
 import { expandOpticalFlow, isOpticalFlow } from './opticalFlowExpand';
 import { PROBE_PASS_ID, expandProbes, expandTextProbes, isProbe, pinUvGlsl, textNeedsProbe } from './probeExpand';
 import { SHADER_TEXTURE_TYPE } from '../nodes/definitions/shaderTexture';
+import { expandSmoothDof } from './smoothDofExpand';
 
 export const PASS_TYPE = 'pass';
 /** Most Pass nodes in one graph. */
@@ -209,7 +210,8 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
       opened = { nodes: more.nodes, groups: new Map([...opened.groups, ...more.groups]) };
     }
     // Grid Rules nodes: each opened into its board Pass and step (compiler/gridRulesExpand.ts); without one, unchanged.
-    const gridOnly = expandGridRules(opened.nodes);
+    // March Camera Lens: Smooth: the picture into a hidden Pass with its CoC, then the gather (compiler/smoothDofExpand.ts).
+    const gridOnly = expandGridRules(expandSmoothDof(opened.nodes));
     // Curve Trace in Draw: Beam: each opened into its screen Pass and step (compiler/curveBeamExpand.ts); without one, unchanged.
     const beams = expandCurveBeams(gridOnly.nodes);
     // Feedback (texture): each opened into its step and buffer Pass (compiler/feedbackExpand.ts); without one, unchanged.

@@ -314,6 +314,7 @@ import {
 import { GridUVNode, PixelateNode, DotMaskNode, SdfMaskNode, LumaRadiusNode, RGBToCMYKNode, CMYKHalftoneNode } from './halftone';
 import { GpuParticlesNode } from './gpuParticles';
 import { BlurStageNode } from './blurStage';
+import { LensDofStageNode } from './lensDof';
 import { RadialFastBlurNode, RadialFastBlurStageNode } from './radialFastBlur';
 import { ChromaLensNode } from './chromaLens';
 import { DeepGlowTextureNode, DeepGlowTextureStageNode } from './deepGlow';
@@ -596,6 +597,8 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   shaderTexture: ShaderTextureNode,
   shaderTextureOutput: ShaderTextureOutputNode,
   blurStage: BlurStageNode,
+  // March Camera Lens: Smooth (compiler/smoothDofExpand.ts): its CoC and gather
+  lensDofStage: LensDofStageNode,
   radialFastBlur: RadialFastBlurNode,
   radialFastBlurStage: RadialFastBlurStageNode,
   // Grid Rules (docs/grid-rules.md): a cellular simulation in one node, and the step the compiler makes of it

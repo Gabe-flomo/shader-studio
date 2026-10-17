@@ -24,6 +24,7 @@ import { generateFragmentShader } from './shaderAssembler';
 import { compilePassGraph, hasPassNode } from './passGraph';
 import { hasAgentsNode } from './agentGraph';
 import { hasHiddenBlur } from './blurPasses';
+import { hasSmoothDof } from './smoothDofExpand';
 import { compileSplatProbes, hasSplatScene, pictureGraphOf } from './splatGraph';
 import { resolveSendReceive } from './sendReceive';
 
@@ -65,7 +66,8 @@ function compileProgram(graph: NodeGraph): CompilationResult {
   // several programs. Only graphs that have one take this branch; everything below is the
   // single-program compile, unchanged.
   // A Smooth / Bloom-chain Blur or Glow (texture) adds hidden passes of its own (compiler/hiddenBlurs.ts).
-  if (hasPassNode(graph.nodes) || hasAgentsNode(graph.nodes) || hasHiddenBlur(graph.nodes)) return compilePassGraph(graph);
+  // A March Camera with Lens: Smooth adds a hidden Pass of its own (compiler/smoothDofExpand.ts).
+  if (hasPassNode(graph.nodes) || hasAgentsNode(graph.nodes) || hasHiddenBlur(graph.nodes) || hasSmoothDof(graph.nodes)) return compilePassGraph(graph);
   try {
     const { nodes } = graph;
 
