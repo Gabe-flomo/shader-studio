@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.250',
+    date: '2026-10-17',
+    title: "Audio Source, opened up",
+    highlights: [
+      { area: 'Studio', text: "Audio Source has File and Mic tabs and a spectrum on its card; Open it to trim the sound and drag frequency bands onto the spectrum." },
+      { area: 'Studio', text: "Each band sends out a value, a trigger (a kick, a snare) or both, as its own output: Kick (trigger) into Envelope, Bass into a size." },
+    ],
+  },
+  {
     id: '2026.10.249',
     date: '2026-10-17',
     title: "Send and Receive",
