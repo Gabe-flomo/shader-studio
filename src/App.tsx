@@ -141,7 +141,7 @@ function AudioMasterVolumeWidget() {
   const nodes        = useNodeGraphStore(s => s.nodes);
   const masterVolume = useNodeGraphStore(s => s.audioMasterVolume);
   const setVolume    = useNodeGraphStore(s => s.setAudioMasterVolume);
-  const hasAudio     = nodes.some(n => n.type === 'audioInput');
+  const hasAudio     = nodes.some(n => n.type === 'audioInput' || n.type === 'audioSource');
   const [paused, setPaused] = useState(false);
   if (!hasAudio) return null;
 

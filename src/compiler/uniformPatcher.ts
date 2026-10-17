@@ -22,6 +22,8 @@ export const SKIP_UNIFORM_TYPES = new Set([
   // midiInput: channel / smooth_ms are read by the MIDI engine in JS; its outputs are
   // per-frame uniforms written by the input bus, not params.
   'midiInput',
+  // The Audio nodes (nodes/definitions/audioTools.ts): every setting is read by lib/audioTools/engine.ts.
+  'audioSource', 'audioBand', 'audioHit', 'audioSpectrum', 'audioSpectrogram', 'audioWaveform',
   // scope: min/max are read by ShaderCanvas (JS) to scale the waveform probe; the
   // node emits no GLSL of its own, so a uniform would be declared and never read.
   'scope',

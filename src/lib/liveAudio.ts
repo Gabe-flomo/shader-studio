@@ -170,6 +170,14 @@ class LiveAudio {
     return this.status;
   }
 
+  /**
+   * The input's analyser node, for listeners with their own analysis (the Audio Source node, lib/audioTools/engine.ts):
+   * an AnalyserNode passes its sound through, so they connect their own after it. Null while nothing is open.
+   */
+  tapNode(): AnalyserNode | null {
+    return this.status === 'on' ? this.analyser : null;
+  }
+
   /** Retune the test tone (no-op otherwise). */
   setTestHz(hz: number): void { this.test?.setHz?.(hz); }
 

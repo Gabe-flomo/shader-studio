@@ -9,6 +9,7 @@ import { ctp } from '../../theme/palette';
 // Mocha on dark, Latte on light. CATEGORY_COLORS is the dark set, for render surfaces.
 export const CATEGORY_ROLES: Record<string, keyof typeof ctp> = {
   Sources:         'blue',
+  Audio:           'pink',
   Transforms:      'green',
   Math:            'lavender',
   Color:           'peach',

@@ -61,6 +61,7 @@ const TYPE_COLOR: Record<DataType, string> = {
   deposit:     '#c792ea',
   volume:      '#f5a97f',
   splat:       '#7fd1e8',
+  audio:       '#b4befe',
 };
 
 // ─── Styles ───────────────────────────────────────────────────────────────────

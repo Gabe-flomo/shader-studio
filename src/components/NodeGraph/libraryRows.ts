@@ -59,7 +59,7 @@ const CATEGORY_SECTIONS_RAW: Array<{ label: string; categories: string[] }> = [
   { label: 'Effects',          categories: ['Effects', 'Passes', 'Texture tools'] },
   { label: 'Agents',           categories: ['Agents', 'Agent presets', 'Particles', 'Particles & Fields'] },
   { label: 'Generators',       categories: ['Noise', 'Fractals', 'Science'] },
-  { label: 'Math & Logic',     categories: ['Sources', 'Animation', 'Math', 'Matrix', 'Shapers', 'Conditionals'] },
+  { label: 'Math & Logic',     categories: ['Sources', 'Audio', 'Animation', 'Math', 'Matrix', 'Shapers', 'Conditionals'] },
   { label: 'Functions',        categories: ['My Nodes', 'Functions'] },
   { label: 'Utility',          categories: ['Utility', 'Output'] },
 ];
@@ -138,7 +138,8 @@ export const CATEGORY_INFO: Record<string, string> = {
   'Texture tools': 'Shape a texture\'s raw values: masks, levels, flow directions, outlines, fades.',
   Noise: 'Smooth random patterns (value, Perlin, simplex, fBm, Voronoi) for textures, warps and motion.',
   Fractals: 'Shapes that repeat at every scale: Mandelbrot, Julia, kaleidoscopic folds.',
-  Sources: 'Inputs from outside the graph: UV, time, mouse, resolution, audio, video, constants.',
+  Sources: 'Inputs from outside the graph: UV, time, mouse, resolution, video, constants (sound: the Audio row).',
+  Audio: 'Sound into pictures: an Audio Source (a file, the test loop or the microphone) and the nodes that listen to it: how loud a band is, when a drum hits, the spectrum, its history and the wave itself.',
   Animation: 'Values that move over time: LFOs, envelopes and keyframes.',
   Math: 'Arithmetic, trigonometry, rounding, interpolation, vectors and comparison, one operation per node.',
   Matrix: '2×2, 3×3 and 4×4 matrices: build, combine and apply transforms.',

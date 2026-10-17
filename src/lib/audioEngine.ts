@@ -97,6 +97,20 @@ class AudioEngine {
       restoreMedia(nodeId, previous);
       throw error;
     }
+    this.register(nodeId, buffer, fileName);
+  }
+
+  /**
+   * Register an already decoded buffer for `nodeId` (an Audio Source's test loop, synthesised on the spot:
+   * lib/testLoop.ts). Nothing is remembered for web exports.
+   */
+  loadBuffer(nodeId: string, buffer: AudioBuffer, name: string): void {
+    this.getCtx();
+    this.register(nodeId, buffer, name);
+  }
+
+  private register(nodeId: string, buffer: AudioBuffer, fileName: string): void {
+    const audioCtx = this.getCtx();
     const analyser = audioCtx.createAnalyser();
     analyser.fftSize = 2048;              // 1024 frequency bins
     analyser.smoothingTimeConstant = 0.8; // temporal smoothing for smooth shader animation
@@ -131,8 +145,8 @@ class AudioEngine {
     });
   }
 
-  /** Play from `offset` seconds into the song (looping). */
-  startAudio(nodeId: string, offset = 0): void {
+  /** Play from `offset` seconds into the song (looping, unless `loop` is false: then it stops at its end). */
+  startAudio(nodeId: string, offset = 0, loop = true): void {
     const state = this.nodes.get(nodeId);
     if (!state) return;
     const audioCtx = this.getCtx();
@@ -151,7 +165,13 @@ class AudioEngine {
     // AudioBufferSourceNode is single-use — always create fresh
     const source = audioCtx.createBufferSource();
     source.buffer = state.buffer;
-    source.loop = true;
+    source.loop = loop;
+    if (!loop) source.onended = () => {
+      // Played to its end (a stop() has already let go of the source, so this one is not current then).
+      if (state.source !== source) return;
+      source.disconnect();
+      state.source = null; state.isPlaying = false; state.stoppedAt = 0;
+    };
 
     // Source → inlet → its chain → the mix (the analyser taps the chain: audioFx.ts)
     source.connect(state.inlet);

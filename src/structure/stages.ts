@@ -110,6 +110,7 @@ export function inFlow(stage: StageOf, flow: FlowId): { stage: StageId; index: n
 /** Each registry category's usual stage. A category missing here fails the coverage test. */
 export const CATEGORY_STAGE: Record<string, StageOf> = {
   Sources: 'any',
+  Audio: 'any',
   '2D Space': 'bend',
   '2D Primitives': 'shape',
   SDF: 'shape',
