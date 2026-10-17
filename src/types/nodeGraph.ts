@@ -10,7 +10,9 @@ export type DataType = "float" | "vec2" | "vec3" | "vec4" | "mat2" | "mat3" | "s
   /** A Time Cube's stacked frames (docs/time-cube.md): the name of its atlas sampler, wired only into Time Cube View and Time Slice. */
   | "volume"
   /** One splat's state in a Splat Scene's modifier chain (docs/splat-scene.md): a GLSL mat3, wired only between splat nodes. */
-  | "splat";
+  | "splat"
+  /** An Audio Source's sound (docs/audio-tools.md): no GLSL, it only tells the Audio nodes which source they listen to. */
+  | "audio";
 
 // Socket (connection point on a node)
 export interface Socket {

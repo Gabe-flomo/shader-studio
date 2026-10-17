@@ -152,6 +152,8 @@ import { DepthCardBody } from '../depth/DepthCardBody';
 import { BlobTrackCardBody } from '../blobs/BlobTrackCardBody';
 import { CacheCardBody } from '../cache/CacheCardBody';
 import { AnalyzeCardBody } from '../analyze/AnalyzeCardBody';
+import { AudioToolCardBody } from '../audio/AudioToolCardBody';
+import { isAudioToolType } from '../../nodes/definitions/audioTools';
 import { SegmentCardBody } from '../segment/SegmentCardBody';
 import { DepthLightCardBody } from '../depth/DepthLightCardBody';
 import { SplatSceneCardBody } from '../splats/SplatSceneCardBody';
@@ -4025,6 +4027,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         {!collapsed && node.type === 'blobTrack' && <BlobTrackCardBody node={node} />}
         {!collapsed && node.type === 'cache' && <CacheCardBody node={node} />}
         {!collapsed && node.type === 'analyze' && <AnalyzeCardBody node={node} />}
+        {!collapsed && isAudioToolType(node.type) && <AudioToolCardBody node={node} />}
         {!collapsed && node.type === 'segment' && <SegmentCardBody node={node} />}
         {!collapsed && node.type === 'depthLight' && <DepthLightCardBody node={node} touch={isTouchDevice} />}
         {!collapsed && node.type === 'splatScene' && <SplatSceneCardBody node={node} />}

@@ -25,6 +25,7 @@ import { timeCubes } from '../lib/timeCube/volumes';
 import { bakedVideos } from '../lib/bakedVideos';
 import { depthEngine } from '../lib/depth/engine';
 import { blobEngine } from '../lib/blobs/engine';
+import { audioToolsEngine } from '../lib/audioTools/engine';
 import { cacheEngine } from '../lib/cache/engine';
 import { consumePreviewPick, previewPickOwner } from '../lib/previewPick';
 import { analyzeEngine } from '../lib/analyze/engine';
@@ -471,6 +472,17 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       if (s.fragmentShader !== prev.fragmentShader || s.passes !== prev.passes || s.textureUniforms !== prev.textureUniforms) program(s);
     });
     return () => { off(); blobEngine.setHost(null); };
+  }, []);
+  // The Audio nodes (docs/audio-tools.md): their numbers through the input bus, their spectra and waves through
+  // the store's node textures.
+  useEffect(() => {
+    audioToolsEngine.setHost({
+      setTexture: (id, tex) => useNodeGraphStore.getState().setNodeTexture(id, tex),
+      requestRender: () => requestRenderRef.current(),
+    });
+    audioToolsEngine.sync(useNodeGraphStore.getState().nodes);
+    const off = useNodeGraphStore.subscribe((s, prev) => { if (s.nodes !== prev.nodes) audioToolsEngine.sync(s.nodes); });
+    return () => { off(); audioToolsEngine.setHost(null); };
   }, []);
   // Cache nodes (docs/cache-node.md): their frames atlas comes in through the store's node textures; each compile
   // says which texture each one records.

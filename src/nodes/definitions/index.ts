@@ -21,6 +21,7 @@ import { SegmentNode } from './segment';
 import { ProbeNode, ProbePackNode, ProbeReadNode } from './probe';
 import { OpticalFlowNode, OpticalFlowReadNode, OpticalFlowStepNode } from './opticalFlow';
 import { MEMORY_NODES, MemoryPackNode, MemoryReadNode } from './memory';
+import { AUDIO_TOOL_NODES } from './audioTools';
 import { DepthCompositeNode, DepthLightNode, PictureEnvironmentNode } from './depthScene';
 import { DepthMixNode } from './depthMix';
 import { SplatProbeOutNode, SplatSceneNode } from './splatScene';
@@ -370,6 +371,8 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   opticalFlowStep: OpticalFlowStepNode,
   opticalFlowRead: OpticalFlowReadNode,
   ...MEMORY_NODES,
+  // The Audio nodes (docs/audio-tools.md): an Audio Source and the nodes that listen to it.
+  ...AUDIO_TOOL_NODES,
   memoryPack: MemoryPackNode,
   memoryRead: MemoryReadNode,
   // Depth Mix (docs/depth-mix.md): a picture with depth and a scene put together (size, space, occlude, fog, light, mix)

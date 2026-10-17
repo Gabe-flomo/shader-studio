@@ -15,12 +15,12 @@ import { useNodeGraphStore } from '../store/useNodeGraphStore';
 import type { GraphNode, SubgraphData } from '../types/nodeGraph';
 import type { PlayRecord } from '../types/play';
 
-/** Engine keys the graph still owns: its Audio Input nodes (groups included) and its audio layers. */
+/** Engine keys the graph still owns: its Audio Input and Audio Source nodes (groups included) and its audio layers. */
 export function audioOwners(nodes: readonly GraphNode[], play: PlayRecord): Set<string> {
   const out = new Set<string>();
   const walk = (list: readonly GraphNode[]) => {
     for (const n of list) {
-      if (n.type === 'audioInput') out.add(n.id);
+      if (n.type === 'audioInput' || n.type === 'audioSource') out.add(n.id);
       const sub = n.params?.subgraph as SubgraphData | undefined;
       if (sub?.nodes) walk(sub.nodes);
     }
