@@ -547,7 +547,7 @@ const addBtnStyleFor = (tc: CtpPalette): React.CSSProperties => ({
 // them doesn't force the row taller than the text field next to them.
 const smallIconBtnStyle = (color: string): React.CSSProperties => ({
   flexShrink: 0, background: 'none', border: 'none', color,
-  width: '26px', height: '26px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+  width: '36px', height: '36px', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center',
   fontSize: '15px', lineHeight: 1, cursor: 'pointer', touchAction: 'manipulation',
 });
 

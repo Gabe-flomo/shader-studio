@@ -23,6 +23,28 @@ import { isRulesGroup } from '../../agentRules/apply';
 import { fontFamily, radius } from '../../theme/tokens';
 import { openGridRulesEditor } from '../../builders/windows';
 import { RecipeChip } from '../builders/RecipeChip';
+import { CurvesCardViz } from './CurvesEditor';
+import { AudioToolCardBody } from '../audio/AudioToolCardBody';
+import { NodeInlineViz } from './NodeInlineViz';
+import { ShaderTextureCardBody } from '../shaderTexture/ShaderTextureCardBody';
+import { PaletteTools } from './PaletteTools';
+import { ParticlePresets } from './ParticlePresets';
+import { DataTextureCardBody } from './DataTextureCardBody';
+import { RenderTargetsCardBody } from './RenderTargetsCardBody';
+import { SendReceiveCardBody } from './SendReceiveCardBody';
+import { DepthCardBody } from '../depth/DepthCardBody';
+import { BlobTrackCardBody } from '../blobs/BlobTrackCardBody';
+import { CacheCardBody } from '../cache/CacheCardBody';
+import { AnalyzeCardBody } from '../analyze/AnalyzeCardBody';
+import { SegmentCardBody } from '../segment/SegmentCardBody';
+import { DepthLightCardBody } from '../depth/DepthLightCardBody';
+import { SplatSceneCardBody } from '../splats/SplatSceneCardBody';
+import { ScatterReachNote } from './ScatterReachNote';
+import { EmitScanCardBody } from '../splats/EmitScanCardBody';
+import { isAudioToolType } from '../../nodes/definitions/audioTools';
+
+/** Cards whose body is always a live picture on desktop (a Pass's texture, a Shuffle's channels…): shown here too. */
+const ALWAYS_VIZ = new Set(['pass', 'dataTexture', 'renderTargets', 'textureFeedback', 'trailField', 'channelShuffle']);
 
 export function MobileNodeExtras({ node, nodes }: { node: GraphNode; nodes: GraphNode[] }) {
   const tk = useTokens();
@@ -53,6 +75,27 @@ export function MobileNodeExtras({ node, nodes }: { node: GraphNode; nodes: Grap
           }} />
         </div>
       )}
+      {/* Curves' graph editor, the Audio Source's File | Mic, a Shader Texture's picture, a Pass's
+          texture: the card bodies a phone used to leave out (the 2026-10 mobile audit) */}
+      {node.type === 'curves' && <div style={box}><CurvesCardViz node={node} touch /></div>}
+      {isAudioToolType(node.type) && <div style={box}><AudioToolCardBody node={node} /></div>}
+      {node.type === 'shaderTexture' && <div style={box}><ShaderTextureCardBody node={node} /></div>}
+      {ALWAYS_VIZ.has(node.type) && <div data-mobile-viz style={{ ...box, paddingTop: 0 }}><NodeInlineViz node={node} /></div>}
+      {/* The rest of the card bodies NodeComponent.tsx draws under a card's sockets, in the same order */}
+      {(node.type === 'palette' || node.type === 'stopPalette') && <div style={box}><PaletteTools node={node} /></div>}
+      {node.type === 'gpuParticles' && <div style={box}><ParticlePresets node={node} /></div>}
+      {node.type === 'dataTexture' && <div style={box}><DataTextureCardBody node={node} touch /></div>}
+      {node.type === 'renderTargets' && <div style={box}><RenderTargetsCardBody node={node} touch /></div>}
+      {(node.type === 'send' || node.type === 'receive') && <div style={box}><SendReceiveCardBody node={node} touch /></div>}
+      {node.type === 'depth' && <div style={box}><DepthCardBody node={node} touch /></div>}
+      {node.type === 'blobTrack' && <div style={box}><BlobTrackCardBody node={node} /></div>}
+      {node.type === 'cache' && <div style={box}><CacheCardBody node={node} /></div>}
+      {node.type === 'analyze' && <div style={box}><AnalyzeCardBody node={node} /></div>}
+      {node.type === 'segment' && <div style={box}><SegmentCardBody node={node} /></div>}
+      {node.type === 'depthLight' && <div style={box}><DepthLightCardBody node={node} touch /></div>}
+      {node.type === 'splatScene' && <div style={box}><SplatSceneCardBody node={node} /></div>}
+      {(node.type === 'pieces' || node.type === 'pieceBalls') && <div style={box}><ScatterReachNote node={node} /></div>}
+      {node.type === 'agentEmit' && node.params.shape === 'splats' && <div style={box}><EmitScanCardBody node={node} /></div>}
       {/* The canvas's Suggestions strip ("Next" moves), which a phone has no card to show under */}
       <div style={{ flexShrink: 0 }}><SuggestionList node={node} nodes={nodes} /></div>
     </>

@@ -9,6 +9,7 @@ import { scopeValueRegistry, floatValueRegistry, vectorValueRegistry } from '../
 import { useCtp } from '../../theme/nodePalette';
 import { useThemeMode } from '../../theme/themeStore';
 import { pal, setVizPalette, MONO, vizContainer, setupViz, imageSize, blitImage, useVizScale, type Viz } from './vizKit';
+import { useViewport } from '../../lib/viewport';
 import { GenericViz, GENERIC_VIZ_TYPES } from './vizGeneric';
 import { passThumbRegistry } from '../../lib/passRunner';
 import { passRepeat } from '../../nodes/definitions/passes';
@@ -3935,7 +3936,12 @@ function ShuffleGridViz({ node }: { node: GraphNode }) {
   const usesB = !!node.inputs.b?.connection || SHUFFLE_ROWS.some(r => String(node.params[r.key] ?? '').startsWith('b'));
   const cols = [...['a1', 'a2', 'a3', 'a4'], ...(usesB ? ['b1', 'b2', 'b3', 'b4'] : []), '0', '1'];
   const head = (c: string) => (c === '0' || c === '1' ? c : `${c[0].toUpperCase()}${c[1]}`);
-  const cell: React.CSSProperties = { width: 22, height: 20, borderRadius: 4, border: `1px solid ${pal.surface1}`, padding: 0, cursor: 'pointer' };
+  // A phone (its node page): cells share the page's width and are thumb-tall, and a lit cell keeps
+  // the finger for its drag instead of scrolling the page.
+  const phone = useViewport(v => v.phone);
+  const cell: React.CSSProperties = phone
+    ? { width: '100%', height: 32, borderRadius: 6, border: `1px solid ${pal.surface1}`, padding: 0, cursor: 'pointer' }
+    : { width: 22, height: 20, borderRadius: 4, border: `1px solid ${pal.surface1}`, padding: 0, cursor: 'pointer' };
   const wires = shuffleWiresOf(node.params);
   const setWires = (next: ShuffleWire[]) => updateNodeParams(node.id, { wires: next }, { immediate: true });
   const tintOf = (k: string) => SHUFFLE_ROWS.find(r => r.key === k)!.tint;
@@ -4023,7 +4029,7 @@ function ShuffleGridViz({ node }: { node: GraphNode }) {
                   <button key={v} type="button" role="radio" aria-checked={kind === v} data-shuffle-kind={`${k}:${v}`}
                     title={v === 'texture' ? `${k.toUpperCase()} takes a texture (a picture, a video, a Pass) and reads it at this pixel` : `${k.toUpperCase()} takes four channels: a colour, a Trail field's Channels, any vec4`}
                     onClick={() => { if (kind !== v) updateNodeParams(node.id, { [`${k}Is`]: v }, { immediate: true }); }}
-                    style={{ font: 'inherit', fontSize: '10px', padding: '1px 7px', border: 0, cursor: 'pointer', background: kind === v ? pal.surface1 : 'transparent', color: kind === v ? pal.text : pal.overlay0 }}>
+                    style={{ font: 'inherit', fontSize: phone ? '12px' : '10px', padding: phone ? '7px 10px' : '1px 7px', border: 0, cursor: 'pointer', background: kind === v ? pal.surface1 : 'transparent', color: kind === v ? pal.text : pal.overlay0 }}>
                     {v === 'texture' ? 'Texture' : 'Channels'}
                   </button>
                 ))}
@@ -4032,8 +4038,10 @@ function ShuffleGridViz({ node }: { node: GraphNode }) {
           );
         })}
       </div>
-      <div style={{ fontSize: '10px', color: pal.overlay0, marginBottom: 4 }}>Click where each channel comes from (A or B's channel 1–4, or 0 / 1). Drag a lit cell onto another to distort that channel by it; right-click a wire to change or remove it.</div>
-      <div ref={gridRef} style={{ position: 'relative', display: 'grid', gridTemplateColumns: `18px repeat(${cols.length}, 22px)`, gap: 3, alignItems: 'center', fontFamily: MONO, fontSize: '10px' }}
+      {phone
+        ? <div style={{ fontSize: '12px', lineHeight: 1.4, color: pal.overlay0, marginBottom: 6 }}>Tap where each channel comes from (A or B's channel 1–4, or 0 / 1). Drag a lit cell onto another to distort that channel by it; tap a wire to change or remove it.</div>
+        : <div style={{ fontSize: '10px', color: pal.overlay0, marginBottom: 4 }}>Click where each channel comes from (A or B's channel 1–4, or 0 / 1). Drag a lit cell onto another to distort that channel by it; right-click a wire to change or remove it.</div>}
+      <div ref={gridRef} style={{ position: 'relative', display: 'grid', gridTemplateColumns: phone ? `18px repeat(${cols.length}, minmax(0, 1fr))` : `18px repeat(${cols.length}, 22px)`, gap: phone ? 4 : 3, alignItems: 'center', fontFamily: MONO, fontSize: '10px' }}
         onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={() => { drag.current = null; setGhost(null); }}>
         <span />
         {cols.map(c => <span key={c} style={{ textAlign: 'center', color: pal.overlay0 }}>{head(c)}</span>)}
@@ -4050,7 +4058,7 @@ function ShuffleGridViz({ node }: { node: GraphNode }) {
                     onPointerDown={onDown(r.key, on)}
                     onPointerUp={() => { if (ghost) suppressClick.current = true; }}
                     onClick={() => { if (suppressClick.current) { suppressClick.current = false; return; } updateNodeParams(node.id, { [r.key]: c }, { immediate: true }); }}
-                    style={{ ...cell, position: 'relative', zIndex: 1, background: on ? r.tint : 'transparent', borderColor: on ? r.tint : pal.surface1, cursor: on ? 'grab' : 'pointer' }} />
+                    style={{ ...cell, position: 'relative', zIndex: 1, background: on ? r.tint : 'transparent', borderColor: on ? r.tint : pal.surface1, cursor: on ? 'grab' : 'pointer', ...(phone ? { touchAction: on ? 'none' : 'manipulation' } : null) }} />
                 );
               })}
             </React.Fragment>
@@ -4087,15 +4095,15 @@ function ShuffleGridViz({ node }: { node: GraphNode }) {
             <span style={{ color: tintOf(editWire.from), fontWeight: 700 }}>{labelOf(editWire.from)}</span>
             <span style={{ flex: 1 }} />
             <button type="button" data-shuffle-wire-remove onClick={() => { setWires(wires.filter(w => w !== editWire)); setEditing(null); }}
-              style={{ font: 'inherit', fontSize: 10.5, padding: '2px 7px', borderRadius: 4, border: `1px solid ${pal.surface1}`, background: 'transparent', color: pal.red, cursor: 'pointer' }}>Remove</button>
+              style={{ font: 'inherit', fontSize: phone ? 12 : 10.5, padding: phone ? '7px 10px' : '2px 7px', borderRadius: 4, border: `1px solid ${pal.surface1}`, background: 'transparent', color: pal.red, cursor: 'pointer' }}>Remove</button>
             <button type="button" aria-label="Close" onClick={() => setEditing(null)}
-              style={{ width: 20, height: 20, padding: 0, border: 0, background: 'none', color: pal.overlay0, cursor: 'pointer', font: `600 12px ${MONO}` }}>×</button>
+              style={{ width: phone ? 34 : 20, height: phone ? 34 : 20, padding: 0, border: 0, background: 'none', color: pal.overlay0, cursor: 'pointer', font: `600 12px ${MONO}` }}>×</button>
           </div>
           <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
             {SHUFFLE_OPS.map(o => (
               <button key={o.value} type="button" data-shuffle-op={o.value} aria-pressed={editWire.op === o.value} title={o.hint}
                 onClick={() => patch(o.value === 'expr' ? { op: 'expr', expr: editWire.expr || `v * ${editWire.from}` } : { op: o.value })}
-                style={{ font: 'inherit', fontSize: 10.5, padding: '2px 7px', borderRadius: 999, cursor: 'pointer', border: `1px solid ${editWire.op === o.value ? tintOf(editWire.from) : pal.surface1}`, background: editWire.op === o.value ? tintOf(editWire.from) : 'transparent', color: editWire.op === o.value ? '#fff' : pal.text }}>
+                style={{ font: 'inherit', fontSize: phone ? 12 : 10.5, padding: phone ? '7px 11px' : '2px 7px', borderRadius: 999, cursor: 'pointer', border: `1px solid ${editWire.op === o.value ? tintOf(editWire.from) : pal.surface1}`, background: editWire.op === o.value ? tintOf(editWire.from) : 'transparent', color: editWire.op === o.value ? '#fff' : pal.text }}>
                 {o.glyph} {o.label}
               </button>
             ))}

@@ -233,12 +233,14 @@ export function CurvesEditor({ node, size, onOpen }: { node: GraphNode; size: nu
 }
 
 /** On the card: the editor at card size, and the big window it opens. */
-export function CurvesCardViz({ node }: { node: GraphNode }) {
+export function CurvesCardViz({ node, touch = false }: { node: GraphNode; touch?: boolean }) {
   const [open, setOpen] = useState(false);
   const live = useNodeGraphStore(s => s.nodes.find(n => n.id === node.id)) ?? node;
+  // `touch` (the phone's node page): as big as the page allows, finger-sized chips, and no Open
+  // window — the page already is the big editor (a 440px window would run off a phone).
   return (
     <div style={{ padding: '6px 10px 8px' }}>
-      <CurvesEditor node={live} size={220} onOpen={() => setOpen(true)} />
+      <CurvesEditor node={live} size={touch ? 300 : 220} onOpen={touch ? undefined : () => setOpen(true)} />
       {open && createPortal(<CurvesWindow nodeId={node.id} fallback={live} onClose={() => setOpen(false)} />, document.body)}
     </div>
   );
