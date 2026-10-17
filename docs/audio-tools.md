@@ -54,7 +54,8 @@ Show it one clap (a cowbell, a word, one drum) and it fires whenever a sound lik
 1. In the Open ↗ window, switch the waveform to **Drag: Select** and drag across one hit of the sound (green). With
    nothing selected, the trim is used. A longer selection is fine: Learn takes the strongest hit inside it.
 2. Press **Learn** (under *Learned sounds*). On the Mic, play the sound and press **Learn last hit**: it takes the
-   strongest hit of the last two seconds heard (it works after a file played, too).
+   strongest hit of the last two seconds heard (it works after a file played, too). A row still waiting to be
+   learned (the *Learn a clap* example's Clap) takes it; otherwise a new row is added.
 3. A row appears: **Sound 1** (rename it: *Clap*), its colour, a small picture of its fingerprint (its loudness from
    low to high frequencies), and:
    - **Match** (0–1, 0.8 to start): how alike a hit has to be to fire. Raise it if other drums fire it, lower it if it

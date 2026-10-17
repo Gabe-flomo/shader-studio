@@ -230,8 +230,11 @@ export function AudioSourceWindow({ nodeId, onClose, onLoad }: { nodeId: string;
     else r = audioToolsEngine.learn(nodeId, span ? { from: span.start, to: span.end } : undefined);
     if ('error' in r) { setLearnMsg(r.error); return; }
     const where = last ? 'the last hit heard' : `the hit at ${fmtSec(r.at)}`;
-    if (o.relearn) {
-      patchSound(o.relearn, { spec: r.spec, env: r.env });
+    // A sound waiting to be learned (an example's Clap, already wired) takes the first fingerprint.
+    const target = o.relearn ?? sounds.find(q => !q.spec.length)?.id;
+    if (target) {
+      patchSound(target, { spec: r.spec, env: r.env });
+      if (!o.relearn) { setLearnMsg(`Learned ${sounds.find(q => q.id === target)?.name} from ${where}: it fires on sounds like it from now on.`); return; }
       setLearnMsg(`Learned again from ${where}.`);
     } else {
       const snd = newSound(sounds, r, takenIds);
