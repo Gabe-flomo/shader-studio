@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.254',
+    date: '2026-10-17',
+    title: "Sound that stays",
+    highlights: [
+      { area: 'Studio', text: "Audio Source keeps your sounds in the library, so they come back after a reload; a new Video tab listens to a video's own sound." },
+      { area: 'Studio', text: "Exported web pages now run the Audio nodes: bands, triggers and learned sounds react after a tap to start sound." },
+    ],
+  },
+  {
     id: '2026.10.253',
     date: '2026-10-17',
     title: "Smooth lens",
