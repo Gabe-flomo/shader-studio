@@ -10,6 +10,7 @@ import { retypeDataTexture } from '../nodes/definitions/dataTexture';
 import { retypeRenderTargets } from '../nodes/definitions/renderTargets';
 import { retypeReadNeighbours } from '../nodes/definitions/readNeighbours';
 import { retypeTrailField } from '../nodes/definitions/agents';
+import { retypeShuffle } from '../nodes/definitions/channelTools';
 import { migrateNodeParams, GROUP_PORT_SENTINEL } from '../types/nodeGraph';
 import { LAYOUT_VERSION, needsLayoutSpread, spreadLegacyLayout } from './legacyLayout';
 import { askText } from '../components/ui/dialogStore';
@@ -583,6 +584,8 @@ function retypeSwizzle(n: GraphNode): GraphNode {
   if (n.type === 'readNeighbours') return retypeReadNeighbours(n);
   // A Trail field's channel outputs take its Channel names.
   if (n.type === 'trailField') return retypeTrailField(n);
+  // A Shuffle's A and B: four channels or a texture (its card's switch).
+  if (n.type === 'channelShuffle') return retypeShuffle(n);
   // A Transform card's sockets follow its Dimension (vec2 / vec3 / vec4).
   if (n.type === 'transform') return retypeTransform(n);
   if (n.type !== 'swizzle') return n;
