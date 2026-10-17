@@ -7,6 +7,7 @@
  * Combos (comboExamples.ts).
  */
 import { retypeTrailField } from '../nodes/definitions/agents';
+import { retypeShuffle } from '../nodes/definitions/channelTools';
 import type { GraphNode, GroupInputPort, GroupOutputPort } from '../types/nodeGraph';
 import { GROUP_PORT_SENTINEL } from '../types/nodeGraph';
 import type { PlayControl, PlayRecord } from '../types/play';
@@ -33,6 +34,11 @@ export function n(type: string, id: string, x: number, y: number, params: Record
   for (const [k, v] of Object.entries(sockets.outputs ?? {})) outputs[k] = { type: v.type, label: v.label };
   const node: GraphNode = { id, type, position: { x, y }, inputs, outputs, params: { ...(def.defaultParams ?? {}), ...params }, ...extra };
   // A Trail field's channel outputs take its Channel names.
+  if (type === 'channelShuffle') {
+    // A Shuffle's A or B switched to Texture: the socket is a texture, its wire kept
+    const r = retypeShuffle({ ...node, inputs: Object.fromEntries(Object.entries(node.inputs).map(([k, v]) => [k, { ...v, connection: undefined }])) });
+    return { ...r, inputs: Object.fromEntries(Object.entries(r.inputs).map(([k, v]) => [k, { ...v, ...(node.inputs[k]?.connection ? { connection: node.inputs[k].connection } : {}) }])) };
+  }
   return type === 'trailField' ? retypeTrailField(node) : node;
 }
 

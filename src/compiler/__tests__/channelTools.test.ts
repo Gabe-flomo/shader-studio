@@ -11,7 +11,7 @@ vi.hoisted(() => {
 
 import { compileGraph } from '../graphCompiler';
 import { getNodeDefinition } from '../../nodes/definitions';
-import { cleanShuffleExpr, shuffleWiresOf } from '../../nodes/definitions/channelTools';
+import { cleanShuffleExpr, retypeShuffle, shuffleWiresOf } from '../../nodes/definitions/channelTools';
 import { n } from '../../store/graphBuilder';
 import { runGlsl, type Val } from './glslEval';
 
@@ -75,6 +75,28 @@ describe('Shuffle', () => {
     expect(cleanShuffleExpr('}')).toBe('v');
     expect(cleanShuffleExpr('')).toBe('v');
   });
+  it('A and B are each four channels or a texture: the switch retypes the socket, and any mix compiles', () => {
+    for (const [aIs, bIs] of [['texture', 'texture'], ['channels', 'texture'], ['texture', 'channels']] as const) {
+      const wire = (kind: string) => (kind === 'texture' ? ['tx', 'texture'] : ['v4', 'xyzw']) as [string, string];
+      const c = n('channelShuffle', 'c', 300, 0, { aIs, bIs, r: 'a1', g: 'b2' }, { a: wire(aIs), b: wire(bIs) });
+      expect(c.inputs.a.type).toBe(aIs === 'texture' ? 'texture' : 'vec4');
+      expect(c.inputs.b.type).toBe(bIs === 'texture' ? 'texture' : 'vec4');
+      const r = compileGraph({ nodes: [n('makeVec4', 'v4', 0, 0, {}), n('textureInput', 'tx', 0, 200, {}), c, n('output', 'o', 600, 0, {}, { color: ['c', 'color'] })] }) as unknown as { errors?: unknown; fragmentShader: string };
+      expect(r.errors, JSON.stringify(r.errors)).toBeUndefined();
+      expect((r.fragmentShader.match(/texture2D\(/g) ?? []).length).toBeGreaterThanOrEqual(aIs === 'texture' && bIs === 'texture' ? 2 : 1);
+    }
+  });
+  it('an old graph\'s Texture A becomes A switched to Texture, its wire kept; switching back drops a wire that no longer fits', () => {
+    const old = { ...n('channelShuffle', 'c', 0, 0, {}), params: { r: 'a1', g: 'a2', b: 'a3', a: 'a4' } };
+    old.inputs = { textureA: { type: 'texture' as const, label: 'Texture A', connection: { nodeId: 'tx', outputKey: 'texture' } }, b: { type: 'vec4' as const, label: 'B' } };
+    const up = retypeShuffle(old);
+    expect(up.params.aIs).toBe('texture');
+    expect(up.inputs.textureA).toBeUndefined();
+    expect(up.inputs.a).toMatchObject({ type: 'texture', connection: { nodeId: 'tx' } });
+    const back = retypeShuffle({ ...up, params: { ...up.params, aIs: 'channels' } });
+    expect(back.inputs.a.type).toBe('vec4');
+    expect(back.inputs.a.connection).toBeUndefined();
+  });
   it('Divide and Expression wires compile', () => {
     const r = compileGraph({ nodes: [
       n('makeVec4', 'v4', 0, 0, {}),
@@ -108,12 +130,14 @@ describe('Channel tools compile', () => {
   it.each(['channelPick', 'channelShuffle', 'channelColours'])('%s from a Trail-like vec4 and from a texture', type => {
     const def = getNodeDefinition(type)!;
     const vecKey = Object.keys(def.inputs).find(k => def.inputs[k].type === 'vec4')!;
-    const texKey = Object.keys(def.inputs).find(k => def.inputs[k].type === 'texture')!;
+    // Shuffle's A takes a texture when switched to Texture (aIs); the others have a Texture socket of their own
+    const texKey = Object.keys(def.inputs).find(k => def.inputs[k].type === 'texture') ?? vecKey;
+    const texParams = type === 'channelShuffle' ? { aIs: 'texture' } : {};
     const out = Object.keys(def.outputs)[0];
-    for (const wire of [{ [vecKey]: ['v4', 'xyzw'] as [string, string] }, { [texKey]: ['tx', 'texture'] as [string, string] }]) {
+    for (const [params, wire] of [[{}, { [vecKey]: ['v4', 'xyzw'] as [string, string] }], [texParams, { [texKey]: ['tx', 'texture'] as [string, string] }]] as const) {
       const r = compileGraph({ nodes: [
         n('makeVec4', 'v4', 0, 0, {}), n('textureInput', 'tx', 0, 200, {}),
-        n(type, 'c', 300, 0, {}, wire),
+        n(type, 'c', 300, 0, params, wire),
         n('output', 'o', 600, 0, {}, { color: ['c', out] }),
       ] });
       expect(r.errors, JSON.stringify(r.errors)).toBeUndefined();

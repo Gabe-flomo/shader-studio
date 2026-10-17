@@ -148,6 +148,33 @@ export function shuffleWiresOf(params: Record<string, unknown>): ShuffleWire[] {
 const SHUFFLE_GLSL = `
 float shufDiv(float a, float b) { return a / (abs(b) < 1e-4 ? (b < 0.0 ? -1e-4 : 1e-4) : b); }`;
 
+export type ShuffleInputKind = 'channels' | 'texture';
+/**
+ * A Shuffle's A and B sockets follow its `aIs` / `bIs` (Channels: vec4, Texture: texture). An old graph's
+ * Texture A socket becomes A switched to Texture, its wire kept; a wire whose type no longer fits is dropped.
+ */
+export function retypeShuffle(node: GraphNode): GraphNode {
+  const inputs = { ...node.inputs };
+  const params = { ...node.params };
+  let changed = false;
+  const old = inputs.textureA;
+  if (old) {
+    delete inputs.textureA;
+    changed = true;
+    if (old.connection && !inputs.a?.connection) { params.aIs = 'texture'; inputs.a = { ...(inputs.a ?? { label: 'A' }), type: 'texture', connection: old.connection }; }
+  }
+  for (const k of ['a', 'b'] as const) {
+    const kind: ShuffleInputKind = params[`${k}Is`] === 'texture' ? 'texture' : 'channels';
+    if (params[`${k}Is`] !== kind) { params[`${k}Is`] = kind; changed = true; }
+    const type = kind === 'texture' ? 'texture' : 'vec4';
+    const cur = inputs[k];
+    if (cur?.type === type) continue;
+    inputs[k] = { ...(cur ?? { label: k.toUpperCase() }), type, connection: undefined };
+    changed = true;
+  }
+  return changed ? { ...node, inputs, params } : node;
+}
+
 /** The wires' code: each one changes its channel in a copy, reading the channels as shuffled. */
 function distortLines(id: string, wires: ShuffleWire[]): string[] {
   if (!wires.length) return [];
@@ -168,26 +195,34 @@ export const ShuffleNode: NodeDefinition = {
   category: TEXTURE_TOOLS_CATEGORY,
   aliases: ['Shuffle channels', 'Reorder channels', 'Swap channels', 'Shift channels', 'Channel mixer', 'Combine channels', 'Merge channels', 'Channels to colour', 'Swizzle'],
   description: 'Builds four new channels (and a colour) from the channels of one or two inputs: put channel 3 in red, channel 1 in green, nothing in blue. Drag one row\'s cell onto another to distort that channel by it (multiply, add, subtract, divide or a one-line expression), like patching a cable. After Effects\' Shift Channels, Nuke\'s Shuffle, TouchDesigner\'s Reorder.',
+  // A and B are each four channels (a vec4) or a texture read at this pixel: the card's Channels / Texture
+  // switch retypes the socket (retypeShuffle, the `aIs` / `bIs` params).
   inputs: {
-    a: { type: 'vec4', label: 'A', hint: 'Four channels: a Trail field\'s Channels, a Data texture read, any vec4. Wins over Texture A.' },
-    textureA: { type: 'texture', label: 'Texture A', hint: 'Or a texture, read at this pixel.' },
-    b: { type: 'vec4', label: 'B', hint: 'A second set of channels to take from (optional).' },
-    uv: { type: 'vec2', label: 'UV', hint: 'Where to read Texture A, in picture coordinates. Empty: this pixel.' },
+    a: { type: 'vec4', label: 'A', hint: 'Four channels: a Trail field\'s Channels, a Data texture read, any vec4. Switch it to Texture on the card to wire a texture.' },
+    b: { type: 'vec4', label: 'B', hint: 'A second set of channels to take from (optional): four channels, or a texture when switched on the card.' },
+    uv: { type: 'vec2', label: 'UV', hint: 'Where to read a texture A or B, in picture coordinates. Empty: this pixel.' },
   },
   outputs: {
     color: { type: 'vec3', label: 'Color', hint: 'Red, green and blue as a colour.' },
     channels: { type: 'vec4', label: 'Channels', hint: 'All four new channels.' },
     alpha: { type: 'float', label: 'Alpha', hint: 'The fourth channel.' },
   },
-  defaultParams: { r: 'a1', g: 'a2', b: 'a3', a: 'a4' },
+  defaultParams: { r: 'a1', g: 'a2', b: 'a3', a: 'a4', aIs: 'channels', bIs: 'channels' },
+  syncSockets: retypeShuffle,
   // Set with the card's click grid (NodeInlineViz ShuffleGridViz): which channel goes into each of R, G, B, A,
   // and its distort wires (`wires`, ShuffleWire[]).
   paramDefs: {},
   glslFunctions: [SHUFFLE_GLSL],
   generateGLSL: (node: GraphNode, v) => {
     const id = node.id;
-    const A = v.a ?? (v.textureA ? `texture2D(${v.textureA}, ${texUv(v.uv ?? 'g_uv')})` : 'vec4(0.0)');
-    const B = v.b ?? 'vec4(0.0)';
+    const read = (k: 'a' | 'b') => {
+      const x = v[k];
+      if (!x) return 'vec4(0.0)';
+      return node.inputs[k]?.type === 'texture' ? `texture2D(${x}, ${texUv(v.uv ?? 'g_uv')})` : x;
+    };
+    // An old graph's Texture A (before A could be a texture), if it still has one
+    const A = v.textureA && !v.a ? `texture2D(${v.textureA}, ${texUv(v.uv ?? 'g_uv')})` : read('a');
+    const B = read('b');
     const slot = (k: string, fb: string) => {
       const f = fromOf(node.params[k], fb);
       if (f === '0' || f === '1') return `${f}.0`;

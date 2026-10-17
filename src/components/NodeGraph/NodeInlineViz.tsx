@@ -4010,6 +4010,27 @@ function ShuffleGridViz({ node }: { node: GraphNode }) {
 
   return (
     <div data-shuffle-grid style={{ ...vizContainer(), padding: '6px 10px 8px' }} onMouseDown={e => e.stopPropagation()} onPointerDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()}>
+      {/* What A and B are: four channels (a vec4) or a texture read at this pixel; switching retypes the socket */}
+      <div data-shuffle-kinds style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 6, fontSize: '10.5px' }}>
+        {(['a', 'b'] as const).map(k => {
+          const kind = node.params[`${k}Is`] === 'texture' ? 'texture' : 'channels';
+          return (
+            <span key={k} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ fontWeight: 700, color: pal.text, fontFamily: MONO }}>{k.toUpperCase()}</span>
+              <span role="radiogroup" aria-label={`${k.toUpperCase()} is`} style={{ display: 'inline-flex', borderRadius: 999, border: `1px solid ${pal.surface1}`, overflow: 'hidden' }}>
+                {(['channels', 'texture'] as const).map(v => (
+                  <button key={v} type="button" role="radio" aria-checked={kind === v} data-shuffle-kind={`${k}:${v}`}
+                    title={v === 'texture' ? `${k.toUpperCase()} takes a texture (a picture, a video, a Pass) and reads it at this pixel` : `${k.toUpperCase()} takes four channels: a colour, a Trail field's Channels, any vec4`}
+                    onClick={() => { if (kind !== v) updateNodeParams(node.id, { [`${k}Is`]: v }, { immediate: true }); }}
+                    style={{ font: 'inherit', fontSize: '10px', padding: '1px 7px', border: 0, cursor: 'pointer', background: kind === v ? pal.surface1 : 'transparent', color: kind === v ? pal.text : pal.overlay0 }}>
+                    {v === 'texture' ? 'Texture' : 'Channels'}
+                  </button>
+                ))}
+              </span>
+            </span>
+          );
+        })}
+      </div>
       <div style={{ fontSize: '10px', color: pal.overlay0, marginBottom: 4 }}>Click where each channel comes from (A or B's channel 1–4, or 0 / 1). Drag a lit cell onto another to distort that channel by it; right-click a wire to change or remove it.</div>
       <div ref={gridRef} style={{ position: 'relative', display: 'grid', gridTemplateColumns: `18px repeat(${cols.length}, 22px)`, gap: 3, alignItems: 'center', fontFamily: MONO, fontSize: '10px' }}
         onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={() => { drag.current = null; setGhost(null); }}>
