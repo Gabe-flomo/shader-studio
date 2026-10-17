@@ -66,11 +66,12 @@ export function MobileTopBar({ page, onPageChange, onRecord, onClear }: {
         aria-label="Back to the Studio"
         onClick={() => onPageChange('studio')}
         style={{
-          width: 28, height: 28, flexShrink: 0, padding: 0, border: 0, borderRadius: radius.md, cursor: 'pointer',
+          width: 36, height: 36, flexShrink: 0, padding: 0, border: 0, borderRadius: radius.md, cursor: 'pointer',
           background: tk.ink.base, color: tk.ink.text, display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}
       >
-        <Icon name="presets" size={13} />
+        {/* A back arrow, not the logo: it reads as the way back to the Studio */}
+        <Icon name="chevL" size={17} />
       </button>}
       {mainPage ? (
         // Studio, Play and Present are the app's main pages: the switch between them is always in sight.
