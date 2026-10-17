@@ -379,6 +379,21 @@ export function MobileNodeGraphOverlay() {
     [topLevelNodes, activeGroupPath],
   );
   const layout = useMemo(() => computeOverlayLayout(nodes), [nodes]);
+  // Fitted to the picture by default (a wide graph showed only its first node); 1:1 scrolls instead.
+  const [fit, setFit] = useState(true);
+  const [box, setBox] = useState<{ w: number; h: number } | null>(null);
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el || !open) return;
+    const measure = () => setBox({ w: el.clientWidth, h: el.clientHeight });
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [open, nodes.length]);
+  const scale = fit && box ? overlayFitScale(layout.width, layout.height, box.w, box.h) : 1;
   if (!open) return null;
 
   return (
@@ -398,6 +413,18 @@ export function MobileNodeGraphOverlay() {
           <span style={{ fontWeight: 500, letterSpacing: 0, color: '#8a8d9b' }}>read-only</span>
         </span>
         <span style={{ flex: 1 }} />
+        {nodes.length > 0 && (
+          <button
+            type="button"
+            aria-pressed={fit}
+            aria-label={fit ? 'Show the graph at full size (scroll to move around)' : 'Fit the whole graph on the picture'}
+            onClick={() => setFit(f => !f)}
+            style={{
+              height: 36, padding: '0 12px', border: 0, borderRadius: 10, cursor: 'pointer', touchAction: 'manipulation',
+              background: 'rgba(26,27,34,0.88)', color: '#d8d9e0', font: `600 12px ${fontFamily.ui}`,
+            }}
+          >{fit ? '1:1' : 'Fit'}</button>
+        )}
         <button
           type="button"
           aria-label="Close the node graph"
@@ -411,8 +438,9 @@ export function MobileNodeGraphOverlay() {
       {nodes.length === 0 ? (
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: '#8a8d9b' }}>No nodes yet.</div>
       ) : (
-        <div style={{ flex: 1, overflow: 'auto', WebkitOverflowScrolling: 'touch' }}>
-          <div style={{ position: 'relative', width: layout.width, height: layout.height }}>
+        <div ref={scrollerRef} style={{ flex: 1, overflow: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          <div style={{ width: layout.width * scale, height: layout.height * scale }}>
+          <div style={{ position: 'relative', width: layout.width, height: layout.height, ...(scale !== 1 ? { transform: `scale(${scale})`, transformOrigin: '0 0' } : null) }}>
             <svg width={layout.width} height={layout.height} style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none' }}>
               {layout.edges.map(e => (
                 <path
@@ -463,10 +491,17 @@ export function MobileNodeGraphOverlay() {
               );
             })}
           </div>
+          </div>
         </div>
       )}
     </div>
   );
+}
+
+/** The overlay's fitted scale: the whole graph inside the box (with a little margin), never enlarged, never below 0.2 (1:1 is a tap away for reading it). */
+export function overlayFitScale(w: number, h: number, boxW: number, boxH: number): number {
+  if (w <= 0 || h <= 0 || boxW <= 0 || boxH <= 0) return 1;
+  return Math.max(0.2, Math.min(1, (boxW - 8) / w, (boxH - 8) / h));
 }
 
 // Where a loose group's folder row should sit among the plain rank rows in
