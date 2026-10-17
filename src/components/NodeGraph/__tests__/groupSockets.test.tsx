@@ -111,6 +111,26 @@ describe('every group card draws its sockets the same way', () => {
     expect(origins()).toContain('built-in:Scene');
   });
 
+  it('Scene Group: hovering its socket names what it feeds, and the name jumps there (as on every card)', () => {
+    st().addNode('sceneGroup', { x: 0, y: 0 });
+    st().addNode('softShadow', { x: 500, y: 0 });
+    const sg = st().nodes.find(x => x.type === 'sceneGroup')!;
+    const ss = st().nodes.find(x => x.type === 'softShadow')!;
+    expect(st().connectNodes(sg.id, 'scene', ss.id, 'scene')).toBe(true);
+    // jsdom lays nothing out: the tooltip's keep-on-screen nudge needs a box well inside the window.
+    const rect = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({ left: 200, top: 200, right: 400, bottom: 260, width: 200, height: 60, x: 200, y: 200, toJSON: () => ({}) } as DOMRect);
+    show(top(sg.id));
+    const socket = host!.querySelector('[data-group-port="out:scene"] [data-socket="out"]')!;
+    act(() => { socket.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, relatedTarget: document.body })); });
+    const links = [...host!.querySelectorAll('[data-group-port="out:scene"] button[title="Jump to this node"]')] as HTMLButtonElement[];
+    const link = links.find(b => b.textContent === 'Soft Shadow')!;
+    expect(link).toBeTruthy();
+    act(() => { link.click(); });
+    expect(st().focusRequest?.nodeId).toBe(ss.id);
+    expect(st().selectedNodeId).toBe(ss.id);
+    rect.mockRestore();
+  });
+
   it('Group: its own ports are added, and × removes one', () => {
     st().addNode('uv', { x: 0, y: 0 });
     const uv = st().nodes.find(x => x.type === 'uv')!;

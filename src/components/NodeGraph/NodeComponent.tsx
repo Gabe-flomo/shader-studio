@@ -756,6 +756,101 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
       style={{ background: 'none', border: 0, padding: 0, margin: 0, font: 'inherit', color: color ?? 'inherit', cursor: 'pointer', textDecoration: 'underline', textDecorationStyle: 'dotted', textUnderlineOffset: 2 }}
     >{text}</button>
   );
+  // The socket tooltips' lines (here, before the special cards return early, so a group card's ports use them too).
+  // ─── Build tooltip for an input socket ─────────────────────────────────────
+  const buildInputTooltip = (inputKey: string): React.ReactNode[] => {
+    const input = node.inputs[inputKey];
+    if (!input) return [];
+    const typeColor = TYPE_COLORS[input.type] || '#888';
+    const lines: React.ReactNode[] = [];
+    lines.push(
+      <span style={{ fontWeight: 700 }}>
+        <span style={{ color: typeColor }}>▶</span> {inputLabelOf(node, inputKey, input.label)} <span style={{ color: tc.surface2 }}>({input.type})</span>
+      </span>
+    );
+    // What it is, in the words chosen for it (Input names…).
+    const chosenHint = inputHintOf(node, inputKey);
+    if (chosenHint) lines.push(<span style={{ whiteSpace: 'normal' }}>{chosenHint}</span>);
+    const inputError = errors?.find(e => e.socket === inputKey);
+    if (inputError) lines.push(<span style={{ color: tk.status.danger, fontWeight: 600, whiteSpace: 'normal' }}>{inputError.message}</span>);
+    if (def?.inputs[inputKey]?.field) lines.push(<span style={{ color: tk.kind.expr, whiteSpace: 'normal' }}>ƒ {FIELD_SOCKET_TIP}</span>);
+    const inExpr = getInputExpr(node, inputKey);
+    if (inExpr) lines.push(<span style={{ color: tk.kind.expr, whiteSpace: 'normal' }}>ƒ <span style={{ fontFamily: fontFamily.mono }}>{inExpr}</span></span>);
+    if (input.connection) {
+      // Show what's connected
+      const srcNode = nodes.find(n => n.id === input.connection!.nodeId);
+      const srcDef = srcNode ? getNodeDefinitionFor(srcNode) : undefined;
+      const srcOutLabel = srcDef?.outputs[input.connection.outputKey]?.label ?? input.connection.outputKey;
+      const srcType = srcDef?.outputs[input.connection.outputKey]?.type;
+      lines.push(
+        <span style={{ color: tc.surface2, marginTop: '2px', display: 'block' }}>Connected to:</span>
+      );
+      const srcName = (typeof srcNode?.params.label === 'string' && srcNode.params.label.trim()) || srcDef?.label || srcNode?.type || input.connection.nodeId;
+      lines.push(
+        <span style={{ color: srcType ? (TYPE_COLORS[srcType] || tc.text) : tc.text, paddingLeft: '6px' }}>
+          {srcNode ? nodeLink(srcNode.id, srcName) : srcName} → {srcOutLabel} <span style={{ color: tc.surface2 }}>({srcType})</span>
+        </span>
+      );
+      lines.push(<span style={{ color: tc.surface2, paddingLeft: '6px', fontSize: 10.5 }}>click the name to jump to it · click the socket to disconnect</span>);
+    } else {
+      // Show compatible sources
+      const sources = getCompatibleSources(nodes, node.id, input.type as DataType);
+      if (sources.length > 0) {
+        lines.push(<span style={{ color: tc.surface2, marginTop: '2px', display: 'block' }}>Sources in graph:</span>);
+        for (const s of sources.slice(0, 6)) {
+          lines.push(
+            <span style={{ paddingLeft: '6px', color: tc.subtext0 }}>• {s.nodeLabel} → {s.outputLabel}</span>
+          );
+        }
+        if (sources.length > 6) {
+          lines.push(<span style={{ paddingLeft: '6px', color: tc.surface2 }}>...+{sources.length - 6} more</span>);
+        }
+      } else {
+        lines.push(<span style={{ color: tc.surface2, marginTop: '2px', display: 'block' }}>No compatible sources in graph</span>);
+      }
+    }
+    return lines;
+  };
+
+  // ─── Build tooltip for an output socket ────────────────────────────────────
+  const buildOutputTooltip = (outputKey: string): React.ReactNode[] => {
+    // A group's sockets are its own (node.outputs), not its definition's.
+    const output = def?.outputs[outputKey] ?? node.outputs?.[outputKey];
+    if (!output) return [];
+    const typeColor = TYPE_COLORS[output.type] || '#888';
+    const lines: React.ReactNode[] = [];
+    lines.push(
+      <span style={{ fontWeight: 700 }}>
+        <span style={{ color: typeColor }}>◀</span> {output.label} <span style={{ color: tc.surface2 }}>({output.type})</span>
+      </span>
+    );
+    // What this output feeds, each name a jump link
+    const targets: Array<{ n: GraphNode; inputKey: string }> = [];
+    for (const n of nodes) {
+      for (const [k, inp] of Object.entries(n.inputs)) {
+        if (inp.connection?.nodeId === node.id && inp.connection.outputKey === outputKey) targets.push({ n, inputKey: k });
+      }
+    }
+    if (targets.length > 0) {
+      lines.push(<span style={{ color: tc.surface2, marginTop: '2px', display: 'block' }}>Feeds:</span>);
+      for (const { n, inputKey } of targets.slice(0, 8)) {
+        const tDef = getNodeDefinitionFor(n);
+        const name = (typeof n.params.label === 'string' && n.params.label.trim()) || tDef?.label || n.type;
+        const inLabel = n.inputs[inputKey]?.label ?? tDef?.inputs[inputKey]?.label ?? inputKey;
+        lines.push(<span style={{ paddingLeft: '6px', color: tc.subtext0 }}>{nodeLink(n.id, name)} ← {inLabel}</span>);
+      }
+      if (targets.length > 8) lines.push(<span style={{ paddingLeft: '6px', color: tc.surface2 }}>...+{targets.length - 8} more</span>);
+      lines.push(<span style={{ color: tc.surface2, paddingLeft: '6px', fontSize: 10.5 }}>click a name to jump to it · double-click the socket to remove these wires</span>);
+    } else {
+      // List what types this can connect to
+      const compatMsg = output.type === 'float'
+        ? 'Connects to float or vec3 inputs'
+        : `Connects to ${output.type} inputs`;
+      lines.push(<span style={{ color: tc.surface2, marginTop: '2px', display: 'block' }}>{compatMsg}</span>);
+    }
+    return lines;
+  };
+
   const [showCommentEditor, setShowCommentEditor] = useState(false);
   // The code card's Edit / double-click and its Note button (stable, so the memoised card stays put)
   const nodeType = node.type;
@@ -2067,11 +2162,11 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                   const wired = !!node.inputs[port.key]?.connection;
                   const color = TYPE_COLORS[port.type] ?? '#888';
                   return (
-                    <div key={port.key} data-group-port={`in:${port.key}`} style={{ display: 'flex', alignItems: 'center', gap: 4, height: rowH }}>
+                    <div key={port.key} data-group-port={`in:${port.key}`} style={{ display: 'flex', alignItems: 'center', gap: 4, height: rowH, position: 'relative' }}>
                       <div
                         ref={el => { registerSocket(node.id, 'in', port.key, el); }}
-                        onMouseEnter={() => onSocketHover?.({ nodeId: node.id, key: port.key, dir: 'in' })}
-                        onMouseLeave={() => onSocketHover?.(null)}
+                        onMouseEnter={() => { holdTip(); setHoveredInput(port.key); onSocketHover?.({ nodeId: node.id, key: port.key, dir: 'in' }); }}
+                        onMouseLeave={leaveInputSocket}
                         onMouseUp={e => {
                           e.stopPropagation();
                           if (wired && !isConnectionDragging) disconnectInput(node.id, port.key);
@@ -2090,6 +2185,12 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                       <GroupPortName label={port.label} type={port.type} origin={port.origin} socketSide="left" style={{ marginLeft: -16 }}
                         onRename={port.origin === 'added' ? renamePort(port) : undefined}
                         onRemove={port.origin === 'added' ? removePort(port) : undefined} />
+                      {/* What is wired in, its name a jump link, as on every other card's sockets */}
+                      {hoveredInput === port.key && !draggingType && node.inputs[port.key] && (
+                        <span style={{ position: 'absolute', left: -22, top: '50%' }}>
+                          <SocketTooltip lines={buildInputTooltip(port.key)} side="left" onMouseEnter={holdTip} onMouseLeave={() => setHoveredInput(null)} />
+                        </span>
+                      )}
                     </div>
                   );
                 })}
@@ -2101,15 +2202,15 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                   const color = TYPE_COLORS[port.type] ?? '#888';
                   const pending = pendingMobileConnection?.sourceNodeId === node.id && pendingMobileConnection?.sourceOutputKey === port.key;
                   return (
-                    <div key={port.key} data-group-port={`out:${port.key}`} style={{ display: 'flex', alignItems: 'center', gap: 6, height: rowH }}>
+                    <div key={port.key} data-group-port={`out:${port.key}`} style={{ display: 'flex', alignItems: 'center', gap: 6, height: rowH, position: 'relative' }}>
                       <GroupPortName label={port.label} type={port.type} origin={port.origin} socketSide="right"
                         onRename={port.origin === 'added' && port.store ? renamePort(port) : undefined}
                         onRemove={port.origin === 'added' && port.store ? removePort(port) : undefined} />
                       <div
                         data-socket="out"
                         ref={el => { registerSocket(node.id, 'out', port.key, el); }}
-                        onMouseEnter={() => onSocketHover?.({ nodeId: node.id, key: port.key, dir: 'out' })}
-                        onMouseLeave={() => onSocketHover?.(null)}
+                        onMouseEnter={() => { holdTip(); setHoveredOutput(port.key); onSocketHover?.({ nodeId: node.id, key: port.key, dir: 'out' }); }}
+                        onMouseLeave={leaveOutputSocket}
                         onMouseDown={e => { e.stopPropagation(); onStartConnection(node.id, port.key, e); }}
                         onTouchEnd={e => { e.stopPropagation(); e.preventDefault(); onTapOutputSocket?.(node.id, port.key); }}
                         style={{
@@ -2121,6 +2222,12 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                           boxShadow: pending ? `0 0 0 3px ${color}, 0 0 10px ${color}` : `0 0 0 2px ${tk.bg.panel}`,
                         }}
                       />
+                      {/* What it feeds, each name a jump link, as on every other card's sockets */}
+                      {hoveredOutput === port.key && !draggingType && (
+                        <span style={{ position: 'absolute', right: -22, top: '50%' }}>
+                          <SocketTooltip lines={buildOutputTooltip(port.key)} side="right" onMouseEnter={holdTip} onMouseLeave={() => setHoveredOutput(null)} />
+                        </span>
+                      )}
                     </div>
                   );
                 })}
@@ -2815,98 +2922,6 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
     return (used.length ? used : all).map(fn => fn.trim());
   }, [showCode, def, node, codeSnippet]);
 
-  // ─── Build tooltip for an input socket ─────────────────────────────────────
-  const buildInputTooltip = (inputKey: string): React.ReactNode[] => {
-    const input = node.inputs[inputKey];
-    if (!input) return [];
-    const typeColor = TYPE_COLORS[input.type] || '#888';
-    const lines: React.ReactNode[] = [];
-    lines.push(
-      <span style={{ fontWeight: 700 }}>
-        <span style={{ color: typeColor }}>▶</span> {inputLabelOf(node, inputKey, input.label)} <span style={{ color: tc.surface2 }}>({input.type})</span>
-      </span>
-    );
-    // What it is, in the words chosen for it (Input names…).
-    const chosenHint = inputHintOf(node, inputKey);
-    if (chosenHint) lines.push(<span style={{ whiteSpace: 'normal' }}>{chosenHint}</span>);
-    const inputError = errors?.find(e => e.socket === inputKey);
-    if (inputError) lines.push(<span style={{ color: tk.status.danger, fontWeight: 600, whiteSpace: 'normal' }}>{inputError.message}</span>);
-    if (def.inputs[inputKey]?.field) lines.push(<span style={{ color: tk.kind.expr, whiteSpace: 'normal' }}>ƒ {FIELD_SOCKET_TIP}</span>);
-    const inExpr = getInputExpr(node, inputKey);
-    if (inExpr) lines.push(<span style={{ color: tk.kind.expr, whiteSpace: 'normal' }}>ƒ <span style={{ fontFamily: fontFamily.mono }}>{inExpr}</span></span>);
-    if (input.connection) {
-      // Show what's connected
-      const srcNode = nodes.find(n => n.id === input.connection!.nodeId);
-      const srcDef = srcNode ? getNodeDefinitionFor(srcNode) : undefined;
-      const srcOutLabel = srcDef?.outputs[input.connection.outputKey]?.label ?? input.connection.outputKey;
-      const srcType = srcDef?.outputs[input.connection.outputKey]?.type;
-      lines.push(
-        <span style={{ color: tc.surface2, marginTop: '2px', display: 'block' }}>Connected to:</span>
-      );
-      const srcName = (typeof srcNode?.params.label === 'string' && srcNode.params.label.trim()) || srcDef?.label || srcNode?.type || input.connection.nodeId;
-      lines.push(
-        <span style={{ color: srcType ? (TYPE_COLORS[srcType] || tc.text) : tc.text, paddingLeft: '6px' }}>
-          {srcNode ? nodeLink(srcNode.id, srcName) : srcName} → {srcOutLabel} <span style={{ color: tc.surface2 }}>({srcType})</span>
-        </span>
-      );
-      lines.push(<span style={{ color: tc.surface2, paddingLeft: '6px', fontSize: 10.5 }}>click the name to jump to it · click the socket to disconnect</span>);
-    } else {
-      // Show compatible sources
-      const sources = getCompatibleSources(nodes, node.id, input.type as DataType);
-      if (sources.length > 0) {
-        lines.push(<span style={{ color: tc.surface2, marginTop: '2px', display: 'block' }}>Sources in graph:</span>);
-        for (const s of sources.slice(0, 6)) {
-          lines.push(
-            <span style={{ paddingLeft: '6px', color: tc.subtext0 }}>• {s.nodeLabel} → {s.outputLabel}</span>
-          );
-        }
-        if (sources.length > 6) {
-          lines.push(<span style={{ paddingLeft: '6px', color: tc.surface2 }}>...+{sources.length - 6} more</span>);
-        }
-      } else {
-        lines.push(<span style={{ color: tc.surface2, marginTop: '2px', display: 'block' }}>No compatible sources in graph</span>);
-      }
-    }
-    return lines;
-  };
-
-  // ─── Build tooltip for an output socket ────────────────────────────────────
-  const buildOutputTooltip = (outputKey: string): React.ReactNode[] => {
-    const output = def.outputs[outputKey];
-    if (!output) return [];
-    const typeColor = TYPE_COLORS[output.type] || '#888';
-    const lines: React.ReactNode[] = [];
-    lines.push(
-      <span style={{ fontWeight: 700 }}>
-        <span style={{ color: typeColor }}>◀</span> {output.label} <span style={{ color: tc.surface2 }}>({output.type})</span>
-      </span>
-    );
-    // What this output feeds, each name a jump link
-    const targets: Array<{ n: GraphNode; inputKey: string }> = [];
-    for (const n of nodes) {
-      for (const [k, inp] of Object.entries(n.inputs)) {
-        if (inp.connection?.nodeId === node.id && inp.connection.outputKey === outputKey) targets.push({ n, inputKey: k });
-      }
-    }
-    if (targets.length > 0) {
-      lines.push(<span style={{ color: tc.surface2, marginTop: '2px', display: 'block' }}>Feeds:</span>);
-      for (const { n, inputKey } of targets.slice(0, 8)) {
-        const tDef = getNodeDefinitionFor(n);
-        const name = (typeof n.params.label === 'string' && n.params.label.trim()) || tDef?.label || n.type;
-        const inLabel = n.inputs[inputKey]?.label ?? tDef?.inputs[inputKey]?.label ?? inputKey;
-        lines.push(<span style={{ paddingLeft: '6px', color: tc.subtext0 }}>{nodeLink(n.id, name)} ← {inLabel}</span>);
-      }
-      if (targets.length > 8) lines.push(<span style={{ paddingLeft: '6px', color: tc.surface2 }}>...+{targets.length - 8} more</span>);
-      lines.push(<span style={{ color: tc.surface2, paddingLeft: '6px', fontSize: 10.5 }}>click a name to jump to it · double-click the socket to remove these wires</span>);
-    } else {
-      // List what types this can connect to
-      const compatMsg = output.type === 'float'
-        ? 'Connects to float or vec3 inputs'
-        : `Connects to ${output.type} inputs`;
-      lines.push(<span style={{ color: tc.surface2, marginTop: '2px', display: 'block' }}>{compatMsg}</span>);
-    }
-    return lines;
-  };
 
   return (
     <div
