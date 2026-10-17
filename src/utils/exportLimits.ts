@@ -44,13 +44,13 @@ export function getGpuLimits(canvas: HTMLCanvasElement | null): GpuLimits {
   const isMobile = isMobileDevice();
   let maxDim = 4096; // WebGL-guaranteed floor on every device we care about
   const gl = canvas?.getContext('webgl2') ?? canvas?.getContext('webgl') ?? null;
-  if (gl) {
-    const vp = gl.getParameter(gl.MAX_VIEWPORT_DIMS) as Int32Array;
-    maxDim = Math.min(
-      gl.getParameter(gl.MAX_TEXTURE_SIZE) as number,
-      gl.getParameter(gl.MAX_RENDERBUFFER_SIZE) as number,
-      vp[0], vp[1],
-    );
+  // A lost context (a phone reclaiming GPU memory) answers null to every getParameter: keep the
+  // floor then, rather than throwing and taking the whole app down with the Record dialog.
+  if (gl && !gl.isContextLost?.()) {
+    const vp = gl.getParameter(gl.MAX_VIEWPORT_DIMS) as Int32Array | null;
+    const dims = [gl.getParameter(gl.MAX_TEXTURE_SIZE), gl.getParameter(gl.MAX_RENDERBUFFER_SIZE), vp?.[0], vp?.[1]]
+      .filter((v): v is number => typeof v === 'number' && v > 0);
+    if (dims.length) maxDim = Math.min(...dims);
   }
   // ~40 bytes/px across the live + export buffers: 8K is ~1.3 GB, 4K ~330 MB.
   const deviceMemory = (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
