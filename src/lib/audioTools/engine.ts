@@ -9,7 +9,10 @@
  *   sums on that frame (dsp.ts) and writes its numbers by channel key (`<id>::level`), or fills its texture.
  * - Textures go to the picture through the store's node textures (`setHost`, ShaderCanvas), as Blob Track's do.
  *
- * Only top-level nodes are followed: Audio nodes inside a group hear nothing yet (docs/audio-tools-plan.md).
+ * - Learned sounds (lib/audioTools/learn.ts) listen on the source's frame too: `<id>::<sound>_t` / `_m`.
+ *
+ * Nodes inside groups (plain, iterated, nested) are followed too (graphWalk.ts): an `audio` wire through a group's
+ * ports reaches its source, and every node is keyed by its own id, as the compiler binds it.
  */
 import * as THREE from 'three';
 import type { GraphNode } from '../../types/nodeGraph';
@@ -19,8 +22,13 @@ import { audioEngine } from '../audioEngine';
 import { liveAudio } from '../liveAudio';
 import {
   AUDIO_BAND_TYPE, AUDIO_HIT_TYPE, AUDIO_SOURCE_TYPE, AUDIO_SPECTROGRAM_TYPE, AUDIO_SPECTRUM_TYPE, AUDIO_TEXTURE_TYPES,
-  AUDIO_WAVEFORM_TYPE, audioBandOf, audioSourceKind, audioTextureSize, isAudioToolType, type AudioSourceKind,
+  AUDIO_WAVEFORM_TYPE, audioBandOf, audioSoundsOf, audioSourceKind, audioTextureSize, type AudioSourceKind,
 } from '../../nodes/definitions/audioTools';
+import { collectAudioNodes } from './graphWalk';
+import {
+  learnFromRing, learnFromSamples, newLearnListener, soundMatchKey, soundTriggerKey, stepLearn,
+  type AudioSoundSpec, type LearnListener, type LearnResult,
+} from './learn';
 import { bandTriggerKey, bandValueKey, bandsOf, newBandRun, stepBandRun, trimWindow, type AudioBandSpec, type BandRun } from './bands';
 import {
   bandLevel, newBandState, newHitState, rmsLevel, scrollRows, spectrumBins, stepBand, stepHit, waveRow, writeRow,
@@ -45,6 +53,9 @@ interface SourceSlot {
   /** The bands' running state, by band id. */
   runs: Map<string, BandRun>;
   bands: AudioBandSpec[];
+  /** Learned sounds, and the listener that matches them (and keeps the last seconds for "Learn last hit"). */
+  sounds: AudioSoundSpec[];
+  learn: LearnListener;
   /** The card's small spectrum: 0..1 on a log layout. */
   row: Float32Array;
   upstream: AnalyserNode | null;
@@ -100,6 +111,8 @@ export interface AudioSourceView {
   duration: number;
   /** Per band: its Value now, and when its last hit was (performance.now ms). */
   bands: Map<string, { level: number; hitAt: number; count: number }>;
+  /** Per learned sound: its Match now (falling), the similarity at the last onset, when it last fired (ms), fires. */
+  sounds: Map<string, { match: number; last: number; hitAt: number; count: number }>;
 }
 
 /** Bins in the card's spectrum. */
@@ -159,23 +172,33 @@ class AudioToolsEngine implements InputSource {
     if (!s) return null;
     const bands = new Map<string, { level: number; hitAt: number; count: number }>();
     for (const [id, r] of s.runs) bands.set(id, { level: r.band.level, hitAt: Number.isFinite(r.hitAt) ? r.hitAt * 1000 : -Infinity, count: r.hit.count });
+    const sounds = new Map<string, { match: number; last: number; hitAt: number; count: number }>();
+    for (const [id, r] of s.learn.runs) sounds.set(id, { match: r.match, last: r.last, hitAt: Number.isFinite(r.hitAt) ? r.hitAt * 1000 : -Infinity, count: r.count });
     return {
       kind: s.kind, active: s.active, loaded: s.loaded, freq: s.freq, wave: s.wave, sampleRate: s.sampleRate, level: s.level, time: s.time,
-      duration: s.loaded ? audioEngine.duration(nodeId) : 0, bands,
+      duration: s.loaded ? audioEngine.duration(nodeId) : 0, bands, sounds,
     };
   }
 
   // ── The graph ────────────────────────────────────────────────────────────────────────────────────────────
 
+  /** The graph changed: every Audio node at any depth (groups too) gets its slot; a removed one's goes. */
   sync(nodes: readonly GraphNode[]): void {
-    const audio = nodes.filter(n => isAudioToolType(n.type));
-    const srcIds = new Set(audio.filter(n => n.type === AUDIO_SOURCE_TYPE).map(n => n.id));
+    const audio = collectAudioNodes(nodes);
+    const srcIds = new Set(audio.filter(r => r.node.type === AUDIO_SOURCE_TYPE).map(r => r.node.id));
     for (const [id, s] of this.sources) if (!srcIds.has(id)) this.dropSource(id, s);
-    for (const [id, l] of this.listeners) if (!audio.some(n => n.id === id && n.type !== AUDIO_SOURCE_TYPE)) this.dropListener(id, l);
-    for (const n of audio) {
-      if (n.type === AUDIO_SOURCE_TYPE) this.syncSource(n);
-      else this.syncListener(n);
-    }
+    for (const [id, l] of this.listeners) if (!audio.some(r => r.node.id === id && r.node.type !== AUDIO_SOURCE_TYPE)) this.dropListener(id, l);
+    // Sources first, so a listener finds its source's slot.
+    for (const r of audio) if (r.node.type === AUDIO_SOURCE_TYPE) this.syncSource(r.node);
+    for (const r of audio) if (r.node.type !== AUDIO_SOURCE_TYPE) this.syncListener(r.node, r.sourceId);
+  }
+
+  /** The ids of the nodes the engine runs now (for tests and checks): sources, and listeners with their source. */
+  slots(): { sources: string[]; listeners: Array<{ id: string; sourceId: string | null; texture: boolean }> } {
+    return {
+      sources: [...this.sources.keys()],
+      listeners: [...this.listeners].map(([id, l]) => ({ id, sourceId: l.sourceId, texture: !!l.tex })),
+    };
   }
 
   private syncSource(n: GraphNode): void {
@@ -183,6 +206,7 @@ class AudioToolsEngine implements InputSource {
     if (!s) {
       s = {
         node: n, kind: audioSourceKind(n), loaded: false, applied: '', upstream: null, probe: null, runs: new Map(), bands: [],
+        sounds: [], learn: newLearnListener(),
         row: new Float32Array(CARD_SPECTRUM_BINS),
         freq: new Float32Array(FFT / 2), wave: new Float32Array(FFT), sampleRate: 48000, active: false, level: 0, time: 0, micSince: 0, status: '',
       };
@@ -194,6 +218,7 @@ class AudioToolsEngine implements InputSource {
     // A band's state stays while it is edited; a removed band's goes.
     for (const id of [...s.runs.keys()]) if (!s.bands.some(b => b.id === id)) s.runs.delete(id);
     for (const b of s.bands) if (!s.runs.has(b.id)) s.runs.set(b.id, newBandRun());
+    s.sounds = audioSoundsOf(n.params);
     // Released by someone else (lib/audioSync.ts stops every song when another graph opens): it has to be loaded again.
     if (s.loaded && !audioEngine.isLoaded(n.id)) { s.loaded = false; s.applied = ''; }
     this.applyPlayback(s);
@@ -243,15 +268,14 @@ class AudioToolsEngine implements InputSource {
     this.changed();
   }
 
-  private syncListener(n: GraphNode): void {
+  private syncListener(n: GraphNode, sourceId: string | null): void {
     let l = this.listeners.get(n.id);
     if (!l) {
       l = { node: n, sourceId: null, band: newBandState(), hit: newHitState(), row: new Float32Array(0), tex: null, w: 0, h: 0, hitAt: 0 };
       this.listeners.set(n.id, l);
     }
     l.node = n;
-    const c = n.inputs.audio?.connection;
-    l.sourceId = c && this.sources.has(c.nodeId) ? c.nodeId : null;
+    l.sourceId = sourceId && this.sources.has(sourceId) ? sourceId : null;
     if (AUDIO_TEXTURE_TYPES.has(n.type)) {
       const { w, h } = audioTextureSize(n);
       if (w !== l.w || h !== l.h || !l.tex) {
@@ -303,6 +327,28 @@ class AudioToolsEngine implements InputSource {
     return null;
   }
 
+  /**
+   * Learn a sound from the loaded file between `from` and `to` seconds (the strongest hit in there), or, with no
+   * range (the Mic), from the last couple of seconds heard ("Learn last hit"). The fingerprint, or why not.
+   */
+  learn(nodeId: string, range?: { from: number; to: number }): LearnResult {
+    const s = this.sources.get(nodeId);
+    if (!s) return { error: 'This Audio Source isn\'t running.' };
+    if (!range) return learnFromRing(s.learn);
+    const buf = audioEngine.buffer(nodeId);
+    if (!buf) return { error: 'Load a sound first.' };
+    // Mono: the channels' average.
+    const a = Math.max(0, Math.floor(range.from * buf.sampleRate) - 4096), b = Math.min(buf.length, Math.ceil(range.to * buf.sampleRate) + 8192);
+    const mono = new Float32Array(Math.max(0, b - a));
+    for (let c = 0; c < buf.numberOfChannels; c++) {
+      const ch = buf.getChannelData(c);
+      for (let i = 0; i < mono.length; i++) mono[i] += ch[a + i] / buf.numberOfChannels;
+    }
+    const off = a / buf.sampleRate;
+    const r = learnFromSamples(mono, buf.sampleRate, range.from - off, range.to - off);
+    return 'error' in r ? r : { ...r, at: r.at + off };
+  }
+
   /** Open the microphone (call from a click: the browser asks). */
   async startMic(nodeId: string): Promise<void> {
     const s = this.sources.get(nodeId);
@@ -333,6 +379,13 @@ class AudioToolsEngine implements InputSource {
         stepBandRun(run, b, s.freq, s.sampleRate, nowMs / 1000, dt);
         if (b.value) write(`${id}::${bandValueKey(b.id)}`, run.band.level);
         if (b.trigger) write(`${id}::${bandTriggerKey(b.id)}`, run.hit.trigger);
+      }
+      stepLearn(s.learn, s.sounds, s.freq, s.sampleRate, nowMs / 1000, dt);
+      for (const snd of s.sounds) {
+        const r = s.learn.runs.get(snd.id);
+        if (!r) continue;
+        if (snd.trigger) write(`${id}::${soundTriggerKey(snd.id)}`, r.trigger);
+        if (snd.matchOut) write(`${id}::${soundMatchKey(snd.id)}`, r.match);
       }
     }
     for (const [id, l] of this.listeners) this.runListener(id, l, nowMs, dt, write);

@@ -1051,10 +1051,7 @@ export class ShaderAssembler {
         }
         // The Audio nodes (docs/audio-tools.md): their numbers come in through the input bus, their pictures of the
         // sound as node textures (lib/audioTools/engine.ts).
-        if (isAudioToolType(node.type)) {
-          for (const ch of audioLiveChannels(node)) this.liveUniforms[audioToolUniform(nodeSlug, ch)] = `${node.id}::${ch}`;
-          if (AUDIO_TEXTURE_TYPES.has(node.type)) this.textureUniforms[audioToolSampler(nodeSlug)] = node.id;
-        }
+        this.registerAudioTool(node, nodeSlug, node.id);
         // Baked nodes (docs/bake.md) read their video the same way, bound by lib/bakedVideos.ts.
         if (node.type === 'videoInput' || node.type === 'baked') {
           this.videoUniforms[`u_vid_${nodeSlug}`] = node.id;
@@ -1084,6 +1081,18 @@ export class ShaderAssembler {
       this.groupSlugs.set(prefix, m);
     }
     return m;
+  }
+
+/**
+   * An Audio node's live uniforms (its numbers, by channel) and texture (its picture of the sound), named after the
+   * id its GLSL uses (`slug`: the top-level slug, or a group's prefixed id) and bound from its original node id, which
+   * is what lib/audioTools/engine.ts writes under, at any depth. True when `node` is an Audio node.
+   */
+  private registerAudioTool(node: GraphNode, slug: string, origId: string): boolean {
+    if (!isAudioToolType(node.type)) return false;
+    for (const ch of audioLiveChannels(node)) this.liveUniforms[audioToolUniform(slug, ch)] = `${origId}::${ch}`;
+    if (AUDIO_TEXTURE_TYPES.has(node.type)) this.textureUniforms[audioToolSampler(slug)] = origId;
+    return true;
   }
 
   private registerUnit(id: string, u: Omit<FieldUnit, 'order'>): void {
@@ -1464,6 +1473,8 @@ export class ShaderAssembler {
                   const { patchedNode: patchedInn, uniforms: innUniforms, bindings: innBindings } = patchNodeParamsForUniforms(inn, innDef, fn => this.functions.add(fn), innOrig);
                   Object.assign(this.paramUniforms, innUniforms);
                   Object.assign(this.paramBindings, innBindings);
+                  // The Audio nodes two groups deep: their numbers and pictures, bound by the original id.
+                  if (this.registerAudioTool(inn, inn.id, innOrig)) innDef.declarationsFor?.(patchedInn).forEach(d => this.declarations.add(d));
                   const innResult = innDef.generateGLSL(patchedInn, innInputVars);
                   this.mainCode.push(innResult.code);
                   this.nodeOutputs.set(inn.id, innResult.outputVars);
@@ -1572,6 +1583,7 @@ export class ShaderAssembler {
               }
               if (subNode.type === CACHE_TYPE) this.registerCache(subNode.id, originalId);
               subDef.textureSlots?.forEach(slot => { this.textureUniforms[`u_tex_${subNode.id}_${slot}`] = `${originalId}::${slot}`; });
+              this.registerAudioTool(subNode, subNode.id, originalId);
               const { patchedNode: patchedSub, uniforms: subUniforms, bindings: subBindings } = patchNodeParamsForUniforms(effectiveSubNode, subDef, fn => this.functions.add(fn), originalId);
               Object.assign(this.paramUniforms, subUniforms);
               Object.assign(this.paramBindings, subBindings);

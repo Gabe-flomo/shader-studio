@@ -8,14 +8,21 @@
  *   Low / High Hz, and what it sends out (Value with Attack / Release / Gain, Trigger with Sensitivity / Cooldown),
  *   with its live level and a flash on each hit. Every band is an output on the node (lib/audioTools/bands.ts).
  *
+ * - **Learn a sound** (lib/audioTools/learn.ts): select a moment on the waveform (Drag: Select) or trim to it, press
+ *   Learn, and the strongest hit in it becomes a learned sound: a row with its fingerprint, Match and Cooldown, and
+ *   Trigger / Match outputs on the node. On the Mic (or after a file played), Learn last hit takes the last seconds heard.
+ *
  * Moving a band or the trim changes only what the engine reads (`live`: no recompile); adding, removing, renaming a
- * band or changing what it sends changes the node's outputs, so those recompile.
+ * band or a sound, or changing what it sends, changes the node's outputs, so those recompile. Match, Cooldown and
+ * Re-learn are live.
  */
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as RPointerEvent } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
-import { audioSourceKind, type AudioSourceKind } from '../../nodes/definitions/audioTools';
+import { audioSoundsOf, audioSourceKind, type AudioSourceKind } from '../../nodes/definitions/audioTools';
+import { findNodeDeep } from '../../lib/audioTools/graphWalk';
+import { LEARN_BANDS, newSound, type AudioSoundSpec, type LearnResult } from '../../lib/audioTools/learn';
 import { audioToolsEngine } from '../../lib/audioTools/engine';
 import { audioEngine } from '../../lib/audioEngine';
 import { liveAudio } from '../../lib/liveAudio';
@@ -48,25 +55,33 @@ function fit(c: HTMLCanvasElement | null): { g: CanvasRenderingContext2D; w: num
   return { g, w, h };
 }
 
-type TrimDrag = { which: 'in' | 'out' | 'new'; anchor: number; start: number; end: number };
+type TrimDrag = { which: 'in' | 'out' | 'new' | 'select'; anchor: number; start: number; end: number };
+type Span = { start: number; end: number };
+const SELECT = '#a6e3a1';
 type SpecDrag = { kind: 'new'; a: number; b: number } | { kind: 'edge'; id: string; edge: 'lo' | 'hi' };
 
 export function AudioSourceWindow({ nodeId, onClose, onLoad }: { nodeId: string; onClose: () => void; onLoad: () => void }) {
   const tk = useTokens();
-  const node = useNodeGraphStore(s => s.nodes.find(n => n.id === nodeId));
+  const node = useNodeGraphStore(s => findNodeDeep(s.nodes, nodeId));
   const update = useNodeGraphStore(s => s.updateNodeParams);
   const waveRef = useRef<HTMLCanvasElement>(null);
   const specRef = useRef<HTMLCanvasElement>(null);
   const meterRefs = useRef(new Map<string, HTMLCanvasElement>());
+  const soundRefs = useRef(new Map<string, HTMLCanvasElement>());
   const [selected, setSelected] = useState<string | null>(null);
+  /** Dragging on the waveform trims, or selects a moment to learn from. */
+  const [dragMode, setDragMode] = useState<'trim' | 'select'>('trim');
+  const [selection, setSelection] = useState<Span | null>(null);
+  const [learnMsg, setLearnMsg] = useState('');
   const trimDrag = useRef<TrimDrag | null>(null);
   const specDrag = useRef<SpecDrag | null>(null);
   const [, redraw] = useState(0);
   // What the drawer reads (the latest node, without restarting the loop).
-  const latest = useRef({ bands: [] as AudioBandSpec[], trimIn: 0, trimOut: 0, selected: null as string | null });
+  const latest = useRef({ bands: [] as AudioBandSpec[], sounds: [] as AudioSoundSpec[], trimIn: 0, trimOut: 0, selected: null as string | null, selection: null as Span | null });
   const bands = node ? bandsOf(node.params) : [];
+  const sounds = node ? audioSoundsOf(node.params) : [];
   const trimIn = Number(node?.params.trimIn ?? 0), trimOut = Number(node?.params.trimOut ?? 0);
-  useEffect(() => { latest.current = { bands, trimIn, trimOut, selected }; });
+  useEffect(() => { latest.current = { bands, sounds, trimIn, trimOut, selected, selection }; });
 
   useEffect(() => {
     const row = new Float32Array(SPEC_BINS);
@@ -99,6 +114,13 @@ export function AudioSourceWindow({ nodeId, onClose, onLoad }: { nodeId: string;
           }
           g.fillStyle = 'rgba(17,17,27,0.55)'; g.fillRect(0, 0, xa, h); g.fillRect(xb, 0, w - xb, h);
           for (const x of [xa, xb]) { g.fillStyle = '#f9e2af'; g.fillRect(x - 1, 0, 2, h); g.fillRect(x - 5, 0, 10, 8); }
+          // The moment selected to learn from.
+          const sel = d?.which === 'select' ? { start: d.start, end: d.end } : L.selection;
+          if (sel) {
+            const sa = (sel.start / v.duration) * w, sb = (sel.end / v.duration) * w;
+            g.fillStyle = 'rgba(166,227,161,0.22)'; g.fillRect(sa, 0, Math.max(1, sb - sa), h);
+            g.fillStyle = SELECT; g.fillRect(sa, h - 3, Math.max(1, sb - sa), 3);
+          }
           const px = (v.time / v.duration) * w;
           g.fillStyle = '#ffffff'; g.fillRect(px - 0.5, 0, 1.5, h);
         } else if (v.kind === 'mic') {
@@ -160,6 +182,24 @@ export function AudioSourceWindow({ nodeId, onClose, onLoad }: { nodeId: string;
         g.fillStyle = b.trigger ? `rgba(249,226,175,${0.15 + 0.85 * flash})` : 'transparent';
         g.beginPath(); g.arc(w - h / 2, h / 2, h / 2 - 2, 0, Math.PI * 2); g.fill();
       }
+      // ── Learned sounds: the fingerprint's bars, the Match now against its threshold, a flash when it fires ──
+      for (const snd of L.sounds) {
+        const m = fit(soundRefs.current.get(snd.id) ?? null), lv = v.sounds.get(snd.id);
+        if (!m) continue;
+        const { g, w, h } = m;
+        const flash = lv ? Math.max(0, 1 - (performance.now() - lv.hitAt) / 300) : 0;
+        g.fillStyle = BG; g.fillRect(0, 0, w, h);
+        if (flash > 0) { g.fillStyle = `${snd.color}${Math.round(flash * 90).toString(16).padStart(2, '0')}`; g.fillRect(0, 0, w, h); }
+        const fh = h - 8, n = snd.spec.length;
+        if (n) {
+          const lo = Math.min(...snd.spec), hi = Math.max(...snd.spec), bw = w / n;
+          g.fillStyle = snd.color;
+          for (let i = 0; i < n; i++) { const a = ((snd.spec[i] - lo) / Math.max(1e-6, hi - lo)) * (fh - 2); g.fillRect(i * bw, fh - a, Math.max(1, bw - 0.6), a); }
+        }
+        g.fillStyle = DIM; g.fillRect(0, h - 5, w, 4);
+        g.fillStyle = (lv?.match ?? 0) >= snd.match ? snd.color : LABEL; g.fillRect(0, h - 5, w * (lv?.match ?? 0), 4);
+        g.fillStyle = '#ffffff'; g.fillRect(w * snd.match - 1, h - 7, 2, 7);
+      }
     });
   }, [nodeId]);
 
@@ -175,6 +215,31 @@ export function AudioSourceWindow({ nodeId, onClose, onLoad }: { nodeId: string;
   const patchBand = (id: string, p: Partial<AudioBandSpec>, structural = false) => setBands(bands.map(b => (b.id === id ? { ...b, ...p } : b)), structural);
   const addBand = (preset: string | { lo: number; hi: number }) => { const b = newBand(bands, preset); setBands([...bands, b], true); setSelected(b.id); };
 
+  // ── Learned sounds ──
+  const takenIds = new Set(bands.map(b => b.id));
+  /** Sounds: Match, Cooldown and Re-learn are live; adding, removing, renaming or what one sends changes the outputs. */
+  const setSounds = (next: AudioSoundSpec[], structural: boolean) => set({ sounds: next }, !structural);
+  const patchSound = (id: string, p: Partial<AudioSoundSpec>, structural = false) => setSounds(sounds.map(q => (q.id === id ? { ...q, ...p } : q)), structural);
+  /** Where Learn takes the hit from: the selection, else the trim (a file), or the last seconds heard (`last`, the Mic). */
+  const learnSpan = (): Span | null => (selection ?? (duration > 0 ? win : null));
+  const learn = (o: { last?: boolean; relearn?: string } = {}) => {
+    const last = o.last || kind === 'mic';
+    const span = last ? null : learnSpan();
+    let r: LearnResult;
+    if (!last && !span) r = { error: 'Load a sound first.' };
+    else r = audioToolsEngine.learn(nodeId, span ? { from: span.start, to: span.end } : undefined);
+    if ('error' in r) { setLearnMsg(r.error); return; }
+    const where = last ? 'the last hit heard' : `the hit at ${fmtSec(r.at)}`;
+    if (o.relearn) {
+      patchSound(o.relearn, { spec: r.spec, env: r.env });
+      setLearnMsg(`Learned again from ${where}.`);
+    } else {
+      const snd = newSound(sounds, r, takenIds);
+      setSounds([...sounds, snd], true);
+      setLearnMsg(`Learned ${snd.name} from ${where}: it fires on sounds like it from now on.`);
+    }
+  };
+
   // ── Trim: drag a handle, or drag across to set a new trim ──
   const secAt = (e: RPointerEvent<HTMLCanvasElement>) => {
     const r = e.currentTarget.getBoundingClientRect();
@@ -184,6 +249,7 @@ export function AudioSourceWindow({ nodeId, onClose, onLoad }: { nodeId: string;
     if (kind !== 'file' || !(duration > 0)) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     const r = e.currentTarget.getBoundingClientRect(), t = secAt(e), px = (e.clientX - r.left);
+    if (dragMode === 'select') { trimDrag.current = { which: 'select', anchor: t, start: t, end: t }; return; }
     const xa = (win.start / duration) * r.width, xb = (win.end / duration) * r.width;
     const which = Math.abs(px - xa) <= 8 ? 'in' : Math.abs(px - xb) <= 8 ? 'out' : 'new';
     trimDrag.current = { which, anchor: t, start: which === 'new' ? t : win.start, end: which === 'new' ? t : win.end };
@@ -195,6 +261,13 @@ export function AudioSourceWindow({ nodeId, onClose, onLoad }: { nodeId: string;
     if (d.which === 'in') d.start = Math.min(t, d.end - MIN_TRIM);
     else if (d.which === 'out') d.end = Math.max(t, d.start + MIN_TRIM);
     else { d.start = Math.min(d.anchor, t); d.end = Math.max(d.anchor, t); }
+  };
+  const onWaveUpAny = () => {
+    const d = trimDrag.current;
+    if (d?.which !== 'select') { onWaveUp(); return; }
+    trimDrag.current = null;
+    // A click clears the selection; a drag makes one.
+    setSelection(d.end - d.start >= 0.02 ? { start: +d.start.toFixed(4), end: +d.end.toFixed(4) } : null);
   };
   const onWaveUp = () => {
     const d = trimDrag.current;
@@ -250,7 +323,7 @@ export function AudioSourceWindow({ nodeId, onClose, onLoad }: { nodeId: string;
 
   return (
     <Modal title={typeof node.params.label === 'string' && node.params.label.trim() ? node.params.label.trim() : 'Audio Source'}
-      subtitle={kind === 'file' ? 'Audio Source · trim the file, pick frequency bands' : 'Audio Source · the Mic, and its frequency bands'}
+      subtitle={kind === 'file' ? 'Audio Source · trim the file, pick frequency bands, learn sounds' : 'Audio Source · the Mic, its frequency bands and learned sounds'}
       icon="wave" width={1240} height={800} onClose={onClose} headerActions={<Button variant="primary" onClick={onClose}>Done</Button>}>
       <div data-audio-source-window style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 16, height: '100%', boxSizing: 'border-box', overflowY: 'auto', font: `500 12px ${fontFamily.ui}` }}>
         {/* Transport */}
@@ -267,14 +340,21 @@ export function AudioSourceWindow({ nodeId, onClose, onLoad }: { nodeId: string;
         </div>
 
         {/* Waveform + trim */}
-        <span style={head}>{kind === 'file' ? 'Waveform · drag the yellow handles (or across) to trim: it loops inside' : 'Live waveform'}</span>
-        <canvas ref={waveRef} data-audio-wave onPointerDown={onWaveDown} onPointerMove={onWaveMove} onPointerUp={onWaveUp}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={head}>{kind === 'file' ? (dragMode === 'trim' ? 'Waveform · drag the yellow handles (or across) to trim: it loops inside' : 'Waveform · drag across one hit of a sound to learn it') : 'Live waveform'}</span>
+          {kind === 'file' && <div style={{ width: 190, marginLeft: 'auto' }}>
+            <Segmented<'trim' | 'select'> size="sm" fill ariaLabel="Drag on the waveform to" value={dragMode} onChange={setDragMode} options={[{ value: 'trim', label: 'Drag: Trim' }, { value: 'select', label: 'Drag: Select' }]} />
+          </div>}
+        </div>
+        <canvas ref={waveRef} data-audio-wave onPointerDown={onWaveDown} onPointerMove={onWaveMove} onPointerUp={onWaveUpAny}
           style={{ width: '100%', height: 120, borderRadius: radius.md, display: 'block', cursor: kind === 'file' && duration > 0 ? 'ew-resize' : 'default', touchAction: 'none' }} />
         {kind === 'file' && duration > 0 && <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           {field('In', +win.start.toFixed(3), v => set({ trimIn: Math.max(0, Math.min(v, win.end - MIN_TRIM)) }, true), { step: 0.01, min: 0, title: 'Where the trim starts, in seconds.' })}
           {field('Out', +win.end.toFixed(3), v => set({ trimOut: v >= duration ? 0 : Math.max(win.start + MIN_TRIM, v) }, true), { step: 0.01, min: 0, title: 'Where the trim ends, in seconds.' })}
           <span style={small}>{fmtSec(win.end - win.start)} of {fmtSec(duration)}</span>
           <Button size="sm" disabled={win.start <= 0 && win.end >= duration} onClick={() => set({ trimIn: 0, trimOut: 0 }, true)}>Whole file</Button>
+          {selection && <span style={{ ...small, color: SELECT }}>Selected {fmtSec(selection.start)}–{fmtSec(selection.end)}</span>}
+          {selection && <Button size="sm" variant="ghost" onClick={() => setSelection(null)}>Clear selection</Button>}
         </div>}
 
         {/* Spectrum + bands */}
@@ -312,6 +392,40 @@ export function AudioSourceWindow({ nodeId, onClose, onLoad }: { nodeId: string;
               {field('Cooldown', b.cooldown, v => patchBand(b.id, { cooldown: Math.max(40, v) }), { step: 10, min: 40, title: 'Milliseconds after a hit before the next can count.', disabled: !b.trigger })}
               <canvas ref={c => { if (c) meterRefs.current.set(b.id, c); else meterRefs.current.delete(b.id); }} style={{ width: 84, height: 18, display: 'block', marginLeft: 'auto' }} title="The band now: its level, and a flash on each hit" />
               <Button size="sm" variant="ghost" onClick={e => { e.stopPropagation(); setBands(bands.filter(q => q.id !== b.id), true); }} title="Remove the band (and its outputs' wires)">✕</Button>
+            </div>
+          ))}
+        </div>
+
+        {/* Learn a sound */}
+        <span style={head}>Learned sounds · fire on any sound like the one you show it</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          {kind === 'file' && <Button size="sm" variant="primary" data-learn onClick={() => learn()} disabled={!(duration > 0)}
+            title="Learn the strongest hit in the selection (Drag: Select), or in the trim when nothing is selected">Learn</Button>}
+          <Button size="sm" data-learn-last onClick={() => learn({ last: true })}
+            title="Learn the strongest hit in the last two seconds heard">Learn last hit</Button>
+          <span style={small}>{learnMsg || (kind === 'file'
+            ? (selection ? 'Learn takes the strongest hit in the selection.' : 'Select one hit (Drag: Select) or trim to it, then press Learn.')
+            : 'Play the sound into the Mic, then press Learn last hit.')}</span>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {sounds.map(snd => (
+            <div key={snd.id} data-sound-row={snd.id}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '6px 8px', borderRadius: radius.md, border: `1px solid ${tk.border.default}`, background: tk.bg.field }}>
+              <input type="color" value={snd.color} onChange={e => patchSound(snd.id, { color: e.target.value })} title="The sound's colour" style={{ width: 22, height: 22, border: 0, padding: 0, background: 'none', cursor: 'pointer' }} />
+              <input defaultValue={snd.name} key={`${snd.id}:${snd.name}`} aria-label="Sound name" title="The sound's name: its outputs take it"
+                onBlur={e => { const v = e.target.value.trim(); if (v && v !== snd.name) patchSound(snd.id, { name: v }, true); }}
+                onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                style={{ width: 84, font: `600 12px ${fontFamily.ui}`, color: tk.text.primary, background: 'transparent', border: `1px solid ${tk.border.default}`, borderRadius: radius.sm, padding: '2px 5px' }} />
+              <canvas ref={c => { if (c) soundRefs.current.set(snd.id, c); else soundRefs.current.delete(snd.id); }} style={{ width: 132, height: 26, display: 'block', borderRadius: radius.sm }}
+                title={snd.spec.length === LEARN_BANDS ? 'Its fingerprint (low to high frequency), and how close the last hit was (the bar; the white tick is Match). Flashes when it fires.' : 'Nothing learned yet: press Re-learn.'} />
+              {field('Match', snd.match, v => patchSound(snd.id, { match: Math.max(0, Math.min(1, v)) }), { step: 0.01, min: 0, max: 1, title: 'How alike a hit must be to fire, 0–1: higher only fires on very close matches.' })}
+              {field('Cooldown', snd.cooldown, v => patchSound(snd.id, { cooldown: Math.max(40, v) }), { step: 10, min: 40, title: 'Milliseconds after it fires before it can fire again.' })}
+              <span style={{ width: 1, alignSelf: 'stretch', background: tk.border.default }} />
+              <Toggle checked={snd.trigger} onChange={c => patchSound(snd.id, c || snd.matchOut ? { trigger: c } : { trigger: false, matchOut: true }, true)} label="Trigger" />
+              <Toggle checked={snd.matchOut} onChange={c => patchSound(snd.id, c || snd.trigger ? { matchOut: c } : { matchOut: false, trigger: true }, true)} label="Match" />
+              <span style={{ marginLeft: 'auto' }} />
+              <Button size="sm" onClick={() => learn({ relearn: snd.id })} title={kind === 'file' ? 'Learn it (again) from the selection, or the trim' : 'Learn it (again) from the last hit heard'}>{snd.spec.length ? 'Re-learn' : 'Learn'}</Button>
+              <Button size="sm" variant="ghost" onClick={() => setSounds(sounds.filter(q => q.id !== snd.id), true)} title="Remove the sound (and its outputs' wires)">✕</Button>
             </div>
           ))}
         </div>
