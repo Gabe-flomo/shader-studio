@@ -51,6 +51,10 @@ export const PICTURE_EXAMPLE_INDEX: Record<string, { label: string; description:
     label: 'Pictures 9 · Threshold: a soft mask of the lamp light', play: true,
     description: 'Threshold makes a soft mask of the lamp light in the built-in Room and cat photo (the paper lantern, the orb lamp and the string lights) from how warm and bright each pixel is, and the rest of the room drops to a dim copy: the lamps glow out of the dark. Level sets how much lamp light counts. Choose your own picture on the Texture Input.',
   },
+  picGlitch: {
+    label: 'Pictures 10 · Glitch: two photos trade blocks', play: true,
+    description: 'Glitch takes two pictures and gives two back: the built-in Room and cat photo (A, a texture) and Walkway cat (B, its colour) trade long bars of picture, dealt again three times a second. The left half shows A′ (the room with bars of the cat), the right half B′ (the cat with bars of the room). Try the other Modes on the Glitch card: Channel cross, Displace, Bit flips, Slice shift. Choose your own picture on the Texture Input.',
+  },
 };
 
 export const PICTURE_EXAMPLE_KEYS = Object.keys(PICTURE_EXAMPLE_INDEX);
@@ -472,6 +476,47 @@ export function buildPictureExamples(): Record<string, ExampleGraph> {
 **How it is built.** Two Channel nodes read how warm (red − blue) and how bright each pixel is; Multiply gives how much lamp light it has. Threshold (Level 0.2, Softness 0.12) turns that into the Mask. Levels (texture) makes a dark copy of the photo; Mix picks the dark copy or the photo by the Mask.
 
 **Try.** Lower Level to 0.1 and the warm walls light up; Softness 0 cuts hard edges. Wire the photo's Texture into Threshold instead (it then reads Brightness) to see why brightness alone doesn't find these lamps. Set Color out to Black and white and wire Threshold's Color to the Output to see the mask itself. Choose your own picture on the Texture Input.`),
+  };
+
+  // ── 10 · Glitch: two photos in, two out; bars of each swapped into the other ──
+  g.picGlitch = {
+    ...PICTURE_EXAMPLE_INDEX.picGlitch,
+    counter: 40,
+    nodes: [
+      photo('room', 40, 60, ROOM_AND_CAT_ID, 'stretch', 'Its Texture is Glitch\'s A (A is: Texture), so Glitch can read it anywhere, which Displace and Slice shift need.'),
+      photo('walk', 40, 460, WALKWAY_CAT_ID, 'cover', 'Its Color is Glitch\'s B (B is: Colour): this pixel of the cat. A colour can be swapped and crossed but not pushed; Displace and Slice shift turn its hue instead.'),
+      n('glitch', 'glitch', 380, 200, { mode: 'swap', amount: 0.3, blocks: 14, blockWidth: 4, rate: 3, seed: 0, aIs: 'texture', bIs: 'colour',
+        ...note([
+          'Glitch, Mode Swap blocks: the picture is cut into blocks (14 rows, each block 4 times as wide as it is tall, so long bars), and Amount (0.3) of them are hit. In a hit block A′ is exactly B and B′ is exactly A: the two photos trade the bar.',
+          'Rate 3 deals the blocks again three times a second (the same hash as Random (from ID), with Seed picking another set). Hit is 1 in the hit blocks.',
+        ]) },
+        { a: ['room', 'texture'], b: ['walk', 'color'] }),
+      expr('split', 700, 200, {
+        label: 'Side by side', outputType: 'vec3',
+        inputs: [['a', 'vec3', ['glitch', 'outA']], ['b', 'vec3', ['glitch', 'outB']], ['hit', 'float', ['glitch', 'hit']], ['uv', 'vec2', ['uvS', 'uv']]],
+        lines: [
+          ['vec3 both', 'uv.x < 0.0 ? a : b'],
+        ],
+        result: 'both',
+        note: [
+          'Side by side: both outputs at once, to show the node gives two pictures back.',
+          'both: A′ (the room, with bars of the cat) left of the middle, B′ (the cat, with bars of the room) right of it.',
+          'hit is wired so you can try mix(both, vec3(1.0, 0.0, 0.3), hit * 0.3) as the result to tint the hit blocks.',
+        ],
+      }),
+      n('uv', 'uvS', 380, 600, note('UV: this pixel\'s place; Side by side uses its X (negative on the left) to choose A′ or B′.')),
+      n('output', 'out', 1000, 200, note('Output: A′ on the left, B′ on the right.'), { color: ['split', 'result'] }),
+    ],
+    play: playRecord([
+      ctl('amount', 'glitch::amount', 'Amount (share of blocks hit)', 0, 1, 0.01),
+      ctl('rate', 'glitch::rate', 'Rate (deals a second)', 0, 20, 0.1),
+      ctl('blocks', 'glitch::blocks', 'Blocks (rows)', 1, 60, 1),
+      ctl('wide', 'glitch::blockWidth', 'Block width', 0.25, 20, 0.05),
+    ], `**What it shows.** Glitch is two in, two out: A and B damage each other. In Swap blocks mode the hit blocks of A′ are B and the hit blocks of B′ are A, exactly, so the two photos trade bars of picture.
+
+**How it is built.** Texture Input (Room and cat) → Glitch's A as a Texture; Texture Input (Walkway cat) → B as a Colour. Glitch → Side by side (A′ left, B′ right) → Output.
+
+**Try.** Change Mode on the Glitch card: **Channel cross** swaps some colour channels per block, **Displace** pushes the room by the cat's brightness (and turns the cat's hue by the room's), **Bit flips** cuts both to a few bits and flips some, **Slice shift** slides rows. Amount 0 leaves both untouched. Choose your own picture on the Texture Input.`),
   };
 
   return g;

@@ -103,6 +103,13 @@ exports[`golden outputs: examples > bgQueue 1`] = `
 }
 `;
 
+exports[`golden outputs: examples > boundsBouncingCopies 1`] = `
+{
+  "speed": "- x120",
+  "wall": "- x120",
+}
+`;
+
 exports[`golden outputs: examples > comboArrayGroupMoons 1`] = `
 {
   "r": "- x120",
@@ -1509,6 +1516,15 @@ exports[`golden outputs: examples > picChannelSplash 1`] = `
 exports[`golden outputs: examples > picCurves 1`] = `
 {
   "amount": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > picGlitch 1`] = `
+{
+  "amount": "- x120",
+  "blocks": "- x120",
+  "rate": "- x120",
+  "wide": "- x120",
 }
 `;
 

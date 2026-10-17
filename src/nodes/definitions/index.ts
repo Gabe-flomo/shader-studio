@@ -173,6 +173,8 @@ export { RandomFromIdNode } from './randomFromId';
 export { ShowDataNode } from './showData';
 export { ChannelNode, ShuffleNode, ChannelColoursNode } from './channelTools';
 export { CurvesNode, ThresholdNode } from './curves';
+export { BoundsNode } from './bounds';
+export { GlitchNode } from './glitch';
 export { TextureFeedbackNode, TextureFeedbackStepNode } from './textureFeedback';
 export { DataTextureNode, DataTexturePackNode, ReadChannelsNode } from './dataTexture';
 export { RenderTargetsNode, RenderTargetsPackNode } from './renderTargets';
@@ -327,6 +329,8 @@ import { RandomFromIdNode } from './randomFromId';
 import { ShowDataNode } from './showData';
 import { ChannelNode, ShuffleNode, ChannelColoursNode } from './channelTools';
 import { CurvesNode, ThresholdNode } from './curves';
+import { BoundsNode } from './bounds';
+import { GlitchNode } from './glitch';
 import { TextureFeedbackNode, TextureFeedbackStepNode } from './textureFeedback';
 import { DataTextureNode, DataTexturePackNode, ReadChannelsNode } from './dataTexture';
 import { RenderTargetsNode, RenderTargetsPackNode } from './renderTargets';
@@ -620,6 +624,8 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   textureMask: TextureMaskNode,
   textureLevels: TextureLevelsNode,
   curves: CurvesNode,
+  // Glitch (docs/glitch-node.md): two pictures in, two damaged pictures out
+  glitch: GlitchNode,
   threshold: ThresholdNode,
   textureFlow: TextureFlowNode,
   textureNeighbours: TextureNeighboursNode,
@@ -832,6 +838,8 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   minMath: MinMathNode,
   max: MaxNode,
   clamp: ClampNode,
+  // Bounds (docs/bounds-node.md): Clip, Wrap, Bounce or Soft inside a range or a box
+  bounds: BoundsNode,
   mix: MixNode,
   mod: ModNode,
   modSelect: ModSelectNode,

@@ -146,7 +146,8 @@ function getNodeOutputType(node: GraphNode, outKey: string, defType: DataType): 
   if (node.type === 'expr' || node.type === 'exprNode' || node.type === 'customFn') return live;
   // Vectorizable math (add, sin, mix…): the type pill retypes the primary output;
   // the definition still says float. Group / loop paths pre-declare from here.
-  if (VECTORIZABLE_NODES[node.type]?.primaryOutput === outKey) return live;
+  const vec = VECTORIZABLE_NODES[node.type];
+  if (vec && (vec.primaryOutput === outKey || vec.alsoOutputs?.includes(outKey))) return live;
   return defType;
 }
 

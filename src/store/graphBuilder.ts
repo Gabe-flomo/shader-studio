@@ -8,6 +8,8 @@
  */
 import { retypeTrailField } from '../nodes/definitions/agents';
 import { retypeShuffle } from '../nodes/definitions/channelTools';
+import { retypeGlitch } from '../nodes/definitions/glitch';
+import { retypeBounds } from '../nodes/definitions/bounds';
 import { retypeAudioSource } from '../nodes/definitions/audioTools';
 import type { GraphNode, GroupInputPort, GroupOutputPort } from '../types/nodeGraph';
 import { GROUP_PORT_SENTINEL } from '../types/nodeGraph';
@@ -38,6 +40,11 @@ export function n(type: string, id: string, x: number, y: number, params: Record
   if (type === 'channelShuffle') {
     // A Shuffle's A or B switched to Texture: the socket is a texture, its wire kept
     const r = retypeShuffle({ ...node, inputs: Object.fromEntries(Object.entries(node.inputs).map(([k, v]) => [k, { ...v, connection: undefined }])) });
+    return { ...r, inputs: Object.fromEntries(Object.entries(r.inputs).map(([k, v]) => [k, { ...v, ...(node.inputs[k]?.connection ? { connection: node.inputs[k].connection } : {}) }])) };
+  }
+  // A Glitch's A / B follow A is / B is; a Bounds card's sockets follow its type (outputType): wires kept.
+  if (type === 'glitch' || type === 'bounds') {
+    const r = (type === 'glitch' ? retypeGlitch : retypeBounds)({ ...node, inputs: Object.fromEntries(Object.entries(node.inputs).map(([k, v]) => [k, { ...v, connection: undefined }])) });
     return { ...r, inputs: Object.fromEntries(Object.entries(r.inputs).map(([k, v]) => [k, { ...v, ...(node.inputs[k]?.connection ? { connection: node.inputs[k].connection } : {}) }])) };
   }
   if (type === 'audioSource') return retypeAudioSource(node);

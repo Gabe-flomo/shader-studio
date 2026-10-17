@@ -42,6 +42,13 @@ exports[`golden shaders: every Play example exports the same bundle > bgQueue 1`
 }
 `;
 
+exports[`golden shaders: every Play example exports the same bundle > boundsBouncingCopies 1`] = `
+{
+  "bundle": "1c97f3a78f94ba1e9feb9e016103:9997",
+  "missing": [],
+}
+`;
+
 exports[`golden shaders: every Play example exports the same bundle > comboArrayGroupMoons 1`] = `
 {
   "bundle": "0db2a3e4dc106d0b129fee56806f:9522",
@@ -1200,6 +1207,13 @@ exports[`golden shaders: every Play example exports the same bundle > picChannel
 exports[`golden shaders: every Play example exports the same bundle > picCurves 1`] = `
 {
   "bundle": "03ce00f8e1f76e1fd486949c7b42:26228",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > picGlitch 1`] = `
+{
+  "bundle": "0701c5180c5435117c33c923e188:6423",
   "missing": [],
 }
 `;
@@ -2384,6 +2398,44 @@ exports[`golden shaders: every example compiles as it did > blank 1`] = `
     "u_p_lightx4_tint",
   ],
   "paramValues": "0f31b6e28d3ac304215e54ca1d4b:161",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > boundsBouncingCopies 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "197800eac27b8c1bb5398a2c5dc4:8369",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "0ca24f209e4661043f12b5b40ff5:213",
+  "paramBindings": "0518b399d998cb1c3225a0a88d49:621",
+  "paramUniforms": [
+    "u_p_boundsx0_maxX",
+    "u_p_boundsx0_maxY",
+    "u_p_boundsx0_minX",
+    "u_p_boundsx0_minY",
+    "u_p_gridlayoutx0_columns",
+    "u_p_noisex0_outMax",
+    "u_p_noisex0_outMin",
+    "u_p_noisex0_scale",
+    "u_p_noisex0_speed",
+    "u_p_noisex0xc2_outMax",
+    "u_p_noisex0xc2_outMin",
+    "u_p_noisex0xc2_scale",
+    "u_p_noisex0xc2_speed",
+    "u_p_randomfromx0_from",
+    "u_p_randomfromx0_seed",
+    "u_p_randomfromx0_to",
+    "u_p_speedx0_value",
+  ],
+  "paramValues": "035bd792b1377c0a80680949c457:471",
   "passes": null,
   "success": true,
   "textureUniforms": {},
@@ -15112,6 +15164,35 @@ exports[`golden shaders: every example compiles as it did > picCurves 1`] = `
   "success": true,
   "textureUniforms": {
     "u_tex_tex_0": "photo",
+  },
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > picGlitch 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "035a299a13abc90a44341be01531:5326",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "1f775924ba473302155986c3c0d6:118",
+  "paramBindings": "1d3de1449e376b1862d9d9bca215:206",
+  "paramUniforms": [
+    "u_p_glitchx0_amount",
+    "u_p_glitchx0_blockWidth",
+    "u_p_glitchx0_blocks",
+    "u_p_glitchx0_rate",
+    "u_p_glitchx0_seed",
+  ],
+  "paramValues": "00961a05af92d2151e272fc26487:134",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {
+    "u_tex_tex_0": "room",
+    "u_tex_tex_0_c2": "walk",
   },
   "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
   "videoUniforms": {},

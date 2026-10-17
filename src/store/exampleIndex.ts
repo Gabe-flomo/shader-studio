@@ -25,6 +25,7 @@ import { COMBO_EXAMPLE_INDEX } from './comboExamples';
 import { MATRIX_EXAMPLE_INDEX, MATRIX_EXAMPLE_KEYS } from './matrixExamples';
 import { DATA_EXAMPLE_INDEX, DATA_EXAMPLE_KEYS } from './dataExampleIndex';
 import { GRID_EXAMPLE_INDEX, GRID_EXAMPLE_KEYS } from './gridExamples';
+import { BOUNDS_EXAMPLE_INDEX, BOUNDS_EXAMPLE_KEYS } from './boundsExamples';
 import { PASS_EXAMPLE_INDEX, PASS_EXAMPLE_KEYS } from './passExamples';
 import { AGENT_EXAMPLE_INDEX, AGENT_EXAMPLE_KEYS, AGENT_RULE_INDEX } from './agentExamples';
 import { AGENT_SHADER_EXAMPLE_INDEX, AGENT_SHADER_EXAMPLE_KEYS } from './agentShaderExamples';
@@ -232,6 +233,8 @@ export const EXAMPLE_INDEX: Record<string, ExampleIndexEntry> = {
   ...DATA_EXAMPLE_INDEX,
   // The numbered Grid tour (gridExamples.ts): every way to build a grid, and the controls over it.
   ...GRID_EXAMPLE_INDEX,
+  // Bounds (boundsExamples.ts, docs/bounds-node.md): copies bouncing in their boxes.
+  ...BOUNDS_EXAMPLE_INDEX,
   // Pass nodes, render to texture (passExamples.ts).
   ...PASS_EXAMPLE_INDEX,
   // The Agents group: slime mold and walkers built from nodes (agentExamples.ts).
@@ -320,7 +323,7 @@ export const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: string
   { label: "Simulations: agents", color: ctp.green, keys: SIM_AGENT_EXAMPLE_KEYS },
   { label: "Effects & Lens",    color: ctp.mauve, keys: ['echoTrails','feedbackSmear','crtTv','lensBarrel', ...RAYS_EXAMPLE_KEYS] },
   { label: "Space & Texture",   color: ctp.flamingo, keys: ['waveTextureDemo','waveInterference','magicTextureDemo','neonFloorGrid','spaceAtlas'] },
-  { label: "Grid",              color: ctp.sky, keys: [...GRID_EXAMPLE_KEYS, ...LEARN_GRID_KEYS, 'gridNeighborDisplaced','gridMetaballs','gridBreathing','gridDensityWave','gridLavaLamp','beatGrid'] },
+  { label: "Grid",              color: ctp.sky, keys: [...GRID_EXAMPLE_KEYS, ...BOUNDS_EXAMPLE_KEYS, ...LEARN_GRID_KEYS, 'gridNeighborDisplaced','gridMetaballs','gridBreathing','gridDensityWave','gridLavaLamp','beatGrid'] },
   // Pieces and Balls are hidden, not deleted (nodes/notOffered.ts): the examples still open by key (What's new links).
   ...(HIDDEN_EXAMPLE_KEYS.length ? [] : [{ label: "Pictures in pieces", color: ctp.sky, keys: PIECES_EXAMPLE_KEYS }]),
   { label: "Matrices",          color: ctp.peach, keys: MATRIX_EXAMPLE_KEYS },
