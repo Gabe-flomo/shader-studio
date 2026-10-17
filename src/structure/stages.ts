@@ -201,6 +201,8 @@ export const TYPE_STAGE: Record<string, StageOf> = {
   agentSense: 'sense', agentNeighbours: 'sense', agentSteer: 'steer',
   agentGravity: 'steer', agentWind: 'steer', agentCurl: 'steer', agentAttract: 'steer', agentVortex: 'steer', agentFlow: 'steer', agentSoundKick: 'steer',
   agentDeposit: 'deposit', trailField: 'trail', drawAgents: 'draw',
+  agentTurnToward: 'steer', agentFollowTrail: 'steer', agentWander: 'steer', agentOrbit: 'steer', agentAvoidWalls: 'steer', agentApplyForce: 'steer',
+  agentDrag: 'steer', agentSlowInCrowd: 'steer', agentLeaveTrail: 'deposit', agentFadeWithAge: 'any',
   agentInputs: 'any', agentOutput: 'any', agentBySpecies: 'any',
   // Output: the hidden ends of passes keep their stage.
   blurStage: 'rule', lensDofStage: 'rule', radialFastBlurStage: 'rule', deepGlowTextureStage: 'rule', gridRulesStep: 'rule', curveTraceBeamStep: 'rule', textureFeedbackStep: 'rule', memoryPack: 'rule', opticalFlowStep: 'rule', probePack: 'rule',

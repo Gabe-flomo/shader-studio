@@ -139,6 +139,7 @@ export function stepWalkers(p: Program, walkers: Walker[], step: number, o: SimO
       step: (e: Val, x: Val) => ((x as number) >= (e as number) ? 1 : 0),
       pow: (a: Val, b: Val) => Math.pow(a as number, b as number),
       acos: (a: Val) => Math.acos(a as number),
+      smoothstep: (e0: Val, e1: Val, x: Val) => { const t = Math.min(Math.max(((x as number) - (e0 as number)) / ((e1 as number) - (e0 as number)), 0), 1); return t * t * (3 - 2 * t); },
       equal: (a: Val, b: Val) => (a as number[]).map((x, i) => (x === (b as number[])[i] ? 1 : 0)),
       agTurn3: (h: Val, s: Val, a: Val) => agTurn3(h as number[], s as number[], a as number),
       agAcross: (h: Val, a: Val) => agAcross(h as number[], a as number),

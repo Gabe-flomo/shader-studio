@@ -36,7 +36,7 @@ const setOf = (rules: AgentRule[], o: Partial<AgentRuleSet> = {}, speed = 0.2): 
 const prog = (set: AgentRuleSet, d3 = false) => programOf(generateRulesInside(set, { groupId: GID, d3 }));
 const one = (set: AgentRuleSet, w: Partial<Walker> = {}, o: SimOptions = {}, steps = 1) => simulate(prog(set, o.d3), [{ ...walkersFor(1, { d3: o.d3 })[0], pos: o.d3 ? [0, 0, 0] : [0, 0], heading: o.d3 ? [1, 0, 0] : 0, speed: 0.2, ...w }], steps, o)[0];
 const ruleLines = (set: AgentRuleSet, sp = 0, ri = 0) => {
-  const b = generateRulesInside(set, { groupId: GID, d3: false }).find(x => x.id === ruleIds(GID).rule(sp, ri))!;
+  const b = generateRulesInside(set, { groupId: GID, d3: false, ruleNodes: false }).find(x => x.id === ruleIds(GID).rule(sp, ri))!;
   return ((b.params.lines ?? []) as Array<{ lhs: string; op: string; rhs: string }>).map(l => `${l.lhs} ${l.op} ${l.rhs}`).join('\n');
 };
 const when = (c: RuleCondition, ...more: RuleCondition[]): AgentRule => ({ when: [c, ...more], do: [{ kind: 'state', state: 1 }] });
@@ -45,11 +45,13 @@ const wrapAngle = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
 const groupWith = (set: AgentRuleSet, space: '2d' | '3d' = '2d') => applyRulesToGroup(n('agentsGroup', GID, 0, 0, { space, subgraph: { nodes: [], inputPorts: [], outputPorts: [] } }), set);
 
 describe('the generated inside', () => {
-  it('is ordinary nodes: Agent Inputs, Start, a block per rule, Finish, Move, Agent Output, each with a note', () => {
+  it('is ordinary nodes: Agent Inputs, Start, a node per action (or a block per rule), Finish, Move, Agent Output, each with a note', () => {
     const set = setOf([doing({ kind: 'wander', degrees: 10 }), doing({ kind: 'trail', channel: 'own', amount: 1 })]);
     const inside = generateRulesInside(set, { groupId: GID, d3: false });
-    expect(inside.map(x => x.type)).toEqual(['agentInputs', 'exprNode', 'exprNode', 'exprNode', 'exprNode', 'agentMove', 'agentOutput']);
-    for (const x of inside) {
+    const blocks = generateRulesInside(set, { groupId: GID, d3: false, ruleNodes: false });
+    expect(inside.map(x => x.type)).toEqual(['agentInputs', 'exprNode', 'agentWander', 'agentLeaveTrail', 'exprNode', 'agentMove', 'agentOutput']);
+    expect(blocks.map(x => x.type)).toEqual(['agentInputs', 'exprNode', 'exprNode', 'exprNode', 'exprNode', 'agentMove', 'agentOutput']);
+    for (const x of [...inside, ...blocks]) {
       expect(getNodeDefinition(x.type), x.type).toBeTruthy();
       expect(String(x.params.__comment ?? '').length, x.id).toBeGreaterThan(20);
       if (x.type !== 'exprNode') continue;

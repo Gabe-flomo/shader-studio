@@ -28,6 +28,7 @@ import {
 import { fieldLines, fieldName, normalizeFieldSpec } from './fields';
 import { checkMemoryExpr, memoryExprGlsl, memoryGlslType, memorySlots, memorySwizzle, usesMemories } from './memory';
 import { type MemoryTimes, memoryOf } from './spec';
+import { actionTitle, ruleTitle, whenTitle } from './ruleNames';
 
 type Wire = [string, string];
 type ExprType = 'float' | 'vec2' | 'vec3' | 'vec4';
@@ -45,7 +46,8 @@ const PI = '3.1415927';
 const TAU = '6.2831853';
 
 /** A salt for a rule's own random numbers: species, rule and which number, mixed (a uint literal). */
-const salt = (sp: number, rule: number, k: number) => `0x${(Math.imul(((sp * 97 + rule) * 13 + k + 1) >>> 0, 0x9E3779B1) >>> 0).toString(16).toUpperCase().padStart(8, '0')}u`;
+const saltNum = (sp: number, rule: number, k: number) => Math.imul(((sp * 97 + rule) * 13 + k + 1) >>> 0, 0x9E3779B1) >>> 0;
+const salt = (sp: number, rule: number, k: number) => `0x${saltNum(sp, rule, k).toString(16).toUpperCase().padStart(8, '0')}u`;
 const dice = (sp: number, rule: number, k: number) => `float(agHash(a_seed ^ ${salt(sp, rule, k)}) >> 8) / 16777216.0`;
 
 /** An Expression Block as the app saves one, with lines of any operator and the note that explains them. */
@@ -90,7 +92,16 @@ const chanKey = (c: ChannelRef | undefined) => String(c ?? 'own');
 const smellVar = (k: string) => (k === 'own' ? 'smellOwn' : `smell${Number(k) + 1}`);
 const hereVar = (k: string) => (k === 'own' ? 'hereOwn' : `here${Number(k) + 1}`);
 
-export interface GenerateOptions { groupId: string; d3: boolean }
+export interface GenerateOptions {
+  groupId: string; d3: boolean;
+  /**
+   * The rules whose actions all have a node of their own (agentRuleSteps.ts: Turn toward, Follow
+   * trail, Wander, Apply force…) become those nodes, after a When block when the rule has
+   * conditions; the rest stay one Expression Block each. Default on; false: every rule a block
+   * (the rules editor's "Show the lines" reads the blocks).
+   */
+  ruleNodes?: boolean;
+}
 
 /** Room for a Sense card (and the Curl noise card) in the column of sensors. */
 const ROW = 840;
@@ -284,7 +295,14 @@ export function generateRulesInside(set: AgentRuleSet, o: GenerateOptions): Grap
   set.species.forEach((sp, s) => {
     sp.rules.forEach((rule, ri) => {
       if (rule.off) return;
-      const r = ruleBlock(set, rule, s, ri, { d3, many, stopSeen, H, P, src, IN, id, x, chain: CHAIN });
+      const ctx: RuleCtx = { d3, many, stopSeen, H, P, src, IN, id, x, chain: CHAIN };
+      if (o.ruleNodes !== false && ruleHasNodes(rule)) {
+        const r = ruleAsNodes(set, rule, s, ri, ctx, space);
+        nodes.push(...r.nodes);
+        x = r.x;
+        return;
+      }
+      const r = ruleBlock(set, rule, s, ri, ctx);
       nodes.push(r.node);
       for (const v of r.modified) src[v] = [r.node.id, v];
       if (rule.stop) stopSeen = true;
@@ -404,7 +422,7 @@ interface RuleCtx {
 }
 
 /** One rule as an Expression Block: its `go`, then each action scaled by it. */
-function ruleBlock(set: AgentRuleSet, rule: AgentRule, s: number, ri: number, c: RuleCtx): { node: GraphNode; modified: string[] } {
+function ruleBlock(set: AgentRuleSet, rule: AgentRule, s: number, ri: number, c: RuleCtx, whenOnly = false): { node: GraphNode; modified: string[] } {
   const lines: Line[] = [];
   const why: Array<[string, string]> = [];
   const reads = new Set<string>();
@@ -427,8 +445,8 @@ function ruleBlock(set: AgentRuleSet, rule: AgentRule, s: number, ri: number, c:
     `1 when this rule applies to this walker this step, else 0: ${[c.stopSeen ? 'no rule above stopped it' : '', c.many ? `it is a ${set.species[s].name}` : '', ...rule.when.filter(w => w.kind !== 'always').map(w => describeCondition(set, s, w))].filter(Boolean).join(', and ') || 'always'}. Every action below is scaled by it.`);
 
   // Do
-  rule.do.forEach((a, j) => actionLines(set, a, s, ri, j + 1, c, add, read));
-  if (rule.stop) add('done', '=', `max(${read('done')}, go)`, 'done: 1 once this rule applied, so the rules below skip this walker this step (stop after this rule).', 'done');
+  if (!whenOnly) rule.do.forEach((a, j) => actionLines(set, a, s, ri, j + 1, c, add, read));
+  if (rule.stop && !whenOnly) add('done', '=', `max(${read('done')}, go)`, 'done: 1 once this rule applied, so the rules below skip this walker this step (stop after this rule).', 'done');
 
   const order = ['h', 'spd', 'mem', 'dep', 'alive', 'done', 'bright', 'mem2'];
   const inputs: Array<{ name: string; type: ExprType; from?: Wire }> = [];
@@ -456,17 +474,130 @@ function ruleBlock(set: AgentRuleSet, rule: AgentRule, s: number, ri: number, c:
   const exposed = order.filter(v => modified.has(v)).map(v => ({ name: v, type: c.chain[v] }));
   const sentence = describeRule(set, s, rule);
   const readsNote = inputs.filter(i => !order.includes(i.name)).map(i => `${i.name} (${READS[i.name.replace(/\d$/, '#').replace(/^(smell|here)(Own|#)$/, '$1').replace(/^nb\d+/, 'nb')] ?? i.name})`);
+  const title = ruleTitle(set, s, rule);
+  const of = c.many ? ` · ${set.species[s].name}` : '';
+  const whenText = [c.many ? set.species[s].name : '', whenTitle(set, s, rule)].filter(Boolean).join(', ');
   const node = block(c.id.rule(s, ri), c.x, 120, {
-    label: `Rule ${ri + 1}${c.many ? ` · ${set.species[s].name}` : ''}`,
+    label: whenOnly ? `When ${whenText || 'not stopped'}` : `${title}${of}`,
     inputs, lines, result: 'go', outputType: 'float', exposed,
     note: [
-      `Rule ${ri + 1}${c.many ? ` of the ${set.species[s].name}` : ''} (an Expression Block): ${sentence}.`,
+      whenOnly
+        ? `When (an Expression Block) for "${title}", rule ${ri + 1}${c.many ? ` of the ${set.species[s].name}` : ''}: ${sentence}. Its go (result) is wired into the When of the rule's step nodes to its right, so they act only on the walkers it holds for.`
+        : `"${title}": rule ${ri + 1}${c.many ? ` of the ${set.species[s].name}` : ''} (an Expression Block): ${sentence}.`,
       `Its inputs are the values the rules carry (${inputs.filter(i => order.includes(i.name)).map(i => i.name).join(', ') || 'none'}: wired from the rule above that last changed them)${readsNote.length ? ` and what it reads: ${readsNote.join(', ')}` : ''}.`,
       ...why.map(([name, text]) => (text.startsWith(`${name}:`) ? text : `${name}: ${text}`)),
       `result: go (1 when the rule applied this step). ${exposed.length ? `${exposed.map(e => e.name).join(', ')} go on to the next block.` : 'It changes nothing the next block reads.'}`,
     ],
   });
   return { node, modified: [...modified] };
+}
+
+/** An action with a node of its own (agentRuleSteps.ts); one multiplied by a memory stays in a block. */
+function actionHasNode(a: RuleAction): boolean {
+  if (a.times) return false;
+  switch (a.kind) {
+    case 'turn': case 'wander': case 'orbit': case 'avoidEdges': case 'force': case 'drag': case 'fade':
+    case 'separate': case 'match': case 'cohere': case 'slow': case 'flow':
+      return true;
+    case 'trail': return !a.fade;
+    default: return false;
+  }
+}
+
+/** A rule made of nodes: every action has one, and it doesn't stop the rules below. */
+export const ruleHasNodes = (rule: AgentRule): boolean => !rule.stop && rule.do.length > 0 && rule.do.every(actionHasNode);
+
+/** The Neighbours node a rule step reads (by which walkers and radius). */
+function nbNode(set: AgentRuleSet, c: RuleCtx, who: NeighbourWho, radius: number | undefined): string {
+  const r = neighbourReadOf(set, who, radius);
+  const k = neighbourReads(set).find(x => x.who === r.who && x.radius === r.radius)!.key;
+  return c.id.neighbours(k);
+}
+
+/**
+ * A rule as nodes: a When block (its conditions as `go`, when it has any) and one rule-step node per
+ * action, in order, each taking the running values from the one before. The same maths as ruleBlock.
+ */
+function ruleAsNodes(set: AgentRuleSet, rule: AgentRule, s: number, ri: number, c: RuleCtx, space: (nd: GraphNode) => GraphNode): { nodes: GraphNode[]; x: number } {
+  const nodes: GraphNode[] = [];
+  let x = c.x;
+  const title = ruleTitle(set, s, rule);
+  const of = c.many ? ` · ${set.species[s].name}` : '';
+  const ruleOf = `rule ${ri + 1}${c.many ? ` of the ${set.species[s].name}` : ''}`;
+  let go: Wire | undefined;
+  if (c.stopSeen || c.many || rule.when.some(w => w.kind !== 'always')) {
+    const w = ruleBlock(set, rule, s, ri, c, true);
+    nodes.push(w.node);
+    go = [w.node.id, 'result'];
+    x += 460;
+  }
+  const when: Record<string, Wire> = go ? { when: go } : {};
+  const whenNote = go ? 'When: the When block\'s go, so it acts only where the rule holds.' : 'When unwired: the rule always applies.';
+  rule.do.forEach((a, ai) => {
+    const j = ai + 1;
+    const nid = `${c.id.rule(s, ri)}_a${j}`;
+    const label = `${actionTitle(set, s, a)}${of}`;
+    const head = `${label}: ${describeAction(set, s, a)}. Part of "${title}" (${ruleOf}).`;
+    const H = c.src.h, SPD = c.src.spd;
+    const pos = c.IN('position');
+    const at = (type: string, params: Record<string, unknown>, wires: Record<string, Wire>, why: string[]): GraphNode =>
+      space(n(type, nid, x, 120, { label, ...params, __comment: [head, ...why, whenNote].join('\n') }, { ...wires, ...when }));
+    const steer = (degrees: number, params: Record<string, unknown>, wires: Record<string, Wire>, why: string) =>
+      at('agentTurnToward', { degrees, ...params }, { heading: H, ...wires },
+        [`Turn toward: turns the heading toward ${why}, at most Max turn a step, the short way round.`]);
+    let nd: GraphNode;
+    switch (a.kind) {
+      case 'turn':
+        if (a.toward === 'trail') {
+          const k = chanKey(a.channel);
+          nd = at('agentFollowTrail', { away: a.away ? 'away' : 'toward', degrees: a.degrees, salt: saltNum(s, ri, 40 + j) }, { heading: H, readings: [c.id.sense(k), 'readings'] },
+            [`Follow trail: the slime-mold turn on the Sense beside it (${channelName(set, a.channel)}): straight on when it smells strongest ahead, a random side when both sides beat ahead, else ${a.away ? 'away from' : 'toward'} the stronger side by Turn.`]);
+        } else {
+          nd = steer(a.degrees, { aim: a.toward, away: a.away ? 'away' : 'toward', x: a.x ?? 0, y: a.y ?? 0 }, { position: pos },
+            a.toward === 'mouse' ? 'the mouse' : a.toward === 'centre' ? 'the middle of the picture' : `the point (${a.x ?? 0}, ${a.y ?? 0})`);
+        }
+        break;
+      case 'flow': nd = steer(a.degrees, { aim: 'direction', away: a.away ? 'away' : 'toward' }, { direction: [c.id.flow, 'force'] }, 'the flow (the Curl noise node\'s Force)'); break;
+      case 'separate': nd = steer(a.degrees, { aim: 'direction' }, { direction: [nbNode(set, c, a.who, a.radius), 'push'] }, 'the Neighbours node\'s Push: away from the walkers within reach, harder the closer'); break;
+      case 'match': nd = steer(a.degrees, { aim: 'direction' }, { direction: [nbNode(set, c, a.who, a.radius), 'heading'] }, 'the Neighbours node\'s Heading: the way the walkers within reach go'); break;
+      case 'cohere': nd = steer(a.degrees, { aim: 'point' }, { target: [nbNode(set, c, a.who, a.radius), 'centre'], position: pos }, 'the Neighbours node\'s Centre: the middle of the walkers within reach'); break;
+      case 'wander':
+        nd = at('agentWander', { degrees: a.degrees, salt: saltNum(s, ri, 60 + j) }, { heading: H }, ['Wander: a fresh random turn every step.']);
+        break;
+      case 'orbit':
+        nd = at('agentOrbit', { around: a.target, x: a.x ?? 0, y: a.y ?? 0, distance: a.distance, degrees: a.degrees, way: a.cw ? 'cw' : 'ccw' }, { heading: H, position: pos },
+          [`Orbit: along the circle, in toward it when further than ${a.distance} and out when nearer.`]);
+        break;
+      case 'avoidEdges':
+        nd = at('agentAvoidWalls', { margin: a.margin, degrees: a.degrees }, { heading: H, position: pos }, [`Avoid walls: within ${a.margin} of an edge it turns back inward.`]);
+        break;
+      case 'force':
+        nd = at('agentApplyForce', { field: a.field === 'curl' ? 'input' : a.field, strength: a.strength, angle: a.angle ?? (a.field === 'gravity' ? -90 : 0), x: a.x ?? 0, y: a.y ?? 0 },
+          { heading: H, speed: SPD, position: pos, ...(a.field === 'curl' ? { force: [c.id.flow, 'force'] as Wire } : {}) },
+          ['Apply force: its velocity (heading × speed) changed by the force for one step; the heading and speed follow.']);
+        break;
+      case 'drag': nd = at('agentDrag', { amount: a.amount }, { speed: SPD }, ['Drag: the speed loses Amount of itself a second.']); break;
+      case 'slow':
+        nd = at('agentSlowInCrowd', { jam: a.jam, base: set.species[s].speed }, { speed: SPD, count: [nbNode(set, c, a.who, a.radius), 'count'] },
+          [`Slow in a crowd: from the species' Speed (${set.species[s].speed}) toward a crawl as the Neighbours node's Count reaches Jam.`]);
+        break;
+      case 'trail': {
+        const own = a.channel === 'own' || a.channel === undefined;
+        nd = at('agentLeaveTrail', { channel: own ? 'own' : String(a.channel), amount: a.amount }, { deposit: c.src.dep, ...(own ? { species: c.IN('species') } : {}) },
+          ['Leave trail: adds to the trail it leaves this step; the last Deposit goes on to Agent Output.']);
+        break;
+      }
+      case 'fade':
+        nd = at('agentFadeWithAge', { seconds: a.seconds }, { bright: c.src.bright, age: c.IN('age') }, ['Fade with age: Finish multiplies its colour by the Brightness.']);
+        break;
+      default: return;
+    }
+    nodes.push(nd);
+    const CHAIN_OF: Record<string, string> = { heading: 'h', speed: 'spd', deposit: 'dep', bright: 'bright' };
+    for (const k of Object.keys(nd.outputs)) if (CHAIN_OF[k]) c.src[CHAIN_OF[k]] = [nid, k];
+    x += 420;
+  });
+  return { nodes, x };
 }
 
 const READS: Record<string, string> = {
