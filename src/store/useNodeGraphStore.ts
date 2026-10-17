@@ -12,6 +12,7 @@ import { retypeRenderTargets } from '../nodes/definitions/renderTargets';
 import { retypeReadNeighbours } from '../nodes/definitions/readNeighbours';
 import { retypeTrailField } from '../nodes/definitions/agents';
 import { retypeShuffle } from '../nodes/definitions/channelTools';
+import { retypeGlitch } from '../nodes/definitions/glitch';
 import { retypeAudioSource } from '../nodes/definitions/audioTools';
 import { audioToolsForWeb } from '../lib/audioTools/webExport';
 import { migrateNodeParams, GROUP_PORT_SENTINEL } from '../types/nodeGraph';
@@ -593,6 +594,8 @@ function retypeSwizzle(n: GraphNode): GraphNode {
   if (n.type === 'audioSource') return retypeAudioSource(n);
   // A Transform card's sockets follow its Dimension (vec2 / vec3 / vec4).
   if (n.type === 'transform') return retypeTransform(n);
+  // A Glitch's A and B: a texture or a colour (A is / B is).
+  if (n.type === 'glitch') return retypeGlitch(n);
   if (n.type !== 'swizzle') return n;
   const { input, output } = swizzleTypes(n);
   const inp = n.inputs.input, out = n.outputs.output;
@@ -5136,8 +5139,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         newInputs[key] = { ...existingIn, type: outputType, connection: keepConn ? existingIn.connection : undefined };
       }
       const newOutputs = { ...n.outputs };
-      if (newOutputs[primaryOutputKey]) {
-        newOutputs[primaryOutputKey] = { ...newOutputs[primaryOutputKey], type: outputType };
+      for (const key of [primaryOutputKey, ...(VECTORIZABLE_NODES[n.type]?.alsoOutputs ?? [])]) {
+        if (newOutputs[key]) newOutputs[key] = { ...newOutputs[key], type: outputType };
       }
       return { ...n, params: { ...n.params, outputType }, inputs: newInputs, outputs: newOutputs };
     };

@@ -214,7 +214,7 @@ export const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: strin
     { label: 'Trig',       types: ['sin', 'cos', 'tan', 'atan2'] },
     { label: 'Rounding',   types: ['abs', 'negate', 'ceil', 'floor', 'round', 'fract', 'fractRaw'] },
     { label: 'Algebra',    types: ['pow', 'sqrt', 'exp', 'tanh'] },
-    { label: 'Interp',     types: ['clamp', 'mix', 'smoothstep', 'mod', 'modSelect'] },
+    { label: 'Interp',     types: ['clamp', 'bounds', 'mix', 'smoothstep', 'mod', 'modSelect'] },
     { label: 'Compare',    types: ['minMath', 'max', 'step', 'sign'] },
     { label: 'Geometry',   types: ['length', 'dot', 'crossProduct', 'reflect', 'refractDir', 'luminance'] },
     { label: 'Vec2',       types: ['vec2Const', 'makeVec2', 'splitVec2', 'transformVec', 'normalizeVec2', 'angleToVec2', 'vec2Angle'] },
@@ -243,6 +243,7 @@ export const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: strin
     { label: 'Chroma',   types: ['chromaShift', 'chromaticAberrationAuto', 'chromaticAberration'] },
     { label: 'Lighting', types: ['light', 'glowToColor', 'light2d', 'radianceCascadesApprox'] },
     { label: 'Warp',     types: ['gravitationalLens', 'floatWarp'] },
+    { label: 'Glitch',   types: ['glitch'] },
   ],
   // Effects also shows the Post Processing nodes (MERGED_CATEGORIES); anything not listed here goes under More.
   'Color Grading': [

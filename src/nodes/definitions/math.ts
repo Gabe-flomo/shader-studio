@@ -1153,7 +1153,7 @@ export const TransformVecNode: NodeDefinition = {
 // ── Vectorizable node registry ────────────────────────────────────────────────
 // Nodes that support component-wise operation on vec2/vec3 inputs.
 // primaryInput / primaryOutput are the socket keys that change type.
-export const VECTORIZABLE_NODES: Record<string, { primaryInput: string; primaryOutput: string; alsoInputs?: string[] }> = {
+export const VECTORIZABLE_NODES: Record<string, { primaryInput: string; primaryOutput: string; alsoInputs?: string[]; alsoOutputs?: string[] }> = {
   // Arithmetic (D5): both operands follow the chosen type; the old addVec2 /
   // addVec3 / multiplyVec2 / multiplyVec3 / mixVec3 / blend nodes are aliases.
   add:      { primaryInput: 'a', primaryOutput: 'result', alsoInputs: ['b'] },
@@ -1186,6 +1186,8 @@ export const VECTORIZABLE_NODES: Record<string, { primaryInput: string; primaryO
   normalizeVec2: { primaryInput: 'v', primaryOutput: 'result' },
   // Constant: the pills pick float / vec2 / vec3 / vec4 and the card shows 1–4 sliders.
   constant:   { primaryInput: 'value', primaryOutput: 'value' },
+  // Bounds (bounds.ts): Value, Min and Max in, Value and Direction out follow the type.
+  bounds:     { primaryInput: 'value', primaryOutput: 'value', alsoInputs: ['min', 'max'], alsoOutputs: ['direction'] },
 };
 
 /** Node types whose type pills also offer vec4. */

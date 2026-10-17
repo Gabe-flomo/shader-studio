@@ -42,7 +42,7 @@ export function socketsAs(type: string, inputs: Sockets, outputs: Sockets, vt: s
   if (!info) return { inputs, outputs };
   const ins = { ...inputs }, outs = { ...outputs };
   for (const k of [info.primaryInput, ...(info.alsoInputs ?? [])]) if (ins[k]) ins[k] = { ...ins[k], type: vt };
-  if (info.primaryOutput && outs[info.primaryOutput]) outs[info.primaryOutput] = { ...outs[info.primaryOutput], type: vt };
+  for (const k of [info.primaryOutput, ...(info.alsoOutputs ?? [])]) if (k && outs[k]) outs[k] = { ...outs[k], type: vt };
   return { inputs: ins, outputs: outs };
 }
 
