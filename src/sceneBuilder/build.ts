@@ -28,6 +28,14 @@ import { LUMA, findTex, fitLines, glf, picUv, sampleWrap, standInId, standIns } 
 import { fmt } from './recipe';
 import { OUTPUT_BY_SHOW, PALETTE_BY_KEY, isPicture, outputClause, outputProblem, type OutputSpec } from './output';
 import { FAR, gateNode } from '../builders/mute';
+import { gradientParams } from '../lib/colourGradient';
+
+/** A shape's colour as a Color node's params: solid, or its gradient (docs/gradients.md; the node then has Point and Normal sockets). */
+function shapeColourParams(sh: ShapeSpec): Record<string, unknown> {
+  return { color: [...sh.color], ...(sh.gradient ? gradientParams('color', sh.gradient, true) : {}) };
+}
+/** Two shapes look the same when their colour and gradient match. */
+const colourKey = (sh: ShapeSpec) => (sh.gradient ? `${sh.color.join()}|${JSON.stringify(sh.gradient)}` : sh.color.join());
 
 export const ROLE_KEY = '_sbRole';
 /** On the Scene Group: the spec it was built from (and, once applied, fingerprints of what was built). */
@@ -455,8 +463,12 @@ function reachableFrom(nodes: GraphNode[], roots: string[]): Set<string> {
   return seen;
 }
 
-function materialsGroup(ctx: Ctx, shapes: ShapeSpec[], hitPos: Ref, texShapes: ShapeSpec[] = []): GraphNode {
+function materialsGroup(ctx: Ctx, shapes: ShapeSpec[], hitPos: Ref, texShapes: ShapeSpec[] = [], normal: Ref | null = null): GraphNode {
   const inner: GraphNode[] = [];
+  // A gradient colour reads the surface's normal too: through its own port.
+  const wantsNormal = !!normal && shapes.some(s => s.gradient);
+  const normalPort: Ref = { nodeId: GROUP_PORT_SENTINEL, outputKey: 'normal' };
+  let normalTo: string | null = null;
   const matBalls: Array<{ node: GraphNode; sh: ShapeSpec }> = [];
   // Inside the group the hit point arrives through the port.
   const port: Ref = { nodeId: GROUP_PORT_SENTINEL, outputKey: 'hitPos' };
@@ -480,7 +492,9 @@ function materialsGroup(ctx: Ctx, shapes: ShapeSpec[], hitPos: Ref, texShapes: S
     const d = emitShape(scope, { ...sh, warps: sh.warps }, pos, inner, local, groupMuted);
     if (!d) continue;
     const name = `‘${itemName(ctx.spec, sh)}’`;
-    const c = mk(scope, 'colorPicker', `${sh.id}:color`, { color: [...sh.color] }, {}, `${name}'s colour.`, inner);
+    const c = mk(scope, 'colorPicker', `${sh.id}:color`, shapeColourParams(sh), sh.gradient ? { point: port, normal: wantsNormal ? normalPort : null } : {},
+      sh.gradient ? `${name}'s colour: a gradient over the hit point (Point) and its Normal.` : `${name}'s colour.`, inner);
+    if (sh.gradient && wantsNormal && !normalTo) normalTo = c.id;
     const slot = texShapes.indexOf(sh);
     let own: Ref | null = null;
     if (texShapes.length) {
@@ -532,13 +546,14 @@ function materialsGroup(ctx: Ctx, shapes: ShapeSpec[], hitPos: Ref, texShapes: S
   };
   const node: GraphNode = {
     id: ctx.idFor('materials'), type: 'group', position: { x: 0, y: 0 },
-    inputs: { hitPos: { type: 'vec3', label: 'Hit Pos', connection: { ...hitPos } }, ...matPics.inputs },
+    inputs: { hitPos: { type: 'vec3', label: 'Hit Pos', connection: { ...hitPos } }, ...(normalTo && normal ? { normal: { type: 'vec3' as const, label: 'Normal', connection: { ...normal } } } : {}), ...matPics.inputs },
     outputs,
     params: {
       label: 'Materials', iterations: 1,
       subgraph: {
         nodes: inner,
-        inputPorts: [{ key: 'hitPos', type: 'vec3', label: 'Hit Pos', toNodeId: inner[0]?.id ?? '', toInputKey: 'pos' }, ...matPics.ports],
+        inputPorts: [{ key: 'hitPos', type: 'vec3', label: 'Hit Pos', toNodeId: inner[0]?.id ?? '', toInputKey: 'pos' },
+          ...(normalTo ? [{ key: 'normal', type: 'vec3' as const, label: 'Normal', toNodeId: normalTo, toInputKey: 'normal' }] : []), ...matPics.ports],
         outputPorts: [
           { key: 'color', type: 'vec3', label: 'Colour', fromNodeId: colour!.nodeId, fromOutputKey: colour!.outputKey },
           ...(shine ? [{ key: 'shine', type: 'float' as const, label: 'Shine', fromNodeId: shine.nodeId, fromOutputKey: shine.outputKey }] : []),
@@ -882,9 +897,9 @@ export function buildSceneGraph(spec: SceneSpec, idFor: (role: string) => string
     if (L.fog > 0) ctx.warnings.push('Glass mode has no fog; it is left out.');
   } else if (L.mode === 'gi') {
     const first = firstShown?.color ?? [0.7, 0.7, 0.7];
-    if (new Set(shapes.map(s => s.color.join())).size > 1) ctx.warnings.push('GI lighting uses one surface colour (the first shape\'s); per-shape colours are a Surface-mode feature.');
+    if (new Set(shapes.map(colourKey)).size > 1) ctx.warnings.push('GI lighting uses one surface colour (the first shape\'s); per-shape colours are a Surface-mode feature.');
     const loop = mk(ctx, 'giLitMarchGroup', 'march', {
-      ...loopParams, albedo: [...first], metallic: L.gi.metal, roughness: L.gi.rough, giStrength: L.gi.strength, specStrength: L.gi.spec,
+      ...loopParams, albedo: [...first], ...(firstShown?.gradient ? gradientParams('albedo', firstShown.gradient, true) : {}), metallic: L.gi.metal, roughness: L.gi.rough, giStrength: L.gi.strength, specStrength: L.gi.spec,
       lightR: L.sunColor[0], lightG: L.sunColor[1], lightB: L.sunColor[2],
       skyTopR: L.sky[0], skyTopG: L.sky[1], skyTopB: L.sky[2], skyBotR: L.bounce[0] * 4, skyBotG: L.bounce[1] * 4, skyBotB: L.bounce[2] * 4,
       subgraph: passBody('march'),
@@ -914,7 +929,7 @@ export function buildSceneGraph(spec: SceneSpec, idFor: (role: string) => string
     const shadow = L.shadows > 0 ? mk(ctx, 'softShadow', 'shadow', { k: L.shadows, tmax: Q.maxDist }, { scene: ref(scene, 'scene'), pos, normal, hit, lightDir: sun ? ref(sun, 'rgb') : null, ...stretch },
       `Soft shadows: marches again from the hit point toward the sun; Hardness ${fmt(L.shadows)} (8 soft … 32 hard).`) : null;
     if (shadow) gateNode(shadow, M.shadows, { to: '1.0' });
-    const colours = new Set(shapes.map(s => s.color.join()));
+    const colours = new Set(shapes.map(colourKey));
     const shines = new Set(shapes.map(s => s.shine));
     let base: Ref, shine: Ref | null = null;
     const shineValue = shapes[0]?.shine ?? 0;
@@ -923,7 +938,7 @@ export function buildSceneGraph(spec: SceneSpec, idFor: (role: string) => string
     if (painted.length > MAX_TEX_SHAPES) ctx.warnings.push(`Pictures paint ${MAX_TEX_SHAPES} shapes at most; ${painted.slice(MAX_TEX_SHAPES).map(s => `‘${itemName(spec, s)}’`).join(', ')} keep${painted.length - MAX_TEX_SHAPES === 1 ? 's' : ''} its colour.`);
     const texShapes = painted.slice(0, MAX_TEX_SHAPES);
     if (texShapes.length || (shapes.length > 1 && (colours.size > 1 || shines.size > 1))) {
-      const mat = materialsGroup(ctx, shapes, pos, texShapes);
+      const mat = materialsGroup(ctx, shapes, pos, texShapes, normal);
       base = ref(mat, 'color');
       if (mat.outputs.shine) shine = ref(mat, 'shine');
       if (texShapes.length) {
@@ -933,7 +948,10 @@ export function buildSceneGraph(spec: SceneSpec, idFor: (role: string) => string
         if (pics.height) litNormal = bumpNormal(ctx, normal, pos, pics.height);
       }
     } else {
-      base = ref(mk(ctx, 'colorPicker', 'color', { color: [...(shapes[0]?.color ?? [0.8, 0.8, 0.8])] }, {}, 'The surface colour. Keep it fairly dark (around 0.2–0.8) and get brightness from the lights.'), 'rgb');
+      const sh0 = shapes[0];
+      base = ref(sh0?.gradient
+        ? mk(ctx, 'colorPicker', 'color', shapeColourParams(sh0), { point: pos, normal }, 'The surface colour: a gradient over the hit point (Point) and its Normal. Keep it fairly dark (around 0.2–0.8) and get brightness from the lights.')
+        : mk(ctx, 'colorPicker', 'color', { color: [...(sh0?.color ?? [0.8, 0.8, 0.8])] }, {}, 'The surface colour. Keep it fairly dark (around 0.2–0.8) and get brightness from the lights.'), 'rgb');
     }
     const light = mk(ctx, 'multiLight', 'light', {
       sunDirX: L.sunDir[0], sunDirY: L.sunDir[1], sunDirZ: L.sunDir[2], sunR: L.sunColor[0], sunG: L.sunColor[1], sunB: L.sunColor[2],

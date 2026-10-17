@@ -135,6 +135,7 @@ import { ParticlePresets } from './ParticlePresets';
 import { socketVisible } from '../../lib/socketsOnDemand';
 import { StopPaletteStops } from './StopPaletteStops';
 import { toRgb } from '../../lib/colorMath';
+import { GradientColourParam } from './GradientColourParam';
 import { CardBadge, CardButton, CardDivider, KeyframedRuler, ParamLabel, ParamSocket, WiredChip, paramLabelColumn } from './NodeCardParts';
 import { driveKey, playDrivenMap } from '../../play/playDriven';
 import { driverOf } from '../../play/paramDrivers';
@@ -2436,6 +2437,13 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                 if (paramDef.type === 'vec3color') {
                   // Same-named vec3 socket (Background, Albedo): a wire there wins over the swatch.
                   const wire = node.inputs[paramKey]?.connection;
+                  if (!wire && paramDef.gradient?.length) {
+                    return (
+                      <GradientColourParam key={paramKey} node={node} paramKey={paramKey} paramDef={paramDef} defaultValue={(def.defaultParams as Record<string, unknown> | undefined)?.[paramKey]}
+                        rowStyle={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 36, padding: '4px 10px 4px 14px' }}
+                        label={<ParamLabel title={paramDef.hint}>{paramDef.label}</ParamLabel>} />
+                    );
+                  }
                   return (
                     <div key={paramKey} data-param-key={paramKey} style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 36, padding: '4px 10px 4px 14px' }}>
                       <ParamLabel muted={!!wire} title={paramDef.hint}>{paramDef.label}</ParamLabel>
@@ -4006,6 +4014,14 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                   <ParamLabel muted title={paramDef.hint} help={paramDef.help}>{paramDef.label}</ParamLabel>
                   <WiredChip source={colorWire} expr={getSourceExpr(shaderLines, nodeOutputVarMap, colorWire.nodeId, colorWire.outputKey)} />
                 </div>
+              );
+            }
+            // A colour that can also be a gradient (docs/gradients.md): the Solid | Gradient switch and its editor.
+            if (paramDef.gradient?.length) {
+              return (
+                <GradientColourParam key={key} node={node} paramKey={key} paramDef={paramDef} defaultValue={def?.defaultParams?.[key]}
+                  rowStyle={rowStyle} swatchSize={node.type === 'colorPicker' ? 'lg' : 'md'}
+                  label={<ParamLabel title={paramDef.hint} help={paramDef.help}>{paramDef.label}</ParamLabel>} />
               );
             }
             return (

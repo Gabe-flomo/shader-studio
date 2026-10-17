@@ -1,5 +1,6 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
 import { f, p, pv3, vec3Str, withParamSockets } from './helpers';
+import { DRIVERS_2D, DRIVERS_3D_POINT, PF_GRADIENT_GLSL, gradientColourGlsl, gradientOn } from '../../lib/colourGradient';
 
 // Shared palette GLSL function — referenced by both PaletteNode and FractalLoopNode
 // so the compiler's Set-based deduplication keeps exactly one copy in the shader.
@@ -137,6 +138,7 @@ vec3 gradientBlend(vec2 uv, vec3 colorA, vec3 colorB, int mode, float offset) {
 // What the old Scale Color did: a float field painted with a colour. With the
 // Background left black it is exactly Colour × Field; a Background colour
 // makes it mix(Background, Colour, Field), so 0 shows the background.
+const COLORIZE_DRIVERS = ['field', ...DRIVERS_2D] as const;
 export const ColorizeNode: NodeDefinition = {
   type: 'colorize',
   label: 'Colorize', aliases: ['scale color', 'scale colour', 'tint', 'color by field', 'colour field', 'color × float', 'field to color'],
@@ -151,16 +153,17 @@ export const ColorizeNode: NodeDefinition = {
     gain:       { type: 'float', label: 'Gain' },
   },
   outputs: { color: { type: 'vec3', label: 'Color', hint: 'mix(Background, Colour, Field × Gain).' } },
+  glslFunctionsFor: node => (gradientOn(node.params, 'color') && !node.inputs.color?.connection ? [PF_GRADIENT_GLSL] : []),
   defaultParams: { color: [1.0, 0.55, 0.2], background: [0.0, 0.0, 0.0], gain: 1.0 },
   paramDefs: {
-    color:      { label: 'Colour',     type: 'vec3color', hint: 'Colour used where the field is 1, when nothing is wired to Colour.' },
+    color:      { label: 'Colour',     type: 'vec3color', gradient: COLORIZE_DRIVERS, hint: 'Colour used where the field is 1, when nothing is wired to Colour.', help: 'Solid, or Gradient: stops laid along the Field\'s own brightness or across the picture (UV X / Y, Radial, Angle). Docs: gradients.' },
     background: { label: 'Background', type: 'vec3color', hint: 'Colour used where the field is 0. Black = plain multiply.' },
     gain:       { label: 'Gain',       type: 'float', min: 0, max: 10, step: 0.01, hint: 'Multiplies the field first. Raise it for a faint glow, lower it to tame a hot one.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id   = node.id;
     const fld  = inputVars.field ?? '0.0';
-    const col  = inputVars.color ?? pv3(node.params.color, [1.0, 0.55, 0.2]);
+    const col  = inputVars.color ?? gradientColourGlsl(node.params, 'color', { value: fld }, COLORIZE_DRIVERS) ?? pv3(node.params.color, [1.0, 0.55, 0.2]);
     const bg   = inputVars.background ?? pv3(node.params.background, [0.0, 0.0, 0.0]);
     const gain = inputVars.gain ?? p(node.params.gain, 1.0);
     return {
@@ -885,6 +888,27 @@ export const OklabMixNode: NodeDefinition = withParamSockets({
   },
 }, ['midGain']);
 
+/**
+ * A Color node's sockets: none, or, while its colour is a Gradient (docs/gradients.md), Point and
+ * Normal, the 3D point it colours and the surface's normal there. Kept on the node, not in the
+ * definition, so a solid Color is the plain node it always was (switching and swapping included).
+ */
+export const COLOR_PICKER_GRADIENT_INPUTS = {
+  point:  { type: 'vec3' as const, label: 'Point', hint: 'Gradient: the 3D point it colours (a march loop\'s Hit Pos). Height, Along X / Z, Distance from centre and Noise read it.' },
+  normal: { type: 'vec3' as const, label: 'Normal', hint: 'Gradient: the surface\'s normal there, for Normal (up → down).' },
+};
+/** The node with its Point / Normal sockets added (gradient on) or taken away (off, unwired). */
+export function colorPickerSockets(n: GraphNode): GraphNode {
+  const on = gradientOn(n.params, 'color');
+  const inputs = { ...n.inputs };
+  let changed = false;
+  for (const [k, s] of Object.entries(COLOR_PICKER_GRADIENT_INPUTS)) {
+    if (on && !inputs[k]) { inputs[k] = { type: s.type, label: s.label }; changed = true; }
+    if (!on && inputs[k] && !inputs[k].connection) { delete inputs[k]; changed = true; }
+  }
+  return changed ? { ...n, inputs } : n;
+}
+
 // ─── Color (picker) ─────────────────────────────────────────────────────────
 // One colour, chosen in the design-tool picker on the card (hue / saturation /
 // brightness square, hex, RGB, eyedropper). The intuitive replacement for
@@ -897,6 +921,7 @@ export const ColorPickerNode: NodeDefinition = {
     'A single colour from a design-tool picker: drag the square and hue strip, type a hex, or use the eyedropper. ' +
     'Outputs it as a vec3 plus the three channels. Wire it into any Color input — Fill, Tint, Background, Blend — ' +
     'instead of assembling it from three floats with Make Vec3. The swatch is a live uniform, so dragging never recompiles.',
+  // Point and Normal are added to the node itself while its colour is a Gradient (colorPickerSockets).
   inputs: {},
   outputs: {
     rgb: { type: 'vec3',  label: 'Color', hint: 'The picked colour as a vec3 in 0–1.' },
@@ -906,13 +931,15 @@ export const ColorPickerNode: NodeDefinition = {
   },
   defaultParams: { color: [0.96, 0.55, 0.2] },
   paramDefs: {
-    color: { label: 'Color', type: 'vec3color', hint: 'Click the swatch to open the picker. Hex and RGB fields accept typing; recent picks are kept below the presets.' },
+    color: { label: 'Color', type: 'vec3color', gradient: DRIVERS_3D_POINT, hint: 'Click the swatch to open the picker. Hex and RGB fields accept typing; recent picks are kept below the presets. Gradient colours a 3D surface by its Point (and Normal): wire a march loop\'s Hit Pos into Point.' },
   },
-  generateGLSL: (node: GraphNode) => {
+  glslFunctionsFor: node => (gradientOn(node.params, 'color') ? [PF_GRADIENT_GLSL] : []),
+  generateGLSL: (node: GraphNode, inputVars) => {
     const id = node.id;
+    const grad = gradientColourGlsl(node.params, 'color', { pos: inputVars.point, normal: inputVars.normal }, DRIVERS_3D_POINT);
     return {
       code: [
-        `    vec3 ${id}_rgb = ${pv3(node.params.color, [0.96, 0.55, 0.2])};\n`,
+        `    vec3 ${id}_rgb = ${grad ?? pv3(node.params.color, [0.96, 0.55, 0.2])};\n`,
         `    float ${id}_r = ${id}_rgb.x;\n`,
         `    float ${id}_g = ${id}_rgb.y;\n`,
         `    float ${id}_b = ${id}_rgb.z;\n`,

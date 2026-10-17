@@ -6,6 +6,8 @@
 import { useState, type ReactNode } from 'react';
 import { BuilderSlider, type BuilderSliderProps } from '../builders/BuilderSlider';
 import { ColorSwatch } from '../ui/ColorPicker';
+import { ColourModeSwitch, GradientSetting } from '../ui/GradientSetting';
+import { DRIVERS_3D_POINT, starterGradient, type ColourGradient, type GradientDriver } from '../../lib/colourGradient';
 import { Icon } from '../ui/Icon';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
@@ -80,6 +82,29 @@ export function ColourRow({ label, value, onChange, hint }: { label: ReactNode; 
   return (
     <Row label={label} hint={hint}>
       <ColorSwatch value={value} label={typeof label === 'string' ? label : 'colour'} onChange={rgb => onChange([rgb[0], rgb[1], rgb[2]])} />
+    </Row>
+  );
+}
+
+/**
+ * A colour that can be Solid or a Gradient over the surface (docs/gradients.md): the switch, the
+ * swatch or the gradient editor. `gradient` null is Solid.
+ */
+export function GradientColourRow({ label, value, gradient, onChange, onGradient, hint, drivers = DRIVERS_3D_POINT }: {
+  label: ReactNode; value: Vec3; gradient: ColourGradient | null | undefined; onChange: (v: Vec3) => void;
+  onGradient: (g: ColourGradient | null) => void; hint?: string; drivers?: readonly GradientDriver[];
+}) {
+  const name = typeof label === 'string' ? label : 'colour';
+  return (
+    <Row label={label} hint={hint}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <ColourModeSwitch label={name} mode={gradient ? 'gradient' : 'solid'}
+            onChange={m => onGradient(m === 'gradient' ? starterGradient(value, drivers[0]) : null)} />
+          {!gradient && <ColorSwatch value={value} label={name} onChange={rgb => onChange([rgb[0], rgb[1], rgb[2]])} />}
+        </div>
+        {gradient && <GradientSetting value={gradient} drivers={drivers} label={name} onChange={g => onGradient(g)} />}
+      </div>
     </Row>
   );
 }
