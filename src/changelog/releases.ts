@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.249',
+    date: '2026-10-17',
+    title: "Send and Receive",
+    highlights: [
+      { area: 'Studio', text: "Send and Receive: name a value or texture with Send, then read it anywhere with Receive, even inside groups, with no wire across the graph." },
+    ],
+  },
+  {
     id: '2026.10.248',
     date: '2026-10-17',
     title: "Curves",
