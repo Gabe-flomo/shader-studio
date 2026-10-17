@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.262',
+    date: '2026-10-17',
+    title: "Better on phones",
+    highlights: [
+      { area: 'Studio', text: "On a phone: a welcome with examples and Start a new scene, a labelled Preview / Both / Graph / Code switch, and node pages with their editors." },
+      { area: 'Studio', text: "Bigger tap targets, long-press for an icon's name, builders keep Done in view, and Record no longer crashes on phones." },
+    ],
+  },
+  {
     id: '2026.10.261',
     date: '2026-10-17',
     title: "Agents presets",
