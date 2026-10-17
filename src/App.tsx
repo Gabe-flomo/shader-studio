@@ -17,6 +17,7 @@ import { MobileTopBar } from './components/shell/MobileTopBar';
 import { fontFamily } from './theme/tokens';
 import { Icon } from './components/ui/Icon';
 import { Sheet } from './components/ui/Sheet';
+import { markPhoneWelcomed, shouldWelcomePhone } from './components/shell/phoneWelcome';
 import { NewGraphSheet } from './components/shell/NewGraphSheet';
 import { CreditTag } from './components/ui/Credit';
 import { Segmented } from './components/ui/Choice';
@@ -731,6 +732,23 @@ function App() {
   // (all collapsed) since the full list is long enough to need scrolling
   // past just the first one or two categories otherwise.
   const [expandedExampleFolders, setExpandedExampleFolders] = useState<Set<string>>(new Set());
+  // A phone's first open: Browse opens on Examples with a short welcome (phoneWelcome.ts).
+  // Not when a link opened something (a query or hash): that is what the visitor came for.
+  const [phoneWelcome, setPhoneWelcome] = useState(false);
+  useEffect(() => {
+    if (window.location.search || window.location.hash) return;
+    if (!shouldWelcomePhone({ phone: mobile, page })) return;
+    markPhoneWelcomed();
+    setPhoneWelcome(true);
+    setMobileExamplesTab('examples');
+    setShowMobileExamples(true);
+  }, [mobile, page]);
+  // However the sheet closes (an example picked, a page link), the welcome was a one-off.
+  const examplesWereOpen = useRef(false);
+  useEffect(() => {
+    if (examplesWereOpen.current && !showMobileExamples) setPhoneWelcome(false);
+    examplesWereOpen.current = showMobileExamples;
+  }, [showMobileExamples]);
   // Keyboard shortcuts modal
   const [showShortcuts, setShowShortcuts]     = useState(false);
   const historyPopped = useHistoryWindow(s => s.open);
@@ -1034,6 +1052,8 @@ function App() {
     const showCanvasPane = mobileLayout !== 'graph' && mobileLayout !== 'code';
     const showGraphPane  = mobileLayout !== 'canvas' && mobileLayout !== 'code';
     const showCodePane   = mobileLayout === 'code';
+    // The bottom bar with more than the layout switch in it (keyframe tools, the error badge): Browse shows as its icon.
+    const bottomCrowded  = !!mobileKeyframeEditor || errorCount > 0;
     return (
       <div style={{ width: '100vw', height: APP_HEIGHT, position: 'relative', overflow: 'hidden', background: tc.crust, touchAction: 'none', display: 'flex', flexDirection: 'column' }}>
 
@@ -1114,23 +1134,28 @@ function App() {
           flexShrink: 0, zIndex: 25, boxSizing: 'border-box', minHeight: 64,
           background: tk.bg.panel, borderTop: `1px solid ${tk.border.default}`,
           padding: '10px calc(14px + env(safe-area-inset-right, 0px)) calc(10px + env(safe-area-inset-bottom, 0px)) calc(14px + env(safe-area-inset-left, 0px))',
-          display: 'flex', alignItems: 'center', gap: 8,
+          // Never past the screen's edge: if it still doesn't fit, Browse goes onto a second row.
+          display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', rowGap: 8,
         }}>
           <MobileIconSegment
             ariaLabel="Layout"
             value={mobileLayout}
             onChange={setMobileLayout}
+            // Worded unless the keyframe tools need the room beside it.
+            captions={!mobileKeyframeEditor}
+            dense={!!mobileKeyframeEditor}
             options={[
-              { value: 'canvas', icon: 'layoutCanvas', label: 'Preview only' },
-              { value: 'split', icon: 'layoutSplit', label: 'Preview and graph' },
-              { value: 'graph', icon: 'layoutGraph', label: 'Graph only' },
-              { value: 'code', icon: 'code', label: 'Generated code' },
+              { value: 'canvas', icon: 'layoutCanvas', label: 'Preview only', short: 'Preview' },
+              { value: 'split', icon: 'layoutSplit', label: 'Preview and graph', short: 'Both' },
+              { value: 'graph', icon: 'layoutGraph', label: 'Graph only', short: 'Graph' },
+              { value: 'code', icon: 'code', label: 'Generated code', short: 'Code' },
             ]}
           />
           {errorBadge}
           {/* Keyframe tools while the keyframe editor is open — no keyboard for V/C/X/D here */}
           {mobileKeyframeEditor && (
             <MobileIconSegment
+              dense
               ariaLabel="Keyframe tool"
               value={mobileKeyframeTool}
               onChange={setMobileKeyframeTool}
@@ -1146,12 +1171,14 @@ function App() {
           <button
             type="button"
             onClick={() => { setMobileExamplesTab('nodes'); setShowMobileExamples(true); }}
+            aria-label="Browse examples, nodes and history"
             style={{
-              height: 40, padding: '0 14px', border: 0, borderRadius: 12, cursor: 'pointer', flexShrink: 0, touchAction: 'manipulation',
+              // With the keyframe tools or the error badge beside the layout switch, a 360px phone has room for the icon only.
+              height: 40, padding: bottomCrowded ? '0 11px' : '0 14px', border: 0, borderRadius: 12, cursor: 'pointer', flexShrink: 0, touchAction: 'manipulation',
               display: 'flex', alignItems: 'center', gap: 7, background: tk.ink.base, color: tk.ink.text, font: `600 13px ${fontFamily.ui}`,
             }}
           >
-            <Icon name="spark" size={15} />Browse
+            <Icon name="spark" size={15} />{!bottomCrowded && 'Browse'}
             {(unseenActivity.count > 0 || unreadRelease) && (
               <span aria-label={unseenActivity.count > 0 ? `${unseenActivity.count} new ${unseenActivity.count === 1 ? 'notice' : 'notices'} in History` : 'New release notes in History'}
                 style={{ width: 8, height: 8, borderRadius: '50%', marginLeft: -2, background: unseenActivity.count > 0 && unseenActivity.error ? tk.status.danger : tk.accent.base, boxShadow: `0 0 0 2px ${tk.ink.base}` }} />
@@ -1161,7 +1188,7 @@ function App() {
 
         {/* Browse sheet — starter graphs, or every node by category */}
         {showMobileExamples && (
-          <Sheet title="Browse" onClose={() => setShowMobileExamples(false)}>
+          <Sheet title={phoneWelcome ? 'Welcome to Playfield' : 'Browse'} onClose={() => { setShowMobileExamples(false); setPhoneWelcome(false); }}>
             <div style={{ marginBottom: 12 }}>
               <Segmented
                 fill
@@ -1179,6 +1206,26 @@ function App() {
               <HistoryPanel compact onShowOnCanvas={() => setShowMobileExamples(false)} />
             ) : mobileExamplesTab === 'examples' ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                {/* First open: what's where. Always: a new scene is one tap from here. */}
+                {phoneWelcome && (
+                  <p data-phone-welcome="" style={{ margin: '0 4px 10px', font: `13.5px/1.5 ${fontFamily.ui}`, color: tk.text.muted }}>
+                    Open an example to see how it’s made, or start a scene of your own. The picture is on top and its graph underneath; the buttons along the bottom switch between them, and <b style={{ color: tk.text.secondary }}>Browse</b> brings you back here.
+                  </p>
+                )}
+                <button
+                  type="button"
+                  data-new-scene=""
+                  onClick={() => { setShowMobileExamples(false); setPhoneWelcome(false); setShowMobileResetConfirm(true); }}
+                  style={{
+                    width: '100%', minHeight: 48, display: 'flex', alignItems: 'center', gap: 10, padding: '0 12px', marginBottom: 6, border: 0,
+                    borderRadius: 12, cursor: 'pointer', touchAction: 'manipulation', textAlign: 'left',
+                    background: tk.bg.subtle, color: tk.text.primary, font: `600 13.5px ${fontFamily.ui}`,
+                  }}
+                >
+                  <span style={{ width: 28, height: 28, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', background: tk.ink.base, color: tk.ink.text, flexShrink: 0 }}><Icon name="plus" size={15} /></span>
+                  <span style={{ flex: 1 }}>Start a new scene</span>
+                  <Icon name="chevR" size={14} style={{ color: tk.text.faint }} />
+                </button>
                 {EXAMPLE_FOLDERS.filter(f => f.keys.some(k => EXAMPLE_INDEX[k])).map(folder => {
                   const isOpen = expandedExampleFolders.has(folder.label);
                   const keys = folder.keys.filter(k => EXAMPLE_INDEX[k]);

@@ -18,6 +18,7 @@ import { Icon } from '../ui/Icon';
 import { type Box, type LegendEntry, type TagRequest, dimFor, layoutTags, TAG_H } from '../../agentBuilder/legend';
 import { type Demo, makeDemo } from '../../agentBuilder/demos';
 import type { ViewRect } from '../builders/studio/LiveViewport';
+import { useViewport } from '../../lib/viewport';
 
 /** What the diagrams need to draw their tags and to light / dim with the legend. */
 export interface ViewportLink {
@@ -38,7 +39,14 @@ export interface ViewportLink {
 
 export const LEGEND_W = 292;
 const PREF = 'builder:agent-builder:studio:legend';
-const readOpen = () => { try { return localStorage.getItem(PREF) !== '0'; } catch { return true; } };
+/**
+ * Whether the legend starts open: as it was last left, else open on a desktop and folded on a
+ * phone, where the open panel (292px) would cover most of the picture.
+ */
+export function legendStartsOpen(stored: string | null, phone: boolean): boolean {
+  return stored === null ? !phone : stored !== '0';
+}
+const readOpen = (phone: boolean) => { let stored: string | null = null; try { stored = localStorage.getItem(PREF); } catch { /* none */ } return legendStartsOpen(stored, phone); };
 
 export function ViewportLegend({ entries, lit, focused, note, onHover, onFocus, onBox }: {
   entries: readonly LegendEntry[]; lit: string | null; focused: string | null;
@@ -49,7 +57,8 @@ export function ViewportLegend({ entries, lit, focused, note, onHover, onFocus, 
   onBox?: (b: Box | null) => void;
 }) {
   const tk = useTokens();
-  const [open, setOpen] = useState(readOpen);
+  const phone = useViewport(v => v.phone);
+  const [open, setOpen] = useState(() => readOpen(phone));
   const ref = useRef<HTMLDivElement>(null);
   const toggle = () => { setOpen(v => { try { localStorage.setItem(PREF, v ? '0' : '1'); } catch { /* this session */ } return !v; }); };
   useEffect(() => {
@@ -66,7 +75,7 @@ export function ViewportLegend({ entries, lit, focused, note, onHover, onFocus, 
   return (
     <div ref={ref} data-viewport-legend={open ? 'open' : 'folded'} onPointerLeave={() => onHover(null)}
       style={{
-        position: 'absolute', left: 12, top: 12, width: open ? LEGEND_W : undefined, maxHeight: 'calc(100% - 24px)', overflowY: 'auto', boxSizing: 'border-box',
+        position: 'absolute', left: 12, top: 12, width: open ? (phone ? `min(${LEGEND_W}px, calc(100% - 24px))` : LEGEND_W) : undefined, maxHeight: 'calc(100% - 24px)', overflowY: 'auto', boxSizing: 'border-box',
         background: alpha(tk.bg.panel, 0.94), borderRadius: radius.lg, boxShadow: `${tk.shadow.float}, inset 0 0 0 1px ${tk.border.default}`, color: tk.text.primary,
         backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)', pointerEvents: 'auto',
       }}>

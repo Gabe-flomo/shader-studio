@@ -21,6 +21,7 @@ import { useNodeGraphStore } from '../../../store/useNodeGraphStore';
 import { useBuilderWindows } from '../../../builders/windows';
 import { AgentBuilder } from '../AgentBuilder';
 import { tagsOverlap } from '../../../agentBuilder/legend';
+import { legendStartsOpen } from '../ViewportLegend';
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 HTMLCanvasElement.prototype.getContext = (() => null) as unknown as HTMLCanvasElement['getContext'];
@@ -209,5 +210,14 @@ describe('focus', () => {
     expect(legendIds()).toEqual(['turn', 'wobble']);
     click($('[data-tag="wobble"]'));
     expect($('[data-focus-demo]')?.getAttribute('data-demo-kind')).toBe('wander');
+  });
+});
+
+describe('the legend on a phone (mobile audit)', () => {
+  it('starts folded on a phone, open on a desktop, and as it was left after that', () => {
+    expect(legendStartsOpen(null, false)).toBe(true);
+    expect(legendStartsOpen(null, true)).toBe(false);
+    expect(legendStartsOpen('1', true)).toBe(true);
+    expect(legendStartsOpen('0', false)).toBe(false);
   });
 });

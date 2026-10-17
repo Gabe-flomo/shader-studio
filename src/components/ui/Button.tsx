@@ -3,6 +3,7 @@ import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
 import { Icon } from './Icon';
 import type { IconName } from './iconPaths';
+import { useViewport } from '../../lib/viewport';
 import { Tooltip } from './Tooltip';
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
@@ -61,6 +62,11 @@ function isText(children: ReactNode): boolean {
   return parts.length > 0 && parts.every(c => typeof c === 'string' || typeof c === 'number');
 }
 
+/** An icon button's side: 32 (`md`) or 26 (`sm`); on a phone the small one is 32 too, so a thumb can hit it. */
+export function iconButtonSize(size: 'sm' | 'md', phone: boolean): number {
+  return size === 'md' || phone ? 32 : 26;
+}
+
 /**
  * Icon-only button. `label` is required: it becomes the aria-label and the tooltip, so no
  * icon button ships without one. `sm` is 26px (node cards), `md` is 32px (panels).
@@ -78,7 +84,7 @@ export function IconButton({
 } & Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children'>) {
   const tk = useTokens();
   const [hover, setHover] = useState(false);
-  const s = size === 'md' ? 32 : 26;
+  const s = iconButtonSize(size, useViewport(v => v.phone));
   const color = active ? tk.accent.base
     : hover && tone === 'danger' ? tk.status.danger
     : hover ? tk.text.secondary : tk.text.faint;

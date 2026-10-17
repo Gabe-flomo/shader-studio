@@ -391,7 +391,8 @@ export function GLSLPage({ onConvert }: { onConvert?: (code: string, guided?: bo
     <div style={{ display: 'flex', flex: 1, minWidth: 0, minHeight: 0, background: tk.bg.panel, color: tk.text.primary, font: `12.5px ${fontFamily.ui}`, overflow: 'hidden', position: 'relative' }}>
 
       {/* ── Node palette sidebar ──────────────────────────────────────── */}
-      {paletteCollapsed ? (
+      {/* A phone has no room for the palette's 44px strip beside the editor: the Functions panel inserts code there instead. */}
+      {phone ? null : paletteCollapsed ? (
         <div style={{ width: 44, flexShrink: 0, display: 'flex', justifyContent: 'center', paddingTop: 10, background: tk.bg.subtle, borderRight: `1px solid ${tk.border.default}` }}>
           <IconButton icon="chevR" label="Expand sidebar" size="sm" onClick={() => setPaletteCollapsed(false)} />
         </div>
@@ -412,7 +413,7 @@ export function GLSLPage({ onConvert }: { onConvert?: (code: string, guided?: bo
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: `1px solid ${tk.border.default}`, minWidth: 0 }}>
         {/* A phone can't fit the toolbar: it scrolls sideways (the Code Explorer and Explain are at its end) */}
         <div style={{ ...panelHead, padding: '0 12px 0 16px', ...(phone ? { overflowX: 'auto', scrollbarWidth: 'none' } : null) }}>
-          <span title={openShader ? `${openShader.name}${openEdited ? ' · edited since it was saved' : ' · saved'}` : 'An unsaved shader: Save gives it a name'} style={{ fontWeight: 650, fontSize: 13.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <span title={openShader ? `${openShader.name}${openEdited ? ' · edited since it was saved' : ' · saved'}` : 'An unsaved shader: Save gives it a name'} style={{ fontWeight: 650, fontSize: 13.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0, display: 'inline-flex', alignItems: 'center', gap: 6, ...(phone ? { flexShrink: 0, maxWidth: 140 } : null) }}>
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{openShader ? openShader.name : 'Fragment shader'}</span>
             {openEdited && <span aria-label="Edited since it was saved" style={{ width: 7, height: 7, borderRadius: '50%', background: tk.status.warning, flexShrink: 0 }} />}
           </span>
@@ -423,6 +424,8 @@ export function GLSLPage({ onConvert }: { onConvert?: (code: string, guided?: bo
             >Read as {dialectLabel(translation.dialect)}</span>
           )}
           <span style={{ marginRight: 'auto' }} />
+          {/* A phone shows no preview until asked: the way to it comes first, not at the toolbar's scrolled-off end. */}
+          {phone && !full && <Button size="sm" variant="ghost" icon="layoutCanvas" onClick={() => toggleLayout('glsl')} title="Show the preview above the editor">Preview</Button>}
           {showSaveInput ? (
             <>
               <Field
@@ -455,7 +458,7 @@ export function GLSLPage({ onConvert }: { onConvert?: (code: string, guided?: bo
           }} />
           <IconButton icon="reset" label="Reset to the blank template" size="sm" onClick={() => { setCode(BOILERPLATE); setOpen(null); }} />
           <IconButton icon="trash" label="Clear the editor" size="sm" onClick={() => { setCode(''); setOpen(null); }} />
-          {!full && <IconButton icon="layoutCanvas" label="Full canvas: the preview here, wide, with its toolbar (shape, full screen, Record, time)" size="sm" onClick={() => toggleLayout('glsl')} />}
+          {!full && !phone && <IconButton icon="layoutCanvas" label="Full canvas: the preview here, wide, with its toolbar (shape, full screen, Record, time)" size="sm" onClick={() => toggleLayout('glsl')} />}
           {(!sideOpen || explorerOpen) && <IconButton icon="popout" label="Show saved shaders and functions" size="sm" onClick={() => { if (explorerOpen) toggleExplorer(); setShowPanel(true); }} />}
         </div>
 

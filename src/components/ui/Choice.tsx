@@ -3,6 +3,18 @@ import { Select } from './Select';
 import { useThemeMode, useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
 import { displayCombo } from '../../hooks/useShortcuts';
+import { useViewport } from '../../lib/viewport';
+
+/**
+ * A segment's least height. `tall` asks for a 40px finger target anywhere; on a phone every
+ * segment gets one big enough for a thumb (32px compact, 36px regular, plus the strip's padding)
+ * instead of the 20–22px a mouse is fine with. Elsewhere: none (the padding decides).
+ */
+export function segmentMinHeight({ tall, phone, sm }: { tall: boolean; phone: boolean; sm: boolean }): number | undefined {
+  if (tall) return 40;
+  if (phone) return sm ? 32 : 36;
+  return undefined;
+}
 
 /** On/off switch. Replaces checkboxes everywhere. `tall` gives it a 40px tap target (phones). */
 export function Toggle({
@@ -18,6 +30,8 @@ export function Toggle({
 }) {
   const tk = useTokens();
   const dark = useThemeMode() === 'dark';
+  // A phone: a thumb-sized row (the 18px switch alone is too small to hit).
+  const phone = useViewport(s => s.phone);
   // Light: white knob either way. Dark: light knob when off, dark knob on the blue track when on.
   const knob = dark ? (checked ? tk.bg.app : tk.text.primary) : tk.bg.panel;
   return (
@@ -32,7 +46,7 @@ export function Toggle({
         width: fullWidth ? '100%' : undefined,
         font: `12px ${fontFamily.ui}`, color: tk.text.secondary, cursor: disabled ? 'default' : 'pointer',
         opacity: disabled ? 0.45 : 1, whiteSpace: fullWidth ? undefined : 'nowrap', textAlign: 'left', maxWidth: '100%',
-        minHeight: tall ? 40 : undefined,
+        minHeight: tall ? 40 : phone ? 32 : undefined,
       }}
     >
       <span
@@ -96,6 +110,8 @@ export function Segmented<T extends string>({
 }) {
   const sm = size === 'sm';
   const tk = useTokens();
+  const phone = useViewport(s => s.phone);
+  const minH = segmentMinHeight({ tall, phone, sm });
   const outerRef = useRef<HTMLDivElement>(null);
   const stripRef = useRef<HTMLDivElement>(null);
   // The width the segments need side by side (null until measured), and whether that's more than there is.
@@ -138,7 +154,7 @@ export function Segmented<T extends string>({
           background: on ? tk.bg.panel : 'transparent', boxShadow: on ? '0 1px 2px rgba(20,20,30,0.1)' : 'none',
           color: on ? tk.text.primary : tk.text.muted, font: `${on ? 600 : 500} ${sm ? 11.5 : 12}px ${fontFamily.ui}`,
           display: 'inline-flex', flexDirection: o.sub ? 'column' : 'row', alignItems: 'center', justifyContent: 'center', gap: o.sub ? 1 : 4,
-          whiteSpace: 'nowrap', minHeight: tall ? 40 : undefined,
+          whiteSpace: 'nowrap', minHeight: minH,
         }}
       >
         <span>{o.label}</span>
@@ -171,7 +187,7 @@ export function Segmented<T extends string>({
           value={value}
           options={options.map(o => ({ value: o.value, label: optionText(o), disabled: o.disabled }))}
           onChange={v => { const o = options.find(x => x.value === v); if (o && !o.disabled) onChange(o.value); }}
-          height={tall ? 40 : sm ? 26 : 30}
+          height={minH ?? (sm ? 26 : 30)}
           style={{ width: '100%', ...(sm ? { font: `500 11.5px ${fontFamily.ui}` } : {}) }}
         />
         {/* The segments, hidden but still measured: they come back when there is room. */}
