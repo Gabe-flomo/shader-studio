@@ -179,6 +179,8 @@ export function StudioShell(p: StudioShellProps) {
   );
 
   // Top bar: Back · name · kind ……… panels · 2D | 3D · actions · primary · close
+  // The builder's main action (Done, Add to graph).
+  const primary = p.primary ? <Button variant="primary" size="sm" data-studio-primary title={p.primary.title} onClick={p.primary.onClick}>{p.primary.label}</Button> : null;
   const topBar = (
     <div data-studio-topbar style={{ minHeight: phone ? 52 : 60, flexShrink: 0, display: 'flex', alignItems: 'center', gap: phone ? 4 : 8, padding: phone ? '0 6px' : '0 12px', borderBottom: `1px solid ${tk.border.subtle}`, minWidth: 0 }}>
       {p.onBack && <IconButton icon="chevL" label={p.backLabel ?? 'Back'} onClick={p.onBack} data-studio-back />}
@@ -204,8 +206,10 @@ export function StudioShell(p: StudioShellProps) {
         )}
         {!phone && p.surprise}
         {p.actions}
-        {p.primary && <Button variant="primary" size="sm" data-studio-primary title={p.primary.title} onClick={p.primary.onClick}>{p.primary.label}</Button>}
+        {!phone && primary}
       </span>
+      {/* On a phone the actions above scroll sideways when they don't fit; Done stays in view beside them. */}
+      {phone && primary && <span style={{ flexShrink: 0, display: 'flex' }}>{primary}</span>}
       <IconButton icon="close" label="Close" shortcut="esc" onClick={p.onClose} />
     </div>
   );

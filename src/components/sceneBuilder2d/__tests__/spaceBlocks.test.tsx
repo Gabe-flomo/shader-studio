@@ -15,7 +15,8 @@ vi.hoisted(() => {
 
 import { act, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { BlockEditor, BlockLibrary } from '../SpaceBlocks';
+import { BlockEditor, BlockLibrary, SpaceView } from '../SpaceBlocks';
+import { PhoneStudioContext } from '../../builders/studio/PhoneStudio';
 import { BLOCK_LIBRARY } from '../../../sceneBuilder2d/blockLibrary';
 import type { SpaceBlock } from '../../../sceneBuilder2d/blocks';
 
@@ -156,5 +157,26 @@ describe('saving a block (My blocks)', () => {
     expect(picked.my).toBe('Wobble rows');
     expect(picked.lines).toEqual(mine.lines);
     expect(picked.params).toEqual(mine.params);
+  });
+});
+
+describe('the Space picture', () => {
+  it('on the desktop it stays in view (sticky) while the blocks scroll', () => {
+    const host = mount(<SpaceView ops={[]} upTo={null} />);
+    const view = host.querySelector('[data-space-view]') as HTMLElement;
+    expect(view.style.position).toBe('sticky');
+    expect(host.querySelector('[data-space-view-toggle]')).toBeNull();
+  });
+
+  it('on a phone it scrolls with the blocks and folds to one line (it used to fill the sheet)', () => {
+    const host = mount(<PhoneStudioContext.Provider value={true}><SpaceView ops={[]} upTo={null} /></PhoneStudioContext.Provider>);
+    const view = () => host.querySelector('[data-space-view]') as HTMLElement;
+    expect(view().style.position).not.toBe('sticky');
+    expect(host.querySelector('canvas')).toBeTruthy();
+    click(host.querySelector('[data-space-view-toggle]'));
+    expect(view().hasAttribute('data-space-view-folded')).toBe(true);
+    expect(host.querySelector('canvas')).toBeNull();
+    click(host.querySelector('[data-space-view-toggle]'));
+    expect(host.querySelector('canvas')).toBeTruthy();
   });
 });
