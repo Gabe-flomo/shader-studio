@@ -189,13 +189,13 @@ export function StudioShell(p: StudioShellProps) {
           <Icon name={p.icon} />
         </span>
       )}
-      <span style={{ display: 'flex', flexDirection: 'column', gap: p.crumb ? 0 : 1, minWidth: phone ? 96 : 0, flexShrink: 1, maxWidth: phone ? '55%' : undefined, marginRight: 'auto', paddingLeft: phone && !p.onBack ? 6 : 0 }}>
+      <span style={{ display: 'flex', flexDirection: 'column', gap: p.crumb ? 0 : 1, minWidth: phone ? 96 : 0, flexShrink: phone ? 6 : 1, maxWidth: phone ? '55%' : undefined, marginRight: 'auto', paddingLeft: phone && !p.onBack ? 6 : 0 }}>
         {p.crumb && <span data-studio-crumb style={{ fontSize: 11, lineHeight: '14px', color: tk.text.muted, display: 'flex', minWidth: 0, overflow: phone ? 'hidden' : undefined }}>{p.crumb}</span>}
         <b data-studio-title title={typeof p.title === 'string' ? p.title : undefined} style={{ fontSize: 15, fontWeight: 650, letterSpacing: '-0.01em', lineHeight: 1.2, ...clampLines(2) }}>{p.title}</b>
         {p.kind && !(phone && p.crumb) && <span data-studio-kind style={{ fontSize: 12, color: tk.text.muted, lineHeight: 1.25 }}>{p.kind}</span>}
       </span>
       {/* On a phone the title gives way first (down to 96px), then the actions slide sideways. */}
-      <span style={{ display: 'flex', alignItems: 'center', gap: phone ? 2 : 6, minWidth: 0, overflowX: phone ? 'auto' : undefined, scrollbarWidth: 'none', ...(phone ? { flexShrink: 0.2 } : null) }}>
+      <span style={{ display: 'flex', alignItems: 'center', gap: phone ? 2 : 6, minWidth: 0, overflowX: phone ? 'auto' : undefined, scrollbarWidth: 'none' }}>
         {!phone && p.nav !== undefined && foldButton('nav', 'panelLeft', 'the sections', sc('['))}
         {!phone && p.presets !== undefined && foldButton('presets', 'panelBottom', 'the presets')}
         {!phone && p.inspector !== undefined && foldButton('inspector', 'panelRight', 'the settings', sc(']'))}
