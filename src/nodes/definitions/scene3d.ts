@@ -154,9 +154,16 @@ export const MarchCameraNode: NodeDefinition = withParamSockets({
     rd: { type: 'vec3', label: 'Ray Dir',    hint: 'The direction this pixel\'s ray points, one per pixel.' },
     ...CAMERA_AXES,
   },
+  // Lens (docs/march-camera.md): a camera saved before it is Grain, the look it always had.
+  version: 2,
+  migrateParams: params => {
+    if (!('lens' in params)) params.lens = 'grain';
+    return params;
+  },
   defaultParams: {
     camDist: 3.0, camAngle: 0.6, camElevation: 0.3, rotSpeed: 0.0, fov: 1.5,
     targetX: 0.0, targetY: 0.0, targetZ: 0.0, aperture: 0.0, focalDist: 3.0, lensSpeed: 0.0,
+    lens: 'grain', dofSamples: '32', dofShape: 'disc', dofMaxBlur: 4,
     // Only read when Perspective is Reverse (hidden otherwise, so they are not uniforms and the code is unchanged).
     reverseStrength: 1.0, reverseDist: 8.0,
   },
@@ -169,9 +176,20 @@ export const MarchCameraNode: NodeDefinition = withParamSockets({
     targetX:      { label: 'Target X',   type: 'float' as const, min: -20.0, max: 20.0, step: 0.05, hint: 'X position of the look-at target.' },
     targetY:      { label: 'Target Y',   type: 'float' as const, min: -20.0, max: 20.0, step: 0.05, hint: 'Y position of the look-at target.' },
     targetZ:      { label: 'Target Z',   type: 'float' as const, min: -20.0, max: 20.0, step: 0.05, hint: 'Z position of the look-at target.' },
-    aperture:     { label: 'Aperture',   type: 'float' as const, min: 0.0,  max: 0.5,  step: 0.005, hint: 'Lens aperture radius. 0 = pinhole (no blur). Higher = more edge grain.' },
+    aperture:     { label: 'Aperture',   type: 'float' as const, min: 0.0,  max: 0.5,  step: 0.005, hint: 'Lens aperture radius: depth of field. 0 = pinhole (everything sharp). Higher = things away from Focal Dist blur more.' },
     focalDist:    { label: 'Focal Dist', type: 'float' as const, min: 0.1,  max: 50.0, step: 0.1,   hint: 'Distance from camera at which the scene is perfectly sharp.' },
-    lensSpeed:    { label: 'Lens Speed', type: 'float' as const, min: 0.0,  max: 5.0,  step: 0.05,  hint: 'Speed at which the aperture grain drifts over time. 0 = frozen static.' },
+    lens:         { label: 'Lens', type: 'select' as const, options: [
+      { value: 'grain',  label: 'Grain (one random lens ray per pixel)' },
+      { value: 'smooth', label: 'Smooth (bokeh blur, one extra pass)' },
+    ], hint: 'How Aperture blurs. Grain: every pixel looks through a random point of the lens, so blur is a fine noise (cheap; smooth only when averaged, as in a long recording). Smooth: the scene is drawn sharp into a hidden pass with its depth, then blurred by how far each pixel is from Focal Dist, in the same frame: soft bokeh with no grain, sharp foreground edges, a little more GPU.' },
+    lensSpeed:    { label: 'Lens Speed', type: 'float' as const, min: 0.0,  max: 5.0,  step: 0.05,  showWhen: { param: 'lens', value: 'grain' }, hint: 'Speed at which the aperture grain drifts over time. 0 = frozen static.' },
+    dofSamples:   { label: 'Blur quality', type: 'select' as const, showWhen: { param: 'lens', value: 'smooth' }, options: [
+      { value: '16', label: 'Draft (16 taps)' }, { value: '32', label: 'Good (32 taps)' }, { value: '64', label: 'Best (64 taps)' },
+    ], hint: 'Reads per pixel for the Smooth blur. More is smoother, wide blurs especially, and costs more.' },
+    dofShape:     { label: 'Bokeh shape', type: 'select' as const, showWhen: { param: 'lens', value: 'smooth' }, options: [
+      { value: 'disc', label: 'Disc (round)' }, { value: 'hex', label: 'Hex (6 blades)' }, { value: 'oct', label: 'Oct (8 blades)' },
+    ], hint: 'The shape bright out-of-focus points take.' },
+    dofMaxBlur:   { label: 'Max blur %', type: 'float' as const, min: 0.5, max: 12, step: 0.5, compileTime: true, showWhen: { param: 'lens', value: 'smooth' }, hint: 'The widest the Smooth blur gets, as a percentage of the picture height. Things very near the camera are capped here. Wider costs more for the same smoothness.' },
     // No default: a camera without it compiles exactly as before; the Scene Builder sets it when Flatten is above 0.
     projection:   { label: 'Perspective', type: 'select' as const, options: [
       { value: 'normal',       label: 'Normal' },
@@ -198,6 +216,7 @@ export const MarchCameraNode: NodeDefinition = withParamSockets({
     const aperture     = inputVars.aperture     || p(node.params.aperture,     0.0);
     const focalDist    = inputVars.focalDist    || p(node.params.focalDist,    3.0);
     const lensSpeed    = inputVars.lensSpeed    || p(node.params.lensSpeed,    0.0);
+    const smooth       = node.params.__dofSmooth === true;
 
     const code = [
       `    float ${id}_ang   = ${camAngle} + ${time} * ${rotSpeed};\n`,
@@ -228,6 +247,13 @@ export const MarchCameraNode: NodeDefinition = withParamSockets({
         `    ${id}_ro0 += ${id}_rO;\n`,
         `    ${id}_rd0 = normalize(${id}_rD * ${id}_fwd - ${id}_ra * ${id}_rO);\n`,
       ] : []),
+      // Lens: Smooth (compiler/smoothDofExpand.ts marks the camera): pinhole rays, and the lens for the CoC.
+      ...(smooth ? [
+        `    vec3  ${id}_ro    = ${id}_ro0;\n`,
+        `    vec3  ${id}_rd    = ${id}_rd0;\n`,
+        `    float ${id}_dofK  = ${aperture} * ${fov};\n`,
+        `    float ${id}_dofIF = 1.0 / max(${focalDist}, 0.05);\n`,
+      ] : [
       // Per-pixel hash for lens disk radius; angle drifts over time via lensSpeed
       `    float ${id}_h1    = fract(sin(dot(${uv}, vec2(127.1, 311.7))) * 43758.5453);\n`,
       `    float ${id}_h2    = fract(sin(dot(${uv}, vec2(269.5, 183.3))) * 43758.5453);\n`,
@@ -236,11 +262,15 @@ export const MarchCameraNode: NodeDefinition = withParamSockets({
       // When aperture=0, lr=0, so ro==ro0 and rd==rd0 (exact pinhole fallback, no branch needed)
       `    vec3  ${id}_ro    = ${id}_ro0 + ${id}_lr * (cos(${id}_lth) * ${id}_rgt + sin(${id}_lth) * ${id}_up2);\n`,
       `    vec3  ${id}_rd    = normalize((${id}_ro0 + ${id}_rd0 * max(${focalDist}, 0.05)) - ${id}_ro);\n`,
+      ]),
     ].join('');
 
     return {
       code,
-      outputVars: { ro: `${id}_ro`, rd: `${id}_rd`, forward: `${id}_fwd`, right: `${id}_rgt`, up: `${id}_up2` },
+      outputVars: {
+        ro: `${id}_ro`, rd: `${id}_rd`, forward: `${id}_fwd`, right: `${id}_rgt`, up: `${id}_up2`,
+        ...(smooth ? { dofK: `${id}_dofK`, dofInvF: `${id}_dofIF` } : {}),
+      },
     };
   },
 }, ['aperture', 'focalDist', 'lensSpeed', 'reverseStrength', 'reverseDist']);

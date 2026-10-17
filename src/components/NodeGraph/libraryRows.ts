@@ -28,7 +28,7 @@ export const HIDDEN_NODES = new Set([
   // The end of a Shader Texture's inside, made with the node (docs/texture-builder.md).
   'shaderTextureOutput',
   // A hidden pass of Blur / Glow (texture) (compiler/hiddenBlurs.ts).
-  'blurStage', 'radialFastBlurStage', 'deepGlowTextureStage',
+  'blurStage', 'lensDofStage', 'radialFastBlurStage', 'deepGlowTextureStage',
   // One step of a Grid Rules board (compiler/gridRulesExpand.ts).
   'gridRulesStep',
   // One frame of a Curve Trace Beam's screen (compiler/curveBeamExpand.ts).
