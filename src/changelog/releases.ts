@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.247',
+    date: '2026-10-17',
+    title: "Measure shapes",
+    highlights: [
+      { area: 'Studio', text: "Overlay Shape: any SDF's outline, bounding box, centre and size, and the pointer's position and distance in its (even warped) space." },
+      { area: 'Studio', text: "Overlay Distance: click two points for the distance between them, or From centre for distance and angle from the origin." },
+    ],
+  },
+  {
     id: '2026.10.246',
     date: '2026-10-17',
     title: "Audio in the graph",
