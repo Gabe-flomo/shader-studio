@@ -1,3 +1,4 @@
+import { resolveSendReceive, syncSendReceiveTypes } from '../compiler/sendReceive';
 import { isPlayfile } from '../playfile/reader';
 import { logEvent } from '../lib/crashLog';
 import { recordActivity } from '../files/activity';
@@ -5137,12 +5138,21 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       const synced = syncAgentSpaces(get().nodes, getNodeDefinition);
       if (synced !== get().nodes) set({ nodes: synced });
     }
+    {
+      // Send / Receive (docs/send-receive.md): a Send takes the type wired into it, its Receives the Send's type and name.
+      const synced = syncSendReceiveTypes(get().nodes);
+      if (synced !== get().nodes) set({ nodes: synced });
+    }
     if (force) {
       // From scratch: nothing the compiler reads is taken from an earlier compile.
       clearNodeDefinitionCache();
       recompileUserNodes();
     }
-    const { nodes, previewNodeId, activeGroupId, bakeGraph } = get();
+    const { nodes: stored, previewNodeId, activeGroupId, bakeGraph } = get();
+    // Receives wired to their Sends first (through group ports added for the compile), so a preview of a node
+    // inside a group still reaches a Send outside it. Problems are reported by compileGraph, which resolves again.
+    const linked = resolveSendReceive(stored);
+    const nodes = linked.errors.length ? stored : linked.nodes;
     const shown = !bakeGraph && !previewNodeId ? shownShaderTexture(get()) : null;
     let graphNodes: GraphNode[];
     if (bakeGraph) {

@@ -784,6 +784,20 @@ exports[`2D agents and pass graphs compile as they did before 3D > raysLightText
 }
 `;
 
+exports[`2D agents and pass graphs compile as they did before 3D > sendReceiveBeat 1`] = `
+{
+  "agents": "1fe1f0024152e81521f99e5e13c1:4",
+  "errors": null,
+  "fragmentShader": "090ee5c0b5445f1255c77f81f55d:4045",
+  "paramBindings": "03976ab35bd3571f9b7f252182d9:239",
+  "paramUniforms": "026dce072e782e1beeeb16470344:165",
+  "passes": "00ee67cc78a44b1ca3d264d5a494:2300",
+  "success": true,
+  "textureUniforms": "167d269bbddad80189e9f9473b28:2",
+  "web": null,
+}
+`;
+
 exports[`2D agents and pass graphs compile as they did before 3D > simAgentCrowd 1`] = `
 {
   "agents": "1abbb8cfe2fffe0322f9d86aeadc:35641",

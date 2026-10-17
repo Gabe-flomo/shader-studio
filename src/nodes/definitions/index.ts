@@ -15,6 +15,7 @@ import { BakedNode } from './baked';
 import { DepthNode } from './depth';
 import { BlobTrackNode } from './blobTrack';
 import { CacheNode, CacheReadNode } from './cache';
+import { SendNode, ReceiveNode } from './sendReceive';
 import { AnalyzeNode } from './analyze';
 import { TextNode } from './text';
 import { SegmentNode } from './segment';
@@ -362,6 +363,9 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   depth: DepthNode,
   blobTrack: BlobTrackNode,
   cache: CacheNode,
+  // Send / Receive (docs/send-receive.md): a wireless link across groups
+  send: SendNode,
+  receive: ReceiveNode,
   cacheRead: CacheReadNode,
   analyze: AnalyzeNode,
   text: TextNode,
