@@ -12,6 +12,7 @@ import { retypeRenderTargets } from '../nodes/definitions/renderTargets';
 import { retypeReadNeighbours } from '../nodes/definitions/readNeighbours';
 import { retypeTrailField } from '../nodes/definitions/agents';
 import { retypeShuffle } from '../nodes/definitions/channelTools';
+import { retypeAudioSource } from '../nodes/definitions/audioTools';
 import { migrateNodeParams, GROUP_PORT_SENTINEL } from '../types/nodeGraph';
 import { LAYOUT_VERSION, needsLayoutSpread, spreadLegacyLayout } from './legacyLayout';
 import { askText } from '../components/ui/dialogStore';
@@ -587,6 +588,8 @@ function retypeSwizzle(n: GraphNode): GraphNode {
   if (n.type === 'trailField') return retypeTrailField(n);
   // A Shuffle's A and B: four channels or a texture (its card's switch).
   if (n.type === 'channelShuffle') return retypeShuffle(n);
+  // An Audio Source's outputs follow its bands (Value and Trigger per band).
+  if (n.type === 'audioSource') return retypeAudioSource(n);
   // A Transform card's sockets follow its Dimension (vec2 / vec3 / vec4).
   if (n.type === 'transform') return retypeTransform(n);
   if (n.type !== 'swizzle') return n;
@@ -598,6 +601,17 @@ function retypeSwizzle(n: GraphNode): GraphNode {
     inputs: { ...n.inputs, input: { ...(inp ?? { label: 'Input' }), type: input as DataType, connection: inp?.type === input ? inp.connection : undefined } },
     outputs: { ...n.outputs, output: { ...(out ?? { label: 'Output' }), type: output as DataType } },
   };
+}
+
+/** Wires from `nodeId`'s outputs that no longer exist are dropped (an Audio Source band removed). */
+export function dropWiresFromGone(nodes: GraphNode[], nodeId: string, outputs: GraphNode['outputs']): GraphNode[] {
+  return nodes.map(n => {
+    let inputs: GraphNode['inputs'] | null = null;
+    for (const [k, s] of Object.entries(n.inputs)) {
+      if (s.connection?.nodeId === nodeId && !(s.connection.outputKey in outputs)) { inputs ??= { ...n.inputs }; inputs[k] = { ...s, connection: undefined }; }
+    }
+    return inputs ? { ...n, inputs } : n;
+  });
 }
 
 /** What beginScratch keeps aside while a scratch graph is on the canvas. */
@@ -1002,7 +1016,11 @@ interface NodeGraphState {
   /** Remove several nodes as one undo step. */
   removeNodes: (nodeIds: string[]) => void;
   updateNodePosition: (nodeId: string, position: { x: number; y: number }) => void;
-  updateNodeParams: (nodeId: string, params: Record<string, unknown>, options?: { immediate?: boolean }) => void;
+  /**
+   * `live`: the params are read only by a CPU engine every frame (an Audio Source's band ranges, trim): the node
+   * changes but nothing recompiles. A change that adds or removes sockets must not pass it.
+   */
+  updateNodeParams: (nodeId: string, params: Record<string, unknown>, options?: { immediate?: boolean; live?: boolean }) => void;
   /** New random values for the node's free sliders (see nodes/randomizeParams.ts); one undo step per call */
   randomizeNodeParams: (nodeId: string, weights?: Record<string, number> | null) => void;
   updateNodeOutputs: (nodeId: string, outputs: Record<string, { type: import('../types/nodeGraph').DataType; label: string }>) => void;
@@ -4127,7 +4145,10 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
             }
           }
         }
-        return { nodes: state.nodes.map(n => n.id === nodeId ? retypeSwizzle({ ...n, params: { ...n.params, ...params } }) : n) };
+        const updated = retypeSwizzle({ ...node, params: { ...node.params, ...params } });
+        const next = state.nodes.map(n => n.id === nodeId ? updated : n);
+        // An Audio Source band that went away: wires from its outputs go with it.
+        return { nodes: node.type === 'audioSource' && updated.outputs !== node.outputs ? dropWiresFromGone(next, nodeId, updated.outputs) : next };
       }
       // Subgraph node — also sync to group node's override keys (depth 1 only)
       const path = state.activeGroupPath;
@@ -4201,6 +4222,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
     // Randomize's locks (__randExclude, __randSkip) never reach the shader: no recompile, no uniform push.
     if (Object.keys(params).length > 0 && Object.keys(params).every(k => k.startsWith('__rand'))) return;
+    // Read by a CPU engine each frame (the Audio Source's bands and trim): nothing to compile.
+    if (options?.live) return;
 
     // Optimisation: if every changed param already has a compiled uniform entry,
     // push the new values directly to ShaderCanvas via paramUniforms — no recompile.

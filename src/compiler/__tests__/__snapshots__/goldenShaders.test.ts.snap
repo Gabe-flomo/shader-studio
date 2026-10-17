@@ -1851,19 +1851,15 @@ exports[`golden shaders: every example compiles as it did > audioKickRing 1`] = 
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "039b74d6a88b391bdf92fcdb6256:4183",
+  "fragmentShader": "070d98d5e742a10ef7d1e8a9f23a:4462",
   "isStateful": false,
   "liveUniforms": {
-    "u_aud_audioband_0_level": "bass::level",
-    "u_aud_audioband_0_peak": "bass::peak",
-    "u_aud_audiohit_0_count": "kick::count",
-    "u_aud_audiohit_0_envelope": "kick::envelope",
-    "u_aud_audiohit_0_strength": "kick::strength",
-    "u_aud_audiohit_0_trigger": "kick::trigger",
+    "u_aud_audiosourc_0_bass_v": "src::bass_v",
+    "u_aud_audiosourc_0_kick_t": "src::kick_t",
     "u_aud_audiosourc_0_level": "src::level",
     "u_aud_audiosourc_0_time": "src::time",
   },
-  "nodeSlugs": "09ae064f04a0cf173c7242b55861:242",
+  "nodeSlugs": "0556bac413d79a10a1f1fc3fe284:197",
   "paramBindings": "05474c1e931b2f1976fc62033847:271",
   "paramUniforms": [
     "u_p_palx0_amplitude",
@@ -1890,10 +1886,8 @@ uniform vec2 u_mouse;
 uniform sampler2D u_fontTexture;
 uniform float u_aud_audiosourc_0_level;
 uniform float u_aud_audiosourc_0_time;
-uniform float u_aud_audiohit_0_trigger;
-uniform float u_aud_audiohit_0_envelope;
-uniform float u_aud_audiohit_0_count;
-uniform float u_aud_audiohit_0_strength;
+uniform float u_aud_audiosourc_0_kick_t;
+uniform float u_aud_audiosourc_0_bass_v;
 uniform sampler2D u_pass_memory_0;
 uniform vec2 u_pass_memory_0_px;
 uniform sampler2D u_passprev_memory_0;
@@ -1930,17 +1924,17 @@ mat2 rot2D(float a) { float s=sin(a), c=cos(a); return mat2(c,-s,s,c); }
 void main() {
     vec2 g_uv = (vUv - 0.5) * 2.0;
     g_uv.x *= u_resolution.x / u_resolution.y;
-    // Audio Source: plays the Test loop, a two-bar drum loop (kick, snare, hi-hats and a voice) made when the graph opens, so there is nothing to download.
-    // Switch Source to File and pick a song on the card, or to Microphone and press Start, to use your own sound. If you hear nothing, click anywhere: browsers start sound only after a click.
-    // Hit, Sound Kick: listens between 30 and 150 Hz for a sudden rise louder than the moments before it: a kick drum.
-    // Trigger is 1 for one frame on each kick: exactly what Envelope and Counter want. Cooldown stops one kick counting twice.
+    // Audio Source: opens on the File tab with nothing loaded, so the picture waits in silence. Press Load a sound… on the card and pick any song, or switch to the Mic tab and press Start.
+    // Open ↗ on the card shows the whole file to trim (it loops inside the trim) and a live spectrum to pick bands on. If you hear nothing, click anywhere: browsers start sound only after a click.
+    // Two bands, picked on Open ↗: Kick (30–150 Hz) sends a trigger, 1 for one frame on each kick drum (Cooldown stops one kick counting twice); Bass (60–250 Hz) sends its level, 0–1.
+    // Each band is an output here: Kick (trigger) and Bass. Add more with the quick bands (Snare, Hi-hat…) or by dragging across the spectrum.
     int memorypack_0_i = int(floor(gl_FragCoord.x));
     vec4 memorypack_0_s = texelFetch(u_passprev_memory_0, ivec2(memorypack_0_i, 0), 0);
     float memorypack_0_dt = max(u_frameDt, 0.0);
     if (memorypack_0_i == 0) {
       vec4 s = memorypack_0_s; float dt = memorypack_0_dt;
       if (s.w < 0.5) { s = vec4(0.0, 0.0, 0.0, 1.0); } else {
-        float gt = step(0.5, u_aud_audiohit_0_trigger);
+        float gt = step(0.5, u_aud_audiosourc_0_kick_t);
         if (gt > 0.5 && s.z < 0.5) s.y = 1.0;
         if (abs(s.y - 1.0) < 0.5) { s.x += dt / max(0.01, 1e-4); if (s.x >= 1.0) { s.x = 1.0; s.y = 2.0; } }
         else if (abs(s.y - 2.0) < 0.5) { float lv = 0.0; s.x = max(lv, s.x - dt * (1.0 - lv) / max(0.4, 1e-4)); if (s.x <= 0.0) s.y = 0.0; }
@@ -1953,8 +1947,8 @@ void main() {
       vec4 s = memorypack_0_s; float dt = memorypack_0_dt;
       if (s.w < 0.5) { s = vec4(0.0, 0.0, 0.0, 1.0); } else {
         if (0.0 > 0.5 && s.z < 0.5) s.x = 0.0;
-        if (u_aud_audiohit_0_trigger > 0.5 && s.y < 0.5) { s.x += 1.0; if (s.x > 7.0 + 1e-4) s.x = 0.0; else if (s.x < 0.0 - 1e-4) s.x = 7.0; }
-        s.y = step(0.5, u_aud_audiohit_0_trigger); s.z = step(0.5, 0.0);
+        if (u_aud_audiosourc_0_kick_t > 0.5 && s.y < 0.5) { s.x += 1.0; if (s.x > 7.0 + 1e-4) s.x = 0.0; else if (s.x < 0.0 - 1e-4) s.x = 7.0; }
+        s.y = step(0.5, u_aud_audiosourc_0_kick_t); s.z = step(0.5, 0.0);
       }
       memorypack_0_s = s;
     }
@@ -1965,7 +1959,6 @@ void main() {
       "nodeId": "__memory",
       "nodeIds": [
         "__memory__pack",
-        "kick",
         "src",
       ],
       "previous": true,
@@ -1991,7 +1984,7 @@ exports[`golden shaders: every example compiles as it did > audioScope 1`] = `
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "1d25ab1b10614f19acc67a407504:3189",
+  "fragmentShader": "1df406afcf7b580bfff294cb42cf:3227",
   "isStateful": false,
   "liveUniforms": {
     "u_aud_audiosourc_0_level": "src::level",
@@ -2016,7 +2009,7 @@ exports[`golden shaders: every example compiles as it did > audioSpectrumBars 1`
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "064a09d480937f0aa5596e26b142:3375",
+  "fragmentShader": "171020174ae0d21c894bfcb591d3:3413",
   "isStateful": false,
   "liveUniforms": {
     "u_aud_audiosourc_0_level": "src::level",
@@ -2041,7 +2034,7 @@ exports[`golden shaders: every example compiles as it did > audioWaterfall 1`] =
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "0ee8d3a994696c0143053d089aae:3424",
+  "fragmentShader": "1fb0a0263806e318ccc5f76dd330:3462",
   "isStateful": false,
   "liveUniforms": {
     "u_aud_audiosourc_0_level": "src::level",

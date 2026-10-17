@@ -1,0 +1,186 @@
+/**
+ * bands.ts — Audio Source's own bands and trim (docs/audio-tools.md), pure so they can be tested.
+ *
+ * A band is a frequency range picked on the Audio Source's window: it sends out a Value (its level 0–1, followed with
+ * Attack / Release, scaled by Gain), a Trigger (1 for one frame per onset in the band: Sensitivity, Cooldown), or both.
+ * Each becomes an output socket on the node (`<band id>_v`, `<band id>_t`), named after the band.
+ *
+ * The trim is In / Out in seconds on the loaded file: playback loops between them.
+ */
+import { bandLevel, newBandState, newHitState, stepBand, stepHit, type BandState, type HitState } from './dsp';
+
+export interface AudioBandSpec {
+  id: string;
+  name: string;
+  /** CSS colour (#rrggbb) for the band on the window and its readouts. */
+  color: string;
+  lo: number;
+  hi: number;
+  /** Sends a Value output: the band's level, 0–1. */
+  value: boolean;
+  /** Sends a Trigger output: 1 for one frame per hit in the band. */
+  trigger: boolean;
+  attack: number;
+  release: number;
+  gain: number;
+  sensitivity: number;
+  cooldown: number;
+}
+
+export const BAND_COLORS = ['#f38ba8', '#fab387', '#f9e2af', '#a6e3a1', '#89dceb', '#89b4fa', '#cba6f7', '#f5c2e7'];
+
+const BAND_DEFAULTS = { value: true, trigger: false, attack: 0.01, release: 0.15, gain: 1, sensitivity: 0.5, cooldown: 120 };
+
+export interface BandPreset { key: string; name: string; lo: number; hi: number; value: boolean; trigger: boolean; sensitivity?: number; cooldown?: number; release?: number }
+
+/**
+ * Quick bands. Kick, Snare and Hi-hat are triggers with Hit's ranges and onset settings (nodes/definitions/audioTools.ts
+ * HIT_PRESETS, the Kick ring example's Cooldown); the rest are levels with Band level's ranges.
+ */
+export const BAND_QUICK_PRESETS: readonly BandPreset[] = [
+  { key: 'sub', name: 'Sub', lo: 20, hi: 60, value: true, trigger: false },
+  { key: 'bass', name: 'Bass', lo: 60, hi: 250, value: true, trigger: false, release: 0.25 },
+  { key: 'kick', name: 'Kick', lo: 30, hi: 150, value: false, trigger: true, sensitivity: 0.5, cooldown: 150 },
+  { key: 'snare', name: 'Snare', lo: 200, hi: 5000, value: false, trigger: true, sensitivity: 0.5, cooldown: 120 },
+  { key: 'hihat', name: 'Hi-hat', lo: 6000, hi: 16000, value: false, trigger: true, sensitivity: 0.5, cooldown: 80 },
+  { key: 'vocals', name: 'Vocals', lo: 300, hi: 3000, value: true, trigger: false },
+  { key: 'air', name: 'Air', lo: 6000, hi: 16000, value: true, trigger: false },
+];
+
+export const BAND_MIN_HZ = 20, BAND_MAX_HZ = 20000;
+
+const num = (v: unknown, d: number, lo = -Infinity, hi = Infinity): number => (typeof v === 'number' && Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : d);
+const slugId = (s: string) => s.replace(/[^A-Za-z0-9]/g, '').slice(0, 12);
+
+/** The node's bands, cleaned: a missing or odd field takes its default, ids are unique and GLSL-safe. */
+export function bandsOf(params: Record<string, unknown>): AudioBandSpec[] {
+  const raw = Array.isArray(params.bands) ? params.bands : [];
+  const out: AudioBandSpec[] = [];
+  const seen = new Set<string>();
+  raw.forEach((r, i) => {
+    if (!r || typeof r !== 'object') return;
+    const b = r as Record<string, unknown>;
+    let id = slugId(String(b.id ?? '')) || `b${i + 1}`;
+    while (seen.has(id)) id = `${id}x`;
+    seen.add(id);
+    const lo = num(b.lo, 60, BAND_MIN_HZ, BAND_MAX_HZ), hi = num(b.hi, 250, BAND_MIN_HZ, BAND_MAX_HZ);
+    out.push({
+      id,
+      name: String(b.name ?? '').trim() || `Band ${i + 1}`,
+      color: typeof b.color === 'string' && /^#[0-9a-f]{6}$/i.test(b.color) ? b.color : BAND_COLORS[i % BAND_COLORS.length],
+      lo: Math.min(lo, hi), hi: Math.max(Math.max(lo, hi), Math.min(lo, hi) + 1),
+      value: b.value !== false && !(b.value === undefined && b.trigger === true),
+      trigger: b.trigger === true,
+      attack: num(b.attack, BAND_DEFAULTS.attack, 0, 2),
+      release: num(b.release, BAND_DEFAULTS.release, 0, 4),
+      gain: num(b.gain, BAND_DEFAULTS.gain, 0, 8),
+      sensitivity: num(b.sensitivity, BAND_DEFAULTS.sensitivity, 0, 1),
+      cooldown: num(b.cooldown, BAND_DEFAULTS.cooldown, 40, 2000),
+    });
+  });
+  // A band that sends nothing still sends its Value (otherwise it has no socket to show).
+  for (const b of out) if (!b.value && !b.trigger) b.value = true;
+  return out;
+}
+
+/** A fresh id not used by `bands`. */
+export function freshBandId(bands: readonly AudioBandSpec[]): string {
+  for (let i = 1; ; i++) { const id = `b${i}`; if (!bands.some(b => b.id === id)) return id; }
+}
+
+/** A name not used by `bands`: "Kick", then "Kick 2"… */
+function freshName(bands: readonly AudioBandSpec[], name: string): string {
+  if (!bands.some(b => b.name === name)) return name;
+  for (let i = 2; ; i++) { const n = `${name} ${i}`; if (!bands.some(b => b.name === n)) return n; }
+}
+
+/** A new band from a quick preset key (or a custom range), added after `bands`. */
+export function newBand(bands: readonly AudioBandSpec[], preset: string | { lo: number; hi: number }): AudioBandSpec {
+  const p = typeof preset === 'string' ? BAND_QUICK_PRESETS.find(q => q.key === preset) : undefined;
+  const lo = p ? p.lo : typeof preset === 'object' ? preset.lo : 60;
+  const hi = p ? p.hi : typeof preset === 'object' ? preset.hi : 250;
+  const used = new Set(bands.map(b => b.color));
+  return {
+    ...BAND_DEFAULTS,
+    id: freshBandId(bands),
+    name: freshName(bands, p?.name ?? 'Band'),
+    color: BAND_COLORS.find(c => !used.has(c)) ?? BAND_COLORS[bands.length % BAND_COLORS.length],
+    lo: Math.min(lo, hi), hi: Math.max(lo, hi),
+    value: p ? p.value : true,
+    trigger: p ? p.trigger : false,
+    ...(p?.sensitivity !== undefined ? { sensitivity: p.sensitivity } : {}),
+    ...(p?.cooldown !== undefined ? { cooldown: p.cooldown } : {}),
+    ...(p?.release !== undefined ? { release: p.release } : {}),
+  };
+}
+
+/** The output keys and labels a band adds: Value is named after the band ("Bass"), Trigger "Kick (trigger)". */
+export const bandValueKey = (id: string) => `${id}_v`;
+export const bandTriggerKey = (id: string) => `${id}_t`;
+export function bandOutputs(bands: readonly AudioBandSpec[]): Array<{ key: string; label: string; channel: string }> {
+  const out: Array<{ key: string; label: string; channel: string }> = [];
+  for (const b of bands) {
+    if (b.value) out.push({ key: bandValueKey(b.id), label: b.name, channel: bandValueKey(b.id) });
+    if (b.trigger) out.push({ key: bandTriggerKey(b.id), label: `${b.name} (trigger)`, channel: bandTriggerKey(b.id) });
+  }
+  return out;
+}
+
+// ── Running a band, once per frame ────────────────────────────────────────────────────────────────────────
+
+export interface BandRun { band: BandState; hit: HitState; hitAt: number }
+export const newBandRun = (): BandRun => ({ band: newBandState(), hit: newHitState(), hitAt: -Infinity });
+
+/**
+ * One frame of a band on a dB spectrum: its Value (followed level) and Trigger (an onset in its range). `now` is
+ * seconds on the wall clock, `dt` seconds since the last frame. Mutates and returns `run`.
+ */
+export function stepBandRun(run: BandRun, b: AudioBandSpec, freqDb: Float32Array, sampleRate: number, now: number, dt: number): BandRun {
+  run.band = stepBand(run.band, bandLevel(freqDb, sampleRate, b.lo, b.hi), dt, b.attack, b.release, b.gain);
+  if (b.trigger) {
+    stepHit(run.hit, freqDb, sampleRate, now, dt, { lo: b.lo, hi: b.hi, sensitivity: b.sensitivity, cooldownMs: b.cooldown, decay: 0.3 });
+    if (run.hit.trigger) run.hitAt = now;
+  } else run.hit.trigger = 0;
+  return run;
+}
+
+// ── Trim ─────────────────────────────────────────────────────────────────────────────────────────────────────
+
+/** The shortest trim, in seconds. */
+export const MIN_TRIM = 0.05;
+
+/**
+ * The window playback loops in, in seconds: In and Out clamped to the file (Out 0 or unset: the end), at least
+ * MIN_TRIM long.
+ */
+export function trimWindow(duration: number, trimIn: unknown, trimOut: unknown): { start: number; end: number } {
+  if (!(duration > 0)) return { start: 0, end: 0 };
+  const a = num(trimIn, 0, 0, duration);
+  let b = num(trimOut, 0, 0, duration);
+  if (b <= 0) b = duration;
+  const start = Math.min(a, Math.max(0, duration - MIN_TRIM));
+  const end = Math.max(Math.min(b, duration), Math.min(duration, start + MIN_TRIM));
+  return { start, end };
+}
+
+/** True when the window is the whole file (nothing trimmed). */
+export const isUntrimmed = (w: { start: number; end: number }, duration: number) => w.start <= 1e-6 && w.end >= duration - 1e-6;
+
+export const secondsToSamples = (s: number, sampleRate: number): number => Math.round(Math.max(0, s) * sampleRate);
+export const samplesToSeconds = (n: number, sampleRate: number): number => (sampleRate > 0 ? Math.max(0, n) / sampleRate : 0);
+
+/**
+ * Where playback is after `elapsed` seconds from `offset`, in a window it loops in (`loop`) or stops at the end of:
+ * `start + (offset − start + elapsed) mod (end − start)`. An offset outside the window starts at the window's In.
+ */
+export function windowPosition(offset: number, elapsed: number, w: { start: number; end: number }, loop: boolean): number {
+  const len = w.end - w.start;
+  if (!(len > 0)) return w.start;
+  const off = offset >= w.start && offset < w.end ? offset : w.start;
+  const t = off - w.start + Math.max(0, elapsed);
+  if (!loop) return Math.min(w.end, w.start + t);
+  return w.start + (((t % len) + len) % len);
+}
+
+/** Clamp a play position into the window (a position outside it goes to the In). */
+export const intoWindow = (pos: number, w: { start: number; end: number }): number => (pos >= w.start && pos < w.end ? pos : w.start);

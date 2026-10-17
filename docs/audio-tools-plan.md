@@ -9,7 +9,7 @@ that use it still load and run.
 ```
 Audio Source ──audio wire──▶ Band level / Hit / Spectrum / Spectrogram / Waveform ──floats, textures──▶ the picture
      │
-     └── lib/audioEngine (a file, the test loop) or lib/liveAudio (microphone / audio input)
+     └── lib/audioEngine (a file, played within its trim) or lib/liveAudio (microphone / audio input)
                 │
      lib/audioTools/engine.ts: one probe AnalyserNode per source (FFT 2048, no smoothing),
      read once per rendered frame on the CPU (lib/audioTools/dsp.ts, pure and unit-tested)
@@ -35,18 +35,38 @@ Audio Source ──audio wire──▶ Band level / Hit / Spectrum / Spectrogram
 | Spectrogram | Audio, UV | Value (frequency across, time down), Texture (bins × history) |
 | Waveform | Audio, UV | Value (−1…1 at this x), Texture (samples × 1) |
 
-Audio Source plays a file, the built-in test loop (synthesised at runtime with an OfflineAudioContext:
-kick, snare, hats and a voice; no binary files) or listens to the microphone / an audio interface.
+Audio Source plays a file or listens to the microphone / an audio interface. (Phase 1 also had a built-in
+test loop; it was removed in the Audio Source redesign below.)
 
-Examples: an "Audio" folder of four commented graphs on the test loop (kick ring pulse via Hit → Envelope,
-spectrum bars, spectrogram waterfall, waveform line).
+Examples: an "Audio" folder of four commented graphs (kick ring pulse, spectrum bars, spectrogram waterfall,
+waveform line). They open on the File tab, empty: load a sound or switch to Mic.
+
+## Audio Source redesign (built)
+
+- **Tabs** File | Mic on the card (as the Texture node's), no Source dropdown; room for a "Video sound" tab later.
+  The `source` param is `file` or `mic`; a saved `loop` opens as `file` (retypeAudioSource, run on load).
+- **Card readout**: a 48-bin log spectrum with the bands' ranges under it, plus a thin level meter.
+- **Open ↗ window** (components/audio/AudioSourceWindow.tsx): the file's waveform (audioEngine.peaks, decoded
+  once) with In / Out trim handles (params `trimIn` / `trimOut`, seconds; Out 0 = the end); playback loops inside
+  the trim (AudioBufferSourceNode loopStart / loopEnd; audioEngine.position wraps inside it). Mic: a scrolling
+  waveform. A live log spectrum labelled in Hz: drag to add a band, drag edges to move one; quick bands Sub, Bass,
+  Kick, Snare, Hi-hat, Vocals, Air (Kick / Snare / Hi-hat as triggers with Hit's ranges and onset settings).
+- **Bands** (`params.bands`, lib/audioTools/bands.ts): id, name, colour, Low / High Hz, Value (Attack, Release,
+  Gain) and / or Trigger (Sensitivity, Cooldown). Each sends `u_aud_<slug>_<band>_v` / `_t` live uniforms written by
+  the engine on the source's own analysis frame (the same path as Band level and Hit). The node's outputs follow
+  the bands (`syncSockets`, the store's retype chain and graphBuilder); a removed output's wires are dropped.
+- **No recompile while editing**: band ranges, their settings and the trim go through `updateNodeParams(…,
+  { live: true })` (the engine reads params every frame); adding, removing, renaming a band or changing what it
+  sends recompiles.
+- The test loop's code is gone from the Audio nodes (lib/testLoop.ts stays: the Play page's Audio readers use it).
 
 ### Known gaps in Phase 1
 - Web export (the play runtime) doesn't run the Audio nodes yet: an exported page hears silence. The old
   Audio Input's song is embedded in exports; porting lib/audioTools to the runtime is the follow-up.
 - A Video's sound as a source (the Play page's Video layers have one; the graph's Video node doesn't yet).
 - Audio nodes inside a group compile but hear nothing (the engine follows top-level wires only).
-- A picked file isn't kept across reloads (same as Audio Input).
+- A loaded file isn't kept across reloads (same as Audio Input): the card names the file to load again. Keeping it
+  in the media library like videos needs an audio library store (backgroundLibrary has images and videos only).
 - Desktop app (WKWebView): the microphone path is untested there.
 - Nice-to-haves not built: Loudness (LUFS-like), Centroid (brightness), Chroma (12 notes as three vec4s).
 
@@ -73,5 +93,4 @@ accept a sampler-backed function (the texture is already a uniform, so the funct
 ## Open questions
 - Should Audio Source follow the graph clock (pause with the picture) or keep its own transport? Now: its own
   Play switch, plus the app's master audio pause.
-- One test loop or several (tempos, styles) for examples?
 - Float textures for Spectrum (more range) once web export is done?

@@ -1,7 +1,7 @@
 /**
  * audioExamples.ts — the Audio folder (docs/audio-tools.md): pictures that follow sound, built from the Audio nodes.
- * Each listens to an Audio Source playing the Test loop (a drum loop made on the spot, so nothing to download and no
- * microphone permission); switch its Source to File or Microphone to use your own sound. Every node has a note.
+ * Each opens with its Audio Source on the File tab and nothing loaded ("Load a sound, or switch to Mic."): load any
+ * song on the card, or switch to the Mic tab. Every node has a note.
  */
 import type { ExampleGraph } from './exampleIndex';
 import type { GraphNode } from '../types/nodeGraph';
@@ -10,19 +10,19 @@ import { n } from './graphBuilder';
 export const AUDIO_EXAMPLE_INDEX: Record<string, { label: string; description: string }> = {
   audioKickRing: {
     label: 'Audio 1 · A ring that jumps on the kick',
-    description: 'Hit listens for the kick drum in the test loop. Each hit fires an Envelope that swells the ring, and a Counter steps its colour round a palette. Bass level lights the background.',
+    description: 'Load a sound (or switch to Mic) on the Audio Source. Its Kick band fires a trigger on each kick drum: an Envelope swells the ring and a Counter steps its colour round a palette. Its Bass band lights the background.',
   },
   audioSpectrumBars: {
     label: 'Audio 2 · Spectrum bars',
-    description: 'Spectrum splits the sound into 64 frequencies, bass on the left. Each column is lit up to its loudness, coloured from low to high.',
+    description: 'Load a sound (or switch to Mic) on the Audio Source. Spectrum splits it into 64 frequencies, bass on the left. Each column is lit up to its loudness, coloured from low to high.',
   },
   audioWaterfall: {
     label: 'Audio 3 · Spectrogram waterfall',
-    description: 'Spectrogram keeps the last two seconds of the spectrum: the top is now and older moments slide down. Kicks show as bright blobs on the left, hi-hats as streaks on the right.',
+    description: 'Load a sound (or switch to Mic) on the Audio Source. Spectrogram keeps the last two seconds of the spectrum: the top is now and older moments slide down. Kicks show as bright blobs on the left, hi-hats as streaks on the right.',
   },
   audioScope: {
     label: 'Audio 4 · Waveform line',
-    description: 'Waveform draws the sound itself, like an oscilloscope: the last 20 milliseconds as a line across the picture. Level makes it glow when the loop is loud.',
+    description: 'Load a sound (or switch to Mic) on the Audio Source. Waveform draws the sound itself, like an oscilloscope: the last 20 milliseconds as a line across the picture. Level makes it glow when it is loud.',
   },
 };
 
@@ -51,37 +51,41 @@ function expr(id: string, x: number, y: number, o: {
 }
 
 const SOURCE_NOTE = [
-  'Audio Source: plays the Test loop, a two-bar drum loop (kick, snare, hi-hats and a voice) made when the graph opens, so there is nothing to download.',
-  'Switch Source to File and pick a song on the card, or to Microphone and press Start, to use your own sound. If you hear nothing, click anywhere: browsers start sound only after a click.',
+  'Audio Source: opens on the File tab with nothing loaded, so the picture waits in silence. Press Load a sound… on the card and pick any song, or switch to the Mic tab and press Start.',
+  'Open ↗ on the card shows the whole file to trim (it loops inside the trim) and a live spectrum to pick bands on. If you hear nothing, click anywhere: browsers start sound only after a click.',
 ];
 
-const source = (x: number, y: number) => n('audioSource', 'src', x, y, { source: 'loop', playing: true, gain: 1, ...note(SOURCE_NOTE) });
+const source = (x: number, y: number, extra: Record<string, unknown> = {}, more: string[] = []) =>
+  n('audioSource', 'src', x, y, { source: 'file', playing: true, gain: 1, ...extra, ...note([...SOURCE_NOTE, ...more]) });
 const uvNode = (x: number, y: number) => n('uv', 'uv', x, y, note('UV: this pixel\'s place in the picture (0 in the middle, 1 at the top).'));
 
 export function buildAudioExamples(): Record<string, ExampleGraph> {
   const g: Record<string, ExampleGraph> = {};
 
-  // ── 1 · Hit (kick) → Envelope (size) and Counter (colour); Band level (bass) → background ──
+  // ── 1 · Audio Source's Kick band (trigger) → Envelope (size) and Counter (colour); its Bass band → background ──
   g.audioKickRing = {
     ...AUDIO_EXAMPLE_INDEX.audioKickRing,
     counter: 40,
     nodes: [
-      source(40, 300),
-      n('audioHit', 'kick', 340, 140, { sound: 'kick', sensitivity: 0.5, cooldown: 150, decay: 0.3, ...note([
-        'Hit, Sound Kick: listens between 30 and 150 Hz for a sudden rise louder than the moments before it: a kick drum.',
-        'Trigger is 1 for one frame on each kick: exactly what Envelope and Counter want. Cooldown stops one kick counting twice.',
-      ]) }, { audio: ['src', 'audio'] }),
-      n('envelope', 'env', 640, 60, { mode: 'trigger', attack: 0.01, decay: 0.4, ...note([
+      source(40, 300, {
+        bands: [
+          { id: 'kick', name: 'Kick', color: '#f38ba8', lo: 30, hi: 150, value: false, trigger: true, attack: 0.01, release: 0.15, gain: 1, sensitivity: 0.5, cooldown: 150 },
+          { id: 'bass', name: 'Bass', color: '#89b4fa', lo: 60, hi: 250, value: true, trigger: false, attack: 0.01, release: 0.25, gain: 1, sensitivity: 0.5, cooldown: 120 },
+        ],
+      }, [
+        'Two bands, picked on Open ↗: Kick (30–150 Hz) sends a trigger, 1 for one frame on each kick drum (Cooldown stops one kick counting twice); Bass (60–250 Hz) sends its level, 0–1.',
+        'Each band is an output here: Kick (trigger) and Bass. Add more with the quick bands (Snare, Hi-hat…) or by dragging across the spectrum.',
+      ]),
+      n('envelope', 'env', 400, 160, { mode: 'trigger', attack: 0.01, decay: 0.4, ...note([
         'Envelope, Trigger mode: each kick plays a quick rise (Attack) and a fall to 0 (Decay).',
-        'Hit has its own Envelope output too; this one lets you shape the rise as well.',
-      ]) }, { gate: ['kick', 'trigger'] }),
-      n('counter', 'count', 640, 260, { stepBy: 1, min: 0, max: 7, limit: 'wrap', ...note('Counter: adds 1 on each kick, 0 → 7, then wraps round. Its Fraction picks the colour.') }, { trigger: ['kick', 'trigger'] }),
-      n('palette', 'hue', 940, 260, note('Palette: a colour for each count, round the wheel.'), { value: ['count', 'fraction'] }),
-      n('audioBand', 'bass', 340, 480, { band: 'bass', attack: 0.01, release: 0.25, gain: 1, ...note('Band level, Bass: how loud 60–250 Hz is, smoothed by Attack and Release. It lights the background.') }, { audio: ['src', 'audio'] }),
-      uvNode(640, 480),
-      expr('look', 1240, 300, {
+        'It fires when its Gate goes above 0.5: the Kick (trigger) is 1 for exactly one frame per kick.',
+      ]) }, { gate: ['src', 'kick_t'] }),
+      n('counter', 'count', 400, 340, { stepBy: 1, min: 0, max: 7, limit: 'wrap', ...note('Counter: adds 1 on each kick, 0 → 7, then wraps round. Its Fraction picks the colour.') }, { trigger: ['src', 'kick_t'] }),
+      n('palette', 'hue', 700, 340, note('Palette: a colour for each count, round the wheel.'), { value: ['count', 'fraction'] }),
+      uvNode(700, 520),
+      expr('look', 1000, 300, {
         label: 'Look', outputType: 'vec3',
-        inputs: [['uv', 'vec2', ['uv', 'uv']], ['e', 'float', ['env', 'value']], ['c', 'vec3', ['hue', 'color']], ['b', 'float', ['bass', 'level']]],
+        inputs: [['uv', 'vec2', ['uv', 'uv']], ['e', 'float', ['env', 'value']], ['c', 'vec3', ['hue', 'color']], ['b', 'float', ['src', 'bass_v']]],
         lines: [
           ['float r', '0.25 + e * 0.25'],
           ['float ring', '1.0 - smoothstep(0.01, 0.02 + e * 0.03, abs(length(uv) - r))'],
@@ -93,10 +97,10 @@ export function buildAudioExamples(): Record<string, ExampleGraph> {
           'r: the radius, bigger while the envelope is up.',
           'ring: the ring itself, thicker at the peak.',
           'halo: a glow round it, only just after a kick.',
-          'Result: the background brightens with the bass level.',
+          'Result: the background brightens with the Bass band\'s level (b).',
         ],
       }),
-      n('output', 'out', 1540, 300, note('Output: the ring on the kick.'), { color: ['look', 'result'] }),
+      n('output', 'out', 1300, 300, note('Output: the ring on the kick.'), { color: ['look', 'result'] }),
     ],
   };
 
@@ -163,7 +167,7 @@ export function buildAudioExamples(): Record<string, ExampleGraph> {
     ...AUDIO_EXAMPLE_INDEX.audioScope,
     counter: 40,
     nodes: [
-      { ...source(40, 300), params: { ...source(40, 300).params, gain: 1.5, ...note([...SOURCE_NOTE, 'Gain 1.5 makes the wave a little taller (only for what the Audio nodes hear).']) } },
+      source(40, 300, { gain: 1.5 }, ['Gain 1.5 makes the wave a little taller (only for what the Audio nodes hear).']),
       uvNode(40, 560),
       n('audioWaveform', 'wave', 340, 300, { samples: '1024', ...note([
         'Waveform: the last 1024 samples of the sound (about 21 ms), newest on the right.',

@@ -8,6 +8,7 @@
  */
 import { retypeTrailField } from '../nodes/definitions/agents';
 import { retypeShuffle } from '../nodes/definitions/channelTools';
+import { retypeAudioSource } from '../nodes/definitions/audioTools';
 import type { GraphNode, GroupInputPort, GroupOutputPort } from '../types/nodeGraph';
 import { GROUP_PORT_SENTINEL } from '../types/nodeGraph';
 import type { PlayControl, PlayRecord } from '../types/play';
@@ -39,6 +40,7 @@ export function n(type: string, id: string, x: number, y: number, params: Record
     const r = retypeShuffle({ ...node, inputs: Object.fromEntries(Object.entries(node.inputs).map(([k, v]) => [k, { ...v, connection: undefined }])) });
     return { ...r, inputs: Object.fromEntries(Object.entries(r.inputs).map(([k, v]) => [k, { ...v, ...(node.inputs[k]?.connection ? { connection: node.inputs[k].connection } : {}) }])) };
   }
+  if (type === 'audioSource') return retypeAudioSource(node);
   return type === 'trailField' ? retypeTrailField(node) : node;
 }
 

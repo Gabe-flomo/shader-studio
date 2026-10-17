@@ -11,6 +11,7 @@
  */
 import type { GraphNode, NodeDefinition, ParamDef } from '../../types/nodeGraph';
 import { texUv } from './passes';
+import { bandOutputs, bandsOf } from '../../lib/audioTools/bands';
 
 export const AUDIO_CATEGORY = 'Audio';
 
@@ -31,6 +32,13 @@ export const AUDIO_LIVE_CHANNELS: Record<string, readonly string[]> = {
   [AUDIO_HIT_TYPE]: ['trigger', 'envelope', 'count', 'strength'],
 };
 
+/** The numbers a node writes every frame: its fixed channels, and an Audio Source's band outputs. */
+export function audioLiveChannels(node: GraphNode): string[] {
+  const fixed = [...(AUDIO_LIVE_CHANNELS[node.type] ?? [])];
+  if (node.type !== AUDIO_SOURCE_TYPE) return fixed;
+  return [...fixed, ...bandOutputs(bandsOf(node.params)).map(o => o.channel)];
+}
+
 /** The nodes that hand the picture a texture. */
 export const AUDIO_TEXTURE_TYPES: ReadonlySet<string> = new Set([AUDIO_SPECTRUM_TYPE, AUDIO_SPECTROGRAM_TYPE, AUDIO_WAVEFORM_TYPE]);
 
@@ -39,11 +47,9 @@ export const audioToolSampler = (slug: string): string => `u_tex_${slug}`;
 
 // ── Settings the engine reads ────────────────────────────────────────────────────────────────────────────────
 
-export type AudioSourceKind = 'loop' | 'file' | 'mic';
-export const audioSourceKind = (node: GraphNode): AudioSourceKind => {
-  const s = node.params.source;
-  return s === 'file' || s === 'mic' ? s : 'loop';
-};
+/** Audio Source's tabs. (A Video's sound is a later tab.) Phase 1's Test loop opens as File, empty. */
+export type AudioSourceKind = 'file' | 'mic';
+export const audioSourceKind = (node: GraphNode): AudioSourceKind => (node.params.source === 'mic' ? 'mic' : 'file');
 
 /** Band level's bands, in Hz. */
 export const BAND_PRESETS: Record<string, { label: string; lo: number; hi: number }> = {
@@ -116,32 +122,52 @@ const pxDefine = (node: GraphNode): string[] => {
 };
 
 const liveOutputs = (node: GraphNode): Record<string, string> =>
-  Object.fromEntries((AUDIO_LIVE_CHANNELS[node.type] ?? []).map(ch => [ch, audioToolUniform(node.id, ch)]));
+  Object.fromEntries(audioLiveChannels(node).map(ch => [ch, audioToolUniform(node.id, ch)]));
 
 // ── Audio Source ─────────────────────────────────────────────────────────────────────────────────────────────
+
+const SOURCE_OUTPUTS = {
+  audio: { type: 'audio' as const, label: 'Audio', hint: 'The sound, for the Audio nodes that listen to it.' },
+  level: { type: 'float' as const, label: 'Level', hint: 'How loud it is right now, 0–1 (its RMS on a dB scale).' },
+  time: { type: 'float' as const, label: 'Time', hint: 'Seconds into the file (round each loop of the trim); the Mic counts from when it started.' },
+};
+
+/**
+ * Audio Source's sockets follow its bands (lib/audioTools/bands.ts): Audio, Level and Time, then each band's Value
+ * ("Bass") and Trigger ("Kick (trigger)"). Phase 1's Test loop opens as File (empty). Wires into an output that went
+ * away are dropped by the store.
+ */
+export function retypeAudioSource(node: GraphNode): GraphNode {
+  if (node.type !== AUDIO_SOURCE_TYPE) return node;
+  let params = node.params;
+  if (params.source !== 'file' && params.source !== 'mic') params = { ...params, source: 'file' };
+  const outputs: GraphNode['outputs'] = {};
+  for (const [k, s] of Object.entries(SOURCE_OUTPUTS)) outputs[k] = { type: s.type, label: s.label };
+  for (const o of bandOutputs(bandsOf(params))) outputs[o.key] = { type: 'float', label: o.label };
+  const cur = node.outputs ?? {};
+  const curKeys = Object.keys(cur);
+  const same = Object.keys(outputs).length === curKeys.length
+    && Object.entries(outputs).every(([k, o], i) => curKeys[i] === k && cur[k]?.type === o.type && cur[k]?.label === o.label);
+  if (same && params === node.params) return node;
+  return { ...node, params, outputs: same ? node.outputs : outputs };
+}
 
 export const AudioSourceNode: NodeDefinition = {
   type: AUDIO_SOURCE_TYPE,
   label: 'Audio Source',
   category: AUDIO_CATEGORY,
-  aliases: ['Audio', 'Sound', 'Music', 'Song', 'Microphone', 'Mic', 'Audio file', 'Audio In', 'Line in'],
-  description: 'Where the sound comes from: the Test loop (a drum loop made on the spot), a file, or the Microphone (or an audio interface). Wire its Audio into Band level, Hit, Spectrum, Spectrogram or Waveform; Level is how loud it is right now (0–1) and Time the seconds it has played.',
+  aliases: ['Audio', 'Sound', 'Music', 'Song', 'Microphone', 'Mic', 'Audio file', 'Audio In', 'Line in', 'Frequency bands', 'Kick trigger'],
+  description: 'Where the sound comes from: a File (Load a sound on the card) or the Mic (or an audio interface), picked with the tabs on the card. Open ↗ shows the whole file to trim, and a live spectrum where you pick frequency bands: each band becomes an output here, its level or a trigger on each hit in it. Wire Audio into Band level, Hit, Spectrum, Spectrogram or Waveform; Level is how loud it is right now (0–1) and Time the seconds it has played.',
   inputs: {},
-  outputs: {
-    audio: { type: 'audio', label: 'Audio', hint: 'The sound, for the Audio nodes that listen to it.' },
-    level: { type: 'float', label: 'Level', hint: 'How loud it is right now, 0–1 (its RMS on a dB scale).' },
-    time: { type: 'float', label: 'Time', hint: 'Seconds into the file or loop (round each loop); the Microphone counts from when it started.' },
-  },
-  defaultParams: { source: 'loop', playing: true, loop: true, gain: 1, _fileName: '' },
+  outputs: SOURCE_OUTPUTS,
+  defaultParams: { source: 'file', playing: true, loop: true, gain: 1, _fileName: '', bands: [], trimIn: 0, trimOut: 0 },
   paramDefs: {
-    source: { label: 'Source', type: 'select', hint: 'Test loop: a two-bar drum loop (kick, snare, hats and a voice) made when needed, no file. File: pick a song on the card. Microphone: a mic or audio interface (the browser asks first).', options: [
-      { value: 'loop', label: 'Test loop' }, { value: 'file', label: 'File' }, { value: 'mic', label: 'Microphone / input' },
-    ] },
-    playing: { label: 'Play', type: 'bool', hint: 'Plays the file or loop (heard through the speakers), or listens to the Microphone.' },
-    loop: { label: 'Loop', type: 'bool', showWhen: { param: 'source', value: 'file' }, hint: 'Start the file again at its end. Off: it stops there.' },
-    gain: { label: 'Gain', type: 'float', min: 0, max: 8, step: 0.01, hint: 'How loud the listening nodes hear it (not how loud you hear it): raise it for a quiet microphone.' },
+    playing: { label: 'Play', type: 'bool', hint: 'Plays the file (heard through the speakers), or listens to the Mic.' },
+    loop: { label: 'Loop', type: 'bool', showWhen: { param: 'source', value: 'file' }, hint: 'Start again at the trim\'s end (or the file\'s). Off: it stops there.' },
+    gain: { label: 'Gain', type: 'float', min: 0, max: 8, step: 0.01, hint: 'How loud the listening nodes and the bands hear it (not how loud you hear it): raise it for a quiet microphone.' },
   },
   assignable: false,
+  syncSockets: retypeAudioSource,
   generateGLSL: (node: GraphNode) => ({ code: '', outputVars: { audio: '0.0', ...liveOutputs(node) } }),
 };
 

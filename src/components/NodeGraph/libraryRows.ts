@@ -139,7 +139,7 @@ export const CATEGORY_INFO: Record<string, string> = {
   Noise: 'Smooth random patterns (value, Perlin, simplex, fBm, Voronoi) for textures, warps and motion.',
   Fractals: 'Shapes that repeat at every scale: Mandelbrot, Julia, kaleidoscopic folds.',
   Sources: 'Inputs from outside the graph: UV, time, mouse, resolution, video, constants (sound: the Audio row).',
-  Audio: 'Sound into pictures: an Audio Source (a file, the test loop or the microphone) and the nodes that listen to it: how loud a band is, when a drum hits, the spectrum, its history and the wave itself.',
+  Audio: 'Sound into pictures: an Audio Source (a file or the microphone, with its own frequency bands) and the nodes that listen to it: how loud a band is, when a drum hits, the spectrum, its history and the wave itself.',
   Animation: 'Values that move over time: LFOs, envelopes and keyframes.',
   Math: 'Arithmetic, trigonometry, rounding, interpolation, vectors and comparison, one operation per node.',
   Matrix: '2×2, 3×3 and 4×4 matrices: build, combine and apply transforms.',
