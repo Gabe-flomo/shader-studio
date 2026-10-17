@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.257',
+    date: '2026-10-17',
+    title: "Gradients anywhere",
+    highlights: [
+      { area: 'Studio', text: "Colour settings switch between Solid and Gradient: colour 3D shapes by height, normal, depth or noise, and 2D fills by edge, radius or angle." },
+      { area: 'Studio', text: "Save your own gradients as presets; they're shared with the Palette nodes and the Library." },
+    ],
+  },
+  {
     id: '2026.10.256',
     date: '2026-10-17',
     title: "Filters and resonators",
