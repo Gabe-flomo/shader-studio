@@ -2747,6 +2747,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       if (e.button !== 0 || !insidePicture(e)) return;
       const t = e.target as Element | null;
       if (t !== renderer.domElement && t?.closest?.('button, input, select, textarea, a, [role="slider"], [role="button"], [contenteditable="true"]')) return;
+      // The Overlay's Distance mode measures with these clicks (PreviewOverlay.tsx)
+      if (t?.closest?.('[data-overlay-capture]')) return;
       // A node picking a point on the picture (Segment's Pick, lib/previewPick.ts) takes this press.
       if (previewPickOwner()) {
         const r = renderer.domElement.getBoundingClientRect();

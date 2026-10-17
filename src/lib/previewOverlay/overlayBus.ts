@@ -9,6 +9,8 @@ export interface OverlayFrame {
   space: Field2 | null;
   /** The app's plain UV at the same texels (for the Warp blend). */
   plain: Field2;
+  /** Shape mode: the SDF's distance at the same texels (row 0 at the bottom), else null. */
+  sdf: Float32Array | null;
   /** Position mode: the point's value, else null. */
   pos: [number, number] | null;
   /** Why nothing could be read ("not in the picture's shader", "compiling"…). */

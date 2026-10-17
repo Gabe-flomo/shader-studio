@@ -11,7 +11,7 @@ import { inject } from '../nodePreview/previewGlsl';
 import { SAMPLE_MS } from '../nodePreview/valuePreviewRunner';
 import { overlayBus } from './overlayBus';
 import { plainUvField, type Field2 } from './overlayMath';
-import { refKey, useOverlay, type SocketRef } from './overlayStore';
+import { overlayKey, useOverlay, type SocketRef } from './overlayStore';
 
 /** Texels read back (96 × 54 at 16:9; the shape follows the picture). */
 export const OVERLAY_TEXELS = 96 * 54;
@@ -22,13 +22,16 @@ export function overlayTargetSize(canvasW: number, canvasH: number): [number, nu
   return [w, Math.max(4, Math.round(w / asp))];
 }
 
-/** The picture's shader with gl_FragCoord scaled to the canvas, ending in vec4(space, position). */
-export function buildOverlayShader(fs: string, spaceVar: string | null, posVar: string | null): string | null {
+/**
+ * The picture's shader with gl_FragCoord scaled to the canvas, ending in vec4(space, position), or
+ * with an SDF (Shape mode) vec4(space, distance, 0).
+ */
+export function buildOverlayShader(fs: string, spaceVar: string | null, posVar: string | null, sdfVar: string | null = null): string | null {
   const scaled = fs.replace(/\bgl_FragCoord\b/g, '(gl_FragCoord * vec4(u_ovScale, 1.0, 1.0))');
   const at = scaled.search(/^\s*uniform\s/m);
   const withU = at >= 0 ? `${scaled.slice(0, at)}\nuniform vec2 u_ovScale;\n${scaled.slice(at)}` : null;
   const src = withU ?? scaled;
-  return inject(src, withU ? '' : 'uniform vec2 u_ovScale;\n', `  gl_FragColor = vec4(${spaceVar ? `vec2(${spaceVar})` : 'vec2(0.0)'}, ${posVar ? `vec2(${posVar})` : 'vec2(0.0)'});`);
+  return inject(src, withU ? '' : 'uniform vec2 u_ovScale;\n', `  gl_FragColor = vec4(${spaceVar ? `vec2(${spaceVar})` : 'vec2(0.0)'}, ${sdfVar ? `float(${sdfVar}), 0.0` : posVar ? `vec2(${posVar})` : 'vec2(0.0)'});`);
 }
 
 type Uniforms = Record<string, THREE.IUniform>;
@@ -105,35 +108,38 @@ export class OverlayRunner {
       return;
     }
     const posRef: SocketRef | null = st.mode === 'position' ? st.position : null;
-    const key = `${st.mode}|${refKey(st.space)}|${refKey(posRef)}`;
+    const sdfRef: SocketRef | null = st.mode === 'shape' ? st.sdf : null;
+    const key = overlayKey(st);
     if (key !== this.lastKey) { this.lastKey = key; this.gen++; this.pending = false; }
     const [w, h] = overlayTargetSize(canvasW, canvasH);
     const plain = plainUvField(w, h, canvasW / Math.max(1, canvasH));
 
     // Plain UV and no point: nothing to read, the values are the convention itself
-    if (!st.space && !posRef) {
+    if (!st.space && !posRef && st.mode !== 'shape') {
       const cpu = `${key}|${canvasW}x${canvasH}`;
-      if (cpu !== this.lastCpu) { this.lastCpu = cpu; overlayBus.publish({ space: plain, plain, pos: null, error: null, key }); }
+      if (cpu !== this.lastCpu) { this.lastCpu = cpu; overlayBus.publish({ space: plain, plain, sdf: null, pos: null, error: null, key }); }
       return;
     }
     this.lastCpu = '';
     const fail = (error: string) => {
       const cur = overlayBus.get();
-      if (cur?.key !== key || cur.error !== error) overlayBus.publish({ space: null, plain, pos: null, error, key });
+      if (cur?.key !== key || cur.error !== error) overlayBus.publish({ space: null, plain, sdf: null, pos: null, error, key });
     };
     const varOf = (r: SocketRef | null) => (r ? varMap.get(r.nodeId)?.[r.outputKey] ?? null : null);
-    const spaceVar = varOf(st.space), posVar = varOf(posRef);
+    const spaceVar = varOf(st.space), posVar = varOf(posRef), sdfVar = varOf(sdfRef);
     if (st.space && (!spaceVar || !declares(fs, spaceVar))) return fail("The space isn't in the picture's shader (wired to the output?)");
     if (posRef && (!posVar || !declares(fs, posVar))) return fail("The position isn't in the picture's shader (wired to the output?)");
     if (st.mode === 'position' && !posRef) return fail('Pick a position');
+    if (st.mode === 'shape' && !sdfRef) return fail('Pick an SDF (a float distance output)');
+    if (sdfRef && (!sdfVar || !declares(fs, sdfVar))) return fail("The SDF isn't in the picture's shader (wired to the output?)");
 
     const now = performance.now();
     if (this.pending || (!force && now - this.lastSample < SAMPLE_MS)) return;
     if (fs !== this.lastFs) { this.lastFs = fs; this.mats.forEach(this.disposeMat); this.mats.clear(); }
-    const mkey = `${spaceVar ?? ''}|${posVar ?? ''}`;
+    const mkey = `${spaceVar ?? ''}|${posVar ?? ''}|${sdfVar ?? ''}`;
     let m = this.mats.get(mkey);
     if (!m) {
-      const src = buildOverlayShader(fs, spaceVar, posVar);
+      const src = buildOverlayShader(fs, spaceVar, posVar, sdfVar);
       if (!src) return fail("Can't read the picture's shader");
       m = new THREE.ShaderMaterial({ vertexShader: vs, fragmentShader: src, uniforms: { u_ovScale: { value: this.scale } } });
       this.mats.set(mkey, m);
@@ -168,12 +174,17 @@ export class OverlayRunner {
         for (let k = 0; k < w * h; k++) { data[k * 2] = buf[k * 4]; data[k * 2 + 1] = buf[k * 4 + 1]; }
         space = { data, w, h };
       }
+      let sdf: Float32Array | null = null;
+      if (sdfRef) {
+        sdf = new Float32Array(w * h);
+        for (let k = 0; k < w * h; k++) sdf[k] = buf[k * 4 + 2];
+      }
       let pos: [number, number] | null = null;
       if (posRef) {
         const c = (Math.floor(h / 2) * w + Math.floor(w / 2)) * 4;
         pos = [buf[c + 2], buf[c + 3]];
       }
-      overlayBus.publish({ space, plain, pos, error: null, key });
+      overlayBus.publish({ space, plain, sdf, pos, error: null, key });
     }, () => { this.pending = false; });
   }
 
@@ -190,6 +201,25 @@ export class OverlayRunner {
     this.dummy.dispose();
     overlayBus.clear();
   }
+}
+
+/**
+ * The float outputs an SDF can be picked from (groups included), SDF nodes first: a 2D primitive
+ * or SDF-category node, or an output called distance.
+ */
+export function sdfOutputs(nodes: readonly GraphNode[], label: (n: GraphNode) => string, isSdfNode: (n: GraphNode) => boolean, inGroup = ''): Array<{ ref: SocketRef; label: string; type: string; group: string; sdf: boolean }> {
+  const out: Array<{ ref: SocketRef; label: string; type: string; group: string; sdf: boolean }> = [];
+  const walk = (list: readonly GraphNode[], group: string) => {
+    for (const n of list) {
+      for (const [k, o] of Object.entries(n.outputs ?? {})) {
+        if (o.type === 'float') out.push({ ref: { nodeId: n.id, outputKey: k }, label: `${label(n)} · ${o.label || k}`, type: n.type, group, sdf: isSdfNode(n) || /^(distance|dist|sdf)$/i.test(k) });
+      }
+      const sg = n.params?.subgraph as { nodes?: GraphNode[] } | undefined;
+      if (sg?.nodes) walk(sg.nodes, label(n));
+    }
+  };
+  walk(nodes, inGroup);
+  return [...out.filter(o => o.sdf), ...out.filter(o => !o.sdf)];
 }
 
 /** The vec2 outputs a space or position can be picked from: every node, groups included. */
