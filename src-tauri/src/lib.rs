@@ -5,6 +5,7 @@ use tauri::{AppHandle, Emitter, State};
 
 mod audio_engine;
 mod bake;
+mod export_codecs;
 mod data_fetch;
 mod midi;
 mod playfile;
@@ -31,7 +32,8 @@ struct FfmpegState(Mutex<Option<FfmpegSession>>);
 // ── Tauri commands ────────────────────────────────────────────────────────────
 
 /// Start an FFmpeg encoding session.
-/// `codec` is one of: "h264", "prores", "prores4444" (keeps alpha), "ffv1",
+/// `codec` is one of: "h264", "ffv1", the ProRes profiles "prores_proxy", "prores_lt", "prores_422",
+/// "prores" (422 HQ), "prores4444" and "prores4444xq" (both keep alpha; see export_codecs.rs),
 /// or "bake" (H.264 that seeks fast, for a Baked node: see bake.rs)
 /// `audio_wav`, when given, is the recording's sound as a WAV file's bytes: it's
 /// muxed in as the audio track (AAC in .mp4, PCM in .mov, FLAC in .mkv).
@@ -55,36 +57,14 @@ fn start_ffmpeg_encode(
     ffmpeg_sidecar::download::auto_download().map_err(|e| e.to_string())?;
     let ffmpeg_path = ffmpeg_sidecar::paths::ffmpeg_path();
 
-    // Build codec-specific output args
+    // Build codec-specific output args (export_codecs.rs; "bake" in bake.rs; anything else is H.264)
     let bake_args = bake::bake_codec_args(fps);
-    let codec_args: Vec<&str> = match codec.as_str() {
-        "bake" => bake_args.iter().map(|s| s.as_str()).collect(),
-        "prores" => vec![
-            "-c:v", "prores_ks",
-            "-profile:v", "3",         // ProRes 422 HQ
-            "-vendor", "apl0",
-            "-pix_fmt", "yuv422p10le",
-        ],
-        "prores4444" => vec![
-            "-c:v", "prores_ks",
-            "-profile:v", "4",         // ProRes 4444: carries the alpha channel
-            "-vendor", "apl0",
-            "-pix_fmt", "yuva444p10le",
-            "-alpha_bits", "16",
-        ],
-        "ffv1" => vec![
-            "-c:v", "ffv1",
-            "-level", "3",
-            "-coder", "1",
-            "-context", "1",
-            "-pix_fmt", "yuv420p",
-        ],
-        _ => vec![              // h264 (default)
-            "-c:v", "libx264",
-            "-preset", "slow",
-            "-crf", "18",
-            "-pix_fmt", "yuv420p",
-        ],
+    let codec_args: Vec<&str> = if codec == "bake" {
+        bake_args.iter().map(|s| s.as_str()).collect()
+    } else {
+        export_codecs::video_codec_args(&codec)
+            .or_else(|| export_codecs::video_codec_args("h264"))
+            .unwrap_or_default()
     };
 
     let fps_str  = fps.to_string();
@@ -118,11 +98,7 @@ fn start_ffmpeg_encode(
     }
     cmd.args(&codec_args);
     if audio_file.is_some() {
-        let audio_codec: &[&str] = match codec.as_str() {
-            "prores" | "prores4444" => &["-c:a", "pcm_s16le"],
-            "ffv1" => &["-c:a", "flac"],
-            _ => &["-c:a", "aac", "-b:a", "320k"],
-        };
+        let audio_codec = export_codecs::audio_codec_args(&codec);
         cmd.args(audio_codec);
         cmd.arg("-shortest");
     }

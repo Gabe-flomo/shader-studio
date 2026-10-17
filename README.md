@@ -174,9 +174,14 @@ Feature documentation lives in `docs/`:
 | [`docs/present-plan.md`](docs/present-plan.md) | The Present page for teaching with Plays (built; the plan and what is left): steps of Markdown + LaTeX text, render and interactive canvases, code snippets and Script layers, shown as slides or one page, exported as a web page or a shareable file |
 | [`docs/constants-node.md`](docs/constants-node.md) | The Constants card: named values, fixed or with sliders, outputs only, Play-controllable |
 | [`docs/playfield-sdk.md`](docs/playfield-sdk.md) | The SDK / add-on idea: layers, mappings and feeds as installable extensions (a write-up, not built) |
+| [`docs/prores-export.md`](docs/prores-export.md) | ProRes export: every profile, 4444 with alpha, desktop FFmpeg and the browser's WASM encoder |
 
 ---
 
 ## License
 
 MIT
+
+### Third-party notices
+
+- **ProRes WASM Encoder** 1.0.3 by Olivier Estevez ([source](https://github.com/OlivierEstevez/ProRes-WASM-encoder)), LGPL-2.1-or-later: the browser's ProRes export. Used unmodified from npm and loaded on demand as a separate file; licence text in [`public/licenses/prores-wasm-encoder.txt`](public/licenses/prores-wasm-encoder.txt). See [`docs/prores-export.md`](docs/prores-export.md).

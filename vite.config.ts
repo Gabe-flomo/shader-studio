@@ -144,6 +144,8 @@ export default defineConfig({
   server: {
     watch: usePolling ? { usePolling: true, interval: 500 } : undefined,
   },
+  // The ProRes encoder is imported lazily; pre-bundled so the dev server doesn't reload the page mid-export when it is first used.
+  optimizeDeps: { include: ['prores-wasm-encoder', 'prores-wasm-encoder/parallel'] },
   build: {
     rollupOptions: {
       // The output window (docs/projection.md) is a page of its own: the picture and the mapping, no app.
@@ -158,6 +160,8 @@ export default defineConfig({
         manualChunks(id) {
           if (id.includes('node_modules/three/')) return 'three';
           if (/node_modules\/(react|react-dom|scheduler|zustand)\//.test(id)) return 'react';
+          // The browser's ProRes encoder (LGPL-2.1+, utils/proresWasm.ts): only loaded with import(), a file of its own.
+          if (id.includes('node_modules/prores-wasm-encoder/')) return 'prores-wasm';
           return undefined;
         },
       },
