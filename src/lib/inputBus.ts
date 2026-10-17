@@ -50,8 +50,15 @@ class InputBus {
   private moved = false;
   /** Sees every write, bound or not (a take recording the MIDI node's outputs). */
   private tapFn: InputWriter | null = null;
+  /** Param channels written lately (`param:<id>::<key>` → value and tick), for engines that read a param in JS. */
+  private paramSeen = new Map<string, { v: number; at: number }>();
+  private ticks = 0;
   private writer: InputWriter = (channelKey, value) => {
     if (this.tapFn) this.tapFn(channelKey, value);
+    if (typeof value === 'number' && channelKey.startsWith(PARAM_PREFIX)) {
+      const e = this.paramSeen.get(channelKey);
+      if (e) { e.v = value; e.at = this.ticks; } else this.paramSeen.set(channelKey, { v: value, at: this.ticks });
+    }
     const uniform = this.live.get(channelKey) ?? this.params.get(channelKey);
     if (uniform !== undefined) this.result.set(uniform, value);
   };
@@ -139,6 +146,15 @@ class InputBus {
     return this.live.values();
   }
 
+  /**
+   * A param's value as a Play control (or any source) drove it this frame or the last, or undefined when nothing
+   * drives it: the Audio effects (lib/audioTools/engine.ts) read their numbers in JS, so they look here first.
+   */
+  paramValue(bindingKey: string): number | undefined {
+    const e = this.paramSeen.get(paramChannelKey(bindingKey));
+    return e && this.ticks - e.at <= 1 ? e.v : undefined;
+  }
+
   /** Uniform name a param binding key resolves to right now, if the param is a live uniform. */
   paramUniform(bindingKey: string): string | undefined {
     return this.params.get(paramChannelKey(bindingKey));
@@ -153,6 +169,7 @@ class InputBus {
     const result = this.result;
     result.clear();
     this.moved = false;
+    this.ticks++;
     if (this.live.size === 0 && this.params.size === 0 && ![...this.sources].some(s => s.wantsTick?.())) return result;
     for (const source of this.sources) source.tickInputs(dt, time, this.writer);
     // Did any scalar change since last frame? (Vectors are mutated in place by

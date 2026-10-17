@@ -8,11 +8,11 @@
  * uniforms after the same original node ids (compiler/shaderAssembler.ts).
  */
 import { GROUP_PORT_SENTINEL, type GraphNode, type SubgraphData } from '../../types/nodeGraph';
-import { AUDIO_SOURCE_TYPE, isAudioToolType } from '../../nodes/definitions/audioTools';
+import { AUDIO_SOURCE_TYPE, isAudioProducerType, isAudioToolType } from '../../nodes/definitions/audioTools';
 
 export interface AudioNodeRef {
   node: GraphNode;
-  /** The Audio Source it listens to (itself for a source), or null when its Audio isn't wired to one. */
+  /** The node whose sound it takes: an Audio Source or an effect (Filter, Resonator bank, Spectral); itself for a source; null when its Audio isn't wired to one. */
   sourceId: string | null;
   /** The groups it sits in, outermost first ([] at the top level). */
   path: string[];
@@ -35,7 +35,7 @@ function resolve(conn: { nodeId: string; outputKey: string } | undefined, list: 
   }
   const src = list.find(x => x.id === conn.nodeId);
   if (!src) return null;
-  if (src.type === AUDIO_SOURCE_TYPE) return src.id;
+  if (isAudioProducerType(src.type)) return src.id;
   const sg = subOf(src);
   const port = sg?.outputPorts?.find(p => p.key === conn.outputKey);
   if (sg && port) return resolve({ nodeId: port.fromNodeId, outputKey: port.fromOutputKey }, sg.nodes, [...parents, { group: src, list }], depth + 1);
@@ -85,4 +85,45 @@ export function collectNodesDeep(nodes: readonly GraphNode[], keep: (n: GraphNod
   };
   walk(nodes);
   return out;
+}
+
+/**
+ * What plays through the speakers when effects (Filter, Resonator bank, Spectral) change an Audio Source's sound
+ * (docs/audio-tools.md, "Audio → audio"). The rule:
+ *  - an effect is heard when its Listen is on and no effect after it (fed by it, at any distance) has Listen on: the
+ *    last listening node of each chain plays, the ones before it go quiet (no double playback);
+ *  - an Audio Source's own (dry) sound goes quiet as soon as any effect after it has Listen on;
+ *  - a Mic's chain is never played (it would feed back into the microphone), and its source never was.
+ * Also each effect's root: the Audio Source its chain starts at (null when it isn't wired to one).
+ */
+export function audioHearing(refs: readonly AudioNodeRef[], kindOf: (sourceId: string) => string | null): {
+  heard: Set<string>; dryMuted: Set<string>; rootOf: Map<string, string | null>;
+} {
+  const fx = new Map(refs.filter(r => r.node.type !== AUDIO_SOURCE_TYPE && isAudioProducerType(r.node.type)).map(r => [r.node.id, r]));
+  const rootOf = new Map<string, string | null>();
+  const root = (id: string, depth = 0): string | null => {
+    if (rootOf.has(id)) return rootOf.get(id)!;
+    const r = fx.get(id);
+    const up = r?.sourceId ?? null;
+    const out = !r ? null : up === null || depth > 64 ? null : fx.has(up) ? root(up, depth + 1) : kindOf(up) !== null ? up : null;
+    rootOf.set(id, out);
+    return out;
+  };
+  for (const id of fx.keys()) root(id);
+  const listens = (id: string) => fx.get(id)?.node.params.listen !== false;
+  const playable = (id: string) => { const s = rootOf.get(id); return !!s && kindOf(s) !== 'mic'; };
+  // Effects that have a listening effect somewhere after them.
+  const shadowed = new Set<string>();
+  for (const id of fx.keys()) {
+    if (!listens(id) || !playable(id)) continue;
+    let up = fx.get(id)!.sourceId, guard = 0;
+    while (up && fx.has(up) && guard++ < 64) { shadowed.add(up); up = fx.get(up)!.sourceId; }
+  }
+  const heard = new Set<string>(), dryMuted = new Set<string>();
+  for (const id of fx.keys()) {
+    if (!listens(id) || !playable(id)) continue;
+    dryMuted.add(rootOf.get(id)!);
+    if (!shadowed.has(id)) heard.add(id);
+  }
+  return { heard, dryMuted, rootOf };
 }

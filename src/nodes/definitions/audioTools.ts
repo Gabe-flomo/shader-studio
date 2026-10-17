@@ -14,6 +14,8 @@ import { texUv } from './passes';
 import { bandOutputs, bandsOf } from '../../lib/audioTools/bands';
 import { soundOutputs, soundsOf, type AudioSoundSpec } from '../../lib/audioTools/learn';
 import type { AtListenerSpec } from '../../play/kit/audioTools.js';
+import { AC_MAX_RESONATORS, AC_SCALES, acTextureSize, type AcScale, type AcSpec } from '../../play/kit/audioChain.js';
+import { p, withNewOutputs } from './helpers';
 
 export const AUDIO_CATEGORY = 'Audio';
 
@@ -23,15 +25,31 @@ export const AUDIO_HIT_TYPE = 'audioHit';
 export const AUDIO_SPECTRUM_TYPE = 'audioSpectrum';
 export const AUDIO_SPECTROGRAM_TYPE = 'audioSpectrogram';
 export const AUDIO_WAVEFORM_TYPE = 'audioWaveform';
+/** The nodes that change the sound (audio in, audio out): play/kit/audioChain.js runs them. */
+export const AUDIO_FILTER_TYPE = 'audioFilter';
+export const AUDIO_RESONATOR_TYPE = 'audioResonator';
+export const AUDIO_SPECTRAL_TYPE = 'audioSpectral';
 
-export const AUDIO_TOOL_TYPES: readonly string[] = [AUDIO_SOURCE_TYPE, AUDIO_BAND_TYPE, AUDIO_HIT_TYPE, AUDIO_SPECTRUM_TYPE, AUDIO_SPECTROGRAM_TYPE, AUDIO_WAVEFORM_TYPE];
+export const AUDIO_FX_TYPES: readonly string[] = [AUDIO_FILTER_TYPE, AUDIO_RESONATOR_TYPE, AUDIO_SPECTRAL_TYPE];
+export const isAudioFxType = (type: string): boolean => AUDIO_FX_TYPES.includes(type);
+/** A node whose Audio output is a sound of its own: an Audio Source, or an effect. */
+export const isAudioProducerType = (type: string): boolean => type === AUDIO_SOURCE_TYPE || isAudioFxType(type);
+
+export const AUDIO_TOOL_TYPES: readonly string[] = [AUDIO_SOURCE_TYPE, AUDIO_BAND_TYPE, AUDIO_HIT_TYPE, AUDIO_SPECTRUM_TYPE, AUDIO_SPECTROGRAM_TYPE, AUDIO_WAVEFORM_TYPE, ...AUDIO_FX_TYPES];
 export const isAudioToolType = (type: string): boolean => AUDIO_TOOL_TYPES.includes(type);
+
+/** An effect's params that change what the shader declares (a bank's size is its texture's width): they recompile. */
+export const AUDIO_FX_COMPILE_KEYS: ReadonlySet<string> = new Set(['count']);
+const ENERGY_CHANNELS = Array.from({ length: AC_MAX_RESONATORS }, (_, k) => `e${k}`);
 
 /** The numbers each node writes every frame (its live uniforms' channels). */
 export const AUDIO_LIVE_CHANNELS: Record<string, readonly string[]> = {
   [AUDIO_SOURCE_TYPE]: ['level', 'time'],
   [AUDIO_BAND_TYPE]: ['level', 'peak'],
   [AUDIO_HIT_TYPE]: ['trigger', 'envelope', 'count', 'strength'],
+  [AUDIO_FILTER_TYPE]: ['level'],
+  [AUDIO_RESONATOR_TYPE]: ['level', ...ENERGY_CHANNELS, 'loudest', 'peak'],
+  [AUDIO_SPECTRAL_TYPE]: ['level'],
 };
 
 /** An Audio Source's learned sounds (lib/audioTools/learn.ts), their ids kept clear of its bands'. */
@@ -48,7 +66,7 @@ export function audioLiveChannels(node: GraphNode): string[] {
 }
 
 /** The nodes that hand the picture a texture. */
-export const AUDIO_TEXTURE_TYPES: ReadonlySet<string> = new Set([AUDIO_SPECTRUM_TYPE, AUDIO_SPECTROGRAM_TYPE, AUDIO_WAVEFORM_TYPE]);
+export const AUDIO_TEXTURE_TYPES: ReadonlySet<string> = new Set([AUDIO_SPECTRUM_TYPE, AUDIO_SPECTROGRAM_TYPE, AUDIO_WAVEFORM_TYPE, AUDIO_RESONATOR_TYPE, AUDIO_SPECTRAL_TYPE]);
 
 export const audioToolUniform = (slug: string, channel: string): string => `u_aud_${slug}_${channel}`;
 export const audioToolSampler = (slug: string): string => `u_tex_${slug}`;
@@ -123,6 +141,7 @@ export function audioTextureSize(node: GraphNode): { w: number; h: number } {
     case AUDIO_SPECTRUM_TYPE: return { w: pick(node.params.bins, SPECTRUM_BINS, 128), h: 1 };
     case AUDIO_SPECTROGRAM_TYPE: return { w: pick(node.params.bins, SPECTROGRAM_BINS, 128), h: pick(node.params.history, SPECTROGRAM_ROWS, 128) };
     case AUDIO_WAVEFORM_TYPE: return { w: pick(node.params.samples, WAVEFORM_SAMPLES, 512), h: 1 };
+    case AUDIO_RESONATOR_TYPE: case AUDIO_SPECTRAL_TYPE: return acTextureSize(effectSpecOf(node));
     default: return { w: 1, h: 1 };
   }
 }
@@ -291,32 +310,55 @@ export const AudioSpectrumNode: NodeDefinition = {
   },
 };
 
+/** How the Spectrogram's Field reads past the history's edges. */
+const FIELD_EDGES: Record<string, (q: string) => string> = {
+  clamp: q => `clamp(${q}, 0.0, 1.0)`,
+  repeat: q => `fract(${q})`,
+  mirror: q => `(1.0 - abs(1.0 - mod(${q}, 2.0)))`,
+};
+const FIELD_OUTPUT = { field: { type: 'float' as const, label: 'Field' } };
+
 export const AudioSpectrogramNode: NodeDefinition = {
   type: AUDIO_SPECTROGRAM_TYPE,
   label: 'Spectrogram',
   category: AUDIO_CATEGORY,
-  aliases: ['Waterfall', 'Spectrum history', 'Sonogram', 'Audio history'],
-  description: 'The Spectrum over time, as a waterfall: across is frequency, the newest moment is at the top and older ones slide down (History rows of them). Value is the loudness at this pixel (0–1); Texture is the whole picture for Sample (texture). Layout, Min dB and Max dB work as on Spectrum.',
+  aliases: ['Waterfall', 'Spectrum history', 'Sonogram', 'Audio history', 'Sound field', 'Spectrogram field'],
+  description: 'The Spectrum over time, as a waterfall: across is frequency, the newest moment is at the top and older ones slide down (History rows of them). Value is the loudness at this pixel (0–1); Texture is the whole picture for Sample (texture). Field is the same history as a function of position, with its own Scale, Offset, Gain and Edges: wire it into a field socket (ƒ: Ride a path, Height Light, Sense, Shape Field, Grid Pattern) or add it to a picture\'s UV to warp it, or threshold it into shapes. Layout, Min dB and Max dB work as on Spectrum.',
   inputs: { ...AUDIO_IN, uv: UV_IN },
   outputs: {
     value: { type: 'float', label: 'Value', hint: 'Loudness at this pixel: frequency across, time down (the top is now).' },
     texture: { type: 'texture', label: 'Texture', hint: 'The history: across is frequency, up is newer.' },
+    field: { type: 'float', label: 'Field', hint: 'The history as a function of position (x: frequency, on the Layout; y: time, the newest at the top), zoomed by Scale, moved by Offset, times Gain. Wired into a field socket (ƒ) it is read wherever that node asks.' },
   },
-  defaultParams: { bins: '128', history: '128', layout: 'log', minDb: -90, maxDb: -20 },
+  defaultParams: { bins: '128', history: '128', layout: 'log', minDb: -90, maxDb: -20, fieldScale: 1, fieldOffsetX: 0, fieldOffsetY: 0, fieldGain: 1, fieldEdges: 'clamp' },
   paramDefs: {
     bins: selectOf('Bins', 'How many frequency steps across.', SPECTROGRAM_BINS, 'bins'),
     history: selectOf('History', 'How many moments it keeps (one a frame: 128 is about 2 seconds).', SPECTROGRAM_ROWS, 'rows'),
     layout: LAYOUT,
-    minDb: MIN_DB,
-    maxDb: MAX_DB,
+    // Read by the engine, not the shader (the Field's settings below are the uniforms).
+    minDb: { ...MIN_DB, compileTime: true },
+    maxDb: { ...MAX_DB, compileTime: true },
+    fieldScale: { label: 'Scale', type: 'float', min: 0.1, max: 8, step: 0.01, section: 'Field', hint: 'Field only: how much of the history fills the picture. 1: all of it; 2: the middle half, twice as big.' },
+    fieldOffsetX: { label: 'Offset X', type: 'float', min: -1, max: 1, step: 0.001, section: 'Field', hint: 'Field only: slides it across (positive brings the highs in).' },
+    fieldOffsetY: { label: 'Offset Y', type: 'float', min: -1, max: 1, step: 0.001, section: 'Field', hint: 'Field only: slides it in time (negative shows older moments).' },
+    fieldGain: { label: 'Gain', type: 'float', min: 0, max: 4, step: 0.01, section: 'Field', hint: 'Field only: multiplies it (a stronger warp, a taller height).' },
+    fieldEdges: { label: 'Edges', type: 'select', section: 'Field', hint: 'Field only, past the history\'s edges: Clamp holds the edge, Repeat tiles it, Mirror tiles it flipped (no seams).', options: [
+      { value: 'clamp', label: 'Clamp' }, { value: 'repeat', label: 'Repeat' }, { value: 'mirror', label: 'Mirror' },
+    ] },
   },
   assignable: false,
+  // Saved before the Field output: the card gains it.
+  syncSockets: withNewOutputs(FIELD_OUTPUT),
   declarationsFor: pxDefine,
   generateGLSL: (node: GraphNode, inputVars) => {
-    const id = node.id, S = audioToolSampler(id);
+    const id = node.id, S = audioToolSampler(id), P = node.params;
+    const edge = FIELD_EDGES[String(P.fieldEdges)] ?? FIELD_EDGES.clamp;
+    // Inside a field function (a ƒ socket) g_uv is the position asked about, so the Field is read there.
     return {
-      code: `    float ${id}_v = texture2D(${S}, clamp(${st(inputVars)}, 0.0, 1.0)).r;\n`,
-      outputVars: { value: `${id}_v`, texture: S },
+      code: `    float ${id}_v = texture2D(${S}, clamp(${st(inputVars)}, 0.0, 1.0)).r;\n`
+        + `    vec2 ${id}_fq = (${st(inputVars)} - 0.5) / max(${p(P.fieldScale, 1)}, 0.001) + 0.5 + vec2(${p(P.fieldOffsetX, 0)}, ${p(P.fieldOffsetY, 0)});\n`
+        + `    float ${id}_f = texture2D(${S}, ${edge(`${id}_fq`)}).r * ${p(P.fieldGain, 1)};\n`,
+      outputVars: { value: `${id}_v`, texture: S, field: `${id}_f` },
     };
   },
 };
@@ -347,6 +389,138 @@ export const AudioWaveformNode: NodeDefinition = {
   },
 };
 
+// ── Audio → audio: Filter, Resonator bank, Spectral (play/kit/audioChain.js) ────────────────────────────────
+
+const FILTER_TYPES = ['lowpass', 'highpass', 'bandpass', 'notch', 'peaking'] as const;
+const SPECTRAL_MODES = ['freeze', 'blur', 'gate'] as const;
+export const RESONATOR_COUNTS = [4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
+
+/**
+ * An effect's settings for one frame (play/kit/audioChain.js acBuild / acStepEffect): the app's engine and an exported
+ * page read the same. `over` gives a number driven this frame (a Play control), by param key.
+ */
+export function effectSpecOf(node: GraphNode, over?: (key: string) => number | undefined): AcSpec {
+  const P = node.params;
+  const f = (k: string, d: number): number => { const o = over?.(k); return o !== undefined && Number.isFinite(o) ? o : num(P[k], d); };
+  const filterType = FILTER_TYPES.find(t => t === P.filterType) ?? 'lowpass';
+  const mode = SPECTRAL_MODES.find(m => m === P.mode) ?? 'freeze';
+  const scale = (typeof P.scale === 'string' && P.scale in AC_SCALES ? P.scale : 'minor') as AcScale;
+  return {
+    type: (isAudioFxType(node.type) ? node.type : AUDIO_FILTER_TYPE) as AcSpec['type'],
+    filterType, frequency: Math.max(10, f('frequency', 1000)), q: Math.max(0.01, f('q', 0.707)), gain: f('gain', 6),
+    count: pick(P.count, RESONATOR_COUNTS, 8), root: f('root', 45), scale, decay: Math.max(0.01, f('decay', 1)),
+    brightness: Math.max(0, Math.min(1, f('brightness', 0.5))), mix: Math.max(0, Math.min(1, f('mix', node.type === AUDIO_RESONATOR_TYPE ? 0.7 : 1))),
+    mode, freeze: P.freeze === true, amount: Math.max(0, Math.min(0.99, f('amount', 0.8))), threshold: f('threshold', -50),
+  };
+}
+
+const AUDIO_THROUGH = {
+  audio: { type: 'audio' as const, label: 'Audio', hint: 'The sound, changed: wire it into the next effect, or into Hit, Spectrum, Spectrogram… to listen to the changed sound.' },
+};
+const AUDIO_FX_IN = { audio: { type: 'audio' as const, label: 'Audio', hint: 'The sound to change: an Audio Source\'s Audio, or another effect\'s.' } };
+const LEVEL_OUT = { type: 'float' as const, label: 'Level', hint: 'How loud the changed sound is right now, 0–1.' };
+const LISTEN: ParamDef = {
+  label: 'Listen', type: 'bool',
+  hint: 'Hear this node: the last node with Listen on in each chain plays (the ones before it, and the Audio Source\'s own sound, go quiet). All off: you hear the Audio Source as it is. A Mic chain is never played (it would feed back).',
+};
+const MIX = (d: string): ParamDef => ({ label: 'Mix', type: 'float', min: 0, max: 1, step: 0.01, hint: `Dry (0) to all ${d} (1).` });
+
+const fxOutputs = (node: GraphNode, extra: Record<string, string> = {}) => ({ audio: '0.0', ...liveOutputs(node), ...extra });
+
+export const AudioFilterNode: NodeDefinition = {
+  type: AUDIO_FILTER_TYPE,
+  label: 'Filter',
+  category: AUDIO_CATEGORY,
+  aliases: ['Audio filter', 'Low-pass', 'Lowpass', 'High-pass', 'Highpass', 'Band-pass', 'Notch', 'EQ', 'Peak EQ', 'Cutoff', 'Resonant filter', 'Biquad'],
+  description: 'Changes the sound: Low-pass keeps what is under Frequency, High-pass what is over it, Band-pass only around it, Notch takes it out, Peak boosts or cuts around it by Gain. Resonance (Q) sharpens it into a ring. Drag across the curve on the card to sweep Frequency (it moves evenly through the octaves). Wire its Audio on into Hit, Spectrum and friends, or another effect; Level is how loud the filtered sound is. Listen plays it.',
+  inputs: { ...AUDIO_FX_IN },
+  outputs: { ...AUDIO_THROUGH, level: LEVEL_OUT },
+  defaultParams: { filterType: 'lowpass', frequency: 800, q: 0.707, gain: 6, listen: true },
+  paramDefs: {
+    filterType: { label: 'Type', type: 'select', hint: 'What it keeps.', options: [
+      { value: 'lowpass', label: 'Low-pass' }, { value: 'highpass', label: 'High-pass' }, { value: 'bandpass', label: 'Band-pass' },
+      { value: 'notch', label: 'Notch' }, { value: 'peaking', label: 'Peak' },
+    ] },
+    frequency: { label: 'Frequency', type: 'float', min: 20, max: 20000, step: 1, hint: 'Where it bites, Hz. Drag across the curve on the card for an even sweep through the octaves.' },
+    q: { label: 'Resonance', type: 'float', min: 0.1, max: 30, step: 0.01, hint: 'Q: 0.71 is smooth; higher rings at Frequency (Band-pass and Notch get narrower).' },
+    gain: { label: 'Gain', type: 'float', min: -24, max: 24, step: 0.1, showWhen: { param: 'filterType', value: 'peaking' }, hint: 'Peak: dB added (or taken) around Frequency.' },
+    listen: LISTEN,
+  },
+  assignable: false,
+  generateGLSL: (node: GraphNode) => ({ code: '', outputVars: fxOutputs(node) }),
+};
+
+export const AudioResonatorNode: NodeDefinition = {
+  type: AUDIO_RESONATOR_TYPE,
+  label: 'Resonator bank',
+  category: AUDIO_CATEGORY,
+  aliases: ['Resonators', 'Resonator', 'Tuned resonators', 'Comb', 'Sympathetic strings', 'Ringing filters', 'Note energies', 'Chord resonator'],
+  description: 'Rings along with the sound: 4–12 resonators tuned to notes from Root up a Scale (minor, major, pentatonic, a chord, stacked fifths, or the harmonic series), each ringing when the sound has energy at its note. Decay is how long they ring, Brightness tilts the high ones louder or quieter, Mix blends them with the dry sound. For the picture: Energies (resonators 1–4, then 5–8 and 9–12) is how hard each one rings, 0–1; Loudest is the index of the one ringing most (0 is the root); Texture holds them all as a strip, one texel each.',
+  inputs: { ...AUDIO_FX_IN },
+  outputs: {
+    ...AUDIO_THROUGH,
+    level: LEVEL_OUT,
+    energies: { type: 'vec4', label: 'Energies 1–4', hint: 'How hard resonators 1–4 ring, 0–1 (x is the root).' },
+    energies2: { type: 'vec4', label: 'Energies 5–8', hint: 'Resonators 5–8 (0 past Count).' },
+    energies3: { type: 'vec4', label: 'Energies 9–12', hint: 'Resonators 9–12 (0 past Count).' },
+    loudest: { type: 'float', label: 'Loudest', hint: 'Which resonator rings most: 0 (the root) to Count − 1.' },
+    peak: { type: 'float', label: 'Peak', hint: 'The loudest resonator\'s energy, 0–1.' },
+    texture: { type: 'texture', label: 'Texture', hint: 'The energies as a strip, Count texels across (the root on the left), grey is how hard each rings.' },
+  },
+  defaultParams: { count: '8', root: 45, scale: 'minor', decay: 1, brightness: 0.5, mix: 0.7, listen: true },
+  paramDefs: {
+    count: selectOf('Count', 'How many resonators (each a note).', RESONATOR_COUNTS, 'notes'),
+    root: { label: 'Root', type: 'float', min: 24, max: 96, step: 1, hint: 'The lowest note, as a MIDI number: 45 is A2, 48 C3, 57 A3, 60 C4.' },
+    scale: { label: 'Scale', type: 'select', hint: 'The notes above the root.', options: [
+      { value: 'minor', label: 'Minor' }, { value: 'major', label: 'Major' }, { value: 'pentatonic', label: 'Pentatonic' },
+      { value: 'minorPentatonic', label: 'Minor pentatonic' }, { value: 'minorChord', label: 'Minor chord' }, { value: 'majorChord', label: 'Major chord' },
+      { value: 'fifths', label: 'Fifths (stacked)' }, { value: 'harmonic', label: 'Harmonic series' },
+    ] },
+    decay: { label: 'Decay', type: 'float', min: 0.05, max: 6, step: 0.01, hint: 'Seconds a resonator rings after a hit (until it is 60 dB down). Longer is a sharper, more singing tone.' },
+    brightness: { label: 'Brightness', type: 'float', min: 0, max: 1, step: 0.01, hint: '0.5 rings every note evenly; lower darkens the high ones, higher makes them louder.' },
+    mix: MIX('resonators'),
+    listen: LISTEN,
+  },
+  assignable: false,
+  declarationsFor: pxDefine,
+  generateGLSL: (node: GraphNode) => {
+    const id = node.id, u = (ch: string) => audioToolUniform(id, ch);
+    const vec = (k: number) => `vec4(${[0, 1, 2, 3].map(i => u(`e${k * 4 + i}`)).join(', ')})`;
+    return {
+      code: `    vec4 ${id}_ea = ${vec(0)};\n    vec4 ${id}_eb = ${vec(1)};\n    vec4 ${id}_ec = ${vec(2)};\n`,
+      outputVars: fxOutputs(node, { energies: `${id}_ea`, energies2: `${id}_eb`, energies3: `${id}_ec`, texture: audioToolSampler(id) }),
+    };
+  },
+};
+
+export const AudioSpectralNode: NodeDefinition = {
+  type: AUDIO_SPECTRAL_TYPE,
+  label: 'Spectral',
+  category: AUDIO_CATEGORY,
+  aliases: ['Spectral freeze', 'Freeze', 'Spectral blur', 'Spectral gate', 'FFT effect', 'Hold sound', 'Drone'],
+  description: 'Changes the sound in its spectrum (an FFT, 1024 samples a frame): Freeze holds the sound as it was the moment Freeze went on, a drone that goes on until it is off; Blur smears each frequency over time (Amount); Gate lets through only the frequencies louder than Threshold, cleaning a sound down to its strongest notes. Mix blends with the dry sound. Texture is the spectrum of what comes out (log, low on the left).',
+  inputs: { ...AUDIO_FX_IN },
+  outputs: {
+    ...AUDIO_THROUGH,
+    level: LEVEL_OUT,
+    texture: { type: 'texture', label: 'Texture', hint: 'The changed sound\'s spectrum as a strip: across is frequency (log), grey is loudness.' },
+  },
+  defaultParams: { mode: 'freeze', freeze: false, amount: 0.8, threshold: -45, mix: 1, listen: true },
+  paramDefs: {
+    mode: { label: 'Mode', type: 'select', hint: 'What happens to the spectrum.', options: [
+      { value: 'freeze', label: 'Freeze' }, { value: 'blur', label: 'Blur' }, { value: 'gate', label: 'Gate' },
+    ] },
+    freeze: { label: 'Freeze', type: 'bool', showWhen: { param: 'mode', value: 'freeze' }, hint: 'On: hold the sound as it is now (a drone) until it is off again.' },
+    amount: { label: 'Amount', type: 'float', min: 0, max: 0.99, step: 0.01, showWhen: { param: 'mode', value: 'blur' }, hint: 'How long each frequency lingers: 0 none, 0.99 a long wash.' },
+    threshold: { label: 'Threshold', type: 'float', min: -100, max: 0, step: 0.5, showWhen: { param: 'mode', value: 'gate' }, hint: 'dB: frequencies quieter than this are silenced (0 is a full-scale tone).' },
+    mix: MIX('changed sound'),
+    listen: LISTEN,
+  },
+  assignable: false,
+  declarationsFor: pxDefine,
+  generateGLSL: (node: GraphNode) => ({ code: '', outputVars: fxOutputs(node, { texture: audioToolSampler(node.id) }) }),
+};
+
 export const AUDIO_TOOL_NODES: Record<string, NodeDefinition> = {
   [AUDIO_SOURCE_TYPE]: AudioSourceNode,
   [AUDIO_BAND_TYPE]: AudioBandNode,
@@ -354,4 +528,7 @@ export const AUDIO_TOOL_NODES: Record<string, NodeDefinition> = {
   [AUDIO_SPECTRUM_TYPE]: AudioSpectrumNode,
   [AUDIO_SPECTROGRAM_TYPE]: AudioSpectrogramNode,
   [AUDIO_WAVEFORM_TYPE]: AudioWaveformNode,
+  [AUDIO_FILTER_TYPE]: AudioFilterNode,
+  [AUDIO_RESONATOR_TYPE]: AudioResonatorNode,
+  [AUDIO_SPECTRAL_TYPE]: AudioSpectralNode,
 };

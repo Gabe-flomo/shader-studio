@@ -127,20 +127,52 @@ Hit-by-example, in the Audio Source window (lib/audioTools/learn.ts, pure and te
 - Not done: several examples per sound (mean and spread), a "learn from the card" button, telling apart two
   sounds that hit at the same moment.
 
-## Phase 3 — Audio → audio, with energies for visuals (plan only)
-Filters (low / high / band pass), a resonator bank, spectral freeze / blur / gate. Each changes the sound you
-hear and also outputs its energies as floats, so the picture follows exactly what the effect does.
-Built on the existing effect chains (lib/audioFx.ts) where possible.
+## Phase 3 — Audio → audio, with energies for visuals (built)
+Filter, Resonator bank and Spectral (docs/audio-tools.md "Audio → audio"). play/kit/audioChain.js holds all of it,
+shared by the app (lib/audioTools/engine.ts) and exported pages (runtime/play-runtime.js, SSKit.audioTools.chain):
+
+- **Pure maths, tested**: the Web Audio spec's biquad (acBiquadCoeffs / acBiquadMag / acBiquadRun), a bank's tuning
+  (acResonatorNotes / Hz / Q from Decay as T60 / gains from Brightness), energies of a block of samples, and the
+  Spectral frames as source text (AC_SPECTRAL_CORE: FFT 1024, hop 256, Hann, overlap-add, dry delayed one frame), which
+  the AudioWorklet loads from a Blob URL (as audioFx.js's bitcrusher) and tests evaluate.
+- **Web Audio** (acBuild): Filter is a BiquadFilterNode (a low- / high-pass's Q handed over in dB, as Web Audio reads
+  it); the bank is N band-pass biquads summed (make-up gain, dry / wet), each tapped by a 512-sample analyser for its
+  energy; Spectral is the worklet (straight through until it loads). Each effect has a probe analyser for its Level and
+  for the listening nodes after it. `update(spec)` moves numbers with setTargetAtTime (no clicks), rebuilds only a bank
+  whose Count changed.
+- **Chains**: graphWalk's `sourceId` is now the node whose sound a node takes (a source or an effect), through group
+  ports as before. The engine builds an effect in its upstream's context (the shared AudioContext for File / Video, the
+  Mic's own for the Mic) and connects upstream output → effect input: a File's per-track analyser (post its audioFx
+  chain), a Video's inlet, the Mic's tap, or the previous effect's output.
+- **What is heard** (graphWalk `audioHearing`, used by the engine and the export): the last effect with Listen on in
+  each chain goes to the speakers (audioEngine.connectOutside: master volume and the record bus); a source with a
+  listening effect after it goes quiet (a File's audioFx chain diverted to a dead gain, its analyser still reading; a
+  Video's out-gain to 0). Mic chains never play.
+- **Live and drivable**: the effects are not in SKIP_UNIFORM_TYPES, so their floats are `u_p_*` uniforms (unused in
+  GLSL; registry.test.ts lists them as engine-read) with param bindings, so Play offers them. The store treats an
+  effect edit as live (no compile, uniforms kept current) except a bank's Count. The engine reads a Play-driven value
+  through `inputBus.paramValue` (param channels written this frame or the last); a page reads the uniform table.
+- **Outputs**: Level (`level`), the bank's `e0`…`e11`, `loudest`, `peak` (floats; Energies are vec4s built from them in
+  GLSL), and textures (bank: Count × 1 energies; Spectral: 128 × 1 log spectrum).
+
+Not done: stereo-aware energies; the Mic chain heard through headphones (a "monitor" switch); per-note outputs
+(Energies are vec4s); driving effect numbers from shader values (GPU → audio).
+
+## The Spectrogram as a field (built)
+Spectrogram's **Field** output (docs/audio-tools.md): a float of position, `texture2D(history, edge((texUv(pos) − 0.5)
+/ Scale + 0.5 + Offset)) × Gain`. Nothing new in the field compiler was needed: inside a field function `g_uv` is the
+position asked about, and the history texture is a global sampler, so the node re-emits as it does in main(). Scale,
+Offset and Gain are uniforms (Spectrogram left SKIP_UNIFORM_TYPES; Min / Max dB became compileTime, as they were
+effectively before). Tested in Height Light, Ride a path inside an Agents group (the walkers' program samples the
+history), Step; example Audio 9 lights it as a landscape and bends stripes with it.
 
 ## Phase 4 — Stems (plan only)
 Stem separation (drums / bass / vocals / other) as an offline bake with a local model, each stem becoming its
 own Audio Source. Any model download only after asking the user.
 
-## Phase 5 — The Spectrogram as a field (plan only)
-Give Spectrogram (and Spectrum) a field-socket output (docs/field-sockets.md): a float function of position,
-`fieldFn(pos)`, reading the history texture at any point, so it plugs in wherever an SDF or a noise field goes —
-warp it, threshold it into shapes, let agents ride or sense it, use it as a height. Needs the field compiler to
-accept a sampler-backed function (the texture is already a uniform, so the function just samples it).
+## Phase 5 — The Spectrogram as a field
+Built with Phase 3 (above, "The Spectrogram as a field"). Spectrum has no Field yet (its Value already is a function
+of x).
 
 ## Open questions
 - Should Audio Source follow the graph clock (pause with the picture) or keep its own transport? Now: its own

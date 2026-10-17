@@ -105,9 +105,57 @@ The spectrum over time, as a waterfall: across is frequency, the top is now, and
 **History** is how many moments it keeps (128 is about two seconds). **Value** is the loudness at this pixel;
 **Texture** the whole picture.
 
+### The Spectrogram as a field
+**Field** is the same history as a *function of position*: across is frequency (on the Layout, log by default), up is
+time (the newest at the top). Wire it into any field socket (ƒ) and that node reads it wherever it likes: **Height
+Light**'s Height ƒ makes a lit landscape of the sound, **Ride a path**'s Path ƒ lets walkers ride where it equals Level,
+**Sense**, **Shape Field** and **Grid Pattern** take it too. Used as a plain value it warps a picture (add it to a UV)
+or thresholds into shapes (Step, Smoothstep). Its own settings (folded under *Field*): **Scale** zooms in (1 is the
+whole history), **Offset X / Y** slide it (Y back in time), **Gain** multiplies it, **Edges** say what lies past the
+history (Clamp, Repeat, Mirror). Scale, Offset and Gain are uniforms: they move without recompiling and Play can drive
+them.
+
 ## Waveform
 The sound itself, like an oscilloscope: the last few milliseconds across the picture. **Value** is the wave at this
 pixel's left-right place, −1 to 1 (0 is silence). **Samples** sets how much sound fits across (1024 ≈ 21 ms).
+
+## Audio → audio: Filter, Resonator bank, Spectral
+These change the sound. Each takes **Audio** in and hands **Audio** on, so they chain:
+*Audio Source → Filter → Resonator bank → Hit / Spectrum / …*. A node listening after an effect hears what the effect
+made (a Spectrum after a low-pass Filter goes dark past the cutoff). Each also sends numbers for the picture.
+
+**What you hear.** Each effect has **Listen** (on when you add it). The last node with Listen on in each chain plays
+through the speakers; the effects before it, and the Audio Source's own sound, go quiet, so nothing plays twice. Turn
+Listen off on every effect to hear the Audio Source as it is again. Two branches from one source, each ending in a
+listening effect, both play. A Mic's chain is analysed but never played (it would feed back into the microphone). The
+sound still follows the Audio Source's **Play** and the app's master volume, and is recorded with the songs.
+
+**Live.** Every setting moves without recompiling (only a bank's Count recompiles). The numbers (Frequency, Resonance,
+Root, Decay, Mix…) are uniforms too, so right-click → Play puts them on a Play control, and the sound follows it.
+
+### Filter
+**Type**: Low-pass (keeps what is under Frequency), High-pass, Band-pass, Notch, Peak. **Frequency** in Hz,
+**Resonance** (Q: 0.71 smooth, higher rings at Frequency), **Gain** (Peak only, dB). The card draws the filter's curve
+(0 dB in the middle, ±24 dB), filled as loud as the filtered sound: **drag across it** to sweep Frequency evenly
+through the octaves. Outputs: **Audio**, **Level** (how loud the filtered sound is, 0–1).
+
+### Resonator bank
+4–12 tuned resonators that ring along with the sound, each when the sound has energy at its note. **Root** is the
+lowest note as a MIDI number (45 = A2, 60 = C4); **Scale**: Minor, Major, Pentatonic, Minor pentatonic, Minor chord,
+Major chord, Fifths (stacked), Harmonic series (the root × 1, 2, 3…). **Decay**: seconds a resonator rings (until 60 dB
+down; longer is sharper and more singing). **Brightness**: 0.5 even, lower darkens the high notes, higher brightens
+them. **Mix**: dry to all resonators. The card shows a bar per note with its name; the loudest is outlined.
+Outputs: **Audio**, **Level**, **Energies 1–4**, **5–8**, **9–12** (vec4s: how hard each rings, 0–1, −60 dB to −10 dB),
+**Loudest** (which one rings most, 0 is the root), **Peak** (its energy) and **Texture** (Count texels across, one per
+note, for Sample (texture)).
+
+### Spectral
+Works on the spectrum (an FFT of 1024 samples, every 256). **Mode**: **Freeze** holds the sound as it was the moment
+**Freeze** went on (each frequency keeps its loudness and goes on turning at its own rate: a drone) until it's off;
+**Blur** smears each frequency over time (**Amount** 0 none … 0.99 a long wash); **Gate** keeps only the frequencies
+louder than **Threshold** (dB; 0 is a full-scale tone). **Mix**: dry to all changed (the dry sound is delayed to line
+up). It adds about 21 ms of delay. Outputs: **Audio**, **Level**, **Texture** (the spectrum of what comes out, 128 bins,
+log). It runs in an AudioWorklet; where the browser has none, the sound passes through unchanged.
 
 ## Good to know
 - Each card shows a small live readout: Audio Source's spectrum, a meter, a flash on each hit, the spectrum, the waterfall or the wave.
@@ -121,7 +169,9 @@ pixel's left-right place, −1 to 1 (0 is silence). **Samples** sets how much so
   (when that video is drawn in the picture, so the page carries it). Browsers only start sound after a tap, so the page
   shows **Tap to start sound** on the picture (a background page starts it on the first click or key, silently waiting
   until then). The Mic doesn't work on a web page: an Audio Source on its Mic tab stays silent there, and the export
-  dialog says so.
+  dialog says so. The effects run there too, with the same Web Audio graph (play/kit/audioChain.js) and the same rule
+  for what is heard; a Play control on the page moves their numbers.
+- Effects inside groups work as the listening nodes do: the chain follows the wire through group ports.
 - A loaded sound is kept in this browser's library, with the videos. Graphs saved as a
   .playfield / .playfile carry the sound with them, like videos. On another computer without it, the card says
   *"name" isn't in this browser's library*: load it again. Graphs from before this change that used the built-in Test

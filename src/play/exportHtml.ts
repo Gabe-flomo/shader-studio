@@ -76,6 +76,8 @@ import agentPlanSource from './kit/agentPlan.js?raw';
 import agentShadersSource from './kit/agentShaders.js?raw';
 import agentHostSource from './kit/agentHost.js?raw';
 import audioToolsSource from './kit/audioTools.js?raw';
+import audioChainSource from './kit/audioChain.js?raw';
+import type { AcSpec } from './kit/audioChain.js';
 import type { AtBand, AtListenerSpec, AtSound } from './kit/audioTools.js';
 import type { AeGrainSample } from '../types/playAudioEngine';
 import type { AgentDepositProgram, AgentDrawProgram, AgentGroupProgram, AgentListener, AgentTrailProgram } from '../compiler/types';
@@ -242,10 +244,29 @@ export interface PlayAudioToolSource extends PlayMediaFile {
   gain: number;
   bands: AtBand[];
   sounds: AtSound[];
+  /** Its own sound is not played: an effect after it is heard instead (lib/audioTools/graphWalk.ts audioHearing). */
+  quiet?: boolean;
+}
+/**
+ * An effect (Filter, Resonator bank, Spectral: kit/audioChain.js) on the page: the sound it takes (`upstreamId`, a source
+ * or another effect), the source its chain starts at, whether it plays, its settings, its texture's size, and the
+ * uniforms its numbers live in (param key → uniform) so a Play control on the page moves them.
+ */
+export interface PlayAudioToolEffect {
+  id: string;
+  upstreamId: string | null;
+  rootId: string | null;
+  heard: boolean;
+  spec: AcSpec;
+  w: number;
+  h: number;
+  drive: Record<string, string>;
 }
 export interface PlayAudioTools {
   sources: PlayAudioToolSource[];
+  /** Listening nodes; `sourceId` is the node whose sound each takes (a source, or an effect). */
   listeners: Array<{ id: string; sourceId: string | null; spec: AtListenerSpec; w: number; h: number }>;
+  effects?: PlayAudioToolEffect[];
   uniforms: Record<string, string>;
   textures: Record<string, string>;
 }
@@ -471,7 +492,7 @@ function runtimeMedia(m: PlayMedia) {
       ...m.audioTools,
       sources: m.audioTools.sources.map(a => ({
         id: a.id, kind: a.kind, src: a.src, ...(a.video ? { video: a.video } : {}), playing: a.playing, loop: a.loop, trimIn: a.trimIn, trimOut: a.trimOut, gain: a.gain,
-        bands: a.bands, sounds: a.sounds,
+        bands: a.bands, sounds: a.sounds, ...(a.quiet ? { quiet: true } : {}),
       })),
     } } : {}),
   };
@@ -580,7 +601,7 @@ export const KIT_FILES: { name: string; src: string; group?: KitGroup }[] = [
   { name: 'passPlan', src: passPlanSource }, { name: 'passHost', src: passHostSource, group: 'passes' },
   { name: 'agentPlan', src: agentPlanSource, group: 'agentsGpu' }, { name: 'agentShaders', src: agentShadersSource, group: 'agentsGpu' },
   { name: 'agentHost', src: agentHostSource, group: 'agentsGpu' },
-  { name: 'audioTools', src: audioToolsSource, group: 'audioTools' },
+  { name: 'audioTools', src: audioToolsSource, group: 'audioTools' }, { name: 'audioChain', src: audioChainSource, group: 'audioTools' },
 ];
 /** Every kit file, in order (the full kit). */
 export const KIT_SOURCES = KIT_FILES.map(f => f.src);
@@ -615,7 +636,7 @@ const KIT_API: [string, string, KitGroup?, string?][] = [
   // The frame's order (passPlan.js) schedules particles and agents too: always in; only the Pass host is optional.
   ['passes', '{ create: phCreate, steps: ppFrameSteps }', 'passes', '{ create: null, steps: ppFrameSteps }'],
   ['agents', '{ create: ahCreate, unsupported: ahUnsupported }', 'agentsGpu'],
-  ['audioTools', '{ newSource: atNewSource, newListener: atNewListener, applyGain: atApplyGain, stepSource: atStepSource, stepListener: atStepListener }', 'audioTools'],
+  ['audioTools', '{ newSource: atNewSource, newListener: atNewListener, applyGain: atApplyGain, stepSource: atStepSource, stepListener: atStepListener, chain: { build: acBuild, newRun: acNewRun, step: acStepEffect } }', 'audioTools'],
 ];
 
 /**
