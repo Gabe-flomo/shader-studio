@@ -68,10 +68,11 @@ describe('Graph ⋯ menu', () => {
     ));
     const names = Array.from(host.querySelectorAll('button')).map(b => b.getAttribute('aria-label') ?? b.textContent ?? '');
     // Moved into the menu: no toolbar button for them any more.
-    for (const gone of ['Bake the picture', 'Optimise graph', 'Randomise settings', 'Reset to the starter graph', 'Outline: list every node']) {
+    for (const gone of ['Bake the picture', 'Optimise graph', 'Reset to the starter graph', 'Outline: list every node', 'Do…']) {
       expect(names.some(n => n.startsWith(gone)), gone).toBe(false);
     }
-    for (const kept of ['Zoom out', 'Zoom in', 'Show minimap']) expect(names.some(n => n.startsWith(kept)), kept).toBe(true);
+    // Randomise is back on the toolbar (the user's ask) and stays in the menu; the Do… bar has no button (⌘K)
+    for (const kept of ['Zoom out', 'Zoom in', 'Show minimap', 'Randomise settings']) expect(names.some(n => n.startsWith(kept)), kept).toBe(true);
     const graph = host.querySelector<HTMLButtonElement>('button[aria-label^="Graph"]')!;
     expect(graph).toBeTruthy();
     act(() => { graph.click(); });

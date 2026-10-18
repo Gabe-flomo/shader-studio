@@ -1,7 +1,7 @@
 /**
  * The canvas toolbar's "Graph ⋯" menu (UX audit §3.4): the rarely used whole-graph actions that
  * used to be icon buttons on the toolbar, which now keeps only view controls (count, frame time,
- * zoom, Fit, Auto layout, maximize, minimap, Next, flow strip, Do…). Pure, so a test can check
+ * zoom, Fit, Auto layout, maximize, minimap, Next, flow strip, Randomise). Pure, so a test can check
  * every action is still here.
  */
 import type { MenuItem } from '../ui/Menu';

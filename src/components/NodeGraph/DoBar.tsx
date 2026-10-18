@@ -11,7 +11,7 @@
  *  - Anything else it can't read falls back to node search (your made nodes included) and the
  *    explainer's idioms ("sine hash", "soft circle").
  *
- * ⌘K or the canvas toolbar's Do… button opens it.
+ * ⌘K (or Help → Do… commands) opens it; the canvas toolbar has no button for it.
  */
 import { Component, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ErrorInfo, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
