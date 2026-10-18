@@ -29,14 +29,8 @@ exports[`card label layout > Splat Wave 1`] = `
 exports[`card label layout > Time Cube View 1`] = `
 [
   "column: Time",
-  "column: Offset",
   "column: Before opacity",
   "column: After opacity",
   "column: Feather (frames)",
-  "column: Feather side",
-  "column: Feather curve",
-  "column: Slice face",
-  "column: Tilt X°",
-  "column: Tilt Y°",
 ]
 `;

@@ -2838,7 +2838,12 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
 
   // An expression's knobs are drawn under their input row (renderKnobRow), not with the sliders.
   // A Grid Rules card shows a few of its settings; its editor window has the rest.
-  const paramDefs = Object.fromEntries(Object.entries(def.paramDefs ?? {}).filter(([k]) => !isKnobParamKey(node, k) && (node.type !== 'gridRules' || GRID_CARD_KEYS.has(k))));
+  // A node with very many settings (Time Cube View, Frame Stack) opens on its Simple set; All shows the rest
+  // (display only: every setting stays a uniform and keeps its value). Per card, per session (foldState.ts).
+  const simpleKeys = def.simpleParams ? new Set(def.simpleParams) : null;
+  const showAllParams = !simpleKeys || !!foldedSections[`${node.id}:all`];
+  const allParamCount = Object.keys(def.paramDefs ?? {}).length;
+  const paramDefs = Object.fromEntries(Object.entries(def.paramDefs ?? {}).filter(([k]) => !isKnobParamKey(node, k) && (node.type !== 'gridRules' || GRID_CARD_KEYS.has(k)) && (showAllParams || simpleKeys!.has(k))));
   // Param keys consumed as the second half of a `ParamDef.pair` group (e.g. Remap's inMax/outMax):
   // rendered together with their pair's owner, so they're skipped when the loop reaches them directly.
   const pairSecondaryKeys = new Set(Object.values(paramDefs).map(pd => pd.pair?.with).filter((v): v is string => !!v));
@@ -3832,6 +3837,22 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
 
         {/* ── Params (hidden when collapsed) ── */}
         {!collapsed && node.type !== 'matConst' && Object.keys(paramDefs).length > 0 && Object.keys(node.inputs).length > 0 && sectionRule}
+        {/* ── Simple / All, for a node with very many settings ── */}
+        {!collapsed && simpleKeys && (
+          <div style={{ display: 'flex', gap: 4, padding: '6px 12px 2px 16px' }} onMouseDown={e => e.stopPropagation()} data-simple-toggle>
+            {([['simple', `Simple (${simpleKeys.size})`], ['all', `All (${allParamCount})`]] as const).map(([mode, text]) => {
+              const on = (mode === 'all') === showAllParams;
+              return (
+                <button key={mode} type="button" aria-pressed={on}
+                  onClick={() => { if (!on) toggleFold(`${node.id}:all`); }}
+                  title={mode === 'simple' ? 'The settings most graphs change' : 'Every setting, in its sections'}
+                  style={{ padding: '2px 8px', borderRadius: radius.sm, border: `1px solid ${on ? tk.border.default : 'transparent'}`, background: on ? tk.bg.field : 'none', color: on ? tk.text.primary : tk.text.muted, font: `500 11.5px ${fontFamily.ui}`, cursor: on ? 'default' : 'pointer' }}>
+                  {text}
+                </button>
+              );
+            })}
+          </div>
+        )}
         {/* ── Particles: one-click looks ── */}
         {!collapsed && node.type === 'gpuParticles' && <ParticlePresets node={node} />}
         {!collapsed && node.type !== 'matConst' && Object.entries(paramDefs).map(([key, paramDef]) => withSection(key, paramDef, () => withParamNote(key, (() => {

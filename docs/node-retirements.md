@@ -271,3 +271,10 @@ Look), GI Lit March Group (March · Advanced · Look · Quality), Mandelbrot / J
 SDF (Shape), Array (Layout · Place · Combine · Look) and Multi-Light (Sun · Background · Light colours) have card sections:
 the first open, the rest folded with their one-line summaries (`lib/sectionSummary.ts`). Folding is display only, so
 every setting stays a uniform and Play controls on them keep working.
+
+## Simple / All
+
+Time Cube View (104 settings) and Frame Stack (70) open on a **Simple** set: the 15 and 13 settings the examples
+change (`simpleParams` on the definition: slice, shape, glow, box and camera for Time Cube View; layout, cards, scan and
+camera for Frame Stack). **All** shows every section. Display only (per card, per session, like folded sections):
+every setting stays a uniform and keeps its value, so Play controls and graphs that set the others work as before.

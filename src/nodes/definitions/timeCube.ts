@@ -672,6 +672,7 @@ export const TimeCubeViewNode: NodeDefinition = {
   type: TIME_CUBE_VIEW_TYPE,
   label: 'Time Cube View',
   category: '3D Scene',
+  simpleParams: ['timeMode', 'before', 'after', 'timeFeather', 'roundness', 'feather', 'rimStrength', 'rimWidth', 'depth', 'quality', 'background', 'camDist', 'camAngle', 'camElevation', 'rotSpeed'],
   aliases: ['Video volume render', 'Space-time cube', 'Volume render', 'Time box', 'Video pill'],
   description: 'Draws a Time Cube as a soft, rounded box in 3D: earlier frames see-through, later ones solid, the frame at the slice crisp. Rim glow, side tint and shadow; highlighted frames that travel and loop as you scan; frames that lift, scale and fade as the slice passes. Has its own orbit camera, or takes a March Camera\'s rays to sit in a 3D scene.',
   brief: {

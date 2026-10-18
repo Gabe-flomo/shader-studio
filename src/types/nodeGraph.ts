@@ -351,6 +351,11 @@ export interface NodeDefinition {
   leadsFor?: string[];
   /** Select params whose option labels count in search (Shape SDF's `shape`: "heart" finds it). */
   searchOptions?: string[];
+  /**
+   * For a node with very many settings: the ones most graphs change. Its card opens showing only these (Simple),
+   * with an All toggle for the rest. Display only: every setting stays a uniform and keeps its value.
+   */
+  simpleParams?: string[];
 }
 
 // ── Helper: run migrations on a node's params ─────────────────────────────────
