@@ -303,7 +303,7 @@ export function TimeCubeBuilder() {
             stillCurrent: () => useTimeCubeBuilder.getState().spec === made,
           });
         }} />}
-      primary={{ label: 'Done', onClick: finishTimeCubeBuilder, title: 'Close and show the time cube on the graph (it is built as you go)' }}
+      primary={{ label: 'Done', onClick: finishTimeCubeBuilder, title: 'Put the time cube in the graph and show it (closing without Done leaves the graph as it was)' }}
       nav={<Nav />} navWidth={248}
       inspector={<Inspector />} inspectorWidth={380}
       presets={<Presets />} presetsSummary={<PresetsSummary kind="timecube" builtIns={stripOf(TC_PRESETS, TIMECUBE_STRIP_KEYS).map(t => t.label)} />}>

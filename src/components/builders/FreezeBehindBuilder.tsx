@@ -7,9 +7,14 @@
  * The usual Suspense freeze: while frozen the gate suspends on a promise that only settles when the builder closes,
  * so React keeps the subtree (its state and DOM, hidden with display: none) and doesn't render it; store updates
  * meanwhile are applied when it thaws. Layout effects inside are cleaned up while frozen and run again on thaw.
+ *
+ * Also frozen for the whole of a Scene builder session (builders/sceneDraft.ts): the graph in the store is the
+ * builder's draft then, so the cards behind the window keep showing your graph, and closing without Done never
+ * flashes the draft.
  */
 import { Suspense, useState, type ReactNode } from 'react';
 import { useBuilderFocus } from '../../builders/builderFocus';
+import { useSceneDraftActive } from '../../builders/sceneDraftFlag';
 
 /** The promise a frozen gate waits on: one per freeze, settled when it thaws. */
 class Wait {
@@ -36,12 +41,13 @@ function Gate({ frozen, children }: { frozen: boolean; children: ReactNode }) {
   return <>{children}</>;
 }
 
-/** `children`, frozen while a mirroring builder is open (or while `frozen`, for tests and callers that know better). */
+/** `children`, frozen while a mirroring builder or a Scene builder session is open (or while `frozen`, for tests and callers that know better). */
 export function FreezeBehindBuilder({ children, frozen }: { children: ReactNode; frozen?: boolean }) {
   const focus = useBuilderFocus();
+  const draft = useSceneDraftActive();
   return (
     <Suspense fallback={null}>
-      <Gate frozen={frozen ?? focus}>{children}</Gate>
+      <Gate frozen={frozen ?? (focus || draft)}>{children}</Gate>
     </Suspense>
   );
 }

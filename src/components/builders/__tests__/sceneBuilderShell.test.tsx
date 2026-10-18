@@ -15,6 +15,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import type { GraphNode } from '../../../types/nodeGraph';
 import { undoManager, useNodeGraphStore } from '../../../store/useNodeGraphStore';
 import { useBuilderWindows } from '../../../builders/windows';
+import { forgetSceneDraft } from '../../../builders/sceneDraft';
 import { useSceneBuilder } from '../../../sceneBuilder/store';
 import { useSceneBuilder2D } from '../../../sceneBuilder2d/store';
 import { useGridBuilder } from '../../../gridScene/store';
@@ -102,6 +103,7 @@ function buildOf(kind: SceneKind): string {
 }
 
 beforeEach(() => {
+  forgetSceneDraft();
   localStorage.clear();
   undoManager.clear('test');
   useNodeGraphStore.setState({ nodes: [], activeGroupPath: [], selectedNodeId: null, selectedNodeIds: [] });
@@ -339,22 +341,25 @@ describe('a graph a builder made: reopen it as it was built', () => {
 });
 
 describe('finding your way', () => {
-  it('"Scene builder" in a kind\'s header goes back to the kinds; what was built stays (keep by default)', () => {
+  it('"Scene builder" in a kind\'s header goes back to the kinds; a scene built before stays (keep by default)', () => {
     buildOf('3d');
-    useSceneBuilder.getState().openWith(templateSpec('twisted'));
+    const built = structuredClone(nodes());
+    act(() => { openBuilder('scenes'); });
+    act(() => { useSceneBuilder.getState().openWith(templateSpec('twisted')); useBuilderWindows.setState({ sceneShell: null }); });
     mount(<><SceneCrumb kind="3d" /><Shell /></>);
     expect($('[data-scene-crumb-kind]')?.textContent).toBe('3D scene');
     click($('[data-scene-crumb-back]'));
     expect(useSceneBuilder.getState().open).toBe(false);
-    expect(useBuilderWindows.getState().sceneShell).toEqual({ page: 'kinds', keep: true });
+    expect(useBuilderWindows.getState().sceneShell).toEqual({ page: 'kinds' });
+    expect(nodes()).toEqual(built);
     expect($('[data-scene-clear]')?.getAttribute('data-scene-clear')).toBe('keep');
   });
   it('back from a kind on a graph no builder made clears by default again', () => {
     useNodeGraphStore.setState({ nodes: handGraph() });
     useBuilderWindows.setState({ agentBuilder: { groupId: null, fromShell: true } });
-    act(() => backToSceneKinds());
+    act(() => { void backToSceneKinds(); });
     expect(useBuilderWindows.getState().agentBuilder).toBeNull();
-    expect(useBuilderWindows.getState().sceneShell).toEqual({ page: 'kinds', keep: false });
+    expect(useBuilderWindows.getState().sceneShell).toEqual({ page: 'kinds' });
   });
 });
 

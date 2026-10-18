@@ -878,7 +878,7 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
         <IconButton icon="expr" label="Every rule as When … Do … lines (Advanced rules)" size="sm" active={shown === 'advanced' && advView === 'all'} onClick={() => { select('advanced'); setAdvView('all'); }} data-open-rules />
         <IconButton icon="fn" label="Open as nodes" size="sm" onClick={() => { flush(); onClose(); openGroupAsNodes(groupId); }} />
       </>}
-      primary={{ label: madeHere ? 'Add to graph' : 'Done', onClick: close, title: madeHere ? 'Keep it (it is already live in your graph, wired to the Output)' : undefined }}
+      primary={{ label: madeHere ? 'Add to graph' : 'Done', onClick: close, title: madeHere ? 'Put it in the graph, wired to the Output (closing without this leaves the graph as it was)' : undefined }}
       nav={nav} phoneNav={{ label: 'Walkers', icon: 'swarm' }} inspector={inspector} presets={presetStrip}
       presetsSummary={<PresetsSummary kind="agents" builtIns={presets.map(p => p.label)} />}>
       <LiveViewport overlay={overlay} />

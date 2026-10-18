@@ -28,6 +28,7 @@ import { fromBase64, toBase64 } from '../playfile/bytes';
 import { PLAYFILE_MIME } from '../playfile/format';
 import { copyCrashReport, latestCrashReport, primeCrashEnv, revealCrashReport, saveCrashReport, showCrashReport, useCrashReports } from './crashReports';
 import { lastCapturedError, onContextLoss, persistNow } from '../lib/crashLog';
+import { sceneDraftActive } from '../builders/sceneDraftFlag';
 
 const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
@@ -369,6 +370,8 @@ function trackUntitledEdits(): void {
   untitledEdited = false;
   useNodeGraphStore.subscribe((s, prev) => {
     if (s.graphEpoch !== prev.graphEpoch) { untitledEdited = false; return; }
+    // A Scene builder's draft isn't an edit until Done (builders/sceneDraft.ts).
+    if (sceneDraftActive()) return;
     if (s.nodes !== prev.nodes || s.looseGroups !== prev.looseGroups || s.play !== prev.play || s.datasets !== prev.datasets) untitledEdited = true;
   });
 }
@@ -450,7 +453,8 @@ export async function startRecovery(): Promise<void> {
   let lastProject = JSON.stringify(projectNow());
   backend.note({ project: projectNow() });
   useNodeGraphStore.subscribe((s, prev) => {
-    if (s.nodes !== prev.nodes || s.looseGroups !== prev.looseGroups || s.play !== prev.play || s.datasets !== prev.datasets) scheduler?.changed();
+    // A Scene builder's draft is never written to the recovery snapshots (builders/sceneDraft.ts): only what Done keeps.
+    if (!sceneDraftActive() && (s.nodes !== prev.nodes || s.looseGroups !== prev.looseGroups || s.play !== prev.play || s.datasets !== prev.datasets)) scheduler?.changed();
     if (s.currentGraph === prev.currentGraph && s.graphDirty === prev.graphDirty) return;
     const p = projectNow();
     const key = JSON.stringify(p);

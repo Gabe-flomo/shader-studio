@@ -1269,8 +1269,8 @@ export function SceneBuilder2DModal() {
   const done = () => void doneBuilding(scene2dBuilder);
   const build = () => void buildStaying(scene2dBuilder);
   const closeAsking = () => void closeBuilding(scene2dBuilder);
-  const doneTitle = editing ? 'Rebuild the scene with your edits, then close and show it on the graph' : 'Build the scene into the graph, then close and show it';
-  const buildTitle = editing ? 'Rebuild the scene it was built as, and keep the builder open' : 'Add the graph to the canvas and show it on the Output, and keep the builder open';
+  const doneTitle = editing ? 'Put your edits in the graph (one undo step), then close and show the scene' : 'Put the scene in the graph (one undo step), then close and show it';
+  const buildTitle = 'Apply your edits to the scene and keep the builder open (Quick controls become Play controls). It goes in the graph when you press Done.';
   const body = { space: <SpaceTab />, shapes: <ShapesTab />, combine: <CombineTab />, modify: <ModifyTab />, depth: <DepthTab />, look: <LookTab />, effects: <EffectsTab />, output: <OutputTab />, recipe: <RecipeTab />, templates: <TemplatesTab /> }[tab];
   void num;
   // A phone: the shared phone layout (StudioShell → PhoneStudio): the picture on top, the sections
@@ -1282,7 +1282,7 @@ export function SceneBuilder2DModal() {
         <IconButton icon="undo" size="sm" label="Undo" disabled={!canUndo} onClick={undo} />
         <IconButton icon="redo" size="sm" label="Redo" disabled={!canRedo} onClick={redo} />
         {/* Icon-only on a phone, so the bar keeps one row and the title isn't cut. */}
-        <IconButton icon="rebuild" size="sm" label={editing ? 'Rebuild' : 'Build'} data-scene2d-build disabled={!shapes && !gridSize} onClick={build} />
+        <IconButton icon="rebuild" size="sm" label="Apply (Done puts it in the graph)" data-scene2d-build disabled={!shapes && !gridSize} onClick={build} />
       </>}
       primary={{ label: 'Done', onClick: done, title: doneTitle }}
       nav={<>{TABS.filter(t => t.id !== 'templates').map(t => <StudioNavItem key={t.id} id={t.id} icon={t.icon} label={t.label} selected={tab === t.id} onClick={() => setTab(t.id)} />)}</>}
@@ -1312,10 +1312,10 @@ export function SceneBuilder2DModal() {
       </>}
       footer={<>
         {editing && <Button icon="copy" onClick={() => void buildStaying({ label: '2D scene', build: () => buildFromBuilder2D(true) })} title="Leave the built scene as it is and build this one beside it">Build as a new copy</Button>}
-        <BuilderNote>{editing ? 'Rebuild replaces the scene it was built as (keeping settings you changed on its nodes) and stays open. Done rebuilds and closes.' : 'Build adds the graph to the canvas and stays open. Done builds and closes.'}</BuilderNote>
+        <BuilderNote>Nothing goes in the graph until Done. Apply keeps the builder open; closing without Done leaves the graph as it was.</BuilderNote>
         <span style={{ flex: 1 }} />
         {(dirty || !editing) && (shapes > 0 || !!gridSize) && <BuilderNote data-scene2d-unbuilt style={{ color: tk.text.faint }}>{editing ? 'Changed · Done rebuilds it' : 'Not built yet · Done builds it'}</BuilderNote>}
-        <Button icon="rebuild" data-scene2d-build disabled={!shapes && !gridSize} onClick={build} title={buildTitle}>{editing ? 'Rebuild' : 'Build'}</Button>
+        <Button icon="rebuild" data-scene2d-build disabled={!shapes && !gridSize} onClick={build} title={buildTitle}>Apply</Button>
         <Button variant="primary" icon="check" data-scene2d-done onClick={done} title={doneTitle}>Done</Button>
       </>}
     >

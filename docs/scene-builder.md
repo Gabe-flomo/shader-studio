@@ -56,11 +56,29 @@ Builder**. These keep their own behaviour (Grid Rules adds its node beside the s
 Agent Builder's own start page asks about clearing the graph the same way, with the same default.
 "Open the scene builder" in the Do… bar opens the kind page (it used to open the 3D builder).
 
+## Nothing is added until Done
+
+A Scene builder visit is one session (builders/sceneDraft.ts). Every kind works on a draft: the Splat,
+Time Cube and Agent builders write into it as you edit (their picture is the main preview), the 2D,
+3D and Grid builders when you press **Apply** (their own preview is live anyway). The graph canvas
+behind the window doesn't change while it is open, and nothing saves or autosaves the draft.
+
+- **Done** puts the scene in the graph as one undo step ("Scene builder: 3D scene"). Opened on a scene
+  that was already built (Edit this one, Open in Scene Builder, Edit in … builder), Done replaces it in
+  place; a new scene is added (replacing the graph when the kind page's Clear was chosen).
+- **×**, **Esc**, back to the kind page, or picking another kind instead leave the graph and the undo
+  history exactly as they were. With changes made in the window, × and back first ask **Discard this
+  scene?** (Discard / Keep editing).
+- **Start over** on "A builder made this" takes the scene away only when the new one's Done comes;
+  closing without Done keeps it.
+
+So there is only ever the one scene from a visit: 2D, back, 3D, Done gives just the 3D scene.
+
 ## Finding your way
 
 Every kind's header starts with **Scene builder › 2D scene** (› the group's name in the Agent
-Builder). **Scene builder** goes back to the kind page; what you built stays in the graph, and the
-page then keeps the graph by default. The kind's sections are its tabs (2D: Space, Shapes, Grid,
+Builder). **Scene builder** goes back to the kind page and drops the scene you were making (asking
+first when you changed something), so the graph is as it was before the Scene builder opened. The kind's sections are its tabs (2D: Space, Shapes, Grid,
 Look, Output, Recipe, Templates) or, in the 3D Scene Builder, the Splat builder, Grid Rules and the
 Agent Builder, the left nav of the studio shell. The Agent Builder's start page also has **‹** for the kind page. The
 kind page and every kind's window are the same size (1440 × 900), so picking a kind doesn't jump.

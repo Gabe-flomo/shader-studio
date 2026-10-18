@@ -14,6 +14,7 @@
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
 import { toast } from '../components/ui/toastStore';
 import { askChoice } from '../components/ui/dialogStore';
+import { commitSceneDraft, sceneDraftDiscarding } from './sceneDraft';
 
 /** How long the window takes to go before the canvas is measured and framed. */
 const FRAME_DELAY_MS = 80;
@@ -43,9 +44,13 @@ export function fitGraphSoon(delay = FRAME_DELAY_MS): void {
   setTimeout(() => useNodeGraphStore.getState()._fitViewCallback?.(undefined, { maxZoom: 1 }), delay);
 }
 
-/** A builder's Done: close it (`close`), then frame what it made (`ids`). */
+/**
+ * A builder's Done: close it (`close`), then frame what it made (`ids`). In a Scene builder session this is what puts
+ * the scene in the graph, as one undo step (builders/sceneDraft.ts).
+ */
 export function finishBuilder(close: () => void, ids: ReadonlyArray<string | null | undefined> = []): void {
   close();
+  commitSceneDraft();
   frameNodes(ids);
 }
 
@@ -97,6 +102,8 @@ export async function buildStaying(b: Pick<BuildingBuilder, 'label' | 'build'>):
  * just close. True when the window closed.
  */
 export async function closeBuilding(b: BuildingBuilder): Promise<boolean> {
+  // The Scene builder already asked "Discard this scene?" (sceneDraft.ts closeSceneWindow): close, and forget the kept draft.
+  if (sceneDraftDiscarding()) { b.close(); b.discard?.(); return true; }
   if (!b.unbuiltEdits()) { b.close(); return true; }
   const choice = await askChoice(`Build your changes to the ${b.label}?`, [
     { id: 'keep', label: 'Keep editing', variant: 'ghost' },

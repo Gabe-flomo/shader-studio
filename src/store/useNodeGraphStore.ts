@@ -219,6 +219,7 @@ import { audioEngine } from '../lib/audioEngine';
 import { videoEngine } from '../lib/videoEngine';
 import { IdGenerator } from './managers/IdGenerator';
 import { UndoManager } from './managers/UndoManager';
+import { sceneDraftActive } from '../builders/sceneDraftFlag';
 import { nodeName, nodesPhrase } from './historyLabels';
 import { applySwitchToList, groupRuleFor, planSwitch, retargetPlay, type SwitchContext } from '../nodes/switchNode';
 import { describePlayChange } from './playHistory';
@@ -6012,8 +6013,10 @@ useNodeGraphStore.subscribe((s, prev) => {
   if (now !== before) s.compile();
 });
 
-// Any change to the graph or its Play setup after it was opened or saved marks it unsaved.
+// Any change to the graph or its Play setup after it was opened or saved marks it unsaved. (Not a Scene builder's
+// draft: builders/sceneDraft.ts puts the mark back when the draft goes, and Done's write marks it.)
 useNodeGraphStore.subscribe((s, prev) => {
+  if (sceneDraftActive()) return;
   if (!s.currentGraph || s.graphDirty || s.currentGraph !== prev.currentGraph) return;
   if (s.nodes !== prev.nodes || s.looseGroups !== prev.looseGroups || s.play !== prev.play || s.datasets !== prev.datasets) useNodeGraphStore.setState({ graphDirty: true });
 });

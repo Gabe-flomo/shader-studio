@@ -33,6 +33,7 @@ import { clampLines, tileName } from '../../ui/textFit';
 import { usePhoneDialog } from '../../ui/phoneDialog';
 import { SidePanel, useNarrowWindow } from '../../code/SidePanels';
 import { BUILDER_RECIPE_EVENT } from '../../../builders/windows';
+import { closeSceneWindow } from '../../../builders/sceneDraft';
 import { PhoneStudio, type PhonePanel, type PhoneSection } from './PhoneStudio';
 
 // ── The phone's section tabs: the nav's items, registered rather than drawn ──
@@ -82,6 +83,7 @@ export interface StudioShellProps {
   kind?: ReactNode;
   /** A small line over the title: where this is ("Scene builder › Agent scene", components/builders/SceneCrumb.tsx). */
   crumb?: ReactNode;
+  /** × and Esc. In a Scene builder session they go through sceneDraft.ts closeSceneWindow first (Discard this scene?). */
   onClose: () => void;
   /** Esc first asks this (a focus view leaves on Esc): true means it was handled and the builder stays open. */
   onEscape?: () => boolean;
@@ -153,7 +155,7 @@ export function StudioShell(p: StudioShellProps) {
         if (dialogs[dialogs.length - 1] !== panelRef.current || (e.target as HTMLElement | null)?.closest?.('[data-captures-escape]')) return;
         e.stopPropagation();
         if (onEscapeRef.current?.()) return;
-        onCloseRef.current();
+        void closeSceneWindow(() => onCloseRef.current());
         return;
       }
       if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey || (e.key !== '[' && e.key !== ']')) return;
@@ -213,7 +215,8 @@ export function StudioShell(p: StudioShellProps) {
       </span>
       {/* On a phone the actions above scroll sideways when they don't fit; Done stays in view beside them. */}
       {phone && primary && <span style={{ flexShrink: 0, display: 'flex' }}>{primary}</span>}
-      <IconButton icon="close" label="Close" shortcut="esc" onClick={p.onClose} />
+      {/* In a Scene builder session × drops the draft (asking first when there are changes): builders/sceneDraft.ts. */}
+      <IconButton icon="close" label="Close" shortcut="esc" onClick={() => void closeSceneWindow(() => onCloseRef.current())} data-studio-close />
     </div>
   );
 

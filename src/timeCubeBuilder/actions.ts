@@ -14,6 +14,7 @@ import type { GraphNode } from '../types/nodeGraph';
 import { undoManager, useNodeGraphStore } from '../store/useNodeGraphStore';
 import { intoView } from '../components/NodeGraph/spawnPoint';
 import { finishBuilder } from '../builders/finish';
+import { beginSceneDraft, markSceneDraft } from '../builders/sceneDraft';
 import { paramDiff } from '../splatBuilder/apply';
 import { writeParams } from '../splatBuilder/actions';
 import { useTimeCubeBuilder } from './store';
@@ -28,14 +29,18 @@ const startSession = () => { session = { base: useNodeGraphStore.getState().node
 
 /** Open the builder on a new scene (the Box of time preset), built into the graph at once. */
 export function openNewTimeCube(at?: { x: number; y: number }, spec: TimeCubeSpec = presetSpec('box')): string | null {
+  // A Scene builder session (builders/sceneDraft.ts): the build below is a draft until Done.
+  beginSceneDraft();
   useTimeCubeBuilder.getState().openWith(spec, { at: at ?? null });
   const id = syncTimeCubeBuilder({ first: true });
+  markSceneDraft();
   startSession();
   return id;
 }
 
 /** Open the builder on the build `nodeId` belongs to, as it is now. False when it isn't one. */
 export function editTimeCubeInBuilder(nodeId: string, section?: TcSection): boolean {
+  beginSceneDraft();
   const st = useNodeGraphStore.getState();
   if (st.activeGroupPath.length) st.exitToRoot();
   const nodes = useNodeGraphStore.getState().nodes;

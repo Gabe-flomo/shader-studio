@@ -1,17 +1,17 @@
 // @vitest-environment jsdom
 /**
- * Switching kind in the Scene builder: a kind picked, back to "What kind of scene?", another kind
- * picked. Only the kind you ended on is in the graph once it is built (the user's report: a Splat
- * scene, back, a Grid scene, Build → the splat was still there). The graph from before the builder
- * opened is left as it was, closing the kind page instead keeps the abandoned scene, editing a
- * scene that was already built never drops it, and undo steps back one thing at a time.
+ * The Scene builder works on a draft (builders/sceneDraft.ts): a scene is only added to the graph when you press Done.
+ * The user's report: a 2D scene, back without saving, a 3D scene, Done → both were in the graph. Now, for every kind:
+ * picking it, editing, Apply, back to the kinds, closing with × or Esc leave the graph exactly as it was (deep-equal)
+ * with no new undo steps; Done adds exactly one scene as one undo step; editing a built scene and Done replaces it in
+ * place; the "Discard this scene?" confirm only comes up when something changed.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import type { GraphNode } from '../../../types/nodeGraph';
 import { undoManager, useNodeGraphStore } from '../../../store/useNodeGraphStore';
-import { openAgentBuilder, useBuilderWindows } from '../../../builders/windows';
+import { closeAgentBuilder, closeGridRulesEditor, useBuilderWindows } from '../../../builders/windows';
 import { useSceneBuilder } from '../../../sceneBuilder/store';
 import { useSceneBuilder2D } from '../../../sceneBuilder2d/store';
 import { useGridBuilder } from '../../../gridScene/store';
@@ -20,12 +20,20 @@ import { useTimeCubeBuilder } from '../../../timeCubeBuilder/store';
 import { useWarpBuilder } from '../../../warpBuilder/store';
 import { templateSpec } from '../../../sceneBuilder/templates';
 import { buildFromBuilder } from '../../../sceneBuilder/actions';
-import { buildFromBuilder2D } from '../../../sceneBuilder2d/actions';
-import { buildFromGridBuilder } from '../../../gridScene/actions';
+import { buildFromBuilder2D, scene2dBuilder } from '../../../sceneBuilder2d/actions';
+import { buildFromGridBuilder, finishGridBuilder } from '../../../gridScene/actions';
+import { finishSplatBuilder, syncSplatBuilder } from '../../../splatBuilder/actions';
+import { finishTimeCubeBuilder, syncTimeCubeBuilder } from '../../../timeCubeBuilder/actions';
+import { finishWarpBuilder } from '../../../warpBuilder/actions';
 import { makeAgentGroup } from '../../../agentBuilder/actions';
 import { START_CARDS } from '../../../agentBuilder/kinds';
+import { openAgentBuilder } from '../../../builders/windows';
+import { doneBuilding, finishBuilder } from '../../../builders/finish';
 import { openBuilder, editBuiltScene } from '../../../builders/open';
 import { backToSceneKinds, builtScenes, closeSceneKinds, SCENE_KINDS, type SceneKind } from '../../../builders/sceneKinds';
+import { closeSceneWindow, forgetSceneDraft, sceneDraftOpen } from '../../../builders/sceneDraft';
+import { useDialogStore } from '../../ui/dialogStore';
+import { scene3dBuilder } from '../../sceneBuilder/SceneBuilderModal';
 import { SceneBuilderShell } from '../SceneBuilderShell';
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -46,6 +54,9 @@ const click = (el: Element | null) => { expect(el).toBeTruthy(); act(() => { (el
 const nodes = () => useNodeGraphStore.getState().nodes;
 const undo = () => act(() => { useNodeGraphStore.getState().undo(); });
 const kindsBuilt = () => builtScenes(nodes()).map(b => b.kind).sort();
+const undoIds = () => ({ done: undoManager.done().map(e => e.id), undone: undoManager.undone().map(e => e.id) });
+/** Let the window watch's microtask run. */
+const settle = () => act(async () => { await Promise.resolve(); await Promise.resolve(); });
 
 function Shell() {
   const page = useBuilderWindows(s => s.sceneShell);
@@ -58,22 +69,51 @@ const handGraph = (): GraphNode[] => [
   { id: 'out', type: 'output', position: { x: 600, y: 0 }, inputs: { color: { type: 'vec4', label: 'Color', connection: { nodeId: 'uv', outputKey: 'uv' } } } as GraphNode['inputs'], outputs: {}, params: {} },
 ];
 
-/** What "Build" (or picking a card) is in each kind's window; Splat, Time Cube and Grid simulation build on opening. */
-async function materialize(kind: SceneKind): Promise<void> {
-  if (kind === '2d') act(() => { buildFromBuilder2D(); });
+/** An edit in each kind's window, then its Apply (the builders that write as you edit write here). */
+async function editAndApply(kind: SceneKind, seed = 3): Promise<void> {
+  if (kind === '2d') act(() => { useSceneBuilder2D.getState().surprise(seed); buildFromBuilder2D(); });
   else if (kind === '3d') {
-    act(() => useSceneBuilder.setState({ spec: templateSpec('twisted') }));
+    act(() => useSceneBuilder.getState().replace(templateSpec('twisted')));
+    if (seed !== 3) act(() => useSceneBuilder.getState().edit(sp => { sp.camera = { ...sp.camera, dist: sp.camera.dist + seed }; }));
     await act(async () => { await buildFromBuilder(); });
-  } else if (kind === 'grid') act(() => { buildFromGridBuilder(false, { quiet: true }); });
-  else if (kind === 'agents') act(() => { const g = makeAgentGroup(START_CARDS[0], '2d'); openAgentBuilder(g!.groupId); });
+  } else if (kind === 'grid') act(() => { useGridBuilder.getState().surprise(seed); buildFromGridBuilder(false, { quiet: true }); });
+  else if (kind === 'splat') act(() => { useSplatBuilder.getState().surprise(seed); syncSplatBuilder(); });
+  else if (kind === 'timecube') act(() => { useTimeCubeBuilder.getState().surprise(seed); syncTimeCubeBuilder(); });
+  else if (kind === 'warp') act(() => { useWarpBuilder.getState().surprise(seed); });
+  else if (kind === 'agents') act(() => { const g = makeAgentGroup(START_CARDS[0], '2d'); openAgentBuilder(g!.groupId, { fromShell: true }); });
+  else if (kind === 'simulation') {
+    const id = useBuilderWindows.getState().gridRules!;
+    act(() => useNodeGraphStore.getState().updateNodeParams(id, { label: 'My rules' }));
+  }
 }
-/** Kinds that leave a scene in the graph without Done (Warp only builds on Done). */
-const makesNodes = (k: SceneKind) => k !== 'warp';
+
+/** Each kind's Done. */
+async function done(kind: SceneKind): Promise<void> {
+  if (kind === '2d') await act(async () => { await doneBuilding(scene2dBuilder); });
+  else if (kind === '3d') await act(async () => { await doneBuilding(scene3dBuilder); });
+  else if (kind === 'grid') await act(async () => { await finishGridBuilder(); });
+  else if (kind === 'splat') act(() => finishSplatBuilder());
+  else if (kind === 'timecube') act(() => finishTimeCubeBuilder());
+  else if (kind === 'warp') act(() => finishWarpBuilder());
+  else if (kind === 'agents') act(() => finishBuilder(closeAgentBuilder));
+  else act(() => finishBuilder(closeGridRulesEditor));
+}
+
+/** What Done leaves in the graph for each kind (the Warp builder builds a small 2D scene). */
+const madeKind = (k: SceneKind): SceneKind => (k === 'warp' ? '2d' : k);
+
+/** Answer the open "Discard this scene?" (failing when there is none). */
+async function answer(id: 'discard' | 'keep'): Promise<void> {
+  const cur = useDialogStore.getState().current;
+  expect(cur?.kind).toBe('choice');
+  expect((cur as { title: string }).title).toBe('Discard this scene?');
+  await act(async () => { (cur as { resolve: (v: string) => void }).resolve(id); useDialogStore.setState({ current: null }); await Promise.resolve(); });
+}
 
 beforeEach(() => {
   localStorage.clear();
-  undoManager.clear('test');
-  useNodeGraphStore.setState({ nodes: handGraph(), activeGroupPath: [], selectedNodeId: null, selectedNodeIds: [] });
+  forgetSceneDraft();
+  useDialogStore.setState({ current: null });
   useBuilderWindows.setState({ gridRules: null, agentRules: null, agentBuilder: null, recipe: null, sceneShell: null });
   useSceneBuilder.setState({ open: false, targetSceneId: null });
   useSceneBuilder2D.setState({ open: false, targetSceneId: null });
@@ -81,85 +121,229 @@ beforeEach(() => {
   useSplatBuilder.setState({ open: false, targetId: null });
   useTimeCubeBuilder.setState({ open: false, targetId: null });
   useWarpBuilder.setState({ open: false });
+  forgetSceneDraft();
+  useNodeGraphStore.setState({ nodes: handGraph(), activeGroupPath: [], selectedNodeId: null, selectedNodeIds: [] });
+  undoManager.clear('test');
+  // One step of the user's own, so "the undo stack is unchanged" means something.
+  undoManager.push(handGraph(), { label: 'Earlier edit' });
 });
-afterEach(() => { act(() => { closeSceneKinds(); useBuilderWindows.setState({ sceneShell: null }); }); });
+afterEach(() => { act(() => { closeSceneKinds(); useBuilderWindows.setState({ sceneShell: null }); }); forgetSceneDraft(); });
 
-describe('switching kind on the kind page', () => {
-  it('Splat scene → back → Grid scene → Build: only the grid is in the graph', async () => {
+const kinds = SCENE_KINDS.map(k => k.id);
+
+describe('nothing is in the graph until Done', () => {
+  it.each(kinds)('%s: pick, edit, Apply, back, pick again, ×: the graph and the undo stack are as they were', async kind => {
+    const before = structuredClone(nodes());
+    const steps = undoIds();
     act(() => openBuilder('scenes'));
     mount(<Shell />);
-    click($('[data-scene-kind="splat"]'));
-    expect(kindsBuilt()).toEqual(['splat']);
-    act(() => backToSceneKinds());
-    expect($('[data-scene-replaces="splat"]')).toBeTruthy();
-    // The clear/keep question is about the graph without the splat: the hand-made UV only.
-    expect($('[data-scene-clear]')?.textContent).toContain('1 node');
-    click($('[data-scene-kind="grid"]'));
-    await materialize('grid');
-    expect(kindsBuilt()).toEqual(['grid']);
-    expect(nodes().some(n => n.type === 'splatScene')).toBe(false);
-    // The graph from before is still there, as it was.
-    expect(nodes().find(n => n.id === 'uv')).toEqual(handGraph()[0]);
-    // Undo: the grid build, then the dropped splat comes back.
-    act(() => closeSceneKinds());
-    undo();
-    expect(nodes()).toEqual(handGraph());
-    undo();
-    expect(kindsBuilt()).toEqual(['splat']);
-  });
+    click($(`[data-scene-kind="${kind}"]`));
+    await editAndApply(kind);
+    // Back: there were changes, so it asks first.
+    let back: Promise<boolean> | null = null;
+    act(() => { back = backToSceneKinds(); });
+    await answer('discard');
+    expect(await back).toBe(true);
+    await settle();
+    expect(nodes()).toEqual(before);
+    expect(undoIds()).toEqual(steps);
+    expect($('[data-scene-kinds]')).toBeTruthy();
+    expect(sceneDraftOpen()).toBe(true);
+    // The same kind again, then × with changes: Discard.
+    click($(`[data-scene-kind="${kind}"]`));
+    await editAndApply(kind);
+    let closed: Promise<boolean> | null = null;
+    act(() => { closed = closeSceneWindow(closeSceneKinds); });
+    await answer('discard');
+    expect(await closed).toBe(true);
+    await settle();
+    expect(nodes()).toEqual(before);
+    expect(undoIds()).toEqual(steps);
+    expect(sceneDraftOpen()).toBe(false);
+  }, 20_000);
 
-  const kinds = SCENE_KINDS.map(k => k.id);
+  it.each(kinds)('%s: Done adds exactly one scene, as one undo step', async kind => {
+    const before = structuredClone(nodes());
+    const steps = undoIds();
+    act(() => openBuilder('scenes'));
+    mount(<Shell />);
+    click($(`[data-scene-kind="${kind}"]`));
+    await editAndApply(kind);
+    await done(kind);
+    await settle();
+    expect(kindsBuilt()).toEqual([madeKind(kind)]);
+    expect(undoIds().done).toEqual([...steps.done, undoManager.top()!.id]);
+    expect(undoManager.top()!.label).toMatch(/^Scene builder: /);
+    // The graph from before is still there.
+    expect(nodes().find(n => n.id === 'uv')).toEqual(before[0]);
+    undo();
+    expect(nodes()).toEqual(before);
+    expect(sceneDraftOpen()).toBe(false);
+  }, 20_000);
+
   const pairs = kinds.flatMap(a => kinds.filter(b => b !== a).map(b => [a, b] as [SceneKind, SceneKind]));
-  it.each(pairs)('%s → back → %s: only the second kind is built; the first graph is untouched', async (a, b) => {
+  it.each(pairs)('%s → back → %s → Done: only the second kind is in the graph, one undo step', async (a, b) => {
+    const before = structuredClone(nodes());
+    const steps = undoIds();
     act(() => openBuilder('scenes'));
     mount(<Shell />);
     click($(`[data-scene-kind="${a}"]`));
-    await materialize(a);
-    if (makesNodes(a)) expect(kindsBuilt()).toEqual([a]);
-    act(() => backToSceneKinds());
+    await editAndApply(a);
+    let back: Promise<boolean> | null = null;
+    act(() => { back = backToSceneKinds(); });
+    await answer('discard');
+    await back;
     click($(`[data-scene-kind="${b}"]`));
-    await materialize(b);
-    expect(kindsBuilt()).toEqual(makesNodes(b) ? [b] : []);
-    expect(nodes().find(n => n.id === 'uv')).toEqual(handGraph()[0]);
-    // One build = one undo step: back to the graph from before, the first kind gone.
-    act(() => closeSceneKinds());
-    if (makesNodes(b)) { undo(); expect(nodes()).toEqual(handGraph()); }
+    await editAndApply(b);
+    await done(b);
+    await settle();
+    expect(kindsBuilt()).toEqual([madeKind(b)]);
+    expect(undoIds().done.length).toBe(steps.done.length + 1);
+    undo();
+    expect(nodes()).toEqual(before);
   }, 20_000);
+});
 
-  it('closing the kind page instead keeps the scene', () => {
+describe("the user's flow", () => {
+  it('2D, edit, back, 3D, Done: only the 3D scene', async () => {
+    act(() => openBuilder('scenes'));
+    mount(<Shell />);
+    click($('[data-scene-kind="2d"]'));
+    await editAndApply('2d');
+    expect(kindsBuilt()).toEqual(['2d']);  // the draft has it…
+    let back: Promise<boolean> | null = null;
+    act(() => { back = backToSceneKinds(); });
+    await answer('discard');
+    await back;
+    expect(kindsBuilt()).toEqual([]);      // …and back drops it
+    click($('[data-scene-kind="3d"]'));
+    await editAndApply('3d');
+    await done('3d');
+    expect(kindsBuilt()).toEqual(['3d']);
+  });
+
+  it('2D, edit, close without Done: the graph is unchanged', async () => {
+    const before = structuredClone(nodes());
+    act(() => openBuilder('scenes'));
+    mount(<Shell />);
+    click($('[data-scene-kind="2d"]'));
+    act(() => { useSceneBuilder2D.getState().surprise(5); });
+    let closed: Promise<boolean> | null = null;
+    act(() => { closed = closeSceneWindow(closeSceneKinds); });
+    await answer('discard');
+    await closed;
+    await settle();
+    expect(nodes()).toEqual(before);
+    expect(useSceneBuilder2D.getState().open).toBe(false);
+  });
+});
+
+describe('the discard confirm', () => {
+  it('only asks when something changed; Keep editing keeps the window and the draft', async () => {
+    const before = structuredClone(nodes());
+    act(() => openBuilder('scenes'));
+    mount(<Shell />);
+    click($('[data-scene-kind="splat"]'));   // built as it opens: not a change of yours
+    let closed: Promise<boolean> | null = null;
+    act(() => { closed = closeSceneWindow(closeSceneKinds); });
+    expect(useDialogStore.getState().current).toBeNull();
+    expect(await closed).toBe(true);
+    await settle();
+    expect(nodes()).toEqual(before);
+
+    act(() => openBuilder('scenes'));
+    click($('[data-scene-kind="2d"]'));
+    // Back with no changes: no question.
+    let back: Promise<boolean> | null = null;
+    act(() => { back = backToSceneKinds(); });
+    expect(useDialogStore.getState().current).toBeNull();
+    expect(await back).toBe(true);
+    click($('[data-scene-kind="2d"]'));
+    await editAndApply('2d');
+    act(() => { closed = closeSceneWindow(closeSceneKinds); });
+    await answer('keep');
+    expect(await closed).toBe(false);
+    expect(useSceneBuilder2D.getState().open).toBe(true);
+    expect(kindsBuilt()).toEqual(['2d']);
+    await done('2d');
+    expect(kindsBuilt()).toEqual(['2d']);
+  });
+
+  it('the kind page × closes without asking and leaves the graph as it was', async () => {
+    const before = structuredClone(nodes());
+    const steps = undoIds();
+    act(() => openBuilder('scenes'));
+    mount(<Shell />);
+    click($('[data-studio-close]'));
+    await settle();
+    expect(useDialogStore.getState().current).toBeNull();
+    expect(useBuilderWindows.getState().sceneShell).toBeNull();
+    expect(nodes()).toEqual(before);
+    expect(undoIds()).toEqual(steps);
+    expect(sceneDraftOpen()).toBe(false);
+  });
+});
+
+describe('editing a built scene', () => {
+  it.each(['2d', '3d', 'grid', 'splat', 'timecube'] as SceneKind[])('%s: Edit this one, change, Done: replaced in place, one undo step; × instead: as it was', async kind => {
+    act(() => openBuilder('scenes'));
+    mount(<Shell />);
+    click($(`[data-scene-kind="${kind}"]`));
+    await editAndApply(kind);
+    await done(kind);
+    const built = builtScenes(nodes());
+    expect(built.map(b => b.kind)).toEqual([kind]);
+    const withScene = structuredClone(nodes());
+    const steps = undoIds();
+
+    // × without Done: as it was.
+    act(() => { editBuiltScene(built[0]); });
+    await editAndApply(kind, 7);
+    let closed: Promise<boolean> | null = null;
+    act(() => { closed = closeSceneWindow(closeSceneKinds); });
+    await answer('discard');
+    await closed;
+    await settle();
+    expect(nodes()).toEqual(withScene);
+    expect(undoIds()).toEqual(steps);
+
+    // Done: the same scene (same id), changed, one step.
+    act(() => { editBuiltScene(built[0]); });
+    if (kind === '2d') act(() => { useSceneBuilder2D.getState().surprise(11); });
+    else if (kind === '3d') act(() => useSceneBuilder.getState().edit(sp => { sp.camera = { ...sp.camera, dist: sp.camera.dist + 1 }; }));
+    else if (kind === 'grid') act(() => { useGridBuilder.getState().surprise(11); });
+    else if (kind === 'splat') act(() => { useSplatBuilder.getState().surprise(11); syncSplatBuilder(); });
+    else act(() => { useTimeCubeBuilder.getState().surprise(11); syncTimeCubeBuilder(); });
+    await done(kind);
+    const after = builtScenes(nodes());
+    expect(after.map(b => b.kind)).toEqual([kind]);
+    expect(after[0].id).toBe(built[0].id);
+    expect(undoIds().done.length).toBe(steps.done.length + 1);
+    undo();
+    expect(nodes()).toEqual(withScene);
+  }, 20_000);
+});
+
+describe('Start over', () => {
+  it('back from the next kind keeps the scene gone; closing without Done brings it back', async () => {
     act(() => openBuilder('scenes'));
     mount(<Shell />);
     click($('[data-scene-kind="splat"]'));
-    act(() => backToSceneKinds());
-    act(() => useBuilderWindows.setState({ sceneShell: null }));
-    expect(kindsBuilt()).toEqual(['splat']);
-    // Opened again later (Add another), picking a kind adds beside it.
-    act(() => useBuilderWindows.setState({ sceneShell: { page: 'kinds', keep: true } }));
-    click($('[data-scene-kind="timecube"]'));
-    expect(kindsBuilt()).toEqual(['splat', 'timecube']);
-  });
-
-  it('back from editing a scene already built never drops it', () => {
+    await done('splat');
+    const withSplat = structuredClone(nodes());
     act(() => openBuilder('scenes'));
-    mount(<Shell />);
-    click($('[data-scene-kind="splat"]'));
-    act(() => closeSceneKinds());
-    const id = builtScenes(nodes())[0].id;
-    act(() => { editBuiltScene({ kind: 'splat', id }); });
-    act(() => backToSceneKinds());
-    expect($('[data-scene-replaces]')).toBeNull();
-    click($('[data-scene-kind="timecube"]'));
-    expect(kindsBuilt()).toEqual(['splat', 'timecube']);
-  });
-
-  it('Done and a later back from a kind opened elsewhere drops nothing', () => {
-    act(() => openBuilder('scenes'));
-    mount(<Shell />);
-    click($('[data-scene-kind="timecube"]'));
-    act(() => closeSceneKinds());
-    act(() => { openBuilder('scene2d'); });
-    act(() => backToSceneKinds());
-    click($('[data-scene-kind="grid"]'));
-    expect(kindsBuilt()).toEqual(['timecube']);
+    expect($('[data-scene-existing]')).toBeTruthy();
+    click($('[data-existing-over]'));
+    expect(kindsBuilt()).toEqual([]);
+    click($('[data-scene-kind="2d"]'));
+    await editAndApply('2d');
+    let back: Promise<boolean> | null = null;
+    act(() => { back = backToSceneKinds(); });
+    await answer('discard');
+    await back;
+    expect(kindsBuilt()).toEqual([]);
+    act(() => { void closeSceneWindow(() => useBuilderWindows.setState({ sceneShell: null })); });
+    await settle();
+    expect(nodes()).toEqual(withSplat);
   });
 });

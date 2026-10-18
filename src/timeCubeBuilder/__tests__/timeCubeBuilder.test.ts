@@ -199,17 +199,18 @@ describe('live in the graph', () => {
     closeTimeCubeBuilder();
   });
 
-  it('Done closes, and the session is one undo step', () => {
+  it('Done closes, and the session (the build and its edits) is one undo step', () => {
+    const before = nodes();
     openNewTimeCube();
-    const built = nodes();
     useTimeCubeBuilder.getState().edit(d => { d.view.roundness = 0.9; });
     useTimeCubeBuilder.getState().edit(d => { d.view.rimStrength = 1.2; });
     finishTimeCubeBuilder();
     expect(useTimeCubeBuilder.getState().open).toBe(false);
     const view = nodes().find(x => x.type === 'timeCubeView')!;
     expect(view.params).toMatchObject({ roundness: 0.9, rimStrength: 1.2 });
+    // A Scene builder session (builders/sceneDraft.ts): one undo takes the whole new scene away.
     useNodeGraphStore.getState().undo();
-    expect(nodes().find(x => x.type === 'timeCubeView')!.params.roundness).toBe(built.find(x => x.type === 'timeCubeView')!.params.roundness);
+    expect(nodes()).toEqual(before);
   });
 });
 

@@ -25,6 +25,7 @@ import { PANEL_LEFT, PANEL_RIGHT, sectionRow, type BuilderSectionTab } from './b
 import { BuilderTabBar, HowLine } from './BuilderTabBar';
 import { BuilderHelpContext, HintLabel, TipsToggle } from './BuilderHelp';
 import { BuilderFlowStrip } from '../structure/BuilderFlowStrip';
+import { closeSceneWindow } from '../../builders/sceneDraft';
 
 export { BuilderFold, BuilderTabBar, HowLine, useRememberedTab } from './BuilderTabBar';
 export { BuilderHelp, EmptyHelp, HintLabel, HintMark, TipsToggle, useTips } from './BuilderHelp';
@@ -138,7 +139,7 @@ export function BuilderWindow({
 
   return (
     <BuilderHelpContext.Provider value={prefsKey}>
-    <Modal title={title} subtitle={subtitle} icon={icon} iconColor={iconColor} width={width} height={height} onClose={onClose} closeOnScrim={false}
+    <Modal title={title} subtitle={subtitle} icon={icon} iconColor={iconColor} width={width} height={height} onClose={() => void closeSceneWindow(onClose)} closeOnScrim={false}
       headerActions={phone ? <><TipsToggle builder={prefsKey} />{headerActions}</> : <>
         <TipsToggle builder={prefsKey} />
         {left && <PanelToggle panel={left} open={open.left} onToggle={() => toggle.current('left')} shortcut={sc('[')} />}
