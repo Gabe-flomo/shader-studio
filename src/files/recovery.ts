@@ -19,7 +19,7 @@ import { toast } from '../components/ui/toastStore';
 import { requestPage } from '../components/page';
 import { installPluginSafety } from '../lib/pluginSafety';
 import {
-  AUTOSAVE_KEY, AutosaveScheduler, buildSnapshot, graphHasContent, graphWork, isPlayfileSnapshot, newSessionMarker, parseAutosaveMode, parseSessionMarker,
+  AUTOSAVE_KEY, AutosaveScheduler, CLOSED_UNSAVED, buildSnapshot, graphHasContent, graphWork, isPlayfileSnapshot, newSessionMarker, parseAutosaveMode, parseSessionMarker,
   pendingAtLaunch, planRotation, reasonWords, recoverDecision, snapshotFileTime, type AutosaveMode, type PluginCrash, type ProjectInfo,
   type SessionMarker, type Snapshot, type SnapshotMeta,
 } from './autosave';
@@ -141,7 +141,14 @@ function browserSession(): SessionBackend {
       current = newSessionMarker(`s${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`, Date.now(), APP_VERSION);
       put();
       // Closing or reloading the tab is a clean exit; a browser or tab crash (or a fatal error) isn't.
-      window.addEventListener('pagehide', () => { if (current && !crashed) { current.cleanExit = true; put(); } });
+      // Nor is leaving with unsaved changes (the warning was answered Leave): the next load offers them back.
+      window.addEventListener('pagehide', () => {
+        if (!current || crashed) return;
+        const unsaved = hasUnsavedWork();
+        current.cleanExit = !unsaved;
+        if (unsaved) current.reason = CLOSED_UNSAVED;
+        put();
+      });
       // Back from the back/forward cache: running again.
       window.addEventListener('pageshow', e => { if (e.persisted && current) { current.cleanExit = false; put(); } });
       return { current, previous: pending };
@@ -308,13 +315,15 @@ export async function downloadSnapshot(file: string): Promise<void> {
 
 /** Reasons a report was already written for, by the page (a fatal error) or by Rust (a panic). */
 const REPORTED = new Set(['js-fatal', 'rust-panic']);
+/** Not crashes: nothing to report. */
+const NOT_A_CRASH = new Set([CLOSED_UNSAVED]);
 
 async function offerRecovery(previous: SessionMarker | null, list: SnapshotMeta[], crash: PluginCrash | null): Promise<void> {
   const unclean = !!previous && !previous.cleanExit;
   // A crash report for the session that went down: written now from what it left behind
   // (its log lines in localStorage), unless the page or Rust wrote one as it went.
   let report: string | null = null;
-  if (unclean && previous) {
+  if (unclean && previous && !NOT_A_CRASH.has(previous.reason ?? '')) {
     const reason = previous.reason ?? 'unknown';
     if (REPORTED.has(reason)) {
       useCrashReports.getState().refresh();
@@ -341,7 +350,7 @@ async function offerRecovery(previous: SessionMarker | null, list: SnapshotMeta[
     return;
   }
   const others = d.others.length ? ` Other autosaves from then: ${d.others.map(o => formatClock(o.at)).join(', ')} (Files → App settings lists them).` : '';
-  const why = previous?.reason && previous.reason !== 'unknown' ? ` ${reasonWords(previous.reason)}.` : '';
+  const why = previous?.reason && previous.reason !== 'unknown' && !NOT_A_CRASH.has(previous.reason) ? ` ${reasonWords(previous.reason)}.` : '';
   const choice = await askChoice(d.title, [
     { id: 'recover', label: 'Recover', variant: 'primary' },
     { id: 'files', label: 'Show in Files', variant: 'ghost' },
@@ -351,6 +360,49 @@ async function offerRecovery(previous: SessionMarker | null, list: SnapshotMeta[
   if (choice === 'recover') await restoreSnapshot(d.snapshot.file);
   else if (choice === 'files') showAutosavesInFiles();
   // Discard: nothing is removed; the old snapshots rotate out as new ones are written.
+}
+
+// ── Leaving with unsaved changes (the browser) ───────────────────────────────
+
+/**
+ * Whether an untitled graph was edited since it was opened (an example, the starter, a file): the
+ * store's graphDirty only follows saved graphs. Every load bumps graphEpoch, which starts it over.
+ */
+let untitledEdited = false;
+let trackingEdits = false;
+function trackUntitledEdits(): void {
+  if (trackingEdits) return;
+  trackingEdits = true;
+  untitledEdited = false;
+  useNodeGraphStore.subscribe((s, prev) => {
+    if (s.graphEpoch !== prev.graphEpoch) { untitledEdited = false; return; }
+    if (s.nodes !== prev.nodes || s.looseGroups !== prev.looseGroups || s.play !== prev.play || s.datasets !== prev.datasets) untitledEdited = true;
+  });
+}
+
+/** Whether leaving now would lose work: a saved graph with changes, or an untitled one that was edited. */
+export function hasUnsavedWork(st = useNodeGraphStore.getState(), edited = untitledEdited): boolean {
+  if (st.scratch) return false;
+  return st.currentGraph ? st.graphDirty : st.graphDirty || edited;
+}
+
+/**
+ * The browser's "Leave site?" prompt while there are unsaved changes. While it's up, an autosave is
+ * written (unless autosave is Off), so Leave still finds the work on the next load (Recover). The
+ * desktop app has its own quit flow and gets no prompt.
+ */
+export function installUnsavedGuard(): () => void {
+  if (isTauri()) return () => {};
+  trackUntitledEdits();
+  const onBeforeUnload = (e: BeforeUnloadEvent) => {
+    if (!hasUnsavedWork()) return;
+    if (useAutosave.getState().mode !== 'off') void writeSnapshot().catch(() => { /* best effort */ });
+    e.preventDefault();
+    // Older browsers show the prompt only for a returnValue.
+    e.returnValue = '';
+  };
+  window.addEventListener('beforeunload', onBeforeUnload);
+  return () => window.removeEventListener('beforeunload', onBeforeUnload);
 }
 
 // ── A page going down ────────────────────────────────────────────────────────
@@ -390,6 +442,7 @@ export async function startRecovery(): Promise<void> {
   started = true;
   backend = isTauri() ? tauriSession : browserSession();
   watchPage();
+  installUnsavedGuard();
   primeCrashEnv();
   let previous: SessionMarker | null = null;
   try { ({ current: session, previous } = await backend.start()); } catch { session = newSessionMarker(`s${Date.now()}`, Date.now(), APP_VERSION); }

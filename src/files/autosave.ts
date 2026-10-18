@@ -211,12 +211,16 @@ export function pendingOnPageLoad(o: { loads: number; pageClean: boolean; crashR
 }
 
 /** A crash reason in words, for the Recover dialog and reports. */
+/** A browser tab closed or reloaded with unsaved changes: not a crash, but the next load offers them back. */
+export const CLOSED_UNSAVED = 'closed-unsaved';
+
 export function reasonWords(reason: string | undefined): string {
   switch (reason) {
     case 'web-content-terminated': return 'Its web content process stopped (WebKit), so the window went blank';
     case 'rust-panic': return 'The app’s native side hit an error (a Rust panic)';
     case 'js-fatal': return 'An error stopped the page';
     case 'page-reloaded': return 'The page reloaded before it closed cleanly';
+    case CLOSED_UNSAVED: return 'The tab was closed or reloaded with changes that weren’t saved';
     case 'webgl-context-lost': return 'The graphics (WebGL) context was lost';
     case 'unknown': case undefined: return 'It was force-quit, killed, replaced by a new build, or the Mac lost power';
     default: return reason;
@@ -277,7 +281,7 @@ export function recoverDecision(prev: SessionMarker | null, snaps: SnapshotMeta 
     others: mine.filter(s => s !== pick),
     skippedEmpty,
     title: 'Recover your work?',
-    message: `Playfield closed unexpectedly${what} (last autosaved ${formatTime(pick.at)}).`
+    message: (prev.reason === CLOSED_UNSAVED ? `The tab closed with unsaved changes${what}` : `Playfield closed unexpectedly${what}`) + ` (last autosaved ${formatTime(pick.at)}).`
       + (skippedEmpty ? ` The newest autosave${skippedEmpty > 1 ? 's were' : ' was'} empty, so this is the latest one with your work.` : '')
       + (crash ? ` ${crash.name} has been switched off in Settings → Plugins; you can try it again there.` : ''),
   };
