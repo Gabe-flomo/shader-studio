@@ -52,4 +52,26 @@ describe('one category model on desktop and phone', () => {
     expect(rows.some(t => t.startsWith('2D Shapes'))).toBe(true);
     expect(rows.some(t => t.startsWith('2D Primitives'))).toBe(false);
   });
+
+  it('the phone Browse searches nodes: matches replace the categories, a result opens its page', () => {
+    host = document.createElement('div');
+    document.body.appendChild(host);
+    root = createRoot(host);
+    act(() => root!.render(<MobileNodeBrowser onClose={() => {}} />));
+    const input = host.querySelector<HTMLInputElement>('[data-browse-search] input')!;
+    const type = (v: string) => act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, v);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    type('circle');
+    expect(host.querySelector('[data-browse-section]')).toBeNull();
+    const results = Array.from(host.querySelectorAll('[data-browse-result]')).map(b => b.getAttribute('data-browse-result'));
+    expect(results).toContain('circleSDF');
+    type('zzqqxx');
+    expect(host.textContent).toContain('No nodes match');
+    type('circle');
+    act(() => host!.querySelector<HTMLButtonElement>('[data-browse-result="circleSDF"]')!.click());
+    expect(host.textContent).toContain('Back to results');
+    expect(host.textContent).toContain('Add disconnected');
+  });
 });
