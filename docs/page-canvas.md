@@ -79,8 +79,15 @@ it has no page canvas.
 
 *2026-10-18. Code: `src/components/shell/CanvasToolbar.tsx`, `canvasGraphMenu.ts`, `graphLayout.ts`.*
 
-The toolbar over the Studio graph has exactly three controls:
+The toolbar over the Studio graph keeps its old order, without the clutter
+(no Do… bar, Next suggestions, flow strip, minimap or Graph ⋯ menu):
 
+**node count · frame time | Zoom − % + | Fit · Auto layout · Maximize graph | Outline · Randomise**
+
+- **Node count** and **frame time** open the graph's stats and the Performance panel.
+- **Zoom** −/+ zoom about the centre; the % resets to 100%.
+- **Fit** (F) frames every node; **Auto layout** arranges left-to-right by data
+  flow (one undo step; not on a locked canvas). On a narrow canvas both are icons.
 - **Maximize graph** (desktop; ⌘⇧G). The graph takes the whole window and the
   picture goes **behind** it, full size: the same preview column (the same
   `ShaderCanvas`, no second renderer) is moved under the graph's area and
@@ -96,17 +103,14 @@ The toolbar over the Studio graph has exactly three controls:
   **Randomise settings** and **Randomise options…** (strength, locks, groups,
   focus, seed). This is the one place for it.
 
-Where the rest went:
+Where the rest went (Fit, Auto layout and zoom are also still in the right-click menu):
 
 | Was on the toolbar | Now |
 |---|---|
-| Zoom −/%/+ | Scroll or pinch; the % sits in the canvas's bottom-left corner (click: 100%); **Zoom to 100%** in the right-click menu |
-| Fit | **F**; **Fit all nodes in view** in the right-click menu |
-| Auto layout (and its "by stage" menu) | **Auto layout** in the right-click menu (by data flow; stages are gone from the graph) |
+| Auto layout's "by stage" menu | Gone (stages are gone from the graph) |
 | Minimap | **Show / Hide the minimap** in the right-click menu (setting `shader-studio:minimap`) |
 | Next (⚡) | **Show / Hide Next suggestions** in the right-click menu |
 | Flow strip | Removed (docs/structure-hints.md) |
-| Node count, frame time | The bar under the graph (the Generated code bar), each still opening its panel |
 | Graph ⋯: Outline | The toolbar's Outline |
 | Graph ⋯: Show passes, Optimise, Bake, Reset to starter, Clear to UV and Output | The empty canvas's right-click menu (**View** and **Graph** sections) |
 | Graph ⋯: Randomise settings / options | The Randomise button and its right-click menu |

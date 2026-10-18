@@ -1163,6 +1163,17 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
   }, [pendingSocket, connectNodes]);
 
   // ── Fit to screen helper ────────────────────────────────────────────────────
+  // The toolbar's − / + buttons: zoom about the canvas's centre.
+  const zoomAroundCentre = useCallback((target: number) => {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    const oldZoom = zoomRef.current;
+    const newZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, target));
+    const p = panRef.current;
+    if (!rect) { applyView(p, newZoom, 'now'); return; }
+    const cx = rect.width / 2, cy = rect.height / 2;
+    applyView({ x: cx - (cx - p.x) * (newZoom / oldZoom), y: cy - (cy - p.y) * (newZoom / oldZoom) }, newZoom, 'now');
+  }, [applyView]);
+
   const handleFitView = useCallback((ids?: ReadonlyArray<string>, opts?: { maxZoom?: number }) => {
     // With ids (a builder's Done, builders/finish.ts): frame just those nodes, when any are on this level.
     const want = ids?.length ? new Set(ids) : null;
@@ -1499,15 +1510,10 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
         </div>
       )}
 
-      {redesignToolbar && <CanvasToolbar showOutline={showOutline} onToggleOutline={toggleOutline} readOnly={locked} />}
-      {/* The zoom, unobtrusive in the corner (the toolbar has no zoom controls): click for 100%. */}
       {redesignToolbar && (
-        <button type="button" data-zoom-readout="" data-graph-overlay="" title="Zoom (scroll or pinch). Click for 100%"
-          onMouseDown={e => e.stopPropagation()} onClick={() => applyView({ x: 0, y: 0 }, 1, 'now')}
-          style={{
-            position: 'absolute', left: 12, bottom: 10, zIndex: 15, height: 22, padding: '0 7px', border: 0, borderRadius: 6, cursor: 'pointer',
-            background: alpha(tk.bg.panel, 0.85), color: tk.text.muted, font: `600 11px ${fontFamily.ui}`, fontVariantNumeric: 'tabular-nums',
-          }}>{Math.round(zoom * 100)}%</button>
+        <CanvasToolbar showOutline={showOutline} onToggleOutline={toggleOutline} readOnly={locked}
+          zoom={zoom} onZoom={zoomAroundCentre} onResetZoom={() => applyView({ x: 0, y: 0 }, 1, 'now')}
+          onFit={() => handleFitView()} onAutoLayout={() => autoLayout()} />
       )}
       {showOptimize && <OptimizeModal onClose={() => setShowOptimize(false)} />}
       {bakeRequest && <BakeDialogHost />}

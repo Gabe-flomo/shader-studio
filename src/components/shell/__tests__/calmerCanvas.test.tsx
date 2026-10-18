@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 /**
- * A calmer canvas (docs/page-canvas.md): the canvas toolbar has exactly three controls (Maximize
- * graph, Outline, Randomise) and the graph's status (node count, frame time); everything else that was on it is in the canvas's right-click menu
+ * A calmer canvas (docs/page-canvas.md): the canvas toolbar in its old order (node count, frame time |
+ * zoom | Fit, Auto layout, Maximize graph | Outline, Randomise), with no Do… bar, suggestions or Graph
+ * menu; everything else that was on it is in the canvas's right-click menu
  * (canvasGraphMenu.ts), with every action still there; Randomise has one place, its button, whose
  * right-click menu holds the settings and the options. The Play panel's seven layout radios are one
  * Layout menu; node card footers show on hover (CSS in index.css).
@@ -58,29 +59,34 @@ const render = (el: React.ReactElement) => {
 };
 
 describe('canvas toolbar', () => {
-  it('has exactly three controls: Maximize graph, Outline, Randomise', () => {
+  it('the old order: status | zoom | Fit, Auto layout, Maximize | Outline, Randomise; no clutter', () => {
     useViewport.setState({ breakpoint: 'desktop-lg' });
-    const h = render(<CanvasToolbar showOutline={false} onToggleOutline={() => {}} />);
+    const fit = vi.fn(), layout = vi.fn(), zoomTo = vi.fn();
+    const h = render(<CanvasToolbar showOutline={false} onToggleOutline={() => {}} zoom={1} onZoom={zoomTo} onResetZoom={() => {}} onFit={fit} onAutoLayout={layout} />);
     const bar = h.querySelector('[data-canvas-toolbar]')!;
-    // The three controls, then the graph's status (node count, frame time) at the end
+    const status = bar.querySelector('[data-graph-status]')!;
+    expect(status).toBeTruthy();
+    expect(bar.firstElementChild!.contains(status) || bar.firstElementChild === status).toBe(true);
     const buttons = Array.from(bar.querySelectorAll('button')).filter(b => !b.closest('[data-graph-status]'));
-    expect(bar.querySelector('[data-graph-status]')).toBeTruthy();
-    expect(buttons.map(b => b.getAttribute('aria-label') ?? '')).toEqual([
+    const names = buttons.map(b => b.getAttribute('aria-label') || b.textContent || '');
+    expect(names).toEqual([
+      'Zoom out', '100%', 'Zoom in', 'Fit', 'Auto layout',
       expect.stringMatching(/^Maximize the graph/),
       expect.stringMatching(/^Outline/),
       expect.stringMatching(/^Randomise settings/),
     ]);
-    // Nothing else: no zoom, Fit, Auto layout, minimap, Next, flow strip or Graph menu.
-    for (const gone of ['Zoom', 'Fit', 'Auto layout', 'minimap', 'Next', 'Flow strip', 'Graph', 'Auto layout options']) {
-      expect(buttons.some(b => (b.getAttribute('aria-label') ?? b.textContent ?? '').startsWith(gone)), gone).toBe(false);
+    // No Do… bar, suggestions, minimap, flow strip or Graph menu.
+    for (const gone of ['Do', 'Next', 'Suggest', 'minimap', 'Show minimap', 'Flow strip', 'Graph']) {
+      expect(names.some(n => n.startsWith(gone)), gone).toBe(false);
     }
-    expect(bar.textContent?.replace(bar.querySelector('[data-graph-status]')!.textContent ?? '', '')).toBe('');
+    act(() => buttons[3].click()); act(() => buttons[4].click()); act(() => buttons[2].click());
+    expect(fit).toHaveBeenCalledOnce(); expect(layout).toHaveBeenCalledOnce(); expect(zoomTo).toHaveBeenCalledWith(1.2);
   });
 
-  it('a locked canvas keeps only the Outline; Maximize is desktop only', () => {
+  it('a locked canvas keeps the view tools and the Outline; Maximize is desktop only', () => {
     useViewport.setState({ breakpoint: 'desktop-lg' });
-    const h = render(<CanvasToolbar readOnly showOutline onToggleOutline={() => {}} />);
-    expect(Array.from(h.querySelectorAll('button')).filter(b => !b.closest('[data-graph-status]')).map(b => b.getAttribute('aria-label'))).toEqual(['Hide the outline']);
+    const h = render(<CanvasToolbar readOnly showOutline onToggleOutline={() => {}} onFit={() => {}} onAutoLayout={() => {}} />);
+    expect(Array.from(h.querySelectorAll('button')).filter(b => !b.closest('[data-graph-status]')).map(b => b.getAttribute('aria-label') || b.textContent)).toEqual(['Fit', 'Hide the outline']);
     act(() => root!.unmount()); host!.remove();
     useViewport.setState({ breakpoint: 'tablet' });
     const t = render(<CanvasToolbar onToggleOutline={() => {}} />);
@@ -167,8 +173,8 @@ describe('canvas right-click menu', () => {
     const src = readFileSync(resolve(__dirname, '../../NodeGraph/NodeGraph.tsx'), 'utf8');
     expect(src).toContain('canvasMenuItems({');
     expect(src).toContain('data-ctx-canvas={r.id}');
-    // The toolbar is only the three controls there too.
-    expect(src).toMatch(/<CanvasToolbar showOutline=\{showOutline\} onToggleOutline=\{toggleOutline\} readOnly=\{locked\} \/>/);
+    // The toolbar gets the zoom, Fit and Auto layout handlers.
+    expect(src).toMatch(/onFit=\{\(\) => handleFitView\(\)\} onAutoLayout=\{\(\) => autoLayout\(\)\}/);
   });
 });
 
