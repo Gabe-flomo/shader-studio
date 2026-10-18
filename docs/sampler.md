@@ -12,14 +12,14 @@ It draws nothing on the picture. Its sound goes through its own effect chain (Fi
 One editor, wherever the layer is edited:
 
 - **The sidebar card** is the compact version: the view switch, the pads (or the zone editor), the selected sound's waveform, its amp envelope and its main numbers, with the other sections as small tabs. **Expand** (Open full editor) opens the split view's big Layers panel on this layer (`openLayerInSplit`), or a full-height sheet on a phone.
-- **The big panel** adds the pad overview, waveform zoom, the zone editor's Velocity tab and roomier controls.
+- **The big panel** adds waveform zoom, the zone editor's Velocity tab and roomier controls.
 
 Its tabs: **Pads** / **Zones** (the primary one, open first), **Sample**, **Filter**, **Pitch & LFO**, **Voice** (Keys), **Kit** (Drum) and **Play**. Every number is a ruler with the app's conventions: type past the end of a soft range to widen it (times, amounts; physical ranges like Start, Pan or Sustain clamp), right-click for the Play/knob menu (add to controls, drive with a null, reset).
 
 ### Drum view
 
 - **Pads**: a 4 × 4 window over the 128 pads, like Drum Rack's. Each pad shows its sound's name and its note (C1 = 36, Live's names), its choke group and its key. Click a pad to play it (higher on the pad is harder) and select it. **Drop sound files** on a pad: several fill the following pads. **Drag a pad onto another** to swap them (sounds and numbers). A missing file says so on the pad.
-- **The pad overview** beside the pads is all 128 notes as 32 rows of 4, the window outlined and pads with sounds lit. Click or drag it (or scroll, or ↑ / ↓) to move the window a row at a time. The window is the layer's `bank` (its first note; C1 by default).
+- **The bank buttons** ‹ › above the pads move the 16 in view by 16 notes (scrolling over the pads moves a row). The window is the layer's `bank` (its first note; C1 by default).
 - **The selected pad**: its sound (a file, a linked folder's file, or a generated drum), its waveform, **Mode** (*One-shot*: plays to the end; *Classic*: plays while held, then Release; with **Loop**, round the loop brace while held), **Rev**, **Choke** (groups 1–16: a hit cuts every pad sounding in its group, over 4 ms, no click), the **amp envelope** picture, Gain, Transpose and Pan.
 - **Sample** tab: Start, End, the loop (start, end, crossfade), One-shot's Fade out, Detune, Vel → Vol and its curve, and **Slice to pads**: the pad's sample is cut at its hits (inside Start…End) and one slice goes on each pad from this one on, as Ableton's Slice to Drum Rack.
 - **Kit** tab: Save kit… / Load kit… (below), Sample index, Index spread, Index mode.

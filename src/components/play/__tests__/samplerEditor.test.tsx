@@ -2,7 +2,7 @@
  * The Sampler's editor (docs/sampler.md): one editor in the sidebar and the
  * split view's big Layers panel. The sidebar card is compact (the pads, the
  * selected sound's waveform, envelope and main numbers) with Expand; the big
- * panel has the overview, zoom and every section; phones get the sheet.
+ * panel has zoom and every section; phones get the sheet.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -52,7 +52,10 @@ describe('the Sampler editor', () => {
     // The selected pad's sound: its waveform and its amp envelope picture.
     expect(html).toContain('data-sampler-wave');
     expect(html).toContain('data-sampler-envelope');
-    expect(html).toContain('Pad overview');
+    // No overview strip: ‹ › bank buttons move the 16 in view.
+    expect(html).not.toContain('Pad overview');
+    expect(html).toContain('data-pad-bank');
+    expect(html).toContain('Higher 16 pads');
   });
 
   it('the sidebar is the same editor, compact, with Expand; phones open a sheet', () => {
