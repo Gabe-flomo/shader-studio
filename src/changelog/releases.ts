@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.273',
+    date: '2026-10-18',
+    title: "One Library",
+    highlights: [
+      { area: 'Studio', text: "Everything you save lives in one Library: graphs, presets, functions, Expression Blocks, keyframes, your nodes, shaders and media, with search and folders." },
+      { area: 'Studio', text: "One preset system across the builders and editors: save, rename, delete, export and import work the same way everywhere." },
+    ],
+  },
+  {
     id: '2026.10.272',
     date: '2026-10-18',
     title: "Save before you lose it",
