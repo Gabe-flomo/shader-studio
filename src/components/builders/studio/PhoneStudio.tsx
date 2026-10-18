@@ -21,7 +21,7 @@
  * Touch: tabs and buttons in the shell are at least 40 px (a scoped style), and a section's help is
  * a tap on ⓘ rather than a hover.
  */
-import { createContext, useEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useTokens } from '../../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../../theme/tokens';
 import { Icon } from '../../ui/Icon';
@@ -30,6 +30,16 @@ import { clampLines } from '../../ui/textFit';
 
 /** True inside a PhoneStudio: builder sliders take their touch size (BuilderSlider). */
 export const PhoneStudioContext = createContext(false);
+
+/**
+ * A row of "+ Add …" buttons (a builder's motions, modifiers, effects, combine operators): wrapping
+ * on a wide window; on a phone two even columns, left-aligned, instead of a ragged wrap.
+ */
+export const addButtonsRow = (phone: boolean): CSSProperties => (phone
+  ? { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 4 }
+  : { display: 'flex', gap: 4, flexWrap: 'wrap' });
+/** One button in an addButtonsRow (on a phone it fills its column, its label at the start). */
+export const addButtonStyle = (phone: boolean): CSSProperties | undefined => (phone ? { justifyContent: 'flex-start', width: '100%' } : undefined);
 
 export const PRESETS_TAB = '__presets';
 export const SETTINGS_MODE = '__settings';

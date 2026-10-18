@@ -4,7 +4,8 @@
  * the builder store's `edit`, with a coalesce key so one drag is one undo step.
  */
 import { useSectionOpen } from '../../builders/sectionFold';
-import type { ReactNode } from 'react';
+import { useContext, type ReactNode } from 'react';
+import { PhoneStudioContext } from '../builders/studio/PhoneStudio';
 import { BuilderSlider, type BuilderSliderProps } from '../builders/BuilderSlider';
 import { ColorSwatch } from '../ui/ColorPicker';
 import { ColourModeSwitch, GradientSetting } from '../ui/GradientSetting';
@@ -130,18 +131,21 @@ export function Card({ id, title, summary, accent, actions, defaultOpen = false,
   const tk = useTokens();
   // Open or folded is remembered per card, across tabs and reloads (builders/sectionFold.ts).
   const [open, setOpen] = useSectionOpen(id, defaultOpen);
+  // On a phone (PhoneStudio) a header with many buttons wraps them onto a second row instead of
+  // cutting the title down to a few letters.
+  const phone = useContext(PhoneStudioContext);
   return (
     <div data-sb-card={id} data-open={open || undefined} {...removeKeys(onRemove, typeof title === 'string' ? title : id)} style={{ outline: 'none',
       borderRadius: radius.control, background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${selected ? tk.accent.base : tk.border.default}`, overflow: 'hidden', flexShrink: 0,
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px 6px 10px', minHeight: 40, boxSizing: 'border-box', cursor: 'pointer' }}
+      <div data-card-head={phone ? 'wrap' : undefined} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px 6px 10px', minHeight: 40, boxSizing: 'border-box', cursor: 'pointer', ...(phone ? { flexWrap: 'wrap', rowGap: 0, minHeight: 44 } : {}) }}
         aria-expanded={open} onClick={() => { setOpen(!open); onHeaderClick?.(); }}>
         <Icon name={open ? 'chevD' : 'chevR'} size={14} style={{ color: tk.text.faint, flexShrink: 0 }} />
         {accent && <span style={{ width: 10, height: 10, borderRadius: 3, background: accent, flexShrink: 0 }} />}
-        <span style={{ fontWeight: 600, fontSize: 13, color: tk.text.primary, flexShrink: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', ...(mute?.muted ? MUTED_DIM : {}) }}>{title}</span>
+        <span style={{ fontWeight: 600, fontSize: 13, color: tk.text.primary, flexShrink: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', ...(phone ? { flex: '0 1 auto', maxWidth: 'calc(100% - 30px)' } : {}), ...(mute?.muted ? MUTED_DIM : {}) }}>{title}</span>
         {mute?.muted && <MutedTag />}
-        <span data-card-summary style={{ flex: 1, minWidth: 0, fontSize: 12, color: tk.text.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{!open && summary}</span>
-        <span onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+        <span data-card-summary style={{ flex: phone ? '1 1 0' : 1, minWidth: 0, fontSize: 12, color: tk.text.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{!open && summary}</span>
+        <span onClick={e => e.stopPropagation()} style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0, ...(phone ? { marginLeft: 'auto' } : {}) }}>
           {mute && <MuteToggle muted={mute.muted} onToggle={mute.onToggle} onSolo={mute.onSolo} what={mute.what ?? (typeof title === 'string' ? title : 'this card')} />}
           {actions}
           {onRemove && <IconButton icon="trash" size="sm" tone="danger" data-card-remove={id} label={removeLabel ?? `Remove ${typeof title === 'string' ? title.toLowerCase() : 'this'} (Delete)`} onClick={onRemove} />}
