@@ -5,8 +5,13 @@
  *
  * It sits under the card (above it when there is no room below), so it never covers a socket:
  * sockets are on the card's left and right edges. Hidden while dragging, while a starter-recipe
- * offer is open, on a locked canvas, and with the × (the canvas toolbar's Suggestions button
- * brings it back). No scrim, no focus taken.
+ * offer is open, on a locked canvas, and with the × (the canvas toolbar's Next button brings it
+ * back). Esc closes it for the selected card. No scrim, no focus taken.
+ *
+ * It is the app's one suggestion surface (docs/glossary.md, "Next"): the flow strip names the next
+ * stage but offers no moves of its own, the library's "Fits here" shows only while a wire is being
+ * dragged, and the Do… bar is a command bar. The list opens the first time; after a move is used
+ * (or it is folded by hand) it starts folded to a small "Next" chip that opens it.
  */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
@@ -22,7 +27,7 @@ import { useRecipeOffer } from '../../store/recipeOfferStore';
 import { getCardSize, isDragging } from './socketRegistry';
 import { previewBus } from '../../lib/nodePreview/previewBus';
 import { measureField, suggestionsFor, subscribeLearning, learningVersion, type OutputMeasurement, type RankedMove } from '../../suggestions';
-import { setSuggestionsShown, useSuggestionsShown } from '../../suggestions/settings';
+import { setSuggestionsOpen, setSuggestionsShown, useSuggestionsOpen, useSuggestionsShown } from '../../suggestions/settings';
 import type { GraphNode } from '../../types/nodeGraph';
 
 const WIDTH = 300;
@@ -131,15 +136,36 @@ function Strip({ node, nodes, canvasRef, pan, zoom }: {
     el.style.visibility = bottom < view.top || top > view.bottom || left > view.right || left + size.w * zoom < view.left ? 'hidden' : 'visible';
   });
 
+  const open = useSuggestionsOpen();
   if (!moves.length || dragging) return null;
 
   const apply = (m: RankedMove) => {
     useNodeGraphStore.getState().applySuggestion(node.id, m.key, m.side, m.move.id, m.args ?? {});
+    // Used once: from now on it starts as the small chip.
+    setSuggestionsOpen(false);
   };
   const hide = () => {
     setSuggestionsShown(false);
-    toast.info('Suggestions hidden', { message: 'The Suggestions button in the canvas toolbar brings them back.' });
+    toast.info('Next suggestions hidden', { message: 'The Next button in the canvas toolbar brings them back.' });
   };
+
+  if (!open) {
+    return createPortal(
+      <div {...portalGuard} ref={ref} data-suggestion-strip={node.id} data-folded="" onPointerDown={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()}
+        style={{ position: 'fixed', left: -9999, top: 0, zIndex: 880 }}>
+        <button type="button" onClick={() => setSuggestionsOpen(true)} aria-expanded={false}
+          title={`Next: ${moves.length} move${moves.length === 1 ? '' : 's'} for this node, learned from your graphs (Esc hides it for this node)`}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 5, height: 24, padding: '0 9px 0 7px', border: `1px solid ${tk.border.default}`, borderRadius: 999,
+            background: tk.bg.panel, color: tk.text.secondary, boxShadow: tk.shadow.popover, cursor: 'pointer', font: `600 11.5px ${fontFamily.ui}`,
+          }}>
+          <Icon name="bolt" size={12} style={{ color: tk.accent.base }} />Next
+          <span style={{ color: tk.text.faint, fontWeight: 500 }}>{moves.length}</span>
+        </button>
+      </div>,
+      document.body,
+    );
+  }
 
   return createPortal(
     <div
@@ -158,11 +184,12 @@ function Strip({ node, nodes, canvasRef, pan, zoom }: {
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 4px 3px 9px' }}>
         <Icon name="bolt" size={12} style={{ color: tk.accent.base, flexShrink: 0 }} />
-        <Tooltip label="Suggestions learn from your graphs" description="Ranked by what you wire in your own saved graphs (imports count half, recent wiring counts too); the bundled examples only help while there is little of yours. It all stays on this device. Reset learning is in Files → App settings → Studio.">
+        <Tooltip label="Suggestions learn from your graphs" description="Ranked by what you wire in your own saved graphs (imports count half, recent wiring counts too); the bundled examples only help while there is little of yours. It all stays on this device. Reset learning is in App settings (the top bar's ⋯) under Studio.">
           <span style={{ fontSize: 11, color: tk.text.muted, cursor: 'default' }}>Next · <span style={{ color: tk.text.faint }}>learns from your graphs</span></span>
         </Tooltip>
         <span style={{ marginLeft: 'auto' }} />
-        <IconButton icon="close" size="sm" label="Hide suggestions" onClick={hide} />
+        <IconButton icon="chevU" size="sm" label="Fold to a small Next chip" onClick={() => setSuggestionsOpen(false)} />
+        <IconButton icon="close" size="sm" label="Hide Next suggestions (the canvas toolbar's Next button brings them back)" onClick={hide} />
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '0 5px 5px' }}>
         {moves.map(m => <MoveRow key={`${m.move.id}:${m.key}`} move={m} onClick={() => apply(m)} />)}
@@ -229,5 +256,5 @@ function MoveRow({ move, onClick, touch = false }: { move: RankedMove; onClick: 
 /** The canvas toolbar's Suggestions toggle. */
 export function SuggestionsToggle() {
   const on = useSuggestionsShown();
-  return <IconButton icon="bolt" size="sm" active={on} label={on ? 'Hide the suggestions under the selected node' : 'Suggestions: next moves under the selected node, learned from your graphs'} onClick={() => setSuggestionsShown(!on)} />;
+  return <IconButton icon="bolt" size="sm" active={on} label={on ? 'Hide Next: the suggestions under the selected node' : 'Next: suggested moves under the selected node, learned from your graphs'} onClick={() => setSuggestionsShown(!on)} />;
 }

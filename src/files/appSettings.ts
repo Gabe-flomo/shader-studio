@@ -62,6 +62,7 @@ const KNOWN: Record<string, SettingInfo> = {
   'nodepalette_favorites': S('Favourite nodes', 'studio'),
   'shader-studio:settings:starterRecipesOff': S('Starter recipes turned off', 'studio', { hint: 'Every node with starter recipes offers them again when added' }),
   'playfield:suggestions:strip': S('Suggestions under the selected node', 'studio', { hint: 'Shows the suggestions again' }),
+  'playfield:suggestions:open': S('Next suggestions folded or open', 'studio', { hint: 'Opens the Next list again on the first selection' }),
   'playfield:structure:strip': S('Flow strip above the graph', 'studio', { hint: 'Shows the flow strip again' }),
   'playfield:structure:tags': S('Stage tags on cards', 'studio'),
   'playfield:structure:notices': S('Order notices', 'studio', { hint: 'Order notices come back on' }),
