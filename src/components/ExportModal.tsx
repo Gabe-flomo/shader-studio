@@ -49,6 +49,7 @@ import { TAKE_MAX_SECONDS, type PlayTake } from '../types/play';
 import { Select } from './ui/Select';
 import { holdAutosave } from '../files/recovery';
 import { resetRuntime } from '../lib/runtimeReset';
+import { frameIsOpaque, graphOwnAlpha } from '../lib/graphAlpha';
 
 // ── Progress bar ──────────────────────────────────────────────────────────────
 
@@ -204,14 +205,18 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
   const [transparent, setTransparent] = useState(false);
   const nodes = useNodeGraphStore(s => s.nodes);
   const play  = useNodeGraphStore(s => s.play);
-  // Output (RGBA): the picture has its own alpha, so a transparent export keeps it.
-  const ownAlpha = nodes.some(n => n.type === 'vec4Output');
+  // The Output's Alpha / Opacity (or Output (RGBA)): the picture has its own alpha, so a transparent export keeps it.
+  const ownAlpha = graphOwnAlpha(nodes);
   // The Finish stack is drawn on a canvas of its own too: record that, not the bare picture.
   const hasLayers = !external && playOverlay.hasLayers();
   const layersOn = hasLayers || (!external && playOverlay.hasFinish());
   // What happens to the shader's picture: its own alpha, black turns clear, or left out for the layers alone.
   const [pictureChoice, setPicture] = useState<TransparentPicture | null>(null);
-  const picture: TransparentPicture = pictureChoice === 'own' && !ownAlpha ? 'luma' : pictureChoice ?? (ownAlpha ? 'own' : 'luma');
+  const picture: TransparentPicture = pictureChoice ?? (ownAlpha ? 'own' : 'luma');
+  // "Its own alpha" on a picture whose frames came back with no transparent pixel at all (shown after the export).
+  const [opaqueNote, setOpaqueNote] = useState(false);
+  /** The first frame of a transparent export with its own alpha: note when nothing in it is see-through. */
+  const checkOwnAlpha = (rgba: Uint8Array) => { if (transparent && picture === 'own') setOpaqueNote(frameIsOpaque(rgba)); };
   const nothingShows = transparent && picture === 'drop' && !hasLayers;
   // Sound: only songs already in Playfield, never the microphone. The Audio engine's racks
   // (desktop) are tracks too: rendered natively frame by frame, tapped in real time (lib/engineExport.ts).
@@ -585,6 +590,7 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
         readPixels: (out, width, height) => {
           if (frameQueue ? planShowsThis(frameQueue) : !playBackground.active()) handleReadPixels(out, width, height);
           playOverlay.compositePixels(out, width, height, frameTime, 1 / fps, firstFrame, { transparent, picture, pointer: applier?.pointer(frameTime), actions: frameActs, seed: applier?.seed, audio: applier?.audio(frameTime) });
+          if (firstFrame) checkOwnAlpha(out);
           settleAlpha(out);
           firstFrame = false;
         },
@@ -660,6 +666,7 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
       else { renderAtTime(t, { dt: 1 / fps, first: i === 0 }); readPixels(pixels, w, h); }
       await playVideoLayers.seek(t);
       playOverlay.compositePixels(pixels, w, h, t, 1 / fps, i === 0, { transparent, picture, pointer: applier?.pointer(t), actions, seed: applier?.seed, audio: applier?.audio(t) });
+      if (i === 0) checkOwnAlpha(pixels);
     };
     const progress = (done: number) => {
       setCaptureProgress(done / total);
@@ -983,16 +990,21 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
                   fill
                   size="sm"
                   tall={phone}
-                  wrap={choiceRowWraps(ownAlpha ? 3 : 2, phone)}
+                  wrap={choiceRowWraps(3, phone)}
                   ariaLabel="The picture"
                   value={picture}
                   onChange={setPicture}
                   options={[
                     { value: 'luma', label: 'Black turns clear', title: 'Alpha from brightness: light on black (glows, particles) keys cleanly, like Screen/Add' },
-                    ...(ownAlpha ? [{ value: 'own' as const, label: 'Its own alpha', title: 'The graph ends in Output (RGBA): its alpha as it is' }] : []),
+                    { value: 'own' as const, label: 'Its own alpha', title: 'The alpha the graph makes: the Output\'s Alpha times its Opacity (or Output (RGBA)), as it is' },
                     { value: 'drop', label: 'Layers only', title: 'Leave the shader picture out: only the Play layers, over nothing' },
                   ]}
                 />
+              )}
+              {transparent && picture === 'own' && !ownAlpha && (
+                <Callout tone="warning" title="The graph has no alpha">
+                  Its Output’s Alpha is empty and its Opacity is 1, so its own alpha is solid everywhere and nothing would be see-through. Wire the Output’s Alpha, lower its Opacity, or pick Black turns clear.
+                </Callout>
               )}
               {transparent && (nothingShows ? (
                 <Callout tone="warning" title="Nothing would show">
@@ -1001,9 +1013,9 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
               ) : (
                 <Help>
                   {picture === 'own'
-                    ? 'The picture keeps its own alpha (the graph ends in Output (RGBA)), with the Play layers over it.'
+                    ? 'The picture keeps its own alpha (the Output’s Alpha times its Opacity, or Output (RGBA)), with the Play layers over it.'
                     : picture === 'luma'
-                      ? 'Black becomes see-through and light stays: right for glows and particles on black. Dark colours turn faint, so for solid shapes end the graph with Output (RGBA) instead.'
+                      ? 'Black becomes see-through and light stays: right for glows and particles on black. Dark colours turn faint, so for solid shapes give the Output an Alpha (or lower its Opacity) and pick Its own alpha.'
                       : 'Only the Play layers are kept, over nothing: the shader picture is left out.'}
                   {' '}{mode === 'ffmpeg' || wasmProres
                     ? `Saved as ProRes ${proresInfo.label.replace(' (alpha)', '')} (.mov), which keeps the alpha.`
@@ -1257,6 +1269,12 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
             {stats}
             {muxing && <Help>Adding the Audio engine’s sound to the recording…</Help>}
           </div>
+        )}
+
+        {opaqueNote && transparent && picture === 'own' && !isBusy && state !== 'idle' && (
+          <Callout tone="warning" title="Nothing came out see-through">
+            The first frame’s alpha was 1 everywhere, so this file is solid. The graph’s own alpha is opaque: wire the Output’s Alpha (or the vec4 into Output (RGBA)) from something that varies, lower the Output’s Opacity, or pick Black turns clear.
+          </Callout>
         )}
 
         {engineNotes.length > 0 && !isBusy && (

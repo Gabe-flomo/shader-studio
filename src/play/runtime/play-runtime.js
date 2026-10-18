@@ -947,13 +947,24 @@ void main() {
       gl.uniform1i(blitLocs.input, 0); gl.uniform1f(blitLocs.seed, seed);
       drawQuad();
     };
-    // `echoRing[i]` holds the picture (i + 1) × delay frames ago, as in ShaderCanvas: every `delay`
-    // frames the oldest slot becomes the newest and the frame just drawn is copied into it.
-    const captureEcho = src => {
+    // `echoRing[i]` holds the Echo's input (i + 1) × delay frames ago, as in ShaderCanvas: every `delay`
+    // frames the oldest slot becomes the newest and the picture's program draws into it once more with
+    // u_echoCap set, which writes the Echo's Color input (a legacy Echo: the picture without its echoes),
+    // so the copies never echo themselves. `extra` binds the samplers the main draw binds after its inputs.
+    const captureEcho = (W, H, extra) => {
       echoFrame++;
       if (echoFrame % Math.max(1, echoCfg.delay) !== 0) return;
       echoRing.unshift(echoRing.pop());
-      blit(src.tex, echoRing[0].fb, src.w, src.h, 0);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, echoRing[0].fb);
+      gl.viewport(0, 0, W, H);
+      gl.useProgram(program);
+      bindPictureInputs(W, H);
+      extra();
+      // The slot being drawn is one of the echo samplers: none of them is read in this draw.
+      for (let i = 0; i < 6; i++) bindSampler('u_echo' + i, blank);
+      setUniform('u_echoCap', 1);
+      drawQuad();
+      setUniform('u_echoCap', 0);
     };
 
     // Images: decoded onto a canvas and uploaded from there, as loadImageTexture.ts does; mipmapped, clamped.
@@ -3082,11 +3093,14 @@ void main() {
       gl.viewport(0, 0, W, H);
       gl.useProgram(program);
       bindPictureInputs(W, H);
-      for (const o of gpOut) bindSampler(o.uniform, o.texture || blank);
-      for (const n of gpBlank) bindSampler(n, blank);
+      const extraSamplers = () => {
+        for (const o of gpOut) bindSampler(o.uniform, o.texture || blank);
+        for (const n of gpBlank) bindSampler(n, blank);
+      };
+      extraSamplers();
       drawQuad();
       if (target) {
-        if (echoCfg) captureEcho(target);
+        if (echoCfg) captureEcho(W, H, extraSamplers);
         blit(target.tex, null, W, H, ditherSeed(frame));
         if (stateful) pingIdx = 1 - pingIdx;
       }

@@ -813,7 +813,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       u_mousebtn:    { value: 0 },
       u_prevFrame:   { value: null },
       // Echo snapshot ring (see nodes/definitions/echo.ts); the shader declares only the ones it uses.
-      ...Object.fromEntries(Array.from({ length: 6 }, (_, i) => [`u_echo${i}`, { value: null }])),
+      ...Object.fromEntries(Array.from({ length: 6 }, (_, i) => [`u_echo${i}`, { value: null }])), u_echoCap: { value: 0 },
       u_fontTexture: { value: FONT_TEXTURE },
       // The graph's Layers node (play/layersTexture.ts); shared objects, refreshed in place each frame.
       ...layersUniforms, ...padGridUniforms, ...motionUniforms,
@@ -1109,7 +1109,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
         const shared = material.uniforms;
         const uniforms: Record<string, THREE.IUniform> = {
           u_time: { value: 0 }, u_resolution: shared.u_resolution, u_mouse: shared.u_mouse, u_mousebtn: shared.u_mousebtn, u_prevFrame: { value: null },
-          ...Object.fromEntries(Array.from({ length: 6 }, (_, i) => [`u_echo${i}`, { value: null }])),
+          ...Object.fromEntries(Array.from({ length: 6 }, (_, i) => [`u_echo${i}`, { value: null }])), u_echoCap: { value: 0 },
           u_fontTexture: { value: FONT_TEXTURE }, ...layersUniforms, ...padGridUniforms, ...motionUniforms,
         };
         for (const [name, value] of Object.entries(c.uniforms)) uniforms[name] = { value: Array.isArray(value) ? [...value] : value };
@@ -1207,6 +1207,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           renderer.setRenderTarget(into);
           renderer.render(blitScene, camera);
         },
+        capture: into => drawEchoCapture(into),
       });
       let offlineStarted = false;
       let offlineAgentsStarted = false;
@@ -1675,14 +1676,30 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
     };
 
     // ── Echo snapshot ring ────────────────────────────────────────────────
-    // `echoRing[i]` holds the picture (i + 1) × delay frames ago. Every `delay`
-    // frames the ring rotates (the oldest slot becomes the newest) and the
-    // frame just rendered is copied into slot 0 — one extra full-screen copy
-    // per `delay` frames, and copies × one frame of GPU memory.
+    // `echoRing[i]` holds the Echo's input (i + 1) × delay frames ago. Every `delay`
+    // frames the ring rotates (the oldest slot becomes the newest) and the shader
+    // draws once more into slot 0 with u_echoCap set: that draw writes the Echo's
+    // Color input (a legacy Echo: the picture with its echoes left out), so the
+    // copies never echo themselves — one extra draw per `delay` frames, and
+    // copies × one frame of GPU memory.
     let echoRing: THREE.WebGLRenderTarget[] = [];
     let echoFrame = 0;
     const disposeEchoRing = () => { for (const rt of echoRing) rt.dispose(); echoRing = []; echoFrame = 0; };
-    const captureEcho = (frameTex: THREE.Texture) => {
+    /** Draw the echo capture into `into`: the shader with u_echoCap = 1 and no echo samplers bound (one of them is `into`). */
+    const drawEchoCapture = (into: THREE.WebGLRenderTarget) => {
+      const u = material.uniforms;
+      const kept = Array.from({ length: 6 }, (_, i) => u[`u_echo${i}`]?.value ?? null);
+      for (let i = 0; i < 6; i++) if (u[`u_echo${i}`]) u[`u_echo${i}`].value = null;
+      if (u.u_echoCap) u.u_echoCap.value = 1;
+      const shown = mesh.material;
+      mesh.material = material;
+      renderer.setRenderTarget(into);
+      renderer.render(scene, camera);
+      mesh.material = shown;
+      if (u.u_echoCap) u.u_echoCap.value = 0;
+      for (let i = 0; i < 6; i++) if (u[`u_echo${i}`]) u[`u_echo${i}`].value = kept[i];
+    };
+    const captureEcho = () => {
       const cfg = echoRef.current;
       if (!cfg) { if (echoRing.length) disposeEchoRing(); return; }
       const w = renderer.domElement.width || 1, h = renderer.domElement.height || 1;
@@ -1698,11 +1715,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
       echoFrame++;
       if (echoFrame % Math.max(1, cfg.delay) === 0) {
         echoRing.unshift(echoRing.pop()!);              // oldest slot becomes the newest
-        blitMat.uniforms.tInput.value = frameTex;
-        blitMat.uniforms.u_seed.value = 0;
-        setBlitBand(blitMat, null); // the echo ring keeps the picture, never the band
-        renderer.setRenderTarget(echoRing[0]);
-        renderer.render(blitScene, camera);
+        drawEchoCapture(echoRing[0]);
         renderer.setRenderTarget(null);
       }
       for (let i = 0; i < echoRing.length; i++) {
@@ -2013,7 +2026,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           pictureSegment('shader');
           renderer.setRenderTarget(writeRT);
           renderer.render(scene, camera);
-          if (echoRef.current) { pictureSegment('echo'); captureEcho(writeRT.texture); }
+          if (echoRef.current) { pictureSegment('echo'); captureEcho(); }
           pictureSegment('present');
           blitMat.uniforms.tInput.value = writeRT.texture;
           blitMat.uniforms.u_seed.value = ditherSeed(frameCount);
@@ -2039,7 +2052,7 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           if (pvMat) mesh.material = pvMat;
           renderer.render(scene, camera);
           if (pvMat) mesh.material = material;
-          if (echoRef.current) { pictureSegment('echo'); captureEcho(floatRt.texture); }
+          if (echoRef.current) { pictureSegment('echo'); captureEcho(); }
           pictureSegment('present');
           blitMat.uniforms.tInput.value = floatRt.texture;
           blitMat.uniforms.u_seed.value = ditherSeed(frameCount);

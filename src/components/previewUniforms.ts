@@ -44,6 +44,7 @@ export function buildPreviewUniforms(
     u_mouse:      { value: mouse ? mouse.clone() : new THREE.Vector2(0, 0) },
     u_prevFrame:  { value: null },
     ...Object.fromEntries(Array.from({ length: 6 }, (_, i) => [`u_echo${i}`, { value: null }])),
+    u_echoCap:    { value: 0 },
     ...shared,
   });
   for (const [name, value] of Object.entries(st.paramUniforms)) u[name] = { value };

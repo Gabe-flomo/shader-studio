@@ -890,7 +890,7 @@ class PlayOverlay {
    * live preview's state is untouched.
    *
    * Transparent: no backdrop, and the picture as `picture` says:
-   *   'own'   its own alpha (the graph ends in Output (RGBA))
+   *   'own'   its own alpha (the Output's Alpha × Opacity, or Output (RGBA))
    *   'luma'  black turns clear: alpha from brightness, colour un-darkened to
    *           match, so light on black (glows, particles) keys cleanly and
    *           composites like Screen/Add

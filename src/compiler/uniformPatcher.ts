@@ -162,6 +162,7 @@ export function patchNodeParamsForUniforms(
 
   for (const [key, paramDef] of Object.entries(def.paramDefs)) {
     if (paramDef.compileTime) continue;        // baked by declaration (loop bounds…)
+    if (paramDef.literalAt !== undefined && node.params[key] === paramDef.literalAt) continue; // left out of the code at this value
     if (!isParamVisible(paramDef, node.params, def.defaultParams)) continue; // hidden by showWhen → not read by the GLSL
     // vec3 / vec3color → a vec3 uniform, so a colour-picker drag is a uniform
     // write, not a recompile. The definition reads it through pv3().

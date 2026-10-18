@@ -316,7 +316,7 @@ function startWatching(): void {
 
 const pendingActions: OutAction[] = [];
 /** Uniforms the player works out itself, or can't take (samplers). */
-const SKIP_UNIFORMS = /^(u_time|u_resolution|u_mouse|u_prevFrame|u_echo\d|u_padGrid\w*|u_padLast|u_layers\w*|u_fontTexture)$/;
+const SKIP_UNIFORMS = /^(u_time|u_resolution|u_mouse|u_prevFrame|u_echo\d|u_echoCap|u_padGrid\w*|u_padLast|u_layers\w*|u_fontTexture)$/;
 type Uniforms = Record<string, THREE.IUniform>;
 let uniformList: [string, THREE.IUniform][] = [];
 let uniformSrc: Uniforms | null = null;
