@@ -303,7 +303,7 @@ export const BlurTextureNode: NodeDefinition = {
   label: 'Blur (texture)',
   category: 'Passes',
   aliases: ['Gaussian blur (texture)', 'Soften', 'Defocus', 'Blur this frame'],
-  description: 'Blurs a Pass\'s texture (or any texture) in the same frame (the older Gaussian Blur reads last frame\'s picture). Radius is in picture pixels. Smooth (the default) is a true Gaussian at any Radius: it adds two hidden passes, and works on a smaller copy when Radius is wide, so it stays fast. Fast is one cheap pass.',
+  description: 'Blurs a Pass\'s texture (or any texture) in the same frame. Radius is in picture pixels. Smooth (the default) is a true Gaussian at any Radius: it adds two hidden passes, and works on a smaller copy when Radius is wide, so it stays fast. Fast is one cheap pass.',
   inputs: {
     texture: { type: 'texture', label: 'Texture', hint: TEX_HINT },
     uv: { type: 'vec2', label: 'UV', hint: UV_HINT },
@@ -348,7 +348,7 @@ export const GlowTextureBase: NodeDefinition = {
   label: 'Glow (texture)',
   category: 'Passes',
   aliases: ['Bloom (texture)', 'Halo', 'Light bleed', 'Glow this frame', 'Neon glow', 'Bloom chain'],
-  description: 'A glow from a Pass\'s texture (or any texture), in the same frame: only the parts brighter than Threshold are kept, spread by Radius (picture pixels), scaled by Intensity and tinted. Add the result over your picture (Add Colors, Blend Modes: Add or Screen). Bloom chain (the default) is a soft core with a long, wide tail, made in a few small hidden passes; Smooth is one Gaussian; Fast is one cheap pass. The older Bloom reads last frame\'s picture.',
+  description: 'A glow from a Pass\'s texture (or any texture), in the same frame: only the parts brighter than Threshold are kept, spread by Radius (picture pixels), scaled by Intensity and tinted. Add the result over your picture (Add Colors, Blend Modes: Add or Screen). Bloom chain (the default) is a soft core with a long, wide tail, made in a few small hidden passes; Smooth is one Gaussian; Fast is one cheap pass.',
   inputs: {
     texture: { type: 'texture', label: 'Texture', hint: TEX_HINT },
     uv: { type: 'vec2', label: 'UV', hint: UV_HINT },

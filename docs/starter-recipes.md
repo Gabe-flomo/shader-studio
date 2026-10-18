@@ -130,7 +130,9 @@ Its input is (0, 0) when unwired, so on its own it does nothing visible.
 |---|---|---|
 | Spiral stripes | UV → Polar (Twist 2) → Wave Texture (X stripes, Scale 2π × 3, Time) → Palette | Straight stripes become rays, Twist makes a spiral; a Scale that is a multiple of 2π leaves no seam |
 
-### Previous Frame (feedback) (`prevFrame`): Built
+### Previous Frame (feedback) (`prevFrame`): Built, retired with the node (retired 2026-10-17, see [node-retirements.md](node-retirements.md))
+
+Feedback (texture) (`textureFeedback`) has its own: **Trails** (the picture as its Fresh paint, Levels roll-off) and **Drifting trails** (the same, read a little zoomed and turned). The Trails suggestion and the Do bar's `fade` build them.
 
 Feedback needs a decay and something new each frame, or it is black / frozen.
 
@@ -171,7 +173,7 @@ what the Output showed (or a stand-in noise picture when nothing).
 |---|---|---|
 | Breathe a shape | LFO → Remap (−1…1 → 0.15…0.45) → Circle SDF → SDF Fill | An LFO only shows once it drives something |
 
-### Picture effects: Bloom, Vignette, Grain, Tone Map, Chroma Shift, Saturation, Hue Rotate, Posterize, Scanlines, Brightness / Contrast, Tone Curve, Invert, CMYK Halftone: Built
+### Picture effects: Vignette, Grain, Tone Map, Saturation, Hue Rotate, Posterize, Scanlines, Brightness / Contrast, Tone Curve, Invert, CMYK Halftone: Built
 
 | Recipe | Graph | Why |
 |---|---|---|
@@ -194,9 +196,8 @@ Particles / Slime (with a Trail) / Empty group, asked before the add (see above)
 | Truchet, Chladni | Palette on the field output; Time on a parameter | Complete generators; small gain |
 | Field Accumulate / Metaball Threshold | Grid → Field Accumulate → Threshold → palette (a metaball grid) | Good teaching recipe; a few more params to tune |
 | Domain Warp | → Fractal Noise → Palette (the reverse of Noise's Marbled) | Easy to add |
-| Swirl / Ripple / UV Warp nodes | UV → warp → a stripe or checker picture, so the warp is visible | Easy to add |
+| Ripple / UV Warp | UV → warp → a stripe or checker picture, so the warp is visible | Easy to add |
 | Ellipse SDF | the 2D shape recipes | Its size is socket-only (no sliders), so the defaults overflow a tile |
 | Gradient, Color Ramp, Stops Palette | the Palette recipes (Angle from Length / noise) | Easy to add |
-| Sobel Edges, Gaussian Blur, Motion Blur | Apply to the picture | Need a moving or detailed picture to read well |
 | Agents group | Move its starter question onto this card | Behaviour change (see above) |
 | 3D shapes | Move the Scene Group wrap onto this card | Being reworked separately |

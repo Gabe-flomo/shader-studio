@@ -51,7 +51,7 @@ They are built after the grade.
   curvature (CRT Screen). Each one changes *where* the picture is read. The picture so far goes
   into a Pass, and the next read of it is at the bent point. A run of moves shares one Pass and
   one read.
-- **Reads round a pixel**: Blur (Blur (texture)), Deep Glow (Deep Glow (texture): see
+- **Reads round a pixel**: Blur (Blur (texture)), Deep Glow (Glow (texture), Method Deep glow: see
   [deep-glow.md](deep-glow.md)),
   Light rays / Radial blur (Radial Fast Blur: see [radial-fast-blur.md](radial-fast-blur.md)),
   Chromatic aberration (Chromatic Aberration (lens): see [chromatic-aberration.md](chromatic-aberration.md))
