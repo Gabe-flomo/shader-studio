@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.286',
+    date: '2026-10-18',
+    title: "Builder on phones",
+    highlights: [
+      { area: 'Studio', text: "The Scene builder fits a phone: full-width controls, readable code lines, a short header and even button grids on every tab." },
+    ],
+  },
+  {
     id: '2026.10.285',
     date: '2026-10-18',
     title: "True EQ curves",
