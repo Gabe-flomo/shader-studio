@@ -5543,7 +5543,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
   replaceGraph: (rawNodes) => {
     undoManager.push(get().nodes, { label: 'Replaced the graph' }, get().play);
-    const nodes = rawNodes.map(n => migrateNodeParams(n.params ? n : { ...n, params: {} }, getNodeDefinition));
+    // The same migrations as opening a file (renamed and retired types, old Expression nodes, params added since).
+    const nodes = migrateLoadedNodes(rawNodes);
     idGenerator.syncFromGraph(nodes);
     set(st => ({ nodes, looseGroups: [], play: emptyPlayRecord(), datasets: {}, previewNodeId: null, activeGroupId: null, activeGroupPath: [], graphEpoch: st.graphEpoch + 1 }));
     get().compile();

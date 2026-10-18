@@ -242,8 +242,12 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         params: { octaves: 5, lacunarity: 2, gain: 0.5, scale: 2, time_scale: 0.05 },
       },
       {
-        id: 'palette_3', type: 'palettePreset', position: { x: 560, y: 200 },
-        inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'fbm_2', outputKey: 'value' } } },
+        id: 'palette_3',
+        type: 'palette',
+        position: { x: 560, y: 200 },
+        inputs: {
+          value: { type: 'float', label: 'Angle', connection: { nodeId: 'fbm_2', outputKey: 'value' } },
+        },
         outputs: { color: { type: 'vec3', label: 'Color' } },
         params: { preset: '4' },
       },
@@ -571,11 +575,13 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
       },
       {
         id: 'lfo_2',
-        type: 'sineLFO',
+        type: 'lfo',
         position: { x: 260, y: 380 },
-        inputs: { time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } } },
+        inputs: {
+          time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
+        },
         outputs: { value: { type: 'float', label: 'Value' } },
-        params: { freq: 0.08, phase: 0, amplitude: 6, offset: 7 },
+        params: { freq: 0.08, phase: 0, amplitude: 6, offset: 7, waveform: 'sine' },
       },
       {
         id: 'modefreq_3',
@@ -749,9 +755,11 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
               },
               {
                 id: 'palette',
-                type: 'palettePreset',
+                type: 'palette',
                 position: { x: 920, y: 400 },
-                inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'pal_t', outputKey: 'result' } } },
+                inputs: {
+                  value: { type: 'float', label: 'Angle', connection: { nodeId: 'pal_t', outputKey: 'result' } },
+                },
                 outputs: { color: { type: 'vec3', label: 'Color' } },
                 params: { __comment: 'Palette: the rings\' colour.', preset: '2' },
               },
@@ -774,14 +782,14 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
               },
               {
                 id: 'col_d',
-                type: 'multiplyVec3',
+                type: 'multiply',
                 position: { x: 1120, y: 360 },
                 inputs: {
-                  color: { type: 'vec3', label: 'Color', connection: { nodeId: 'palette', outputKey: 'color' } },
-                  scale: { type: 'float', label: 'Scale', connection: { nodeId: 'glow', outputKey: 'result' } },
+                  a: { type: 'vec3', label: 'A', connection: { nodeId: 'palette', outputKey: 'color' } },
+                  b: { type: 'vec3', label: 'B', connection: { nodeId: 'glow', outputKey: 'result' } },
                 },
                 outputs: { result: { type: 'vec3', label: 'Result' } },
-                params: { __comment: 'Multiply: the palette colour, lit by the ring glow. The group adds every pass\'s rings together.' },
+                params: { __comment: 'Multiply: the palette colour, lit by the ring glow. The group adds every pass\'s rings together.', outputType: 'vec3', b: 1 },
                 assignOp: '+=',
               },
             ],
@@ -843,13 +851,14 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
             nodes: [
               {
                 id: 'uv_scale',
-                type: 'multiplyVec2',
+                type: 'multiply',
                 position: { x: 120, y: 180 },
                 inputs: {
-                  v: { type: 'vec2', label: 'Vec2', connection: { nodeId: GROUP_PORT_SENTINEL, outputKey: 'in_uv' } },
+                  a: { type: 'vec2', label: 'A', connection: { nodeId: GROUP_PORT_SENTINEL, outputKey: 'in_uv' } },
+                  b: { type: 'vec2', label: 'B' },
                 },
                 outputs: { result: { type: 'vec2', label: 'Result' } },
-                params: { __comment: 'Multiply: the picture × 2 each pass (⟳ carry), so every octave\'s noise is twice as fine.', scale: 2 },
+                params: { __comment: 'Multiply: the picture × 2 each pass (⟳ carry), so every octave\'s noise is twice as fine.', outputType: 'vec2', b: 2 },
                 carryMode: true,
               },
               {
@@ -922,9 +931,11 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
       },
       {
         id: 'palette_2',
-        type: 'palettePreset',
+        type: 'palette',
         position: { x: 500, y: 200 },
-        inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'group_1', outputKey: 'out_value' } } },
+        inputs: {
+          value: { type: 'float', label: 'Angle', connection: { nodeId: 'group_1', outputKey: 'out_value' } },
+        },
         outputs: { color: { type: 'vec3', label: 'Color' } },
         params: { __comment: 'Palette: the summed noise as colour.', preset: '5' },
       },
@@ -1011,9 +1022,11 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
       },
       {
         id: 'palette_3',
-        type: 'palettePreset',
+        type: 'palette',
         position: { x: 700, y: 200 },
-        inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'fbm_2', outputKey: 'value' } } },
+        inputs: {
+          value: { type: 'float', label: 'Angle', connection: { nodeId: 'fbm_2', outputKey: 'value' } },
+        },
         outputs: { color: { type: 'vec3', label: 'Color' } },
         params: { preset: '1' },
       },
@@ -1118,9 +1131,11 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
       },
       {
         id: 'pal_3',
-        type: 'palettePreset',
+        type: 'palette',
         position: { x: 500, y: 200 },
-        inputs: { t: { type: 'float', label: 't', connection: { nodeId: 'wave_2', outputKey: 'value' } } },
+        inputs: {
+          value: { type: 'float', label: 'Angle', connection: { nodeId: 'wave_2', outputKey: 'value' } },
+        },
         outputs: { color: { type: 'vec3', label: 'Color' } },
         params: { preset: '1', scale: 1, offset: 0 },
       },
@@ -1248,9 +1263,11 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
       },
       {
         id: 'pal_5',
-        type: 'palettePreset',
+        type: 'palette',
         position: { x: 700, y: 260 },
-        inputs: { t: { type: 'float', label: 't', connection: { nodeId: 'mul_4', outputKey: 'result' } } },
+        inputs: {
+          value: { type: 'float', label: 'Angle', connection: { nodeId: 'mul_4', outputKey: 'result' } },
+        },
         outputs: { color: { type: 'vec3', label: 'Color' } },
         params: { preset: '4', scale: 1, offset: 0 },
       },
@@ -1346,13 +1363,13 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
               },
               {
                 id: 'hb_sm1',
-                type: 'smoothMin',
+                type: 'sdfUnion',
                 position: { x: 620, y: 180 },
                 inputs: {
                   a: { type: 'float', label: 'A', connection: { nodeId: 'hb_sph', outputKey: 'dist' } },
                   b: { type: 'float', label: 'B', connection: { nodeId: 'hb_box', outputKey: 'dist' } },
                 },
-                outputs: { result: { type: 'float', label: 'Result' } },
+                outputs: { dist: { type: 'float', label: 'Distance' } },
                 params: { k: 0.2 },
               },
               {
@@ -1360,7 +1377,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
                 type: 'minMath',
                 position: { x: 800, y: 310 },
                 inputs: {
-                  a: { type: 'float', label: 'A', connection: { nodeId: 'hb_sm1', outputKey: 'result' } },
+                  a: { type: 'float', label: 'A', connection: { nodeId: 'hb_sm1', outputKey: 'dist' } },
                   b: { type: 'float', label: 'B', connection: { nodeId: 'hb_gnd', outputKey: 'dist' } },
                 },
                 outputs: { result: { type: 'float', label: 'Result' } },
@@ -1822,65 +1839,65 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
               },
               {
                 id: 'he_sm1',
-                type: 'smoothMin',
+                type: 'sdfUnion',
                 position: { x: 820, y: 190 },
                 inputs: {
                   a: { type: 'float', label: 'A', connection: { nodeId: 'he_sphA', outputKey: 'dist' } },
                   b: { type: 'float', label: 'B', connection: { nodeId: 'he_sphB', outputKey: 'dist' } },
                 },
-                outputs: { result: { type: 'float', label: 'Result' } },
+                outputs: { dist: { type: 'float', label: 'Distance' } },
                 params: { k: 0.3 },
               },
               {
                 id: 'he_sm2',
-                type: 'smoothMin',
+                type: 'sdfUnion',
                 position: { x: 1000, y: 300 },
                 inputs: {
-                  a: { type: 'float', label: 'A', connection: { nodeId: 'he_sm1', outputKey: 'result' } },
+                  a: { type: 'float', label: 'A', connection: { nodeId: 'he_sm1', outputKey: 'dist' } },
                   b: { type: 'float', label: 'B', connection: { nodeId: 'he_sphC', outputKey: 'dist' } },
                 },
-                outputs: { result: { type: 'float', label: 'Result' } },
+                outputs: { dist: { type: 'float', label: 'Distance' } },
                 params: { k: 0.3 },
               },
             ],
             outputNodeId: 'he_sm2',
-            outputKey: 'result',
+            outputKey: 'dist',
           },
         },
       },
       {
         id: 'he_nmul',
-        type: 'multiplyVec3',
+        type: 'multiply',
         position: { x: 1160, y: 200 },
         inputs: {
-          color: { type: 'vec3', label: 'Color', connection: { nodeId: 'mlg_he_ray', outputKey: 'normal' } },
-          scale: { type: 'float', label: 'Scale' },
+          a: { type: 'vec3', label: 'A', connection: { nodeId: 'mlg_he_ray', outputKey: 'normal' } },
+          b: { type: 'vec3', label: 'B' },
         },
         outputs: { result: { type: 'vec3', label: 'Result' } },
-        params: { scale: 0.5 },
+        params: { outputType: 'vec3', b: 0.5 },
       },
       {
         id: 'he_nadd',
-        type: 'addVec3',
+        type: 'add',
         position: { x: 1360, y: 200 },
         inputs: {
           a: { type: 'vec3', label: 'A', connection: { nodeId: 'he_nmul', outputKey: 'result' } },
           b: { type: 'vec3', label: 'B' },
         },
         outputs: { result: { type: 'vec3', label: 'Result' } },
-        params: { bx: 0.5, by: 0.5, bz: 0.5 },
+        params: { outputType: 'vec3', b: 0.5 },
       },
       {
         id: 'he_mix',
-        type: 'mixVec3',
+        type: 'mix',
         position: { x: 1420, y: 340 },
         inputs: {
           a: { type: 'vec3', label: 'A', connection: { nodeId: 'mlg_he_ray', outputKey: 'color' } },
           b: { type: 'vec3', label: 'B', connection: { nodeId: 'he_nadd', outputKey: 'result' } },
-          fac: { type: 'float', label: 'Fac' },
+          t: { type: 'float', label: 'Blend' },
         },
         outputs: { result: { type: 'vec3', label: 'Result' } },
-        params: { fac: 0.5 },
+        params: { outputType: 'vec3', t: 0.5 },
       },
       {
         id: 'he_out',
@@ -3650,25 +3667,25 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
       },
       {
         id: 'gmul_8',
-        type: 'multiplyVec3',
+        type: 'multiply',
         position: { x: 1460, y: 360 },
         inputs: {
-          color: { type: 'vec3', label: 'Color', connection: { nodeId: 'gclr_7', outputKey: 'rgb' } },
-          scale: { type: 'float', label: 'Scale', connection: { nodeId: 'tanh_6', outputKey: 'output' } },
+          a: { type: 'vec3', label: 'A', connection: { nodeId: 'gclr_7', outputKey: 'rgb' } },
+          b: { type: 'vec3', label: 'B', connection: { nodeId: 'tanh_6', outputKey: 'output' } },
         },
         outputs: { result: { type: 'vec3', label: 'Result' } },
-        params: { scale: 1 },
+        params: { outputType: 'vec3', b: 1 },
       },
       {
         id: 'add_9',
-        type: 'addVec3',
+        type: 'add',
         position: { x: 1640, y: 260 },
         inputs: {
           a: { type: 'vec3', label: 'A', connection: { nodeId: 'mlg_4', outputKey: 'color' } },
           b: { type: 'vec3', label: 'B', connection: { nodeId: 'gmul_8', outputKey: 'result' } },
         },
         outputs: { result: { type: 'vec3', label: 'Result' } },
-        params: {},
+        params: { outputType: 'vec3', b: 0 },
       },
       {
         id: 'output_10',
@@ -4052,14 +4069,14 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
               },
               {
                 id: 'pos_b',
-                type: 'addVec3',
+                type: 'add',
                 position: { x: 260, y: 280 },
                 inputs: {
                   a: { type: 'vec3', label: 'A', connection: { nodeId: 'sp', outputKey: 'pos' } },
                   b: { type: 'vec3', label: 'B', connection: { nodeId: 'ofs_b', outputKey: 'rgb' } },
                 },
                 outputs: { result: { type: 'vec3', label: 'Result' } },
-                params: {},
+                params: { outputType: 'vec3', b: 0 },
               },
               {
                 id: 'sdf_b',
@@ -4079,14 +4096,14 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
               },
               {
                 id: 'pos_c',
-                type: 'addVec3',
+                type: 'add',
                 position: { x: 260, y: 420 },
                 inputs: {
                   a: { type: 'vec3', label: 'A', connection: { nodeId: 'sp', outputKey: 'pos' } },
                   b: { type: 'vec3', label: 'B', connection: { nodeId: 'ofs_c', outputKey: 'rgb' } },
                 },
                 outputs: { result: { type: 'vec3', label: 'Result' } },
-                params: {},
+                params: { outputType: 'vec3', b: 0 },
               },
               {
                 id: 'sdf_c',
@@ -4555,14 +4572,14 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
       },
       {
         id: 'msk_9',
-        type: 'multiplyVec3',
+        type: 'multiply',
         position: { x: 1820, y: 200 },
         inputs: {
-          color: { type: 'vec3', label: 'Color', connection: { nodeId: 'pal_8', outputKey: 'color' } },
-          scale: { type: 'float', label: 'Scale', connection: { nodeId: 'mlg_4', outputKey: 'hit' } },
+          a: { type: 'vec3', label: 'A', connection: { nodeId: 'pal_8', outputKey: 'color' } },
+          b: { type: 'vec3', label: 'B', connection: { nodeId: 'mlg_4', outputKey: 'hit' } },
         },
         outputs: { result: { type: 'vec3', label: 'Result' } },
-        params: { scale: 1 },
+        params: { outputType: 'vec3', b: 1 },
       },
       {
         id: 'tone_10',
@@ -5071,7 +5088,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
               },
               {
                 id: 'sm12',
-                type: 'sdfSmoothUnion',
+                type: 'sdfUnion',
                 position: { x: 660, y: 150 },
                 inputs: {
                   a: { type: 'float', label: 'A', connection: { nodeId: 's1', outputKey: 'dist' } },
@@ -5082,7 +5099,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
               },
               {
                 id: 'sm123',
-                type: 'sdfSmoothUnion',
+                type: 'sdfUnion',
                 position: { x: 860, y: 260 },
                 inputs: {
                   a: { type: 'float', label: 'A', connection: { nodeId: 'sm12', outputKey: 'dist' } },
@@ -5614,22 +5631,24 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
       },
       {
         id: 'gm_pal',
-        type: 'palettePreset',
+        type: 'palette',
         position: { x: 760, y: 460 },
-        inputs: { value: { type: 'float', label: 'Value', connection: { nodeId: 'gm_fvis', outputKey: 'result' } } },
+        inputs: {
+          value: { type: 'float', label: 'Angle', connection: { nodeId: 'gm_fvis', outputKey: 'result' } },
+        },
         outputs: { color: { type: 'vec3', label: 'Color' } },
         params: { preset: '3' },
       },
       {
         id: 'gm_col',
-        type: 'multiplyVec3',
+        type: 'multiply',
         position: { x: 1020, y: 300 },
         inputs: {
-          color: { type: 'vec3', label: 'Color', connection: { nodeId: 'gm_pal', outputKey: 'color' } },
-          scale: { type: 'float', label: 'Scale', connection: { nodeId: 'gm_fill', outputKey: 'result' } },
+          a: { type: 'vec3', label: 'A', connection: { nodeId: 'gm_pal', outputKey: 'color' } },
+          b: { type: 'vec3', label: 'B', connection: { nodeId: 'gm_fill', outputKey: 'result' } },
         },
         outputs: { result: { type: 'vec3', label: 'Result' } },
-        params: {},
+        params: { outputType: 'vec3', b: 1 },
       },
       {
         id: 'gm_out',
@@ -5791,11 +5810,13 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
       },
       {
         id: 'gd_pal',
-        type: 'palettePreset',
+        type: 'palette',
         position: { x: 780, y: 420 },
-        inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'gd_grid', outputKey: 'dist_to_center' } } },
+        inputs: {
+          value: { type: 'float', label: 'Angle', connection: { nodeId: 'gd_grid', outputKey: 'dist_to_center' } },
+        },
         outputs: { color: { type: 'vec3', label: 'Color' } },
-        params: { __comment: 'Palette: a colour for each cell, from how far it is from the middle (Dist to Center), so the colours ring outward.' },
+        params: { __comment: 'Palette: a colour for each cell, from how far it is from the middle (Dist to Center), so the colours ring outward.', preset: '1' },
       },
       {
         id: 'gd_col',
@@ -6283,7 +6304,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
   // ── Beat Grid ──
   beatGrid: {
     label: 'Beat Grid',
-    description: 'Grid Layout cuts the screen into cells; BPM Sync pulses every box on the beat and Audio Input (load a track) pushes them further. Cell Filter strokes every other cell; Palette colours by column with its Scale param.',
+    description: 'Grid Layout cuts the screen into cells; BPM Sync pulses every box on the beat and a Band level on an Audio Source (load a track) pushes them further. Cell Filter strokes every other cell; Palette colours by column with its Scale param.',
     counter: 13,
     play: {
       version: 1,
@@ -6330,11 +6351,19 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
       },
       {
         id: 'audio',
-        type: 'audioInput',
+        type: 'audioSource',
+        position: { x: 280, y: 560 },
+        inputs: {},
+        outputs: { audio: { type: 'audio', label: 'Audio' }, level: { type: 'float', label: 'Level' }, time: { type: 'float', label: 'Time' } },
+        params: { source: 'file', playing: true, loop: true, gain: 1, __comment: 'Audio Source: load a track (or pick the Mic) on its card.' },
+      },
+      {
+        id: 'bass',
+        type: 'audioBand',
         position: { x: 480, y: 560 },
-        inputs: { band_0_center: { type: 'float', label: 'Band 0 Hz' } },
-        outputs: { amplitude_0: { type: 'float', label: 'Band 0' } },
-        params: { freq_range: 200, mode: 'band', _bands: [200], _soloedBand: -1, _fileName: '', _hasFile: false },
+        inputs: { audio: { type: 'audio', label: 'Audio', connection: { nodeId: 'audio', outputKey: 'audio' } } },
+        outputs: { level: { type: 'float', label: 'Level' }, peak: { type: 'float', label: 'Peak' } },
+        params: { band: 'bass', low: 60, high: 250, attack: 0.01, release: 0.15, gain: 1, __comment: 'Band level, Bass: how loud the low end is now (0–1), added to the boxes\' size.' },
       },
       {
         id: 'grid',
@@ -6392,7 +6421,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         position: { x: 1320, y: 360 },
         inputs: {
           a: { type: 'float', label: 'A', connection: { nodeId: 'size', outputKey: 'result' } },
-          b: { type: 'float', label: 'B', connection: { nodeId: 'audio', outputKey: 'amplitude_0' } },
+          b: { type: 'float', label: 'B', connection: { nodeId: 'bass', outputKey: 'level' } },
         },
         outputs: { result: { type: 'float', label: 'Result' } },
         params: { b: 0 },
@@ -6900,25 +6929,25 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
   // ── Particles: Sound Field ──
   particleSoundField: {
     label: 'Particles: Sound Field',
-    description: 'A Particles node that sound ripples through: a still field of particles where every sound sends a ring travelling out from the centre and every hit fires a shockwave. Load a song on the Audio Input card; until then a steady beat stands in.',
+    description: 'A Particles node that sound ripples through: a still field of particles where every sound sends a ring travelling out from the centre and every hit fires a shockwave. Load a song on the Audio Source card; until then a steady beat stands in.',
     counter: 4,
     nodes: [
       {
         id: 'audio',
-        type: 'audioInput',
+        type: 'audioSource',
         position: { x: 60, y: 120 },
-        inputs: { band_0_center: { type: 'float', label: 'Band 0 Hz' } },
-        outputs: { amplitude_0: { type: 'float', label: 'Band 0' } },
+        inputs: {},
+        outputs: { audio: { type: 'audio', label: 'Audio' }, level: { type: 'float', label: 'Level' }, time: { type: 'float', label: 'Time' } },
         params: {
-          freq_range: 200, mode: 'full', _bands: [200], _soloedBand: -1, _fileName: '', _hasFile: false,
-          __comment: 'Load a song (or pick the mic) here. Particles hears the first Audio Input in the graph by itself, so its loudness reaches them with no wire.',
+          source: 'file', playing: true, loop: true, gain: 1,
+          __comment: 'Audio Source: load a song (or pick the Mic) here. Particles hears the first Audio Source in the graph by itself, so its Level reaches them with no wire.',
         },
       },
       {
         id: 'beat',
         type: 'exprNode',
         position: { x: 400, y: 120 },
-        inputs: { a: { type: 'float', label: 'a (float)', connection: { nodeId: 'audio', outputKey: 'amplitude_0' } } },
+        inputs: { a: { type: 'float', label: 'a (float)', connection: { nodeId: 'audio', outputKey: 'level' } } },
         outputs: { result: { type: 'vec3', label: 'Result (vec3)' } },
         params: {
           inputs: [{ name: 'a', type: 'float', slider: null }],
@@ -6966,25 +6995,26 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
   // ── Particles: Chladni Sand ──
   particleChladniSand: {
     label: 'Particles: Chladni Sand',
-    description: 'Sand on a vibrating square plate (Pattern: Chladni square): the sound picks the plate\'s modes and the sand gathers on the still lines between them, morphing from figure to figure. Load a song on the Audio Input card (its six bands, low to high, each add a mode); until then a stand-in beat steps through figures.',
+    description: 'Sand on a vibrating square plate (Pattern: Chladni square): the sound picks the plate\'s modes and the sand gathers on the still lines between them, morphing from figure to figure. Load a song on the Audio Source card (its six bands, low to high, each add a mode); until then a stand-in beat steps through figures.',
     counter: 5,
     nodes: [
       {
         id: 'audio',
-        type: 'audioInput',
+        type: 'audioSource',
         position: { x: 60, y: 60 },
-        inputs: Object.fromEntries([0, 1, 2, 3, 4, 5].map(i => [`band_${i}_center`, { type: 'float' as const, label: `Band ${i} Hz` }])),
-        outputs: Object.fromEntries([0, 1, 2, 3, 4, 5].map(i => [`amplitude_${i}`, { type: 'float' as const, label: `Band ${i}` }])),
+        inputs: {},
+        outputs: { audio: { type: 'audio', label: 'Audio' }, level: { type: 'float', label: 'Level' }, time: { type: 'float', label: 'Time' }, ...Object.fromEntries([1, 2, 3, 4, 5, 6].map(i => [`b${i}_v`, { type: 'float' as const, label: `Band ${i}` }])) },
         params: {
-          freq_range: 150, mode: 'band', _bands: [150, 450, 900, 1600, 2600, 4000], _soloedBand: -1, _fileName: '', _hasFile: false,
-          __comment: 'Load a song (or pick the mic) here. Its six bands, low to high, are what the plate hears: the loudest picks the main figure and the others add theirs. Particles hears this node by itself, with no wire; Band 0 only feeds the stand-in beat\'s silence check.',
+          source: 'file', playing: true, loop: true, gain: 1,
+          bands: [{ id: 'b1', name: 'Band 1', lo: 100, hi: 200 }, { id: 'b2', name: 'Band 2', lo: 350, hi: 550 }, { id: 'b3', name: 'Band 3', lo: 750, hi: 1050 }, { id: 'b4', name: 'Band 4', lo: 1350, hi: 1850 }, { id: 'b5', name: 'Band 5', lo: 2250, hi: 2950 }, { id: 'b6', name: 'Band 6', lo: 3500, hi: 4500 }],
+          __comment: 'Audio Source: load a song (or pick the Mic) here. Its six bands, low to high, are what the plate hears: the loudest picks the main figure and the others add theirs. Particles hears the first Audio Source by itself, with no wire; Level only feeds the stand-in beat\'s silence check.',
         },
       },
       {
         id: 'beat',
         type: 'exprNode',
         position: { x: 400, y: 60 },
-        inputs: { a: { type: 'float', label: 'a (float)', connection: { nodeId: 'audio', outputKey: 'amplitude_0' } } },
+        inputs: { a: { type: 'float', label: 'a (float)', connection: { nodeId: 'audio', outputKey: 'level' } } },
         outputs: { result: { type: 'float', label: 'Result (float)' } },
         params: {
           inputs: [{ name: 'a', type: 'float', slider: null }],
@@ -7218,25 +7248,26 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
   // ── Particles: Cymatics in 3D ──
   particleCymatics3d: {
     label: 'Particles: Cymatics in 3D',
-    description: 'A round singing plate in 3D (Pattern: Chladni round, Space: 3D): rings and spokes of sand on a plate lying flat, seen from a slowly circling camera with a little depth of field. The sound picks the modes; load a song on the Audio Input card, or a stand-in beat steps through figures.',
+    description: 'A round singing plate in 3D (Pattern: Chladni round, Space: 3D): rings and spokes of sand on a plate lying flat, seen from a slowly circling camera with a little depth of field. The sound picks the modes; load a song on the Audio Source card, or a stand-in beat steps through figures.',
     counter: 4,
     nodes: [
       {
         id: 'audio',
-        type: 'audioInput',
+        type: 'audioSource',
         position: { x: 60, y: 120 },
-        inputs: Object.fromEntries([0, 1, 2, 3, 4, 5].map(i => [`band_${i}_center`, { type: 'float' as const, label: `Band ${i} Hz` }])),
-        outputs: Object.fromEntries([0, 1, 2, 3, 4, 5].map(i => [`amplitude_${i}`, { type: 'float' as const, label: `Band ${i}` }])),
+        inputs: {},
+        outputs: { audio: { type: 'audio', label: 'Audio' }, level: { type: 'float', label: 'Level' }, time: { type: 'float', label: 'Time' }, ...Object.fromEntries([1, 2, 3, 4, 5, 6].map(i => [`b${i}_v`, { type: 'float' as const, label: `Band ${i}` }])) },
         params: {
-          freq_range: 150, mode: 'band', _bands: [150, 450, 900, 1600, 2600, 4000], _soloedBand: -1, _fileName: '', _hasFile: false,
-          __comment: 'Load a song (or pick the mic) here. Its six bands, low to high, pick the plate\'s modes: the loudest the main figure, the others weigh in. Particles hears this node by itself; Band 0 only feeds the stand-in beat\'s silence check.',
+          source: 'file', playing: true, loop: true, gain: 1,
+          bands: [{ id: 'b1', name: 'Band 1', lo: 100, hi: 200 }, { id: 'b2', name: 'Band 2', lo: 350, hi: 550 }, { id: 'b3', name: 'Band 3', lo: 750, hi: 1050 }, { id: 'b4', name: 'Band 4', lo: 1350, hi: 1850 }, { id: 'b5', name: 'Band 5', lo: 2250, hi: 2950 }, { id: 'b6', name: 'Band 6', lo: 3500, hi: 4500 }],
+          __comment: 'Audio Source: load a song (or pick the Mic) here. Its six bands, low to high, pick the plate\'s modes: the loudest the main figure, the others weigh in. Particles hears the first Audio Source by itself; Level only feeds the stand-in beat\'s silence check.',
         },
       },
       {
         id: 'beat',
         type: 'exprNode',
         position: { x: 400, y: 120 },
-        inputs: { a: { type: 'float', label: 'a (float)', connection: { nodeId: 'audio', outputKey: 'amplitude_0' } } },
+        inputs: { a: { type: 'float', label: 'a (float)', connection: { nodeId: 'audio', outputKey: 'level' } } },
         outputs: { result: { type: 'float', label: 'Result (float)' } },
         params: {
           inputs: [{ name: 'a', type: 'float', slider: null }],
@@ -12390,7 +12421,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
   },
   midiGlowKeys: {
     label: 'MIDI: Keys to Glow',
-    description: 'MIDI Input turns a controller into floats — or the computer keyboard: turn on the keyboard stand-in on the card and play the A–K row. Velocity sets the circle\'s Radius (Multiply + Add), Gate brightens the SDF Glow while a key is held (Multiply on the Tinted output), Note picks the Palette colour, and CC 1 (the mod wheel) drives Turbulence strength on the UV. The same shape as the Audio Input examples: an outside signal in, floats out, everything else is ordinary nodes.',
+    description: 'MIDI Input turns a controller into floats — or the computer keyboard: turn on the keyboard stand-in on the card and play the A–K row. Velocity sets the circle\'s Radius (Multiply + Add), Gate brightens the SDF Glow while a key is held (Multiply on the Tinted output), Note picks the Palette colour, and CC 1 (the mod wheel) drives Turbulence strength on the UV. The same shape as the Audio examples: an outside signal in, floats out, everything else is ordinary nodes.',
     counter: 14,
     nodes: [
       { id: 'mk_uv', type: 'uv', position: { x: 40, y: 120 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },

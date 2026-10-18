@@ -161,11 +161,11 @@ what the Output showed (or a stand-in noise picture when nothing).
 
 (The Particles card also has its own presets; the recipes only wire it in.)
 
-### Audio Input (`audioInput`): Built
+### Audio Source (`audioSource`) and Band level (`audioBand`): Built
 
 | Recipe | Graph | Why |
 |---|---|---|
-| Pulse a shape to the sound | Band → Remap (0…1 → 0.18…0.5) → Circle SDF radius → SDF Glow | Level → mapping → visual, the basic audio-reactive chain. The circle is visible in silence |
+| Pulse a shape to the sound | Level → Remap (0…1 → 0.18…0.5) → Circle SDF radius → SDF Glow | Level → mapping → visual, the basic audio-reactive chain. The circle is visible in silence |
 
 ### LFO (`lfo`): Built
 
@@ -191,7 +191,7 @@ Particles / Slime (with a Trail) / Empty group, asked before the add (see above)
 |---|---|---|
 | Texture Input / Video Input | Fit (cover / contain) via the node's Fit, Pixelate, Halftone, Edges via a Pass | Needs a picture loaded to look like anything; best with a sample image |
 | Time | "Speed" (× k), "Loop every N s" (mod), "Ping-pong 0…1" (sin → remap) | Time on its own drives nothing visible; better offered on a slider's right-click |
-| Audio Input, smoothing | Envelope / smoothing node before the mapping | No dedicated smoothing node yet (Play mappings smooth) |
+| Hit | Envelope → a ring that bursts on each hit | Band level already smooths (Attack / Release); Hit's Envelope needs its own recipe |
 | Mandelbrot / Julia, Newton, IFS | Mouse → Julia C; Time → zoom | Already full pictures; recipes would be "make it interactive" |
 | Truchet, Chladni | Palette on the field output; Time on a parameter | Complete generators; small gain |
 | Field Accumulate / Metaball Threshold | Grid → Field Accumulate → Threshold → palette (a metaball grid) | Good teaching recipe; a few more params to tune |

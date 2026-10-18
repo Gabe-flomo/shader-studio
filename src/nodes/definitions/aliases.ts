@@ -33,13 +33,15 @@ export interface NodeAlias {
 }
 
 const num = (v: unknown, d: number): number => (typeof v === 'number' && Number.isFinite(v) ? v : d);
+/** An old Add (vec3)'s B sliders as Add's one B, when all three are the same number (Add's B is one number). */
+const sameXYZ = (o: Record<string, unknown>): number | undefined => (typeof o.bx === 'number' && o.bx === o.by && o.bx === o.bz ? o.bx : undefined);
 
 export const NODE_ALIASES: Record<string, NodeAlias> = {
   // ── D4: SDF combine ops. Union / Intersect / Subtract take a blend radius k
   //    (0 = hard op); Offset / Onion / Sharpen are the shape modifiers. ──
   min:                { to: 'sdfUnion',     outputs: { result: 'dist' } },
   smoothMin:          { to: 'sdfUnion',     inputs: { smoothness: 'k' }, outputs: { result: 'dist' },
-                        params: o => ({ ...o, k: num(o.smoothness, 0.5), smoothness: undefined }) },
+                        params: o => ({ ...o, k: num(o.smoothness, num(o.k, 0.5)), smoothness: undefined }) },
   sdf2dSmoothUnion:   { to: 'sdfUnion',     inputs: { sdfA: 'a', sdfB: 'b' }, outputs: { result: 'dist' },
                         params: o => ({ ...o, k: num(o.k, 0.12) }) },
   sdfSmoothUnion:     { to: 'sdfUnion',     params: o => ({ ...o, k: num(o.k, 0.15) }) },
@@ -59,7 +61,7 @@ export const NODE_ALIASES: Record<string, NodeAlias> = {
   // ── D5: vector arithmetic is the scalar node with its type pill set ──
   addVec2:      { to: 'add',      params: o => ({ ...o, outputType: 'vec2', b: 0.0 }),
                   socketTypes: { inputs: { a: 'vec2', b: 'vec2' }, outputs: { result: 'vec2' } } },
-  addVec3:      { to: 'add',      params: o => ({ ...o, outputType: 'vec3', b: 0.0 }),
+  addVec3:      { to: 'add',      params: o => ({ ...o, outputType: 'vec3', b: sameXYZ(o) ?? 0.0, bx: undefined, by: undefined, bz: undefined }),
                   socketTypes: { inputs: { a: 'vec3', b: 'vec3' }, outputs: { result: 'vec3' } } },
   multiplyVec2: { to: 'multiply', inputs: { v: 'a', scale: 'b' },
                   params: o => ({ ...o, outputType: 'vec2', b: num(o.scale, 1.0), scale: undefined }),

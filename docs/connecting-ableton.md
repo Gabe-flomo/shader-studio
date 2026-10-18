@@ -36,7 +36,7 @@ MIDI, OSC and audio carry different things, and you can use all three at once.
 2. **Point Ableton at it:** Settings → Audio → Output Device: the **Multi-Output Device** (Mac) or **CABLE Input** with Driver Type **MME/DirectX** (Windows; ASIO can only use your interface).
 3. **In Shader Studio:** source **Live audio in** → **Listen** → allow the microphone (browsers ask this for any audio input) → pick **BlackHole 2ch** / **CABLE Output**. Bands: Level, Bass, Low-mid, High-mid, Treble; raise **gain** if it barely moves. Kick flashes: **Trigger** → On **Audio hit** → Bass → **Envelope**, and nudge the threshold.
 
-No extra software: pick your microphone and point it at the speakers. Expect 20–50 ms of delay either way. The Studio's Audio Input node plays files; live input lives on the Play page.
+No extra software: pick your microphone and point it at the speakers. Expect 20–50 ms of delay either way. The Studio's Audio Source node plays files or listens to the Mic; live input also lives on the Play page.
 
 ## A MIDI controller
 

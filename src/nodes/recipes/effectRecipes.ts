@@ -1,6 +1,6 @@
 /**
  * effectRecipes.ts — starter recipes for nodes that work on a picture or over time: Previous
- * Frame (feedback), Pass, Particles, Audio Input, LFO and the picture effects (Bloom, Vignette,
+ * Frame (feedback), Pass, Particles, Audio Source / Band level, LFO and the picture effects (Bloom, Vignette,
  * Grain…).
  */
 import type { GraphNode } from '../../types/nodeGraph';
@@ -166,7 +166,7 @@ export const AUDIO_RECIPES: StarterRecipe[] = [
   {
     id: 'audio-pulse',
     label: 'Pulse a shape to the sound',
-    description: 'The band\'s level (0…1) becomes a circle\'s radius, lit by SDF Glow. Load a sound on the card to hear and see it.',
+    description: 'How loud it is (its Level, 0…1) becomes a circle\'s radius, lit by SDF Glow. Load a sound on the Audio Source\'s card to hear and see it.',
     build: ctx => ({
       nodes: [
         n('remap', 'size', col(1), 0, { inMin: 0, inMax: 1, outMin: 0.18, outMax: 0.5, ...note(

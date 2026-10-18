@@ -11,7 +11,7 @@ A chain per sound, then one on the master bus:
 | `master` | Everything the app plays, after each sound's own chain |
 | `synth` | The MIDI tone synth (`lib/toneSynth.ts`) |
 | `layer:<id>` | An audio layer's song, a Video layer's sound, or a Drum pad layer's pads (before its volume) |
-| `node:<id>` | An Audio Input node's song |
+| `node:<id>` | An Audio Input node's song (the retired node, in old graphs) |
 
 ```
 song / video / synth ─→ inlet ─→ [its chain] ─→ (video: volume) ─→ mix ─→ [master chain] ─→ master volume ─→ speakers

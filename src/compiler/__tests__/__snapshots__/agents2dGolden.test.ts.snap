@@ -534,15 +534,15 @@ exports[`2D agents and pass graphs compile as they did before 3D > agentShaderRi
 
 exports[`2D agents and pass graphs compile as they did before 3D > agentShaderSoundRings 1`] = `
 {
-  "agents": "0ac21c0b6f2ded1343d8e4505f26:18870",
+  "agents": "15a1b57d4e9b4f17262d5b2235b4:18905",
   "errors": null,
-  "fragmentShader": "01e8dfb094442e1a037fb0e94f46:5866",
+  "fragmentShader": "015c2ef7591a3306e2d00a335860:5907",
   "paramBindings": "08b8a36da1dca70be8d065e9a446:1727",
   "paramUniforms": "1f53af8e01ea210b239857b91418:1223",
   "passes": "167d269bbddad80189e9f9473b28:2",
   "success": true,
   "textureUniforms": "167d269bbddad80189e9f9473b28:2",
-  "web": "175e56694b9d5200e7864236db8e:18932",
+  "web": "18fbd3ba25187f071c45220b345f:18967",
 }
 `;
 

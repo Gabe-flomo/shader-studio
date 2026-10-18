@@ -16,8 +16,10 @@ exports[`golden shaders: every Play example exports the same bundle > audioEffec
 
 exports[`golden shaders: every Play example exports the same bundle > beatGrid 1`] = `
 {
-  "bundle": "0352c72cecc8da1f0f4f955a4b79:7883",
-  "missing": [],
+  "bundle": "1d0b0366cc7f46086efbeff48c3d:8114",
+  "missing": [
+    "MIDI Input node outputs",
+  ],
 }
 `;
 
@@ -2422,15 +2424,18 @@ exports[`golden shaders: every example compiles as it did > bakeHeavyScene 1`] =
 
 exports[`golden shaders: every example compiles as it did > beatGrid 1`] = `
 {
-  "audioUniforms": {
-    "u_audio_audio_0_0": "audio",
-  },
+  "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "01df3d02498c0511ff8d2a3cbb96:4881",
+  "fragmentShader": "09d1c4b239cc96069e52ede69e75:5108",
   "isStateful": false,
-  "liveUniforms": {},
-  "nodeSlugs": "1cd46751665ec70d150b0eecd407:280",
+  "liveUniforms": {
+    "u_aud_audioband_0_level": "bass::level",
+    "u_aud_audioband_0_peak": "bass::peak",
+    "u_aud_audiosourc_0_level": "audio::level",
+    "u_aud_audiosourc_0_time": "audio::time",
+  },
+  "nodeSlugs": "193c845d3ecc2402fcee30f7ca9e:308",
   "paramBindings": "0f288aaaf1541619e26e8b202251:742",
   "paramUniforms": [
     "u_p_addx0_b",
@@ -13899,20 +13904,22 @@ exports[`golden shaders: every example compiles as it did > p5Webgl 1`] = `
 
 exports[`golden shaders: every example compiles as it did > particleChladniSand 1`] = `
 {
-  "audioUniforms": {
-    "u_audio_audio_0_0": "audio",
-    "u_audio_audio_0_1": "audio",
-    "u_audio_audio_0_2": "audio",
-    "u_audio_audio_0_3": "audio",
-    "u_audio_audio_0_4": "audio",
-    "u_audio_audio_0_5": "audio",
-  },
+  "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "070dfe9317d86e0895999155f57e:8653",
+  "fragmentShader": "111c4d933cdc920ab1c339f661a0:8493",
   "isStateful": false,
-  "liveUniforms": {},
-  "nodeSlugs": "114d4229841506135b320877528b:83",
+  "liveUniforms": {
+    "u_aud_audiosourc_0_b1_v": "audio::b1_v",
+    "u_aud_audiosourc_0_b2_v": "audio::b2_v",
+    "u_aud_audiosourc_0_b3_v": "audio::b3_v",
+    "u_aud_audiosourc_0_b4_v": "audio::b4_v",
+    "u_aud_audiosourc_0_b5_v": "audio::b5_v",
+    "u_aud_audiosourc_0_b6_v": "audio::b6_v",
+    "u_aud_audiosourc_0_level": "audio::level",
+    "u_aud_audiosourc_0_time": "audio::time",
+  },
+  "nodeSlugs": "08cc2d32b7010516da5cc91b003c:88",
   "paramBindings": "06508d052eebd20dc943fb1c50a4:2375",
   "paramUniforms": [
     "u_p_gpuparticlx0_attract",
@@ -13983,20 +13990,22 @@ exports[`golden shaders: every example compiles as it did > particleChladniSand 
 
 exports[`golden shaders: every example compiles as it did > particleCymatics3d 1`] = `
 {
-  "audioUniforms": {
-    "u_audio_audio_0_0": "audio",
-    "u_audio_audio_0_1": "audio",
-    "u_audio_audio_0_2": "audio",
-    "u_audio_audio_0_3": "audio",
-    "u_audio_audio_0_4": "audio",
-    "u_audio_audio_0_5": "audio",
-  },
+  "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "1155dfd66998041349b26059a632:8372",
+  "fragmentShader": "003e7c2a5d03701f83bf53240195:8212",
   "isStateful": false,
-  "liveUniforms": {},
-  "nodeSlugs": "11a8fd42e30d201c0c77d4f80693:84",
+  "liveUniforms": {
+    "u_aud_audiosourc_0_b1_v": "audio::b1_v",
+    "u_aud_audiosourc_0_b2_v": "audio::b2_v",
+    "u_aud_audiosourc_0_b3_v": "audio::b3_v",
+    "u_aud_audiosourc_0_b4_v": "audio::b4_v",
+    "u_aud_audiosourc_0_b5_v": "audio::b5_v",
+    "u_aud_audiosourc_0_b6_v": "audio::b6_v",
+    "u_aud_audiosourc_0_level": "audio::level",
+    "u_aud_audiosourc_0_time": "audio::time",
+  },
+  "nodeSlugs": "08c71dc53677440cb8bf40b1d76c:89",
   "paramBindings": "05b56cae87a4c00fe5b53adf45f7:2429",
   "paramUniforms": [
     "u_p_gpuparticlx0_attract",
@@ -14622,15 +14631,16 @@ exports[`golden shaders: every example compiles as it did > particleRain 1`] = `
 
 exports[`golden shaders: every example compiles as it did > particleSoundField 1`] = `
 {
-  "audioUniforms": {
-    "u_audio_audio_0_0": "audio",
-  },
+  "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "17ec6ed5e049e81ebe823fde2fde:7809",
+  "fragmentShader": "0b34ee8a8749380f99195d1280d6:7821",
   "isStateful": false,
-  "liveUniforms": {},
-  "nodeSlugs": "04cbfd5386c3e0085b3572c0c2a1:84",
+  "liveUniforms": {
+    "u_aud_audiosourc_0_level": "audio::level",
+    "u_aud_audiosourc_0_time": "audio::time",
+  },
+  "nodeSlugs": "0a63c6772d2d661319c8f541bdb4:89",
   "paramBindings": "0670d676aa5ab20dd8dc011b439d:2429",
   "paramUniforms": [
     "u_p_gpuparticlx0_attract",
@@ -18135,7 +18145,7 @@ exports[`golden shaders: every example compiles as it did > shapesAndGround3D 1`
     "u_p_shapesxgroundx0xsgxtrx0xc2_ty",
     "u_p_shapesxgroundx0xsgxtrx0xc2_tz",
   ],
-  "paramValues": "0e50b4bed9a5381e21a87272cb43:1039",
+  "paramValues": "003c3f9ebbfc6e0dac28d534f806:1039",
   "passes": null,
   "success": true,
   "textureUniforms": {},
@@ -18188,7 +18198,7 @@ exports[`golden shaders: every example compiles as it did > softMetaballs3D 1`] 
     "u_p_softxmetaballsx0xsgxtrx0xc2_ty",
     "u_p_softxmetaballsx0xsgxtrx0xc2_tz",
   ],
-  "paramValues": "020221f2d97bf910d0e096b4981b:1155",
+  "paramValues": "14747427b6547717497e35ed8815:1157",
   "passes": null,
   "success": true,
   "textureUniforms": {},
@@ -18498,7 +18508,7 @@ exports[`golden shaders: every example compiles as it did > splatRingsInScene 1`
     "u_p_splatx0_softness",
     "u_p_splatx0_splatSize",
   ],
-  "paramValues": "01402cfa1a0568192aa7180498aa:1317",
+  "paramValues": "1fd2e5e68ed96c13d30059de6e66:1317",
   "passes": null,
   "success": true,
   "textureUniforms": {

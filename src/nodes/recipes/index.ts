@@ -48,7 +48,9 @@ export const STARTER_RECIPES: Readonly<Record<string, StarterRecipe[]>> = {
   textureFade: FADE_RECIPES,
   textureFeedback: FEEDBACK_TEXTURE_RECIPES,
   gpuParticles: PARTICLE_RECIPES,
-  audioInput: AUDIO_RECIPES,
+  // The Audio nodes (docs/audio-tools.md): an Audio Source's Level, or one band's (Band level).
+  audioSource: AUDIO_RECIPES,
+  audioBand: AUDIO_RECIPES,
   lfo: LFO_RECIPES,
   // Light the scene (docs/light-scene.md): 3D and 4D scenes both march through a March Loop Group.
   marchLoopGroup: LIGHT_RECIPES,
