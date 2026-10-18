@@ -357,9 +357,9 @@ function emitShape(ctx: Ctx, sh: ShapeSpec, pos: Ref, list: GraphNode[], local?:
       `Lifts the 3D point to 4D for ${name}: (x, y, z) becomes a 4D point on the slice at W ${fmt(w)}, cut ${def.fourD.slice}-first. Move W to sweep the slice through the 4D shape.`, list);
     shapePos = ref(lift, 'p4');
     if (spin) {
-      const turn = mk(ctx, 'rotate4D', `${sh.id}:turn4`, { plane: 'xw', angle: 0, spin }, { p4: shapePos },
-        `Turns ${name} in the xw plane, ${fmt(spin)}° a second: a turn into the fourth axis, so its 3D slice morphs.`, list);
-      shapePos = ref(turn, 'p4');
+      const turn = mk(ctx, 'transform', `${sh.id}:turn4`, { dim: '4', spin, spinPlane: 'xw' }, { p: shapePos },
+        `A Transform (4D) turning ${name} in the xw plane, ${fmt(spin)}° a second: a turn into the fourth axis, so its 3D slice morphs.`, list);
+      shapePos = ref(turn, 'p');
     }
   }
   const isBalls = sh.kind === 'picture-balls';

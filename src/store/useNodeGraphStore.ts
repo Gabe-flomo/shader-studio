@@ -61,7 +61,7 @@ import { datasetStore } from '../data/datasetStore';
 import { retypeDataNode } from '../nodes/definitions/data';
 import { retypeTransform, transformDefFor, transformDim } from '../nodes/definitions/transformAny';
 import { addScopeOf, transformDimHere } from '../nodes/addScope';
-import { switchToTransformIn } from '../nodes/toTransform';
+import { migrateTransformsOnLoad, migrateTransformsPlay, switchToTransformIn } from '../nodes/toTransform';
 import { migratePlayRecord } from './migratePlay';
 import { clearLegacyColumnsWire } from '../nodes/definitions/gridColumns';
 import { playEngine } from '../lib/playEngine';
@@ -299,7 +299,16 @@ function upgradeExprNodes(nodes: GraphNode[]): GraphNode[] {
  * compile a saved graph off-screen without loading it (Present snapshots).
  */
 export function migrateLoadedNodes(nodes: GraphNode[]): GraphNode[] {
-  return upgradeExprNodes(resolveNodeAliases(nodes, getNodeDefinition)).map(n => migrateNodeParams(n.params ? n : { ...n, params: {} }, getNodeDefinition));
+  return switchRetiredTransforms(upgradeExprNodes(resolveNodeAliases(nodes, getNodeDefinition)).map(n => migrateNodeParams(n.params ? n : { ...n, params: {} }, getNodeDefinition)));
+}
+
+/**
+ * The retired transform nodes (docs/node-retirements.md) as Transforms where that is exact (nodes/toTransform.ts
+ * migrateTransformsOnLoad), the new Transforms brought up to date. The last step of every load.
+ */
+function switchRetiredTransforms(nodes: GraphNode[]): GraphNode[] {
+  const sw = migrateTransformsOnLoad(nodes);
+  return sw === nodes ? nodes : sw.map(n => migrateNodeParams(n, getNodeDefinition));
 }
 
 /**
@@ -308,7 +317,10 @@ export function migrateLoadedNodes(nodes: GraphNode[]): GraphNode[] {
  * nodes as saved, before migrateLoadedNodes.
  */
 export function migrateLoadedPlay(play: PlayRecord, savedNodes: GraphNode[]): PlayRecord {
-  return migratePlayRecord(play, resolveNodeAliases(savedNodes, getNodeDefinition), getNodeDefinition);
+  const resolved = resolveNodeAliases(savedNodes, getNodeDefinition);
+  const migrated = migratePlayRecord(play, resolved, getNodeDefinition);
+  // Controls on a retired transform's settings follow it onto its Transform (tx → x…).
+  return migrateTransformsPlay(upgradeExprNodes(resolved).map(n => migrateNodeParams(n.params ? n : { ...n, params: {} }, getNodeDefinition)), migrated);
 }
 
 /** Convert a label to a filesystem-safe slug. Used by the generic graph-save
@@ -5521,10 +5533,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     undoManager.clear(example === 'blank' ? 'Started a new graph' : `Loaded example: ${graph.label}`);
     const { nodes: rawNodes } = graph;
 
-    const nodes = spreadLegacyLayout(upgradeExprNodes(resolveNodeAliases(rawNodes, getNodeDefinition)).map(n => migrateNodeParams(
-      n.params ? n : { ...n, params: {} },
-      getNodeDefinition,
-    )));
+    const nodes = spreadLegacyLayout(migrateLoadedNodes(rawNodes));
 
     idGenerator.syncFromGraph(nodes);
     // Example graphs don't carry their own loose groups yet — reset rather
@@ -5745,7 +5754,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         return n;
       });
       play = migrateLoadedPlay(play, sanitized);
-      nodes = upgradeExprNodes(resolveNodeAliases(sanitized, getNodeDefinition)).map(n => migrateNodeParams(n, getNodeDefinition));
+      nodes = migrateLoadedNodes(sanitized);
       if (needsLayoutSpread(parsed)) nodes = spreadLegacyLayout(nodes);
     } catch (e) {
       console.error('[loadSavedGraph] saved graph is corrupt', name, e);
@@ -5807,7 +5816,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       datasets = parseDatasetsRecord(parsed.datasets);
       isPlayFile = parsed.kind === PLAY_FILE_KIND;
       play = migrateLoadedPlay(play, parsed.nodes as GraphNode[]);
-      nodes = upgradeExprNodes(resolveNodeAliases(parsed.nodes as GraphNode[], getNodeDefinition)).map(n => migrateNodeParams(n, getNodeDefinition));
+      nodes = migrateLoadedNodes(parsed.nodes as GraphNode[]);
       if (needsLayoutSpread(parsed)) nodes = spreadLegacyLayout(nodes);
     } catch (e) {
       console.error('[importGraph] invalid graph file', e);

@@ -205,10 +205,10 @@ export function buildFourDExamples(): Record<string, ExampleGraph> {
       n('marchCamera', 'cam', 40, 220, { camDist: 3.7, camAngle: 0.5, camElevation: 0.75, rotSpeed: 0.1, fov: 1.5, ...note('March Camera: looks down into the tray from above and circles slowly.') }, { time: ['time', 'time'] }),
       scene('scene', 40, 860, 'Hypersphere in a tesseract', [
         n('lift4D', 'lift', 240, 80, { ...note('Lift to 4D: W (the slice) arrives from the LFO outside the group through the W port, so one number moves the slice for the geometry and for the colouring. Face-first slice.') }, { pos: ['sp', 'pos'] }),
-        n('rotate4D', 'rot', 520, 80, { plane: 'xw', angle: 0, spin: 14, ...note('Rotate 4D in the xw plane, slowly. The sphere is round in every direction so it does not change; the box around it does. Spin 14 degrees a second keeps it going; Angle is a Play slider set straight on this node, inside the group.') }, { p4: ['lift', 'p4'] }),
-        n('hypersphereSDF', 'ball', 800, 20, { radius: 0.6, ...note('Hypersphere SDF: length(p4) - radius. A 4D ball of radius 0.6: its slice at W is a 3D ball of radius sqrt(0.6² - W²). At W = 0 it is a full 0.6 ball; at W = ±0.6 it shrinks to a point and is gone.') }, { p4: ['rot', 'p4'] }),
-        n('tesseractSDF', 'outer', 800, 220, { size: 0.9, rounding: 0.05, ...note('Tesseract SDF (outer): the outside of the box, half size 0.9.') }, { p4: ['rot', 'p4'] }),
-        n('tesseractSDF', 'inner', 800, 420, { size: 0.8, rounding: 0.04, ...note('Tesseract SDF (inner): a slightly smaller box, half size 0.8. Cutting it out of the outer one leaves a hollow shell 0.1 thick.') }, { p4: ['rot', 'p4'] }),
+        n('transform', 'rot', 520, 80, { dim: '4', rxw: 0, spin: 14, spinPlane: 'xw', ...note('Transform (4D), turning in the xw plane, slowly. The sphere is round in every direction so it does not change; the box around it does. Spin 14 degrees a second keeps it going; Angle is a Play slider set straight on this node, inside the group.') }, { p: ['lift', 'p4'] }),
+        n('hypersphereSDF', 'ball', 800, 20, { radius: 0.6, ...note('Hypersphere SDF: length(p4) - radius. A 4D ball of radius 0.6: its slice at W is a 3D ball of radius sqrt(0.6² - W²). At W = 0 it is a full 0.6 ball; at W = ±0.6 it shrinks to a point and is gone.') }, { p4: ['rot', 'p'] }),
+        n('tesseractSDF', 'outer', 800, 220, { size: 0.9, rounding: 0.05, ...note('Tesseract SDF (outer): the outside of the box, half size 0.9.') }, { p4: ['rot', 'p'] }),
+        n('tesseractSDF', 'inner', 800, 420, { size: 0.8, rounding: 0.04, ...note('Tesseract SDF (inner): a slightly smaller box, half size 0.8. Cutting it out of the outer one leaves a hollow shell 0.1 thick.') }, { p4: ['rot', 'p'] }),
         n('sdfSubtract', 'shell', 1080, 320, { k: 0, ...note('Subtract: outer box minus inner box = a hollow tesseract shell. Both are the same rotated 4D point, so the shell turns as one piece.') }, { a: ['outer', 'dist'], b: ['inner', 'dist'] }),
         n('planeSDF3D', 'lid', 1080, 560, { height: 0.35, ...note('A plane at y = 0.35. Used below to slice the top off the shell, so you can see inside. Its Height is a Play slider set on this node inside the group.') }, { p: ['sp', 'pos'] }),
         n('sdfIntersect', 'tray', 1360, 420, { k: 0, ...note('Intersect with the plane: keeps only what is below y = 0.35. The shell becomes an open tray with the ball inside.') }, { a: ['shell', 'dist'], b: ['lid', 'dist'] }),
@@ -224,14 +224,14 @@ export function buildFourDExamples(): Record<string, ExampleGraph> {
     ],
     play: play([
       ctl('sweep', 'sweep::amplitude', 'Sweep (w range)', 0, 0.6, 0.01),
-      ctl('a', 'scene::rot::angle', 'Turn (deg)', -180, 180, 0.5),
+      ctl('a', 'scene::rot::rxw', 'Turn (deg)', -180, 180, 0.5),
       ctl('lid', 'scene::lid::height', 'Cut height', -0.2, 0.9, 0.01),
       ctl('c', 'cam::camAngle', 'Camera angle', 0, 6.28, 0.02),
     ], `**What it shows.** A hypersphere (a ball with four directions) inside a hollow tesseract, seen through a slice. The ball's slice is always a ball, but its size depends on **w**: biggest at w = 0, shrinking to a point as w reaches its radius, so as the slice sweeps the orange ball swells and shrinks. Meanwhile the box around it, turning in the xw plane, morphs from a cube to a corner-cut shape and back. The top is cut off so you can see in, and the box casts a shadow into itself and darkens the corners where the ball nearly touches.
 
-**How it is built.** Inside the Scene Group: Scene Pos → **Lift to 4D** (w comes from an LFO outside, through a port) → **Rotate 4D** (xw) → a **Hypersphere SDF**, and two **Tesseract SDF**s subtracted to make a shell; a plane trims the shell open; Union joins the two. An Expression Block outside tells ball from shell by distance from the middle, using the same w. Soft Shadow and SDF Ambient Occlusion measure the Scene Group with the same w.
+**How it is built.** Inside the Scene Group: Scene Pos → **Lift to 4D** (w comes from an LFO outside, through a port) → **Transform** (4D, turning in xw) → a **Hypersphere SDF**, and two **Tesseract SDF**s subtracted to make a shell; a plane trims the shell open; Union joins the two. An Expression Block outside tells ball from shell by distance from the middle, using the same w. Soft Shadow and SDF Ambient Occlusion measure the Scene Group with the same w.
 
-**Try.** **Turn** and **Cut height** are Play knobs set directly on nodes inside the Scene Group (Rotate 4D and the plane), no wiring needed. Raise **Sweep** to 0.6 to take the slice all the way to the ball's edge, where it vanishes. Set it to 0 and the slice stays through the middle. **Turn** changes the box only: the sphere looks the same however you turn it in 4D.`),
+**Try.** **Turn** and **Cut height** are Play knobs set directly on nodes inside the Scene Group (the 4D Transform and the plane), no wiring needed. Raise **Sweep** to 0.6 to take the slice all the way to the ball's edge, where it vanishes. Set it to 0 and the slice stays through the middle. **Turn** changes the box only: the sphere looks the same however you turn it in 4D.`),
   };
 
   // ── 3. All three slice directions ─────────────────────────────────────────
@@ -241,8 +241,8 @@ export function buildFourDExamples(): Record<string, ExampleGraph> {
     { dir: 'corner', key: 'c', x: 2.5, y: 680, word: 'Corner-first: the normal is (1,1,1,1)/2. A point at W = 1.0, then a tetrahedron, a truncated tetrahedron, and an octahedron at W = 0.' },
   ];
   const shapeNodes: GraphNode[] = lifts.flatMap(l => [
-    n('translate3D', `mv_${l.key}`, 240, l.y, { tx: l.x, ...note(`Translate 3D: moves this tesseract to x = ${l.x} so the three sit in a row. Subtracting the offset from the point moves the shape the other way, as every Translate does.`) }, { pos: ['sp', 'pos'] }),
-    n('lift4D', `lift_${l.key}`, 520, l.y, { sliceDir: l.dir, ...note(`Lift to 4D, ${l.dir}-first. ${l.word} All three read the same W through the same port.`) }, { pos: [`mv_${l.key}`, 'pos'] }),
+    n('transform', `mv_${l.key}`, 240, l.y, { dim: '3', x: l.x, ...note(`Transform: moves this tesseract to x = ${l.x} so the three sit in a row. Subtracting the offset from the point moves the shape the other way, as every Move does.`) }, { p: ['sp', 'pos'] }),
+    n('lift4D', `lift_${l.key}`, 520, l.y, { sliceDir: l.dir, ...note(`Lift to 4D, ${l.dir}-first. ${l.word} All three read the same W through the same port.`) }, { pos: [`mv_${l.key}`, 'p'] }),
     n('tesseractSDF', `ts_${l.key}`, 800, l.y, { size: 0.5, rounding: 0.02, ...note(`Tesseract SDF: the same tesseract (half size 0.5) for all three, so the only difference between them is the way the slice is cut.`) }, { p4: [`lift_${l.key}`, 'p4'] }),
   ]);
   const three: ExampleGraph = {
@@ -273,7 +273,7 @@ export function buildFourDExamples(): Record<string, ExampleGraph> {
       ctl('c', 'cam::camAngle', 'Camera angle', 0, 6.28, 0.02),
     ], `**What it shows.** The same tesseract cut three ways at the same instant. **Left, face-first**: the cut is parallel to one of the cubic cells, so you see a plain cube until w passes the half size and the cube is gone. **Middle, edge-first**: the cut leans toward the edges (normal along (0,0,1,1)), so it is a box, longer than a cube, that shortens over a longer range of w. **Right, corner-first**: the cut leans along (1,1,1,1) so it starts at a point, becomes a tetrahedron, then an octahedron at w = 0 and back. Each is a different 3D picture of one and the same 4D object.
 
-**How it is built.** One Scene Group holds all three: Scene Pos → **Translate 3D** (to its place in the row) → **Lift to 4D** (Slice direction Face-, Edge- or Corner-first) → **Tesseract SDF**, then the three joined by Unions with a floor. One LFO outside feeds all three Lift to 4D through ports, so they always share w.
+**How it is built.** One Scene Group holds all three: Scene Pos → **Transform** (to its place in the row) → **Lift to 4D** (Slice direction Face-, Edge- or Corner-first) → **Tesseract SDF**, then the three joined by Unions with a floor. One LFO outside feeds all three Lift to 4D through ports, so they always share w.
 
 **Try.** Set **Sweep** to 0 and move **Centre** from 0 to 1: the cube disappears at 0.5, the prism at 0.71 and the corner-first shape last, at 1.0. At Centre 0 compare the three: a cube, a longer box, and a regular octahedron. Open the group and try the **Custom** direction on one of the Lift to 4D nodes.`),
   };
@@ -298,9 +298,9 @@ export function buildFourDShapeExamples(): Record<string, ExampleGraph> {
       n('marchCamera', 'cam', 40, 220, { camDist: 4.0, camAngle: 0.6, camElevation: 0.4, rotSpeed: 0.08, fov: 1.5, ...note('March Camera: slowly circles the middle. Only the camera moves in 3D; the shape changes because it turns in 4D.') }, { time: ['time', 'time'] }),
       scene('scene', 40, 860, 'Duocylinder', [
         n('lift4D', 'lift', 240, 80, { w: 0.0, ...note('Lift to 4D, face-first, W = 0: the slice goes through the middle. Its W is a Play knob (Slice) set straight on this node.') }, { pos: ['sp', 'pos'] }),
-        n('rotate4D', 'rot1', 480, 80, { plane: 'xw', angle: 0, spin: 24, ...note('Rotate 4D in the xw plane, 24 degrees a second: x swaps with w, so the slice crosses a different part of the duocylinder every moment and the cylinder tilts and stretches. Spin is a Play knob.') }, { p4: ['lift', 'p4'] }),
-        n('rotate4D', 'rot2', 720, 80, { plane: 'yz', angle: 0, spin: 17, ...note('Rotate 4D again, in the yz plane: an ordinary 3D turn (y toward z) that rolls the shape in view. Two turns at different speeds never repeat quickly: this is the dance.') }, { p4: ['rot1', 'p4'] }),
-        n('duocylinderSDF', 'dc', 960, 80, { r1: 0.68, r2: 0.56, ...note('Duocylinder SDF: a disc of radius 0.68 in the xy plane times a disc of radius 0.56 in the zw plane: max(length(p.xy) - 0.68, length(p.zw) - 0.56), an exact distance. At rest its slice is a fat cylinder along z; turned, it breathes. Radius xy is a Play knob.') }, { p4: ['rot2', 'p4'] }),
+        n('transform', 'rot1', 480, 80, { dim: '4', rxw: 0, spin: 24, spinPlane: 'xw', ...note('Transform (4D), turning in the xw plane, 24 degrees a second: x swaps with w, so the slice crosses a different part of the duocylinder every moment and the cylinder tilts and stretches. Spin is a Play knob.') }, { p: ['lift', 'p4'] }),
+        n('transform', 'rot2', 720, 80, { dim: '4', ryz: 0, spin: 17, spinPlane: 'yz', ...note('A second Transform (4D), turning in the yz plane: an ordinary 3D turn (y toward z) that rolls the shape in view. Two turns at different speeds never repeat quickly: this is the dance.') }, { p: ['rot1', 'p'] }),
+        n('duocylinderSDF', 'dc', 960, 80, { r1: 0.68, r2: 0.56, ...note('Duocylinder SDF: a disc of radius 0.68 in the xy plane times a disc of radius 0.56 in the zw plane: max(length(p.xy) - 0.68, length(p.zw) - 0.56), an exact distance. At rest its slice is a fat cylinder along z; turned, it breathes. Radius xy is a Play knob.') }, { p4: ['rot2', 'p'] }),
         floorNode('floor', -1.0, 'A floor at y = -1.0, just below the largest the shape gets (its reach is the square root of both radii squared, about 0.88), so the shadow has somewhere to land.'),
         n('sdfUnion', 'un', 1240, 200, { k: 0, ...note('Union: the scene is the nearer of the duocylinder and the floor.') }, { a: ['dc', 'dist'], b: ['floor', 'dist'] }),
       ], ['un', 'dist'],
@@ -319,7 +319,7 @@ export function buildFourDShapeExamples(): Record<string, ExampleGraph> {
       ctl('c', 'cam::camAngle', 'Camera angle', 0, 6.28, 0.02),
     ], `**What it shows.** A duocylinder is the product of two circles: one in the xy plane, one in the zw plane, so it is round in two separate ways. Its 3D slice at rest is a cylinder, but it is turned in two planes at once. The **xw** turn swaps x with the fourth direction, so the cylinder stretches and shortens as different parts of the shape pass through the slice. The **yz** turn is an ordinary roll. Together they make the shape tumble and breathe without end.
 
-**How it is built.** Inside the Scene Group: Scene Pos → **Lift to 4D** → **Rotate 4D** (xw) → **Rotate 4D** (yz) → **Duocylinder SDF** → Union with a floor → Scene Output. The camera, march loop and lighting outside know nothing about the fourth dimension.
+**How it is built.** Inside the Scene Group: Scene Pos → **Lift to 4D** → **Transform** (4D, turning in xw) → **Transform** (4D, turning in yz) → **Duocylinder SDF** → Union with a floor → Scene Output. The camera, march loop and lighting outside know nothing about the fourth dimension.
 
 **Try.** Set both turn speeds to 0 and slide **Slice**: the cylinder shortens and vanishes at the zw radius (0.56). Turn only **xw**, then only **yz**, to see which motion is the 4D one. Change **Radius xy** to fatten or thin the cylinder.`),
   };
@@ -368,10 +368,10 @@ export function buildFourDShapeExamples(): Record<string, ExampleGraph> {
       n('constant', 'wob', 40, 760, { value: 0.035, ...note('A number: how far the noise pushes the surface in and out (the Play knob Wobble). 0 gives the smooth torus.') }),
       scene('scene', 40, 860, 'Clifford torus', [
         n('lift4D', 'lift', 240, 80, { w: 0.0, ...note('Lift to 4D, face-first. W is a Play knob (Slice): the cut moves through the torus.') }, { pos: ['sp', 'pos'] }),
-        n('rotate4D', 'rot1', 480, 80, { plane: 'xw', angle: 0, spin: 9, ...note('Rotate 4D in xw, slowly (9 degrees a second): which part of the torus meets the slice changes, and the 3D shape drifts between a pair of rings and a fat torus.') }, { p4: ['lift', 'p4'] }),
-        n('rotate4D', 'rot2', 720, 80, { plane: 'yw', angle: 0, spin: 6, ...note('A second, slower turn in yw so the motion does not repeat soon.') }, { p4: ['rot1', 'p4'] }),
-        n('cliffordTorusSDF', 'ct', 960, 80, { radius: 0.9, thickness: 0.17, balance: 45, ...note('Clifford Torus SDF: a thickened torus lying on a 3-sphere of radius 0.9, made of two equal circles (radius 0.9 / √2) in the xy and zw planes. Balance 45 is the true Clifford torus; other angles give the other tori on the sphere. An exact distance.') }, { p4: ['rot2', 'p4'] }),
-        n('noise4D', 'nz', 960, 280, { scale: 3.0, octaves: '2', gain: 0.5, ...note('Noise 4D at the turned 4D point: because the point turns in 4D, the noise slides through the shape, so the roughness crawls over the surface instead of sitting on it.') }, { p4: ['rot2', 'p4'] }),
+        n('transform', 'rot1', 480, 80, { dim: '4', rxw: 0, spin: 9, spinPlane: 'xw', ...note('Transform (4D), turning in xw, slowly (9 degrees a second): which part of the torus meets the slice changes, and the 3D shape drifts between a pair of rings and a fat torus.') }, { p: ['lift', 'p4'] }),
+        n('transform', 'rot2', 720, 80, { dim: '4', ryw: 0, spin: 6, spinPlane: 'yw', ...note('A second, slower turn in yw so the motion does not repeat soon.') }, { p: ['rot1', 'p'] }),
+        n('cliffordTorusSDF', 'ct', 960, 80, { radius: 0.9, thickness: 0.17, balance: 45, ...note('Clifford Torus SDF: a thickened torus lying on a 3-sphere of radius 0.9, made of two equal circles (radius 0.9 / √2) in the xy and zw planes. Balance 45 is the true Clifford torus; other angles give the other tori on the sphere. An exact distance.') }, { p4: ['rot2', 'p'] }),
+        n('noise4D', 'nz', 960, 280, { scale: 3.0, octaves: '2', gain: 0.5, ...note('Noise 4D at the turned 4D point: because the point turns in 4D, the noise slides through the shape, so the roughness crawls over the surface instead of sitting on it.') }, { p4: ['rot2', 'p'] }),
         n('multiply', 'amp', 1240, 280, { b: 1.0, ...note('Multiply: the signed noise (-1 to 1) times the Wobble amount.') }, { a: ['nz', 'signed'], b: ['wob', 'value'] }),
         n('add', 'bump', 1460, 160, { b: 0.0, ...note('Add: the torus distance plus the noise. Pushing the distance up or down moves the surface out or in. The wobble is small, so the distance stays safe to march.') }, { a: ['ct', 'dist'], b: ['amp', 'result'] }),
         floorNode('floor', -1.0, 'A floor at y = -1.0 for the shadow.'),
@@ -394,7 +394,7 @@ export function buildFourDShapeExamples(): Record<string, ExampleGraph> {
       ctl('c', 'cam::camAngle', 'Camera angle', 0, 6.28, 0.02),
     ], `**What it shows.** The Clifford torus is a flat torus that lies on the surface of a 4D sphere: a circle in the xy plane times a circle in the zw plane, both the same size. Seen through a 3D slice it is a pair of linked rings, a fat torus, or an oval, depending on where the slice cuts and how the shape is turned. Slow turns in **xw** and **yw** carry the slice through all of those.
 
-**How it is built.** Inside the Scene Group: Scene Pos → **Lift to 4D** → **Rotate 4D** (xw) → **Rotate 4D** (yw) → **Clifford Torus SDF**, plus a little **Noise 4D** on the same turned point added to the distance, then a floor.
+**How it is built.** Inside the Scene Group: Scene Pos → **Lift to 4D** → **Transform** (4D, turning in xw) → **Transform** (4D, turning in yw) → **Clifford Torus SDF**, plus a little **Noise 4D** on the same turned point added to the distance, then a floor.
 
 **Try.** Slide **Slice** to move the cut. **Balance** away from 45 makes one circle bigger than the other: the shape moves from the Clifford torus toward an ordinary ring. **Wobble** 0 gives the smooth surface; raise it to see the noise travel through the shape.`),
   };
@@ -408,8 +408,8 @@ export function buildFourDShapeExamples(): Record<string, ExampleGraph> {
       n('marchCamera', 'cam', 40, 220, { camDist: 6.0, camAngle: 0.7, camElevation: 0.5, rotSpeed: 0.07, fov: 1.5, ...note('March Camera: pulled back and slowly circling, to take in the whole lattice.') }, { time: ['time', 'time'] }),
       scene('scene', 40, 860, '4D lattice', [
         n('lift4D', 'lift', 240, 80, { w: 0.0, ...note('Lift to 4D, face-first. W is a Play knob (Slice).') }, { pos: ['sp', 'pos'] }),
-        n('rotate4D', 'rot', 480, 80, { plane: 'xw', angle: 0, spin: 12, ...note('Rotate 4D in xw, 12 degrees a second, BEFORE the repeat: the whole lattice turns, so the slice cuts the rows of spheres at a changing slant.') }, { p4: ['lift', 'p4'] }),
-        n('repeat4D', 'rep', 720, 80, { cellX: 1.2, cellY: 1.2, cellZ: 1.2, cellW: 1.2, limit: 1, ...note('Repeat 4D: a lattice with cells 1.2 across in all four directions, with one extra copy on each side of the middle (Count limit 1): 3 x 3 x 3 x 3 = 81 hyperspheres. Cell size is a Play knob.') }, { p4: ['rot', 'p4'] }),
+        n('transform', 'rot', 480, 80, { dim: '4', rxw: 0, spin: 12, spinPlane: 'xw', ...note('Transform (4D), turning in xw, 12 degrees a second, BEFORE the repeat: the whole lattice turns, so the slice cuts the rows of spheres at a changing slant.') }, { p: ['lift', 'p4'] }),
+        n('repeat4D', 'rep', 720, 80, { cellX: 1.2, cellY: 1.2, cellZ: 1.2, cellW: 1.2, limit: 1, ...note('Repeat 4D: a lattice with cells 1.2 across in all four directions, with one extra copy on each side of the middle (Count limit 1): 3 x 3 x 3 x 3 = 81 hyperspheres. Cell size is a Play knob.') }, { p4: ['rot', 'p'] }),
         n('hypersphereSDF', 'ball', 960, 80, { radius: 0.4, ...note('Hypersphere SDF: a 4D ball of radius 0.4 in each cell. Its slice is a 3D ball of radius √(0.4² − w²) where w is how far the slice sits from the ball\'s centre; as the lattice turns, each copy is cut nearer to or further from its centre, so the balls swell and shrink out of step. Radius is a Play knob.') }, { p4: ['rep', 'p4'] }),
         floorNode('floor', -2.2, 'A floor at y = -2.2, below the lattice.'),
         n('sdfUnion', 'un', 1240, 200, { k: 0, ...note('Union: the scene is the nearer of the lattice and the floor.') }, { a: ['ball', 'dist'], b: ['floor', 'dist'] }),
@@ -429,7 +429,7 @@ export function buildFourDShapeExamples(): Record<string, ExampleGraph> {
       ctl('c', 'cam::camAngle', 'Camera angle', 0, 6.28, 0.02),
     ], `**What it shows.** A lattice of hyperspheres, spaced evenly in all four directions, seen through a 3D slice. A hypersphere's slice is always a ball, but its size depends on how far the slice is from the ball's centre. Turn the lattice in the **xw** plane and every copy is cut at a different distance, so a regular grid of equal balls becomes balls that swell, shrink and vanish in waves.
 
-**How it is built.** Inside the Scene Group: Scene Pos → **Lift to 4D** → **Rotate 4D** (xw) → **Repeat 4D** → **Hypersphere SDF** → Union with a floor. The turn comes before the repeat, so the lattice turns as a whole.
+**How it is built.** Inside the Scene Group: Scene Pos → **Lift to 4D** → **Transform** (4D, turning in xw) → **Repeat 4D** → **Hypersphere SDF** → Union with a floor. The turn comes before the repeat, so the lattice turns as a whole.
 
 **Try.** Set **xw turn** to 0 and the slice is a plain 3 x 3 x 3 grid of equal balls; turn it on and watch them morph. **Slice** moves the cut through the lattice; **Ball radius** above half the cell makes the balls merge. **Cell size (x)** changes the spacing in x only.`),
   };
@@ -452,10 +452,10 @@ export function buildFourDShapeExamples(): Record<string, ExampleGraph> {
   const galleryShapes: GraphNode[] = gal.flatMap((g, i) => {
     const { x, z } = slot(i), y = 40 + i * 190;
     return [
-      n('translate3D', `mv_${g.key}`, 240, y, { tx: x, tz: z, ...note(`Translate 3D: moves the ${g.label} to x = ${x}, z = ${z} so the ten sit in two rows.`) }, { pos: ['sp', 'pos'] }),
-      n('lift4D', `lift_${g.key}`, 480, y, { w: 0.0, ...note(`Lift to 4D, face-first, W = 0: the slice goes through the middle of the ${g.label}.`) }, { pos: [`mv_${g.key}`, 'pos'] }),
-      n('rotate4D', `rot_${g.key}`, 720, y, { plane: 'xw', angle: i * 20, spin: 0, ...note(`Rotate 4D in xw: one shared angle comes in through a port from the outside (plus a different head start, ${i * 20} degrees, for each shape), so all ten turn together but are at different stages.`) }, { p4: [`lift_${g.key}`, 'p4'] }),
-      n(g.type, `sh_${g.key}`, 960, y, { ...g.params, ...note(`${getNodeDefinition(g.type)?.label ?? g.type}: ${g.words}.`) }, { p4: [`rot_${g.key}`, 'p4'] }),
+      n('transform', `mv_${g.key}`, 240, y, { dim: '3', x: x, z: z, ...note(`Transform: moves the ${g.label} to x = ${x}, z = ${z} so the ten sit in two rows.`) }, { p: ['sp', 'pos'] }),
+      n('lift4D', `lift_${g.key}`, 480, y, { w: 0.0, ...note(`Lift to 4D, face-first, W = 0: the slice goes through the middle of the ${g.label}.`) }, { pos: [`mv_${g.key}`, 'p'] }),
+      n('transform', `rot_${g.key}`, 720, y, { dim: '4', rxw: i * 20, spin: 0, spinPlane: 'xw', ...note(`Transform (4D), turning in xw: one shared angle comes in through a port from the outside (plus a different head start, ${i * 20} degrees, for each shape), so all ten turn together but are at different stages.`) }, { p: [`lift_${g.key}`, 'p4'] }),
+      n(g.type, `sh_${g.key}`, 960, y, { ...g.params, ...note(`${getNodeDefinition(g.type)?.label ?? g.type}: ${g.words}.`) }, { p4: [`rot_${g.key}`, 'p'] }),
     ];
   });
   const unions: GraphNode[] = gal.slice(1).map((g, i) => n('sdfUnion', `u${i}`, 1240 + i * 20, 80 + i * 190, { k: 0, ...note(i === 0 ? 'Union: the first two shapes, whichever is nearer.' : `Union: adds the ${g.label}.`) },
@@ -473,7 +473,7 @@ export function buildFourDShapeExamples(): Record<string, ExampleGraph> {
         n('sdfUnion', 'un', 1500, 400, { k: 0, ...note('Union: all the shapes or the floor, whichever is nearer.') }, { a: ['u8', 'dist'], b: ['floor', 'dist'] }),
       ], ['un', 'dist'],
       'Ten 4D shapes, each lifted, turned by the same angle and measured, then joined. The same angle comes in through ten ports.',
-      gal.map(g => ({ key: `a_${g.key}`, label: `Angle (${g.label})`, from: ['turn', 'result'] as Wire, to: [`rot_${g.key}`, 'angle'] as [string, string] }))),
+      gal.map(g => ({ key: `a_${g.key}`, label: `Angle (${g.label})`, from: ['turn', 'result'] as Wire, to: [`rot_${g.key}`, 'rxw'] as [string, string] }))),
       ...finish([0.05, 0.055, 0.1],
         expr('col', 1180, 520, 'Surface colour', { x: ['hp', 'x'], y: ['hp', 'y'], z: ['hp', 'z'] },
           checker(-1.15) + 'vec3(0.55) + 0.42 * cos(6.2832 * ((floor((x + 5.0) / 2.0) + (z > 0.0 ? 5.0 : 0.0)) * 0.1 + vec3(0.0, 0.33, 0.67)))',
@@ -486,7 +486,7 @@ export function buildFourDShapeExamples(): Record<string, ExampleGraph> {
       ctl('e', 'cam::camElevation', 'Camera height', 0.1, 1.2, 0.01),
     ], `**What it shows.** Every 4D shape of this folder, side by side, each seen as a 3D slice through its middle, turning in the **xw** plane. Near row: duocylinder, spherinder, cubinder, cylindrical prism, ditorus. Far row: 5-cell, 16-cell, 24-cell, tesseract, Clifford torus. A shape that is the same all round in 3D can change its slice completely when it turns in 4D.
 
-**How it is built.** One Scene Group holds ten copies of Scene Pos → **Translate 3D** → **Lift to 4D** → **Rotate 4D** (xw) → a shape, joined by Unions. A Multiply node outside makes one angle from Time and the Turn speed knob, and ten ports bring it in. The 5-cell, 16-cell and 24-cell are bounds (never over the true distance), the rest are exact.
+**How it is built.** One Scene Group holds ten copies of Scene Pos → **Transform** (3D, to place it) → **Lift to 4D** → **Transform** (4D, turning in xw) → a shape, joined by Unions. A Multiply node outside makes one angle from Time and the Turn speed knob, and ten ports bring it in. The 5-cell, 16-cell and 24-cell are bounds (never over the true distance), the rest are exact.
 
 **Try.** Set **Turn speed** to 0: each shape shows its rest slice. Then drag it up slowly and watch which shapes change most. **Camera angle** goes round to the other side, where the rows swap places.`),
   };

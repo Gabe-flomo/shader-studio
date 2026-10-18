@@ -89,3 +89,25 @@ Channel split), comboBloomDots and fcTrippyNoise (Pass + Glow (texture), Bloom c
 dofDepthBlur (depth in the Pass's alpha → Depth of Field (texture)), tiltShiftScene (Tilt-Shift (texture)),
 motionBlurTrails (Feedback (texture)), feedbackSmear and fcMainFrame (the picture's Pass and its Previous),
 passFeedbackTrails (the fade built by hand, Keep per frame), ttMotionTrails (Feedback (texture)).
+
+# The catalogue sweep (2026-10-17, second round)
+
+The same rules (merged = an alias, hidden = still registered and offered nowhere: `CATALOGUE_RETIRED_TYPES` in
+`src/nodes/notOffered.ts`), for the rest of the node audit's duplicates. Tests:
+`src/nodes/__tests__/catalogueSweep.test.ts`.
+
+## Old transforms → Transform
+
+Transform 2D, UV Transform 2D, Rotate 2D, Translate / Rotate / Scale 3D and Translate / Rotate / Scale 4D are hidden.
+A graph that has one switches it to a **Transform** when it opens (every load path: examples, saved graphs, imported
+files, Present snapshots, `replaceGraph`), with the same plan as the card's Switch to Transform, but only where the
+numbers are exactly the same: a setting whose units change (an angle in radians becoming degrees) is never carried on
+load, so a Rotate 3D with a non-zero Angle, a UV Transform 2D or Rotate 2D with an unwired angle stays as it was. Play
+controls on a switched setting follow it (`mv::tx` → `mv::x`), and so do a group card's overrides. The 4D Scene
+Builder's spin is a 4D Transform now (it used Rotate 4D); the 3D builder already wrote Transforms.
+
+Examples rewritten to Transform: every one that had an old transform (the 4D folder, curved space, Learn's
+Transform / Truchet / Wood, Learn 3D's Combine, the web shaders, Grid tour, the 3D scenes). Six could not switch as
+they were (a Translate with only Z wired, a Rotate 3D with its Angle wired): a Make Vec3 now carries the wire into
+the Transform's Offset or Turn. sdCrossScene3D's Rotate 3D had settings the node never read (it drew unturned): it is
+an identity Transform you can turn.

@@ -37,12 +37,21 @@ export const SWEPT_EFFECT_TYPES: readonly string[] = [
 ];
 
 /**
+ * The 2026-10-17 catalogue sweep (docs/node-retirements.md, "The catalogue sweep"): nodes another node now does,
+ * kept registered so saved graphs load and render as before, offered nowhere. Each family says where it went.
+ */
+export const CATALOGUE_RETIRED_TYPES: readonly string[] = [
+  // The old single-purpose transforms → Transform (a saved one switches on load when that is exact: toTransform.ts).
+  'place2D', 'uvTransform2d', 'rotate2d', 'translate3D', 'rotate3D', 'scale3d', 'translate4D', 'rotate4D', 'scale4D',
+];
+
+/**
  * Retired for good: Ride a curve (its curves built in) gave way on 2026-10-15 to Ride a path, which rides
  * any wired shape's outline (agentRidePath.ts); saved graphs with a Ride a curve still load and run.
  * Audio Input (a file with per-band floats) gave way on 2026-10-17 to the Audio nodes (docs/audio-tools.md): Audio
  * Source wired into Band level, Hit, Spectrum…; saved graphs with an Audio Input still load and play.
  */
-export const RETIRED_TYPES: readonly string[] = ['agentRideCurve', 'audioInput', ...SWEPT_EFFECT_TYPES];
+export const RETIRED_TYPES: readonly string[] = ['agentRideCurve', 'audioInput', ...SWEPT_EFFECT_TYPES, ...CATALOGUE_RETIRED_TYPES];
 
 /** Registered types that are never offered for adding (their saved nodes still work). */
 export const NOT_OFFERED: ReadonlySet<string> = new Set([...(OFFER_PIECES ? [] : PIECES_TYPES), ...RETIRED_TYPES]);

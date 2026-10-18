@@ -164,10 +164,10 @@ lesson('learn3dCombine', [
   n('marchCamera', 'cam', 40, 220, { ...CAM }),
   n('constant', 'blend', 40, 760, { label: 'Blend radius', value: 0.25, ...note('The Union\'s blend radius, kept outside the Scene Group and wired in through a port so Play can move it (sliders inside a Scene Group are fixed when the shader is built).') }),
   scene('scene', 40, 480, 'Scene', [
-    n('translate3D', 'mv', 240, 80, { tx: 0.45, ...note('Moving a shape means moving the point it measures: Translate 3D subtracts the offset from the point before the sphere measures it, so the sphere\'s centre ends up at the offset (x = 0.45 here).') }, { pos: ['sp', 'pos'] }),
-    n('sphereSDF3D', 'sph', 480, 80, { radius: 0.5 }, { pos: ['mv', 'pos'] }),
-    n('translate3D', 'mvb', 240, 320, { tx: -0.45 }, { pos: ['sp', 'pos'] }),
-    n('roundedBoxSDF3D', 'box', 480, 320, { sizeX: 0.4, sizeY: 0.4, sizeZ: 0.4, radius: 0.05 }, { pos: ['mvb', 'pos'] }),
+    n('transform', 'mv', 240, 80, { dim: '3', x: 0.45, ...note('Moving a shape means moving the point it measures: Transform\'s Move subtracts the offset from the point before the sphere measures it, so the sphere\'s centre ends up at the offset (x = 0.45 here).') }, { p: ['sp', 'pos'] }),
+    n('sphereSDF3D', 'sph', 480, 80, { radius: 0.5 }, { pos: ['mv', 'p'] }),
+    n('transform', 'mvb', 240, 320, { dim: '3', x: -0.45 }, { p: ['sp', 'pos'] }),
+    n('roundedBoxSDF3D', 'box', 480, 320, { sizeX: 0.4, sizeY: 0.4, sizeZ: 0.4, radius: 0.05 }, { pos: ['mvb', 'p'] }),
     n('sdfUnion', 'un', 760, 200, { k: 0.25, ...note('Union keeps the smaller of the two distances, so a point is near the scene if it is near either shape. Blend radius above 0 rounds the join into a smooth blend; here it comes in from the Blend radius Constant outside.') }, { a: ['sph', 'dist'], b: ['box', 'dist'] }),
   ], ['un', 'dist'], 'Two shapes measured at the same point and joined by a Union. Only what reaches Scene Output counts: the Union, not the sphere or box on their own.',
   { key: 'k', label: 'Blend radius', from: ['blend', 'value'], to: ['un', 'k'] }),
@@ -178,9 +178,9 @@ lesson('learn3dCombine', [
   ctl('a', 'cam::camAngle', 'Camera angle', 0, 6.28, 0.02),
 ], `**What it shows.** A scene with more than one shape is still one distance: for any point, the distance to the *nearest* surface. **Union** does exactly that, it keeps the smaller of two distances. With a **Blend radius** above 0 it becomes a smooth union and the sphere and box melt into each other like putty where they meet, something meshes can't do cheaply.
 
-**How it is built.** Everything happens inside the **Scene Group** (double-click it). **Scene Pos** is the point being measured. It goes through a Translate 3D to each shape, so each is measured from its own centre, then both distances go into Union, and the Union goes into **Scene Output**. Scene Output is what the scene returns: a shape that isn't wired through to it is not in the scene. The blend radius comes in from a Constant outside the group, through a port on the Scene Group, so it can be a Play slider. Outside the group nothing else changed: camera, loop, and the loop's own Color output, which lights the surface with one fixed light.
+**How it is built.** Everything happens inside the **Scene Group** (double-click it). **Scene Pos** is the point being measured. It goes through a Transform to each shape, so each is measured from its own centre, then both distances go into Union, and the Union goes into **Scene Output**. Scene Output is what the scene returns: a shape that isn't wired through to it is not in the scene. The blend radius comes in from a Constant outside the group, through a port on the Scene Group, so it can be a Play slider. Outside the group nothing else changed: camera, loop, and the loop's own Color output, which lights the surface with one fixed light.
 
-**Try.** Raise **Blend radius** from 0 and watch the crease fill in; turn the **Camera angle** to see the join from the side. Inside the group, slide the sphere's Translate 3D X so it passes into the box and out again. Swap Union for Subtract (the box bites into the sphere) or Intersect (only the overlap is left). Add a Plane 3D as a floor with a second Union.`);
+**Try.** Raise **Blend radius** from 0 and watch the crease fill in; turn the **Camera angle** to see the join from the side. Inside the group, slide the sphere's Transform Move X so it passes into the box and out again. Swap Union for Subtract (the box bites into the sphere) or Intersect (only the overlap is left). Add a Plane 3D as a floor with a second Union.`);
 
 lesson('learn3dOrbit', [
   time(40, 460),

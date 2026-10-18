@@ -368,7 +368,7 @@ lesson('learnPolygon', [
 
 **How it is built.** An **Expression Block** holds the Book's three lines: the angle, the slice size 2π / n, and cos(nearest slice centre − angle) × length. A Constant sets n; Compare against Size fills the shape; Fract of the field × 8 draws the rings.
 
-**Try.** Sides 3, 4, 6, 12. Past 12 it is nearly a circle. Put **Rotate 2D** (angle from Time) on the UV before the block to spin it. The **Shape SDF** node has exact polygons, stars and many more shapes ready-made.`);
+**Try.** Sides 3, 4, 6, 12. Past 12 it is nearly a circle. Put a **Transform** (Apply mode, Time into Turn) on the UV before the block to spin it. The **Shape SDF** node has exact polygons, stars and many more shapes ready-made.`);
 
 lesson('learnCombine', [
   uv(),
@@ -441,11 +441,11 @@ lesson('learnTransform', [
   uv(),
   time(40, 420),
   n('multiply', 'spd', 260, 420, { b: 0.4 }, { a: ['time', 'time'] }),
-  n('uvTransform2d', 'xf', 480, 220, { sx: 1, sy: 1, tx: 0, ty: 0 }, { uv: ['uv', 'uv'], angle: ['spd', 'result'] }),
-  n('boxSDF', 'box', 740, 220, { width: 0.3, height: 0.3 }, { position: ['xf', 'result'] }),
+  n('transform', 'xf', 480, 220, { dim: '2', mode: 'space', stretch: true, sx: 1, sy: 1, x: 0, y: 0 }, { p: ['uv', 'uv'], turn: ['spd', 'result'] }),
+  n('boxSDF', 'box', 740, 220, { width: 0.3, height: 0.3 }, { position: ['xf', 'p'] }),
   n('sdfFill', 'fill', 1000, 220, { strokeWidth: 0.02 }, { d: ['box', 'distance'] }),
   out(['fill', 'result'], 1260),
-], [ctl('spd', 'spd::b', 'Spin speed', -2, 2, 0.05), ctl('sx', 'xf::sx', 'Scale x', 0.2, 3, 0.01), ctl('sy', 'xf::sy', 'Scale y', 0.2, 3, 0.01)], `**What it shows.** The last three lessons in one node. **UV Transform 2D** moves, rotates and scales the UV before Box SDF sees it, so the box appears to spin. Rotate the space one way and the picture turns the other, which is why the maths looks backwards at first.
+], [ctl('spd', 'spd::b', 'Spin speed', -2, 2, 0.05), ctl('sx', 'xf::sx', 'Scale x', 0.2, 3, 0.01), ctl('sy', 'xf::sy', 'Scale y', 0.2, 3, 0.01)], `**What it shows.** The last three lessons in one node. **Transform** (Apply mode, Stretch on) moves, rotates and scales the UV before Box SDF sees it, so the box appears to spin. Rotate the space one way and the picture turns the other, which is why the maths looks backwards at first.
 
 **How it is built.** Time × 0.4 is the angle in radians. Inside, the node builds one 2×2 matrix from the rotation and the scale and applies it round a pivot, then the translation. Everything downstream of it, however much you add, is transformed together.
 
@@ -528,14 +528,14 @@ lesson('learnTruchet', [
   n('multiply', 'my2', 1000, 500, { b: 2 }, { a: ['my', 'output'] }),
   n('add', 'index', 1240, 420, { ...note('0, 1, 2 or 3: where the cell sits in its 2×2 block.') }, { a: ['mx', 'output'], b: ['my2', 'result'] }),
   n('multiply', 'turn', 1480, 420, { b: 1.5708, ...note('Index × a quarter turn (π/2).') }, { a: ['index', 'result'] }),
-  n('rotate2d', 'spun', 1720, 220, {}, { input: ['grid', 'cellUV'], angle: ['turn', 'result'] }),
-  n('splitVec2', 'c', 1960, 220, {}, { v: ['spun', 'output'] }),
+  n('transform', 'spun', 1720, 220, { dim: '2', mode: 'space' }, { p: ['grid', 'cellUV'], turn: ['turn', 'result'] }),
+  n('splitVec2', 'c', 1960, 220, {}, { v: ['spun', 'p'] }),
   n('step', 'half', 2200, 220, { ...note('step(x, y): 1 above the diagonal, 0 below. One triangle, the whole tile design.') }, { edge: ['c', 'x'], x: ['c', 'y'] }),
   n('colorize', 'paint', 2440, 220, { color: [0.96, 0.86, 0.62], background: [0.1, 0.3, 0.35] }, { field: ['half', 'result'] }),
   out(['paint', 'color'], 2680),
 ], [ctl('n', 'cols::value', 'Columns', 4, 48, 1), ctl('t', 'turn::b', 'Turn per index', 0, 3.1416, 0.01)], `**What it shows.** Truchet tiles: one simple tile design, here a square cut into two triangles along its diagonal, turned four different ways. Turning each cell by a quarter turn per its place in a 2×2 block makes big patterns (diamonds, zigzags, arrows) out of that one triangle.
 
-**How it is built.** **Grid** gives each cell its coordinates and its ID. Mod 2 of the ID's x and y (x + 2y) numbers the cells 0–3 in every 2×2 block; × π/2 is the cell's rotation; Rotate 2D turns the Cell UV; Step(x, y) draws the triangle.
+**How it is built.** **Grid** gives each cell its coordinates and its ID. Mod 2 of the ID's x and y (x + 2y) numbers the cells 0–3 in every 2×2 block; × π/2 is the cell's rotation; a Transform (Apply mode) turns the Cell UV; Step(x, y) draws the triangle.
 
 **Try.** Slide Turn per index: 0 lines all triangles up, π/2 is the classic pattern, other angles break the tiles apart. The **Truchet Tiles** node draws the other famous tile, quarter circles, turned at random (random is the next chapter).`);
 
@@ -630,8 +630,8 @@ lesson('learnWood', [
   vt(n('multiply', 'pos', 280, 220, { b: 3 }, { a: ['uv', 'uv'] }), 'vec2'),
   n('noiseFloat', 'nz', 520, 400, { mode: 'smooth', scale: 1, speed: 0, ...note('A slowly changing number for every point.') }, { uv: ['pos', 'result'] }),
   n('multiply', 'twist', 760, 400, { b: 0.6, ...note('The noise becomes an angle.') }, { a: ['nz', 'value'] }),
-  n('rotate2d', 'bent', 1000, 220, { ...note('Each point is turned by its own noise angle, so straight lines bend.') }, { input: ['pos', 'result'], angle: ['twist', 'result'] }),
-  n('splitVec2', 'b', 1240, 220, {}, { v: ['bent', 'output'] }),
+  n('transform', 'bent', 1000, 220, { dim: '2', mode: 'space', ...note('Each point is turned by its own noise angle, so straight lines bend.') }, { p: ['pos', 'result'], turn: ['twist', 'result'] }),
+  n('splitVec2', 'b', 1240, 220, {}, { v: ['bent', 'p'] }),
   n('sin', 'rings', 1480, 220, { freq: 14, amp: 1, ...note('Stripes: a sine of x.') }, { input: ['b', 'x'] }),
   n('abs', 'a', 1720, 220, {}, { input: ['rings', 'output'] }),
   n('smoothstep', 'grain', 1960, 220, { edge0: 0, edge1: 0.9 }, { value: ['a', 'output'] }),
@@ -639,9 +639,9 @@ lesson('learnWood', [
   out(['wood', 'color'], 2440),
 ], [ctl('t', 'twist::b', 'Twist', 0, 3, 0.01), ctl('r', 'rings::freq', 'Ring density', 2, 40, 0.1), ctl('s', 'pos::b', 'Scale', 0.5, 8, 0.01)], `**What it shows.** Noise is rarely the picture itself; it bends something else. Straight stripes (a sine of x) look like nothing; turn every point of the space by a noise-driven angle before drawing them and the stripes wander and bunch like the grain in a plank of wood.
 
-**How it is built.** UV × Scale → Noise Float → × Twist is an angle → **Rotate 2D** turns each point by its own angle → x → Sin → Abs → Smoothstep → Colorize in two browns.
+**How it is built.** UV × Scale → Noise Float → × Twist is an angle → **Transform** (Apply mode) turns each point by its own angle → x → Sin → Abs → Smoothstep → Colorize in two browns.
 
-**Try.** Twist 0 shows the plain stripes. Push Twist up for knots. Swap Rotate 2D for an Add of the noise to x only: a different, wavier grain. The Book's other example, splatter, is Noise Float → Smoothstep with close edges.`);
+**Try.** Twist 0 shows the plain stripes. Push Twist up for knots. Swap the Transform for an Add of the noise to x only: a different, wavier grain. The Book's other example, splatter, is Noise Float → Smoothstep with close edges.`);
 
 // ── Cellular noise (chapter 12) ─────────────────────────────────────────────
 
@@ -781,7 +781,7 @@ lesson('learnLoop', [
 
 **How it is built.** Inside the group: Loop Carry (vec2) → Tile → Length → + Index × 0.3 → Palette. The Palette node's assignment is set to **+=** in its header, so instead of the last pass winning, all four colours add up; Add Colors × 0.25 averages them and Tone Map rounds off the peaks. In GLSL: \`vec2 c = uv; for (i…) { c = fract(c*1.5)-0.5; col += palette(length(c)+i*0.3); }\`. The ⟳ carry-mode button on a node is a shortcut for the same wiring when a node feeds itself.
 
-**Try.** Raise Iterations on the group to 6. Change Fold scale. Swap Tile for Rotate 2D and the carry becomes an accumulated rotation.`);
+**Try.** Raise Iterations on the group to 6. Change Fold scale. Swap Tile for a Transform (Apply mode) and the carry becomes an accumulated rotation.`);
 
 // ── Moved: earlier Learn lessons that teach something the Book doesn't ─────
 // Same keys, graphs and notes as before; they now live in Curves & Shapes,

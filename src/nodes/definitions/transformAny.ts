@@ -3,8 +3,9 @@
  *
  * The universal transform (docs/transform-node.md). New things that place or turn something make
  * this node (the builders, recipes, the Do bar, smart 3D placement); the single-purpose nodes
- * (Transform 2D, UV Transform 2D, Rotate 2D, Translate/Rotate/Scale 3D, the 4D transforms) stay
- * in the library and in saved graphs. Transform covers what each of them does:
+ * (Transform 2D, UV Transform 2D, Rotate 2D, Translate/Rotate/Scale 3D, the 4D transforms) are
+ * retired (still registered for saved graphs, switched on load where exact: toTransform.ts).
+ * Transform covers what each of them does:
  *
  *   Mode Place (default)  the shape is moved, turned and scaled: the point is moved back, turned back
  *                         and divided by the scale (Transform 2D, Translate 3D/4D, Rotate 4D, Scale 4D).

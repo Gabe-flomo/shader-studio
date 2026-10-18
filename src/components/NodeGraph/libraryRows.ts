@@ -189,7 +189,7 @@ export const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: strin
     { label: 'Fields',  types: ['gyroidField', 'schwarzPField'] },
   ],
   '3D Transforms': [
-    { label: 'Move',   types: ['transform', 'translate3D', 'rotate3D', 'rotateAxis3D', 'scale3d'] },
+    { label: 'Move',   types: ['transform', 'rotateAxis3D'] },
     { label: 'Repeat', types: ['repeat3D', 'limitedRepeat3D', 'polarRepeat3D', 'mirroredRepeat3D', 'voxelize'] },
     { label: 'Warp',   types: ['twist3D', 'bend3D', 'sinWarp3D', 'displace3D', 'spiralWarp3D', 'domainWarp3D', 'turbulence3D', 'shear3D'] },
     { label: 'Fold',   types: ['fold3D', 'mirrorFold3D', 'kaleidoscope3D', 'sphereInvert3D', 'mobiusWarp3D', 'logPolarWarp3D', 'helixWarp3D'] },
@@ -200,7 +200,7 @@ export const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: strin
     { label: 'Solids',    types: ['hypersphereSDF', 'tesseractSDF', 'duocylinderSDF', 'spherinderSDF', 'cubinderSDF', 'cylPrismSDF', 'ditorusSDF', 'cliffordTorusSDF', 'hopfCirclesSDF'] },
   ],
   '4D Space': [
-    { label: 'Into 4D, move and turn', types: ['lift4D', 'transform', 'translate4D', 'rotate4D', 'scale4D'] },
+    { label: 'Into 4D, move and turn', types: ['lift4D', 'transform'] },
     { label: 'Repeat, fold and warp',  types: ['repeat4D', 'fold4D', 'twist4D', 'noise4D'] },
   ],
   '3D Lighting': [
@@ -263,7 +263,7 @@ export const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: strin
     { label: 'Style',   types: ['sdfFill', 'sdfColorize'] },
   ],
   '2D Space': [
-    { label: 'Basic',   types: ['transform', 'uvTransform2d', 'rotate2d', 'shear', 'perspective2d', 'fract', 'displace'] },
+    { label: 'Basic',   types: ['transform', 'shear', 'perspective2d', 'fract', 'displace'] },
     { label: 'Repeat',  types: ['infiniteRepeatSpace', 'limitedRepeat2D', 'mirroredRepeat2D', 'angularRepeat2D', 'kaleidoSpace', 'grid'] },
     { label: 'Warp',    types: ['uvWarp', 'rippleSpace', 'sphericalSpace', 'lensDistortion', 'crtScreen', 'turbulence', 'uvReciprocal', 'gravityField', 'spiralField', 'vectorField'] },
     { label: 'Map',     types: ['polarSpace', 'logPolarSpace', 'hyperbolicSpace', 'inversionSpace', 'mobiusSpace', 'cornerPin'] },
