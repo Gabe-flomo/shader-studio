@@ -17369,44 +17369,6 @@ exports[`golden shaders: every example compiles as it did > publishAndKeyframes 
 }
 `;
 
-exports[`golden shaders: every example compiles as it did > rayMarchOutputs3D 1`] = `
-{
-  "audioUniforms": {},
-  "echo": null,
-  "errors": null,
-  "fragmentShader": "0d8d2d6f02694414208477170932:7346",
-  "isStateful": false,
-  "liveUniforms": {},
-  "nodeSlugs": "1937bed239c04c1c9638e522c679:306",
-  "paramBindings": "08adef8c8f51fc0c25b8c95564cd:900",
-  "paramUniforms": [
-    "u_p_dxrayxmarchxoutpx3xsgxsphx3_radius",
-    "u_p_marchcamerx3_aperture",
-    "u_p_marchcamerx3_camAngle",
-    "u_p_marchcamerx3_camDist",
-    "u_p_marchcamerx3_camElevation",
-    "u_p_marchcamerx3_focalDist",
-    "u_p_marchcamerx3_fov",
-    "u_p_marchcamerx3_lensSpeed",
-    "u_p_marchcamerx3_rotSpeed",
-    "u_p_marchcamerx3_targetX",
-    "u_p_marchcamerx3_targetY",
-    "u_p_marchcamerx3_targetZ",
-    "u_p_marchloopgx3_albedo",
-    "u_p_marchloopgx3_bg",
-    "u_p_marchloopgx3_jitter",
-    "u_p_marchloopgx3_maxDist",
-    "u_p_marchloopgx3_stepScale",
-  ],
-  "paramValues": "147a255e20b8c30313e79ab251b8:582",
-  "passes": null,
-  "success": true,
-  "textureUniforms": {},
-  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
-  "videoUniforms": {},
-}
-`;
-
 exports[`golden shaders: every example compiles as it did > raymarchSpheres 1`] = `
 {
   "audioUniforms": {},

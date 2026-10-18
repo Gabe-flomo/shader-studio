@@ -23,12 +23,12 @@ import { getNodeDefinition, getOfferedDefinitions, NODE_REGISTRY } from '../defi
 import { NODE_ALIASES } from '../definitions/aliases';
 import { RETIRED_TYPES } from '../notOffered';
 import { CATEGORY_GROUPS, HIDDEN_NODES, libraryLayout, nodesOfRow, rowOfType } from '../../components/NodeGraph/libraryRows';
-import { migrateNodeParams } from '../../types/nodeGraph';
+import { GROUP_PORT_SENTINEL, migrateNodeParams } from '../../types/nodeGraph';
 import { resolveNodeAliases } from '../definitions/aliases';
 import { runGlsl, type Val } from '../../compiler/__tests__/glslEval';
 import { scoreNodeDef } from '../searchNodes';
 import { EXAMPLE_GRAPHS } from '../../store/exampleGraphs';
-import { migrateLoadedNodes, migrateLoadedPlay, useNodeGraphStore } from '../../store/useNodeGraphStore';
+import { MERGED_EXAMPLES, migrateLoadedNodes, migrateLoadedPlay, useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { compileGraph } from '../../compiler/graphCompiler';
 import { gpBindings } from '../../play/kit/gpuParticles.js';
 
@@ -395,6 +395,19 @@ describe('T7: search finds the everyday words (the real scorer, over the library
   it('Shape SDF\'s option labels count; a node without searchOptions does not match its options', () => {
     expect(scoreNodeDef(getNodeDefinition('shapeSDF')!, 'heart')).toBeGreaterThan(80);
     expect(scoreNodeDef(getNodeDefinition('simpleSDF')!, 'ring')).toBeLessThan(65);
+  });
+});
+
+describe('Q14: one copy of the first ray march; the Clifford torus wobble comes through its port', () => {
+  it('3D: Hello Sphere is gone, its key opens Learn\'s first ray march', () => {
+    expect(EXAMPLE_GRAPHS.rayMarchOutputs3D).toBeUndefined();
+    expect(EXAMPLE_GRAPHS.learnRaymarch).toBeTruthy();
+    expect(MERGED_EXAMPLES.rayMarchOutputs3D).toBe('learnRaymarch');
+  });
+  it('fourDCliffordTorus: the inner Multiply reads the group port, not a node outside the group', () => {
+    const scene = EXAMPLE_GRAPHS.fourDCliffordTorus.nodes.find(n => n.type === 'sceneGroup')!;
+    const amp = (scene.params.subgraph as { nodes: GraphNode[] }).nodes.find(n => n.id === 'amp')!;
+    expect(amp.inputs.b.connection).toEqual({ nodeId: GROUP_PORT_SENTINEL, outputKey: 'wob' });
   });
 });
 

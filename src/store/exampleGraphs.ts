@@ -12727,6 +12727,9 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
 
 // The Learn folder is built from the node definitions at load; its last lesson reuses a graph above.
 Object.assign(EXAMPLE_GRAPHS, buildLearnExamples(EXAMPLE_GRAPHS), buildLearn3dExamples(), buildCurvedSpaceExamples(), buildRepeatSceneExamples(), buildPiecesExamples(), buildCurveTraceExamples(), buildComboExamples(), buildMatrixExamples(), buildDataExamples(), buildGridExamples(), buildBoundsExamples(), buildConvertExamples(), buildPassExamples(), buildAgentExamples(), buildAgentShaderExamples(), buildAgent3dExamples(), buildSimAgentExamples(), buildRideCurveExamples(), buildAgentSketchExamples(), buildBakeExamples(EXAMPLE_GRAPHS), buildExprLoopExamples(), buildSplatExamples(EXAMPLE_GRAPHS), buildTimeCubeExamples(), buildFrameStackExamples(), buildFourDExamples(), buildFourDProjectionExamples(), buildTextureToolExamples(), buildMemoryExamples(), buildSendReceiveExamples(), buildAudioExamples(), buildPictureExamples(), buildRaysExamples(), buildSimGridExamples(), buildSceneBuilderExamples(), buildSceneBuilder2DExamples(), buildAgentRuleExamples(), buildGridRulesExamples());
+// 3D: Hello Sphere was the same graph as Learn's first ray march (which is built from it above, with notes and
+// Play controls): one copy is kept, in Learn (MERGED_EXAMPLES opens the old key there).
+delete EXAMPLE_GRAPHS.rayMarchOutputs3D;
 
 // Every example's Play setup is in the rules shape (implementation guide, phase 9): authored with actions,
 // a signal's When and links where that reads easiest, opened as the rules they play as.

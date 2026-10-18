@@ -298,6 +298,9 @@ function upgradeExprNodes(nodes: GraphNode[]): GraphNode[] {
  * does (renamed node types, old Expression nodes, params added since). Used to
  * compile a saved graph off-screen without loading it (Present snapshots).
  */
+/** Example keys merged into another: a link or recent entry to the old key opens the one kept. */
+export const MERGED_EXAMPLES: Record<string, string> = { rayMarchOutputs3D: 'learnRaymarch' };
+
 export function migrateLoadedNodes(nodes: GraphNode[]): GraphNode[] {
   return switchRetiredTransforms(upgradeExprNodes(resolveNodeAliases(nodes, getNodeDefinition)).map(n => migrateNodeParams(n.params ? n : { ...n, params: {} }, getNodeDefinition)));
 }
@@ -5514,7 +5517,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   loadExampleGraph: async (name?: string) => {
-    const example = name ?? DEFAULT_EXAMPLE;
+    // An example merged into another (docs/node-retirements.md) opens as the one kept.
+    const example = (name && MERGED_EXAMPLES[name]) ?? name ?? DEFAULT_EXAMPLE;
     let loadedKey = example;
     // The blank starter is bundled with the app; every other example lives in
     // a lazily loaded chunk (see exampleIndex.ts).

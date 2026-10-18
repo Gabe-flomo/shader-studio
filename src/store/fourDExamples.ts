@@ -8,7 +8,7 @@
  *
  * Every node carries a comment saying what it is and why it is there.
  */
-import type { GraphNode, SubgraphData } from '../types/nodeGraph';
+import { GROUP_PORT_SENTINEL, type GraphNode, type SubgraphData } from '../types/nodeGraph';
 import type { ExampleGraph } from './exampleIndex';
 import { ctl, n, play } from './graphBuilder';
 import { getNodeDefinition } from '../nodes/definitions';
@@ -372,7 +372,7 @@ export function buildFourDShapeExamples(): Record<string, ExampleGraph> {
         n('transform', 'rot2', 720, 80, { dim: '4', ryw: 0, spin: 6, spinPlane: 'yw', ...note('A second, slower turn in yw so the motion does not repeat soon.') }, { p: ['rot1', 'p'] }),
         n('cliffordTorusSDF', 'ct', 960, 80, { radius: 0.9, thickness: 0.17, balance: 45, ...note('Clifford Torus SDF: a thickened torus lying on a 3-sphere of radius 0.9, made of two equal circles (radius 0.9 / √2) in the xy and zw planes. Balance 45 is the true Clifford torus; other angles give the other tori on the sphere. An exact distance.') }, { p4: ['rot2', 'p'] }),
         n('noise4D', 'nz', 960, 280, { scale: 3.0, octaves: '2', gain: 0.5, ...note('Noise 4D at the turned 4D point: because the point turns in 4D, the noise slides through the shape, so the roughness crawls over the surface instead of sitting on it.') }, { p4: ['rot2', 'p'] }),
-        n('multiply', 'amp', 1240, 280, { b: 1.0, ...note('Multiply: the signed noise (-1 to 1) times the Wobble amount.') }, { a: ['nz', 'signed'], b: ['wob', 'value'] }),
+        n('multiply', 'amp', 1240, 280, { b: 1.0, ...note('Multiply: the signed noise (-1 to 1) times the Wobble amount.') }, { a: ['nz', 'signed'], b: [GROUP_PORT_SENTINEL, 'wob'] }),
         n('add', 'bump', 1460, 160, { b: 0.0, ...note('Add: the torus distance plus the noise. Pushing the distance up or down moves the surface out or in. The wobble is small, so the distance stays safe to march.') }, { a: ['ct', 'dist'], b: ['amp', 'result'] }),
         floorNode('floor', -1.0, 'A floor at y = -1.0 for the shadow.'),
         n('sdfUnion', 'un', 1660, 220, { k: 0, ...note('Union: the scene is the nearer of the torus and the floor.') }, { a: ['bump', 'result'], b: ['floor', 'dist'] }),

@@ -231,3 +231,10 @@ node the first answer for its words (square → Box SDF, heart / star / hexagon 
 A select's option labels count when the node lists the param in `searchOptions` (Shape SDF's Shape: every one of its
 shapes finds it). An alias that is the whole query now ranks above a label that only starts with it ("if" → Select,
 not IFS). `catalogueSweep.test.ts` checks the words against the real scorer.
+
+## Examples
+
+- **3D: Hello Sphere** (`rayMarchOutputs3D`) was the same graph as Learn's **42 · Extra: first ray march**, which is
+  built from it and adds notes and Play controls. The Learn one is kept; the old key opens it (`MERGED_EXAMPLES`).
+- **fourDCliffordTorus**: inside its Scene Group, the Multiply's B read the Wobble Constant outside the group directly
+  (it compiled only through the load-time repair); it now reads the group's Wobble port.
