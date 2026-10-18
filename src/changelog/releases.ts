@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.270',
+    date: '2026-10-17',
+    title: "One name for each thing",
+    highlights: [
+      { area: 'Studio', text: "Clearer names (Publish node, Import shader, Finish, Controls, Sources), and one Code page for the shader editor, Convert and Functions." },
+      { area: 'Studio', text: "A calmer canvas: rare actions in a Graph menu, card buttons on hover, one Next strip for suggestions, and one Layout menu in Play." },
+    ],
+  },
+  {
     id: '2026.10.269',
     date: '2026-10-17',
     title: "Tidier Start sheet",
