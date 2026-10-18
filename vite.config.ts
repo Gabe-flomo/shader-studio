@@ -151,10 +151,10 @@ const isTauri = process.env.TAURI_ENV_PLATFORM !== undefined;
 // so it is opt-in: VITE_USE_POLLING=1 npm run dev
 const usePolling = process.env.VITE_USE_POLLING === '1';
 
-// Cross-origin isolation (docs/stems.md): the desktop app serves its pages with COOP / COEP (src-tauri/tauri.conf.json
-// app.security.headers), so ONNX Runtime's WebAssembly can use threads (SharedArrayBuffer). `tauri dev` gets the same
-// headers here; the web build stays as it is. VITE_CROSS_ORIGIN_ISOLATE=1 tries them in a browser.
-const crossOriginIsolate = isTauri || process.env.VITE_CROSS_ORIGIN_ISOLATE === '1';
+// Cross-origin isolation (docs/stems.md): COOP / COEP would let ONNX Runtime's WebAssembly use threads, but in the
+// desktop app (WKWebView) they stopped the preview drawing at all, so nothing is isolated by default.
+// VITE_CROSS_ORIGIN_ISOLATE=1 tries them in a browser.
+const crossOriginIsolate = process.env.VITE_CROSS_ORIGIN_ISOLATE === '1';
 const isolationHeaders = { 'Cross-Origin-Opener-Policy': 'same-origin', 'Cross-Origin-Embedder-Policy': 'require-corp' };
 
 // The desktop app's version, stamped into profile ZIPs (Files page) so an install can say where one came from.
