@@ -51,6 +51,28 @@ without recompiling; adding, removing or renaming a band recompiles (its outputs
 
 If you hear nothing, click anywhere in the app: browsers only start sound after a click.
 
+### Stems
+**Separate** (on the card, and under *Stems* in the Open ↗ window) splits a File's song into stems on this device:
+**Drums**, **Bass**, **Vocals** and **Other**. How it works, sizes and speeds: [stems.md](stems.md).
+
+1. Press **Separate**. The first time, it offers the model: *HT-Demucs (4 stems) runs on this device and is downloaded
+   once (126 MB). Nothing is sent anywhere.* Nothing downloads until you press **Download (126 MB) and separate**.
+2. While it works the picture pauses and a screen says what is happening: the song, the step (downloading, segment 3 of
+   24, encoding a stem), a progress bar, the time so far and about how long is left, and whether it runs on the GPU
+   (WebGPU) or the CPU (WebAssembly). **Cancel** stops it; the picture plays again either way. A 3-minute song takes
+   well under a minute on a GPU, several minutes on one CPU thread.
+3. Pick a **Stem**: *Full mix*, *Drums*, *Bass*, *Vocals* or *Other*. The bands, Learn a sound, the learned sounds,
+   Hit, Band level, Spectrum, Spectrogram, Waveform and the effects all hear that stem: Hit on the Drums stem finds the
+   kicks without the bass line getting in the way. The window's waveform shows the stem.
+4. **Hear**: *Full mix* (the default) plays the song while the analysis hears the stem; *This stem* plays the stem.
+
+The stems play in step with the song, inside its trim and loop. They are kept in the library beside the song (Opus,
+about 3.6 MB per stem for 3 minutes), so they come back after a reload and travel in .playfield / .playfile files. In
+the window: **4 stems | 6 stems (+ guitar, piano)** picks the model for **Re-separate** (the 6-stem model is a second
+download, 136 MB; its guitar is usable, its piano bleeds), **Remove stems** removes them. Loading another song leaves
+the old song's stems unused. A web page carries the picked stem like the song (up to 6 MB; a bigger one stays out and
+the page analyses the whole song).
+
 ### Learn a sound
 Show it one clap (a cowbell, a word, one drum) and it fires whenever a sound like it plays.
 
@@ -176,4 +198,5 @@ log). It runs in an AudioWorklet; where the browser has none, the sound passes t
   .playfield / .playfile carry the sound with them, like videos. On another computer without it, the card says
   *"name" isn't in this browser's library*: load it again. Graphs from before this change that used the built-in Test
   loop open on the File tab, empty.
+- Stems on a web page: the picked stem travels with the song (see *Stems* above); the Mic and Video tabs have none.
 - The old **Audio Input** node is retired: it's no longer in the node list, but graphs that use it still work.

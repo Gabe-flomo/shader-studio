@@ -33,6 +33,8 @@ import { Button } from '../ui/Button';
 import { Segmented, Toggle } from '../ui/Choice';
 import { NumberInput } from '../NodeGraph/NumberInput';
 import { addDrawer } from './drawLoop';
+import { StemControls } from './StemControls';
+import { STEM_LABELS } from '../../stemModel/config';
 
 const BG = '#11111b', ACCENT = '#b4befe', DIM = 'rgba(180,190,254,0.18)', GRID = 'rgba(205,214,244,0.12)', LABEL = 'rgba(205,214,244,0.6)';
 const HZ_LABELS = [50, 100, 200, 500, 1000, 2000, 5000, 10000];
@@ -100,7 +102,8 @@ export function AudioSourceWindow({ nodeId, onClose, onLoad }: { nodeId: string;
         g.fillStyle = BG; g.fillRect(0, 0, w, h);
         const mid = h / 2;
         if (v.kind === 'file' && v.loaded && v.duration > 0) {
-          const peaks = audioEngine.peaks(nodeId, Math.min(2000, Math.max(200, Math.round(w))));
+          // With a stem picked, its waveform (what Learn and the bands hear), on the song's time line.
+          const peaks = audioEngine.peaks(nodeId, Math.min(2000, Math.max(200, Math.round(w))), v.stem !== 'mix');
           const d = trimDrag.current;
           const win = d ? { start: d.start, end: d.end } : trimWindow(v.duration, L.trimIn, L.trimOut);
           const xa = (win.start / v.duration) * w, xb = (win.end / v.duration) * w;
@@ -342,9 +345,15 @@ export function AudioSourceWindow({ nodeId, onClose, onLoad }: { nodeId: string;
           <span style={{ ...small, marginLeft: 'auto' }}>{audioToolsEngine.status(nodeId)}</span>
         </div>
 
+        {/* Stems */}
+        {kind === 'file' && <>
+          <span style={head}>Stems · split the song on this device, then pick what everything listening hears</span>
+          <StemControls node={node} loaded={!!view?.loaded} />
+        </>}
+
         {/* Waveform + trim */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={head}>{kind === 'file' ? (dragMode === 'trim' ? 'Waveform · drag the yellow handles (or across) to trim: it loops inside' : 'Waveform · drag across one hit of a sound to learn it') : 'Live waveform'}</span>
+          <span style={head}>{kind === 'file' ? `${view?.stem && view.stem !== 'mix' ? `Waveform (${STEM_LABELS[view.stem]})` : 'Waveform'} · ${dragMode === 'trim' ? 'drag the yellow handles (or across) to trim: it loops inside' : 'drag across one hit of a sound to learn it'}` : 'Live waveform'}</span>
           {kind === 'file' && <div style={{ width: 190, marginLeft: 'auto' }}>
             <Segmented<'trim' | 'select'> size="sm" fill ariaLabel="Drag on the waveform to" value={dragMode} onChange={setDragMode} options={[{ value: 'trim', label: 'Drag: Trim' }, { value: 'select', label: 'Drag: Select' }]} />
           </div>}

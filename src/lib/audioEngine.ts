@@ -41,6 +41,25 @@ interface AudioNodeState {
   peaks?: { n: number; data: Float32Array };
   /** The trim it plays within (an Audio Source's In / Out), and whether it loops there; unset: the whole song. */
   win?: { start: number; end: number; loop: boolean };
+  /** Its chain's way to the mix (a gain: quiet while its stem is heard instead). */
+  out: GainNode;
+  /**
+   * A separated stem of the song (an Audio Source's Stem, lib/audioTools/stems.ts), played in step with it: started
+   * at the same moment and offset, within the same trim. Its own analyser is what the Audio nodes read then.
+   */
+  stem?: StemState;
+  /** The speakers play the stem instead of the song. */
+  hearStem: boolean;
+}
+
+interface StemState {
+  buffer: AudioBuffer;
+  peaks?: { n: number; data: Float32Array };
+  source: AudioBufferSourceNode | null;
+  inlet: GainNode;
+  out: GainNode;
+  analyser: AnalyserNode;
+  unplug: () => void;
 }
 
 class AudioEngine {
@@ -118,8 +137,12 @@ class AudioEngine {
     }
     existing?.unplug();
 
+    if (existing) this.dropStem(existing);
     const inlet = audioCtx.createGain();
-    const unplug = audioFxHost.attach(audioCtx, trackChainId(nodeId), inlet, this.mix!, analyser);
+    const out = audioCtx.createGain();
+    out.connect(this.mix!);
+    const unplugChain = audioFxHost.attach(audioCtx, trackChainId(nodeId), inlet, out, analyser);
+    const unplug = () => { unplugChain(); try { out.disconnect(); } catch { /* gone */ } };
 
     this.nodes.set(nodeId, {
       buffer,
@@ -135,8 +158,66 @@ class AudioEngine {
       mode: 'band',
       startedAt: 0,
       stoppedAt: 0,
+      out,
+      hearStem: false,
     });
   }
+
+  // ── Stems ──────────────────────────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Give a track its stem (or none): played in step with the song from now on (restarted together when playing),
+   * through the same effect chain, and read by its own analyser.
+   */
+  setStem(nodeId: string, buffer: AudioBuffer | null): void {
+    const state = this.nodes.get(nodeId);
+    if (!state) return;
+    if (state.stem?.buffer === buffer) return;
+    const pos = state.isPlaying ? this.position(nodeId) ?? 0 : null;
+    this.dropStem(state);
+    if (buffer) {
+      const ctx = this.getCtx();
+      const inlet = ctx.createGain(), out = ctx.createGain(), analyser = ctx.createAnalyser();
+      analyser.fftSize = 2048;
+      analyser.smoothingTimeConstant = 0.8;
+      out.connect(this.mix!);
+      const unplugChain = audioFxHost.attach(ctx, trackChainId(nodeId), inlet, out, analyser);
+      state.stem = { buffer, source: null, inlet, out, analyser, unplug: () => { unplugChain(); try { out.disconnect(); } catch { /* gone */ } } };
+    }
+    this.applyHear(state);
+    // Playing: start both again together, where the song was.
+    if (pos !== null) this.startAudio(nodeId, pos, state.win?.loop ?? true, state.win);
+  }
+
+  /** The speakers play the stem (true) or the song (false); the analysers read on either way. */
+  setHearStem(nodeId: string, on: boolean): void {
+    const state = this.nodes.get(nodeId);
+    if (!state) return;
+    state.hearStem = on;
+    this.applyHear(state);
+  }
+
+  private applyHear(state: AudioNodeState): void {
+    const stem = !!state.stem && state.hearStem;
+    state.out.gain.value = stem ? 0 : 1;
+    if (state.stem) state.stem.out.gain.value = stem ? 1 : 0;
+  }
+
+  private dropStem(state: AudioNodeState): void {
+    const st = state.stem;
+    if (!st) return;
+    if (st.source) { try { st.source.stop(); } catch { /* stopped */ } st.source.disconnect(); }
+    st.unplug();
+    st.analyser.disconnect();
+    state.stem = undefined;
+    this.applyHear(state);
+  }
+
+  /** The stem's analyser (null without a stem). */
+  stemAnalyser(nodeId: string): AnalyserNode | null { return this.nodes.get(nodeId)?.stem?.analyser ?? null; }
+
+  /** The stem's decoded sound (null without a stem). */
+  stemBuffer(nodeId: string): AudioBuffer | null { return this.nodes.get(nodeId)?.stem?.buffer ?? null; }
 
   /**
    * Play from `offset` seconds into the song (looping, unless `loop` is false: then it stops at its end). With `win`
@@ -157,6 +238,7 @@ class AudioEngine {
       try { state.source.stop(); } catch (_) { /* already stopped */ }
       state.source.disconnect();
     }
+    if (state.stem?.source) { try { state.stem.source.stop(); } catch { /* stopped */ } state.stem.source.disconnect(); state.stem.source = null; }
 
     // AudioBufferSourceNode is single-use — always create fresh
     const source = audioCtx.createBufferSource();
@@ -172,22 +254,29 @@ class AudioEngine {
     // Source → inlet → its chain → the mix (the analyser taps the chain: audioFx.ts)
     source.connect(state.inlet);
 
+    // The stem (when there is one) starts with the song: same moment, same offset, same loop.
+    const stem = state.stem ? audioCtx.createBufferSource() : null;
+    if (stem && state.stem) { stem.buffer = state.stem.buffer; stem.loop = loop; stem.connect(state.stem.inlet); state.stem.source = stem; }
+    const when = audioCtx.currentTime;
     const dur = state.buffer.duration;
     let off = dur > 0 ? ((offset % dur) + dur) % dur : 0;
     if (win && dur > 0 && win.end > win.start) {
       const w = { start: Math.max(0, Math.min(dur, win.start)), end: Math.max(0, Math.min(dur, win.end)) };
       if (!(off >= w.start && off < w.end)) off = w.start;
       state.win = { ...w, loop };
-      if (loop) { source.loopStart = w.start; source.loopEnd = w.end; source.start(0, off); }
-      else source.start(0, off, Math.max(0, w.end - off));
+      for (const s of stem ? [source, stem] : [source]) {
+        if (loop) { s.loopStart = w.start; s.loopEnd = w.end; s.start(when, off); }
+        else s.start(when, off, Math.max(0, w.end - off));
+      }
     } else {
       state.win = undefined;
-      source.start(0, off);
+      source.start(when, off);
+      if (stem) { if (loop) { stem.loopStart = 0; stem.loopEnd = dur; } stem.start(when, off, loop ? undefined : Math.max(0, dur - off)); }
     }
 
     state.source = source;
     state.isPlaying = true;
-    state.startedAt = audioCtx.currentTime - off;
+    state.startedAt = when - off;
   }
 
   /** Outside sources joined to the output (a Video layer's sound): counted so a recording takes them too. */
@@ -242,12 +331,14 @@ class AudioEngine {
     state.source.disconnect();
     state.source = null;
     state.isPlaying = false;
+    if (state.stem?.source) { try { state.stem.source.stop(); } catch { /* stopped */ } state.stem.source.disconnect(); state.stem.source = null; }
   }
 
   removeAudio(nodeId: string): void {
     this.stopAudio(nodeId);
     const state = this.nodes.get(nodeId);
     if (state) {
+      this.dropStem(state);
       state.unplug();
       state.analyser.disconnect();
     }
@@ -420,19 +511,22 @@ class AudioEngine {
     return this.nodes.get(nodeId)?.buffer.duration ?? 0;
   }
 
-  /** The loudest sample in each of `n` slices of the song (0..1), for a waveform overview. */
-  peaks(nodeId: string, n: number): Float32Array | null {
+  /** The loudest sample in each of `n` slices of the song (0..1), for a waveform overview; `stem`: its stem's. */
+  peaks(nodeId: string, n: number, stem = false): Float32Array | null {
     const state = this.nodes.get(nodeId);
     if (!state) return null;
-    if (state.peaks?.n === n) return state.peaks.data;
-    const ch = state.buffer.getChannelData(0), out = new Float32Array(n), per = Math.max(1, Math.floor(ch.length / n));
+    const holder: { buffer: AudioBuffer; peaks?: { n: number; data: Float32Array } } | undefined = stem ? state.stem : state;
+    if (!holder) return null;
+    if (holder.peaks?.n === n) return holder.peaks.data;
+    // Over the song's length (a stem may be a few samples longer or shorter): the two line up.
+    const ch = holder.buffer.getChannelData(0), out = new Float32Array(n), per = Math.max(1, Math.floor(state.buffer.length / n));
     for (let i = 0; i < n; i++) {
       let m = 0;
       const end = Math.min(ch.length, (i + 1) * per);
       for (let j = i * per; j < end; j += 4) { const a = Math.abs(ch[j]); if (a > m) m = a; }
       out[i] = m;
     }
-    state.peaks = { n, data: out };
+    holder.peaks = { n, data: out };
     return out;
   }
 

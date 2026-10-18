@@ -20,6 +20,10 @@
  *   source or another effect), built in its context; a listener wired to an effect hears what the effect made. What
  *   plays: graphWalk.ts audioHearing (the last effect with Listen on in each chain; its source goes quiet).
  *
+ * - Stems (lib/audioTools/stems.ts, docs/stems.md): a File source with a Stem picked plays that stem in step with the
+ *   song (lib/audioEngine.ts setStem); its analyser is what the bands, learned sounds, listeners and effects take.
+ *   Hear: Full mix (the default) keeps the song on the speakers, This stem plays the stem instead.
+ *
  * Nodes inside groups (plain, iterated, nested) are followed too (graphWalk.ts): an `audio` wire through a group
  * ports reaches its source, and every node is keyed by its own id, as the compiler binds it.
  */
@@ -42,6 +46,9 @@ import { audioHearing, collectAudioNodes, findNodeDeep } from './graphWalk';
 import { acBuild, acNewRun, acStepEffect, acTextureSize, type AcEffect, type AcRun, type AcSpec } from '../../play/kit/audioChain.js';
 import { learnFromRing, learnFromSamples, newLearnListener, type AudioSoundSpec, type LearnListener, type LearnResult } from './learn';
 import { bandsOf, newBandRun, trimWindow, type AudioBandSpec, type BandRun } from './bands';
+import { analysedStem, analysedStemId, hearsStem, stemsOf, type StemChoice } from './stems';
+import { forgetMedia, rememberMedia } from '../mediaSources';
+import { STEM_LABELS } from '../../stemModel/config';
 import { atApplyGain, atNewListener, atStepListener, atStepSource, type AtListener } from '../../play/kit/audioTools.js';
 
 const FFT = 2048;
@@ -85,6 +92,10 @@ interface SourceSlot {
   time: number;
   micSince: number;
   status: string;
+  /** The stem the analysis reads: its library id when loaded, the one being opened, and whether the library lacks it. */
+  stemHave: string;
+  stemLoading: string;
+  stemMissing: boolean;
 }
 
 /**
@@ -142,6 +153,8 @@ export interface AudioSourceView {
   /** Seconds into the file (or since the mic started). */
   time: number;
   duration: number;
+  /** The stem the analysis reads now ('mix' while none is loaded). */
+  stem: StemChoice;
   /** Per band: its Value now, and when its last hit was (performance.now ms). */
   bands: Map<string, { level: number; hitAt: number; count: number }>;
   /** Per learned sound: its Match now (falling), the similarity at the last onset, when it last fired (ms), fires. */
@@ -218,7 +231,7 @@ class AudioToolsEngine implements InputSource {
     for (const [id, r] of s.learn.runs) sounds.set(id, { match: r.match, last: r.last, hitAt: Number.isFinite(r.hitAt) ? r.hitAt * 1000 : -Infinity, count: r.count });
     return {
       kind: s.kind, active: s.active, loaded: s.loaded, freq: s.freq, wave: s.wave, sampleRate: s.sampleRate, level: s.level, time: s.time,
-      duration: s.kind === 'file' && s.loaded ? audioEngine.duration(nodeId) : 0, bands, sounds,
+      duration: s.kind === 'file' && s.loaded ? audioEngine.duration(nodeId) : 0, bands, sounds, stem: this.stemReady(s) ? analysedStem(s.node.params) : 'mix',
     };
   }
 
@@ -265,6 +278,7 @@ class AudioToolsEngine implements InputSource {
         sounds: [], learn: newLearnListener(),
         row: new Float32Array(CARD_SPECTRUM_BINS), restoring: '', missing: false, videoEl: null, videoIn: null, videoOut: null, videoUnplug: null,
         freq: new Float32Array(FFT / 2), wave: new Float32Array(FFT), sampleRate: 48000, active: false, level: 0, time: 0, micSince: 0, status: '',
+        stemHave: '', stemLoading: '', stemMissing: false,
       };
       this.sources.set(n.id, s);
     }
@@ -280,6 +294,51 @@ class AudioToolsEngine implements InputSource {
     if (s.kind !== 'video' && s.videoEl) this.unplugVideo(s);
     this.restoreFile(s);
     this.applyPlayback(s);
+    this.syncStem(s);
+  }
+
+  // ── Stems ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  /** The picked stem is loaded and plays with the song: the analysis reads it. */
+  private stemReady(s: SourceSlot): boolean {
+    return s.kind === 'file' && s.loaded && !!s.stemHave && s.stemHave === analysedStemId(s.node.params) && !!audioEngine.stemAnalyser(s.node.id);
+  }
+
+  /** Load the picked stem (from the library) into the song's track, or take it away; and what the speakers play. */
+  private syncStem(s: SourceSlot): void {
+    const id = s.node.id;
+    const want = s.kind === 'file' && s.loaded ? analysedStemId(s.node.params) : '';
+    // The track was loaded again (a new file, or reopened): its stem went with the old one.
+    if (s.stemHave && !audioEngine.stemAnalyser(id)) s.stemHave = '';
+    if (!want) {
+      if (s.stemHave || audioEngine.stemAnalyser(id)) { audioEngine.setStem(id, null); forgetMedia(`${id}::stem`); }
+      s.stemHave = ''; s.stemLoading = ''; s.stemMissing = false;
+    } else if (want !== s.stemHave && want !== s.stemLoading) {
+      s.stemLoading = want;
+      s.stemMissing = false;
+      void (async () => {
+        const got = await getVideo(want).catch(() => null);
+        const still = () => this.sources.get(id) === s && analysedStemId(s.node.params) === want && s.loaded;
+        if (!still()) { if (s.stemLoading === want) s.stemLoading = ''; return; }
+        if (!got) { s.stemLoading = ''; s.stemMissing = true; this.refreshStatus(s); this.changed(); return; }
+        try {
+          // Kept for a web page (as the song is), then decoded in the song's context.
+          rememberMedia(`${id}::stem`, 'audio', got.name, got.type, got.blob);
+          const buf = await audioEngine.context().decodeAudioData(await got.blob.arrayBuffer());
+          if (!still()) { if (s.stemLoading === want) s.stemLoading = ''; return; }
+          audioEngine.setStem(id, buf);
+          s.stemHave = want;
+        } catch (e) {
+          console.warn('[audio tools] stem', e);
+          s.stemMissing = true;
+        }
+        s.stemLoading = '';
+        audioEngine.setHearStem(id, hearsStem(s.node.params) && s.stemHave === want);
+        this.refreshStatus(s);
+        this.changed();
+      })();
+    }
+    if (s.loaded) audioEngine.setHearStem(id, hearsStem(s.node.params) && !!s.stemHave && s.stemHave === want);
   }
 
   /** A File source whose sound isn't open but is kept in the library (`sampleId`): open it (a reload, a graph loaded). */
@@ -339,7 +398,13 @@ class AudioToolsEngine implements InputSource {
       text = kept && !s.missing ? `Opening "${was || 'the sound'}" from the library…`
         : was ? `"${was}" isn't in this browser's library: load it again, or switch to Mic.` : 'Load a sound, or switch to Mic.';
     }
-    else text = `${audioEngine.getFileName(s.node.id) || 'Sound'} · ${audioEngine.isPlaying(s.node.id) ? 'playing' : 'stopped'}`;
+    else {
+      text = `${audioEngine.getFileName(s.node.id) || 'Sound'} · ${audioEngine.isPlaying(s.node.id) ? 'playing' : 'stopped'}`;
+      const stem = analysedStem(s.node.params);
+      if (s.stemMissing) text += ' · the stems aren\'t in this browser\'s library: Separate again';
+      else if (stem !== 'mix') text += s.stemHave ? ` · analysing ${STEM_LABELS[stem]}${hearsStem(s.node.params) ? ' (heard)' : ''}` : ` · opening the ${STEM_LABELS[stem]} stem…`;
+      else if (!stemsOf(s.node.params) && s.node.params.stems) text += ' · its stems are for another song';
+    }
     this.setStatus(s, text);
   }
 
@@ -418,6 +483,7 @@ class AudioToolsEngine implements InputSource {
     try { s.probe?.disconnect(); } catch { /* gone */ }
     try { if (s.upstream && s.probe) s.upstream.disconnect(s.probe); } catch { /* gone */ }
     if (s.loaded) audioEngine.removeAudio(id);
+    forgetMedia(`${id}::stem`);
     this.sources.delete(id);
   }
 
@@ -437,7 +503,7 @@ class AudioToolsEngine implements InputSource {
       return e instanceof Error ? e.message : String(e);
     }
     const s = this.sources.get(nodeId);
-    if (s) { s.loaded = true; s.applied = ''; this.applyPlayback(s); }
+    if (s) { s.loaded = true; s.applied = ''; s.stemHave = ''; s.stemLoading = ''; this.applyPlayback(s); this.syncStem(s); }
     this.changed();
     return null;
   }
@@ -450,7 +516,8 @@ class AudioToolsEngine implements InputSource {
     const s = this.sources.get(nodeId);
     if (!s) return { error: 'This Audio Source isn\'t running.' };
     if (!range) return learnFromRing(s.learn);
-    const buf = audioEngine.buffer(nodeId);
+    // The stem the analysis reads, when one is picked (Learn a kick on Drums).
+    const buf = (this.stemReady(s) ? audioEngine.stemBuffer(nodeId) : null) ?? audioEngine.buffer(nodeId);
     if (!buf) return { error: 'Load a sound first.' };
     // Mono: the channels' average.
     const a = Math.max(0, Math.floor(range.from * buf.sampleRate) - 4096), b = Math.min(buf.length, Math.ceil(range.to * buf.sampleRate) + 8192);
@@ -506,7 +573,8 @@ class AudioToolsEngine implements InputSource {
     if (!s || s.node.params.playing === false) return null;
     if (s.kind === 'mic') return liveAudio.tapNode();
     if (s.kind === 'video') return s.videoIn;
-    return s.loaded ? audioEngine.getAnalyser(id) : null;
+    // The picked stem, when there is one: the effects work on it.
+    return s.loaded ? (this.stemReady(s) ? audioEngine.stemAnalyser(id) : audioEngine.getAnalyser(id)) : null;
   }
 
   /**
@@ -567,7 +635,7 @@ class AudioToolsEngine implements InputSource {
     const upstream = !playing ? null
       : s.kind === 'mic' ? liveAudio.tapNode()
       : s.kind === 'video' ? this.videoUpstream(s)
-      : (audioEngine.isPlaying(id) ? audioEngine.getAnalyser(id) : null);
+      : (audioEngine.isPlaying(id) ? (this.stemReady(s) ? audioEngine.stemAnalyser(id) : audioEngine.getAnalyser(id)) : null);
     if (upstream !== s.upstream) {
       if (s.upstream && s.probe) { try { s.upstream.disconnect(s.probe); } catch { /* gone */ } }
       s.upstream = upstream;

@@ -118,6 +118,28 @@ function depthModelFiles(): Plugin {
   }
 }
 
+// The stem models (docs/stems.md): opt-in downloads from Hugging Face. For a local check (`?stemModel=local`) the dev
+// server serves them from .cache/stem-models/<repo>/ (or STEM_MODELS_DIR), never bundled.
+const STEM_CACHE = process.env.STEM_MODELS_DIR ? `${process.env.STEM_MODELS_DIR.replace(/\/$/, '')}/` : fileURLToPath(new URL('./.cache/stem-models/', import.meta.url))
+function stemModelFiles(): Plugin {
+  return {
+    name: 'stem-model-files',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const url = (req.url ?? '').split('?')[0]
+        const m = /\/stem-models\/(.+)$/.exec(url)
+        const file = m && !m[1].includes('..') ? STEM_CACHE + decodeURIComponent(m[1]) : null
+        if (file && existsSync(file)) {
+          res.setHeader('Content-Type', file.endsWith('.json') ? 'application/json' : 'application/octet-stream')
+          res.end(readFileSync(file))
+          return
+        }
+        next()
+      })
+    },
+  }
+}
+
 // https://vite.dev/config/
 // base switches automatically: '/' for Tauri desktop, '/shader-studio/' for GitHub Pages.
 // TAURI_ENV_PLATFORM is set by the Tauri CLI during both `tauri dev` and `tauri build`.
@@ -129,11 +151,17 @@ const isTauri = process.env.TAURI_ENV_PLATFORM !== undefined;
 // so it is opt-in: VITE_USE_POLLING=1 npm run dev
 const usePolling = process.env.VITE_USE_POLLING === '1';
 
+// Cross-origin isolation (docs/stems.md): the desktop app serves its pages with COOP / COEP (src-tauri/tauri.conf.json
+// app.security.headers), so ONNX Runtime's WebAssembly can use threads (SharedArrayBuffer). `tauri dev` gets the same
+// headers here; the web build stays as it is. VITE_CROSS_ORIGIN_ISOLATE=1 tries them in a browser.
+const crossOriginIsolate = isTauri || process.env.VITE_CROSS_ORIGIN_ISOLATE === '1';
+const isolationHeaders = { 'Cross-Origin-Opener-Policy': 'same-origin', 'Cross-Origin-Embedder-Policy': 'require-corp' };
+
 // The desktop app's version, stamped into profile ZIPs (Files page) so an install can say where one came from.
 const appVersion = (JSON.parse(readFileSync(fileURLToPath(new URL('./src-tauri/tauri.conf.json', import.meta.url)), 'utf8')) as { version?: string }).version ?? '0.0.0'
 
 export default defineConfig({
-  plugins: [react(), mediapipeWasm(), threeSlimSource(), imageModelFiles(isTauri), depthModelFiles()],
+  plugins: [react(), mediapipeWasm(), threeSlimSource(), imageModelFiles(isTauri), depthModelFiles(), stemModelFiles()],
   define: { __APP_VERSION__: JSON.stringify(appVersion) },
   // The hand tracker's worker imports MediaPipe as an ES module.
   worker: { format: 'es' },
@@ -143,7 +171,9 @@ export default defineConfig({
   base: isTauri ? '/' : '/shader-studio/',
   server: {
     watch: usePolling ? { usePolling: true, interval: 500 } : undefined,
+    ...(crossOriginIsolate ? { headers: isolationHeaders } : {}),
   },
+  ...(crossOriginIsolate ? { preview: { headers: isolationHeaders } } : {}),
   // The ProRes encoder is imported lazily; pre-bundled so the dev server doesn't reload the page mid-export when it is first used.
   optimizeDeps: { include: ['prores-wasm-encoder', 'prores-wasm-encoder/parallel'] },
   build: {
