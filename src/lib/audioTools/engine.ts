@@ -607,6 +607,47 @@ class AudioToolsEngine implements InputSource {
     if (changed && f.tex) f.tex.needsUpdate = true;
   }
 
+  // ── Hear what you hover (the Audio Source window's spectrum) ─────────────────────────────────────────────
+  private audition: { id: string; filter: BiquadFilterNode; unplug: () => void } | null = null;
+
+  /**
+   * Play only lo–hi Hz of a File source (a band-pass between its sound and the speakers), for the window's
+   * "Hear hovered" switch. False when it can't: not a loaded file, or its own sound is already routed
+   * elsewhere (an effect after it is what's heard). Moving the band only glides the filter.
+   */
+  auditionBand(id: string, lo: number, hi: number): boolean {
+    const s = this.sources.get(id);
+    if (!s || s.kind !== 'file' || !s.loaded || this.diverted.has(id)) return false;
+    if (this.audition && this.audition.id !== id) this.stopAudition();
+    let ctx: AudioContext;
+    try { ctx = audioEngine.context(); } catch { return false; }
+    const a = Math.max(20, Math.min(lo, hi)), b = Math.max(a + 1, Math.max(lo, hi));
+    const centre = Math.sqrt(a * b), q = Math.max(0.3, Math.min(30, centre / (b - a)));
+    if (!this.audition) {
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.value = centre;
+      filter.Q.value = q;
+      audioFxHost.divert(ctx, trackChainId(id), filter);
+      this.audition = { id, filter, unplug: audioEngine.connectOutside(filter) };
+    } else {
+      const t = ctx.currentTime;
+      this.audition.filter.frequency.setTargetAtTime(centre, t, 0.03);
+      this.audition.filter.Q.setTargetAtTime(q, t, 0.03);
+    }
+    return true;
+  }
+
+  /** Back to the whole sound. */
+  stopAudition(): void {
+    const a = this.audition;
+    if (!a) return;
+    this.audition = null;
+    try { audioFxHost.divert(audioEngine.context(), trackChainId(a.id), null); } catch { /* no context */ }
+    a.unplug();
+    try { a.filter.disconnect(); } catch { /* gone */ }
+  }
+
   /** A gain to nowhere in a context: a diverted chain goes there (its analyser still reads it). */
   private sinkOf(ctx: BaseAudioContext): GainNode {
     let g = this.sinks.get(ctx);

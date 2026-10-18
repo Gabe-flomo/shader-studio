@@ -4,6 +4,8 @@
  * - **The file's whole waveform** (decoded once: the audio engine's peaks) with In / Out handles to trim; playback
  *   loops inside the trim, the playhead shows where it is. Mic and Video: a live scrolling waveform instead.
  * - **The live spectrum** (log frequency, labelled in Hz). Drag across it to add a band; drag a band's edge to move it.
+ *   **Hear hovered**: while on, only the frequencies under the pointer play (the band under it, else a third
+ *   of an octave around it), through a band-pass on the File's sound (engine.ts auditionBand).
  * - **Quick bands** (Sub, Bass, Kick, Snare, Hi-hat, Vocals, Air) and **the band list**: each band's name, colour,
  *   Low / High Hz, and what it sends out (Value with Attack / Release / Gain, Trigger with Sensitivity / Cooldown),
  *   with its live level and a flash on each hit. Every band is an output on the node (lib/audioTools/bands.ts).
@@ -284,6 +286,20 @@ export function AudioSourceWindow({ nodeId, onClose, onLoad }: { nodeId: string;
     set({ trimIn: +Math.max(0, d.start).toFixed(4), trimOut: d.end >= duration - 1e-3 ? 0 : +d.end.toFixed(4) }, true);
   };
 
+  // ── Hear hovered: while on, only the frequencies under the pointer play (a band under it, else a third of an octave) ──
+  const [hearHover, setHearHover] = useState(false);
+  const [hearing, setHearing] = useState<{ lo: number; hi: number; name?: string } | null>(null);
+  useEffect(() => () => audioToolsEngine.stopAudition(), []);
+  useEffect(() => { if (!hearHover) { audioToolsEngine.stopAudition(); setHearing(null); } }, [hearHover]);
+  const auditionAt = (x: number) => {
+    const band = [...bands].reverse().find(b => x >= xOf(b.lo) && x <= xOf(b.hi));
+    const hz = hzOf(x);
+    const pick = band ? { lo: band.lo, hi: band.hi, name: band.name } : { lo: Math.round(hz / 2 ** (1 / 6)), hi: Math.round(hz * 2 ** (1 / 6)) };
+    if (audioToolsEngine.auditionBand(nodeId, pick.lo, pick.hi)) setHearing(pick);
+    else setHearing(null);
+  };
+  const stopHearing = () => { audioToolsEngine.stopAudition(); setHearing(null); };
+
   // ── Spectrum: drag across empty space to add a band, drag a band's edge to move it, click a band to pick it ──
   const xAt = (e: RPointerEvent<HTMLCanvasElement>) => { const r = e.currentTarget.getBoundingClientRect(); return Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)); };
   const onSpecDown = (e: RPointerEvent<HTMLCanvasElement>) => {
@@ -298,6 +314,7 @@ export function AudioSourceWindow({ nodeId, onClose, onLoad }: { nodeId: string;
   };
   const onSpecMove = (e: RPointerEvent<HTMLCanvasElement>) => {
     const d = specDrag.current;
+    if (hearHover && !d) auditionAt(xAt(e));
     if (!d) return;
     const x = xAt(e);
     if (d.kind === 'new') { d.b = x; return; }
@@ -370,8 +387,17 @@ export function AudioSourceWindow({ nodeId, onClose, onLoad }: { nodeId: string;
         </div>}
 
         {/* Spectrum + bands */}
-        <span style={head}>Spectrum · drag across it to add a band, drag a band's edge to move it</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <span style={head}>Spectrum · drag across it to add a band, drag a band's edge to move it</span>
+          {hearHover && <span data-hearing style={{ ...small, color: tk.text.secondary }}>
+            {hearing ? `Hearing ${hearing.name ? `${hearing.name}: ` : ''}${fmtHz(hearing.lo)}–${fmtHz(hearing.hi)} Hz` : kind === 'file' ? 'Hover the spectrum to hear just those frequencies' : 'Hear hovered works on the File tab'}
+          </span>}
+          <span style={{ marginLeft: 'auto' }}>
+            <Toggle checked={hearHover} onChange={setHearHover} label="Hear hovered" />
+          </span>
+        </div>
         <canvas ref={specRef} data-audio-spectrum onPointerDown={onSpecDown} onPointerMove={onSpecMove} onPointerUp={onSpecUp}
+          onPointerLeave={() => { if (hearHover) stopHearing(); }}
           style={{ width: '100%', height: 200, borderRadius: radius.md, display: 'block', cursor: 'crosshair', touchAction: 'none' }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
           <span style={small}>Add a band:</span>
