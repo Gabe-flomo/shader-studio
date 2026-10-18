@@ -1,5 +1,5 @@
 /**
- * Where things are on an effect graph's canvas (the Look effect editor and
+ * Where things are on an effect graph's canvas (the Finish effect editor and
  * the stack card's tiny diagram share it): nodes are fixed-width cards whose
  * socket rows come first, so a socket's position follows from its index
  * without measuring the page.

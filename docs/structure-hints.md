@@ -29,10 +29,10 @@ A registry-wide test checks that every node resolves to a stage, that every cate
 - **Flow strip.** A thin bar above the canvas: `2D  Space › Bend space › Shape › Shape it › Colour › Post`.
   - Stages the graph has are lit with their colour. Absent stages are faint.
   - The stage the Output has reached is bold. This is the furthest stage among everything that feeds the Output, including what's inside groups.
-  - The stage after it is dashed and marked **next**. Two or three moves from the Suggestions system follow it, for the node that feeds the Output. Moves of the next stage come first. Clicking a move applies it as one undo step.
+  - The stage after it is dashed and marked **next**. The strip offers no moves of its own (2026-10-17): the Next strip under the selected card is the one suggestion surface (docs/suggestions.md), and the next stage nudges its ranking (Next-stage boost below).
   - Clicking a stage name opens the node browser on that stage, listed by category. Back returns to the categories. On a phone this opens the Browse sheet's Nodes tab.
-  - On a narrow canvas the moves fold into a "Next: …" menu, and only the current and next stages keep their names.
-  - On a phone the strip collapses to a chip, for example `2D ● Colour › next Post`. The chip opens the same content in a popover: the stages with a line each, the next moves, notices and View.
+  - On a narrow canvas only the current and next stages keep their names.
+  - On a phone the strip collapses to a chip, for example `2D ● Colour › next Post`. The chip opens the same content in a popover: the stages with a line each, notices and View.
   - The strip's × hides it. Hiding is remembered (`playfield:structure:strip`). The flow button in the canvas toolbar brings it back.
 - **Stage tags.** A faint stage-coloured line along the top edge of each card. Nodes that belong anywhere get no tag. You can toggle tags in the strip's **View** menu, which also has the legend for the current flow.
 - **Next-stage boost** (`src/structure/boost.ts`). This is deliberately small. It breaks near-ties but never overrides a confident preview finding or a strong habit of yours:

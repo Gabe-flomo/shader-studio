@@ -39,7 +39,8 @@ import { TimeControlsStrip } from './components/TimeControlsStrip';
 import { REBUILD_TOOLTIP, rebuildWithToast } from './components/shell/rebuildAction';
 import { useFunctionBuilder } from './components/FunctionBuilder/useFunctionBuilder';
 import { logEvent, setCrashContext } from './lib/crashLog';
-import { NAVIGATE_EVENT, type Page } from './components/page';
+import { CodeTabs } from './components/shell/CodeTabs';
+import { NAVIGATE_EVENT, isCodePage, rememberCodePage, resolvePage, type Page } from './components/page';
 import { useLinkedPresentationWatcher } from './components/shell/linkedPresentationWatcher';
 import { can, openProSheet, requireFeature } from './lib/plan';
 import { NodeSearchPalette } from './components/NodeGraph/NodeSearchPalette';
@@ -99,7 +100,7 @@ const Stage                  = lazyWithSuspense<PropsOf<typeof StageT>>(() => im
 const ConvertPage            = lazyWithSuspense<PropsOf<typeof ConvertPageT>>(() => import('./components/convert/ConvertPage').then(m => ({ default: m.ConvertPage })));
 const PlayPage               = lazyWithSuspense<PropsOf<typeof PlayPageT>>(() => import('./components/play/PlayPage').then(m => ({ default: m.PlayPage })));
 const PresentPage            = lazyWithSuspense<PropsOf<typeof PresentPageT>>(() => import('./components/present/PresentPage').then(m => ({ default: m.PresentPage })));
-// The Builder page: the Function Builder and the node pack workspace (it can pop out into a floating window).
+// The Code page's Functions and Node packs tabs: the Function Builder and the node pack workspace (it can pop out into a floating window).
 const BuilderPage            = lazyWithSuspense<PropsOf<typeof BuilderPageT>>(() => import('./components/nodePacks/BuilderShell').then(m => ({ default: m.BuilderPage })));
 const MobileGraphBrowser     = lazyWithSuspense<PropsOf<typeof MobileGraphBrowserT>>(() => import('./components/NodeGraph/MobileGraphBrowser').then(m => ({ default: m.MobileGraphBrowser })));
 const MobileNodeGraphOverlay = lazyWithSuspense<PropsOf<typeof MobileNodeGraphOverlayT>>(() => import('./components/NodeGraph/MobileGraphBrowser').then(m => ({ default: m.MobileNodeGraphOverlay })));
@@ -538,13 +539,23 @@ function App() {
   // The open page, for crash reports (docs/crash-recovery.md).
   useEffect(() => { setCrashContext('page', page); logEvent(`page: ${page}`); }, [page]);
   // Every page switch goes through the plan: Convert is Pro, and on Free asking for it opens the Pro sheet instead.
+  // `code` (the Code page's own tab) opens it on the tab used last (components/page.ts).
   const setPage = useCallback((next: Page | ((p: Page) => Page)) => {
     setPageRaw(prev => {
-      const p = typeof next === 'function' ? next(prev) : next;
+      const asked = typeof next === 'function' ? next(prev) : next;
+      let p = resolvePage(asked);
+      // The Code tab itself never lands on a locked tab: the shader editor instead.
+      if (asked === 'code' && p === 'convert' && !can('convert')) p = 'glsl';
+      // Phones have no Functions page: the builder opens full screen over where you are.
+      if (p === 'fn' && isMobile(breakpointRef.current)) {
+        if (asked === 'code') p = 'glsl';
+        else { void import('./components/nodePacks/builderWindow').then(m => m.popOutBuilder()); return prev; }
+      }
       if (p === 'convert' && !can('convert')) { queueMicrotask(() => openProSheet('convert')); return prev; }
       return p;
     });
   }, []);
+  useEffect(() => { rememberCodePage(page); }, [page]);
   // Once the app is idle, fetch the on-demand pages and dialogs (twice: loaded chunks can
   // declare more), so opening one later never waits on React's lowest-priority work.
   useEffect(() => {
@@ -1393,6 +1404,7 @@ function App() {
     return (
       <div style={{ width: '100vw', height: APP_HEIGHT, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: tc.crust }}>
         <MobileTopBar page={page} onPageChange={setPage} onRecord={() => setShowExport(true)} />
+        <CodeTabs phone page={page} onPageChange={setPage} />
         {/* What the desktop graph mounts beside the canvas: the Code Explorer, the Do… bar, the Scene Builder */}
         {codeExplorerOpen && <CodeExplorerDialog />}
         <PhoneOverlays />
@@ -1405,6 +1417,7 @@ function App() {
     return (
       <div style={{ width: '100vw', height: APP_HEIGHT, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: tc.crust }}>
         <MobileTopBar page={page} onPageChange={setPage} onRecord={() => setShowExport(true)} />
+        <CodeTabs phone page={page} onPageChange={setPage} />
         {/* What the desktop graph mounts beside the canvas: the Code Explorer, the Do… bar, the Scene Builder */}
         {codeExplorerOpen && <CodeExplorerDialog />}
         <PhoneOverlays />
@@ -1422,6 +1435,7 @@ function App() {
     return (
       <div style={{ width: '100vw', height: APP_HEIGHT, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: tc.crust }}>
         <DesktopTopNav compact page={page} onPageChange={setPage} onRecord={() => setShowExport(true)} />
+        {isCodePage(page) && <CodeTabs page={page} onPageChange={setPage} />}
         {/* Opened from Files' Explore code and the code editors (the desktop layout mounts it at the end) */}
         {codeExplorerOpen && <CodeExplorerDialog />}
 
@@ -1507,7 +1521,7 @@ function App() {
               <div ref={canvasFrame} style={{ flex: 1, position: 'relative', minHeight: 0 }}><ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} /><AudioMasterVolumeWidget /></div>
             </PlaySplitArea>
             <div style={{ background: tc.mantle, borderTop: `1px solid ${tc.surface0}`, padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '10px', fontFamily: 'monospace', color: tc.surface2, minHeight: '28px', flexShrink: 0 }}>
-              <StatusReadout swatchSize={12} probeGap={10} emptyText="hover for color · click node to probe" />
+              <StatusReadout swatchSize={12} probeGap={10} emptyText="hover for colour · click node to probe" />
               <div style={{ flex: 1 }} />
               {errorBadge}
             </div>
@@ -1538,6 +1552,7 @@ function App() {
   return (
     <div style={{ width: '100vw', height: APP_HEIGHT, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: tc.crust }}>
       <DesktopTopNav page={page} onPageChange={setPage} onRecord={() => setShowExport(true)} />
+      {isCodePage(page) && <CodeTabs page={page} onPageChange={setPage} />}
 
       {page === 'shortcuts' && <ShortcutsPage />}
       {page === 'files' && <div style={{ flex: 1, minHeight: 0, display: 'flex' }}><FilesPage onNavigate={setPage} /></div>}
@@ -1550,7 +1565,7 @@ function App() {
 
       <div style={{ display: (page === 'studio' || page === 'glsl' || page === 'play' || page === 'convert') ? 'flex' : 'none', flex: 1, overflow: 'hidden', position: 'relative', userSelect: isDragging ? 'none' : undefined as undefined }}>
 
-        {/* Left: Node Palette — hidden on GLSL page */}
+        {/* Left: Node Palette — Studio only */}
         {page === 'studio' && paletteBaseW > 0 && (
           <div style={{ width: effectivePaletteW, minWidth: effectivePaletteW, flexShrink: 0, overflow: 'hidden', height: '100%', position: 'relative', background: tk.bg.subtle, borderRight: `1px solid ${tk.border.default}` }}>
             {/* Collapsed state: show only an expand button */}

@@ -8,6 +8,7 @@ import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Icon } from '../ui/Icon';
 import { listNodeTypes } from '../../present/nodeCode';
 import { capsLabel, cardStyle } from './fileUiShared';
+import { rowLabel } from '../NodeGraph/libraryRows';
 
 export function NodesListView({ compact, onOpenNode }: { compact: boolean; onOpenNode: (type: string) => void }) {
   const tk = useTokens();
@@ -34,7 +35,7 @@ export function NodesListView({ compact, onOpenNode }: { compact: boolean; onOpe
       </div>
       {groups.map(([cat, list]) => (
         <section key={cat} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <span style={{ ...capsLabel(tk), padding: '0 4px' }}>{cat} · {list.length}</span>
+          <span style={{ ...capsLabel(tk), padding: '0 4px' }}>{rowLabel(cat)} · {list.length}</span>
           <div style={{ ...cardStyle(tk), display: 'grid', gridTemplateColumns: compact ? '1fr' : 'repeat(auto-fill, minmax(260px, 1fr))', gap: 1, overflow: 'hidden' }}>
             {list.map(e => <NodeRow key={e.type} label={e.label} description={e.description} onClick={() => onOpenNode(e.type)} />)}
           </div>

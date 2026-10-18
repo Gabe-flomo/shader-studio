@@ -8,16 +8,17 @@ presentations, GLSL shaders, background images and notes. Making one is Pro
 
 ## Where
 
-**Builder → Node packs.** The Builder page has two tabs, *Functions* (the
-Function Builder) and *Node packs* (the pack workspace).
+**Code → Node packs.** The Code page (docs/glossary.md) has four tabs: *Shader*,
+*Convert*, *Functions* (the Function Builder) and *Node packs* (the pack
+workspace). Functions and Node packs were the old Builder page's two tabs.
 
-**Pop out.** The Builder page's *Pop out* button moves the whole Builder into a
-window that floats over every page, so you can build nodes beside the graph
-that uses them. Drag it by its title bar, resize it from any edge or corner,
-double-click the title bar (or the panel button) to snap it to the right edge as
-a full-height panel, and *Dock* to put it back in the Builder page. Its place
-and size are remembered on the device. On phones it's a full-screen sheet
-(also in the phone menu: *Builder: functions and node packs*).
+**Pop out.** The *Pop out* button on the Functions and Node packs tabs moves
+them into a window that floats over every page, so you can build nodes beside
+the graph that uses them. Drag it by its title bar, resize it from any edge or
+corner, double-click the title bar (or the panel button) to snap it to the right
+edge as a full-height panel, and *Dock* to put it back on the Code page. Its
+place and size are remembered on the device. On phones it's a full-screen sheet
+(the Code page's Functions and Node packs tabs open it).
 
 It's the same builder in both places, reading the same stores, so nodes
 published from the window show up in the node list, the Studio and the Builder

@@ -139,7 +139,7 @@ function PictureFinish({ play, onChange, touch, wide = false }: {
     setFinish(f => ({ ...f, on: true, effects: [...f.effects, e] }));
     usePlayUi.getState().revealFinish(e.id);
   };
-  // The Look effect editor (New effect…, or Edit on a custom effect's card). While it is open the
+  // The Finish effect editor (New effect…, or Edit on a custom effect's card). While it is open the
   // effect it makes is live in the stack without undo steps; Use makes one step, Cancel puts the stack back.
   const [editing, setEditing] = useState<{ original: FinishEffect | null } | null>(null);
   const putDraft = (e: FinishEffect) => useNodeGraphStore.getState().setPlay(p => {
@@ -364,7 +364,7 @@ function EffectCard({ effect: e, index, count, dimmed, touch, focused, focusTick
   /** Move the card at `from` to `to` (this card's buttons, or another card dropped on this one). */
   onReorder: (from: number, to: number) => void;
   onRemove: () => void;
-  /** Open the Look effect editor on it (custom effects). */
+  /** Open the Finish effect editor on it (custom effects). */
   onEdit?: () => void;
 }) {
   const onMove = (to: number) => onReorder(index, to);
@@ -832,7 +832,7 @@ function DatamoshEditor({ e, k, layers, onPatch }: { e: FinishEffect; k: RowKit;
         'Nothing heals while it is held. For a key, map it onto Mosh. A rule can do it too: its Do has Mosh (for some seconds) and Reset mosh for this effect.')}
       {k.row('Start over', <Button size="sm" variant="secondary" onPointerDown={() => reset(true)} onPointerUp={() => reset(false)} onPointerLeave={() => reset(false)}>Reset mosh</Button>,
         'Snaps the picture back to the live one, then the mosh builds up again. Map a key onto Reset, or give a rule the Do “Reset mosh”, to do it on cue.')}
-      {k.note(<>A video with its keyframes cut out: each frame’s movement is measured block by block and applied to the <b>old</b> picture instead of the new one, so colours from before smear and bleed along whatever moves. Turn <b>Refresh</b> up and hold <b>Mosh</b> to mosh only on cue; <b>Reset mosh</b> starts it over. On the Rules page a rule can do both: <b>Mosh</b> for some seconds and <b>Reset mosh</b> (and pulse or set any Look effect’s setting).{from === 'camera' ? ' Offline renders have no live camera, so there the picture holds still unless Refresh or a keyframe brings it back.' : ''}</>)}
+      {k.note(<>A video with its keyframes cut out: each frame’s movement is measured block by block and applied to the <b>old</b> picture instead of the new one, so colours from before smear and bleed along whatever moves. Turn <b>Refresh</b> up and hold <b>Mosh</b> to mosh only on cue; <b>Reset mosh</b> starts it over. On the Rules page a rule can do both: <b>Mosh</b> for some seconds and <b>Reset mosh</b> (and pulse or set any Finish effect’s setting).{from === 'camera' ? ' Offline renders have no live camera, so there the picture holds still unless Refresh or a keyframe brings it back.' : ''}</>)}
     </>
   );
 }

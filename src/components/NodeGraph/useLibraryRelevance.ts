@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { getActiveNodes, useNodeGraphStore } from '../../store/useNodeGraphStore';
+import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { getNodeDefinition, getOfferedDefinitions } from '../../nodes/definitions';
-import { exampleFollowCounts, libraryContext, mainOutputType, rankFits, type FollowCounts, type LibraryContext } from '../../structure/relevance';
+import { exampleFollowCounts, libraryContext, rankFits, type FollowCounts, type LibraryContext } from '../../structure/relevance';
 import { useLibraryPrefs } from '../../structure/libraryPrefs';
 import type { NodeDefinition } from '../../types/nodeGraph';
 
@@ -34,25 +34,14 @@ export function useLibraryContext(enabled: boolean): LibraryContext {
   return ctx;
 }
 
-/** The "Fits here" nodes for the selected node, or for the wire being dragged (which wins). */
+/**
+ * The "Fits here" nodes for the wire being dragged. Only while dragging: the Next strip under the
+ * selected card is the one suggestion surface (docs/glossary.md), so selecting a card adds nothing here.
+ */
 export function useFitsHere(enabled: boolean, hidden: ReadonlySet<string>): { defs: NodeDefinition[]; from: string | null } {
-  const selectedId = useNodeGraphStore(s => s.selectedNodeId);
-  const pathKey = useNodeGraphStore(s => s.activeGroupPath.join('/'));
   const wire = useLibraryPrefs(s => s.wire);
   const [counts, setCounts] = useState<FollowCounts | null>(null);
-
-  // The selected node's type and main output, read when the selection changes (not per graph edit).
-  const selected = useMemo(() => {
-    if (!selectedId) return null;
-    const s = useNodeGraphStore.getState();
-    const node = getActiveNodes(s.nodes, s.activeGroupPath)?.find(n => n.id === selectedId);
-    if (!node) return null;
-    const outType = mainOutputType(getNodeDefinition(node.type)) ?? Object.values(node.outputs ?? {})[0]?.type ?? null;
-    return outType ? { type: node.type, outType: outType as string } : null;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedId, pathKey]);
-
-  const source = wire ? { type: wire.nodeType, outType: wire.outType } : selected;
+  const source = wire ? { type: wire.nodeType, outType: wire.outType } : null;
   const wanted = enabled && !!source;
   useEffect(() => {
     if (!wanted || counts) return;

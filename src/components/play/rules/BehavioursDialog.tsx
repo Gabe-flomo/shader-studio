@@ -41,7 +41,7 @@ export function BehavioursDialog({ play, onChange, onAdded, onClose }: {
     if (!picked) return;
     let first = '', sources = 0;
     onChange(p => { const r = applyBehaviour(p, picked, fill); first = r.ruleIds[0] ?? ''; sources = r.sourceIds.length; return r.play; });
-    toast.success(`Added ${picked.name}`, { message: first ? 'Its rules are on the Rules page, ready to change.' : `${sources === 1 ? 'Its source is' : 'Its sources are'} on the Inputs board.` });
+    toast.success(`Added ${picked.name}`, { message: first ? 'Its rules are on the Rules page, ready to change.' : `${sources === 1 ? 'Its source is' : 'Its sources are'} under Controls.` });
     onAdded(first);
     onClose();
   };

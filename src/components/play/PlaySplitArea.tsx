@@ -19,7 +19,8 @@ import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { useCan } from '../../lib/plan';
 import { IconButton } from '../ui/Button';
 import { Segmented } from '../ui/Choice';
-import { Icon } from '../ui/Icon';
+import { Menu } from '../ui/Menu';
+import { playLayoutItems, sideIcon } from './playLayoutMenu';
 import { usePlayUi, type PlayTab } from './playUi';
 import { clampRatio, ratioAt, setAreaMeasure, shownRatio, usePlaySplit, WIDE_PANEL_PX, type SidebarMode, type SplitSide } from './playSplit';
 import { PlayRail, RailPageTabs } from './PlayRail';
@@ -154,19 +155,6 @@ function SplitDivider({ horizontal, dragging, onPointerDown, onReset }: { horizo
   );
 }
 
-const SIDE_OPTIONS: Array<{ value: SplitSide; icon: 'panelLeft' | 'panelRight' | 'panelTop' | 'panelBottom'; title: string }> = [
-  { value: 'left', icon: 'panelLeft', title: 'Panel left of the picture' },
-  { value: 'right', icon: 'panelRight', title: 'Panel right of the picture' },
-  { value: 'top', icon: 'panelTop', title: 'Panel above the picture' },
-  { value: 'bottom', icon: 'panelBottom', title: 'Panel below the picture' },
-];
-
-const SIDEBAR_OPTIONS: Array<{ value: SidebarMode; icon: 'sidebar' | 'rail' | 'sidebarOff'; title: string }> = [
-  { value: 'full', icon: 'sidebar', title: 'Sidebar beside the panel' },
-  { value: 'rail', icon: 'rail', title: 'Fold the sidebar into icons: this panel takes its width, one page at a time (⌘⇧B)' },
-  { value: 'hidden', icon: 'sidebarOff', title: 'No sidebar: just the picture and this panel' },
-];
-
 /** The big panel: its header (section or page, side, sidebar, close), the rail, and the body PlayPage fills. */
 function SplitPanel() {
   const tk = useTokens();
@@ -229,28 +217,14 @@ function SplitPanel() {
                 { value: 'controls', label: `Controls${nControls ? ` · ${nControls}` : ''}` },
                 { value: 'layers', label: `Layers${nLayers ? ` · ${nLayers}` : ''}${layersOk ? '' : ' · Pro'}` },
                 { value: 'finish', label: `Finish${nFinish ? ` · ${nFinish}` : ''}${finishOk ? '' : ' · Pro'}` },
-                { value: 'engine', label: `Engine${nRacks ? ` · ${nRacks}` : ''}${engineOk ? '' : ' · Pro'}` },
-                { value: 'mappings', label: `Mappings${nMappings ? ` · ${nMappings}` : ''}` },
+                { value: 'engine', label: `Sound${nRacks ? ` · ${nRacks}` : ''}${engineOk ? '' : ' · Pro'}` },
+                { value: 'mappings', label: `Sources${nMappings ? ` · ${nMappings}` : ''}` },
               ]}
             />
           </div>
         )}
         <span style={{ flex: 1 }} />
-        <Segmented<SplitSide>
-          size="sm"
-          ariaLabel="Where the panel sits"
-          value={side}
-          onChange={setSide}
-          options={SIDE_OPTIONS.map(o => ({ value: o.value, title: o.title, label: <Icon name={o.icon} size={14} /> }))}
-        />
-        <span aria-hidden style={{ width: 1, height: 18, background: tk.border.default, margin: '0 2px' }} />
-        <Segmented<SidebarMode>
-          size="sm"
-          ariaLabel="The sidebar"
-          value={sidebar}
-          onChange={setSidebar}
-          options={SIDEBAR_OPTIONS.map(o => ({ value: o.value, title: o.title, label: <Icon name={o.icon} size={14} /> }))}
-        />
+        <LayoutMenu side={side} sidebar={sidebar} setSide={setSide} setSidebar={setSidebar} />
         <IconButton icon="close" size="sm" label="Close the panel: back to the full picture" shortcut={SPLIT_SHORTCUT} onClick={() => usePlaySplit.getState().setOn(false)} />
       </div>
       <div style={{ flex: 1, minHeight: 0, minWidth: 0, display: 'flex' }}>
@@ -258,6 +232,21 @@ function SplitPanel() {
         <div ref={bodyRef} style={{ flex: 1, minHeight: 0, minWidth: 0, display: 'flex', flexDirection: 'column', position: 'relative' }} />
       </div>
     </div>
+  );
+}
+
+/** One Layout button for where the panel sits and the sidebar (playLayoutMenu.ts), instead of seven radios. */
+function LayoutMenu({ side, sidebar, setSide, setSidebar }: { side: SplitSide; sidebar: SidebarMode; setSide: (s: SplitSide) => void; setSidebar: (m: SidebarMode) => void }) {
+  const tk = useTokens();
+  const anchor = useRef<HTMLSpanElement>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  return (
+    <span ref={anchor} style={{ display: 'inline-flex' }}>
+      <IconButton icon={sideIcon(side)} size="sm" label="Layout: where the panel sits, and the sidebar" active={!!menu} tooltip={!menu}
+        aria-haspopup="menu" data-play-layout=""
+        onClick={() => { const r = anchor.current?.getBoundingClientRect(); setMenu(menu || !r ? null : { x: r.right - 290, y: r.bottom + 6 }); }} />
+      {menu && <Menu x={menu.x} y={menu.y} minWidth={290} title="Layout" items={playLayoutItems(side, sidebar, setSide, setSidebar, tk.accent.base)} onClose={() => setMenu(null)} />}
+    </span>
   );
 }
 

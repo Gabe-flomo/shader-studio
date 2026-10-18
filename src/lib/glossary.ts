@@ -1,0 +1,85 @@
+/**
+ * glossary.ts — one name per idea in the app's chrome (docs/glossary.md is the readable copy).
+ *
+ * `GLOSSARY` is the list of concepts and the one word each gets on screen; `BANNED` is the
+ * words those names replaced, which a test (lib/__tests__/glossary.test.ts) keeps out of the
+ * chrome: page tabs, rail names, shortcut labels, menu rows and toolbar tooltips. Node labels
+ * and node categories are not chrome (they live in the node definitions) and get their own pass.
+ *
+ * Pure data: nothing in the app reads this at run time.
+ */
+
+export interface GlossaryTerm {
+  /** The word on screen. */
+  name: string;
+  /** What it means, in one line. */
+  means: string;
+  /** Words not to use for it. */
+  avoid: readonly string[];
+}
+
+export const GLOSSARY: readonly GlossaryTerm[] = [
+  { name: 'Code', means: 'The top-level page for code: the shader editor, Convert, Functions and Node packs, as tabs', avoid: ['GLSL (as a page)', 'Builder (as a page)'] },
+  { name: 'Shader', means: 'Code page tab: write a fragment shader by hand and run it', avoid: ['GLSL page', 'GLSL editor'] },
+  { name: 'Convert', means: 'Code page tab: turn GLSL into nodes', avoid: [] },
+  { name: 'Functions', means: 'Code page tab: plot and compose functions, then send them to the graph', avoid: ['Builder', 'Function Builder (in navigation)'] },
+  { name: 'Node packs', means: 'Code page tab: make and share packs of node types', avoid: [] },
+  { name: 'Builder', means: 'Only the Scene builders (2D, 3D, Agents, Grid, Splat, Time Cube, Warp) that write a graph for you', avoid: [] },
+  { name: 'Publish node', means: 'Turn a graph, a group or GLSL into your own node type (the sidebar panel)', avoid: ['Node Builder'] },
+  { name: 'Import shader', means: 'The top bar button: a .glsl file becomes a node in the graph', avoid: ['GLSL (as a button)'] },
+  { name: 'Generated code', means: 'The graph’s own GLSL, in the drawer under the Studio canvas', avoid: ['GLSL code', 'GLSL output'] },
+  { name: 'Finish', means: 'Play’s stack of effects over the whole picture (grade, lens, film, time)', avoid: ['Look (as the rail or its effects)'] },
+  { name: 'Look', means: 'Only a section inside one builder or layer editor: how that one thing is drawn', avoid: [] },
+  { name: 'Controls', means: 'Play’s section of sliders, buttons and pads people play, with what drives them', avoid: ['Inputs', 'Mappings (as a section)'] },
+  { name: 'Sources', means: 'What drives a control: a key, a knob, the mouse, a hand, an LFO. A mapping is one source → control row', avoid: ['Inputs', 'Mappings (as a list title)'] },
+  { name: 'Inputs & media', means: 'The node library row of UV, Time, Mouse, Texture, MIDI and data nodes (category “Sources” in the definitions)', avoid: ['Sources (as a node row)'] },
+  { name: 'Sound', means: 'Play’s section for the Audio engine (racks, arrangement) and the effects on the sound', avoid: ['Engine (as a section)'] },
+  { name: 'Rules', means: 'Play’s When/Do section. A signal is one event a rule listens for', avoid: ['Signals (as the section)'] },
+  { name: 'Next', means: 'The one suggestion surface: next moves for the selected node, learned from your graphs', avoid: [] },
+  { name: 'App settings', means: 'The app’s own preferences, in the top bar’s ⋯ menu', avoid: [] },
+  { name: 'Nodes reference', means: 'Every node type with its sockets, picture and GLSL, under Help', avoid: [] },
+  { name: 'colour', means: 'UI copy spells it the British way (node labels such as “Color Ramp” are a later pass)', avoid: ['color'] },
+];
+
+export interface BannedWord {
+  /** Matched against each chrome string (after `${…}` in template strings is taken out). */
+  pattern: RegExp;
+  /** What to write instead. */
+  use: string;
+  /** Strings that may match the pattern anyway (a node's own label, say). */
+  allow?: RegExp;
+}
+
+export const BANNED: readonly BannedWord[] = [
+  { pattern: /\bNode Builder\b/, use: 'Publish node' },
+  { pattern: /^Builder\b/, use: 'Functions (a tab of the Code page); “Builder” is only a Scene builder' },
+  { pattern: /^GLSL$/, use: 'Import shader (the button) or Code (the page)' },
+  { pattern: /\bGLSL page\b/, use: 'the Code page (its Shader tab)' },
+  { pattern: /\bGo to (Mappings|Engine|Inputs|Look|Signals)\b/, use: 'the rail’s own name: Controls, Sources, Finish, Sound, Rules' },
+  { pattern: /^(Inputs|Look|Engine|Mappings|Signals)( ·.*)?$/, use: 'Controls, Finish, Sound, Sources or Rules' },
+  { pattern: /\b[Cc]olor\b/, use: 'colour', allow: /\bAdd Color node\b|\bColor constant node\b/ },
+];
+
+/** A template string's text without its `${…}` parts (nested ones too; an unclosed one runs to the end). */
+function withoutPlaceholders(text: string): string {
+  let out = '';
+  let depth = 0;
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === '$' && text[i + 1] === '{') { depth++; i++; continue; }
+    if (depth > 0) { if (text[i] === '{') depth++; else if (text[i] === '}') depth--; continue; }
+    out += text[i];
+  }
+  return out;
+}
+
+/** A chrome string's problems: one line per banned word it uses. */
+export function glossaryProblems(text: string): string[] {
+  const t = withoutPlaceholders(text).replace(/\s+/g, ' ').trim();
+  const out: string[] = [];
+  for (const b of BANNED) {
+    if (!b.pattern.test(t)) continue;
+    if (b.allow?.test(t)) continue;
+    out.push(`“${t}”: use ${b.use}`);
+  }
+  return out;
+}

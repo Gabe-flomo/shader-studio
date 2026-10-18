@@ -81,7 +81,7 @@ export function ProSheetHost() {
     >
       <div style={{ padding: '16px 20px 18px', display: 'flex', flexDirection: 'column', gap: 12, font: `12.5px/1.5 ${fontFamily.ui}`, color: tk.text.secondary }}>
         <p style={{ margin: 0 }}>
-          You’re on Free: the Studio, Present, the GLSL page, the Builder, Learn and Play’s controls with the mouse, keys and audio.
+          You’re on Free: the Studio, Present, the Code page’s Shader, Functions and Node packs, Learn and Play’s controls with the mouse, keys and audio.
           Pro unlocks the rest, and anything you made on Pro still opens here to look at.
         </p>
         <div style={{ borderRadius: radius.lg, background: tk.bg.field, padding: '10px 12px' }}>

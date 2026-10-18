@@ -39,3 +39,33 @@ const subscribe = (fn: () => void) => {
 export function useSuggestionsShown(): boolean {
   return useSyncExternalStore(subscribe, read, () => true);
 }
+
+// ── Folded or open ───────────────────────────────────────────────────────────
+// The Next strip is the one suggestion surface (docs/glossary.md). It opens with its list the first
+// time, so it is found; once a move has been used (or it has been folded by hand) it starts folded
+// to a small "Next" chip under the card, and a click opens it. Remembered on this device.
+
+export const STRIP_OPEN_KEY = 'playfield:suggestions:open';
+const openListeners = new Set<() => void>();
+let openState: boolean | null = null;
+
+function readOpen(): boolean {
+  if (openState === null) {
+    try { openState = localStorage.getItem(STRIP_OPEN_KEY) !== 'folded'; } catch { openState = true; }
+  }
+  return openState;
+}
+
+export function suggestionsOpen(): boolean { return readOpen(); }
+
+export function setSuggestionsOpen(open: boolean): void {
+  openState = open;
+  try { localStorage.setItem(STRIP_OPEN_KEY, open ? 'open' : 'folded'); } catch { /* this session only */ }
+  for (const fn of openListeners) fn();
+}
+
+const subscribeOpen = (fn: () => void) => { openListeners.add(fn); return () => { openListeners.delete(fn); }; };
+
+export function useSuggestionsOpen(): boolean {
+  return useSyncExternalStore(subscribeOpen, readOpen, () => true);
+}

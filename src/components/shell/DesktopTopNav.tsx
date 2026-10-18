@@ -10,7 +10,8 @@ import { useThemeStore, useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius, type ThemeMode } from '../../theme/tokens';
 import { isPlayRecordEmpty } from '../../types/play';
 import { loadShortcutMap } from '../../hooks/useShortcuts';
-import { requestPage, type Page } from '../page';
+import { isCodePage, requestPage, type Page } from '../page';
+import { openAppSettings, openNodesReference } from './appDialogStore';
 import { openCommandsRef } from '../../suggestions/doBarStore';
 import { Button, IconButton } from '../ui/Button';
 import { Icon } from '../ui/Icon';
@@ -18,7 +19,6 @@ import type { IconName } from '../ui/iconPaths';
 import { Popover } from '../ui/Popover';
 import { Menu, type MenuItem } from '../ui/Menu';
 import { useLearnUi } from '../learn/learnStore';
-import { ProBadgeFor } from '../account/ProSheet';
 import { accountMenuItems, signedInLabel } from '../account/accountMenu';
 import { usePlan } from '../../lib/plan';
 import { Tooltip } from '../ui/Tooltip';
@@ -69,16 +69,22 @@ function useElementWidth<T extends HTMLElement>(): [RefObject<T | null>, number]
   return [ref, width];
 }
 
-/** The pages, as icons: the current one shows its name, and hovering the strip shows them all. Keys lives under Files (App settings) and the More menu. */
+/**
+ * The pages (docs/glossary.md): Studio · Play · Present · Code · Files. Code holds the shader
+ * editor, Convert, Functions and Node packs as tabs (CodeTabs.tsx); its tab is on for any of them
+ * and opens the one used last. Keyboard shortcuts and the Nodes reference are under Help, App
+ * settings under ⋯.
+ */
 const TABS: { page: Page; label: string; icon: IconName }[] = [
   { page: 'studio', label: 'Studio', icon: 'layoutGraph' },
   { page: 'play', label: 'Play', icon: 'play' },
   { page: 'present', label: 'Present', icon: 'slides' },
-  { page: 'fn', label: 'Builder', icon: 'wave' },
-  { page: 'glsl', label: 'GLSL', icon: 'code' },
-  { page: 'convert', label: 'Convert', icon: 'bidir' },
+  { page: 'code', label: 'Code', icon: 'code' },
   { page: 'files', label: 'Files', icon: 'folder' },
 ];
+
+/** The top bar's tab for a page (the Code page's tabs all light Code). */
+const tabOf = (p: Page): Page => (isCodePage(p) ? 'code' : p);
 
 /**
  * Desktop top bar (redesign): brand, page tabs, and the graph-level actions that used to hide
@@ -115,7 +121,7 @@ export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }:
   const tabLabels = !compact && fold.tabLabels;
   // Tabs that don't fit go in a "···" after the strip (never hidden without a way to them).
   const tabsRef = useRef<HTMLDivElement>(null);
-  const hiddenTabs = useOverflowingTabs(tabsRef, barWidth, page);
+  const hiddenTabs = useOverflowingTabs(tabsRef, barWidth, tabOf(page));
 
   return (
     <div
@@ -155,7 +161,7 @@ export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }:
         }}
       >
         {TABS.map(t => {
-          const on = page === t.page;
+          const on = tabOf(page) === t.page;
           const named = on || tabLabels;
           return (
             <button
@@ -176,13 +182,12 @@ export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }:
             >
               <Icon name={t.icon} size={15} />
               {named && <span style={{ display: 'inline-block', verticalAlign: 'middle' }}>{t.label}</span>}
-              {t.page === 'convert' && <ProBadgeFor feature="convert" style={{ marginLeft: 6 }} />}
               {t.page === 'play' && hasPlay && <span aria-label="This graph has a Play setup" style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: tk.accent.base, marginLeft: 6, verticalAlign: 'middle' }} />}
             </button>
           );
         })}
       </div>
-      {hiddenTabs.length > 0 && <MoreTabsButton tabs={TABS.filter(t => hiddenTabs.includes(t.page))} page={page} onPageChange={onPageChange} />}
+      {hiddenTabs.length > 0 && <MoreTabsButton tabs={TABS.filter(t => hiddenTabs.includes(t.page))} page={tabOf(page)} onPageChange={onPageChange} />}
 
       {/* No `minWidth: 0` here: this cluster must never shrink below its content's natural width
           (buttons/pills don't wrap or shrink themselves) — that's what stops it overlapping the
@@ -196,9 +201,7 @@ export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }:
         <IconButton icon="undo" label="Undo" shortcut={shortcuts.undo} onClick={undo} />
         <IconButton icon="redo" label="Redo" onClick={redo} />
         {!iconOnly && <Divider />}
-        {foldAux ? (
-          <OverflowMenu mode={mode} toggleTheme={toggleTheme} rebuildShortcut={shortcuts.rebuild} />
-        ) : (
+        {!foldAux && (
           <>
             <IconButton icon="rebuild" label={REBUILD_TOOLTIP} shortcut={shortcuts.rebuild} onClick={() => { void rebuildWithToast(); }} />
             <IconButton
@@ -223,8 +226,8 @@ export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }:
             <Tooltip label="Import a .play file, a graph file, or a .present.json (opens on the Present page)" shortcut={shortcuts.import}>
               <Button size="sm" icon="import" aria-label="Import a .play file, graph or presentation file" onClick={() => { void importAnyFile(onPageChange); }}>Import</Button>
             </Tooltip>
-            <Tooltip label="Import a GLSL fragment shader (Shadertoy or raw) as a node, wired UV → shader → Output">
-              <Button size="sm" icon="code" aria-label="Import a GLSL shader as a node" onClick={async () => { reportGlslImport(await importGlslFromFile()); }}>GLSL</Button>
+            <Tooltip label="Import shader: a GLSL fragment shader file (Shadertoy or raw) as a node, wired UV → shader → Output">
+              <Button size="sm" icon="code" aria-label="Import a GLSL shader as a node" onClick={async () => { reportGlslImport(await importGlslFromFile()); }}>Import shader</Button>
             </Tooltip>
             <Tooltip label="Export this graph as a .play file, with what it uses" shortcut={shortcuts.export}>
               <Button size="sm" icon="export" aria-label="Export this graph as a .play file" onClick={e => offerGraphExport(e.currentTarget)}>Export</Button>
@@ -247,7 +250,7 @@ export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }:
             {showRecordLabel && 'Record'}
           </button>
         </Tooltip>
-        <AccountButton />
+        <AppMenu folded={foldAux} mode={mode} toggleTheme={toggleTheme} rebuildShortcut={shortcuts.rebuild} />
       </div>
     </div>
   );
@@ -288,27 +291,39 @@ function MoreTabsButton({ tabs, page, onPageChange }: { tabs: typeof TABS; page:
 }
 
 /**
- * The bar's "···" overflow, holding the least-used items once the bar is too narrow for them
- * inline: the Workspace/Keyboard/Hands chips (each already hides itself when it has nothing to
- * show) and Rebuild + the theme toggle. Everything here stays reachable by keyboard through this
- * one button rather than disappearing.
+ * The bar's ⋯ menu: App settings (it used to be a Files page, docs/glossary.md) and the account
+ * (who is signed in, Sign out). Once the bar is too narrow for them inline it also holds the
+ * least-used items: the Workspace/Keyboard/Hands chips (each hides itself when it has nothing to
+ * show), Rebuild and the theme toggle, so nothing disappears without a way to it.
  */
-function OverflowMenu({ mode, toggleTheme, rebuildShortcut }: { mode: ThemeMode; toggleTheme: () => void; rebuildShortcut?: string }) {
+function AppMenu({ folded, mode, toggleTheme, rebuildShortcut }: { folded: boolean; mode: ThemeMode; toggleTheme: () => void; rebuildShortcut?: string }) {
+  const tk = useTokens();
+  const session = usePlan(s => s.session);
   const anchor = useRef<HTMLSpanElement>(null);
   const [open, setOpen] = useState(false);
+  const account = accountMenuItems(session);
+  const who = signedInLabel(session);
+  const run = (fn: () => void) => () => { fn(); setOpen(false); };
   return (
-    <span ref={anchor} style={{ display: 'inline-flex' }}>
-      <IconButton icon="more" label="More tools" active={open} tooltip={!open} onClick={() => setOpen(o => !o)} />
+    <span ref={anchor} style={{ display: 'inline-flex', marginLeft: 2 }}>
+      <IconButton icon="more" label={who ? `More: App settings · ${who}` : 'More: App settings'} active={open} tooltip={!open} onClick={() => setOpen(o => !o)} />
       {open && (
-        <Popover anchorRef={anchor} onClose={() => setOpen(false)} align="end" width={230} padding={6}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <WorkspaceChip />
-            <KeyboardPill />
-            <HandsLive />
-            <OverflowRow icon="rebuild" label={`${REBUILD_TOOLTIP}${rebuildShortcut ? ` (${rebuildShortcut})` : ''}`}
-              onClick={() => { void rebuildWithToast(); setOpen(false); }} />
-            <OverflowRow icon={mode === 'light' ? 'moon' : 'sun'} label={mode === 'light' ? 'Switch to dark theme' : 'Switch to light theme'}
-              onClick={() => { toggleTheme(); setOpen(false); }} />
+        <Popover anchorRef={anchor} onClose={() => setOpen(false)} align="end" width={250} padding={6}>
+          <div data-app-menu="" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {folded && <>
+              <WorkspaceChip />
+              <KeyboardPill />
+              <HandsLive />
+              <OverflowRow icon="rebuild" label={`${REBUILD_TOOLTIP}${rebuildShortcut ? ` (${rebuildShortcut})` : ''}`} onClick={run(() => { void rebuildWithToast(); })} />
+              <OverflowRow icon={mode === 'light' ? 'moon' : 'sun'} label={mode === 'light' ? 'Switch to dark theme' : 'Switch to light theme'} onClick={run(toggleTheme)} />
+              <span style={{ height: 1, background: tk.border.subtle, margin: '3px 4px' }} />
+            </>}
+            <OverflowRow icon="sliders" label="App settings…" onClick={run(openAppSettings)} />
+            {account.map((it, i) => (it === 'separator'
+              ? <span key={i} style={{ height: 1, background: tk.border.subtle, margin: '3px 4px' }} />
+              : 'heading' in it
+                ? <div key={i} style={{ padding: '8px 8px 3px', borderTop: `1px solid ${tk.border.subtle}`, marginTop: 3, color: tk.text.faint, font: `600 10.5px ${fontFamily.ui}` }}>{it.heading}</div>
+                : <OverflowRow key={i} icon={it.icon ?? 'more'} label={it.label} onClick={run(it.onSelect)} />))}
           </div>
         </Popover>
       )}
@@ -339,7 +354,7 @@ function OverflowRow({ icon, label, onClick }: { icon: IconName; label: string; 
 
 /**
  * Help: the Start sheet again, the Learn lessons (moved out of Present), the Do… bar's commands,
- * the keyboard shortcuts and Report a problem, in one place (UX audit §3.2).
+ * the keyboard shortcuts, the Nodes reference (moved out of Files) and Report a problem, in one place (UX audit §3.2).
  */
 function HelpMenu() {
   const anchor = useRef<HTMLSpanElement>(null);
@@ -350,35 +365,15 @@ function HelpMenu() {
     'separator',
     { label: 'Do… bar commands', icon: 'spark', onSelect: () => { requestPage('studio'); openCommandsRef(); } },
     { label: 'Keyboard shortcuts', icon: 'keyboard', onSelect: () => requestPage('shortcuts') },
+    { label: 'Nodes reference…', icon: 'nodes', hint: 'Every node type: what it does, its sockets, a live picture, its GLSL', onSelect: () => openNodesReference() },
     'separator',
     { label: 'Report a problem…', icon: 'warning', onSelect: () => { void import('../../files/crashReports').then(m => m.reportProblem()); } },
   ];
   return (
     <span ref={anchor} style={{ display: 'inline-flex' }}>
-      <IconButton icon="book" label="Help: start, lessons, shortcuts" active={!!menu} tooltip={!menu}
+      <IconButton icon="book" label="Help: start, lessons, shortcuts, nodes reference" active={!!menu} tooltip={!menu}
         onClick={() => { const r = anchor.current?.getBoundingClientRect(); setMenu(r ? { x: Math.max(8, r.right - 260), y: r.bottom + 6 } : null); }} />
       {menu && <Menu x={menu.x} y={menu.y} minWidth={260} title="Help" items={items} onClose={() => setMenu(null)} />}
-    </span>
-  );
-}
-
-/** The account menu (desktop's More): who is signed in and on which plan, and Sign out. Absent with no sign-in. */
-function AccountButton() {
-  const session = usePlan(s => s.session);
-  const anchor = useRef<HTMLSpanElement>(null);
-  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
-  const items = accountMenuItems(session);
-  if (!items.length) return null;
-  return (
-    <span ref={anchor} style={{ display: 'inline-flex', marginLeft: 2 }}>
-      <IconButton
-        icon="more"
-        label={signedInLabel(session) ?? 'More'}
-        active={!!menu}
-        tooltip={!menu}
-        onClick={() => { const r = anchor.current?.getBoundingClientRect(); setMenu(r ? { x: r.right - 240, y: r.bottom + 6 } : null); }}
-      />
-      {menu && <Menu x={menu.x} y={menu.y} minWidth={240} onClose={() => setMenu(null)} items={items} />}
     </span>
   );
 }

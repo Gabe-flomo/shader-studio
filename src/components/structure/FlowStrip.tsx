@@ -1,14 +1,15 @@
 /**
  * FlowStrip — the thin strip above the canvas (docs/structure-hints.md): the usual order of
- * steps for this kind of graph (2D, 3D, passes, agents), the stages the graph has lit up, and a
- * hint at the stage after the one the Output has reached, with two or three moves from the
- * suggestions. A stage's name opens the node browser on that stage. Gentle order notices sit at
+ * steps for this kind of graph (2D, 3D, passes, agents), the stages the graph has lit up, and the
+ * stage after the one the Output has reached (dashed). It offers no moves of its own: the Next strip
+ * under the selected card is the one suggestion surface (docs/glossary.md). A stage's name opens the
+ * node browser on that stage. Gentle order notices sit at
  * its end. A guide only: nothing here blocks or rewrites anything.
  *
  * On a phone it collapses to one chip that opens the same things in a popover. Hidden with its ×
  * (remembered); the canvas toolbar's flow button brings it back.
  */
-import { useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { IconButton } from '../ui/Button';
@@ -17,13 +18,12 @@ import { Popover } from '../ui/Popover';
 import { Toggle } from '../ui/Choice';
 import { Tooltip } from '../ui/Tooltip';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
-import { suggestionsFor, type RankedMove } from '../../suggestions';
-import { FLOWS, STAGES, stageOfType, inFlow, type FlowId, type StageId } from '../../structure/stages';
+import { FLOWS, STAGES, type FlowId, type StageId } from '../../structure/stages';
 import type { FlowReading } from '../../structure/flow';
 import type { OrderNotice } from '../../structure/notices';
 import { useStructureHints } from '../../structure/hintsStore';
 import { BROWSE_STAGE_EVENT } from '../../structure/browse';
-import { outputFeeder, useStructure } from './useStructure';
+import { useStructure } from './useStructure';
 import { hideStrip, StageLegend, useStageColour } from './stageUi';
 
 const FLOW_WHY: Record<FlowId, string> = {
@@ -55,28 +55,6 @@ export function browseStage(flow: FlowId, stage: StageId) {
   window.dispatchEvent(new CustomEvent(BROWSE_STAGE_EVENT, { detail: { flow, stage } }));
 }
 
-/** The next-stage moves: the suggestions for what the Output shows, those of the next stage first. */
-function useNextMoves(reading: FlowReading | null): { node: string; moves: RankedMove[] } | null {
-  const nodes = useNodeGraphStore(s => s.nodes);
-  const topLevel = useNodeGraphStore(s => s.activeGroupPath.length === 0);
-  const feederId = useMemo(() => outputFeeder(nodes)?.id ?? null, [nodes]);
-  const flow = reading?.flow, next = reading?.next;
-  // Wiring changes re-rank; a drag (positions only) keeps the feeder and the same answer.
-  return useMemo(() => {
-    if (!topLevel || !feederId || !flow || !next) return null;
-    const st = useNodeGraphStore.getState();
-    const feeder = st.nodes.find(n => n.id === feederId);
-    if (!feeder) return null;
-    let ranked: RankedMove[] = [];
-    try { ranked = suggestionsFor(feeder, st.nodes, { limit: 12, stageTarget: { flow, stage: next } }); } catch { return null; }
-    const inNext = ranked.filter(m => m.move.anchor && inFlow(stageOfType(m.move.anchor.type), flow)?.stage === next);
-    const rest = ranked.filter(m => !inNext.includes(m));
-    const moves = [...inNext, ...rest].slice(0, inNext.length >= 2 ? Math.min(3, inNext.length) : 2);
-    return moves.length ? { node: feederId, moves } : null;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [topLevel, feederId, flow, next, reading]);
-}
-
 export function FlowStrip({ phone = false }: { phone?: boolean }) {
   const on = useStructureHints(s => s.stripOn);
   if (!on) return null;
@@ -86,15 +64,12 @@ export function FlowStrip({ phone = false }: { phone?: boolean }) {
 function Strip({ phone }: { phone: boolean }) {
   const tk = useTokens();
   const { reading, notices, graph } = useStructure();
-  const next = useNextMoves(reading);
   const ref = useRef<HTMLDivElement>(null);
   const width = useWidth(ref);
   const nStages = reading ? FLOWS[reading.flow].stages.length : 6;
-  // Room for every stage's name and the next moves inline; else the moves fold into a menu, then
-  // the stages show their names only for where the Output is and what comes next.
-  const inlineNext = width >= nStages * 80 + 380;
+  // Room for every stage's name; else the stages show their names only for where the Output is and what comes next.
   const compact = width > 0 && width < nStages * 80 + 120;
-  if (phone) return reading ? <PhoneChip reading={reading} notices={notices} graph={graph} next={next} /> : null;
+  if (phone) return reading ? <PhoneChip reading={reading} notices={notices} graph={graph} /> : null;
   // One container from the start, so the width watcher keeps watching it.
   return (
     <div ref={ref} data-flow-strip={reading?.flow ?? ''} role="navigation" aria-label="Flow"
@@ -109,9 +84,6 @@ function Strip({ phone }: { phone: boolean }) {
           <Stages reading={reading} compact={compact} />
         </div>
         <span style={{ flex: 1 }} />
-        {next && reading.next && (inlineNext
-          ? <NextInline reading={reading} next={next} />
-          : <NextMenu reading={reading} next={next} />)}
         <NoticesButton notices={notices} graph={graph} />
         <ViewButton flow={reading.flow} />
         <IconButton icon="close" size="sm" label="Hide the flow strip (the flow button in the canvas toolbar brings it back)" onClick={hideStrip} />
@@ -167,58 +139,6 @@ function Stages({ reading, vertical = false, compact = false, onPicked }: { read
         );
       })}
     </>
-  );
-}
-
-function MoveChip({ m, nodeId, onDone }: { m: RankedMove; nodeId: string; onDone?: () => void }) {
-  const tk = useTokens();
-  return (
-    <button type="button" data-next-move={m.move.id} title={m.why}
-      onClick={() => { useNodeGraphStore.getState().applySuggestion(nodeId, m.key, m.side, m.move.id, m.args ?? {}); onDone?.(); }}
-      style={{ height: 24, padding: '0 9px', border: 0, borderRadius: 999, cursor: 'pointer', background: tk.bg.field, color: tk.text.primary, font: `550 11.5px ${fontFamily.ui}`, flexShrink: 0 }}
-      onMouseEnter={e => { e.currentTarget.style.background = tk.bg.hover; }} onMouseLeave={e => { e.currentTarget.style.background = tk.bg.field; }}>
-      {m.move.label}
-    </button>
-  );
-}
-
-function NextInline({ reading, next }: { reading: FlowReading; next: { node: string; moves: RankedMove[] } }) {
-  const tk = useTokens();
-  return (
-    <span data-next-hint style={{ display: 'inline-flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
-      <span style={{ color: tk.text.muted }}>Next: <b style={{ color: tk.text.primary, fontWeight: 600 }}>{STAGES[reading.next!].label}</b></span>
-      {next.moves.map(m => <MoveChip key={m.move.id} m={m} nodeId={next.node} />)}
-    </span>
-  );
-}
-
-function NextMenu({ reading, next }: { reading: FlowReading; next: { node: string; moves: RankedMove[] } }) {
-  const tk = useTokens();
-  const ref = useRef<HTMLSpanElement>(null);
-  const [open, setOpen] = useState(false);
-  return (
-    <span ref={ref} style={{ display: 'inline-flex', flexShrink: 0 }}>
-      <button type="button" data-next-hint onClick={() => setOpen(o => !o)}
-        style={{ display: 'inline-flex', alignItems: 'center', gap: 4, height: 24, padding: '0 8px', border: 0, borderRadius: radius.md, cursor: 'pointer', background: open ? tk.bg.selected : tk.bg.field, color: tk.text.secondary, font: `550 11.5px ${fontFamily.ui}` }}>
-        Next: {STAGES[reading.next!].label}<Icon name="chevD" size={12} />
-      </button>
-      {open && (
-        <Popover anchorRef={ref} onClose={() => setOpen(false)} align="end" width={240} padding={10}>
-          <NextBody reading={reading} next={next} onDone={() => setOpen(false)} />
-        </Popover>
-      )}
-    </span>
-  );
-}
-
-function NextBody({ reading, next, onDone }: { reading: FlowReading; next: { node: string; moves: RankedMove[] }; onDone?: () => void }) {
-  const tk = useTokens();
-  const s = reading.next!;
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <span style={{ fontSize: 12, color: tk.text.muted }}><b style={{ color: tk.text.primary }}>Next: {STAGES[s].label}.</b> {STAGES[s].line}</span>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5 }}>{next.moves.map(m => <MoveChip key={m.move.id} m={m} nodeId={next.node} onDone={onDone} />)}</div>
-    </div>
   );
 }
 
@@ -306,8 +226,8 @@ function ViewButton({ flow }: { flow: FlowId }) {
   );
 }
 
-/** The phone's chip: the flow, where the Output is, what's next, and the notices count. */
-function PhoneChip({ reading, notices, graph, next }: { reading: FlowReading; notices: OrderNotice[]; graph: string; next: { node: string; moves: RankedMove[] } | null }) {
+/** The phone's chip: the flow, where the Output is, the stage after it, and the notices count. */
+function PhoneChip({ reading, notices, graph }: { reading: FlowReading; notices: OrderNotice[]; graph: string }) {
   const tk = useTokens();
   const colour = useStageColour();
   const ref = useRef<HTMLButtonElement>(null);
@@ -338,7 +258,6 @@ function PhoneChip({ reading, notices, graph, next }: { reading: FlowReading; no
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               <Stages reading={reading} vertical onPicked={() => setOpen(false)} />
             </div>
-            {next && reading.next && section('What usually comes next', <NextBody reading={reading} next={next} onDone={() => setOpen(false)} />)}
             {notices.length > 0 && section('Notes', <NoticeList notices={notices} graph={graph} onShow={() => setOpen(false)} />)}
             {section('View', <><ViewToggles /><StageLegend flow={reading.flow} /></>)}
           </div>

@@ -467,7 +467,7 @@ export function NodeBrowser({
         <span style={{ fontSize: 12, color: tk.text.muted, lineHeight: 1.45 }}>{STAGES[stageBrowse.stage].line}</span>
         {cats.map(cat => (
           <div key={cat}>
-            <CapsLabel>{cat}</CapsLabel>
+            <CapsLabel>{rowLabel(cat)}</CapsLabel>
             {renderPills(list.filter(x => x.category === cat).map(x => ({ type: x.type, label: x.label, description: nodeBlurb(getNodeDefinition(x.type)) })))}
           </div>
         ))}

@@ -277,7 +277,7 @@ function PackEditor({ initial, narrow }: { initial: PackProject; narrow: boolean
       x: r.left, y: r.bottom + 6, items: [
         { label: 'A saved graph…', icon: 'graphs', hint: 'An example of the nodes in use', onSelect: () => setPicking({ what: 'extra-graph' }) },
         { label: 'A presentation…', icon: 'slides', onSelect: () => setPicking({ what: 'extra-presentation' }) },
-        { label: 'A GLSL shader…', icon: 'code', hint: 'From the GLSL page', onSelect: () => setPicking({ what: 'extra-glsl' }) },
+        { label: 'A GLSL shader…', icon: 'code', hint: 'From Code → Shader', onSelect: () => setPicking({ what: 'extra-glsl' }) },
         { label: 'A Finish effect…', icon: 'sliders', hint: 'A custom effect from Your effects (Play → Finish)', onSelect: () => setPicking({ what: 'extra-finish' }) },
         { label: 'A background image…', icon: 'overlay', onSelect: () => { void listImages().then(list => setPicking({ what: 'extra-background', items: list.map(m => ({ id: m.id, label: m.name, detail: `${m.width}×${m.height}`, icon: 'overlay' as IconName, disabled: p.extras.some(x => x.kind === 'background' && x.id === m.id) })) })).catch(() => toast.error('Couldn’t read the backgrounds library')); } },
         { label: 'Notes (markdown)', icon: 'text', hint: 'A readme: what the nodes do, how to use them', onSelect: () => update(x => ({ ...x, extras: [...x.extras, { kind: 'note', id: `note_${Date.now().toString(36)}`, name: x.extras.some(e => e.kind === 'note') ? 'Notes' : 'Read me', text: `# ${x.name}\n\n` }] })) },
@@ -350,7 +350,7 @@ function PackEditor({ initial, narrow }: { initial: PackProject; narrow: boolean
         let list: Array<{ id: string; name: string; group?: string }> = [];
         try { list = JSON.parse(localStorage.getItem(GLSL_KEY) ?? '[]'); } catch { /* none */ }
         return <PickerModal title="Add a GLSL shader" icon="code" items={list.map(s => ({ id: s.id, label: s.name, detail: s.group, icon: 'code', disabled: p.extras.some(x => x.kind === 'glsl' && x.id === s.id) }))}
-          empty="No shaders on the GLSL page yet." onClose={close} onPick={it => { addExtra({ kind: 'glsl', id: it.id, name: it.label }); close(); }} />;
+          empty="No shaders in Code → Shader yet." onClose={close} onPick={it => { addExtra({ kind: 'glsl', id: it.id, name: it.label }); close(); }} />;
       }
       case 'extra-finish': {
         const list = loadSavedEffects();
