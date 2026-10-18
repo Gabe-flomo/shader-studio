@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.267',
+    date: '2026-10-17',
+    title: "Faster exports, tidier corners",
+    highlights: [
+      { area: 'Studio', text: "Desktop video export has a Speed choice: Fast uses the Mac's hardware encoder (the default), Best compression uses x264." },
+      { area: 'Studio', text: "Gradients survive in Scene Builder recipes, presets show their colours, Splat and Time Cube builders pause, and Agents groups take a Sound input." },
+    ],
+  },
+  {
     id: '2026.10.266',
     date: '2026-10-17',
     title: "Room to scroll on phones",
