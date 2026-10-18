@@ -18,6 +18,7 @@
  *    key (and by meaning: radius ↔ r…), keyframes and input expressions go
  *    with their socket, and Play targets on a renamed param are retargeted.
  */
+import { socketDefault } from './socketDefault';
 import { isOffered } from './notOffered';
 import type { DataType, GraphNode, InputSocket, NodeDefinition } from '../types/nodeGraph';
 import type { PlayRecord } from '../types/play';
@@ -159,7 +160,7 @@ function sameKind(a: unknown, b: unknown): boolean {
 function buildTarget(old: GraphNode, def: NodeDefinition): GraphNode {
   const inputs: Record<string, InputSocket> = {};
   for (const [key, socket] of Object.entries(def.inputs)) {
-    inputs[key] = { ...socket, defaultValue: def.paramDefs?.[key] ? undefined : def.defaultParams?.[key] as number | number[] | undefined };
+    inputs[key] = { ...socket, defaultValue: socketDefault(def, key) };
   }
   const outputs = { ...def.outputs };
   const params: Record<string, unknown> = { ...(def.defaultParams ?? {}) };

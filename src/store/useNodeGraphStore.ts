@@ -1,4 +1,5 @@
 import { resolveSendReceive, syncSendReceiveTypes } from '../compiler/sendReceive';
+import { socketDefault } from '../nodes/socketDefault';
 import { isPlayfile } from '../playfile/reader';
 import { logEvent } from '../lib/crashLog';
 import { recordActivity } from '../files/activity';
@@ -3869,9 +3870,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     for (const [key, socket] of Object.entries(def.inputs)) {
       inputs[key] = {
         ...socket,
-        defaultValue: def.paramDefs?.[key]
-          ? undefined
-          : def.defaultParams?.[key] as number | number[] | undefined,
+        defaultValue: socketDefault(def, key),
       };
     }
     // An Agents group's added ports (its Agent Inputs' extra outputs) are sockets on the group too.
@@ -3991,9 +3990,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       for (const [key, socket] of Object.entries(def.inputs)) {
         inputs[key] = {
           ...socket,
-          defaultValue: def.paramDefs?.[key]
-            ? undefined
-            : def.defaultParams?.[key] as number | number[] | undefined,
+          defaultValue: socketDefault(def, key),
         };
       }
 

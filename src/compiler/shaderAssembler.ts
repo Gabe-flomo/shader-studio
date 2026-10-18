@@ -1,4 +1,5 @@
 import { DEPTH_TYPE, depthSampler } from '../nodes/definitions/depth';
+import { isSocketValue } from '../nodes/socketDefault';
 import { BLOB_TRACK_TYPE } from '../nodes/definitions/blobTrack';
 import { CACHE_TYPE } from '../nodes/definitions/cache';
 import { ANALYZE_TYPE } from '../nodes/definitions/analyze';
@@ -313,8 +314,9 @@ export function resolveInputVars(
         const frozen = frozenValueOf(node, inputKey);
         if (frozen !== undefined) inputVars[inputKey] = formatGlslLiteral(frozen, 'float');
       }
-    } else if (input.defaultValue !== undefined) {
-      inputVars[inputKey] = formatGlslLiteral(input.defaultValue as number | number[], input.type);
+    } else if (input.defaultValue !== undefined && isSocketValue(input.defaultValue)) {
+      // Only a number or numbers: a graph saved with a same-named text param copied in (a Shuffle's 'a4') has none.
+      inputVars[inputKey] = formatGlslLiteral(input.defaultValue, input.type);
     } else if (input.type === 'vec2' && (inputKey === 'uv' || inputKey === 'p' || inputKey === 'uv2')) {
       inputVars[inputKey] = 'g_uv';
     } else if (input.type === 'float' && inputKey === 't' && typeof node.params.t === 'number') {
@@ -397,7 +399,7 @@ function resolveInputFallback(
     const frozen = frozenValueOf(node, inputKey);
     if (frozen !== undefined) return formatGlslLiteral(frozen, 'float');
   }
-  if (inp.defaultValue !== undefined) return formatGlslLiteral(inp.defaultValue as number | number[], inp.type);
+  if (inp.defaultValue !== undefined && isSocketValue(inp.defaultValue)) return formatGlslLiteral(inp.defaultValue, inp.type);
   if (inp.type === 'vec2' && (inputKey === 'uv' || inputKey === 'p' || inputKey === 'uv2')) return 'g_uv';
   if (inp.type === 'float' && inputKey === 't' && typeof node.params.t === 'number') return undefined; // own slider wins (see resolveInputVars)
   if (inp.type === 'float' && (inputKey === 'time' || inputKey === 't')) return 'u_time';
