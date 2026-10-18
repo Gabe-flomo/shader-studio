@@ -34,8 +34,8 @@ export const TC_PRESETS: readonly TcPreset[] = [
   { key: 'morph', label: 'Stack to ring', blurb: 'The cards fold from a stack into a ring and back, one after another.', example: 'frameStackMorph', display: 'stack' },
 ];
 
-/** The video and clip settings that are yours, kept by a preset. */
-export const SOURCE_KEEP = ['source', 'videoId', 'fileName', '_meta', 'segments', 'clip'] as const;
+/** The video and clip settings (or the pictures) that are yours, kept by a preset. */
+export const SOURCE_KEEP = ['source', 'videoId', 'fileName', '_meta', 'segments', 'clip', 'pictures', 'pictureFit'] as const;
 
 let examples: Record<string, { nodes: GraphNode[] }> | null = null;
 const allExamples = () => (examples ??= { ...buildTimeCubeExamples(), ...buildFrameStackExamples() });

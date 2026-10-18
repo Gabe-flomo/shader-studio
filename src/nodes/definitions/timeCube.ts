@@ -4,6 +4,7 @@ import { planFrameStack, stackSettingsOf, FRAME_WIDTHS, MAX_FRAMES, MIN_FRAMES }
 import { BALL_META, DEMO_META } from '../../lib/timeCube/frames';
 import { segmentsFromStartEnd } from '../../lib/media/clip';
 import { KNEE_EASE, migrateOpacity, OD_SOLID, OPACITY_KNEE, OPACITY_REF } from '../../lib/timeCube/plan';
+import { picturesMeta, picturesStackSettings } from '../../lib/timeCube/pictures';
 
 /**
  * Time cube (docs/time-cube.md): a video as a box of time.
@@ -40,11 +41,12 @@ const fx = (n: number) => (Number.isInteger(n) ? `${n}.0` : `${+n.toFixed(6)}`);
 
 /** The defines a Time Cube node's volume needs, from its plan (the test clip's when its video's size isn't known yet). */
 export function timeCubeDeclarations(node: GraphNode): string[] {
+  const pictures = node.params.source === 'pictures';
   const meta = node.params.source === 'library' ? (node.params._meta as { width?: number; height?: number; duration?: number } | undefined)
-    : node.params.source === 'ball' ? BALL_META : DEMO_META;
+    : node.params.source === 'ball' ? BALL_META : pictures ? picturesMeta(node.params) : DEMO_META;
   const plan = planFrameStack(
     meta && typeof meta.width === 'number' && typeof meta.height === 'number' ? { width: meta.width, height: meta.height, duration: Number(meta.duration) || 0 } : DEMO_META,
-    stackSettingsOf(node.params),
+    pictures ? picturesStackSettings(node.params, stackSettingsOf(node.params)) : stackSettingsOf(node.params),
   );
   const s = `u_tex_${node.id}`;
   return [
@@ -371,6 +373,9 @@ const axisOf = (v: unknown) =>(v === 'x' || v === 'y' ? v : 'z');
 const AXIS_CODE: Record<string, string> = { z: '0.0', x: '1.0', y: '2.0' };
 const STEPS: Record<string, number> = { draft: 96, good: 160, best: 288 };
 
+/** The sources that are videos (every one but Pictures): what the video-only settings show for. */
+const VIDEO_SOURCES = ['ball', 'demo', 'library'];
+
 // ── Time Cube (the source) ───────────────────────────────────────────────────
 
 /** The source's schema. 2: Start / End (seconds; End 0 the end of the video) are `segments`, set in the clip editor. */
@@ -396,18 +401,25 @@ export const TimeCubeNode: NodeDefinition = {
     volume: { type: 'volume', label: 'Volume', hint: 'The stacked frames. Wire into Time Cube View or Time Slice.' },
   },
   defaultParams: {
-    source: 'ball', videoId: '', fileName: '', frames: 128, frameWidth: '256', spacing: 'count', step: 0.1,
+    source: 'ball', videoId: '', fileName: '', frames: 128,
+    // Pictures instead of a video (lib/timeCube/pictures.ts): one a frame, in this order, and how each fits the frame.
+    pictures: [], pictureFit: 'cover', frameWidth: '256', spacing: 'count', step: 0.1,
     // The clip editor's settings (lib/media/clip.ts). An out at or before its in runs to the end of the video.
     segments: [{ in: 0, out: 0 }], clip: { distribute: 'proportional', ramp: 'none', crop: { x: 0, y: 0, w: 1, h: 1 }, rotate: 0, flipX: false, flipY: false },
     _schemaVersion: TIME_CUBE_SOURCE_VERSION,
     combine: 'pick', subFrames: 4, precision: '8', order: 'time', sortBy: 'brightness', invert: false, seed: 1, keyColor: [0.85, 0.12, 0.12], keyTolerance: 0.25,
   },
   paramDefs: {
-    frames: { section: 'Stack', label: 'Frames', type: 'float', min: MIN_FRAMES, max: MAX_FRAMES, step: 1, hard: true, showWhen: { param: 'spacing', value: 'count' }, hint: 'How many frames to stack, spread through the clip (Edit clip… on the card).', help: 'How many frames to stack, spread through the clip\'s kept segments (Edit clip… on the card trims the video and adds segments). More frames make a smoother box but take longer to build and more memory (the card shows how much). Up to 256.' },
-    spacing: { section: 'Stack', label: 'Spacing', type: 'select', options: [{ value: 'count', label: 'Spread a number of frames' }, { value: 'step', label: 'One frame every…' }], hint: 'Pick frames by count, or one every so many seconds.' },
-    step: { section: 'Stack', label: 'Every (s)', type: 'float', min: 0.02, max: 2, step: 0.01, showWhen: { param: 'spacing', value: 'step' }, hint: 'Seconds between stacked frames.' },
+    frames: { section: 'Stack', label: 'Frames', type: 'float', min: MIN_FRAMES, max: MAX_FRAMES, step: 1, hard: true, showWhen: { param: 'spacing', value: 'count' }, hint: 'How many frames to stack, spread through the clip (Edit clip… on the card). With pictures: the most pictures it takes.', help: 'How many frames to stack, spread through the clip\'s kept segments (Edit clip… on the card trims the video and adds segments). More frames make a smoother box but take longer to build and more memory (the card shows how much). Up to 256. With pictures, the cube has one frame a picture, and this is the most it takes: pictures past it are left out.' },
+    pictureFit: { section: 'Stack', label: 'Fit pictures', type: 'select', showWhen: { param: 'source', value: 'pictures' }, options: [
+      { value: 'cover', label: 'Fill (crop)' },
+      { value: 'contain', label: 'Fit (black bars)' },
+      { value: 'stretch', label: 'Stretch' },
+    ], hint: 'The frame takes the first picture\'s shape; how the others fit it. Fill covers the frame and crops what is over, Fit shows all of each picture with black bars, Stretch fills it exactly.' },
+    spacing: { section: 'Stack', label: 'Spacing', type: 'select', showWhen: { param: 'source', value: VIDEO_SOURCES }, options: [{ value: 'count', label: 'Spread a number of frames' }, { value: 'step', label: 'One frame every…' }], hint: 'Pick frames by count, or one every so many seconds.' },
+    step: { section: 'Stack', label: 'Every (s)', type: 'float', min: 0.02, max: 2, step: 0.01, showWhen: { param: 'spacing', value: 'step', and: { param: 'source', value: VIDEO_SOURCES } }, hint: 'Seconds between stacked frames.' },
     frameWidth: { section: 'Stack', label: 'Frame size', type: 'select', options: FRAME_WIDTHS.map(w => ({ value: String(w), label: `${w} px wide` })), hint: 'How wide each stacked frame is (the height follows the video\'s shape). Bigger is sharper and heavier.' },
-    combine: { section: 'Frames from', label: 'Frames from', type: 'select', options: [
+    combine: { section: 'Frames from', label: 'Frames from', type: 'select', showWhen: { param: 'source', value: VIDEO_SOURCES }, options: [
       { value: 'pick', label: 'Pick one frame' },
       { value: 'average', label: 'Average (long exposure)' },
       { value: 'max', label: 'Brightest (light trails)' },
@@ -415,11 +427,11 @@ export const TimeCubeNode: NodeDefinition = {
       { value: 'difference', label: 'Motion (only what moved)' },
       { value: 'median', label: 'Median (moving things vanish)' },
     ], hint: 'Each stacked frame is one frame of the video, or several from its slot of time combined.', help: 'Pick takes one frame per slot. The others read Sub-frames frames spread over the slot and combine them: Average is a long exposure (motion blur), Brightest keeps light trails, Darkest dark ones, Motion keeps only what changed, Median keeps what stayed put. They decode Sub-frames times as many frames (the card says how long that takes).' },
-    precision: { section: 'Frames from', label: 'Precision', type: 'select', showWhen: { param: 'combine', value: ['average', 'max', 'min', 'difference', 'median'] }, options: [
+    precision: { section: 'Frames from', label: 'Precision', type: 'select', showWhen: { param: 'combine', value: ['average', 'max', 'min', 'difference', 'median'], and: { param: 'source', value: VIDEO_SOURCES } }, options: [
       { value: '8', label: '8-bit (the video\'s own)' },
       { value: '16', label: '16-bit float' },
     ], hint: 'How finely the combined frames are kept. 16-bit keeps the in-between shades an Average or Median makes (smooth gradients, no banding) and takes twice the memory (the card shows it).' },
-    subFrames: { section: 'Frames from', label: 'Sub-frames', type: 'float', min: 2, max: 16, step: 1, hard: true, showWhen: { param: 'combine', value: ['average', 'max', 'min', 'difference', 'median'] }, hint: 'Frames read for each stacked frame when combining.' },
+    subFrames: { section: 'Frames from', label: 'Sub-frames', type: 'float', min: 2, max: 16, step: 1, hard: true, showWhen: { param: 'combine', value: ['average', 'max', 'min', 'difference', 'median'], and: { param: 'source', value: VIDEO_SOURCES } }, hint: 'Frames read for each stacked frame when combining.' },
     order: { section: 'Order', label: 'Frame order', type: 'select', options: [
       { value: 'time', label: 'Time' },
       { value: 'reverse', label: 'Reverse' },

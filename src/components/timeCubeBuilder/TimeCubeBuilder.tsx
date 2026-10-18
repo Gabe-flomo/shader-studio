@@ -47,7 +47,7 @@ import {
 } from '../../timeCubeBuilder/spec';
 
 export const SECTION_INFO: Record<TcSection, { icon: IconName; line: string }> = {
-  source: { icon: 'import', line: 'The video (Ball action, built in, until you choose one), its clip, how many frames and how they are read' },
+  source: { icon: 'import', line: 'The video (Ball action, built in, until you choose one) or a set of pictures, its clip, how many frames and how they are read' },
   shape: { icon: 'cube', line: 'A box of time or a stack of cards: its shape, size and layout' },
   time: { icon: 'clock', line: 'The slice or the scan, flow and playback, and an LFO to move it' },
   colour: { icon: 'sun', line: 'Glow, tint, brightness, a colour key that keeps one colour through time' },
@@ -139,7 +139,9 @@ function ParamRow({ role, k, spec }: { role: 'source' | 'view' | 'stack'; k: str
 }
 
 function Groups({ groups, spec, section }: { groups: ParamGroup[]; spec: TimeCubeSpec; section: TcSection }) {
-  return <>{groups.map((g, i) => (
+  // A group whose every control is hidden now (Frames from, for pictures) isn't shown.
+  const shown = groups.filter(g => g.keys.some(k => { const pd = defsOf(g.role)[k]; return pd && visibleNow(pd, spec[g.role], g.role); }));
+  return <>{shown.map((g, i) => (
     <Card key={`${spec.display}:${g.role}:${g.title}`} id={`timecube:${section}:${g.role}:${g.title}`} title={g.title} defaultOpen={i === 0}
       summary={summarizeSection(g.keys, defsOf(g.role), spec[g.role], defaultsOf(g.role)).text}>
       {g.keys.map(k => <ParamRow key={k} role={g.role} k={k} spec={spec} />)}
@@ -154,7 +156,7 @@ function SourcePanel({ spec }: { spec: TimeCubeSpec }) {
     {node ? (
       <div data-tc-source-card style={{ margin: '0 -12px' }}><TimeCubeCardBody node={node} /></div>
     ) : <BuilderNote>Building… ({sourceName(spec.source)})</BuilderNote>}
-    <BuilderNote>The Time Cube reads a video: the built-in Ball action clip, one from the Library, or a file (Choose video). Edit clip… trims it, keeps several segments, crops and turns it.</BuilderNote>
+    <BuilderNote>The Time Cube reads a video: the built-in Ball action clip, one from the Library, or a file (Choose video). Edit clip… trims it, keeps several segments, crops and turns it. Or a set of pictures (Choose video → Pictures…), one a frame, kept with the graph.</BuilderNote>
     <Groups groups={groupsFor('source', spec.display)} spec={spec} section="source" />
   </>;
 }

@@ -95,7 +95,8 @@ describe('bool showWhen gates (toggle → visibility)', () => {
       for (const pd of Object.values(def.paramDefs ?? {})) {
         if (!pd.showWhen) continue;
         const gate = def.paramDefs?.[pd.showWhen.param];
-        expect(gate, `${type}: ${pd.label} gated on ${pd.showWhen.param}`).toBeDefined();
+        // A gate is a setting, or a param the card sets itself (the Time Cube's source: video or pictures).
+        expect(gate ?? (pd.showWhen.param in (def.defaultParams ?? {}) ? true : undefined), `${type}: ${pd.label} gated on ${pd.showWhen.param}`).toBeDefined();
         if (gate?.type === 'bool') expect(['true', 'false']).toEqual(expect.arrayContaining([pd.showWhen.value].flat()));
       }
     }

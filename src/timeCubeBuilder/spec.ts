@@ -147,6 +147,10 @@ const optLabel = (role: TcRole, key: string, v: unknown) => defsOf(role)[key]?.o
 const short = (s: string) => s.replace(/\s*\(.*\)\s*$/, '');
 
 export function sourceName(source: Params): string {
+  if (source.source === 'pictures') {
+    const n = Array.isArray(source.pictures) ? source.pictures.length : 0;
+    return n ? `${n} ${n === 1 ? 'picture' : 'pictures'}` : 'Pictures';
+  }
   if (source.source === 'library') return (typeof source.fileName === 'string' && source.fileName) || 'A Library video';
   return source.source === 'ball' ? 'Ball action' : 'Test clip';
 }
@@ -154,7 +158,8 @@ export function sourceName(source: Params): string {
 export function sectionSummary(spec: TimeCubeSpec, s: TcSection): string {
   const v = spec.view, st = spec.stack, cube = spec.display === 'cube';
   switch (s) {
-    case 'source': return `${sourceName(spec.source)} · ${spec.source.spacing === 'step' ? `every ${f2(spec.source.step)} s` : `${f2(spec.source.frames)} frames`}${spec.source.combine !== 'pick' ? ` · ${short(optLabel('source', 'combine', spec.source.combine))}` : ''}`;
+    case 'source': if (spec.source.source === 'pictures') return `${sourceName(spec.source)} · ${short(optLabel('source', 'pictureFit', spec.source.pictureFit ?? 'cover')).toLowerCase()}`;
+      return `${sourceName(spec.source)} · ${spec.source.spacing === 'step' ? `every ${f2(spec.source.step)} s` : `${f2(spec.source.frames)} frames`}${spec.source.combine !== 'pick' ? ` · ${short(optLabel('source', 'combine', spec.source.combine))}` : ''}`;
     case 'shape': return cube ? `Box · ${short(optLabel('view', 'axis', v.axis))} · round ${f2(v.roundness)}` : `Cards · ${optLabel('stack', 'layout', st.layout)} · ${f2(st.cards)} cards`;
     case 'time': {
       const what = short(DRIVE_TARGETS[spec.display].find(t => t.value === spec.drive.target)?.label ?? spec.drive.target);
