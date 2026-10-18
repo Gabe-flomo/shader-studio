@@ -37,6 +37,7 @@ import { Toggle } from '../ui/Choice';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
 import { Preview2D, compileScene2D } from './Preview2D';
+import { compiledPicture } from '../sceneBuilder/specThumbs';
 import { useDepthView } from '../../builders/depthPreview';
 import { StudioNavItem, StudioShell } from '../builders/studio/StudioShell';
 import { usePhoneDialog } from '../ui/phoneDialog';
@@ -1065,6 +1066,7 @@ function MyPresets() {
   return (
     <div data-scene2d-my-presets style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
       <UserPresets kind="2d" canvasSelector="[data-scene2d-preview]"
+        fallbackThumb={() => { try { return compiledPicture(compileScene2D(useSceneBuilder2D.getState().scene)); } catch { return null; } }}
         getRecipe={() => specToPresetText(useSceneBuilder2D.getState().scene)}
         onLoad={text => { const scene = presetTextToSpec<Scene2D>(text); if (scene) useSceneBuilder2D.getState().replace(scene); }} />
     </div>

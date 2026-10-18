@@ -7,7 +7,7 @@
  */
 import { useEffect, useState } from 'react';
 import type { SceneSpec } from '../../sceneBuilder/spec';
-import { compileSpec } from './previewGl';
+import { compileSpec, type Compiled } from './previewGl';
 import { programPixels } from './surpriseActions';
 
 const cache = new Map<string, string | null>();
@@ -16,7 +16,11 @@ const listeners = new Set<() => void>();
 let pumping = false;
 
 function draw(spec: SceneSpec, w: number, h: number, type: 'image/png' | 'image/jpeg' = 'image/png'): string | null {
-  const c = compileSpec(spec);
+  return compiledPicture(compileSpec(spec), w, h, type);
+}
+
+/** One frame of a compiled builder preview (previewGl's Compiled), drawn offscreen, as a data URL; null when it can't be drawn. */
+export function compiledPicture(c: Compiled, w = 264, h = 152, type: 'image/png' | 'image/jpeg' = 'image/jpeg'): string | null {
   if (c.error) return null;
   const px = programPixels(c.vs, c.fs, c.uniforms, [0.5], w, h, c.textures);
   if (!px || px === 'error') return null;
