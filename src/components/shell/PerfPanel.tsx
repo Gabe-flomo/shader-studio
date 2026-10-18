@@ -241,8 +241,9 @@ export function PerfPanel({ onClose }: { onClose: () => void }) {
   const segMax = Math.max(1e-3, ...gpuRows.map(q => q.avg), snap.probeMs ?? 0);
 
   return (
-    <div style={{ color: tk.text.secondary }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 12px 10px 16px', borderBottom: `1px solid ${tk.border.subtle}` }}>
+    // Scrolls inside itself (the header stays put), so it never runs past the window.
+    <div data-perf-panel style={{ color: tk.text.secondary, maxHeight: 'min(70vh, 620px)', overflowY: 'auto', overscrollBehavior: 'contain' }}>
+      <div style={{ position: 'sticky', top: 0, zIndex: 1, background: tk.bg.panel, display: 'flex', alignItems: 'center', gap: 8, padding: '12px 12px 10px 16px', borderBottom: `1px solid ${tk.border.subtle}` }}>
         <b style={{ fontSize: 14, fontWeight: 650, color: tk.text.primary, marginRight: 'auto' }}>Performance</b>
         <span style={{ font: `500 10.5px ${fontFamily.mono}`, color: tk.text.muted, background: tk.bg.hover, borderRadius: 6, padding: '2px 6px' }}>
           {gpuOk ? 'GPU timer' : snap.gpuTimer === 'unsupported' ? 'CPU timing only' : 'waiting for a frame'}
