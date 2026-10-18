@@ -14,6 +14,10 @@ sharp. **Lens** says how the blur is made:
 |---|---|---|
 | **Grain** | Every pixel's ray starts at a random point of the lens and aims at the focal point, so out-of-focus parts are a fine noise. Lens Speed drifts the pattern over time. | Free (one ray, as before) |
 | **Smooth** | The scene is drawn once through the pinhole into a hidden pass, with each pixel's circle of confusion; a bokeh blur then gathers it in the same frame. | One extra pass and 16–64 reads per pixel |
+| **Soft grain** | The Grain rays, drawn into the same hidden pass, with a lighter bokeh blur over them: the grain melts into a soft haze. **Softness** (a live slider) scales that blur. | Same as Smooth |
+
+The grain lens is capped at 6% of Focal Dist, so the blur tops out at a few percent of the picture: before, a near
+Focal Dist with a wide Aperture fanned the rays out so far that the picture dissolved into noise.
 
 Saved graphs keep Grain (a camera saved before Lens migrates to Grain, and its code is unchanged). New cameras start
 on Grain too: Smooth costs about 0.5 ms at 2 MP even when Aperture is 0 (the pass and its probes still run), and

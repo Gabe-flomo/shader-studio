@@ -169,7 +169,7 @@ export const MarchCameraNode: NodeDefinition = withParamSockets({
   defaultParams: {
     camDist: 3.0, camAngle: 0.6, camElevation: 0.3, rotSpeed: 0.0, fov: 1.5,
     targetX: 0.0, targetY: 0.0, targetZ: 0.0, aperture: 0.0, focalDist: 3.0, lensSpeed: 0.0,
-    lens: 'grain', dofSamples: '32', dofShape: 'disc', dofMaxBlur: 4,
+    lens: 'grain', dofSamples: '32', dofShape: 'disc', dofMaxBlur: 4, softness: 0.5,
     // Only read when Perspective is Reverse (hidden otherwise, so they are not uniforms and the code is unchanged).
     reverseStrength: 1.0, reverseDist: 8.0,
   },
@@ -187,15 +187,17 @@ export const MarchCameraNode: NodeDefinition = withParamSockets({
     lens:         { label: 'Lens', type: 'select' as const, options: [
       { value: 'grain',  label: 'Grain (one random lens ray per pixel)' },
       { value: 'smooth', label: 'Smooth (bokeh blur, one extra pass)' },
-    ], hint: 'How Aperture blurs. Grain: every pixel looks through a random point of the lens, so blur is a fine noise (cheap; smooth only when averaged, as in a long recording). Smooth: the scene is drawn sharp into a hidden pass with its depth, then blurred by how far each pixel is from Focal Dist, in the same frame: soft bokeh with no grain, sharp foreground edges, a little more GPU.' },
-    lensSpeed:    { label: 'Lens Speed', type: 'float' as const, min: 0.0,  max: 5.0,  step: 0.05,  showWhen: { param: 'lens', value: 'grain' }, hint: 'Speed at which the aperture grain drifts over time. 0 = frozen static.' },
-    dofSamples:   { label: 'Blur quality', type: 'select' as const, showWhen: { param: 'lens', value: 'smooth' }, options: [
+      { value: 'soft', label: 'Soft grain (the grain, softened)' },
+    ], hint: 'How Aperture blurs. Grain: every pixel looks through a random point of the lens, so blur is a fine noise (cheap; smooth only when averaged, as in a long recording). Smooth: the scene is drawn sharp into a hidden pass with its depth, then blurred by how far each pixel is from Focal Dist, in the same frame: soft bokeh with no grain, sharp foreground edges, a little more GPU. Soft grain: the Grain look with a light bokeh blur over it, so the noise melts into a soft haze (Softness sets how much).' },
+    lensSpeed:    { label: 'Lens Speed', type: 'float' as const, min: 0.0,  max: 5.0,  step: 0.05,  showWhen: { param: 'lens', value: ['grain', 'soft'] }, hint: 'Speed at which the aperture grain drifts over time. 0 = frozen static.' },
+    dofSamples:   { label: 'Blur quality', type: 'select' as const, showWhen: { param: 'lens', value: ['smooth', 'soft'] }, options: [
       { value: '16', label: 'Draft (16 taps)' }, { value: '32', label: 'Good (32 taps)' }, { value: '64', label: 'Best (64 taps)' },
     ], hint: 'Reads per pixel for the Smooth blur. More is smoother, wide blurs especially, and costs more.' },
-    dofShape:     { label: 'Bokeh shape', type: 'select' as const, showWhen: { param: 'lens', value: 'smooth' }, options: [
+    dofShape:     { label: 'Bokeh shape', type: 'select' as const, showWhen: { param: 'lens', value: ['smooth', 'soft'] }, options: [
       { value: 'disc', label: 'Disc (round)' }, { value: 'hex', label: 'Hex (6 blades)' }, { value: 'oct', label: 'Oct (8 blades)' },
     ], hint: 'The shape bright out-of-focus points take.' },
-    dofMaxBlur:   { label: 'Max blur %', type: 'float' as const, min: 0.5, max: 12, step: 0.5, compileTime: true, showWhen: { param: 'lens', value: 'smooth' }, hint: 'The widest the Smooth blur gets, as a percentage of the picture height. Things very near the camera are capped here. Wider costs more for the same smoothness.' },
+    dofMaxBlur:   { label: 'Max blur %', type: 'float' as const, min: 0.5, max: 12, step: 0.5, compileTime: true, showWhen: { param: 'lens', value: ['smooth', 'soft'] }, hint: 'The widest the Smooth blur gets, as a percentage of the picture height. Things very near the camera are capped here. Wider costs more for the same smoothness.' },
+    softness:     { label: 'Softness', type: 'float' as const, min: 0.05, max: 1.0, step: 0.01, showWhen: { param: 'lens', value: 'soft' }, hint: 'How much the grain is blurred over: low keeps the sparkle of the grain, high melts it into a smooth haze.' },
     // No default: a camera without it compiles exactly as before; the Scene Builder sets it when Flatten is above 0.
     projection:   { label: 'Perspective', type: 'select' as const, options: [
       { value: 'normal',       label: 'Normal' },
@@ -223,6 +225,8 @@ export const MarchCameraNode: NodeDefinition = withParamSockets({
     const focalDist    = inputVars.focalDist    || p(node.params.focalDist,    3.0);
     const lensSpeed    = inputVars.lensSpeed    || p(node.params.lensSpeed,    0.0);
     const smooth       = node.params.__dofSmooth === true;
+    // Soft grain (compiler/smoothDofExpand.ts): the grain rays, and the lens handed over for a light blur on top
+    const soft         = node.params.__dofSoft === true;
 
     const code = [
       `    float ${id}_ang   = ${camAngle} + ${time} * ${rotSpeed};\n`,
@@ -263,11 +267,17 @@ export const MarchCameraNode: NodeDefinition = withParamSockets({
       // Per-pixel hash for lens disk radius; angle drifts over time via lensSpeed
       `    float ${id}_h1    = fract(sin(dot(${uv}, vec2(127.1, 311.7))) * 43758.5453);\n`,
       `    float ${id}_h2    = fract(sin(dot(${uv}, vec2(269.5, 183.3))) * 43758.5453);\n`,
-      `    float ${id}_lr    = ${aperture} * sqrt(${id}_h1);\n`,
+      // The lens is capped at 6% of Focal Dist (the blur then tops out at a few percent of the picture): with a near focus the rays used to fan out wildly and
+      // the picture dissolved into noise ("blows up" at low values); past the cap the blur just stops growing.
+      `    float ${id}_lr    = min(${aperture}, 0.06 * max(${focalDist}, 0.05)) * sqrt(${id}_h1);\n`,
       `    float ${id}_lth   = 6.28318 * ${id}_h2 + ${time} * ${lensSpeed};\n`,
       // When aperture=0, lr=0, so ro==ro0 and rd==rd0 (exact pinhole fallback, no branch needed)
       `    vec3  ${id}_ro    = ${id}_ro0 + ${id}_lr * (cos(${id}_lth) * ${id}_rgt + sin(${id}_lth) * ${id}_up2);\n`,
       `    vec3  ${id}_rd    = normalize((${id}_ro0 + ${id}_rd0 * max(${focalDist}, 0.05)) - ${id}_ro);\n`,
+      ...(soft ? [
+        `    float ${id}_dofK  = min(${aperture}, 0.06 * max(${focalDist}, 0.05)) * ${fov} * ${p(node.params.softness, 0.5)};\n`,
+        `    float ${id}_dofIF = 1.0 / max(${focalDist}, 0.05);\n`,
+      ] : []),
       ]),
     ].join('');
 
@@ -275,7 +285,7 @@ export const MarchCameraNode: NodeDefinition = withParamSockets({
       code,
       outputVars: {
         ro: `${id}_ro`, rd: `${id}_rd`, forward: `${id}_fwd`, right: `${id}_rgt`, up: `${id}_up2`,
-        ...(smooth ? { dofK: `${id}_dofK`, dofInvF: `${id}_dofIF` } : {}),
+        ...(smooth || soft ? { dofK: `${id}_dofK`, dofInvF: `${id}_dofIF` } : {}),
       },
     };
   },

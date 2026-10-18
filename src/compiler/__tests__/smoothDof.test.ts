@@ -109,3 +109,24 @@ describe('March Camera Lens: Smooth', () => {
     expect(r.passes ?? []).toEqual([]);
   });
 });
+
+describe('March Camera Lens: Soft grain, and the grain cap', () => {
+  it('Soft grain keeps the grain rays and blurs over them with a lighter CoC (Softness)', () => {
+    const r = compileGraph({ nodes: withLens(orbs(), { lens: 'soft', aperture: 0.12, softness: 0.4 }) });
+    expect(r.errors ?? []).toEqual([]);
+    const cam = orbs().find(n => n.type === 'marchCamera')!;
+    const pass = (r.passes ?? []).find(p => p.nodeId === dofPassId(cam.id))!;
+    expect(pass.label).toBe('Soft grain lens');
+    // Grain rays (the per-pixel lens hash) AND the CoC hand-over, scaled by Softness
+    expect(pass.fragmentShader).toMatch(/_h1\s*=/);
+    expect(pass.fragmentShader).toMatch(/_dofK\s*=\s*min\([^;]*_softness;/);
+    expect(r.fragmentShader).toContain('lensDofGather(');
+    parses(pass.fragmentShader);
+    parses(r.fragmentShader);
+  });
+  it('the grain lens is capped at 6% of Focal Dist, so a near focus no longer blows the picture into noise', () => {
+    const r = compileGraph({ nodes: withLens(orbs(), { lens: 'grain', aperture: 0.5, focalDist: 0.2 }) });
+    expect(r.errors ?? []).toEqual([]);
+    expect(r.fragmentShader).toMatch(/_lr\s*=\s*min\([^,]+, 0\.06 \* max\(/);
+  });
+});

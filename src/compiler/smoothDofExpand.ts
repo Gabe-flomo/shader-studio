@@ -25,7 +25,8 @@ export const dofPassId = (camId: string) => `${camId}__dof`;
 
 interface DofPlan { cam: GraphNode; march: GraphNode; output: GraphNode }
 
-const isSmoothCamera = (n: GraphNode) => n.type === 'marchCamera' && !n.bypassed && n.params.lens === 'smooth';
+// Smooth: pinhole rays blurred by depth. Soft grain: the grain rays, with a lighter blur of the same kind on top.
+const isSmoothCamera = (n: GraphNode) => n.type === 'marchCamera' && !n.bypassed && (n.params.lens === 'smooth' || n.params.lens === 'soft');
 
 /** The Smooth cameras that can be opened (at most one per graph: the one the Output sees). */
 export function planSmoothDof(nodes: readonly GraphNode[]): DofPlan | null {
@@ -64,7 +65,7 @@ export function expandSmoothDof(nodes: GraphNode[]): GraphNode[] {
   const pass: GraphNode = {
     id: passId, type: 'pass', position: at,
     // Nearest: the gather reads each tap's own CoC, which a linear read would blend across an edge.
-    params: { label: 'Smooth lens', scale: '1', format: 'half', filter: 'nearest', wrap: 'clamp', repeat: 1 },
+    params: { label: cam.params.lens === 'soft' ? 'Soft grain lens' : 'Smooth lens', scale: '1', format: 'half', filter: 'nearest', wrap: 'clamp', repeat: 1 },
     inputs: {
       color: { type: 'vec3', label: 'Color', connection: { ...output.inputs.color.connection! } },
       alpha: { type: 'float', label: 'Alpha', connection: { nodeId: cocId, outputKey: 'coc' } },
@@ -78,7 +79,7 @@ export function expandSmoothDof(nodes: GraphNode[]): GraphNode[] {
     outputs: { color: { type: 'vec3', label: 'Color' } },
   };
   const camOut: GraphNode = {
-    ...cam, params: { ...cam.params, __dofSmooth: true },
+    ...cam, params: { ...cam.params, ...(cam.params.lens === 'soft' ? { __dofSoft: true } : { __dofSmooth: true }) },
     outputs: { ...cam.outputs, dofK: { type: 'float', label: 'Aperture × FOV' }, dofInvF: { type: 'float', label: '1 / Focal Dist' } },
   };
   const outOut: GraphNode = { ...output, inputs: { ...output.inputs, color: { ...output.inputs.color, connection: { nodeId: gatherId, outputKey: 'color' } } } };

@@ -294,7 +294,7 @@ void main() {
     vec3  marchcamer_0_rd0   = normalize(g_uv.x * marchcamer_0_rgt + g_uv.y * marchcamer_0_up2 + u_p_marchcamerx0_fov * marchcamer_0_fwd);
     float marchcamer_0_h1    = fract(sin(dot(g_uv, vec2(127.1, 311.7))) * 43758.5453);
     float marchcamer_0_h2    = fract(sin(dot(g_uv, vec2(269.5, 183.3))) * 43758.5453);
-    float marchcamer_0_lr    = u_p_marchcamerx0_aperture * sqrt(marchcamer_0_h1);
+    float marchcamer_0_lr    = min(u_p_marchcamerx0_aperture, 0.06 * max(u_p_marchcamerx0_focalDist, 0.05)) * sqrt(marchcamer_0_h1);
     float marchcamer_0_lth   = 6.28318 * marchcamer_0_h2 + u_time * u_p_marchcamerx0_lensSpeed;
     vec3  marchcamer_0_ro    = marchcamer_0_ro0 + marchcamer_0_lr * (cos(marchcamer_0_lth) * marchcamer_0_rgt + sin(marchcamer_0_lth) * marchcamer_0_up2);
     vec3  marchcamer_0_rd    = normalize((marchcamer_0_ro0 + marchcamer_0_rd0 * max(u_p_marchcamerx0_focalDist, 0.05)) - marchcamer_0_ro);
@@ -892,7 +892,7 @@ void main() {
     vec3  marchcamer_0_rd0   = normalize(g_uv.x * marchcamer_0_rgt + g_uv.y * marchcamer_0_up2 + u_p_marchcamerx0_fov * marchcamer_0_fwd);
     float marchcamer_0_h1    = fract(sin(dot(g_uv, vec2(127.1, 311.7))) * 43758.5453);
     float marchcamer_0_h2    = fract(sin(dot(g_uv, vec2(269.5, 183.3))) * 43758.5453);
-    float marchcamer_0_lr    = u_p_marchcamerx0_aperture * sqrt(marchcamer_0_h1);
+    float marchcamer_0_lr    = min(u_p_marchcamerx0_aperture, 0.06 * max(u_p_marchcamerx0_focalDist, 0.05)) * sqrt(marchcamer_0_h1);
     float marchcamer_0_lth   = 6.28318 * marchcamer_0_h2 + time_0_time * u_p_marchcamerx0_lensSpeed;
     vec3  marchcamer_0_ro    = marchcamer_0_ro0 + marchcamer_0_lr * (cos(marchcamer_0_lth) * marchcamer_0_rgt + sin(marchcamer_0_lth) * marchcamer_0_up2);
     vec3  marchcamer_0_rd    = normalize((marchcamer_0_ro0 + marchcamer_0_rd0 * max(u_p_marchcamerx0_focalDist, 0.05)) - marchcamer_0_ro);
@@ -1020,7 +1020,7 @@ void main() {
     vec3  marchcamer_0_rd0   = normalize(g_uv.x * marchcamer_0_rgt + g_uv.y * marchcamer_0_up2 + u_p_marchcamerx0_fov * marchcamer_0_fwd);
     float marchcamer_0_h1    = fract(sin(dot(g_uv, vec2(127.1, 311.7))) * 43758.5453);
     float marchcamer_0_h2    = fract(sin(dot(g_uv, vec2(269.5, 183.3))) * 43758.5453);
-    float marchcamer_0_lr    = u_p_marchcamerx0_aperture * sqrt(marchcamer_0_h1);
+    float marchcamer_0_lr    = min(u_p_marchcamerx0_aperture, 0.06 * max(u_p_marchcamerx0_focalDist, 0.05)) * sqrt(marchcamer_0_h1);
     float marchcamer_0_lth   = 6.28318 * marchcamer_0_h2 + time_0_time * u_p_marchcamerx0_lensSpeed;
     vec3  marchcamer_0_ro    = marchcamer_0_ro0 + marchcamer_0_lr * (cos(marchcamer_0_lth) * marchcamer_0_rgt + sin(marchcamer_0_lth) * marchcamer_0_up2);
     vec3  marchcamer_0_rd    = normalize((marchcamer_0_ro0 + marchcamer_0_rd0 * max(u_p_marchcamerx0_focalDist, 0.05)) - marchcamer_0_ro);
@@ -1268,7 +1268,7 @@ void main() {
     vec3  marchcamer_0_rd0   = normalize(g_uv.x * marchcamer_0_rgt + g_uv.y * marchcamer_0_up2 + u_p_marchcamerx0_fov * marchcamer_0_fwd);
     float marchcamer_0_h1    = fract(sin(dot(g_uv, vec2(127.1, 311.7))) * 43758.5453);
     float marchcamer_0_h2    = fract(sin(dot(g_uv, vec2(269.5, 183.3))) * 43758.5453);
-    float marchcamer_0_lr    = u_p_marchcamerx0_aperture * sqrt(marchcamer_0_h1);
+    float marchcamer_0_lr    = min(u_p_marchcamerx0_aperture, 0.06 * max(u_p_marchcamerx0_focalDist, 0.05)) * sqrt(marchcamer_0_h1);
     float marchcamer_0_lth   = 6.28318 * marchcamer_0_h2 + time_0_time * u_p_marchcamerx0_lensSpeed;
     vec3  marchcamer_0_ro    = marchcamer_0_ro0 + marchcamer_0_lr * (cos(marchcamer_0_lth) * marchcamer_0_rgt + sin(marchcamer_0_lth) * marchcamer_0_up2);
     vec3  marchcamer_0_rd    = normalize((marchcamer_0_ro0 + marchcamer_0_rd0 * max(u_p_marchcamerx0_focalDist, 0.05)) - marchcamer_0_ro);
