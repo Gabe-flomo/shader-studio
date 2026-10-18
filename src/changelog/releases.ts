@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.280',
+    date: '2026-10-18',
+    title: "A tidier node library",
+    highlights: [
+      { area: 'Studio', text: "A tidier library (465 \u2192 434 nodes): old transforms, duplicate shapers and Chladni nodes merged; old graphs still open; search finds everyday words." },
+      { area: 'Studio', text: "New Brush node for grid simulations; Multi-Light gets a background and sun angles; Particles moved into Agents; Audio Source can listen to what you hover." },
+    ],
+  },
+  {
     id: '2026.10.279',
     date: '2026-10-18',
     title: "Echo, fixed",
