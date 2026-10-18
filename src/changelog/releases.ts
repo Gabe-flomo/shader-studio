@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.271',
+    date: '2026-10-17',
+    title: "One node per effect",
+    highlights: [
+      { area: 'Studio', text: "Each effect has one node now, working on a texture in the same frame, so moving things don't lag or smear; old graphs still open." },
+      { area: 'Studio', text: "SDF Glow has every distance falloff, UV Warp has a Kind (Smooth, Jitter, Curl, Swirl), plus new Depth of Field and Tilt-Shift texture nodes." },
+    ],
+  },
+  {
     id: '2026.10.270',
     date: '2026-10-17',
     title: "One name for each thing",
