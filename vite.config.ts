@@ -118,28 +118,6 @@ function depthModelFiles(): Plugin {
   }
 }
 
-// The stem models (docs/stems.md): opt-in downloads from Hugging Face. For a local check (`?stemModel=local`) the dev
-// server serves them from .cache/stem-models/<repo>/ (or STEM_MODELS_DIR), never bundled.
-const STEM_CACHE = process.env.STEM_MODELS_DIR ? `${process.env.STEM_MODELS_DIR.replace(/\/$/, '')}/` : fileURLToPath(new URL('./.cache/stem-models/', import.meta.url))
-function stemModelFiles(): Plugin {
-  return {
-    name: 'stem-model-files',
-    configureServer(server) {
-      server.middlewares.use((req, res, next) => {
-        const url = (req.url ?? '').split('?')[0]
-        const m = /\/stem-models\/(.+)$/.exec(url)
-        const file = m && !m[1].includes('..') ? STEM_CACHE + decodeURIComponent(m[1]) : null
-        if (file && existsSync(file)) {
-          res.setHeader('Content-Type', file.endsWith('.json') ? 'application/json' : 'application/octet-stream')
-          res.end(readFileSync(file))
-          return
-        }
-        next()
-      })
-    },
-  }
-}
-
 // https://vite.dev/config/
 // base switches automatically: '/' for Tauri desktop, '/shader-studio/' for GitHub Pages.
 // TAURI_ENV_PLATFORM is set by the Tauri CLI during both `tauri dev` and `tauri build`.
@@ -151,7 +129,7 @@ const isTauri = process.env.TAURI_ENV_PLATFORM !== undefined;
 // so it is opt-in: VITE_USE_POLLING=1 npm run dev
 const usePolling = process.env.VITE_USE_POLLING === '1';
 
-// Cross-origin isolation (docs/stems.md): COOP / COEP would let ONNX Runtime's WebAssembly use threads, but in the
+// Cross-origin isolation: COOP / COEP would let ONNX Runtime's WebAssembly use threads, but in the
 // desktop app (WKWebView) they stopped the preview drawing at all, so nothing is isolated by default.
 // VITE_CROSS_ORIGIN_ISOLATE=1 tries them in a browser.
 const crossOriginIsolate = process.env.VITE_CROSS_ORIGIN_ISOLATE === '1';
@@ -161,7 +139,7 @@ const isolationHeaders = { 'Cross-Origin-Opener-Policy': 'same-origin', 'Cross-O
 const appVersion = (JSON.parse(readFileSync(fileURLToPath(new URL('./src-tauri/tauri.conf.json', import.meta.url)), 'utf8')) as { version?: string }).version ?? '0.0.0'
 
 export default defineConfig({
-  plugins: [react(), mediapipeWasm(), threeSlimSource(), imageModelFiles(isTauri), depthModelFiles(), stemModelFiles()],
+  plugins: [react(), mediapipeWasm(), threeSlimSource(), imageModelFiles(isTauri), depthModelFiles()],
   define: { __APP_VERSION__: JSON.stringify(appVersion) },
   // The hand tracker's worker imports MediaPipe as an ES module.
   worker: { format: 'es' },
