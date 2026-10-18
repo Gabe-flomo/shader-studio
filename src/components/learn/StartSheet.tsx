@@ -61,14 +61,15 @@ export function StartSheet() {
 
         <section style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <p style={caps}>Or open an example</p>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(118px, 1fr))', gap: 10 }}>
+          <div data-start-examples="" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 14 }}>
             {featured.map(k => (
               <button key={k} type="button" data-start-example={k} onClick={() => example(k)} title={EXAMPLE_INDEX[k].description ?? EXAMPLE_INDEX[k].label}
-                style={{ display: 'flex', flexDirection: 'column', padding: 0, minWidth: 0, textAlign: 'left', cursor: 'pointer', border: `1px solid ${tk.border.default}`, borderRadius: radius.card, overflow: 'hidden', background: tk.bg.panel, color: tk.text.primary, font: 'inherit' }}>
-                <span style={{ position: 'relative', display: 'block', aspectRatio: '16 / 9', background: `linear-gradient(135deg, ${tk.bg.render}, ${alpha(tk.accent.base, 0.3)})` }}>
+                style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 6, minWidth: 0, textAlign: 'left', cursor: 'pointer', border: `1px solid ${tk.border.default}`, borderRadius: radius.card, overflow: 'hidden', background: tk.bg.panel, color: tk.text.primary, font: 'inherit' }}>
+                {/* The picture sits inset in the card, with its own rounded corners */}
+                <span style={{ position: 'relative', display: 'block', aspectRatio: '16 / 9', borderRadius: radius.md, overflow: 'hidden', background: `linear-gradient(135deg, ${tk.bg.render}, ${alpha(tk.accent.base, 0.3)})` }}>
                   {stills[k] && <img src={stills[k]!} alt="" draggable={false} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
                 </span>
-                <span style={{ padding: '7px 9px 9px', font: `600 12px/1.3 ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{EXAMPLE_INDEX[k].label}</span>
+                <span style={{ padding: '0 3px 2px', font: `600 12px/1.3 ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{EXAMPLE_INDEX[k].label}</span>
               </button>
             ))}
           </div>
