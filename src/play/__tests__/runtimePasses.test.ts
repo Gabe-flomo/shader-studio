@@ -81,7 +81,7 @@ function run(bundle: Record<string, unknown>, frames = 2) {
   return { calls, setup, frameCalls: calls.slice(setup), internals: api.internals, gl: gl as unknown as Record<string, number> };
 }
 
-const FS = 'precision highp float;\nuniform sampler2D u_prevFrame;\nuniform sampler2D u_echo0;\nuniform sampler2D u_echo1;\nvarying vec2 vUv;\nvoid main(){ gl_FragColor = texture2D(u_prevFrame, vUv) + texture2D(u_echo0, vUv); }';
+const FS = 'precision highp float;\nuniform sampler2D u_prevFrame;\nuniform sampler2D u_echo0;\nuniform sampler2D u_echo1;\nuniform float u_echoCap;\nvarying vec2 vUv;\nvoid main(){ gl_FragColor = texture2D(u_prevFrame, vUv) + texture2D(u_echo0, vUv); }';
 
 describe('web runtime passes', () => {
   it('prepares GLSL as Three.js does on WebGL2', () => {
@@ -116,10 +116,11 @@ describe('web runtime passes', () => {
     const { frameCalls } = run({ fragmentShader: FS, passes: { stateful: false, echo: { copies: 2, delay: 2 } } }, 4);
     // One scene target and two echo slots.
     expect(frameCalls.filter(c => c[0] === 'createFramebuffer').length).toBe(3);
-    // A blit per frame to the screen, plus a copy into the ring on frames 2 and 4.
+    // A blit per frame to the screen; the ring takes a capture draw (u_echoCap 1, then back to 0) on frames 2 and 4.
     const blits = frameCalls.filter(c => c[0] === 'uniform1f' && (c[1] as { uniform: string }).uniform === 'u_seed');
-    expect(blits.length).toBe(6);
-    expect(blits.filter(c => c[2] === 0).length).toBe(2);
+    expect(blits.length).toBe(4);
+    const caps = frameCalls.filter(c => c[0] === 'uniform1f' && (c[1] as { uniform: string }).uniform === 'u_echoCap').map(c => c[2]);
+    expect(caps).toEqual([1, 0, 1, 0]);
   });
 
   it('an image input without an image reads blank, on a unit of its own', () => {

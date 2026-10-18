@@ -297,10 +297,16 @@ export const SOFT_CIRCLE_AS_WRITTEN: GraphNode[] = [
           "nodeId": "multiply_9",
           "outputKey": "result"
         }
+      },
+      "alpha": {
+        "type": "float",
+        "label": "Alpha"
       }
     },
     "outputs": {},
-    "params": {}
+    "params": {
+      "opacity": 1
+    }
   }
 ];
 
@@ -394,10 +400,16 @@ export const SOFT_CIRCLE_OPTIMISED: GraphNode[] = [
           "nodeId": "block_1",
           "outputKey": "result"
         }
+      },
+      "alpha": {
+        "type": "float",
+        "label": "Alpha"
       }
     },
     "outputs": {},
-    "params": {}
+    "params": {
+      "opacity": 1
+    }
   },
   {
     "id": "block_1",

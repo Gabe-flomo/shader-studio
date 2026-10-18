@@ -6096,7 +6096,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
   // ── Echo Trails ──
   echoTrails: {
     label: 'Echo Trails',
-    description: 'Echo layers dimmer copies of earlier frames. A circle orbits (Rotate 2D driven by Time), SDF Glow tints it, and Add Color lays the live glow over the echoes.',
+    description: 'Echo is an effect on a colour: it lays dimmer copies of earlier frames over it. A circle orbits (Rotate 2D driven by Time), SDF Glow tints it, and Echo leaves five ghosts behind it.',
     counter: 8,
     nodes: [
       {
@@ -6153,28 +6153,19 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
       {
         id: 'echo',
         type: 'echo',
-        position: { x: 1320, y: 460 },
-        inputs: { uv: { type: 'vec2', label: 'UV' } },
-        outputs: { color: { type: 'vec3', label: 'Echoes' }, alpha: { type: 'float', label: 'Coverage' } },
-        params: { copies: 5, delay: 4, decay: 0.75, blend: 'max' },
-      },
-      {
-        id: 'sum',
-        type: 'addColor',
-        position: { x: 1740, y: 300 },
+        position: { x: 1740, y: 200 },
         inputs: {
-          a: { type: 'vec3', label: 'A', connection: { nodeId: 'echo', outputKey: 'color' } },
-          b: { type: 'vec3', label: 'B', connection: { nodeId: 'glow', outputKey: 'tinted' } },
-          scale: { type: 'float', label: 'Scale' },
+          color: { type: 'vec3', label: 'Color', connection: { nodeId: 'glow', outputKey: 'tinted' } },
+          uv: { type: 'vec2', label: 'UV' },
         },
-        outputs: { result: { type: 'vec3', label: 'Result' } },
-        params: { scale: 1 },
+        outputs: { color: { type: 'vec3', label: 'Color' }, echoes: { type: 'vec3', label: 'Echoes only' }, alpha: { type: 'float', label: 'Coverage' } },
+        params: { copies: 5, delay: 4, decay: 0.75, blend: 'max', _schemaVersion: 2 },
       },
       {
         id: 'out',
         type: 'output',
-        position: { x: 2160, y: 300 },
-        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'sum', outputKey: 'result' } } },
+        position: { x: 2160, y: 200 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'echo', outputKey: 'color' } } },
         outputs: {},
         params: {},
       },

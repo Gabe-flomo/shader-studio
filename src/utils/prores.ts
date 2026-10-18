@@ -103,7 +103,9 @@ export function proresNotes(o: ProResNotesInput): ProResNotes {
   if (profile.alpha && !o.transparent) {
     warnings.push({ title: 'This file will be opaque', text: `${profile.label.replace(' (alpha)', '')} can hold transparency, but Transparent is off, so the alpha is solid. Turn on Transparent (Background) to keep it.` });
   } else if (keepsAlpha && !o.ownAlpha && o.picture === 'luma') {
-    warnings.push({ title: 'The graph has no alpha', text: 'Its output is opaque (it ends in Output, not Output (RGBA)), so the transparency comes from brightness: black turns clear. For solid shapes, end the graph with Output (RGBA).' });
+    warnings.push({ title: 'The graph has no alpha', text: 'Its output is opaque (the Output\'s Alpha is empty and its Opacity is 1), so the transparency comes from brightness: black turns clear. For solid shapes, wire the Output\'s Alpha or lower its Opacity.' });
+  } else if (keepsAlpha && !o.ownAlpha && o.picture === 'own') {
+    warnings.push({ title: 'The graph has no alpha', text: 'Its own alpha is 1 everywhere (the Output\'s Alpha is empty and its Opacity is 1), so this file would be solid. Wire the Output\'s Alpha, lower its Opacity, or pick Black turns clear.' });
   }
   if (o.wasm && o.estimateBytes > BROWSER_PRORES_WARN_BYTES) {
     warnings.push({ title: 'A big file for a browser', text: `${formatBytes(o.estimateBytes)} is held in this tab's memory until it saves. Shorten it, lower the resolution, pick a lighter profile, or use the desktop app.` });

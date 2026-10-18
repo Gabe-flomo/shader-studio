@@ -138,6 +138,12 @@ export interface ParamDef {
    */
   compileTime?: boolean;
   /**
+   * At exactly this value the param stays a literal, not a uniform, so the node can leave it out of
+   * its code (Output's Opacity at 1 writes the alpha as it always did). Any other value is a live
+   * uniform; moving onto or off this value recompiles once.
+   */
+  literalAt?: number;
+  /**
    * Groups this float param with another into one "range" row (a min/max pair rendered as two
    * compact slots side by side, e.g. Remap's "Input range" [inMin … inMax]) instead of two full
    * rows. Set this on the FIRST (lower) param of the pair; `with` names the second param's key

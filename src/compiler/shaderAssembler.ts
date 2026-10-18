@@ -43,6 +43,7 @@ import { marchJitterDecl, MARCH_STEP_REF_KEY } from './marchJitter';
 import { curvedMarch } from './curvedSpace';
 import { CELL3_DECL, CELL3_GLOBAL, CELL3SIZE_GLOBAL } from '../nodes/definitions/repeatScene';
 import { TC_SPACE_DECL } from '../nodes/definitions/timeCube';
+import { ECHO_CAPTURE_UNIFORM, ECHO_INPUT_GLOBAL, isLegacyEcho } from '../nodes/definitions/echo';
 import { safeMarchLines, safeMarchSteps, stepsHeatmap, warpSafetyOf } from './warpSafety';
 import {
   getKeyframeConfig, generateKeyframeGLSL, isKeyframeBypassed,
@@ -843,6 +844,8 @@ export class ShaderAssembler {
   private isStateful = false;
   /** Echo nodes anywhere in the graph (incl. group subgraphs): snapshot ring size and spacing. */
   private echo: { copies: number; delay: number } | null = null;
+  /** An Echo that takes a Color input (not a legacy one): the capture draw writes that input (nodes/definitions/echo.ts). */
+  private echoInput = false;
   private usedSlugs = new Set<string>();
   private nodeSlugMap = new Map<string, string>();
   private sortedNodes: GraphNode[];
@@ -954,11 +957,13 @@ export class ShaderAssembler {
 
   private detectEcho(): void {
     let copies = 0; let delay = 0;
+    this.echoInput = false;
     const visit = (nodes: GraphNode[]) => {
       for (const n of nodes) {
         if (n.type === 'echo') {
           copies = Math.max(copies, Math.max(1, Math.min(6, Math.round(Number(n.params.copies ?? 3)))));
           if (!delay) delay = Math.max(1, Math.round(Number(n.params.delay ?? 6)));
+          if (!isLegacyEcho(n)) this.echoInput = true;
         }
         const sg = n.params?.subgraph as { nodes?: GraphNode[] } | undefined;
         if (sg?.nodes) visit(sg.nodes);
@@ -4466,7 +4471,9 @@ export class ShaderAssembler {
       return u && u in this.paramUniforms ? u : this.linkFallbacks.get(m) ?? 'vec3(1.0)';
     });
     if (this.linkFallbacks.size) this.mainCode = this.mainCode.map(linkToken);
-    const mainBody = this.mainCode.join('') + (this.stepsView ? `    gl_FragColor = vec4(${this.stepsView}, 1.0);\n` : '');
+    const mainBody = this.mainCode.join('') + (this.stepsView ? `    gl_FragColor = vec4(${this.stepsView}, 1.0);\n` : '')
+      // The echo ring's capture draw: the Echo's Color input, not the picture (nodes/definitions/echo.ts).
+      + (this.echo && this.echoInput ? `    if (${ECHO_CAPTURE_UNIFORM} > 0.5) gl_FragColor = vec4(${ECHO_INPUT_GLOBAL}, 1.0);\n` : '');
     // Repeat Cell outside a Repeat Scene (or in a path that skips declarationsFor) still needs its global.
     if (!this.declarations.has(CELL3_DECL) && [CELL3_GLOBAL, CELL3SIZE_GLOBAL].some(g => mainBody.includes(g) || [...this.functions].some(f => f.includes(g)))) this.declarations.add(CELL3_DECL);
     // A Time Cube Shape inside a Scene Group (docs/timecube-space.md) talks to its Time Cube View through globals.
@@ -4480,6 +4487,8 @@ export class ShaderAssembler {
       ...Object.keys(this.textureUniforms).map(name => `uniform sampler2D ${name};`),
       ...(this.isStateful ? ['uniform sampler2D u_prevFrame;'] : []),
       ...(this.echo ? Array.from({ length: this.echo.copies }, (_, i) => `uniform sampler2D u_echo${i};`) : []),
+      ...(this.echo ? [`uniform float ${ECHO_CAPTURE_UNIFORM};`] : []),
+      ...(this.echo && this.echoInput ? [`vec3 ${ECHO_INPUT_GLOBAL} = vec3(0.0);`] : []),
     ].join('\n');
     const audioUniformDecls = Object.keys(this.audioUniforms)
       .map(name => `uniform float ${name};`)

@@ -31,6 +31,12 @@ export interface HistoryGpu<R> {
   draw(time: number, into: R, prev: R | null, echoes: readonly R[]): void;
   /** Copy a picture into a target (an echo slot). */
   copy(from: R, into: R): void;
+  /**
+   * Draw the echo capture into an echo slot, straight after `draw` (same time and uniforms): the
+   * graph with u_echoCap set, which writes the Echo's input instead of the picture, so the copies
+   * never hold their own echoes (nodes/definitions/echo.ts). Without it the picture is copied.
+   */
+  capture?(into: R): void;
 }
 
 export interface HistoryFrame {
@@ -114,7 +120,8 @@ export class OfflineHistory<R> {
     this.echoFrame++;
     if (this.echoFrame % Math.max(1, echo.delay) === 0 && this.ring.length) {
       this.ring.unshift(this.ring.pop()!);
-      this.gpu.copy(out, this.ring[0]);
+      if (this.gpu.capture) this.gpu.capture(this.ring[0]);
+      else this.gpu.copy(out, this.ring[0]);
     }
     return out;
   }
