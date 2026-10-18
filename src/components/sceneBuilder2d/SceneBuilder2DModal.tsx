@@ -7,7 +7,7 @@
  * own edits where it can) and stays open; Done builds (or rebuilds) and then closes.
  */
 import { OFFER_PIECES } from '../../nodes/notOffered';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useSceneBuilder2D, type Builder2DTab } from '../../sceneBuilder2d/store';
 import { buildFromBuilder2D, scene2dBuilder } from '../../sceneBuilder2d/actions';
 import {
@@ -40,6 +40,7 @@ import { Preview2D, compileScene2D } from './Preview2D';
 import { compiledPicture } from '../sceneBuilder/specThumbs';
 import { useDepthView } from '../../builders/depthPreview';
 import { StudioNavItem, StudioShell } from '../builders/studio/StudioShell';
+import { PhoneStudioContext, addButtonStyle, addButtonsRow } from '../builders/studio/PhoneStudio';
 import { usePhoneDialog } from '../ui/phoneDialog';
 import { DepthTab } from './DepthTab';
 import { QUICK_PIN_API, QuickControls } from './QuickControls';
@@ -105,13 +106,14 @@ function joinedGroup(d: Scene2D, op: CombineOp, k: number, a: Item, b: Item): Gr
 /** The seven combine choices as picture buttons; `value` marks the current one. */
 function CombineButtons({ value, onPick, label }: { value?: { op: CombineOp; k: number } | null; onPick: (op: CombineOp, smooth: boolean) => void; label: string }) {
   const tk = useTokens();
+  const phone = useContext(PhoneStudioContext);
   return (
-    <div role="group" aria-label={label} style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+    <div role="group" aria-label={label} data-combine-buttons={phone ? 'grid' : 'wrap'} style={addButtonsRow(phone)}>
       {COMBINE_CHOICES_2D.map(ch => {
         const on = !!value && value.op === ch.op && (ch.op === 'xor' || (value.k > 0) === ch.smooth);
         return (
           <button key={ch.key} type="button" data-combine-op={ch.key} aria-pressed={on} title={`${ch.label}: ${ch.blurb}`} onClick={() => onPick(ch.op, ch.smooth)}
-            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 9px', border: 0, borderRadius: radius.md, cursor: 'pointer',
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 9px', border: 0, borderRadius: radius.md, cursor: 'pointer', minWidth: 0, textAlign: 'left',
               background: on ? tk.bg.selected : tk.bg.field, color: tk.text.primary, font: `500 11.5px ${fontFamily.ui}` }}>
             <span style={{ font: `700 13px ${fontFamily.mono}`, color: tk.accent.text, minWidth: 18, textAlign: 'center' }}>{ch.glyph}</span>{ch.label}
           </button>
@@ -156,9 +158,11 @@ function Vec2Row({ label, value, min, max, step = 0.01, onChange, hint, defaultV
   lazyParam?: (axis: 0 | 1) => LazyParam;
 }) {
   const tk = useTokens();
+  // A phone: X over Y, each slider the row's full width (side by side they ran off the card).
+  const phone = useContext(PhoneStudioContext);
   return (
     <Row label={label} hint={hint}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 6 }}>
+      <div data-vec2-layout={phone ? 'stacked' : 'pair'} style={{ display: 'grid', gridTemplateColumns: phone ? 'minmax(0, 1fr)' : 'repeat(2, minmax(0, 1fr))', gap: 6 }}>
         {(['X', 'Y'] as const).map((ax, i) => (
           <div key={ax} style={{ display: 'flex', alignItems: 'center', gap: 4, minWidth: 0 }}>
             <span style={{ font: `600 10.5px ${fontFamily.mono}`, color: tk.text.faint, width: 10 }}>{ax}</span>
@@ -190,6 +194,38 @@ function ParamControl({ p, value, onChange, keyBase }: { p: ParamDef; value: num
   const v = typeof value === 'number' ? value : p.def;
   return <NumRow label={p.label} hint={p.hint} value={v} min={p.min} max={p.max} step={p.step} unit={p.deg ? '°' : undefined} integer={p.step === 1} onChange={onChange} defaultValue={p.def}
     rangeKey={`2d:${keyBase}:${p.key}`} lazyParam={play2dAny(keyBase, [p.key])} />;
+}
+
+/** A row of picture tiles: wrapping on a wide window; on a phone an even grid that fills the width. */
+const tileGrid = (phone: boolean): React.CSSProperties => (phone
+  ? { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(72px, 1fr))', gap: 6 }
+  : { display: 'flex', flexWrap: 'wrap', gap: 6 });
+
+/**
+ * A card's picture and its settings: the picture beside them on a wide window; on a phone the picture
+ * (smaller, with its note beside it) on top, so the settings get the card's full width.
+ */
+function ThumbBody({ thumb, note, gap = 12, bodyStyle, children }: {
+  thumb: (size: number | null) => ReactNode; note?: ReactNode; gap?: number; bodyStyle?: React.CSSProperties; children: ReactNode;
+}) {
+  const phone = useContext(PhoneStudioContext);
+  if (phone) {
+    return (
+      <div data-thumb-layout="stacked" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {thumb(56)}
+          {note && <div style={{ flex: 1, minWidth: 0 }}>{note}</div>}
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>{children}</div>
+      </div>
+    );
+  }
+  return (
+    <div data-thumb-layout="beside" style={{ display: 'flex', gap, alignItems: 'flex-start' }}>
+      {thumb(null)}
+      <div style={{ flex: 1, minWidth: 0, ...bodyStyle }}>{note}{children}</div>
+    </div>
+  );
 }
 
 const tile = (tk: ReturnType<typeof useTokens>, on = false): React.CSSProperties => ({
@@ -237,9 +273,10 @@ function LayerList() {
     (f.parent ? f.parent.children : d.layers).splice(f.index, 1, ...f.item.children);
   });
   const hasNext = !!sel && (sel.parent ? sel.parent.children : scene.layers).length > sel.index + 1;
+  const phone = useContext(PhoneStudioContext);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 10px' }}>
+    <div data-layer-list style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: phone ? '8px 16px 16px' : '12px 10px' }}>
       <BuilderLabel meta={`${allShapes(scene).length} shapes`} hint="Layers are painted top to bottom: the last one is on top. A combine joins, cuts or overlaps the shapes inside it.">Layers</BuilderLabel>
       {rows.length === 0 && <BuilderNote>No shapes yet. Pick one on the Shapes tab.</BuilderNote>}
       <div role="listbox" aria-label="Layers" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -314,10 +351,13 @@ function FunctionPicker({ role, onPick }: { role: FnRole; onPick: (f: FnEntry) =
     try { foundCache = await gatherFunctions(); setFound(foundCache); } finally { setBusy(false); }
   };
   const mine = (found ?? []).filter(f => f.role === role && (!q || `${f.name} ${f.from}`.toLowerCase().includes(q.toLowerCase())));
-  const chip: React.CSSProperties = { display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-start', gap: 1, padding: '6px 9px', border: 0, borderRadius: radius.md, background: tk.bg.field, color: tk.text.primary, cursor: 'pointer', textAlign: 'left', font: `600 11.5px ${fontFamily.mono}`, maxWidth: 230 };
+  const phone = useContext(PhoneStudioContext);
+  const chip: React.CSSProperties = { display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-start', gap: 1, padding: '6px 9px', border: 0, borderRadius: radius.md, background: tk.bg.field, color: tk.text.primary, cursor: 'pointer', textAlign: 'left', font: `600 11.5px ${fontFamily.mono}`, maxWidth: phone ? 'none' : 230, minWidth: 0 };
+  // A phone: two even columns instead of a ragged wrap.
+  const chips: React.CSSProperties = phone ? { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 6 } : { display: 'flex', flexWrap: 'wrap', gap: 6 };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+      <div style={chips}>
         {BUILT_IN_FUNCTIONS.filter(f => f.role === role).map(f => (
           <button key={f.name} type="button" title={f.code} style={chip} onClick={() => onPick(f)}>
             {f.name}<span style={{ font: `500 10.5px ${fontFamily.ui}`, color: tk.text.muted }}>{f.blurb}</span>
@@ -330,7 +370,7 @@ function FunctionPicker({ role, onPick }: { role: FnRole; onPick: (f: FnEntry) =
           <>
             <input aria-label="Search functions" placeholder={`${mine.length} ${role === 'space' ? 'vec2 f(vec2 p)' : 'float f(vec2 p)'} functions found: search…`} value={q} onChange={e => setQ(e.target.value)}
               style={{ height: 28, padding: '0 8px', borderRadius: radius.sm, border: `1px solid ${tk.border.default}`, background: tk.bg.field, color: tk.text.primary, font: `500 12px ${fontFamily.ui}` }} />
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: 220, overflow: 'auto' }}>
+            <div style={{ ...chips, maxHeight: 220, overflow: 'auto' }}>
               {mine.slice(0, 60).map(f => (
                 <button key={`${f.from}:${f.name}`} type="button" title={f.code} style={chip} onClick={() => onPick(f)}>
                   {f.name}<span style={{ font: `500 10.5px ${fontFamily.ui}`, color: tk.text.muted }}>{f.from}</span>
@@ -344,8 +384,9 @@ function FunctionPicker({ role, onPick }: { role: FnRole; onPick: (f: FnEntry) =
   );
 }
 
-function SpaceTab() {
+export function SpaceTab() {
   const tk = useTokens();
+  const phone = useContext(PhoneStudioContext);
   const scene = useSceneBuilder2D(s => s.scene);
   const [hover, setHover] = useState<number | null>(null);
   const move = (i: number, dir: -1 | 1) => edit(d => { const j = i + dir; if (j < 0 || j >= d.space.length) return; [d.space[i], d.space[j]] = [d.space[j], d.space[i]]; });
@@ -381,13 +422,10 @@ function SpaceTab() {
                     onClick={() => edit(d => { const b = d.space[i].block; if (b) d.space[i] = newCombineOp(d.space[i].id, b, emptyBlock(), 'add'); })} />
                   {order}
                 </>}>
-                <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-                  <WarpCanvas map={() => blockMap(block, 1)} k={JSON.stringify(block)} size={72} title="A grid through this block alone" />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    {block.lib && BLOCK_BY_ID[block.lib] && <BuilderNote>{BLOCK_BY_ID[block.lib].blurb}</BuilderNote>}
-                    <BlockEditor block={block} idBase={`sp:${op.id}`} update={upd(i)} />
-                  </div>
-                </div>
+                <ThumbBody thumb={sz => <WarpCanvas map={() => blockMap(block, 1)} k={JSON.stringify(block)} size={sz ?? 72} title="A grid through this block alone" />}
+                  note={block.lib && BLOCK_BY_ID[block.lib] ? <BuilderNote>{BLOCK_BY_ID[block.lib].blurb}</BuilderNote> : undefined}>
+                  <BlockEditor block={block} idBase={`sp:${op.id}`} update={upd(i)} />
+                </ThumbBody>
               </Card>
             ) : comb ? (
               <Card id={`sp2-${op.id}`} onRemove={drop} removeLabel={`Remove ${sum.label}`} defaultOpen title={sum.label} summary={sum.value} mute={mute}
@@ -396,17 +434,16 @@ function SpaceTab() {
                     onClick={() => edit(d => { const c = d.space[i].combine; if (!c) return; const id2 = nextId(d, 'p'); d.space.splice(i, 1, newBlockOp(d.space[i].id, c.a), newBlockOp(id2, c.b)); })}>Split</Button>
                   {order}
                 </>}>
-                <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-                  <WarpCanvas map={() => combineMap(comb, 1)} k={JSON.stringify(comb)} size={72} title="A grid through the combine" />
-                  <div style={{ flex: 1, minWidth: 0 }}><CombineEditor spec={comb} idBase={`sp:${op.id}`} update={updC(i)} /></div>
-                </div>
+                <ThumbBody thumb={sz => <WarpCanvas map={() => combineMap(comb, 1)} k={JSON.stringify(comb)} size={sz ?? 72} title="A grid through the combine" />}
+                  note={phone ? <BuilderNote>A grid through the combine: blocks A and B on the same uv, joined as picked below.</BuilderNote> : undefined}>
+                  <CombineEditor spec={comb} idBase={`sp:${op.id}`} update={updC(i)} />
+                </ThumbBody>
               </Card>
             ) : def && (
               <Card id={`sp2-${op.id}`} onRemove={drop} removeLabel={`Remove ${sum.label}`} defaultOpen title={def.label} summary={sum.value} actions={order} mute={mute}>
-                <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                  <Thumb k={JSON.stringify(op)} make={() => renderSpaceThumbnail(op, 64)} size={64} />
-                  <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <BuilderNote>{op.kind === 'fn' ? `${String(op.values.name)} (${String(op.values.from || 'a function')}): ${def.blurb}` : def.blurb}</BuilderNote>
+                <ThumbBody gap={10} bodyStyle={{ display: 'flex', flexDirection: 'column', gap: 4 }}
+                  thumb={sz => <Thumb k={`${JSON.stringify(op)}:${sz ?? 64}`} make={() => renderSpaceThumbnail(op, sz ?? 64)} size={sz ?? 64} />}
+                  note={<BuilderNote>{op.kind === 'fn' ? `${String(op.values.name)} (${String(op.values.from || 'a function')}): ${def.blurb}` : def.blurb}</BuilderNote>}>
                     {op.kind === 'fn' && <pre style={{ margin: 0, maxHeight: 140, overflow: 'auto', padding: 8, borderRadius: radius.sm, background: tk.bg.field, font: `500 10.5px/1.5 ${fontFamily.mono}`, color: tk.text.secondary }}>{String(op.values.code ?? '')}</pre>}
                     {def.select && (
                       <Row label={def.select.label}>
@@ -417,25 +454,39 @@ function SpaceTab() {
                     {def.params.map(p => (
                       <ParamControl key={p.key} p={p} keyBase={op.id} value={op.values[p.key]} onChange={v => edit(d => { d.space[i].values[p.key] = v; }, `sp:${op.id}:${p.key}`)} />
                     ))}
-                  </div>
-                </div>
+                </ThumbBody>
               </Card>
             )}
           </div>
         );
       })}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
-        <BuilderLabel hint="A block is up to three lines like an Expression Block: uv.x, uv.y or uv, then =, +=, -= or *=, then any expression of x, y, uv and t. Blocks chain: each one's uv feeds the next. Link (on a block) combines two blocks instead.">Add a block</BuilderLabel>
-        <span style={{ flex: 1 }} />
-        <Button size="sm" variant="ghost" icon="plus" onClick={() => addBlock(emptyBlock())}>Empty block</Button>
-        <Button size="sm" variant="ghost" icon="wave" data-open-warp-stack onClick={() => openWarpFrom2D(null)}
-          title="Open every block of the stack in the Warp Builder (drag tiles instead of typing; Done brings them back here, in place)">{scene.space.some(o => o.kind === 'block') ? 'Open stack in Warp Builder' : 'Warp Builder'}</Button>
-      </div>
+      {(() => {
+        const label = <BuilderLabel hint="A block is up to three lines like an Expression Block: uv.x, uv.y or uv, then =, +=, -= or *=, then any expression of x, y, uv and t. Blocks chain: each one's uv feeds the next. Link (on a block) combines two blocks instead.">Add a block</BuilderLabel>;
+        const warpLabel = scene.space.some(o => o.kind === 'block') ? (phone ? 'Open in Warp Builder' : 'Open stack in Warp Builder') : 'Warp Builder';
+        const warpTitle = 'Open every block of the stack in the Warp Builder (drag tiles instead of typing; Done brings them back here, in place)';
+        // A phone: the label, then the two buttons side by side at full width.
+        return phone ? (
+          <div data-add-block-row="stacked" style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
+            {label}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 6 }}>
+              <Button icon="plus" style={{ height: 44 }} onClick={() => addBlock(emptyBlock())}>Empty block</Button>
+              <Button icon="wave" style={{ height: 44 }} data-open-warp-stack onClick={() => openWarpFrom2D(null)} title={warpTitle}>{warpLabel}</Button>
+            </div>
+          </div>
+        ) : (
+          <div data-add-block-row style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+            {label}
+            <span style={{ flex: 1 }} />
+            <Button size="sm" variant="ghost" icon="plus" onClick={() => addBlock(emptyBlock())}>Empty block</Button>
+            <Button size="sm" variant="ghost" icon="wave" data-open-warp-stack onClick={() => openWarpFrom2D(null)} title={warpTitle}>{warpLabel}</Button>
+          </div>
+        );
+      })()}
       <BlockLibrary onPick={addBlock} onPickCombine={c => edit(d => { const op = newCombineOp(nextId(d, 'p'), c.a, c.b, c.mode, c.amount); if (c.my) op.combine!.my = c.my; d.space.push(op); })} />
       <Card id="sp2-builtins" title="Built-in transforms" summary="zoom, rotate, tile, mirror, kaleidoscope… as their own nodes">
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        <div style={tileGrid(phone)}>
           {SPACES.filter(sp => sp.kind !== 'fn').map(sp => (
-            <button key={sp.kind} type="button" title={sp.blurb} style={tile(tk)}
+            <button key={sp.kind} type="button" title={sp.blurb} style={{ ...tile(tk), ...(phone ? { width: 'auto', minWidth: 0 } : {}) }}
               onClick={() => edit(d => { d.space.push(newSpaceOp(sp.kind, nextId(d, 'p'))); })}>
               <Thumb k={`space:${sp.kind}`} make={() => renderSpaceThumbnail(newSpaceOp(sp.kind, 'x'), 44)} />
               {sp.label}
@@ -507,6 +558,7 @@ function GroupControls({ id, g }: { id: string; g: GroupSpec }) {
 
 function ItemInspector({ id }: { id: string }) {
   const scene = useSceneBuilder2D(s => s.scene);
+  const phone = useContext(PhoneStudioContext);
   const f = findItem(scene, id);
   if (!f) return null;
   const it = f.item;
@@ -571,9 +623,9 @@ function ItemInspector({ id }: { id: string }) {
             </div>
           );
         })}
-        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+        <div style={addButtonsRow(phone)}>
           {MOTIONS.map(md => (
-            <Button key={md.kind} size="sm" variant="ghost" icon="plus" title={md.blurb}
+            <Button key={md.kind} size="sm" variant="ghost" icon="plus" title={md.blurb} style={addButtonStyle(phone)}
               onClick={() => edit(d => { const g = findItem(d, id); if (g) g.item.motion.push(newMotion(md.kind as MotionKind, nextId(d, 'm'))); })}>{md.label}</Button>
           ))}
         </div>
@@ -604,6 +656,7 @@ function ItemInspector({ id }: { id: string }) {
 
 export function ShapesTab() {
   const tk = useTokens();
+  const phone = useContext(PhoneStudioContext);
   const hasPieces = useSceneBuilder2D(s => !!s.scene.pieces);
   const selectedId = useSceneBuilder2D(s => s.selectedId);
   const select = useSceneBuilder2D(s => s.select);
@@ -615,9 +668,9 @@ export function ShapesTab() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <BuilderLabel hint="Each shape is a distance field (SDF): how far every pixel is from its edge. Click one to add it as a new layer.">Add a shape</BuilderLabel>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+      <div data-shape-tiles style={tileGrid(phone)}>
         {SHAPES.filter(sh => sh.kind !== 'fnshape').map(sh => (
-          <button key={sh.kind} type="button" title={sh.blurb} style={tile(tk)} onClick={() => add(sh.kind)}>
+          <button key={sh.kind} type="button" title={sh.blurb} style={{ ...tile(tk), ...(phone ? { width: 'auto', minWidth: 0 } : {}) }} onClick={() => add(sh.kind)}>
             <Thumb k={`shape:${sh.kind}`} make={() => renderShapeThumbnail(sh.kind, 44)} />
             {sh.label}
           </button>
@@ -635,7 +688,7 @@ export function ShapesTab() {
         edit(d => { id = nextId(d, 's'); d.layers.push(newShape('fnshape', id, { name: f.name, fn: { name: f.name, code: f.code, timed: f.timed, from: f.from }, color: [...DEFAULT_COLOURS[d.layers.length % DEFAULT_COLOURS.length]] as Vec3 })); });
         select(id);
       }} />
-      {selectedId ? <ItemInspector key={selectedId} id={selectedId} /> : <BuilderNote>Select a layer on the left to change it.</BuilderNote>}
+      {selectedId ? <ItemInspector key={selectedId} id={selectedId} /> : <BuilderNote>Select a layer {phone ? 'on the Layers tab' : 'on the left'} to change it.</BuilderNote>}
     </div>
   );
 }
@@ -710,6 +763,7 @@ function OlderGridCard() {
 /** One Modify card's body: its sliders, or for f(d) its line (the Expression Block editor) and sliders. */
 function ModBody({ id, m, i }: { id: string; m: DistMod; i: number }) {
   const tk = useTokens();
+  const phone = useContext(PhoneStudioContext);
   const [newName, setNewName] = useState('');
   const upd = (fn: (x: DistMod) => void, key?: string) => edit(d => { const f = findItem(d, id); const x = f?.item.mods?.[i]; if (x) fn(x); }, key && `${id}:mod:${m.id}:${key}`);
   const def = MOD_BY_KIND[m.kind];
@@ -727,7 +781,7 @@ function ModBody({ id, m, i }: { id: string; m: DistMod; i: number }) {
     <>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <span style={{ font: `600 12px ${fontFamily.mono}`, color: tk.text.muted }}>d =</span>
-        <ExprLineInput ariaLabel="f(d)" attrs={{ 'data-mod-fd': '' }} value={m.expr ?? ''} vars={vars} invalid={!chk.ok} placeholder="e.g. abs(d) - 0.02" onChange={v => upd(x => { x.expr = v; }, 'expr')} />
+        <ExprLineInput ariaLabel="f(d)" attrs={{ 'data-mod-fd': '' }} height={phone ? 40 : 28} value={m.expr ?? ''} vars={vars} invalid={!chk.ok} placeholder="e.g. abs(d) - 0.02" onChange={v => upd(x => { x.expr = v; }, 'expr')} />
       </div>
       {!chk.ok && <div role="alert" data-mod-error style={{ fontSize: 11.5, color: tk.status.danger }}>{chk.error}</div>}
       {names.map(n => {
@@ -744,7 +798,7 @@ function ModBody({ id, m, i }: { id: string; m: DistMod; i: number }) {
       })}
       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
         <input aria-label="New slider name" placeholder="New slider (e.g. amp)" value={newName} onChange={e => setNewName(e.target.value)}
-          style={{ height: 26, padding: '0 8px', borderRadius: radius.sm, border: `1px solid ${why ? tk.status.danger : tk.border.default}`, background: tk.bg.field, color: tk.text.primary, font: `500 12px ${fontFamily.mono}`, width: 160 }} />
+          style={{ height: 26, padding: '0 8px', borderRadius: radius.sm, border: `1px solid ${why ? tk.status.danger : tk.border.default}`, background: tk.bg.field, color: tk.text.primary, font: `500 12px ${fontFamily.mono}`, ...(phone ? { flex: 1, minWidth: 0 } : { width: 160 }) }} />
         <Button size="sm" variant="ghost" icon="plus" disabled={!newName.trim() || !!why} onClick={() => { const n = newName.trim(); upd(x => { x.values[n] = 0.1; }); setNewName(''); }}>Slider</Button>
         {why && <span style={{ fontSize: 11, color: tk.status.danger }}>{why}</span>}
       </div>
@@ -758,9 +812,10 @@ function ModBody({ id, m, i }: { id: string; m: DistMod; i: number }) {
  */
 export function ModifyTab() {
   const scene = useSceneBuilder2D(s => s.scene);
+  const phone = useContext(PhoneStudioContext);
   const selectedId = useSceneBuilder2D(s => s.selectedId);
   const sel = selectedId ? findItem(scene, selectedId) : null;
-  if (!sel) return <BuilderNote>Pick a shape or a combine on the left: Modify changes its distance before it is drawn (a disc into rings, ripples, a wobbly edge…).</BuilderNote>;
+  if (!sel) return <BuilderNote>Pick a shape or a combine {phone ? 'on the Layers tab' : 'on the left'}: Modify changes its distance before it is drawn (a disc into rings, ripples, a wobbly edge…).</BuilderNote>;
   const it = sel.item;
   const id = it.id;
   const mods = it.mods ?? [];
@@ -782,8 +837,8 @@ export function ModifyTab() {
         </Card>
       ))}
       <BuilderLabel hint="Each adds a card at the bottom of the stack. Hover a button for what it does.">Add</BuilderLabel>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-        {MODS.map(md => <Button key={md.kind} size="sm" variant="ghost" icon="plus" title={md.blurb} data-mod-add={md.kind} onClick={() => add(md.kind)}>{md.label}</Button>)}
+      <div style={addButtonsRow(phone)}>
+        {MODS.map(md => <Button key={md.kind} size="sm" variant="ghost" icon="plus" title={md.blurb} data-mod-add={md.kind} style={addButtonStyle(phone)} onClick={() => add(md.kind)}>{md.label}</Button>)}
       </div>
     </div>
   );
@@ -1016,12 +1071,13 @@ function EffectsTab() {
 
 function OutputTab() {
   const out = useSceneBuilder2D(s => s.scene.output);
+  const phone = useContext(PhoneStudioContext);
   const show = out?.show ?? 'picture';
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <BuilderNote>What the Output shows. Anything but the picture is a way to see how the scene works.</BuilderNote>
       {OUTPUT_SHOWS.map(o => (
-        <label key={o.show} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', cursor: 'pointer' }}>
+        <label key={o.show} style={{ display: 'flex', gap: phone ? 12 : 8, alignItems: 'flex-start', cursor: 'pointer', ...(phone ? { minHeight: 44, padding: '6px 0', boxSizing: 'border-box' } : {}) }}>
           <input type="radio" name="out2d" checked={show === o.show} onChange={() => edit(d => { d.output = o.show === 'picture' ? undefined : { show: o.show as Show2D, palette: d.output?.palette }; })} />
           <span><b>{o.label}</b><br /><span style={{ fontSize: 12, opacity: 0.75 }}>{o.blurb}</span></span>
         </label>
@@ -1074,9 +1130,12 @@ function MyPresets() {
 }
 
 function TemplatesTab() {
+  // A phone: the label's long aside goes under it as a note (beside it, it squeezed the label onto two lines).
+  const phone = useContext(PhoneStudioContext);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <BuilderLabel meta="saved here, not as graphs · undo takes a load back">Your presets</BuilderLabel>
+      <BuilderLabel meta={phone ? undefined : 'saved here, not as graphs · undo takes a load back'}>Your presets</BuilderLabel>
+      {phone && <BuilderNote>Saved here, not as graphs. Undo takes a load back.</BuilderNote>}
       <MyPresets />
       <BuilderLabel>Built-in starting points</BuilderLabel>
       <BuilderNote>Starting points. Loading one replaces the form (Undo brings yours back).</BuilderNote>
@@ -1179,7 +1238,8 @@ export function SceneBuilder2DModal() {
       actions={<>
         <IconButton icon="undo" size="sm" label="Undo" disabled={!canUndo} onClick={undo} />
         <IconButton icon="redo" size="sm" label="Redo" disabled={!canRedo} onClick={redo} />
-        <Button size="sm" icon="rebuild" data-scene2d-build disabled={!shapes && !gridSize} onClick={build} title={buildTitle}>{editing ? 'Rebuild' : 'Build'}</Button>
+        {/* Icon-only on a phone, so the bar keeps one row and the title isn't cut. */}
+        <IconButton icon="rebuild" size="sm" label={editing ? 'Rebuild' : 'Build'} data-scene2d-build disabled={!shapes && !gridSize} onClick={build} />
       </>}
       primary={{ label: 'Done', onClick: done, title: doneTitle }}
       nav={<>{TABS.filter(t => t.id !== 'templates').map(t => <StudioNavItem key={t.id} id={t.id} icon={t.icon} label={t.label} selected={tab === t.id} onClick={() => setTab(t.id)} />)}</>}

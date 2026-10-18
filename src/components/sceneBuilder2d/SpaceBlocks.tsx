@@ -136,41 +136,73 @@ export function BlockEditor({ block, update, idBase }: { block: SpaceBlock; upda
   const nameProblem = newName.trim() ? paramNameProblem(newName.trim(), taken) : null;
   // What a line can name: the point, time and the block's sliders (autocomplete).
   const vars = useMemo(() => [{ name: 'x', type: 'float' }, { name: 'y', type: 'float' }, { name: 'uv', type: 'vec2' }, { name: 't', type: 'float' }, ...(block.loop ? LOOP_BLOCK_NAMES.map(v => ({ name: v.name, type: v.type })) : []), ...block.params.map(p => ({ name: p.name, type: 'float' }))], [block.params, block.loop]);
+  // On a phone (PhoneStudio) each line stacks, so its expression gets the sheet's full width.
+  const phone = useContext(PhoneStudioContext);
+  const indent = phone ? 0 : 146;
+  const addLine = () => update(b => { b.lines.push(emptyLine(b.lines.length === 0 ? 'uv.x' : b.lines.length === 1 ? 'uv.y' : 'uv')); });
+  const lineHint = `x, y = uv.x, uv.y as they are now · t = time${block.loop ? ' · uv0 = the point before the block · fi, k, n = the pass' : ''} · whole numbers are fine`;
 
   return (
     <div data-block-editor={idBase} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         {block.lines.map((l, i) => {
           const c = chk.lines[i];
+          const h = phone ? 40 : 28;
+          const target = (
+            <Select ariaLabel={`Line ${i + 1} target`} mono height={h} style={phone ? { width: '100%', boxSizing: 'border-box' } : undefined} value={l.target} options={BLOCK_TARGETS.map(x => ({ value: x, label: x }))}
+              onChange={v => update(b => { b.lines[i].target = v as BlockTarget; })} />
+          );
+          const operator = (
+            <Select ariaLabel={`Line ${i + 1} operator`} mono height={h} style={phone ? { width: '100%', boxSizing: 'border-box' } : undefined} value={l.op} options={BLOCK_OPS.map(x => ({ value: x, label: x }))}
+              onChange={v => update(b => { b.lines[i].op = v as BlockOp; })} />
+          );
+          const expr = (
+            <ExprLineInput ariaLabel={`Line ${i + 1} expression`} attrs={{ 'data-block-rhs': i }} value={l.rhs} vars={vars} height={h}
+              placeholder={i === 0 ? 'e.g. amp * sin(y * 6 + t)' : 'leave empty: as it is'} invalid={!!c && !c.ok}
+              onChange={v => update(b => { b.lines[i].rhs = v; }, `${idBase}:rhs${i}`)}
+              onCaret={el => caret(i, el)}
+              onBlur={() => setTimeout(() => setOffer(o => (o?.line === i ? null : o)), 150)} />
+          );
+          const removeLine = <IconButton icon="close" label="Remove this line" size="sm" onClick={() => update(b => { b.lines.splice(i, 1); })} />;
           return (
-            <div key={i} data-block-line={i} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 4 }}>
-                <span style={{ width: 82, flexShrink: 0 }}>
-                  <Select ariaLabel={`Line ${i + 1} target`} mono height={28} value={l.target} options={BLOCK_TARGETS.map(x => ({ value: x, label: x }))}
-                    onChange={v => update(b => { b.lines[i].target = v as BlockTarget; })} />
-                </span>
-                <span style={{ width: 58, flexShrink: 0 }}>
-                  <Select ariaLabel={`Line ${i + 1} operator`} mono height={28} value={l.op} options={BLOCK_OPS.map(x => ({ value: x, label: x }))}
-                    onChange={v => update(b => { b.lines[i].op = v as BlockOp; })} />
-                </span>
-                <ExprLineInput ariaLabel={`Line ${i + 1} expression`} attrs={{ 'data-block-rhs': i }} value={l.rhs} vars={vars}
-                  placeholder={i === 0 ? 'e.g. amp * sin(y * 6 + t)' : 'leave empty: as it is'} invalid={!!c && !c.ok}
-                  onChange={v => update(b => { b.lines[i].rhs = v; }, `${idBase}:rhs${i}`)}
-                  onCaret={el => caret(i, el)}
-                  onBlur={() => setTimeout(() => setOffer(o => (o?.line === i ? null : o)), 150)} />
-                <IconButton icon="close" label="Remove this line" size="sm" onClick={() => update(b => { b.lines.splice(i, 1); })} />
-              </div>
-              {c && !c.ok && <div role="alert" data-block-error={i} style={{ fontSize: 11.5, color: tk.status.danger, paddingLeft: 146 }}>{c.error}</div>}
-              {offer?.line === i && <MakeSliderButton lit={offer.lit} onMake={() => makeSlider(i, offer.lit)} indent={146} />}
+            <div key={i} data-block-line={i} data-line-layout={phone ? 'stacked' : 'inline'} style={{ display: 'flex', flexDirection: 'column', gap: phone ? 6 : 3 }}>
+              {phone ? (
+                // A phone: target, operator and × on one row; the expression the full width under them.
+                <>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ width: 96, flexShrink: 0 }}>{target}</span>
+                    <span style={{ width: 76, flexShrink: 0 }}>{operator}</span>
+                    <span style={{ flex: 1 }} />
+                    {removeLine}
+                  </div>
+                  <div data-block-rhs-row={i} style={{ display: 'flex', width: '100%', minWidth: 0 }}>{expr}</div>
+                </>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 4 }}>
+                  <span style={{ width: 82, flexShrink: 0 }}>{target}</span>
+                  <span style={{ width: 58, flexShrink: 0 }}>{operator}</span>
+                  {expr}
+                  {removeLine}
+                </div>
+              )}
+              {c && !c.ok && <div role="alert" data-block-error={i} style={{ fontSize: 11.5, color: tk.status.danger, paddingLeft: indent }}>{c.error}</div>}
+              {offer?.line === i && <MakeSliderButton lit={offer.lit} onMake={() => makeSlider(i, offer.lit)} indent={indent} />}
             </div>
           );
         })}
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          {block.lines.length < MAX_LINES && (
-            <Button size="sm" variant="ghost" icon="plus" onClick={() => update(b => { b.lines.push(emptyLine(b.lines.length === 0 ? 'uv.x' : b.lines.length === 1 ? 'uv.y' : 'uv')); })}>Line</Button>
-          )}
-          <BuilderNote style={{ fontSize: 11 }}>x, y = uv.x, uv.y as they are now · t = time{block.loop ? ' · uv0 = the point before the block · fi, k, n = the pass' : ''} · whole numbers are fine</BuilderNote>
-        </div>
+        {phone ? (
+          <div data-line-add-layout="stacked" style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 2 }}>
+            {block.lines.length < MAX_LINES && <Button icon="plus" style={{ width: '100%', height: 44, justifyContent: 'center' }} onClick={addLine}>Line</Button>}
+            <BuilderNote style={{ fontSize: 11.5 }}>{lineHint}</BuilderNote>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            {block.lines.length < MAX_LINES && (
+              <Button size="sm" variant="ghost" icon="plus" onClick={addLine}>Line</Button>
+            )}
+            <BuilderNote style={{ fontSize: 11 }}>{lineHint}</BuilderNote>
+          </div>
+        )}
       </div>
       {chk.errors.map((e, i) => <div key={i} role="alert" style={{ fontSize: 11.5, color: tk.status.danger }}>{e}</div>)}
       {block.params.map((p, j) => (
@@ -229,30 +261,34 @@ export function CombineEditor({ spec, update, idBase }: { spec: CombineSpec; upd
   const [picking, setPicking] = useState<'a' | 'b' | null>(null);
   const [saving, setSaving] = useState(false);
   const mode = COMBINE_MODES.find(m => m.mode === spec.mode) ?? COMBINE_MODES[0];
+  // A phone: the four modes as one even segmented row, and Save combine… a full-width button after both blocks.
+  const phone = useContext(PhoneStudioContext);
+  const save = saving
+    ? <SaveBlockForm src={{ combine: spec }} onCancel={() => setSaving(false)} onSaved={name => { update(c => { c.my = name; }); setSaving(false); }} />
+    : <Button size={phone ? 'md' : 'sm'} variant={phone ? 'secondary' : 'ghost'} icon="save" data-save-combine={idBase} style={phone ? { width: '100%', height: 44 } : { alignSelf: 'flex-start' }} onClick={() => setSaving(true)}
+        title="Save the whole combine (both blocks and how they join) to My blocks">{spec.my ? `Save changes to “${spec.my}”…` : 'Save combine…'}</Button>;
   return (
     <div data-combine-editor={idBase} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <div role="radiogroup" aria-label="How to combine" style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+      <div role="radiogroup" aria-label="How to combine" data-combine-modes={phone ? 'segmented' : 'chips'}
+        style={phone ? { display: 'grid', gridTemplateColumns: `repeat(${COMBINE_MODES.length}, minmax(0, 1fr))`, gap: 2, padding: 2, borderRadius: radius.control, background: tk.bg.field } : { display: 'flex', gap: 4, flexWrap: 'wrap' }}>
         {COMBINE_MODES.map(m => (
           <button key={m.mode} type="button" role="radio" aria-checked={spec.mode === m.mode} title={m.blurb} onClick={() => update(c => { c.mode = m.mode as CombineMode; })}
-            style={{ padding: '5px 10px', border: 0, borderRadius: radius.control, cursor: 'pointer', font: `600 12px ${fontFamily.ui}`,
-              background: spec.mode === m.mode ? tk.bg.selected : tk.bg.field, color: spec.mode === m.mode ? tk.accent.text : tk.text.secondary, boxShadow: spec.mode === m.mode ? `inset 0 0 0 1px ${tk.accent.base}` : 'none' }}>
+            style={{ padding: phone ? '0 4px' : '5px 10px', minHeight: phone ? 40 : undefined, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', border: 0, borderRadius: radius.control, cursor: 'pointer', font: `600 ${phone ? 12.5 : 12}px ${fontFamily.ui}`,
+              background: spec.mode === m.mode ? (phone ? tk.bg.panel : tk.bg.selected) : (phone ? 'transparent' : tk.bg.field), color: spec.mode === m.mode ? tk.accent.text : tk.text.secondary, boxShadow: spec.mode === m.mode ? `inset 0 0 0 1px ${tk.accent.base}` : 'none' }}>
             {m.label}
           </button>
         ))}
       </div>
       <BuilderNote>{mode.blurb} <code style={{ fontFamily: fontFamily.mono }}>uv = {mode.glsl}</code></BuilderNote>
-      {saving
-        ? <SaveBlockForm src={{ combine: spec }} onCancel={() => setSaving(false)} onSaved={name => { update(c => { c.my = name; }); setSaving(false); }} />
-        : <Button size="sm" variant="ghost" icon="save" data-save-combine={idBase} style={{ alignSelf: 'flex-start' }} onClick={() => setSaving(true)}
-            title="Save the whole combine (both blocks and how they join) to My blocks">{spec.my ? `Save changes to “${spec.my}”…` : 'Save combine…'}</Button>}
+      {!phone && save}
       {spec.mode === 'blend' && <NumRow label="Amount" hint="0 is all A, 1 is all B." value={spec.amount} min={0} max={1} onChange={v => update(c => { c.amount = v; }, `${idBase}:amount`)} />}
       {(['a', 'b'] as const).map(side => {
         const b = spec[side];
         return (
-          <div key={side} data-combine-side={side} style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: 10, borderRadius: radius.md, boxShadow: `inset 0 0 0 1px ${tk.border.subtle}` }}>
+          <div key={side} data-combine-side={side} style={{ display: 'flex', flexDirection: 'column', gap: phone ? 8 : 6, padding: 10, borderRadius: radius.md, boxShadow: `inset 0 0 0 1px ${tk.border.subtle}` }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <WarpCanvas map={() => blockMap(b)} k={JSON.stringify(b)} size={44} />
-              <b style={{ fontSize: 12.5, flex: 1 }}>{side.toUpperCase()} · {b.name || 'Block'}</b>
+              <b style={{ fontSize: phone ? 13 : 12.5, flex: 1, minWidth: 0 }}>{side.toUpperCase()} · {b.name || 'Block'}</b>
               <Button size="sm" variant={picking === side ? 'secondary' : 'ghost'} icon="presets" onClick={() => setPicking(picking === side ? null : side)}>From library</Button>
             </div>
             {picking === side && <BlockLibrary compact onPick={nb => { update(c => { c[side] = nb; }); setPicking(null); }} />}
@@ -260,6 +296,7 @@ export function CombineEditor({ spec, update, idBase }: { spec: CombineSpec; upd
           </div>
         );
       })}
+      {phone && save}
     </div>
   );
 }

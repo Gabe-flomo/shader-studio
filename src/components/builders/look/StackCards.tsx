@@ -4,7 +4,8 @@
  * change the order, switch it off, open it for its settings. Each number is the builders' slider,
  * so right-click offers the Play menu of the node param it builds (once built).
  */
-import { useState } from 'react';
+import { useContext, useState } from 'react';
+import { PhoneStudioContext, addButtonStyle, addButtonsRow } from '../studio/PhoneStudio';
 import { useTokens } from '../../../theme/themeStore';
 import { alpha, radius } from '../../../theme/tokens';
 import { Button, IconButton } from '../../ui/Button';
@@ -162,15 +163,16 @@ function StackCard({ it, def, index, count, props }: { it: StackItem; def: Stack
 }
 
 export function StackCards(props: StackCardsProps) {
+  const phone = useContext(PhoneStudioContext);
   const tk = useTokens();
   const byKind = Object.fromEntries(props.defs.map(d => [d.kind, d]));
   const [endOver, setEndOver] = useState(false);
   const mime = `text/x-look-${props.name}`;
   return (
     <div data-look-stack={props.name} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+      <div style={addButtonsRow(phone)}>
         {stackOffered(props.defs).map(d => (
-          <Button key={d.kind} size="sm" variant="ghost" icon="plus" title={d.blurb} data-look-add={d.kind}
+          <Button key={d.kind} size="sm" variant="ghost" icon="plus" title={d.blurb} data-look-add={d.kind} style={addButtonStyle(phone)}
             onClick={() => props.onEdit(items => [...items, newStackItem(d, nextStackId(items, props.idPrefix))])}>{d.label}</Button>
         ))}
       </div>
