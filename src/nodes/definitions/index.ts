@@ -312,6 +312,7 @@ import { RadialFastBlurNode, RadialFastBlurStageNode } from './radialFastBlur';
 import { ChromaLensNode } from './chromaLens';
 import { DeepGlowTextureStageNode, GlowTextureNode } from './deepGlow';
 import { GridRulesNode, GridRulesStepNode, MouseButtonNode } from './gridRules';
+import { BrushNode } from './brush';
 import { ShaderTextureNode, ShaderTextureOutputNode } from './shaderTexture';
 import { PassNode, PassOutputNode, SampleTextureNode, EdgesTextureNode, BlurTextureNode, DisplaceTextureNode, DisplacementMapNode, JumpFloodTextureNode } from './passes';
 import { TextureMaskNode, TextureLevelsNode, TextureFlowNode, TextureNeighboursNode, TextureChangeNode, DistanceShapeNode, TextureFadeNode, ReadTextureNode } from './textureTools';
@@ -592,6 +593,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   gridRules: GridRulesNode,
   gridRulesStep: GridRulesStepNode,
   mouseButton: MouseButtonNode,
+  brush: BrushNode,
   sampleTexture: SampleTextureNode,
   edgesTexture: EdgesTextureNode,
   blurTexture: BlurTextureNode,

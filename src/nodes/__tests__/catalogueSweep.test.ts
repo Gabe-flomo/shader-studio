@@ -440,6 +440,30 @@ describe('C1: Multi-Light has a Background and a sun by Azimuth / Elevation', ()
   });
 });
 
+describe('C2: Brush, for painting into grid simulations', () => {
+  it('is the hand-built chain\'s maths: (1 − smoothstep(−h, h, |p − mouse × Scale| − Radius)) × Value × button', () => {
+    const nd = load([saved('brush', 'b', { radius: 4, softness: 1.5, value: 1, scale: 0.125 }, { position: null }, ['mask'])])[0];
+    const { code } = getNodeDefinition('brush')!.generateGLSL(nd, { position: 'P' });
+    expect(code).toContain('length(P - u_mouse * 0.125) - 4.0');
+    expect(code).toContain('* u_mousebtn;');
+    const env = (btn: number) => ({ P: [10, 10], u_mouse: [80, 80], u_mousebtn: btn, smoothstep: (e0: Val, e1: Val, x: Val) => { const t = Math.min(1, Math.max(0, ((x as number) - (e0 as number)) / ((e1 as number) - (e0 as number)))); return t * t * (3 - 2 * t); } });
+    expect(runGlsl(code, env(1)).b_mask).toBeCloseTo(1, 12);
+    expect(runGlsl(code, env(0)).b_mask).toBe(0);
+    const always = getNodeDefinition('brush')!.generateGLSL({ ...nd, params: { ...nd.params, paint: 'always' } }, { position: 'P' }).code;
+    expect(always).not.toContain('u_mousebtn');
+  });
+
+  it('the 8 grid examples paint with a Brush (no Mouse → Circle SDF → Compare chain, no Play mapping for the button)', () => {
+    const keys = Object.keys(EXAMPLE_GRAPHS).filter(k => typesOf(EXAMPLE_GRAPHS[k].nodes).includes('brush'));
+    expect(keys.length).toBe(8);
+    for (const k of keys) {
+      expect(EXAMPLE_GRAPHS[k].nodes.some(n => n.id === 'brushDist' || n.id === 'brushOn'), k).toBe(false);
+      const r = compileGraph({ nodes: migrateLoadedNodes(EXAMPLE_GRAPHS[k].nodes) });
+      expect(r.errors ?? [], k).toEqual([]);
+    }
+  });
+});
+
 describe('Radiance Cascades 2D is retired (too slow)', () => {
   it('stays registered, is offered nowhere, and nothing uses it', () => {
     expect(NODE_REGISTRY.radianceCascadesApprox).toBeTruthy();

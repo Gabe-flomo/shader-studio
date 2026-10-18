@@ -18,7 +18,7 @@ import { GR_STACK_GLSL } from '../../gridRules/stack';
 
 /** The pointer's button (1 while down over the picture). Declared only by the nodes that read it. */
 export const MOUSE_BUTTON_UNIFORM = 'u_mousebtn';
-const BUTTON_DECL = `uniform float ${MOUSE_BUTTON_UNIFORM};`;
+export const BUTTON_DECL = `uniform float ${MOUSE_BUTTON_UNIFORM};`;
 
 const sel = (label: string, options: Array<[string, string]>, hint: string, section?: string): ParamDef =>
   ({ label, type: 'select', options: options.map(([value, l]) => ({ value, label: l })), hint, ...(section ? { section } : {}) });

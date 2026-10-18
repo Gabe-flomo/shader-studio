@@ -248,3 +248,11 @@ the same) and **Background** (*Black* as before, or a **Background colour** wher
 (`finish` / `finishGlow` in the 4D example files) drops its Make Vec3, Colour and Select: Multi-Light at Azimuth
 50.7°, Elevation 50.1° (the old (0.55, 0.85, 0.45), normalised) with its own background. Examples changed: the 13 4D
 examples that use it.
+
+## Brush
+
+The eight grid simulations (Life, Life-like, Brain, Water, Heat, Fire, Sand, Wire) each painted with the same five
+nodes: Mouse (Pixels) → Multiply by the Pass's scale → Circle SDF round it → Compare (< 0) → Multiply by a Constant that
+Play mapped to the mouse button. **Brush** (Inputs & media, `definitions/brush.ts`) is that chain in one node: Radius,
+Softness, Value, Scale (the Pass's) and Paint (*While pressed* reads the mouse button itself, so it paints in the editor
+too; *Always*). The eight examples use it, and their "(mouse button)" Play controls and mappings are gone.
