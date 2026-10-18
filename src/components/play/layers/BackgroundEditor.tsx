@@ -177,7 +177,7 @@ export function BackgroundEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }
     { label: 'Sketch', icon: 'code', hint: 'JavaScript on a 2D canvas', onSelect: () => add([{ id: newSourceId(), kind: 'script', name: 'Sketch', code: DEFAULT_BACKGROUND_SKETCH }]) },
     { label: '3D sketch', icon: 'cube', hint: 'p5-style 3D on WebGL', onSelect: () => add([{ id: newSourceId(), kind: 'script', name: '3D sketch', code: DEFAULT_SCRIPT_3D, mode: '3d' }]) },
     { label: 'Image from your backgrounds…', icon: 'overlay', hint: 'Captured from a graph, or imported, in the Library', onSelect: () => { void fromLibrary(); } },
-    { label: 'Image file…', icon: 'import', hint: 'PNG, JPG, WebP or SVG', onSelect: () => askFile('image') },
+    { label: 'Image file…', icon: 'folder', hint: 'PNG, JPG, WebP or SVG', onSelect: () => askFile('image') },
     { label: 'Video…', icon: 'play', hint: 'MP4, WebM or MOV', onSelect: () => askFile('video') },
     ...(linkedOk ? [
       { label: 'Image from a linked folder…', icon: 'link', hint: 'A picture on disk, kept in the setup like a file you pick', onSelect: () => { void fromLinked('image'); } },
@@ -367,7 +367,7 @@ function SourceSettings({ it, tk, busy, onSet, onFile, onLinked, onLibrary, onGr
           {row('Image', (
             <>
               <Button size="sm" icon="overlay" disabled={busy} onClick={onLibrary}>From your backgrounds…</Button>
-              <Button size="sm" variant="ghost" icon="import" disabled={busy} onClick={() => onFile('image')}>{busy ? 'Loading…' : 'Replace with a file'}</Button>
+              <Button size="sm" variant="ghost" icon="folder" disabled={busy} onClick={() => onFile('image')}>{busy ? 'Loading…' : 'Replace with a file'}</Button>
               {onLinked && <Button size="sm" variant="ghost" icon="link" disabled={busy} onClick={() => onLinked('image')}>Linked folder…</Button>}
             </>
           ))}
@@ -382,7 +382,7 @@ function SourceSettings({ it, tk, busy, onSet, onFile, onLinked, onLibrary, onGr
       body = (
         <>
           {row('File', <>
-            <Button size="sm" icon="import" disabled={busy} onClick={() => onFile('video')}>{busy ? 'Loading…' : missing && !linked ? 'Load it again' : 'Replace video'}</Button>
+            <Button size="sm" icon="folder" disabled={busy} onClick={() => onFile('video')}>{busy ? 'Loading…' : missing && !linked ? 'Load it again' : 'Replace video'}</Button>
             {linked && missing && linkedProblem(it.libraryId!) && <LinkedRelinkButton id={it.libraryId!} filter="video" onRelinked={ref => onLinked?.('video', ref)} />}
             {onLinked && !(linked && missing) && <Button size="sm" variant="ghost" icon="link" disabled={busy} onClick={() => onLinked('video')}>Linked folder…</Button>}
           </>)}

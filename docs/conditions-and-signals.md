@@ -50,7 +50,7 @@ A missing value (a hand out of view, a deleted layer) is never true, and a cross
 
 ## Signals
 
-A **signal** is one true/false value the setup names, watched every frame (the **Signals** page, ⌘5: add, rename, fire by hand with ▶, delete). It has three views: its **level** (true now), its **rise** (it just became true) and its **fall** (it just became false). What makes it true, on its card:
+A **signal** is one true/false value the setup names, watched every frame (the **Rules** page, ⌘3: add, rename, fire by hand with ▶, delete). It has three views: its **level** (true now), its **rise** (it just became true) and its **fall** (it just became false). What makes it true, on its card:
 
 - **When sent**: true in the frame something sends it (an action's Send a signal, a layer's Born, an increment's step), so a one-frame pulse.
 - **While…**: its own trigger: true while a key is held, a condition is met, a hand is closed, the picture is pressed; a tap (a crossing, an OSC message) is true for its one frame.

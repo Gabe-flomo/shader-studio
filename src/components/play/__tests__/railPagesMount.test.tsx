@@ -131,7 +131,9 @@ describe('the rail’s full-width pages', () => {
     roots.push({ root, el });
     act(() => root.render(<PlayRail />));
     const cats = el.querySelectorAll('[data-rail-category]');
-    expect(Array.from(cats).map(c => c.getAttribute('data-rail-category'))).toEqual(['controls', 'signals', 'layers', 'finish', 'engine']);
+    expect(Array.from(cats).map(c => c.getAttribute('data-rail-category'))).toEqual(['controls', 'layers', 'signals', 'finish', 'engine']);
+    // Each icon carries its name under it (P18).
+    expect(Array.from(cats).map(c => c.querySelector('[data-rail-label]')?.textContent)).toEqual(['Controls', 'Layers', 'Rules', 'Finish', 'Sound']);
     act(() => (el.querySelector('[data-rail-category="layers"]') as HTMLButtonElement).click());
     expect(usePlaySplit.getState().railPage).toBe('layers');
     expect(el.querySelector('[data-popover]')).toBeNull();

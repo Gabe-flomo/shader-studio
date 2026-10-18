@@ -19,6 +19,7 @@ const CHROME_FILES = [
   'src/components/play/PlaySplitArea.tsx',
   'src/components/play/PlayRail.tsx',
   'src/components/play/PlayPage.tsx',
+  'src/components/play/playSetupMenu.tsx',
   'src/components/NodeGraph/NodePalette.tsx',
   'src/components/nodePacks/BuilderShell.tsx',
   'src/components/learn/StartSheet.tsx',
@@ -70,7 +71,7 @@ describe('glossary', () => {
   it('the Play rail uses the glossary’s words', () => {
     const strings = [...RAIL_CATEGORIES.flatMap(c => [c.label, c.description]), ...Object.values(RAIL_PAGES).flatMap(p => [p.label, p.description])];
     expect(strings.flatMap(glossaryProblems)).toEqual([]);
-    expect(RAIL_CATEGORIES.map(c => c.label)).toEqual(['Controls', 'Rules', 'Layers', 'Finish', 'Sound']);
+    expect(RAIL_CATEGORIES.map(c => c.label)).toEqual(['Controls', 'Layers', 'Rules', 'Finish', 'Sound']);
   });
 
   it('the bars, menus and toolbars use the glossary’s words', () => {

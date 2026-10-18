@@ -8,7 +8,6 @@
  * is the same store write a Studio slider makes, and a mapping is a per-frame
  * uniform write on the input bus (lib/playEngine.ts).
  */
-import { offerPlayExport } from '../playfile/exportMenus';
 import { can, openProSheet, requireFeature, useCan, usePlanName } from '../../lib/plan';
 import { sourceNeedsPro, sourceTypeNeedsPro, triggerNeedsPro, proOnlyParts } from '../../play/planGates';
 import { ProBadge, ProLock } from '../account/ProSheet';
@@ -63,7 +62,6 @@ import { Select } from '../ui/Select';
 import { GroupedPicker } from '../ui/GroupedPicker';
 import { HAND_POINT_SECTIONS, sourcePickerSections } from './sourcePickerSections';
 import { NumberInput } from '../NodeGraph/NumberInput';
-import { reportFileResult } from '../shell/reportFileResult';
 import { LayersPanel } from './LayersPanel';
 import { FinishPanel } from './finish/FinishPanel';
 import { NOTES_FOLD_KEY, NotesCard } from './NotesCard';
@@ -87,7 +85,7 @@ import { AudioEnginePanel } from './engine/AudioEnginePanel';
 import { aeRack, aeSlot, aeSlotLabel, parseAuTarget, parseMacroTarget, patchSlot, rackMacros } from '../../types/playAudioEngine';
 import { setMacroValue } from '../../play/rackMacros';
 import { SplitButton } from './PlaySplitArea';
-import { EmbedDialog } from './EmbedDialog';
+import { PlaySetupDialogs, playSetupItems } from './playSetupMenu';
 import { MiniMapper } from './MiniMapper';
 import { wireControlOnly, wireRuleWhen, type MiniMapperTarget } from './miniMapperCore';
 import { LiveAudioChip, MidiStatusChip, OscStatusChip } from './chips';
@@ -103,11 +101,8 @@ import { ColourPad } from './ColourPad';
 import { anyLiveMapped } from './useLiveValues';
 import { useLiveValue, usePolledNumber } from './liveValueStore';
 import { useStage } from './stageStore';
-import { useTakes } from '../../lib/takes';
-import { startOverMenuItem } from '../../play/startOver';
 import { SoloButton, SoloStrip } from './Solo';
 import { GuidesToggle } from './GuidesToggle';
-import { OpenPlayableButton } from './OpenPlayable';
 import { SuggestControlsButton } from './SuggestControlsButton';
 import { MidiFileCard } from './MidiFileCard';
 import { MidiSourceOptions, PadSourceOptions } from './MidiSourceOptions';
@@ -170,8 +165,6 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
   }, [nodes, playControls]);
   const paramBindings = useNodeGraphStore(s => s.paramBindings);
   const updateNodeParams = useNodeGraphStore(s => s.updateNodeParams);
-  const [embedOpen, setEmbedOpen] = useState(false);
-  const importGraphFromFile = useNodeGraphStore(s => s.importGraphFromFile);
   const pageMoreRef = useRef<HTMLSpanElement>(null);
   const [pageMore, setPageMore] = useState<{ x: number; y: number } | null>(null);
 
@@ -261,8 +254,6 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
   const audioFxOk = useCan('play.audioFx');
   const engineOk = useCan('audio.engine');
   const backgroundsOk = useCan('play.backgrounds');
-  const websiteOk = useCan('export.website');
-  const takesOk = useCan('play.takes');
   const plan = usePlanName();
   const lockedParts = useMemo(() => proOnlyParts(play, plan), [play, plan]);
 
@@ -410,6 +401,8 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
   const railPage = useBigPage();
   const bigPage = compact ? null : railPage;
   const splitHost = usePlaySplit(s => s.host);
+  // The split panel is out (desktop): its header's ⋯ has the setup's actions (playSetupMenu.tsx).
+  const setupInPanel = usePlaySplit(s => s.on && s.available && !!s.host) && !compact;
   const splitWide = usePlaySplit(s => s.wide);
   const sidebarGone = usePlaySplit(s => s.sidebar !== 'full') && big !== null;
   // Phones: the page picked from the bottom row (a Layers or Mappings page of its own, or the tab's).
@@ -522,6 +515,13 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
   const addControlButtonEl = (
     <AddControlButton compact={compact} candidates={candidates} layers={layersOk ? layerCandidates : NO_LAYER_CANDIDATES} finish={finishOk ? finishCandidates : NO_LAYER_CANDIDATES} layerById={id => play.layers.find(l => l.id === id)} taken={new Set(play.controls.map(c => c.target))} onAdd={addControl} onAddFinish={addFinishControl} sound={audioFxOk ? soundCandidates : NO_LAYER_CANDIDATES} onAddSound={addSoundControl} onAddAction={addActionControl} onAddNull={addWithNull} />
   );
+  // The setup's actions (Open, Import, Export, website, Clear) sit in the panel's ⋯ when the panel is out; else here.
+  const controlsMoreItems = (close: () => void): MenuItem[] => [
+    { label: play.notes || play.source ? 'Edit notes…' : 'Add notes…', icon: 'comment', disabled: notesEditing, hint: 'What this setup shows, how to play it, and where it comes from', onSelect: () => { close(); setNotesEditing(true); } },
+    // Phones have no preview bar, so Stage is here.
+    ...(compact ? [{ label: 'Stage', icon: 'play' as const, hint: 'The picture and its controls on their own, as people will play with it', onSelect: () => { close(); useStage.getState().open('full'); } }] : []),
+    ...(setupInPanel ? [] : [{ heading: 'Play setup' } as MenuItem, ...playSetupItems({ close, anchor: pageMoreRef.current, sheet: compact })]),
+  ];
   const controlsHeader = <PanelHeader
     title="Controls"
     scroll={compact}
@@ -532,19 +532,14 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
         {/* A phone slides this row sideways: Add control and Suggest come first there, in sight. */}
         {compact && addControlButtonEl}
         {compact && <SuggestControlsButton compact={compact} />}
-        <OpenPlayableButton compact={compact} />
-        <IconButton icon="import" label="Import a play file (a graph with its Play panel and mappings)" onClick={async () => { reportFileResult(await importGraphFromFile(), { failTitle: 'Couldn’t import that file' }); }} />
-        <IconButton icon="export" label="Export a play file: the graph, the panel and the mappings, exactly as they are now (.playfile)" disabled={play.controls.length === 0} onClick={e => offerPlayExport(e.currentTarget)} />
-        {!play.notes && !play.source && !notesEditing && <IconButton icon="comment" label="Add notes: what this setup shows, how to play it, and where it comes from (saved with the graph and in play files)" onClick={() => setNotesEditing(true)} />}
-        <IconButton icon="code" label={`Put it on a website: a player with controls, or the picture as a background, as a snippet or a page${websiteOk ? '' : ' (Pro)'}`} style={websiteOk ? undefined : { opacity: 0.5 }} onClick={() => { if (requireFeature('export.website')) setEmbedOpen(true); }} />
-        <IconButton icon="record" label={`Record a performance: play for up to a minute, watch it back, render it frame by frame${takesOk ? '' : ' (Pro)'}`} style={takesOk ? undefined : { opacity: 0.5 }} onClick={() => useTakes.getState().openPerformance()} />
-        <IconButton icon="play" label="Stage: the picture and its controls on their own, as people will play with it" onClick={() => useStage.getState().open('full')} />
+        {/* Load, Import, Export, Record and Stage live in the top bar and the preview bar; the setup's own
+            actions in the panel's ⋯ (playSetupMenu.tsx). Here: Suggest and Add control, then ⋯ (Notes…). */}
         {!compact && <SuggestControlsButton compact={compact} />}
         {!compact && addControlButtonEl}
         <span ref={pageMoreRef} style={{ display: 'inline-flex' }}>
-          <IconButton icon="more" label="More" onClick={() => { const r = pageMoreRef.current?.getBoundingClientRect(); setPageMore(r ? { x: r.right - 200, y: r.bottom + 4 } : null); }} />
+          <IconButton icon="more" label="More: notes, and the setup" onClick={() => { const r = pageMoreRef.current?.getBoundingClientRect(); setPageMore(r ? { x: r.right - 220, y: r.bottom + 4 } : null); }} />
         </span>
-        {pageMore && <Menu x={pageMore.x} y={pageMore.y} minWidth={200} onClose={() => setPageMore(null)} items={[startOverMenuItem(() => setPageMore(null))]} />}
+        {pageMore && <Menu x={pageMore.x} y={pageMore.y} minWidth={220} title="Controls" onClose={() => setPageMore(null)} items={controlsMoreItems(() => setPageMore(null))} />}
       </>
     )}
   />;
@@ -751,8 +746,9 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       )}
       {missingReaderControls.length > 0 && readerChipDismissed !== missingReaderKey && (
         <div data-reader-chip style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', margin: '4px 0 8px', padding: '6px 8px', borderRadius: radius.md, background: alpha(tk.accent.base, 0.1), color: tk.text.secondary, font: `11.5px/1.4 ${fontFamily.ui}` }}>
-          <span style={{ flex: '1 1 160px', minWidth: 0 }}>{missingReaderControls.length === 1 ? `The reader ${missingReaderControls[0].name} has no control yet.` : `${missingReaderControls.length} audio readers have no controls yet.`} Each reader can be a control here: its live level, to map as Another control or use in conditions.</span>
-          <Button size="sm" variant="primary" onClick={() => update(p => addMissingReaderControls(p, songLabel))} title="A 0–1 control per reader, in a group named after what they listen to">Add controls for {missingReaderControls.length} reader{missingReaderControls.length === 1 ? '' : 's'}</Button>
+          {/* One short line (Play audit P22); what Add does is its tooltip. */}
+          <span data-reader-nudge="" style={{ flex: '1 1 160px', minWidth: 0 }}>{missingReaderControls.length === 1 ? `The audio reader ${missingReaderControls[0].name} isn’t a control yet` : `${missingReaderControls.length} audio readers aren’t controls yet`}</span>
+          <Button size="sm" variant="primary" onClick={() => update(p => addMissingReaderControls(p, songLabel))} title="A 0–1 control per reader (its live level), in a group named after what they listen to: map it onto other controls or use it in rules">Add</Button>
           <IconButton icon="close" label="Not now" size="sm" onClick={() => setReaderChipDismissed(missingReaderKey)} />
         </div>
       )}
@@ -885,7 +881,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       <div ref={rootRef} style={{ position: 'absolute', inset: 0 }}>
         {bigPanel}
         <DetailWindow play={play} onChange={update} renderSource={id => <DetailSource id={id} play={play} update={update} audioNodes={audioNodes} nullLayers={nullLayers} layerRefs={layerRefs} />} />
-        {embedOpen && <EmbedDialog onClose={() => setEmbedOpen(false)} />}
+        <PlaySetupDialogs />
         <AudioReadersHost compact={compact} />
         <LayerContextMenu play={play} onChange={update} />
       </div>
@@ -948,7 +944,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       {compact && <PlayRailBar />}
       {bigPanel}
       <DetailWindow play={play} onChange={update} renderSource={id => <DetailSource id={id} play={play} update={update} audioNodes={audioNodes} nullLayers={nullLayers} layerRefs={layerRefs} />} />
-      {embedOpen && <EmbedDialog onClose={() => setEmbedOpen(false)} />}
+      <PlaySetupDialogs />
       <AudioReadersHost compact={compact} />
       <LayerContextMenu play={play} onChange={update} />
     </div>
@@ -1491,6 +1487,7 @@ function MappingsDrawer({ play, mode, grid = false, pages = false, height, onRes
   const [learnFor, setLearnFor] = useState<string | null>(null);
   const [guideOpen, setGuideOpen] = useState(false);
   const [addMenu, setAddMenu] = useState<{ x: number; y: number } | null>(null);
+  const [srcMore, setSrcMore] = useState<{ x: number; y: number } | null>(null);
   const [noteMap, setNoteMap] = useState(false);
   useEffect(() => {
     if (!learnFor) return;
@@ -1606,7 +1603,8 @@ function MappingsDrawer({ play, mode, grid = false, pages = false, height, onRes
       )}
       {(usesHands(play) || (learnFor && handFeed.getStatus() !== 'unsupported')) && (
         <div style={{ margin: '4px 0 6px', padding: '6px 10px', borderRadius: radius.md, background: tk.bg.field }}>
-          <HandsChip />
+          {/* A setup that reads hands has Enable on the picture (HandsPill): one place for it. */}
+          <HandsChip enable={!usesHands(play)} />
         </div>
       )}
       {learnFor && (
@@ -1654,21 +1652,18 @@ function MappingsDrawer({ play, mode, grid = false, pages = false, height, onRes
         onClick={mode === 'drawer' ? onToggle : undefined}
         extra={open && (
           <>
-            {play.mappings.length > 1 && (
-              <IconButton
-                icon={allCollapsed ? 'chevD' : 'chevU'}
-                label={allCollapsed ? 'Expand all mappings' : 'Collapse all mappings'}
-                onClick={() => usePlayUi.getState().toggleFoldMany(play.mappings.map(m => mappingFoldKey(m.id)), !allCollapsed)}
-              />
-            )}
-            <IconButton icon="info" label="Connect Ableton, a MIDI controller, OSC or live audio: step-by-step" onClick={() => setGuideOpen(true)} />
+            {/* One row (Play audit P15): the guide and expand/collapse-all sit in the ⋯; Learn keeps its width while
+                listening (the strip below says what it's waiting for), so the row doesn't wrap. */}
             <ProLock feature="play.sources" badge={false}><HandsButton /></ProLock>
-            <Button size="sm" icon="spark" variant={learnFor === 'new' ? 'primary' : 'secondary'} disabled={noControls} onClick={() => setLearnFor(l => (l === 'new' ? null : 'new'))}>
-              {learnFor === 'new' ? 'Listening…' : 'Learn'}
+            <Button size="sm" icon="spark" variant={learnFor === 'new' ? 'primary' : 'secondary'} disabled={noControls} aria-pressed={learnFor === 'new'}
+              title={learnFor === 'new' ? 'Listening: move a knob, hit a note or press a key (Esc to cancel)' : 'Learn: move a knob, hit a note or press a key to map it'}
+              onClick={() => setLearnFor(l => (l === 'new' ? null : 'new'))}>
+              Learn
             </Button>
             <Button size="sm" icon="plus" disabled={noControls} onClick={addDefaultMapping}>Add</Button>
-            {mode !== 'drawer' && <Button size="sm" icon="plus" variant="ghost" title="A source that drives nothing yet: random, or pick what it reads; then Map it onto controls" onClick={e => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setAddMenu({ x: r.left, y: r.bottom + 4 }); }}>Source</Button>}
-            {addMenu && <Menu x={addMenu.x} y={addMenu.y} onClose={() => setAddMenu(null)} title="Add a source" items={[
+            {mode !== 'drawer' && <Button size="sm" icon="plus" variant="ghost" title="A source that drives nothing yet: random, or pick what it reads; then Map it onto controls" onClick={e => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setAddMenu({ x: r.right - 280, y: r.bottom + 4 }); }}>Source</Button>}
+            {/* Opens leftwards from the button's right edge: the column sits at the screen's right. */}
+            {addMenu && <Menu x={addMenu.x} y={addMenu.y} minWidth={280} onClose={() => setAddMenu(null)} title="Add a source" items={[
               { heading: 'Random' },
               ...RANDOM_SOURCES.map(r => ({ label: r.label, hint: r.hint, icon: 'dice' as const, onSelect: () => {
                 let id = '';
@@ -1681,6 +1676,14 @@ function MappingsDrawer({ play, mode, grid = false, pages = false, height, onRes
               { label: 'Map 12 notes → 12 targets…', hint: 'C to B onto controls or layers in order; any octave hits the same one', icon: 'piano' as const, onSelect: () => { if (!allSources) { openProSheet('play.sources'); return; } setNoteMap(true); } },
             ]} />}
             {noteMap && <NoteClassMapDialog play={play} onRecord={onRecord} onClose={() => setNoteMap(false)} />}
+            <IconButton icon="more" label="More: connect gear, expand or collapse all" onClick={e => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setSrcMore({ x: r.right - 240, y: r.bottom + 4 }); }} />
+            {srcMore && <Menu x={srcMore.x} y={srcMore.y} minWidth={240} title="Sources" onClose={() => setSrcMore(null)} items={[
+              { label: 'Connect gear…', icon: 'info', hint: 'Ableton, a MIDI controller, OSC or live audio, step by step', onSelect: () => setGuideOpen(true) },
+              ...(play.mappings.length > 1 ? [{
+                label: allCollapsed ? 'Expand all mappings' : 'Collapse all mappings', icon: allCollapsed ? 'chevD' as const : 'chevU' as const,
+                onSelect: () => usePlayUi.getState().toggleFoldMany(play.mappings.map(m => mappingFoldKey(m.id)), !allCollapsed),
+              }] : []),
+            ]} />}
           </>
         )}
       />

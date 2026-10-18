@@ -887,13 +887,13 @@ function App() {
     document.addEventListener('keydown', onKey, true);
     return () => document.removeEventListener('keydown', onKey, true);
   }, [page]);
-  // ⌃1–4 do what ⌘1–4 (railControls/Layers/Finish/Engine, useShortcuts.ts) do: a plain browser tab
-  // claims ⌘1–4 for switching its own tabs before the page ever sees the keydown, so this fixed,
-  // unremappable fallback is the only way those four reach the rail there (App.tsx, not useShortcuts's
-  // customizable map — the same four ids fire either way).
+  // ⌃1–5 do what ⌘1–5 (railControls/Layers/Signals/Finish/Engine, useShortcuts.ts) do: a plain browser tab
+  // claims ⌘1–5 for switching its own tabs before the page ever sees the keydown, so this fixed,
+  // unremappable fallback is the only way those five reach the rail there (App.tsx, not useShortcuts's
+  // customizable map — the same five ids fire either way). The order is the rail's, top to bottom.
   useEffect(() => {
     if (page !== 'play') return;
-    const CTRL_RAIL_CATS = { '1': 'controls', '2': 'layers', '3': 'finish', '4': 'engine', '5': 'signals' } as const;
+    const CTRL_RAIL_CATS = { '1': 'controls', '2': 'layers', '3': 'signals', '4': 'finish', '5': 'engine' } as const;
     const onKey = (e: KeyboardEvent) => {
       if (!e.ctrlKey || e.metaKey || e.shiftKey || e.altKey || isTyping(e.target)) return;
       const cat = CTRL_RAIL_CATS[e.key as keyof typeof CTRL_RAIL_CATS];

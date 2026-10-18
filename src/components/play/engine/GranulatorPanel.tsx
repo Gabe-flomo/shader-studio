@@ -15,6 +15,7 @@ import { Button, IconButton } from '../../ui/Button';
 import { Segmented, Toggle } from '../../ui/Choice';
 import { Select } from '../../ui/Select';
 import { RulerSlider } from '../../ui/RulerSlider';
+import { isCountRange } from '../../ui/rulerMath';
 import { LogRulerSlider } from '../../ui/LogRulerSlider';
 import { toast } from '../../ui/toastStore';
 import { GR_FROM_LINKS_MAX, GR_FROM_PROPS, GR_FROM_PROP_NAMES, GR_FROM_TARGETS, GR_MODES, GR_SYNTHS, GR_SYNTH_NAMES, grFromDefaults, grGrainOpacity, grNewStats, grParam, grSpectrumImage, grSummary, type GrParam } from '../../../play/kit/granulator.js';
@@ -216,7 +217,7 @@ export function ParamRow({ p, value, touch, exposed, onSet, onExpose, soft }: { 
       ) : p.log ? (
         <LogSlider p={p} value={value} onSet={onSet} />
       ) : (
-        <RulerSlider value={value} min={p.min} max={p.max} step={p.step || (p.max - p.min) / 1000} defaultValue={p.value} hard={!soft} onChange={onSet} ariaLabel={p.name} touch={touch} integer={p.step === 1} />
+        <RulerSlider value={value} min={p.min} max={p.max} step={p.step || (p.max - p.min) / 1000} defaultValue={p.value} hard={!soft} onChange={onSet} ariaLabel={p.name} touch={touch} integer={isCountRange(p.step, p.min, p.max)} />
       )}
       <IconButton icon={exposed ? 'check' : 'plus'} size="sm" active={exposed} disabled={exposed} label={exposed ? 'Already a control' : `Make ${p.name} a control, to map the mouse, audio, MIDI or an LFO onto it`} onClick={onExpose} />
     </div>
@@ -284,7 +285,7 @@ function SampleRow({ rack, slot, play, onChange }: { rack: AeRack; slot: AeSlot;
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
         <span style={{ ...labelStyle(tk), width: 44 }}>Sample</span>
         <Select ariaLabel="The granulator’s sample" value={current} options={options} height={28} style={{ flex: '1 1 170px', minWidth: 0 }} onChange={pick} />
-        <Button size="sm" variant="ghost" icon="import" disabled={busy} onClick={() => fileRef.current?.click()} title="Upload a sound: it goes into the Library’s Sounds">{busy ? 'Saving…' : 'Upload…'}</Button>
+        <Button size="sm" variant="ghost" icon="folder" disabled={busy} onClick={() => fileRef.current?.click()} title="Upload a sound: it goes into the Library’s Sounds">{busy ? 'Saving…' : 'Upload…'}</Button>
         <LinkedPickButton filter="audio" label="Linked folder…" disabled={busy} onPick={(ref, e) => setSample({ sampleId: ref, name: e.name })} />
         {status === 'missing' && linked && <LinkedRelinkButton id={current} filter="audio" onRelinked={ref => setSample({ sampleId: ref, name: ref.split('/').pop() ?? slot.sample?.name ?? 'Sample' })} />}
         <input ref={fileRef} type="file" accept={audioAccept()} style={{ display: 'none' }} onChange={e => void upload(e)} />

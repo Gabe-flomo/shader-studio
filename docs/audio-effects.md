@@ -1,6 +1,6 @@
 # Audio effects
 
-Built-in effects on the app's sound, as ordered chains: **Filter**, **Echo**, **Reverb**, **Distortion** and **Compressor**. They live in the Play page's **Finish** tab, under **Sound** (the picture's stack is under **Picture**). The example is **Audio effects** in the Play folder's Finish group.
+Built-in effects on the app's sound, as ordered chains: **Filter**, **Echo**, **Reverb**, **Distortion** and **Compressor**. They live on the Play page's **Sound → Effects** tab (beside **Arrangement**; until 2026-10-18 this tab was also called Sound). The example is **Audio effects** in the Play folder's Finish group.
 
 ## Where the chains sit
 
@@ -33,6 +33,10 @@ Web Audio contexts are separate, so the master chain is built once per context: 
 | --- | --- | --- |
 | Filter | cutoff (Hz), resonance (Q; 0.71 flat), LFO rate (Hz), LFO depth (octaves) | low-pass, high-pass, band-pass, notch |
 | Echo | time (ms), tempo (BPM), feedback, tone (low-pass in the loop), mix | sync (off, 1/1 … 1/16, dotted, triplets), ping-pong |
+
+**A synced Echo follows the setup's tempo** (`play/echoTempo.ts`): with Sync on a note value, its Tempo isn't shown; the card says "at 120 BPM", and the tempo is the arrangement's BPM (Sound → Arrangement), else the Clock source's, else 120. It is written into the effect's own `bpm` whenever the effects or the arrangement's tempo change, so playback, renders and website exports (which read `bpm`) all agree.
+
+**Sliders.** A frequency over decades (Filter cutoff, Echo and Distortion tone: unit Hz, `max / min ≥ 50`) runs on a log ruler (`LogRulerSlider`); only a small whole-number range (Bits, Downsample) gets the count track (`isCountRange` in `ui/rulerMath.ts`). Before, every step-1 number drew a count track, a solid grey bar for 20–20000 Hz. Labels wrap onto two lines rather than cutting off.
 | Reverb | size, decay (s, RT60), pre-delay (ms), damping, mix | room, hall, plate |
 | Distortion | drive (0–36 dB), tone, bits, downsample, mix, output (dB) | soft (tanh), hard clip, wavefold, tube (asymmetric), bitcrush |
 | Compressor | threshold, ratio, knee, attack (ms), release (ms), makeup (dB) | — |
@@ -49,7 +53,7 @@ The numbers are offered wherever other targets are: a reading's **Map…** menu 
 
 ## Readers: after or before
 
-**Readers hear** (`audioFx.analyse`, default after): the analyser each sound already had (the audio readers, audio layers, Audio Input uniforms) taps the chain's output, or with **Before** its input. The master chain has no analyser of its own, except on the test loop, which is a single sound.
+**Readers hear** (`audioFx.analyse`, default after), in the Effects tab's ⋯ (After the effects / Before the effects; a line at the top says when the readers hear the dry sound): the analyser each sound already had (the audio readers, audio layers, Audio Input uniforms) taps the chain's output, or with **Before** its input. The master chain has no analyser of its own, except on the test loop, which is a single sound.
 
 ## Recordings, renders and websites
 

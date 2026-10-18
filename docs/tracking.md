@@ -18,7 +18,7 @@ Each tracker can **track the camera or a Video layer** (its settings' **Track**)
 
 ## Turning it on
 
-A setup that reads hands shows **Enable hand tracking** on the picture, and a **Hands** status in the mappings drawer, on a hand trigger and on a null that follows a hand:
+A setup that reads hands shows **Enable hand tracking** on the picture, and a **Hands** status in the Sources column, on a hand trigger and on a null that follows a hand. The picture's button is the one way to turn it on there (Play audit P2, 2026-10-18): the Sources status and a hand trigger's status show the state, the eye and Stop, but not a second and third Enable. Where the setup doesn't read hands yet (Learn, the Sources header's hand button, a Camera layer), the status keeps its own **Enable**.
 
 | Status | Means |
 |---|---|

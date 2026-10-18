@@ -49,7 +49,7 @@ export interface RackPreset {
   /** The rack, without its wiring (see the file's comment). Its values are in its slots' `params`. */
   rack: AeRack;
   controls: RackPresetControl[];
-  /** A Granulator's Sound effects (its `rack:<id>` chain, Finish → Sound). */
+  /** A Granulator's Sound effects (its `rack:<id>` chain, Sound → Effects). */
   soundFx?: AudioFxChain;
   /** The Listener sat on this rack, after `at` effects (absent: after the chain). */
   listener?: { at?: number };
@@ -248,7 +248,7 @@ function freshChain(c: AudioFxChain): AudioFxChain {
 
 /**
  * The preset's Sound effects (a Granulator's chain) added to the end of
- * Finish → Sound's master chain. Audio Unit effects run in the engine and
+ * Sound → Effects' master chain. Audio Unit effects run in the engine and
  * have no web version, so they don't come; null when the preset has no
  * Sound effects.
  */

@@ -2310,13 +2310,13 @@ Holding **M** turns Datamosh's **Mosh** on: nothing heals while it's held.
     ],
     notes: `**What it shows.** A **Drum pads** layer: sixteen pads, each playing a sound Simpler-style, with the sound feeding audio readers that drive the picture. The kick pulses the glow; the hats throw sparks. Nothing plays by itself: you play it.
 
-**How it's built.** The pads hold generated drums (made when the example opens, so no audio files come with it): a kick, a snare, closed and open hats in the same **choke** group (a closed hat cuts the open one), a clap, toms, a rim and a cowbell, then variations: a lower kick (Pitch −5), a higher tom, a **reversed** snare and a looping **gate** clap (it plays while held). The layer's sound goes through its own effect chain (Finish → Sound) to the master. The audio readers listen to it (**Listen to: Drum pads · Drums**): **Kick** at 60 Hz drives the Pulse, **Hats** at 8 kHz fire the Sparks burst. Mouse Y moves the kick's pitch (a mapping on **Drums · Kick pitch**, the layer property \`pad1_pitch\`).
+**How it's built.** The pads hold generated drums (made when the example opens, so no audio files come with it): a kick, a snare, closed and open hats in the same **choke** group (a closed hat cuts the open one), a clap, toms, a rim and a cowbell, then variations: a lower kick (Pitch −5), a higher tom, a **reversed** snare and a looping **gate** clap (it plays while held). The layer's sound goes through its own effect chain (Sound → Effects) to the master. The audio readers listen to it (**Listen to: Drum pads · Drums**): **Kick** at 60 Hz drives the Pulse, **Hats** at 8 kHz fire the Sparks burst. Mouse Y moves the kick's pitch (a mapping on **Drums · Kick pitch**, the layer property \`pad1_pitch\`).
 
 **Try this.**
 • Press Z X C V, A S D F, Q W E R: pads 1–12 (1 2 3 4 are pads 13–16). Space plays the snare through an action (**Do: Play pad**).
 • Click pads on the layer card (higher on a pad is harder), or play MIDI notes 36–51 (a drum rack's), or a pad grid's lower-left 4 × 4.
 • Select a pad and drag its waveform's edges, try Reverse, Gate and Loop, or drop a sound file of your own on it.
-• Add a Reverb to the Drums chain in Finish → Sound.
+• Add a Reverb to the Drums chain in Sound → Effects.
 • Record a take and render it: every hit lands in the video's sound at the moment you played it.`,
   })),
   ex('granulator', glowGraph({ radius: 0.12, falloff: 14, tint: [0.45, 0.7, 1] }), play({
@@ -2387,7 +2387,7 @@ Holding **M** turns Datamosh's **Mosh** on: nothing heals while it's held.
     ],
     notes: `**What it shows.** A **Granulator**: an Audio engine rack whose instrument plays a sample as a cloud of short grains, up to 64 at once. Its sound feeds audio readers that swell the glow, and its grains ride three nulls across the picture. Move the mouse to play it: X scans through the sample, Y sets the grain size.
 
-**How it's built.** The rack **Granulator** (Engine tab) holds a Granulator in **Cloud** mode, with **Drone** on so it sounds without a key. Its sample is the generated **pad chord** (A minor, slowly swelling), made when the example opens, so no audio file comes with it. Mouse X drives **Position** (\`au:gran:inst::1\`, a control like any Audio Unit parameter) and mouse Y the **Grain size** through an Exp curve. The sound goes through the rack's own Sound chain (Finish → Sound → Granulator: a hall reverb). The readers listen to the rack (**Listen to: Audio engine · Granulator**): **Body** at 320 Hz drives the glow, and **Shine** at 880 Hz follows the chord's top octave. The grains are sensors on the rack: **Grain count**, and grains 1–3's place in the sample (x) and level (y) drive the three nulls.
+**How it's built.** The rack **Granulator** (Engine tab) holds a Granulator in **Cloud** mode, with **Drone** on so it sounds without a key. Its sample is the generated **pad chord** (A minor, slowly swelling), made when the example opens, so no audio file comes with it. Mouse X drives **Position** (\`au:gran:inst::1\`, a control like any Audio Unit parameter) and mouse Y the **Grain size** through an Exp curve. The sound goes through the rack's own Sound chain (Sound → Effects → Granulator: a hall reverb). The readers listen to the rack (**Listen to: Audio engine · Granulator**): **Body** at 320 Hz drives the glow, and **Shine** at 880 Hz follows the chord's top octave. The grains are sensors on the rack: **Grain count**, and grains 1–3's place in the sample (x) and level (y) drive the three nulls.
 
 **Try this.**
 • Click the picture first: the browser starts sound on a click. Mute the master if you only want to watch.
@@ -2435,7 +2435,7 @@ Holding **M** turns Datamosh's **Mosh** on: nothing heals while it's held.
 
 **Try this.**
 • Nothing plays by itself: open **Spectrum** (the Audio readers panel) and press **Play test loop**, then move the mouse left and right.
-• Finish → Sound → Filter: try **High-pass** or **Band-pass**, or give it an **LFO**.
+• Sound → Effects → Filter: try **High-pass** or **Band-pass**, or give it an **LFO**.
 • Add a **Reverb** (Hall) or a **Distortion** (Wavefold, Bitcrush) after the filter, and drag the cards to change the order.
 • Readers hear → **Before**: the glow stops following the filter.
 • Record a take and render it: the render's sound has the sweep as you played it.`,
@@ -2468,7 +2468,7 @@ Holding **M** turns Datamosh's **Mosh** on: nothing heals while it's held.
     mappings: [map('glow', 'radius', { kind: 'reader', readerId: 'hits' }, 0.07, 0.3, { smoothMs: 25 })],
     notes: `**What it shows.** A **MIDI clip** on the Audio engine's tape: four bars of a riff in **A minor pentatonic**, with the tape's **Scale** set to that scale and **Snap to scale** on the rack, so whatever you play on the computer keyboard lands in the scale too. The notes swell the glow through an audio reader.
 
-**How it's built.** One rack, **Tom keys**: a Granulator playing the generated tom (so no audio file comes with it) with a short, plucked envelope, through a hall reverb (Finish → Sound). The tape (Engine tab → Arrangement) holds one clip on its lane; the transport's Scale is **A Minor Pentatonic**, and the rack's **Snap to scale** is Nearest. The **Hits** reader listens to the rack and drives the glow's Radius.
+**How it's built.** One rack, **Tom keys**: a Granulator playing the generated tom (so no audio file comes with it) with a short, plucked envelope, through a hall reverb (Sound → Effects). The tape (Engine tab → Arrangement) holds one clip on its lane; the transport's Scale is **A Minor Pentatonic**, and the rack's **Snap to scale** is Nearest. The **Hits** reader listens to the rack and drives the glow's Radius.
 
 **Try this.**
 • Click the picture first (the browser starts sound on a click), then press **Play** on the transport.

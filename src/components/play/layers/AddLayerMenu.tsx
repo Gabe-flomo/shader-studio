@@ -286,7 +286,8 @@ export function AddLayerMenu({ play, touch, anchorRef, initialSection, onAdd, on
           <Icon name={r.icon} size={15} style={{ color: r.iconColor ?? tk.text.muted, marginTop: 1, flexShrink: 0 }} />
           <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.label}</span>
-            <span style={{ font: `${touch ? 12 : 11.5}px/1.35 ${fontFamily.ui}`, color: tk.text.faint, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{r.hint}</span>
+            {/* One line (its first clause); the whole description is the row's tooltip. */}
+            <span style={{ font: `${touch ? 12 : 11.5}px/1.35 ${fontFamily.ui}`, color: tk.text.faint, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{firstClause(r.hint)}</span>
           </span>
         </button>
         {e && <span style={{ paddingTop: touch ? 2 : 3, paddingRight: 2 }}>{moreButton(`${e.def.name}: folder, name, icon, colour`, ev => setKindMenu({ ...at(ev), entry: e }), touch || on || kindMenu?.entry.def.id === e.def.id)}</span>}
@@ -428,4 +429,11 @@ function DropDown({ anchorRef, rootRef, scrollRef, children }: { anchorRef: RefO
     </div>,
     document.body,
   );
+}
+
+/** A description's first clause, for a one-line hint: up to the first sentence end, colon or semicolon. */
+export function firstClause(text: string | undefined): string {
+  if (!text) return '';
+  const m = /^(.+?)(?:[.:;](?:\s|$)|$)/.exec(text.trim());
+  return (m ? m[1] : text).trim();
 }

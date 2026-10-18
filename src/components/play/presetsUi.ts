@@ -128,10 +128,10 @@ export function applyRackPresetToPlay(preset: RackPreset, replace?: string): voi
   else toast.success(title, { message: r.notes.length ? `Not added: ${r.notes.join('; ')}.` : preset.controls.length ? 'Its rack controls are on the Controls tab.' : 'Play it from MIDI or the computer keyboard.' });
 }
 
-/** A preset's Sound effects on Finish → Sound's master chain. */
+/** A preset's Sound effects on Sound → Effects' master chain. */
 export function presetSoundToMaster(preset: RackPreset): void {
   const next = presetSoundOnMaster(useNodeGraphStore.getState().play, preset);
-  if (!next) { toast.info('No Sound effects in it', { message: 'Audio Unit effects run in the engine and have no Finish → Sound version.' }); return; }
+  if (!next) { toast.info('No Sound effects in it', { message: 'Audio Unit effects run in the engine and have no Sound → Effects version.' }); return; }
   useNodeGraphStore.getState().setPlay(next, { label: `Added “${preset.name}”’s Sound effects` });
-  toast.success(`Added “${preset.name}”’s Sound effects`, { message: 'At the end of Finish → Sound’s master chain.' });
+  toast.success(`Added “${preset.name}”’s Sound effects`, { message: 'At the end of Sound → Effects’ master chain.' });
 }

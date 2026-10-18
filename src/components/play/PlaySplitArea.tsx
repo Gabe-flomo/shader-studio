@@ -25,6 +25,7 @@ import { usePlayUi, type PlayTab } from './playUi';
 import { clampRatio, ratioAt, setAreaMeasure, shownRatio, usePlaySplit, WIDE_PANEL_PX, type SidebarMode, type SplitSide } from './playSplit';
 import { PlayRail, RailPageTabs } from './PlayRail';
 import { categoryDef, categoryOf, RAIL_PAGES } from './railPages';
+import { playSetupItems } from './playSetupMenu';
 
 /** How often the picture follows the divider while it's dragged, in ms. */
 const DRAG_APPLY_MS = 60;
@@ -195,19 +196,21 @@ function SplitPanel() {
   const cat = categoryDef(categoryOf(railPage));
   return (
     <div data-split-panel="" style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: tk.bg.subtle, color: tk.text.primary, font: `12.5px ${fontFamily.ui}` }}>
-      <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px 6px 12px', minHeight: 44, boxSizing: 'border-box', background: tk.bg.panel, borderBottom: `1px solid ${tk.border.default}`, flexWrap: 'wrap' }}>
+      {/* One row at every width: what doesn't fit scrolls or ellipsizes, and the ⋯, Layout and × stay put. */}
+      <div data-split-header="" style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px 6px 12px', minHeight: 44, boxSizing: 'border-box', background: tk.bg.panel, borderBottom: `1px solid ${tk.border.default}`, flexWrap: 'nowrap' }}>
         {rail ? (
           // The category, and its pages as a tab strip when it has more than one.
-          <div data-rail-crumb="" style={{ flex: '1 1 240px', minWidth: 0, display: 'flex', alignItems: 'center', gap: 10, overflow: 'hidden' }}>
+          <div data-rail-crumb="" style={{ flex: '1 1 auto', minWidth: 0, display: 'flex', alignItems: 'center', gap: 10, overflow: 'hidden' }}>
             <span style={{ flexShrink: 0, font: `650 13px ${fontFamily.ui}`, whiteSpace: 'nowrap' }}>{cat.label}</span>
             {cat.pages.length > 1 ? (
               <RailPageTabs def={cat} current={railPage} play={play} onPick={setRailPage} />
             ) : (
-              <span style={{ minWidth: 0, color: tk.text.faint, font: `11.5px ${fontFamily.ui}`, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{page.description}</span>
+              <span title={page.description} style={{ minWidth: 0, color: tk.text.faint, font: `11.5px ${fontFamily.ui}`, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{page.description}</span>
             )}
           </div>
         ) : (
-          <div style={{ flex: '1 1 240px', minWidth: 'min(100%, 380px)', maxWidth: 460 }}>
+          <div data-split-sections="" style={{ flex: '0 1 460px', minWidth: 0, overflowX: 'auto', scrollbarWidth: 'none' }}>
+            <div style={{ minWidth: 380 }}>
             <Segmented<PlayTab>
               fill
               ariaLabel="Panel section"
@@ -221,9 +224,11 @@ function SplitPanel() {
                 { value: 'mappings', label: `Sources${nMappings ? ` · ${nMappings}` : ''}` },
               ]}
             />
+            </div>
           </div>
         )}
         <span style={{ flex: 1 }} />
+        <SetupMenu />
         <LayoutMenu side={side} sidebar={sidebar} setSide={setSide} setSidebar={setSidebar} />
         <IconButton icon="close" size="sm" label="Close the panel: back to the full picture" shortcut={SPLIT_SHORTCUT} onClick={() => usePlaySplit.getState().setOn(false)} />
       </div>
@@ -232,6 +237,21 @@ function SplitPanel() {
         <div ref={bodyRef} style={{ flex: 1, minHeight: 0, minWidth: 0, display: 'flex', flexDirection: 'column', position: 'relative' }} />
       </div>
     </div>
+  );
+}
+
+/** The Play setup's ⋯: Open, Import, Export, Put it on a website, Clear Play setup (playSetupMenu.tsx). */
+function SetupMenu() {
+  const anchor = useRef<HTMLSpanElement>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const close = () => setMenu(null);
+  return (
+    <span ref={anchor} style={{ display: 'inline-flex', flexShrink: 0 }}>
+      <IconButton icon="more" size="sm" label="Play setup: open, import, export, put it on a website, clear" active={!!menu} tooltip={!menu}
+        aria-haspopup="menu" data-play-setup-menu=""
+        onClick={() => { const r = anchor.current?.getBoundingClientRect(); setMenu(menu || !r ? null : { x: r.right - 240, y: r.bottom + 6 }); }} />
+      {menu && <Menu x={menu.x} y={menu.y} minWidth={240} title="Play setup" items={playSetupItems({ close, anchor: anchor.current })} onClose={close} />}
+    </span>
   );
 }
 

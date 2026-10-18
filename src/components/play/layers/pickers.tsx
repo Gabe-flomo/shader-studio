@@ -25,7 +25,7 @@ export function ImagePicker({ src, onPick }: { src: string; onPick: (src: string
     <>
       <input ref={inputRef} type="file" accept="image/*,.svg" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) loadImage(f, 1024, false, false, onPick); e.target.value = ''; }} />
       {src && <img src={src} alt="" style={{ width: 44, height: 26, objectFit: 'cover', borderRadius: 6, boxShadow: `inset 0 0 0 1px ${alpha('#000', 0.12)}` }} />}
-      <Button size="sm" icon="import" onClick={() => inputRef.current?.click()}>{src ? 'Replace' : 'Choose image'}</Button>
+      <Button size="sm" icon="folder" onClick={() => inputRef.current?.click()}>{src ? 'Replace' : 'Choose image'}</Button>
       <LinkedPickButton filter="image" label="Linked…" variant="ghost" onPick={ref => fromLinked(ref, 1024, false, onPick)} />
       {!src && <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>PNG with transparency works best for mattes</span>}
     </>
@@ -38,7 +38,7 @@ export function SpritePicker({ sprite, crop, onPick, onCrop }: { sprite: string;
     <>
       <input ref={inputRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,.svg" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) loadImage(f, 256, true, true, onPick); e.target.value = ''; }} />
       {sprite && <img src={sprite} alt="" style={{ width: 26, height: 26, objectFit: crop ? 'cover' : 'contain', borderRadius: 6, background: 'repeating-conic-gradient(#8884 0 25%, transparent 0 50%) 0 0 / 8px 8px' }} />}
-      <Button size="sm" icon="import" onClick={() => inputRef.current?.click()}>{sprite ? 'Replace' : 'Upload PNG / SVG'}</Button>
+      <Button size="sm" icon="folder" onClick={() => inputRef.current?.click()}>{sprite ? 'Replace' : 'Upload PNG / SVG'}</Button>
       <LinkedPickButton filter="image" label="Linked…" variant="ghost" onPick={ref => fromLinked(ref, 256, true, onPick)} />
       {sprite && <Toggle checked={crop} onChange={onCrop} label="Square crop" />}
     </>

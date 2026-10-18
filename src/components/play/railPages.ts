@@ -54,7 +54,7 @@ export const RAIL_PAGES: Readonly<Record<RailPage, RailPageDef>> = {
   signals: { id: 'signals', category: 'signals', label: 'Rules', description: 'When something happens, what to do: a pinch bursts the sparks' },
   background: { id: 'background', category: 'layers', label: 'Background', description: 'What the picture is under the layers' },
   'finish-picture': { id: 'finish-picture', category: 'finish', label: 'Picture', description: 'Grade, lens, film and time effects over the whole picture' },
-  'finish-sound': { id: 'finish-sound', category: 'engine', label: 'Sound', description: 'Reverb, echo, filter and more on each sound and the master' },
+  'finish-sound': { id: 'finish-sound', category: 'engine', label: 'Effects', description: 'Reverb, echo, filter and more on each sound and the master' },
   'engine-performance': { id: 'engine-performance', category: 'engine', label: 'Arrangement', description: 'Racks of synths and effects, played live' },
   'midi-file': { id: 'midi-file', category: 'controls', label: 'MIDI file', description: 'A MIDI file played as if from a controller' },
   'pad-grid': { id: 'pad-grid', category: 'controls', label: 'Pad grid', description: 'A grid of pads from a controller, read as sources' },
@@ -62,20 +62,21 @@ export const RAIL_PAGES: Readonly<Record<RailPage, RailPageDef>> = {
 
 export const RAIL_CATEGORIES: readonly RailCategoryDef[] = [
   { id: 'controls', label: 'Controls', icon: 'sliders', description: 'The controls people play, and the sources that drive them', pages: ['controls', 'midi-file', 'pad-grid'] },
-  { id: 'signals', label: 'Rules', icon: 'bolt', description: 'When something happens, what to do', pages: ['signals'] },
   { id: 'layers', label: 'Layers', icon: 'layers', description: 'What acts on the picture, and the background', pages: ['layers', 'background'] },
+  { id: 'signals', label: 'Rules', icon: 'bolt', description: 'When something happens, what to do', pages: ['signals'] },
   { id: 'finish', label: 'Finish', icon: 'curve', description: 'Grade, lens, film and time effects over the whole picture', pages: ['finish-picture'] },
   { id: 'engine', label: 'Sound', icon: 'piano', description: 'The Audio engine, and effects on the sound', pages: ['engine-performance', 'finish-sound'] },
 ];
 
 /**
- * Each rail category's keyboard shortcut (⌘1–4; useShortcuts.ts's own
- * `DEFAULT_ACTIONS` strings must match — App.tsx wires these up, and also
- * binds the ⌃ equivalent, since a plain browser tab claims ⌘1–4 for its own
- * tabs before the page ever sees the keydown).
+ * Each rail category's keyboard shortcut, ⌘1–5 in the rail's own order
+ * (top to bottom: Controls, Layers, Rules, Finish, Sound). useShortcuts.ts's
+ * own `DEFAULT_ACTIONS` strings must match — App.tsx wires these up, and also
+ * binds the ⌃ equivalent, since a plain browser tab claims ⌘1–5 for its own
+ * tabs before the page ever sees the keydown.
  */
 export const RAIL_CATEGORY_SHORTCUT: Readonly<Record<RailCategory, string>> = {
-  controls: 'cmd+1', layers: 'cmd+2', finish: 'cmd+3', engine: 'cmd+4', signals: 'cmd+5',
+  controls: 'cmd+1', layers: 'cmd+2', signals: 'cmd+3', finish: 'cmd+4', engine: 'cmd+5',
 };
 
 export const RAIL_PAGE_IDS = Object.keys(RAIL_PAGES) as RailPage[];

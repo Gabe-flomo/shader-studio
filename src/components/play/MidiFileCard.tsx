@@ -56,7 +56,7 @@ export function MidiFileCard() {
     return (
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
         {picker}
-        <Button size="sm" variant="ghost" icon="import" onClick={() => input.current?.click()} title="Its notes and knob moves play on the clock as if a controller sent them. Record the preview for the file's length to get a video in sync with the song.">
+        <Button size="sm" variant="ghost" icon="folder" onClick={() => input.current?.click()} title="Its notes and knob moves play on the clock as if a controller sent them. Record the preview for the file's length to get a video in sync with the song.">
           Play a MIDI file
         </Button>
         <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>A .mid as input, in sync with the clock</span>
@@ -74,7 +74,7 @@ export function MidiFileCard() {
         <Icon name="wave" size={14} style={{ color: tk.accent.base, flexShrink: 0 }} />
         <span style={{ font: `600 12px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{midiFile.name}</span>
         <span style={{ flex: 1 }} />
-        <IconButton icon="import" label="Replace with another MIDI file" size="sm" onClick={() => input.current?.click()} />
+        <IconButton icon="folder" label="Replace with another MIDI file" size="sm" onClick={() => input.current?.click()} />
         <IconButton icon="trash" label="Remove the MIDI file" size="sm" tone="danger" onClick={() => setPlay(r => { const next = { ...r }; delete next.midiFile; return next; })} />
       </div>
       {info && 'error' in info ? (

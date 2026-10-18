@@ -5,7 +5,7 @@ The **Sampler** layer plays samples, after Ableton's Simpler, Sampler and Drum R
 - **Drum view** (Drum Rack): 128 pads, 16 in view, each pad its own sound and settings (a chain), with choke groups.
 - **Keys view** (Sampler): zones across the keyboard and velocity, played at pitch, with Classic, One-shot and Slice modes.
 
-It draws nothing on the picture. Its sound goes through its own effect chain (Finish → Sound, `layer:<id>`) to the master bus, feeds the audio readers (`pads:<id>`), and is mixed into recordings and renders. Add it from **Add layer → Inputs & helpers → Sampler** (layers are Pro). It replaces the **Drum pads** layer: setups made with Drum pads open as a Sampler in its Drum view, sounding the same (see [Migration](#migration-from-drum-pads)). The plan and the Ableton research behind it are in [sampler-plan.md](sampler-plan.md).
+It draws nothing on the picture. Its sound goes through its own effect chain (Sound → Effects, `layer:<id>`) to the master bus, feeds the audio readers (`pads:<id>`), and is mixed into recordings and renders. Add it from **Add layer → Inputs & helpers → Sampler** (layers are Pro). It replaces the **Drum pads** layer: setups made with Drum pads open as a Sampler in its Drum view, sounding the same (see [Migration](#migration-from-drum-pads)). The plan and the Ableton research behind it are in [sampler-plan.md](sampler-plan.md).
 
 ## The editor
 

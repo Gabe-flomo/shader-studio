@@ -23,6 +23,7 @@ import { Button, IconButton } from '../../ui/Button';
 import { Toggle } from '../../ui/Choice';
 import { Select } from '../../ui/Select';
 import { RulerSlider } from '../../ui/RulerSlider';
+import { isCountRange } from '../../ui/rulerMath';
 import { Icon } from '../../ui/Icon';
 import { toast } from '../../ui/toastStore';
 import { askConfirm, askText } from '../../ui/dialogStore';
@@ -258,7 +259,7 @@ export function SendView({ rack, play }: { rack: AeRack; play: PlayRecord }) {
   );
 }
 
-/** A Granulator's Sound chain (`rack:<id>`, Finish → Sound): how many effects, and the way there. */
+/** A Granulator's Sound chain (`rack:<id>`, Sound → Effects): how many effects, and the way there. */
 export function GrainChainRow({ rack, play }: { rack: AeRack; play: PlayRecord }) {
   const tk = useTokens();
   const chain = play.audioFx?.chains[rackChainId(rack.id)];
@@ -270,7 +271,7 @@ export function GrainChainRow({ rack, play }: { rack: AeRack; play: PlayRecord }
       <span style={{ flex: '1 1 140px', color: tk.text.muted, font: `11.5px ${fontFamily.ui}` }}>
         {n ? `${chain!.effects.map(e => AUDIO_FX_EFFECTS[e.kind].label).join(' → ')}${chain!.on ? '' : ' (off)'}` : 'None yet: filter, echo, reverb, distortion, compressor.'}
       </span>
-      <Button size="sm" variant="ghost" icon="sliders" onClick={open} title="Finish → Sound: this rack’s own chain">Sound effects…</Button>
+      <Button size="sm" variant="ghost" icon="sliders" onClick={open} title="Sound → Effects: this rack’s own chain">Sound effects…</Button>
     </div>
   );
 }
@@ -472,7 +473,7 @@ export function Params({ rack, slot, play, onChange, touch, onKeep }: { rack: Ae
               <Select ariaLabel={p.name} value={String(Math.round(v))} height={26} onChange={x => set(p, Number(x))}
                 options={p.values.map((label, i) => ({ value: String(Math.round(p.min) + i), label }))} />
             ) : (
-              <RulerSlider value={v} min={p.min} max={p.max} step={p.step || (p.max - p.min) / 1000} defaultValue={p.value} hard onChange={x => set(p, x)} ariaLabel={p.name} touch={touch} integer={p.step === 1} />
+              <RulerSlider value={v} min={p.min} max={p.max} step={p.step || (p.max - p.min) / 1000} defaultValue={p.value} hard onChange={x => set(p, x)} ariaLabel={p.name} touch={touch} integer={isCountRange(p.step, p.min, p.max)} />
             )}
             <IconButton icon={isExposed ? 'check' : 'plus'} size="sm" active={isExposed} disabled={isExposed} label={isExposed ? 'Already a control' : `Make ${p.name} a control, to map audio, MIDI or an LFO onto it`} onClick={() => expose(p)} />
           </div>

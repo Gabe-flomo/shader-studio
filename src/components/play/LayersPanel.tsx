@@ -76,7 +76,6 @@ import { displaceUsers, matteUsers } from '../../types/playLayers';
 import { dragFileCount, dragHasFiles } from '../../play/layerDrop';
 import { addDroppedLayers, dropLabel } from './dropLayers';
 import { appDropMakers } from './dropMakers';
-import { startOverMenuItem } from '../../play/startOver';
 import { clampLines } from '../ui/textFit';
 
 const KIND = BUILTIN_LAYER;
@@ -532,8 +531,6 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
         </span>
         {pageMore && <Menu x={pageMore.x} y={pageMore.y} minWidth={200} onClose={() => setPageMore(null)} items={[
           { label: 'Save as a set…', icon: 'layers', disabled: !pickedLayerIds().length, hint: picked.length ? `The ${picked.length} picked, with their controls and mappings` : 'The selected layer (⇧/⌘-click to pick more)', onSelect: () => { setPageMore(null); saveSet(); } },
-          'separator',
-          startOverMenuItem(() => setPageMore(null)),
         ]} />}
         {savingSet && <SaveSetDialog play={play} layerIds={savingSet} onClose={saved => { setSavingSet(null); if (saved) clearPicks(); }} />}
       </div>

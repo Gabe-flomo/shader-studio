@@ -66,7 +66,11 @@ function useHandSettings(): [PlayHands, (patch: Partial<PlayHands>) => void] {
   return [hands, set];
 }
 
-export function HandsChip({ settings = true }: { settings?: boolean }) {
+/**
+ * `enable` false: no Enable / Try again here, because the picture's pill (HandsPill) offers it
+ * while the setup reads hands, so it shows in one place on screen (Play audit P2). Stop stays.
+ */
+export function HandsChip({ settings = true, enable = true }: { settings?: boolean; enable?: boolean }) {
   const tk = useTokens();
   const { status, count, paused, progress } = useHands();
   const [hands, set] = useHandSettings();
@@ -95,7 +99,7 @@ export function HandsChip({ settings = true }: { settings?: boolean }) {
           onClick={() => set({ overlay: !hands.overlay })}
         />
       )}
-      {!from.baked && (status === 'off' || status === 'blocked' || status === 'error') && (
+      {enable && !from.baked && (status === 'off' || status === 'blocked' || status === 'error') && (
         <Button size="sm" icon="hand" onClick={() => void handFeed.start()}>{status === 'off' ? 'Enable' : 'Try again'}</Button>
       )}
       {!from.baked && status === 'on' && <Button size="sm" variant="ghost" onClick={() => handFeed.stop()}>Stop</Button>}

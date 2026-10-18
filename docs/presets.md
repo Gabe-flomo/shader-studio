@@ -151,7 +151,7 @@ header) → **Save as preset…**, then a name. `rackPresetFrom` keeps:
   and each target's range and curve; targets on an effect move to the new
   rack's effect ids, targets on a device left out go. A macro with targets
   gets its Play control; mappings onto it don't come (wiring);
-- a Granulator's **Sound effects** (its `rack:<id>` chain, Finish → Sound);
+- a Granulator's **Sound effects** (its `rack:<id>` chain, Sound → Effects);
 - the **Listener**, when the audio readers listen to this rack, and where it
   sits in the chain;
 - MIDI input and channel, volume and colour. (Racks have no pan.)
@@ -180,9 +180,9 @@ browser, Audio Unit devices are kept (heard in the desktop app), as with a
 setup made there. The Listener is placed only when the setup's readers aren't
 listening somewhere already. One undo step.
 
-**As a Finish → Sound chain:** Add track → From a preset… also lists the
+**As a Sound → Effects chain:** Add track → From a preset… also lists the
 presets that have Sound effects (a Granulator's chain) under "Only its Sound
-effects, on Finish → Sound"; picking one appends those effects to the master
+effects, on Sound → Effects"; picking one appends those effects to the master
 chain. Audio Unit effects run in the engine and have no web version, so a
 preset of Audio Units has nothing to give there.
 

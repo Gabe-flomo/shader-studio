@@ -105,6 +105,20 @@ export function valueAfterDrag(start: number, dx: number, unit: number, fine: bo
 export const COUNT_PX_PER_STEP = 14;
 export const COUNT_MAX_MARKS = 96;
 
+/**
+ * Should a whole-number param get the count track (one mark per item)? Only a small range: a
+ * step-1 param over thousands (a filter's 20–20000 Hz, an echo's 1–2000 ms) is a measure, not a
+ * count, and its count track was a solid grey bar.
+ */
+export function isCountRange(step: number | undefined, min: number, max: number): boolean {
+  return step === 1 && max - min <= COUNT_MAX_MARKS;
+}
+
+/** A frequency spanning decades (20 Hz–20 kHz) reads best on a log scale. */
+export function isLogRange(min: number, max: number, unit?: string): boolean {
+  return unit === 'Hz' && min > 0 && max / min >= 50;
+}
+
 /** Count after dragging by `dx` px — right adds items. ⇧ slows it to a third. */
 export function countAfterDrag(start: number, dx: number, fine: boolean): number {
   return start + (dx / COUNT_PX_PER_STEP) * (fine ? 1 / 3 : 1);

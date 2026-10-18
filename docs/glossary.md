@@ -20,12 +20,12 @@ Node labels live in the node definitions; their rules are under "Node labels" be
 | **Import shader** | The top bar button: a `.glsl` file becomes a node in the graph | GLSL (as a button) |
 | **Generated code** | The graph's own GLSL, in the drawer under the Studio canvas (⌘\\) | GLSL code, GLSL output |
 | **Finish** | The graph's one stack of effects over the whole picture (grade, lens, film, time), after the graph. Play → Finish, the Studio's Finish button (phones: ⋯ → Finish…) and a builder's Look → Finish all edit it. Its effects are *Finish effects*, its presets *Finish presets* (the grade's Looks are built-in Finish presets) | Look (for the rail, the stack or its effects), Finish stack (as a preset kind) |
-| **Effects** | Effect nodes in the graph: the node library's Effects, a builder's Effects page, the built-in effect groups in the Library | |
+| **Effects** | Effect nodes in the graph: the node library's Effects, a builder's Effects page, the built-in effect groups in the Library. Also Sound's tab of effects on each sound and the master | |
 | **Look** | Only a section inside one builder or layer editor: how that one thing is drawn | |
 | **Controls** | Play's section of sliders, buttons and pads people play, beside what drives them | Inputs, Mappings (as a section) |
 | **Sources** | What drives a control: a key, a knob, the mouse, a hand, an LFO. The list of them is titled *Sources*. A *mapping* is one source → control row | Inputs, Mappings (as a title) |
 | **Inputs & media** | The node library row of UV, Time, Mouse, Texture, MIDI and data nodes (category `Sources` in the definitions) | Sources (as a node row) |
-| **Sound** | Play's section for the Audio engine (racks, the arrangement) and the effects on the sound | Engine (as a section) |
+| **Sound** | Play's section for the Audio engine. Its tabs: **Arrangement** (racks, the tape) and **Effects** (the effects on each sound and the master) | Engine (as a section), Sound (as its own tab) |
 | **Rules** | Play's When/Do section. A *signal* is one event a rule listens for | Signals (as the section) |
 | **Next** | The one suggestion surface: next moves for the selected node, learned from your graphs | |
 | **App settings** | The app's own preferences, in the top bar's ⋯ menu | |
@@ -41,7 +41,7 @@ Node labels live in the node definitions; their rules are under "Node labels" be
   plotter and the node packs join the shader editor and Convert as tabs of one **Code** page.
 - **Node Builder → Publish node.** The panel publishes the graph (or GLSL) as a node type; "My
   nodes" is already the palette's row of the results, so the panel is named for the action.
-- **Look → Finish.** The rail said *Look*, its title, the ⌘3 label and the code all said
+- **Look → Finish.** The rail said *Look*, its title, the ⌘3 label (now ⌘4) and the code all said
   *Finish*, and "Look" is also a section in every builder. Finish wins because the codebase, the
   shortcut and the docs (`docs/finish-stack.md`) already use it.
 - **One Finish, two layers.** *Effects* are nodes in the graph (and a builder's Effects page adds
@@ -60,8 +60,10 @@ Node labels live in the node definitions; their rules are under "Node labels" be
   word. The node library row is shown as **Inputs & media** (`ROW_LABELS` in
   `components/NodeGraph/libraryRows.ts`); the definitions keep the category id `Sources`.
   "Inputs" alone was avoided for the row because a node's sockets are its inputs.
-- **Engine → Sound.** ⌘4 and the tab strip now say Sound, like the rail. "Audio engine" is still
+- **Engine → Sound.** ⌘5 (⌘4 until 2026-10-18) and the tab strip now say Sound, like the rail. "Audio engine" is still
   the name of the rack system inside it.
+- **Sound's Sound tab → Effects** (2026-10-18). The section was Sound and its effects tab was
+  Sound too. The tab is named for what it holds; in context it can't be mistaken for effect nodes.
 - **Signals → Rules.** Only the shortcut id said Signals (its label already read "Go to Rules").
   "Signal" stays as the word for one event (a layer's *Signals out*, the built-in signals).
 - **colour.** The app's prose already leans British. Chrome strings say colour; node labels are a

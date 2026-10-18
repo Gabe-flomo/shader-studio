@@ -118,13 +118,13 @@ export function VideoEditor({ f, ctx, pictureHidden }: { f: FieldKit; ctx: Edito
             <span style={{ color: tk.text.primary, font: `600 12.5px ${fontFamily.ui}` }}>Pick a video</span>
             <span style={{ color: tk.text.muted, font: `11.5px/1.45 ${fontFamily.ui}` }}>An MP4, WebM or MOV of your own. It stays in this browser’s library, not in the setup. With Sound on, its sound can drive controls through audio readers.</span>
             <span style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              <Button size="sm" variant="primary" icon="import" disabled={busy} onClick={() => fileRef.current?.click()}>{busy ? 'Opening…' : 'Pick a video…'}</Button>
+              <Button size="sm" variant="primary" icon="folder" disabled={busy} onClick={() => fileRef.current?.click()}>{busy ? 'Opening…' : 'Pick a video…'}</Button>
               <LinkedPickButton filter="video" disabled={busy} onPick={(ref, e) => takeLinked(ref, e.name, e.size)} />
             </span>
           </div>
         ) : f.row('File', (
           <>
-            <Button size="sm" icon="import" disabled={busy} onClick={() => fileRef.current?.click()}>{busy ? 'Opening…' : status === 'missing' ? 'Pick it again' : 'Replace'}</Button>
+            <Button size="sm" icon="folder" disabled={busy} onClick={() => fileRef.current?.click()}>{busy ? 'Opening…' : status === 'missing' ? 'Pick it again' : 'Replace'}</Button>
             <Button size="sm" icon="play" disabled={status !== 'ready'} onClick={() => setClipOpen(true)} title="Open the video: trim, segments, speed, loop, crop (the clip editor)">Edit clip…</Button>
             {status === 'missing' ? <LinkedRelinkButton id={l.videoId} filter="video" onRelinked={ref => takeLinked(ref, ref.split('/').pop() ?? l.fileName, l.bytes)} /> : <LinkedPickButton filter="video" label="Linked…" disabled={busy} onPick={(ref, e) => takeLinked(ref, e.name, e.size)} />}
             <span title={l.fileName} style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, flex: 1 }}>
