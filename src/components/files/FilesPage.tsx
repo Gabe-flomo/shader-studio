@@ -374,7 +374,7 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
   const linked = <LinkedFoldersView compact={compact} folderId={linkedId} />;
   const notes = <NotesView inv={inv} compact={compact} onGoTo={n => { void goToNote(n); }} onDelete={n => { deleteNoteWithUndo(n); }} />;
   const entries: HomeEntry[] = [
-    { id: 'library', icon: 'graphs', label: 'Library', sub: 'Graphs, presets, functions, your nodes and shaders: open, rename, export', tint: tk.status.success, onClick: () => show('library') },
+    { id: 'library', icon: 'graphs', label: 'Library', sub: 'Group presets, your nodes, functions, palettes and media, ready to drop on the graph', tint: tk.status.success, onClick: () => show('library') },
     { id: 'browse', icon: 'folder', label: 'Browse', sub: 'Everything saved, as a tree, with sizes', tint: tk.accent.base, onClick: () => open('section:graphs') },
     { id: 'notes', icon: 'comment', label: 'Notes', sub: notesCount ? `${plural(notesCount, 'note')}: Play notes and node comments` : 'No notes yet', count: notesCount, tint: tk.accent.base, onClick: () => show('notes') },
     { id: 'cleanup', icon: 'spark', label: 'Clean up', sub: cleanupCount ? `${plural(cleanupCount, 'suggestion')}: old versions, unused files, duplicates` : 'Nothing to clean up', count: cleanupCount, tint: tk.status.success, onClick: () => show('cleanup') },

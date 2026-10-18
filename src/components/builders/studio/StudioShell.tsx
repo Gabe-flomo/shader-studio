@@ -100,6 +100,8 @@ export interface StudioShellProps {
   nav?: ReactNode;
   inspector?: ReactNode;
   presets?: ReactNode;
+  /** The folded presets strip's one line ("4 built in · 2 yours: …"; UserPresets' PresetsSummary). */
+  presetsSummary?: ReactNode;
   navWidth?: number;
   inspectorWidth?: number;
   /** On a phone: the nav itself as a tab of the bottom bar (its items still become the section tabs), for a nav with more than sections in it. */
@@ -249,11 +251,25 @@ export function StudioShell(p: StudioShellProps) {
             <div data-studio-viewport style={{ flex: 1, minWidth: 0, minHeight: 0, position: 'relative', display: 'flex', flexDirection: 'column' }}>{p.children}</div>
             {p.inspector !== undefined && side('inspector', p.inspector, p.inspectorWidth ?? 344, 'Settings')}
           </div>
-          {p.presets !== undefined && open.presets && (
-            <div data-studio-panel="presets" style={{ flexShrink: 0, borderTop: `1px solid ${tk.border.subtle}`, background: tk.bg.subtle, padding: '10px 12px 12px', overflowX: 'auto' }}>
-              {p.presets}
+          {p.presets !== undefined && (open.presets ? (
+            // Open: a fold button, then the strip (its cards scroll sideways in a StripRow).
+            <div style={{ flexShrink: 0, display: 'flex', alignItems: 'flex-start', minWidth: 0, borderTop: `1px solid ${tk.border.subtle}`, background: tk.bg.subtle }}>
+              <span style={{ flexShrink: 0, padding: '8px 0 0 8px' }}>
+                <IconButton icon="chevD" size="sm" label="Fold the presets" data-studio-presets-fold onClick={() => set('presets', false)} />
+              </span>
+              <div data-studio-panel="presets" style={{ flex: 1, minWidth: 0, padding: '10px 12px 12px 6px', overflowX: 'hidden' }}>
+                {p.presets}
+              </div>
             </div>
-          )}
+          ) : (
+            // Folded: one line saying what is there; click it to open the strip again.
+            <button type="button" data-studio-presets-folded onClick={() => set('presets', true)} title="Show the presets"
+              style={{ flexShrink: 0, height: 36, display: 'flex', alignItems: 'center', gap: 8, padding: '0 14px 0 12px', border: 0, borderTop: `1px solid ${tk.border.subtle}`, background: tk.bg.subtle, cursor: 'pointer', textAlign: 'left', color: tk.text.secondary, font: `12.5px ${fontFamily.ui}`, minWidth: 0 }}>
+              <Icon name="chevR" size={14} style={{ color: tk.text.faint, flexShrink: 0 }} />
+              <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '0.08em', color: tk.text.faint, textTransform: 'uppercase', flexShrink: 0 }}>Presets</span>
+              {p.presetsSummary && <span data-studio-presets-summary style={{ flex: 1, minWidth: 0, color: tk.text.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.presetsSummary}</span>}
+            </button>
+          ))}
         </>}
       </div>
     </div>,
@@ -332,4 +348,46 @@ export function PresetCard({ id, label, hint, src, onClick, active = false }: { 
     </button>
   );
   return hint ? <Tooltip label={label} description={hint} placement="top">{card}</Tooltip> : card;
+}
+
+/**
+ * A presets strip's row of cards: it scrolls sideways, ends with room after its last card, and fades
+ * at an edge while more is past it, so no card ("+ Save this scene", "All…") ever looks cut off.
+ */
+export function StripRow({ children, attrs }: { children: ReactNode; attrs?: Record<string, string> }) {
+  return (
+    <ScrollFade>
+      <div {...attrs} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', width: 'max-content', paddingRight: 24, paddingBottom: 2 }}>{children}</div>
+    </ScrollFade>
+  );
+}
+
+/** A sideways-scrolling box that fades at an edge while more is past it. */
+export function ScrollFade({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [edges, setEdges] = useState({ left: false, right: false });
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const read = () => {
+      const left = el.scrollLeft > 1, right = el.scrollLeft + el.clientWidth < el.scrollWidth - 1;
+      setEdges(e => (e.left === left && e.right === right ? e : { left, right }));
+    };
+    read();
+    el.addEventListener('scroll', read, { passive: true });
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(read) : null;
+    ro?.observe(el);
+    if (el.firstElementChild) ro?.observe(el.firstElementChild);
+    return () => { el.removeEventListener('scroll', read); ro?.disconnect(); };
+  }, []);
+  const fade = 28;
+  const mask = edges.left || edges.right
+    ? `linear-gradient(to right, ${edges.left ? 'transparent' : '#000'} 0, #000 ${edges.left ? fade : 0}px, #000 calc(100% - ${edges.right ? fade : 0}px), ${edges.right ? 'transparent' : '#000'} 100%)`
+    : undefined;
+  return (
+    <div ref={ref} data-scroll-fade={edges.right ? (edges.left ? 'both' : 'right') : edges.left ? 'left' : 'none'}
+      style={{ minWidth: 0, overflowX: 'auto', overflowY: 'hidden', maskImage: mask, WebkitMaskImage: mask }}>
+      {children}
+    </div>
+  );
 }

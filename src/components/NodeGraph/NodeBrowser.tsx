@@ -14,7 +14,7 @@ import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
 import { Button, IconButton } from '../ui/Button';
 import { Icon } from '../ui/Icon';
-import { nodeDragProps, nodeDragStyle, type DropPayload } from './nodeDrop';
+import { AddHint, CapsLabel, CategoryRow as BrowserCategoryRow, Crumb, Pill } from './browserParts';
 import { BuildersSection } from '../builders/BuildersSection';
 import { matchBuilders } from '../../builders/registry';
 import { FLOWS } from '../../structure/stages';
@@ -249,60 +249,6 @@ function NodePreviewCard({ type, onAdd, isFavorite, onToggleFavorite, context, o
   );
 }
 
-// ── Node pill ─────────────────────────────────────────────────────────────────
-function NodePill({
-  label, description, badge,
-  isSelected, isHighlighted,
-  onSingleClick, onDoubleClick,
-  swapMode, btnRef, drag, onDragEnd,
-}: {
-  type: string; label: string; description?: string; badge?: string;
-  isSelected: boolean; isHighlighted: boolean;
-  onSingleClick: () => void; onDoubleClick: () => void;
-  swapMode: boolean;
-  btnRef?: (el: HTMLButtonElement | null) => void;
-  /** Pressing and moving carries the node to the graph (nodeDrop.ts); none when it can't be added by hand. */
-  drag: DropPayload | null;
-  onDragEnd?: () => void;
-}) {
-  const tk = useTokens();
-  const [hovered, setHovered] = useState(false);
-  const on = isSelected || isHighlighted;
-  return (
-    <button
-      ref={btnRef}
-      title={`${description ? `${description}\n\n` : ''}Click to preview · Double-click to ${swapMode ? 'replace' : 'add'}${drag && !swapMode ? ' · or drag it onto the graph' : ''}`}
-      {...nodeDragProps(swapMode ? null : drag, onDragEnd)}
-      onClick={onSingleClick}
-      onDoubleClick={onDoubleClick}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        height: 28, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0 10px', border: 0, borderRadius: radius.md,
-        background: on ? tk.bg.selected : hovered ? tk.bg.hover : tk.bg.field,
-        boxShadow: on ? `inset 0 0 0 1.5px ${tk.accent.base}` : 'none',
-        color: on ? tk.accent.text : tk.text.secondary, font: `${on ? 600 : 500} 12.5px ${fontFamily.ui}`,
-        cursor: swapMode ? 'pointer' : 'grab', ...nodeDragStyle, whiteSpace: 'nowrap',
-        transition: 'background 0.12s, box-shadow 0.12s',
-      }}
-    >
-      {label}
-      {badge && <span style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', color: tk.text.faint, background: tk.bg.hover, borderRadius: radius.sm, padding: '1px 5px' }}>{badge}</span>}
-    </button>
-  );
-}
-
-// ── Caps labels ───────────────────────────────────────────────────────────────
-function CapsLabel({ children, rule = false }: { children: ReactNode; rule?: boolean }) {
-  const tk = useTokens();
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 2px 4px' }}>
-      <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: tk.text.faint }}>{children}</span>
-      {rule && <span style={{ flex: 1, height: 1, background: tk.border.subtle }} />}
-    </div>
-  );
-}
-
 // ── Props ─────────────────────────────────────────────────────────────────────
 interface NodeBrowserProps {
   /** `params`: a row's starting settings for the node (a Transform added from the 3D row is 3D). */
@@ -404,9 +350,9 @@ export function NodeBrowser({
     <>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
         {nodes.map(def => (
-          <NodePill
+          <Pill
             key={def.type}
-            type={def.type} label={def.label} description={def.description} badge={def.badge}
+            label={def.label} description={def.description} badge={def.badge}
             isSelected={previewType === def.type}
             isHighlighted={highlightType === def.type}
             onSingleClick={() => handleNodeClick(def.type)}
@@ -433,14 +379,7 @@ export function NodeBrowser({
     </>
   );
 
-  const crumb = (label: ReactNode, count: number) => (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-      <IconButton icon="chevL" label="Back to categories" size="sm" onClick={() => { setPath([]); setPreviewType(null); }}
-        style={{ background: tk.bg.hover, color: tk.text.secondary }} />
-      <span style={{ flex: 1, minWidth: 0, fontWeight: 600, fontSize: 12.5, color: tk.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
-      <Count n={count} />
-    </div>
-  );
+  const crumb = (label: ReactNode, count: number) => <Crumb label={label} count={count} onBack={() => { setPath([]); setPreviewType(null); }} />;
 
   // ── Compute content ────────────────────────────────────────────────────────
   let innerContent: React.ReactNode;
@@ -597,11 +536,7 @@ export function NodeBrowser({
   const showsPills = !isGlsl && (isSearching || path.length > 0);
   return (
     <>
-      {showsPills && (
-        <div data-add-hint="" style={{ color: tk.text.faint, font: `11px/1.4 ${fontFamily.ui}`, padding: '0 2px 6px' }}>
-          Click a node to preview it · double-click{swapTargetNodeId ? ' to replace' : ' or drag it onto the graph to add it'}
-        </div>
-      )}
+      {showsPills && <AddHint swap={!!swapTargetNodeId} />}
       <div ref={containerRef}>{innerContent}</div>
       {isGlsl && glslPopupType && (
         <GlslSourcePopup
@@ -615,35 +550,9 @@ export function NodeBrowser({
   );
 }
 
-function Count({ n }: { n: number }) {
-  const tk = useTokens();
-  return <span style={{ fontSize: 11, color: tk.text.faint, background: tk.bg.hover, borderRadius: radius.sm, padding: '1px 6px', fontVariantNumeric: 'tabular-nums' }}>{n}</span>;
-}
-
-// ── Category row ──────────────────────────────────────────────────────────────
-function CategoryRow({ cat, icon, count, onClick }: {
-  cat: string; icon?: ReactNode; count: number; onClick: () => void;
-}) {
-  const tk = useTokens();
-  const [hovered, setHovered] = useState(false);
-  return (
-    <button
-      onClick={onClick}
-      title={CATEGORY_INFO[cat]}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        width: '100%', height: 30, display: 'flex', alignItems: 'center', gap: 8, padding: '0 6px 0 8px', border: 0,
-        borderRadius: radius.md, background: hovered ? tk.bg.hover : 'transparent', cursor: 'pointer', textAlign: 'left',
-        color: tk.text.secondary, font: `12.5px ${fontFamily.ui}`,
-      }}
-    >
-      {icon && <span style={{ width: 14, display: 'flex', justifyContent: 'center', flexShrink: 0 }}>{icon}</span>}
-      <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{rowLabel(cat)}</span>
-      <Count n={count} />
-      <Icon name="chevR" size={14} style={{ color: tk.text.disabled }} />
-    </button>
-  );
+/** A category of the node list (browserParts' row, with the category's own label and note). */
+function CategoryRow({ cat, icon, count, onClick }: { cat: string; icon?: ReactNode; count: number; onClick: () => void }) {
+  return <BrowserCategoryRow label={rowLabel(cat)} title={CATEGORY_INFO[cat]} icon={icon} count={count} onClick={onClick} />;
 }
 
 // ── Relevant only / Show all ──────────────────────────────────────────────────

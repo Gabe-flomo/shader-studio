@@ -15,7 +15,7 @@
 import { useEffect, useMemo } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
-import { StudioShell, StudioLabel, StudioNavItem, PresetCard } from '../builders/studio/StudioShell';
+import { StripRow, StudioShell, StudioLabel, StudioNavItem, PresetCard } from '../builders/studio/StudioShell';
 import { SceneCrumb } from '../builders/SceneCrumb';
 import { IconButton } from '../ui/Button';
 import type { IconName } from '../ui/iconPaths';
@@ -29,7 +29,8 @@ import { closeSplatBuilder, finishSplatBuilder, openSplatAsNodes, syncSplatBuild
 import { SPLAT_TEMPLATES, withTemplate } from '../../splatBuilder/templates';
 import { EFFECT_INFO, normalizeSpec, scanName, sectionSummary, type SplatBuilderSpec, type SplatSection } from '../../splatBuilder/spec';
 import { SECTION_PANELS, RecipeSection } from './panels';
-import { UserPresets } from '../builders/UserPresets';
+import { PresetsSummary, UserPresets } from '../builders/UserPresets';
+import { SPLAT_STRIP_KEYS, stripOf } from '../../builders/stripPresets';
 import { presetTextToSpec, specToPresetText } from '../../builders/userPresets';
 import { SplatViewport, scanBoxNow, useScanBox } from './SplatViewport';
 import { fitPlace } from '../../splatBuilder/place';
@@ -93,11 +94,12 @@ function Inspector() {
 
 function Presets() {
   const current = useSplatBuilder(s => s.spec);
-  const pics = useMemo(() => Object.fromEntries(SPLAT_TEMPLATES.map(t => { const s = t.make(); return [t.key, cloudPicture(s.effects, s.background.color)]; })), []);
+  const offered = useMemo(() => stripOf(SPLAT_TEMPLATES, SPLAT_STRIP_KEYS), []);
+  const pics = useMemo(() => Object.fromEntries(offered.map(t => { const s = t.make(); return [t.key, cloudPicture(s.effects, s.background.color)]; })), []);
   const effects = current.effects.map(e => e.kind).join(',');
   return (
-    <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-      {SPLAT_TEMPLATES.map(t => (
+    <StripRow>
+      {offered.map(t => (
         <PresetCard key={t.key} id={t.key} label={t.label} hint={`${t.blurb}${current.scan.source.kind === 'file' ? ' Your scan stays.' : ''}`} src={pics[t.key]}
           active={effects === t.make().effects.map(e => e.kind).join(',') && effects !== ''}
           onClick={() => useSplatBuilder.getState().replace(withTemplate(useSplatBuilder.getState().spec, t))} />
@@ -105,7 +107,7 @@ function Presets() {
       <UserPresets kind="splat" getRecipe={() => specToPresetText(useSplatBuilder.getState().spec)}
         onLoad={text => { const s = presetTextToSpec<SplatBuilderSpec>(text); if (s) useSplatBuilder.getState().replace(normalizeSpec(s)); }}
         fallbackThumb={() => { const s = useSplatBuilder.getState().spec; return cloudPicture(s.effects, s.background.color); }} />
-    </div>
+    </StripRow>
   );
 }
 
@@ -172,7 +174,7 @@ export function SplatBuilder() {
       primary={{ label: 'Done', onClick: finishSplatBuilder, title: 'Close and show the scene on the graph (it is built as you go)' }}
       nav={<Nav />} navWidth={248} phoneSettingsTitle={hood ? 'Under the hood' : undefined}
       inspector={<Inspector />} inspectorWidth={hood ? 480 : 380}
-      presets={<Presets />}>
+      presets={<Presets />} presetsSummary={<PresetsSummary kind="splat" builtIns={stripOf(SPLAT_TEMPLATES, SPLAT_STRIP_KEYS).map(t => t.label)} />}>
       <SplatViewport />
     </StudioShell>
   );

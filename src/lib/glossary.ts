@@ -38,8 +38,8 @@ export const GLOSSARY: readonly GlossaryTerm[] = [
   { name: 'Rules', means: 'Play’s When/Do section. A signal is one event a rule listens for', avoid: ['Signals (as the section)'] },
   { name: 'Next', means: 'The one suggestion surface: next moves for the selected node, learned from your graphs', avoid: [] },
   { name: 'App settings', means: 'The app’s own preferences, in the top bar’s ⋯ menu', avoid: [] },
-  { name: 'Library', means: 'Everything you save in one place (graphs, presets, functions, Expression Blocks, keyframes, My nodes, shaders, media): the sidebar entry, Files → Library, the top bar’s folder', avoid: ['Saved Graphs', 'Saved Keyframes'] },
-  { name: 'Storage', means: 'How much is saved and where: the workspace folder, backups, the browser’s room (under the Library, and the Files page)', avoid: ['Library (for the space meter)'] },
+  { name: 'Library', means: 'What you saved that goes on the graph (group presets first, My nodes, functions, Expression Blocks, transforms, palettes) and your media, drawn like the Nodes list: the sidebar entry, Files → Library. Saved graphs are the top bar’s Load', avoid: ['Saved Graphs', 'Saved Keyframes'] },
+  { name: 'Storage', means: 'How much is saved and where: the workspace folder, backups, the browser’s room (the Files page only)', avoid: ['Library (for the space meter)'] },
   { name: 'Nodes reference', means: 'Every node type with its sockets, picture and GLSL, under Help', avoid: [] },
   { name: 'colour', means: 'UI copy spells it the British way (node labels such as “Color Ramp” are a later pass)', avoid: ['color'] },
 ];
@@ -60,7 +60,7 @@ export const BANNED: readonly BannedWord[] = [
   { pattern: /\bGLSL page\b/, use: 'the Code page (its Shader tab)' },
   { pattern: /\bGo to (Mappings|Engine|Inputs|Look|Signals)\b/, use: 'the rail’s own name: Controls, Sources, Finish, Sound, Rules' },
   { pattern: /^(Inputs|Look|Engine|Mappings|Signals)( ·.*)?$/, use: 'Controls, Finish, Sound, Sources or Rules' },
-  { pattern: /\bSaved (Graphs|Keyframes)\b/, use: 'Library (its Graphs or Keyframes filter)' },
+  { pattern: /\bSaved (Graphs|Keyframes)\b/, use: 'Load (saved graphs) or the keyframe editor’s Presets' },
   { pattern: /\b[Cc]olor\b/, use: 'colour', allow: /\bAdd Color node\b|\bColor constant node\b/ },
 ];
 

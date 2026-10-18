@@ -81,13 +81,14 @@ describe('the Grid Rules builder', () => {
     expect($('[data-studio-section="run"] [data-studio-summary]')?.textContent).toBe('30 steps a second');
     expect($('[data-inspector]')?.getAttribute('data-inspector')).toBe('rule');
     expect($('[data-try-board]')).toBeTruthy();
-    expect($$('[data-studio-panel="presets"] [data-preset]').map(b => b.getAttribute('data-preset'))).toContain('highLife');
+    // At most four built-ins per rule type (builders/stripPresets.ts).
+    expect($$('[data-studio-panel="presets"] [data-preset]').map(b => b.getAttribute('data-preset'))).toEqual(['life', 'seeds', 'maze', 'caves']);
     click($('[data-studio-section="start"]'));
     expect($('[data-inspector]')?.getAttribute('data-inspector')).toBe('start');
     expect(localStorage.getItem('builder:grid-rules:tab')).toBe('start');
     // A preset is one click.
-    click($('[data-preset="highLife"]'));
-    expect(params().bornMask).toBe((1 << 3) | (1 << 6));
+    click($('[data-preset="seeds"]'));
+    expect(params().bornMask).toBe(1 << 2);
   });
 
   it('↺ on the try board is a true reset: step 0, the board as dealt, nothing kept to step back to; the app\'s ↺ does it too', () => {

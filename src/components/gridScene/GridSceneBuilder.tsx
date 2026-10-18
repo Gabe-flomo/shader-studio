@@ -20,7 +20,7 @@ import { PreviewClock } from '../builders/PreviewClock';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
-import { StudioShell, StudioLabel, StudioNavItem, PresetCard } from '../builders/studio/StudioShell';
+import { StripRow, StudioShell, StudioLabel, StudioNavItem, PresetCard } from '../builders/studio/StudioShell';
 import { SceneCrumb } from '../builders/SceneCrumb';
 import { BuilderSlider } from '../builders/BuilderSlider';
 import { BuilderNote } from '../builders/BuilderWindow';
@@ -41,7 +41,8 @@ import { buildStaying, closeBuilding } from '../../builders/finish';
 import { Popover } from '../ui/Popover';
 import { MAX_SEARCH, gridProgram, searchCapped } from '../../gridScene/glsl';
 import { GRID_TEMPLATES } from '../../gridScene/templates';
-import { UserPresets } from '../builders/UserPresets';
+import { PresetsSummary, UserPresets } from '../builders/UserPresets';
+import { GRID_STRIP_KEYS, stripOf } from '../../builders/stripPresets';
 import { presetTextToSpec, specToPresetText } from '../../builders/userPresets';
 import {
   DO_KINDS, DO_LABELS, DRAW_MODES, DRAW_MODE_LABELS, MAX_CELLS, MAX_PLACED, PIC_MODES, PIC_MODE_LABELS, defaultDraw, drawOf, picModeOf, MAX_RULES, MAX_SHAPES, MAX_WARPS, MIN_CELLS, MOTION_LABELS, MOTION_PATHS, PATTERN_KINDS, PATTERN_LABELS,
@@ -768,14 +769,15 @@ function Viewport() {
 }
 
 function Presets() {
-  const pics = useMemo(() => Object.fromEntries(GRID_TEMPLATES.map(t => [t.key, gridPicture(t.make())])), []);
+  const offered = useMemo(() => stripOf(GRID_TEMPLATES, GRID_STRIP_KEYS), []);
+  const pics = useMemo(() => Object.fromEntries(offered.map(t => [t.key, gridPicture(t.make())])), [offered]);
   return (
-    <div data-grid-presets style={{ display: 'flex', gap: 12 }}>
-      {GRID_TEMPLATES.map(t => <PresetCard key={t.key} id={t.key} label={t.label} hint={t.blurb} src={pics[t.key]} onClick={() => useGridBuilder.getState().replace(t.make())} />)}
+    <StripRow attrs={{ 'data-grid-presets': '' }}>
+      {offered.map(t => <PresetCard key={t.key} id={t.key} label={t.label} hint={t.blurb} src={pics[t.key]} onClick={() => useGridBuilder.getState().replace(t.make())} />)}
       <UserPresets kind="grid" getRecipe={() => specToPresetText(useGridBuilder.getState().spec)}
         onLoad={text => { const spec = presetTextToSpec<GridSceneSpec>(text); if (spec) useGridBuilder.getState().replace(spec); }}
         fallbackThumb={() => gridPicture(useGridBuilder.getState().spec)} />
-    </div>
+    </StripRow>
   );
 }
 
@@ -905,7 +907,7 @@ export function GridSceneBuilder() {
       primary={{ label: 'Done', onClick: () => void finishGridBuilder(), title: 'Done: build (or rebuild) what changed into the graph, then close and show it' }}
       nav={<LeftPanel />} navWidth={318} phoneNav={{ label: 'Draw', icon: 'edit' }}
       inspector={<Inspector />} inspectorWidth={360}
-      presets={<Presets />}>
+      presets={<Presets />} presetsSummary={<PresetsSummary kind="grid" builtIns={stripOf(GRID_TEMPLATES, GRID_STRIP_KEYS).map(t => t.label)} />}>
       <Viewport />
     </StudioShell>
   );

@@ -17,7 +17,16 @@ import {
 import { USER_PRESETS_KEY, useUserScenePresets } from '../../sceneBuilder/userPresets';
 import { Card } from '../../components/sceneBuilder/controls';
 import { BuilderFold } from '../../components/builders/BuilderTabBar';
-import { UserPresets } from '../../components/builders/UserPresets';
+import { UserPresets, presetsSummaryText } from '../../components/builders/UserPresets';
+import { StripRow, StudioShell } from '../../components/builders/studio/StudioShell';
+import {
+  AGENT_STRIP_KEYS, GRID_RULES_STRIP_KEYS, GRID_STRIP_KEYS, MAX_STRIP_BUILT_INS, SCENE2D_STRIP_KEYS, SCENE_STRIP_KEYS, SPLAT_STRIP_KEYS, TIMECUBE_STRIP_KEYS, WARP_STRIP_KEYS, stripOf,
+} from '../stripPresets';
+import { TEMPLATES_2D } from '../../sceneBuilder2d/templates';
+import { presetsFor } from '../../agentBuilder/presets';
+import type { WalkerKind } from '../../agentRules/spec';
+import type { GridRuleType } from '../../gridRules/spec';
+import { PRESET_TABLES } from '../../components/gridRules/GridRulesEditor';
 import { STRIP_TEMPLATE_KEYS } from '../../components/sceneBuilder/SceneBuilderModal';
 import { blankPixels, captureViewportThumb } from '../../components/builders/viewportThumb';
 import { useSceneBuilder2D } from '../../sceneBuilder2d/store';
@@ -180,11 +189,32 @@ describe('your presets, per builder', () => {
     expect('label' in kept).toBe(false);
   });
 
-  it('the built-ins each strip keeps: four in the 3D builder, none in the Warp builder, the rest as before', () => {
+  it('every builder strip offers at most four built-ins (per walker kind or rule type), all of them real', () => {
     expect(STRIP_TEMPLATE_KEYS).toEqual(['room', 'orb', 'blobs', 'glass']);
-    expect(GRID_TEMPLATES.length).toBeGreaterThan(0);
-    expect(SPLAT_TEMPLATES.length).toBeGreaterThan(0);
-    expect(TC_PRESETS.length).toBeGreaterThan(0);
+    const lists: Array<[string, readonly string[], readonly { key: string }[]]> = [
+      ['3d', SCENE_STRIP_KEYS, SCENE_TEMPLATES],
+      ['2d', SCENE2D_STRIP_KEYS, TEMPLATES_2D.filter(t => !t.hidden)],
+      ['grid', GRID_STRIP_KEYS, GRID_TEMPLATES],
+      ['splat', SPLAT_STRIP_KEYS, SPLAT_TEMPLATES],
+      ['timecube', TIMECUBE_STRIP_KEYS, TC_PRESETS],
+      ['warp', WARP_STRIP_KEYS, []],
+      ...Object.entries(AGENT_STRIP_KEYS).map(([k, keys]) => [`agents:${k}`, keys, presetsFor(k as WalkerKind)] as [string, readonly string[], readonly { key: string }[]]),
+      ...Object.entries(GRID_RULES_STRIP_KEYS).map(([k, keys]) => [`gridRules:${k}`, keys, Object.keys(PRESET_TABLES[k as GridRuleType]).map(key => ({ key }))] as [string, readonly string[], readonly { key: string }[]]),
+    ];
+    for (const [name, keys, all] of lists) {
+      expect(keys.length, name).toBeLessThanOrEqual(MAX_STRIP_BUILT_INS);
+      expect(stripOf(all, keys).map(t => t.key), name).toEqual([...keys]);
+    }
+    expect(MAX_STRIP_BUILT_INS).toBe(4);
+    // The ones no longer offered still load by key (examples and saved graphs name them).
+    expect(TC_PRESETS.some(p => p.key === 'hall')).toBe(true);
+    expect(GRID_TEMPLATES.some(t => t.key === 'pieces')).toBe(true);
+  });
+
+  it('the folded strip says what is there: built-ins, then yours', () => {
+    expect(presetsSummaryText(['Room', 'Orb'], [])).toBe('2 built in · none of yours yet: Room, Orb');
+    expect(presetsSummaryText([], ['A', 'B'])).toBe('2 yours: A, B');
+    expect(presetsSummaryText(['a', 'b', 'c', 'd'], ['e', 'f'])).toBe('4 built in · 2 yours: a, b, c, d, e…');
   });
 });
 
@@ -237,3 +267,42 @@ describe('the strip: + Save this scene, load, rename, delete', () => {
     expect(blankPixels(new Uint8ClampedArray([10, 20, 30, 255, 200, 20, 30, 255]))).toBe(false);
   });
 });
+
+describe('the presets strip folds (StudioShell)', () => {
+  beforeEach(() => localStorage.clear());
+  afterEach(() => { unmount(); document.body.innerHTML = ''; });
+  const shell = () => mount(
+    <StudioShell prefsKey="fold-test" icon="grid" title="Test" onClose={() => {}} presets={<div data-test-strip>cards</div>} presetsSummary="4 built in · none of yours yet">
+      <div />
+    </StudioShell>,
+  );
+
+  it('folds to one line with its summary, remembered per builder; the line opens it again', () => {
+    shell();
+    expect($('[data-studio-panel="presets"] [data-test-strip]')).toBeTruthy();
+    click($('[data-studio-presets-fold]'));
+    expect($('[data-studio-panel="presets"]')).toBeNull();
+    expect($('[data-studio-presets-summary]')!.textContent).toBe('4 built in · none of yours yet');
+    expect(localStorage.getItem('builder:fold-test:studio:presets')).toBe('0');
+    // Remembered across a remount, and per builder.
+    unmount();
+    shell();
+    expect($('[data-studio-presets-folded]')).toBeTruthy();
+    expect(localStorage.getItem('builder:other:studio:presets')).toBeNull();
+    click($('[data-studio-presets-folded]'));
+    expect($('[data-studio-panel="presets"] [data-test-strip]')).toBeTruthy();
+    expect(localStorage.getItem('builder:fold-test:studio:presets')).toBe('1');
+  });
+
+  it('the strip row ends with room after its last card and scrolls (nothing clipped)', () => {
+    mount(<StripRowProbe />);
+    const row = $('[data-probe-row]')!;
+    expect(row.style.paddingRight).toBe('24px');
+    expect(row.style.width).toBe('max-content');
+    expect((row.parentElement as HTMLElement).style.overflowX).toBe('auto');
+  });
+});
+
+function StripRowProbe() {
+  return <StripRow attrs={{ 'data-probe-row': '' }}><span>a</span></StripRow>;
+}

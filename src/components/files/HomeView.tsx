@@ -5,6 +5,7 @@
  * poster cards, what you use most as chips, and the way into the other
  * sections (Browse, Notes, Clean up, Workspace, App settings, Nodes).
  */
+import { LibraryCard } from '../shell/LibraryPanel';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
@@ -105,6 +106,11 @@ export function HomeView({ inv, compact, estimate, usage, entries, browse, onOpe
         <span style={{ font: `500 12.5px ${fontFamily.ui}`, opacity: 0.7 }}>{greeting}</span>
         <span style={{ font: `650 ${compact ? 19 : 22}px ${fontFamily.ui}`, letterSpacing: '-0.015em', lineHeight: 1.25 }}>{headline}</span>
         {!!totalWeek && sinceText && <span style={{ fontSize: 11.5, opacity: 0.6 }}>Counting since {sinceText}. Nothing leaves this browser.</span>}
+      </div>
+
+      {/* Storage: how much is saved, the workspace folder, export and import (only here, on Files) */}
+      <div data-files-storage="">
+        <LibraryCard />
       </div>
 
       {/* Activity: tiles and the calendar */}

@@ -214,7 +214,7 @@ Kinds are grouped by what they apply to:
 | Group | Kinds |
 |---|---|
 | Nodes in the graph | Groups (+ the built-in effects), Vector transforms, Functions, Expression Blocks, Keyframe curves |
-| Scene builders | the 3D, 2D, Grid, Warp, Grid Rules, Splat, Time Cube and Agents builders' presets (+ the Agents and Time Cube built-ins), Space blocks |
+| Scene builders | the 3D, 2D, Grid, Warp, Grid Rules, Splat, Time Cube and Agents builders' presets (yours only: each strip draws its own built-ins, `src/builders/stripPresets.ts`), Space blocks |
 | Play | Layer sets, Racks, Drum kits (+ the built-in kits) |
 | Finish | Finish presets (+ the grade's Looks and starting stacks, built in), Finish effects, saved Looks |
 | Colour | Palette node presets, Background palettes (+ the built-in palettes) |
@@ -222,7 +222,8 @@ Kinds are grouped by what they apply to:
 `<PresetMenu>` (`src/components/presets/PresetMenu.tsx`) is the shared UI. It has two variants:
 
 - **menu**: a Presets button. It lists built-ins, then yours. You can save, rename and
-  delete (with Undo), and the list has Export, Import and "In the Library".
+  delete (with Undo), and the list has Export, Import and, for a kind the Library lists,
+  "In the Library" (it opens the Library on that category).
 - **strip**: a builder's cards, with "+ Save this scene" and "All…".
 
 These places use it:
@@ -231,8 +232,10 @@ These places use it:
 - the keyframe editor
 - the Transform Vec editor
 
-Every user preset also shows in the Library's Presets filter (`docs/library.md`). Functions,
-Expression Blocks and keyframe curves show under their own filters instead.
+The Library (`docs/library.md`) shows only the kinds that go on the graph: groups (yours and
+the built-in ones), Functions, Expression Blocks, Vector transforms and Palettes, each under its
+own category. Builder presets, Play's, Finish's, keyframe curves and background palettes are
+only where they apply.
 
 Still drawn by their own panels, but stored through the same keys:
 
@@ -241,7 +244,7 @@ Still drawn by their own panels, but stored through the same keys:
 - the 2D builder's space blocks
 - the Palette node's menu
 - the Particles node's preset chips (built-ins only, no user presets yet)
-- the Agents and Time Cube builders' built-in cards (they draw live thumbnails)
+- every builder's built-in cards (they draw live thumbnails; at most four per strip)
 
 ## See also
 

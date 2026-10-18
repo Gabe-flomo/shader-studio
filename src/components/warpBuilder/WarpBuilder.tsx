@@ -17,7 +17,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type ReactNode } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
-import { StudioShell, StudioLabel } from '../builders/studio/StudioShell';
+import { StripRow, StudioShell, StudioLabel } from '../builders/studio/StudioShell';
 import { SceneCrumb } from '../builders/SceneCrumb';
 import { BuilderNote } from '../builders/BuilderWindow';
 import { MuteToggle } from '../builders/MuteToggle';
@@ -48,7 +48,7 @@ import { finishWarpBuilder, sendWarpTo2D } from '../../warpBuilder/actions';
 import { COND_GLYPHS, FN_GLYPHS, GLYPH_SIZE, type CondGlyph } from '../../warpBuilder/glyphs';
 import { applyTile } from '../../warpBuilder/slotMenu';
 import { SlotMenu } from './SlotMenu';
-import { UserPresets } from '../builders/UserPresets';
+import { PresetsSummary, UserPresets } from '../builders/UserPresets';
 import { presetTextToSpec, specToPresetText } from '../../builders/userPresets';
 import { WarpPreview } from './WarpPreview';
 import { usePhoneDialog } from '../ui/phoneDialog';
@@ -525,10 +525,10 @@ function Presets() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <StudioLabel meta="your warps, saved here with a picture · undo takes a load back">Presets</StudioLabel>
-      <div data-warp-presets style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 2 }}>
+      <StripRow attrs={{ 'data-warp-presets': '' }}>
         <UserPresets kind="warp" noun="warp" getRecipe={() => specToPresetText(useWarpBuilder.getState().spec)}
           onLoad={text => { const s = presetTextToSpec<WarpSpec>(text); if (s) { useWarpBuilder.getState().replace(s); useWarpBuilder.getState().select(null); } }} />
-      </div>
+      </StripRow>
     </div>
   );
 }
@@ -636,7 +636,7 @@ export function WarpBuilder() {
       primary={{ label: from2d && !phone ? 'Done: back to 2D' : 'Done', onClick: finishWarpBuilder, title: from2d ? 'Write these blocks into the 2D scene\'s Space and go back to it' : 'Build a UV → the warp → the preview look, and show it on the graph' }}
       nav={<Palette />} navWidth={280} phoneNav={{ label: 'Tiles', icon: 'fn' }}
       inspector={<Inspector />} inspectorWidth={360}
-      presets={<Presets />}>
+      presets={<Presets />} presetsSummary={<PresetsSummary kind="warp" builtIns={[]} />}>
       <Viewport />
     </StudioShell>
   );

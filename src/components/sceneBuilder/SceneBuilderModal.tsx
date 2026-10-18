@@ -32,8 +32,9 @@ import { newSeed } from '../../lib/surprise';
 import { surpriseSceneAction, useSceneSurprise } from './surpriseActions';
 import { SceneCrumb } from '../builders/SceneCrumb';
 import { BuilderHelpContext } from '../builders/BuilderHelp';
-import { PresetCard, StudioLabel, StudioNavItem, StudioShell } from '../builders/studio/StudioShell';
-import { UserPresets } from '../builders/UserPresets';
+import { PresetCard, StripRow, StudioLabel, StudioNavItem, StudioShell } from '../builders/studio/StudioShell';
+import { PresetsSummary, UserPresets } from '../builders/UserPresets';
+import { SCENE_STRIP_KEYS } from '../../builders/stripPresets';
 import { DescribeTab, RecipeTab, preferRecipeAsText } from './tabs';
 import { SectionHead, SectionPanel } from './sectionPanels';
 import { SceneViewport } from './SceneViewport';
@@ -83,8 +84,8 @@ export async function openAsNodesAction(): Promise<void> {
   }
 }
 
-/** The built-in presets the strip keeps (the rest of its room is for yours): GI-lit, volumetric, and two more. */
-export const STRIP_TEMPLATE_KEYS = ['room', 'orb', 'blobs', 'glass'] as const;
+/** The built-in presets the strip keeps (builders/stripPresets.ts; the rest of its room is for yours). */
+export const STRIP_TEMPLATE_KEYS = SCENE_STRIP_KEYS;
 
 function PresetsStrip() {
   const replace = useSceneBuilder(s => s.replace);
@@ -101,13 +102,13 @@ function PresetsStrip() {
         <SurpriseBar seed={seed} busy={busy} onSurprise={s => void surpriseSceneAction(s)}
           title="A whole random scene: 2–6 shapes, combines, sometimes modifiers, a look, colours and a camera (one undo step). The same seed makes the same scene." />
       </span>
-      <div data-scene-presets style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 2 }}>
+      <StripRow attrs={{ 'data-scene-presets': '' }}>
         {builtIns.map(t => (
           <PresetCard key={t.key} id={t.key} label={t.label} hint={t.blurb} src={thumbs[`template:${t.key}`]} onClick={() => load(t.recipe)} />
         ))}
         <UserPresets kind="3d" getRecipe={() => printRecipe(useSceneBuilder.getState().spec)} onLoad={load}
           fallbackThumb={() => snapshotSpec(useSceneBuilder.getState().spec)} />
-      </div>
+      </StripRow>
     </div>
   );
 }
@@ -195,7 +196,8 @@ export function SceneBuilderModal() {
         ]} />}
       </>}
       primary={{ label: 'Done', onClick: () => void doneAction(), title: editing ? 'Done: rebuild the scene with your edits, then close and show it on the graph' : 'Done: build the scene into the graph, then close and show it' }}
-      nav={nav} phoneSettingsTitle={hood ? 'Under the hood' : undefined} inspector={inspector} inspectorWidth={hood ? 480 : 400} navWidth={236} presets={<PresetsStrip />}>
+      nav={nav} phoneSettingsTitle={hood ? 'Under the hood' : undefined} inspector={inspector} inspectorWidth={hood ? 480 : 400} navWidth={236} presets={<PresetsStrip />}
+      presetsSummary={<PresetsSummary kind="3d" builtIns={STRIP_TEMPLATE_KEYS.map(k => SCENE_TEMPLATES.find(t => t.key === k)?.label ?? k)} />}>
       <SceneViewport onPicked={() => { if (!SHAPE_SECTIONS.includes(section)) pick('shapes'); }} />
     </StudioShell>
   );

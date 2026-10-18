@@ -3,14 +3,14 @@
  *
  *   variant "menu"   a Presets button opening a list: the kind's built-ins, then yours (click to
  *                    apply; rename and delete on hover), "Save this … as a preset", and at the foot
- *                    Export, Import and "In the Library".
+ *                    Export, Import and (for a kind the Library lists) "In the Library".
  *   variant "strip"  a builder's presets strip (docs/scene-builder.md, "Your presets"): a card per
  *                    preset you saved (its picture and name; click loads, ✎ renames, × deletes),
  *                    "+ Save this scene", and "All…" opening the same list as the menu.
  *
- * Whichever kind, the list, the save form, the rename and the delete are the same, and every
- * preset saved here also shows in the Library's Presets filter (or its own filter, for functions,
- * Expression Blocks and keyframe curves).
+ * Whichever kind, the list, the save form, the rename and the delete are the same. The kinds that
+ * go on the graph (groups, transforms, functions, Expression Blocks, palettes) also show in the
+ * Library, under their own category; the others (builders, Play, Finish) only here.
  */
 import { useRef, useState, type CSSProperties } from 'react';
 import '../../presets/presetKinds';
@@ -29,6 +29,7 @@ import { errorMessage, openTextFile, saveTextFile } from '../../utils/fileIO';
 import { reportFileResult } from '../shell/reportFileResult';
 import { PresetCard } from '../builders/studio/StudioShell';
 import { withUndo } from '../../library/libraryFacade';
+import type { LibraryCategoryId } from '../../library/libraryCategories';
 
 export interface PresetMenuProps {
   /** The preset kind (presets/presetKinds.ts): "keyframe", "builder:3d", "transform"… */
@@ -89,8 +90,12 @@ async function importKind(): Promise<void> {
   toast.success('Presets imported', { message: r.added ? `${r.added} added${r.kept ? ` · ${r.kept} you already had (yours kept)` : ''}` : 'Nothing new' });
 }
 
-function openInLibrary(): void {
-  void import('../../library/appLibrary').then(m => m.openLibrary('presets'));
+/** The Library category a kind's presets show in; none for the kinds that don't go on the graph (builders, Play, Finish…). */
+const LIBRARY_CATEGORY: Record<string, LibraryCategoryId> = { group: 'groups', transform: 'transforms', customFn: 'functions', expr: 'expressions', palette: 'palettes' };
+
+function openInLibrary(kind: string): void {
+  const c = LIBRARY_CATEGORY[kind];
+  if (c) void import('../../library/appLibrary').then(m => m.openLibrary(c));
 }
 
 // ── The list (the menu, and the strip's "All…") ─────────────────────────────
@@ -144,7 +149,7 @@ function PresetList({ kind, onApply, getData, getThumb, noun = 'preset', hideBui
         <IconButton icon="export" size="sm" label={`Export your ${def?.label.toLowerCase() ?? 'presets'}`} disabled={mine.length === 0} onClick={() => { void exportKind(kind, mine); }} />
         <IconButton icon="import" size="sm" label="Import presets (a Library export)" onClick={() => { void importKind(); }} />
         <span style={{ flex: 1 }} />
-        <Button size="sm" variant="ghost" icon="folder" onClick={() => { openInLibrary(); onDone(); }} title="Every preset you saved, of every kind, with folders">In the Library</Button>
+        {LIBRARY_CATEGORY[kind] && <Button size="sm" variant="ghost" icon="folder" onClick={() => { openInLibrary(kind); onDone(); }} title="The Library, opened on these presets: drag one onto the graph">In the Library</Button>}
       </div>
     </div>
   );
