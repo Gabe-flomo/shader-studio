@@ -411,6 +411,35 @@ describe('Q14: one copy of the first ray march; the Clifford torus wobble comes 
   });
 });
 
+describe('C1: Multi-Light has a Background and a sun by Azimuth / Elevation', () => {
+  const gen = (params: Record<string, unknown>, ins: Record<string, string> = {}) => getNodeDefinition('multiLight')!.generateGLSL(load([saved('multiLight', 'L', params, { hit: null }, ['color'])])[0], { hit: 'H', ...ins }).code;
+
+  it('a Multi-Light as saved before emits the same line (X / Y / Z, black where it missed)', () => {
+    expect(gen({})).toBe('    vec3 L_color = H > 0.5 ? multiLight(vec3(0.5), vec3(0.0, 1.0, 0.0), 1.0, 1.0, vec3(0.6, 0.7, 0.4), vec3(1.0, 0.9, 0.7), vec3(0.3, 0.5, 0.7), vec3(0.1, 0.1, 0.08)) : vec3(0.0);\n');
+  });
+
+  it('Background: Colour fills where Hit is 0', () => {
+    expect(gen({ background: 'colour', bgColor: [0.1, 0.2, 0.3] })).toMatch(/: vec3\(0\.1, 0\.2, 0\.3\);\n$/);
+  });
+
+  it('Azimuth / Elevation point the sun: (cos el · sin az, sin el, cos el · cos az)', () => {
+    const code = gen({ sunFrom: 'angles', azimuth: 50.7, elevation: 50.1 });
+    const from = code.indexOf('1.0, 1.0, ') + 10, to = code.indexOf(', vec3(1.0, 0.9');
+    const dir = runGlsl(`    vec3 d = ${code.slice(from, to)};\n`, {}).d as number[];
+    const s = [0.55, 0.85, 0.45], len = Math.hypot(...s);
+    dir.forEach((x, i) => expect(Math.abs(x - s[i] / len)).toBeLessThan(2e-3));
+  });
+
+  it('the 4D finish needs no Make Vec3, Colour or Select for the sun and the background', () => {
+    for (const k of Object.keys(EXAMPLE_GRAPHS).filter(k => k.startsWith('fourD'))) {
+      const types = EXAMPLE_GRAPHS[k].nodes.map(n => n.type);
+      if (!types.includes('multiLight')) continue;
+      expect(types.filter(t => t === 'makeVec3' || t === 'select'), k).toEqual([]);
+      expect(EXAMPLE_GRAPHS[k].nodes.find(n => n.type === 'multiLight')!.params).toMatchObject({ sunFrom: 'angles', background: 'colour' });
+    }
+  });
+});
+
 describe('Radiance Cascades 2D is retired (too slow)', () => {
   it('stays registered, is offered nowhere, and nothing uses it', () => {
     expect(NODE_REGISTRY.radianceCascadesApprox).toBeTruthy();

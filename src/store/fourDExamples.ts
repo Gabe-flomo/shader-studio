@@ -136,9 +136,11 @@ export const passBody = (id: string): SubgraphData => sub([
 ]);
 
 export const SUN = { x: 0.55, y: 0.85, z: 0.45 };
+/** SUN as Multi-Light's angles (degrees): azimuth atan(x, z), elevation asin(y / |SUN|). */
+export const SUN_ANGLES = { azimuth: 50.7, elevation: 50.1 };
 
 /**
- * Loop, Multi-Light, background, vignette and tone map: the same finishing for all.
+ * Loop, Multi-Light (its own sun angles and background), vignette and tone map: the same finishing for all.
  * `colour` is the Expression Block that picks a surface colour from the hit point.
  */
 export function finish(bg: [number, number, number], colour: GraphNode, loopNote: string, outX = 1700): GraphNode[] {
@@ -146,15 +148,12 @@ export function finish(bg: [number, number, number], colour: GraphNode, loopNote
     n('marchLoopGroup', 'march', 340, 220, { bg, maxSteps: 128, maxDist: 24, ...note(loopNote) }, { ro: ['cam', 'ro'], rd: ['cam', 'rd'], scene: ['scene', 'scene'] }),
     n('splitVec3', 'hp', 640, 420, { ...note('Split Vec3: the hit point as x, y, z, so the surface colour can depend on where the ray landed.') }, { v: ['march', 'pos'] }),
     colour,
-    n('makeVec3', 'sun', 900, 40, { r: SUN.x, g: SUN.y, b: SUN.z, ...note('Make Vec3: the direction the sun shines from, as one vector. It goes to Multi-Light to light the surface.') }),
     n('multiLight', 'lit', 1180, 220, {
+      sunFrom: 'angles', ...SUN_ANGLES, background: 'colour', bgColor: bg,
       sunR: 1.25, sunG: 1.05, sunB: 0.85, skyR: 0.22, skyG: 0.3, skyB: 0.5, bounceR: 0.09, bounceG: 0.06, bounceB: 0.05,
-      ...note('Multi-Light: warm sun from one side, a cool sky fill from above and a little bounce light, over the surface colour, in linear light. No shadow or occlusion rays, so 4D shapes stay quick to draw: the March Loop\'s sun button (Light the scene) adds them.'),
-    }, { baseColor: ['col', 'result'], normal: ['march', 'normal'], hit: ['march', 'hit'], sunDir: ['sun', 'rgb'] }),
-    n('colorPicker', 'sky', 1180, 520, { color: bg, ...note('Background colour: what a ray that hits nothing shows.') }),
-    n('select', 'pick', 1420, 220, { outputType: 'vec3', ...note('Hit is 1 where the ray touched the shape: show the lit surface there, the background elsewhere.') },
-      { mask: ['march', 'hit'], ifTrue: ['lit', 'color'], ifFalse: ['sky', 'rgb'] }),
-    n('vignette', 'vig', 1660, 220, { radius: 0.75, softness: 0.6, strength: 0.7, ...note('A soft dark edge to the frame, to hold the eye on the middle.') }, { color: ['pick', 'result'] }),
+      ...note('Multi-Light: warm sun from one side (Azimuth 50.7°, Elevation 50.1°), a cool sky fill from above and a little bounce light, over the surface colour, in linear light. Where the ray hit nothing (Hit 0) it shows its Background colour. No shadow or occlusion rays, so 4D shapes stay quick to draw: the March Loop\'s sun button (Light the scene) adds them.'),
+    }, { baseColor: ['col', 'result'], normal: ['march', 'normal'], hit: ['march', 'hit'] }),
+    n('vignette', 'vig', 1660, 220, { radius: 0.75, softness: 0.6, strength: 0.7, ...note('A soft dark edge to the frame, to hold the eye on the middle.') }, { color: ['lit', 'color'] }),
     n('toneMap', 'tone', 1900, 220, { mode: 'aces', ...note('Tone Map: the lights go above 1; ACES rolls them off so the bright side keeps its colour instead of clipping.') }, { color: ['vig', 'result'] }),
     n('output', 'out', outX + 440, 220, { ...note('Output: the picture.') }, { color: ['tone', 'color'] }),
   ].map(nd => (nd.type === 'marchLoopGroup' ? { ...nd, params: { ...nd.params, subgraph: passBody('march') } } : nd));

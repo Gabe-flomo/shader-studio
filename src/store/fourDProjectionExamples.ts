@@ -13,7 +13,7 @@
 import type { GraphNode } from '../types/nodeGraph';
 import type { ExampleGraph } from './exampleIndex';
 import { ctl, n, play } from './graphBuilder';
-import { FOURD_EXAMPLE_INDEX, SUN, checker, expr, finish, note, passBody, scene } from './fourDExamples';
+import { FOURD_EXAMPLE_INDEX, SUN_ANGLES, checker, expr, finish, note, passBody, scene } from './fourDExamples';
 
 /** An Add node set to vec3 (the card's type picker retypes its sockets). */
 function vec3Add(id: string, x: number, y: number, comment: string, a: [string, string], b: [string, string]): GraphNode {
@@ -33,16 +33,13 @@ function finishGlow(bg: [number, number, number], colour: GraphNode, glow: Graph
     n('splitVec3', 'hp', 640, 420, { ...note('Split Vec3: the hit point as x, y, z, so the colour can depend on where the ray landed.') }, { v: ['march', 'pos'] }),
     colour,
     glow,
-    n('makeVec3', 'sun', 900, 40, { r: SUN.x, g: SUN.y, b: SUN.z, ...note('Make Vec3: the direction the sun shines from. It goes to Multi-Light to light the tubes.') }),
     n('multiLight', 'lit', 1180, 220, {
+      sunFrom: 'angles', ...SUN_ANGLES, background: 'colour', bgColor: bg,
       sunR: 1.1, sunG: 1.0, sunB: 0.9, skyR: 0.3, skyG: 0.38, skyB: 0.6, bounceR: 0.1, bounceG: 0.08, bounceB: 0.1,
-      ...note('Multi-Light: a warm sun from one side and a cool sky fill from above over the tube colour (no occlusion rays, so it stays quick).'),
-    }, { baseColor: ['col', 'result'], normal: ['march', 'normal'], hit: ['march', 'hit'], sunDir: ['sun', 'rgb'] }),
-    n('colorPicker', 'sky', 1180, 520, { color: bg, ...note('Background colour: what a ray that hits nothing shows.') }),
-    n('select', 'pick', 1420, 220, { outputType: 'vec3', ...note('Hit is 1 where the ray touched a tube: show the lit tube there, the background elsewhere.') },
-      { mask: ['march', 'hit'], ifTrue: ['lit', 'color'], ifFalse: ['sky', 'rgb'] }),
+      ...note('Multi-Light: a warm sun from one side (Azimuth 50.7°, Elevation 50.1°) and a cool sky fill from above over the tube colour (no occlusion rays, so it stays quick); where the ray hit nothing, its Background colour.'),
+    }, { baseColor: ['col', 'result'], normal: ['march', 'normal'], hit: ['march', 'hit'] }),
     vec3Add('glowed', 1660, 220, 'Add: the glow on top of whatever is there, tube or background. A ray that missed but passed close to an edge took many steps, so it gets a halo.',
-      ['pick', 'result'], ['glow', 'result']),
+      ['lit', 'color'], ['glow', 'result']),
     n('vignette', 'vig', 1900, 220, { radius: 0.75, softness: 0.6, strength: 0.75, ...note('A soft dark edge to the frame, to hold the eye on the middle.') }, { color: ['glowed', 'result'] }),
     n('toneMap', 'tone', 2140, 220, { mode: 'aces', ...note('Tone Map: the glow goes above 1; ACES rolls it off so the brightest lines keep their colour instead of clipping.') }, { color: ['vig', 'result'] }),
     n('output', 'out', 2380, 220, { ...note('Output: the picture.') }, { color: ['tone', 'color'] }),

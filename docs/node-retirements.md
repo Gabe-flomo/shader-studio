@@ -238,3 +238,13 @@ not IFS). `catalogueSweep.test.ts` checks the words against the real scorer.
   built from it and adds notes and Play controls. The Learn one is kept; the old key opens it (`MERGED_EXAMPLES`).
 - **fourDCliffordTorus**: inside its Scene Group, the Multiply's B read the Wobble Constant outside the group directly
   (it compiled only through the load-time repair); it now reads the group's Wobble port.
+
+## Multi-Light: Background and sun angles
+
+Thirteen 4D examples finished with the same seven nodes: March Loop → Split Vec3 → Expression → Multi-Light (its Sun
+Dir from a Make Vec3) → Select (Hit, a background Colour) → Vignette → Tone Map. Multi-Light now has **Sun**
+(*Azimuth & elevation* or *Direction X / Y / Z*; X / Y / Z stays the default, so every Multi-Light made before reads
+the same) and **Background** (*Black* as before, or a **Background colour** where Hit is 0). The 4D finish
+(`finish` / `finishGlow` in the 4D example files) drops its Make Vec3, Colour and Select: Multi-Light at Azimuth
+50.7°, Elevation 50.1° (the old (0.55, 0.85, 0.45), normalised) with its own background. Examples changed: the 13 4D
+examples that use it.
