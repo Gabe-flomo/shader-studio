@@ -1,8 +1,11 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { BAND_MAX_HZ, BAND_MIN_HZ, bandsOf, newBand } from '../../../lib/audioTools/bands';
+import { bandSections, webAudioQ } from '../../../lib/audioTools/bandFilter';
+import { modalOpen } from '../../../lib/modalOpen';
 import {
-  MAX_WIDTH_OCT, MIN_WIDTH_OCT, bandRange, bandResponse, bandView, dragFreq, dragWidth, hzToX, newBandAt, noteName, qToWidth,
-  wheelSlope, wheelWidth, widthToQ, withFreq, withShape, withWidth, xToHz,
+  MAX_WIDTH_OCT, MIN_WIDTH_OCT, bandGains, bandRange, bandResponse, bandView, dragFreq, dragWidth, hzToX, isBandDeleteKey, newBandAt,
+  noteName, qToWidth, wheelSlope, wheelWidth, widthToQ, withFreq, withShape, withWidth, xToHz,
 } from '../bandEq';
 
 describe('band shape migration', () => {
@@ -25,32 +28,97 @@ describe('band shape migration', () => {
   });
 });
 
-describe('the curve', () => {
-  const band = { lo: 250, hi: 1000, shape: 'band' as const, slope: 24 as const };
-  it('a Band passes all at its centre, about −3 dB at its edges, little far away', () => {
-    expect(bandResponse(band, 500)).toBeCloseTo(1, 6);
-    for (const edge of [250, 1000]) {
-      const r = bandResponse(band, edge);
-      expect(r).toBeGreaterThan(0.6);
-      expect(r).toBeLessThan(0.8);
+describe('the curve: the filters the band is heard through', () => {
+  const SR = 48000;
+  const db = (b: Parameters<typeof bandResponse>[0], hz: number) => 20 * Math.log10(bandResponse(b, hz, SR));
+  const SLOPES = [12, 24, 48] as const;
+  const BANDS = [
+    { lo: 1141, hi: 1223 }, // 0.1 oct, Q 14.4 (the user's band)
+    { lo: 250, hi: 1000 },
+    { lo: 40, hi: 90 },
+    { lo: 200, hi: 2000 },
+    { lo: 6000, hi: 16000 }, // near Nyquist: the pre-warp keeps lo / hi at −3 dB
+  ];
+  it('a Band is 0 dB at its centre and −3 dB (±0.2) at its lo and hi, at every slope', () => {
+    for (const r of BANDS) for (const slope of SLOPES) {
+      const b = { ...r, shape: 'band' as const, slope };
+      const f0 = bandSections(b, SR)[0].freq;
+      expect(db(b, f0)).toBeCloseTo(0, 4);
+      // The geometric centre (the handle): 0 dB, a hair under near Nyquist (−0.11 dB for 6–16 kHz at 48 kHz).
+      expect(Math.abs(db(b, bandView(b).freq))).toBeLessThan(0.15);
+      expect(db(b, r.lo)).toBeGreaterThan(-3.2); expect(db(b, r.lo)).toBeLessThan(-2.8);
+      expect(db(b, r.hi)).toBeGreaterThan(-3.2); expect(db(b, r.hi)).toBeLessThan(-2.8);
+      // Inside lo–hi it passes more than −3 dB; outside, less.
+      expect(db(b, r.lo * 1.01)).toBeGreaterThan(-3.01);
+      expect(db(b, r.lo / 1.01)).toBeLessThan(-2.99);
     }
-    expect(bandResponse(band, 30)).toBeLessThan(0.01);
-    expect(bandResponse(band, 12000)).toBeLessThan(0.01);
+  });
+  /** The width in octaves where a band is `level` dB down (bisection either side of its centre). */
+  const widthAt = (b: Parameters<typeof bandResponse>[0], level: number) => {
+    const c = bandSections(b, SR)[0].freq;
+    const edge = (dir: 1 | -1) => {
+      let a = 0, z = 8;
+      for (let i = 0; i < 60; i++) { const m = (a + z) / 2; if (db(b, c * 2 ** (dir * m)) > level) a = m; else z = m; }
+      return a;
+    };
+    return edge(1) + edge(-1);
+  };
+  it('a Q-14 band is a narrow spike: narrower than a Q-1 band at −12 dB by the ratio a band-pass gives', () => {
+    const q14 = bandRange('band', 1000, qToWidth(14)), q1 = bandRange('band', 1000, qToWidth(1));
+    const b14 = { ...q14, shape: 'band' as const, slope: 12 as const }, b1 = { ...q1, shape: 'band' as const, slope: 12 as const };
+    // Analogue band-pass: −12 dB where Q·(Ω − 1/Ω) = √(10^1.2 − 1); its width there 2·log2 Ω_hi.
+    const expected = (q: number) => { const u = Math.sqrt(10 ** 1.2 - 1) / q; return 2 * Math.log2((u + Math.sqrt(u * u + 4)) / 2); };
+    const w14 = widthAt(b14, -12), w1 = widthAt(b1, -12);
+    expect(w14).toBeCloseTo(expected(widthToQ(bandView(b14).width)), 2);
+    // (Its −12 dB points reach 4 kHz, where the digital filter is a little narrower than the analogue one.)
+    expect(w1).toBeCloseTo(expected(widthToQ(bandView(b1).width)), 1);
+    expect(w1 / w14).toBeGreaterThan(0.95 * (expected(1) / expected(14)));
+    expect(w1 / w14).toBeLessThan(1.05 * (expected(1) / expected(14)));
+    expect(w1 / w14).toBeGreaterThan(5);
+    // And at −3 dB it is exactly its width.
+    expect(widthAt(b14, -3)).toBeCloseTo(bandView(b14).width, 2);
   });
   it('a steeper slope falls faster outside the band', () => {
-    expect(bandResponse({ ...band, slope: 48 }, 2000)).toBeLessThan(bandResponse({ ...band, slope: 12 }, 2000));
+    const band = { lo: 250, hi: 1000, shape: 'band' as const };
+    expect(db({ ...band, slope: 48 }, 4000)).toBeLessThan(db({ ...band, slope: 24 }, 4000));
+    expect(db({ ...band, slope: 24 }, 4000)).toBeLessThan(db({ ...band, slope: 12 }, 4000));
   });
-  it('a Low cut lets through what is above its corner', () => {
-    const lc = { lo: 1000, hi: BAND_MAX_HZ, shape: 'lowcut' as const, slope: 24 as const };
-    expect(bandResponse(lc, 1000)).toBeCloseTo(Math.SQRT1_2, 5);
-    expect(bandResponse(lc, 10000)).toBeGreaterThan(0.99);
-    expect(bandResponse(lc, 100)).toBeLessThan(0.001);
+  it('a Low cut is −3 dB at its corner, flat above, and falls at its slope well below', () => {
+    for (const slope of SLOPES) {
+      const lc = { lo: 1000, hi: BAND_MAX_HZ, shape: 'lowcut' as const, slope };
+      expect(db(lc, 1000)).toBeCloseTo(-3.01, 1);
+      expect(db(lc, 8000)).toBeGreaterThan(-0.1);
+      const perOct = db(lc, 1000 / 8) - db(lc, 1000 / 16);
+      expect(perOct).toBeGreaterThan(slope - 0.5); expect(perOct).toBeLessThan(slope + 0.5);
+    }
   });
-  it('a High cut lets through what is below its corner', () => {
-    const hc = { lo: BAND_MIN_HZ, hi: 1000, shape: 'highcut' as const, slope: 12 as const };
-    expect(bandResponse(hc, 1000)).toBeCloseTo(Math.SQRT1_2, 5);
-    expect(bandResponse(hc, 100)).toBeGreaterThan(0.99);
-    expect(bandResponse(hc, 10000)).toBeLessThan(0.02);
+  it('a High cut is −3 dB at its corner, flat below, and falls at its slope well above', () => {
+    for (const slope of SLOPES) {
+      const hc = { lo: BAND_MIN_HZ, hi: 200, shape: 'highcut' as const, slope };
+      expect(db(hc, 200)).toBeCloseTo(-3.01, 1);
+      expect(db(hc, 25)).toBeGreaterThan(-0.1);
+      const perOct = db(hc, 1600) - db(hc, 3200);
+      expect(perOct).toBeGreaterThan(slope - 0.5); expect(perOct).toBeLessThan(slope + 1);
+    }
+  });
+  it('what is heard: the sections Solo plays, with WebAudio\'s dB Q for a low- / high-pass', () => {
+    const b = { lo: 1141, hi: 1223, shape: 'band' as const, slope: 12 as const };
+    const [s] = bandSections(b, SR);
+    expect(s.type).toBe('bandpass');
+    // Q 14.4, the panel's, within the pre-warp's 0.5%.
+    expect(Math.abs(s.q / widthToQ(bandView(b).width) - 1)).toBeLessThan(0.005);
+    expect(webAudioQ(s)).toBe(s.q);
+    expect(bandSections({ ...b, slope: 48 }, SR)).toHaveLength(4);
+    const lp = bandSections({ lo: BAND_MIN_HZ, hi: 500, shape: 'highcut', slope: 12 }, SR);
+    expect(lp).toEqual([{ type: 'lowpass', freq: 500, q: expect.closeTo(Math.SQRT1_2, 6) }]);
+    expect(webAudioQ(lp[0])).toBeCloseTo(-3.0103, 3);
+    expect(bandSections({ lo: 500, hi: BAND_MAX_HZ, shape: 'lowcut', slope: 24 }, SR).map(x => +x.q.toFixed(4))).toEqual([0.5412, 1.3066]);
+  });
+  it('the curve is the same whichever way it is asked for', () => {
+    const b = { lo: 200, hi: 2000, shape: 'band' as const, slope: 24 as const };
+    const hz = [50, 200, 632, 2000, 9000];
+    const g = bandGains(b, hz, SR);
+    hz.forEach((f, i) => expect(g[i]).toBeCloseTo(bandResponse(b, f, SR), 6));
   });
 });
 
@@ -108,11 +176,41 @@ describe('drag and wheel', () => {
   });
   it('width ↔ Q', () => {
     expect(widthToQ(1)).toBeCloseTo(1.414, 3);
-    for (const w of [0.3, 1, 2.5]) expect(qToWidth(widthToQ(w))).toBeCloseTo(w, 6);
+    expect(widthToQ(0.1)).toBeCloseTo(14.42, 2);
+    expect(widthToQ(2)).toBeCloseTo(2 / 3, 6);
+    for (const w of [0.1, 0.3, 1, 2.5, 8]) expect(qToWidth(widthToQ(w))).toBeCloseTo(w, 6);
+    for (const q of [0.1, 0.7071, 1, 4, 14.41, 30]) expect(widthToQ(qToWidth(q))).toBeCloseTo(q, 6);
+    // Q is the centre over the −3 dB bandwidth: f0 / (hi − lo).
+    const b = bandRange('band', 1181, 0.1), v = bandView({ ...b, shape: 'band' });
+    expect(widthToQ(v.width)).toBeCloseTo(v.freq / (b.hi - b.lo), 6);
   });
   it('names the note under a frequency', () => {
     expect(noteName(440)).toBe('A4');
     expect(noteName(261.63)).toBe('C4');
     expect(noteName(55)).toBe('A1');
+  });
+});
+
+describe('deleting a band (the window owns Delete)', () => {
+  const el = (tag: string, type?: string) => { const e = document.createElement(tag); if (type) (e as HTMLInputElement).type = type; return e; };
+  it('Delete or Backspace removes the selected band, unless typing in a field or with a modifier', () => {
+    expect(isBandDeleteKey({ key: 'Delete', target: document.body })).toBe(true);
+    expect(isBandDeleteKey({ key: 'Backspace', target: el('div') })).toBe(true);
+    expect(isBandDeleteKey({ key: 'Delete', target: el('button') })).toBe(true);
+    expect(isBandDeleteKey({ key: 'Delete', target: el('input', 'color') })).toBe(true);
+    expect(isBandDeleteKey({ key: 'Backspace', target: el('input', 'text') })).toBe(false);
+    expect(isBandDeleteKey({ key: 'Delete', target: el('textarea') })).toBe(false);
+    expect(isBandDeleteKey({ key: 'Backspace', metaKey: true, target: document.body })).toBe(false);
+    expect(isBandDeleteKey({ key: 'a', target: document.body })).toBe(false);
+  });
+  it('while a modal window is open the graph keeps its Delete to itself (the selected node behind it stays)', () => {
+    expect(modalOpen()).toBe(false);
+    const d = document.createElement('div');
+    d.setAttribute('aria-modal', 'true');
+    document.body.appendChild(d);
+    expect(modalOpen()).toBe(true);
+    d.setAttribute('aria-modal', 'false');
+    expect(modalOpen()).toBe(false);
+    d.remove();
   });
 });

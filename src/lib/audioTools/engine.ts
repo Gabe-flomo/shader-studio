@@ -49,6 +49,7 @@ import { audioHearing, collectAudioNodes, findNodeDeep } from './graphWalk';
 import { acBuild, acNewRun, acStepEffect, acTextureSize, type AcEffect, type AcRun, type AcSpec } from '../../play/kit/audioChain.js';
 import { learnFromRing, learnFromSamples, newLearnListener, type AudioSoundSpec, type LearnListener, type LearnResult } from './learn';
 import { bandsOf, newBandRun, trimWindow, type AudioBandSpec, type BandRun } from './bands';
+import { bandSections, sectionsFor, webAudioQ } from './bandFilter';
 import { AheadAnalysis } from './ahead';
 import {
   atApplyGain, atCurveAt, atEventsHeard, atNewListener, atStepListener, atStepSource, atTriggerOpts,
@@ -701,27 +702,25 @@ class AudioToolsEngine implements InputSource {
    * "Hear hovered" switch and a band's Solo. False when it can't: not a loaded file, or its own sound is already
    * routed elsewhere (an effect after it is what's heard). Moving the band only glides the filter.
    *
-   * `shape` (the band's, lib/audioTools/bands.ts): Band is the band-pass, Low cut a high-pass at lo, High cut a
-   * low-pass at hi; `slope` (dB per octave) stacks one filter per 12 dB. Unset: one band-pass, as before.
+   * `shape` and `slope` (the band's, lib/audioTools/bands.ts) pick the biquads (lib/audioTools/bandFilter.ts, the
+   * same sums the window draws the band's curve with): Band is band-passes whose −3 dB points are lo and hi, Low cut
+   * a Butterworth high-pass at lo, High cut a low-pass at hi, one section per 12 dB/oct. Unset: one band-pass.
    */
   auditionBand(id: string, lo: number, hi: number, o: { shape?: 'band' | 'lowcut' | 'highcut'; slope?: number } = {}): boolean {
     const s = this.sources.get(id);
     if (!s || s.kind !== 'file' || !s.loaded || this.diverted.has(id)) return false;
-    const shape = o.shape ?? 'band', stages = Math.max(1, Math.min(4, Math.round((o.slope ?? 12) / 12)));
-    const key = `${shape}:${stages}`;
+    const shape = o.shape ?? 'band', slope = o.slope ?? 12;
+    const key = `${shape}:${sectionsFor(slope)}`;
     if (this.audition && (this.audition.id !== id || this.audition.key !== key)) this.stopAudition();
     let ctx: AudioContext;
     try { ctx = audioEngine.context(); } catch { return false; }
-    const a = Math.max(20, Math.min(lo, hi)), b = Math.max(a + 1, Math.max(lo, hi));
-    const centre = Math.sqrt(a * b);
-    const freq = shape === 'lowcut' ? a : shape === 'highcut' ? b : centre;
-    const q = shape === 'band' ? Math.max(0.3, Math.min(30, centre / (b - a))) : Math.SQRT1_2;
+    const sections = bandSections({ lo, hi, shape, slope }, ctx.sampleRate);
     if (!this.audition) {
-      const filters = Array.from({ length: stages }, () => {
+      const filters = sections.map(sec => {
         const f = ctx.createBiquadFilter();
-        f.type = shape === 'lowcut' ? 'highpass' : shape === 'highcut' ? 'lowpass' : 'bandpass';
-        f.frequency.value = freq;
-        f.Q.value = q;
+        f.type = sec.type;
+        f.frequency.value = sec.freq;
+        f.Q.value = webAudioQ(sec);
         return f;
       });
       for (let i = 1; i < filters.length; i++) filters[i - 1].connect(filters[i]);
@@ -729,7 +728,11 @@ class AudioToolsEngine implements InputSource {
       this.audition = { id, key, filters, unplug: audioEngine.connectOutside(filters[filters.length - 1]) };
     } else {
       const t = ctx.currentTime;
-      for (const f of this.audition.filters) { f.frequency.setTargetAtTime(freq, t, 0.03); f.Q.setTargetAtTime(q, t, 0.03); }
+      this.audition.filters.forEach((f, i) => {
+        const sec = sections[i] ?? sections[0];
+        f.frequency.setTargetAtTime(sec.freq, t, 0.03);
+        f.Q.setTargetAtTime(webAudioQ(sec), t, 0.03);
+      });
     }
     return true;
   }

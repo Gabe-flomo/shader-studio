@@ -1,14 +1,18 @@
 /**
  * The Audio Source window's bands as an equaliser (after FabFilter Pro-Q, for isolating rather than boosting):
  *
- * - **The analyser**: the live spectrum on a log frequency axis (20 Hz – 20 kHz, labelled) and a dB scale, with a
- *   falling peak-hold line. Hover shows the frequency and the nearest note ("440 Hz · A4").
- * - **Each band is a handle** on its own filled curve (Band: a band-pass; Low cut: everything above; High cut:
- *   everything below), falling at its slope (12 / 24 / 48 dB/oct). Drag a handle sideways for its frequency, up /
- *   down (or scroll over it) for a Band's width; scrolling over a cut steps its slope.
+ * - **The analyser**: the live spectrum, grey, on a log frequency axis (20 Hz – 20 kHz, labelled), with a falling
+ *   peak-hold line. Hover shows the frequency and the nearest note ("440 Hz · A4").
+ * - **Each band's response**: a 0 dB line near the top, a dB scale on the right (down to −48), and each band drawn
+ *   as the exact magnitude response of the biquads Solo / Hear hovered play it through (lib/audioTools/bandFilter.ts),
+ *   worked out per pixel: a Band peaks at 0 dB and is −3 dB at its lo / hi (so a Q 14 band is a narrow spike), a cut
+ *   is flat at 0 dB and rolls off at its true slope past its corner (−3 dB). Filled under it in its colour (the
+ *   selected brighter); the bands together (the most any lets through: each is its own output) are the bright line.
+ * - **Each band is a handle** on its curve (a Band's peak, a cut's corner). Drag a handle sideways for its
+ *   frequency, up / down (or scroll over it) for a Band's width; scrolling over a cut steps its slope.
  * - **Double-click** empty spectrum to add a band there. Click a handle (or right-click it) for its panel, floating
  *   by the handle: name, Frequency and Width (type, or drag on the label), Shape, Slope, colour, Solo, Delete.
- * - **Keys** (the view focused): Delete removes the selected band, ← → move it a semitone (Shift: a third of an
+ * - **Keys**: Delete removes the selected band (anywhere in the window: AudioSourceWindow.tsx); the view focused, ← → move it a semitone (Shift: a third of an
  *   octave), ↑ ↓ narrow / widen it (a cut: its slope), Esc lets go.
  * - **Hear hovered** (the window's switch): only the frequencies under the pointer play, the band under it, else a
  *   third of an octave. **Solo** plays just the selected band until switched off. Both through engine.auditionBand.
@@ -26,15 +30,18 @@ import { Segmented } from '../ui/Choice';
 import { Button } from '../ui/Button';
 import { addDrawer } from './drawLoop';
 import {
-  FREQ_LABELS, FREQ_MINOR, MAX_WIDTH_OCT, MIN_WIDTH_OCT, SHAPE_HINTS, SHAPE_LABELS, bandRange, bandResponse, bandView,
-  dragWidth, fmtFreq, hzToX, newBandAt, noteName, responseDb, wheelSlope, wheelWidth, widthToQ, withFreq, withShape, withWidth, xToHz,
+  DEFAULT_SAMPLE_RATE, FREQ_LABELS, FREQ_MINOR, MAX_WIDTH_OCT, MIN_WIDTH_OCT, SHAPE_HINTS, SHAPE_LABELS, bandGains, bandRange, bandResponse,
+  bandView, dragWidth, fmtFreq, hzToX, newBandAt, noteName, responseDb, wheelSlope, wheelWidth, widthToQ, withFreq, withShape, withWidth, xToHz,
 } from './bandEq';
 
-/** The spectrum's dB range (analyser dB, about what AnalyserNode gives a loud mix). */
+/** The spectrum's dB range (analyser dB, about what AnalyserNode gives a loud mix), drawn over the whole height. */
 const DB_TOP = -10, DB_BOTTOM = -100;
-const DB_LINES = [-20, -40, -60, -80];
-/** The band curves' range: 0 dB at the top line, this many dB down at the bottom. */
-const CURVE_RANGE_DB = 36;
+/**
+ * The bands' scale (labelled on the right): the filters' gain, 0 dB near the top (a band passes there) down to
+ * EQ_BOTTOM_DB at the bottom. Nothing boosts, so above 0 dB is only a little headroom.
+ */
+const EQ_TOP_DB = 9, EQ_BOTTOM_DB = -48;
+const EQ_LINES = [0, -12, -24, -36];
 const AXIS = 18, TOP = 8;
 const POINTS = 240;
 const HANDLE_R = 8, HIT = 14;
@@ -54,10 +61,18 @@ function fit(c: HTMLCanvasElement | null): { g: CanvasRenderingContext2D; w: num
   return { g, w, h };
 }
 
-/** Where the curves' dB sit in the view (0 dB on the top line). */
-const CURVE_TOP = TOP + 22;
-const curveY = (db: number, h: number) => CURVE_TOP + (Math.max(0, -db) / CURVE_RANGE_DB) * (h - AXIS - CURVE_TOP);
-const handleY = (b: AudioBandSpec, h: number) => curveY(b.shape === 'band' ? 0 : -3, h);
+/** Where a band's gain (dB) sits in a view `h` tall; far below the scale it sits just under the bottom (clipped). */
+const eqY = (db: number, h: number) => TOP + ((EQ_TOP_DB - Math.max(EQ_BOTTOM_DB - 6, Math.min(EQ_TOP_DB, db))) / (EQ_TOP_DB - EQ_BOTTOM_DB)) * (h - AXIS - TOP);
+/** A band's handle sits on its curve: a Band's peak (0 dB), a cut's corner (−3 dB). */
+const handleY = (b: AudioBandSpec, h: number, sr: number) => eqY(responseDb(bandResponse(b, bandView(b).freq, sr)), h);
+/** "Freq" across the view for each CSS pixel (the curves are worked out per pixel, so a Q-14 band keeps its shape). */
+function pixelFreqs(w: number): Float64Array {
+  const n = Math.max(2, Math.round(w) + 1), f = new Float64Array(n);
+  for (let i = 0; i < n; i++) f[i] = xToHz(i / (n - 1));
+  return f;
+}
+/** `#rrggbb` + an alpha 0–1 as `#rrggbbaa`. */
+const withAlpha = (hex: string, a: number) => `${hex}${Math.round(Math.max(0, Math.min(1, a)) * 255).toString(16).padStart(2, '0')}`;
 
 type Drag = { id: string; dx: number; y0: number; width0: number; moved: boolean };
 
@@ -84,6 +99,8 @@ export function BandEqEditor({
   const hover = useRef<{ x: number; y: number } | null>(null);
   const [solo, setSolo] = useState<string | null>(null);
   const [boxW, setBoxW] = useState(800);
+  /** The sample rate the bands are heard at (their curves' shape near the top depends on it). */
+  const srRef = useRef(DEFAULT_SAMPLE_RATE);
   const latest = useRef({ bands, selected, solo, tk });
   useEffect(() => { latest.current = { bands, selected, solo, tk }; });
   const selBand = bands.find(b => b.id === selected) ?? null;
@@ -100,6 +117,9 @@ export function BandEqEditor({
   useEffect(() => {
     const cur = new Float32Array(POINTS), peak = new Float32Array(POINTS).fill(DB_BOTTOM);
     cur.fill(DB_BOTTOM);
+    // Each band's gain per pixel, worked out again only when the band or the view's width changes.
+    let freqs: Float64Array | null = null;
+    const curves = new Map<string, { key: string; gains: Float32Array }>();
     let seen = -1;
     return addDrawer(() => {
       const sp = fit(canvasRef.current);
@@ -121,11 +141,12 @@ export function BandEqEditor({
         g.textAlign = hz === 20 ? 'left' : hz === 20000 ? 'right' : 'center';
         g.fillText(label, hz === 20 ? x + 3 : hz === 20000 ? x - 3 : x, sh + 4);
       }
+      // The bands' dB scale on the right; 0 dB is drawn after the analyser, over it.
       g.textAlign = 'right'; g.textBaseline = 'middle';
-      for (const db of DB_LINES) {
-        const y = Math.round(dbY(db));
-        g.fillStyle = 'rgba(205,214,244,0.07)'; g.fillRect(0, y, w, 1);
-        g.fillStyle = 'rgba(205,214,244,0.4)'; g.fillText(`${db}`, w - 4, y - 7);
+      for (const db of EQ_LINES) {
+        const y = Math.round(eqY(db, h));
+        if (db !== 0) { g.fillStyle = 'rgba(205,214,244,0.06)'; g.fillRect(0, y, w, 1); }
+        g.fillStyle = 'rgba(205,214,244,0.45)'; g.fillText(db === 0 ? '0 dB' : `${db}`, w - 4, y - 7);
       }
       // ── The analyser ──
       if (v && audioToolsEngine.frame !== seen) {
@@ -152,38 +173,63 @@ export function BandEqEditor({
         g.beginPath();
         for (let i = 0; i < POINTS; i++) { const x = ((i + 0.5) / POINTS) * w, y = dbY(vals[i]); if (i) g.lineTo(x, y); else g.moveTo(x, y); }
       };
-      const grad = g.createLinearGradient(0, TOP, 0, sh);
-      grad.addColorStop(0, `${t.accent.base}66`); grad.addColorStop(1, `${t.accent.base}08`);
-      path(cur); g.lineTo(w, sh); g.lineTo(0, sh); g.closePath(); g.fillStyle = grad; g.fill();
-      path(cur); g.strokeStyle = 'rgba(205,214,244,0.55)'; g.lineWidth = 1; g.stroke();
-      path(peak); g.strokeStyle = 'rgba(249,226,175,0.45)'; g.lineWidth = 1; g.stroke();
-      // ── The bands: filled curves, then handles ──
+      // The analyser: grey, behind everything.
+      path(cur); g.lineTo(w, sh); g.lineTo(0, sh); g.closePath(); g.fillStyle = 'rgba(205,214,244,0.13)'; g.fill();
+      path(cur); g.strokeStyle = 'rgba(205,214,244,0.4)'; g.lineWidth = 1; g.stroke();
+      path(peak); g.strokeStyle = 'rgba(205,214,244,0.18)'; g.lineWidth = 1; g.stroke();
+      // The 0 dB line: what a band lets through untouched.
+      const y0 = eqY(0, h);
+      g.fillStyle = 'rgba(205,214,244,0.32)'; g.fillRect(0, Math.round(y0), w, 1);
+      // ── The bands: each band's response (the filters Solo plays), filled under it, then their union, then handles ──
+      const sr = v?.sampleRate || DEFAULT_SAMPLE_RATE;
+      srRef.current = sr;
+      if (!freqs || freqs.length !== Math.max(2, Math.round(w) + 1)) { freqs = pixelFreqs(w); curves.clear(); }
+      const fx = freqs, n = fx.length, xs = (i: number) => (i / (n - 1)) * w;
+      const live = new Set<string>();
+      const curveOf = (b: AudioBandSpec): Float32Array => {
+        live.add(b.id);
+        const key = `${b.lo}|${b.hi}|${b.shape}|${b.slope}|${sr}`;
+        let c = curves.get(b.id);
+        if (!c || c.key !== key) { c = { key, gains: bandGains(b, fx, sr) }; curves.set(b.id, c); }
+        return c.gains;
+      };
+      const trace = (gains: Float32Array) => {
+        g.beginPath();
+        for (let i = 0; i < n; i++) { const y = eqY(responseDb(gains[i]), h); if (i) g.lineTo(xs(i), y); else g.moveTo(xs(i), y); }
+      };
       const now = performance.now();
+      // Inside the plot only: a curve far below the scale runs off its bottom rather than along it.
+      g.save(); g.beginPath(); g.rect(0, TOP, w, sh - TOP); g.clip();
       for (const b of L.bands) {
-        const sel = b.id === L.selected, lv = v?.bands.get(b.id);
+        const sel = b.id === L.selected, lv = v?.bands.get(b.id), gains = curveOf(b);
         const flash = lv && b.trigger ? Math.max(0, 1 - (now - lv.hitAt) / 250) : 0;
-        g.beginPath();
-        for (let i = 0; i <= POINTS; i++) {
-          const x = (i / POINTS) * w, y = Math.min(sh, curveY(responseDb(bandResponse(b, xToHz(i / POINTS))), h));
-          if (i) g.lineTo(x, y); else g.moveTo(x, y);
-        }
-        g.lineTo(w, sh); g.lineTo(0, sh); g.closePath();
-        const a = Math.round((sel ? 0.26 : 0.13) * 255 + flash * 90);
-        g.fillStyle = `${b.color}${Math.min(255, a).toString(16).padStart(2, '0')}`; g.fill();
-        g.beginPath();
-        for (let i = 0; i <= POINTS; i++) {
-          const x = (i / POINTS) * w, y = Math.min(sh, curveY(responseDb(bandResponse(b, xToHz(i / POINTS))), h));
-          if (i) g.lineTo(x, y); else g.moveTo(x, y);
-        }
-        g.strokeStyle = b.color; g.lineWidth = sel ? 2 : 1.25; g.globalAlpha = sel ? 1 : 0.75; g.stroke(); g.globalAlpha = 1;
-        // Its level: a bar under the band's range, as tall as the level.
-        if (lv) {
-          const x0 = hzToX(b.lo) * w, x1 = hzToX(b.hi) * w;
-          g.fillStyle = `${b.color}cc`; g.fillRect(x0, sh - 3, Math.max(2, x1 - x0) * Math.min(1, lv.level), 3);
-        }
+        trace(gains); g.lineTo(w, sh + 8); g.lineTo(0, sh + 8); g.closePath();
+        const fill = g.createLinearGradient(0, y0, 0, sh);
+        const a = (sel ? 0.34 : 0.17) + flash * 0.3;
+        fill.addColorStop(0, withAlpha(b.color, a)); fill.addColorStop(1, withAlpha(b.color, a * 0.06));
+        g.fillStyle = fill; g.fill();
+        if (!sel) { trace(gains); g.strokeStyle = withAlpha(b.color, 0.7); g.lineWidth = 1.25; g.stroke(); }
+      }
+      for (const id of [...curves.keys()]) if (!live.has(id)) curves.delete(id);
+      // The bands together: each is its own output, so what any of them passes (the most any lets through).
+      if (L.bands.length > 1) {
+        const all = L.bands.map(curveOf), sum = new Float32Array(n);
+        for (let i = 0; i < n; i++) { let m = 0; for (const c of all) if (c[i] > m) m = c[i]; sum[i] = m; }
+        trace(sum); g.strokeStyle = 'rgba(255,255,255,0.8)'; g.lineWidth = 1.5; g.stroke();
+      }
+      // The selected band's own curve on top.
+      const selB = L.bands.find(b => b.id === L.selected);
+      if (selB) { trace(curveOf(selB)); g.strokeStyle = selB.color; g.lineWidth = 2; g.stroke(); }
+      g.restore();
+      // Each band's level: a bar under its range (its −3 dB points), as long as the level.
+      for (const b of L.bands) {
+        const lv = v?.bands.get(b.id);
+        if (!lv) continue;
+        const x0 = hzToX(b.lo) * w, x1 = hzToX(b.hi) * w;
+        g.fillStyle = withAlpha(b.color, 0.8); g.fillRect(x0, sh - 3, Math.max(2, x1 - x0) * Math.min(1, lv.level), 3);
       }
       L.bands.forEach((b, i) => {
-        const sel = b.id === L.selected, x = hzToX(bandView(b).freq) * w, y = handleY(b, h);
+        const sel = b.id === L.selected, x = hzToX(bandView(b).freq) * w, y = handleY(b, h, sr);
         const lv = v?.bands.get(b.id);
         const flash = lv && b.trigger ? Math.max(0, 1 - (now - lv.hitAt) / 250) : 0;
         if (sel || flash > 0) { g.beginPath(); g.arc(x, y, HANDLE_R + 5, 0, Math.PI * 2); g.fillStyle = `${b.color}${sel ? '33' : Math.round(flash * 200).toString(16).padStart(2, '0')}`; g.fill(); }
@@ -239,7 +285,7 @@ export function BandEqEditor({
   const handleAt = (px: number, py: number, w: number, h: number, reach = HIT): AudioBandSpec | null => {
     let best: AudioBandSpec | null = null, bd = reach;
     for (const b of bands) {
-      const d = Math.hypot(hzToX(bandView(b).freq) * w - px, handleY(b, h) - py);
+      const d = Math.hypot(hzToX(bandView(b).freq) * w - px, handleY(b, h, srRef.current) - py);
       if (d <= bd) { bd = d; best = b; }
     }
     return best;
@@ -248,7 +294,7 @@ export function BandEqEditor({
   const bandUnder = (x: number): AudioBandSpec | null => {
     const hz = xToHz(x);
     let best: AudioBandSpec | null = null, br = 0.5;
-    for (const b of bands) { const r = bandResponse(b, hz); if (r > br || (r >= br && b.id === selected)) { br = r; best = b; } }
+    for (const b of bands) { const r = bandResponse(b, hz, srRef.current); if (r > br || (r >= br && b.id === selected)) { br = r; best = b; } }
     return best;
   };
   const hearAt = (x: number) => {
@@ -340,8 +386,8 @@ export function BandEqEditor({
     if (!selBand) return;
     const v = bandView(selBand);
     let p: Partial<AudioBandSpec> | null = null;
-    if (e.key === 'Delete' || e.key === 'Backspace') { setBands(bands.filter(b => b.id !== selBand.id), true); onSelect(null); }
-    else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') p = withFreq(selBand, v.freq * 2 ** ((e.key === 'ArrowRight' ? 1 : -1) * (e.shiftKey ? 4 : 1) / 12));
+    // Delete / Backspace: the window's (AudioSourceWindow.tsx), wherever the focus is, so the graph never gets it.
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') p = withFreq(selBand, v.freq * 2 ** ((e.key === 'ArrowRight' ? 1 : -1) * (e.shiftKey ? 4 : 1) / 12));
     else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
       const up = e.key === 'ArrowUp';
       p = selBand.shape === 'band' ? withWidth(selBand, v.width * 2 ** ((up ? -1 : 1) / 6)) : { slope: wheelSlope(selBand.slope, up ? -1 : 1) };
@@ -352,8 +398,10 @@ export function BandEqEditor({
 
   // ── The floating panel ──
   const handleX = selBand ? hzToX(bandView(selBand).freq) * boxW : 0;
-  const panelLeft = Math.max(4, Math.min(boxW - Math.min(PANEL_W, boxW - 8) - 4, handleX - PANEL_W / 2));
-  const selY = selBand ? handleY(selBand, height) : 0;
+  // Beside the handle (on the roomier side), just under it: the band's curve stays in sight.
+  const panelW = Math.min(PANEL_W, boxW - 8);
+  const panelLeft = Math.max(4, Math.min(boxW - panelW - 4, handleX > boxW / 2 ? handleX - HANDLE_R - 16 - panelW : handleX + HANDLE_R + 16));
+  const selY = selBand ? handleY(selBand, height, srRef.current) : 0;
   const panelBelow = selY < height / 2;
 
   return (
@@ -366,7 +414,7 @@ export function BandEqEditor({
           style={{ width: '100%', height, borderRadius: radius.md, display: 'block', cursor: 'crosshair', touchAction: 'none' }} />
         {selBand && (
           <BandPanel key={selBand.id} band={selBand} index={bands.indexOf(selBand)} solo={solo === selBand.id}
-            style={{ position: 'absolute', left: panelLeft, width: Math.min(PANEL_W, boxW - 8), ...(panelBelow ? { top: selY + HANDLE_R + 10 } : { bottom: height - selY + HANDLE_R + 10 }) }}
+            style={{ position: 'absolute', left: panelLeft, width: panelW, ...(panelBelow ? { top: selY + 4 } : { bottom: height - selY + 4 }) }}
             patch={(p, structural) => patchBand(selBand.id, p, structural)}
             onSolo={() => setSolo(solo === selBand.id ? null : selBand.id)}
             onDelete={() => { setBands(bands.filter(b => b.id !== selBand.id), true); onSelect(null); }}

@@ -30,6 +30,7 @@ import { ThemeOverrideContext, useTokens } from './theme/themeStore';
 import { AspectPicker, CanvasFullscreenButton, PreviewFooter, PreviewHeader, PreviewQualityPicker, FrameRatePicker } from './components/shell/PreviewChrome';
 import { OverlayButton } from './components/PreviewOverlay';
 import { canvasFrameRef as canvasFrame, exitFullscreen, isFullscreenKey, isTyping, toggleFullscreenTarget, useFullscreen } from './lib/fullscreen';
+import { modalOpen } from './lib/modalOpen';
 import { GuidesToggle } from './components/play/GuidesToggle';
 import { PANEL_WIDTHS, usePlayUi } from './components/play/playUi';
 import { PlaySplitArea, SplitButton } from './components/play/PlaySplitArea';
@@ -814,6 +815,9 @@ function App() {
       if (ids.length > 0) st.duplicateNodes(ids);
     }),
     deleteSelected: unlessScratch(() => {
+      // A window over the graph owns Delete (the Audio Source window's removes its selected band): the selected
+      // nodes are behind it, out of sight, and must not vanish.
+      if (modalOpen()) return;
       const st = useNodeGraphStore.getState();
       const ids = st.selectedNodeIds.length > 0 ? st.selectedNodeIds : st.selectedNodeId ? [st.selectedNodeId] : [];
       if (ids.length === 0) return;
