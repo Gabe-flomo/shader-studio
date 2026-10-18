@@ -106,6 +106,14 @@ export const TEXTURE_TOOL_EXAMPLE_INDEX: Record<string, { label: string; descrip
     label: 'Texture tools 21 · Segment: click to select', play: true,
     description: 'Segment (Click) cuts out whatever is under a point and follows it as it moves: here a ball cluster in the Ball action clip. Press Pick on preview on the Segment card and click anything to select it; everything else fades to grey.',
   },
+  ttDeepGlow: {
+    label: 'Texture tools 22 · Deep glow on a video', play: true,
+    description: 'Glow (texture) with Method Deep glow on the Ball action clip: a hot core round every bright ball and a tail that reaches far across the frame, its colours fanning out a little (Chromatic spread). Its Color output is the video with the glow over it.',
+  },
+  ttDisplaceNoise: {
+    label: 'Texture tools 23 · Displace a video by a noise', play: true,
+    description: 'Displace (texture) reads the Ball action clip pushed about by a map: two drifting noises in a Pass, red pushing across and green up and down (0.5 stays put), so the video ripples like it is under water.',
+  },
 };
 
 /** The ordered keys, for the Texture tools folder. */
@@ -1081,6 +1089,58 @@ export function buildTextureToolExamples(): Record<string, ExampleGraph> {
 **How it is built.** Video → Segment (Click, Follow) → Look: colour where Mask is 1, grey elsewhere, an orange Edge.
 
 **Try.** Press Pick on preview on the Segment card and click another part of the picture. Turn Follow off to keep looking at the same spot.`),
+  };
+
+  // ── 22 · Video → Glow (texture), Deep glow ──
+  g.ttDeepGlow = {
+    ...TEXTURE_TOOL_EXAMPLE_INDEX.ttDeepGlow,
+    counter: 10,
+    nodes: [
+      n('videoInput', 'vid', 40, 300, { ...BALL_VIDEO_PARAMS, ...note('Video Input: the built-in Ball action clip, looping. Its Texture output goes straight into the glow: no Pass of your own needed.') }),
+      n('glowTexture', 'glow', 340, 300, { method: 'deep', radius: 160, intensity: 1.2, threshold: 0.35, knee: 0.3, spread: 0.4, preserve: 0.5, composite: 'add',
+        ...note([
+          'Glow (texture), Method Deep glow: After Effects\' Deep Glow. Everything brighter than Threshold glows, with a hot core and a tail out to Radius (160 picture pixels; wider costs the same).',
+          'Chromatic spread 0.4 lets red reach a little further than blue, so the halo fans into colour; Preserve colour 0.5 keeps the balls\' own hue in the core.',
+          'Its Color output is the video with the glow added (Composite: Add); Glow is the glow alone.',
+        ]) },
+        { texture: ['vid', 'texture'] }),
+      n('output', 'out', 640, 300, note('Output: the glowing video. The glow\'s hidden passes run first each frame.'), { color: ['glow', 'color'] }),
+    ],
+    play: playRecord([
+      ctl('radius', 'glow::radius', 'Radius', 10, 400, 1),
+      ctl('intensity', 'glow::intensity', 'Intensity', 0, 4, 0.01),
+      ctl('threshold', 'glow::threshold', 'What glows', 0, 1, 0.01),
+    ], `**What it shows.** The deep, filmic glow on any texture: Glow (texture) with Method Deep glow.
+
+**How it is built.** Video Input → Glow (texture), Deep glow → Output (its Color). The node makes its own chain of smaller and smaller hidden passes, which is why a huge Radius costs no more.
+
+**Try.** Radius 400 for light that fills the frame. Threshold 0.1 to make everything glow. Composite Screen for a softer, never-clipping add. Switch Method to Bloom chain to compare.`),
+  };
+
+  // ── 23 · Two noises → Pass (the map) → Displace (texture) of the video ──
+  g.ttDisplaceNoise = {
+    ...TEXTURE_TOOL_EXAMPLE_INDEX.ttDisplaceNoise,
+    counter: 20,
+    nodes: [
+      n('videoInput', 'vid', 40, 120, { ...BALL_VIDEO_PARAMS, ...note('Video Input: the built-in Ball action clip, the picture to push about.') }),
+      n('uv', 'uv', 40, 420, note('UV: this pixel\'s place in the picture: where the noises are read.')),
+      n('time', 'time', 40, 600, note('Time: drifts the noises.')),
+      n('fbm', 'nx', 340, 380, { scale: 3, time_scale: 0.15, octaves: 4, ...note('Fractal Noise: a soft random value, 0 to 1, drifting slowly: the push across.') }, { uv: ['uv', 'uv'], time: ['time', 'time'] }),
+      n('fbm', 'ny', 340, 600, { scale: 3.3, time_scale: 0.12, octaves: 4, ...note('Fractal Noise: a second one, a little finer and slower, so the push up and down doesn\'t follow the push across.') }, { uv: ['uv', 'uv'], time: ['time', 'time'] }),
+      n('makeVec3', 'mapCol', 640, 480, { b: 0, ...note('Make Vec3: the map as a colour. Red is the push across, green up and down; 0.5 would leave the pixel where it is.') }, { r: ['nx', 'value'], g: ['ny', 'value'] }),
+      n('pass', 'map', 940, 480, { label: 'Pass · map', scale: '0.5', ...note('Pass: holds the map as a texture (half size: the noises are soft, so nothing is lost), for Displace to read.') }, { color: ['mapCol', 'rgb'] }),
+      n('displaceTexture', 'push', 1240, 300, { amount: 24, ...note('Displace (texture): reads the video at this pixel moved by the map\'s red and green, up to Amount (24 picture pixels) each way.') },
+        { texture: ['vid', 'texture'], map: ['map', 'texture'] }),
+      n('output', 'out', 1540, 300, note('Output: the rippling video. The map Pass draws first each frame.'), { color: ['push', 'color'] }),
+    ],
+    play: playRecord([
+      ctl('amount', 'push::amount', 'How far it pushes', 0, 80, 0.5),
+      ctl('speed', 'nx::time_scale', 'Ripple speed', 0, 1, 0.01),
+    ], `**What it shows.** Displace (texture): one texture read through another. The map's red and green say how far each pixel of the picture is pushed.
+
+**How it is built.** Two Fractal Noises → Make Vec3 (red, green) → Pass (the map) → Displace (texture) of the Video Input's Texture → Output.
+
+**Try.** Amount 80 for heavy warping. Swap the noises for a Spectrogram or a Pass of something you draw. Displace (2D Space) does the same to a UV instead of a texture.`),
   };
 
   return g;

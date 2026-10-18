@@ -15,9 +15,9 @@ export const PROBE_READ_TYPE = 'probeRead';
 
 export const ProbeNode: NodeDefinition = {
   type: PROBE_TYPE,
-  label: 'Value at point',
+  label: 'Value at Point',
   category: 'Utility',
-  aliases: ['Probe', 'Sample at point', 'Read pixel', 'Single value', 'Freeze across pixels', 'Value here', 'Pick value'],
+  aliases: ['Value at point', 'Probe', 'Sample at point', 'Read pixel', 'Single value', 'Freeze across pixels', 'Value here', 'Pick value'],
   description: 'Turns a value that changes from pixel to pixel (an SDF\'s distance, a noise, a mask) into one number, the same everywhere: the value at Point, read exactly. Use it before Text, a memory node, or any setting that wants a single number.',
   inputs: {
     value: { type: 'float', label: 'Value', hint: 'Any float: it is worked out at Point, not at each pixel.' },

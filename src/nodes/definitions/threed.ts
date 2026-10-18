@@ -1096,7 +1096,7 @@ export const MultiLightNode: NodeDefinition = withParamSockets({
   type: 'multiLight',
   label: 'Multi-Light',
   category: '3D Lighting',
-  description: 'IQ outdoor lighting rig: sun diffuse + sky dome + bounce light. Outputs linear HDR — chain with ToneMap node for display.',
+  description: 'An outdoor lighting rig (Inigo Quilez\'s): a sun, a sky dome and bounce light over the surface colour, where Hit is 1. Point the sun with Azimuth and Elevation (or X / Y / Z); Background fills where the ray hit nothing. Outputs linear light: finish with Tone Map.',
   inputs: {
     baseColor: { type: 'vec3',  label: 'Base Color' },
     normal:    { type: 'vec3',  label: 'Normal'     },
@@ -1108,24 +1108,36 @@ export const MultiLightNode: NodeDefinition = withParamSockets({
   outputs: { color: { type: 'vec3', label: 'Lit Color' } },
   glslFunction: MULTILIGHT_GLSL,
   defaultParams: {
+    sunFrom: 'xyz', azimuth: 56.3, elevation: 44.2,
     sunDirX: 0.6,  sunDirY: 0.7,  sunDirZ: 0.4,
     sunR:    1.0,  sunG:    0.9,  sunB:    0.7,
     skyR:    0.3,  skyG:    0.5,  skyB:    0.7,
     bounceR: 0.1,  bounceG: 0.1,  bounceB: 0.08,
+    background: 'none', bgColor: [0.05, 0.05, 0.08],
   },
+  // Sun starts as X / Y / Z (every Multi-Light made before Azimuth & elevation existed reads the same).
   paramDefs: {
-    sunDirX: { label: 'Sun X', type: 'float', min: -1.0, max: 1.0, step: 0.01, hint: 'Sun direction X component. Normalized internally — only the ratio matters.' },
-    sunDirY: { label: 'Sun Y', type: 'float', min: -1.0, max: 1.0, step: 0.01, hint: 'Sun direction Y component. Positive = sun above horizon; negative = below.' },
-    sunDirZ: { label: 'Sun Z', type: 'float', min: -1.0, max: 1.0, step: 0.01, hint: 'Sun direction Z component. Controls left/right sun angle.' },
-    sunR:    { label: 'Sun R', type: 'float', min: 0.0,  max: 2.0, step: 0.01, hint: 'Direct sun light red. Values > 1 are HDR — boost for warm golden hour.' },
-    sunG:    { label: 'Sun G', type: 'float', min: 0.0,  max: 2.0, step: 0.01, hint: 'Direct sun light green.' },
-    sunB:    { label: 'Sun B', type: 'float', min: 0.0,  max: 2.0, step: 0.01, hint: 'Direct sun light blue. Lower than R/G for warm sunlight.' },
-    skyR:    { label: 'Sky R', type: 'float', min: 0.0,  max: 1.0, step: 0.01, hint: 'Sky dome indirect light red. Faces the top hemisphere.' },
-    skyG:    { label: 'Sky G', type: 'float', min: 0.0,  max: 1.0, step: 0.01, hint: 'Sky dome indirect light green.' },
-    skyB:    { label: 'Sky B', type: 'float', min: 0.0,  max: 1.0, step: 0.01, hint: 'Sky dome indirect light blue. Higher than R for a blue sky fill.' },
-    bounceR: { label: 'Bounce R', type: 'float', min: 0.0, max: 0.5, step: 0.005, hint: 'Bounce/fill light red — simulates indirect light from the ground or walls.' },
-    bounceG: { label: 'Bounce G', type: 'float', min: 0.0, max: 0.5, step: 0.005, hint: 'Bounce/fill light green.' },
-    bounceB: { label: 'Bounce B', type: 'float', min: 0.0, max: 0.5, step: 0.005, hint: 'Bounce/fill light blue.' },
+    sunFrom: { section: 'Sun', label: 'Sun', type: 'select', hint: 'Point the sun by its angles, or by a direction (X, Y, Z). A wired Sun Dir wins over both.', options: [
+      { value: 'angles', label: 'Azimuth & elevation' }, { value: 'xyz', label: 'Direction X / Y / Z' },
+    ] },
+    azimuth:   { section: 'Sun', label: 'Azimuth', type: 'float', min: -180, max: 180, step: 0.5, showWhen: { param: 'sunFrom', value: 'angles' }, hint: 'Degrees round the up axis: 0 shines from the front (+Z), 90 from the right (+X).' },
+    elevation: { section: 'Sun', label: 'Elevation', type: 'float', min: -90, max: 90, step: 0.5, showWhen: { param: 'sunFrom', value: 'angles' }, hint: 'Degrees above the horizon: 90 is straight overhead, below 0 the sun is under the ground.' },
+    sunDirX: { section: 'Sun', label: 'Sun X', type: 'float', min: -1.0, max: 1.0, step: 0.01, showWhen: { param: 'sunFrom', value: 'xyz' }, hint: 'Sun direction X component. Normalized internally — only the ratio matters.' },
+    sunDirY: { section: 'Sun', label: 'Sun Y', type: 'float', min: -1.0, max: 1.0, step: 0.01, showWhen: { param: 'sunFrom', value: 'xyz' }, hint: 'Sun direction Y component. Positive = sun above horizon; negative = below.' },
+    sunDirZ: { section: 'Sun', label: 'Sun Z', type: 'float', min: -1.0, max: 1.0, step: 0.01, showWhen: { param: 'sunFrom', value: 'xyz' }, hint: 'Sun direction Z component. Controls left/right sun angle.' },
+    background: { section: 'Background', label: 'Background', type: 'select', hint: 'Where Hit is 0 (the ray missed): black, or a colour of its own (so no Select is needed after it).', options: [
+      { value: 'none', label: 'Black' }, { value: 'colour', label: 'Colour' },
+    ] },
+    bgColor: { section: 'Background', label: 'Background colour', type: 'vec3color', showWhen: { param: 'background', value: 'colour' }, hint: 'What a ray that hits nothing shows.' },
+    sunR:    { section: 'Light colours', label: 'Sun R', type: 'float', min: 0.0,  max: 2.0, step: 0.01, hint: 'Direct sun light red. Values > 1 are HDR — boost for warm golden hour.' },
+    sunG:    { section: 'Light colours', label: 'Sun G', type: 'float', min: 0.0,  max: 2.0, step: 0.01, hint: 'Direct sun light green.' },
+    sunB:    { section: 'Light colours', label: 'Sun B', type: 'float', min: 0.0,  max: 2.0, step: 0.01, hint: 'Direct sun light blue. Lower than R/G for warm sunlight.' },
+    skyR:    { section: 'Light colours', label: 'Sky R', type: 'float', min: 0.0,  max: 1.0, step: 0.01, hint: 'Sky dome indirect light red. Faces the top hemisphere.' },
+    skyG:    { section: 'Light colours', label: 'Sky G', type: 'float', min: 0.0,  max: 1.0, step: 0.01, hint: 'Sky dome indirect light green.' },
+    skyB:    { section: 'Light colours', label: 'Sky B', type: 'float', min: 0.0,  max: 1.0, step: 0.01, hint: 'Sky dome indirect light blue. Higher than R for a blue sky fill.' },
+    bounceR: { section: 'Light colours', label: 'Bounce R', type: 'float', min: 0.0, max: 0.5, step: 0.005, hint: 'Bounce/fill light red — simulates indirect light from the ground or walls.' },
+    bounceG: { section: 'Light colours', label: 'Bounce G', type: 'float', min: 0.0, max: 0.5, step: 0.005, hint: 'Bounce/fill light green.' },
+    bounceB: { section: 'Light colours', label: 'Bounce B', type: 'float', min: 0.0, max: 0.5, step: 0.005, hint: 'Bounce/fill light blue.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id        = node.id;
@@ -1137,12 +1149,16 @@ export const MultiLightNode: NodeDefinition = withParamSockets({
     const sunDirX   = p(node.params.sunDirX, 0.6);
     const sunDirY   = p(node.params.sunDirY, 0.7);
     const sunDirZ   = p(node.params.sunDirZ, 0.4);
-    const sunDir    = inputVars.sunDir    || `vec3(${sunDirX}, ${sunDirY}, ${sunDirZ})`;
+    // Azimuth & elevation (degrees): (cos el · sin az, sin el, cos el · cos az).
+    const az = `(${p(node.params.azimuth, 56.3)} * 0.017453292519943295)`, el = `(${p(node.params.elevation, 44.2)} * 0.017453292519943295)`;
+    const fromAngles = `vec3(cos(${el}) * sin(${az}), sin(${el}), cos(${el}) * cos(${az}))`;
+    const sunDir    = inputVars.sunDir    || (node.params.sunFrom === 'angles' ? fromAngles : `vec3(${sunDirX}, ${sunDirY}, ${sunDirZ})`);
+    const bg        = node.params.background === 'colour' ? pv3(node.params.bgColor, [0.05, 0.05, 0.08]) : 'vec3(0.0)';
     const sunColor  = `vec3(${p(node.params.sunR, 1.0)}, ${p(node.params.sunG, 0.9)}, ${p(node.params.sunB, 0.7)})`;
     const skyColor  = `vec3(${p(node.params.skyR, 0.3)}, ${p(node.params.skyG, 0.5)}, ${p(node.params.skyB, 0.7)})`;
     const bounceColor = `vec3(${p(node.params.bounceR, 0.1)}, ${p(node.params.bounceG, 0.1)}, ${p(node.params.bounceB, 0.08)})`;
     return {
-      code: `    vec3 ${id}_color = ${hit} > 0.5 ? multiLight(${baseColor}, ${normal}, ${ao}, ${shadow}, ${sunDir}, ${sunColor}, ${skyColor}, ${bounceColor}) : vec3(0.0);\n`,
+      code: `    vec3 ${id}_color = ${hit} > 0.5 ? multiLight(${baseColor}, ${normal}, ${ao}, ${shadow}, ${sunDir}, ${sunColor}, ${skyColor}, ${bounceColor}) : ${bg};\n`,
       outputVars: { color: `${id}_color` },
     };
   },
@@ -1186,7 +1202,7 @@ export const Fresnel3DNode: NodeDefinition = withParamSockets({
 
 export const FakeSSSNode: NodeDefinition = withParamSockets({
   type: 'fakeSSS',
-  label: 'Fake SSS',
+  label: 'Skin Glow', aliases: ['Fake SSS', 'SSS', 'Subsurface scattering', 'Translucency', 'Wax'],
   category: '3D Lighting',
   description: 'Fake subsurface scattering via Beer\'s law thickness estimation. Makes wax, jade, soap look compelling. Connect same SceneGroup as MarchLoopGroup.',
   inputs: {
@@ -1517,7 +1533,7 @@ export const GlassNode: NodeDefinition = withParamSockets({
 
 export const PhaseHGNode: NodeDefinition = withParamSockets({
   type: 'phaseHG',
-  label: 'Phase (HG)',
+  label: 'Light Scattering', aliases: ['Phase (HG)', 'Henyey-Greenstein', 'HG phase', 'Forward scattering'],
   category: '3D Lighting',
   description: 'Henyey-Greenstein phase function. Weights in-scattered light by the angle between view and light directions. Wire cos(θ) = dot(−Ray Dir, Light Dir). g=0: isotropic fog. g≈0.8: forward-scattering cloud. g<0: backlit haze.',
   inputs: {

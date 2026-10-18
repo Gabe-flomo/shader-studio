@@ -415,8 +415,8 @@ export const HOPF_MAX_COUNT = 24;
 export const HOPF_MAX_RINGS = 3;
 
 export const HopfCirclesSDFNode = shapeNode({
-  type: 'hopfCirclesSDF', label: 'Hopf Circles SDF', fn: 'sdf4d_hopf',
-  aliases: ['hopf fibration', 'hopf fibres', 'villarceau', 'linked circles', 'great circles'],
+  type: 'hopfCirclesSDF', label: 'Hopf Circles', fn: 'sdf4d_hopf',
+  aliases: ['Hopf Circles SDF', 'hopf fibration', 'hopf fibres', 'villarceau', 'linked circles', 'great circles'],
   description:
     'A few fibres of the Hopf fibration: great circles on a 3-sphere, any two of which link once. Each is a thin tube (exact distance: around a circle, the distance is √((ρ − R)² + perp²)). ' +
     'On its own in a slice they look like rings; through Stereographic 4D they become the famous bundle of linked circles filling space, nested around circles of latitude. ' +

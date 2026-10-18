@@ -2,8 +2,11 @@
 
 One node that moves, turns and scales a point in **2D, 3D or 4D** (`src/nodes/definitions/transformAny.ts`).
 It is the default transform: the builders, recipes, the Do bar, suggestions and smart 3D placement make it.
-The single-purpose nodes (Transform 2D, UV Transform 2D, Rotate 2D, Translate / Rotate / Rotate Axis / Scale 3D,
-Translate / Rotate / Scale 4D) stay in the library and in saved graphs, unchanged.
+The single-purpose nodes (Transform 2D, UV Transform 2D, Rotate 2D, Translate / Rotate / Scale 3D, Translate /
+Rotate / Scale 4D) were retired from the library on 2026-10-17 (docs/node-retirements.md): a saved one becomes a
+Transform when the graph opens, wherever that gives exactly the same numbers (`migrateTransformsOnLoad`,
+`src/nodes/toTransform.ts`), and stays as it was otherwise (an angle in radians, a wire with no place). Rotate Axis 3D
+(any axis) stays in the library.
 
 ## The card
 
@@ -103,8 +106,7 @@ difference. `src/components/NodeGraph/__tests__/switchToTransformChoice.test.tsx
   goes into the scene there, or gets its own Scene Group, camera and loop, like Rotate 3D (`smart3d.ts`,
   `scene3dShapes.ts`); a 4D one gets a Lift to 4D before it.
 - **Do bar**: `create rotate`, `add move`, `create translate 3d`, `create transform 4d`… make a Transform in the
-  dimension named. The old nodes are still made by their type name (`create rotate3d`), which is how a printed
-  recipe names them.
+  dimension named. The retired nodes are no longer made by name.
 - **Builders**: the 2D Scene Builder places shapes, rings, zoom, move and rotate with Transform; the 3D Scene
   Builder writes a shape's place and turn as one Transform and Move / Turn / Rotate / Scale as one each (Describe
   reads both these and the older Translate / Rotate / Scale 3D graphs). A shape added beside another is moved

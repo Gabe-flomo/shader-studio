@@ -250,7 +250,7 @@ stack warps on it. Warps run top to bottom:
 | repeat | endless copies, one per cell | Repeat 3D |
 | mirror-repeat | endless copies, every other one flipped | Mirrored Repeat 3D |
 | limited-repeat | a few copies each way | Limited Repeat 3D |
-| mirror | one half of space mirrored onto the other | Fold 3D |
+| mirror | one half of space mirrored onto the other | Mirror Fold 3D (Offsets 0) |
 | fold | mirror with an offset (fractal folds) | Mirror Fold 3D |
 | polar-repeat | copies round an axis | Polar Repeat 3D |
 | kaleido | repeated folds with a solid's symmetry | Kaleidoscope 3D |

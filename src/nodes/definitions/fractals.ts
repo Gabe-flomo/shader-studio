@@ -138,37 +138,37 @@ export const MandelbrotNode: NodeDefinition = {
     dist_shade:     0.0,   // 0 = off; darken near-set boundary using distance estimation
   },
   paramDefs: {
-    mode: { label: 'Mode', type: 'select', hint: 'Mandelbrot varies c per pixel; Julia fixes c and varies the start point.', options: [
+    mode: { section: 'Fractal', label: 'Mode', type: 'select', hint: 'Mandelbrot varies c per pixel; Julia fixes c and varies the start point.', options: [
       { value: 'mandelbrot', label: 'Mandelbrot' },
       { value: 'julia',      label: 'Julia'      },
     ]},
-    precision: { label: 'Precision', type: 'select', hint: 'Standard is fast; High uses double-single math for zooms past 10^6.', options: [
+    precision: { section: 'Fractal', label: 'Precision', type: 'select', hint: 'Standard is fast; High uses double-single math for zooms past 10^6.', options: [
       { value: 'standard', label: 'Standard (fast, zoom ≤ 10⁶)' },
       { value: 'high',     label: 'High (DS, zoom ≤ 10¹²)'     },
     ]},
-    power:          { label: 'Power (k)',       type: 'float', min: 2,     max: 8,    step: 1, hint: 'Exponent k in z^k + c. 2 is the classic set; higher adds symmetry lobes.' },
-    max_iter:       { label: 'Max Iterations',  type: 'float', min: 20,    max: 2000, step: 5, hint: 'Detail at the boundary. Higher resolves finer filaments but costs GPU time.' },
-    bailout:        { label: 'Bailout Radius',  type: 'float', min: 2,     max: 1000, step: 10, hint: 'Escape radius. 2 is the minimum; larger smooths the coloring bands.' },
-    zoom:           { label: 'Zoom',            type: 'float', min: 0.01,  max: 50000, step: 0.05, hint: 'Magnification. Fine control; use Zoom (log2) for deep dives.' },
-    zoom_exp:       { label: 'Zoom (log₂)',     type: 'float', min: 0,     max: 60,   step: 0.1, hint: 'Extra magnification as a power of two. 10 is x1024 on top of Zoom.' },
-    center_x:       { label: 'Center X',        type: 'float', min: -3,    max: 3,    step: 0.0001, hint: 'Real part of the view center.' },
-    center_y:       { label: 'Center Y',        type: 'float', min: -3,    max: 3,    step: 0.0001, hint: 'Imaginary part of the view center.' },
-    cx:             { label: 'Julia c.x',       type: 'float', min: -2,    max: 2,    step: 0.001, hint: 'Real part of c in Julia mode. Try -0.8.' },
-    cy:             { label: 'Julia c.y',       type: 'float', min: -2,    max: 2,    step: 0.001, hint: 'Imaginary part of c in Julia mode. Try 0.156.' },
-    orbit_trap:     { label: 'Orbit Trap',  type: 'select', hint: 'Shape the orbit is measured against; colors by how close the orbit passes.', options: [
+    power:          { section: 'Fractal', label: 'Power (k)',       type: 'float', min: 2,     max: 8,    step: 1, hint: 'Exponent k in z^k + c. 2 is the classic set; higher adds symmetry lobes.' },
+    max_iter:       { section: 'Fractal', label: 'Max Iterations',  type: 'float', min: 20,    max: 2000, step: 5, hint: 'Detail at the boundary. Higher resolves finer filaments but costs GPU time.' },
+    bailout:        { section: 'Fractal', label: 'Bailout Radius',  type: 'float', min: 2,     max: 1000, step: 10, hint: 'Escape radius. 2 is the minimum; larger smooths the coloring bands.' },
+    zoom:           { section: 'Fractal', label: 'Zoom',            type: 'float', min: 0.01,  max: 50000, step: 0.05, hint: 'Magnification. Fine control; use Zoom (log2) for deep dives.' },
+    zoom_exp:       { section: 'Fractal', label: 'Zoom (log₂)',     type: 'float', min: 0,     max: 60,   step: 0.1, hint: 'Extra magnification as a power of two. 10 is x1024 on top of Zoom.' },
+    center_x:       { section: 'Fractal', label: 'Center X',        type: 'float', min: -3,    max: 3,    step: 0.0001, hint: 'Real part of the view center.' },
+    center_y:       { section: 'Fractal', label: 'Center Y',        type: 'float', min: -3,    max: 3,    step: 0.0001, hint: 'Imaginary part of the view center.' },
+    cx:             { section: 'Fractal', label: 'Julia c.x',       type: 'float', min: -2,    max: 2,    step: 0.001, hint: 'Real part of c in Julia mode. Try -0.8.' },
+    cy:             { section: 'Fractal', label: 'Julia c.y',       type: 'float', min: -2,    max: 2,    step: 0.001, hint: 'Imaginary part of c in Julia mode. Try 0.156.' },
+    orbit_trap:     { section: 'Orbit trap', label: 'Orbit Trap',  type: 'select', hint: 'Shape the orbit is measured against; colors by how close the orbit passes.', options: [
       { value: 'none',  label: 'None'         },
       { value: 'point', label: 'Point'        },
       { value: 'line',  label: 'Line (y=0)'   },
       { value: 'ring',  label: 'Ring'         },
       { value: 'cross', label: 'Cross'        },
     ]},
-    trap_x:         { label: 'Trap X',          type: 'float', min: -2,    max: 2,    step: 0.01, hint: 'Horizontal position of the trap shape.' },
-    trap_y:         { label: 'Trap Y',          type: 'float', min: -2,    max: 2,    step: 0.01, hint: 'Vertical position of the trap shape.' },
-    trap_r:         { label: 'Trap Radius',     type: 'float', min: 0.0,   max: 2,    step: 0.01, hint: 'Size of the trap shape (ring and cross).' },
-    palette_preset: { label: 'Palette',         type: 'select', options: PALETTE_PRESET_OPTIONS, hint: 'Color ramp used for iteration coloring.' },
-    color_scale:    { label: 'Color Cycles',    type: 'float', min: 0.1,   max: 20,   step: 0.1, hint: 'How many times the palette repeats across the iteration range.' },
-    color_offset:   { label: 'Color Offset',    type: 'float', min: 0.0,   max: 1.0,  step: 0.01, hint: 'Shifts the palette along, 0 to 1.' },
-    dist_shade:     { label: 'Edge Shading',    type: 'float', min: 0.0,   max: 20,   step: 0.1, hint: 'Darkens pixels near the set boundary using the distance estimate. 0 is off.' },
+    trap_x:         { section: 'Orbit trap', label: 'Trap X',          type: 'float', min: -2,    max: 2,    step: 0.01, hint: 'Horizontal position of the trap shape.' },
+    trap_y:         { section: 'Orbit trap', label: 'Trap Y',          type: 'float', min: -2,    max: 2,    step: 0.01, hint: 'Vertical position of the trap shape.' },
+    trap_r:         { section: 'Orbit trap', label: 'Trap Radius',     type: 'float', min: 0.0,   max: 2,    step: 0.01, hint: 'Size of the trap shape (ring and cross).' },
+    palette_preset: { section: 'Colour', label: 'Palette',         type: 'select', options: PALETTE_PRESET_OPTIONS, hint: 'Color ramp used for iteration coloring.' },
+    color_scale:    { section: 'Colour', label: 'Color Cycles',    type: 'float', min: 0.1,   max: 20,   step: 0.1, hint: 'How many times the palette repeats across the iteration range.' },
+    color_offset:   { section: 'Colour', label: 'Color Offset',    type: 'float', min: 0.0,   max: 1.0,  step: 0.01, hint: 'Shifts the palette along, 0 to 1.' },
+    dist_shade:     { section: 'Colour', label: 'Edge Shading',    type: 'float', min: 0.0,   max: 20,   step: 0.1, hint: 'Darkens pixels near the set boundary using the distance estimate. 0 is off.' },
   },
 
   generateGLSL: (node: GraphNode, inputVars) => {
@@ -507,7 +507,7 @@ const IFS_GLSL = IFS_HELPERS + '\n' + FERN_TRANSFORMS + '\n'
 
 export const IFSNode: NodeDefinition = withParamSockets({
   type: 'ifs',
-  label: 'IFS Fractal',
+  label: 'Fold Fractal', aliases: ['IFS Fractal', 'IFS', 'Iterated function system'],
   category: 'Fractals',
   description: [
     'Iterated Function System fractal via chaos game simulation. ',

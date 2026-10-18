@@ -9,7 +9,7 @@ describe('suggestQuickAdds', () => {
 
   it('reads the socket label: a Time input gets BPM Sync, a Center input gets the mouse', () => {
     expect(suggestQuickAdds({ type: 'float', dir: 'in', label: 'Time' }).map(q => q.type)).toEqual(['time', 'bpmSync', 'lfo']);
-    expect(suggestQuickAdds({ type: 'vec2', dir: 'in', label: 'Center' }).map(q => q.type)).toEqual(['mouse', 'vec2Const', 'uv']);
+    expect(suggestQuickAdds({ type: 'vec2', dir: 'in', label: 'Center' }).map(q => q.type)).toEqual(['mouse', 'makeVec2', 'uv']);
     expect(suggestQuickAdds({ type: 'vec2', dir: 'in', label: 'UV' }).map(q => q.type)).toEqual(['uv', 'pixelUV', 'mouse']);
   });
 

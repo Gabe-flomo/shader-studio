@@ -288,8 +288,12 @@ function fbmGraph(o: { scale?: number; timeScale?: number; preset?: string } = {
       params: { octaves: 5, lacunarity: 2, gain: 0.5, scale: o.scale ?? 2, time_scale: o.timeScale ?? 0.05 },
     },
     {
-      id: 'pal', type: 'palettePreset', position: { x: 560, y: 200 },
-      inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'fbm', outputKey: 'value' } } },
+      id: 'pal',
+      type: 'palette',
+      position: { x: 560, y: 200 },
+      inputs: {
+        value: { type: 'float', label: 'Angle', connection: { nodeId: 'fbm', outputKey: 'value' } },
+      },
       outputs: { color: { type: 'vec3', label: 'Color' } },
       params: { preset: o.preset ?? '4' },
     },

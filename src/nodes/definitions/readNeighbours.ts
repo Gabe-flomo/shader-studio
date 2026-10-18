@@ -40,9 +40,9 @@ export function retypeReadNeighbours(n: GraphNode): GraphNode {
 
 export const ReadNeighboursNode: NodeDefinition = {
   type: READ_NEIGHBOURS_TYPE,
-  label: 'Read neighbours (texture)',
+  label: 'Read Neighbours (texture)',
   category: TEXTURE_TOOLS_CATEGORY,
-  aliases: ['Neighbours 4', 'Stencil', 'Laplacian', 'Gradient', 'Four neighbours', 'Left right up down', 'Finite difference'],
+  aliases: ['Read neighbours (texture)', 'Neighbours 4', 'Stencil', 'Laplacian', 'Gradient', 'Four neighbours', 'Left right up down', 'Finite difference'],
   description: 'The four texels round this one, read exactly, in one node: Here, Left, Right, Up and Down for the channels you pick (one channel a float … four a vec4), Distance texels away. Laplacian (Left + Right + Up + Down − 4 × Here) is how curved the field is, what makes waves travel and heat spread; Gradient is which way the first channel rises. The usual stencil of a simulation, without four Sample nodes.',
   inputs: {
     texture: { type: 'texture', label: 'Texture', hint: 'Usually a Data Texture\'s Previous (last frame), or any texture.' },

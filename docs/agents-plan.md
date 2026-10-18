@@ -267,7 +267,7 @@ Two conventions keep the inside graph short:
 | **Integrate** | Force (total), Velocity, Position, Drag, Max speed, Mass | Position, Velocity | Semi-implicit Euler: `v += F·dt; v *= exp(−drag·dt); clamp; p += v·dt`. Edges as Move. |
 | **Age / Life** | Age, Life, Fade | Alive, Age, Age 0–1 | `age += dt`, dead past `life`. Emit reuses dead agents. |
 
-**Any ordinary node is allowed inside where it makes sense** (section 4). For example: Noise → Multiply → Steer's Jitter, Compare → Select, Expression Block, Palette → Agent Output's Colour, Time, Audio Input amplitude, MIDI values.
+**Any ordinary node is allowed inside where it makes sense** (section 4). For example: Noise → Multiply → Steer's Jitter, Compare → Select, Expression Block, Palette → Agent Output's Colour, Time, an Audio Source's Level or a Band level, MIDI values.
 
 ### Outside the group
 
@@ -399,7 +399,7 @@ The inside runs **once per agent**, not once per pixel. That decides it:
 |---|---|
 | Math, vectors, shapers, conditionals, constants, matrices, Expression Blocks, Custom Functions, published nodes | Pure functions. |
 | Noise, SDFs, patterns, Texture Input, Video, Data, Palette, Vector Field, Gravity Field | Pure functions of position, evaluated at the agent (`g_uv = a_pos`). |
-| Time, Mouse, Audio Input, MIDI, LFOs | Uniforms. |
+| Time, Mouse, Audio (Audio Source, Band level, Hit), MIDI, LFOs | Uniforms. |
 | Pass sampling nodes (Sample, Edges) on a `texture` port; the **Layers** node | A texture read at a point. Layers is a frame late, which is fine for food and walls. |
 | Plain and iterated groups (nesting cap 2) | Inlined as today. |
 
@@ -428,7 +428,7 @@ The rule lives in `compiler/agentRules.ts`, next to `fieldSockets.ts`. Its messa
 
 - **Controls and mappings.** Any slider inside or outside the group can be a Play control or a mapping target, because they are uniforms. The group card can **pin** inner sliders (as Scene Group's `innerNodeId::paramKey` overrides) so Sense angle, Turn and Speed sit on the group's card. Right-click keeps the Play / knob menu, and typing past the max extends the range (slider conventions).
 - **Triggers.** **Start over** and Emit's **Burst** are trigger params: rules and trigger sources route to them, as with GP's Burst.
-- **Sound.** Sound kick and Chladni nodes inside, Sound from on the group (above). Audio Input amplitude into any socket is one wire.
+- **Sound.** Sound kick and Chladni nodes inside, Sound from on the group (above). A Band level or an Audio Source's Level into any socket is one wire.
 - **Hands, pose, nulls and the mouse** go into Attract/Repel, Vortex and Emit Position.
 - **Motion layer as food and as an emitter (P4).** Expose a Motion layer's grid as a texture: a **Motion (texture)** source node, the follow-up `docs/motion-layer.md` already names. It goes into the Trail's Add ƒ (food: slime grows toward where people move), Emit's Picture (born where it moves) or a Sense. Until then, the Layers node gives a frame-late version.
 - **Readings (P6, shipped).** Alive share, centre, spread, mean speed and each species' share, by a reduction to 2 × 1 texels read back with GP's `gpReadback` (a frame or two late), only while Play reads them: sensors on `ag:<group node id>` in the mapping and rule pickers.

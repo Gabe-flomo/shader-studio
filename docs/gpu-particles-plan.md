@@ -204,7 +204,7 @@ In 3D the plate lies flat (x, z) at the emitter's height, the sand settles onto 
   - Their weights are Weights × (their level / the loudest)^(1 + 5·(1 − Weights)). At Weights 0 only the loudest mode shows; at 1 they mix into lace.
   - Silence holds the figure. If it's silent from the start, N and M's figure shows.
 - **Where the sound comes from:** the spectrum comes from Sound from (the mic, or the Audio engine's master or a track).
-  - With Sound from Graph, every band of the graph's first Audio Input is used (`audioBands` in `gpBindings`, low to high), once they're louder than 0.02.
+  - With Sound from Graph, every band of the graph's first Audio Source is used (its bands' Values, `audioBands` in `gpBindings`, in the order the source lists them), once they're louder than 0.02; its Level is the level. A graph saved with the retired Audio Input still uses that node's bands.
   - With only a level (Sound level, a stand-in beat), each hit steps the figure on to a new set of bands.
 - **Holding a figure** (`GP_PLATE_HOLD`, 2 s): the sand needs time to settle, so a figure holds at least this long.
   - Hits closer together than that don't step the figure on.
@@ -228,10 +228,10 @@ In 3D the plate lies flat (x, z) at the emitter's height, the sand settles onto 
 
 **Examples** (every node has a plain-language comment; each Expression line is named and explained in the comment):
 - **Particles: Chladni Sand.** A square plate.
-  - An Audio Input with six bands (150 Hz to 4 kHz) is what the plate hears once a song is loaded.
+  - An Audio Source with six bands (100 Hz to 4.5 kHz) is what the plate hears once a song is loaded.
   - A stand-in beat in Sound level (a hit every 1.6 s while the song is quiet) steps through figures until then.
   - A dark steel plate is drawn under the sand with an Expression into Over.
-- **Particles: Cymatics in 3D.** The Singing plate lying flat in 3D (camera tilted 50°, drifting, a little blur), with the same Audio Input and stand-in beat.
+- **Particles: Cymatics in 3D.** The Singing plate lying flat in 3D (camera tilted 50°, drifting, a little blur), with the same Audio Source and stand-in beat.
 - **Particles: Star Outline.** A star's Shape SDF turned into a ridge along its outline, `−3·d²`, wired into Flow (Slope). Particles born everywhere climb to the outline; Swirl runs them round it, with Thread on.
 - **Particles: Currents into a Heart.** Flow is a slope into a heart's SDF plus an FBM noise that fades out at the heart's edge. Particles ride the noise's currents in, then the node's curl Turbulence stirs them inside, so they fill the heart instead of piling on the noise's peaks.
 

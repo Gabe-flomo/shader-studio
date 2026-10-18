@@ -10,7 +10,7 @@
  */
 import type { ExampleGraph } from './exampleIndex';
 import type { GraphNode } from '../types/nodeGraph';
-import type { PlayControl, PlayMapping, PlayRecord, PlaySource } from '../types/play';
+import type { PlayControl, PlayMapping, PlayRecord } from '../types/play';
 import { colourCtl, ctl, n } from './graphBuilder';
 import RIDGES_AT_DUSK from './playAssets/ridges-at-dusk.jpg?inline';
 
@@ -61,9 +61,6 @@ export const SIM_GRID_EXAMPLE_KEYS = Object.keys(SIM_GRID_EXAMPLE_INDEX);
 /** A node comment (shown on the card's Comment tab and, as // lines, in the generated code). */
 const note = (text: string | string[]) => ({ __comment: Array.isArray(text) ? text.join('\n') : text });
 
-const mouseDown: PlaySource = { kind: 'mouse', axis: 'down' };
-const mapTo = (id: string, controlId: string, source: PlaySource, outMin = 0, outMax = 1): PlayMapping =>
-  ({ id, controlId, source, outMin, outMax, curve: 'linear', smoothMs: 0, enabled: true });
 const toggle = (id: string, target: string, label: string, group?: string): PlayControl =>
   ({ ...ctl(id, target, label, 0, 1, 1), toggle: true, ...(group ? { group } : {}) });
 
@@ -97,12 +94,6 @@ function expr(id: string, x: number, y: number, o: {
 function colourMix(id: string, x: number, y: number, params: Record<string, unknown>, wires: Record<string, Wire>): GraphNode {
   const m = n('mix', id, x, y, { outputType: 'vec3', ...params }, wires);
   return { ...m, inputs: { ...m.inputs, a: { ...m.inputs.a, type: 'vec3' }, b: { ...m.inputs.b, type: 'vec3' } }, outputs: { result: { ...m.outputs.result, type: 'vec3' } } };
-}
-
-/** A Multiply retyped to vec2 (the mouse's pixels times the Pass's scale). */
-function vec2Scale(id: string, x: number, y: number, by: number, from: Wire, why: string): GraphNode {
-  const m = n('multiply', id, x, y, { outputType: 'vec2', b: by, ...note(why) }, { a: from });
-  return { ...m, inputs: { ...m.inputs, a: { ...m.inputs.a, type: 'vec2' }, b: { ...m.inputs.b, type: 'vec2' } }, outputs: { result: { ...m.outputs.result, type: 'vec2' } } };
 }
 
 /** A Constants card of live float entries (each an output and a Play target `id::key`). */
@@ -188,7 +179,6 @@ function boardKit(o: { cell: number; seedScale: number; density: number; speed: 
     n('uv', 'uv', 40, 1500, note('UV: this cell\'s place in the picture. The seed noise is read at it, so every cell gets its own roll.')),
     n('time', 'time', 40, 1700, note('Time: seconds since the start. Fed into the seed noise so each Reset deals a new board.')),
     n('fragCoord', 'pix', 40, 1900, note('Pixel Coordinates: inside the board\'s Pass this counts board cells (the Pass draws one pixel per cell). The brush is measured in cells with it.')),
-    n('mouse', 'mouse', 40, 2100, note('Mouse: its Pixels output is where the pointer is, in picture pixels. Below it is scaled to board cells.')),
 
     n('sampleTexture', 'self', 340, 120, note([
       `Sample (texture): this cell one step ago (the board Pass\'s Previous). Alpha is ${o.stateWord}; Color carries the other channels.`,
@@ -211,11 +201,7 @@ function boardKit(o: { cell: number; seedScale: number; density: number; speed: 
     n('constant', 'reset', 940, 1960, { value: 0, label: 'Reset', ...note('Reset: while 1, the board is dealt again from the noise every frame. Flip it on and off (a switch in Play) for a new board.') }),
     n('max', 'restart', 1240, 1860, note('Max: start over when this is the first frame or Reset is on.'), { a: ['fresh', 'mask'], b: ['reset', 'value'] }),
 
-    vec2Scale('brushAt', 340, 2100, s, ['mouse', 'px'], `Multiply (vec2): the pointer\'s picture pixels times ${s} (the board Pass\'s Scale), so the pointer is in board cells like Pixel Coordinates. (Mouse\'s UV is measured against the picture, not the smaller Pass.)`),
-    n('circleSDF', 'brushDist', 640, 2000, { radius: o.brush, ...note(`Circle SDF: how far this cell is from the pointer, in cells, minus Radius (${o.brush} cells). Below 0 inside the brush.`) }, { position: ['pix', 'coord'], offset: ['brushAt', 'result'] }),
-    n('compare', 'inBrush', 940, 2060, { operator: '<', ...note('Compare (< 0, B left empty): 1 inside the brush circle.') }, { a: ['brushDist', 'distance'] }),
-    n('constant', 'brushOn', 940, 2220, { value: 0, label: 'Brush (mouse button)', ...note('Brush: 1 while the mouse button is down. Play maps the mouse button onto it, so the brush only paints while you hold the button (it stays 0 in the editor until Play is on).') }),
-    n('multiply', 'paint', 1240, 2100, note('Multiply: inside the brush and the button is down.'), { a: ['inBrush', 'mask'], b: ['brushOn', 'value'] }),
+    n('brush', 'paint', 1240, 2100, { radius: o.brush, scale: s, label: 'Brush', ...note(`Brush: 1 under the pointer (Radius ${o.brush} cells) while the mouse button is down: the brush paints. Its Scale is the board Pass\'s Scale, ${s}, so the pointer is measured in cells like Pixel Coordinates.`) }, { position: ['pix', 'coord'] }),
   ];
 }
 
@@ -241,7 +227,7 @@ function lifeTail(x: number, ruleNext: Wire, label: string): GraphNode[] {
   return [
     n('mix', 'stepped', x, 400, note('Mix: on a step frame (Blend = the tick) the rule\'s answer, otherwise the cell as it was. This is how Speed slows the board down.'), { a: ['self', 'alpha'], b: ruleNext, t: ['tick', 'output'] }),
     n('mix', 'seeded', x + 300, 400, note('Mix: the random board instead when starting over (first frame or Reset).'), { a: ['stepped', 'result'], b: ['seedOn', 'mask'], t: ['restart', 'result'] }),
-    n('multiply', 'paintCells', x + 300, 640, note('Multiply: the brush paints a random half of the cells under it (the seed roll), so a stroke lands as a fizzing patch rather than a solid block, which would just die from crowding.'), { a: ['paint', 'result'], b: ['seedOn', 'mask'] }),
+    n('multiply', 'paintCells', x + 300, 640, note('Multiply: the brush paints a random half of the cells under it (the seed roll), so a stroke lands as a fizzing patch rather than a solid block, which would just die from crowding.'), { a: ['paint', 'mask'], b: ['seedOn', 'mask'] }),
     n('max', 'aliveSoft', x + 600, 400, note('Max: alive if the rule (or the seed) says so, or the brush painted it.'), { a: ['seeded', 'result'], b: ['paintCells', 'result'] }),
     n('round', 'alive', x + 600, 560, note('Round: exactly 0 or 1. A Compare can, very rarely, land between the two (a brush edge right on a cell\'s centre), and a half-alive cell would muddy every count round it.'), { input: ['aliveSoft', 'result'] }),
     n('multiply', 'glowFade', x + 300, 120, { b: 0.93, ...note('Multiply: last frame\'s afterglow (red) times Afterglow (B, 0.93 per frame), so a dead cell fades over about a second. A live param so Play can drive it.') }, { a: ['selfParts', 'x'] }),
@@ -290,15 +276,14 @@ export function buildSimGridExamples(): Record<string, ExampleGraph> {
       ctl('born', 'ruleNums::born', 'Born with', 0, 8, 1),
       ctl('stayA', 'ruleNums::stayA', 'Survives with', 0, 8, 1),
       ctl('stayB', 'ruleNums::stayB', 'or with', 0, 8, 1),
-      ctl('brush', 'brushDist::radius', 'Brush size (cells)', 1, 30, 0.5),
-      ctl('brushOn', 'brushOn::value', 'Brush (mouse button)', 0, 1, 1),
+      ctl('brush', 'paint::radius', 'Brush size (cells)', 1, 30, 0.5),
       colourCtl('aliveColour', 'aliveColour::color', 'Live cells'),
     ], `**What it shows.** Conway's Game of Life (Gardner, 1970) with no new nodes: a Pass holds the board and remembers it, its Previous output is the board one step ago, and ordinary nodes write the rule.
 
-**How it is built.** The Life board Pass is at ⅛ size with Nearest sampling, so each pixel of it is a cell and reads never blend. Sample (texture) reads this cell and its eight neighbours from Previous; one Expression Block adds the eight up. Compare nodes check the count against the rule (born with 3, survives with 2 or 3), and a Mix picks Born or Survives by whether the cell is alive. Noise seeds the board on the first frame and while Reset is on; the mouse button paints. Red keeps an afterglow that fades after a cell dies, coloured by a Stops Palette.
+**How it is built.** The Life board Pass is at ⅛ size with Nearest sampling, so each pixel of it is a cell and reads never blend. Sample (texture) reads this cell and its eight neighbours from Previous; one Expression Block adds the eight up. Compare nodes check the count against the rule (born with 3, survives with 2 or 3), and a Mix picks Born or Survives by whether the cell is alive. Noise seeds the board on the first frame and while Reset is on; the mouse button paints (a Brush node reads it). Red keeps an afterglow that fades after a cell dies, coloured by a Stops Palette.
 
 **Try.** Hold the mouse button and draw. Slow Speed right down to watch single steps. Flip Reset on and off for a new board, at a different Seed density. Change the rule numbers on the Constants card (born with 3, survives with 2 or 3).`,
-    [mapTo('mouseBrush', 'brushOn', mouseDown)]),
+    []),
   };
 
   // ── 2 · Life-like rules: Born / Survives as 18 switches ──
@@ -347,7 +332,6 @@ export function buildSimGridExamples(): Record<string, ExampleGraph> {
       ctl('density', 'density::value', 'Seed density', 0.02, 0.9, 0.01),
       toggle('reset', 'reset::value', 'Reset'),
       ctl('afterglow', 'glowFade::b', 'Afterglow', 0, 0.99, 0.005),
-      ctl('brushOn', 'brushOn::value', 'Brush (mouse button)', 0, 1, 1),
     ], `**What it shows.** Life is one rule out of 2¹⁸ "Life-like" rules: a cell is born with some neighbour counts and survives with others. Here the rule is eighteen switches, so you can flip from one to another while it runs.
 
 **How it is built.** The board is the Game of Life's (a ⅛-size Pass on Nearest, eight Sample reads counted). Two Constants cards hold the switches; two small Expression Blocks look the count up in them; a Mix picks Born? or Survives? by whether the cell is alive. It starts as Day & Night (B3678/S34678), where live and dead regions behave the same.
@@ -358,7 +342,7 @@ export function buildSimGridExamples(): Record<string, ExampleGraph> {
 • Seeds B2/S: born 2, survives nothing. Every cell dies at once and the board explodes; Reset at density 0.05.
 • Day & Night B3678/S34678: the start.
 • Maze B3/S12345: corridors. Coral B3/S45678: slow growth. Diamoeba B35678/S5678: blobs. Anneal B4678/S35678: regions that smooth out.`,
-    [mapTo('mouseBrush', 'brushOn', mouseDown)]),
+    []),
   };
 
   // ── 3 · Brian's Brain: on, dying, off ──
@@ -379,7 +363,7 @@ export function buildSimGridExamples(): Record<string, ExampleGraph> {
       n('mix', 'seeded', 1840, 400, note('Mix: the random board instead when starting over (first frame or Reset).'), { a: ['stepOn', 'result'], b: ['seedOn', 'mask'], t: ['restart', 'result'] }),
       n('compare', 'keep', 1840, 800, { operator: '≈', smoothing: 0.5, ...note('Compare (≈ 0, B left empty): 1 unless starting over. The fresh board has no dying cells.') }, { a: ['restart', 'result'] }),
       n('multiply', 'dying', 2140, 640, note('Multiply: dying cells, cleared when starting over.'), { a: ['stepDying', 'result'], b: ['keep', 'mask'] }),
-      n('multiply', 'paintCells', 1840, 600, note('Multiply: the brush switches on a random share of the cells under it (the seed roll).'), { a: ['paint', 'result'], b: ['seedOn', 'mask'] }),
+      n('multiply', 'paintCells', 1840, 600, note('Multiply: the brush switches on a random share of the cells under it (the seed roll).'), { a: ['paint', 'mask'], b: ['seedOn', 'mask'] }),
       n('max', 'onSoft', 2140, 400, note('Max: on if the rule or the seed says so, or the brush painted it.'), { a: ['seeded', 'result'], b: ['paintCells', 'result'] }),
       n('round', 'on', 2440, 300, note('Round: exactly 0 or 1, so a rare in-between value from a Compare (a brush edge right on a cell\'s centre) can never creep into the counts.'), { input: ['onSoft', 'result'] }),
       n('makeVec3', 'pack', 2440, 500, { g: 1, ...note('Make Vec3: what the board stores besides Alpha: red is dying, green 1 (started), blue the step clock.') }, { r: ['dying', 'result'], b: ['phase', 'output'] }),
@@ -405,7 +389,6 @@ export function buildSimGridExamples(): Record<string, ExampleGraph> {
       ctl('density', 'density::value', 'Seed density', 0.02, 0.9, 0.01),
       toggle('reset', 'reset::value', 'Reset'),
       ctl('glow', 'glow::intensity', 'Glow', 0, 4, 0.05),
-      ctl('brushOn', 'brushOn::value', 'Brush (mouse button)', 0, 1, 1),
       colourCtl('onColour', 'onColour::color', 'On'),
       colourCtl('dyingColour', 'dyingColour::color', 'Dying'),
     ], `**What it shows.** Brian's Brain (Brian Silverman): three states instead of two. An off cell with exactly two on neighbours turns on; every on cell starts dying; every dying cell switches off. Because a cell must rest a step after firing, sparks can't go back the way they came, and the board fills with gliding sparks that never settle.
@@ -413,7 +396,7 @@ export function buildSimGridExamples(): Record<string, ExampleGraph> {
 **How it is built.** A board like Life's, at ¼ size (sparks need room: on a small board they can burn out), with the three states in two channels of the Pass (Alpha = on, red = dying). The neighbours are counted from Alpha, so dying cells don't count. Compare finds "exactly two" and "off"; a Multiply combines them. A second Pass holds the coloured picture so Glow (texture) can light the sparks.
 
 **Try.** Hold the mouse button to drop a handful of on cells. Slow Speed to follow single sparks. Set Born with to 3 for a quieter, sparser variant.`,
-    [mapTo('mouseBrush', 'brushOn', mouseDown)]),
+    []),
   };
 
   // ── 4 · Cave generator: the 4-5 rule, repeated 8 times a frame ──
@@ -497,7 +480,6 @@ export function buildSimGridExamples(): Record<string, ExampleGraph> {
       n('uv', 'uv', 40, 900, note('UV: this cell\'s place, for the raindrop rolls.')),
       n('time', 'time', 40, 1100, note('Time: seconds since the start. Fed into the rain\'s noise so every frame rolls new drops.')),
       n('fragCoord', 'pix', 40, 1300, note('Pixel Coordinates: inside the Water heights Pass this counts its cells. The mouse\'s drop is measured in cells.')),
-      n('mouse', 'mouse', 40, 1500, note('Mouse: its Pixels output is the pointer in picture pixels.')),
       n('sampleTexture', 'self', 340, 120, note('Sample (texture): this cell one step ago (the Water heights Pass\'s Previous). Red is the height now, green the height the step before: the two buffers.'), { texture: ['water', 'previous'] }),
       n('splitVec3', 'heights', 640, 120, note('Split Vec3: X is the height now (h), Y the height a step before (h old).'), { v: ['self', 'color'] }),
       n('textureNeighbours', 'spread', 340, 420, { mode: 'difference', size: '3', spacing: WATER_CELL, strength: 2,
@@ -516,12 +498,8 @@ export function buildSimGridExamples(): Record<string, ExampleGraph> {
       n('compare', 'dropNow', 2440, 820, { operator: '<', ...note('Compare (<): 1 during the first Drop length of each drop\'s turn.') }, { a: ['rainPhase', 'output'], b: ['dropTime', 'value'] }),
       n('multiply', 'drop', 2740, 760, note('Multiply: on the drop\'s spot, while it is landing.'), { a: ['rainSpot', 'mask'], b: ['dropNow', 'mask'] }),
       n('multiply', 'dropDepth', 3040, 760, { b: -1, ...note('Multiply: a drop pushes the surface down by 1 (B) each frame it lands.') }, { a: ['drop', 'result'] }),
-      vec2Scale('brushAt', 340, 1500, 1 / WATER_CELL, ['mouse', 'px'], 'Multiply (vec2): the pointer\'s picture pixels times 0.5 (the Water heights Pass\'s Scale), so it is in water cells like Pixel Coordinates.'),
-      n('circleSDF', 'brushDist', 640, 1350, { radius: 5, ...note('Circle SDF: how far this cell is from the pointer, in cells, minus Radius (5). Below 0 under the finger.') }, { position: ['pix', 'coord'], offset: ['brushAt', 'result'] }),
-      n('compare', 'inBrush', 940, 1350, { operator: '<', smoothing: 2, ...note('Compare (< 0, B left empty): 1 under the pointer, with a soft 2-cell edge so the push is smooth (a hard edge rings).') }, { a: ['brushDist', 'distance'] }),
-      n('constant', 'brushOn', 940, 1550, { value: 0, label: 'Push (mouse button)', ...note('Push: 1 while the mouse button is down (Play maps the button onto it).') }),
-      n('multiply', 'press', 1240, 1400, { ...note('Multiply: under the pointer and the button is down.') }, { a: ['inBrush', 'mask'], b: ['brushOn', 'value'] }),
-      n('multiply', 'pressDepth', 1540, 1400, { b: -0.04, ...note('Multiply: the finger pushes the surface down by 0.04 (B) each frame it is held; drag it to draw a wake.') }, { a: ['press', 'result'] }),
+      n('brush', 'press', 1240, 1400, { radius: 5, softness: 2, scale: 1 / WATER_CELL, label: 'Push', ...note('Brush: 1 under the pointer (Radius 5 cells, a soft 2-cell edge) while the mouse button is down: the push pushes the water down. Its Scale is the Pass\'s Scale, so the pointer is measured in cells like Pixel Coordinates.') }, { position: ['pix', 'coord'] }),
+      n('multiply', 'pressDepth', 1540, 1400, { b: -0.04, ...note('Multiply: the finger pushes the surface down by 0.04 (B) each frame it is held; drag it to draw a wake.') }, { a: ['press', 'mask'] }),
       n('add', 'withRain', 2140, 500, note('Add: the wave plus this frame\'s raindrops.'), { a: ['damped', 'result'], b: ['dropDepth', 'result'] }),
       n('add', 'newHeight', 2440, 500, note('Add: plus the finger.'), { a: ['withRain', 'result'], b: ['pressDepth', 'result'] }),
       n('makeVec3', 'pack', 2740, 500, note('Make Vec3: the new height in red, and this step\'s height in green (it becomes h old next step). The two buffers swap by moving one channel along.'), { r: ['newHeight', 'result'], g: ['heights', 'x'] }),
@@ -548,13 +526,12 @@ export function buildSimGridExamples(): Record<string, ExampleGraph> {
       ctl('finger', 'pressDepth::b', 'Finger strength', -0.5, 0, 0.005),
       ctl('dropSize', 'rainDist::radius', 'Drop size', 0.002, 0.08, 0.001),
       ctl('refraction', 'bend::strength', 'Refraction', 0, 0.3, 0.005),
-      ctl('brushOn', 'brushOn::value', 'Push (mouse button)', 0, 1, 1),
     ], `**What it shows.** Hugo Elias's classic 2D water: two height buffers and one line of maths, new = (neighbours) / 2 − old, times a damping just under 1. It is a discrete wave equation, so ripples spread, bounce off the edges and pass through each other.
 
 **How it is built.** The Water heights Pass keeps two heights per cell: red is now, green is the step before. Each step reads both from Previous, takes 2h − h old (the water carrying on) and adds the Laplacian from Neighbours (Difference from average, Strength 2, the wave speed). Damping multiplies it down; raindrops (rare hashed cells) and the mouse push the surface. The new height goes in red and the old red moves to green. For the picture, Flow (texture) finds the surface's slope and bends a photo through it; Levels picks the crests for a highlight.
 
 **Try.** Hold the mouse button and drag to draw a wake. Rain 0 and a single click to watch one ring bounce round the pool. Damping 0.999 to let the ripples pile up; Wave speed 0.5 for slow, heavy water.`,
-    [mapTo('mousePush', 'brushOn', mouseDown)]),
+    []),
   };
 
   // ── 6 · Heat: diffusion as a Neighbours average blend ──
@@ -566,7 +543,6 @@ export function buildSimGridExamples(): Record<string, ExampleGraph> {
       n('uv', 'uv', 40, 900, note('UV: this cell\'s place, for the drifting hot spots.')),
       n('time', 'time', 40, 1100, note('Time: drifts the hot spots.')),
       n('fragCoord', 'pix', 40, 1300, note('Pixel Coordinates: inside the Heat map Pass this counts its cells. The brush is measured in cells.')),
-      n('mouse', 'mouse', 40, 1500, note('Mouse: its Pixels output is the pointer in picture pixels.')),
       n('sampleTexture', 'self', 340, 120, note('Sample (texture): this cell\'s temperature one step ago (the Heat map Pass\'s Previous). The temperature is stored in Alpha (and as grey in Color).'), { texture: ['heat', 'previous'] }),
       n('textureNeighbours', 'around', 340, 380, { mode: 'average', size: '3', spacing: HEAT_CELL,
         ...note('Neighbours (texture), Average: the mean temperature of the cells round this one (one cell apart: 4 picture pixels at ¼ size). Its Value is that mean (the colour is grey, so its brightness is the temperature).') },
@@ -578,13 +554,9 @@ export function buildSimGridExamples(): Record<string, ExampleGraph> {
       n('constant', 'spotLevel', 340, 1100, { value: 0.66, label: 'Hot spot level', ...note('Hot spot level: how high the noise must be to heat. Higher means fewer, smaller hot spots.') }),
       n('compare', 'hot', 640, 950, { operator: '>', smoothing: 0.03, ...note('Compare (>): 1 where the noise is above Hot spot level, with a soft edge: drifting hot spots.') }, { a: ['spots', 'value'], b: ['spotLevel', 'value'] }),
       n('multiply', 'heating', 940, 950, { b: 0.04, ...note('Multiply: the heat a hot spot adds each step (B, 0.04).') }, { a: ['hot', 'mask'] }),
-      vec2Scale('brushAt', 340, 1500, 1 / HEAT_CELL, ['mouse', 'px'], 'Multiply (vec2): the pointer\'s picture pixels times 0.25 (the Heat map Pass\'s Scale), so it is in heat cells.'),
-      n('circleSDF', 'brushDist', 640, 1350, { radius: 6, ...note('Circle SDF: distance from the pointer in cells, minus Radius (6).') }, { position: ['pix', 'coord'], offset: ['brushAt', 'result'] }),
-      n('compare', 'inBrush', 940, 1350, { operator: '<', smoothing: 1.5, ...note('Compare (< 0, B left empty): 1 under the brush, with a soft edge.') }, { a: ['brushDist', 'distance'] }),
-      n('constant', 'brushOn', 940, 1550, { value: 0, label: 'Brush (mouse button)', ...note('Brush: 1 while the mouse button is down (Play maps the button onto it).') }),
-      n('multiply', 'paint', 1240, 1400, note('Multiply: the brush\'s heat: under the pointer while the button is down.'), { a: ['inBrush', 'mask'], b: ['brushOn', 'value'] }),
+      n('brush', 'paint', 1240, 1400, { radius: 6, softness: 1.5, scale: 1 / HEAT_CELL, label: 'Brush', ...note('Brush: 1 under the pointer (Radius 6 cells, a soft 1.5-cell edge) while the mouse button is down: the brush paints. Its Scale is the Pass\'s Scale, so the pointer is measured in cells like Pixel Coordinates.') }, { position: ['pix', 'coord'] }),
       n('add', 'warmed', 1540, 400, note('Add: the hot spots\' heat.'), { a: ['cooled', 'result'], b: ['heating', 'result'] }),
-      n('max', 'temperature', 1840, 400, note('Max: the brush sets what it touches to full heat (1).'), { a: ['warmed', 'result'], b: ['paint', 'result'] }),
+      n('max', 'temperature', 1840, 400, note('Max: the brush sets what it touches to full heat (1).'), { a: ['warmed', 'result'], b: ['paint', 'mask'] }),
       n('floatToVec3', 'grey', 2140, 300, note('Float → Color: the temperature as grey, so the Neighbours Value read above is the temperature.'), { input: ['temperature', 'result'] }),
       n('pass', 'heat', 2440, 400, { label: 'Heat map', scale: '0.25', filter: 'linear', wrap: 'clamp', format: 'half', repeat: 4,
         ...note([
@@ -605,14 +577,13 @@ export function buildSimGridExamples(): Record<string, ExampleGraph> {
       ctl('cooling', 'cooled::b', 'Cooling (kept per step)', 0.95, 1, 0.0005),
       ctl('spotLevel', 'spotLevel::value', 'Hot spot level', 0.5, 1, 0.005),
       ctl('heating', 'heating::b', 'Hot spot heat', 0, 0.2, 0.002),
-      ctl('brush', 'brushDist::radius', 'Brush size (cells)', 1, 30, 0.5),
-      ctl('brushOn', 'brushOn::value', 'Brush (mouse button)', 0, 1, 1),
+      ctl('brush', 'paint::radius', 'Brush size (cells)', 1, 30, 0.5),
     ], `**What it shows.** Heat diffusion on a grid. Every step each cell moves towards the average of the cells round it (heat flows from hot to cold) and loses a little (cooling). That is the discrete heat equation.
 
 **How it is built.** The Heat map Pass holds the temperature (in Alpha, and as grey in Color). Neighbours (texture), Average, reads the cells round each one from Previous; a Mix moves the cell Spread of the way to that average; a Multiply cools it. Drifting Perlin hot spots and the mouse add heat. Repeat 4 runs four steps a frame. Levels and a Stops Palette turn temperature into colour.
 
 **Try.** Hold the mouse button and paint. Spread 0.1 for slow, sticky heat; Cooling 1 for no losses (the heat only spreads). Hot spot level 1 turns the spots off.`,
-    [mapTo('mouseBrush', 'brushOn', mouseDown)]),
+    []),
   };
 
   // ── 7 · Forest fire (Drossel–Schwabl) ──
@@ -624,7 +595,6 @@ export function buildSimGridExamples(): Record<string, ExampleGraph> {
       n('uv', 'uv', 40, 1100, note('UV: this cell\'s place, for the per-cell dice.')),
       n('time', 'time', 40, 1300, note('Time: fed into the dice so they roll anew every frame.')),
       n('fragCoord', 'pix', 40, 1500, note('Pixel Coordinates: inside the Forest Pass this counts its cells. The click is measured in cells.')),
-      n('mouse', 'mouse', 40, 1700, note('Mouse: its Pixels output is the pointer in picture pixels.')),
       n('sampleTexture', 'self', 340, 120, note('Sample (texture): this cell one step ago (the Forest Pass\'s Previous). Alpha is fire (1 burning); Color holds tree, ash and the started flag.'), { texture: ['forest', 'previous'] }),
       n('splitVec3', 'selfParts', 640, 120, note('Split Vec3: X (red) is a tree (1), Y (green) the ash\'s glow, Z (blue) 1 once the forest has started.'), { v: ['self', 'color'] }),
       n('textureNeighbours', 'nearFire', 340, 380, { mode: 'max', size: '3', spacing: FIRE_CELL,
@@ -651,12 +621,8 @@ export function buildSimGridExamples(): Record<string, ExampleGraph> {
       n('add', 'trees', 2440, 160, note('Add: next step\'s trees: the ones standing plus the new ones.'), { a: ['standing', 'result'], b: ['sprout', 'result'] }),
       n('multiply', 'ashFade', 1540, 1300, { b: 0.95, ...note('Multiply: last step\'s ash glow times Ash fade (B, 0.95), so embers cool over a second or so.') }, { a: ['selfParts', 'y'] }),
       n('max', 'ash', 1840, 1300, note('Max: a cell that was burning becomes fresh, fully glowing ash.'), { a: ['ashFade', 'result'], b: ['self', 'alpha'] }),
-      vec2Scale('brushAt', 340, 1700, 1 / FIRE_CELL, ['mouse', 'px'], 'Multiply (vec2): the pointer\'s picture pixels times 0.25 (the Forest Pass\'s Scale), so it is in forest cells.'),
-      n('circleSDF', 'brushDist', 640, 1550, { radius: 3, ...note('Circle SDF: distance from the pointer in cells, minus Radius (3).') }, { position: ['pix', 'coord'], offset: ['brushAt', 'result'] }),
-      n('compare', 'inBrush', 940, 1550, { operator: '<', ...note('Compare (< 0, B left empty): 1 under the pointer.') }, { a: ['brushDist', 'distance'] }),
-      n('constant', 'brushOn', 940, 1750, { value: 0, label: 'Light (mouse button)', ...note('Light: 1 while the mouse button is down (Play maps the button onto it).') }),
-      n('multiply', 'torch', 1240, 1600, note('Multiply: the click sets the trees under the pointer alight.'), { a: ['inBrush', 'mask'], b: ['brushOn', 'value'] }),
-      n('multiply', 'torchTrees', 1540, 1600, note('Multiply: only trees burn, so clicking bare ground does nothing.'), { a: ['torch', 'result'], b: ['selfParts', 'x'] }),
+      n('brush', 'torch', 1240, 1600, { radius: 3, scale: 1 / FIRE_CELL, label: 'Light', ...note('Brush: 1 under the pointer (Radius 3 cells) while the mouse button is down: the light sets the trees alight. Its Scale is the Pass\'s Scale, so the pointer is measured in cells like Pixel Coordinates.') }, { position: ['pix', 'coord'] }),
+      n('multiply', 'torchTrees', 1540, 1600, note('Multiply: only trees burn, so clicking bare ground does nothing.'), { a: ['torch', 'mask'], b: ['selfParts', 'x'] }),
       n('max', 'fire', 1840, 500, note('Max: next step\'s fire: trees that caught, or the ones you lit.'), { a: ['catches', 'result'], b: ['torchTrees', 'result'] }),
       n('compare', 'fresh', 1840, 1000, { operator: '≈', smoothing: 0.5, ...note('Compare (≈ 0, B left empty): 1 on the very first frame, when the Pass is still empty (blue, the started flag, is 0).') }, { a: ['selfParts', 'z'] }),
       n('constant', 'reset', 1840, 1150, { value: 0, label: 'Reset', ...note('Reset: while 1 the forest is planted again. Flip it on and off (a switch in Play).') }),
@@ -699,13 +665,12 @@ export function buildSimGridExamples(): Record<string, ExampleGraph> {
       ctl('ashFade', 'ashFade::b', 'Ash fade', 0.5, 0.995, 0.005),
       toggle('reset', 'reset::value', 'Reset'),
       ctl('glow', 'glow::intensity', 'Fire glow', 0, 4, 0.05),
-      ctl('brushOn', 'brushOn::value', 'Light (mouse button)', 0, 1, 1),
     ], `**What it shows.** The Drossel–Schwabl forest-fire model (1992), a probabilistic cellular automaton: empty ground grows a tree with chance p, a tree is struck by lightning with a much smaller chance f, a tree next to a fire catches, and a fire burns out in one step. Forests build up, then burn in sweeping fronts of every size.
 
 **How it is built.** The Forest Pass (¼ size, Nearest) keeps fire in Alpha, trees in red and the ash glow in green. Neighbours (texture) on Max reads the 3×3 block and its Alpha says "fire next door". A hashed Noise Float die with Time wired in rolls growth for every cell every frame. Lightning is rarer than a per-cell die can roll (the hash's numbers come in steps of about 1/256), so instead it strikes one random place, Lightning times a second: the strike's number (Time × rate, rounded down) is hashed into a position. Compare, Max, Multiply, Add and Subtract write the rules. A second Pass holds the coloured picture so Glow (texture) lights the fires.
 
 **Try.** Click (hold the mouse button) on a forest to start a fire. Raise Lightning for many small fires; set it to 0 and Tree growth to 0.003 for a dense forest, then light it. Ash fade 0.99 leaves long burn scars.`,
-    [mapTo('mouseLight', 'brushOn', mouseDown)]),
+    []),
   };
 
   // ── 8 · Falling sand, from gathers only ──
@@ -722,7 +687,6 @@ export function buildSimGridExamples(): Record<string, ExampleGraph> {
       n('uv', 'uv', 40, 1500, note('UV: this cell\'s place, for the spouts, the ledges and the dice.')),
       n('time', 'time', 40, 1700, note('Time: moves one spout and rolls the dice anew every frame.')),
       n('fragCoord', 'pix', 40, 1900, note('Pixel Coordinates: inside the Sand grains Pass this counts its cells. Its Y tells the step which row is the floor; the brush is measured with it.')),
-      n('mouse', 'mouse', 40, 2100, note('Mouse: its Pixels output is the pointer in picture pixels.')),
       n('resolution', 'res', 40, 2300, note('Resolution: inside the Sand grains Pass this is the Pass\'s own size, in cells (rows and columns). The step uses it to find the top row.')),
       n('sampleTexture', 'self', 340, 120, note('Sample (texture): this cell one step ago (the Sand grains Pass\'s Previous). Red is filled (1) or empty (0); green is the grain\'s shade, or −1 for a ledge (a wall that never moves); blue is the side grains slide to this step.'), { texture: ['sand', 'previous'] }),
       ...mooreSamples('nb', 'sand', SAND_CELL, 340, 300, 'Red: something there; green: its shade (−1 for a ledge).'),
@@ -792,12 +756,8 @@ export function buildSimGridExamples(): Record<string, ExampleGraph> {
       n('circleSDF', 'spoutB', 940, 1900, { radius: 0.03, ...note('Circle SDF: the swinging spout.') }, { position: ['uv', 'uv'], offset: ['spoutBAt', 'xy'] }),
       n('minMath', 'spouts', 1240, 1800, note('Min: both spouts as one shape (the nearer one\'s distance).'), { a: ['spoutA', 'distance'], b: ['spoutB', 'distance'] }),
       n('compare', 'inSpout', 1540, 1800, { operator: '<', ...note('Compare (< 0, B left empty): 1 inside a spout.') }, { a: ['spouts', 'result'] }),
-      vec2Scale('brushAt', 340, 2150, 1 / SAND_CELL, ['mouse', 'px'], 'Multiply (vec2): the pointer\'s picture pixels times 0.25 (the Sand grains Pass\'s Scale), so it is in sand cells.'),
-      n('circleSDF', 'brushDist', 640, 2150, { radius: 6, ...note('Circle SDF: distance from the pointer in cells, minus Radius (6).') }, { position: ['pix', 'coord'], offset: ['brushAt', 'result'] }),
-      n('compare', 'inBrush', 940, 2150, { operator: '<', ...note('Compare (< 0, B left empty): 1 under the brush.') }, { a: ['brushDist', 'distance'] }),
-      n('constant', 'brushOn', 940, 2300, { value: 0, label: 'Pour (mouse button)', ...note('Pour: 1 while the mouse button is down (Play maps the button onto it).') }),
-      n('multiply', 'brushPour', 1240, 2150, note('Multiply: under the pointer while the button is down.'), { a: ['inBrush', 'mask'], b: ['brushOn', 'value'] }),
-      n('max', 'pourWhere', 1840, 1900, note('Max: the spouts and the brush.'), { a: ['inSpout', 'mask'], b: ['brushPour', 'result'] }),
+      n('brush', 'brushPour', 1240, 2150, { radius: 6, scale: 1 / SAND_CELL, label: 'Pour', ...note('Brush: 1 under the pointer (Radius 6 cells) while the mouse button is down: the pour pours sand. Its Scale is the Pass\'s Scale, so the pointer is measured in cells like Pixel Coordinates.') }, { position: ['pix', 'coord'] }),
+      n('max', 'pourWhere', 1840, 1900, note('Max: the spouts and the brush.'), { a: ['inSpout', 'mask'], b: ['brushPour', 'mask'] }),
       n('multiply', 'pourHere', 2140, 1700, note('Multiply: where sand is poured this frame: in a spout or the brush, on the cells whose die came up.'), { a: ['pourWhere', 'result'], b: ['dribble', 'mask'] }),
 
       ...seg('ledgeL', 340, 2400, [-1.4, 0.35], [-0.25, 0.0], 'left'),
@@ -825,14 +785,13 @@ export function buildSimGridExamples(): Record<string, ExampleGraph> {
       ctl('flow', 'flow::value', 'Pour rate', 0, 1, 0.01),
       ctl('swing', 'swing::amp', 'Spout swing', 0, 1.7, 0.01),
       toggle('clear', 'clear::value', 'Clear'),
-      ctl('brush', 'brushDist::radius', 'Brush size (cells)', 1, 30, 0.5),
-      ctl('brushOn', 'brushOn::value', 'Pour (mouse button)', 0, 1, 1),
+      ctl('brush', 'brushPour::radius', 'Brush size (cells)', 1, 30, 0.5),
     ], `**What it shows.** Falling sand, built only from gathers. A shader writes one cell and can't push a grain into its neighbour, so the usual "move the grain" code is impossible. Instead every cell asks the question from both ends: "does my grain leave?" and "does a grain arrive?". The two cells of every move read the same 3×3 facts, so they always agree, and grains are never lost or doubled.
 
 **How it is built.** The Sand grains Pass (¼ size, Nearest) stores filled in red, each grain's shade in green (−1 marks a ledge) and the slide side in blue. Nine Sample (texture) reads go into one Expression Block, explained line by line in its note: a grain falls if the cell below is empty; otherwise it slides diagonally to this step's side if that cell is empty and nothing is falling into it. The side flips every step, so piles stay symmetric. Spouts (Circle SDFs, one swinging on a Sin) and the mouse pour new grains; two Line Segment SDFs make ledges.
 
 **Try.** Hold the mouse button to pour. Turn Pour rate up to fill the screen, then Clear. Spout swing 0 makes two steady cones.`,
-    [mapTo('mousePour', 'brushOn', mouseDown)]),
+    []),
   };
 
   // ── 9 · Wireworld: copper, electron heads and tails ──
@@ -842,7 +801,6 @@ export function buildSimGridExamples(): Record<string, ExampleGraph> {
     counter: 80,
     nodes: [
       n('fragCoord', 'pix', 40, 1500, note('Pixel Coordinates: inside the Circuit Pass this counts its cells (one pixel per cell). The starter circuit and the brush are laid out with it.')),
-      n('mouse', 'mouse', 40, 1900, note('Mouse: its Pixels output is the pointer in picture pixels.')),
       n('sampleTexture', 'self', 340, 120, note('Sample (texture): this cell one step ago (the Circuit Pass\'s Previous). Red is an electron head, green its tail, blue copper (any wire); Alpha is 3 + the step clock once the circuit has started (an empty Pass reads 0 or 1 there).'), { texture: ['wires', 'previous'] }),
       n('splitVec3', 'selfParts', 640, 120, note('Split Vec3: head (X), tail (Y), wire (Z).'), { v: ['self', 'color'] }),
       ...mooreSamples('nb', 'wires', WIRE_CELL, 340, 300, 'Its red is 1 for an electron head.'),
@@ -906,15 +864,11 @@ export function buildSimGridExamples(): Record<string, ExampleGraph> {
       n('constant', 'reset', 1240, 1660, { value: 0, label: 'Reset', ...note('Reset: while 1, the starter circuit is laid down again (wiping what you drew). A switch in Play.') }),
       n('max', 'restart', 1540, 1560, note('Max: start over on the first frame or while Reset is on.'), { a: ['fresh', 'mask'], b: ['reset', 'value'] }),
 
-      vec2Scale('brushAt', 340, 1900, 1 / WIRE_CELL, ['mouse', 'px'], 'Multiply (vec2): the pointer\'s picture pixels times ⅛ (the Circuit Pass\'s Scale), so it is in cells.'),
-      n('circleSDF', 'brushDist', 640, 1900, { radius: 1.2, ...note('Circle SDF: distance from the pointer in cells, minus Radius (1.2 cells: a fine pen for wires).') }, { position: ['pix', 'coord'], offset: ['brushAt', 'result'] }),
-      n('compare', 'inBrush', 940, 1900, { operator: '<', ...note('Compare (< 0, B left empty): 1 under the pen.') }, { a: ['brushDist', 'distance'] }),
-      n('constant', 'brushOn', 940, 2060, { value: 0, label: 'Pen (mouse button)', ...note('Pen: 1 while the mouse button is down (Play maps the button onto it).') }),
-      n('multiply', 'pen', 1240, 1950, note('Multiply: under the pointer while the button is down.'), { a: ['inBrush', 'mask'], b: ['brushOn', 'value'] }),
+      n('brush', 'pen', 1240, 1950, { radius: 1.2, scale: 1 / WIRE_CELL, label: 'Pen', ...note('Brush: 1 under the pointer (Radius 1.2 cells) while the mouse button is down: the pen draws wire. Its Scale is the Pass\'s Scale, so the pointer is measured in cells like Pixel Coordinates.') }, { position: ['pix', 'coord'] }),
       n('constant', 'drawWire', 1240, 2110, { value: 0, label: 'Pen draws copper', ...note('Pen draws copper: 0, the pen sends sparks (heads) into the copper under it; 1, it lays new copper. A switch in Play.') }),
-      n('multiply', 'newCopper', 1540, 2000, note('Multiply: the pen lays copper when Pen draws copper is on.'), { a: ['pen', 'result'], b: ['drawWire', 'value'] }),
+      n('multiply', 'newCopper', 1540, 2000, note('Multiply: the pen lays copper when Pen draws copper is on.'), { a: ['pen', 'mask'], b: ['drawWire', 'value'] }),
       n('compare', 'sparkMode', 1540, 2160, { operator: '≈', smoothing: 0.5, ...note('Compare (≈ 0, B left empty): 1 while Pen draws copper is off.') }, { a: ['drawWire', 'value'] }),
-      n('multiply', 'penSpark', 1840, 2000, note('Multiply: the pen sparks when it isn\'t drawing copper.'), { a: ['pen', 'result'], b: ['sparkMode', 'mask'] }),
+      n('multiply', 'penSpark', 1840, 2000, note('Multiply: the pen sparks when it isn\'t drawing copper.'), { a: ['pen', 'mask'], b: ['sparkMode', 'mask'] }),
       n('multiply', 'spark', 2140, 2000, note('Multiply: a spark only takes on plain copper.'), { a: ['penSpark', 'result'], b: ['idle', 'result'] }),
 
       n('max', 'headAll', 2140, 400, note('Max: the heads, plus any spark.'), { a: ['headStep', 'result'], b: ['spark', 'result'] }),
@@ -947,15 +901,14 @@ export function buildSimGridExamples(): Record<string, ExampleGraph> {
       ctl('bridges', 'bridgeShare::value', 'Bridges (on Reset)', 0, 1, 0.01),
       toggle('reset', 'reset::value', 'Reset'),
       toggle('drawWire', 'drawWire::value', 'Pen draws copper'),
-      ctl('pen', 'brushDist::radius', 'Pen size (cells)', 0.5, 6, 0.1),
-      ctl('brushOn', 'brushOn::value', 'Pen (mouse button)', 0, 1, 1),
+      ctl('pen', 'pen::radius', 'Pen size (cells)', 0.5, 6, 0.1),
       ctl('glow', 'glow::intensity', 'Glow', 0, 4, 0.05),
     ], `**What it shows.** Wireworld (Brian Silverman, 1987; A. K. Dewdney's Computer Recreations, 1990): four states, empty, copper, electron head and electron tail. A head becomes a tail, a tail becomes copper, and copper becomes a head when exactly one or two of its eight neighbours are heads. Electrons run along wires; the tail stops them turning back.
 
 **How it is built.** The Circuit Pass (⅛ size, Nearest) keeps head in red, tail in green and copper in blue. Eight Sample (texture) reads count the heads round each cell; two Compare nodes and a Max say "one or two"; Subtract finds plain copper; Multiply fires it. A small Expression Block lays out the starter circuit: three square loops per tile, each with one electron, with some outer loops bridged to their neighbours. Bridged loops trade electrons and fill with trains of them; lone loops keep circling their single electron.
 
 **Try.** Hold the mouse button on a wire to send a spark. Turn on Pen draws copper and draw a wire from one loop to another, then turn it off and watch them trade electrons. Change Bridges, then Reset.`,
-    [mapTo('mousePen', 'brushOn', mouseDown)]),
+    []),
   };
 
   return g;

@@ -63,7 +63,7 @@ const ROWS: Array<[string, string, string, Where?]> = [
   ['learnTranslate',   'Translate: move the space',     'Subtract an offset from the coordinates and the cross appears at the offset. Here it circles the centre.', [8, 'Translate']],
   ['learnRotate',      'Rotate with a matrix',          'A Rotation Matrix times the UV turns the whole space, so the cross spins.', [8, 'Rotations']],
   ['learnScale',       'Scale with a matrix',           'A Scale Matrix stretches the space: scale up and the shape shrinks. The cross breathes.', [8, 'Scale']],
-  ['learnTransform',   'Move, turn, scale in one node', 'UV Transform 2D does all three as one matrix before the SDF, so the box spins.', [8]],
+  ['learnTransform',   'Move, turn, scale in one node', 'A Transform does all three as one matrix before the SDF, so the box spins.', [8]],
   ['learnYUV',         'YUV: a matrix on colour',       'A 3×3 matrix turns YUV (brightness plus two colour differences) into RGB.', [8, 'Other uses for matrices: YUV color']],
   // Patterns (chapter 9)
   ['learnTiling',      'Tiling',                        'Tile repeats the coordinates, so one circle becomes many. Everything after it happens in every tile.', [9]],

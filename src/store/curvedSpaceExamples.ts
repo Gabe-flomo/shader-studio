@@ -116,8 +116,8 @@ const nodesFor = (cam: GraphNode, sc: GraphNode, lp: GraphNode, sh: GraphNode, e
   }, { time: ['time', 'time'] });
   const radius = n('constant', 'rad', 40, 760, { label: 'Sphere radius', value: 0.3, ...note(['The spheres\' radius, kept outside the Scene Group and wired in through a port so Play can move it (sliders inside a Scene Group are fixed when the shader is built).']) });
   const sc = scene('scene', 40, 480, 'Sphere lattice', [
-    n('translate3D', 'mv', 240, 120, { tx: 0.6, ty: 0.6, tz: 0.6, ...note(['Translate 3D: moves the whole lattice by (0.6, 0.6, 0.6), half a cell, so the origin, where the camera is, is the empty middle between eight spheres.']) }, { pos: ['sp', 'pos'] }),
-    n('repeat3D', 'rep', 480, 120, { cellX: 1.2, cellY: 1.2, cellZ: 1.2, ...note(['Repeat 3D: folds all of space into one 1.2 × 1.2 × 1.2 cell, so the single sphere below appears in every cell. Without any curvature this is an ordinary endless lattice.']) }, { pos: ['mv', 'pos'] }),
+    n('transform', 'mv', 240, 120, { dim: '3', x: 0.6, y: 0.6, z: 0.6, ...note(['Transform: moves the whole lattice by (0.6, 0.6, 0.6), half a cell, so the origin, where the camera is, is the empty middle between eight spheres.']) }, { p: ['sp', 'pos'] }),
+    n('repeat3D', 'rep', 480, 120, { cellX: 1.2, cellY: 1.2, cellZ: 1.2, ...note(['Repeat 3D: folds all of space into one 1.2 × 1.2 × 1.2 cell, so the single sphere below appears in every cell. Without any curvature this is an ordinary endless lattice.']) }, { pos: ['mv', 'p'] }),
     n('sphereSDF3D', 'sph', 760, 120, { radius: 0.3, ...note(['Sphere: one ball at the centre of every cell. Its radius comes in from the Sphere radius Constant through the group\'s port.']) }, { pos: ['rep', 'pos'] }),
   ], ['sph', 'dist'], ['An endless lattice of spheres, 1.2 apart. All the strangeness in this example comes from how the rays travel, not from the scene: it is the same flat lattice at every curvature.'],
   { key: 'r', label: 'Sphere radius', from: ['rad', 'value'], to: ['sph', 'radius'] });
@@ -154,8 +154,8 @@ const nodesFor = (cam: GraphNode, sc: GraphNode, lp: GraphNode, sh: GraphNode, e
     ]),
   }, { time: ['time', 'time'] });
   const sc = scene('scene', 40, 480, 'Hall of columns', [
-    n('translate3D', 'mv', 240, 40, { tx: 1.2, ty: 0, tz: 1.2, ...note(['Translate 3D: shifts the grid by half a cell in x and z, so the camera at the origin is in a gap between four columns.']) }, { pos: ['sp', 'pos'] }),
-    n('repeat3D', 'rep', 480, 40, { cellX: 2.4, cellY: 50, cellZ: 2.4, ...note(['Repeat 3D: columns every 2.4 in x and z. The huge Cell Y means no repeat upward: each column is one tall piece.']) }, { pos: ['mv', 'pos'] }),
+    n('transform', 'mv', 240, 40, { dim: '3', x: 1.2, y: 0, z: 1.2, ...note(['Transform: shifts the grid by half a cell in x and z, so the camera at the origin is in a gap between four columns.']) }, { p: ['sp', 'pos'] }),
+    n('repeat3D', 'rep', 480, 40, { cellX: 2.4, cellY: 50, cellZ: 2.4, ...note(['Repeat 3D: columns every 2.4 in x and z. The huge Cell Y means no repeat upward: each column is one tall piece.']) }, { pos: ['mv', 'p'] }),
     n('cylinderSDF3D', 'col', 760, 40, { radius: 0.3, height: 3.0, ...note(['Cylinder: a column 0.3 wide that reaches 3 up and 3 down. Repeated, they make a grove of columns going on forever.']) }, { pos: ['rep', 'pos'] }),
     n('planeSDF3D', 'floor', 760, 320, { height: -1.0, ...note(['Plane 3D: the floor, 1 below the camera.']) }, { p: ['sp', 'pos'] }),
     n('sdfUnion', 'un', 1040, 200, { k: 0, ...note(['Union: the nearest of the columns and the floor.']) }, { a: ['col', 'dist'], b: ['floor', 'dist'] }),
@@ -195,8 +195,8 @@ const nodesFor = (cam: GraphNode, sc: GraphNode, lp: GraphNode, sh: GraphNode, e
   }, { time: ['time', 'time'] });
   const sc = scene('scene', 40, 480, 'Boxes on a floor', [
     n('repeat3D', 'rep', 240, 40, { cellX: 3.2, cellY: 50, cellZ: 2.0, ...note(['Repeat 3D: a box every 3.2 across and every 2.0 deep. The huge Cell Y means no repeat upward.']) }, { pos: ['sp', 'pos'] }),
-    n('translate3D', 'up', 480, 40, { ty: -0.05, ...note(['Translate 3D: lifts the boxes so they stand on the floor.']) }, { pos: ['rep', 'pos'] }),
-    n('roundedBoxSDF3D', 'box', 720, 40, { sizeX: 0.5, sizeY: 0.35, sizeZ: 0.5, radius: 0.06, ...note(['Rounded Box: every box is exactly the same size. In an ordinary camera the far ones would be smaller.']) }, { pos: ['up', 'pos'] }),
+    n('transform', 'up', 480, 40, { dim: '3', y: -0.05, ...note(['Transform: lifts the boxes so they stand on the floor.']) }, { p: ['rep', 'pos'] }),
+    n('boxSDF3D', 'box', 720, 40, { sizeX: 0.5, sizeY: 0.35, sizeZ: 0.5, edges: 'rounded', rounding: 0.06, ...note(['Box SDF 3D, Edges Rounded: every box is exactly the same size. In an ordinary camera the far ones would be smaller.']) }, { pos: ['up', 'p'] }),
     n('planeSDF3D', 'floor', 720, 320, { height: -0.4, ...note(['Plane 3D: the floor the boxes stand on.']) }, { p: ['sp', 'pos'] }),
     n('sdfUnion', 'un', 1000, 200, { k: 0, ...note(['Union: the nearest of the boxes and the floor.']) }, { a: ['box', 'dist'], b: ['floor', 'dist'] }),
   ], ['un', 'dist'], ['Rows of identical boxes receding from the camera: a normal camera shrinks the far ones, this scene never changes size.']);
@@ -214,7 +214,7 @@ const nodesFor = (cam: GraphNode, sc: GraphNode, lp: GraphNode, sh: GraphNode, e
     ],
     notes: `**What it shows.** Reverse perspective, the way a Byzantine icon or a Cubist painting draws a table: parts that are farther away are drawn **bigger**. Every box is the same size; the rows going back from the camera grow as they recede, the opposite of an ordinary camera.
 
-**How it is built.** The scene is ordinary: Repeat 3D makes rows of one Rounded Box and a Plane 3D is the floor. The change is entirely in **March Camera**, with **Perspective** set to **Reverse**: instead of every ray starting at one point and fanning out, each ray starts at its own point on the picture and aims at a point **Converge at** in front. A ray's sideways offset at depth z is O · (1 − strength · z / Converge at): smaller the farther it goes, so an object of fixed size takes up more and more of the picture. (docs/curved-space.md has the maths.)
+**How it is built.** The scene is ordinary: Repeat 3D makes rows of one Box SDF 3D (Edges Rounded) and a Plane 3D is the floor. The change is entirely in **March Camera**, with **Perspective** set to **Reverse**: instead of every ray starting at one point and fanning out, each ray starts at its own point on the picture and aims at a point **Converge at** in front. A ray's sideways offset at depth z is O · (1 − strength · z / Converge at): smaller the farther it goes, so an object of fixed size takes up more and more of the picture. (docs/curved-space.md has the maths.)
 
 **Try.** **Reverse strength** at 0 is a camera with parallel rays (orthographic): the boxes keep one size; raise it and the far ones grow. **Converge at** moves the point the rays meet: closer is a stronger effect, and past that point the picture flips, as a real lens does behind its focus. **Camera height** looks more from above. On the camera's card, set Perspective to Normal to see the ordinary lens.`,
   });

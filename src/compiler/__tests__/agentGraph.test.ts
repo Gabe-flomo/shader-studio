@@ -221,6 +221,6 @@ describe('Agents compile: particles (P2)', () => {
   it('the new inside nodes refuse to go outside a group', () => {
     const r = compileGraph({ nodes: [...particlesNodes(0, 0), n('agentCurl', 'strayCurl', 0, 0)] });
     expect(r.success).toBe(false);
-    expect(r.errors!.join('\n')).toMatch(/Node strayCurl: Curl noise goes inside an Agents group\./);
+    expect(r.errors!.join('\n')).toMatch(/Node strayCurl: Curl Noise goes inside an Agents group\./);
   });
 });

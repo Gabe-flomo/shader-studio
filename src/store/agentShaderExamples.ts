@@ -62,7 +62,7 @@ export const AGENT_SHADER_EXAMPLE_INDEX: Record<string, { label: string; descrip
   },
   agentShaderSoundRings: {
     label: 'Rings that pulse to sound',
-    description: 'One SDF chain that both draws and pulls: rings ride outward from the middle, thicker and brighter on every beat, and Flow pulls particles down onto them, harder on the beat. A silent stand-in beat (120 a minute) drives it; load a track into Audio Input and set Bpm to 0 on Loudness.',
+    description: 'One SDF chain that both draws and pulls: rings ride outward from the middle, thicker and brighter on every beat, and Flow pulls particles down onto them, harder on the beat. A silent stand-in beat (120 a minute) drives it; load a track into the Audio Source and set Bpm to 0 on Loudness.',
   },
 };
 
@@ -1003,9 +1003,9 @@ export function shaderSoundRingsNodes(x = 0, y = 0): GraphNode[] {
   // ── Outside: sound → rings, one chain drawn and obeyed ──
   const uv = n('uv', 'sdUv', X(0), Y(420), { ...note(['UV: where each pixel (or, read inside the group, each particle) is.']) });
   const time = n('time', 'sdTime', X(0), Y(700), { ...note(['Time: moves the rings outward and keeps the stand-in beat. Inside the group it is the simulation\'s own clock, so the beat lands on the same steps every run.']) });
-  const audio = n('audioInput', 'sdAudio', X(0), Y(980), {
-    mode: 'full', freq_range: 200,
-    ...note(['Audio Input, Full Spectrum: how loud a loaded track is (0–1). Silent until you load one; then set Beat to 0 on Loudness.']),
+  const audio = n('audioSource', 'sdAudio', X(0), Y(980), {
+    source: 'file', playing: true, gain: 1,
+    ...note(['Audio Source: load a track (or pick the Mic) on its card. Its Level is how loud it is now (0–1). Silent until you load one; then set Bpm to 0 on Loudness.']),
   });
   const loud = expr('sdLoud', X(420), Y(700), {
     label: 'Loudness',
@@ -1014,10 +1014,10 @@ export function shaderSoundRingsNodes(x = 0, y = 0): GraphNode[] {
     lines: [['float beat', 'bpm > 0.0 ? exp(-fract(t * bpm / 60.0) * 5.0) : 0.0']],
     result: 'max(audio, beat)',
     outputType: 'float',
-    wires: { audio: ['sdAudio', 'amplitude_0'], t: ['sdTime', 'time'] },
+    wires: { audio: ['sdAudio', 'level'], t: ['sdTime', 'time'] },
     note: [
       'Loudness (an Expression Block): how loud it is now, 0–1.',
-      'beat: a silent stand-in kick, Bpm (120) times a minute: jumps to 1 on each beat and dies away. Set Bpm to 0 when a track drives Audio Input.',
+      'beat: a silent stand-in kick, Bpm (120) times a minute: jumps to 1 on each beat and dies away. Set Bpm to 0 when a track plays in the Audio Source.',
       'Result: the louder of the track and the stand-in. It goes into the rings (they swell) and into the group (the pull).',
     ],
   });

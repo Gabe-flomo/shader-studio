@@ -199,7 +199,8 @@ function probeOf(node: GraphNode) {
 export const GpuParticlesNode: NodeDefinition = {
   type: 'gpuParticles',
   label: 'Particles',
-  category: 'Particles',
+  // In the Agents row (its own Particles group): a one-node Particles row read as empty (2026-10-17).
+  category: 'Simulation',
   aliases: ['GPU particles', 'Particle system', 'Glow particles', 'TouchDesigner particles', 'Lights', 'Fireflies', 'Sparks', 'Ink', 'Ink in water', 'Dust', 'Image particles', 'Dissolve', 'Sound particles', 'Rocket', 'Exhaust', 'Chladni', 'Cymatics', 'Sand plate', 'Nodal lines'],
   description: 'Up to 4 million particles on the GPU, glowing (Light) or laid down as ink (Ink), in 2D or through a drifting 3D camera with depth of field. They can hold a picture and blow away, react to sound and hands, gather into Chladni figures on a plate the sound plays, and flow round shapes or stand inside a raymarched scene.',
   brief: {

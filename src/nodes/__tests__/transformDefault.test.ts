@@ -1,7 +1,7 @@
 /**
  * The one Transform is the default (docs/transform-node.md): search ranks it first, new things make it in
  * the right Dimension, and in 3D it is placed like the 3D transforms (in a Scene Group, wrapped by smart 3D).
- * The single-purpose nodes stay offered.
+ * The single-purpose nodes were retired from the library on 2026-10-17 (docs/node-retirements.md): they still load.
  */
 import { describe, expect, it, vi } from 'vitest';
 vi.hoisted(() => {
@@ -23,15 +23,16 @@ import { buildStandaloneGraph } from '../../sceneBuilder/build';
 import { parseRecipe } from '../../sceneBuilder/recipe';
 import type { GraphNode } from '../../types/nodeGraph';
 
-const OLD = ['place2D', 'uvTransform2d', 'rotate2d', 'translate3D', 'rotate3D', 'rotateAxis3D', 'scale3d', 'translate4D', 'rotate4D', 'scale4D'];
+const OLD = ['place2D', 'uvTransform2d', 'rotate2d', 'translate3D', 'rotate3D', 'scale3d', 'translate4D', 'rotate4D', 'scale4D'];
 
-describe('the old transform nodes stay', () => {
-  it('are still offered and still load', () => {
+describe('the old transform nodes are retired', () => {
+  it('are no longer offered but still load; Rotate Axis 3D (no Transform does it) stays', () => {
     const offered = new Set(getOfferedDefinitions().map(d => d.type));
     for (const t of OLD) {
-      expect(offered.has(t), t).toBe(true);
-      expect(getNodeDefinition(t)?.deprecated, t).toBeFalsy();
+      expect(offered.has(t), t).toBe(false);
+      expect(getNodeDefinition(t), t).toBeTruthy();
     }
+    expect(offered.has('rotateAxis3D')).toBe(true);
   });
 });
 
@@ -45,8 +46,8 @@ describe('search: Transform first', () => {
       expect(r.length).toBeGreaterThan(1);
     });
   }
-  it('“translate 3d” still finds Translate 3D', () => {
-    expect(rank('translate 3d')).toContain('translate3D');
+  it('“translate 3d” no longer finds the retired Translate 3D', () => {
+    expect(rank('translate 3d')).not.toContain('translate3D');
   });
 });
 
@@ -57,8 +58,8 @@ describe('the Do bar language makes Transform', () => {
     expect(typeByName(['translate', '3d'])).toEqual({ type: 'transform', params: { dim: '3' } });
     expect(typeByName(['rotate', '4d'])).toEqual({ type: 'transform', params: { dim: '4' } });
     expect(typeByName(['transform'])).toEqual({ type: 'transform' });
-    // The old nodes by their type id (how a printed recipe names them).
-    expect(typeByName(['rotate3d'])).toEqual({ type: 'rotate3D' });
+    // The retired nodes are not made by name any more (docs/node-retirements.md).
+    expect(typeByName(['rotate3d'])).toBeNull();
   });
   it('node factories give a 3D Transform 3D sockets', () => {
     const t = n('transform', 't', 0, 0, { dim: '3' }, { p: ['a', 'pos'] });

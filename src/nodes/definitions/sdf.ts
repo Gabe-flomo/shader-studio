@@ -7,7 +7,7 @@ import { p, withParamSockets } from './helpers';
 
 export const SdSegmentNode: NodeDefinition = {
   type: 'sdSegment', label: 'Line Segment SDF', aliases: ['sdSegment'], category: '2D Primitives',
-  description: 'Signed distance to a 2D line segment (IQ)',
+  description: 'A straight line between two points, as a distance: 0 on the line, growing away from it. Thicken it with SDF Offset, paint it with SDF Fill.',
   inputs: {
     p: { type: 'vec2', label: 'UV' },
     a: { type: 'vec2', label: 'A' },
@@ -29,7 +29,7 @@ export const SdSegmentNode: NodeDefinition = {
 
 export const SdEllipseNode: NodeDefinition = {
   type: 'sdEllipse', label: 'Ellipse SDF', aliases: ['sdEllipse'], category: '2D Primitives',
-  description: 'Signed distance to a 2D ellipse (IQ)',
+  description: 'An ellipse as a distance: negative inside, 0 on the edge, positive outside.',
   inputs: {
     p:  { type: 'vec2', label: 'UV' },
     ab: { type: 'vec2', label: 'Radii (a,b)' },

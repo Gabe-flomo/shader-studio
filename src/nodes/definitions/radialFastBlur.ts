@@ -60,7 +60,7 @@ const decl = (s: string) => [`uniform sampler2D ${s};`, `uniform vec2 ${passPxUn
 export const RadialFastBlurNode: NodeDefinition = withParamSockets({
   type: 'radialFastBlur',
   label: 'Radial Fast Blur',
-  category: 'Passes',
+  category: 'Texture tools',
   aliases: ['Light rays', 'God rays', 'Sun rays', 'CC Radial Fast Blur', 'Zoom blur (texture)', 'Radial blur (texture)', 'Light streaks', 'Volumetric light', 'Zoom burst'],
   description: 'Long zoom streaks and light rays from a texture (a Pass, a Shader Texture, a picture), like After Effects\' CC Radial Fast Blur: the picture blurred along lines from a Centre. Average is a zoom blur; Brightest takes the brightest colour along each streak, so bright shapes and text throw rays; Add adds the streaks as light. Threshold keeps only the bright parts. Fast at any Length: four hidden passes of 8 reads, each reading the one before 8 times further apart (4096 reads along a streak). Wire Mouse UV into Centre to aim it.',
   inputs: {

@@ -111,6 +111,26 @@ describe('card label layout', () => {
   it('Time Cube View', () => { showType('timeCubeView'); expect(layout()).toMatchSnapshot(); });
 });
 
+describe('Simple / All (a node with very many settings)', () => {
+  it('Time Cube View opens on its Simple set; All shows every section', () => {
+    showType('timeCubeView');
+    const toggle = host!.querySelector('[data-simple-toggle]')!;
+    expect(toggle).toBeTruthy();
+    const [simple, all] = [...toggle.querySelectorAll('button')];
+    expect(simple.getAttribute('aria-pressed')).toBe('true');
+    expect(simple.textContent).toBe('Simple (15)');
+    const sectionsIn = () => host!.querySelectorAll('[aria-expanded]').length;
+    const before = sectionsIn();
+    act(() => { all.click(); });
+    expect(host!.querySelector('[data-simple-toggle]')!.querySelectorAll('button')[1].getAttribute('aria-pressed')).toBe('true');
+    expect(sectionsIn()).toBeGreaterThan(before);
+  });
+  it('a node without simpleParams has no toggle', () => {
+    showType('circleSDF');
+    expect(host!.querySelector('[data-simple-toggle]')).toBeNull();
+  });
+});
+
 describe('builder rows', () => {
   it('HintLabel wraps a long name instead of cutting it', () => {
     act(() => { root!.render(<HintLabel hint="What it does">Combine with Not repeated</HintLabel>); });

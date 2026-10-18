@@ -224,9 +224,9 @@ export const AudioSourceNode: NodeDefinition = {
 
 export const AudioBandNode: NodeDefinition = {
   type: AUDIO_BAND_TYPE,
-  label: 'Band level',
+  label: 'Band Level',
   category: AUDIO_CATEGORY,
-  aliases: ['Audio band', 'Frequency band', 'Bass level', 'EQ band', 'Audio level', 'Envelope follower'],
+  aliases: ['Band level', 'Audio band', 'Frequency band', 'Bass level', 'EQ band', 'Audio level', 'Envelope follower'],
   description: 'How loud one band of the sound is, 0–1: pick a Band (Sub, Bass, Low mid, Mid, High, Air) or Custom between Low and High. Attack and Release smooth it (rise and fall times); Gain scales it. Peak holds the highest Level for a moment, then falls.',
   inputs: { ...AUDIO_IN },
   outputs: {
@@ -454,9 +454,9 @@ export const AudioFilterNode: NodeDefinition = {
 
 export const AudioResonatorNode: NodeDefinition = {
   type: AUDIO_RESONATOR_TYPE,
-  label: 'Resonator bank',
+  label: 'Resonator Bank',
   category: AUDIO_CATEGORY,
-  aliases: ['Resonators', 'Resonator', 'Tuned resonators', 'Comb', 'Sympathetic strings', 'Ringing filters', 'Note energies', 'Chord resonator'],
+  aliases: ['Resonator bank', 'Resonators', 'Resonator', 'Tuned resonators', 'Comb', 'Sympathetic strings', 'Ringing filters', 'Note energies', 'Chord resonator'],
   description: 'Rings along with the sound: 4–12 resonators tuned to notes from Root up a Scale (minor, major, pentatonic, a chord, stacked fifths, or the harmonic series), each ringing when the sound has energy at its note. Decay is how long they ring, Brightness tilts the high ones louder or quieter, Mix blends them with the dry sound. For the picture: Energies (resonators 1–4, then 5–8 and 9–12) is how hard each one rings, 0–1; Loudest is the index of the one ringing most (0 is the root); Texture holds them all as a strip, one texel each.',
   inputs: { ...AUDIO_FX_IN },
   outputs: {

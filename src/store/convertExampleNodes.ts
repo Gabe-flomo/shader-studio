@@ -435,9 +435,9 @@ export const SOFT_CIRCLE_OPTIMISED: GraphNode[] = [
           "outputKey": "res"
         }
       },
-      "color_rgb": {
+      "colour_rgb": {
         "type": "vec3",
-        "label": "color_rgb",
+        "label": "colour_rgb",
         "connection": {
           "nodeId": "colorPicker_8",
           "outputKey": "rgb"
@@ -479,7 +479,7 @@ export const SOFT_CIRCLE_OPTIMISED: GraphNode[] = [
           "slider": null
         },
         {
-          "name": "color_rgb",
+          "name": "colour_rgb",
           "type": "vec3",
           "slider": null
         },
@@ -546,7 +546,7 @@ export const SOFT_CIRCLE_OPTIMISED: GraphNode[] = [
         {
           "lhs": "vec3 n6_result",
           "op": "=",
-          "rhs": "n5_rgb * color_rgb"
+          "rhs": "n5_rgb * colour_rgb"
         }
       ],
       "result": "n6_result",
@@ -559,7 +559,7 @@ export const SOFT_CIRCLE_OPTIMISED: GraphNode[] = [
         "subtract_4",
         "divide_3"
       ],
-      "__foldedLabel": "uv → Subtract → d → m → Float → Color → Multiply",
+      "__foldedLabel": "uv → Subtract → d → m → Float → Colour → Multiply",
       "subtract_b": 0.5,
       "d_scale": 1,
       "m_edge0": 0.31,

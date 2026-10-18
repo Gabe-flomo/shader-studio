@@ -14,14 +14,15 @@ describe('4D shapes in the 3D Scene Builder', () => {
     expect(FOUR).toEqual(['hypersphere', 'tesseract', 'duocylinder', 'clifford-torus', 'cell24', 'julia4d', 'mandel4d']);
   });
 
-  it.each(FOUR)('%s builds as Lift to 4D → Rotate 4D → the shape, and compiles', kind => {
+  it.each(FOUR)('%s builds as Lift to 4D → a 4D Transform (Spin) → the shape, and compiles', kind => {
     const r = parseRecipe(`surface · ${kind} w=0.1 spin=10 · background night`);
     expect(r.errors).toEqual([]);
     const g = buildStandaloneGraph(r.spec);
     const inner = g.nodes.flatMap(n => ((n.params.subgraph as { nodes?: typeof g.nodes } | undefined)?.nodes ?? []));
     const types = inner.map(n => n.type);
     expect(types).toContain('lift4D');
-    expect(types).toContain('rotate4D');
+    expect(inner.some(n => n.type === 'transform' && n.params.dim === '4' && n.params.spin === 10 && n.params.spinPlane === 'xw')).toBe(true);
+    expect(types).not.toContain('rotate4D');
     expect(compileGraph({ nodes: g.nodes }).success).toBe(true);
     const again = parseRecipe(printRecipe(r.spec));
     expect(again.errors).toEqual([]);

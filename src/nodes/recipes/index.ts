@@ -32,7 +32,7 @@ export const STARTER_RECIPES: Readonly<Record<string, StarterRecipe[]>> = {
   ...each(['fbm', 'noiseFloat', 'waveTexture'], NOISE_RECIPES),
   voronoi: VORONOI_RECIPES,
   palette: PALETTE_RECIPES,
-  ...each(['circleSDF', 'boxSDF', 'ringSDF', 'shapeSDF', 'simpleSDF'], SDF_SHAPE_RECIPES),
+  ...each(['circleSDF', 'boxSDF', 'ringSDF', 'shapeSDF'], SDF_SHAPE_RECIPES),
   sdfUnion: SDF_COMBINE_RECIPES.union,
   sdfSubtract: SDF_COMBINE_RECIPES.subtract,
   sdfIntersect: SDF_COMBINE_RECIPES.intersect,
@@ -48,7 +48,9 @@ export const STARTER_RECIPES: Readonly<Record<string, StarterRecipe[]>> = {
   textureFade: FADE_RECIPES,
   textureFeedback: FEEDBACK_TEXTURE_RECIPES,
   gpuParticles: PARTICLE_RECIPES,
-  audioInput: AUDIO_RECIPES,
+  // The Audio nodes (docs/audio-tools.md): an Audio Source's Level, or one band's (Band level).
+  audioSource: AUDIO_RECIPES,
+  audioBand: AUDIO_RECIPES,
   lfo: LFO_RECIPES,
   // Light the scene (docs/light-scene.md): 3D and 4D scenes both march through a March Loop Group.
   marchLoopGroup: LIGHT_RECIPES,

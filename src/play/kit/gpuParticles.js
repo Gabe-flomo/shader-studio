@@ -237,10 +237,24 @@ export function gpBindings(fragmentShader) {
   const out = [], seen = new Set();
   const fs = fragmentShader || '';
   const re = /uniform\s+sampler2D\s+(\w+)\s*;\s*\/\/ gpu-particles (\{[^\n]*\})/g;
-  const am = /uniform\s+float\s+(u_audio_\w+)\s*;/.exec(fs);
+  let am = /uniform\s+float\s+(u_audio_\w+)\s*;/.exec(fs);
   // Every band of that same Audio Input (u_audio_<slug>_<band>), low to high as its bands are listed.
   const bands = [];
-  if (am) {
+  if (!am) {
+    // No (retired) Audio Input: the first Audio Source (its live Level and Time, u_aud_<slug>_level / _time) is
+    // heard instead, and its bands' Values (u_aud_<slug>_<band>_v) are the bands, in the order the source lists them.
+    const rs = /uniform\s+float\s+u_aud_(\w+)_time\s*;/g;
+    let ms;
+    while (!am && (ms = rs.exec(fs))) {
+      const stem = ms[1];
+      if (!new RegExp(`uniform\\s+float\\s+u_aud_${stem}_level\\s*;`).test(fs)) continue;
+      am = [null, `u_aud_${stem}_level`];
+      const rv = new RegExp(`uniform\\s+float\\s+(u_aud_${stem}_\\w+_v)\\s*;`, 'g');
+      let mv;
+      while ((mv = rv.exec(fs))) if (!bands.includes(mv[1])) bands.push(mv[1]);
+    }
+    for (let i = 0; i < bands.length; i++) bands[i] = [bands[i], i];
+  } else {
     const stem = am[1].replace(/_\d+$/, '');
     const rb = /uniform\s+float\s+(u_audio_\w+?)_(\d+)\s*;/g;
     let mb;

@@ -152,9 +152,9 @@ export const AgentWindNode: NodeDefinition = {
 
 export const AgentCurlNode: NodeDefinition = {
   type: 'agentCurl',
-  label: 'Curl noise',
+  label: 'Curl Noise',
   category: 'Simulation',
-  aliases: ['Turbulence', 'Curl', 'Swirling noise', 'Smoke'],
+  aliases: ['Curl noise', 'Turbulence', 'Curl', 'Swirling noise', 'Smoke'],
   description: 'Swirling currents that never bunch up (the curl of two octaves of noise, the Particles node\'s Turbulence): walkers fold into streams, threads and eddies. Evolve makes the currents drift.',
   inputs: {
     strength: { type: 'float', label: 'Strength', hint: 'Picture units a second, every second.' },
@@ -405,9 +405,9 @@ export const AgentFlowNode: NodeDefinition = {
 
 export const AgentSoundKickNode: NodeDefinition = {
   type: 'agentSoundKick',
-  label: 'Sound kick',
+  label: 'Sound Kick',
   category: 'Simulation',
-  aliases: ['Shockwave', 'Beat push', 'Audio force', 'Sound wave', 'Vibrate', 'Shake'],
+  aliases: ['Sound kick', 'Shockwave', 'Beat push', 'Audio force', 'Sound wave', 'Vibrate', 'Shake'],
   description: 'Sound as a force, the Particles node\'s: Shockwave sends a ring of pressure out from the centre on every beat; Wave sends rings as loud as the sound was when they left; Vibrate shivers walkers where the wave is; Shake jitters everything with the level. It listens to Sound from (with a silent stand-in Beat while you build).',
   inputs: {
     centre: { type: 'vec2', label: 'Centre', hint: 'Where the rings start. Wins over X and Y.' },
@@ -764,9 +764,9 @@ export const sceneGridUniforms = (slug: string) => ({ grid: `u_agVol_${slug}`, a
 
 export const AgentCollideSceneNode: NodeDefinition = {
   type: 'agentCollideScene',
-  label: 'Collide (3D scene)',
+  label: 'Collide (3D Scene)',
   category: 'Simulation',
-  aliases: ['Scene collide', 'Collide 3D', 'Bounce off a scene', 'SDF scene collision', 'Ray-marched obstacle'],
+  aliases: ['Collide (3D scene)', 'Scene collide', 'Collide 3D', 'Bounce off a scene', 'SDF scene collision', 'Ray-marched obstacle'],
   description: 'In a 3D group: keeps walkers out of a ray-marched scene\'s shapes. Wire a Scene Group\'s Scene into the group (+ Add an input from outside, Scene) and that port into Scene. The scene\'s distance is sampled on a coarse 48³ grid round the centre (the Particles node\'s, filled every step), so walkers bounce off or slide along its surfaces at almost no cost. Goes after Integrate (Position and Velocity).',
   inputs: {
     scene: { type: 'scene3d', label: 'Scene', hint: 'A Scene Group\'s Scene, through a port added to the group (Agent Inputs → + Add an input from outside → Scene). The same Scene the March Loop draws.' },

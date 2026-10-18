@@ -1,6 +1,6 @@
 # Audio readers
 
-An **audio reader** is a dot on the spectrum that reads one frequency band as 0–1: a kick near 60 Hz, a hi-hat near 8 kHz. Readers listen to one input at a time (`audioReaders.input`): the live input (mic, interface, virtual cable), an Audio Input node's song, a Video layer's sound (`video:<layerId>`), a Drum pad layer (`pads:<layerId>`) or an Audio engine rack (`engine:<rackId>`). The maths (band → dB → 0–1 → attack/release) is in `src/play/audioReaders.ts`, read once a frame by `src/lib/audioReaderBank.ts`; exported websites carry a line-for-line copy in `src/play/runtime/play-runtime.js`.
+An **audio reader** is a dot on the spectrum that reads one frequency band as 0–1: a kick near 60 Hz, a hi-hat near 8 kHz. Readers listen to one input at a time (`audioReaders.input`): the live input (mic, interface, virtual cable), an Audio Input node's song (the retired node, in old graphs), a Video layer's sound (`video:<layerId>`), a Drum pad layer (`pads:<layerId>`) or an Audio engine rack (`engine:<rackId>`). The maths (band → dB → 0–1 → attack/release) is in `src/play/audioReaders.ts`, read once a frame by `src/lib/audioReaderBank.ts`; exported websites carry a line-for-line copy in `src/play/runtime/play-runtime.js`.
 
 ## Every reader is a control
 

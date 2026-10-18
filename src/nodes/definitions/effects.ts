@@ -339,9 +339,9 @@ float simpleLight(float d, float brightness) {
  */
 export const GlowToColorNode: NodeDefinition = withParamSockets({
   type: 'glowToColor',
-  label: 'Glow to Color',
+  label: 'Glow to Colour',
   category: 'Effects',
-  aliases: ['Tanh Color', 'Exposure Tint'],
+  aliases: ['Glow to Color', 'Tanh Color', 'Exposure Tint'],
   description: 'Turns an accumulated glow (any float, often the carry out of a March Loop Group) into a colour: `Tint × tanh(Glow × Exposure)`. Tanh keeps bright cores from blowing out to white. Replaces the Multiply → Tanh → Make Vec3 → Multiply chain.',
   inputs: {
     glow: { type: 'float', label: 'Glow', hint: 'Accumulated brightness, any range.' },
@@ -371,9 +371,9 @@ export const GlowToColorNode: NodeDefinition = withParamSockets({
  */
 export const NormalToColorNode: NodeDefinition = {
   type: 'normalToColor',
-  label: 'Normal to Color',
+  label: 'Normal to Colour',
   category: 'Color',
-  aliases: ['Signed to Color', 'Vec3 to Color'],
+  aliases: ['Normal to Color', 'Signed to Color', 'Vec3 to Color'],
   description: 'Maps a signed vec3 (a normal, a position, a direction) onto colours: `Vector × 0.5 + 0.5`, so −1 → 0 and +1 → 1. `Abs` mode uses |Vector| instead. Replaces the Multiply(0.5) → Add(0.5) chain.',
   inputs: { v: { type: 'vec3', label: 'Vector' } },
   outputs: { color: { type: 'vec3', label: 'Color' } },
@@ -1210,7 +1210,7 @@ export const VignetteNode: NodeDefinition = {
 // Scanlines — CRT-style horizontal scan lines
 export const ScanlinesNode: NodeDefinition = withParamSockets({
   type: 'scanlines', label: 'Scanlines', category: 'Post Processing',
-  description: 'Add CRT-style scanlines to a color.',
+  description: 'Darkens every other row of the picture, like the lines of an old CRT screen.',
   inputs: {
     color:     { type: 'vec3',  label: 'Color' },
     uv:        { type: 'vec2',  label: 'UV (0-1)' },
@@ -2058,7 +2058,7 @@ const TEX_IN = { type: 'texture' as const, label: 'Texture', hint: 'A Pass of th
 export const DofTextureNode: NodeDefinition = withParamSockets({
   type: 'dofTexture',
   label: 'Depth of Field (texture)',
-  category: 'Passes',
+  category: 'Texture tools',
   aliases: ['Depth of Field', 'DoF', 'Lens Blur', 'Bokeh', 'Focus blur', 'Defocus'],
   description: 'A camera\'s focus blur on a texture (a Pass of the picture), in the same frame. Focus Depth: pixels whose depth is far from Focal Dist get a bokeh blur (the depth from Dist, or from the texture\'s alpha: put a March Loop\'s Distance into the Pass\'s Alpha). Focus Point: like a lens focused on Focal Point, with a Focal Length and Aperture. Disc, Hex or Oct bokeh.',
   inputs: {
@@ -2121,7 +2121,7 @@ export const DofTextureNode: NodeDefinition = withParamSockets({
 export const TiltShiftTextureNode: NodeDefinition = withParamSockets({
   type: 'tiltShiftTexture',
   label: 'Tilt-Shift (texture)',
-  category: 'Passes',
+  category: 'Texture tools',
   aliases: ['Tilt-Shift Blur', 'Tilt shift', 'Miniature', 'Focus band'],
   description: 'The miniature look on a texture (a Pass of the picture), in the same frame: a band stays sharp and the picture blurs more the further from it, along the band. Tilt Angle turns the band.',
   inputs: {

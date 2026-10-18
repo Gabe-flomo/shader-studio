@@ -32,7 +32,7 @@ export const GRID_EXAMPLE_INDEX: Record<string, { label: string; description: st
   },
   gridTourMorph: {
     label: 'Grid 3 · One wire: shapes that morph and spin per cell', play: true,
-    description: 'A whole chain wired into Grid Pattern’s Shape: a star and a square mixed together, spun by a Rotate 2D, with a Cell node giving every cell its own phase. Each cell morphs between the two shapes and turns on its own clock.',
+    description: 'A whole chain wired into Grid Pattern’s Shape: a star and a square mixed together, spun by a Transform (Apply mode), with a Cell node giving every cell its own phase. Each cell morphs between the two shapes and turns on its own clock.',
   },
   gridTourRipple: {
     label: 'Grid 4 · Big patterns from per-cell numbers', play: true,
@@ -132,7 +132,7 @@ export function buildGridExamples(): Record<string, ExampleGraph> {
 
 **How it is built.** UV → Grid → Cell UV → Circle SDF (UV). Grid's Cell ID → Noise Float (Hash, Out 0.12–0.44) → Multiply by Cell Filter's Inv Mask → Circle SDF's Radius. The same hash → Palette → SDF Fill's Fill; a Colour Picker → its Stroke. Circle SDF → SDF Fill → Output.
 
-**Try.** Change the Cell Filter's X and Y, or use its Mask instead of Inv Mask to keep only the picked cells. Put a Rotate 2D between Cell UV and Circle SDF and swap the circle for a Box SDF. Compare with Grid 1: Grid Pattern is this whole chain in one card.`));
+**Try.** Change the Cell Filter's X and Y, or use its Mask instead of Inv Mask to keep only the picked cells. Put a Transform (Apply mode) between Cell UV and Circle SDF and swap the circle for a Box SDF. Compare with Grid 1: Grid Pattern is this whole chain in one card.`));
 
   // ── 3 · One wire: morph + spin per cell ───────────────────────────────────
   add('gridTourMorph', [
@@ -146,9 +146,9 @@ export function buildGridExamples(): Record<string, ExampleGraph> {
       ...note('The sine, from −1…1 to 0…1: how far this cell is between the star and the square.') }, { value: ['wave', 'output'] }),
     n('multiply', 'spin', 760, 200, { b: 0.6, ...note('The same clock, slower: the turning angle.') }, { a: ['clock', 'result'] }),
     n('uv', 'luv', 760, 40, { ...note('Inside a field chain the UV node is the cell’s own coordinates (−0.5…0.5), not the canvas.') }),
-    n('rotate2d', 'rot', 1000, 120, {}, { input: ['luv', 'uv'], angle: ['spin', 'result'] }),
-    n('shapeSDF', 'star', 1240, 40, { shape: 'starN', r: 0.36, n_pts: 5, m_pts: 2.4 }, { p: ['rot', 'output'] }),
-    n('boxSDF', 'box', 1240, 240, { width: 0.24, height: 0.24 }, { position: ['rot', 'output'] }),
+    n('transform', 'rot', 1000, 120, { dim: '2', mode: 'space' }, { p: ['luv', 'uv'], turn: ['spin', 'result'] }),
+    n('shapeSDF', 'star', 1240, 40, { shape: 'starN', r: 0.36, n_pts: 5, m_pts: 2.4 }, { p: ['rot', 'p'] }),
+    n('boxSDF', 'box', 1240, 240, { width: 0.24, height: 0.24 }, { position: ['rot', 'p'] }),
     n('mix', 'morph', 1480, 200, { ...note('Mixing two distances gives the shapes in between: 0 is the star, 1 the square.') },
       { a: ['star', 'distance'], b: ['box', 'distance'], t: ['blend', 'result'] }),
     n('palette', 'pal', 1480, 460, { preset: '1', scale: 0.16 }, { value: ['phase', 'value'] }),
@@ -163,7 +163,7 @@ export function buildGridExamples(): Record<string, ExampleGraph> {
     ctl('box', 'box::width', 'Square width', 0.05, 0.45, 0.005),
   ], `**What it shows.** A shape of your own on the grid, with one wire, varying per cell. Everything from Cell to Mix is wired into Grid Pattern's **Shape**, a field socket: Grid Pattern runs that whole chain once in every cell, in the cell's own coordinates. The **Cell** node is the cell being drawn, so hashing its Cell ID gives every cell its own phase: each one morphs between a star and a square and spins on its own clock.
 
-**How it is built.** Cell (Cell ID) → Noise Float (Hash, 0…2π) + Time → Sin → Remap (0…1) → Mix's Blend. The same clock × 0.6 → Rotate 2D's angle, turning a UV node (inside a chain it's the cell's coordinates) before Shape SDF (Star) and Box SDF. Mix → Grid Pattern Shape. The phase → Palette → Grid Pattern Picture.
+**How it is built.** Cell (Cell ID) → Noise Float (Hash, 0…2π) + Time → Sin → Remap (0…1) → Mix's Blend. The same clock × 0.6 → a Transform's Turn, turning a UV node (inside a chain it's the cell's coordinates) before Shape SDF (Star) and Box SDF. Mix → Grid Pattern Shape. The phase → Palette → Grid Pattern Picture.
 
 **Try.** Set Spin speed to 0 and Morph speed high. Replace the Box SDF with a Circle SDF. Set Grid Pattern's Affect to Grow and wire a Mouse into Affect Pos: the wired shape grows near the mouse like a built-in one.`));
 

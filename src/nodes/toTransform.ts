@@ -17,7 +17,7 @@
  * Pure.
  */
 import type { GraphNode, InputSocket, SubgraphData } from '../types/nodeGraph';
-import type { PlayRecord } from '../types/play';
+import { emptyPlayRecord, type PlayRecord } from '../types/play';
 import { TransformNode, transformSockets, type TransformDim } from './definitions/transformAny';
 import { applySwitchToList, retargetPlay, type SwitchPlan } from './switchNode';
 import { getNodeDefinition } from './definitions';
@@ -258,14 +258,16 @@ const subOf = (n: GraphNode): SubgraphData | null => {
  * and the switch is exact. Consumers follow the output map, a group's output ports too, Play controls on
  * renamed settings are retargeted and a group card's overrides renamed (and converted). Pure.
  */
-export function switchToTransformIn(nodes: GraphNode[], play: PlayRecord, want: (n: GraphNode) => boolean): SwitchResult {
+export function switchToTransformIn(nodes: GraphNode[], play: PlayRecord, want: (n: GraphNode) => boolean, opts: { onLoad?: boolean } = {}): SwitchResult {
   const switched: string[] = [];
   const skipped: SwitchResult['skipped'] = [];
   const exact: SwitchResult['exact'] = [];
   const inexact: SwitchResult['inexact'] = [];
   const labelOf = (n: GraphNode) => (typeof n.params.label === 'string' && n.params.label) || getNodeDefinition(n.type)?.label || n.type;
   let pl = play;
-  const playHas = (id: string, key: string) => (pl.controls ?? []).some(c => { const p = c.target.split('::'); return p.length >= 2 && p[p.length - 2] === id && p[p.length - 1] === key; });
+  // On load the choice must not depend on the Play record (the nodes and the record are migrated apart): a setting
+  // whose units change counts as animated, so only switches that carry every setting as it is are made.
+  const playHas = (id: string, key: string) => !!opts.onLoad || (pl.controls ?? []).some(c => { const p = c.target.split('::'); return p.length >= 2 && p[p.length - 2] === id && p[p.length - 1] === key; });
 
   const level = (list: GraphNode[], parent: GraphNode | null): { list: GraphNode[]; parentParams: Record<string, unknown> | null; outPorts: Record<string, Record<string, string>> } => {
     let out = list.map(n => {
@@ -287,6 +289,7 @@ export function switchToTransformIn(nodes: GraphNode[], play: PlayRecord, want: 
       });
       if (!plan) continue;
       if (!plan.ok) { skipped.push({ id: old.id, label: labelOf(old), reason: plan.reason ?? '' }); continue; }
+      if (opts.onLoad && plan.inexact) { skipped.push({ id: old.id, label: labelOf(old), reason: plan.inexact }); continue; }
       out = applySwitchToList(out, plan);
       pl = retargetPlay(pl, old.id, plan).play;
       outPorts[old.id] = plan.outputMap;
@@ -340,4 +343,28 @@ export function transformParamFor(old: GraphNode, key: string): { to: string; fa
   if (!m) return null;
   const mv = [...m.params, ...dynamicParams(old)].find(x => x.from === key);
   return mv ? { to: mv.to, factor: mv.factor ?? 1 } : null;
+}
+
+// ── On load: the retired transform nodes (docs/node-retirements.md, the catalogue sweep) ──────────────────
+
+/**
+ * A loaded graph's old transform nodes (Transform 2D, UV Transform 2D, Rotate 2D, Translate / Rotate / Scale 3D
+ * and 4D) as Transforms, wherever the switch gives exactly the same numbers: no unit change (an angle in radians
+ * carried to degrees is left as it is), every wire with a place. The rest keep their old node, which still loads
+ * and renders (they are hidden from the library, not removed). Pure; the same nodes when none switched.
+ */
+export function migrateTransformsOnLoad(nodes: GraphNode[]): GraphNode[] {
+  if (!hasOldTransform(nodes)) return nodes;
+  const r = switchToTransformIn(nodes, emptyPlayRecord(), () => true, { onLoad: true });
+  return r.switched.length ? r.nodes : nodes;
+}
+
+/** The Play record of a graph whose nodes migrateTransformsOnLoad switches: controls on renamed settings follow. */
+export function migrateTransformsPlay(savedNodes: GraphNode[], play: PlayRecord): PlayRecord {
+  if (!hasOldTransform(savedNodes)) return play;
+  return switchToTransformIn(savedNodes, play, () => true, { onLoad: true }).play;
+}
+
+function hasOldTransform(nodes: GraphNode[]): boolean {
+  return nodes.some(n => TO_TRANSFORM_TYPES.has(n.type) || (subOf(n) ? hasOldTransform(subOf(n)!.nodes) : false));
 }

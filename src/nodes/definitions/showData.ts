@@ -38,9 +38,9 @@ export function showDataMode(node: GraphNode, v: Record<string, string | undefin
 
 export const ShowDataNode: NodeDefinition = withParamSockets({
   type: 'showData',
-  label: 'Show data',
+  label: 'Show Data',
   category: TEXTURE_TOOLS_CATEGORY,
-  aliases: ['Viewer', 'False colour', 'False color', 'Heat map', 'Visualise data', 'Debug view', 'Show values', 'Direction colours', 'Show channels', 'Data view'],
+  aliases: ['Show data', 'Viewer', 'False colour', 'False color', 'Heat map', 'Visualise data', 'Debug view', 'Show values', 'Direction colours', 'Show channels', 'Data view'],
   description: 'Shows what data holds, to look at before using it. Heat: any number as false colour (blue low → red high, Low and High set the range). Direction: a vector as a colour (hue is which way it points, brightness how strong). Channels: a texture or four channels side by side in a 2 × 2 grid, each as heat. Wire it to Output while you look.',
   inputs: {
     value: { type: 'float', label: 'Number', hint: 'Any number: a density, a distance, a channel, noise. Shown as Heat.' },

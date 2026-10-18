@@ -115,7 +115,7 @@ describe('compiling a graph', () => {
     // `color` is a name the pass uses: the node's name goes in front.
     expect(Object.keys(r.bind).sort()).toEqual(['background', 'colorize_color', 'gain']);
     expect(p.colours.map(c => c.name).sort()).toEqual(['background', 'colorize_color']);
-    expect(p.params.find(x => x.key === 'gain')).toMatchObject({ value: 1.5, label: 'Gain · Colorize' });
+    expect(p.params.find(x => x.key === 'gain')).toMatchObject({ value: 1.5, label: 'Gain · Colourize' });
     expect(p.params.find(x => x.key === 'colorize_color.g')?.value).toBeCloseTo(0.5, 2);
   });
 

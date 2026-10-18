@@ -145,17 +145,17 @@ describe('Play controls inside a Scene Group', () => {
     const r = compileGraph({ nodes: ns });
     const cands = collectPlayCandidates(ns, r.paramBindings);
     const targets = cands.map(c => c.target);
-    expect(targets).toContain('scene::rot::angle');
+    expect(targets).toContain('scene::rot::rxw');
     expect(targets).toContain('scene::lid::height');
     expect(targets).toContain('scene::ball::radius');
     expect(targets).not.toContain('scene::lift::w');
-    expect(cands.find(x => x.target === 'scene::rot::angle')!.groupLabel).toBe('Hypersphere in a tesseract');
+    expect(cands.find(x => x.target === 'scene::rot::rxw')!.groupLabel).toBe('Hypersphere in a tesseract');
   });
 
   it('the binding is the inner node and key, which is what the engine writes', () => {
-    expect(bindingKeyOf('scene::rot::angle')).toBe('rot::angle');
+    expect(bindingKeyOf('scene::rot::rxw')).toBe('rot::rxw');
     const r = compileGraph({ nodes: nodes() });
-    expect(r.paramUniforms[r.paramBindings['rot::angle']]).toBe(0);
+    expect(r.paramUniforms[r.paramBindings['rot::rxw']]).toBe(0);
   });
 
   it('reads the control value (a group override wins), finds the node, and keeps the target', () => {
@@ -178,7 +178,7 @@ describe('Play controls inside a Scene Group', () => {
     const r = compileGraph({ nodes: ns });
     const { items } = controlItems(ns, DEFAULT_RANDOMIZE_OPTIONS, collectPlayCandidates(ns, r.paramBindings), new Set());
     const targets = items.map(i => i.target);
-    expect(targets).toContain('scene::rot::angle');
+    expect(targets).toContain('scene::rot::rxw');
     expect(targets).toContain('scene::lid::height');
     expect(targets).not.toContain('scene::lift::w');
     const t = nodes('fourDTesseractSlice');

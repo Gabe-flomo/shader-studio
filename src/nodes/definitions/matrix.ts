@@ -3,28 +3,6 @@ import { p } from './helpers';
 
 // ─── Vec2 Const ───────────────────────────────────────────────────────────────
 
-export const Vec2ConstNode: NodeDefinition = {
-  type: 'vec2Const',
-  label: 'Vec2 Const',
-  category: 'Math',
-  subcategory: 'Vector Build/Split',
-  description: 'A constant vec2 — type in X and Y directly, no inputs.',
-  inputs: {},
-  outputs: { val: { type: 'vec2', label: 'Vec2' } },
-  defaultParams: { x: 0, y: 0 },
-  paramDefs: {
-    x: { label: 'X', type: 'float', step: 0.01, hint: 'Horizontal component.' },
-    y: { label: 'Y', type: 'float', step: 0.01, hint: 'Vertical component.' },
-  },
-  generateGLSL: (node: GraphNode) => {
-    const id = node.id;
-    return {
-      code: `    vec2 ${id}_val = vec2(${p(node.params.x, 0)}, ${p(node.params.y, 0)});\n`,
-      outputVars: { val: `${id}_val` },
-    };
-  },
-};
-
 // ─── Vec3 Const ───────────────────────────────────────────────────────────────
 
 

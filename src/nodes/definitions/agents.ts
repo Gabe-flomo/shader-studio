@@ -379,9 +379,9 @@ const sel = (v: unknown, allowed: string[], fallback: string) => (typeof v === '
  */
 export const agHandPlace = (hx: string, hy: string) => `vec2((${hx} * 2.0 - 1.0) * (u_resolution.x / u_resolution.y), ${hy} * 2.0 - 1.0)`;
 /** Hand X / Y sliders, shown while `gate` is `value`. */
-export const agHandParams = (gate: string, value: string, what: string) => ({
-  handX: { label: 'Hand X', type: 'float' as const, min: 0, max: 1, step: 0.001, hint: `${what}, across: 0 left, 1 right.`, help: 'Made for Play: right-click → Follow a hand (or Add as position with Y and map the pair to a hand, a null, the pose or the pointer). 0–1 across the picture at any shape, like the Particles node\'s Hand X.', showWhen: { param: gate, value } },
-  handY: { label: 'Hand Y', type: 'float' as const, min: 0, max: 1, step: 0.001, hint: `${what}, up: 0 bottom, 1 top.`, showWhen: { param: gate, value } },
+export const agHandParams = (gate: string, value: string, what: string, section?: string) => ({
+  handX: { ...(section ? { section } : {}), label: 'Hand X', type: 'float' as const, min: 0, max: 1, step: 0.001, hint: `${what}, across: 0 left, 1 right.`, help: 'Made for Play: right-click → Follow a hand (or Add as position with Y and map the pair to a hand, a null, the pose or the pointer). 0–1 across the picture at any shape, like the Particles node\'s Hand X.', showWhen: { param: gate, value } },
+  handY: { ...(section ? { section } : {}), label: 'Hand Y', type: 'float' as const, min: 0, max: 1, step: 0.001, hint: `${what}, up: 0 bottom, 1 top.`, showWhen: { param: gate, value } },
 });
 
 // ── The group ────────────────────────────────────────────────────────────────
@@ -1008,9 +1008,9 @@ export const AgentMoveNode: NodeDefinition = {
 
 export const AgentBySpeciesNode: NodeDefinition = {
   type: 'agentBySpecies',
-  label: 'By species',
+  label: 'By Species',
   category: 'Simulation',
-  aliases: ['Per species', 'Species select'],
+  aliases: ['By species', 'Per species', 'Species select'],
   description: 'Picks one of four numbers by this walker\'s species: a different Turn, Speed or Angle for each kind, from one rule.',
   inputs: {
     a: { type: 'float', label: 'Species 1' },
@@ -1056,46 +1056,46 @@ export const AgentEmitNode: NodeDefinition = {
   },
   defaultParams: { mode: 'fill', shape: 'disc', heading: 'inward', at: 'point', x: 0, y: 0, handX: 0.5, handY: 0.5, size: 0.6, rate: 20000, life: 0, lifeVar: 0.2, speed: 0, speedVar: 0, spread: 0, share: 1, burst: 0, species: 'each', threshold: 0.2, miss: 'best', up: '-y', minOpacity: 0.05, home: 'off' },
   paramDefs: {
-    mode: { label: 'Births', type: 'select', hint: 'Fill: everyone is born at once when the simulation starts (slime). Rate: a stream of births a second. Keep full: born at once, each reborn the moment it dies (particles with a Life).', options: [
+    mode: { section: 'Births', label: 'Births', type: 'select', hint: 'Fill: everyone is born at once when the simulation starts (slime). Rate: a stream of births a second. Keep full: born at once, each reborn the moment it dies (particles with a Life).', options: [
       { value: 'fill', label: 'Fill (all at once)' }, { value: 'rate', label: 'Rate (per second)' }, { value: 'respawn', label: 'Keep full (reborn when they die)' },
     ] },
-    shape: { label: 'Shape', type: 'select', hint: 'Where in the picture they are born.', options: [
+    shape: { section: 'Births', label: 'Shape', type: 'select', hint: 'Where in the picture they are born.', options: [
       { value: 'point', label: 'Point' }, { value: 'line', label: 'Line (across, Size each way)' }, { value: 'ring', label: 'Ring' }, { value: 'disc', label: 'Disc' }, { value: 'box', label: 'Box' }, { value: 'screen', label: 'Whole picture' },
       { value: 'picture', label: 'Picture (where bright)' }, { value: 'field', label: 'Field (Where ƒ above Threshold)' },
       { value: 'sphere', label: 'Sphere (3D; a ring in 2D)' }, { value: 'ball', label: 'Ball (3D; a disc in 2D)' },
       { value: 'splats', label: 'Splat scan (each splat a walker)' },
     ] },
-    up: { label: 'Up is', type: 'select', hint: 'Splat scan: which way is up in the file. Most scans have y pointing down (3DGS, COLMAP): −Y turns them over.', options: [
+    up: { section: 'Births', label: 'Up is', type: 'select', hint: 'Splat scan: which way is up in the file. Most scans have y pointing down (3DGS, COLMAP): −Y turns them over.', options: [
       { value: '-y', label: '−Y (most scans)' }, { value: 'y', label: '+Y' },
     ], showWhen: { param: 'shape', value: 'splats' } },
-    minOpacity: { label: 'Skip below', type: 'float', min: 0, max: 1, step: 0.01, hint: 'Splat scan: splats fainter than this opacity aren\'t born (scans have many faint floaters).', showWhen: { param: 'shape', value: 'splats' } },
-    home: { label: 'Remember home', type: 'select', hint: 'Keep where each walker is born in its More memory (x, y, z): a Home memory that Return home pulls it back to. A splat scan always does, with the splat\'s size in w.', help: 'Where each walker was born, kept in its More memory x, y and z (2D: z is 0) for the whole of its life: the rules\' Home memory (a memory of the kind Home always takes x, y, z). Return home (a Forces card) springs it back there. A splat scan always keeps it, and the splat\'s own size in w. Only groups with More memory keep it (a rules group with a Home memory has it).', options: [
+    minOpacity: { section: 'Births', label: 'Skip below', type: 'float', min: 0, max: 1, step: 0.01, hint: 'Splat scan: splats fainter than this opacity aren\'t born (scans have many faint floaters).', showWhen: { param: 'shape', value: 'splats' } },
+    home: { section: 'Births', label: 'Remember home', type: 'select', hint: 'Keep where each walker is born in its More memory (x, y, z): a Home memory that Return home pulls it back to. A splat scan always does, with the splat\'s size in w.', help: 'Where each walker was born, kept in its More memory x, y and z (2D: z is 0) for the whole of its life: the rules\' Home memory (a memory of the kind Home always takes x, y, z). Return home (a Forces card) springs it back there. A splat scan always keeps it, and the splat\'s own size in w. Only groups with More memory keep it (a rules group with a Home memory has it).', options: [
       { value: 'off', label: 'Off' }, { value: 'on', label: 'On' },
     ], showWhen: { param: 'shape', value: ['point', 'line', 'ring', 'disc', 'box', 'screen', 'picture', 'field', 'sphere', 'ball'] } },
-    threshold: { label: 'Threshold', type: 'float', min: 0, max: 1, step: 0.01, hint: 'Picture / Field: how bright (how high) a place must be for walkers to be born there.', showWhen: { param: 'shape', value: ['picture', 'field'] } },
-    miss: { label: 'No place found', type: 'select', hint: 'Picture / Field: when none of the 8 tries lands where it is bright enough (a sparse picture): born at the best try anyway, or not born this time (it tries again on a later birth; Keep full: the next step).', options: [
+    threshold: { section: 'Births', label: 'Threshold', type: 'float', min: 0, max: 1, step: 0.01, hint: 'Picture / Field: how bright (how high) a place must be for walkers to be born there.', showWhen: { param: 'shape', value: ['picture', 'field'] } },
+    miss: { section: 'Births', label: 'No place found', type: 'select', hint: 'Picture / Field: when none of the 8 tries lands where it is bright enough (a sparse picture): born at the best try anyway, or not born this time (it tries again on a later birth; Keep full: the next step).', options: [
       { value: 'best', label: 'Born at the best try' }, { value: 'skip', label: 'Not born this time' },
     ], showWhen: { param: 'shape', value: ['picture', 'field'] } },
-    species: { label: 'Species', type: 'select', hint: 'Which species these walkers are (with the group\'s Species above 1). Each in turn shares them out evenly; chain one Emit per species to give each its own place.', options: [
+    species: { section: 'Births', label: 'Species', type: 'select', hint: 'Which species these walkers are (with the group\'s Species above 1). Each in turn shares them out evenly; chain one Emit per species to give each its own place.', options: [
       { value: 'each', label: 'Each in turn' }, { value: '1', label: 'Species 1' }, { value: '2', label: 'Species 2' }, { value: '3', label: 'Species 3' }, { value: '4', label: 'Species 4' },
     ] },
-    heading: { label: 'Facing', type: 'select', hint: 'Which way they face when born.', options: [
+    heading: { section: 'Births', label: 'Facing', type: 'select', hint: 'Which way they face when born.', options: [
       { value: 'random', label: 'Random' }, { value: 'inward', label: 'Inward' }, { value: 'outward', label: 'Outward' }, { value: 'up', label: 'Up' },
     ] },
-    at: { label: 'At', type: 'select', hint: 'Where the shape\'s centre comes from when nothing is wired into Position.', help: 'X and Y: picture units. A hand or null: Hand X / Y, 0–1 across and up the picture, made for Play (right-click Hand X → Follow a hand).', options: [{ value: 'point', label: 'X and Y' }, { value: 'hand', label: 'A hand or null (Hand X / Y)' }] },
-    x: { label: 'X', type: 'float', min: -2, max: 2, step: 0.01, hint: 'Centre of the shape, across.', showWhen: { param: 'at', value: 'point' } },
-    y: { label: 'Y', type: 'float', min: -1, max: 1, step: 0.01, hint: 'Centre of the shape, up.', showWhen: { param: 'at', value: 'point' } },
-    ...agHandParams('at', 'hand', 'The centre of the shape'),
-    z: { label: 'Z', type: 'float', min: -1, max: 1, step: 0.01, hint: '3D: the centre\'s depth (toward you is +).', showWhen: { param: 'agentSpace', value: '3d' } },
-    size: { label: 'Size', type: 'float', min: 0, max: 2, step: 0.01, hint: 'Radius of the ring or disc, half-width of the box (picture units).' },
-    rate: { label: 'Rate', type: 'float', min: 0, max: 1000000, step: 100, hint: 'Births a second (Rate mode).' },
-    life: { label: 'Life', type: 'float', min: 0, max: 60, step: 0.1, hint: 'Seconds each lives. 0: forever.' },
-    lifeVar: { label: 'Life ±', type: 'float', min: 0, max: 1, step: 0.01, hint: 'How much Life varies, as a share of it.' },
-    speed: { label: 'Speed', type: 'float', min: 0, max: 2, step: 0.01, hint: 'Starting speed along its facing (Move sets its own).' },
-    speedVar: { label: 'Speed ±', type: 'float', min: 0, max: 1, step: 0.01, hint: 'How much the starting speed varies, as a share of it (0.45: the Particles node\'s).' },
-    spread: { label: 'Spread', type: 'float', min: 0, max: 1, step: 0.01, hint: 'How far each one\'s direction strays from its facing toward a random one (1: any direction).' },
-    burst: { label: 'Burst', type: 'float', trigger: true, min: 0, max: 1, step: 0.01, hint: 'A trigger: each time it rises past 0.5 everyone is born again at once.', help: 'A trigger. Each time it rises past 0.5 every walker is born again at once, from this Emit. In Play, route a trigger source (a key, a beat, a pad) to it.' },
-    share: { label: 'Share', type: 'float', min: 0, max: 10, step: 0.01, hint: 'With Also chained: this Emit\'s share of the births.' },
+    at: { section: 'Births', label: 'At', type: 'select', hint: 'Where the shape\'s centre comes from when nothing is wired into Position.', help: 'X and Y: picture units. A hand or null: Hand X / Y, 0–1 across and up the picture, made for Play (right-click Hand X → Follow a hand).', options: [{ value: 'point', label: 'X and Y' }, { value: 'hand', label: 'A hand or null (Hand X / Y)' }] },
+    x: { section: 'Births', label: 'X', type: 'float', min: -2, max: 2, step: 0.01, hint: 'Centre of the shape, across.', showWhen: { param: 'at', value: 'point' } },
+    y: { section: 'Births', label: 'Y', type: 'float', min: -1, max: 1, step: 0.01, hint: 'Centre of the shape, up.', showWhen: { param: 'at', value: 'point' } },
+    ...agHandParams('at', 'hand', 'The centre of the shape', 'Births'),
+    z: { section: 'Births', label: 'Z', type: 'float', min: -1, max: 1, step: 0.01, hint: '3D: the centre\'s depth (toward you is +).', showWhen: { param: 'agentSpace', value: '3d' } },
+    size: { section: 'Life and speed', label: 'Size', type: 'float', min: 0, max: 2, step: 0.01, hint: 'Radius of the ring or disc, half-width of the box (picture units).' },
+    rate: { section: 'Life and speed', label: 'Rate', type: 'float', min: 0, max: 1000000, step: 100, hint: 'Births a second (Rate mode).' },
+    life: { section: 'Life and speed', label: 'Life', type: 'float', min: 0, max: 60, step: 0.1, hint: 'Seconds each lives. 0: forever.' },
+    lifeVar: { section: 'Life and speed', label: 'Life ±', type: 'float', min: 0, max: 1, step: 0.01, hint: 'How much Life varies, as a share of it.' },
+    speed: { section: 'Life and speed', label: 'Speed', type: 'float', min: 0, max: 2, step: 0.01, hint: 'Starting speed along its facing (Move sets its own).' },
+    speedVar: { section: 'Life and speed', label: 'Speed ±', type: 'float', min: 0, max: 1, step: 0.01, hint: 'How much the starting speed varies, as a share of it (0.45: the Particles node\'s).' },
+    spread: { section: 'Life and speed', label: 'Spread', type: 'float', min: 0, max: 1, step: 0.01, hint: 'How far each one\'s direction strays from its facing toward a random one (1: any direction).' },
+    burst: { section: 'Life and speed', label: 'Burst', type: 'float', trigger: true, min: 0, max: 1, step: 0.01, hint: 'A trigger: each time it rises past 0.5 everyone is born again at once.', help: 'A trigger. Each time it rises past 0.5 every walker is born again at once, from this Emit. In Play, route a trigger source (a key, a beat, a pad) to it.' },
+    share: { section: 'Life and speed', label: 'Share', type: 'float', min: 0, max: 10, step: 0.01, hint: 'With Also chained: this Emit\'s share of the births.' },
   },
   assignable: false,
   glslFunctions: [AG_DIR_GLSL],
@@ -1366,9 +1366,9 @@ export function retypeTrailField(node: GraphNode): GraphNode {
 
 export const TrailFieldNode: NodeDefinition = {
   type: 'trailField',
-  label: 'Trail field',
+  label: 'Trail Field',
   category: 'Simulation',
-  aliases: ['Trail', 'Pheromone field', 'Chemoattractant', 'Trail map'],
+  aliases: ['Trail field', 'Trail', 'Pheromone field', 'Chemoattractant', 'Trail map'],
   description: 'The trail the walkers leave: every step it spreads out (Diffuse) and fades (Half-life). It is an ordinary texture: Amount at this pixel goes into a Palette or the Output, Texture into Glow, Blur or Sample (texture), and back into the Agents group for Sense to smell (it reads the trail as it was one step before).',
   inputs: {
     deposit: { type: 'deposit', label: 'Deposit', hint: 'A Deposit (or a chain of them).' },
@@ -1613,9 +1613,9 @@ function bgPaletteAt(node: GraphNode, t: string): string {
 
 export const DrawAgentsNode: NodeDefinition = {
   type: 'drawAgents',
-  label: 'Draw agents',
+  label: 'Draw Agents',
   category: 'Simulation',
-  aliases: ['Render agents', 'Agent points', 'Show agents', 'Draw particles', 'Streaks', 'Ink'],
+  aliases: ['Draw agents', 'Render agents', 'Agent points', 'Show agents', 'Draw particles', 'Streaks', 'Ink'],
   description: 'Draws every walker of an Agents group over the picture wired into Over, with the Particles node\'s looks: soft dots (Points), dots with a glow (Glow), short lines along their motion (Streaks), or dark ink on paper (Ink), lit by up to four moving lights. Colour by species, speed, heading or age, with Colour A → B or one of the Particles palettes. A 3D group is seen through a camera (Distance, Angle, Elevation, Orbit speed, Zoom, Flatten, Translate) with depth of field, or through a ray-marched scene\'s camera wired into Camera from and Camera ray.',
   inputs: {
     agents: { type: 'agents', label: 'Agents', hint: 'An Agents group\'s output.' },

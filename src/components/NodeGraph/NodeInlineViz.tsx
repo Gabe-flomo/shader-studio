@@ -1,3 +1,4 @@
+import { shaperCurveType } from '../../nodes/definitions/shapers';
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { toast } from '../ui/toastStore';
 import { candidateFor, collectPlayCandidates } from '../../play/playControls';
@@ -1599,7 +1600,7 @@ export function ShaperCurveViz({ node }: { node: GraphNode }) {
     ctx.setLineDash([]);
 
     // Control point guides for bezier nodes
-    if (n.type === 'quadBezierShaper') {
+    if (shaperCurveType(n) === 'quadBezierShaper') {
       const ax = typeof n.params.a === 'number' ? n.params.a : 0.5;
       const ay = typeof n.params.b === 'number' ? n.params.b : 0.5;
       ctx.strokeStyle = `${pal.red}40`;
@@ -1624,7 +1625,7 @@ export function ShaperCurveViz({ node }: { node: GraphNode }) {
     }
 
     // Curve
-    const fn = evalShaper(n.type, n.params);
+    const fn = evalShaper(shaperCurveType(n), n.params);
     const isBipolar = n.params.bipolar === true;
     // Map pixel x → domain value and domain y → canvas y
     const xFromPx = (px: number) => isBipolar ? (px / W) * 2 - 1 : px / W;
@@ -4899,16 +4900,28 @@ export function ChladniFieldViz({ node }: { node: GraphNode }) {
     const scale = chladniLiveOrParam(n, 'scale', 1.0);
     const circular = n.params.geometry === 'circular';
     const bounded = n.params.bounded !== 'infinite';
+    // Terms 2…6 add their own modes (the old Superposition's).
+    const termsCount = Math.max(1, Math.min(6, parseInt(typeof n.params.terms === 'string' ? n.params.terms : '1', 10) || 1));
+    const extra: Array<{ n: number; m: number; w: number }> = [];
+    for (let i = 2; i <= termsCount; i++) {
+      const fb = CHLADNI_SUPERPOSITION_VIZ_DEFAULTS[i];
+      const at = (k: string, d: number) => (typeof n.params[`${k}${i}`] === 'number' ? n.params[`${k}${i}`] as number : d);
+      extra.push({ n: at('n', fb.n), m: at('m', fb.m), w: at('w', fb.w) });
+    }
     drawChladniField(viz, (px, py) => {
       const sx = px * scale, sy = py * scale;
       if (circular) {
         const r = Math.hypot(sx, sy);
         if (bounded && r > 1) return null;
         const theta = Math.atan2(sy, sx);
-        return Math.cos(nVal * theta + mixVal * Math.PI) * Math.cos(mVal * Math.PI * r);
+        let sum = Math.cos(nVal * theta + mixVal * Math.PI) * Math.cos(mVal * Math.PI * r);
+        for (const t of extra) sum += t.w * Math.cos(t.n * theta) * Math.cos(t.m * Math.PI * r);
+        return sum;
       }
       if (bounded && (Math.abs(sx) > 1 || Math.abs(sy) > 1)) return null;
-      return waveTermValue(sx, sy, nVal, mVal) + mixVal * waveTermValue(sx, sy, mVal, nVal);
+      let sum = waveTermValue(sx, sy, nVal, mVal) + mixVal * waveTermValue(sx, sy, mVal, nVal);
+      for (const t of extra) sum += t.w * waveTermValue(sx, sy, t.n, t.m);
+      return sum;
     });
   }, []);
 
@@ -5306,6 +5319,7 @@ function NodeInlineVizSwitch({ node, onEnterGroup }: { node: GraphNode; onEnterG
     case 'doubleCircleSigmoid':
     case 'doubleEllipticSigmoid':
     case 'quadBezierShaper':
+    case 'shaper':
     case 'cubicBezierShaper':  return <ShaperCurveViz    node={node} />;
     case 'sin':
     case 'cos':            return <SinCosWaveViz          node={node} />;
@@ -5340,7 +5354,7 @@ function NodeInlineVizSwitch({ node, onEnterGroup }: { node: GraphNode; onEnterG
     case 'rotate3D':
     case 'repeat3D':
     case 'twist3D':
-    case 'fold3D':
+    case 'mirrorFold3D':
     // Additional 3D primitives
     case 'roundedBoxSDF3D':
     case 'boxFrameSDF3D':
@@ -5542,10 +5556,7 @@ function NodeInlineVizSwitch({ node, onEnterGroup }: { node: GraphNode; onEnterG
     case 'truchet':
     case 'metaballs':
     case 'lissajous':
-    case 'chladni':          return <SDF3DParamViz           node={node} />;
-    case 'waveTerm':           return <WaveTermViz           node={node} />;
     case 'chladniField':       return <ChladniFieldViz       node={node} />;
-    case 'chladniSuperposition': return <ChladniSuperpositionViz node={node} />;
     case 'chladniModeFreq':    return <ChladniModeFreqViz    node={node} />;
     case 'vec2Swizzle':
     case 'vec3Swizzle':        return <SwizzleViz            node={node} />;
@@ -5611,7 +5622,7 @@ export const INLINE_VIZ_TYPES = new Set<string>([
   'smoothstep', 'clamp', 'mix', 'addColor',
   'expEase', 'doubleExpSeat', 'doubleExpSigmoid', 'logisticSigmoid',
   'circularEaseIn', 'circularEaseOut', 'doubleCircleSeat', 'doubleCircleSigmoid',
-  'doubleEllipticSigmoid', 'quadBezierShaper', 'cubicBezierShaper',
+  'doubleEllipticSigmoid', 'quadBezierShaper', 'shaper', 'cubicBezierShaper',
   'sin', 'cos', 'tan',
   'toneCurve', 'shadowsHighlights', 'liftGammaGain', 'hueRotate', 'colorSaturation',
   'mat2Construct', 'mat2Inspect', 'mat3Construct', 'mat3Inspect',
@@ -5624,7 +5635,7 @@ export const INLINE_VIZ_TYPES = new Set<string>([
   'linkSDF3D', 'pyramidSDF3D', 'hexPrismSDF3D', 'triPrismSDF3D',
   'cappedConeSDF3D', 'roundedCylinderSDF3D', 'solidAngleSDF3D', 'verticalCapsuleSDF3D',
   // 3D transforms (a Transform's preview type follows its Dimension: previewTypeOf)
-  'translate3D', 'rotate3D', 'repeat3D', 'twist3D', 'fold3D', 'transform', 'transform3D', 'transform4D',
+  'translate3D', 'rotate3D', 'repeat3D', 'twist3D', 'mirrorFold3D', 'transform', 'transform3D', 'transform4D',
   'scale3d', 'rotateAxis3D', 'sinWarp3D', 'bend3D', 'limitedRepeat3D', 'polarRepeat3D', 'displace3D', 'voxelize',
   // 3D boolean ops
   'sdfOnion',

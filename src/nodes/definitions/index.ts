@@ -63,7 +63,7 @@ export { GaussianFieldNode, FieldAccumulateNode, MetaballThresholdNode, FieldToL
 export { FractNode, Rotate2DNode, UVWarpNode, DisplaceNode, UvTransform2dNode, UvReciprocalNode } from './transforms';
 
 // Matrix
-export { Vec2ConstNode, MatConstNode, Mat2ConstructNode, Mat3ConstructNode, Mat2InspectNode, Mat3InspectNode, Mat2MulVecNode, Mat3MulVecNode } from './matrix';
+export { MatConstNode, Mat2ConstructNode, Mat3ConstructNode, Mat2InspectNode, Mat3InspectNode, Mat2MulVecNode, Mat3MulVecNode } from './matrix';
 
 // Spaces
 export {
@@ -106,7 +106,7 @@ export { FBMNode, VoronoiNode, DomainWarpNode, FlowFieldNode, CirclePackNode, No
 export { MandelbrotNode, IFSNode, NewtonFractalNode, LyapunovNode, ApollonianNode, SphericalFoldFractalNode } from './fractals';
 
 // Physics
-export { ChladniNode, WaveTermNode, ChladniFieldNode, ChladniSuperpositionNode, ChladniModeFreqNode } from './physics';
+export { ChladniFieldNode, ChladniModeFreqNode } from './physics';
 
 // Vector fields
 export { VectorFieldNode, GravityFieldNode, SpiralFieldNode } from './vectorFields';
@@ -125,11 +125,11 @@ export { TruchetNode, MetaballsNode, LissajousNode } from './patterns';
 export {
   SphereSDF3DNode, BoxSDF3DNode, TorusSDF3DNode, CapsuleSDF3DNode,
   CylinderSDF3DNode, ConeSDF3DNode, OctahedronSDF3DNode,
-  Translate3DNode, Rotate3DNode, Repeat3DNode, Twist3DNode, Fold3DNode,
+  Translate3DNode, Rotate3DNode, Repeat3DNode, Twist3DNode,
   PlaneSDF3DNode, Scale3DNode, RotateAxis3DNode, SinWarp3DNode, SpiralWarp3DNode,
-  RoundedBoxSDF3DNode, BoxFrameSDF3DNode, EllipsoidSDF3DNode, CappedTorusSDF3DNode,
+  BoxFrameSDF3DNode, EllipsoidSDF3DNode, CappedTorusSDF3DNode,
   LinkSDF3DNode, PyramidSDF3DNode, HexPrismSDF3DNode, TriPrismSDF3DNode,
-  CappedConeSDF3DNode, RoundedCylinderSDF3DNode, SolidAngleSDF3DNode, VerticalCapsuleSDF3DNode,
+  CappedConeSDF3DNode, RoundedCylinderSDF3DNode, SolidAngleSDF3DNode,
   SDFUnionNode, SDFSubtractNode, SDFIntersectNode,
   SDFOnionNode,
   Bend3DNode, LimitedRepeat3DNode, PolarRepeat3DNode, Displace3DNode,
@@ -197,21 +197,16 @@ export {
   NormalizeVec2Node,
   RemapNode,
   CrossProductNode, ReflectNode, ComplexMulNode, ComplexPowNode,
-  AngleToVec2Node, Vec2AngleNode, LuminanceNode, SignNode, StepNode,
+  AngleToVec2Node, LuminanceNode, SignNode, StepNode,
   WeightedAverageNode,
   CompareNode, SelectNode,
-  Vec2SwizzleNode, Vec3SwizzleNode, SwizzleNode, MakeVec4Node,
+  SwizzleNode, MakeVec4Node,
   SplitVec2Node, SplitVec3Node, SplitVec4Node,
 } from './math';
 
 
 // Shapers
-export {
-  ExpEaseNode, DoubleExpSeatNode, DoubleExpSigmoidNode, LogisticSigmoidNode,
-  CircularEaseInNode, CircularEaseOutNode,
-  DoubleCircleSeatNode, DoubleCircleSigmoidNode, DoubleEllipticSigmoidNode,
-  QuadBezierShaperNode, CubicBezierShaperNode,
-} from './shapers';
+export { ShaperNode, CubicBezierShaperNode } from './shapers';
 
 // ─── Registry ─────────────────────────────────────────────────────────────────
 
@@ -255,7 +250,7 @@ import { LoopRippleStepNode, LoopRotateStepNode, LoopDomainFoldNode, LoopFloatAc
 import { LoopCarryNode } from './loop';
 import { FBMNode, VoronoiNode, DomainWarpNode, FlowFieldNode, CirclePackNode, NoiseFloatNode, ScatterNode } from './noise';
 import { MandelbrotNode, IFSNode, NewtonFractalNode, LyapunovNode, ApollonianNode, SphericalFoldFractalNode } from './fractals';
-import { ChladniNode, WaveTermNode, ChladniFieldNode, ChladniSuperpositionNode, ChladniModeFreqNode } from './physics';
+import { ChladniFieldNode, ChladniModeFreqNode } from './physics';
 import { VectorFieldNode, GravityFieldNode, SpiralFieldNode } from './vectorFields';
 import { RaymarchNode, VolumeCloudsNode, ChromaticAberrationNode, CombineRGBNode, MandelbulbNode,
   SdfAoNode, SoftShadowNode, MultiLightNode, Fresnel3DNode, FakeSSSNode, VolumetricFogNode, MaterialSelectNode, GlassNode,
@@ -265,11 +260,11 @@ import { TruchetNode, MetaballsNode, LissajousNode } from './patterns';
 import {
   SphereSDF3DNode, BoxSDF3DNode, TorusSDF3DNode, CapsuleSDF3DNode,
   CylinderSDF3DNode, ConeSDF3DNode, OctahedronSDF3DNode,
-  Translate3DNode, Rotate3DNode, Repeat3DNode, Twist3DNode, Fold3DNode,
+  Translate3DNode, Rotate3DNode, Repeat3DNode, Twist3DNode,
   PlaneSDF3DNode, Scale3DNode, RotateAxis3DNode, SinWarp3DNode, SpiralWarp3DNode,
-  RoundedBoxSDF3DNode, BoxFrameSDF3DNode, EllipsoidSDF3DNode, CappedTorusSDF3DNode,
+  BoxFrameSDF3DNode, EllipsoidSDF3DNode, CappedTorusSDF3DNode,
   LinkSDF3DNode, PyramidSDF3DNode, HexPrismSDF3DNode, TriPrismSDF3DNode,
-  CappedConeSDF3DNode, RoundedCylinderSDF3DNode, SolidAngleSDF3DNode, VerticalCapsuleSDF3DNode,
+  CappedConeSDF3DNode, RoundedCylinderSDF3DNode, SolidAngleSDF3DNode,
   SDFUnionNode, SDFSubtractNode, SDFIntersectNode,
   SDFOnionNode,
   Bend3DNode, LimitedRepeat3DNode, PolarRepeat3DNode, Displace3DNode,
@@ -288,7 +283,7 @@ import { PaletteNode, GradientNode, HSVNode, PosterizeNode, InvertNode, HueRange
 import { OutputNode, Vec4OutputNode } from './output';
 import { GroupNode } from './group';
 import { ScopeNode } from './utility';
-import { Vec2ConstNode, MatConstNode, Mat2ConstructNode, Mat3ConstructNode, Mat2InspectNode, Mat3InspectNode, Mat2MulVecNode, Mat3MulVecNode, RotationMatrixNode } from './matrix';
+import { MatConstNode, Mat2ConstructNode, Mat3ConstructNode, Mat2InspectNode, Mat3InspectNode, Mat2MulVecNode, Mat3MulVecNode, RotationMatrixNode } from './matrix';
 import { Mat2MulNode, Mat3MulNode, Mat2InverseNode, Mat3InverseNode, Mat2MixNode, Mat3MixNode, ScaleMatrixNode, ShearMatrixNode, StretchMatrixNode, Mat3MulPointNode, CornerPinNode, ColorMatrixNode } from './matrixOps';
 import { LFONode, BPMSyncNode } from './animations';
 import {
@@ -301,19 +296,14 @@ import {
   NormalizeVec2Node,
   RemapNode,
   CrossProductNode, ReflectNode, RefractDirNode, ComplexMulNode, ComplexPowNode,
-  AngleToVec2Node, Vec2AngleNode, LuminanceNode, SignNode, StepNode,
+  AngleToVec2Node, LuminanceNode, SignNode, StepNode,
   WeightedAverageNode,
   CompareNode, SelectNode,
-  Vec2SwizzleNode, Vec3SwizzleNode, SwizzleNode, MakeVec4Node,
+  SwizzleNode, MakeVec4Node,
   SplitVec2Node, SplitVec3Node, SplitVec4Node,
   TransformVecNode,
 } from './math';
-import {
-  ExpEaseNode, DoubleExpSeatNode, DoubleExpSigmoidNode, LogisticSigmoidNode,
-  CircularEaseInNode, CircularEaseOutNode,
-  DoubleCircleSeatNode, DoubleCircleSigmoidNode, DoubleEllipticSigmoidNode,
-  QuadBezierShaperNode, CubicBezierShaperNode,
-} from './shapers';
+import { ShaperNode, CubicBezierShaperNode } from './shapers';
 import { GridUVNode, PixelateNode, DotMaskNode, SdfMaskNode, LumaRadiusNode, RGBToCMYKNode, CMYKHalftoneNode } from './halftone';
 import { GpuParticlesNode } from './gpuParticles';
 import { BlurStageNode } from './blurStage';
@@ -322,6 +312,7 @@ import { RadialFastBlurNode, RadialFastBlurStageNode } from './radialFastBlur';
 import { ChromaLensNode } from './chromaLens';
 import { DeepGlowTextureStageNode, GlowTextureNode } from './deepGlow';
 import { GridRulesNode, GridRulesStepNode, MouseButtonNode } from './gridRules';
+import { BrushNode } from './brush';
 import { ShaderTextureNode, ShaderTextureOutputNode } from './shaderTexture';
 import { PassNode, PassOutputNode, SampleTextureNode, EdgesTextureNode, BlurTextureNode, DisplaceTextureNode, DisplacementMapNode, JumpFloodTextureNode } from './passes';
 import { TextureMaskNode, TextureLevelsNode, TextureFlowNode, TextureNeighboursNode, TextureChangeNode, DistanceShapeNode, TextureFadeNode, ReadTextureNode } from './textureTools';
@@ -437,7 +428,6 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   uvTransform2d: UvTransform2dNode,
   uvReciprocal: UvReciprocalNode,
   // Matrix
-  vec2Const: Vec2ConstNode,
   matConst: MatConstNode,
   mat2Construct: Mat2ConstructNode,
   mat3Construct: Mat3ConstructNode,
@@ -580,10 +570,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   apollonian: ApollonianNode,
   sphericalFoldFractal: SphericalFoldFractalNode,
   // Physics
-  chladni: ChladniNode,
-  waveTerm: WaveTermNode,
   chladniField: ChladniFieldNode,
-  chladniSuperposition: ChladniSuperpositionNode,
   chladniModeFreq: ChladniModeFreqNode,
   // Vector fields
   vectorField:     VectorFieldNode,
@@ -606,6 +593,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   gridRules: GridRulesNode,
   gridRulesStep: GridRulesStepNode,
   mouseButton: MouseButtonNode,
+  brush: BrushNode,
   sampleTexture: SampleTextureNode,
   edgesTexture: EdgesTextureNode,
   blurTexture: BlurTextureNode,
@@ -733,7 +721,6 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   octahedronSDF3D: OctahedronSDF3DNode,
   planeSDF3D: PlaneSDF3DNode,
   // 3D Primitives (new)
-  roundedBoxSDF3D: RoundedBoxSDF3DNode,
   boxFrameSDF3D: BoxFrameSDF3DNode,
   ellipsoidSDF3D: EllipsoidSDF3DNode,
   cappedTorusSDF3D: CappedTorusSDF3DNode,
@@ -744,7 +731,6 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   cappedConeSDF3D: CappedConeSDF3DNode,
   roundedCylinderSDF3D: RoundedCylinderSDF3DNode,
   solidAngleSDF3D: SolidAngleSDF3DNode,
-  verticalCapsuleSDF3D: VerticalCapsuleSDF3DNode,
   // 3D Boolean Ops (new)
   sdfUnion: SDFUnionNode,
   sdfSubtract: SDFSubtractNode,
@@ -755,7 +741,6 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   rotate3D: Rotate3DNode,
   repeat3D: Repeat3DNode,
   twist3D: Twist3DNode,
-  fold3D: Fold3DNode,
   scale3d: Scale3DNode,
   rotateAxis3D: RotateAxis3DNode,
   sinWarp3D: SinWarp3DNode,
@@ -867,16 +852,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   normalizeVec2: NormalizeVec2Node,
   remap: RemapNode,
   // Shapers
-  expEase: ExpEaseNode,
-  doubleExpSeat: DoubleExpSeatNode,
-  doubleExpSigmoid: DoubleExpSigmoidNode,
-  logisticSigmoid: LogisticSigmoidNode,
-  circularEaseIn: CircularEaseInNode,
-  circularEaseOut: CircularEaseOutNode,
-  doubleCircleSeat: DoubleCircleSeatNode,
-  doubleCircleSigmoid: DoubleCircleSigmoidNode,
-  doubleEllipticSigmoid: DoubleEllipticSigmoidNode,
-  quadBezierShaper: QuadBezierShaperNode,
+  shaper: ShaperNode,
   cubicBezierShaper: CubicBezierShaperNode,
   crossProduct: CrossProductNode,
   reflect: ReflectNode,
@@ -884,15 +860,12 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   complexMul: ComplexMulNode,
   complexPow: ComplexPowNode,
   angleToVec2: AngleToVec2Node,
-  vec2Angle: Vec2AngleNode,
   luminance: LuminanceNode,
   sign: SignNode,
   step: StepNode,
   weightedAverage: WeightedAverageNode,
   compare: CompareNode,
   select: SelectNode,
-  vec2Swizzle: Vec2SwizzleNode,
-  vec3Swizzle: Vec3SwizzleNode,
   swizzle: SwizzleNode,
   makeVec4: MakeVec4Node,
   // Halftone

@@ -88,5 +88,5 @@ Linked files aren't stored, so they don't count (`docs/storage-limit.md`). Only 
 
 ## Not covered (yet)
 
-- The Present page's pictures and fonts, the Studio's Texture / Video / Audio Input nodes, p5 imports and the Granulator keep their own pickers.
+- The Present page's pictures and fonts, the Studio's Texture / Video / Audio Source nodes, p5 imports and the Granulator keep their own pickers.
 - A folder can't be linked twice by path on the desktop; in a browser the same folder picked twice is two linked folders.

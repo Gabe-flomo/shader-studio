@@ -1,7 +1,7 @@
 /**
  * agentRidePath.ts — Ride a path (docs/agents-group.md "Ride a path"): walkers that travel along the
  * outline of whatever shape is wired into Path ƒ, as a flowing band. The node has no shapes of its own:
- * a Circle SDF, a Lissajous Curve, a Chladni Field, Metaballs, noise, text, an Expression Block blending
+ * a Circle SDF, a Lissajous Curve, a Chladni plate, Metaballs, noise, text, an Expression Block blending
  * several, anything with a value at every point.
  *
  * Path ƒ is a field socket (as Collide's Shape): the node calls the shape's function at points of its
@@ -21,12 +21,12 @@ import { isAgent3d } from './agents';
 
 export const AgentRidePathNode: NodeDefinition = {
   type: 'agentRidePath',
-  label: 'Ride a path',
+  label: 'Ride a Path',
   category: 'Simulation',
-  aliases: ['Ride a curve', 'Follow a path', 'Ride an outline', 'Follow an outline', 'Follow a shape', 'Contour walkers', 'Ride a shape', 'Path walkers'],
-  description: 'Walkers that travel along a shape\'s outline as a flowing band. Wire any shape into Path ƒ (a Circle SDF, a Lissajous Curve, a Chladni Field, Metaballs, text) and they slide along where it equals Level, pulled back onto it every step, so they follow it as it moves. Position, Velocity and Heading go to Agent Output.',
+  aliases: ['Ride a path', 'Ride a curve', 'Follow a path', 'Ride an outline', 'Follow an outline', 'Follow a shape', 'Contour walkers', 'Ride a shape', 'Path walkers'],
+  description: 'Walkers that travel along a shape\'s outline as a flowing band. Wire any shape into Path ƒ (a Circle SDF, a Lissajous Curve, a Chladni plate, Metaballs, text) and they slide along where it equals Level, pulled back onto it every step, so they follow it as it moves. Position, Velocity and Heading go to Agent Output.',
   inputs: {
-    path: { type: 'float', label: 'Path ƒ', field: true, hint: 'The shape to ride the outline of: an SDF\'s Distance (a circle, a star, a union), a Lissajous Curve, a Chladni Field (its nodal lines), noise. Walkers follow where it equals Level. Unwired, they stay where they are.' },
+    path: { type: 'float', label: 'Path ƒ', field: true, hint: 'The shape to ride the outline of: an SDF\'s Distance (a circle, a star, a union), a Lissajous Curve, a Chladni plate (its nodal lines), noise. Walkers follow where it equals Level. Unwired, they stay where they are.' },
     speed: { type: 'float', label: 'Speed', hint: 'Overrides Speed; each walker\'s variation still applies.' },
     level: { type: 'float', label: 'Level', hint: 'Overrides Level: wire a beat or an LFO to make the band breathe in and out.' },
     width: { type: 'float', label: 'Ribbon width', hint: 'Overrides Ribbon width.' },

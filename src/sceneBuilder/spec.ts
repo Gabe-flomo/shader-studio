@@ -45,9 +45,8 @@ export interface ShapeDef {
   label: string;
   /** Other words the recipe accepts for it. */
   aliases: string[];
-  /** The node it builds (`roundType` when its Round is above 0). */
+  /** The node it builds. */
   type: string;
-  roundType?: string;
   /** The position socket (Plane 3D's is `p`). */
   posKey: string;
   /** The distance output (a field's is `surface`). */
@@ -70,16 +69,16 @@ const P = (key: string, label: string, param: ParamDef['param'], def: number | V
 export const SHAPES: ShapeDef[] = [
   { kind: 'sphere', label: 'Sphere', aliases: ['ball', 'orb'], type: 'sphereSDF3D', posKey: 'pos', distKey: 'dist', blurb: 'A ball.',
     params: [P('r', 'Radius', 'radius', 0.5, 0.01, 5)] },
-  { kind: 'box', label: 'Box', aliases: ['cube', 'rounded-box', 'roundbox'], type: 'boxSDF3D', roundType: 'roundedBoxSDF3D', posKey: 'pos', distKey: 'dist', blurb: 'A box; Round softens its edges.',
-    params: [P('size', 'Size (half)', ['sizeX', 'sizeY', 'sizeZ'], [0.5, 0.5, 0.5], 0.01, 5, 0.01, { hint: 'Half its width, height and depth.' }), P('round', 'Round', 'radius', 0, 0, 1, 0.005, { hint: 'Above 0 it becomes a Rounded Box with edges this round.' })] },
+  { kind: 'box', label: 'Box', aliases: ['cube', 'rounded-box', 'roundbox'], type: 'boxSDF3D', posKey: 'pos', distKey: 'dist', blurb: 'A box; Round softens its edges.',
+    params: [P('size', 'Size (half)', ['sizeX', 'sizeY', 'sizeZ'], [0.5, 0.5, 0.5], 0.01, 5, 0.01, { hint: 'Half its width, height and depth.' }), P('round', 'Round', 'rounding', 0, 0, 1, 0.005, { hint: 'Above 0 its edges are rounded this much (Edges: Rounded).' })] },
   { kind: 'torus', label: 'Torus', aliases: ['donut', 'ring'], type: 'torusSDF3D', posKey: 'pos', distKey: 'dist', blurb: 'A ring lying flat.',
     params: [P('R', 'Ring radius', 'majorR', 0.5, 0.1, 5), P('r', 'Tube radius', 'minorR', 0.2, 0.01, 2)] },
   { kind: 'cone', label: 'Cone', aliases: [], type: 'coneSDF3D', posKey: 'pos', distKey: 'dist', blurb: 'A pointed cone, tip at the top.',
     params: [P('angle', 'Angle', 'angle', 22.92, 0.5, 89, 0.5, { deg: true }), P('h', 'Height', 'height', 1, 0.1, 5)] },
   { kind: 'capped-cone', label: 'Capped cone', aliases: ['frustum'], type: 'cappedConeSDF3D', posKey: 'pos', distKey: 'dist', blurb: 'A cone with its tip cut off.',
     params: [P('h', 'Height', 'height', 0.5, 0.01, 5), P('r1', 'Bottom radius', 'r1', 0.4, 0, 3), P('r2', 'Top radius', 'r2', 0.1, 0, 3)] },
-  { kind: 'cylinder', label: 'Cylinder', aliases: ['pillar', 'column', 'rounded-cylinder'], type: 'cylinderSDF3D', roundType: 'roundedCylinderSDF3D', posKey: 'pos', distKey: 'dist', blurb: 'An upright cylinder; Round softens its rims.',
-    params: [P('r', 'Radius', 'radius', 0.3, 0.01, 5), P('h', 'Height (half)', 'height', 0.5, 0.01, 5), P('round', 'Round', 'edgeRadius', 0, 0, 0.5, 0.005)] },
+  { kind: 'cylinder', label: 'Cylinder', aliases: ['pillar', 'column', 'rounded-cylinder'], type: 'cylinderSDF3D', posKey: 'pos', distKey: 'dist', blurb: 'An upright cylinder; Round softens its rims.',
+    params: [P('r', 'Radius', 'radius', 0.3, 0.01, 5), P('h', 'Height (half)', 'height', 0.5, 0.01, 5), P('round', 'Round', 'rounding', 0, 0, 0.5, 0.005)] },
   { kind: 'capsule', label: 'Capsule', aliases: ['pill'], type: 'capsuleSDF3D', posKey: 'pos', distKey: 'dist', blurb: 'An upright pill.',
     params: [P('h', 'Height', 'height', 0.6, 0.01, 5), P('r', 'Radius', 'radius', 0.2, 0.01, 2)] },
   { kind: 'plane', label: 'Plane', aliases: ['floor', 'ground'], type: 'planeSDF3D', posKey: 'p', distKey: 'dist', blurb: 'An endless floor.',
@@ -225,7 +224,7 @@ export const WARPS: WarpDef[] = [
     blurb: 'Endless copies, every other one flipped, so neighbours meet seamlessly.', params: [P('cell', 'Cell size', ['cellX', 'cellY', 'cellZ'], [2, 2, 2], 0.1, 10)] },
   { kind: 'limited-repeat', label: 'Limited repeat', aliases: ['repeat-n', 'array'], type: 'limitedRepeat3D', posIn: 'pos', posOut: 'pos', stepHint: exact,
     blurb: 'A few copies each way.', params: [P('cell', 'Cell size', ['cellX', 'cellY', 'cellZ'], [1, 1, 1], 0.1, 10), P('count', 'Copies each way', ['limX', 'limY', 'limZ'], [2, 2, 2], 0, 20, 1)] },
-  { kind: 'mirror', label: 'Mirror', aliases: ['symmetry', 'abs'], type: 'fold3D', posIn: 'pos', posOut: 'pos', stepHint: exact,
+  { kind: 'mirror', label: 'Mirror', aliases: ['symmetry', 'abs'], type: 'mirrorFold3D', posIn: 'pos', posOut: 'pos', stepHint: exact,
     blurb: 'One half of space mirrored onto the other, on the chosen axes.', axes: { key: 'axes', label: 'Axes', kind: 'flags', params: ['foldX', 'foldY', 'foldZ'], def: 'xz' }, params: [] },
   { kind: 'fold', label: 'Fold', aliases: ['mirror-fold'], type: 'mirrorFold3D', posIn: 'pos', posOut: 'pos', stepHint: exact,
     blurb: 'Mirror with an offset: folds space along planes, the move fractals repeat.', axes: { key: 'axes', label: 'Axes', kind: 'flags', params: ['foldX', 'foldY', 'foldZ'], def: 'xy' },

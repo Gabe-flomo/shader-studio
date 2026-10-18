@@ -410,6 +410,7 @@ export const FrameStackNode: NodeDefinition = {
   type: FRAME_STACK_TYPE,
   label: 'Frame Stack',
   category: '3D Scene',
+  simpleParams: ['layout', 'cards', 'spacing', 'corner', 'thickness', 'border', 'shading', 'lift', 'gap', 'camDist', 'camAngle', 'camElevation', 'background'],
   aliases: ['Frame cards', 'Video cards', 'Card stack', 'Frames as cards', 'Contact sheet', 'Film strip 3D', 'Time cube cards'],
   description: 'Draws a Time Cube\'s frames as separate cards you can arrange: a stack, a fan, a ring or torus, a helix or a grid, and morph between two. Scatter them, let them drift apart and back, scan through them (the card at the scan pops out) and highlight every few. Has its own camera (isometric too), or takes a March Camera\'s rays.',
   brief: {

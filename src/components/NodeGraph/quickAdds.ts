@@ -46,7 +46,7 @@ function feedRules(type: string, text: string): Rule[] {
       if (has(text, 'angle', 'rot', 'twist', 'spin')) return [['time', 'time', 'keeps turning'], ['lfo', 'value', 'swings back and forth'], ['mouse', 'x', 'follow the pointer']];
       return [['time', 'time', 'animate it'], ['lfo', 'value', 'time through a wave'], ['constant', 'value', 'a slider of its own']];
     case 'vec2':
-      if (has(text, 'center', 'centre', 'offset', 'translate', 'shift')) return [['mouse', 'uv', 'follow the pointer'], ['vec2Const', 'val', 'a fixed point'], ['uv', 'uv', 'per-pixel']];
+      if (has(text, 'center', 'centre', 'offset', 'translate', 'shift')) return [['mouse', 'uv', 'follow the pointer'], ['makeVec2', 'xy', 'a fixed point'], ['uv', 'uv', 'per-pixel']];
       return [['uv', 'uv', 'the screen'], ['pixelUV', 'uv', 'pixel-square screen'], ['mouse', 'uv', 'follow the pointer']];
     case 'texture':
       return [['pass', 'texture', 'draw a picture into a texture'], ['textureInput', 'texture', 'a picture, a video or the webcam']];

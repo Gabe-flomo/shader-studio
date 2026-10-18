@@ -30,16 +30,23 @@ export interface NodeAlias {
   params?: (old: Record<string, unknown>) => Record<string, unknown>;
   /** Live socket types the canonical node should carry. */
   socketTypes?: { inputs?: Record<string, DataType>; outputs?: Record<string, DataType> };
+  /**
+   * Only nodes this holds for migrate (the old type stays registered, hidden, for the rest): a merge that is exact
+   * except when a socket is wired (docs/node-retirements.md).
+   */
+  when?: (node: GraphNode) => boolean;
 }
 
 const num = (v: unknown, d: number): number => (typeof v === 'number' && Number.isFinite(v) ? v : d);
+/** An old Add (vec3)'s B sliders as Add's one B, when all three are the same number (Add's B is one number). */
+const sameXYZ = (o: Record<string, unknown>): number | undefined => (typeof o.bx === 'number' && o.bx === o.by && o.bx === o.bz ? o.bx : undefined);
 
 export const NODE_ALIASES: Record<string, NodeAlias> = {
   // ── D4: SDF combine ops. Union / Intersect / Subtract take a blend radius k
   //    (0 = hard op); Offset / Onion / Sharpen are the shape modifiers. ──
   min:                { to: 'sdfUnion',     outputs: { result: 'dist' } },
   smoothMin:          { to: 'sdfUnion',     inputs: { smoothness: 'k' }, outputs: { result: 'dist' },
-                        params: o => ({ ...o, k: num(o.smoothness, 0.5), smoothness: undefined }) },
+                        params: o => ({ ...o, k: num(o.smoothness, num(o.k, 0.5)), smoothness: undefined }) },
   sdf2dSmoothUnion:   { to: 'sdfUnion',     inputs: { sdfA: 'a', sdfB: 'b' }, outputs: { result: 'dist' },
                         params: o => ({ ...o, k: num(o.k, 0.12) }) },
   sdfSmoothUnion:     { to: 'sdfUnion',     params: o => ({ ...o, k: num(o.k, 0.15) }) },
@@ -59,7 +66,7 @@ export const NODE_ALIASES: Record<string, NodeAlias> = {
   // ── D5: vector arithmetic is the scalar node with its type pill set ──
   addVec2:      { to: 'add',      params: o => ({ ...o, outputType: 'vec2', b: 0.0 }),
                   socketTypes: { inputs: { a: 'vec2', b: 'vec2' }, outputs: { result: 'vec2' } } },
-  addVec3:      { to: 'add',      params: o => ({ ...o, outputType: 'vec3', b: 0.0 }),
+  addVec3:      { to: 'add',      params: o => ({ ...o, outputType: 'vec3', b: sameXYZ(o) ?? 0.0, bx: undefined, by: undefined, bz: undefined }),
                   socketTypes: { inputs: { a: 'vec3', b: 'vec3' }, outputs: { result: 'vec3' } } },
   multiplyVec2: { to: 'multiply', inputs: { v: 'a', scale: 'b' },
                   params: o => ({ ...o, outputType: 'vec2', b: num(o.scale, 1.0), scale: undefined }),
@@ -101,6 +108,48 @@ export const NODE_ALIASES: Record<string, NodeAlias> = {
   squareLFO:     { to: 'lfo', params: o => ({ ...o, waveform: 'square' }) },
   sawtoothLFO:   { to: 'lfo', params: o => ({ ...o, waveform: 'sawtooth' }) },
   triangleLFO:   { to: 'lfo', params: o => ({ ...o, waveform: 'triangle' }) },
+
+  // ── 2026-10-17 catalogue sweep: one Shaper with a Curve (shapers.ts); each curve is its old node's code. The old
+  //    defaults fill a setting the saved node lacked (Logistic's Steepness started at 0.7). ──
+  ...Object.fromEntries(['expEase', 'doubleExpSeat', 'doubleExpSigmoid', 'logisticSigmoid', 'circularEaseIn', 'circularEaseOut',
+    'doubleCircleSeat', 'doubleCircleSigmoid', 'doubleEllipticSigmoid', 'quadBezierShaper'].map(t => [t, {
+    to: 'shaper', params: (o: Record<string, unknown>) => ({ ...o, curve: t, a: num(o.a, t === 'logisticSigmoid' ? 0.7 : 0.5), b: num(o.b, 0.5), bipolar: o.bipolar === true }),
+  } satisfies NodeAlias])),
+
+  // ── 2026-10-17 catalogue sweep: small duplicates. Vec2 → Angle is Vector Angle with its Vector wired (the same
+  //    atan call); the fixed swizzles are Swizzle with their pattern; Vec2 Const is a vec2 Constant. ──
+  vec2Angle:   { to: 'atan2', outputs: { result: 'angle' } },
+  vec2Swizzle: { to: 'swizzle', params: o => ({ ...o, inputType: 'vec2', pattern: typeof o.mode === 'string' ? o.mode : 'yx', mode: undefined }),
+                 socketTypes: { inputs: { input: 'vec2' }, outputs: { output: 'vec2' } } },
+  vec3Swizzle: { to: 'swizzle', params: o => ({ ...o, inputType: 'vec3', pattern: typeof o.mode === 'string' ? o.mode : 'yzx', mode: undefined }),
+                 socketTypes: { inputs: { input: 'vec3' }, outputs: { output: 'vec3' } } },
+  vec2Const:   { to: 'constant', outputs: { val: 'value' }, params: o => ({ ...o, outputType: 'vec2', x: num(o.x, 0), y: num(o.y, 0) }),
+                 socketTypes: { inputs: { value: 'vec2' }, outputs: { value: 'vec2' } } },
+
+  // ── 2026-10-17 catalogue sweep: one Chladni (physics.ts, type chladniField). Plate is Mix −1 (cos nπx cos mπy −
+  //    cos mπx cos nπy), with its unstretched UV (Aspect Fill), no edge and its turbulence (Wobble on); Wave Term and
+  //    Superposition are Mix 0 (adding 0 × the swapped term). Their old defaults fill missing settings. ──
+  chladni: { to: 'chladniField', outputs: { density: 'lines' },
+    params: o => ({ ...o, n: num(o.n, 1.0), m: num(o.m, 0.75), mix: -1, scale: num(o.scale, 1.0), geometry: 'square', aspect: 'fill', bounded: 'infinite', terms: '1',
+      wobble: 'on', turbulence: num(o.turbulence, 0.0), turb_speed: num(o.turb_speed, 0.5), noise_mode: typeof o.noise_mode === 'string' ? o.noise_mode : 'smooth',
+      line_width: num(o.line_width, 1.5), aa: num(o.aa, 1.0), brightness: num(o.brightness, 1.0) }) },
+  waveTerm: { to: 'chladniField', outputs: { value: 'field' },
+    params: o => ({ ...o, n: num(o.n, 3.0), m: num(o.m, 4.0), mix: 0, scale: num(o.scale, 1.0), geometry: 'square', terms: '1' }) },
+  chladniSuperposition: { to: 'chladniField', inputs: { n1: 'n', m1: 'm' },
+    params: o => ({ ...o, n: num(o.n1, 6.0), m: num(o.m1, 4.0), mix: 0, n1: undefined, m1: undefined }) },
+
+  // ── 2026-10-17 catalogue sweep: the rounded shapes are Box SDF 3D / Cylinder with Edges Rounded (the same
+  //    function); Vertical Capsule is Capsule SDF 3D (the same function). ──
+  roundedBoxSDF3D: { to: 'boxSDF3D', inputs: { radius: 'rounding' },
+    params: o => ({ ...o, sizeX: num(o.sizeX, 0.4), sizeY: num(o.sizeY, 0.4), sizeZ: num(o.sizeZ, 0.4), edges: 'rounded', rounding: num(o.radius, 0.1), radius: undefined }) },
+  // Its Radius was half the outside radius; the Cylinder's is the outside one. A wired Radius can't be doubled.
+  roundedCylinderSDF3D: { to: 'cylinderSDF3D', inputs: { edgeRadius: 'rounding' }, when: n => !n.inputs?.radius?.connection,
+    params: o => ({ ...o, radius: 2 * num(o.radius, 0.35), height: num(o.height, 0.4), edges: 'rounded', rounding: num(o.edgeRadius, 0.05), edgeRadius: undefined }) },
+  verticalCapsuleSDF3D: { to: 'capsuleSDF3D', params: o => ({ ...o, height: num(o.height, 0.5), radius: num(o.radius, 0.2) }) },
+
+  // ── 2026-10-17 catalogue sweep: Fold 3D is Mirror Fold 3D with its offsets at 0 (abs(p) − 0.0 is abs(p)), each
+  //    axis as Fold 3D read it (X and Z on unless unticked, Y off unless ticked). ──
+  fold3D: { to: 'mirrorFold3D', params: o => ({ ...o, foldX: o.foldX !== false, foldY: o.foldY === true, foldZ: o.foldZ !== false, offsetX: 0, offsetY: 0, offsetZ: 0 }) },
 
   // ── 2026-10-17 sweep: one UV Warp with a Kind (transforms.ts). Each kind is its old node's GLSL;
   //    the old defaults fill any setting the saved node lacked. Swirl / Vortex is Swirl round (0, 0), no spin. ──
@@ -194,7 +243,7 @@ function resolveList(nodes: GraphNode[], getDef: GetDef): Resolved {
       if (nsg !== sg) { node = { ...node, params: { ...node.params, subgraph: nsg } }; changed = true; }
     }
     const alias = NODE_ALIASES[node.type];
-    if (!alias) return node;
+    if (!alias || (alias.when && !alias.when(node))) return node;
     changed = true;
     const def = getDef(alias.to);
     const inputs = renameKeys(node.inputs, alias.inputs);

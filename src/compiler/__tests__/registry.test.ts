@@ -303,7 +303,8 @@ describe('helper pruning (D10)', () => {
 describe('node aliases (D4–D6)', () => {
   it('every alias points at a registered type with the sockets and params it names', () => {
     for (const [old, alias] of Object.entries(NODE_ALIASES)) {
-      expect(NODE_REGISTRY[old], `${old} is aliased and must not also be registered`).toBeUndefined();
+      // A conditional alias (`when`) keeps its old type registered for the nodes it doesn't move.
+      if (!alias.when) expect(NODE_REGISTRY[old], `${old} is aliased and must not also be registered`).toBeUndefined();
       const def = NODE_REGISTRY[alias.to];
       expect(def, `${old} → ${alias.to}`).toBeTruthy();
       for (const nk of Object.values(alias.inputs ?? {}))  expect(def.inputs[nk],  `${old}: input ${nk}`).toBeTruthy();

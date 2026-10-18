@@ -51,11 +51,18 @@ const subNodes = (n: GraphNode | undefined): GraphNode[] => ((n?.params?.subgrap
 
 /** Node type → the shape it is (a rounded variant counts as its shape with Round set). */
 const SHAPE_OF_TYPE = new Map<string, ShapeDef>();
-for (const s of SHAPES) { SHAPE_OF_TYPE.set(s.type, s); if (s.roundType) SHAPE_OF_TYPE.set(s.roundType, s); }
-SHAPE_OF_TYPE.set('verticalCapsuleSDF3D', SHAPES.find(s => s.kind === 'capsule')!);
+for (const s of SHAPES) SHAPE_OF_TYPE.set(s.type, s);
+// A Rounded Cylinder that stayed (its Radius wired: definitions/aliases.ts) still reads as a rounded Cylinder.
+SHAPE_OF_TYPE.set('roundedCylinderSDF3D', SHAPES.find(s => s.kind === 'cylinder')!);
 /** Node type → the warp it is; the first in WARPS wins (Rotate 3D on its own is a Turn). */
 const WARP_OF_TYPE = new Map<string, WarpDef>();
 for (const w of WARPS) if (!WARP_OF_TYPE.has(w.type)) WARP_OF_TYPE.set(w.type, w);
+const FOLD_WARP = WARPS.find(w => w.kind === 'fold')!;
+/** The warp a node is: a Mirror Fold 3D is a Mirror with its offsets all 0 and unwired, a Fold otherwise. */
+const warpOf = (n: GraphNode): WarpDef | undefined => {
+  if (n.type === 'mirrorFold3D' && (['offsetX', 'offsetY', 'offsetZ'].some(k => num(n.params[k], 0) !== 0 || n.inputs[k]?.connection))) return FOLD_WARP;
+  return WARP_OF_TYPE.get(n.type);
+};
 /** Node type → the modifier that changes a distance with it (Displace 3D, Offset, Onion; Scale 3D's correction). */
 const DIST_OF_TYPE = new Map<string, WarpDef>();
 for (const w of WARPS) if (w.distStep && !DIST_OF_TYPE.has(w.distStep.type)) DIST_OF_TYPE.set(w.distStep.type, w);
@@ -95,7 +102,7 @@ function warpValues(n: GraphNode, def: WarpDef): WarpSpec['values'] {
 }
 
 function toWarp(r: Reader, n: GraphNode): WarpSpec {
-  const def = WARP_OF_TYPE.get(n.type);
+  const def = warpOf(n);
   r.read.add(n.id);
   const role = roleOf(n);
   const id = /^w\d+$/.test(role) ? role : `w_${n.id}`;
@@ -167,7 +174,7 @@ function posChain(r: Reader, n: GraphNode | undefined, key: string, guard = 0): 
   const from = n ? r.src(n, key) : undefined;
   if (!from || guard > 64) return [];
   if (from.type === 'scenePos') { r.read.add(from.id); return []; }
-  const def = WARP_OF_TYPE.get(from.type);
+  const def = warpOf(from);
   const inKey = from.type === 'transform' ? 'p' : def?.posIn ?? Object.keys(from.inputs).find(k => from.inputs[k].type === 'vec3' && from.inputs[k].connection) ?? 'pos';
   return [...posChain(r, from, inKey, guard + 1), from];
 }
@@ -177,10 +184,11 @@ function readShape(r: Reader, n: GraphNode, def: ShapeDef): ShapeSpec {
   const role = roleOf(n);
   const sh = newShape(def.kind, /^s\d+$/.test(role) ? role : `s_${n.id}`);
   sh.name = typeof n.params._sbName === 'string' ? n.params._sbName : '';
-  const rounded = n.type === def.roundType;
+  const legacy = n.type === 'roundedCylinderSDF3D';
+  const rounded = legacy || n.params.edges === 'rounded';
   for (const p of def.params) {
     if (!p.param) continue;
-    if (p.key === 'round') { sh.size.round = rounded ? round(num(n.params[p.param as string], 0)) : 0; continue; }
+    if (p.key === 'round') { sh.size.round = rounded ? round(num(n.params[legacy ? 'edgeRadius' : p.param as string], 0)) : 0; continue; }
     if (Array.isArray(p.param)) sh.size[p.key] = p.param.map((k, i) => round(num(n.params[k], (p.def as Vec3)[i]))) as Vec3;
     else sh.size[p.key] = p.deg ? deg(num(n.params[p.param], 0)) : round(num(n.params[p.param], p.def as number));
   }
@@ -585,7 +593,7 @@ export function describeGraph(nodes: GraphNode[]): DescribeResult | null {
     let at = out ? br.src(out, 'pos') : undefined;
     for (let g = 0; at && at.type !== 'marchLoopInputs' && g < 64; g++) {
       chain.unshift(at);
-      const def = WARP_OF_TYPE.get(at.type);
+      const def = warpOf(at);
       at = br.src(at, def?.posIn ?? Object.keys(at.inputs).find(k => at!.inputs[k].type === 'vec3') ?? 'pos');
     }
     if (chain.length) {

@@ -23,13 +23,13 @@ describe('loop guard', () => {
     st().compile();
   });
 
-  it('refuses Stops Palette → Draw agents · Over and says which loop, leaving the graph as it was', () => {
+  it('refuses Stops Palette → Draw Agents · Over and says which loop, leaving the graph as it was', () => {
     const before = st().nodes;
     expect(st().connectNodes('node_12', 'color', 'node_13', 'over')).toBe(false);
     expect(st().nodes).toBe(before);
     expect(wireOf('node_13', 'over')).toBeUndefined();
     const t = useToastStore.getState().toasts.at(-1)!;
-    expect(t.title).toBe('That would make a loop: Draw agents → Stops Palette → Draw agents');
+    expect(t.title).toBe('That would make a loop: Draw Agents → Stops Palette → Draw Agents');
     expect(t.message).toContain('Palette by density');
     expect(t.action?.label).toBe('Use last frame’s instead');
     expect(st().compilationErrors).toEqual([]);
@@ -67,7 +67,7 @@ describe('loop guard', () => {
   it('a loaded graph with a loop compiles to the named error; Select the loop and Remove the wire fix it', () => {
     useNodeGraphStore.setState({ nodes: densityLoopGraph() });
     expect(() => st().compile()).not.toThrow();
-    expect(st().compilationErrors[0]).toContain('Draw agents → Stops Palette → Draw agents');
+    expect(st().compilationErrors[0]).toContain('Draw Agents → Stops Palette → Draw Agents');
     expect(st().graphLoop?.closing).toMatchObject({ toNodeId: 'node_13', toInputKey: 'over' });
 
     st().selectLoop();

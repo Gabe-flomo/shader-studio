@@ -386,3 +386,48 @@ export const CubicBezierShaperNode: NodeDefinition = withParamSockets({
     };
   },
 }, ['a', 'b', 'c', 'd']);
+
+// ── Shaper: the ten curves above in one node (docs/node-retirements.md) ─────────────────────────────────────
+//
+// Each Curve emits its old node's code exactly (the definitions above are no longer registered; a saved one is an
+// alias to Shaper with its Curve set). Cubic Bezier stays its own node: it has four control settings.
+
+/** Shaper's curves: the old node each one is, its label, and its Shape's default. */
+export const SHAPER_CURVES: ReadonlyArray<{ value: string; label: string; node: NodeDefinition; a: number; hint: string }> = [
+  { value: 'expEase', label: 'Exp ease', node: ExpEaseNode, a: 0.5, hint: 'Shape 0: a strong ease-in; 0.5: a straight line; 1: a strong ease-out.' },
+  { value: 'circularEaseIn', label: 'Circular ease in', node: CircularEaseInNode, a: 0.5, hint: 'A quarter circle: slow start, fast finish.' },
+  { value: 'circularEaseOut', label: 'Circular ease out', node: CircularEaseOutNode, a: 0.5, hint: 'A quarter circle: fast start, slow finish.' },
+  { value: 'doubleExpSeat', label: 'Exp seat', node: DoubleExpSeatNode, a: 0.5, hint: 'Shape low: a flat plateau in the middle; high: a strong dip.' },
+  { value: 'doubleCircleSeat', label: 'Circle seat', node: DoubleCircleSeatNode, a: 0.5, hint: 'Two arcs; Shape is where they meet.' },
+  { value: 'doubleExpSigmoid', label: 'Exp sigmoid', node: DoubleExpSigmoidNode, a: 0.5, hint: 'An S-curve. Shape near 0: almost a straight line; near 1: a sharp step.' },
+  { value: 'logisticSigmoid', label: 'Logistic sigmoid', node: LogisticSigmoidNode, a: 0.7, hint: 'The classic smooth step. Shape 0: a straight line; toward 1: a sharp step at 0.5.' },
+  { value: 'doubleCircleSigmoid', label: 'Circle sigmoid', node: DoubleCircleSigmoidNode, a: 0.5, hint: 'An S-curve of two arcs; Shape is where they meet.' },
+  { value: 'doubleEllipticSigmoid', label: 'Elliptic sigmoid', node: DoubleEllipticSigmoidNode, a: 0.5, hint: 'An S-curve of two quarter ellipses; Shape and Shape Y place the bend.' },
+  { value: 'quadBezierShaper', label: 'Quadratic Bezier', node: QuadBezierShaperNode, a: 0.5, hint: 'A Bezier curve through (Shape, Shape Y).' },
+];
+const CURVE_OF: Record<string, (typeof SHAPER_CURVES)[number]> = Object.fromEntries(SHAPER_CURVES.map(c => [c.value, c]));
+/** The curve a Shaper draws (an unknown one reads as Exp ease). */
+export const shaperCurve = (node: { params: Record<string, unknown> }) => CURVE_OF[String(node.params.curve)] ?? SHAPER_CURVES[0];
+/** The old node type a shaper node draws like: a Shaper's Curve, or the node's own type (Cubic Bezier). For the card's curve. */
+export const shaperCurveType = (node: { type: string; params: Record<string, unknown> }) => (node.type === 'shaper' ? shaperCurve(node).value : node.type);
+
+const WITH_A = SHAPER_CURVES.filter(c => c.value !== 'circularEaseIn' && c.value !== 'circularEaseOut').map(c => c.value);
+const WITH_B = ['doubleEllipticSigmoid', 'quadBezierShaper'];
+
+export const ShaperNode: NodeDefinition = withParamSockets({
+  type: 'shaper', label: 'Shaper', category: 'Shapers',
+  aliases: ['Ease', 'Easing', 'Ease in', 'Ease out', 'Sigmoid', 'S-curve', 'Seat', 'Exp Ease', 'Exp Seat', 'Exp Sigmoid', 'Logistic Sigmoid',
+    'Circ Ease In', 'Circ Ease Out', 'Circle Seat', 'Circle Sigmoid', 'Elliptic Sigmoid', 'Quad Bezier', 'Curve', 'Response curve'],
+  description: 'Bends a 0 to 1 value along a curve: pick the Curve (eases, seats, S-curves, a Bezier) and set its Shape. Bipolar extends it to −1…1, mirrored through 0. The card draws the curve. For a curve with two control points, use Cubic Bezier.',
+  ...floatIO,
+  defaultParams: { curve: 'expEase', a: 0.5, b: 0.5, bipolar: false },
+  paramDefs: {
+    curve: { label: 'Curve', type: 'select', hint: 'Which curve: each is one of Golan Levin\'s shaping functions.', options: SHAPER_CURVES.map(c => ({ value: c.value, label: c.label })) },
+    a: { label: 'Shape', type: 'float', min: 0, max: 1, step: 0.01, showWhen: { param: 'curve', value: WITH_A }, hint: 'What it does depends on the Curve (its hint on the Curve picker).' },
+    b: { label: 'Shape Y', type: 'float', min: 0, max: 1, step: 0.01, showWhen: { param: 'curve', value: WITH_B }, hint: 'The bend\'s height (Elliptic sigmoid) or the control point\'s (Quadratic Bezier).' },
+    bipolar: { label: 'Bipolar', type: 'bool', hint: 'Takes −1…1: the curve mirrored through 0.' },
+  },
+  glslFunctionsFor: node => (shaperCurve(node).value === 'quadBezierShaper' ? [QUAD_BEZIER_GLSL] : []),
+  // The curve's own (old) node writes the code, so every curve is exactly what it was.
+  generateGLSL: (node, inputVars) => shaperCurve(node).node.generateGLSL(node, inputVars),
+}, ['a', 'b']);

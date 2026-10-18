@@ -335,7 +335,7 @@ function emitShape(ctx: Ctx, sh: ShapeSpec, pos: Ref, list: GraphNode[], local?:
     pos = ref(n, 'p');
   }
   local?.set(sh.id, pos);
-  const rounded = def.roundType && Number(sh.size.round ?? 0) > 0;
+  const rounded = def.params.some(p => p.key === 'round') && Number(sh.size.round ?? 0) > 0;
   const params: Record<string, unknown> = {};
   for (const p of def.params) {
     if (!p.param) continue;
@@ -346,8 +346,8 @@ function emitShape(ctx: Ctx, sh: ShapeSpec, pos: Ref, list: GraphNode[], local?:
       p.param.forEach((k, i) => { params[k] = arr[i]; });
     } else params[p.param] = p.deg ? rad(Number(v)) : Number(v);
   }
-  // Rounded Cylinder's Radius is half the cylinder's (its formula doubles it): keep r the outer radius.
-  if (rounded && def.roundType === 'roundedCylinderSDF3D') params.radius = Number(params.radius) / 2;
+  // Round: Edges Rounded, by Round (Box SDF 3D and Cylinder keep their outside size).
+  if (rounded) params.edges = 'rounded';
   const colourWord = ctx.spec.look.mode === 'surface' && allShapes(ctx.spec).length > 1 ? ` Its colour ${v3(sh.color)} is picked in Materials.` : '';
   // A 4D shape: the point is lifted to 4D at the slice W and turned in xw first (docs/4d.md).
   let shapePos = pos;
@@ -357,13 +357,13 @@ function emitShape(ctx: Ctx, sh: ShapeSpec, pos: Ref, list: GraphNode[], local?:
       `Lifts the 3D point to 4D for ${name}: (x, y, z) becomes a 4D point on the slice at W ${fmt(w)}, cut ${def.fourD.slice}-first. Move W to sweep the slice through the 4D shape.`, list);
     shapePos = ref(lift, 'p4');
     if (spin) {
-      const turn = mk(ctx, 'rotate4D', `${sh.id}:turn4`, { plane: 'xw', angle: 0, spin }, { p4: shapePos },
-        `Turns ${name} in the xw plane, ${fmt(spin)}° a second: a turn into the fourth axis, so its 3D slice morphs.`, list);
-      shapePos = ref(turn, 'p4');
+      const turn = mk(ctx, 'transform', `${sh.id}:turn4`, { dim: '4', spin, spinPlane: 'xw' }, { p: shapePos },
+        `A Transform (4D) turning ${name} in the xw plane, ${fmt(spin)}° a second: a turn into the fourth axis, so its 3D slice morphs.`, list);
+      shapePos = ref(turn, 'p');
     }
   }
   const isBalls = sh.kind === 'picture-balls';
-  const node = mk(ctx, rounded ? def.roundType! : def.type, sh.id, { ...params, ...(isBalls ? ballsExtra(ctx, sh) : {}), _sbName: sh.name },
+  const node = mk(ctx, def.type, sh.id, { ...params, ...(isBalls ? ballsExtra(ctx, sh) : {}), _sbName: sh.name },
     { [def.posKey]: shapePos }, `${name}: a ${def.label.toLowerCase()}${shapeSummary(sh) ? `, ${shapeSummary(sh)}` : ''}. ${def.blurb}${colourWord}${isBalls ? ` Its picture comes in through the group's “Picture for ${itemName(ctx.spec, sh)}” port.` : ''}`, list);
   if (isBalls) {
     if (sh.tex) ctx.balls?.push({ node, sh });

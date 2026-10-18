@@ -46,7 +46,7 @@ export const caGeomNum = (v: unknown) => (v === 'axial' ? 1 : v === 'directional
 export const ChromaLensNode: NodeDefinition = withParamSockets({
   type: 'chromaLens',
   label: 'Chromatic Aberration (lens)',
-  category: 'Passes',
+  category: 'Texture tools',
   aliases: ['Chromatic aberration', 'Chroma', 'Spectral aberration', 'Colour fringe', 'Color fringe', 'Lens fringe', 'Prism', 'Dispersion', 'RGB split', 'RGB shift', 'Rainbow fringe'],
   description: 'A lens\'s colour fringing on a texture (a Pass, a Shader Texture, a picture). Spectral reads the picture at up to 16 taps across the spectrum, each shifted by its wavelength and weighed so they add up to white: smooth rainbow fringes, not three copies. Channel split is the clean red/blue split. Lateral fringes outward from a Centre (growing to the edges); Axial gives highlights a coloured defocus halo; Directional is a prism. Blur softens each colour by how far it moved. Amount is in picture pixels. One pass.',
   inputs: {

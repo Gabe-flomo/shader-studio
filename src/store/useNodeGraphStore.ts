@@ -61,7 +61,7 @@ import { datasetStore } from '../data/datasetStore';
 import { retypeDataNode } from '../nodes/definitions/data';
 import { retypeTransform, transformDefFor, transformDim } from '../nodes/definitions/transformAny';
 import { addScopeOf, transformDimHere } from '../nodes/addScope';
-import { switchToTransformIn } from '../nodes/toTransform';
+import { migrateTransformsOnLoad, migrateTransformsPlay, switchToTransformIn } from '../nodes/toTransform';
 import { migratePlayRecord } from './migratePlay';
 import { clearLegacyColumnsWire } from '../nodes/definitions/gridColumns';
 import { playEngine } from '../lib/playEngine';
@@ -298,8 +298,20 @@ function upgradeExprNodes(nodes: GraphNode[]): GraphNode[] {
  * does (renamed node types, old Expression nodes, params added since). Used to
  * compile a saved graph off-screen without loading it (Present snapshots).
  */
+/** Example keys merged into another: a link or recent entry to the old key opens the one kept. */
+export const MERGED_EXAMPLES: Record<string, string> = { rayMarchOutputs3D: 'learnRaymarch' };
+
 export function migrateLoadedNodes(nodes: GraphNode[]): GraphNode[] {
-  return upgradeExprNodes(resolveNodeAliases(nodes, getNodeDefinition)).map(n => migrateNodeParams(n.params ? n : { ...n, params: {} }, getNodeDefinition));
+  return switchRetiredTransforms(upgradeExprNodes(resolveNodeAliases(nodes, getNodeDefinition)).map(n => migrateNodeParams(n.params ? n : { ...n, params: {} }, getNodeDefinition)));
+}
+
+/**
+ * The retired transform nodes (docs/node-retirements.md) as Transforms where that is exact (nodes/toTransform.ts
+ * migrateTransformsOnLoad), the new Transforms brought up to date. The last step of every load.
+ */
+function switchRetiredTransforms(nodes: GraphNode[]): GraphNode[] {
+  const sw = migrateTransformsOnLoad(nodes);
+  return sw === nodes ? nodes : sw.map(n => migrateNodeParams(n, getNodeDefinition));
 }
 
 /**
@@ -308,7 +320,10 @@ export function migrateLoadedNodes(nodes: GraphNode[]): GraphNode[] {
  * nodes as saved, before migrateLoadedNodes.
  */
 export function migrateLoadedPlay(play: PlayRecord, savedNodes: GraphNode[]): PlayRecord {
-  return migratePlayRecord(play, resolveNodeAliases(savedNodes, getNodeDefinition), getNodeDefinition);
+  const resolved = resolveNodeAliases(savedNodes, getNodeDefinition);
+  const migrated = migratePlayRecord(play, resolved, getNodeDefinition);
+  // Controls on a retired transform's settings follow it onto its Transform (tx → x…).
+  return migrateTransformsPlay(upgradeExprNodes(resolved).map(n => migrateNodeParams(n.params ? n : { ...n, params: {} }, getNodeDefinition)), migrated);
 }
 
 /** Convert a label to a filesystem-safe slug. Used by the generic graph-save
@@ -5502,7 +5517,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   },
 
   loadExampleGraph: async (name?: string) => {
-    const example = name ?? DEFAULT_EXAMPLE;
+    // An example merged into another (docs/node-retirements.md) opens as the one kept.
+    const example = (name && MERGED_EXAMPLES[name]) ?? name ?? DEFAULT_EXAMPLE;
     let loadedKey = example;
     // The blank starter is bundled with the app; every other example lives in
     // a lazily loaded chunk (see exampleIndex.ts).
@@ -5521,10 +5537,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     undoManager.clear(example === 'blank' ? 'Started a new graph' : `Loaded example: ${graph.label}`);
     const { nodes: rawNodes } = graph;
 
-    const nodes = spreadLegacyLayout(upgradeExprNodes(resolveNodeAliases(rawNodes, getNodeDefinition)).map(n => migrateNodeParams(
-      n.params ? n : { ...n, params: {} },
-      getNodeDefinition,
-    )));
+    const nodes = spreadLegacyLayout(migrateLoadedNodes(rawNodes));
 
     idGenerator.syncFromGraph(nodes);
     // Example graphs don't carry their own loose groups yet — reset rather
@@ -5543,7 +5556,8 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
 
   replaceGraph: (rawNodes) => {
     undoManager.push(get().nodes, { label: 'Replaced the graph' }, get().play);
-    const nodes = rawNodes.map(n => migrateNodeParams(n.params ? n : { ...n, params: {} }, getNodeDefinition));
+    // The same migrations as opening a file (renamed and retired types, old Expression nodes, params added since).
+    const nodes = migrateLoadedNodes(rawNodes);
     idGenerator.syncFromGraph(nodes);
     set(st => ({ nodes, looseGroups: [], play: emptyPlayRecord(), datasets: {}, previewNodeId: null, activeGroupId: null, activeGroupPath: [], graphEpoch: st.graphEpoch + 1 }));
     get().compile();
@@ -5744,7 +5758,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
         return n;
       });
       play = migrateLoadedPlay(play, sanitized);
-      nodes = upgradeExprNodes(resolveNodeAliases(sanitized, getNodeDefinition)).map(n => migrateNodeParams(n, getNodeDefinition));
+      nodes = migrateLoadedNodes(sanitized);
       if (needsLayoutSpread(parsed)) nodes = spreadLegacyLayout(nodes);
     } catch (e) {
       console.error('[loadSavedGraph] saved graph is corrupt', name, e);
@@ -5806,7 +5820,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       datasets = parseDatasetsRecord(parsed.datasets);
       isPlayFile = parsed.kind === PLAY_FILE_KIND;
       play = migrateLoadedPlay(play, parsed.nodes as GraphNode[]);
-      nodes = upgradeExprNodes(resolveNodeAliases(parsed.nodes as GraphNode[], getNodeDefinition)).map(n => migrateNodeParams(n, getNodeDefinition));
+      nodes = migrateLoadedNodes(parsed.nodes as GraphNode[]);
       if (needsLayoutSpread(parsed)) nodes = spreadLegacyLayout(nodes);
     } catch (e) {
       console.error('[importGraph] invalid graph file', e);
