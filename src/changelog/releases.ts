@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.287',
+    date: '2026-10-18',
+    title: "One Finish, new Library",
+    highlights: [
+      { area: 'Studio', text: "One Finish stack from Play, Studio and the 2D builder. The Library looks like Nodes: presets and media to drag in. Soft bokeh on the 3D camera." },
+      { area: 'Studio', text: "Builder preset strips keep 4 built-ins and fold away. Next suggestions are off unless you turn them on." },
+    ],
+  },
+  {
     id: '2026.10.286',
     date: '2026-10-18',
     title: "Builder on phones",
