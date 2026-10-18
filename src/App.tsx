@@ -1,4 +1,5 @@
 import { offerGraphExport } from './components/playfile/exportMenus';
+import { saveAsShortcut, saveShortcut, selectAllNodesAtLevel } from './components/shell/graphShortcuts';
 import { useHistBand } from './lib/histogramBand';
 import { openDoBar } from './suggestions/doBarStore';
 import { doBarOrRecipe } from './builders/windows';
@@ -788,6 +789,8 @@ function App() {
   const shortcutHandlers = useMemo(() => ({
     undo:           unlessScratch(() => undo()),
     redo:           unlessScratch(() => useNodeGraphStore.getState().redo()),
+    save:           unlessScratch(() => { void saveShortcut(); }),
+    saveAs:         unlessScratch(() => saveAsShortcut()),
     export:         unlessScratch(() => offerGraphExport(null)),
     import:         unlessScratch(() => { void importAnyFile(setPage); }),
     fitView:        () => _fitViewCallback?.(),
@@ -827,7 +830,12 @@ function App() {
     addOutput:      unlessScratch(() => addRandomNode('output')),
     addMix:         unlessScratch(() => addRandomNode('mix')),
     addColor:       unlessScratch(() => addRandomNode('color')),
-    selectAll:      () => setNodeHighlightFilter(null),
+    // Studio only, so ⌘A selects text as usual elsewhere (Present, Files…).
+    selectAll:      () => {
+      if (page !== 'studio') return false;
+      setNodeHighlightFilter(null);
+      selectAllNodesAtLevel();
+    },
     filterFloat:    () => setNodeHighlightFilter('float'),
     filterVec2:     () => setNodeHighlightFilter('vec2'),
     filterVec3:     () => setNodeHighlightFilter('vec3'),

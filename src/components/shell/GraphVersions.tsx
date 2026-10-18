@@ -21,14 +21,14 @@ import { reportFileResult } from './reportFileResult';
 import { GraphPresentationLink } from './GraphLinks';
 import { AutosaveSection } from './AutosaveControls';
 
-export function SaveGraphForm({ onDone }: { onDone?: () => void }) {
+export function SaveGraphForm({ onDone, asNew: startAsNew = false }: { onDone?: () => void; /** Open on "save under a name" (⇧⌘S). */ asNew?: boolean }) {
   const tk = useTokens();
   const saveGraph = useNodeGraphStore(s => s.saveGraph);
   const current = useNodeGraphStore(s => s.currentGraph);
   const dirty = useNodeGraphStore(s => s.graphDirty);
   const getSavedGraphNames = useNodeGraphStore(s => s.getSavedGraphNames);
   const [note, setNote] = useState('');
-  const [asNew, setAsNew] = useState(!current);
+  const [asNew, setAsNew] = useState(!current || startAsNew);
   const [name, setName] = useState('');
   const n = name.trim();
   const exists = !!n && getSavedGraphNames().includes(n);

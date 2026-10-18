@@ -123,13 +123,13 @@ A group can also repeat: set its **Iterations** above 1 and it runs like a \`for
     step('Saving your work', [
       text(`Graphs are saved in this browser.
 
-1. Press the **Save** button (the disk) in the top bar.
+1. Press **⌘S**, or the **Save** button (the disk) in the top bar.
 2. Type a **Graph name** and press **Save**.
-3. Next time, the same button offers **Save new version**, with an optional note on what changed.
+3. Next time, **⌘S** saves the next version straight away. The Save button also offers **Major**, **Save in place** and a note on what changed; **⇧⌘S** saves under another name.
 
 Your graphs are in the **Saved Graphs** tab of the sidebar, with the **Library** for backups and moving to another machine.
 
-Note that **⌘S** is **Export**: it saves the graph as a file, which is handy for sharing.
+To share a graph as a file, **Export** it (**⇧⌘E**): a .play file with what it uses.
 
 Next: the Learn lessons follow *The Book of Shaders* (the sample **Shaders from zero** walks the path). Or turn a graph into an instrument with **From shader to instrument: your first Play**.`),
     ]),

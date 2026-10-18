@@ -99,7 +99,7 @@ export function MobileTopBar({ page, onPageChange, onRecord, onClear }: {
         <IconButton icon="undo" label="Undo" tooltip={false} onClick={undo} style={{ width: 34, height: 40 }} />
         <IconButton icon="redo" label="Redo" tooltip={false} onClick={redo} style={{ width: 34, height: 40 }} />
         <span style={{ width: 1, height: 20, flexShrink: 0, background: tk.border.default, margin: '0 1px' }} />
-        <SaveGraphButton compact />
+        <SaveGraphButton compact listen />
         <LoadGraphButton />
       </>}
       <span ref={moreRef} style={{ display: 'inline-flex' }}>

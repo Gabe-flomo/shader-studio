@@ -31,6 +31,19 @@ import { AutosaveIndicator } from './AutosaveControls';
 import { GraphLinkBadge } from './GraphLinks';
 import { REBUILD_TOOLTIP, rebuildWithToast } from './rebuildAction';
 import { getTopNavFold } from './topNavFold';
+import { OPEN_SAVE_FORM, type OpenSaveFormDetail } from './graphShortcuts';
+
+/** Opens a save form when ⌘S / ⇧⌘S ask for one (graphShortcuts.ts); `open` gets whether it's "save under a name". */
+function useSaveFormRequests(enabled: boolean, open: (asNew: boolean) => void) {
+  const openRef = useRef(open);
+  openRef.current = open;
+  useEffect(() => {
+    if (!enabled) return;
+    const on = (e: Event) => openRef.current(!!(e as CustomEvent<OpenSaveFormDetail>).detail?.asNew);
+    window.addEventListener(OPEN_SAVE_FORM, on);
+    return () => window.removeEventListener(OPEN_SAVE_FORM, on);
+  }, [enabled]);
+}
 
 /**
  * Tracks an element's border-box width via ResizeObserver, so layout can respond to the bar's
@@ -319,13 +332,15 @@ function GraphNameChip({ compact = false }: { /** A narrow bar: the autosave ind
   const dirty = useNodeGraphStore(s => s.graphDirty);
   const anchor = useRef<HTMLSpanElement>(null);
   const [open, setOpen] = useState(false);
+  const [asNew, setAsNew] = useState(false);
+  useSaveFormRequests(true, n => { setAsNew(n); setOpen(true); });
   const name = current?.name ?? 'Untitled';
   return (
     <span ref={anchor} style={{ display: 'inline-flex', minWidth: 0, flexShrink: 1 }}>
       <Tooltip grow label={current ? (dirty ? `Unsaved changes: save “${name}” as a new version (Minor), a new family (Major), in place, or under another name` : `Saved: “${name}” ${current.major}.${current.minor}`) : 'Not saved yet: give it a name to save it'}>
         <button
           type="button"
-          onClick={() => setOpen(o => !o)}
+          onClick={() => { setAsNew(false); setOpen(o => !o); }}
           aria-label={`${name}${current ? `, version ${current.major}.${current.minor}` : ''}${dirty ? ', unsaved changes' : ''}: save`}
           style={{
             display: 'inline-flex', alignItems: 'center', gap: 7, minWidth: 0, maxWidth: 280, height: 30, padding: '0 10px',
@@ -344,7 +359,7 @@ function GraphNameChip({ compact = false }: { /** A narrow bar: the autosave ind
       <AutosaveIndicator compact={compact} onClick={() => setOpen(o => !o)} />
       {open && (
         <Popover anchorRef={anchor} onClose={() => setOpen(false)} align="start" width={320} padding={10}>
-          <SaveGraphForm onDone={() => setOpen(false)} />
+          <SaveGraphForm key={asNew ? 'new' : 'version'} asNew={asNew} onDone={() => setOpen(false)} />
         </Popover>
       )}
     </span>
@@ -357,21 +372,29 @@ function Divider() {
 }
 
 /** Save (a new version of the open graph, or under a name). `compact` (phones) drops the name label; the dot stays on the icon. */
-export function SaveGraphButton({ compact = false, align = 'end' }: { compact?: boolean; /** Which edge of the button the save form lines up with. */ align?: 'start' | 'end' }) {
+export function SaveGraphButton({ compact = false, align = 'end', listen = false }: {
+  compact?: boolean;
+  /** Which edge of the button the save form lines up with. */
+  align?: 'start' | 'end';
+  /** Opens for ⌘S / ⇧⌘S (where there's no name chip: the phone bar). */
+  listen?: boolean;
+}) {
   const tk = useTokens();
   const current = useNodeGraphStore(s => s.currentGraph);
   const dirty = useNodeGraphStore(s => s.graphDirty);
   const anchor = useRef<HTMLSpanElement>(null);
   const [open, setOpen] = useState(false);
+  const [asNew, setAsNew] = useState(false);
+  useSaveFormRequests(listen, n => { setAsNew(n); setOpen(true); });
   return (
     <span ref={anchor} style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
       <span style={{ position: 'relative', display: 'inline-flex' }}>
-        <IconButton icon="save" label={current ? `Save “${current.name}” as a new version` : 'Save graph'} active={open} tooltip={!open} onClick={() => setOpen(o => !o)} style={compact ? { width: 36, height: 40 } : undefined} />
+        <IconButton icon="save" label={current ? `Save “${current.name}” as a new version` : 'Save graph'} shortcut={loadShortcutMap().save} active={open} tooltip={!open} onClick={() => { setAsNew(false); setOpen(o => !o); }} style={compact ? { width: 36, height: 40 } : undefined} />
         {compact && dirty && <span aria-label="Unsaved changes" style={{ position: 'absolute', top: 8, right: 6, width: 6, height: 6, borderRadius: '50%', background: tk.status.warning, pointerEvents: 'none' }} />}
       </span>
       {open && (
         <Popover anchorRef={anchor} onClose={() => setOpen(false)} align={align} width={300} padding={10}>
-          <SaveGraphForm onDone={() => setOpen(false)} />
+          <SaveGraphForm key={asNew ? 'new' : 'version'} asNew={asNew} onDone={() => setOpen(false)} />
         </Popover>
       )}
     </span>
