@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.289',
+    date: '2026-10-18',
+    title: "Time Cube from pictures",
+    highlights: [
+      { area: 'Studio', text: "Fill a Time Cube from a set of pictures, one per frame, in name order. Kept with the graph (or on disk on desktop), not in the Library." },
+    ],
+  },
+  {
     id: '2026.10.288',
     date: '2026-10-18',
     title: "Scenes on Done",
