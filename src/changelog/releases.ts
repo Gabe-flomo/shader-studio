@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.288',
+    date: '2026-10-18',
+    title: "Scenes on Done",
+    highlights: [
+      { area: 'Studio', text: "The Scene builder leaves your graph alone until Done: going back, switching kinds or closing changes nothing, and Done is one undo." },
+    ],
+  },
+  {
     id: '2026.10.287',
     date: '2026-10-18',
     title: "One Finish, new Library",
