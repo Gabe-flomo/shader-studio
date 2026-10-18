@@ -8,7 +8,7 @@ import { portalGuard } from './portalGuard';
 import { menuAsSheet } from './menuSheet';
 
 export type MenuItem =
-  | { label: string; icon?: IconName; /** Tints the icon (a saved layer kind's colour). */ iconColor?: string; hint?: string; danger?: boolean; disabled?: boolean; onSelect: () => void }
+  | { label: string; icon?: IconName; /** Tints the icon (a saved layer kind's colour). */ iconColor?: string; /** A small colour strip before the label (a CSS background, e.g. a gradient's stops). */ swatch?: string; hint?: string; danger?: boolean; disabled?: boolean; onSelect: () => void }
   | 'separator'
   /** A small caps label over the items that follow it (not selectable). */
   | { heading: string };
@@ -100,7 +100,8 @@ export function Menu({ x, y, items, onClose, minWidth = 190, maxWidth = 360, tit
           opacity: it.disabled ? 0.45 : 1,
         }}
       >
-        {it.icon && <Icon name={it.icon} size={asSheet ? 18 : 15} style={{ color: it.danger ? tk.status.danger : it.iconColor ?? tk.text.muted, marginTop: long ? 1 : 0, flexShrink: 0 }} />}
+        {it.swatch && <span aria-hidden data-menu-swatch="" style={{ width: asSheet ? 40 : 32, height: asSheet ? 14 : 12, borderRadius: 3, background: it.swatch, boxShadow: `inset 0 0 0 1px ${tk.border.subtle}`, flexShrink: 0, marginTop: long ? 3 : 0 }} />}
+        {!it.swatch && it.icon && <Icon name={it.icon} size={asSheet ? 18 : 15} style={{ color: it.danger ? tk.status.danger : it.iconColor ?? tk.text.muted, marginTop: long ? 1 : 0, flexShrink: 0 }} />}
         {long ? (
           <span style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
             <span>{it.label}</span>

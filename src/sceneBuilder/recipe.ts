@@ -32,6 +32,8 @@ import { SCENE_SETTING_RAND, sceneRand } from '../lang/sceneRand';
 import { suggest } from '../lang/fuzzy';
 import { DEFAULT_PALETTE, OUTPUTS, OUTPUT_WORDS, PALETTES, PALETTE_BY_KEY, outputClause, type OutputSpec } from './output';
 import { MUTED_WORD } from '../builders/mute';
+import { parseGradientText, printGradientText } from './recipeGradient';
+import { DRIVERS_3D_SURFACE } from '../lib/colourGradient';
 
 // ── Errors ──────────────────────────────────────────────────────────────────
 
@@ -584,6 +586,16 @@ class Parser {
         continue;
       }
       if (key === 'color' || key === 'colour' || key === 'c') { const c = this.colour(a); if (c) sh.color = c; continue; }
+      if (key === 'gradient' || key === 'grad') {
+        // gradient="height: navy 0, orange 1" (recipeGradient.ts); gradient=off for the solid colour.
+        if (a.value.kind === 'word' && /^(off|none|solid)$/i.test(a.value.v)) { sh.gradient = null; continue; }
+        if (a.value.kind !== 'str') { this.fail(a, 'gradient is quoted text: gradient="height: navy 0, orange 1".'); continue; }
+        const g = parseGradientText(a.value.v);
+        if ('error' in g) { this.fail(a, g.error); continue; }
+        if (!DRIVERS_3D_SURFACE.includes(g.gradient.along)) { this.fail(a, `A shape's gradient runs along ${DRIVERS_3D_SURFACE.join(', ')}.`); continue; }
+        sh.gradient = g.gradient;
+        continue;
+      }
       if (key === 'shine' || key === 'gloss') { if (a.value.kind === 'num') sh.shine = Math.max(0, Math.min(1, a.value.v)); else this.fail(a, typeMismatch('shine', 'float', a.value, 'a number from 0 to 1')); continue; }
       if (key === 'name') { if (a.value.kind === 'str' || a.value.kind === 'word') sh.name = a.value.v; continue; }
       if (key === 'glass') { sh.glass = !(a.value.kind === 'word' && /^(no|off|false)$/i.test(a.value.v)) && !(a.value.kind === 'num' && a.value.v === 0); continue; }
@@ -602,7 +614,7 @@ class Parser {
         ?? (key === 'radius' ? def.params.find(q => q.key === 'r') : key === 'height' ? def.params.find(q => q.key === 'h') : undefined);
       if (!p) {
         const words = def.params.map(q => shapeParamWord(def, q.key));
-        const s = suggest(raw, [...words, ...(shapeDims(def) ? ['size', ...DIM_WORDS] : []), 'at', 'rot', 'color', 'shine', 'name', 'glass']);
+        const s = suggest(raw, [...words, ...(shapeDims(def) ? ['size', ...DIM_WORDS] : []), 'at', 'rot', 'color', 'gradient', 'shine', 'name', 'glass']);
         this.fail(a, `${def.label} has no setting “${raw}”.${s ? ` Did you mean “${s}”?` : ` It takes ${words.join(', ')}.`}`);
         continue;
       }
@@ -978,6 +990,7 @@ function printItem(it: SceneItem, indent: string | null = null): string {
   if (!same(it.at, [0, 0, 0])) parts.push(`at=(${it.at.map(fmt).join(',')})`);
   if (!same(it.rot, [0, 0, 0])) parts.push(`rot=(${it.rot.map(fmt).join(',')})`);
   if (!same(it.color, DEFAULT_COLOR)) parts.push(`color=${fmtColour(it.color)}`);
+  if (it.gradient) parts.push(`gradient="${printGradientText(it.gradient)}"`);
   if (it.shine > 0) parts.push(`shine=${fmt(it.shine)}`);
   if (it.glass) parts.push('glass');
   if (it.tex) {

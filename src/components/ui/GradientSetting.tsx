@@ -33,6 +33,10 @@ import type { GradientStop } from './gradientStops';
 export type ColourMode = 'solid' | 'gradient';
 
 /** A Library palette as at most 8 gradient stops (resampled evenly when it has more). */
+/** A strip of a palette's stops (a CSS background), for its row in the Presets menu. */
+export const paletteSwatchCss = (p: Palette): string =>
+  gradientCssOf({ stops: paletteAsGradientStops(p), interp: p.style === 'bands' ? 'constant' : 'linear' });
+
 export function paletteAsGradientStops(p: Pick<Palette, 'stops' | 'style'>): GradientStop[] {
   const stops = p.stops.map(s => ({ pos: s.pos, color: [s.color[0], s.color[1], s.color[2]] as [number, number, number] }));
   if (stops.length <= GRADIENT_MAX_STOPS) return normaliseStops(stops);
@@ -87,9 +91,9 @@ export function GradientSetting({ value, onChange, drivers, label, touch = false
   const yours = palettes.filter(p => !p.preset);
   const presetItems = (): MenuItem[] => [
     { heading: 'Built in' },
-    ...builtIn.map(p => ({ label: p.name, icon: 'presets' as const, onSelect: () => applyPalette(p) })),
+    ...builtIn.map(p => ({ label: p.name, icon: 'presets' as const, swatch: paletteSwatchCss(p), onSelect: () => applyPalette(p) })),
     { heading: 'Yours' },
-    ...(yours.length ? yours.map(p => ({ label: p.name, icon: 'presets' as const, onSelect: () => applyPalette(p) }))
+    ...(yours.length ? yours.map(p => ({ label: p.name, icon: 'presets' as const, swatch: paletteSwatchCss(p), onSelect: () => applyPalette(p) }))
       : [{ label: 'None saved yet: use Save as preset', disabled: true, onSelect: () => {} }]),
     'separator',
     { label: 'Save as preset…', icon: 'plus' as const, onSelect: () => { void save(); } },

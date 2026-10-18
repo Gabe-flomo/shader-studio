@@ -613,6 +613,10 @@ Every shape also takes:
 - `at=(x,y,z)`: where it is;
 - `rot=(x,y,z)`: its rotation in degrees;
 - `color=…`;
+- `gradient="height: navy 0, orange 1"`: its colour as a gradient (docs/gradients.md). The quoted text is
+  what it runs along (height, centre, axisX, axisZ, normal, depth, noise), then the blend when it isn't
+  smooth (`linear`, `constant`), then `from..to` when it isn't the driver's own range, a `:` and the
+  stops (a colour and its place 0–1, split by commas). `gradient=off` goes back to the solid colour;
 - `shine=0…1`;
 - `glass`: made of glass, in Glass mode;
 - `name=…`.
