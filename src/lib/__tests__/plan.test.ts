@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { ALL_FEATURES, FEATURES, can, canOn, closeProSheet, requireFeature, usePlan, useProSheet, type Feature } from '../plan';
 
 const FREE: Feature[] = ['studio', 'present', 'glsl', 'builder', 'learn', 'nodes.import', 'play.controls'];
-const PRO_ONLY: Feature[] = ['play.layers', 'play.sources', 'play.backgrounds', 'play.finish', 'play.audioFx', 'play.takes', 'play.midiFile', 'audio.engine', 'audio.stems', 'audio.plugins', 'play.output', 'play.projection', 'convert', 'export.hires', 'export.website', 'files.everything', 'files.install', 'nodes.publish', 'nodes.pack'];
+const PRO_ONLY: Feature[] = ['play.layers', 'play.sources', 'play.backgrounds', 'play.finish', 'play.audioFx', 'play.takes', 'play.midiFile', 'audio.engine', 'audio.plugins', 'play.output', 'play.projection', 'convert', 'export.hires', 'export.website', 'files.everything', 'files.install', 'nodes.publish', 'nodes.pack'];
 
 afterEach(() => {
   usePlan.getState().setSession({ status: 'signed-in', user: '', plan: 'pro', source: 'open' });
@@ -51,14 +51,5 @@ describe('requireFeature', () => {
     usePlan.getState().setSession({ status: 'signed-in', user: 't', plan: 'pro', source: 'gate' });
     expect(requireFeature('export.hires')).toBe(true);
     expect(useProSheet.getState().open).toBe(false);
-  });
-});
-
-describe('Separate is Pro, the Audio nodes are not', () => {
-  it('audio.stems needs Pro; Free opens the Pro sheet', () => {
-    usePlan.getState().setSession({ status: 'signed-in', user: 'f', plan: 'free', source: 'gate' });
-    expect(can('audio.stems')).toBe(false);
-    expect(requireFeature('audio.stems')).toBe(false);
-    expect(useProSheet.getState()).toMatchObject({ open: true, feature: 'audio.stems' });
   });
 });

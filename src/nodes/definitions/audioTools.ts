@@ -13,7 +13,7 @@ import type { GraphNode, NodeDefinition, ParamDef } from '../../types/nodeGraph'
 import { texUv } from './passes';
 import { bandOutputs, bandsOf } from '../../lib/audioTools/bands';
 import { soundOutputs, soundsOf, type AudioSoundSpec } from '../../lib/audioTools/learn';
-import type { AtListenerSpec } from '../../play/kit/audioTools.js';
+import { AT_TRIGGER_DEFAULTS, atThresholdFromSensitivity, type AtListenerSpec } from '../../play/kit/audioTools.js';
 import { AC_MAX_RESONATORS, AC_SCALES, acTextureSize, type AcScale, type AcSpec } from '../../play/kit/audioChain.js';
 import { p, withNewOutputs } from './helpers';
 
@@ -121,7 +121,9 @@ export function listenerSpecOf(node: GraphNode): AtListenerSpec {
   return {
     type: node.type, lo, hi,
     attack: num(P.attack, 0.01), release: num(P.release, 0.15), gain: Math.max(0, num(P.gain, 1)),
-    sensitivity: num(P.sensitivity, 0.5), cooldown: num(P.cooldown, 120), decay: num(P.decay, 0.3),
+    threshold: num(P.threshold, typeof P.sensitivity === 'number' ? atThresholdFromSensitivity(P.sensitivity) : AT_TRIGGER_DEFAULTS.threshold),
+    releaseAt: num(P.releaseAt, AT_TRIGGER_DEFAULTS.releaseAt), gate: num(P.gate, AT_TRIGGER_DEFAULTS.gate), minMs: num(P.minMs, AT_TRIGGER_DEFAULTS.minMs),
+    cooldown: num(P.cooldown, 120), decay: num(P.decay, 0.3),
     layout: P.layout === 'linear' ? 'linear' : 'log', minDb: num(P.minDb, -90), maxDb: num(P.maxDb, -20), smoothing: num(P.smoothing, 0.5),
   };
 }
@@ -199,23 +201,46 @@ export function retypeAudioSource(node: GraphNode): GraphNode {
   return { ...node, params, outputs: same ? node.outputs : outputs };
 }
 
+/** v1 → v2: each band's Sensitivity → a fixed Threshold (a Gate only on a trigger-only band, so a Value reads as before); the stems go. */
+export function migrateAudioSourceV2(params: Record<string, unknown>): Record<string, unknown> {
+  const rest = { ...params };
+  delete rest.stem; delete rest.hear; delete rest.stems;
+  const bands = Array.isArray(rest.bands) ? rest.bands.map(b => {
+    if (!b || typeof b !== 'object') return b;
+    const { sensitivity, ...band } = b as Record<string, unknown>;
+    return band.threshold !== undefined ? band : { ...band, threshold: atThresholdFromSensitivity(sensitivity), gate: band.value === false ? AT_TRIGGER_DEFAULTS.gate : 0 };
+  }) : rest.bands;
+  return { ...rest, ...(bands !== undefined ? { bands } : {}) };
+}
+
+/** v1 → v2: Hit's Sensitivity → a fixed Threshold, with the new lines' defaults. */
+export function migrateAudioHitV2(params: Record<string, unknown>): Record<string, unknown> {
+  const { sensitivity, ...rest } = params;
+  if (rest.threshold !== undefined) return rest;
+  return { ...rest, threshold: atThresholdFromSensitivity(sensitivity), releaseAt: AT_TRIGGER_DEFAULTS.releaseAt, gate: AT_TRIGGER_DEFAULTS.gate, minMs: AT_TRIGGER_DEFAULTS.minMs };
+}
+
 export const AudioSourceNode: NodeDefinition = {
   type: AUDIO_SOURCE_TYPE,
   label: 'Audio Source',
   category: AUDIO_CATEGORY,
-  aliases: ['Audio', 'Sound', 'Music', 'Song', 'Microphone', 'Mic', 'Audio file', 'Audio In', 'Line in', 'Frequency bands', 'Kick trigger', 'Learn a sound', 'Sound match', 'Clap detect', 'Video sound', 'Stems', 'Separate', 'Stem separation', 'Isolate drums', 'Isolate vocals', 'Demucs'],
-  description: 'Where the sound comes from: a File (Load a sound on the card; it is kept in the library, so it comes back after a reload), the Mic (or an audio interface), or a Video node\'s own sound (the Video tab: a Texture node playing a video, or a Baked node), picked with the tabs on the card. Open ↗ shows the whole file to trim, and a live spectrum where you pick frequency bands: each band becomes an output here, its level or a trigger on each hit in it. Learn a sound there too (select one clap, press Learn): it fires a trigger whenever a sound like it plays. Separate splits a File into stems (drums, bass, vocals, other; guitar and piano with the 6-stem model) on this device: pick a Stem and everything listening hears only it, while you still hear the whole song. Wire Audio into Band level, Hit, Spectrum, Spectrogram or Waveform; Level is how loud it is right now (0–1) and Time the seconds it has played.',
+  aliases: ['Audio', 'Sound', 'Music', 'Song', 'Microphone', 'Mic', 'Audio file', 'Audio In', 'Line in', 'Frequency bands', 'Kick trigger', 'Learn a sound', 'Sound match', 'Clap detect', 'Video sound', 'Beat trigger', 'Threshold trigger', 'Noise gate'],
+  description: 'Where the sound comes from: a File (Load a sound on the card; it is kept in the library, so it comes back after a reload), the Mic (or an audio interface), or a Video node\'s own sound (the Video tab: a Texture node playing a video, or a Baked node), picked with the tabs on the card. The card\'s transport plays or pauses it, Restarts it, Mutes it (silent, but still listened to: its triggers keep firing) and sets its Volume; it stays on the card when the card is folded. Open ↗ shows the whole file to trim, and a live spectrum where you pick frequency bands: each band becomes an output here, its level or a trigger each time it rises above a Threshold line you set (watch it on the trigger scope; a Gate keeps noise out). A File is analysed ahead, so its triggers fire when you hear each hit. Learn a sound there too (select one clap, press Learn): it fires a trigger whenever a sound like it plays. Wire Audio into Band level, Hit, Spectrum, Spectrogram or Waveform; Level is how loud it is right now (0–1) and Time the seconds it has played.',
   inputs: {},
   outputs: SOURCE_OUTPUTS,
-  // stem / hear / stems: Separate (lib/audioTools/stems.ts, docs/stems.md): which stem the analysis hears, whether the
-  // speakers play it, and the stems kept for this song.
-  defaultParams: { source: 'file', playing: true, loop: true, gain: 1, _fileName: '', sampleId: '', videoNode: '', bands: [], sounds: [], trimIn: 0, trimOut: 0, stem: 'mix', hear: 'mix', stems: null },
+  // volume / muted: what you hear (after the analysis: a muted source still triggers). syncOffset: ms added to when its
+  // triggers fire (on top of the output's own latency, which is taken off by itself).
+  defaultParams: { source: 'file', playing: true, loop: true, gain: 1, volume: 1, muted: false, syncOffset: 0, _fileName: '', sampleId: '', videoNode: '', bands: [], sounds: [], trimIn: 0, trimOut: 0 },
   paramDefs: {
     playing: { label: 'Play', type: 'bool', hint: 'Plays the file or the video\'s sound (heard through the speakers), or listens to the Mic.' },
     loop: { label: 'Loop', type: 'bool', showWhen: { param: 'source', value: 'file' }, hint: 'Start again at the trim\'s end (or the file\'s). Off: it stops there.' },
     gain: { label: 'Gain', type: 'float', min: 0, max: 8, step: 0.01, hint: 'How loud the listening nodes and the bands hear it (not how loud you hear it): raise it for a quiet microphone.' },
   },
   assignable: false,
+  // 2: fixed-threshold triggers (a band's Sensitivity became its Threshold) and no stems (Separate is gone: a stem
+  // picked plays and is analysed as the full mix).
+  version: 2,
+  migrateParams: (params, fromVersion) => (fromVersion < 2 ? migrateAudioSourceV2(params) : params),
   syncSockets: retypeAudioSource,
   generateGLSL: (node: GraphNode) => ({ code: '', outputVars: { audio: '0.0', ...liveOutputs(node) } }),
 };
@@ -255,7 +280,7 @@ export const AudioHitNode: NodeDefinition = {
   label: 'Hit',
   category: AUDIO_CATEGORY,
   aliases: ['Onset', 'Beat detect', 'Kick detect', 'Transient', 'Drum trigger', 'Audio trigger', 'Beat'],
-  description: 'Finds hits in the sound (a kick, a snare, a hi-hat): a sudden rise in its band, louder than what came just before. Trigger is 1 for one frame per hit (wire it into Envelope, Counter or Sample & Hold), Envelope jumps to 1 and falls in Decay, Count counts the hits, Strength is how loud the last one was. Sensitivity catches quieter hits; Cooldown is the shortest gap between two.',
+  description: 'Finds hits in the sound (a kick, a snare, a hi-hat): each time its band\'s level rises above Threshold, a line that stays put. It fires once per rise and re-arms only when the level falls back below Release (a fraction of Threshold), so a held note fires once. Below Gate the band counts as silence (noise never fires it); Min time is how long the level must stay above Threshold; Cooldown is the shortest gap between two hits. Trigger is 1 for one frame per hit (wire it into Envelope, Counter or Sample & Hold), Envelope jumps to 1 and falls in Decay, Count counts the hits, Strength is how loud the last one was.',
   inputs: { ...AUDIO_IN },
   outputs: {
     trigger: { type: 'float', label: 'Trigger', hint: '1 on the frame of a hit, 0 otherwise: a rising edge the memory nodes count.' },
@@ -263,18 +288,24 @@ export const AudioHitNode: NodeDefinition = {
     count: { type: 'float', label: 'Count', hint: 'Hits so far (from when the graph loaded).' },
     strength: { type: 'float', label: 'Strength', hint: 'How loud the band was at the last hit, 0–1.' },
   },
-  defaultParams: { sound: 'kick', low: 30, high: 150, sensitivity: 0.5, cooldown: 120, decay: 0.3 },
+  defaultParams: { sound: 'kick', low: 30, high: 150, threshold: AT_TRIGGER_DEFAULTS.threshold, releaseAt: AT_TRIGGER_DEFAULTS.releaseAt, gate: AT_TRIGGER_DEFAULTS.gate, minMs: AT_TRIGGER_DEFAULTS.minMs, cooldown: 120, decay: 0.3 },
   paramDefs: {
     sound: { label: 'Sound', type: 'select', hint: 'Which sound to listen for: each lives in its own band.', options: [
       ...Object.entries(HIT_PRESETS).map(([value, p]) => ({ value, label: p.label })), { value: 'custom', label: 'Custom (Low – High)' },
     ] },
     low: { label: 'Low', type: 'float', min: 20, max: 20000, step: 1, showWhen: { param: 'sound', value: 'custom' }, hint: 'The band\'s bottom, in Hz.' },
     high: { label: 'High', type: 'float', min: 20, max: 20000, step: 1, showWhen: { param: 'sound', value: 'custom' }, hint: 'The band\'s top, in Hz.' },
-    sensitivity: { label: 'Sensitivity', type: 'float', min: 0, max: 1, step: 0.01, hint: 'Higher catches quieter hits (and more false ones); lower only the clear ones.' },
+    threshold: { label: 'Threshold', type: 'float', min: 0, max: 1, step: 0.01, hint: 'Fires when the band\'s level (0–1, as Band level reads it) rises above this line. Lower catches quieter hits.' },
+    releaseAt: { label: 'Release', type: 'float', min: 0, max: 1, step: 0.01, hint: 'Re-arms once the level falls below Threshold × this: a held note or a swell fires only once. Nearer 1 re-arms sooner.' },
+    gate: { label: 'Gate', type: 'float', min: 0, max: 1, step: 0.01, hint: 'Below this level the band is silence: noise under it never fires. 0 is off.' },
+    minMs: { label: 'Min time', type: 'float', min: 0, max: 200, step: 1, hint: 'Milliseconds the level must stay above Threshold to fire: stops a single noisy blip.' },
     cooldown: { label: 'Cooldown', type: 'float', min: 40, max: 2000, step: 1, hint: 'Milliseconds after a hit before the next can count: stops one drum counting twice.' },
     decay: secs('Decay', 'Seconds the Envelope takes to fall from 1 to 0.', 5),
   },
   assignable: false,
+  // 2: a fixed Threshold (with Release, Gate, Min time) instead of Sensitivity's moving one.
+  version: 2,
+  migrateParams: (params, fromVersion) => (fromVersion < 2 ? migrateAudioHitV2(params) : params),
   generateGLSL: (node: GraphNode) => ({ code: '', outputVars: liveOutputs(node) }),
 };
 

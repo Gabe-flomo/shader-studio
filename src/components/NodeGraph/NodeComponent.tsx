@@ -157,6 +157,7 @@ import { CacheCardBody } from '../cache/CacheCardBody';
 import { AnalyzeCardBody } from '../analyze/AnalyzeCardBody';
 import { AudioToolCardBody } from '../audio/AudioToolCardBody';
 import { EnvelopeCardViz } from './EnvelopeCardViz';
+import { AudioTransport } from '../audio/AudioTransport';
 import { isAudioToolType } from '../../nodes/definitions/audioTools';
 import { SegmentCardBody } from '../segment/SegmentCardBody';
 import { DepthLightCardBody } from '../depth/DepthLightCardBody';
@@ -3305,8 +3306,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
       {node.type === 'curves' && <CurvesCardViz node={node} />}
       {/* Envelope (ADSR): its graph with draggable points and the live value (EnvelopeCardViz.tsx) */}
       {!collapsed && node.type === 'envelope' && <EnvelopeCardViz node={node} />}
-      {/* Audio Source: its File | Mic tabs first, above its settings, as the Texture node's (docs/audio-tools.md) */}
-      {!collapsed && node.type === 'audioSource' && <AudioToolCardBody node={node} />}
+      {/* Audio Source: its File | Mic tabs first, above its settings, as the Texture node's (docs/audio-tools.md); folded, its transport stays */}
+      {node.type === 'audioSource' && (collapsed ? <AudioTransport node={node} compact /> : <AudioToolCardBody node={node} />)}
       {node.type === 'agentOutput' && (
         <div style={{ padding: '8px 14px', fontSize: 11.5, lineHeight: 1.45, color: tk.text.faint, borderBottom: `1px solid ${tk.border.subtle}` }}>
           What this walker becomes at the end of the step. Anything left unwired stays as it was, so an empty rule stands still.

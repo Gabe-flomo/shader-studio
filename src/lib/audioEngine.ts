@@ -41,25 +41,13 @@ interface AudioNodeState {
   peaks?: { n: number; data: Float32Array };
   /** The trim it plays within (an Audio Source's In / Out), and whether it loops there; unset: the whole song. */
   win?: { start: number; end: number; loop: boolean };
-  /** Its chain's way to the mix (a gain: quiet while its stem is heard instead). */
+  /** Its chain's way to the mix, after the analyser's tap: the track's Volume (0 while Muted), so the analysis hears it whatever. */
   out: GainNode;
-  /**
-   * A separated stem of the song (an Audio Source's Stem, lib/audioTools/stems.ts), played in step with it: started
-   * at the same moment and offset, within the same trim. Its own analyser is what the Audio nodes read then.
-   */
-  stem?: StemState;
-  /** The speakers play the stem instead of the song. */
-  hearStem: boolean;
-}
-
-interface StemState {
-  buffer: AudioBuffer;
-  peaks?: { n: number; data: Float32Array };
-  source: AudioBufferSourceNode | null;
-  inlet: GainNode;
-  out: GainNode;
-  analyser: AnalyserNode;
-  unplug: () => void;
+  /** The track's Volume (0..1) and Mute: what you hear, not what the Audio nodes read. */
+  volume: number;
+  muted: boolean;
+  /** Where the latest start began in the song (seconds), for positionAt before it is heard. */
+  startOff: number;
 }
 
 class AudioEngine {
@@ -137,7 +125,6 @@ class AudioEngine {
     }
     existing?.unplug();
 
-    if (existing) this.dropStem(existing);
     const inlet = audioCtx.createGain();
     const out = audioCtx.createGain();
     out.connect(this.mix!);
@@ -159,65 +146,30 @@ class AudioEngine {
       startedAt: 0,
       stoppedAt: 0,
       out,
-      hearStem: false,
+      volume: existing?.volume ?? 1,
+      muted: existing?.muted ?? false,
+      startOff: 0,
     });
+    this.applyVolume(this.nodes.get(nodeId)!);
   }
 
-  // ── Stems ──────────────────────────────────────────────────────────────────────────────────────────────
+  // ── Volume and Mute (after the analysis tap) ─────────────────────────────────────────────────────────
 
-  /**
-   * Give a track its stem (or none): played in step with the song from now on (restarted together when playing),
-   * through the same effect chain, and read by its own analyser.
-   */
-  setStem(nodeId: string, buffer: AudioBuffer | null): void {
+  /** What you hear of a track: Volume 0..1, and Mute (silent, still analysed). */
+  setVolume(nodeId: string, volume: number, muted: boolean): void {
     const state = this.nodes.get(nodeId);
     if (!state) return;
-    if (state.stem?.buffer === buffer) return;
-    const pos = state.isPlaying ? this.position(nodeId) ?? 0 : null;
-    this.dropStem(state);
-    if (buffer) {
-      const ctx = this.getCtx();
-      const inlet = ctx.createGain(), out = ctx.createGain(), analyser = ctx.createAnalyser();
-      analyser.fftSize = 2048;
-      analyser.smoothingTimeConstant = 0.8;
-      out.connect(this.mix!);
-      const unplugChain = audioFxHost.attach(ctx, trackChainId(nodeId), inlet, out, analyser);
-      state.stem = { buffer, source: null, inlet, out, analyser, unplug: () => { unplugChain(); try { out.disconnect(); } catch { /* gone */ } } };
-    }
-    this.applyHear(state);
-    // Playing: start both again together, where the song was.
-    if (pos !== null) this.startAudio(nodeId, pos, state.win?.loop ?? true, state.win);
+    state.volume = Math.max(0, Math.min(1, Number.isFinite(volume) ? volume : 1));
+    state.muted = muted;
+    this.applyVolume(state);
   }
 
-  /** The speakers play the stem (true) or the song (false); the analysers read on either way. */
-  setHearStem(nodeId: string, on: boolean): void {
-    const state = this.nodes.get(nodeId);
-    if (!state) return;
-    state.hearStem = on;
-    this.applyHear(state);
+  private applyVolume(state: AudioNodeState): void {
+    const g = state.muted ? 0 : state.volume;
+    const p = state.out.gain;
+    if (this.ctx && typeof p.setTargetAtTime === 'function') p.setTargetAtTime(g, this.ctx.currentTime, 0.01);
+    else p.value = g;
   }
-
-  private applyHear(state: AudioNodeState): void {
-    const stem = !!state.stem && state.hearStem;
-    state.out.gain.value = stem ? 0 : 1;
-    if (state.stem) state.stem.out.gain.value = stem ? 1 : 0;
-  }
-
-  private dropStem(state: AudioNodeState): void {
-    const st = state.stem;
-    if (!st) return;
-    if (st.source) { try { st.source.stop(); } catch { /* stopped */ } st.source.disconnect(); }
-    st.unplug();
-    st.analyser.disconnect();
-    state.stem = undefined;
-    this.applyHear(state);
-  }
-
-  /** The stem's analyser (null without a stem). */
-  stemAnalyser(nodeId: string): AnalyserNode | null { return this.nodes.get(nodeId)?.stem?.analyser ?? null; }
-
-  /** The stem's decoded sound (null without a stem). */
-  stemBuffer(nodeId: string): AudioBuffer | null { return this.nodes.get(nodeId)?.stem?.buffer ?? null; }
 
   /**
    * Play from `offset` seconds into the song (looping, unless `loop` is false: then it stops at its end). With `win`
@@ -238,7 +190,6 @@ class AudioEngine {
       try { state.source.stop(); } catch (_) { /* already stopped */ }
       state.source.disconnect();
     }
-    if (state.stem?.source) { try { state.stem.source.stop(); } catch { /* stopped */ } state.stem.source.disconnect(); state.stem.source = null; }
 
     // AudioBufferSourceNode is single-use — always create fresh
     const source = audioCtx.createBufferSource();
@@ -254,9 +205,6 @@ class AudioEngine {
     // Source → inlet → its chain → the mix (the analyser taps the chain: audioFx.ts)
     source.connect(state.inlet);
 
-    // The stem (when there is one) starts with the song: same moment, same offset, same loop.
-    const stem = state.stem ? audioCtx.createBufferSource() : null;
-    if (stem && state.stem) { stem.buffer = state.stem.buffer; stem.loop = loop; stem.connect(state.stem.inlet); state.stem.source = stem; }
     const when = audioCtx.currentTime;
     const dur = state.buffer.duration;
     let off = dur > 0 ? ((offset % dur) + dur) % dur : 0;
@@ -264,19 +212,17 @@ class AudioEngine {
       const w = { start: Math.max(0, Math.min(dur, win.start)), end: Math.max(0, Math.min(dur, win.end)) };
       if (!(off >= w.start && off < w.end)) off = w.start;
       state.win = { ...w, loop };
-      for (const s of stem ? [source, stem] : [source]) {
-        if (loop) { s.loopStart = w.start; s.loopEnd = w.end; s.start(when, off); }
-        else s.start(when, off, Math.max(0, w.end - off));
-      }
+      if (loop) { source.loopStart = w.start; source.loopEnd = w.end; source.start(when, off); }
+      else source.start(when, off, Math.max(0, w.end - off));
     } else {
       state.win = undefined;
       source.start(when, off);
-      if (stem) { if (loop) { stem.loopStart = 0; stem.loopEnd = dur; } stem.start(when, off, loop ? undefined : Math.max(0, dur - off)); }
     }
 
     state.source = source;
     state.isPlaying = true;
     state.startedAt = when - off;
+    state.startOff = off;
   }
 
   /** Outside sources joined to the output (a Video layer's sound): counted so a recording takes them too. */
@@ -331,14 +277,12 @@ class AudioEngine {
     state.source.disconnect();
     state.source = null;
     state.isPlaying = false;
-    if (state.stem?.source) { try { state.stem.source.stop(); } catch { /* stopped */ } state.stem.source.disconnect(); state.stem.source = null; }
   }
 
   removeAudio(nodeId: string): void {
     this.stopAudio(nodeId);
     const state = this.nodes.get(nodeId);
     if (state) {
-      this.dropStem(state);
       state.unplug();
       state.analyser.disconnect();
     }
@@ -490,11 +434,20 @@ class AudioEngine {
 
   /** Seconds into the song now (where it stopped, while stopped), or null when nothing is loaded. */
   position(nodeId: string): number | null {
+    return this.ctx ? this.positionAt(nodeId, this.ctx.currentTime) : this.nodes.get(nodeId)?.stoppedAt ?? null;
+  }
+
+  /**
+   * Seconds into the song at context time `ctxTime` (where it stopped, while stopped), or null when nothing is loaded.
+   * Before the latest start is heard it reads earlier than where it started (so a trigger at the start still fires).
+   */
+  positionAt(nodeId: string, ctxTime: number): number | null {
     const state = this.nodes.get(nodeId);
     if (!state) return null;
     if (!state.isPlaying || !this.ctx) return state.stoppedAt;
     const dur = state.buffer.duration;
-    const t = this.ctx.currentTime - state.startedAt;
+    const t = ctxTime - state.startedAt;
+    if (t < state.startOff) return t;
     const w = state.win;
     if (w && w.end > w.start) {
       // startedAt is when 0 would have played: past the window's end it goes round inside the window.
@@ -506,27 +459,62 @@ class AudioEngine {
     return dur > 0 ? ((t % dur) + dur) % dur : 0;
   }
 
+  /**
+   * The context time the speakers play right now: the render clock less the output's latency (getOutputTimestamp
+   * when the browser has it, else baseLatency + outputLatency). What a trigger lines up with.
+   */
+  heardTime(): number {
+    const ctx = this.ctx;
+    if (!ctx) return 0;
+    const ts = typeof ctx.getOutputTimestamp === 'function' ? ctx.getOutputTimestamp() : null;
+    if (ts && typeof ts.contextTime === 'number' && typeof ts.performanceTime === 'number' && ts.performanceTime > 0 && ctx.state === 'running') {
+      const t = ts.contextTime + (performance.now() - ts.performanceTime) / 1000;
+      // A stale or odd timestamp: fall back to the latencies.
+      if (t <= ctx.currentTime + 1e-3 && ctx.currentTime - t < 1) return t;
+    }
+    return ctx.currentTime - this.outputLatency();
+  }
+
+  /** Seconds between the render clock and the speakers (baseLatency + outputLatency; 0 where a browser doesn't say). */
+  outputLatency(): number {
+    const ctx = this.ctx as (AudioContext & { outputLatency?: number }) | null;
+    if (!ctx) return 0;
+    const v = (Number(ctx.baseLatency) || 0) + (Number(ctx.outputLatency) || 0);
+    return Number.isFinite(v) && v > 0 && v < 1 ? v : 0;
+  }
+
+  /** Changes on every start (or seek) of a track: a new run of its position. */
+  playToken(nodeId: string): number {
+    const st = this.nodes.get(nodeId);
+    return st?.isPlaying ? st.startedAt : NaN;
+  }
+
+  /** Back to `at` seconds (a trim's In): playing on from there, or waiting there while stopped. */
+  seek(nodeId: string, at: number): void {
+    const state = this.nodes.get(nodeId);
+    if (!state) return;
+    if (state.isPlaying) this.startAudio(nodeId, at, state.win?.loop ?? (state.source?.loop ?? true), state.win);
+    else state.stoppedAt = Math.max(0, at);
+  }
+
   /** The song's length in seconds (0 when nothing is loaded). */
   duration(nodeId: string): number {
     return this.nodes.get(nodeId)?.buffer.duration ?? 0;
   }
 
-  /** The loudest sample in each of `n` slices of the song (0..1), for a waveform overview; `stem`: its stem's. */
-  peaks(nodeId: string, n: number, stem = false): Float32Array | null {
+  /** The loudest sample in each of `n` slices of the song (0..1), for a waveform overview. */
+  peaks(nodeId: string, n: number): Float32Array | null {
     const state = this.nodes.get(nodeId);
     if (!state) return null;
-    const holder: { buffer: AudioBuffer; peaks?: { n: number; data: Float32Array } } | undefined = stem ? state.stem : state;
-    if (!holder) return null;
-    if (holder.peaks?.n === n) return holder.peaks.data;
-    // Over the song's length (a stem may be a few samples longer or shorter): the two line up.
-    const ch = holder.buffer.getChannelData(0), out = new Float32Array(n), per = Math.max(1, Math.floor(state.buffer.length / n));
+    if (state.peaks?.n === n) return state.peaks.data;
+    const ch = state.buffer.getChannelData(0), out = new Float32Array(n), per = Math.max(1, Math.floor(state.buffer.length / n));
     for (let i = 0; i < n; i++) {
       let m = 0;
       const end = Math.min(ch.length, (i + 1) * per);
       for (let j = i * per; j < end; j += 4) { const a = Math.abs(ch[j]); if (a > m) m = a; }
       out[i] = m;
     }
-    holder.peaks = { n, data: out };
+    state.peaks = { n, data: out };
     return out;
   }
 

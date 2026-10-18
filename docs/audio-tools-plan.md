@@ -168,7 +168,8 @@ history), Step; example Audio 9 lights it as a landscape and bends stripes with 
 
 ## Phase 4 — Stems (plan only)
 Stem separation (drums / bass / vocals / other) as an offline bake with a local model, each stem becoming its
-own Audio Source. Any model download only after asking the user.
+own Audio Source. Any model download only after asking the user. (Built as Separate, then removed on 2026-10-18: the
+separation wasn't good enough. Research: [reports/stems-research.md](reports/stems-research.md).)
 
 ## Phase 5 — The Spectrogram as a field
 Built with Phase 3 (above, "The Spectrogram as a field"). Spectrum has no Field yet (its Value already is a function

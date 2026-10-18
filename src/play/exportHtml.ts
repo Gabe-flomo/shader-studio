@@ -246,11 +246,11 @@ export interface PlayAudioToolSource extends PlayMediaFile {
   sounds: AtSound[];
   /** Its own sound is not played: an effect after it is heard instead (lib/audioTools/graphWalk.ts audioHearing). */
   quiet?: boolean;
-  /**
-   * The separated stem the Audio nodes hear (docs/stems.md): its file (null when over the limit or not open), played in
-   * step with the song; `hear` plays it instead of the song. Without its file the page analyses the whole song.
-   */
-  stem?: PlayMediaFile & { stem: string; hear: boolean };
+  /** What you hear of it (the card's Volume, 0..1, and Mute): the analysis hears it whatever. */
+  volume?: number;
+  muted?: boolean;
+  /** Milliseconds its triggers wait (the card's Sync offset), on top of the page's output latency for a file or video. */
+  syncOffset?: number;
 }
 /**
  * An effect (Filter, Resonator bank, Spectral: kit/audioChain.js) on the page: the sound it takes (`upstreamId`, a source
@@ -366,9 +366,6 @@ export function leftBehind(play: PlayRecord, media?: PlayMedia, opts: { graphs?:
     if (a.kind === 'file' && !a.src) out.push(a.bytes > AUDIO_LIMIT
       ? { what: `The sound “${a.name}” (${sizeText(a.bytes)}) in ${a.label}`, why: `Sounds over ${sizeText(AUDIO_LIMIT)} stay out of the page, so ${a.label} and the Audio nodes listening to it hear silence there. Trim or compress it under ${sizeText(AUDIO_LIMIT)} to bring it along.` }
       : { what: `${a.name ? `The sound “${a.name}”` : 'The sound'} in ${a.label}`, why: 'No sound is open in it this session (none loaded, or still opening from the library), so the Audio nodes listening to it hear silence on the page. Load it, then export again.' });
-    if (a.kind === 'file' && a.src && a.stem && !a.stem.src) out.push({ what: `The ${a.stem.stem} stem${a.stem.bytes ? ` (${sizeText(a.stem.bytes)})` : ''} in ${a.label}`, why: a.stem.bytes > AUDIO_LIMIT
-      ? `Stems over ${sizeText(AUDIO_LIMIT)} stay out of the page, so there the Audio nodes listening to ${a.label} hear the whole song instead of the ${a.stem.stem}. Trim the song (Separate again) to bring it along.`
-      : `It isn’t open in this session (still opening from the library), so there the Audio nodes listening to ${a.label} hear the whole song. Open the graph again in a moment and export again.` });
     if (a.kind === 'video' && !a.video) out.push({ what: `The video sound in ${a.label}`, why: 'Its video node isn’t drawn in the picture, so the page doesn’t carry that video and the Audio nodes listening to it hear silence. Wire the video into the picture to bring it along.' });
   }
   for (const a of media?.audio ?? []) {
@@ -459,7 +456,6 @@ export function mediaCarried(media?: PlayMedia, hands?: HandAssets | 'pending', 
   for (const v of Object.values(media?.videos ?? {})) if (v.src) out.push({ what: `Video “${v.name}” in ${v.label}`, bytes: v.src.length });
   for (const a of media?.audio ?? []) if (a.src) out.push({ what: `Song “${a.name}” in ${a.label}`, bytes: a.src.length });
   for (const a of media?.audioTools?.sources ?? []) if (a.src) out.push({ what: `Sound “${a.name}” in ${a.label}`, bytes: a.src.length });
-  for (const a of media?.audioTools?.sources ?? []) if (a.stem?.src) out.push({ what: `Stem “${a.stem.name}” in ${a.label}`, bytes: a.stem.src.length });
   for (const l of play?.layers ?? []) {
     const f = l.kind === 'video' ? media?.layerVideos?.[l.id] : undefined;
     if (f?.src) out.push({ what: `Video “${f.name}” in ${f.label}`, bytes: f.src.length });

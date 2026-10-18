@@ -20,9 +20,12 @@
  *   source or another effect), built in its context; a listener wired to an effect hears what the effect made. What
  *   plays: graphWalk.ts audioHearing (the last effect with Listen on in each chain; its source goes quiet).
  *
- * - Stems (lib/audioTools/stems.ts, docs/stems.md): a File source with a Stem picked plays that stem in step with the
- *   song (lib/audioEngine.ts setStem); its analyser is what the bands, learned sounds, listeners and effects take.
- *   Hear: Full mix (the default) keeps the song on the speakers, This stem plays the stem instead.
+ * - Triggers (a band's, Hit's: play/kit/audioTools.js atStepTrigger) fire when the level rises above a fixed Threshold,
+ *   re-arm below Release, and ignore anything under the Gate. A File source is analysed ahead (ahead.ts): its bands'
+ *   (and the Hits wired straight to it) hits are found over the whole file once, then fired as playback is *heard*
+ *   (lib/audioEngine.ts heardTime: less the output's latency, plus the source's Sync offset). Mic and Video run live,
+ *   per frame; a Video's hits wait for its sound to reach the speakers (the output latency plus Sync offset).
+ * - Volume and Mute (the card's transport) act after the analysis: a muted source is silent but still triggers.
  *
  * Nodes inside groups (plain, iterated, nested) are followed too (graphWalk.ts): an `audio` wire through a group
  * ports reaches its source, and every node is keyed by its own id, as the compiler binds it.
@@ -39,17 +42,18 @@ import { bakedVideos } from '../bakedVideos';
 import { mediaElementSourceOf } from '../videoSound';
 import { getVideo } from '../backgroundLibrary';
 import {
-  AUDIO_HIT_TYPE, AUDIO_SOURCE_TYPE, AUDIO_TEXTURE_TYPES, audioSoundsOf, audioSourceKind, audioTextureSize, effectSpecOf, isAudioFxType, listenerSpecOf,
+  AUDIO_HIT_TYPE, AUDIO_SOURCE_TYPE, AUDIO_TEXTURE_TYPES, audioBandOf, audioSoundsOf, audioSourceKind, audioTextureSize, effectSpecOf, isAudioFxType, listenerSpecOf,
   type AudioSourceKind,
 } from '../../nodes/definitions/audioTools';
 import { audioHearing, collectAudioNodes, findNodeDeep } from './graphWalk';
 import { acBuild, acNewRun, acStepEffect, acTextureSize, type AcEffect, type AcRun, type AcSpec } from '../../play/kit/audioChain.js';
 import { learnFromRing, learnFromSamples, newLearnListener, type AudioSoundSpec, type LearnListener, type LearnResult } from './learn';
 import { bandsOf, newBandRun, trimWindow, type AudioBandSpec, type BandRun } from './bands';
-import { analysedStem, analysedStemId, hearsStem, stemsOf, type StemChoice } from './stems';
-import { forgetMedia, rememberMedia } from '../mediaSources';
-import { STEM_LABELS } from '../../stemModel/config';
-import { atApplyGain, atNewListener, atStepListener, atStepSource, type AtListener } from '../../play/kit/audioTools.js';
+import { AheadAnalysis } from './ahead';
+import {
+  atApplyGain, atCurveAt, atEventsHeard, atNewListener, atStepListener, atStepSource, atTriggerOpts,
+  type AtExtHit, type AtListener, type AtScope, type AtTriggerOpts,
+} from '../../play/kit/audioTools.js';
 
 const FFT = 2048;
 const num = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
@@ -92,10 +96,10 @@ interface SourceSlot {
   time: number;
   micSince: number;
   status: string;
-  /** The stem the analysis reads: its library id when loaded, the one being opened, and whether the library lacks it. */
-  stemHave: string;
-  stemLoading: string;
-  stemMissing: boolean;
+  /** A File analysed ahead (its decoded sound's bands' levels), and the stretch of the song heard since the last frame. */
+  ahead: AheadAnalysis | null;
+  heard: { token: number; pos: number } | null;
+  span: { from: number; to: number; win: { start: number; end: number }; loop: boolean } | null;
 }
 
 /**
@@ -153,12 +157,27 @@ export interface AudioSourceView {
   /** Seconds into the file (or since the mic started). */
   time: number;
   duration: number;
-  /** The stem the analysis reads now ('mix' while none is loaded). */
-  stem: StemChoice;
-  /** Per band: its Value now, and when its last hit was (performance.now ms). */
-  bands: Map<string, { level: number; hitAt: number; count: number }>;
+  /** Per band: its Value now, when its last hit was (performance.now ms), and its trigger scope. */
+  bands: Map<string, BandView>;
+  /** A File analysed ahead: 'analysing' while a band's range is worked out, 'ready', or 'live' (Mic, Video, not loaded). */
+  ahead: 'live' | 'analysing' | 'ready';
+  /** Milliseconds between the analyser and the speakers (what a File's or Video's hits are lined up by). */
+  latencyMs: number;
   /** Per learned sound: its Match now (falling), the similarity at the last onset, when it last fired (ms), fires. */
   sounds: Map<string, { match: number; last: number; hitAt: number; count: number }>;
+}
+
+/** A band's live picture for the window: its Value, hits, and what its trigger measured lately (the scope). */
+export interface BandView {
+  level: number;
+  hitAt: number;
+  count: number;
+  /** The last frames' measured signal and where it fired (a ring, `at` is the oldest). */
+  scope: AtScope;
+  gateOpen: boolean;
+  armed: boolean;
+  /** Its hits come from the file analysed ahead (not the live frame). */
+  ahead: boolean;
 }
 
 /** Bins in the card's spectrum. */
@@ -225,13 +244,20 @@ class AudioToolsEngine implements InputSource {
   sourceView(nodeId: string): AudioSourceView | null {
     const s = this.sources.get(nodeId);
     if (!s) return null;
-    const bands = new Map<string, { level: number; hitAt: number; count: number }>();
-    for (const [id, r] of s.runs) bands.set(id, { level: r.band.level, hitAt: Number.isFinite(r.hitAt) ? r.hitAt * 1000 : -Infinity, count: r.hit.count });
+    const bands = new Map<string, BandView>();
+    for (const [id, r] of s.runs) {
+      bands.set(id, {
+        level: r.band.level, hitAt: Number.isFinite(r.hitAt) ? r.hitAt * 1000 : -Infinity, count: r.hit.count, scope: r.hit.scope,
+        gateOpen: r.hit.gateOpen, armed: r.hit.armed, ahead: !!this.aheadSet.get(s)?.has(id),
+      });
+    }
     const sounds = new Map<string, { match: number; last: number; hitAt: number; count: number }>();
     for (const [id, r] of s.learn.runs) sounds.set(id, { match: r.match, last: r.last, hitAt: Number.isFinite(r.hitAt) ? r.hitAt * 1000 : -Infinity, count: r.count });
     return {
       kind: s.kind, active: s.active, loaded: s.loaded, freq: s.freq, wave: s.wave, sampleRate: s.sampleRate, level: s.level, time: s.time,
-      duration: s.kind === 'file' && s.loaded ? audioEngine.duration(nodeId) : 0, bands, sounds, stem: this.stemReady(s) ? analysedStem(s.node.params) : 'mix',
+      duration: s.kind === 'file' && s.loaded ? audioEngine.duration(nodeId) : 0, bands, sounds,
+      ahead: s.kind !== 'file' || !s.ahead ? 'live' : s.ahead.busy() ? 'analysing' : 'ready',
+      latencyMs: s.kind === 'mic' ? 0 : Math.round(audioEngine.outputLatency() * 1000),
     };
   }
 
@@ -278,7 +304,7 @@ class AudioToolsEngine implements InputSource {
         sounds: [], learn: newLearnListener(),
         row: new Float32Array(CARD_SPECTRUM_BINS), restoring: '', missing: false, videoEl: null, videoIn: null, videoOut: null, videoUnplug: null,
         freq: new Float32Array(FFT / 2), wave: new Float32Array(FFT), sampleRate: 48000, active: false, level: 0, time: 0, micSince: 0, status: '',
-        stemHave: '', stemLoading: '', stemMissing: false,
+        ahead: null, heard: null, span: null,
       };
       this.sources.set(n.id, s);
     }
@@ -294,51 +320,7 @@ class AudioToolsEngine implements InputSource {
     if (s.kind !== 'video' && s.videoEl) this.unplugVideo(s);
     this.restoreFile(s);
     this.applyPlayback(s);
-    this.syncStem(s);
-  }
-
-  // ── Stems ────────────────────────────────────────────────────────────────────────────────────────────────
-
-  /** The picked stem is loaded and plays with the song: the analysis reads it. */
-  private stemReady(s: SourceSlot): boolean {
-    return s.kind === 'file' && s.loaded && !!s.stemHave && s.stemHave === analysedStemId(s.node.params) && !!audioEngine.stemAnalyser(s.node.id);
-  }
-
-  /** Load the picked stem (from the library) into the song's track, or take it away; and what the speakers play. */
-  private syncStem(s: SourceSlot): void {
-    const id = s.node.id;
-    const want = s.kind === 'file' && s.loaded ? analysedStemId(s.node.params) : '';
-    // The track was loaded again (a new file, or reopened): its stem went with the old one.
-    if (s.stemHave && !audioEngine.stemAnalyser(id)) s.stemHave = '';
-    if (!want) {
-      if (s.stemHave || audioEngine.stemAnalyser(id)) { audioEngine.setStem(id, null); forgetMedia(`${id}::stem`); }
-      s.stemHave = ''; s.stemLoading = ''; s.stemMissing = false;
-    } else if (want !== s.stemHave && want !== s.stemLoading) {
-      s.stemLoading = want;
-      s.stemMissing = false;
-      void (async () => {
-        const got = await getVideo(want).catch(() => null);
-        const still = () => this.sources.get(id) === s && analysedStemId(s.node.params) === want && s.loaded;
-        if (!still()) { if (s.stemLoading === want) s.stemLoading = ''; return; }
-        if (!got) { s.stemLoading = ''; s.stemMissing = true; this.refreshStatus(s); this.changed(); return; }
-        try {
-          // Kept for a web page (as the song is), then decoded in the song's context.
-          rememberMedia(`${id}::stem`, 'audio', got.name, got.type, got.blob);
-          const buf = await audioEngine.context().decodeAudioData(await got.blob.arrayBuffer());
-          if (!still()) { if (s.stemLoading === want) s.stemLoading = ''; return; }
-          audioEngine.setStem(id, buf);
-          s.stemHave = want;
-        } catch (e) {
-          console.warn('[audio tools] stem', e);
-          s.stemMissing = true;
-        }
-        s.stemLoading = '';
-        audioEngine.setHearStem(id, hearsStem(s.node.params) && s.stemHave === want);
-        this.refreshStatus(s);
-        this.changed();
-      })();
-    }
-    if (s.loaded) audioEngine.setHearStem(id, hearsStem(s.node.params) && !!s.stemHave && s.stemHave === want);
+    if (s.loaded) audioEngine.setVolume(n.id, volumeOf(n.params), n.params.muted === true);
   }
 
   /** A File source whose sound isn't open but is kept in the library (`sampleId`): open it (a reload, a graph loaded). */
@@ -399,11 +381,7 @@ class AudioToolsEngine implements InputSource {
         : was ? `"${was}" isn't in this browser's library: load it again, or switch to Mic.` : 'Load a sound, or switch to Mic.';
     }
     else {
-      text = `${audioEngine.getFileName(s.node.id) || 'Sound'} · ${audioEngine.isPlaying(s.node.id) ? 'playing' : 'stopped'}`;
-      const stem = analysedStem(s.node.params);
-      if (s.stemMissing) text += ' · the stems aren\'t in this browser\'s library: Separate again';
-      else if (stem !== 'mix') text += s.stemHave ? ` · analysing ${STEM_LABELS[stem]}${hearsStem(s.node.params) ? ' (heard)' : ''}` : ` · opening the ${STEM_LABELS[stem]} stem…`;
-      else if (!stemsOf(s.node.params) && s.node.params.stems) text += ' · its stems are for another song';
+      text = `${audioEngine.getFileName(s.node.id) || 'Sound'} · ${audioEngine.isPlaying(s.node.id) ? 'playing' : 'stopped'}${s.node.params.muted === true ? ' (muted)' : ''}`;
     }
     this.setStatus(s, text);
   }
@@ -483,7 +461,7 @@ class AudioToolsEngine implements InputSource {
     try { s.probe?.disconnect(); } catch { /* gone */ }
     try { if (s.upstream && s.probe) s.upstream.disconnect(s.probe); } catch { /* gone */ }
     if (s.loaded) audioEngine.removeAudio(id);
-    forgetMedia(`${id}::stem`);
+    s.ahead?.dispose();
     this.sources.delete(id);
   }
 
@@ -503,7 +481,7 @@ class AudioToolsEngine implements InputSource {
       return e instanceof Error ? e.message : String(e);
     }
     const s = this.sources.get(nodeId);
-    if (s) { s.loaded = true; s.applied = ''; s.stemHave = ''; s.stemLoading = ''; this.applyPlayback(s); this.syncStem(s); }
+    if (s) { s.loaded = true; s.applied = ''; this.applyPlayback(s); audioEngine.setVolume(nodeId, volumeOf(s.node.params), s.node.params.muted === true); }
     this.changed();
     return null;
   }
@@ -516,8 +494,7 @@ class AudioToolsEngine implements InputSource {
     const s = this.sources.get(nodeId);
     if (!s) return { error: 'This Audio Source isn\'t running.' };
     if (!range) return learnFromRing(s.learn);
-    // The stem the analysis reads, when one is picked (Learn a kick on Drums).
-    const buf = (this.stemReady(s) ? audioEngine.stemBuffer(nodeId) : null) ?? audioEngine.buffer(nodeId);
+    const buf = audioEngine.buffer(nodeId);
     if (!buf) return { error: 'Load a sound first.' };
     // Mono: the channels' average.
     const a = Math.max(0, Math.floor(range.from * buf.sampleRate) - 4096), b = Math.min(buf.length, Math.ceil(range.to * buf.sampleRate) + 8192);
@@ -529,6 +506,46 @@ class AudioToolsEngine implements InputSource {
     const off = a / buf.sampleRate;
     const r = learnFromSamples(mono, buf.sampleRate, range.from - off, range.to - off);
     return 'error' in r ? r : { ...r, at: r.at + off };
+  }
+
+  /** Back to the start: a File to its trim's In (playing on if it plays), a Video to its first frame. */
+  restart(nodeId: string): void {
+    const s = this.sources.get(nodeId);
+    if (!s) return;
+    if (s.kind === 'file' && s.loaded) {
+      const win = trimWindow(audioEngine.duration(nodeId), s.node.params.trimIn, s.node.params.trimOut);
+      audioEngine.seek(nodeId, win.start);
+      s.heard = null;
+    } else if (s.kind === 'video') {
+      const el = this.videoOf(s).el;
+      if (el) el.currentTime = 0;
+    }
+    this.changed();
+  }
+
+  /**
+   * Learn a band's noise floor: the level it sits at in a quiet stretch — a File's `range` (seconds; from the file
+   * analysed ahead), else the last couple of seconds heard live — and a Gate just over it (the loudest 5% left out, so
+   * a stray click doesn't count). The Gate, or why not.
+   */
+  learnNoise(nodeId: string, bandId: string, range?: { from: number; to: number }): { gate: number; floor: number } | { error: string } {
+    const s = this.sources.get(nodeId), b = s?.bands.find(q => q.id === bandId);
+    if (!s || !b) return { error: 'This band isn\'t running.' };
+    let vals: number[] = [];
+    if (range && s.kind === 'file' && s.ahead) {
+      const c = s.ahead.curve(b);
+      if (!c) return { error: 'Still analysing the file: try again in a moment.' };
+      const h = s.ahead.hopSeconds;
+      for (let i = Math.max(0, Math.floor(range.from / h)); i <= Math.min(c.length - 1, Math.ceil(range.to / h)); i++) vals.push(c[i]);
+    } else {
+      const sc = s.runs.get(b.id)?.hit.scope;
+      if (sc) for (let k = 0; k < 120; k++) vals.push(sc.vals[(sc.at - 1 - k + sc.vals.length * 2) % sc.vals.length]);
+    }
+    vals = vals.filter(v => Number.isFinite(v));
+    if (vals.length < 4) return { error: range ? 'Select a longer quiet stretch (or trim to one).' : 'Let it listen to the quiet for a couple of seconds first.' };
+    vals.sort((a, c) => a - c);
+    const floor = vals[Math.min(vals.length - 1, Math.floor(vals.length * 0.95))];
+    return { floor, gate: Math.min(0.95, Math.round((floor + 0.03) * 100) / 100) };
   }
 
   /** Open the microphone (call from a click: the browser asks). */
@@ -554,12 +571,82 @@ class AudioToolsEngine implements InputSource {
       this.readSource(s);
       write(`${id}::level`, s.level);
       write(`${id}::time`, s.time);
-      // The card's spectrum, the bands' Value / Trigger, the learned sounds' Trigger / Match (play/kit/audioTools.js).
-      atStepSource(s, s.bands, s.sounds, s.freq, s.sampleRate, nowMs / 1000, dt, (ch, v) => write(`${id}::${ch}`, v));
+      // The card's spectrum, the bands' Value / Trigger, the learned sounds' Trigger / Match (play/kit/audioTools.js);
+      // a File's band hits come from the file analysed ahead, as it is heard.
+      const ext = this.aheadHits(s);
+      atStepSource(s, s.bands, s.sounds, s.freq, s.sampleRate, nowMs / 1000, dt, (ch, v) => write(`${id}::${ch}`, v), { delay: this.liveDelay(s), ext });
       this.setDry(id, s, this.dryMuted.has(id));
     }
     for (const [id, f] of this.effects) this.runEffect(id, f, dt, write);
     for (const [id, l] of this.listeners) this.runListener(id, l, nowMs, dt, write);
+  }
+
+  // ── Triggers: a File analysed ahead, heard; live ones held for the speakers ────────────────────────────────
+
+  /** Seconds a live hit waits so it lands when its sound is heard: a Video's (and a File's still being analysed) output latency, plus Sync offset. */
+  private liveDelay(s: SourceSlot): number {
+    const offset = num(s.node.params.syncOffset, 0) / 1000;
+    return Math.max(0, (s.kind === 'mic' ? 0 : audioEngine.outputLatency()) + offset);
+  }
+
+  /** Which bands' hits came from the file analysed ahead on the last frame. */
+  private aheadSet = new WeakMap<SourceSlot, Set<string>>();
+
+  /**
+   * A File's band hits this frame, from the file analysed ahead: those whose song time playback was *heard* passing
+   * since the last frame (lib/audioEngine.ts heardTime, less Sync offset), round the loop too. Undefined for Mic and
+   * Video, a file not playing, or before its analysis is ready (the live frame decides then).
+   */
+  private aheadHits(s: SourceSlot): Map<string, AtExtHit> | undefined {
+    const id = s.node.id;
+    s.span = null;
+    if (s.kind !== 'file' || !s.loaded) { this.dropAhead(s); return undefined; }
+    const buf = audioEngine.buffer(id);
+    if (!buf) { this.dropAhead(s); return undefined; }
+    if (!s.ahead || s.ahead.buffer !== buf) {
+      this.dropAhead(s);
+      s.ahead = new AheadAnalysis(buf, () => this.changed());
+    }
+    const ahead = s.ahead;
+    const playing = audioEngine.isPlaying(id);
+    // Ask for every band's range now, playing or not, so it is ready when it plays.
+    for (const b of s.bands) if (b.trigger) ahead.curve(b);
+    for (const l of this.listeners.values()) if (l.sourceId === id && l.node.type === AUDIO_HIT_TYPE) ahead.curve(audioBandOf(l.node));
+    if (!playing) { s.heard = null; this.aheadSet.delete(s); return undefined; }
+    const pos = audioEngine.positionAt(id, audioEngine.heardTime() - num(s.node.params.syncOffset, 0) / 1000) ?? 0;
+    const token = audioEngine.playToken(id);
+    const win = trimWindow(audioEngine.duration(id), s.node.params.trimIn, s.node.params.trimOut), loop = s.node.params.loop !== false;
+    let from = pos;
+    // The same run (a seek or restart starts a new one): forward is heard since the last frame (however long a slow or
+    // throttled frame took), back is round the loop's end. A new run fires nothing until it moves on.
+    if (s.heard && s.heard.token === token && (pos >= s.heard.pos || loop)) from = s.heard.pos;
+    s.heard = { token, pos };
+    s.span = { from, to: pos, win, loop };
+    const ext = new Map<string, AtExtHit>();
+    const used = new Set<string>();
+    for (const b of s.bands) {
+      if (!b.trigger) continue;
+      const hit = this.heardHit(s, b, trigOf(b));
+      if (hit) { ext.set(b.id, hit); used.add(b.id); }
+    }
+    this.aheadSet.set(s, used);
+    return ext;
+  }
+
+  /** A range's hits heard this frame (s.span), from the file analysed ahead; null when it isn't ready. */
+  private heardHit(s: SourceSlot, range: { lo: number; hi: number }, o: Partial<AtTriggerOpts>): AtExtHit | null {
+    const sp = s.span, ahead = s.ahead;
+    if (!sp || !ahead) return null;
+    const ev = ahead.events(range, o), curve = ahead.curve(range);
+    if (!ev || !curve) return null;
+    const r = atEventsHeard(ev, sp.from, sp.to, sp.win, sp.loop);
+    return { fired: r.count, signal: atCurveAt(curve, ahead.hopSeconds, sp.to), strength: r.strength };
+  }
+
+  private dropAhead(s: SourceSlot): void {
+    s.ahead?.dispose();
+    s.ahead = null; s.heard = null; s.span = null;
+    this.aheadSet.delete(s);
   }
 
   // ── Effects ──────────────────────────────────────────────────────────────────────────────────────────────
@@ -573,8 +660,7 @@ class AudioToolsEngine implements InputSource {
     if (!s || s.node.params.playing === false) return null;
     if (s.kind === 'mic') return liveAudio.tapNode();
     if (s.kind === 'video') return s.videoIn;
-    // The picked stem, when there is one: the effects work on it.
-    return s.loaded ? (this.stemReady(s) ? audioEngine.stemAnalyser(id) : audioEngine.getAnalyser(id)) : null;
+    return s.loaded ? audioEngine.getAnalyser(id) : null;
   }
 
   /**
@@ -667,7 +753,8 @@ class AudioToolsEngine implements InputSource {
 
   /** Quiet a source's own sound (an effect after it is heard) or let it play again. */
   private setDry(id: string, s: SourceSlot, mute: boolean): void {
-    if (s.videoOut) s.videoOut.gain.value = mute ? 0 : 1;
+    // A Video's sound: off when an effect is heard instead, else its Volume (0 while Muted).
+    if (s.videoOut) s.videoOut.gain.value = mute || s.node.params.muted === true ? 0 : volumeOf(s.node.params);
     // A file's chain goes to a sink instead of the mix (its analyser, which the effects take, still reads it).
     if (mute && s.kind === 'file' && s.loaded && !this.diverted.has(id) && !audioFxHost.isDiverted(trackChainId(id))) {
       const ctx = audioEngine.context();
@@ -686,7 +773,7 @@ class AudioToolsEngine implements InputSource {
     const upstream = !playing ? null
       : s.kind === 'mic' ? liveAudio.tapNode()
       : s.kind === 'video' ? this.videoUpstream(s)
-      : (audioEngine.isPlaying(id) ? (this.stemReady(s) ? audioEngine.stemAnalyser(id) : audioEngine.getAnalyser(id)) : null);
+      : (audioEngine.isPlaying(id) ? audioEngine.getAnalyser(id) : null);
     if (upstream !== s.upstream) {
       if (s.upstream && s.probe) { try { s.upstream.disconnect(s.probe); } catch { /* gone */ } }
       s.upstream = upstream;
@@ -726,7 +813,14 @@ class AudioToolsEngine implements InputSource {
     const s = src ?? (f ? { active: f.active, freq: f.run.freq, wave: f.run.wave, sampleRate: f.run.sr } : undefined);
     const freq = s?.active ? s.freq : this.silentFreq, wave = s?.active ? s.wave : this.silentWave, sr = s?.sampleRate ?? 48000;
     // Band level, Hit, or a texture (play/kit/audioTools.js): a silent Spectrogram holds what it had (no upload).
-    const changed = atStepListener(l.run, listenerSpecOf(l.node), freq, wave, sr, !!s?.active, nowMs, dt, (ch, v) => write(`${id}::${ch}`, v));
+    // A Hit wired straight to a File takes its hits from the file analysed ahead, as heard; a live one waits for the speakers.
+    const spec = listenerSpecOf(l.node);
+    let x: { delay?: number; ext?: AtExtHit } | undefined;
+    if (src && l.node.type === AUDIO_HIT_TYPE) {
+      const ext = src.span ? this.heardHit(src, spec, trigOf(spec)) ?? undefined : undefined;
+      x = { delay: this.liveDelay(src), ext };
+    }
+    const changed = atStepListener(l.run, spec, freq, wave, sr, !!s?.active, nowMs, dt, (ch, v) => write(`${id}::${ch}`, v), x);
     if (changed && l.tex) l.tex.needsUpdate = true;
   }
 
@@ -798,6 +892,13 @@ class AudioToolsEngine implements InputSource {
   /** Is a Video source routed to its video's element now (for tests)? */
   videoRouted(nodeId: string): HTMLMediaElement | null { return this.sources.get(nodeId)?.videoEl ?? null; }
 }
+
+/** A source's Volume (0..1, what you hear). */
+function volumeOf(P: Record<string, unknown>): number { const v = Number(P.volume ?? 1); return Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 1; }
+
+/** A band's or Hit's trigger settings. */
+const trigOf = (o: { threshold: number; releaseAt: number; gate: number; minMs: number; cooldown: number }): AtTriggerOpts =>
+  atTriggerOpts({ threshold: o.threshold, releaseAt: o.releaseAt, gate: o.gate, minMs: o.minMs, cooldownMs: o.cooldown });
 
 /** Unmute a video element now if the page has had a click, else on the next one (browsers block sound before). */
 function unmuteWhenAllowed(el: HTMLMediaElement): void {
