@@ -1,7 +1,9 @@
 # The builders' Look and Effects
 
-The 2D Scene Builder's **Look** page has a palette with slots and a colour grade. Its **Effects**
-page has shader effects on the finished picture. Both are shared code (`src/builders/look/`), so
+The 2D Scene Builder's **Look** page has a palette with slots, the tone map and the **Finish** card.
+Its **Effects** page adds effect nodes to the scene it builds. The Finish card is the graph's one
+Finish (the same stack as Play → Finish and the Studio's Finish button: see
+[finish-stack.md](finish-stack.md), "One Finish"). Both are shared code (`src/builders/look/`), so
 another scene builder can take them up with its own spec, recipe and form.
 
 ## Palette
@@ -20,7 +22,20 @@ another scene builder can take them up with its own spec, recipe and form.
   every part that takes the slot, so changing that node on the canvas recolours them all too.
 - **Colour by** and the grid read the same palette. A palette of your own builds as a Color Ramp.
 
-## Grade
+## Finish
+
+Look → **Finish** shows the graph's one Finish, embedded: grade, lens, film, CRT, shake and time
+effects over the whole picture, after the graph, the Effects page and Play's layers. The builder's
+preview draws it over the picture. On Free it shows locked.
+
+## Grade (older: moves to the Finish)
+
+The builder no longer offers new grade cards, vignette or grain: the Finish does that for the whole
+picture. A scene that has them keeps them, and they still build as nodes (old graphs and recipes
+are unchanged). On Pro, **Build** (or **Build and move to the Finish** on the card) moves them into the Finish as
+effects with the same maths and numbers, with controls on their nodes (`builders/look/toFinish.ts`;
+[finish-stack.md](finish-stack.md), "Moving the builder's older grade"). On Free they stay nodes and
+stay editable on the Finish card. What follows is how they build as nodes.
 
 The grade is a stack of the app's own colour-grading nodes. It is built after the tone map, in the
 order shown. Each card can be switched off, dragged (or moved with the arrows) or removed.

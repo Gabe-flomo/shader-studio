@@ -42,6 +42,7 @@ import {
   applyStackPreset, deleteStackPreset, FINISH_LIBRARY_CHANGED, loadSavedEffects, loadStackPresets, renameStackPreset, saveEffect, saveStackPreset,
   type StackPreset,
 } from '../../../play/finishLibrary';
+import { BUILTIN_FINISH_PRESETS, type BuiltInFinishPreset } from '../../../play/finishPresets';
 import { GlslEditor } from '../../code/GlslEditor';
 import { useNodeGraphStore } from '../../../store/useNodeGraphStore';
 import { effectNodeSockets, FX_OUT_TYPE, nodeEffect, nodeEffectDefs, type EffectGraph } from '../../../play/lookGraph';
@@ -100,11 +101,18 @@ export function FinishPanel(props: {
   );
 }
 
-function PictureFinish({ play, onChange, touch, wide = false }: {
+/**
+ * The one Finish (docs/finish-stack.md, "One Finish"): the graph's stack of whole-picture effects.
+ * The same component edits it everywhere: Play's Finish rail, the 2D builder's Look → Finish card
+ * and the Studio's Finish button (components/finish/FinishEditor.tsx). `embedded`: inside a page
+ * that scrolls itself (a builder card), so no scroll box of its own.
+ */
+export function PictureFinish({ play, onChange, touch, wide = false, embedded = false }: {
   play: PlayRecord;
   onChange: (fn: (p: PlayRecord) => PlayRecord) => void;
   touch: boolean;
   wide?: boolean;
+  embedded?: boolean;
 }) {
   const tk = useTokens();
   const finish = play.finish ?? emptyFinish();
@@ -232,6 +240,23 @@ function PictureFinish({ play, onChange, touch, wide = false }: {
   const removePreset = async (pr: StackPreset) => {
     if (await askConfirm(`Delete the preset “${pr.name}”?`, { message: 'Plays that loaded it keep their stacks.', confirmLabel: 'Delete', danger: true })) deleteStackPreset(pr.id);
   };
+  // A Look sets the stack's Grade to it (the grade keeps its place and controls) or adds one; a stack adds its effects.
+  const applyBuiltIn = (pr: BuiltInFinishPreset) => {
+    const look = pr.look ? GRADE_LOOKS.find(l => l.id === pr.look) : undefined;
+    const grade = finish.effects.find(e => e.kind === 'grade');
+    if (look && grade) { setFinish(f => ({ ...f, on: true, effects: f.effects.map(e => (e.id === grade.id ? applyLook(e, look) : e)) })); return; }
+    loadPreset(pr, finish.effects.length ? 'add' : 'replace');
+  };
+  // The presets that come with the app: the grade's Looks and a few starting stacks (play/finishPresets.ts).
+  const builtInItems: MenuItem[] = [
+    'separator',
+    { heading: 'Built in' },
+    ...BUILTIN_FINISH_PRESETS.map((pr): MenuItem => ({
+      label: pr.name, icon: pr.look ? 'sliders' : 'presets',
+      hint: pr.look ? `${pr.description}. Sets the Grade to this look` : `${pr.description}. Adds to the stack`,
+      onSelect: () => applyBuiltIn(pr),
+    })),
+  ];
   const presetItems: MenuItem[] = [
     { label: 'Save stack as preset…', icon: 'save', disabled: !finish.effects.length, hint: 'Every effect, its order and settings', onSelect: () => { void savePreset(); } },
     ...lib.presets.flatMap((pr): MenuItem[] => [
@@ -242,13 +267,14 @@ function PictureFinish({ play, onChange, touch, wide = false }: {
       { label: 'Rename…', icon: 'edit', onSelect: () => { void renamePreset(pr); } },
       { label: 'Delete', icon: 'trash', danger: true, onSelect: () => { void removePreset(pr); } },
     ]),
+    ...builtInItems,
   ];
 
   const compare = finish.compare;
   const active = finish.on && finish.effects.some(e => e.enabled);
   const toggleWipe = () => setFinish(f => ({ ...f, compare: { ...(f.compare ?? fnDefaultCompare()), on: !f.compare?.on } }));
   return (
-    <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '8px 12px 24px' }}>
+    <div data-finish-stack style={embedded ? { padding: '2px 0 4px' } : { flex: 1, minHeight: 0, overflowY: 'auto', padding: '8px 12px 24px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', margin: '2px 0 8px' }}>
         <Toggle checked={finish.on} onChange={on => setFinish(f => ({ ...f, on }))} label="Finish" />
         <Tooltip label="Before / after wipe" description="Split the picture: on one side of the divider, the picture before the Finish stack. It is saved with the Play, shows in renders and exports, and its position and angle can be mapped (an LFO makes a moving wipe). Drag the divider on the picture." placement="bottom">
@@ -262,7 +288,7 @@ function PictureFinish({ play, onChange, touch, wide = false }: {
           <GroupedPicker value="" placeholder="+ Add effect" ariaLabel="Add an effect" title="Add an effect" sections={sections} onChange={add} width={320} search searchPlaceholder="Search effects and nodes" />
         </div>
       </div>
-      {presetMenu && <Menu x={presetMenu.x} y={presetMenu.y} items={presetItems} onClose={() => setPresetMenu(null)} title="Stack presets" minWidth={230} />}
+      {presetMenu && <Menu x={presetMenu.x} y={presetMenu.y} items={presetItems} onClose={() => setPresetMenu(null)} title="Finish presets" minWidth={230} />}
       {compare?.on && active && (
         <WipeCard compare={compare} touch={touch} exposed={exposed} onPatch={change => patch(FINISH_COMPARE_ID, change)} onExpose={p => expose(compareHost(compare), p)} />
       )}

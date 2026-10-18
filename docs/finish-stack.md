@@ -1,5 +1,58 @@
 # The Finish stack
 
+## One Finish
+
+Two layers finish a picture, named the same everywhere:
+
+- **Effects** are nodes in the graph: the node library's Effects, a Scene builder's **Effects**
+  page (which adds effect nodes to the scene it builds), and the built-in effect groups in the
+  Library (Long exposure, Trails, Datamosh, Kaleidoscope feedback, Ripples). They are part of the
+  graph and its order.
+- The **Finish** is one stack of whole-picture effects per graph (`play.finish`, saved with the
+  graph), applied after the graph and Play's layers, in the preview, renders and exports. One
+  component edits it (`PictureFinish` in `FinishPanel.tsx`, wrapped by
+  `components/finish/FinishEditor.tsx`), in three places that all show the same stack:
+  - Play → **Finish** (the rail);
+  - the Studio: the preview header's **Finish** button (phones: ⋯ → **Finish…**) opens the Finish
+    panel (`FinishButton`, `FinishDrawer`), at the top with its toolbar row in view;
+  - the 2D Scene builder: Look → **Finish** card, embedded. The builder's own preview draws the
+    Finish over its picture (`components/finish/FinishOverPreview.tsx`, the same kit renderer).
+
+**Moving the builder's older grade.** The 2D builder used to build its Look → Grade cards, the
+Look's vignette and its grain as nodes at the end of its graph. On Pro, **Build** (or **Build and
+move to the Finish** on the Finish card) moves them into the Finish (`builders/look/toFinish.ts`):
+
+- each card becomes one custom Finish effect named as the card was, whose code is the exact maths
+  of the nodes it built (Brightness / Contrast, Tone Curve, Saturation, Hue Rotate, Shadows /
+  Highlights, Lift / Gamma / Gain, Blackbody × Multiply, Posterize, Invert, Duotone and Gradient
+  map ramps, the Vignette and Grain nodes at the builder's UV point), with the card's settings as
+  its sliders (a range widens to hold a value typed past its end), on/off and mutes kept;
+- a value changed by hand on a built node since the last build moves with the node's value;
+- Play controls on those nodes move onto the effect's setting (`finish:<id>::<key>`), the hue's
+  range turned from radians into degrees;
+- `defId: 'builder:<kind>@<scene>'` marks where it came from (the scene is its UV node's id);
+  `finishToGradeItem` / `finishToPost` map it back to the card;
+- the move is idempotent per scene: moving a scene's grade again (Surprise me, then Build)
+  replaces the effects its earlier move made, in their place, instead of adding more. Controls on
+  a replaced effect move to the new one of the same kind, or go with their mappings;
+- nothing moves until the build works (a failed build leaves the scene and the Finish as they were).
+
+The scene then holds no grade, so a plain rebuild adds nothing more. What changes: the grade now
+works after the Effects page and Play's layers instead of before the Effects page, and a gradient
+map keeps the palette it was moved with. A graph that is not rebuilt keeps its grade nodes and
+draws exactly as before; old scenes and recipes (`grade saturation 1.3`, `vignette 0.4`) still
+load and build. On **Free** the Finish doesn't play, so nothing moves: the card shows the
+Finish locked and the scene's own grade, vignette and grain stay nodes, editable as before.
+
+**Presets.** Finish presets are the one kind of whole-picture preset (the preset store's
+`finishStack` kind, "Finish presets"): your saved stacks, plus the built-ins
+(`play/finishPresets.ts`): every grade Look (Teal & orange, Bleach bypass…) as a Grade set to it,
+and starting stacks (Film, Old TV, Dreamy, Cheap lens). In the Presets menu, a built-in Look sets
+the stack's Grade to it (keeping its place and controls) or adds one; a built-in stack adds its
+effects (replaces an empty stack).
+
+## The stack
+
 Play's **Finish** tab: colour grading, lens and screen effects, film effects,
 camera shake, time displacement, warps, glitches, a simulated water surface,
 stylised looks (pixel sort, halftone, ASCII, light leaks), light rays and temporal effects
@@ -20,6 +73,9 @@ shape, the bright parts, where the camera sees movement, or where the water move
 - UI: `src/components/play/finish/` (`FinishPanel`, `CurveEditor`,
   `ColourWheel`, `CompareHandle`, `savedLooks`, and the Look effect editor:
   `EffectEditor`, `EffectGraphEditor`, `MiniGraph`, `effectGraphLayout`).
+- One Finish: `src/components/finish/` (`FinishEditor`, `FinishButton`, `FinishDrawer`,
+  `FinishOverPreview`), `src/builders/look/toFinish.ts`, `src/play/finishPresets.ts`; tests
+  `src/builders/look/__tests__/toFinish.test.ts`, `src/components/finish/__tests__/oneFinish.test.tsx`.
 - Tests: `src/play/__tests__/finish.test.ts`, `finishFollowups.test.ts`
   (the wipe, custom effects, presets, the library) and `finishMaps.test.ts`
   (Where, the maps, the new effects, particles born where a map says) and
@@ -869,6 +925,9 @@ state) is gone: the wipe is the one divider.
 
 Stored in `localStorage` as a list, `shader-studio:finish-presets`
 (`{ id, name, savedAt, finish }`, checked with `parseFinish` when read).
+
+Under **Built in** the menu lists the Finish presets that come with the app (see "One Finish"
+above): the grade's Looks and a few starting stacks.
 
 ## Custom effects
 

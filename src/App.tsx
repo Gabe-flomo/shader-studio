@@ -27,6 +27,7 @@ import { MobilePreviewPill } from './components/shell/MobilePreviewPill';
 import { MobileIconSegment } from './components/shell/MobileIconSegment';
 import { Button, IconButton } from './components/ui/Button';
 import { ThemeOverrideContext, useTokens } from './theme/themeStore';
+import { FinishButton, FinishDrawer } from './components/finish/FinishEditor';
 import { AspectPicker, CanvasFullscreenButton, PreviewFooter, PreviewHeader, PreviewQualityPicker, FrameRatePicker } from './components/shell/PreviewChrome';
 import { OverlayButton } from './components/PreviewOverlay';
 import { canvasFrameRef as canvasFrame, exitFullscreen, isFullscreenKey, isTyping, toggleFullscreenTarget, useFullscreen } from './lib/fullscreen';
@@ -1643,6 +1644,8 @@ function App() {
                 <AspectPicker onPanel />
                 <PreviewQualityPicker onPanel /><FrameRatePicker onPanel />
                 <OverlayButton />
+                {/* The one Finish (components/finish/FinishEditor.tsx): Play has it on its rail. */}
+                {page !== 'play' && <FinishButton />}
                 <CanvasFullscreenButton plainF={page === 'play'} />
                 {page === 'play' && <GuidesToggle />}
                 {page === 'play' && <SplitButton />}
@@ -1668,6 +1671,7 @@ function App() {
       </div>
 
       {/* Floating preview window */}
+      <FinishDrawer />
       {previewFloated && (
         <div
           ref={floatContainerRef}

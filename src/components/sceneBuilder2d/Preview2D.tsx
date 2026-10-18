@@ -12,6 +12,7 @@ import type { Compiled } from '../sceneBuilder/previewGl';
 import { previewPassesOf } from '../builders/previewPasses';
 import { useBuilderPreview, useThrottled } from '../builders/useBuilderPreview';
 import { PreviewClock } from '../builders/PreviewClock';
+import { FinishOverPreview } from '../finish/FinishOverPreview';
 import { useTokens } from '../../theme/themeStore';
 import { registerPreviewDepth } from '../builders/previewTextures';
 import { fontFamily, radius } from '../../theme/tokens';
@@ -60,6 +61,8 @@ export function Preview2D({ scene, compiled: given, height = 260 }: {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, ...(fill ? { flex: 1, minHeight: 0 } : {}) }}>
       <div style={{ position: 'relative', ...(fill ? { flex: 1, minHeight: 0 } : { height }), borderRadius: radius.md, overflow: 'hidden', background: tk.bg.render }}>
         <canvas ref={canvasRef} data-scene2d-preview aria-label="Live preview of the 2D scene" style={{ width: '100%', height: '100%', display: 'block' }} />
+        {/* The graph's Finish over the picture (as the Studio shows it); not over a depth view. */}
+        {view === 'result' && <FinishOverPreview source={canvasRef} />}
         {error && (
           <div style={{ position: 'absolute', inset: 0, padding: 12, overflow: 'auto', color: '#f38ba8', font: `500 11px ${fontFamily.mono}`, background: 'rgba(13,13,18,0.86)' }}>{error}</div>
         )}

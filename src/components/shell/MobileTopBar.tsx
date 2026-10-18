@@ -24,6 +24,7 @@ import { canOn, usePlan, type Feature } from '../../lib/plan';
 import { accountMenuItems } from '../account/accountMenu';
 import { rotateFullscreenLabel, useRotateFullscreen } from '../../lib/rotateFullscreen';
 import { useLearnUi } from '../learn/learnStore';
+import { FinishDrawer, useFinishDrawer } from '../finish/FinishEditor';
 
 /**
  * Phone top bar (Mobile board): the Studio | Play | Present switch (other pages: the logo, back
@@ -136,6 +137,7 @@ export function MobileTopBar({ page, onPageChange, onRecord, onClear }: {
               ? { label: 'Back to the Studio', icon: 'nodes', onSelect: () => onPageChange('studio') }
               : { label: 'Present', icon: 'slides', hint: 'Teach with your Plays: steps of text, pictures, sliders and code', onSelect: () => onPageChange('present') },
             { label: 'Learn the app', icon: 'book', hint: 'Lessons on the Studio, Play, Convert and more', onSelect: () => useLearnUi.getState().openLearn() },
+            ...(page !== 'play' ? [{ label: 'Finish…', icon: 'curve' as const, hint: 'Grade, lens, film and time effects over the whole picture: the same stack as Play → Finish', onSelect: () => useFinishDrawer.getState().show() }] : []),
             { label: 'Import a file', icon: 'import', hint: 'A .play file, a graph, or a .present.json (opens on Present)', onSelect: () => { void importAnyFile(onPageChange); } },
             isCodePage(page)
               ? { label: 'Back to the Studio', icon: 'nodes', onSelect: () => onPageChange('studio') }
@@ -172,6 +174,8 @@ export function MobileTopBar({ page, onPageChange, onRecord, onClear }: {
           <div style={{ padding: '14px 16px 18px' }}><LibraryPanel inCard /></div>
         </Modal>
       )}
+      {/* The Studio's Finish panel (⋯ → Finish…), as a bottom sheet. */}
+      <FinishDrawer />
     </div>
   );
 }

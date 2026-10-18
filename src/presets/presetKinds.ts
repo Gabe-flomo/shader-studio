@@ -8,7 +8,7 @@
  *   nodes     Groups (+ the built-in effects), Vector transforms, Functions, Expression Blocks, Keyframe curves
  *   builders  each Scene builder's presets (8), the 2D builder's space blocks
  *   play      layer sets, racks, drum kits (+ the built-in kits)
- *   finish    Finish stacks, Finish effects, Looks
+ *   finish    Finish presets (+ the built-in Looks and stacks), Finish effects, saved Looks
  *   colour    Palette node presets, background palettes (+ the built-in palettes)
  *
  * Import this module once (the Library and <PresetMenu> do) before using the store.
@@ -23,6 +23,7 @@ import { LAYER_SETS_CHANGED, LAYER_SETS_KEY, parseLayerSet } from '../play/layer
 import { RACK_PRESETS_CHANGED, RACK_PRESETS_KEY, parseRackPreset } from '../play/rackPresets';
 import { BUILTIN_KITS, DRUM_KITS_CHANGED, DRUM_KITS_KEY, parseDrumKit } from '../play/drumKits';
 import { FINISH_EFFECTS_KEY, FINISH_LIBRARY_CHANGED, FINISH_PRESETS_KEY, parseSavedEffect, parseStackPreset } from '../play/finishLibrary';
+import { BUILTIN_FINISH_PRESETS } from '../play/finishPresets';
 import { SAVED_LOOKS_CHANGED } from '../components/play/finish/savedLooks';
 import { PALETTE_PRESETS_CHANGED } from '../lib/palette';
 import { SAVED_BLOCKS_CHANGED, SAVED_BLOCKS_KEY, parseSavedBlock } from '../sceneBuilder2d/savedBlocks';
@@ -115,9 +116,11 @@ const KINDS: PresetKindDef[] = [
   },
   // ── Finish ──
   {
-    id: 'finishStack', label: 'Finish stacks', appliesTo: 'the Finish stack', group: 'finish',
+    id: 'finishStack', label: 'Finish presets', appliesTo: 'the Finish (the whole picture)', group: 'finish',
     storage: { t: 'list', key: FINISH_PRESETS_KEY, nameField: 'name' }, folderScope: 'presets:finishStack', events: [FINISH_LIBRARY_CHANGED], idPrefix: 'fstk',
     valid: r => !!parseStackPreset(r),
+    // The grade's Looks and a few starting stacks (play/finishPresets.ts).
+    builtIns: () => BUILTIN_FINISH_PRESETS.map(p => builtIn('finishStack', p.id, p.name, p.description, p as unknown as Record<string, unknown>)),
   },
   {
     id: 'finishEffect', label: 'Finish effects', appliesTo: 'the Finish stack', group: 'finish',
