@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.277',
+    date: '2026-10-18',
+    title: "Quieter grid hover",
+    highlights: [
+      { area: 'Studio', text: "Grid Rules: hovering a cell shows the cells it counts as a faint outline, so it no longer looks like a big brush." },
+    ],
+  },
+  {
     id: '2026.10.276',
     date: '2026-10-18',
     title: "Nodes on the picture",
