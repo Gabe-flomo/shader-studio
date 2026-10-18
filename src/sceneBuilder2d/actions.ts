@@ -13,25 +13,19 @@ import type { BuildingBuilder } from '../builders/finish';
 import { attachQuickControls } from './quickPlay';
 import { can } from '../lib/plan';
 import { paletteSwatches } from '../builders/look/palette';
-import { addMovedToPlay, hasMovableLook, lookToFinish, withoutMovedLook } from '../builders/look/toFinish';
+import { addMovedToPlay, hasMovableLook, lookToFinish, withoutMovedLook, type LookMove } from '../builders/look/toFinish';
+import type { Scene2D } from './spec';
 
 /**
- * The Look's older whole-picture settings (Grade cards, vignette, grain) moved into the graph's one
- * Finish (builders/look/toFinish.ts): the same maths as Finish effects, controls on their nodes
- * moved with them. Only where the Finish plays (Pro); on Free they stay nodes. Returns what moved.
+ * The Look's older whole-picture settings (Grade cards, vignette, grain) as a move into the graph's
+ * one Finish (builders/look/toFinish.ts): the same maths as Finish effects, controls on their nodes
+ * moved with them. Only where the Finish plays (Pro); on Free they stay nodes. Null when nothing moves.
+ * Nothing changes until the build that uses it has worked (buildFromBuilder2D).
  */
-export function moveLookToFinish(): string[] {
-  if (!can('play.finish')) return [];
-  const sb = useSceneBuilder2D.getState();
-  const look = sb.scene.look;
-  if (!hasMovableLook(look)) return [];
-  const nodes = useNodeGraphStore.getState().nodes;
-  const found = sb.targetSceneId ? find2dBuild(nodes, sb.targetSceneId) : null;
-  const move = lookToFinish(look, { swatches: paletteSwatches(look.colour.palette, look.custom), byRole: found?.byRole });
-  if (!move.effects.length) return [];
-  useNodeGraphStore.getState().setPlay(p => addMovedToPlay(p, move));
-  sb.edit(d => { d.look = withoutMovedLook(d.look); });
-  return move.names;
+function lookMoveFor(scene: Scene2D, found: ReturnType<typeof find2dBuild>): LookMove | null {
+  if (!can('play.finish') || !hasMovableLook(scene.look)) return null;
+  const move = lookToFinish(scene.look, { swatches: paletteSwatches(scene.look.colour.palette, scene.look.custom), byRole: found?.byRole });
+  return move.effects.length ? move : null;
 }
 
 /** Open the builder on a new scene (Build adds it beside what is on the canvas). */
@@ -74,18 +68,25 @@ export function rebuildScene2DFromRecipe(sceneId: string): boolean {
 
 /** Build (or rebuild) the builder's scene into the graph. */
 export function buildFromBuilder2D(asNew = false): boolean {
-  // Grade, vignette and grain go to the graph's Finish first, so the build no longer makes them as nodes.
-  const moved = moveLookToFinish();
   const sb = useSceneBuilder2D.getState();
   const st = useNodeGraphStore.getState();
   if (st.activeGroupPath.length) st.exitToRoot();
   const nodes = useNodeGraphStore.getState().nodes;
   const target = sb.targetSceneId && nodes.some(n => n.id === sb.targetSceneId) ? sb.targetSceneId : null;
   const fresh = asNew || !target;
-  const result = applyScene2D(nodes, sb.scene, {
+  // Grade, vignette and grain go to the graph's Finish (Pro), so the build no longer makes them as nodes.
+  const move = lookMoveFor(sb.scene, fresh || !target ? null : find2dBuild(nodes, target));
+  const scene = move ? { ...sb.scene, look: withoutMovedLook(sb.scene.look) } : sb.scene;
+  const result = applyScene2D(nodes, scene, {
     nextId: () => useNodeGraphStore.getState().newNodeId(),
     sceneId: fresh ? null : target, asNew: fresh, at: sb.at ?? undefined,
   });
+  // The build worked: the Finish gets the moved effects, tagged with this scene, replacing what an earlier move of it made.
+  if (move) {
+    useNodeGraphStore.getState().setPlay(p => addMovedToPlay(p, move, result.sceneId));
+    sb.edit(d => { d.look = withoutMovedLook(d.look); });
+  }
+  const moved = move?.names ?? [];
   // A new scene lands in the visible canvas (where the builder was opened from, when it was).
   const placed = fresh ? intoView(nodes, result.nodes, sb.at ? 'ifOutOfView' : 'centre') : result.nodes;
   useNodeGraphStore.getState().setNodesRewritten(placed, fresh ? 'Built a 2D scene' : 'Rebuilt the 2D scene');

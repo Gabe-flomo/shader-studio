@@ -9,10 +9,9 @@
 import { OFFER_PIECES } from '../../nodes/notOffered';
 import { useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useSceneBuilder2D, type Builder2DTab } from '../../sceneBuilder2d/store';
-import { buildFromBuilder2D, moveLookToFinish, scene2dBuilder } from '../../sceneBuilder2d/actions';
+import { buildFromBuilder2D, scene2dBuilder } from '../../sceneBuilder2d/actions';
 import { hasMovableLook } from '../../builders/look/toFinish';
 import { useCan } from '../../lib/plan';
-import { toast } from '../ui/toastStore';
 import { FINISH_BLURB, FinishEditor } from '../finish/FinishEditor';
 import {
   COLOUR_BYS, LOOK_MUTES_2D, MAX_DUP, MAX_LEVELS, MOTIONS, OUTPUT_SHOWS, SHAPES, SHAPE_BY_KIND, SPACES, SPACE_BY_KIND, TONE_MODES,
@@ -1049,14 +1048,8 @@ function LookFinishCard() {
   const P = look.post;
   const set = (fn: (l: Scene2D['look']) => void, key?: string) => edit(d => fn(d.look), key && `look:${key}`);
   const older = hasMovableLook(look);
-  const moveNow = () => {
-    const sb = useSceneBuilder2D.getState();
-    const built = !!sb.targetSceneId && useNodeGraphStore.getState().nodes.some(n => n.id === sb.targetSceneId);
-    // A built scene rebuilds at once (its grade nodes go as the effects arrive); a new one builds them never.
-    if (built) { buildFromBuilder2D(false); return; }
-    const moved = moveLookToFinish();
-    if (moved.length) toast.success('Moved to the Finish', { message: `${moved.join(', ')}: the same maths and numbers, now over the whole picture.` });
-  };
+  // Build moves them (the Finish gets them as the grade nodes go, so the picture is never graded twice).
+  const moveNow = () => { buildFromBuilder2D(false); };
   const olderEditors = (
     <>
       <StackCards name="grade" idPrefix="gr" items={grade} defs={GRADE_KINDS} playParam={gradePlay} noAdd={finishOk}
@@ -1076,7 +1069,7 @@ function LookFinishCard() {
       {older && finishOk && (
         <div data-look-older style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <BuilderNote>This scene still has its grade{P.vignette > 0 || P.grain > 0 ? ', vignette or grain' : ''} built as nodes. Build moves {grade.length + (P.vignette > 0 ? 1 : 0) + (P.grain > 0 ? 1 : 0) === 1 ? 'it' : 'them'} into the Finish below, with the same maths and numbers (controls on them come along).</BuilderNote>
-          <div><Button size="sm" icon="import" onClick={moveNow}>Move to the Finish now</Button></div>
+          <div><Button size="sm" icon="import" onClick={moveNow} title="Builds the scene, with its grade in the Finish instead of as nodes">Build and move to the Finish</Button></div>
           {olderEditors}
         </div>
       )}

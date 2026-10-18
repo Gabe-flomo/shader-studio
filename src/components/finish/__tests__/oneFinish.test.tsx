@@ -15,6 +15,7 @@ import { useNodeGraphStore } from '../../../store/useNodeGraphStore';
 import { emptyPlayRecord } from '../../../types/play';
 import { GRADE_LOOKS, newFinishEffect, parseFinish } from '../../../types/playFinish';
 import { usePlan } from '../../../lib/plan';
+import { usePlayUi } from '../../play/playUi';
 import { BUILTIN_FINISH_PRESETS } from '../../../play/finishPresets';
 import { parseStackPreset, applyStackPreset } from '../../../play/finishLibrary';
 import '../../../presets/presetKinds';
@@ -62,6 +63,22 @@ describe('one Finish, everywhere', () => {
     expect(drawer.textContent).toContain('Film grain');
     expect(builder.textContent).toContain('Film grain');
     expect(studio.querySelector('[data-finish-button]')!.textContent).toBe('Finish · 3');
+  });
+
+  it('the Studio panel opens at the top: an effect Play revealed earlier doesn’t scroll it', async () => {
+    usePlayUi.getState().revealFinish('v1');
+    const scrolled: Element[] = [];
+    const was = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function () { scrolled.push(this); };
+    try {
+      await mount(<FinishDrawer />);
+      await act(async () => { useFinishDrawer.getState().show(); });
+      await act(async () => { await new Promise(r => setTimeout(r, 0)); });
+      expect(document.querySelector('[data-finish-drawer] [data-finish-stack]')).toBeTruthy();
+      expect(usePlayUi.getState().finishFocus).toBe('');
+      expect(scrolled).toHaveLength(0);
+      expect((document.querySelector('[data-finish-drawer] [data-finish-stack]') as HTMLElement).scrollTop).toBe(0);
+    } finally { Element.prototype.scrollIntoView = was; }
   });
 
   it('Play, the builder and the Studio all use the same component on play.finish', () => {

@@ -32,7 +32,7 @@ preview draws it over the picture. On Free it shows locked.
 
 The builder no longer offers new grade cards, vignette or grain: the Finish does that for the whole
 picture. A scene that has them keeps them, and they still build as nodes (old graphs and recipes
-are unchanged). On Pro, **Build** or **Move to the Finish now** moves them into the Finish as
+are unchanged). On Pro, **Build** (or **Build and move to the Finish** on the card) moves them into the Finish as
 effects with the same maths and numbers, with controls on their nodes (`builders/look/toFinish.ts`;
 [finish-stack.md](finish-stack.md), "Moving the builder's older grade"). On Free they stay nodes and
 stay editable on the Finish card. What follows is how they build as nodes.

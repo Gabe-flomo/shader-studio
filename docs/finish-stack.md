@@ -14,13 +14,13 @@ Two layers finish a picture, named the same everywhere:
   `components/finish/FinishEditor.tsx`), in three places that all show the same stack:
   - Play → **Finish** (the rail);
   - the Studio: the preview header's **Finish** button (phones: ⋯ → **Finish…**) opens the Finish
-    panel (`FinishButton`, `FinishDrawer`);
+    panel (`FinishButton`, `FinishDrawer`), at the top with its toolbar row in view;
   - the 2D Scene builder: Look → **Finish** card, embedded. The builder's own preview draws the
     Finish over its picture (`components/finish/FinishOverPreview.tsx`, the same kit renderer).
 
 **Moving the builder's older grade.** The 2D builder used to build its Look → Grade cards, the
-Look's vignette and its grain as nodes at the end of its graph. On Pro, **Build** (or **Move to
-the Finish now** on the Finish card) moves them into the Finish (`builders/look/toFinish.ts`):
+Look's vignette and its grain as nodes at the end of its graph. On Pro, **Build** (or **Build and
+move to the Finish** on the Finish card) moves them into the Finish (`builders/look/toFinish.ts`):
 
 - each card becomes one custom Finish effect named as the card was, whose code is the exact maths
   of the nodes it built (Brightness / Contrast, Tone Curve, Saturation, Hue Rotate, Shadows /
@@ -30,10 +30,14 @@ the Finish now** on the Finish card) moves them into the Finish (`builders/look/
 - a value changed by hand on a built node since the last build moves with the node's value;
 - Play controls on those nodes move onto the effect's setting (`finish:<id>::<key>`), the hue's
   range turned from radians into degrees;
-- `defId: 'builder:<kind>'` marks where it came from; `finishToGradeItem` / `finishToPost` map it
-  back to the card.
+- `defId: 'builder:<kind>@<scene>'` marks where it came from (the scene is its UV node's id);
+  `finishToGradeItem` / `finishToPost` map it back to the card;
+- the move is idempotent per scene: moving a scene's grade again (Surprise me, then Build)
+  replaces the effects its earlier move made, in their place, instead of adding more. Controls on
+  a replaced effect move to the new one of the same kind, or go with their mappings;
+- nothing moves until the build works (a failed build leaves the scene and the Finish as they were).
 
-The scene then holds no grade, so later builds add nothing more. What changes: the grade now
+The scene then holds no grade, so a plain rebuild adds nothing more. What changes: the grade now
 works after the Effects page and Play's layers instead of before the Effects page, and a gradient
 map keeps the palette it was moved with. A graph that is not rebuilt keeps its grade nodes and
 draws exactly as before; old scenes and recipes (`grade saturation 1.3`, `vignette 0.4`) still

@@ -11,10 +11,10 @@ vi.hoisted(() => {
 import { GRADE_KINDS } from '../grade';
 import { newStackItem, type StackItem } from '../stack';
 import {
-  BUILDER_FX_PREFIX, addMovedToPlay, finishToGradeItem, finishToPost, gradeItemToFinish, hasMovableLook, lookToFinish, postToFinish, withoutMovedLook,
+  BUILDER_FX_PREFIX, addMovedToPlay, builderFxSource, finishToGradeItem, finishToPost, gradeItemToFinish, hasMovableLook, lookToFinish, postToFinish, withoutMovedLook,
 } from '../toFinish';
 import { fnParseCustom } from '../../../play/kit/finish.js';
-import { parseFinish, type FinishEffect } from '../../../types/playFinish';
+import { newFinishEffect, parseFinish, type FinishEffect } from '../../../types/playFinish';
 import { emptyPlayRecord } from '../../../types/play';
 import { useNodeGraphStore } from '../../../store/useNodeGraphStore';
 import { useSceneBuilder2D } from '../../../sceneBuilder2d/store';
@@ -22,6 +22,7 @@ import { buildFromBuilder2D } from '../../../sceneBuilder2d/actions';
 import { find2dBuild } from '../../../sceneBuilder2d/apply';
 import { buildScene2D } from '../../../sceneBuilder2d/build';
 import { starterScene, type Scene2D } from '../../../sceneBuilder2d/spec';
+import { hasMovableLook as movable } from '../toFinish';
 import { usePlan } from '../../../lib/plan';
 
 const sample = (kind: string): StackItem => {
@@ -128,7 +129,8 @@ describe('Build moves the Look into the one Finish', () => {
     expect(buildFromBuilder2D()).toBe(true);
     const st = useNodeGraphStore.getState();
     const fx = st.play.finish!.effects;
-    expect(fx.map(e => e.defId)).toEqual([`${BUILDER_FX_PREFIX}saturation`, `${BUILDER_FX_PREFIX}grain`]);
+    const id0 = useSceneBuilder2D.getState().targetSceneId!;
+    expect(fx.map(e => e.defId)).toEqual([`${BUILDER_FX_PREFIX}saturation@${id0}`, `${BUILDER_FX_PREFIX}grain@${id0}`]);
     expect(fx[0].amount).toBe(1.4);
     const id = useSceneBuilder2D.getState().targetSceneId!;
     const build = find2dBuild(st.nodes, id)!;
@@ -148,5 +150,70 @@ describe('Build moves the Look into the one Finish', () => {
     expect(st.play.finish).toBeUndefined();
     const build = find2dBuild(st.nodes, useSceneBuilder2D.getState().targetSceneId!)!;
     expect(build.byRole.has('grade:gr1')).toBe(true);
+  });
+});
+
+describe('the move is idempotent per scene', () => {
+  beforeEach(() => { useNodeGraphStore.setState({ nodes: [], play: emptyPlayRecord() }); });
+  afterEach(() => { useSceneBuilder2D.getState().close(); });
+
+  it('Surprise me → Build, three times, leaves one set (the last), in place, beside the user’s own effects', () => {
+    // Seeds whose surprise has a grade, vignette or grain to move.
+    const seeds: number[] = [];
+    useSceneBuilder2D.getState().openWith(starterScene());
+    for (let seed = 1; seeds.length < 3 && seed < 500; seed++) {
+      useSceneBuilder2D.getState().surprise(seed);
+      if (movable(useSceneBuilder2D.getState().scene.look)) seeds.push(seed);
+    }
+    expect(seeds).toHaveLength(3);
+    useSceneBuilder2D.getState().openWith(starterScene());
+    buildFromBuilder2D();
+    const sceneId = useSceneBuilder2D.getState().targetSceneId!;
+    // The user's own effects, before and after where the moved set will go.
+    useNodeGraphStore.getState().setPlay(p => ({ ...p, finish: { on: true, effects: [newFinishEffect('bloom', 'mine1')] } }));
+    let last = 0;
+    for (const seed of seeds) {
+      useSceneBuilder2D.getState().surprise(seed);
+      const look = useSceneBuilder2D.getState().scene.look;
+      last = (look.grade?.length ?? 0) + (look.post.vignette > 0 ? 1 : 0) + (look.post.grain > 0 ? 1 : 0);
+      expect(buildFromBuilder2D()).toBe(true);
+      expect(useSceneBuilder2D.getState().targetSceneId).toBe(sceneId);
+      if (seed === seeds[0]) useNodeGraphStore.getState().setPlay(p => ({ ...p, finish: { ...p.finish!, effects: [...p.finish!.effects, newFinishEffect('grain', 'mine2')] } }));
+    }
+    const fx = useNodeGraphStore.getState().play.finish!.effects;
+    const moved = fx.filter(e => builderFxSource(e)?.tag === sceneId);
+    expect(moved).toHaveLength(last);
+    expect(fx.map(e => e.id).filter(id => id.startsWith('mine'))).toEqual(['mine1', 'mine2']);
+    // The moved set kept its place: after the first of the user's effects, before the one added later.
+    expect(fx[0].id).toBe('mine1');
+    expect(fx[fx.length - 1].id).toBe('mine2');
+  });
+
+  it('a second scene’s move leaves the first scene’s effects alone; controls on a replaced effect follow it', () => {
+    const sat = (amount: number) => [newStackItem(GRADE_KINDS.find(d => d.kind === 'saturation')!, 'gr1', { amount })];
+    const look = (amount: number) => ({ grade: sat(amount), post: { vignette: 0, grain: 0, bloom: 0, scanlines: 0 } });
+    let play = addMovedToPlay(emptyPlayRecord(), lookToFinish(look(1.2)), 'sceneA');
+    play = addMovedToPlay(play, lookToFinish(look(1.5)), 'sceneB');
+    const a = play.finish!.effects[0];
+    play = { ...play, controls: [{ id: 'c', target: `finish:${a.id}::amount`, kind: 'float', label: 'Sat', min: 0, max: 3 }], mappings: [] };
+    play = addMovedToPlay(play, lookToFinish(look(2)), 'sceneA');
+    const fx = play.finish!.effects;
+    expect(fx.map(e => [builderFxSource(e)!.tag, e.amount])).toEqual([['sceneA', 2], ['sceneB', 1.5]]);
+    expect(play.controls[0].target).toBe(`finish:${fx[0].id}::amount`);
+    // A replaced effect with nothing of its kind to go to takes its controls (and their mappings) with it.
+    const other = addMovedToPlay({ ...play, mappings: [{ id: 'm', controlId: 'c' } as never] }, { ...lookToFinish({ grade: [], post: { vignette: 0.3, grain: 0, bloom: 0, scanlines: 0 } }) }, 'sceneA');
+    expect(other.controls).toHaveLength(0);
+    expect(other.mappings).toHaveLength(0);
+  });
+
+  it('a failed build moves nothing', async () => {
+    useSceneBuilder2D.getState().openWith(starterScene());
+    useSceneBuilder2D.getState().edit(d => { d.look.post.grain = 0.2; });
+    const apply = await import('../../../sceneBuilder2d/apply');
+    const spy = vi.spyOn(apply, 'applyScene2D').mockImplementation(() => { throw new Error('boom'); });
+    expect(() => buildFromBuilder2D()).toThrow();
+    spy.mockRestore();
+    expect(useNodeGraphStore.getState().play.finish).toBeUndefined();
+    expect(useSceneBuilder2D.getState().scene.look.post.grain).toBe(0.2);
   });
 });

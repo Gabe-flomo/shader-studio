@@ -18,6 +18,7 @@ import { fontFamily, radius } from '../../theme/tokens';
 import { openProSheet, useCan } from '../../lib/plan';
 import { Button, IconButton } from '../ui/Button';
 import { Icon } from '../ui/Icon';
+import { usePlayUi } from '../play/playUi';
 import { usePhoneDialog } from '../ui/phoneDialog';
 
 /** The Finish's own words, the same everywhere it shows. */
@@ -53,11 +54,17 @@ function FinishLocked({ count }: { count: number }) {
 
 // ── The Studio's Finish panel ────────────────────────────────────────────────
 
-export const useFinishDrawer = create<{ open: boolean; toggle: () => void; close: () => void; show: () => void }>(set => ({
+/**
+ * Opening the panel forgets the last effect Play revealed (playUi's finishFocus), so it opens at the
+ * top, with its toolbar row (on/off, Before / after, Presets) in view, not scrolled to an old card.
+ */
+const openFresh = () => { if (usePlayUi.getState().finishFocus) usePlayUi.setState({ finishFocus: '' }); };
+
+export const useFinishDrawer = create<{ open: boolean; toggle: () => void; close: () => void; show: () => void }>((set, get) => ({
   open: false,
-  toggle: () => set(s => ({ open: !s.open })),
+  toggle: () => { if (!get().open) openFresh(); set(s => ({ open: !s.open })); },
   close: () => set({ open: false }),
-  show: () => set({ open: true }),
+  show: () => { if (!get().open) openFresh(); set({ open: true }); },
 }));
 
 /** The preview header's Finish button: how many effects the stack has, and the panel on a click. */

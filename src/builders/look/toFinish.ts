@@ -19,8 +19,20 @@ import { GRADE_BY_KIND, gradeParamTarget } from './grade';
 import { newStackItem, stackValue, type LookParam, type StackItem, type StackValue } from './stack';
 import type { Vec3 } from './palette';
 
-/** `defId` of an effect moved from the builder: `builder:<grade kind>`, `builder:vignette`, `builder:grain`. */
+/**
+ * `defId` of an effect moved from the builder: `builder:<grade kind>`, `builder:vignette` or
+ * `builder:grain`, then `@<scene>` (the 2D build's UV node id) once it is in a graph's Finish. The
+ * scene tag makes a move idempotent: moving a scene's grade again replaces what it moved before.
+ */
 export const BUILDER_FX_PREFIX = 'builder:';
+
+/** Where a Finish effect came from in the builder: its kind and its scene's tag ('' when none); null for any other effect. */
+export function builderFxSource(e: Pick<FinishEffect, 'kind' | 'defId'>): { kind: string; tag: string } | null {
+  if (e.kind !== 'custom' || typeof e.defId !== 'string' || !e.defId.startsWith(BUILDER_FX_PREFIX)) return null;
+  const rest = e.defId.slice(BUILDER_FX_PREFIX.length);
+  const at = rest.indexOf('@');
+  return at < 0 ? { kind: rest, tag: '' } : { kind: rest.slice(0, at), tag: rest.slice(at + 1) };
+}
 
 const num = (v: number) => { const t = String(Math.round(v * 1e6) / 1e6); return /[.e]/.test(t) ? t : `${t}.0`; };
 const clean = (s: string) => s.replace(/\|/g, '/').replace(/\s+/g, ' ').trim();
@@ -138,8 +150,8 @@ export function gradeItemToFinish(it: StackItem, opts: { swatches?: readonly Vec
 
 /** A Finish effect that came from a Grade card, back as the card (null for any other effect). */
 export function finishToGradeItem(e: FinishEffect, id = 'gr1'): StackItem | null {
-  if (e.kind !== 'custom' || typeof e.defId !== 'string' || !e.defId.startsWith(BUILDER_FX_PREFIX)) return null;
-  const def = GRADE_BY_KIND[e.defId.slice(BUILDER_FX_PREFIX.length)];
+  const src = builderFxSource(e);
+  const def = src ? GRADE_BY_KIND[src.kind] : undefined;
   if (!def) return null;
   const params: Record<string, StackValue> = {};
   for (const p of def.params) {
@@ -165,8 +177,9 @@ export function postToFinish(kind: 'vignette' | 'grain', value: number, on = tru
 
 /** A Finish effect from the Look's vignette or grain, back as the setting. */
 export function finishToPost(e: FinishEffect): { kind: 'vignette' | 'grain'; value: number } | null {
-  if (e.kind !== 'custom' || (e.defId !== `${BUILDER_FX_PREFIX}vignette` && e.defId !== `${BUILDER_FX_PREFIX}grain`)) return null;
-  const kind = e.defId === `${BUILDER_FX_PREFIX}vignette` ? 'vignette' : 'grain';
+  const src = builderFxSource(e);
+  if (!src || (src.kind !== 'vignette' && src.kind !== 'grain')) return null;
+  const kind = src.kind;
   const v = e[kind === 'vignette' ? 'strength' : 'grainAmount'];
   return typeof v === 'number' ? { kind, value: v } : null;
 }
@@ -249,15 +262,45 @@ export function withoutMovedLook<L extends MovableLook>(look: L): L {
   return out;
 }
 
-/** The Play record with the moved effects at the end of its Finish, and controls on the old nodes moved onto them. */
-export function addMovedToPlay(play: PlayRecord, move: LookMove): PlayRecord {
+/**
+ * The Play record with the moved effects in its Finish, tagged with their scene (`tag`). Moving a
+ * scene again replaces the effects its earlier move made (where the first of them was), so a
+ * Surprise me and Build, again and again, leaves one set. Controls on the old nodes move onto the
+ * effects; controls on a replaced effect move to the new one of the same kind, or go (with their
+ * mappings) when there is none.
+ */
+export function addMovedToPlay(play: PlayRecord, move: LookMove, tag = ''): PlayRecord {
   if (!move.effects.length) return play;
-  const f: PlayFinish = play.finish ?? { on: true, effects: [] };
-  const finish: PlayFinish = { ...f, effects: [...f.effects, ...move.effects] };
-  const controls = play.controls.map(c => {
-    const to = move.retarget.get(c.target);
-    if (!to) return c;
-    return to.scale === 1 ? { ...c, target: to.target } : { ...c, target: to.target, min: c.min * to.scale, max: c.max * to.scale, ...(c.step ? { step: c.step * to.scale } : {}) };
+  const tagged = move.effects.map(e => {
+    const src = builderFxSource(e);
+    return src ? { ...e, defId: `${BUILDER_FX_PREFIX}${src.kind}${tag ? `@${tag}` : ''}` } : e;
   });
-  return { ...play, finish, controls };
+  const f: PlayFinish = play.finish ?? { on: true, effects: [] };
+  const mine = (e: FinishEffect) => { const s = builderFxSource(e); return !!s && !!tag && s.tag === tag; };
+  const old = f.effects.filter(mine);
+  const at = f.effects.findIndex(mine);
+  const rest = f.effects.filter(e => !mine(e));
+  const effects = at < 0 ? [...rest, ...tagged] : [...rest.slice(0, at), ...tagged, ...rest.slice(at)];
+  const finish: PlayFinish = { ...f, effects };
+  // A replaced effect's controls: onto the new effect of the same kind (each new one taken once), else gone.
+  const oldTo = new Map<string, string | null>();
+  const free = [...tagged];
+  for (const o of old) {
+    const k = builderFxSource(o)!.kind;
+    const i = free.findIndex(n => builderFxSource(n)?.kind === k);
+    oldTo.set(o.id, i >= 0 ? free.splice(i, 1)[0].id : null);
+  }
+  const gone = new Set<string>();
+  const controls = play.controls.flatMap(c => {
+    const to = move.retarget.get(c.target);
+    if (to) return [to.scale === 1 ? { ...c, target: to.target } : { ...c, target: to.target, min: c.min * to.scale, max: c.max * to.scale, ...(c.step ? { step: c.step * to.scale } : {}) }];
+    const m = /^finish:(.+)::(.+)$/.exec(c.target);
+    if (!m || !oldTo.has(m[1])) return [c];
+    const id = oldTo.get(m[1]);
+    const next = id ? finish.effects.find(e => e.id === id) : undefined;
+    if (next && typeof next[m[2]] === 'number') return [{ ...c, target: `finish:${id}::${m[2]}` }];
+    gone.add(c.id);
+    return [];
+  });
+  return gone.size ? { ...play, finish, controls, mappings: play.mappings.filter(m => !gone.has(m.controlId)) } : { ...play, finish, controls };
 }
