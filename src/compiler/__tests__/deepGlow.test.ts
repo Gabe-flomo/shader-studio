@@ -162,7 +162,9 @@ describe('the builders\' Effects page', () => {
     const dg = nodes.find(x => x.type === 'glowTexture' && x.params.method === 'deep')!;
     expect(dg.params).toMatchObject({ radius: 300, spread: 0.4, composite: 'screen', tint: [1, 0.8, 0.6] });
     expect(nodes.find(x => x.id === dg.inputs.texture.connection?.nodeId)?.type).toBe('pass');
-    expect(nodes.find(x => x.id === dg.inputs.uv.connection?.nodeId)?.type).toBe('uvWarp');
+    // The swirl bends the scene itself: the glow reads a Pass of the swirled picture, at this pixel.
+    expect(dg.inputs.uv.connection).toBeUndefined();
+    expect(nodes.filter(x => x.type === 'pass')).toHaveLength(1);
     const r = compileGraph({ nodes });
     expect(r.success, (r.errors ?? []).join('; ')).toBe(true);
     expect((r.passes ?? []).filter(x => x.hidden)).toHaveLength(15);

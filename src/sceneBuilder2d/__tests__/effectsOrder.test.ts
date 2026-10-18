@@ -1,8 +1,7 @@
 /**
  * Effect order matters (docs/builder-look.md, "Effects"): light rays then a kaleidoscope folds the
- * rays' picture (a new Pass holds it and the fold reads that), while a kaleidoscope then light rays
- * streaks the folded picture (the folded picture goes into a new Pass, and the rays read that).
- * Before, a read after a move read the old Pass at the bent point: the rays were folded either way.
+ * rays' picture (the rays read their Pass at the folded point), while a kaleidoscope then light rays
+ * streaks the folded picture (the scene is drawn folded, and the rays read a Pass of that).
  */
 import { describe, expect, it } from 'vitest';
 import { compileGraph } from '../../compiler/graphCompiler';
@@ -20,32 +19,29 @@ function scene(order: Array<'rays' | 'kaleido'>): Scene2D {
 const roles = (s: Scene2D) => new Map(buildScene2D(s).nodes.map(n => [String(n.params._sbRole), n]));
 
 describe('effect order', () => {
-  it('rays → kaleidoscope: the fold reads a new Pass holding the rays', () => {
+  it('rays → kaleidoscope: the rays read the picture in a Pass, at the folded point', () => {
     const s = scene(['rays', 'kaleido']);
     const r = roles(s);
     const rays = r.get(fxRole(s.effects![0]))!;
-    const second = r.get(`${fxRole(s.effects![1])}:pass`)!;
-    expect(second.type).toBe('pass');
-    expect(second.inputs.color.connection?.nodeId).toBe(rays.id);
-    const read = r.get(`${fxRole(s.effects![1])}:read`)!;
-    expect(read.inputs.texture.connection?.nodeId).toBe(second.id);
-    expect(read.inputs.uv.connection?.nodeId).toBe(r.get(`${fxRole(s.effects![1])}:bend`)!.id);
-    expect([...r.values()].filter(n => n.type === 'pass')).toHaveLength(2);
+    const pass = r.get(`${fxRole(s.effects![0])}:pass`)!;
+    expect(pass.type).toBe('pass');
+    expect(rays.inputs.texture.connection?.nodeId).toBe(pass.id);
+    // The fold bends the point the rays' picture is read at: the folded rays.
+    expect(rays.inputs.uv.connection?.nodeId).toBe(r.get(`${fxRole(s.effects![1])}:bend`)!.id);
+    expect([...r.values()].filter(n => n.type === 'pass')).toHaveLength(1);
   });
 
-  it('kaleidoscope → rays: the rays streak the folded picture (a new Pass holds it)', () => {
+  it('kaleidoscope → rays: the scene is drawn folded, and the rays streak it (a Pass holds it)', () => {
     const s = scene(['kaleido', 'rays']);
     const r = roles(s);
     const rays = r.get(fxRole(s.effects![1]))!;
-    // The folded picture: the first Pass read at the folded point…
-    const read = r.get(`${fxRole(s.effects![0])}:read`)!;
-    expect(read.inputs.uv.connection?.nodeId).toBe(r.get(`${fxRole(s.effects![0])}:bend`)!.id);
-    // …drawn into a Pass of its own, which the rays streak (read at the plain point).
-    const second = r.get(`${fxRole(s.effects![1])}:pass`)!;
-    expect(second.inputs.color.connection?.nodeId).toBe(read.id);
-    expect(rays.inputs.texture.connection?.nodeId).toBe(second.id);
+    const fold = r.get(`${fxRole(s.effects![0])}:bend`)!;
+    expect(fold.inputs.input.connection?.nodeId).toBe(r.get('uv')!.id);
+    const pass = r.get(`${fxRole(s.effects![1])}:pass`)!;
+    expect(rays.inputs.texture.connection?.nodeId).toBe(pass.id);
     expect(rays.inputs.uv.connection).toBeUndefined();
-    expect([...r.values()].filter(n => n.type === 'pass')).toHaveLength(2);
+    expect(r.has(`${fxRole(s.effects![0])}:read`)).toBe(false);
+    expect([...r.values()].filter(n => n.type === 'pass')).toHaveLength(1);
   });
 
   it('the two orders compile to different programs', () => {

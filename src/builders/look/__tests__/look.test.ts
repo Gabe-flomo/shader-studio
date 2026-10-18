@@ -76,18 +76,24 @@ describe('Effects page', () => {
     expect(warnings).toEqual([]);
     expect(types(nodes).some(t => def.nodes.includes(t))).toBe(true);
   });
-  it('a run of moves shares one Pass and one read; Blur after them blurs the moved picture', () => {
+  it('moves bend the scene and cost no Pass; Blur reads one, at the point the CRT after it bends', () => {
     const s = starterScene();
     s.effects = ['swirl', 'pixelate', 'kaleido', 'blur', 'crt'].map((k, i) => newStackItem(FX_BY_KIND[k], `fx${i + 1}`));
     const { nodes } = compiles(s);
-    // swirl+pixelate+kaleido: one Pass and one read; Blur: a Pass of the moved picture; CRT curvature: a third.
-    expect(types(nodes).filter(t => t === 'pass')).toHaveLength(3);
+    // swirl+pixelate+kaleido bend the scene's coordinates; Blur: the one Pass; CRT: its screen bends Blur's point.
+    expect(types(nodes).filter(t => t === 'pass')).toHaveLength(1);
+    const byId = new Map(nodes.map(n => [n.id, n]));
     const blur = nodes.find(n => n.type === 'blurTexture')!;
-    expect(blur.inputs.uv.connection).toBeUndefined();
-    const blurPass = nodes.find(n => n.id === blur.inputs.texture.connection?.nodeId)!;
-    const read = nodes.find(n => n.id === blurPass.inputs.color.connection?.nodeId)!;
-    expect(read.type).toBe('sampleTexture');
-    expect(nodes.find(n => n.id === read.inputs.uv.connection?.nodeId)?.type).toBe('kaleidoSpace');
+    expect(byId.get(blur.inputs.uv.connection!.nodeId)?.type).toBe('crtScreen');
+    const blurPass = byId.get(blur.inputs.texture.connection!.nodeId)!;
+    expect(blurPass.type).toBe('pass');
+    expect(types(nodes)).not.toContain('sampleTexture');
+    // Card order: the scene is read at swirl(pixelate(kaleido(p))), so the kaleidoscope bends the screen's point first.
+    const kal = nodes.find(n => n.type === 'kaleidoSpace')!;
+    expect(byId.get(kal.inputs.input.connection!.nodeId)?.type).toBe('uv');
+    const pix = nodes.find(n => n.type === 'pixelate')!;
+    expect(pix.inputs.uv.connection?.nodeId).toBe(kal.id);
+    expect(nodes.find(n => n.type === 'uvWarp')!.inputs.input.connection?.nodeId).toBe(pix.id);
   });
   it('every effect together, and noise displacement, compile', () => {
     const s = withPicture(starterScene());
