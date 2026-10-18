@@ -37,6 +37,7 @@ export const DEFAULT_ACTIONS: ShortcutAction[] = [
   { id: 'import',            label: 'Import graph',          group: 'Graph',      defaultCombo: 'cmd+o',       description: 'Import graph from file' },
   // View
   { id: 'fitView',           label: 'Fit view',              group: 'View',       defaultCombo: 'f',           description: 'Fit all nodes in view' },
+  { id: 'maximizeGraph',     label: 'Maximize the graph',    group: 'View',       defaultCombo: 'cmd+shift+g', description: 'Studio: the graph takes the preview’s space too; again to bring the preview back' },
   { id: 'toggleCode',        label: 'Toggle GLSL code',      group: 'View',       defaultCombo: 'cmd+\\',      description: 'Show/hide GLSL output panel' },
   { id: 'toggleRecord',      label: 'Record video',          group: 'View',       defaultCombo: 'cmd+r',       description: 'Open the video recorder' },
   // ⌘⇧↵, not ⌘⇧R: that one is a hard reload in browsers. Works from the code editors too, and on the GLSL and Convert pages.
