@@ -1,7 +1,7 @@
 {
   "name": "shader-studio",
   "private": true,
-  "version": "2026.10.272",
+  "version": "2026.10.273",
   "type": "module",
   "scripts": {
     "dev": "vite",
