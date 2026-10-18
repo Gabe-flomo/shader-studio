@@ -1,4 +1,5 @@
 import { resolveSendReceive, syncSendReceiveTypes } from '../compiler/sendReceive';
+import { RECEIVE_TYPE } from '../nodes/definitions/sendReceive';
 import { socketDefault } from '../nodes/socketDefault';
 import { isPlayfile } from '../playfile/reader';
 import { logEvent } from '../lib/crashLog';
@@ -2594,14 +2595,22 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     const { nodes, activeGroupPath } = get();
     undoManager.push(nodes, { label: `Duplicated ${nodeIds.length === 1 ? nodeName(nodeInScope(get(), nodeIds[0])) : `${nodeIds.length} nodes`}`, nodeIds });
     const activeNodes = activeGroupPath.length > 0 ? (getActiveNodes(nodes, activeGroupPath) ?? nodes) : nodes;
-    const newNodes = nodeIds.flatMap(nodeId => {
+    const copyOf = new Map<string, string>();
+    const copied = nodeIds.flatMap(nodeId => {
       const node = activeNodes.find(n => n.id === nodeId);
       if (!node) return [];
       const newId = idGenerator.next();
+      copyOf.set(node.id, newId);
       const clearedInputs = Object.fromEntries(
         Object.entries(node.inputs).map(([k, v]) => [k, { ...v, connection: undefined }])
       );
       return [{ ...node, id: newId, inputs: clearedInputs, position: { x: node.position.x + 60, y: node.position.y + 60 } }];
+    });
+    // A Send copied with its Receive: the copied Receive reads the copied Send (docs/send-receive.md). A Receive
+    // copied alone keeps reading the Send it read.
+    const newNodes = copied.map(n => {
+      const to = n.type === RECEIVE_TYPE ? copyOf.get(String(n.params.sendId ?? '')) : undefined;
+      return to ? { ...n, params: { ...n.params, sendId: to } } : n;
     });
     if (!newNodes.length) return;
     if (activeGroupPath.length > 0) {
