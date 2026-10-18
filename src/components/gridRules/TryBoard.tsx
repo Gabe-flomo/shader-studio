@@ -223,7 +223,22 @@ export function TryBoard({ params, nodeParams, focus, hood, onUseAsStart }: {
     const [x, y] = hover;
     const i = y * B.w + x;
     if (counting) {
-      for (const [nx, ny] of neighbourCells(params, B, x, y)) overlay.push(<rect key={`h${nx},${ny}`} x={px(nx) + 0.5} y={py(ny) + 0.5} width={cell - 1} height={cell - 1} fill={ink('#ffffff', 0.08)} stroke={ink('#9cc1ff', 0.9)} strokeWidth={1} />);
+      // The cells it counts, as one faint area with a thin dashed outline (not a box per cell, which read as a
+      // brush about to paint them).
+      const hood = neighbourCells(params, B, x, y);
+      const inHood = new Set(hood.map(([nx, ny]) => `${nx},${ny}`));
+      let fillD = '', edgeD = '';
+      for (const [nx, ny] of hood) {
+        const X = px(nx), Y = py(ny);
+        fillD += `M${X} ${Y}h${cell}v${cell}h${-cell}Z`;
+        // Grid y grows upward (py flips it): the cell above on screen is ny + 1
+        if (!inHood.has(`${nx},${ny + 1}`)) edgeD += `M${X} ${Y}h${cell}`;
+        if (!inHood.has(`${nx},${ny - 1}`)) edgeD += `M${X} ${Y + cell}h${cell}`;
+        if (!inHood.has(`${nx - 1},${ny}`)) edgeD += `M${X} ${Y}v${cell}`;
+        if (!inHood.has(`${nx + 1},${ny}`)) edgeD += `M${X + cell} ${Y}v${cell}`;
+      }
+      overlay.push(<path key="hood-fill" d={fillD} fill={ink('#9cc1ff', 0.07)} stroke="none" />);
+      overlay.push(<path key="hood-edge" d={edgeD} fill="none" stroke={ink('#9cc1ff', 0.55)} strokeWidth={1} strokeDasharray="3 3" />);
       const st = Math.round(B.a[i]);
       const k = liveNeighbours(params, B, x, y);
       const max = maxCount(s.neighbourhood, s.radius, s.shape, s.stencil);
