@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.281',
+    date: '2026-10-18',
+    title: "Fewer passes",
+    highlights: [
+      { area: 'Studio', text: "2D builder: kaleidoscope, CRT, swirl and other coordinate effects no longer need a Pass (your CRT + chroma + kaleidoscope: 3 passes to 1)." },
+    ],
+  },
+  {
     id: '2026.10.280',
     date: '2026-10-18',
     title: "A tidier node library",
