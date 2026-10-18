@@ -194,8 +194,8 @@ export const MarchCameraNode: NodeDefinition = withParamSockets({
       { value: '16', label: 'Draft (16 taps)' }, { value: '32', label: 'Good (32 taps)' }, { value: '64', label: 'Best (64 taps)' },
     ], hint: 'Reads per pixel for the Smooth blur. More is smoother, wide blurs especially, and costs more.' },
     dofShape:     { section: 'Lens & focus', label: 'Bokeh shape', type: 'select' as const, showWhen: { param: 'lens', value: ['smooth', 'soft'] }, options: [
-      { value: 'disc', label: 'Disc (round)' }, { value: 'hex', label: 'Hex (6 blades)' }, { value: 'oct', label: 'Oct (8 blades)' },
-    ], hint: 'The shape bright out-of-focus points take.' },
+      { value: 'soft', label: 'Soft (like particles)' }, { value: 'disc', label: 'Disc (round)' }, { value: 'hex', label: 'Hex (6 blades)' }, { value: 'oct', label: 'Oct (8 blades)' },
+    ], hint: 'The shape out-of-focus points take. Soft: a soft blob with no rim, the same haze as the particles\' and agents\' depth of field. Disc, Hex, Oct: crisp-edged bokeh.' },
     dofMaxBlur:   { section: 'Lens & focus', label: 'Max blur %', type: 'float' as const, min: 0.5, max: 12, step: 0.5, compileTime: true, showWhen: { param: 'lens', value: ['smooth', 'soft'] }, hint: 'The widest the Smooth blur gets, as a percentage of the picture height. Things very near the camera are capped here. Wider costs more for the same smoothness.' },
     softness:     { section: 'Lens & focus', label: 'Softness', type: 'float' as const, min: 0.05, max: 1.0, step: 0.01, showWhen: { param: 'lens', value: 'soft' }, hint: 'How much the grain is blurred over: low keeps the sparkle of the grain, high melts it into a smooth haze.' },
     // No default: a camera without it compiles exactly as before; the Scene Builder sets it when Flatten is above 0.

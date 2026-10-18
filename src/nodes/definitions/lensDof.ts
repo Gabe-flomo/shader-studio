@@ -30,7 +30,7 @@ import { BL_BASE_GLSL } from '../../play/kit/blur.js';
 
 export const LENS_DOF_STAGE_TYPE = 'lensDofStage';
 
-export type LensShape = 'disc' | 'hex' | 'oct';
+export type LensShape = 'disc' | 'hex' | 'oct' | 'soft';
 
 /** The signed CoC radius in picture heights (see the header): positive behind the focus. */
 export function lensCoc(aperture: number, fov: number, focalDist: number, dist: number): number {
@@ -43,7 +43,7 @@ export const lensSamples = (v: unknown): number => {
   const n = Number(v);
   return (LENS_SAMPLES as readonly number[]).includes(n) ? n : 32;
 };
-export const lensShape = (v: unknown): LensShape => (v === 'hex' || v === 'oct' ? v : 'disc');
+export const lensShape = (v: unknown): LensShape => (v === 'hex' || v === 'oct' || v === 'soft' ? v : 'disc');
 /** Max blur, in picture heights (the slider is a percentage). */
 export const lensMaxBlur = (v: unknown): number => {
   const n = typeof v === 'number' && isFinite(v) ? v : 4;
@@ -54,13 +54,13 @@ const f = (n: number) => (Number.isInteger(n) ? `${n}.0` : `${n}`);
 
 /**
  * The gather. `cc` is this pixel's signed CoC, `R` the largest radius in pixels, `n` the polygon's sides
- * (0: a disc). First a ring of probes finds how far a nearer, blurrier neighbour reaches (so a blurred
+ * (0: a disc; -1: soft, a Gaussian blob like the particles' and agents' depth of field). First a ring of probes finds how far a nearer, blurrier neighbour reaches (so a blurred
  * foreground spills over what is behind it); then N golden-angle taps over the larger of that and this
  * pixel's own radius, turned per pixel (fine noise instead of rings).
  */
 export const LENS_DOF_GLSL = `
 float ldShape(float a, float n) {
-  if (n < 2.5) return 1.0;
+  if (n < 2.5) return 1.0; // disc, soft
   float seg = 6.2831853 / n;
   return cos(0.5 * seg) / cos(mod(a, seg) - 0.5 * seg);
 }
@@ -93,6 +93,14 @@ vec3 lensDofGather(sampler2D tex, vec2 uv, vec2 px, float res, float R, float n,
     float ss = min(abs(s.a) * res, R);
     // A tap behind this pixel can't blur over it more than this pixel is blurred (sharp edges stay sharp).
     if (s.a > cc) ss = min(ss, max(own, 1.0) * 2.0);
+    if (n < -0.5) {
+      // Soft: each out-of-focus point is a Gaussian blob of its CoC that keeps its light (as the
+      // particles draw it), so near and far blur melt into haze with no hard rim.
+      float w = exp(-2.0 * (r * r) / max(ss * ss, 0.25));
+      acc += s.rgb * w;
+      tot += w;
+      continue;
+    }
     float m = smoothstep(r - soft, r + soft, ss);
     acc += mix(acc / tot, s.rgb, m);
     tot += 1.0;
@@ -134,7 +142,7 @@ export const LensDofStageNode: NodeDefinition = {
     const tex = inputVars.texture || (typeof node.params.__src === 'string' ? node.params.__src : '');
     if (!tex) return { code: `    vec3 ${id}_c = vec3(0.0);\n`, outputVars: { color: `${id}_c`, coc: '0.0' } };
     const shape = lensShape(node.params.dofShape);
-    const sides = shape === 'hex' ? 6 : shape === 'oct' ? 8 : 0;
+    const sides = shape === 'hex' ? 6 : shape === 'oct' ? 8 : shape === 'soft' ? -1 : 0;
     const n = lensSamples(node.params.dofSamples);
     const maxBlur = lensMaxBlur(node.params.dofMaxBlur);
     return {

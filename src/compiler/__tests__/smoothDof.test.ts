@@ -77,9 +77,18 @@ describe('March Camera Lens: Smooth', () => {
   });
 
   it('every quality, shape and Max blur compiles', () => {
-    for (const dofSamples of ['16', '32', '64']) for (const dofShape of ['disc', 'hex', 'oct']) {
+    for (const dofSamples of ['16', '32', '64']) for (const dofShape of ['disc', 'hex', 'oct', 'soft']) {
       const r = smoothCompiles(withLens(orbs(), { lens: 'smooth', dofSamples, dofShape, dofMaxBlur: 8 }));
       expect(r.fragmentShader).toContain(`, ${dofSamples});`);
+    }
+  });
+
+  it('Soft bokeh (like the particles\' blur): a Gaussian gather, on Smooth and Soft grain', () => {
+    for (const lens of ['smooth', 'soft']) {
+      const r = compileGraph({ nodes: withLens(orbs(), { lens, dofShape: 'soft', aperture: 0.1 }) });
+      expect(r.success).toBe(true);
+      expect(r.fragmentShader).toMatch(/lensDofGather\([^;]*, -1\.0, \d+\);/);
+      expect(r.fragmentShader).toContain('exp(-2.0 * (r * r)');
     }
   });
 
