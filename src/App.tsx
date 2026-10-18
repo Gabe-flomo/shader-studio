@@ -823,8 +823,9 @@ function App() {
     }),
     exitGroup: () => {
       const st = useNodeGraphStore.getState();
-      // Esc belongs to whatever dialog, menu or popover is open first
-      if (st.activeGroupPath.length === 0 || document.querySelector('[role="dialog"], [role="menu"], [data-popover]')) return;
+      // Esc belongs to whatever dialog, menu or popover is open first. Not used here: left to the
+      // rest of the app (Overlay off, the suggestions closing…), so it isn't swallowed.
+      if (st.activeGroupPath.length === 0 || document.querySelector('[role="dialog"], [role="menu"], [data-popover]')) return false;
       st.exitGroup();
     },
     addUV:          unlessScratch(() => addRandomNode('uv')),
