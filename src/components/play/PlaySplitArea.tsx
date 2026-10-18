@@ -229,8 +229,8 @@ function SplitPanel() {
                 { value: 'controls', label: `Controls${nControls ? ` · ${nControls}` : ''}` },
                 { value: 'layers', label: `Layers${nLayers ? ` · ${nLayers}` : ''}${layersOk ? '' : ' · Pro'}` },
                 { value: 'finish', label: `Finish${nFinish ? ` · ${nFinish}` : ''}${finishOk ? '' : ' · Pro'}` },
-                { value: 'engine', label: `Engine${nRacks ? ` · ${nRacks}` : ''}${engineOk ? '' : ' · Pro'}` },
-                { value: 'mappings', label: `Mappings${nMappings ? ` · ${nMappings}` : ''}` },
+                { value: 'engine', label: `Sound${nRacks ? ` · ${nRacks}` : ''}${engineOk ? '' : ' · Pro'}` },
+                { value: 'mappings', label: `Sources${nMappings ? ` · ${nMappings}` : ''}` },
               ]}
             />
           </div>

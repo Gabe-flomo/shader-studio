@@ -81,7 +81,7 @@ function BuilderWindow() {
 
   if (phone) {
     return (
-      <div role="dialog" aria-label="Builder" style={{ position: 'fixed', inset: 0, zIndex: 1500, display: 'flex', flexDirection: 'column', background: tk.bg.panel, paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+      <div role="dialog" aria-label="Functions and node packs" style={{ position: 'fixed', inset: 0, zIndex: 1500, display: 'flex', flexDirection: 'column', background: tk.bg.panel, paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
         <BuilderShell compact actions={<IconButton icon="close" label="Close the builder" tooltip={false} onClick={dockBuilder} style={{ width: 38, height: 38 }} />} />
       </div>
     );

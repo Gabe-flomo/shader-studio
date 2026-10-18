@@ -65,7 +65,7 @@ const SIDEBAR_TABS: Array<{ id: TabId; label: string; icon: IconName; color: (tk
   { id: 'favorites',   label: 'Favorites',       icon: 'star',    color: tk => tk.status.warning },
   { id: 'graphs',      label: 'Saved Graphs',    icon: 'graphs',  color: tk => tk.status.success },
   { id: 'presets',     label: 'Presets',         icon: 'presets', color: tk => tk.accent.base },
-  { id: 'builder',     label: 'Node Builder',    icon: 'spark',   color: tk => tk.kind.fn },
+  { id: 'builder',     label: 'Publish node',    icon: 'spark',   color: tk => tk.kind.fn },
   { id: 'functions',   label: 'Functions',       icon: 'fn',      color: tk => tk.kind.fn },
   { id: 'expressions', label: 'Expression Blocks', icon: 'expr',    color: tk => tk.kind.expr },
   { id: 'keyframes',   label: 'Saved Keyframes', icon: 'kf',      color: tk => tk.status.warning },

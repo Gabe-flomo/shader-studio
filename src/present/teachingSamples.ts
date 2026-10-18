@@ -167,14 +167,14 @@ Try [[control:radius]], [[control:falloff]] and the [[control:tint]].`, [['radiu
       interactive('playMouse', `A **mapping** connects a **source** (the mouse, a key, a knob) to a control.
 
 1. On the Play page, open a control's details (the chevron on its card) and press **Map**. A mapping appears with **Mouse X** as its source.
-2. In **Mappings**, set its **Range** and **Curve** (Linear, Exp, Log or Draw). **Smooth** takes the jitter out.
+2. Under **Sources**, set its **Range** and **Curve** (Linear, Exp, Log or Draw). **Smooth** takes the jitter out.
 
 Move over the picture: mouse x drives [[control:x]] and mouse y drives [[control:falloff]]. The badge under each slider says what drives it.`, [['x', 'Position X'], ['falloff', 'Falloff']]),
     ]),
     step('An LFO moves it for you', [
       interactive('playLfo', `An **LFO** is a source that moves on its own: a slow wave.
 
-In **Mappings**, press **Add** and set **Source** to **LFO**. Pick a shape (Sine, Triangle, Saw, Square, Random) and a rate in **Hz**, cycles per second. **Clock (BPM)** is the same idea locked to a tempo.
+Under **Sources**, press **Add** and set **Source** to **LFO**. Pick a shape (Sine, Triangle, Saw, Square, Random) and a rate in **Hz**, cycles per second. **Clock (BPM)** is the same idea locked to a tempo.
 
 Here a 0.25 Hz sine breathes [[control:radius]] (one breath every 4 seconds), a triangle sways [[control:x]], and a 120 BPM clock pulses the [[control:tint]].`, [['radius', 'Radius'], ['x', 'Sway'], ['tint', 'Tint']]),
     ]),
@@ -184,7 +184,7 @@ Here a 0.25 Hz sine breathes [[control:radius]] (one breath every 4 seconds), a 
 - Source **Keyboard key**: 1 while the key is held, 0 when it is up.
 - Source **Trigger (envelope, toggle…)**: set **On** to **Key** and **Does** to **Envelope**. Each press rises to a peak (Attack), falls to a level (Decay, Sustain) and fades after you let go (Release).
 
-**Learn** in the Mappings header picks the key for you: press it, then press the key.
+**Learn** in the Sources header picks the key for you: press it, then press the key.
 
 Click the picture first. Hold **A** to grow [[control:radius]]; tap **Space** to make [[control:y]] jump.`, [['radius', 'Radius (hold A)'], ['y', 'Jump (Space)']]),
     ]),

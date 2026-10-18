@@ -1,5 +1,5 @@
 /**
- * MiniGraph — a Look effect's node graph drawn small and read-only on its
+ * MiniGraph — a Finish effect's node graph drawn small and read-only on its
  * stack card: one box per node with its name, and the wires between them.
  * Clicking it opens the editor (the card passes onOpen).
  */

@@ -323,7 +323,7 @@ function InputLegend({ play }: { play: PlayRecord }) {
   if (!rows.length) return null;
   return (
     <div>
-      {heading('Inputs')}
+      {heading('Sources')}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {rows.map(r => (
           <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>

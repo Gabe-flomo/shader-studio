@@ -90,7 +90,7 @@ export function MobileTopBar({ page, onPageChange, onRecord, onClear }: {
           />
         </span>
       ) : (
-        <span style={{ marginLeft: 10, fontWeight: 650, fontSize: 15 }}>{page === 'shortcuts' ? 'Keys' : page === 'files' ? 'Files' : page === 'glsl' ? 'GLSL' : page === 'convert' ? 'Convert' : 'Builder'}</span>
+        <span style={{ marginLeft: 10, fontWeight: 650, fontSize: 15 }}>{page === 'shortcuts' ? 'Keys' : page === 'files' ? 'Files' : page === 'glsl' ? 'Shader' : page === 'convert' ? 'Convert' : 'Functions'}</span>
       )}
       <span style={{ flex: 1 }} />
       {/* The graph's own actions; Present has its own file actions in its header. */}
@@ -137,10 +137,10 @@ export function MobileTopBar({ page, onPageChange, onRecord, onClear }: {
             page === 'glsl'
               ? { label: 'Back to the Studio', icon: 'nodes', onSelect: () => onPageChange('studio') }
               : { label: 'GLSL editor', icon: 'code', hint: 'Write a shader by hand; its Code Explorer shows how functions are used', onSelect: () => onPageChange('glsl') },
-            { label: 'Import a GLSL shader', icon: 'code', onSelect: async () => { reportGlslImport(await importGlslFromFile()); } },
+            { label: 'Import shader', icon: 'code', hint: 'A GLSL fragment shader file, as a node', onSelect: async () => { reportGlslImport(await importGlslFromFile()); } },
             { label: `Convert GLSL to nodes${pro('convert')}`, icon: 'nodes', hint: 'Paste a shader, preview the nodes it becomes, make it real', onSelect: () => onPageChange('convert') },
             { label: 'Export this graph', icon: 'export', hint: 'As a .play file, with what it uses', onSelect: () => offerGraphExport(null) },
-            { label: 'Builder: functions and node packs', icon: 'nodes', hint: 'Plot functions, make node packs (full screen)', onSelect: () => { void import('../nodePacks/builderWindow').then(m => m.popOutBuilder()); } },
+            { label: 'Functions and node packs', icon: 'nodes', hint: 'Plot functions, make node packs (full screen)', onSelect: () => { void import('../nodePacks/builderWindow').then(m => m.popOutBuilder()); } },
             page === 'files'
               ? { label: 'Back to the Studio', icon: 'nodes', onSelect: () => onPageChange('studio') }
               : { label: 'Files', icon: 'folder', hint: 'Everything saved: sizes, clean up, download and install', onSelect: () => onPageChange('files') },

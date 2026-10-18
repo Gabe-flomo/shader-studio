@@ -32,7 +32,7 @@ export function BuilderShell({ actions, onNavigateToStudio, compact = false }: {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, overflow: 'hidden', background: tk.bg.panel, color: tk.text.primary, fontFamily: fontFamily.ui }}>
       <div style={{ height: 44, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: compact ? '0 8px' : '0 10px 0 12px', borderBottom: `1px solid ${tk.border.default}` }}>
-        <Segmented<BuilderTab> size="sm" ariaLabel="Builder" value={tab} onChange={setBuilderTab}
+        <Segmented<BuilderTab> size="sm" ariaLabel="Functions and node packs" value={tab} onChange={setBuilderTab}
           options={[{ value: 'functions', label: 'Functions' }, { value: 'packs', label: 'Node packs' }]} />
         <span style={{ flex: 1 }} />
         {actions}

@@ -36,7 +36,7 @@ describe('categories and pages', () => {
   it('gives each category the pages the owner listed', () => {
     const pages = Object.fromEntries(RAIL_CATEGORIES.map(c => [c.id, c.pages.map(p => RAIL_PAGES[p].label)]));
     expect(pages).toEqual({
-      controls: ['Inputs', 'MIDI file', 'Pad grid'],
+      controls: ['Controls', 'MIDI file', 'Pad grid'],
       signals: ['Rules'],
       layers: ['Layers', 'Background'],
       finish: ['Picture'],

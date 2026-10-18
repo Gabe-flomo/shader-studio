@@ -1507,7 +1507,7 @@ function App() {
               <div ref={canvasFrame} style={{ flex: 1, position: 'relative', minHeight: 0 }}><ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} /><AudioMasterVolumeWidget /></div>
             </PlaySplitArea>
             <div style={{ background: tc.mantle, borderTop: `1px solid ${tc.surface0}`, padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '10px', fontFamily: 'monospace', color: tc.surface2, minHeight: '28px', flexShrink: 0 }}>
-              <StatusReadout swatchSize={12} probeGap={10} emptyText="hover for color · click node to probe" />
+              <StatusReadout swatchSize={12} probeGap={10} emptyText="hover for colour · click node to probe" />
               <div style={{ flex: 1 }} />
               {errorBadge}
             </div>

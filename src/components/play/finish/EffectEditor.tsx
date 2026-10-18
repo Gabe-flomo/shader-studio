@@ -1,5 +1,5 @@
 /**
- * EffectEditor — the Look effect editor: build an effect from nodes or write
+ * EffectEditor — the Finish effect editor: build an effect from nodes or write
  * it as GLSL, watch it on the picture, then "Use as effect".
  *
  *   Nodes   EffectGraphEditor: Effect inputs (Picture colour, UV, Centred UV,
@@ -94,7 +94,7 @@ export function EffectEditor({ initial, finishOn, touch, onDraft, onDone }: {
   const ready = !!draft && !(mode === 'nodes' && error);
   return (
     <Modal
-      title={initial ? `Edit “${initial.name ?? 'effect'}”` : 'New Look effect'}
+      title={initial ? `Edit “${initial.name ?? 'effect'}”` : 'New Finish effect'}
       subtitle="Build it from nodes or write it in GLSL; it runs on every pixel of the finished picture"
       icon={mode === 'nodes' ? 'nodes' : 'code'}
       width={1180}
@@ -150,7 +150,7 @@ export function EffectEditor({ initial, finishOn, touch, onDraft, onDone }: {
           <Preview />
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <Button size="sm" variant={before ? 'primary' : 'secondary'} icon="layoutSplit" onClick={() => setBefore(!before)}>{before ? 'Showing before' : 'Before'}</Button>
-            <span style={{ flex: 1, color: tk.text.faint, font: `11px/1.4 ${fontFamily.ui}` }}>{finishOn ? 'The finished picture, with this effect at its place in the stack.' : 'The Look stack is off: turn it on to see the effect.'}</span>
+            <span style={{ flex: 1, color: tk.text.faint, font: `11px/1.4 ${fontFamily.ui}` }}>{finishOn ? 'The finished picture, with this effect at its place in the stack.' : 'The Finish stack is off: turn it on to see the effect.'}</span>
           </div>
           {error
             ? <pre style={{ margin: 0, padding: '6px 8px', borderRadius: radius.sm, background: alpha(tk.status.danger, 0.1), color: tk.status.danger, font: `11px/1.45 ${fontFamily.mono}`, whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 140, overflow: 'auto' }}>{error}</pre>

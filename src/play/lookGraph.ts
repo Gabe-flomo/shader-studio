@@ -7,7 +7,7 @@
  *    colour (Hue Rotate, Posterize, Vignette, Tone Map…) is offered under
  *    + Add effect → Nodes. It becomes a one-node graph: the picture's colour
  *    into its colour input, its colour output out.
- *  - **Built effects**: a small graph made in the Look effect editor, with an
+ *  - **Built effects**: a small graph made in the Finish effect editor, with an
  *    inputs node (Picture colour, UV, Centred UV, Time), any number of nodes,
  *    "Picture at" (the picture read at another point) and one Colour output.
  *
@@ -83,12 +83,12 @@ const NO_CATEGORIES: Array<[RegExp, string]> = [
 ];
 /** Single types that read something outside the shader (inputs, textures, other frames). */
 const NO_NODE_TYPES: Record<string, string> = {
-  mouse: 'it reads the mouse (map a Look setting to the mouse instead)',
+  mouse: 'it reads the mouse (map a Finish setting to the mouse instead)',
   textureInput: 'it reads an image the Studio loads',
   videoInput: 'it reads a video the Studio plays',
   baked: 'it plays a baked video the Studio keeps',
-  audioInput: 'it listens to audio in the Studio (map a Look setting to an audio reader instead)',
-  midiInput: 'it reads MIDI in the Studio (map a Look setting to MIDI instead)',
+  audioInput: 'it listens to audio in the Studio (map a Finish setting to an audio reader instead)',
+  midiInput: 'it reads MIDI in the Studio (map a Finish setting to MIDI instead)',
   data: 'it reads a dataset',
   playLayers: 'it reads the Play layers (the picture already has them)',
   padGrid: 'it reads the drum pads',
@@ -128,7 +128,7 @@ export function colourSockets(def: Pick<NodeDefinition, 'inputs' | 'outputs'>): 
   return input && output ? { input, output } : null;
 }
 
-/** Why a node can't be a Look effect on its own (+ Add effect → Nodes), or '' when it can. */
+/** Why a node can't be a Finish effect on its own (+ Add effect → Nodes), or '' when it can. */
 export function nodeEffectProblem(def: NodeDefinition): string {
   const p = effectNodeProblem(def);
   if (p) return p;
@@ -137,7 +137,7 @@ export function nodeEffectProblem(def: NodeDefinition): string {
 }
 
 let nodeEffectsMemo: { version: number; list: NodeDefinition[] } | null = null;
-/** Every node that can be added as a Look effect, by category then name. */
+/** Every node that can be added as a Finish effect, by category then name. */
 export function nodeEffectDefs(): NodeDefinition[] {
   const version = getUserNodesVersion();
   if (nodeEffectsMemo?.version === version) return nodeEffectsMemo.list;
@@ -298,6 +298,8 @@ function toCompileNodes(graph: EffectGraph): { nodes: GraphNode[]; seeds: Map<st
   return { nodes, seeds: new Map([[FX_IN_ID, seed]]), error: errors.join('\n') };
 }
 
+// Written into every built effect's code (and so into exported bundles): kept word for word when the
+// editor was renamed Finish effect (docs/glossary.md), so saved effects and golden bundles don't change.
 const CODE_HEAD = '// Built from nodes in the Look effect editor (Edit nodes… opens it).\n// Made from the graph: edit the graph, not this code.\n';
 
 /**
@@ -381,7 +383,7 @@ export function compileEffectGraph(graph: EffectGraph): EffectGraphCompile {
   head = rename(head);
   body = rename(body);
   // The Studio's blurs and glows read the frame drawn before (u_prevFrame) as the picture around a
-  // point; in the Look stack the picture itself is there to read, so they read that.
+  // point; in the Finish stack the picture itself is there to read, so they read that.
   const prevRe = /\btexture2D\(\s*u_prevFrame\s*,/g;
   if (prevRe.test(head + body)) {
     head = 'vec4 fxPrev(vec2 q) { return vec4(picture(q), 1.0); }\n' + head.replace(prevRe, 'fxPrev(');
@@ -392,13 +394,13 @@ export function compileEffectGraph(graph: EffectGraph): EffectGraphCompile {
   const rest = head + '\n' + body;
   const left = [...new Set(rest.match(/\bu_[A-Za-z]\w*/g) ?? [])];
   if (left.length) {
-    if (left.includes('u_mouse')) return fail('A node reads the mouse, which a Look effect can’t (map one of its settings to the mouse instead).');
-    if (left.some(u => /^u_(audio|midi)/.test(u))) return fail('A node reads audio or MIDI, which a Look effect can’t (map one of its settings to it instead).');
-    if (left.some(u => /^u_(tex|vid|fontTexture|prevFrame|echo)/.test(u))) return fail('A node reads a texture or an earlier frame, which a Look effect can’t (Picture at reads the picture).');
-    return fail(`A node reads ${left.join(', ')}, which a Look effect can’t give it.`);
+    if (left.includes('u_mouse')) return fail('A node reads the mouse, which a Finish effect can’t (map one of its settings to the mouse instead).');
+    if (left.some(u => /^u_(audio|midi)/.test(u))) return fail('A node reads audio or MIDI, which a Finish effect can’t (map one of its settings to it instead).');
+    if (left.some(u => /^u_(tex|vid|fontTexture|prevFrame|echo)/.test(u))) return fail('A node reads a texture or an earlier frame, which a Finish effect can’t (Picture at reads the picture).');
+    return fail(`A node reads ${left.join(', ')}, which a Finish effect can’t give it.`);
   }
-  if (/\b(texture2D|sampler2D|samplerCube)\b/.test(rest)) return fail('A node reads a texture, which a Look effect can’t.');
-  if (/\bvUv\b/.test(head)) return fail('A node’s helper reads the picture position directly, which a Look effect can’t.');
+  if (/\b(texture2D|sampler2D|samplerCube)\b/.test(rest)) return fail('A node reads a texture, which a Finish effect can’t.');
+  if (/\bvUv\b/.test(head)) return fail('A node’s helper reads the picture position directly, which a Finish effect can’t.');
   const undefs = [...head.matchAll(/^\s*#define\s+([A-Za-z_]\w*)/gm)].map(m => `#undef ${m[1]}`);
 
   const code = `${CODE_HEAD}${decls.length ? decls.join('\n') + '\n' : ''}\n${head ? head + '\n\n' : ''}vec3 effect(vec2 vUv, vec3 fxColor) {\n  vec4 fxOut = vec4(fxColor, 1.0);\n${body.replace(/\s+$/, '')}\n  return fxOut.rgb;\n}\n${undefs.length ? undefs.join('\n') + '\n' : ''}`;

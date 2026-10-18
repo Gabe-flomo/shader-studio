@@ -64,12 +64,19 @@ const CATEGORY_SECTIONS_RAW: Array<{ label: string; categories: string[] }> = [
   { label: 'Utility',          categories: ['Utility', 'Output'] },
 ];
 
-/** How a row reads in the library (the node definitions keep their own category names). */
+/**
+ * How a row reads in the library (the node definitions keep their own category names). The
+ * glossary (docs/glossary.md) decides the chrome's words: "Sources" is Play's word for what drives
+ * a control, so the node row reads "Inputs & media"; UI copy spells colour the British way.
+ */
 const ROW_LABELS: Record<string, string> = {
   '2D Primitives': '2D Shapes',
   '3D Primitives': '3D Shapes',
   SDF: 'Combine, cut & fill (SDF)',
   Science: 'Chladni',
+  Sources: 'Inputs & media',
+  Color: 'Colour',
+  'Color Grading': 'Colour grading',
 };
 export const rowLabel = (row: string) => ROW_LABELS[row] ?? row;
 
@@ -249,7 +256,7 @@ export const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: strin
   // Effects also shows the Post Processing nodes (MERGED_CATEGORIES); anything not listed here goes under More.
   'Color Grading': [
     { label: 'Tone',  types: ['liftGammaGain', 'toneCurve', 'shadowsHighlights', 'toneMap'] },
-    { label: 'Color', types: ['hueRotate', 'colorSaturation'] },
+    { label: 'Colour', types: ['hueRotate', 'colorSaturation'] },
     { label: 'Film',  types: ['grain'] },
   ],
   SDF: [

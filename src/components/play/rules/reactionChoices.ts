@@ -37,7 +37,7 @@ export function doChoices(play: PlayRecord, preferLayer?: string): DoChoice[] {
   return out;
 }
 
-/** The Look effect a reaction acts on ('finish:<effectId>'), or undefined. */
+/** The Finish effect a reaction acts on ('finish:<effectId>'), or undefined. */
 export function lookEffectOf(play: PlayRecord, layerId: string): FinishEffect | undefined {
   if (!layerId.startsWith(FINISH_TARGET_PREFIX)) return undefined;
   const id = layerId.slice(FINISH_TARGET_PREFIX.length);
@@ -74,7 +74,7 @@ export function reactionText(r: PlayReaction, play: PlayRecord): string {
   if (isLookAction(r.do)) {
     const e = lookEffectOf(play, r.layerId);
     const water = e ? undefined : play.layers.find(x => x.id === r.layerId && x.kind === 'water');
-    const name = e ? finishHostLabel(e) : water ? water.label : 'a removed Look effect';
+    const name = e ? finishHostLabel(e) : water ? water.label : 'a removed Finish effect';
     const p = e && r.key ? finishParamOf(e, r.key) : undefined;
     const v = typeof r.value === 'number' ? +r.value.toFixed(3) : 0, sec = typeof r.seconds === 'number' ? +r.seconds.toFixed(2) : 1;
     if (r.do === 'mosh') return `Mosh ${sec} s · ${name}`;

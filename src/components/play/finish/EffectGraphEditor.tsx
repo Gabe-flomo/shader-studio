@@ -1,5 +1,5 @@
 /**
- * EffectGraphEditor — the Look effect editor's Nodes tab: a small node canvas
+ * EffectGraphEditor — the Finish effect editor's Nodes tab: a small node canvas
  * for one effect. The same node definitions as the Studio (their settings,
  * ranges and GLSL), on a reduced editor of its own: the Studio's graph editor
  * is bound to the one open graph (a single store), so it can't host a second,

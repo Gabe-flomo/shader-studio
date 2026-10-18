@@ -49,7 +49,7 @@ export interface RailCategoryDef {
 }
 
 export const RAIL_PAGES: Readonly<Record<RailPage, RailPageDef>> = {
-  controls: { id: 'controls', category: 'controls', label: 'Inputs', description: 'The controls people play beside the sources that drive them' },
+  controls: { id: 'controls', category: 'controls', label: 'Controls', description: 'The controls people play beside the sources that drive them' },
   layers: { id: 'layers', category: 'layers', label: 'Layers', description: 'What sits on the picture, with the selected layer’s editor' },
   signals: { id: 'signals', category: 'signals', label: 'Rules', description: 'When something happens, what to do: a pinch bursts the sparks' },
   background: { id: 'background', category: 'layers', label: 'Background', description: 'What the picture is under the layers' },
@@ -61,10 +61,10 @@ export const RAIL_PAGES: Readonly<Record<RailPage, RailPageDef>> = {
 };
 
 export const RAIL_CATEGORIES: readonly RailCategoryDef[] = [
-  { id: 'controls', label: 'Inputs', icon: 'sliders', description: 'The controls people play, and the sources that drive them', pages: ['controls', 'midi-file', 'pad-grid'] },
+  { id: 'controls', label: 'Controls', icon: 'sliders', description: 'The controls people play, and the sources that drive them', pages: ['controls', 'midi-file', 'pad-grid'] },
   { id: 'signals', label: 'Rules', icon: 'bolt', description: 'When something happens, what to do', pages: ['signals'] },
   { id: 'layers', label: 'Layers', icon: 'layers', description: 'What acts on the picture, and the background', pages: ['layers', 'background'] },
-  { id: 'finish', label: 'Look', icon: 'curve', description: 'Grade, lens, film and time effects over the whole picture', pages: ['finish-picture'] },
+  { id: 'finish', label: 'Finish', icon: 'curve', description: 'Grade, lens, film and time effects over the whole picture', pages: ['finish-picture'] },
   { id: 'engine', label: 'Sound', icon: 'piano', description: 'The Audio engine, and effects on the sound', pages: ['engine-performance', 'finish-sound'] },
 ];
 

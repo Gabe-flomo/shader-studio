@@ -74,8 +74,8 @@ const TABS: { page: Page; label: string; icon: IconName }[] = [
   { page: 'studio', label: 'Studio', icon: 'layoutGraph' },
   { page: 'play', label: 'Play', icon: 'play' },
   { page: 'present', label: 'Present', icon: 'slides' },
-  { page: 'fn', label: 'Builder', icon: 'wave' },
-  { page: 'glsl', label: 'GLSL', icon: 'code' },
+  { page: 'fn', label: 'Functions', icon: 'wave' },
+  { page: 'glsl', label: 'Shader', icon: 'code' },
   { page: 'convert', label: 'Convert', icon: 'bidir' },
   { page: 'files', label: 'Files', icon: 'folder' },
 ];
@@ -223,8 +223,8 @@ export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }:
             <Tooltip label="Import a .play file, a graph file, or a .present.json (opens on the Present page)" shortcut={shortcuts.import}>
               <Button size="sm" icon="import" aria-label="Import a .play file, graph or presentation file" onClick={() => { void importAnyFile(onPageChange); }}>Import</Button>
             </Tooltip>
-            <Tooltip label="Import a GLSL fragment shader (Shadertoy or raw) as a node, wired UV → shader → Output">
-              <Button size="sm" icon="code" aria-label="Import a GLSL shader as a node" onClick={async () => { reportGlslImport(await importGlslFromFile()); }}>GLSL</Button>
+            <Tooltip label="Import shader: a GLSL fragment shader file (Shadertoy or raw) as a node, wired UV → shader → Output">
+              <Button size="sm" icon="code" aria-label="Import a GLSL shader as a node" onClick={async () => { reportGlslImport(await importGlslFromFile()); }}>Import shader</Button>
             </Tooltip>
             <Tooltip label="Export this graph as a .play file, with what it uses" shortcut={shortcuts.export}>
               <Button size="sm" icon="export" aria-label="Export this graph as a .play file" onClick={e => offerGraphExport(e.currentTarget)}>Export</Button>

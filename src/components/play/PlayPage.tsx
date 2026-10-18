@@ -894,8 +894,8 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
             ...(compact || sideView.tabs.includes('controls') ? [{ value: 'controls' as const, label: `Controls${play.controls.length ? ` · ${play.controls.length}` : ''}` }] : []),
             ...(compact || sideView.tabs.includes('layers') ? [{ value: 'layers' as const, label: `Layers${play.layers.length ? ` · ${play.layers.length}` : ''}${layersOk ? '' : ' · Pro'}` }] : []),
             ...(compact || sideView.tabs.includes('finish') ? [{ value: 'finish' as const, label: `Finish${play.finish?.effects.length ? ` · ${play.finish.effects.length}` : ''}${finishOk ? '' : ' · Pro'}`, title: 'Grade, lens, film and time effects over the whole picture, and effects on the sound' }] : []),
-            ...(compact || sideView.tabs.includes('engine') ? [{ value: 'engine' as const, label: `Engine${play.audioEngine?.racks.length ? ` · ${play.audioEngine.racks.length}` : ''}${engineOk ? '' : ' · Pro'}`, title: 'The Audio engine: racks of synths (Audio Units on a Mac, or the sample player) and effects, played from MIDI and the keyboard' }] : []),
-            ...(compact ? [{ value: 'mappings' as const, label: `Mappings${play.mappings.length + (play.pairMappings?.length ?? 0) ? ` · ${play.mappings.length + (play.pairMappings?.length ?? 0)}` : ''}` }] : []),
+            ...(compact || sideView.tabs.includes('engine') ? [{ value: 'engine' as const, label: `Sound${play.audioEngine?.racks.length ? ` · ${play.audioEngine.racks.length}` : ''}${engineOk ? '' : ' · Pro'}`, title: 'The Audio engine: racks of synths (Audio Units on a Mac, or the sample player) and effects, played from MIDI and the keyboard' }] : []),
+            ...(compact ? [{ value: 'mappings' as const, label: `Sources${play.mappings.length + (play.pairMappings?.length ?? 0) ? ` · ${play.mappings.length + (play.pairMappings?.length ?? 0)}` : ''}` }] : []),
           ]}
         />
         </div>
@@ -1632,14 +1632,14 @@ function MappingsDrawer({ play, mode, grid = false, pages = false, height, onRes
       {mode === 'drawer' && open && (
         <div
           onPointerDown={onResizeStart}
-          title="Drag to resize the mappings"
+          title="Drag to resize Sources"
           style={{ position: 'absolute', left: 0, right: 0, top: -4, height: 9, cursor: 'row-resize', zIndex: 2 }}
           onMouseEnter={e => ((e.currentTarget as HTMLDivElement).style.background = alpha(tk.accent.base, 0.25))}
           onMouseLeave={e => ((e.currentTarget as HTMLDivElement).style.background = 'transparent')}
         />
       )}
       <PanelHeader
-        title={mode === 'drawer' ? 'Mappings' : 'Sources'}
+        title="Sources"
         hint={headCount ? `${headCount}` : undefined}
         chevron={mode === 'drawer' ? (open ? 'down' : 'up') : undefined}
         onClick={mode === 'drawer' ? onToggle : undefined}
