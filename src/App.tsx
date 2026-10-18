@@ -13,7 +13,6 @@ import { NodeGraph } from './components/NodeGraph/NodeGraph';
 import { NodePalette } from './components/NodeGraph/NodePalette';
 import { FreezeBehindBuilder } from './components/builders/FreezeBehindBuilder';
 import { CodeBarRow, CodePanel } from './components/CodePanel';
-import { GraphStatus } from './components/shell/CanvasToolbar';
 import { tokenizeLine } from './components/glslSyntax';
 import { DesktopTopNav } from './components/shell/DesktopTopNav';
 import { MobileTopBar } from './components/shell/MobileTopBar';
@@ -1603,8 +1602,6 @@ function App() {
                 : (
                   <div style={{ borderTop: `1px solid ${tk.border.default}` }}>
                     <CodeBarRow slug={selectedNodeId ? (nodeSlugMap.get(selectedNodeId) ?? null) : null} onClick={() => setShowCode(true)}>
-                      {/* The graph's status: node count (stats) and frame time (performance). */}
-                      <GraphStatus />
                       <IconButton icon="chevU" label="Show generated code" size="sm" onClick={e => { e.stopPropagation(); setShowCode(true); }} />
                     </CodeBarRow>
                   </div>

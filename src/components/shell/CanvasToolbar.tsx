@@ -34,7 +34,7 @@ const SuggestControlsPanel = lazySafe(() => import('../play/SuggestControlsPanel
  * Everything else lives elsewhere (docs/page-canvas.md): zoom by scroll/pinch and the keys, with
  * the percentage in the canvas corner; Fit (F), Auto layout, the minimap, Next suggestions, Show
  * passes, Optimise, Bake and the resets in the canvas's right-click menu (canvasGraphMenu.ts); the
- * node count and frame time in the status bar under the graph (GraphStatus).
+ * node count and frame time here too (GraphStatus).
  */
 export function CanvasToolbar({ showOutline = false, onToggleOutline, readOnly = false }: {
   /** The outline panel: a list of the nodes in evaluation order, with step-through. */
@@ -62,6 +62,9 @@ export function CanvasToolbar({ showOutline = false, onToggleOutline, readOnly =
           label={showOutline ? 'Hide the outline' : 'Outline: list every node, jump to one, or step through the graph'} onClick={onToggleOutline} />
       )}
       {!readOnly && <RandomiseButton />}
+      {/* The node count (stats) and the frame time (performance), back at the top */}
+      <span style={{ width: 1, height: 18, margin: '0 4px', background: tk.border.subtle }} />
+      <GraphStatus />
     </div>
   );
 }
