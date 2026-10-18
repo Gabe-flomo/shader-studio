@@ -116,7 +116,7 @@ function GlslSourcePopup({ type, anchorRef, onInsert, onClose }: {
           <div style={{ fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{def?.label ?? type}</div>
           {nodeBlurb(def) && <div style={{ fontSize: 12, color: tk.text.muted, marginTop: 2, lineHeight: 1.45 }}>{nodeBlurb(def)}</div>}
         </div>
-        <CategoryChip>{def?.category}</CategoryChip>
+        <CategoryChip>{def ? rowLabel(rowOfType(def.type, def.category)) : undefined}</CategoryChip>
         <IconButton icon="close" label="Close" size="sm" onClick={onClose} />
       </div>
       <pre style={{
@@ -174,7 +174,7 @@ function NodePreviewCard({ type, onAdd, isFavorite, onToggleFavorite, context, o
           style={isFavorite ? { color: tk.status.warning } : undefined}
           onMouseDown={e => { e.preventDefault(); e.stopPropagation(); onToggleFavorite(); }}
         />
-        <CategoryChip>{def?.category}</CategoryChip>
+        <CategoryChip>{def ? rowLabel(rowOfType(def.type, def.category)) : undefined}</CategoryChip>
       </div>
 
       {isGlsl ? (
