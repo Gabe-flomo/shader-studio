@@ -101,7 +101,7 @@ export const WaveRadiusNode: NodeDefinition = withParamSockets({
 //   • displacement only — uniform displacement for all neighbors (legacy / uniform shift)
 export const NeighborDistNode: NodeDefinition = {
   type: 'neighborDist',
-  label: 'Neighbor Dist',
+  label: 'Neighbour Distance', aliases: ['Neighbor Dist'],
   category: 'Grid',
   description: 'Minimum distance to the nearest dot center across a 3×3 (or 5×5) neighborhood. Connect Cell ID for per-cell hash displacement (fixes clipping on scattered dots). Connect displacement for a uniform shift. Use with Grid (Cell UV and Cell ID).',
   inputs: {
@@ -312,7 +312,7 @@ export const GridDensityWarpNode: NodeDefinition = withParamSockets({
 // Neighbor Offset 2D — converts flat loop index to 2D (dx,dy) offset for neighborhood iteration.
 export const NeighborOffset2dNode: NodeDefinition = {
   type: 'neighborOffset2d',
-  label: 'Neighbor Offset 2D',
+  label: 'Neighbour Offset 2D', aliases: ['Neighbor Offset 2D'],
   category: 'Grid',
   description: 'Converts a flat Loop Index (0 to N²-1) to a 2D (dx,dy) offset. Use inside a looped group with Radius 1 (9 iterations) or Radius 2 (25) to iterate a cell neighborhood. Use with Loop Index inside an iterated group.',
   inputs: {

@@ -133,7 +133,7 @@ float sdf3d_vertCapsule(vec3 p, float h, float r) {
 // ─── 3D SDF Primitive Nodes ────────────────────────────────────────────────────
 
 export const SphereSDF3DNode: NodeDefinition = {
-  type: 'sphereSDF3D', label: 'Sphere SDF 3D', category: '3D Primitives',
+  type: 'sphereSDF3D', label: 'Sphere', aliases: ['Sphere SDF 3D'], category: '3D Primitives',
   description: 'Signed distance to a sphere centered at origin.',
   inputs: {
     pos:    { type: 'vec3',  label: 'Position' },
@@ -162,8 +162,8 @@ const EDGES: ParamDef = {
 const isRounded = (node: GraphNode, inputVars: Record<string, string>) => node.params.edges === 'rounded' || !!inputVars.rounding;
 
 export const BoxSDF3DNode: NodeDefinition = {
-  type: 'boxSDF3D', label: 'Box SDF 3D', category: '3D Primitives',
-  aliases: ['Rounded Box', 'Cube', 'Rounded cube', 'Bevel'],
+  type: 'boxSDF3D', label: 'Box 3D', category: '3D Primitives',
+  aliases: ['Box SDF 3D', 'Rounded Box', 'Cube', 'Rounded cube', 'Bevel'],
   description: 'A box centred on the origin, Size X / Y / Z out from the middle each way (half its width, height and depth). Edges Rounded softens its edges and corners by Rounding while its outside size stays the same.',
   inputs: {
     pos:    { type: 'vec3',  label: 'Position' },
@@ -199,7 +199,7 @@ export const BoxSDF3DNode: NodeDefinition = {
 };
 
 export const TorusSDF3DNode: NodeDefinition = {
-  type: 'torusSDF3D', label: 'Torus SDF 3D', category: '3D Primitives',
+  type: 'torusSDF3D', label: 'Torus', aliases: ['Torus SDF 3D'], category: '3D Primitives',
   description: 'Signed distance to a torus (major radius R, tube radius r) in XZ plane.',
   inputs: {
     pos:    { type: 'vec3',  label: 'Position' },
@@ -226,8 +226,8 @@ export const TorusSDF3DNode: NodeDefinition = {
 };
 
 export const CapsuleSDF3DNode: NodeDefinition = {
-  type: 'capsuleSDF3D', label: 'Capsule SDF 3D', category: '3D Primitives',
-  aliases: ['Vertical Capsule', 'Pill'],
+  type: 'capsuleSDF3D', label: 'Capsule', category: '3D Primitives',
+  aliases: ['Capsule SDF 3D', 'Vertical Capsule', 'Pill'],
   description: 'An upright pill: a cylinder with round ends, from the origin up to Height, Radius round.',
   inputs: {
     pos:    { type: 'vec3',  label: 'Position' },
@@ -254,8 +254,8 @@ export const CapsuleSDF3DNode: NodeDefinition = {
 };
 
 export const CylinderSDF3DNode: NodeDefinition = {
-  type: 'cylinderSDF3D', label: 'Cylinder SDF 3D', category: '3D Primitives',
-  aliases: ['Rounded Cylinder', 'Pillar', 'Column', 'Puck', 'Disc 3D'],
+  type: 'cylinderSDF3D', label: 'Cylinder', category: '3D Primitives',
+  aliases: ['Cylinder SDF 3D', 'Rounded Cylinder', 'Pillar', 'Column', 'Puck', 'Disc 3D'],
   description: 'An upright cylinder centred on the origin: Radius round, Half Height up and down. Edges Rounded softens its rims by Rounding while its outside size stays the same.',
   inputs: {
     pos:    { type: 'vec3',  label: 'Position' },
@@ -288,7 +288,7 @@ export const CylinderSDF3DNode: NodeDefinition = {
 };
 
 export const ConeSDF3DNode: NodeDefinition = {
-  type: 'coneSDF3D', label: 'Cone SDF 3D', category: '3D Primitives',
+  type: 'coneSDF3D', label: 'Cone', aliases: ['Cone SDF 3D'], category: '3D Primitives',
   description: 'Signed distance to a cone (angle in radians, height). Pointing Up: tip at the top, standing on its base at the origin. Cones saved before this setting point down (tip at the origin, base above) and keep doing so.',
   inputs: {
     pos:    { type: 'vec3',  label: 'Position' },
@@ -320,7 +320,7 @@ export const ConeSDF3DNode: NodeDefinition = {
 };
 
 export const OctahedronSDF3DNode: NodeDefinition = {
-  type: 'octahedronSDF3D', label: 'Octahedron SDF 3D', category: '3D Primitives',
+  type: 'octahedronSDF3D', label: 'Octahedron', aliases: ['Octahedron SDF 3D'], category: '3D Primitives',
   description: 'Signed distance to a regular octahedron with given size.',
   inputs: {
     pos:  { type: 'vec3',  label: 'Position' },
@@ -520,7 +520,7 @@ export const Twist3DNode: NodeDefinition = {
 
 export const PlaneSDF3DNode: NodeDefinition = {
   type: 'planeSDF3D',
-  label: 'Plane 3D',
+  label: 'Plane', aliases: ['Plane 3D'],
   category: '3D Primitives',
   description: 'Infinite horizontal plane. Distance = Position.y − Height. Use as ground or ceiling.',
   inputs: {
@@ -795,7 +795,7 @@ export const HexPrismSDF3DNode: NodeDefinition = withParamSockets({
 
 export const TriPrismSDF3DNode: NodeDefinition = withParamSockets({
   type: 'triPrismSDF3D', label: 'Tri Prism', category: '3D Primitives',
-  description: 'Triangular prism.',
+  description: 'A prism with a triangle for its cross-section, lying along the depth axis.',
   inputs: { pos: { type: 'vec3', label: 'Position' } },
   outputs: { dist: { type: 'float', label: 'Distance' } },
   defaultParams: { radius: 0.4, height: 0.2 },
@@ -1209,7 +1209,7 @@ export const MirroredRepeat3DNode: NodeDefinition = {
  */
 export const SdCrossNode: NodeDefinition = {
   type: 'sdCross3D',
-  label: 'SD Cross 3D',
+  label: 'Cross', aliases: ['SD Cross 3D', 'Menger cross', 'Plus 3D'],
   category: '3D Primitives',
   description: 'Union of three infinite square bars along each axis — the cross shape used to build a Menger sponge. size = bar half-thickness.',
   inputs: {
@@ -1531,7 +1531,7 @@ export const GyroidFieldNode: NodeDefinition = {
 
 export const SchwarzPFieldNode: NodeDefinition = {
   type: 'schwarzPField',
-  label: 'Schwarz-P Field',
+  label: 'Lattice Surface', aliases: ['Schwarz-P Field', 'Schwarz P', 'TPMS', 'Minimal surface'],
   category: '3D Primitives',
   description:
     "Schwarz-P triply periodic minimal surface. cos(x)+cos(y)+cos(z)=0. " +

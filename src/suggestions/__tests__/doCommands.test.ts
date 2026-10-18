@@ -277,7 +277,7 @@ describe('type checks', () => {
     // The same guard as wiring by hand: names the loop, with the tip for a Draw agents' own Density.
     const density = run('connect the stops palette to the over of draw agents', densityLoopGraph({ loop: false })).clauses[0];
     expect(density.status).not.toBe('ok');
-    expect(density.message).toContain('That would make a loop: Draw agents → Stops Palette → Draw agents');
+    expect(density.message).toContain('That would make a loop: Draw Agents → Stops Palette → Draw Agents');
     expect(density.message).toContain('Palette by density');
     const sw = run('switch the circle to a palette', scratchGraph('circle'));
     expect(sw.clauses[0].message).toMatch(/Can’t switch Circle SDF to Palette/);

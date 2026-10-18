@@ -70,7 +70,7 @@ export const MultiplyNode: NodeDefinition = {
 };
 
 export const DivideNode: NodeDefinition = {
-  type: 'divide', label: 'Divide', category: 'Math', subcategory: 'Arithmetic', description: 'Divides A by B (A ÷ B).',
+  type: 'divide', label: 'Divide', category: 'Math', subcategory: 'Arithmetic', description: 'A ÷ B. Dividing by 0 gives a huge number, so keep B away from 0.',
   inputs: { a: { type: 'float', label: 'A' }, b: { type: 'float', label: 'B' } },
   outputs: { result: { type: 'float', label: 'Result' } },
   defaultParams: { b: 1.0, exact: false },
@@ -180,7 +180,7 @@ export const PowNode: NodeDefinition = {
 };
 
 export const NegateNode: NodeDefinition = {
-  type: 'negate', label: 'Negate', category: 'Math', subcategory: 'Arithmetic', description: 'Flips the sign of Input (−Input).',
+  type: 'negate', label: 'Negate', category: 'Math', subcategory: 'Arithmetic', description: 'Flips the sign: Input becomes −Input.',
   inputs: { input: { type: 'float', label: 'Input' } }, outputs: { output: { type: 'float', label: 'Output' } },
   generateGLSL: (node: GraphNode, inputVars) => {
     const t = ot(node), o = `${node.id}_output`;
@@ -284,7 +284,7 @@ export const ModNode: NodeDefinition = {
 // ModSelectNode — mod-based 0/1 mask for even/odd/every-Nth selection.
 export const ModSelectNode: NodeDefinition = withParamSockets({
   type: 'modSelect',
-  label: 'Mod Select',
+  label: 'Every Nth', aliases: ['Mod Select', 'Every other', 'Alternate', 'Even odd', 'Stripes mask'],
   category: 'Math', subcategory: 'Modulo',
   description: 'Outputs a mask where mod(Value, Period) is below Threshold × Period. Use for even/odd rows, every-Nth column, or any periodic selection. Also outputs raw mod value and normalized phase 0–1.',
   inputs: {
@@ -337,7 +337,7 @@ export const Atan2Node: NodeDefinition = {
 };
 
 export const CeilNode: NodeDefinition = {
-  type: 'ceil', label: 'Round Up', aliases: ['Ceil'], category: 'Math', subcategory: 'Rounding', description: 'Round up to nearest integer.',
+  type: 'ceil', label: 'Round Up', aliases: ['Ceil'], category: 'Math', subcategory: 'Rounding', description: 'Rounds up to the next whole number: 1.2 becomes 2, −1.2 becomes −1.',
   inputs: { input: { type: 'float', label: 'Input' } }, outputs: { output: { type: 'float', label: 'Output' } },
   generateGLSL: (node: GraphNode, inputVars) => {
     const t = ot(node), o = `${node.id}_output`;
@@ -346,7 +346,7 @@ export const CeilNode: NodeDefinition = {
 };
 
 export const FloorNode: NodeDefinition = {
-  type: 'floor', label: 'Floor', category: 'Math', subcategory: 'Rounding', description: 'Round down to nearest integer.',
+  type: 'floor', label: 'Floor', category: 'Math', subcategory: 'Rounding', description: 'Rounds down to the whole number below: 1.8 becomes 1, −1.2 becomes −2.',
   inputs: { input: { type: 'float', label: 'Input' } }, outputs: { output: { type: 'float', label: 'Output' } },
   generateGLSL: (node: GraphNode, inputVars) => {
     const t = ot(node), o = `${node.id}_output`;
@@ -355,7 +355,7 @@ export const FloorNode: NodeDefinition = {
 };
 
 export const SqrtNode: NodeDefinition = {
-  type: 'sqrt', label: 'Square Root', aliases: ['Sqrt'], category: 'Math', subcategory: 'Arithmetic', description: 'Square root.',
+  type: 'sqrt', label: 'Square Root', aliases: ['Sqrt'], category: 'Math', subcategory: 'Arithmetic', description: 'The square root: the number that, times itself, gives what comes in. It rises fast near 0 and slowly after; keep what comes in above 0.',
   inputs: { input: { type: 'float', label: 'Input' } }, outputs: { output: { type: 'float', label: 'Output' } },
   defaultParams: { exact: false },
   paramDefs: { exact: exactDef('Off: the input is clamped to 0 or more first. On: plain sqrt(Input), as GLSL does (a negative input is undefined there).') },
@@ -367,7 +367,7 @@ export const SqrtNode: NodeDefinition = {
 };
 
 export const RoundNode: NodeDefinition = {
-  type: 'round', label: 'Round', category: 'Math', subcategory: 'Rounding', description: 'Round to nearest integer.',
+  type: 'round', label: 'Round', category: 'Math', subcategory: 'Rounding', description: 'Rounds to the nearest whole number: 1.4 becomes 1, 1.6 becomes 2.',
   inputs: { input: { type: 'float', label: 'Input' } }, outputs: { output: { type: 'float', label: 'Output' } },
   generateGLSL: (node: GraphNode, inputVars) => {
     const t = ot(node), o = `${node.id}_output`;
@@ -415,7 +415,7 @@ export const DotNode: NodeDefinition = {
 };
 
 export const MakeVec2Node: NodeDefinition = {
-  type: 'makeVec2', label: 'Make Vec2', category: 'Math', subcategory: 'Vector Build/Split', description: 'Build a vec2 from two float values.',
+  type: 'makeVec2', label: 'Make Vec2', category: 'Math', subcategory: 'Vector Build/Split', description: 'Builds a vec2 (a 2D point or direction) from two numbers.',
   inputs: { x: { type: 'float', label: 'X' }, y: { type: 'float', label: 'Y' } },
   outputs: { xy: { type: 'vec2', label: 'XY' } },
   defaultParams: { x: 0.0, y: 0.0 },
@@ -526,7 +526,7 @@ export const SwizzleNode: NodeDefinition = {
 };
 
 export const MakeVec3Node: NodeDefinition = {
-  type: 'makeVec3', label: 'Make Vec3', category: 'Math', subcategory: 'Vector Build/Split', description: 'Build a vec3 color from three float values.',
+  type: 'makeVec3', label: 'Make Vec3', category: 'Math', subcategory: 'Vector Build/Split', description: 'Builds a vec3 (a colour or a 3D point) from three numbers.',
   inputs: { r: { type: 'float', label: 'R' }, g: { type: 'float', label: 'G' }, b: { type: 'float', label: 'B' } },
   outputs: { rgb: { type: 'vec3', label: 'RGB' } },
   defaultParams: { r: 0.0, g: 0.0, b: 0.0 },
@@ -541,7 +541,7 @@ export const MakeVec3Node: NodeDefinition = {
 };
 
 export const FloatToVec3Node: NodeDefinition = {
-  type: 'floatToVec3', label: 'Float → Color', category: 'Color', description: 'Convert a float to a grayscale vec3.',
+  type: 'floatToVec3', label: 'Float → Colour', aliases: ['Float → Color'], category: 'Color', description: 'Turns one number into a grey: the same value in red, green and blue.',
   inputs: { input: { type: 'float', label: 'Float' } }, outputs: { rgb: { type: 'vec3', label: 'Color' } },
   generateGLSL: (node: GraphNode, inputVars) => {
     const o = `${node.id}_rgb`;
@@ -659,7 +659,7 @@ export const RemapNode: NodeDefinition = {
 // ─── New Math Nodes (V2) ───────────────────────────────────────────────────────
 
 export const CrossProductNode: NodeDefinition = {
-  type: 'crossProduct', label: 'Cross Product', category: 'Math', subcategory: 'Vector Ops', description: 'Cross product of two vec3 vectors',
+  type: 'crossProduct', label: 'Cross Product', category: 'Math', subcategory: 'Vector Ops', description: 'The vector at right angles to both A and B, as long as the area they span. How a surface normal is made from two directions along it.',
   inputs: { a: { type: 'vec3', label: 'A' }, b: { type: 'vec3', label: 'B' } },
   outputs: { result: { type: 'vec3', label: 'Result' } },
   defaultParams: {},
@@ -729,7 +729,7 @@ export const RefractDirNode: NodeDefinition = withParamSockets({
 }, ['ior1', 'ior2']);
 
 export const ComplexMulNode: NodeDefinition = {
-  type: 'complexMul', label: 'Complex Mul', category: 'Math', subcategory: 'Complex Numbers', description: 'Multiply two complex numbers (vec2)',
+  type: 'complexMul', label: 'Complex Mul', category: 'Math', subcategory: 'Complex Numbers', description: 'Multiplies two complex numbers (vec2: across is the real part, up the imaginary): their angles add and their lengths multiply. The step behind Mandelbrot-style fractals.',
   inputs: { a: { type: 'vec2', label: 'A (re,im)' }, b: { type: 'vec2', label: 'B (re,im)' } },
   outputs: { result: { type: 'vec2', label: 'Result' } },
   defaultParams: {},
@@ -804,7 +804,7 @@ export const LuminanceNode: NodeDefinition = {
 };
 
 export const SignNode: NodeDefinition = {
-  type: 'sign', label: 'Sign', category: 'Math', subcategory: 'Comparison', description: 'Sign of a float value (-1, 0, +1)',
+  type: 'sign', label: 'Sign', category: 'Math', subcategory: 'Comparison', description: '−1 for a negative number, 0 for 0, 1 for a positive one.',
   inputs: { value: { type: 'float', label: 'Value' } },
   outputs: { result: { type: 'float', label: 'Sign' } },
   defaultParams: {},

@@ -33,7 +33,7 @@ describe('nodeCode', () => {
     expect(info.inputs[0].value).toBe('the position (g_uv)');
     expect(info.inputs[1].value).toBe('0.3');
     expect(info.outputs).toEqual([expect.objectContaining({ key: 'distance', type: 'float', value: 'node_dist' })]);
-    expect(info.howItWorks).toMatch(/^Signed distance function for a circle\. Its work is done by the function circleSDF\(\)/);
+    expect(info.howItWorks).toMatch(/^A circle as a distance: how far each point is from its edge, negative inside\. Wire Distance into SDF Fill to paint it or SDF Glow to light it\. Its work is done by the function circleSDF\(\)/);
   });
 
   it('settings that aren’t sockets are listed with their range and hint', () => {

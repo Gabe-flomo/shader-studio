@@ -61,7 +61,7 @@ export const MaskNode: NodeDefinition = {
 
 export const AddColorNode: NodeDefinition = {
   type: 'addColor',
-  label: 'Add Colors',
+  label: 'Add Colours', aliases: ['Add Colors'],
   category: 'Combiners',
   description: 'Additive color blend — A + B * Scale. Standard way to accumulate glow layers.',
   inputs: {

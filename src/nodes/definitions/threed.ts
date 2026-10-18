@@ -1186,7 +1186,7 @@ export const Fresnel3DNode: NodeDefinition = withParamSockets({
 
 export const FakeSSSNode: NodeDefinition = withParamSockets({
   type: 'fakeSSS',
-  label: 'Fake SSS',
+  label: 'Skin Glow', aliases: ['Fake SSS', 'SSS', 'Subsurface scattering', 'Translucency', 'Wax'],
   category: '3D Lighting',
   description: 'Fake subsurface scattering via Beer\'s law thickness estimation. Makes wax, jade, soap look compelling. Connect same SceneGroup as MarchLoopGroup.',
   inputs: {
@@ -1517,7 +1517,7 @@ export const GlassNode: NodeDefinition = withParamSockets({
 
 export const PhaseHGNode: NodeDefinition = withParamSockets({
   type: 'phaseHG',
-  label: 'Phase (HG)',
+  label: 'Light Scattering', aliases: ['Phase (HG)', 'Henyey-Greenstein', 'HG phase', 'Forward scattering'],
   category: '3D Lighting',
   description: 'Henyey-Greenstein phase function. Weights in-scattered light by the angle between view and light directions. Wire cos(θ) = dot(−Ray Dir, Light Dir). g=0: isotropic fog. g≈0.8: forward-scattering cloud. g<0: backlit haze.',
   inputs: {

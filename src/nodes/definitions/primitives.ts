@@ -10,7 +10,7 @@ export const CircleSDFNode: NodeDefinition = {
   type: 'circleSDF',
   label: 'Circle SDF',
   category: '2D Primitives',
-  description: 'Signed distance function for a circle.',
+  description: 'A circle as a distance: how far each point is from its edge, negative inside. Wire Distance into SDF Fill to paint it or SDF Glow to light it.',
   inputs: {
     position: { type: 'vec2', label: 'UV' },
     radius:   { type: 'float', label: 'Radius' },
@@ -42,7 +42,7 @@ export const BoxSDFNode: NodeDefinition = {
   type: 'boxSDF',
   label: 'Box SDF',
   category: '2D Primitives',
-  description: 'Signed distance function for a box.',
+  description: 'A rectangle as a distance: how far each point is from its edge, negative inside. Wire Distance into SDF Fill to paint it or SDF Glow to light it.',
   inputs: {
     position:   { type: 'vec2', label: 'UV' },
     dimensions: { type: 'vec2', label: 'Dimensions' },

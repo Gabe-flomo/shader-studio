@@ -1008,9 +1008,9 @@ export const AgentMoveNode: NodeDefinition = {
 
 export const AgentBySpeciesNode: NodeDefinition = {
   type: 'agentBySpecies',
-  label: 'By species',
+  label: 'By Species',
   category: 'Simulation',
-  aliases: ['Per species', 'Species select'],
+  aliases: ['By species', 'Per species', 'Species select'],
   description: 'Picks one of four numbers by this walker\'s species: a different Turn, Speed or Angle for each kind, from one rule.',
   inputs: {
     a: { type: 'float', label: 'Species 1' },
@@ -1366,9 +1366,9 @@ export function retypeTrailField(node: GraphNode): GraphNode {
 
 export const TrailFieldNode: NodeDefinition = {
   type: 'trailField',
-  label: 'Trail field',
+  label: 'Trail Field',
   category: 'Simulation',
-  aliases: ['Trail', 'Pheromone field', 'Chemoattractant', 'Trail map'],
+  aliases: ['Trail field', 'Trail', 'Pheromone field', 'Chemoattractant', 'Trail map'],
   description: 'The trail the walkers leave: every step it spreads out (Diffuse) and fades (Half-life). It is an ordinary texture: Amount at this pixel goes into a Palette or the Output, Texture into Glow, Blur or Sample (texture), and back into the Agents group for Sense to smell (it reads the trail as it was one step before).',
   inputs: {
     deposit: { type: 'deposit', label: 'Deposit', hint: 'A Deposit (or a chain of them).' },
@@ -1613,9 +1613,9 @@ function bgPaletteAt(node: GraphNode, t: string): string {
 
 export const DrawAgentsNode: NodeDefinition = {
   type: 'drawAgents',
-  label: 'Draw agents',
+  label: 'Draw Agents',
   category: 'Simulation',
-  aliases: ['Render agents', 'Agent points', 'Show agents', 'Draw particles', 'Streaks', 'Ink'],
+  aliases: ['Draw agents', 'Render agents', 'Agent points', 'Show agents', 'Draw particles', 'Streaks', 'Ink'],
   description: 'Draws every walker of an Agents group over the picture wired into Over, with the Particles node\'s looks: soft dots (Points), dots with a glow (Glow), short lines along their motion (Streaks), or dark ink on paper (Ink), lit by up to four moving lights. Colour by species, speed, heading or age, with Colour A → B or one of the Particles palettes. A 3D group is seen through a camera (Distance, Angle, Elevation, Orbit speed, Zoom, Flatten, Translate) with depth of field, or through a ray-marched scene\'s camera wired into Camera from and Camera ray.',
   inputs: {
     agents: { type: 'agents', label: 'Agents', hint: 'An Agents group\'s output.' },

@@ -507,7 +507,7 @@ const IFS_GLSL = IFS_HELPERS + '\n' + FERN_TRANSFORMS + '\n'
 
 export const IFSNode: NodeDefinition = withParamSockets({
   type: 'ifs',
-  label: 'IFS Fractal',
+  label: 'Fold Fractal', aliases: ['IFS Fractal', 'IFS', 'Iterated function system'],
   category: 'Fractals',
   description: [
     'Iterated Function System fractal via chaos game simulation. ',

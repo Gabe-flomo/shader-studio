@@ -24,14 +24,14 @@ function feedback(): GraphNode[] {
 }
 
 describe('loops in the compile', () => {
-  it('names the Draw agents → Stops Palette loop, without a Pass, with a tip, and does not throw', () => {
+  it('names the Draw Agents → Stops Palette loop, without a Pass, with a tip, and does not throw', () => {
     const nodes = densityLoopGraph();
     let r: ReturnType<typeof compileGraph> | undefined;
     expect(() => { r = compileGraph({ nodes }); }).not.toThrow();
     expect(r!.success).toBe(false);
     expect(r!.errors).toHaveLength(1);
     const msg = r!.errors![0];
-    expect(msg).toContain('Draw agents → Stops Palette → Draw agents');
+    expect(msg).toContain('Draw Agents → Stops Palette → Draw Agents');
     expect(msg).not.toMatch(/Pass/);
     expect(msg).toContain('Palette by density');
     expect(r!.loop).toMatchObject({
@@ -94,12 +94,12 @@ describe('loops in the compile', () => {
 });
 
 describe('loops when wiring', () => {
-  it('refuses Stops Palette → Draw agents · Over when the palette reads its Density', () => {
+  it('refuses Stops Palette → Draw Agents · Over when the palette reads its Density', () => {
     const nodes = densityLoopGraph({ loop: false });
     const loop = loopIfWired(nodes, 'node_12', 'color', 'node_13', 'over');
     expect(loop).not.toBeNull();
     expect(loop!.nodeIds).toEqual(['node_13', 'node_12', 'node_13']);
-    expect(loopMessage(nodes, loop!)).toContain('Draw agents → Stops Palette → Draw agents');
+    expect(loopMessage(nodes, loop!)).toContain('Draw Agents → Stops Palette → Draw Agents');
     // A wire out of the Agents group is the engine's side of the step: never a loop.
     expect(loopIfWired(nodes, 'node_1', 'agents', 'node_13', 'agents')).toBeNull();
   });

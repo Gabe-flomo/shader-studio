@@ -49,7 +49,7 @@ function ride(params: Record<string, unknown>, pos: number[], d3 = false) {
 describe('Ride a path', () => {
   it('is offered; Ride a curve (curves built in) is hidden, and searching its name finds Ride a path', () => {
     const def = getNodeDefinition('agentRidePath')!;
-    expect(def.label).toBe('Ride a path');
+    expect(def.label).toBe('Ride a Path');
     expect(def.inputs.path.field).toBe(true);
     expect(def.aliases).toContain('Ride a curve');
     expect(isOffered('agentRidePath')).toBe(true);

@@ -172,9 +172,9 @@ export const GridRulesStepNode: NodeDefinition = {
 
 export const MouseButtonNode: NodeDefinition = {
   type: 'mouseButton',
-  label: 'Mouse button',
+  label: 'Mouse Button',
   category: 'Sources',
-  aliases: ['Mouse down', 'Click', 'Pointer down', 'Pressed'],
+  aliases: ['Mouse button', 'Mouse down', 'Click', 'Pointer down', 'Pressed'],
   description: '1 while the mouse button (or a finger) is down on the picture, else 0: in the Studio preview, on the Play page and on exported pages. With Mouse, a brush.',
   inputs: {},
   outputs: { down: { type: 'float', label: 'Down', hint: '1 while the button is held over the picture.' } },

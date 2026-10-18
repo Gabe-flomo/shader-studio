@@ -215,8 +215,8 @@ float sdf4d_tesseract(vec4 p, float h, float rnd) {
 }`;
 
 export const HypersphereSDFNode: NodeDefinition = {
-  type: 'hypersphereSDF', label: 'Hypersphere SDF', category: CAT,
-  aliases: ['4d sphere', '3-sphere', 'glome'],
+  type: 'hypersphereSDF', label: 'Hypersphere', category: CAT,
+  aliases: ['Hypersphere SDF', '4d sphere', '3-sphere', 'glome'],
   description:
     'Signed distance to a 4D sphere (a hypersphere) at the origin: length(Point 4D) − Radius. Its 3D slice is always a sphere, but the size depends on w: ' +
     'radius at w = 0, shrinking to a point as w reaches the radius, and gone beyond. Sweep w and a sphere swells and shrinks.',
@@ -237,8 +237,8 @@ export const HypersphereSDFNode: NodeDefinition = {
 };
 
 export const TesseractSDFNode: NodeDefinition = {
-  type: 'tesseractSDF', label: 'Tesseract SDF', category: CAT,
-  aliases: ['4d box', 'hypercube', '8-cell', 'tesseract'],
+  type: 'tesseractSDF', label: 'Tesseract', category: CAT,
+  aliases: ['Tesseract SDF', '4d box', 'hypercube', '8-cell', 'tesseract'],
   description:
     'Signed distance to a tesseract (a 4D cube): the 3D box formula with a fourth coordinate. At w = 0 with no rotation its slice is an ordinary cube. ' +
     'Turn it in a plane with w (Rotate 4D, xw) and the slice morphs: it stretches along x and returns; add a second turn (yw, zw) and it becomes a many-faced solid before settling back to a cube.',
@@ -306,8 +306,8 @@ export function shapeNode(s: ShapeSpec): NodeDefinition {
 const PRODUCT = 'length(max(vec2(a, b), 0.0)) + min(max(a, b), 0.0)';
 
 export const DuocylinderSDFNode = shapeNode({
-  type: 'duocylinderSDF', label: 'Duocylinder SDF', fn: 'sdf4d_duocylinder',
-  aliases: ['duocylinder', '4d cylinder', 'disc times disc'],
+  type: 'duocylinderSDF', label: 'Duocylinder', fn: 'sdf4d_duocylinder',
+  aliases: ['Duocylinder SDF', 'duocylinder', '4d cylinder', 'disc times disc'],
   description:
     'A duocylinder: the product of two discs, one in the xy plane (radius 1) and one in the zw plane (radius 2). Its distance is max(length(p.xy) − Radius xy, length(p.zw) − Radius zw) inside and an exact ' +
     'distance outside. Its slice at w is a cylinder along z with radius 1 and a height that shrinks as w grows: √(Radius zw² − w²) each way. Turn it in xw and yz together and it rolls.',
@@ -325,8 +325,8 @@ float sdf4d_duocylinder(vec4 p, float r1, float r2) {
 });
 
 export const SpherinderSDFNode = shapeNode({
-  type: 'spherinderSDF', label: 'Spherinder SDF', fn: 'sdf4d_spherinder',
-  aliases: ['spherinder', 'sphere times line', 'ball prism'],
+  type: 'spherinderSDF', label: 'Spherinder', fn: 'sdf4d_spherinder',
+  aliases: ['Spherinder SDF', 'spherinder', 'sphere times line', 'ball prism'],
   description:
     'A spherinder: a sphere stretched along w into a segment (a sphere × a line, the 4D cousin of a cylinder). Exact. Its slice at w = 0 with no rotation is a ball for as long as |w| is under the half height, then nothing: ' +
     'a ball that appears and disappears. Rotate it in xw and the ball stretches into a capsule-like shape.',
@@ -344,8 +344,8 @@ float sdf4d_spherinder(vec4 p, float r, float h) {
 });
 
 export const CubinderSDFNode = shapeNode({
-  type: 'cubinderSDF', label: 'Cubinder SDF', fn: 'sdf4d_cubinder',
-  aliases: ['cubinder', 'square times circle', 'square disc'],
+  type: 'cubinderSDF', label: 'Cubinder', fn: 'sdf4d_cubinder',
+  aliases: ['Cubinder SDF', 'cubinder', 'square times circle', 'square disc'],
   description:
     'A cubinder, built as a SQUARE × DISC: a square in the xy plane (half size h) times a disc in the zw plane (radius r). Exact. Its boundary is cube-like where the square meets the disc ' +
     'and cylinder-like along the disc edge. At w = 0 the slice is a box of half size h in x and y whose height along z is the disc\'s; as w grows the box shortens. (The other reading, a cylinder × segment, is the Cylindrical Prism.)',
@@ -364,8 +364,8 @@ float sdf4d_cubinder(vec4 p, float h, float r) {
 });
 
 export const CylPrismSDFNode = shapeNode({
-  type: 'cylPrismSDF', label: 'Cylindrical Prism SDF', fn: 'sdf4d_cylprism',
-  aliases: ['cylindrical prism', 'cylinder times segment', '4d prism'],
+  type: 'cylPrismSDF', label: 'Cylindrical Prism', fn: 'sdf4d_cylprism',
+  aliases: ['Cylindrical Prism SDF', 'cylindrical prism', 'cylinder times segment', '4d prism'],
   description:
     'A cylindrical prism: an ordinary cylinder (a disc in xy, a segment in z) extruded along w. Exact. The same set as a disc × a rectangle in the zw plane. At w within the half extent its slice is the cylinder; ' +
     'turn it in xw and the circular cross-section becomes an ellipse, and in zw the cylinder tilts into its fourth direction.',
@@ -385,8 +385,8 @@ float sdf4d_cylprism(vec4 p, float r, float hz, float hw) {
 });
 
 export const DitorusSDFNode = shapeNode({
-  type: 'ditorusSDF', label: 'Ditorus SDF', fn: 'sdf4d_ditorus',
-  aliases: ['ditorus', 'tiger', 'tiger torus', 'duotorus', 'torus 4d'],
+  type: 'ditorusSDF', label: 'Ditorus', fn: 'sdf4d_ditorus',
+  aliases: ['Ditorus SDF', 'ditorus', 'tiger', 'tiger torus', 'duotorus', 'torus 4d'],
   description:
     'A ditorus ("tiger"): a thickened torus that sits in 4D as the product of two circles, one in the xy plane (Major radius xy) and one in the zw plane (Major radius zw), thickened by Minor radius: ' +
     'length(vec2(length(p.xy) − Major radius xy, length(p.zw) − Major radius zw)) − Minor radius. Exact. Its slices are tori (and thin rings, and two-lobed shapes near the ends) that change as w moves or as it turns.',
@@ -403,8 +403,8 @@ float sdf4d_ditorus(vec4 p, float R1, float R2, float r) {
 });
 
 export const CliffordTorusSDFNode = shapeNode({
-  type: 'cliffordTorusSDF', label: 'Clifford Torus SDF', fn: 'sdf4d_clifford',
-  aliases: ['clifford torus', 'torus on the 3-sphere', 'hopf torus'],
+  type: 'cliffordTorusSDF', label: 'Clifford Torus', fn: 'sdf4d_clifford',
+  aliases: ['Clifford Torus SDF', 'clifford torus', 'torus on the 3-sphere', 'hopf torus'],
   description:
     'A thickened Clifford torus: the flat torus that sits on the surface of a 3-sphere (radius s), made from a circle in xy of radius s·cos(a) and a circle in zw of radius s·sin(a). ' +
     'At Balance 45 degrees both circles are equal (s/√2): the true Clifford torus, which divides the 3-sphere into two equal solid tori. Other balances give the other tori that foliate the sphere. ' +
@@ -423,8 +423,8 @@ float sdf4d_clifford(vec4 p, float s, float t, float balDeg) {
 });
 
 export const Cell5SDFNode = shapeNode({
-  type: 'cell5SDF', label: '5-Cell SDF', fn: 'sdf4d_cell5',
-  aliases: ['5-cell', 'pentachoron', '4-simplex', 'simplex 4d', 'hypertetrahedron'],
+  type: 'cell5SDF', label: '5-Cell', fn: 'sdf4d_cell5',
+  aliases: ['5-Cell SDF', '5-cell', 'pentachoron', '4-simplex', 'simplex 4d', 'hypertetrahedron'],
   description:
     'The 5-cell (pentachoron, the 4D simplex): five tetrahedral cells, five corners. BOUND: the distance is the largest of the five face-plane distances, which is exact inside and ' +
     'never more than the true distance outside, so marching is safe but takes a few more steps near corners. Radius is the distance from the centre to a corner. One corner points along +w.',
@@ -443,8 +443,8 @@ float sdf4d_cell5(vec4 p, float R) {
 });
 
 export const Cell16SDFNode = shapeNode({
-  type: 'cell16SDF', label: '16-Cell SDF', fn: 'sdf4d_cell16',
-  aliases: ['16-cell', 'hexadecachoron', 'cross-polytope 4d', 'hyperoctahedron', 'orthoplex'],
+  type: 'cell16SDF', label: '16-Cell', fn: 'sdf4d_cell16',
+  aliases: ['16-Cell SDF', '16-cell', 'hexadecachoron', 'cross-polytope 4d', 'hyperoctahedron', 'orthoplex'],
   description:
     'The 16-cell (hexadecachoron, the 4D cross-polytope): sixteen tetrahedral cells, eight corners on the axes. BOUND: (|x| + |y| + |z| + |w| − s) / 2, exact inside and never over the true distance ' +
     'outside. Radius s is the distance from the centre to each corner; at w = 0 the slice is an octahedron.',
@@ -457,8 +457,8 @@ float sdf4d_cell16(vec4 p, float s) {
 });
 
 export const Cell24SDFNode = shapeNode({
-  type: 'cell24SDF', label: '24-Cell SDF', fn: 'sdf4d_cell24',
-  aliases: ['24-cell', 'icositetrachoron', 'octaplex'],
+  type: 'cell24SDF', label: '24-Cell', fn: 'sdf4d_cell24',
+  aliases: ['24-Cell SDF', '24-cell', 'icositetrachoron', 'octaplex'],
   description:
     'The 24-cell (icositetrachoron): twenty-four octahedral cells, 24 corners, and no 3D counterpart. It is self-dual: its cells and its corners have the same arrangement. BOUND: the larger of ' +
     'the biggest |coordinate| and half the sum of the four |coordinates|, minus the face distance: exact inside and never over the true distance outside. Radius is the distance to a corner; the faces are at 1/√2 of it.',
@@ -711,8 +711,8 @@ export const FOURD_SHAPE_TYPES = ['hypersphereSDF', 'tesseractSDF', 'duocylinder
 // |q| grows gives a 4D fractal; its 3D slice is the familiar lumpy, curling solid.
 
 export const QuatJuliaSDFNode = shapeNode({
-  type: 'quatJuliaSDF', label: 'Quaternion Julia SDF', fn: 'sdf4d_quatJulia',
-  aliases: ['quaternion julia', '4d julia', 'julia 4d', 'quaternion fractal', '4d fractal'],
+  type: 'quatJuliaSDF', label: 'Quaternion Julia', fn: 'sdf4d_quatJulia',
+  aliases: ['Quaternion Julia SDF', 'quaternion julia', '4d julia', 'julia 4d', 'quaternion fractal', '4d fractal'],
   description:
     'A quaternion Julia set: every 4D point q is iterated q → q² + c, and points that never escape are inside. The constant c (four numbers) picks the set; moving it slowly makes the shape boil and curl. ' +
     'Its distance is the usual fractal estimate 0.5·|q|·log|q| / |dq|: a safe lower bound, so lower the march loop\'s Step Scale a little (0.8) if you see holes. The slice at w is the 3D Julia most people picture.',
@@ -743,8 +743,8 @@ float sdf4d_quatJulia(vec4 p, float cx, float cy, float cz, float cw, float iter
 });
 
 export const QuatMandelSDFNode = shapeNode({
-  type: 'quatMandelSDF', label: 'Quaternion Mandelbrot SDF', fn: 'sdf4d_quatMandel',
-  aliases: ['quaternion mandelbrot', '4d mandelbrot', 'mandelbrot 4d'],
+  type: 'quatMandelSDF', label: 'Quaternion Mandelbrot', fn: 'sdf4d_quatMandel',
+  aliases: ['Quaternion Mandelbrot SDF', 'quaternion mandelbrot', '4d mandelbrot', 'mandelbrot 4d'],
   description:
     'The quaternion Mandelbrot set: from q = 0, iterate q → q² + p with p the 4D point; points that never escape are inside. Its slices are the 2D Mandelbrot spun round its axis, and turning it in 4D reveals more. ' +
     'Distance by the fractal estimate (a lower bound): lower Step Scale a little if you see holes.',

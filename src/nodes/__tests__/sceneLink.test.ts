@@ -62,7 +62,7 @@ describe('link targets', () => {
   it('lists the Translates and shapes in a Scene Group, by name, with where they sit', () => {
     const s = scene();
     expect(linkTargets(s).map(t => `${t.kind}:${t.id}:${t.label}`)).toEqual([
-      'translate:moveA:Ball (Translate 3D)', 'shape:ballA:Sphere SDF 3D', 'translate:moveB:Translate 3D (Box SDF 3D)', 'shape:boxB:Box SDF 3D',
+      'translate:moveA:Ball (Translate 3D)', 'shape:ballA:Sphere', 'translate:moveB:Translate 3D (Box 3D)', 'shape:boxB:Box 3D',
     ]);
     expect(translateChain((s.params.subgraph as SubgraphData).nodes, 'ballA')).toEqual(['moveA']);
     expect(staticCentre(s, 'ballA')).toEqual([1, 2, 3]);
@@ -86,7 +86,7 @@ describe('linking a Depth Light', () => {
     expect(sc.outputs.col_ballA).toBeUndefined(); // no colour to follow
     expect(lit.inputs.lightPos.connection).toEqual({ nodeId: 'scene', outputKey: 'at_ballA' });
     expect(lit.inputs.lightColor.connection).toBeUndefined();
-    expect(lightLinkOf(lit)).toEqual({ scene: 'scene', object: 'ballA', label: 'Sphere SDF 3D' });
+    expect(lightLinkOf(lit)).toEqual({ scene: 'scene', object: 'ballA', label: 'Sphere' });
   });
 
   it('follows the object: its Translate\'s live slider uniforms reach the light in main()', () => {

@@ -34,7 +34,7 @@ export const UVNode: NodeDefinition = {
   type: 'uv',
   label: 'UV',
   category: 'Sources',
-  description: 'Centered, aspect-corrected UV coordinates',
+  description: 'Each pixel\'s position on the picture, centred: (0, 0) is the middle, and across is scaled by the picture\'s shape so circles stay round. Most chains start here.',
   inputs: {},
   outputs: {
     uv: { type: 'vec2', label: 'UV' },
@@ -55,7 +55,7 @@ export const TimeNode: NodeDefinition = {
   type: 'time',
   label: 'Time',
   category: 'Sources',
-  description: 'Current time in seconds',
+  description: 'Seconds since the graph started. Wire it into anything to make it move.',
   inputs: {},
   outputs: {
     time: { type: 'float', label: 'Time' },
@@ -144,7 +144,7 @@ export const ResolutionNode: NodeDefinition = {
   type: 'resolution',
   label: 'Resolution',
   category: 'Sources',
-  description: 'Canvas resolution in pixels (width, height).',
+  description: 'The picture\'s size in pixels (width, height). Divide a pixel position by it to get 0 to 1 across the picture.',
   inputs: {},
   outputs: {
     res:    { type: 'vec2',  label: 'Resolution' },

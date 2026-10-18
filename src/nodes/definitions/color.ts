@@ -141,7 +141,7 @@ vec3 gradientBlend(vec2 uv, vec3 colorA, vec3 colorB, int mode, float offset) {
 const COLORIZE_DRIVERS = ['field', ...DRIVERS_2D] as const;
 export const ColorizeNode: NodeDefinition = {
   type: 'colorize',
-  label: 'Colorize', aliases: ['scale color', 'scale colour', 'tint', 'color by field', 'colour field', 'color × float', 'field to color'],
+  label: 'Colourize', aliases: ['Colorize', 'scale color', 'scale colour', 'tint', 'color by field', 'colour field', 'color × float', 'field to color'],
   category: 'Color', subcategory: 'Build',
   description:
     'Paints a float field with a colour: Colour × Field (× Gain). A glow, a distance, a noise or a mask goes in; a vec3 you can wire straight to Output comes out. ' +
@@ -469,7 +469,7 @@ export const HueRangeNode: NodeDefinition = {
 
 // ColorRamp: multi-stop gradient (up to 8 stops), generates a chain of mix() calls
 export const ColorRampNode: NodeDefinition = {
-  type: 'colorRamp', label: 'Color Ramp', category: 'Color',
+  type: 'colorRamp', label: 'Colour Ramp', aliases: ['Color Ramp'], category: 'Color',
   description: 'Multi-stop gradient — up to 8 color stops, evenly spaced.',
   inputs: { t: { type: 'float', label: 't (0-1)' } },
   outputs: { color: { type: 'vec3', label: 'Color' } },
@@ -915,7 +915,7 @@ export function colorPickerSockets(n: GraphNode): GraphNode {
 // building colours out of three floats with Make Vec3.
 export const ColorPickerNode: NodeDefinition = {
   type: 'colorPicker',
-  label: 'Color', aliases: ['color picker', 'swatch', 'solid color', 'rgb color', 'make color', 'colour'],
+  label: 'Colour', aliases: ['color picker', 'swatch', 'solid color', 'rgb color', 'make color', 'colour'],
   category: 'Color', subcategory: 'Build',
   description:
     'A single colour from a design-tool picker: drag the square and hue strip, type a hex, or use the eyedropper. ' +

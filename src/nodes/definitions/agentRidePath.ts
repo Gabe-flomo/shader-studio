@@ -21,9 +21,9 @@ import { isAgent3d } from './agents';
 
 export const AgentRidePathNode: NodeDefinition = {
   type: 'agentRidePath',
-  label: 'Ride a path',
+  label: 'Ride a Path',
   category: 'Simulation',
-  aliases: ['Ride a curve', 'Follow a path', 'Ride an outline', 'Follow an outline', 'Follow a shape', 'Contour walkers', 'Ride a shape', 'Path walkers'],
+  aliases: ['Ride a path', 'Ride a curve', 'Follow a path', 'Ride an outline', 'Follow an outline', 'Follow a shape', 'Contour walkers', 'Ride a shape', 'Path walkers'],
   description: 'Walkers that travel along a shape\'s outline as a flowing band. Wire any shape into Path ƒ (a Circle SDF, a Lissajous Curve, a Chladni plate, Metaballs, text) and they slide along where it equals Level, pulled back onto it every step, so they follow it as it moves. Position, Velocity and Heading go to Agent Output.',
   inputs: {
     path: { type: 'float', label: 'Path ƒ', field: true, hint: 'The shape to ride the outline of: an SDF\'s Distance (a circle, a star, a union), a Lissajous Curve, a Chladni plate (its nodal lines), noise. Walkers follow where it equals Level. Unwired, they stay where they are.' },

@@ -4,9 +4,7 @@ The app's chrome (page tabs, rail names, shortcut labels, menu rows, toolbar too
 uses one name for each idea below. `src/lib/glossary.ts` holds the same list as data, and
 `src/lib/__tests__/glossary.test.ts` fails when a retired word comes back into the chrome.
 
-Node labels and node categories live in the node definitions and are **not** covered here yet.
-They get their own pass later (so the `Color` node, `Color Ramp` and the category ids stay as they
-are for now).
+Node labels live in the node definitions; their rules are under "Node labels" below. Node categories are not covered here yet.
 
 ## The names
 
@@ -69,3 +67,22 @@ are for now).
 Old page ids still work (deep links, `requestPage`, saved state): `glsl`, `convert` and `fn` open
 the Code page on the matching tab, `code` opens it on the last tab used, and `shortcuts` is the
 keyboard shortcuts page reached from Help.
+
+## Node labels (2026-10-17)
+
+Node labels follow these rules now (the catalogue sweep, `docs/node-retirements.md`). Type ids never change, so
+saved graphs, the Do bar's type names and code keep working; every renamed node keeps its old label as an alias, so
+search and `create …` still find it by the old name.
+
+| Rule | Examples |
+|---|---|
+| **Colour**, British, in labels too | Colour, Colourize, Colour Ramp, Add Colours, Glow to Colour, Normal to Colour, Float → Colour |
+| **Neighbour(s)**, one spelling | Neighbour Distance, Neighbour Offset 2D (beside Neighbours, Read Neighbours (texture)) |
+| **Title Case** for every label; a trailing tag stays lower case | Draw Agents, Trail Field, Value at Point, Band Level, Jump Flood (texture), Slime Mold (preset) |
+| **2D shapes keep "SDF"** (Circle SDF, Box SDF, Shape SDF…): it is how the Learn chapters introduce distances | Circle SDF, Ring SDF, Line Segment SDF |
+| **3D and 4D shapes drop "SDF"** (every one of them is a distance); **"3D"** only where a 2D node has the same name | Sphere, Torus, Capsule, Cylinder, Plane, Box 3D (beside Box SDF), Tesseract, 16-Cell, Quaternion Julia |
+| **Plain words first, the jargon as an alias** | Light Scattering (Phase (HG)), Skin Glow (Fake SSS), Fold Fractal (IFS Fractal), Lattice Surface (Schwarz-P Field), Cross (SD Cross 3D), Every Nth (Mod Select) |
+
+Short-word labels that are GLSL itself stay (Sin, Fract, Mix, Smoothstep): they are what a shader writer types.
+Every description is at least a full sentence saying what the node is for (the 21 that were a few words were
+rewritten); `nodeWording.test.ts` checks they name sockets and settings by their labels.

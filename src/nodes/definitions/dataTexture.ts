@@ -263,9 +263,9 @@ export const DataTexturePackNode: NodeDefinition = {
 
 export const ReadChannelsNode: NodeDefinition = {
   type: READ_CHANNELS_TYPE,
-  label: 'Read channels (texture)',
+  label: 'Read Channels (texture)',
   category: TEXTURE_TOOLS_CATEGORY,
-  aliases: ['Read channels', 'Texture channels', 'Read data', 'Unpack', 'Channels', 'texelFetch'],
+  aliases: ['Read channels (texture)', 'Read channels', 'Texture channels', 'Read data', 'Unpack', 'Channels', 'texelFetch'],
   description: 'Reads channels of any texture as a typed value: pick one to four of r g b a, and the output is a float, vec2, vec3 or vec4 to match, whichever channels they are (.rb is a vec2). Exact reads one texel, never blended, for data such as positions; Smooth blends, for pictures.',
   inputs: {
     texture: { type: 'texture', label: 'Texture', hint: 'Any texture: a Data Texture, a Pass, a picture, a video.' },

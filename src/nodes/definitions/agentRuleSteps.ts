@@ -87,9 +87,9 @@ const pointOf = (node: GraphNode, which: string, d3: boolean) => {
 
 export const AgentTurnTowardNode: NodeDefinition = {
   type: 'agentTurnToward',
-  label: 'Turn toward',
+  label: 'Turn Toward',
   category: 'Simulation',
-  aliases: ['Steer toward', 'Seek', 'Flee', 'Head for', 'Keep apart', 'Separation', 'Alignment', 'Cohesion', 'Follow flow'],
+  aliases: ['Turn toward', 'Steer toward', 'Seek', 'Flee', 'Head for', 'Keep apart', 'Separation', 'Alignment', 'Cohesion', 'Follow flow'],
   description: 'Turns the walker toward a way to go (Direction) or a point (Target, the mouse, the centre), at most Max turn a step, the short way round. Away turns the other way. The Agent Builder\'s seek, flee, keep apart, align and stay together are this node.',
   inputs: {
     heading: HEADING_IN,
@@ -134,9 +134,9 @@ export const AgentTurnTowardNode: NodeDefinition = {
 
 export const AgentFollowTrailNode: NodeDefinition = {
   type: 'agentFollowTrail',
-  label: 'Follow trail',
+  label: 'Follow Trail',
   category: 'Simulation',
-  aliases: ['Slime mold turn', 'Jones rule', 'Smell', 'Avoid trail', 'Physarum'],
+  aliases: ['Follow trail', 'Slime mold turn', 'Jones rule', 'Smell', 'Avoid trail', 'Physarum'],
   description: 'The slime-mold turn, gated by When: straight on when the trail is strongest ahead, a random side when both sides beat ahead, else Turn toward the stronger side. Away runs from the trail instead. Readings come from a Sense node.',
   inputs: {
     heading: HEADING_IN,
@@ -246,9 +246,9 @@ export const AgentOrbitNode: NodeDefinition = {
 
 export const AgentAvoidWallsNode: NodeDefinition = {
   type: 'agentAvoidWalls',
-  label: 'Avoid walls',
+  label: 'Avoid Walls',
   category: 'Simulation',
-  aliases: ['Avoid edges', 'Stay inside', 'Keep in the picture'],
+  aliases: ['Avoid walls', 'Avoid edges', 'Stay inside', 'Keep in the picture'],
   description: 'Within Margin of an edge of the picture (or the box in 3D), turns the walker back inward, at most Max turn a step. Elsewhere it does nothing.',
   inputs: { heading: HEADING_IN, position: POSITION_IN, when: WHEN },
   outputs: HEADING_OUT,
@@ -274,9 +274,9 @@ export const AgentAvoidWallsNode: NodeDefinition = {
 
 export const AgentApplyForceNode: NodeDefinition = {
   type: 'agentApplyForce',
-  label: 'Apply force',
+  label: 'Apply Force',
   category: 'Simulation',
-  aliases: ['Push', 'Pull', 'Gravity', 'Wind', 'Attract', 'Accelerate'],
+  aliases: ['Apply force', 'Push', 'Pull', 'Gravity', 'Wind', 'Attract', 'Accelerate'],
   description: 'Changes the walker\'s velocity (which way it heads, times how fast) by a force for one step, so its heading and speed follow: gravity, a gusty wind, a pull toward (or, with a negative Strength, a push from) a point or the mouse, or any force wired into Force (Curl noise\'s).',
   inputs: {
     heading: HEADING_IN,
@@ -359,9 +359,9 @@ export const AgentDragNode: NodeDefinition = {
 
 export const AgentSlowInCrowdNode: NodeDefinition = {
   type: 'agentSlowInCrowd',
-  label: 'Slow in a crowd',
+  label: 'Slow in a Crowd',
   category: 'Simulation',
-  aliases: ['Jam', 'Crowd speed', 'Traffic'],
+  aliases: ['Slow in a crowd', 'Jam', 'Crowd speed', 'Traffic'],
   description: 'The speed falls from Walking speed toward a crawl as Count (how many walkers are near: Neighbours\' Count) reaches Jam; at most 95% slower, so nobody stops for good.',
   inputs: {
     speed: SPEED_IN,
@@ -391,9 +391,9 @@ export const AgentSlowInCrowdNode: NodeDefinition = {
 
 export const AgentLeaveTrailNode: NodeDefinition = {
   type: 'agentLeaveTrail',
-  label: 'Leave trail',
+  label: 'Leave Trail',
   category: 'Simulation',
-  aliases: ['Deposit', 'Pheromone', 'Mark'],
+  aliases: ['Leave trail', 'Deposit', 'Pheromone', 'Mark'],
   description: 'Adds Amount to the trail the walker leaves this step, in its own species\' channel or one channel. Wire Deposit on to the next step, and the last into Agent Output\'s Deposit.',
   inputs: {
     deposit: { type: 'vec4', label: 'Deposit', hint: 'The trail it leaves so far this step, one amount per channel (unwired: none yet).' },
@@ -424,9 +424,9 @@ export const AgentLeaveTrailNode: NodeDefinition = {
 
 export const AgentFadeWithAgeNode: NodeDefinition = {
   type: 'agentFadeWithAge',
-  label: 'Fade with age',
+  label: 'Fade with Age',
   category: 'Simulation',
-  aliases: ['Fade out', 'Dim', 'Die out', 'Brightness'],
+  aliases: ['Fade with age', 'Fade out', 'Dim', 'Die out', 'Brightness'],
   description: 'Dims the walker from full brightness at birth to black at Over seconds old (Brightness times what is left), for its colour.',
   inputs: {
     bright: { type: 'float', label: 'Brightness', hint: 'Its brightness so far this step (unwired: 1).' },

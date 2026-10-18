@@ -510,9 +510,9 @@ export const DisplacementMapNode: NodeDefinition = withParamSockets({
 
 export const JumpFloodTextureNode: NodeDefinition = {
   type: 'jumpFloodTexture',
-  label: 'Jump flood (texture)',
+  label: 'Jump Flood (texture)',
   category: 'Texture tools',
-  aliases: ['JFA', 'Jump flooding', 'Distance field (texture)', 'Nearest seed', 'Voronoi (texture)'],
+  aliases: ['Jump flood (texture)', 'JFA', 'Jump flooding', 'Distance field (texture)', 'Nearest seed', 'Voronoi (texture)'],
   description: 'One step of a jump flood, the fast way to turn a shape into a distance field: reads the texture at this pixel and 8 places Reach picture pixels round it, where each pixel holds the place of a seed (red, green: a point in picture coordinates; blue 1: a seed is known), and keeps the nearest. Put it in a Pass that reads its own Previous with Repeat set (8 to 11), halving Reach each step, and every pixel ends up knowing the nearest point of the shape. Use a half-float Pass with Filter Nearest.',
   inputs: {
     texture: { type: 'texture', label: 'Texture', hint: 'A Pass whose pixels hold seeds (usually its own Previous). Unwired, nothing is found.' },
