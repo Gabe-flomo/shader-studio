@@ -103,6 +103,7 @@ export const Minimap = React.memo(function Minimap({ nodes, viewportWidth, viewp
 
   return (
     <div
+      data-graph-overlay=""
       style={{
         position: 'absolute',
         bottom: 16,

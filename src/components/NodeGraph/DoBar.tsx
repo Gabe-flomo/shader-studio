@@ -415,7 +415,7 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
   };
   const pick = (f: Fallback) => {
     const st = useNodeGraphStore.getState();
-    if (f.kind === 'node') st.addNode(f.type, spawnPoint());
+    if (f.kind === 'node') st.addNode(f.type, spawnPoint(f.type));
     else st.addBuiltNode(idiomBlock(f.spec, 'idiom', spawnPoint().x, spawnPoint().y), f.spec.idiom.name);
     closeDoBar();
   };

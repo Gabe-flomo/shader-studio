@@ -79,6 +79,7 @@ export function CanvasToolbar({
 
   return (
     <div
+      data-graph-overlay=""
       onMouseDown={e => e.stopPropagation()}
       style={{
         position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 15,

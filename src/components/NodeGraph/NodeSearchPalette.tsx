@@ -188,7 +188,7 @@ function SearchPanel({ onClose, spawnPosition, filterOutputType, filterInputType
 
   // ── Actions ──
   const place = useCallback((type: string, params?: Record<string, unknown>) => {
-    const newId = addNode(type, spawnPosition ?? spawnPoint(), params);
+    const newId = addNode(type, spawnPosition ?? spawnPoint(type), params);
     if (newId) {
       recordRecentNode(type);
       onNodePlaced?.(newId);

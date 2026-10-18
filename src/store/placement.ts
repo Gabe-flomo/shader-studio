@@ -14,14 +14,20 @@
  */
 import type { GraphNode } from '../types/nodeGraph';
 import { cardHeight, untangle } from './agentSetup';
-import { boundsOf, nearestFree, type Box, type Pt } from './freeSpace';
+import { boundsOf, boxesHit, nearestFree, type Box, type Pt } from './freeSpace';
 
 /** The part of the graph on screen, in graph coordinates. */
-export interface ViewRect { x: number; y: number; w: number; h: number }
+export interface ViewRect {
+  x: number; y: number; w: number; h: number;
+  /** Boxes on screen that float over the canvas (the minimap, the toolbar): kept clear like cards. */
+  reserved?: readonly Box[];
+}
 
 const CARD_W = 360;
 /** Space kept between a new block and the cards already there. */
 export const PLACE_GAP = 60;
+/** Closer than this to a card counts as on it (a planner's columns sit closer than PLACE_GAP on purpose). */
+const OVERLAP_GAP = 8;
 /** Space kept between a block taller or wider than the view and the view's edge. */
 const VIEW_PAD = 40;
 
@@ -60,8 +66,9 @@ export function placeSetupInView(existing: readonly GraphNode[], added: GraphNod
   const tidy = untangle(added, heightOf);
   const block = boundsOf(tidy.map(nd => boxOf(nd, heightOf)));
   if (!block) return tidy;
-  const there = existing.map(nd => boxOf(nd, heightOf));
-  const graph = boundsOf(there);
+  const cards = existing.map(nd => boxOf(nd, heightOf));
+  const graph = boundsOf(cards);
+  const there = [...cards, ...(view?.reserved ?? [])];
   const centre = opts.at
     ?? (view ? { x: view.x + view.w / 2, y: view.y + view.h / 2 } : graph ? { x: graph.x + graph.w / 2, y: graph.y + graph.h / 2 } : { x: block.x + block.w / 2, y: block.y + block.h / 2 });
   const start = centredStart(block, centre, view);
@@ -94,12 +101,19 @@ export function settleAddedInView(before: readonly GraphNode[], after: GraphNode
   if (before.some(nd => !now.has(nd.id))) return after;
   const added = after.filter(nd => !was.has(nd.id));
   if (!added.length) return after;
-  if ((opts.mode ?? 'ifOutOfView') === 'ifOutOfView') {
-    const block = boundsOf(added.map(nd => boxOf(nd, heightOf)))!;
-    if (seenIn(block, view)) return after;
-  }
   const rest = after.filter(nd => was.has(nd.id));
-  const moved = new Map(placeSetupInView(rest, added, view, { heightOf }).map(nd => [nd.id, nd.position]));
+  let at: Pt | null = null;
+  if ((opts.mode ?? 'ifOutOfView') === 'ifOutOfView') {
+    const boxes = added.map(nd => boxOf(nd, heightOf));
+    const block = boundsOf(boxes)!;
+    if (seenIn(block, view)) {
+      // On screen, but on a card or under the minimap: nudged to the nearest clear spot from where it is.
+      const others = [...rest.map(nd => boxOf(nd, heightOf)), ...(view.reserved ?? [])];
+      if (!boxes.some(b => others.some(o => boxesHit(b, o, OVERLAP_GAP)))) return after;
+      at = { x: block.x + block.w / 2, y: block.y + block.h / 2 };
+    }
+  }
+  const moved = new Map(placeSetupInView(rest, added, view, { heightOf, at }).map(nd => [nd.id, nd.position]));
   return after.map(nd => (moved.has(nd.id) ? { ...nd, position: moved.get(nd.id)! } : nd));
 }
 

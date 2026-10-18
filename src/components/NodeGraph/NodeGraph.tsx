@@ -120,6 +120,21 @@ const CRISP_ZOOM = typeof navigator !== 'undefined' && (
 /** How long the zoom holds still before it counts as settled (layout zoom, sharp canvases). Trackpad pinch events come every frame, so this is well clear of a gesture. */
 const CRISP_ZOOM_SETTLE_MS = 160;
 
+/**
+ * The graph-space boxes under the overlays that float on the canvas (marked `data-graph-overlay`: the
+ * minimap, the toolbar), so a node added in view doesn't land under one.
+ */
+function reservedBoxes(canvas: HTMLElement, rect: DOMRect, origin: { x: number; y: number }, z: number): Array<{ x: number; y: number; w: number; h: number }> {
+  const host = canvas.parentElement ?? canvas;
+  const out: Array<{ x: number; y: number; w: number; h: number }> = [];
+  host.querySelectorAll<HTMLElement>('[data-graph-overlay]').forEach(o => {
+    const b = o.getBoundingClientRect();
+    if (b.width <= 0 || b.height <= 0) return;
+    out.push({ x: origin.x + (b.left - rect.left) / z, y: origin.y + (b.top - rect.top) / z, w: b.width / z, h: b.height / z });
+  });
+  return out;
+}
+
 export const NodeGraph = React.memo(function NodeGraph({ transparent = false, redesignToolbar = false, locked = false }: {
   transparent?: boolean;
   /** Desktop redesign: the top-centre CanvasToolbar (node count, zoom, fit, layout, minimap, clear) replaces the legacy corner toolbar. */
@@ -1282,7 +1297,10 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
       const z = zoomRef.current || 1;
       const p = panRef.current ?? { x: 0, y: 0 };
       const r = el ? el.getBoundingClientRect() : { width: 960, height: 600 };
-      return { x: -p.x / z, y: -p.y / z, w: r.width / z, h: r.height / z };
+      const x = -p.x / z, y = -p.y / z;
+      // What floats over the canvas (the minimap, the toolbar): new cards stay out from under it (store/placement.ts).
+      const reserved = el ? reservedBoxes(el, r as DOMRect, { x, y }, z) : [];
+      return { x, y, w: r.width / z, h: r.height / z, reserved };
     });
     return () => reg(null);
   }, []);

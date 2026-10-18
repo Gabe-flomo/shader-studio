@@ -375,7 +375,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
 
   const handleAdd = (type: string, params?: Record<string, unknown>) => {
     if (swapTargetNodeId) { swapNode(swapTargetNodeId, type); onNodeAdded?.(); return; }
-    addNode(type, spawnPoint(), params);
+    addNode(type, spawnPoint(type), params);
     onNodeAdded?.();
   };
 
@@ -602,7 +602,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
                 return (
                   <ItemRow label={d.label} icon="spark" color={tk.kind.fn} tag={d.sealed ? 'Sealed' : undefined}
                     drag={{ label: d.label, type: d.id, place: pos => addNode(d.id, pos) }} onDragDone={onNodeAdded}
-                    onClick={() => { addNode(d.id, spawnPoint()); onNodeAdded?.(); }}
+                    onClick={() => { addNode(d.id, spawnPoint(d.id)); onNodeAdded?.(); }}
                     onEdit={d.source ? () => {
                       if (d.source?.kind === 'code') { setPublishExisting(d.id); setPublishSource({ kind: 'code', code: d.source.code, entry: d.source.entry, label: d.label }); return; }
                       if (openUserNodeSource(d.id, spawnPoint())) onNodeAdded?.();
@@ -864,7 +864,7 @@ function PaletteBody({ mode = 'full', onNodeAdded, onCollapse, context, onGlslIn
   if (mode === 'drawer') {
     const handleAdd = (type: string, params?: Record<string, unknown>) => {
       if (swapTargetNodeId) { swapNode(swapTargetNodeId, type); onNodeAdded?.(); return; }
-      addNode(type, spawnPoint(), params);
+      addNode(type, spawnPoint(type), params);
       onNodeAdded?.();
     };
     return (
