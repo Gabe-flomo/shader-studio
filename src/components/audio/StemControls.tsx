@@ -8,6 +8,8 @@
  * - **Stem**: Full mix or one of the stems: what the bands, Hit, Learn a sound, the effects and every listening node hear.
  * - **Hear**: Full mix (the default: you hear the song, the analysis hears the stem) or This stem.
  */
+import { requireFeature } from '../../lib/plan';
+import { ProBadgeFor } from '../account/ProSheet';
 import { useState } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { useTokens } from '../../theme/themeStore';
@@ -50,6 +52,8 @@ export function StemControls({ node, compact = false, loaded }: { node: GraphNod
   const busy = !!running;
   const stem = analysedStem(P);
   const separate = (id: string) => {
+    // Separate is Pro (lib/plan.ts 'audio.stems'); stems a song already has stay usable on Free
+    if (!requireFeature('audio.stems')) return;
     if (models[id]?.downloaded) { setOffer(null); void separateNode(node, id); }
     else setOffer(id);
   };
@@ -75,7 +79,7 @@ export function StemControls({ node, compact = false, loaded }: { node: GraphNod
       <div data-stem-controls style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
           <Button size="sm" data-stem-separate disabled={busy} onClick={() => separate(model)}
-            title="Split the song into stems (drums, bass, vocals, other) on this device, once; then pick one for everything listening to hear">Separate</Button>
+            title="Split the song into stems (drums, bass, vocals, other) on this device, once; then pick one for everything listening to hear">Separate<ProBadgeFor feature="audio.stems" /></Button>
           {!compact && (
             <div style={{ width: 300 }}>
               <Segmented<string> size="sm" fill ariaLabel="Stem model" value={model} onChange={setModel}
@@ -119,7 +123,7 @@ export function StemControls({ node, compact = false, loaded }: { node: GraphNod
               <Segmented<string> size="sm" fill ariaLabel="Stem model" value={model} onChange={setModel}
                 options={STEM_MODELS.map(m => ({ value: m.id, label: m.stems.length === 4 ? '4 stems' : '6 stems (+ guitar, piano)' }))} />
             </div>
-            <Button size="sm" disabled={busy} data-stem-reseparate onClick={() => separate(model)} title="Separate the song again (with the model picked here); the stems it has now go once the new ones are kept">Re-separate</Button>
+            <Button size="sm" disabled={busy} data-stem-reseparate onClick={() => separate(model)} title="Separate the song again (with the model picked here); the stems it has now go once the new ones are kept">Re-separate<ProBadgeFor feature="audio.stems" /></Button>
             <Button size="sm" variant="ghost" disabled={busy} data-stem-remove
               onClick={() => { void removeStems(bake).then(() => set({ stems: null, stem: 'mix', hear: 'mix' })); }}
               title="Remove the stems from the library (the song stays)">Remove stems</Button>

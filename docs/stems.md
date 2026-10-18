@@ -101,3 +101,7 @@ whole song.
 - Separating doesn't run during Play on its own: it pauses the picture until it's done.
 - WKWebView: WebGPU, `AudioEncoder` (Opus) and cross-origin isolation under `tauri://` were not checked in the app
   (see the open questions in the PR). Without `AudioEncoder` the stems are kept as WAV.
+
+## Plans
+
+Separate (and Re-separate) is a **Pro** feature (`audio.stems` in src/lib/plan.ts). Stems a song already has stay usable on Free, and every other Audio node is free.
