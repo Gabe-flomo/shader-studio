@@ -1,5 +1,4 @@
 import { ProBadgeFor } from '../account/ProSheet';
-import { BROWSE_STAGE_EVENT } from '../../structure/browse';
 import React, { useState, useEffect, useRef } from 'react';
 import { ItemRow, EmptyHint, TabSectionHeader } from '../library/ItemRow';
 import { Library, type LibraryFilter } from '../library/Library';
@@ -390,13 +389,6 @@ function PaletteBody({ mode = 'full', onNodeAdded, onCollapse, context, onGlslIn
     const open = () => setPanes(prev => (prev.some(p => p.activeTab === 'history') ? prev : prev.map(p => (p.id === focusedPaneId ? { ...p, activeTab: 'history' } : p))));
     window.addEventListener(OPEN_WHATS_NEW, open);
     return () => window.removeEventListener(OPEN_WHATS_NEW, open);
-  }, [mode, focusedPaneId]);
-  // A stage clicked on the flow strip: show the Nodes tab (the browser then shows that stage).
-  useEffect(() => {
-    if (mode === 'drawer') return;
-    const open = () => setPanes(prev => (prev.some(p => p.activeTab === 'nodes') ? prev : prev.map(p => (p.id === focusedPaneId ? { ...p, activeTab: 'nodes' } : p))));
-    window.addEventListener(BROWSE_STAGE_EVENT, open);
-    return () => window.removeEventListener(BROWSE_STAGE_EVENT, open);
   }, [mode, focusedPaneId]);
 
   // "Show in the Library" (a filter), and a request for one of the sidebar's tabs (the Library's "Publish node…").

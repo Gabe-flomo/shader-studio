@@ -223,7 +223,7 @@ What can't go inside, and why (the card says so):
 
 - **Unwired means "this walker".** Inside the group a socket left unwired that reads the walker by itself says so in faint type on the card ("← this walker's position", "← this walker's heading", "← a fresh random number"); on Agent Output it says "unchanged".
 - **The eye on a node inside the group** shows what an agent standing at each pixel would see: the node, and the inside nodes it depends on, with the agent at that pixel, facing right, species 1, remembering nothing. On Sense it shows the three sensors' readings (left, centre, right as red, green, blue) on this frame's trail; on Flow or Collide, their field. The simulation keeps running underneath.
-- **Show passes** (the layers button on the canvas toolbar, when the graph has Pass nodes or an Agents group) rings every card in the colour of the program it runs in: a Pass (blue, purple…), the Agents group (amber: its inside, what is wired into its ports, Deposit, Trail and Draw) or the picture (green). A card compiled into two programs, such as a shape both the walkers and the picture read, is striped.
+- **Show passes** (in the canvas's right-click menu, when the graph has Pass nodes or an Agents group) rings every card in the colour of the program it runs in: a Pass (blue, purple…), the Agents group (amber: its inside, what is wired into its ports, Deposit, Trail and Draw) or the picture (green). A card compiled into two programs, such as a shape both the walkers and the picture read, is striped.
 
 ## The loop, and the "↺ last step" chip
 

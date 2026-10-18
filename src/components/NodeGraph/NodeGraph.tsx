@@ -8,6 +8,8 @@ import { canFollowHand, followHand } from '../../play/followHand';
 import { NodeComponent } from './NodeComponent';
 import { NodeSearchPalette } from './NodeSearchPalette';
 import { CanvasToolbar } from '../shell/CanvasToolbar';
+import { canvasMenuItems } from '../shell/canvasGraphMenu';
+import { setSuggestionsShown, suggestionsShown } from '../../suggestions/settings';
 import { setVizScale, vizScaleForZoom } from './vizKit';
 import { registerSocket, remeasureAllSockets, setLayoutZoomGetter, getSocketOffset, getDragPosition, publishView, getCardSize, isDragging, subscribeCardSizes, forgetNodeLayout, type Pt } from './socketRegistry';
 import { WireLayer, type EdgeInfo } from './WireLayer';
@@ -23,8 +25,6 @@ import { ShowHowWindow } from './ShowHowWindow';
 import { openDoBar, useDoBarHighlight } from '../../suggestions/doBarStore';
 import { useLongPress } from '../../lib/longPress';
 import { learnedNext, rankTables } from '../../suggestions';
-import { nudgeByStage } from '../../structure/boost';
-import { currentStageTarget } from '../../structure/hintsStore';
 import { RecipeOffer } from './RecipeOffer';
 import { SignalMapLayer } from './SignalMap';
 import { openRecipeOffer, useRecipeOffer } from '../../store/recipeOfferStore';
@@ -86,12 +86,6 @@ const CULL_MIN_NODES = 30;
 const CULL_MARGIN_PX = 300;
 const ZOOM_MAX = 2.5;
 
-function groupLabel(gn: import('../../types/nodeGraph').GraphNode): string {
-  if (typeof gn.params?.label === 'string') return gn.params.label;
-  return gn.type === 'sceneGroup' ? 'Scene Group' : gn.type === 'spaceWarpGroup' ? 'Space Warp Group'
-    : gn.type === 'marchLoopGroup' ? 'March Loop Group' : gn.type === 'giLitMarchGroup' ? 'GI Lit March Group' : 'Group';
-}
-
 // Memoised so a parent re-render (App) doesn't re-render the whole graph;
 // NodeGraph reads everything it needs from the store with selectors.
 /** The last focus request handled (see focusNodeRequest), across remounts. */
@@ -135,10 +129,12 @@ function reservedBoxes(canvas: HTMLElement, rect: DOMRect, origin: { x: number; 
   return out;
 }
 
-export const NodeGraph = React.memo(function NodeGraph({ transparent = false, redesignToolbar = false, locked = false }: {
+export const NodeGraph = React.memo(function NodeGraph({ transparent = false, redesignToolbar = false, locked = false, overPicture = false }: {
   transparent?: boolean;
-  /** Desktop redesign: the top-centre CanvasToolbar (node count, zoom, fit, layout, minimap, clear) replaces the legacy corner toolbar. */
+  /** Desktop redesign: the top-centre CanvasToolbar (Maximize graph, Outline, Randomise) replaces the legacy corner toolbar. */
   redesignToolbar?: boolean;
+  /** Maximized graph: the picture is behind the canvas, so its background is a light dim (the dots stay) rather than solid. */
+  overPicture?: boolean;
   /**
    * Read-only: the cards and wires are a picture (no drags, edits, sockets or
    * menus), the canvas still pans, zooms, fits and box-selects. The Convert
@@ -515,17 +511,6 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
     setLayoutZoomGetter(() => zoomRef.current);
     publishView(panRef.current, zoomRef.current);
   }, []);
-
-  // Toolbar zoom buttons zoom around the middle of the visible canvas (the wheel zooms around the cursor).
-  const zoomAroundCentre = useCallback((target: number) => {
-    const rect = canvasRef.current?.getBoundingClientRect();
-    const oldZoom = zoomRef.current;
-    const newZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, target));
-    const p = panRef.current;
-    if (!rect) { applyView(p, newZoom, 'now'); return; }
-    const cx = rect.width / 2, cy = rect.height / 2;
-    applyView({ x: cx - (cx - p.x) * (newZoom / oldZoom), y: cy - (cy - p.y) * (newZoom / oldZoom) }, newZoom, 'now');
-  }, [applyView]);
 
   // ── Pan mode tracking ───────────────────────────────────────────────────────
   // Pan is triggered by: middle-mouse drag, Space+drag, or Option+drag (Ableton-style)
@@ -1018,8 +1003,7 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
     // Learned picks first (suggestions: your graphs, then the examples), then the hand-written rules.
     const learned = origin ? learnedNext(origin.type, smartConnect.key, smartConnect.dir, rankTables(), 2)
       .map(l => ({ type: l.type, key: l.key, note: l.you ? 'you often use it here' : 'usually goes here' })) : [];
-    // The flow strip's next stage leans in a little (structure/boost.ts).
-    return nudgeByStage(suggestQuickAdds({ type: sock.type, dir: smartConnect.dir, label: sock.label, key: smartConnect.key, nodeType: origin?.type, learned }), q => q.type, currentStageTarget());
+    return suggestQuickAdds({ type: sock.type, dir: smartConnect.dir, label: sock.label, key: smartConnect.key, nodeType: origin?.type, learned });
   }, [smartConnect, displayNodes]);
   const closeSmartConnect = useCallback(() => { setSmartConnect(null); setGhostSuggestion(null); }, []);
   const pickQuickAdd = useCallback((q: QuickAdd) => {
@@ -1131,13 +1115,12 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
     if (el && canvasRef.current?.contains(el)) openContextMenuAt(el, x, y);
   });
   const openContextMenuAt = (target: HTMLElement, clientX: number, clientY: number) => {
-    if (lockedRef.current) return;
+    // Overlays (the toolbar, panels, the zoom readout) keep their own right-click.
+    if (target.closest('[data-graph-overlay]')) return;
     const nodeEl = target.closest('[data-node-id]') as HTMLElement | null;
     const nodeId = nodeEl?.dataset.nodeId ?? null;
-    // On empty canvas the menu only has "Group selection" — with fewer than two nodes
-    // selected there is nothing to show, so don't open an empty strip.
-    // At the top level it offers the 3D Scene Builder.
-    if (!nodeId && useNodeGraphStore.getState().selectedNodeIds.length < 2 && useNodeGraphStore.getState().activeGroupPath.length > 0) { setContextMenu(null); return; }
+    // A locked canvas: only the empty canvas's view items (Fit, zoom, minimap, passes).
+    if (lockedRef.current && nodeId) return;
     // On a slider or colour row, the menu starts with making it a Play control.
     const paramKey = nodeId ? (target.closest('[data-param-key]') as HTMLElement | null)?.dataset.paramKey : undefined;
     setContextMenu({ x: clientX, y: clientY, nodeId, paramKey });
@@ -1440,7 +1423,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
         position: 'relative',
         width: '100%',
         height: '100%',
-        backgroundColor: transparent ? 'transparent' : tc.crust,
+        backgroundColor: transparent ? 'transparent' : overPicture ? alpha(tc.crust, 0.42) : tc.crust,
         overflow: 'hidden',
         cursor: 'default',
         WebkitTouchCallout: 'none',
@@ -1515,28 +1498,15 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
         </div>
       )}
 
+      {redesignToolbar && <CanvasToolbar showOutline={showOutline} onToggleOutline={toggleOutline} readOnly={locked} />}
+      {/* The zoom, unobtrusive in the corner (the toolbar has no zoom controls): click for 100%. */}
       {redesignToolbar && (
-        <CanvasToolbar
-          nodes={displayNodes}
-          topLevel={activeGroupPath.length === 0}
-          groupName={activeGroupNode ? groupLabel(activeGroupNode) : undefined}
-          zoom={zoom}
-          onZoom={zoomAroundCentre}
-          onResetZoom={() => applyView({ x: 0, y: 0 }, 1, 'now')}
-          onFit={() => handleFitView()}
-          onAutoLayout={() => autoLayout()}
-          onArrangeByStage={() => autoLayout('stage')}
-          showMinimap={showMinimap}
-          onToggleMinimap={toggleMinimap}
-          showOutline={showOutline}
-          onToggleOutline={toggleOutline}
-          onClear={() => loadExampleGraph('blank')}
-          onClearMinimal={() => useNodeGraphStore.getState().clearToMinimal()}
-          compact={compactToolbar}
-          readOnly={locked}
-          onOptimize={() => setShowOptimize(true)}
-          onBake={() => useBakeDialog.getState().open({ kind: 'picture' })}
-        />
+        <button type="button" data-zoom-readout="" data-graph-overlay="" title="Zoom (scroll or pinch). Click for 100%"
+          onMouseDown={e => e.stopPropagation()} onClick={() => applyView({ x: 0, y: 0 }, 1, 'now')}
+          style={{
+            position: 'absolute', left: 12, bottom: 10, zIndex: 15, height: 22, padding: '0 7px', border: 0, borderRadius: 6, cursor: 'pointer',
+            background: alpha(tk.bg.panel, 0.85), color: tk.text.muted, font: `600 11px ${fontFamily.ui}`, fontVariantNumeric: 'tabular-nums',
+          }}>{Math.round(zoom * 100)}%</button>
       )}
       {showOptimize && <OptimizeModal onClose={() => setShowOptimize(false)} />}
       {bakeRequest && <BakeDialogHost />}
@@ -1705,9 +1675,17 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
       {contextMenu && createPortal(
         <div
           {...portalGuard}
+          data-canvas-context-menu=""
           onClick={e => e.stopPropagation()}
+          // Kept inside the window: a long menu opened low or far right moves up or left to fit.
+          ref={el => {
+            if (!el) return;
+            const r = el.getBoundingClientRect();
+            if (r.bottom > window.innerHeight - 8) el.style.top = `${Math.max(8, window.innerHeight - r.height - 8)}px`;
+            if (r.right > window.innerWidth - 8) el.style.left = `${Math.max(8, window.innerWidth - r.width - 8)}px`;
+          }}
           style={{
-            position: 'fixed', left: contextMenu.x, top: contextMenu.y,
+            position: 'fixed', left: contextMenu.x, top: contextMenu.y, maxHeight: 'calc(100vh - 16px)', overflowY: 'auto',
             background: tc.base, border: `1px solid ${tc.surface1}`, borderRadius: '6px',
             padding: '4px 0', zIndex: 10000, boxShadow: '0 4px 16px rgba(0,0,0,0.6)',
             minWidth: '160px', fontSize: '12px',
@@ -1918,7 +1896,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                     <div style={{ borderTop: `1px solid ${tc.surface0}`, margin: '4px 0' }} />
                   </>
                 )}
-                {canGroup && (
+                {canGroup && !locked && (
                   <>
                     <button style={ctxBtnStyle} onClick={() => {
                       groupNodes(ids, 'Group');
@@ -1943,8 +1921,39 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                     <div style={{ borderTop: `1px solid ${tc.surface0}`, margin: '4px 0' }} />
                   </>
                 )}
+                {/* The canvas's own items (canvasGraphMenu.ts): view, then whole-graph actions. */}
+                {!clickedNode && (() => {
+                  const st = useNodeGraphStore.getState();
+                  const close = (fn: () => void) => () => { setContextMenu(null); fn(); };
+                  const rows = canvasMenuItems({
+                    readOnly: locked, topLevel: activeGroupPath.length === 0,
+                    multiProgram: !!(st.programMap?.passes?.some(p => !p.hidden) || st.programMap?.agents), showPasses: st.showPasses,
+                    showMinimap, onToggleMinimap: isTouchDevice.current ? undefined : toggleMinimap,
+                    showNext: suggestionsShown(), onToggleNext: () => setSuggestionsShown(!suggestionsShown()),
+                    zoom, onResetZoom: () => applyView({ x: 0, y: 0 }, 1, 'now'), onFit: () => handleFitView(), onAutoLayout: () => autoLayout(),
+                    onTogglePasses: () => st.setShowPasses(!st.showPasses),
+                    onOptimize: () => setShowOptimize(true), onBake: () => useBakeDialog.getState().open({ kind: 'picture' }),
+                    onClear: () => loadExampleGraph('blank'), onClearMinimal: () => useNodeGraphStore.getState().clearToMinimal(),
+                  });
+                  return (
+                    <div data-ctx-canvas-items="">
+                      {rows.map((r, i) => r === 'separator'
+                        ? <div key={i} style={{ borderTop: `1px solid ${tc.surface0}`, margin: '4px 0' }} />
+                        : 'heading' in r
+                          ? <div key={i} style={{ padding: i ? '6px 12px 2px' : '4px 12px 2px', fontSize: '10px', letterSpacing: 0.6, textTransform: 'uppercase', color: tc.surface2, borderTop: i ? `1px solid ${tc.surface0}` : undefined, marginTop: i ? 4 : 0 }}>{r.heading}</div>
+                          : (
+                            <button key={r.id} data-ctx-canvas={r.id} title={r.hint} onClick={close(r.onSelect)}
+                              style={{ ...ctxBtnStyle, display: 'flex', alignItems: 'center', gap: 12, ...(r.danger ? { color: tc.red } : {}) }}>
+                              <span style={{ flex: 1 }}>{r.label}</span>
+                              {r.shortcut && <span style={{ color: tc.surface2, fontSize: '10px' }}>{r.shortcut}</span>}
+                            </button>
+                          ))}
+                      {!locked && activeGroupPath.length === 0 && <div style={{ borderTop: `1px solid ${tc.surface0}`, margin: '4px 0' }} />}
+                    </div>
+                  );
+                })()}
                 {/* The 3D Scene Builder (docs/scene-builder-3d.md): on the empty canvas, and on any node of a scene it built. */}
-                {!clickedNode && activeGroupPath.length === 0 && (
+                {!clickedNode && !locked && activeGroupPath.length === 0 && (
                   <>
                     {/* Builders (builders/registry.ts): the same three as the node browser's Builders section */}
                     <div data-ctx-builders style={{ padding: '4px 10px 2px', fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: tc.overlay0 }}>Builders</div>

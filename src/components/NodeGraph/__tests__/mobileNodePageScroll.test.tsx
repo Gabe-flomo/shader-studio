@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * A phone's node page is ONE scroller: the flow chip, breadcrumb, card face, Inputs/Output tabs and
+ * A phone’s node page is ONE scroller: the breadcrumb, card face, Inputs/Output tabs and
  * the rows all scroll together, only the node's own header row (48px) sticks, and nothing inside
  * scrolls on its own (a scroller in a scroller traps the finger in a thin strip).
  */
@@ -46,7 +46,7 @@ describe('phone node page', () => {
     const id = useNodeGraphStore.getState().addNode('exprNode', { x: 0, y: 0 }, { label: 'Side by side' });
     expect(id).toBeTruthy();
     root = createRoot(host);
-    act(() => root!.render(<MobileGraphBrowser top={<div data-test-top>flow</div>} />));
+    act(() => root!.render(<MobileGraphBrowser />));
     openNode('Side by side');
 
     const scroller = host.querySelector<HTMLElement>('[data-phone-page-scroll]');
@@ -54,8 +54,7 @@ describe('phone node page', () => {
     expect(scroller!.style.overflowY).toBe('auto');
     expect(scroller!.style.flex).toMatch(/^1/);
 
-    // The flow chip and the breadcrumb are inside the scroller (they scroll away), before the page.
-    expect(scroller!.querySelector('[data-test-top]')).toBeTruthy();
+    // The breadcrumb is inside the scroller (they scroll away), before the page.
     expect(scroller!.textContent).toContain('Home');
     const page = scroller!.querySelector<HTMLElement>('[data-node-page]');
     expect(page).toBeTruthy();

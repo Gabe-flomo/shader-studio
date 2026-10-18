@@ -1432,11 +1432,7 @@ function ExprLinesList({ lines, onReorder, onUpdateLine, onRemoveLine, variables
   );
 }
 
-/**
- * `top`: what sits above the breadcrumb (the Studio's flow chip). On a node page it scrolls
- * away with the rest of the page instead of staying pinned over it.
- */
-export function MobileGraphBrowser({ top }: { top?: React.ReactNode }) {
+export function MobileGraphBrowser() {
   const tc = useCtp();
   const tk = useTokens();
   // Always the flat top-level list — a group's contents live nested in
@@ -4345,7 +4341,6 @@ export function MobileGraphBrowser({ top }: { top?: React.ReactNode }) {
         // scroll together, and only the node's own header row sticks (48px). Nothing
         // inside it scrolls on its own, so a finger is never trapped in a small strip.
         <div key={focusedNode.id} data-phone-page-scroll="" style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', overscrollBehaviorY: 'contain', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
-          {top}
           {breadcrumbEl}
           {mobileKeyframeEditor && mobileKeyframeEditor.nodeId === focusedNode.id
             ? renderKeyframeEditorView(focusedNode)
@@ -4353,7 +4348,6 @@ export function MobileGraphBrowser({ top }: { top?: React.ReactNode }) {
         </div>
       ) : (
         <>
-          {top}
           {breadcrumbEl}
           {homeGraphView ? renderHomeGraph() : renderHome()}
         </>
