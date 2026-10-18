@@ -89,7 +89,7 @@ import { setMacroValue } from '../../play/rackMacros';
 import { SplitButton } from './PlaySplitArea';
 import { EmbedDialog } from './EmbedDialog';
 import { MiniMapper } from './MiniMapper';
-import { wireRuleWhen, type MiniMapperTarget } from './miniMapperCore';
+import { wireControlOnly, wireRuleWhen, type MiniMapperTarget } from './miniMapperCore';
 import { LiveAudioChip, MidiStatusChip, OscStatusChip } from './chips';
 import { rackKeyboard } from '../../lib/rackKeyboard';
 import { keyboardClaimed } from '../../lib/keyboardClaim';
@@ -1045,12 +1045,23 @@ function AddControlButton({ candidates, layers, finish, sound, layerById, taken,
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [withNull, setWithNull] = useState(false);
-  // The target picked (search parameters first); its own popover then picks the source (miniMapper.ts).
+  // A source for the control just added, when asked for from its toast (miniMapper.ts).
   const [pending, setPending] = useState<{ target: MiniMapperTarget; label: string } | null>(null);
+  // One step: picking a setting adds its control. Mapping a source onto it is an offer after, not a step on the way.
+  const setPlay = useNodeGraphStore(s => s.setPlay);
+  const mounted = useRef(true);
+  useEffect(() => () => { mounted.current = false; }, []);
+  const addNow = (target: MiniMapperTarget, label: string) => {
+    setPlay(p => wireControlOnly(p, target).play);
+    toast.success(`Added “${label}”`, {
+      message: 'It’s on the panel. Map MIDI, the mouse, audio or an LFO onto it, or leave it as a knob.',
+      action: { label: 'Map a source…', onClick: () => setPending({ target, label }), stillValid: () => mounted.current },
+    });
+  };
   const pickGraph = (c: PlayCandidate) => {
     if (withNull && c.kind === 'float') { const { drives, label } = graphNullDrives(candidates, c); onAddNull(drives, label); return; }
     if (withNull) { onAdd(c); return; }
-    setPending({ target: { candidate: c }, label: candidateLabel(c) });
+    addNow({ candidate: c }, candidateLabel(c));
   };
   const pickLayer = (l: LayerCandidates, key: string) => {
     if (withNull) {
@@ -1059,7 +1070,7 @@ function AddControlButton({ candidates, layers, finish, sound, layerById, taken,
       if (r) onAddNull(r.drives, r.label);
       return;
     }
-    setPending({ target: { layerId: l.id, key }, label: `${l.label} · ${l.props.find(p => p.key === key)?.label ?? key}` });
+    addNow({ layerId: l.id, key }, `${l.label} · ${l.props.find(p => p.key === key)?.label ?? key}`);
   };
   // Folders: 'graph', 'layers', and one per layer id. The graph starts open; layers start folded.
   const [unfolded, setUnfolded] = useState<Set<string>>(() => new Set(['graph', 'layers']));
@@ -1150,7 +1161,7 @@ function AddControlButton({ candidates, layers, finish, sound, layerById, taken,
               <div key={f.id}>
                 {folder(`finish:${f.id}`, f.label, f.props.length, 14)}
                 {isOpen(`finish:${f.id}`) && f.props.map(pr => (
-                  <button key={pr.key} type="button" title={pr.hint} onClick={() => { if (withNull) { onAddFinish(f.id, pr.key, withNull); close(); } else { setPending({ target: { effectId: f.id, key: pr.key }, label: `${f.label} · ${pr.label}` }); close(); } }} {...hover} style={{ ...itemStyle, paddingLeft: 40 }}>
+                  <button key={pr.key} type="button" title={pr.hint} onClick={() => { if (withNull) { onAddFinish(f.id, pr.key, withNull); close(); } else { addNow({ effectId: f.id, key: pr.key }, `${f.label} · ${pr.label}`); close(); } }} {...hover} style={{ ...itemStyle, paddingLeft: 40 }}>
                     <Icon name="curve" size={13} style={{ color: tk.text.faint }} />
                     <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pr.label}</span>
                     {withNull && taken.has(finishTarget(f.id, pr.key)) && <span style={{ color: tk.text.faint, fontSize: 10.5 }}>on panel</span>}
@@ -1163,7 +1174,7 @@ function AddControlButton({ candidates, layers, finish, sound, layerById, taken,
               <div key={f.id}>
                 {folder(f.id, f.label, f.props.length, 14)}
                 {isOpen(f.id) && f.props.map(pr => (
-                  <button key={pr.key} type="button" title={pr.hint} onClick={() => { if (withNull) { onAddSound(f.id, pr.key, withNull); close(); } else { setPending({ target: { audioFx: `${f.id}::${pr.key}` }, label: `${f.label} · ${pr.label}` }); close(); } }} {...hover} style={{ ...itemStyle, paddingLeft: 40 }}>
+                  <button key={pr.key} type="button" title={pr.hint} onClick={() => { if (withNull) { onAddSound(f.id, pr.key, withNull); close(); } else { addNow({ audioFx: `${f.id}::${pr.key}` }, `${f.label} · ${pr.label}`); close(); } }} {...hover} style={{ ...itemStyle, paddingLeft: 40 }}>
                     <Icon name="wave" size={13} style={{ color: tk.text.faint }} />
                     <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pr.label}</span>
                     {withNull && taken.has(`${f.id}::${pr.key}`) && <span style={{ color: tk.text.faint, fontSize: 10.5 }}>on panel</span>}
