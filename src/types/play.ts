@@ -1023,8 +1023,8 @@ export const ACTIONS_FOR: Record<string, readonly BuiltinActionKind[]> = {
   background: ['next', 'prev', 'shuffle', 'goto', 'reset', 'toggle', 'show', 'hide'],
   // Step through a dataset: the next, previous, a random or the Nth row (or chunk); Reset goes back to what Offset says.
   data: ['next', 'prev', 'shuffle', 'goto', 'reset', 'toggle', 'show', 'hide'],
-  // Play pad N (a drum pad layer draws nothing, so showing and hiding mean nothing there).
-  drumpad: ['pad'],
+  // Play pad N (a Sampler draws nothing, so showing and hiding mean nothing there).
+  sampler: ['pad'],
   other: ['toggle', 'show', 'hide'],
 };
 

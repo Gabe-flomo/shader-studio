@@ -146,7 +146,7 @@ export function sendChoices(layers: readonly PlayLayer[]): SendChoice[] {
     const kind = l.kind as string;
     if (kind === 'audio' && (l as { input?: string }).input === 'file') out.push({ value: layerChainId(l.id), label: `${l.label} · song` });
     else if (kind === 'video' && (l as { sound?: string }).sound === 'play') out.push({ value: layerChainId(l.id), label: `${l.label} · video sound` });
-    else if (kind === 'drumpad') out.push({ value: layerChainId(l.id), label: `${l.label} · drum pads` });
+    else if (kind === 'sampler') out.push({ value: layerChainId(l.id), label: `${l.label} · drum pads` });
   }
   return out;
 }

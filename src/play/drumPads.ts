@@ -1,25 +1,29 @@
 /**
- * drumPads.ts — the app's host for Drum pad layers (types/playLayers.ts
- * DrumPadLayer; docs/drum-pads.md). Module singleton, no React.
+ * drumPads.ts — the app's host for Sampler layers (types/playLayers.ts
+ * SamplerLayer; docs/sampler.md; the Drum pads layer before it). Module
+ * singleton, no React.
  *
- *   Samples   each pad names a sample in the media library (IndexedDB, the
- *             videos store: lib/backgroundLibrary.ts) or a generated drum;
- *             decoded once per sample in the audio engine's context. A sample
- *             the library doesn't have is "missing": the card asks for it.
- *   Sound     per layer: the kit's sampler (play/kit/drumPads.js) → its effect
- *             chain (`layer:<id>`, lib/audioFx.ts) → the layer's volume → the
- *             audio engine's mix (the master chain, the speakers and the
- *             record bus). An analyser on the chain is what readers hear
- *             (`pads:<id>`, lib/padSound.ts).
- *   Hits      clicks on the card, keys, MIDI notes, the pad grid and actions
- *             all become a `pad` action through the overlay (so takes record
- *             them, stamped with the clock time they landed); the overlay
- *             hands them, live or from a take, to `play`.
+ *   Samples   each pad and zone names a sample in the media library
+ *             (IndexedDB, the videos store: lib/backgroundLibrary.ts) or a
+ *             generated drum; decoded once per sample in the audio engine's
+ *             context. A sample the library doesn't have is "missing": the
+ *             editor asks for it.
+ *   Sound     per layer: the Sampler's engine (play/kit/sampler.js) → its
+ *             effect chain (`layer:<id>`, lib/audioFx.ts) → the layer's
+ *             volume → the audio engine's mix (the master chain, the speakers
+ *             and the record bus). An analyser on the chain is what readers
+ *             hear (`pads:<id>`, lib/padSound.ts).
+ *   Hits      clicks, keys, MIDI notes, the pad grid and actions all become a
+ *             `pad` action (pad N = note (base + N − 1) mod 128) through the
+ *             overlay, so takes record them, stamped with the clock time they
+ *             landed and the sound they picked (`slot`); the overlay hands
+ *             them, live or from a take, to `play`, which schedules every
+ *             voice on the AudioContext clock.
  *   Export    each sample is remembered for web exports (lib/mediaSources.ts,
  *             key `dsample:<sampleId>`).
  */
 import type { PlayRecord } from '../types/play';
-import { padHasSound, type DrumPad, type DrumPadLayer } from '../types/playLayers';
+import { padHasSound, type DrumPad, type SamplerLayer, type SamplerZone } from '../types/playLayers';
 import { addVideoFile, getVideo, videoMimeOf } from '../lib/backgroundLibrary';
 import { audioEngine } from '../lib/audioEngine';
 import { audioFxHost } from '../lib/audioFx';
@@ -35,39 +39,49 @@ import { kmLayoutOf, kmPadOf } from './kit/midi.js';
 import { audioAccept } from '../lib/audioAccept';
 import { isLinkedRef } from '../files/linkedRefs';
 import { onLinkedChange } from '../files/linkedFolders';
+import { dpKey, dpPadOfCell, dpPadOfKey, dpPeaks, dpSynthBuffer } from './kit/drumPads.js';
 import {
-  DP_PADS, dpCreateSampler, dpHitNumbers, dpKey, dpPadOfCell, dpPadOfKey, dpPadOfNote, dpPeaks, dpSynthBuffer, type DpSampler, dpHash01, dpPickPad, dpSlots } from './kit/drumPads.js';
+  SM_DRUM_VOICES, SM_PADS, SM_PIANO_KEYS, smCreateSampler, smHits, smKeyProp, smNumbers, smPadOfNote, smPianoOffset, type SmSampler,
+} from './kit/sampler.js';
 
-/** What the card shows about a pad's sample. */
+/** What the editor shows about a pad's (or zone's) sample. */
 export type PadStatus = 'empty' | 'loading' | 'ready' | 'missing' | 'error';
 
-export interface PadAction { do: 'pad'; layerId: string; amount: number; vel?: number; at?: number; /** The pad (1-based) whose sound played, after the sample index (docs/drum-pads.md). */ slot?: number }
+export interface PadAction { do: 'pad'; layerId: string; amount: number; vel?: number; at?: number; /** The pad (Drum view) or zone (Keys view, round robin / random) whose sound played, 1-based. */ slot?: number }
+
+/** A pad's or a zone's sound: a library sample or a generated drum. */
+export type SoundRef = Pick<DrumPad, 'sampleId' | 'synth' | 'fileName'>;
 
 interface Sample { status: PadStatus; buffer: AudioBuffer | null; error: string; peaks: Float32Array | null }
-interface Kit { ctx: AudioContext; sampler: DpSampler; analyser: AnalyserNode; out: GainNode; vol: number; dispose: () => void }
+interface Kit { ctx: AudioContext; sampler: SmSampler; analyser: AnalyserNode; out: GainNode; vol: number; voices: number; dispose: () => void }
 
-/** A pad's sample key: its library id, or `synth:<kind>` for a generated drum. */
-export const sampleKey = (p: DrumPad | undefined): string => (!p ? '' : p.sampleId ? p.sampleId : p.synth ? `synth:${p.synth}` : '');
+/** A sound's sample key: its library id, or `synth:<kind>` for a generated drum. */
+export const sampleKey = (p: Partial<SoundRef> | undefined | null): string => (!p ? '' : p.sampleId ? p.sampleId : p.synth ? `synth:${p.synth}` : '');
 export const sampleMediaKey = (sampleId: string) => `dsample:${sampleId}`;
 
-/** Audio files a pad takes. */
+/** Audio files a pad or zone takes. */
 export const SAMPLE_ACCEPT = audioAccept();
 export { isAudioFile } from '../lib/audioAccept';
 
+/** Every sound a Sampler layer names (its pads' and zones'). */
+export const layerSounds = (l: SamplerLayer): SoundRef[] => [...l.pads.filter(padHasSound), ...l.zones.filter(padHasSound)];
+
 class PlayDrumPads {
-  private layers: DrumPadLayer[] = [];
+  private layers: SamplerLayer[] = [];
   private samples = new Map<string, Sample>();
   /** Files picked this session, used straight away (and the only copy of a `session:` one). */
   private blobs = new Map<string, Blob>();
   private kits = new Map<string, Kit>();
   private listeners = new Set<() => void>();
-  /** layerId:pad → when it was last hit (performance.now) and how hard, for the card's lights. */
+  /** layerId:pad → when it was last hit (performance.now) and how hard, for the editor's lights. */
   private lit = new Map<string, { at: number; vel: number }>();
   private clock = { time: 0, wall: 0, playing: false };
   private actor: ((a: PadAction) => void) | null = null;
-  /** Hits so far per layer: the random index modes draw from the seed and this count, so a take repeats them. */
-  private hits = new Map<string, number>();
-  private heldKeys = new Map<string, number>();
+  /** Per layer: hits so far (the random picks and round robin draw from it) and the last note's pitch (glide). */
+  private states = new Map<string, { hits: number; lastPitch: number | null }>();
+  private heldKeys = new Map<string, { pad: number; layers: string[] }>();
+  /** Keys view: the computer keyboard's octave shift per layer (Z / X), on top of the layer's octave. */
+  private octaveShift = new Map<string, number>();
 
   constructor() {
     padSound.setHost({ analyser: id => this.analyser(id), state: id => this.soundState(id), buffer: p => this.buffer(p) });
@@ -76,7 +90,7 @@ class PlayDrumPads {
       for (const [key, s] of [...this.samples]) {
         if (!isLinkedRef(key) || (refs ? !refs.includes(key) : s.status === 'ready' || s.status === 'loading')) continue;
         this.samples.delete(key);
-        void this.load(key, { ...emptyPad(), sampleId: key });
+        void this.load(key, { sampleId: key, synth: '', fileName: '' });
       }
     });
     if (typeof window === 'undefined') return;
@@ -87,8 +101,7 @@ class PlayDrumPads {
       for (const l of this.layers) {
         if (!l.visible || !l.midi || (l.channel && l.channel !== e.channel)) continue;
         if (l.grid && this.gridClaims(e.note, e.channel, e.device ?? '')) continue;
-        const pad = dpPadOfNote(e.note, l.baseNote);
-        if (pad < 0) continue;
+        const pad = smPadOfNote(e.note, l.baseNote);
         if (e.kind === 'noteOn') this.trigger(l.id, pad, e.velocity / 127); else this.letGo(l.id, pad);
       }
     });
@@ -111,10 +124,10 @@ class PlayDrumPads {
 
   /** The setup that plays changed: load new samples, let go of layers that left. */
   setRecord(record: Pick<PlayRecord, 'layers'>): void {
-    this.layers = can('play.layers') ? record.layers.filter((l): l is DrumPadLayer => l.kind === 'drumpad') : [];
+    this.layers = can('play.layers') ? record.layers.filter((l): l is SamplerLayer => l.kind === 'sampler') : [];
     for (const [id, k] of this.kits) if (!this.layers.some(l => l.id === id)) { k.dispose(); this.kits.delete(id); }
     for (const l of this.layers) {
-      for (const p of l.pads) {
+      for (const p of layerSounds(l)) {
         const key = sampleKey(p);
         if (key && !this.samples.has(key)) void this.load(key, p);
       }
@@ -128,7 +141,7 @@ class PlayDrumPads {
     return audioEngine.context();
   }
 
-  private async load(key: string, p: DrumPad): Promise<void> {
+  private async load(key: string, p: SoundRef): Promise<void> {
     const s: Sample = { status: 'loading', buffer: null, error: '', peaks: null };
     this.samples.set(key, s);
     this.emit();
@@ -165,7 +178,7 @@ class PlayDrumPads {
     try { sampleId = (await addVideoFile(typed, { name: fileName })).id; } catch { sampleId = `session:${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`; kept = false; }
     this.blobs.set(sampleId, typed);
     this.samples.delete(sampleId);
-    await this.load(sampleId, { ...emptyPad(), sampleId, fileName });
+    await this.load(sampleId, { sampleId, synth: '', fileName });
     const s = this.samples.get(sampleId);
     if (s?.status !== 'ready') throw new Error(s?.error || 'Couldn’t open that sound.');
     return { sampleId, fileName, bytes: file.size, kept };
@@ -178,20 +191,20 @@ class PlayDrumPads {
    */
   async useLinked(ref: string, fileName: string, bytes: number): Promise<{ sampleId: string; fileName: string; bytes: number }> {
     this.samples.delete(ref);
-    await this.load(ref, { ...emptyPad(), sampleId: ref, fileName });
+    await this.load(ref, { sampleId: ref, synth: '', fileName });
     const s = this.samples.get(ref);
     if (s?.status !== 'ready') throw new Error(s?.error || (s?.status === 'missing' ? 'That file couldn’t be read from its folder.' : 'Couldn’t open that sound.'));
     return { sampleId: ref, fileName: fileName.slice(0, 120), bytes };
   }
 
-  status(p: DrumPad | undefined): PadStatus { const k = sampleKey(p); return k ? this.samples.get(k)?.status ?? 'loading' : 'empty'; }
-  errorText(p: DrumPad | undefined): string { return this.samples.get(sampleKey(p))?.error ?? ''; }
-  peaks(p: DrumPad | undefined): Float32Array | null { return this.samples.get(sampleKey(p))?.peaks ?? null; }
-  duration(p: DrumPad | undefined): number { return this.samples.get(sampleKey(p))?.buffer?.duration ?? 0; }
-  /** The decoded sample (offline mixes play it). */
-  buffer(p: DrumPad | undefined): AudioBuffer | null { return this.samples.get(sampleKey(p))?.buffer ?? null; }
+  status(p: Partial<SoundRef> | undefined): PadStatus { const k = sampleKey(p); return k ? this.samples.get(k)?.status ?? 'loading' : 'empty'; }
+  errorText(p: Partial<SoundRef> | undefined): string { return this.samples.get(sampleKey(p))?.error ?? ''; }
+  peaks(p: Partial<SoundRef> | undefined): Float32Array | null { return this.samples.get(sampleKey(p))?.peaks ?? null; }
+  duration(p: Partial<SoundRef> | undefined): number { return this.samples.get(sampleKey(p))?.buffer?.duration ?? 0; }
+  /** The decoded sample (offline mixes play it; the editor draws it). */
+  buffer(p: Partial<SoundRef> | undefined | null): AudioBuffer | null { return this.samples.get(sampleKey(p))?.buffer ?? null; }
   /** A sample's file as a data URL for a web export (null: too big, or not open here). */
-  exportSource(p: DrumPad): { src: string | null; bytes: number } {
+  exportSource(p: SoundRef & { bytes: number }): { src: string | null; bytes: number } {
     if (!p.sampleId) return { src: null, bytes: 0 };
     const m = mediaSource(sampleMediaKey(p.sampleId));
     return { src: m?.dataUrl ?? null, bytes: m?.dataUrl?.length ?? (m?.tooBig ? m.bytes : p.bytes) };
@@ -199,14 +212,20 @@ class PlayDrumPads {
 
   // ── Sound ──────────────────────────────────────────────────────────────────
 
-  private volumeOf(l: DrumPadLayer): number { return Math.max(0, playEngine.layerValue(l.id, 'volume', l.volume)); }
+  private volumeOf(l: SamplerLayer): number { return Math.max(0, playEngine.layerValue(l.id, 'volume', l.volume)); }
+  private voicesOf(l: SamplerLayer): number { return l.view === 'keys' ? l.inst.voices : SM_DRUM_VOICES; }
 
-  private kit(l: DrumPadLayer): Kit | null {
+  private kit(l: SamplerLayer): Kit | null {
     const had = this.kits.get(l.id);
-    if (had) return had;
+    if (had) {
+      const v = this.voicesOf(l);
+      if (v !== had.voices) { had.voices = v; had.sampler.setVoices(v); }
+      return had;
+    }
     const ctx = this.context();
     if (!ctx) return null;
-    const sampler = dpCreateSampler(ctx);
+    const voices = this.voicesOf(l);
+    const sampler = smCreateSampler(ctx, { voices });
     const analyser = ctx.createAnalyser();
     analyser.fftSize = 2048;
     analyser.smoothingTimeConstant = 0.8;
@@ -216,7 +235,7 @@ class PlayDrumPads {
     // sampler → its chain → the volume → the mix; the readers tap the chain.
     const unplug = audioFxHost.attach(ctx, layerChainId(l.id), sampler.output, out, analyser);
     const off = audioEngine.connectOutside(out);
-    const k: Kit = { ctx, sampler, analyser, out, vol, dispose: () => { sampler.stopAll(); unplug(); off(); } };
+    const k: Kit = { ctx, sampler, analyser, out, vol, voices, dispose: () => { sampler.stopAll(); unplug(); off(); } };
     this.kits.set(l.id, k);
     return k;
   }
@@ -227,7 +246,7 @@ class PlayDrumPads {
     return c.playing && c.wall ? c.time + Math.min(0.25, (performance.now() - c.wall) / 1000) : c.time;
   }
 
-  /** Once a frame: the clock, and mapped pitch, volume and pan on sounding pads. */
+  /** Once a frame: the clock, and mapped numbers on sounding voices (only what changed reaches them). */
   follow(time: number, playing: boolean): void {
     this.clock.time = time;
     this.clock.playing = playing;
@@ -238,73 +257,86 @@ class PlayDrumPads {
       const vol = this.volumeOf(l);
       if (vol !== k.vol) { k.vol = vol; k.out.gain.setTargetAtTime(vol, k.ctx.currentTime, 0.015); }
       if (!k.sampler.playing()) continue;
-      for (let i = 0; i < DP_PADS; i++) {
+      if (l.view === 'keys') {
+        // The instrument's filter and LFO move with their mappings; pitch and level stay each zone's.
+        const o = { cutoff: this.num(l, smKeyProp('cutoff')), lfoAmt: this.num(l, smKeyProp('lfoAmt')) };
+        for (let i = 0; i < SM_PADS; i++) if (k.sampler.playing(i)) k.sampler.setLive(i, o);
+        continue;
+      }
+      for (let i = 0; i < l.pads.length; i++) {
         if (!k.sampler.playing(i)) continue;
-        k.sampler.setLive(i, dpHitNumbers(key => this.num(l, i, key)));
+        k.sampler.setLive(i, smNumbers(key => this.num(l, dpKey(i, key))));
       }
     }
   }
 
-  private num(l: DrumPadLayer, pad: number, key: string): number {
-    const k = dpKey(pad, key);
-    return playEngine.layerValue(l.id, k, l[k as `pad${number}_${string}`]);
+  private num(l: SamplerLayer, key: string): number | undefined {
+    const v = playEngine.layerValue(l.id, key, (l as unknown as Record<string, number>)[key]);
+    return typeof v === 'number' && Number.isFinite(v) ? v : undefined;
   }
 
-  /** Hit a pad (velocity 0..1): recorded in a take when one is recording. */
+  private stateOf(id: string) {
+    let s = this.states.get(id);
+    if (!s) { s = { hits: 0, lastPitch: null }; this.states.set(id, s); }
+    return s;
+  }
+
+  /** Hit a pad (0-based; in the Keys view, the note's pad) with velocity 0..1: recorded in a take when one is recording. */
   trigger(layerId: string, pad: number, vel = 1): void {
     const l = this.layers.find(x => x.id === layerId);
-    const slot = l ? this.pickSlot(l, pad) + 1 : undefined;
-    const a: PadAction = { do: 'pad', layerId, amount: pad + 1, vel: Math.max(0.01, Math.min(1, vel)), at: this.clockNow(), ...(slot ? { slot } : {}) };
+    const v = Math.max(0.01, Math.min(1, vel));
+    // Pick now (the Sample index, round robin, random), so the take records what played.
+    const slot = l ? this.pickSlot(l, pad, v) : 0;
+    const a: PadAction = { do: 'pad', layerId, amount: pad + 1, vel: v, at: this.clockNow(), ...(slot ? { slot } : {}) };
     if (this.actor) this.actor(a); else this.play(a);
   }
 
-  /**
-   * The pad (0-based) whose sound a hit on `pad` plays, after the layer's
-   * sample index (docs/drum-pads.md "Sample index"): its place among the pads
-   * with sounds plus Index (wrapping), or a seeded random pad. Counts the hit.
-   */
-  pickSlot(l: DrumPadLayer, pad: number): number {
-    const slots = dpSlots((i: number) => padHasSound(l.pads[i]), DP_PADS);
-    const n = (this.hits.get(l.id) ?? 0) + 1;
-    this.hits.set(l.id, n);
-    const index = playEngine.layerValue(l.id, 'sampleIndex', l.sampleIndex ?? 0);
-    const spread = playEngine.layerValue(l.id, 'indexSpread', l.indexSpread ?? 0);
-    return dpPickPad(slots, pad, index, l.indexMode ?? 'index', spread, dpHash01(l.indexSeed ?? 0, n));
+  /** What a hit on `pad` picks (1-based pad or zone; 0 when nothing to pick): counts the hit. */
+  pickSlot(l: SamplerLayer, pad: number, vel = 1): number {
+    const DRY = {} as AudioBuffer;
+    return smHits(l, pad, vel, { num: k => this.num(l, k), buffer: () => DRY, state: this.stateOf(l.id), dry: true }).slot;
   }
 
-  /** Let a pad go: only gate pads care (they fade over their release). */
+  /** Let a pad go: a Classic pad, or any note of the Keys view (one-shots ignore it). */
   letGo(layerId: string, pad: number): void {
     const l = this.layers.find(x => x.id === layerId);
-    if (l?.pads[pad]?.mode !== 'gate') return;
+    if (!l) return;
+    if (l.view === 'keys' ? l.inst.mode === 'oneshot' || (l.inst.mode === 'slice' && !l.inst.sliceGate) : l.pads[pad]?.mode !== 'gate') return;
     const a: PadAction = { do: 'pad', layerId, amount: pad + 1, vel: 0, at: this.clockNow() };
     if (this.actor) this.actor(a); else this.play(a);
   }
 
-  /** A hit (live, or from a take playing back): play it. */
+  /** A hit (live, or from a take playing back): every voice it starts, on the AudioContext clock now. */
   play(a: { layerId: string; amount: number; vel?: number; slot?: number }): void {
     const l = this.layers.find(x => x.id === a.layerId);
     const pad = Math.round(a.amount) - 1;
-    if (!l || !l.visible || pad < 0 || pad >= DP_PADS) return;
+    if (!l || !l.visible || pad < 0 || pad >= SM_PADS) return;
     const k = this.kit(l);
     if (!k) return;
     if (k.ctx.state === 'suspended') void k.ctx.resume();
     const vel = a.vel ?? 1;
     if (vel <= 0) { k.sampler.release(pad); return; }
-    // The sound comes from the indexed pad (recorded in the take as `slot`; older takes pick again).
-    const src = a.slot && a.slot >= 1 && a.slot <= DP_PADS ? a.slot - 1 : this.pickSlot(l, pad);
-    const p = l.pads[src] ?? l.pads[pad];
     this.lit.set(`${l.id}:${pad}`, { at: performance.now(), vel });
     this.emit();
-    const buffer = this.buffer(p);
-    if (!buffer) return;
-    k.sampler.hit(pad, { ...dpHitNumbers(key => this.num(l, src, key)), buffer, mode: p.mode, loop: p.loop, reverse: p.reverse, choke: p.choke, velocity: vel });
+    const hits = smHits(l, pad, vel, { num: key => this.num(l, key), buffer: s => this.buffer(s as SoundRef), state: this.stateOf(l.id) }, a.slot);
+    for (const h of hits.voices) k.sampler.hit(h.group, h.o);
   }
 
-  /** When a pad was last hit (performance.now) and how hard, for the card; null before any. */
+  /** When a pad was last hit (performance.now) and how hard, for the editor; null before any. */
   lastHit(layerId: string, pad: number): { at: number; vel: number } | null { return this.lit.get(`${layerId}:${pad}`) ?? null; }
 
-  /** Everything sounding stops (the card's Stop). */
+  /** Everything sounding stops (the editor's Stop), with the short fade. */
   stopAll(layerId: string): void { this.kits.get(layerId)?.sampler.stopAll(); }
+
+  /** Keys view: the computer keyboard's octave now (the layer's plus Z / X). */
+  octave(l: Pick<SamplerLayer, 'id' | 'octave'>): number { return Math.max(-2, Math.min(8, l.octave + (this.octaveShift.get(l.id) ?? 0))); }
+  shiftOctave(layerId: string, by: number): void {
+    const l = this.layers.find(x => x.id === layerId);
+    if (!l) return;
+    const next = Math.max(-2 - l.octave, Math.min(8 - l.octave, (this.octaveShift.get(layerId) ?? 0) + by));
+    this.octaveShift.set(layerId, next);
+    this.emit();
+  }
 
   analyser(layerId: string): AnalyserNode | null {
     const l = this.layers.find(x => x.id === layerId);
@@ -315,7 +347,7 @@ class PlayDrumPads {
     const l = this.layers.find(x => x.id === layerId);
     if (!l) return 'gone';
     if (!l.visible) return 'off';
-    if (!l.pads.some(p => this.status(p) === 'ready')) return 'no-file';
+    if (!layerSounds(l).some(p => this.status(p) === 'ready')) return 'no-file';
     return this.kits.get(l.id)?.sampler.playing() ? 'playing' : 'paused';
   }
 
@@ -323,19 +355,42 @@ class PlayDrumPads {
 
   private keysOn(): boolean { return playEngine.isPerforming() && !playEngine.isLearning(); }
 
+  /** The pad a computer key plays on a layer, or -1: the Drum view's window, or the Keys view's piano. */
+  padOfKey(l: SamplerLayer, code: string): number {
+    if (l.view === 'keys') {
+      const off = smPianoOffset(code);
+      if (off < 0) return -1;
+      const note = (this.octave(l) + 2) * 12 + off;
+      return note >= 0 && note <= 127 ? smPadOfNote(note, l.baseNote) : -1;
+    }
+    const i = dpPadOfKey(code);
+    return i < 0 ? -1 : smPadOfNote(l.bank + i, l.baseNote);
+  }
+
   private onKeyDown = (e: KeyboardEvent): void => {
     if (e.metaKey || e.ctrlKey || e.altKey || e.repeat || isTypingTarget(e.target) || !this.keysOn() || keyboardClaimed(e)) return;
-    const pad = dpPadOfKey(e.code);
-    if (pad < 0) return;
-    let hit = false;
-    for (const l of this.layers) if (l.keys && l.visible) { this.trigger(l.id, pad, 1); hit = true; }
-    if (hit) this.heldKeys.set(e.code, pad);
+    const hitLayers: string[] = [];
+    let pad = -1;
+    for (const l of this.layers) {
+      if (!l.keys || !l.visible) continue;
+      // Keys view: Z and X move the keyboard's octave, like Live's.
+      if (l.view === 'keys' && (e.code === 'KeyZ' || e.code === 'KeyX')) { this.shiftOctave(l.id, e.code === 'KeyZ' ? -1 : 1); continue; }
+      const p = this.padOfKey(l, e.code);
+      if (p < 0) continue;
+      this.trigger(l.id, p, l.view === 'keys' ? 0.8 : 1);
+      hitLayers.push(l.id);
+      pad = p;
+    }
+    if (hitLayers.length) this.heldKeys.set(e.code, { pad, layers: hitLayers });
   };
   private onKeyUp = (e: KeyboardEvent): void => {
-    const pad = this.heldKeys.get(e.code);
-    if (pad === undefined) return;
+    const held = this.heldKeys.get(e.code);
+    if (!held) return;
     this.heldKeys.delete(e.code);
-    for (const l of this.layers) if (l.keys && l.visible) this.letGo(l.id, pad);
+    for (const id of held.layers) {
+      const l = this.layers.find(x => x.id === id);
+      if (l) this.letGo(id, this.padOfKey(l, e.code) >= 0 ? this.padOfKey(l, e.code) : held.pad);
+    }
   };
 
   /** Would the pad grid take this note (its device, channel and layout)? */
@@ -346,18 +401,21 @@ class PlayDrumPads {
   }
 
   private gridHit(col: number, row: number, vel: number): void {
-    const pad = dpPadOfCell(col, row);
-    if (pad < 0) return;
+    const i = dpPadOfCell(col, row);
+    if (i < 0) return;
     for (const l of this.layers) {
       if (!l.grid || !l.visible) continue;
+      const pad = smPadOfNote(l.bank + i, l.baseNote);
       if (vel > 0) this.trigger(l.id, pad, vel); else this.letGo(l.id, pad);
     }
   }
 }
 
-const emptyPad = (): DrumPad => ({ sampleId: '', fileName: '', bytes: 0, synth: '', name: '', mode: 'oneshot', loop: false, reverse: false, choke: 0 });
-
 export const playDrumPads = new PlayDrumPads();
+/** The same host under its new name. */
+export const playSampler = playDrumPads;
 
-/** Does any pad of the layer play something? */
-export const layerHasSound = (l: DrumPadLayer): boolean => l.pads.some(padHasSound);
+/** Does any pad or zone of the layer play something? */
+export const layerHasSound = (l: SamplerLayer): boolean => l.pads.some(padHasSound) || l.zones.some((z: SamplerZone) => padHasSound(z));
+/** The piano keys' labels, for the editor (A W S E…). */
+export const PIANO_KEY_LABELS = SM_PIANO_KEYS.map(c => c.replace(/^Key/, '').replace('Semicolon', ';').replace('Quote', '\''));

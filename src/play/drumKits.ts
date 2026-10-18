@@ -1,10 +1,11 @@
 /**
- * drumKits.ts — saved drum kits (docs/drum-pads.md, "Kits"): a Drum pad
- * layer's whole setup as a preset on this device, beside the Finish stack's
- * presets (play/finishLibrary.ts).
+ * drumKits.ts — saved drum kits (docs/sampler.md, "Kits"): a Sampler's Drum
+ * view as a preset on this device, beside the Finish stack's presets
+ * (play/finishLibrary.ts).
  *
- * A kit keeps every pad (its sample or generated drum and how it plays), each
- * pad's numbers (start, end, pitch, volume, pan, the envelope, velocity), the
+ * A kit keeps every pad (its sample or generated drum and how it plays: mode,
+ * loop, reverse, choke, filter, LFO), each pad's numbers (every SM_PARAMS
+ * key: start, end, transpose, gain, pan, the envelopes, filter, LFO…), the
  * kit's Keys / MIDI / Pad grid settings, its Volume and its effect chain.
  * Samples are named by their media-library id (lib/backgroundLibrary.ts), so
  * a kit whose sample this device doesn't have shows those pads as missing.
@@ -15,9 +16,10 @@
  * over a KV: the tests and the importers use them without a browser.
  */
 import { safeSetItem, type FileResult } from '../utils/fileIO';
-import { emptyDrumPad, type DrumPad, type DrumPadLayer } from '../types/playLayers';
+import { emptyDrumPad, padHasSound, type DrumPad, type DrumPadLayer } from '../types/playLayers';
 import { audioFxId, layerChainId, parseAudioFx, type AudioFxChain, type PlayAudioFx } from '../types/playAudioFx';
-import { DP_CHOKES, DP_PADS, DP_PARAMS, DP_SYNTHS, dpClamp, dpKey, type DpSynth } from './kit/drumPads.js';
+import { DP_PADS, DP_SYNTHS, dpKey, type DpSynth } from './kit/drumPads.js';
+import { SM_CHOKES, SM_FILTERS, SM_LFO_SHAPES, SM_LFO_TO, SM_PADS, SM_PARAMS, smClamp, type SmFilter, type SmLfoShape, type SmLfoTo } from './kit/sampler.js';
 import { afNewEffect } from './kit/audioFx.js';
 
 export const DRUM_KITS_KEY = 'shader-studio:drum-kits';
@@ -29,7 +31,7 @@ export interface DrumKit {
   name: string;
   savedAt: number;
   description?: string;
-  /** Sixteen pads (empty ones included, so a kit's layout is kept). */
+  /** Sixteen pads or more, up to 128 (empty ones included, so a kit's layout is kept). */
   pads: DrumPad[];
   /** Each pad's numbers, `pad<N>_<key>` (only the ones that differ from the defaults are stored). */
   numbers: Record<string, number>;
@@ -59,11 +61,12 @@ function writeList(kv: ListKV, list: DrumKit[]): FileResult {
   return r;
 }
 
-const padNumberKeys = new Set(DP_PARAMS.map(p => p.key));
-/** Every pad number at its default. */
-export function defaultPadNumbers(): Record<string, number> {
+const padNumberKeys = new Set(SM_PARAMS.map(p => p.key));
+const padDefault = (key: string): number => SM_PARAMS.find(p => p.key === key)?.value ?? 0;
+/** Every number of the first `pads` pads at its default. */
+export function defaultPadNumbers(pads = DP_PADS): Record<string, number> {
   const out: Record<string, number> = {};
-  for (let i = 0; i < DP_PADS; i++) for (const p of DP_PARAMS) out[dpKey(i, p.key)] = p.value;
+  for (let i = 0; i < pads; i++) for (const p of SM_PARAMS) out[dpKey(i, p.key)] = p.value;
   return out;
 }
 
@@ -78,7 +81,10 @@ function parsePad(raw: unknown): DrumPad {
   if (r.mode === 'gate') p.mode = 'gate';
   p.loop = r.loop === true;
   p.reverse = r.reverse === true;
-  p.choke = Math.max(0, Math.min(DP_CHOKES, Math.round(num(r.choke, 0))));
+  p.choke = Math.max(0, Math.min(SM_CHOKES, Math.round(num(r.choke, 0))));
+  if ((SM_FILTERS as readonly string[]).includes(r.filter as string) && r.filter !== 'off') p.filter = r.filter as SmFilter;
+  if ((SM_LFO_SHAPES as readonly string[]).includes(r.lfoShape as string) && r.lfoShape !== 'sine') p.lfoShape = r.lfoShape as SmLfoShape;
+  if ((SM_LFO_TO as readonly string[]).includes(r.lfoTo as string) && r.lfoTo !== 'pitch') p.lfoTo = r.lfoTo as SmLfoTo;
   return p;
 }
 
@@ -88,13 +94,14 @@ export function parseDrumKit(raw: unknown): DrumKit | null {
   const r = raw as Record<string, unknown>;
   if (typeof r.id !== 'string' || !r.id || !Array.isArray(r.pads)) return null;
   const pads: DrumPad[] = [];
-  for (let i = 0; i < DP_PADS; i++) pads.push(parsePad(r.pads[i]));
+  for (let i = 0; i < Math.min(SM_PADS, Math.max(DP_PADS, r.pads.length)); i++) pads.push(parsePad(r.pads[i]));
+  while (pads.length > DP_PADS && !padHasSound(pads[pads.length - 1])) pads.pop();
   const numbers: Record<string, number> = {};
   if (r.numbers && typeof r.numbers === 'object') {
     for (const [k, v] of Object.entries(r.numbers as Record<string, unknown>)) {
-      const m = /^pad(\d+)_([a-z]+)$/.exec(k);
-      if (!m || Number(m[1]) < 1 || Number(m[1]) > DP_PADS || !padNumberKeys.has(m[2]) || typeof v !== 'number' || !Number.isFinite(v)) continue;
-      numbers[k] = dpClamp(m[2], v);
+      const m = /^pad(\d+)_([A-Za-z]+)$/.exec(k);
+      if (!m || Number(m[1]) < 1 || Number(m[1]) > pads.length || !padNumberKeys.has(m[2]) || typeof v !== 'number' || !Number.isFinite(v)) continue;
+      numbers[k] = smClamp(m[2], v);
     }
   }
   const fx = r.fx ? parseAudioFx({ chains: { master: r.fx } })?.chains.master : undefined;
@@ -107,7 +114,7 @@ export function parseDrumKit(raw: unknown): DrumKit | null {
     volume: Math.max(0, Math.min(2, num(r.volume, 0.9))),
     keys: r.keys !== false, midi: r.midi !== false,
     channel: Math.max(0, Math.min(16, Math.round(num(r.channel, 0)))),
-    baseNote: Math.max(0, Math.min(112, Math.round(num(r.baseNote, 36)))),
+    baseNote: Math.max(0, Math.min(127, Math.round(num(r.baseNote, 36)))),
     grid: r.grid !== false,
     ...(fx && fx.effects.length ? { fx } : {}),
   };
@@ -120,16 +127,16 @@ export function loadDrumKits(kv: ListKV = localList): DrumKit[] {
 /** The layer as a kit (not yet saved): its pads, numbers, settings and effect chain. */
 export function kitFromLayer(l: DrumPadLayer, fx: PlayAudioFx | undefined, name: string, id = newId()): DrumKit {
   const numbers: Record<string, number> = {};
-  const defaults = defaultPadNumbers();
-  for (let i = 0; i < DP_PADS; i++) for (const p of DP_PARAMS) {
+  const count = Math.max(DP_PADS, l.pads.length);
+  for (let i = 0; i < count; i++) if (padHasSound(l.pads[i])) for (const p of SM_PARAMS) {
     const k = dpKey(i, p.key);
     const v = l[k as `pad${number}_${string}`];
-    if (typeof v === 'number' && Number.isFinite(v) && v !== defaults[k]) numbers[k] = v;
+    if (typeof v === 'number' && Number.isFinite(v) && v !== p.value) numbers[k] = v;
   }
   const chain = fx?.chains[layerChainId(l.id)];
   const kit = parseDrumKit({
     id, name, savedAt: Date.now(),
-    pads: Array.from({ length: DP_PADS }, (_, i) => l.pads[i] ?? emptyDrumPad()), numbers,
+    pads: Array.from({ length: count }, (_, i) => l.pads[i] ?? emptyDrumPad()), numbers,
     volume: l.volume, keys: l.keys, midi: l.midi, channel: l.channel, baseNote: l.baseNote, grid: l.grid,
     ...(chain && chain.effects.length ? { fx: chain } : {}),
   });
@@ -177,17 +184,18 @@ export type KitLoadMode = 'replace' | 'merge';
  * Loaded effects get new ids, so they never collide with the layer's controls.
  */
 export function applyDrumKit(l: DrumPadLayer, fx: PlayAudioFx | undefined, kit: DrumKit, mode: KitLoadMode): { layer: DrumPadLayer; fx: PlayAudioFx | undefined; filled: number } {
-  const defaults = defaultPadNumbers();
   const numbersOf = (i: number): Record<string, number> => {
     const out: Record<string, number> = {};
-    for (const p of DP_PARAMS) { const k = dpKey(i, p.key); out[k] = kit.numbers[k] ?? defaults[k]; }
+    for (const p of SM_PARAMS) { const k = dpKey(i, p.key); out[k] = kit.numbers[k] ?? padDefault(p.key); }
     return out;
   };
   if (mode === 'replace') {
     const numbers: Record<string, number> = {};
-    for (let i = 0; i < DP_PADS; i++) Object.assign(numbers, numbersOf(i));
+    kit.pads.forEach((p, i) => { if (padHasSound(p)) Object.assign(numbers, numbersOf(i)); });
+    // The layer's own pad numbers go: the kit's pads bring theirs.
+    const kept = Object.fromEntries(Object.entries(l).filter(([k]) => !/^pad\d+_/.test(k))) as unknown as DrumPadLayer;
     const layer: DrumPadLayer = {
-      ...l, ...numbers, pads: kit.pads.map(p => ({ ...p })),
+      ...kept, ...numbers, view: 'drum', pads: kit.pads.map(p => ({ ...p })),
       volume: kit.volume, keys: kit.keys, midi: kit.midi, channel: kit.channel, baseNote: kit.baseNote, grid: kit.grid,
     };
     const chainId = layerChainId(l.id);
@@ -197,10 +205,10 @@ export function applyDrumKit(l: DrumPadLayer, fx: PlayAudioFx | undefined, kit: 
     const nextFx: PlayAudioFx | undefined = Object.keys(chains).length || fx?.analyse ? { ...(fx ?? {}), chains } : undefined;
     return { layer, fx: nextFx, filled: kit.pads.filter(p => p.sampleId || p.synth).length };
   }
-  const pads = Array.from({ length: DP_PADS }, (_, i) => l.pads[i] ?? emptyDrumPad());
+  const pads = Array.from({ length: Math.max(l.pads.length, kit.pads.length) }, (_, i) => l.pads[i] ?? emptyDrumPad());
   const patch: Record<string, number> = {};
   let filled = 0;
-  for (let i = 0; i < DP_PADS; i++) {
+  for (let i = 0; i < kit.pads.length; i++) {
     const mine = pads[i], theirs = kit.pads[i];
     if (mine.sampleId || mine.synth || !(theirs.sampleId || theirs.synth)) continue;
     pads[i] = { ...theirs };

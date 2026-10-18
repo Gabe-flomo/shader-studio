@@ -64,7 +64,7 @@ export function videoUses(ids: readonly string[], kv: ReadKV, open?: { name: str
   }
   if (open) {
     // Video layers' files, drum pads' samples, and the Audio engine's sample player sounds (`sounds`).
-    const refs = [...open.layers.flatMap(l => (l.kind === 'video' ? [l.videoId] : l.kind === 'drumpad' ? l.pads.map(p => p.sampleId) : [])), ...(open.sounds ?? [])];
+    const refs = [...open.layers.flatMap(l => (l.kind === 'video' ? [l.videoId] : l.kind === 'sampler' ? [...l.pads, ...(l.zones ?? [])].map(p => p.sampleId) : [])), ...(open.sounds ?? [])];
     for (const id of refs) {
       if (!id || !want.has(id)) continue;
       const list = out.get(id)!;

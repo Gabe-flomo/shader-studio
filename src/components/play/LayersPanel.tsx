@@ -14,7 +14,7 @@
  * dragged and invisible zones are outlined.
  */
 import { VideoEditor } from './layers/VideoEditor';
-import { DrumPadEditor } from './layers/DrumPadEditor';
+import { SamplerEditor } from './layers/sampler/SamplerEditor';
 import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useNarrow } from '../../hooks/useNarrow';
 import { useThemeMode, useTokens } from '../../theme/themeStore';
@@ -858,7 +858,7 @@ function LayerRow({ layer: l, layers, play, onChangePlay, canUp, canDown, touch,
     case 'image': body = <ImageEditor f={f} pictureHidden={pictureHidden} />; break;
     case 'camera': body = <CameraEditor f={f} pictureHidden={pictureHidden} />; break;
     case 'video': body = <VideoEditor f={f} ctx={ctx} pictureHidden={pictureHidden} />; break;
-    case 'drumpad': body = <DrumPadEditor f={f} ctx={ctx} />; break;
+    case 'sampler': body = <SamplerEditor f={f} ctx={ctx} />; break;
     case 'particles': body = <ParticlesEditor f={f} ctx={ctx} />; break;
     case 'shape': body = <ShapeEditor f={f} ctx={ctx} />; break;
     case 'audio': body = <AudioEditor f={f} />; break;
@@ -1018,7 +1018,7 @@ function LayerRow({ layer: l, layers, play, onChangePlay, canUp, canDown, touch,
               </Section>
             )}
           </BigEditorScaffold>
-          {l.kind !== 'null' && l.kind !== 'drumpad' && !isBackground && f.toggle('Shader', 'toShader', 'Seen by the Layers node', 'Include this layer in what the graph\'s Layers node reads (its colour, alpha and distance), so shader effects like SDF Glow can use it.')}
+          {l.kind !== 'null' && l.kind !== 'sampler' && !isBackground && f.toggle('Shader', 'toShader', 'Seen by the Layers node', 'Include this layer in what the graph\'s Layers node reads (its colour, alpha and distance), so shader effects like SDF Glow can use it.')}
         </>
       )}
     </div>

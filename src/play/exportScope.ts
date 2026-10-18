@@ -159,7 +159,7 @@ export function webExportScope(input: PlayHtmlInput): { input: PlayHtmlInput; fr
       if (outLayers.has(l.id) && x.visible !== false) x = { ...x, visible: false } as PlayLayer;
       if (x.trackMatte && dropped.has(x.trackMatte.id)) { x = { ...x }; delete (x as { trackMatte?: unknown }).trackMatte; }
       // Drum pads keep their keys and clicks, not MIDI.
-      if (x.kind === 'drumpad' && x.midi) { kinds.add('midi'); x = { ...x, midi: false }; }
+      if (x.kind === 'sampler' && x.midi) { kinds.add('midi'); x = { ...x, midi: false }; }
       return x;
     }),
   };

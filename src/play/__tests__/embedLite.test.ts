@@ -345,7 +345,7 @@ describe('the full player carries only what it uses', () => {
     expect(groups({ ...simple(), fragmentShader: `${SHADER}\n// gpu-particles x` })).toEqual(['blur', 'gpuParticles']);
     expect(groups({ ...simple(), agents: { groups: [], deposits: [], trails: [], draws: [], bessel: 'u_b' } })).toEqual(['agentsGpu', 'blur', 'gpuParticles']);
     expect(groups({ ...simple(), graphPasses: [{ slug: 'a', label: 'A', fragmentShader: 'void main(){}', scale: 1, format: 'half', filter: 'linear', wrap: 'clamp', previous: false, live: true, u: { tex: 'u_pass_a', prev: 'u_passprev_a' } }] })).toEqual(['passes']);
-    expect(groups({ ...simple(), play: { ...simple().play, layers: [defaultLayer('drumpad', 'L1', 'Pads')] } })).toEqual(['drums']);
+    expect(groups({ ...simple(), play: { ...simple().play, layers: [defaultLayer('sampler', 'L1', 'Pads')] } })).toEqual(['drums']);
   });
 
   it('every subset of the kit loads, with what it left out null', () => {

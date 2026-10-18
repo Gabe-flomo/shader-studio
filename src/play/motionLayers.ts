@@ -12,7 +12,7 @@
 import { defaultLayer, type MotionLayer, type PlayLayer } from '../types/play';
 
 /** Kinds a Motion layer can't watch: they draw nothing (nulls, drum pads, relationships), or are Motion layers themselves. */
-const UNWATCHABLE = new Set(['null', 'drumpad', 'relationship', 'motion']);
+const UNWATCHABLE = new Set(['null', 'sampler', 'relationship', 'motion']);
 
 export function motionSourceStart(layers: readonly PlayLayer[]): Pick<MotionLayer, 'readFrom' | 'sourceId'> {
   if (layers.some(l => l.kind === 'camera')) return { readFrom: 'camera', sourceId: '' };

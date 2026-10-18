@@ -1658,22 +1658,23 @@ void main() {
     const looks = LK ? LK.create() : null;
     const layerValue = (id, key, fb) => { const k = id + '::' + key; let v = overrides.get(k); if (v === undefined && looks) v = LK.value(looks, id, key); if (v === undefined) v = layerLive.get(k); return v === undefined ? fb : v; };
     const value = (l, k) => layerValue(l.id, k, l[k]);
-    // Drum pad layers (the kit's drumPads.js): each pad's sample from its data URL, or a generated drum,
-    // decoded as the page opens; heard once the visitor's first click or key lets sound start.
+    // Sampler layers (the kit's sampler.js on drumPads.js, docs/sampler.md): each pad's and zone's sample from its
+    // data URL, or a generated drum, decoded as the page opens; heard once the visitor's first click or key lets sound start.
     const DPK = typeof SSKit !== 'undefined' && SSKit.drumPads ? SSKit.drumPads : null;
-    const drumLayers = DPK ? play.layers.filter(l => l.kind === 'drumpad' && l.visible) : [];
+    const SMK = typeof SSKit !== 'undefined' && SSKit.sampler ? SSKit.sampler : null;
+    const drumLayers = DPK && SMK ? play.layers.filter(l => l.kind === 'sampler' && l.visible) : [];
     const drums = { ctx: null, kits: new Map(), wired: false };
     if (drumLayers.length && !follow) {
       const AC = window.AudioContext || window.webkitAudioContext;
       if (AC) {
         drums.ctx = new AC();
         for (const l of drumLayers) {
-          const kit = { l, sampler: null, an: null, freq: null, out: null, buffers: l.pads.map(() => null) };
+          const kit = { l, sampler: null, an: null, freq: null, out: null, buffers: new Map(), state: { hits: 0, lastPitch: null }, octave: 0 };
           drums.kits.set(l.id, kit);
-          l.pads.forEach((p, i) => {
-            if (p.src) fetch(p.src).then(r => r.arrayBuffer()).then(b => drums.ctx.decodeAudioData(b)).then(buf => { kit.buffers[i] = buf; }, () => {});
-            else if (p.synth) kit.buffers[i] = DPK.synth(drums.ctx, p.synth);
-          });
+          for (const p of [...(l.pads || []), ...(l.zones || [])]) {
+            if (p.src) fetch(p.src).then(r => r.arrayBuffer()).then(b => drums.ctx.decodeAudioData(b)).then(buf => { kit.buffers.set(p, buf); }, () => {});
+            else if (p.synth) kit.buffers.set(p, DPK.synth(drums.ctx, p.synth));
+          }
         }
       }
     }
@@ -1684,7 +1685,7 @@ void main() {
       const bus = drums.ctx.createGain();
       afxAttach(drums.ctx, 'master', bus, drums.ctx.destination, null);
       for (const k of drums.kits.values()) {
-        k.sampler = DPK.sampler(drums.ctx);
+        k.sampler = SMK.create(drums.ctx, { voices: k.l.view === 'keys' ? (k.l.inst && k.l.inst.voices) || 8 : 32 });
         k.an = drums.ctx.createAnalyser(); k.an.fftSize = 2048; k.an.smoothingTimeConstant = 0.8; k.freq = new Float32Array(k.an.frequencyBinCount);
         k.out = drums.ctx.createGain(); k.out.gain.value = Math.max(0, k.l.volume);
         afxAttach(drums.ctx, 'layer:' + k.l.id, k.sampler.output, k.out, k.an);
@@ -1692,30 +1693,31 @@ void main() {
       }
     }
     function startDrums() { if (!drums.ctx || !alive) return; wireDrums(); if (drums.ctx.state === 'suspended') drums.ctx.resume(); }
-    // A hit: { layerId, amount (pad number from 1), vel (0 lets a gate pad go) }.
+    // A hit: { layerId, amount (pad number from 1: note (base + amount − 1) mod 128), vel (0 lets it go), slot (a take's pick) }.
     function drumAct(a) {
       const k = drums.kits.get(a.layerId);
       if (!k) return;
       startDrums();
       const pad = Math.round(a.amount) - 1, vel = a.vel == null ? 1 : a.vel;
-      if (!k.l.pads[pad] || !k.sampler) return;
+      if (pad < 0 || pad > 127 || !k.sampler) return;
       if (vel <= 0) { k.sampler.release(pad); return; }
-      // The sound comes from the indexed pad (docs/drum-pads.md "Sample index"); a take says which.
-      const src = a.slot >= 1 ? a.slot - 1 : pickSlot(k.l, pad);
-      const p = k.l.pads[src] || k.l.pads[pad];
-      const buf = k.buffers[src] || k.buffers[pad];
-      if (!buf) return;
       k.out.gain.value = Math.max(0, value(k.l, 'volume'));
-      k.sampler.hit(pad, Object.assign(DPK.numbers(key => value(k.l, DPK.key(src, key))), { buffer: buf, mode: p.mode, loop: p.loop, reverse: p.reverse, choke: p.choke, velocity: vel }));
+      const r = SMK.hits(k.l, pad, vel, { num: key => { const v = value(k.l, key); return typeof v === 'number' ? v : undefined; }, buffer: s => k.buffers.get(s) || null, state: k.state }, a.slot);
+      for (const v of r.voices) k.sampler.hit(v.group, v.o);
     }
-    const drumHits = new Map();
-    function pickSlot(l, pad) {
-      if (!DPK.pick) return pad;
-      const slots = DPK.slots(i => { const q = l.pads[i]; return !!q && (!!q.sampleId || !!q.synth); }, l.pads.length);
-      const n = (drumHits.get(l.id) || 0) + 1; drumHits.set(l.id, n);
-      return DPK.pick(slots, pad, value(l, 'sampleIndex'), l.indexMode || 'index', value(l, 'indexSpread'), DPK.hash(l.indexSeed || 0, n));
-    }
-    const drumHit = (pad, vel) => { for (const l of drumLayers) drumAct({ layerId: l.id, amount: pad + 1, vel }); };
+    // Does a let-go matter (a Classic pad or note; one-shots ignore it)?
+    const drumGates = (l, pad) => (l.view === 'keys' ? !(l.inst && (l.inst.mode === 'oneshot' || (l.inst.mode === 'slice' && !l.inst.sliceGate))) : !!(l.pads[pad] && l.pads[pad].mode === 'gate'));
+    // A computer key's pad on a layer: the Drum view's window (Z X C V…), the Keys view's piano (A W S E…, Z / X octave).
+    const drumPadOfKey = (l, code) => {
+      if (l.view === 'keys') {
+        const off = SMK.pianoOffset(code);
+        if (off < 0) return -1;
+        const k = drums.kits.get(l.id), note = ((l.octave == null ? 3 : l.octave) + (k ? k.octave : 0) + 2) * 12 + off;
+        return note >= 0 && note <= 127 ? SMK.padOfNote(note, l.baseNote) : -1;
+      }
+      const i = DPK.padOfKey(code);
+      return i < 0 ? -1 : SMK.padOfNote((l.bank == null ? l.baseNote : l.bank) + i, l.baseNote);
+    };
     // Granulator racks (the kit's granulator.js, docs/granulator.md): each one's grains in an AudioWorklet (else a
     // ScriptProcessor) → its Sound chain (`rack:<id>`, analysed for the readers as `engine:<id>`) → its volume → the
     // master chain. Heard once the visitor's first click or key lets sound start; notes from Web MIDI and `ae:<id>`
@@ -2695,17 +2697,24 @@ void main() {
     if (soundVideos.length && !follow) { on(window, 'pointerdown', startVideoSound, true); on(window, 'keydown', startVideoSound, true); }
     if (drums.ctx) {
       on(window, 'pointerdown', startDrums, true);
-      // Z X C V / A S D F / Q W E R / 1 2 3 4 play pads 1–16 (a player only: a background never takes keys).
+      // Drum view: Z X C V / A S D F / Q W E R / 1 2 3 4 play the window's 16 pads; Keys view: A W S E D… play notes,
+      // Z / X move the octave (a player only: a background never takes keys).
       if (mode === 'player' && drumLayers.some(l => l.keys)) {
         const held = new Map();
         on(window, 'keydown', e => {
           if (e.metaKey || e.ctrlKey || e.altKey || e.repeat || isTyping(e.target)) return;
-          const pad = DPK.padOfKey(e.code);
-          if (pad < 0) return;
-          held.set(e.code, pad);
-          for (const l of drumLayers) if (l.keys) drumAct({ layerId: l.id, amount: pad + 1, vel: 1 });
+          const hit = [];
+          for (const l of drumLayers) {
+            if (!l.keys) continue;
+            if (l.view === 'keys' && (e.code === 'KeyZ' || e.code === 'KeyX')) { const k = drums.kits.get(l.id); if (k) k.octave += e.code === 'KeyZ' ? -1 : 1; continue; }
+            const pad = drumPadOfKey(l, e.code);
+            if (pad < 0) continue;
+            hit.push([l, pad]);
+            drumAct({ layerId: l.id, amount: pad + 1, vel: l.view === 'keys' ? 0.8 : 1 });
+          }
+          if (hit.length) held.set(e.code, hit);
         });
-        on(window, 'keyup', e => { const pad = held.get(e.code); if (pad === undefined) return; held.delete(e.code); for (const l of drumLayers) if (l.keys && l.pads[pad] && l.pads[pad].mode === 'gate') drumAct({ layerId: l.id, amount: pad + 1, vel: 0 }); });
+        on(window, 'keyup', e => { const hit = held.get(e.code); if (!hit) return; held.delete(e.code); for (const [l, pad] of hit) if (drumGates(l, pad)) drumAct({ layerId: l.id, amount: pad + 1, vel: 0 }); });
       } else on(window, 'keydown', startDrums, true);
     }
     if (grains.ctx) { on(window, 'pointerdown', startGrains, true); on(window, 'keydown', startGrains, true); }
@@ -2843,18 +2852,22 @@ void main() {
       }
       head.append(tools);
       panel.append(head);
-      // Drum pads: a button per pad that plays something (hold a gate pad).
+      // Samplers: a button per pad that plays something (Drum view; hold a Classic pad), or per octave of C notes (Keys view).
       for (const l of drumLayers) {
         const row = el('div', 'ssp-control');
         row.append(el('span', 'ssp-label', l.label));
         const grid = el('div', 'ssp-row');
         grid.style.flexWrap = 'wrap'; grid.style.gap = '4px'; grid.style.justifyContent = 'flex-start';
-        l.pads.forEach((p, i) => {
-          if (!p.src && !p.synth) return;
-          const b = el('button', 'ssp-btn', p.name || (p.fileName || '').replace(/\.[a-z0-9]{2,4}$/i, '') || ({ kick: 'Kick', snare: 'Snare', hat: 'Closed hat', openhat: 'Open hat', clap: 'Clap', tom: 'Tom', rim: 'Rim', cowbell: 'Cowbell' })[p.synth] || String(i + 1));
-          b.onpointerdown = () => drumAct({ layerId: l.id, amount: i + 1, vel: 1 });
-          b.onpointerup = () => { if (p.mode === 'gate') drumAct({ layerId: l.id, amount: i + 1, vel: 0 }); };
+        const btn = (label, pad) => {
+          const b = el('button', 'ssp-btn', label);
+          b.onpointerdown = () => drumAct({ layerId: l.id, amount: pad + 1, vel: 1 });
+          b.onpointerup = () => { if (drumGates(l, pad)) drumAct({ layerId: l.id, amount: pad + 1, vel: 0 }); };
           grid.append(b);
+        };
+        if (l.view === 'keys') for (let o = 1; o <= 5; o++) btn('C' + o, SMK.padOfNote((o + 2) * 12, l.baseNote));
+        else l.pads.forEach((p, i) => {
+          if (!p.src && !p.synth) return;
+          btn(p.name || (p.fileName || '').replace(/\.[a-z0-9]{2,4}$/i, '') || ({ kick: 'Kick', snare: 'Snare', hat: 'Closed hat', openhat: 'Open hat', clap: 'Clap', tom: 'Tom', rim: 'Rim', cowbell: 'Cowbell' })[p.synth] || String(i + 1), i);
         });
         row.append(grid);
         panel.append(row);
@@ -3016,16 +3029,15 @@ void main() {
     const reduced = stillForReducedMotion && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     const inst = { mode, claimsKey: code => keysUsed.has(code), pad: padG ? (st, d1, d2, dev) => { padQueue.push([st, d1, d2, dev]); } : null };
-    // MIDI notes from each drum layer's base note play its pads (36–51 by default).
+    // MIDI notes play each Sampler's pads (note n is pad (n − base) mod 128) or its zones.
     if (drumLayers.some(l => l.midi)) inst.drum = (st, d1, d2) => {
       const type = st & 0xf0, ch = (st & 0x0f) + 1;
       if (type !== 0x90 && type !== 0x80) return;
       for (const l of drumLayers) {
         if (!l.midi || (l.channel && l.channel !== ch)) continue;
-        const pad = DPK.padOfNote(d1, l.baseNote);
-        if (pad < 0) continue;
+        const pad = SMK.padOfNote(d1, l.baseNote);
         const vel = type === 0x90 ? d2 / 127 : 0;
-        if (vel > 0 || (l.pads[pad] && l.pads[pad].mode === 'gate')) drumAct({ layerId: l.id, amount: pad + 1, vel });
+        if (vel > 0 || drumGates(l, pad)) drumAct({ layerId: l.id, amount: pad + 1, vel });
       }
     };
     // MIDI notes play the Granulator racks that listen (any input, or all devices here: a page can't tell them apart), by channel.

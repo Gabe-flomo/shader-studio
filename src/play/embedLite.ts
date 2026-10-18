@@ -90,7 +90,7 @@ const UNIFORM_KINDS: [RegExp, string, string?][] = [
 ];
 
 /** The kit feature a layer kind brings (exportHtml.ts KIT_GROUPS), for the dialog's sizes. */
-const LAYER_FEATURE: Partial<Record<string, string>> = { script: 'script', agents: 'agentsCpu', water: 'finish', drumpad: 'drums', data: 'data' };
+const LAYER_FEATURE: Partial<Record<string, string>> = { script: 'script', agents: 'agentsCpu', water: 'finish', sampler: 'drums', drumpad: 'drums', data: 'data' };
 
 /**
  * A Play mapping the snippet runs: a uniform written from the pointer (x, y, a button held), a key held,

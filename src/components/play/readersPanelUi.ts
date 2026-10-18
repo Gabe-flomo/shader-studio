@@ -45,13 +45,13 @@ export function readerInputOptions(input: string, songs: ReadonlyArray<{ id: str
     ...songs.map(s => ({ value: s.id, label: `Song · ${s.label}${s.file !== null ? ` · ${s.file}` : ' (no song loaded)'}` })),
   ];
   for (const l of layers) if (l.kind === 'video') out.push({ value: videoReaderInput(l.id), label: `Video · ${l.label}${l.sound === 'off' ? ' (sound off)' : ''}` });
-  for (const l of layers) if (l.kind === 'drumpad') out.push({ value: padsReaderInput(l.id), label: `Drum pads · ${l.label}` });
+  for (const l of layers) if (l.kind === 'sampler') out.push({ value: padsReaderInput(l.id), label: `Drum pads · ${l.label}` });
   for (const r of racks) out.push({ value: engineReaderInput(r.id), label: `Audio engine · ${r.name}` });
   if (racks.length || input === engineReaderInput(ENGINE_MASTER)) out.push({ value: engineReaderInput(ENGINE_MASTER), label: 'Audio engine · Master (every rack)' });
   const video = videoLayerOfInput(input), pads = padsLayerOfInput(input), rack = engineRackOfInput(input);
   if (rack) { if (rack !== ENGINE_MASTER && !racks.some(r => r.id === rack)) out.push({ value: input, label: 'Audio engine · a rack no longer in the setup' }); }
   else if (video && !layers.some(l => l.id === video && l.kind === 'video')) out.push({ value: input, label: 'Video · a layer no longer in the setup' });
-  else if (pads && !layers.some(l => l.id === pads && l.kind === 'drumpad')) out.push({ value: input, label: 'Drum pads · a layer no longer in the setup' });
+  else if (pads && !layers.some(l => l.id === pads && l.kind === 'sampler')) out.push({ value: input, label: 'Drum pads · a layer no longer in the setup' });
   else if (input && !video && !pads && !rack && !songs.some(s => s.id === input)) out.push({ value: input, label: 'Song · a node no longer in the graph' });
   return out;
 }

@@ -320,7 +320,7 @@ export function setMedia(layers: readonly PlayLayer[]): SetMedia[] {
   for (const l of layers) {
     const r = l as unknown as Record<string, unknown>;
     if (l.kind === 'video') add(l.videoId, 'video', l.fileName, l.label);
-    if (l.kind === 'drumpad') for (const pad of l.pads) add(pad.sampleId, 'sound', pad.name || pad.fileName, l.label);
+    if (l.kind === 'sampler') for (const pad of [...l.pads, ...(l.zones ?? [])]) add(pad.sampleId, 'sound', pad.name || pad.fileName, l.label);
     if (typeof r.fontUrl === 'string' && isLinkedRef(r.fontUrl)) add(r.fontUrl, 'font', '', l.label);
   }
   return out;

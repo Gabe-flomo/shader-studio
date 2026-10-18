@@ -34,7 +34,7 @@ import type { ArrNote, PlayArrangement } from '../types/playArrangement';
 import { FN_EFFECTS } from '../play/kit/finish.js';
 import { effectFromGraph, type EffectGraph } from '../play/lookGraph';
 import { gpPreset } from '../play/kit/gpuParticles.js';
-import { defaultDisplace, MASK_DEFAULTS, MASK_PROP_KEYS, maskKey, type DrumPadLayer, type LayerDisplace, type MaskOp, type MaskProp, type MaskShape } from '../types/playLayers';
+import { defaultDisplace, MASK_DEFAULTS, MASK_PROP_KEYS, maskKey, padNumbers, type DrumPadLayer, type LayerDisplace, type MaskOp, type MaskProp, type MaskShape } from '../types/playLayers';
 import type { DpSynth } from '../play/kit/drumPads.js';
 import { agPresetLayer } from '../play/kit/agents.js';
 import { HAND_EX, handBeatNodes } from './agentPlayExample';
@@ -126,11 +126,12 @@ const reader = (id: string, name: string, hz: number, width: number, gain: numbe
 /** The same trigger, firing by a mode other than Once. */
 const firing = (t: TriggerSpec, fire: FireSpec): TriggerSpec => ({ ...t, fire });
 const act = (id: string, trigger: TriggerSpec, kind: ActionKind, layerId: string, amount = 1): PlayAction => ({ id, trigger, do: kind, layerId, amount, enabled: true });
-/** A Drum pad layer of generated drums: pad i plays `synth` with its own settings (numbers are layer properties). */
+/** A Sampler (Drum view) of generated drums: pad i plays `synth` with its own settings (numbers are layer properties). */
 function drumKit(id: string, label: string, pads: Array<[DpSynth, { name?: string; choke?: number; mode?: 'oneshot' | 'gate'; loop?: boolean; reverse?: boolean; pitch?: number; start?: number; end?: number }]>): PlayLayer {
-  const l = defaultLayer('drumpad', id, label) as DrumPadLayer & Record<string, unknown>;
+  const l = defaultLayer('sampler', id, label) as DrumPadLayer & Record<string, unknown>;
   pads.forEach(([synth, o], i) => {
     l.pads[i] = { ...l.pads[i], synth, name: o.name ?? '', choke: o.choke ?? 0, mode: o.mode ?? 'oneshot', loop: o.loop ?? false, reverse: o.reverse ?? false };
+    Object.assign(l, padNumbers(i));
     for (const k of ['pitch', 'start', 'end'] as const) if (o[k] !== undefined) l[`pad${i + 1}_${k}`] = o[k];
   });
   return l;

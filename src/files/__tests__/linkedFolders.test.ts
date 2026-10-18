@@ -180,7 +180,7 @@ describe('the library reads linked ids without copying them', () => {
 
   it('a .playfile export carries the bytes; the import keeps them as library media under the same id', async () => {
     const ref = linkedRef(folderId, 'Kicks/kick 2.wav');
-    const setup = JSON.stringify({ layers: [{ kind: 'drumpad', pads: [{ sampleId: ref, fileName: 'kick 2.wav' }] }] });
+    const setup = JSON.stringify({ layers: [{ kind: 'sampler', pads: [{ sampleId: ref, fileName: 'kick 2.wav' }] }] });
     const ids = videoIdsIn([{ kind: 'play', name: 'Kit', data: setup }]);
     expect(ids).toEqual([ref]);
     const files = await videoZipFiles(ids);

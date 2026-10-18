@@ -243,7 +243,7 @@ function SampleRow({ rack, slot, play, onChange }: { rack: AeRack; slot: AeSlot;
   const padOptions = useMemo(() => {
     const out: { value: string; label: string }[] = [];
     for (const l of play.layers) {
-      if (l.kind !== 'drumpad') continue;
+      if (l.kind !== 'sampler') continue;
       (l as DrumPadLayer).pads.forEach((p, i) => {
         const name = p.name || p.fileName || (p.synth ? GR_SYNTH_NAMES[p.synth] : '');
         if (p.sampleId) out.push({ value: `lib:${p.sampleId}:${name}`, label: `${l.label} · pad ${i + 1} · ${name}` });

@@ -62,7 +62,7 @@ export function lookDefaults(kind: string, layerId: string, play: PlayRecord): P
 
 /** How much a new reaction of this kind does by default. */
 export function defaultAmount(kind: string, l: PlayLayer | undefined): number {
-  if (kind === SIGNAL_ACTION || kind === 'goto' || kind === 'pad' || l?.kind === 'drumpad') return 1;
+  if (kind === SIGNAL_ACTION || kind === 'goto' || kind === 'pad' || l?.kind === 'sampler') return 1;
   if (kind === 'scatter') return 2;
   return 60;
 }

@@ -41,7 +41,7 @@ describe('every kind has a contract', () => {
     expect(layerEvents(defaultLayer('relationship', 'r', 'R')).map(e => e.field)).toEqual(['catchSignal']);
     expect(layerEvents(defaultLayer('text', 't', 'T'))).toEqual([]);
     expect(layerPorts(defaultLayer('null', 'n', 'N')).position).toBe(true);
-    expect(layerPorts(defaultLayer('drumpad', 'd', 'D')).position).toBe(false);
+    expect(layerPorts(defaultLayer('sampler', 'd', 'D')).position).toBe(false);
   });
 
   it('the Signals page hears Born and Died now (they were left out of the senders)', () => {

@@ -20,7 +20,7 @@ export function newWaterLayer(id: string, label: string, over: Partial<WaterLaye
 
 /** Layers a Water layer can ride or be pushed by: anything but itself, other Water layers and the Background. */
 export function waterLayerSources(layers: readonly PlayLayer[], selfId: string, forShape = false): PlayLayer[] {
-  return layers.filter(l => l.id !== selfId && l.kind !== 'water' && l.kind !== 'background' && (!forShape || (l.kind !== 'null' && l.kind !== 'drumpad' && l.kind !== 'relationship')));
+  return layers.filter(l => l.id !== selfId && l.kind !== 'water' && l.kind !== 'background' && (!forShape || (l.kind !== 'null' && l.kind !== 'sampler' && l.kind !== 'relationship')));
 }
 
 /** After removing layer `id`: Water layers riding it, or pushed by its shape, have no such layer any more. */
