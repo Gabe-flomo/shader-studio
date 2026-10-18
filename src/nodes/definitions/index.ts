@@ -166,7 +166,7 @@ export { ShaderTextureNode, ShaderTextureOutputNode } from './shaderTexture';
 export { RadialFastBlurNode, RadialFastBlurStageNode } from './radialFastBlur';
 export { ChromaLensNode } from './chromaLens';
 export { DeepGlowTextureNode, DeepGlowTextureStageNode } from './deepGlow';
-export { PassNode, PassOutputNode, SampleTextureNode, EdgesTextureNode, BlurTextureNode, GlowTextureNode, ChromaTextureNode, DisplaceTextureNode, DisplacementMapNode, JumpFloodTextureNode } from './passes';
+export { PassNode, PassOutputNode, SampleTextureNode, EdgesTextureNode, BlurTextureNode, GlowTextureNode, DisplaceTextureNode, DisplacementMapNode, JumpFloodTextureNode } from './passes';
 export { TextureMaskNode, TextureLevelsNode, TextureFlowNode, TextureNeighboursNode, TextureChangeNode, DistanceShapeNode, TextureFadeNode, ReadTextureNode } from './textureTools';
 export { HeightLightNode } from './heightLight';
 export { RandomFromIdNode } from './randomFromId';
@@ -323,7 +323,7 @@ import { ChromaLensNode } from './chromaLens';
 import { DeepGlowTextureNode, DeepGlowTextureStageNode } from './deepGlow';
 import { GridRulesNode, GridRulesStepNode, MouseButtonNode } from './gridRules';
 import { ShaderTextureNode, ShaderTextureOutputNode } from './shaderTexture';
-import { PassNode, PassOutputNode, SampleTextureNode, EdgesTextureNode, BlurTextureNode, GlowTextureNode, ChromaTextureNode, DisplaceTextureNode, DisplacementMapNode, JumpFloodTextureNode } from './passes';
+import { PassNode, PassOutputNode, SampleTextureNode, EdgesTextureNode, BlurTextureNode, GlowTextureNode, DisplaceTextureNode, DisplacementMapNode, JumpFloodTextureNode } from './passes';
 import { TextureMaskNode, TextureLevelsNode, TextureFlowNode, TextureNeighboursNode, TextureChangeNode, DistanceShapeNode, TextureFadeNode, ReadTextureNode } from './textureTools';
 import { HeightLightNode } from './heightLight';
 import { RandomFromIdNode } from './randomFromId';
@@ -608,7 +608,6 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   edgesTexture: EdgesTextureNode,
   blurTexture: BlurTextureNode,
   glowTexture: GlowTextureNode,
-  chromaTexture: ChromaTextureNode,
   chromaLens: ChromaLensNode,
   deepGlowTexture: DeepGlowTextureNode,
   deepGlowTextureStage: DeepGlowTextureStageNode,

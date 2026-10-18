@@ -21,6 +21,7 @@ import { HIDDEN_NODES } from '../../components/NodeGraph/libraryRows';
 import { compileGraph } from '../../compiler/graphCompiler';
 import { EXAMPLE_GRAPHS } from '../../store/exampleGraphs';
 import { runGlsl, type Val } from '../../compiler/__tests__/glslEval';
+import { caRow } from '../../play/kit/chroma.js';
 
 /** A saved node as an old graph holds it: no definition lookup, just type, sockets and params. */
 function saved(type: string, id: string, params: Record<string, unknown>, inputs: Record<string, [string, string] | null>, outputs: string[], extra: Partial<GraphNode> = {}): GraphNode {
@@ -56,11 +57,12 @@ const near = (a: Val, b: Val, eps = 1e-9) => {
 };
 
 /** Retired in the sweep and kept registered (hidden): no exact mapping onto the survivor. */
-const SWEPT_HIDDEN: string[] = ['light2d'];
+const SWEPT_HIDDEN: string[] = ['light2d', 'chromaShift', 'chromaticAberration'];
 /** Merged into a survivor: gone from the registry, migrated on load (old type → survivor). */
 const MERGED_INTO: Record<string, string> = {
   smoothWarp: 'uvWarp', curlWarp: 'uvWarp', swirlWarp: 'uvWarp', swirlSpace: 'uvWarp',
   glowLayer: 'light', distanceFalloff: 'light', deepGlow: 'light',
+  chromaTexture: 'chromaLens',
 };
 const SWEPT_MERGED = Object.keys(MERGED_INTO);
 
@@ -305,5 +307,37 @@ describe('SDF Glow: every distance falloff in one Mode list', () => {
     compiles([uv, shape, saved('distanceFalloff', 'g', {}, { distance: ['c', 'distance'] }, ['falloff']), saved('output', 'out', {}, { color: ['g', 'falloff'] }, [])]);
     compiles([uv, shape, saved('deepGlow', 'g', {}, { d: ['c', 'distance'] }, ['result']), saved('output', 'out', {}, { color: ['g', 'result'] }, [])]);
     compiles([uv, saved('light2d', 'g', {}, { uv: ['uv', 'uv'] }, ['light']), saved('output', 'out', {}, { color: ['g', 'light'] }, [])]);
+  });
+});
+
+// ── Chromatic aberration ─────────────────────────────────────────────────────
+
+describe('Chromatic aberration: one texture node', () => {
+  it('RGB Split (texture) migrates to Chromatic Aberration (lens), Channel split, Blur 0', () => {
+    const [r, d] = load([
+      saved('chromaTexture', 'a', { mode: 'radial', amount: 6, falloff: 1.5 }, { texture: null, uv: null }, ['color', 'alpha']),
+      saved('chromaTexture', 'b', { mode: 'directional', amount: 3, angle: 45 }, { texture: null }, ['color', 'alpha']),
+    ]);
+    expect(r.type).toBe('chromaLens');
+    expect(r.params).toMatchObject({ mode: 'split', geometry: 'lateral', amount: 6, falloff: 1.5, blur: 0, distortion: 0, centerX: 0, centerY: 0 });
+    expect(d.params).toMatchObject({ mode: 'split', geometry: 'directional', amount: 3, angle: 45, blur: 0 });
+  });
+
+  it('Channel split reads red Amount one way, blue the other and green in place (the old RGB Split\'s three reads)', () => {
+    const f = (x: number): [number, number, number] => [Math.sin(x * 0.3), Math.cos(x * 0.17), x * 0.01];
+    for (const x of [-20, 0, 3.5, 40]) {
+      const got = caRow(f, x, 4, 12, 'split');
+      near(got, [f(x + 4)[0], f(x)[1], f(x - 4)[2]], 1e-12);
+    }
+  });
+
+  it('old graphs with RGB Split, Chroma Shift and Chromatic Aberration compile', () => {
+    const uv = saved('uv', 'uv', {}, {}, ['uv']);
+    const pic = saved('circleSDF', 'c', {}, { position: ['uv', 'uv'] }, ['distance']);
+    const col = saved('floatToVec3', 'v', {}, { input: ['c', 'distance'] }, ['rgb']);
+    const pass = saved('pass', 'p', {}, { color: ['v', 'rgb'] }, ['texture', 'color', 'alpha', 'previous']);
+    compiles([uv, pic, col, pass, saved('chromaTexture', 'x', { amount: 5 }, { texture: ['p', 'texture'] }, ['color', 'alpha']), saved('output', 'out', {}, { color: ['x', 'color'] }, [])]);
+    compiles([uv, pic, col, saved('chromaShift', 'x', {}, { color: ['v', 'rgb'] }, ['result']), saved('output', 'out', {}, { color: ['x', 'result'] }, [])]);
+    compiles([uv, saved('chromaticAberration', 'x', {}, { uv: ['uv', 'uv'] }, ['uv_r']), saved('circleSDF', 'c2', {}, { position: ['x', 'uv_r'] }, ['distance']), saved('output', 'out', {}, { color: ['c2', 'distance'] }, [])]);
   });
 });

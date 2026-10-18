@@ -346,7 +346,7 @@ describe('quick adds, Switch to and starter offers', () => {
     expect(suggestQuickAdds({ type: 'float', dir: 'out', label: 'Distance', nodeType: 'jumpFloodTexture' })[0].type).toBe('distanceShape');
     expect(suggestQuickAdds({ type: 'vec3', dir: 'out', label: 'Light', nodeType: 'distanceShape' }).map(q => q.type).slice(0, 2)).toEqual(['addColor', 'blendModes']);
     // Elsewhere nothing changes.
-    expect(suggestQuickAdds({ type: 'float', dir: 'out', label: 'Distance' }).map(q => q.type)).toEqual(['sdfFill', 'glowLayer', 'sdfColorize']);
+    expect(suggestQuickAdds({ type: 'float', dir: 'out', label: 'Distance' }).map(q => q.type)).toEqual(['sdfFill', 'light', 'sdfColorize']);
   });
 
   it('switch among themselves', () => {

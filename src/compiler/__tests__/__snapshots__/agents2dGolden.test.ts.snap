@@ -1161,3 +1161,17 @@ exports[`2D agents and pass graphs compile as they did before 3D > ttVideoOutlin
   "web": null,
 }
 `;
+
+exports[`2D agents and pass graphs compile as they did before 3D > volAnimatedRepeat 1`] = `
+{
+  "agents": "1fe1f0024152e81521f99e5e13c1:4",
+  "errors": null,
+  "fragmentShader": "02552b19366233074e8b067ef6c7:6369",
+  "paramBindings": "10881c2facf10a13023afcbc2809:1705",
+  "paramUniforms": "1d879d6efaa8dc0c13e3624520ad:1299",
+  "passes": "09799a92943e420e3c800c048688:9562",
+  "success": true,
+  "textureUniforms": "167d269bbddad80189e9f9473b28:2",
+  "web": null,
+}
+`;

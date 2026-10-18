@@ -19,8 +19,10 @@ export const PIECES_TYPES: readonly string[] = ['pieces', 'pieceBalls'];
  * load and render as before) but are offered nowhere. The ones that could map exactly are aliases now
  * (definitions/aliases.ts) and are gone from the registry.
  *  - Point Light 2D → SDF Glow, Point light mode (it measured its own distance from UV and Light Pos).
+ *  - Chroma Shift (a fake fringe from the colour's slope) and Chromatic Aberration (three offset UVs) →
+ *    Chromatic Aberration (lens) on a Pass of the picture.
  */
-export const SWEPT_EFFECT_TYPES: readonly string[] = ['light2d'];
+export const SWEPT_EFFECT_TYPES: readonly string[] = ['light2d', 'chromaShift', 'chromaticAberration'];
 
 /**
  * Retired for good: Ride a curve (its curves built in) gave way on 2026-10-15 to Ride a path, which rides

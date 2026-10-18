@@ -162,7 +162,7 @@ describe('the builders\' Effects page', () => {
     const dg = nodes.find(x => x.type === 'deepGlowTexture')!;
     expect(dg.params).toMatchObject({ radius: 300, spread: 0.4, composite: 'screen', tint: [1, 0.8, 0.6] });
     expect(nodes.find(x => x.id === dg.inputs.texture.connection?.nodeId)?.type).toBe('pass');
-    expect(nodes.find(x => x.id === dg.inputs.uv.connection?.nodeId)?.type).toBe('swirlSpace');
+    expect(nodes.find(x => x.id === dg.inputs.uv.connection?.nodeId)?.type).toBe('uvWarp');
     const r = compileGraph({ nodes });
     expect(r.success, (r.errors ?? []).join('; ')).toBe(true);
     expect((r.passes ?? []).filter(x => x.hidden)).toHaveLength(15);

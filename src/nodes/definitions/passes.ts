@@ -398,62 +398,6 @@ export const GlowTextureNode: NodeDefinition = {
   },
 };
 
-/**
- * Chromatic Aberration (texture): a real RGB split of a picture. Red is read a little one way,
- * blue the other and green where it is, so edges fringe red and blue as through a cheap lens.
- * Radial pushes outward from the centre (more toward the edges, as a lens does); Directional
- * pushes every pixel the same way (an old video signal, a misregistered print).
- * Kept for saved graphs: the builders and Play's Finish use Chromatic Aberration (lens) (chromaLens.ts),
- * whose Channel split look with Blur 0 is this node's maths.
- */
-export const ChromaTextureNode: NodeDefinition = withParamSockets({
-  type: 'chromaTexture',
-  label: 'RGB Split (texture)',
-  category: 'Passes',
-  aliases: ['Chromatic Aberration (texture)', 'RGB shift', 'Channel split'],
-  description: 'The older chromatic aberration (Chromatic Aberration (lens) is the newer one, with smooth spectral fringes). Splits a Pass\'s texture (or any texture) into red, green and blue and reads them a little apart: red pushed one way, blue the other, green where it is. Radial pushes outward from the centre, growing toward the edges like a lens; Directional pushes every pixel the same way, like a misaligned video signal. Amount is in picture pixels. Put a Pass before it (the picture you want split) and use its Color as the picture after.',
-  inputs: {
-    texture: { type: 'texture', label: 'Texture', hint: TEX_HINT },
-    uv: { type: 'vec2', label: 'UV', hint: UV_HINT },
-  },
-  outputs: {
-    color: { type: 'vec3', label: 'Color' },
-    alpha: { type: 'float', label: 'Alpha' },
-  },
-  defaultParams: { mode: 'radial', amount: 4, angle: 0, falloff: 1 },
-  paramDefs: {
-    mode: { label: 'Mode', type: 'select', hint: 'Radial: outward from the centre, more toward the edges (a lens). Directional: the same way everywhere (a video signal).', options: [
-      { value: 'radial', label: 'Radial (lens)' }, { value: 'directional', label: 'Directional' },
-    ] },
-    amount: { label: 'Amount', type: 'float', min: 0, max: 40, step: 0.25, hint: 'How far apart the channels are, in picture pixels (at the frame\'s edge for Radial). 2–6 is subtle; 20 is broken glass.' },
-    angle: { label: 'Angle', type: 'float', min: -180, max: 180, step: 1, showWhen: { param: 'mode', value: 'directional' }, hint: 'Which way red goes, in degrees: 0 right, 90 up. Blue goes the other way.' },
-    falloff: { label: 'Falloff', type: 'float', min: 0, max: 3, step: 0.05, showWhen: { param: 'mode', value: 'radial' }, hint: 'How the split grows from the centre: 0 the same everywhere, 1 in step with the distance, 2 only near the edges.' },
-  },
-  assignable: false,
-  generateGLSL: (node: GraphNode, inputVars) => {
-    const id = node.id;
-    const tex = inputVars.texture;
-    if (!tex) return { code: `    vec4 ${id}_s = vec4(0.0);\n`, outputVars: { color: `${id}_s.rgb`, alpha: `${id}_s.a` } };
-    const amount = p(node.params.amount, 4);
-    const dir = node.params.mode === 'directional'
-      ? `    float ${id}_a = (${p(node.params.angle, 0)}) * 0.01745329;\n    vec2 ${id}_dir = vec2(cos(${id}_a), sin(${id}_a));\n`
-      : [
-        `    vec2 ${id}_c = (${id}_st - 0.5) * 2.0 * vec2(u_resolution.x / u_resolution.y, 1.0);\n`,
-        `    float ${id}_len = length(${id}_c);\n`,
-        `    vec2 ${id}_dir = ${id}_len > 1e-5 ? ${id}_c / ${id}_len * pow(${id}_len, ${p(node.params.falloff, 1)}) : vec2(0.0);\n`,
-      ].join('');
-    const code = [
-      `    vec2 ${id}_st = ${texUv(inputVars.uv ?? 'g_uv')};\n`,
-      dir,
-      `    vec2 ${id}_off = ${id}_dir * (${amount}) * ${passPxUniform(tex)};\n`,
-      `    vec4 ${id}_s = texture2D(${tex}, ${id}_st);\n`,
-      `    ${id}_s.r = texture2D(${tex}, ${id}_st + ${id}_off).r;\n`,
-      `    ${id}_s.b = texture2D(${tex}, ${id}_st - ${id}_off).b;\n`,
-    ].join('');
-    return { code, outputVars: { color: `${id}_s.rgb`, alpha: `${id}_s.a` } };
-  },
-}, ['amount', 'angle', 'falloff']);
-
 export const DisplaceTextureNode: NodeDefinition = withParamSockets({
   type: 'displaceTexture',
   label: 'Displace (texture)',

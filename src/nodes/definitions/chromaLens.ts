@@ -7,7 +7,7 @@
  * coloured defocus halo round highlights) or Directional (a prism). Blur softens each colour by how far
  * it moved. One pass; the maths is play/kit/chroma.js, shared with the builders and Play's Finish.
  *
- * The older Chromatic Aberration (texture) node (passes.ts, chromaTexture) stays for saved graphs.
+ * The older RGB Split (texture) (chromaTexture) is this node's Channel split with Blur 0 now (NODE_ALIASES).
  * See docs/chromatic-aberration.md.
  */
 import type { GraphNode, NodeDefinition } from '../../types/nodeGraph';

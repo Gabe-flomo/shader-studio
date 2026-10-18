@@ -10,7 +10,7 @@ vi.hoisted(() => {
 import { parser } from '@shaderfrog/glsl-parser';
 import { compileGraph } from '../graphCompiler';
 import { n } from '../../store/graphBuilder';
-import { getNodeDefinition } from '../../nodes/definitions';
+import { getNodeDefinition, resolveNodeAliases } from '../../nodes/definitions';
 import type { GraphNode } from '../../types/nodeGraph';
 import { CA_MAX_TAPS, CA_MIN_TAPS, CA_SPREAD, CA_SUB, caBlurPx, caReads, caRow, caShiftPx, caSpectralWeights, caTapCount } from '../../play/kit/chroma.js';
 import { FN_EFFECTS, fnBuildFinal, fnDefaultEffect } from '../../play/kit/finish.js';
@@ -134,15 +134,16 @@ describe('the node', () => {
     expect(r.fragmentShader.split('void main')[1]).not.toMatch(/u_p_\w+_amount\b/);
   });
 
-  it('is found as Chromatic aberration; the old node stays for saved graphs and still compiles', () => {
+  it('is found as Chromatic aberration; the old RGB Split (texture) opens as its Channel split and compiles', () => {
     expect(getNodeDefinition('chromaLens')!.aliases).toEqual(expect.arrayContaining(['Chromatic aberration', 'Dispersion', 'Prism']));
-    const old = getNodeDefinition('chromaTexture')!;
-    expect(old.deprecated).toBeFalsy();
+    expect(getNodeDefinition('chromaTexture')!.type).toBe('chromaLens');
     for (const mode of ['radial', 'directional']) {
-      const nodes = [...picture(), n('chromaTexture', 'ch', 0, 0, { mode, amount: 6 }, { texture: ['p', 'texture'] }), n('output', 'out', 0, 0, {}, { color: ['ch', 'color'] })];
+      const old: GraphNode = { id: 'ch', type: 'chromaTexture', position: { x: 0, y: 0 }, params: { mode, amount: 6 },
+        inputs: { texture: { type: 'texture', label: 'Texture', connection: { nodeId: 'p', outputKey: 'texture' } } }, outputs: { color: { type: 'vec3', label: 'Color' } } };
+      const nodes = resolveNodeAliases([...picture(), old, n('output', 'out', 0, 0, {}, { color: ['ch', 'color'] })], getNodeDefinition);
+      expect(nodes.find(x => x.id === 'ch')!.params).toMatchObject({ mode: 'split', geometry: mode === 'radial' ? 'lateral' : 'directional', blur: 0 });
       const r = compileGraph({ nodes });
       expect(r.success, (r.errors ?? []).join('; ')).toBe(true);
-      expect(r.fragmentShader).not.toContain('caRead(');
     }
   });
 });

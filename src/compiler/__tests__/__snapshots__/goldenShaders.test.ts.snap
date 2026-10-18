@@ -19046,62 +19046,6 @@ exports[`golden shaders: every example compiles as it did > tiltShiftScene 1`] =
 }
 `;
 
-exports[`golden shaders: every example compiles as it did > volAnimatedRepeat 1`] = `
-{
-  "audioUniforms": {},
-  "echo": null,
-  "errors": null,
-  "fragmentShader": "0a35a66bda2bef00c9960f80563b:10937",
-  "isStateful": false,
-  "liveUniforms": {},
-  "nodeSlugs": "1900a81c5a76320e66e60ff445bf:855",
-  "paramBindings": "1b3a6ce0f14abb172e087b496dbb:1698",
-  "paramUniforms": [
-    "u_p_chromashifx8_angle_deg",
-    "u_p_chromashifx8_contrast",
-    "u_p_chromashifx8_strength",
-    "u_p_grainx9_amount",
-    "u_p_grainx9_scale",
-    "u_p_grainx9_seed",
-    "u_p_marchcamerx2_camAngle",
-    "u_p_marchcamerx2_camDist",
-    "u_p_marchcamerx2_fov",
-    "u_p_marchcamerx2_rotSpeed",
-    "u_p_marchloopgx4_albedo",
-    "u_p_marchloopgx4_bg",
-    "u_p_marchloopgx4_jitter",
-    "u_p_marchloopgx4_maxDist",
-    "u_p_marchloopgx4_passthrough",
-    "u_p_marchloopgx4_stepScale",
-    "u_p_marchloopgx4xmlxswrp3x0_amplitude",
-    "u_p_marchloopgx4xmlxswrp3x0_frequency",
-    "u_p_mulx5_b",
-    "u_p_palx7_amplitude",
-    "u_p_palx7_freq",
-    "u_p_palx7_offset",
-    "u_p_palx7_phase",
-    "u_p_repeatedxspheresx3xsgxcosx0_amp",
-    "u_p_repeatedxspheresx3xsgxcosx0_freq",
-    "u_p_repeatedxspheresx3xsgxmulx0_b",
-    "u_p_repeatedxspheresx3xsgxrepx0_cellX",
-    "u_p_repeatedxspheresx3xsgxrepx0_cellY",
-    "u_p_repeatedxspheresx3xsgxrepx0_cellZ",
-    "u_p_repeatedxspheresx3xsgxsinx0_amp",
-    "u_p_repeatedxspheresx3xsgxsinx0_freq",
-    "u_p_repeatedxspheresx3xsgxsphx0_radius",
-    "u_p_repeatedxspheresx3xsgxtrx0_tx",
-    "u_p_repeatedxspheresx3xsgxtrx0_ty",
-    "u_p_repeatedxspheresx3xsgxtrx0_tz",
-  ],
-  "paramValues": "1b9410b4c7b24418ae32734f6c93:1307",
-  "passes": null,
-  "success": true,
-  "textureUniforms": {},
-  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
-  "videoUniforms": {},
-}
-`;
-
 exports[`golden shaders: every example compiles as it did > volumeGlowDemo 1`] = `
 {
   "audioUniforms": {},

@@ -248,7 +248,6 @@ export const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: strin
   ],
   Effects: [
     { label: 'Blur',     types: ['gaussianBlur', 'bloom', 'radialBlur', 'tiltShiftBlur', 'lensBlur', 'depthOfField'] },
-    { label: 'Chroma',   types: ['chromaShift', 'chromaticAberrationAuto', 'chromaticAberration'] },
     { label: 'Lighting', types: ['light', 'glowToColor', 'radianceCascadesApprox'] },
     { label: 'Warp',     types: ['gravitationalLens', 'floatWarp'] },
     { label: 'Glitch',   types: ['glitch'] },

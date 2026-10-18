@@ -122,6 +122,11 @@ export const NODE_ALIASES: Record<string, NodeAlias> = {
   deepGlow: { to: 'light', inputs: { d: 'distance', color: 'tint' }, outputs: { result: 'tinted' },
               params: o => ({ ...o, mode: 'deep', intensity: num(o.intensity, 1.5), radius: num(o.radius, 0.08), saturation: num(o.saturation, 1.2),
                 edgeSoftness: num(o.edgeSoftness, 0.01), tint: [1, 1, 1], perDistance: false }) },
+
+  // ── 2026-10-17 sweep: one chromatic aberration, on a texture (chromaLens.ts). RGB Split (texture) is its Channel
+  //    split with Blur 0 (the same three reads; Radial is Lateral round the middle). ──
+  chromaTexture: { to: 'chromaLens', params: o => ({ ...o, mode: 'split', geometry: o.mode === 'directional' ? 'directional' : 'lateral',
+    amount: num(o.amount, 4), angle: num(o.angle, 0), falloff: num(o.falloff, 1), blur: 0, distortion: 0, centerX: 0, centerY: 0, samples: 12 }) },
 };
 
 /** Glow Layer's Types (combiners.ts GLOW_TYPES), each an SDF Glow mode of the same name. */

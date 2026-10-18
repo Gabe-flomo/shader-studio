@@ -1,4 +1,5 @@
 import { BLANK_GRAPH } from './exampleIndex';
+import { n } from './graphBuilder';
 import { GROUP_PORT_SENTINEL } from '../types/nodeGraph';
 import { gpPreset } from '../play/kit/gpuParticles.js';
 // An original picture made for the examples (tools/ridges-at-dusk.mjs), inlined as a data URL.
@@ -3953,24 +3954,17 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         outputs: { color: { type: 'vec3', label: 'Color' } },
         params: { offset: [0.5, 0.5, 0.5], amplitude: [0.5, 0.5, 0.5], freq: [1, 1, 1], phase: [0.3, 0.416, 0.557] },
       },
-      {
-        id: 'chroma_8',
-        type: 'chromaShift',
-        position: { x: 1760, y: 60 },
-        inputs: {
-          color: { type: 'vec3', label: 'Color', connection: { nodeId: 'pal_7', outputKey: 'color' } },
-          uv: { type: 'vec2', label: 'UV' },
-          time: { type: 'float', label: 'Time' },
-        },
-        outputs: { result: { type: 'vec3', label: 'Result' } },
-        params: { mode: 'linear', strength: 0.08, contrast: 2.05, angle_deg: 0, animate: 'false', anim_speed: 0.4 },
-      },
+      n('pass', 'chroma_pass', 1760, -160, { label: 'Picture', __comment: 'Pass: the coloured picture as a texture, this frame, so the colour split below can read it a few pixels to each side.' },
+        { color: ['pal_7', 'color'] }),
+      n('chromaLens', 'chroma_8', 1760, 60, { mode: 'split', geometry: 'directional', amount: 2.5, blur: 0, angle: 0,
+        __comment: 'Chromatic Aberration (lens), Channel split along 0°: red read 2.5 pixels one way and blue the other, so the edges fringe red and blue.' },
+        { texture: ['chroma_pass', 'texture'] }),
       {
         id: 'grain_9',
         type: 'grain',
         position: { x: 2100, y: 60 },
         inputs: {
-          color: { type: 'vec3', label: 'Color', connection: { nodeId: 'chroma_8', outputKey: 'result' } },
+          color: { type: 'vec3', label: 'Color', connection: { nodeId: 'chroma_8', outputKey: 'color' } },
           uv: { type: 'vec2', label: 'UV' },
           seed: { type: 'float', label: 'Seed', connection: { nodeId: 'time_1', outputKey: 'time' } },
         },

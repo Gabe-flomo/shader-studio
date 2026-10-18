@@ -55,7 +55,7 @@ export const STARTER_RECIPES: Readonly<Record<string, StarterRecipe[]>> = {
   [PICTURE_DEPTH_SET]: PICTURE_DEPTH_RECIPES,
   // "Add a splat scan" (docs/splat-scene.md): opened from a March Loop / GI Lit card, never on add.
   [SPLAT_SCENE_SET]: SPLAT_SCENE_RECIPES,
-  ...each(['bloom', 'vignette', 'grain', 'toneMap', 'chromaShift', 'colorSaturation', 'hueRotate', 'posterize', 'scanlines', 'brightnessContrast', 'toneCurve', 'invert', 'cmykHalftone'], PICTURE_EFFECT_RECIPES),
+  ...each(['vignette', 'grain', 'toneMap', 'colorSaturation', 'hueRotate', 'posterize', 'scanlines', 'brightnessContrast', 'toneCurve', 'invert', 'cmykHalftone'], PICTURE_EFFECT_RECIPES),
 };
 
 /** The recipes offered when a node of `type` is added (none: no offer). */
