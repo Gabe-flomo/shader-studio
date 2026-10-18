@@ -7,6 +7,12 @@ import { useRef, useState } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import type { PhoneSplit } from './splitSize';
 
+/** The app's height in px: what portrait split sizes are shares of (--app-vh, see splitLength). */
+function appHeight(): number {
+  const v = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--app-vh'));
+  return Number.isFinite(v) && v > 0 ? v : window.innerHeight;
+}
+
 /**
  * A grab bar over the seam, 18px tall and overlapping both sides by 9px, so it takes no room of
  * its own. The seam follows the finger; letting go snaps and remembers the size; a double-tap
@@ -39,7 +45,7 @@ export function SplitHandle({ split, label = 'Resize', vertical = false }: { spl
         const dy = pos(e) - start.current.y;
         if (!moved.current && Math.abs(dy) < 4) return;
         moved.current = true;
-        split.drag(start.current.vh + (dy / (vertical ? window.innerWidth : window.innerHeight)) * 100);
+        split.drag(start.current.vh + (dy / (vertical ? window.innerWidth : appHeight())) * 100);
       }}
       onPointerUp={e => {
         if (start.current === null) return;
@@ -61,8 +67,8 @@ export function SplitHandle({ split, label = 'Resize', vertical = false }: { spl
       }}
     >
       <div style={{
-        ...(vertical ? { height: active ? 56 : 40, width: 4 } : { width: active ? 56 : 40, height: 4 }),
-        borderRadius: 2, background: active ? tk.accent.base : tk.border.strong, transition: 'width 120ms ease, height 120ms ease, background 120ms ease',
+        ...(vertical ? { height: active ? 56 : 44, width: 5 } : { width: active ? 56 : 44, height: 5 }),
+        borderRadius: 3, background: active ? tk.accent.base : tk.border.strong, transition: 'width 120ms ease, height 120ms ease, background 120ms ease',
       }} />
     </div>
   );

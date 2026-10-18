@@ -19,6 +19,7 @@
 import { useRef, useState, type ReactNode } from 'react';
 import { NOTE_REF_RE, NOTE_REF_TYPE, type NoteRefKind } from './noteRefs';
 import { useTokens } from '../../theme/themeStore';
+import { usePhoneLayout } from '../../hooks/useBreakpoint';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { IconButton } from '../ui/Button';
 import { Icon } from '../ui/Icon';
@@ -147,6 +148,9 @@ export function NotesCard({ notes, title, source, editing, targets, onEdit, onCh
   const [creditOpen, setCreditOpen] = useState(false);
   const startEdit = () => { setDraft(notes); if (!open) toggle(); onEdit(true); };
   const done = () => { onChange(draft.trim()); onEdit(false); };
+  // A phone's Play panel already scrolls as one column: the notes grow into it rather than
+  // scrolling inside a 240px box of their own (a scroller in a scroller traps the finger).
+  const { phone } = usePhoneLayout();
 
   return (
     // Shrinks (and scrolls) before the controls under it do: long notes never squeeze the panel shut.
@@ -155,7 +159,7 @@ export function NotesCard({ notes, title, source, editing, targets, onEdit, onCh
       onDragLeave={() => setDropping(false)}
       onDrop={onDrop}
       style={{
-        flex: big ? '1 1 auto' : '0 1 auto', minHeight: 34, display: 'flex', flexDirection: 'column', margin: '8px 12px 2px', borderRadius: radius.lg,
+        flex: big ? '1 1 auto' : phone ? '0 0 auto' : '0 1 auto', minHeight: 34, display: 'flex', flexDirection: 'column', margin: '8px 12px 2px', borderRadius: radius.lg,
         border: `1px solid ${dropping ? tk.accent.base : tk.border.default}`, background: dropping ? alpha(tk.accent.base, 0.06) : tk.bg.panel, overflow: 'hidden',
       }}
     >
@@ -197,7 +201,7 @@ export function NotesCard({ notes, title, source, editing, targets, onEdit, onCh
           <div style={{ color: tk.text.faint, fontSize: 11, marginTop: 4 }}>Drag a layer or a control here to link it · ⌘/Ctrl + Enter to save · Esc to cancel</div>
         </div>
       ) : open && (
-        <div data-selectable="" style={{ minHeight: 0, maxHeight: big ? 'none' : 240, flex: big ? 1 : undefined, overflowY: 'auto', padding: '0 12px 10px 12px', color: tk.text.secondary, lineHeight: 1.5 }}>
+        <div data-selectable="" style={{ minHeight: 0, maxHeight: big || phone ? 'none' : 240, flex: big ? 1 : undefined, overflowY: phone && !big ? 'visible' : 'auto', padding: '0 12px 10px 12px', color: tk.text.secondary, lineHeight: 1.5 }}>
           {parseNotes(notes).map((b, i) => b.kind === 'p'
             ? <p key={i} style={{ margin: '0 0 6px' }}>{b.lines.map((l, j) => <span key={j}>{j > 0 && <br />}{inline(l, chip)}</span>)}</p>
             : <ul key={i} style={{ margin: '0 0 6px', paddingLeft: 18 }}>{b.items.map((it, j) => <li key={j} style={{ margin: '1px 0' }}>{inline(it, chip)}</li>)}</ul>)}

@@ -1432,7 +1432,11 @@ function ExprLinesList({ lines, onReorder, onUpdateLine, onRemoveLine, variables
   );
 }
 
-export function MobileGraphBrowser() {
+/**
+ * `top`: what sits above the breadcrumb (the Studio's flow chip). On a node page it scrolls
+ * away with the rest of the page instead of staying pinned over it.
+ */
+export function MobileGraphBrowser({ top }: { top?: React.ReactNode }) {
   const tc = useCtp();
   const tk = useTokens();
   // Always the flat top-level list — a group's contents live nested in
@@ -2126,7 +2130,10 @@ export function MobileGraphBrowser() {
   // same pair of conditions removeNode's store-level guard checks — a
   // plain 'group' never stamps a def.anchored type on its own content, so
   // this only ever hides Remove where the store would no-op anyway.
-  function renderNodeHeader(node: GraphNode) {
+  // On a node page the header is the one row that stays put (sticky, 48px) while everything
+  // else, breadcrumb included, scrolls in the page's single scroller. The keyframe view pins
+  // its curve instead, so there it scrolls away like the rest.
+  function renderNodeHeader(node: GraphNode, { sticky = true }: { sticky?: boolean } = {}) {
     const originalLocked = !!node.params?._groupOriginal && !!getNodeDefinitionFor(node)?.anchored;
     const canRemove = node.type !== 'output' && focusStack.length > 0 && !originalLocked;
     const isPreviewActive = previewNodeId === node.id;
@@ -2144,9 +2151,13 @@ export function MobileGraphBrowser() {
       boxShadow: on ? `inset 0 0 0 1px ${tint}66` : `0 0 0 1px ${tk.border.default}`,
     });
     return (
+      <div data-node-page-header="" style={{
+        ...(sticky ? { position: 'sticky' as const, top: 0, zIndex: 6 } : {}),
+        background: tc.mantle, padding: '0 14px', marginBottom: 8, flexShrink: 0,
+      }}>
       <div style={{
-        margin: '2px 14px 10px', padding: '10px 10px 10px 8px', borderRadius: 14, background: tk.bg.subtle,
-        display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0,
+        height: 48, boxSizing: 'border-box', padding: '0 10px 0 8px', borderRadius: 14, background: tk.bg.subtle,
+        display: 'flex', alignItems: 'center', gap: 4,
       }}>
         <button style={{ ...hb(false, '', focusStack.length > 0), background: 'none', boxShadow: 'none' }} disabled={focusStack.length === 0} aria-label="Back" onClick={goBack}>
           <Icon name="chevL" size={17} />
@@ -2192,6 +2203,7 @@ export function MobileGraphBrowser() {
             <Icon name="trash" size={17} />
           </button>
         )}
+      </div>
       </div>
     );
   }
@@ -2928,10 +2940,10 @@ export function MobileGraphBrowser() {
     };
 
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+      <div data-node-page="" style={{ display: 'flex', flexDirection: 'column' }}>
         {renderNodeHeader(node)}
 
-        <div style={{ flex: 1, overflowY: 'auto', padding: '10px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        <div style={{ padding: '2px 10px 10px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
           {GROUP_TYPES.has(node.type) && renderGroupBanner(node)}
           {node.type === 'textureInput' && renderTextureUploadBanner(node)}
           {node.type === 'data' && <DataEditorLauncher node={node} />}
@@ -3179,10 +3191,6 @@ export function MobileGraphBrowser() {
           </div>
         </div>
 
-        {renderSocketOverlays(node)}
-        {exprEdit && exprEdit.nodeId === node.id && node.inputs[exprEdit.key] && (
-          <InputExprPopover sheet node={node} inputKey={exprEdit.key} onClose={() => setExprEdit(null)} />
-        )}
       </div>
     );
   }
@@ -3246,14 +3254,14 @@ export function MobileGraphBrowser() {
     const isSelectedLinear = selected ? isLinearEase(selected.ease) : true;
 
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-        {renderNodeHeader(node)}
+      <div data-node-page="" style={{ display: 'flex', flexDirection: 'column' }}>
+        {renderNodeHeader(node, { sticky: false })}
 
-        {/* Pinned, not part of the scroll below — the curve (and the title/
+        {/* Pinned (sticky in the page's one scroller), not part of the scroll below — the curve (and the title/
             Clear/Done/axis row above it) stays on screen while you scroll
             through Value/Easing/Playback underneath, instead of scrolling
             away and losing your visual reference to what you're editing. */}
-        <div style={{ flexShrink: 0, padding: '10px 10px 8px', display: 'flex', flexDirection: 'column', gap: '10px', borderBottom: `1px solid ${tc.surface0}` }}>
+        <div style={{ position: 'sticky', top: 0, zIndex: 6, background: tc.mantle, flexShrink: 0, padding: '10px 10px 8px', display: 'flex', flexDirection: 'column', gap: '10px', borderBottom: `1px solid ${tc.surface0}` }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <div style={{ flex: 1, minWidth: 0, fontSize: '13px', fontWeight: 700, color: tc.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {input.label}{axis ? ` · ${axis.toUpperCase()}` : ''}
@@ -3301,7 +3309,7 @@ export function MobileGraphBrowser() {
           />
         </div>
 
-        <div style={{ flex: 1, overflowY: 'auto', padding: '10px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <div style={{ padding: '10px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {keyframes.length === 0 && (
             <div style={{ fontSize: '11px', color: tc.surface2 }}>
               Pick "Add" below, then tap in the canvas to place a keyframe — or "Draw" to sketch a curve freehand.
@@ -3533,7 +3541,7 @@ export function MobileGraphBrowser() {
     const updateResult = (value: string) => updateNodeParams(node.id, { result: value });
 
     return (
-      <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+      <div data-node-page="" style={{ position: 'relative', display: 'flex', flexDirection: 'column' }}>
         {renderNodeHeader(node)}
 
         {/* The desktop card face, read-only; Edit jumps to the lines below */}
@@ -3559,7 +3567,7 @@ export function MobileGraphBrowser() {
           ))}
         </div>
 
-        <div style={{ flex: 1, overflowY: 'auto' }}>
+        <div>
           {exprMode === 'inputs' ? (
             <div style={{ padding: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {customInputs.length === 0 && (
@@ -3670,8 +3678,6 @@ export function MobileGraphBrowser() {
             </div>
           )}
         </div>
-
-        {renderSocketOverlays(node)}
       </div>
     );
   }
@@ -4165,13 +4171,7 @@ export function MobileGraphBrowser() {
     );
   }
 
-  return (
-    <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', height: '100%', background: tc.mantle, color: tc.text, fontFamily: 'system-ui, sans-serif' }}>
-      {/* Breadcrumb — the drill-down path (group ancestry + in-node focus
-          trail) is unbounded in principle, so it's collapsed to the 4 most
-          recent locations behind Home; anything older sits behind a
-          tappable "…" instead of forcing a horizontal scroll to get back. */}
-      {(() => {
+  const breadcrumbEl = (() => {
         type BreadcrumbSegment = { key: string; label: string; isCurrent: boolean; onClick: () => void };
         const groupPathSegments: BreadcrumbSegment[] = activeGroupPath.flatMap((id, i) => {
           const parentScope = getActiveNodes(topLevelNodes, activeGroupPath.slice(0, i)) ?? topLevelNodes;
@@ -4332,13 +4332,37 @@ export function MobileGraphBrowser() {
             )}
           </div>
         );
-      })()}
+  })();
 
-      {focusedNode
-        ? (mobileKeyframeEditor && mobileKeyframeEditor.nodeId === focusedNode.id
+  return (
+    <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', height: '100%', background: tc.mantle, color: tc.text, fontFamily: 'system-ui, sans-serif' }}>
+      {/* Breadcrumb — the drill-down path (group ancestry + in-node focus
+          trail) is unbounded in principle, so it's collapsed to the 4 most
+          recent locations behind Home; anything older sits behind a
+          tappable "…" instead of forcing a horizontal scroll to get back. */}
+      {focusedNode ? (
+        // A node page is ONE scroller: the breadcrumb, card face, tabs and the rows all
+        // scroll together, and only the node's own header row sticks (48px). Nothing
+        // inside it scrolls on its own, so a finger is never trapped in a small strip.
+        <div key={focusedNode.id} data-phone-page-scroll="" style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', overscrollBehaviorY: 'contain', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+          {top}
+          {breadcrumbEl}
+          {mobileKeyframeEditor && mobileKeyframeEditor.nodeId === focusedNode.id
             ? renderKeyframeEditorView(focusedNode)
-            : (focusedNode.type === 'exprNode' ? renderExprBlockDetail(focusedNode) : renderNodeDetail(focusedNode)))
-        : (homeGraphView ? renderHomeGraph() : renderHome())}
+            : (focusedNode.type === 'exprNode' ? renderExprBlockDetail(focusedNode) : renderNodeDetail(focusedNode))}
+        </div>
+      ) : (
+        <>
+          {top}
+          {breadcrumbEl}
+          {homeGraphView ? renderHomeGraph() : renderHome()}
+        </>
+      )}
+      {/* The node page's sheets and its full-screen Connect picker sit outside the scroller */}
+      {focusedNode && !(mobileKeyframeEditor && mobileKeyframeEditor.nodeId === focusedNode.id) && renderSocketOverlays(focusedNode)}
+      {focusedNode && exprEdit && exprEdit.nodeId === focusedNode.id && focusedNode.inputs[exprEdit.key] && (
+        <InputExprPopover sheet node={focusedNode} inputKey={exprEdit.key} onClose={() => setExprEdit(null)} />
+      )}
 
       {renderGraphNavigatorOverlay()}
       {renderGroupPortBuilderOverlay()}

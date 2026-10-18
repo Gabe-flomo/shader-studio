@@ -9,7 +9,7 @@ const store = vi.hoisted(() => {
   });
   return m;
 });
-import { PLAY_SPLIT, STUDIO_SPLIT, SNAP_VH, clampSplit, readSplit, settleSplit, writeSplit } from '../splitSize';
+import { PLAY_SPLIT, PLAY_SPLIT_LANDSCAPE, STUDIO_SPLIT, SNAP_VH, clampSplit, readSplit, settleSplit, splitLength, writeSplit } from '../splitSize';
 
 describe('phone split', () => {
   beforeEach(() => store.clear());
@@ -20,11 +20,35 @@ describe('phone split', () => {
     expect(settleSplit(PLAY_SPLIT, 99)).toBe(PLAY_SPLIT.max);
   });
 
-  it('snaps when let go near a snap point, and stays put otherwise', () => {
-    const s = PLAY_SPLIT.snaps[1];
-    expect(settleSplit(PLAY_SPLIT, s + SNAP_VH - 0.5)).toBe(s);
-    expect(settleSplit(PLAY_SPLIT, s - 1)).toBe(s);
-    expect(settleSplit(PLAY_SPLIT, 49)).toBe(49);
+  it('sideways: snaps when let go near a snap point, and stays put otherwise', () => {
+    const spec = PLAY_SPLIT_LANDSCAPE;
+    const s = spec.snaps[1];
+    expect(settleSplit(spec, s + SNAP_VH - 0.5)).toBe(s);
+    expect(settleSplit(spec, s - 1)).toBe(s);
+    expect(settleSplit(spec, s + SNAP_VH + 1.5)).toBe(s + SNAP_VH + 1.5);
+  });
+
+  it('upright: always settles on the nearest of a strip, the default and a big picture', () => {
+    expect(STUDIO_SPLIT.snaps).toEqual([25, 42, 70]);
+    expect(STUDIO_SPLIT.snaps).toContain(STUDIO_SPLIT.initial);
+    expect(settleSplit(STUDIO_SPLIT, 15)).toBe(25);
+    expect(settleSplit(STUDIO_SPLIT, 32)).toBe(25);
+    expect(settleSplit(STUDIO_SPLIT, 35)).toBe(42);
+    expect(settleSplit(STUDIO_SPLIT, 55)).toBe(42);
+    expect(settleSplit(STUDIO_SPLIT, 58)).toBe(70);
+    expect(settleSplit(STUDIO_SPLIT, 99)).toBe(70);
+    for (const v of [20, 30, 49, 60]) expect(PLAY_SPLIT.snaps).toContain(settleSplit(PLAY_SPLIT, v));
+  });
+
+  it('upright sizes are shares of the app height (the visible viewport), not CSS vh', () => {
+    expect(splitLength(42)).toBe('calc(var(--app-vh, 100dvh) * 0.42)');
+    expect(splitLength(25)).toBe('calc(var(--app-vh, 100dvh) * 0.25)');
+    expect(splitLength(42)).not.toMatch(/\dvh\b/);
+  });
+
+  it('a snapped size survives a reload', () => {
+    writeSplit(STUDIO_SPLIT, settleSplit(STUDIO_SPLIT, 22));
+    expect(readSplit(STUDIO_SPLIT)).toBe(25);
   });
 
   it('is remembered per page, and the default is not stored', () => {
