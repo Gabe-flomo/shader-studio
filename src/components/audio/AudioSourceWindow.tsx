@@ -3,9 +3,9 @@
  *
  * - **The file's whole waveform** (decoded once: the audio engine's peaks) with In / Out handles to trim; playback
  *   loops inside the trim, the playhead shows where it is. Mic and Video: a live scrolling waveform instead.
- * - **The live spectrum** (log frequency, labelled in Hz). Drag across it to add a band; drag a band's edge to move it.
- *   **Hear hovered**: while on, only the frequencies under the pointer play (the band under it, else a third
- *   of an octave around it), through a band-pass on the File's sound (engine.ts auditionBand).
+ * - **The bands as an equaliser** (BandEqEditor.tsx): the live spectrum with each band a handle on its curve
+ *   (Band, Low cut, High cut); double-click to add one, drag to move it, scroll for its width, its floating panel
+ *   for the rest (Solo, Shape, Slope). **Hear hovered**: while on, only the frequencies under the pointer play.
  * - **Quick bands** (Sub, Bass, Kick, Snare, Hi-hat, Vocals, Air) and **the band list**: each band's name, colour,
  *   Low / High Hz, and what it sends out (Value with Attack / Release / Gain, Trigger with Sensitivity / Cooldown),
  *   with its live level and a flash on each hit. Every band is an output on the node (lib/audioTools/bands.ts).
@@ -29,22 +29,18 @@ import { audioToolsEngine } from '../../lib/audioTools/engine';
 import { audioEngine } from '../../lib/audioEngine';
 import { liveAudio } from '../../lib/liveAudio';
 import { BAND_MAX_HZ, BAND_MIN_HZ, BAND_QUICK_PRESETS, MIN_TRIM, bandsOf, newBand, trimWindow, type AudioBandSpec } from '../../lib/audioTools/bands';
-import { hzAt, spectrumBins, xOfHz } from '../../lib/audioTools/dsp';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { Segmented, Toggle } from '../ui/Choice';
 import { NumberInput } from '../NodeGraph/NumberInput';
 import { addDrawer } from './drawLoop';
+import { BandEqEditor, type Hearing } from './BandEqEditor';
 import { StemControls } from './StemControls';
 import { STEM_LABELS } from '../../stemModel/config';
 
-const BG = '#11111b', ACCENT = '#b4befe', DIM = 'rgba(180,190,254,0.18)', GRID = 'rgba(205,214,244,0.12)', LABEL = 'rgba(205,214,244,0.6)';
-const HZ_LABELS = [50, 100, 200, 500, 1000, 2000, 5000, 10000];
-const xOf = (hz: number) => xOfHz(hz, 'log', BAND_MIN_HZ, BAND_MAX_HZ);
-const hzOf = (x: number) => Math.round(hzAt(Math.max(0, Math.min(1, x)), 'log', BAND_MIN_HZ, BAND_MAX_HZ));
+const BG = '#11111b', ACCENT = '#b4befe', DIM = 'rgba(180,190,254,0.18)', LABEL = 'rgba(205,214,244,0.6)';
 const fmtHz = (hz: number) => (hz >= 1000 ? `${+(hz / 1000).toFixed(hz >= 10000 ? 0 : 1)}k` : `${hz}`);
 const fmtSec = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toFixed(2).padStart(5, '0')}`;
-const SPEC_BINS = 160;
 const MIC_HISTORY = 400;
 
 /** Size a canvas to its box at the device pixel ratio; the 2D context in CSS pixels. */
@@ -62,14 +58,12 @@ function fit(c: HTMLCanvasElement | null): { g: CanvasRenderingContext2D; w: num
 type TrimDrag = { which: 'in' | 'out' | 'new' | 'select'; anchor: number; start: number; end: number };
 type Span = { start: number; end: number };
 const SELECT = '#a6e3a1';
-type SpecDrag = { kind: 'new'; a: number; b: number } | { kind: 'edge'; id: string; edge: 'lo' | 'hi' };
 
 export function AudioSourceWindow({ nodeId, onClose, onLoad }: { nodeId: string; onClose: () => void; onLoad: () => void }) {
   const tk = useTokens();
   const node = useNodeGraphStore(s => findNodeDeep(s.nodes, nodeId));
   const update = useNodeGraphStore(s => s.updateNodeParams);
   const waveRef = useRef<HTMLCanvasElement>(null);
-  const specRef = useRef<HTMLCanvasElement>(null);
   const meterRefs = useRef(new Map<string, HTMLCanvasElement>());
   const soundRefs = useRef(new Map<string, HTMLCanvasElement>());
   const [selected, setSelected] = useState<string | null>(null);
@@ -78,7 +72,6 @@ export function AudioSourceWindow({ nodeId, onClose, onLoad }: { nodeId: string;
   const [selection, setSelection] = useState<Span | null>(null);
   const [learnMsg, setLearnMsg] = useState('');
   const trimDrag = useRef<TrimDrag | null>(null);
-  const specDrag = useRef<SpecDrag | null>(null);
   const [, redraw] = useState(0);
   // What the drawer reads (the latest node, without restarting the loop).
   const latest = useRef({ bands: [] as AudioBandSpec[], sounds: [] as AudioSoundSpec[], trimIn: 0, trimOut: 0, selected: null as string | null, selection: null as Span | null });
@@ -88,7 +81,6 @@ export function AudioSourceWindow({ nodeId, onClose, onLoad }: { nodeId: string;
   useEffect(() => { latest.current = { bands, sounds, trimIn, trimOut, selected, selection }; });
 
   useEffect(() => {
-    const row = new Float32Array(SPEC_BINS);
     const mic = new Float32Array(MIC_HISTORY);
     let micAt = 0, seen = -1;
     return addDrawer(() => {
@@ -142,39 +134,6 @@ export function AudioSourceWindow({ nodeId, onClose, onLoad }: { nodeId: string;
           g.fillText('Load a sound, or switch to Mic.', w / 2, mid);
         }
       }
-      // ── Spectrum ──
-      const sp = fit(specRef.current);
-      if (sp) {
-        const { g, w, h } = sp;
-        const axis = 16, sh = h - axis;
-        g.fillStyle = BG; g.fillRect(0, 0, w, h);
-        g.font = `10px ${fontFamily.ui}`; g.textAlign = 'center'; g.textBaseline = 'top';
-        for (const hz of HZ_LABELS) {
-          const x = xOf(hz) * w;
-          g.fillStyle = GRID; g.fillRect(x, 0, 1, sh);
-          g.fillStyle = LABEL; g.fillText(`${fmtHz(hz)} Hz`, x, sh + 3);
-        }
-        for (const b of L.bands) {
-          const x0 = xOf(b.lo) * w, x1 = xOf(b.hi) * w, lv = v.bands.get(b.id);
-          const flash = lv ? Math.max(0, 1 - (performance.now() - lv.hitAt) / 250) : 0;
-          g.fillStyle = `${b.color}${L.selected === b.id ? '40' : '26'}`; g.fillRect(x0, 0, x1 - x0, sh);
-          if (flash > 0) { g.fillStyle = `${b.color}${Math.round(flash * 120).toString(16).padStart(2, '0')}`; g.fillRect(x0, 0, x1 - x0, sh); }
-          if (lv) { g.fillStyle = b.color; g.fillRect(x0, sh - 4 - (sh - 20) * lv.level, x1 - x0, 2); }
-          g.fillStyle = b.color; g.fillRect(x0, 0, 1.5, sh); g.fillRect(x1 - 1.5, 0, 1.5, sh);
-          g.textAlign = 'left'; g.fillText(b.name, x0 + 4, 4); g.textAlign = 'center';
-        }
-        spectrumBins(v.freq, v.sampleRate, row, 'log', -90, -20, 0.5);
-        g.fillStyle = 'rgba(205,214,244,0.75)';
-        const bw = w / SPEC_BINS;
-        for (let i = 0; i < SPEC_BINS; i++) { const a = row[i] * (sh - 18); g.fillRect(i * bw, sh - a, Math.max(1, bw - 0.5), a); }
-        const d = specDrag.current;
-        if (d?.kind === 'new') {
-          const a = Math.min(d.a, d.b) * w, b = Math.max(d.a, d.b) * w;
-          g.fillStyle = 'rgba(249,226,175,0.25)'; g.fillRect(a, 0, b - a, sh);
-          g.fillStyle = '#f9e2af'; g.textAlign = 'center';
-          g.fillText(`${fmtHz(hzOf(Math.min(d.a, d.b)))}–${fmtHz(hzOf(Math.max(d.a, d.b)))} Hz`, (a + b) / 2, 4);
-        }
-      }
       // ── Band meters ──
       for (const b of L.bands) {
         const m = fit(meterRefs.current.get(b.id) ?? null), lv = v.bands.get(b.id);
@@ -219,6 +178,8 @@ export function AudioSourceWindow({ nodeId, onClose, onLoad }: { nodeId: string;
   const setBands = (next: AudioBandSpec[], structural: boolean) => set({ bands: next }, !structural);
   const patchBand = (id: string, p: Partial<AudioBandSpec>, structural = false) => setBands(bands.map(b => (b.id === id ? { ...b, ...p } : b)), structural);
   const addBand = (preset: string | { lo: number; hi: number }) => { const b = newBand(bands, preset); setBands([...bands, b], true); setSelected(b.id); };
+  // The editor's band, its row: picked in one, highlighted (and brought into view) in the other.
+  useEffect(() => { if (selected) document.querySelector(`[data-band-row="${selected}"]`)?.scrollIntoView({ block: 'nearest' }); }, [selected]);
 
   // ── Learned sounds ──
   const takenIds = new Set(bands.map(b => b.id));
@@ -286,51 +247,11 @@ export function AudioSourceWindow({ nodeId, onClose, onLoad }: { nodeId: string;
     set({ trimIn: +Math.max(0, d.start).toFixed(4), trimOut: d.end >= duration - 1e-3 ? 0 : +d.end.toFixed(4) }, true);
   };
 
-  // ── Hear hovered: while on, only the frequencies under the pointer play (a band under it, else a third of an octave) ──
+  // ── Hear hovered: while on, only the frequencies under the pointer play (BandEqEditor) ──
   const [hearHover, setHearHover] = useState(false);
-  const [hearing, setHearing] = useState<{ lo: number; hi: number; name?: string } | null>(null);
+  const [hearing, setHearing] = useState<Hearing>(null);
   useEffect(() => () => audioToolsEngine.stopAudition(), []);
   useEffect(() => { if (!hearHover) { audioToolsEngine.stopAudition(); setHearing(null); } }, [hearHover]);
-  const auditionAt = (x: number) => {
-    const band = [...bands].reverse().find(b => x >= xOf(b.lo) && x <= xOf(b.hi));
-    const hz = hzOf(x);
-    const pick = band ? { lo: band.lo, hi: band.hi, name: band.name } : { lo: Math.round(hz / 2 ** (1 / 6)), hi: Math.round(hz * 2 ** (1 / 6)) };
-    if (audioToolsEngine.auditionBand(nodeId, pick.lo, pick.hi)) setHearing(pick);
-    else setHearing(null);
-  };
-  const stopHearing = () => { audioToolsEngine.stopAudition(); setHearing(null); };
-
-  // ── Spectrum: drag across empty space to add a band, drag a band's edge to move it, click a band to pick it ──
-  const xAt = (e: RPointerEvent<HTMLCanvasElement>) => { const r = e.currentTarget.getBoundingClientRect(); return Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)); };
-  const onSpecDown = (e: RPointerEvent<HTMLCanvasElement>) => {
-    e.currentTarget.setPointerCapture(e.pointerId);
-    const r = e.currentTarget.getBoundingClientRect(), x = xAt(e), px = x * r.width;
-    for (const b of [...bands].reverse()) {
-      for (const edge of ['lo', 'hi'] as const) if (Math.abs(xOf(b[edge]) * r.width - px) <= 6) { specDrag.current = { kind: 'edge', id: b.id, edge }; setSelected(b.id); return; }
-    }
-    const inside = [...bands].reverse().find(b => x >= xOf(b.lo) && x <= xOf(b.hi));
-    if (inside) { setSelected(inside.id); return; }
-    specDrag.current = { kind: 'new', a: x, b: x };
-  };
-  const onSpecMove = (e: RPointerEvent<HTMLCanvasElement>) => {
-    const d = specDrag.current;
-    if (hearHover && !d) auditionAt(xAt(e));
-    if (!d) return;
-    const x = xAt(e);
-    if (d.kind === 'new') { d.b = x; return; }
-    const b = bands.find(q => q.id === d.id);
-    if (!b) return;
-    const hz = hzOf(x);
-    patchBand(b.id, d.edge === 'lo' ? { lo: Math.min(hz, b.hi - 1) } : { hi: Math.max(hz, b.lo + 1) });
-  };
-  const onSpecUp = (e: RPointerEvent<HTMLCanvasElement>) => {
-    const d = specDrag.current;
-    specDrag.current = null;
-    if (d?.kind !== 'new') return;
-    const r = e.currentTarget.getBoundingClientRect();
-    if (Math.abs(d.b - d.a) * r.width < 6) return;
-    addBand({ lo: hzOf(Math.min(d.a, d.b)), hi: hzOf(Math.max(d.a, d.b)) });
-  };
 
   const head: CSSProperties = { font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.06em', textTransform: 'uppercase', color: tk.text.faint };
   const small: CSSProperties = { font: `500 11.5px ${fontFamily.ui}`, color: tk.text.muted };
@@ -388,17 +309,16 @@ export function AudioSourceWindow({ nodeId, onClose, onLoad }: { nodeId: string;
 
         {/* Spectrum + bands */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <span style={head}>Spectrum · drag across it to add a band, drag a band's edge to move it</span>
-          {hearHover && <span data-hearing style={{ ...small, color: tk.text.secondary }}>
+          <span style={head}>Bands · double-click to add one, drag its handle to move it, scroll over it for its width</span>
+          {(hearHover || hearing) && <span data-hearing style={{ ...small, color: tk.text.secondary }}>
             {hearing ? `Hearing ${hearing.name ? `${hearing.name}: ` : ''}${fmtHz(hearing.lo)}–${fmtHz(hearing.hi)} Hz` : kind === 'file' ? 'Hover the spectrum to hear just those frequencies' : 'Hear hovered works on the File tab'}
           </span>}
           <span style={{ marginLeft: 'auto' }}>
             <Toggle checked={hearHover} onChange={setHearHover} label="Hear hovered" />
           </span>
         </div>
-        <canvas ref={specRef} data-audio-spectrum onPointerDown={onSpecDown} onPointerMove={onSpecMove} onPointerUp={onSpecUp}
-          onPointerLeave={() => { if (hearHover) stopHearing(); }}
-          style={{ width: '100%', height: 200, borderRadius: radius.md, display: 'block', cursor: 'crosshair', touchAction: 'none' }} />
+        <BandEqEditor nodeId={nodeId} bands={bands} selected={selected} onSelect={setSelected} patchBand={patchBand} setBands={setBands}
+          onAdd={addBand} hearHover={hearHover} onHearing={setHearing} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
           <span style={small}>Add a band:</span>
           {BAND_QUICK_PRESETS.map(p => (
@@ -411,7 +331,7 @@ export function AudioSourceWindow({ nodeId, onClose, onLoad }: { nodeId: string;
           {!bands.length && <span style={small}>No bands yet. Each band you add becomes an output on the Audio Source: its level (Value) or a Trigger on each hit in it.</span>}
           {bands.map(b => (
             <div key={b.id} data-band-row={b.id} onClick={() => setSelected(b.id)}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '6px 8px', borderRadius: radius.md, border: `1px solid ${selected === b.id ? b.color : tk.border.default}`, background: tk.bg.field }}>
+              style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '6px 8px', borderRadius: radius.md, border: `1px solid ${selected === b.id ? b.color : tk.border.default}`, background: selected === b.id ? `${b.color}1f` : tk.bg.field }}>
               <input type="color" value={b.color} onChange={e => patchBand(b.id, { color: e.target.value })} title="The band's colour" style={{ width: 22, height: 22, border: 0, padding: 0, background: 'none', cursor: 'pointer' }} />
               <input defaultValue={b.name} key={`${b.id}:${b.name}`} aria-label="Band name" title="The band's name: its outputs take it"
                 onBlur={e => { const v = e.target.value.trim(); if (v && v !== b.name) patchBand(b.id, { name: v }, true); }}

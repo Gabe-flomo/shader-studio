@@ -32,8 +32,15 @@ The card shows a small live spectrum (bass on the left, log frequency) with your
 - **Waveform**: the whole file. Drag the yellow **In** and **Out** handles (or drag across the waveform) to trim it:
   playback loops inside the trim, and the white line is where it is now. Type exact **In** / **Out** seconds under it,
   or press **Whole file**. On the Mic tab it's a live scrolling waveform instead.
-- **Spectrum**: live, log frequency, labelled in Hz. **Drag across it to add a band** over that range; drag a band's
-  edge to move it; click a band to pick it.
+- **Bands, as an equaliser** (after FabFilter Pro-Q; components/audio/BandEqEditor.tsx): the live spectrum (log
+  frequency 20 Hz – 20 kHz, a dB scale, a falling peak-hold line; hover shows the frequency and note, "440 Hz · A4").
+  Each band is a numbered handle on its filled curve. **Double-click** to add a band there; drag a handle sideways
+  for its frequency, up / down or scroll over it for its width (up narrows); click it for its floating panel:
+  name, colour, Freq and Width (type, or drag the label), **Shape** (Band, Low cut = everything above, High cut =
+  everything below), **Slope** (12 / 24 / 48 dB/oct), **Solo** (hear just that band), Delete. Keys: Delete,
+  ← → a semitone (Shift: a third of an octave), ↑ ↓ width (a cut: slope), Esc. A band's lo / hi are what it
+  measures; the shape and slope draw its curve and shape what Solo and Hear hovered play. Bands saved before
+  shapes open as Band.
 - **Add a band**: Sub, Bass, Kick, Snare, Hi-hat, Vocals, Air. Kick, Snare and Hi-hat come as triggers with Hit's
   ranges and onset settings; the others send their level.
 - **Each band** has a name and a colour, **Low** and **High** in Hz, and what it sends out:

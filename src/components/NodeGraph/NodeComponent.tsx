@@ -156,6 +156,7 @@ import { BlobTrackCardBody } from '../blobs/BlobTrackCardBody';
 import { CacheCardBody } from '../cache/CacheCardBody';
 import { AnalyzeCardBody } from '../analyze/AnalyzeCardBody';
 import { AudioToolCardBody } from '../audio/AudioToolCardBody';
+import { EnvelopeCardViz } from './EnvelopeCardViz';
 import { isAudioToolType } from '../../nodes/definitions/audioTools';
 import { SegmentCardBody } from '../segment/SegmentCardBody';
 import { DepthLightCardBody } from '../depth/DepthLightCardBody';
@@ -3302,6 +3303,8 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
       {node.type === 'shaderTexture' && <ShaderTextureCardBody node={node} onEnterGroup={onEnterGroup} />}
       {/* Curves: the card's graph editor (CurvesEditor.tsx) */}
       {node.type === 'curves' && <CurvesCardViz node={node} />}
+      {/* Envelope (ADSR): its graph with draggable points and the live value (EnvelopeCardViz.tsx) */}
+      {!collapsed && node.type === 'envelope' && <EnvelopeCardViz node={node} />}
       {/* Audio Source: its File | Mic tabs first, above its settings, as the Texture node's (docs/audio-tools.md) */}
       {!collapsed && node.type === 'audioSource' && <AudioToolCardBody node={node} />}
       {node.type === 'agentOutput' && (

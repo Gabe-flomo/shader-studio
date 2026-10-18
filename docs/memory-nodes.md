@@ -26,6 +26,10 @@ button, a Compare.
   control. Inputs are read once a frame, at the picture's centre: a per-pixel picture (noise over UV) gives
   its centre pixel's value.
 - Outputs are ordinary floats: wire them anywhere (a circle's radius, a palette's angle, a Cache's Delay).
+- The Envelope's card draws its curve (after Ableton's): drag the peak for Attack, the next point for Decay
+  (sideways) and Sustain (up and down), the end for Release; it writes on release (one recompile). While the
+  preview runs, a dot rides the curve with the live value (read back from the GPU only while the card shows:
+  `lib/memoryProbe.ts`).
 - Chain them: a Lag into a Spring works. A memory node fed by another reads it one frame late.
 - Settings are compile-time: dragging one recompiles. To drive a setting live, wire it from outside (put a
   Lag after a value instead of animating Rise).
