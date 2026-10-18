@@ -3,7 +3,8 @@
  *
  * Groups keep their nodes in `params.subgraph.nodes`. A node inside a group whose Audio comes in through one of the
  * group's input ports is wired to GROUP_PORT_SENTINEL (outputKey = the port's key): follow the group's own input
- * out, one level at a time. A wire from a group's output goes in through its output port. Plain, iterated and nested
+ * out, one level at a time; in an Agents group the wire comes from Agent Inputs' added port of that key instead (a
+ * Sound port, docs/agents-group.md). A wire from a group's output goes in through its output port. Plain, iterated and nested
  * groups all keep their nodes this way, so the engine (engine.ts) hears all of them; the compiler names their
  * uniforms after the same original node ids (compiler/shaderAssembler.ts).
  */
@@ -36,6 +37,11 @@ function resolve(conn: { nodeId: string; outputKey: string } | undefined, list: 
   const src = list.find(x => x.id === conn.nodeId);
   if (!src) return null;
   if (isAudioProducerType(src.type)) return src.id;
+  // An Agents group's added input (Agent Inputs' "from outside the group" ports): the group's own socket of that key.
+  if (src.type === 'agentInputs' && parents.length) {
+    const p = parents[parents.length - 1];
+    return resolve(p.group.inputs[conn.outputKey]?.connection, p.list, parents.slice(0, -1), depth + 1);
+  }
   const sg = subOf(src);
   const port = sg?.outputPorts?.find(p => p.key === conn.outputKey);
   if (sg && port) return resolve({ nodeId: port.fromNodeId, outputKey: port.fromOutputKey }, sg.nodes, [...parents, { group: src, list }], depth + 1);
