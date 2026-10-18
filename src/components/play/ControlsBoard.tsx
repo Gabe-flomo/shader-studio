@@ -26,15 +26,14 @@ import { layerNumericProps, layerTarget, parseReaderTarget, type PlayControl, ty
 import { Menu, type MenuItem } from '../ui/Menu';
 import { addLayerPropControl } from './layerOps';
 import { Button, IconButton } from '../ui/Button';
-import { Segmented } from '../ui/Choice';
 import { Field } from '../ui/Field';
 import { Icon } from '../ui/Icon';
 import type { IconName } from '../ui/iconPaths';
 import { Select } from '../ui/Select';
 import { usePlayUi } from './playUi';
 import { addTraceDrawer, normalise, setTraceSource, traceBuffer, type TraceSample } from './controlTrace';
-import { ControlLinkHint } from './ControlLink';
-import { boardGroupList, groupControls, type ControlOriginKind, type KindFilter, type MappedFilter } from './controlGroups';
+import { ControlLinkHint, useControlLinkUi } from './ControlLink';
+import { boardFiltersShown, filterOfShow, groupControls, showOptions, type BoardShow, type ControlOriginKind } from './controlGroups';
 
 export type TraceKind = 'line' | 'level' | 'step' | 'colour' | 'xy';
 
@@ -136,13 +135,14 @@ export function ControlsBoard({ play, renderCard, drivenBy, flatView }: {
   const flat = useControlBoard(s => s.flat), setFlat = useControlBoard(s => s.setFlat);
   const pinned = useControlBoard(s => s.pinned), togglePin = useControlBoard(s => s.togglePin), clearPins = useControlBoard(s => s.clearPins);
   const [query, setQuery] = useState('');
-  const [group, setGroup] = useState('all');
-  const [mapped, setMapped] = useState<MappedFilter>('all');
-  const [kind, setKind] = useState<KindFilter>('all');
-  const allGroups = useMemo(() => boardGroupList(play), [play]);
-  const shownGroup = allGroups.some(g => g.id === group) ? group : 'all';
-  const groups = useMemo(() => groupControls(play, { query, group: shownGroup, mapped, kind }), [play, query, shownGroup, mapped, kind]);
-  const filtered = query.trim() !== '' || shownGroup !== 'all' || mapped !== 'all' || kind !== 'all';
+  const [show, setShow] = useState<BoardShow>('all');
+  const options = useMemo(() => showOptions(play), [play]);
+  // A group or kind that's gone (deleted, or the last of its kind) falls back to everything.
+  const shownShow = options.some(o => o.value === show) ? show : 'all';
+  const groups = useMemo(() => groupControls(play, { query, ...filterOfShow(shownShow) }), [play, query, shownShow]);
+  const filtered = query.trim() !== '' || shownShow !== 'all';
+  const filtersShown = boardFiltersShown(play.controls.length, filtered);
+  const linking = useControlLinkUi(s => !!s.from);
 
   useEffect(() => { setTraceSource(sampleBoard); return () => setTraceSource(null); }, []);
 
@@ -157,26 +157,24 @@ export function ControlsBoard({ play, renderCard, drivenBy, flatView }: {
     return c ? [{ key, label: c.label, kind: traceKeyOf(c, play).kind, min: c.kind === 'float' ? c.min : 0, max: c.kind === 'float' ? c.max : 1, min2: 0, max2: 1, colour: c.kind === 'color' }] : [];
   });
 
-  const bar = (
-    <div data-board-bar="" style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', padding: '8px 0 6px' }}>
-      {!flat && <>
-        <Field placeholder="Search controls" aria-label="Search controls" value={query} onChange={e => setQuery(e.target.value)} height={28} style={{ width: 200 }} leading={<Icon name="search" size={14} style={{ color: tk.text.faint }} />} />
-        {allGroups.length > 1 && (
-          <Select ariaLabel="Group" value={shownGroup} height={28}
-            options={[{ value: 'all', label: `All groups · ${play.controls.length}` }, ...allGroups.map(g => ({ value: g.id, label: `${g.label} · ${g.count}` }))]}
-            onChange={setGroup} />
-        )}
-        <Segmented<MappedFilter> size="sm" ariaLabel="Mapped" value={mapped} onChange={setMapped}
-          options={[{ value: 'all', label: 'All' }, { value: 'mapped', label: 'Mapped', title: 'Controls something drives' }, { value: 'unmapped', label: 'Unmapped', title: 'Controls nothing drives yet' }]} />
-        <Select ariaLabel="Kind" value={kind} height={28} onChange={v => setKind(v as KindFilter)}
-          options={[{ value: 'all', label: 'Every kind' }, { value: 'float', label: 'Sliders' }, { value: 'color', label: 'Colours' }, { value: 'action', label: 'Buttons' }]} />
-        {filtered && <Button size="sm" variant="ghost" onClick={() => { setQuery(''); setGroup('all'); setMapped('all'); setKind('all'); }}>Clear</Button>}
+  const viewToggle = <IconButton icon="grid" size="sm" active={flat} label={flat ? 'Grouped, with live graphs' : 'Flat grid: every card in one grid, no groups or graphs'} onClick={() => setFlat(!flat)} />;
+  // One row: search, the filter, the view. Few controls: no search or filter, and the view toggle
+  // sits on the first group's heading instead of a row of its own.
+  const barShown = flat || filtersShown || linking || groups.length === 0;
+  const bar = barShown ? (
+    <div data-board-bar="" style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'nowrap', minWidth: 0, padding: '8px 0 6px' }}>
+      {!flat && filtersShown && <>
+        <Field placeholder="Search controls" aria-label="Search controls" value={query} onChange={e => setQuery(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Escape' && query) { e.stopPropagation(); setQuery(''); } }}
+          height={28} style={{ flex: '1 1 120px', minWidth: 80, maxWidth: 240 }} leading={<Icon name="search" size={14} style={{ color: tk.text.faint }} />} />
+        <Select ariaLabel="Show" value={shownShow} height={28} options={options} onChange={setShow} style={{ flex: '0 1 auto', minWidth: 0 }} />
+        {filtered && <Button size="sm" variant="ghost" onClick={() => { setQuery(''); setShow('all'); }}>Clear</Button>}
       </>}
       <span style={{ flex: 1 }} />
       <ControlLinkHint play={play} />
-      <IconButton icon="grid" size="sm" active={flat} label={flat ? 'Grouped, with live graphs' : 'Flat grid: every card in one grid, no groups or graphs'} onClick={() => setFlat(!flat)} />
+      {viewToggle}
     </div>
-  );
+  ) : null;
 
   if (flat) return <div data-controls-board="flat">{bar}{flatView}</div>;
 
@@ -210,9 +208,10 @@ export function ControlsBoard({ play, renderCard, drivenBy, flatView }: {
         </TraceArea>
       )}
       {groups.length === 0 && <div style={{ padding: '14px 4px', color: tk.text.faint }}>No control matches.</div>}
-      {groups.map(g => (
+      {groups.map((g, gi) => (
         <BoardGroupView key={g.origin.id} id={g.origin.id} label={g.origin.label} icon={ORIGIN_ICONS[g.origin.kind]} count={g.items.length}
-          card={g.origin.kind === 'layer'} extra={g.origin.kind === 'layer' ? <AddLayerParam play={play} layerId={g.origin.id.slice('layer:'.length)} /> : undefined}>
+          card={g.origin.kind === 'layer'}
+          extra={<>{g.origin.kind === 'layer' && <AddLayerParam play={play} layerId={g.origin.id.slice('layer:'.length)} />}{!bar && gi === 0 && viewToggle}</>}>
           {g.items.map(({ control, index }) => {
             const t = traceKeyOf(control, play);
             const pair = pairOf(play, control.id);

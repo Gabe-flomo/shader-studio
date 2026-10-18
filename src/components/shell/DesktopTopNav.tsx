@@ -1,7 +1,7 @@
 import { offerGraphExport } from '../playfile/exportMenus';
 import { GraphsList } from '../library/GraphsList';
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
-import { EXAMPLE_FOLDERS, EXAMPLE_INDEX, useNodeGraphStore } from '../../store/useNodeGraphStore';
+import { EXAMPLE_FOLDERS, EXAMPLE_INDEX, exampleTitleOf, useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { useThemeStore, useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius, type ThemeMode } from '../../theme/tokens';
 import { isPlayRecordEmpty } from '../../types/play';
@@ -386,10 +386,12 @@ function GraphNameChip({ compact = false }: { /** A narrow bar: the autosave ind
   const [open, setOpen] = useState(false);
   const [asNew, setAsNew] = useState(false);
   useSaveFormRequests(true, n => { setAsNew(n); setOpen(true); });
-  const name = current?.name ?? 'Untitled';
+  // An example not saved yet goes by its title (the save form offers it as the name).
+  const example = useNodeGraphStore(exampleTitleOf);
+  const name = current?.name ?? example ?? 'Untitled';
   return (
     <span ref={anchor} style={{ display: 'inline-flex', minWidth: 0, flexShrink: 1 }}>
-      <Tooltip grow label={current ? (dirty ? `Unsaved changes: save “${name}” as a new version (Minor), a new family (Major), in place, or under another name` : `Saved: “${name}” ${current.major}.${current.minor}`) : 'Not saved yet: give it a name to save it'}>
+      <Tooltip grow label={current ? (dirty ? `Unsaved changes: save “${name}” as a new version (Minor), a new family (Major), in place, or under another name` : `Saved: “${name}” ${current.major}.${current.minor}`) : example ? `The example “${example}”, not saved yet: save it under a name to keep your changes` : 'Not saved yet: give it a name to save it'}>
         <button
           type="button"
           onClick={() => { setAsNew(false); setOpen(o => !o); }}
@@ -397,7 +399,7 @@ function GraphNameChip({ compact = false }: { /** A narrow bar: the autosave ind
           style={{
             display: 'inline-flex', alignItems: 'center', gap: 7, minWidth: 0, maxWidth: 280, height: 30, padding: '0 10px',
             border: `1px solid ${open ? tk.border.strong : 'transparent'}`, borderRadius: radius.md, background: open ? tk.bg.hover : 'none',
-            cursor: 'pointer', color: current ? tk.text.primary : tk.text.faint, font: `${current ? 600 : 500} 13px ${fontFamily.ui}`,
+            cursor: 'pointer', color: current ? tk.text.primary : example ? tk.text.secondary : tk.text.faint, font: `${current ? 600 : 500} 13px ${fontFamily.ui}`,
           }}
           onMouseEnter={e => { if (!open) e.currentTarget.style.background = tk.bg.hover; }}
           onMouseLeave={e => { if (!open) e.currentTarget.style.background = 'none'; }}

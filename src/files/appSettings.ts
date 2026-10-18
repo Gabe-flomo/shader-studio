@@ -73,7 +73,6 @@ const KNOWN: Record<string, SettingInfo> = {
   'shader-studio:play:drawerHeight': S('Drawer height', 'play'),
   'shader-studio:play:addLayerOpen': S('Add layer list open', 'play'),
   'shader-studio:play:openFolders': S('Open folders', 'play'),
-  'shader-studio:play:notesOpen': S('Notes card open', 'play'),
   'shader-studio:play:readers-peak': S('Audio readers: peak hold', 'play'),
   'shader-studio:phoneSplit:play': S('Split view on a phone (Play)', 'play'),
   'shader-studio:performance-rolling': S('Rolling performance takes', 'play', { data: true }),
@@ -83,6 +82,7 @@ const KNOWN: Record<string, SettingInfo> = {
   'shader-studio:finish-effects': S('Your Finish effects', 'finish', { data: true }),
   // Present
   'shader-studio:settings:linkedOpen': S('Opening a linked presentation', 'present', { hint: 'Asks again next time' }),
+  'shader-studio:linkedPresentationAsked': S('Graphs already asked about their presentation', 'present', { hint: 'Each graph’s “Has a presentation” notice shows once more' }),
   'shader-studio:settings:lastPresentation': S('Last open presentation', 'present'),
   'shader-studio-present:themes': S('Presentation themes', 'present', { data: true }),
   // Devices

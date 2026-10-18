@@ -7,7 +7,27 @@
  */
 import type { PlayMapping, PlaySource, PlaySourceDef } from '../../types/play';
 
-export type MappingGroupId = 'midi' | 'keys' | 'audio' | 'motion' | 'triggers' | 'picture' | 'other';
+/**
+ * Mapping and source cards start folded to one line (the app's collapsed-by-default rule); a card
+ * opened by hand stays open, remembered on this device in playUi's `folded` under these keys
+ * (an entry of `false` = open, no entry = folded).
+ */
+export const mappingFoldKey = (id: string): string => `mapping:${id}`;
+export const sourceFoldKey = (id: string): string => `source:${id}`;
+/** The sources column's group headings (open unless folded). */
+export const sourceGroupFoldKey = (id: string): string => `srcgroup:${id}`;
+/** The built-in signals' group at the bottom of the sources column (folded unless opened). */
+export const BUILT_IN_FOLD_KEY = 'srcgroup:builtin';
+
+const CURVE_WORDS: Record<PlayMapping['curve'], string> = { linear: 'linear', exp: 'exp', log: 'log', custom: 'drawn' };
+const num = (n: number) => `${Math.round(n * 1000) / 1000}`;
+
+/** The rest of a folded mapping's line, after "source → control": "0.05–0.7 · linear" (an increment says its steps elsewhere). */
+export function mappingRangeText(m: Pick<PlayMapping, 'outMin' | 'outMax' | 'curve'>): string {
+  return `${num(m.outMin)}–${num(m.outMax)} · ${CURVE_WORDS[m.curve] ?? m.curve}`;
+}
+
+export type MappingGroupId ='midi' | 'keys' | 'audio' | 'motion' | 'triggers' | 'picture' | 'other';
 
 export const MAPPING_GROUPS: ReadonlyArray<{ id: MappingGroupId; label: string; kinds: readonly PlaySource['kind'][] }> = [
   { id: 'midi', label: 'MIDI and OSC', kinds: ['midi', 'pad', 'osc'] },

@@ -30,7 +30,7 @@ import { InputsBoard } from './inputs/InputsBoard';
 import { SwingStrip } from './inputs/SwingStrip';
 import { SourceDragHandle } from './inputs/SourceDragHandle';
 import { SourceGroups } from './inputs/SourceGroups';
-import type { SourceItem } from './mappingGroups';
+import { mappingFoldKey, mappingRangeText, sourceFoldKey, type SourceItem } from './mappingGroups';
 import { dropOutcome } from './inputs/sourceDrag';
 import { controlSwing, type Swing } from '../../play/controlSwing';
 import { DetailWindow } from './detail/DetailWindow';
@@ -66,7 +66,7 @@ import { NumberInput } from '../NodeGraph/NumberInput';
 import { reportFileResult } from '../shell/reportFileResult';
 import { LayersPanel } from './LayersPanel';
 import { FinishPanel } from './finish/FinishPanel';
-import { NotesCard } from './NotesCard';
+import { NOTES_FOLD_KEY, NotesCard } from './NotesCard';
 import { AspectPicker, CanvasFullscreenButton, PreviewQualityPicker, FrameRatePicker } from '../shell/PreviewChrome';
 import { NOTE_REF_TYPE, noteRef, type NoteRefKind } from './noteRefs';
 import { LayerContextMenu } from './LayerContextMenu';
@@ -383,13 +383,16 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
   }, [update]);
 
   const addMapping = useCallback((source: PlaySource, controlId?: string) => {
+    // A mapping just made opens, to be set up (the rest stay folded to their one line).
+    const id = playId('map');
+    usePlayUi.getState().toggleFold(mappingFoldKey(id), false);
     update(p => {
       const control = p.controls.find(c => c.id === controlId) ?? p.controls[0];
       if (!control) return p;
       return {
         ...p,
         mappings: [...p.mappings, {
-          id: playId('map'), controlId: control.id, source,
+          id, controlId: control.id, source,
           outMin: control.min, outMax: control.max, curve: 'linear', smoothMs: 30, enabled: true,
         }],
       };
@@ -496,8 +499,14 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
     bands: Array.isArray(n.params._bands) ? Math.max(1, n.params._bands.length) : 1,
   })), [nodes]);
 
-  const notesCard = (play.notes || play.source || notesEditing) ? (
+  // The notes fold into the Controls header's ⓘ (folded unless opened, remembered on this device).
+  const hasNotes = !!(play.notes || play.source);
+  const notesOpen = usePlayUi(s => s.folded[NOTES_FOLD_KEY] === false);
+  const foldNotes = useCallback((open: boolean) => usePlayUi.getState().toggleFold(NOTES_FOLD_KEY, !open), []);
+  const notesCard = ((hasNotes && notesOpen) || notesEditing) ? (
     <NotesCard
+      open={notesOpen || notesEditing}
+      onFold={foldNotes}
       notes={play.notes ?? ''}
       source={play.source}
       editing={notesEditing}
@@ -517,6 +526,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
     title="Controls"
     scroll={compact}
     hint={play.controls.length === 0 ? undefined : `${play.controls.length}`}
+    after={hasNotes && !notesEditing ? <IconButton icon="info" size="sm" data-notes-toggle="" active={notesOpen} label={notesOpen ? 'Fold the notes away' : 'Notes: what this setup shows and how to play it'} onClick={() => foldNotes(!notesOpen)} /> : undefined}
     extra={(
       <>
         {/* A phone slides this row sideways: Add control and Suggest come first there, in sight. */}
@@ -639,21 +649,23 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       if (!cb) return null;
       const num = (v: unknown) => (typeof v === 'number' ? v : undefined);
       const pms = (play.pairMappings ?? []).filter(m => m.enabled && m.pairId === pair.id);
+      const drivenA = pms.some(m => pairDrives(m, pair, c.id)) || play.mappings.some(m => m.enabled && m.controlId === c.id);
+      const drivenB = pms.some(m => pairDrives(m, pair, cb.id)) || play.mappings.some(m => m.enabled && m.controlId === cb.id);
       return (
         <ContextMenuArea key={c.id} items={() => pairMenu(pair.id)}>
           <LivePairCard
             liveOn={liveOn}
             pair={pair} a={c} b={cb} touch={compact}
             values={[num(readControlValue(nodes, c.target, play)), num(readControlValue(nodes, cb.target, play))]}
-            drivenA={pms.some(m => pairDrives(m, pair, c.id)) || play.mappings.some(m => m.enabled && m.controlId === c.id)}
-            drivenB={pms.some(m => pairDrives(m, pair, cb.id)) || play.mappings.some(m => m.enabled && m.controlId === cb.id)}
+            drivenA={drivenA}
+            drivenB={drivenB}
             drivenBy={[...pms.map(m => pairMappingLabel(m, play)), ...play.mappings.filter(m => m.enabled && (m.controlId === c.id || m.controlId === cb.id)).map(m => mappingLabel(m, play))]}
             onChange={(ctl, v) => writeControl(ctl, v)}
             onRename={label => update(p => ({ ...p, pairs: (p.pairs ?? []).map(x => (x.id === pair.id ? { ...x, label } : x)) }))}
             onPosition={position => update(p => ({ ...p, pairs: (p.pairs ?? []).map(x => (x.id === pair.id ? { ...x, position } : x)) }))}
             onUnpair={() => update(p => unpair(p, pair.id))}
             onMap={() => addPairMapping(pair.id)}
-            trace={board?.trace}
+            trace={drivenA || drivenB ? board?.trace : undefined}
             onName={board?.onIsolate}
             isolated={board?.isolated}
           />
@@ -978,7 +990,7 @@ function ControlGroup({ name, count, grid, children }: { name: string; count: nu
  * `scroll` (phones): one row, the tools sliding sideways under the title, instead of wrapping
  * onto two more lines (a lone ⋯ on a third row at 360–390px).
  */
-function PanelHeader({ title, hint, extra, onClick, chevron, scroll = false }: { title: string; hint?: string; extra?: ReactNode; onClick?: () => void; chevron?: 'up' | 'down'; scroll?: boolean }) {
+function PanelHeader({ title, hint, after, extra, onClick, chevron, scroll = false }: { title: string; hint?: string; /** Beside the title (the Controls notes' ⓘ). */ after?: ReactNode; extra?: ReactNode; onClick?: () => void; chevron?: 'up' | 'down'; scroll?: boolean }) {
   const tk = useTokens();
   return (
     <div
@@ -991,6 +1003,7 @@ function PanelHeader({ title, hint, extra, onClick, chevron, scroll = false }: {
       {chevron && <Icon name={chevron === 'up' ? 'chevU' : 'chevD'} size={14} style={{ color: tk.text.faint }} />}
       <span style={{ font: `650 13px ${fontFamily.ui}`, ...(scroll ? { flexShrink: 0 } : null) }}>{title}</span>
       {hint && <span style={{ color: tk.text.faint, font: `500 11.5px ${fontFamily.mono}`, ...(scroll ? { flexShrink: 0 } : null) }}>{hint}</span>}
+      {after && <span onClick={e => e.stopPropagation()} style={{ display: 'inline-flex', flexShrink: 0, marginLeft: -4 }}>{after}</span>}
       <span style={{ flex: 1 }} />
       {/* Wraps onto a second line on narrow screens rather than running off the edge (or, `scroll`, slides sideways). */}
       <span onClick={e => e.stopPropagation()} data-header-tools={scroll ? 'scroll' : undefined} style={scroll
@@ -1321,7 +1334,8 @@ function ControlRow({ control, index, count, exists, fate, onRelink, help, sourc
         )}
       </div>
       <ControlBody control={control} value={value} liveOn={liveOn} driven={driven} exists={exists} source={source} onChange={onChange} onRange={onRange} touch={touch} swing={swing} />
-      {trace}
+      {/* The live graph only while something drives it: a hand-moved control's line is flat news. */}
+      {driven && trace}
       {!exists && fate && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 0 6px', padding: '6px 8px', borderRadius: radius.md, background: alpha(tk.status.warning, 0.12), color: tk.text.secondary, font: `11.5px/1.4 ${fontFamily.ui}` }}>
           <span style={{ flex: 1, minWidth: 0 }}>
@@ -1345,9 +1359,11 @@ function ControlRow({ control, index, count, exists, fate, onRelink, help, sourc
           {help.hint && <div style={{ color: tk.text.muted }}>{help.hint}</div>}
           {help.comment && <div style={{ color: tk.text.muted }}><b>Note on the node:</b> {help.comment}</div>}
           {control.kind === 'float' && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase', width: 62 }}>Range</span>
-              <RangeEditor min={control.min} max={control.max} onRange={onRange} />
+            // No min/max editor (the slider rule): typing a value past either end on the slider widens it.
+            <div data-control-range="" style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+              <span style={{ color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase', width: 62, flexShrink: 0 }}>Range</span>
+              <span style={{ color: tk.text.secondary, font: `500 11.5px ${fontFamily.mono}` }}>{round3(control.min)} – {round3(control.max)}</span>
+              <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>Type a value past either end to widen it.</span>
             </div>
           )}
           {control.kind === 'action' && (
@@ -1357,11 +1373,14 @@ function ControlRow({ control, index, count, exists, fate, onRelink, help, sourc
               <span style={{ color: tk.text.faint, fontSize: 11 }}>A mapping presses it each time it rises past the middle of its range.</span>
             </div>
           )}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <span style={{ color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase', width: 62 }}>Driven by</span>
-            <span style={{ flex: 1, minWidth: 0 }}>{driven ? drivenBy.join(', ') : 'Nothing yet: drag the slider, or map an input onto it.'}</span>
-            <Button size="sm" variant="ghost" icon="plus" onClick={onMap}>Map</Button>
-            {onNull && <Button size="sm" variant="ghost" icon="plus" title="Add a Null on the picture that drives this slider: drag the dot to change it" onClick={onNull}>Null</Button>}
+          {/* The label over the text, the buttons under it: never a one-word-per-line column beside them. */}
+          <div data-driven-by="" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <span style={{ color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Driven by</span>
+            <span style={{ minWidth: 0 }}>{driven ? drivenBy.join(', ') : 'Nothing yet: drag the slider, or map an input onto it.'}</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', marginLeft: -6 }}>
+              <Button size="sm" variant="ghost" icon="plus" onClick={onMap}>Map</Button>
+              {onNull && <Button size="sm" variant="ghost" icon="plus" title="Add a Null on the picture that drives this slider: drag the dot to change it" onClick={onNull}>Null</Button>}
+            </span>
           </div>
         </div>
       )}
@@ -1429,18 +1448,6 @@ function ControlBody({ control, value, liveOn, driven, exists, source, onChange,
         </div>
       </div>
     )
-  );
-}
-
-function RangeEditor({ min, max, onRange }: { min: number; max: number; onRange: (min: number, max: number) => void }) {
-  const tk = useTokens();
-  const numStyle = { width: 46, height: 22, borderRadius: 5, border: 0, background: tk.bg.field, color: tk.text.muted, font: `500 10.5px ${fontFamily.mono}`, textAlign: 'center' as const };
-  return (
-    <span title="Slider range" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
-      <NumberInput value={min} onCommit={n => { if (n < max) onRange(n, max); }} style={numStyle} title="Minimum" />
-      <span style={{ color: tk.text.faint, fontSize: 10 }}>–</span>
-      <NumberInput value={max} onCommit={n => { if (n > min) onRange(min, n); }} style={numStyle} title="Maximum" />
-    </span>
   );
 }
 
@@ -1552,10 +1559,12 @@ function MappingsDrawer({ play, mode, grid = false, pages = false, height, onRes
   const allSources = useCan('play.sources');
   const learnTrigger = !!learnFor && learnFor !== 'new' && play.mappings.find(m => m.id === learnFor)?.source.kind === 'trigger';
   const midi = midiEngine.webMidi();
-  // Collapsed rows show one line: source → control, the meter and the switch. UI state only.
-  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
-  const toggleRow = (id: string) => setCollapsed(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
-  const allCollapsed = play.mappings.length > 0 && play.mappings.every(m => collapsed.has(m.id));
+  // Rows start folded to one line (source → control · range · curve, the meter and the switch);
+  // one opened by hand stays open, remembered on this device (playUi's folded, mappingFoldKey).
+  const folds = usePlayUi(s => s.folded);
+  const isCollapsed = (id: string) => folds[mappingFoldKey(id)] !== false;
+  const toggleRow = (id: string) => usePlayUi.getState().toggleFold(mappingFoldKey(id), !isCollapsed(id));
+  const allCollapsed = play.mappings.length > 0 && play.mappings.every(m => isCollapsed(m.id));
   const rowFor = (m: PlayMapping, opts: { collapsed: boolean; fixed?: boolean }) => (
     <MappingRow
       key={m.id}
@@ -1649,7 +1658,7 @@ function MappingsDrawer({ play, mode, grid = false, pages = false, height, onRes
               <IconButton
                 icon={allCollapsed ? 'chevD' : 'chevU'}
                 label={allCollapsed ? 'Expand all mappings' : 'Collapse all mappings'}
-                onClick={() => setCollapsed(allCollapsed ? new Set() : new Set(play.mappings.map(m => m.id)))}
+                onClick={() => usePlayUi.getState().toggleFoldMany(play.mappings.map(m => mappingFoldKey(m.id)), !allCollapsed)}
               />
             )}
             <IconButton icon="info" label="Connect Ableton, a MIDI controller, OSC or live audio: step-by-step" onClick={() => setGuideOpen(true)} />
@@ -1667,7 +1676,7 @@ function MappingsDrawer({ play, mode, grid = false, pages = false, height, onRes
                 if (id) useMapMode.getState().start(id, r.label);
               } })),
               'separator',
-              { label: 'Another input…', hint: 'A knob, a key, the mouse: pick it on the card, or press Learn', icon: 'plus' as const, onSelect: () => onRecord(p => addFreeSource(p, allSources ? { kind: 'midi', signal: 'cc', channel: 0 } : { kind: 'mouse', axis: 'x' }).play) },
+              { label: 'Another input…', hint: 'A knob, a key, the mouse: pick it on the card, or press Learn', icon: 'plus' as const, onSelect: () => { let id = ''; onRecord(p => { const x = addFreeSource(p, allSources ? { kind: 'midi', signal: 'cc', channel: 0 } : { kind: 'mouse', axis: 'x' }); id = x.id; return x.play; }); if (id) usePlayUi.getState().toggleFold(sourceFoldKey(id), false); } },
               { heading: 'MIDI' },
               { label: 'Map 12 notes → 12 targets…', hint: 'C to B onto controls or layers in order; any octave hits the same one', icon: 'piano' as const, onSelect: () => { if (!allSources) { openProSheet('play.sources'); return; } setNoteMap(true); } },
             ]} />}
@@ -1682,19 +1691,19 @@ function MappingsDrawer({ play, mode, grid = false, pages = false, height, onRes
           {play.midiFile && !pages && <MidiFileSlot />}
           {!ownSources.length && !play.mappings.length ? emptyState : mode === 'drawer' ? <>
             {ownSources.length > 0 && <div style={grid ? PANEL_GRID_WIDE : undefined}>{ownSources.map(sourceCard)}</div>}
-            {play.mappings.length > 0 && <div style={grid ? PANEL_GRID_WIDE : undefined}>{play.mappings.map(m => rowFor(m, { collapsed: collapsed.has(m.id) }))}</div>}
+            {play.mappings.length > 0 && <div style={grid ? PANEL_GRID_WIDE : undefined}>{play.mappings.map(m => rowFor(m, { collapsed: isCollapsed(m.id) }))}</div>}
           </> : (
             // The sources column: own sources and old mappings together, by kind, with a search.
             <SourceGroups sources={ownSources} mappings={play.mappings} words={sourceWords} gridStyle={grid ? PANEL_GRID_WIDE : undefined}
-              renderItem={x => (x.kind === 'source' ? sourceCard(x.def) : rowFor(x.mapping, { collapsed: collapsed.has(x.mapping.id) }))} />
+              renderItem={x => (x.kind === 'source' ? sourceCard(x.def) : rowFor(x.mapping, { collapsed: isCollapsed(x.mapping.id) }))} />
           )}
-          {/* The built-in signals (Signals: count, active, share): once the setup has a signal to count. */}
-          {mode !== 'drawer' && !!play.signals?.length && <ProLock feature="play.sources" style={{ display: 'block', width: '100%' }}><BuiltInSignalsSection onRecord={onRecord} /></ProLock>}
           {!!play.pairs?.length && (
             <PairMappingsSection play={play} grid={grid} audioNodes={audioNodes} layerRefs={layerRefs} onAdd={onAddPair} onUpdate={onUpdatePair} onRemove={onRemovePair} />
           )}
           {!play.midiFile && !pages && <MidiFileSlot />}
           {!pages && <ProLock feature="play.sources" style={{ display: 'block', width: '100%' }}><PadGridCard /></ProLock>}
+          {/* The built-in signals (Signals: count, active, share), folded at the bottom: once the setup has a signal to count. */}
+          {mode !== 'drawer' && !!play.signals?.length && <ProLock feature="play.sources" style={{ display: 'block', width: '100%' }}><BuiltInSignalsSection onRecord={onRecord} /></ProLock>}
         </div>
       )}
       {guideOpen && <ConnectGuide onClose={() => setGuideOpen(false)} />}
@@ -1905,15 +1914,21 @@ function MappingRow({ mapping: m, control, controls, audioNodes, nullLayers, lay
           <button type="button" onClick={onToggle} title="Expand" style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 6, border: 0, background: 'none', padding: 0, cursor: 'pointer', color: tk.text.primary, font: `500 12px ${fontFamily.ui}`, textAlign: 'left' }}>
             {waiting
               ? <MidiWaitChip title="This row has no knob yet: the first CC that moves on any device becomes its CC" />
-              : <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 600 }} title={m.increment ? 'Increment' : undefined}>{m.increment ? summary : sourceLabel(m.source, controls, layerRefs)}</span>}
+              : <span style={{ flex: '0 1 auto', minWidth: 24, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 600 }} title={m.increment ? 'Increment' : undefined}>{m.increment ? summary : sourceLabel(m.source, controls, layerRefs)}</span>}
             <Icon name="chevR" size={12} style={{ color: tk.text.faint, flexShrink: 0 }} />
-            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: tk.text.secondary }}>{control?.label ?? 'missing control'}</span>
+            <span style={{ flex: '1 1 0', minWidth: 24, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: tk.text.secondary }}>{control?.label ?? 'missing control'}</span>
           </button>
           {locked && <ProBadge title="This source needs Pro: kept, but it doesn't run on Free" />}
           <SoloButton kind="mapping" id={m.id} />
           <Toggle checked={m.enabled} onChange={enabled => onUpdate({ enabled })} />
         </div>
-        <FedMeter feed={feed} curved curve={m.curve} curveY={m.curveY} on={m.enabled} margin="2px 0 0 22px" />
+        {/* The second line: its range and curve ("0.05–0.7 · linear"), then the meter. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '2px 0 0 22px', minWidth: 0 }}>
+          {!m.increment && control?.kind !== 'action' && (
+            <span data-mapping-range="" style={{ flexShrink: 0, whiteSpace: 'nowrap', color: tk.text.faint, font: `500 10.5px ${fontFamily.mono}` }}>{mappingRangeText(m)}</span>
+          )}
+          <div style={{ flex: 1, minWidth: 0 }}><FedMeter feed={feed} curved curve={m.curve} curveY={m.curveY} on={m.enabled} margin="0" /></div>
+        </div>
       </div>
     );
   }
@@ -2099,15 +2114,31 @@ function SourceCard({ def: s, play, meter: meterGiven = 0, liveMeter = false, au
       actions={<IconButton icon="spark" label={learning ? 'Listening… (Esc to cancel)' : 'Learn: replace this source with the next input'} size="sm" active={learning} onClick={onLearn} />}
       secondary={[{ icon: 'trash', label: 'Remove the source and its routes', danger: true, onSelect: () => onChange(p => removeSource(p, s.id)) }]} />
   );
+  // Folded by default to its header and one line (what it reads → what it drives); remembered when opened.
+  const open = usePlayUi(st => st.folded[sourceFoldKey(s.id)] === false) || learning;
+  const toggleOpen = () => usePlayUi.getState().toggleFold(sourceFoldKey(s.id), open);
+  const drives = routes.map(r => play.controls.find(c => c.id === r.to)?.label ?? 'a missing control');
   return (
-    <div data-source-card={s.id} style={{ marginTop: 6, padding: '8px 10px', borderRadius: radius.card, background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${mapping || learning ? tk.accent.base : tk.border.default}`, opacity: s.enabled ? 1 : 0.55 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+    <div data-source-card={s.id} data-folded={open ? undefined : ''} style={{ marginTop: 6, padding: open ? '8px 10px' : '6px 10px', borderRadius: radius.card, background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${mapping || learning ? tk.accent.base : tk.border.default}`, opacity: s.enabled ? 1 : 0.55 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: open ? 6 : 0 }}>
+        <IconButton icon={open ? 'chevD' : 'chevR'} label={open ? 'Collapse source' : 'Expand source'} size="sm" tooltip={false} onClick={toggleOpen} style={{ marginLeft: -6 }} />
         <SourceDragHandle id={s.id} label={name} />
         <Field value={s.label ?? ''} placeholder={name} aria-label="Source name" onChange={e => set({ label: e.target.value || undefined })} height={24} style={{ flex: 1, minWidth: 0, font: `600 12px ${fontFamily.ui}` }} />
         <Button size="sm" icon="plus" variant={mapping ? 'primary' : 'secondary'} title="Map: then click each control it should drive" onClick={() => (mapping ? useMapMode.getState().stop() : useMapMode.getState().start(s.id, name))}>{mapping ? 'Done' : 'Map'}</Button>
         <Toggle checked={s.enabled} onChange={enabled => set({ enabled })} />
         <IconButton icon="popout" label="Open its details" size="sm" onClick={() => openDetail('source', s.id)} />
       </div>
+      {!open && (
+        <>
+          <button type="button" onClick={toggleOpen} title="Expand" style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', minWidth: 0, margin: '2px 0 0', padding: '0 0 0 22px', border: 0, background: 'none', cursor: 'pointer', textAlign: 'left', font: `500 11.5px ${fontFamily.ui}`, color: tk.text.secondary }}>
+            <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>
+              {sourceLabel(s.source, play.controls, layerRefs)} → {drives.length ? drives.join(', ') : 'nothing yet'}
+            </span>
+          </button>
+          <FedMeter feed={feed} on={s.enabled} margin="4px 0 0 22px" />
+        </>
+      )}
+      {open && <>
       {step ? (
         <IncrementEditor
           mapping={{ id: s.id, controlId: step.routes[0]?.to ?? '', source: s.source, outMin: step.lo, outMax: step.hi, curve: 'linear', smoothMs: 0, enabled: s.enabled, increment: step.step }}
@@ -2132,6 +2163,7 @@ function SourceCard({ def: s, play, meter: meterGiven = 0, liveMeter = false, au
           onPatch={patch => onChange(p => patchRoute(p, s.id, r.id, patch))} onRemove={() => onChange(p => removeRoute(p, s.id, r.id))} />)}
         {!routes.length && <div style={{ color: tk.text.faint, font: `11.5px ${fontFamily.ui}`, padding: '4px 0' }}>Drives nothing yet: press Map, then click a control. Rules can still watch it.</div>}
       </div>
+      </>}
     </div>
   );
 }

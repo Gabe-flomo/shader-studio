@@ -165,7 +165,10 @@ and when you open a presentation that has a linked graph:
 | **Always** | it opens on Present too; you stay where you are (the notice has **Go to Present**) | its graph loads, unless the open graph has unsaved changes: then it only offers |
 | **Never** | nothing | nothing |
 
-Nothing happens when the other side is already the one open. Opening a
+Nothing happens when the other side is already the one open. The **Ask**
+notice for a loaded graph shows once per graph (an example by its key, a saved
+graph by its name), remembered on this device; resetting “Graphs already asked
+about their presentation” on the Files page shows each once more. Opening a
 presentation's graph never replaces unsaved changes without the usual
 “Open this graph?” question.
 

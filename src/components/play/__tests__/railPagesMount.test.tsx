@@ -106,12 +106,15 @@ describe('the rail’s full-width pages', () => {
     expect(host.querySelector('[data-controls-board=""]')).not.toBeNull();
   });
 
-  it('Controls full width is the board: grouped cards with a trace slot each', () => {
+  it('Controls full width is the board: grouped cards, a trace slot only on what a mapping drives', () => {
     const host = mountPage('controls', true);
     expect(host.querySelector('[data-controls-board=""]')).not.toBeNull();
     expect(host.querySelector('[data-board-group="layer:l1"]')).not.toBeNull();
     expect(host.querySelector('[data-board-group="graph"]')).not.toBeNull();
-    expect(host.querySelectorAll('[data-trace-slot]').length).toBe(2);
+    // Speed is driven (the mouse); Box · X's only mapping is off, so its flat line isn't drawn.
+    const slots = host.querySelectorAll('[data-trace-slot]');
+    expect(slots.length).toBe(1);
+    expect(slots[0].getAttribute('data-trace-key')).toBe('c2');
   });
 
   it('the sidebar stays out while the rail is out', () => {

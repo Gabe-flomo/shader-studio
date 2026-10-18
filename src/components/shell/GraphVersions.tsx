@@ -10,7 +10,7 @@
  * and saving an older one makes it the newest again.
  */
 import { useRef, useState } from 'react';
-import { useNodeGraphStore } from '../../store/useNodeGraphStore';
+import { exampleTitleOf, useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { listVersions, nextNumber, seriesLabel, whenSaved, type SaveKind } from '../../store/graphVersions';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
@@ -29,7 +29,8 @@ export function SaveGraphForm({ onDone, asNew: startAsNew = false }: { onDone?: 
   const getSavedGraphNames = useNodeGraphStore(s => s.getSavedGraphNames);
   const [note, setNote] = useState('');
   const [asNew, setAsNew] = useState(!current || startAsNew);
-  const [name, setName] = useState('');
+  // An unsaved example offers its own title as the name.
+  const [name, setName] = useState(() => exampleTitleOf(useNodeGraphStore.getState()) ?? '');
   const n = name.trim();
   const exists = !!n && getSavedGraphNames().includes(n);
 

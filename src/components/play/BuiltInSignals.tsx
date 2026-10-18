@@ -19,6 +19,8 @@ import { Icon } from '../ui/Icon';
 import { NumberInput } from '../NodeGraph/NumberInput';
 import { rowField } from '../ui/rowLayout';
 import { useMapMode } from './inputs/mapMode';
+import { usePlayUi } from './playUi';
+import { BUILT_IN_FOLD_KEY } from './mappingGroups';
 
 type Now = { count: number; active: number; share: number };
 
@@ -56,11 +58,13 @@ export function BuiltInBadge() {
   );
 }
 
-/** The Inputs board's Built in group: one card per built-in signal, with its value now and Map. */
+/** The Inputs board's Built in group, folded at the bottom of the sources column: one card per built-in signal, with its value now and Map. */
 export function BuiltInSignalsSection({ onRecord }: { onRecord: (fn: (p: PlayRecord) => PlayRecord) => void }) {
   const tk = useTokens();
   const now = useBuiltInSignals();
-  const [open, setOpen] = useState(true);
+  // Folded at the bottom of the sources column unless opened (remembered on this device).
+  const open = usePlayUi(s => s.folded[BUILT_IN_FOLD_KEY] === false);
+  const setOpen = (fn: (o: boolean) => boolean) => usePlayUi.getState().toggleFold(BUILT_IN_FOLD_KEY, !fn(open));
   const map = (read: BuiltInSignalRead, label: string) => {
     let id = '';
     onRecord(p => { const x = addFreeSource(p, { kind: 'signals', read }); id = x.id; return x.play; });
