@@ -16,7 +16,7 @@ import {
   getGroupPresetDir, setGroupPresetDir,
 } from '../store/useNodeGraphStore';
 import { pickDirectory } from '../utils/fileIO';
-import { LibraryPanel } from './shell/LibraryPanel';
+import { requestPage } from './page';
 import { useCtp } from '../theme/nodePalette';
 import { useTokens } from '../theme/themeStore';
 
@@ -246,9 +246,13 @@ export function KeyboardShortcutsModal({ onClose }: Props) {
               </div>
             ))}
 
-            {/* ── Library: export everything, import, backup folder ── */}
-            <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: `1px solid ${ctp.surface0}` }}>
-              <LibraryPanel />
+            {/* ── Storage (export everything, import, the workspace folder) is on the Files page ── */}
+            <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: `1px solid ${ctp.surface0}`, display: 'flex', alignItems: 'center', gap: 10, fontSize: '12px', color: ctp.subtext0 }}>
+              <span style={{ flex: 1 }}>Storage, backups, Export everything and the workspace folder are on the Files page.</span>
+              <button type="button" onClick={() => { requestPage('files'); onClose(); }}
+                style={{ background: ctp.surface0, border: 'none', borderRadius: '6px', color: ctp.text, padding: '5px 10px', fontSize: '12px', cursor: 'pointer', flexShrink: 0 }}>
+                Open Files
+              </button>
             </div>
           </div>
         )}

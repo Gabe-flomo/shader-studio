@@ -24,6 +24,9 @@ import { getMembership, moveItemsToFolder, createFolder } from '../../utils/asse
 import { defaultLayer } from '../../types/playLayers';
 import { PresetMenu } from '../../components/presets/PresetMenu';
 import { Library } from '../../components/library/Library';
+import { GraphsList } from '../../components/library/GraphsList';
+import { LIBRARY_CATEGORIES, listAddable, mediaItems } from '../libraryCategories';
+import { mediaNodeFor, placeMedia } from '../mediaPlacement';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -112,8 +115,8 @@ describe('the Library lists every type from the stores they live in', () => {
     // Built-ins come with their kinds.
     expect(builtInPresets('group').length).toBeGreaterThan(0);
     expect(builtInPresets('drumKit').length).toBeGreaterThan(0);
-    expect(builtInPresets('builder:agents').length).toBeGreaterThan(0);
-    expect(builtInPresets('builder:timecube').length).toBeGreaterThan(0);
+    // A builder's built-ins are its strip's own cards (builders/stripPresets.ts), not the kind's.
+    expect(builtInPresets('builder:agents')).toEqual([]);
   });
 });
 
@@ -308,34 +311,115 @@ describe('<PresetMenu>', () => {
   });
 });
 
-describe('<Library>', () => {
-  it('offers a filter only for types with items, and shows each type’s items', () => {
-    seed({ 'shader-studio:kfp:kfp_1': '' });
-    localStorage.removeItem('shader-studio:kfp:kfp_1');
-    mount(<Library size="full" filter="all" />);
-    const chips = $$('[data-library-filter]').map(c => c.dataset.libraryFilter);
-    expect(chips).toEqual(expect.arrayContaining(['all', 'graphs', 'presets', 'functions', 'expressions', 'nodes', 'shaders']));
-    expect(chips).not.toContain('keyframes');
-    expect($('[data-library-type="graphs"]')!.textContent).toContain('Sunset');
-    expect($('[data-library-type="presets"] [data-preset-kind="layerSet"]')!.textContent).toContain('Ring set');
-    click($('[data-library-filter="shaders"]'));
-    expect($('[data-library-type="graphs"]')).toBeNull();
-    expect($('[data-library-type="shaders"]')!.textContent).toContain('Plasma');
+describe('what the Library lists (library/libraryCategories.ts)', () => {
+  it('only what goes on the graph: no graphs, shaders, builder presets, Play, Finish or keyframe presets', () => {
+    seed({ 'shader-studio:kfp:kfp_1': FIXTURES['shader-studio:kfp:kfp_1'] });
+    const all = listAddable();
+    const names = Object.values(all).flat().map(i => i.name);
+    expect(names).toEqual(expect.arrayContaining(['Glow group', 'Swirl', 'Wave', 'Ripple', 'My blur', 'Sea']));
+    for (const gone of ['Sunset', 'Rings', 'Plasma', 'Noise', 'Glass room', 'Rings 2D', 'Ring set', 'Dusty', 'Tint', 'Warm', 'Dusk', 'Ease in']) expect(names).not.toContain(gone);
+    expect(all.groups.map(i => i.name)).toEqual(['Glow group']);
+    expect(all.builtInGroups.length).toBe(builtInPresets('group').length);
   });
 
-  it('shows one short line when nothing is saved', () => {
-    mount(<Library size="rail" filter="graphs" />);
-    expect($('[data-library]')!.textContent).toContain('Nothing saved yet');
-    expect($$('[data-library-filter]').map(c => c.dataset.libraryFilter)).toEqual(['all', 'graphs']);
+  it('group presets come first, then the rest of the presets, then media', () => {
+    expect(LIBRARY_CATEGORIES.map(c => c.id)).toEqual(['groups', 'builtInGroups', 'nodes', 'functions', 'expressions', 'transforms', 'palettes', 'images', 'videos', 'sounds']);
+    expect(LIBRARY_CATEGORIES.filter(c => c.section === 'Media').map(c => c.id)).toEqual(['images', 'videos', 'sounds']);
+  });
+
+  it('media: pictures, videos and sounds apart; splats are not media', () => {
+    const m = mediaItems(
+      [{ id: 'img1', name: 'Beach', width: 10, height: 10, type: 'image/png', bytes: 1, createdAt: 1, thumb: 'data:x' }],
+      [{ id: 'v1', name: 'Clip', type: 'video/mp4', bytes: 1, createdAt: 1 }, { id: 's1', name: 'Kick', type: 'audio/wav', bytes: 1, createdAt: 1 }, { id: 'sp1', name: 'Scan', type: 'model/x-splat', bytes: 1, createdAt: 1 }],
+    );
+    expect(m.images.map(i => [i.id, i.media])).toEqual([['img1', 'image']]);
+    expect(m.videos.map(i => [i.id, i.media])).toEqual([['v1', 'video']]);
+    expect(m.sounds.map(i => [i.id, i.media])).toEqual([['s1', 'sound']]);
+  });
+
+  it('a media drop makes the node that plays it: picture → Texture, video → Texture (video), sound → Audio Source with the file, paused', () => {
+    expect(mediaNodeFor({ kind: 'image', id: 'img1', name: 'Beach' })).toEqual({ type: 'textureInput', params: { libraryId: 'img1', _imageName: 'Beach' } });
+    expect(mediaNodeFor({ kind: 'video', id: 'v1', name: 'Clip' })).toMatchObject({ type: 'videoInput', params: { videoId: 'v1' } });
+    expect(mediaNodeFor({ kind: 'sound', id: 's1', name: 'Kick' })).toEqual({ type: 'audioSource', params: { source: 'file', sampleId: 's1', _fileName: 'Kick', playing: false } });
+  });
+
+  it('placing a picture adds a Texture node at the drop point and wires it into an empty Output', () => {
+    useNodeGraphStore.setState({ activeGroupPath: [], nodes: [{ id: 'out', type: 'output', position: { x: 600, y: 0 }, inputs: { color: { type: 'vec3', label: 'Color' }, alpha: { type: 'float', label: 'Alpha' } }, outputs: {}, params: {} }] as never });
+    const id = placeMedia({ kind: 'image', id: 'img1', name: 'Beach' }, { x: 120, y: 80 })!;
+    const after = useNodeGraphStore.getState().nodes;
+    const tex = after.find(n => n.id === id)!;
+    expect(tex).toMatchObject({ type: 'textureInput', position: { x: 120, y: 80 }, params: expect.objectContaining({ libraryId: 'img1' }) });
+    expect(after.find(n => n.type === 'output')!.inputs.color.connection).toEqual({ nodeId: id, outputKey: 'color' });
+    // A sound is not wired (it has no picture) and starts paused.
+    const snd = placeMedia({ kind: 'sound', id: 's1', name: 'Kick' }, { x: 0, y: 300 })!;
+    expect(useNodeGraphStore.getState().nodes.find(n => n.id === snd)).toMatchObject({ type: 'audioSource', params: expect.objectContaining({ sampleId: 's1', playing: false }) });
+  });
+});
+
+describe('<Library>', () => {
+  it('looks like the Nodes list: sections, category rows with counts, group presets first; a category opens into pills', () => {
+    seed();
+    mount(<Library size="full" />);
+    expect($$('[data-library-section]').map(s => s.dataset.librarySection)).toEqual(['Presets']);
+    const rows = $$('[data-library-category-row]').map(r => r.dataset.libraryCategoryRow);
+    expect(rows[0]).toBe('groups');
+    expect(rows).toEqual(['groups', 'builtInGroups', 'nodes', 'functions', 'expressions', 'transforms', 'palettes']);
+    expect($('[data-library-category-row="groups"]')!.textContent).toContain('1');
+    // Nothing that isn't for the graph.
+    const text = $('[data-library]')!.textContent!;
+    for (const gone of ['Graphs', 'Shaders', 'Ring set', 'Glass room', 'Keyframe']) expect(text).not.toContain(gone);
+    click($('[data-library-category-row="groups"]'));
+    expect($('[data-library-open="groups"]')).toBeTruthy();
+    expect($$('[data-library-item]').map(p => p.textContent)).toEqual(['Glow group']);
+    click($('[data-library-item="gp_1"]'));
+    expect($('[data-library-preview="gp_1"]')!.textContent).toContain('Add to graph');
+    click($('[aria-label="Back to categories"]'));
+    expect($('[data-library-category-row="groups"]')).toBeTruthy();
+  });
+
+  it('search shows matching pills under their category', () => {
+    seed();
+    mount(<Library size="rail" />);
+    type($('[aria-label="Search the Library"]') as HTMLInputElement, 'wave');
+    const hits = $$('[data-library-item]');
+    expect(hits.find(p => p.textContent === 'Wave')?.dataset.libraryCategory).toBe('functions');
+    // Each hit under its category's heading, and nothing else saved (Sunset, Plasma) shows.
+    expect($$('[data-library-section]').map(s => s.dataset.librarySection)).toContain('functions');
+    expect($('[data-library]')!.textContent).not.toContain('Sunset');
+  });
+
+  it('shows one short line when nothing of yours is saved (the built-in groups are still there)', () => {
+    mount(<Library size="rail" />);
+    expect($('[data-library]')!.textContent).toContain('Nothing of yours here yet');
+    expect($$('[data-library-category-row]').map(r => r.dataset.libraryCategoryRow)).toEqual(['builtInGroups']);
   });
 
   it('showing the Library writes nothing', () => {
     seed();
     const before = snapshot();
-    mount(<Library size="full" filter="all" />);
-    // Its own remembered filter is the only thing it may keep.
-    const after = snapshot();
-    delete after['playfield:library:filter'];
-    expect(after).toEqual(before);
+    mount(<Library size="full" />);
+    expect(snapshot()).toEqual(before);
+  });
+});
+
+describe('Load (the top bar’s graphs list)', () => {
+  it('lists saved graphs only', () => {
+    seed();
+    mount(<GraphsList />);
+    const text = $('[data-graphs-list]')!.textContent!;
+    expect(text).toContain('Sunset');
+    expect(text).toContain('Rings');
+    for (const gone of ['Glow group', 'Wave', 'Plasma', 'My blur', 'Ring set', 'Glass room', 'Sea']) expect(text).not.toContain(gone);
+  });
+});
+
+describe('Storage is on the Files page only', () => {
+  it('the Storage card (LibraryCard) is drawn by the Files home and nowhere else', () => {
+    const files = import.meta.glob('../../**/*.tsx', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
+    const users = Object.entries(files).filter(([path, src]) => !path.includes('__tests__') && /<LibraryCard\b/.test(src)).map(([path]) => path.replace(/^(\.\.\/)+/, 'src/'));
+    expect(users).toEqual(['src/components/files/HomeView.tsx']);
+    // And the Storage panel itself only inside it (no settings tab, no phone menu sheet).
+    const panels = Object.entries(files).filter(([path, src]) => !path.includes('__tests__') && /<LibraryPanel\b/.test(src)).map(([path]) => path.replace(/^(\.\.\/)+/, 'src/'));
+    expect(panels).toEqual(['src/components/shell/LibraryPanel.tsx']);
   });
 });

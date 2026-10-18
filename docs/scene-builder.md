@@ -113,8 +113,32 @@ Every builder's presets strip (the 2D Scene Builder's **Templates** tab) ends wi
 and **+ Save this scene**: name it, and the builder's scene is kept with a picture of the viewport as
 it is now. A preset is the builder's scene (its spec, or the 3D builder's recipe), not a graph: it
 loads only in the builder it was saved from (one undo step) and is built only when you build. The
-pencil renames one, × deletes it. The built-ins stay first (the 3D Scene Builder keeps four: the GI-lit
-room, the volumetric orb, the blobs and the glass); the Warp builder has only yours.
+pencil renames one, × deletes it. The built-ins stay first, **at most four per strip**
+(`src/builders/stripPresets.ts`); the rest of the strip is yours. A builder whose strip follows a
+kind offers at most four per kind:
+
+| Builder | Built-ins on the strip |
+|---|---|
+| 3D Scene Builder | Room (GI-lit), Orb (volumetric), Blobs, Glass |
+| 2D Scene Builder | Kaleidoscope of glowing rings, Orbiting shapes, Mirrored flower, Pixel hearts |
+| Grid scene | Pixel heart, Ripple pond, Traffic, Warped weave |
+| Splat builder | Turntable, Dissolve reveal, Exploded view, Hologram |
+| Time Cube | Box of time, Highlights loop, Long exposure, Ring of frames |
+| Warp builder | none (its built-in blocks are in its Library card) |
+| Agents, per walker kind | Trail: Slime mold, Long veins, Ants with food, Frost (DLA) · Particles: Spark fountain, Smoke, Snow, Burst · Flock: Boids, Glassy streams, Bait balls, Murmuration · Crowd: Two-way lanes, One door, Crossing · Orbit: Swarm, Two arms, Opposite ways, Moths |
+| Grid Rules, per rule type | Count: Life, Seeds, Maze, Caves · Stages: Brian's Brain, Star Wars, Spirals, Lava · Smooth: Ripples, Mitosis, Worms, Labyrinth · Patterns: all three · Blocks: both |
+
+The others are no longer offered but stay in their tables, so an example, a saved graph or a recipe
+that names one still loads it.
+
+**Folding.** The strip folds (the ˅ at its left, or the top bar's presets button) to one line:
+"PRESETS · 4 built in · 2 yours: Life, Seeds, …"; click the line to open it again. Folded or open is
+remembered per builder (`builder:<builder>:studio:presets`); it starts open. The cards sit in a
+`StripRow` (`components/builders/studio/StudioShell.tsx`): it scrolls sideways, leaves room after
+the last card, and fades at an edge while more cards are past it, so "+ Save this scene" and "All…"
+never look cut off.
+
+Builder presets are not in the Library (they don't go on the graph): they live in their strip.
 
 | Builder | Kept as | Picture from |
 |---|---|---|

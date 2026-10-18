@@ -29,7 +29,8 @@ import { BUILT_IN_FUNCTIONS, findFunctions, functionsFromGraphs, type FnEntry, t
 import { GRID_LABELS } from '../../sceneBuilder2d/grid';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { BuilderLabel, BuilderNote, BuilderWindow } from '../builders/BuilderWindow';
-import { UserPresets } from '../builders/UserPresets';
+import { PresetsSummary, UserPresets } from '../builders/UserPresets';
+import { SCENE2D_STRIP_KEYS, stripOf } from '../../builders/stripPresets';
 import { presetTextToSpec, specToPresetText } from '../../builders/userPresets';
 import { focusRecipeEditor, useBuilderRecipeRequest } from '../../builders/windows';
 import { Card, NumRow, Row, rgbCss } from '../sceneBuilder/controls';
@@ -1181,7 +1182,7 @@ function TemplatesTab() {
       <MyPresets />
       <BuilderLabel>Built-in starting points</BuilderLabel>
       <BuilderNote>Starting points. Loading one replaces the form (Undo brings yours back).</BuilderNote>
-      {TEMPLATES_2D.filter(t => !t.hidden).map(t => (
+      {stripOf(TEMPLATES_2D.filter(t => !t.hidden), SCENE2D_STRIP_KEYS).map(t => (
         <Card key={t.key} id={`tpl2-${t.key}`} title={t.label} summary={t.blurb}
           actions={<Button size="sm" onClick={() => useSceneBuilder2D.getState().replace(templateScene(t.key))}>Load</Button>}>
           <BuilderNote>{t.blurb}</BuilderNote>
@@ -1287,6 +1288,7 @@ export function SceneBuilder2DModal() {
       nav={<>{TABS.filter(t => t.id !== 'templates').map(t => <StudioNavItem key={t.id} id={t.id} icon={t.icon} label={t.label} selected={tab === t.id} onClick={() => setTab(t.id)} />)}</>}
       phonePanels={[{ id: 'layers', label: 'Layers', icon: 'layers', content: <LayerList /> }]}
       surprise={surpriseBar} presets={<TemplatesTab />}
+      presetsSummary={<PresetsSummary kind="2d" builtIns={stripOf(TEMPLATES_2D.filter(t => !t.hidden), SCENE2D_STRIP_KEYS).map(t => t.label)} />}
       inspector={<div style={{ padding: '4px 16px 16px' }}>{tab === 'templates' ? <TemplatesTab /> : body}</div>}>
       <PhoneViewport2D />
     </StudioShell>

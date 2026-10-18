@@ -18,12 +18,13 @@
 import { useEffect, useMemo } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
-import { StudioShell, StudioLabel, StudioNavItem, PresetCard } from '../builders/studio/StudioShell';
+import { StripRow, StudioShell, StudioLabel, StudioNavItem, PresetCard } from '../builders/studio/StudioShell';
 import { LiveViewport } from '../builders/studio/LiveViewport';
 import { SceneCrumb } from '../builders/SceneCrumb';
 import { BuilderNote } from '../builders/BuilderWindow';
 import { Card, ColourRow, NumRow, Row } from '../sceneBuilder/controls';
-import { UserPresets } from '../builders/UserPresets';
+import { PresetsSummary, UserPresets } from '../builders/UserPresets';
+import { TIMECUBE_STRIP_KEYS, stripOf } from '../../builders/stripPresets';
 import { presetTextToSpec, specToPresetText } from '../../builders/userPresets';
 import { IconButton } from '../ui/Button';
 import { Segmented, Toggle } from '../ui/Choice';
@@ -239,18 +240,19 @@ function Inspector() {
 
 function Presets() {
   const spec = useTimeCubeBuilder(s => s.spec);
-  const pics = useMemo(() => Object.fromEntries(TC_PRESETS.map(p => [p.key, timeCubePicture(presetSpec(p.key))])), []);
+  const offered = useMemo(() => stripOf(TC_PRESETS, TIMECUBE_STRIP_KEYS), []);
+  const pics = useMemo(() => Object.fromEntries(offered.map(p => [p.key, timeCubePicture(presetSpec(p.key))])), [offered]);
   const now = useMemo(() => presetNow(spec), [spec]);
   return (
-    <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-      {TC_PRESETS.map(p => (
+    <StripRow>
+      {offered.map(p => (
         <PresetCard key={p.key} id={p.key} label={p.label} hint={`${p.blurb} Your video stays.`} src={pics[p.key]} active={now === p.key}
           onClick={() => useTimeCubeBuilder.getState().replace(withPreset(useTimeCubeBuilder.getState().spec, p.key))} />
       ))}
       <UserPresets kind="timecube" noun="time cube" getRecipe={() => specToPresetText(useTimeCubeBuilder.getState().spec)}
         onLoad={text => { const s = presetTextToSpec<TimeCubeSpec>(text); if (s) useTimeCubeBuilder.getState().replace(s); }}
         fallbackThumb={() => timeCubePicture(useTimeCubeBuilder.getState().spec)} />
-    </div>
+    </StripRow>
   );
 }
 
@@ -304,7 +306,7 @@ export function TimeCubeBuilder() {
       primary={{ label: 'Done', onClick: finishTimeCubeBuilder, title: 'Close and show the time cube on the graph (it is built as you go)' }}
       nav={<Nav />} navWidth={248}
       inspector={<Inspector />} inspectorWidth={380}
-      presets={<Presets />}>
+      presets={<Presets />} presetsSummary={<PresetsSummary kind="timecube" builtIns={stripOf(TC_PRESETS, TIMECUBE_STRIP_KEYS).map(t => t.label)} />}>
       <LiveViewport ownSize clock emptyNote="The preview is hidden: show it to see the time cube here." />
     </StudioShell>
   );

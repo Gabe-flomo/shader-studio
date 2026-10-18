@@ -16,7 +16,6 @@ import { importAnyFile } from './importAnyFile';
 import { isPlayRecordEmpty } from '../../types/play';
 import { exportEverything, importEverything } from '../../utils/libraryActions';
 import { Modal } from '../ui/Modal';
-import { LibraryPanel } from './LibraryPanel';
 import { Library } from '../library/Library';
 import { HandsLive } from '../play/HandsChip';
 import { KeyboardPill } from '../play/engine/KeyboardPill';
@@ -49,7 +48,6 @@ export function MobileTopBar({ page, onPageChange, onRecord, onClear }: {
   const moreRef = useRef<HTMLSpanElement>(null);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [library, setLibrary] = useState(false);
-  const [storage, setStorage] = useState(false);
   const session = usePlan(s => s.session);
   const rotate = useRotateFullscreen();
   const account = accountMenuItems(session);
@@ -146,9 +144,8 @@ export function MobileTopBar({ page, onPageChange, onRecord, onClear }: {
             { label: 'Export this graph', icon: 'export', hint: 'As a .play file, with what it uses', onSelect: () => offerGraphExport(null) },
             page === 'files'
               ? { label: 'Back to the Studio', icon: 'nodes', onSelect: () => onPageChange('studio') }
-              : { label: 'Files', icon: 'folder', hint: 'Everything saved: sizes, clean up, download and install', onSelect: () => onPageChange('files') },
-            { label: 'Library…', icon: 'folder', hint: 'Everything you saved: graphs, presets, functions, your nodes, shaders', onSelect: () => setLibrary(true) },
-            { label: 'Storage and backups…', icon: 'folder', hint: 'Backup folder, export and import, recordings', onSelect: () => setStorage(true) },
+              : { label: 'Files', icon: 'folder', hint: 'Everything saved: storage and backups, sizes, clean up, download and install', onSelect: () => onPageChange('files') },
+            { label: 'Library…', icon: 'folder', hint: 'Group presets, your nodes, functions, palettes and media, to add to the graph', onSelect: () => setLibrary(true) },
             { label: `Export everything${pro('files.everything')}`, icon: 'export', hint: 'Every graph, presentation, preset and setting as one ZIP', onSelect: () => { void exportEverything(); } },
             { label: `Import a library${pro('files.install')}`, icon: 'import', hint: 'A library ZIP: adds to what you have', onSelect: () => { void importEverything(); } },
             'separator',
@@ -165,13 +162,8 @@ export function MobileTopBar({ page, onPageChange, onRecord, onClear }: {
         />
       )}
       {library && (
-        <Modal title="Library" subtitle="Everything you saved" icon="folder" onClose={() => setLibrary(false)} width={440}>
+        <Modal title="Library" subtitle="What you saved, ready for the graph" icon="folder" onClose={() => setLibrary(false)} width={440}>
           <div style={{ padding: '14px 16px 18px' }}><Library size="full" onOpened={() => setLibrary(false)} /></div>
-        </Modal>
-      )}
-      {storage && (
-        <Modal title="Storage and backups" subtitle="Everything saved in this browser" icon="folder" onClose={() => setStorage(false)} width={440}>
-          <div style={{ padding: '14px 16px 18px' }}><LibraryPanel inCard /></div>
         </Modal>
       )}
       {/* The Studio's Finish panel (⋯ → Finish…), as a bottom sheet. */}

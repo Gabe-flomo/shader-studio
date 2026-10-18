@@ -17,8 +17,6 @@ import { registerPresetKind, type PresetItem, type PresetKindDef } from './prese
 import { useNodeGraphStore, loadGroupPresets } from '../store/useNodeGraphStore';
 import { COMPOUND_EFFECTS } from '../store/compoundEffects';
 import { builderPresets, presetStorageKey, PRESET_BUILDER_KINDS, type PresetBuilderKind } from '../builders/userPresets';
-import { TRAIL_PRESETS, PARTICLE_PRESETS, FLOCK_PRESETS, CROWD_PRESETS, ORBIT_PRESETS } from '../agentBuilder/presets';
-import { TC_PRESETS } from '../timeCubeBuilder/presets';
 import { LAYER_SETS_CHANGED, LAYER_SETS_KEY, parseLayerSet } from '../play/layerSets';
 import { RACK_PRESETS_CHANGED, RACK_PRESETS_KEY, parseRackPreset } from '../play/rackPresets';
 import { BUILTIN_KITS, DRUM_KITS_CHANGED, DRUM_KITS_KEY, parseDrumKit } from '../play/drumKits';
@@ -76,9 +74,8 @@ const KINDS: PresetKindDef[] = [
     return {
       id: builderPresetKind(k), label: BUILDER_LABELS[k], appliesTo: BUILDER_LABELS[k], group: 'builders',
       storage: { t: 'list', key: presetStorageKey(k), nameField: 'name' }, folderScope: `presets:builder:${k}`, events: [], idPrefix: 'up',
+      // No built-ins here: each builder's strip draws its own (at most four, builders/stripPresets.ts).
       thumbField: 'thumb', timeField: 'createdAt', valid: r => typeof r.recipe === 'string',
-      builtIns: k === 'agents' ? () => [...TRAIL_PRESETS, ...PARTICLE_PRESETS, ...FLOCK_PRESETS, ...CROWD_PRESETS, ...ORBIT_PRESETS].map(p => builtIn(builderPresetKind(k), p.key, p.label, p.hint, { key: p.key }))
-        : k === 'timecube' ? () => TC_PRESETS.map(p => builtIn(builderPresetKind(k), p.key, p.label, p.blurb, { key: p.key })) : undefined,
       afterWrite: () => store().getState().reload(),
       // The builders' strips read the in-memory list (a preset too big for storage stays until reload).
       ops: {

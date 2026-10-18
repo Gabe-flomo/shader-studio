@@ -45,8 +45,9 @@ import { backToGridScene, gridSceneOfSimulation } from '../../gridScene/actions'
 import { BuilderSlider } from '../builders/BuilderSlider';
 import { Select } from '../ui/Select';
 import { ColorSwatch } from '../ui/ColorPicker';
-import { PresetCard, StudioLabel, StudioNavItem, StudioShell } from '../builders/studio/StudioShell';
-import { UserPresets } from '../builders/UserPresets';
+import { PresetCard, StripRow, StudioLabel, StudioNavItem, StudioShell } from '../builders/studio/StudioShell';
+import { PresetsSummary, UserPresets } from '../builders/UserPresets';
+import { GRID_RULES_STRIP_KEYS, stripOfTable } from '../../builders/stripPresets';
 import { presetTextToSpec, specToPresetText } from '../../builders/userPresets';
 import { DyingStages, NeighbourhoodPictures, PictureSwitches, RuleSentence } from './BornSurvive';
 import { BlocksForm, PatternsForm } from './StencilForms';
@@ -120,8 +121,9 @@ function GridRulesBuilder({ node, onClose }: { node: GraphNode; onClose: () => v
   const [focus, setFocus] = useState<Omit<TryFocus, 'section'>>({});
   const info = sections.find(x => x.id === section)!;
 
-  const table = PRESET_TABLES[shape.type];
-  const thumbs = useGridThumbs(shape.type, table);
+  // The strip offers at most four per rule type (builders/stripPresets.ts); the whole table still matches and loads.
+  const offered = useMemo(() => Object.fromEntries(stripOfTable(PRESET_TABLES[shape.type], GRID_RULES_STRIP_KEYS[shape.type])), [shape.type]);
+  const thumbs = useGridThumbs(shape.type, offered);
   const current = matchingPreset(params);
   const surprise = (seed: number) => surpriseGridAction(node.id, seed, keepType ? shape.type : undefined);
 
@@ -197,14 +199,14 @@ function GridRulesBuilder({ node, onClose }: { node: GraphNode; onClose: () => v
         <SurpriseBar seed={surpriseSeed} onSurprise={surprise}
           title="A random rule that stays alive (tried on a test board first), with a random start and colours (one undo step)" />
       </span>
-      <div style={{ display: 'flex', gap: 12 }}>
-        {Object.entries(table).map(([key, pr]) => (
+      <StripRow>
+        {Object.entries(offered).map(([key, pr]) => (
           <PresetCard key={key} id={key} label={pr.label} hint={pr.hint} src={thumbs[key]} active={current === key} onClick={() => set(presetPatch(pr), true)} />
         ))}
         {/* Yours: the rule's settings (not the node), saved with a picture of the try board; any kind of rule. */}
         <UserPresets kind="gridRules" noun="rule" getRecipe={() => specToPresetText(gridRulesPresetOf(params))}
           onLoad={text => { const patch = presetTextToSpec<P>(text); if (patch) set(patch, true); }} />
-      </div>
+      </StripRow>
     </div>
   );
 
@@ -221,7 +223,8 @@ function GridRulesBuilder({ node, onClose }: { node: GraphNode; onClose: () => v
         <IconButton icon="fn" size="sm" disabled={!!problem} label={problem ?? 'Open as nodes: the same simulation from ordinary nodes, every node with a note'} onClick={() => { if (openAsNodes(node.id)) onClose(); }} data-open-as-nodes />
       </>}
       primary={{ label: 'Done', onClick: () => finishBuilder(onClose, [node.id]), title: 'Close the builder and show the Grid Rules node (every change is already in the graph)' }}
-      nav={nav} phoneNav={{ label: 'Rule type', icon: 'grid' }} phoneSettingsTitle={hood ? 'Under the hood' : undefined} inspector={inspector} inspectorWidth={432} navWidth={232} presets={presetStrip}>
+      nav={nav} phoneNav={{ label: 'Rule type', icon: 'grid' }} phoneSettingsTitle={hood ? 'Under the hood' : undefined} inspector={inspector} inspectorWidth={432} navWidth={232} presets={presetStrip}
+      presetsSummary={<PresetsSummary kind="gridRules" builtIns={Object.values(offered).map(p => p.label)} />}>
       <TryBoard params={params} nodeParams={node.params} focus={{ section, ...focus }} hood={hood} onUseAsStart={useAsStart} />
     </StudioShell>
   );

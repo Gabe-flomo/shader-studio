@@ -1,62 +1,80 @@
 # The Library
 
-One place for everything you save. It replaced the sidebar's Saved Graphs, Presets,
-Functions, Expression Blocks and Saved Keyframes panels, the list under Publish node → My
-nodes, and the top bar's Load menu.
+What you saved that goes on the graph, and your media. It looks and works like the sidebar's
+**Nodes** list: a search field, categories under small caps headings, each a row with its count
+that opens into its items as pills.
 
 ## Where it is
 
-- **Sidebar → Library** (the folder icon). Under it is **Storage**: how much is saved, the
-  workspace folder, Export everything and Import a library. This used to be the "Library" card.
-- **Top bar → folder button**: the same Library on its Graphs filter, with the bundled
-  Examples under it.
-- **Files → Library**: the same component at full size. Files keeps its tree (Browse), which
-  shows sizes, what uses what, and Clean up.
-- **Phone → ⋯ → Library…**. Storage and backups has its own row.
+- **Sidebar → Library** (the folder icon).
+- **Files → Library**: the same list at full width.
+- **Phone → ⋯ → Library…**.
 
-## Filters
+Not in the Library, on purpose:
 
-All · Graphs · Presets · Functions · Expression Blocks · Keyframes · My nodes · Shaders ·
-Media. A filter only shows when its type has something in it. Graphs always shows, and so
-does the filter you are on. When nothing at all is saved, the Library shows one short line
-saying so. The filter you last used is remembered (`playfield:library:filter`).
+| What | Where it is |
+|---|---|
+| Saved graphs | the top bar's **Load** button (graphs only, with the bundled Examples under them) |
+| GLSL shaders | **Code → Shader** |
+| Builder presets | their builder's presets strip (`docs/scene-builder.md`, "Your presets") |
+| Layer sets, racks, drum kits | Play |
+| Finish presets, Looks | the Finish panel |
+| Keyframe curves | the keyframe editor's Presets menu |
+| Background palettes | Backgrounds |
+| **Storage** (how much is saved, the workspace folder, Export everything, Import a library) | the **Files** page's home, and only there |
 
-**Presets** groups presets by what they apply to: nodes in the graph, Scene builders, Play,
-Finish and colour. Inside each group they are split by kind. The built-in effects (Long
-exposure, Trails…) build nodes, so they stay Effects, under "Built-in effects". Whole-picture
-presets are Finish presets (the grade's Looks and a few stacks come built in; they load in the
-Finish panel: `docs/finish-stack.md`, "One Finish").
+## Categories
 
-## What each thing does
+Group presets come first.
 
-Every row has the same actions on hover: export, rename and delete. Delete gives a toast
-with **Undo**, which puts back every key the delete touched. Search covers names, notes,
-shader groups and preset kinds. Folders work the same in every list.
-
-| Type | Click | Notes |
+| Section | Category | Comes in as |
 |---|---|---|
-| Graph | opens it | Play tag, linked presentations, versions; rename moves its versions, folder and links |
-| Function, Expression Block, Transform Vec, group preset | shows its card; double-click, **Add** or drag places it | |
-| Keyframe curve | applies it to the open keyframe editor | |
-| My node | places it; drag works too | Edit opens its GLSL or its source graph; delete asks first |
-| Shader | opens it on the Code page's Shader tab | groups come from the Code page |
-| Layer set, rack | adds it to Play | |
-| Builder presets, Finish presets, palettes, drum kits, space blocks | shows where it loads from | they load in their own builder or panel |
-| Media | opens the media manager | pictures, videos and sounds |
+| Presets | Group presets | the group you saved, wired inside |
+| | Built-in groups | the built-in effect, as a group you can open |
+| | My nodes | the node type you published |
+| | Functions | a Custom Function node |
+| | Expression Blocks | an Expression Block node |
+| | Vector transforms | a Transform Vec node |
+| | Palettes | a Palette node (a cosine palette) or a Stops Palette |
+| Media | Pictures | a Texture node showing the picture |
+| | Videos | a Texture node on its Video source, playing it (muted) |
+| | Sounds | an Audio Source on its File tab with the sound loaded, paused |
 
-**Import** (the button next to search) can bring in:
+A category with nothing in it isn't listed (Built-in groups always is). When nothing of yours is
+saved, one short line says so.
 
-- any file Playfield makes: a `.play` file, a graph, a Library export, or a library ZIP
-- several graph files at once, or a folder of graphs
-- an older `custom-fns.json`
-- node types
+## Adding things
 
-It also links to Files for storage and clean up.
+As in the Nodes list:
+
+- **click** a pill to preview it (what it is, its signature or sockets, its note, **Add to graph**,
+  and for your own things Export, Rename and Delete with Undo; My nodes also have Edit);
+- **double-click** it to add it where the view is;
+- **drag** it onto the graph to drop it there.
+
+A picture or a video dropped on the graph is wired into the Output's Color when the Output has
+nothing there yet. Every media node opens its file from the library by itself, as it does when a
+saved graph opens: nothing is stored twice (`src/library/mediaPlacement.ts`).
+
+**Import…** (under the categories) brings in a Library export, a `.play` file or a library ZIP,
+an older `custom-fns.json`, or node types. **Manage media…** opens the media manager (import,
+folders, rename, clean up).
+
+## Load
+
+The top bar's folder button lists **saved graphs only**, newest worked-on first and in your
+folders, with one search, then the bundled Examples. Each row keeps its graph actions: versions,
+linked presentations, export, rename and delete (with Undo). Its import button takes graph files
+or a folder of graphs (`src/components/library/GraphsList.tsx`).
 
 ## Code
 
-- `src/library/libraryFacade.ts`: listing, rename, delete with undo, and export or import
-  for every type. It reads and writes the same keys the old panels did:
+- `src/library/libraryCategories.ts`: the categories and what each lists (`listAddable`,
+  `mediaItems`).
+- `src/library/mediaPlacement.ts`: the node a media item becomes (`mediaNodeFor`) and placing it.
+- `src/library/libraryFacade.ts`: listing, rename, delete with undo, export and import for every
+  saved type (graphs and shaders included: Files, Load and the exports use it). It reads and
+  writes the same keys the old panels did:
 
   | Type | Where it is stored |
   |---|---|
@@ -68,19 +86,8 @@ It also links to Files for storage and clean up.
   | Shaders | `shader-studio:glsl-shaders` |
   | Presets | through the preset store (`docs/presets.md`) |
 
-  Folder scopes are unchanged: `graphs`, `functions`, `expressions`, `keyframes`,
-  `presets:usernodes`, `presets:group`, `presets:transform`.
-- `src/library/appLibrary.ts`: the app's side. It wires delete to the store (links,
-  history, the node registry), keeps the open graph's name when it is renamed, opens shaders,
-  and sends `OPEN_LIBRARY` to show the Library on a filter.
-- `src/components/library/Library.tsx`: the UI. `ItemRow.tsx` holds the shared row, preview
-  card and rename field.
-- **Export** writes a `library.json` that holds only the chosen items, with their versions and
-  folders. **Import** merges a file like that and never overwrites:
-  - A graph whose name is taken comes in as "(imported)".
-  - A preset you already have stays as yours.
-  - Lists are merged by id.
-
-  A file that holds settings or presentations goes through the full library import
-  (Storage → Import a library…).
+- `src/library/appLibrary.ts`: the app's side (deletes through the store, the open graph's name on
+  rename) and `openLibrary(category)`, which shows the Library opened on a category.
+- `src/components/library/Library.tsx`: the UI, drawn with the Nodes list's own pieces
+  (`src/components/NodeGraph/browserParts.tsx`: CapsLabel, CategoryRow, Crumb, Pill, AddHint).
 - Tests: `src/library/__tests__/library.test.tsx`.

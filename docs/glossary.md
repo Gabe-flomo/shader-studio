@@ -29,8 +29,8 @@ Node labels live in the node definitions; their rules are under "Node labels" be
 | **Rules** | Play's When/Do section. A *signal* is one event a rule listens for | Signals (as the section) |
 | **Next** | The one suggestion surface: next moves for the selected node, learned from your graphs | |
 | **App settings** | The app's own preferences, in the top bar's ⋯ menu | |
-| **Library** | Everything you save, in one place, with type filters: the sidebar entry, Files → Library, the top bar's folder button (`docs/library.md`) | Saved Graphs, Saved Keyframes |
-| **Storage** | How much is saved and where: the workspace folder, backups, export and import of everything (under the Library; the Files page) | Library (for the space meter) |
+| **Library** | What you saved that goes on the graph (group presets first, My nodes, functions, Expression Blocks, transforms, palettes) and your media, drawn like the Nodes list: the sidebar entry, Files → Library (`docs/library.md`). Saved graphs are the top bar's **Load** | Saved Graphs, Saved Keyframes |
+| **Storage** | How much is saved and where: the workspace folder, backups, export and import of everything (the Files page only) | Library (for the space meter) |
 | **Nodes reference** | Every node type with its sockets, a live picture and its GLSL, under Help | |
 | **colour** | UI copy spells it the British way | color |
 

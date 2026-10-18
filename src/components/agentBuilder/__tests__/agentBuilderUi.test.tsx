@@ -233,7 +233,7 @@ function normalizeOld() {
 describe('presets', () => {
   it('a picture card applies its rule set as one undo step; undo takes it back', () => {
     startTrail();
-    expect($$('[data-preset]').map(b => b.getAttribute('data-preset'))).toEqual(['slime', 'veins', 'cells', 'mesh', 'clumps', 'ants', 'predatorPrey', 'dla']);
+    expect($$('[data-preset]').map(b => b.getAttribute('data-preset'))).toEqual(['slime', 'veins', 'ants', 'dla']);
     click($('[data-preset="veins"]'));
     expect(groupRules(group()!).species[0].rules[0].do[0]).toMatchObject({ kind: 'turn', degrees: 20 });
     expect($('[data-studio-section="turning"] [data-studio-summary]')?.textContent).toBe('20° · wobble 7°');

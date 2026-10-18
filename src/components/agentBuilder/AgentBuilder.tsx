@@ -14,7 +14,8 @@
  * unchanged. Born, the trail's Fades / Spreads and Look write the nodes round the group. Changes
  * apply live: a quarter of a second after you stop, one undo step a burst.
  */
-import { UserPresets } from '../builders/UserPresets';
+import { PresetsSummary, UserPresets } from '../builders/UserPresets';
+import { AGENT_STRIP_KEYS, stripOf } from '../../builders/stripPresets';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { GraphNode } from '../../types/nodeGraph';
 import { useTokens } from '../../theme/themeStore';
@@ -28,7 +29,7 @@ import { restartAgents } from '../../lib/agentRunner';
 import { Button, IconButton } from '../ui/Button';
 import { Segmented, Toggle } from '../ui/Choice';
 import { Select } from '../ui/Select';
-import { PresetCard, StudioLabel, StudioNavItem, StudioShell } from '../builders/studio/StudioShell';
+import { PresetCard, StripRow, StudioLabel, StudioNavItem, StudioShell } from '../builders/studio/StudioShell';
 import { LiveViewport, type ViewRect } from '../builders/studio/LiveViewport';
 import { AgentTransport } from './AgentTransport';
 import { OrbitPad } from './OrbitPad';
@@ -403,7 +404,8 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
   const lensRef = useLensRef(cards.senses.distance, current);
   // The view ring stays between half and twice its size (0.21–0.92 of the lens); past that the lens zooms with it.
   const viewRef = useLensRef(viewRadius, `${current}:view`, 0.5, 2.2);
-  const presets = presetsFor(kind);
+  // At most four built-ins per walker kind (builders/stripPresets.ts); the rest of the strip is yours.
+  const presets = useMemo(() => stripOf(presetsFor(kind), AGENT_STRIP_KEYS[kind] ?? []), [kind]);
   const thumbs = usePresetThumbs(presets);
   const trailChannels = useMemo(() => hoodTrailChannels(set, { velocity: depositWhat === 'velocity' }), [set, depositWhat]);
 
@@ -737,12 +739,12 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
         <span style={{ flex: 1 }}><StudioLabel meta="click to apply · undo takes it back">Presets</StudioLabel></span>
         <SurpriseBar seed={surpriseSeed} onSurprise={surprise} title={`A random ${kindLabel.toLowerCase()} setup from a new seed: every number varied, new colours (one undo step)`} />
       </span>
-      <div style={{ display: 'flex', gap: 12 }}>
+      <StripRow>
         {presets.map(p => <PresetCard key={p.key} id={p.key} label={p.label} hint={p.hint} src={thumbs[p.key]} active={preset === p.key} onClick={() => applyPreset(p.key)} />)}
         {/* Yours: the rules as they are now, saved with a picture of the viewport */}
         <UserPresets kind="agents" noun="setup" getRecipe={() => agentPresetText(groupId)}
           onLoad={text => { flush(); const next = applyAgentPresetText(groupId, text, 'your preset'); if (next) { setSet(next); setSp(0); setPreset(null); setLit(null); } }} />
-      </div>
+      </StripRow>
     </div>
   );
 
@@ -877,7 +879,8 @@ function KindEditor({ groupId, madeHere, onClose, onBack }: { groupId: string; m
         <IconButton icon="fn" label="Open as nodes" size="sm" onClick={() => { flush(); onClose(); openGroupAsNodes(groupId); }} />
       </>}
       primary={{ label: madeHere ? 'Add to graph' : 'Done', onClick: close, title: madeHere ? 'Keep it (it is already live in your graph, wired to the Output)' : undefined }}
-      nav={nav} phoneNav={{ label: 'Walkers', icon: 'swarm' }} inspector={inspector} presets={presetStrip}>
+      nav={nav} phoneNav={{ label: 'Walkers', icon: 'swarm' }} inspector={inspector} presets={presetStrip}
+      presetsSummary={<PresetsSummary kind="agents" builtIns={presets.map(p => p.label)} />}>
       <LiveViewport overlay={overlay} />
       <AgentTransport groupId={groupId} />
       {hoodOpen && (

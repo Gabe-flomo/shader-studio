@@ -28,7 +28,6 @@ import { toast } from '../ui/toastStore';
 import { openTextFile } from '../../utils/fileIO';
 import { convertFragmentShader } from '../../nodes/userNodes/glslImport';
 import { spawnPoint } from './spawnPoint';
-import { LibraryCard } from '../shell/LibraryPanel';
 import { creditSentence } from '../../types/credit';
 import { HistoryPanel, CountBadge, UnreadDot } from '../history/HistoryPanel';
 import { useUnseenActivity } from '../ui/activityStore';
@@ -51,7 +50,7 @@ interface ContentPaneState {
 const SIDEBAR_TABS: Array<{ id: TabId; label: string; icon: IconName; color: (tk: Tokens) => string }> = [
   { id: 'nodes',       label: 'Nodes',           icon: 'nodes',   color: tk => tk.accent.base },
   { id: 'favorites',   label: 'Favorites',       icon: 'star',    color: tk => tk.status.warning },
-  // Everything you save, in one place: graphs, presets, functions, Expression Blocks, keyframes, your nodes, shaders, media.
+  // What you saved that goes on the graph (group presets first, your nodes, functions…) and your media.
   { id: 'library',     label: 'Library',         icon: 'folder',  color: tk => tk.status.success },
   { id: 'builder',     label: 'Publish node',    icon: 'spark',   color: tk => tk.kind.fn },
   { id: 'history',     label: 'History',         icon: 'history', color: tk => tk.accent.base },
@@ -233,10 +232,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
 
       case 'library':
         return (
-          <>
-            <Library size="rail" onOpened={onNodeAdded} />
-            <div style={{ marginTop: 10 }}><LibraryCard /></div>
-          </>
+          <Library size="rail" onOpened={onNodeAdded} />
         );
 
       case 'builder':
@@ -301,7 +297,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
             <TabSectionHeader label="My nodes" />
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '2px 2px 8px' }}>
               <span style={{ fontSize: 12, color: tk.text.muted, lineHeight: 1.45, flex: 1, minWidth: 160 }}>
-                {userNodes.length ? `${userNodes.length} node type${userNodes.length === 1 ? '' : 's'} published.` : 'Nothing published yet.'} They are in the Library, with your other saved work, and in Nodes › My nodes.
+                {userNodes.length ? `${userNodes.length} node type${userNodes.length === 1 ? '' : 's'} published.` : 'Nothing published yet.'} They are in the Library, ready to drop on the graph, and in Nodes › My nodes.
               </span>
               <Button size="sm" icon="folder" onClick={() => onShowTab('library', 'nodes')}>Show in the Library</Button>
             </div>

@@ -1,5 +1,5 @@
 import { offerGraphExport } from '../playfile/exportMenus';
-import { Library } from '../library/Library';
+import { GraphsList } from '../library/GraphsList';
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { EXAMPLE_FOLDERS, EXAMPLE_INDEX, useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { useThemeStore, useTokens } from '../../theme/themeStore';
@@ -454,20 +454,19 @@ export function SaveGraphButton({ compact = false, align = 'end', listen = false
 }
 
 /**
- * The top bar's folder button: the Library (components/library/Library.tsx) on its Graphs filter,
- * the same list, folders and actions as the sidebar's Library, with the bundled examples under it.
+ * The top bar's folder button (Load): your saved graphs only (components/library/GraphsList.tsx),
+ * with the bundled examples under them. Presets, nodes and media are the sidebar's Library.
  */
 export function LoadGraphButton({ align = 'end' }: { /** Which edge of the button the list lines up with. */ align?: 'start' | 'end' } = {}) {
   const anchor = useRef<HTMLSpanElement>(null);
   const [open, setOpen] = useState(false);
   return (
     <span ref={anchor} style={{ display: 'inline-flex' }}>
-      <IconButton icon="folder" label="Open the Library: saved graphs and examples" active={open} tooltip={!open} onClick={() => setOpen(o => !o)} />
+      <IconButton icon="folder" label="Load a graph: your saved graphs and the examples" active={open} tooltip={!open} onClick={() => setOpen(o => !o)} />
       {open && (
         <Popover anchorRef={anchor} onClose={() => setOpen(false)} align={align} width={340} padding={8}>
           <div data-load-scroll="" style={{ maxHeight: 'min(560px, 76vh)', overflowY: 'auto', overscrollBehavior: 'contain' }}>
-            <Library size="popover" filter="graphs" onOpened={() => setOpen(false)}
-              footer={<ExamplesSection onOpened={() => setOpen(false)} />} />
+            <GraphsList onOpened={() => setOpen(false)} footer={<ExamplesSection onOpened={() => setOpen(false)} />} />
           </div>
         </Popover>
       )}

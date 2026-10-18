@@ -7,15 +7,19 @@
  * builder): they load only in the builder they were saved from, and never make a graph by
  * themselves.
  *
+ * Folded (StudioShell), the strip is one line: PresetsSummary says how many built-ins and how many
+ * of yours, and their names.
+ *
  * The strip is the shared <PresetMenu> (components/presets/PresetMenu.tsx) over the builder's
- * preset kind (`builder:<kind>` in presets/presetKinds.ts), so the same presets also show in the
- * Library's Presets filter. It draws its cards inline (display: contents), so a builder puts it in
+ * preset kind (`builder:<kind>` in presets/presetKinds.ts). Builder presets aren't in the Library
+ * (they don't go on the graph): they live here. It draws its cards inline (display: contents), so a builder puts it in
  * its strip's row after its own.
  */
 import { useRef } from 'react';
 import { PresetMenu } from '../presets/PresetMenu';
 import type { PresetBuilderKind } from '../../builders/userPresets';
 import { builderPresetKind } from '../../presets/presetKinds';
+import { usePresets } from '../../presets/presetStore';
 import { captureViewportThumb } from './viewportThumb';
 
 export interface UserPresetsProps {
@@ -42,4 +46,17 @@ export function UserPresets({ kind, getRecipe, onLoad, fallbackThumb, noun = 'sc
         onApply={p => { if (typeof p.record.recipe === 'string') onLoad(p.record.recipe); }} />
     </span>
   );
+}
+
+/** The folded strip's line: "4 built in · 2 yours: Room, Orb, Blobs, Glass, My sunset…". */
+export function presetsSummaryText(builtIns: readonly string[], mine: readonly string[]): string {
+  const counts = [builtIns.length ? `${builtIns.length} built in` : '', mine.length ? `${mine.length} yours` : 'none of yours yet'].filter(Boolean).join(' · ');
+  const names = [...builtIns, ...mine];
+  return names.length ? `${counts}: ${names.slice(0, 5).join(', ')}${names.length > 5 ? '…' : ''}` : counts;
+}
+
+/** The folded presets strip's one line for a builder (StudioShell's presetsSummary). */
+export function PresetsSummary({ kind, builtIns }: { kind: PresetBuilderKind; builtIns: readonly string[] }) {
+  const { mine } = usePresets(builderPresetKind(kind));
+  return <>{presetsSummaryText(builtIns, mine.map(p => p.name))}</>;
 }
