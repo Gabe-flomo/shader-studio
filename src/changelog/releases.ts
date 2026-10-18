@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.291',
+    date: '2026-10-18',
+    title: "Cleaner pads",
+    highlights: [
+      { area: 'Studio', text: "The Sampler's pads take the full width; small \u2039 \u203a buttons above them move through the 128 notes." },
+    ],
+  },
+  {
     id: '2026.10.290',
     date: '2026-10-18',
     title: "Sampler",
