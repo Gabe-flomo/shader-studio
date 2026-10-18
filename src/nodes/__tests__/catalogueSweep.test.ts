@@ -26,6 +26,7 @@ import { CATEGORY_GROUPS, HIDDEN_NODES, libraryLayout, nodesOfRow, rowOfType } f
 import { migrateNodeParams } from '../../types/nodeGraph';
 import { resolveNodeAliases } from '../definitions/aliases';
 import { runGlsl, type Val } from '../../compiler/__tests__/glslEval';
+import { scoreNodeDef } from '../searchNodes';
 import { EXAMPLE_GRAPHS } from '../../store/exampleGraphs';
 import { migrateLoadedNodes, migrateLoadedPlay, useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { compileGraph } from '../../compiler/graphCompiler';
@@ -370,6 +371,30 @@ describe('Q12: one home per kind of node', () => {
     }
     const ungrouped = libraryLayout(new Set()).flatMap(s => s.rows.filter(r => CATEGORY_GROUPS[r.row]).flatMap(r => r.groups.filter(g => g.label === 'More').flatMap(g => g.types.map(t => `${r.row}: ${t}`))));
     expect(ungrouped).toEqual([]);
+  });
+});
+
+describe('T7: search finds the everyday words (the real scorer, over the library)', () => {
+  const lib = () => getOfferedDefinitions().filter(d => !HIDDEN_NODES.has(d.type));
+  const top = (q: string, n = 3) => lib().map(d => ({ t: d.type, s: scoreNodeDef(d, q) })).filter(x => x.s > 0)
+    .sort((a, b) => b.s - a.s || a.t.localeCompare(b.t)).slice(0, n).map(x => x.t);
+  const FIRST: Record<string, string> = {
+    heart: 'shapeSDF', hexagon: 'shapeSDF', star: 'shapeSDF', polygon: 'shapeSDF', triangle: 'shapeSDF',
+    square: 'boxSDF', rectangle: 'boxSDF', cube: 'boxSDF3D', sine: 'sin', cosine: 'cos', lerp: 'mix', interpolate: 'mix',
+    raymarch: 'marchLoopGroup', tonemap: 'toneMap', hdr: 'toneMap', exposure: 'toneMap', perlin: 'noiseFloat', worley: 'voronoi',
+    hsl: 'hsv', font: 'text', letters: 'text', checkerboard: 'gridPattern', stripes: 'waveTexture', slider: 'constant',
+    record: 'cache', people: 'segment', 'translate 3d': 'transform', 'rotate 4d': 'transform', vhs: 'glitch', dither: 'posterize',
+  };
+  for (const [q, t] of Object.entries(FIRST)) it(`“${q}” → ${t} first`, () => expect(top(q)[0]).toBe(t));
+  const AMONG: Record<string, string> = {
+    if: 'select', switch: 'select', branch: 'compare', 'ray march': 'marchLoopGroup', simplex: 'noiseFloat', crt: 'crtScreen',
+    photo: 'textureInput', checker: 'gridPattern', water: 'rippleSpace', fire: 'turbulence', freeze: 'sampleHold', track: 'blobTrack',
+    camera: 'marchCamera',
+  };
+  for (const [q, t] of Object.entries(AMONG)) it(`“${q}” → ${t} in the top 5`, () => expect(top(q, 5)).toContain(t));
+  it('Shape SDF\'s option labels count; a node without searchOptions does not match its options', () => {
+    expect(scoreNodeDef(getNodeDefinition('shapeSDF')!, 'heart')).toBeGreaterThan(80);
+    expect(scoreNodeDef(getNodeDefinition('simpleSDF')!, 'ring')).toBeLessThan(65);
   });
 });
 

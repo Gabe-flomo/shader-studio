@@ -221,3 +221,13 @@ structure map keeps each node's stage (Luminance stays a number).
 
 - **Particles** (the one node of its own row) is in the **Agents** row, in a Particles group under Start here; the
   one-node Particles row is gone on desktop and phone. Its search aliases are unchanged.
+
+## Search
+
+The audit ran the real scorer over 230 everyday words; the misses now land (`src/nodes/searchNodes.ts`):
+`SEARCH_WORDS` adds words per node (sine → Sin, lerp → Mix, raymarch → March Loop Group, tonemap / hdr / exposure →
+Tone Map, perlin / worley, hsl, font, checkerboard, slider, record, people, vhs, dither…) and `SEARCH_LEADS` makes a
+node the first answer for its words (square → Box SDF, heart / star / hexagon → Shape SDF, "translate 3d" → Transform).
+A select's option labels count when the node lists the param in `searchOptions` (Shape SDF's Shape: every one of its
+shapes finds it). An alias that is the whole query now ranks above a label that only starts with it ("if" → Select,
+not IFS). `catalogueSweep.test.ts` checks the words against the real scorer.

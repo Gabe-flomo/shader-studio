@@ -591,6 +591,7 @@ export function buildShapeSdfCall(
 
 export const ShapeSDFNode: NodeDefinition = withParamSockets({
   type: 'shapeSDF',
+  searchOptions: ['shape'],
   label: 'Shape SDF',
   category: '2D Primitives',
   description: 'Exact signed distance function — pick any of 35 IQ primitives from the dropdown.',

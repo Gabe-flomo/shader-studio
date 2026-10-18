@@ -349,6 +349,8 @@ export interface NodeDefinition {
    * ranks the node above every other match (Transform for "move", "translate", "place"…).
    */
   leadsFor?: string[];
+  /** Select params whose option labels count in search (Shape SDF's `shape`: "heart" finds it). */
+  searchOptions?: string[];
 }
 
 // ── Helper: run migrations on a node's params ─────────────────────────────────
