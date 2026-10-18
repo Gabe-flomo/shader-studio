@@ -32,7 +32,7 @@ export const STARTER_RECIPES: Readonly<Record<string, StarterRecipe[]>> = {
   ...each(['fbm', 'noiseFloat', 'waveTexture'], NOISE_RECIPES),
   voronoi: VORONOI_RECIPES,
   palette: PALETTE_RECIPES,
-  ...each(['circleSDF', 'boxSDF', 'ringSDF', 'shapeSDF', 'simpleSDF'], SDF_SHAPE_RECIPES),
+  ...each(['circleSDF', 'boxSDF', 'ringSDF', 'shapeSDF'], SDF_SHAPE_RECIPES),
   sdfUnion: SDF_COMBINE_RECIPES.union,
   sdfSubtract: SDF_COMBINE_RECIPES.subtract,
   sdfIntersect: SDF_COMBINE_RECIPES.intersect,

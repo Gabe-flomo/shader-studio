@@ -6010,11 +6010,13 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
       },
       {
         id: 'c2',
-        type: 'vec2Const',
+        type: 'constant',
         position: { x: 60, y: 520 },
-        inputs: {},
-        outputs: { val: { type: 'vec2', label: 'Vec2' } },
-        params: { x: 0.5, y: 0.25 },
+        inputs: {
+          value: { type: 'vec2', label: 'Value' },
+        },
+        outputs: { value: { type: 'vec2', label: 'Value' } },
+        params: { x: 0.5, y: 0.25, outputType: 'vec2' },
       },
       {
         id: 'g1',
@@ -6033,7 +6035,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         position: { x: 480, y: 400 },
         inputs: {
           pos: { type: 'vec2', label: 'Position', connection: { nodeId: 'uv', outputKey: 'uv' } },
-          center: { type: 'vec2', label: 'Center', connection: { nodeId: 'c2', outputKey: 'val' } },
+          center: { type: 'vec2', label: 'Center', connection: { nodeId: 'c2', outputKey: 'value' } },
         },
         outputs: { field: { type: 'float', label: 'Field' } },
         params: { k: 1.5, gridSize: 1.5 },
@@ -12668,14 +12670,19 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
       { id: 'cc_uv', type: 'uv', position: { x: 40, y: 160 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
       { id: 'cc_t', type: 'time', position: { x: 40, y: 320 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
       {
-        id: 'cc_len', type: 'vec2Angle', position: { x: 260, y: 300 },
-        inputs: { v: { type: 'vec2', label: 'Vector', connection: { nodeId: 'cc_uv', outputKey: 'uv' } } },
-        outputs: { result: { type: 'float', label: 'Angle (rad)' } }, params: {},
+        id: 'cc_len',
+        type: 'atan2',
+        position: { x: 260, y: 300 },
+        inputs: {
+          v: { type: 'vec2', label: 'Vector', connection: { nodeId: 'cc_uv', outputKey: 'uv' } },
+        },
+        outputs: { angle: { type: 'float', label: 'Angle' } },
+        params: {},
       },
       {
         id: 'cc_pal', type: 'stopPalette', position: { x: 500, y: 300 },
         inputs: {
-          value: { type: 'float', label: 'Angle', connection: { nodeId: 'cc_len', outputKey: 'result' } },
+          value: { type: 'float', label: 'Angle', connection: { nodeId: 'cc_len', outputKey: 'angle' } },
           anim: { type: 'float', label: 'Angle offset', connection: { nodeId: 'cc_t', outputKey: 'time' } },
         },
         outputs: { color: { type: 'vec3', label: 'Color' } },

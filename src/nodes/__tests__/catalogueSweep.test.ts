@@ -299,6 +299,48 @@ describe('N5: one Chladni (Plate, Field, Superposition and Wave Term)', () => {
   });
 });
 
+describe('N8: small duplicates', () => {
+  const code = (nd: GraphNode, ins: Record<string, string>) => getNodeDefinition(nd.type)!.generateGLSL(nd, ins).code;
+
+  it('Vec2 → Angle is Vector Angle with its Vector wired: the same atan call, Angle out', () => {
+    gone('vec2Angle', 'atan2');
+    const [nd] = load([saved('vec2Angle', 'a', {}, { v: ['u', 'uv'] }, ['result'])]);
+    expect(nd.type).toBe('atan2');
+    expect(code(nd, { v: 'V' })).toBe('    float a_angle = atan((V).y, (V).x);\n');
+    expect(code(nd, { y: 'Y', x: 'X' })).toBe('    float a_angle = atan(Y, X);\n');
+    const [down] = load([saved('vec2Angle', 'a', {}, { v: null }, ['result']), saved('sin', 's', {}, { input: ['a', 'result'] }, ['output'])]).slice(1);
+    expect(down.inputs.input.connection).toEqual({ nodeId: 'a', outputKey: 'angle' });
+  });
+
+  it('Vec2 / Vec3 Swizzle are Swizzle with their pattern; the same components', () => {
+    gone('vec2Swizzle', 'swizzle');
+    gone('vec3Swizzle', 'swizzle');
+    const [a, b] = load([saved('vec2Swizzle', 'a', { mode: 'xx' }, { input: null }, ['output']), saved('vec3Swizzle', 'b', { mode: 'zyx' }, { input: null }, ['output'])]);
+    expect(a.params).toMatchObject({ inputType: 'vec2', pattern: 'xx' });
+    expect(a.outputs.output.type).toBe('vec2');
+    expect(code(a, { input: 'V' })).toBe('    vec2 a_output = (V).xx;\n');
+    expect(b.params).toMatchObject({ inputType: 'vec3', pattern: 'zyx' });
+    expect(code(b, { input: 'V' })).toBe('    vec3 b_output = (V).zyx;\n');
+  });
+
+  it('Vec2 Const is a vec2 Constant: the same vec2', () => {
+    gone('vec2Const', 'constant');
+    const [c] = load([saved('vec2Const', 'c', { x: 0.5, y: -2 }, {}, ['val'])]);
+    expect(c.params).toMatchObject({ outputType: 'vec2', x: 0.5, y: -2 });
+    expect(code(c, {})).toBe('    vec2 c_value = vec2(0.5, -2.0);\n');
+  });
+
+  it('Simple SDF and SDF Colorize are hidden (registered, offered nowhere, unused by examples)', () => {
+    const offered = new Set(getOfferedDefinitions().map(d => d.type));
+    for (const t of ['simpleSDF', 'sdfColorize']) {
+      expect(NODE_REGISTRY[t], t).toBeTruthy();
+      expect(offered.has(t), t).toBe(false);
+    }
+    const OLD = ['simpleSDF', 'sdfColorize', 'vec2Angle', 'vec2Swizzle', 'vec3Swizzle', 'vec2Const'];
+    for (const [k, g] of Object.entries(EXAMPLE_GRAPHS)) expect(typesOf(g.nodes).filter(t => OLD.includes(t)), k).toEqual([]);
+  });
+});
+
 describe('Radiance Cascades 2D is retired (too slow)', () => {
   it('stays registered, is offered nowhere, and nothing uses it', () => {
     expect(NODE_REGISTRY.radianceCascadesApprox).toBeTruthy();

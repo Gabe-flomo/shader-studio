@@ -179,7 +179,7 @@ export const CATEGORY_ORDER = [...CATEGORY_SECTIONS.flatMap(s => s.categories.fl
 // ── Sub-group definitions for categories that need them ───────────────────────
 export const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: string[] }>> = {
   '2D Primitives': [
-    { label: 'SDF',      types: ['circleSDF', 'boxSDF', 'ringSDF', 'simpleSDF', 'shapeSDF', 'sdSegment', 'sdEllipse'] },
+    { label: 'SDF',      types: ['circleSDF', 'boxSDF', 'ringSDF', 'shapeSDF', 'sdSegment', 'sdEllipse'] },
     { label: 'Patterns', types: ['truchet', 'metaballs', 'lissajous'] },
   ],
   '3D Primitives': [
@@ -224,10 +224,10 @@ export const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: strin
     { label: 'Interp',     types: ['clamp', 'bounds', 'mix', 'smoothstep', 'mod', 'modSelect'] },
     { label: 'Compare',    types: ['minMath', 'max', 'step', 'sign'] },
     { label: 'Geometry',   types: ['length', 'dot', 'crossProduct', 'reflect', 'refractDir', 'luminance'] },
-    { label: 'Vec2',       types: ['vec2Const', 'makeVec2', 'splitVec2', 'transformVec', 'normalizeVec2', 'angleToVec2', 'vec2Angle'] },
+    { label: 'Vec2',       types: ['makeVec2', 'splitVec2', 'transformVec', 'normalizeVec2', 'angleToVec2'] },
     { label: 'Vec3',       types: ['makeVec3', 'splitVec3', 'floatToVec3'] },
     { label: 'Vec4',       types: ['makeVec4', 'splitVec4'] },
-    { label: 'Swizzle',    types: ['swizzle', 'vec2Swizzle', 'vec3Swizzle'] },
+    { label: 'Swizzle',    types: ['swizzle'] },
     { label: 'Complex',    types: ['complexMul', 'complexPow'] },
     { label: 'Remap',      types: ['remap'] },
   ],
@@ -254,7 +254,7 @@ export const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: strin
   SDF: [
     { label: 'Combine', types: ['sdfUnion', 'sdfIntersect', 'sdfSubtract'] },
     { label: 'Modify',  types: ['sdfOffset', 'sdfOnion', 'sdfSharpen'] },
-    { label: 'Style',   types: ['sdfFill', 'sdfColorize'] },
+    { label: 'Style',   types: ['sdfFill'] },
   ],
   '2D Space': [
     { label: 'Basic',   types: ['transform', 'shear', 'perspective2d', 'fract', 'displace'] },

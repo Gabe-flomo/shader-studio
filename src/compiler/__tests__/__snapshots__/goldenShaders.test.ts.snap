@@ -466,7 +466,7 @@ exports[`golden shaders: every Play example exports the same bundle > granulator
 
 exports[`golden shaders: every Play example exports the same bundle > gridLavaLamp 1`] = `
 {
-  "bundle": "103eef6919bd961b7c4d5373a127:7425",
+  "bundle": "1a723810b8c7c40e6ec0980f60fa:7369",
   "missing": [],
 }
 `;
@@ -900,7 +900,7 @@ exports[`golden shaders: every Play example exports the same bundle > learnRayma
 
 exports[`golden shaders: every Play example exports the same bundle > learnRect 1`] = `
 {
-  "bundle": "0572bef99dbf6f165e711916c2b8:4665",
+  "bundle": "11bdd8870c84781b326fcd306da6:4694",
   "missing": [],
 }
 `;
@@ -2720,10 +2720,10 @@ exports[`golden shaders: every example compiles as it did > colorStopsCycle 1`] 
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "13e5be78af56610d330b889501e4:4492",
+  "fragmentShader": "16a1ed71c740390c463d421834d0:4482",
   "isStateful": false,
   "liveUniforms": {},
-  "nodeSlugs": "0949f6b9d712d41d97bf27c22c6c:194",
+  "nodeSlugs": "106f8ef0d1d74b1ae32711f59759:190",
   "paramBindings": "07fc136e9c29de1a82340c060282:725",
   "paramUniforms": [
     "u_p_colorizex0_background",
@@ -6637,13 +6637,15 @@ exports[`golden shaders: every example compiles as it did > gridLavaLamp 1`] = `
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "16cae18d9d189d17e8199cd84275:3622",
+  "fragmentShader": "0d4fdef130ec31087b7ad3537a2a:3590",
   "isStateful": false,
   "liveUniforms": {},
-  "nodeSlugs": "15c1439c3be43c022e765d944a07:208",
-  "paramBindings": "1a71c62338ebfb03fdd99a8b2e08:579",
+  "nodeSlugs": "1638d98d4afb2713476e56229823:202",
+  "paramBindings": "0a8b83602915aa1150963f2b8b4c:567",
   "paramUniforms": [
     "u_p_addx0_b",
+    "u_p_cstx2_x",
+    "u_p_cstx2_y",
     "u_p_gaussianfix1_gridSize",
     "u_p_gaussianfix1_k",
     "u_p_gaussianfix2_gridSize",
@@ -6658,10 +6660,8 @@ exports[`golden shaders: every example compiles as it did > gridLavaLamp 1`] = `
     "u_p_mkv3x0xc2_b",
     "u_p_mkv3x0xc2_g",
     "u_p_mkv3x0xc2_r",
-    "u_p_vec2constx2_x",
-    "u_p_vec2constx2_y",
   ],
-  "paramValues": "1cd451be0b5d3a075a7e9ef42476:456",
+  "paramValues": "02f8767244d3500fa48bc2daad00:444",
   "passes": null,
   "success": true,
   "textureUniforms": {},
@@ -11641,17 +11641,19 @@ exports[`golden shaders: every example compiles as it did > learnRect 1`] = `
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "04d9af25285fef1785dc30f1fe17:3368",
+  "fragmentShader": "0cf602e65ea10905a6644e98a599:3408",
   "isStateful": false,
   "liveUniforms": {},
-  "nodeSlugs": "12fe62455c4e6f03e2dff6007e63:260",
-  "paramBindings": "18f50727e2cc971cd21d67d7e33b:491",
+  "nodeSlugs": "141d6f3cc8d3f00efbe679ac36cc:257",
+  "paramBindings": "0cfdf4b64e035c03b164d0d4d5ea:485",
   "paramUniforms": [
     "u_p_addx0_b",
     "u_p_colorizex0_background",
     "u_p_colorizex0_color",
     "u_p_colorizex0_gain",
     "u_p_cstx0_value",
+    "u_p_cstx0xc2_x",
+    "u_p_cstx0xc2_y",
     "u_p_divx0_b",
     "u_p_mulx0_b",
     "u_p_mulx0xc2_b",
@@ -11660,10 +11662,8 @@ exports[`golden shaders: every example compiles as it did > learnRect 1`] = `
     "u_p_sstepx0xc2_edge0",
     "u_p_sstepx0xc2_edge1",
     "u_p_subx0_b",
-    "u_p_vec2constx0_x",
-    "u_p_vec2constx0_y",
   ],
-  "paramValues": "099e18d75a87561b74b8e5040aec:384",
+  "paramValues": "105f72af97863a1c8dbac0b4b18e:378",
   "passes": null,
   "success": true,
   "textureUniforms": {},

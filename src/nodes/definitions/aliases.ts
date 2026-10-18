@@ -116,6 +116,16 @@ export const NODE_ALIASES: Record<string, NodeAlias> = {
     to: 'shaper', params: (o: Record<string, unknown>) => ({ ...o, curve: t, a: num(o.a, t === 'logisticSigmoid' ? 0.7 : 0.5), b: num(o.b, 0.5), bipolar: o.bipolar === true }),
   } satisfies NodeAlias])),
 
+  // ── 2026-10-17 catalogue sweep: small duplicates. Vec2 → Angle is Vector Angle with its Vector wired (the same
+  //    atan call); the fixed swizzles are Swizzle with their pattern; Vec2 Const is a vec2 Constant. ──
+  vec2Angle:   { to: 'atan2', outputs: { result: 'angle' } },
+  vec2Swizzle: { to: 'swizzle', params: o => ({ ...o, inputType: 'vec2', pattern: typeof o.mode === 'string' ? o.mode : 'yx', mode: undefined }),
+                 socketTypes: { inputs: { input: 'vec2' }, outputs: { output: 'vec2' } } },
+  vec3Swizzle: { to: 'swizzle', params: o => ({ ...o, inputType: 'vec3', pattern: typeof o.mode === 'string' ? o.mode : 'yzx', mode: undefined }),
+                 socketTypes: { inputs: { input: 'vec3' }, outputs: { output: 'vec3' } } },
+  vec2Const:   { to: 'constant', outputs: { val: 'value' }, params: o => ({ ...o, outputType: 'vec2', x: num(o.x, 0), y: num(o.y, 0) }),
+                 socketTypes: { inputs: { value: 'vec2' }, outputs: { value: 'vec2' } } },
+
   // ── 2026-10-17 catalogue sweep: one Chladni (physics.ts, type chladniField). Plate is Mix −1 (cos nπx cos mπy −
   //    cos mπx cos nπy), with its unstretched UV (Aspect Fill), no edge and its turbulence (Wobble on); Wave Term and
   //    Superposition are Mix 0 (adding 0 × the swapped term). Their old defaults fill missing settings. ──

@@ -174,3 +174,27 @@ Chladni Plate, Chladni Field, Chladni Superposition and Wave Term were four node
 
 Examples changed: agentRidePath (notes; its shader picks up the new settings). The two Physics examples load as they
 did ("Chladni (Quick)").
+
+## Small duplicates
+
+| Old | Now | How |
+|---|---|---|
+| Vec2 → Angle | **Vector Angle**, its new Vector input | Merged: the same `atan(v.y, v.x)`; Result → Angle |
+| Vec2 Swizzle, Vec3 Swizzle | **Swizzle** | Merged: Input vec2 / vec3, Pattern = the old Mode |
+| Vec2 Const | **Constant** (vec2) | Merged: the same `vec2(x, y)`; Val → Value |
+| Simple SDF | Shape SDF, Circle / Box / Ring SDF | Hidden: the same shapes, not the same float operations |
+| SDF Colorize | SDF Fill | Hidden: SDF Fill mixes the other way round (`mix(bg, fill, 1 − t)`), equal to rounding only |
+
+Considered and left for now:
+
+- **Color Ramp → Stops Palette**: Color Ramp is a chain of `mix()` calls between evenly spaced stops; Stops Palette
+  interpolates differently, so the colours are close but not the same. Three builders (the Look grade's Duotone and
+  Gradient map, the 2D and 3D Scene Builders' ramps) write Color Ramps, so it stays offered.
+- **One Colour Adjust node** for Brightness / Contrast, Saturation, Hue Rotate, Lift / Gamma / Gain, Shadows /
+  Highlights and Tone Curve: a node that runs every step would turn a migrated single step into several (not exact);
+  one with a step picker adds nothing over the six. Q12 gives them one home (Colour grading) instead.
+- **Size-switching matrix nodes** (Mat2 / Mat3 Construct, Inspect, × Vec, Inverse, Mix): the Mat3 versions have a
+  third vector socket, so one node needs its sockets to follow a Size setting; a later round.
+
+Examples changed: gridLavaLamp (Vec2 Const → Constant), colorStopsCycle (Vec2 → Angle → Vector Angle), learnRect
+(Vec2 Const → Constant).

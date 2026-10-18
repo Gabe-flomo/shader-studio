@@ -321,11 +321,17 @@ export const ModSelectNode: NodeDefinition = withParamSockets({
 }, ['threshold', 'softness']);
 
 export const Atan2Node: NodeDefinition = {
-  type: 'atan2', label: 'Vector Angle', aliases: ['Atan2'], category: 'Math', subcategory: 'Trigonometry', description: 'The angle of the point (X, Y) around the origin, in radians: atan(Y, X).',
-  inputs: { y: { type: 'float', label: 'Y' }, x: { type: 'float', label: 'X' } },
+  type: 'atan2', label: 'Vector Angle', aliases: ['Atan2', 'Vec2 → Angle', 'Angle of', 'Direction angle', 'Heading'], category: 'Math', subcategory: 'Trigonometry',
+  description: 'The angle of a point round the origin, in radians: atan(Y, X). Wire X and Y, or a whole vec2 into Vector (it wins when wired).',
+  inputs: {
+    y: { type: 'float', label: 'Y' }, x: { type: 'float', label: 'X' },
+    v: { type: 'vec2', label: 'Vector', hint: 'A vec2 instead of X and Y: its angle.' },
+  },
   outputs: { angle: { type: 'float', label: 'Angle' } },
   generateGLSL: (node: GraphNode, inputVars) => {
     const o = `${node.id}_angle`;
+    // A wired Vector: the old Vec2 → Angle's call.
+    if (inputVars.v) return { code: `    float ${o} = atan((${inputVars.v}).y, (${inputVars.v}).x);\n`, outputVars: { angle: o } };
     return { code: `    float ${o} = atan(${inputVars.y || '0.0'}, ${inputVars.x || '1.0'});\n`, outputVars: { angle: o } };
   },
 };
@@ -498,7 +504,7 @@ export function swizzleTypes(node: GraphNode): { input: string; output: string }
 }
 
 export const SwizzleNode: NodeDefinition = {
-  type: 'swizzle', label: 'Swizzle', aliases: ['Components', 'Reorder'], category: 'Math', subcategory: 'Vector Build/Split',
+  type: 'swizzle', label: 'Swizzle', aliases: ['Components', 'Reorder', 'Vec2 Swizzle', 'Vec3 Swizzle', 'Swap XY', 'yx'], category: 'Math', subcategory: 'Vector Build/Split',
   description: 'Any pattern of a vector’s components, as GLSL writes it: .xyx, .zwxy, .bgr, .yy… One to four letters from xyzw (or rgba), each at most as far as the input reaches. The output is as wide as the pattern.',
   inputs: { input: { type: 'vec3', label: 'Input' } },
   outputs: { output: { type: 'vec3', label: 'Output' } },
@@ -781,22 +787,6 @@ export const AngleToVec2Node: NodeDefinition = {
   },
 };
 
-export const Vec2AngleNode: NodeDefinition = {
-  type: 'vec2Angle', label: 'Vec2 → Angle', category: 'Math', subcategory: 'Angles', description: 'Get angle of a vec2 direction (atan2)',
-  inputs: { v: { type: 'vec2', label: 'Vector' } },
-  outputs: { result: { type: 'float', label: 'Angle (rad)' } },
-  defaultParams: {},
-  paramDefs: {},
-  generateGLSL: (node: GraphNode, inputVars) => {
-    const id = node.id;
-    const v  = inputVars.v || 'vec2(1.0, 0.0)';
-    return {
-      code: `    float ${id}_result = atan((${v}).y, (${v}).x);\n`,
-      outputVars: { result: `${id}_result` },
-    };
-  },
-};
-
 export const LuminanceNode: NodeDefinition = {
   type: 'luminance', label: 'Luminance', category: 'Math', subcategory: 'Color', description: 'Perceptual luminance of a vec3 RGB color (BT.709)',
   inputs: { color: { type: 'vec3', label: 'RGB' } },
@@ -1007,83 +997,6 @@ export const SelectNode: NodeDefinition = {
 
 // ─── Swizzle Nodes ────────────────────────────────────────────────────────────
 
-export const Vec2SwizzleNode: NodeDefinition = {
-  type: 'vec2Swizzle',
-  label: 'Vec2 Swizzle',
-  category: 'Math', subcategory: 'Vector Build/Split',
-  description:
-    'Reorder vec2 channels. .yx swaps X and Y — useful for axis reflection, ' +
-    '90° rotation prep, or feeding one axis into the other. .xx / .yy broadcast a single channel.',
-  inputs: {
-    input: { type: 'vec2', label: 'Input' },
-  },
-  outputs: {
-    output: { type: 'vec2', label: 'Output' },
-  },
-  defaultParams: { mode: 'yx' },
-  paramDefs: {
-    mode: {
-      label: 'Mode',
-      type: 'select',
-      options: [
-        { value: 'yx', label: '.yx  (swap X / Y)'  },
-        { value: 'xx', label: '.xx  (X broadcast)' },
-        { value: 'yy', label: '.yy  (Y broadcast)' },
-      ],
-    },
-  },
-  generateGLSL: (node, inputVars) => {
-    const id   = node.id;
-    const v    = inputVars.input || 'vec2(0.0)';
-    const mode = String(node.params.mode || 'yx');
-    return {
-      code: `    vec2 ${id}_output = ${v}.${mode};\n`,
-      outputVars: { output: `${id}_output` },
-    };
-  },
-};
-
-export const Vec3SwizzleNode: NodeDefinition = {
-  type: 'vec3Swizzle',
-  label: 'Vec3 Swizzle',
-  category: 'Math', subcategory: 'Vector Build/Split',
-  description:
-    'Reorder vec3 channels. .yzx / .zxy are cyclic permutations used for ' +
-    'cross-products (a.yzx * b.zxy - a.zxy * b.yzx), component-min (min(v, min(v.yzx, v.zxy))), ' +
-    'and color-channel cycling inside loops.',
-  inputs: {
-    input: { type: 'vec3', label: 'Input' },
-  },
-  outputs: {
-    output: { type: 'vec3', label: 'Output' },
-  },
-  defaultParams: { mode: 'yzx' },
-  paramDefs: {
-    mode: {
-      label: 'Mode',
-      type: 'select',
-      options: [
-        { value: 'yzx', label: '.yzx  (cycle forward)'  },
-        { value: 'zxy', label: '.zxy  (cycle backward)' },
-        { value: 'xxy', label: '.xxy  (X, X, Y)'        },
-        { value: 'xyy', label: '.xyy  (X, Y, Y)'        },
-        { value: 'xxx', label: '.xxx  (X broadcast)'    },
-        { value: 'yyy', label: '.yyy  (Y broadcast)'    },
-        { value: 'zzz', label: '.zzz  (Z broadcast)'    },
-        { value: 'zyx', label: '.zyx  (reverse)'        },
-      ],
-    },
-  },
-  generateGLSL: (node, inputVars) => {
-    const id   = node.id;
-    const v    = inputVars.input || 'vec3(0.0)';
-    const mode = String(node.params.mode || 'yzx');
-    return {
-      code: `    vec3 ${id}_output = ${v}.${mode};\n`,
-      outputVars: { output: `${id}_output` },
-    };
-  },
-};
 
 // ── Transform Vec node ────────────────────────────────────────────────────────
 

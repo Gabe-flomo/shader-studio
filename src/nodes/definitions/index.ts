@@ -63,7 +63,7 @@ export { GaussianFieldNode, FieldAccumulateNode, MetaballThresholdNode, FieldToL
 export { FractNode, Rotate2DNode, UVWarpNode, DisplaceNode, UvTransform2dNode, UvReciprocalNode } from './transforms';
 
 // Matrix
-export { Vec2ConstNode, MatConstNode, Mat2ConstructNode, Mat3ConstructNode, Mat2InspectNode, Mat3InspectNode, Mat2MulVecNode, Mat3MulVecNode } from './matrix';
+export { MatConstNode, Mat2ConstructNode, Mat3ConstructNode, Mat2InspectNode, Mat3InspectNode, Mat2MulVecNode, Mat3MulVecNode } from './matrix';
 
 // Spaces
 export {
@@ -197,10 +197,10 @@ export {
   NormalizeVec2Node,
   RemapNode,
   CrossProductNode, ReflectNode, ComplexMulNode, ComplexPowNode,
-  AngleToVec2Node, Vec2AngleNode, LuminanceNode, SignNode, StepNode,
+  AngleToVec2Node, LuminanceNode, SignNode, StepNode,
   WeightedAverageNode,
   CompareNode, SelectNode,
-  Vec2SwizzleNode, Vec3SwizzleNode, SwizzleNode, MakeVec4Node,
+  SwizzleNode, MakeVec4Node,
   SplitVec2Node, SplitVec3Node, SplitVec4Node,
 } from './math';
 
@@ -283,7 +283,7 @@ import { PaletteNode, GradientNode, HSVNode, PosterizeNode, InvertNode, HueRange
 import { OutputNode, Vec4OutputNode } from './output';
 import { GroupNode } from './group';
 import { ScopeNode } from './utility';
-import { Vec2ConstNode, MatConstNode, Mat2ConstructNode, Mat3ConstructNode, Mat2InspectNode, Mat3InspectNode, Mat2MulVecNode, Mat3MulVecNode, RotationMatrixNode } from './matrix';
+import { MatConstNode, Mat2ConstructNode, Mat3ConstructNode, Mat2InspectNode, Mat3InspectNode, Mat2MulVecNode, Mat3MulVecNode, RotationMatrixNode } from './matrix';
 import { Mat2MulNode, Mat3MulNode, Mat2InverseNode, Mat3InverseNode, Mat2MixNode, Mat3MixNode, ScaleMatrixNode, ShearMatrixNode, StretchMatrixNode, Mat3MulPointNode, CornerPinNode, ColorMatrixNode } from './matrixOps';
 import { LFONode, BPMSyncNode } from './animations';
 import {
@@ -296,10 +296,10 @@ import {
   NormalizeVec2Node,
   RemapNode,
   CrossProductNode, ReflectNode, RefractDirNode, ComplexMulNode, ComplexPowNode,
-  AngleToVec2Node, Vec2AngleNode, LuminanceNode, SignNode, StepNode,
+  AngleToVec2Node, LuminanceNode, SignNode, StepNode,
   WeightedAverageNode,
   CompareNode, SelectNode,
-  Vec2SwizzleNode, Vec3SwizzleNode, SwizzleNode, MakeVec4Node,
+  SwizzleNode, MakeVec4Node,
   SplitVec2Node, SplitVec3Node, SplitVec4Node,
   TransformVecNode,
 } from './math';
@@ -427,7 +427,6 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   uvTransform2d: UvTransform2dNode,
   uvReciprocal: UvReciprocalNode,
   // Matrix
-  vec2Const: Vec2ConstNode,
   matConst: MatConstNode,
   mat2Construct: Mat2ConstructNode,
   mat3Construct: Mat3ConstructNode,
@@ -859,15 +858,12 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   complexMul: ComplexMulNode,
   complexPow: ComplexPowNode,
   angleToVec2: AngleToVec2Node,
-  vec2Angle: Vec2AngleNode,
   luminance: LuminanceNode,
   sign: SignNode,
   step: StepNode,
   weightedAverage: WeightedAverageNode,
   compare: CompareNode,
   select: SelectNode,
-  vec2Swizzle: Vec2SwizzleNode,
-  vec3Swizzle: Vec3SwizzleNode,
   swizzle: SwizzleNode,
   makeVec4: MakeVec4Node,
   // Halftone
