@@ -137,3 +137,16 @@ Examples changed: curvedReverse, learn3dCombine and learn3dOrbit (Rounded Box �
 
 Hidden (still registered, so a saved graph loads and renders as before): it was too slow for what it gave. No example,
 recipe or builder used it. For light from a shape, use **SDF Glow** (its Point light mode for a lamp with a falloff).
+
+## Shapers → Shaper
+
+Ten shaping curves were ten nodes with the same sockets (x, Shape, sometimes a second Shape, Bipolar). They are one
+**Shaper** with a **Curve** picker: Exp ease, Circular ease in / out, Exp seat, Circle seat, Exp sigmoid, Logistic
+sigmoid, Circle sigmoid, Elliptic sigmoid, Quadratic Bezier (`shapers.ts`, `SHAPER_CURVES`). Each Curve runs its old
+node's generator, so the code is exactly the old node's; only the Quadratic Bezier brings its helper. The card draws
+the curve (the same curve picture the old nodes had) and the Bezier editor opens for the Quadratic Bezier curve.
+Shape is shown for the curves that read it, Shape Y for Elliptic sigmoid and Quadratic Bezier. Saved shapers are
+aliases (`curve` set, the old defaults filled: Logistic's started at 0.7). **Cubic Bezier** stays its own node (four
+control settings, and its own editor).
+
+Example changed: learnShapers (Exp Sigmoid → Shaper, Curve Exp sigmoid; the same code, renamed uniforms).

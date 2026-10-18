@@ -214,7 +214,7 @@ lesson('learnFractFloor', [
 
 lesson('learnShapers', [
   ...plotFrame(),
-  n('doubleExpSigmoid', 'levin', 760, 140, { a: 0.6, ...note('Golan Levin\'s double-exponential sigmoid: an S-curve whose sharpness is one number.') }, { x: ['xy', 'x'] }),
+  n('shaper', 'levin', 760, 140, { curve: 'doubleExpSigmoid', a: 0.6, ...note('Shaper, Curve Exp sigmoid: Golan Levin\'s double-exponential S-curve, whose sharpness is one number (Shape).') }, { x: ['xy', 'x'] }),
   n('constant', 'k', 760, 520, { value: 6, ...note('k: how early and how sharply the impulse peaks (at x = 1/k).') }),
   expr('iq', 1000, 380, 'Exp impulse', { x: ['xy', 'x'], k: ['k', 'value'] }, {}, [], 'k * x * exp(1.0 - k * x)',
     'Inigo Quilez\'s exponential impulse: rises fast to 1 at x = 1/k, then decays slowly. Good for a hit, a flash, a bounce.'),
@@ -224,9 +224,9 @@ lesson('learnShapers', [
   out(['line', 'color'], 2200),
 ], [ctl('a', 'levin::a', 'Sigmoid sharpness', 0, 1, 0.01), ctl('k', 'k::value', 'Impulse k', 1, 30, 0.1)], `**What it shows.** Beyond the built-in functions there are whole families of hand-made curves, and the Book points to two collections. Golan Levin's polynomial and exponential shaping functions give eases, seats and S-curves with one or two handles: the green line is his **Exp Sigmoid**. Inigo Quilez's functions are small formulas with a job: the orange line is his *exponential impulse*, k·x·e^(1−k·x), which shoots up to 1 and dies away slowly.
 
-**How it is built.** The plot frame with two functions. Exp Sigmoid is a node from the **Shapers** category, which holds Levin's set (Exp Ease, Exp Seat, Logistic Sigmoid, Circle Seat and Sigmoid, Elliptic Sigmoid, Bezier). The impulse is an **Expression Block** with x and k as inputs, since there's no node for it: any formula from Quilez's page can go in one the same way.
+**How it is built.** The plot frame with two functions. The **Shaper** node (Curve: Exp sigmoid) holds Levin's set on its Curve picker (Exp ease, Exp seat, Logistic sigmoid, Circle seat and sigmoid, Elliptic sigmoid, Quadratic Bezier). The impulse is an **Expression Block** with x and k as inputs, since there's no node for it: any formula from Quilez's page can go in one the same way.
 
-**Try.** Sharpness 0 is almost y = x; 1 is almost a step. Raise k and the impulse peaks earlier. Swap Exp Sigmoid for Exp Seat or Circle Seat. In the Expression Block, try Quilez's cubic pulse: 1 − smoothstep(0, 0.1, abs(x − 0.5)).`);
+**Try.** Sharpness 0 is almost y = x; 1 is almost a step. Raise k and the impulse peaks earlier. Switch the Shaper's Curve to Exp seat or Circle seat. In the Expression Block, try Quilez's cubic pulse: 1 − smoothstep(0, 0.1, abs(x − 0.5)).`);
 
 // ── Colours (chapter 6) ─────────────────────────────────────────────────────
 

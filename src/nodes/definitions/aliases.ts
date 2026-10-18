@@ -109,6 +109,13 @@ export const NODE_ALIASES: Record<string, NodeAlias> = {
   sawtoothLFO:   { to: 'lfo', params: o => ({ ...o, waveform: 'sawtooth' }) },
   triangleLFO:   { to: 'lfo', params: o => ({ ...o, waveform: 'triangle' }) },
 
+  // ── 2026-10-17 catalogue sweep: one Shaper with a Curve (shapers.ts); each curve is its old node's code. The old
+  //    defaults fill a setting the saved node lacked (Logistic's Steepness started at 0.7). ──
+  ...Object.fromEntries(['expEase', 'doubleExpSeat', 'doubleExpSigmoid', 'logisticSigmoid', 'circularEaseIn', 'circularEaseOut',
+    'doubleCircleSeat', 'doubleCircleSigmoid', 'doubleEllipticSigmoid', 'quadBezierShaper'].map(t => [t, {
+    to: 'shaper', params: (o: Record<string, unknown>) => ({ ...o, curve: t, a: num(o.a, t === 'logisticSigmoid' ? 0.7 : 0.5), b: num(o.b, 0.5), bipolar: o.bipolar === true }),
+  } satisfies NodeAlias])),
+
   // ── 2026-10-17 catalogue sweep: the rounded shapes are Box SDF 3D / Cylinder with Edges Rounded (the same
   //    function); Vertical Capsule is Capsule SDF 3D (the same function). ──
   roundedBoxSDF3D: { to: 'boxSDF3D', inputs: { radius: 'rounding' },

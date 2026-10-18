@@ -12,7 +12,11 @@ vi.hoisted(() => {
 });
 
 import { readFileSync } from 'fs';
-import type { GraphNode } from '../../types/nodeGraph';
+import type { GraphNode, NodeDefinition } from '../../types/nodeGraph';
+import {
+  ExpEaseNode, DoubleExpSeatNode, DoubleExpSigmoidNode, LogisticSigmoidNode, CircularEaseInNode, CircularEaseOutNode,
+  DoubleCircleSeatNode, DoubleCircleSigmoidNode, DoubleEllipticSigmoidNode, QuadBezierShaperNode,
+} from '../definitions/shapers';
 import { emptyPlayRecord, type PlayRecord } from '../../types/play';
 import { getNodeDefinition, getOfferedDefinitions, NODE_REGISTRY } from '../definitions';
 import { NODE_ALIASES } from '../definitions/aliases';
@@ -159,10 +163,48 @@ function runNode(nd: GraphNode, inputs: Record<string, string>, env: Record<stri
   const out = runGlsl(code, env);
   return Object.fromEntries(Object.entries(outputVars).map(([k, v]) => [k, out[v] as Val]));
 }
+const near = (a: number, b: number, eps = 1e-12) => expect(Math.abs(a - b), `${a} vs ${b}`).toBeLessThan(eps);
 const gone = (t: string, to: string) => {
   expect(NODE_REGISTRY[t], t).toBeUndefined();
   expect(NODE_ALIASES[t]?.to, t).toBe(to);
 };
+
+describe('N4: one Shaper with a Curve', () => {
+  const OLD: Record<string, NodeDefinition> = {
+    expEase: ExpEaseNode, doubleExpSeat: DoubleExpSeatNode, doubleExpSigmoid: DoubleExpSigmoidNode, logisticSigmoid: LogisticSigmoidNode,
+    circularEaseIn: CircularEaseInNode, circularEaseOut: CircularEaseOutNode, doubleCircleSeat: DoubleCircleSeatNode,
+    doubleCircleSigmoid: DoubleCircleSigmoidNode, doubleEllipticSigmoid: DoubleEllipticSigmoidNode, quadBezierShaper: QuadBezierShaperNode,
+  };
+
+  it('each old shaper migrates to Shaper with its Curve and settings, and emits exactly its old code', () => {
+    for (const [t, old] of Object.entries(OLD)) {
+      gone(t, 'shaper');
+      for (const params of [{}, { a: 0.23, b: 0.81, bipolar: true }]) {
+        const raw = saved(t, 's', params, { x: null }, ['y']);
+        const [nd] = load([raw]);
+        expect(nd.type, t).toBe('shaper');
+        expect(nd.params.curve, t).toBe(t);
+        for (const ins of [{ x: 'X' }, { x: 'X', a: 'A', b: 'B' }] as Record<string, string>[]) {
+          const want = old.generateGLSL({ ...raw, params: { ...old.defaultParams, ...params } }, ins);
+          expect(getNodeDefinition('shaper')!.generateGLSL(nd, ins), `${t} ${JSON.stringify(params)}`).toEqual(want);
+        }
+      }
+    }
+    expect(load([saved('logisticSigmoid', 's', {}, { x: null }, ['y'])])[0].params.a).toBe(0.7);
+  });
+
+  it('only the Quadratic Bezier curve brings its helper; Cubic Bezier stays its own node', () => {
+    const def = getNodeDefinition('shaper')!;
+    expect(def.glslFunctionsFor!(saved('shaper', 's', { curve: 'quadBezierShaper' }, {}, [])).join('')).toContain('quadBezierShaper(');
+    expect(def.glslFunctionsFor!(saved('shaper', 's', { curve: 'expEase' }, {}, []))).toEqual([]);
+    expect(NODE_REGISTRY.cubicBezierShaper).toBeTruthy();
+  });
+
+  it('runs the same numbers on the CPU (Exp ease, Shape 0.3, x 0.4)', () => {
+    const [nd] = load([saved('expEase', 's', { a: 0.3 }, { x: null }, ['y'])]);
+    near(runNode(nd, { x: 'X' }, { X: 0.4, pow: (a, b) => Math.pow(a as number, b as number) }).y as number, Math.pow(0.4, 0.6));
+  });
+});
 
 describe('Radiance Cascades 2D is retired (too slow)', () => {
   it('stays registered, is offered nowhere, and nothing uses it', () => {

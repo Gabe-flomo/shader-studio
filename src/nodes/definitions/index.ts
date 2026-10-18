@@ -206,12 +206,7 @@ export {
 
 
 // Shapers
-export {
-  ExpEaseNode, DoubleExpSeatNode, DoubleExpSigmoidNode, LogisticSigmoidNode,
-  CircularEaseInNode, CircularEaseOutNode,
-  DoubleCircleSeatNode, DoubleCircleSigmoidNode, DoubleEllipticSigmoidNode,
-  QuadBezierShaperNode, CubicBezierShaperNode,
-} from './shapers';
+export { ShaperNode, CubicBezierShaperNode } from './shapers';
 
 // ─── Registry ─────────────────────────────────────────────────────────────────
 
@@ -308,12 +303,7 @@ import {
   SplitVec2Node, SplitVec3Node, SplitVec4Node,
   TransformVecNode,
 } from './math';
-import {
-  ExpEaseNode, DoubleExpSeatNode, DoubleExpSigmoidNode, LogisticSigmoidNode,
-  CircularEaseInNode, CircularEaseOutNode,
-  DoubleCircleSeatNode, DoubleCircleSigmoidNode, DoubleEllipticSigmoidNode,
-  QuadBezierShaperNode, CubicBezierShaperNode,
-} from './shapers';
+import { ShaperNode, CubicBezierShaperNode } from './shapers';
 import { GridUVNode, PixelateNode, DotMaskNode, SdfMaskNode, LumaRadiusNode, RGBToCMYKNode, CMYKHalftoneNode } from './halftone';
 import { GpuParticlesNode } from './gpuParticles';
 import { BlurStageNode } from './blurStage';
@@ -864,16 +854,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   normalizeVec2: NormalizeVec2Node,
   remap: RemapNode,
   // Shapers
-  expEase: ExpEaseNode,
-  doubleExpSeat: DoubleExpSeatNode,
-  doubleExpSigmoid: DoubleExpSigmoidNode,
-  logisticSigmoid: LogisticSigmoidNode,
-  circularEaseIn: CircularEaseInNode,
-  circularEaseOut: CircularEaseOutNode,
-  doubleCircleSeat: DoubleCircleSeatNode,
-  doubleCircleSigmoid: DoubleCircleSigmoidNode,
-  doubleEllipticSigmoid: DoubleEllipticSigmoidNode,
-  quadBezierShaper: QuadBezierShaperNode,
+  shaper: ShaperNode,
   cubicBezierShaper: CubicBezierShaperNode,
   crossProduct: CrossProductNode,
   reflect: ReflectNode,

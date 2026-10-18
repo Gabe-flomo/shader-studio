@@ -150,7 +150,7 @@ export const CATEGORY_INFO: Record<string, string> = {
   Animation: 'Values that move over time: LFOs, envelopes and keyframes.',
   Math: 'Arithmetic, trigonometry, rounding, interpolation, vectors and comparison, one operation per node.',
   Matrix: '2×2, 3×3 and 4×4 matrices: build, combine and apply transforms.',
-  Shapers: 'Curves that reshape a 0 to 1 value: easing, seats, sigmoids and Béziers.',
+  Shapers: 'Curves that reshape a 0 to 1 value: Shaper (eases, seats, S-curves, a Bezier: pick the Curve) and Cubic Bezier.',
   Conditionals: 'Pick between values with a condition.',
   Functions: 'Custom GLSL functions and Expression Blocks: write your own maths.',
   'My Nodes': 'Nodes you published from your own graphs.',
@@ -230,12 +230,6 @@ export const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: strin
     { label: 'Swizzle',    types: ['swizzle', 'vec2Swizzle', 'vec3Swizzle'] },
     { label: 'Complex',    types: ['complexMul', 'complexPow'] },
     { label: 'Remap',      types: ['remap'] },
-  ],
-  Shapers: [
-    { label: 'Ease',    types: ['expEase', 'circularEaseIn', 'circularEaseOut'] },
-    { label: 'Seat',    types: ['doubleExpSeat', 'doubleCircleSeat'] },
-    { label: 'Sigmoid', types: ['doubleExpSigmoid', 'logisticSigmoid', 'doubleCircleSigmoid', 'doubleEllipticSigmoid'] },
-    { label: 'Bezier',  types: ['quadBezierShaper', 'cubicBezierShaper'] },
   ],
   // The Agents family (docs/agents-plan.md): the inside nodes only go into an open Agents group.
   Agents: [

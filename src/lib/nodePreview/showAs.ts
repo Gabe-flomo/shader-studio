@@ -142,7 +142,7 @@ export const SINGLE_INPUT_TRANSFORMS: ReadonlySet<string> = new Set([
   'fract', 'fractRaw', 'exp', 'sqrt', 'floor', 'ceil', 'negate', 'sign', 'mod', 'tanh', 'round', 'step',
   'clamp', 'quantize', 'minMath', 'max',
   'expEase', 'doubleExpSeat', 'doubleExpSigmoid', 'logisticSigmoid', 'circularEaseIn', 'circularEaseOut',
-  'doubleCircleSeat', 'doubleCircleSigmoid', 'doubleEllipticSigmoid', 'quadBezierShaper', 'cubicBezierShaper',
+  'doubleCircleSeat', 'doubleCircleSigmoid', 'doubleEllipticSigmoid', 'quadBezierShaper', 'shaper', 'cubicBezierShaper',
 ]);
 
 /**

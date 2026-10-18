@@ -3095,7 +3095,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
           {node.type === 'transformVec' && (
             <CardButton icon="grid" on={showTransformVecModal} label="Open the Transform Vec editor" onClick={() => setShowTransformVecModal(v => !v)} />
           )}
-          {(node.type === 'cubicBezierShaper' || node.type === 'quadBezierShaper') && (
+          {(node.type === 'cubicBezierShaper' || node.type === 'quadBezierShaper' || (node.type === 'shaper' && node.params.curve === 'quadBezierShaper')) && (
             <CardButton icon="curve" on={showBezierModal} label="Open the Bezier editor" onClick={() => setShowBezierModal(v => !v)} />
           )}
           {node.type === 'floatWarp' && (
@@ -4236,7 +4236,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
       )}
 
       {/* ── Bezier editor modal ── */}
-      {showBezierModal && (node.type === 'cubicBezierShaper' || node.type === 'quadBezierShaper') && (
+      {showBezierModal && (node.type === 'cubicBezierShaper' || node.type === 'quadBezierShaper' || (node.type === 'shaper' && node.params.curve === 'quadBezierShaper')) && (
         <BezierEditorModal node={node} onClose={() => setShowBezierModal(false)} />
       )}
 

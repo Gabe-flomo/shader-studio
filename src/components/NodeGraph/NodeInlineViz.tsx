@@ -1,3 +1,4 @@
+import { shaperCurveType } from '../../nodes/definitions/shapers';
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { toast } from '../ui/toastStore';
 import { candidateFor, collectPlayCandidates } from '../../play/playControls';
@@ -1599,7 +1600,7 @@ export function ShaperCurveViz({ node }: { node: GraphNode }) {
     ctx.setLineDash([]);
 
     // Control point guides for bezier nodes
-    if (n.type === 'quadBezierShaper') {
+    if (shaperCurveType(n) === 'quadBezierShaper') {
       const ax = typeof n.params.a === 'number' ? n.params.a : 0.5;
       const ay = typeof n.params.b === 'number' ? n.params.b : 0.5;
       ctx.strokeStyle = `${pal.red}40`;
@@ -1624,7 +1625,7 @@ export function ShaperCurveViz({ node }: { node: GraphNode }) {
     }
 
     // Curve
-    const fn = evalShaper(n.type, n.params);
+    const fn = evalShaper(shaperCurveType(n), n.params);
     const isBipolar = n.params.bipolar === true;
     // Map pixel x → domain value and domain y → canvas y
     const xFromPx = (px: number) => isBipolar ? (px / W) * 2 - 1 : px / W;
@@ -5306,6 +5307,7 @@ function NodeInlineVizSwitch({ node, onEnterGroup }: { node: GraphNode; onEnterG
     case 'doubleCircleSigmoid':
     case 'doubleEllipticSigmoid':
     case 'quadBezierShaper':
+    case 'shaper':
     case 'cubicBezierShaper':  return <ShaperCurveViz    node={node} />;
     case 'sin':
     case 'cos':            return <SinCosWaveViz          node={node} />;
@@ -5611,7 +5613,7 @@ export const INLINE_VIZ_TYPES = new Set<string>([
   'smoothstep', 'clamp', 'mix', 'addColor',
   'expEase', 'doubleExpSeat', 'doubleExpSigmoid', 'logisticSigmoid',
   'circularEaseIn', 'circularEaseOut', 'doubleCircleSeat', 'doubleCircleSigmoid',
-  'doubleEllipticSigmoid', 'quadBezierShaper', 'cubicBezierShaper',
+  'doubleEllipticSigmoid', 'quadBezierShaper', 'shaper', 'cubicBezierShaper',
   'sin', 'cos', 'tan',
   'toneCurve', 'shadowsHighlights', 'liftGammaGain', 'hueRotate', 'colorSaturation',
   'mat2Construct', 'mat2Inspect', 'mat3Construct', 'mat3Inspect',

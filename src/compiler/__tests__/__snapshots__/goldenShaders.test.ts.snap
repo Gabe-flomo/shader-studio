@@ -928,7 +928,7 @@ exports[`golden shaders: every Play example exports the same bundle > learnShape
 
 exports[`golden shaders: every Play example exports the same bundle > learnShapers 1`] = `
 {
-  "bundle": "105eb0855d0d25130260a3e604ae:5727",
+  "bundle": "0bde34b2e932070e6b2e4d544027:5703",
   "missing": [],
 }
 `;
@@ -11766,11 +11766,11 @@ exports[`golden shaders: every example compiles as it did > learnShapers 1`] = `
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "10908ef42485a711b3189be90448:4218",
+  "fragmentShader": "0c8e3414dd77581337d678bbf1b5:4202",
   "isStateful": false,
   "liveUniforms": {},
-  "nodeSlugs": "012f8dda26c70100f466ad722be3:284",
-  "paramBindings": "069ca82a5052301b96ebb96318e9:586",
+  "nodeSlugs": "0376bb0b5f803c1564f57ffb209f:280",
+  "paramBindings": "0a99b0cff83b01092d10bf54e70f:582",
   "paramUniforms": [
     "u_p_colorizex0_background",
     "u_p_colorizex0_color",
@@ -11785,9 +11785,9 @@ exports[`golden shaders: every example compiles as it did > learnShapers 1`] = `
     "u_p_comparex0xc2_smoothing",
     "u_p_cstx0_value",
     "u_p_divx0_b",
-    "u_p_doubleexpsx0_a",
+    "u_p_shaperx0_a",
   ],
-  "paramValues": "1a69e0464058cb05af5c1e766327:481",
+  "paramValues": "1e9e7bee311d3216d3829c17ea40:477",
   "passes": null,
   "success": true,
   "textureUniforms": {},
