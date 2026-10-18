@@ -45,9 +45,13 @@ The card shows a small live spectrum (bass on the left, log frequency) with your
   for its frequency, up / down or scroll over it for its width (up narrows); click it for its floating panel:
   name, colour, Freq and Width (type, or drag the label), **Shape** (Band, Low cut = everything above, High cut =
   everything below), **Slope** (12 / 24 / 48 dB/oct), **Solo** (hear just that band), Delete. Keys: Delete,
-  ← → a semitone (Shift: a third of an octave), ↑ ↓ width (a cut: slope), Esc. A band's lo / hi are what it
-  measures; the shape and slope draw its curve and shape what Solo and Hear hovered play. Bands saved before
-  shapes open as Band.
+  ← → a semitone (Shift: a third of an octave), ↑ ↓ width (a cut: slope), Esc. Delete removes the selected band
+  wherever the focus is in the window (never the node behind it). A band's lo / hi are what it measures and are
+  the −3 dB points of its curve: each curve is the exact response of the biquads Solo and Hear hovered play
+  (lib/audioTools/bandFilter.ts), drawn against a 0 dB line near the top with a dB scale on the right (to −48):
+  a Band peaks at 0 dB with Q = √(2^N)/(2^N − 1) for N octaves (0.1 oct is Q 14.4, a narrow spike), a cut is a
+  Butterworth that is −3 dB at its corner and falls at its slope. The bright line is the bands together (the
+  most any lets through). Bands saved before shapes open as Band.
 - **Add a band**: Sub, Bass, Kick, Snare, Hi-hat, Vocals, Air. Kick, Snare and Hi-hat come as triggers with Hit's
   ranges (Threshold 0.5, 0.35 and 0.2: broad, noisy bands read lower); the others send their level.
 - **Each band** has a name and a colour, **Low** and **High** in Hz, its **Gate**, and what it sends out:

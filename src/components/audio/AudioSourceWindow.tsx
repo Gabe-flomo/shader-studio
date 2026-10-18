@@ -41,6 +41,7 @@ import { Segmented, Toggle } from '../ui/Choice';
 import { NumberInput } from '../NodeGraph/NumberInput';
 import { addDrawer } from './drawLoop';
 import { BandEqEditor, type Hearing } from './BandEqEditor';
+import { isBandDeleteKey } from './bandEq';
 import { AudioTransport } from './AudioTransport';
 
 const HIT_TICK = 'rgba(249,226,175,0.9)';
@@ -127,6 +128,23 @@ export function AudioSourceWindow({ nodeId, onClose, onLoad }: { nodeId: string;
   const sounds = node ? audioSoundsOf(node.params) : [];
   const trimIn = Number(node?.params.trimIn ?? 0), trimOut = Number(node?.params.trimOut ?? 0);
   useEffect(() => { latest.current = { bands, sounds, trimIn, trimOut, selected, selection }; });
+  /** Removes a band (set each render: it writes the latest bands). */
+  const removeBandRef = useRef<(id: string) => void>(() => {});
+  // Delete / Backspace in the window removes the selected band, wherever the focus is (a row clicked, the panel's
+  // buttons, the spectrum), and never reaches the graph: there it would delete the Audio Source node itself (it is
+  // the selected node behind the window), closing the window and dropping its wires. The capture phase on window
+  // runs before the app's shortcuts.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!isBandDeleteKey(e)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const L = latest.current;
+      if (L.selected && L.bands.some(b => b.id === L.selected)) removeBandRef.current(L.selected);
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, []);
 
   useEffect(() => {
     const mic = new Float32Array(MIC_HISTORY);
@@ -230,6 +248,9 @@ export function AudioSourceWindow({ nodeId, onClose, onLoad }: { nodeId: string;
   const setBands = (next: AudioBandSpec[], structural: boolean) => set({ bands: next }, !structural);
   const patchBand = (id: string, p: Partial<AudioBandSpec>, structural = false) => setBands(bands.map(b => (b.id === id ? { ...b, ...p } : b)), structural);
   const addBand = (preset: string | { lo: number; hi: number }) => { const b = newBand(bands, preset); setBands([...bands, b], true); setSelected(b.id); };
+  /** Remove a band (and its outputs' wires); let go of it if it was selected. */
+  const removeBand = (id: string) => { setBands(bands.filter(q => q.id !== id), true); if (selected === id) setSelected(null); };
+  removeBandRef.current = removeBand;
   // The editor's band, its row: picked in one, highlighted (and brought into view) in the other.
   useEffect(() => { if (selected) document.querySelector(`[data-band-row="${selected}"]`)?.scrollIntoView({ block: 'nearest' }); }, [selected]);
 
@@ -391,7 +412,7 @@ export function AudioSourceWindow({ nodeId, onClose, onLoad }: { nodeId: string;
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <span style={head}>Bands · double-click to add one, drag its handle to move it, scroll over it for its width</span>
           {(hearHover || hearing) && <span data-hearing style={{ ...small, color: tk.text.secondary }}>
-            {hearing ? `Hearing ${hearing.name ? `${hearing.name}: ` : ''}${fmtHz(hearing.lo)}–${fmtHz(hearing.hi)} Hz` : kind === 'file' ? 'Hover the spectrum to hear just those frequencies' : 'Hear hovered works on the File tab'}
+            {hearing ? `Hearing ${hearing.name ? `${hearing.name}: ` : ''}${Math.round(hearing.lo)}–${Math.round(hearing.hi)} Hz (−3 dB)` : kind === 'file' ? 'Hover the spectrum to hear just those frequencies' : 'Hear hovered works on the File tab'}
           </span>}
           <span style={{ marginLeft: 'auto' }}>
             <Toggle checked={hearHover} onChange={setHearHover} label="Hear hovered" />
@@ -434,7 +455,7 @@ export function AudioSourceWindow({ nodeId, onClose, onLoad }: { nodeId: string;
               <Button size="sm" data-learn-noise onClick={e => { e.stopPropagation(); learnNoise(b); }}
                 title={kind === 'file' ? 'Set the Gate just over the band\'s noise in the selection (Drag: Select a quiet stretch)' : 'Set the Gate just over the band\'s noise in the last two seconds: keep it quiet first'}>Learn noise</Button>
               <canvas ref={c => { if (c) meterRefs.current.set(b.id, c); else meterRefs.current.delete(b.id); }} style={{ width: 84, height: 18, display: 'block', marginLeft: 'auto' }} title="The band now: its level, and a flash on each hit" />
-              <Button size="sm" variant="ghost" onClick={e => { e.stopPropagation(); setBands(bands.filter(q => q.id !== b.id), true); }} title="Remove the band (and its outputs' wires)">✕</Button>
+              <Button size="sm" variant="ghost" onClick={e => { e.stopPropagation(); removeBand(b.id); }} title="Remove the band (and its outputs' wires)">✕</Button>
               {b.trigger && (
                 <canvas ref={c => { if (c) scopeRefs.current.set(b.id, c); else scopeRefs.current.delete(b.id); }} data-trigger-scope={b.id}
                   onPointerDown={e => onScope(e, b, 'down')} onPointerMove={e => onScope(e, b, 'move')} onPointerUp={() => { scopeDrag.current = null; }}

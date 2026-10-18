@@ -4,10 +4,12 @@
  * curve each shape draws, and what a drag or a scroll does to a band.
  *
  * A band's lo / hi (lib/audioTools/bands.ts) stay what the analysis measures. The view shows them as a centre
- * frequency and a width in octaves (Band), or a corner frequency (Low cut: everything above lo; High cut:
- * everything below hi), with edges that fall at the band's slope (12 / 24 / 48 dB per octave, Butterworth-like).
+ * frequency and a width in octaves (Band, Q = √(2^N)/(2^N − 1)), or a corner frequency (Low cut: everything above lo;
+ * High cut: everything below hi). lo and hi are the −3 dB points of the filters the band is heard through and drawn
+ * as (lib/audioTools/bandFilter.ts).
  */
 import { BAND_MAX_HZ, BAND_MIN_HZ, type AudioBandShape, type AudioBandSlope } from '../../lib/audioTools/bands';
+import { DEFAULT_SAMPLE_RATE, bandGain, gainDb } from '../../lib/audioTools/bandFilter';
 
 export const MIN_WIDTH_OCT = 0.1;
 export const MAX_WIDTH_OCT = 8;
@@ -77,36 +79,18 @@ export function wheelSlope(slope: AudioBandSlope, deltaY: number): AudioBandSlop
   return order[clamp(i, 0, order.length - 1)];
 }
 
-/** A Band's width in octaves as a filter Q (and back): 1 octave is Q 1.41. */
-export const widthToQ = (oct: number): number => Math.sqrt(2 ** oct) / (2 ** oct - 1);
-export function qToWidth(q: number): number {
-  // Solve sqrt(2^N) / (2^N − 1) = q for 2^N.
-  const a = 1 / (2 * q), r = a + Math.sqrt(a * a + 1);
-  return 2 * Math.log2(r);
-}
+// ── The curve: the filters the band is heard through (lib/audioTools/bandFilter.ts) ──────────────────────────
 
-// ── The curve ─────────────────────────────────────────────────────────────────────────────────────────────
-
-/** A Butterworth-like high-pass at `fc` of `slope` dB/oct: 0.707 (−3 dB) at the corner. */
-const hp = (hz: number, fc: number, n: number) => 1 / Math.sqrt(1 + (fc / hz) ** (2 * n));
-const lp = (hz: number, fc: number, n: number) => 1 / Math.sqrt(1 + (hz / fc) ** (2 * n));
+export { widthToQ, qToWidth, bandGains, gainDb, DEFAULT_SAMPLE_RATE } from '../../lib/audioTools/bandFilter';
 
 /**
- * How much of `hz` the band lets through, 0–1 (1 at a Band's centre, about 0.707 at its edges for a wide one,
- * falling by the slope beyond). Low cut: 0.707 at lo, 1 well above. High cut: the mirror.
+ * How much of `hz` the band lets through, 0–1, from the same biquads Solo / Hear hovered play: 1 (0 dB) at a Band's
+ * centre and 0.707 (−3 dB) at its lo and hi; a cut 0.707 at its corner, 1 well inside, falling at its slope beyond.
  */
-export function bandResponse(b: BandLike, hz: number): number {
-  const n = (b.slope ?? 24) / 6;
-  const f = Math.max(1, hz);
-  if (b.shape === 'lowcut') return hp(f, b.lo, n);
-  if (b.shape === 'highcut') return lp(f, b.hi, n);
-  const c = Math.sqrt(b.lo * b.hi);
-  const peak = hp(c, b.lo, n) * lp(c, b.hi, n);
-  return Math.min(1, (hp(f, b.lo, n) * lp(f, b.hi, n)) / Math.max(1e-9, peak));
-}
+export const bandResponse = (b: BandLike, hz: number, sampleRate = DEFAULT_SAMPLE_RATE): number => bandGain(b, hz, sampleRate);
 
 /** Response in dB (−∞ floored at −120). */
-export const responseDb = (r: number): number => (r > 1e-6 ? 20 * Math.log10(r) : -120);
+export const responseDb = gainDb;
 
 // ── Labels ────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -138,3 +122,16 @@ export const SHAPE_HINTS: Record<AudioBandShape, string> = {
   lowcut: 'Low cut: everything above its frequency',
   highcut: 'High cut: everything below its frequency',
 };
+
+/**
+ * The Audio Source window's Delete (removes its selected band): Delete or Backspace, without ⌘ / Ctrl / Alt, and not
+ * typed into a field (a band's name, a number).
+ */
+export function isBandDeleteKey(e: { key: string; metaKey?: boolean; ctrlKey?: boolean; altKey?: boolean; target?: EventTarget | null }): boolean {
+  if (e.key !== 'Delete' && e.key !== 'Backspace') return false;
+  if (e.metaKey || e.ctrlKey || e.altKey) return false;
+  const el = e.target as HTMLElement | null | undefined;
+  if (el && typeof el.tagName === 'string' && (/^(TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable)) return false;
+  if (el && el.tagName === 'INPUT' && !/^(color|checkbox|radio|range|button)$/.test((el as HTMLInputElement).type)) return false;
+  return true;
+}
