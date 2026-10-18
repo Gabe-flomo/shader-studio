@@ -23,8 +23,13 @@ export const PIECES_TYPES: readonly string[] = ['pieces', 'pieceBalls'];
  *    Chromatic Aberration (lens) on a Pass of the picture.
  *  - Bloom (it glowed last frame's picture, so moving things lagged) → a Pass + Glow (texture), same frame
  *    (right-click an old Bloom → Upgrade to same-frame glow does it: nodes/upgradeBloom.ts).
+ *  - Gaussian Blur → Blur (texture); Radial Blur → Radial Fast Blur; Lens Blur and Depth of Field → Depth of Field
+ *    (texture) (Focus Point / Depth); Tilt-Shift Blur → Tilt-Shift (texture). All of them read last frame's picture.
  */
-export const SWEPT_EFFECT_TYPES: readonly string[] = ['light2d', 'chromaShift', 'chromaticAberration', 'bloom'];
+export const SWEPT_EFFECT_TYPES: readonly string[] = [
+  'light2d', 'chromaShift', 'chromaticAberration', 'bloom',
+  'gaussianBlur', 'radialBlur', 'lensBlur', 'depthOfField', 'tiltShiftBlur',
+];
 
 /**
  * Retired for good: Ride a curve (its curves built in) gave way on 2026-10-15 to Ride a path, which rides

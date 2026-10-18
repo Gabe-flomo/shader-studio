@@ -85,7 +85,7 @@ export const FLOWS: Record<FlowId, FlowInfo> = {
   pass: {
     id: 'pass', label: 'Passes',
     stages: ['source', 'pass', 'rule', 'readout', 'colour', 'post'],
-    alias: { space: 'source', camera: 'source', bend: 'rule', shape: 'source', objects: 'source', combine: 'source', scene: 'source', march: 'source', light: 'readout', shapeIt: 'readout', sense: 'rule', steer: 'rule', move: 'rule', deposit: 'rule', trail: 'rule', draw: 'readout' },
+    alias: { space: 'source', camera: 'source', bend: 'source', shape: 'source', objects: 'source', combine: 'source', scene: 'source', march: 'source', light: 'readout', shapeIt: 'readout', sense: 'rule', steer: 'rule', move: 'rule', deposit: 'rule', trail: 'rule', draw: 'readout' },
   },
   agents: {
     id: 'agents', label: 'Agents',
@@ -193,7 +193,7 @@ export const TYPE_STAGE: Record<string, StageOf> = {
   rayMarch: 'march', rayRender: 'march', marchLoopGroup: 'march', giLitMarchGroup: 'march', volumetricScene: 'march',
   glassScene: 'march', sceneBuilder: 'march', timeCubeView: 'march', frameStack: 'march', volumeGlow: 'light',
   // Passes.
-  pass: 'pass', blurTexture: 'rule', displaceTexture: 'rule', jumpFloodTexture: 'rule', displacementMap: 'bend',
+  pass: 'pass', blurTexture: 'rule', dofTexture: 'readout', tiltShiftTexture: 'readout', displaceTexture: 'rule', jumpFloodTexture: 'rule', displacementMap: 'bend',
   textureFade: 'rule', textureFeedback: 'pass', textureNeighbours: 'rule', gridRules: 'rule', echo: 'pass',
   // Simulation: the Agents family, step by step.
   agentSense: 'sense', agentNeighbours: 'sense', agentSteer: 'steer',

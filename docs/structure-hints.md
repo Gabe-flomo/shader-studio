@@ -85,103 +85,103 @@ WRITE_DOCS=1 npx vitest run src/structure/__tests__/stats.test.ts
 ```
 
 <!-- stats:start -->
-395 bundled examples: 240 2D, 61 3D, 36 Passes, 58 Agents.
+496 bundled examples: 278 2D, 91 3D, 56 Passes, 71 Agents.
 
-**2D** — 240 examples, 830 stage links. Forward 703, same stage 87, feedback 0, colour into an input 25, backward 15: **97.9% of order-carrying links follow the flow**; 10 of 240 examples have any backward link.
+**2D** — 278 examples, 909 stage links. Forward 754, same stage 111, feedback 0, colour into an input 29, backward 15: **98% of order-carrying links follow the flow**; 10 of 278 examples have any backward link.
 
 | Link | Examples with it | Share |
 |---|---:|---:|
-| Space → Shape | 176 | 73.3% |
-| Shape → Shape it | 120 | 50% |
-| Shape it → Post | 88 | 36.7% |
-| Shape → Colour | 74 | 30.8% |
-| Colour → Post | 36 | 15% |
-| Space → Bend space | 33 | 13.8% |
-| Space → Colour | 26 | 10.8% |
-| Bend space → Shape | 25 | 10.4% |
-| Space → Post | 11 | 4.6% |
-| Bend space → Colour | 9 | 3.8% |
+| Space → Shape | 177 | 63.7% |
+| Shape → Shape it | 135 | 48.6% |
+| Shape it → Post | 88 | 31.7% |
+| Shape → Colour | 74 | 26.6% |
+| Colour → Post | 35 | 12.6% |
+| Space → Bend space | 35 | 12.6% |
+| Space → Colour | 29 | 10.4% |
+| Bend space → Shape | 28 | 10.1% |
+| Shape it → Colour | 10 | 3.6% |
+| Bend space → Colour | 9 | 3.2% |
 
 | Stages feeding the Output | Examples |
 |---|---:|
 | Space → Shape → Shape it → Post | 85 |
 | Space → Shape → Colour | 31 |
-| Space → Shape → Colour → Post | 29 |
-| Space → Colour | 14 |
-| Space → Shape → Shape it | 12 |
-| Space → Shape | 7 |
+| Space → Shape → Colour → Post | 28 |
+| Space → Colour | 19 |
+| Space → Shape → Shape it | 16 |
+| Space | 15 |
 
-**3D** — 61 examples, 555 stage links. Forward 448, same stage 105, feedback 0, colour into an input 0, backward 2: **99.6% of order-carrying links follow the flow**; 2 of 61 examples have any backward link.
+**3D** — 91 examples, 908 stage links. Forward 706, same stage 182, feedback 0, colour into an input 2, backward 18: **97.5% of order-carrying links follow the flow**; 11 of 91 examples have any backward link.
 
 | Link | Examples with it | Share |
 |---|---:|---:|
-| Camera → March | 44 | 72.1% |
-| Scene → March | 43 | 70.5% |
-| Bend space → Objects | 24 | 39.3% |
-| Objects → Combine | 15 | 24.6% |
-| Objects → March | 15 | 24.6% |
-| March → Post | 14 | 23% |
-| March → Colour | 13 | 21.3% |
-| Combine → Scene | 12 | 19.7% |
-| March → Lighting | 9 | 14.8% |
-| Scene → Lighting | 9 | 14.8% |
+| Camera → March | 67 | 73.6% |
+| Scene → March | 67 | 73.6% |
+| Bend space → Objects | 43 | 47.3% |
+| March → Post | 36 | 39.6% |
+| Objects → Combine | 28 | 30.8% |
+| Lighting → Post | 25 | 27.5% |
+| Combine → Scene | 25 | 27.5% |
+| March → Lighting | 24 | 26.4% |
+| Objects → March | 19 | 20.9% |
+| Objects → Scene | 16 | 17.6% |
 
 | Stages feeding the Output | Examples |
 |---|---:|
-| Objects → March | 15 |
-| Camera → Bend space → Objects → Scene → March | 7 |
-| Camera → Bend space → Objects → Combine → Scene → March → Lighting → Post | 5 |
+| Objects → March | 18 |
+| Camera → Bend space → Objects → Combine → Scene → March → Lighting → Post | 13 |
+| Camera → Bend space → Objects → Scene → March | 8 |
+| Camera → Objects → Scene → March → Lighting → Post | 5 |
+| Camera → Bend space → Objects → Combine → Scene → March → Post | 5 |
 | Camera → Objects → Scene → March | 4 |
-| Camera → Bend space → Objects → Scene → March → Colour | 3 |
-| Camera → Objects → Scene → March → Lighting → Colour → Post | 3 |
 
-**Passes** — 36 examples, 348 stage links. Forward 197, same stage 46, feedback 102, colour into an input 0, backward 3: **98.5% of order-carrying links follow the flow**; 2 of 36 examples have any backward link.
+**Passes** — 56 examples, 580 stage links. Forward 313, same stage 126, feedback 122, colour into an input 13, backward 6: **98.1% of order-carrying links follow the flow**; 5 of 56 examples have any backward link.
 
 | Link | Examples with it | Share |
 |---|---:|---:|
-| Source → Pass | 18 | 50% |
-| Pass → Read out | 16 | 44.4% |
-| Pass → Rule | 15 | 41.7% |
-| Read out → Colour | 11 | 30.6% |
-| Pass → Colour | 8 | 22.2% |
-| Source → Read out | 6 | 16.7% |
-| Source → Colour | 6 | 16.7% |
-| Source → Rule | 3 | 8.3% |
-| Rule → Read out | 3 | 8.3% |
-| Pass → Post | 2 | 5.6% |
+| Pass → Read out | 33 | 58.9% |
+| Source → Pass | 24 | 42.9% |
+| Read out → Colour | 20 | 35.7% |
+| Source → Read out | 19 | 33.9% |
+| Pass → Rule | 17 | 30.4% |
+| Source → Colour | 13 | 23.2% |
+| Pass → Colour | 11 | 19.6% |
+| Colour → Post | 7 | 12.5% |
+| Rule → Colour | 5 | 8.9% |
+| Source → Rule | 4 | 7.1% |
 
 | Stages feeding the Output | Examples |
 |---|---:|
+| Source → Pass → Read out | 9 |
+| Source → Pass → Read out → Colour | 9 |
 | Source → Pass → Rule → Read out → Colour | 9 |
 | Rule | 9 |
-| Source → Pass → Read out → Colour | 6 |
-| Source → Pass → Rule | 4 |
+| Source → Pass → Read out → Colour → Post | 6 |
 | Source → Pass → Colour → Post | 2 |
-| Source → Pass → Rule → Read out | 2 |
 
-**Agents** — 58 examples, 415 stage links. Forward 275, same stage 89, feedback 41, colour into an input 8, backward 2: **99.3% of order-carrying links follow the flow**; 2 of 58 examples have any backward link.
+**Agents** — 71 examples, 552 stage links. Forward 358, same stage 129, feedback 42, colour into an input 21, backward 2: **99.4% of order-carrying links follow the flow**; 2 of 71 examples have any backward link.
 
 | Link | Examples with it | Share |
 |---|---:|---:|
-| Move → Draw | 34 | 58.6% |
-| Move → Deposit | 32 | 55.2% |
-| Deposit → Trail | 32 | 55.2% |
-| Sense → Draw | 27 | 46.6% |
-| Steer → Move | 25 | 43.1% |
-| Sense → Move | 19 | 32.8% |
-| Trail → Draw | 17 | 29.3% |
-| Sense → Steer | 16 | 27.6% |
-| Sense → Trail | 9 | 15.5% |
-| Trail → Colour | 9 | 15.5% |
+| Move → Draw | 46 | 64.8% |
+| Move → Deposit | 41 | 57.7% |
+| Deposit → Trail | 41 | 57.7% |
+| Steer → Move | 40 | 56.3% |
+| Sense → Steer | 27 | 38% |
+| Sense → Move | 22 | 31% |
+| Trail → Draw | 17 | 23.9% |
+| Trail → Colour | 16 | 22.5% |
+| Sense → Draw | 15 | 21.1% |
+| Sense → Colour | 10 | 14.1% |
 
 | Stages feeding the Output | Examples |
 |---|---:|
-| Sense → Move → Deposit → Trail → Draw | 10 |
-| Sense → Steer → Move → Deposit → Trail → Draw | 9 |
-| Sense → Draw | 8 |
-| Draw | 5 |
-| Sense → Move → Deposit → Trail → Draw → Colour | 5 |
-| Sense → Steer → Move → Draw | 4 |
+| Sense → Steer → Move → Deposit → Trail → Draw | 12 |
+| Sense → Steer → Move → Deposit → Trail → Draw → Colour | 10 |
+| Sense → Draw | 6 |
+| Draw | 6 |
+| Steer → Move → Draw | 5 |
+| Sense → Move → Deposit → Trail → Draw | 5 |
 
 <!-- stats:end -->
 

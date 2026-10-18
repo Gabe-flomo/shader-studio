@@ -2262,7 +2262,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
   // ── Tilt-Shift ──
   tiltShiftScene: {
     label: 'Tilt-Shift',
-    description: 'Tilt-Shift Blur keeps one horizontal band sharp and blurs away from it, like a miniature. The scene is a perspective floor grid so the depth reads.',
+    description: 'Tilt-Shift (texture) keeps one horizontal band sharp and blurs away from it, like a miniature, reading a Pass of the picture in the same frame. The scene is a perspective floor grid so the depth reads.',
     counter: 7,
     nodes: [
       {
@@ -2327,22 +2327,16 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         outputs: { glow: { type: 'float', label: 'Glow' }, tinted: { type: 'vec3', label: 'Tinted' } },
         params: { mode: 'glow', brightness: 40, ringFreq: 8, tint: [1, 0.7, 0.3] },
       },
-      {
-        id: 'tilt',
-        type: 'tiltShiftBlur',
-        position: { x: 2160, y: 200 },
-        inputs: {
-          color: { type: 'vec3', label: 'Color', connection: { nodeId: 'glow', outputKey: 'tinted' } },
-          uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'uv', outputKey: 'uv' } },
-        },
-        outputs: { result: { type: 'vec3', label: 'Result' }, mask: { type: 'float', label: 'Focus Mask' } },
-        params: { focus_center: 0, band_width: 0.2, max_blur: 8, tilt_angle: 0, axis: 'horizontal' },
-      },
+      n('pass', 'tilt_pass', 1960, 200, { label: 'Floor', __comment: 'Pass: the glowing floor as a texture, this frame, so the blur can read along the band.' },
+        { color: ['glow', 'tinted'] }),
+      n('tiltShiftTexture', 'tilt', 2160, 200, { focus_center: 0, band_width: 0.2, max_blur: 8, tilt_angle: 0, axis: 'horizontal',
+        __comment: 'Tilt-Shift (texture): the band round Focus Center stays sharp; away from it the floor blurs along the band, up to Max Blur pixels: a miniature.' },
+        { texture: ['tilt_pass', 'texture'] }),
       {
         id: 'out',
         type: 'output',
         position: { x: 2580, y: 200 },
-        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'tilt', outputKey: 'result' } } },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'tilt', outputKey: 'color' } } },
         outputs: {},
         params: {},
       },
@@ -4763,23 +4757,16 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         outputs: { color: { type: 'vec3', label: 'Color' } },
         params: { mode: 'aces' },
       },
-      {
-        id: 'dof_6',
-        type: 'depthOfField',
-        position: { x: 1300, y: 240 },
-        inputs: {
-          color: { type: 'vec3', label: 'Color', connection: { nodeId: 'tone_5', outputKey: 'color' } },
-          uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'uv_0', outputKey: 'uv' } },
-          dist: { type: 'float', label: 'Dist', connection: { nodeId: 'mlg_4', outputKey: 'dist' } },
-        },
-        outputs: { result: { type: 'vec3', label: 'Result' }, coc: { type: 'float', label: 'CoC' } },
-        params: { focalDist: 5.5, focalRange: 1.2, maxBlur: 10, bokehShape: 'disc' },
-      },
+      n('pass', 'dof_pass', 1300, 60, { label: 'Scene + depth', __comment: 'Pass: the lit scene as a texture, this frame, with each pixel\'s ray distance in its alpha (half float holds distances past 1), so the blur can read the picture and its depth round each pixel.' },
+        { color: ['tone_5', 'color'], alpha: ['mlg_4', 'dist'] }),
+      n('dofTexture', 'dof_6', 1540, 240, { focus: 'depth', focalDist: 5.5, focalRange: 1.2, maxBlur: 10, bokehShape: 'disc',
+        __comment: 'Depth of Field (texture), Focus Depth: pixels whose depth (the Pass\'s alpha) is far from Focal Dist get a bokeh disc up to Max Blur pixels wide, read from the same frame.' },
+        { texture: ['dof_pass', 'texture'] }),
       {
         id: 'out_7',
         type: 'output',
         position: { x: 1520, y: 240 },
-        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'dof_6', outputKey: 'result' } } },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'dof_6', outputKey: 'color' } } },
         outputs: {},
         params: {},
       },
@@ -12060,8 +12047,8 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
   },
   // ── Combo: Wave Texture + Blur H/V ──
   comboBlurDirectional: {
-    label: 'Combo: Wave Texture + Blur H/V',
-    description: 'A sharp Wave Texture through Gaussian Blur set to Horizontal only, Kawase quality (the four diagonal taps from Intel\'s fast-blur article): the separable Blur X pass from the blur articles, on its own a streak. Switch Direction to Vertical or Both on the card to compare. Both passes plus threshold and screen in one node: Combo: Grid + SDF Fill + Bloom.',
+    label: 'Combo: Wave Texture + Blur',
+    description: 'A sharp Wave Texture drawn into a Pass, then Blur (texture), Smooth: a true Gaussian made as two hidden passes, across then down, the separable Blur X and Blur Y passes from the blur articles, read between texels so no copies show. Set Method to Fast on the card for the one-pass kind. The threshold, blur and add-back chain in one node: Combo: Grid + SDF Fill + Bloom.',
     counter: 7,
     nodes: [
       {
@@ -12119,23 +12106,17 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         outputs: { color: { type: 'vec3', label: 'Color' } },
         params: { levels: 3 },
       },
-      {
-        id: 'bl_blur',
-        type: 'gaussianBlur',
-        position: { x: 1000, y: 200 },
-        inputs: {
-          color: { type: 'vec3', label: 'Color', connection: { nodeId: 'bl_post', outputKey: 'color' } },
-          uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'bl_uv', outputKey: 'uv' } },
-        },
-        outputs: { result: { type: 'vec3', label: 'Result' } },
-        params: { radius: 6, quality: 'kawase', direction: 'horizontal' },
-      },
+      n('pass', 'bl_pass', 1000, 0, { label: 'Waves', __comment: 'Pass: the sharp waves as a texture, this frame, so the blur can read round each pixel.' },
+        { color: ['bl_post', 'color'] }),
+      n('blurTexture', 'bl_blur', 1000, 200, { method: 'smooth', radius: 6,
+        __comment: 'Blur (texture), Smooth: a true Gaussian of 6 pixels, made as two hidden passes (across, then down) that read between texels, so no copies show. Fast is one cheap pass.' },
+        { texture: ['bl_pass', 'texture'] }),
       {
         id: 'bl_out',
         type: 'output',
         position: { x: 1240, y: 200 },
         inputs: {
-          color: { type: 'vec3', label: 'Color', connection: { nodeId: 'bl_blur', outputKey: 'result' } },
+          color: { type: 'vec3', label: 'Color', connection: { nodeId: 'bl_blur', outputKey: 'color' } },
         },
         outputs: {},
         params: {},

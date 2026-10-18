@@ -5,7 +5,8 @@ import { MARCH_STEP_REF_KEY, stepWeightGlsl } from '../../compiler/marchJitter';
 import { allBlockLines, clampCount, loopCode, loopCountValue, loopMax, loopOf } from '../exprLoop';
 // Shared with the Play page's Finish stack (play/kit/finish.js), so both tone-map and mask the same way.
 import { FN_CRT_MASK_GLSL, FN_TONE_FUNCTIONS, FN_TONE_GLSL, FN_TONE_JODIE_GLSL } from '../../play/kit/finishGlsl.js';
-import { BL_BASE_GLSL, BL_PREV_GLSL } from '../../play/kit/blur.js';
+import { BL_BASE_GLSL, BL_PREV_GLSL, BL_GLSL2 as BL_GLSL2_GRAPH } from '../../play/kit/blur.js';
+import { passPxUniform, texUv } from './passes';
 import { GLOW_TYPES, GLOW_TYPE_LABELS, glowFormula } from './combiners';
 import { DRIVERS_2D, PF_GRADIENT_GLSL, gradientColourGlsl, gradientOn } from '../../lib/colourGradient';
 
@@ -2041,6 +2042,128 @@ export const DepthOfFieldNode: NodeDefinition = withParamSockets({
     };
   },
 }, ['focalDist', 'focalRange', 'maxBlur']);
+
+// ─── Depth of Field (texture) and Tilt-Shift (texture) ───────────────────────
+// The 2026-10-17 sweep: the lens blurs on a texture, in the same frame (a Pass of the picture), instead of
+// last frame's picture. Depth of Field (texture) is the old Depth of Field and Lens Blur in one node (Focus:
+// Depth or Point), with the same circle-of-confusion maths and the same bokeh reads (lensBlurDisc/Hex/Oct);
+// Tilt-Shift (texture) is the old Tilt-Shift Blur's band and 1D Gaussian. The old nodes stay registered
+// (notOffered.ts) for saved graphs.
+
+const LENS_FOCAL: Record<string, string> = { '24mm': '1.0', '35mm': '1.6', '50mm': '2.5', '75mm': '3.8', '85mm': '4.4', '135mm': '7.2' };
+const LENS_APERTURE: Record<string, string> = { 'f1.4': '1.0', 'f2': '0.71', 'f2.8': '0.5', 'f4': '0.35', 'f5.6': '0.25', 'f8': '0.18' };
+const bokehFn = (v: unknown) => (v === 'hex' ? 'lensBlurHex' : v === 'oct' ? 'lensBlurOct' : 'lensBlurDisc');
+const TEX_IN = { type: 'texture' as const, label: 'Texture', hint: 'A Pass of the picture (or any texture). Unwired, this reads black.' };
+
+export const DofTextureNode: NodeDefinition = withParamSockets({
+  type: 'dofTexture',
+  label: 'Depth of Field (texture)',
+  category: 'Passes',
+  aliases: ['Depth of Field', 'DoF', 'Lens Blur', 'Bokeh', 'Focus blur', 'Defocus'],
+  description: 'A camera\'s focus blur on a texture (a Pass of the picture), in the same frame. Focus Depth: pixels whose depth is far from Focal Dist get a bokeh blur (the depth from Dist, or from the texture\'s alpha: put a March Loop\'s Distance into the Pass\'s Alpha). Focus Point: like a lens focused on Focal Point, with a Focal Length and Aperture. Disc, Hex or Oct bokeh.',
+  inputs: {
+    texture: TEX_IN,
+    uv: { type: 'vec2', label: 'UV', hint: 'Where to read, in picture coordinates. Leave empty for this pixel.' },
+    dist: { type: 'float', label: 'Dist', hint: 'Focus Depth: this pixel\'s depth (a March Loop\'s Distance). Unwired: the texture\'s alpha.' },
+    focal_point: { type: 'vec2', label: 'Focal Point', hint: 'Focus Point: the point in focus, in picture coordinates (Mouse UV). Unwired: the middle.' },
+  },
+  outputs: {
+    color: { type: 'vec3', label: 'Color' },
+    alpha: { type: 'float', label: 'Alpha' },
+    coc: { type: 'float', label: 'CoC', hint: 'How far each pixel is blurred, in pixels (the circle of confusion).' },
+  },
+  defaultParams: { focus: 'depth', focalDist: 3.0, focalRange: 1.0, maxBlur: 8.0, focal_length: '50mm', aperture: 'f2.8', focus_distance: 0.25, boost: 1.0, bokehShape: 'disc' },
+  paramDefs: {
+    focus: { label: 'Focus', type: 'select', hint: 'Depth: blur by how far each pixel\'s depth is from Focal Dist. Point: a lens focused on Focal Point.', options: [
+      { value: 'depth', label: 'Depth' }, { value: 'point', label: 'Point (lens)' },
+    ] },
+    focalDist:  { label: 'Focal Dist',  type: 'float', min: 0.1,  max: 50.0, step: 0.1, showWhen: { param: 'focus', value: 'depth' }, hint: 'World-unit depth that stays sharp. Match your camera\'s distance for tight focus.' },
+    focalRange: { label: 'Focal Range', type: 'float', min: 0.05, max: 20.0, step: 0.05, showWhen: { param: 'focus', value: 'depth' }, hint: 'Depth band around Focal Dist that stays sharp. Smaller = shallower depth of field.' },
+    maxBlur:    { label: 'Max Blur',    type: 'float', min: 0.0,  max: 24.0, step: 0.5, showWhen: { param: 'focus', value: 'depth' }, hint: 'Largest bokeh radius, in pixels.' },
+    focal_length: { label: 'Focal Length', type: 'select', showWhen: { param: 'focus', value: 'point' }, options: [
+      { value: '24mm', label: '24mm (wide)' }, { value: '35mm', label: '35mm (street)' }, { value: '50mm', label: '50mm (standard)' },
+      { value: '75mm', label: '75mm (portrait)' }, { value: '85mm', label: '85mm (portrait)' }, { value: '135mm', label: '135mm (telephoto)' },
+    ] },
+    aperture: { label: 'Aperture', type: 'select', showWhen: { param: 'focus', value: 'point' }, options: [
+      { value: 'f1.4', label: 'f/1.4 (wide open)' }, { value: 'f2', label: 'f/2' }, { value: 'f2.8', label: 'f/2.8' },
+      { value: 'f4', label: 'f/4' }, { value: 'f5.6', label: 'f/5.6' }, { value: 'f8', label: 'f/8 (stopped down)' },
+    ] },
+    focus_distance: { label: 'Focus Distance', type: 'float', min: 0.02, max: 1.5, step: 0.01, showWhen: { param: 'focus', value: 'point' }, hint: 'How far from Focal Point the picture stays sharp, in picture units.' },
+    boost: { label: 'Boost', type: 'float', min: 0.1, max: 4.0, step: 0.05, showWhen: { param: 'focus', value: 'point' }, hint: 'Scales the blur.' },
+    bokehShape: { label: 'Bokeh Shape', type: 'select', options: [
+      { value: 'disc', label: 'Disc (circular)' }, { value: 'hex', label: 'Hex (6-blade)' }, { value: 'oct', label: 'Oct (8-blade)' },
+    ] },
+  },
+  glslFunctions: [BL_BASE_GLSL, LENS_BLUR_GLSL],
+  assignable: false,
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+    const P = node.params;
+    const tex = inputVars.texture;
+    if (!tex) return { code: `    vec4 ${id}_c = vec4(0.0);\n    float ${id}_coc = 0.0;\n`, outputVars: { color: `${id}_c.rgb`, alpha: `${id}_c.a`, coc: `${id}_coc` } };
+    const uvVar = inputVars.uv ?? 'g_uv';
+    const lines = [
+      `    vec2  ${id}_st = ${texUv(uvVar)};\n`,
+      `    vec4  ${id}_c  = texture2D(${tex}, ${id}_st);\n`,
+    ];
+    if (P.focus === 'point') {
+      const fp = inputVars.focal_point ?? 'vec2(0.0)';
+      lines.push(`    float ${id}_coc = max(0.0, length(${uvVar} - ${fp}) - ${p(P.focus_distance, 0.25)}) * ${LENS_FOCAL[String(P.focal_length)] ?? '2.5'} * ${LENS_APERTURE[String(P.aperture)] ?? '0.5'} * ${p(P.boost, 1.0)};\n`);
+    } else {
+      const depth = inputVars.dist ?? `${id}_c.a`;
+      lines.push(`    float ${id}_coc = clamp(abs(${depth} - ${p(P.focalDist, 3.0)}) / max(${p(P.focalRange, 1.0)}, 0.001), 0.0, ${p(P.maxBlur, 8.0)});\n`);
+    }
+    lines.push(`    vec3  ${id}_rgb = ${bokehFn(P.bokehShape)}(${tex}, ${id}_st, ${passPxUniform(tex)}, ${id}_coc, ${id}_c.rgb);\n`);
+    return { code: lines.join(''), outputVars: { color: `${id}_rgb`, alpha: `${id}_c.a`, coc: `${id}_coc` } };
+  },
+}, ['focalDist', 'focalRange', 'maxBlur', 'focus_distance', 'boost']);
+
+export const TiltShiftTextureNode: NodeDefinition = withParamSockets({
+  type: 'tiltShiftTexture',
+  label: 'Tilt-Shift (texture)',
+  category: 'Passes',
+  aliases: ['Tilt-Shift Blur', 'Tilt shift', 'Miniature', 'Focus band'],
+  description: 'The miniature look on a texture (a Pass of the picture), in the same frame: a band stays sharp and the picture blurs more the further from it, along the band. Tilt Angle turns the band.',
+  inputs: {
+    texture: TEX_IN,
+    uv: { type: 'vec2', label: 'UV', hint: 'Where to read, in picture coordinates. Leave empty for this pixel.' },
+  },
+  outputs: {
+    color: { type: 'vec3', label: 'Color' },
+    alpha: { type: 'float', label: 'Alpha' },
+    mask: { type: 'float', label: 'Focus Mask', hint: '0 in the sharp band, rising to 1 away from it.' },
+  },
+  defaultParams: { focus_center: 0.0, band_width: 0.25, max_blur: 6.0, tilt_angle: 0.0, axis: 'horizontal' },
+  paramDefs: {
+    focus_center: { label: 'Focus Center', type: 'float', min: -1.0, max: 1.0, step: 0.01, hint: 'Where the sharp band sits (picture coordinates, 0 the middle).' },
+    band_width: { label: 'Band Width', type: 'float', min: 0.02, max: 0.6, step: 0.01, hint: 'How wide the sharp band is.' },
+    max_blur: { label: 'Max Blur (px)', type: 'float', min: 1.0, max: 16.0, step: 0.5, hint: 'The blur at the far edges, in pixels.' },
+    tilt_angle: { label: 'Tilt Angle°', type: 'float', min: -60.0, max: 60.0, step: 1.0, hint: 'Turns the band.' },
+    axis: { label: 'Axis', type: 'select', options: [{ value: 'horizontal', label: 'Horizontal' }, { value: 'vertical', label: 'Vertical' }] },
+  },
+  glslFunctions: [BL_BASE_GLSL, BL_GLSL2_GRAPH],
+  assignable: false,
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id = node.id;
+    const P = node.params;
+    const tex = inputVars.texture;
+    if (!tex) return { code: `    vec4 ${id}_c = vec4(0.0);\n    float ${id}_mask = 0.0;\n`, outputVars: { color: `${id}_c.rgb`, alpha: `${id}_c.a`, mask: `${id}_mask` } };
+    const uvVar = inputVars.uv ?? 'g_uv';
+    const angle = p(P.tilt_angle, 0.0);
+    const isVert = P.axis === 'vertical';
+    const tiltDir = isVert ? `vec2(cos(${angle} * 0.01745329), sin(${angle} * 0.01745329))` : `vec2(-sin(${angle} * 0.01745329), cos(${angle} * 0.01745329))`;
+    const blurDir = isVert ? `vec2(-sin(${angle} * 0.01745329), cos(${angle} * 0.01745329))` : `vec2(cos(${angle} * 0.01745329), sin(${angle} * 0.01745329))`;
+    const code = [
+      `    vec2  ${id}_st   = ${texUv(uvVar)};\n`,
+      `    float ${id}_dist = abs(dot(${uvVar} - vec2(0.0, ${p(P.focus_center, 0.0)}), ${tiltDir}));\n`,
+      `    float ${id}_mask = clamp((${id}_dist - ${p(P.band_width, 0.25)}) / (1.0 - ${p(P.band_width, 0.25)}), 0.0, 1.0);\n`,
+      // The old node's 1D Gaussian along the band, σ = 2 × the local blur, read between texels.
+      `    float ${id}_sg   = ${id}_mask * ${p(P.max_blur, 6.0)} * 2.0;\n`,
+      `    vec4  ${id}_c    = blGauss(${tex}, ${id}_st, ${blurDir} * ${passPxUniform(tex)}, ${id}_sg);\n`,
+    ].join('');
+    return { code, outputVars: { color: `${id}_c.rgb`, alpha: `${id}_c.a`, mask: `${id}_mask` } };
+  },
+}, ['focus_center', 'band_width', 'max_blur', 'tilt_angle']);
 
 // ─── Motion Blur ─────────────────────────────────────────────────────────────
 // Temporal accumulation: blends current scene with the previous frame.

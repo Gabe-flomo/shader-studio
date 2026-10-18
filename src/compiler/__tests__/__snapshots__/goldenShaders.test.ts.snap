@@ -2834,34 +2834,6 @@ exports[`golden shaders: every example compiles as it did > comboArrayStars 1`] 
 }
 `;
 
-exports[`golden shaders: every example compiles as it did > comboBlurDirectional 1`] = `
-{
-  "audioUniforms": {},
-  "echo": null,
-  "errors": null,
-  "fragmentShader": "0e50e908d5762500c28303001898:3404",
-  "isStateful": true,
-  "liveUniforms": {},
-  "nodeSlugs": "067506bfc809df0153774c621d75:143",
-  "paramBindings": "021df66c46b82118fc346b3de7f5:283",
-  "paramUniforms": [
-    "u_p_gaussianblx0_radius",
-    "u_p_palx0_scale",
-    "u_p_palx0_speed",
-    "u_p_postx0_levels",
-    "u_p_wavex0_distortion",
-    "u_p_wavex0_scale",
-    "u_p_wavex0_speed",
-  ],
-  "paramValues": "137af9c0af041f0fc40c138abdcc:177",
-  "passes": null,
-  "success": true,
-  "textureUniforms": {},
-  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
-  "videoUniforms": {},
-}
-`;
-
 exports[`golden shaders: every example compiles as it did > comboChaosStars 1`] = `
 {
   "audioUniforms": {},
@@ -4345,52 +4317,6 @@ exports[`golden shaders: every example compiles as it did > displaceText 1`] = `
     "u_p_fbmx0_time_scale",
   ],
   "paramValues": "1eed858fd333d611c019c3173b17:129",
-  "passes": null,
-  "success": true,
-  "textureUniforms": {},
-  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
-  "videoUniforms": {},
-}
-`;
-
-exports[`golden shaders: every example compiles as it did > dofDepthBlur 1`] = `
-{
-  "audioUniforms": {},
-  "echo": null,
-  "errors": null,
-  "fragmentShader": "083bf3cf31479e065cd0c18c7c71:10013",
-  "isStateful": true,
-  "liveUniforms": {},
-  "nodeSlugs": "1d6fcc5ffd0e24082aaa9325d241:491",
-  "paramBindings": "09912db7e700b60c59d1feed8bde:1212",
-  "paramUniforms": [
-    "u_p_depthoffiex6_focalDist",
-    "u_p_depthoffiex6_focalRange",
-    "u_p_depthoffiex6_maxBlur",
-    "u_p_marchcamerx2_aperture",
-    "u_p_marchcamerx2_camAngle",
-    "u_p_marchcamerx2_camDist",
-    "u_p_marchcamerx2_camElevation",
-    "u_p_marchcamerx2_focalDist",
-    "u_p_marchcamerx2_fov",
-    "u_p_marchcamerx2_lensSpeed",
-    "u_p_marchcamerx2_rotSpeed",
-    "u_p_marchloopgx4_albedo",
-    "u_p_marchloopgx4_bg",
-    "u_p_marchloopgx4_jitter",
-    "u_p_marchloopgx4_maxDist",
-    "u_p_marchloopgx4_stepScale",
-    "u_p_threexspheresx3xsgxsphx0_radius",
-    "u_p_threexspheresx3xsgxsphx0xc2_radius",
-    "u_p_threexspheresx3xsgxsphx0xc3_radius",
-    "u_p_threexspheresx3xsgxtrx0_tx",
-    "u_p_threexspheresx3xsgxtrx0_ty",
-    "u_p_threexspheresx3xsgxtrx0_tz",
-    "u_p_threexspheresx3xsgxtrx0xc2_tx",
-    "u_p_threexspheresx3xsgxtrx0xc2_ty",
-    "u_p_threexspheresx3xsgxtrx0xc2_tz",
-  ],
-  "paramValues": "10039cabeda781003b21a9f06da6:934",
   "passes": null,
   "success": true,
   "textureUniforms": {},
@@ -18512,39 +18438,6 @@ exports[`golden shaders: every example compiles as it did > splatRingsInScene 1`
     "u_tex_splat_0_color": "splatScan::color",
     "u_tex_splat_0_depth": "splatScan::depth",
   },
-  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
-  "videoUniforms": {},
-}
-`;
-
-exports[`golden shaders: every example compiles as it did > tiltShiftScene 1`] = `
-{
-  "audioUniforms": {},
-  "echo": null,
-  "errors": null,
-  "fragmentShader": "1cc94c3d018eb5063395c6af244a:5178",
-  "isStateful": true,
-  "liveUniforms": {},
-  "nodeSlugs": "1d9bc148b2118a087c7932e32629:142",
-  "paramBindings": "1feb6fec6b2754021357970f9bb4:514",
-  "paramUniforms": [
-    "u_p_boxsdfx0_height",
-    "u_p_boxsdfx0_posX",
-    "u_p_boxsdfx0_posY",
-    "u_p_boxsdfx0_width",
-    "u_p_gridlayoutx0_columns",
-    "u_p_lightx0_brightness",
-    "u_p_lightx0_tint",
-    "u_p_perspectivx0_ratio",
-    "u_p_tiltshiftbx0_band_width",
-    "u_p_tiltshiftbx0_focus_center",
-    "u_p_tiltshiftbx0_max_blur",
-    "u_p_tiltshiftbx0_tilt_angle",
-  ],
-  "paramValues": "09523a17681f60182cb52a6cb8b8:370",
-  "passes": null,
-  "success": true,
-  "textureUniforms": {},
   "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
   "videoUniforms": {},
 }

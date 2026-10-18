@@ -58,7 +58,7 @@ const near = (a: Val, b: Val, eps = 1e-9) => {
 };
 
 /** Retired in the sweep and kept registered (hidden): no exact mapping onto the survivor. */
-const SWEPT_HIDDEN: string[] = ['light2d', 'chromaShift', 'chromaticAberration', 'bloom'];
+const SWEPT_HIDDEN: string[] = ['light2d', 'chromaShift', 'chromaticAberration', 'bloom', 'gaussianBlur', 'radialBlur', 'lensBlur', 'depthOfField', 'tiltShiftBlur'];
 /** Merged into a survivor: gone from the registry, migrated on load (old type → survivor). */
 const MERGED_INTO: Record<string, string> = {
   smoothWarp: 'uvWarp', curlWarp: 'uvWarp', swirlWarp: 'uvWarp', swirlSpace: 'uvWarp',
@@ -390,5 +390,65 @@ describe('Picture glow: Glow (texture), with Deep glow as a Method', () => {
   it('an old Bloom (last frame) still loads and compiles, hidden', () => {
     compiles([saved('uv', 'uv', {}, {}, ['uv']), saved('circleSDF', 'c', {}, { position: ['uv', 'uv'] }, ['distance']), saved('floatToVec3', 'v', {}, { input: ['c', 'distance'] }, ['rgb']),
       saved('bloom', 'b', { threshold: 0.4 }, { color: ['v', 'rgb'], uv: ['uv', 'uv'] }, ['result']), saved('output', 'out', {}, { color: ['b', 'result'] }, [])]);
+  });
+});
+
+// ── Blur ─────────────────────────────────────────────────────────────────────
+
+const TEX_ENV = {
+  u_resolution: [1600, 900], u_p: 1, u_p_px: [1 / 1600, 1 / 900],
+  texture2D: () => [0.2, 0.4, 0.6, 3.7],
+  lensBlurDisc: (_s: Val, _uv: Val, _px: Val, _coc: Val, c: Val) => c, lensBlurHex: (_s: Val, _uv: Val, _px: Val, _coc: Val, c: Val) => c, lensBlurOct: (_s: Val, _uv: Val, _px: Val, _coc: Val, c: Val) => c,
+  blGauss: () => [0.2, 0.4, 0.6, 3.7],
+};
+const texIn = (nd: GraphNode, extra: Record<string, string> = {}) => {
+  const { code, outputVars } = getNodeDefinition(nd.type)!.generateGLSL(nd, { texture: 'u_p', uv: 'UV', ...extra });
+  return { code: code.replace(/u_p_px/g, 'u_p_px'), outputVars };
+};
+
+describe('Blur: the lens blurs on a texture, same frame', () => {
+  it('Depth of Field (texture), Focus Point, is Lens Blur\'s circle of confusion', () => {
+    const FOC: Record<string, number> = { '24mm': 1, '35mm': 1.6, '50mm': 2.5, '135mm': 7.2 };
+    const AP: Record<string, number> = { 'f1.4': 1, 'f2.8': 0.5, 'f8': 0.18 };
+    for (const fl of Object.keys(FOC)) for (const ap of Object.keys(AP)) {
+      const nd = migrateNodeParams(saved('dofTexture', 'd', { focus: 'point', focal_length: fl, aperture: ap, focus_distance: 0.2, boost: 1.3 }, {}, ['color', 'coc']), getNodeDefinition);
+      const { code, outputVars } = texIn(nd, { focal_point: 'FP' });
+      for (const [UV, FP] of [[[0.5, 0.1], [0, 0]], [[-0.9, 0.6], [0.2, -0.1]]]) {
+        const out = runGlsl(code, { ...TEX_ENV, UV, FP, ...GLOW_ENV });
+        const old = Math.max(0, Math.hypot(UV[0] - FP[0], UV[1] - FP[1]) - 0.2) * FOC[fl] * AP[ap] * 1.3;
+        near(out[outputVars.coc] as Val, old, 1e-9);
+      }
+    }
+  });
+
+  it('Depth of Field (texture), Focus Depth, is Depth of Field\'s circle of confusion; the depth defaults to the texture\'s alpha', () => {
+    const nd = migrateNodeParams(saved('dofTexture', 'd', { focus: 'depth', focalDist: 5.5, focalRange: 1.2, maxBlur: 10 }, {}, ['color', 'coc']), getNodeDefinition);
+    for (const D of [0.5, 5.5, 6.1, 40]) {
+      const { code, outputVars } = texIn(nd, { dist: 'D' });
+      near(runGlsl(code, { ...TEX_ENV, UV: [0, 0], D })[outputVars.coc] as Val, Math.min(10, Math.max(0, Math.abs(D - 5.5) / 1.2)));
+    }
+    const { code, outputVars } = texIn(nd);
+    near(runGlsl(code, { ...TEX_ENV, UV: [0, 0] })[outputVars.coc] as Val, Math.min(10, Math.abs(3.7 - 5.5) / 1.2));
+  });
+
+  it('Tilt-Shift (texture) has Tilt-Shift Blur\'s focus band', () => {
+    for (const axis of ['horizontal', 'vertical']) {
+      const nd = migrateNodeParams(saved('tiltShiftTexture', 't', { focus_center: 0.1, band_width: 0.2, max_blur: 8, tilt_angle: 15, axis }, {}, ['color', 'mask']), getNodeDefinition);
+      const { code, outputVars } = texIn(nd);
+      for (const UV of [[0.3, 0.5], [-1, -0.8], [0, 0.1]]) {
+        const a = 15 * 0.01745329;
+        const td = axis === 'vertical' ? [Math.cos(a), Math.sin(a)] : [-Math.sin(a), Math.cos(a)];
+        const dist = Math.abs(UV[0] * td[0] + (UV[1] - 0.1) * td[1]);
+        near(runGlsl(code, { ...TEX_ENV, UV })[outputVars.mask] as Val, Math.min(1, Math.max(0, (dist - 0.2) / 0.8)), 1e-6);
+      }
+    }
+  });
+
+  it('the new nodes compile on a Pass; old Gaussian, Radial, Lens, Depth of Field and Tilt-Shift blurs still load and compile', () => {
+    for (const t of ['dofTexture', 'tiltShiftTexture']) compiles([...picturePass(), saved(t, 'x', {}, { texture: ['p', 'texture'] }, ['color']), saved('output', 'out', {}, { color: ['x', 'color'] }, [])]);
+    const base = [saved('uv', 'uv', {}, {}, ['uv']), saved('circleSDF', 'c', {}, { position: ['uv', 'uv'] }, ['distance']), saved('floatToVec3', 'v', {}, { input: ['c', 'distance'] }, ['rgb'])];
+    for (const t of ['gaussianBlur', 'radialBlur', 'lensBlur', 'depthOfField', 'tiltShiftBlur']) {
+      compiles([...base, saved(t, 'x', {}, { color: ['v', 'rgb'], uv: ['uv', 'uv'] }, ['result']), saved('output', 'out', {}, { color: ['x', 'result'] }, [])]);
+    }
   });
 });

@@ -62,6 +62,11 @@ const CONNECTION_GATED = new Set([
   ...['amount', 'samples', 'blur', 'falloff', 'centerX', 'centerY', 'angle', 'distortion'].map(k => `chromaLens.${k}`),
   // Deep Glow: nothing to glow until a texture is wired.
   ...['radius', 'intensity', 'threshold', 'knee', 'spread', 'preserve', 'tint'].map(k => `deepGlowTexture.${k}`),
+  // Depth of Field (texture), Tilt-Shift (texture): nothing to blur until a texture is wired.
+  ...['focalDist', 'focalRange', 'maxBlur', 'focus_distance', 'boost'].map(k => `dofTexture.${k}`),
+  ...['focus_center', 'band_width', 'max_blur', 'tilt_angle'].map(k => `tiltShiftTexture.${k}`),
+  // Glow (texture)'s Deep glow settings.
+  'glowTexture.spread', 'glowTexture.preserve',
   // Radial Fast Blur: nothing to streak until a texture is wired.
   ...['length', 'centerX', 'centerY', 'threshold', 'knee', 'intensity', 'opacity', 'decay', 'falloff', 'tint'].map(k => `radialFastBlur.${k}`),
   // Texture tools (docs/texture-tools.md) likewise read nothing until a texture is wired; Read's Flow amount needs Flow

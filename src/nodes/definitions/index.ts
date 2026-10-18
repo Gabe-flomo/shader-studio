@@ -93,7 +93,7 @@ export {
   ExprBlockNode, CustomFnNode, GravitationalLensNode, FloatWarpNode,
   VignetteNode, ScanlinesNode, SobelNode,
   RadianceCascadesApproxNode,
-  GaussianBlurNode, BloomNode, RadialBlurNode, TiltShiftBlurNode, LensBlurNode, MotionBlurNode, DepthOfFieldNode,
+  GaussianBlurNode, BloomNode, RadialBlurNode, TiltShiftBlurNode, LensBlurNode, MotionBlurNode, DepthOfFieldNode, DofTextureNode, TiltShiftTextureNode,
   ChromaShiftNode,
 } from './effects';
 export { LoopRippleStepNode, LoopRotateStepNode, LoopDomainFoldNode, LoopFloatAccumulateNode, LoopRingStepNode, LoopColorRingStepNode } from './loopPair';
@@ -249,7 +249,7 @@ import {
   ExprBlockNode, CustomFnNode, GravitationalLensNode, FloatWarpNode,
   VignetteNode, ScanlinesNode, SobelNode,
   RadianceCascadesApproxNode,
-  GaussianBlurNode, BloomNode, RadialBlurNode, TiltShiftBlurNode, LensBlurNode, MotionBlurNode, DepthOfFieldNode,
+  GaussianBlurNode, BloomNode, RadialBlurNode, TiltShiftBlurNode, LensBlurNode, MotionBlurNode, DepthOfFieldNode, DofTextureNode, TiltShiftTextureNode,
   ChromaShiftNode, GlowToColorNode, NormalToColorNode, CrtMaskNode } from './effects';
 import { LoopRippleStepNode, LoopRotateStepNode, LoopDomainFoldNode, LoopFloatAccumulateNode, LoopRingStepNode, LoopColorRingStepNode } from './loopPair';
 import { LoopCarryNode } from './loop';
@@ -553,6 +553,8 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   lensBlur: LensBlurNode,
   motionBlur: MotionBlurNode,
   depthOfField: DepthOfFieldNode,
+  dofTexture: DofTextureNode,
+  tiltShiftTexture: TiltShiftTextureNode,
   chromaShift: ChromaShiftNode,
   // Loops
   loopCarry:             LoopCarryNode,

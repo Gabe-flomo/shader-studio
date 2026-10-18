@@ -616,6 +616,34 @@ exports[`2D agents and pass graphs compile as they did before 3D > comboBloomDot
 }
 `;
 
+exports[`2D agents and pass graphs compile as they did before 3D > comboBlurDirectional 1`] = `
+{
+  "agents": "1fe1f0024152e81521f99e5e13c1:4",
+  "errors": null,
+  "fragmentShader": "13aa5ed4be540f0968e34c468e09:2034",
+  "paramBindings": "0ca024e1f1cda109b27946ac3ef2:278",
+  "paramUniforms": "038b412f7a34120faa5d2f5bcd77:172",
+  "passes": "0ba8617a974f531c4ee1aa7fe3ac:8518",
+  "success": true,
+  "textureUniforms": "167d269bbddad80189e9f9473b28:2",
+  "web": null,
+}
+`;
+
+exports[`2D agents and pass graphs compile as they did before 3D > dofDepthBlur 1`] = `
+{
+  "agents": "1fe1f0024152e81521f99e5e13c1:4",
+  "errors": null,
+  "fragmentShader": "06254ebd0c2f2f01590b7739e815:3149",
+  "paramBindings": "0eef844352d728116ae6208124dc:1194",
+  "paramUniforms": "0d641781361c8f0dd9e9e97da8d9:916",
+  "passes": "1137951bf004001d10a9cabb50db:9131",
+  "success": true,
+  "textureUniforms": "167d269bbddad80189e9f9473b28:2",
+  "web": null,
+}
+`;
+
 exports[`2D agents and pass graphs compile as they did before 3D > fcTrippyNoise 1`] = `
 {
   "agents": "1fe1f0024152e81521f99e5e13c1:4",
@@ -1145,6 +1173,20 @@ exports[`2D agents and pass graphs compile as they did before 3D > slimeMold 1`]
   "success": true,
   "textureUniforms": "167d269bbddad80189e9f9473b28:2",
   "web": "0ec9d21f23f4071b59e1e447ed19:13245",
+}
+`;
+
+exports[`2D agents and pass graphs compile as they did before 3D > tiltShiftScene 1`] = `
+{
+  "agents": "1fe1f0024152e81521f99e5e13c1:4",
+  "errors": null,
+  "fragmentShader": "05d46aa1b6de6218e15f929d7416:3203",
+  "paramBindings": "082542587b5f941088d5479002b2:494",
+  "paramUniforms": "1bbc0504dff2071c7eb30aa1d33f:350",
+  "passes": "0414f8a86368b3132d6bb8fe25c5:3325",
+  "success": true,
+  "textureUniforms": "167d269bbddad80189e9f9473b28:2",
+  "web": null,
 }
 `;
 
