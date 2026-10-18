@@ -5,11 +5,10 @@
  *
  * It sits under the card (above it when there is no room below), so it never covers a socket:
  * sockets are on the card's left and right edges. Hidden while dragging, while a starter-recipe
- * offer is open, on a locked canvas, and with the × (the canvas toolbar's Next button brings it
- * back). Esc closes it for the selected card. No scrim, no focus taken.
+ * offer is open, on a locked canvas, and with the × (the canvas right-click menu's "Show Next
+ * suggestions" brings it back). Esc closes it for the selected card. No scrim, no focus taken.
  *
- * It is the app's one suggestion surface (docs/glossary.md, "Next"): the flow strip names the next
- * stage but offers no moves of its own, the library's "Fits here" shows only while a wire is being
+ * It is the app's one suggestion surface (docs/glossary.md, "Next"): the library's "Fits here" shows only while a wire is being
  * dragged, and the Do… bar is a command bar. The list opens the first time; after a move is used
  * (or it is folded by hand) it starts folded to a small "Next" chip that opens it.
  */
@@ -251,10 +250,4 @@ function MoveRow({ move, onClick, touch = false }: { move: RankedMove; onClick: 
       <span style={{ fontSize: 11, color: tk.text.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{move.why}</span>
     </button>
   );
-}
-
-/** The canvas toolbar's Suggestions toggle. */
-export function SuggestionsToggle() {
-  const on = useSuggestionsShown();
-  return <IconButton icon="bolt" size="sm" active={on} label={on ? 'Hide Next: the suggestions under the selected node' : 'Next: suggested moves under the selected node, learned from your graphs'} onClick={() => setSuggestionsShown(!on)} />;
 }

@@ -1,12 +1,15 @@
 /**
  * The Studio's split between the graph and the preview (desktop):
  *
- * - Maximize graph: the graph takes the preview's space too (the preview keeps running under it, so
- *   coming back is instant). A toolbar button and ⇧⌘G (useShortcuts.ts `maximizeGraph`) toggle it;
- *   remembered on this device.
+ * - Maximize graph: the graph takes the whole window and the picture goes full size BEHIND it, as
+ *   the graph's backdrop (the same canvas moved and resized, no second renderer; the aspect preset
+ *   still letterboxes it). The graph's background turns to a light dim so the picture shows, the
+ *   cards stay solid, and the pointer goes to the graph. A toolbar button and ⇧⌘G
+ *   (useShortcuts.ts `maximizeGraph`) toggle it; remembered on this device.
  * - The preview's width: the default leaves the graph room for a few cards at a readable zoom at
  *   1440 wide, and a width the divider was dragged to is remembered on this device.
  */
+import type { CSSProperties } from 'react';
 import { create } from 'zustand';
 
 const MAX_KEY = 'playfield.graphMaximized';
@@ -46,3 +49,21 @@ export function rememberedPreviewWidth(w: number, min: number, minGraph: number)
 }
 
 export function rememberPreviewWidth(px: number): void { write(WIDTH_KEY, String(Math.round(px))); }
+
+/**
+ * Whether the picture goes behind the graph: a maximized graph on the Studio, with the preview docked
+ * (a floated preview stays a window; a page that hosts the canvas itself keeps it).
+ */
+export function pictureBehindGraph(o: { maximized: boolean; page: string; floated: boolean; hosted: boolean }): boolean {
+  return o.maximized && o.page === 'studio' && !o.floated && !o.hosted;
+}
+
+/** The preview column moved behind the maximized graph: the graph's whole area (right of the sidebar), under it. */
+export function pictureBehindStyle(left: number): CSSProperties {
+  return { position: 'absolute', top: 0, bottom: 0, left, right: 0, zIndex: 5, pointerEvents: 'none' };
+}
+
+/** The maximized graph's box: the same area, over the picture. */
+export function graphOverPictureStyle(left: number): CSSProperties {
+  return { position: 'absolute', top: 0, bottom: 0, left, right: 0, zIndex: 6 };
+}

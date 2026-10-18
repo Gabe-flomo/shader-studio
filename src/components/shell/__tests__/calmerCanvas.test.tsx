@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
 /**
- * A calmer canvas (UX audit §3.4): the canvas toolbar keeps the view controls and puts the rarely
- * used whole-graph actions in one "Graph ⋯" menu, with every action still there; the Play panel's
- * seven layout radios are one Layout menu; node card footers show on hover (CSS in index.css).
+ * A calmer canvas (docs/page-canvas.md): the canvas toolbar has exactly three controls (Maximize
+ * graph, Outline, Randomise); everything else that was on it is in the canvas's right-click menu
+ * (canvasGraphMenu.ts), with every action still there; Randomise has one place, its button, whose
+ * right-click menu holds the settings and the options. The Play panel's seven layout radios are one
+ * Layout menu; node card footers show on hover (CSS in index.css).
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -16,12 +18,20 @@ vi.hoisted(() => {
   if (!('ResizeObserver' in globalThis)) vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
 });
 
+const randomize = vi.hoisted(() => vi.fn(async () => {}));
+vi.mock('../../surprise/surpriseActions', async orig => ({
+  ...(await orig<typeof import('../../surprise/surpriseActions')>()),
+  randomizeGraphAction: randomize,
+}));
+
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { graphMenuItems, type GraphMenuActions } from '../canvasGraphMenu';
+import { canvasMenuItems, randomiseMenuItems, type CanvasMenuActions, type CanvasMenuItem, type CanvasMenuRow } from '../canvasGraphMenu';
 import { CanvasToolbar } from '../CanvasToolbar';
+import { useGraphMaximize } from '../graphLayout';
+import { useViewport } from '../../../lib/viewport';
 import { playLayoutItems, SIDE_OPTIONS, SIDEBAR_OPTIONS } from '../../play/playLayoutMenu';
 import type { MenuItem } from '../../ui/Menu';
 
@@ -29,57 +39,134 @@ import type { MenuItem } from '../../ui/Menu';
 
 let root: Root | null = null;
 let host: HTMLElement | null = null;
-afterEach(() => { act(() => root?.unmount()); host?.remove(); root = null; host = null; });
+afterEach(() => { act(() => root?.unmount()); host?.remove(); root = null; host = null; document.body.innerHTML = ''; });
 
 const labels = (items: MenuItem[]) => items.flatMap(i => (i !== 'separator' && !('heading' in i) ? [i.label] : []));
-const all = (over: Partial<GraphMenuActions> = {}): GraphMenuActions => ({
-  readOnly: false, topLevel: true, multiProgram: true, showPasses: false, showOutline: false,
-  onToggleOutline: vi.fn(), onTogglePasses: vi.fn(), onBake: vi.fn(), onRandomize: vi.fn(), onRandomizeOptions: vi.fn(),
-  onOptimize: vi.fn(), onClear: vi.fn(), onClearMinimal: vi.fn(), ...over,
+const rows = (items: CanvasMenuItem[]) => items.filter((i): i is CanvasMenuRow => i !== 'separator' && !('heading' in i));
+const all = (over: Partial<CanvasMenuActions> = {}): CanvasMenuActions => ({
+  readOnly: false, topLevel: true, multiProgram: true, showPasses: false, showMinimap: true, onToggleMinimap: vi.fn(),
+  showNext: true, onToggleNext: vi.fn(), zoom: 0.75, onResetZoom: vi.fn(), onFit: vi.fn(), onAutoLayout: vi.fn(),
+  onTogglePasses: vi.fn(), onOptimize: vi.fn(), onBake: vi.fn(), onClear: vi.fn(), onClearMinimal: vi.fn(), ...over,
 });
 
-describe('Graph ⋯ menu', () => {
-  it('holds every action that left the toolbar, each wired to its handler', () => {
+const render = (el: React.ReactElement) => {
+  host = document.createElement('div');
+  document.body.appendChild(host);
+  root = createRoot(host);
+  act(() => root!.render(el));
+  return host;
+};
+
+describe('canvas toolbar', () => {
+  it('has exactly three controls: Maximize graph, Outline, Randomise', () => {
+    useViewport.setState({ breakpoint: 'desktop-lg' });
+    const h = render(<CanvasToolbar showOutline={false} onToggleOutline={() => {}} />);
+    const bar = h.querySelector('[data-canvas-toolbar]')!;
+    const buttons = Array.from(bar.querySelectorAll('button'));
+    expect(buttons.map(b => b.getAttribute('aria-label') ?? '')).toEqual([
+      expect.stringMatching(/^Maximize the graph/),
+      expect.stringMatching(/^Outline/),
+      expect.stringMatching(/^Randomise settings/),
+    ]);
+    // Nothing else: no zoom, Fit, Auto layout, minimap, Next, flow strip, node count or Graph menu.
+    for (const gone of ['Zoom', 'Fit', 'Auto layout', 'minimap', 'Next', 'Flow strip', 'Graph', 'Auto layout options']) {
+      expect(buttons.some(b => (b.getAttribute('aria-label') ?? b.textContent ?? '').startsWith(gone)), gone).toBe(false);
+    }
+    expect(bar.textContent).toBe('');
+  });
+
+  it('a locked canvas keeps only the Outline; Maximize is desktop only', () => {
+    useViewport.setState({ breakpoint: 'desktop-lg' });
+    const h = render(<CanvasToolbar readOnly showOutline onToggleOutline={() => {}} />);
+    expect(Array.from(h.querySelectorAll('button')).map(b => b.getAttribute('aria-label'))).toEqual(['Hide the outline']);
+    act(() => root!.unmount()); host!.remove();
+    useViewport.setState({ breakpoint: 'tablet' });
+    const t = render(<CanvasToolbar onToggleOutline={() => {}} />);
+    expect(t.querySelector('[data-maximize-graph]')).toBeNull();
+    useViewport.setState({ breakpoint: 'desktop-lg' });
+  });
+
+  it('Maximize toggles the remembered maximize; Outline calls its handler', () => {
+    useViewport.setState({ breakpoint: 'desktop-lg' });
+    useGraphMaximize.getState().set(false);
+    const outline = vi.fn();
+    const h = render(<CanvasToolbar onToggleOutline={outline} />);
+    act(() => { h.querySelector<HTMLButtonElement>('[data-maximize-graph]')!.click(); });
+    expect(useGraphMaximize.getState().on).toBe(true);
+    act(() => { h.querySelector<HTMLButtonElement>('[data-outline-toggle]')!.click(); });
+    expect(outline).toHaveBeenCalledTimes(1);
+    useGraphMaximize.getState().set(false);
+  });
+});
+
+describe('Randomise button', () => {
+  it('a click randomises the settings (one action), with no menu', () => {
+    randomize.mockClear();
+    const h = render(<CanvasToolbar onToggleOutline={() => {}} />);
+    act(() => { h.querySelector<HTMLButtonElement>('[data-randomize]')!.click(); });
+    expect(randomize).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+  });
+
+  it('a right-click opens its menu: Randomise settings and Randomise options…', () => {
+    randomize.mockClear();
+    const h = render(<CanvasToolbar onToggleOutline={() => {}} />);
+    const dice = h.querySelector<HTMLButtonElement>('[data-randomize]')!;
+    act(() => { dice.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 300, clientY: 40 })); });
+    const items = () => Array.from(document.querySelectorAll('[role="menu"] [role="menuitem"], [role="menu"] button')).map(b => b as HTMLElement);
+    expect(items().map(b => b.textContent ?? '').filter(t => t.startsWith('Randomise'))).toEqual([
+      expect.stringContaining('Randomise settings'), expect.stringContaining('Randomise options…'),
+    ]);
+    // Options… opens the options (strength, locks, groups, focus, seed).
+    act(() => { items().find(b => (b.textContent ?? '').includes('Randomise options…'))!.click(); });
+    expect(document.querySelector('[role="dialog"][aria-label="Randomise options"]')).toBeTruthy();
+    expect(randomize).not.toHaveBeenCalled();
+  });
+
+  it('the menu’s rows are wired: settings randomises, options opens the options', () => {
+    const r = vi.fn(), o = vi.fn();
+    const items = randomiseMenuItems({ summary: 'strength 50%', onRandomize: r, onOptions: o });
+    expect(labels(items)).toEqual(['Randomise settings', 'Randomise options…']);
+    items.forEach(i => { if (i !== 'separator' && !('heading' in i)) i.onSelect(); });
+    expect(r).toHaveBeenCalledTimes(1);
+    expect(o).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('canvas right-click menu', () => {
+  it('holds every action that left the toolbar and the Graph menu, each wired to its handler', () => {
     const a = all();
-    const items = graphMenuItems(a);
-    expect(labels(items)).toEqual(['Outline', 'Show passes', 'Randomise settings', 'Randomise options…', 'Optimise graph…', 'Bake the picture…', 'Reset to the starter graph', 'Clear to UV and Output']);
-    const handlers = [a.onToggleOutline, a.onTogglePasses, a.onRandomize, a.onRandomizeOptions, a.onOptimize, a.onBake, a.onClear, a.onClearMinimal];
-    items.filter((i): i is Extract<MenuItem, { onSelect: () => void }> => i !== 'separator' && !('heading' in i)).forEach((i, k) => {
-      i.onSelect();
-      expect(handlers[k]).toHaveBeenCalledTimes(1);
+    const items = canvasMenuItems(a);
+    expect(rows(items).map(r => r.label)).toEqual([
+      'Fit all nodes in view', 'Zoom to 100%', 'Auto layout', 'Hide the minimap', 'Hide Next suggestions', 'Show passes',
+      'Optimise graph…', 'Bake the picture…', 'Reset to the starter graph', 'Clear to UV and Output',
+    ]);
+    expect(rows(items).find(r => r.id === 'zoom')!.shortcut).toBe('75%');
+    expect(rows(items).find(r => r.id === 'fit')!.shortcut).toBe('F');
+    const handlers = [a.onFit, a.onResetZoom, a.onAutoLayout, a.onToggleMinimap, a.onToggleNext, a.onTogglePasses, a.onOptimize, a.onBake, a.onClear, a.onClearMinimal];
+    rows(items).forEach((r, k) => {
+      r.onSelect();
+      expect(handlers[k], r.label).toHaveBeenCalledTimes(1);
     });
+    // Randomise lives on its button only.
+    expect(rows(items).some(r => /random/i.test(r.label))).toBe(false);
   });
 
-  it('a locked canvas keeps only what changes nothing; Bake only at the top level; passes only with several programs', () => {
-    expect(labels(graphMenuItems(all({ readOnly: true })))).toEqual(['Outline', 'Show passes']);
-    expect(labels(graphMenuItems(all({ topLevel: false })))).not.toContain('Bake the picture…');
-    expect(labels(graphMenuItems(all({ multiProgram: false })))).not.toContain('Show passes');
-    expect(labels(graphMenuItems(all({ showOutline: true, showPasses: true })))).toContain('Hide the outline');
+  it('a locked canvas keeps only the view; Bake only at the top level; passes only with several programs; no minimap on touch', () => {
+    expect(rows(canvasMenuItems(all({ readOnly: true }))).map(r => r.id)).toEqual(['fit', 'zoom', 'minimap', 'passes']);
+    expect(rows(canvasMenuItems(all({ topLevel: false }))).map(r => r.id)).not.toContain('bake');
+    expect(rows(canvasMenuItems(all({ multiProgram: false }))).map(r => r.id)).not.toContain('passes');
+    expect(rows(canvasMenuItems(all({ onToggleMinimap: undefined }))).map(r => r.id)).not.toContain('minimap');
+    const off = rows(canvasMenuItems(all({ showMinimap: false, showNext: false, showPasses: true }))).map(r => r.label);
+    expect(off).toEqual(expect.arrayContaining(['Show the minimap', 'Show Next suggestions', 'Hide passes']));
   });
 
-  it('the toolbar has view controls and one Graph button, and opening it lists the actions', () => {
-    host = document.createElement('div');
-    document.body.appendChild(host);
-    root = createRoot(host);
-    act(() => root!.render(
-      <CanvasToolbar nodes={[]} topLevel zoom={1} onZoom={() => {}} onResetZoom={() => {}} onFit={() => {}} onAutoLayout={() => {}}
-        showMinimap={false} onToggleMinimap={() => {}} showOutline={false} onToggleOutline={() => {}} onClear={() => {}} onClearMinimal={() => {}}
-        onOptimize={() => {}} onBake={() => {}} />,
-    ));
-    const names = Array.from(host.querySelectorAll('button')).map(b => b.getAttribute('aria-label') ?? b.textContent ?? '');
-    // Moved into the menu: no toolbar button for them any more.
-    for (const gone of ['Bake the picture', 'Optimise graph', 'Reset to the starter graph', 'Outline: list every node', 'Do…']) {
-      expect(names.some(n => n.startsWith(gone)), gone).toBe(false);
-    }
-    // Randomise is back on the toolbar (the user's ask) and stays in the menu; the Do… bar has no button (⌘K)
-    for (const kept of ['Zoom out', 'Zoom in', 'Show minimap', 'Randomise settings']) expect(names.some(n => n.startsWith(kept)), kept).toBe(true);
-    const graph = host.querySelector<HTMLButtonElement>('button[aria-label^="Graph"]')!;
-    expect(graph).toBeTruthy();
-    act(() => { graph.click(); });
-    const menu = Array.from(document.querySelectorAll('[role="menu"] [role="menuitem"], [role="menu"] button')).map(b => b.textContent ?? '');
-    for (const want of ['Outline', 'Randomise settings', 'Optimise graph…', 'Bake the picture…', 'Reset to the starter graph']) {
-      expect(menu.some(t => t.includes(want)), want).toBe(true);
-    }
+  it('the graph renders these rows on the empty canvas’s right-click (NodeGraph.tsx)', () => {
+    const src = readFileSync(resolve(__dirname, '../../NodeGraph/NodeGraph.tsx'), 'utf8');
+    expect(src).toContain('canvasMenuItems({');
+    expect(src).toContain('data-ctx-canvas={r.id}');
+    // The toolbar is only the three controls there too.
+    expect(src).toMatch(/<CanvasToolbar showOutline=\{showOutline\} onToggleOutline=\{toggleOutline\} readOnly=\{locked\} \/>/);
   });
 });
 

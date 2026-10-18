@@ -1,6 +1,6 @@
 # Structure hints
 
-Most shaders are built in roughly the same order: first the coordinates, then the shape, then the colour, then the finish. Structure hints show that order as a **loose guide**. They never block a wire, move a node or rewrite anything. The order comes from the bundled examples (see [The data](#the-data)).
+Most shaders are built in roughly the same order: first the coordinates, then the shape, then the colour, then the finish. The stage map below records that order. It is used by the builders' flow strips and the node library's relevance; the Studio graph itself does not show stages (see [Where stages show](#where-stages-show)). The order comes from the bundled examples (see [The data](#the-data)).
 
 ## The flows
 
@@ -24,47 +24,23 @@ Every node type has a stage or the explicit `any`. Maths, time, constants, Expre
 
 A registry-wide test checks that every node resolves to a stage, that every category is mapped and that no override names a missing type. A node added to a known category is covered automatically. User nodes are `any`.
 
-## What you see
+## Where stages show
 
-- **Flow strip.** A thin bar above the canvas: `2D  Space › Bend space › Shape › Shape it › Colour › Post`.
-  - Stages the graph has are lit with their colour. Absent stages are faint.
-  - The stage the Output has reached is bold. This is the furthest stage among everything that feeds the Output, including what's inside groups.
-  - The stage after it is dashed and marked **next**. The strip offers no moves of its own (2026-10-17): the Next strip under the selected card is the one suggestion surface (docs/suggestions.md), and the next stage nudges its ranking (Next-stage boost below).
-  - Clicking a stage name opens the node browser on that stage, listed by category. Back returns to the categories. On a phone this opens the Browse sheet's Nodes tab.
-  - On a narrow canvas only the current and next stages keep their names.
-  - On a phone the strip collapses to a chip, for example `2D ● Colour › next Post`. The chip opens the same content in a popover: the stages with a line each, notices and View.
-  - The strip's × hides it. Hiding is remembered (`playfield:structure:strip`). The flow button in the canvas toolbar brings it back.
-- **Stage tags.** A faint stage-coloured line along the top edge of each card. Nodes that belong anywhere get no tag. You can toggle tags in the strip's **View** menu, which also has the legend for the current flow.
-- **Next-stage boost** (`src/structure/boost.ts`). This is deliberately small. It breaks near-ties but never overrides a confident preview finding or a strong habit of yours:
-  - **Suggestions strip:** +0.35 to a move whose node is in the next stage. For scale, kind fit is 0.4–1, usage is up to ×3 and an output finding is up to ×4.
-  - **Search** and the **Do… bar's node list:** +4 points within a match tier. Tiers are 10–20 points apart.
-  - **Quick add:** a pick in the next stage rises at most one place.
-  - There is no boost while the strip is hidden.
-- **Order notices** (`src/structure/notices.ts`). These are phrased as questions and never block anything. They appear as a "1 note" chip at the end of the strip. **Show** selects the node, opening its group if needed. **It's intended** dismisses the notice for this graph, keyed by the saved graph's name. **Turn order notices off** switches them off everywhere, and so does the View menu.
-  - *A bend after the colour:* a Bend-space node is fed a colour and its result goes on as a colour (into a colour step, a finish or the Output). The notice reads: "this bends the colours, not the shape". A bend whose result goes back into space, such as a shape's UV or a sampler, is colour-to-space. That's deliberate and is never flagged.
-  - *Bloom after Tone map:* the brights are already squeezed into range.
-  - *Noise mixed in after a finish:* a noise joins the picture after a Post node that it doesn't pass through.
-  - **Exceptions:** anything wired to a node that reads a previous frame (Pass, Previous Frame, Echo, Fade, Grid Rules, Motion Blur) is left alone, because feedback is deliberate. So is anything inside an iterated group or loop, and anything passing through an Expression Block or custom function.
-  - **False-positive bar:** fewer than 2% of the bundled examples may be flagged. Today none are (0 of 395).
-- **Auto layout** (flow, the default; `layoutByRank` in `src/store/graphLayout.ts`, also used by Convert and GLSL import). Nodes go in left-to-right columns by data-flow rank, and the layout stays compact:
-  - A node is pulled right, next to the first node it feeds (`compactRanks`). A Time or a constant read only at the end of a long chain used to sit alone in the first column, far from everything else.
-  - Each connected piece of the graph is laid out on its own (`connectedPieces`). The piece with the Output comes first. The others are packed beside it in rows no wider than the widest piece, with the usual column gap (`packPieces`), so nothing is stranded far left or far right.
-- **Arrange by stage** (`src/structure/arrange.ts`). Open the ▾ beside **Auto layout** and choose **By stage**. Nodes are placed in left-to-right columns by stage, with the Output last.
-  - Maths, time and constants sit in the column of the first stage they feed.
-  - A loose group's members stay together in one column.
-  - Empty columns are dropped and each column is stacked, so cards never overlap.
-  - It is one undo step ("Arranged by stage"), and it lays out the level you're in.
-- **In the builders.** The 3D Scene Builder (3D flow), Grid Rules (passes) and Agent Rules (agents) windows show their flow under the header.
+**Not in the Studio graph** (removed 2026-10-18). The graph has no flow strip, no stage tags on cards, no stage browse in the node library, no order notices and no "Arrange by stage"; suggestions, quick add, search and the Do… bar no longer lean to a "next stage". Node cards keep their category colours. The strip's settings (`playfield:structure:strip`, `:tags`, `:notices`, `:dismissed`) are no longer read.
+
+What still uses the stage map:
+
+- **The builders.** The 3D Scene Builder (3D flow), Grid Rules (passes) and Agent Rules (agents) windows show their flow under the header (`BuilderFlowStrip.tsx`).
   - Each stage has a line saying where it lives in that builder, for example "Quality: how far and how finely each ray steps". Stages that happen in the graph are outlined only.
-  - The strip folds to the stage names, and the folded state is remembered.
+  - The strip folds to the stage names, and the folded state is remembered (`playfield:structure:builderStripFolded`).
   - Empty sections (an empty scene tree or an empty rule list) add a "Next in the flow: …" line. The data is in `src/structure/builders.ts`.
+- **The node library's relevance** (`src/structure/relevance.ts`): the graph's flow (2D, 3D, passes, agents; `detectFlow` in `flow.ts`) decides which categories fit it.
+- **The numbers below** (`src/structure/stats.ts`, printed by its test), and the pattern miner's stage labels.
 
-Settings are listed in Files → App settings → Studio:
+**Auto layout** (`layoutByRank` in `src/store/graphLayout.ts`, also used by Convert and GLSL import; in the canvas's right-click menu). Nodes go in left-to-right columns by data-flow rank, and the layout stays compact:
 
-- `playfield:structure:strip`
-- `playfield:structure:tags`
-- `playfield:structure:notices`
-- `playfield:structure:dismissed`
+- A node is pulled right, next to the first node it feeds (`compactRanks`). A Time or a constant read only at the end of a long chain used to sit alone in the first column, far from everything else.
+- Each connected piece of the graph is laid out on its own (`connectedPieces`). The piece with the Output comes first. The others are packed beside it in rows no wider than the widest piece, with the usual column gap (`packPieces`), so nothing is stranded far left or far right.
 
 ## The data
 
@@ -194,8 +170,3 @@ What the data changed:
 ## Limits
 
 - A graph has one flow. A 2D picture composited over a 3D scene reads as 3D, with the 2D stages aliased.
-- The Output's stage is the *furthest* stage that feeds it, so one late node, such as a tone map, sets it.
-- Order notices cover three common accidents. They aren't a linter.
-- Notices dismissed in unsaved work share one key, `(unsaved)`.
-- Stage tags are on the regular node card. Special cards, such as the Agents group card, don't show them.
-- Arrange by stage doesn't move a collapsed loose group's box, only its members.

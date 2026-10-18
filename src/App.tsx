@@ -2,7 +2,7 @@ import { offerGraphExport } from './components/playfile/exportMenus';
 import { saveAsShortcut, saveShortcut, selectAllNodesAtLevel } from './components/shell/graphShortcuts';
 import { LearnSurfaces } from './components/learn/LearnSurfaces';
 import { SaveNudge } from './components/shell/SaveNudge';
-import { defaultPreviewWidth, rememberedPreviewWidth, rememberPreviewWidth, useGraphMaximize } from './components/shell/graphLayout';
+import { defaultPreviewWidth, graphOverPictureStyle, pictureBehindGraph, pictureBehindStyle, rememberedPreviewWidth, rememberPreviewWidth, useGraphMaximize } from './components/shell/graphLayout';
 import { useHistBand } from './lib/histogramBand';
 import { openDoBar } from './suggestions/doBarStore';
 import { doBarOrRecipe } from './builders/windows';
@@ -10,11 +10,10 @@ import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { lazyWithSuspense, preloadLazyComponents, type PropsOf } from './components/lazyWithSuspense';
 import ShaderCanvas, { type OfflineRenderHandle, type HistogramData } from './components/ShaderCanvas';
 import { NodeGraph } from './components/NodeGraph/NodeGraph';
-import { FlowStrip } from './components/structure/FlowStrip';
-import { BROWSE_STAGE_EVENT } from './structure/browse';
 import { NodePalette } from './components/NodeGraph/NodePalette';
 import { FreezeBehindBuilder } from './components/builders/FreezeBehindBuilder';
 import { CodeBarRow, CodePanel } from './components/CodePanel';
+import { GraphStatus } from './components/shell/CanvasToolbar';
 import { tokenizeLine } from './components/glslSyntax';
 import { DesktopTopNav } from './components/shell/DesktopTopNav';
 import { MobileTopBar } from './components/shell/MobileTopBar';
@@ -720,17 +719,6 @@ function App() {
     window.addEventListener(OPEN_WHATS_NEW, open);
     return () => window.removeEventListener(OPEN_WHATS_NEW, open);
   }, [setPage]);
-  // A stage clicked on the flow strip: the node browser opens on it (structure/browse.ts).
-  useEffect(() => {
-    const open = () => {
-      const b = breakpointRef.current;
-      if (isMobile(b)) { setMobileExamplesTab('nodes'); setShowMobileExamples(true); return; }
-      if (isTablet(b)) { setPaletteExpanded(true); return; }
-      setPaletteCollapsed(false);
-    };
-    window.addEventListener(BROWSE_STAGE_EVENT, open);
-    return () => window.removeEventListener(BROWSE_STAGE_EVENT, open);
-  }, []);
   // After an update: once, a small notice pointing at What's new.
   useEffect(() => {
     const id = window.setTimeout(() => {
@@ -1138,9 +1126,7 @@ function App() {
 
           {showGraphPane && (
             <div style={{ flex: 1, minHeight: 0, minWidth: 0, display: 'flex', flexDirection: 'column', [landscape ? 'borderLeft' : 'borderTop']: showCanvasPane ? `1px solid ${tc.surface0}` : undefined }}>
-              {/* On a phone the flow strip is one chip (docs/structure-hints.md); on a node page it
-                  scrolls away with the page rather than staying pinned above it. */}
-              <div style={{ flex: 1, minHeight: 0, minWidth: 0 }}><MobileGraphBrowser top={<FlowStrip phone />} /></div>
+              <div style={{ flex: 1, minHeight: 0, minWidth: 0 }}><MobileGraphBrowser /></div>
             </div>
           )}
 
@@ -1498,7 +1484,6 @@ function App() {
             </button>
 
             <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column' }}>
-              <FlowStrip />
               <div style={{ flex: 1, minHeight: 0, position: 'relative' }}><NodeGraph redesignToolbar /></div>
             </div>
             {showCode && <CodePanel code={fragmentShader} onClose={() => setShowCode(false)} highlightNodeId={selectedNodeId} nodeSlugMap={nodeSlugMap} />}
@@ -1549,6 +1534,8 @@ function App() {
   // ══════════════════════════════════════════════════════════════════════════
   const paletteW = getPaletteWidth(bp);
   const graphMaximized = graphMaxOn;
+  // Maximized Studio graph with the docked preview: the picture goes behind the graph, full size.
+  const pictureBehind = pictureBehindGraph({ maximized: graphMaximized, page, floated: previewFloated, hosted });
   const paletteBaseW = paletteUserW ?? paletteW;
   const effectivePaletteW = paletteBaseW === 0 ? 0 : paletteCollapsed ? 28 : paletteBaseW;
 
@@ -1600,17 +1587,15 @@ function App() {
         {/* Center content. On Play the panel is a fixed column and the picture takes the rest. */}
         <div data-play-sidebar={page === 'play' ? '' : undefined} style={page === 'play'
           ? (playSidebarHidden ? { width: 0, flexShrink: 0, position: 'relative', overflow: 'hidden' } : { width: playWidth, flexShrink: 0, position: 'relative', borderRight: `1px solid ${tk.border.default}` })
-          : graphMaximized && page === 'studio'
-            // Maximized: over the preview's space too (the preview keeps running underneath).
-            ? { position: 'absolute', top: 0, bottom: 0, left: paletteBaseW > 0 ? effectivePaletteW : 0, right: 0, zIndex: 6, background: tk.bg.app }
+          : pictureBehind
+            // Maximized: the graph takes the whole window, over the picture (the preview, moved behind it below).
+            ? graphOverPictureStyle(paletteBaseW > 0 ? effectivePaletteW : 0)
             : { flex: 1, position: 'relative', minWidth: 0 }}>
           {page === 'play' && <PlayPage />}
           {page === 'studio' && (
             <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column' }}>
-              {/* The flow strip: the usual order of steps, what this graph has, what comes next (docs/structure-hints.md). */}
-              <FlowStrip />
               <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
-                <NodeGraph redesignToolbar />
+                <NodeGraph redesignToolbar overPicture={pictureBehind} />
               </div>
               {/* Generated code docks under the canvas: a bar when closed, a resizable panel when open. */}
               {showCode
@@ -1618,6 +1603,8 @@ function App() {
                 : (
                   <div style={{ borderTop: `1px solid ${tk.border.default}` }}>
                     <CodeBarRow slug={selectedNodeId ? (nodeSlugMap.get(selectedNodeId) ?? null) : null} onClick={() => setShowCode(true)}>
+                      {/* The graph's status: node count (stats) and frame time (performance). */}
+                      <GraphStatus />
                       <IconButton icon="chevU" label="Show generated code" size="sm" onClick={e => { e.stopPropagation(); setShowCode(true); }} />
                     </CodeBarRow>
                   </div>
@@ -1628,8 +1615,8 @@ function App() {
           {page === 'convert' && <ConvertPage onMaterialized={openStudioFitted} />}
         </div>
 
-        {/* Resize Divider — hidden when preview is floated, and on Play (the picture fills the space) */}
-        {!previewFloated && page !== 'play' && !hosted && (
+        {/* Resize Divider — hidden when preview is floated, on Play (the picture fills the space), and behind a maximized graph */}
+        {!previewFloated && page !== 'play' && !hosted && !pictureBehind && (
           <div
             onMouseDown={handleDividerMouseDown}
             onTouchStart={handleDividerTouchStart}
@@ -1641,10 +1628,17 @@ function App() {
 
         {/* Right: Shader Preview — hidden when floated or when the page hosts the canvas itself. A render surface, so it's dark in both themes. */}
         {!previewFloated && !hosted && (
-          <div style={{ ...(page === 'play' ? { flexGrow: 1, flexBasis: 0, minWidth: 0 } : { width: previewWidth }), flexShrink: 0, display: 'flex', flexDirection: 'column', background: '#0d0d12' }}>
+          <div data-preview-column="" data-picture-behind={pictureBehind ? '' : undefined} style={{
+            ...(pictureBehind
+              // Maximized graph: the same canvas, moved behind the graph and sized to its area (no second
+              // renderer); the aspect preset still letterboxes it (ShaderCanvas). No header or footer.
+              ? pictureBehindStyle(paletteBaseW > 0 ? effectivePaletteW : 0)
+              : page === 'play' ? { flexGrow: 1, flexBasis: 0, minWidth: 0 } : { width: previewWidth }),
+            flexShrink: 0, display: 'flex', flexDirection: 'column', background: '#0d0d12',
+          }}>
             {/* Chrome around the picture follows the app's real theme; the picture itself stays dark (below). */}
             <ThemeOverrideContext.Provider value={null}>
-              <PreviewHeader>
+              {!pictureBehind && <PreviewHeader>
                 <AspectPicker onPanel />
                 <PreviewQualityPicker onPanel /><FrameRatePicker onPanel />
                 <OverlayButton />
@@ -1655,7 +1649,7 @@ function App() {
                 {page === 'play' && <OutputButton />}
                 <IconButton icon="wave" label="Brightness histogram" size="sm" active={showHistogram} onClick={() => setShowHistogram(v => !v)} />
                 <IconButton icon="popout" label="Float the preview" size="sm" onClick={() => { setPreviewFloated(true); setFloatPos({ x: window.innerWidth - floatSize.w - 20, y: 60 }); }} />
-              </PreviewHeader>
+              </PreviewHeader>}
             </ThemeOverrideContext.Provider>
             <ThemeOverrideContext.Provider value="dark">
               <PlaySplitArea active={page === 'play'}>
@@ -1666,7 +1660,7 @@ function App() {
               </PlaySplitArea>
             </ThemeOverrideContext.Provider>
             <ThemeOverrideContext.Provider value={null}>
-              <PreviewFooter idleHint="Hover for colour · select a node to probe" />
+              {!pictureBehind && <PreviewFooter idleHint="Hover for colour · select a node to probe" />}
             </ThemeOverrideContext.Provider>
           </div>
         )}

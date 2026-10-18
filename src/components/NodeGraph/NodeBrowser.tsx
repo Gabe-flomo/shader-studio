@@ -17,9 +17,7 @@ import { Icon } from '../ui/Icon';
 import { nodeDragProps, nodeDragStyle, type DropPayload } from './nodeDrop';
 import { BuildersSection } from '../builders/BuildersSection';
 import { matchBuilders } from '../../builders/registry';
-import { useStructureHints } from '../../structure/hintsStore';
-import { typesForStage } from '../../structure/browse';
-import { FLOWS, STAGES } from '../../structure/stages';
+import { FLOWS } from '../../structure/stages';
 import { misfitBadge, splitCategories } from '../../structure/relevance';
 import { useLibraryPrefs } from '../../structure/libraryPrefs';
 import { useFitsHere, useLibraryContext } from './useLibraryRelevance';
@@ -350,9 +348,6 @@ export function NodeBrowser({
   const hidden = useHiddenHere(HIDDEN_NODES);
   const fits = useFitsHere(relevanceOn && relevantOnly, hidden);
   const [showOther, setShowOther] = useState(false);
-  // A stage picked on the flow strip (structure/hintsStore.ts); Back clears it.
-  const stageBrowse = useStructureHints(st => st.browse);
-  const setStageBrowse = useStructureHints(st => st.setBrowse);
 
   useUserNodesVersion(); // re-render when a node type is published or deleted
   const allCats = getAllCategories();
@@ -450,31 +445,7 @@ export function NodeBrowser({
   // ── Compute content ────────────────────────────────────────────────────────
   let innerContent: React.ReactNode;
 
-  if (stageBrowse && !isSearching && !isGlsl) {
-    // A stage clicked on the flow strip (docs/structure-hints.md): its nodes, by category.
-    const list = typesForStage(stageBrowse.flow, stageBrowse.stage, hidden);
-    const cats = [...new Set(list.map(x => x.category))];
-    innerContent = (
-      <div data-stage-browse={stageBrowse.stage} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-          <IconButton icon="chevL" label="Back to categories" size="sm" onClick={() => { setStageBrowse(null); setPreviewType(null); }}
-            style={{ background: tk.bg.hover, color: tk.text.secondary }} />
-          <span style={{ flex: 1, minWidth: 0, fontWeight: 600, fontSize: 12.5, color: tk.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            Stage: {STAGES[stageBrowse.stage].label} <span style={{ color: tk.text.faint, fontWeight: 500 }}>· {FLOWS[stageBrowse.flow].label}</span>
-          </span>
-          <Count n={list.length} />
-        </div>
-        <span style={{ fontSize: 12, color: tk.text.muted, lineHeight: 1.45 }}>{STAGES[stageBrowse.stage].line}</span>
-        {cats.map(cat => (
-          <div key={cat}>
-            <CapsLabel>{rowLabel(cat)}</CapsLabel>
-            {renderPills(list.filter(x => x.category === cat).map(x => ({ type: x.type, label: x.label, description: nodeBlurb(getNodeDefinition(x.type)) })))}
-          </div>
-        ))}
-      </div>
-    );
-
-  } else if (isSearching) {
+  if (isSearching) {
     const trimmed = searchQuery.trim().toLowerCase();
     const results = getOfferedDefinitions()
       .filter(def => !hidden.has(def.type))
@@ -623,7 +594,7 @@ export function NodeBrowser({
   }
 
   // Where nodes are listed, how to add one is always on screen (not only in a tooltip).
-  const showsPills = !isGlsl && (isSearching || !!stageBrowse || path.length > 0);
+  const showsPills = !isGlsl && (isSearching || path.length > 0);
   return (
     <>
       {showsPills && (

@@ -145,7 +145,6 @@ import { Chip } from '../ui/Chip';
 import { groupAddable, groupCardPorts, portKeyFor, type GroupPort } from '../../nodes/groupPorts';
 import { MAX_GROUP_ITERATIONS } from '../../nodes/definitions/group';
 import { programTintColour, programTintsCached } from '../../lib/programTints';
-import { StageTag } from '../structure/stageUi';
 import { BakedCardBody } from '../bake/BakedCardBody';
 import { TimeCubeCardBody } from '../timeCube/TimeCubeCardBody';
 import { DataTextureCardBody } from './DataTextureCardBody';
@@ -2967,8 +2966,6 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         ].filter(Boolean).join(', '),
       }}
     >
-      {/* Its stage in the flow, faint along the top edge (structure hints; off in the flow strip's View). */}
-      <StageTag type={node.type} />
       {/* Show passes: which program(s) this node runs in; striped when it is compiled into more than one. */}
       {programTags && (
         <div

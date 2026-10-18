@@ -20,14 +20,14 @@ graphs**, and it all stays in this browser.
   3. **What fits the kind**, with a short reason: "a distance: lights the edge".
 - **The why** says which: the measurement, your habit, "common after Circle SDF in the examples"
   (while you have little data of your own), or the kind.
-- **Hiding it**: the × on the strip, or the ⚡ Next button in the canvas toolbar (it brings it back).
+- **Hiding it**: the × on the strip, or **Show Next suggestions** in the canvas's right-click menu (it brings it back).
   App settings → Studio lists "Suggestions under the selected node". Esc closes it for the selected
   card.
 - **Folded**: the list opens the first time. Once a move is used (or the strip is folded with its
   chevron) it starts as a small **Next** chip under the card, and a click opens it
   (`playfield:suggestions:open`).
 - **One surface** (docs/glossary.md): this strip is the only place suggestions appear by
-  themselves. The flow strip names the next stage but offers no moves, the library's *Fits here*
+  themselves. The library's *Fits here*
   shows only while a wire is being dragged, and the Do… bar is a command bar (its completions
   answer what you type).
 - **Reset learning**: App settings → Studio → "Suggestions: what they learned from your graphs" →
@@ -145,7 +145,7 @@ flat, stepped or clipped (Posterize, Floor, Step, Compare, Color, Constant, Time
 
 ## The Do… bar
 
-**⌘K**, or the ✎ button in the canvas toolbar. **⌘⇧D** (Ctrl+Shift+D on Windows and Linux) opens it
+**⌘K** (or Help → Do… commands). **⌘⇧D** (Ctrl+Shift+D on Windows and Linux) opens it
 from any page (Play, Present, Files… switch to the Studio first) and even while typing in a text
 field; inside a scene builder it jumps to that builder's recipe instead (docs/scene-builder.md). Both
 are listed, and remappable, on the Shortcuts page. Type what to do; a live preview lists the steps that

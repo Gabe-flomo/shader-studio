@@ -4,225 +4,179 @@ import { getRandomizeOptions, optionsSummary } from '../../nodes/randomizeOption
 import { lockedItems } from '../../nodes/randomizeParams';
 import { Suspense, useMemo, useRef, useState, type ReactNode } from 'react';
 import { lazySafe } from '../lazyWithSuspense';
-import { useNodeGraphStore } from '../../store/useNodeGraphStore';
+import { useNodeGraphStore, getActiveNodes } from '../../store/useNodeGraphStore';
 import { useThemeMode, useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { categoryColor } from '../../theme/categories';
 import type { GraphNode } from '../../types/nodeGraph';
 import { IconButton } from '../ui/Button';
-import { SuggestionsToggle } from '../NodeGraph/SuggestionStrip';
-import { ArrangeMenu, FlowStripToggle } from '../structure/stageUi';
 import { Icon } from '../ui/Icon';
 import type { IconName } from '../ui/iconPaths';
 import { Popover } from '../ui/Popover';
 import { Menu } from '../ui/Menu';
-import { graphMenuItems } from './canvasGraphMenu';
+import { randomiseMenuItems } from './canvasGraphMenu';
 import { Tooltip } from '../ui/Tooltip';
 import { computeGraphStats, countNodes, mainBodyLines } from './graphStats';
 import { PerfBadge, PerfPanel } from './PerfPanel';
 import { useGraphMaximize } from './graphLayout';
 import { isDesktop, useBreakpoint } from '../../hooks/useBreakpoint';
 import { loadShortcutMap } from '../../hooks/useShortcuts';
+import { useLongPress } from '../../lib/longPress';
 
 // Loaded on first use: the finder pulls in the compiler and the offscreen renderer.
 const SuggestControlsPanel = lazySafe(() => import('../play/SuggestControlsPanel'));
 
 /**
- * Floating toolbar at the top centre of the canvas (desktop redesign), split in two (UX audit §3.4):
- * view controls (node count with graph stats, frame time, zoom, Fit, Auto layout, maximize, minimap,
- * Next, flow strip, Randomise; the Do… bar opens with ⌘K) and one "Graph ⋯" menu with the rarely used whole-graph actions
- * (canvasGraphMenu.ts). Shortcuts are unchanged.
+ * Floating toolbar at the top centre of the canvas: exactly three controls. Maximize graph (the
+ * picture goes behind the graph, shell/graphLayout.ts), the Outline, and Randomise (click: one undo
+ * step; right-click or a long press: Randomise settings / Randomise options…).
+ *
+ * Everything else lives elsewhere (docs/page-canvas.md): zoom by scroll/pinch and the keys, with
+ * the percentage in the canvas corner; Fit (F), Auto layout, the minimap, Next suggestions, Show
+ * passes, Optimise, Bake and the resets in the canvas's right-click menu (canvasGraphMenu.ts); the
+ * node count and frame time in the status bar under the graph (GraphStatus).
  */
-export function CanvasToolbar({
-  nodes, topLevel, groupName, zoom, onZoom, onResetZoom, onFit, onAutoLayout, onArrangeByStage, showMinimap, onToggleMinimap, showOutline, onToggleOutline, onClear, onClearMinimal, compact = false, readOnly = false, onOptimize, onBake,
-}: {
-  nodes: readonly GraphNode[];
-  topLevel: boolean;
-  groupName?: string;
-  zoom: number;
-  onZoom: (zoom: number) => void;
-  onResetZoom: () => void;
-  onFit: () => void;
-  onAutoLayout: () => void;
-  /** Auto layout by stage (structure/arrange.ts): offered from a menu beside Auto layout. */
-  onArrangeByStage?: () => void;
-  showMinimap: boolean;
-  onToggleMinimap: () => void;
+export function CanvasToolbar({ showOutline = false, onToggleOutline, readOnly = false }: {
   /** The outline panel: a list of the nodes in evaluation order, with step-through. */
   showOutline?: boolean;
   onToggleOutline?: () => void;
-  onClear: () => void;
-  /** Right-click on the trash: empty the canvas down to UV → Output */
-  onClearMinimal?: () => void;
-  /** Narrow canvas (tablet): Fit and Auto layout become icon buttons. */
-  compact?: boolean;
-  /** A locked canvas: no auto layout and no clearing, the view tools stay. */
+  /** A locked canvas: no maximize and no randomise; the outline stays. */
   readOnly?: boolean;
-  /** Open the optimise-graph dialog (runs of math cards → blocks). */
-  onOptimize?: () => void;
-  /** Bake the picture (docs/bake.md): render the whole graph once to a video and play that instead. */
-  onBake?: () => void;
 }) {
   const tk = useTokens();
-  const selected = useNodeGraphStore(s => s.selectedNodeIds.length);
-  const { total, insideGroups } = useMemo(() => countNodes(nodes), [nodes]);
-  const countRef = useRef<HTMLSpanElement>(null);
-  const [statsOpen, setStatsOpen] = useState(false);
-  const perfRef = useRef<HTMLSpanElement>(null);
-  const [perfOpen, setPerfOpen] = useState(false);
-  // Show passes: only offered when the graph compiles into more than one program (Pass nodes, Agents).
-  const multiProgram = useNodeGraphStore(s => !!(s.programMap?.passes?.some(p => !p.hidden) || s.programMap?.agents));
-  const showPasses = useNodeGraphStore(s => s.showPasses);
-  const setShowPasses = useNodeGraphStore(s => s.setShowPasses);
-
-  const countLabel = selected > 1 ? `${selected} of ${total} selected` : `${total} ${total === 1 ? 'node' : 'nodes'}`;
-  const countTip = topLevel
-    ? `${total} nodes in the whole graph${insideGroups ? ` (${insideGroups} inside groups)` : ''}`
-    : `${total} nodes in ${groupName ?? 'this group'}`;
-
   return (
     <div
       data-graph-overlay=""
+      data-canvas-toolbar=""
       onMouseDown={e => e.stopPropagation()}
+      onContextMenu={e => { e.preventDefault(); e.stopPropagation(); }}
       style={{
         position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 15,
-        display: 'flex', alignItems: 'center', gap: 2, padding: 5, borderRadius: 12, whiteSpace: 'nowrap', maxWidth: 'calc(100% - 16px)', overflowX: 'auto',
+        display: 'flex', alignItems: 'center', gap: 2, padding: 5, borderRadius: 12, whiteSpace: 'nowrap',
         background: tk.bg.panel, boxShadow: tk.shadow.float, font: `12px ${fontFamily.ui}`,
       }}
     >
-      <span ref={countRef} style={{ display: 'inline-flex' }}>
-        <Tooltip label={countTip} disabled={statsOpen}>
-          <ToolButton icon="nodes" active={statsOpen || selected > 1} onClick={() => setStatsOpen(o => !o)}>
-            {countLabel}
-            {!topLevel && groupName && (
-              <span style={{ font: `600 11px ${fontFamily.mono}`, color: tk.text.muted, background: tk.bg.hover, borderRadius: 6, padding: '1px 6px' }}>{groupName}</span>
-            )}
-          </ToolButton>
-        </Tooltip>
-      </span>
-      {statsOpen && (
-        <Popover anchorRef={countRef} onClose={() => setStatsOpen(false)} align="start" width={420} padding={0}>
-          <GraphStatsPanel nodes={nodes} topLevel={topLevel} groupName={groupName} onClose={() => setStatsOpen(false)} />
-        </Popover>
-      )}
-      {/* Phones: the frame-time badge is what pushed the bar past the screen's edge; the node count stays. */}
-      {!compact && (
-        <span ref={perfRef} style={{ display: 'inline-flex' }}>
-          <Tooltip label="Performance: frame time, compiles, cost by node" disabled={perfOpen}>
-            <ToolButton icon="wave" active={perfOpen} onClick={() => setPerfOpen(o => !o)}><PerfBadge /></ToolButton>
-          </Tooltip>
-        </span>
-      )}
-      {perfOpen && (
-        <Popover anchorRef={perfRef} onClose={() => setPerfOpen(false)} align="start" width={420} padding={0}>
-          <PerfPanel onClose={() => setPerfOpen(false)} />
-        </Popover>
-      )}
-      <Sep />
-      <IconButton icon="minus" label="Zoom out" size="sm" onClick={() => onZoom(zoom / 1.2)} />
-      <Tooltip label="Reset zoom to 100%">
-        <button
-          type="button"
-          onClick={onResetZoom}
-          style={{ minWidth: 42, height: 30, border: 0, borderRadius: radius.md, background: 'none', cursor: 'pointer', color: tk.text.secondary, font: `600 12px ${fontFamily.ui}` }}
-        >{Math.round(zoom * 100)}%</button>
-      </Tooltip>
-      <IconButton icon="plus" label="Zoom in" size="sm" onClick={() => onZoom(zoom * 1.2)} />
-      <Sep />
-      {compact ? (
-        <>
-          <IconButton icon="fit" label="Fit all nodes in view" shortcut="f" size="sm" onClick={onFit} />
-          {!readOnly && <IconButton icon="layout" label="Arrange left-to-right by data flow" size="sm" onClick={onAutoLayout} />}
-          {!readOnly && onArrangeByStage && <ArrangeMenu onFlow={onAutoLayout} onStage={onArrangeByStage} />}
-        </>
-      ) : (
-        <>
-          <Tooltip label="Fit all nodes in view" shortcut="f"><ToolButton icon="fit" onClick={onFit}>Fit</ToolButton></Tooltip>
-          {!readOnly && <Tooltip label="Arrange left-to-right by data flow"><ToolButton icon="layout" onClick={onAutoLayout}>Auto layout</ToolButton></Tooltip>}
-          {!readOnly && onArrangeByStage && <ArrangeMenu onFlow={onAutoLayout} onStage={onArrangeByStage} />}
-        </>
-      )}
       {!readOnly && <MaximizeGraphButton />}
-      <Sep />
-      <IconButton icon="minimap" label={showMinimap ? 'Hide minimap' : 'Show minimap'} size="sm" active={showMinimap} onClick={onToggleMinimap} />
-      {!readOnly && <SuggestionsToggle />}
-      {!readOnly && <FlowStripToggle />}
-      {/* Randomise every setting on this level, one undo step (also in the Graph menu, with its options) */}
-      {!readOnly && <IconButton icon="dice" label="Randomise settings (one undo step)" size="sm" data-randomize onClick={() => void randomizeGraphAction()} />}
-      {/* The Do… bar has no toolbar button: ⌘K (or Help → Do… commands) opens it */}
-      <Sep />
-      <GraphMenuButton readOnly={readOnly} topLevel={topLevel} multiProgram={multiProgram} showPasses={showPasses} onTogglePasses={() => setShowPasses(!showPasses)}
-        showOutline={!!showOutline} onToggleOutline={onToggleOutline} onBake={onBake} onOptimize={onOptimize} onClear={onClear} onClearMinimal={onClearMinimal} />
+      {onToggleOutline && (
+        <IconButton icon="layoutGraph" size="sm" active={showOutline} data-outline-toggle=""
+          label={showOutline ? 'Hide the outline' : 'Outline: list every node, jump to one, or step through the graph'} onClick={onToggleOutline} />
+      )}
+      {!readOnly && <RandomiseButton />}
     </div>
   );
 }
 
-/** Desktop Studio: the graph takes the preview's space too (shell/graphLayout.ts), or gives it back. */
+/** Desktop Studio: the graph takes the whole window and the picture goes behind it (shell/graphLayout.ts), or the split comes back. */
 function MaximizeGraphButton() {
   const on = useGraphMaximize(s => s.on);
   const toggle = useGraphMaximize(s => s.toggle);
   const bp = useBreakpoint();
   if (!isDesktop(bp)) return null;
   return (
-    <IconButton icon={on ? 'splitPanel' : 'layoutCanvas'} label={on ? 'Bring the preview back' : 'Maximize the graph: use the preview’s space too'}
+    <IconButton icon={on ? 'splitPanel' : 'layoutCanvas'} data-maximize-graph=""
+      label={on ? 'Bring the preview back beside the graph' : 'Maximize the graph: the picture goes behind it, full size'}
       shortcut={loadShortcutMap().maximizeGraph} size="sm" active={on} onClick={toggle} />
   );
 }
 
 /**
- * "Graph ⋯": the rarely used whole-graph actions (canvasGraphMenu.ts): the outline, passes, randomise
- * (with its options popover and a seed), optimise, bake, reset. Randomise all settings (docs/surprise.md)
- * moves the settings on the level on screen by the saved strength, locks and group options, as one undo step.
+ * Randomise (docs/surprise.md): a click moves every setting on the level on screen by the saved
+ * strength, locks and group options, as one undo step. A right-click (or a long press) opens its
+ * small menu: Randomise settings, and Randomise options… (strength, locks, groups, focus, seed).
  */
-function GraphMenuButton({ readOnly, topLevel, multiProgram, showPasses, onTogglePasses, showOutline, onToggleOutline, onBake, onOptimize, onClear, onClearMinimal }: {
-  readOnly: boolean; topLevel: boolean; multiProgram: boolean; showPasses: boolean; onTogglePasses: () => void; showOutline: boolean;
-  onToggleOutline?: () => void; onBake?: () => void; onOptimize?: () => void; onClear: () => void; onClearMinimal?: () => void;
-}) {
+export function RandomiseButton() {
   const anchor = useRef<HTMLSpanElement>(null);
-  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; summary: string } | null>(null);
   const [options, setOptions] = useState(false);
   const [suggest, setSuggest] = useState(false);
-  const [summary, setSummary] = useState('');
-  const open = () => {
+  const openMenu = (x: number, y: number) => {
     // Counting locks walks the whole graph: worked out when the menu opens, not per render.
-    setSummary(optionsSummary(getRandomizeOptions(), lockedItems(useNodeGraphStore.getState().nodes).length));
-    const r = anchor.current?.getBoundingClientRect();
-    setMenu(r ? { x: r.right - 280, y: r.bottom + 6 } : null);
+    const summary = optionsSummary(getRandomizeOptions(), lockedItems(useNodeGraphStore.getState().nodes).length);
+    setMenu({ x, y, summary });
   };
-  const items = graphMenuItems({
-    readOnly, topLevel, multiProgram, showPasses, showOutline, randomizeSummary: summary,
-    onToggleOutline, onTogglePasses, onBake, onOptimize, onClear, onClearMinimal,
-    onRandomize: () => void randomizeGraphAction(),
-    onRandomizeOptions: () => setOptions(true),
-  });
+  const hold = useLongPress(openMenu);
   return (
-    <span ref={anchor} style={{ display: 'inline-flex', alignItems: 'center' }}>
-      <ToolButton icon="more" active={!!menu || options} onClick={() => (menu ? setMenu(null) : open())} ariaLabel="Graph: outline, passes, randomise, optimise, bake, reset">Graph</ToolButton>
-      {menu && <Menu x={menu.x} y={menu.y} minWidth={280} title="Graph" items={items} onClose={() => setMenu(null)} />}
+    <span ref={anchor} style={{ display: 'inline-flex' }}>
+      <IconButton icon="dice" size="sm" data-randomize="" aria-haspopup="menu" active={!!menu || options}
+        label="Randomise settings (one undo step). Right-click for options"
+        onClick={() => { if (hold.consumeClick()) return; void randomizeGraphAction(); }}
+        onContextMenu={e => { e.preventDefault(); e.stopPropagation(); openMenu(e.clientX, e.clientY); }}
+        onPointerDown={hold.onPointerDown} onPointerMove={hold.onPointerMove} onPointerUp={hold.onPointerUp} onPointerCancel={hold.onPointerCancel}
+        style={hold.style} />
+      {menu && (
+        <Menu x={menu.x} y={menu.y} minWidth={260} title="Randomise" onClose={() => setMenu(null)}
+          items={randomiseMenuItems({ summary: menu.summary, onRandomize: () => void randomizeGraphAction(), onOptions: () => setOptions(true) })} />
+      )}
       {options && <RandomizePopover anchorRef={anchor} onClose={() => setOptions(false)} onSuggest={() => setSuggest(true)} />}
       {suggest && <Suspense fallback={null}><SuggestControlsPanel anchorRef={anchor} offerOpenPlay onClose={() => setSuggest(false)} /></Suspense>}
     </span>
   );
 }
 
-function Sep() {
-  const tk = useTokens();
-  return <span style={{ width: 1, height: 18, background: tk.border.default, margin: '0 4px' }} />;
+/**
+ * The graph's status, for the bar under the canvas: the node count on the level on screen (click:
+ * the graph's stats) and the frame time (click: the performance panel). Reads the store itself.
+ */
+export function GraphStatus() {
+  const nodes = useNodeGraphStore(s => s.nodes);
+  const activeGroupPath = useNodeGraphStore(s => s.activeGroupPath);
+  const activeGroupId = useNodeGraphStore(s => s.activeGroupId);
+  const selected = useNodeGraphStore(s => s.selectedNodeIds.length);
+  const level = useMemo(() => (activeGroupPath.length ? getActiveNodes(nodes, activeGroupPath) ?? [] : nodes), [nodes, activeGroupPath]);
+  const topLevel = activeGroupPath.length === 0;
+  const groupName = useMemo(() => {
+    if (!activeGroupId) return undefined;
+    const parent = activeGroupPath.length > 1 ? getActiveNodes(nodes, activeGroupPath.slice(0, -1)) ?? [] : nodes;
+    const g = parent.find(n => n.id === activeGroupId);
+    return g ? (typeof g.params?.label === 'string' && g.params.label) || 'Group' : undefined;
+  }, [nodes, activeGroupId, activeGroupPath]);
+  const { total, insideGroups } = useMemo(() => countNodes(level), [level]);
+  const countRef = useRef<HTMLSpanElement>(null);
+  const [statsOpen, setStatsOpen] = useState(false);
+  const perfRef = useRef<HTMLSpanElement>(null);
+  const [perfOpen, setPerfOpen] = useState(false);
+  const countLabel = selected > 1 ? `${selected} of ${total} selected` : `${total} ${total === 1 ? 'node' : 'nodes'}`;
+  const countTip = topLevel
+    ? `${total} nodes in the whole graph${insideGroups ? ` (${insideGroups} inside groups)` : ''}`
+    : `${total} nodes in ${groupName ?? 'this group'}`;
+  return (
+    // The bar this sits in opens the code on a click: keep these clicks (and their popovers') here.
+    <span data-graph-status="" onClick={e => e.stopPropagation()} style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+      <span ref={countRef} style={{ display: 'inline-flex' }}>
+        <Tooltip label={countTip} disabled={statsOpen}>
+          <ToolButton icon="nodes" active={statsOpen || selected > 1} onClick={() => setStatsOpen(o => !o)}>{countLabel}</ToolButton>
+        </Tooltip>
+      </span>
+      {statsOpen && (
+        <Popover anchorRef={countRef} onClose={() => setStatsOpen(false)} align="end" width={420} padding={0}>
+          <GraphStatsPanel nodes={level} topLevel={topLevel} groupName={groupName} onClose={() => setStatsOpen(false)} />
+        </Popover>
+      )}
+      <span ref={perfRef} style={{ display: 'inline-flex' }}>
+        <Tooltip label="Performance: frame time, compiles, cost by node" disabled={perfOpen}>
+          <ToolButton icon="wave" active={perfOpen} onClick={() => setPerfOpen(o => !o)}><PerfBadge /></ToolButton>
+        </Tooltip>
+      </span>
+      {perfOpen && (
+        <Popover anchorRef={perfRef} onClose={() => setPerfOpen(false)} align="end" width={420} padding={0}>
+          <PerfPanel onClose={() => setPerfOpen(false)} />
+        </Popover>
+      )}
+    </span>
+  );
 }
 
-function ToolButton({ icon, active = false, onClick, children, ariaLabel }: { icon: IconName; active?: boolean; onClick: () => void; children: ReactNode; ariaLabel?: string }) {
+function ToolButton({ icon, active = false, onClick, children }: { icon: IconName; active?: boolean; onClick: () => void; children: ReactNode }) {
   const tk = useTokens();
   const [hover, setHover] = useState(false);
   return (
     <button
       type="button"
-      aria-label={ariaLabel}
-      aria-haspopup={ariaLabel ? 'menu' : undefined}
       onClick={onClick}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{
-        height: 30, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0 8px', border: 0, borderRadius: radius.md,
+        height: 28, display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0 8px', border: 0, borderRadius: radius.md,
         cursor: 'pointer', font: `500 12px ${fontFamily.ui}`,
         background: active ? tk.bg.selected : hover ? tk.bg.hover : 'transparent',
         color: active ? tk.accent.base : tk.text.secondary,

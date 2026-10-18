@@ -12,7 +12,7 @@ exports. The original nodes are kept, and Unbake brings them back.
 - **A node:** right-click it and choose **Bake…**. This works on any card with
   a colour, colour-with-alpha or value output, groups and March Loop groups
   included. It only works on the top level of the graph, not inside a group.
-- **The whole picture:** use the record-dot button on the canvas toolbar, or
+- **The whole picture:** right-click the empty canvas and choose **Bake the picture…**, or
   right-click the Output node and choose **Bake the picture…**. This bakes the
   node wired into the Output. Play layers stay live on top.
 

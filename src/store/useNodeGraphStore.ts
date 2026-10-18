@@ -212,7 +212,6 @@ import { loadImageTextureFromFile } from '../lib/loadImageTexture';
 import { archiveCurrent, deleteHistory, nextNumber, readVersion, replaceVersion, versionMeta, type SaveKind } from './graphVersions';
 import type { ExampleGraph } from './exampleIndex';
 import { layoutByRank, estimateNodeHeight } from './graphLayout';
-import { arrangeByStage } from '../structure/arrange';
 import { getCardSize } from '../components/NodeGraph/socketRegistry';
 import { constantsItems, constantsOutputs, paramKeysOf, paramsFor, type ConstantsItem } from '../nodes/definitions/constants';
 import { typesCompatible } from '../lib/typesCompatible';
@@ -1162,8 +1161,8 @@ interface NodeGraphState {
   endScratch: (commit: boolean) => void;
   /** Empty the canvas down to UV → Output (the trash button's right-click) */
   clearToMinimal: () => void;
-  /** Tidy the current level: by data flow (columns by depth), or 'stage' (columns by stage in the flow, structure/arrange.ts). One undo step. */
-  autoLayout: (mode?: 'flow' | 'stage') => void;
+  /** Tidy the current level by data flow (columns by depth). One undo step. */
+  autoLayout: () => void;
   /** Move top-level cards to new places (no undo entry, no recompile): for layouts the Convert page redoes once its cards are measured. */
   setNodePositions: (positions: Map<string, { x: number; y: number }>) => void;
   /** `source` is the shader the errors were reported against (their line numbers point into it) */
@@ -5427,7 +5426,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     return saveTextFile(json, name.endsWith('.json') ? name : `${name}.json`);
   },
 
-  autoLayout: (mode = 'flow') => {
+  autoLayout: () => {
     const state = get();
     const { nodes } = state;
     if (nodes.length === 0) return;
@@ -5440,13 +5439,12 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
      *  browser's home grid, via computeNodeRanks/groupNodesByRank — same
      *  ranks, so a node lands in the same column here as it does in that
      *  grid's row) on any array of nodes and return a position map. */
-    function computeLayout(layoutNodes: import('../types/nodeGraph').GraphNode[], looseGroups?: import('../types/nodeGraph').LooseGroup[]): Map<string, { x: number; y: number }> {
+    function computeLayout(layoutNodes: import('../types/nodeGraph').GraphNode[]): Map<string, { x: number; y: number }> {
       // 360px cards + 80px for wires; a card's height as it rendered (code cards run tall), estimated before it has.
       const heightOf = (n: import('../types/nodeGraph').GraphNode) => getCardSize(n.id)?.h ?? estimateNodeHeight(n);
-      if (mode === 'stage') return arrangeByStage(layoutNodes, { looseGroups, startX: START_X, startY: START_Y, colW: 440, gap: 32, heightOf });
       return layoutByRank(layoutNodes, { startX: START_X, startY: START_Y, colW: 440, gap: 32, heightOf });
     }
-    const label = mode === 'stage' ? 'Arranged by stage' : 'Tidied the layout';
+    const label = 'Tidied the layout';
 
     const activeGroupId = state.activeGroupId;
 
@@ -5456,7 +5454,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
       const sg = groupNode?.params?.subgraph as import('../types/nodeGraph').SubgraphData | undefined;
       if (!sg || sg.nodes.length === 0) return;
       undoManager.push(nodes, { label });
-      const newPositions = computeLayout(sg.nodes, sg.looseGroups);
+      const newPositions = computeLayout(sg.nodes);
       set(state2 => ({
         nodes: state2.nodes.map(n => {
           if (n.id !== activeGroupId) return n;
@@ -5480,7 +5478,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     } else {
       // Top-level layout
       undoManager.push(nodes, { label });
-      const newPositions = computeLayout(nodes, state.looseGroups);
+      const newPositions = computeLayout(nodes);
       set(state2 => ({
         nodes: state2.nodes.map(n => ({
           ...n,
