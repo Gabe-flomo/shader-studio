@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.284',
+    date: '2026-10-18',
+    title: "Toolbar order",
+    highlights: [
+      { area: 'Studio', text: "The graph toolbar is back in its old order with Fit and Auto layout, and without the Do bar or suggestions." },
+    ],
+  },
+  {
     id: '2026.10.283',
     date: '2026-10-18',
     title: "Steady triggers",
