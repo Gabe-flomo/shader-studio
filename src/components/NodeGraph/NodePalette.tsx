@@ -120,7 +120,7 @@ function ItemRow({ label, icon, color, onClick, onDoubleClick, selected = false,
         onDoubleClick={onDoubleClick}
         {...nodeDragProps(drag ?? null, onDragDone)}
         aria-expanded={preview !== undefined ? selected : undefined}
-        title={hint ? `${label} — ${hint}` : onDoubleClick ? `${label} · double-click to add${drag ? ' or drag onto the graph' : ''}` : label}
+        title={`${hint ? `${label} — ${hint}` : label}${onDoubleClick ? ` · double-click to add${drag ? ' or drag onto the graph' : ''}` : ''}`}
         style={{
           flex: 1, minWidth: 0, height: source ? undefined : 32, alignSelf: 'stretch', border: 0, background: 'none', padding: 0, textAlign: 'left', cursor: 'pointer',
           color: tk.text.secondary, font: `12.5px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', ...(drag ? nodeDragStyle : {}),

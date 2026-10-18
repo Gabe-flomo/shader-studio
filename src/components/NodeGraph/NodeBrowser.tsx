@@ -272,7 +272,7 @@ function NodePill({
   return (
     <button
       ref={btnRef}
-      title={description ?? `Click to preview · Double-click to ${swapMode ? 'replace' : 'add'}${drag && !swapMode ? ' · or drag it onto the graph' : ''}`}
+      title={`${description ? `${description}\n\n` : ''}Click to preview · Double-click to ${swapMode ? 'replace' : 'add'}${drag && !swapMode ? ' · or drag it onto the graph' : ''}`}
       {...nodeDragProps(swapMode ? null : drag, onDragEnd)}
       onClick={onSingleClick}
       onDoubleClick={onDoubleClick}
@@ -621,8 +621,15 @@ export function NodeBrowser({
     );
   }
 
+  // Where nodes are listed, how to add one is always on screen (not only in a tooltip).
+  const showsPills = !isGlsl && (isSearching || !!stageBrowse || path.length > 0);
   return (
     <>
+      {showsPills && (
+        <div data-add-hint="" style={{ color: tk.text.faint, font: `11px/1.4 ${fontFamily.ui}`, padding: '0 2px 6px' }}>
+          Click a node to preview it · double-click{swapTargetNodeId ? ' to replace' : ' or drag it onto the graph to add it'}
+        </div>
+      )}
       <div ref={containerRef}>{innerContent}</div>
       {isGlsl && glslPopupType && (
         <GlslSourcePopup

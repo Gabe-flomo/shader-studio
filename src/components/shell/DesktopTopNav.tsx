@@ -220,19 +220,20 @@ export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }:
         ) : (
           <>
             <Tooltip label="Import a .play file, a graph file, or a .present.json (opens on the Present page)" shortcut={shortcuts.import}>
-              <Button size="sm" icon="import" onClick={() => { void importAnyFile(onPageChange); }}>Import</Button>
+              <Button size="sm" icon="import" aria-label="Import a .play file, graph or presentation file" onClick={() => { void importAnyFile(onPageChange); }}>Import</Button>
             </Tooltip>
             <Tooltip label="Import a GLSL fragment shader (Shadertoy or raw) as a node, wired UV → shader → Output">
-              <Button size="sm" icon="code" onClick={async () => { reportGlslImport(await importGlslFromFile()); }}>GLSL</Button>
+              <Button size="sm" icon="code" aria-label="Import a GLSL shader as a node" onClick={async () => { reportGlslImport(await importGlslFromFile()); }}>GLSL</Button>
             </Tooltip>
             <Tooltip label="Export this graph as a .play file, with what it uses" shortcut={shortcuts.export}>
-              <Button size="sm" icon="export" onClick={e => offerGraphExport(e.currentTarget)}>Export</Button>
+              <Button size="sm" icon="export" aria-label="Export this graph as a .play file" onClick={e => offerGraphExport(e.currentTarget)}>Export</Button>
             </Tooltip>
           </>
         )}
         <Tooltip label="Record the preview as video or a still" shortcut={shortcuts.toggleRecord}>
           <button
             type="button"
+            aria-label="Record the preview as video or a still"
             onClick={onRecord}
             style={{
               height: 32, marginLeft: 4, padding: showRecordLabel ? '0 13px 0 11px' : '0 11px', border: 0, borderRadius: radius.control, cursor: 'pointer',
