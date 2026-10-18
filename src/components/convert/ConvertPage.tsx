@@ -506,7 +506,7 @@ function GlslConvert({ onMaterialized, compact = false }: { onMaterialized: () =
           <span style={{ flex: '0 1 auto', maxWidth: '100%', display: 'flex', flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center', gap: 8 }}>
             {formSwitch}
             <Button size="sm" variant="ghost" onClick={keepAsOne} title="The older import: the whole shader as one code node">Keep as one node…</Button>
-            <Button size="sm" variant="primary" icon="nodes" disabled={blocked} onClick={materialize} title={blocked ? 'Fix what the check lists first' : 'Keep these nodes as the graph and open the Studio (undoable)'}>Materialize</Button>
+            <Button size="sm" variant="primary" icon="nodes" disabled={blocked} onClick={materialize} title={blocked ? 'Fix what the check lists first' : 'Keep these nodes as the graph and open the Studio (undoable)'}>Open in Studio</Button>
           </span>
         )}
       </div>
@@ -544,7 +544,7 @@ function GlslConvert({ onMaterialized, compact = false }: { onMaterialized: () =
         <div style={{ height: 52, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px', borderTop: `1px solid ${tk.border.subtle}` }}>
           <Button size="sm" variant="ghost" onClick={keepAsOne} disabled={!code.trim()} title="The older import: the whole shader as one code node">Keep as one node…</Button>
           <span style={{ flex: 1 }} />
-          <Button size="sm" variant="primary" icon="nodes" disabled={blocked || empty} onClick={materialize} title={blocked ? 'Fix what the check lists first' : 'Keep these nodes as the graph and open the Studio (undoable)'}>Materialize</Button>
+          <Button size="sm" variant="primary" icon="nodes" disabled={blocked || empty} onClick={materialize} title={blocked ? 'Fix what the check lists first' : 'Keep these nodes as the graph and open the Studio (undoable)'}>Open in Studio</Button>
         </div>
         {oneNode && <PublishNodeModal source={{ kind: 'code', code: oneNode.code, entry: oneNode.entry, label: oneNode.label }} onClose={() => setOneNode(null)} />}
       </div>

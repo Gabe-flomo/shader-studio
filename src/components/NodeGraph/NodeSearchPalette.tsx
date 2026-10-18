@@ -43,6 +43,7 @@ import type { IconName } from '../ui/iconPaths';
 import { Button, IconButton } from '../ui/Button';
 import { DocText } from '../ui/DocText';
 import { NodeInlineViz, INLINE_VIZ_TYPES } from './NodeInlineViz';
+import { nodeBlurb } from '../../nodes/plainDescriptions';
 
 interface Props {
   open: boolean;
@@ -479,10 +480,7 @@ function SearchPanel({ onClose, spawnPosition, filterOutputType, filterInputType
 
 // ── Pieces ────────────────────────────────────────────────────────────────────
 
-const descOf = (def: NodeDefinition): string => {
-  const raw = def.description as string | string[] | undefined;
-  return Array.isArray(raw) ? raw.join('\n') : (raw ?? '');
-};
+const descOf = (def: NodeDefinition): string => nodeBlurb(def) ?? '';
 const firstLine = (s: string) => s.split(/\n|(?<=\.)\s/)[0] ?? '';
 
 function footerLine(item: Item): string {

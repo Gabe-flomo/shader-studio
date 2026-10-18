@@ -377,7 +377,7 @@ constructors) that run fine in the Studio.
   sit out. Click a card for its details (a floating card, with the ≈ choice).
   The view starts at a readable zoom on the sources when the whole chain
   wouldn't fit legibly. The app's preview on the right renders the graph live.
-- **Materialize** keeps the scratch graph as the real one (undoable, unsaved)
+- **Open in Studio** (once called Materialize) keeps the scratch graph as the real one (undoable, unsaved)
   and opens the Studio; kept code carries a `FROM CODE` badge, inexact nodes an
   `≈` badge with the reason on hover. **Keep as one node…** is the older import.
 

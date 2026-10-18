@@ -1117,8 +1117,8 @@ function AddControlButton({ candidates, layers, finish, sound, layerById, taken,
         <Popover anchorRef={anchor} onClose={close} align="end" width={320} padding={8}>
           <Field autoFocus placeholder="Search sliders, colours and layers" value={query} onChange={e => setQuery(e.target.value)} height={30} leading={<Icon name="search" size={14} style={{ color: tk.text.faint }} />} />
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 4px 2px' }}>
-            <Toggle checked={withNull} onChange={v => { if (!v || requireFeature('play.layers')) setWithNull(v); }} label={can('play.layers') ? 'Drive with a null' : 'Drive with a null · Pro'} />
-            <Tooltip label="Drive with a null" description="Adds the slider and a Null on the picture that drives it: drag the dot to change the value. The dot's left-to-right is the slider's range. An X/Y pair (Position X and Y) shares one null that starts where the thing is.">
+            <Toggle checked={withNull} onChange={v => { if (!v || requireFeature('play.layers')) setWithNull(v); }} label={can('play.layers') ? 'With a dot to drag on the picture' : 'With a dot to drag on the picture · Pro'} />
+            <Tooltip label="With a dot to drag on the picture" description="Adds the slider and a Null on the picture that drives it: drag the dot to change the value. The dot's left-to-right is the slider's range. An X/Y pair (Position X and Y) shares one null that starts where the thing is.">
               <span style={{ display: 'inline-flex', color: tk.text.faint, cursor: 'help' }}><Icon name="info" size={13} /></span>
             </Tooltip>
           </div>
@@ -1688,8 +1688,8 @@ function MappingsDrawer({ play, mode, grid = false, pages = false, height, onRes
             <SourceGroups sources={ownSources} mappings={play.mappings} words={sourceWords} gridStyle={grid ? PANEL_GRID_WIDE : undefined}
               renderItem={x => (x.kind === 'source' ? sourceCard(x.def) : rowFor(x.mapping, { collapsed: collapsed.has(x.mapping.id) }))} />
           )}
-          {/* The built-in signals: always there, whatever the setup has (Signals: count, active, share). */}
-          {mode !== 'drawer' && <ProLock feature="play.sources" style={{ display: 'block', width: '100%' }}><BuiltInSignalsSection onRecord={onRecord} /></ProLock>}
+          {/* The built-in signals (Signals: count, active, share): once the setup has a signal to count. */}
+          {mode !== 'drawer' && !!play.signals?.length && <ProLock feature="play.sources" style={{ display: 'block', width: '100%' }}><BuiltInSignalsSection onRecord={onRecord} /></ProLock>}
           {!!play.pairs?.length && (
             <PairMappingsSection play={play} grid={grid} audioNodes={audioNodes} layerRefs={layerRefs} onAdd={onAddPair} onUpdate={onUpdatePair} onRemove={onRemovePair} />
           )}

@@ -1817,7 +1817,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                               toast.success(`Added “${label}”`, { message: 'In Play, drag the dot on the picture to change the value.', action: openPlay });
                               setContextMenu(null);
                             }}>
-                            Drive with a null in Play
+                            Drag it with a dot on the picture (Play)
                           </button>
                         )}
                         {canFollowHand(playParam.candidates, playParam.c) && (

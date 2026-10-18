@@ -653,7 +653,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
               }}
               emptyHint={<EmptyHint>Select a group node and save it to create a preset.</EmptyHint>}
             />
-            <TabSectionHeader label="Transform Vec" />
+            <TabSectionHeader label="Vector transforms" />
             <FolderableList
               scopeKey="presets:transform"
               color={tabColor('presets')}
@@ -675,7 +675,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
                       onDelete={() => { deleteTransformPreset(p.id); refreshTransformPresets(); }}
                       onRename={() => { setRenameTransformValue(p.label); setRenamingTransformId(p.id); }} />;
               }}
-              emptyHint={<EmptyHint>Open a Transform Vec node and save a preset.</EmptyHint>}
+              emptyHint={<EmptyHint>Formulas for each part of a vector, saved from a Transform Vec node’s editor.</EmptyHint>}
             />
           </>
         );

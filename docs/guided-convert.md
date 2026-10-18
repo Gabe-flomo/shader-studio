@@ -39,7 +39,7 @@ at every step**, and the check under the preview says so (Same picture / Differs
 5. **Next:** the strip suggests the next cut ("Next: lines 12–18, the noise() call"), from the shader's
    own paragraphs and what the automatic converter would make of them. Skippable.
 6. **Finish:** *Convert the rest* turns the remainder into nodes the automatic way, or *Keep the rest as
-   a function* leaves it as it is. **Materialize** keeps the graph (as on the automatic page).
+   a function* leaves it as it is. **Open in Studio** (once called Materialize) keeps the graph (as on the automatic page).
 
 ## The data model
 

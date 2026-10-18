@@ -387,7 +387,7 @@ The picture doesn't change. The fix is undoable in the editor, and the check sti
     ], 2),
     step('Materialize', [
       render('convertCircleOptimised', 'The same Soft circle, from the optimised graph', square),
-      text(`When the check is happy, press **Materialize**. The nodes become your graph and the Studio opens on them. **Undo** brings your old graph back.
+      text(`When the check is happy, press **Open in Studio**. The nodes become your graph and the Studio opens on them. **Undo** brings your old graph back.
 
 Code the converter couldn't turn into nodes is kept as a card marked **FROM CODE**, so the picture is still right.
 
