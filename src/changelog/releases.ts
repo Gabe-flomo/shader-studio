@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.279',
+    date: '2026-10-18',
+    title: "Echo, fixed",
+    highlights: [
+      { area: 'Studio', text: "Echo no longer blows out to white, Copies works, and it's a normal effect now: feed it a colour, get the colour with its echoes." },
+      { area: 'Studio', text: "Output has an Alpha input and an Opacity slider; Record tells you clearly when a graph has no alpha to export." },
+    ],
+  },
+  {
     id: '2026.10.278',
     date: '2026-10-18',
     title: "Status on top",
