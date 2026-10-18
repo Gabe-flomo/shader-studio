@@ -26,10 +26,9 @@ import type { SpaceOp } from '../../sceneBuilder2d/spec';
 import { literalAt, literalToSlider, type LiteralSpan } from '../../lib/glslPatterns/literalSlider';
 import { MakeSliderButton } from '../code/MakeSlider';
 import { BuilderNote } from '../builders/BuilderWindow';
-import { NumRow, Row } from '../sceneBuilder/controls';
+import { NumRow } from '../sceneBuilder/controls';
 import { Button, IconButton } from '../ui/Button';
 import { Select } from '../ui/Select';
-import { RulerSlider } from '../ui/RulerSlider';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 
@@ -53,7 +52,9 @@ export function WarpCanvas({ map, k, size, title }: { map: () => Map2; k: string
 /** The space stack as a warped grid: what every shape below sees. `upTo` stops after that many transforms. */
 export function SpaceView({ ops, upTo, hoverName }: { ops: SpaceOp[]; upTo: number | null; hoverName?: string }) {
   const tk = useTokens();
-  const [t, setT] = useState(0);
+  // The grid is drawn at time 0 (the preview on the right plays the motion); a Time slider here only
+  // redrew this CPU picture on every drag and made the builder stutter.
+  const t = 0;
   const shown = upTo === null ? ops : ops.slice(0, upTo);
   const key = useMemo(() => JSON.stringify([shown, t]), [shown, t]);
   // On a phone (the builder's bottom sheet, components/builders/studio/PhoneStudio.tsx) the sheet is only part of
@@ -89,10 +90,6 @@ export function SpaceView({ ops, upTo, hoverName }: { ops: SpaceOp[]; upTo: numb
             : <>A grid seen through the whole stack, top to bottom. Each block’s uv feeds the next. The orange ring is radius 0.62; lines are ¼ apart.</>}
         </BuilderNote>
         <BuilderNote>{ops.length ? `${ops.length} transform${ops.length === 1 ? '' : 's'}. Hover one to see the space after it.` : 'Nothing bends space yet: add a block from the library below.'}</BuilderNote>
-        <span style={{ flex: 1 }} />
-        <Row label="Time t" hint="Where time stands for this picture (seconds). The preview on the right plays.">
-          <RulerSlider value={t} min={0} max={10} step={0.05} onChange={setT} ariaLabel="Time t" />
-        </Row>
       </div>
     </div>
     </div>
