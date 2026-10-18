@@ -1524,10 +1524,6 @@ export function MobileGraphBrowser() {
   const [groupPortBuilder, setGroupPortBuilder] = useState<null | {
     groupId: string; dir: 'input' | 'output'; returnPath: string[]; stage: 'choose' | 'pickExisting' | 'addNew';
   }>(null);
-  // Home's "+ Add Node" FAB — places a freestanding node with no wiring
-  // target, into whatever scope Home is currently showing (root or inside
-  // a group), same scoping NodeSearchPalette's own addNode() already does.
-  const [homeAddNodeOpen, setHomeAddNodeOpen] = useState(false);
   // Long-press context menu on a Home chip — holds the target node's id.
   const [longPressMenuFor, setLongPressMenuFor] = useState<string | null>(null);
   // "Insert a node into a connection" — picked from the long-press menu's
@@ -3809,7 +3805,6 @@ export function MobileGraphBrowser() {
       return (
         <div style={{ flex: 1, position: 'relative', padding: '16px 12px', fontSize: '12px', color: tc.surface2 }}>
           No nodes yet.
-          {renderAddNodeFab()}
         </div>
       );
     }
@@ -4068,37 +4063,7 @@ export function MobileGraphBrowser() {
             </Button>
           </div>
         )}
-        {!selectMode && renderAddNodeFab()}
       </div>
-    );
-  }
-  // Floating "+" — the only way to place a completely freestanding node
-  // (no pre-existing socket to wire it to). Reuses NodeSearchPalette with
-  // no type filter and no spawnPosition, so it lands in whatever scope
-  // Home is currently showing (root or inside a group) via addNode()'s own
-  // activeGroupPath scoping, same as every other "Add New Node" flow here.
-  function renderAddNodeFab() {
-    return (
-      <>
-        <button
-          onClick={() => setHomeAddNodeOpen(true)}
-          title="Add a new node"
-          style={{
-            position: 'absolute', right: '14px', bottom: '14px', zIndex: 3,
-            width: '44px', height: '44px', borderRadius: '50%',
-            background: tc.blue, border: 'none', color: tc.mantle,
-            fontSize: '22px', fontWeight: 700, lineHeight: 1, cursor: 'pointer', touchAction: 'manipulation',
-            boxShadow: '0 10px 24px rgba(58,111,247,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}
-        >
-          +
-        </button>
-        <NodeSearchPalette
-          open={homeAddNodeOpen}
-          onClose={() => setHomeAddNodeOpen(false)}
-          onNodePlaced={id => { setHomeAddNodeOpen(false); pushFocus(id); }}
-        />
-      </>
     );
   }
 
