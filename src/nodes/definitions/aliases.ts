@@ -30,6 +30,11 @@ export interface NodeAlias {
   params?: (old: Record<string, unknown>) => Record<string, unknown>;
   /** Live socket types the canonical node should carry. */
   socketTypes?: { inputs?: Record<string, DataType>; outputs?: Record<string, DataType> };
+  /**
+   * Only nodes this holds for migrate (the old type stays registered, hidden, for the rest): a merge that is exact
+   * except when a socket is wired (docs/node-retirements.md).
+   */
+  when?: (node: GraphNode) => boolean;
 }
 
 const num = (v: unknown, d: number): number => (typeof v === 'number' && Number.isFinite(v) ? v : d);
@@ -103,6 +108,19 @@ export const NODE_ALIASES: Record<string, NodeAlias> = {
   squareLFO:     { to: 'lfo', params: o => ({ ...o, waveform: 'square' }) },
   sawtoothLFO:   { to: 'lfo', params: o => ({ ...o, waveform: 'sawtooth' }) },
   triangleLFO:   { to: 'lfo', params: o => ({ ...o, waveform: 'triangle' }) },
+
+  // ── 2026-10-17 catalogue sweep: the rounded shapes are Box SDF 3D / Cylinder with Edges Rounded (the same
+  //    function); Vertical Capsule is Capsule SDF 3D (the same function). ──
+  roundedBoxSDF3D: { to: 'boxSDF3D', inputs: { radius: 'rounding' },
+    params: o => ({ ...o, sizeX: num(o.sizeX, 0.4), sizeY: num(o.sizeY, 0.4), sizeZ: num(o.sizeZ, 0.4), edges: 'rounded', rounding: num(o.radius, 0.1), radius: undefined }) },
+  // Its Radius was half the outside radius; the Cylinder's is the outside one. A wired Radius can't be doubled.
+  roundedCylinderSDF3D: { to: 'cylinderSDF3D', inputs: { edgeRadius: 'rounding' }, when: n => !n.inputs?.radius?.connection,
+    params: o => ({ ...o, radius: 2 * num(o.radius, 0.35), height: num(o.height, 0.4), edges: 'rounded', rounding: num(o.edgeRadius, 0.05), edgeRadius: undefined }) },
+  verticalCapsuleSDF3D: { to: 'capsuleSDF3D', params: o => ({ ...o, height: num(o.height, 0.5), radius: num(o.radius, 0.2) }) },
+
+  // ── 2026-10-17 catalogue sweep: Fold 3D is Mirror Fold 3D with its offsets at 0 (abs(p) − 0.0 is abs(p)), each
+  //    axis as Fold 3D read it (X and Z on unless unticked, Y off unless ticked). ──
+  fold3D: { to: 'mirrorFold3D', params: o => ({ ...o, foldX: o.foldX !== false, foldY: o.foldY === true, foldZ: o.foldZ !== false, offsetX: 0, offsetY: 0, offsetZ: 0 }) },
 
   // ── 2026-10-17 sweep: one UV Warp with a Kind (transforms.ts). Each kind is its old node's GLSL;
   //    the old defaults fill any setting the saved node lacked. Swirl / Vortex is Swirl round (0, 0), no spin. ──
@@ -196,7 +214,7 @@ function resolveList(nodes: GraphNode[], getDef: GetDef): Resolved {
       if (nsg !== sg) { node = { ...node, params: { ...node.params, subgraph: nsg } }; changed = true; }
     }
     const alias = NODE_ALIASES[node.type];
-    if (!alias) return node;
+    if (!alias || (alias.when && !alias.when(node))) return node;
     changed = true;
     const def = getDef(alias.to);
     const inputs = renameKeys(node.inputs, alias.inputs);

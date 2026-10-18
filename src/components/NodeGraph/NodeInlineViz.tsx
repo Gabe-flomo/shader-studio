@@ -5340,7 +5340,7 @@ function NodeInlineVizSwitch({ node, onEnterGroup }: { node: GraphNode; onEnterG
     case 'rotate3D':
     case 'repeat3D':
     case 'twist3D':
-    case 'fold3D':
+    case 'mirrorFold3D':
     // Additional 3D primitives
     case 'roundedBoxSDF3D':
     case 'boxFrameSDF3D':
@@ -5624,7 +5624,7 @@ export const INLINE_VIZ_TYPES = new Set<string>([
   'linkSDF3D', 'pyramidSDF3D', 'hexPrismSDF3D', 'triPrismSDF3D',
   'cappedConeSDF3D', 'roundedCylinderSDF3D', 'solidAngleSDF3D', 'verticalCapsuleSDF3D',
   // 3D transforms (a Transform's preview type follows its Dimension: previewTypeOf)
-  'translate3D', 'rotate3D', 'repeat3D', 'twist3D', 'fold3D', 'transform', 'transform3D', 'transform4D',
+  'translate3D', 'rotate3D', 'repeat3D', 'twist3D', 'mirrorFold3D', 'transform', 'transform3D', 'transform4D',
   'scale3d', 'rotateAxis3D', 'sinWarp3D', 'bend3D', 'limitedRepeat3D', 'polarRepeat3D', 'displace3D', 'voxelize',
   // 3D boolean ops
   'sdfOnion',

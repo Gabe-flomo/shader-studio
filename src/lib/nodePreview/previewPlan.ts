@@ -114,7 +114,7 @@ export function previewPlan(node: Pick<GraphNode, 'type' | 'outputs'> & { params
  */
 export const PARAM_LIST_TYPES: ReadonlySet<string> = new Set([
   'sphereSDF3D', 'boxSDF3D', 'torusSDF3D', 'capsuleSDF3D', 'cylinderSDF3D', 'coneSDF3D', 'octahedronSDF3D', 'planeSDF3D',
-  'translate3D', 'rotate3D', 'repeat3D', 'twist3D', 'fold3D', 'transform3D', 'transform4D',
+  'translate3D', 'rotate3D', 'repeat3D', 'twist3D', 'mirrorFold3D', 'transform3D', 'transform4D',
   'roundedBoxSDF3D', 'boxFrameSDF3D', 'ellipsoidSDF3D', 'cappedTorusSDF3D', 'linkSDF3D', 'pyramidSDF3D', 'hexPrismSDF3D',
   'triPrismSDF3D', 'cappedConeSDF3D', 'roundedCylinderSDF3D', 'solidAngleSDF3D', 'verticalCapsuleSDF3D',
   'scale3d', 'rotateAxis3D', 'sinWarp3D', 'bend3D', 'limitedRepeat3D', 'polarRepeat3D', 'displace3D', 'sdfOnion',

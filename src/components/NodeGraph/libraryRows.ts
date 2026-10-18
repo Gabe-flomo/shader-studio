@@ -184,7 +184,7 @@ export const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: strin
   ],
   '3D Primitives': [
     { label: 'Basic',   types: ['sphereSDF3D', 'boxSDF3D', 'torusSDF3D', 'capsuleSDF3D', 'cylinderSDF3D', 'coneSDF3D', 'planeSDF3D', 'octahedronSDF3D', 'pieceBalls'] },
-    { label: 'Curved',  types: ['ellipsoidSDF3D', 'cappedTorusSDF3D', 'cappedConeSDF3D', 'roundedBoxSDF3D', 'roundedCylinderSDF3D', 'verticalCapsuleSDF3D'] },
+    { label: 'Curved',  types: ['ellipsoidSDF3D', 'cappedTorusSDF3D', 'cappedConeSDF3D'] },
     { label: 'Complex', types: ['boxFrameSDF3D', 'linkSDF3D', 'pyramidSDF3D', 'hexPrismSDF3D', 'triPrismSDF3D', 'solidAngleSDF3D', 'sdCross3D'] },
     { label: 'Fields',  types: ['gyroidField', 'schwarzPField'] },
   ],
@@ -192,7 +192,7 @@ export const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: strin
     { label: 'Move',   types: ['transform', 'rotateAxis3D'] },
     { label: 'Repeat', types: ['repeat3D', 'limitedRepeat3D', 'polarRepeat3D', 'mirroredRepeat3D', 'voxelize'] },
     { label: 'Warp',   types: ['twist3D', 'bend3D', 'sinWarp3D', 'displace3D', 'spiralWarp3D', 'domainWarp3D', 'turbulence3D', 'shear3D'] },
-    { label: 'Fold',   types: ['fold3D', 'mirrorFold3D', 'kaleidoscope3D', 'sphereInvert3D', 'mobiusWarp3D', 'logPolarWarp3D', 'helixWarp3D'] },
+    { label: 'Fold',   types: ['mirrorFold3D', 'kaleidoscope3D', 'sphereInvert3D', 'mobiusWarp3D', 'logPolarWarp3D', 'helixWarp3D'] },
   ],
   '4D Shapes': [
     { label: 'Fractals',  types: ['quatJuliaSDF', 'quatMandelSDF'] },

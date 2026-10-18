@@ -111,3 +111,24 @@ Transform / Truchet / Wood, Learn 3D's Combine, the web shaders, Grid tour, the 
 they were (a Translate with only Z wired, a Rotate 3D with its Angle wired): a Make Vec3 now carries the wire into
 the Transform's Offset or Turn. sdCrossScene3D's Rotate 3D had settings the node never read (it drew unturned): it is
 an identity Transform you can turn.
+
+## 3D shapes and folds
+
+| Old | Now | How |
+|---|---|---|
+| Fold 3D | **Mirror Fold 3D**, Offsets 0 | Merged (alias): `abs(p) − 0.0` is `abs(p)`; each axis as Fold 3D read it |
+| Vertical Capsule | **Capsule SDF 3D** | Merged: the same function under another name (and its "Half Height" was the full height) |
+| Rounded Box | **Box SDF 3D**, Edges Rounded | Merged: the same `sdf3d_roundedBox` call; its Radius is Rounding |
+| Rounded Cylinder | **Cylinder SDF 3D**, Edges Rounded | Merged where exact: its Radius was half the outside radius (IQ's formula doubles it), so the Cylinder's Radius is twice it and the call halves it again. One with its Radius *wired* can't be doubled: it stays a Rounded Cylinder (hidden) |
+
+Box SDF 3D and Cylinder have **Edges** (Sharp / Rounded) and a **Rounding** slider (and socket) shown for Rounded. Sharp
+emits exactly the plain shape's code, and the hidden Rounding is no uniform, so every existing box and cylinder compiles
+as before. The 3D Scene Builder's Round is that Rounding now (it used to swap in the rounded node).
+
+A merge that is exact except in one wiring is an alias with `when` (`definitions/aliases.ts`): nodes it holds for
+migrate, the rest keep their (hidden, still registered) type.
+
+3D Domain Warp, Turbulence 3D and Mirror Fold 3D were filed under 3D Primitives, so they sat ungrouped in the 3D
+Shapes row; they are **3D Transforms** now, in its Warp and Fold groups.
+
+Examples changed: curvedReverse, learn3dCombine and learn3dOrbit (Rounded Box → Box SDF 3D, Edges Rounded).

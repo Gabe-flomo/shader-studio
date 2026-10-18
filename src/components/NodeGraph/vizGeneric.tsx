@@ -556,7 +556,7 @@ const sdCapsuleY = (p: V3, h: number, r: number) => { const q: V3 = [p[0], p[1] 
 
 const SDF3: Record<string, Sdf3> = {
   sphereSDF3D: (p, n) => v3len(p) - num(n, 'radius', 0.5),
-  boxSDF3D: (p, n) => sdBox(p, [num(n, 'sizeX', 0.5), num(n, 'sizeY', 0.5), num(n, 'sizeZ', 0.5)]),
+  boxSDF3D: (p, n) => { const r = n.params.edges === 'rounded' ? num(n, 'rounding', 0.1) : 0; return sdBox(p, [num(n, 'sizeX', 0.5) - r, num(n, 'sizeY', 0.5) - r, num(n, 'sizeZ', 0.5) - r]) - r; },
   roundedBoxSDF3D: (p, n) => { const r = num(n, 'radius', 0.1); return sdBox(p, [num(n, 'sizeX', 0.4) - r, num(n, 'sizeY', 0.4) - r, num(n, 'sizeZ', 0.4) - r]) - r; },
   boxFrameSDF3D: (p, n) => {
     const b: V3 = [num(n, 'sizeX', 0.4), num(n, 'sizeY', 0.4), num(n, 'sizeZ', 0.4)], e = num(n, 'thickness', 0.05);
@@ -580,7 +580,7 @@ const SDF3: Record<string, Sdf3> = {
   },
   capsuleSDF3D: (p, n) => sdCapsuleY(p, num(n, 'height', 0.6) / 2, num(n, 'radius', 0.2)),
   verticalCapsuleSDF3D: (p, n) => sdCapsuleY(p, num(n, 'height', 0.5), num(n, 'radius', 0.2)),
-  cylinderSDF3D: (p, n) => sdCappedCyl(p, num(n, 'radius', 0.3), num(n, 'height', 0.5)),
+  cylinderSDF3D: (p, n) => { const r = n.params.edges === 'rounded' ? num(n, 'rounding', 0.05) : 0; return sdCappedCyl(p, num(n, 'radius', 0.3) - r, num(n, 'height', 0.5) - r) - r; },
   roundedCylinderSDF3D: (p, n) => { const r = num(n, 'edgeRadius', 0.05); return sdCappedCyl(p, num(n, 'radius', 0.35) - r, num(n, 'height', 0.4) - r) - r; },
   coneSDF3D: (p, n) => {
     const an = num(n, 'angle', 0.4), h = num(n, 'height', 1);

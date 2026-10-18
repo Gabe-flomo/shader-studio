@@ -43,6 +43,8 @@ export const SWEPT_EFFECT_TYPES: readonly string[] = [
 export const CATALOGUE_RETIRED_TYPES: readonly string[] = [
   // The old single-purpose transforms → Transform (a saved one switches on load when that is exact: toTransform.ts).
   'place2D', 'uvTransform2d', 'rotate2d', 'translate3D', 'rotate3D', 'scale3d', 'translate4D', 'rotate4D', 'scale4D',
+  // Rounded Cylinder → Cylinder, Edges Rounded (an alias moves it, except one with its Radius wired: definitions/aliases.ts).
+  'roundedCylinderSDF3D',
 ];
 
 /**

@@ -335,7 +335,7 @@ function emitShape(ctx: Ctx, sh: ShapeSpec, pos: Ref, list: GraphNode[], local?:
     pos = ref(n, 'p');
   }
   local?.set(sh.id, pos);
-  const rounded = def.roundType && Number(sh.size.round ?? 0) > 0;
+  const rounded = def.params.some(p => p.key === 'round') && Number(sh.size.round ?? 0) > 0;
   const params: Record<string, unknown> = {};
   for (const p of def.params) {
     if (!p.param) continue;
@@ -346,8 +346,8 @@ function emitShape(ctx: Ctx, sh: ShapeSpec, pos: Ref, list: GraphNode[], local?:
       p.param.forEach((k, i) => { params[k] = arr[i]; });
     } else params[p.param] = p.deg ? rad(Number(v)) : Number(v);
   }
-  // Rounded Cylinder's Radius is half the cylinder's (its formula doubles it): keep r the outer radius.
-  if (rounded && def.roundType === 'roundedCylinderSDF3D') params.radius = Number(params.radius) / 2;
+  // Round: Edges Rounded, by Round (Box SDF 3D and Cylinder keep their outside size).
+  if (rounded) params.edges = 'rounded';
   const colourWord = ctx.spec.look.mode === 'surface' && allShapes(ctx.spec).length > 1 ? ` Its colour ${v3(sh.color)} is picked in Materials.` : '';
   // A 4D shape: the point is lifted to 4D at the slice W and turned in xw first (docs/4d.md).
   let shapePos = pos;
@@ -363,7 +363,7 @@ function emitShape(ctx: Ctx, sh: ShapeSpec, pos: Ref, list: GraphNode[], local?:
     }
   }
   const isBalls = sh.kind === 'picture-balls';
-  const node = mk(ctx, rounded ? def.roundType! : def.type, sh.id, { ...params, ...(isBalls ? ballsExtra(ctx, sh) : {}), _sbName: sh.name },
+  const node = mk(ctx, def.type, sh.id, { ...params, ...(isBalls ? ballsExtra(ctx, sh) : {}), _sbName: sh.name },
     { [def.posKey]: shapePos }, `${name}: a ${def.label.toLowerCase()}${shapeSummary(sh) ? `, ${shapeSummary(sh)}` : ''}. ${def.blurb}${colourWord}${isBalls ? ` Its picture comes in through the group's “Picture for ${itemName(ctx.spec, sh)}” port.` : ''}`, list);
   if (isBalls) {
     if (sh.tex) ctx.balls?.push({ node, sh });

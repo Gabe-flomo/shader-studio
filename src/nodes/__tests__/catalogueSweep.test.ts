@@ -17,7 +17,10 @@ import { emptyPlayRecord, type PlayRecord } from '../../types/play';
 import { getNodeDefinition, getOfferedDefinitions, NODE_REGISTRY } from '../definitions';
 import { NODE_ALIASES } from '../definitions/aliases';
 import { RETIRED_TYPES } from '../notOffered';
-import { HIDDEN_NODES } from '../../components/NodeGraph/libraryRows';
+import { CATEGORY_GROUPS, HIDDEN_NODES } from '../../components/NodeGraph/libraryRows';
+import { migrateNodeParams } from '../../types/nodeGraph';
+import { resolveNodeAliases } from '../definitions/aliases';
+import { runGlsl, type Val } from '../../compiler/__tests__/glslEval';
 import { EXAMPLE_GRAPHS } from '../../store/exampleGraphs';
 import { migrateLoadedNodes, migrateLoadedPlay, useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { compileGraph } from '../../compiler/graphCompiler';
@@ -42,6 +45,9 @@ export function saved(type: string, id: string, params: Record<string, unknown>,
     outputs: Object.fromEntries(outputs.map(k => [k, { type: def?.outputs[k]?.type ?? 'float', label: k }])),
   } as GraphNode;
 }
+
+/** Load as the store does: aliases, then each node's param migration. */
+const load = (nodes: GraphNode[]) => resolveNodeAliases(nodes, getNodeDefinition).map(nd => migrateNodeParams(nd, getNodeDefinition));
 
 describe('T6: examples use current node types', () => {
   it('no example uses an old (aliased) type name or the retired Audio Input', () => {
@@ -140,7 +146,94 @@ describe('T4: the old transforms are retired; a saved one becomes a Transform on
     expect(migrateLoadedPlay(play, raw).controls[0].target).toBe('mv::x');
   });
 
-  it('the 4D builder turns a spinning shape with a Transform', () => {
+  it('the 4D builder turns a spinning shape with a Transform (3D builder folds and rounds with current nodes)', () => {
+    const spec = readFileSync(new URL('../../sceneBuilder/spec.ts', import.meta.url), 'utf8');
+    for (const t of ['fold3D', 'roundedBoxSDF3D', 'roundedCylinderSDF3D', 'verticalCapsuleSDF3D']) expect(spec).not.toContain(`'${t}'`);
     expect(readFileSync(new URL('../../sceneBuilder/build.ts', import.meta.url), 'utf8')).not.toContain("'rotate4D'");
+  });
+});
+
+/** A node's own emitted code run on the CPU; returns its outputs. */
+function runNode(nd: GraphNode, inputs: Record<string, string>, env: Record<string, Val | ((...a: Val[]) => Val)>): Record<string, Val> {
+  const { code, outputVars } = getNodeDefinition(nd.type)!.generateGLSL(nd, inputs);
+  const out = runGlsl(code, env);
+  return Object.fromEntries(Object.entries(outputVars).map(([k, v]) => [k, out[v] as Val]));
+}
+const gone = (t: string, to: string) => {
+  expect(NODE_REGISTRY[t], t).toBeUndefined();
+  expect(NODE_ALIASES[t]?.to, t).toBe(to);
+};
+
+describe('Q10: the 3D warps sit in 3D Transforms; Fold 3D is Mirror Fold 3D at Offset 0', () => {
+  it('3D Domain Warp, Turbulence 3D and Mirror Fold 3D are 3D Transforms, grouped there', () => {
+    for (const t of ['domainWarp3D', 'turbulence3D', 'mirrorFold3D']) {
+      expect(getNodeDefinition(t)!.category, t).toBe('3D Transforms');
+      expect(CATEGORY_GROUPS['3D Transforms'].some(g => g.types.includes(t)), t).toBe(true);
+    }
+  });
+
+  it('a saved Fold 3D migrates with its axes and folds the same', () => {
+    gone('fold3D', 'mirrorFold3D');
+    const [def, x, all] = load([
+      saved('fold3D', 'a', {}, { pos: null }, ['pos']),
+      saved('fold3D', 'b', { foldX: true, foldY: false, foldZ: false }, { pos: null }, ['pos']),
+      saved('fold3D', 'c', { foldX: true, foldY: true, foldZ: true }, { pos: null }, ['pos']),
+    ]);
+    expect(def.params).toMatchObject({ foldX: true, foldY: false, foldZ: true, offsetX: 0, offsetY: 0, offsetZ: 0 });
+    expect(x.params).toMatchObject({ foldX: true, foldY: false, foldZ: false });
+    const P = [-0.3, -0.7, 0.4];
+    const abs = (v: number[], m: boolean[]) => v.map((c, i) => (m[i] ? Math.abs(c) : c));
+    expect(runNode(def, { pos: 'P' }, { P }).pos).toEqual(abs(P, [true, false, true]));
+    expect(runNode(x, { pos: 'P' }, { P }).pos).toEqual(abs(P, [true, false, false]));
+    expect(runNode(all, { pos: 'P' }, { P }).pos).toEqual(abs(P, [true, true, true]));
+  });
+});
+
+describe('Q11 / N7: one Capsule, Box and Cylinder with Rounding', () => {
+  it('Vertical Capsule is Capsule SDF 3D (the same function under another name)', () => {
+    gone('verticalCapsuleSDF3D', 'capsuleSDF3D');
+    const [c] = load([saved('verticalCapsuleSDF3D', 'v', { radius: 0.3 }, { pos: null }, ['dist'])]);
+    expect(c.type).toBe('capsuleSDF3D');
+    expect(c.params).toMatchObject({ height: 0.5, radius: 0.3 });
+    expect(runNode(c, { pos: 'P' }, { P: [0, 0, 0], sdf3d_capsule: (p, h, r) => { const v = p as number[]; const y = v[1] - Math.min(Math.max(v[1], 0), h as number); return Math.hypot(v[0], y, v[2]) - (r as number); } }).dist).toBeCloseTo(-0.3, 12);
+  });
+
+  it('a Box or Cylinder with Edges Sharp emits exactly the plain shape', () => {
+    const box = getNodeDefinition('boxSDF3D')!.generateGLSL(saved('boxSDF3D', 'b', { sizeX: 0.5, sizeY: 0.5, sizeZ: 0.5 }, {}, ['dist']), { pos: 'P' }).code;
+    expect(box).toBe('    float b_dist = sdf3d_box(P, vec3(0.5, 0.5, 0.5));\n');
+    const cyl = getNodeDefinition('cylinderSDF3D')!.generateGLSL(saved('cylinderSDF3D', 'c', { radius: 0.3, height: 0.5 }, {}, ['dist']), { pos: 'P' }).code;
+    expect(cyl).toBe('    float c_dist = sdf3d_cylinder(P, 0.3, 0.5);\n');
+  });
+
+  it('Rounded Box migrates to Box SDF 3D, Edges Rounded: the same rounded-box call', () => {
+    gone('roundedBoxSDF3D', 'boxSDF3D');
+    const [b] = load([saved('roundedBoxSDF3D', 'r', { sizeX: 0.3, radius: 0.07 }, { pos: null, radius: ['w', 'value'] }, ['dist'])]);
+    expect(b.type).toBe('boxSDF3D');
+    expect(b.params).toMatchObject({ sizeX: 0.3, sizeY: 0.4, sizeZ: 0.4, edges: 'rounded', rounding: 0.07 });
+    expect(b.inputs.rounding.connection).toEqual({ nodeId: 'w', outputKey: 'value' });
+    const code = (nd: GraphNode, ins: Record<string, string>) => getNodeDefinition(nd.type)!.generateGLSL(nd, ins).code;
+    expect(code(b, { pos: 'P' })).toBe('    float r_dist = sdf3d_roundedBox(P, vec3(0.3, 0.4, 0.4), 0.07);\n');
+    expect(code(b, { pos: 'P', rounding: 'W' })).toBe('    float r_dist = sdf3d_roundedBox(P, vec3(0.3, 0.4, 0.4), W);\n');
+  });
+
+  it('Rounded Cylinder migrates with Radius as the outside radius: the old call\'s arguments exactly', () => {
+    expect(NODE_ALIASES.roundedCylinderSDF3D.to).toBe('cylinderSDF3D');
+    const [c] = load([saved('roundedCylinderSDF3D', 'r', { radius: 0.35, edgeRadius: 0.06, height: 0.4 }, { pos: null }, ['dist'])]);
+    expect(c.type).toBe('cylinderSDF3D');
+    expect(c.params).toMatchObject({ radius: 0.7, edges: 'rounded', rounding: 0.06, height: 0.4 });
+    const args: Val[][] = [];
+    runNode(c, { pos: 'P' }, { P: [0.1, 0.2, 0.3], sdf3d_roundedCylinder: (...a: Val[]) => { args.push(a); return 0; } });
+    expect(args[0].slice(1)).toEqual([0.35, 0.06, 0.4]);
+  });
+
+  it('a Rounded Cylinder with its Radius wired stays as it was (hidden, still registered)', () => {
+    const [c] = load([saved('roundedCylinderSDF3D', 'r', {}, { pos: null, radius: ['w', 'value'] }, ['dist'])]);
+    expect(c.type).toBe('roundedCylinderSDF3D');
+    expect(RETIRED_TYPES).toContain('roundedCylinderSDF3D');
+  });
+
+  it('no example uses Fold 3D, Vertical Capsule or the rounded shapes', () => {
+    const OLD = ['fold3D', 'verticalCapsuleSDF3D', 'roundedBoxSDF3D', 'roundedCylinderSDF3D'];
+    for (const [k, g] of Object.entries(EXAMPLE_GRAPHS)) expect(typesOf(g.nodes).filter(t => OLD.includes(t)), k).toEqual([]);
   });
 });

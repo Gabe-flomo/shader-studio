@@ -11,7 +11,7 @@
  *
  * Transform nodes transform an incoming vec3 point and output the new vec3.
  */
-import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
+import type { NodeDefinition, GraphNode, ParamDef } from '../../types/nodeGraph';
 import { p, withParamSockets } from './helpers';
 
 // ─── Shared GLSL helpers ───────────────────────────────────────────────────────
@@ -154,21 +154,33 @@ export const SphereSDF3DNode: NodeDefinition = {
   },
 };
 
+/** Box SDF 3D's and Cylinder's Edges: Sharp (the plain shape) or Rounded by Rounding (the old Rounded Box / Cylinder). */
+const EDGES: ParamDef = {
+  label: 'Edges', type: 'select', hint: 'Sharp, or Rounded: the edges rounded by Rounding, keeping the outside size.',
+  options: [{ value: 'sharp', label: 'Sharp' }, { value: 'rounded', label: 'Rounded' }],
+};
+const isRounded = (node: GraphNode, inputVars: Record<string, string>) => node.params.edges === 'rounded' || !!inputVars.rounding;
+
 export const BoxSDF3DNode: NodeDefinition = {
   type: 'boxSDF3D', label: 'Box SDF 3D', category: '3D Primitives',
-  description: 'Signed distance to an axis-aligned box centered at origin.',
+  aliases: ['Rounded Box', 'Cube', 'Rounded cube', 'Bevel'],
+  description: 'A box centred on the origin, Size X / Y / Z out from the middle each way (half its width, height and depth). Edges Rounded softens its edges and corners by Rounding while its outside size stays the same.',
   inputs: {
     pos:    { type: 'vec3',  label: 'Position' },
     sizeX:  { type: 'float', label: 'Size X' },
     sizeY:  { type: 'float', label: 'Size Y' },
     sizeZ:  { type: 'float', label: 'Size Z' },
+    rounding: { type: 'float', label: 'Rounding', hint: 'Wired, the edges are rounded by it (Edges reads Rounded).' },
   },
+  socketsOnDemand: { rounding: ['rounding'] },
   outputs: { dist: { type: 'float', label: 'Distance' } },
-  defaultParams: { sizeX: 0.5, sizeY: 0.5, sizeZ: 0.5 },
+  defaultParams: { sizeX: 0.5, sizeY: 0.5, sizeZ: 0.5, edges: 'sharp', rounding: 0.1 },
   paramDefs: {
     sizeX: { label: 'Size X', type: 'float', min: 0.01, max: 5.0, step: 0.01 },
     sizeY: { label: 'Size Y', type: 'float', min: 0.01, max: 5.0, step: 0.01 },
     sizeZ: { label: 'Size Z', type: 'float', min: 0.01, max: 5.0, step: 0.01 },
+    edges: EDGES,
+    rounding: { label: 'Rounding', type: 'float', min: 0.0, max: 1.0, step: 0.005, showWhen: { param: 'edges', value: 'rounded' }, hint: 'How round the edges are (0: sharp).' },
   },
   glslFunction: SDF3D_PRIMS_GLSL,
   generateGLSL: (node: GraphNode, inputVars) => {
@@ -177,10 +189,12 @@ export const BoxSDF3DNode: NodeDefinition = {
     const sx  = inputVars.sizeX || p(node.params.sizeX, 0.5);
     const sy  = inputVars.sizeY || p(node.params.sizeY, 0.5);
     const sz  = inputVars.sizeZ || p(node.params.sizeZ, 0.5);
-    return {
-      code: `    float ${id}_dist = sdf3d_box(${pos}, vec3(${sx}, ${sy}, ${sz}));\n`,
-      outputVars: { dist: `${id}_dist` },
-    };
+    // Sharp: the plain box, as before Rounding existed.
+    if (!isRounded(node, inputVars)) {
+      return { code: `    float ${id}_dist = sdf3d_box(${pos}, vec3(${sx}, ${sy}, ${sz}));\n`, outputVars: { dist: `${id}_dist` } };
+    }
+    const r = inputVars.rounding || p(node.params.rounding, 0.1);
+    return { code: `    float ${id}_dist = sdf3d_roundedBox(${pos}, vec3(${sx}, ${sy}, ${sz}), ${r});\n`, outputVars: { dist: `${id}_dist` } };
   },
 };
 
@@ -213,7 +227,8 @@ export const TorusSDF3DNode: NodeDefinition = {
 
 export const CapsuleSDF3DNode: NodeDefinition = {
   type: 'capsuleSDF3D', label: 'Capsule SDF 3D', category: '3D Primitives',
-  description: 'Signed distance to a vertical capsule (hemisphere-capped cylinder) along Y axis.',
+  aliases: ['Vertical Capsule', 'Pill'],
+  description: 'An upright pill: a cylinder with round ends, from the origin up to Height, Radius round.',
   inputs: {
     pos:    { type: 'vec3',  label: 'Position' },
     height: { type: 'float', label: 'Height' },
@@ -240,17 +255,22 @@ export const CapsuleSDF3DNode: NodeDefinition = {
 
 export const CylinderSDF3DNode: NodeDefinition = {
   type: 'cylinderSDF3D', label: 'Cylinder SDF 3D', category: '3D Primitives',
-  description: 'Signed distance to a finite axis-aligned cylinder along Y axis.',
+  aliases: ['Rounded Cylinder', 'Pillar', 'Column', 'Puck', 'Disc 3D'],
+  description: 'An upright cylinder centred on the origin: Radius round, Half Height up and down. Edges Rounded softens its rims by Rounding while its outside size stays the same.',
   inputs: {
     pos:    { type: 'vec3',  label: 'Position' },
     radius: { type: 'float', label: 'Radius' },
     height: { type: 'float', label: 'Half Height' },
+    rounding: { type: 'float', label: 'Rounding', hint: 'Wired, the rims are rounded by it (Edges reads Rounded).' },
   },
+  socketsOnDemand: { rounding: ['rounding'] },
   outputs: { dist: { type: 'float', label: 'Distance' } },
-  defaultParams: { radius: 0.3, height: 0.5 },
+  defaultParams: { radius: 0.3, height: 0.5, edges: 'sharp', rounding: 0.05 },
   paramDefs: {
     radius: { label: 'Radius',      type: 'float', min: 0.01, max: 5.0, step: 0.01 },
     height: { label: 'Half Height', type: 'float', min: 0.01, max: 5.0, step: 0.01 },
+    edges: EDGES,
+    rounding: { label: 'Rounding', type: 'float', min: 0.0, max: 0.5, step: 0.005, showWhen: { param: 'edges', value: 'rounded' }, hint: 'How round the rims are (0: sharp).' },
   },
   glslFunction: SDF3D_PRIMS_GLSL,
   generateGLSL: (node: GraphNode, inputVars) => {
@@ -258,10 +278,12 @@ export const CylinderSDF3DNode: NodeDefinition = {
     const pos = inputVars.pos    || 'vec3(0.0)';
     const r   = inputVars.radius || p(node.params.radius, 0.3);
     const h   = inputVars.height || p(node.params.height, 0.5);
-    return {
-      code: `    float ${id}_dist = sdf3d_cylinder(${pos}, ${r}, ${h});\n`,
-      outputVars: { dist: `${id}_dist` },
-    };
+    if (!isRounded(node, inputVars)) {
+      return { code: `    float ${id}_dist = sdf3d_cylinder(${pos}, ${r}, ${h});\n`, outputVars: { dist: `${id}_dist` } };
+    }
+    // IQ's rounded cylinder takes half the outside radius (its formula doubles it): Radius stays the outside radius.
+    const rb = inputVars.rounding || p(node.params.rounding, 0.05);
+    return { code: `    float ${id}_dist = sdf3d_roundedCylinder(${pos}, (${r}) * 0.5, ${rb}, ${h});\n`, outputVars: { dist: `${id}_dist` } };
   },
 };
 
@@ -494,38 +516,6 @@ export const Twist3DNode: NodeDefinition = {
   },
 };
 
-export const Fold3DNode: NodeDefinition = {
-  type: 'fold3D', label: 'Fold 3D', category: '3D Transforms',
-  description: 'Fold 3D space across X, Y, and/or Z planes (abs fold for fractal geometry).',
-  inputs: {
-    pos: { type: 'vec3', label: 'Position' },
-  },
-  outputs: { pos: { type: 'vec3', label: 'Folded Pos' } },
-  defaultParams: { foldX: true, foldY: false, foldZ: true },
-  paramDefs: {
-    foldX: { label: 'Fold X', type: 'bool' },
-    foldY: { label: 'Fold Y', type: 'bool' },
-    foldZ: { label: 'Fold Z', type: 'bool' },
-  },
-  generateGLSL: (node: GraphNode, inputVars) => {
-    const id     = node.id;
-    const pos    = inputVars.pos || 'vec3(0.0)';
-    const doX    = node.params.foldX !== false;
-    const doY    = node.params.foldY === true;
-    const doZ    = node.params.foldZ !== false;
-    const xExpr  = doX ? `abs(${id}_pf.x)` : `${id}_pf.x`;
-    const yExpr  = doY ? `abs(${id}_pf.y)` : `${id}_pf.y`;
-    const zExpr  = doZ ? `abs(${id}_pf.z)` : `${id}_pf.z`;
-    return {
-      code: [
-        `    vec3 ${id}_pf  = ${pos};\n`,
-        `    vec3 ${id}_pos = vec3(${xExpr}, ${yExpr}, ${zExpr});\n`,
-      ].join(''),
-      outputVars: { pos: `${id}_pos` },
-    };
-  },
-};
-
 // ─── New 3D Nodes ─────────────────────────────────────────────────────────────
 
 export const PlaneSDF3DNode: NodeDefinition = {
@@ -673,30 +663,6 @@ export const SinWarp3DNode: NodeDefinition = {
 };
 
 // ─── New 3D SDF Primitive Nodes ───────────────────────────────────────────────
-
-export const RoundedBoxSDF3DNode: NodeDefinition = withParamSockets({
-  type: 'roundedBoxSDF3D', label: 'Rounded Box', category: '3D Primitives',
-  description: 'Box SDF with rounded corners and edges. Radius 0 is a plain box.',
-  inputs: { pos: { type: 'vec3', label: 'Position' }, radius: { type: 'float', label: 'Radius' } },
-  outputs: { dist: { type: 'float', label: 'Distance' } },
-  defaultParams: { sizeX: 0.4, sizeY: 0.4, sizeZ: 0.4, radius: 0.1 },
-  paramDefs: {
-    sizeX:  { label: 'Size X',  type: 'float', min: 0.01, max: 5.0, step: 0.01 },
-    sizeY:  { label: 'Size Y',  type: 'float', min: 0.01, max: 5.0, step: 0.01 },
-    sizeZ:  { label: 'Size Z',  type: 'float', min: 0.01, max: 5.0, step: 0.01 },
-    radius: { label: 'Radius',  type: 'float', min: 0.0,  max: 1.0, step: 0.01 },
-  },
-  glslFunction: SDF3D_PRIMS_GLSL,
-  generateGLSL: (node, inputVars) => {
-    const id = node.id;
-    const pos = inputVars.pos || 'vec3(0.0)';
-    const sx  = p(node.params.sizeX, 0.4);
-    const sy  = p(node.params.sizeY, 0.4);
-    const sz  = p(node.params.sizeZ, 0.4);
-    const r   = inputVars.radius || p(node.params.radius, 0.1);
-    return { code: `    float ${id}_dist = sdf3d_roundedBox(${pos}, vec3(${sx}, ${sy}, ${sz}), ${r});\n`, outputVars: { dist: `${id}_dist` } };
-  },
-}, ['sizeX', 'sizeY', 'sizeZ']);
 
 export const BoxFrameSDF3DNode: NodeDefinition = withParamSockets({
   type: 'boxFrameSDF3D', label: 'Box Frame', category: '3D Primitives',
@@ -913,26 +879,6 @@ export const SolidAngleSDF3DNode: NodeDefinition = withParamSockets({
     };
   },
 }, ['radius', 'angle']);
-
-export const VerticalCapsuleSDF3DNode: NodeDefinition = withParamSockets({
-  type: 'verticalCapsuleSDF3D', label: 'Vertical Capsule', category: '3D Primitives',
-  description: 'Axis-aligned capsule centered at origin, extends along Y.',
-  inputs: { pos: { type: 'vec3', label: 'Position' } },
-  outputs: { dist: { type: 'float', label: 'Distance' } },
-  defaultParams: { height: 0.5, radius: 0.2 },
-  paramDefs: {
-    height: { label: 'Half Height', type: 'float', min: 0.0, max: 5.0, step: 0.01 },
-    radius: { label: 'Radius',      type: 'float', min: 0.01, max: 3.0, step: 0.01 },
-  },
-  glslFunction: SDF3D_PRIMS_GLSL,
-  generateGLSL: (node, inputVars) => {
-    const id = node.id;
-    const pos = inputVars.pos || 'vec3(0.0)';
-    const h = p(node.params.height, 0.5);
-    const r = p(node.params.radius, 0.2);
-    return { code: `    float ${id}_dist = sdf3d_vertCapsule(${pos}, ${h}, ${r});\n`, outputVars: { dist: `${id}_dist` } };
-  },
-}, ['height', 'radius']);
 
 // ─── SDF Boolean Ops ──────────────────────────────────────────────────────────
 
@@ -1625,11 +1571,12 @@ export const SchwarzPFieldNode: NodeDefinition = {
 export const MirrorFold3DNode: NodeDefinition = {
   type: 'mirrorFold3D',
   label: 'Mirror Fold 3D',
-  category: '3D Primitives',
+  category: '3D Transforms',
+  aliases: ['Fold 3D', 'Mirror 3D', 'Symmetry 3D', 'abs fold'],
   description:
-    'Demoscene fold trick: abs(p.axis) - offset per axis. Mirrors space across ' +
-    'each toggled axis, turning one SDF into infinite reflected copies. ' +
-    'Stack inside an iterated group for fractal-like complexity.',
+    'Mirrors space across each ticked axis (abs(p.axis) − Offset), so one shape becomes its reflected copies. Offset 0 ' +
+    'is a plain mirror (the old Fold 3D); other offsets push the copies apart. Stack it inside an iterated group for ' +
+    'fractal-like folds.',
   inputs: {
     pos:     { type: 'vec3',  label: 'Position' },
     offsetX: { type: 'float', label: 'Offset X' },
@@ -1701,7 +1648,7 @@ float fbm3(vec3 p, int octaves, float lacunarity, float gain) {
 export const Turbulence3DNode: NodeDefinition = withParamSockets({
   type: 'turbulence3D',
   label: 'Turbulence 3D', aliases: ['xor warp 3d', 'sine warp loop 3d'],
-  category: '3D Primitives',
+  category: '3D Transforms',
   description:
     'Xor-style 3D turbulence: octaves of sin(rotated p · d) / d added to the position, d growing each pass. ' +
     'Place between Scene Pos and a Plane 3D or Gyroid Field for water, smoke and cloth; cheaper and more fluid than 3D Domain Warp.',
@@ -1751,7 +1698,7 @@ export const Turbulence3DNode: NodeDefinition = withParamSockets({
 export const DomainWarp3DNode: NodeDefinition = withParamSockets({
   type: 'domainWarp3D',
   label: '3D Domain Warp',
-  category: '3D Primitives',
+  category: '3D Transforms',
   description:
     'Warps a 3D position with FBM noise — p + fbm3(p × Scale) × Strength. ' +
     'Place between ray position and any SDF or Gyroid Field for organic turbulence.',

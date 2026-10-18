@@ -80,7 +80,6 @@ const PARTNER: Record<string, { type: 'sphereSDF3D' | 'boxSDF3D'; params: Record
   voxelize:        { type: 'sphereSDF3D', params: { radius: 0.2 } },
   polarRepeat3D:   { type: 'sphereSDF3D', params: { radius: 0.2 }, shift: [0.8, 0, 0] },
   kaleidoscope3D:  { type: 'sphereSDF3D', params: { radius: 0.25 }, shift: [0.6, 0.3, 0.2] },
-  fold3D:          { type: 'sphereSDF3D', params: { radius: 0.3 }, shift: [0.5, 0.3, 0.2] },
   mirrorFold3D:    { type: 'sphereSDF3D', params: { radius: 0.3 }, shift: [0.5, 0.3, 0.2] },
   sphereInvert3D:  { type: 'sphereSDF3D', params: { radius: 0.5 }, shift: [1.6, 0, 0] },
   turbulence3D:    { type: 'sphereSDF3D', params: { radius: 0.8 } },

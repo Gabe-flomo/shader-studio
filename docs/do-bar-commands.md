@@ -2363,7 +2363,7 @@ box [size] round= width= height= depth= at= rot= color= shine= name= texture= ma
 | Slot | What |
 |---|---|
 | size (bare) | Size (half) · Half its width, height and depth. · random: (0.25…0.8)×3 |
-| round | Round · Above 0 it becomes a Rounded Box with edges this round. · default 0 · random: 0–0.16666666666666666 |
+| round | Round · Above 0 its edges are rounded this much (Edges: Rounded). · default 0 · random: 0–0.16666666666666666 |
 | width | Width · Only the width (half of it, like size): size= sets all three. · default 0.5 · random: 0.25–0.8 |
 | height | Height · Only the height (half of it, like size): size= sets all three. · default 0.5 · random: 0.25–0.8 |
 | depth | Depth · Only the depth (half of it, like size): size= sets all three. · default 0.5 · random: 0.25–0.8 |

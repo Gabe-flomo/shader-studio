@@ -167,7 +167,7 @@ lesson('learn3dCombine', [
     n('transform', 'mv', 240, 80, { dim: '3', x: 0.45, ...note('Moving a shape means moving the point it measures: Transform\'s Move subtracts the offset from the point before the sphere measures it, so the sphere\'s centre ends up at the offset (x = 0.45 here).') }, { p: ['sp', 'pos'] }),
     n('sphereSDF3D', 'sph', 480, 80, { radius: 0.5 }, { pos: ['mv', 'p'] }),
     n('transform', 'mvb', 240, 320, { dim: '3', x: -0.45 }, { p: ['sp', 'pos'] }),
-    n('roundedBoxSDF3D', 'box', 480, 320, { sizeX: 0.4, sizeY: 0.4, sizeZ: 0.4, radius: 0.05 }, { pos: ['mvb', 'p'] }),
+    n('boxSDF3D', 'box', 480, 320, { sizeX: 0.4, sizeY: 0.4, sizeZ: 0.4, edges: 'rounded', rounding: 0.05 }, { pos: ['mvb', 'p'] }),
     n('sdfUnion', 'un', 760, 200, { k: 0.25, ...note('Union keeps the smaller of the two distances, so a point is near the scene if it is near either shape. Blend radius above 0 rounds the join into a smooth blend; here it comes in from the Blend radius Constant outside.') }, { a: ['sph', 'dist'], b: ['box', 'dist'] }),
   ], ['un', 'dist'], 'Two shapes measured at the same point and joined by a Union. Only what reaches Scene Output counts: the Union, not the sphere or box on their own.',
   { key: 'k', label: 'Blend radius', from: ['blend', 'value'], to: ['un', 'k'] }),
@@ -186,7 +186,7 @@ lesson('learn3dOrbit', [
   time(40, 460),
   n('marchCamera', 'cam', 280, 220, { camDist: 3.4, camAngle: 0.6, camElevation: 0.45, rotSpeed: 0.4, fov: 1.5, ...note('Angle is Angle + Time × Rot Speed, so with Time wired the camera circles the target at Rot Speed radians per second, always looking at the centre.') }, { time: ['time', 'time'] }),
   scene('scene', 280, 520, 'Scene', [
-    n('roundedBoxSDF3D', 'box', 480, 80, { sizeX: 0.45, sizeY: 0.45, sizeZ: 0.45, radius: 0.08 }, { pos: ['sp', 'pos'] }),
+    n('boxSDF3D', 'box', 480, 80, { sizeX: 0.45, sizeY: 0.45, sizeZ: 0.45, edges: 'rounded', rounding: 0.08 }, { pos: ['sp', 'pos'] }),
     n('planeSDF3D', 'floor', 480, 320, { height: -0.46 }, { p: ['sp', 'pos'] }),
     n('sdfUnion', 'un', 760, 200, {}, { a: ['box', 'dist'], b: ['floor', 'dist'] }),
   ], ['un', 'dist'], 'A box on a floor. A box, not a sphere: a sphere looks the same from every side, so you could not see the camera move.'),
