@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.268',
+    date: '2026-10-17',
+    title: "Easier to start, easier to save",
+    highlights: [
+      { area: 'Studio', text: "\u2318S saves (\u21e7\u2318S save as, \u21e7\u2318E export, \u2318A select all); the graph keeps its zoom, fits after Build, and Maximize gives it the window." },
+      { area: 'Studio', text: "A Start sheet and Help \u2192 Learn on desktop; new nodes land in free space; adding a Play control takes one step; Esc closes popovers." },
+    ],
+  },
+  {
     id: '2026.10.267',
     date: '2026-10-17',
     title: "Faster exports, tidier corners",
