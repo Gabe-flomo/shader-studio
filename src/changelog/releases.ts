@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.283',
+    date: '2026-10-18',
+    title: "Steady triggers",
+    highlights: [
+      { area: 'Studio', text: "Audio triggers fire when a band crosses a fixed line, with a noise gate and a scope; files are analysed ahead. Pause, mute, volume on the card. No stems." },
+    ],
+  },
+  {
     id: '2026.10.282',
     date: '2026-10-18',
     title: "Band EQ",
