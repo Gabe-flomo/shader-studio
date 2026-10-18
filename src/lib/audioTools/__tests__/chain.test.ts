@@ -48,6 +48,8 @@ const fake = vi.hoisted(() => {
     isPlaying: (id: string) => playing.has(id), position: () => 0, getFileName: () => 'loop.wav',
     getAnalyser: (id: string) => { if (!loaded.has(id)) return null; if (!analysers.has(id)) analysers.set(id, analyser()); return analysers.get(id)!; },
     buffer: () => null, context: () => ctx,
+    // Stems (none here): lib/audioEngine.ts setStem / stemAnalyser.
+    setStem: () => {}, setHearStem: () => {}, stemAnalyser: () => null, stemBuffer: () => null,
     connectOutside: (n: Node) => { outside.push(n); return () => { outside.splice(outside.indexOf(n), 1); }; },
   };
   return { ctx, frame, made, audioEngine, outside, analysers };

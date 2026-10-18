@@ -203,11 +203,13 @@ export const AudioSourceNode: NodeDefinition = {
   type: AUDIO_SOURCE_TYPE,
   label: 'Audio Source',
   category: AUDIO_CATEGORY,
-  aliases: ['Audio', 'Sound', 'Music', 'Song', 'Microphone', 'Mic', 'Audio file', 'Audio In', 'Line in', 'Frequency bands', 'Kick trigger', 'Learn a sound', 'Sound match', 'Clap detect', 'Video sound'],
-  description: 'Where the sound comes from: a File (Load a sound on the card; it is kept in the library, so it comes back after a reload), the Mic (or an audio interface), or a Video node\'s own sound (the Video tab: a Texture node playing a video, or a Baked node), picked with the tabs on the card. Open ↗ shows the whole file to trim, and a live spectrum where you pick frequency bands: each band becomes an output here, its level or a trigger on each hit in it. Learn a sound there too (select one clap, press Learn): it fires a trigger whenever a sound like it plays. Wire Audio into Band level, Hit, Spectrum, Spectrogram or Waveform; Level is how loud it is right now (0–1) and Time the seconds it has played.',
+  aliases: ['Audio', 'Sound', 'Music', 'Song', 'Microphone', 'Mic', 'Audio file', 'Audio In', 'Line in', 'Frequency bands', 'Kick trigger', 'Learn a sound', 'Sound match', 'Clap detect', 'Video sound', 'Stems', 'Separate', 'Stem separation', 'Isolate drums', 'Isolate vocals', 'Demucs'],
+  description: 'Where the sound comes from: a File (Load a sound on the card; it is kept in the library, so it comes back after a reload), the Mic (or an audio interface), or a Video node\'s own sound (the Video tab: a Texture node playing a video, or a Baked node), picked with the tabs on the card. Open ↗ shows the whole file to trim, and a live spectrum where you pick frequency bands: each band becomes an output here, its level or a trigger on each hit in it. Learn a sound there too (select one clap, press Learn): it fires a trigger whenever a sound like it plays. Separate splits a File into stems (drums, bass, vocals, other; guitar and piano with the 6-stem model) on this device: pick a Stem and everything listening hears only it, while you still hear the whole song. Wire Audio into Band level, Hit, Spectrum, Spectrogram or Waveform; Level is how loud it is right now (0–1) and Time the seconds it has played.',
   inputs: {},
   outputs: SOURCE_OUTPUTS,
-  defaultParams: { source: 'file', playing: true, loop: true, gain: 1, _fileName: '', sampleId: '', videoNode: '', bands: [], sounds: [], trimIn: 0, trimOut: 0 },
+  // stem / hear / stems: Separate (lib/audioTools/stems.ts, docs/stems.md): which stem the analysis hears, whether the
+  // speakers play it, and the stems kept for this song.
+  defaultParams: { source: 'file', playing: true, loop: true, gain: 1, _fileName: '', sampleId: '', videoNode: '', bands: [], sounds: [], trimIn: 0, trimOut: 0, stem: 'mix', hear: 'mix', stems: null },
   paramDefs: {
     playing: { label: 'Play', type: 'bool', hint: 'Plays the file or the video\'s sound (heard through the speakers), or listens to the Mic.' },
     loop: { label: 'Loop', type: 'bool', showWhen: { param: 'source', value: 'file' }, hint: 'Start again at the trim\'s end (or the file\'s). Off: it stops there.' },

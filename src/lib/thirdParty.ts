@@ -27,6 +27,16 @@ export const THIRD_PARTY: readonly ThirdPartyNotice[] = [
     licenseFile: 'licenses/prores-wasm-encoder.txt',
     use: 'Encodes ProRes .mov files in the browser (Record › ProRes). Unmodified, from npm; loaded on demand as a separate file (prores-wasm chunk), so it can be replaced on its own. A port of FFmpeg’s prores_ks.',
   },
+  {
+    id: 'demucs',
+    name: 'HT-Demucs (Hybrid Transformer Demucs v4)',
+    version: 'htdemucs, htdemucs_6s',
+    author: 'Meta Platforms, Inc. (Simon Rouard, Francisco Massa, Alexandre Défossez)',
+    licence: 'MIT',
+    source: 'https://github.com/facebookresearch/demucs',
+    licenseFile: 'licenses/demucs.txt',
+    use: 'Separates a song into stems on the Audio Source (Separate; docs/stems.md). Its weights are an opt-in download, never bundled: the ONNX exports monteslu/htdemucs-web-onnx (4 stems) and StemSplitio/htdemucs-6s-onnx (6 stems), both MIT, pinned on Hugging Face and run with ONNX Runtime Web on this device.',
+  },
 ];
 
 export const thirdParty = (id: string): ThirdPartyNotice | undefined => THIRD_PARTY.find(t => t.id === id);

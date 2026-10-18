@@ -20,7 +20,7 @@
  *             normalize }) makes the page reconnect to a live feed and add its rows (needs the network)
  *   media:  { textures: { uniform: { src } }, videos: { uniform: { src, loop, speed, clip? } },
  *             audio: [{ id, src, uniforms, bands, range, mode }],   (src: a data URL, or null)
- *             audioTools?: { sources: [{ id, kind: 'file' | 'video', src, video?, playing, loop, trimIn, trimOut, gain, bands, sounds, quiet? }],
+ *             audioTools?: { sources: [{ id, kind: 'file' | 'video', src, video?, playing, loop, trimIn, trimOut, gain, bands, sounds, quiet?, stem?: { src, stem, hear } }],
  *               effects?: [{ id, upstreamId, rootId, heard, spec, w, h, drive }],
  *               listeners: [{ id, sourceId, spec, w, h }], uniforms: { uniform: '<id>::<channel>' }, textures: { sampler: id } } }
  *             the Audio nodes (docs/audio-tools.md): run once a frame with the app's own sums (kit/audioTools.js);
@@ -2558,21 +2558,33 @@ void main() {
         const probe = at.ctx.createAnalyser(); probe.fftSize = 2048; probe.smoothingTimeConstant = 0;
         s.sr = at.ctx.sampleRate;
         // Its sound comes out here: read by the probe, taken by its effects, and played unless an effect is heard instead.
+        // With a stem (docs/stems.md) the stem comes out here and the song plays beside it (Hear: Full mix).
         const out = at.ctx.createGain();
         out.connect(probe);
-        if (!c.quiet) out.connect(at.out);
+        const stem = c.kind === 'file' && c.src && c.stem && c.stem.src ? c.stem : null;
+        if (!c.quiet && (!stem || stem.hear)) out.connect(at.out);
         s.out = out;
         if (c.kind === 'file' && c.src) {
-          at.ctx.decodeAudioData(dataBytes(c.src).buffer).then(buf => {
+          const decode = src => at.ctx.decodeAudioData(dataBytes(src).buffer);
+          Promise.all([decode(c.src), stem ? decode(stem.src).catch(() => null) : null]).then(([buf, sbuf]) => {
             if (!alive) return;
             // The trim, as the app's (lib/audioTools/bands.ts trimWindow): Out 0 is the end; at least 0.05 s.
             const d = buf.duration, a = Math.max(0, Math.min(c.trimIn || 0, Math.max(0, d - 0.05)));
             let b = c.trimOut > 0 ? Math.min(c.trimOut, d) : d;
             b = Math.max(b, Math.min(d, a + 0.05));
-            const src = at.ctx.createBufferSource(); src.buffer = buf; src.loop = c.loop; src.loopStart = a; src.loopEnd = b;
-            src.connect(out);
-            if (c.loop) src.start(0, a); else src.start(0, a, b - a);
-            s.node = src; s.probe = probe; s.startedAt = at.ctx.currentTime; s.win = { a, b };
+            const play = (bf, to) => { const n = at.ctx.createBufferSource(); n.buffer = bf; n.loop = c.loop; n.loopStart = a; n.loopEnd = b; n.connect(to); return n; };
+            const when = at.ctx.currentTime;
+            const src = play(buf, sbuf ? at.ctx.createGain() : out);
+            if (sbuf) {
+              // The song to the speakers (unless the stem is heard), the stem to the probe: both start together.
+              if (!c.quiet && !stem.hear) src.disconnect(), src.connect(at.out);
+              else src.disconnect();
+              const sn = play(sbuf, out);
+              if (c.loop) sn.start(when, a); else sn.start(when, a, b - a);
+              s.stemNode = sn;
+            } else if (stem && !c.quiet && !stem.hear) out.connect(at.out); // the stem didn't decode: the song is analysed and heard
+            if (c.loop) src.start(when, a); else src.start(when, a, b - a);
+            s.node = src; s.probe = probe; s.startedAt = when; s.win = { a, b };
           }, () => { /* not decodable in this browser */ });
         } else if (c.kind === 'video' && c.video) {
           const v = videos.find(x => x.name === c.video);
