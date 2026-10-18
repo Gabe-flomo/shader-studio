@@ -48,7 +48,7 @@ card's summary ("4 controls · 1 changed", "Off").
 
 | Section | Box of time (Time Cube View) | Stack of cards (Frame Stack) |
 |---|---|---|
-| **Source** | The Time Cube card itself (Choose video: the built-in Ball action clip, the painted test clip, a Library video or a file; Edit clip…; the build's progress and its strip of frames), then Frames, Frames from, Frame order | the same |
+| **Source** | The Time Cube card itself (Choose video: the built-in Ball action clip, the painted test clip, a Library video, a file, or **Pictures…**, one a frame, see [time-cube.md](time-cube.md) "From pictures"; Edit clip…; the build's progress and its strip of frames), then Frames, Fit pictures, Frames from, Frame order | the same |
 | **Shape** | **A box of time / A stack of cards**; Shape (roundness, edge softness, bulge), Box (stack along, time stretch, box size) | the switch; Layout (layout, morph to, cards, spacing), Shape (radius, face out, arc, tube, turns, fan, columns), Cards (size, stretch, corners, thickness, opacity, border, backs) |
 | **Time** | **Animate with an LFO** (what it moves, wave, speed, middle, reach); Slice (slice or flow, offset, before / after opacity, feather, slice face, tilts) | the LFO; Scan, Playback (what each card shows, speed, shift, delay), Order (shuffle) |
 | **Colour** | Glow & tint (rim glow, side tint), Picture (brightness, contrast, dark is clear), Colour key with its "everything else" and animate (the hue shift and drift are colour shifting) | brightness, contrast, border, edge and highlight colours, shading |
@@ -63,8 +63,10 @@ Every number is a `BuilderSlider`: double-click resets it, typing past the end w
 node card's Play menu (Add to Play controls). A socket the LFO drives says so instead of showing its slider. Quick
 controls (the 2D Scene Builder's pins) aren't offered here: the shell only has them for the 2D builder.
 
-The Time Cube reads a video, so the source is a video (Ball action, built in, by default): a webcam or a texture isn't something the
-node can stack.
+The Time Cube reads a video (Ball action, built in, by default) or a set of pictures: a webcam or a texture isn't something the
+node can stack. Presets keep your pictures and their fit as they keep your video and clip. The pictures live in the node's params,
+so the Scene builder's draft (nothing is added to the graph until Done) carries them like any other setting: × or Esc drops them
+with the draft, and nothing was put in the Library.
 
 ## Presets
 

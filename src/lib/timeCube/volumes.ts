@@ -23,6 +23,8 @@ import { BALL_VIDEO_ID } from '../builtinVideos';
 import { planFrameStack, stackSettingsOf, tileOrigin, type StackPlan, type VideoMeta } from './plan';
 import { BALL_LABEL, BALL_META, DEMO_LABEL, DEMO_META, TimeCubeCancelled, decodeVideoFrames, demoReader, openVideoReader, paintDemoFrames, probeVideo, type FrameReader } from './frames';
 import { deepTexture, reorderDeep } from './deep';
+import { picturesKey, picturesMeta, picturesStackSettings, usedPictures, pictureFitOf } from './pictures';
+import { drawPictures } from './pictureSource';
 import {
   combineFramesFloat, combineKey, combineSettingsOf, frameMotion, frameOrder, frameStat, orderKey, orderSettingsOf, subFrameTimes,
   type CombineSettings, type FrameStat, type OrderSettings,
@@ -39,7 +41,7 @@ export interface TimeCubeStatus {
   message?: string;
 }
 
-export type TimeCubeSource = { kind: 'ball' } | { kind: 'demo' } | { kind: 'library'; videoId: string };
+export type TimeCubeSource = { kind: 'ball' } | { kind: 'demo' } | { kind: 'library'; videoId: string } | { kind: 'pictures' };
 
 /**
  * The video a Time Cube node reads: the built-in Ball action clip (`source: 'ball'`, the default), the painted
@@ -47,6 +49,8 @@ export type TimeCubeSource = { kind: 'ball' } | { kind: 'demo' } | { kind: 'libr
  */
 export function timeCubeSource(node: GraphNode): TimeCubeSource | null {
   if (node.params.source === 'ball') return { kind: 'ball' };
+  // Pictures (lib/timeCube/pictures.ts): nothing to build until some are chosen.
+  if (node.params.source === 'pictures') return usedPictures(node.params).length ? { kind: 'pictures' } : null;
   if (node.params.source !== 'library') return { kind: 'demo' };
   const id = typeof node.params.videoId === 'string' ? node.params.videoId : '';
   return id ? { kind: 'library', videoId: id } : null;
@@ -57,6 +61,10 @@ export function timeCubeSourceName(node: GraphNode): string {
   const src = timeCubeSource(node);
   if (src?.kind === 'ball') return BALL_LABEL;
   if (src?.kind === 'demo') return DEMO_LABEL;
+  if (node.params.source === 'pictures') {
+    const n = usedPictures(node.params).length;
+    return n ? `${n} ${n === 1 ? 'picture' : 'pictures'}` : 'Pictures (none chosen yet)';
+  }
   return (typeof node.params.fileName === 'string' && node.params.fileName) || 'A Library video';
 }
 
@@ -68,6 +76,7 @@ export function timeCubeVideoId(src: TimeCubeSource | null): string | null {
 /** A video's size and length as the node keeps it (`_meta`, written when the video is chosen). */
 export function timeCubeMeta(node: GraphNode): VideoMeta | null {
   if (node.params.source === 'ball') return BALL_META;
+  if (node.params.source === 'pictures') return picturesMeta(node.params);
   if (node.params.source !== 'library') return DEMO_META;
   const m = node.params._meta as Partial<VideoMeta> | undefined;
   return m && typeof m.width === 'number' && m.width > 0 && typeof m.height === 'number' && m.height > 0 && typeof m.duration === 'number'
@@ -77,15 +86,22 @@ export function timeCubeMeta(node: GraphNode): VideoMeta | null {
 /** The node's frame stack, or null while its video's size is unknown. */
 export function timeCubePlan(node: GraphNode): StackPlan | null {
   const meta = timeCubeMeta(node);
-  return meta ? planFrameStack(meta, stackSettingsOf(node.params)) : null;
+  if (!meta) return null;
+  const s = stackSettingsOf(node.params);
+  return planFrameStack(meta, node.params.source === 'pictures' ? picturesStackSettings(node.params, s) : s);
+}
+
+/** How a node's frames are read: pictures are always one a frame (Frames from doesn't apply). */
+export function timeCubeCombine(node: GraphNode): CombineSettings {
+  return combineSettingsOf(node.params.source === 'pictures' ? { ...node.params, combine: 'pick' } : node.params);
 }
 
 /** What a volume's frames are before any reordering (Frames from included): volumes with the same base share their decoding. */
 export function baseVolumeKey(node: GraphNode): string | null {
   const src = timeCubeSource(node), plan = timeCubePlan(node);
   if (!src || !plan) return null;
-  const who = src.kind === 'library' ? `vid:${src.videoId}` : src.kind;
-  return `${who}|${plan.tileW}x${plan.tileH}|${plan.cols}x${plan.rows}|${plan.frames}|${plan.clipKey}${combineKey(combineSettingsOf(node.params))}${stackSettingsOf(node.params).deep ? '|16' : ''}`;
+  const who = src.kind === 'library' ? `vid:${src.videoId}` : src.kind === 'pictures' ? picturesKey(node.params) : src.kind;
+  return `${who}|${plan.tileW}x${plan.tileH}|${plan.cols}x${plan.rows}|${plan.frames}|${plan.clipKey}${combineKey(timeCubeCombine(node))}${src.kind !== 'pictures' && stackSettingsOf(node.params).deep ? '|16' : ''}`;
 }
 
 /** What a volume holds: two nodes with the same key share one build. The defaults (Pick, in time order) keep the old keys. */
@@ -259,7 +275,7 @@ class TimeCubes {
 
   private start(key: string, node: GraphNode): Volume {
     const plan = timeCubePlan(node)!;
-    const comb = combineSettingsOf(node.params), ord = orderSettingsOf(node.params);
+    const comb = timeCubeCombine(node), ord = orderSettingsOf(node.params);
     const total = plan.frames * comb.sub;
     const v: Volume = { key, baseKey: baseVolumeKey(node) ?? key, plan, canvas: null, base: null, stats: null, order: null, deep: null, tex: null, status: { state: 'building', done: 0, total }, abort: new AbortController(), done: Promise.resolve(), freedAt: 0 };
     this.volumes.set(key, v);
@@ -275,6 +291,7 @@ class TimeCubes {
       // The frames in time order: from a volume already built with the same frames (a reorder decodes nothing), or built now.
       const donor = [...this.volumes.values()].find(o => o !== v && o.baseKey === v.baseKey && o.status.state === 'ready' && (o.base ?? o.canvas));
       let base: HTMLCanvasElement;
+      let note = '';
       if (donor) { base = (donor.base ?? donor.canvas)!; v.stats = donor.stats; v.deep = donor.deep; }
       else {
         base = document.createElement('canvas');
@@ -292,7 +309,13 @@ class TimeCubes {
         };
         const missing = () => { v.status = { state: 'missing', done: 0, total, message: 'This video is not in this browser\'s Library. Choose it again.' }; };
         const scale = src.kind === 'ball' ? ballFallback : 1;
-        if (comb.combine === 'pick') {
+        if (src.kind === 'pictures') {
+          // One picture a frame, in the list's order, fitted into the tile (lib/timeCube/pictureSource.ts).
+          const pics = usedPictures(node.params);
+          const unread = await drawPictures(pics, plan, ctx, pictureFitOf(node.params.pictureFit), progress, signal);
+          if (unread >= pics.length) { v.status = { state: 'missing', done: 0, total, message: 'None of the pictures could be read here. Choose them again.' }; return; }
+          if (unread) note = `${unread} of ${pics.length} pictures couldn't be read here: their frames are black.`;
+        } else if (comb.combine === 'pick') {
           const blob = await blobOf();
           if (blob === 'missing') { missing(); return; }
           let painted = !blob;
@@ -331,7 +354,7 @@ class TimeCubes {
       tex.wrapS = THREE.ClampToEdgeWrapping; tex.wrapT = THREE.ClampToEdgeWrapping;
       tex.needsUpdate = true;
       v.canvas = canvas; v.tex = tex;
-      v.status = { state: 'ready', done: total, total };
+      v.status = { state: 'ready', done: total, total, ...(note ? { message: note } : {}) };
       v.abort = null;
       if (this.volumes.get(key) !== v) { tex.dispose(); return; }
       for (const id of this.users(key)) this.host?.setTexture(id, tex);

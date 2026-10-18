@@ -32,6 +32,8 @@ Choose a video on the card:
   be decoded (node and jsdom tests, a failed load), stretched over Ball
   action's length; graphs saved before Ball action shipped keep it
   (`source: 'demo'`).
+- **Pictures…** fills the cube from a set of pictures instead of a video, one
+  a frame (see "From pictures" below).
 
 The node decodes the planned frames into one texture (see "How it works") and
 shows its progress, with **Cancel**. After a cancel, an error or a missing
@@ -126,6 +128,66 @@ frames themselves are not saved. They are decoded again when the graph opens.
 
 The Library and Files pages count the node as a use of its video, so **Clean
 up** keeps the video. `.play` bundles carry it like a Video layer's.
+
+### From pictures
+
+**Choose video → Pictures…** turns the card into a list of pictures, one a
+frame, in order (`source: 'pictures'`, `params.pictures`). Frame Stack, the
+View and the Slice read it like any other volume.
+
+- **Add pictures…** picks several at once (a phone's photo picker too). They
+  arrive in **file-name order**, natural sort (`frame 2` before `frame 10`),
+  after the pictures already there.
+- **From the Library…** picks pictures already in the Library, by reference.
+- **Sort by name**, **Reverse**, **Clear**, and on each thumbnail **‹ ›**
+  (earlier, later) and **×** (remove). The number on a thumbnail is its frame.
+- **How many:** the cube has exactly one frame a picture, so 24 pictures make
+  a 24-frame cube. **Frames** is the most it takes (128 by default, up to
+  256). Picking more than there is room for keeps the first ones by name and
+  says how many were left out ("2 pictures were left out: the cube holds 128
+  frames (Frames). Raise Frames (up to 256) to take more."). Lowering Frames
+  later keeps the list but uses only the first ones (the rest are dimmed, and
+  the card says so). We chose this over repeating the last picture or
+  stretching the pictures over the frame count: a frame is always one
+  picture, so what you see in the cube is exactly your list. A single picture
+  is stacked twice (a cube needs two frames).
+- **Frame shape:** the first picture's. The others are fitted into it by
+  **Fit pictures**: **Fill (crop)** (the default: the frame is always full,
+  as a video's is), **Fit (black bars)** or **Stretch**. Frame size sets the
+  width, as for a video.
+- Frames from, Spacing and Edit clip… are for videos and are hidden. Frame
+  order (reverse, shuffle, sort by brightness…) works on pictures as on
+  frames.
+
+**Where the pictures are kept.** Nothing is added to the Library.
+
+| Picked | The graph keeps | When it opens |
+|---|---|---|
+| A file, in a browser or on a phone | a copy in the node (`src`, a JPEG data URL; PNG with transparency) | from the copy |
+| A file, in the desktop app (**Add pictures…**) | its path (`path`); no bytes | read from disk (anywhere in your home folder) |
+| A file, in the desktop app (**Add, keep in graph…**) | a copy, as in a browser | from the copy |
+| From the Library | its id (`libraryId`) | from the Library |
+
+All of a node's copies share about 1.2 MB (1,600,000 characters of data URL,
+`EMBED_TOTAL`), so a graph with 128 pictures still saves in the browser's
+storage: each copy is the largest of 512, 384, 256, 192, 128 or 96 px on its
+long side that fits its share (24 pictures: 512 px; 128: about 192 px).
+Adding pictures makes the copies already there smaller when they no longer
+fit. A picture picked this session is also held at full size in memory, so
+the cube is built sharp until the page reloads; after that it is built from
+the copy.
+
+On the desktop, **Keep in graph** turns pictures on disk into copies, so the
+graph (and a .play file of it) opens on another computer; a graph that keeps
+paths opens elsewhere with black frames for the files it can't find, and the
+card says how many. Library pictures are named by `libraryId`, the field
+Files' Used by follows, so Clean up keeps them.
+
+Code: `lib/timeCube/pictures.ts` (the model, pure), `lib/timeCube/pictureSource.ts`
+(reading, embedding, the desktop dialog, drawing the tiles),
+`components/timeCube/TimeCubePictures.tsx` (the list). Tests:
+`lib/timeCube/__tests__/timeCubePictures.test.ts`,
+`components/timeCube/__tests__/timeCubePicturesCard.test.tsx`.
 
 ### Time Cube View (3D Scene)
 

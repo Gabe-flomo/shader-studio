@@ -1,5 +1,5 @@
 /**
- * The Time Cube card's own lines (docs/time-cube.md): which video, the
+ * The Time Cube card's own lines (docs/time-cube.md): which video (or the pictures, TimeCubePictures), the
  * stack's size and memory, build progress with Cancel, and a strip of the
  * stacked frames. The settings below are the card's usual sliders.
  */
@@ -16,6 +16,7 @@ import { buildEstimate, combineSettingsOf } from '../../lib/timeCube/order';
 import { clipParams, defaultClip, isIdentity } from '../../lib/media/clip';
 import { lazyWithSuspense, type PropsOf } from '../lazyWithSuspense';
 import type { TimeCubeClipModal as TimeCubeClipModalT } from './TimeCubeClipModal';
+import { TimeCubePictures } from './TimeCubePictures';
 
 // The clip editor loads on demand, in its own chunk.
 const TimeCubeClipModal = lazyWithSuspense<PropsOf<typeof TimeCubeClipModalT>>(() => import('./TimeCubeClipModal').then(m => ({ default: m.TimeCubeClipModal })));
@@ -37,7 +38,8 @@ export function TimeCubeCardBody({ node, touch = false }: { node: GraphNode; tou
   const status = useStatus(node.id);
   const plan = timeCubePlan(node);
   const src = timeCubeSource(node);
-  const comb = combineSettingsOf(node.params);
+  const pictures = node.params.source === 'pictures';
+  const comb = combineSettingsOf(pictures ? { ...node.params, combine: 'pick' } : node.params);
   const [picking, setPicking] = useState(false);
   const [videos, setVideos] = useState<LibraryVideoMeta[] | null>(null);
   const [busy, setBusy] = useState('');
@@ -79,7 +81,7 @@ export function TimeCubeCardBody({ node, touch = false }: { node: GraphNode; tou
       }
       if (!meta) { setBusy('That video could not be read here.'); return; }
       // A new video starts with the whole clip (the old one's trims and crop would not fit it).
-      updateNodeParams(node.id, { source: 'library', videoId: v.id, fileName: v.name, _meta: meta, ...clipParams(defaultClip()) });
+      updateNodeParams(node.id, { source: 'library', videoId: v.id, fileName: v.name, _meta: meta, pictures: [], ...clipParams(defaultClip()) });
       setPicking(false); setBusy('');
     } catch (e) { setBusy(e instanceof Error ? e.message : String(e)); }
   };
@@ -119,17 +121,18 @@ export function TimeCubeCardBody({ node, touch = false }: { node: GraphNode; tou
         <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
           <b style={{ font: `600 12.5px ${fontFamily.ui}`, color: tk.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={name}>{name}</b>
           <span style={small}>
-            {plan ? `${plan.frames} frames · ${plan.tileW}×${plan.tileH} · ${formatBytes(plan.bytes)}${plan.bytes > plan.atlasW * plan.atlasH * 4 ? ' (16-bit)' : ''}` : 'Reading the video\'s size…'}
-            {plan && plan.every > 0 ? ` · one every ${plan.every < 1 ? `${Math.round(plan.every * 1000)} ms` : `${plan.every.toFixed(2)} s`}` : ''}
+            {pictures && !plan ? 'No pictures yet' : plan ? `${plan.frames} frames · ${plan.tileW}×${plan.tileH} · ${formatBytes(plan.bytes)}${plan.bytes > plan.atlasW * plan.atlasH * 4 ? ' (16-bit)' : ''}` : 'Reading the video\'s size…'}
+            {plan && plan.every > 0 && !pictures ? ` · one every ${plan.every < 1 ? `${Math.round(plan.every * 1000)} ms` : `${plan.every.toFixed(2)} s`}` : ''}
           </span>
         </span>
-        <button type="button" style={btn} onClick={() => setPicking(v => !v)} title="Use a video from the Library or a file">{picking ? 'Close' : 'Choose video'}</button>
+        <button type="button" style={btn} onClick={() => setPicking(v => !v)} title="Use a video from the Library or a file, or a set of pictures">{picking ? 'Close' : pictures ? 'Choose source' : 'Choose video'}</button>
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      {!pictures && <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <span style={{ ...small, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={clipSummary}>{clipSummary}</span>
         <button type="button" style={btn} onClick={() => setEditing(true)} disabled={!plan} title="Trim the video, keep several segments, ramp the speed, crop and turn the frames (double-click the strip too)">Edit clip…</button>
-      </div>
-      {editing && <TimeCubeClipModal node={node} onClose={() => setEditing(false)} />}
+      </div>}
+      {editing && !pictures && <TimeCubeClipModal node={node} onClose={() => setEditing(false)} />}
+      {pictures && <TimeCubePictures node={node} touch={touch} />}
 
       {plan?.capped && <span style={{ ...small, color: tk.status.warningText }}>{capText(plan)}</span>}
       {plan && comb.combine !== 'pick' && (() => {
@@ -139,8 +142,10 @@ export function TimeCubeCardBody({ node, touch = false }: { node: GraphNode; tou
 
       {picking && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: 6, borderRadius: radius.md, background: tk.bg.subtle, maxHeight: 220, overflowY: 'auto' }}>
-          <button type="button" style={{ ...btn, textAlign: 'left', background: src?.kind === 'ball' ? tk.bg.selected : tk.bg.field }} onClick={() => { updateNodeParams(node.id, { source: 'ball', videoId: '', fileName: '', _meta: undefined }); setPicking(false); }}>{BALL_LABEL}</button>
-          <button type="button" style={{ ...btn, textAlign: 'left', background: src?.kind === 'demo' ? tk.bg.selected : tk.bg.field }} onClick={() => { updateNodeParams(node.id, { source: 'demo', videoId: '', fileName: '', _meta: undefined }); setPicking(false); }}>{DEMO_LABEL}</button>
+          <button type="button" style={{ ...btn, textAlign: 'left', background: src?.kind === 'ball' ? tk.bg.selected : tk.bg.field }} onClick={() => { updateNodeParams(node.id, { source: 'ball', videoId: '', fileName: '', _meta: undefined, pictures: [] }); setPicking(false); }}>{BALL_LABEL}</button>
+          <button type="button" style={{ ...btn, textAlign: 'left', background: src?.kind === 'demo' ? tk.bg.selected : tk.bg.field }} onClick={() => { updateNodeParams(node.id, { source: 'demo', videoId: '', fileName: '', _meta: undefined, pictures: [] }); setPicking(false); }}>{DEMO_LABEL}</button>
+          <button type="button" data-tc-source-pictures style={{ ...btn, textAlign: 'left', background: pictures ? tk.bg.selected : tk.bg.field }} title="A set of pictures, one a frame, in file-name order (kept with the graph, not added to the Library)"
+            onClick={() => { if (!pictures) updateNodeParams(node.id, { source: 'pictures', videoId: '', fileName: '', _meta: undefined, spacing: 'count', ...clipParams(defaultClip()) }); setPicking(false); }}>Pictures…</button>
           <button type="button" style={{ ...btn, textAlign: 'left' }} onClick={() => fileRef.current?.click()}>From a file…</button>
           <input ref={fileRef} type="file" accept="video/*" style={{ display: 'none' }} onChange={e => { void onFile(e.target.files?.[0]); e.target.value = ''; }} />
           {videos === null && <span style={small}>Loading the Library…</span>}
@@ -174,8 +179,9 @@ export function TimeCubeCardBody({ node, touch = false }: { node: GraphNode; tou
           <button type="button" style={btn} onClick={() => timeCubes.rebuild(node.id)}>Build</button>
         </div>
       )}
+      {ready && status?.message && <span style={{ ...small, color: tk.status.warningText }}>{status.message}</span>}
       {ready && <canvas ref={stripRef} width={320} height={plan ? Math.round(320 / Math.min(8, plan.frames) / plan.aspect) : 22} style={{ width: '100%', borderRadius: 4, imageRendering: 'auto', cursor: 'pointer' }}
-        onDoubleClick={e => { e.stopPropagation(); setEditing(true); }} title="Eight of the stacked frames, first to last. Double-click to edit the clip." />}
+        onDoubleClick={e => { e.stopPropagation(); if (!pictures) setEditing(true); }} title={pictures ? 'Eight of the stacked frames, first to last.' : 'Eight of the stacked frames, first to last. Double-click to edit the clip.'} />}
     </div>
   );
 }
