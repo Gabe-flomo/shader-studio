@@ -2321,7 +2321,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
       },
       n('pass', 'tilt_pass', 1960, 200, { label: 'Floor', __comment: 'Pass: the glowing floor as a texture, this frame, so the blur can read along the band.' },
         { color: ['glow', 'tinted'] }),
-      n('tiltShiftTexture', 'tilt', 2160, 200, { focus_center: 0, band_width: 0.2, max_blur: 8, tilt_angle: 0, axis: 'horizontal',
+      n('tiltShiftTexture', 'tilt', 2160, 200, { focus_center: 0, band_width: 0.2, max_blur: 12, tilt_angle: 0, axis: 'horizontal',
         __comment: 'Tilt-Shift (texture): the band round Focus Center stays sharp; away from it the floor blurs along the band, up to Max Blur pixels: a miniature.' },
         { texture: ['tilt_pass', 'texture'] }),
       {
@@ -11455,7 +11455,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
       },
       n('pass', 'tn_pass', 3760, 300, { label: 'Picture', __comment: 'Pass: the picture as a texture, this frame, so the glow can read round each pixel (half float keeps brightness above 1).' },
         { color: ['tn_blend', 'result'] }),
-      n('glowTexture', 'tn_bloom', 4000, 300, { method: 'bloom', threshold: 0.66, knee: 0.2, radius: 20, intensity: 2, tail: 0.4,
+      n('glowTexture', 'tn_bloom', 4000, 300, { method: 'bloom', threshold: 0.66, knee: 0.2, radius: 20, intensity: 0.6, tail: 0.4,
         __comment: 'Glow (texture), Bloom chain: the parts brighter than Threshold, halved again and again and built back up: a soft core with a long tail, in the same frame. Color is the picture with the glow added.' },
         { texture: ['tn_pass', 'texture'] }),
       {
@@ -11777,7 +11777,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
       },
       n('pass', 'bd_pass', 1240, 240, { label: 'Dots', __comment: 'Pass: the dots as a texture, this frame, so the glow can read round each pixel.' },
         { color: ['bd_fill', 'result'] }),
-      n('glowTexture', 'bd_bloom', 1480, 240, { method: 'bloom', threshold: 0.45, knee: 0.25, radius: 20, intensity: 2.5, tail: 0.4,
+      n('glowTexture', 'bd_bloom', 1480, 240, { method: 'bloom', threshold: 0.45, knee: 0.25, radius: 16, intensity: 0.8, tail: 0.4,
         __comment: 'Glow (texture), Bloom chain: thresholds the bright dots, blurs them down a mip chain and back up, and its Color adds the glow over the dots: the threshold → blur → add chain in one node, same frame.' },
         { texture: ['bd_pass', 'texture'] }),
       {
@@ -12086,8 +12086,8 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
       },
       n('pass', 'bl_pass', 1000, 0, { label: 'Waves', __comment: 'Pass: the sharp waves as a texture, this frame, so the blur can read round each pixel.' },
         { color: ['bl_post', 'color'] }),
-      n('blurTexture', 'bl_blur', 1000, 200, { method: 'smooth', radius: 6,
-        __comment: 'Blur (texture), Smooth: a true Gaussian of 6 pixels, made as two hidden passes (across, then down) that read between texels, so no copies show. Fast is one cheap pass.' },
+      n('blurTexture', 'bl_blur', 1000, 200, { method: 'smooth', radius: 12,
+        __comment: 'Blur (texture), Smooth: a true Gaussian of 12 pixels, made as two hidden passes (across, then down) that read between texels, so no copies show. Fast is one cheap pass.' },
         { texture: ['bl_pass', 'texture'] }),
       {
         id: 'bl_out',
