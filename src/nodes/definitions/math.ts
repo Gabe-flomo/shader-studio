@@ -541,7 +541,7 @@ export const MakeVec3Node: NodeDefinition = {
 };
 
 export const FloatToVec3Node: NodeDefinition = {
-  type: 'floatToVec3', label: 'Float → Color', category: 'Math', subcategory: 'Vector Build/Split', description: 'Convert a float to a grayscale vec3.',
+  type: 'floatToVec3', label: 'Float → Color', category: 'Color', description: 'Convert a float to a grayscale vec3.',
   inputs: { input: { type: 'float', label: 'Float' } }, outputs: { rgb: { type: 'vec3', label: 'Color' } },
   generateGLSL: (node: GraphNode, inputVars) => {
     const o = `${node.id}_rgb`;
@@ -788,7 +788,7 @@ export const AngleToVec2Node: NodeDefinition = {
 };
 
 export const LuminanceNode: NodeDefinition = {
-  type: 'luminance', label: 'Luminance', category: 'Math', subcategory: 'Color', description: 'Perceptual luminance of a vec3 RGB color (BT.709)',
+  type: 'luminance', label: 'Luminance', category: 'Color', description: 'Perceptual luminance of a vec3 RGB color (BT.709)',
   inputs: { color: { type: 'vec3', label: 'RGB' } },
   outputs: { result: { type: 'float', label: 'Luminance' } },
   defaultParams: {},

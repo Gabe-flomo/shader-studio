@@ -2058,7 +2058,7 @@ const TEX_IN = { type: 'texture' as const, label: 'Texture', hint: 'A Pass of th
 export const DofTextureNode: NodeDefinition = withParamSockets({
   type: 'dofTexture',
   label: 'Depth of Field (texture)',
-  category: 'Passes',
+  category: 'Texture tools',
   aliases: ['Depth of Field', 'DoF', 'Lens Blur', 'Bokeh', 'Focus blur', 'Defocus'],
   description: 'A camera\'s focus blur on a texture (a Pass of the picture), in the same frame. Focus Depth: pixels whose depth is far from Focal Dist get a bokeh blur (the depth from Dist, or from the texture\'s alpha: put a March Loop\'s Distance into the Pass\'s Alpha). Focus Point: like a lens focused on Focal Point, with a Focal Length and Aperture. Disc, Hex or Oct bokeh.',
   inputs: {
@@ -2121,7 +2121,7 @@ export const DofTextureNode: NodeDefinition = withParamSockets({
 export const TiltShiftTextureNode: NodeDefinition = withParamSockets({
   type: 'tiltShiftTexture',
   label: 'Tilt-Shift (texture)',
-  category: 'Passes',
+  category: 'Texture tools',
   aliases: ['Tilt-Shift Blur', 'Tilt shift', 'Miniature', 'Focus band'],
   description: 'The miniature look on a texture (a Pass of the picture), in the same frame: a band stays sharp and the picture blurs more the further from it, along the band. Tilt Angle turns the band.',
   inputs: {

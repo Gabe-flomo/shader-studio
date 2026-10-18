@@ -393,7 +393,7 @@ export const PosterizeNode: NodeDefinition = {
 export const InvertNode: NodeDefinition = {
   type: 'invert',
   label: 'Invert',
-  category: 'Color',
+  category: 'Color Grading',
   description: 'Inverts Color (1 − Color). Also works for inverting SDF signs or float ranges.',
   inputs:  { color: { type: 'vec3', label: 'Color' } },
   outputs: { color: { type: 'vec3', label: 'Color' } },
@@ -415,7 +415,7 @@ export const InvertNode: NodeDefinition = {
 export const HueRangeNode: NodeDefinition = {
   type: 'hueRange',
   label: 'Hue Range',
-  category: 'Color',
+  category: 'Color Grading',
   description: 'Boost or suppress a hue band\'s saturation. Boost > 1 = more vivid, < 1 = desaturate. Input space: RGB (default) or HSV (if already converted). Output is always RGB.',
   inputs: {
     color:      { type: 'vec3',  label: 'Color'      },
@@ -601,7 +601,7 @@ vec3 blendSubtract(vec3 b, vec3 s) { return b - s; }`,
 
 // BrightnessContrast
 export const BrightnessContrastNode: NodeDefinition = {
-  type: 'brightnessContrast', label: 'Brightness / Contrast', category: 'Color',
+  type: 'brightnessContrast', label: 'Brightness / Contrast', category: 'Color Grading',
   description: 'Adjust brightness and contrast of a vec3 color.',
   inputs: {
     color:      { type: 'vec3',  label: 'Color' },

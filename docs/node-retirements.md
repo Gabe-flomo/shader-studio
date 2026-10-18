@@ -198,3 +198,23 @@ Considered and left for now:
 
 Examples changed: gridLavaLamp (Vec2 Const → Constant), colorStopsCycle (Vec2 → Angle → Vector Angle), learnRect
 (Vec2 Const → Constant).
+
+## Rows: one home per kind of node
+
+- **Colour grading** holds every adjustment of a finished colour: Brightness / Contrast, Invert, Hue Range and
+  Colour Matrix moved there from Colour, beside Saturation, Hue Rotate, Lift / Gamma / Gain, Shadows / Highlights,
+  Tone Curve, Tone Map and Grain. **Colour** makes colour: pick, palettes, gradients, Luminance and Float → Color
+  (moved from Math), conversions and blends.
+- **Texture tools** holds every node that works on a texture: the "(texture)" effects (Blur, Glow, Edges, Depth of
+  Field, Tilt-Shift, Displace, Jump flood), Chromatic Aberration (lens), Radial Fast Blur, Displacement Map and Sample
+  (texture) moved there from Passes, which now holds the Pass. Its groups: Effects, Read, Shape the values, Channels,
+  Time, Look and track. Motion (texture) stays an input (Inputs & media).
+- **Combiners** has no glows left (they were merged into SDF Glow in the first round); its row text no longer says so.
+- `CATEGORY_GROUPS` lists only types that sit in the row (Mix, Blend Modes, Make Vec3, Saturation and Fract were
+  listed in rows they weren't in), and every offered node of a grouped row is in a group: Mirror 2D and Motion 2D
+  (2D Space Basic), Quantize and Weighted Average (Math), Collide (3D scene) and Grid Rules (Agents), Field to Lines,
+  Combine RGB, Repeat Cell, Curve Trace 3D and Time Cube Shape (3D Shapes, Traced), Curve Trace and Text (2D Shapes,
+  Lines & text), and the screen finishes (Effects, Screen).
+
+The definitions' categories changed with the rows (so search's category word and the card colour follow); the
+structure map keeps each node's stage (Luminance stays a number).

@@ -187,7 +187,7 @@ const tapsOf = (v: unknown) => (v === '12' || v === '48' ? Number(v) : 24);
 export const SampleTextureNode: NodeDefinition = withParamSockets({
   type: 'sampleTexture',
   label: 'Sample (texture)',
-  category: 'Passes',
+  category: 'Texture tools',
   aliases: ['Read texture', 'Texture lookup', 'Offset', 'texture2D'],
   description: 'Reads a Pass\'s texture at this pixel, shifted by Offset (in picture pixels), or wherever UV says. The building block for displacement and feedback: warp the UV, or read a Pass\'s Previous output.',
   inputs: {
@@ -230,7 +230,7 @@ export const SampleTextureNode: NodeDefinition = withParamSockets({
 export const EdgesTextureNode: NodeDefinition = withParamSockets({
   type: 'edgesTexture',
   label: 'Edges (texture)',
-  category: 'Passes',
+  category: 'Texture tools',
   aliases: ['Sobel (texture)', 'Edge detect', 'Outline', 'Find edges', 'Contours'],
   description: 'Finds the edges in a Pass\'s texture: a 3×3 Sobel filter on its brightness, reading the pixels around this one. Edges is how strong the edge is here (0–1), Direction which way the brightness rises, Color the picture\'s own colour on its edges. Feed it into another Pass to blur or glow the outlines.',
   inputs: {
@@ -301,7 +301,7 @@ const hiddenDecl = (node: GraphNode) => {
 export const BlurTextureNode: NodeDefinition = {
   type: 'blurTexture',
   label: 'Blur (texture)',
-  category: 'Passes',
+  category: 'Texture tools',
   aliases: ['Gaussian blur (texture)', 'Soften', 'Defocus', 'Blur this frame'],
   description: 'Blurs a Pass\'s texture (or any texture) in the same frame. Radius is in picture pixels. Smooth (the default) is a true Gaussian at any Radius: it adds two hidden passes, and works on a smaller copy when Radius is wide, so it stays fast. Fast is one cheap pass.',
   inputs: {
@@ -346,7 +346,7 @@ export const BlurTextureNode: NodeDefinition = {
 export const GlowTextureBase: NodeDefinition = {
   type: 'glowTexture',
   label: 'Glow (texture)',
-  category: 'Passes',
+  category: 'Texture tools',
   aliases: ['Bloom (texture)', 'Halo', 'Light bleed', 'Glow this frame', 'Neon glow', 'Bloom chain'],
   description: 'A glow from a Pass\'s texture (or any texture), in the same frame: only the parts brighter than Threshold are kept, spread by Radius (picture pixels), scaled by Intensity and tinted. Add the result over your picture (Add Colors, Blend Modes: Add or Screen). Bloom chain (the default) is a soft core with a long, wide tail, made in a few small hidden passes; Smooth is one Gaussian; Fast is one cheap pass.',
   inputs: {
@@ -402,7 +402,7 @@ export const GlowTextureBase: NodeDefinition = {
 export const DisplaceTextureNode: NodeDefinition = withParamSockets({
   type: 'displaceTexture',
   label: 'Displace (texture)',
-  category: 'Passes',
+  category: 'Texture tools',
   aliases: ['Displace by texture', 'Displacement map', 'Warp by texture', 'Refract'],
   description: 'Reads Texture with its UV pushed by a second texture, Map: Map\'s red and green, centred on 0.5, move the read sideways and up by Amount (in picture pixels). Heat haze, glass and liquid looks; with a Pass\'s Previous as Texture, smoke and flow.',
   inputs: {
@@ -451,7 +451,7 @@ const DM_CHANNEL_SELECT = DM_CHANNELS.map(c => ({ value: c, label: DM_CHANNEL_LA
 export const DisplacementMapNode: NodeDefinition = withParamSockets({
   type: 'displacementMap',
   label: 'Displacement Map',
-  category: 'Passes',
+  category: 'Texture tools',
   aliases: ['Displace by map', 'AE displacement map', 'Displace channels', 'Displacement', 'Map displace'],
   description: 'After Effects’ Displacement Map: moves the Source by the Map’s colours. One channel of the Map (red, green, blue, alpha, luminance, hue, lightness, saturation, or a fixed amount) pushes sideways, another up and down; mid-grey stays put, white pushes the full Max, black the full Max the other way. Source can be a texture (a Pass) or any colour chain that is a function of position (noise, shapes, Texture Input), read at the pushed place. A chain that reads the previous frame or particles can’t be read elsewhere: put a Pass after it and wire its Texture.',
   inputs: {
@@ -511,7 +511,7 @@ export const DisplacementMapNode: NodeDefinition = withParamSockets({
 export const JumpFloodTextureNode: NodeDefinition = {
   type: 'jumpFloodTexture',
   label: 'Jump flood (texture)',
-  category: 'Passes',
+  category: 'Texture tools',
   aliases: ['JFA', 'Jump flooding', 'Distance field (texture)', 'Nearest seed', 'Voronoi (texture)'],
   description: 'One step of a jump flood, the fast way to turn a shape into a distance field: reads the texture at this pixel and 8 places Reach picture pixels round it, where each pixel holds the place of a seed (red, green: a point in picture coordinates; blue 1: a seed is known), and keeps the nearest. Put it in a Pass that reads its own Previous with Repeat set (8 to 11), halving Reach each step, and every pixel ends up knowing the nearest point of the shape. Use a half-float Pass with Filter Nearest.',
   inputs: {

@@ -323,7 +323,7 @@ export const GLSL_COLOR_MATRIX = `mat3 colorMatrix(float hue, float sat, float g
 export const ColorMatrixNode: NodeDefinition = {
   type: 'colorMatrix',
   label: 'Colour Matrix',
-  category: 'Color',
+  category: 'Color Grading',
   aliases: ['color matrix', 'hue rotate matrix', 'grade matrix', 'channel mixer'],
   description: 'A colour grade as a 3×3 matrix: hue rotation (turning colours around the grey axis), saturation and gain. Apply it with Mat3 × Vec3 on a colour; multiply it with other colour matrices (Mat3 × Mat3) or blend two grades (Mat3 Mix). A Matrix Const makes any channel mix (sepia, swap red and blue…).',
   inputs: {

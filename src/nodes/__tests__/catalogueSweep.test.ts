@@ -22,7 +22,7 @@ import { emptyPlayRecord, type PlayRecord } from '../../types/play';
 import { getNodeDefinition, getOfferedDefinitions, NODE_REGISTRY } from '../definitions';
 import { NODE_ALIASES } from '../definitions/aliases';
 import { RETIRED_TYPES } from '../notOffered';
-import { CATEGORY_GROUPS, HIDDEN_NODES } from '../../components/NodeGraph/libraryRows';
+import { CATEGORY_GROUPS, HIDDEN_NODES, libraryLayout, nodesOfRow, rowOfType } from '../../components/NodeGraph/libraryRows';
 import { migrateNodeParams } from '../../types/nodeGraph';
 import { resolveNodeAliases } from '../definitions/aliases';
 import { runGlsl, type Val } from '../../compiler/__tests__/glslEval';
@@ -338,6 +338,30 @@ describe('N8: small duplicates', () => {
     }
     const OLD = ['simpleSDF', 'sdfColorize', 'vec2Angle', 'vec2Swizzle', 'vec3Swizzle', 'vec2Const'];
     for (const [k, g] of Object.entries(EXAMPLE_GRAPHS)) expect(typesOf(g.nodes).filter(t => OLD.includes(t)), k).toEqual([]);
+  });
+});
+
+describe('Q12: one home per kind of node', () => {
+  const rowOf = (t: string) => { const d = getNodeDefinition(t)!; return rowOfType(d.type, d.category); };
+
+  it('colour adjustments are in Colour grading; Luminance and Float → Color in Colour', () => {
+    for (const t of ['brightnessContrast', 'colorSaturation', 'hueRotate', 'liftGammaGain', 'shadowsHighlights', 'toneCurve', 'invert', 'hueRange', 'colorMatrix']) expect(rowOf(t), t).toBe('Color Grading');
+    for (const t of ['luminance', 'floatToVec3']) expect(rowOf(t), t).toBe('Color');
+  });
+
+  it('every "(texture)" node is in Texture tools (Motion (texture) is an input); no glow is a Combiner', () => {
+    for (const d of getOfferedDefinitions().filter(x => !HIDDEN_NODES.has(x.type) && /\((texture|lens)\)/.test(x.label) && x.type !== 'motionMap')) expect(rowOfType(d.type, d.category), d.label).toBe('Texture tools');
+    expect(getOfferedDefinitions().filter(d => d.category === 'Combiners' && !HIDDEN_NODES.has(d.type) && /glow/i.test(d.label))).toEqual([]);
+  });
+
+  it('every grouped type is in its row, and every offered node of a grouped row has a group', () => {
+    const offered = getOfferedDefinitions().filter(d => !HIDDEN_NODES.has(d.type));
+    for (const [row, groups] of Object.entries(CATEGORY_GROUPS)) {
+      const inRow = new Set(nodesOfRow(row).map(d => d.type));
+      for (const g of groups) for (const t of g.types) if (offered.some(d => d.type === t)) expect(inRow.has(t), `${row}/${g.label}: ${t}`).toBe(true);
+    }
+    const ungrouped = libraryLayout(new Set()).flatMap(s => s.rows.filter(r => CATEGORY_GROUPS[r.row]).flatMap(r => r.groups.filter(g => g.label === 'More').flatMap(g => g.types.map(t => `${r.row}: ${t}`))));
+    expect(ungrouped).toEqual([]);
   });
 });
 
