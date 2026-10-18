@@ -27,7 +27,7 @@ queries in a Chromium browser on a Mac). Pick Smooth when you see the grain.
 Smooth's settings (shown only for Smooth):
 
 - **Blur quality**: 16, 32 (default) or 64 taps per pixel, in a golden-angle disc turned per pixel.
-- **Bokeh shape**: Disc, Hex (6 blades) or Oct (8 blades).
+- **Bokeh shape**: Soft (like particles: each out-of-focus point a Gaussian blob that keeps its light, no rim; the same haze as the particles' and agents' depth of field), Disc, Hex (6 blades) or Oct (8 blades).
 - **Max blur %**: the widest blur, as a percentage of the picture height (default 4). Things very near the camera
   are capped here. It rebuilds the shader when changed; Aperture and Focal Dist stay live sliders.
 
