@@ -6,14 +6,15 @@
  *   Blur · Deep Glow · Light rays / Radial blur · Chromatic aberration (spectral) · CRT mask
  *   (Glow is retired for Deep Glow: not offered, but old scenes keep it and build it as before)
  *
- * How they build. An effect that moves the picture (Displace, Swirl, Pixelate, Kaleidoscope, CRT
- * curvature…) changes WHERE the picture is read: the picture so far goes into a Pass, and the next
- * read of it (Sample (texture)) is at the bent point. Runs of such effects bend one point in turn
- * and share one Pass and one read. An effect that reads round a pixel (Blur, Glow, Chromatic
- * aberration, Displace by a picture) reads the Pass with its own node. CRT mask then works on the
- * colour. So a stack of N effects costs at most one Pass per effect that needs one, never more.
+ * How they build. Effects apply top to bottom, each to the picture the ones above made.
+ *   Moves (Displace by noise, Swirl, Ripple, Lens, Pixelate, Kaleidoscope, CRT curvature) only change
+ *   WHERE the picture is read: they bend the coordinates. Before the first read they bend the scene's
+ *   own coordinates (the 2D builder draws its shapes in the bent space), so they cost no Pass.
+ *   Colour (CRT mask) works on the colour at the pixel, no Pass.
+ *   Reads (Blur, Deep Glow, Glow, Light rays, Chromatic aberration, Displace by a picture) read round
+ *   a pixel: the picture so far goes into a Pass and the read's node reads it, at the point the
+ *   moves after it bend. So a stack costs one Pass per read, and nothing for the rest.
  */
-import type { GraphNode } from '../../types/nodeGraph';
 import { mk, ref, type Ctx, type Ref } from '../../sceneBuilder/build';
 import { fmt } from '../../sceneBuilder/recipe';
 import { numOf, stackOffered, stackUpgrade, stackValue, type LookParam, type StackItem, type StackKindDef } from './stack';
@@ -170,165 +171,245 @@ export interface FxOpts {
   texture: (name: string, what: string) => Ref | null;
 }
 
-/** Does the item need its picture as a texture (a Pass)? */
-export function fxNeedsPass(it: StackItem): boolean {
-  if (!it.on) return false;
-  if (it.kind === 'crt') return numOf(it, FX_BY_KIND.crt.params.find(p => p.key === 'curve')!) > 0;
-  return FX_BY_KIND[it.kind] !== undefined;
+/**
+ * What an effect does to the picture. A move only changes where the picture is read (a pure bend
+ * of the coordinates); colour works on the colour at this pixel; a read reads round the pixel, so it
+ * needs the picture so far in a Pass. CRT with curvature is a move and colour (its screen, then its mask).
+ */
+export type FxClass = 'move' | 'colour' | 'move+colour' | 'read';
+
+export function fxClass(it: StackItem): FxClass | null {
+  const def = FX_BY_KIND[it.kind];
+  if (!def) return null;
+  const v = (key: string) => def.params.find(p => p.key === key)!;
+  switch (it.kind) {
+    case 'swirl': case 'ripple': case 'lens': case 'pixelate': case 'kaleido': return 'move';
+    case 'displace': return String(stackValue(it, v('by'))) === 'picture' ? 'read' : 'move';
+    case 'crt': return numOf(it, v('curve')) > 0 ? 'move+colour' : 'colour';
+    default: return 'read';
+  }
 }
 
-/** The effects stack after `color`, in order. */
-export function emitEffects(c: Ctx, items: readonly StackItem[] | undefined, color: Ref, opts: FxOpts): Ref {
-  const list = (items ?? []).filter(it => it.on && FX_BY_KIND[it.kind]);
-  let cur = color;
-  /** The Pass holding `cur` (made when an effect first needs it), and where it will be read (null: here). */
-  let pass: Ref | null = null;
-  let point: Ref | null = null;
-  let passes = 0;
-  let firstBend = '';
-  const passFor = (role: string, what: string): Ref | null => {
-    if (pass) return pass;
-    if (passes >= MAX_FX_PASSES) { c.warnings.push(`${what} needs a Pass and the effects already use ${MAX_FX_PASSES}: it is left out. Fewer effects that move or blur the picture, or put them together.`); return null; }
-    passes++;
-    const p = mk(c, 'pass', `${role}:pass`, { scale: '1', format: 'half' }, { color: cur },
-      `Pass: draws the picture so far into a texture of its own, so the effects after it (${what}…) can read it anywhere, not only at this pixel.`);
-    pass = ref(p, 'texture');
-    return pass;
-  };
-  /** The picture read at the bent point (if anything bent it): the colour the next effect works on. */
-  const flush = () => {
-    if (pass && point) {
-      const s = mk(c, 'sampleTexture', `${firstBend}:read`, {}, { texture: pass, uv: point },
-        'Reads the picture (the Pass before) at the bent point: every move above (swirl, ripple, pixelate…) is where this reads.');
-      cur = ref(s, 'color');
-      pass = null;
-    }
-    point = null;
-  };
+/** Does the item need its picture as a texture (a Pass)? Only the reads do: moves bend the coordinates, colour works in place. */
+export function fxNeedsPass(it: StackItem): boolean {
+  return it.on && fxClass(it) === 'read';
+}
+
+/** The effects stack, planned: where the scene is drawn, and the rest after its colour. */
+export interface FxPlan {
   /**
-   * The Pass a read (blur, glow, rays, chroma, displace by a picture) works on. After moves, the
-   * picture is read at the bent point first and drawn into a new Pass, so the read works on the
-   * moved picture: kaleidoscope → rays streaks the folded picture, rays → kaleidoscope folds the
-   * rays (reading the old Pass at the bent point would give the second either way).
+   * Where the scene should be drawn: the screen's point bent by the moves before the first read
+   * (null: no such moves, or the scene can't be bent and they read a Pass instead). Every part of
+   * the scene that reads the screen's point must read this instead.
    */
-  const readPass = (role: string, what: string): Ref | null => {
-    if (point) flush();
-    return passFor(role, what);
-  };
-  list.forEach((it, i) => {
-    const def = FX_BY_KIND[it.kind];
-    const role = fxRole(it);
-    const P = (key: string) => def.params.find(p => p.key === key) as LookParam;
-    const n = (key: string) => numOf(it, P(key));
-    const s = (key: string) => String(stackValue(it, P(key)));
-    const step = `Effect ${i + 1} of ${list.length}, ${def.label}`;
-    const at = () => point ?? opts.screen;
-    const bend = (type: string, params: Record<string, unknown>, wires: Record<string, Ref | null>, inKey: string, outKey: string, note: string) => {
-      if (!passFor(role, def.label.toLowerCase())) return;
-      if (!point) firstBend = role;
-      const node = mk(c, type, `${role}:bend`, params, { ...wires, [inKey]: at() }, `${step}: ${note} It bends the point the picture is read at.`);
-      point = ref(node, outKey);
-    };
-    let node: GraphNode;
-    switch (it.kind) {
-      case 'displace': {
-        if (s('by') === 'picture') {
-          const map = it.tex ? opts.texture(it.tex, 'Displace') : null;
-          if (!map) { if (!it.tex) c.warnings.push('Displace by a picture has no picture: pick one on its card.'); break; }
-          const tex = readPass(role, 'displace');
-          if (!tex) break;
-          node = mk(c, 'displaceTexture', role, { amount: n('pixels') }, { texture: tex, map, uv: point },
-            `${step}: the picture read where the picture “${it.tex}” pushes it: its red sideways, its green up and down (mid-grey stays), up to ${fmt(n('pixels'))} pixels.`);
-          cur = ref(node, 'color'); pass = null; point = null;
-        } else {
-          const noise = mk(c, 'domainWarp', `${role}:noise`, { strength: 1, scale: n('scale'), time_scale: n('speed') }, { uv: at(), time: n('speed') ? opts.getTime() : null },
-            `Noise for ${step}: its Offset is a soft, swirling push (scale ${fmt(n('scale'))}${n('speed') ? `, drifting at ${fmt(n('speed'))}` : ''}).`);
-          bend('displace', { amount: n('strength') }, { offset: ref(noise, 'offset') }, 'input', 'output', `each point pushed by the noise's Offset × ${fmt(n('strength'))}.`);
+  sceneUv: Ref | null;
+  /** The effects after the scene's colour (and whatever per-pixel colour work comes between). */
+  finish: (color: Ref) => Ref;
+}
+
+interface Step { it: StackItem; i: number; cls: FxClass; map: Ref | null }
+
+/**
+ * The effects stack (docs/builder-look.md, "Effects"). Effects apply top to bottom, each to the
+ * picture the ones above made, so at the screen's point p the result of [A, B] is A's picture read
+ * where B bends p: picture(bendA(bendB(p))). The later move bends the screen's point first.
+ *
+ * Only the reads (blur, glow, rays, chroma, displace by a picture) need the picture so far in a
+ * Pass. The moves after a read bend the point that read works at; the moves before the first read
+ * bend the scene's own coordinates (`sceneUv`): the shapes are drawn in the bent space, which is the
+ * same picture as reading a Pass of it at the bent point, with no Pass. With `bendScene` false (the
+ * scene can't be bent), those first moves read a Pass of the scene instead.
+ *
+ * CRT works in two places: its screen bends the point (a move) and its mask works on the colour at
+ * the point that reaches it, with the vignette of its screen.
+ */
+export function planEffects(c: Ctx, items: readonly StackItem[] | undefined, opts: FxOpts, bendScene: boolean): FxPlan {
+  const all = (items ?? []).filter(it => it.on && FX_BY_KIND[it.kind]);
+  const steps: Step[] = [];
+  all.forEach((it, i) => {
+    const cls = fxClass(it)!;
+    let map: Ref | null = null;
+    if (it.kind === 'displace' && cls === 'read') {
+      map = it.tex ? opts.texture(it.tex, 'Displace') : null;
+      if (!map) { if (!it.tex) c.warnings.push('Displace by a picture has no picture: pick one on its card.'); return; }
+    }
+    steps.push({ it, i, cls, map });
+  });
+
+  // Runs between the reads: the first run works on the scene, each later one on its read.
+  const first: Step[] = [];
+  const reads: Array<{ read: Step; after: Step[] }> = [];
+  const isMove = (s: Step) => s.cls === 'move' || s.cls === 'move+colour';
+  let k = 0;
+  for (; k < steps.length && steps[k].cls !== 'read'; k++) first.push(steps[k]);
+  const fallback = !bendScene && first.some(isMove);
+  let budget = MAX_FX_PASSES - (fallback ? 1 : 0);
+  for (; k < steps.length; k++) {
+    const s = steps[k];
+    if (s.cls === 'read') {
+      if (budget <= 0) {
+        c.warnings.push(`${FX_BY_KIND[s.it.kind].label.toLowerCase()} needs a Pass and the effects already use ${MAX_FX_PASSES}: it is left out. Fewer effects that blur or read round the picture.`);
+        continue;
+      }
+      budget--;
+      reads.push({ read: s, after: [] });
+    } else (reads.length ? reads[reads.length - 1].after : first).push(s);
+  }
+
+  const label = (s: Step) => FX_BY_KIND[s.it.kind].label;
+  const stepName = (s: Step) => `Effect ${s.i + 1} of ${all.length}, ${label(s)}`;
+  const P = (s: Step, key: string) => FX_BY_KIND[s.it.kind].params.find(p => p.key === key) as LookParam;
+  const n = (s: Step, key: string) => numOf(s.it, P(s, key));
+  const str = (s: Step, key: string) => String(stackValue(s.it, P(s, key)));
+
+  /** What each step of a run sees: the point that reaches it (null: the screen's) and its CRT vignette. */
+  type Seen = Map<Step, { at: Ref | null; vignette: Ref | null }>;
+  /**
+   * A run's moves, the last first: each bends the point that reaches it, so the point the run's
+   * input is read at is bendFirst(…(bendLast(screen))). Returns that point (null: nothing moved).
+   */
+  const bendRun = (run: Step[], what: string): { at: Ref | null; seen: Seen } => {
+    let q: Ref | null = null;
+    const seen: Seen = new Map();
+    for (let j = run.length - 1; j >= 0; j--) {
+      const s = run[j];
+      const here = q;
+      const input = here ?? opts.screen;
+      const role = fxRole(s.it);
+      const bend = (type: string, params: Record<string, unknown>, wires: Record<string, Ref | null>, inKey: string, outKey: string, note: string) => {
+        const node = mk(c, type, `${role}:bend`, params, { ...wires, [inKey]: input },
+          `${stepName(s)}: ${note} It bends the point ${what} is read at${here ? ' (after the moves below it on the Effects page, which bend the screen\'s point first)' : ''}.`);
+        q = ref(node, outKey);
+      };
+      let vignette: Ref | null = null;
+      switch (s.it.kind) {
+        case 'displace': {
+          const noise = mk(c, 'domainWarp', `${role}:noise`, { strength: 1, scale: n(s, 'scale'), time_scale: n(s, 'speed') }, { uv: input, time: n(s, 'speed') ? opts.getTime() : null },
+            `Noise for ${stepName(s)}: its Offset is a soft, swirling push (scale ${fmt(n(s, 'scale'))}${n(s, 'speed') ? `, drifting at ${fmt(n(s, 'speed'))}` : ''}).`);
+          bend('displace', { amount: n(s, 'strength') }, { offset: ref(noise, 'offset') }, 'input', 'output', `each point pushed by the noise's Offset × ${fmt(n(s, 'strength'))}.`);
+          break;
         }
-        break;
-      }
-      case 'swirl': bend('uvWarp', { kind: 'swirl', strength: n('strength'), falloff: n('falloff'), cx: 0, cy: 0, speed: 0 }, {}, 'input', 'output', `a twist of ${fmt(n('strength'))} radians at the centre, fading out at ${fmt(n('falloff'))}.`); break;
-      case 'ripple': bend('rippleSpace', { freqX: n('freq'), freqY: n('freq'), ampX: n('amp'), ampY: n('amp') }, { time: opts.getTime() }, 'input', 'output', `${fmt(n('freq'))} waves of ${fmt(n('amp'))}, moving with time.`); break;
-      case 'lens': bend('lensDistortion', { k1: n('bend'), zoom: n('zoom') }, {}, 'input', 'output', `a lens bend of ${fmt(n('bend'))}${n('zoom') !== 1 ? `, zoomed ${fmt(n('zoom'))}` : ''}.`); break;
-      case 'pixelate': bend('pixelate', { pixelSize: n('size') }, {}, 'uv', 'uv', `blocks ${fmt(n('size'))} across.`); break;
-      case 'kaleido': bend('kaleidoSpace', { segments: Math.round(n('segments')), rotate: rad(n('rotate')) }, {}, 'input', 'output', `${Math.round(n('segments'))} mirrored wedges${n('rotate') ? `, turned ${fmt(n('rotate'))}°` : ''}.`); break;
-      case 'rays': {
-        const tex = readPass(role, 'light rays');
-        if (!tex) break;
-        const mode = s('mode');
-        node = mk(c, 'radialFastBlur', role, {
-          mode, direction: s('direction'), length: n('length'), centerX: n('cx'), centerY: n('cy'), threshold: n('threshold'), knee: 0.15,
-          intensity: n('intensity'), opacity: n('opacity'), decay: n('decay'), falloff: n('falloff'), tint: stackValue(it, P('tint')),
-        }, { texture: tex, uv: point },
-          `${step}: streaks ${s('direction') === 'in' ? 'into' : 'out from'} the centre, Length ${fmt(n('length'))}${mode === 'average' ? ' (a zoom blur)' : mode === 'add' ? ', added as light' : ', the brightest along each (light rays)'}${n('threshold') > 0 ? `, from the parts brighter than ${fmt(n('threshold'))}` : ''}. Four small hidden passes, so long streaks stay cheap.`);
-        cur = ref(node, 'color');
-        pass = null; point = null;
-        break;
-      }
-      case 'deepglow': {
-        const tex = passFor(role, 'deep glow');
-        if (!tex) break;
-        node = mk(c, 'glowTexture', role, {
-          method: 'deep', intensity: n('intensity'), radius: n('radius'), threshold: n('threshold'), knee: n('knee'), spread: n('spread'), preserve: n('preserve'),
-          composite: s('composite'), tint: stackValue(it, P('tint')),
-        }, { texture: tex, uv: point },
-          `${step}: the parts brighter than ${fmt(n('threshold'))} glow with a hot core and a tail reaching ${fmt(n('radius'))} pixels, at ${fmt(n('intensity'))}${s('composite') === 'screen' ? ', screened' : ', added'} over the picture. A small mip chain of hidden passes, so a wide glow stays cheap.`);
-        cur = ref(node, 'color');
-        pass = null; point = null;
-        break;
-      }
-      case 'blur': case 'glow': case 'chroma': {
-        const tex = readPass(role, def.label.toLowerCase());
-        if (!tex) break;
-        if (it.kind === 'blur') {
-          node = mk(c, 'blurTexture', role, { method: 'smooth', radius: n('radius') }, { texture: tex, uv: point }, `${step}: a Gaussian blur of ${fmt(n('radius'))} pixels over the whole picture.`);
-          cur = ref(node, 'color');
-        } else if (it.kind === 'chroma') {
-          // The builder's Direction (radial / axial / directional, as recipes have always said it) is the node's Geometry.
-          const geometry = s('mode') === 'directional' ? 'directional' : s('mode') === 'axial' ? 'axial' : 'lateral';
-          node = mk(c, 'chromaLens', role, {
-            mode: s('look'), geometry, amount: n('amount'), samples: Math.round(n('samples')), blur: n('blur'), falloff: n('falloff'),
-            centerX: n('cx'), centerY: n('cy'), angle: n('angle'), distortion: n('distortion'),
-          }, { texture: tex, uv: point },
-            `${step}: ${s('look') === 'split' ? 'red and blue copies' : `${Math.round(n('samples'))} taps across the spectrum`} ${geometry === 'axial' ? `defocused up to ${fmt(n('amount'))} pixels round the highlights` : `moved ${fmt(n('amount'))} pixels${geometry === 'lateral' ? ', outward from the centre' : `, at ${fmt(n('angle'))}°`}`}${n('blur') > 0 ? `, each softened by ${fmt(n('blur'))} × how far it moved` : ''}.`);
-          cur = ref(node, 'color');
-        } else {
-          const here = point ? ref(mk(c, 'sampleTexture', `${role}:here`, {}, { texture: tex, uv: point }, 'The picture at the bent point: what the glow is added to.'), 'color') : cur;
-          node = mk(c, 'glowTexture', role, { method: 'bloom', threshold: n('threshold'), knee: 0.2, radius: n('radius'), intensity: n('intensity'), tail: 0.4 }, { texture: tex, uv: point },
-            `${step}: the parts brighter than ${fmt(n('threshold'))} spread ${fmt(n('radius'))} pixels (a Bloom chain), at ${fmt(n('intensity'))}. Same frame: nothing lags or smears.`);
-          cur = ref(mk(c, 'addColor', `${role}:add`, {}, { a: here, b: ref(node, 'glow') }, 'Adds the glow over the picture: light adds up, so it can pass 1.'), 'result');
-        }
-        pass = null; point = null;
-        break;
-      }
-      case 'crt': {
-        const curve = n('curve'), vig = n('vignette');
-        let vignette: Ref | null = null;
-        if (curve > 0) {
-          if (passFor(role, 'CRT')) {
-            if (!point) firstBend = role;
-            const scr = mk(c, 'crtScreen', `${role}:screen`, { curvature: curve, snap: 'off', vignettePower: Math.max(vig, 0.02) }, { uv: at() },
-              `${step}: bows the screen like a tube's glass (curvature ${fmt(curve)}); outside the tube is black. Vignette darkens toward the bent edges.`);
-            point = ref(scr, 'uv');
+        case 'swirl': bend('uvWarp', { kind: 'swirl', strength: n(s, 'strength'), falloff: n(s, 'falloff'), cx: 0, cy: 0, speed: 0 }, {}, 'input', 'output', `a twist of ${fmt(n(s, 'strength'))} radians at the centre, fading out at ${fmt(n(s, 'falloff'))}.`); break;
+        case 'ripple': bend('rippleSpace', { freqX: n(s, 'freq'), freqY: n(s, 'freq'), ampX: n(s, 'amp'), ampY: n(s, 'amp') }, { time: opts.getTime() }, 'input', 'output', `${fmt(n(s, 'freq'))} waves of ${fmt(n(s, 'amp'))}, moving with time.`); break;
+        case 'lens': bend('lensDistortion', { k1: n(s, 'bend'), zoom: n(s, 'zoom') }, {}, 'input', 'output', `a lens bend of ${fmt(n(s, 'bend'))}${n(s, 'zoom') !== 1 ? `, zoomed ${fmt(n(s, 'zoom'))}` : ''}.`); break;
+        case 'pixelate': bend('pixelate', { pixelSize: n(s, 'size') }, {}, 'uv', 'uv', `blocks ${fmt(n(s, 'size'))} across.`); break;
+        case 'kaleido': bend('kaleidoSpace', { segments: Math.round(n(s, 'segments')), rotate: rad(n(s, 'rotate')) }, {}, 'input', 'output', `${Math.round(n(s, 'segments'))} mirrored wedges${n(s, 'rotate') ? `, turned ${fmt(n(s, 'rotate'))}°` : ''}.`); break;
+        case 'crt': {
+          const curve = n(s, 'curve'), vig = n(s, 'vignette');
+          if (curve > 0) {
+            const scr = mk(c, 'crtScreen', `${role}:screen`, { curvature: curve, snap: 'off', vignettePower: Math.max(vig, 0.02) }, { uv: input },
+              `${stepName(s)}: bows the screen like a tube's glass (curvature ${fmt(curve)}); outside the tube is black. It bends the point ${what} is read at. Vignette darkens toward the bent edges.`);
+            q = ref(scr, 'uv');
+            vignette = ref(scr, 'vignette');
+          } else if (vig > 0) {
+            const scr = mk(c, 'crtScreen', `${role}:screen`, { curvature: 0, snap: 'off', vignettePower: vig }, { uv: input }, `${stepName(s)}: the tube's vignette, darker toward the edges (the screen is flat: Curvature 0).`);
             vignette = ref(scr, 'vignette');
           }
-        } else if (vig > 0) {
-          const scr = mk(c, 'crtScreen', `${role}:screen`, { curvature: 0, snap: 'off', vignettePower: vig }, { uv: opts.screen }, `${step}: the tube's vignette, darker toward the edges (the screen is flat: Curvature 0).`);
-          vignette = ref(scr, 'vignette');
+          break;
         }
-        flush();
-        node = mk(c, 'crtMask', role, { maskType: s('mask'), cellSize: n('size'), strength: n('strength'), scanlines: n('scanlines') }, { color: cur, uv: opts.screen, vignette },
-          `${step}: the ${P('mask').options!.find(o => o.value === s('mask'))?.label.toLowerCase()} of a tube, ${fmt(n('size'))}-pixel cells at ${fmt(n('strength'))}${n('scanlines') ? `, scanlines ${fmt(n('scanlines'))}` : ''}.`);
-        cur = ref(node, 'result');
-        break;
+      }
+      seen.set(s, { at: here, vignette });
+    }
+    return { at: q, seen };
+  };
+
+  /** A run's colour work, in order (CRT mask), at the point that reaches each. */
+  const colourRun = (run: Step[], color: Ref, seen: Seen): Ref => {
+    let cur = color;
+    for (const s of run) {
+      if (s.it.kind !== 'crt') continue;
+      const v = seen.get(s)!;
+      const node = mk(c, 'crtMask', fxRole(s.it), { maskType: str(s, 'mask'), cellSize: n(s, 'size'), strength: n(s, 'strength'), scanlines: n(s, 'scanlines') }, { color: cur, uv: v.at ?? opts.screen, vignette: v.vignette },
+        `${stepName(s)}: the ${P(s, 'mask').options!.find(o => o.value === str(s, 'mask'))?.label.toLowerCase()} of a tube, ${fmt(n(s, 'size'))}-pixel cells at ${fmt(n(s, 'strength'))}${n(s, 'scanlines') ? `, scanlines ${fmt(n(s, 'scanlines'))}` : ''}.`);
+      cur = ref(node, 'result');
+    }
+    return cur;
+  };
+
+  const passOf = (role: string, color: Ref, what: string): Ref => ref(mk(c, 'pass', `${role}:pass`, { scale: '1', format: 'half' }, { color },
+    `Pass: draws the picture so far into a texture of its own, so ${what} can read it round each pixel, not only at this one.`), 'texture');
+
+  /** A read's node: it reads `tex` (the Pass of `before`) at `at` (null: the screen's point). */
+  const emitRead = (s: Step, tex: Ref, at: Ref | null, before: Ref): Ref => {
+    const role = fxRole(s.it);
+    const step = stepName(s);
+    const moved = at ? ' It reads at the point the moves below it on the Effects page bend.' : '';
+    switch (s.it.kind) {
+      case 'displace': {
+        const node = mk(c, 'displaceTexture', role, { amount: n(s, 'pixels') }, { texture: tex, map: s.map, uv: at },
+          `${step}: the picture read where the picture “${s.it.tex}” pushes it: its red sideways, its green up and down (mid-grey stays), up to ${fmt(n(s, 'pixels'))} pixels.${moved}`);
+        return ref(node, 'color');
+      }
+      case 'rays': {
+        const mode = str(s, 'mode');
+        const node = mk(c, 'radialFastBlur', role, {
+          mode, direction: str(s, 'direction'), length: n(s, 'length'), centerX: n(s, 'cx'), centerY: n(s, 'cy'), threshold: n(s, 'threshold'), knee: 0.15,
+          intensity: n(s, 'intensity'), opacity: n(s, 'opacity'), decay: n(s, 'decay'), falloff: n(s, 'falloff'), tint: stackValue(s.it, P(s, 'tint')),
+        }, { texture: tex, uv: at },
+          `${step}: streaks ${str(s, 'direction') === 'in' ? 'into' : 'out from'} the centre, Length ${fmt(n(s, 'length'))}${mode === 'average' ? ' (a zoom blur)' : mode === 'add' ? ', added as light' : ', the brightest along each (light rays)'}${n(s, 'threshold') > 0 ? `, from the parts brighter than ${fmt(n(s, 'threshold'))}` : ''}. Four small hidden passes, so long streaks stay cheap.${moved}`);
+        return ref(node, 'color');
+      }
+      case 'deepglow': {
+        const node = mk(c, 'glowTexture', role, {
+          method: 'deep', intensity: n(s, 'intensity'), radius: n(s, 'radius'), threshold: n(s, 'threshold'), knee: n(s, 'knee'), spread: n(s, 'spread'), preserve: n(s, 'preserve'),
+          composite: str(s, 'composite'), tint: stackValue(s.it, P(s, 'tint')),
+        }, { texture: tex, uv: at },
+          `${step}: the parts brighter than ${fmt(n(s, 'threshold'))} glow with a hot core and a tail reaching ${fmt(n(s, 'radius'))} pixels, at ${fmt(n(s, 'intensity'))}${str(s, 'composite') === 'screen' ? ', screened' : ', added'} over the picture. A small mip chain of hidden passes, so a wide glow stays cheap.${moved}`);
+        return ref(node, 'color');
+      }
+      case 'blur':
+        return ref(mk(c, 'blurTexture', role, { method: 'smooth', radius: n(s, 'radius') }, { texture: tex, uv: at }, `${step}: a Gaussian blur of ${fmt(n(s, 'radius'))} pixels over the whole picture.${moved}`), 'color');
+      case 'chroma': {
+        // The builder's Direction (radial / axial / directional, as recipes have always said it) is the node's Geometry.
+        const geometry = str(s, 'mode') === 'directional' ? 'directional' : str(s, 'mode') === 'axial' ? 'axial' : 'lateral';
+        const node = mk(c, 'chromaLens', role, {
+          mode: str(s, 'look'), geometry, amount: n(s, 'amount'), samples: Math.round(n(s, 'samples')), blur: n(s, 'blur'), falloff: n(s, 'falloff'),
+          centerX: n(s, 'cx'), centerY: n(s, 'cy'), angle: n(s, 'angle'), distortion: n(s, 'distortion'),
+        }, { texture: tex, uv: at },
+          `${step}: ${str(s, 'look') === 'split' ? 'red and blue copies' : `${Math.round(n(s, 'samples'))} taps across the spectrum`} ${geometry === 'axial' ? `defocused up to ${fmt(n(s, 'amount'))} pixels round the highlights` : `moved ${fmt(n(s, 'amount'))} pixels${geometry === 'lateral' ? ', outward from the centre' : `, at ${fmt(n(s, 'angle'))}°`}`}${n(s, 'blur') > 0 ? `, each softened by ${fmt(n(s, 'blur'))} × how far it moved` : ''}.${moved}`);
+        return ref(node, 'color');
+      }
+      default: { // glow (retired): Bloom chain, added over the picture
+        const here = at ? ref(mk(c, 'sampleTexture', `${role}:here`, {}, { texture: tex, uv: at }, 'The picture at the bent point: what the glow is added to.'), 'color') : before;
+        const node = mk(c, 'glowTexture', role, { method: 'bloom', threshold: n(s, 'threshold'), knee: 0.2, radius: n(s, 'radius'), intensity: n(s, 'intensity'), tail: 0.4 }, { texture: tex, uv: at },
+          `${step}: the parts brighter than ${fmt(n(s, 'threshold'))} spread ${fmt(n(s, 'radius'))} pixels (a Bloom chain), at ${fmt(n(s, 'intensity'))}. Same frame: nothing lags or smears.${moved}`);
+        return ref(mk(c, 'addColor', `${role}:add`, {}, { a: here, b: ref(node, 'glow') }, 'Adds the glow over the picture: light adds up, so it can pass 1.'), 'result');
       }
     }
-    // A run of bends stays one bent point: the next bend bends it further. A read after bends works
-    // on the bent picture in a Pass of its own (readPass); CRT mask reads the bent picture first.
-  });
-  flush();
-  return cur;
+  };
+
+  // The moves before the first read bend the scene itself (made now, before the scene is drawn).
+  const pre = bendScene && first.some(isMove) ? bendRun(first, 'the whole scene') : null;
+  return {
+    sceneUv: pre?.at ?? null,
+    finish(color: Ref): Ref {
+      let cur = color;
+      if (pre) cur = colourRun(first, cur, pre.seen);
+      else {
+        const b = bendRun(first, 'the picture');
+        if (b.at) {
+          const role = fxRole(first.find(isMove)!.it);
+          const tex = passOf(role, cur, `the moves (${first.filter(isMove).map(s => label(s).toLowerCase()).join(', ')})`);
+          cur = ref(mk(c, 'sampleTexture', `${role}:read`, {}, { texture: tex, uv: b.at }, 'Reads the picture (the Pass before) at the bent point: every move above (swirl, ripple, pixelate…) is where this reads.'), 'color');
+        }
+        cur = colourRun(first, cur, b.seen);
+      }
+      for (const { read, after } of reads) {
+        const tex = passOf(fxRole(read.it), cur, `${label(read).toLowerCase()}`);
+        const b = bendRun(after, `${label(read).toLowerCase()}'s picture`);
+        cur = emitRead(read, tex, b.at, cur);
+        cur = colourRun(after, cur, b.seen);
+      }
+      return cur;
+    },
+  };
 }
+
+/** The effects stack after `color`, for a scene that can't be bent (the first moves read a Pass of it). */
+export function emitEffects(c: Ctx, items: readonly StackItem[] | undefined, color: Ref, opts: FxOpts): Ref {
+  return planEffects(c, items, opts, false).finish(color);
+}
+
 
 /** The node and param an effect setting sets, by role (for the Play menu). */
 export function fxParamTarget(it: StackItem, key: string): { role: string; param: string } | null {

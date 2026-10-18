@@ -48,20 +48,25 @@ Effects work on the finished picture, top to bottom: each one works on what the 
 They are built after the grade.
 
 - **Moves**: Displace by noise (Domain Warp), Swirl, Ripple, Lens, Pixelate, Kaleidoscope and CRT
-  curvature (CRT Screen). Each one changes *where* the picture is read. The picture so far goes
-  into a Pass, and the next read of it is at the bent point. A run of moves shares one Pass and
-  one read.
+  curvature (CRT Screen). Each one only changes *where* the picture is read: it bends the
+  coordinates, so it needs no Pass. Moves before the first read bend the scene's own coordinates:
+  the 2D builder draws its shapes, space blocks, grid and pictures at the bent point, which is the
+  same picture as reading a Pass of the scene there (except at the frame's edge: a point bent
+  outside the frame now shows the scene carrying on, not the edge pixels stretched). Moves after a
+  read bend the point that read reads its Pass at. Effects apply top to bottom, so for cards A
+  then B the picture at p is the scene read at A(B(p)): the later card bends the screen's point
+  first. (A scene whose field sockets read the point, such as Picture in pieces moved by a field,
+  or whose Output shows a measurement, reads one Pass at the bent point instead.)
 - **Reads round a pixel**: Blur (Blur (texture)), Deep Glow (Glow (texture), Method Deep glow: see
   [deep-glow.md](deep-glow.md)),
   Light rays / Radial blur (Radial Fast Blur: see [radial-fast-blur.md](radial-fast-blur.md)),
   Chromatic aberration (Chromatic Aberration (lens): see [chromatic-aberration.md](chromatic-aberration.md))
   and Displace by a picture (Displace
   (texture), with the picture chosen in the shared texture picker or a Shader Texture). Each reads
-  a Pass with its own node. After moves, the moved picture is drawn into a new Pass first and the
-  read works on that, so the order shows: **Kaleidoscope → Light rays** streaks the folded picture,
-  **Light rays → Kaleidoscope** folds the rays. (Before, a read after moves read the old Pass at
-  the bent point, which is the same picture as the other order: the rays were folded either way.)
-  Each such read takes one more of the six Passes; the 2D builder's Effects page says how many are
+  the picture so far from a Pass with its own node; these are the only effects that take a Pass.
+  The order shows: **Kaleidoscope → Light rays** streaks the folded picture (the scene is drawn
+  folded and the rays read a Pass of it), **Light rays → Kaleidoscope** folds the rays (the rays
+  read their Pass at the folded point). The 2D builder's Effects page says how many Passes are
   used and tags each card that takes one ("pass 2 of 6").
 - **The order on the page**: cards are numbered and applied top to bottom ("1 first"); drag a card
   by its grip to move it, or use its arrows.
@@ -80,7 +85,8 @@ They are built after the grade.
   it and builds it as before (Glow (texture), Bloom chain, then Add). The card shows
   **Upgrade to Deep Glow**, which swaps it in place with about the same strength.
 - **On the colour**: CRT mask (CRT Mask) has slot mask, aperture grille or shadow mask (dots), plus
-  cell size, strength, scanlines, curvature and vignette.
+  cell size, strength, scanlines, curvature and vignette. Its curvature is a move (CRT Screen bends
+  the point); the mask works on the colour, at the point that reaches it, with the screen's vignette.
 
 The effects use at most six Pass nodes; past that, an effect is left out with a warning. The
 builder preview draws the Pass programs itself (`components/builders/previewPasses.ts`).

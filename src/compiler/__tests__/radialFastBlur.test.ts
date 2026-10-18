@@ -232,10 +232,11 @@ describe('the builders\' Light rays card', () => {
     expect(rays.params).toMatchObject({ mode: 'add', length: 1.5, threshold: 0.4, tint: [1, 0.8, 0.5], direction: 'in', centerX: 0.2 });
     const pass = nodes.find(x => x.id === rays.inputs.texture.connection?.nodeId)!;
     expect(pass.type).toBe('pass');
-    // After a move, it streaks the moved picture: the swirled read drawn into a Pass of its own.
+    // After a move, it streaks the moved picture: the swirl bends the scene itself, which the Pass holds.
     expect(rays.inputs.uv.connection).toBeUndefined();
-    const read = nodes.find(x => x.id === pass.inputs.color.connection?.nodeId)!;
-    expect(nodes.find(x => x.id === read.inputs.uv.connection?.nodeId)?.type).toBe('uvWarp');
+    expect(nodes.filter(x => x.type === 'pass')).toHaveLength(1);
+    expect(nodes.some(x => x.type === 'sampleTexture')).toBe(false);
+    expect(nodes.find(x => x.type === 'uvWarp')).toBeDefined();
     const r = compileGraph({ nodes });
     expect(r.success, (r.errors ?? []).join('; ')).toBe(true);
     expect((r.passes ?? []).filter(x => x.hidden)).toHaveLength(4);

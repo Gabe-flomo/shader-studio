@@ -991,7 +991,7 @@ function EffectsTab() {
   const effects = useSceneBuilder2D(s => s.scene.effects) ?? [];
   const sources = useSceneBuilder2D(s => s.scene.textures) ?? [];
   const scene = useThrottled(useSceneBuilder2D(s => s.scene));
-  // The Passes the effects take (each move after a read starts a new one), as a tag on the card that takes one.
+  // The Passes the effects take (one per read: blur, glow, rays, chroma, displace by a picture), as a tag on the card that takes one.
   const passOf = useMemo(() => {
     const out = new Map<string, number>();
     let n = 0;
@@ -1004,8 +1004,8 @@ function EffectsTab() {
   }, [scene]);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <BuilderNote>Shader effects on the finished picture, top to bottom: each one works on what the ones above made. Moves (Displace, Swirl, Pixelate, Kaleidoscope, CRT curvature) bend where the picture is read; Blur, Glow and Chromatic aberration read round each pixel; CRT mask works on the colour. They build as real nodes after the Look's grade.</BuilderNote>
-      {passOf.size > 0 && <BuilderNote style={{ fontSize: 11 }}>Passes: {passOf.size} of {MAX_FX_PASSES} used, {MAX_FX_PASSES - passOf.size} left. A move (swirl, kaleidoscope…) after a read (blur, glow, rays…) takes a new one, so it bends what the reads made.</BuilderNote>}
+      <BuilderNote>Shader effects on the finished picture, top to bottom: each one works on what the ones above made. Moves (Displace, Swirl, Pixelate, Kaleidoscope, CRT curvature) bend where the picture is read: before the first Blur, Glow, Light rays or Chromatic aberration they bend the scene's own space, so they cost no Pass. Those reads read round each pixel, so each takes a Pass; CRT mask works on the colour. They build as real nodes after the Look's grade.</BuilderNote>
+      {passOf.size > 0 && <BuilderNote style={{ fontSize: 11 }}>Passes: {passOf.size} of {MAX_FX_PASSES} used, {MAX_FX_PASSES - passOf.size} left. Only reads (blur, glow, rays, chromatic aberration, displace by a picture) take one; a move after a read bends where that read reads.</BuilderNote>}
       <StackCards name="fx" idPrefix="fx" items={effects} defs={FX_KINDS} playParam={fxPlay} sources={sources} onAddSource={addSource}
         badge={it => (passOf.has(it.id) ? `pass ${passOf.get(it.id)} of ${MAX_FX_PASSES}` : null)}
         empty="No effects yet: add one above."

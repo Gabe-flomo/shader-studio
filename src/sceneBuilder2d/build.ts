@@ -39,7 +39,8 @@ import { DEPTH_MIX_COMBINE_LABELS, DEPTH_SPACE_LABELS } from '../nodes/definitio
 import { FIT_LABELS, LUMA, findTex, fitLines, glf, newTexUse, picUv, sampleWrap, standInId, standIns, type TexSource, type TexUse } from '../builders/textures';
 import { CUSTOM_PALETTE, paletteLabel, paletteSwatches, slotColour } from '../builders/look/palette';
 import { emitGrades } from '../builders/look/grade';
-import { emitEffects } from '../builders/look/effects';
+import { planEffects } from '../builders/look/effects';
+import { fieldInputKeys } from '../compiler/fieldSockets';
 
 export { ROLE_KEY };
 /** On the UV node: the scene it was built from (and, once applied, fingerprints of what was built). */
@@ -82,6 +83,8 @@ interface B {
   mixCol: Map<string, Ref>;
   /** The last looped block's orbit trap (its node's `trap` output): Look → Colour by trap reads it. */
   trap?: Ref | null;
+  /** The Effects page's bent point the scene is drawn at, or null: nodes that read this pixel when unwired get it wired. */
+  bentAt?: Ref | null;
 }
 
 // ── Pictures (builders/textures.ts) ─────────────────────────────────────────
@@ -585,6 +588,40 @@ const DRIVERS: Record<string, { code: string; what: string }> = {
  * The result has no Output node: `final` is what to wire into it.
  */
 export function buildScene2D(spec: Scene2D, idFor: (role: string) => string = role => `sb2_${role.replace(/[^A-Za-z0-9]/g, '_')}`): Build2DResult {
+  // The Effects page's moves before its first read bend the scene's own coordinates (no Pass), unless
+  // the Output shows a measurement or a field socket's chain would carry the bend into its own calls.
+  const bend = !spec.output || spec.output.show === 'picture';
+  const r = buildOnce(spec, idFor, bend);
+  return bend && fieldChainsBent(r.nodes) ? buildOnce(spec, idFor, false) : r;
+}
+
+/**
+ * Does a field socket's chain hold one of the Effects page's bends? A field chain is compiled again
+ * as a function of position (its UV node is the call's point), so a bend in it would bend that point
+ * a second time: such scenes read a Pass at the bent point instead (docs/field-sockets.md).
+ */
+function fieldChainsBent(nodes: GraphNode[]): boolean {
+  const byId = new Map(nodes.map(n => [n.id, n]));
+  for (const n of nodes) {
+    for (const key of fieldInputKeys(getNodeDefinition(n.type))) {
+      const start = n.inputs[key]?.connection?.nodeId;
+      const todo = start ? [start] : [];
+      const seen = new Set<string>();
+      while (todo.length) {
+        const id = todo.pop()!;
+        if (seen.has(id)) continue;
+        seen.add(id);
+        const m = byId.get(id);
+        if (!m) continue;
+        if (String(m.params[ROLE_KEY] ?? '').startsWith('fx:')) return true;
+        for (const inp of Object.values(m.inputs)) if (inp.connection) todo.push(inp.connection.nodeId);
+      }
+    }
+  }
+  return false;
+}
+
+function buildOnce(spec: Scene2D, idFor: (role: string) => string, bendScene: boolean): Build2DResult {
   const c: Ctx = { spec: undefined as never, idFor, nodes: [], warnings: [] };
   const L = spec.look;
   const b: B = { c, spec, time: null, local: new Map(), mixCol: new Map(), getTime: () => {
@@ -595,7 +632,13 @@ export function buildScene2D(spec: Scene2D, idFor: (role: string) => string = ro
 
   const uv = mk(c, 'uv', 'uv', {}, {}, `The picture's coordinates: the centre is (0, 0), the top is 1 and the bottom −1. Built by the 2D Scene Builder${spec.space.length ? `; ${spec.space.length} space transform${spec.space.length === 1 ? '' : 's'} follow` : ''}. Right-click → Edit in 2D Scene Builder, or use Rebuild from recipe on its Recipe chip.`);
   const screen = ref(uv, 'uv');
-  let pos = screen;
+  // The Effects page (builders/look/effects.ts): its first moves bend where the scene is drawn.
+  const fx = planEffects(c, spec.effects, { screen, getTime: b.getTime, texture: (name, what) => texFor(b, name, what)?.out ?? null }, bendScene);
+  // The point every part of the scene reads (the screen's, or the effects' bent one). The finish
+  // after the effects (vignette, grain…) reads the screen's own.
+  const at = fx.sceneUv ?? screen;
+  b.bentAt = fx.sceneUv;
+  let pos = at;
   for (const op of spec.space) {
     // A muted transform is still built, its node bypassed by a live uniform (builders/mute.ts).
     const next = spaceNode(b, op, pos);
@@ -603,7 +646,7 @@ export function buildScene2D(spec: Scene2D, idFor: (role: string) => string = ro
     pos = next;
   }
   // A picture with depth (depth.ts): its picture and Depth node, and the Depth Mix the shapes read.
-  const depthPic = spec.depth ? emitDepthPicture(b, spec.depth, screen, pos) : null;
+  const depthPic = spec.depth ? emitDepthPicture(b, spec.depth, at, pos) : null;
   if (depthPic?.shapes && spec.depth?.space.on) pos = ref(depthPic.shapes, 'uv');
   b.depthGrow = depthPic?.shapes && spec.depth?.size.on ? ref(depthPic.shapes, 'scale') : null;
 
@@ -658,7 +701,7 @@ export function buildScene2D(spec: Scene2D, idFor: (role: string) => string = ro
     const t = texFor(b, L.bgTex.tex, 'The background');
     if (t) {
       const warped = L.bgTex.warp && spec.space.length > 0;
-      const pic = samplePicture(b, 'bgpic', L.bgTex, t.src, t.out, L.bgTex.warp ? pos : screen, SCREEN_EXT, 'the background');
+      const pic = samplePicture(b, 'bgpic', L.bgTex, t.src, t.out, L.bgTex.warp ? pos : at, SCREEN_EXT, 'the background');
       acc = ref(expr(c, 'bgpic', 'Background picture', [
         { name: 'bg', type: 'vec3', from: acc }, { name: 'tex', type: 'vec3', from: pic.color }, { name: 'a', type: 'float', from: pic.alpha }, { name: 'inside', type: 'float', from: pic.inside },
       ], 'mix(bg, tex, clamp(a, 0.0, 1.0) * inside)',
@@ -743,7 +786,7 @@ export function buildScene2D(spec: Scene2D, idFor: (role: string) => string = ro
     // A picture mask: the layer (and its glow) only where the picture is bright.
     const m = it.mask ? texFor(b, it.mask.tex, `${name}'s mask`) : null;
     if (m && it.mask) {
-      const pic = samplePicture(b, `${it.id}:mask`, { tex: m.src.name, fit: 'cover', scale: 1 }, m.src, m.out, screen, SCREEN_EXT, `${name}'s mask`);
+      const pic = samplePicture(b, `${it.id}:mask`, { tex: m.src.name, fit: 'cover', scale: 1 }, m.src, m.out, at, SCREEN_EXT, `${name}'s mask`);
       acc = ref(expr(c, `${it.id}:masked`, 'Picture mask', [
         { name: 'behind', type: 'vec3', from: behind }, { name: 'layer', type: 'vec3', from: acc },
         { name: 'tex', type: 'vec3', from: pic.color }, { name: 'a', type: 'float', from: pic.alpha }, { name: 'inside', type: 'float', from: pic.inside },
@@ -761,7 +804,7 @@ export function buildScene2D(spec: Scene2D, idFor: (role: string) => string = ro
   }
   if (spec.grid) {
     const under = acc;
-    acc = emitGrid(b, spec.grid, pos, screen, acc, anim);
+    acc = emitGrid(b, spec.grid, pos, at, acc, anim);
     gateChain(c.nodes, under, acc, spec.grid.muted);
   }
   if (spec.pieces) {
@@ -777,7 +820,7 @@ export function buildScene2D(spec: Scene2D, idFor: (role: string) => string = ro
   if (L.tone !== 'none') final = effect('tone', mk(c, 'toneMap', 'tone', { mode: L.tone }, { color: final }, `Squeezes the bright, linear light into colours a screen can show (${L.tone.toUpperCase()}) without clipping highlights.`), 'color');
   // The Look's grade, then the Effects page, each in its order (builders/look).
   final = emitGrades(c, L.grade, final, { swatches });
-  final = emitEffects(c, spec.effects, final, { screen, getTime: b.getTime, texture: (name, what) => texFor(b, name, what)?.out ?? null });
+  final = fx.finish(final);
   const P = L.post;
   if (P.bloom > 0) {
     // The Look's bloom (an older setting): a Pass of the picture and a Glow (texture) Bloom chain, in the same frame.
@@ -860,7 +903,7 @@ function emitDepthPicture(b: B, d: DepthPic2D, screen: Ref, pos: Ref): DepthPicR
     ? { color: ref(mk(c, 'sampleTexture', 'depth:pic:sample', {}, { texture: t.out, uv: screen }, `Reads the picture “${t.src.name}” stretched over the whole frame: its colour at this pixel.`), 'color'), place: null as Ref | null }
     : samplePicture(b, 'depth:pic', newTexUse(t.src.name, { fit: d.fit }), t.src, t.out, screen, SCREEN_EXT, 'the picture with depth');
   const baked = !!d.bake;
-  const dn = mk(c, 'depth', 'depth', baked ? { update: 'baked', depthBake: structuredClone(d.bake) } : {}, { texture: t.out, uv: pic.place },
+  const dn = mk(c, 'depth', 'depth', baked ? { update: 'baked', depthBake: structuredClone(d.bake) } : {}, { texture: t.out, uv: pic.place ?? b.bentAt ?? null },
     `Depth: how far each part of “${t.src.name}” is (0 far, 1 near), worked out on this device by a small model. `
       + (baked ? 'Generate depth ran it once in the 2D Scene Builder and kept the result as an image beside the picture (Update: Baked), so it is ready at once and goes into exported pages. ' : 'It runs live once the model is downloaded (the card offers it); Bake depth on the card keeps it, smooth and ready for exported pages. ')
       + (pic.place ? 'Its UV is wired from the picture\'s fit, so the depth lines up with the picture whatever its shape.' : 'It reads this pixel, as the stretched picture does.'));
@@ -887,7 +930,7 @@ function emitDepthMix(b: B, d: DepthPic2D, p: DepthPicRefs, scene: Ref, dists: R
   const g = d.gradient;
   const phase = g && g.flow ? ref(mk(c, 'multiply', 'depth:flow', { b: g.flow }, { a: b.getTime() }, `Time × ${fmt(g.flow)}: the gradient's colours flow along depth at ${fmt(g.flow)} cycles a second.`), 'result') : null;
   const look = DEPTH_LOOK_LABELS[d.look];
-  const node = mk(c, 'depthMix', 'depth:mix', depthMixParams(d), { picture: p.color, depth: p.depth, scene, coverage, phase },
+  const node = mk(c, 'depthMix', 'depth:mix', depthMixParams(d), { picture: p.color, depth: p.depth, scene, coverage, phase, uv: b.bentAt ?? null },
     `Depth Mix: the scene and the picture “${p.name}” put together by depth. ${look.label}: ${look.blurb} `
       + `${d.look === 'top' || d.look === 'occlude' || d.look === 'fog' ? `With the picture: ${DEPTH_MIX_COMBINE_LABELS[d.with].label} (${DEPTH_MIX_COMBINE_LABELS[d.with].blurb.toLowerCase()}) ` : ''}`
       + `Picture ${fmt(d.picture)} is how bright the picture shows. Depth range ${fmt(d.range[0])}–${fmt(d.range[1])} and Curve ${fmt(d.curve)} shape the depth first. `
