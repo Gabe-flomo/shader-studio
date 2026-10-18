@@ -6,6 +6,8 @@ import { allBlockLines, clampCount, loopCode, loopCountValue, loopMax, loopOf } 
 // Shared with the Play page's Finish stack (play/kit/finish.js), so both tone-map and mask the same way.
 import { FN_CRT_MASK_GLSL, FN_TONE_FUNCTIONS, FN_TONE_GLSL, FN_TONE_JODIE_GLSL } from '../../play/kit/finishGlsl.js';
 import { BL_BASE_GLSL, BL_PREV_GLSL } from '../../play/kit/blur.js';
+import { GLOW_TYPES, GLOW_TYPE_LABELS, glowFormula } from './combiners';
+import { DRIVERS_2D, PF_GRADIENT_GLSL, gradientColourGlsl, gradientOn } from '../../lib/colourGradient';
 
 
 export const AbsNode: NodeDefinition = {
@@ -161,10 +163,39 @@ vec3 grainTemporal(vec3 color, vec2 uv, float amount, float scale, float time) {
 
 
 
+/**
+ * SDF Glow: a distance turned into light. Since the 2026-10-17 sweep it is the one distance-to-glow node: its
+ * Mode list holds every falloff the separate nodes had, each with that node's exact formula and settings:
+ *  - Glow / Haze / Bounded / Ring / Simple: the classic modes, shaped by Falloff;
+ *  - Halo / Soft / Exponential / Gaussian / Neon / Rim / Inverse square: the old Glow Layer's types
+ *    (combiners.ts glowFormula), shaped by Reach and Power;
+ *  - Bounded inverse power / Gaussian bump / Cone / Wyvill: the old Distance Falloff, shaped by Falloff (its Rate) and Power;
+ *  - Deep glow: the old (SDF) Deep Glow's core + bleed with its Reinhard roll-off;
+ *  - Point light: the old Point Light 2D's Squared / Inverse / Linear falloffs of the distance.
+ * Glow Layer, Distance Falloff and Deep Glow migrate here (NODE_ALIASES); Point Light 2D stays registered
+ * for saved graphs (it measured its own distance from UV and Light Pos).
+ */
+const CLASSIC_GLOW_MODES = ['glow', 'haze', 'bounded', 'ring', 'simple'];
+const FALLOFF_MODES = ['invPow', 'gaussBump', 'cone', 'wyvill'];
+const LAYER_MODES: string[] = [...GLOW_TYPES];
+const SDF_GLOW_DRIVERS = ['surface', ...DRIVERS_2D] as const;
+const DEEP_GLOW_SDF_GLSL = `
+vec3 deep_glow(float d, vec3 baseColor, float intensity, float radius, float saturation, float edgeSoftness) {
+    // Sharp core (1 inside the shape, 0 at/past the edge)
+    float core = smoothstep(edgeSoftness, 0.0, d);
+    // Non-linear inverse-square falloff — sharp inner halo, soft far-reaching bleed
+    float glow = intensity / pow(max(d, 0.0) / max(radius, 0.0001) + 1.0, 2.0);
+    // Hyper-saturate the bleed color relative to the core color
+    vec3 glowColor = pow(max(baseColor, vec3(0.0)), vec3(saturation));
+    vec3 hdrColor = (baseColor * core) + (glowColor * glow);
+    // Reinhard tonemap — rolls off HDR values instead of clipping to white
+    return hdrColor / (hdrColor + vec3(1.0));
+}`;
+
 export const LightNode: NodeDefinition = withParamSockets({
   type: 'light',
-  label: 'SDF Glow', aliases: ['Light', 'Make Light', 'Glow from Distance', 'ring light'],
-  description: 'Turns a distance field into light. Glow is the classic exp(-falloff · d); Haze has a fatter tail; Bounded stops at a set radius; Ring adds concentric rings; Simple is 1/d. `Inner` lights the inside of the shape from the edge inward — add it to Glow for a neon tube. The `Tinted` output is the glow times `Tint`, so a coloured glow is one node — it replaces the SDF Glow → Palette → Multiply chain.',
+  label: 'SDF Glow', aliases: ['Light', 'Make Light', 'Glow from Distance', 'ring light', 'Glow Layer', 'Distance Falloff', 'Deep Glow (SDF)', 'Point Light 2D', 'Halo', 'Neon', 'Falloff'],
+  description: 'Turns a distance field into light; Mode picks the falloff. Glow is the classic exp(-falloff · d); Haze has a fatter tail; Bounded stops at a set radius; Ring adds concentric rings; Simple is 1/d. Halo, Soft, Exponential, Gaussian, Neon, Rim and Inverse square are shaped by Reach and Power; Bounded inverse power, Gaussian bump, Cone and Wyvill turn a distance into a 0–1 falloff; Deep glow adds a hot core and a saturated bleed, rolled off so it never clips; Point light is a lamp\'s falloff. `Inner` lights the inside of the shape from the edge inward — add it to Glow for a neon tube. The `Tinted` output is the glow times `Tint`, so a coloured glow is one node.',
   category: 'Effects',
   // Three outputs, but its glow is the classic += accumulator in a loop.
   assignable: true,
@@ -176,13 +207,16 @@ export const LightNode: NodeDefinition = withParamSockets({
   outputs: {
     glow:   { type: 'float', label: 'Glow' },
     inner:  { type: 'float', label: 'Inner', hint: 'Glow inside the shape, from the edge inward (Inner falloff). Add it to Glow for a neon tube.' },
-    tinted: { type: 'vec3',  label: 'Tinted', hint: 'Glow × Tint, ready for the Output.' },
+    tinted: { type: 'vec3',  label: 'Tinted', hint: 'Glow × Tint, ready for the Output (Deep glow: its rolled-off colour).' },
   },
   // perDistance: on for new nodes; saved graphs without it keep counting per step.
-  defaultParams: { mode: 'glow', brightness: 10.0, ringFreq: 8.0, tint: [1.0, 0.85, 0.6], innerFalloff: 8.0, perDistance: true },
+  defaultParams: {
+    mode: 'glow', brightness: 10.0, ringFreq: 8.0, tint: [1.0, 0.85, 0.6], innerFalloff: 8.0, perDistance: true,
+    reach: 0.01, power: 1.0, intensity: 1.5, radius: 0.08, saturation: 1.2, edgeSoftness: 0.01, pointModel: 'squared', lightRadius: 2.0, pointGamma: 'false',
+  },
   paramDefs: {
-    perDistance: { label: 'Per distance', type: 'bool', hint: 'Only in a volumetric March Loop, summed with +=: adds glow for the length of ray each step covers, not once per step, so the glow doesn\'t form rings that follow the shapes (banding). Anywhere else it changes nothing.' },
-    tint: { label: 'Tint', type: 'vec3color', hint: 'Colour of the Tinted output when nothing is wired to Tint.' },
+    perDistance: { label: 'Per distance', type: 'bool', showWhen: { param: 'mode', value: CLASSIC_GLOW_MODES }, hint: 'Only in a volumetric March Loop, summed with +=: adds glow for the length of ray each step covers, not once per step, so the glow doesn\'t form rings that follow the shapes (banding). Anywhere else it changes nothing.' },
+    tint: { label: 'Tint', type: 'vec3color', gradient: SDF_GLOW_DRIVERS, hint: 'Colour of the Tinted output when nothing is wired to Tint. Gradient: by distance from the shape, or across the picture.' },
     mode: {
       label: 'Mode', type: 'select',
       options: [
@@ -191,12 +225,38 @@ export const LightNode: NodeDefinition = withParamSockets({
         { value: 'bounded', label: 'Bounded (stops at 1/k)' },
         { value: 'ring',    label: 'Ring Light'    },
         { value: 'simple',  label: 'Simple (1/d)'  },
+        ...GLOW_TYPES.map(t => ({ value: t, label: GLOW_TYPE_LABELS[t].label })),
+        { value: 'invPow',    label: 'Bounded inverse power (1 / (1 + k·dᵖ))' },
+        { value: 'gaussBump', label: 'Gaussian bump (exp(−k·d²))' },
+        { value: 'cone',      label: 'Cone (1 − k·d)' },
+        { value: 'wyvill',    label: 'Wyvill bump ((1 − k·d²)³)' },
+        { value: 'deep',      label: 'Deep glow (core + bleed)' },
+        { value: 'point',     label: 'Point light' },
       ],
-      hint: 'Glow is the classic tight halo. Haze has a fatter tail and reads as fog. Bounded stops at a definite radius (1/Falloff), for a hard budget on how far light spreads.',
+      hint: 'Glow is the classic tight halo. Haze has a fatter tail and reads as fog. Bounded stops at a definite radius (1/Falloff). Halo to Inverse square are shaped by Reach and Power. Bounded inverse power, Gaussian bump, Cone and Wyvill give a 0–1 falloff. Deep glow: a hot core with a saturated bleed. Point light: a lamp\'s falloff.',
+      help: [
+        ...GLOW_TYPES.map(t => `${GLOW_TYPE_LABELS[t].label}: ${GLOW_TYPE_LABELS[t].blurb}`),
+        'Bounded inverse power: 1 at the shape, 1 ÷ (1 + Falloff × distance ^ Power) outside, never blowing up. Gaussian bump: exp(−Falloff × distance²), soft. Cone: 1 − Falloff × distance, a straight ramp. Wyvill: (1 − Falloff × distance²)³, a smooth bump that ends.',
+        'Deep glow: a sharp core inside the shape plus a wide inverse-square bleed out to Radius, its colour pushed by Saturation, rolled off (Reinhard) so it never clips to white. Tinted is the finished colour.',
+        'Point light: Intensity × the falloff of the distance (wire the distance to the lamp, e.g. a Circle SDF or a Length). Squared: (1 − distance × Radius)², physical-looking; Inverse: Intensity ÷ distance; Linear: 1 − distance × Radius.',
+      ].join('\n'),
     },
     innerFalloff: { label: 'Inner falloff', type: 'float', min: 0.1, max: 100, step: 0.1, hint: 'Falloff of the Inner output: light inside the shape, measured from the edge inward. Low floods the interior (frosted glass); high hugs the rim (neon tube).' },
-    brightness: { label: 'Falloff', type: 'float', min: 0.1, max: 100, step: 0.1, hint: 'How fast the glow fades with distance. Higher is tighter and dimmer.' },
+    brightness: { label: 'Falloff', type: 'float', min: 0.1, max: 100, step: 0.1, showWhen: { param: 'mode', value: [...CLASSIC_GLOW_MODES, ...FALLOFF_MODES] }, hint: 'How fast the glow fades with distance. Higher is tighter and dimmer.' },
     ringFreq:   { label: 'Ring Freq',  type: 'float', min: 1.0, max: 30,  step: 0.5, showWhen: { param: 'mode', value: 'ring' } },
+    reach:      { label: 'Reach', type: 'float', min: 0.001, max: 0.2, step: 0.001, showWhen: { param: 'mode', value: LAYER_MODES }, hint: 'How far the glow reaches, in distance units (the old Glow Layer\'s Intensity).' },
+    power:      { label: 'Power', type: 'float', min: 0.1, max: 4.0, step: 0.05, showWhen: { param: 'mode', value: [...LAYER_MODES, 'invPow'] }, hint: 'How sharply it falls off: bigger fades faster (Bounded inverse power: the exponent on the distance, 2 is inverse-square).' },
+    intensity:  { label: 'Intensity', type: 'float', min: 0.0, max: 10.0, step: 0.05, showWhen: { param: 'mode', value: ['deep', 'point'] }, hint: 'How bright the bleed (Deep glow) or the lamp (Point light) is.' },
+    radius:     { label: 'Radius', type: 'float', min: 0.01, max: 4.0, step: 0.01, showWhen: { param: 'mode', value: 'deep' }, hint: 'Distance units, not pixels — scale to whatever feeds Distance. A raw SDF is usually 0.02–0.3; a raw scalar Field (e.g. Chladni) can need 1–4 for a visible bleed.' },
+    saturation: { label: 'Saturation', type: 'float', min: 1.0, max: 3.0, step: 0.05, showWhen: { param: 'mode', value: 'deep' }, hint: 'Pushes the bleed\'s colour further than the core\'s.' },
+    edgeSoftness: { label: 'Edge Softness', type: 'float', min: 0.0, max: 0.2, step: 0.005, showWhen: { param: 'mode', value: 'deep' }, hint: 'How softly the core\'s edge fades.' },
+    pointModel: { label: 'Falloff Model', type: 'select', showWhen: { param: 'mode', value: 'point' }, options: [
+      { value: 'squared', label: 'Squared (physical)' }, { value: 'inverse', label: 'Inverse' }, { value: 'linear', label: 'Linear' },
+    ] },
+    lightRadius: { label: 'Radius', type: 'float', min: 0.1, max: 20.0, step: 0.1, showWhen: { param: 'mode', value: 'point', and: { param: 'pointModel', value: ['squared', 'linear'] } }, hint: 'How quickly the lamp\'s light ends: it reaches 1 ÷ Radius.' },
+    pointGamma: { label: 'Gamma', type: 'select', showWhen: { param: 'mode', value: 'point', and: { param: 'pointModel', value: 'inverse' } }, options: [
+      { value: 'false', label: 'Off' }, { value: 'true', label: 'On' },
+    ] },
   },
   glslFunction: `float ringLight(float d, float brightness, float freq) {
   float ring = abs(sin(d * freq));
@@ -205,16 +265,21 @@ export const LightNode: NodeDefinition = withParamSockets({
 float simpleLight(float d, float brightness) {
   return brightness * 0.01 / max(abs(d), 0.0001);
 }`,
+  glslFunctionsFor: node => [
+    ...(node.params.mode === 'deep' ? [DEEP_GLOW_SDF_GLSL] : []),
+    ...(gradientOn(node.params, 'tint') && !node.inputs?.tint?.connection ? [PF_GRADIENT_GLSL] : []),
+  ],
   generateGLSL: (node: GraphNode, inputVars) => {
     const outVar   = `${node.id}_glow`;
     const distVar  = inputVars.distance   ?? '0.0';
     const brightVar = inputVars.brightness ?? p(node.params.brightness, 10.0);
     const mode     = (node.params.mode as string) ?? 'glow';
     const ringFreq = p(node.params.ringFreq, 8.0);
-    const tintVar  = inputVars.tint ?? pv3(node.params.tint, [1.0, 0.85, 0.6]);
+    const tintVar  = inputVars.tint ?? gradientColourGlsl(node.params, 'tint', { value: `abs(${distVar})` }, SDF_GLOW_DRIVERS) ?? pv3(node.params.tint, [1.0, 0.85, 0.6]);
 
     const innerFalloff = p(node.params.innerFalloff, 8.0);
     let code: string;
+    let tinted = `${tintVar} * ${outVar}`;
     if (mode === 'ring') {
       code = `    float ${outVar} = ringLight(${distVar}, ${brightVar}, ${ringFreq});\n`;
     } else if (mode === 'simple') {
@@ -225,22 +290,47 @@ float simpleLight(float d, float brightness) {
     } else if (mode === 'bounded') {
       // Stops at a definite radius of 1/falloff: a hard budget on how far light spreads
       code = `    float ${outVar} = smoothstep(1.0 / clamp(${brightVar}, 0.1, 100.0), 0.0, max(${distVar}, 0.0));\n`;
+    } else if (LAYER_MODES.includes(mode)) {
+      // The old Glow Layer's formula for its Type (combiners.ts glowFormula): Reach is its Intensity.
+      code = `    float ${outVar} = ${glowFormula(mode, distVar, p(node.params.reach, 0.01), p(node.params.power, 1.0))};\n`;
+    } else if (FALLOFF_MODES.includes(mode)) {
+      // The old Distance Falloff: Falloff is its Rate (k).
+      const d = distVar, k = brightVar;
+      const expr = mode === 'gaussBump' ? `exp(-${d} * ${d} * ${k})`
+        : mode === 'cone' ? `max(0.0, 1.0 - ${d} * ${k})`
+        : mode === 'wyvill' ? `pow(max(0.0, 1.0 - ${d} * ${d} * ${k}), 3.0)`
+        : `1.0 / (1.0 + pow(max(${d}, 0.0), ${p(node.params.power, 2.0)}) * ${k})`;
+      code = `    float ${outVar} = ${expr};\n`;
+    } else if (mode === 'deep') {
+      // The old (SDF) Deep Glow: Tinted is its rolled-off colour, Glow the bleed alone.
+      const I = p(node.params.intensity, 1.5), R = p(node.params.radius, 0.08);
+      code = `    float ${outVar} = ${I} / pow(max(${distVar}, 0.0) / max(${R}, 0.0001) + 1.0, 2.0);\n`;
+      tinted = `deep_glow(${distVar}, ${tintVar}, ${I}, ${R}, ${p(node.params.saturation, 1.2)}, ${p(node.params.edgeSoftness, 0.01)})`;
+    } else if (mode === 'point') {
+      // The old Point Light 2D's falloffs of the distance.
+      const I = p(node.params.intensity, 1.5), R = p(node.params.lightRadius, 2.0), d = distVar;
+      const model = node.params.pointModel as string;
+      const expr = model === 'inverse'
+        ? (node.params.pointGamma === 'true' ? `${I} * pow(1.0 / max(${d}, 0.001), 1.0/2.2)` : `${I} / max(${d}, 0.001)`)
+        : model === 'linear' ? `${I} * max(1.0 - ${d} * ${R}, 0.0)`
+        : `${I} * pow(max(1.0 - ${d} * ${R}, 0.0), 2.0)`;
+      code = `    float ${outVar} = ${expr};\n`;
     } else {
       // Same curve the old makeLight node emitted (unclamped distance: the inside of a shape glows > 1).
       code = `    float ${outVar} = exp(-clamp(${brightVar}, 0.1, 100.0) * ${distVar});\n`;
     }
     // Inner light: distance measured from the edge inward, zero outside
     code += `    float ${outVar}_inner = exp(-clamp(${innerFalloff}, 0.1, 100.0) * max(-(${distVar}), 0.0)) * step(${distVar}, 0.0);\n`;
-    // Per distance in a volumetric loop body: the March Loop compiler sets the reference step.
+    // Per distance in a volumetric loop body: the March Loop compiler sets the reference step (classic modes).
     const stepRef = inputVars[MARCH_STEP_REF_KEY];
-    if (stepRef) {
+    if (stepRef && (CLASSIC_GLOW_MODES.includes(mode) || !mode)) {
       const w = stepWeightGlsl(distVar, stepRef, `clamp(${brightVar}, 0.1, 100.0)`);
       code += `    ${outVar} *= ${w};\n    ${outVar}_inner *= ${w};\n`;
     }
-    code += `    vec3 ${outVar}_tinted = ${tintVar} * ${outVar};\n`;
+    code += `    vec3 ${outVar}_tinted = ${tinted};\n`;
     return { code, outputVars: { glow: outVar, inner: `${outVar}_inner`, tinted: `${outVar}_tinted` } };
   },
-}, ['innerFalloff', 'ringFreq']);
+}, ['innerFalloff', 'ringFreq', 'reach', 'power', 'intensity', 'radius', 'saturation', 'edgeSoftness', 'lightRadius']);
 
 /**
  * Glow to Color — the "after the loop" half of every volumetric example:

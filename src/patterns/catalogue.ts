@@ -82,7 +82,7 @@ export const FAMILIES: Family[] = [
 
 const DISTANCE_PORTS = /^(distance|dist|d|sdf|value|dCenter|distToCenter|cellDist)$/i;
 const SHAPE_CATS = new Set(['2D Primitives', '3D Primitives', 'SDF', 'Field']);
-const LIGHT_TYPES = ['light', 'glowLayer', 'deepGlow', 'volumeGlow', 'glowToColor', 'glowTexture', 'bloom'];
+const LIGHT_TYPES = ['light', 'volumeGlow', 'glowToColor', 'glowTexture', 'bloom'];
 const NOISE_TYPES = ['fbm', 'noiseFloat', 'voronoi', 'domainWarp', 'turbulence', 'magicTexture', 'waveTexture', 'gyroidField'];
 const WAVE_TYPES = ['sin', 'cos', 'lfo', 'sineLFO', 'waveTerm', 'waveTexture'];
 
@@ -159,7 +159,7 @@ export const TECHNIQUES: Technique[] = [
     slots: { in: [S('distance', 'distance', 'float'), S('strength', 'value', 'float')], out: [S('brightness', 'brightness', 'float')] },
     variants: [
       { id: 'node-simple', name: 'SDF Glow, Simple mode', match: lit(['light'], n => param(n, 'mode') === 'simple') },
-      { id: 'glow-layer', name: 'Glow Layer (intensity / |d|)', match: lit(['glowLayer']) },
+      { id: 'glow-layer', name: 'SDF Glow, Halo mode (reach / |d|)', match: lit(['light'], n => param(n, 'mode') === 'halo') },
       { id: 'code', name: 'k / d in code', match: code((l, ids) => idiom('glow-inv', 'glow-over')(l, ids) || /[\d.]+\s*\/\s*(?:max\s*\(|abs\s*\(|length\s*\()/.test(l)) },
     ],
   },

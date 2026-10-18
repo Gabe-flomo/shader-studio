@@ -249,7 +249,7 @@ export const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: strin
   Effects: [
     { label: 'Blur',     types: ['gaussianBlur', 'bloom', 'radialBlur', 'tiltShiftBlur', 'lensBlur', 'depthOfField'] },
     { label: 'Chroma',   types: ['chromaShift', 'chromaticAberrationAuto', 'chromaticAberration'] },
-    { label: 'Lighting', types: ['light', 'glowToColor', 'light2d', 'radianceCascadesApprox'] },
+    { label: 'Lighting', types: ['light', 'glowToColor', 'radianceCascadesApprox'] },
     { label: 'Warp',     types: ['gravitationalLens', 'floatWarp'] },
     { label: 'Glitch',   types: ['glitch'] },
   ],
@@ -273,7 +273,6 @@ export const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: strin
   ],
   Combiners: [
     { label: 'Blend',   types: ['mix', 'blendModes', 'mask', 'addColor', 'alphaBlend'] },
-    { label: 'Layer',   types: ['glowLayer', 'deepGlow'] },
   ],
   Grid: [
     { label: 'Layout',   types: ['gridPattern', 'gridPaint', 'arrayField', 'gridLayout', 'cellPicture', 'pieces'] },
@@ -286,7 +285,6 @@ export const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: strin
     { label: 'Gaussian',  types: ['gaussianField', 'fieldAccumulate'] },
     { label: 'Noisy SDF', types: ['noisyGridSDF'] },
     { label: 'Threshold', types: ['metaballThreshold'] },
-    { label: 'Falloff',   types: ['distanceFalloff'] },
   ],
 };
 

@@ -56,9 +56,13 @@ const near = (a: Val, b: Val, eps = 1e-9) => {
 };
 
 /** Retired in the sweep and kept registered (hidden): no exact mapping onto the survivor. */
-const SWEPT_HIDDEN: string[] = [];
-/** Merged into a survivor: gone from the registry, migrated on load. */
-const SWEPT_MERGED = ['smoothWarp', 'curlWarp', 'swirlWarp', 'swirlSpace'];
+const SWEPT_HIDDEN: string[] = ['light2d'];
+/** Merged into a survivor: gone from the registry, migrated on load (old type → survivor). */
+const MERGED_INTO: Record<string, string> = {
+  smoothWarp: 'uvWarp', curlWarp: 'uvWarp', swirlWarp: 'uvWarp', swirlSpace: 'uvWarp',
+  glowLayer: 'light', distanceFalloff: 'light', deepGlow: 'light',
+};
+const SWEPT_MERGED = Object.keys(MERGED_INTO);
 
 describe('retired types are offered nowhere but still registered', () => {
   it('every retired type keeps a definition and is out of the library', () => {
@@ -70,10 +74,10 @@ describe('retired types are offered nowhere but still registered', () => {
     }
   });
   it('a merged type is gone from the registry and resolves to its survivor', () => {
-    for (const t of ['smoothWarp', 'curlWarp', 'swirlWarp', 'swirlSpace']) {
+    for (const [t, to] of Object.entries(MERGED_INTO)) {
       expect(NODE_REGISTRY[t], t).toBeUndefined();
-      expect(NODE_ALIASES[t]?.to, t).toBe('uvWarp');
-      expect(getNodeDefinition(t)?.type, t).toBe('uvWarp');
+      expect(NODE_ALIASES[t]?.to, t).toBe(to);
+      expect(getNodeDefinition(t)?.type, t).toBe(to);
     }
   });
   it('no example uses a retired or merged type', () => {
@@ -174,5 +178,132 @@ describe('UV Warp: one node, Kind = Smooth / Jitter / Curl / Swirl', () => {
         saved('output', 'out', {}, { color: ['c', 'distance'] }, []),
       ]);
     }
+  });
+});
+
+// ── SDF Glow ─────────────────────────────────────────────────────────────────
+
+const pw = (a: Val, b: Val) => (Array.isArray(a) ? a.map((x, i) => Math.pow(x, Array.isArray(b) ? b[i] : b as number)) : Math.pow(a as number, b as number));
+const smoothstep = (e0: Val, e1: Val, x: Val) => { const t = Math.min(1, Math.max(0, ((x as number) - (e0 as number)) / ((e1 as number) - (e0 as number)))); return t * t * (3 - 2 * t); };
+const stepFn = (e: Val, x: Val) => ((x as number) >= (e as number) ? 1 : 0);
+/** JS mirror of the old (SDF) Deep Glow's deep_glow() (combiners.ts before the sweep). */
+const deepGlowJs = (d: number, c: number[], I: number, R: number, S: number, E: number) => {
+  const core = smoothstep(E, 0, d) as number;
+  const glow = I / Math.pow(Math.max(d, 0) / Math.max(R, 0.0001) + 1, 2);
+  return c.map(ch => { const h = ch * core + Math.pow(Math.max(ch, 0), S) * glow; return h / (h + 1); });
+};
+const GLOW_ENV = {
+  pow: pw, smoothstep, step: stepFn,
+  deep_glow: (d: Val, c: Val, I: Val, R: Val, S: Val, E: Val) => deepGlowJs(d as number, c as number[], I as number, R as number, S as number, E as number),
+};
+
+/** The old Glow Layer's formula for each Type (amount i, power p), as it was written. */
+function oldGlowLayer(type: string, d: number, i: number, p: number): number {
+  const x = Math.max(d, 0) / Math.max(i, 1e-5);
+  switch (type) {
+    case 'soft': return Math.pow(1 / (1 + x), p);
+    case 'exp': return Math.exp(-0.35 * x * p);
+    case 'gauss': return Math.exp(-0.0625 * x * x * p);
+    case 'neon': return 0.6 * Math.pow(1 / (1 + x), p) + 1.2 * Math.exp(-Math.abs(d) / Math.max(0.35 * i, 1e-5));
+    case 'rim': return Math.pow(1 / (1 + Math.abs(d) / Math.max(i, 1e-5)), p);
+    case 'invsq': return Math.pow(1 / (1 + x * x), p);
+    default: return Math.pow(i / Math.max(Math.abs(d), 0.0001), p);
+  }
+}
+/** The old Distance Falloff for each mode (rate k, power p). */
+function oldFalloff(mode: string, d: number, k: number, p: number): number {
+  if (mode === 'gaussian') return Math.exp(-d * d * k);
+  if (mode === 'linear') return Math.max(0, 1 - d * k);
+  if (mode === 'wyvill') return Math.pow(Math.max(0, 1 - d * d * k), 3);
+  return 1 / (1 + Math.pow(Math.max(d, 0), p) * k);
+}
+/** The old Point Light 2D's falloff of a distance. */
+function oldPoint(model: string, d: number, I: number, R: number, gamma: boolean): number {
+  if (model === 'inverse') return gamma ? I * Math.pow(1 / Math.max(d, 0.001), 1 / 2.2) : I / Math.max(d, 0.001);
+  if (model === 'linear') return I * Math.max(1 - d * R, 0);
+  return I * Math.pow(Math.max(1 - d * R, 0), 2);
+}
+const DISTANCES = [-0.3, -0.02, 0, 0.004, 0.05, 0.21, 0.8, 2.5];
+
+describe('SDF Glow: every distance falloff in one Mode list', () => {
+  it('Glow Layer migrates (Type → mode, Intensity → Reach, Color → Tint, Glow → Tinted) and matches every type', () => {
+    for (const type of ['halo', 'soft', 'exp', 'gauss', 'neon', 'rim', 'invsq']) {
+      const [nd] = load([saved('glowLayer', 'g', { mode: type, intensity: 0.03, power: 1.3, color: [0.2, 0.9, 1] }, { d: null, color: null, intensity: null, power: null }, ['result'])]);
+      expect(nd.type).toBe('light');
+      expect(nd.params).toMatchObject({ mode: type, reach: 0.03, power: 1.3, tint: [0.2, 0.9, 1], perDistance: false });
+      expect(Object.keys(nd.outputs)).toContain('tinted');
+      for (const D of DISTANCES) {
+        const out = runNode(nd, { distance: 'D' }, { D, ...GLOW_ENV });
+        const g = oldGlowLayer(type, D, 0.03, 1.3);
+        near(out.glow, g, 1e-9 * Math.max(1, Math.abs(g)));
+        near(out.tinted, [0.2, 0.9, 1].map(c => c * g), 1e-9 * Math.max(1, Math.abs(g)));
+      }
+    }
+  });
+
+  it('a Glow Layer with no Type is Halo, with no colour white, and its gradient carries over', () => {
+    const [nd] = load([saved('glowLayer', 'g', { intensity: 0.01, power: 1, color__grad: { on: true, along: 'surface', interp: 'smooth', n: 2 }, color__gc0: [1, 0, 0], color__gc1: [0, 0, 1] }, { d: null }, ['result'])]);
+    expect(nd.params.mode).toBe('halo');
+    expect(nd.params.tint).toEqual([1, 1, 1]);
+    expect(nd.params.tint__grad).toEqual({ on: true, along: 'surface', interp: 'smooth', n: 2 });
+    expect(nd.params.tint__gc1).toEqual([0, 0, 1]);
+    expect(nd.params.color__grad).toBeUndefined();
+    const code = getNodeDefinition('light')!.generateGLSL(nd, { distance: 'D' }).code;
+    expect(code).toContain('pfGradient(');
+  });
+
+  it('Distance Falloff migrates (Rate → Falloff) and matches every mode', () => {
+    for (const mode of ['bounded_inv_sq', 'gaussian', 'linear', 'wyvill']) {
+      const [nd] = load([saved('distanceFalloff', 'f', { mode, k: 3.5, power: 2.5 }, { distance: null, k: null }, ['falloff'])]);
+      expect(nd.type).toBe('light');
+      expect(nd.params.brightness).toBe(3.5);
+      for (const D of DISTANCES) near(runNode(nd, { distance: 'D' }, { D, ...GLOW_ENV }).glow, oldFalloff(mode, D, 3.5, 2.5));
+    }
+  });
+
+  it('a wire into Distance Falloff\'s Rate becomes a wire into Falloff, and its output wire follows', () => {
+    const nodes = load([
+      saved('time', 't', {}, {}, ['time']),
+      saved('distanceFalloff', 'f', { mode: 'linear' }, { distance: null, k: ['t', 'time'] }, ['falloff']),
+      saved('output', 'out', {}, { color: ['f', 'falloff'] }, []),
+    ]);
+    expect(nodes[1].inputs.brightness.connection).toEqual({ nodeId: 't', outputKey: 'time' });
+    expect(nodes[2].inputs.color.connection).toEqual({ nodeId: 'f', outputKey: 'glow' });
+  });
+
+  it('Deep Glow (SDF) migrates to Deep glow mode and matches its core + bleed', () => {
+    const [nd] = load([saved('deepGlow', 'd', { intensity: 2, radius: 0.1, saturation: 1.5, edgeSoftness: 0.02 }, { d: null, color: null }, ['result'])]);
+    expect(nd.params).toMatchObject({ mode: 'deep', intensity: 2, radius: 0.1, saturation: 1.5, edgeSoftness: 0.02, tint: [1, 1, 1] });
+    const C = [0.9, 0.4, 0.2];
+    for (const D of DISTANCES) near(runNode(nd, { distance: 'D', tint: 'C' }, { D, C, ...GLOW_ENV }).tinted, deepGlowJs(D, C, 2, 0.1, 1.5, 0.02));
+    // Its helper is the old one, written out the same.
+    const fns = getNodeDefinition('light')!.glslFunctionsFor!(nd).join('');
+    expect(fns).toContain('float glow = intensity / pow(max(d, 0.0) / max(radius, 0.0001) + 1.0, 2.0);');
+    expect(fns).toContain('return hdrColor / (hdrColor + vec3(1.0));');
+  });
+
+  it('Point light mode is Point Light 2D\'s falloff of the distance', () => {
+    for (const [model, gamma] of [['squared', false], ['linear', false], ['inverse', false], ['inverse', true]] as const) {
+      const nd = migrateNodeParams(saved('light', 'p', { mode: 'point', pointModel: model, intensity: 1.7, lightRadius: 1.4, pointGamma: gamma ? 'true' : 'false', tint: [1, 1, 1] }, { distance: null }, ['glow', 'tinted']), getNodeDefinition);
+      for (const D of DISTANCES.filter(x => x >= 0)) near(runNode(nd, { distance: 'D' }, { D, ...GLOW_ENV }).glow, oldPoint(model, D, 1.7, 1.4, gamma), 1e-9 * Math.max(1, oldPoint(model, D, 1.7, 1.4, gamma)));
+    }
+  });
+
+  it('the classic modes compile exactly as before (no new helper, same lines)', () => {
+    const nd = migrateNodeParams(saved('light', 'l', { mode: 'glow', brightness: 12, tint: [1, 0.85, 0.6] }, { distance: null }, ['glow']), getNodeDefinition);
+    const { code } = getNodeDefinition('light')!.generateGLSL(nd, { distance: 'D' });
+    expect(code).toBe('    float l_glow = exp(-clamp(12.0, 0.1, 100.0) * D);\n'
+      + '    float l_glow_inner = exp(-clamp(8.0, 0.1, 100.0) * max(-(D), 0.0)) * step(D, 0.0);\n'
+      + '    vec3 l_glow_tinted = vec3(1.0, 0.85, 0.6) * l_glow;\n');
+    expect(getNodeDefinition('light')!.glslFunctionsFor!(nd)).toEqual([]);
+  });
+
+  it('old graphs with Glow Layer, Distance Falloff, Deep Glow and Point Light 2D compile', () => {
+    const shape = saved('circleSDF', 'c', { radius: 0.3 }, { position: ['uv', 'uv'] }, ['distance']);
+    const uv = saved('uv', 'uv', {}, {}, ['uv']);
+    compiles([uv, shape, saved('glowLayer', 'g', { mode: 'neon' }, { d: ['c', 'distance'] }, ['result']), saved('output', 'out', {}, { color: ['g', 'result'] }, [])]);
+    compiles([uv, shape, saved('distanceFalloff', 'g', {}, { distance: ['c', 'distance'] }, ['falloff']), saved('output', 'out', {}, { color: ['g', 'falloff'] }, [])]);
+    compiles([uv, shape, saved('deepGlow', 'g', {}, { d: ['c', 'distance'] }, ['result']), saved('output', 'out', {}, { color: ['g', 'result'] }, [])]);
+    compiles([uv, saved('light2d', 'g', {}, { uv: ['uv', 'uv'] }, ['light']), saved('output', 'out', {}, { color: ['g', 'light'] }, [])]);
   });
 });

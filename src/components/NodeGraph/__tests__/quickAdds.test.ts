@@ -19,7 +19,7 @@ describe('suggestQuickAdds', () => {
   });
 
   it('sends a distance output to SDF colourers and any other float to a colour', () => {
-    expect(suggestQuickAdds({ type: 'float', dir: 'out', label: 'Distance' }).map(q => q.type)).toEqual(['sdfFill', 'glowLayer', 'sdfColorize']);
+    expect(suggestQuickAdds({ type: 'float', dir: 'out', label: 'Distance' }).map(q => q.type)).toEqual(['sdfFill', 'light', 'sdfColorize']);
     expect(suggestQuickAdds({ type: 'float', dir: 'out', label: 'Value' }).map(q => q.type)).toEqual(['floatToVec3', 'palette', 'colorRamp']);
     expect(suggestQuickAdds({ type: 'vec2', dir: 'out', label: 'UV' }).map(q => q.type)).toEqual(['circleSDF', 'fbm', 'gradient']);
     expect(suggestQuickAdds({ type: 'vec3', dir: 'out', label: 'Color' }).map(q => q.type)).toEqual(['brightnessContrast', 'vignette', 'blendModes']);

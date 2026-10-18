@@ -9,7 +9,6 @@ function ownColour(params: Record<string, unknown>, key: string, ctx: { value: s
   const v = params[key];
   return typeof v === 'string' || Array.isArray(v) ? pv3(v, [1, 1, 1]) : null;
 }
-const GLOW_DRIVERS = ['surface', ...DRIVERS_2D] as const;
 const FILL_DRIVERS = ['inside', ...DRIVERS_2D] as const;
 
 // ── Basic SDF combiners ───────────────────────────────────────────────────────
@@ -91,7 +90,7 @@ export const AddColorNode: NodeDefinition = {
 // ── Compound / smart combiners ────────────────────────────────────────────────
 
 /**
- * Glow types: how a distance becomes glow (Glow Layer's Type, and the 2D Scene Builder's Look → Glow
+ * Glow types: how a distance becomes glow (SDF Glow's Halo … Inverse square modes, once Glow Layer's Type, and the 2D Scene Builder's Look → Glow
  * type, which writes the same formulas into its Expression Blocks). i is the amount (how far the glow
  * reaches, in picture units), p the falloff. Every type but Halo and Rim is 1 inside the shape.
  */
@@ -119,94 +118,6 @@ export function glowFormula(type: string, d: string, i: string, pw: string): str
     default: return `pow(${i} / max(abs(${d}), 0.0001), ${pw})`;
   }
 }
-
-export const GlowLayerNode: NodeDefinition = {
-  type: 'glowLayer',
-  label: 'Glow Layer',
-  category: 'Combiners',
-  description: 'Turns a signed distance field into a coloured glow. Type picks the formula: Halo (the classic Intensity ÷ |SDF|), Soft, Exponential, Gaussian, Neon, Rim or Inverse square. Intensity is how far it reaches, Power sharpens the falloff.',
-  inputs: {
-    d:         { type: 'float', label: 'SDF' },
-    color:     { type: 'vec3',  label: 'Color' },
-    intensity: { type: 'float', label: 'Intensity' },
-    power:     { type: 'float', label: 'Power' },
-  },
-  outputs: { result: { type: 'vec3', label: 'Glow' } },
-  defaultParams: { intensity: 0.01, power: 1.0, mode: 'halo' },
-  paramDefs: {
-    mode:      { label: 'Type', type: 'select', options: GLOW_TYPES.map(t => ({ value: t, label: GLOW_TYPE_LABELS[t].label })),
-      hint: GLOW_TYPES.map(t => `${GLOW_TYPE_LABELS[t].label}: ${GLOW_TYPE_LABELS[t].blurb}`).join('\n') },
-    intensity: { label: 'Intensity', type: 'float', min: 0.001, max: 0.2,  step: 0.001, hint: 'The amount: how far the glow reaches.' },
-    power:     { label: 'Power',     type: 'float', min: 0.1,   max: 4.0,  step: 0.05, hint: 'The falloff: bigger fades faster.' },
-    color:     { label: 'Color', type: 'vec3color', gradient: GLOW_DRIVERS, hint: 'The glow\'s colour when nothing is wired to Color (white until you pick one). Gradient: by distance from the shape, or across the picture.' },
-  },
-  glslFunctionsFor: node => (gradientOn(node.params, 'color') && !node.inputs.color?.connection ? [PF_GRADIENT_GLSL] : []),
-  generateGLSL: (node: GraphNode, inputVars) => {
-    const id      = node.id;
-    const dVar    = inputVars.d         || '1.0';
-    const cVar    = inputVars.color     || ownColour(node.params, 'color', { value: `abs(${dVar})` }, GLOW_DRIVERS) || 'vec3(1.0)';
-    const iVar    = inputVars.intensity || p(node.params.intensity, 0.01);
-    const pVar    = inputVars.power     || p(node.params.power, 1.0);
-    return {
-      code: [
-        `    float ${id}_g = ${glowFormula(String(node.params.mode ?? 'halo'), dVar, iVar, pVar)};\n`,
-        `    vec3 ${id}_result = ${cVar} * ${id}_g;\n`,
-      ].join(''),
-      outputVars: { result: `${id}_result` },
-    };
-  },
-};
-
-export const DeepGlowNode: NodeDefinition = {
-  type: 'deepGlow',
-  label: 'Deep Glow',
-  category: 'Combiners',
-  description: 'After Effects-style "Deep Glow": a sharp core plus a wide, non-linear light bleed, with saturated glow color and built-in Reinhard tonemapping so the HDR falloff never clips to flat white.',
-  inputs: {
-    d:            { type: 'float', label: 'SDF' },
-    color:        { type: 'vec3',  label: 'Color' },
-    intensity:    { type: 'float', label: 'Intensity' },
-    radius:       { type: 'float', label: 'Radius' },
-    saturation:   { type: 'float', label: 'Saturation' },
-    edgeSoftness: { type: 'float', label: 'Edge Softness' },
-  },
-  outputs: { result: { type: 'vec3', label: 'Result' } },
-  defaultParams: { intensity: 1.5, radius: 0.08, saturation: 1.2, edgeSoftness: 0.01 },
-  paramDefs: {
-    intensity:    { label: 'Intensity',     type: 'float', min: 0.0,  max: 5.0,  step: 0.05 },
-    radius:       { label: 'Radius',        type: 'float', min: 0.01, max: 4.0,  step: 0.01, hint: 'Distance units, not pixels — scale to whatever feeds SDF. A raw SDF is usually 0.02–0.3; a raw scalar Field (e.g. Chladni) can need 1–4 for a visible bleed.' },
-    saturation:   { label: 'Saturation',    type: 'float', min: 1.0,  max: 3.0,  step: 0.05 },
-    edgeSoftness: { label: 'Edge Softness', type: 'float', min: 0.0,  max: 0.2,  step: 0.005 },
-  },
-  glslFunction: `
-vec3 deep_glow(float d, vec3 baseColor, float intensity, float radius, float saturation, float edgeSoftness) {
-    // Sharp core (1 inside the shape, 0 at/past the edge)
-    float core = smoothstep(edgeSoftness, 0.0, d);
-    // Non-linear inverse-square falloff — sharp inner halo, soft far-reaching bleed
-    float glow = intensity / pow(max(d, 0.0) / max(radius, 0.0001) + 1.0, 2.0);
-    // Hyper-saturate the bleed color relative to the core color
-    vec3 glowColor = pow(max(baseColor, vec3(0.0)), vec3(saturation));
-    vec3 hdrColor = (baseColor * core) + (glowColor * glow);
-    // Reinhard tonemap — rolls off HDR values instead of clipping to white
-    return hdrColor / (hdrColor + vec3(1.0));
-}`,
-  generateGLSL: (node: GraphNode, inputVars) => {
-    const id   = node.id;
-    // No SDF wired — treat as "fully inside the shape everywhere" (d = 0) rather
-    // than "far outside" (which would make core/glow collapse to ~nothing), so a
-    // bare Color input still gets the full saturated-HDR + tonemap treatment.
-    const dVar = inputVars.d         || '0.0';
-    const cVar = inputVars.color     || 'vec3(1.0)';
-    const iVar = inputVars.intensity    || p(node.params.intensity, 1.5);
-    const rVar = inputVars.radius       || p(node.params.radius, 0.08);
-    const sVar = inputVars.saturation   || p(node.params.saturation, 1.2);
-    const eVar = inputVars.edgeSoftness || p(node.params.edgeSoftness, 0.01);
-    return {
-      code: `    vec3 ${id}_result = deep_glow(${dVar}, ${cVar}, ${iVar}, ${rVar}, ${sVar}, ${eVar});\n`,
-      outputVars: { result: `${id}_result` },
-    };
-  },
-};
 
 /**
  * One pixel of anti-aliasing for an SDF edge ("Crisp").

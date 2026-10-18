@@ -127,13 +127,13 @@ describe('stops are uniforms', () => {
 });
 
 describe('each driver compiles in its context', () => {
-  it('2D: SDF Fill (Edge → inside + UV), Glow Layer (Distance to surface + UV), Colorize (Field + UV)', () => {
+  it('2D: SDF Fill (Edge → inside + UV), SDF Glow (Distance to surface + UV), Colorize (Field + UV)', () => {
     for (const along of ['inside', ...DRIVERS_2D] as GradientDriver[]) {
       const r = ok(fillGraph(gradientParams('fillColor', grad({ along }))));
       expect(r.fragmentShader, along).toContain('pfGradient(');
     }
     for (const along of ['surface', ...DRIVERS_2D] as GradientDriver[]) {
-      const r = ok([node('c', 'circleSDF', {}), node('g', 'glowLayer', gradientParams('color', grad({ along })), { d: { nodeId: 'c', outputKey: 'distance' } }), out('g', 'result')]);
+      const r = ok([node('c', 'circleSDF', {}), node('g', 'light', { mode: 'halo', ...gradientParams('tint', grad({ along })) }, { distance: { nodeId: 'c', outputKey: 'distance' } }), out('g', 'tinted')]);
       expect(r.fragmentShader, along).toContain('pfGradient(');
     }
     for (const along of ['field', ...DRIVERS_2D] as GradientDriver[]) {

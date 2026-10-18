@@ -718,11 +718,11 @@ export function buildScene2D(spec: Scene2D, idFor: (role: string) => string = ro
         if (crisp) gateNode(g, L.mute?.glow, { from: 'crisp' });
         acc = ref(g, 'result');
       } else {
-        // Glow Layer (its Soft type is this formula) added over what is behind.
+        // SDF Glow in Soft mode (this formula) added over what is behind.
         const gt = gtype('soft');
-        const g = mk(c, 'glowLayer', `${it.id}:glow`, { intensity: L.glow.amount, power: L.glow.falloff, mode: gt }, { d, color: fill },
-          `The glow of ${name} (Style: Glow, type ${GLOW_TYPE_LABELS[gt].label}): ${GLOW_TYPE_LABELS[gt].blurb} With Soft (the default) it is the shape's own colour inside and at the edge, fading out from there, so the shape and its glow read as one. Intensity is how far it reaches, Power how fast it fades; both live.`);
-        acc = ref(mk(c, 'addColor', `${it.id}:addglow`, {}, { a: acc, b: ref(g, 'result') }, `Adds ${name}'s glow to what is behind it. No flat fill is painted over it. Light adds up, so it can go past 1; Tone Map brings it back.`), 'result');
+        const g = mk(c, 'light', `${it.id}:glow`, { mode: gt, reach: L.glow.amount, power: L.glow.falloff, perDistance: false }, { distance: d, tint: fill },
+          `The glow of ${name} (Style: Glow, type ${GLOW_TYPE_LABELS[gt].label}): ${GLOW_TYPE_LABELS[gt].blurb} With Soft (the default) it is the shape's own colour inside and at the edge, fading out from there, so the shape and its glow read as one. Reach is how far it reaches, Power how fast it fades; both live.`);
+        acc = ref(mk(c, 'addColor', `${it.id}:addglow`, {}, { a: acc, b: ref(g, 'tinted') }, `Adds ${name}'s glow to what is behind it. No flat fill is painted over it. Light adds up, so it can go past 1; Tone Map brings it back.`), 'result');
       }
     } else if (style === 'glow') {
       // Glow style on a layer that doesn't glow (Look → Glow off, or not marked): the crisp shape.
@@ -731,9 +731,9 @@ export function buildScene2D(spec: Scene2D, idFor: (role: string) => string = ro
     } else if (glows) {
       const glowFrom = acc;
       const ht = gtype('halo');
-      const g = mk(c, 'glowLayer', `${it.id}:glow`, { intensity: L.glow.amount, power: L.glow.falloff, ...(ht !== 'halo' ? { mode: ht } : {}) }, { d, color: glowTint ?? fill },
-        `The glow of ${name}: its colour × (${fmt(L.glow.amount)} ÷ distance) ^ ${fmt(L.glow.falloff)}. A bigger Intensity reaches further; a bigger Power makes it fall off faster. It is added to what is behind, then the shape is painted over it.`);
-      acc = ref(mk(c, 'addColor', `${it.id}:addglow`, {}, { a: acc, b: ref(g, 'result') }, `Adds ${name}'s glow to what is behind it. Light adds up, so it can go past 1; Tone Map brings it back.`), 'result');
+      const g = mk(c, 'light', `${it.id}:glow`, { mode: ht, reach: L.glow.amount, power: L.glow.falloff, perDistance: false }, { distance: d, tint: glowTint ?? fill },
+        `The glow of ${name}: its colour × (${fmt(L.glow.amount)} ÷ distance) ^ ${fmt(L.glow.falloff)}. A bigger Reach reaches further; a bigger Power makes it fall off faster. It is added to what is behind, then the shape is painted over it.`);
+      acc = ref(mk(c, 'addColor', `${it.id}:addglow`, {}, { a: acc, b: ref(g, 'tinted') }, `Adds ${name}'s glow to what is behind it. Light adds up, so it can go past 1; Tone Map brings it back.`), 'result');
       gateChain(c.nodes, glowFrom, acc, L.mute?.glow);
     }
     if (style === 'filled') {
@@ -940,9 +940,9 @@ function emitGrid(b: B, g: GridSpec, pos: Ref, screen: Ref, behind: Ref, anim: R
   }
   let acc = behind;
   if (L.glow.mode === 'all' || (g.glow && L.glow.mode !== 'off')) {
-    const gl = mk(c, 'glowLayer', 'grid:glow', { intensity: L.glow.amount, power: L.glow.falloff }, { d, color: fill },
+    const gl = mk(c, 'light', 'grid:glow', { mode: 'halo', reach: L.glow.amount, power: L.glow.falloff, perDistance: false }, { distance: d, tint: fill },
       `The grid's glow: its colour × (${fmt(L.glow.amount)} ÷ distance) ^ ${fmt(L.glow.falloff)}, added to what is behind.`);
-    acc = ref(mk(c, 'addColor', 'grid:addglow', {}, { a: acc, b: ref(gl, 'result') }, 'Adds the grid\'s glow to what is behind it.'), 'result');
+    acc = ref(mk(c, 'addColor', 'grid:addglow', {}, { a: acc, b: ref(gl, 'tinted') }, 'Adds the grid\'s glow to what is behind it.'), 'result');
   }
   return ref(mk(c, 'sdfFill', 'grid:fill', {}, { d, fillColor: fill, background: acc }, 'Paints the grid\'s shapes over what is behind them.'), 'result');
 }

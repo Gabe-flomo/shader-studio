@@ -410,7 +410,7 @@ describe('Grid scene: the default glow and the shape read as one shape', () => {
     const d = 0.05, halo = (L.glowAmount / d) ** L.glowFalloff;
     expect(soft(d) / halo).toBeGreaterThan(0.85);
     s.look.glowStyle = 'halo';
-    expect(buildStandaloneGrid(s).nodes.find(n => n.params[GS_ROLE] === 'glow')!.type).toBe('glowLayer');
+    expect(buildStandaloneGrid(s).nodes.find(n => n.params[GS_ROLE] === 'glow')!.type).toBe('light');
   });
 });
 

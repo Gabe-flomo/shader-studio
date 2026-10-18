@@ -108,7 +108,37 @@ export const NODE_ALIASES: Record<string, NodeAlias> = {
   curlWarp:   { to: 'uvWarp', params: o => ({ ...o, kind: 'curl', strength: num(o.strength, 0.15), scale: num(o.scale, 3.0), speed: num(o.speed, 0.4) }) },
   swirlWarp:  { to: 'uvWarp', params: o => ({ ...o, kind: 'swirl', strength: num(o.strength, 2.0), falloff: num(o.falloff, 4.0), cx: num(o.cx, 0.0), cy: num(o.cy, 0.0), speed: num(o.speed, 0.3) }) },
   swirlSpace: { to: 'uvWarp', params: o => ({ ...o, kind: 'swirl', strength: num(o.strength, 2.0), falloff: num(o.falloff, 1.0), cx: 0.0, cy: 0.0, speed: 0.0 }) },
+
+  // ── 2026-10-17 sweep: one SDF Glow (effects.ts LightNode) with every distance falloff as a Mode, each the
+  //    old node's formula. Per distance stays off (the old nodes counted per step in a March Loop). ──
+  // Glow Layer: its Type is the mode, its Intensity the Reach, its Color (and gradient) the Tint.
+  glowLayer: { to: 'light', inputs: { d: 'distance', color: 'tint', intensity: 'reach' }, outputs: { result: 'tinted' },
+               params: o => ({ ...renameColour(o), mode: GLOW_LAYER_TYPES.includes(o.mode as string) ? o.mode : 'halo',
+                 reach: num(o.intensity, 0.01), power: num(o.power, 1.0), intensity: undefined, perDistance: false }) },
+  // Distance Falloff: its Rate is the Falloff (k); Bounded Inv² is Bounded inverse power.
+  distanceFalloff: { to: 'light', inputs: { k: 'brightness' }, outputs: { falloff: 'glow' },
+                     params: o => ({ ...o, mode: FALLOFF_MODE[String(o.mode)] ?? 'invPow', brightness: num(o.k, 5.0), power: num(o.power, 2.0), k: undefined, perDistance: false }) },
+  // Deep Glow (the SDF one): Deep glow mode, its Color the Tint (white when it had none), Result the Tinted output.
+  deepGlow: { to: 'light', inputs: { d: 'distance', color: 'tint' }, outputs: { result: 'tinted' },
+              params: o => ({ ...o, mode: 'deep', intensity: num(o.intensity, 1.5), radius: num(o.radius, 0.08), saturation: num(o.saturation, 1.2),
+                edgeSoftness: num(o.edgeSoftness, 0.01), tint: [1, 1, 1], perDistance: false }) },
 };
+
+/** Glow Layer's Types (combiners.ts GLOW_TYPES), each an SDF Glow mode of the same name. */
+const GLOW_LAYER_TYPES = ['halo', 'soft', 'exp', 'gauss', 'neon', 'rim', 'invsq'];
+/** Distance Falloff's modes → SDF Glow's. */
+const FALLOFF_MODE: Record<string, string> = { bounded_inv_sq: 'invPow', gaussian: 'gaussBump', linear: 'cone', wyvill: 'wyvill' };
+/** Glow Layer's colour setting (and its gradient's keys, `color__…`) as SDF Glow's Tint (white when it had none). */
+function renameColour(o: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(o)) {
+    if (k === 'color') out.tint = v;
+    else if (k.startsWith('color__')) out[`tint__${k.slice(7)}`] = v;
+    else out[k] = v;
+  }
+  if (out.tint === undefined) out.tint = [1, 1, 1];
+  return out;
+}
 
 /** Canonical params for a node created fresh (no old params) or migrated. */
 export function aliasParams(alias: NodeAlias, old: Record<string, unknown>): Record<string, unknown> {

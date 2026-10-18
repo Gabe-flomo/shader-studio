@@ -76,12 +76,12 @@ describe('Fits here', () => {
       b.inputs[firstIn(to)].connection = { nodeId: `${id}a`, outputKey: circleOut };
       return { nodes: [n('circleSDF', `${id}a`, 0, 0), b] };
     };
-    const counts = buildFollowCounts([g('sdfFill', 'x'), g('sdfFill', 'y'), g('sdfFill', 'z'), g('glowLayer', 'w')]);
+    const counts = buildFollowCounts([g('sdfFill', 'x'), g('sdfFill', 'y'), g('sdfFill', 'z'), g('light', 'w')]);
     const outType = defs.find(d => d.type === 'circleSDF')!.outputs[circleOut].type;
     const fits = rankFits('circleSDF', outType, defs, counts).map(d => d.type);
     expect(fits[0]).toBe('sdfFill');
-    expect(fits).toContain('glowLayer');
-    expect(fits.indexOf('sdfFill')).toBeLessThan(fits.indexOf('glowLayer'));
+    expect(fits).toContain('light');
+    expect(fits.indexOf('sdfFill')).toBeLessThan(fits.indexOf('light'));
   });
   it('is empty for a type the corpus never saw, and skips hidden types', () => {
     const defs = getOfferedDefinitions();

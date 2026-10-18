@@ -57,7 +57,7 @@ export { FieldCellNode } from './fieldCell';
 export { GridLayoutNode, WaveRadiusNode, NeighborDistNode, CellFilterNode, CellDisplaceNode, GridDensityWarpNode, NeighborOffset2dNode, AnimatedCellCenterNode, NeighborAttractCirclesNode } from './grid';
 
 // Grid Field
-export { GaussianFieldNode, FieldAccumulateNode, MetaballThresholdNode, FieldToLinesNode, DistanceFalloffNode, NoisyGridSDFNode } from './gridField';
+export { GaussianFieldNode, FieldAccumulateNode, MetaballThresholdNode, FieldToLinesNode, NoisyGridSDFNode } from './gridField';
 
 // Transforms
 export { FractNode, Rotate2DNode, UVWarpNode, DisplaceNode, UvTransform2dNode, UvReciprocalNode } from './transforms';
@@ -82,7 +82,7 @@ export { SdSegmentNode, SdEllipseNode, SdfOffsetNode, SdfSharpenNode } from './s
 
 // Combiners
 export {
-  MaskNode, AddColorNode, GlowLayerNode, DeepGlowNode, SDFFillNode, SDFColorizeNode,
+  MaskNode, AddColorNode, SDFFillNode, SDFColorizeNode,
   AlphaBlendNode, Light2DNode,
 } from './combiners';
 
@@ -228,7 +228,7 @@ import { PiecesNode, BallsNode } from './pieces';
 import { ArrayFieldNode } from './arrayField';
 import { FieldCellNode } from './fieldCell';
 import { GridLayoutNode, WaveRadiusNode, NeighborDistNode, CellFilterNode, CellDisplaceNode, GridDensityWarpNode, NeighborOffset2dNode, AnimatedCellCenterNode, NeighborAttractCirclesNode } from './grid';
-import { GaussianFieldNode, FieldAccumulateNode, MetaballThresholdNode, FieldToLinesNode, DistanceFalloffNode, NoisyGridSDFNode } from './gridField';
+import { GaussianFieldNode, FieldAccumulateNode, MetaballThresholdNode, FieldToLinesNode, NoisyGridSDFNode } from './gridField';
 import { FractNode, Rotate2DNode, UVWarpNode, DisplaceNode, UvTransform2dNode, UvReciprocalNode } from './transforms';
 import {
   PolarSpaceNode, LogPolarSpaceNode, HyperbolicSpaceNode, InversionSpaceNode,
@@ -240,7 +240,7 @@ import {
 import { CircleSDFNode, BoxSDFNode, RingSDFNode, ShapeSDFNode, SimpleSDFNode } from './primitives';
 import { SdSegmentNode, SdEllipseNode, SdfOffsetNode, SdfSharpenNode } from './sdf';
 import {
-  MaskNode, AddColorNode, GlowLayerNode, DeepGlowNode, SDFFillNode, SDFColorizeNode,
+  MaskNode, AddColorNode, SDFFillNode, SDFColorizeNode,
   AlphaBlendNode, Light2DNode,
 } from './combiners';
 import {
@@ -479,7 +479,6 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   fieldAccumulate: FieldAccumulateNode,
   metaballThreshold: MetaballThresholdNode,
   fieldToLines: FieldToLinesNode,
-  distanceFalloff: DistanceFalloffNode,
   noisyGridSDF: NoisyGridSDFNode,
   shear: ShearNode,
   perspective2d: Perspective2DNode,
@@ -501,8 +500,6 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   // Combiners
   mask: MaskNode,
   addColor: AddColorNode,
-  glowLayer: GlowLayerNode,
-  deepGlow: DeepGlowNode,
   sdfFill: SDFFillNode,
   sdfColorize: SDFColorizeNode,
   alphaBlend: AlphaBlendNode,
