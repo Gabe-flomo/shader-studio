@@ -1,7 +1,7 @@
 /**
  * settings.ts — whether the Suggestions strip shows (localStorage `playfield:suggestions:strip`,
- * listed in App settings → Studio). Hidden with the strip's ×, back with the canvas toolbar's
- * Suggestions button or by resetting the setting.
+ * listed in App settings → Studio). Off unless turned on: the canvas right-click menu's
+ * Show Next suggestions (stored as 'on'); hidden again with the strip's × or that menu.
  */
 import { useSyncExternalStore } from 'react';
 
@@ -12,7 +12,7 @@ let shown: boolean | null = null;
 
 function read(): boolean {
   if (shown === null) {
-    try { shown = localStorage.getItem(STRIP_KEY) !== 'off'; } catch { shown = true; }
+    try { shown = localStorage.getItem(STRIP_KEY) === 'on'; } catch { shown = false; }
   }
   return shown;
 }
@@ -22,8 +22,8 @@ export function suggestionsShown(): boolean { return read(); }
 export function setSuggestionsShown(on: boolean): void {
   shown = on;
   try {
-    if (on) localStorage.removeItem(STRIP_KEY);
-    else localStorage.setItem(STRIP_KEY, 'off');
+    if (on) localStorage.setItem(STRIP_KEY, 'on');
+    else localStorage.removeItem(STRIP_KEY);
   } catch { /* storage blocked: this session only */ }
   for (const fn of listeners) fn();
 }
@@ -37,7 +37,7 @@ const subscribe = (fn: () => void) => {
 };
 
 export function useSuggestionsShown(): boolean {
-  return useSyncExternalStore(subscribe, read, () => true);
+  return useSyncExternalStore(subscribe, read, () => false);
 }
 
 // ── Folded or open ───────────────────────────────────────────────────────────
