@@ -66,6 +66,7 @@ import routesSource from './kit/routes.js?raw';
 import fnSource from './kit/fn.js?raw';
 import spreadSource from './kit/spread.js?raw';
 import drumPadsSource from './kit/drumPads.js?raw';
+import samplerSource from './kit/sampler.js?raw';
 import granulatorSource from './kit/granulator.js?raw';
 import macrosSource from './kit/macros.js?raw';
 import jfaSource from './kit/jfa.js?raw';
@@ -390,16 +391,18 @@ export function leftBehind(play: PlayRecord, media?: PlayMedia, opts: { graphs?:
       ? { what: `The sound “${sm.name}” (${sizeText(bytes)}) in ${r.name}’s Granulator`, why: `Sounds over ${sizeText(AUDIO_LIMIT)} stay out of the page, so that Granulator is silent there. Trim it, or pick a generated sample.` }
       : { what: `The sound “${sm.name}” in ${r.name}’s Granulator`, why: 'Its file isn’t open in this session (still loading, or this browser’s library doesn’t have it), so that Granulator is silent on the page. Open the Play page until its waveform shows, then export again.' });
   }
-  // Drum pads: a sample over the limit, or not opened this session, stays out; that pad is silent on the page.
+  // Samplers: a sample over the limit, or not opened this session, stays out; that pad (or zone) is silent on the page.
   for (const l of play.layers) {
-    if (l.kind !== 'drumpad') continue;
-    l.pads.forEach((p, i) => {
-      if (!p.sampleId || media?.layerPads?.[l.id]?.[i]?.src) return;
-      const bytes = media?.layerPads?.[l.id]?.[i]?.bytes || p.bytes;
+    if (l.kind !== 'sampler') continue;
+    const each = (p: { sampleId: string; fileName: string; bytes: number }, key: string, where: string) => {
+      if (!p.sampleId || media?.layerPads?.[l.id]?.[key]?.src) return;
+      const bytes = media?.layerPads?.[l.id]?.[key]?.bytes || p.bytes;
       out.push(bytes > AUDIO_LIMIT
-        ? { what: `The sound “${p.fileName}” (${sizeText(bytes)}) on pad ${i + 1} of ${l.label}`, why: `Sounds over ${sizeText(AUDIO_LIMIT)} stay out of the page, so that pad is silent there. Trim it to bring it along.` }
-        : { what: `The sound “${p.fileName}” on pad ${i + 1} of ${l.label}`, why: 'Its file isn’t open in this session (still loading, or this browser’s library doesn’t have it), so that pad is silent on the page. Open the Play page until the pad shows, then export again.' });
-    });
+        ? { what: `The sound “${p.fileName}” (${sizeText(bytes)}) on ${where} of ${l.label}`, why: `Sounds over ${sizeText(AUDIO_LIMIT)} stay out of the page, so that ${where.split(' ')[0]} is silent there. Trim it to bring it along.` }
+        : { what: `The sound “${p.fileName}” on ${where} of ${l.label}`, why: `Its file isn’t open in this session (still loading, or this browser’s library doesn’t have it), so that ${where.split(' ')[0]} is silent on the page. Open the Play page until it shows, then export again.` });
+    };
+    l.pads.forEach((p, i) => each(p, String(i), `pad ${i + 1}`));
+    (l.zones ?? []).forEach((z, i) => each(z, `z${z.id}`, `zone ${i + 1}`));
   }
   for (const l of play.layers) {
     if (l.kind === 'audio' && l.input === 'file') {
@@ -459,7 +462,7 @@ export function mediaCarried(media?: PlayMedia, hands?: HandAssets | 'pending', 
   for (const l of play?.layers ?? []) {
     const f = l.kind === 'video' ? media?.layerVideos?.[l.id] : undefined;
     if (f?.src) out.push({ what: `Video “${f.name}” in ${f.label}`, bytes: f.src.length });
-    if (l.kind === 'drumpad') for (const s of Object.values(media?.layerPads?.[l.id] ?? {})) if (s.src) out.push({ what: `Sound “${s.name}” in ${s.label}`, bytes: s.src.length });
+    if (l.kind === 'sampler') for (const s of Object.values(media?.layerPads?.[l.id] ?? {})) if (s.src) out.push({ what: `Sound “${s.name}” in ${s.label}`, bytes: s.src.length });
   }
   for (const s of Object.values(media?.rackSamples ?? {})) if (s.src) out.push({ what: `Sound “${s.name}” in ${s.label}`, bytes: s.src.length });
   const queue = backgroundLayerOf(play);
@@ -541,9 +544,13 @@ export function playBundle(input: PlayHtmlInput) {
   if (play.layers.some(l => l.kind === 'video')) {
     play.layers = play.layers.map(l => (l.kind === 'video' ? { ...l, src: input.media?.layerVideos?.[l.id]?.src ?? '' } as typeof l : l));
   }
-  // Drum pad layers carry their samples in their pads (data URLs, when they came along).
-  if (play.layers.some(l => l.kind === 'drumpad')) {
-    play.layers = play.layers.map(l => (l.kind === 'drumpad' ? { ...l, pads: l.pads.map((p, i) => ({ ...p, src: input.media?.layerPads?.[l.id]?.[i]?.src ?? '' })) } as typeof l : l));
+  // Sampler layers carry their samples in their pads and zones (data URLs, when they came along).
+  if (play.layers.some(l => l.kind === 'sampler')) {
+    play.layers = play.layers.map(l => (l.kind === 'sampler' ? {
+      ...l,
+      pads: l.pads.map((p, i) => ({ ...p, src: input.media?.layerPads?.[l.id]?.[i]?.src ?? '' })),
+      zones: (l.zones ?? []).map(z => ({ ...z, src: input.media?.layerPads?.[l.id]?.[`z${z.id}`]?.src ?? '' })),
+    } as typeof l : l));
   }
   // Granulator racks carry a Library sample in their sample (a data URL, when it came along); generated ones need nothing.
   if (play.audioEngine?.racks.some(r => r.instrument?.kind === 'granulator' && r.instrument.sample?.sampleId)) {
@@ -600,7 +607,7 @@ export const KIT_FILES: { name: string; src: string; group?: KitGroup }[] = [
   { name: 'finishGlsl', src: finishGlslSource, group: 'finish' }, { name: 'blur', src: blurSource, group: 'blur' }, { name: 'rays', src: raysSource, group: 'blur' }, { name: 'chroma', src: chromaSource, group: 'blur' }, { name: 'deepglow', src: deepglowSource, group: 'blur' },
   { name: 'finish', src: finishSource, group: 'finish' }, { name: 'waterLayer', src: waterLayerSource, group: 'finish' },
   { name: 'signals', src: signalsSource }, { name: 'routes', src: routesSource }, { name: 'increment', src: incrementSource },
-  { name: 'audioFx', src: audioFxSource, group: 'audioFx' }, { name: 'drumPads', src: drumPadsSource, group: 'drums' },
+  { name: 'audioFx', src: audioFxSource, group: 'audioFx' }, { name: 'drumPads', src: drumPadsSource, group: 'drums' }, { name: 'sampler', src: samplerSource, group: 'drums' },
   { name: 'granulator', src: granulatorSource, group: 'drums' }, { name: 'macros', src: macrosSource }, { name: 'fn', src: fnSource },
   { name: 'spread', src: spreadSource }, { name: 'jfa', src: jfaSource, group: 'jfa' }, { name: 'gpuParticles', src: gpuParticlesSource, group: 'gpuParticles' },
   { name: 'passPlan', src: passPlanSource }, { name: 'passHost', src: passHostSource, group: 'passes' },
@@ -630,6 +637,7 @@ const KIT_API: [string, string, KitGroup?, string?][] = [
   ['finish', '{ create: fnCreate, active: fnActive, mapLayers: fnMapLayers, usesMotion: fnUsesMotion, looks: { create: fnLookNew, act: fnLookAct, step: fnLookStep, value: fnLookValue, reset: fnLookReset, is: fnLookIs } }', 'finish'],
   ['audioFx', '{ chain: afCreateChain, loadWorklet: afLoadWorklet, needsWorklet: afNeedsWorklet }', 'audioFx'],
   ['drumPads', '{ sampler: dpCreateSampler, numbers: dpHitNumbers, key: dpKey, synth: dpSynthBuffer, padOfKey: dpPadOfKey, padOfNote: dpPadOfNote, padOfCell: dpPadOfCell, slots: dpSlots, pick: dpPickPad, hash: dpHash01 }', 'drums'],
+  ['sampler', '{ create: smCreateSampler, hits: smHits, padOfNote: smPadOfNote, pianoOffset: smPianoOffset }', 'drums'],
   ['granulator', '{ create: grCreate, settings: grSettings, summary: grSummary, synth: grSynthBuffer, params: GR_PARAMS, fromPoints: grFromPoints }', 'drums'],
   ['macros', '{ curve: mcCurve, value: mcTargetValue }'],
   ['signals', '{ gate: sgGate, condNew: sgCondNew, condStep: sgCondStep, condRewind: sgCondRewind, logic: sgLogic, order: sgSignalOrder, signalPlan: sgSignalPlan, levelDeps: sgLevelDeps, pulseLinks: sgPulseLinks, reactions: sgReactions, shapeNew: sgShapeNew, shapeRewind: sgShapeRewind, shaped: sgShaped, shapeStep: sgShapeStep, lagNew: sgLagNew, lagStep: sgLagStep, linkPlan: sgLinkPlan, linkNew: sgLinkNew, linkClear: sgLinkClear, linkFire: sgLinkFire, linkDue: sgLinkDue, runActions: sgRunActions, swapNew: sgSwapNew, swapStep: sgSwapStep, parseRef: sgParseValueRef, point: sgScreenPoint, valueKey: sgValueKey, depth: SG_DEPTH }'],
@@ -662,7 +670,7 @@ export function kitGroupsFor(bundle: ReturnType<typeof playBundle>): Set<KitGrou
   if (bundle.datasets || /"kind":"data"|dataset/i.test(json)) g.add('data');
   if (play.finish || /"kind":"water"|look/i.test(json)) g.add('finish');
   if (play.audioFx) g.add('audioFx');
-  if (play.audioEngine || json.includes('"kind":"drumpad"')) g.add('drums');
+  if (play.audioEngine || json.includes('"kind":"sampler"')) g.add('drums');
   if (/\bu_layers(Field)?\b/.test(shaders)) g.add('jfa');
   if (bundle.graphPasses?.length) g.add('passes');
   if (bundle.agents) g.add('agentsGpu');

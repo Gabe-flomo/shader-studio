@@ -249,7 +249,7 @@ exports[`golden shaders: every Play example exports the same bundle > displaceTe
 
 exports[`golden shaders: every Play example exports the same bundle > drumPads 1`] = `
 {
-  "bundle": "186bbfde6fbb64008fb5847dc3a1:11078",
+  "bundle": "084dc2d3a652050e2fc4f9a7b73d:15742",
   "missing": [],
 }
 `;

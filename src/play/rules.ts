@@ -126,7 +126,7 @@ export function defaultReaction(play: PlayRecord, layerId?: string): PlayReactio
   const l = play.layers.find(x => x.id === layerId) ?? play.layers[play.layers.length - 1];
   const id = `re_${Date.now().toString(36)}_${(++reSeq).toString(36)}`;
   if (!l) return { id, do: SIGNAL_ACTION, layerId: '', amount: 1, enabled: true, signal: '' };
-  return { id, do: actionsForLayer(l)[0], layerId: l.id, amount: l.kind === 'drumpad' ? 1 : 60, enabled: true };
+  return { id, do: actionsForLayer(l)[0], layerId: l.id, amount: l.kind === 'sampler' ? 1 : 60, enabled: true };
 }
 let reSeq = 0;
 

@@ -77,7 +77,7 @@ describe('a reader comes with a control', () => {
 
   it('groups by what the readers listen to: a rack, a video layer, drum pads, a song', () => {
     const rack = { ...newRack('r1', []), name: 'Bass rack' };
-    const base: PlayRecord = { ...empty(), layers: [defaultLayer('video', 'v1', 'Clip'), defaultLayer('drumpad', 'd1', 'Kit')], audioEngine: { racks: [rack] } };
+    const base: PlayRecord = { ...empty(), layers: [defaultLayer('video', 'v1', 'Clip'), defaultLayer('sampler', 'd1', 'Kit')], audioEngine: { racks: [rack] } };
     const on = (input: string, songLabel?: (id: string) => string | undefined) => readerGroupName({ ...base, audioReaders: { input, readers: [] } }, songLabel);
     expect(on('')).toBe('Audio readers · Live');
     expect(on('engine:r1')).toBe('Audio readers · Bass rack');

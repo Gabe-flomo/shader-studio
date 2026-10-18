@@ -68,7 +68,7 @@ describe('the record', () => {
 
 describe('the edits (mattes.ts)', () => {
   it('candidates exclude nulls, the Background layer, and drum pads / relationships', () => {
-    const layers = [L('shape', 'a'), L('null', 'n'), L('background', 'bg', { sources: [] }), L('drumpad', 'd'), L('image', 'i')];
+    const layers = [L('shape', 'a'), L('null', 'n'), L('background', 'bg', { sources: [] }), L('sampler', 'd'), L('image', 'i')];
     expect(backgroundMatteCandidates(layers).map(l => l.id)).toEqual(['a', 'i']);
   });
 

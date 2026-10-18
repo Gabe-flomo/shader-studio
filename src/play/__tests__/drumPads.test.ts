@@ -54,7 +54,7 @@ const firstLoud = (d: Float32Array, over = 1e-3) => d.findIndex(v => Math.abs(v)
 const lastLoud = (d: Float32Array, over = 1e-3) => { for (let i = d.length - 1; i >= 0; i--) if (Math.abs(d[i]) > over) return i; return -1; };
 function rms(d: Float32Array, from: number, to: number): number { let s = 0; for (let i = from; i < to; i++) s += d[i] * d[i]; return Math.sqrt(s / Math.max(1, to - from)); }
 const flat = { attack: 0, decay: 0, sustain: 1, release: 0.05, volume: 1, pan: 0, vel: 0 };
-const drums = (over: Record<string, unknown> = {}): DrumPadLayer => ({ ...(defaultLayer('drumpad', 'drums', 'Drums') as DrumPadLayer), ...over });
+const drums = (over: Record<string, unknown> = {}): DrumPadLayer => ({ ...(defaultLayer('sampler', 'drums', 'Drums') as DrumPadLayer), ...over });
 
 describe('pad math', () => {
   it('pitch is semitones of playback rate', () => {
@@ -242,13 +242,14 @@ describe('triggering', () => {
   });
   const take = () => got.splice(0);
 
-  it('MIDI notes from the base note play pads 1–16, with their velocity', () => {
+  it('MIDI notes play the pad on their note (pad 1 is the base note; all 128 pads), with their velocity', () => {
     take();
     midiEngine.handleMessage({ kind: 'noteOn', channel: 1, note: 38, velocity: 127 });
     midiEngine.handleMessage({ kind: 'noteOn', channel: 1, note: 60, velocity: 127 });
     midiEngine.handleMessage({ kind: 'noteOn', channel: 2, note: 36, velocity: 64 });
+    midiEngine.handleMessage({ kind: 'noteOn', channel: 2, note: 35, velocity: 64 });
     const hits = take();
-    expect(hits.map(h => [h.amount, Math.round((h.vel ?? 0) * 100) / 100])).toEqual([[3, 1], [1, 0.5]]);
+    expect(hits.map(h => [h.amount, Math.round((h.vel ?? 0) * 100) / 100])).toEqual([[3, 1], [25, 1], [1, 0.5], [128, 0.5]]);
     expect(hits[0].do).toBe('pad');
   });
   it('a channel and a base note of its own', () => {
@@ -303,28 +304,31 @@ describe('triggering', () => {
 });
 
 describe('the record', () => {
-  it('a new layer: 16 empty pads, keys, MIDI and grid on, every pad number at its default', () => {
+  it('a new layer: 16 empty pads in view, keys, MIDI and grid on; a pad’s numbers come with its sound', () => {
     const l = drums();
     expect(l.pads).toHaveLength(16);
     expect(l.pads.every(p => !p.sampleId && !p.synth && p.mode === 'oneshot')).toBe(true);
-    expect(l).toMatchObject({ keys: true, midi: true, grid: true, baseNote: 36, channel: 0 });
-    for (const p of DP_PARAMS) expect(l[dpKey(15, p.key) as `pad${number}_${string}`]).toBe(p.value);
+    expect(l).toMatchObject({ kind: 'sampler', view: 'drum', bank: 36, keys: true, midi: true, grid: true, baseNote: 36, channel: 0 });
+    for (const p of DP_PARAMS) expect(l[dpKey(15, p.key) as `pad${number}_${string}`]).toBeUndefined();
+    const parsed = parseLayer({ ...l, pads: [{ synth: 'kick' }] }) as DrumPadLayer;
+    for (const p of DP_PARAMS) expect(parsed[dpKey(0, p.key) as `pad${number}_${string}`]).toBe(p.value);
     // Pads are copies: one layer's pads aren't another's.
     const other = drums();
     other.pads[0].synth = 'kick';
     expect(drums().pads[0].synth).toBe('');
   });
   it('a file keeps what is valid and falls back for the rest (old files: no pads at all)', () => {
-    const l = parseLayer({ id: 'd', kind: 'drumpad', label: 'Kit', pads: [{ sampleId: 'snd_1', fileName: 'kick.wav', bytes: 99, mode: 'gate', loop: true, choke: 42, synth: 'banjo' }, null, 'x'], pad1_pitch: 99, pad2_volume: 0.3, volume: 'loud' }) as DrumPadLayer;
+    const l = parseLayer({ id: 'd', kind: 'sampler', label: 'Kit', pads: [{ sampleId: 'snd_1', fileName: 'kick.wav', bytes: 99, mode: 'gate', loop: true, choke: 42, synth: 'banjo' }, null, 'x'], pad1_pitch: 99, pad2_volume: 0.3, volume: 'loud' }) as DrumPadLayer;
     expect(l.pads).toHaveLength(16);
-    expect(l.pads[0]).toMatchObject({ sampleId: 'snd_1', fileName: 'kick.wav', bytes: 99, mode: 'gate', loop: true, choke: 8, synth: '' });
-    expect(l.pad1_pitch).toBe(24);
-    expect(l.pad2_volume).toBe(0.3);
-    expect(l.pad3_decay).toBe(0.2);
+    expect(l.pads[0]).toMatchObject({ sampleId: 'snd_1', fileName: 'kick.wav', bytes: 99, mode: 'gate', loop: true, choke: 16, synth: '' });
+    expect(l.pad1_pitch).toBe(96);
+    // Pads without a sound keep no numbers.
+    expect(l.pad2_volume).toBeUndefined();
+    expect(l.pad1_decay).toBe(0.2);
     expect(l.volume).toBe(0.9);
-    const bare = parseLayer({ id: 'd', kind: 'drumpad', label: 'Kit' }) as DrumPadLayer;
+    const bare = parseLayer({ id: 'd', kind: 'sampler', label: 'Kit' }) as DrumPadLayer;
     expect(bare.pads).toHaveLength(16);
-    expect(bare.pad16_end).toBe(1);
+    expect(bare.pad16_end).toBeUndefined();
   });
   it('Play pad actions and pad hits in takes survive a save', () => {
     const rec = parsePlayRecordAsSaved({
@@ -353,7 +357,7 @@ describe('the record', () => {
     expect(opts.map(o => o.label)).toContain('Drum pads · a layer no longer in the setup');
   });
   it('Add layer offers it', () => {
-    expect(BUILTIN_LAYERS.some(b => b.kind === 'drumpad')).toBe(true);
+    expect(BUILTIN_LAYERS.some(b => b.kind === 'sampler')).toBe(true);
   });
 });
 

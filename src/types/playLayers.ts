@@ -16,7 +16,8 @@
 
 import { cpIsPlain, cpParse, type CpSaved } from '../play/kit/clipPlay.js';
 import { LINKED_PREFIX, LINKED_REF_MAX, isLinkedRef } from '../files/linkedRefs';
-import { DP_CHOKES, DP_INDEX_MODES, DP_PADS, DP_PARAMS, DP_SYNTHS, dpKey, type DpIndexMode, type DpMode, type DpSynth } from '../play/kit/drumPads.js';
+import { DP_INDEX_MODES, DP_PADS, DP_SYNTHS, dpKey, type DpIndexMode, type DpMode, type DpSynth } from '../play/kit/drumPads.js';
+import { SM_CHOKES, SM_FILTERS, SM_KEYS_PARAMS, SM_LFO_SHAPES, SM_LFO_TO, SM_MODES, SM_PADS, SM_PARAMS, SM_SELECT, SM_ZONES, smKeyProp, smRootFromName, type SmFilter, type SmLfoShape, type SmLfoTo, type SmMode, type SmSelect } from '../play/kit/sampler.js';
 import { AG_GROUPS, AG_MAX, AG_RULES, AG_RULE_TYPES, AG_TARGETS, AG_CHANNELS, agPresetLayer } from '../play/kit/agents.js';
 import { DM_BEHAVIOURS, DM_CHANNELS, DM_DEFAULTS, DM_HINTS, type DmBehaviour, type DmChannel, type DmQuality } from '../play/kit/displace.js';
 import { WL_PARAMS } from '../play/kit/waterLayer.js';
@@ -868,14 +869,15 @@ export function videoLayerOfInput(input: string): string | null {
   return input.startsWith('video:') && input.length > 6 ? input.slice(6) : null;
 }
 
-// ── Drum pads ───────────────────────────────────────────────────────────────
+// ── Sampler (was Drum pads) ─────────────────────────────────────────────────
 
 /**
- * One pad of a Drum pad layer: what it plays and how (its numbers are layer
- * properties, `pad<N>_<key>`, so each is a mapping target). The sample lives
- * in the media library (IndexedDB, lib/backgroundLibrary.ts, next to the
- * videos) and the pad keeps its id, name and size; or it plays a generated
- * drum (`synth`), which needs no file at all.
+ * One pad of a Sampler's Drum view (a chain, Drum Rack-style): what it plays
+ * and how (its numbers are layer properties, `pad<N>_<key>` with every
+ * SM_PARAMS key, so each is a mapping target). The sample lives in the media
+ * library (IndexedDB, lib/backgroundLibrary.ts, next to the videos) and the
+ * pad keeps its id, name and size; or it plays a generated drum (`synth`),
+ * which needs no file at all.
  */
 export interface DrumPad {
   /** '' for an empty pad (or a generated one). */
@@ -886,36 +888,114 @@ export interface DrumPad {
   synth: DpSynth | '';
   /** A name of its own ('' shows the file's or the drum's). */
   name: string;
-  /** One-shot plays to the end; gate plays while held. */
+  /** One-shot plays to the end; gate (Classic) plays while held. */
   mode: DpMode;
-  /** Gate: start to end round and round while held. */
+  /** Classic: loop between the loop markers while held. */
   loop: boolean;
   reverse: boolean;
-  /** 1..8: a hit cuts every voice in the same group (an open hat by a closed one). 0: none. */
+  /** 1..16: a hit cuts every voice in the same group (an open hat by a closed one). 0: none. */
   choke: number;
+  /** The pad's filter (off when absent). */
+  filter?: SmFilter;
+  lfoShape?: SmLfoShape;
+  lfoTo?: SmLfoTo;
+}
+/** A Sampler pad (the Drum view's chains): the drum pads' pad, with its filter and LFO choices. */
+export type SamplerPad = DrumPad;
+
+/**
+ * A zone of the Sampler's Keys view (Ableton Sampler's zone): a sample
+ * across a key range and a velocity range, pitched from its root key.
+ * Its sample settings are plain fields (the instrument's numbers are the
+ * layer's `k_<key>` properties).
+ */
+export interface SamplerZone {
+  id: number;
+  sampleId: string;
+  fileName: string;
+  bytes: number;
+  synth: DpSynth | '';
+  name: string;
+  /** Lowest and highest key (0..127). */
+  lo: number;
+  hi: number;
+  /** The key where it plays at its own pitch. */
+  root: number;
+  /** Lowest and highest velocity (1..127). */
+  vlo: number;
+  vhi: number;
+  /** Semitones and cents. */
+  tune: number;
+  detune: number;
+  /** Linear gain (1 as recorded) and pan (−1..1), on top of the instrument's. */
+  gain: number;
+  pan: number;
+  start: number;
+  end: number;
+  loopStart: number;
+  loopEnd: number;
+  /** Loop crossfade, seconds. */
+  xfade: number;
+  loop: boolean;
+  reverse: boolean;
+  /** Pitch tracking: off plays every key at the root's pitch. */
+  track: boolean;
+  /** Slice mode: where each slice starts (0..1 of the sample), sorted. */
+  slices?: number[];
+}
+
+/** The Keys view's instrument settings (its numbers are `k_<key>` layer properties). */
+export interface SamplerInst {
+  mode: SmMode;
+  /** Overlapping zones: all together, in turn, or one at random (seeded). */
+  select: SmSelect;
+  seed: number;
+  /** Polyphony 1..32; 1 with Legato glides held notes. */
+  voices: number;
+  retrigger: boolean;
+  legato: boolean;
+  filter: SmFilter;
+  lfoShape: SmLfoShape;
+  lfoTo: SmLfoTo;
+  /** Slice mode: how readily a jump in level makes a new slice (0..1). */
+  sensitivity: number;
+  /** Slice mode: slices play while held (Classic) rather than to their end. */
+  sliceGate: boolean;
 }
 
 /**
- * A drum pad sampler (docs/drum-pads.md): 16 pads, each a sample played
- * Simpler-style, hit by clicks, keys, MIDI notes and grid pads, actions and
- * takes. It draws nothing: its sound goes through its effect chain
- * (`layer:<id>`) to the master bus, and audio readers can listen to it
- * (`pads:<id>`).
+ * The Sampler (docs/sampler.md), after Ableton's Simpler, Sampler and Drum
+ * Rack: a **Drum view** (128 pads, 16 in view, each a chain with its own
+ * sample and voice settings; choke groups) and a **Keys view** (zones across
+ * the keyboard). Hit by clicks, keys, MIDI notes and grid pads, actions and
+ * takes: every hit names a pad, and pad N is note (baseNote + N − 1) mod 128.
+ * It draws nothing: its sound goes through its effect chain (`layer:<id>`)
+ * to the master bus, and audio readers can listen to it (`pads:<id>`).
+ * Files from before (kind `drumpad`, the Drum pads layer) load as its Drum view.
  */
-export interface DrumPadLayer extends LayerBase {
-  kind: 'drumpad';
+export interface SamplerLayer extends LayerBase {
+  kind: 'sampler';
+  view: 'drum' | 'keys';
+  /** The Drum view's window: its first note (36: C1–D#2, Drum Rack's). */
+  bank: number;
+  /** Pad i (0-based) plays note (baseNote + i) mod 128. At least 16; trailing empty pads are dropped. */
   pads: DrumPad[];
-  /** The whole kit's level, after its effect chain. */
+  zones: SamplerZone[];
+  inst: SamplerInst;
+  /** The whole layer's level, after its effect chain. */
   volume: number;
-  /** Z X C V / A S D F / Q W E R / 1 2 3 4 play pads 1–16. */
+  /** Drum view: Z X C V / A S D F / Q W E R / 1 2 3 4 play the window's 16 pads. Keys view: A W S E D… play notes. */
   keys: boolean;
-  /** MIDI notes from `baseNote` play pads 1–16 (36–51 by default, a drum rack's). */
+  /** MIDI notes play the pads (Drum) or the zones (Keys). */
   midi: boolean;
   /** 0: any channel. */
   channel: number;
+  /** The note pad 1 plays (36 by default, a drum rack's). */
   baseNote: number;
-  /** The pad grid's lower-left 4 × 4 plays the pads. */
+  /** The pad grid's lower-left 4 × 4 plays the window's pads. */
   grid: boolean;
+  /** Keys view: the computer keyboard's octave (A plays C of it; 3 is C3 = 60). */
+  octave: number;
   /**
    * Sample index (docs/drum-pads.md): a hit on a pad plays the sound of the
    * pad `Index` places further on among the pads that play something
@@ -930,23 +1010,38 @@ export interface DrumPadLayer extends LayerBase {
   /** The random modes' seed: the same seed picks the same pads in the same order. */
   indexSeed: number;
   [padKey: `pad${number}_${string}`]: number;
+  [instKey: `k_${string}`]: number;
 }
+/** The old name (the Drum pads layer is the Sampler's Drum view now). */
+export type DrumPadLayer = SamplerLayer;
 
 export const emptyDrumPad = (): DrumPad => ({ sampleId: '', fileName: '', bytes: 0, synth: '', name: '', mode: 'oneshot', loop: false, reverse: false, choke: 0 });
 /** Does the pad play anything? */
-export const padHasSound = (p: DrumPad | undefined): boolean => !!p && (!!p.sampleId || !!p.synth);
+export const padHasSound = (p: Pick<DrumPad, 'sampleId' | 'synth'> | undefined | null): boolean => !!p && (!!p.sampleId || !!p.synth);
 /** What a pad is called: its own name, its file's, its drum's, or "Pad 3". */
-export function padName(p: DrumPad | undefined, i: number): string {
+export function padName(p: Pick<DrumPad, 'name' | 'fileName' | 'synth'> | undefined, i: number): string {
   if (!p) return `Pad ${i + 1}`;
   return p.name || p.fileName.replace(/\.[a-z0-9]{2,4}$/i, '') || (p.synth ? DRUM_SYNTH_LABELS[p.synth] : '') || `Pad ${i + 1}`;
 }
 export const DRUM_SYNTH_LABELS: Record<DpSynth, string> = { kick: 'Kick', snare: 'Snare', hat: 'Closed hat', openhat: 'Open hat', clap: 'Clap', tom: 'Tom', rim: 'Rim', cowbell: 'Cowbell' };
+/** A zone's name: its own, its file's, its drum's, or "Zone 2". */
+export const zoneName = (z: SamplerZone | undefined, i: number): string => padName(z, i).replace(/^Pad /, 'Zone ');
 
-/** Every pad number at its default, for a new layer. */
-function drumPadNumbers(): Record<string, number> {
-  const out: Record<string, number> = {};
-  for (let i = 0; i < DP_PADS; i++) for (const p of DP_PARAMS) out[dpKey(i, p.key)] = p.value;
-  return out;
+export const defaultSamplerInst = (): SamplerInst => ({ mode: 'classic', select: 'all', seed: 1, voices: 8, retrigger: true, legato: false, filter: 'off', lfoShape: 'sine', lfoTo: 'pitch', sensitivity: 0.5, sliceGate: false });
+/** A new zone for a sound: every key, every velocity, at its root (from its file name, else C3). */
+export function newSamplerZone(id: number, sound: Partial<SamplerZone>): SamplerZone {
+  return {
+    id, sampleId: '', fileName: '', bytes: 0, synth: '', name: '', lo: 0, hi: 127, root: smRootFromName(sound.fileName ?? '', 60), vlo: 1, vhi: 127,
+    tune: 0, detune: 0, gain: 1, pan: 0, start: 0, end: 1, loopStart: 0, loopEnd: 1, xfade: 0, loop: false, reverse: false, track: true, ...sound,
+  };
+}
+/** A pad's every number at its default (a patch), for when a pad gets a sound. */
+export function padNumbers(i: number): Record<string, number> {
+  return Object.fromEntries(SM_PARAMS.map(p => [dpKey(i, p.key), p.value]));
+}
+/** The Keys view's instrument numbers at their defaults. */
+function samplerInstNumbers(): Record<string, number> {
+  return Object.fromEntries(SM_KEYS_PARAMS.map(p => [smKeyProp(p.key), p.value]));
 }
 
 /** Every member's picture strength at its default (1), for a new Relationship layer. */
@@ -1026,31 +1121,85 @@ export function newAgentRule(l: Pick<AgentsLayer, 'rules'>, type: AgentRuleType)
   return { rule, numbers: Object.fromEntries(agentRuleNumbers(rule)) };
 }
 
+function parsePadFields(r: Record<string, unknown>, p: { sampleId: string; fileName: string; bytes: number; synth: DpSynth | ''; name: string }): void {
+  if (typeof r.sampleId === 'string') p.sampleId = r.sampleId.slice(0, 200);
+  if (typeof r.fileName === 'string') p.fileName = r.fileName.slice(0, 120);
+  if (typeof r.bytes === 'number' && Number.isFinite(r.bytes)) p.bytes = Math.max(0, Math.round(r.bytes));
+  if ((DP_SYNTHS as readonly string[]).includes(r.synth as string)) p.synth = r.synth as DpSynth;
+  if (typeof r.name === 'string') p.name = r.name.slice(0, 60);
+  // A web export carries the sample in the pad itself (runtime only).
+  if (typeof r.src === 'string' && r.src.startsWith('data:audio/')) (p as typeof p & { src?: string }).src = r.src;
+}
+
 function parseDrumPads(v: unknown): DrumPad[] {
   const arr = Array.isArray(v) ? v : [];
   const out: DrumPad[] = [];
-  for (let i = 0; i < DP_PADS; i++) {
+  for (let i = 0; i < Math.min(SM_PADS, Math.max(DP_PADS, arr.length)); i++) {
     const r = arr[i] && typeof arr[i] === 'object' ? arr[i] as Record<string, unknown> : {};
     const p = emptyDrumPad();
-    if (typeof r.sampleId === 'string') p.sampleId = r.sampleId.slice(0, 200);
-    if (typeof r.fileName === 'string') p.fileName = r.fileName.slice(0, 120);
-    if (typeof r.bytes === 'number' && Number.isFinite(r.bytes)) p.bytes = Math.max(0, Math.round(r.bytes));
-    if ((DP_SYNTHS as readonly string[]).includes(r.synth as string)) p.synth = r.synth as DpSynth;
-    if (typeof r.name === 'string') p.name = r.name.slice(0, 60);
+    parsePadFields(r, p);
     if (r.mode === 'gate') p.mode = 'gate';
     p.loop = r.loop === true;
     p.reverse = r.reverse === true;
-    if (typeof r.choke === 'number' && Number.isFinite(r.choke)) p.choke = Math.max(0, Math.min(DP_CHOKES, Math.round(r.choke)));
-    // A web export carries the sample in the pad itself (runtime only).
-    if (typeof r.src === 'string' && r.src.startsWith('data:audio/')) (p as DrumPad & { src?: string }).src = r.src;
+    if (typeof r.choke === 'number' && Number.isFinite(r.choke)) p.choke = Math.max(0, Math.min(SM_CHOKES, Math.round(r.choke)));
+    if ((SM_FILTERS as readonly string[]).includes(r.filter as string) && r.filter !== 'off') p.filter = r.filter as SmFilter;
+    if ((SM_LFO_SHAPES as readonly string[]).includes(r.lfoShape as string) && r.lfoShape !== 'sine') p.lfoShape = r.lfoShape as SmLfoShape;
+    if ((SM_LFO_TO as readonly string[]).includes(r.lfoTo as string) && r.lfoTo !== 'pitch') p.lfoTo = r.lfoTo as SmLfoTo;
     out.push(p);
+  }
+  // Trailing empty pads aren't kept (16 at least, the first window).
+  while (out.length > DP_PADS && !padHasSound(out[out.length - 1])) out.pop();
+  return out;
+}
+
+const fin = (v: unknown, lo: number, hi: number, d: number, int = false) => (typeof v === 'number' && Number.isFinite(v) ? Math.max(lo, Math.min(hi, int ? Math.round(v) : v)) : d);
+
+export function parseSamplerZones(v: unknown): SamplerZone[] {
+  if (!Array.isArray(v)) return [];
+  const out: SamplerZone[] = [], seen = new Set<number>();
+  for (const raw of v) {
+    if (!raw || typeof raw !== 'object' || out.length >= SM_ZONES) continue;
+    const r = raw as Record<string, unknown>;
+    let id = fin(r.id, 1, 9999, 0, true);
+    if (!id || seen.has(id)) { id = 1; while (seen.has(id)) id++; }
+    seen.add(id);
+    const z = newSamplerZone(id, {});
+    parsePadFields(r, z);
+    z.lo = fin(r.lo, 0, 127, 0, true); z.hi = fin(r.hi, 0, 127, 127, true);
+    if (z.hi < z.lo) [z.lo, z.hi] = [z.hi, z.lo];
+    z.root = fin(r.root, 0, 127, 60, true);
+    z.vlo = fin(r.vlo, 1, 127, 1, true); z.vhi = fin(r.vhi, 1, 127, 127, true);
+    if (z.vhi < z.vlo) [z.vlo, z.vhi] = [z.vhi, z.vlo];
+    z.tune = fin(r.tune, -48, 48, 0); z.detune = fin(r.detune, -50, 50, 0);
+    z.gain = fin(r.gain, 0, 4, 1); z.pan = fin(r.pan, -1, 1, 0);
+    z.start = fin(r.start, 0, 1, 0); z.end = fin(r.end, 0, 1, 1);
+    z.loopStart = fin(r.loopStart, 0, 1, 0); z.loopEnd = fin(r.loopEnd, 0, 1, 1); z.xfade = fin(r.xfade, 0, 10, 0);
+    z.loop = r.loop === true; z.reverse = r.reverse === true; z.track = r.track !== false;
+    if (Array.isArray(r.slices)) {
+      const s = r.slices.filter((x): x is number => typeof x === 'number' && Number.isFinite(x) && x >= 0 && x < 1).slice(0, SM_PADS).sort((a, b) => a - b);
+      if (s.length) z.slices = s;
+    }
+    out.push(z);
   }
   return out;
 }
 
-/** The audio readers' input for a Drum pad layer's sound. */
+export function parseSamplerInst(v: unknown): SamplerInst {
+  const d = defaultSamplerInst();
+  if (!v || typeof v !== 'object') return d;
+  const r = v as Record<string, unknown>;
+  const pickOf = <T extends string>(xs: readonly T[], x: unknown, fb: T): T => ((xs as readonly string[]).includes(x as string) ? x as T : fb);
+  return {
+    mode: pickOf(SM_MODES, r.mode, d.mode), select: pickOf(SM_SELECT, r.select, d.select), seed: fin(r.seed, 0, 999999, d.seed, true),
+    voices: fin(r.voices, 1, 32, d.voices, true), retrigger: r.retrigger !== false, legato: r.legato === true,
+    filter: pickOf(SM_FILTERS, r.filter, d.filter), lfoShape: pickOf(SM_LFO_SHAPES, r.lfoShape, d.lfoShape), lfoTo: pickOf(SM_LFO_TO, r.lfoTo, d.lfoTo),
+    sensitivity: fin(r.sensitivity, 0, 1, d.sensitivity), sliceGate: r.sliceGate === true,
+  };
+}
+
+/** The audio readers' input for a Sampler layer's sound. */
 export const padsReaderInput = (layerId: string) => `pads:${layerId}`;
-/** The Drum pad layer id an audio readers' input names, or null. */
+/** The Sampler layer id an audio readers' input names, or null. */
 export function padsLayerOfInput(input: string): string | null {
   return input.startsWith('pads:') && input.length > 5 ? input.slice(5) : null;
 }
@@ -1464,10 +1613,10 @@ export interface DataLayer extends LayerBase {
 let dataItemCount: (l: DataLayer) => number = () => 0;
 export function setDataItemCount(fn: (l: DataLayer) => number): void { dataItemCount = fn; }
 
-export type PlayLayer = NullLayer | TextLayer | ImageLayer | ParticlesLayer | ShapeLayer | AudioLayer | GlyphsLayer | ContoursLayer | LensLayer | BrushLayer | BodiesLayer | CameraLayer | ClonerLayer | ScriptLayer | BackgroundLayer | DataLayer | VideoLayer | DrumPadLayer | RelationshipLayer | AgentsLayer | MotionLayer | WaterLayer;
+export type PlayLayer = NullLayer | TextLayer | ImageLayer | ParticlesLayer | ShapeLayer | AudioLayer | GlyphsLayer | ContoursLayer | LensLayer | BrushLayer | BodiesLayer | CameraLayer | ClonerLayer | ScriptLayer | BackgroundLayer | DataLayer | VideoLayer | SamplerLayer | RelationshipLayer | AgentsLayer | MotionLayer | WaterLayer;
 export type PlayLayerKind = PlayLayer['kind'];
 
-export const LAYER_KINDS: readonly PlayLayerKind[] = ['null', 'text', 'image', 'particles', 'shape', 'audio', 'glyphs', 'contours', 'lens', 'brush', 'bodies', 'camera', 'cloner', 'script', 'background', 'data', 'video', 'drumpad', 'relationship', 'agents', 'motion', 'water'];
+export const LAYER_KINDS: readonly PlayLayerKind[] = ['null', 'text', 'image', 'particles', 'shape', 'audio', 'glyphs', 'contours', 'lens', 'brush', 'bodies', 'camera', 'cloner', 'script', 'background', 'data', 'video', 'sampler', 'relationship', 'agents', 'motion', 'water'];
 
 /** The starter sketch a new Script layer holds. */
 export const DEFAULT_SCRIPT = `// A sketch: setup runs once, draw runs every frame.
@@ -1624,7 +1773,10 @@ const LAYER_DEFAULTS: { [K in PlayLayerKind]: Defaults<Extract<PlayLayer, { kind
     toShader: true, videoId: '', fileName: '', bytes: 0, fit: 'contain', x: 0.5, y: 0.5, scale: 1, rotation: 0, opacity: 1, mirror: false, color: [0, 0, 0], blend: 'normal', matte: 'over',
     playing: true, loop: true, speed: 1, start: 0, follow: true, sound: 'off', volume: 0.8,
   },
-  drumpad: { toShader: false, pads: Array.from({ length: DP_PADS }, emptyDrumPad), volume: 0.9, keys: true, midi: true, channel: 0, baseNote: 36, grid: true, sampleIndex: 0, indexMode: 'index', indexSpread: 1, indexSeed: 1, ...drumPadNumbers() },
+  sampler: {
+    toShader: false, view: 'drum', bank: 36, pads: Array.from({ length: DP_PADS }, emptyDrumPad), zones: [], inst: defaultSamplerInst(), volume: 0.9, keys: true, midi: true, channel: 0, baseNote: 36, grid: true, octave: 3,
+    sampleIndex: 0, indexMode: 'index', indexSpread: 1, indexSeed: 1, ...samplerInstNumbers(),
+  },
   cloner: {
     toShader: true, sourceId: '', hideSource: true, arrange: 'grid', count: 12, cols: 5, rows: 3, x: 0.5, y: 0.5, x2: 0.9, y2: 0.5, spacingX: 0.25, spacingY: 0.25,
     radius: 0.3, startAngle: 0, sweep: 360, face: false, pathId: '', spread: 1, jitter: 0, seed: 1,
@@ -1667,8 +1819,11 @@ type Field =
   | { t: 'ids' }
   /** A Background layer's queue. */
   | { t: 'queue' }
-  /** A Drum pad layer's pads. */
+  /** A Sampler layer's pads. */
   | { t: 'drumpads' }
+  /** A Sampler layer's zones and instrument settings. */
+  | { t: 'samplerZones' }
+  | { t: 'samplerInst' }
   /** A Relationship layer's members. */
   | { t: 'members' }
   /** An Agents layer's rule stack. */
@@ -1770,10 +1925,11 @@ const LAYER_SCHEMA: Record<PlayLayerKind, Record<string, Field>> = {
       [`g${i + 1}_count`, N(0, AG_MAX, true)], [`g${i + 1}_color`, C], [`g${i + 1}_size`, N(0.2, 60)], [`g${i + 1}_drain`, N(0, 10)], [`g${i + 1}_respawn`, N(0, 500)],
     ] as const).flat()),
   },
-  drumpad: {
-    toShader: B, pads: { t: 'drumpads' }, volume: N(0, 1.5), keys: B, midi: B, channel: N(0, 16, true), baseNote: N(0, 112, true), grid: B,
-    sampleIndex: N(-1000, 1000), indexMode: E(...DP_INDEX_MODES), indexSpread: N(0, DP_PADS), indexSeed: N(0, 999999, true),
-    ...Object.fromEntries(Array.from({ length: DP_PADS }, (_, i) => DP_PARAMS.map(p => [dpKey(i, p.key), N(p.min, p.max)] as const)).flat()),
+  sampler: {
+    toShader: B, view: E('drum', 'keys'), bank: N(0, 112, true), pads: { t: 'drumpads' }, zones: { t: 'samplerZones' }, inst: { t: 'samplerInst' },
+    volume: N(0, 4), keys: B, midi: B, channel: N(0, 16, true), baseNote: N(0, 127, true), grid: B, octave: N(-2, 8, true),
+    sampleIndex: N(-1000, 1000), indexMode: E(...DP_INDEX_MODES), indexSpread: N(0, SM_PADS), indexSeed: N(0, 999999, true),
+    ...Object.fromEntries(SM_KEYS_PARAMS.map(p => [smKeyProp(p.key), N(p.lo, p.hi)] as const)),
   },
   video: {
     toShader: B, videoId: S, fileName: S, bytes: N(0), fit: E('height', 'contain', 'cover'), x: N(), y: N(), scale: N(0.01), rotation: N(), opacity: unit, mirror: B, color: C, blend: blendF, matte: matteF,
@@ -1825,6 +1981,8 @@ function coerce(v: unknown, f: Field, fallback: unknown): unknown {
       return Array.isArray(v) ? v.filter(isScriptParamDef).slice(0, 32).map(d => ({ ...d })) : fallback;
     case 'queue': return parseBackgroundItems(v);
     case 'drumpads': return parseDrumPads(v);
+    case 'samplerZones': return parseSamplerZones(v);
+    case 'samplerInst': return parseSamplerInst(v);
     case 'members': return parseRelationMembers(v);
     case 'agentRules': return parseAgentRules(v);
   }
@@ -1835,6 +1993,8 @@ export function parseLayer(raw: unknown): PlayLayer | null {
   if (!raw || typeof raw !== 'object') return null;
   const l = { ...(raw as Record<string, unknown>) };
   const id = typeof l.id === 'string' && l.id ? l.id : null;
+  // The Drum pads layer is the Sampler's Drum view now: same pads, numbers and settings.
+  if (l.kind === 'drumpad') { l.kind = 'sampler'; l.view = 'drum'; if (typeof l.bank !== 'number' && typeof l.baseNote === 'number') l.bank = Math.min(112, l.baseNote); }
   const kind = l.kind as PlayLayerKind;
   if (!id || !LAYER_KINDS.includes(kind)) return null;
   if (kind === 'particles') migrateParticles(l);
@@ -1846,6 +2006,8 @@ export function parseLayer(raw: unknown): PlayLayer | null {
   if (kind === 'script') parseScriptExtras(l, out);
   // A Video layer's clip settings (docs/clip-editor.md): kept only when they change something.
   if (kind === 'video') { const c = cpParse(l.clip); if (c && !cpIsPlain(c)) out.clip = c; }
+  // A Sampler's pad numbers are dynamic keys (`pad3_pitch`): every pad that plays something has them all, clamped, else defaults.
+  if (kind === 'sampler') (out.pads as DrumPad[]).forEach((p, i) => { if (padHasSound(p)) for (const d of SM_PARAMS) { const k = dpKey(i, d.key), x = l[k]; out[k] = typeof x === 'number' && Number.isFinite(x) ? Math.max(d.lo, Math.min(d.hi, x)) : d.value; } });
   // An Agents layer's rule numbers are dynamic keys (`r3_weight`): each rule's, clamped to a sane range, else its default.
   if (kind === 'agents') for (const r of out.rules as AgentRule[]) for (const [k, dv] of agentRuleNumbers(r)) { const x = l[k]; out[k] = typeof x === 'number' && Number.isFinite(x) ? Math.max(-1e4, Math.min(1e4, x)) : dv; }
   // Made from a layer kind: the id (parsePlayRecord checks the file has it).
@@ -1911,10 +2073,10 @@ export function displaceUsers(layers: readonly PlayLayer[], id: string): PlayLay
 // ── Track mattes and masks ───────────────────────────────────────────────────
 
 /** Nulls draw nothing and the Background layer is the picture: every other kind can be matted and masked. */
-export function canHaveMatte(kind: PlayLayerKind): boolean { return kind !== 'null' && kind !== 'background' && kind !== 'drumpad' && kind !== 'relationship' && kind !== 'motion'; }
+export function canHaveMatte(kind: PlayLayerKind): boolean { return kind !== 'null' && kind !== 'background' && kind !== 'sampler' && kind !== 'relationship' && kind !== 'motion'; }
 
 /** Anything that draws can be a matte, the Background layer (the picture) included. */
-export function canBeMatte(kind: PlayLayerKind): boolean { return kind !== 'null' && kind !== 'drumpad' && kind !== 'relationship'; }
+export function canBeMatte(kind: PlayLayerKind): boolean { return kind !== 'null' && kind !== 'sampler' && kind !== 'relationship'; }
 
 function parseTrackMatte(v: unknown, selfId: string): TrackMatte | null {
   if (!v || typeof v !== 'object') return null;
@@ -2080,6 +2242,8 @@ export interface LayerNumericProp {
   key: string; label: string; min: number; max: number; step?: number; hint: string;
   /** min/max are a physical limit (0–1 opacity, a pad's start in its sample): a typed value is clamped rather than widening the slider's range. */
   hard?: boolean;
+  /** Its default, when the kind's defaults don't hold one (a pad's numbers, made as it gets a sound). */
+  value?: number;
 }
 
 const X = (what: string): LayerNumericProp => ({ key: 'x', label: 'X', min: 0, max: 1, hint: `${what} across the picture: 0 is the left edge, 1 the right.` });
@@ -2239,8 +2403,8 @@ export const LAYER_NUMERIC_PROPS: Record<PlayLayerKind, ReadonlyArray<LayerNumer
     { key: 'scale', label: 'Scale', min: 0.05, max: 3, hint: 'Camera image height as a fraction of the picture height.' },
     ROT, OPACITY,
   ],
-  drumpad: [
-    { key: 'volume', label: 'Volume', min: 0, max: 1.5, hint: 'The whole kit’s level, after its effect chain.' },
+  sampler: [
+    { key: 'volume', label: 'Volume', min: 0, max: 1.5, hint: 'The whole Sampler’s level, after its effect chain.' },
     { key: 'sampleIndex', label: 'Sample index', min: 0, max: DP_PADS - 1, step: 1, hint: 'Which sound a pad plays: its own place among the pads with sounds, plus Index, wrapping round. Step it with an Increment to walk through the kit.' },
     { key: 'indexSpread', label: 'Index spread', min: 0, max: DP_PADS - 1, step: 1, hint: 'Index + random spread: how many pads either way a hit may land from Index (seeded, so a take repeats it).' },
   ],
@@ -2401,12 +2565,17 @@ function kindNumericProps(l: PlayLayer): ReadonlyArray<LayerNumericProp> {
     if (!(n > 0)) return base;
     return base.map(d => d.key === 'offset' ? { ...d, max: Math.max(1, n - 1) } : d.key === 'from' || d.key === 'to' || d.key === 'count' ? { ...d, max: Math.max(2, n) } : d);
   }
-  // Each pad that plays something: its numbers, "Pad 3 · Pitch" (`pad3_pitch`).
-  // A pad's numbers are the sampler's physical ranges (a start past the sample's end, a pan past the speakers), so they're hard.
-  if (l.kind === 'drumpad') {
+  // Each pad that plays something: its numbers, "Pad 3 · Transpose" (`pad3_pitch`); the Keys view's instrument, "Keys · Frequency" (`k_cutoff`).
+  // Physical ranges (a start past the sample's end, a pan past the speakers) are hard; times and amounts can be typed past the slider.
+  if (l.kind === 'sampler') {
     // Index runs over the pads that play something (0 … N−1).
     const last = Math.max(1, l.pads.filter(padHasSound).length - 1);
-    return [...base.map(d => d.key === 'sampleIndex' || d.key === 'indexSpread' ? { ...d, max: last } : d), ...l.pads.flatMap((p, i) => (padHasSound(p) ? DP_PARAMS.map(d => ({ key: dpKey(i, d.key), label: `Pad ${i + 1} · ${d.label}`, min: d.min, max: d.max, step: d.step, hard: true, hint: d.hint })) : []))];
+    const num = (key: string, label: string, d: (typeof SM_PARAMS)[number]): LayerNumericProp => ({ key, label, min: d.min, max: d.max, step: d.step, hint: d.hint, value: d.value, ...(d.hard ? { hard: true } : {}) });
+    return [
+      ...base.map(d => d.key === 'sampleIndex' || d.key === 'indexSpread' ? { ...d, max: last } : d),
+      ...l.pads.flatMap((p, i) => (padHasSound(p) ? SM_PARAMS.map(d => num(dpKey(i, d.key), `Pad ${i + 1} · ${d.label}`, d)) : [])),
+      ...(l.zones.length ? SM_KEYS_PARAMS.map(d => num(smKeyProp(d.key), `Keys · ${d.label}`, d)) : []),
+    ];
   }
   // Each member that reacts to the picture: its strength, "Member 2 · Picture strength" (`m2_picture`).
   if (l.kind === 'agents') return [...base, ...agentNumericProps(l)];

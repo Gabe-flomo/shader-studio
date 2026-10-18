@@ -227,7 +227,7 @@ describe('engine tracks and sends', () => {
     const layers = [
       { id: 'l1', kind: 'audio', label: 'Beat', input: 'file' }, { id: 'l2', kind: 'audio', label: 'Mic', input: 'live' },
       { id: 'v1', kind: 'video', label: 'Clip', sound: 'play' }, { id: 'v2', kind: 'video', label: 'Silent', sound: 'off' },
-      { id: 'd1', kind: 'drumpad', label: 'Pads' }, { id: 't1', kind: 'text', label: 'Title' },
+      { id: 'd1', kind: 'sampler', label: 'Pads' }, { id: 't1', kind: 'text', label: 'Title' },
     ] as unknown as PlayLayer[];
     expect(sendChoices(layers)).toEqual([
       { value: 'master', label: 'Everything the page plays' },

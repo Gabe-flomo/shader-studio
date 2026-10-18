@@ -28,7 +28,7 @@ export const SOURCE_LABELS: Record<string, string> = {
 /** Words for a layer's kind. */
 export const LAYER_KIND_LABELS: Record<string, string> = {
   image: 'Image', video: 'Video', text: 'Text', script: 'Script', particles: 'Particles', brush: 'Brush', bodies: 'Bodies', glyphs: 'Glyphs',
-  contours: 'Contours', audio: 'Audio', drumpad: 'Drum pads', camera: 'Camera', background: 'Background', data: 'Data', shape: 'Shape', null: 'Null', cloner: 'Cloner', p5: 'p5 sketch',
+  contours: 'Contours', audio: 'Audio', sampler: 'Sampler', drumpad: 'Drum pads', camera: 'Camera', background: 'Background', data: 'Data', shape: 'Shape', null: 'Null', cloner: 'Cloner', p5: 'p5 sketch',
 };
 
 const titleCase = (s: string) => s.replace(/[_-]+/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^\w/, c => c.toUpperCase());

@@ -9,7 +9,8 @@ import { useTokens } from '../../../theme/themeStore';
 import { fontFamily } from '../../../theme/tokens';
 import { NOTES_ACTION, SIGNAL_ACTION, defaultNotes, isLookAction, type PlayReaction, type PlayRecord, type TriggerSpec } from '../../../types/play';
 import { NotesEditor } from './NotesEditor';
-import { padName } from '../../../types/playLayers';
+import { padHasSound, padName } from '../../../types/playLayers';
+import { smNoteName, smNoteOfPad } from '../../../play/kit/sampler.js';
 import { IconButton } from '../../ui/Button';
 import { Toggle } from '../../ui/Choice';
 import { Select } from '../../ui/Select';
@@ -56,9 +57,13 @@ export function ReactionEditor({ ruleId, r, play, onPatch, onRemove }: {
             title={r.do === 'burst' ? 'How many particles' : r.do === 'scatter' ? 'How hard' : r.do === 'multiply' ? 'How many to bud' : 'How many to remove, youngest first'}
             onCommit={n => onPatch({ amount: Math.max(0, n) })} style={numStyle} />
         )}
-        {r.do === 'pad' && layer?.kind === 'drumpad' && (
-          <Select ariaLabel="Which pad" value={String(Math.max(1, Math.min(16, Math.round(r.amount))))} height={26}
-            options={layer.pads.map((p, i) => ({ value: String(i + 1), label: `${i + 1} · ${padName(p, i)}` }))}
+        {r.do === 'pad' && layer?.kind === 'sampler' && (
+          <Select ariaLabel="Which pad" value={String(Math.max(1, Math.min(128, Math.round(r.amount))))} height={26}
+            options={Array.from({ length: 128 }, (_, i) => {
+              // Pad N is note (base + N − 1) mod 128: its note name, and its sound in the Drum view.
+              const n = smNoteOfPad(i, layer.baseNote), p = layer.pads[i];
+              return { value: String(i + 1), label: `${i + 1} · ${smNoteName(n)}${layer.view === 'drum' && padHasSound(p) ? ` · ${padName(p, i)}` : ''}` };
+            })}
             onChange={v => onPatch({ amount: Number(v) })} />
         )}
         {r.do === 'goto' && layer?.kind === 'background' && (

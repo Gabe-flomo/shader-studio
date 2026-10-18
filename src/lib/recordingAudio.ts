@@ -53,8 +53,8 @@ import type { GraphNode } from '../types/nodeGraph';
 import { videoLayerTimeAt, type VideoLayer } from '../types/playLayers';
 import { videoSound } from './videoSound';
 import { padSound } from './padSound';
-import { dpCreateSampler, dpHitNumbers, dpKey } from '../play/kit/drumPads.js';
-import type { DrumPad, DrumPadLayer } from '../types/playLayers';
+import { smCreateSampler, smHits, smParam, SM_DRUM_VOICES } from '../play/kit/sampler.js';
+import { padHasSound, type DrumPad, type SamplerLayer, type SamplerZone } from '../types/playLayers';
 
 export interface RecordingTrack {
   key: string;
@@ -125,31 +125,32 @@ export function sendFx(fx: PlayAudioFx | undefined, source: string): PlayAudioFx
   return { ...fx, chains };
 }
 
-/** A Drum pad layer in a mix: its settings when the export starts, and each pad's decoded sample. */
+/** A Sampler layer in a mix: its settings when the export starts, and each pad's and zone's decoded sample. */
 export interface PadTrack {
   layerId: string;
-  layer: Pick<DrumPadLayer, 'volume' | 'pads'> & Record<string, unknown>;
-  buffers: ReadonlyArray<AudioBuffer | null>;
+  layer: Pick<SamplerLayer, 'volume' | 'pads'> & Partial<Pick<SamplerLayer, 'view' | 'zones' | 'inst' | 'baseNote'>> & Record<string, unknown>;
+  /** A pad's or zone's sample, by the pad or zone. */
+  buffer: (sound: DrumPad | SamplerZone) => AudioBuffer | null;
 }
 
-/** A drum pad hit in a mix: `t` seconds into it, pad 0-based, velocity (0 lets a gate pad go). */
-export interface PadHit { layerId: string; pad: number; vel: number; t: number }
+/** A Sampler hit in a mix: `t` seconds into it, pad 0-based, velocity (0 lets it go), and what it picked (the take's `slot`). */
+export interface PadHit { layerId: string; pad: number; vel: number; t: number; slot?: number }
 
 /** A take's pad hits as seconds into a mix starting at clock time `from`. */
 export function padHitsOf(take: { from: number; events: ReadonlyArray<{ t: number; do: string; layerId: string; amount: number; vel?: number }> } | null | undefined, from: number, length = Infinity): PadHit[] {
   if (!take) return [];
   return take.events
     .filter(e => e.do === 'pad')
-    .map(e => ({ layerId: e.layerId, pad: Math.round(e.amount) - 1, vel: e.vel ?? 1, t: take.from + e.t - from }))
+    .map(e => { const slot = (e as { slot?: number }).slot; return { layerId: e.layerId, pad: Math.round(e.amount) - 1, vel: e.vel ?? 1, t: take.from + e.t - from, ...(slot ? { slot } : {}) }; })
     .filter(h => h.t >= 0 && h.t < length && h.pad >= 0);
 }
 
-/** A Drum pad layer as a track, when any of its pads has a sample open here. */
-export function padTrackOf(l: DrumPadLayer, bufferOf: (p: DrumPad) => AudioBuffer | null): RecordingTrack | null {
+/** A Sampler layer as a track, when any of its pads or zones has a sample open here. */
+export function padTrackOf(l: SamplerLayer, bufferOf: (p: DrumPad | SamplerZone) => AudioBuffer | null): RecordingTrack | null {
   if (!l.visible) return null;
-  const buffers = l.pads.map(p => bufferOf(p));
-  if (!buffers.some(Boolean)) return null;
-  return { key: `dpad:${l.id}`, label: l.label, clock: true, chain: layerChainId(l.id), pads: { layerId: l.id, layer: l as unknown as PadTrack['layer'], buffers } };
+  const sounds = [...l.pads.filter(padHasSound), ...(l.zones ?? []).filter(padHasSound)];
+  if (!sounds.some(p => bufferOf(p))) return null;
+  return { key: `dpad:${l.id}`, label: l.label, clock: true, chain: layerChainId(l.id), pads: { layerId: l.id, layer: l as unknown as PadTrack['layer'], buffer: bufferOf } };
 }
 
 /** The audio effects for an offline mix: the record's chains, and each number through the mix (default: the record's). */
@@ -226,7 +227,7 @@ export function recordingTracks(play: PlayRecord, nodes: readonly GraphNode[]): 
   for (const l of play.layers) {
     // A video layer is heard hidden too (it keeps running while its sound is on).
     if (l.kind === 'video') { const t = videoTrackOf(l, videoSound.file(l.id)); if (t) out.push(t); continue; }
-    if (l.kind === 'drumpad') { const t = padTrackOf(l, p => padSound.buffer(p)); if (t) out.push(t); continue; }
+    if (l.kind === 'sampler') { const t = padTrackOf(l, p => padSound.buffer(p)); if (t) out.push(t); continue; }
     if (l.kind !== 'audio' || !l.visible || (l as { input?: string }).input !== 'file') continue;
     const key = `layer:${l.id}`;
     if (audioEngine.isLoaded(key)) out.push({ key, label: audioEngine.getFileName(key) || l.label, clock: true, chain: trackChainId(key) });
@@ -299,26 +300,26 @@ export async function mixBuffers(tracks: readonly RecordingTrack[], buffers: Rea
 }
 
 /**
- * A Drum pad layer's hits in an offline mix, each at its exact moment (sample
+ * A Sampler layer's hits in an offline mix, each at its exact moment (sample
  * accurate), into `input` (its chain, which ends in `volume`): the same
- * sampler as live, the pads' numbers where the take had them at each hit.
+ * engine and the same picks as live (smHits, the take's `slot`), the numbers
+ * where the take had them at each hit.
  */
 export function playPadHits(ctx: BaseAudioContext, input: AudioNode, volume: GainNode | null, track: PadTrack, hits: readonly PadHit[], valueAt?: ValueAt): void {
   const l = track.layer;
   const num = (key: string, t: number) => {
-    const base = typeof l[key] === 'number' ? l[key] as number : undefined;
+    // A number the layer doesn't hold yet is at its default (a take may still have moved it).
+    const base = typeof l[key] === 'number' ? l[key] as number : smParam(key.replace(/^pad\d+_|^k_/, ''))?.value;
     return valueAt && base !== undefined ? valueAt(track.layerId, key, base, t) : base;
   };
   if (volume) volume.gain.value = Math.max(0, num('volume', 0) ?? 1);
-  const sampler = dpCreateSampler(ctx);
+  const sampler = smCreateSampler(ctx, { voices: l.view === 'keys' ? l.inst?.voices ?? 8 : SM_DRUM_VOICES });
   sampler.output.connect(input);
+  const state = { hits: 0, lastPitch: null };
   for (const h of [...hits].filter(x => x.layerId === track.layerId).sort((a, b) => a.t - b.t)) {
-    const p = l.pads[h.pad];
-    if (!p) continue;
     if (h.vel <= 0) { sampler.release(h.pad, h.t); continue; }
-    const buffer = track.buffers[h.pad];
-    if (!buffer) continue;
-    sampler.hit(h.pad, { ...dpHitNumbers(key => num(dpKey(h.pad, key), h.t)), buffer, mode: p.mode, loop: p.loop, reverse: p.reverse, choke: p.choke, velocity: h.vel }, h.t);
+    const r = smHits(l, h.pad, h.vel, { num: key => num(key, h.t), buffer: s => track.buffer(s as DrumPad), state }, h.slot);
+    for (const v of r.voices) sampler.hit(v.group, v.o, h.t);
   }
 }
 

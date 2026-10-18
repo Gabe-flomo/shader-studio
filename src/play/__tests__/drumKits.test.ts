@@ -18,7 +18,7 @@ import {
   applyDrumKit, BUILTIN_KITS, defaultPadNumbers, deleteDrumKit, DRUM_KITS_KEY, installDrumKits, kitFromLayer, kitMissing, kitSampleIds, kitSummary, loadDrumKits, parseDrumKit, renameDrumKit, saveDrumKit, type ListKV,
 } from '../drumKits';
 import { defaultLayer } from '../../types/play';
-import { emptyDrumPad, type DrumPadLayer } from '../../types/playLayers';
+import { emptyDrumPad, padNumbers, type DrumPadLayer } from '../../types/playLayers';
 import { layerChainId, type PlayAudioFx } from '../../types/playAudioFx';
 import { afNewEffect } from '../kit/audioFx.js';
 import { DP_PADS, dpKey } from '../kit/drumPads.js';
@@ -35,10 +35,12 @@ function mapKV(): ListKV & { data: Map<string, string> } {
 }
 
 function layer(): { l: DrumPadLayer; fx: PlayAudioFx } {
-  const l = defaultLayer('drumpad', 'L1', 'Beat') as DrumPadLayer;
+  const l = defaultLayer('sampler', 'L1', 'Beat') as DrumPadLayer;
   l.pads[0] = { ...emptyDrumPad(), sampleId: 'snd_kick', fileName: 'kick.wav', bytes: 4000, name: 'Big kick', mode: 'oneshot', loop: false, reverse: false, choke: 1 };
   l.pads[1] = { ...emptyDrumPad(), synth: 'snare', mode: 'gate', loop: true, reverse: true, choke: 0 };
   l.pads[2] = { ...emptyDrumPad(), sampleId: 'snd_hat', fileName: 'hat.wav', bytes: 900 };
+  // A pad that gets a sound gets its numbers (the editor does this).
+  for (const i of [0, 1, 2]) Object.assign(l, padNumbers(i));
   l[dpKey(0, 'pitch') as `pad${number}_${string}`] = -5;
   l[dpKey(0, 'start') as `pad${number}_${string}`] = 0.1;
   l[dpKey(1, 'release') as `pad${number}_${string}`] = 0.4;
@@ -60,7 +62,7 @@ describe('drum kits: save and load', () => {
     const [loaded] = loadDrumKits(kv);
     expect(loaded).toEqual(kit);
     // Onto a fresh layer with another id: the same pads, numbers, settings, and a chain on that layer.
-    const fresh = defaultLayer('drumpad', 'L2', 'New') as DrumPadLayer;
+    const fresh = defaultLayer('sampler', 'L2', 'New') as DrumPadLayer;
     const r = applyDrumKit(fresh, undefined, loaded, 'replace');
     expect(r.layer.pads).toEqual(l.pads);
     for (let i = 0; i < DP_PADS; i++) for (const k of Object.keys(defaultPadNumbers()).filter(k => k.startsWith(`pad${i + 1}_`))) expect(r.layer[k as `pad${number}_${string}`]).toBe(l[k as `pad${number}_${string}`]);
@@ -96,9 +98,9 @@ describe('drum kits: save and load', () => {
     expect(k.name).toBe('Drum kit');
     expect(k.pads).toHaveLength(DP_PADS);
     expect(k.pads[0].synth).toBe('kick');
-    expect(k.pads[0].choke).toBe(8);
+    expect(k.pads[0].choke).toBe(16);
     expect(k.pads[1].synth).toBe('');
-    expect(k.numbers).toEqual({ pad1_pitch: 24 });
+    expect(k.numbers).toEqual({ pad1_pitch: 96 });
     expect(k.volume).toBe(2);
     expect(k.channel).toBe(16);
     expect(k.fx?.effects.map(e => e.kind)).toEqual(['reverb']);
@@ -112,7 +114,7 @@ describe('drum kits: merge against replace', () => {
   it('merge fills only the empty pads and leaves settings and effects alone', () => {
     const { l, fx } = layer();
     const kit = kitFromLayer(l, fx, 'Kit');
-    const target = defaultLayer('drumpad', 'T', 'Target') as DrumPadLayer;
+    const target = defaultLayer('sampler', 'T', 'Target') as DrumPadLayer;
     target.pads[0] = { ...emptyDrumPad(), synth: 'cowbell' };
     target[dpKey(0, 'pitch') as `pad${number}_${string}`] = 7;
     target.volume = 0.3; target.keys = true;
@@ -135,11 +137,12 @@ describe('drum kits: merge against replace', () => {
   it('replace puts the kit\'s numbers everywhere (defaults where the kit had none) and drops a chain the kit lacks', () => {
     const { l } = layer();
     const kit = kitFromLayer(l, undefined, 'Dry');
-    const target = defaultLayer('drumpad', 'T', 'Target') as DrumPadLayer;
+    const target = defaultLayer('sampler', 'T', 'Target') as DrumPadLayer;
     target[dpKey(5, 'pitch') as `pad${number}_${string}`] = 9;
     const had: PlayAudioFx = { chains: { [layerChainId('T')]: { on: true, effects: [afNewEffect('echo', 'e1')] }, master: { on: true, effects: [afNewEffect('reverb', 'm1')] } } };
     const r = applyDrumKit(target, had, kit, 'replace');
-    expect(r.layer.pad6_pitch).toBe(0);
+    // The target's own pad numbers go with its pads (an empty pad has none).
+    expect(r.layer.pad6_pitch).toBeUndefined();
     expect(r.layer.pad1_pitch).toBe(-5);
     expect(r.fx?.chains[layerChainId('T')]).toBeUndefined();
     expect(r.fx?.chains.master?.effects).toHaveLength(1);
@@ -162,7 +165,7 @@ describe('drum kits: samples and built-ins', () => {
       expect(k.id.startsWith('builtin:')).toBe(true);
       expect(kitSampleIds(k)).toEqual([]);
       expect(k.pads.filter(p => p.synth).length).toBe(DP_PADS);
-      const r = applyDrumKit(defaultLayer('drumpad', 'X', 'X') as DrumPadLayer, undefined, k, 'replace');
+      const r = applyDrumKit(defaultLayer('sampler', 'X', 'X') as DrumPadLayer, undefined, k, 'replace');
       expect(r.filled).toBe(DP_PADS);
     }
     expect(BUILTIN_KITS[1].fx?.effects[0].kind).toBe('reverb');

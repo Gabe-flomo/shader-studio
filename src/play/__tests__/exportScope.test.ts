@@ -112,7 +112,7 @@ describe('left out, held at the current value', () => {
   });
 
   it('MIDI: the pad grid, MIDI-played pads and racks; the mic: live readers, Audio layers, an Audio Input with no song', () => {
-    const pads = defaultLayer('drumpad', 'dp', 'Pads');
+    const pads = defaultLayer('sampler', 'dp', 'Pads');
     const audio = defaultLayer('audio', 'au', 'Mic');
     const play = record([mapping('k', 'glow', { kind: 'key', code: 'Space' })], {
       padGrid: { cols: 8, rows: 8 } as never, layers: [pads, audio],

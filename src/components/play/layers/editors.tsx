@@ -1070,7 +1070,7 @@ export function RelationshipEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext
     );
   };
   const signals = ctx.play.signals ?? [];
-  const alphaLayers = ctx.layers.filter(x => x.id !== l.id && x.kind !== 'relationship' && x.kind !== 'null' && x.kind !== 'drumpad');
+  const alphaLayers = ctx.layers.filter(x => x.id !== l.id && x.kind !== 'relationship' && x.kind !== 'null' && x.kind !== 'sampler');
   const small: React.CSSProperties = { ...f.numStyle, width: 50 };
   const faint: React.CSSProperties = { color: f.tk.text.faint, font: '11px Inter, system-ui, sans-serif' };
   const sections = [

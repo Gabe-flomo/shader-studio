@@ -141,7 +141,7 @@ function AudioReadersPanel({ compact }: { compact: boolean }) {
     </div>
   );
   const padsId = padsLayerOfInput(cfg.input);
-  const padsLayer = padsId ? play.layers.find(v => v.id === padsId && v.kind === 'drumpad') : undefined;
+  const padsLayer = padsId ? play.layers.find(v => v.id === padsId && v.kind === 'sampler') : undefined;
   const rackId = engineRackOfInput(cfg.input);
   const rack = rackId ? play.audioEngine?.racks.find(r => r.id === rackId) : undefined;
   const sourceNote = rackId

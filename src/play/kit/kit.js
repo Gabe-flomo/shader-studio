@@ -98,7 +98,7 @@ export function klPictureAt(grid, W, H, x, y, r, ch) {
 }
 /** Is this layer's Displacement Map on (displace.js)? Not on the kinds that can't be matted. */
 function dispOn(l) {
-  return !!(l.displace && l.displace.on !== false) && l.kind !== 'null' && l.kind !== 'background' && l.kind !== 'drumpad' && l.kind !== 'relationship' && l.kind !== 'motion';
+  return !!(l.displace && l.displace.on !== false) && l.kind !== 'null' && l.kind !== 'background' && l.kind !== 'sampler' && l.kind !== 'relationship' && l.kind !== 'motion';
 }
 const KIT_ANIMATED = { particles: 1, bodies: 1, audio: 1, brush: 1, camera: 1, video: 1, lens: 1, script: 1, relationship: 1, agents: 1, motion: 1, water: 1 };
 

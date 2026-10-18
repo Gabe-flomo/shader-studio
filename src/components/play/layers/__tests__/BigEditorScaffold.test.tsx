@@ -10,7 +10,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { Section } from '../Section';
 import { BigEditorScaffold } from '../BigEditorScaffold';
-import { DrumPadEditor } from '../DrumPadEditor';
+import { SamplerEditor } from '../sampler/SamplerEditor';
 import { ParticlesEditor, RelationshipEditor } from '../editors';
 import { VideoEditor } from '../VideoEditor';
 import { makeFieldKit } from '../fields';
@@ -83,7 +83,7 @@ describe('BigEditorScaffold', () => {
 
 describe('big editors mount without console errors', () => {
   const kinds: Array<[string, () => React.ReactElement]> = [
-    ['drum pads', () => { const { f, ctx } = ctxFor('drumpad', 'dp1'); return <DrumPadEditor f={f} ctx={ctx} />; }],
+    ['sampler', () => { const { f, ctx } = ctxFor('sampler', 'dp1'); return <SamplerEditor f={f} ctx={ctx} />; }],
     ['particles', () => { const { f, ctx } = ctxFor('particles', 'pt1'); return <ParticlesEditor f={f} ctx={ctx} />; }],
     ['relationship', () => { const { f, ctx } = ctxFor('relationship', 'rl1'); return <RelationshipEditor f={f} ctx={ctx} />; }],
     ['video', () => { const { f, ctx } = ctxFor('video', 'vd1'); return <VideoEditor f={f} ctx={ctx} pictureHidden={false} />; }],

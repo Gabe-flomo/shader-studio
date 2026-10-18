@@ -172,7 +172,7 @@ describe('the website player’s panel', () => {
 
 const wav = (...n: number[]) => new Blob([new Uint8Array(n)], { type: 'audio/wav' });
 const webm = (...n: number[]) => new Blob([new Uint8Array(n)], { type: 'video/webm' });
-const padsSetup = (sampleId: string) => JSON.stringify({ nodes: [{ id: 'o', type: 'output' }], version: 1, savedAt: 1, play: { ...emptyPlayRecord(), layers: [{ ...defaultLayer('drumpad', 'd', 'Kit'), pads: [{ sampleId, fileName: 'kick.wav', bytes: 3 }] }] } });
+const padsSetup = (sampleId: string) => JSON.stringify({ nodes: [{ id: 'o', type: 'output' }], version: 1, savedAt: 1, play: { ...emptyPlayRecord(), layers: [{ ...defaultLayer('sampler', 'd', 'Kit'), pads: [{ sampleId, fileName: 'kick.wav', bytes: 3 }] }] } });
 
 describe('drum pad samples as Sounds', () => {
   it('lists sounds and videos apart on the Files page, with who uses a sound', async () => {

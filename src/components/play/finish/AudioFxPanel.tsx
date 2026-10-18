@@ -74,7 +74,7 @@ export function AudioFxPanel({ play, onChange, touch, wide = false }: {
     for (const l of play.layers) {
       if (l.kind === 'audio' && (l as { input?: string }).input === 'file') out.push({ id: layerChainId(l.id), label: l.label, icon: 'wave', note: 'This audio layer’s song.' });
       if (l.kind === 'video' && (l as { sound?: string }).sound !== 'off') out.push({ id: layerChainId(l.id), label: l.label, icon: 'camera', note: 'This Video layer’s sound (before its volume).' });
-      if (l.kind === 'drumpad') out.push({ id: layerChainId(l.id), label: l.label, icon: 'grid', note: 'This Drum pad layer’s pads, all through one chain (before its volume).' });
+      if (l.kind === 'sampler') out.push({ id: layerChainId(l.id), label: l.label, icon: 'grid', note: 'This Drum pad layer’s pads, all through one chain (before its volume).' });
     }
     for (const n of nodes) if (n.type === 'audioInput') out.push({ id: nodeChainId(n.id), label: `Audio Input · ${n.id}`, icon: 'wave', note: 'This Audio Input node’s song.' });
     for (const r of play.audioEngine?.racks ?? []) if (r.instrument?.kind === 'granulator' && !r.source) out.push({ id: rackChainId(r.id), label: `${r.name} · Granulator`, icon: 'piano', note: 'This Audio engine rack’s Granulator (before the rack’s volume).' });
@@ -106,7 +106,7 @@ export function AudioFxPanel({ play, onChange, touch, wide = false }: {
   const audioUnitFor = async (chainId: string) => {
     if (!can('audio.engine') || !can('audio.plugins')) { openProSheet('audio.plugins'); return; }
     const layer = chainId.startsWith('layer:') ? play.layers.find(l => l.id === chainId.slice(6)) : undefined;
-    if (layer?.kind === 'drumpad') {
+    if (layer?.kind === 'sampler') {
       const pads = layer as DrumPadLayer;
       const existing = play.audioEngine?.racks.find(r => r.pads === pads.id);
       const pick = await askChoice('Audio Unit effects play in the Audio engine', [

@@ -18,8 +18,8 @@ export type PadSoundState = 'gone' | 'off' | 'no-file' | 'paused' | 'playing';
 export interface PadSoundHost {
   analyser(layerId: string): AnalyserNode | null;
   state(layerId: string): PadSoundState;
-  /** A pad's decoded sample (offline mixes play it), null while it has none. */
-  buffer?(pad: DrumPad): AudioBuffer | null;
+  /** A pad's (or zone's) decoded sample (offline mixes play it), null while it has none. */
+  buffer?(pad: Pick<DrumPad, 'sampleId' | 'synth'>): AudioBuffer | null;
 }
 
 let host: PadSoundHost | null = null;
@@ -28,5 +28,5 @@ export const padSound = {
   setHost(h: PadSoundHost | null): void { host = h; },
   analyser: (layerId: string): AnalyserNode | null => host?.analyser(layerId) ?? null,
   state: (layerId: string): PadSoundState => host?.state(layerId) ?? 'gone',
-  buffer: (pad: DrumPad): AudioBuffer | null => host?.buffer?.(pad) ?? null,
+  buffer: (pad: Pick<DrumPad, 'sampleId' | 'synth'>): AudioBuffer | null => host?.buffer?.(pad) ?? null,
 };

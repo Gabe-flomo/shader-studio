@@ -1843,12 +1843,18 @@ function webMedia(st: Pick<NodeGraphState, 'nodes' | 'textureUniforms' | 'nodeTe
   // Drum pad samples: remembered by play/drumPads.ts when each loaded (key `dsample:<sampleId>`); generated drums need nothing.
   const layerPads: NonNullable<PlayMedia['layerPads']> = {};
   for (const l of st.play.layers) {
-    if (l.kind !== 'drumpad') continue;
+    if (l.kind !== 'sampler') continue;
     const files: Record<string, PlayMediaFile> = {};
     l.pads.forEach((p, i) => {
       if (!p.sampleId) return;
       const m = mediaSource(`dsample:${p.sampleId}`);
       files[i] = { label: `${l.label} · pad ${i + 1}`, name: p.fileName || m?.name || '', src: m?.dataUrl ?? null, bytes: m?.dataUrl?.length ?? (m?.tooBig ? m.bytes : p.bytes) };
+    });
+    // The Keys view's zones, keyed `z<id>`.
+    (l.zones ?? []).forEach((z, i) => {
+      if (!z.sampleId) return;
+      const m = mediaSource(`dsample:${z.sampleId}`);
+      files[`z${z.id}`] = { label: `${l.label} · zone ${i + 1}`, name: z.fileName || m?.name || '', src: m?.dataUrl ?? null, bytes: m?.dataUrl?.length ?? (m?.tooBig ? m.bytes : z.bytes) };
     });
     if (Object.keys(files).length) layerPads[l.id] = files;
   }
