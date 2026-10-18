@@ -1423,12 +1423,13 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
         position: 'relative',
         width: '100%',
         height: '100%',
-        backgroundColor: transparent ? 'transparent' : overPicture ? alpha(tc.crust, 0.42) : tc.crust,
+        // Over the picture (Maximize graph): no backdrop and no dot grid, the picture itself shows under the cards
+        backgroundColor: transparent || overPicture ? 'transparent' : tc.crust,
         overflow: 'hidden',
         cursor: 'default',
         WebkitTouchCallout: 'none',
         userSelect: 'none',
-        backgroundImage: transparent
+        backgroundImage: transparent || overPicture
           ? 'none'
           : `radial-gradient(circle at 1.5px 1.5px, ${tk.text.disabled} 1.1px, transparent 1.6px)`,
         backgroundSize: `${gridSize}px ${gridSize}px`,
