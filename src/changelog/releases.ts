@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.263',
+    date: '2026-10-17',
+    title: "Stems",
+    highlights: [
+      { area: 'Studio', text: "Audio Source can Separate a song into drums, bass, vocals and other on this device; pick a stem so kicks and claps are read from the drums alone." },
+      { area: 'Studio', text: "Optional download adds guitar and piano. The stems are kept in the library with the song; a 3-minute song takes about half a minute on the GPU." },
+    ],
+  },
+  {
     id: '2026.10.262',
     date: '2026-10-17',
     title: "Better on phones",
