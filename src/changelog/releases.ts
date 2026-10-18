@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.282',
+    date: '2026-10-18',
+    title: "Band EQ",
+    highlights: [
+      { area: 'Studio', text: "Audio Source bands work like an EQ: drag handles on curves, double-click to add, scroll for width, Solo. Envelope cards show a curve you can drag." },
+    ],
+  },
+  {
     id: '2026.10.281',
     date: '2026-10-18',
     title: "Fewer passes",
