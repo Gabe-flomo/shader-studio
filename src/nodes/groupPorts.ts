@@ -40,16 +40,17 @@ export const ADDABLE_PORT_TYPES: Record<string, readonly DataType[]> = {
   group: ['float', 'vec2', 'vec3', 'vec4', 'texture'],
   groupOutput: ['float', 'vec2', 'vec3', 'vec4'],
   marchLoopGroup: ['float', 'vec2', 'vec3', 'vec4', 'texture'],
-  agentsGroup: ['float', 'vec2', 'vec3', 'vec4', 'texture', 'scene3d'],
+  // audio: a Sound port, for the Audio nodes inside (Band level, Hit…) to hear an Audio Source outside.
+  agentsGroup: ['float', 'vec2', 'vec3', 'vec4', 'texture', 'scene3d', 'audio'],
 };
 
 /** A port type in words, for an added port's label and the Add form's choices. */
 export const PORT_TYPE_WORDS: Record<string, string> = {
-  float: 'number', vec2: 'x, y', vec3: 'colour / xyz', vec4: '4 numbers', texture: 'image', scene3d: '3D scene',
+  float: 'number', vec2: 'x, y', vec3: 'colour / xyz', vec4: '4 numbers', texture: 'image', scene3d: '3D scene', audio: 'sound',
   mat2: '2×2 matrix', mat3: '3×3 matrix', spacewarp3d: 'space warp',
 };
 export const PORT_TYPE_CHOICES: Record<string, string> = {
-  float: 'Number', vec2: 'x, y', vec3: 'Colour', vec4: '4', texture: 'Image', scene3d: 'Scene',
+  float: 'Number', vec2: 'x, y', vec3: 'Colour', vec4: '4', texture: 'Image', scene3d: 'Scene', audio: 'Sound',
 };
 
 type Extra = { key: string; type: string; label: string };

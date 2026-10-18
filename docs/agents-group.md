@@ -210,7 +210,7 @@ Every node it adds has a note saying which of the Particles node's settings it c
 
 **Example**: Play → *Agents in Play* → **Agents: a hand and a beat**: 262,144 particles (256k) your hand (or the pointer) pulls and stirs, a fist pushes them away, B bursts them and R starts over, while the Audio engine's kick track (the group's Sound from: Engine track 1) blasts shockwaves through them.
 
-Any ordinary node can join the rule: noise to wobble the turn, a shape's distance into Sense's Field ƒ to avoid it, an Expression Block to reshape the readings (the preset's **Crowding** does this), Time, Audio Input, MIDI. Every unwired socket on the Agents nodes means "this walker", and every node that would read the pixel's position reads the walker's position instead.
+Any ordinary node can join the rule: noise to wobble the turn, a shape's distance into Sense's Field ƒ to avoid it, an Expression Block to reshape the readings (the preset's **Crowding** does this), Time, Audio Input, MIDI. The Audio nodes too (Band level, Hit, an Audio Source's bands): an Audio Source inside the group, or one outside wired in through a **Sound** input added on Agent Inputs. Every unwired socket on the Agents nodes means "this walker", and every node that would read the pixel's position reads the walker's position instead.
 
 What can't go inside, and why (the card says so):
 

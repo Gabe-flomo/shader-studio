@@ -70,7 +70,9 @@ export function canvasThumb(src: HTMLCanvasElement, w = THUMB_W, h = THUMB_H): s
  */
 export function captureViewportThumb(from: Element | null, fallback?: () => string | null, selector?: string): string | null {
   const named = selector && typeof document !== 'undefined' ? document.querySelector(selector) : null;
-  const c = named instanceof HTMLCanvasElement ? named : viewportCanvas(from);
+  // A named canvas that isn't on screen (its panel folded) is the builder's own picture's turn, not
+  // whatever other canvas is biggest on the page.
+  const c = named instanceof HTMLCanvasElement ? named : selector ? null : viewportCanvas(from);
   const pic = c ? canvasThumb(c) : null;
   if (pic) return pic;
   try { return fallback?.() ?? null; } catch { return null; }

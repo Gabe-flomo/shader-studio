@@ -24,7 +24,8 @@ setting on a card shows up in the builder by itself. Every node has a note.
 ## Built as you go
 
 The picture is drawn by the main preview, so the builder's viewport **is** the main preview, at the viewport's own
-size (`LiveViewport ownSize`, as in the Splat builder), and every change is built into the graph at once
+size (`LiveViewport ownSize`, as in the Splat builder), with Pause / Play and ↺ at its bottom right (the app's
+clock and its one true reset, `LiveViewport clock`), and every change is built into the graph at once
 (`timeCubeBuilder/actions.ts`):
 
 - opening on a new scene builds it (the Box of time preset): one undo step, "Time Cube builder: built a time cube";

@@ -228,7 +228,7 @@ function Overlay({ image }: { image: ViewRect }) {
 
 export function SplatViewport() {
   return (
-    <LiveViewport emptyNote="The preview is hidden: show it to see the scan here." ownSize
+    <LiveViewport emptyNote="The preview is hidden: show it to see the scan here." ownSize clock
       overlay={({ image }) => <Overlay image={image} />} />
   );
 }

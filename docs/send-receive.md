@@ -74,8 +74,9 @@ This includes a group that sends a value and also, through a Receive at the leve
 - Receive card: the Send picker, a chip **← from Send “beat”** that jumps to the Send, or the missing-Send message.
 - While dragging a wire, a Send's input lights up for anything it can carry.
 
-Copying a Receive keeps reading the original Send; copying a Send and its Receives together leaves the copied
-Receives reading the original Send (pick the copy in their list).
+Duplicating a Receive keeps reading the original Send; duplicating a Send and its Receives together gives copied
+Receives that read the copied Send (store `duplicateNodes`), so the copy is a working pair of its own. (A Send and
+Receive inside a duplicated group keep their inner ids: not remapped yet.)
 
 ## Tests
 

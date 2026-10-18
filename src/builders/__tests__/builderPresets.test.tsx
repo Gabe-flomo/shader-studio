@@ -19,7 +19,7 @@ import { Card } from '../../components/sceneBuilder/controls';
 import { BuilderFold } from '../../components/builders/BuilderTabBar';
 import { UserPresets } from '../../components/builders/UserPresets';
 import { STRIP_TEMPLATE_KEYS } from '../../components/sceneBuilder/SceneBuilderModal';
-import { blankPixels } from '../../components/builders/viewportThumb';
+import { blankPixels, captureViewportThumb } from '../../components/builders/viewportThumb';
 import { useSceneBuilder2D } from '../../sceneBuilder2d/store';
 import { surpriseScene2D } from '../../sceneBuilder2d/surprise';
 import { useGridBuilder } from '../../gridScene/store';
@@ -213,6 +213,15 @@ describe('the strip: + Save this scene, load, rename, delete', () => {
     expect(builderPresets('2d').getState().presets[0].name).toBe('Dusk');
     click($(`[data-delete-preset="${p.id}"]`));
     expect(builderPresets('2d').getState().presets).toEqual([]);
+  });
+
+  it('a named preview canvas that is folded away gives way to the builder\'s own picture, not another canvas', () => {
+    const other = document.createElement('canvas');
+    other.width = 400; other.height = 300;
+    document.body.appendChild(other);
+    try {
+      expect(captureViewportThumb(document.body, () => 'data:own', '[data-scene2d-preview]')).toBe('data:own');
+    } finally { other.remove(); }
   });
 
   it('a blank name gets one', () => {

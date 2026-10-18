@@ -3,7 +3,7 @@ import { usePreviewQuality } from '../lib/previewQuality';
 import { recordActivity } from '../files/activity';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { CanvasRecorder } from '../utils/CanvasRecorder';
-import { codecExt, runFfmpegEncode, type FfmpegCodec } from '../utils/ffmpegRecorder';
+import { codecExt, hardwareEncoders, resolveMp4Encoder, runFfmpegEncode, HW_ENCODER_NAMES, type FfmpegCodec, type Mp4Encoder } from '../utils/ffmpegRecorder';
 import { PRORES_PROFILES, effectiveProResProfile, forceOpaque, formatBytes, proresEstimateBytes, proresNotes, type ProResProfileId } from '../utils/prores';
 import { encodeProResWasm } from '../utils/proresWasm';
 import { licenseUrl, thirdParty } from '../lib/thirdParty';
@@ -87,7 +87,7 @@ const CODEC_LABELS: Record<DesktopFormat, string> = {
 };
 
 const CODEC_DESCRIPTIONS: Record<DesktopFormat, string> = {
-  h264:   'CRF 18 · .mp4 · best compatibility',
+  h264:   '.mp4 · best compatibility',
   prores: 'Apple ProRes · .mov · 4444 keeps alpha',
   ffv1:   'Lossless · .mkv · largest file',
 };
@@ -183,6 +183,16 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
   const previewAspect    = useNodeGraphStore(s => s.previewAspect);
   const setPreviewAspect = useNodeGraphStore(s => s.setPreviewAspect);
   const [codec, setCodec]           = useState<DesktopFormat>('h264');
+  // The MP4's encoder (Speed): hardware VideoToolbox when this FFmpeg has it (asked once), else x264. null: not picked yet.
+  const [hwEncoders, setHwEncoders] = useState<string[] | null>(null);
+  const [encoderPick, setEncoderPick] = useState<Mp4Encoder | null>(null);
+  useEffect(() => {
+    if (!inTauri || external) return;
+    let live = true;
+    void hardwareEncoders().then(list => { if (live) setHwEncoders(list); });
+    return () => { live = false; };
+  }, [external]);
+  const mp4Encoder: Mp4Encoder = resolveMp4Encoder(encoderPick ?? 'auto', hwEncoders ?? []);
   // ProRes's profile (desktop and browser); a transparent export uses 4444 unless 4444 XQ is picked.
   const [proresId, setProresId]     = useState<ProResProfileId>('hq');
   // Browser (and the desktop's real-time mode): ProRes from the WASM encoder, frame by frame, instead of the recorder / PNGs.
@@ -549,6 +559,9 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
         duration: span.length,
         startTime: span.from,
         codec: useCodec,
+        encoder: mp4Encoder,
+        // The hardware encoder gave up part-way: x264 renders every frame again from the first.
+        onRestart: () => { firstFrame = true; firstRender = true; },
         audioWav: mix ? wavBytes(mix) : null,
         // Throwing here is what actually stops the encode loop on Cancel.
         renderFrame: async (t) => {
@@ -1068,6 +1081,31 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
                   })}
                 </div>
                 )}
+              </Section>
+            )}
+
+            {mode === 'ffmpeg' && ffCodec === 'h264' && (
+              <Section label="Speed">
+                <div data-export-encoder={mp4Encoder}>
+                  <Segmented
+                    fill
+                    tall={phone}
+                    ariaLabel="Encoder speed"
+                    value={mp4Encoder}
+                    onChange={v => setEncoderPick(v)}
+                    options={[
+                      { value: 'hardware', label: 'Fast', sub: 'hardware H.264', disabled: hwEncoders !== null && !hwEncoders.includes(HW_ENCODER_NAMES.hardware), title: 'This FFmpeg has no hardware H.264 encoder (Apple VideoToolbox)' },
+                      { value: 'hardware_hevc', label: 'Fast, smaller', sub: 'hardware HEVC', disabled: hwEncoders !== null && !hwEncoders.includes(HW_ENCODER_NAMES.hardware_hevc), title: 'This FFmpeg has no hardware HEVC encoder (Apple VideoToolbox)' },
+                      { value: 'x264', label: 'Best compression', sub: 'x264, slower' },
+                    ]}
+                  />
+                </div>
+                <Help>
+                  {mp4Encoder === 'x264'
+                    ? 'x264 at CRF 18: the smallest file for its quality, and the slowest to write.'
+                    : 'The Mac\'s video engine (VideoToolbox): several times faster, at a bitrate scaled to the size and frame rate so it looks like x264\'s; the file is a little bigger. If it fails part-way, the export starts over with x264.'}
+                  {hwEncoders === null ? ' Checking which encoders this FFmpeg has…' : ''}
+                </Help>
               </Section>
             )}
 

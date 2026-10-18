@@ -34,7 +34,8 @@ struct FfmpegState(Mutex<Option<FfmpegSession>>);
 /// Start an FFmpeg encoding session.
 /// `codec` is one of: "h264", "ffv1", the ProRes profiles "prores_proxy", "prores_lt", "prores_422",
 /// "prores" (422 HQ), "prores4444" and "prores4444xq" (both keep alpha; see export_codecs.rs),
-/// or "bake" (H.264 that seeks fast, for a Baked node: see bake.rs)
+/// or "bake" (H.264 that seeks fast, for a Baked node: see bake.rs).
+/// `encoder`, for "h264" only: "hardware" / "hardware_hevc" (VideoToolbox, fast) or "x264" (the default).
 /// `audio_wav`, when given, is the recording's sound as a WAV file's bytes: it's
 /// muxed in as the audio track (AAC in .mp4, PCM in .mov, FLAC in .mkv).
 /// Returns an error string if FFmpeg can't be found or the session is already active.
@@ -47,6 +48,7 @@ fn start_ffmpeg_encode(
     fps: u32,
     codec: String,
     audio_wav: Option<Vec<u8>>,
+    encoder: Option<String>,
 ) -> Result<(), String> {
     let mut guard = state.0.lock().map_err(|e| e.to_string())?;
     if guard.is_some() {
@@ -59,8 +61,15 @@ fn start_ffmpeg_encode(
 
     // Build codec-specific output args (export_codecs.rs; "bake" in bake.rs; anything else is H.264)
     let bake_args = bake::bake_codec_args(fps);
+    // An MP4's encoder (the Record dialog's Speed): VideoToolbox when asked, else x264 (export_codecs.rs).
+    let mp4_args = match encoder.as_deref() {
+        Some(e) if codec == "h264" => Some(export_codecs::mp4_encoder_args(e, width, height, fps)),
+        _ => None,
+    };
     let codec_args: Vec<&str> = if codec == "bake" {
         bake_args.iter().map(|s| s.as_str()).collect()
+    } else if let Some(a) = &mp4_args {
+        a.iter().map(|s| s.as_str()).collect()
     } else {
         export_codecs::video_codec_args(&codec)
             .or_else(|| export_codecs::video_codec_args("h264"))
@@ -119,6 +128,44 @@ fn start_ffmpeg_encode(
 
     *guard = Some(FfmpegSession { child, stdin, width, height, audio_file });
     Ok(())
+}
+
+/// The hardware encoders this FFmpeg can use (export_codecs::HARDWARE_ENCODERS that it lists and that encode a
+/// few test frames), probed once and kept for the session. Empty off macOS, or when the FFmpeg build has none.
+#[tauri::command]
+async fn ffmpeg_hw_encoders() -> Result<Vec<String>, String> {
+    static FOUND: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+    if let Some(found) = FOUND.get() {
+        return Ok(found.clone());
+    }
+    let found = tauri::async_runtime::spawn_blocking(|| -> Result<Vec<String>, String> {
+        ffmpeg_sidecar::download::auto_download().map_err(|e| e.to_string())?;
+        let ffmpeg_path = ffmpeg_sidecar::paths::ffmpeg_path();
+        let listing = Command::new(&ffmpeg_path)
+            .args(["-hide_banner", "-encoders"])
+            .stdin(Stdio::null())
+            .output()
+            .map_err(|e| format!("Couldn't run FFmpeg: {e}"))?;
+        let listed = export_codecs::listed_hardware_encoders(&String::from_utf8_lossy(&listing.stdout));
+        // Listed isn't always usable (a build without the framework, a machine without the engine): try each.
+        Ok(listed
+            .into_iter()
+            .filter(|name| {
+                Command::new(&ffmpeg_path)
+                    .args(["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "color=c=gray:s=320x240:r=30", "-frames:v", "3", "-c:v", name, "-b:v", "2000000", "-f", "null", "-"])
+                    .stdin(Stdio::null())
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .status()
+                    .map(|s| s.success())
+                    .unwrap_or(false)
+            })
+            .collect())
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+    let _ = FOUND.set(found.clone());
+    Ok(found)
 }
 
 /// Send a single raw RGBA frame (width × height × 4 bytes) to FFmpeg stdin.
@@ -326,6 +373,7 @@ pub fn run() {
         .manage(recovery::SessionState::default())
         .invoke_handler(tauri::generate_handler![
             start_ffmpeg_encode,
+            ffmpeg_hw_encoders,
             send_frame_rgba,
             stop_ffmpeg_encode,
             osc_start,

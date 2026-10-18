@@ -22,6 +22,7 @@ import { round, printRecipe } from './recipe';
 import { META_KEY, ROLE_KEY, WARP_KIND_KEY, type SceneBuilderMeta } from './build';
 import { DEFAULT_PALETTE, OUTPUT_BY_SHOW, PALETTES, type OutputShow, type OutputSpec } from './output';
 import { MUTE_PARAM } from '../builders/mute';
+import { gradientOn, readGradient, type ColourGradient } from '../lib/colourGradient';
 
 export interface DescribeResult {
   spec: SceneSpec;
@@ -475,6 +476,10 @@ const colourOf = (n: GraphNode | undefined): Vec3 | null => {
   return null;
 };
 
+/** A Color node's gradient (docs/gradients.md), when it is showing one. */
+const gradientOf = (n: GraphNode | undefined, key = 'color'): ColourGradient | null =>
+  (n && gradientOn(n.params, key) ? readGradient(n.params, key) : null);
+
 const SOCKET_OUTPUT: Record<string, OutputShow> = { depth: 'depth', dist: 'distance', normal: 'normal', hit: 'hit', pos: 'position', iter: 'steps', ao: 'ao', shadow: 'shadow' };
 
 /** The output the graph's Output shows, when it isn't the picture: its spec and the nodes it reads. */
@@ -620,7 +625,7 @@ export function describeGraph(nodes: GraphNode[]): DescribeResult | null {
       recognized.push('Multi-Light (sun, sky, bounce)');
       const base = r.src(multi, 'baseColor');
       const c = colourOf(base);
-      if (c) { walkItems(spec.root, it => { if (it.type === 'shape') it.color = c; }); r.read.add(base!.id); }
+      if (c) { const g = gradientOf(base); walkItems(spec.root, it => { if (it.type === 'shape') { it.color = c; if (g) it.gradient = g; } }); r.read.add(base!.id); }
       else if (base?.type === 'group' && roleOf(base) === 'materials') {
         r.read.add(base.id);
         for (const n of subNodes(base)) {
@@ -628,7 +633,7 @@ export function describeGraph(nodes: GraphNode[]): DescribeResult | null {
           if (!m) continue;
           walkItems(spec.root, it => {
             if (it.type !== 'shape' || it.id !== m[1]) return;
-            if (m[2] === 'color') it.color = colourOf(n) ?? it.color; else it.shine = round(num(n.params.value, 0));
+            if (m[2] === 'color') { it.color = colourOf(n) ?? it.color; const g = gradientOf(n); if (g) it.gradient = g; } else it.shine = round(num(n.params.value, 0));
           });
         }
         recognized.push('Materials (a colour per shape)');
@@ -651,7 +656,9 @@ export function describeGraph(nodes: GraphNode[]): DescribeResult | null {
   } else if (mode === 'gi') {
     const P = renderer.params;
     const c = vec(P.albedo, [0.7, 0.7, 0.7]).map(round) as Vec3;
-    walkItems(spec.root, it => { if (it.type === 'shape') it.color = c; });
+    const g = gradientOf(renderer, 'albedo');
+    let firstShape = true;
+    walkItems(spec.root, it => { if (it.type === 'shape') { it.color = c; if (g && firstShape) it.gradient = g; firstShape = false; } });
     L.gi = { strength: round(num(P.giStrength, 0.4)), metal: round(num(P.metallic, 0)), rough: round(num(P.roughness, 0.5)), spec: round(num(P.specStrength, 0.5)) };
     L.sunColor = [round(num(P.lightR, 1)), round(num(P.lightG, 0.95)), round(num(P.lightB, 0.85))];
     L.sky = [round(num(P.skyTopR, 0.2)), round(num(P.skyTopG, 0.45)), round(num(P.skyTopB, 0.8))];

@@ -11,6 +11,7 @@
  * Pure: ids come from the caller, so the store's id generator stays in charge.
  */
 
+import { socketDefault } from './socketDefault';
 import type { GraphNode, InputSocket, NodeDefinition, SubgraphData } from '../types/nodeGraph';
 import { getNodeDefinition } from './definitions';
 import { startingSockets } from './definitions/transformAny';
@@ -22,7 +23,7 @@ export function instantiateNode(id: string, type: string, def: NodeDefinition, p
   const sockets = startingSockets(type, def, all);
   const inputs: Record<string, InputSocket> = {};
   for (const [key, socket] of Object.entries(sockets.inputs)) {
-    inputs[key] = { ...socket, defaultValue: def.paramDefs?.[key] ? undefined : def.defaultParams?.[key] as number | number[] | undefined };
+    inputs[key] = { ...socket, defaultValue: socketDefault(def, key) };
   }
   return { id, type, position, inputs, outputs: { ...sockets.outputs }, params: all };
 }

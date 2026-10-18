@@ -18,7 +18,7 @@ import {
   gradientValueParams, readGradient, starterGradient, type ColourGradient, type GradientDriver,
 } from '../colourGradient';
 import { allPalettes, deletePalette, listPalettes, renamePalette, savePalette } from '../backgroundLibrary';
-import { paletteAsGradientStops } from '../../components/ui/GradientSetting';
+import { paletteAsGradientStops, paletteSwatchCss } from '../../components/ui/GradientSetting';
 import { buildStandaloneGraph } from '../../sceneBuilder/build';
 import { newShape, starterSpec, type SceneSpec } from '../../sceneBuilder/spec';
 import { getNodeDefinition } from '../../nodes/definitions';
@@ -206,6 +206,11 @@ describe('presets', () => {
     expect(paletteAsGradientStops(fire).length).toBeLessThanOrEqual(8);
     const big = savePalette({ name: 'Big', stops: evenStops(Array.from({ length: 20 }, (_, i) => [i / 19, 0, 1 - i / 19] as [number, number, number])), style: 'gradient' });
     expect(paletteAsGradientStops(big)).toHaveLength(8);
+  });
+  it('each preset row gets a swatch of its stops (the Presets menu)', () => {
+    for (const p of allPalettes()) expect(paletteSwatchCss(p)).toMatch(/^linear-gradient\(90deg, rgb\(/);
+    const two = { name: 'x', stops: [{ pos: 0, color: [1, 0, 0] as [number, number, number] }, { pos: 1, color: [0, 0, 1] as [number, number, number] }], style: 'gradient' as const };
+    expect(paletteSwatchCss(two as Parameters<typeof paletteSwatchCss>[0])).toBe('linear-gradient(90deg, rgb(255 0 0) 0.0%, rgb(0 0 255) 100.0%)');
   });
 });
 

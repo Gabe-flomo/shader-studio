@@ -184,8 +184,10 @@ log). It runs in an AudioWorklet; where the browser has none, the sound passes t
 - The Audio examples open on the File tab with nothing loaded: load any song, or switch to Mic.
 - Bands, the trim and the tab are saved with the graph.
 - The Audio nodes work inside groups too (plain, iterated, and a group inside a group): wire an Audio Source's Audio
-  into the group and on to the nodes inside, or keep the Audio Source inside. In an Agents group, keep the Audio nodes
-  outside and wire their numbers in.
+  into the group and on to the nodes inside, or keep the Audio Source inside. In an Agents group the Audio nodes work
+  too (Band level, Hit, an Audio Source's bands drive the walkers: the agents' program shares the preview's live
+  values): keep the Audio Source inside, or add a **Sound** input on Agent Inputs (+ Add an input from outside),
+  wire the Audio Source outside into that socket on the group card, and the port into the Audio nodes inside.
 - **Web pages** exported from Playfield run the Audio nodes as the app does (the same sums, frame by frame): a File's
   sound travels in the page (up to 6 MB; a bigger one is listed as left out), and a Video's sound plays from its video
   (when that video is drawn in the picture, so the page carries it). Browsers only start sound after a tap, so the page

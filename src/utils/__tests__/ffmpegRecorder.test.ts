@@ -31,7 +31,7 @@ describe('runFfmpegEncode', () => {
         expect(f.args).toBeInstanceOf(Uint8Array);
         expect((f.args as Uint8Array).length).toBe(4 * 2 * 4);
       }
-      expect(calls.map(c => c.cmd)).toEqual(['start_ffmpeg_encode', 'send_frame_rgba', 'send_frame_rgba', 'send_frame_rgba', 'stop_ffmpeg_encode']);
+      expect(calls.map(c => c.cmd).filter(c => c !== 'ffmpeg_hw_encoders')).toEqual(['start_ffmpeg_encode', 'send_frame_rgba', 'send_frame_rgba', 'send_frame_rgba', 'stop_ffmpeg_encode']);
     } finally {
       vi.unstubAllGlobals();
     }

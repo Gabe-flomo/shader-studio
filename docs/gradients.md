@@ -39,10 +39,15 @@ Click **Gradient** beside the swatch. Then:
 - **From / To**: the driver's values at the bar's left and right ends. Height runs from −1 to 1 at
   first; set From 0 and To 2 to put the whole bar on the upper half of a scene. Swap them to flip it.
 - **Presets**: the app's palettes, built in (Sunset, Ocean, Fire, Mono, Neon, Earth, Dusk, Forest…)
-  and yours. **Save as preset** names the gradient and keeps it in the Library's palettes, the same
+  and yours, each with a small strip of its colours beside its name. **Save as preset** names the gradient and keeps it in the Library's palettes, the same
   store the Palette and Stops Palette nodes and the Play and Present backgrounds use, so a preset
   saved here shows up in all of them, and theirs show up here. Rename or delete yours from the same
   menu. A palette with more than 8 colours is resampled to 8 stops.
+
+In the 3D Scene Builder's recipe a shape's gradient is quoted text:
+`sphere gradient="height linear 0..2: navy 0, orange 0.5, (1,0.9,0.6) 1"` (the driver, the blend
+when it isn't smooth, the range when it isn't the driver's own, then the stops). Describe reads a
+shape's gradient back off the graph's Color node (src/sceneBuilder/recipeGradient.ts).
 
 **Solid** switches back to the single colour. The gradient is kept behind it, so switching to
 Gradient again brings it back.

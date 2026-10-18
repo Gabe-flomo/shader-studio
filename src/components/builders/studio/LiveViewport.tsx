@@ -14,14 +14,21 @@ import { adoptPreviewCanvas, mirrorPreview, wakePreview } from '../../../lib/pre
 import { setPreviewSizeOverride } from '../../../lib/previewSize';
 import { useTokens } from '../../../theme/themeStore';
 import { containRect } from '../../../agentBuilder/diagram';
+import { useNodeGraphStore } from '../../../store/useNodeGraphStore';
+import { PreviewClock } from '../PreviewClock';
 
 export interface ViewRect { x: number; y: number; w: number; h: number }
 
-export function LiveViewport({ overlay, emptyNote = 'The preview is hidden: show it to see the walkers here.', ownSize = false }: {
+export function LiveViewport({ overlay, emptyNote = 'The preview is hidden: show it to see the walkers here.', ownSize = false, clock = false }: {
   overlay?: (box: { w: number; h: number; image: ViewRect }) => ReactNode;
   emptyNote?: string;
   /** Draw the main preview at this viewport's size while it is open (lib/previewSize.ts), not the panel's shape. */
   ownSize?: boolean;
+  /**
+   * Pause / Play and ↺ over the picture (PreviewClock), as the builders with their own preview canvas have. The picture
+   * is the main preview's, so Pause is the app's clock (the Time strip's) and ↺ the app's one true reset.
+   */
+  clock?: boolean;
 }) {
   const tk = useTokens();
   const boxRef = useRef<HTMLDivElement>(null);
@@ -94,6 +101,14 @@ export function LiveViewport({ overlay, emptyNote = 'The preview is hidden: show
         <span style={{ position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)', fontSize: 12.5, color: tk.text.faint, textAlign: 'center', maxWidth: 320 }}>{emptyNote}</span>
       )}
       {box.w > 0 && overlay?.({ w: box.w, h: box.h, image })}
+      {clock && <ClockOverMain />}
     </div>
   );
+}
+
+/** The app's clock as a builder viewport's Pause / Play and ↺. */
+function ClockOverMain() {
+  const playing = useNodeGraphStore(s => s.timePlaying);
+  const setPlaying = useNodeGraphStore(s => s.setTimePlaying);
+  return <PreviewClock paused={!playing} onPause={() => setPlaying(!playing)} style={{ position: 'absolute', right: 10, bottom: 10, zIndex: 2 }} />;
 }

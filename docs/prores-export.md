@@ -27,6 +27,16 @@ to `start_ffmpeg_encode` / `send_frame_rgba`; FFmpeg reads them as `rawvideo rgb
 The codec names are `prores_proxy`, `prores_lt`, `prores_422`, `prores` (422 HQ, its old name),
 `prores4444`, `prores4444xq`. Sound goes in as PCM.
 
+**H.264 (.mp4) on the desktop: Speed.** Under Codec › H.264 the dialog offers **Fast** (Apple VideoToolbox
+`h264_videotoolbox`), **Fast, smaller** (`hevc_videotoolbox`, tagged `hvc1` for QuickTime) and **Best
+compression** (x264, CRF 18, preset medium; it was slow, about twice the time for a few percent smaller).
+VideoToolbox has no CRF, so it gets a bitrate scaled to pixels a second (0.2 bits a pixel for H.264, 0.12 for
+HEVC, 4–160 Mb/s; about 25 Mb/s at 1080p60), `-maxrate` 1.5× and a two-second buffer
+(`export_codecs.rs mp4_encoder_args`). Which hardware encoders this FFmpeg can use is asked once
+(`ffmpeg_hw_encoders`: the `-encoders` listing, then three test frames each to the null muxer) and kept for the
+session; the default is Fast when it is there, x264 when not. A hardware encode that fails part-way starts over
+with x264 from the first frame (`runFfmpegEncode`, `onRestart`). Not run on a real desktop export yet.
+
 **Browser (WASM).** In the browser (and the desktop's Real-time mode), Format › ProRes renders frame
 by frame, offline, and encodes with [ProRes WASM Encoder](https://github.com/OlivierEstevez/ProRes-WASM-encoder)
 (`src/utils/proresWasm.ts`). It runs in a pool of Web Workers (blob workers; the single-thread encoder

@@ -305,7 +305,7 @@ export function TimeCubeBuilder() {
       nav={<Nav />} navWidth={248}
       inspector={<Inspector />} inspectorWidth={380}
       presets={<Presets />}>
-      <LiveViewport ownSize emptyNote="The preview is hidden: show it to see the time cube here." />
+      <LiveViewport ownSize clock emptyNote="The preview is hidden: show it to see the time cube here." />
     </StudioShell>
   );
 }

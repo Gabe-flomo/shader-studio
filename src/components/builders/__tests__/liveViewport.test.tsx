@@ -10,6 +10,8 @@ import { createRoot, type Root } from 'react-dom/client';
 import { LiveViewport } from '../studio/LiveViewport';
 import { sendPreviewFrame, setPreviewWake } from '../../../lib/previewMirror';
 import { previewSizeOverride } from '../../../lib/previewSize';
+import { useNodeGraphStore } from '../../../store/useNodeGraphStore';
+import { onRuntimeReset } from '../../../lib/runtimeReset';
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 HTMLCanvasElement.prototype.getContext = (() => null) as unknown as HTMLCanvasElement['getContext'];
@@ -68,5 +70,24 @@ describe('LiveViewport', () => {
     act(() => root!.unmount());
     root = null;
     expect(previewSizeOverride()).toBeNull();
+  });
+
+  it('clock: Pause / Play drives the app\'s clock and ↺ is the true reset (the Splat and Time Cube builders)', () => {
+    mount(<LiveViewport />);
+    expect(host!.querySelector('[data-preview-clock]')).toBeNull();
+    act(() => root!.unmount());
+    useNodeGraphStore.getState().setTimePlaying(true);
+    mount(<LiveViewport ownSize clock />);
+    const [pause, reset] = Array.from(host!.querySelectorAll<HTMLButtonElement>('[data-preview-clock] button'));
+    act(() => pause.click());
+    expect(useNodeGraphStore.getState().timePlaying).toBe(false);
+    expect(pause.textContent).toContain('Play');
+    act(() => pause.click());
+    expect(useNodeGraphStore.getState().timePlaying).toBe(true);
+    const fn = vi.fn();
+    const off = onRuntimeReset(fn);
+    act(() => reset.click());
+    off();
+    expect(fn).toHaveBeenCalledTimes(1);
   });
 });
