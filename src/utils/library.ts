@@ -520,7 +520,7 @@ export const DOWNLOAD_SETS: ReadonlyArray<{ id: DownloadSetId; label: string; hi
   { id: 'backgrounds', label: 'Only backgrounds', hint: 'Image backgrounds as picture files and background palettes, in their folders', kinds: ['backgrounds'] },
   { id: 'glsl', label: 'Only GLSL shaders', hint: 'Every saved shader as a plain .glsl file (notes as a comment at the top), in its folders', kinds: ['glsl shaders'] },
   { id: 'functions', label: 'Only custom functions', hint: 'The Functions library: each preset as a .json file', kinds: ['functions'] },
-  { id: 'nodes', label: 'Only published nodes', hint: 'Node types you published from the Builder, as .json files', kinds: ['published nodes'] },
+  { id: 'nodes', label: 'Only published nodes', hint: 'Node types you published (Publish node), as .json files', kinds: ['published nodes'] },
   { id: 'presets', label: 'Only the other presets', hint: 'Group, expression, transform and keyframe presets, palettes, and the Finish stack’s presets, effects and looks', kinds: ['group presets', 'expressions', 'transforms', 'keyframe presets', 'palettes', 'finish', 'drum kits', 'play presets'] },
 ];
 

@@ -15,6 +15,7 @@ import { NodeDragGhost } from './components/NodeGraph/NodeDragGhost'
 import { ProSheetHost } from './components/account/ProSheet'
 import { PlayfileHost } from './components/playfile/PlayfileHost'
 import { BuilderWindowHost } from './components/nodePacks/BuilderWindowHost'
+import { AppDialogs } from './components/shell/AppDialogs'
 import { SignInPage } from './components/account/SignInPage'
 import { GATE_USERS, OPEN_SESSION, isGateOn, rememberSignIn, restoreSignIn, sessionFor, verifyLogin } from './auth/gate'
 import { usePlan } from './lib/plan'
@@ -128,7 +129,7 @@ if (import.meta.env.DEV) {
 // Dev-only component gallery for the redesign primitives: open the app with #ui.
 // import.meta.env.DEV is false in production builds, so the gallery isn't bundled.
 function startApp() {
-  root.render(<><CrashBoundary><App /></CrashBoundary><CrashReportViewerHost /><Toaster /><BackgroundsHost /><LinkedPickerHost /><DialogHost /><NodeDragGhost /><ProSheetHost /><PlayfileHost /><BuilderWindowHost /><PerformanceBar /><FunctionCardHost /></>)
+  root.render(<><CrashBoundary><App /></CrashBoundary><CrashReportViewerHost /><Toaster /><BackgroundsHost /><LinkedPickerHost /><DialogHost /><NodeDragGhost /><ProSheetHost /><PlayfileHost /><BuilderWindowHost /><AppDialogs /><PerformanceBar /><FunctionCardHost /></>)
   // Songs stop when the graph that owns them is closed or they're deleted.
   void import('./lib/audioSync').then(m => m.startAudioSync())
   // Text layers' fonts from linked folders (docs/linked-folders.md) are read from disk.

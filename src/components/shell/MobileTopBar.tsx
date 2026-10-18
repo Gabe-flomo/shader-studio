@@ -4,7 +4,8 @@ import { rebuildWithToast } from './rebuildAction';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { useThemeStore, useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
-import type { Page } from '../page';
+import { isCodePage, type Page } from '../page';
+import { openAppSettings, openNodesReference } from './appDialogStore';
 import { IconButton } from '../ui/Button';
 import { Segmented } from '../ui/Choice';
 import { Icon } from '../ui/Icon';
@@ -84,13 +85,13 @@ export function MobileTopBar({ page, onPageChange, onRecord, onClear }: {
             onChange={v => onPageChange(v)}
             options={[
               { value: 'studio', label: 'Studio' },
-              { value: 'play', label: hasPlay ? 'Play •' : 'Play', title: hasPlay ? 'This graph has a Play setup' : 'Perform this graph: controls, mappings, layers' },
+              { value: 'play', label: hasPlay ? 'Play •' : 'Play', title: hasPlay ? 'This graph has a Play setup' : 'Perform this graph: controls, sources, layers' },
               { value: 'present', label: 'Present', title: 'Teach with your Plays: steps of text, pictures, sliders and code' },
             ]}
           />
         </span>
       ) : (
-        <span style={{ marginLeft: 10, fontWeight: 650, fontSize: 15 }}>{page === 'shortcuts' ? 'Keys' : page === 'files' ? 'Files' : page === 'glsl' ? 'Shader' : page === 'convert' ? 'Convert' : 'Functions'}</span>
+        <span style={{ marginLeft: 10, fontWeight: 650, fontSize: 15 }}>{page === 'shortcuts' ? 'Keys' : isCodePage(page) ? 'Code' : 'Files'}</span>
       )}
       <span style={{ flex: 1 }} />
       {/* The graph's own actions; Present has its own file actions in its header. */}
@@ -134,13 +135,11 @@ export function MobileTopBar({ page, onPageChange, onRecord, onClear }: {
               : { label: 'Present', icon: 'slides', hint: 'Teach with your Plays: steps of text, pictures, sliders and code', onSelect: () => onPageChange('present') },
             { label: 'Learn the app', icon: 'book', hint: 'Lessons on the Studio, Play, Convert and more', onSelect: () => useLearnUi.getState().openLearn() },
             { label: 'Import a file', icon: 'import', hint: 'A .play file, a graph, or a .present.json (opens on Present)', onSelect: () => { void importAnyFile(onPageChange); } },
-            page === 'glsl'
+            isCodePage(page)
               ? { label: 'Back to the Studio', icon: 'nodes', onSelect: () => onPageChange('studio') }
-              : { label: 'GLSL editor', icon: 'code', hint: 'Write a shader by hand; its Code Explorer shows how functions are used', onSelect: () => onPageChange('glsl') },
+              : { label: 'Code', icon: 'code', hint: 'Write a shader, convert GLSL to nodes, plot functions, make node packs', onSelect: () => onPageChange('code') },
             { label: 'Import shader', icon: 'code', hint: 'A GLSL fragment shader file, as a node', onSelect: async () => { reportGlslImport(await importGlslFromFile()); } },
-            { label: `Convert GLSL to nodes${pro('convert')}`, icon: 'nodes', hint: 'Paste a shader, preview the nodes it becomes, make it real', onSelect: () => onPageChange('convert') },
             { label: 'Export this graph', icon: 'export', hint: 'As a .play file, with what it uses', onSelect: () => offerGraphExport(null) },
-            { label: 'Functions and node packs', icon: 'nodes', hint: 'Plot functions, make node packs (full screen)', onSelect: () => { void import('../nodePacks/builderWindow').then(m => m.popOutBuilder()); } },
             page === 'files'
               ? { label: 'Back to the Studio', icon: 'nodes', onSelect: () => onPageChange('studio') }
               : { label: 'Files', icon: 'folder', hint: 'Everything saved: sizes, clean up, download and install', onSelect: () => onPageChange('files') },
@@ -151,6 +150,8 @@ export function MobileTopBar({ page, onPageChange, onRecord, onClear }: {
             page === 'shortcuts'
               ? { label: 'Back to the Studio', icon: 'nodes', onSelect: () => onPageChange('studio') }
               : { label: 'Keyboard shortcuts', icon: 'hash', onSelect: () => onPageChange('shortcuts') },
+            { label: 'Nodes reference', icon: 'nodes', hint: 'Every node type: what it does, its sockets, a live picture, its GLSL', onSelect: () => openNodesReference() },
+            { label: 'App settings', icon: 'sliders', hint: 'Theme, shortcuts, panel sizes: reset any of them to its default', onSelect: openAppSettings },
             { label: mode === 'light' ? 'Dark theme' : 'Light theme', icon: mode === 'light' ? 'moon' : 'sun', onSelect: toggleTheme },
             { label: `Rotate to full screen · ${rotateFullscreenLabel(rotate.setting)}`, icon: 'phone', hint: 'Turned sideways, the picture alone fills the screen. Tap to change: Off, Play only, Always (Play and Studio)', onSelect: rotate.cycle },
             ...(onClear ? ['separator' as const, { label: 'New graph…', icon: 'plus' as const, hint: 'Start from a Scene builder, or from an empty graph', onSelect: onClear }] : []),

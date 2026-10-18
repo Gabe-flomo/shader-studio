@@ -16,7 +16,6 @@ import { useNodeGraphStore } from '../store/useNodeGraphStore';
 import { useTakes } from '../lib/takes';
 import { askChoice } from '../components/ui/dialogStore';
 import { toast } from '../components/ui/toastStore';
-import { requestPage } from '../components/page';
 import { installPluginSafety } from '../lib/pluginSafety';
 import {
   AUTOSAVE_KEY, AutosaveScheduler, CLOSED_UNSAVED, buildSnapshot, graphHasContent, graphWork, isPlayfileSnapshot, newSessionMarker, parseAutosaveMode, parseSessionMarker,
@@ -286,15 +285,9 @@ export async function restoreSnapshot(file: string): Promise<boolean> {
   return true;
 }
 
-/** Files → App settings, where the autosaves are listed. */
-export const OPEN_APP_SETTINGS = 'open-files-app-settings';
-let appSettingsWanted = false;
-export function takeAppSettingsRequest(): boolean { const w = appSettingsWanted; appSettingsWanted = false; return w; }
+/** App settings (a window from the top bar's ⋯ since 2026-10-17, docs/glossary.md), where the autosaves are listed. */
 export function showAutosavesInFiles(): void {
-  appSettingsWanted = true;
-  requestPage('files');
-  // The Files page may already be open: it listens too.
-  window.setTimeout(() => window.dispatchEvent(new Event(OPEN_APP_SETTINGS)), 0);
+  void import('../components/shell/appDialogStore').then(m => m.openAppSettings());
 }
 
 export function formatClock(ms: number, now = Date.now()): string {
@@ -353,7 +346,7 @@ async function offerRecovery(previous: SessionMarker | null, list: SnapshotMeta[
   const why = previous?.reason && previous.reason !== 'unknown' && !NOT_A_CRASH.has(previous.reason) ? ` ${reasonWords(previous.reason)}.` : '';
   const choice = await askChoice(d.title, [
     { id: 'recover', label: 'Recover', variant: 'primary' },
-    { id: 'files', label: 'Show in Files', variant: 'ghost' },
+    { id: 'files', label: 'Show in App settings', variant: 'ghost' },
     { id: 'discard', label: 'Discard', variant: 'danger' },
   ], { message: d.message + why + others, ...(report ? { note: 'A crash report was saved.', links } : {}) });
   backend?.done();

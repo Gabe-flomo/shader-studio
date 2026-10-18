@@ -282,7 +282,7 @@ function FunctionsRoute({ compact, onPick }: { compact: boolean; onPick: (p: Cod
               </div>
             </div>
             <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', paddingBottom: 8 }}>
-              {!all.length && <Empty>No functions yet. Keep some from the GLSL page’s <b>Discover functions</b>, or save a Custom Function node as a preset, and they appear here.</Empty>}
+              {!all.length && <Empty>No functions yet. Keep some from Code → Shader’s <b>Discover functions</b>, or save a Custom Function node as a preset, and they appear here.</Empty>}
               {all.length > 0 && !list.length && <Empty>Nothing matches.</Empty>}
               {list.map(e => (
                 <PickRow key={e.id} on={entry?.id === e.id} onPick={() => setPicked(e.id)}

@@ -68,7 +68,6 @@ import { OPEN_CLEANUP_VIEW } from '../../files/storageLimit';
 import { takeCleanupRequest } from '../../files/storageLimitApp';
 import { exportPlayfile } from '../../playfile/app';
 import { reportFileResult } from '../shell/reportFileResult';
-import { OPEN_APP_SETTINGS, takeAppSettingsRequest } from '../../files/recovery';
 
 /** Files' ids for the library's videos (files/videosSource.ts through inventory's external sources). */
 const VIDEO_PREFIX = 'ext:videos:';
@@ -136,14 +135,6 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
     if (id && inv) setExpanded(s => { const n = new Set(s); for (const p of pathTo(inv, id).slice(0, -1)) n.add(p.id); return n; });
     scroller.current?.scrollTo({ top: 0 });
   }, [inv, compact]);
-  // The Recover dialog's "Show in Files" asks for App settings, where the autosaves are listed.
-  const [wantAppSettings, setWantAppSettings] = useState(() => takeAppSettingsRequest());
-  useEffect(() => {
-    const go = () => { takeAppSettingsRequest(); setWantAppSettings(true); };
-    window.addEventListener(OPEN_APP_SETTINGS, go);
-    return () => window.removeEventListener(OPEN_APP_SETTINGS, go);
-  }, []);
-  useEffect(() => { if (wantAppSettings && inv) { setWantAppSettings(false); open(APP_SETTINGS_ID); } }, [wantAppSettings, inv, open]);
   const openNodePage = useCallback((type: string) => { setSheetId(null); setNodeType(type); setView('nodes'); scroller.current?.scrollTo({ top: 0 }); }, []);
   const show = useCallback((v: View) => { setSheetId(null); setView(v); scroller.current?.scrollTo({ top: 0 }); }, []);
 
@@ -349,8 +340,8 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
     <ItemPage inv={inv} node={n} compact={compact} onOpen={open} onMenu={(x, at) => setMenu({ node: x, ...at })}
       primary={n.kind === 'graph' ? { label: isPlayGraph(n) ? 'Open in Play' : 'Open in the Studio', icon: isPlayGraph(n) ? 'play' : 'nodes', onClick: () => { void openGraph(n.label, isPlayGraph(n) ? 'play' : 'studio'); } }
         : n.kind === 'presentation' ? { label: 'Open on Present', icon: 'slides', onClick: () => { rememberLast(n.label); onNavigate?.('present'); } }
-        : n.kind === 'shader' ? { label: 'Open on the GLSL page', icon: 'code', onClick: () => openShader(n) }
-        : n.kind === 'builderFn' ? { label: 'Open the Function Builder', icon: 'fn', onClick: () => onNavigate?.('fn') }
+        : n.kind === 'shader' ? { label: 'Open in Code → Shader', icon: 'code', onClick: () => openShader(n) }
+        : n.kind === 'builderFn' ? { label: 'Open in Code → Functions', icon: 'fn', onClick: () => onNavigate?.('fn') }
         : layerSetOf(n) ? { label: 'Add to Play', icon: 'play', onClick: () => { addLayerSetToPlay(layerSetOf(n)!, { afterSelected: false }); onNavigate?.('play'); } }
         : rackPresetOf(n) ? { label: 'Add as a track', icon: 'play', onClick: () => { applyRackPresetToPlay(rackPresetOf(n)!); onNavigate?.('play'); } }
         : null}
@@ -376,12 +367,10 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
   const notes = <NotesView inv={inv} compact={compact} onGoTo={n => { void goToNote(n); }} onDelete={n => { deleteNoteWithUndo(n); }} />;
   const entries: HomeEntry[] = [
     { id: 'browse', icon: 'folder', label: 'Browse', sub: 'Everything saved, as a tree', tint: tk.accent.base, onClick: () => open('section:graphs') },
-    { id: 'nodes', icon: 'nodes', label: 'Nodes', sub: 'Every node type: sockets, a live picture, its GLSL', tint: tk.accent.base, onClick: () => { setNodeType(null); show('nodes'); } },
     { id: 'notes', icon: 'comment', label: 'Notes', sub: notesCount ? `${plural(notesCount, 'note')}: Play notes and node comments` : 'No notes yet', count: notesCount, tint: tk.accent.base, onClick: () => show('notes') },
     { id: 'cleanup', icon: 'spark', label: 'Clean up', sub: cleanupCount ? `${plural(cleanupCount, 'suggestion')}: old versions, unused files, duplicates` : 'Nothing to clean up', count: cleanupCount, tint: tk.status.success, onClick: () => show('cleanup') },
     { id: 'workspace', icon: 'folder', label: 'Workspace folder', sub: 'A folder on this computer that mirrors what’s saved', tint: tk.status.warning, onClick: () => show('workspace') },
     { id: 'linked', icon: 'link', label: 'Linked folders', sub: 'Folders of samples, images, videos and fonts, used in place', tint: tk.accent.base, onClick: () => show('linked') },
-    { id: 'settings', icon: 'sliders', label: 'App settings', sub: 'Theme, shortcuts, panel sizes: reset to default here', tint: tk.text.muted, onClick: () => open(APP_SETTINGS_ID) },
   ];
   const home = <HomeView inv={inv} compact={compact} estimate={estimate} usage={usage} entries={entries} onOpen={open} onOpenNode={openNodePage} onOpenWhereItBelongs={openWhereItBelongs}
     browse={compact ? <div style={{ borderRadius: radius.lg, background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${tk.border.default}`, overflow: 'hidden' }}>
@@ -461,7 +450,6 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
         </div>
         <div style={{ padding: '10px 10px 4px' }}>
           <SideEntry icon="grid" tint={tk.accent.base} label="Home" sub="" count={0} active={view === 'home'} dense onClick={() => show('home')} />
-          <SideEntry icon="nodes" tint={tk.accent.base} label="Nodes" sub="" count={0} active={view === 'nodes'} dense onClick={() => { setNodeType(null); show('nodes'); }} />
           <CleanUpEntry count={cleanupCount} active={view === 'cleanup'} onClick={() => show('cleanup')} dense />
           <NotesEntry count={notesCount} active={view === 'notes'} onClick={() => show('notes')} dense />
           <WorkspaceEntry active={view === 'workspace'} onClick={() => show('workspace')} />

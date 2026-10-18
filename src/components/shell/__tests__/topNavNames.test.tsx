@@ -45,7 +45,7 @@ describe('DesktopTopNav', () => {
   it('every page tab shows its name, and hovering the strip changes nothing', () => {
     const el = mount();
     const tabs = Array.from(el.querySelectorAll('[role="tab"]'));
-    expect(tabs.map(t => t.textContent)).toEqual(['Studio', 'Play', 'Present', 'Functions', 'Shader', 'Convert', 'Files']);
+    expect(tabs.map(t => t.textContent)).toEqual(['Studio', 'Play', 'Present', 'Code', 'Files']);
     const before = el.innerHTML;
     act(() => { el.querySelector('[role="tablist"]')!.dispatchEvent(new MouseEvent('mouseover', { bubbles: true })); });
     expect(el.innerHTML).toBe(before);
