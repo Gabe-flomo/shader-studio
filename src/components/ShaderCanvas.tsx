@@ -1,4 +1,5 @@
 import { playableForPlan } from '../play/planGates';
+import { memoryProbe } from '../lib/memoryProbe';
 import { bandUniforms, useHistBand, type HistBand } from '../lib/histogramBand';
 import { effectivePreviewQuality, usePreviewQuality } from '../lib/previewQuality';
 import { currentPlan, usePlan } from '../lib/plan';
@@ -1996,6 +1997,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
           if (step.do === 'passes') {
             passRunner!.run(passTargets!, fw, fh, gpuTimer, step.stage, step.part);
             if (step.last && !focus && (frameCount % 10 === 0 || !dynamic)) passRunner!.drawThumbnails(passTargets!);
+            // The Envelope card's playhead (lib/memoryProbe.ts): only while a card watches.
+            if (step.last && memoryProbe.wanted()) passRunner!.readMemory(passTargets!, useNodeGraphStore.getState().nodes);
           } else if (step.do === 'particles') {
             gpuTimer.begin('particles');
             drawGpuParticles(material, { width: fw, height: fh, dt: playing ? dt : 0, time: shaderTime, mouse: particleMouse(fw, fh) });

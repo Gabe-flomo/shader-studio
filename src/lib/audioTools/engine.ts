@@ -608,32 +608,42 @@ class AudioToolsEngine implements InputSource {
   }
 
   // ── Hear what you hover (the Audio Source window's spectrum) ─────────────────────────────────────────────
-  private audition: { id: string; filter: BiquadFilterNode; unplug: () => void } | null = null;
+  private audition: { id: string; key: string; filters: BiquadFilterNode[]; unplug: () => void } | null = null;
 
   /**
    * Play only lo–hi Hz of a File source (a band-pass between its sound and the speakers), for the window's
-   * "Hear hovered" switch. False when it can't: not a loaded file, or its own sound is already routed
-   * elsewhere (an effect after it is what's heard). Moving the band only glides the filter.
+   * "Hear hovered" switch and a band's Solo. False when it can't: not a loaded file, or its own sound is already
+   * routed elsewhere (an effect after it is what's heard). Moving the band only glides the filter.
+   *
+   * `shape` (the band's, lib/audioTools/bands.ts): Band is the band-pass, Low cut a high-pass at lo, High cut a
+   * low-pass at hi; `slope` (dB per octave) stacks one filter per 12 dB. Unset: one band-pass, as before.
    */
-  auditionBand(id: string, lo: number, hi: number): boolean {
+  auditionBand(id: string, lo: number, hi: number, o: { shape?: 'band' | 'lowcut' | 'highcut'; slope?: number } = {}): boolean {
     const s = this.sources.get(id);
     if (!s || s.kind !== 'file' || !s.loaded || this.diverted.has(id)) return false;
-    if (this.audition && this.audition.id !== id) this.stopAudition();
+    const shape = o.shape ?? 'band', stages = Math.max(1, Math.min(4, Math.round((o.slope ?? 12) / 12)));
+    const key = `${shape}:${stages}`;
+    if (this.audition && (this.audition.id !== id || this.audition.key !== key)) this.stopAudition();
     let ctx: AudioContext;
     try { ctx = audioEngine.context(); } catch { return false; }
     const a = Math.max(20, Math.min(lo, hi)), b = Math.max(a + 1, Math.max(lo, hi));
-    const centre = Math.sqrt(a * b), q = Math.max(0.3, Math.min(30, centre / (b - a)));
+    const centre = Math.sqrt(a * b);
+    const freq = shape === 'lowcut' ? a : shape === 'highcut' ? b : centre;
+    const q = shape === 'band' ? Math.max(0.3, Math.min(30, centre / (b - a))) : Math.SQRT1_2;
     if (!this.audition) {
-      const filter = ctx.createBiquadFilter();
-      filter.type = 'bandpass';
-      filter.frequency.value = centre;
-      filter.Q.value = q;
-      audioFxHost.divert(ctx, trackChainId(id), filter);
-      this.audition = { id, filter, unplug: audioEngine.connectOutside(filter) };
+      const filters = Array.from({ length: stages }, () => {
+        const f = ctx.createBiquadFilter();
+        f.type = shape === 'lowcut' ? 'highpass' : shape === 'highcut' ? 'lowpass' : 'bandpass';
+        f.frequency.value = freq;
+        f.Q.value = q;
+        return f;
+      });
+      for (let i = 1; i < filters.length; i++) filters[i - 1].connect(filters[i]);
+      audioFxHost.divert(ctx, trackChainId(id), filters[0]);
+      this.audition = { id, key, filters, unplug: audioEngine.connectOutside(filters[filters.length - 1]) };
     } else {
       const t = ctx.currentTime;
-      this.audition.filter.frequency.setTargetAtTime(centre, t, 0.03);
-      this.audition.filter.Q.setTargetAtTime(q, t, 0.03);
+      for (const f of this.audition.filters) { f.frequency.setTargetAtTime(freq, t, 0.03); f.Q.setTargetAtTime(q, t, 0.03); }
     }
     return true;
   }
@@ -645,7 +655,7 @@ class AudioToolsEngine implements InputSource {
     this.audition = null;
     try { audioFxHost.divert(audioEngine.context(), trackChainId(a.id), null); } catch { /* no context */ }
     a.unplug();
-    try { a.filter.disconnect(); } catch { /* gone */ }
+    for (const f of a.filters) try { f.disconnect(); } catch { /* gone */ }
   }
 
   /** A gain to nowhere in a context: a diverted chain goes there (its analyser still reads it). */

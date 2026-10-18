@@ -23,11 +23,24 @@ export interface AudioBandSpec {
   gain: number;
   sensitivity: number;
   cooldown: number;
+  /**
+   * How the band isolates (the window's equaliser, components/audio/bandEq.ts): Band (a band-pass from lo to hi),
+   * Low cut (everything above lo: hi is the top) or High cut (everything below hi: lo is the bottom). The analysis
+   * measures lo–hi either way. Bands saved before shapes are Band.
+   */
+  shape: AudioBandShape;
+  /** How steeply its edges fall, dB per octave: the drawn curve and what Solo / Hear hovered play. */
+  slope: AudioBandSlope;
 }
+
+export type AudioBandShape = 'band' | 'lowcut' | 'highcut';
+export type AudioBandSlope = 12 | 24 | 48;
+export const BAND_SHAPES: readonly AudioBandShape[] = ['band', 'lowcut', 'highcut'];
+export const BAND_SLOPES: readonly AudioBandSlope[] = [12, 24, 48];
 
 export const BAND_COLORS = ['#f38ba8', '#fab387', '#f9e2af', '#a6e3a1', '#89dceb', '#89b4fa', '#cba6f7', '#f5c2e7'];
 
-const BAND_DEFAULTS = { value: true, trigger: false, attack: 0.01, release: 0.15, gain: 1, sensitivity: 0.5, cooldown: 120 };
+const BAND_DEFAULTS = { value: true, trigger: false, attack: 0.01, release: 0.15, gain: 1, sensitivity: 0.5, cooldown: 120, shape: 'band' as AudioBandShape, slope: 24 as AudioBandSlope };
 
 export interface BandPreset { key: string; name: string; lo: number; hi: number; value: boolean; trigger: boolean; sensitivity?: number; cooldown?: number; release?: number }
 
@@ -61,7 +74,10 @@ export function bandsOf(params: Record<string, unknown>): AudioBandSpec[] {
     let id = slugId(String(b.id ?? '')) || `b${i + 1}`;
     while (seen.has(id)) id = `${id}x`;
     seen.add(id);
-    const lo = num(b.lo, 60, BAND_MIN_HZ, BAND_MAX_HZ), hi = num(b.hi, 250, BAND_MIN_HZ, BAND_MAX_HZ);
+    const shape: AudioBandShape = BAND_SHAPES.includes(b.shape as AudioBandShape) ? b.shape as AudioBandShape : 'band';
+    // A cut reaches the end of the range on its open side.
+    const lo = shape === 'highcut' ? BAND_MIN_HZ : num(b.lo, 60, BAND_MIN_HZ, BAND_MAX_HZ);
+    const hi = shape === 'lowcut' ? BAND_MAX_HZ : num(b.hi, 250, BAND_MIN_HZ, BAND_MAX_HZ);
     out.push({
       id,
       name: String(b.name ?? '').trim() || `Band ${i + 1}`,
@@ -74,6 +90,8 @@ export function bandsOf(params: Record<string, unknown>): AudioBandSpec[] {
       gain: num(b.gain, BAND_DEFAULTS.gain, 0, 8),
       sensitivity: num(b.sensitivity, BAND_DEFAULTS.sensitivity, 0, 1),
       cooldown: num(b.cooldown, BAND_DEFAULTS.cooldown, 40, 2000),
+      shape,
+      slope: BAND_SLOPES.includes(b.slope as AudioBandSlope) ? b.slope as AudioBandSlope : BAND_DEFAULTS.slope,
     });
   });
   // A band that sends nothing still sends its Value (otherwise it has no socket to show).

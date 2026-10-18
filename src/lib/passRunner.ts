@@ -32,6 +32,9 @@ function bindPrev(u: Uniforms0, slug: string, rt: THREE.WebGLRenderTarget): void
 import { THUMB_FS, THUMB_MODES, bigThumbKey, drawArrows, readTexel, thumbViewOf } from './thumbView';
 import { ppDrawn, ppKeeps, ppPixel, ppPrevBound, ppRepeat, ppSize, ppSplitsForParticles, ppStaged, ppTargetKey } from '../play/kit/passPlan.js';
 import { CanvasProbeRegistry } from './canvasProbeRegistry';
+import { memoryProbe } from './memoryProbe';
+import { MEMORY_PASS_ID } from '../compiler/memoryExpand';
+import type { GraphNode } from '../types/nodeGraph';
 
 /** Pass cards register a canvas here (by node id); the live runner draws their thumbnails into it. */
 export const passThumbRegistry = new CanvasProbeRegistry();
@@ -365,6 +368,15 @@ export class PassRunner {
         if (canvas) this.drawThumb(canvas, targets.get(spec.slug));
       }
     }
+  }
+
+  /** The memory nodes' states for the cards that watch them (lib/memoryProbe.ts): row 0 of the `__memory` Pass. */
+  readMemory(targets: PassTargets, nodes: readonly GraphNode[]): void {
+    if (!memoryProbe.wanted()) return;
+    const e = this.entries.find(x => x.spec.nodeId === MEMORY_PASS_ID);
+    const t = e ? targets.get(e.spec.slug) : undefined;
+    // After the swap, prev holds the state just worked out.
+    if (t) memoryProbe.read(this.host.renderer, t.prev ?? t.cur, nodes);
   }
 
   private drawThumb(canvas: HTMLCanvasElement, t: ReturnType<PassTargets['get']>): void {
