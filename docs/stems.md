@@ -29,10 +29,10 @@ own README does.
   used. WebGPU first (with `shader-f16`): the pieces' in-between tensors stay on the GPU, piece 0's input
   normalisation runs on the CPU (it overflows in fp16 on WebGPU). If WebGPU won't open, or its first result holds
   NaN, the worker reopens the model on WebAssembly and carries on.
-- **WebAssembly threads** need cross-origin isolation. The desktop app serves its pages with
-  `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`
-  (`src-tauri/tauri.conf.json` → `app.security.headers`; `tauri dev` gets the same from `vite.config.ts`), so there it
-  uses up to 8 threads. The web build is not isolated: one thread.
+- **WebAssembly threads** need cross-origin isolation (COOP / COEP). It is **off** everywhere: tried in the desktop
+  app (2026.10.263), the headers stopped the preview from drawing in WKWebView, so they were taken out again
+  (2026.10.264). WebAssembly runs on one thread; WebGPU (the usual path) doesn't need isolation.
+  `VITE_CROSS_ORIGIN_ISOLATE=1` tries the headers in a browser dev server.
 - **The song** is decoded at 44.1 kHz stereo (mono doubled), normalised by its mean and spread as `demucs.apply` does,
   cut into 7.8 s segments (343 980 samples) with 25 % overlap, and each segment goes through the model. For the 4-stem
   pieces the spectrogram is made in JS exactly as htdemucs `_spec` does (reflect pad, STFT n_fft 4096, hop 1024, Hann,
