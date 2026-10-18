@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.264',
+    date: '2026-10-17',
+    title: "Desktop preview fix",
+    highlights: [
+      { area: 'Studio', text: "Desktop app: the preview draws again (2026.10.263's new isolation setting stopped it); stems still separate on the GPU." },
+    ],
+  },
+  {
     id: '2026.10.263',
     date: '2026-10-17',
     title: "Stems",
