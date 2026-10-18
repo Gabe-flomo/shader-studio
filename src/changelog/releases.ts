@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.276',
+    date: '2026-10-18',
+    title: "Nodes on the picture",
+    highlights: [
+      { area: 'Studio', text: "Maximize graph now shows the picture itself behind your nodes, with no dimming and no dot grid." },
+    ],
+  },
+  {
     id: '2026.10.275',
     date: '2026-10-18',
     title: "A quieter canvas",
