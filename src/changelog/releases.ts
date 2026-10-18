@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.265',
+    date: '2026-10-17',
+    title: "Separate on Pro",
+    highlights: [
+      { area: 'Studio', text: "Separating a song into stems is part of Pro; every other Audio node stays free, and stems a song already has work on Free." },
+    ],
+  },
+  {
     id: '2026.10.264',
     date: '2026-10-17',
     title: "Desktop preview fix",
