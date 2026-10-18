@@ -3,8 +3,8 @@
  * for the sidebar card, the split view's big Layers panel and a phone's
  * full-height sheet:
  *
- *   Drum view   Drum Rack's pads: a 4 × 4 window over 128 pads (the overview
- *               beside it moves the window), click to play (higher is harder)
+ *   Drum view   Drum Rack's pads: a 4 × 4 window over 128 pads (‹ › bank buttons
+ *               above it move the window), click to play (higher is harder)
  *               and select, drop files (several fill the next pads), drag a
  *               pad onto another to swap them. The selected pad's sample on
  *               a waveform (S / E, the loop brace, zoom, snap to zero
@@ -39,7 +39,6 @@ import { Select } from '../../../ui/Select';
 import { NumberInput } from '../../../NodeGraph/NumberInput';
 import { toast } from '../../../ui/toastStore';
 import { alpha, fontFamily, radius } from '../../../../theme/tokens';
-import { useTokens } from '../../../../theme/themeStore';
 import { EMPTY_READERS, useReadersPanel } from '../../readersPanelUi';
 import { setReaderInput } from '../../../../play/readerControls';
 import { ReaderDots } from '../../ReaderDots';
@@ -133,7 +132,7 @@ function SamplerBody({ f, ctx, compact, onExpand, expandLabel }: { f: FieldKit; 
         onChange={v => f.set({ view: v })} />
       <span style={{ flex: 1 }} />
       <IconButton icon="pause" label="Stop everything sounding" size="sm" onClick={() => playSampler.stopAll(l.id)} />
-      {onExpand && <Button size="sm" variant="ghost" icon="popout" onClick={onExpand} title="The full editor: the zone editor, the pad overview and every section">{expandLabel}</Button>}
+      {onExpand && <Button size="sm" variant="ghost" icon="popout" onClick={onExpand} title="The full editor: the zone editor and every section">{expandLabel}</Button>}
     </div>
   );
 
@@ -434,11 +433,15 @@ function DrumSections({ f, ctx, compact, header, sel, setSel, snap, setSnap, num
       <Section id="sampler-pads" kind="sampler" title="Pads" primary summary={`${loaded} pad${loaded === 1 ? '' : 's'} with sounds · ${smNoteName(l.bank)}–${smNoteName(l.bank + 15)} in view`}>
         {header}
         <input ref={fileRef} type="file" accept={SAMPLE_ACCEPT} multiple style={{ display: 'none' }} onChange={e => { const files = Array.from(e.target.files ?? []); e.target.value = ''; if (files.length) void loadFiles(sel, files); }} />
-        <div style={{ display: 'flex', gap: 6, marginTop: 8, alignItems: 'stretch' }}>
-          <PadOverview l={l} onMove={moveBank} compact={compact} />
-          <div role="grid" aria-label="Pads" style={{ flex: 1, minWidth: 0, display: 'grid', gridTemplateColumns: `repeat(${DP_COLS}, minmax(0, 1fr))`, gap: compact ? 4 : 5 }}>
-            {ROWS.flatMap(r => Array.from({ length: DP_COLS }, (_, c) => r * DP_COLS + c)).map(k => padButton(windowPads[k], k))}
-          </div>
+        {/* Which 16 of the 128 notes are in view: ‹ › step a bank of 16; scrolling over the pads steps a row. */}
+        <div data-pad-bank="" style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 8 }}>
+          <IconButton icon="chevL" label="Lower 16 pads" size="sm" disabled={l.bank <= 0} onClick={() => moveBank(l.bank - SM_WINDOW)} />
+          <span style={{ minWidth: 72, textAlign: 'center', color: tk.text.muted, font: `600 11px ${fontFamily.mono}` }}>{smNoteName(l.bank)}–{smNoteName(l.bank + SM_WINDOW - 1)}</span>
+          <IconButton icon="chevR" label="Higher 16 pads" size="sm" disabled={l.bank >= SM_PADS - SM_WINDOW} onClick={() => moveBank(l.bank + SM_WINDOW)} />
+        </div>
+        <div role="grid" aria-label="Pads" onWheel={e => { if (Math.abs(e.deltaY) > 4) moveBank(l.bank + (e.deltaY < 0 ? 4 : -4)); }}
+          style={{ marginTop: 6, display: 'grid', gridTemplateColumns: `repeat(${DP_COLS}, minmax(0, 1fr))`, gap: compact ? 4 : 5 }}>
+          {ROWS.flatMap(r => Array.from({ length: DP_COLS }, (_, c) => r * DP_COLS + c)).map(k => padButton(windowPads[k], k))}
         </div>
         {/* The selected pad: its sound, sample and how it plays. */}
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 10 }}>
@@ -505,35 +508,6 @@ function DrumSections({ f, ctx, compact, header, sel, setSel, snap, setSnap, num
         {f.select('Index mode', 'indexMode', [{ value: 'index', label: 'Index — its place plus Index' }, { value: 'random', label: 'Random — any pad, seeded' }, { value: 'spread', label: 'Index ± spread' }], 'Which pad’s sound a hit plays. Step Index from a beat, a signal or an Increment to walk through the sounds.')}
       </Section>
     </>
-  );
-}
-
-/** Drum Rack's pad overview: the 128 notes as 32 rows of 4, the window outlined; click or drag to move it. */
-function PadOverview({ l, onMove, compact }: { l: SamplerLayer; onMove: (bank: number) => void; compact: boolean }) {
-  const tk = useTokens();
-  const ref = useRef<HTMLDivElement>(null);
-  const rows = 32, cell = compact ? 3 : 4, gap = 1;
-  const at = (clientY: number) => {
-    const r = ref.current!.getBoundingClientRect();
-    const row = rows - 1 - Math.floor(((clientY - r.top) / r.height) * rows);
-    return Math.max(0, Math.min(SM_PADS - SM_WINDOW, row * 4 - 6));
-  };
-  const has = new Set<number>();
-  l.pads.forEach((p, i) => { if (padHasSound(p)) has.add(smNoteOfPad(i, l.baseNote)); });
-  return (
-    <div ref={ref} role="slider" aria-label="Pad overview: the window of pads in view" aria-valuemin={0} aria-valuemax={SM_PADS - SM_WINDOW} aria-valuenow={l.bank} tabIndex={0}
-      title="All 128 notes, the 16 in view outlined. Click or drag to move the window; ↑ / ↓ steps a row."
-      onPointerDown={e => { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); onMove(at(e.clientY)); }}
-      onPointerMove={e => { if (e.buttons) onMove(at(e.clientY)); }}
-      onKeyDown={e => { if (e.key === 'ArrowUp') { e.preventDefault(); onMove(l.bank + 4); } if (e.key === 'ArrowDown') { e.preventDefault(); onMove(l.bank - 4); } }}
-      onWheel={e => { if (Math.abs(e.deltaY) > 4) onMove(l.bank + (e.deltaY < 0 ? 4 : -4)); }}
-      style={{ display: 'grid', gridTemplateColumns: `repeat(4, ${cell}px)`, gridAutoRows: `${cell}px`, gap, padding: 3, borderRadius: radius.sm, background: tk.bg.render, cursor: 'ns-resize', alignContent: 'space-between', touchAction: 'none', flexShrink: 0 }}>
-      {Array.from({ length: rows }, (_, r) => rows - 1 - r).flatMap(row => Array.from({ length: 4 }, (_, c) => {
-        const n = row * 4 + c;
-        const inView = n >= l.bank && n < l.bank + SM_WINDOW;
-        return <span key={n} style={{ width: cell, height: cell, borderRadius: 1, background: has.has(n) ? (inView ? tk.accent.base : alpha(tk.accent.base, 0.5)) : inView ? 'rgba(205,214,244,0.4)' : 'rgba(205,214,244,0.12)' }} />;
-      }))}
-    </div>
   );
 }
 
