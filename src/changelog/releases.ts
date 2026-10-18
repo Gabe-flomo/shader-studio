@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.285',
+    date: '2026-10-18',
+    title: "True EQ curves",
+    highlights: [
+      { area: 'Studio', text: "EQ bands draw their real filter shape. Deleting a band keeps the node. A new scene kind replaces the last. Phone: node search, no + button." },
+    ],
+  },
+  {
     id: '2026.10.284',
     date: '2026-10-18',
     title: "Toolbar order",
