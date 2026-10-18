@@ -1658,21 +1658,21 @@
   "reads": "build",
   "ok": true,
   "added": [
-   "swirlSpace"
+   "uvWarp"
   ],
   "removed": [],
-  "hash": "24e40a6c"
+  "hash": "9a73df38"
  },
  "action swirl:empty · star with a swirl": {
   "reads": "build",
   "ok": true,
   "added": [
    "shapeSDF",
-   "swirlSpace",
-   "uv"
+   "uv",
+   "uvWarp"
   ],
   "removed": [],
-  "hash": "7b7e182a"
+  "hash": "94126644"
  },
  "action twist:circle [c] · twist the space 0.5": {
   "reads": "build",
@@ -2163,11 +2163,11 @@
   "added": [
    "circleSDF",
    "distanceShape",
-   "swirlSpace",
-   "uv"
+   "uv",
+   "uvWarp"
   ],
   "removed": [],
-  "hash": "595733e1"
+  "hash": "6b89d475"
  },
  "recipe noise-on-shape:mixed · disconnect the current output, add it to the noise, and output the result": {
   "reads": "disconnect combine output",
@@ -2565,10 +2565,10 @@
   "reads": "build",
   "ok": true,
   "added": [
-   "swirlSpace"
+   "uvWarp"
   ],
   "removed": [],
-  "hash": "24e40a6c"
+  "hash": "9a73df38"
  },
  "phrase:circle [c] · polar": {
   "reads": "build",

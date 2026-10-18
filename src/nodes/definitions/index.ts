@@ -60,7 +60,7 @@ export { GridLayoutNode, WaveRadiusNode, NeighborDistNode, CellFilterNode, CellD
 export { GaussianFieldNode, FieldAccumulateNode, MetaballThresholdNode, FieldToLinesNode, DistanceFalloffNode, NoisyGridSDFNode } from './gridField';
 
 // Transforms
-export { FractNode, Rotate2DNode, UVWarpNode, SmoothWarpNode, CurlWarpNode, SwirlWarpNode, DisplaceNode, UvTransform2dNode, UvReciprocalNode } from './transforms';
+export { FractNode, Rotate2DNode, UVWarpNode, DisplaceNode, UvTransform2dNode, UvReciprocalNode } from './transforms';
 
 // Matrix
 export { Vec2ConstNode, MatConstNode, Mat2ConstructNode, Mat3ConstructNode, Mat2InspectNode, Mat3InspectNode, Mat2MulVecNode, Mat3MulVecNode } from './matrix';
@@ -68,7 +68,7 @@ export { Vec2ConstNode, MatConstNode, Mat2ConstructNode, Mat3ConstructNode, Mat2
 // Spaces
 export {
   PolarSpaceNode, LogPolarSpaceNode, HyperbolicSpaceNode, InversionSpaceNode,
-  MobiusSpaceNode, SwirlSpaceNode, KaleidoSpaceNode, SphericalSpaceNode,
+  MobiusSpaceNode, KaleidoSpaceNode, SphericalSpaceNode,
   RippleSpaceNode, InfiniteRepeatSpaceNode,
   WaveTextureNode, MagicTextureNode, GridNode, ShearNode,
   Perspective2DNode,
@@ -229,10 +229,10 @@ import { ArrayFieldNode } from './arrayField';
 import { FieldCellNode } from './fieldCell';
 import { GridLayoutNode, WaveRadiusNode, NeighborDistNode, CellFilterNode, CellDisplaceNode, GridDensityWarpNode, NeighborOffset2dNode, AnimatedCellCenterNode, NeighborAttractCirclesNode } from './grid';
 import { GaussianFieldNode, FieldAccumulateNode, MetaballThresholdNode, FieldToLinesNode, DistanceFalloffNode, NoisyGridSDFNode } from './gridField';
-import { FractNode, Rotate2DNode, UVWarpNode, SmoothWarpNode, CurlWarpNode, SwirlWarpNode, DisplaceNode, UvTransform2dNode, UvReciprocalNode } from './transforms';
+import { FractNode, Rotate2DNode, UVWarpNode, DisplaceNode, UvTransform2dNode, UvReciprocalNode } from './transforms';
 import {
   PolarSpaceNode, LogPolarSpaceNode, HyperbolicSpaceNode, InversionSpaceNode,
-  MobiusSpaceNode, SwirlSpaceNode, KaleidoSpaceNode, SphericalSpaceNode,
+  MobiusSpaceNode, KaleidoSpaceNode, SphericalSpaceNode,
   RippleSpaceNode, InfiniteRepeatSpaceNode,
   WaveTextureNode, MagicTextureNode, GridNode, ShearNode,
   Perspective2DNode,
@@ -433,9 +433,6 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   fract: FractNode,
   rotate2d: Rotate2DNode,
   uvWarp: UVWarpNode,
-  smoothWarp: SmoothWarpNode,
-  curlWarp: CurlWarpNode,
-  swirlWarp: SwirlWarpNode,
   displace: DisplaceNode,
   uvTransform2d: UvTransform2dNode,
   uvReciprocal: UvReciprocalNode,
@@ -454,7 +451,6 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   hyperbolicSpace: HyperbolicSpaceNode,
   inversionSpace: InversionSpaceNode,
   mobiusSpace: MobiusSpaceNode,
-  swirlSpace: SwirlSpaceNode,
   kaleidoSpace: KaleidoSpaceNode,
   sphericalSpace: SphericalSpaceNode,
   rippleSpace: RippleSpaceNode,

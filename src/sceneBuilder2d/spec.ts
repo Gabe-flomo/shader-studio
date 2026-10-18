@@ -147,7 +147,7 @@ export const SPACES: SpaceDef[] = [
     params: [P('count', 'Copies', 'count', 6, 2, 32, 1)] },
   { kind: 'polar', label: 'Polar', aliases: ['polar-map'], type: 'polarSpace', posIn: 'input', posOut: 'output', blurb: 'Reads the picture as angle and distance: straight lines become spirals and circles.',
     params: [P('twist', 'Twist', 'twist', 0, -5, 5), P('scale', 'Radial scale', 'radialScale', 1, 0.1, 5)] },
-  { kind: 'swirl', label: 'Swirl', aliases: ['twist', 'vortex', 'whirl'], type: 'swirlSpace', posIn: 'input', posOut: 'output', blurb: 'Twists space round the centre, most at the middle.',
+  { kind: 'swirl', label: 'Swirl', aliases: ['twist', 'vortex', 'whirl'], type: 'uvWarp', posIn: 'input', posOut: 'output', blurb: 'Twists space round the centre, most at the middle.',
     params: [P('amount', 'Strength', 'strength', 2, -10, 10, 0.1), P('falloff', 'Falloff', 'falloff', 1, 0.1, 5, 0.1)] },
   { kind: 'warp', label: 'Noise warp', aliases: ['distort', 'wobble', 'domain-warp', 'organic'], type: 'domainWarp', posIn: 'uv', posOut: 'uv', animated: true, blurb: 'Pushes space about with smooth noise: organic, flowing edges.',
     params: [P('amount', 'Strength', 'strength', 0.3, 0, 1.5), P('scale', 'Scale', 'scale', 1.5, 0.1, 6), P('speed', 'Speed', 'time_scale', 0, 0, 2, 0.01, { hint: 'How fast the noise drifts. 0 stands still.' })] },

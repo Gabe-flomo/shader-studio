@@ -267,7 +267,7 @@ export const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: strin
   '2D Space': [
     { label: 'Basic',   types: ['transform', 'uvTransform2d', 'rotate2d', 'shear', 'perspective2d', 'fract', 'displace'] },
     { label: 'Repeat',  types: ['infiniteRepeatSpace', 'limitedRepeat2D', 'mirroredRepeat2D', 'angularRepeat2D', 'kaleidoSpace', 'grid'] },
-    { label: 'Warp',    types: ['uvWarp', 'smoothWarp', 'curlWarp', 'swirlWarp', 'swirlSpace', 'rippleSpace', 'sphericalSpace', 'lensDistortion', 'crtScreen', 'turbulence', 'uvReciprocal', 'gravityField', 'spiralField', 'vectorField'] },
+    { label: 'Warp',    types: ['uvWarp', 'rippleSpace', 'sphericalSpace', 'lensDistortion', 'crtScreen', 'turbulence', 'uvReciprocal', 'gravityField', 'spiralField', 'vectorField'] },
     { label: 'Map',     types: ['polarSpace', 'logPolarSpace', 'hyperbolicSpace', 'inversionSpace', 'mobiusSpace', 'cornerPin'] },
     { label: 'Pattern', types: ['waveTexture', 'magicTexture', 'chaosLayers'] },
   ],

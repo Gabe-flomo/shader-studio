@@ -293,12 +293,12 @@ const SPACE: Move[] = [
   },
   {
     id: 'swirl', label: 'Swirl', kinds: ['space'], shape: 'transform', sides: ['in', 'out'],
-    anchor: { type: 'swirlSpace', key: 'input', out: 'output' },
+    anchor: { type: 'uvWarp', key: 'input', out: 'output' },
     why: 'a space: a vortex round the centre',
     args: [{ name: 'amount', label: 'Strength', kind: 'number', default: 2, words: ['strength', 'amount', 'by'] }],
     build: ctx => ({
-      nodes: [n('swirlSpace', 'swirl', C(1), 0, { strength: num(ctx, 'amount', 2), falloff: 1, ...note(
-        'Swirl / Vortex: twists the space round the centre, most at the middle.',
+      nodes: [n('uvWarp', 'swirl', C(1), 0, { kind: 'swirl', strength: num(ctx, 'amount', 2), falloff: 1, cx: 0, cy: 0, speed: 0, ...note(
+        'UV Warp (Swirl): twists the space round the centre, most at the middle.',
         'Why: the Swirl suggestion. Strength is the twist at the centre, in radians.',
       ) }, { input: [IN, ''] })],
       result: ['swirl', 'output'],

@@ -101,6 +101,13 @@ export const NODE_ALIASES: Record<string, NodeAlias> = {
   squareLFO:     { to: 'lfo', params: o => ({ ...o, waveform: 'square' }) },
   sawtoothLFO:   { to: 'lfo', params: o => ({ ...o, waveform: 'sawtooth' }) },
   triangleLFO:   { to: 'lfo', params: o => ({ ...o, waveform: 'triangle' }) },
+
+  // ── 2026-10-17 sweep: one UV Warp with a Kind (transforms.ts). Each kind is its old node's GLSL;
+  //    the old defaults fill any setting the saved node lacked. Swirl / Vortex is Swirl round (0, 0), no spin. ──
+  smoothWarp: { to: 'uvWarp', params: o => ({ ...o, kind: 'smooth', strength: num(o.strength, 0.1), scale: num(o.scale, 4.0), speed: num(o.speed, 0.5) }) },
+  curlWarp:   { to: 'uvWarp', params: o => ({ ...o, kind: 'curl', strength: num(o.strength, 0.15), scale: num(o.scale, 3.0), speed: num(o.speed, 0.4) }) },
+  swirlWarp:  { to: 'uvWarp', params: o => ({ ...o, kind: 'swirl', strength: num(o.strength, 2.0), falloff: num(o.falloff, 4.0), cx: num(o.cx, 0.0), cy: num(o.cy, 0.0), speed: num(o.speed, 0.3) }) },
+  swirlSpace: { to: 'uvWarp', params: o => ({ ...o, kind: 'swirl', strength: num(o.strength, 2.0), falloff: num(o.falloff, 1.0), cx: 0.0, cy: 0.0, speed: 0.0 }) },
 };
 
 /** Canonical params for a node created fresh (no old params) or migrated. */

@@ -271,6 +271,9 @@ function spaceNode(b: B, op: SpaceOp, pos: Ref): Ref {
       const speed = n1('speed', 0);
       return ref(mk(c, 'domainWarp', op.id, { strength: n1('amount', 0.3), scale: n1('scale', 1.5), time_scale: speed }, { uv: pos, time: speed ? b.getTime() : null }, note(speed ? ' Time is wired so the noise drifts.' : '')), 'uv');
     }
+    case 'swirl':
+      // UV Warp, Kind Swirl: the twist round the centre (no spin; the old Swirl / Vortex).
+      return ref(mk(c, 'uvWarp', op.id, { kind: 'swirl', strength: n1('amount', 2), falloff: n1('falloff', 1), cx: 0, cy: 0, speed: 0 }, { input: pos }, note()), 'output');
     case 'fisheye':
       return ref(mk(c, 'sphericalSpace', op.id, { strength: n1('amount', 0.5), mode: 'fisheye' }, { input: pos }, note()), 'output');
     default: {

@@ -138,9 +138,9 @@ These categories show sub-group chips inside the browser. Clicking a chip filter
 ### Spaces
 | Sub-group | Contents |
 |---|---|
-| Warp | displace, uvWarp, smoothWarp, curlWarp, swirlWarp |
+| Warp | displace, uvWarp (Kind: Smooth, Jitter, Curl, Swirl) |
 | Repeat | fract, infiniteRepeat, mirroredRepeat2D, limitedRepeat2D, angularRepeat2D |
-| Distort | polarSpace, logPolarSpace, hyperbolicSpace, inversionSpace, mobiusSpace, swirlSpace, kaleidoSpace, sphericalSpace, rippleSpace, perspective2d, shear |
+| Distort | polarSpace, logPolarSpace, hyperbolicSpace, inversionSpace, mobiusSpace, kaleidoSpace, sphericalSpace, rippleSpace, perspective2d, shear |
 | Texture | waveTexture, magicTexture, grid |
 
 ### Math

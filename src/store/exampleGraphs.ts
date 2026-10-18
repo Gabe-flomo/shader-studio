@@ -975,7 +975,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
             nodes: [
               {
                 id: 'warp_n',
-                type: 'smoothWarp',
+                type: 'uvWarp',
                 position: { x: 120, y: 200 },
                 inputs: {
                   input: { type: 'vec2', label: 'UV', connection: { nodeId: GROUP_PORT_SENTINEL, outputKey: 'in_uv' } },
@@ -983,7 +983,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
                   strength: { type: 'float', label: 'Strength' },
                 },
                 outputs: { output: { type: 'vec2', label: 'UV out' } },
-                params: { strength: 0.18, scale: 2.5, speed: 0.3 },
+                params: { kind: 'smooth', strength: 0.18, scale: 2.5, speed: 0.3 },
                 carryMode: true,
               },
             ],
