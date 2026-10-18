@@ -22,7 +22,7 @@ import { StudioShell } from './studio/StudioShell';
 import { useNarrowWindow } from '../code/SidePanels';
 import { usePhoneDialog } from '../ui/phoneDialog';
 import { ScenePicture } from './scenePictures';
-import { SCENE_KINDS, builtScenes, clearForScene, defaultClearChoice, removeBuiltScene, sceneKindInfo, selectedBuiltScene, type BuiltScene, type SceneKind, type SceneKindInfo } from '../../builders/sceneKinds';
+import { SCENE_KINDS, abandonedSceneKind, builtScenes, clearForScene, discardAbandonedScene, graphWithoutAbandoned, defaultClearChoice, removeBuiltScene, sceneKindInfo, selectedBuiltScene, type BuiltScene, type SceneKind, type SceneKindInfo } from '../../builders/sceneKinds';
 import { editBuiltScene, startSceneKind } from '../../builders/open';
 import { clearableCount } from '../../agentBuilder/actions';
 import { finishBuilder } from '../../builders/finish';
@@ -39,16 +39,19 @@ export function SceneBuilderShell({ page }: { page: SceneShellPage }) {
 
 function KindPage({ note, keep }: { note?: string; keep?: boolean }) {
   const tk = useTokens();
-  const clearable = useNodeGraphStore(s => clearableCount(s.nodes));
+  // Back from a new scene: picking a kind drops it first (sceneKinds.ts discardAbandonedScene), so the choice below is about the graph without it.
+  const [left] = useState(abandonedSceneKind);
+  const clearable = useNodeGraphStore(s => clearableCount(graphWithoutAbandoned(s.nodes)));
   // Keep by default; only the untouched starter is cleared without asking (sceneKinds.ts defaultClearChoice).
-  const fallback = useNodeGraphStore(s => defaultClearChoice(s.nodes, !!keep));
+  const fallback = useNodeGraphStore(s => defaultClearChoice(graphWithoutAbandoned(s.nodes), !!keep));
   const [choice, setChoice] = useState<'clear' | 'keep' | null>(null);
   // Three across (two rows of three), two on a narrow window, one on a phone.
   const phone = usePhoneDialog();
   const narrow = useNarrowWindow();
   const clearFirst = choice ?? fallback;
   const pick = (k: SceneKind) => {
-    if (clearFirst === 'clear' && clearable > 0) clearForScene();
+    discardAbandonedScene();
+    if (clearFirst === 'clear' && clearableCount(useNodeGraphStore.getState().nodes) > 0) clearForScene();
     startSceneKind(k, { fromShell: true });
   };
   return (
@@ -58,6 +61,11 @@ function KindPage({ note, keep }: { note?: string; keep?: boolean }) {
           <b style={{ fontSize: 20, fontWeight: 650, letterSpacing: '-0.01em' }}>What kind of scene?</b>
           <span style={{ fontSize: 12.5, color: tk.text.muted }}>Pick one: the window becomes its builder. “Scene builder” at the top brings you back here.</span>
           {note && <span data-scene-note style={{ fontSize: 12, color: tk.text.secondary }}>{note}</span>}
+          {left && (
+            <span data-scene-replaces={left} style={{ fontSize: 12, color: tk.text.secondary }}>
+              Picking a kind replaces the {sceneKindInfo(left).title} you just made (undo brings it back). Close to keep it.
+            </span>
+          )}
         </span>
         {clearable > 0 && (
           <span data-scene-clear={clearFirst} style={{ display: 'inline-flex', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center', gap: 10, fontSize: 12.5, color: tk.text.muted }}

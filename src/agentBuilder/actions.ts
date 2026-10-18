@@ -195,7 +195,7 @@ const isOutput = (n: GraphNode) => n.type === 'output' || n.type === 'vec4Output
 /** How many nodes the start page's "Clear the graph first" would take away (all but the Output). */
 export const clearableCount = (nodes: readonly GraphNode[]) => nodes.filter(n => !isOutput(n)).length;
 
-const unwired = (n: GraphNode, gone: (id: string) => boolean): GraphNode => ({
+export const unwired = (n: GraphNode, gone: (id: string) => boolean): GraphNode => ({
   ...n, inputs: Object.fromEntries(Object.entries(n.inputs).map(([k, v]) => [k, v.connection && gone(v.connection.nodeId) ? { ...v, connection: undefined } : v])),
 });
 
