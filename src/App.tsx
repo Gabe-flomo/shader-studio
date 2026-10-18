@@ -50,7 +50,7 @@ import { APP_HEIGHT } from './lib/viewport';
 import { rotateShowsFullscreen, useRotateFullscreen } from './lib/rotateFullscreen';
 import { PhoneFullscreenChrome } from './components/shell/PhoneFullscreen';
 import { SplitHandle } from './components/shell/PhoneSplit';
-import { PLAY_SPLIT, PLAY_SPLIT_LANDSCAPE, STUDIO_SPLIT, STUDIO_SPLIT_LANDSCAPE, usePhoneSplit } from './components/shell/splitSize';
+import { PLAY_SPLIT, PLAY_SPLIT_LANDSCAPE, STUDIO_SPLIT, STUDIO_SPLIT_LANDSCAPE, splitLength, usePhoneSplit } from './components/shell/splitSize';
 import { useShortcuts } from './hooks/useShortcuts';
 import { useTimeHotkeys } from './hooks/useTimeHotkeys';
 import { useCtp, type CtpPalette } from './theme/nodePalette';
@@ -1068,7 +1068,7 @@ function App() {
             <div style={{
               position: 'relative',
               flex: mobileLayout === 'canvas' ? 1 : '0 0 auto',
-              ...(mobileLayout === 'canvas' ? {} : landscape ? { width: `${mobileCanvasVh}vw` } : { height: `${mobileCanvasVh}vh` }),
+              ...(mobileLayout === 'canvas' ? {} : landscape ? { width: `${mobileCanvasVh}vw` } : { height: splitLength(mobileCanvasVh) }),
               minHeight: 0, minWidth: 0,
               background: tk.bg.render,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -1078,7 +1078,7 @@ function App() {
                 position: 'relative',
                 ...(mobileLayout === 'canvas' ? { width: '100%', height: '100%' }
                   : landscape ? { height: '100%', aspectRatio: '1 / 1', maxWidth: '100%' }
-                  : { width: `min(100%, ${mobileCanvasVh}vh)`, height: `min(100%, ${mobileCanvasVh}vh)` }),
+                  : { width: `min(100%, ${splitLength(mobileCanvasVh)})`, height: `min(100%, ${splitLength(mobileCanvasVh)})` }),
               }} ref={canvasFrame}>
                 <ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} />
                 <AudioMasterVolumeWidget />
@@ -1107,9 +1107,9 @@ function App() {
 
           {showGraphPane && (
             <div style={{ flex: 1, minHeight: 0, minWidth: 0, display: 'flex', flexDirection: 'column', [landscape ? 'borderLeft' : 'borderTop']: showCanvasPane ? `1px solid ${tc.surface0}` : undefined }}>
-              {/* On a phone the flow strip is one chip (docs/structure-hints.md). */}
-              <FlowStrip phone />
-              <div style={{ flex: 1, minHeight: 0, minWidth: 0 }}><MobileGraphBrowser /></div>
+              {/* On a phone the flow strip is one chip (docs/structure-hints.md); on a node page it
+                  scrolls away with the page rather than staying pinned above it. */}
+              <div style={{ flex: 1, minHeight: 0, minWidth: 0 }}><MobileGraphBrowser top={<FlowStrip phone />} /></div>
             </div>
           )}
 
@@ -1311,9 +1311,9 @@ function App() {
           <ThemeOverrideContext.Provider value="dark">
             <div style={{
               position: 'relative', flexShrink: 0, background: tk.bg.render, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
-              ...(landscape ? { width: `${playSplit.vh}vw`, minWidth: 0 } : { height: `${playSplit.vh}vh` }),
+              ...(landscape ? { width: `${playSplit.vh}vw`, minWidth: 0 } : { height: splitLength(playSplit.vh) }),
             }}>
-              <div ref={canvasFrame} style={{ position: 'relative', width: landscape ? '100%' : `min(100vw, ${playSplit.vh}vh)`, height: '100%' }}>
+              <div ref={canvasFrame} style={{ position: 'relative', width: landscape ? '100%' : `min(100vw, ${splitLength(playSplit.vh)})`, height: '100%' }}>
                 <ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} />
                 <PhoneFullscreenChrome showEnter={landscape} />
               </div>

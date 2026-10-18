@@ -157,13 +157,15 @@ export function PhoneStudio(p: PhoneStudioProps) {
         <div data-studio-viewport style={{ flex: 1, minHeight: LIMITS.viewport / 2, position: 'relative', display: 'flex', flexDirection: 'column', minWidth: 0 }}>{p.children}</div>
         {hasSheet && (
           <div data-phone-sheet style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', borderTop: `1px solid ${tk.border.subtle}`, background: tk.bg.subtle, boxShadow: '0 -8px 24px rgba(0,0,0,0.12)' }}>
+            {/* The handle resizes the sheet on every tab, the presets included: a long list of
+                presets gets the same room as the settings (it used to stop at 42vh, unresizable). */}
+            <div data-phone-handle role="separator" aria-orientation="horizontal" aria-label="Resize the settings" aria-valuenow={height}
+              onPointerDown={onHandleDown} onPointerMove={onHandleMove} onPointerUp={onHandleUp} onPointerCancel={onHandleUp}
+              style={{ height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'ns-resize', touchAction: 'none', flexShrink: 0 }}>
+              <span style={{ width: 40, height: 5, borderRadius: 3, background: tk.border.strong }} />
+            </div>
             {!presetsOpen && (
               <>
-                <div data-phone-handle role="separator" aria-orientation="horizontal" aria-label="Resize the settings" aria-valuenow={height}
-                  onPointerDown={onHandleDown} onPointerMove={onHandleMove} onPointerUp={onHandleUp} onPointerCancel={onHandleUp}
-                  style={{ height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'ns-resize', touchAction: 'none', flexShrink: 0 }}>
-                  <span style={{ width: 40, height: 5, borderRadius: 3, background: tk.border.strong }} />
-                </div>
                 <div data-phone-sheet-head style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 8px 4px', minHeight: 40, flexShrink: 0 }}>
                   {p.presets !== undefined && (
                     <button type="button" data-phone-back onClick={() => setMode(PRESETS_TAB)}
@@ -184,7 +186,7 @@ export function PhoneStudio(p: PhoneStudioProps) {
             )}
             {/* All stay mounted; only the one shown has a size. */}
             {p.presets !== undefined && (
-              <div data-phone-presets hidden={!presetsOpen} style={{ display: presetsOpen ? 'block' : 'none', maxHeight: '42vh', overflow: 'auto', padding: '12px 16px', touchAction: 'pan-x pan-y' }}>{p.presets}</div>
+              <div data-phone-presets hidden={!presetsOpen} style={{ display: presetsOpen ? 'block' : 'none', maxHeight: height, overflow: 'auto', padding: '0 16px 12px', touchAction: 'pan-x pan-y' }}>{p.presets}</div>
             )}
             {p.panels?.map(x => (
               <div key={x.id} data-phone-panel={x.id} hidden={mode !== x.id} style={{ display: mode === x.id ? 'flex' : 'none', flexDirection: 'column', height, overflowY: 'auto', touchAction: 'pan-y' }}>{x.content}</div>
