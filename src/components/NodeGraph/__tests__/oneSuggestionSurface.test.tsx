@@ -29,7 +29,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { SuggestionStrip } from '../SuggestionStrip';
 import { useFitsHere } from '../useLibraryRelevance';
 import { useNodeGraphStore } from '../../../store/useNodeGraphStore';
-import { setSuggestionsOpen, suggestionsOpen } from '../../../suggestions/settings';
+import { setSuggestionsOpen, setSuggestionsShown, suggestionsOpen } from '../../../suggestions/settings';
 import { n } from '../../../store/graphBuilder';
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -38,7 +38,8 @@ if (!globalThis.CSS) vi.stubGlobal('CSS', { escape: (s: string) => s });
 let root: Root | null = null;
 let host: HTMLElement | null = null;
 afterEach(() => { act(() => root?.unmount()); host?.remove(); root = null; host = null; });
-beforeEach(() => { localStorage.clear(); setSuggestionsOpen(true); });
+// The strip is off by default; these tests turn it on (canvas right-click → Show Next suggestions).
+beforeEach(() => { localStorage.clear(); setSuggestionsShown(true); setSuggestionsOpen(true); });
 const mount = (el: React.ReactElement) => {
   host = document.createElement('div');
   document.body.appendChild(host);
@@ -95,5 +96,18 @@ describe('Fits here', () => {
     function Probe() { got = useFitsHere(true, new Set()); return null; }
     mount(createElement(Probe));
     expect(got).toEqual({ defs: [], from: null });
+  });
+});
+
+describe('Next suggestions are off by default', () => {
+  it('a fresh device shows no strip until it is turned on', async () => {
+    localStorage.clear();
+    vi.resetModules();
+    const fresh = await import('../../../suggestions/settings');
+    expect(fresh.suggestionsShown()).toBe(false);
+    fresh.setSuggestionsShown(true);
+    expect(localStorage.getItem(fresh.STRIP_KEY)).toBe('on');
+    fresh.setSuggestionsShown(false);
+    expect(fresh.suggestionsShown()).toBe(false);
   });
 });

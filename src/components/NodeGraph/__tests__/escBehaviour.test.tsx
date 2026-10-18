@@ -26,6 +26,7 @@ vi.mock('../../../suggestions', async orig => {
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { SuggestionStrip } from '../SuggestionStrip';
+import { setSuggestionsShown } from '../../../suggestions/settings';
 import { useNodeGraphStore } from '../../../store/useNodeGraphStore';
 import { useShortcuts } from '../../../hooks/useShortcuts';
 import { n } from '../../../store/graphBuilder';
@@ -49,6 +50,8 @@ const esc = () => {
 };
 
 describe('the Next strip', () => {
+  // Off by default; turned on as from the canvas right-click menu.
+  setSuggestionsShown(true);
   it('Esc closes it; selecting the card again brings it back', () => {
     const nodes = [n('uv', 'u', 0, 0)];
     useNodeGraphStore.setState({ nodes, selectedNodeId: 'u', selectedNodeIds: [] });
