@@ -9,6 +9,9 @@
  *
  * Nothing happens when that presentation is already the open one. The
  * Present page's code loads only when a presentation is actually opened.
+ * The Ask notice shows once per graph (an example by its key, a saved graph
+ * by its name), remembered on this device: opening it again doesn't cover
+ * the controls with the same notice every time.
  */
 import { useEffect } from 'react';
 import { GRAPH_OPENED, type GraphOpened } from '../../store/useNodeGraphStore';
@@ -17,6 +20,25 @@ import { toast } from '../ui/toastStore';
 import { requestPage } from '../page';
 
 export const LINKED_PRESENTATION_TOAST = 'Has a presentation';
+
+const ASKED_KEY = 'shader-studio:linkedPresentationAsked';
+/** How many graphs' "asked" marks to keep (the oldest go first). */
+const ASKED_KEEP = 200;
+
+const graphKey = (ev: GraphOpened) => (ev.kind === 'example' ? `example:${ev.key}` : `saved:${ev.name}`);
+
+function askedList(): string[] {
+  try { const v = JSON.parse(localStorage.getItem(ASKED_KEY) ?? '[]'); return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []; } catch { return []; }
+}
+
+/** True the first time a graph's notice is asked for (and marks it), false after. */
+export function firstAskFor(ev: GraphOpened): boolean {
+  const key = graphKey(ev);
+  const list = askedList();
+  if (list.includes(key)) return false;
+  try { localStorage.setItem(ASKED_KEY, JSON.stringify([...list, key].slice(-ASKED_KEEP))); } catch { /* preference only: it may ask again */ }
+  return true;
+}
 
 const more = (n: number) => (n > 0 ? ` (and ${n} more)` : '');
 
@@ -35,6 +57,7 @@ export function handleGraphOpened(ev: GraphOpened): void {
     }, () => {});
     return;
   }
+  if (!firstAskFor(ev)) return;
   toast.info(LINKED_PRESENTATION_TOAST, {
     message: `${ev.kind === 'example' ? 'Sample: ' : ''}“${d.name}”${more(d.others)}`,
     action: { label: 'Open', onClick: () => { void openIt(ev, d.name).then(ok => { if (ok) requestPage('present'); }, () => {}); } },

@@ -142,6 +142,11 @@ function datasetsField(datasets: DatasetsRecord): { datasets?: DatasetsRecord } 
 }
 
 /** A graph was opened (a saved one, or an example): the linked-presentation watcher (App) hears it. */
+/** The open graph's example title, while it is still that example (not saved, nothing else loaded since). */
+export function exampleTitleOf(s: { exampleTitle: { label: string; epoch: number } | null; graphEpoch: number; currentGraph: unknown }): string | null {
+  return !s.currentGraph && s.exampleTitle && s.exampleTitle.epoch === s.graphEpoch ? s.exampleTitle.label : null;
+}
+
 export const GRAPH_OPENED = 'graph-opened';
 export type GraphOpened = { kind: 'saved'; name: string } | { kind: 'example'; key: string };
 function announceGraphOpened(detail: GraphOpened): void {
@@ -1208,6 +1213,12 @@ interface NodeGraphState {
   currentGraph: { name: string; version: number; major: number; minor: number; latest: boolean } | null;
   /** Bumped whenever a whole different graph is loaded (an example, a saved graph, an import): not by edits or undo. */
   graphEpoch: number;
+  /**
+   * The example the open graph came from, by its title (the top bar names an unsaved example
+   * after it, and saving offers that name). Only good while `epoch` is still graphEpoch: any
+   * other graph loaded since makes it stale. Use `exampleTitleOf`.
+   */
+  exampleTitle: { label: string; epoch: number } | null;
   /** The open graph changed since it was loaded or saved. */
   graphDirty: boolean;
   /** Open an earlier version of a saved graph. Saving it makes it the newest version. */
@@ -1895,6 +1906,7 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
   playOpenRequest: 0,
   currentGraph: null,
   graphEpoch: 0,
+  exampleTitle: null,
   graphDirty: false,
   focusNodeRequest: null,
   focusNode: (id) => set(s => ({ selectedNodeIds: [id], selectedNodeId: id, focusNodeRequest: { id, n: (s.focusNodeRequest?.n ?? 0) + 1 } })),
@@ -5554,8 +5566,9 @@ export const useNodeGraphStore = create<NodeGraphState>((set, get) => ({
     const datasets = parseDatasetsRecord(graph.datasets);
     set(st => ({ nodes, looseGroups: [], play, datasets, previewNodeId: null, activeGroupId: null, activeGroupPath: [], graphEpoch: st.graphEpoch + 1 }));
     get().compile();
-    // An example is not a saved project: saving it asks for a name.
-    set({ currentGraph: null, graphDirty: false });
+    // An example is not a saved project: saving it asks for a name (its title, offered).
+    const title = example === 'blank' ? null : graph.label;
+    set(st => ({ currentGraph: null, graphDirty: false, exampleTitle: title ? { label: title, epoch: st.graphEpoch } : null }));
     announcePlay(play, () => set(s => ({ playOpenRequest: s.playOpenRequest + 1 })));
     if (example !== 'blank') announceGraphOpened({ kind: 'example', key: loadedKey });
     if (graph.images) void attachExampleImages(graph.images, get().graphEpoch);

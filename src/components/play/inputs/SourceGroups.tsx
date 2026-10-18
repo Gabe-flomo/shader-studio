@@ -3,8 +3,9 @@
  * sources and the old mappings together under MIDI and OSC, Keys, mouse and
  * gamepad, Audio… (mappingGroups.ts groupSourceItems), each heading folding
  * its cards away and saying how many it holds, with a search over names and
- * what each reads once there are enough cards to look for one. Folds and the
- * search are UI state only.
+ * what each reads once there are enough cards to look for one. A heading's
+ * fold is remembered on this device (playUi's folded, sourceGroupFoldKey);
+ * the search is UI state only.
  */
 import { useState, type CSSProperties, type ReactNode } from 'react';
 import { useTokens } from '../../../theme/themeStore';
@@ -12,7 +13,8 @@ import { fontFamily } from '../../../theme/tokens';
 import { Field } from '../../ui/Field';
 import { Icon } from '../../ui/Icon';
 import { IconButton } from '../../ui/Button';
-import { groupSourceItems, type MappingGroupId, type SourceItem } from '../mappingGroups';
+import { groupSourceItems, sourceGroupFoldKey, type MappingGroupId, type SourceItem } from '../mappingGroups';
+import { usePlayUi } from '../playUi';
 import type { PlayMapping, PlaySourceDef } from '../../../types/play';
 
 /** Fewer cards than this and a search box is more clutter than help. */
@@ -28,11 +30,12 @@ export function SourceGroups({ sources, mappings, words, gridStyle, renderItem }
 }) {
   const tk = useTokens();
   const [query, setQuery] = useState('');
-  const [folded, setFolded] = useState<ReadonlySet<MappingGroupId>>(() => new Set());
+  const folds = usePlayUi(s => s.folded);
   const total = sources.length + mappings.length;
   if (!total) return null;
   const groups = groupSourceItems(sources, mappings, words, query);
-  const fold = (id: MappingGroupId) => setFolded(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  const isFolded = (id: MappingGroupId) => folds[sourceGroupFoldKey(id)] === true;
+  const fold = (id: MappingGroupId) => usePlayUi.getState().toggleFold(sourceGroupFoldKey(id), !isFolded(id));
   return (
     <div data-source-groups="">
       {(total >= SEARCH_FROM || query) && (
@@ -44,7 +47,7 @@ export function SourceGroups({ sources, mappings, words, gridStyle, renderItem }
       )}
       {!groups.length && <div style={{ padding: '10px 2px', color: tk.text.faint, font: `12px ${fontFamily.ui}` }}>No source matches “{query.trim()}”.</div>}
       {groups.map(g => {
-        const open = !folded.has(g.id) || !!query.trim();
+        const open = !isFolded(g.id) || !!query.trim();
         return (
           <section key={g.id} data-source-group={g.id}>
             <button type="button" aria-expanded={open} onClick={() => fold(g.id)}

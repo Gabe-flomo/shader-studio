@@ -139,8 +139,9 @@ the controls are a board (`ControlsBoard.tsx`) instead of one grid:
 - **Layer cards:** a layer's controls sit in a small card of their own, and
   its **+ Parameter** adds another of the layer's numbers to it (the ones not on
   the panel yet).
-- **Live graphs:** each card has a small trace of its value over the last six
-  seconds under its slider: a line for sliders, a filled level for audio
+- **Live graphs:** each card that something drives (an enabled mapping or a
+  route) has a small trace of its value over the last six seconds under its
+  slider; a control only moved by hand has none (its line would be flat): a line for sliders, a filled level for audio
   readers, a step for buttons, a colour strip for colours, and a dot trail
   (with both values as lines) for pairs. Every trace in a group is drawn on
   one canvas laid over the group. One `requestAnimationFrame` loop
@@ -150,9 +151,31 @@ the controls are a board (`ControlsBoard.tsx`) instead of one grid:
 - **Isolate:** click a control's name to pin its graph, larger, in a strip at
   the top with its value now, the lowest and highest seen, and what drives it.
   Several can be pinned; Show all clears them. Double-click the name to rename.
-- **Filters:** search, group, mapped or not, kind (sliders, colours, buttons).
+- **Filters:** one row: a search, one **Show** dropdown (all controls, mapped,
+  unmapped, then each kind and each group the setup has more than one of;
+  `controlGroups.ts` `showOptions`/`filterOfShow`) and the view toggle. Below
+  eight controls (`FILTERS_FROM`) the search and the dropdown stay hidden and
+  the view toggle sits on the first group's heading, so the first card is
+  right under the header.
+- **Notes:** a setup's notes fold into the ⓘ beside the Controls title
+  (folded at first, remembered on this device: playUi's `folded`,
+  `NOTES_FOLD_KEY`); the card's own chevron folds them again.
 - **Flat grid** (the grid button) brings back the single grid of cards,
   remembered on this device. The sidebar keeps its single list.
+- **A control's details** (its chevron): where it comes from, its range as
+  text (no min/max editor: typing a value past either end on the slider
+  widens it, the slider rule), and **Driven by** with its label over the text
+  and **+ Map** / **+ Null** under it.
+
+## A new graph starts fresh
+
+Opening another graph (an example, a saved graph, an imported file:
+`graphEpoch` changes, not a Code-page conversion preview) puts each rail
+category back on its primary page (Controls, Layers, Picture, Arrangement),
+forgets the remembered sub-pages, and clears the phone's picked page, the
+Finish view and the old graph's layer selection (`resetOnGraphLoad.ts`,
+mounted once in App). An example not saved yet goes by its title in the top
+bar, and the save form offers that title as its name (`exampleTitleOf`).
 
 The cards are the same as everywhere: sliders, colours and buttons stay
 usable inline; the graph is added under them.
@@ -162,6 +185,8 @@ usable inline; the graph is added under them.
 `src/components/play/__tests__/rail.test.ts` (the page model, the rail's state
 and restore, opening a category straight to its remembered page, ⌘⇧B and ⌘⇧M),
 `controlBoard.test.ts` (the trace buffer, the sampler loop, the board's and the
-workspace's groups) and `railPagesMount.test.tsx` (every page mounted in
+workspace's groups), `controlsDensity.test.tsx` (the header's notes ⓘ, the
+filter row, folded mappings, the built-in group, the reset on a new graph, the
+control card's details) and `railPagesMount.test.tsx` (every page mounted in
 jsdom, wide and narrow, the phone's pages, the rail's click-through and the
 panel header's tab strip, all without a console error).

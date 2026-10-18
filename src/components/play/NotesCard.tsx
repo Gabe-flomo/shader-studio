@@ -15,6 +15,10 @@
  * Shaders) shows that as a linked credit line under the header, open or
  * closed, so the notes themselves don't need a source line. The editor can
  * add or change that credit ("Add source / credit…").
+ *
+ * The card starts folded away: the Controls header's ⓘ opens it (and its
+ * chevron folds it again), remembered on this device (PlayPage keeps the
+ * open state in playUi's `folded`, key NOTES_FOLD_KEY).
  */
 import { useRef, useState, type ReactNode } from 'react';
 import { NOTE_REF_RE, NOTE_REF_TYPE, type NoteRefKind } from './noteRefs';
@@ -30,7 +34,8 @@ import { CreditEditor } from '../ui/CreditEditor';
 import { Button } from '../ui/Button';
 import type { SourceCredit } from '../../types/credit';
 
-const OPEN_KEY = 'shader-studio:play:notesOpen';
+/** The notes' fold key in playUi's `folded` (no entry: folded). */
+export const NOTES_FOLD_KEY = 'play:notes';
 
 /** What a link can point at: the record's layers and controls, by id. */
 export interface NoteTargets {
@@ -89,8 +94,12 @@ function parseNotes(notes: string): Block[] {
   return blocks;
 }
 
-export function NotesCard({ notes, title, source, editing, targets, onEdit, onChange, onSourceChange, onOpen }: {
+export function NotesCard({ notes, title, source, editing, targets, onEdit, onChange, onSourceChange, onOpen, open, onFold }: {
   notes: string;
+  /** Unfolded (the header's ⓘ, or this card's chevron). Folded, the card shows only while editing. */
+  open: boolean;
+  /** Fold or unfold it. */
+  onFold: (open: boolean) => void;
   /** Where the setup comes from: a linked credit line under the header. */
   source?: SourceCredit;
   /** Shown in the header: the example's name, when there is one. */
@@ -136,13 +145,7 @@ export function NotesCard({ notes, title, source, editing, targets, onEdit, onCh
     const ref = e.dataTransfer.getData(NOTE_REF_TYPE);
     if (ref) onChange(notes ? `${notes.replace(/\s+$/, '')} ${ref}` : ref);
   };
-  const [open, setOpen] = useState<boolean>(() => {
-    try { return localStorage.getItem(OPEN_KEY) !== '0'; } catch { return true; }
-  });
-  const toggle = () => setOpen(o => {
-    try { localStorage.setItem(OPEN_KEY, o ? '0' : '1'); } catch { /* preference only */ }
-    return !o;
-  });
+  const toggle = () => onFold(!open);
   const [draft, setDraft] = useState(notes);
   const fieldRef = useRef<HTMLTextAreaElement>(null);
   const [creditOpen, setCreditOpen] = useState(false);

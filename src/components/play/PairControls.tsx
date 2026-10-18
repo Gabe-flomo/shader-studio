@@ -27,6 +27,8 @@ import { GroupedPicker } from '../ui/GroupedPicker';
 import type { PickerSection } from '../ui/groupedPickerModel';
 import { NumberInput } from '../NodeGraph/NumberInput';
 import { ConditionFields, DistanceAnchorPicker, SignalPicker, labelContext } from './ConditionFields';
+import { usePlayUi } from './playUi';
+import { mappingFoldKey } from './mappingGroups';
 
 // ── On the panel ─────────────────────────────────────────────────────────────
 
@@ -175,7 +177,9 @@ export function PairMappingRow({ mapping: m, play, sourceSections, renderSourceO
   onRemove: () => void;
 }) {
   const tk = useTokens();
-  const [open, setOpen] = useState(true);
+  // Folded by default to its one-line summary; the open state is remembered (playUi's folded, like the other mappings).
+  const open = usePlayUi(s => s.folded[mappingFoldKey(m.id)] === false);
+  const setOpen = (fn: (o: boolean) => boolean) => usePlayUi.getState().toggleFold(mappingFoldKey(m.id), !fn(open));
   const pair = play.pairs?.find(p => p.id === m.pairId);
   const ca = pair && play.controls.find(c => c.id === pair.a), cb = pair && play.controls.find(c => c.id === pair.b);
   const now = usePairNow(m);

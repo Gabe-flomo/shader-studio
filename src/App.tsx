@@ -43,6 +43,7 @@ import { logEvent, setCrashContext } from './lib/crashLog';
 import { CodeTabs } from './components/shell/CodeTabs';
 import { NAVIGATE_EVENT, isCodePage, rememberCodePage, resolvePage, type Page } from './components/page';
 import { useLinkedPresentationWatcher } from './components/shell/linkedPresentationWatcher';
+import { usePlayResetOnGraphLoad } from './components/play/resetOnGraphLoad';
 import { can, openProSheet, requireFeature } from './lib/plan';
 import { NodeSearchPalette } from './components/NodeGraph/NodeSearchPalette';
 import { useShallow } from 'zustand/react/shallow';
@@ -596,6 +597,7 @@ function App() {
   }, [setPage]);
   // A graph with a linked presentation: offer it, open it too, or nothing (the setting in the Library).
   useLinkedPresentationWatcher();
+  usePlayResetOnGraphLoad();
 
   // Navigate to Function Builder when an ExprBlock requests it
   useEffect(() => {

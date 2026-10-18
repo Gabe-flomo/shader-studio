@@ -89,3 +89,43 @@ export function groupControls(play: PlayRecord, filter: BoardFilter = {}): Board
 export function boardGroupList(play: PlayRecord): Array<ControlOrigin & { count: number }> {
   return groupControls(play).map(g => ({ ...g.origin, count: g.items.length }));
 }
+
+/**
+ * The board's one filter dropdown (docs/split-view.md, Controls board): everything, mapped or
+ * unmapped, one kind, or one group, as a single value — `all`, `mapped`, `unmapped`,
+ * `kind:<kind>` or `group:<origin id>`.
+ */
+export type BoardShow = string;
+
+/** Below this many controls the search and the filter stay hidden (a scroll is quicker). */
+export const FILTERS_FROM = 8;
+
+/** Show the search and the filter: enough controls to need them, or one is already in use. */
+export function boardFiltersShown(controlCount: number, active: boolean): boolean {
+  return active || controlCount >= FILTERS_FROM;
+}
+
+/** The filter that a dropdown value stands for. */
+export function filterOfShow(show: BoardShow): Pick<BoardFilter, 'group' | 'mapped' | 'kind'> {
+  if (show === 'mapped' || show === 'unmapped') return { mapped: show };
+  if (show.startsWith('kind:')) return { kind: show.slice(5) as KindFilter };
+  if (show.startsWith('group:')) return { group: show.slice(6) };
+  return {};
+}
+
+const KIND_LABELS: Record<PlayControl['kind'], string> = { float: 'Sliders', color: 'Colours', action: 'Buttons' };
+
+/** The dropdown's options: All, Mapped, Unmapped, then the kinds and the groups the setup has (with counts), when there's more than one. */
+export function showOptions(play: PlayRecord): Array<{ value: BoardShow; label: string }> {
+  const kinds = (Object.keys(KIND_LABELS) as Array<PlayControl['kind']>)
+    .map(k => ({ k, n: play.controls.filter(c => c.kind === k).length }))
+    .filter(x => x.n > 0);
+  const groups = boardGroupList(play);
+  return [
+    { value: 'all', label: `All controls · ${play.controls.length}` },
+    { value: 'mapped', label: 'Mapped' },
+    { value: 'unmapped', label: 'Unmapped' },
+    ...(kinds.length > 1 ? kinds.map(x => ({ value: `kind:${x.k}`, label: `${KIND_LABELS[x.k]} · ${x.n}` })) : []),
+    ...(groups.length > 1 ? groups.map(g => ({ value: `group:${g.id}`, label: `${g.label} · ${g.count}` })) : []),
+  ];
+}

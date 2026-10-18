@@ -104,8 +104,8 @@ They're read-only and can't be deleted: they aren't signals of the record, so
 there's nothing on the Rules page to remove, and a setup with no signals reads 0.
 They're marked **Built in** wherever they show:
 
-- the Inputs board's sources column has a **Built in** group with a card for
-  each (its value now, and **Map**, which makes a source of the record reading
+- the Inputs board's sources column has a **Built in** group, folded at the
+  bottom, with a card for each (its value now, and **Map**, which makes a source of the record reading
   it and starts Map mode);
 - the mapping Source picker lists them under **From the setup**;
 - the condition value picker lists them under **Signals (built in)**.
