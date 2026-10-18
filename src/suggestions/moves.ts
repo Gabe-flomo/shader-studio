@@ -628,12 +628,12 @@ const TEXTURE: Move[] = [
   },
   {
     id: 'trails', label: 'Trails', kinds: ['texture', 'colour'], shape: 'branch', sides: ['out'],
-    anchor: { type: 'textureFade', key: 'fresh', out: 'color' },
+    anchor: { type: 'textureFeedback', key: 'fresh', out: 'color' },
     why: 'feedback: whatever moves leaves a fading trail',
     when: ctx => ctx.nodes.some(nd => nd.type === 'output'),
     build: () => ({
-      nodes: [n('textureFade', 'fade', C(1), 0, note('Fade (feedback): last frame, faded, with the picture painted on top.', 'Why: the Trails suggestion (the Fade node\'s own Trails setup).'))],
-      thenRecipe: { nodeId: 'fade', recipeId: 'fade-trails' },
+      nodes: [n('textureFeedback', 'trails', C(1), 0, note('Feedback (texture): keeps last frame in a buffer of its own, fades it (Tail, in seconds) and lays the picture over it.', 'Why: the Trails suggestion (Feedback\'s own Trails setup). Zoom or Turn drift the trails; Hue drift changes their colour as they age.'))],
+      thenRecipe: { nodeId: 'trails', recipeId: 'feedback-trails' },
     }),
   },
   {

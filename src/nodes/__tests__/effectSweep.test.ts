@@ -24,12 +24,13 @@ import { runGlsl, type Val } from '../../compiler/__tests__/glslEval';
 import { caRow } from '../../play/kit/chroma.js';
 import { DeepGlowTextureNode } from '../definitions/deepGlow';
 
-/** A saved node as an old graph holds it: no definition lookup, just type, sockets and params. */
+/** A saved node as an old graph holds it: type, sockets (typed as its definition has them, else float) and params. */
 function saved(type: string, id: string, params: Record<string, unknown>, inputs: Record<string, [string, string] | null>, outputs: string[], extra: Partial<GraphNode> = {}): GraphNode {
+  const def = getNodeDefinition(type);
   return {
     id, type, position: { x: 0, y: 0 }, params,
-    inputs: Object.fromEntries(Object.entries(inputs).map(([k, w]) => [k, { type: 'float', label: k, ...(w ? { connection: { nodeId: w[0], outputKey: w[1] } } : {}) }])),
-    outputs: Object.fromEntries(outputs.map(k => [k, { type: 'float', label: k }])),
+    inputs: Object.fromEntries(Object.entries(inputs).map(([k, w]) => [k, { type: def?.inputs[k]?.type ?? 'float', label: k, ...(w ? { connection: { nodeId: w[0], outputKey: w[1] } } : {}) }])),
+    outputs: Object.fromEntries(outputs.map(k => [k, { type: def?.outputs[k]?.type ?? 'float', label: k }])),
     ...extra,
   } as GraphNode;
 }
@@ -58,7 +59,7 @@ const near = (a: Val, b: Val, eps = 1e-9) => {
 };
 
 /** Retired in the sweep and kept registered (hidden): no exact mapping onto the survivor. */
-const SWEPT_HIDDEN: string[] = ['light2d', 'chromaShift', 'chromaticAberration', 'bloom', 'gaussianBlur', 'radialBlur', 'lensBlur', 'depthOfField', 'tiltShiftBlur'];
+const SWEPT_HIDDEN: string[] = ['light2d', 'chromaShift', 'chromaticAberration', 'bloom', 'gaussianBlur', 'radialBlur', 'lensBlur', 'depthOfField', 'tiltShiftBlur', 'prevFrame', 'motionBlur', 'textureFade', 'sobel'];
 /** Merged into a survivor: gone from the registry, migrated on load (old type → survivor). */
 const MERGED_INTO: Record<string, string> = {
   smoothWarp: 'uvWarp', curlWarp: 'uvWarp', swirlWarp: 'uvWarp', swirlSpace: 'uvWarp',
@@ -450,5 +451,31 @@ describe('Blur: the lens blurs on a texture, same frame', () => {
     for (const t of ['gaussianBlur', 'radialBlur', 'lensBlur', 'depthOfField', 'tiltShiftBlur']) {
       compiles([...base, saved(t, 'x', {}, { color: ['v', 'rgb'], uv: ['uv', 'uv'] }, ['result']), saved('output', 'out', {}, { color: ['x', 'result'] }, [])]);
     }
+  });
+});
+
+// ── Feedback ─────────────────────────────────────────────────────────────────
+
+describe('Feedback: Feedback (texture) is the trails node', () => {
+  it('Motion Blur\'s example settings as a Feedback tail keep 72% a frame at 60 fps (green, blue as before)', () => {
+    // Feedback (texture)'s fade is Fade (feedback)'s code (feedbackStepCode), run here on the CPU for one frame.
+    const nd = migrateNodeParams(saved('textureFade', 'f', { tail: 0.234, tint: [1, 0.865, 0.757], clean: 0, combine: 'add' }, {}, ['color']), getNodeDefinition);
+    const { code, outputVars } = getNodeDefinition('textureFade')!.generateGLSL(nd, { texture: 'PREV', uv: 'UV', fresh: 'FRESH' });
+    const out = runGlsl(code, { u_resolution: [1600, 900], u_frameDt: 1 / 60, PREV: 1, UV: [0, 0], texture2D: () => [1, 1, 1, 1], FRESH: [0, 0, 0], ...GLOW_ENV });
+    near(out[outputVars.color] as Val, [0.72, 0.72 * 0.95, 0.72 * 0.9], 0.003);
+  });
+
+  it('old graphs with Previous Frame, Motion Blur, Fade (feedback) and Sobel still load and compile', () => {
+    const base = [saved('uv', 'uv', {}, {}, ['uv']), saved('circleSDF', 'c', {}, { position: ['uv', 'uv'] }, ['distance']), saved('floatToVec3', 'v', {}, { input: ['c', 'distance'] }, ['rgb'])];
+    compiles([...base, saved('prevFrame', 'x', {}, { uv: ['uv', 'uv'] }, ['color']), saved('output', 'out', {}, { color: ['x', 'color'] }, [])]);
+    compiles([...base, saved('motionBlur', 'x', {}, { color: ['v', 'rgb'], uv: ['uv', 'uv'] }, ['result']), saved('output', 'out', {}, { color: ['x', 'result'] }, [])]);
+    compiles([...base, saved('sobel', 'x', {}, { value: ['c', 'distance'], uv: ['uv', 'uv'] }, ['result']), saved('output', 'out', {}, { color: ['x', 'result'] }, [])]);
+    compiles([...base, saved('textureFade', 'f', {}, { texture: ['p', 'previous'], fresh: ['v', 'rgb'] }, ['color']),
+      saved('pass', 'p', {}, { color: ['f', 'color'] }, ['texture', 'color', 'previous']), saved('output', 'out', {}, { color: ['p', 'color'] }, [])]);
+  });
+
+  it('Feedback (texture) with only Fresh wired compiles (the Trails suggestion on a colour)', () => {
+    compiles([saved('uv', 'uv', {}, {}, ['uv']), saved('circleSDF', 'c', {}, { position: ['uv', 'uv'] }, ['distance']), saved('floatToVec3', 'v', {}, { input: ['c', 'distance'] }, ['rgb']),
+      saved('textureFeedback', 'fb', {}, { fresh: ['v', 'rgb'] }, ['color', 'alpha', 'texture']), saved('output', 'out', {}, { color: ['fb', 'color'] }, [])]);
   });
 });

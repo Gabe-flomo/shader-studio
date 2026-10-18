@@ -25,10 +25,15 @@ export const PIECES_TYPES: readonly string[] = ['pieces', 'pieceBalls'];
  *    (right-click an old Bloom → Upgrade to same-frame glow does it: nodes/upgradeBloom.ts).
  *  - Gaussian Blur → Blur (texture); Radial Blur → Radial Fast Blur; Lens Blur and Depth of Field → Depth of Field
  *    (texture) (Focus Point / Depth); Tilt-Shift Blur → Tilt-Shift (texture). All of them read last frame's picture.
+ *  - Previous Frame (Feedback) and Motion Blur (last frame's whole picture) → Feedback (texture), or a Pass and its
+ *    Previous to build your own; Fade (feedback) → Feedback (texture) (which still runs Fade's code inside).
+ *  - Sobel Edges (a slope of one value, dFdx / dFdy) → Edges (texture).
  */
 export const SWEPT_EFFECT_TYPES: readonly string[] = [
   'light2d', 'chromaShift', 'chromaticAberration', 'bloom',
   'gaussianBlur', 'radialBlur', 'lensBlur', 'depthOfField', 'tiltShiftBlur',
+  'prevFrame', 'motionBlur', 'textureFade',
+  'sobel',
 ];
 
 /**

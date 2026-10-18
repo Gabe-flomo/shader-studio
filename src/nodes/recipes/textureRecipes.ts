@@ -93,6 +93,25 @@ function fadeRecipe(ctx: RecipeContext, drift: boolean): ReturnType<StarterRecip
   };
 }
 
+/** Feedback (texture) on what the Output shows: the picture is its Fresh paint, Levels rolls off stacked light. */
+function feedbackRecipe(ctx: RecipeContext, drift: boolean): ReturnType<StarterRecipe['build']> {
+  const pic = pictureFor(ctx, col(-2), 0);
+  return {
+    params: { tail: 1.5, ...(drift ? { zoom: 1.01, turn: 0.6 } : {}), ...note('Feedback (texture): last frame kept in a buffer of its own, faded (Tail: seconds to fade to 1%), with the picture painted on top.', drift ? 'Why: whatever moves leaves a trail; Zoom and Turn read last frame a little zoomed and turned, so the trails stream outwards in a slow swirl.' : 'Why: whatever moves leaves a trail. Tail for longer or shorter trails.') },
+    nodes: [
+      ...pic.nodes,
+      n('textureLevels', 'tone', col(1), 0, { rollOff: 0.4, ...note('Levels (texture): Roll-off 0.4 bends the brightest overlaps down so stacked light doesn\'t clip to flat white.') }, { color: [SELF, 'color'] }),
+    ],
+    wire: { fresh: pic.out },
+    show: ['tone', 'color'],
+  };
+}
+
+export const FEEDBACK_TEXTURE_RECIPES: StarterRecipe[] = [
+  { id: 'feedback-trails', label: 'Trails', description: 'The picture leaves trails: each frame keeps last frame faded and paints the picture on top.', build: ctx => feedbackRecipe(ctx, false) },
+  { id: 'feedback-drift', label: 'Drifting trails', description: 'The same, with last frame read a little zoomed and turned: the trails swirl outwards.', build: ctx => feedbackRecipe(ctx, true) },
+];
+
 export const FADE_RECIPES: StarterRecipe[] = [
   { id: 'fade-trails', label: 'Trails', description: 'A feedback Pass: last frame fades and the picture is painted on top, so moving things leave trails.', build: ctx => fadeRecipe(ctx, false) },
   { id: 'fade-drift', label: 'Drifting trails', description: 'The same, with Read (texture) zooming and turning last frame a little: the trails swirl outwards.', build: ctx => fadeRecipe(ctx, true) },

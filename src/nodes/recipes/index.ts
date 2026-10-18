@@ -10,7 +10,7 @@ import { GRID_PATTERN_RECIPES, GRID_RECIPES } from './gridRecipes';
 import { NOISE_RECIPES, PALETTE_RECIPES, VORONOI_RECIPES } from './noiseRecipes';
 import { KALEIDO_RECIPES, POLAR_RECIPES, REPEAT_RECIPES, SDF_COMBINE_RECIPES, SDF_SHAPE_RECIPES, TILE_RECIPES } from './shapeRecipes';
 import { AUDIO_RECIPES, FEEDBACK_RECIPES, LFO_RECIPES, PARTICLE_RECIPES, PASS_RECIPES, PICTURE_EFFECT_RECIPES } from './effectRecipes';
-import { CHANGE_RECIPES, FADE_RECIPES, JUMP_FLOOD_RECIPES } from './textureRecipes';
+import { CHANGE_RECIPES, FADE_RECIPES, FEEDBACK_TEXTURE_RECIPES, JUMP_FLOOD_RECIPES } from './textureRecipes';
 import { LIGHT_RECIPES } from './lightRecipes';
 import { PICTURE_DEPTH_RECIPES, PICTURE_DEPTH_SET } from './depthRecipes';
 import { SPLAT_SCENE_RECIPES, SPLAT_SCENE_SET } from './splatRecipes';
@@ -46,6 +46,7 @@ export const STARTER_RECIPES: Readonly<Record<string, StarterRecipe[]>> = {
   jumpFloodTexture: JUMP_FLOOD_RECIPES,
   textureChange: CHANGE_RECIPES,
   textureFade: FADE_RECIPES,
+  textureFeedback: FEEDBACK_TEXTURE_RECIPES,
   gpuParticles: PARTICLE_RECIPES,
   audioInput: AUDIO_RECIPES,
   lfo: LFO_RECIPES,

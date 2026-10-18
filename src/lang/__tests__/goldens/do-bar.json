@@ -2018,12 +2018,11 @@
   "reads": "build",
   "ok": true,
   "added": [
-   "pass",
-   "textureFade",
+   "textureFeedback",
    "textureLevels"
   ],
   "removed": [],
-  "hash": "0974048b"
+  "hash": "55e181aa"
  },
  "action trails:empty · circle with a glow, then trails on the picture": {
   "reads": "build",
@@ -2031,13 +2030,12 @@
   "added": [
    "circleSDF",
    "light",
-   "pass",
-   "textureFade",
+   "textureFeedback",
    "textureLevels",
    "uv"
   ],
   "removed": [],
-  "hash": "3c3e2a0f"
+  "hash": "ac56b6e6"
  },
  "action flow:pass [pass] · flow": {
   "reads": "build",
@@ -2137,13 +2135,12 @@
   "added": [
    "circleSDF",
    "light",
-   "pass",
-   "textureFade",
+   "textureFeedback",
    "textureLevels",
    "uv"
   ],
   "removed": [],
-  "hash": "9d77d5c3"
+  "hash": "8323b49c"
  },
  "recipe kaleidoscope:empty · star with a glow falloff 4, then repeat it 6 times around": {
   "reads": "build",
@@ -2783,12 +2780,11 @@
   "reads": "build",
   "ok": true,
   "added": [
-   "pass",
-   "textureFade",
+   "textureFeedback",
    "textureLevels"
   ],
   "removed": [],
-  "hash": "763f6c91"
+  "hash": "ec93382b"
  },
  "phrase:empty · circel with a glwo": {
   "reads": "build",

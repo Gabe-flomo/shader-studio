@@ -21,7 +21,7 @@ export const PASS_EXAMPLE_INDEX_MORE: Record<string, { label: string; descriptio
   },
   passFeedbackTrails: {
     label: 'Passes 3 · Feedback trails', play: true,
-    description: 'Three lights draw trails that fade and drift: a Pass reads its own picture from the frame before (its Previous output) a little zoomed and turned, dims it and adds the lights again. Feedback per Pass, in the same frame.',
+    description: 'Three lights draw trails that fade and drift: a Pass reads its own picture from the frame before (its Previous output) a little zoomed and turned, dims it and adds the lights again: feedback built by hand. Feedback (texture) is the same loop in one node.',
   },
   passReactionDiffusion: {
     label: 'Passes 4 · Reaction-diffusion', play: true,
@@ -212,29 +212,45 @@ export function buildPassExamplesMore(): Record<string, ExampleGraph> {
           'zoomed: this pixel pulled 0.7% towards the centre (reading inwards pushes the picture out).',
           'turned: that point turned by Swirl (a 2D rotation), so the trails curl.',
           'wobble: a tiny wavy push that changes with t, so the trails ripple like smoke.',
-          'result: the point to read, wired into Fade (feedback)\'s UV.',
+          'result: the point to read, wired into Sample (texture)\'s UV.',
         ],
       }),
-      n('textureFade', 'feed', 900, 260, {
-        tail: 3, clean: 0.24, tint: [0.63, 0.83, 1], combine: 'add',
-        ...note('Fade (feedback): the next picture for the Trails pass. It reads the pass\'s Previous (its own picture from the frame before) at the drifted point, fades it and adds this frame\'s lights (Fresh) on top. Tail 3: a lone trail fades to 1% in 3 seconds. Clean takes a little off each second so it really reaches black. Tint gives red a shorter tail than blue, so old trails cool to blue.') },
-        { texture: ['trails', 'previous'], uv: ['drift', 'result'], fresh: ['lights', 'result'] }),
+      n('sampleTexture', 'last', 640, 420, {
+        ...note('Sample (texture): the Trails pass\'s Previous (its own picture from the frame before), read at the drifted point. This is the loop: what the pass drew last frame comes back here.') },
+        { texture: ['trails', 'previous'], uv: ['drift', 'result'] }),
+      n('constant', 'keep', 640, 620, { value: 0.975, label: 'Keep',
+        ...note('How much of last frame\'s picture is kept each frame: 0.975 fades a lone trail to 1% in about 3 seconds at 60 frames a second. A constant so Play can drive it: see the Keep control. (Feedback (texture) does this whole loop in one node, with its tail in seconds at any frame rate.)') }),
+      expr('feed', 900, 260, {
+        label: 'Fade and add', outputType: 'vec3',
+        inputs: [['last', 'vec3', ['last', 'color']], ['lights', 'vec3', ['lights', 'result']], ['keep', 'float', ['keep', 'value']]],
+        lines: [
+          ['vec3 perChannel', 'pow(vec3(keep), vec3(1.6, 1.2, 1.0))'],
+          ['vec3 faded', 'max(last * perChannel - 0.004, 0.0)'],
+        ],
+        result: 'faded + lights',
+        note: [
+          'What: the next picture for the Trails pass: last frame, faded, with this frame\'s lights added on top.',
+          'perChannel: Keep for each colour, red kept least (Keep to the power 1.6), so old trails cool to blue.',
+          'faded: last frame dimmed by perChannel, minus a little every frame so faint trails really reach black.',
+          'result: the faded picture plus the fresh lights (light adds up; the half-float pass keeps it above 1).',
+        ],
+      }),
       n('pass', 'trails', 1180, 260, { label: 'Trails',
         ...note('Trails: the Pass that keeps the picture. What is wired into it is drawn into its texture; its Previous output (read by Sample (texture) on the left) hands that picture back next frame, which closes the loop. Half float, so the bright cores above 1 aren\'t clipped while they fade.') },
-        { color: ['feed', 'color'] }),
+        { color: ['feed', 'result'] }),
       n('toneMap', 'tone', 1440, 260, { mode: 'reinhard2',
         ...note('Tone Map (Reinhard2): brings the trails\' bright parts (above 1) back into range smoothly, so the lights\' cores don\'t flatten to white.') },
         { color: ['trails', 'color'] }),
       outNode(1700, 260, ['tone', 'color'], 'the trails, toned. The Trails pass draws first each frame; this program reads it.'),
     ],
     play: playRecord([
-      ctl('decay', 'feed::tail', 'Tail (seconds)', 0.2, 10, 0.01),
+      ctl('decay', 'keep::value', 'Keep (per frame)', 0.8, 0.995, 0.001),
       ctl('swirl', 'swirl::value', 'Swirl', -0.03, 0.03, 0.0005),
     ], `**What it shows.** Feedback in a Pass. The Trails pass reads its own picture from the frame before (its **Previous** output), warps it a little, fades it and adds three moving lights on top. What it draws comes back next frame, so the lights leave trails that drift, spiral and cool as they fade.
 
-**How it is built.** Three lights (an Expression Block) are this frame's paint. Drift the old picture computes where to read last frame's picture (a little nearer the centre and turned by Swirl). **Fade (feedback)** reads the Trails pass's Previous there, fades it and adds the lights; that goes into the Trails pass, whose Previous closes the loop. **Tone Map** softens the bright cores for the output.
+**How it is built.** Three lights (an Expression Block) are this frame's paint. Drift the old picture computes where to read last frame's picture (a little nearer the centre and turned by Swirl). **Sample (texture)** reads the Trails pass's Previous there; **Fade and add** dims it by Keep and adds the lights; that goes into the Trails pass, whose Previous closes the loop. **Tone Map** softens the bright cores for the output. **Feedback (texture)** is this loop in one node (Texture tools 2).
 
-**Try.** Tail 8 for long comet tails, 0.5 for short sparks. Swirl negative turns the other way; 0 makes them stream straight out. Set the Trails pass to ½ for softer, cheaper trails. Replace the lights with anything (a shape, a video, the mouse) and it leaves trails too.`),
+**Try.** Keep 0.995 for long comet tails, 0.9 for short sparks. Swirl negative turns the other way; 0 makes them stream straight out. Set the Trails pass to ½ for softer, cheaper trails. Replace the lights with anything (a shape, a video, the mouse) and it leaves trails too.`),
   };
 
   // ── 4 · Reaction-diffusion (Gray-Scott) at ½: state from the frame before → step → Pass ──

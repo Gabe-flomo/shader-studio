@@ -376,6 +376,8 @@ describe('the Texture tools examples', () => {
       const r = compileGraph({ nodes: resolveNodeAliases(EXAMPLE_GRAPHS[k].nodes, getNodeDefinition) });
       expect(r.errors, k).toBeUndefined();
     }
+    // Feedback (texture) runs Read (texture) and Fade (feedback) inside it (Fade is retired from the library, 2026-10-17).
+    if (used.has('textureFeedback')) { used.add('readTexture'); used.add('textureFade'); }
     for (const t of TEXTURE_TOOL_TYPES) expect(used.has(t), t).toBe(true);
   });
 

@@ -146,7 +146,7 @@ function pictureSteps(): Entry[] {
     const words = [head, ...aliases];
     if (a.id === 'trails') {
       words.splice(1, 0, 'trails');
-      // The Fade node's own settings (the move has none): how long a pixel takes to fade, and the clean-up.
+      // Feedback (texture)'s own settings (the move has none): how long a pixel takes to fade, and the clean-up.
       params.push({ key: 'tail', type: 'time', primary: true, def: 1.5, label: 'Tail (s)', rand: { kind: 'num', lo: 0.3, hi: 4, log: true }, hint: 'seconds for a pixel left alone to fade to 1%' },
         { key: 'clean', type: 'number', def: 0.2, label: 'Clean', rand: { kind: 'num', lo: 0, hi: 0.5 } });
     }
