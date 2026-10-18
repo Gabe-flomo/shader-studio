@@ -1,6 +1,6 @@
 # Stem separation for the Audio Source node: research
 
-*2026-10-17. Research only. Nothing downloaded, nothing changed in the repo.*
+*2026-10-17. Research only. Nothing downloaded, nothing changed in the repo.* (Kept as history: Separate was built from this, then removed on 2026-10-18.)
 
 ## TL;DR
 

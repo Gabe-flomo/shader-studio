@@ -18,7 +18,14 @@ Where the sound comes from. The card has tabs, like the Texture node's Image | V
   what the Audio nodes hear, in step with the picture: it plays and loops with the video (there is no trim). You hear it
   through the speakers while Play is on. A video without a sound track reads silence; so does the webcam.
 
-- **Play**: plays the file out loud, or listens to the Mic. The **Pause** button on the card does the same.
+- **The transport** (the top row of the card, and of the Open ↗ window; it stays on the card when you fold it):
+  - **Play / Pause**: plays the file or the video's sound, or listens to the Mic. Paused, nothing plays and nothing is
+    analysed (every listening node hears silence).
+  - **Restart**: back to the trim's In (a File) or the video's start, and plays.
+  - **Mute**: silent, but still analysed: the bands, triggers, learned sounds and every listening node go on as if you
+    heard it. For pictures that move to a song you don't want to hear.
+  - **Volume**: how loud you hear it. It acts after the analysis, so moving it moves no trigger.
+  - The Mic is never played to the speakers (it would feed back), so it has Play / Pause only.
 - **Loop** (File only): start again at the end of the trim (or the file). A Video loops as its video node does.
 - **Gain**: how loud the bands and the listening nodes hear it, not how loud you hear it. Raise it for a quiet microphone.
 - Outputs: **Audio** (for the nodes below), **Level** (how loud it is right now, 0–1), **Time** (seconds played),
@@ -42,43 +49,69 @@ The card shows a small live spectrum (bass on the left, log frequency) with your
   measures; the shape and slope draw its curve and shape what Solo and Hear hovered play. Bands saved before
   shapes open as Band.
 - **Add a band**: Sub, Bass, Kick, Snare, Hi-hat, Vocals, Air. Kick, Snare and Hi-hat come as triggers with Hit's
-  ranges and onset settings; the others send their level.
-- **Each band** has a name and a colour, **Low** and **High** in Hz, and what it sends out:
+  ranges (Threshold 0.5, 0.35 and 0.2: broad, noisy bands read lower); the others send their level.
+- **Each band** has a name and a colour, **Low** and **High** in Hz, its **Gate**, and what it sends out:
   - **Value**: the band's level, 0–1, with **Attack**, **Release** (rise and fall times in seconds) and **Gain**;
-  - **Trigger**: 1 for one frame on each hit in the band (**Sensitivity**, **Cooldown** in ms), exactly what
-    Envelope (Trigger mode), Counter and Sample & Hold count;
-  - or both. The row shows the band's live level and flashes on each hit.
+  - **Trigger**: 1 for one frame each time the band's level rises above its **Threshold** (see *Triggers* below),
+    exactly what Envelope (Trigger mode), Counter and Sample & Hold count;
+  - or both. The row shows the band's live level and flashes on each hit; a trigger band has its **trigger scope**
+    under it.
 
 Every band becomes an **output on the Audio Source**, named after it: *Bass* for a Value, *Kick (trigger)* for a
 Trigger. Wire *Kick (trigger)* straight into an Envelope's Gate for a pulse on every kick. Removing a band (or
 switching off what it sends) takes its output away, and the wires from it go too.
 
-Moving a band or the trim, and its Attack / Release / Gain / Sensitivity / Cooldown, change the picture at once
+Moving a band or the trim, and its Attack / Release / Gain and trigger settings, change the picture at once
 without recompiling; adding, removing or renaming a band recompiles (its outputs change).
 
 If you hear nothing, click anywhere in the app: browsers only start sound after a click.
 
-### Stems
-**Separate** (on the card, and under *Stems* in the Open ↗ window) splits a File's song into stems on this device:
-**Drums**, **Bass**, **Vocals** and **Other**. How it works, sizes and speeds: [stems.md](stems.md).
+### Triggers: a line that stays put
+A trigger (a band's, and Hit's) watches the band's **level** (0–1, the same number its Value shows before Attack /
+Release / Gain) against lines that never move:
 
-1. Press **Separate**. The first time, it offers the model: *HT-Demucs (4 stems) runs on this device and is downloaded
-   once (126 MB). Nothing is sent anywhere.* Nothing downloads until you press **Download (126 MB) and separate**.
-2. While it works the picture pauses and a screen says what is happening: the song, the step (downloading, segment 3 of
-   24, encoding a stem), a progress bar, the time so far and about how long is left, and whether it runs on the GPU
-   (WebGPU) or the CPU (WebAssembly). **Cancel** stops it; the picture plays again either way. A 3-minute song takes
-   well under a minute on a GPU, several minutes on one CPU thread.
-3. Pick a **Stem**: *Full mix*, *Drums*, *Bass*, *Vocals* or *Other*. The bands, Learn a sound, the learned sounds,
-   Hit, Band level, Spectrum, Spectrogram, Waveform and the effects all hear that stem: Hit on the Drums stem finds the
-   kicks without the bass line getting in the way. The window's waveform shows the stem.
-4. **Hear**: *Full mix* (the default) plays the song while the analysis hears the stem; *This stem* plays the stem.
+- **Threshold**: it fires when the level rises above this line.
+- **Release** (× Threshold, 0.8 to start): it re-arms only once the level falls back below Threshold × Release. A held
+  note, a swell or a level wobbling round the line fires **once**, not again and again. Nearer 1 re-arms sooner (for
+  kicks over a busy bass line); lower needs a deeper dip.
+- **Gate**: below it the band is **silence**: its Value reads 0 and nothing fires, so hiss, hum or a noise bed never
+  triggers. It closes only after the level has stayed under it for 80 ms, so noise hovering round it doesn't flicker.
+  **Learn noise** sets it for you: on a File, select a quiet stretch (Drag: Select) and press it; on the Mic or a Video,
+  let it play the quiet for two seconds first. The Gate goes just over the loudest of that noise.
+- **Min ms** (10 to start): how long the level must stay above Threshold to fire, so one noisy blip doesn't. At 60
+  frames a second one frame is already 17 ms, so live it only matters at higher Min ms; a File's analysis (every 5 ms)
+  uses it fully.
+- **Cooldown**: the shortest gap between two hits. A rise inside it is ignored (not fired late).
 
-The stems play in step with the song, inside its trim and loop. They are kept in the library beside the song (Opus,
-about 3.6 MB per stem for 3 minutes), so they come back after a reload and travel in .playfield / .playfile files. In
-the window: **4 stems | 6 stems (+ guitar, piano)** picks the model for **Re-separate** (the 6-stem model is a second
-download, 136 MB; its guitar is usable, its piano bleeds), **Remove stems** removes them. Loading another song leaves
-the old song's stems unused. A web page carries the picked stem like the song (up to 6 MB; a bigger one stays out and
-the page analyses the whole song).
+**The trigger scope**, under each trigger band in the window, is how you tune it by eye: the last five seconds of the
+level it measures (newest on the right), the **Threshold** (solid, the band's colour), **Release** (dashed) and
+**Gate** (grey, with the silence shaded under it), and a yellow tick wherever it fired. **Drag a line** up or down to
+move it (it picks the nearest). The top-left says whether the gate is open, whether it is armed, and how many hits so far.
+Aim for: one tick per drum hit, the Threshold under the hits' peaks, the Gate over the noise floor between them.
+
+Graphs from before this change had a **Sensitivity** (a moving threshold). They open with a Threshold in its place
+(0.5 for the old default; higher sensitivity is a lower line: 0 → 0.7, 1 → 0.3) and Release 0.8; a band that sent a
+Value keeps no Gate, so its Value reads as it did.
+
+### Files: analysed ahead, fired as you hear them
+A File's whole song is in memory, so its trigger bands are worked out **ahead**: once, over the whole file, in the
+background (a few seconds for a long song; the window says *Analysing the file…*, then *Triggers: analysed ahead*).
+Each hit is then fired when playback is **heard** reaching it, not when a frame happens to read the sound: the same at
+30, 60 or 120 frames a second, and lined up with the speakers. A Hit wired straight to a File works the same way.
+Changing a Threshold, Release, Gate, Min ms or Cooldown re-picks the hits at once; moving a band's range analyses that
+range again (the live frame stands in for the moment). The Mic and a Video are analysed live, frame by frame, with the
+same Threshold, Release, Gate and Min ms.
+
+**Latency.** The browser plays a sound a little after it renders it (a few ms wired, 150–250 ms on Bluetooth or
+AirPlay). A File's hits are timed to when the speakers play them (the browser's own output latency, shown as
+*output N ms* in the window); a Video's hits are held back by that much too. **Sync offset** (ms, in the window)
+nudges them further: **+** if the picture still comes early, **−** if late. The Mic is heard in the room, so only a +
+offset applies to it.
+
+### Separate (removed)
+Splitting a song into stems is gone. A graph that had a stem picked opens on the full mix and works as before; stems
+already kept in the library stay there (they are not listed with the sounds). The research notes are in
+[reports/stems-research.md](reports/stems-research.md).
 
 ### Learn a sound
 Show it one clap (a cowbell, a word, one drum) and it fires whenever a sound like it plays.
@@ -111,10 +144,11 @@ set **Low** and **High** in Hz. **Attack** and **Release** are rise and fall tim
 leaves a tail after each hit. **Gain** scales the result. **Peak** holds the highest Level for a moment, then falls.
 
 ## Hit
-Finds hits: a kick, a snare, a hi-hat. It watches its band for a sudden rise louder than the last moment or so.
+Finds hits: a kick, a snare, a hi-hat. It fires each time its band's level rises above a fixed **Threshold**, as a
+band's trigger does (see *Triggers: a line that stays put* above). Wired straight to a File it is analysed ahead.
 
 - **Sound**: Kick, Snare, Hi-hat, Any, or Custom (**Low** to **High**).
-- **Sensitivity**: higher catches quieter hits (and some false ones).
+- **Threshold**, **Release** (× Threshold), **Gate**, **Min time** (ms): the lines it fires on.
 - **Cooldown**: milliseconds before another hit can count, so one drum doesn't count twice.
 - **Decay**: seconds for the Envelope to fall back to 0.
 - Outputs: **Trigger** (1 for one frame on each hit), **Envelope** (jumps to 1, falls in Decay), **Count**
@@ -207,5 +241,6 @@ log). It runs in an AudioWorklet; where the browser has none, the sound passes t
   .playfield / .playfile carry the sound with them, like videos. On another computer without it, the card says
   *"name" isn't in this browser's library*: load it again. Graphs from before this change that used the built-in Test
   loop open on the File tab, empty.
-- Stems on a web page: the picked stem travels with the song (see *Stems* above); the Mic and Video tabs have none.
+- On a web page the triggers run live, frame by frame (the same Threshold, Release, Gate and Min ms), held back by the
+  page's output latency and the Sync offset; Volume and Mute travel too.
 - The old **Audio Input** node is retired: it's no longer in the node list, but graphs that use it still work.

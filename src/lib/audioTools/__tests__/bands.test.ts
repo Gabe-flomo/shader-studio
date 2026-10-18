@@ -59,7 +59,8 @@ describe('bands', () => {
     for (const k of ['kick', 'snare', 'hihat']) {
       const b = newBand([], k), h = HIT_PRESETS[k];
       expect([b.lo, b.hi, b.trigger, b.value]).toEqual([h.lo, h.hi, true, false]);
-      expect(b.sensitivity).toBe(0.5);
+      expect([b.releaseAt, b.gate, b.minMs]).toEqual([0.8, 0.1, 10]);
+      expect(b.threshold).toBe(k === 'kick' ? 0.5 : k === 'snare' ? 0.35 : 0.2);
     }
     expect(newBand([], 'kick').cooldown).toBe(150);
     for (const k of ['sub', 'bass', 'vocals', 'air']) { const b = newBand([], k); expect(b.value && !b.trigger).toBe(true); }

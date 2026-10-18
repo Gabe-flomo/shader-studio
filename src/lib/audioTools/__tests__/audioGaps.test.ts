@@ -38,8 +38,7 @@ const fakes = vi.hoisted(() => {
     isPlaying: (id: string) => playingIds.has(id), position: () => 0, getFileName: (id: string) => loaded.get(id) ?? '',
     getAnalyser: (id: string) => (playingIds.has(id) ? { ...analyser(), context: ctx } : null),
     buffer: () => null, context: () => ctx, connectOutside: vi.fn(() => () => {}),
-    // Stems (none here): lib/audioEngine.ts setStem / stemAnalyser.
-    setStem: () => {}, setHearStem: () => {}, stemAnalyser: () => null, stemBuffer: () => null,
+    setVolume: vi.fn(), positionAt: () => 0, heardTime: () => 0, outputLatency: () => 0, playToken: () => 1, seek: vi.fn(),
   };
   const el = { paused: false, currentTime: 1.5, muted: true };
   return { ctx, audioEngine, loaded, el };

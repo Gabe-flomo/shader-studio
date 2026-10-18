@@ -20,7 +20,7 @@
  *             normalize }) makes the page reconnect to a live feed and add its rows (needs the network)
  *   media:  { textures: { uniform: { src } }, videos: { uniform: { src, loop, speed, clip? } },
  *             audio: [{ id, src, uniforms, bands, range, mode }],   (src: a data URL, or null)
- *             audioTools?: { sources: [{ id, kind: 'file' | 'video', src, video?, playing, loop, trimIn, trimOut, gain, bands, sounds, quiet?, stem?: { src, stem, hear } }],
+ *             audioTools?: { sources: [{ id, kind: 'file' | 'video', src, video?, playing, loop, trimIn, trimOut, gain, bands, sounds, quiet?, volume?, muted?, syncOffset? }],
  *               effects?: [{ id, upstreamId, rootId, heard, spec, w, h, drive }],
  *               listeners: [{ id, sourceId, spec, w, h }], uniforms: { uniform: '<id>::<channel>' }, textures: { sampler: id } } }
  *             the Audio nodes (docs/audio-tools.md): run once a frame with the app's own sums (kit/audioTools.js);
@@ -2568,32 +2568,27 @@ void main() {
         if (!c.playing) continue;
         const probe = at.ctx.createAnalyser(); probe.fftSize = 2048; probe.smoothingTimeConstant = 0;
         s.sr = at.ctx.sampleRate;
-        // Its sound comes out here: read by the probe, taken by its effects, and played unless an effect is heard instead.
-        // With a stem (docs/stems.md) the stem comes out here and the song plays beside it (Hear: Full mix).
+        // Its sound comes out here: read by the probe, taken by its effects, and played (at its Volume; silent when
+        // Muted, still read) unless an effect is heard instead.
         const out = at.ctx.createGain();
         out.connect(probe);
-        const stem = c.kind === 'file' && c.src && c.stem && c.stem.src ? c.stem : null;
-        if (!c.quiet && (!stem || stem.hear)) out.connect(at.out);
+        if (!c.quiet) {
+          const vol = at.ctx.createGain();
+          vol.gain.value = c.muted ? 0 : (typeof c.volume === 'number' ? c.volume : 1);
+          out.connect(vol); vol.connect(at.out);
+        }
         s.out = out;
         if (c.kind === 'file' && c.src) {
           const decode = src => at.ctx.decodeAudioData(dataBytes(src).buffer);
-          Promise.all([decode(c.src), stem ? decode(stem.src).catch(() => null) : null]).then(([buf, sbuf]) => {
+          decode(c.src).then(buf => {
             if (!alive) return;
             // The trim, as the app's (lib/audioTools/bands.ts trimWindow): Out 0 is the end; at least 0.05 s.
             const d = buf.duration, a = Math.max(0, Math.min(c.trimIn || 0, Math.max(0, d - 0.05)));
             let b = c.trimOut > 0 ? Math.min(c.trimOut, d) : d;
             b = Math.max(b, Math.min(d, a + 0.05));
-            const play = (bf, to) => { const n = at.ctx.createBufferSource(); n.buffer = bf; n.loop = c.loop; n.loopStart = a; n.loopEnd = b; n.connect(to); return n; };
+            const src = at.ctx.createBufferSource();
+            src.buffer = buf; src.loop = c.loop; src.loopStart = a; src.loopEnd = b; src.connect(out);
             const when = at.ctx.currentTime;
-            const src = play(buf, sbuf ? at.ctx.createGain() : out);
-            if (sbuf) {
-              // The song to the speakers (unless the stem is heard), the stem to the probe: both start together.
-              if (!c.quiet && !stem.hear) src.disconnect(), src.connect(at.out);
-              else src.disconnect();
-              const sn = play(sbuf, out);
-              if (c.loop) sn.start(when, a); else sn.start(when, a, b - a);
-              s.stemNode = sn;
-            } else if (stem && !c.quiet && !stem.hear) out.connect(at.out); // the stem didn't decode: the song is analysed and heard
             if (c.loop) src.start(when, a); else src.start(when, a, b - a);
             s.node = src; s.probe = probe; s.startedAt = when; s.win = { a, b };
           }, () => { /* not decodable in this browser */ });
@@ -2650,7 +2645,10 @@ void main() {
         else if (s.win && at.ctx) { const len = s.win.b - s.win.a, t = at.ctx.currentTime - s.startedAt; s.time = s.win.a + (c.loop ? ((t % len) + len) % len : Math.min(len, t)); }
         put(id + '::level', s.level);
         put(id + '::time', s.time);
-        ATK.stepSource(s.st, c.bands, c.sounds, s.freq, s.sr, nowMs / 1000, dt, (ch, v) => put(id + '::' + ch, v));
+        // Live hits wait for the speakers: the output's latency (a file or video), plus the source's Sync offset.
+        const lat = at.ctx ? (at.ctx.baseLatency || 0) + (at.ctx.outputLatency || 0) : 0;
+        s.delay = Math.max(0, (lat > 0 && lat < 1 ? lat : 0) + (c.syncOffset || 0) / 1000);
+        ATK.stepSource(s.st, c.bands, c.sounds, s.freq, s.sr, nowMs / 1000, dt, (ch, v) => put(id + '::' + ch, v), { delay: s.delay });
       }
       // The effects: their numbers (a Play control on the page moves them through their uniforms), sound and texture.
       for (const f of at.fx.values()) {
@@ -2668,7 +2666,7 @@ void main() {
       for (const l of at.lis) {
         const s = l.cfg.sourceId ? (at.srcs.get(l.cfg.sourceId) || at.fx.get(l.cfg.sourceId)) : null;
         const on = !!(s && s.active);
-        const changed = ATK.stepListener(l.run, l.cfg.spec, on ? s.freq : at.silentF, on ? s.wave : at.silentW, s ? s.sr : 48000, on, nowMs, dt, (ch, v) => put(l.cfg.id + '::' + ch, v));
+        const changed = ATK.stepListener(l.run, l.cfg.spec, on ? s.freq : at.silentF, on ? s.wave : at.silentW, s ? s.sr : 48000, on, nowMs, dt, (ch, v) => put(l.cfg.id + '::' + ch, v), { delay: s && s.delay ? s.delay : 0 });
         if (changed && l.tex) {
           gl.bindTexture(gl.TEXTURE_2D, l.tex);
           gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, l.run.w, l.run.h, 0, gl.RGBA, gl.UNSIGNED_BYTE, l.run.data);

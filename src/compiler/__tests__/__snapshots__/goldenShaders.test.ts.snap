@@ -1925,7 +1925,7 @@ exports[`golden shaders: every example compiles as it did > audioKickRing 1`] = 
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "070d98d5e742a10ef7d1e8a9f23a:4462",
+  "fragmentShader": "11737d81a9c9e602902be0c2c367:4551",
   "isStateful": false,
   "liveUniforms": {
     "u_aud_audiosourc_0_bass_v": "src::bass_v",
@@ -2000,7 +2000,7 @@ void main() {
     g_uv.x *= u_resolution.x / u_resolution.y;
     // Audio Source: opens on the File tab with nothing loaded, so the picture waits in silence. Press Load a sound… on the card and pick any song, or switch to the Mic tab and press Start.
     // Open ↗ on the card shows the whole file to trim (it loops inside the trim) and a live spectrum to pick bands on. If you hear nothing, click anywhere: browsers start sound only after a click.
-    // Two bands, picked on Open ↗: Kick (30–150 Hz) sends a trigger, 1 for one frame on each kick drum (Cooldown stops one kick counting twice); Bass (60–250 Hz) sends its level, 0–1.
+    // Two bands, picked on Open ↗: Kick (30–150 Hz) sends a trigger, 1 for one frame each time its level rises above the Threshold line (0.5; it re-arms once the level falls below Release, and Cooldown stops one kick counting twice); Bass (60–250 Hz) sends its level, 0–1.
     // Each band is an output here: Kick (trigger) and Bass. Add more with the quick bands (Snare, Hi-hat…) or by dragging across the spectrum.
     int memorypack_0_i = int(floor(gl_FragCoord.x));
     vec4 memorypack_0_s = texelFetch(u_passprev_memory_0, ivec2(memorypack_0_i, 0), 0);

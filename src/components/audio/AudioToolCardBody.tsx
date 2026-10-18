@@ -27,8 +27,7 @@ import { Popover } from '../ui/Popover';
 import { addVideoFile, deleteVideo, getVideo, isAudioType, listVideos, subscribe as subscribeLibrary, type LibraryVideoMeta } from '../../lib/backgroundLibrary';
 import { collectNodesDeep } from '../../lib/audioTools/graphWalk';
 import { AudioSourceWindow } from './AudioSourceWindow';
-import { StemControls } from './StemControls';
-import { isStemSampleId } from '../../lib/audioTools/stems';
+import { AudioTransport } from './AudioTransport';
 
 import { addDrawer } from './drawLoop';
 
@@ -266,7 +265,8 @@ function SoundLibrary({ anchorRef, current, onPick, onClose }: { anchorRef: Reac
   const [items, setItems] = useState<LibraryVideoMeta[] | null>(null);
   useEffect(() => {
     let live = true;
-    const load = () => listVideos().then(l => { if (live) setItems(l.filter(v => isAudioType(v.type) && !isStemSampleId(v.id))); }, () => { if (live) setItems([]); });
+    // Stems from the retired Separate (ids `stem_…`) stay in the library but aren't offered.
+    const load = () => listVideos().then(l => { if (live) setItems(l.filter(v => isAudioType(v.type) && !v.id.startsWith('stem_'))); }, () => { if (live) setItems([]); });
     load();
     const off = subscribeLibrary(load);
     return () => { live = false; off(); };
@@ -301,7 +301,7 @@ function useVideoNodes(): Array<{ value: string; label: string }> {
   }), [nodes]);
 }
 
-/** Audio Source's card: File | Mic | Video tabs (as the Texture node's Image | Video | Webcam), Play, Load / Library / Start / a video, Open ↗. */
+/** Audio Source's card: File | Mic | Video tabs (as the Texture node's Image | Video | Webcam), the transport, Load / Library / Start / a video, Open ↗. */
 function SourceControls({ node }: { node: GraphNode }) {
   const tk = useTokens();
   const text = useEngineText(node.id);
@@ -311,7 +311,6 @@ function SourceControls({ node }: { node: GraphNode }) {
   const [libOpen, setLibOpen] = useState(false);
   const [err, setErr] = useState('');
   const kind = audioSourceKind(node);
-  const playing = node.params.playing !== false;
   const videos = useVideoNodes();
   const set = (p: Record<string, unknown>) => useNodeGraphStore.getState().updateNodeParams(node.id, p, { immediate: true });
   const loaded = useSyncExternalStore(useMemo(() => (fn: () => void) => audioToolsEngine.onChange(fn), []), () => !!audioToolsEngine.sourceView(node.id)?.loaded);
@@ -329,15 +328,14 @@ function SourceControls({ node }: { node: GraphNode }) {
         <Select ariaLabel="Video node" value={videoNode} onChange={v => set({ videoNode: v })}
           options={[{ value: '', label: videos.length ? 'Pick a video node…' : 'No video in the graph yet' }, ...videos]} />
       )}
+      <AudioTransport node={node} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-        <Button size="sm" onClick={() => set({ playing: !playing })} title={playing ? 'Stop' : 'Play'}>{playing ? 'Pause' : 'Play'}</Button>
         {kind === 'file' && <Button size="sm" onClick={() => fileRef.current?.click()} title="Load an audio file (mp3, wav, ogg, m4a…); it is kept in the library">{loaded ? 'Replace…' : 'Load a sound…'}</Button>}
         {kind === 'file' && <span ref={libRef}><Button size="sm" onClick={() => setLibOpen(o => !o)} aria-expanded={libOpen} title="Sounds kept in the library: use one, or remove it">Library</Button></span>}
         {kind === 'mic' && !liveAudio.isOn() && <Button size="sm" onClick={() => { void audioToolsEngine.startMic(node.id); }} title="Open the microphone or audio input (the browser asks first)">Start</Button>}
         <Button size="sm" onClick={() => setOpen(true)} title="Open the big window: the whole file to trim, and the spectrum to pick bands on">Open ↗</Button>
       </div>
       <div style={{ fontSize: 11.5, color: err ? tk.status.danger : tk.text.muted, lineHeight: 1.45 }}>{err || text}</div>
-      {kind === 'file' && <StemControls node={node} compact loaded={loaded} />}
       {libOpen && <SoundLibrary anchorRef={libRef} current={typeof node.params.sampleId === 'string' ? node.params.sampleId : ''} onClose={() => setLibOpen(false)}
         onPick={id => { setLibOpen(false); void loadLibrarySound(node.id, id).then(e => setErr(e ?? '')); }} />}
       {open && createPortal(<AudioSourceWindow nodeId={node.id} onClose={() => setOpen(false)} onLoad={() => fileRef.current?.click()} />, document.body)}

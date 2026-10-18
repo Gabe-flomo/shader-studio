@@ -49,7 +49,7 @@ function runHit(signal: Float32Array, o: HitSettings, from: number, to: number):
   return hits;
 }
 
-const KICK: HitSettings = { lo: 30, hi: 150, sensitivity: 0.5, cooldownMs: 120, decay: 0.3 };
+const KICK: HitSettings = { lo: 30, hi: 150, threshold: 0.5, cooldownMs: 120, decay: 0.3 };
 
 describe('band energy', () => {
   it('a 100 Hz sine is loud in its band and quiet elsewhere', () => {
@@ -86,16 +86,16 @@ describe('Hit (onsets)', () => {
   });
 
   it('respects the cooldown on a fast click train', () => {
-    const fast = runHit(clicks(0.06, 3), { lo: 30, hi: 16000, sensitivity: 0.5, cooldownMs: 40, decay: 0.2 }, 0, 3);
-    expect(fast.length).toBeGreaterThan(30);
-    const slow = runHit(clicks(0.06, 3), { lo: 30, hi: 16000, sensitivity: 0.5, cooldownMs: 250, decay: 0.2 }, 0, 3);
+    const fast = runHit(clicks(0.1, 3), { lo: 2000, hi: 16000, threshold: 0.2, cooldownMs: 40, decay: 0.2 }, 0, 3);
+    expect(fast.length).toBe(28); // one per click: each falls back below Release before the next
+    const slow = runHit(clicks(0.1, 3), { lo: 2000, hi: 16000, threshold: 0.2, cooldownMs: 250, decay: 0.2 }, 0, 3);
     expect(slow.length).toBeGreaterThanOrEqual(9);
     expect(slow.length).toBeLessThanOrEqual(12);
     for (let i = 1; i < slow.length; i++) expect(slow[i] - slow[i - 1]).toBeGreaterThanOrEqual(0.25 - 1e-9);
   });
 
-  it('never triggers on a steady tone, and Trigger lasts one frame', () => {
-    expect(runHit(sine(60, 0.6, 4), KICK, 1, 4)).toEqual([]);
+  it('a steady tone fires once (its rise), never again; Trigger lasts one frame', () => {
+    expect(runHit(sine(60, 0.6, 4), KICK, 1, 4)).toEqual([1]);
     const st = newHitState(), triggers: number[] = [];
     frames(kicks([0.3], 1), 0, 1, (db, t) => { stepHit(st, db, SR, t, HOP / SR, KICK); triggers.push(st.trigger); });
     expect(triggers.filter(v => v === 1).length).toBe(1);

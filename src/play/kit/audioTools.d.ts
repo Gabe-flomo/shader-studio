@@ -13,25 +13,43 @@ export const AT_PEAK_HOLD: number;
 export const AT_PEAK_FALL: number;
 export function atStepBand(s: AtBandState, raw: number, dt: number, attack: number, release: number, gain: number): AtBandState;
 
-export interface AtHitSettings { lo: number; hi: number; sensitivity: number; cooldownMs: number; decay: number }
-export interface AtHitState {
-  prev: Float32Array | null;
-  history: Float32Array;
-  at: number;
-  filled: number;
-  lastHit: number;
-  trigger: number;
-  envelope: number;
-  count: number;
-  strength: number;
-  flux: number;
-  threshold: number;
+/** A trigger's settings (atTriggerOpts): Threshold and Gate on the 0..1 level, Release a fraction of Threshold. */
+export interface AtTriggerOpts { threshold: number; releaseAt: number; gate: number; minMs: number; cooldownMs: number }
+export interface AtTriggerState {
+  gateOpen: boolean; below: number; armed: boolean; above: number; crossAt: number; lastHit: number;
+  trigger: number; signal: number; gated: number; strength: number; count: number;
 }
+export const AT_GATE_HOLD: number;
+export const AT_TRIGGER_DEFAULTS: AtTriggerOpts;
+export function atThresholdFromSensitivity(sensitivity: unknown): number;
+export function atNewTriggerState(): AtTriggerState;
+export function atStepTrigger(s: AtTriggerState, x: number, now: number, dt: number, o: AtTriggerOpts): AtTriggerState;
+export function atTriggerOpts(o: Partial<AtTriggerOpts> & { cooldown?: number }): AtTriggerOpts;
+
+export const AT_SCOPE_FRAMES: number;
+export interface AtScope { vals: Float32Array; hits: Uint8Array; at: number }
+export function atNewScope(): AtScope;
+
+/** A hit decided ahead (a file analysed ahead) for one frame: how many fired, the signal to plot, the strength. */
+export interface AtExtHit { fired: number; signal: number; strength: number }
+export interface AtHitSettings extends Partial<AtTriggerOpts> { lo: number; hi: number; decay: number; delay?: number }
+export interface AtHitState extends AtTriggerState { envelope: number; pending: number[]; scope: AtScope }
 export const AT_HIT_HISTORY: number;
 export function atNewHitState(): AtHitState;
 export function atHitThreshold(meanFlux: number, sensitivity: number): number;
 export function atBandFlux(prev: Float32Array, cur: Float32Array, sampleRate: number, lo: number, hi: number): number;
-export function atStepHit(s: AtHitState, freqDb: Float32Array, sampleRate: number, now: number, dt: number, o: AtHitSettings): AtHitState;
+export function atStepHit(s: AtHitState, freqDb: Float32Array, sampleRate: number, now: number, dt: number, o: AtHitSettings, ext?: AtExtHit): AtHitState;
+
+export const AT_OFFLINE_FFT: number;
+export const AT_OFFLINE_HOP_SECONDS: number;
+export function atOfflineHop(sampleRate: number): number;
+export function atSpectrumDbAt(mono: Float32Array, start: number, n: number, out: Float32Array): Float32Array;
+export function atAnalyseLevels(mono: Float32Array, sampleRate: number, ranges: ReadonlyArray<{ lo: number; hi: number }>, hop: number, onProgress?: (f: number) => void): Float32Array[];
+export interface AtEvents { times: Float64Array; strengths: Float32Array }
+export function atPickTriggers(curve: Float32Array, hopSeconds: number, o: Partial<AtTriggerOpts> & { cooldown?: number }): AtEvents;
+export function atEventsIn(times: Float64Array, a: number, b: number): { count: number; last: number };
+export function atEventsHeard(ev: AtEvents, from: number, to: number, win: { start: number; end: number }, loop: boolean): { count: number; strength: number };
+export function atCurveAt(curve: Float32Array, hopSeconds: number, t: number): number;
 
 export const AT_SPECTRUM_MIN_HZ: number;
 export function atHzAt(x: number, layout: AtLayout, minHz: number, maxHz: number): number;
@@ -43,10 +61,12 @@ export function atScrollRows(data: Uint8Array, w: number, h: number, row: ArrayL
 export function atWaveRow(wave: Float32Array, out: Float32Array, gain?: number): void;
 
 /** The fields of a band (lib/audioTools/bands.ts AudioBandSpec) the frame reads. */
-export interface AtBand { id: string; lo: number; hi: number; value: boolean; trigger: boolean; attack: number; release: number; gain: number; sensitivity: number; cooldown: number }
+export interface AtBand { id: string; lo: number; hi: number; value: boolean; trigger: boolean; attack: number; release: number; gain: number; threshold: number; releaseAt: number; gate: number; minMs: number; cooldown: number }
+/** A frame's extras for a source's bands or a Hit: hold live hits back `delay` seconds; hits decided ahead. */
+export interface AtStepExtras { delay?: number; ext?: AtExtHit }
 export interface AtBandRun { band: AtBandState; hit: AtHitState; hitAt: number }
 export function atNewBandRun(): AtBandRun;
-export function atStepBandRun(run: AtBandRun, b: AtBand, freqDb: Float32Array, sampleRate: number, now: number, dt: number): AtBandRun;
+export function atStepBandRun(run: AtBandRun, b: AtBand, freqDb: Float32Array, sampleRate: number, now: number, dt: number, x?: AtStepExtras): AtBandRun;
 
 export const AT_LEARN_BANDS: number;
 export const AT_LEARN_MIN_HZ: number;
@@ -83,16 +103,16 @@ export const AT_CARD_BINS: number;
 export interface AtSource { runs: Map<string, AtBandRun>; learn: AtLearnListener; row: Float32Array }
 export function atNewSource(): AtSource;
 export function atApplyGain(freq: Float32Array, wave: Float32Array, gain: number): number;
-export function atStepSource(st: AtSource, bands: readonly AtBand[], sounds: readonly AtSound[], freq: Float32Array, sampleRate: number, now: number, dt: number, write: (channel: string, v: number) => void): void;
+export function atStepSource(st: AtSource, bands: readonly AtBand[], sounds: readonly AtSound[], freq: Float32Array, sampleRate: number, now: number, dt: number, write: (channel: string, v: number) => void, x?: { delay?: number; ext?: Map<string, AtExtHit> }): void;
 
 /** A listening node's settings for a frame (lib/audioTools/engine.ts listenerSpecOf). */
 export interface AtListenerSpec {
   type: string;
   lo: number; hi: number;
   attack: number; release: number; gain: number;
-  sensitivity: number; cooldown: number; decay: number;
+  threshold: number; releaseAt: number; gate: number; minMs: number; cooldown: number; decay: number;
   layout: AtLayout; minDb: number; maxDb: number; smoothing: number;
 }
 export interface AtListener { band: AtBandState; hit: AtHitState; row: Float32Array; data: Uint8Array | null; w: number; h: number; hitAt: number }
 export function atNewListener(type: string, w: number, h: number): AtListener;
-export function atStepListener(l: AtListener, spec: AtListenerSpec, freq: Float32Array, wave: Float32Array, sampleRate: number, active: boolean, nowMs: number, dt: number, write: (channel: string, v: number) => void): boolean;
+export function atStepListener(l: AtListener, spec: AtListenerSpec, freq: Float32Array, wave: Float32Array, sampleRate: number, active: boolean, nowMs: number, dt: number, write: (channel: string, v: number) => void, x?: AtStepExtras): boolean;

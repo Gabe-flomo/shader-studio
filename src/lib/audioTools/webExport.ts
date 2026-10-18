@@ -15,8 +15,6 @@ import {
 import { acTextureSize } from '../../play/kit/audioChain.js';
 import { bandsOf } from './bands';
 import { audioHearing, collectAudioNodes } from './graphWalk';
-import { analysedStem, hearsStem } from './stems';
-import { STEM_LABELS } from '../../stemModel/config';
 
 const num = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
 
@@ -28,7 +26,7 @@ export interface AudioToolsWebInput {
   videoUniforms: Readonly<Record<string, string>>;
   /** The last compile's param uniforms (`<id>::<param>` → uniform): an effect's numbers, which a Play control can move. */
   paramBindings?: Readonly<Record<string, string>>;
-  /** The file kept for a node id (lib/mediaSources.ts mediaSource); `<id>::stem` for its stem. */
+  /** The file kept for a node id (lib/mediaSources.ts mediaSource). */
   mediaOf: (nodeId: string) => MediaSource | null;
   labelOf?: (node: GraphNode) => string;
 }
@@ -41,10 +39,6 @@ export function audioToolsForWeb(o: AudioToolsWebInput): PlayAudioTools | undefi
   const label = (n: GraphNode) => o.labelOf?.(n) ?? ((typeof n.params.label === 'string' && n.params.label.trim()) || 'Audio Source');
   const kinds = new Map(audio.filter(r => r.node.type === AUDIO_SOURCE_TYPE).map(r => [r.node.id, audioSourceKind(r.node)]));
   const hearing = audioHearing(audio, id => kinds.get(id) ?? null);
-  const stemFile = (id: string, stem: keyof typeof STEM_LABELS, hear: boolean, where: string) => {
-    const m = o.mediaOf(`${id}::stem`);
-    return { name: m?.name ?? STEM_LABELS[stem], label: where, src: m?.dataUrl ?? null, bytes: m?.dataUrl?.length ?? (m?.tooBig ? m.bytes : 0), stem: STEM_LABELS[stem], hear };
-  };
   const sources: PlayAudioTools['sources'] = audio.filter(r => r.node.type === AUDIO_SOURCE_TYPE).map(({ node: n }) => {
     const kind = audioSourceKind(n), P = n.params;
     const m = kind === 'file' ? o.mediaOf(n.id) : null;
@@ -60,8 +54,10 @@ export function audioToolsForWeb(o: AudioToolsWebInput): PlayAudioTools | undefi
       sounds: audioSoundsOf(P).filter(s => s.spec.length > 0),
       // An effect after it is heard instead (the app's rule, graphWalk.ts audioHearing).
       ...(hearing.dryMuted.has(n.id) ? { quiet: true } : {}),
-      // The stem the Audio nodes hear (docs/stems.md): its file kept when it was opened (lib/audioTools/engine.ts).
-      ...(kind === 'file' && analysedStem(P) !== 'mix' ? { stem: stemFile(n.id, analysedStem(P) as keyof typeof STEM_LABELS, hearsStem(P), label(n)) } : {}),
+      // The card's transport: what you hear of it, and when its triggers land.
+      ...(num(P.volume, 1) !== 1 ? { volume: Math.max(0, Math.min(1, num(P.volume, 1))) } : {}),
+      ...(P.muted === true ? { muted: true } : {}),
+      ...(num(P.syncOffset, 0) !== 0 ? { syncOffset: num(P.syncOffset, 0) } : {}),
     };
   });
   const effects: NonNullable<PlayAudioTools['effects']> = audio.filter(r => isAudioFxType(r.node.type)).map(({ node: n, sourceId }) => {

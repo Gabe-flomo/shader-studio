@@ -10,6 +10,8 @@
  *
  *   atStepSource    an Audio Source's frame: its card spectrum, its bands (Value, Trigger), its learned sounds
  *   atStepListener  a listening node's frame: Band level, Hit, or a Spectrum / Spectrogram / Waveform texture
+ *   atStepTrigger   a trigger (a band's, Hit's): a fixed Threshold with hysteresis, a noise Gate, a minimum time above
+ *   atAnalyseLevels a whole file's band levels ahead; atPickTriggers / atEventsHeard then fire them as they are heard
  *   atApplyGain     a source's Gain on its frame (dB on the spectrum, × on the wave)
  *
  * Top-level names start with `at` / `AT_` (the kit's files share one scope in exports).
@@ -67,16 +69,12 @@ export function atStepBand(s, raw, dt, attack, release, gain) {
   return { level, peak, heldFor };
 }
 
-// ── Hit: onsets by spectral flux with an adaptive threshold ──────────────────────────────────────────────────
+// ── Onsets by spectral flux with an adaptive threshold (what Learn a sound listens with) ─────────────────────
 
 /** About 0.7 s of frames at 60 fps. */
 export const AT_HIT_HISTORY = 40;
 
-export function atNewHitState() {
-  return { prev: null, history: new Float32Array(AT_HIT_HISTORY), at: 0, filled: 0, lastHit: -Infinity, trigger: 0, envelope: 0, count: 0, strength: 0, flux: 0, threshold: 0 };
-}
-
-/** The threshold's multiple of the recent mean flux, and its floor, for a Sensitivity. */
+/** The onset threshold's multiple of the recent mean flux, and its floor, for a sensitivity (Learn a sound's AT_LEARN_ONSET). */
 export function atHitThreshold(meanFlux, sensitivity) {
   const s = Math.max(0, Math.min(1, sensitivity));
   return Math.max(0.002 + 0.012 * (1 - s), meanFlux * (4 - 2.5 * s));
@@ -104,32 +102,228 @@ export function atBandFlux(prev, cur, sampleRate, lo, hi) {
   return sum / (b - a + 1);
 }
 
-/** One frame of Hit: Trigger is 1 on the frame of a hit and 0 on every other. Mutates and returns `s`. */
-export function atStepHit(s, freqDb, sampleRate, now, dt, o) {
+// ── Triggers: a fixed Threshold with hysteresis, a noise Gate and a minimum time above ─────────────────────────
+//
+// A trigger watches one 0..1 signal, its band's level (the same number as the band's Value, before Attack / Release
+// and Gain), against lines that never move:
+//   Gate       below it is silence (no trigger, Value 0); it closes only after AT_GATE_HOLD below, so noise hovering
+//              around it doesn't flicker it open and shut.
+//   Threshold  the signal must rise above it, and stay there for Min time (ms, counting the frame it rose on), to fire.
+//   Release    Threshold × Release: it re-arms only once the signal falls below this, so a held note or a swell fires
+//              once (a Schmitt trigger: TouchDesigner's Trigger / Release Threshold pair).
+//   Cooldown   the shortest gap between two hits; a rise inside it is swallowed (never fired late).
+
+/** Seconds the gate stays open after the signal drops under it. */
+export const AT_GATE_HOLD = 0.08;
+
+/** A new trigger's settings (Threshold and Gate on the 0..1 level scale, Release a fraction of Threshold). */
+export const AT_TRIGGER_DEFAULTS = { threshold: 0.5, releaseAt: 0.8, gate: 0.1, minMs: 10, cooldownMs: 120 };
+
+/**
+ * An old Sensitivity (0..1, the adaptive detector's, gone) as a fixed Threshold on the level: 0.5 → 0.5; higher
+ * sensitivity → a lower line (catches quieter hits): 0 → 0.7, 1 → 0.3.
+ */
+export function atThresholdFromSensitivity(sensitivity) {
+  const v = Math.max(0, Math.min(1, typeof sensitivity === 'number' && Number.isFinite(sensitivity) ? sensitivity : 0.5));
+  return Math.round((0.7 - 0.4 * v) * 100) / 100;
+}
+
+export function atNewTriggerState() {
+  return { gateOpen: false, below: 0, armed: true, above: 0, crossAt: 0, lastHit: -Infinity, trigger: 0, signal: 0, gated: 0, strength: 0, count: 0 };
+}
+
+/**
+ * One step of a trigger on signal `x` over the `dt` seconds ending at `now` (`o`: threshold, releaseAt, gate, minMs,
+ * cooldownMs, as atTriggerOpts cleans them). Fires (s.trigger = 1) once the gated signal has been above Threshold for
+ * Min time, when armed and out of the Cooldown; s.lastHit is then the moment it first rose above (the onset).
+ * Mutates and returns `s`.
+ */
+export function atStepTrigger(s, x, now, dt, o) {
   s.trigger = 0;
-  s.envelope = o.decay > 0 ? Math.max(0, s.envelope - dt / o.decay) : 0;
-  if (!s.prev || s.prev.length !== freqDb.length) {
-    s.prev = new Float32Array(freqDb);
-    return s;
-  }
-  const flux = atBandFlux(s.prev, freqDb, sampleRate, o.lo, o.hi);
-  s.prev.set(freqDb);
-  let mean = 0;
-  for (let i = 0; i < s.filled; i++) mean += s.history[i];
-  mean = s.filled ? mean / s.filled : 0;
-  const thr = atHitThreshold(mean, o.sensitivity);
-  s.flux = flux; s.threshold = thr;
-  s.history[s.at] = flux;
-  s.at = (s.at + 1) % s.history.length;
-  s.filled = Math.min(s.history.length, s.filled + 1);
-  if (flux > thr && (now - s.lastHit) * 1000 >= Math.max(40, o.cooldownMs)) {
-    s.lastHit = now;
-    s.trigger = 1;
-    s.envelope = 1;
-    s.count += 1;
-    s.strength = atBandLevel(freqDb, sampleRate, o.lo, o.hi);
+  s.signal = x;
+  if (x > o.gate) { s.gateOpen = true; s.below = 0; }
+  else if (s.gateOpen) { s.below += dt; if (s.below >= AT_GATE_HOLD - 1e-9) s.gateOpen = false; }
+  const v = s.gateOpen ? x : 0;
+  s.gated = v;
+  const thr = o.threshold;
+  if (s.armed) {
+    if (v > thr) {
+      if (s.above === 0) s.crossAt = now;
+      s.above += Math.max(dt, 1e-6);
+      if (s.above * 1000 >= o.minMs - 1e-6) {
+        s.armed = false;
+        // A rise inside the Cooldown is swallowed: it neither fires now nor later.
+        if ((s.crossAt - s.lastHit) * 1000 >= o.cooldownMs - 1e-6) {
+          s.lastHit = s.crossAt;
+          s.trigger = 1;
+          s.count += 1;
+          s.strength = v;
+        }
+      }
+    } else s.above = 0;
+  } else if (v < thr * o.releaseAt) {
+    s.armed = true;
+    s.above = 0;
   }
   return s;
+}
+
+/** A band's or Hit's trigger settings, cleaned (Cooldown as `cooldownMs` or `cooldown`). */
+export function atTriggerOpts(o) {
+  const n = (v, d) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
+  const D = AT_TRIGGER_DEFAULTS;
+  return {
+    threshold: Math.max(0, Math.min(1, n(o.threshold, D.threshold))),
+    releaseAt: Math.max(0, Math.min(1, n(o.releaseAt, D.releaseAt))),
+    gate: Math.max(0, Math.min(1, n(o.gate, D.gate))),
+    minMs: Math.max(0, n(o.minMs, D.minMs)),
+    cooldownMs: Math.max(0, n(o.cooldownMs !== undefined ? o.cooldownMs : o.cooldown, D.cooldownMs)),
+  };
+}
+
+/** Frames a trigger scope keeps (about 5 s at 60 fps): the signal it measured and where it fired. */
+export const AT_SCOPE_FRAMES = 300;
+export function atNewScope() { return { vals: new Float32Array(AT_SCOPE_FRAMES), hits: new Uint8Array(AT_SCOPE_FRAMES), at: 0 }; }
+function atPushScope(sc, v, hit) { sc.vals[sc.at] = v; sc.hits[sc.at] = hit ? 1 : 0; sc.at = (sc.at + 1) % sc.vals.length; }
+
+export function atNewHitState() {
+  return Object.assign(atNewTriggerState(), { envelope: 0, pending: [], scope: atNewScope() });
+}
+
+/**
+ * One frame of Hit: Trigger is 1 on the frame of a hit and 0 on every other. `o`: lo, hi, threshold, releaseAt, gate,
+ * minMs, cooldownMs, decay, and `delay` (seconds to hold a live hit back: a sound that reaches the speakers later than
+ * the analyser reads it). `ext` (optional): this frame's hit decided ahead (a file analysed ahead: { fired, signal,
+ * strength }); the live trigger still runs then, for the gate. Mutates and returns `s`.
+ */
+export function atStepHit(s, freqDb, sampleRate, now, dt, o, ext) {
+  s.envelope = o.decay > 0 ? Math.max(0, s.envelope - dt / o.decay) : 0;
+  const level = atBandLevel(freqDb, sampleRate, o.lo, o.hi);
+  const count = s.count, strength = s.strength;
+  atStepTrigger(s, level, now, dt, atTriggerOpts(o));
+  let fired = 0;
+  if (ext) {
+    s.count = count; s.strength = strength;
+    if (ext.fired) { fired = 1; s.count += ext.fired; s.strength = ext.strength; }
+    atPushScope(s.scope, ext.signal, fired);
+  } else {
+    const delay = o.delay > 0 ? o.delay : 0;
+    if (s.trigger) s.pending.push(s.lastHit + delay);
+    while (s.pending.length && s.pending[0] <= now + 1e-9) { s.pending.shift(); fired = 1; }
+    atPushScope(s.scope, level, fired);
+  }
+  s.trigger = fired;
+  if (fired) s.envelope = 1;
+  return s;
+}
+
+// ── A whole file analysed ahead (a File source; docs/audio-tools.md "Files: analysed ahead") ───────────────────
+
+/** The analysis window (AnalyserNode's size, so a level reads as it does live) and its hop: 5 ms. */
+export const AT_OFFLINE_FFT = 2048;
+export const AT_OFFLINE_HOP_SECONDS = 0.005;
+export function atOfflineHop(sampleRate) { return Math.max(1, Math.round(sampleRate * AT_OFFLINE_HOP_SECONDS)); }
+
+let atFftTables = null;
+function atTables(n) {
+  if (atFftTables && atFftTables.n === n) return atFftTables;
+  const rev = new Uint32Array(n), cos = new Float64Array(n / 2), sin = new Float64Array(n / 2), win = new Float64Array(n);
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    rev[i] = j;
+  }
+  for (let k = 0; k < n / 2; k++) { cos[k] = Math.cos((-2 * Math.PI * k) / n); sin[k] = Math.sin((-2 * Math.PI * k) / n); }
+  for (let i = 0; i < n; i++) win[i] = 0.42 - 0.5 * Math.cos((2 * Math.PI * i) / n) + 0.08 * Math.cos((4 * Math.PI * i) / n);
+  atFftTables = { n, rev, cos, sin, win, re: new Float64Array(n), im: new Float64Array(n) };
+  return atFftTables;
+}
+
+/**
+ * The dB spectrum of `mono[start … start + n)` (zeros outside) into `out` (n / 2 bins), as AnalyserNode computes it:
+ * a Blackman window, an FFT, magnitude ÷ n, 20·log10.
+ */
+export function atSpectrumDbAt(mono, start, n, out) {
+  const T = atTables(n), re = T.re, im = T.im;
+  for (let i = 0; i < n; i++) {
+    const k = start + i, r = T.rev[i];
+    re[r] = (k >= 0 && k < mono.length ? mono[k] : 0) * T.win[i];
+    im[r] = 0;
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    const half = len >> 1, step = n / len;
+    for (let i = 0; i < n; i += len) {
+      for (let k = 0; k < half; k++) {
+        const wr = T.cos[k * step], wi = T.sin[k * step], a = i + k, b = a + half;
+        const xr = re[b] * wr - im[b] * wi, xi = re[b] * wi + im[b] * wr;
+        re[b] = re[a] - xr; im[b] = im[a] - xi;
+        re[a] += xr; im[a] += xi;
+      }
+    }
+  }
+  for (let i = 0; i < n / 2; i++) { const m = Math.sqrt(re[i] * re[i] + im[i] * im[i]) / n; out[i] = m > 1e-12 ? 20 * Math.log10(m) : -240; }
+  return out;
+}
+
+/**
+ * Each range's level (atBandLevel, 0..1) through a whole sound, one value per `hop` samples: value `i` is the window
+ * centred on sample `i · hop`, so it lines up with the song's time `i · hop / sampleRate`. `onProgress(0..1)` now and then.
+ */
+export function atAnalyseLevels(mono, sampleRate, ranges, hop, onProgress) {
+  const n = AT_OFFLINE_FFT, frames = Math.max(1, Math.ceil(mono.length / hop));
+  const curves = ranges.map(() => new Float32Array(frames));
+  const db = new Float32Array(n / 2);
+  for (let i = 0; i < frames; i++) {
+    atSpectrumDbAt(mono, i * hop - n / 2, n, db);
+    for (let r = 0; r < ranges.length; r++) curves[r][i] = atBandLevel(db, sampleRate, ranges[r].lo, ranges[r].hi);
+    if (onProgress && (i & 1023) === 0) onProgress(i / frames);
+  }
+  return curves;
+}
+
+/**
+ * The hits in a level curve (one value per `hopSeconds`), found by the same trigger as live: their times (the onsets,
+ * in seconds) and strengths.
+ */
+export function atPickTriggers(curve, hopSeconds, o) {
+  const s = atNewTriggerState(), opts = atTriggerOpts(o), times = [], strengths = [];
+  for (let i = 0; i < curve.length; i++) {
+    atStepTrigger(s, curve[i], i * hopSeconds, hopSeconds, opts);
+    if (s.trigger) { times.push(s.lastHit); strengths.push(s.strength); }
+  }
+  return { times: Float64Array.from(times), strengths: Float32Array.from(strengths) };
+}
+
+/** How many of the sorted `times` are in (a, b], and the index of the last one (−1 with none). */
+export function atEventsIn(times, a, b) {
+  if (!(b > a)) return { count: 0, last: -1 };
+  const after = t => { let lo = 0, hi = times.length; while (lo < hi) { const m = (lo + hi) >> 1; if (times[m] <= t) lo = m + 1; else hi = m; } return lo; };
+  const i = after(a), j = after(b);
+  return { count: j - i, last: j > i ? j - 1 : -1 };
+}
+
+/**
+ * The hits heard between two playback positions inside a window that loops: (from, to], or, when playback went round
+ * (`to < from`, `loop`), (from, end] and [start, to]. How many, and the strongest one's strength.
+ */
+export function atEventsHeard(ev, from, to, win, loop) {
+  const take = (a, b) => {
+    const r = atEventsIn(ev.times, a, b);
+    let st = 0;
+    for (let k = r.last - r.count + 1; k <= r.last; k++) st = Math.max(st, ev.strengths[k]);
+    return { count: r.count, strength: st };
+  };
+  if (to >= from) return take(from, to);
+  if (!loop) return { count: 0, strength: 0 };
+  const x = take(from, win.end), y = take(win.start - 1e-9, to);
+  return { count: x.count + y.count, strength: Math.max(x.strength, y.strength) };
+}
+
+/** A curve's value at a song time (its nearest hop), 0 outside it. */
+export function atCurveAt(curve, hopSeconds, t) {
+  const i = Math.round(t / hopSeconds);
+  return i >= 0 && i < curve.length ? curve[i] : 0;
 }
 
 // ── Spectrum layouts and textures ────────────────────────────────────────────────────────────────────────────
@@ -200,13 +394,19 @@ export function atWaveRow(wave, out, gain = 1) {
 
 export function atNewBandRun() { return { band: atNewBandState(), hit: atNewHitState(), hitAt: -Infinity }; }
 
-/** One frame of a band (lib/audioTools/bands.ts AudioBandSpec): its Value and Trigger. Mutates and returns `run`. */
-export function atStepBandRun(run, b, freqDb, sampleRate, now, dt) {
-  run.band = atStepBand(run.band, atBandLevel(freqDb, sampleRate, b.lo, b.hi), dt, b.attack, b.release, b.gain);
-  if (b.trigger) {
-    atStepHit(run.hit, freqDb, sampleRate, now, dt, { lo: b.lo, hi: b.hi, sensitivity: b.sensitivity, cooldownMs: b.cooldown, decay: 0.3 });
-    if (run.hit.trigger) run.hitAt = now;
-  } else run.hit.trigger = 0;
+/**
+ * One frame of a band (lib/audioTools/bands.ts AudioBandSpec): its Value (the level once the Gate lets it through,
+ * followed with Attack / Release, times Gain) and its Trigger. `x` (optional): { delay, ext } — seconds to hold live
+ * hits back, and this frame's hit decided ahead (a file analysed ahead). Mutates and returns `run`.
+ */
+export function atStepBandRun(run, b, freqDb, sampleRate, now, dt, x) {
+  atStepHit(run.hit, freqDb, sampleRate, now, dt, {
+    lo: b.lo, hi: b.hi, threshold: b.threshold, releaseAt: b.releaseAt, gate: b.gate, minMs: b.minMs, cooldownMs: b.cooldown,
+    decay: 0.3, delay: x && x.delay ? x.delay : 0,
+  }, b.trigger && x && x.ext ? x.ext : undefined);
+  if (!b.trigger) run.hit.trigger = 0;
+  if (run.hit.trigger) run.hitAt = now;
+  run.band = atStepBand(run.band, run.hit.gateOpen ? run.hit.signal : 0, dt, b.attack, b.release, b.gain);
   return run;
 }
 
@@ -381,14 +581,15 @@ export function atApplyGain(freq, wave, gain) {
 /**
  * One frame of an Audio Source after its Level and Time: the card's spectrum, each band's Value / Trigger
  * (`<band>_v` / `_t`), each learned sound's Trigger / Match (`<sound>_t` / `_m`), written by channel through `write`.
+ * `x` (optional): { delay, ext } — seconds to hold live band hits back, and the hits decided ahead, by band id.
  */
-export function atStepSource(st, bands, sounds, freq, sampleRate, now, dt, write) {
+export function atStepSource(st, bands, sounds, freq, sampleRate, now, dt, write, x) {
   atSpectrumBins(freq, sampleRate, st.row, 'log', -90, -20, 0.5);
   for (const id of [...st.runs.keys()]) if (!bands.some(b => b.id === id)) st.runs.delete(id);
   for (const b of bands) {
     let run = st.runs.get(b.id);
     if (!run) st.runs.set(b.id, (run = atNewBandRun()));
-    atStepBandRun(run, b, freq, sampleRate, now, dt);
+    atStepBandRun(run, b, freq, sampleRate, now, dt, x ? { delay: x.delay || 0, ext: x.ext ? x.ext.get(b.id) : undefined } : undefined);
     if (b.value) write(b.id + '_v', run.band.level);
     if (b.trigger) write(b.id + '_t', run.hit.trigger);
   }
@@ -415,9 +616,10 @@ export function atNewListener(type, w, h) {
 /**
  * One frame of a listening node (`spec`: its type and settings, lib/audioTools/engine.ts listenerSpecOf) on its
  * source's frame (silence when `active` is false). Numbers go through `write` by channel; a texture node fills
- * `l.data` and returns true when it changed (a Spectrogram holds while its source is silent).
+ * `l.data` and returns true when it changed (a Spectrogram holds while its source is silent). `x` (optional, Hit):
+ * { delay, ext } as atStepBandRun's.
  */
-export function atStepListener(l, spec, freq, wave, sampleRate, active, nowMs, dt, write) {
+export function atStepListener(l, spec, freq, wave, sampleRate, active, nowMs, dt, write, x) {
   switch (spec.type) {
     case 'audioBand':
       l.band = atStepBand(l.band, atBandLevel(freq, sampleRate, spec.lo, spec.hi), dt, spec.attack, spec.release, Math.max(0, spec.gain));
@@ -425,7 +627,10 @@ export function atStepListener(l, spec, freq, wave, sampleRate, active, nowMs, d
       write('peak', l.band.peak);
       return false;
     case 'audioHit':
-      atStepHit(l.hit, freq, sampleRate, nowMs / 1000, dt, { lo: spec.lo, hi: spec.hi, sensitivity: spec.sensitivity, cooldownMs: spec.cooldown, decay: spec.decay });
+      atStepHit(l.hit, freq, sampleRate, nowMs / 1000, dt, {
+        lo: spec.lo, hi: spec.hi, threshold: spec.threshold, releaseAt: spec.releaseAt, gate: spec.gate, minMs: spec.minMs, cooldownMs: spec.cooldown,
+        decay: spec.decay, delay: x && x.delay ? x.delay : 0,
+      }, x && x.ext ? x.ext : undefined);
       if (l.hit.trigger) l.hitAt = nowMs;
       write('trigger', l.hit.trigger);
       write('envelope', l.hit.envelope);
