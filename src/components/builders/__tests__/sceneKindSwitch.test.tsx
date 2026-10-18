@@ -173,7 +173,7 @@ describe('nothing is in the graph until Done', () => {
     await settle();
     expect(kindsBuilt()).toEqual([madeKind(kind)]);
     expect(undoIds().done).toEqual([...steps.done, undoManager.top()!.id]);
-    expect(undoManager.top()!.label).toMatch(/^Scene builder: /);
+    expect(undoManager.top()!.label).toBe(`Scene builder: ${SCENE_KINDS.find(k => k.id === kind)!.title}`);
     // The graph from before is still there.
     expect(nodes().find(n => n.id === 'uv')).toEqual(before[0]);
     undo();

@@ -10,7 +10,7 @@ import { applyScene2D, find2dBuild, scene2dOfBuild } from './apply';
 import { allShapes, starterScene } from './spec';
 import { clearDraft, hasUnbuiltEdits, reopenDraft } from '../builders/drafts';
 import type { BuildingBuilder } from '../builders/finish';
-import { beginSceneDraft } from '../builders/sceneDraft';
+import { beginSceneDraft, sceneDraftOpen } from '../builders/sceneDraft';
 import { attachQuickControls } from './quickPlay';
 import { can } from '../lib/plan';
 import { paletteSwatches } from '../builders/look/palette';
@@ -106,6 +106,11 @@ export function buildFromBuilder2D(asNew = false): boolean {
     ...(result.kept.length ? [`Kept ${result.kept.length} setting${result.kept.length === 1 ? '' : 's'} you changed on the nodes.`] : []),
     ...result.warnings,
   ];
+  // In the Scene builder this is Apply (or Done's last step): nothing to announce unless there is something to say.
+  if (sceneDraftOpen()) {
+    if (notes.length) (result.warnings.length ? toast.warning : toast.info)('Applied', { message: notes.join(' ') });
+    return true;
+  }
   (result.warnings.length ? toast.warning : toast.success)(fresh ? '2D scene built' : '2D scene rebuilt', {
     message: notes.length ? notes.join(' ') : 'Every node has a note. Open the 2D Scene Builder from its UV node to change it here again.',
   });

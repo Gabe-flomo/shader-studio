@@ -133,7 +133,9 @@ let checkQueued = false;
 
 function onWindows(): void {
   if (!session && startingWindowOpen()) beginSceneDraft();
-  if (session && openSceneKind() !== session.kind) remark(session);
+  // A kind's window opening (closing keeps the kind: Done's step is named after it).
+  const kind = session ? openSceneKind() : null;
+  if (session && kind !== null && kind !== session.kind) remark(session);
   // Every window closed (a kind's window closing and the next one opening is one moment): the draft goes.
   if (session && !checkQueued) {
     checkQueued = true;

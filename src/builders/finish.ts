@@ -14,7 +14,7 @@
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
 import { toast } from '../components/ui/toastStore';
 import { askChoice } from '../components/ui/dialogStore';
-import { commitSceneDraft, sceneDraftDiscarding } from './sceneDraft';
+import { commitSceneDraft, sceneDraftDiscarding, sceneDraftOpen } from './sceneDraft';
 
 /** How long the window takes to go before the canvas is measured and framed. */
 const FRAME_DELAY_MS = 80;
@@ -86,7 +86,8 @@ export async function buildStaying(b: Pick<BuildingBuilder, 'label' | 'build'>):
   try {
     const made = await b.build();
     const built = made !== false && made !== null;
-    if (built) fitGraphSoon();
+    // Not in a Scene builder session: there the graph behind is your graph until Done (sceneDraft.ts).
+    if (built && !sceneDraftOpen()) fitGraphSoon();
     return built;
   } catch (err) {
     toast.error(`Couldn't build the ${b.label}`, {

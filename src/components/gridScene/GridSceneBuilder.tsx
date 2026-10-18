@@ -762,7 +762,7 @@ function Viewport() {
         <PreviewClock paused={paused} onPause={() => setPaused(p => !p)} style={{ position: 'absolute', right: 8, bottom: 8 }} />
       </div>
       <span data-grid-stats style={{ fontSize: 11.5, color: tk.text.muted }}>
-        {error ? 'The preview could not draw this grid.' : `Live: the graph Build makes (${compiled.nodes} nodes, ${placed} drawn cells), compiled in ${Math.round(compiled.ms)} ms. Sliders are uniforms on the built nodes.`}
+        {error ? 'The preview could not draw this grid.' : `Live: the graph Done adds (${compiled.nodes} nodes, ${placed} drawn cells), compiled in ${Math.round(compiled.ms)} ms. Sliders are uniforms on the built nodes.`}
       </span>
     </div>
   );

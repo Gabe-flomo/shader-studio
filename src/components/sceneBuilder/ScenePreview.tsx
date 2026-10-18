@@ -35,7 +35,7 @@ export function ScenePreview({ spec, height = 240 }: { spec: SceneSpec; height?:
           {paused ? 'Play' : 'Pause'}
         </button>
       </div>
-      <span style={{ fontSize: 11.5, color: tk.text.muted }}>{error ? 'The preview could not draw this scene.' : `Live: the graph Build makes, compiled in ${Math.round(compiled.ms)} ms`}</span>
+      <span style={{ fontSize: 11.5, color: tk.text.muted }}>{error ? 'The preview could not draw this scene.' : `Live: the graph Done adds, compiled in ${Math.round(compiled.ms)} ms`}</span>
     </div>
   );
 }
