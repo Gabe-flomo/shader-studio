@@ -98,6 +98,7 @@ vec2 ch2_noise2(vec2 p, float t, float spd, int mode) {
     return vec2(hx, hy) * 2.0 - 1.0;
 }`;
 
+/** Retired: Chladni Plate is Chladni with Mix −1, Aspect Fill, Bounded Infinite and Wobble on (aliases.ts). Not registered. */
 export const ChladniNode: NodeDefinition = withParamSockets({
   type: 'chladni',
   label: 'Chladni Plate',
@@ -211,6 +212,7 @@ float waveTerm(vec2 p, float n, float m) {
     return cos(n * PI * p.x) * cos(m * PI * p.y);
 }`;
 
+/** Retired: Wave Term is Chladni with Mix 0 (aliases.ts). Not registered. */
 export const WaveTermNode: NodeDefinition = {
   type: 'waveTerm',
   label: 'Wave Term',
@@ -284,118 +286,6 @@ export const WaveTermNode: NodeDefinition = {
   },
 };
 
-// ─── Chladni Field ────────────────────────────────────────────────────────────
-//
-// One-node "fast path": n, m, a Mix knob (weight of the swapped mode relative
-// to the primary one — 0 = pure grid, ±1 = the classic X/diamond, anything
-// between is an organic blend), and a Square/Circular geometry switch baked
-// directly into the node instead of requiring a separate space-transform node.
-// Outputs a raw field — pipe into Field to Lines to draw it, or use the field
-// directly as a mask/displacement source.
-//
-// For full multi-term control (3+ stacked modes) use Chladni Superposition.
-// For fully manual per-term wiring use individual Wave Term nodes.
-
-export const ChladniFieldNode: NodeDefinition = {
-  type: 'chladniField',
-  label: 'Chladni Field',
-  category: 'Science',
-  description: 'One-node Chladni pattern generator: n, m, and a Mix knob for the classic two-mode blend, plus a Square/Circular geometry switch. n/m/Mix are wirable — animate them with a Sine LFO, or wire through a Quantize node for discrete stepped jumps. Outputs a raw scalar field — pipe into Field to Lines to draw it. The fast path for a good-looking pattern in one node; use Chladni Superposition when you want more than two modes stacked.',
-  inputs: {
-    uv:    { type: 'vec2',  label: 'UV'    },
-    n:     { type: 'float', label: 'n'     },
-    m:     { type: 'float', label: 'm'     },
-    mix:   { type: 'float', label: 'Mix'   },
-    scale: { type: 'float', label: 'Scale' },
-  },
-  outputs: {
-    field: { type: 'float', label: 'Field' },
-    uv:    { type: 'vec2',  label: 'UV (scaled)' },
-  },
-  glslFunction: WAVE_TERM_GLSL,
-  defaultParams: { n: 6.0, m: 4.0, mix: 1.0, scale: 1.0, geometry: 'square', aspect: 'square', bounded: 'plate' },
-  paramDefs: {
-    n:        { label: 'n',        type: 'float', min: -2,  max: 2,   step: 0.01 },
-    m:        { label: 'm',        type: 'float', min: -2,  max: 2,   step: 0.01 },
-    mix:      { label: 'Mix',      type: 'float', min: -2,  max: 2,   step: 0.01, hint: 'Square plate: weight of the swapped (m,n) mode relative to the primary (n,m) mode — 0 = pure grid, ±1 = classic X/diamond. Circular plate: phase rotation between the two degenerate rotational modes.' },
-    scale:    { label: 'Scale',    type: 'float', min: 0.1, max: 4.0, step: 0.01, hint: 'With Bounded on, this is the plate\'s physical size (bigger Scale = smaller plate on screen). n/m only change the pattern inside that fixed edge, not the edge itself.' },
-    geometry: {
-      label: 'Geometry', type: 'select',
-      options: [
-        { value: 'square',   label: 'Square Plate'   },
-        { value: 'circular', label: 'Circular Plate' },
-      ],
-    },
-    aspect: {
-      label: 'Aspect', type: 'select',
-      hint: 'Square: n and m always mean the same number of repetitions per axis, so changing them reads as a uniform zoom — matches a real plate. Fill: uses the raw viewport-stretched UV, so mode counts differ per axis on a non-square canvas.',
-      options: [
-        { value: 'square', label: 'Square (uniform zoom)' },
-        { value: 'fill',   label: 'Fill viewport (stretches)' },
-      ],
-    },
-    bounded: {
-      label: 'Bounded', type: 'select',
-      hint: 'Plate: draws a fixed-size edge (set by Scale) and masks everything outside it, so changing n/m only reorganizes the pattern inside that fixed boundary — like a real plate at a fixed size being driven at different frequencies, not a camera zooming. Infinite: no edge, the pattern tiles forever (the old behavior).',
-      options: [
-        { value: 'plate',    label: 'Plate (fixed edge)' },
-        { value: 'infinite', label: 'Infinite (tiles forever)' },
-      ],
-    },
-  },
-  generateGLSL: (node: GraphNode, inputVars) => {
-    const id       = node.id;
-    const uvVar    = inputVars.uv   ?? 'vec2(0.0)';
-    const nVal     = inputVars.n    ?? p(node.params.n, 6.0);
-    const mVal     = inputVars.m    ?? p(node.params.m, 4.0);
-    const mixVal   = inputVars.mix  ?? p(node.params.mix, 1.0);
-    const scale    = inputVars.scale ?? p(node.params.scale, 1.0);
-    const geometry = typeof node.params.geometry === 'string' ? node.params.geometry : 'square';
-    const aspectMode = typeof node.params.aspect === 'string' ? node.params.aspect : 'square';
-    const bounded  = typeof node.params.bounded === 'string' ? node.params.bounded : 'plate';
-
-    // The global UV is aspect-corrected (x *= resolution.x/resolution.y) so
-    // shapes don't skew on a non-square canvas — but for a periodic pattern
-    // like this, that means n and m stop meaning "the same repeat count per
-    // axis" unless the canvas happens to be square. Undoing that x-stretch
-    // here (default) makes changing n/m read as a uniform zoom, like a real
-    // plate, regardless of viewport shape.
-    const baseUv = aspectMode === 'square'
-      ? `vec2(${uvVar}.x / (u_resolution.x / u_resolution.y), ${uvVar}.y)`
-      : uvVar;
-    const code: string[] = [`    vec2  ${id}_p = ${baseUv} * ${scale};\n`];
-
-    if (geometry === 'circular') {
-      // Matches the validated reference: f(r,θ) = cos(n·θ + mix·π)·cos(m·π·r).
-      code.push(
-        `    float ${id}_r     = length(${id}_p);\n`,
-        `    float ${id}_theta = atan(${id}_p.y, ${id}_p.x);\n`,
-        `    float ${id}_field = cos(${nVal} * ${id}_theta + ${mixVal} * PI) * cos(${mVal} * PI * ${id}_r);\n`,
-      );
-      if (bounded === 'plate') {
-        // Fixed disc edge — r>1 is off the plate, no pattern drawn there.
-        // Because the edge sits at a constant r=1 regardless of n/m, raising
-        // n/m visibly reorganizes the pattern *inside* it instead of reading
-        // as the camera zooming.
-        code.push(`    if (${id}_r > 1.0) { ${id}_field = ${plateMaskSentinel(id)}; }\n`);
-      }
-    } else {
-      code.push(
-        `    float ${id}_field = waveTerm(${id}_p, ${nVal}, ${mVal}) + ${mixVal} * waveTerm(${id}_p, ${mVal}, ${nVal});\n`,
-      );
-      if (bounded === 'plate') {
-        // Same idea, square edge: |p.x|>1 or |p.y|>1 is off the plate.
-        code.push(`    if (abs(${id}_p.x) > 1.0 || abs(${id}_p.y) > 1.0) { ${id}_field = ${plateMaskSentinel(id)}; }\n`);
-      }
-    }
-
-    return {
-      code: code.join(''),
-      outputVars: { field: `${id}_field`, uv: `${id}_p` },
-    };
-  },
-};
-
 // ─── Chladni Superposition ────────────────────────────────────────────────────
 //
 // The "in-between" node: starts as a single mode (n1,m1), same as Chladni
@@ -416,6 +306,7 @@ const CHLADNI_SUPERPOSITION_TERM_DEFAULTS: Record<number, { n: number; m: number
   6: { n: 8.0, m: 3.0, w: 0.1  },
 };
 
+/** Retired: Chladni Superposition is Chladni with Mix 0 (aliases.ts). Not registered. */
 export const ChladniSuperpositionNode: NodeDefinition = withParamSockets({
   type: 'chladniSuperposition',
   label: 'Chladni Superposition',
@@ -582,8 +473,9 @@ float chladniSeedPhase(float seed) {
 export const ChladniModeFreqNode: NodeDefinition = {
   type: 'chladniModeFreq',
   label: 'Chladni Mode Frequency',
+  aliases: ['Plate frequency', 'Resonance frequency'],
   category: 'Science',
-  description: 'Single-knob Chladni mode selection — approximates how a real plate is driven by one frequency instead of independent n/m mode numbers. n = Frequency, m = Frequency × an irrational-ish ratio picked by Seed, so sweeping Frequency alone drifts continuously through a rich, non-repeating family of patterns instead of jumping between a handful of discrete shapes. A different Seed picks a differently-evolving family. Wire n/m into Chladni Field\'s or Chladni Superposition\'s n/m sockets.',
+  description: 'Single-knob Chladni mode selection — approximates how a real plate is driven by one frequency instead of independent n/m mode numbers. n = Frequency, m = Frequency × an irrational-ish ratio picked by Seed, so sweeping Frequency alone drifts continuously through a rich, non-repeating family of patterns instead of jumping between a handful of discrete shapes. A different Seed picks a differently-evolving family. Wire n and m into a Chladni node\'s n and m.',
   inputs: {
     frequency: { type: 'float', label: 'Frequency' },
     seed:      { type: 'float', label: 'Seed' },
@@ -616,3 +508,186 @@ export const ChladniModeFreqNode: NodeDefinition = {
     };
   },
 };
+
+// ─── Chladni (one node: Plate, Field, Superposition and Wave Term) ─────────────
+//
+// The one Chladni node (docs/node-retirements.md). Its type id stays 'chladniField', so graphs saved with Chladni
+// Field load unchanged; Chladni Plate, Chladni Superposition and Wave Term are aliases onto it (aliases.ts):
+//
+//   field = waveTerm(n, m) + Mix · waveTerm(m, n) + Σ (Terms 2…6) Weight_i · waveTerm(n_i, m_i)   (square plate)
+//   field = cos(n·θ + Mix·π)·cos(m·π·r) + Σ Weight_i · cos(n_i·θ)·cos(m_i·π·r)                   (circular plate)
+//
+//  - Mix −1 is the classic Chladni plate (cos nπx cos mπy − cos mπx cos nπy, the old Plate); Mix 0 one term (Wave Term).
+//  - Wobble (the old Plate's turbulence) pushes the point by a noise before the field is read; off, no noise code.
+//  - Lines is the field's zero set drawn anti-aliased (fwidth), Line Width wide: the old Plate's Density.
+// The old generators below this one are not registered; they stay so the migration tests can run the old code.
+
+/** Line Width / AA / Brightness / Turbulence settings, shared by Lines and Wobble. */
+const NOISE_MODES = [
+  { value: 'smooth',   label: 'Hash (drift)'     },
+  { value: 'value',    label: 'Value (smooth)'   },
+  { value: 'voronoi',  label: 'Voronoi (clumpy)' },
+  { value: 'fbm',      label: 'fBm (fractal)'    },
+  { value: 'swirl',    label: 'Swirl (curl)'     },
+  { value: 'jump',     label: 'Jump (stutter)'   },
+];
+const ON_WOBBLE = { param: 'wobble', value: 'on' };
+const TERM_KEYS = ['n2', 'm2', 'w2', 'n3', 'm3', 'w3', 'n4', 'm4', 'w4', 'n5', 'm5', 'w5', 'n6', 'm6', 'w6'];
+const termsFrom = (i: number) => ['2', '3', '4', '5', '6'].filter(t => Number(t) >= i);
+
+export const ChladniFieldNode: NodeDefinition = withParamSockets({
+  type: 'chladniField',
+  label: 'Chladni',
+  category: 'Science',
+  aliases: ['Chladni Plate', 'Chladni Field', 'Chladni Superposition', 'Wave Term', 'Cymatics', 'Standing wave', 'Nodal lines', 'Vibrating plate', 'Resonance'],
+  description: 'The pattern of a vibrating plate: n and m are the mode numbers, Mix blends in the swapped mode (−1 is the classic plate, 0 a single wave, +1 the X / diamond), and Terms adds up to five more modes with their own weights. Geometry picks a square or round plate. Field is the raw value (0 on the still lines); Lines draws those lines; Wobble shakes the point with a noise first. Chladni Mode Frequency drives n and m from one Frequency knob.',
+  inputs: {
+    uv:    { type: 'vec2',  label: 'UV'    },
+    time:  { type: 'float', label: 'Time', hint: 'Moves the Wobble noise.' },
+    n:     { type: 'float', label: 'n'     },
+    m:     { type: 'float', label: 'm'     },
+    mix:   { type: 'float', label: 'Mix'   },
+    scale: { type: 'float', label: 'Scale' },
+  },
+  socketsOnDemand: { time: ['wobble'] },
+  outputs: {
+    field: { type: 'float', label: 'Field', hint: 'The plate\'s raw value: 0 on the still (nodal) lines. Into Field to Lines, a palette or a mask.' },
+    lines: { type: 'float', label: 'Lines', hint: 'The still lines drawn: 1 on a line, 0 between, anti-aliased (Line Width, AA).' },
+    color: { type: 'vec3',  label: 'Color', hint: 'Lines × Brightness, as a grey colour.' },
+    uv:    { type: 'vec2',  label: 'UV (scaled)' },
+  },
+  glslFunction: WAVE_TERM_GLSL,
+  glslFunctionsFor: node => (node.params.wobble === 'on' ? [CHLADNI_GLSL] : []),
+  defaultParams: {
+    n: 6.0, m: 4.0, mix: 1.0, scale: 1.0, geometry: 'square', aspect: 'square', bounded: 'plate', terms: '1',
+    n2: CHLADNI_SUPERPOSITION_TERM_DEFAULTS[2].n, m2: CHLADNI_SUPERPOSITION_TERM_DEFAULTS[2].m, w2: CHLADNI_SUPERPOSITION_TERM_DEFAULTS[2].w,
+    n3: CHLADNI_SUPERPOSITION_TERM_DEFAULTS[3].n, m3: CHLADNI_SUPERPOSITION_TERM_DEFAULTS[3].m, w3: CHLADNI_SUPERPOSITION_TERM_DEFAULTS[3].w,
+    n4: CHLADNI_SUPERPOSITION_TERM_DEFAULTS[4].n, m4: CHLADNI_SUPERPOSITION_TERM_DEFAULTS[4].m, w4: CHLADNI_SUPERPOSITION_TERM_DEFAULTS[4].w,
+    n5: CHLADNI_SUPERPOSITION_TERM_DEFAULTS[5].n, m5: CHLADNI_SUPERPOSITION_TERM_DEFAULTS[5].m, w5: CHLADNI_SUPERPOSITION_TERM_DEFAULTS[5].w,
+    n6: CHLADNI_SUPERPOSITION_TERM_DEFAULTS[6].n, m6: CHLADNI_SUPERPOSITION_TERM_DEFAULTS[6].m, w6: CHLADNI_SUPERPOSITION_TERM_DEFAULTS[6].w,
+    line_width: 1.5, aa: 1.0, brightness: 1.0,
+    wobble: 'off', turbulence: 0.0, turb_speed: 0.5, noise_mode: 'smooth',
+  },
+  paramDefs: {
+    n:        { label: 'n',        type: 'float', min: -2,  max: 2,   step: 0.01, hint: 'The first mode number: how many times the wave repeats across (x), or round the circle.' },
+    m:        { label: 'm',        type: 'float', min: -2,  max: 2,   step: 0.01, hint: 'The second mode number: up the plate (y), or out from the middle.' },
+    mix:      { label: 'Mix',      type: 'float', min: -2,  max: 2,   step: 0.01, hint: 'Square plate: how much of the swapped (m, n) mode is added. −1 is the classic Chladni plate, 0 a plain grid, +1 the X / diamond. Round plate: a turn between the two matching modes.' },
+    scale:    { label: 'Scale',    type: 'float', min: 0.1, max: 4.0, step: 0.01, hint: 'With Bounded on, the plate\'s size (bigger Scale = smaller plate on screen). n and m only change the pattern inside that fixed edge.' },
+    geometry: {
+      label: 'Geometry', type: 'select',
+      options: [
+        { value: 'square',   label: 'Square Plate'   },
+        { value: 'circular', label: 'Circular Plate' },
+      ],
+    },
+    aspect: {
+      label: 'Aspect', type: 'select',
+      hint: 'Square: n and m mean the same number of repeats on both axes, like a real plate. Fill: the picture\'s stretched UV, so the counts differ per axis on a wide picture.',
+      options: [
+        { value: 'square', label: 'Square (uniform zoom)' },
+        { value: 'fill',   label: 'Fill viewport (stretches)' },
+      ],
+    },
+    bounded: {
+      label: 'Bounded', type: 'select',
+      hint: 'Plate: an edge of fixed size (set by Scale), nothing drawn outside, so changing n and m reorganises the pattern inside it instead of zooming. Infinite: no edge, the pattern tiles forever.',
+      options: [
+        { value: 'plate',    label: 'Plate (fixed edge)' },
+        { value: 'infinite', label: 'Infinite (tiles forever)' },
+      ],
+    },
+    terms: {
+      label: 'Terms', type: 'select', section: 'More modes', hint: 'How many modes are added up: 1 is n, m (and Mix); each more brings its own n, m and Weight.',
+      options: [
+        { value: '1', label: '1' }, { value: '2', label: '2' }, { value: '3', label: '3' },
+        { value: '4', label: '4' }, { value: '5', label: '5' }, { value: '6', label: '6' },
+      ],
+    },
+    n2: { label: 'n2', type: 'float', min: -2, max: 2, step: 0.01, section: 'More modes', showWhen: { param: 'terms', value: termsFrom(2) } },
+    m2: { label: 'm2', type: 'float', min: -2, max: 2, step: 0.01, section: 'More modes', showWhen: { param: 'terms', value: termsFrom(2) } },
+    w2: { label: 'Weight 2', type: 'float', min: -2, max: 2, step: 0.01, section: 'More modes', showWhen: { param: 'terms', value: termsFrom(2) } },
+    n3: { label: 'n3', type: 'float', min: -2, max: 2, step: 0.01, section: 'More modes', showWhen: { param: 'terms', value: termsFrom(3) } },
+    m3: { label: 'm3', type: 'float', min: -2, max: 2, step: 0.01, section: 'More modes', showWhen: { param: 'terms', value: termsFrom(3) } },
+    w3: { label: 'Weight 3', type: 'float', min: -2, max: 2, step: 0.01, section: 'More modes', showWhen: { param: 'terms', value: termsFrom(3) } },
+    n4: { label: 'n4', type: 'float', min: -2, max: 2, step: 0.01, section: 'More modes', showWhen: { param: 'terms', value: termsFrom(4) } },
+    m4: { label: 'm4', type: 'float', min: -2, max: 2, step: 0.01, section: 'More modes', showWhen: { param: 'terms', value: termsFrom(4) } },
+    w4: { label: 'Weight 4', type: 'float', min: -2, max: 2, step: 0.01, section: 'More modes', showWhen: { param: 'terms', value: termsFrom(4) } },
+    n5: { label: 'n5', type: 'float', min: -2, max: 2, step: 0.01, section: 'More modes', showWhen: { param: 'terms', value: termsFrom(5) } },
+    m5: { label: 'm5', type: 'float', min: -2, max: 2, step: 0.01, section: 'More modes', showWhen: { param: 'terms', value: termsFrom(5) } },
+    w5: { label: 'Weight 5', type: 'float', min: -2, max: 2, step: 0.01, section: 'More modes', showWhen: { param: 'terms', value: termsFrom(5) } },
+    n6: { label: 'n6', type: 'float', min: -2, max: 2, step: 0.01, section: 'More modes', showWhen: { param: 'terms', value: termsFrom(6) } },
+    m6: { label: 'm6', type: 'float', min: -2, max: 2, step: 0.01, section: 'More modes', showWhen: { param: 'terms', value: termsFrom(6) } },
+    w6: { label: 'Weight 6', type: 'float', min: -2, max: 2, step: 0.01, section: 'More modes', showWhen: { param: 'terms', value: termsFrom(6) } },
+    line_width: { label: 'Line Width', type: 'float', min: 0.1, max: 8.0, step: 0.05, section: 'Lines', hint: 'How wide the Lines output draws the still lines, in pixels (roughly).' },
+    aa:         { label: 'AA Smooth',  type: 'float', min: 0.0, max: 4.0, step: 0.1,  section: 'Lines', hint: 'How soft the lines\' edges are.' },
+    brightness: { label: 'Brightness', type: 'float', min: 0.1, max: 5.0, step: 0.05, section: 'Lines', hint: 'Color is Lines × Brightness.' },
+    wobble: {
+      label: 'Wobble', type: 'select', section: 'Wobble', hint: 'On: the point is shaken by a noise before the plate is read, so the lines wander and fray (Time moves it).',
+      options: [{ value: 'off', label: 'Off' }, { value: 'on', label: 'On' }],
+    },
+    turbulence: { label: 'Turbulence', type: 'float', min: 0.0, max: 0.3, step: 0.001, section: 'Wobble', showWhen: ON_WOBBLE, hint: 'How far the noise pushes the point.' },
+    turb_speed: { label: 'Turb Speed', type: 'float', min: 0.0, max: 3.0, step: 0.05,  section: 'Wobble', showWhen: ON_WOBBLE, hint: 'How fast the noise moves with Time.' },
+    noise_mode: { label: 'Noise Mode', type: 'select', section: 'Wobble', showWhen: ON_WOBBLE, options: NOISE_MODES },
+  },
+  sectionSummary: (section, params) => {
+    if (section === 'More modes') return params.terms && params.terms !== '1' ? `${params.terms} modes` : 'one mode';
+    if (section === 'Wobble') return params.wobble === 'on' ? 'on' : 'off';
+    return undefined;
+  },
+  generateGLSL: (node: GraphNode, inputVars) => {
+    const id       = node.id;
+    const uvVar    = inputVars.uv   ?? 'vec2(0.0)';
+    const nVal     = inputVars.n    ?? p(node.params.n, 6.0);
+    const mVal     = inputVars.m    ?? p(node.params.m, 4.0);
+    const mixVal   = inputVars.mix  ?? p(node.params.mix, 1.0);
+    const scale    = inputVars.scale ?? p(node.params.scale, 1.0);
+    const geometry = typeof node.params.geometry === 'string' ? node.params.geometry : 'square';
+    const aspectMode = typeof node.params.aspect === 'string' ? node.params.aspect : 'square';
+    const bounded  = typeof node.params.bounded === 'string' ? node.params.bounded : 'plate';
+    const termsRaw = parseInt(typeof node.params.terms === 'string' ? node.params.terms : '1', 10);
+    const termsCount = Math.max(1, Math.min(6, Number.isFinite(termsRaw) ? termsRaw : 1));
+    const term = (i: number) => {
+      const fb = CHLADNI_SUPERPOSITION_TERM_DEFAULTS[i];
+      return { n: p(node.params[`n${i}`], fb.n), m: p(node.params[`m${i}`], fb.m), w: p(node.params[`w${i}`], fb.w) };
+    };
+
+    // The global UV is aspect-corrected (x *= resolution.x/resolution.y) so shapes don't skew; for a periodic
+    // pattern that means n and m stop meaning "the same repeat count per axis" unless the canvas is square.
+    // Square (default) undoes that x-stretch, so changing n and m reads as a uniform zoom, like a real plate.
+    const baseUv = aspectMode === 'square'
+      ? `vec2(${uvVar}.x / (u_resolution.x / u_resolution.y), ${uvVar}.y)`
+      : uvVar;
+    const code: string[] = [`    vec2  ${id}_p = ${baseUv} * ${scale};\n`];
+    if (node.params.wobble === 'on') {
+      const noiseMode = typeof node.params.noise_mode === 'string' ? node.params.noise_mode : 'smooth';
+      // ch2_noise2's modes: 0 hash (smooth), 1 value, 2 voronoi, 3 fbm, 4 swirl, 5 jump.
+      const mode = noiseMode === 'value' ? 1 : noiseMode === 'voronoi' ? 2 : noiseMode === 'fbm' ? 3 : noiseMode === 'swirl' ? 4 : noiseMode === 'jump' ? 5 : 0;
+      code.push(`    ${id}_p += ch2_noise2(${id}_p, ${inputVars.time ?? '0.0'}, ${p(node.params.turb_speed, 0.5)}, ${mode}) * ${p(node.params.turbulence, 0.0)};\n`);
+    }
+
+    if (geometry === 'circular') {
+      // f(r,θ) = cos(n·θ + Mix·π)·cos(m·π·r) + Σ w_i·cos(n_i·θ)·cos(m_i·π·r), masked to the unit disc.
+      let sum = `cos(${nVal} * ${id}_theta + ${mixVal} * PI) * cos(${mVal} * PI * ${id}_r)`;
+      for (let i = 2; i <= termsCount; i++) { const t = term(i); sum += ` + ${t.w} * cos(${t.n} * ${id}_theta) * cos(${t.m} * PI * ${id}_r)`; }
+      code.push(
+        `    float ${id}_r     = length(${id}_p);\n`,
+        `    float ${id}_theta = atan(${id}_p.y, ${id}_p.x);\n`,
+        `    float ${id}_field = ${sum};\n`,
+      );
+      // A fixed disc edge: r > 1 is off the plate, so raising n and m reorganises the pattern inside it.
+      if (bounded === 'plate') code.push(`    if (${id}_r > 1.0) { ${id}_field = ${plateMaskSentinel(id)}; }\n`);
+    } else {
+      let sum = `waveTerm(${id}_p, ${nVal}, ${mVal}) + ${mixVal} * waveTerm(${id}_p, ${mVal}, ${nVal})`;
+      for (let i = 2; i <= termsCount; i++) { const t = term(i); sum += ` + ${t.w} * waveTerm(${id}_p, ${t.n}, ${t.m})`; }
+      code.push(`    float ${id}_field = ${sum};\n`);
+      // The same idea, square edge: |p.x| > 1 or |p.y| > 1 is off the plate.
+      if (bounded === 'plate') code.push(`    if (abs(${id}_p.x) > 1.0 || abs(${id}_p.y) > 1.0) { ${id}_field = ${plateMaskSentinel(id)}; }\n`);
+    }
+    // Lines: the zero set, anti-aliased with fwidth (the old Plate's Density); only when wired.
+    const lines = `(1.0 - smoothstep(0.0, fwidth(${id}_field) * max(${p(node.params.aa, 1.0)}, 0.01) * ${p(node.params.line_width, 1.5)}, abs(${id}_field)))`;
+    return {
+      code: code.join(''),
+      outputVars: { field: `${id}_field`, lines, color: `vec3(${lines} * ${p(node.params.brightness, 1.0)})`, uv: `${id}_p` },
+    };
+  },
+}, [...TERM_KEYS, 'line_width', 'aa', 'brightness', 'turbulence', 'turb_speed']);

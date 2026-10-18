@@ -254,15 +254,15 @@ exports[`2D agents and pass graphs compile as they did before 3D > agentRideMorp
 
 exports[`2D agents and pass graphs compile as they did before 3D > agentRidePath 1`] = `
 {
-  "agents": "11ba2bd284537f131ea19ab6b3a6:18522",
+  "agents": "1c3405c8929cc21a84991c2660eb:18608",
   "errors": null,
   "fragmentShader": "01ee86544218e104254558716fd0:2146",
-  "paramBindings": "12e7762f017dea0e47aaa9843884:1945",
-  "paramUniforms": "02203e0e4cc2ab189de8fe6c334a:1375",
+  "paramBindings": "1346e3a25b290c06cb2577edb5c4:2091",
+  "paramUniforms": "0dd56f6483fbc008d8da97016a5f:1471",
   "passes": "167d269bbddad80189e9f9473b28:2",
   "success": true,
   "textureUniforms": "167d269bbddad80189e9f9473b28:2",
-  "web": "14accf2c0d958519f1baeca3c018:18623",
+  "web": "1d401f5bccc00a106c4f60007809:18709",
 }
 `;
 

@@ -170,7 +170,7 @@ export const TYPE_STAGE: Record<string, StageOf> = {
   // Halftone: cells are a bend; the CMYK screens are a finish.
   gridUV: 'bend', pixelate: 'bend', rgbToCMYK: 'post', cmykHalftone: 'post',
   // Science: the plate's terms are maths.
-  waveTerm: 'any', chladniModeFreq: 'any',
+  chladniModeFreq: 'any',
   // Fractals that are whole 3D renders.
   raymarch3d: 'march', mandelbulb: 'march', volumeClouds: 'march',
   // Effects: light from a distance; warps; the colour-making ones.

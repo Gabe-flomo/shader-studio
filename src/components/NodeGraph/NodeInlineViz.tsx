@@ -4900,16 +4900,28 @@ export function ChladniFieldViz({ node }: { node: GraphNode }) {
     const scale = chladniLiveOrParam(n, 'scale', 1.0);
     const circular = n.params.geometry === 'circular';
     const bounded = n.params.bounded !== 'infinite';
+    // Terms 2…6 add their own modes (the old Superposition's).
+    const termsCount = Math.max(1, Math.min(6, parseInt(typeof n.params.terms === 'string' ? n.params.terms : '1', 10) || 1));
+    const extra: Array<{ n: number; m: number; w: number }> = [];
+    for (let i = 2; i <= termsCount; i++) {
+      const fb = CHLADNI_SUPERPOSITION_VIZ_DEFAULTS[i];
+      const at = (k: string, d: number) => (typeof n.params[`${k}${i}`] === 'number' ? n.params[`${k}${i}`] as number : d);
+      extra.push({ n: at('n', fb.n), m: at('m', fb.m), w: at('w', fb.w) });
+    }
     drawChladniField(viz, (px, py) => {
       const sx = px * scale, sy = py * scale;
       if (circular) {
         const r = Math.hypot(sx, sy);
         if (bounded && r > 1) return null;
         const theta = Math.atan2(sy, sx);
-        return Math.cos(nVal * theta + mixVal * Math.PI) * Math.cos(mVal * Math.PI * r);
+        let sum = Math.cos(nVal * theta + mixVal * Math.PI) * Math.cos(mVal * Math.PI * r);
+        for (const t of extra) sum += t.w * Math.cos(t.n * theta) * Math.cos(t.m * Math.PI * r);
+        return sum;
       }
       if (bounded && (Math.abs(sx) > 1 || Math.abs(sy) > 1)) return null;
-      return waveTermValue(sx, sy, nVal, mVal) + mixVal * waveTermValue(sx, sy, mVal, nVal);
+      let sum = waveTermValue(sx, sy, nVal, mVal) + mixVal * waveTermValue(sx, sy, mVal, nVal);
+      for (const t of extra) sum += t.w * waveTermValue(sx, sy, t.n, t.m);
+      return sum;
     });
   }, []);
 
@@ -5544,10 +5556,7 @@ function NodeInlineVizSwitch({ node, onEnterGroup }: { node: GraphNode; onEnterG
     case 'truchet':
     case 'metaballs':
     case 'lissajous':
-    case 'chladni':          return <SDF3DParamViz           node={node} />;
-    case 'waveTerm':           return <WaveTermViz           node={node} />;
     case 'chladniField':       return <ChladniFieldViz       node={node} />;
-    case 'chladniSuperposition': return <ChladniSuperpositionViz node={node} />;
     case 'chladniModeFreq':    return <ChladniModeFreqViz    node={node} />;
     case 'vec2Swizzle':
     case 'vec3Swizzle':        return <SwizzleViz            node={node} />;

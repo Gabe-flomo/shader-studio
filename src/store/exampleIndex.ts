@@ -125,7 +125,7 @@ export const EXAMPLE_INDEX: Record<string, ExampleIndexEntry> = {
   fractalRings: { label: "Fractal Rings" },
   raymarchSpheres: { label: "Raymarch Spheres" },
   gravitationalLens: { label: "Gravity Lens" },
-  chladniFieldQuickDemo: { label: "Chladni Field (Quick)" },
+  chladniFieldQuickDemo: { label: "Chladni (Quick)" },
   chladniModeFreqDemo: { label: "Chladni Mode Frequency" },
   groupCarryRings: { label: "Group: Fractal Rings (Carry)", description: "Rings within rings from a Group that repeats: each pass folds the picture into smaller tiles (Fract, carried from pass to pass) and adds glowing rings in its own Palette colour." },
   groupCarryFBM: { label: "Group: FBM Octaves (Carry)", description: "Fractal noise built by hand: a Group repeats once per octave, each pass adding noise twice as fine and half as strong, summed into clouds." },

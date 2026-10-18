@@ -373,7 +373,7 @@ export const QuantizeNode: NodeDefinition = {
   type: 'quantize',
   label: 'Quantize',
   category: 'Math', subcategory: 'Rounding',
-  description: 'Snaps a float to the nearest multiple of Step. Wire this upstream of any continuous input — like Wave Term or Chladni Field\'s n/m sockets — to get discrete stepped jumps instead of a smooth continuous sweep, without baking a fixed step size into the node itself.',
+  description: 'Snaps a float to the nearest multiple of Step. Wire this upstream of any continuous input — like a Chladni node\'s n and m sockets — to get discrete stepped jumps instead of a smooth continuous sweep, without baking a fixed step size into the node itself.',
   inputs: {
     input: { type: 'float', label: 'Input' },
     step:  { type: 'float', label: 'Step'  },

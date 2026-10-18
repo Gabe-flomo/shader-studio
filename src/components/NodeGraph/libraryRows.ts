@@ -133,7 +133,7 @@ export const CATEGORY_INFO: Record<string, string> = {
   Agents: 'Walkers, particles and slime that move and leave trails: the Agents group and the nodes that go outside and inside it.',
   'Agent presets': 'Ready-made Agents setups, one click each: slime mold, ants, boids, galaxy, smoke and more. Open the group to change how they behave.',
   '4D': 'Shapes and transforms in four dimensions. Lift to 4D turns a 3D point into a 4D one and the shape is sliced back to 3D; projection nodes show the whole 4D shape at once; 4D Wireframe 2D and Plane Slice 4D go straight to the flat picture.',
-  Science: 'Chladni plates: the standing-wave patterns of a vibrating plate, and the waves that make them.',
+  Science: 'Chladni plates: the standing-wave patterns of a vibrating plate (Chladni), and one knob that sweeps their modes (Chladni Mode Frequency).',
   SDF: 'Work on distances from any shape, 2D or 3D. Combine joins, cuts or overlaps two shapes; Modify grows, hollows or sharpens one; Style turns a distance into colour.',
   Color: 'Make and change colour: pick colours, palettes and gradients, adjust, convert and blend.',
   'Color Grading': 'Film-style adjustments on a finished colour: tone, curves, saturation, tone mapping and grain.',

@@ -4,7 +4,7 @@
  *
  *  - Walkers on a harmonograph: a 3 : 2 Lissajous Curve ridden by a band of walkers, drawn as streaks
  *    coloured by their speed, laying a glowing trail of the figure;
- *  - Riding outlines: a circle, a Lissajous Curve and a Chladni Field, one Shape slider blending them;
+ *  - Riding outlines: a circle, a Lissajous Curve and a Chladni plate, one Shape slider blending them;
  *  - Morphing ribbon: an LFO sweeps a 3 : 2 Lissajous Curve's phase, folding it, the walkers following,
  *    each coloured by where round the figure it is.
  *
@@ -162,8 +162,8 @@ export function ridePathNodes(x = 0, y = 0, withOutput = true): GraphNode[] {
   const plate = n('chladniField', 'rpPlate', 0, 760, {
     n: 5, m: 3, mix: 1, scale: 1, geometry: 'square', aspect: 'square', bounded: 'plate',
     ...note([
-      'Chladni Field: a vibrating square plate, + where it moves up, − down. Its outline (0) is the nodal lines, where sand gathers on a real plate.',
-      '(Chladni Field, not Chladni Pattern: the Pattern draws its lines with screen derivatives, which an agent, not being a pixel, cannot use.)',
+      'Chladni: a vibrating square plate, + where it moves up, − down. Its outline (0) is the nodal lines, where sand gathers on a real plate.',
+      '(its Field output, not Lines: Lines draws its lines with screen derivatives, which an agent, not being a pixel, cannot use.)',
       'Try: n 7 and m 2 for another pattern; Mix 0 for a plain grid.',
     ]),
   });

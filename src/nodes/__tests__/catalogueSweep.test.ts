@@ -17,6 +17,7 @@ import {
   ExpEaseNode, DoubleExpSeatNode, DoubleExpSigmoidNode, LogisticSigmoidNode, CircularEaseInNode, CircularEaseOutNode,
   DoubleCircleSeatNode, DoubleCircleSigmoidNode, DoubleEllipticSigmoidNode, QuadBezierShaperNode,
 } from '../definitions/shapers';
+import { ChladniNode, ChladniSuperpositionNode, WaveTermNode } from '../definitions/physics';
 import { emptyPlayRecord, type PlayRecord } from '../../types/play';
 import { getNodeDefinition, getOfferedDefinitions, NODE_REGISTRY } from '../definitions';
 import { NODE_ALIASES } from '../definitions/aliases';
@@ -203,6 +204,98 @@ describe('N4: one Shaper with a Curve', () => {
   it('runs the same numbers on the CPU (Exp ease, Shape 0.3, x 0.4)', () => {
     const [nd] = load([saved('expEase', 's', { a: 0.3 }, { x: null }, ['y'])]);
     near(runNode(nd, { x: 'X' }, { X: 0.4, pow: (a, b) => Math.pow(a as number, b as number) }).y as number, Math.pow(0.4, 0.6));
+  });
+});
+
+describe('N5: one Chladni (Plate, Field, Superposition and Wave Term)', () => {
+  /** Runs a node's code and evaluates each of its outputs (an output may be an expression, like Lines). */
+  const runAll = (def: NodeDefinition, nd: GraphNode, ins: Record<string, string>, env: Record<string, Val | ((...a: Val[]) => Val)>) => {
+    const { code, outputVars } = def.generateGLSL(nd, ins);
+    const tail = Object.entries(outputVars).map(([k, v]) => `    ${k === 'uv' ? 'vec2' : k === 'color' ? 'vec3' : 'float'} __out_${k} = ${v};\n`).join('');
+    const out = runGlsl(code + tail, env);
+    return Object.fromEntries(Object.keys(outputVars).map(k => [k, out[`__out_${k}`] as Val]));
+  };
+  const wave = (PI: number) => (p: Val, n: Val, m: Val) => Math.cos((n as number) * PI * (p as number[])[0]) * Math.cos((m as number) * PI * (p as number[])[1]);
+  const ENV = (UV: number[]) => ({
+    UV, T: 1.3, PI: 3.1415926538, u_resolution: [1600, 900], waveTerm: wave(3.1415926538),
+    smoothstep: (e0: Val, e1: Val, x: Val) => { const t = Math.min(1, Math.max(0, ((x as number) - (e0 as number)) / ((e1 as number) - (e0 as number)))); return t * t * (3 - 2 * t); },
+    fwidth: () => 0.01, length: (v: Val) => Math.hypot(...(v as number[])), atan: (y: Val, x: Val) => Math.atan2(y as number, x as number),
+    chladni: (p: Val, m: Val, n: Val) => wave(3.14159265)(p, n, m) - wave(3.14159265)(p, m, n),
+    ch2_noise2: (p: Val) => [Math.sin((p as number[])[0] * 7), Math.cos((p as number[])[1] * 5)],
+  });
+  const near = (a: Val, b: Val, eps: number) => {
+    const A = Array.isArray(a) ? a : [a as number], B = Array.isArray(b) ? b : [b as number];
+    A.forEach((x, i) => expect(Math.abs(x - B[i]), `${A} vs ${B}`).toBeLessThanOrEqual(eps));
+  };
+  const POINTS = [[0.12, -0.31], [0.7, 0.44], [-1.3, 0.05], [0.0, 0.92]];
+  const UNIFIED = () => getNodeDefinition('chladniField')!;
+
+  it('Plate, Superposition and Wave Term are aliases onto Chladni; Mode Frequency stays', () => {
+    for (const t of ['chladni', 'waveTerm', 'chladniSuperposition']) gone(t, 'chladniField');
+    expect(NODE_REGISTRY.chladniModeFreq).toBeTruthy();
+    expect(getNodeDefinition('chladniField')!.label).toBe('Chladni');
+  });
+
+  it('Wave Term: the same value (Mix 0 adds exactly nothing)', () => {
+    for (const bounded of ['plate', 'infinite']) {
+      const raw = saved('waveTerm', 'w', { n: 2.5, m: 1.5, scale: 1.4, bounded }, { uv: null }, ['value']);
+      const [nd] = load([raw]);
+      for (const UV of POINTS) {
+        const old = runAll(WaveTermNode, { ...raw, params: { ...WaveTermNode.defaultParams, ...raw.params } }, { uv: 'UV' }, ENV(UV));
+        const now = runAll(UNIFIED(), nd, { uv: 'UV' }, ENV(UV));
+        near(now.field, old.value, 0);
+        near(now.uv, old.uv, 0);
+      }
+    }
+  });
+
+  it('Superposition: 4 terms, square and round, the same field', () => {
+    for (const geometry of ['square', 'circular']) {
+      const raw = saved('chladniSuperposition', 's', { terms: '4', n1: 3, m1: 2, geometry, w3: -0.4 }, { uv: null, n1: null }, ['field']);
+      const [nd] = load([raw]);
+      expect(nd.params).toMatchObject({ n: 3, m: 2, mix: 0, terms: '4' });
+      for (const UV of POINTS) {
+        const old = runAll(ChladniSuperpositionNode, { ...raw, params: { ...ChladniSuperpositionNode.defaultParams, ...raw.params } }, { uv: 'UV' }, ENV(UV));
+        near(runAll(UNIFIED(), nd, { uv: 'UV' }, ENV(UV)).field, old.field, 0);
+      }
+    }
+  });
+
+  it('Plate: Mix −1, unstretched, unbounded, with its wobble and lines (π differs only past float32: the same float)', () => {
+    expect(Math.fround(3.14159265)).toBe(Math.fround(3.1415926538));
+    const raw = saved('chladni', 'c', { m: 0.6, n: 1.7, scale: 1.2, turbulence: 0.05, line_width: 2, aa: 1.5, brightness: 1.4 }, { uv: null, time: null }, ['density', 'field', 'color', 'uv']);
+    const [nd] = load([raw]);
+    expect(nd.params).toMatchObject({ n: 1.7, m: 0.6, mix: -1, aspect: 'fill', bounded: 'infinite', wobble: 'on' });
+    expect(nd.outputs.lines).toBeTruthy();
+    for (const UV of POINTS) {
+      const old = runAll(ChladniNode, { ...raw, params: { ...ChladniNode.defaultParams, ...raw.params } }, { uv: 'UV', time: 'T' }, ENV(UV));
+      const now = runAll(UNIFIED(), nd, { uv: 'UV', time: 'T' }, ENV(UV));
+      near(now.uv, old.uv, 0);
+      near(now.field, old.field, 1e-6);
+      near(now.lines, old.density, 1e-4);
+      near(now.color, old.color, 1e-4);
+    }
+  });
+
+  it('Lines and Color compile when wired (also an old Plate graph)', () => {
+    for (const t of ['chladniField', 'chladni']) {
+      const nodes = migrateLoadedNodes([
+        saved('uv', 'uv', {}, {}, ['uv']),
+        saved(t, 'c', t === 'chladni' ? { turbulence: 0.02 } : {}, { uv: ['uv', 'uv'] }, t === 'chladni' ? ['density', 'color'] : ['lines', 'color']),
+        saved('multiply', 'k', {}, { a: ['c', t === 'chladni' ? 'density' : 'lines'] }, ['result']),
+        saved('output', 'out', {}, { color: ['c', 'color'] }, []),
+      ]);
+      const r = compileGraph({ nodes });
+      expect(r.errors ?? [], t).toEqual([]);
+      expect(r.fragmentShader).toContain('fwidth(');
+    }
+  });
+
+  it('a Chladni saved before (the old Field) emits its old field line', () => {
+    const nd = load([saved('chladniField', 'f', { n: 6, m: 4, mix: 1, scale: 1, geometry: 'square' }, { uv: null }, ['field'])])[0];
+    const { code } = UNIFIED().generateGLSL(nd, { uv: 'UV' });
+    expect(code).toContain('float f_field = waveTerm(f_p, 6.0, 4.0) + 1.0 * waveTerm(f_p, 4.0, 6.0);\n');
+    expect(code).not.toContain('ch2_noise2');
   });
 });
 

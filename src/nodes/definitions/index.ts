@@ -106,7 +106,7 @@ export { FBMNode, VoronoiNode, DomainWarpNode, FlowFieldNode, CirclePackNode, No
 export { MandelbrotNode, IFSNode, NewtonFractalNode, LyapunovNode, ApollonianNode, SphericalFoldFractalNode } from './fractals';
 
 // Physics
-export { ChladniNode, WaveTermNode, ChladniFieldNode, ChladniSuperpositionNode, ChladniModeFreqNode } from './physics';
+export { ChladniFieldNode, ChladniModeFreqNode } from './physics';
 
 // Vector fields
 export { VectorFieldNode, GravityFieldNode, SpiralFieldNode } from './vectorFields';
@@ -250,7 +250,7 @@ import { LoopRippleStepNode, LoopRotateStepNode, LoopDomainFoldNode, LoopFloatAc
 import { LoopCarryNode } from './loop';
 import { FBMNode, VoronoiNode, DomainWarpNode, FlowFieldNode, CirclePackNode, NoiseFloatNode, ScatterNode } from './noise';
 import { MandelbrotNode, IFSNode, NewtonFractalNode, LyapunovNode, ApollonianNode, SphericalFoldFractalNode } from './fractals';
-import { ChladniNode, WaveTermNode, ChladniFieldNode, ChladniSuperpositionNode, ChladniModeFreqNode } from './physics';
+import { ChladniFieldNode, ChladniModeFreqNode } from './physics';
 import { VectorFieldNode, GravityFieldNode, SpiralFieldNode } from './vectorFields';
 import { RaymarchNode, VolumeCloudsNode, ChromaticAberrationNode, CombineRGBNode, MandelbulbNode,
   SdfAoNode, SoftShadowNode, MultiLightNode, Fresnel3DNode, FakeSSSNode, VolumetricFogNode, MaterialSelectNode, GlassNode,
@@ -570,10 +570,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   apollonian: ApollonianNode,
   sphericalFoldFractal: SphericalFoldFractalNode,
   // Physics
-  chladni: ChladniNode,
-  waveTerm: WaveTermNode,
   chladniField: ChladniFieldNode,
-  chladniSuperposition: ChladniSuperpositionNode,
   chladniModeFreq: ChladniModeFreqNode,
   // Vector fields
   vectorField:     VectorFieldNode,

@@ -150,3 +150,27 @@ aliases (`curve` set, the old defaults filled: Logistic's started at 0.7). **Cub
 control settings, and its own editor).
 
 Example changed: learnShapers (Exp Sigmoid → Shaper, Curve Exp sigmoid; the same code, renamed uniforms).
+
+## Chladni
+
+Chladni Plate, Chladni Field, Chladni Superposition and Wave Term were four nodes for one formula. They are one
+**Chladni** node (type id `chladniField`, so graphs saved with Chladni Field load unchanged):
+
+- square plate: `waveTerm(n, m) + Mix · waveTerm(m, n) + Σ Weight_i · waveTerm(n_i, m_i)` (Terms 2–6, folded under
+  *More modes*); round plate: `cos(n·θ + Mix·π)·cos(m·π·r) + Σ Weight_i · cos(n_i·θ)·cos(m_i·π·r)`.
+- Mix −1 is the classic plate, `cos nπx cos mπy − cos mπx cos nπy` (the old Plate), Mix 0 a single wave (Wave Term).
+- **Lines** (and **Color**, Lines × Brightness) draw the still lines anti-aliased with `fwidth`: the old Plate's
+  Density. They are expressions on the outputs, so nothing is added to a shader that doesn't wire them.
+- **Wobble** (the old Plate's turbulence) pushes the point by a noise first; off, no noise code at all.
+
+| Old | Chladni with |
+|---|---|
+| Chladni Plate | Mix −1, Aspect Fill, Bounded Infinite, Wobble On; Density → Lines (the same value; its literal π and the shader's PI are the same float32) |
+| Chladni Superposition | Mix 0 (adding 0 × the swapped term changes nothing); n1 / m1 → n / m |
+| Wave Term | Mix 0; Value → Field |
+| Chladni Field | itself |
+
+**Chladni Mode Frequency** stays (one Frequency knob → n and m). The agents' **Chladni** force is separate.
+
+Examples changed: agentRidePath (notes; its shader picks up the new settings). The two Physics examples load as they
+did ("Chladni (Quick)").

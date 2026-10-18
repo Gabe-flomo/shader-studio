@@ -116,6 +116,18 @@ export const NODE_ALIASES: Record<string, NodeAlias> = {
     to: 'shaper', params: (o: Record<string, unknown>) => ({ ...o, curve: t, a: num(o.a, t === 'logisticSigmoid' ? 0.7 : 0.5), b: num(o.b, 0.5), bipolar: o.bipolar === true }),
   } satisfies NodeAlias])),
 
+  // ── 2026-10-17 catalogue sweep: one Chladni (physics.ts, type chladniField). Plate is Mix −1 (cos nπx cos mπy −
+  //    cos mπx cos nπy), with its unstretched UV (Aspect Fill), no edge and its turbulence (Wobble on); Wave Term and
+  //    Superposition are Mix 0 (adding 0 × the swapped term). Their old defaults fill missing settings. ──
+  chladni: { to: 'chladniField', outputs: { density: 'lines' },
+    params: o => ({ ...o, n: num(o.n, 1.0), m: num(o.m, 0.75), mix: -1, scale: num(o.scale, 1.0), geometry: 'square', aspect: 'fill', bounded: 'infinite', terms: '1',
+      wobble: 'on', turbulence: num(o.turbulence, 0.0), turb_speed: num(o.turb_speed, 0.5), noise_mode: typeof o.noise_mode === 'string' ? o.noise_mode : 'smooth',
+      line_width: num(o.line_width, 1.5), aa: num(o.aa, 1.0), brightness: num(o.brightness, 1.0) }) },
+  waveTerm: { to: 'chladniField', outputs: { value: 'field' },
+    params: o => ({ ...o, n: num(o.n, 3.0), m: num(o.m, 4.0), mix: 0, scale: num(o.scale, 1.0), geometry: 'square', terms: '1' }) },
+  chladniSuperposition: { to: 'chladniField', inputs: { n1: 'n', m1: 'm' },
+    params: o => ({ ...o, n: num(o.n1, 6.0), m: num(o.m1, 4.0), mix: 0, n1: undefined, m1: undefined }) },
+
   // ── 2026-10-17 catalogue sweep: the rounded shapes are Box SDF 3D / Cylinder with Edges Rounded (the same
   //    function); Vertical Capsule is Capsule SDF 3D (the same function). ──
   roundedBoxSDF3D: { to: 'boxSDF3D', inputs: { radius: 'rounding' },

@@ -512,9 +512,9 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
     ],
   },
 
-  // ── Chladni Field (Quick) ──
+  // ── Chladni (Quick) ──
   chladniFieldQuickDemo: {
-    label: 'Chladni Field (Quick)',
+    label: 'Chladni (Quick)',
     counter: 4,
     nodes: [
       {
