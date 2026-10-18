@@ -4397,8 +4397,12 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
       )}
 
       {/* ── Footer — Info/Comment/Code/Reset live here instead of the header, so the
-          title doesn't get crowded as a node gains more of these toggles ── */}
+          title doesn't get crowded as a node gains more of these toggles. A calmer canvas (UX audit
+          §3.4): its buttons show while the card is hovered or selected, always on touch, and a
+          button that is on (a comment, the code open) always shows (index.css, data-card-footer). ── */}
       <div
+        data-card-footer=""
+        data-reveal={isSelected || isTouchDevice ? '' : undefined}
         onMouseDown={e => e.stopPropagation()}
         style={{ display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center', padding: '5px 8px', borderTop: `1px solid ${tk.border.subtle}` }}
       >

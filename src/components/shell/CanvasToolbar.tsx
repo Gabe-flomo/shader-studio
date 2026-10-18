@@ -16,6 +16,8 @@ import { ArrangeMenu, FlowStripToggle } from '../structure/stageUi';
 import { Icon } from '../ui/Icon';
 import type { IconName } from '../ui/iconPaths';
 import { Popover } from '../ui/Popover';
+import { Menu } from '../ui/Menu';
+import { graphMenuItems } from './canvasGraphMenu';
 import { Tooltip } from '../ui/Tooltip';
 import { computeGraphStats, countNodes, mainBodyLines } from './graphStats';
 import { PerfBadge, PerfPanel } from './PerfPanel';
@@ -27,8 +29,10 @@ import { loadShortcutMap } from '../../hooks/useShortcuts';
 const SuggestControlsPanel = lazySafe(() => import('../play/SuggestControlsPanel'));
 
 /**
- * Floating toolbar at the top centre of the canvas (desktop redesign): node count for the
- * current context (opens graph stats), zoom, fit, auto layout, minimap, clear.
+ * Floating toolbar at the top centre of the canvas (desktop redesign), split in two (UX audit §3.4):
+ * view controls (node count with graph stats, frame time, zoom, Fit, Auto layout, maximize, minimap,
+ * Next, flow strip, Do…) and one "Graph ⋯" menu with the rarely used whole-graph actions
+ * (canvasGraphMenu.ts). Shortcuts are unchanged.
  */
 export function CanvasToolbar({
   nodes, topLevel, groupName, zoom, onZoom, onResetZoom, onFit, onAutoLayout, onArrangeByStage, showMinimap, onToggleMinimap, showOutline, onToggleOutline, onClear, onClearMinimal, compact = false, readOnly = false, onOptimize, onBake,
@@ -145,24 +149,9 @@ export function CanvasToolbar({
       {!readOnly && <SuggestionsToggle />}
       {!readOnly && <FlowStripToggle />}
       {!readOnly && <DoBarButton />}
-      {multiProgram && (
-        <IconButton icon="layers" label={showPasses ? 'Hide passes' : 'Show passes: tint each node by the program it runs in (a Pass, an Agents group, the picture)'} size="sm" active={showPasses} onClick={() => setShowPasses(!showPasses)} />
-      )}
-      {onToggleOutline && (
-        <IconButton icon="layoutGraph" label={showOutline ? 'Hide the outline' : 'Outline: list every node, jump to one, or step through the graph'} size="sm" active={!!showOutline} onClick={onToggleOutline} />
-      )}
-      {!readOnly && onBake && topLevel && (
-        <IconButton icon="record" label="Bake the picture: render it once to a video and play that instead (much lighter to run; Unbake brings it back)" size="sm" onClick={onBake} />
-      )}
-      {!readOnly && <RandomizeGraphButton />}
-      {!readOnly && onOptimize && (
-        <IconButton icon="spark" label="Optimise graph: fold runs of math cards into Expression Blocks, sliders kept, picture unchanged" size="sm" onClick={onOptimize} />
-      )}
-      {!readOnly && (
-        <span onContextMenu={e => { e.preventDefault(); e.stopPropagation(); onClearMinimal?.(); }} style={{ display: 'inline-flex' }}>
-          <IconButton icon="trash" label={onClearMinimal ? 'Reset to the starter graph · right-click: clear to just UV and Output' : 'Clear all nodes'} size="sm" tone="danger" onClick={onClear} />
-        </span>
-      )}
+      <Sep />
+      <GraphMenuButton readOnly={readOnly} topLevel={topLevel} multiProgram={multiProgram} showPasses={showPasses} onTogglePasses={() => setShowPasses(!showPasses)}
+        showOutline={!!showOutline} onToggleOutline={onToggleOutline} onBake={onBake} onOptimize={onOptimize} onClear={onClear} onClearMinimal={onClearMinimal} />
     </div>
   );
 }
@@ -180,22 +169,36 @@ function MaximizeGraphButton() {
 }
 
 /**
- * Randomise all settings in this graph (docs/surprise.md): the settings on the level on screen,
- * moved by the saved strength, locks and group options (the chevron or a right-click opens them,
- * with a seed field), as one undo step. Click: randomise with the current options.
+ * "Graph ⋯": the rarely used whole-graph actions (canvasGraphMenu.ts): the outline, passes, randomise
+ * (with its options popover and a seed), optimise, bake, reset. Randomise all settings (docs/surprise.md)
+ * moves the settings on the level on screen by the saved strength, locks and group options, as one undo step.
  */
-function RandomizeGraphButton() {
+function GraphMenuButton({ readOnly, topLevel, multiProgram, showPasses, onTogglePasses, showOutline, onToggleOutline, onBake, onOptimize, onClear, onClearMinimal }: {
+  readOnly: boolean; topLevel: boolean; multiProgram: boolean; showPasses: boolean; onTogglePasses: () => void; showOutline: boolean;
+  onToggleOutline?: () => void; onBake?: () => void; onOptimize?: () => void; onClear: () => void; onClearMinimal?: () => void;
+}) {
   const anchor = useRef<HTMLSpanElement>(null);
-  const [open, setOpen] = useState(false);
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const [options, setOptions] = useState(false);
   const [suggest, setSuggest] = useState(false);
   const [summary, setSummary] = useState('');
-  // The tooltip's one-line summary is worked out on hover: counting locks walks the whole graph.
-  const refresh = () => setSummary(optionsSummary(getRandomizeOptions(), lockedItems(useNodeGraphStore.getState().nodes).length));
+  const open = () => {
+    // Counting locks walks the whole graph: worked out when the menu opens, not per render.
+    setSummary(optionsSummary(getRandomizeOptions(), lockedItems(useNodeGraphStore.getState().nodes).length));
+    const r = anchor.current?.getBoundingClientRect();
+    setMenu(r ? { x: r.right - 280, y: r.bottom + 6 } : null);
+  };
+  const items = graphMenuItems({
+    readOnly, topLevel, multiProgram, showPasses, showOutline, randomizeSummary: summary,
+    onToggleOutline, onTogglePasses, onBake, onOptimize, onClear, onClearMinimal,
+    onRandomize: () => void randomizeGraphAction(),
+    onRandomizeOptions: () => setOptions(true),
+  });
   return (
-    <span ref={anchor} onMouseEnter={refresh} onContextMenu={e => { e.preventDefault(); e.stopPropagation(); refresh(); setOpen(true); }} style={{ display: 'inline-flex', alignItems: 'center' }}>
-      <IconButton icon="dice" label={`Randomise settings in this graph, one undo step${summary ? ` (${summary})` : ''} · right-click or the arrow: options and a seed`} size="sm" onClick={() => void randomizeGraphAction()} data-randomize-graph />
-      <IconButton icon="chevD" label="Randomise options: strength, locks, groups, focus, seed" size="sm" active={open} onClick={() => { refresh(); setOpen(o => !o); }} data-randomize-options style={{ width: 16, marginLeft: -4 }} />
-      {open && <RandomizePopover anchorRef={anchor} onClose={() => setOpen(false)} onSuggest={() => setSuggest(true)} />}
+    <span ref={anchor} style={{ display: 'inline-flex', alignItems: 'center' }}>
+      <ToolButton icon="more" active={!!menu || options} onClick={() => (menu ? setMenu(null) : open())} ariaLabel="Graph: outline, passes, randomise, optimise, bake, reset">Graph</ToolButton>
+      {menu && <Menu x={menu.x} y={menu.y} minWidth={280} title="Graph" items={items} onClose={() => setMenu(null)} />}
+      {options && <RandomizePopover anchorRef={anchor} onClose={() => setOptions(false)} onSuggest={() => setSuggest(true)} />}
       {suggest && <Suspense fallback={null}><SuggestControlsPanel anchorRef={anchor} offerOpenPlay onClose={() => setSuggest(false)} /></Suspense>}
     </span>
   );
@@ -206,12 +209,14 @@ function Sep() {
   return <span style={{ width: 1, height: 18, background: tk.border.default, margin: '0 4px' }} />;
 }
 
-function ToolButton({ icon, active = false, onClick, children }: { icon: IconName; active?: boolean; onClick: () => void; children: ReactNode }) {
+function ToolButton({ icon, active = false, onClick, children, ariaLabel }: { icon: IconName; active?: boolean; onClick: () => void; children: ReactNode; ariaLabel?: string }) {
   const tk = useTokens();
   const [hover, setHover] = useState(false);
   return (
     <button
       type="button"
+      aria-label={ariaLabel}
+      aria-haspopup={ariaLabel ? 'menu' : undefined}
       onClick={onClick}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}

@@ -106,3 +106,12 @@ input, textarea, [contenteditable]:not([contenteditable="false"]), pre, code, [d
 [data-quick-pin-row]:hover [data-quick-pin], [data-quick-pin]:focus-visible { opacity: 0.75; }
 [data-quick-pin]:hover { opacity: 1 !important; }
 @media (hover: none) { [data-quick-pin] { opacity: 0.45; } }
+
+/* Node card footers (NodeComponent): the buttons show on hover, selection or keyboard focus; on touch
+   screens and for a button that is on (aria-pressed) they always show. Layout never changes. */
+@media (hover: hover) {
+  [data-card-footer]:not([data-reveal]) > * { opacity: 0; transition: opacity 120ms ease; }
+  [data-card-footer]:not([data-reveal]) > :is([aria-pressed="true"], :has([aria-pressed="true"])),
+  [data-node-id]:hover [data-card-footer] > *,
+  [data-card-footer]:focus-within > * { opacity: 1; }
+}
