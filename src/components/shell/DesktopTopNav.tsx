@@ -1,11 +1,7 @@
 import { offerGraphExport } from '../playfile/exportMenus';
+import { Library } from '../library/Library';
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
-import { EXAMPLE_FOLDERS, EXAMPLE_INDEX, SAVED_GRAPHS_CHANGED, useNodeGraphStore } from '../../store/useNodeGraphStore';
-import { groupGraphsByTime, sortGraphsByRecent } from '../../store/graphRecency';
-import { getMembership, loadFolders, toggleFolderCollapsed } from '../../utils/assetFolders';
-
-/** The folder scope the sidebar's Saved Graphs list uses (FolderableList scopeKey) */
-const GRAPH_FOLDER_SCOPE = 'graphs';
+import { EXAMPLE_FOLDERS, EXAMPLE_INDEX, useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { useThemeStore, useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius, type ThemeMode } from '../../theme/tokens';
 import { isPlayRecordEmpty } from '../../types/play';
@@ -25,11 +21,10 @@ import { Tooltip } from '../ui/Tooltip';
 import { WorkspaceChip } from '../workspace/WorkspacePanel';
 import { HandsLive } from '../play/HandsChip';
 import { KeyboardPill } from '../play/engine/KeyboardPill';
-import { reportFileResult, reportGlslImport } from './reportFileResult';
+import { reportGlslImport } from './reportFileResult';
 import { importAnyFile } from './importAnyFile';
-import { SaveGraphForm, VersionsButton } from './GraphVersions';
+import { SaveGraphForm } from './GraphVersions';
 import { AutosaveIndicator } from './AutosaveControls';
-import { GraphLinkBadge } from './GraphLinks';
 import { REBUILD_TOOLTIP, rebuildWithToast } from './rebuildAction';
 import { getTopNavFold } from './topNavFold';
 import { OPEN_SAVE_FORM, type OpenSaveFormDetail } from './graphShortcuts';
@@ -459,83 +454,20 @@ export function SaveGraphButton({ compact = false, align = 'end', listen = false
 }
 
 /**
- * The saved-graphs menu: the same list as the sidebar's Saved Graphs, in the same folders (shared
- * folder state, so collapsing one here collapses it there too).
+ * The top bar's folder button: the Library (components/library/Library.tsx) on its Graphs filter,
+ * the same list, folders and actions as the sidebar's Library, with the bundled examples under it.
  */
 export function LoadGraphButton({ align = 'end' }: { /** Which edge of the button the list lines up with. */ align?: 'start' | 'end' } = {}) {
-  const tk = useTokens();
-  const getSavedGraphNames = useNodeGraphStore(s => s.getSavedGraphNames);
-  const loadSavedGraph = useNodeGraphStore(s => s.loadSavedGraph);
-  const deleteSavedGraph = useNodeGraphStore(s => s.deleteSavedGraph);
-  const savedGraphHasPlay = useNodeGraphStore(s => s.savedGraphHasPlay);
   const anchor = useRef<HTMLSpanElement>(null);
   const [open, setOpen] = useState(false);
-  const [, bump] = useState(0);
-  useEffect(() => {
-    const refresh = () => bump(n => n + 1);
-    window.addEventListener(SAVED_GRAPHS_CHANGED, refresh);
-    window.addEventListener('assetbrowser-folders-changed', refresh);
-    return () => { window.removeEventListener(SAVED_GRAPHS_CHANGED, refresh); window.removeEventListener('assetbrowser-folders-changed', refresh); };
-  }, []);
-
-  const names = open ? getSavedGraphNames() : [];
-  const folders = open ? loadFolders(GRAPH_FOLDER_SCOPE) : [];
-  const membership = open ? getMembership(GRAPH_FOLDER_SCOPE) : {};
-  // Recent work first: graphs outside folders under Today / This week / Earlier (by the newest save
-  // of any version), then the folders, each newest first inside.
-  const now = Date.now();
-  const inFolder = (folderId: string) => sortGraphsByRecent(names.filter(n => membership[n] === folderId));
-  const loose = groupGraphsByTime(names.filter(n => !membership[n] || !folders.some(f => f.id === membership[n])), now);
-  const head = (label: string) => (
-    <div style={{ padding: '8px 8px 3px', color: tk.text.faint, font: `700 10px ${fontFamily.ui}`, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{label}</div>
-  );
-  const row = (n: string, indent: boolean) => (
-    <LoadRow
-      key={n}
-      name={n}
-      indent={indent}
-      hasPlay={savedGraphHasPlay(n)}
-      onLoad={() => { reportFileResult(loadSavedGraph(n), { failTitle: `Couldn’t open “${n}”` }); setOpen(false); }}
-      onDelete={() => deleteSavedGraph(n)}
-      onOpened={() => setOpen(false)}
-    />
-  );
   return (
     <span ref={anchor} style={{ display: 'inline-flex' }}>
-      <IconButton icon="folder" label="Open a saved graph or an example" active={open} tooltip={!open} onClick={() => setOpen(o => !o)} />
+      <IconButton icon="folder" label="Open the Library: saved graphs and examples" active={open} tooltip={!open} onClick={() => setOpen(o => !o)} />
       {open && (
-        <Popover anchorRef={anchor} onClose={() => setOpen(false)} align={align} width={280}>
-          <div data-load-scroll="" style={{ maxHeight: 'min(480px, 66vh)', overflowY: 'auto', overscrollBehavior: 'contain' }}>
-          {names.length === 0 ? (
-            <div style={{ padding: '10px 10px', color: tk.text.faint }}>No saved graphs yet.</div>
-          ) : (
-            <div>
-              {loose.map(g => <div key={g.id}>{head(g.label)}{g.items.map(n => row(n, false))}</div>)}
-              {folders.length > 0 && head('Folders')}
-              {folders.map(f => {
-                const items = inFolder(f.id);
-                return (
-                  <div key={f.id}>
-                    <button
-                      type="button"
-                      onClick={() => toggleFolderCollapsed(GRAPH_FOLDER_SCOPE, f.id)}
-                      style={{
-                        width: '100%', height: 32, display: 'flex', alignItems: 'center', gap: 6, padding: '0 8px 0 4px', border: 0,
-                        borderRadius: radius.md, background: 'none', cursor: 'pointer', color: tk.text.secondary, font: `600 12.5px ${fontFamily.ui}`,
-                      }}
-                    >
-                      <Icon name={f.collapsed ? 'chevR' : 'chevD'} size={14} style={{ color: tk.text.faint }} />
-                      <Icon name="folder" size={15} style={{ color: tk.status.success }} />
-                      <span style={{ flex: 1, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.label}</span>
-                      <span style={{ fontSize: 11, fontWeight: 500, color: tk.text.faint }}>{items.length}</span>
-                    </button>
-                    {!f.collapsed && items.map(n => row(n, true))}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-          <ExamplesSection onOpened={() => setOpen(false)} />
+        <Popover anchorRef={anchor} onClose={() => setOpen(false)} align={align} width={340} padding={8}>
+          <div data-load-scroll="" style={{ maxHeight: 'min(560px, 76vh)', overflowY: 'auto', overscrollBehavior: 'contain' }}>
+            <Library size="popover" filter="graphs" onOpened={() => setOpen(false)}
+              footer={<ExamplesSection onOpened={() => setOpen(false)} />} />
           </div>
         </Popover>
       )}
@@ -579,24 +511,3 @@ function ExamplesSection({ onOpened }: { onOpened: () => void }) {
   );
 }
 
-function LoadRow({ name, indent = false, hasPlay = false, onLoad, onDelete, onOpened }: { name: string; indent?: boolean; hasPlay?: boolean; onLoad: () => void; onDelete: () => void; onOpened?: () => void }) {
-  const tk = useTokens();
-  const [hover, setHover] = useState(false);
-  return (
-    <div
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      style={{ display: 'flex', alignItems: 'center', gap: 4, height: 32, padding: `0 2px 0 ${indent ? 30 : 8}px`, borderRadius: radius.md, background: hover ? tk.bg.field : 'transparent' }}
-    >
-      <button
-        type="button"
-        onClick={onLoad}
-        style={{ flex: 1, minWidth: 0, textAlign: 'left', border: 0, background: 'none', padding: 0, cursor: 'pointer', color: tk.text.primary, font: `12.5px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-      >{name}</button>
-      <GraphLinkBadge graph={name} compact />
-      {hasPlay && <span title="Loads with a Play setup" style={{ height: 18, padding: '0 6px', borderRadius: 5, display: 'inline-flex', alignItems: 'center', background: alpha(tk.accent.base, 0.12), color: tk.accent.text, font: `600 10px ${fontFamily.ui}` }}>Play</span>}
-      <VersionsButton name={name} onOpened={onOpened} />
-      {hover && <IconButton icon="trash" label={`Delete “${name}”`} size="sm" tone="danger" tooltip={false} onClick={onDelete} />}
-    </div>
-  );
-}

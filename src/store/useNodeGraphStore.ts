@@ -910,7 +910,7 @@ interface NodeGraphState {
   /** A group just made from a selection that should open its Publish dialog once its card mounts. */
   pendingPublishGroupId: string | null;
   setPendingPublishGroupId: (id: string | null) => void;
-  /** Import many graphs (a multi-file pick or a folder); folders are recreated in Saved Graphs. */
+  /** Import many graphs (a multi-file pick or a folder); folders are recreated in the Library. */
   importGraphsBulk: (mode: 'files' | 'folder') => Promise<FileResult & { imported?: string[]; skipped?: Array<{ path: string; reason: string }> }>;
   setRawGlslShader: (shader: string | null) => void;
 

@@ -271,11 +271,11 @@ Text size and line height start at the theme's and reset the same way.
 
 - **All of them**: in the list, **Download all** saves one ZIP of
   `.present.json` files in their folders, plus a `library.json`. Or use the
-  Library (Studio sidebar → Saved Graphs → Library, or on a phone ⋯ →
-  Library…): **Download… → Only presentations** is the same ZIP, and
+  Storage panel (Studio sidebar → Library → Storage, or on a phone ⋯ →
+  Storage and backups…): **Download… → Only presentations** is the same ZIP, and
   **Export everything** puts presentations in the full library ZIP with
   graphs, shaders, presets and settings.
-- **Bringing them in**: Library → **Import a library…** takes either ZIP (or
+- **Bringing them in**: Storage → **Import a library…** takes either ZIP (or
   its `library.json`, or a single `.present.json`). Nothing of yours is
   overwritten: a presentation whose name is taken by a different one comes in
   as “Name (2)”; one you already have is skipped; folders come with them.

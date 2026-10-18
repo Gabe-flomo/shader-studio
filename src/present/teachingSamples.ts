@@ -127,7 +127,7 @@ A group can also repeat: set its **Iterations** above 1 and it runs like a \`for
 2. Type a **Graph name** and press **Save**.
 3. Next time, **⌘S** saves the next version straight away. The Save button also offers **Major**, **Save in place** and a note on what changed; **⇧⌘S** saves under another name.
 
-Your graphs are in the **Saved Graphs** tab of the sidebar, with the **Library** for backups and moving to another machine.
+Your graphs are in the sidebar's **Library** (also the top bar's folder button), with **Storage** under it for backups and moving to another machine.
 
 To share a graph as a file, **Export** it (**⇧⌘E**): a .play file with what it uses.
 

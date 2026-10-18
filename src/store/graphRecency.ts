@@ -3,7 +3,7 @@
  *
  * "Worked on" is the latest save time of any version in the series (graphVersions.ts): the
  * newest version's, or an older one's when it was saved in place since. Lists group by it
- * (the top bar's Load menu, the sidebar's Saved Graphs), newest first.
+ * (the top bar's Load menu, the Library's Graphs), newest first.
  */
 
 const GRAPH_PREFIX = 'shader-studio:';

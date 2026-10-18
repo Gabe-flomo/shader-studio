@@ -1,6 +1,6 @@
 # Folder Organization
 
-All five saved-asset panels — **Saved Graphs**, **Functions**, **Group Presets**, **Transform Vecs**, and **Expr Blocks** — share the same folder system. Tags have been removed; folders are the only organization tool.
+Every list in the **Library** (docs/library.md) — Graphs, Functions, Expression Blocks, Keyframes, My nodes and each kind of preset — shares the same folder system, with one folder scope per list (the scopes the old panels used, so existing folders stay). Tags have been removed; folders are the only organization tool. The Code page's shaders keep their own groups.
 
 ---
 

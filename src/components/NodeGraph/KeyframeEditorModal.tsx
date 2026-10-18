@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useCallback, useState, useMemo } from 'react';
-import { useNodeGraphStore, saveKeyframePreset, loadKeyframePresets } from '../../store/useNodeGraphStore';
+import { useNodeGraphStore } from '../../store/useNodeGraphStore';
+import { PresetMenu } from '../presets/PresetMenu';
 import type { KeyframePreset } from '../../types/keyframePreset';
 import type { GraphNode } from '../../types/nodeGraph';
 import { EASING_PRESETS, isKeyframeBypassed, VECTOR_AXES, type Keyframe, type KeyframeLoopMode } from '../../compiler/keyframes';
@@ -10,8 +11,6 @@ import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
 import { Button, IconButton } from '../ui/Button';
 import { Segmented, Toggle } from '../ui/Choice';
-import { Icon } from '../ui/Icon';
-import type { IconName } from '../ui/iconPaths';
 import { Modal } from '../ui/Modal';
 import { RulerSlider } from '../ui/RulerSlider';
 import { subscribeTimeTick } from '../../lib/timeTick';
@@ -551,23 +550,10 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
     updateNodeParams(node.id, { [`__keyframes_${socketKey}_${targetAxis}`]: keyframesRef.current.map(k => ({ ...k, ease: { ...k.ease } })) });
   }, [node.id, socketKey, updateNodeParams]);
 
-  // ── Saved keyframe presets — save the active axis's curve to the palette's
-  // "Saved Keyframes" tab, or apply one back onto this axis. Applying is a
-  // window CustomEvent (mirroring reset-time/seek-time) so the sidebar tab
-  // can reach whichever editor happens to be open without holding a direct
-  // reference to it. ──
-  const [showSaveInput, setShowSaveInput] = useState(false);
-  const [savePresetName, setSavePresetName] = useState('');
-  const handleSavePreset = useCallback((name: string) => {
-    if (keyframesRef.current.length === 0) return;
-    saveKeyframePreset({
-      label: name.trim() || `${socketKey}${isVector ? `.${activeAxis}` : ''}`,
-      keyframes: keyframesRef.current.map(k => ({ ...k, ease: { ...k.ease } })),
-    });
-    setShowSaveInput(false);
-    setSavePresetName('');
-  }, [socketKey, isVector, activeAxis]);
-
+  // ── Saved keyframe presets (the Presets menu, components/presets/PresetMenu.tsx): save the active
+  // axis's curve, or apply one back onto this axis. The Library's Keyframes filter applies one too,
+  // through a window CustomEvent (mirroring reset-time/seek-time), so it can reach whichever editor
+  // happens to be open without holding a direct reference to it. ──
   useEffect(() => {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent<{ keyframes: Keyframe[] }>).detail;
@@ -579,22 +565,10 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
     return () => window.removeEventListener('apply-keyframe-preset', handler);
   }, [writeKeyframes]);
 
-  // Loading a preset right here — not just from the sidebar tab — so you
-  // don't have to leave the modal (switch the palette away from whatever
-  // it's showing) just to apply a saved curve.
-  const [showLoadDropdown, setShowLoadDropdown] = useState(false);
-  const [keyframePresets, setKeyframePresets] = useState<KeyframePreset[]>(() => loadKeyframePresets());
-  useEffect(() => {
-    const refresh = () => setKeyframePresets(loadKeyframePresets());
-    window.addEventListener('keyframepreset-changed', refresh);
-    return () => window.removeEventListener('keyframepreset-changed', refresh);
-  }, []);
   const handleLoadPreset = useCallback((preset: KeyframePreset) => {
     writeKeyframes(preset.keyframes.slice(0, MAX_KEYFRAMES).map(k => ({ ...k, ease: { ...k.ease } })));
     setSelectedKf(null);
-    setShowLoadDropdown(false);
   }, [writeKeyframes]);
-  const loadDropdownRef = useRef<HTMLDivElement>(null);
 
   // ── Tool mode (select / add / delete) ──
   const [toolMode, setToolModeState] = useState<ToolMode>('select');
@@ -1064,9 +1038,6 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
     >
       <div
         style={{ display: 'flex', height: '100%', minHeight: 0, userSelect: 'none', WebkitUserSelect: 'none' }}
-        onMouseDown={e => {
-          if (showLoadDropdown && loadDropdownRef.current && !loadDropdownRef.current.contains(e.target as Node)) setShowLoadDropdown(false);
-        }}
       >
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
           {/* Tool bar */}
@@ -1086,48 +1057,10 @@ export function KeyframeEditorModal({ node, socketKey, onClose }: Props) {
               <Toggle checked={bypassed} onChange={setBypassed} label="Bypass" />
             </span>
             <span style={{ width: 1, height: 20, background: tk.border.default, margin: '0 4px' }} />
-            <div ref={loadDropdownRef} style={{ position: 'relative' }}>
-              <Button size="sm" variant="ghost" icon="kf" onClick={() => setShowLoadDropdown(v => !v)}>
-                Presets <Icon name="chevD" size={13} />
-              </Button>
-              {showLoadDropdown && (
-                <div style={{
-                  position: 'absolute', top: '100%', right: 0, marginTop: 6, zIndex: 20, width: 240, padding: 4,
-                  background: tk.bg.panel, borderRadius: radius.lg, boxShadow: tk.shadow.popover,
-                }}>
-                  {showSaveInput ? (
-                    <div style={{ display: 'flex', gap: 6, padding: 4 }}>
-                      <input
-                        autoFocus
-                        aria-label="Preset name"
-                        placeholder={`${socketKey}${isVector ? `.${activeAxis}` : ''}`}
-                        value={savePresetName}
-                        onChange={e => setSavePresetName(e.target.value)}
-                        onKeyDown={e => {
-                          e.stopPropagation();
-                          if (e.key === 'Enter') { handleSavePreset(savePresetName); setShowLoadDropdown(false); }
-                          if (e.key === 'Escape') { setShowSaveInput(false); setSavePresetName(''); }
-                        }}
-                        style={{ ...fieldStyle, height: 30, font: `500 12.5px ${fontFamily.ui}` }}
-                      />
-                      <Button size="sm" onClick={() => { handleSavePreset(savePresetName); setShowLoadDropdown(false); }}>Save</Button>
-                    </div>
-                  ) : (
-                    <MenuRow icon="save" disabled={keyframes.length === 0} onClick={() => { setSavePresetName(''); setShowSaveInput(true); }}>
-                      Save this curve as a preset…
-                    </MenuRow>
-                  )}
-                  <div style={{ height: 1, background: tk.border.subtle, margin: '4px 0' }} />
-                  {keyframePresets.length === 0
-                    ? <div style={{ fontSize: 12, color: tk.text.muted, padding: '6px 10px' }}>No saved presets yet</div>
-                    : keyframePresets.map(p => (
-                      <MenuRow key={p.id} icon="kf" onClick={() => handleLoadPreset(p)}>
-                        {p.label} <span style={{ color: tk.text.faint }}>· {p.keyframes.length} keys</span>
-                      </MenuRow>
-                    ))}
-                </div>
-              )}
-            </div>
+            <PresetMenu kind="keyframe" noun="curve" icon="kf"
+              getData={() => (keyframesRef.current.length ? { keyframes: keyframesRef.current.map(k => ({ ...k, ease: { ...k.ease } })) } : null)}
+              defaultName={() => `${socketKey}${isVector ? `.${activeAxis}` : ''}`}
+              onApply={p => handleLoadPreset(p.record as unknown as KeyframePreset)} />
           </div>
 
           {/* Axis picker — vec2/vec3 sockets */}
@@ -1331,27 +1264,6 @@ function InspectorNote({ children }: { children: React.ReactNode }) {
   return <span style={{ fontSize: 12, lineHeight: 1.45, color: tk.text.muted }}>{children}</span>;
 }
 
-function MenuRow({ icon, onClick, disabled = false, children }: { icon: IconName; onClick: () => void; disabled?: boolean; children: React.ReactNode }) {
-  const tk = useTokens();
-  const [hover, setHover] = useState(false);
-  return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={onClick}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      style={{
-        width: '100%', height: 32, display: 'flex', alignItems: 'center', gap: 8, padding: '0 10px', border: 0, borderRadius: radius.md,
-        background: hover && !disabled ? tk.bg.hover : 'none', color: disabled ? tk.text.disabled : tk.text.primary,
-        font: `500 12.5px ${fontFamily.ui}`, textAlign: 'left', cursor: disabled ? 'default' : 'pointer',
-      }}
-    >
-      <Icon name={icon} size={14} style={{ color: tk.text.faint, flexShrink: 0 }} />
-      <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{children}</span>
-    </button>
-  );
-}
 
 /** Small cubic-bezier drawing for an easing preset tile. */
 function EaseGlyph({ e, color }: { e: Keyframe['ease']; color: string }) {
