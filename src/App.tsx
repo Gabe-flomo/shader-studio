@@ -1,5 +1,6 @@
 import { offerGraphExport } from './components/playfile/exportMenus';
 import { saveAsShortcut, saveShortcut, selectAllNodesAtLevel } from './components/shell/graphShortcuts';
+import { LearnSurfaces } from './components/learn/LearnSurfaces';
 import { defaultPreviewWidth, rememberedPreviewWidth, rememberPreviewWidth, useGraphMaximize } from './components/shell/graphLayout';
 import { useHistBand } from './lib/histogramBand';
 import { openDoBar } from './suggestions/doBarStore';
@@ -1307,6 +1308,7 @@ function App() {
           <ExportModal canvas={usePreviewHost.getState().canvas} offlineRender={usePreviewHost.getState().offline} onClose={() => setShowExport(false)} />
         )}
         {showShortcuts && <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />}
+        <LearnSurfaces phone={mobile} page={page} />
         <NodeSearchPalette open={searchPaletteOpen} onClose={() => setSearchPaletteOpen(false)} onNodePlaced={id => useNodeGraphStore.getState().requestSmartConnect(id)} />
       </div>
     );
@@ -1514,6 +1516,7 @@ function App() {
         </div>
         {showExport && <ExportModal canvas={usePreviewHost.getState().canvas} offlineRender={usePreviewHost.getState().offline} onClose={() => setShowExport(false)} />}
         {showShortcuts && <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />}
+        <LearnSurfaces phone={mobile} page={page} />
         <NodeSearchPalette open={searchPaletteOpen} onClose={() => setSearchPaletteOpen(false)} onNodePlaced={id => useNodeGraphStore.getState().requestSmartConnect(id)} />
         {showTabletHistory && (
           <Sheet title="History" onClose={() => setShowTabletHistory(false)}>
@@ -1689,6 +1692,7 @@ function App() {
         <ExportModal canvas={usePreviewHost.getState().canvas} offlineRender={usePreviewHost.getState().offline} onClose={() => setShowExport(false)} />
       )}
       {showShortcuts && <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />}
+        <LearnSurfaces phone={mobile} page={page} />
       {historyPopped && <HistoryWindow />}
       {codeExplorerOpen && <CodeExplorerDialog />}
       <NodeSearchPalette open={searchPaletteOpen} onClose={() => setSearchPaletteOpen(false)} onNodePlaced={id => useNodeGraphStore.getState().requestSmartConnect(id)} />

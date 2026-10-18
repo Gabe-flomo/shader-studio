@@ -1,6 +1,6 @@
 import { offerGraphExport } from '../playfile/exportMenus';
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
-import { SAVED_GRAPHS_CHANGED, useNodeGraphStore } from '../../store/useNodeGraphStore';
+import { EXAMPLE_FOLDERS, EXAMPLE_INDEX, SAVED_GRAPHS_CHANGED, useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { groupGraphsByTime, sortGraphsByRecent } from '../../store/graphRecency';
 import { getMembership, loadFolders, toggleFolderCollapsed } from '../../utils/assetFolders';
 
@@ -16,7 +16,8 @@ import { Button, IconButton } from '../ui/Button';
 import { Icon } from '../ui/Icon';
 import type { IconName } from '../ui/iconPaths';
 import { Popover } from '../ui/Popover';
-import { Menu } from '../ui/Menu';
+import { Menu, type MenuItem } from '../ui/Menu';
+import { useLearnUi } from '../learn/learnStore';
 import { ProBadgeFor } from '../account/ProSheet';
 import { accountMenuItems, signedInLabel } from '../account/accountMenu';
 import { usePlan } from '../../lib/plan';
@@ -230,6 +231,7 @@ export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }:
             </Tooltip>
           </>
         )}
+        <HelpMenu />
         <Tooltip label="Record the preview as video or a still" shortcut={shortcuts.toggleRecord}>
           <button
             type="button"
@@ -305,9 +307,6 @@ function OverflowMenu({ mode, toggleTheme, rebuildShortcut }: { mode: ThemeMode;
             <HandsLive />
             <OverflowRow icon="rebuild" label={`${REBUILD_TOOLTIP}${rebuildShortcut ? ` (${rebuildShortcut})` : ''}`}
               onClick={() => { void rebuildWithToast(); setOpen(false); }} />
-            <OverflowRow icon="book" label="Do… bar commands" onClick={() => { requestPage('studio'); openCommandsRef(); setOpen(false); }} />
-            <OverflowRow icon="keyboard" label="Keyboard shortcuts" onClick={() => { requestPage('shortcuts'); setOpen(false); }} />
-            <OverflowRow icon="warning" label="Report a problem…" onClick={() => { setOpen(false); void import('../../files/crashReports').then(m => m.reportProblem()); }} />
             <OverflowRow icon={mode === 'light' ? 'moon' : 'sun'} label={mode === 'light' ? 'Switch to dark theme' : 'Switch to light theme'}
               onClick={() => { toggleTheme(); setOpen(false); }} />
           </div>
@@ -335,6 +334,31 @@ function OverflowRow({ icon, label, onClick }: { icon: IconName; label: string; 
       <Icon name={icon} size={15} />
       {label}
     </button>
+  );
+}
+
+/**
+ * Help: the Start sheet again, the Learn lessons (moved out of Present), the Do… bar's commands,
+ * the keyboard shortcuts and Report a problem, in one place (UX audit §3.2).
+ */
+function HelpMenu() {
+  const anchor = useRef<HTMLSpanElement>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const items: MenuItem[] = [
+    { label: 'Start…', icon: 'presets', hint: 'Examples, the Scene builder, a lesson or a blank graph', onSelect: () => useLearnUi.getState().openStart() },
+    { label: 'Learn the app…', icon: 'book', hint: 'Lessons on the Studio, Play, Convert and more', onSelect: () => useLearnUi.getState().openLearn() },
+    'separator',
+    { label: 'Do… bar commands', icon: 'spark', onSelect: () => { requestPage('studio'); openCommandsRef(); } },
+    { label: 'Keyboard shortcuts', icon: 'keyboard', onSelect: () => requestPage('shortcuts') },
+    'separator',
+    { label: 'Report a problem…', icon: 'warning', onSelect: () => { void import('../../files/crashReports').then(m => m.reportProblem()); } },
+  ];
+  return (
+    <span ref={anchor} style={{ display: 'inline-flex' }}>
+      <IconButton icon="book" label="Help: start, lessons, shortcuts" active={!!menu} tooltip={!menu}
+        onClick={() => { const r = anchor.current?.getBoundingClientRect(); setMenu(r ? { x: Math.max(8, r.right - 260), y: r.bottom + 6 } : null); }} />
+      {menu && <Menu x={menu.x} y={menu.y} minWidth={260} title="Help" items={items} onClose={() => setMenu(null)} />}
+    </span>
   );
 }
 
@@ -483,13 +507,14 @@ export function LoadGraphButton({ align = 'end' }: { /** Which edge of the butto
   );
   return (
     <span ref={anchor} style={{ display: 'inline-flex' }}>
-      <IconButton icon="folder" label="Load a saved graph" active={open} tooltip={!open} onClick={() => setOpen(o => !o)} />
+      <IconButton icon="folder" label="Open a saved graph or an example" active={open} tooltip={!open} onClick={() => setOpen(o => !o)} />
       {open && (
         <Popover anchorRef={anchor} onClose={() => setOpen(false)} align={align} width={280}>
+          <div data-load-scroll="" style={{ maxHeight: 'min(480px, 66vh)', overflowY: 'auto', overscrollBehavior: 'contain' }}>
           {names.length === 0 ? (
             <div style={{ padding: '10px 10px', color: tk.text.faint }}>No saved graphs yet.</div>
           ) : (
-            <div data-load-scroll="" style={{ maxHeight: 'min(420px, 60vh)', overflowY: 'auto', overscrollBehavior: 'contain' }}>
+            <div>
               {loose.map(g => <div key={g.id}>{head(g.label)}{g.items.map(n => row(n, false))}</div>)}
               {folders.length > 0 && head('Folders')}
               {folders.map(f => {
@@ -515,9 +540,47 @@ export function LoadGraphButton({ align = 'end' }: { /** Which edge of the butto
               })}
             </div>
           )}
+          <ExamplesSection onOpened={() => setOpen(false)} />
+          </div>
         </Popover>
       )}
     </span>
+  );
+}
+
+/** The Load menu's Examples: the bundled examples by folder (the node list's Examples, one click from the header). */
+function ExamplesSection({ onOpened }: { onOpened: () => void }) {
+  const tk = useTokens();
+  const [openFolders, setOpenFolders] = useState<Set<string>>(() => new Set());
+  const folders = EXAMPLE_FOLDERS.filter(f => f.keys.some(k => EXAMPLE_INDEX[k]));
+  const flip = (label: string) => setOpenFolders(prev => { const n = new Set(prev); if (n.has(label)) n.delete(label); else n.add(label); return n; });
+  return (
+    <div data-load-examples="" style={{ borderTop: `1px solid ${tk.border.subtle}`, marginTop: 4, paddingTop: 2 }}>
+      <div style={{ padding: '8px 8px 3px', color: tk.text.faint, font: `700 10px ${fontFamily.ui}`, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Examples</div>
+      {folders.map(f => {
+        const isOpen = openFolders.has(f.label);
+        const keys = f.keys.filter(k => EXAMPLE_INDEX[k]).sort((a, b) => EXAMPLE_INDEX[a].label.localeCompare(EXAMPLE_INDEX[b].label));
+        return (
+          <div key={f.label}>
+            <button type="button" aria-expanded={isOpen} onClick={() => flip(f.label)}
+              style={{ width: '100%', height: 30, display: 'flex', alignItems: 'center', gap: 6, padding: '0 8px 0 4px', border: 0, borderRadius: radius.md, background: 'none', cursor: 'pointer', color: tk.text.secondary, font: `600 12.5px ${fontFamily.ui}` }}>
+              <Icon name={isOpen ? 'chevD' : 'chevR'} size={14} style={{ color: tk.text.faint }} />
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: f.color, flexShrink: 0 }} />
+              <span style={{ flex: 1, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.label}</span>
+              <span style={{ fontSize: 11, fontWeight: 500, color: tk.text.faint }}>{keys.length}</span>
+            </button>
+            {isOpen && keys.map(k => (
+              <button key={k} type="button" title={EXAMPLE_INDEX[k].description ?? undefined}
+                onClick={() => { void useNodeGraphStore.getState().loadExampleGraph(k); requestPage('studio'); onOpened(); }}
+                style={{ width: '100%', height: 30, display: 'flex', alignItems: 'center', padding: '0 8px 0 30px', border: 0, borderRadius: radius.md, background: 'none', cursor: 'pointer', color: tk.text.primary, font: `12.5px ${fontFamily.ui}`, textAlign: 'left' }}
+                onMouseEnter={e => { e.currentTarget.style.background = tk.bg.field; }} onMouseLeave={e => { e.currentTarget.style.background = 'none'; }}>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{EXAMPLE_INDEX[k].label}</span>
+              </button>
+            ))}
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
