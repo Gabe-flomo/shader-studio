@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.278',
+    date: '2026-10-18',
+    title: "Status on top",
+    highlights: [
+      { area: 'Studio', text: "The node count and frame time are back at the top of the graph; the Performance panel scrolls inside itself." },
+      { area: 'Studio', text: "2D builder: the Time slider on the Space card is gone (it only made the builder stutter)." },
+    ],
+  },
+  {
     id: '2026.10.277',
     date: '2026-10-18',
     title: "Quieter grid hover",
