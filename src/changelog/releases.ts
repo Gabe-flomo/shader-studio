@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.266',
+    date: '2026-10-17',
+    title: "Room to scroll on phones",
+    highlights: [
+      { area: 'Studio', text: "On a phone, node pages scroll as one page with only the node's name row pinned, so long lists of inputs are easy to reach." },
+      { area: 'Studio', text: "In Both, drag the handle to give the preview a quarter, about half or most of the screen; your phone remembers it." },
+    ],
+  },
+  {
     id: '2026.10.265',
     date: '2026-10-17',
     title: "Separate on Pro",
