@@ -60,6 +60,8 @@ fingerprints, `apply.ts`).
   (the first ask can land while the Scene builder's kind page still holds the preview), so it shows the last frame
   rather than "the preview is hidden" (that note is only for a preview that really can't draw: its panel hidden). The
   Agent Builder's viewport is the same code.
+- **Pause / Play and ↺** sit at the viewport's bottom right (`LiveViewport clock`, the builders' `PreviewClock`): Pause is
+  the app's clock (the picture is the main preview's) and ↺ the app's one true reset (`lib/runtimeReset.ts`).
 - **Open as nodes** closes and selects the Splat Scene (its card lists the modifier chain). **Done** closes and frames
   the build on the graph.
 
