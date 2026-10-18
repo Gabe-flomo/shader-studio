@@ -58,7 +58,9 @@ export const BlurStageNode: NodeDefinition = {
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id = node.id;
-    const P = node.params;
+    // A Glow (texture)'s slider wired from outside (its own socket): each hidden pass computes the wire.
+    const P: Record<string, unknown> = { ...node.params };
+    for (const k of ['radius', 'threshold', 'knee', 'tail']) if (inputVars[k]) P[k] = inputVars[k];
     const src = (typeof P.__src === 'string' && P.__src) || inputVars.texture;
     const radius = p(P.radius, 8);
     const thr = p(P.threshold, 0.5);

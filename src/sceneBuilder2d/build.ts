@@ -779,7 +779,15 @@ export function buildScene2D(spec: Scene2D, idFor: (role: string) => string = ro
   final = emitGrades(c, L.grade, final, { swatches });
   final = emitEffects(c, spec.effects, final, { screen, getTime: b.getTime, texture: (name, what) => texFor(b, name, what)?.out ?? null });
   const P = L.post;
-  if (P.bloom > 0) final = effect('bloom', mk(c, 'bloom', 'bloom', { intensity: P.bloom, threshold: 0.35 }, { color: final, uv: screen }, `Bloom: bright areas bleed light into their surroundings. Intensity ${fmt(P.bloom)}.`), 'result');
+  if (P.bloom > 0) {
+    // The Look's bloom (an older setting): a Pass of the picture and a Glow (texture) Bloom chain, in the same frame.
+    const pass = mk(c, 'pass', 'bloom:pass', { scale: '1', format: 'half' }, { color: final }, 'Pass: the picture so far as a texture, so the bloom can read round each pixel (half float keeps brightness above 1).');
+    const glow = mk(c, 'glowTexture', 'bloom:glow', { method: 'bloom', threshold: 0.35, knee: 0.2, radius: 20, intensity: P.bloom, tail: 0.4 }, { texture: ref(pass, 'texture') },
+      `Bloom: the parts brighter than 0.35 spread a soft glow (a Bloom chain, same frame). Intensity ${fmt(P.bloom)}.`);
+    const add = mk(c, 'addColor', 'bloom', {}, { a: final, b: ref(glow, 'glow') }, 'Adds the bloom over the picture: light adds up, so it can pass 1.');
+    gateNode(add, M.bloom, { from: 'a' });
+    final = ref(add, 'result');
+  }
   if (P.vignette > 0) final = effect('vignette', mk(c, 'vignette', 'vignette', { strength: P.vignette }, { color: final, uv: screen }, `Vignette: darkens the corners. Strength ${fmt(P.vignette)}.`), 'result');
   if (P.scanlines > 0) final = effect('scanlines', mk(c, 'scanlines', 'scanlines', { intensity: P.scanlines }, { color: final, uv: screen }, `Scanlines: thin dark lines across the picture. Intensity ${fmt(P.scanlines)}.`), 'result');
   if (P.grain > 0) final = effect('grain', mk(c, 'grain', 'grain', { amount: P.grain }, { color: final, uv: screen }, `Film grain: a little noise over everything. Amount ${fmt(P.grain)}.`), 'color');

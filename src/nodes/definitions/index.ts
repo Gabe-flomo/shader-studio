@@ -165,8 +165,8 @@ export { GpuParticlesNode } from './gpuParticles';
 export { ShaderTextureNode, ShaderTextureOutputNode } from './shaderTexture';
 export { RadialFastBlurNode, RadialFastBlurStageNode } from './radialFastBlur';
 export { ChromaLensNode } from './chromaLens';
-export { DeepGlowTextureNode, DeepGlowTextureStageNode } from './deepGlow';
-export { PassNode, PassOutputNode, SampleTextureNode, EdgesTextureNode, BlurTextureNode, GlowTextureNode, DisplaceTextureNode, DisplacementMapNode, JumpFloodTextureNode } from './passes';
+export { DeepGlowTextureNode, DeepGlowTextureStageNode, GlowTextureNode } from './deepGlow';
+export { PassNode, PassOutputNode, SampleTextureNode, EdgesTextureNode, BlurTextureNode, DisplaceTextureNode, DisplacementMapNode, JumpFloodTextureNode } from './passes';
 export { TextureMaskNode, TextureLevelsNode, TextureFlowNode, TextureNeighboursNode, TextureChangeNode, DistanceShapeNode, TextureFadeNode, ReadTextureNode } from './textureTools';
 export { HeightLightNode } from './heightLight';
 export { RandomFromIdNode } from './randomFromId';
@@ -320,10 +320,10 @@ import { BlurStageNode } from './blurStage';
 import { LensDofStageNode } from './lensDof';
 import { RadialFastBlurNode, RadialFastBlurStageNode } from './radialFastBlur';
 import { ChromaLensNode } from './chromaLens';
-import { DeepGlowTextureNode, DeepGlowTextureStageNode } from './deepGlow';
+import { DeepGlowTextureStageNode, GlowTextureNode } from './deepGlow';
 import { GridRulesNode, GridRulesStepNode, MouseButtonNode } from './gridRules';
 import { ShaderTextureNode, ShaderTextureOutputNode } from './shaderTexture';
-import { PassNode, PassOutputNode, SampleTextureNode, EdgesTextureNode, BlurTextureNode, GlowTextureNode, DisplaceTextureNode, DisplacementMapNode, JumpFloodTextureNode } from './passes';
+import { PassNode, PassOutputNode, SampleTextureNode, EdgesTextureNode, BlurTextureNode, DisplaceTextureNode, DisplacementMapNode, JumpFloodTextureNode } from './passes';
 import { TextureMaskNode, TextureLevelsNode, TextureFlowNode, TextureNeighboursNode, TextureChangeNode, DistanceShapeNode, TextureFadeNode, ReadTextureNode } from './textureTools';
 import { HeightLightNode } from './heightLight';
 import { RandomFromIdNode } from './randomFromId';
@@ -609,7 +609,6 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   blurTexture: BlurTextureNode,
   glowTexture: GlowTextureNode,
   chromaLens: ChromaLensNode,
-  deepGlowTexture: DeepGlowTextureNode,
   deepGlowTextureStage: DeepGlowTextureStageNode,
   displaceTexture: DisplaceTextureNode,
   displacementMap: DisplacementMapNode,

@@ -19,7 +19,7 @@ import type { GraphNode } from '../types/nodeGraph';
 import type { PassProgram } from './types';
 import type { generateFragmentShader } from './shaderAssembler';
 import { PASS_SCALES, passRepeat, passUniform } from '../nodes/definitions/passes';
-import { DEEP_GLOW_NODE_TYPE, HIDDEN_PASS_TYPES, MAX_HIDDEN_PASSES, RAYS_NODE_TYPE, SOCKETED_HIDDEN_TYPES, blurMethod, hiddenSlug, planBlur, planDeepGlow, planRays } from './blurPasses';
+import { HIDDEN_PASS_TYPES, MAX_HIDDEN_PASSES, RAYS_NODE_TYPE, SOCKETED_HIDDEN_TYPES, blurMethod, hiddenSlug, isDeepGlow, planBlur, planDeepGlow, planRays } from './blurPasses';
 import { getNodeDefinitionFor } from '../nodes/definitions';
 
 /** The final picture's key in `before` / annotate. */
@@ -76,7 +76,7 @@ export function planHiddenBlurs(ctx: HiddenBlurCtx): HiddenBlurs {
   };
   for (const node of ctx.nodes) {
     if (!HIDDEN_PASS_TYPES.has(node.type)) continue;
-    const rays = node.type === RAYS_NODE_TYPE, deep = node.type === DEEP_GLOW_NODE_TYPE;
+    const rays = node.type === RAYS_NODE_TYPE, deep = isDeepGlow(node);
     const socketed = SOCKETED_HIDDEN_TYPES.has(node.type);
     const method = rays ? 'rays' : deep ? 'deepGlow' : blurMethod(node);
     const wire = node.inputs.texture?.connection;

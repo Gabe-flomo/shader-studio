@@ -93,7 +93,7 @@ describe('the node', () => {
       const hidden = (r.passes ?? []).filter(x => x.hidden);
       expect(hidden).toHaveLength(15);
       expect(hidden.every(x => x.format === 'half')).toBe(true);
-      expect(hidden[0].label).toBe('Deep Glow (texture) · threshold ½');
+      expect(hidden[0].label).toBe('Glow (texture) · threshold ½');
       expect(hidden[0].fragmentShader).toContain('dgPre(');
       expect(hidden[1].fragmentShader).toContain('dgDown(');
       expect(hidden[14].fragmentShader).toContain('dgUp(');
@@ -159,7 +159,7 @@ describe('the builders\' Effects page', () => {
     const s = starterScene();
     s.effects = [newStackItem(FX_BY_KIND.swirl, 'fx0'), newStackItem(FX_BY_KIND.deepglow, 'fx1', { radius: 300, spread: 0.4, composite: 'screen', tint: [1, 0.8, 0.6] })];
     const { nodes } = buildStandalone2D(s);
-    const dg = nodes.find(x => x.type === 'deepGlowTexture')!;
+    const dg = nodes.find(x => x.type === 'glowTexture' && x.params.method === 'deep')!;
     expect(dg.params).toMatchObject({ radius: 300, spread: 0.4, composite: 'screen', tint: [1, 0.8, 0.6] });
     expect(nodes.find(x => x.id === dg.inputs.texture.connection?.nodeId)?.type).toBe('pass');
     expect(nodes.find(x => x.id === dg.inputs.uv.connection?.nodeId)?.type).toBe('uvWarp');

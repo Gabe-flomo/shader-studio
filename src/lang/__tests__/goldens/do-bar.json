@@ -2702,10 +2702,11 @@
   "reads": "build",
   "ok": true,
   "added": [
-   "bloom"
+   "glowTexture",
+   "pass"
   ],
   "removed": [],
-  "hash": "5ca00047"
+  "hash": "baf8718a"
  },
  "phrase:colour [p] · screen blend": {
   "reads": "build",
@@ -2776,7 +2777,7 @@
    "glowTexture"
   ],
   "removed": [],
-  "hash": "6e18e9f5"
+  "hash": "5c390023"
  },
  "phrase:pass [pass] · trails": {
   "reads": "build",

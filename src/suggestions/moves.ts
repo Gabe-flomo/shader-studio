@@ -478,15 +478,18 @@ const COLOUR: Move[] = [
   },
   {
     id: 'glow-colour', label: 'Glow', kinds: ['colour'], shape: 'transform', sides: ['out'],
-    anchor: { type: 'bloom', key: 'color', out: 'result' },
+    anchor: { type: 'glowTexture', key: 'texture', out: 'color' },
     why: 'a colour: bright parts bleed light round them',
     args: [{ name: 'amount', label: 'Intensity', kind: 'number', default: 1.2, words: ['intensity', 'amount', 'by'] }],
     build: ctx => ({
-      nodes: [n('bloom', 'bloom', C(1), 0, { intensity: num(ctx, 'amount', 1.2), ...note(
-        'Bloom: the bright parts spread a soft glow round themselves (a post effect on the colour coming in).',
-        'Why: the Glow suggestion, in place. Threshold picks how bright a pixel must be to glow.',
-      ) }, { color: [IN, ''] })],
-      result: ['bloom', 'result'],
+      nodes: [
+        n('pass', 'pic', C(1), 0, { scale: '1', format: 'half', ...note('Pass: the colour coming in as a texture, this frame, so the glow can read round each pixel.') }, { color: [IN, ''] }),
+        n('glowTexture', 'bloom', C(2), 0, { method: 'bloom', threshold: 0.6, knee: 0.2, radius: 16, intensity: num(ctx, 'amount', 1.2), tail: 0.4, ...note(
+          'Glow (texture), Bloom chain: the bright parts spread a soft glow round themselves, in the same frame. Color is the picture with the glow added.',
+          'Why: the Glow suggestion, in place. Threshold picks how bright a pixel must be to glow.',
+        ) }, { texture: ['pic', 'texture'] }),
+      ],
+      result: ['bloom', 'color'],
     }),
   },
   {

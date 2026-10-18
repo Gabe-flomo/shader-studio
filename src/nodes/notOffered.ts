@@ -21,8 +21,10 @@ export const PIECES_TYPES: readonly string[] = ['pieces', 'pieceBalls'];
  *  - Point Light 2D → SDF Glow, Point light mode (it measured its own distance from UV and Light Pos).
  *  - Chroma Shift (a fake fringe from the colour's slope) and Chromatic Aberration (three offset UVs) →
  *    Chromatic Aberration (lens) on a Pass of the picture.
+ *  - Bloom (it glowed last frame's picture, so moving things lagged) → a Pass + Glow (texture), same frame
+ *    (right-click an old Bloom → Upgrade to same-frame glow does it: nodes/upgradeBloom.ts).
  */
-export const SWEPT_EFFECT_TYPES: readonly string[] = ['light2d', 'chromaShift', 'chromaticAberration'];
+export const SWEPT_EFFECT_TYPES: readonly string[] = ['light2d', 'chromaShift', 'chromaticAberration', 'bloom'];
 
 /**
  * Retired for good: Ride a curve (its curves built in) gave way on 2026-10-15 to Ride a path, which rides

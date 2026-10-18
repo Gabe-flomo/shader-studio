@@ -15,15 +15,27 @@ import type { GraphNode } from '../../types/nodeGraph';
 
 let k = 0;
 const nextId = () => `ub${k++}`;
-const withBloom = Object.entries(EXAMPLE_GRAPHS).filter(([, g]) => g.nodes.some(nd => nd.type === 'bloom' && nd.inputs.color?.connection)).slice(0, 12);
+/** Graphs with a wired Bloom: the examples had them until the 2026-10-17 sweep moved them to Glow (texture); old graphs still do. */
+const bloomGraph = (params: Record<string, unknown>): GraphNode[] => [
+  n('uv', 'uv', 0, 0), n('circleSDF', 'c', 0, 0, { radius: 0.3 }, { position: ['uv', 'uv'] }),
+  n('light', 'l', 0, 0, { mode: 'glow', brightness: 20 }, { distance: ['c', 'distance'] }),
+  n('bloom', 'b', 0, 0, params, { color: ['l', 'tinted'], uv: ['uv', 'uv'] }),
+  n('toneMap', 't', 0, 0, {}, { color: ['b', 'result'] }), n('output', 'out', 0, 0, {}, { color: ['t', 'color'] }),
+];
+const withBloom: Array<[string, { nodes: GraphNode[] }]> = [
+  ['spiral', { nodes: bloomGraph({ threshold: 0.4, intensity: 2, radius: 40 }) }],
+  ['layered luma', { nodes: bloomGraph({ threshold: 0.45, intensity: 2.5, radius: 40, select: 'luma', softness: 0.25, kernel: 'layered' }) }],
+];
+const GRAPHS = Object.fromEntries(withBloom);
+void EXAMPLE_GRAPHS;
 
 const allPrograms = (r: ReturnType<typeof compileGraph>) => [r.fragmentShader, ...((r as { passes?: Array<{ fragmentShader?: string }> }).passes ?? []).map(p => p.fragmentShader ?? '')].join('\n');
 
 describe('upgrade Bloom', () => {
-  it('there are examples with a wired Bloom', () => expect(withBloom.length).toBeGreaterThan(0));
+  it('no example uses the old Bloom any more', () => expect(Object.values(EXAMPLE_GRAPHS).some(g => g.nodes.some(nd => nd.type === 'bloom'))).toBe(false));
 
   it.each(withBloom.map(([key]) => key))('%s compiles after the upgrade', key => {
-    const nodes = resolveNodeAliases(EXAMPLE_GRAPHS[key].nodes, getNodeDefinition);
+    const nodes = resolveNodeAliases(GRAPHS[key].nodes, getNodeDefinition);
     const bloom = nodes.find(nd => nd.type === 'bloom' && nd.inputs.color?.connection)!;
     const r = upgradeBloom(nodes, bloom.id, nextId)!;
     expect(r).not.toBeNull();

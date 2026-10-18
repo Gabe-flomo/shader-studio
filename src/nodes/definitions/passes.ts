@@ -342,7 +342,8 @@ export const BlurTextureNode: NodeDefinition = {
   },
 };
 
-export const GlowTextureNode: NodeDefinition = {
+/** Glow (texture) without its Deep glow method: deepGlow.ts adds it (and registers the whole node). */
+export const GlowTextureBase: NodeDefinition = {
   type: 'glowTexture',
   label: 'Glow (texture)',
   category: 'Passes',

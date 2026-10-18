@@ -22,6 +22,7 @@ import { compileGraph } from '../../compiler/graphCompiler';
 import { EXAMPLE_GRAPHS } from '../../store/exampleGraphs';
 import { runGlsl, type Val } from '../../compiler/__tests__/glslEval';
 import { caRow } from '../../play/kit/chroma.js';
+import { DeepGlowTextureNode } from '../definitions/deepGlow';
 
 /** A saved node as an old graph holds it: no definition lookup, just type, sockets and params. */
 function saved(type: string, id: string, params: Record<string, unknown>, inputs: Record<string, [string, string] | null>, outputs: string[], extra: Partial<GraphNode> = {}): GraphNode {
@@ -57,12 +58,12 @@ const near = (a: Val, b: Val, eps = 1e-9) => {
 };
 
 /** Retired in the sweep and kept registered (hidden): no exact mapping onto the survivor. */
-const SWEPT_HIDDEN: string[] = ['light2d', 'chromaShift', 'chromaticAberration'];
+const SWEPT_HIDDEN: string[] = ['light2d', 'chromaShift', 'chromaticAberration', 'bloom'];
 /** Merged into a survivor: gone from the registry, migrated on load (old type → survivor). */
 const MERGED_INTO: Record<string, string> = {
   smoothWarp: 'uvWarp', curlWarp: 'uvWarp', swirlWarp: 'uvWarp', swirlSpace: 'uvWarp',
   glowLayer: 'light', distanceFalloff: 'light', deepGlow: 'light',
-  chromaTexture: 'chromaLens',
+  chromaTexture: 'chromaLens', deepGlowTexture: 'glowTexture',
 };
 const SWEPT_MERGED = Object.keys(MERGED_INTO);
 
@@ -339,5 +340,55 @@ describe('Chromatic aberration: one texture node', () => {
     compiles([uv, pic, col, pass, saved('chromaTexture', 'x', { amount: 5 }, { texture: ['p', 'texture'] }, ['color', 'alpha']), saved('output', 'out', {}, { color: ['x', 'color'] }, [])]);
     compiles([uv, pic, col, saved('chromaShift', 'x', {}, { color: ['v', 'rgb'] }, ['result']), saved('output', 'out', {}, { color: ['x', 'result'] }, [])]);
     compiles([uv, saved('chromaticAberration', 'x', {}, { uv: ['uv', 'uv'] }, ['uv_r']), saved('circleSDF', 'c2', {}, { position: ['x', 'uv_r'] }, ['distance']), saved('output', 'out', {}, { color: ['c2', 'distance'] }, [])]);
+  });
+});
+
+// ── Picture glow ─────────────────────────────────────────────────────────────
+
+/** A picture drawn into a Pass (circle distance as grey), for the texture effects. */
+const picturePass = (): GraphNode[] => [
+  saved('uv', 'uv', {}, {}, ['uv']),
+  saved('circleSDF', 'c', { radius: 0.3 }, { position: ['uv', 'uv'] }, ['distance']),
+  saved('floatToVec3', 'v', {}, { input: ['c', 'distance'] }, ['rgb']),
+  saved('pass', 'p', {}, { color: ['v', 'rgb'] }, ['texture', 'color', 'alpha', 'previous']),
+];
+
+describe('Picture glow: Glow (texture), with Deep glow as a Method', () => {
+  it('Deep Glow (texture) migrates to Glow (texture), Method Deep glow, with its settings', () => {
+    const [nd] = load([saved('deepGlowTexture', 'g', { radius: 300, intensity: 2, threshold: 0.4, knee: 0.2, spread: 0.3, preserve: 0.7, composite: 'screen', tint: [1, 0.8, 0.6] }, { texture: null }, ['color', 'alpha', 'glow'])]);
+    expect(nd.type).toBe('glowTexture');
+    expect(nd.params).toMatchObject({ method: 'deep', radius: 300, intensity: 2, threshold: 0.4, knee: 0.2, spread: 0.3, preserve: 0.7, composite: 'screen', tint: [1, 0.8, 0.6] });
+  });
+
+  it('Deep glow compiles to the old Deep Glow (texture): its mip chain in hidden passes, the same final read', () => {
+    const nodes = [...picturePass(), saved('deepGlowTexture', 'g', { radius: 120 }, { texture: ['p', 'texture'] }, ['color', 'alpha', 'glow']), saved('output', 'out', {}, { color: ['g', 'color'] }, [])];
+    const r = compiles(nodes);
+    expect((r.passes ?? []).filter(x => x.hidden)).toHaveLength(15);
+    expect(r.fragmentShader).toContain('dgComposite(');
+    // The node's own code is the Deep Glow generator's.
+    const nd = load(nodes).find(x => x.id === 'g')!;
+    const old = DeepGlowTextureNode.generateGLSL(nd, { texture: 'T' }).code;
+    expect(getNodeDefinition('glowTexture')!.generateGLSL(nd, { texture: 'T' }).code).toBe(old);
+  });
+
+  it('a wired Deep glow slider still drives every hidden pass', () => {
+    const nodes = [...picturePass(), saved('time', 't', {}, {}, ['time']),
+      saved('deepGlowTexture', 'g', {}, { texture: ['p', 'texture'], threshold: ['t', 'time'] }, ['color']), saved('output', 'out', {}, { color: ['g', 'color'] }, [])];
+    const r = compiles(nodes);
+    const pre = (r.passes ?? []).filter(x => x.hidden)[0];
+    expect(pre.fragmentShader).toMatch(/u_time/);
+  });
+
+  it('the other methods keep their code; Color is the picture with the glow added', () => {
+    const nd = migrateNodeParams(saved('glowTexture', 'g', { method: 'bloom', threshold: 0.5, radius: 12, intensity: 1.5 }, { texture: null }, ['glow']), getNodeDefinition);
+    const r = getNodeDefinition('glowTexture')!.generateGLSL(nd, { texture: 'T' });
+    expect(r.outputVars.color).toBe('(texture2D(T, g_uv).rgb + g_glow)');
+    const nodes = [...picturePass(), saved('glowTexture', 'g', { method: 'bloom' }, { texture: ['p', 'texture'] }, ['glow', 'color']), saved('output', 'out', {}, { color: ['g', 'color'] }, [])];
+    compiles(nodes);
+  });
+
+  it('an old Bloom (last frame) still loads and compiles, hidden', () => {
+    compiles([saved('uv', 'uv', {}, {}, ['uv']), saved('circleSDF', 'c', {}, { position: ['uv', 'uv'] }, ['distance']), saved('floatToVec3', 'v', {}, { input: ['c', 'distance'] }, ['rgb']),
+      saved('bloom', 'b', { threshold: 0.4 }, { color: ['v', 'rgb'], uv: ['uv', 'uv'] }, ['result']), saved('output', 'out', {}, { color: ['b', 'result'] }, [])]);
   });
 });

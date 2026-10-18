@@ -11122,7 +11122,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
   // ── Web: Trippy Noise ──
   fcTrippyNoise: {
     label: 'Web: Trippy Noise',
-    description: 'After "trippy noise", a community shader from the web (author credit to follow). Rotate 2D → |uv| → Polar angle drives a second Rotate; three Noise Floats (value noise, offset ±0.333) → Smoothstep → RGB tints summed; Vignette, lift, a Texture Input screened in through Blend Modes (an empty image slot changes nothing), and Bloom replaces the threshold → blur X → blur Y → screen passes.',
+    description: 'After "trippy noise", a community shader from the web (author credit to follow). Rotate 2D → |uv| → Polar angle drives a second Rotate; three Noise Floats (value noise, offset ±0.333) → Smoothstep → RGB tints summed; Vignette, lift, a Texture Input screened in through Blend Modes (an empty image slot changes nothing), and a Pass + Glow (texture) Bloom chain replaces the threshold → blur X → blur Y → screen passes.',
     counter: 33,
     nodes: [
       {
@@ -11488,25 +11488,17 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         outputs: { result: { type: 'vec3', label: 'Result' } },
         params: { mode: 'screen', opacity: 0.5, strength: 1 },
       },
-      {
-        id: 'tn_bloom',
-        type: 'bloom',
-        position: { x: 4000, y: 300 },
-        inputs: {
-          color: { type: 'vec3', label: 'Color', connection: { nodeId: 'tn_blend', outputKey: 'result' } },
-          uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'tn_uv', outputKey: 'uv' } },
-          threshold: { type: 'float', label: 'Threshold' },
-          intensity: { type: 'float', label: 'Intensity' },
-        },
-        outputs: { result: { type: 'vec3', label: 'Result' } },
-        params: { threshold: 0.66, intensity: 2, radius: 40 },
-      },
+      n('pass', 'tn_pass', 3760, 300, { label: 'Picture', __comment: 'Pass: the picture as a texture, this frame, so the glow can read round each pixel (half float keeps brightness above 1).' },
+        { color: ['tn_blend', 'result'] }),
+      n('glowTexture', 'tn_bloom', 4000, 300, { method: 'bloom', threshold: 0.66, knee: 0.2, radius: 20, intensity: 2, tail: 0.4,
+        __comment: 'Glow (texture), Bloom chain: the parts brighter than Threshold, halved again and again and built back up: a soft core with a long tail, in the same frame. Color is the picture with the glow added.' },
+        { texture: ['tn_pass', 'texture'] }),
       {
         id: 'tn_out',
         type: 'output',
         position: { x: 4220, y: 300 },
         inputs: {
-          color: { type: 'vec3', label: 'Color', connection: { nodeId: 'tn_bloom', outputKey: 'result' } },
+          color: { type: 'vec3', label: 'Color', connection: { nodeId: 'tn_bloom', outputKey: 'color' } },
         },
         outputs: {},
         params: {},
@@ -11708,7 +11700,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
   // ── Combo: Grid + SDF Fill + Bloom ──
   comboBloomDots: {
     label: 'Combo: Grid + SDF Fill + Bloom',
-    description: 'Grid → Circle SDF on the Cell UV → SDF Fill draws bright dots coloured by Cell ID; Bloom (Luma select, Layered kernel — Xor\'s bloom article) thresholds, blurs and screens the highlights: the whole threshold → Blur X → Blur Y → screen pass chain in one node. Bloom on a full picture: Web: Trippy Noise; the blur half on its own: Combo: Wave Texture + Blur H/V.',
+    description: 'Grid → Circle SDF on the Cell UV → SDF Fill draws bright dots coloured by Cell ID; a Pass holds the dots and Glow (texture), Bloom chain, thresholds, blurs and adds the highlights back: the whole threshold → blur → add chain in one node, in the same frame. Bloom on a full picture: Web: Trippy Noise; the blur on its own: Combo: Wave Texture + Blur.',
     counter: 11,
     nodes: [
       {
@@ -11818,25 +11810,17 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         outputs: { result: { type: 'vec3', label: 'Color' }, alpha: { type: 'float', label: 'Alpha' } },
         params: { strokeWidth: 0, antialias: 0.01, strokeAlign: 'center', aaMode: 'pixel' },
       },
-      {
-        id: 'bd_bloom',
-        type: 'bloom',
-        position: { x: 1480, y: 240 },
-        inputs: {
-          color: { type: 'vec3', label: 'Color', connection: { nodeId: 'bd_fill', outputKey: 'result' } },
-          uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'bd_uv', outputKey: 'uv' } },
-          threshold: { type: 'float', label: 'Threshold' },
-          intensity: { type: 'float', label: 'Intensity' },
-        },
-        outputs: { result: { type: 'vec3', label: 'Result' } },
-        params: { threshold: 0.45, intensity: 2.5, radius: 40, select: 'luma', softness: 0.25, kernel: 'layered' },
-      },
+      n('pass', 'bd_pass', 1240, 240, { label: 'Dots', __comment: 'Pass: the dots as a texture, this frame, so the glow can read round each pixel.' },
+        { color: ['bd_fill', 'result'] }),
+      n('glowTexture', 'bd_bloom', 1480, 240, { method: 'bloom', threshold: 0.45, knee: 0.25, radius: 20, intensity: 2.5, tail: 0.4,
+        __comment: 'Glow (texture), Bloom chain: thresholds the bright dots, blurs them down a mip chain and back up, and its Color adds the glow over the dots: the threshold → blur → add chain in one node, same frame.' },
+        { texture: ['bd_pass', 'texture'] }),
       {
         id: 'bd_out',
         type: 'output',
         position: { x: 1720, y: 240 },
         inputs: {
-          color: { type: 'vec3', label: 'Color', connection: { nodeId: 'bd_bloom', outputKey: 'result' } },
+          color: { type: 'vec3', label: 'Color', connection: { nodeId: 'bd_bloom', outputKey: 'color' } },
         },
         outputs: {},
         params: {},

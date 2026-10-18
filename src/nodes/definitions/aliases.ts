@@ -127,6 +127,11 @@ export const NODE_ALIASES: Record<string, NodeAlias> = {
   //    split with Blur 0 (the same three reads; Radial is Lateral round the middle). ──
   chromaTexture: { to: 'chromaLens', params: o => ({ ...o, mode: 'split', geometry: o.mode === 'directional' ? 'directional' : 'lateral',
     amount: num(o.amount, 4), angle: num(o.angle, 0), falloff: num(o.falloff, 1), blur: 0, distortion: 0, centerX: 0, centerY: 0, samples: 12 }) },
+
+  // ── 2026-10-17 sweep: one picture glow, Glow (texture) (deepGlow.ts GlowTextureNode). Deep Glow (texture) is its
+  //    Deep glow method: the same generator, hidden passes and sliders. ──
+  deepGlowTexture: { to: 'glowTexture', params: o => ({ ...o, method: 'deep', radius: num(o.radius, 120), intensity: num(o.intensity, 1), threshold: num(o.threshold, 0.6),
+    knee: num(o.knee, 0.3), spread: num(o.spread, 0), preserve: num(o.preserve, 0.5), tint: o.tint ?? [1, 1, 1], composite: o.composite === 'screen' ? 'screen' : 'add' }) },
 };
 
 /** Glow Layer's Types (combiners.ts GLOW_TYPES), each an SDF Glow mode of the same name. */
