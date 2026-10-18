@@ -2,9 +2,8 @@ import type React from 'react';
 /**
  * MobileNodeBrowser — the "Nodes" tab inside the mobile Examples sheet.
  *
- * Deliberately NOT another search-and-place picker (that's NodeSearchPalette,
- * reachable everywhere else in the app) — this is an exploratory reference:
- * browse by category (and subcategory, for the handful of categories large
+ * An exploratory reference with a search field on top (the same ranking as
+ * NodeSearchPalette, nodeSearchModel.rankMatches): browse by category (and subcategory, for the handful of categories large
  * enough to need one — see subcategory on NodeDefinition), open a node to
  * read its description and see a live preview, then decide whether to add
  * it — disconnected, or wired to something already in the graph.
@@ -33,6 +32,7 @@ import { InlineVizFrame, GenericPreviewViz, SKIP_INLINE_PREVIEW } from './Mobile
 import { INLINE_VIZ_TYPES } from './NodeInlineViz';
 import { useCtp, type CtpPalette } from '../../theme/nodePalette';
 import { BuildersSection } from '../builders/BuildersSection';
+import { rankMatches } from './nodeSearchModel';
 
 function labelFor(n: GraphNode): string {
   return (typeof n.params.label === 'string' && n.params.label) || getNodeDefinitionFor(n)?.label || n.type;
@@ -95,6 +95,15 @@ export function MobileNodeBrowser({ onClose }: { onClose: () => void }) {
   const pairHeadStyle: React.CSSProperties = { fontSize: 10.5, fontWeight: 700, color: tc.overlay0, letterSpacing: '0.08em', margin: '4px 0 6px' };
   const promotedStyle: React.CSSProperties = { font: `500 11px ${fontFamily.ui}`, color: '#a8720a', background: 'rgba(217,154,30,0.14)', borderRadius: 6, padding: '2px 7px' };
   const [openCategory, setOpenCategory] = useState<string | null>(null);
+  // Search: the nodes offered here (hidden ones stay hidden), best match first.
+  const [query, setQuery] = useState('');
+  const matches = useMemo(() => {
+    const q = query.trim();
+    if (!q) return null;
+    const defs = CATEGORIES.flatMap(sec => sec.rows.flatMap(r => r.groups.flatMap(g => g.types)))
+      .map(t => getNodeDefinition(t)).filter((d): d is NodeDefinition => !!d);
+    return rankMatches(defs, q).slice(0, 40).map(m => m.def);
+  }, [query, CATEGORIES]);
   const [selectedType, setSelectedType] = useState<string | null>(null);
   // "Add Connected" sub-flow: pick an existing node, then pick one of its
   // compatible socket pairings with selectedType. Reset whenever the detail
@@ -222,7 +231,7 @@ export function MobileNodeBrowser({ onClose }: { onClose: () => void }) {
     // ── Detail page itself ────────────────────────────────────────────
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-        <button onClick={closeDetail} style={backBtnStyleFor(tc)}><Icon name="chevL" size={14} />Back to categories</button>
+        <button onClick={closeDetail} style={backBtnStyleFor(tc)}><Icon name="chevL" size={14} />{query.trim() ? 'Back to results' : 'Back to categories'}</button>
 
         <div>
           <div style={{ font: `650 22px ${fontFamily.ui}`, letterSpacing: '-0.01em', color: tc.text }}>{def.label}</div>
@@ -267,6 +276,37 @@ export function MobileNodeBrowser({ onClose }: { onClose: () => void }) {
   // ── Category accordion ─────────────────────────────────────────────────
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <label data-browse-search="" style={{
+        display: 'flex', alignItems: 'center', gap: 8, height: 44, padding: '0 12px', marginBottom: 6, borderRadius: 12,
+        background: tc.mantle, boxShadow: `0 0 0 1px ${tc.surface0}`, color: tc.overlay0,
+      }}>
+        <Icon name="search" size={16} />
+        <input
+          type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Search nodes"
+          aria-label="Search nodes" autoCapitalize="off" autoCorrect="off" spellCheck={false} enterKeyHint="search"
+          style={{ flex: 1, minWidth: 0, border: 'none', outline: 'none', background: 'transparent', color: tc.text, font: `500 16px ${fontFamily.ui}` }}
+        />
+        {query && (
+          <button type="button" aria-label="Clear search" onClick={() => setQuery('')}
+            style={{ border: 'none', background: 'none', padding: 4, color: tc.overlay0, cursor: 'pointer', display: 'flex' }}>
+            <Icon name="close" size={14} />
+          </button>
+        )}
+      </label>
+      {matches ? (
+        matches.length === 0
+          ? <div style={{ fontSize: 13, color: tc.overlay0, padding: '12px' }}>No nodes match “{query.trim()}”.</div>
+          : matches.map(d => (
+            <button key={d.type} data-browse-result={d.type} onClick={() => openDetail(d.type)} style={{ ...rowBtnStyleFor(tc), height: 'auto', minHeight: 46, padding: '6px 12px', borderRadius: 10, gap: 10 }}>
+              <span style={{ width: 9, height: 9, borderRadius: '50%', background: categoryColor(d.category, mode), flexShrink: 0 }} />
+              <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.label}</span>
+                <span style={{ fontSize: 11.5, fontWeight: 500, color: tc.overlay0 }}>{rowLabel(rowOfType(d.type, d.category))}</span>
+              </span>
+              <Icon name="chevR" size={14} style={{ color: tc.surface2, flexShrink: 0 }} />
+            </button>
+          ))
+      ) : <>
       {/* The builders: the 3D Scene Builder, Grid Rules, Agent Rules (docs/node-browser.md) */}
       <BuildersSection touch onOpened={onClose} />
       {CATEGORIES.map(sec => (
@@ -317,6 +357,7 @@ export function MobileNodeBrowser({ onClose }: { onClose: () => void }) {
           })}
         </div>
       ))}
+      </>}
     </div>
   );
 }
