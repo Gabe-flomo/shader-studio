@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.269',
+    date: '2026-10-17',
+    title: "Tidier Start sheet",
+    highlights: [
+      { area: 'Studio', text: "The Start sheet's example cards have room around their pictures, in two even rows." },
+    ],
+  },
+  {
     id: '2026.10.268',
     date: '2026-10-17',
     title: "Easier to start, easier to save",
