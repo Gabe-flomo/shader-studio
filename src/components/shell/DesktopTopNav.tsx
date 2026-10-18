@@ -110,8 +110,11 @@ export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }:
   const foldAux = compact || fold.foldAux;
   const hideWordmark = compact || fold.hideWordmark;
   const showRecordLabel = !compact && fold.recordLabel;
-  // Hovering (or focusing) the tab strip shows every page's name; otherwise only the current one's.
-  const [tabsOpen, setTabsOpen] = useState(false);
+  // Desktop widths: every tab named, always (positions never move). Narrower: icons, the current page named.
+  const tabLabels = !compact && fold.tabLabels;
+  // Tabs that don't fit go in a "···" after the strip (never hidden without a way to them).
+  const tabsRef = useRef<HTMLDivElement>(null);
+  const hiddenTabs = useOverflowingTabs(tabsRef, barWidth, page);
 
   return (
     <div
@@ -122,7 +125,7 @@ export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }:
         font: `12.5px ${fontFamily.ui}`, userSelect: 'none', minWidth: 0,
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: hideWordmark ? 'auto' : 250, flexShrink: hideWordmark ? 0 : 1, minWidth: hideWordmark ? undefined : 36, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: hideWordmark || fold.compactBrand ? 'auto' : 250, flexShrink: hideWordmark || fold.compactBrand ? 0 : 1, minWidth: hideWordmark ? undefined : 36, overflow: 'hidden' }}>
         <span style={{ width: 26, height: 26, flexShrink: 0, borderRadius: radius.md, background: tk.ink.base, color: tk.ink.text, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <Icon name="presets" size={13} />
         </span>
@@ -138,11 +141,9 @@ export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }:
       </div>
 
       <div
+        ref={tabsRef}
         role="tablist"
-        onMouseEnter={() => setTabsOpen(true)}
-        onMouseLeave={() => setTabsOpen(false)}
-        onFocus={() => setTabsOpen(true)}
-        onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setTabsOpen(false); }}
+        aria-label="Pages"
         style={{
           display: 'flex', gap: 2, padding: 3, borderRadius: 10, background: tk.bg.hover, flexShrink: 1, minWidth: 0,
           // Always scrollable, not just once `fold.scrollTabs` kicks in: the right cluster
@@ -154,10 +155,11 @@ export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }:
       >
         {TABS.map(t => {
           const on = page === t.page;
-          const named = on || tabsOpen;
+          const named = on || tabLabels;
           return (
             <button
               key={t.page}
+              data-page-tab={t.page}
               role="tab"
               aria-selected={on}
               aria-label={t.label}
@@ -168,17 +170,18 @@ export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }:
                 padding: named ? '6px 12px 6px 10px' : '6px 9px', borderRadius: 7, border: 0, cursor: 'pointer',
                 background: on ? tk.bg.panel : 'transparent', boxShadow: on ? '0 1px 2px rgba(20,20,30,0.1)' : 'none',
                 color: on ? tk.text.primary : tk.text.faint, font: `${on ? 600 : 500} 13px ${fontFamily.ui}`, whiteSpace: 'nowrap',
-                transition: 'padding 0.16s ease, gap 0.16s ease',
+                flexShrink: 0,
               }}
             >
               <Icon name={t.icon} size={15} />
-              <span style={{ display: 'inline-block', maxWidth: named ? 90 : 0, overflow: 'hidden', transition: 'max-width 0.18s ease', verticalAlign: 'middle' }}>{t.label}</span>
+              {named && <span style={{ display: 'inline-block', verticalAlign: 'middle' }}>{t.label}</span>}
               {t.page === 'convert' && <ProBadgeFor feature="convert" style={{ marginLeft: 6 }} />}
               {t.page === 'play' && hasPlay && <span aria-label="This graph has a Play setup" style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: tk.accent.base, marginLeft: 6, verticalAlign: 'middle' }} />}
             </button>
           );
         })}
       </div>
+      {hiddenTabs.length > 0 && <MoreTabsButton tabs={TABS.filter(t => hiddenTabs.includes(t.page))} page={page} onPageChange={onPageChange} />}
 
       {/* No `minWidth: 0` here: this cluster must never shrink below its content's natural width
           (buttons/pills don't wrap or shrink themselves) — that's what stops it overlapping the
@@ -244,6 +247,40 @@ export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }:
         <AccountButton />
       </div>
     </div>
+  );
+}
+
+/**
+ * The tabs scrolled out of the strip's sight, measured after every layout change: those go in its "···".
+ * The current page's tab is kept in view.
+ */
+function useOverflowingTabs(ref: RefObject<HTMLDivElement | null>, barWidth: number, page: Page): Page[] {
+  const [hidden, setHidden] = useState<Page[]>([]);
+  useLayoutEffect(() => {
+    const strip = ref.current;
+    if (!strip) return;
+    strip.querySelector<HTMLElement>(`[data-page-tab="${page}"]`)?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+    const box = strip.getBoundingClientRect();
+    const out: Page[] = [];
+    strip.querySelectorAll<HTMLElement>('[data-page-tab]').forEach(b => {
+      const r = b.getBoundingClientRect();
+      if (r.width > 0 && (r.right > box.right + 1 || r.left < box.left - 1)) out.push(b.dataset.pageTab as Page);
+    });
+    setHidden(prev => (prev.join() === out.join() ? prev : out));
+  }, [ref, barWidth, page]);
+  return hidden;
+}
+
+function MoreTabsButton({ tabs, page, onPageChange }: { tabs: typeof TABS; page: Page; onPageChange: (p: Page) => void }) {
+  const anchor = useRef<HTMLSpanElement>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  return (
+    <span ref={anchor} style={{ display: 'inline-flex', marginLeft: -8, flexShrink: 0 }}>
+      <IconButton icon="more" label={`More pages: ${tabs.map(t => t.label).join(', ')}`} active={!!menu} tooltip={!menu}
+        onClick={() => { const r = anchor.current?.getBoundingClientRect(); setMenu(r ? { x: r.left, y: r.bottom + 6 } : null); }} />
+      {menu && <Menu x={menu.x} y={menu.y} minWidth={180} onClose={() => setMenu(null)}
+        items={tabs.map(t => ({ label: t.label, icon: t.icon, onSelect: () => onPageChange(t.page), ...(t.page === page ? { hint: 'This page' } : {}) }))} />}
+    </span>
   );
 }
 
