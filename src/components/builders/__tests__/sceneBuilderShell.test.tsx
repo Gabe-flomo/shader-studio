@@ -33,7 +33,7 @@ import { starterScene } from '../../../sceneBuilder2d/spec';
 import { makeAgentGroup } from '../../../agentBuilder/actions';
 import { START_CARDS } from '../../../agentBuilder/kinds';
 import { openBuilder, runBuilderAction, startSceneKind, newGridRules } from '../../../builders/open';
-import { builtScenes, builtSceneIds, backToSceneKinds, openSceneKind, selectedBuiltScene, SCENE_KINDS, type SceneKind } from '../../../builders/sceneKinds';
+import { builtScenes, builtSceneIds, backToSceneKinds, isStarterGraph, openSceneKind, selectedBuiltScene, SCENE_KINDS, type SceneKind } from '../../../builders/sceneKinds';
 import { builderHoldsPreview, watchBuilderPreview } from '../../../builders/previewPriority';
 import { previewHeld } from '../../../lib/previewHold';
 import { SceneBuilderShell } from '../SceneBuilderShell';
@@ -214,14 +214,32 @@ describe('entry points that open one kind go straight to it', () => {
   });
 });
 
-describe('a graph no builder made: clear by default, or keep it', () => {
-  it.each<SceneKind>(['2d', 'agents', 'grid', 'simulation', '3d', 'splat', 'timecube'])('%s: Clear and start over is the default; the clear is an undo step of its own', kind => {
+describe('a graph no builder made: keep it by default, or clear it', () => {
+  it('the untouched starter is cleared by default; anything else is kept (UX audit §4.6)', () => {
+    useNodeGraphStore.getState().loadExampleGraph('blank');
+    expect(isStarterGraph(nodes())).toBe(true);
+    act(() => openBuilder('scenes'));
+    mount(<Shell />);
+    expect($('[data-scene-clear]')?.getAttribute('data-scene-clear')).toBe('clear');
+    // Moving a card doesn't make it yours; changing a setting does.
+    const moved = nodes().map(x => ({ ...x, position: { x: x.position.x + 50, y: x.position.y } }));
+    expect(isStarterGraph(moved)).toBe(true);
+    const tuned = nodes().map(x => (x.type === 'circleSDF' ? { ...x, params: { ...x.params, radius: 0.45 } } : x));
+    expect(isStarterGraph(tuned)).toBe(false);
+    act(() => { useNodeGraphStore.setState({ nodes: tuned }); });
+    expect($('[data-scene-clear]')?.getAttribute('data-scene-clear')).toBe('keep');
+    expect(isStarterGraph(handGraph())).toBe(false);
+  });
+
+  it.each<SceneKind>(['2d', 'agents', 'grid', 'simulation', '3d', 'splat', 'timecube'])('%s: Keep my graph is the default; Clear and start over is an undo step of its own', kind => {
     useNodeGraphStore.setState({ nodes: handGraph() });
     act(() => openBuilder('scenes'));
     expect(useBuilderWindows.getState().sceneShell).toEqual({ page: 'kinds' });
     mount(<Shell />);
-    expect($('[data-scene-clear]')?.getAttribute('data-scene-clear')).toBe('clear');
+    expect($('[data-scene-clear]')?.getAttribute('data-scene-clear')).toBe('keep');
     expect($('[data-scene-clear]')?.textContent).toContain('Your graph has 1 node');
+    click($('[aria-label="Clear the current graph first?"] button:first-child'));
+    expect($('[data-scene-clear]')?.getAttribute('data-scene-clear')).toBe('clear');
     click($(`[data-scene-kind="${kind}"]`));
     expect(nodes().some(x => x.id === 'uv')).toBe(false);
     expect(nodes().some(x => x.id === 'out')).toBe(true);

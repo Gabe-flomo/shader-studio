@@ -17,9 +17,10 @@
  *
  * Opening the Scene builder: a graph a builder made reopens that scene ("Edit this one / Start
  * over / Add another", the Agent Builder's prompt for every kind); any other graph goes to the
- * kind page, which clears the graph by default (its own undo step), with "Keep my graph" beside it.
+ * kind page, which keeps the graph by default (clearing, its own undo step, is the default only for the untouched starter).
  */
 import type { GraphNode } from '../types/nodeGraph';
+import { BLANK_GRAPH } from '../store/exampleIndex';
 import type { IconName } from '../components/ui/iconPaths';
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
 import { metaOf } from '../sceneBuilder/build';
@@ -219,4 +220,32 @@ export function clearForScene(): GraphNode[] | null {
 /** "Start over": take a built scene away (builtSceneIds), one undo step. */
 export function removeBuiltScene(b: Pick<BuiltScene, 'kind' | 'id'>): boolean {
   return removeSetupNodes(builtSceneIds(useNodeGraphStore.getState().nodes, b), 'Scene builder: started over');
+}
+
+/** A card as the starter would have it: its type, its settings and what its inputs are wired to (by type). */
+function starterKey(nodes: readonly GraphNode[]): string[] {
+  const typeOf = new Map(nodes.map(n => [n.id, n.type]));
+  return nodes.map(n => JSON.stringify([
+    n.type,
+    Object.entries(n.params ?? {}).filter(([k]) => !k.startsWith('_')).sort(([a], [b]) => a.localeCompare(b)),
+    Object.entries(n.inputs ?? {}).filter(([, i]) => i.connection).map(([k, i]) => [k, typeOf.get(i.connection!.nodeId), i.connection!.outputKey]).sort(),
+  ])).sort();
+}
+const STARTER = starterKey(BLANK_GRAPH.nodes);
+
+/**
+ * Whether the graph is still the starter a new graph opens with (UV → Circle SDF → Light → Output,
+ * settings untouched; where the cards sit doesn't count). The kind page clears that by default and
+ * keeps anything else (UX audit §4.6).
+ */
+export function isStarterGraph(nodes: readonly GraphNode[]): boolean {
+  if (nodes.length !== STARTER.length) return false;
+  const key = starterKey(nodes);
+  return key.every((k, i) => k === STARTER[i]);
+}
+
+/** The kind page's "Clear the graph first?" when nobody picked: clear only an untouched starter (or nothing to clear). */
+export function defaultClearChoice(nodes: readonly GraphNode[], keep: boolean): 'clear' | 'keep' {
+  if (keep || builderMade(nodes as GraphNode[])) return 'keep';
+  return isStarterGraph(nodes) ? 'clear' : 'keep';
 }

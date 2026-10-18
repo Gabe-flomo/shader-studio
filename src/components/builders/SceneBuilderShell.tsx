@@ -3,8 +3,9 @@
  * builder shell (StudioShell):
  *
  *  - "What kind of scene?": 2D scene, Agent scene, Grid scene, Grid simulation, 3D scene, Splat scene, each with a picture and a
- *    line. With nodes in the graph it asks first: Clear and start over (the default when no builder
- *    made the graph: everything but the Output goes, as an undo step of its own) or Keep my graph.
+ *    line. With nodes in the graph it asks first: Clear and start over (everything but the Output
+ *    goes, as an undo step of its own) or Keep my graph, the default unless the graph is still the
+ *    untouched starter.
  *    Picking a kind turns the window into that kind's builder (builders/open.ts startSceneKind).
  *  - On a graph a builder made: that scene, reopened as it was built (Edit this one, the default),
  *    Start over (it goes, then the kinds) or Add another (the kinds, keeping the graph). With
@@ -21,7 +22,7 @@ import { StudioShell } from './studio/StudioShell';
 import { useNarrowWindow } from '../code/SidePanels';
 import { usePhoneDialog } from '../ui/phoneDialog';
 import { ScenePicture } from './scenePictures';
-import { SCENE_KINDS, builtScenes, builderMade, clearForScene, removeBuiltScene, sceneKindInfo, selectedBuiltScene, type BuiltScene, type SceneKind, type SceneKindInfo } from '../../builders/sceneKinds';
+import { SCENE_KINDS, builtScenes, clearForScene, defaultClearChoice, removeBuiltScene, sceneKindInfo, selectedBuiltScene, type BuiltScene, type SceneKind, type SceneKindInfo } from '../../builders/sceneKinds';
 import { editBuiltScene, startSceneKind } from '../../builders/open';
 import { clearableCount } from '../../agentBuilder/actions';
 import { finishBuilder } from '../../builders/finish';
@@ -39,13 +40,13 @@ export function SceneBuilderShell({ page }: { page: SceneShellPage }) {
 function KindPage({ note, keep }: { note?: string; keep?: boolean }) {
   const tk = useTokens();
   const clearable = useNodeGraphStore(s => clearableCount(s.nodes));
-  const made = useNodeGraphStore(s => builderMade(s.nodes));
+  // Keep by default; only the untouched starter is cleared without asking (sceneKinds.ts defaultClearChoice).
+  const fallback = useNodeGraphStore(s => defaultClearChoice(s.nodes, !!keep));
   const [choice, setChoice] = useState<'clear' | 'keep' | null>(null);
   // Three across (two rows of three), two on a narrow window, one on a phone.
   const phone = usePhoneDialog();
   const narrow = useNarrowWindow();
-  // Clear by default, unless a builder made what is here (or Add another / Back said keep it).
-  const clearFirst = choice ?? (keep || made ? 'keep' : 'clear');
+  const clearFirst = choice ?? fallback;
   const pick = (k: SceneKind) => {
     if (clearFirst === 'clear' && clearable > 0) clearForScene();
     startSceneKind(k, { fromShell: true });

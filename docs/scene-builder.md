@@ -26,7 +26,7 @@ What it shows first depends on the graph:
 
 - **A graph no builder made** (or an empty one): the kind page. When the graph has anything besides
   its Output, the page asks first: "Your graph has N nodes: **Clear and start over** | **Keep my
-  graph**". **Clear and start over** is the default. Picking a kind then clears everything but the
+  graph**". **Keep my graph** is the default, unless the graph is still the untouched starter (UV → Circle SDF → Light → Output, settings unchanged; `isStarterGraph`), where **Clear and start over** is. Clearing: picking a kind clears everything but the
   Output (unwired) as an undo step of its own ("Scene builder: cleared the graph"), and the kind
   makes its scene as the next step. Undo takes back the scene, then the clear. **Keep my graph**
   adds the new scene beside what is there.

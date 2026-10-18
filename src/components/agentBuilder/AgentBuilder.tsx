@@ -73,7 +73,7 @@ import { onlyWhenText } from '../../agentBuilder/onlyWhen';
 import { DEMO_H, DEMO_W, FocusDemo, ViewportLegend, type ViewportLink } from './ViewportLegend';
 import { Icon } from '../ui/Icon';
 import { SceneCrumb } from '../builders/SceneCrumb';
-import { backToSceneKinds, builderMade } from '../../builders/sceneKinds';
+import { backToSceneKinds, defaultClearChoice } from '../../builders/sceneKinds';
 import { AdvancedRules, type AdvancedView } from './AdvancedRules';
 import { SurpriseBar } from '../surprise/SurpriseBar';
 import { surpriseBuilderAction, useSurpriseSeeds } from '../surprise/surpriseActions';
@@ -101,8 +101,9 @@ export function AgentBuilder({ groupId, onClose, onOpenGroup, fromShell = false 
   const groupsKey = useNodeGraphStore(s => JSON.stringify(builderGroups(s.nodes)));
   const groups = useMemo(() => JSON.parse(groupsKey) as BuilderGroup[], [groupsKey]);
   const clearable = useNodeGraphStore(s => (fromShell ? 0 : clearableCount(s.nodes)));
-  const madeByBuilder = useNodeGraphStore(s => builderMade(s.nodes));
-  const clearFirst = clearChoice ?? (answer?.to === 'add' || madeByBuilder ? 'keep' : 'clear');
+  // Keep by default; only the untouched starter is cleared without asking (sceneKinds.ts defaultClearChoice).
+  const fallbackClear = useNodeGraphStore(s => defaultClearChoice(s.nodes, answer?.to === 'add'));
+  const clearFirst = clearChoice ?? fallbackClear;
   const id = groupId ?? made?.groupId ?? null;
   const pick = (card: StartCard) => {
     // "Clear the graph first": its own undo step, before the one that adds the group; Back brings the whole graph back.
