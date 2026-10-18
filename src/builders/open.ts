@@ -29,7 +29,7 @@ import type { BuilderId } from './registry';
 import { closeSceneShell, openAgentBuilder, openGridRulesEditor, showRecipeOf } from './windows';
 import { readStartCells, startCellsFromGrid, type StartCells } from '../gridRules/startCells';
 import { editScene2DInBuilder } from '../sceneBuilder2d/actions';
-import { openSceneBuilderShell, type BuiltScene, type SceneKind } from './sceneKinds';
+import { openSceneBuilderShell, trackFreshScene, type BuiltScene, type SceneKind } from './sceneKinds';
 import { openAgentRulesEditor } from '../agentRules/storeActions';
 import { editGridSceneInBuilder, openNewGridScene } from '../gridScene/actions';
 import { builderRecipeOf } from './recipe';
@@ -102,6 +102,7 @@ export function openBuilder(id: BuilderId, at?: { x: number; y: number }): void 
  */
 export function startSceneKind(kind: SceneKind, o: { at?: { x: number; y: number }; fromShell?: boolean } = {}): void {
   closeSceneShell();
+  const base = useNodeGraphStore.getState().nodes;
   if (kind === '3d') openNewSceneBuilder(o.at);
   else if (kind === '2d') openNewSceneBuilder2D(o.at);
   else if (kind === 'grid') openNewGridScene(o.at);
@@ -110,6 +111,8 @@ export function startSceneKind(kind: SceneKind, o: { at?: { x: number; y: number
   else if (kind === 'timecube') openNewTimeCube(o.at);
   else if (kind === 'warp') openNewWarpBuilder();
   else openAgentBuilder(null, { fromShell: o.fromShell });
+  // Back to the kinds and another kind picked drops what this one made (sceneKinds.ts discardAbandonedScene).
+  trackFreshScene(kind, base);
 }
 
 /** "Edit this one": a built scene in its own builder, as it was built (its saved spec, its node, its group). */
