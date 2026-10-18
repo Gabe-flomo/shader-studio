@@ -45,6 +45,8 @@ export const CATALOGUE_RETIRED_TYPES: readonly string[] = [
   'place2D', 'uvTransform2d', 'rotate2d', 'translate3D', 'rotate3D', 'scale3d', 'translate4D', 'rotate4D', 'scale4D',
   // Rounded Cylinder → Cylinder, Edges Rounded (an alias moves it, except one with its Radius wired: definitions/aliases.ts).
   'roundedCylinderSDF3D',
+  // Radiance Cascades 2D: too slow for what it gives (the user's call, 2026-10-17); SDF Glow lights a shape cheaply.
+  'radianceCascadesApprox',
 ];
 
 /**

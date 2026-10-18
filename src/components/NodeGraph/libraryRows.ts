@@ -247,7 +247,7 @@ export const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: strin
     { label: 'Inside: rule steps', types: ['agentTurnToward', 'agentFollowTrail', 'agentWander', 'agentOrbit', 'agentAvoidWalls', 'agentApplyForce', 'agentDrag', 'agentSlowInCrowd', 'agentLeaveTrail', 'agentFadeWithAge'] },
   ],
   Effects: [
-    { label: 'Lighting', types: ['light', 'glowToColor', 'radianceCascadesApprox'] },
+    { label: 'Lighting', types: ['light', 'glowToColor'] },
     { label: 'Warp',     types: ['gravitationalLens', 'floatWarp'] },
     { label: 'Glitch',   types: ['glitch'] },
   ],

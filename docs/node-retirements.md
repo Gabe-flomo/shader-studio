@@ -39,7 +39,7 @@ Kept on purpose:
   Cache Read reads one delay, so neither does it.
 - **Pixelate** (2D Space): a UV-space pixelate, not a picture effect.
 - **Displace** (2D Space): moves the UV by a vector; Displace (texture) moves a texture's read by a map.
-- **Posterize**, **Radiance Cascades 2D**: no texture version exists.
+- **Posterize**: no texture version exists. (Radiance Cascades 2D was retired later the same day: see below.)
 - **Pass + Sample (texture) of its Previous**: the build-your-own feedback path (Passes 3).
 
 ## SDF Glow's modes
@@ -132,3 +132,8 @@ migrate, the rest keep their (hidden, still registered) type.
 Shapes row; they are **3D Transforms** now, in its Warp and Fold groups.
 
 Examples changed: curvedReverse, learn3dCombine and learn3dOrbit (Rounded Box → Box SDF 3D, Edges Rounded).
+
+## Radiance Cascades 2D
+
+Hidden (still registered, so a saved graph loads and renders as before): it was too slow for what it gave. No example,
+recipe or builder used it. For light from a shape, use **SDF Glow** (its Point light mode for a lamp with a falloff).

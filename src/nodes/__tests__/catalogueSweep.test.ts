@@ -164,6 +164,16 @@ const gone = (t: string, to: string) => {
   expect(NODE_ALIASES[t]?.to, t).toBe(to);
 };
 
+describe('Radiance Cascades 2D is retired (too slow)', () => {
+  it('stays registered, is offered nowhere, and nothing uses it', () => {
+    expect(NODE_REGISTRY.radianceCascadesApprox).toBeTruthy();
+    expect(RETIRED_TYPES).toContain('radianceCascadesApprox');
+    expect(getOfferedDefinitions().some(d => d.type === 'radianceCascadesApprox')).toBe(false);
+    for (const [k, g] of Object.entries(EXAMPLE_GRAPHS)) expect(typesOf(g.nodes).includes('radianceCascadesApprox'), k).toBe(false);
+    expect(Object.values(CATEGORY_GROUPS).flat().some(g => g.types.includes('radianceCascadesApprox'))).toBe(false);
+  });
+});
+
 describe('Q10: the 3D warps sit in 3D Transforms; Fold 3D is Mirror Fold 3D at Offset 0', () => {
   it('3D Domain Warp, Turbulence 3D and Mirror Fold 3D are 3D Transforms, grouped there', () => {
     for (const t of ['domainWarp3D', 'turbulence3D', 'mirrorFold3D']) {
