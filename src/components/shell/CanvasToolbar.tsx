@@ -11,7 +11,6 @@ import { categoryColor } from '../../theme/categories';
 import type { GraphNode } from '../../types/nodeGraph';
 import { IconButton } from '../ui/Button';
 import { SuggestionsToggle } from '../NodeGraph/SuggestionStrip';
-import { DoBarButton } from '../NodeGraph/DoBar';
 import { ArrangeMenu, FlowStripToggle } from '../structure/stageUi';
 import { Icon } from '../ui/Icon';
 import type { IconName } from '../ui/iconPaths';
@@ -31,7 +30,7 @@ const SuggestControlsPanel = lazySafe(() => import('../play/SuggestControlsPanel
 /**
  * Floating toolbar at the top centre of the canvas (desktop redesign), split in two (UX audit §3.4):
  * view controls (node count with graph stats, frame time, zoom, Fit, Auto layout, maximize, minimap,
- * Next, flow strip, Do…) and one "Graph ⋯" menu with the rarely used whole-graph actions
+ * Next, flow strip, Randomise; the Do… bar opens with ⌘K) and one "Graph ⋯" menu with the rarely used whole-graph actions
  * (canvasGraphMenu.ts). Shortcuts are unchanged.
  */
 export function CanvasToolbar({
@@ -148,7 +147,9 @@ export function CanvasToolbar({
       <IconButton icon="minimap" label={showMinimap ? 'Hide minimap' : 'Show minimap'} size="sm" active={showMinimap} onClick={onToggleMinimap} />
       {!readOnly && <SuggestionsToggle />}
       {!readOnly && <FlowStripToggle />}
-      {!readOnly && <DoBarButton />}
+      {/* Randomise every setting on this level, one undo step (also in the Graph menu, with its options) */}
+      {!readOnly && <IconButton icon="dice" label="Randomise settings (one undo step)" size="sm" data-randomize onClick={() => void randomizeGraphAction()} />}
+      {/* The Do… bar has no toolbar button: ⌘K (or Help → Do… commands) opens it */}
       <Sep />
       <GraphMenuButton readOnly={readOnly} topLevel={topLevel} multiProgram={multiProgram} showPasses={showPasses} onTogglePasses={() => setShowPasses(!showPasses)}
         showOutline={!!showOutline} onToggleOutline={onToggleOutline} onBake={onBake} onOptimize={onOptimize} onClear={onClear} onClearMinimal={onClearMinimal} />
