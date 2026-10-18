@@ -354,6 +354,14 @@ describe('Q12: one home per kind of node', () => {
     expect(getOfferedDefinitions().filter(d => d.category === 'Combiners' && !HIDDEN_NODES.has(d.type) && /glow/i.test(d.label))).toEqual([]);
   });
 
+  it('Particles sits in the Agents row (its own group); there is no one-node Particles row, desktop or phone', () => {
+    expect(rowOf('gpuParticles')).toBe('Agents');
+    expect(CATEGORY_GROUPS.Agents.find(g => g.label === 'Particles')?.types).toEqual(['gpuParticles']);
+    const rows = libraryLayout(new Set()).flatMap(s => s.rows.map(r => r.row));
+    expect(rows).not.toContain('Particles');
+    expect(getNodeDefinition('gpuParticles')!.aliases).toContain('GPU particles');
+  });
+
   it('every grouped type is in its row, and every offered node of a grouped row has a group', () => {
     const offered = getOfferedDefinitions().filter(d => !HIDDEN_NODES.has(d.type));
     for (const [row, groups] of Object.entries(CATEGORY_GROUPS)) {

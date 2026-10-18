@@ -176,6 +176,8 @@ export const TYPE_STAGE: Record<string, StageOf> = {
   // Effects: light from a distance; warps; the colour-making ones.
   light: 'shapeIt', light2d: 'shapeIt', radianceCascadesApprox: 'shapeIt', glowToColor: 'colour', normalToColor: 'colour',
   gravitationalLens: 'bend', floatWarp: 'any', forLoop: 'any', exprNode: 'any', customFn: 'any',
+  // Particles (filed under the Agents row since 2026-10-17) draws its particles.
+  gpuParticles: 'draw',
   // Colour grading's finishing tools.
   toneMap: 'post', grain: 'post',
   // Post Processing: the feedback ones are a pass.

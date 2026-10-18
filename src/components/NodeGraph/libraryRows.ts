@@ -57,7 +57,7 @@ const CATEGORY_SECTIONS_RAW: Array<{ label: string; categories: string[] }> = [
   { label: 'Shape operations', categories: ['SDF'] },
   { label: 'Colour',           categories: ['Color', 'Color Grading', 'Combiners'] },
   { label: 'Effects',          categories: ['Effects', 'Passes', 'Texture tools'] },
-  { label: 'Agents',           categories: ['Agents', 'Agent presets', 'Particles', 'Particles & Fields'] },
+  { label: 'Agents',           categories: ['Agents', 'Agent presets', 'Particles & Fields'] },
   { label: 'Generators',       categories: ['Noise', 'Fractals', 'Science'] },
   { label: 'Math & Logic',     categories: ['Sources', 'Audio', 'Animation', 'Math', 'Matrix', 'Shapers', 'Conditionals'] },
   { label: 'Functions',        categories: ['My Nodes', 'Functions'] },
@@ -130,7 +130,7 @@ export const CATEGORY_INFO: Record<string, string> = {
   '4D Shapes': 'Shapes in four dimensions, measured at a 4D point (from Lift to 4D): hypersphere, tesseract, duocylinder, the regular polytopes and quaternion fractals. What you see is their 3D slice.',
   '4D Space': 'Get a point into 4D and change it there: Lift to 4D turns the 3D point into a 4D one (choosing how the slice cuts), then move, turn in any of the six 4D planes, scale, repeat, fold, twist or add noise, before a 4D shape measures it.',
   '4D Projection': 'See a whole 4D shape at once instead of a slice: project it into 3D (perspective or stereographic), draw its wireframe, or go straight to the flat picture.',
-  Agents: 'Walkers, particles and slime that move and leave trails: the Agents group and the nodes that go outside and inside it.',
+  Agents: 'Walkers, particles and slime that move and leave trails: the Particles node (up to millions of GPU particles in one node), the Agents group and the nodes that go outside and inside it.',
   'Agent presets': 'Ready-made Agents setups, one click each: slime mold, ants, boids, galaxy, smoke and more. Open the group to change how they behave.',
   '4D': 'Shapes and transforms in four dimensions. Lift to 4D turns a 3D point into a 4D one and the shape is sliced back to 3D; projection nodes show the whole 4D shape at once; 4D Wireframe 2D and Plane Slice 4D go straight to the flat picture.',
   Science: 'Chladni plates: the standing-wave patterns of a vibrating plate (Chladni), and one knob that sweeps their modes (Chladni Mode Frequency).',
@@ -235,6 +235,7 @@ export const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: strin
   // The Agents family (docs/agents-plan.md): the inside nodes only go into an open Agents group.
   Agents: [
     { label: 'Start here', types: ['agentsGroup'] },
+    { label: 'Particles', types: ['gpuParticles'] },
     { label: 'Outside the group', types: ['agentEmit', 'agentDeposit', 'trailField', 'drawAgents'] },
     { label: 'Inside: walkers', types: ['agentSense', 'agentNeighbours', 'agentSteer', 'agentMove', 'agentBySpecies'] },
     { label: 'Inside: forces', types: ['agentGravity', 'agentWind', 'agentCurl', 'agentAttract', 'agentVortex', 'agentFlow', 'agentSoundKick'] },
