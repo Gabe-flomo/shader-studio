@@ -794,8 +794,8 @@ interface NodeGraphState {
 
   // Fit-view callback — registered by NodeGraph so App/shortcuts can trigger it
   /** Fit every node on the canvas in view; with `ids`, only those nodes (a builder's result, builders/finish.ts). */
-  _fitViewCallback: ((ids?: ReadonlyArray<string>) => void) | null;
-  registerFitView: (cb: (ids?: ReadonlyArray<string>) => void) => void;
+  _fitViewCallback: ((ids?: ReadonlyArray<string>, opts?: { maxZoom?: number }) => void) | null;
+  registerFitView: (cb: (ids?: ReadonlyArray<string>, opts?: { maxZoom?: number }) => void) => void;
   _viewportCenterGetter: (() => { x: number; y: number }) | null;
   registerViewportCenterGetter: (cb: () => { x: number; y: number }) => void;
   /** The part of the graph on screen, in graph coordinates (registered by NodeGraph): where nodes made from a card go. */

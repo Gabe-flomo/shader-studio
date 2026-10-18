@@ -28,6 +28,7 @@ import { useHiddenHere } from './useAddScope';
 import { recordRecentNode } from '../../nodes/recentNodes';
 
 import { HIDDEN_NODES, CATEGORY_SECTIONS, rowLabel, VIRTUAL_ROWS, rowOfType, MERGED_CATEGORIES, CATEGORY_INFO, ROW_ADD_PARAMS, nodesOfRow, CATEGORY_ORDER, CATEGORY_GROUPS, byLabel } from './libraryRows';
+import { nodeBlurb } from '../../nodes/plainDescriptions';
 
 
 // ── GLSL source extractor ─────────────────────────────────────────────────────
@@ -113,9 +114,9 @@ function GlslSourcePopup({ type, anchorRef, onInsert, onClose }: {
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 10px 10px 14px', borderBottom: `1px solid ${tk.border.subtle}`, flexShrink: 0 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontWeight: 600, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{def?.label ?? type}</div>
-          {def?.description && <div style={{ fontSize: 12, color: tk.text.muted, marginTop: 2, lineHeight: 1.45 }}>{def.description}</div>}
+          {nodeBlurb(def) && <div style={{ fontSize: 12, color: tk.text.muted, marginTop: 2, lineHeight: 1.45 }}>{nodeBlurb(def)}</div>}
         </div>
-        <CategoryChip>{def?.category}</CategoryChip>
+        <CategoryChip>{def ? rowLabel(rowOfType(def.type, def.category)) : undefined}</CategoryChip>
         <IconButton icon="close" label="Close" size="sm" onClick={onClose} />
       </div>
       <pre style={{
@@ -173,7 +174,7 @@ function NodePreviewCard({ type, onAdd, isFavorite, onToggleFavorite, context, o
           style={isFavorite ? { color: tk.status.warning } : undefined}
           onMouseDown={e => { e.preventDefault(); e.stopPropagation(); onToggleFavorite(); }}
         />
-        <CategoryChip>{def?.category}</CategoryChip>
+        <CategoryChip>{def ? rowLabel(rowOfType(def.type, def.category)) : undefined}</CategoryChip>
       </div>
 
       {isGlsl ? (
@@ -185,8 +186,8 @@ function NodePreviewCard({ type, onAdd, isFavorite, onToggleFavorite, context, o
         // The thumbnail is a render surface, so it keeps its own dark look in both themes.
         <div style={{ borderRadius: radius.md, overflow: 'hidden' }}><NodeInlineViz node={node} /></div>
       ) : null}
-      {!isGlsl && def?.description && (
-        <DocText text={Array.isArray(def.description) ? (def.description as string[]).join('\n') : def.description} style={{ fontSize: 12, color: tk.text.muted }} />
+      {!isGlsl && nodeBlurb(def) && (
+        <DocText text={nodeBlurb(def)!} style={{ fontSize: 12, color: tk.text.muted }} />
       )}
       {!isGlsl && userNode && (() => {
         const rows = [
@@ -272,7 +273,7 @@ function NodePill({
   return (
     <button
       ref={btnRef}
-      title={description ?? `Click to preview · Double-click to ${swapMode ? 'replace' : 'add'}${drag && !swapMode ? ' · or drag it onto the graph' : ''}`}
+      title={`${description ? `${description}\n\n` : ''}Click to preview · Double-click to ${swapMode ? 'replace' : 'add'}${drag && !swapMode ? ' · or drag it onto the graph' : ''}`}
       {...nodeDragProps(swapMode ? null : drag, onDragEnd)}
       onClick={onSingleClick}
       onDoubleClick={onDoubleClick}
@@ -467,7 +468,7 @@ export function NodeBrowser({
         {cats.map(cat => (
           <div key={cat}>
             <CapsLabel>{cat}</CapsLabel>
-            {renderPills(list.filter(x => x.category === cat).map(x => ({ type: x.type, label: x.label, description: getNodeDefinition(x.type)?.description })))}
+            {renderPills(list.filter(x => x.category === cat).map(x => ({ type: x.type, label: x.label, description: nodeBlurb(getNodeDefinition(x.type)) })))}
           </div>
         ))}
       </div>
@@ -480,7 +481,7 @@ export function NodeBrowser({
       .map(def => ({ def, score: scoreNodeDef(def, trimmed) }))
       .filter(({ score }) => score > 0)
       .sort((a, b) => b.score - a.score || a.def.label.localeCompare(b.def.label))
-      .map(({ def }) => ({ type: def.type, label: def.label, description: def.description, badge: relevanceOn ? misfitBadge(def.category, libCtx.flow) ?? undefined : undefined }));
+      .map(({ def }) => ({ type: def.type, label: def.label, description: nodeBlurb(def), badge: relevanceOn ? misfitBadge(def.category, libCtx.flow) ?? undefined : undefined }));
     const builderHits = showBuilders ? matchBuilders(trimmed).length : 0;
     innerContent = (
       <>
@@ -621,8 +622,15 @@ export function NodeBrowser({
     );
   }
 
+  // Where nodes are listed, how to add one is always on screen (not only in a tooltip).
+  const showsPills = !isGlsl && (isSearching || !!stageBrowse || path.length > 0);
   return (
     <>
+      {showsPills && (
+        <div data-add-hint="" style={{ color: tk.text.faint, font: `11px/1.4 ${fontFamily.ui}`, padding: '0 2px 6px' }}>
+          Click a node to preview it · double-click{swapTargetNodeId ? ' to replace' : ' or drag it onto the graph to add it'}
+        </div>
+      )}
       <div ref={containerRef}>{innerContent}</div>
       {isGlsl && glslPopupType && (
         <GlslSourcePopup

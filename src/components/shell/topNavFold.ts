@@ -3,7 +3,13 @@
  * ResizeObserver on the bar itself, not the window or a page-level breakpoint), so it adapts to
  * the actual space — including a narrowed studio pane in split view or a wide Hands pill.
  *
+ * The page tabs always show their names at desktop widths (`tabLabels`), so their positions never
+ * move; to make room for them the brand block shrinks to its content (`compactBrand`) and
+ * Import/GLSL/Export go to icons first. Narrower than that the tabs are icons with the current
+ * page's name, and any tab that still doesn't fit is in the strip's "···" (DesktopTopNav).
+ *
  * Folding priority, widest to narrowest:
+ *  0. `compactBrand` — the brand block is only as wide as the mark and "Playfield".
  *  1. `iconOnly`     — Import/GLSL/Export drop their text labels (icon + tooltip only), and the
  *                      current graph's name/version next to Save hides.
  *  2. `foldAux`      — the least-used items (Workspace chip, Keyboard pill, Hands pill, Rebuild,
@@ -20,6 +26,10 @@
  * gets that tight, not to prevent the overlap itself — that's structural.
  */
 export interface TopNavFold {
+  /** Every page tab shows its name (not just the current one); no hover expansion either way. */
+  tabLabels: boolean;
+  /** The brand block takes its content's width instead of lining up with the node list. */
+  compactBrand: boolean;
   /** Import/GLSL/Export show icons only; the saved-graph name next to Save hides. */
   iconOnly: boolean;
   /** Workspace/Keyboard/Hands chips and Rebuild/theme fold into the "···" overflow menu. */
@@ -33,7 +43,9 @@ export interface TopNavFold {
 /** Bar-width thresholds (px) below which each fold stage kicks in. Tuned against the real bar at
  *  900/1024/1180/1440px so nothing clips across that range; see DesktopTopNav.tsx. */
 export const TOP_NAV_FOLD_WIDTH = {
-  iconOnly: 1300,
+  compactBrand: 1700,
+  iconOnly: 1600,
+  tabLabels: 1100,
   foldAux: 1180,
   recordLabel: 1010,
   hideWordmark: 940,
@@ -45,9 +57,11 @@ export const TOP_NAV_FOLD_WIDTH = {
  */
 export function getTopNavFold(width: number): TopNavFold {
   if (width <= 0) {
-    return { iconOnly: false, foldAux: false, recordLabel: true, hideWordmark: false };
+    return { tabLabels: true, compactBrand: false, iconOnly: false, foldAux: false, recordLabel: true, hideWordmark: false };
   }
   return {
+    tabLabels: width >= TOP_NAV_FOLD_WIDTH.tabLabels,
+    compactBrand: width < TOP_NAV_FOLD_WIDTH.compactBrand,
     iconOnly: width < TOP_NAV_FOLD_WIDTH.iconOnly,
     foldAux: width < TOP_NAV_FOLD_WIDTH.foldAux,
     recordLabel: width >= TOP_NAV_FOLD_WIDTH.recordLabel,

@@ -34,7 +34,7 @@ import { showSocketPatch, socketVisible, socketsForParam } from '../../lib/socke
 import { candidateFor, candidateLabel, collectPlayCandidates, upstreamControls } from '../../play/playControls';
 import { addCandidateControl, driveWithNull, graphNullDrives } from '../play/layerOps';
 import { Minimap } from './Minimap';
-import { frameNodes, scopeChange, scopeKey, type View } from './scopeView';
+import { frameNodes, recallViews, rememberViews, scopeChange, scopeKey, type View } from './scopeView';
 import { useCtp, type CtpPalette } from '../../theme/nodePalette';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
@@ -119,6 +119,21 @@ const CRISP_ZOOM = typeof navigator !== 'undefined' && (
 );
 /** How long the zoom holds still before it counts as settled (layout zoom, sharp canvases). Trackpad pinch events come every frame, so this is well clear of a gesture. */
 const CRISP_ZOOM_SETTLE_MS = 160;
+
+/**
+ * The graph-space boxes under the overlays that float on the canvas (marked `data-graph-overlay`: the
+ * minimap, the toolbar), so a node added in view doesn't land under one.
+ */
+function reservedBoxes(canvas: HTMLElement, rect: DOMRect, origin: { x: number; y: number }, z: number): Array<{ x: number; y: number; w: number; h: number }> {
+  const host = canvas.parentElement ?? canvas;
+  const out: Array<{ x: number; y: number; w: number; h: number }> = [];
+  host.querySelectorAll<HTMLElement>('[data-graph-overlay]').forEach(o => {
+    const b = o.getBoundingClientRect();
+    if (b.width <= 0 || b.height <= 0) return;
+    out.push({ x: origin.x + (b.left - rect.left) / z, y: origin.y + (b.top - rect.top) / z, w: b.width / z, h: b.height / z });
+  });
+  return out;
+}
 
 export const NodeGraph = React.memo(function NodeGraph({ transparent = false, redesignToolbar = false, locked = false }: {
   transparent?: boolean;
@@ -1208,7 +1223,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
   // stable trampoline once and keep the live callback in a ref.
   const handleFitViewRef = useRef(handleFitView);
   handleFitViewRef.current = handleFitView;
-  useEffect(() => { registerFitView(ids => handleFitViewRef.current(ids)); }, [registerFitView]);
+  useEffect(() => { registerFitView((ids, opts) => handleFitViewRef.current(ids, opts)); }, [registerFitView]);
   useEffect(() => { registerSetView((p, z) => applyView(p, Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z)), 'now')); }, [registerSetView, applyView]);
 
   // Entering a group, a Shader Texture, a Pass or any other scope frames its cards; leaving goes back to the
@@ -1217,6 +1232,29 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
   // later, so the framing runs again then with their real sizes, unless something else moved the view.
   const savedViews = useRef(new Map<string, View>());
   const scopeRef = useRef<string[]>(activeGroupPath);
+  // Back from another page: the view this graph was left on (scopeView.ts rememberViews). Another graph
+  // opened while the canvas is up forgets the views of the last one's groups.
+  const graphEpoch = useNodeGraphStore(s => s.graphEpoch);
+  const epochRef = useRef(graphEpoch);
+  useLayoutEffect(() => {
+    if (locked) return;
+    const mem = recallViews(epochRef.current);
+    if (!mem) return;
+    savedViews.current = mem;
+    const v = mem.get(scopeKey(scopeRef.current));
+    if (v) applyView(v.pan, Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, v.zoom)), 'now');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    if (epochRef.current === graphEpoch) return;
+    epochRef.current = graphEpoch;
+    savedViews.current = new Map();
+  }, [graphEpoch]);
+  useEffect(() => () => {
+    if (lockedRef.current) return;
+    savedViews.current.set(scopeKey(scopeRef.current), { pan: panRef.current, zoom: zoomRef.current });
+    rememberViews(epochRef.current, savedViews.current);
+  }, []);
   // A layout effect, so a focus request (revealNode) is still pending when this looks.
   useLayoutEffect(() => {
     const prev = scopeRef.current;
@@ -1259,7 +1297,10 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
       const z = zoomRef.current || 1;
       const p = panRef.current ?? { x: 0, y: 0 };
       const r = el ? el.getBoundingClientRect() : { width: 960, height: 600 };
-      return { x: -p.x / z, y: -p.y / z, w: r.width / z, h: r.height / z };
+      const x = -p.x / z, y = -p.y / z;
+      // What floats over the canvas (the minimap, the toolbar): new cards stay out from under it (store/placement.ts).
+      const reserved = el ? reservedBoxes(el, r as DOMRect, { x, y }, z) : [];
+      return { x, y, w: r.width / z, h: r.height / z, reserved };
     });
     return () => reg(null);
   }, []);
@@ -1776,7 +1817,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
                               toast.success(`Added “${label}”`, { message: 'In Play, drag the dot on the picture to change the value.', action: openPlay });
                               setContextMenu(null);
                             }}>
-                            Drive with a null in Play
+                            Drag it with a dot on the picture (Play)
                           </button>
                         )}
                         {canFollowHand(playParam.candidates, playParam.c) && (

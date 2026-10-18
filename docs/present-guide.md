@@ -20,13 +20,14 @@ or is deleted.
 - Otherwise click the presentation's title (top left of the page) for the
   file menu: **New presentation…**, **Import a .present.json file…**, the
   samples, and the actions for the one that's open.
-- The samples come in two groups. **Learn the app** teaches Playfield
-  itself: *Getting started in the Studio*, *From shader to instrument: your
-  first Play*, *Field sockets: one shape, many copies*, *Bring your own
-  GLSL* (the Convert page) and *Making a lesson with Present*. **Topics**
-  teach shaders: *Shaders from zero* (The Book of Shaders through the Learn
-  folder), ray marching, matrices, playing a shader and sketching over one.
-  Opening a sample builds it fresh from the bundled examples.
+- The samples here are the **Topics**, which teach shaders: *Shaders from zero* (The Book of
+  Shaders through the Learn folder), ray marching, matrices, playing a shader and sketching over
+  one. Opening a sample builds it fresh from the bundled examples.
+- The lessons on Playfield itself (*Getting started in the Studio*, *From shader to instrument:
+  your first Play*, *Field sockets*, *Bring your own GLSL*, *Making a lesson with Present*, *How
+  Agents work*) moved to **Learn**: Help (the book in the top bar) → **Learn the app…**, the
+  desktop's first-run **Start** sheet, the phone's More menu, or **Learn the app…** in this
+  page's menu. A lesson opens here in Scroll to read, and can be edited like any presentation.
 - Add blocks to a step (Text, Render, Interactive, Code; see Code blocks below). The first time a
   block needs a picture it asks you to choose a Play: a saved graph or an
   example with a Play setup. That takes a snapshot into the presentation.

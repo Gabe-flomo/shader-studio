@@ -30,6 +30,7 @@ import { useHiddenHere } from './useAddScope';
 /** `create` offers every type except the ones scoped to another group (nodes/addScope.ts). */
 const NO_TYPES: ReadonlySet<string> = new Set();
 import { intoView, spawnPoint } from './spawnPoint';
+import { fitGraphSoon } from '../../builders/finish';
 import { parseDo, type DoPlan } from '../../suggestions/doBar';
 import { inTargetStage, STAGE_SEARCH_POINTS } from '../../structure/boost';
 import { currentStageTarget } from '../../structure/hintsStore';
@@ -69,6 +70,12 @@ import { graphToScript } from '../../lang/fromGraph';
 import { useWordHelp, inputOffsetAt } from '../builders/WordHelp';
 import { openShowHow } from '../../suggestions/showHowStore';
 import type { Dialect } from '../../lang/registry';
+
+/** How many cards the canvas's level has (a Do… run that adds some frames the graph). */
+const nodesAtLevel = (): number => {
+  const st = useNodeGraphStore.getState();
+  return (getActiveNodes(st.nodes, st.activeGroupPath) ?? st.nodes).length;
+};
 
 const WIDTH = 560;
 
@@ -369,6 +376,8 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
     }
     ranLine();
     closeDoBar();
+    // A scene, splat or agents setup: frame the graph with it (Grid Rules went through runDoPlan, in place).
+    if (r.dialect !== 'grid') fitGraphSoon(r.dialect === 'splat' ? 400 : undefined);
   };
   // A random line goes into the bar; ‹ › walk back and forward through the ones made here, › past the end makes another.
   const showRoll = (r: Roll) => { setText(r.line); setCaret(r.line.length); };
@@ -391,7 +400,10 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
     }
     if (plan.intent === 'teach') { teach(); return; }
     if (cmd?.ok && !idiomWins) {
+      const had = nodesAtLevel();
       const ran = useNodeGraphStore.getState().runCommand(runText.trim(), picks);
+      // A run that added cards frames the graph, so what it made is in view with the rest.
+      if (ran.ok && nodesAtLevel() > had) fitGraphSoon();
       if (ran.ok) { ranLine(); toast.info(`Do: ${text.trim()}`, { message: `${ran.steps.map(st => st.label).join(' → ')}. Undo takes it all back.` }); }
       else toast.info('Didn’t run', { message: ran.clauses.find(c => c.status !== 'ok')?.message ?? 'The graph changed: try again.' });
       closeDoBar();
@@ -403,7 +415,7 @@ function Bar({ initial, check }: { initial: string; check?: Wire4[] }) {
   };
   const pick = (f: Fallback) => {
     const st = useNodeGraphStore.getState();
-    if (f.kind === 'node') st.addNode(f.type, spawnPoint());
+    if (f.kind === 'node') st.addNode(f.type, spawnPoint(f.type));
     else st.addBuiltNode(idiomBlock(f.spec, 'idiom', spawnPoint().x, spawnPoint().y), f.spec.idiom.name);
     closeDoBar();
   };

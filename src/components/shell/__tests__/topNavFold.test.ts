@@ -5,12 +5,12 @@ import { getTopNavFold, TOP_NAV_FOLD_WIDTH } from '../topNavFold';
 
 describe('getTopNavFold', () => {
   it('shows everything at full width', () => {
-    const fold = getTopNavFold(1440);
-    expect(fold).toEqual({ iconOnly: false, foldAux: false, recordLabel: true, hideWordmark: false });
+    const fold = getTopNavFold(1800);
+    expect(fold).toEqual({ tabLabels: true, compactBrand: false, iconOnly: false, foldAux: false, recordLabel: true, hideWordmark: false });
   });
 
   it('assumes the roomiest layout before the bar has been measured', () => {
-    expect(getTopNavFold(0)).toEqual({ iconOnly: false, foldAux: false, recordLabel: true, hideWordmark: false });
+    expect(getTopNavFold(0)).toEqual({ tabLabels: true, compactBrand: false, iconOnly: false, foldAux: false, recordLabel: true, hideWordmark: false });
     expect(getTopNavFold(-1)).toEqual(getTopNavFold(0));
   });
 
@@ -44,8 +44,9 @@ describe('getTopNavFold', () => {
   });
 
   it('fits the bar\'s known trouble spot: fully folded well before 900px, fully open by 1440px', () => {
-    expect(getTopNavFold(900)).toEqual({ iconOnly: true, foldAux: true, recordLabel: false, hideWordmark: true });
-    expect(getTopNavFold(1440).iconOnly).toBe(false);
+    expect(getTopNavFold(900)).toEqual({ tabLabels: false, compactBrand: true, iconOnly: true, foldAux: true, recordLabel: false, hideWordmark: true });
+    // At 1440 every page tab keeps its name: the brand block and Import/GLSL/Export make the room.
+    expect(getTopNavFold(1440)).toMatchObject({ tabLabels: true, compactBrand: true, iconOnly: true, foldAux: false, recordLabel: true });
   });
 
   // The status pills (Keyboard, Hands) render in the right-hand cluster only while `!foldAux`

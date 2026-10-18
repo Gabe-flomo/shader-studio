@@ -134,6 +134,30 @@ describe('settleAddedInView', () => {
     expect(out.find(nd => nd.id === 'new1')!.position).not.toEqual({ x: 1200, y: 700 });
   });
 
+  it('ifOutOfView: a node the planner put on top of a card on screen is nudged clear, staying near', () => {
+    // "repeat 6 times around": the new card landed on the UV card.
+    const after = [...before, n('uv', 'new1', 110, 120)];
+    const out = settleAddedInView(before, after, view, { heightOf });
+    const moved = out.find(nd => nd.id === 'new1')!;
+    noOverlap([moved], before);
+    expect(Math.hypot(moved.position.x - 110, moved.position.y - 120)).toBeLessThan(500);
+    expect(out.find(nd => nd.id === 'a')!.position).toEqual({ x: 100, y: 100 });
+  });
+
+  it('keeps clear of the minimap and the toolbar (the view\'s reserved boxes)', () => {
+    const minimap = { x: 1300, y: 800, w: 280, h: 180 };
+    const v: ViewRect = { ...view, reserved: [minimap] };
+    // Planner put it under the minimap.
+    const after = [...before, n('uv', 'new1', 1250, 760)];
+    const out = settleAddedInView(before, after, v, { heightOf });
+    const b = box(out.find(nd => nd.id === 'new1')!);
+    expect(boxesHit(b, minimap, 0)).toBe(false);
+    // A setup centred in a view whose middle is under an overlay lands beside it.
+    const mid = { x: 600, y: 400, w: 400, h: 200 };
+    const placed = placeSetupInView([], setup('s'), { ...view, reserved: [mid] }, { heightOf });
+    for (const nd of placed) expect(boxesHit(box(nd), mid, 0), nd.id).toBe(false);
+  });
+
   it('leaves a rewrite in place (a node was removed) and does nothing without a view', () => {
     const rewrite = [n('uv', 'new1', 9000, 9000)];
     expect(settleAddedInView(before, rewrite, view, { heightOf })).toBe(rewrite);
@@ -228,5 +252,23 @@ describe('every multi-node add goes through the placement helpers', () => {
     for (const file of ['src/store/useNodeGraphStore.ts', 'src/components/NodeGraph/NodeBrowser.tsx']) {
       expect(readFileSync(file, 'utf8')).not.toMatch(/position: \{ x: \d+ \+ Math\.random\(\)|x: \d+ \+ Math\.random\(\) \* \d+, y:/);
     }
+  });
+});
+
+describe('spawnPoint (a node added from the list, the search, the Do… bar)', () => {
+  it('lands in view, off the cards there and out from under the minimap, sized for the card it is', async () => {
+    const { spawnPoint } = await import('../../components/NodeGraph/spawnPoint');
+    const view: ViewRect = { x: 0, y: 0, w: 1000, h: 700, reserved: [{ x: 320, y: 200, w: 360, h: 300 }] };
+    useNodeGraphStore.setState({ activeGroupId: null, activeGroupPath: [] });
+    useNodeGraphStore.getState().replaceGraph([n('uv', 'u', 300, 600)]);
+    useNodeGraphStore.setState({ _viewportRectGetter: () => view, _viewportCenterGetter: () => ({ x: 500, y: 350 }) });
+    for (const type of ['uv', 'exprNode', 'circleSDF']) {
+      const p = spawnPoint(type);
+      const b = { x: p.x, y: p.y, w: 360, h: 180 };
+      expect(boxesHit(b, view.reserved![0], 0), type).toBe(false);
+      expect(boxesHit(b, { x: 300, y: 600, w: 360, h: 120 }, 0), type).toBe(false);
+      expect(Math.hypot(p.x + 180 - 500, p.y + 90 - 350), type).toBeLessThan(900);
+    }
+    useNodeGraphStore.setState({ _viewportRectGetter: null, _viewportCenterGetter: null });
   });
 });

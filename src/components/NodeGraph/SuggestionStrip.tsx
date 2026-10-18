@@ -40,8 +40,30 @@ export function SuggestionStrip({ nodes, canvasRef, pan, zoom, readOnly }: {
   const on = useSuggestionsShown();
   const selectedId = useNodeGraphStore(s => (s.selectedNodeIds.length <= 1 ? s.selectedNodeId : null));
   const offerOpen = useRecipeOffer(s => !!s.offer);
+  // Esc closes it for this selection; selecting a card (this one again included) brings it back.
+  const [dismissed, setDismissed] = useState<string | null>(null);
+  useEffect(() => { setDismissed(null); }, [selectedId]);
   const node = selectedId ? nodes.find(n => n.id === selectedId) : undefined;
-  if (!on || readOnly || !node || offerOpen) return null;
+  const shown = on && !readOnly && !!node && !offerOpen && dismissed !== node.id;
+  useEffect(() => {
+    if (!shown || !node) return;
+    const id = node.id;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      // A dialog, menu or popover takes Esc first.
+      if (document.querySelector('[role="dialog"], [role="menu"], [data-popover]')) return;
+      if (!document.querySelector(`[data-suggestion-strip="${CSS.escape(id)}"]`)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setDismissed(id);
+    };
+    // Capture: ahead of the app's Esc (leave group, Overlay off), so one Esc does one thing.
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [shown, node]);
+  if (!shown || !node) return null;
   return <Strip key={node.id} node={node} nodes={nodes} canvasRef={canvasRef} pan={pan} zoom={zoom} />;
 }
 

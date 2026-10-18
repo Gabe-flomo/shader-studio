@@ -9,7 +9,7 @@
  * **Open in Mappings** to tune its curve and smoothing, or **Done**.
  *
  * Anchored to whatever button opened it: a layer slider's + (layers/fields.tsx)
- * or the Controls page's Add control button, after its own target picker
+ * or, from the Controls page's Add control, the "Map a source…" on the toast after the control is added
  * (PlayPage.tsx). Opens as a Popover on desktop, a bottom sheet on phones
  * (the same breakpoint GroupedPicker uses). Learn waits for the next input
  * of any kind (lib/playEngine.ts startLearn — the same "Learn" a mapping

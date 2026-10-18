@@ -20,7 +20,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { useNodeGraphStore } from '../../../store/useNodeGraphStore';
 import { NodeGraph } from '../NodeGraph';
 import { getView } from '../socketRegistry';
-import { frameNodes, scopeChange } from '../scopeView';
+import { forgetViews, frameNodes, scopeChange } from '../scopeView';
 import { makeShaderTexture } from '../../../nodes/shaderTextureStarters';
 import { n } from '../../../store/graphBuilder';
 import type { GraphNode, SubgraphData } from '../../../types/nodeGraph';
@@ -124,6 +124,40 @@ describe('NodeGraph: entering and leaving', () => {
     act(() => { st().exitToDepth(0); });
     expect(getView()).toEqual({ pan: { x: 10, y: 20 }, zoom: 0.7 });
     act(() => { st().enterGroup(g.id); });
+    act(() => { st().exitToRoot(); });
+    expect(getView()).toEqual({ pan: { x: 10, y: 20 }, zoom: 0.7 });
+  });
+
+  it('a page switch (unmount, mount again) keeps the zoom and pan; another graph opened meanwhile starts fresh', () => {
+    forgetViews();
+    act(() => { root!.render(<NodeGraph />); });
+    act(() => { st()._setViewCallback?.({ x: -120, y: 45 }, 0.33); });
+    act(() => root!.unmount());
+    // Back on Studio: the view it was left on.
+    root = createRoot(host!);
+    act(() => { root!.render(<NodeGraph />); });
+    expect(getView()).toEqual({ pan: { x: -120, y: 45 }, zoom: 0.33 });
+    // Another graph loaded while the canvas is away: not the old view.
+    act(() => root!.unmount());
+    st().replaceGraph([n('uv', 'u2', 0, 0)]);
+    root = createRoot(host!);
+    act(() => { root!.render(<NodeGraph />); });
+    expect(getView()).not.toEqual({ pan: { x: -120, y: 45 }, zoom: 0.33 });
+  });
+
+  it('inside a group, coming back keeps the inside view and still restores the outer one on leaving', () => {
+    forgetViews();
+    st().replaceGraph([n('uv', 'u', 9000, 9000), n('output', 'out', 9400, 9000, {}, { color: ['u', 'uv'] })]);
+    act(() => { root!.render(<NodeGraph />); });
+    act(() => { st().groupNodes(['u']); });
+    const g = st().nodes.find(q => q.type === 'group')!;
+    act(() => { st()._setViewCallback?.({ x: 10, y: 20 }, 0.7); });
+    act(() => { st().enterGroup(g.id); });
+    act(() => { st()._setViewCallback?.({ x: 5, y: 6 }, 1.25); });
+    act(() => root!.unmount());
+    root = createRoot(host!);
+    act(() => { root!.render(<NodeGraph />); });
+    expect(getView()).toEqual({ pan: { x: 5, y: 6 }, zoom: 1.25 });
     act(() => { st().exitToRoot(); });
     expect(getView()).toEqual({ pan: { x: 10, y: 20 }, zoom: 0.7 });
   });

@@ -201,14 +201,16 @@ function plainGraph(): GraphNode[] {
 }
 
 describe('the start page: clear the current graph first?', () => {
-  it('clear is the default on a graph no builder made (the Scene builder rule); Keep my graph keeps it; nothing to clear, no question', () => {
+  it('keep is the default on a graph no builder made (the Scene builder rule; only the untouched starter clears); Keep my graph keeps it; nothing to clear, no question', () => {
     openStart();
     expect($('[data-start-clear]')).toBeNull();
     for (const m of mounted.splice(0)) { act(() => m.root.unmount()); m.host.remove(); }
     useNodeGraphStore.setState({ nodes: plainGraph() });
     openStart();
-    expect($('[data-start-clear]')?.getAttribute('data-start-clear')).toBe('clear');
+    expect($('[data-start-clear]')?.getAttribute('data-start-clear')).toBe('keep');
     expect($('[data-start-clear]')?.textContent).toContain('Your graph has 1 node');
+    click($('[aria-label="Clear the current graph first?"] button:first-child'));
+    expect($('[data-start-clear]')?.getAttribute('data-start-clear')).toBe('clear');
     click($('[aria-label="Clear the current graph first?"] button:last-child'));
     expect($('[data-start-clear]')?.getAttribute('data-start-clear')).toBe('keep');
     click($('[data-start-kind="trail"]'));

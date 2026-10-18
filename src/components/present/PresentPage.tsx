@@ -50,6 +50,7 @@ import type { BlockContext } from './Blocks';
 import { useCamera } from '../../present/runtimeHost';
 import { Backdrop, MissingImageNote } from './Backdrop';
 import { lookVars, ThemeScope, useColumn, usePageBackground, usePageVars, usePresentFonts, useStepLook } from './presentLook';
+import { useLearnUi } from '../learn/learnStore';
 
 function usePresentationList(): PresentationEntry[] {
   const [list, setList] = useState(listPresentations);
@@ -60,6 +61,10 @@ function usePresentationList(): PresentationEntry[] {
   }, []);
   return list;
 }
+
+/** Present keeps the topic samples (authoring); the lessons on the app itself moved to Learn (components/learn). */
+const PRESENT_SAMPLE_GROUPS = SAMPLE_GROUPS.filter(g => g.id !== 'app');
+const PRESENT_SAMPLES = SAMPLE_PRESENTATIONS.filter(s => s.group !== 'app');
 
 async function openSample(sample: SamplePresentation): Promise<void> {
   try {
@@ -153,8 +158,10 @@ function Header({ compact, list, onExport, onBrowse }: { compact: boolean; list:
     { heading: 'Backgrounds' },
     { label: 'Capture a background…', icon: 'camera', hint: 'A still from any graph at the moment you choose, 1920 × 1080 or up to 4K, kept in the Library', onSelect: () => { void openCapture({ aspect: 16 / 9 }); } },
     { label: 'Your backgrounds…', icon: 'overlay', hint: 'Image backgrounds and palettes in the Library', onSelect: () => { void openBackgrounds(); } },
-    // The samples, under a heading per group.
-    ...SAMPLE_GROUPS.flatMap(g => [
+    // The samples, under a heading per group. The lessons on the app itself are in Learn (Help → Learn the app).
+    'separator',
+    { label: 'Learn the app…', icon: 'book', hint: 'Lessons on using Playfield: they open here to read', onSelect: () => useLearnUi.getState().openLearn() },
+    ...PRESENT_SAMPLE_GROUPS.flatMap(g => [
       'separator' as const,
       { heading: `Samples: ${g.label.toLowerCase()}` },
       ...SAMPLE_PRESENTATIONS.filter(sample => sample.group === g.id).map(sample => ({ label: sample.title, icon: 'spark' as const, hint: sample.hint, onSelect: () => void openSample(sample) })),
@@ -239,7 +246,7 @@ function SaveStatus({ compact }: { compact: boolean }) {
 function EmptyState({ compact }: { compact: boolean }) {
   const tk = useTokens();
   const [busy, setBusy] = useState<string | null>(null);
-  const stills = useSampleStills(SAMPLE_PRESENTATIONS);
+  const stills = useSampleStills(PRESENT_SAMPLES);
   const open = async (sample: SamplePresentation) => { setBusy(sample.title); await openSample(sample); setBusy(null); };
   return (
     <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
@@ -256,7 +263,12 @@ function EmptyState({ compact }: { compact: boolean }) {
             <Button variant="ghost" icon="camera" onClick={() => { void openCapture({ aspect: 16 / 9 }); }} title="A still from any graph, 1920 × 1080 or up to 4K, kept in the Library for step backgrounds">Capture a background</Button>
           </div>
         </section>
-        {SAMPLE_GROUPS.map(g => (
+        <section data-present-learn="" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', color: tk.text.muted, font: `500 13px ${fontFamily.ui}` }}>
+          <Icon name="book" size={15} style={{ color: tk.accent.base }} />
+          Learning Playfield itself? The lessons are in Learn.
+          <Button size="sm" variant="ghost" icon="book" onClick={() => useLearnUi.getState().openLearn()}>Learn the app…</Button>
+        </section>
+        {PRESENT_SAMPLE_GROUPS.map(g => (
           <section key={g.id} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px 10px', flexWrap: 'wrap' }}>
               <h3 style={{ margin: 0, font: `680 ${compact ? 15 : 16}px ${fontFamily.ui}`, color: tk.text.primary }}>{g.label}</h3>

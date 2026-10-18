@@ -1,4 +1,7 @@
 import { offerGraphExport } from './components/playfile/exportMenus';
+import { saveAsShortcut, saveShortcut, selectAllNodesAtLevel } from './components/shell/graphShortcuts';
+import { LearnSurfaces } from './components/learn/LearnSurfaces';
+import { defaultPreviewWidth, rememberedPreviewWidth, rememberPreviewWidth, useGraphMaximize } from './components/shell/graphLayout';
 import { useHistBand } from './lib/histogramBand';
 import { openDoBar } from './suggestions/doBarStore';
 import { doBarOrRecipe } from './builders/windows';
@@ -108,10 +111,10 @@ const PhoneOverlays          = lazyWithSuspense<Record<string, never>>(() => imp
 
 // ── Responsive sizing helpers ─────────────────────────────────────────────────
 function getDefaultPreviewWidth(bp: ReturnType<typeof useBreakpoint>) {
-  if (bp === 'desktop-lg') return Math.max(Math.floor(window.innerWidth * 0.38), 420);
-  if (bp === 'desktop-sm') return Math.max(Math.floor(window.innerWidth * 0.35), 300);
-  if (bp === 'tablet')     return Math.max(Math.floor(window.innerWidth * 0.45), 280);
-  return window.innerWidth; // mobile: full width (canvas is background)
+  if (bp === 'mobile') return window.innerWidth; // mobile: full width (canvas is background)
+  // Desktop: a width the divider was dragged to, else a default that leaves the graph room (shell/graphLayout.ts).
+  const kept = bp === 'tablet' ? null : rememberedPreviewWidth(window.innerWidth, MIN_PREVIEW, MIN_GRAPH + getPaletteWidth(bp));
+  return kept ?? defaultPreviewWidth(window.innerWidth, bp);
 }
 
 function getPaletteWidth(bp: ReturnType<typeof useBreakpoint>) {
@@ -768,6 +771,7 @@ function App() {
   const pageLayouts = usePageCanvas(s => s.layout);
   const hosted = hostsCanvas(page, pageLayouts);
 
+  const graphMaxOn = useGraphMaximize(s => s.on);
   const [showHistogram, setShowHistogram] = useState(false);
   const [histData, setHistData]           = useState<HistogramData | null>(null);
   const handleHistogram = useCallback((data: HistogramData) => { setHistData(data); }, []);
@@ -788,9 +792,12 @@ function App() {
   const shortcutHandlers = useMemo(() => ({
     undo:           unlessScratch(() => undo()),
     redo:           unlessScratch(() => useNodeGraphStore.getState().redo()),
+    save:           unlessScratch(() => { void saveShortcut(); }),
+    saveAs:         unlessScratch(() => saveAsShortcut()),
     export:         unlessScratch(() => offerGraphExport(null)),
     import:         unlessScratch(() => { void importAnyFile(setPage); }),
     fitView:        () => _fitViewCallback?.(),
+    maximizeGraph:  () => { if (page !== 'studio') return false; useGraphMaximize.getState().toggle(); },
     fullscreen:     () => { if (page === 'present') void toggleFullscreenTarget('present'); else if (page === 'studio' || page === 'play' || hosted) void toggleFullscreenTarget('canvas'); },
     toggleCode:     () => setShowCode(v => !v),
     toggleRecord:   () => setShowExport(v => !v),
@@ -817,8 +824,9 @@ function App() {
     }),
     exitGroup: () => {
       const st = useNodeGraphStore.getState();
-      // Esc belongs to whatever dialog, menu or popover is open first
-      if (st.activeGroupPath.length === 0 || document.querySelector('[role="dialog"], [role="menu"], [data-popover]')) return;
+      // Esc belongs to whatever dialog, menu or popover is open first. Not used here: left to the
+      // rest of the app (Overlay off, the suggestions closing…), so it isn't swallowed.
+      if (st.activeGroupPath.length === 0 || document.querySelector('[role="dialog"], [role="menu"], [data-popover]')) return false;
       st.exitGroup();
     },
     addUV:          unlessScratch(() => addRandomNode('uv')),
@@ -827,7 +835,12 @@ function App() {
     addOutput:      unlessScratch(() => addRandomNode('output')),
     addMix:         unlessScratch(() => addRandomNode('mix')),
     addColor:       unlessScratch(() => addRandomNode('color')),
-    selectAll:      () => setNodeHighlightFilter(null),
+    // Studio only, so ⌘A selects text as usual elsewhere (Present, Files…).
+    selectAll:      () => {
+      if (page !== 'studio') return false;
+      setNodeHighlightFilter(null);
+      selectAllNodesAtLevel();
+    },
     filterFloat:    () => setNodeHighlightFilter('float'),
     filterVec2:     () => setNodeHighlightFilter('vec2'),
     filterVec3:     () => setNodeHighlightFilter('vec3'),
@@ -898,12 +911,15 @@ function App() {
   const handleDividerMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     setIsDragging(true);
+    let last: number | null = null;
     const onMove = (ev: MouseEvent) => {
       const newWidth = window.innerWidth - ev.clientX;
-      setPreviewWidth(Math.max(MIN_PREVIEW, Math.min(newWidth, window.innerWidth - MIN_GRAPH)));
+      last = Math.max(MIN_PREVIEW, Math.min(newWidth, window.innerWidth - MIN_GRAPH));
+      setPreviewWidth(last);
     };
     const onUp = () => {
       setIsDragging(false);
+      if (last != null) rememberPreviewWidth(last);
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
     };
@@ -913,13 +929,16 @@ function App() {
 
   const handleDividerTouchStart = useCallback((_e: React.TouchEvent) => {
     setIsDragging(true);
+    let last: number | null = null;
     const onMove = (ev: TouchEvent) => {
       const touch = ev.touches[0];
       const newWidth = window.innerWidth - touch.clientX;
-      setPreviewWidth(Math.max(MIN_PREVIEW, Math.min(newWidth, window.innerWidth - MIN_GRAPH)));
+      last = Math.max(MIN_PREVIEW, Math.min(newWidth, window.innerWidth - MIN_GRAPH));
+      setPreviewWidth(last);
     };
     const onEnd = () => {
       setIsDragging(false);
+      if (last != null) rememberPreviewWidth(last);
       window.removeEventListener('touchmove', onMove);
       window.removeEventListener('touchend', onEnd);
     };
@@ -1289,6 +1308,7 @@ function App() {
           <ExportModal canvas={usePreviewHost.getState().canvas} offlineRender={usePreviewHost.getState().offline} onClose={() => setShowExport(false)} />
         )}
         {showShortcuts && <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />}
+        <LearnSurfaces phone={mobile} page={page} />
         <NodeSearchPalette open={searchPaletteOpen} onClose={() => setSearchPaletteOpen(false)} onNodePlaced={id => useNodeGraphStore.getState().requestSmartConnect(id)} />
       </div>
     );
@@ -1496,6 +1516,7 @@ function App() {
         </div>
         {showExport && <ExportModal canvas={usePreviewHost.getState().canvas} offlineRender={usePreviewHost.getState().offline} onClose={() => setShowExport(false)} />}
         {showShortcuts && <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />}
+        <LearnSurfaces phone={mobile} page={page} />
         <NodeSearchPalette open={searchPaletteOpen} onClose={() => setSearchPaletteOpen(false)} onNodePlaced={id => useNodeGraphStore.getState().requestSmartConnect(id)} />
         {showTabletHistory && (
           <Sheet title="History" onClose={() => setShowTabletHistory(false)}>
@@ -1510,6 +1531,7 @@ function App() {
   // DESKTOP LAYOUT (1024px+) — original 3-panel layout, responsively sized
   // ══════════════════════════════════════════════════════════════════════════
   const paletteW = getPaletteWidth(bp);
+  const graphMaximized = graphMaxOn;
   const paletteBaseW = paletteUserW ?? paletteW;
   const effectivePaletteW = paletteBaseW === 0 ? 0 : paletteCollapsed ? 28 : paletteBaseW;
 
@@ -1526,7 +1548,7 @@ function App() {
         </div>
       )}
 
-      <div style={{ display: (page === 'studio' || page === 'glsl' || page === 'play' || page === 'convert') ? 'flex' : 'none', flex: 1, overflow: 'hidden', userSelect: isDragging ? 'none' : undefined as undefined }}>
+      <div style={{ display: (page === 'studio' || page === 'glsl' || page === 'play' || page === 'convert') ? 'flex' : 'none', flex: 1, overflow: 'hidden', position: 'relative', userSelect: isDragging ? 'none' : undefined as undefined }}>
 
         {/* Left: Node Palette — hidden on GLSL page */}
         {page === 'studio' && paletteBaseW > 0 && (
@@ -1560,7 +1582,10 @@ function App() {
         {/* Center content. On Play the panel is a fixed column and the picture takes the rest. */}
         <div data-play-sidebar={page === 'play' ? '' : undefined} style={page === 'play'
           ? (playSidebarHidden ? { width: 0, flexShrink: 0, position: 'relative', overflow: 'hidden' } : { width: playWidth, flexShrink: 0, position: 'relative', borderRight: `1px solid ${tk.border.default}` })
-          : { flex: 1, position: 'relative', minWidth: 0 }}>
+          : graphMaximized && page === 'studio'
+            // Maximized: over the preview's space too (the preview keeps running underneath).
+            ? { position: 'absolute', top: 0, bottom: 0, left: paletteBaseW > 0 ? effectivePaletteW : 0, right: 0, zIndex: 6, background: tk.bg.app }
+            : { flex: 1, position: 'relative', minWidth: 0 }}>
           {page === 'play' && <PlayPage />}
           {page === 'studio' && (
             <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column' }}>
@@ -1667,6 +1692,7 @@ function App() {
         <ExportModal canvas={usePreviewHost.getState().canvas} offlineRender={usePreviewHost.getState().offline} onClose={() => setShowExport(false)} />
       )}
       {showShortcuts && <KeyboardShortcutsModal onClose={() => setShowShortcuts(false)} />}
+        <LearnSurfaces phone={mobile} page={page} />
       {historyPopped && <HistoryWindow />}
       {codeExplorerOpen && <CodeExplorerDialog />}
       <NodeSearchPalette open={searchPaletteOpen} onClose={() => setSearchPaletteOpen(false)} onNodePlaced={id => useNodeGraphStore.getState().requestSmartConnect(id)} />

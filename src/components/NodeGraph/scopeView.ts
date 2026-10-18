@@ -50,3 +50,23 @@ export function scopeChange(prev: ReadonlyArray<string>, next: ReadonlyArray<str
   const back = leaving ? saved.get(b) : undefined;
   return back ? { restore: back } : { frame: true };
 }
+
+/**
+ * The views the canvas had when it went away (switching to Play, Files… unmounts it), so coming back
+ * shows the graph as it was left: its zoom and pan, and inside a group the views of the levels
+ * outside it. Kept for the graph that is open (`epoch`, the store's graphEpoch, which every load
+ * bumps): another graph opened meanwhile starts fresh.
+ */
+let remembered: { epoch: number; views: Map<string, View> } | null = null;
+
+export function rememberViews(epoch: number, views: ReadonlyMap<string, View>): void {
+  remembered = { epoch, views: new Map(views) };
+}
+
+/** The views remembered for the graph `epoch` names, or null when it isn't the one they were left on. */
+export function recallViews(epoch: number): Map<string, View> | null {
+  return remembered && remembered.epoch === epoch ? new Map(remembered.views) : null;
+}
+
+/** Tests. */
+export function forgetViews(): void { remembered = null; }

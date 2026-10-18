@@ -435,7 +435,7 @@ function GuidedInner({ a, steps, dispatch, redoCount, onExit, onMaterialized, tk
             ) : <span style={{ color: tk.text.muted }}>{free.length ? '' : 'Every line is converted.'}</span>}
           </div>
           {free.length > 0 && <Button size="sm" variant="ghost" icon="spark" onClick={convertRest} title="Turn everything not converted yet into nodes, the automatic way">Convert the rest</Button>}
-          <Button size="sm" variant="primary" icon="nodes" disabled={!good?.compiled} onClick={materialize} title={free.length ? 'Keep this graph (what isn’t converted stays one Custom Function) and open the Studio' : 'Keep this graph and open the Studio'}>Materialize</Button>
+          <Button size="sm" variant="primary" icon="nodes" disabled={!good?.compiled} onClick={materialize} title={free.length ? 'Keep this graph (what isn’t converted stays one Custom Function) and open the Studio' : 'Keep this graph and open the Studio'}>Open in Studio</Button>
         </div>
       </div>
 

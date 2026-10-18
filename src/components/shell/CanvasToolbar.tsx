@@ -19,6 +19,9 @@ import { Popover } from '../ui/Popover';
 import { Tooltip } from '../ui/Tooltip';
 import { computeGraphStats, countNodes, mainBodyLines } from './graphStats';
 import { PerfBadge, PerfPanel } from './PerfPanel';
+import { useGraphMaximize } from './graphLayout';
+import { isDesktop, useBreakpoint } from '../../hooks/useBreakpoint';
+import { loadShortcutMap } from '../../hooks/useShortcuts';
 
 // Loaded on first use: the finder pulls in the compiler and the offscreen renderer.
 const SuggestControlsPanel = lazySafe(() => import('../play/SuggestControlsPanel'));
@@ -76,6 +79,7 @@ export function CanvasToolbar({
 
   return (
     <div
+      data-graph-overlay=""
       onMouseDown={e => e.stopPropagation()}
       style={{
         position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 15,
@@ -135,6 +139,7 @@ export function CanvasToolbar({
           {!readOnly && onArrangeByStage && <ArrangeMenu onFlow={onAutoLayout} onStage={onArrangeByStage} />}
         </>
       )}
+      {!readOnly && <MaximizeGraphButton />}
       <Sep />
       <IconButton icon="minimap" label={showMinimap ? 'Hide minimap' : 'Show minimap'} size="sm" active={showMinimap} onClick={onToggleMinimap} />
       {!readOnly && <SuggestionsToggle />}
@@ -159,6 +164,18 @@ export function CanvasToolbar({
         </span>
       )}
     </div>
+  );
+}
+
+/** Desktop Studio: the graph takes the preview's space too (shell/graphLayout.ts), or gives it back. */
+function MaximizeGraphButton() {
+  const on = useGraphMaximize(s => s.on);
+  const toggle = useGraphMaximize(s => s.toggle);
+  const bp = useBreakpoint();
+  if (!isDesktop(bp)) return null;
+  return (
+    <IconButton icon={on ? 'splitPanel' : 'layoutCanvas'} label={on ? 'Bring the preview back' : 'Maximize the graph: use the preview’s space too'}
+      shortcut={loadShortcutMap().maximizeGraph} size="sm" active={on} onClick={toggle} />
   );
 }
 

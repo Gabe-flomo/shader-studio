@@ -34,7 +34,7 @@ export function ImportGlslModal({ onClose }: Props) {
   const handleCreate = () => {
     if (parsed.length === 0) return;
     const params = buildCustomFnParams(parsed[0], code);
-    addNode('customFn', spawnPoint(), params);
+    addNode('customFn', spawnPoint('customFn'), params);
     onClose();
   };
 

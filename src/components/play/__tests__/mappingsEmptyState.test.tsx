@@ -93,4 +93,23 @@ describe('Mappings page: empty state actions', () => {
     expect(useNodeGraphStore.getState().play.mappings.length).toBe(1);
     expect(errors).toEqual([]);
   });
+
+  it('Add control is one step: picking a setting adds its control, with no source picker on the way', () => {
+    const layer = defaultLayer('shape', 'l1', 'Box');
+    const host = mountMappingsPage({ ...emptyPlayRecord(), layers: [layer] });
+    click(byText(host, 'Add control')!);
+    // Unfold the layer, pick its first number.
+    const folderBtn = Array.from(document.querySelectorAll('button')).find(b => b.textContent?.startsWith('Box'))!;
+    click(folderBtn);
+    const rows = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).filter(b => (b.style.paddingLeft === '40px'));
+    expect(rows.length).toBeGreaterThan(0);
+    click(rows.find(b => !b.textContent?.includes('button')) ?? rows[0]);
+    const play = useNodeGraphStore.getState().play;
+    expect(play.controls.length).toBe(1);
+    expect(play.mappings.length).toBe(0);
+    // No second picker ("Control only" / "Add as a control") and no third popover ("Done").
+    expect(document.body.textContent).not.toContain('Add as a control');
+    expect(byText(document.body, 'Done')).toBeFalsy();
+    expect(errors).toEqual([]);
+  });
 });

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { renderPoster } from '../../present/runtimeHost';
 import { snapshotExample } from '../../present/snapshot';
 import type { SamplePresentation } from '../../present/samples';
@@ -72,4 +72,12 @@ export function useSampleStills(samples: readonly SamplePresentation[]): Record<
     return () => { live = false; };
   }, [samples]);
   return stills;
+}
+
+/** Pictures of bundled examples by key (the Start sheet's featured examples), made the same way, one at a time. */
+export function useExampleStills(keys: readonly string[]): Record<string, string | null> {
+  const id = keys.join('|');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const samples = useMemo(() => keys.map(k => ({ title: k, still: k }) as unknown as SamplePresentation), [id]);
+  return useSampleStills(samples);
 }

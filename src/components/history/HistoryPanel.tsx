@@ -438,7 +438,7 @@ function ChangesView({ mode, split, rootRef, onShowOnCanvas }: { mode: HistoryMo
   const openStep = openId === null ? null : steps.find(s => s.id === openId) ?? null;
 
   if (scratch) {
-    return <Note>The Convert page is showing a graph-to-be. Its history starts when you Materialize it.</Note>;
+    return <Note>The Convert page is showing a graph-to-be. Its history starts when you open it in the Studio (Open in Studio).</Note>;
   }
 
   const detailFor = (s: TimelineStep, onClose?: () => void) => (

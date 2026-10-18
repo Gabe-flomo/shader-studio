@@ -359,3 +359,8 @@ export const SAMPLE_GROUPS: { id: SamplePresentation['group']; label: string; bl
 
 /** The sample the empty page offers first. */
 export const FIRST_SAMPLE = SAMPLE_PRESENTATIONS.find(s => s.title === SAMPLE_TITLE)!;
+
+/** The lessons on using Playfield itself: the Learn dialog's (components/learn), not the Present page's. */
+export const LEARN_LESSONS = SAMPLE_PRESENTATIONS.filter(s => s.group === 'app');
+/** The Start sheet's "Getting started" lesson. */
+export const GETTING_STARTED = SAMPLE_PRESENTATIONS.find(s => s.title === STUDIO_TITLE)!;

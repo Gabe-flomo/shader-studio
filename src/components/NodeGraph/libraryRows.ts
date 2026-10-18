@@ -282,3 +282,36 @@ export const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: strin
     { label: 'Falloff',   types: ['distanceFalloff'] },
   ],
 };
+
+// ── The whole layout, for a list that shows every row (the phone's Browse) ───
+export interface LibraryRow {
+  /** The row's key (a node category, or a merged / virtual row). */
+  row: string;
+  /** What it reads as: the same name the desktop node list shows. */
+  label: string;
+  /** Its sub-groups as the desktop shows them (CATEGORY_GROUPS, then "More"); one unnamed group when it has none. */
+  groups: Array<{ label: string | null; types: string[] }>;
+}
+
+/**
+ * The library as the desktop node list lays it out: its sections in order, each with its rows
+ * (rowLabel names) and their sub-groups, without `hidden` types and empty rows. The phone's Browse
+ * lists this, so a category has one name and one place on both (UX audit §3.5).
+ */
+export function libraryLayout(hidden: ReadonlySet<string>): Array<{ label: string; rows: LibraryRow[] }> {
+  const typeLabel = (t: string) => getOfferedDefinitions().find(d => d.type === t)?.label ?? t;
+  const sortTypes = (ts: string[]) => [...ts].sort((a, b) => (a === 'transform' ? -1 : b === 'transform' ? 1 : byLabel(typeLabel(a), typeLabel(b))));
+  return CATEGORY_SECTIONS.map(sec => ({
+    label: sec.label,
+    rows: sec.categories.map((row): LibraryRow => {
+      const types = [...new Set(nodesOfRow(row).map(d => d.type))].filter(t => !hidden.has(t) && !HIDDEN_NODES.has(t));
+      const listed = CATEGORY_GROUPS[row];
+      if (!listed) return { row, label: rowLabel(row), groups: [{ label: null, types: sortTypes(types) }] };
+      const ordered = [...listed].sort((a, b) => (a.label === 'Start here' ? -1 : b.label === 'Start here' ? 1 : byLabel(a.label, b.label)));
+      const groups = ordered.map(g => ({ label: g.label as string | null, types: sortTypes(types.filter(t => g.types.includes(t))) }));
+      const rest = types.filter(t => !listed.some(g => g.types.includes(t)));
+      if (rest.length) groups.push({ label: 'More', types: sortTypes(rest) });
+      return { row, label: rowLabel(row), groups: groups.filter(g => g.types.length > 0) };
+    }).filter(r => r.groups.some(g => g.types.length > 0)),
+  })).filter(sec => sec.rows.length > 0);
+}

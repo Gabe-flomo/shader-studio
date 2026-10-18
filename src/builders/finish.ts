@@ -35,6 +35,14 @@ export function frameNodes(ids: ReadonlyArray<string | null | undefined>): void 
   setTimeout(() => useNodeGraphStore.getState()._fitViewCallback?.(keep), FRAME_DELAY_MS);
 }
 
+/**
+ * The whole graph framed (never zoomed in past 100%), once what just changed has been laid out: after
+ * a builder's Build (it stays open, the graph behind it is ready when it closes) or a Do… run.
+ */
+export function fitGraphSoon(delay = FRAME_DELAY_MS): void {
+  setTimeout(() => useNodeGraphStore.getState()._fitViewCallback?.(undefined, { maxZoom: 1 }), delay);
+}
+
 /** A builder's Done: close it (`close`), then frame what it made (`ids`). */
 export function finishBuilder(close: () => void, ids: ReadonlyArray<string | null | undefined> = []): void {
   close();
@@ -72,7 +80,9 @@ export async function doneBuilding(b: BuildingBuilder): Promise<boolean> {
 export async function buildStaying(b: Pick<BuildingBuilder, 'label' | 'build'>): Promise<boolean> {
   try {
     const made = await b.build();
-    return made !== false && made !== null;
+    const built = made !== false && made !== null;
+    if (built) fitGraphSoon();
+    return built;
   } catch (err) {
     toast.error(`Couldn't build the ${b.label}`, {
       message: 'The builder stays open with your edits, so nothing is lost. Change what went wrong and build again.',

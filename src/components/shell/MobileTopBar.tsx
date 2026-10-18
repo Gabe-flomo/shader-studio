@@ -21,6 +21,7 @@ import { KeyboardPill } from '../play/engine/KeyboardPill';
 import { canOn, usePlan, type Feature } from '../../lib/plan';
 import { accountMenuItems } from '../account/accountMenu';
 import { rotateFullscreenLabel, useRotateFullscreen } from '../../lib/rotateFullscreen';
+import { useLearnUi } from '../learn/learnStore';
 
 /**
  * Phone top bar (Mobile board): the Studio | Play | Present switch (other pages: the logo, back
@@ -99,7 +100,7 @@ export function MobileTopBar({ page, onPageChange, onRecord, onClear }: {
         <IconButton icon="undo" label="Undo" tooltip={false} onClick={undo} style={{ width: 34, height: 40 }} />
         <IconButton icon="redo" label="Redo" tooltip={false} onClick={redo} style={{ width: 34, height: 40 }} />
         <span style={{ width: 1, height: 20, flexShrink: 0, background: tk.border.default, margin: '0 1px' }} />
-        <SaveGraphButton compact />
+        <SaveGraphButton compact listen />
         <LoadGraphButton />
       </>}
       <span ref={moreRef} style={{ display: 'inline-flex' }}>
@@ -131,6 +132,7 @@ export function MobileTopBar({ page, onPageChange, onRecord, onClear }: {
             page === 'present'
               ? { label: 'Back to the Studio', icon: 'nodes', onSelect: () => onPageChange('studio') }
               : { label: 'Present', icon: 'slides', hint: 'Teach with your Plays: steps of text, pictures, sliders and code', onSelect: () => onPageChange('present') },
+            { label: 'Learn the app', icon: 'book', hint: 'Lessons on the Studio, Play, Convert and more', onSelect: () => useLearnUi.getState().openLearn() },
             { label: 'Import a file', icon: 'import', hint: 'A .play file, a graph, or a .present.json (opens on Present)', onSelect: () => { void importAnyFile(onPageChange); } },
             page === 'glsl'
               ? { label: 'Back to the Studio', icon: 'nodes', onSelect: () => onPageChange('studio') }

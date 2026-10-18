@@ -31,10 +31,13 @@ export const DEFAULT_ACTIONS: ShortcutAction[] = [
   // Graph management
   { id: 'undo',              label: 'Undo',                  group: 'Graph',      defaultCombo: 'cmd+z',       description: 'Undo the last change to the graph or the Play setup' },
   { id: 'redo',              label: 'Redo',                  group: 'Graph',      defaultCombo: 'cmd+shift+z', description: 'Redo the change just undone' },
-  { id: 'export',            label: 'Export graph',          group: 'Graph',      defaultCombo: 'cmd+s',       description: 'Export graph to file' },
+  { id: 'save',              label: 'Save',                  group: 'Graph',      defaultCombo: 'cmd+s',       description: 'Save the open graph as its next version (Minor). The first time, it asks for a name' },
+  { id: 'saveAs',            label: 'Save as…',              group: 'Graph',      defaultCombo: 'cmd+shift+s', description: 'Save under another name: a new graph, or a new family of a graph with that name' },
+  { id: 'export',            label: 'Export .play file',     group: 'Graph',      defaultCombo: 'cmd+shift+e', description: 'Export the graph as a .play file, with what it uses' },
   { id: 'import',            label: 'Import graph',          group: 'Graph',      defaultCombo: 'cmd+o',       description: 'Import graph from file' },
   // View
   { id: 'fitView',           label: 'Fit view',              group: 'View',       defaultCombo: 'f',           description: 'Fit all nodes in view' },
+  { id: 'maximizeGraph',     label: 'Maximize the graph',    group: 'View',       defaultCombo: 'cmd+shift+g', description: 'Studio: the graph takes the preview’s space too; again to bring the preview back' },
   { id: 'toggleCode',        label: 'Toggle GLSL code',      group: 'View',       defaultCombo: 'cmd+\\',      description: 'Show/hide GLSL output panel' },
   { id: 'toggleRecord',      label: 'Record video',          group: 'View',       defaultCombo: 'cmd+r',       description: 'Open the video recorder' },
   // ⌘⇧↵, not ⌘⇧R: that one is a hard reload in browsers. Works from the code editors too, and on the GLSL and Convert pages.
@@ -68,7 +71,7 @@ export const DEFAULT_ACTIONS: ShortcutAction[] = [
   { id: 'deleteSelected',    label: 'Delete selection',      group: 'Graph',      defaultCombo: 'backspace',   description: 'Remove the selected nodes' },
   { id: 'exitGroup',         label: 'Leave group',           group: 'Graph',      defaultCombo: 'escape',      description: 'Go up one level when inside a group' },
   // Node graph — select/filter/highlight
-  { id: 'selectAll',         label: 'Show all nodes',        group: 'Filter',     defaultCombo: 'cmd+a',       description: 'Clear filter — show all nodes normally' },
+  { id: 'selectAll',         label: 'Select all nodes',      group: 'Graph',      defaultCombo: 'cmd+a',       description: 'Select every node at this level of the graph (Studio). In a text field it selects the text as usual' },
   { id: 'filterFloat',       label: 'Highlight float nodes', group: 'Filter',     defaultCombo: '1',           description: 'Hold to highlight nodes that output float' },
   { id: 'filterVec2',        label: 'Highlight vec2 nodes',  group: 'Filter',     defaultCombo: '2',           description: 'Hold to highlight nodes that output vec2 (UV)' },
   { id: 'filterVec3',        label: 'Highlight vec3 nodes',  group: 'Filter',     defaultCombo: '3',           description: 'Hold to highlight nodes that output vec3 (color/pos)' },
@@ -82,6 +85,12 @@ export const DEFAULT_ACTIONS: ShortcutAction[] = [
 
 const STORAGE_KEY = 'shader-studio:shortcuts';
 
+/**
+ * Defaults that moved: a stored binding equal to the OLD default is the old default, not a choice,
+ * so it follows the move (⌘S used to export; it saves now and export is ⇧⌘E).
+ */
+const MOVED_DEFAULTS: Record<string, string> = { export: 'cmd+s' };
+
 export function loadShortcutMap(): ShortcutMap {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -90,7 +99,8 @@ export function loadShortcutMap(): ShortcutMap {
       // Merge in any new defaults that didn't exist when last saved
       const map: ShortcutMap = {};
       for (const a of DEFAULT_ACTIONS) {
-        map[a.id] = stored[a.id] ?? a.defaultCombo;
+        const own = stored[a.id];
+        map[a.id] = own && !(MOVED_DEFAULTS[a.id] && normaliseCombo(own) === MOVED_DEFAULTS[a.id]) ? own : a.defaultCombo;
       }
       return map;
     }
@@ -190,7 +200,8 @@ export function findShortcut(map: ShortcutMap, combo: string, editable = false, 
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
-type ActionHandlers = Partial<Record<string, () => void>>;
+/** A handler that returns `false` didn't use the key: the browser's own action (⌘A selecting text…) goes ahead. */
+type ActionHandlers = Partial<Record<string, () => void | boolean>>;
 
 /**
  * Listen for keyboard shortcuts and fire the matching handler.
@@ -211,8 +222,10 @@ export function useShortcuts(
   // Track which key combo is currently held for a hold-action (so keyup matches)
   const heldComboRef = useRef<string | null>(null);
 
-  const dispatch = useCallback((actionId: string) => {
-    handlersRef.current[actionId]?.();
+  const dispatch = useCallback((actionId: string): boolean => {
+    const h = handlersRef.current[actionId];
+    if (!h) return true;
+    return h() !== false;
   }, []);
 
   useEffect(() => {
@@ -228,8 +241,8 @@ export function useShortcuts(
       const combo    = comboFromEvent(e);
       const actionId = findShortcut(loadShortcutMap(), combo, editable);
       if (!actionId) return;
+      if (!dispatch(actionId)) return;
       e.preventDefault();
-      dispatch(actionId);
       // If this is a hold action, remember the combo so keyup can match it
       if (holdHandlerRef.current?.ids.has(actionId)) {
         heldComboRef.current = normaliseCombo(combo);

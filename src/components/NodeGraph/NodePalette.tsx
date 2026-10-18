@@ -120,7 +120,7 @@ function ItemRow({ label, icon, color, onClick, onDoubleClick, selected = false,
         onDoubleClick={onDoubleClick}
         {...nodeDragProps(drag ?? null, onDragDone)}
         aria-expanded={preview !== undefined ? selected : undefined}
-        title={hint ? `${label} — ${hint}` : onDoubleClick ? `${label} · double-click to add${drag ? ' or drag onto the graph' : ''}` : label}
+        title={`${hint ? `${label} — ${hint}` : label}${onDoubleClick ? ` · double-click to add${drag ? ' or drag onto the graph' : ''}` : ''}`}
         style={{
           flex: 1, minWidth: 0, height: source ? undefined : 32, alignSelf: 'stretch', border: 0, background: 'none', padding: 0, textAlign: 'left', cursor: 'pointer',
           color: tk.text.secondary, font: `12.5px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', ...(drag ? nodeDragStyle : {}),
@@ -375,7 +375,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
 
   const handleAdd = (type: string, params?: Record<string, unknown>) => {
     if (swapTargetNodeId) { swapNode(swapTargetNodeId, type); onNodeAdded?.(); return; }
-    addNode(type, spawnPoint(), params);
+    addNode(type, spawnPoint(type), params);
     onNodeAdded?.();
   };
 
@@ -602,7 +602,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
                 return (
                   <ItemRow label={d.label} icon="spark" color={tk.kind.fn} tag={d.sealed ? 'Sealed' : undefined}
                     drag={{ label: d.label, type: d.id, place: pos => addNode(d.id, pos) }} onDragDone={onNodeAdded}
-                    onClick={() => { addNode(d.id, spawnPoint()); onNodeAdded?.(); }}
+                    onClick={() => { addNode(d.id, spawnPoint(d.id)); onNodeAdded?.(); }}
                     onEdit={d.source ? () => {
                       if (d.source?.kind === 'code') { setPublishExisting(d.id); setPublishSource({ kind: 'code', code: d.source.code, entry: d.source.entry, label: d.label }); return; }
                       if (openUserNodeSource(d.id, spawnPoint())) onNodeAdded?.();
@@ -653,7 +653,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
               }}
               emptyHint={<EmptyHint>Select a group node and save it to create a preset.</EmptyHint>}
             />
-            <TabSectionHeader label="Transform Vec" />
+            <TabSectionHeader label="Vector transforms" />
             <FolderableList
               scopeKey="presets:transform"
               color={tabColor('presets')}
@@ -675,7 +675,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
                       onDelete={() => { deleteTransformPreset(p.id); refreshTransformPresets(); }}
                       onRename={() => { setRenameTransformValue(p.label); setRenamingTransformId(p.id); }} />;
               }}
-              emptyHint={<EmptyHint>Open a Transform Vec node and save a preset.</EmptyHint>}
+              emptyHint={<EmptyHint>Formulas for each part of a vector, saved from a Transform Vec node’s editor.</EmptyHint>}
             />
           </>
         );
@@ -864,7 +864,7 @@ function PaletteBody({ mode = 'full', onNodeAdded, onCollapse, context, onGlslIn
   if (mode === 'drawer') {
     const handleAdd = (type: string, params?: Record<string, unknown>) => {
       if (swapTargetNodeId) { swapNode(swapTargetNodeId, type); onNodeAdded?.(); return; }
-      addNode(type, spawnPoint(), params);
+      addNode(type, spawnPoint(type), params);
       onNodeAdded?.();
     };
     return (

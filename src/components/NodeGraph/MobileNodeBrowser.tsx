@@ -17,12 +17,13 @@ import type React from 'react';
  * promotion rules (float -> vec2/vec3, ...) used everywhere else.
  */
 import { useMemo, useState } from 'react';
-import { getOfferedDefinitions, getNodeDefinition, getNodeDefinitionFor } from '../../nodes/definitions';
+import { getNodeDefinition, getNodeDefinitionFor } from '../../nodes/definitions';
 import { useUserNodesVersion } from '../../nodes/userNodes/useUserNodes';
 import type { GraphNode, NodeDefinition } from '../../types/nodeGraph';
 import { useNodeGraphStore, getActiveNodes } from '../../store/useNodeGraphStore';
 import { typesCompatible } from '../../lib/typesCompatible';
 import { HIDDEN_TYPES } from './nodeCategoryMeta';
+import { libraryLayout, rowLabel, rowOfType } from './libraryRows';
 import { useHiddenHere } from './useAddScope';
 import { categoryColor } from '../../theme/categories';
 import { useThemeMode } from '../../theme/themeStore';
@@ -40,39 +41,11 @@ function labelFor(n: GraphNode): string {
   return (typeof n.params.label === 'string' && n.params.label) || getNodeDefinitionFor(n)?.label || n.type;
 }
 
+// The same sections, rows, names and sub-groups as the desktop node list (libraryRows.ts).
 // Rebuilt when the user-node registry changes (built-ins are static).
-// Types with no subcategory land in a single unnamed group per category;
-// most categories are small enough that this is the only group they get.
-interface SubGroup { name: string | null; types: string[] }
-interface CategoryGroup { name: string; subgroups: SubGroup[] }
-
-function buildCategories(userNodesVersion: number, hidden: ReadonlySet<string>): CategoryGroup[] {
+function buildCategories(userNodesVersion: number, hidden: ReadonlySet<string>) {
   void userNodesVersion; // the argument is what invalidates the memo below
-  const catMap = new Map<string, Map<string | null, string[]>>();
-  for (const def of getOfferedDefinitions()) {
-    const type = def.type;
-    if (hidden.has(type)) continue;
-    if (!catMap.has(def.category)) catMap.set(def.category, new Map());
-    const subMap = catMap.get(def.category)!;
-    const sub = def.subcategory ?? null;
-    const arr = subMap.get(sub) ?? [];
-    arr.push(type);
-    subMap.set(sub, arr);
-  }
-  const byLabel = (a: string, b: string) => (getNodeDefinition(a)?.label ?? a).localeCompare(getNodeDefinition(b)?.label ?? b);
-  return Array.from(catMap.entries())
-    .map(([name, subMap]) => ({
-      name,
-      subgroups: Array.from(subMap.entries())
-        // The universal Transform leads its group (docs/transform-node.md).
-        .map(([subName, types]) => ({ name: subName, types: types.sort((a, b) => (a === 'transform' ? -1 : b === 'transform' ? 1 : byLabel(a, b))) }))
-        .sort((a, b) => {
-          if (a.name === null) return b.name === null ? 0 : 1;   // unnamed group last
-          if (b.name === null) return -1;
-          return a.name.localeCompare(b.name);
-        }),
-    }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+  return libraryLayout(hidden);
 }
 
 // Full-width list row (node types, pairing targets)
@@ -260,7 +233,7 @@ export function MobileNodeBrowser({ onClose }: { onClose: () => void }) {
           <div style={{ font: `650 22px ${fontFamily.ui}`, letterSpacing: '-0.01em', color: tc.text }}>{def.label}</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, fontSize: 10.5, fontWeight: 700, color: tc.overlay0, letterSpacing: '0.08em' }}>
             <span style={{ width: 8, height: 8, borderRadius: '50%', background: categoryColor(def.category, mode) }} />
-            {def.category.toUpperCase()}{def.subcategory ? ` · ${def.subcategory.toUpperCase()}` : ''}
+            {rowLabel(rowOfType(def.type, def.category)).toUpperCase()}{def.subcategory ? ` · ${def.subcategory.toUpperCase()}` : ''}
           </div>
         </div>
 
@@ -312,7 +285,7 @@ export function MobileNodeBrowser({ onClose }: { onClose: () => void }) {
             {list.map(x => (
               <button key={x.type} onClick={() => openDetail(x.type)} style={{ ...rowBtnStyleFor(tc), height: 40, borderRadius: 10 }}>
                 <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{x.label}</span>
-                <span style={{ fontSize: 11.5, color: tc.overlay0 }}>{x.category}</span>
+                <span style={{ fontSize: 11.5, color: tc.overlay0 }}>{rowLabel(rowOfType(x.type, x.category))}</span>
                 <Icon name="chevR" size={14} style={{ color: tc.surface2, flexShrink: 0 }} />
               </button>
             ))}
@@ -321,47 +294,54 @@ export function MobileNodeBrowser({ onClose }: { onClose: () => void }) {
       })()}
       {/* Then the builders: the 3D Scene Builder, Grid Rules, Agent Rules (docs/node-browser.md) */}
       <BuildersSection touch onOpened={onClose} />
-      {CATEGORIES.map(cat => {
-        const isOpen = openCategory === cat.name;
-        const flat = cat.subgroups.length === 1 && cat.subgroups[0].name === null;
-        const total = cat.subgroups.reduce((n, g) => n + g.types.length, 0);
-        return (
-          <div key={cat.name}>
-            <button
-              aria-expanded={isOpen}
-              onClick={() => setOpenCategory(o => (o === cat.name ? null : cat.name))}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 10, width: '100%', height: 46, padding: '0 12px', border: 'none',
-                borderRadius: 12, background: isOpen ? tc.mantle : 'none', cursor: 'pointer', touchAction: 'manipulation', textAlign: 'left',
-                color: tc.text, font: `600 13.5px ${fontFamily.ui}`,
-              }}
-            >
-              <Icon name={isOpen ? 'chevD' : 'chevR'} size={14} style={{ color: tc.overlay0 }} />
-              <span style={{ width: 9, height: 9, borderRadius: '50%', background: categoryColor(cat.name, mode) }} />
-              <span style={{ flex: 1 }}>{cat.name}</span>
-              <span style={{ fontSize: 12, fontWeight: 500, color: tc.overlay0, background: tc.surface0, borderRadius: 7, padding: '2px 7px' }}>{total}</span>
-            </button>
-            {isOpen && cat.subgroups.map(group => (
-              <div key={group.name ?? '__none__'}>
-                {!flat && group.name && (
-                  <div style={{ fontSize: 10.5, fontWeight: 700, color: tc.overlay0, letterSpacing: '0.08em', padding: '8px 12px 2px 43px' }}>
-                    {group.name.toUpperCase()}
+      {CATEGORIES.map(sec => (
+        <div key={sec.label} data-browse-section={sec.label}>
+          <div style={{ fontSize: 10.5, fontWeight: 700, color: tc.overlay0, letterSpacing: '0.08em', padding: '12px 12px 4px' }}>{sec.label.toUpperCase()}</div>
+          {sec.rows.map(cat => {
+            const isOpen = openCategory === cat.row;
+            const flat = cat.groups.length === 1 && cat.groups[0].label === null;
+            const total = cat.groups.reduce((n, g) => n + g.types.length, 0);
+            return (
+              <div key={cat.row}>
+                <button
+                  aria-expanded={isOpen}
+                  data-browse-row={cat.row}
+                  onClick={() => setOpenCategory(o => (o === cat.row ? null : cat.row))}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 10, width: '100%', height: 46, padding: '0 12px', border: 'none',
+                    borderRadius: 12, background: isOpen ? tc.mantle : 'none', cursor: 'pointer', touchAction: 'manipulation', textAlign: 'left',
+                    color: tc.text, font: `600 13.5px ${fontFamily.ui}`,
+                  }}
+                >
+                  <Icon name={isOpen ? 'chevD' : 'chevR'} size={14} style={{ color: tc.overlay0 }} />
+                  <span style={{ width: 9, height: 9, borderRadius: '50%', background: categoryColor(cat.row, mode) }} />
+                  <span style={{ flex: 1 }}>{cat.label}</span>
+                  <span style={{ fontSize: 12, fontWeight: 500, color: tc.overlay0, background: tc.surface0, borderRadius: 7, padding: '2px 7px' }}>{total}</span>
+                </button>
+                {isOpen && cat.groups.map(group => (
+                  <div key={group.label ?? '__none__'}>
+                    {!flat && group.label && (
+                      <div style={{ fontSize: 10.5, fontWeight: 700, color: tc.overlay0, letterSpacing: '0.08em', padding: '8px 12px 2px 43px' }}>
+                        {group.label.toUpperCase()}
+                      </div>
+                    )}
+                    {group.types.map(type => {
+                      const d = getNodeDefinition(type);
+                      if (!d) return null;
+                      return (
+                        <button key={type} onClick={() => openDetail(type)} style={{ ...rowBtnStyleFor(tc), height: 40, padding: '0 12px 0 43px', borderRadius: 10 }}>
+                          <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.label}</span>
+                          <Icon name="chevR" size={14} style={{ color: tc.surface2, flexShrink: 0 }} />
+                        </button>
+                      );
+                    })}
                   </div>
-                )}
-                {group.types.map(type => {
-                  const d = getNodeDefinition(type)!;
-                  return (
-                    <button key={type} onClick={() => openDetail(type)} style={{ ...rowBtnStyleFor(tc), height: 40, padding: '0 12px 0 43px', borderRadius: 10 }}>
-                      <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.label}</span>
-                      <Icon name="chevR" size={14} style={{ color: tc.surface2, flexShrink: 0 }} />
-                    </button>
-                  );
-                })}
+                ))}
               </div>
-            ))}
-          </div>
-        );
-      })}
+            );
+          })}
+        </div>
+      ))}
     </div>
   );
 }
