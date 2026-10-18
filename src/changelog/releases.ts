@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.275',
+    date: '2026-10-18',
+    title: "A quieter canvas",
+    highlights: [
+      { area: 'Studio', text: "The graph toolbar is just Maximize, Outline and Randomise; Maximize puts the picture full size behind your graph, in your aspect preset." },
+      { area: 'Studio', text: "Stages are gone from the graph; the rest lives in the canvas right-click menu. Recover and other choice dialogs are tidier." },
+    ],
+  },
+  {
     id: '2026.10.274',
     date: '2026-10-18',
     title: "Soft grain",
