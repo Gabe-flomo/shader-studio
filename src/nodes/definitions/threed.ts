@@ -1117,27 +1117,27 @@ export const MultiLightNode: NodeDefinition = withParamSockets({
   },
   // Sun starts as X / Y / Z (every Multi-Light made before Azimuth & elevation existed reads the same).
   paramDefs: {
-    sunFrom: { label: 'Sun', type: 'select', hint: 'Point the sun by its angles, or by a direction (X, Y, Z). A wired Sun Dir wins over both.', options: [
+    sunFrom: { section: 'Sun', label: 'Sun', type: 'select', hint: 'Point the sun by its angles, or by a direction (X, Y, Z). A wired Sun Dir wins over both.', options: [
       { value: 'angles', label: 'Azimuth & elevation' }, { value: 'xyz', label: 'Direction X / Y / Z' },
     ] },
-    azimuth:   { label: 'Azimuth', type: 'float', min: -180, max: 180, step: 0.5, showWhen: { param: 'sunFrom', value: 'angles' }, hint: 'Degrees round the up axis: 0 shines from the front (+Z), 90 from the right (+X).' },
-    elevation: { label: 'Elevation', type: 'float', min: -90, max: 90, step: 0.5, showWhen: { param: 'sunFrom', value: 'angles' }, hint: 'Degrees above the horizon: 90 is straight overhead, below 0 the sun is under the ground.' },
-    sunDirX: { label: 'Sun X', type: 'float', min: -1.0, max: 1.0, step: 0.01, showWhen: { param: 'sunFrom', value: 'xyz' }, hint: 'Sun direction X component. Normalized internally — only the ratio matters.' },
-    sunDirY: { label: 'Sun Y', type: 'float', min: -1.0, max: 1.0, step: 0.01, showWhen: { param: 'sunFrom', value: 'xyz' }, hint: 'Sun direction Y component. Positive = sun above horizon; negative = below.' },
-    sunDirZ: { label: 'Sun Z', type: 'float', min: -1.0, max: 1.0, step: 0.01, showWhen: { param: 'sunFrom', value: 'xyz' }, hint: 'Sun direction Z component. Controls left/right sun angle.' },
-    background: { label: 'Background', type: 'select', hint: 'Where Hit is 0 (the ray missed): black, or a colour of its own (so no Select is needed after it).', options: [
+    azimuth:   { section: 'Sun', label: 'Azimuth', type: 'float', min: -180, max: 180, step: 0.5, showWhen: { param: 'sunFrom', value: 'angles' }, hint: 'Degrees round the up axis: 0 shines from the front (+Z), 90 from the right (+X).' },
+    elevation: { section: 'Sun', label: 'Elevation', type: 'float', min: -90, max: 90, step: 0.5, showWhen: { param: 'sunFrom', value: 'angles' }, hint: 'Degrees above the horizon: 90 is straight overhead, below 0 the sun is under the ground.' },
+    sunDirX: { section: 'Sun', label: 'Sun X', type: 'float', min: -1.0, max: 1.0, step: 0.01, showWhen: { param: 'sunFrom', value: 'xyz' }, hint: 'Sun direction X component. Normalized internally — only the ratio matters.' },
+    sunDirY: { section: 'Sun', label: 'Sun Y', type: 'float', min: -1.0, max: 1.0, step: 0.01, showWhen: { param: 'sunFrom', value: 'xyz' }, hint: 'Sun direction Y component. Positive = sun above horizon; negative = below.' },
+    sunDirZ: { section: 'Sun', label: 'Sun Z', type: 'float', min: -1.0, max: 1.0, step: 0.01, showWhen: { param: 'sunFrom', value: 'xyz' }, hint: 'Sun direction Z component. Controls left/right sun angle.' },
+    background: { section: 'Background', label: 'Background', type: 'select', hint: 'Where Hit is 0 (the ray missed): black, or a colour of its own (so no Select is needed after it).', options: [
       { value: 'none', label: 'Black' }, { value: 'colour', label: 'Colour' },
     ] },
-    bgColor: { label: 'Background colour', type: 'vec3color', showWhen: { param: 'background', value: 'colour' }, hint: 'What a ray that hits nothing shows.' },
-    sunR:    { label: 'Sun R', type: 'float', min: 0.0,  max: 2.0, step: 0.01, hint: 'Direct sun light red. Values > 1 are HDR — boost for warm golden hour.' },
-    sunG:    { label: 'Sun G', type: 'float', min: 0.0,  max: 2.0, step: 0.01, hint: 'Direct sun light green.' },
-    sunB:    { label: 'Sun B', type: 'float', min: 0.0,  max: 2.0, step: 0.01, hint: 'Direct sun light blue. Lower than R/G for warm sunlight.' },
-    skyR:    { label: 'Sky R', type: 'float', min: 0.0,  max: 1.0, step: 0.01, hint: 'Sky dome indirect light red. Faces the top hemisphere.' },
-    skyG:    { label: 'Sky G', type: 'float', min: 0.0,  max: 1.0, step: 0.01, hint: 'Sky dome indirect light green.' },
-    skyB:    { label: 'Sky B', type: 'float', min: 0.0,  max: 1.0, step: 0.01, hint: 'Sky dome indirect light blue. Higher than R for a blue sky fill.' },
-    bounceR: { label: 'Bounce R', type: 'float', min: 0.0, max: 0.5, step: 0.005, hint: 'Bounce/fill light red — simulates indirect light from the ground or walls.' },
-    bounceG: { label: 'Bounce G', type: 'float', min: 0.0, max: 0.5, step: 0.005, hint: 'Bounce/fill light green.' },
-    bounceB: { label: 'Bounce B', type: 'float', min: 0.0, max: 0.5, step: 0.005, hint: 'Bounce/fill light blue.' },
+    bgColor: { section: 'Background', label: 'Background colour', type: 'vec3color', showWhen: { param: 'background', value: 'colour' }, hint: 'What a ray that hits nothing shows.' },
+    sunR:    { section: 'Light colours', label: 'Sun R', type: 'float', min: 0.0,  max: 2.0, step: 0.01, hint: 'Direct sun light red. Values > 1 are HDR — boost for warm golden hour.' },
+    sunG:    { section: 'Light colours', label: 'Sun G', type: 'float', min: 0.0,  max: 2.0, step: 0.01, hint: 'Direct sun light green.' },
+    sunB:    { section: 'Light colours', label: 'Sun B', type: 'float', min: 0.0,  max: 2.0, step: 0.01, hint: 'Direct sun light blue. Lower than R/G for warm sunlight.' },
+    skyR:    { section: 'Light colours', label: 'Sky R', type: 'float', min: 0.0,  max: 1.0, step: 0.01, hint: 'Sky dome indirect light red. Faces the top hemisphere.' },
+    skyG:    { section: 'Light colours', label: 'Sky G', type: 'float', min: 0.0,  max: 1.0, step: 0.01, hint: 'Sky dome indirect light green.' },
+    skyB:    { section: 'Light colours', label: 'Sky B', type: 'float', min: 0.0,  max: 1.0, step: 0.01, hint: 'Sky dome indirect light blue. Higher than R for a blue sky fill.' },
+    bounceR: { section: 'Light colours', label: 'Bounce R', type: 'float', min: 0.0, max: 0.5, step: 0.005, hint: 'Bounce/fill light red — simulates indirect light from the ground or walls.' },
+    bounceG: { section: 'Light colours', label: 'Bounce G', type: 'float', min: 0.0, max: 0.5, step: 0.005, hint: 'Bounce/fill light green.' },
+    bounceB: { section: 'Light colours', label: 'Bounce B', type: 'float', min: 0.0, max: 0.5, step: 0.005, hint: 'Bounce/fill light blue.' },
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id        = node.id;

@@ -263,3 +263,11 @@ Every newer node has a short commented example: **Texture tools 22 · Deep glow 
 glow), **Texture tools 23 · Displace a video by a noise** (Displace (texture)), **Audio 10 · Hit and Band Level**. Chromatic
 Aberration (lens), Depth of Field (texture), Tilt-Shift (texture) and Band Level already had one (volAnimatedRepeat,
 dofDepthBlur, tiltShiftScene, beatGrid).
+
+## Folded sections on big nodes
+
+Emit (Births · Life and speed), March Camera (Camera · Lens & focus · Projection), March Loop Group (March · Advanced ·
+Look), GI Lit March Group (March · Advanced · Look · Quality), Mandelbrot / Julia (Fractal · Orbit trap · Colour), Shape
+SDF (Shape), Array (Layout · Place · Combine · Look) and Multi-Light (Sun · Background · Light colours) have card sections:
+the first open, the rest folded with their one-line summaries (`lib/sectionSummary.ts`). Folding is display only, so
+every setting stays a uniform and Play controls on them keep working.

@@ -481,6 +481,26 @@ describe('N9: every newer node has a commented example', () => {
   });
 });
 
+describe('S1: big nodes open on their main settings, the rest folded', () => {
+  const FIRST: Record<string, string> = {
+    agentEmit: 'Births', marchCamera: 'Camera', marchLoopGroup: 'March', giLitMarchGroup: 'March', mandelbrot: 'Fractal',
+    shapeSDF: 'Shape', arrayField: 'Layout', multiLight: 'Sun',
+  };
+  for (const [t, first] of Object.entries(FIRST)) {
+    it(`${t}: every setting has a section, the first is ${first}, each section's settings are together`, () => {
+      const defs = Object.values(getNodeDefinition(t)!.paramDefs ?? {});
+      expect(defs.every(d => !!d.section), t).toBe(true);
+      expect(defs[0].section).toBe(first);
+      const order = defs.map(d => d.section).filter((s, i, a) => s !== a[i - 1]);
+      expect(new Set(order).size, `${t}: ${order}`).toBe(order.length);
+    });
+  }
+  it('March Camera folds its lens settings under Lens & focus', () => {
+    const pd = getNodeDefinition('marchCamera')!.paramDefs!;
+    for (const k of ['aperture', 'lens', 'dofSamples', 'dofShape', 'dofMaxBlur']) expect(pd[k].section, k).toBe('Lens & focus');
+  });
+});
+
 describe('Radiance Cascades 2D is retired (too slow)', () => {
   it('stays registered, is offered nowhere, and nothing uses it', () => {
     expect(NODE_REGISTRY.radianceCascadesApprox).toBeTruthy();
