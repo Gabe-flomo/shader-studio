@@ -65,7 +65,8 @@ export function Popover({
       if (ref.current?.contains(t) || anchorRef.current?.contains(t)) return;
       // A popover opened from inside this one is portaled after it, not inside it: a press
       // there is still "inside" (a saved graph's versions list in the Load menu, say).
-      const other = (t as Element).closest?.('[data-popover]');
+      // So is a menu or a dialog opened from inside it (the Library's Import menu, a delete's confirm).
+      const other = (t as Element).closest?.('[data-popover], [role="menu"], [data-menu-sheet], [role="dialog"]');
       if (other && ref.current && other !== ref.current && (ref.current.compareDocumentPosition(other) & Node.DOCUMENT_POSITION_FOLLOWING)) return;
       onCloseRef.current();
     };

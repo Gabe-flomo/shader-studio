@@ -67,6 +67,8 @@ import { OPEN_WORKSPACE_VIEW, takeWorkspaceViewRequest } from '../workspace/work
 import { OPEN_CLEANUP_VIEW } from '../../files/storageLimit';
 import { takeCleanupRequest } from '../../files/storageLimitApp';
 import { exportPlayfile } from '../../playfile/app';
+import { Library } from '../library/Library';
+import { OPEN_LIBRARY } from '../../library/appLibrary';
 import { reportFileResult } from '../shell/reportFileResult';
 
 /** Files' ids for the library's videos (files/videosSource.ts through inventory's external sources). */
@@ -81,7 +83,7 @@ const layerSetOf = (n: FileNode) => (n.kind === 'preset' && n.id.startsWith('lse
 const rackPresetOf = (n: FileNode) => (n.kind === 'preset' && n.id.startsWith('rpre:') ? loadRackPresets().find(x => x.id === n.id.slice(5)) : undefined);
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-type View = 'home' | 'browse' | 'cleanup' | 'workspace' | 'linked' | 'notes' | 'nodes';
+type View = 'home' | 'library' | 'browse' | 'cleanup' | 'workspace' | 'linked' | 'notes' | 'nodes';
 /** The GLSL page reads these when it mounts: the editor's text and which saved shader it is. */
 const GLSL_EDITOR_KEY = 'shader-studio:glsl-editor';
 const GLSL_OPEN_KEY = 'glsl-editor:open-shader';
@@ -103,6 +105,12 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
     const go = () => { takeCleanupRequest(); setView('cleanup'); };
     window.addEventListener(OPEN_CLEANUP_VIEW, go);
     return () => window.removeEventListener(OPEN_CLEANUP_VIEW, go);
+  }, []);
+  // "Show in the Library" while the Files page is up opens its Library view.
+  useEffect(() => {
+    const go = () => setView('library');
+    window.addEventListener(OPEN_LIBRARY, go);
+    return () => window.removeEventListener(OPEN_LIBRARY, go);
   }, []);
   // The top bar's workspace indicator asks for the Workspace view.
   useEffect(() => {
@@ -366,7 +374,8 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
   const linked = <LinkedFoldersView compact={compact} folderId={linkedId} />;
   const notes = <NotesView inv={inv} compact={compact} onGoTo={n => { void goToNote(n); }} onDelete={n => { deleteNoteWithUndo(n); }} />;
   const entries: HomeEntry[] = [
-    { id: 'browse', icon: 'folder', label: 'Browse', sub: 'Everything saved, as a tree', tint: tk.accent.base, onClick: () => open('section:graphs') },
+    { id: 'library', icon: 'graphs', label: 'Library', sub: 'Graphs, presets, functions, your nodes and shaders: open, rename, export', tint: tk.status.success, onClick: () => show('library') },
+    { id: 'browse', icon: 'folder', label: 'Browse', sub: 'Everything saved, as a tree, with sizes', tint: tk.accent.base, onClick: () => open('section:graphs') },
     { id: 'notes', icon: 'comment', label: 'Notes', sub: notesCount ? `${plural(notesCount, 'note')}: Play notes and node comments` : 'No notes yet', count: notesCount, tint: tk.accent.base, onClick: () => show('notes') },
     { id: 'cleanup', icon: 'spark', label: 'Clean up', sub: cleanupCount ? `${plural(cleanupCount, 'suggestion')}: old versions, unused files, duplicates` : 'Nothing to clean up', count: cleanupCount, tint: tk.status.success, onClick: () => show('cleanup') },
     { id: 'workspace', icon: 'folder', label: 'Workspace folder', sub: 'A folder on this computer that mirrors what’s saved', tint: tk.status.warning, onClick: () => show('workspace') },
@@ -377,8 +386,9 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
       {inv.sections.map((s, i) => <SectionRow key={s.id} node={s} first={i === 0} state={checkState(s.id)} onCheck={on => onCheck(s.id, on)} onOpen={() => open(s.id)} />)}
     </div> : undefined} />;
   const nodesView = nodeType ? <NodePage type={nodeType} compact={compact} inv={inv} onOpen={open} onNavigate={onNavigate} /> : <NodesListView compact={compact} onOpenNode={openNodePage} />;
-  const special = (v: View) => (v === 'home' ? home : v === 'nodes' ? nodesView : v === 'cleanup' ? cleanup : v === 'workspace' ? workspace : v === 'linked' ? linked : v === 'notes' ? notes : null);
-  const specialCrumb = (v: View) => (v === 'nodes' && nodeType ? [{ id: 'nodes', label: 'Nodes', kind: 'section' as const, section: 'nodes' as const, size: 0 }, { id: `nodetype:${nodeType}`, label: getNodeDefinition(nodeType)?.label ?? nodeType, kind: 'node' as const, section: 'nodes' as const, size: 0 }] : crumb(v === 'cleanup' ? 'Clean up' : v === 'workspace' ? 'Workspace folder' : v === 'linked' ? 'Linked folders' : v === 'notes' ? 'Notes' : v === 'nodes' ? 'Nodes' : 'Home'));
+  const library = <div style={{ padding: compact ? '12px 16px 40px' : '20px 24px 40px', maxWidth: 760 }}><Library size="full" /></div>;
+  const special = (v: View) => (v === 'home' ? home : v === 'library' ? library : v === 'nodes' ? nodesView : v === 'cleanup' ? cleanup : v === 'workspace' ? workspace : v === 'linked' ? linked : v === 'notes' ? notes : null);
+  const specialCrumb = (v: View) => (v === 'nodes' && nodeType ? [{ id: 'nodes', label: 'Nodes', kind: 'section' as const, section: 'nodes' as const, size: 0 }, { id: `nodetype:${nodeType}`, label: getNodeDefinition(nodeType)?.label ?? nodeType, kind: 'node' as const, section: 'nodes' as const, size: 0 }] : crumb(v === 'library' ? 'Library' : v === 'cleanup' ? 'Clean up' : v === 'workspace' ? 'Workspace folder' : v === 'linked' ? 'Linked folders' : v === 'notes' ? 'Notes' : v === 'nodes' ? 'Nodes' : 'Home'));
   const banner = view !== 'workspace' && <WorkspaceBanner compact={compact} onOpen={() => setView('workspace')} />;
   const crumb = (label: string) => [{ id: view, label, kind: 'section' as const, section: 'graphs' as const, size: 0 }];
 
@@ -450,6 +460,7 @@ export function FilesPage({ compact = false, onNavigate }: { compact?: boolean; 
         </div>
         <div style={{ padding: '10px 10px 4px' }}>
           <SideEntry icon="grid" tint={tk.accent.base} label="Home" sub="" count={0} active={view === 'home'} dense onClick={() => show('home')} />
+          <SideEntry icon="graphs" tint={tk.status.success} label="Library" sub="" count={0} active={view === 'library'} dense onClick={() => show('library')} />
           <CleanUpEntry count={cleanupCount} active={view === 'cleanup'} onClick={() => show('cleanup')} dense />
           <NotesEntry count={notesCount} active={view === 'notes'} onClick={() => show('notes')} dense />
           <WorkspaceEntry active={view === 'workspace'} onClick={() => show('workspace')} />

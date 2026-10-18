@@ -1,23 +1,14 @@
-import { offerCustomFunctionsExport } from '../playfile/exportMenus';
 import { ProBadgeFor } from '../account/ProSheet';
 import { BROWSE_STAGE_EVENT } from '../../structure/browse';
-import { useCan } from '../../lib/plan';
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { SaveGraphForm, VersionsButton } from '../shell/GraphVersions';
-import { GraphLinkBadge } from '../shell/GraphLinks';
-import { useNodeGraphStore, switchScopeFor, SAVED_GRAPHS_CHANGED, loadCustomFns, EXAMPLE_INDEX, EXAMPLE_FOLDERS, loadExprPresets, deleteExprPreset, renameExprPreset, loadTransformPresets, deleteTransformPreset, renameTransformPreset, loadKeyframePresets, deleteKeyframePreset, renameKeyframePreset } from '../../store/useNodeGraphStore';
+import React, { useState, useEffect, useRef } from 'react';
+import { ItemRow, EmptyHint, TabSectionHeader } from '../library/ItemRow';
+import { Library, type LibraryFilter } from '../library/Library';
+import { OPEN_LIBRARY } from '../../library/appLibrary';
+import { useNodeGraphStore, switchScopeFor, SAVED_GRAPHS_CHANGED, EXAMPLE_INDEX, EXAMPLE_FOLDERS } from '../../store/useNodeGraphStore';
 import { NODE_REGISTRY, getNodeDefinitionFor } from '../../nodes/definitions';
 import { NodeBrowser } from './NodeBrowser';
-import { nodeDragProps, nodeDragStyle, type DropPayload } from './nodeDrop';
 import { ImportGlslModal } from './ImportGlslModal';
-import { FolderableList } from './FolderableList';
-import { groupByTime, lastWorkedOn, sortByRecent } from '../../store/graphRecency';
-import type { CustomFnPreset } from '../../types/customFnPreset';
-import { FnThumbnail } from '../code/FnThumbnail';
 import type { GraphNode } from '../../types/nodeGraph';
-import type { ExprPreset } from '../../types/exprPreset';
-import { exprPresetParams } from '../../lib/glslPatterns/saveFlows';
-import type { GroupPreset } from '../../types/groupPreset';
 import { useUserNodes } from '../../nodes/userNodes/useUserNodes';
 import { graphToSubgraph } from '../../nodes/userNodes/graphToSubgraph';
 import type { PublishSource } from '../../nodes/userNodes/publishUserNode';
@@ -25,8 +16,6 @@ import { Toggle } from '../ui/Choice';
 import { lazyWithSuspense, type PropsOf } from '../lazyWithSuspense';
 import type { PublishNodeModal as PublishNodeModalT } from './PublishNodeModal';
 const PublishNodeModal = lazyWithSuspense<PropsOf<typeof PublishNodeModalT>>(() => import('./PublishNodeModal').then(m => ({ default: m.PublishNodeModal })));
-import type { TransformPreset } from '../../types/transformPreset';
-import type { KeyframePreset } from '../../types/keyframePreset';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius, type Tokens } from '../../theme/tokens';
 import { Button, IconButton } from '../ui/Button';
@@ -36,22 +25,22 @@ import { tidyGlsl } from '../../glsl/format';
 import { Icon } from '../ui/Icon';
 import type { IconName } from '../ui/iconPaths';
 import { Tooltip } from '../ui/Tooltip';
-import { reportFileResult } from '../shell/reportFileResult';
 import { toast } from '../ui/toastStore';
 import { openTextFile } from '../../utils/fileIO';
 import { convertFragmentShader } from '../../nodes/userNodes/glslImport';
 import { spawnPoint } from './spawnPoint';
 import { LibraryCard } from '../shell/LibraryPanel';
-import { CreditTag } from '../ui/Credit';
-import { creditSentence, type SourceCredit } from '../../types/credit';
+import { creditSentence } from '../../types/credit';
 import { HistoryPanel, CountBadge, UnreadDot } from '../history/HistoryPanel';
 import { useUnseenActivity } from '../ui/activityStore';
 import { OPEN_WHATS_NEW, useWhatsNewUnread } from '../../changelog/releaseNotes';
 import { SwapSuggestions } from './SwitchNodePicker';
-import { COMPOUND_EFFECTS, compoundSubgraph } from '../../store/compoundEffects';
+
+/** Ask the sidebar to show one of its tabs (detail: { tab }). */
+export const OPEN_SIDEBAR_TAB = 'open-sidebar-tab';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-type TabId = 'nodes' | 'favorites' | 'graphs' | 'presets' | 'builder' | 'functions' | 'expressions' | 'keyframes' | 'history';
+type TabId = 'nodes' | 'favorites' | 'library' | 'builder' | 'history';
 
 interface ContentPaneState {
   id: string;
@@ -63,163 +52,11 @@ interface ContentPaneState {
 const SIDEBAR_TABS: Array<{ id: TabId; label: string; icon: IconName; color: (tk: Tokens) => string }> = [
   { id: 'nodes',       label: 'Nodes',           icon: 'nodes',   color: tk => tk.accent.base },
   { id: 'favorites',   label: 'Favorites',       icon: 'star',    color: tk => tk.status.warning },
-  { id: 'graphs',      label: 'Saved Graphs',    icon: 'graphs',  color: tk => tk.status.success },
-  { id: 'presets',     label: 'Presets',         icon: 'presets', color: tk => tk.accent.base },
+  // Everything you save, in one place: graphs, presets, functions, Expression Blocks, keyframes, your nodes, shaders, media.
+  { id: 'library',     label: 'Library',         icon: 'folder',  color: tk => tk.status.success },
   { id: 'builder',     label: 'Publish node',    icon: 'spark',   color: tk => tk.kind.fn },
-  { id: 'functions',   label: 'Functions',       icon: 'fn',      color: tk => tk.kind.fn },
-  { id: 'expressions', label: 'Expression Blocks', icon: 'expr',    color: tk => tk.kind.expr },
-  { id: 'keyframes',   label: 'Saved Keyframes', icon: 'kf',      color: tk => tk.status.warning },
   { id: 'history',     label: 'History',         icon: 'history', color: tk => tk.accent.base },
 ];
-
-// ── Saved-item row ────────────────────────────────────────────────────────────
-function ItemRow({ label, icon, color, onClick, onDoubleClick, selected = false, preview, onDelete, onRename, onEdit, editLabel = 'Edit', onExport, hint, tag, extra, thumb, source, drag, onDragDone }: {
-  label: string; icon: IconName; color: string;
-  /** Where an example comes from: a small credit line under the name. */
-  source?: SourceCredit;
-  /** Drawn in place of the icon (a saved function's rendered thumbnail). */
-  thumb?: React.ReactNode;
-  /** One line shown in the row's tooltip (an example's description) */
-  hint?: string;
-  /** Small pill after the name ("Play" for a graph that loads with a Play setup). */
-  tag?: string;
-  onClick: () => void;
-  /** Saved items: click selects (showing `preview`), double-click places */
-  onDoubleClick?: () => void;
-  selected?: boolean;
-  preview?: React.ReactNode;
-  onDelete?: () => void;
-  onRename?: () => void;
-  /** Open the item for editing (distinct from renaming). */
-  onEdit?: () => void;
-  editLabel?: string;
-  /** Save the item as a shareable file. */
-  onExport?: () => void;
-  /** Always shown before the hover actions (a saved graph's version count). */
-  extra?: React.ReactNode;
-  /** Pressing and moving drags the item onto the graph (nodeDrop.ts). */
-  drag?: DropPayload | null;
-  onDragDone?: () => void;
-}) {
-  const tk = useTokens();
-  const [hovered, setHovered] = useState(false);
-  const row = (
-    <div
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        minHeight: 32, display: 'flex', alignItems: 'center', gap: 9, padding: source ? '4px 4px 4px 8px' : '0 4px 0 8px', borderRadius: radius.md,
-        background: selected ? tk.bg.selected : hovered ? tk.bg.hover : 'transparent',
-      }}
-    >
-      {thumb ?? <Icon name={icon} size={15} style={{ color }} />}
-      <button
-        type="button"
-        // The second click of a double-click shouldn't collapse the preview it just opened
-        onClick={e => { if (onDoubleClick && e.detail > 1) return; onClick(); }}
-        onDoubleClick={onDoubleClick}
-        {...nodeDragProps(drag ?? null, onDragDone)}
-        aria-expanded={preview !== undefined ? selected : undefined}
-        title={`${hint ? `${label} — ${hint}` : label}${onDoubleClick ? ` · double-click to add${drag ? ' or drag onto the graph' : ''}` : ''}`}
-        style={{
-          flex: 1, minWidth: 0, height: source ? undefined : 32, alignSelf: 'stretch', border: 0, background: 'none', padding: 0, textAlign: 'left', cursor: 'pointer',
-          color: tk.text.secondary, font: `12.5px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', ...(drag ? nodeDragStyle : {}),
-          ...(source ? { display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2 } : {}),
-        }}
-      >{source ? <><span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span><CreditTag source={source} size={10.5} compact /></> : label}</button>
-      {tag && (
-        <span title={`Loads with a Play setup`} style={{ height: 18, padding: '0 6px', borderRadius: 5, display: 'inline-flex', alignItems: 'center', flexShrink: 0, background: alpha(tk.accent.base, 0.12), color: tk.accent.text, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.02em' }}>{tag}</span>
-      )}
-      {extra}
-      {(hovered || selected) && onExport && <IconButton icon="export" label="Export as a file" size="sm" onClick={e => { e.stopPropagation(); onExport(); }} />}
-      {(hovered || selected) && onEdit && <IconButton icon="layoutGraph" label={editLabel} size="sm" onClick={e => { e.stopPropagation(); onEdit(); }} />}
-      {(hovered || selected) && onRename && <IconButton icon="edit" label="Rename" size="sm" onClick={e => { e.stopPropagation(); onRename(); }} />}
-      {(hovered || selected) && onDelete && <IconButton icon="trash" label="Delete" size="sm" tone="danger" onClick={e => { e.stopPropagation(); onDelete(); }} />}
-    </div>
-  );
-  if (!selected || !preview) return row;
-  return <div>{row}{preview}</div>;
-}
-
-/**
- * Card under a selected saved item: its name and kind, a one-line signature, the comment it was
- * saved with, and Add to graph (double-clicking the row does the same).
- */
-function SavedItemPreview({ name, kind, signature, comment, onAdd, picture }: {
-  name: string; kind: string; signature?: string; comment?: string; onAdd: () => void;
-  /** A larger picture beside the name (a saved function's thumbnail). */
-  picture?: React.ReactNode;
-}) {
-  const tk = useTokens();
-  return (
-    <div style={{ margin: '4px 2px 8px', padding: '10px 12px', borderRadius: radius.md, background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${tk.border.default}`, display: 'flex', flexDirection: 'column', gap: 8 }}>
-      {picture ? (
-        // The picture beside the name, with the kind under it: the sidebar is narrow, the name comes first.
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          {picture}
-          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <b style={{ fontWeight: 600, fontSize: 13, color: tk.text.primary, overflowWrap: 'anywhere' }}>{name}</b>
-            <span style={{ fontSize: 11, color: tk.text.faint }}>{kind}</span>
-          </div>
-        </div>
-      ) : (
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-          <b style={{ fontWeight: 600, fontSize: 13, color: tk.text.primary, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</b>
-          <span style={{ fontSize: 11, color: tk.text.faint }}>{kind}</span>
-        </div>
-      )}
-      {signature && (
-        <code style={{ font: `11.5px/1.5 ${fontFamily.mono}`, color: tk.text.secondary, background: tk.bg.field, borderRadius: 6, padding: '5px 8px', overflowWrap: 'anywhere' }}>{signature}</code>
-      )}
-      {comment ? (
-        <div style={{ display: 'flex', gap: 7, fontSize: 12, lineHeight: 1.45, color: tk.text.secondary }}>
-          <Icon name="comment" size={14} style={{ color: tk.text.faint, flexShrink: 0, marginTop: 1 }} />
-          <span style={{ whiteSpace: 'pre-wrap' }}>{comment}</span>
-        </div>
-      ) : (
-        <span style={{ fontSize: 11.5, color: tk.text.faint }}>No comment. Add one on the node before saving to see it here.</span>
-      )}
-      <Button size="sm" variant="primary" icon="plus" onClick={onAdd} style={{ alignSelf: 'flex-start' }}>Add to graph</Button>
-    </div>
-  );
-}
-
-const signatureOf = (name: string, outputType: string, inputs: Array<{ name: string; type: string }>) =>
-  `${outputType} ${name.replace(/\s+/g, '_')}(${inputs.map(i => `${i.type} ${i.name}`).join(', ')})`;
-
-function RenameField({ value, onChange, onCommit, onCancel }: {
-  value: string; onChange: (v: string) => void; onCommit: () => void; onCancel: () => void;
-}) {
-  return (
-    <Field
-      autoFocus
-      value={value}
-      height={30}
-      onChange={e => onChange(e.target.value)}
-      onBlur={onCommit}
-      onKeyDown={e => { if (e.key === 'Enter') onCommit(); if (e.key === 'Escape') onCancel(); e.stopPropagation(); }}
-    />
-  );
-}
-
-// ── EmptyHint ─────────────────────────────────────────────────────────────────
-function EmptyHint({ children }: { children: React.ReactNode }) {
-  const tk = useTokens();
-  return <div style={{ fontSize: 12, color: tk.text.faint, padding: '2px 4px', lineHeight: 1.5 }}>{children}</div>;
-}
-
-// ── TabSectionHeader ──────────────────────────────────────────────────────────
-function TabSectionHeader({ label, action }: { label: string; action?: React.ReactNode }) {
-  const tk = useTokens();
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '10px 0 4px' }}>
-      <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: tk.text.faint }}>{label}</span>
-      <div style={{ flex: 1, height: 1, background: tk.border.subtle }} />
-      {action}
-    </div>
-  );
-}
-
 
 // ── ContentPane ───────────────────────────────────────────────────────────────
 interface ContentPaneProps {
@@ -235,37 +72,19 @@ interface ContentPaneProps {
   flexGrow: number;
   context?: 'studio' | 'glsl';
   onGlslInsert?: (code: string) => void;
+  /** Show another tab in this pane (the Library on a filter, say). */
+  onShowTab: (tab: TabId, libraryFilter?: LibraryFilter) => void;
 }
 
-function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, onToggleFavorite, nodeButtonRefs, onNodeAdded, flexGrow, context, onGlslInsert }: ContentPaneProps) {
+function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, onToggleFavorite, nodeButtonRefs, onNodeAdded, flexGrow, context, onGlslInsert, onShowTab }: ContentPaneProps) {
   const tk = useTokens();
-  // Saved items: the one showing its preview card
-  const [selectedSaved, setSelectedSaved] = useState<string | null>(null);
-  const toggleSaved = (id: string) => setSelectedSaved(cur => (cur === id ? null : id));
-  /** Where a saved item lands: the middle of the view (a card's top-left, so offset by half a card) */
-  const placeAt = spawnPoint;
   const addNode                 = useNodeGraphStore(s => s.addNode);
-  const currentGraph            = useNodeGraphStore(s => s.currentGraph);
-  const graphDirty              = useNodeGraphStore(s => s.graphDirty);
   const getSavedGraphNames      = useNodeGraphStore(s => s.getSavedGraphNames);
   const savedGraphHasPlay       = useNodeGraphStore(s => s.savedGraphHasPlay);
-  const loadSavedGraph          = useNodeGraphStore(s => s.loadSavedGraph);
-  const deleteSavedGraph        = useNodeGraphStore(s => s.deleteSavedGraph);
-  const deleteCustomFn          = useNodeGraphStore(s => s.deleteCustomFn);
-  const importCustomFnsFromFile = useNodeGraphStore(s => s.importCustomFnsFromFile);
-  const loadCustomFnsFromDisk   = useNodeGraphStore(s => s.loadCustomFnsFromDisk);
   const swapTargetNodeId        = useNodeGraphStore(s => s.swapTargetNodeId);
   const setSwapTargetNodeId     = useNodeGraphStore(s => s.setSwapTargetNodeId);
   const swapNode                = useNodeGraphStore(s => s.swapNode);
   const graphNodes        = useNodeGraphStore(s => s.nodes);
-  const groupPresets      = useNodeGraphStore(s => s.groupPresets);
-  const instantiateGroupPreset = useNodeGraphStore(s => s.instantiateGroupPreset);
-  const placeSubgraphAsGroup = useNodeGraphStore(s => s.placeSubgraphAsGroup);
-  const deleteGroupPreset = useNodeGraphStore(s => s.deleteGroupPreset);
-  const deleteUserNode     = useNodeGraphStore(s => s.deleteUserNode);
-  const openUserNodeSource = useNodeGraphStore(s => s.openUserNodeSource);
-  const exportUserNodes    = useNodeGraphStore(s => s.exportUserNodes);
-  const canPack = useCan('nodes.pack');
   const readSavedGraphNodes = useNodeGraphStore(s => s.readSavedGraphNodes);
   const [publishSource, setPublishSource] = useState<PublishSource | null>(null);
   const [publishExisting, setPublishExisting] = useState<string | undefined>(undefined);
@@ -280,97 +99,22 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
     if (!r.ok) { toast.error(`Can’t publish “${label}”`, { message: r.error }); return; }
     setPublishSource({ kind: 'subgraph', subgraph: r.subgraph, label });
   };
-  const importUserNodesFromFile = useNodeGraphStore(s => s.importUserNodesFromFile);
-  const importUserNodes = async () => {
-    const r = await importUserNodesFromFile();
-    if (!r.ok) { reportFileResult(r, { failTitle: 'Couldn’t import node types' }); return; }
-    if (r.deferred) return; // a .play file: its preview dialog imports
-    const parts = [
-      r.imported?.length ? `${r.imported.length} new: ${r.imported.join(', ')}` : '',
-      r.replaced?.length ? `${r.replaced.length} updated: ${r.replaced.join(', ')}` : '',
-    ].filter(Boolean);
-    toast.success('Node types imported', { message: parts.join(' · ') });
-  };
   const userNodes          = useUserNodes();
   const loadExampleGraph  = useNodeGraphStore(s => s.loadExampleGraph);
 
   const [query, setQuery]                           = useState('');
   const [savedNames, setSavedNames]                 = useState<string[]>(() => getSavedGraphNames());
-  const [showGraphSaveInput, setShowGraphSaveInput] = useState(false);
-  const [userPresets, setUserPresets]               = useState<CustomFnPreset[]>(() => loadCustomFns());
-  const [exprPresets, setExprPresets]               = useState<ExprPreset[]>(() => loadExprPresets());
-  const [transformPresets, setTransformPresets]     = useState<TransformPreset[]>(() => loadTransformPresets());
-  const [renamingExprId, setRenamingExprId]         = useState<string | null>(null);
-  const [renameExprValue, setRenameExprValue]       = useState('');
-  const [renamingTransformId, setRenamingTransformId] = useState<string | null>(null);
-  const [renameTransformValue, setRenameTransformValue] = useState('');
-  const [keyframePresets, setKeyframePresets]       = useState<KeyframePreset[]>(() => loadKeyframePresets());
-  const [renamingKeyframeId, setRenamingKeyframeId] = useState<string | null>(null);
-  const [renameKeyframeValue, setRenameKeyframeValue] = useState('');
   const [examplesExpanded, setExamplesExpanded]     = useState(false);
   const [openFolders, setOpenFolders]               = useState<Set<string>>(new Set());
   const [showImport, setShowImport]                 = useState(false);
 
   const { activeTab } = state;
 
-  const refreshSavedNames     = () => setSavedNames(getSavedGraphNames());
-  const importGraphsBulk      = useNodeGraphStore(s => s.importGraphsBulk);
-  const importGraphs = async (mode: 'files' | 'folder') => {
-    const r = await importGraphsBulk(mode);
-    refreshSavedNames();
-    if (!r.ok) { reportFileResult(r, { failTitle: 'Couldn’t import graphs' }); return; }
-    const n = r.imported?.length ?? 0;
-    const skipped = r.skipped?.length ?? 0;
-    toast.success(`Imported ${n} graph${n === 1 ? '' : 's'}`, { message: skipped ? `${skipped} file${skipped === 1 ? '' : 's'} skipped (${r.skipped![0].reason}).` : undefined });
-  };
-  // Saves and deletes from anywhere (the top bar too) keep this list current
+  // Saves and deletes from anywhere (the top bar too) keep the Publish node panel's saved-graph picker current
   useEffect(() => {
     const onChange = () => setSavedNames(useNodeGraphStore.getState().getSavedGraphNames());
     window.addEventListener(SAVED_GRAPHS_CHANGED, onChange);
     return () => window.removeEventListener(SAVED_GRAPHS_CHANGED, onChange);
-  }, []);
-  const refreshExprPresets    = () => setExprPresets(loadExprPresets());
-  const refreshTransformPresets = () => setTransformPresets(loadTransformPresets());
-  const refreshKeyframePresets = () => setKeyframePresets(loadKeyframePresets());
-
-  const refreshPresets = useCallback(async () => {
-    const local = loadCustomFns();
-    const disk  = await loadCustomFnsFromDisk();
-    const seen  = new Set<string>();
-    const merged: CustomFnPreset[] = [];
-    for (const p of [...disk, ...local]) {
-      if (!seen.has(p.id)) { seen.add(p.id); merged.push(p); }
-    }
-    merged.sort((a, b) => a.savedAt - b.savedAt);
-    setUserPresets(merged);
-  }, [loadCustomFnsFromDisk]);
-
-  useEffect(() => {
-    refreshPresets();
-    window.addEventListener('focus', refreshPresets);
-    window.addEventListener('customfn-changed', refreshPresets);
-    return () => { window.removeEventListener('focus', refreshPresets); window.removeEventListener('customfn-changed', refreshPresets); };
-  }, [refreshPresets]);
-
-  useEffect(() => {
-    refreshExprPresets();
-    window.addEventListener('exprpreset-changed', refreshExprPresets);
-    return () => window.removeEventListener('exprpreset-changed', refreshExprPresets);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    refreshTransformPresets();
-    window.addEventListener('transformpreset-changed', refreshTransformPresets);
-    return () => window.removeEventListener('transformpreset-changed', refreshTransformPresets);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    refreshKeyframePresets();
-    window.addEventListener('keyframepreset-changed', refreshKeyframePresets);
-    return () => window.removeEventListener('keyframepreset-changed', refreshKeyframePresets);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleAdd = (type: string, params?: Record<string, unknown>) => {
@@ -488,39 +232,11 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
             </div>
           );
 
-      case 'graphs':
+      case 'library':
         return (
           <>
-            {showGraphSaveInput ? (
-              <div style={{ marginBottom: 8 }}>
-                <SaveGraphForm onDone={() => { setShowGraphSaveInput(false); refreshSavedNames(); }} />
-              </div>
-            ) : (
-              <div style={{ display: 'flex', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
-                <Button size="sm" icon="save" onClick={() => setShowGraphSaveInput(true)}>{currentGraph ? `Save “${currentGraph.name}”${graphDirty ? ' •' : ''}` : 'Save current graph'}</Button>
-                <Button size="sm" icon="import" title="Import several graph files at once" onClick={() => importGraphs('files')}>Import files…</Button>
-                <Button size="sm" icon="folder" title="Import a folder of graphs; its folders are recreated here" onClick={() => importGraphs('folder')}>Import folder…</Button>
-              </div>
-            )}
-            <LibraryCard />
-            <FolderableList
-              scopeKey="graphs"
-              color={tabColor('graphs')}
-              items={savedNames.map(name => ({ id: name, label: name }))}
-              // Recent work first (Today, This week, Earlier, by the newest save of any version), folders after.
-              groupLoose={items => groupByTime(items, i => lastWorkedOn(i.id), i => i.label)}
-              sortItems={items => sortByRecent(items, i => lastWorkedOn(i.id), i => i.label)}
-              foldersLast
-              maxHeight="min(60vh, 560px)"
-              renderItem={(item) => (
-                <ItemRow label={item.label} icon="graphs" color={tabColor('graphs')} tag={savedGraphHasPlay(item.id) ? 'Play' : undefined}
-                  selected={currentGraph?.name === item.id}
-                  extra={<><GraphLinkBadge graph={item.id} compact /><VersionsButton name={item.id} onOpened={() => onNodeAdded?.()} /></>}
-                  onClick={() => { if (reportFileResult(loadSavedGraph(item.id), { failTitle: `Couldn’t open “${item.label}”` })) onNodeAdded?.(); }}
-                  onDelete={() => { deleteSavedGraph(item.id); refreshSavedNames(); }} />
-              )}
-              emptyHint={!showGraphSaveInput && <EmptyHint>Save the current graph to keep it here.</EmptyHint>}
-            />
+            <Library size="rail" onOpened={onNodeAdded} />
+            <div style={{ marginTop: 10 }}><LibraryCard /></div>
           </>
         );
 
@@ -575,7 +291,7 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
                   <Field autoFocus aria-label="Search saved graphs" placeholder="Search saved graphs" height={30} value={savedPickQ} onChange={e => setSavedPickQ(e.target.value)} />
                   <div style={{ maxHeight: 320, overflowY: 'auto', marginTop: 6 }}>
                     {savedNames.filter(n => !savedPickQ.trim() || n.toLowerCase().includes(savedPickQ.trim().toLowerCase())).map(name => (
-                      <ItemRow key={name} label={name} icon="graphs" color={tabColor('graphs')} tag={savedGraphHasPlay(name) ? 'Play' : undefined}
+                      <ItemRow key={name} label={name} icon="graphs" color={tk.status.success} tag={savedGraphHasPlay(name) ? 'Play' : undefined}
                         onClick={() => { setSavedPickOpen(false); openPublishFor(readSavedGraphNodes(name), name); }} />
                     ))}
                     {savedNames.length > 0 && savedNames.every(n => savedPickQ.trim() && !n.toLowerCase().includes(savedPickQ.trim().toLowerCase())) && <EmptyHint>Nothing matches “{savedPickQ}”.</EmptyHint>}
@@ -583,180 +299,15 @@ function ContentPane({ state, isFocused, onFocus, onClose, isOnly, favorites, on
                 </Popover>
               )}
             </div>
-            <TabSectionHeader label="My nodes" action={
-              <span style={{ display: 'flex', gap: 2 }}>
-                <IconButton icon="import" label="Import node types: a node pack (.playfile) or an older .json" size="sm" onClick={importUserNodes} />
-                {userNodes.length > 0 && (
-                  <IconButton icon="export" label={canPack ? 'Export node types as a node pack (.play file, signed, optionally sealed)' : 'Export node types as a node pack (Pro: making node packs)'} size="sm"
-                    onClick={async () => reportFileResult(await exportUserNodes(), { failTitle: 'Couldn’t export node types' })} />
-                )}
+            <TabSectionHeader label="My nodes" />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '2px 2px 8px' }}>
+              <span style={{ fontSize: 12, color: tk.text.muted, lineHeight: 1.45, flex: 1, minWidth: 160 }}>
+                {userNodes.length ? `${userNodes.length} node type${userNodes.length === 1 ? '' : 's'} published.` : 'Nothing published yet.'} They are in the Library, with your other saved work, and in Nodes › My nodes.
               </span>
-            } />
-            <FolderableList
-              scopeKey="presets:usernodes"
-              color={tabColor('presets')}
-              items={userNodes.map(d => ({ id: d.id, label: d.label }))}
-              renderItem={(item) => {
-                const d = userNodes.find(u => u.id === item.id);
-                if (!d) return null;
-                return (
-                  <ItemRow label={d.label} icon="spark" color={tk.kind.fn} tag={d.sealed ? 'Sealed' : undefined}
-                    drag={{ label: d.label, type: d.id, place: pos => addNode(d.id, pos) }} onDragDone={onNodeAdded}
-                    onClick={() => { addNode(d.id, spawnPoint(d.id)); onNodeAdded?.(); }}
-                    onEdit={d.source ? () => {
-                      if (d.source?.kind === 'code') { setPublishExisting(d.id); setPublishSource({ kind: 'code', code: d.source.code, entry: d.source.entry, label: d.label }); return; }
-                      if (openUserNodeSource(d.id, spawnPoint())) onNodeAdded?.();
-                    } : undefined}
-                    editLabel={d.source?.kind === 'code' ? 'Edit the GLSL (publish again to update)' : 'Open source graph (publish again to update)'}
-                    onExport={async () => reportFileResult(await exportUserNodes([d.id]), { failTitle: `Couldn’t export “${d.label}”` })}
-                    onDelete={() => { if (window.confirm(`Delete node type “${d.label}”? Placed instances will stop compiling.`)) deleteUserNode(d.id); }} />
-                );
-              }}
-              emptyHint={<EmptyHint>Publish a group as a node (the ✦ button on a group card) and it appears here — and in Nodes › My Nodes. Or import a .json someone shared.</EmptyHint>}
-            />
+              <Button size="sm" icon="folder" onClick={() => onShowTab('library', 'nodes')}>Show in the Library</Button>
+            </div>
             {publishSource && <PublishNodeModal source={publishSource} existingId={publishExisting} onClose={() => { setPublishSource(null); setPublishExisting(undefined); }} />}
           </>
-        );
-
-      case 'presets':
-        return (
-          <>
-            <TabSectionHeader label="Built-in effects" />
-            {COMPOUND_EFFECTS.map(c => {
-              const put = (pos: { x: number; y: number }) => placeSubgraphAsGroup(c.label, compoundSubgraph(c), pos, c.description);
-              const place = () => { put(placeAt()); onNodeAdded?.(); };
-              return (
-                <ItemRow key={c.id} label={c.label} icon="presets" color={tabColor('presets')}
-                  drag={{ label: c.label, place: pos => put(pos) }} onDragDone={onNodeAdded}
-                  selected={selectedSaved === c.id} onClick={() => toggleSaved(c.id)} onDoubleClick={() => place()}
-                  preview={<SavedItemPreview name={c.label} kind="Group" signature="built in · a group you can open" comment={c.description} onAdd={() => place()} />} />
-              );
-            })}
-            <TabSectionHeader label="Group presets" />
-            <FolderableList
-              scopeKey="presets:group"
-              color={tabColor('presets')}
-              items={(groupPresets as GroupPreset[]).map(p => ({ id: p.id, label: p.label, _preset: p }))}
-              renderItem={(item) => {
-                const p = (item as typeof item & { _preset: GroupPreset })._preset;
-                const place = () => { instantiateGroupPreset(p.id, placeAt()); onNodeAdded?.(); };
-                const sub = p.subgraph;
-                return (
-                  <ItemRow label={p.label} icon="presets" color={tabColor('presets')}
-                    drag={{ label: p.label, place: pos => instantiateGroupPreset(p.id, pos) }} onDragDone={onNodeAdded}
-                    selected={selectedSaved === p.id} onClick={() => toggleSaved(p.id)} onDoubleClick={place}
-                    preview={<SavedItemPreview name={p.label} kind="Group"
-                      signature={`${sub.nodes.length} nodes · ${sub.inputPorts.length} in · ${sub.outputPorts.length} out`}
-                      comment={p.description} onAdd={place} />}
-                    onDelete={() => deleteGroupPreset(p.id)} />
-                );
-              }}
-              emptyHint={<EmptyHint>Select a group node and save it to create a preset.</EmptyHint>}
-            />
-            <TabSectionHeader label="Vector transforms" />
-            <FolderableList
-              scopeKey="presets:transform"
-              color={tabColor('presets')}
-              items={(transformPresets as TransformPreset[]).map(p => ({ id: p.id, label: p.label, _preset: p }))}
-              renderItem={(item) => {
-                const p = (item as typeof item & { _preset: TransformPreset })._preset;
-                return renamingTransformId === p.id
-                  ? <RenameField value={renameTransformValue} onChange={setRenameTransformValue}
-                      onCommit={() => { renameTransformPreset(p.id, renameTransformValue); setRenamingTransformId(null); refreshTransformPresets(); }}
-                      onCancel={() => setRenamingTransformId(null)} />
-                  : <ItemRow label={p.label} icon="layout" color={tabColor('presets')}
-                      drag={{ label: p.label, type: 'transformVec', place: pos => addNode('transformVec', pos, { outputType: p.outputType, exprX: p.exprX, exprY: p.exprY, exprZ: p.exprZ, exprW: p.exprW, ...(p.comment ? { __comment: p.comment } : {}) }) }} onDragDone={onNodeAdded}
-                      selected={selectedSaved === p.id} onClick={() => toggleSaved(p.id)}
-                      onDoubleClick={() => { addNode('transformVec', placeAt(), { outputType: p.outputType, exprX: p.exprX, exprY: p.exprY, exprZ: p.exprZ, exprW: p.exprW, ...(p.comment ? { __comment: p.comment } : {}) }); onNodeAdded?.(); }}
-                      preview={<SavedItemPreview name={p.label} kind="Transform Vec"
-                        signature={`${p.outputType}(${[p.exprX, p.exprY, p.outputType !== 'vec2' ? p.exprZ : null, p.outputType === 'vec4' ? p.exprW : null].filter(Boolean).join(', ')})`}
-                        comment={p.comment}
-                        onAdd={() => { addNode('transformVec', placeAt(), { outputType: p.outputType, exprX: p.exprX, exprY: p.exprY, exprZ: p.exprZ, exprW: p.exprW, ...(p.comment ? { __comment: p.comment } : {}) }); onNodeAdded?.(); }} />}
-                      onDelete={() => { deleteTransformPreset(p.id); refreshTransformPresets(); }}
-                      onRename={() => { setRenameTransformValue(p.label); setRenamingTransformId(p.id); }} />;
-              }}
-              emptyHint={<EmptyHint>Formulas for each part of a vector, saved from a Transform Vec node’s editor.</EmptyHint>}
-            />
-          </>
-        );
-
-      case 'functions':
-        return (
-          <>
-            <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
-              {userPresets.length > 0 && <Button size="sm" icon="export" onClick={e => offerCustomFunctionsExport(e.currentTarget)}>Export</Button>}
-              <Button size="sm" icon="import" onClick={async () => { await importCustomFnsFromFile(); await refreshPresets(); }}>Import</Button>
-            </div>
-            <FolderableList
-              scopeKey="functions"
-              color={tabColor('functions')}
-              items={(userPresets as CustomFnPreset[]).map(p => ({ id: p.id, label: p.label, _preset: p }))}
-              renderItem={(item) => {
-                const p = (item as typeof item & { _preset: CustomFnPreset })._preset;
-                const place = () => {
-                  addNode('customFn', placeAt(), { label: p.label, inputs: p.inputs, outputType: p.outputType, body: p.body, glslFunctions: p.glslFunctions, ...(p.comment ? { __comment: p.comment } : {}) });
-                  onNodeAdded?.();
-                };
-                return (
-                  <ItemRow label={p.label} icon="fn" color={tabColor('functions')}
-                    thumb={<FnThumbnail preset={p} size={22} />}
-                    drag={{ label: p.label, type: 'customFn', place: pos => addNode('customFn', pos, { label: p.label, inputs: p.inputs, outputType: p.outputType, body: p.body, glslFunctions: p.glslFunctions, ...(p.comment ? { __comment: p.comment } : {}) }) }} onDragDone={onNodeAdded}
-                    selected={selectedSaved === p.id} onClick={() => toggleSaved(p.id)} onDoubleClick={place}
-                    preview={<SavedItemPreview name={p.label} kind="Custom Function" signature={signatureOf(p.label, p.outputType, p.inputs)} comment={p.comment} onAdd={place} picture={<FnThumbnail preset={p} size={56} radius={radius.md} />} />}
-                    onDelete={() => { deleteCustomFn(p.id); refreshPresets(); }} />
-                );
-              }}
-              emptyHint={<EmptyHint>Open a Custom Function node and save it as a preset.</EmptyHint>}
-            />
-          </>
-        );
-
-      case 'expressions':
-        return (
-          <FolderableList
-            scopeKey="expressions"
-            color={tabColor('expressions')}
-            items={(exprPresets as ExprPreset[]).map(p => ({ id: p.id, label: p.label, _preset: p }))}
-            renderItem={(item) => {
-              const p = (item as typeof item & { _preset: ExprPreset })._preset;
-              return renamingExprId === p.id
-                ? <RenameField value={renameExprValue} onChange={setRenameExprValue}
-                    onCommit={() => { renameExprPreset(p.id, renameExprValue); setRenamingExprId(null); refreshExprPresets(); }}
-                    onCancel={() => setRenamingExprId(null)} />
-                : <ItemRow label={p.label} icon="expr" color={tabColor('expressions')}
-                    drag={{ label: p.label, type: 'exprNode', place: pos => addNode('exprNode', pos, exprPresetParams(p)) }} onDragDone={onNodeAdded}
-                    selected={selectedSaved === p.id} onClick={() => toggleSaved(p.id)}
-                    onDoubleClick={() => { addNode('exprNode', placeAt(), exprPresetParams(p)); onNodeAdded?.(); }}
-                    preview={<SavedItemPreview name={p.label} kind="Expression Block"
-                      signature={`${signatureOf(p.label, p.outputType, p.inputs)} = ${p.result}`}
-                      comment={p.comment}
-                      onAdd={() => { addNode('exprNode', placeAt(), exprPresetParams(p)); onNodeAdded?.(); }} />}
-                    onDelete={() => { deleteExprPreset(p.id); refreshExprPresets(); }}
-                    onRename={() => { setRenameExprValue(p.label); setRenamingExprId(p.id); }} />;
-            }}
-            emptyHint={<EmptyHint>Open an Expression Block node and save it as a preset.</EmptyHint>}
-          />
-        );
-
-      case 'keyframes':
-        return (
-          <FolderableList
-            scopeKey="keyframes"
-            color={tabColor('keyframes')}
-            items={(keyframePresets as KeyframePreset[]).map(p => ({ id: p.id, label: p.label, _preset: p }))}
-            renderItem={(item) => {
-              const p = (item as typeof item & { _preset: KeyframePreset })._preset;
-              return renamingKeyframeId === p.id
-                ? <RenameField value={renameKeyframeValue} onChange={setRenameKeyframeValue}
-                    onCommit={() => { renameKeyframePreset(p.id, renameKeyframeValue); setRenamingKeyframeId(null); refreshKeyframePresets(); }}
-                    onCancel={() => setRenamingKeyframeId(null)} />
-                : <ItemRow label={p.label} icon="kf" color={tabColor('keyframes')}
-                    onClick={() => window.dispatchEvent(new CustomEvent('apply-keyframe-preset', { detail: { keyframes: p.keyframes } }))}
-                    onDelete={() => { deleteKeyframePreset(p.id); refreshKeyframePresets(); }}
-                    onRename={() => { setRenameKeyframeValue(p.label); setRenamingKeyframeId(p.id); }} />;
-            }}
-            emptyHint={<EmptyHint>Save a curve from the keyframe editor. Click a saved curve here to apply it to whichever editor is open.</EmptyHint>}
-          />
         );
 
       case 'history':
@@ -846,6 +397,17 @@ function PaletteBody({ mode = 'full', onNodeAdded, onCollapse, context, onGlslIn
     const open = () => setPanes(prev => (prev.some(p => p.activeTab === 'nodes') ? prev : prev.map(p => (p.id === focusedPaneId ? { ...p, activeTab: 'nodes' } : p))));
     window.addEventListener(BROWSE_STAGE_EVENT, open);
     return () => window.removeEventListener(BROWSE_STAGE_EVENT, open);
+  }, [mode, focusedPaneId]);
+
+  // "Show in the Library" (a filter), and a request for one of the sidebar's tabs (the Library's "Publish node…").
+  useEffect(() => {
+    if (mode === 'drawer') return;
+    const show = (tab: TabId) => setPanes(prev => (prev.some(p => p.activeTab === tab) ? prev : prev.map(p => (p.id === focusedPaneId ? { ...p, activeTab: tab } : p))));
+    const lib = () => show('library');
+    const tab = (e: Event) => { const t = (e as CustomEvent<{ tab?: string }>).detail?.tab; if (t && SIDEBAR_TABS.some(x => x.id === t)) show(t as TabId); };
+    window.addEventListener(OPEN_LIBRARY, lib);
+    window.addEventListener(OPEN_SIDEBAR_TAB, tab);
+    return () => { window.removeEventListener(OPEN_LIBRARY, lib); window.removeEventListener(OPEN_SIDEBAR_TAB, tab); };
   }, [mode, focusedPaneId]);
 
   const nodeButtonRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
@@ -979,6 +541,7 @@ function PaletteBody({ mode = 'full', onNodeAdded, onCollapse, context, onGlslIn
                 flexGrow={pane.flexGrow}
                 context={context}
                 onGlslInsert={onGlslInsert}
+                onShowTab={(tab, filter) => { updatePane(pane.id, { activeTab: tab }); if (filter) setTimeout(() => window.dispatchEvent(new CustomEvent(OPEN_LIBRARY, { detail: { filter } })), 0); }}
               />
             </React.Fragment>
           ))}

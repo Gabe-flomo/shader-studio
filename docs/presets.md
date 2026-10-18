@@ -193,6 +193,56 @@ preset of Audio Units has nothing to give there.
 (sample player zones, a Granulator's sound) are named by `sampleId`, so a
 `.play` export bundles them.
 
+## One preset store
+
+Every kind of preset is now behind one API, `src/presets/presetStore.ts`:
+
+- list, save, rename and remove
+- folders, one scope per kind
+- export and import (a `library.json` subset that never overwrites on import)
+- a `usePresets(kind)` hook
+
+The kinds are registered in `src/presets/presetKinds.ts`. Each one is described by where its
+presets have always lived (a key prefix or one list key, and the field its name is in), so old
+data reads as it is. A write changes only the name, or drops the one record, and keeps every
+other field. A kind whose module keeps state in memory supplies its own operations: the
+builders' zustand stores, background palettes, and the stores behind group and function
+deletes.
+
+Kinds are grouped by what they apply to:
+
+| Group | Kinds |
+|---|---|
+| Nodes in the graph | Groups (+ the built-in effects), Vector transforms, Functions, Expression Blocks, Keyframe curves |
+| Scene builders | the 3D, 2D, Grid, Warp, Grid Rules, Splat, Time Cube and Agents builders' presets (+ the Agents and Time Cube built-ins), Space blocks |
+| Play | Layer sets, Racks, Drum kits (+ the built-in kits) |
+| Finish | Finish stacks, Finish effects, Looks |
+| Colour | Palette node presets, Background palettes (+ the built-in palettes) |
+
+`<PresetMenu>` (`src/components/presets/PresetMenu.tsx`) is the shared UI. It has two variants:
+
+- **menu**: a Presets button. It lists built-ins, then yours. You can save, rename and
+  delete (with Undo), and the list has Export, Import and "In the Library".
+- **strip**: a builder's cards, with "+ Save this scene" and "All…".
+
+These places use it:
+
+- every Scene builder's strip (`components/builders/UserPresets.tsx`)
+- the keyframe editor
+- the Transform Vec editor
+
+Every user preset also shows in the Library's Presets filter (`docs/library.md`). Functions,
+Expression Blocks and keyframe curves show under their own filters instead.
+
+Still drawn by their own panels, but stored through the same keys:
+
+- the Finish rail's presets and Looks (they move when the two Finish systems merge)
+- Play's layer-set and rack dialogs, and drum kits
+- the 2D builder's space blocks
+- the Palette node's menu
+- the Particles node's preset chips (built-ins only, no user presets yet)
+- the Agents and Time Cube builders' built-in cards (they draw live thumbnails)
+
 ## See also
 
 - docs/files-page.md (item pages), docs/playfile-format.md, docs/linked-folders.md

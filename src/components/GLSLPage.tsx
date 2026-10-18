@@ -1,3 +1,4 @@
+import { OPEN_SAVED_SHADER, SHADERS_CHANGED } from '../library/libraryFacade';
 import { offerSetExport } from './playfile/exportMenus';
 import { recordActivity } from '../files/activity';
 import { redactSealedCode } from '../nodes/userNodes/userNodeRegistry';
@@ -160,7 +161,10 @@ function loadShaders(): SavedShader[] {
  * actually landed, so a full quota never shows a shader as "saved".
  */
 function persistShaders(list: SavedShader[]): FileResult {
-  return safeSetItem(SHADERS_KEY, JSON.stringify(list), 'shaders');
+  const r = safeSetItem(SHADERS_KEY, JSON.stringify(list), 'shaders');
+  // The Library lists them too.
+  if (r.ok) window.dispatchEvent(new Event(SHADERS_CHANGED));
+  return r;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -278,6 +282,20 @@ export function GLSLPage({ onConvert }: { onConvert?: (code: string, guided?: bo
     editorRef.current?.focus();
     setOpen(s.id);
   };
+
+  // The Library renamed, deleted, imported or opened one.
+  useEffect(() => {
+    const reread = () => setShaders(loadShaders());
+    const openOne = (e: Event) => {
+      const id = (e as CustomEvent<{ id?: string }>).detail?.id;
+      const s = loadShaders().find(x => x.id === id);
+      if (s) { setShaders(loadShaders()); loadShader(s); }
+    };
+    window.addEventListener(SHADERS_CHANGED, reread);
+    window.addEventListener(OPEN_SAVED_SHADER, openOne);
+    return () => { window.removeEventListener(SHADERS_CHANGED, reread); window.removeEventListener(OPEN_SAVED_SHADER, openOne); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const deleteShader = (id: string) => {
     const next = shaders.filter(s => s.id !== id);

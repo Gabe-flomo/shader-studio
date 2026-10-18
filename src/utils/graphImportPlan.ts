@@ -14,7 +14,7 @@ export interface PickedFile {
 
 export interface PlannedGraph {
   name: string;
-  /** Folder label, or null for the root of Saved Graphs. Nested dirs join with ` / `. */
+  /** Folder label, or null for the root of the Library’s Graphs. Nested dirs join with ` / `. */
   folder: string | null;
   payload: string;
 }

@@ -22,6 +22,8 @@ const CHROME_FILES = [
   'src/components/NodeGraph/NodePalette.tsx',
   'src/components/nodePacks/BuilderShell.tsx',
   'src/components/learn/StartSheet.tsx',
+  'src/components/library/Library.tsx',
+  'src/components/presets/PresetMenu.tsx',
 ];
 
 const ATTR = /\b(label|title|hint|description|aria-label|ariaLabel|placeholder)\s*[:=]\s*\{?\s*(['"`])((?:(?!\2)[^\\]|\\.)*)\2/g;
@@ -48,6 +50,7 @@ describe('glossary', () => {
     expect(glossaryProblems('Go to Mappings')).toHaveLength(1);
     expect(glossaryProblems('Engine${n ? ` · ${n}` : \'\'}')).toHaveLength(1);
     expect(glossaryProblems('Hover for color')).toHaveLength(1);
+    expect(glossaryProblems('Saved Graphs')).toHaveLength(1);
     // …and leaves the right ones alone.
     for (const ok of ['Publish node', 'Functions', 'Import shader', 'Go to Controls', 'Sound · 2', 'Hover for colour', 'Add Color node', 'Scene builder', 'Inputs & media']) {
       expect(glossaryProblems(ok), ok).toEqual([]);

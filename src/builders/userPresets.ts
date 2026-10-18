@@ -37,6 +37,8 @@ export interface UserPresetsState {
   add: (name: string, recipe: string, thumb: string | null) => { preset: UserBuilderPreset; stored: boolean };
   rename: (id: string, name: string) => void;
   remove: (id: string) => void;
+  /** Read the list again from storage (after an import or an undo wrote it). */
+  reload: () => void;
 }
 
 export type UserPresetsStore = UseBoundStore<StoreApi<UserPresetsState>>;
@@ -79,6 +81,7 @@ function makeStore(kind: PresetBuilderKind): UserPresetsStore {
       const presets = get().presets.filter(p => p.id !== id);
       set({ presets }); save(presets);
     },
+    reload: () => set({ presets: load() }),
   }));
 }
 

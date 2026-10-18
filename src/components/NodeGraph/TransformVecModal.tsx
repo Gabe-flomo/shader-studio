@@ -1,11 +1,11 @@
-import React, { useRef, useCallback, useState } from 'react';
+import React, { useRef, useCallback } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
-import { saveTransformPreset } from '../../store/useNodeGraphStore';
+import { PresetMenu } from '../presets/PresetMenu';
+import type { TransformPreset } from '../../types/transformPreset';
 import type { GraphNode, DataType, SubgraphData } from '../../types/nodeGraph';
 import { getNodeDefinitionFor } from '../../nodes/definitions';
 import { useCtp, type CtpPalette } from '../../theme/nodePalette';
 import { Modal } from '../ui/Modal';
-import { Button } from '../ui/Button';
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
@@ -124,26 +124,18 @@ export function TransformVecModal({ node, onClose }: Props) {
   const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const focusedComp = useRef<string | null>(null);
 
-  // Save-preset UI state
-  const [savingPreset, setSavingPreset] = useState(false);
-  const [presetLabel, setPresetLabel]   = useState('');
-  const [savedFlash, setSavedFlash]     = useState(false);
-
-  const handleSavePreset = () => {
-    const label = presetLabel.trim() || 'Transform Vec';
-    saveTransformPreset({
-      label,
-      outputType: type as 'vec2' | 'vec3' | 'vec4',
-      exprX: (node.params.exprX as string) ?? 'x',
-      exprY: (node.params.exprY as string) ?? 'y',
-      exprZ: (node.params.exprZ as string) ?? 'z',
-      exprW: (node.params.exprW as string) ?? 'w',
-      comment: typeof node.params.__comment === 'string' && node.params.__comment.trim() ? node.params.__comment.trim() : undefined,
-    });
-    setSavingPreset(false);
-    setPresetLabel('');
-    setSavedFlash(true);
-    setTimeout(() => setSavedFlash(false), 1200);
+  // Presets (the Presets menu, components/presets/PresetMenu.tsx): this node's formulas, saved and applied back.
+  const presetData = () => ({
+    outputType: type as 'vec2' | 'vec3' | 'vec4',
+    exprX: (node.params.exprX as string) ?? 'x',
+    exprY: (node.params.exprY as string) ?? 'y',
+    exprZ: (node.params.exprZ as string) ?? 'z',
+    exprW: (node.params.exprW as string) ?? 'w',
+    ...(typeof node.params.__comment === 'string' && node.params.__comment.trim() ? { comment: node.params.__comment.trim() } : {}),
+  });
+  const applyPreset = (p: TransformPreset) => {
+    if (p.outputType && p.outputType !== type) changeNodeVectorType(node.id, 'uv', 'result', p.outputType);
+    updateNodeParams(node.id, { exprX: p.exprX, exprY: p.exprY, exprZ: p.exprZ, exprW: p.exprW });
   };
 
   // ── Collect upstream GLSL variables (same logic as AssignInitModal) ──────────
@@ -233,30 +225,8 @@ export function TransformVecModal({ node, onClose }: Props) {
   }, [node, updateNodeParams]);
 
   return (
-    <Modal title="Transform Vec" icon="grid" width={560} onClose={onClose} headerActions={<Button size="sm" variant={savingPreset ? 'secondary' : 'ghost'} icon="export" onClick={() => { setSavingPreset(v => !v); setPresetLabel(''); }}>{savedFlash ? 'Saved' : 'Save preset'}</Button>}>
+    <Modal title="Transform Vec" icon="grid" width={560} onClose={onClose} headerActions={<PresetMenu kind="transform" noun="transform" icon="layout" defaultName={() => 'Transform Vec'} getData={presetData} onApply={p => applyPreset(p.record as unknown as TransformPreset)} />}>
       <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 14, fontSize: 12.5 }}>
-        {/* Inline save preset input */}
-        {savingPreset && (
-          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-            <input
-              autoFocus
-              value={presetLabel}
-              onChange={e => setPresetLabel(e.target.value)}
-              placeholder="Preset name…"
-              onKeyDown={e => {
-                if (e.key === 'Enter') handleSavePreset();
-                if (e.key === 'Escape') { setSavingPreset(false); setPresetLabel(''); }
-                e.stopPropagation();
-              }}
-              style={{ flex: 1, background: tc.crust, border: `1px solid ${tc.green}55`, color: tc.green, borderRadius: '4px', padding: '4px 8px', fontSize: '12px', outline: 'none', fontFamily: 'monospace' }}
-            />
-            <button
-              onClick={handleSavePreset}
-              style={{ background: `${tc.green}22`, border: `1px solid ${tc.green}55`, color: tc.green, cursor: 'pointer', fontSize: '11px', padding: '3px 10px', borderRadius: '4px' }}
-            >Save</button>
-          </div>
-        )}
-
         {/* Type selector */}
         <div>
           <p style={SECTION_LABEL}>Input / Output Type</p>

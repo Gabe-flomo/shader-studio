@@ -24,7 +24,7 @@ interface Props<T extends FolderableItem> {
   items: T[];
   renderItem: (item: T, selected: boolean) => React.ReactNode;
   emptyHint?: React.ReactNode;
-  /** Items outside folders, split under headings (Saved Graphs: Today, This week, Earlier). Without it they are one run. */
+  /** Items outside folders, split under headings (the Library’s Graphs: Today, This week, Earlier). Without it they are one run. */
   groupLoose?: (items: T[]) => { id: string; label: string; items: T[] }[];
   /** The order inside each folder (and of the loose items when they aren't grouped). */
   sortItems?: (items: T[]) => T[];

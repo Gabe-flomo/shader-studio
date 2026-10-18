@@ -154,8 +154,8 @@ export function LibraryPanel({ inCard = false }: { inCard?: boolean } = {}) {
 const OPEN_KEY = 'shader-studio:settings:libraryOpen';
 
 /**
- * The Library in the Graphs sidebar: one line saying how the workspace folder
- * is doing (or that there isn't one), opening into the whole panel.
+ * Storage, under the sidebar's Library: one line saying how much is saved and how the
+ * workspace folder is doing (or that there isn't one), opening into the whole panel.
  */
 export function LibraryCard() {
   const tk = useTokens();
@@ -172,7 +172,7 @@ export function LibraryCard() {
       <button type="button" onClick={toggle} aria-expanded={open} title={st.folder ?? undefined}
         style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', border: 0, background: 'none', cursor: 'pointer', color: tk.text.primary, font: `600 12px ${fontFamily.ui}`, textAlign: 'left' }}>
         <span style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: ws.tone === 'ok' ? tk.status.success : ws.tone === 'bad' ? tk.status.danger : ws.tone === 'warn' ? tk.status.warning : ws.tone === 'busy' ? tk.accent.base : tk.text.disabled }} />
-        <span>Library</span>
+        <span>Storage</span>
         <span style={{ flex: 1, minWidth: 0, color: tk.text.faint, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{line}</span>
         <span style={{ color: tk.text.faint }}>{open ? '▾' : '▸'}</span>
       </button>
