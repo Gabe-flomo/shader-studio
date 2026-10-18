@@ -23,7 +23,9 @@ saying so. The filter you last used is remembered (`playfield:library:filter`).
 
 **Presets** groups presets by what they apply to: nodes in the graph, Scene builders, Play,
 Finish and colour. Inside each group they are split by kind. The built-in effects (Long
-exposure, Trails…) are under "Built-in effects".
+exposure, Trails…) build nodes, so they stay Effects, under "Built-in effects". Whole-picture
+presets are Finish presets (the grade's Looks and a few stacks come built in; they load in the
+Finish panel: `docs/finish-stack.md`, "One Finish").
 
 ## What each thing does
 

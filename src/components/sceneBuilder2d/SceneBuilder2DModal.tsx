@@ -9,7 +9,11 @@
 import { OFFER_PIECES } from '../../nodes/notOffered';
 import { useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useSceneBuilder2D, type Builder2DTab } from '../../sceneBuilder2d/store';
-import { buildFromBuilder2D, scene2dBuilder } from '../../sceneBuilder2d/actions';
+import { buildFromBuilder2D, moveLookToFinish, scene2dBuilder } from '../../sceneBuilder2d/actions';
+import { hasMovableLook } from '../../builders/look/toFinish';
+import { useCan } from '../../lib/plan';
+import { toast } from '../ui/toastStore';
+import { FINISH_BLURB, FinishEditor } from '../finish/FinishEditor';
 import {
   COLOUR_BYS, LOOK_MUTES_2D, MAX_DUP, MAX_LEVELS, MOTIONS, OUTPUT_SHOWS, SHAPES, SHAPE_BY_KIND, SPACES, SPACE_BY_KIND, TONE_MODES,
   COMBINE_CHOICES_2D, OP_GLYPH_2D, SHAPE_STYLES, allShapes, findItem, itemName, itemSummary, styleOf, newBlockOp, starterScene, newCombineOp, newDup, newGroup, newMotion, newShape, newSpaceOp, nextId, num, opLabel, spaceSummary,
@@ -64,7 +68,7 @@ import { PIECE_SHAPES } from '../../nodes/definitions/pieces';
 import { FIT_LABELS, TEX_FITS, newTexUse, withSource, type TexFit, type TexSource, type TexUse } from '../../builders/textures';
 import { find2dBuild } from '../../sceneBuilder2d/apply';
 import { paletteLabel, paletteSwatches, swatchGradient } from '../../builders/look/palette';
-import { GRADE_BY_KIND, GRADE_KINDS, gradeParamTarget } from '../../builders/look/grade';
+import { GRADE_KINDS, gradeParamTarget } from '../../builders/look/grade';
 import { FX_KINDS, MAX_FX_PASSES, fxParamTarget } from '../../builders/look/effects';
 import { buildScene2D } from '../../sceneBuilder2d/build';
 import type { StackItem } from '../../builders/look/stack';
@@ -964,7 +968,6 @@ function LookTab() {
   const sources = useSceneBuilder2D(s => s.scene.textures) ?? [];
   const set = (fn: (l: Scene2D['look']) => void, key?: string) => edit(d => fn(d.look), key && `look:${key}`);
   const swatches = paletteSwatches(look.colour.palette, look.custom);
-  const grade = look.grade ?? [];
   const P = look.post;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -1015,20 +1018,9 @@ function LookTab() {
           </>
         )}
       </Card>
-      <Card id="look2-grade" title="Grade" summary={grade.length ? grade.map(g => GRADE_BY_KIND[g.kind]?.label ?? g.kind).join(' → ') : 'none'}>
-        <StackCards name="grade" idPrefix="gr" items={grade} defs={GRADE_KINDS} playParam={gradePlay}
-          empty="No grade yet: add one above. Each is a real node after the tone map, in the order shown."
-          onEdit={(fn, key) => edit(d => { const next = fn([...(d.look.grade ?? [])]); if (next.length) d.look.grade = next; else delete d.look.grade; }, key)} />
-      </Card>
-      <Card id="look2-finish" title="Finish" summary={`tone ${look.tone}${P.vignette ? ' · vignette' : ''}${P.grain ? ' · grain' : ''}${P.bloom || P.scanlines ? ' · older effects' : ''}`}>
+      <Card id="look2-tone" title="Tone map" summary={`${look.tone}${P.bloom || P.scanlines ? ' · older effects' : ''}`}>
         <Effect m={look.tone !== 'none' ? lookMute('tone', 'the tone map', !!look.mute?.tone) : null}>
-          <Row label="Tone map"><Select ariaLabel="Tone map" value={look.tone} options={TONE_MODES.map(t => ({ value: t, label: t }))} onChange={v => set(l => { l.tone = v as ToneMode; })} /></Row>
-        </Effect>
-        <Effect m={P.vignette > 0 ? lookMute('vignette', 'the vignette', !!look.mute?.vignette) : null}>
-          <NumRow label="Vignette" value={P.vignette} defaultValue={DEFAULT_SCENE_2D.look.post.vignette} min={0} max={1} onChange={v => set(l => { l.post.vignette = v; }, 'pv')} />
-        </Effect>
-        <Effect m={P.grain > 0 ? lookMute('grain', 'the grain', !!look.mute?.grain) : null}>
-          <NumRow label="Grain" value={P.grain} defaultValue={DEFAULT_SCENE_2D.look.post.grain} min={0} max={0.5} onChange={v => set(l => { l.post.grain = v; }, 'pg')} />
+          <Row label="Tone map" hint="Squeezes the scene's bright light into colours a screen can show. It is part of the scene (built as a node), before the Effects page and the Finish."><Select ariaLabel="Tone map" value={look.tone} options={TONE_MODES.map(t => ({ value: t, label: t }))} onChange={v => set(l => { l.tone = v as ToneMode; })} /></Row>
         </Effect>
         {(P.bloom > 0 || P.scanlines > 0) && (
           <div data-look-legacy style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -1038,7 +1030,64 @@ function LookTab() {
           </div>
         )}
       </Card>
+      <LookFinishCard />
     </div>
+  );
+}
+
+/**
+ * Look → Finish: the graph's one Finish (components/finish/FinishEditor.tsx), the same stack as
+ * Play → Finish and the Studio's Finish button. A scene that still holds the older Grade cards,
+ * vignette or grain shows them here: on Pro they move into the Finish on Build (or Move now), with
+ * the same maths and numbers (builders/look/toFinish.ts); on Free they stay nodes in the graph.
+ */
+function LookFinishCard() {
+  const look = useSceneBuilder2D(s => s.scene.look);
+  const finishN = useNodeGraphStore(s => s.play.finish?.effects.length ?? 0);
+  const finishOk = useCan('play.finish');
+  const grade = look.grade ?? [];
+  const P = look.post;
+  const set = (fn: (l: Scene2D['look']) => void, key?: string) => edit(d => fn(d.look), key && `look:${key}`);
+  const older = hasMovableLook(look);
+  const moveNow = () => {
+    const sb = useSceneBuilder2D.getState();
+    const built = !!sb.targetSceneId && useNodeGraphStore.getState().nodes.some(n => n.id === sb.targetSceneId);
+    // A built scene rebuilds at once (its grade nodes go as the effects arrive); a new one builds them never.
+    if (built) { buildFromBuilder2D(false); return; }
+    const moved = moveLookToFinish();
+    if (moved.length) toast.success('Moved to the Finish', { message: `${moved.join(', ')}: the same maths and numbers, now over the whole picture.` });
+  };
+  const olderEditors = (
+    <>
+      <StackCards name="grade" idPrefix="gr" items={grade} defs={GRADE_KINDS} playParam={gradePlay} noAdd={finishOk}
+        empty={finishOk ? 'No older grade.' : 'No grade yet: add one above. Each is a real node after the tone map, in the order shown.'}
+        onEdit={(fn, key) => edit(d => { const next = fn([...(d.look.grade ?? [])]); if (next.length) d.look.grade = next; else delete d.look.grade; }, key)} />
+      {(!finishOk || P.vignette > 0) && <Effect m={P.vignette > 0 ? lookMute('vignette', 'the vignette', !!look.mute?.vignette) : null}>
+        <NumRow label="Vignette" value={P.vignette} defaultValue={DEFAULT_SCENE_2D.look.post.vignette} min={0} max={1} onChange={v => set(l => { l.post.vignette = v; }, 'pv')} />
+      </Effect>}
+      {(!finishOk || P.grain > 0) && <Effect m={P.grain > 0 ? lookMute('grain', 'the grain', !!look.mute?.grain) : null}>
+        <NumRow label="Grain" value={P.grain} defaultValue={DEFAULT_SCENE_2D.look.post.grain} min={0} max={0.5} onChange={v => set(l => { l.post.grain = v; }, 'pg')} />
+      </Effect>}
+    </>
+  );
+  return (
+    <Card id="look2-finish" title="Finish" summary={`${finishN ? `${finishN} effect${finishN === 1 ? '' : 's'}` : 'none'} · the whole picture${older ? ' · older grade to move' : ''}`}>
+      <BuilderNote>{FINISH_BLURB}</BuilderNote>
+      {older && finishOk && (
+        <div data-look-older style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <BuilderNote>This scene still has its grade{P.vignette > 0 || P.grain > 0 ? ', vignette or grain' : ''} built as nodes. Build moves {grade.length + (P.vignette > 0 ? 1 : 0) + (P.grain > 0 ? 1 : 0) === 1 ? 'it' : 'them'} into the Finish below, with the same maths and numbers (controls on them come along).</BuilderNote>
+          <div><Button size="sm" icon="import" onClick={moveNow}>Move to the Finish now</Button></div>
+          {olderEditors}
+        </div>
+      )}
+      <FinishEditor embedded />
+      {!finishOk && (
+        <div data-look-free-grade style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <BuilderNote>On Free, the scene's own grade, vignette and grain are built as nodes in the graph.</BuilderNote>
+          {olderEditors}
+        </div>
+      )}
+    </Card>
   );
 }
 
@@ -1059,7 +1108,7 @@ function EffectsTab() {
   }, [scene]);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <BuilderNote>Shader effects on the finished picture, top to bottom: each one works on what the ones above made. Moves (Displace, Swirl, Pixelate, Kaleidoscope, CRT curvature) bend where the picture is read: before the first Blur, Glow, Light rays or Chromatic aberration they bend the scene's own space, so they cost no Pass. Those reads read round each pixel, so each takes a Pass; CRT mask works on the colour. They build as real nodes after the Look's grade.</BuilderNote>
+      <BuilderNote>Shader effects on the finished picture, top to bottom: each one works on what the ones above made. Moves (Displace, Swirl, Pixelate, Kaleidoscope, CRT curvature) bend where the picture is read: before the first Blur, Glow, Light rays or Chromatic aberration they bend the scene's own space, so they cost no Pass. Those reads read round each pixel, so each takes a Pass; CRT mask works on the colour. These are Effects: real nodes in the graph, built after the tone map. The Finish (Look → Finish) works on the whole picture after all of them.</BuilderNote>
       {passOf.size > 0 && <BuilderNote style={{ fontSize: 11 }}>Passes: {passOf.size} of {MAX_FX_PASSES} used, {MAX_FX_PASSES - passOf.size} left. Only reads (blur, glow, rays, chromatic aberration, displace by a picture) take one; a move after a read bends where that read reads.</BuilderNote>}
       <StackCards name="fx" idPrefix="fx" items={effects} defs={FX_KINDS} playParam={fxPlay} sources={sources} onAddSource={addSource}
         badge={it => (passOf.has(it.id) ? `pass ${passOf.get(it.id)} of ${MAX_FX_PASSES}` : null)}

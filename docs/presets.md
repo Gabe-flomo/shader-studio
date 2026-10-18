@@ -216,7 +216,7 @@ Kinds are grouped by what they apply to:
 | Nodes in the graph | Groups (+ the built-in effects), Vector transforms, Functions, Expression Blocks, Keyframe curves |
 | Scene builders | the 3D, 2D, Grid, Warp, Grid Rules, Splat, Time Cube and Agents builders' presets (+ the Agents and Time Cube built-ins), Space blocks |
 | Play | Layer sets, Racks, Drum kits (+ the built-in kits) |
-| Finish | Finish stacks, Finish effects, Looks |
+| Finish | Finish presets (+ the grade's Looks and starting stacks, built in), Finish effects, saved Looks |
 | Colour | Palette node presets, Background palettes (+ the built-in palettes) |
 
 `<PresetMenu>` (`src/components/presets/PresetMenu.tsx`) is the shared UI. It has two variants:
@@ -236,7 +236,7 @@ Expression Blocks and keyframe curves show under their own filters instead.
 
 Still drawn by their own panels, but stored through the same keys:
 
-- the Finish rail's presets and Looks (they move when the two Finish systems merge)
+- the Finish's presets and Looks, in the one Finish panel (Play, the Studio's Finish button, the builder's Finish card)
 - Play's layer-set and rack dialogs, and drum kits
 - the 2D builder's space blocks
 - the Palette node's menu

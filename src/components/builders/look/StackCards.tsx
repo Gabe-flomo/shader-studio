@@ -46,6 +46,8 @@ export interface StackCardsProps {
   empty: string;
   /** A short tag on a card (e.g. the Pass it takes, "pass 2 of 6"), or null. */
   badge?: (it: StackItem) => string | null;
+  /** No row of kinds to add (an older stack that is kept, not grown: the 2D builder's grade on Pro). */
+  noAdd?: boolean;
 }
 
 const edited = (items: StackItem[], id: string, fn: (x: StackItem) => void) => items.map(x => {
@@ -170,12 +172,12 @@ export function StackCards(props: StackCardsProps) {
   const mime = `text/x-look-${props.name}`;
   return (
     <div data-look-stack={props.name} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <div style={addButtonsRow(phone)}>
+      {!props.noAdd && <div style={addButtonsRow(phone)}>
         {stackOffered(props.defs).map(d => (
           <Button key={d.kind} size="sm" variant="ghost" icon="plus" title={d.blurb} data-look-add={d.kind} style={addButtonStyle(phone)}
             onClick={() => props.onEdit(items => [...items, newStackItem(d, nextStackId(items, props.idPrefix))])}>{d.label}</Button>
         ))}
-      </div>
+      </div>}
       {props.items.length === 0 && <BuilderNote>{props.empty}</BuilderNote>}
       {props.items.length > 0 && <BuilderNote style={{ fontSize: 11 }}>Applied top to bottom: 1 first, each working on what the ones above made.</BuilderNote>}
       {props.items.map((it, i) => byKind[it.kind] && <StackCard key={it.id} it={it} def={byKind[it.kind]} index={i} count={props.items.length} props={props} />)}

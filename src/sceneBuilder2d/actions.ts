@@ -11,6 +11,28 @@ import { allShapes, starterScene } from './spec';
 import { clearDraft, hasUnbuiltEdits, reopenDraft } from '../builders/drafts';
 import type { BuildingBuilder } from '../builders/finish';
 import { attachQuickControls } from './quickPlay';
+import { can } from '../lib/plan';
+import { paletteSwatches } from '../builders/look/palette';
+import { addMovedToPlay, hasMovableLook, lookToFinish, withoutMovedLook } from '../builders/look/toFinish';
+
+/**
+ * The Look's older whole-picture settings (Grade cards, vignette, grain) moved into the graph's one
+ * Finish (builders/look/toFinish.ts): the same maths as Finish effects, controls on their nodes
+ * moved with them. Only where the Finish plays (Pro); on Free they stay nodes. Returns what moved.
+ */
+export function moveLookToFinish(): string[] {
+  if (!can('play.finish')) return [];
+  const sb = useSceneBuilder2D.getState();
+  const look = sb.scene.look;
+  if (!hasMovableLook(look)) return [];
+  const nodes = useNodeGraphStore.getState().nodes;
+  const found = sb.targetSceneId ? find2dBuild(nodes, sb.targetSceneId) : null;
+  const move = lookToFinish(look, { swatches: paletteSwatches(look.colour.palette, look.custom), byRole: found?.byRole });
+  if (!move.effects.length) return [];
+  useNodeGraphStore.getState().setPlay(p => addMovedToPlay(p, move));
+  sb.edit(d => { d.look = withoutMovedLook(d.look); });
+  return move.names;
+}
 
 /** Open the builder on a new scene (Build adds it beside what is on the canvas). */
 export function openNewSceneBuilder2D(at?: { x: number; y: number }): void {
@@ -52,6 +74,8 @@ export function rebuildScene2DFromRecipe(sceneId: string): boolean {
 
 /** Build (or rebuild) the builder's scene into the graph. */
 export function buildFromBuilder2D(asNew = false): boolean {
+  // Grade, vignette and grain go to the graph's Finish first, so the build no longer makes them as nodes.
+  const moved = moveLookToFinish();
   const sb = useSceneBuilder2D.getState();
   const st = useNodeGraphStore.getState();
   if (st.activeGroupPath.length) st.exitToRoot();
@@ -73,6 +97,7 @@ export function buildFromBuilder2D(asNew = false): boolean {
   // Quick controls waiting for a build become Play controls now (quickPlay.ts).
   attachQuickControls(useSceneBuilder2D.getState().scene.quick);
   const notes = [
+    ...(moved.length ? [`Moved ${moved.join(', ')} to the Finish (the whole picture's stack: the builder's Finish card, Play → Finish).`] : []),
     ...(result.kept.length ? [`Kept ${result.kept.length} setting${result.kept.length === 1 ? '' : 's'} you changed on the nodes.`] : []),
     ...result.warnings,
   ];

@@ -19,7 +19,8 @@ Node labels live in the node definitions; their rules are under "Node labels" be
 | **Publish node** | Turn a graph, group or GLSL into your own node type (the sidebar panel) | Node Builder |
 | **Import shader** | The top bar button: a `.glsl` file becomes a node in the graph | GLSL (as a button) |
 | **Generated code** | The graph's own GLSL, in the drawer under the Studio canvas (⌘\\) | GLSL code, GLSL output |
-| **Finish** | Play's stack of effects over the whole picture: grade, lens, film, time. Its effects are *Finish effects* | Look (for the rail, the stack or its effects) |
+| **Finish** | The graph's one stack of effects over the whole picture (grade, lens, film, time), after the graph. Play → Finish, the Studio's Finish button (phones: ⋯ → Finish…) and a builder's Look → Finish all edit it. Its effects are *Finish effects*, its presets *Finish presets* (the grade's Looks are built-in Finish presets) | Look (for the rail, the stack or its effects), Finish stack (as a preset kind) |
+| **Effects** | Effect nodes in the graph: the node library's Effects, a builder's Effects page, the built-in effect groups in the Library | |
 | **Look** | Only a section inside one builder or layer editor: how that one thing is drawn | |
 | **Controls** | Play's section of sliders, buttons and pads people play, beside what drives them | Inputs, Mappings (as a section) |
 | **Sources** | What drives a control: a key, a knob, the mouse, a hand, an LFO. The list of them is titled *Sources*. A *mapping* is one source → control row | Inputs, Mappings (as a title) |
@@ -42,9 +43,13 @@ Node labels live in the node definitions; their rules are under "Node labels" be
   nodes" is already the palette's row of the results, so the panel is named for the action.
 - **Look → Finish.** The rail said *Look*, its title, the ⌘3 label and the code all said
   *Finish*, and "Look" is also a section in every builder. Finish wins because the codebase, the
-  shortcut and the docs (`docs/finish-stack.md`) already use it. The two Finish systems (Play's
-  stack and the builder's Look → Finish section) merge in a later round; this round only names
-  them the same. Saved *Looks* presets keep their name for now: they are Finish presets.
+  shortcut and the docs (`docs/finish-stack.md`) already use it.
+- **One Finish, two layers.** *Effects* are nodes in the graph (and a builder's Effects page adds
+  them); the *Finish* is one whole-picture stack per graph. Play's rail, the Studio's Finish
+  button and the builder's Look → Finish card are one component on that one stack; the builder's
+  older Grade cards, vignette and grain move into it on Build (Pro). Looks and the starting
+  stacks are built-in *Finish presets*; the effect groups (Long exposure, Trails…) build nodes, so
+  they stay *Effects*.
 - **Inputs / Mappings → Controls, with Sources inside.** The rail category is **Controls** (⌘1
   "Go to Controls"). Its sources column, the desktop drawer and the phone tab are **Sources**
   (⌘⇧M "Go to Sources": it opens that list directly, so it stays, under its own name). The
