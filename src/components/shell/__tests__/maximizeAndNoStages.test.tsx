@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /**
  * Maximize graph puts the picture behind the graph (shell/graphLayout.ts), full size in the aspect
- * preset, with the graph's background dimmed rather than solid; and the Studio graph shows no stages
+ * preset, with no graph background or dots over it; and the Studio graph shows no stages
  * (no flow strip, stage tags, stage browse or arrange by stage), on desktop or on a phone. Stages stay
  * in the builders (BuilderFlowStrip).
  */
@@ -71,13 +71,16 @@ describe('Maximize graph: the picture behind the graph', () => {
     expect(src('../../ShaderCanvas.tsx')).toContain('setFit(fitAspect(r.width, r.height, ratio))');
   });
 
-  it('over the picture the graph’s background is a dim, not solid; normally it is solid', () => {
+  it('over the picture the graph has no background and no dot grid (the picture shows as it is); normally it is solid with dots', () => {
     useNodeGraphStore.getState().replaceGraph([n('uv', 'u', 0, 0), n('output', 'o', 400, 0, {}, { color: ['u', 'uv'] })]);
-    const solid = render(<NodeGraph redesignToolbar />).querySelector<HTMLElement>('[data-node-canvas]')!.style.backgroundColor;
+    const solid = render(<NodeGraph redesignToolbar />).querySelector<HTMLElement>('[data-node-canvas]')!.style;
+    const solidBg = solid.backgroundColor, solidImg = solid.backgroundImage;
     act(() => root!.unmount()); host!.remove();
-    const dim = render(<NodeGraph redesignToolbar overPicture />).querySelector<HTMLElement>('[data-node-canvas]')!.style.backgroundColor;
-    expect(dim).toMatch(/rgba\(.*0\.42\)/);
-    expect(solid).not.toMatch(/rgba/);
+    const over = render(<NodeGraph redesignToolbar overPicture />).querySelector<HTMLElement>('[data-node-canvas]')!.style;
+    expect(over.backgroundColor).toBe('transparent');
+    expect(over.backgroundImage).toBe('none');
+    expect(solidBg).not.toBe('transparent');
+    expect(solidImg).toContain('radial-gradient');
   });
 });
 

@@ -86,7 +86,7 @@ The toolbar over the Studio graph has exactly three controls:
   `ShaderCanvas`, no second renderer) is moved under the graph's area and
   resized, its header, footer and divider step aside, and the aspect preset
   chosen in the preview's header still letterboxes it. The graph's background
-  turns to a light dim (the dot grid stays) so the picture shows through; the
+  has no background and no dot grid, so the picture shows as it is under the cards; the
   cards and the code bar stay solid, and the pointer always goes to the graph.
   Again (or the button) brings the split back. Remembered on this device
   (`playfield.graphMaximized`). A floated preview stays a window.

@@ -3,8 +3,8 @@
  *
  * - Maximize graph: the graph takes the whole window and the picture goes full size BEHIND it, as
  *   the graph's backdrop (the same canvas moved and resized, no second renderer; the aspect preset
- *   still letterboxes it). The graph's background turns to a light dim so the picture shows, the
- *   cards stay solid, and the pointer goes to the graph. A toolbar button and ⇧⌘G
+ *   still letterboxes it). The graph has no background or dot grid there, so the picture shows as it
+ *   is with the cards over it; the cards stay solid, and the pointer goes to the graph. A toolbar button and ⇧⌘G
  *   (useShortcuts.ts `maximizeGraph`) toggle it; remembered on this device.
  * - The preview's width: the default leaves the graph room for a few cards at a readable zoom at
  *   1440 wide, and a width the divider was dragged to is remembered on this device.
