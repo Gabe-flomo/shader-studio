@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.274',
+    date: '2026-10-18',
+    title: "Soft grain",
+    highlights: [
+      { area: 'Studio', text: "March Camera: Lens Soft grain keeps the grainy depth of field you like and melts it into a soft haze (Softness sets how much)." },
+      { area: 'Studio', text: "Grain no longer blows up into noise when Focal Dist is low; the blur now tops out at a few percent of the picture." },
+    ],
+  },
+  {
     id: '2026.10.273',
     date: '2026-10-18',
     title: "One Library",
