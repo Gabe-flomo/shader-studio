@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.272',
+    date: '2026-10-18',
+    title: "Save before you lose it",
+    highlights: [
+      { area: 'Studio', text: "After 15 minutes on a new graph that hasn't been saved, Playfield asks you to name and save it (once per graph)." },
+      { area: 'Studio', text: "Randomise is back on the canvas toolbar; the Do\u2026 bar has no button now (\u2318K still opens it)." },
+    ],
+  },
+  {
     id: '2026.10.271',
     date: '2026-10-17',
     title: "One node per effect",
