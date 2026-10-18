@@ -602,6 +602,90 @@ exports[`2D agents and pass graphs compile as they did before 3D > agentsHandBea
 }
 `;
 
+exports[`2D agents and pass graphs compile as they did before 3D > comboBloomDots 1`] = `
+{
+  "agents": "1fe1f0024152e81521f99e5e13c1:4",
+  "errors": null,
+  "fragmentShader": "1a92e983539bed1bc1cc8b4f5d20:3786",
+  "paramBindings": "10a563af47f5ab118a02a96c62bc:725",
+  "paramUniforms": "1511b57001eeb90cb24f4d499026:490",
+  "passes": "14c0cee5932423094f8173bb8ecf:26957",
+  "success": true,
+  "textureUniforms": "167d269bbddad80189e9f9473b28:2",
+  "web": null,
+}
+`;
+
+exports[`2D agents and pass graphs compile as they did before 3D > comboBlurDirectional 1`] = `
+{
+  "agents": "1fe1f0024152e81521f99e5e13c1:4",
+  "errors": null,
+  "fragmentShader": "140c75e3330c1118c8db0ab27479:2697",
+  "paramBindings": "0ca024e1f1cda109b27946ac3ef2:278",
+  "paramUniforms": "1b3d5c46436a9906757c5be66c4c:173",
+  "passes": "0144e620cac8d9012d03d2d8fcad:11437",
+  "success": true,
+  "textureUniforms": "167d269bbddad80189e9f9473b28:2",
+  "web": null,
+}
+`;
+
+exports[`2D agents and pass graphs compile as they did before 3D > dofDepthBlur 1`] = `
+{
+  "agents": "1fe1f0024152e81521f99e5e13c1:4",
+  "errors": null,
+  "fragmentShader": "06254ebd0c2f2f01590b7739e815:3149",
+  "paramBindings": "0eef844352d728116ae6208124dc:1194",
+  "paramUniforms": "0d641781361c8f0dd9e9e97da8d9:916",
+  "passes": "1137951bf004001d10a9cabb50db:9131",
+  "success": true,
+  "textureUniforms": "167d269bbddad80189e9f9473b28:2",
+  "web": null,
+}
+`;
+
+exports[`2D agents and pass graphs compile as they did before 3D > fcMainFrame 1`] = `
+{
+  "agents": "1fe1f0024152e81521f99e5e13c1:4",
+  "errors": null,
+  "fragmentShader": "0369765e21cd4e08abceee3d765f:1695",
+  "paramBindings": "06c8e599c3a35c16a7d025810e7b:403",
+  "paramUniforms": "1576eb3a9b224b129a6068ba10d4:413",
+  "passes": "01163cb46876141f646859450109:6486",
+  "success": true,
+  "textureUniforms": "167d269bbddad80189e9f9473b28:2",
+  "web": null,
+}
+`;
+
+exports[`2D agents and pass graphs compile as they did before 3D > fcTrippyNoise 1`] = `
+{
+  "agents": "1fe1f0024152e81521f99e5e13c1:4",
+  "errors": null,
+  "fragmentShader": "0f92d0ba48cfcd09c2145dc1936d:3840",
+  "paramBindings": "02a40dfc149bdc1f6f8aeb4c22b0:1611",
+  "paramUniforms": "13cbc558e10c3606482e32578c42:1103",
+  "passes": "09db5d109d4a3c1050c730581d7a:35938",
+  "success": true,
+  "textureUniforms": "1812a3d7051e321835bb122cf042:26",
+  "web": null,
+}
+`;
+
+exports[`2D agents and pass graphs compile as they did before 3D > feedbackSmear 1`] = `
+{
+  "agents": "1fe1f0024152e81521f99e5e13c1:4",
+  "errors": null,
+  "fragmentShader": "054614f1fb650305bc846015e4c4:1661",
+  "paramBindings": "06de722b36bb451e99da645c5781:816",
+  "paramUniforms": "1843f561a2beb31162b9faf77c70:622",
+  "passes": "08fa32c443758906e36adc854533:5039",
+  "success": true,
+  "textureUniforms": "167d269bbddad80189e9f9473b28:2",
+  "web": null,
+}
+`;
+
 exports[`2D agents and pass graphs compile as they did before 3D > gridRulesWire 1`] = `
 {
   "agents": "1fe1f0024152e81521f99e5e13c1:4",
@@ -649,9 +733,9 @@ exports[`2D agents and pass graphs compile as they did before 3D > passFeedbackT
   "agents": "1fe1f0024152e81521f99e5e13c1:4",
   "errors": null,
   "fragmentShader": "0f0b2cfd75494507d28db83dc488:2446",
-  "paramBindings": "038badfbfa56570e12efc76b17dc:142",
-  "paramUniforms": "084ad9328bcd6900cc55020388d2:114",
-  "passes": "0e3ee2b5fec21b065ae55e636e8f:6095",
+  "paramBindings": "02762cc358d51c109f281ce24231:149",
+  "paramUniforms": "10b943123b4ea0144a7d423aabd9:104",
+  "passes": "11e665d8671c9806632af0c15a6f:6633",
   "success": true,
   "textureUniforms": "167d269bbddad80189e9f9473b28:2",
   "web": null,
@@ -778,6 +862,76 @@ exports[`2D agents and pass graphs compile as they did before 3D > raysLightText
   "paramBindings": "153ab6993f11df01bf1499881bdb:391",
   "paramUniforms": "0350558b0ce623037b3fa1712520:289",
   "passes": "04e46316e29e971323547afcdba9:24877",
+  "success": true,
+  "textureUniforms": "167d269bbddad80189e9f9473b28:2",
+  "web": null,
+}
+`;
+
+exports[`2D agents and pass graphs compile as they did before 3D > sb2DepthBeams 1`] = `
+{
+  "agents": "1fe1f0024152e81521f99e5e13c1:4",
+  "errors": null,
+  "fragmentShader": "0f40738372692b0293800fba0be5:17811",
+  "paramBindings": "0f81ad47556b3808ceb22a02f50f:3569",
+  "paramUniforms": "10eb8bddbc78f9092693c8d64602:2007",
+  "passes": "025824b6b432d60cada7f5065bfe:44309",
+  "success": true,
+  "textureUniforms": "086ff7a6cb43c00224f405af4169:76",
+  "web": null,
+}
+`;
+
+exports[`2D agents and pass graphs compile as they did before 3D > sb2Kaleidoscope 1`] = `
+{
+  "agents": "1fe1f0024152e81521f99e5e13c1:4",
+  "errors": null,
+  "fragmentShader": "13cf477362349618d30ba9dd15c6:18590",
+  "paramBindings": "1067fb6801175410bec10faf33ef:3696",
+  "paramUniforms": "1658b68d7ba513119cc95f6c42e9:2059",
+  "passes": "166a3fa0f671261b5d0177d70d78:45434",
+  "success": true,
+  "textureUniforms": "167d269bbddad80189e9f9473b28:2",
+  "web": null,
+}
+`;
+
+exports[`2D agents and pass graphs compile as they did before 3D > sb2Orbits 1`] = `
+{
+  "agents": "1fe1f0024152e81521f99e5e13c1:4",
+  "errors": null,
+  "fragmentShader": "139268351421eb1edb581771b169:23731",
+  "paramBindings": "03147e9f0085e202421c0a47b48c:3870",
+  "paramUniforms": "033a33387b792608852348a62276:2449",
+  "passes": "1fe762822cf36509dca2ff33950d:50042",
+  "success": true,
+  "textureUniforms": "167d269bbddad80189e9f9473b28:2",
+  "web": null,
+}
+`;
+
+exports[`2D agents and pass graphs compile as they did before 3D > sb2RingOfRings 1`] = `
+{
+  "agents": "1fe1f0024152e81521f99e5e13c1:4",
+  "errors": null,
+  "fragmentShader": "0d077491e9797a0d4ec8fe93a088:16712",
+  "paramBindings": "05472e48d43c68106c83e5db2d9e:3155",
+  "paramUniforms": "152f0dc73b97ab050f7c98f3f0af:1733",
+  "passes": "1630edef42bed8032e5756c9758d:43364",
+  "success": true,
+  "textureUniforms": "167d269bbddad80189e9f9473b28:2",
+  "web": null,
+}
+`;
+
+exports[`2D agents and pass graphs compile as they did before 3D > sb2RippleGrid 1`] = `
+{
+  "agents": "1fe1f0024152e81521f99e5e13c1:4",
+  "errors": null,
+  "fragmentShader": "16c5a6e0cc36d319fb39ec3dd888:9730",
+  "paramBindings": "18b14eb14d6bbe081b8cc2a4d630:1033",
+  "paramUniforms": "08d30ecd1e23e9014c2b6755e468:581",
+  "passes": "1ecfcbffccb4fe1397b98989a5d8:35955",
   "success": true,
   "textureUniforms": "167d269bbddad80189e9f9473b28:2",
   "web": null,
@@ -1050,6 +1204,20 @@ exports[`2D agents and pass graphs compile as they did before 3D > slimeMold 1`]
 }
 `;
 
+exports[`2D agents and pass graphs compile as they did before 3D > tiltShiftScene 1`] = `
+{
+  "agents": "1fe1f0024152e81521f99e5e13c1:4",
+  "errors": null,
+  "fragmentShader": "05d46aa1b6de6218e15f929d7416:3203",
+  "paramBindings": "082542587b5f941088d5479002b2:494",
+  "paramUniforms": "0be206b39af30515d50f133496d3:351",
+  "passes": "0414f8a86368b3132d6bb8fe25c5:3325",
+  "success": true,
+  "textureUniforms": "167d269bbddad80189e9f9473b28:2",
+  "web": null,
+}
+`;
+
 exports[`2D agents and pass graphs compile as they did before 3D > ttBlob3d 1`] = `
 {
   "agents": "1fe1f0024152e81521f99e5e13c1:4",
@@ -1110,10 +1278,10 @@ exports[`2D agents and pass graphs compile as they did before 3D > ttMotionTrail
 {
   "agents": "1fe1f0024152e81521f99e5e13c1:4",
   "errors": null,
-  "fragmentShader": "1945d70cb39206088f299eb5cced:2882",
-  "paramBindings": "0223faecf415eb0ace8008d22b16:1342",
-  "paramUniforms": "1b55bc2bfaf8b4096d3d6e779ac3:948",
-  "passes": "159c5888d063e31f77ffa2218951:9662",
+  "fragmentShader": "1a616dc7c72b2f12677dacb4daf0:2733",
+  "paramBindings": "0aa7c32168c04617941af38cbc51:1487",
+  "paramUniforms": "1c187c09172bed1de1d59d15599d:1048",
+  "passes": "1d9b1fb287aac11c4c77e03a3578:10689",
   "success": true,
   "textureUniforms": "167d269bbddad80189e9f9473b28:2",
   "web": null,
@@ -1156,6 +1324,20 @@ exports[`2D agents and pass graphs compile as they did before 3D > ttVideoOutlin
   "paramBindings": "070657987790aa155ca735250af5:889",
   "paramUniforms": "1497fa153b3a551c454dac8ab491:622",
   "passes": "0c4556f7a0e18d1b113df21987ad:29744",
+  "success": true,
+  "textureUniforms": "167d269bbddad80189e9f9473b28:2",
+  "web": null,
+}
+`;
+
+exports[`2D agents and pass graphs compile as they did before 3D > volAnimatedRepeat 1`] = `
+{
+  "agents": "1fe1f0024152e81521f99e5e13c1:4",
+  "errors": null,
+  "fragmentShader": "02552b19366233074e8b067ef6c7:6369",
+  "paramBindings": "10881c2facf10a13023afcbc2809:1705",
+  "paramUniforms": "1d879d6efaa8dc0c13e3624520ad:1299",
+  "passes": "09799a92943e420e3c800c048688:9562",
   "success": true,
   "textureUniforms": "167d269bbddad80189e9f9473b28:2",
   "web": null,

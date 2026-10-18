@@ -977,8 +977,8 @@ function LookTab() {
         </Effect>
         {(P.bloom > 0 || P.scanlines > 0) && (
           <div data-look-legacy style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <BuilderNote>This scene was made with effects the builder no longer offers. They still build as before; set one to 0 to take it out. Effects → Glow and CRT mask replace them.</BuilderNote>
-            {P.bloom > 0 && <Effect m={lookMute('bloom', 'the bloom', !!look.mute?.bloom)}><NumRow label="Bloom (older)" hint="The older Bloom reads the frame before, so moving things smear. Effects → Glow is the same-frame kind." value={P.bloom} min={0} max={1.5} onChange={v => set(l => { l.post.bloom = v; }, 'pb')} /></Effect>}
+            <BuilderNote>This scene was made with effects the builder no longer offers. They still build (the bloom as a same-frame Glow); set one to 0 to take it out. Effects → Glow and CRT mask replace them.</BuilderNote>
+            {P.bloom > 0 && <Effect m={lookMute('bloom', 'the bloom', !!look.mute?.bloom)}><NumRow label="Bloom (older)" hint="The older Bloom setting: it builds a Pass and a same-frame Glow (texture). Effects → Glow gives you its settings." value={P.bloom} min={0} max={1.5} onChange={v => set(l => { l.post.bloom = v; }, 'pb')} /></Effect>}
             {P.scanlines > 0 && <Effect m={lookMute('scanlines', 'the scanlines', !!look.mute?.scanlines)}><NumRow label="Scanlines (older)" hint="Effects → CRT mask has scanlines with the tube's mask." value={P.scanlines} min={0} max={1} onChange={v => set(l => { l.post.scanlines = v; }, 'ps')} /></Effect>}
           </div>
         )}

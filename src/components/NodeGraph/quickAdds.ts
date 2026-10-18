@@ -73,7 +73,7 @@ function consumeRules(type: string, text: string, nodeType?: string): Rule[] {
     case 'texture':
       return [['textureMask', 'texture', 'a mask from it'], ['textureLevels', 'texture', 'shape its values'], ['textureFlow', 'texture', 'a flow from its slopes']];
     case 'float':
-      if (has(text, 'dist', 'sdf', 'field', 'shape')) return [['sdfFill', 'd', 'fill and stroke'], ['glowLayer', 'd', 'glow around the edge'], ['sdfColorize', 'd', 'inside / outside colours']];
+      if (has(text, 'dist', 'sdf', 'field', 'shape')) return [['sdfFill', 'd', 'fill and stroke'], ['light', 'distance', 'glow around the edge'], ['sdfColorize', 'd', 'inside / outside colours']];
       return [['floatToVec3', 'input', 'as a grey'], ['palette', 'value', 'as a colour'], ['colorRamp', 't', 'through a gradient']];
     case 'vec2':
       return [['circleSDF', 'position', 'a shape in this space'], ['fbm', 'uv', 'noise in this space'], ['gradient', 'uv', 'a gradient across it']];

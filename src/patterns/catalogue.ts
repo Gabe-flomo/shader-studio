@@ -82,7 +82,7 @@ export const FAMILIES: Family[] = [
 
 const DISTANCE_PORTS = /^(distance|dist|d|sdf|value|dCenter|distToCenter|cellDist)$/i;
 const SHAPE_CATS = new Set(['2D Primitives', '3D Primitives', 'SDF', 'Field']);
-const LIGHT_TYPES = ['light', 'glowLayer', 'deepGlow', 'volumeGlow', 'glowToColor', 'glowTexture', 'bloom'];
+const LIGHT_TYPES = ['light', 'volumeGlow', 'glowToColor', 'glowTexture', 'bloom'];
 const NOISE_TYPES = ['fbm', 'noiseFloat', 'voronoi', 'domainWarp', 'turbulence', 'magicTexture', 'waveTexture', 'gyroidField'];
 const WAVE_TYPES = ['sin', 'cos', 'lfo', 'sineLFO', 'waveTerm', 'waveTexture'];
 
@@ -159,7 +159,7 @@ export const TECHNIQUES: Technique[] = [
     slots: { in: [S('distance', 'distance', 'float'), S('strength', 'value', 'float')], out: [S('brightness', 'brightness', 'float')] },
     variants: [
       { id: 'node-simple', name: 'SDF Glow, Simple mode', match: lit(['light'], n => param(n, 'mode') === 'simple') },
-      { id: 'glow-layer', name: 'Glow Layer (intensity / |d|)', match: lit(['glowLayer']) },
+      { id: 'glow-layer', name: 'SDF Glow, Halo mode (reach / |d|)', match: lit(['light'], n => param(n, 'mode') === 'halo') },
       { id: 'code', name: 'k / d in code', match: code((l, ids) => idiom('glow-inv', 'glow-over')(l, ids) || /[\d.]+\s*\/\s*(?:max\s*\(|abs\s*\(|length\s*\()/.test(l)) },
     ],
   },
@@ -260,7 +260,7 @@ export const TECHNIQUES: Technique[] = [
     maths: 'p′ = p + k·noise(p); f(p′)', words: ['warp', 'domain warp', 'liquid', 'turbulence', 'distort'],
     slots: { in: [S('position', 'position', 'vec2'), S('amount', 'value', 'float')], out: [S('position', 'position', 'vec2')] },
     variants: [
-      { id: 'node', name: 'Warp node', match: nodes(['domainWarp', 'domainWarp3D', 'turbulence', 'turbulence3D', 'smoothWarp', 'chaosLayers', 'sinWarp3D', 'gridDensityWarp', 'textureFlow', 'displacementMap']) },
+      { id: 'node', name: 'Warp node', match: nodes(['domainWarp', 'domainWarp3D', 'turbulence', 'turbulence3D', 'uvWarp', 'chaosLayers', 'sinWarp3D', 'gridDensityWarp', 'textureFlow', 'displacementMap']) },
       { id: 'noise-into-uv', name: 'Noise into another node’s position', match: v => { const out: Hit[] = []; for (const n of v.ofType(...NOISE_TYPES)) for (const m of v.downstream(n.uid, 2)) { const e = v.ins(m.uid).find(x => /^(uv|p|pos|position|coord)$/i.test(x.in) && (x.from === n.uid || v.upstream(x.from, 1).some(u => u.uid === n.uid) || x.from === n.uid)); if (e && m.uid !== n.uid) out.push({ nodes: [n.uid, m.uid] }); } return out; } },
       { id: 'code', name: 'p += sin(p.yx) or noise(p + noise(p)) in code', match: code(re(/(\w+)\s*\+=\s*[^;]*(?:sin|cos)\s*\(\s*[^;]*\1\.(?:yx|y|x)|(?:fbm|noise)\w*\s*\([^;]*(?:fbm|noise)\w*\s*\(/)) },
     ],

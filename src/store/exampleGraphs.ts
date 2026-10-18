@@ -1,4 +1,5 @@
 import { BLANK_GRAPH } from './exampleIndex';
+import { n } from './graphBuilder';
 import { GROUP_PORT_SENTINEL } from '../types/nodeGraph';
 import { gpPreset } from '../play/kit/gpuParticles.js';
 // An original picture made for the examples (tools/ridges-at-dusk.mjs), inlined as a data URL.
@@ -975,7 +976,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
             nodes: [
               {
                 id: 'warp_n',
-                type: 'smoothWarp',
+                type: 'uvWarp',
                 position: { x: 120, y: 200 },
                 inputs: {
                   input: { type: 'vec2', label: 'UV', connection: { nodeId: GROUP_PORT_SENTINEL, outputKey: 'in_uv' } },
@@ -983,7 +984,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
                   strength: { type: 'float', label: 'Strength' },
                 },
                 outputs: { output: { type: 'vec2', label: 'UV out' } },
-                params: { strength: 0.18, scale: 2.5, speed: 0.3 },
+                params: { kind: 'smooth', strength: 0.18, scale: 2.5, speed: 0.3 },
                 carryMode: true,
               },
             ],
@@ -2051,22 +2052,21 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
       },
       {
         id: 'glow',
-        type: 'glowLayer',
+        type: 'light',
         position: { x: 1520, y: 200 },
         inputs: {
-          d: { type: 'float', label: 'SDF', connection: { nodeId: 'box', outputKey: 'distance' } },
-          color: { type: 'vec3', label: 'Color', connection: { nodeId: 'neon', outputKey: 'rgb' } },
-          intensity: { type: 'float', label: 'Intensity' },
-          power: { type: 'float', label: 'Power' },
+          distance: { type: 'float', label: 'Distance', connection: { nodeId: 'box', outputKey: 'distance' } },
+          brightness: { type: 'float', label: 'Brightness' },
+          tint: { type: 'vec3', label: 'Tint', connection: { nodeId: 'neon', outputKey: 'rgb' } },
         },
-        outputs: { result: { type: 'vec3', label: 'Glow' } },
-        params: { intensity: 0.03, power: 1.2 },
+        outputs: { glow: { type: 'float', label: 'Glow' }, inner: { type: 'float', label: 'Inner' }, tinted: { type: 'vec3', label: 'Tinted' } },
+        params: { mode: 'halo', reach: 0.03, power: 1.2, perDistance: false },
       },
       {
         id: 'out',
         type: 'output',
         position: { x: 1920, y: 200 },
-        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'glow', outputKey: 'result' } } },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'glow', outputKey: 'tinted' } } },
         outputs: {},
         params: {},
       },
@@ -2237,22 +2237,14 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           phase: [0, 0.33, 0.67],
         },
       },
-      {
-        id: 'mb_blur',
-        type: 'motionBlur',
-        position: { x: 700, y: 200 },
-        inputs: {
-          color: { type: 'vec3', label: 'Color', connection: { nodeId: 'mb_frac', outputKey: 'color' } },
-          uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'mb_uv', outputKey: 'uv' } },
-        },
-        outputs: { result: { type: 'vec3', label: 'Result' } },
-        params: { scene_weight: 0.28, history_weight: 0.72, decay_r: 1, decay_g: 0.95, decay_b: 0.9 },
-      },
+      n('textureFeedback', 'mb_blur', 700, 200, { label: 'Trails', amount: 0.28, tail: 0.234, tint: [1, 0.865, 0.757], clean: 0, blend: 'add',
+        __comment: 'Feedback (texture): the fractal (Fresh, at 0.28) added over last frame\'s trails, which fade to 1% in 0.23 seconds (about 72% kept each frame at 60 fps), blue fastest (Tint): smooth motion trails at any frame rate.' },
+        { fresh: ['mb_frac', 'color'] }),
       {
         id: 'mb_out',
         type: 'output',
         position: { x: 960, y: 200 },
-        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'mb_blur', outputKey: 'result' } } },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'mb_blur', outputKey: 'color' } } },
         outputs: {},
         params: {},
       },
@@ -2262,7 +2254,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
   // ── Tilt-Shift ──
   tiltShiftScene: {
     label: 'Tilt-Shift',
-    description: 'Tilt-Shift Blur keeps one horizontal band sharp and blurs away from it, like a miniature. The scene is a perspective floor grid so the depth reads.',
+    description: 'Tilt-Shift (texture) keeps one horizontal band sharp and blurs away from it, like a miniature, reading a Pass of the picture in the same frame. The scene is a perspective floor grid so the depth reads.',
     counter: 7,
     nodes: [
       {
@@ -2327,22 +2319,16 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         outputs: { glow: { type: 'float', label: 'Glow' }, tinted: { type: 'vec3', label: 'Tinted' } },
         params: { mode: 'glow', brightness: 40, ringFreq: 8, tint: [1, 0.7, 0.3] },
       },
-      {
-        id: 'tilt',
-        type: 'tiltShiftBlur',
-        position: { x: 2160, y: 200 },
-        inputs: {
-          color: { type: 'vec3', label: 'Color', connection: { nodeId: 'glow', outputKey: 'tinted' } },
-          uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'uv', outputKey: 'uv' } },
-        },
-        outputs: { result: { type: 'vec3', label: 'Result' }, mask: { type: 'float', label: 'Focus Mask' } },
-        params: { focus_center: 0, band_width: 0.2, max_blur: 8, tilt_angle: 0, axis: 'horizontal' },
-      },
+      n('pass', 'tilt_pass', 1960, 200, { label: 'Floor', __comment: 'Pass: the glowing floor as a texture, this frame, so the blur can read along the band.' },
+        { color: ['glow', 'tinted'] }),
+      n('tiltShiftTexture', 'tilt', 2160, 200, { focus_center: 0, band_width: 0.2, max_blur: 12, tilt_angle: 0, axis: 'horizontal',
+        __comment: 'Tilt-Shift (texture): the band round Focus Center stays sharp; away from it the floor blurs along the band, up to Max Blur pixels: a miniature.' },
+        { texture: ['tilt_pass', 'texture'] }),
       {
         id: 'out',
         type: 'output',
         position: { x: 2580, y: 200 },
-        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'tilt', outputKey: 'result' } } },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'tilt', outputKey: 'color' } } },
         outputs: {},
         params: {},
       },
@@ -3954,24 +3940,17 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         outputs: { color: { type: 'vec3', label: 'Color' } },
         params: { offset: [0.5, 0.5, 0.5], amplitude: [0.5, 0.5, 0.5], freq: [1, 1, 1], phase: [0.3, 0.416, 0.557] },
       },
-      {
-        id: 'chroma_8',
-        type: 'chromaShift',
-        position: { x: 1760, y: 60 },
-        inputs: {
-          color: { type: 'vec3', label: 'Color', connection: { nodeId: 'pal_7', outputKey: 'color' } },
-          uv: { type: 'vec2', label: 'UV' },
-          time: { type: 'float', label: 'Time' },
-        },
-        outputs: { result: { type: 'vec3', label: 'Result' } },
-        params: { mode: 'linear', strength: 0.08, contrast: 2.05, angle_deg: 0, animate: 'false', anim_speed: 0.4 },
-      },
+      n('pass', 'chroma_pass', 1760, -160, { label: 'Picture', __comment: 'Pass: the coloured picture as a texture, this frame, so the colour split below can read it a few pixels to each side.' },
+        { color: ['pal_7', 'color'] }),
+      n('chromaLens', 'chroma_8', 1760, 60, { mode: 'split', geometry: 'directional', amount: 2.5, blur: 0, angle: 0,
+        __comment: 'Chromatic Aberration (lens), Channel split along 0°: red read 2.5 pixels one way and blue the other, so the edges fringe red and blue.' },
+        { texture: ['chroma_pass', 'texture'] }),
       {
         id: 'grain_9',
         type: 'grain',
         position: { x: 2100, y: 60 },
         inputs: {
-          color: { type: 'vec3', label: 'Color', connection: { nodeId: 'chroma_8', outputKey: 'result' } },
+          color: { type: 'vec3', label: 'Color', connection: { nodeId: 'chroma_8', outputKey: 'color' } },
           uv: { type: 'vec2', label: 'UV' },
           seed: { type: 'float', label: 'Seed', connection: { nodeId: 'time_1', outputKey: 'time' } },
         },
@@ -4770,23 +4749,16 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         outputs: { color: { type: 'vec3', label: 'Color' } },
         params: { mode: 'aces' },
       },
-      {
-        id: 'dof_6',
-        type: 'depthOfField',
-        position: { x: 1300, y: 240 },
-        inputs: {
-          color: { type: 'vec3', label: 'Color', connection: { nodeId: 'tone_5', outputKey: 'color' } },
-          uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'uv_0', outputKey: 'uv' } },
-          dist: { type: 'float', label: 'Dist', connection: { nodeId: 'mlg_4', outputKey: 'dist' } },
-        },
-        outputs: { result: { type: 'vec3', label: 'Result' }, coc: { type: 'float', label: 'CoC' } },
-        params: { focalDist: 5.5, focalRange: 1.2, maxBlur: 10, bokehShape: 'disc' },
-      },
+      n('pass', 'dof_pass', 1300, 60, { label: 'Scene + depth', __comment: 'Pass: the lit scene as a texture, this frame, with each pixel\'s ray distance in its alpha (half float holds distances past 1), so the blur can read the picture and its depth round each pixel.' },
+        { color: ['tone_5', 'color'], alpha: ['mlg_4', 'dist'] }),
+      n('dofTexture', 'dof_6', 1540, 240, { focus: 'depth', focalDist: 5.5, focalRange: 1.2, maxBlur: 10, bokehShape: 'disc',
+        __comment: 'Depth of Field (texture), Focus Depth: pixels whose depth (the Pass\'s alpha) is far from Focal Dist get a bokeh disc up to Max Blur pixels wide, read from the same frame.' },
+        { texture: ['dof_pass', 'texture'] }),
       {
         id: 'out_7',
         type: 'output',
         position: { x: 1520, y: 240 },
-        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'dof_6', outputKey: 'result' } } },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'dof_6', outputKey: 'color' } } },
         outputs: {},
         params: {},
       },
@@ -6212,7 +6184,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
   // ── Feedback Smear ──
   feedbackSmear: {
     label: 'Feedback Smear',
-    description: 'The feedback loop: Previous Frame is sampled through a slightly rotated, shrunk UV, then mixed 92/8 with fresh noise colour. Every frame smears the last one inward.',
+    description: 'The feedback loop: the picture goes into a Pass, and its Previous (last frame) is sampled through a slightly rotated, shrunk UV, then mixed 92/8 with fresh noise colour. Every frame smears the last one inward.',
     counter: 8,
     nodes: [
       {
@@ -6244,18 +6216,8 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         outputs: { result: { type: 'vec2', label: 'Result' } },
         params: { tx: 0, ty: 0, angle: 0.02, sx: 0.985, sy: 0.985, pivotX: 0, pivotY: 0 },
       },
-      {
-        id: 'prev',
-        type: 'prevFrame',
-        position: { x: 900, y: 200 },
-        inputs: { uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'warp', outputKey: 'result' } } },
-        outputs: {
-          color: { type: 'vec3', label: 'Color' },
-          alpha: { type: 'float', label: 'Alpha' },
-          uv: { type: 'vec2', label: 'UV (pass-through)' },
-        },
-        params: {},
-      },
+      n('sampleTexture', 'prev', 900, 200, { __comment: 'Sample (texture): last frame\'s picture (the Picture pass\'s Previous), read through the slightly turned, shrunk UV, so every frame the old picture drifts inward.' },
+        { texture: ['frame', 'previous'], uv: ['warp', 'result'] }),
       {
         id: 'n',
         type: 'fbm',
@@ -6314,11 +6276,13 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         outputs: { color: { type: 'vec3', label: 'Color' } },
         params: { mode: 'aces' },
       },
+      n('pass', 'frame', 2160, 300, { label: 'Picture', __comment: 'Pass: the finished picture, kept as a texture; its Previous hands it back next frame, which closes the feedback loop.' },
+        { color: ['tone', 'color'] }),
       {
         id: 'out',
         type: 'output',
-        position: { x: 2160, y: 300 },
-        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'tone', outputKey: 'color' } } },
+        position: { x: 2400, y: 300 },
+        inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'frame', outputKey: 'color' } } },
         outputs: {},
         params: {},
       },
@@ -10391,16 +10355,8 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           label: 'feedback warp',
         },
       },
-      {
-        id: 'mf_prev',
-        type: 'prevFrame',
-        position: { x: 500, y: 560 },
-        inputs: {
-          uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'mf_warp', outputKey: 'result' } },
-        },
-        outputs: { color: { type: 'vec3', label: 'Color' }, alpha: { type: 'float', label: 'Alpha' }, uv: { type: 'vec2', label: 'UV (pass-through)' } },
-        params: {},
-      },
+      n('sampleTexture', 'mf_prev', 500, 560, { __comment: 'Sample (texture): the picture from the frame before (the Picture pass\'s Previous), read through the sine warp: the feedback smear.' },
+        { texture: ['mf_pass', 'previous'], uv: ['mf_warp', 'result'] }),
       {
         id: 'mf_b2',
         type: 'multiply',
@@ -10433,12 +10389,14 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         outputs: { color: { type: 'vec3', label: 'Color' } },
         params: { mode: 'tanh' },
       },
+      n('pass', 'mf_pass', 1460, 300, { label: 'Picture', __comment: 'Pass: the finished picture, kept as a texture; its Previous hands it back next frame (to Sample (texture) on the left), which closes the feedback loop.' },
+        { color: ['mf_tone', 'color'] }),
       {
         id: 'mf_out',
         type: 'output',
-        position: { x: 1460, y: 300 },
+        position: { x: 1700, y: 300 },
         inputs: {
-          color: { type: 'vec3', label: 'Color', connection: { nodeId: 'mf_tone', outputKey: 'color' } },
+          color: { type: 'vec3', label: 'Color', connection: { nodeId: 'mf_pass', outputKey: 'color' } },
         },
         outputs: {},
         params: {},
@@ -11129,7 +11087,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
   // ── Web: Trippy Noise ──
   fcTrippyNoise: {
     label: 'Web: Trippy Noise',
-    description: 'After "trippy noise", a community shader from the web (author credit to follow). Rotate 2D → |uv| → Polar angle drives a second Rotate; three Noise Floats (value noise, offset ±0.333) → Smoothstep → RGB tints summed; Vignette, lift, a Texture Input screened in through Blend Modes (an empty image slot changes nothing), and Bloom replaces the threshold → blur X → blur Y → screen passes.',
+    description: 'After "trippy noise", a community shader from the web (author credit to follow). Rotate 2D → |uv| → Polar angle drives a second Rotate; three Noise Floats (value noise, offset ±0.333) → Smoothstep → RGB tints summed; Vignette, lift, a Texture Input screened in through Blend Modes (an empty image slot changes nothing), and a Pass + Glow (texture) Bloom chain replaces the threshold → blur X → blur Y → screen passes.',
     counter: 33,
     nodes: [
       {
@@ -11495,25 +11453,17 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         outputs: { result: { type: 'vec3', label: 'Result' } },
         params: { mode: 'screen', opacity: 0.5, strength: 1 },
       },
-      {
-        id: 'tn_bloom',
-        type: 'bloom',
-        position: { x: 4000, y: 300 },
-        inputs: {
-          color: { type: 'vec3', label: 'Color', connection: { nodeId: 'tn_blend', outputKey: 'result' } },
-          uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'tn_uv', outputKey: 'uv' } },
-          threshold: { type: 'float', label: 'Threshold' },
-          intensity: { type: 'float', label: 'Intensity' },
-        },
-        outputs: { result: { type: 'vec3', label: 'Result' } },
-        params: { threshold: 0.66, intensity: 2, radius: 40 },
-      },
+      n('pass', 'tn_pass', 3760, 300, { label: 'Picture', __comment: 'Pass: the picture as a texture, this frame, so the glow can read round each pixel (half float keeps brightness above 1).' },
+        { color: ['tn_blend', 'result'] }),
+      n('glowTexture', 'tn_bloom', 4000, 300, { method: 'bloom', threshold: 0.66, knee: 0.2, radius: 20, intensity: 0.6, tail: 0.4,
+        __comment: 'Glow (texture), Bloom chain: the parts brighter than Threshold, halved again and again and built back up: a soft core with a long tail, in the same frame. Color is the picture with the glow added.' },
+        { texture: ['tn_pass', 'texture'] }),
       {
         id: 'tn_out',
         type: 'output',
         position: { x: 4220, y: 300 },
         inputs: {
-          color: { type: 'vec3', label: 'Color', connection: { nodeId: 'tn_bloom', outputKey: 'result' } },
+          color: { type: 'vec3', label: 'Color', connection: { nodeId: 'tn_bloom', outputKey: 'color' } },
         },
         outputs: {},
         params: {},
@@ -11715,7 +11665,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
   // ── Combo: Grid + SDF Fill + Bloom ──
   comboBloomDots: {
     label: 'Combo: Grid + SDF Fill + Bloom',
-    description: 'Grid → Circle SDF on the Cell UV → SDF Fill draws bright dots coloured by Cell ID; Bloom (Luma select, Layered kernel — Xor\'s bloom article) thresholds, blurs and screens the highlights: the whole threshold → Blur X → Blur Y → screen pass chain in one node. Bloom on a full picture: Web: Trippy Noise; the blur half on its own: Combo: Wave Texture + Blur H/V.',
+    description: 'Grid → Circle SDF on the Cell UV → SDF Fill draws bright dots coloured by Cell ID; a Pass holds the dots and Glow (texture), Bloom chain, thresholds, blurs and adds the highlights back: the whole threshold → blur → add chain in one node, in the same frame. Bloom on a full picture: Web: Trippy Noise; the blur on its own: Combo: Wave Texture + Blur.',
     counter: 11,
     nodes: [
       {
@@ -11825,25 +11775,17 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         outputs: { result: { type: 'vec3', label: 'Color' }, alpha: { type: 'float', label: 'Alpha' } },
         params: { strokeWidth: 0, antialias: 0.01, strokeAlign: 'center', aaMode: 'pixel' },
       },
-      {
-        id: 'bd_bloom',
-        type: 'bloom',
-        position: { x: 1480, y: 240 },
-        inputs: {
-          color: { type: 'vec3', label: 'Color', connection: { nodeId: 'bd_fill', outputKey: 'result' } },
-          uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'bd_uv', outputKey: 'uv' } },
-          threshold: { type: 'float', label: 'Threshold' },
-          intensity: { type: 'float', label: 'Intensity' },
-        },
-        outputs: { result: { type: 'vec3', label: 'Result' } },
-        params: { threshold: 0.45, intensity: 2.5, radius: 40, select: 'luma', softness: 0.25, kernel: 'layered' },
-      },
+      n('pass', 'bd_pass', 1240, 240, { label: 'Dots', __comment: 'Pass: the dots as a texture, this frame, so the glow can read round each pixel.' },
+        { color: ['bd_fill', 'result'] }),
+      n('glowTexture', 'bd_bloom', 1480, 240, { method: 'bloom', threshold: 0.45, knee: 0.25, radius: 16, intensity: 0.8, tail: 0.4,
+        __comment: 'Glow (texture), Bloom chain: thresholds the bright dots, blurs them down a mip chain and back up, and its Color adds the glow over the dots: the threshold → blur → add chain in one node, same frame.' },
+        { texture: ['bd_pass', 'texture'] }),
       {
         id: 'bd_out',
         type: 'output',
         position: { x: 1720, y: 240 },
         inputs: {
-          color: { type: 'vec3', label: 'Color', connection: { nodeId: 'bd_bloom', outputKey: 'result' } },
+          color: { type: 'vec3', label: 'Color', connection: { nodeId: 'bd_bloom', outputKey: 'color' } },
         },
         outputs: {},
         params: {},
@@ -12083,8 +12025,8 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
   },
   // ── Combo: Wave Texture + Blur H/V ──
   comboBlurDirectional: {
-    label: 'Combo: Wave Texture + Blur H/V',
-    description: 'A sharp Wave Texture through Gaussian Blur set to Horizontal only, Kawase quality (the four diagonal taps from Intel\'s fast-blur article): the separable Blur X pass from the blur articles, on its own a streak. Switch Direction to Vertical or Both on the card to compare. Both passes plus threshold and screen in one node: Combo: Grid + SDF Fill + Bloom.',
+    label: 'Combo: Wave Texture + Blur',
+    description: 'A sharp Wave Texture drawn into a Pass, then Blur (texture), Smooth: a true Gaussian made as two hidden passes, across then down, the separable Blur X and Blur Y passes from the blur articles, read between texels so no copies show. Set Method to Fast on the card for the one-pass kind. The threshold, blur and add-back chain in one node: Combo: Grid + SDF Fill + Bloom.',
     counter: 7,
     nodes: [
       {
@@ -12142,23 +12084,17 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         outputs: { color: { type: 'vec3', label: 'Color' } },
         params: { levels: 3 },
       },
-      {
-        id: 'bl_blur',
-        type: 'gaussianBlur',
-        position: { x: 1000, y: 200 },
-        inputs: {
-          color: { type: 'vec3', label: 'Color', connection: { nodeId: 'bl_post', outputKey: 'color' } },
-          uv: { type: 'vec2', label: 'UV', connection: { nodeId: 'bl_uv', outputKey: 'uv' } },
-        },
-        outputs: { result: { type: 'vec3', label: 'Result' } },
-        params: { radius: 6, quality: 'kawase', direction: 'horizontal' },
-      },
+      n('pass', 'bl_pass', 1000, 0, { label: 'Waves', __comment: 'Pass: the sharp waves as a texture, this frame, so the blur can read round each pixel.' },
+        { color: ['bl_post', 'color'] }),
+      n('blurTexture', 'bl_blur', 1000, 200, { method: 'smooth', radius: 12,
+        __comment: 'Blur (texture), Smooth: a true Gaussian of 12 pixels, made as two hidden passes (across, then down) that read between texels, so no copies show. Fast is one cheap pass.' },
+        { texture: ['bl_pass', 'texture'] }),
       {
         id: 'bl_out',
         type: 'output',
         position: { x: 1240, y: 200 },
         inputs: {
-          color: { type: 'vec3', label: 'Color', connection: { nodeId: 'bl_blur', outputKey: 'result' } },
+          color: { type: 'vec3', label: 'Color', connection: { nodeId: 'bl_blur', outputKey: 'color' } },
         },
         outputs: {},
         params: {},

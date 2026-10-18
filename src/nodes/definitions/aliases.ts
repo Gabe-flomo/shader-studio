@@ -101,7 +101,54 @@ export const NODE_ALIASES: Record<string, NodeAlias> = {
   squareLFO:     { to: 'lfo', params: o => ({ ...o, waveform: 'square' }) },
   sawtoothLFO:   { to: 'lfo', params: o => ({ ...o, waveform: 'sawtooth' }) },
   triangleLFO:   { to: 'lfo', params: o => ({ ...o, waveform: 'triangle' }) },
+
+  // ── 2026-10-17 sweep: one UV Warp with a Kind (transforms.ts). Each kind is its old node's GLSL;
+  //    the old defaults fill any setting the saved node lacked. Swirl / Vortex is Swirl round (0, 0), no spin. ──
+  smoothWarp: { to: 'uvWarp', params: o => ({ ...o, kind: 'smooth', strength: num(o.strength, 0.1), scale: num(o.scale, 4.0), speed: num(o.speed, 0.5) }) },
+  curlWarp:   { to: 'uvWarp', params: o => ({ ...o, kind: 'curl', strength: num(o.strength, 0.15), scale: num(o.scale, 3.0), speed: num(o.speed, 0.4) }) },
+  swirlWarp:  { to: 'uvWarp', params: o => ({ ...o, kind: 'swirl', strength: num(o.strength, 2.0), falloff: num(o.falloff, 4.0), cx: num(o.cx, 0.0), cy: num(o.cy, 0.0), speed: num(o.speed, 0.3) }) },
+  swirlSpace: { to: 'uvWarp', params: o => ({ ...o, kind: 'swirl', strength: num(o.strength, 2.0), falloff: num(o.falloff, 1.0), cx: 0.0, cy: 0.0, speed: 0.0 }) },
+
+  // ── 2026-10-17 sweep: one SDF Glow (effects.ts LightNode) with every distance falloff as a Mode, each the
+  //    old node's formula. Per distance stays off (the old nodes counted per step in a March Loop). ──
+  // Glow Layer: its Type is the mode, its Intensity the Reach, its Color (and gradient) the Tint.
+  glowLayer: { to: 'light', inputs: { d: 'distance', color: 'tint', intensity: 'reach' }, outputs: { result: 'tinted' },
+               params: o => ({ ...renameColour(o), mode: GLOW_LAYER_TYPES.includes(o.mode as string) ? o.mode : 'halo',
+                 reach: num(o.intensity, 0.01), power: num(o.power, 1.0), intensity: undefined, perDistance: false }) },
+  // Distance Falloff: its Rate is the Falloff (k); Bounded Inv² is Bounded inverse power.
+  distanceFalloff: { to: 'light', inputs: { k: 'brightness' }, outputs: { falloff: 'glow' },
+                     params: o => ({ ...o, mode: FALLOFF_MODE[String(o.mode)] ?? 'invPow', brightness: num(o.k, 5.0), power: num(o.power, 2.0), k: undefined, perDistance: false }) },
+  // Deep Glow (the SDF one): Deep glow mode, its Color the Tint (white when it had none), Result the Tinted output.
+  deepGlow: { to: 'light', inputs: { d: 'distance', color: 'tint' }, outputs: { result: 'tinted' },
+              params: o => ({ ...o, mode: 'deep', intensity: num(o.intensity, 1.5), radius: num(o.radius, 0.08), saturation: num(o.saturation, 1.2),
+                edgeSoftness: num(o.edgeSoftness, 0.01), tint: [1, 1, 1], perDistance: false }) },
+
+  // ── 2026-10-17 sweep: one chromatic aberration, on a texture (chromaLens.ts). RGB Split (texture) is its Channel
+  //    split with Blur 0 (the same three reads; Radial is Lateral round the middle). ──
+  chromaTexture: { to: 'chromaLens', params: o => ({ ...o, mode: 'split', geometry: o.mode === 'directional' ? 'directional' : 'lateral',
+    amount: num(o.amount, 4), angle: num(o.angle, 0), falloff: num(o.falloff, 1), blur: 0, distortion: 0, centerX: 0, centerY: 0, samples: 12 }) },
+
+  // ── 2026-10-17 sweep: one picture glow, Glow (texture) (deepGlow.ts GlowTextureNode). Deep Glow (texture) is its
+  //    Deep glow method: the same generator, hidden passes and sliders. ──
+  deepGlowTexture: { to: 'glowTexture', params: o => ({ ...o, method: 'deep', radius: num(o.radius, 120), intensity: num(o.intensity, 1), threshold: num(o.threshold, 0.6),
+    knee: num(o.knee, 0.3), spread: num(o.spread, 0), preserve: num(o.preserve, 0.5), tint: o.tint ?? [1, 1, 1], composite: o.composite === 'screen' ? 'screen' : 'add' }) },
 };
+
+/** Glow Layer's Types (combiners.ts GLOW_TYPES), each an SDF Glow mode of the same name. */
+const GLOW_LAYER_TYPES = ['halo', 'soft', 'exp', 'gauss', 'neon', 'rim', 'invsq'];
+/** Distance Falloff's modes → SDF Glow's. */
+const FALLOFF_MODE: Record<string, string> = { bounded_inv_sq: 'invPow', gaussian: 'gaussBump', linear: 'cone', wyvill: 'wyvill' };
+/** Glow Layer's colour setting (and its gradient's keys, `color__…`) as SDF Glow's Tint (white when it had none). */
+function renameColour(o: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(o)) {
+    if (k === 'color') out.tint = v;
+    else if (k.startsWith('color__')) out[`tint__${k.slice(7)}`] = v;
+    else out[k] = v;
+  }
+  if (out.tint === undefined) out.tint = [1, 1, 1];
+  return out;
+}
 
 /** Canonical params for a node created fresh (no old params) or migrated. */
 export function aliasParams(alias: NodeAlias, old: Record<string, unknown>): Record<string, unknown> {

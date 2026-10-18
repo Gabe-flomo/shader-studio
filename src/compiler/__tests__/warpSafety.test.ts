@@ -34,7 +34,7 @@ describe('warp safety on the March Loop', () => {
     for (const [k, g] of loops) {
       const r = compileGraph({ nodes: withSafety(resolveNodeAliases(g.nodes, getNodeDefinition), mode, { showSteps: 'steps' }) });
       if (!r.success) bad.push(`${k}: ${String(r.errors)}`);
-      else expect(r.fragmentShader).toContain('_lip');
+      else expect([r.fragmentShader, ...(r.passes ?? []).map(p => p.fragmentShader)].join('\n')).toContain('_lip'); // a Pass's program marches too
     }
     expect(bad).toEqual([]);
   });
@@ -77,7 +77,7 @@ describe('warp safety on the March Loop', () => {
     for (const [k, g] of [...volLoops, ...giLoops]) {
       const r = compileGraph({ nodes: withSafety(resolveNodeAliases(g.nodes, getNodeDefinition), mode, { showSteps: 'steps' }) });
       if (!r.success) bad.push(`${k}: ${String(r.errors)}`);
-      else expect(r.fragmentShader).toContain('_lip');
+      else expect([r.fragmentShader, ...(r.passes ?? []).map(p => p.fragmentShader)].join('\n')).toContain('_lip'); // a Pass's program marches too
     }
     expect(bad).toEqual([]);
   });

@@ -97,144 +97,80 @@ export const FractNode: NodeDefinition = {
   },
 };
 
+/**
+ * UV Warp: one node for the four noise-and-twist warps (2026-10-17 sweep). Kind picks the field:
+ * Smooth (value noise), Jitter (blocky hash grid), Curl (divergence-free flow) or Swirl (a twist round a
+ * centre, the old Swirl / Vortex too). Each kind runs exactly the GLSL its old node did, so the old
+ * types (smoothWarp, curlWarp, swirlWarp, swirlSpace) migrate here through NODE_ALIASES.
+ * A uvWarp saved before Kind (version < 2, no `kind`) was the Jitter node and stays Jitter.
+ */
+export const UV_WARP_KINDS = ['smooth', 'jitter', 'curl', 'swirl'] as const;
+export type UvWarpKind = typeof UV_WARP_KINDS[number];
+export const uvWarpKind = (v: unknown): UvWarpKind => ((UV_WARP_KINDS as readonly string[]).includes(v as string) ? v as UvWarpKind : 'jitter');
+/** Each kind's old defaults (what its node used when a setting was missing). */
+const UV_WARP_DEFAULTS: Record<UvWarpKind, { strength: number; scale: number; speed: number }> = {
+  smooth: { strength: 0.1, scale: 4.0, speed: 0.5 },
+  jitter: { strength: 0.05, scale: 8.0, speed: 1.0 },
+  curl: { strength: 0.15, scale: 3.0, speed: 0.4 },
+  swirl: { strength: 2.0, scale: 4.0, speed: 0.3 },
+};
+const UV_WARP_GLSL_OF: Record<UvWarpKind, string> = { smooth: SMOOTH_WARP_GLSL, jitter: UV_WARP_GLSL, curl: CURL_WARP_GLSL, swirl: SWIRL_WARP_GLSL };
+const NOISE_KINDS = ['smooth', 'jitter', 'curl'];
+
 export const UVWarpNode: NodeDefinition = withParamSockets({
   type: 'uvWarp',
-  label: 'UV Warp (Jitter)',
+  label: 'UV Warp',
+  aliases: ['UV Warp (Smooth)', 'UV Warp (Jitter)', 'UV Warp (Curl)', 'UV Warp (Swirl)', 'Swirl / Vortex', 'Swirl', 'Vortex', 'Twirl', 'Curl warp', 'Jitter warp'],
   category: '2D Space', subcategory: 'Warp',
-  description: 'Hash-grid jitter warp — intentionally blocky/pixelated displacement. Great for glitch and mosaic effects. For smooth flowing warps use UV Warp (Smooth).',
-  inputs: {
-    input: { type: 'vec2', label: 'UV' },
-    time:  { type: 'float', label: 'Time', hint: 'Wire Time to animate the jitter; unwired it is a fixed displacement.' },
-  },
-  outputs: {
-    output: { type: 'vec2', label: 'UV out' },
-  },
-  defaultParams: { strength: 0.05, scale: 8.0, speed: 1.0 },
-  paramDefs: {
-    strength: { label: 'Strength', type: 'float', min: 0.0,  max: 0.5,  step: 0.001, hint: 'How far each block shifts. 0.05 is a subtle glitch, 0.3 shreds the image.' },
-    scale:    { label: 'Scale',    type: 'float', min: 0.1,  max: 40.0, step: 0.1, hint: 'Size of the jitter blocks. Higher = smaller, more numerous blocks.' },
-    speed:    { label: 'Speed',    type: 'float', min: 0.0,  max: 5.0,  step: 0.01, hint: 'How fast the blocks reshuffle. Needs Time wired.' },
-  },
-  glslFunction: UV_WARP_GLSL,
-  generateGLSL: (node: GraphNode, inputVars) => {
-    const id      = node.id;
-    const uv      = inputVars.input || 'vec2(0.0)';
-    const timeVar = inputVars.time  || '0.0';
-    const str     = p(node.params.strength, 0.05);
-    const scale   = p(node.params.scale, 8.0);
-    const speed   = p(node.params.speed, 1.0);
-    return {
-      code: `    vec2 ${id}_output = ${uv} + uvWarpOffset(${uv}, ${scale}, ${timeVar}, ${speed}) * ${str};\n`,
-      outputVars: { output: `${id}_output` },
-    };
-  },
-}, ['strength', 'scale', 'speed']);
-
-export const SmoothWarpNode: NodeDefinition = withParamSockets({
-  type: 'smoothWarp',
-  label: 'UV Warp (Smooth)',
-  category: '2D Space', subcategory: 'Warp',
-  description: 'Smooth bilinear value-noise warp — flowing, organic displacement with no visible grid edges. Use Strength to control how much it moves, Scale for frequency.',
+  description: 'Pushes the UV around. Kind picks how: Smooth is flowing value noise with no grid edges; Jitter is a blocky hash grid (glitch, mosaic); Curl is divergence-free noise that swirls like smoke; Swirl twists space round a centre, most at the middle. Strength is how far it moves (for Swirl, the twist in radians); wire Time to animate.',
+  version: 2,
+  migrateParams: (params, fromVersion) => (fromVersion < 2 && !('kind' in params) ? { ...params, kind: 'jitter' } : params),
   inputs: {
     input:    { type: 'vec2',  label: 'UV' },
-    time:     { type: 'float', label: 'Time', hint: 'Wire Time to animate the warp; unwired it is a fixed displacement.' },
+    time:     { type: 'float', label: 'Time', hint: 'Wire Time to animate the warp; unwired it is a fixed displacement (Swirl holds still).' },
     strength: { type: 'float', label: 'Strength' },
   },
   outputs: {
     output: { type: 'vec2', label: 'UV out' },
   },
-  defaultParams: { strength: 0.1, scale: 4.0, speed: 0.5 },
+  defaultParams: { kind: 'smooth', strength: 0.1, scale: 4.0, speed: 0.5, falloff: 4.0, cx: 0.0, cy: 0.0 },
   paramDefs: {
-    strength: { label: 'Strength', type: 'float', min: 0.0,  max: 1.0,  step: 0.005, hint: 'How far the warp pushes pixels. 0.1 ripples, 0.5 melts.' },
-    scale:    { label: 'Scale',    type: 'float', min: 0.1,  max: 40.0, step: 0.1, hint: 'Frequency of the warp field. Higher = smaller, tighter swirls.' },
-    speed:    { label: 'Speed',    type: 'float', min: 0.0,  max: 5.0,  step: 0.01, hint: 'How fast the warp field drifts. Needs Time wired.' },
+    kind: { label: 'Kind', type: 'select', hint: 'Smooth: flowing noise. Jitter: blocky, glitchy shifts. Curl: smoke-like swirling flow. Swirl: a twist round a centre.', options: [
+      { value: 'smooth', label: 'Smooth' }, { value: 'jitter', label: 'Jitter' }, { value: 'curl', label: 'Curl' }, { value: 'swirl', label: 'Swirl' },
+    ] },
+    strength: { label: 'Strength', type: 'float', min: 0.0, max: 1.0, step: 0.005, hint: 'How far the warp pushes: 0.05 is a subtle ripple, 0.5 melts. For Swirl it is the twist at the centre in radians (2 is a strong twist; negative twists the other way).' },
+    scale:    { label: 'Scale',    type: 'float', min: 0.1,  max: 40.0, step: 0.1, showWhen: { param: 'kind', value: NOISE_KINDS }, hint: 'Frequency of the warp field. Higher = smaller, busier blocks or swirls.' },
+    speed:    { label: 'Speed',    type: 'float', min: 0.0,  max: 5.0,  step: 0.01, hint: 'How fast the field drifts (Swirl: keeps spinning). Needs Time wired.' },
+    falloff:  { label: 'Falloff',  type: 'float', min: 0.1,  max: 20.0, step: 0.1, showWhen: { param: 'kind', value: 'swirl' }, hint: 'How quickly the twist fades outward. Higher keeps it tight to the centre.' },
+    cx:       { label: 'Center X', type: 'float', min: -1.0, max: 1.0,  step: 0.01, showWhen: { param: 'kind', value: 'swirl' }, hint: 'Horizontal position of the swirl centre.' },
+    cy:       { label: 'Center Y', type: 'float', min: -1.0, max: 1.0,  step: 0.01, showWhen: { param: 'kind', value: 'swirl' }, hint: 'Vertical position of the swirl centre.' },
   },
-  glslFunction: SMOOTH_WARP_GLSL,
+  glslFunctionsFor: node => [UV_WARP_GLSL_OF[uvWarpKind(node.params.kind)]],
   generateGLSL: (node: GraphNode, inputVars) => {
     const id      = node.id;
+    const kind    = uvWarpKind(node.params.kind);
+    const D       = UV_WARP_DEFAULTS[kind];
     const uv      = inputVars.input || 'vec2(0.0)';
     const timeVar = inputVars.time  || '0.0';
-    const str     = inputVars.strength || p(node.params.strength, 0.1);
-    const scale   = p(node.params.scale, 4.0);
-    const speed   = p(node.params.speed, 0.5);
+    const str     = inputVars.strength || p(node.params.strength, D.strength);
+    const speed   = p(node.params.speed, D.speed);
+    if (kind === 'swirl') {
+      const falloff = p(node.params.falloff, 4.0);
+      const cx      = p(node.params.cx, 0.0);
+      const cy      = p(node.params.cy, 0.0);
+      return {
+        code: `    vec2 ${id}_output = ${uv} + swirlWarpOffset(${uv}, ${cx}, ${cy}, ${str}, ${falloff}, ${timeVar}, ${speed});\n`,
+        outputVars: { output: `${id}_output` },
+      };
+    }
+    const scale = p(node.params.scale, D.scale);
+    const fn = kind === 'smooth' ? 'smoothWarpOffset' : kind === 'curl' ? 'curlWarpOffset' : 'uvWarpOffset';
     return {
-      code: `    vec2 ${id}_output = ${uv} + smoothWarpOffset(${uv}, ${scale}, ${timeVar}, ${speed}) * ${str};\n`,
+      code: `    vec2 ${id}_output = ${uv} + ${fn}(${uv}, ${scale}, ${timeVar}, ${speed}) * ${str};\n`,
       outputVars: { output: `${id}_output` },
     };
   },
-}, ['scale', 'speed']);
-
-export const CurlWarpNode: NodeDefinition = withParamSockets({
-  type: 'curlWarp',
-  label: 'UV Warp (Curl)',
-  category: '2D Space', subcategory: 'Warp',
-  description: 'Divergence-free curl noise warp — simulates fluid flow, smoke, and turbulent streams. Particles never converge or diverge, giving a very natural swirling motion.',
-  inputs: {
-    input:    { type: 'vec2',  label: 'UV' },
-    time:     { type: 'float', label: 'Time', hint: 'Wire Time to animate the flow; unwired it is a fixed displacement.' },
-    strength: { type: 'float', label: 'Strength' },
-  },
-  outputs: {
-    output: { type: 'vec2', label: 'UV out' },
-  },
-  defaultParams: { strength: 0.15, scale: 3.0, speed: 0.4 },
-  paramDefs: {
-    strength: { label: 'Strength', type: 'float', min: 0.0,  max: 1.0,  step: 0.005, hint: 'How far the flow carries pixels. 0.15 is gentle smoke.' },
-    scale:    { label: 'Scale',    type: 'float', min: 0.1,  max: 20.0, step: 0.1, hint: 'Size of the eddies. Higher = smaller, busier swirls.' },
-    speed:    { label: 'Speed',    type: 'float', min: 0.0,  max: 5.0,  step: 0.01, hint: 'How fast the flow evolves. Needs Time wired.' },
-  },
-  glslFunction: CURL_WARP_GLSL,
-  generateGLSL: (node: GraphNode, inputVars) => {
-    const id      = node.id;
-    const uv      = inputVars.input || 'vec2(0.0)';
-    const timeVar = inputVars.time  || '0.0';
-    const str     = inputVars.strength || p(node.params.strength, 0.15);
-    const scale   = p(node.params.scale, 3.0);
-    const speed   = p(node.params.speed, 0.4);
-    return {
-      code: `    vec2 ${id}_output = ${uv} + curlWarpOffset(${uv}, ${scale}, ${timeVar}, ${speed}) * ${str};\n`,
-      outputVars: { output: `${id}_output` },
-    };
-  },
-}, ['scale', 'speed']);
-
-export const SwirlWarpNode: NodeDefinition = withParamSockets({
-  type: 'swirlWarp',
-  label: 'UV Warp (Swirl)',
-  category: '2D Space', subcategory: 'Warp',
-  description: 'Rotational twist warp — strongest at center, decays with distance. Twist sets max rotation angle, Falloff controls how quickly it fades outward. Animates with time.',
-  inputs: {
-    input:    { type: 'vec2',  label: 'UV' },
-    time:     { type: 'float', label: 'Time', hint: 'Wire Time to keep the swirl spinning; unwired it holds still.' },
-    strength: { type: 'float', label: 'Twist' },
-  },
-  outputs: {
-    output: { type: 'vec2', label: 'UV out' },
-  },
-  defaultParams: { strength: 2.0, falloff: 4.0, cx: 0.0, cy: 0.0, speed: 0.3 },
-  paramDefs: {
-    strength: { label: 'Twist',   type: 'float', min: -12.0, max: 12.0, step: 0.05, hint: 'Max rotation at the center, in radians. Negative twists the other way.' },
-    falloff:  { label: 'Falloff', type: 'float', min: 0.1,   max: 20.0, step: 0.1, hint: 'How quickly the twist fades outward. Higher keeps it tight to the center.' },
-    cx:       { label: 'Center X',type: 'float', min: -1.0,  max: 1.0,  step: 0.01, hint: 'Horizontal position of the swirl center.' },
-    cy:       { label: 'Center Y',type: 'float', min: -1.0,  max: 1.0,  step: 0.01, hint: 'Vertical position of the swirl center.' },
-    speed:    { label: 'Speed',   type: 'float', min: -5.0,  max: 5.0,  step: 0.01, hint: 'Adds continuous spin over time. Needs Time wired.' },
-  },
-  glslFunction: SWIRL_WARP_GLSL,
-  generateGLSL: (node: GraphNode, inputVars) => {
-    const id      = node.id;
-    const uv      = inputVars.input || 'vec2(0.0)';
-    const timeVar = inputVars.time  || '0.0';
-    const twist   = inputVars.strength || p(node.params.strength, 2.0);
-    const falloff = p(node.params.falloff, 4.0);
-    const cx      = p(node.params.cx, 0.0);
-    const cy      = p(node.params.cy, 0.0);
-    const speed   = p(node.params.speed, 0.3);
-    return {
-      code: `    vec2 ${id}_output = ${uv} + swirlWarpOffset(${uv}, ${cx}, ${cy}, ${twist}, ${falloff}, ${timeVar}, ${speed});\n`,
-      outputVars: { output: `${id}_output` },
-    };
-  },
-}, ['falloff', 'cx', 'cy', 'speed']);
+}, ['scale', 'speed', 'falloff', 'cx', 'cy']);
 
 // "Displace" — wire any vec2 as the displacement direction, control amount with Strength
 export const DisplaceNode: NodeDefinition = {

@@ -9,12 +9,12 @@
  *
  * Where hidden passes can't go (a group without a Pass, an Agents program, a repeated Pass reading
  * itself, past the budget) it draws a grainier glow in one pass (dgSingle: 32 reads on a spiral).
- * The older Glow (texture) stays for saved graphs. Not the Combiners' Deep Glow (combiners.ts), which
- * glows an SDF shape. See docs/deep-glow.md.
+ * Since the 2026-10-17 sweep it is Glow (texture)'s Deep glow method (GlowTextureNode below); a saved Deep Glow (texture)
+ * migrates there (NODE_ALIASES). Not SDF Glow's Deep glow mode, which glows an SDF shape. See docs/deep-glow.md.
  */
 import type { GraphNode, NodeDefinition } from '../../types/nodeGraph';
 import { p, pv3, withParamSockets } from './helpers';
-import { passPxUniform, texUv } from './passes';
+import { GlowTextureBase, passPxUniform, texUv } from './passes';
 import { DG_BASE_GLSL, DG_GLSL2 } from '../../play/kit/deepglow.js';
 
 /** The sliders a wire can drive (#829). */
@@ -92,6 +92,50 @@ export const DeepGlowTextureNode: NodeDefinition = withParamSockets({
     return { code: lines.join(''), outputVars: { color: `${id}_o.rgb`, alpha: `${id}_o.a`, glow: `${id}_glow` } };
   },
 }, DG_SOCKETS);
+
+/**
+ * Glow (texture): THE picture glow since the 2026-10-17 sweep. Bloom chain, Smooth and Fast are passes.ts's
+ * (GlowTextureBase); Deep glow is the node above (the old Deep Glow (texture), which migrates here as Method =
+ * Deep glow through NODE_ALIASES): its own mip chain of hidden passes (compiler/blurPasses.ts isDeepGlow), its
+ * Chromatic spread, Preserve colour and Composite. Every slider can be wired (#829); a wire drives every hidden
+ * pass too. Color is the picture with the glow over it (for every method), Glow the glow alone.
+ */
+const base = GlowTextureBase;
+const deepOnly = { showWhen: { param: 'method', value: 'deep' } };
+/** Deep glow: the Method, or a saved Deep Glow (texture) compiled before its alias ran. */
+const glowDeep = (node: GraphNode) => node.params.method === 'deep' || node.type === 'deepGlowTexture';
+
+export const GlowTextureNode: NodeDefinition = withParamSockets({
+  ...base,
+  aliases: [...(base.aliases ?? []), 'Deep Glow', 'Deep Glow (texture)', 'Bloom'],
+  description: `${base.description} Deep glow is After Effects' Deep Glow: a hot core with a long, natural tail out to Radius (hundreds of pixels cost the same), Chromatic spread and Preserve colour, added or screened over the picture.`,
+  outputs: {
+    ...base.outputs,
+    color: { type: 'vec3', label: 'Color', hint: 'The picture with the glow over it (Deep glow: Add or Screen, as Composite says; the others add).' },
+    alpha: { type: 'float', label: 'Alpha' },
+  },
+  defaultParams: { ...base.defaultParams, spread: 0, preserve: 0.5, composite: 'add' },
+  paramDefs: {
+    ...base.paramDefs,
+    method: { ...base.paramDefs!.method, hint: 'Bloom chain: soft core, long tail. Smooth: one Gaussian. Fast: one pass, grainy when wide. Deep glow: a hot core with a very long tail, chromatic spread, add or screen.', options: [
+      ...base.paramDefs!.method.options!, { value: 'deep', label: 'Deep glow' },
+    ] },
+    radius: { ...base.paramDefs!.radius, max: 200, hint: 'How far the glow spreads, in picture pixels. The Bloom chain\'s tail reaches a few times further; Deep glow\'s tail reaches Radius whatever its size (try 100–400).' },
+    spread: { ...paramDefs!.spread, ...deepOnly },
+    preserve: { ...paramDefs!.preserve, ...deepOnly },
+    composite: { ...paramDefs!.composite, ...deepOnly },
+  },
+  glslFunctionsFor: node => (glowDeep(node) ? [DG_BASE_GLSL, DG_GLSL2] : []),
+  declarationsFor: node => (glowDeep(node) ? DeepGlowTextureNode.declarationsFor!(node) : base.declarationsFor!(node)),
+  generateGLSL: (node: GraphNode, inputVars) => {
+    if (glowDeep(node)) return DeepGlowTextureNode.generateGLSL(node, inputVars);
+    const r = base.generateGLSL(node, inputVars);
+    const tex = inputVars.texture;
+    // The picture with the glow added, as expressions: written into the shader only where something reads them.
+    const at = `texture2D(${tex}, ${node.id}_uv)`;
+    return { ...r, outputVars: { ...r.outputVars, color: tex ? `(${at}.rgb + ${r.outputVars.glow})` : 'vec3(0.0)', alpha: tex ? `${at}.a` : '0.0' } };
+  },
+}, ['radius', 'intensity', 'threshold', 'knee', 'tail', 'spread', 'preserve', 'tint']);
 
 /**
  * One hidden pass of a Deep Glow (made by the compiler, never in a graph): __stage 'pre' (reads the

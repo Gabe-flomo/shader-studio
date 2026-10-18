@@ -407,9 +407,9 @@ export function buildGridScene(spec: GridSceneSpec, idFor: (role: string) => str
   let acc = ref(ground, 'result');
   if (look.glow) {
     // Soft (the default): the glow is 1 at the shape's edge and inside, so the filled shape and its glow
-    // read as one shape. Halo: the Glow Layer's amount ÷ |d|, a bright rim round a flat shape.
+    // read as one shape. Halo: SDF Glow's Halo mode, amount ÷ |d|, a bright rim round a flat shape.
     const gl = look.glowStyle === 'halo'
-      ? mk(c, 'glowLayer', 'glow', { intensity: look.glowAmount, power: look.glowFalloff }, { d, color: colour },
+      ? mk(c, 'light', 'glow', { mode: 'halo', reach: look.glowAmount, power: look.glowFalloff, perDistance: false }, { distance: d, tint: colour },
         `The shapes' glow (halo): each shape's colour × (${r2(look.glowAmount * 1000) / 1000} ÷ distance) ^ ${look.glowFalloff}, added to the ground: a bright rim round the flat shape.`)
       : expr(c, 'glow', 'Soft glow', [
         { name: 'd', type: 'float', from: d },
@@ -418,7 +418,7 @@ export function buildGridScene(spec: GridSceneSpec, idFor: (role: string) => str
         { name: 'falloff', type: 'float', slider: { value: look.glowFalloff, min: 0.5, max: 3 } },
       ], 'color * pow(amount / (max(d, 0.0) + max(amount, 1.0e-5)), falloff)',
       `The shapes' glow: each shape's colour × (amount ÷ (distance outside it + amount)) ^ falloff, added to the ground. It is the shape's own colour at its edge and inside, fading out from there, so the shape and its glow read as one (amount ${r2(look.glowAmount * 1000) / 1000}, falloff ${look.glowFalloff}; the Grid builder's Look → Glow style Halo gives the old bright rim). The Grid scene fades its distance out within a cell of the shapes, so the glow never steps at cell borders.`);
-    acc = ref(mk(c, 'addColor', 'addglow', {}, { a: acc, b: ref(gl, 'result') }, 'Adds the glow over the ground.'), 'result');
+    acc = ref(mk(c, 'addColor', 'addglow', {}, { a: acc, b: ref(gl, look.glowStyle === 'halo' ? 'tinted' : 'result') }, 'Adds the glow over the ground.'), 'result');
   }
   let final = ref(mk(c, 'sdfFill', 'fill', {}, { d, fillColor: colour, background: acc }, 'Paints the shapes over the ground: inside a shape (negative distance) its colour shows, the edge anti-aliased.'), 'result');
   if (look.tone !== 'none') final = ref(mk(c, 'toneMap', 'tone', { mode: look.tone }, { color: final }, `Squeezes the glow's bright light into colours a screen can show (${look.tone.toUpperCase()}).`), 'color');

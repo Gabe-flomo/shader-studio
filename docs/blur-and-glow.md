@@ -1,5 +1,7 @@
 # Blur and glow
 
+**Since 2026-10-17** the picture's blurs and glows are the texture nodes only: Blur (texture), Glow (texture) (with Deep glow as a Method), Radial Fast Blur, and the new Depth of Field (texture) and Tilt-Shift (texture). Gaussian Blur, Bloom, Radial Blur, Lens Blur, Depth of Field and Tilt-Shift Blur (which read last frame's picture) are hidden: saved graphs still load and draw them. See [node-retirements.md](node-retirements.md).
+
 This page covers how Playfield blurs and glows a picture: the shared code in `src/play/kit/blur.js`, the hidden passes behind **Blur (texture)** and **Glow (texture)**, and the other places that blur. Sources are listed at the end.
 
 ## Why the old glows looked bad

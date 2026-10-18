@@ -27,8 +27,8 @@ export const TEXTURE_TOOL_EXAMPLE_INDEX: Record<string, { label: string; descrip
     description: 'A video (the built-in Ball action clip, or yours, or the camera) becomes a glowing outline: Mask keeps its bright parts, Neighbours (Range) finds the mask\'s edge, Glow (texture) spreads it, Levels dims the video underneath. Choose another video or the camera on the Video Input.',
   },
   ttMotionTrails: {
-    label: 'Texture tools 2 · Motion trails with Fade', play: true,
-    description: 'Change (texture) finds where a drifting picture moves; Fade (feedback) keeps a fading trail of it, read through Read (texture) a little zoomed and turned so the trails swirl outwards; Levels rolls off the brightest overlaps.',
+    label: 'Texture tools 2 · Motion trails with Feedback', play: true,
+    description: 'Change (texture) finds where a drifting picture moves; Feedback (texture) keeps a fading trail of it, read a little zoomed and turned so the trails swirl outwards; Levels rolls off the brightest overlaps.',
   },
   ttTrailFlow: {
     label: 'Texture tools 3 · A slime trail bends a picture', play: true,
@@ -225,33 +225,27 @@ export function buildTextureToolExamples(): Record<string, ExampleGraph> {
       n('textureChange', 'moved', 1340, 220, { measure: 'colour', amount: 3, level: 0.15, width: 0.3,
         ...note('Change (texture): the picture now against a frame ago. Motion is bright where it changed; Color keeps the picture\'s own colour there. Amount for faint motion, Threshold to ignore flicker.') },
         { texture: ['picPass', 'texture'], before: ['picPass', 'previous'] }),
-      n('readTexture', 'drift', 1340, 560, { zoom: 1.008, turn: 0.4,
-        ...note('Read (texture): last frame of the trails, read 0.8% zoomed and turned 0.4°. Its UV output (the bent place) goes into Fade, so every frame the old trails grow outwards in a slow swirl.') },
-        { texture: ['trails', 'previous'] }),
-      n('textureFade', 'fade', 1640, 300, { tail: 1.5, clean: 0.05, tint: [0.55, 0.85, 1], combine: 'add',
+      n('textureFeedback', 'trails', 1640, 300, { label: 'Trails', tail: 1.5, clean: 0.05, tint: [0.55, 0.85, 1], amount: 1, blend: 'add', zoom: 1.008, turn: 0.4,
         ...note([
-          'Fade (feedback): last frame of the trails (read at Read\'s UV) faded, with the fresh motion added on top.',
-          'Tail 1.5: seconds for a trail to fade to 1%, the same at any frame rate. Tint fades red fastest, so old trails cool to blue.',
+          'Feedback (texture): keeps a buffer of its own. Each frame it reads last frame\'s trails 0.8% zoomed and turned 0.4° (so the old trails grow outwards in a slow swirl), fades them, and adds the fresh motion (Fresh) on top.',
+          'Tail 1.5: seconds for a trail to fade to 1%, the same at any frame rate. Tint fades red fastest, so old trails cool to blue. Half float keeps stacked light above 1.',
         ]) },
-        { texture: ['trails', 'previous'], uv: ['drift', 'uv'], fresh: ['moved', 'color'] }),
-      n('pass', 'trails', 1940, 300, { label: 'Pass · trails',
-        ...note('Pass: holds the trails. Its Previous goes back to Read and Fade, closing the feedback loop. Half float keeps stacked light above 1.') },
-        { color: ['fade', 'color'] }),
+        { fresh: ['moved', 'color'] }),
       n('textureLevels', 'tone', 2200, 300, { gain: 1.4, rollOff: 0.5,
         ...note('Levels (texture): Gain 1.4 brightens the trails, Roll-off 0.5 bends the brightest overlaps down (x / (1 + 0.5x)) so they don\'t clip to flat white.') },
         { color: ['trails', 'color'] }),
       n('output', 'out', 2460, 300, note('Output: the motion trails.'), { color: ['tone', 'color'] }),
     ],
     play: playRecord([
-      ctl('tail', 'fade::tail', 'Trail length (s)', 0.1, 8, 0.05),
-      ctl('zoom', 'drift::zoom', 'Drift outwards', 0.98, 1.03, 0.0005),
-      ctl('turn', 'drift::turn', 'Swirl', -3, 3, 0.05),
+      ctl('tail', 'trails::tail', 'Trail length (s)', 0.1, 8, 0.05),
+      ctl('zoom', 'trails::zoom', 'Drift outwards', 0.98, 1.03, 0.0005),
+      ctl('turn', 'trails::turn', 'Swirl', -3, 3, 0.05),
       ctl('amount', 'moved::amount', 'Motion gain', 0, 20, 0.1),
-    ], `**What it shows.** The feedback-trail recipe (guide 1.11) without Expression Blocks: Change finds what moved, Read bends where last frame is read, and Fade dims it with a tail in seconds.
+    ], `**What it shows.** The feedback-trail recipe (guide 1.11) in one node: Change finds what moved, and Feedback (texture) keeps a trail of it, bending where last frame is read and dimming it with a tail in seconds.
 
-**How it is built.** Noise → Palette → Posterize is the moving picture, held in a Pass. Change compares the Pass with its Previous. Fade reads the trails Pass's Previous at Read's bent UV, fades it and adds the motion; the result goes back into the trails Pass. Levels rolls off the brightest overlaps.
+**How it is built.** Noise → Palette → Posterize is the moving picture, held in a Pass. Change compares the Pass with its Previous. Feedback (texture) reads its own buffer from the frame before, zoomed and turned, fades it and adds the motion (its Fresh input). Levels rolls off the brightest overlaps.
 
-**Try.** Trail length 6 for comet tails, 0.3 for sparks. Swirl negative to spin the other way. Set Read's Zoom below 1 for trails that sink inwards.`),
+**Try.** Trail length 6 for comet tails, 0.3 for sparks. Swirl negative to spin the other way. Set Zoom below 1 for trails that sink inwards, or Hue drift for trails that change colour as they age.`),
   };
 
   // ── 3 · Slime mold → Trail image → Flow (along the veins) → a photo read at the pushed UV ──

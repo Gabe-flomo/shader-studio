@@ -46,9 +46,9 @@ describe('shape styles', () => {
     expect(styleOf(s.layers[0])).toBe('glow');
     const roles = byRole(s);
     expect(roles.has('s1:fill')).toBe(false);
-    // A Glow Layer (Soft) added over what is behind: nodes, not a code block.
+    // An SDF Glow (Soft) added over what is behind: nodes, not a code block.
     const g = roles.get('s1:glow')!;
-    expect(g.type).toBe('glowLayer');
+    expect(g.type).toBe('light');
     expect(g.params.mode).toBe('soft');
     const add = roles.get('s1:addglow')!;
     expect(add.inputs.b.connection?.nodeId).toBe(g.id);
@@ -74,7 +74,7 @@ describe('shape styles', () => {
     const s = parseRecipe2D('circle r=0.3 style=filled · glow').scene;
     expect(s.layers[0].style).toBe('filled');
     const roles = byRole(s);
-    expect(roles.get('s1:glow')?.type).toBe('glowLayer');
+    expect(roles.get('s1:glow')?.type).toBe('light');
     expect(roles.get('s1:fill')?.type).toBe('sdfFill');
     compiles(s);
   });

@@ -1,0 +1,91 @@
+# Node retirements: one node per effect (2026-10-17)
+
+The node audit (October 2026) found the same effect offered two, three or five times: a version that reads
+**last frame's picture** (`u_prevFrame`, so anything moving lags and smears) next to a newer one that reads a
+**texture in the same frame** (a Pass, a picture, a video), and several distance-to-glow and UV-warp nodes that
+were one formula each. This sweep keeps one node per effect, the texture version where there is one.
+
+## How a node is retired
+
+- **Merged** (the old type is gone from the registry): when the survivor can do exactly what the old node did,
+  the old type is an alias (`src/nodes/definitions/aliases.ts`, `NODE_ALIASES`). A saved graph that has one
+  opens with the survivor in its place, the old settings carried over, wires and Play controls kept.
+- **Hidden** (still registered): when the survivor works differently (a texture instead of a colour, a Pass in
+  the graph), the old node stays registered so saved graphs load and render exactly as before, but nothing
+  offers it: not the node browser, search, the Do bar, suggestions or the builders
+  (`src/nodes/notOffered.ts`, `SWEPT_EFFECT_TYPES`).
+- Every example, builder, recipe and suggestion that used a retired node uses the survivor.
+
+Tests: `src/nodes/__tests__/effectSweep.test.ts` loads an old graph with each retired type, checks each merged
+mode against the old maths on the CPU, and checks no example uses a retired type.
+
+## The families
+
+| Effect | Survivor | Merged into it | Hidden (still loads) |
+|---|---|---|---|
+| Trails / feedback | **Feedback (texture)**; build your own with a **Pass** and its Previous | – | Previous Frame (Feedback), Motion Blur, Fade (feedback) |
+| Time delay | **Echo**, **Cache** / Cache Read (unchanged) | – | – |
+| Picture glow | **Glow (texture)**: Bloom chain, Smooth, Fast, **Deep glow** | Deep Glow (texture) → Method Deep glow | Bloom |
+| Blur | **Blur (texture)**, **Radial Fast Blur** | – | Gaussian Blur, Radial Blur |
+| Lens blurs | **Depth of Field (texture)** (Focus Depth / Point), **Tilt-Shift (texture)** (new) | – | Lens Blur, Depth of Field, Tilt-Shift Blur |
+| Chromatic aberration | **Chromatic Aberration (lens)** | RGB Split (texture) → Channel split, Blur 0 | Chroma Shift, Chromatic Aberration (UV offsets) |
+| Edges | **Edges (texture)** | – | Sobel Edges |
+| Distance → glow | **SDF Glow**, Mode list | Glow Layer, Distance Falloff, Deep Glow (SDF) | Point Light 2D |
+| UV warps | **UV Warp**, Kind = Smooth / Jitter / Curl / Swirl | UV Warp (Smooth), (Curl), (Swirl), Swirl / Vortex | – |
+
+Kept on purpose:
+
+- **Echo**: discrete copies of the picture *Delay* frames apart. Feedback (texture) is a continuous fade and
+  Cache Read reads one delay, so neither does it.
+- **Pixelate** (2D Space): a UV-space pixelate, not a picture effect.
+- **Displace** (2D Space): moves the UV by a vector; Displace (texture) moves a texture's read by a map.
+- **Posterize**, **Radiance Cascades 2D**: no texture version exists.
+- **Pass + Sample (texture) of its Previous**: the build-your-own feedback path (Passes 3).
+
+## SDF Glow's modes
+
+Each mode is the old node's formula, with that node's settings shown only for it (`effects.ts`, `LightNode`):
+
+| Modes | Settings | Was |
+|---|---|---|
+| Glow (exp), Haze, Bounded, Ring Light, Simple (1/d) | Falloff, Ring Freq | SDF Glow |
+| Halo, Soft, Exponential, Gaussian, Neon, Rim, Inverse square | Reach (Glow Layer's Intensity), Power | Glow Layer (`glowFormula`) |
+| Bounded inverse power, Gaussian bump, Cone, Wyvill bump | Falloff (Distance Falloff's Rate), Power | Distance Falloff |
+| Deep glow | Intensity, Radius, Saturation, Edge Softness | Deep Glow (SDF) |
+| Point light | Falloff Model (Squared / Inverse / Linear), Intensity, Radius, Gamma | Point Light 2D's falloffs |
+
+Tint takes a gradient (by distance from the shape, or across the picture), as Glow Layer's Color did. A
+migrated Glow Layer's **Glow** output is SDF Glow's **Tinted**; Distance Falloff's **Falloff** is **Glow**.
+Per distance (March Loop banding) applies to the classic modes only.
+
+## UV Warp's kinds
+
+`transforms.ts`: each kind emits its old node's call (`smoothWarpOffset`, `uvWarpOffset`, `curlWarpOffset`,
+`swirlWarpOffset`), with only that kind's helper in the shader. Swirl / Vortex is Swirl round (0, 0) with no
+spin. A UV Warp saved before Kind (the old *UV Warp (Jitter)*) stays Jitter (version 2, `migrateParams`); a new
+one starts Smooth.
+
+## Glow (texture), Deep glow
+
+Deep glow is the old Deep Glow (texture): its own mip chain of hidden passes (`compiler/blurPasses.ts`,
+`isDeepGlow`), Chromatic spread, Preserve colour and Composite (shown for it only). Glow (texture) gained a
+**Color** output (the picture with the glow added, for every method) and sockets for its sliders, which drive
+every hidden pass as well as the final read.
+
+## The new lens nodes
+
+- **Depth of Field (texture)**: Focus **Depth** blurs by how far each pixel's depth is from Focal Dist (the
+  depth from Dist, or from the texture's alpha: put a March Loop's Distance into the Pass's Alpha); Focus
+  **Point** is the old Lens Blur (Focal Length, Aperture, Focus Distance round a Focal Point). Same circle of
+  confusion and the same Disc / Hex / Oct bokeh reads as the old nodes, from the same frame.
+- **Tilt-Shift (texture)**: the old band and 1D Gaussian along it (σ = 2 × the local blur), from the same frame.
+
+## Examples that changed
+
+groupCarryDomainWarp (UV Warp, Smooth), neonFloorGrid (SDF Glow, Halo), the 2D Scene Builder examples
+(sb2*: SDF Glow; sb2 with bloom: Pass + Glow (texture)), volAnimatedRepeat (Pass + Chromatic Aberration (lens),
+Channel split), comboBloomDots and fcTrippyNoise (Pass + Glow (texture), Bloom chain), comboBlurDirectional
+(now *Wave Texture + Blur*: Blur (texture); the old one-direction Kawase blur has no texture version),
+dofDepthBlur (depth in the Pass's alpha → Depth of Field (texture)), tiltShiftScene (Tilt-Shift (texture)),
+motionBlurTrails (Feedback (texture)), feedbackSmear and fcMainFrame (the picture's Pass and its Previous),
+passFeedbackTrails (the fade built by hand, Keep per frame), ttMotionTrails (Feedback (texture)).

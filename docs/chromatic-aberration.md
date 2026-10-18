@@ -78,8 +78,9 @@ and **RGB split** (Channel split, Directional, Blur 0).
 
 ## Old graphs, scenes and stacks
 
-- The old **Chromatic Aberration (texture)** node (`chromaTexture`) stays, renamed **RGB Split
-  (texture)** in the library, so saved graphs load and draw as before.
+- The old **Chromatic Aberration (texture)** node (`chromaTexture`, later RGB Split (texture)) opens as this
+  node's Channel split with Blur 0 since 2026-10-17 (the same three reads; [node-retirements.md](node-retirements.md)).
+  Chroma Shift and the UV-offset Chromatic Aberration are hidden (saved graphs still load).
 - The builders' card now builds the new node. Its keys are unchanged (`chroma 6 mode=directional
   angle=30` still reads: Direction is the Geometry, Radial is Lateral), and Amount keeps its pixels,
   so an old recipe fringes as far, now with spectral fringes. New keys: `look`, `blur`, `samples`,

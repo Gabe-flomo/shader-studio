@@ -247,9 +247,7 @@ export const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: strin
     { label: 'Inside: rule steps', types: ['agentTurnToward', 'agentFollowTrail', 'agentWander', 'agentOrbit', 'agentAvoidWalls', 'agentApplyForce', 'agentDrag', 'agentSlowInCrowd', 'agentLeaveTrail', 'agentFadeWithAge'] },
   ],
   Effects: [
-    { label: 'Blur',     types: ['gaussianBlur', 'bloom', 'radialBlur', 'tiltShiftBlur', 'lensBlur', 'depthOfField'] },
-    { label: 'Chroma',   types: ['chromaShift', 'chromaticAberrationAuto', 'chromaticAberration'] },
-    { label: 'Lighting', types: ['light', 'glowToColor', 'light2d', 'radianceCascadesApprox'] },
+    { label: 'Lighting', types: ['light', 'glowToColor', 'radianceCascadesApprox'] },
     { label: 'Warp',     types: ['gravitationalLens', 'floatWarp'] },
     { label: 'Glitch',   types: ['glitch'] },
   ],
@@ -267,13 +265,12 @@ export const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: strin
   '2D Space': [
     { label: 'Basic',   types: ['transform', 'uvTransform2d', 'rotate2d', 'shear', 'perspective2d', 'fract', 'displace'] },
     { label: 'Repeat',  types: ['infiniteRepeatSpace', 'limitedRepeat2D', 'mirroredRepeat2D', 'angularRepeat2D', 'kaleidoSpace', 'grid'] },
-    { label: 'Warp',    types: ['uvWarp', 'smoothWarp', 'curlWarp', 'swirlWarp', 'swirlSpace', 'rippleSpace', 'sphericalSpace', 'lensDistortion', 'crtScreen', 'turbulence', 'uvReciprocal', 'gravityField', 'spiralField', 'vectorField'] },
+    { label: 'Warp',    types: ['uvWarp', 'rippleSpace', 'sphericalSpace', 'lensDistortion', 'crtScreen', 'turbulence', 'uvReciprocal', 'gravityField', 'spiralField', 'vectorField'] },
     { label: 'Map',     types: ['polarSpace', 'logPolarSpace', 'hyperbolicSpace', 'inversionSpace', 'mobiusSpace', 'cornerPin'] },
     { label: 'Pattern', types: ['waveTexture', 'magicTexture', 'chaosLayers'] },
   ],
   Combiners: [
     { label: 'Blend',   types: ['mix', 'blendModes', 'mask', 'addColor', 'alphaBlend'] },
-    { label: 'Layer',   types: ['glowLayer', 'deepGlow'] },
   ],
   Grid: [
     { label: 'Layout',   types: ['gridPattern', 'gridPaint', 'arrayField', 'gridLayout', 'cellPicture', 'pieces'] },
@@ -286,7 +283,6 @@ export const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: strin
     { label: 'Gaussian',  types: ['gaussianField', 'fieldAccumulate'] },
     { label: 'Noisy SDF', types: ['noisyGridSDF'] },
     { label: 'Threshold', types: ['metaballThreshold'] },
-    { label: 'Falloff',   types: ['distanceFalloff'] },
   ],
 };
 

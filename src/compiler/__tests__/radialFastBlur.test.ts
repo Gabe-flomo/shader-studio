@@ -235,7 +235,7 @@ describe('the builders\' Light rays card', () => {
     // After a move, it streaks the moved picture: the swirled read drawn into a Pass of its own.
     expect(rays.inputs.uv.connection).toBeUndefined();
     const read = nodes.find(x => x.id === pass.inputs.color.connection?.nodeId)!;
-    expect(nodes.find(x => x.id === read.inputs.uv.connection?.nodeId)?.type).toBe('swirlSpace');
+    expect(nodes.find(x => x.id === read.inputs.uv.connection?.nodeId)?.type).toBe('uvWarp');
     const r = compileGraph({ nodes });
     expect(r.success, (r.errors ?? []).join('; ')).toBe(true);
     expect((r.passes ?? []).filter(x => x.hidden)).toHaveLength(4);

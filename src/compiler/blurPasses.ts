@@ -27,7 +27,13 @@ export const DEEP_GLOW_NODE_TYPE = 'deepGlowTexture';
 /** Every node type with hidden passes. */
 export const HIDDEN_PASS_TYPES = new Set([...BLUR_NODE_TYPES, RAYS_NODE_TYPE, DEEP_GLOW_NODE_TYPE]);
 /** Node types whose sliders are sockets of their own (withParamSockets): every hidden pass computes what is wired into them. */
-export const SOCKETED_HIDDEN_TYPES = new Set([RAYS_NODE_TYPE, DEEP_GLOW_NODE_TYPE]);
+export const SOCKETED_HIDDEN_TYPES = new Set([RAYS_NODE_TYPE, DEEP_GLOW_NODE_TYPE, 'glowTexture']);
+/**
+ * A Deep Glow's mip chain (planDeepGlow): Glow (texture) with Method Deep glow (since the 2026-10-17 sweep), or a
+ * saved Deep Glow (texture) that hasn't been through the alias yet.
+ */
+export const isDeepGlow = (node: Pick<GraphNode, 'type' | 'params'>): boolean =>
+  node.type === DEEP_GLOW_NODE_TYPE || (node.type === 'glowTexture' && node.params?.method === 'deep');
 /** Most hidden passes a graph's blurs and glows may add; a node past it draws in one pass (its Fast look). */
 export const MAX_HIDDEN_PASSES = 48;
 

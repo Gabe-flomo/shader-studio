@@ -28,8 +28,8 @@ function graph(params: Record<string, unknown> = {}): GraphNode[] {
     // Shapes read the first Depth Mix (no scene wired): Depth UV and Sized value
     n('depthMix', 'shapes', 0, 0, { mode: 'space' }, { picture: ['pic', 'color'], depth: ['dep', 'depth'], uv: ['uv', 'uv'] }),
     n('shapeSDF', 'circle', 0, 0, { shape: 'circle', r: 0.3 }, { p: ['shapes', 'uv'] }),
-    n('glowLayer', 'glow', 0, 0, { intensity: 0.01, power: 1.2 }, { d: ['circle', 'distance'] }),
-    n('depthMix', 'mix', 0, 0, params, { picture: ['pic', 'color'], depth: ['dep', 'depth'], scene: ['glow', 'result'], uv: ['uv', 'uv'] }),
+    n('light', 'glow', 0, 0, { mode: 'halo', reach: 0.01, power: 1.2 }, { distance: ['circle', 'distance'] }),
+    n('depthMix', 'mix', 0, 0, params, { picture: ['pic', 'color'], depth: ['dep', 'depth'], scene: ['glow', 'tinted'], uv: ['uv', 'uv'] }),
     n('output', 'out', 0, 0, {}, { color: ['mix', 'color'] }),
   ];
 }

@@ -226,44 +226,6 @@ vec2 mobiusSpace(vec2 z, vec2 pole, float ang) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const SwirlSpaceNode: NodeDefinition = {
-  type: 'swirlSpace',
-  label: 'Swirl / Vortex',
-  category: '2D Space', subcategory: 'Warp',
-  description: 'Rotates space by an amount that grows with distance from center, forming a vortex. Animate Strength with Time for a spinning galaxy effect.',
-  inputs: {
-    input:    { type: 'vec2',  label: 'UV' },
-    strength: { type: 'float', label: 'Strength' },
-    falloff:  { type: 'float', label: 'Falloff' },
-  },
-  outputs: {
-    output: { type: 'vec2', label: 'Swirled UV' },
-  },
-  defaultParams: { strength: 2.0, falloff: 1.0 },
-  paramDefs: {
-    strength: { label: 'Strength', type: 'float', min: -10.0, max: 10.0, step: 0.1, hint: 'Total twist in radians at the center. Negative spins the other way.' },
-    falloff:  { label: 'Falloff',  type: 'float', min: 0.1,   max: 5.0,  step: 0.1, hint: 'How fast the twist fades with distance. Higher keeps it near the center.' },
-  },
-  generateGLSL: (node: GraphNode, inputVars) => {
-    const id       = node.id;
-    const inVar    = inputVars.input    || 'vec2(0.0)';
-    const strength = inputVars.strength || p(node.params.strength, 2.0);
-    const falloff  = inputVars.falloff  || p(node.params.falloff, 1.0);
-    return {
-      code: [
-        `    float ${id}_r  = length(${inVar});\n`,
-        `    float ${id}_sa = ${strength} * exp(-${id}_r * ${falloff});\n`,
-        `    float ${id}_sc = cos(${id}_sa), ${id}_ss = sin(${id}_sa);\n`,
-        `    vec2 ${id}_output = vec2(${inVar}.x * ${id}_sc - ${inVar}.y * ${id}_ss,\n`,
-        `                            ${inVar}.x * ${id}_ss + ${inVar}.y * ${id}_sc);\n`,
-      ].join(''),
-      outputVars: { output: `${id}_output` },
-    };
-  },
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-
 export const KaleidoSpaceNode: NodeDefinition = {
   type: 'kaleidoSpace',
   label: 'Kaleidoscope',

@@ -293,12 +293,12 @@ const SPACE: Move[] = [
   },
   {
     id: 'swirl', label: 'Swirl', kinds: ['space'], shape: 'transform', sides: ['in', 'out'],
-    anchor: { type: 'swirlSpace', key: 'input', out: 'output' },
+    anchor: { type: 'uvWarp', key: 'input', out: 'output' },
     why: 'a space: a vortex round the centre',
     args: [{ name: 'amount', label: 'Strength', kind: 'number', default: 2, words: ['strength', 'amount', 'by'] }],
     build: ctx => ({
-      nodes: [n('swirlSpace', 'swirl', C(1), 0, { strength: num(ctx, 'amount', 2), falloff: 1, ...note(
-        'Swirl / Vortex: twists the space round the centre, most at the middle.',
+      nodes: [n('uvWarp', 'swirl', C(1), 0, { kind: 'swirl', strength: num(ctx, 'amount', 2), falloff: 1, cx: 0, cy: 0, speed: 0, ...note(
+        'UV Warp (Swirl): twists the space round the centre, most at the middle.',
         'Why: the Swirl suggestion. Strength is the twist at the centre, in radians.',
       ) }, { input: [IN, ''] })],
       result: ['swirl', 'output'],
@@ -478,15 +478,18 @@ const COLOUR: Move[] = [
   },
   {
     id: 'glow-colour', label: 'Glow', kinds: ['colour'], shape: 'transform', sides: ['out'],
-    anchor: { type: 'bloom', key: 'color', out: 'result' },
+    anchor: { type: 'glowTexture', key: 'texture', out: 'color' },
     why: 'a colour: bright parts bleed light round them',
     args: [{ name: 'amount', label: 'Intensity', kind: 'number', default: 1.2, words: ['intensity', 'amount', 'by'] }],
     build: ctx => ({
-      nodes: [n('bloom', 'bloom', C(1), 0, { intensity: num(ctx, 'amount', 1.2), ...note(
-        'Bloom: the bright parts spread a soft glow round themselves (a post effect on the colour coming in).',
-        'Why: the Glow suggestion, in place. Threshold picks how bright a pixel must be to glow.',
-      ) }, { color: [IN, ''] })],
-      result: ['bloom', 'result'],
+      nodes: [
+        n('pass', 'pic', C(1), 0, { scale: '1', format: 'half', ...note('Pass: the colour coming in as a texture, this frame, so the glow can read round each pixel.') }, { color: [IN, ''] }),
+        n('glowTexture', 'bloom', C(2), 0, { method: 'bloom', threshold: 0.6, knee: 0.2, radius: 16, intensity: num(ctx, 'amount', 1.2), tail: 0.4, ...note(
+          'Glow (texture), Bloom chain: the bright parts spread a soft glow round themselves, in the same frame. Color is the picture with the glow added.',
+          'Why: the Glow suggestion, in place. Threshold picks how bright a pixel must be to glow.',
+        ) }, { texture: ['pic', 'texture'] }),
+      ],
+      result: ['bloom', 'color'],
     }),
   },
   {
@@ -625,12 +628,12 @@ const TEXTURE: Move[] = [
   },
   {
     id: 'trails', label: 'Trails', kinds: ['texture', 'colour'], shape: 'branch', sides: ['out'],
-    anchor: { type: 'textureFade', key: 'fresh', out: 'color' },
+    anchor: { type: 'textureFeedback', key: 'fresh', out: 'color' },
     why: 'feedback: whatever moves leaves a fading trail',
     when: ctx => ctx.nodes.some(nd => nd.type === 'output'),
     build: () => ({
-      nodes: [n('textureFade', 'fade', C(1), 0, note('Fade (feedback): last frame, faded, with the picture painted on top.', 'Why: the Trails suggestion (the Fade node\'s own Trails setup).'))],
-      thenRecipe: { nodeId: 'fade', recipeId: 'fade-trails' },
+      nodes: [n('textureFeedback', 'trails', C(1), 0, note('Feedback (texture): keeps last frame in a buffer of its own, fades it (Tail, in seconds) and lays the picture over it.', 'Why: the Trails suggestion (Feedback\'s own Trails setup). Zoom or Turn drift the trails; Hue drift changes their colour as they age.'))],
+      thenRecipe: { nodeId: 'trails', recipeId: 'feedback-trails' },
     }),
   },
   {

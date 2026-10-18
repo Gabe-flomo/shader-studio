@@ -12,10 +12,10 @@ const mk = (id: string, type: string, x: number, params: Record<string, unknown>
 };
 
 function graph(): GraphNode[] {
-  const uv = mk('uv', 'uv', 0); const c = mk('c', 'circleSDF', 200); const g = mk('g', 'glowLayer', 400); const o = mk('o', 'output', 600);
+  const uv = mk('uv', 'uv', 0); const c = mk('c', 'circleSDF', 200); const g = mk('g', 'light', 400, { mode: 'halo' }); const o = mk('o', 'output', 600);
   c.inputs.position.connection = { nodeId: 'uv', outputKey: 'uv' };
-  g.inputs.d.connection = { nodeId: 'c', outputKey: 'distance' };
-  o.inputs.color.connection = { nodeId: 'g', outputKey: 'result' };
+  g.inputs.distance.connection = { nodeId: 'c', outputKey: 'distance' };
+  o.inputs.color.connection = { nodeId: 'g', outputKey: 'tinted' };
   return [uv, c, g, o];
 }
 

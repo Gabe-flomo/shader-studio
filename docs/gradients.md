@@ -15,7 +15,7 @@ Code: `src/lib/colourGradient.ts` (the maths, the params, the GLSL), `src/compon
 | 3D Scene Builder shapes (Surface mode; GI mode uses the first shape's) | Colour | Height, Distance from centre, Along X, Along Z, Normal (up → down), Noise |
 | Color node | Color | the same as the Scene Builder; it reads the Point (and Normal) wired into it |
 | SDF Fill | Fill | Edge → inside, UV X, UV Y, Radial, Angle |
-| Glow Layer | Color | Distance to surface, UV X, UV Y, Radial, Angle |
+| SDF Glow (was Glow Layer's Color) | Tint | Distance to surface, UV X, UV Y, Radial, Angle |
 | Colorize | Colour | Field brightness, UV X, UV Y, Radial, Angle |
 
 A setting only offers drivers its node can give. A Color node needs a 3D point wired into **Point**

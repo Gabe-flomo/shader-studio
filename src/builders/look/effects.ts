@@ -36,7 +36,7 @@ export const FX_KINDS: StackKindDef[] = [
     ],
   },
   {
-    kind: 'swirl', label: 'Swirl', words: ['swirl', 'twirl', 'vortex'], nodes: ['swirlSpace'],
+    kind: 'swirl', label: 'Swirl', words: ['swirl', 'twirl', 'vortex'], nodes: ['uvWarp'],
     blurb: 'Twists the picture round its centre, most in the middle.',
     params: [
       { key: 'strength', label: 'Twist', hint: 'Radians of twist at the centre; negative turns the other way.', type: 'num', def: 2, min: -10, max: 10, primary: true, node: ':bend', param: 'strength', aliases: ['amount', 'twist'] },
@@ -89,7 +89,7 @@ export const FX_KINDS: StackKindDef[] = [
     ],
   },
   {
-    kind: 'deepglow', label: 'Deep Glow', words: ['deepglow', 'deep-glow', 'glow-deep'], nodes: ['deepGlowTexture'],
+    kind: 'deepglow', label: 'Deep Glow', words: ['deepglow', 'deep-glow', 'glow-deep'], nodes: ['glowTexture'],
     blurb: 'A bloom like After Effects\' Deep Glow: bright parts get a hot core and a long, natural tail (Deep Glow (texture)).',
     params: [
       { key: 'intensity', label: 'Intensity', hint: 'How bright the glow is (its exposure).', type: 'num', def: 1, min: 0, max: 4, primary: true, node: '', param: 'intensity', aliases: ['amount', 'exposure'] },
@@ -247,7 +247,7 @@ export function emitEffects(c: Ctx, items: readonly StackItem[] | undefined, col
         }
         break;
       }
-      case 'swirl': bend('swirlSpace', { strength: n('strength'), falloff: n('falloff') }, {}, 'input', 'output', `a twist of ${fmt(n('strength'))} radians at the centre, fading out at ${fmt(n('falloff'))}.`); break;
+      case 'swirl': bend('uvWarp', { kind: 'swirl', strength: n('strength'), falloff: n('falloff'), cx: 0, cy: 0, speed: 0 }, {}, 'input', 'output', `a twist of ${fmt(n('strength'))} radians at the centre, fading out at ${fmt(n('falloff'))}.`); break;
       case 'ripple': bend('rippleSpace', { freqX: n('freq'), freqY: n('freq'), ampX: n('amp'), ampY: n('amp') }, { time: opts.getTime() }, 'input', 'output', `${fmt(n('freq'))} waves of ${fmt(n('amp'))}, moving with time.`); break;
       case 'lens': bend('lensDistortion', { k1: n('bend'), zoom: n('zoom') }, {}, 'input', 'output', `a lens bend of ${fmt(n('bend'))}${n('zoom') !== 1 ? `, zoomed ${fmt(n('zoom'))}` : ''}.`); break;
       case 'pixelate': bend('pixelate', { pixelSize: n('size') }, {}, 'uv', 'uv', `blocks ${fmt(n('size'))} across.`); break;
@@ -268,8 +268,8 @@ export function emitEffects(c: Ctx, items: readonly StackItem[] | undefined, col
       case 'deepglow': {
         const tex = passFor(role, 'deep glow');
         if (!tex) break;
-        node = mk(c, 'deepGlowTexture', role, {
-          intensity: n('intensity'), radius: n('radius'), threshold: n('threshold'), knee: n('knee'), spread: n('spread'), preserve: n('preserve'),
+        node = mk(c, 'glowTexture', role, {
+          method: 'deep', intensity: n('intensity'), radius: n('radius'), threshold: n('threshold'), knee: n('knee'), spread: n('spread'), preserve: n('preserve'),
           composite: s('composite'), tint: stackValue(it, P('tint')),
         }, { texture: tex, uv: point },
           `${step}: the parts brighter than ${fmt(n('threshold'))} glow with a hot core and a tail reaching ${fmt(n('radius'))} pixels, at ${fmt(n('intensity'))}${s('composite') === 'screen' ? ', screened' : ', added'} over the picture. A small mip chain of hidden passes, so a wide glow stays cheap.`);

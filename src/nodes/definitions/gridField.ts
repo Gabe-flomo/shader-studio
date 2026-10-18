@@ -233,53 +233,7 @@ export const FieldToLinesNode: NodeDefinition = {
   },
 };
 
-// ─── Distance Falloff ─────────────────────────────────────────────────────────
-// Converts distance to smooth falloff using one of four physically-motivated curves.
-
-export const DistanceFalloffNode: NodeDefinition = withParamSockets({
-  type: 'distanceFalloff',
-  label: 'Distance Falloff',
-  category: 'Field',
-  description: 'Converts a distance value to a smooth 0–1 falloff. Bounded inverse square is the most useful: 1.0 at Distance 0, decays without blowing up.',
-  inputs: {
-    distance: { type: 'float', label: 'Distance' },
-  },
-  outputs: {
-    falloff: { type: 'float', label: 'Falloff' },
-  },
-  defaultParams: { mode: 'bounded_inv_sq', k: 5.0, power: 2.0 },
-  paramDefs: {
-    mode: { label: 'Mode', type: 'select', hint: 'Bounded Inv2 stays finite; Gaussian is soft; Linear is a cone; Wyvill a smooth bump.', options: [
-      { value: 'bounded_inv_sq', label: 'Bounded Inv²' },
-      { value: 'gaussian',       label: 'Gaussian'      },
-      { value: 'linear',         label: 'Linear'        },
-      { value: 'wyvill',         label: 'Wyvill'        },
-    ]},
-    k:     { label: 'Rate',  type: 'float', min: 0.1, max: 20.0, step: 0.1, hint: 'How fast the falloff decays. Higher = smaller glow.' },
-    power: { label: 'Power', type: 'float', min: 1.0, max: 4.0,  step: 0.1, showWhen: { param: 'mode', value: 'bounded_inv_sq' }, hint: 'Exponent on distance. 2 is inverse-square; higher falls off harder.' },
-  },
-  generateGLSL: (node: GraphNode, inputVars) => {
-    const id   = node.id;
-    const d    = inputVars.distance ?? '0.0';
-    const k    = p(node.params.k, 5.0);
-    const pw   = p(node.params.power, 2.0);
-    const mode = String(node.params.mode ?? 'bounded_inv_sq');
-    let expr: string;
-    if (mode === 'gaussian') {
-      expr = `exp(-${d} * ${d} * ${k})`;
-    } else if (mode === 'linear') {
-      expr = `max(0.0, 1.0 - ${d} * ${k})`;
-    } else if (mode === 'wyvill') {
-      expr = `pow(max(0.0, 1.0 - ${d} * ${d} * ${k}), 3.0)`;
-    } else {
-      expr = `1.0 / (1.0 + pow(max(${d}, 0.0), ${pw}) * ${k})`;
-    }
-    return {
-      code: `    float ${id}_falloff = ${expr};\n`,
-      outputVars: { falloff: `${id}_falloff` },
-    };
-  },
-}, ['k', 'power']);
+// Distance Falloff is SDF Glow's Bounded inverse power / Gaussian bump / Cone / Wyvill modes now (effects.ts, NODE_ALIASES).
 
 // ─── Noisy Grid SDF ───────────────────────────────────────────────────────────
 // Smooth-min of noise-displaced circle SDFs over a grid neighborhood.

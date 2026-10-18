@@ -57,10 +57,10 @@ export { FieldCellNode } from './fieldCell';
 export { GridLayoutNode, WaveRadiusNode, NeighborDistNode, CellFilterNode, CellDisplaceNode, GridDensityWarpNode, NeighborOffset2dNode, AnimatedCellCenterNode, NeighborAttractCirclesNode } from './grid';
 
 // Grid Field
-export { GaussianFieldNode, FieldAccumulateNode, MetaballThresholdNode, FieldToLinesNode, DistanceFalloffNode, NoisyGridSDFNode } from './gridField';
+export { GaussianFieldNode, FieldAccumulateNode, MetaballThresholdNode, FieldToLinesNode, NoisyGridSDFNode } from './gridField';
 
 // Transforms
-export { FractNode, Rotate2DNode, UVWarpNode, SmoothWarpNode, CurlWarpNode, SwirlWarpNode, DisplaceNode, UvTransform2dNode, UvReciprocalNode } from './transforms';
+export { FractNode, Rotate2DNode, UVWarpNode, DisplaceNode, UvTransform2dNode, UvReciprocalNode } from './transforms';
 
 // Matrix
 export { Vec2ConstNode, MatConstNode, Mat2ConstructNode, Mat3ConstructNode, Mat2InspectNode, Mat3InspectNode, Mat2MulVecNode, Mat3MulVecNode } from './matrix';
@@ -68,7 +68,7 @@ export { Vec2ConstNode, MatConstNode, Mat2ConstructNode, Mat3ConstructNode, Mat2
 // Spaces
 export {
   PolarSpaceNode, LogPolarSpaceNode, HyperbolicSpaceNode, InversionSpaceNode,
-  MobiusSpaceNode, SwirlSpaceNode, KaleidoSpaceNode, SphericalSpaceNode,
+  MobiusSpaceNode, KaleidoSpaceNode, SphericalSpaceNode,
   RippleSpaceNode, InfiniteRepeatSpaceNode,
   WaveTextureNode, MagicTextureNode, GridNode, ShearNode,
   Perspective2DNode,
@@ -82,7 +82,7 @@ export { SdSegmentNode, SdEllipseNode, SdfOffsetNode, SdfSharpenNode } from './s
 
 // Combiners
 export {
-  MaskNode, AddColorNode, GlowLayerNode, DeepGlowNode, SDFFillNode, SDFColorizeNode,
+  MaskNode, AddColorNode, SDFFillNode, SDFColorizeNode,
   AlphaBlendNode, Light2DNode,
 } from './combiners';
 
@@ -93,7 +93,7 @@ export {
   ExprBlockNode, CustomFnNode, GravitationalLensNode, FloatWarpNode,
   VignetteNode, ScanlinesNode, SobelNode,
   RadianceCascadesApproxNode,
-  GaussianBlurNode, BloomNode, RadialBlurNode, TiltShiftBlurNode, LensBlurNode, MotionBlurNode, DepthOfFieldNode,
+  GaussianBlurNode, BloomNode, RadialBlurNode, TiltShiftBlurNode, LensBlurNode, MotionBlurNode, DepthOfFieldNode, DofTextureNode, TiltShiftTextureNode,
   ChromaShiftNode,
 } from './effects';
 export { LoopRippleStepNode, LoopRotateStepNode, LoopDomainFoldNode, LoopFloatAccumulateNode, LoopRingStepNode, LoopColorRingStepNode } from './loopPair';
@@ -165,8 +165,8 @@ export { GpuParticlesNode } from './gpuParticles';
 export { ShaderTextureNode, ShaderTextureOutputNode } from './shaderTexture';
 export { RadialFastBlurNode, RadialFastBlurStageNode } from './radialFastBlur';
 export { ChromaLensNode } from './chromaLens';
-export { DeepGlowTextureNode, DeepGlowTextureStageNode } from './deepGlow';
-export { PassNode, PassOutputNode, SampleTextureNode, EdgesTextureNode, BlurTextureNode, GlowTextureNode, ChromaTextureNode, DisplaceTextureNode, DisplacementMapNode, JumpFloodTextureNode } from './passes';
+export { DeepGlowTextureNode, DeepGlowTextureStageNode, GlowTextureNode } from './deepGlow';
+export { PassNode, PassOutputNode, SampleTextureNode, EdgesTextureNode, BlurTextureNode, DisplaceTextureNode, DisplacementMapNode, JumpFloodTextureNode } from './passes';
 export { TextureMaskNode, TextureLevelsNode, TextureFlowNode, TextureNeighboursNode, TextureChangeNode, DistanceShapeNode, TextureFadeNode, ReadTextureNode } from './textureTools';
 export { HeightLightNode } from './heightLight';
 export { RandomFromIdNode } from './randomFromId';
@@ -228,11 +228,11 @@ import { PiecesNode, BallsNode } from './pieces';
 import { ArrayFieldNode } from './arrayField';
 import { FieldCellNode } from './fieldCell';
 import { GridLayoutNode, WaveRadiusNode, NeighborDistNode, CellFilterNode, CellDisplaceNode, GridDensityWarpNode, NeighborOffset2dNode, AnimatedCellCenterNode, NeighborAttractCirclesNode } from './grid';
-import { GaussianFieldNode, FieldAccumulateNode, MetaballThresholdNode, FieldToLinesNode, DistanceFalloffNode, NoisyGridSDFNode } from './gridField';
-import { FractNode, Rotate2DNode, UVWarpNode, SmoothWarpNode, CurlWarpNode, SwirlWarpNode, DisplaceNode, UvTransform2dNode, UvReciprocalNode } from './transforms';
+import { GaussianFieldNode, FieldAccumulateNode, MetaballThresholdNode, FieldToLinesNode, NoisyGridSDFNode } from './gridField';
+import { FractNode, Rotate2DNode, UVWarpNode, DisplaceNode, UvTransform2dNode, UvReciprocalNode } from './transforms';
 import {
   PolarSpaceNode, LogPolarSpaceNode, HyperbolicSpaceNode, InversionSpaceNode,
-  MobiusSpaceNode, SwirlSpaceNode, KaleidoSpaceNode, SphericalSpaceNode,
+  MobiusSpaceNode, KaleidoSpaceNode, SphericalSpaceNode,
   RippleSpaceNode, InfiniteRepeatSpaceNode,
   WaveTextureNode, MagicTextureNode, GridNode, ShearNode,
   Perspective2DNode,
@@ -240,7 +240,7 @@ import {
 import { CircleSDFNode, BoxSDFNode, RingSDFNode, ShapeSDFNode, SimpleSDFNode } from './primitives';
 import { SdSegmentNode, SdEllipseNode, SdfOffsetNode, SdfSharpenNode } from './sdf';
 import {
-  MaskNode, AddColorNode, GlowLayerNode, DeepGlowNode, SDFFillNode, SDFColorizeNode,
+  MaskNode, AddColorNode, SDFFillNode, SDFColorizeNode,
   AlphaBlendNode, Light2DNode,
 } from './combiners';
 import {
@@ -249,7 +249,7 @@ import {
   ExprBlockNode, CustomFnNode, GravitationalLensNode, FloatWarpNode,
   VignetteNode, ScanlinesNode, SobelNode,
   RadianceCascadesApproxNode,
-  GaussianBlurNode, BloomNode, RadialBlurNode, TiltShiftBlurNode, LensBlurNode, MotionBlurNode, DepthOfFieldNode,
+  GaussianBlurNode, BloomNode, RadialBlurNode, TiltShiftBlurNode, LensBlurNode, MotionBlurNode, DepthOfFieldNode, DofTextureNode, TiltShiftTextureNode,
   ChromaShiftNode, GlowToColorNode, NormalToColorNode, CrtMaskNode } from './effects';
 import { LoopRippleStepNode, LoopRotateStepNode, LoopDomainFoldNode, LoopFloatAccumulateNode, LoopRingStepNode, LoopColorRingStepNode } from './loopPair';
 import { LoopCarryNode } from './loop';
@@ -320,10 +320,10 @@ import { BlurStageNode } from './blurStage';
 import { LensDofStageNode } from './lensDof';
 import { RadialFastBlurNode, RadialFastBlurStageNode } from './radialFastBlur';
 import { ChromaLensNode } from './chromaLens';
-import { DeepGlowTextureNode, DeepGlowTextureStageNode } from './deepGlow';
+import { DeepGlowTextureStageNode, GlowTextureNode } from './deepGlow';
 import { GridRulesNode, GridRulesStepNode, MouseButtonNode } from './gridRules';
 import { ShaderTextureNode, ShaderTextureOutputNode } from './shaderTexture';
-import { PassNode, PassOutputNode, SampleTextureNode, EdgesTextureNode, BlurTextureNode, GlowTextureNode, ChromaTextureNode, DisplaceTextureNode, DisplacementMapNode, JumpFloodTextureNode } from './passes';
+import { PassNode, PassOutputNode, SampleTextureNode, EdgesTextureNode, BlurTextureNode, DisplaceTextureNode, DisplacementMapNode, JumpFloodTextureNode } from './passes';
 import { TextureMaskNode, TextureLevelsNode, TextureFlowNode, TextureNeighboursNode, TextureChangeNode, DistanceShapeNode, TextureFadeNode, ReadTextureNode } from './textureTools';
 import { HeightLightNode } from './heightLight';
 import { RandomFromIdNode } from './randomFromId';
@@ -433,9 +433,6 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   fract: FractNode,
   rotate2d: Rotate2DNode,
   uvWarp: UVWarpNode,
-  smoothWarp: SmoothWarpNode,
-  curlWarp: CurlWarpNode,
-  swirlWarp: SwirlWarpNode,
   displace: DisplaceNode,
   uvTransform2d: UvTransform2dNode,
   uvReciprocal: UvReciprocalNode,
@@ -454,7 +451,6 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   hyperbolicSpace: HyperbolicSpaceNode,
   inversionSpace: InversionSpaceNode,
   mobiusSpace: MobiusSpaceNode,
-  swirlSpace: SwirlSpaceNode,
   kaleidoSpace: KaleidoSpaceNode,
   sphericalSpace: SphericalSpaceNode,
   rippleSpace: RippleSpaceNode,
@@ -483,7 +479,6 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   fieldAccumulate: FieldAccumulateNode,
   metaballThreshold: MetaballThresholdNode,
   fieldToLines: FieldToLinesNode,
-  distanceFalloff: DistanceFalloffNode,
   noisyGridSDF: NoisyGridSDFNode,
   shear: ShearNode,
   perspective2d: Perspective2DNode,
@@ -505,8 +500,6 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   // Combiners
   mask: MaskNode,
   addColor: AddColorNode,
-  glowLayer: GlowLayerNode,
-  deepGlow: DeepGlowNode,
   sdfFill: SDFFillNode,
   sdfColorize: SDFColorizeNode,
   alphaBlend: AlphaBlendNode,
@@ -560,6 +553,8 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   lensBlur: LensBlurNode,
   motionBlur: MotionBlurNode,
   depthOfField: DepthOfFieldNode,
+  dofTexture: DofTextureNode,
+  tiltShiftTexture: TiltShiftTextureNode,
   chromaShift: ChromaShiftNode,
   // Loops
   loopCarry:             LoopCarryNode,
@@ -615,9 +610,7 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   edgesTexture: EdgesTextureNode,
   blurTexture: BlurTextureNode,
   glowTexture: GlowTextureNode,
-  chromaTexture: ChromaTextureNode,
   chromaLens: ChromaLensNode,
-  deepGlowTexture: DeepGlowTextureNode,
   deepGlowTextureStage: DeepGlowTextureStageNode,
   displaceTexture: DisplaceTextureNode,
   displacementMap: DisplacementMapNode,

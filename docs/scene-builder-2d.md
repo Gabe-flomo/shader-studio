@@ -36,8 +36,8 @@ How a layer is drawn, per layer (Shapes → **Style**; `style=` in a recipe):
   doesn't glow (Look → Glow off, or Only layers marked Glow and it isn't) is the crisp shape alone
   (one SDF Fill). Once the Look's glow has been muted, the glow node passes a crisp fill through
   while muted, live.
-- **Filled**: a flat filled shape (SDF Fill) with the Look's glow as a halo round it (Glow Layer,
-  amount ÷ |distance|): the look every scene had before styles. Picture layers start Filled.
+- **Filled**: a flat filled shape (SDF Fill) with the Look's glow as a halo round it (SDF Glow, Halo
+  mode: amount ÷ |distance|): the look every scene had before styles. Picture layers start Filled.
 - **Outline**: a glowing line along the edge, the glow of abs(distance) (*Glow outline*). The Look's
   glow tint colours it.
 
@@ -49,8 +49,8 @@ layer it is in draws it.
 ## Glow types
 
 How a distance becomes glow (Look → Glow → **Type**, or one layer's own under Shapes → **Glow
-type**). The same formulas are the **Glow Layer** node's **Type** (`combiners.ts`,
-`GLOW_TYPES` / `glowFormula`), so the node and the builder share them. i is the amount, p the
+type**). The same formulas are **SDF Glow**'s Halo … Inverse square **modes** (once the Glow Layer node's
+Type; `combiners.ts` `GLOW_TYPES` / `glowFormula`), so the node and the builder share them. i is the amount, p the
 falloff, x = distance outside ÷ i:
 
 | Type | Formula | Looks like |
@@ -65,7 +65,8 @@ falloff, x = distance outside ÷ i:
 
 With no type chosen, Glow-style layers use Soft and Filled layers' halo uses Halo, exactly as
 before types. Amount and falloff are live sliders on the built node (Glow style: the *Glow shape*
-Expression Block; Filled: the Glow Layer); changing the type rebuilds. Recipe: `glow type=neon`,
+Expression Block; Filled: SDF Glow's Reach and Power); changing the type rebuilds. The old Bloom setting
+(Look → Finish, older) builds a Pass and a same-frame Glow (texture). Recipe: `glow type=neon`,
 and on a layer `glow-type=gauss`.
 
 ## Modify

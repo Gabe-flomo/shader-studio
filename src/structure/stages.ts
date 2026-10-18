@@ -85,7 +85,7 @@ export const FLOWS: Record<FlowId, FlowInfo> = {
   pass: {
     id: 'pass', label: 'Passes',
     stages: ['source', 'pass', 'rule', 'readout', 'colour', 'post'],
-    alias: { space: 'source', camera: 'source', bend: 'rule', shape: 'source', objects: 'source', combine: 'source', scene: 'source', march: 'source', light: 'readout', shapeIt: 'readout', sense: 'rule', steer: 'rule', move: 'rule', deposit: 'rule', trail: 'rule', draw: 'readout' },
+    alias: { space: 'source', camera: 'source', bend: 'source', shape: 'source', objects: 'source', combine: 'source', scene: 'source', march: 'source', light: 'readout', shapeIt: 'readout', sense: 'rule', steer: 'rule', move: 'rule', deposit: 'rule', trail: 'rule', draw: 'readout' },
   },
   agents: {
     id: 'agents', label: 'Agents',
@@ -163,7 +163,7 @@ export const TYPE_STAGE: Record<string, StageOf> = {
   // Union / Subtract / Intersect: Combine in 3D (a 2D flow reads Combine as Shape).
   sdfUnion: 'combine', sdfSubtract: 'combine', sdfIntersect: 'combine',
   // Field: thresholds and falloffs shape a field.
-  metaballThreshold: 'shapeIt', fieldToLines: 'shapeIt', distanceFalloff: 'shapeIt',
+  metaballThreshold: 'shapeIt', fieldToLines: 'shapeIt',
   // Grid: the layout bends space; the rest draws or filters.
   gridPattern: 'shape', arrayField: 'shape', neighborDist: 'shape', neighborAttractCircles: 'shape', noisyGridSDF: 'shape',
   gridPaint: 'colour', cellPicture: 'any', cellPattern: 'any', pieces: 'shape', cellFilter: 'shapeIt', waveRadius: 'shapeIt', neighborOffset2d: 'any', animatedCellCenter: 'any',
@@ -173,8 +173,6 @@ export const TYPE_STAGE: Record<string, StageOf> = {
   waveTerm: 'any', chladniModeFreq: 'any',
   // Fractals that are whole 3D renders.
   raymarch3d: 'march', mandelbulb: 'march', volumeClouds: 'march',
-  // Combiners: glows shape the distance; the rest mixes colour.
-  glowLayer: 'shapeIt', deepGlow: 'shapeIt',
   // Effects: light from a distance; warps; the colour-making ones.
   light: 'shapeIt', light2d: 'shapeIt', radianceCascadesApprox: 'shapeIt', glowToColor: 'colour', normalToColor: 'colour',
   gravitationalLens: 'bend', floatWarp: 'any', forLoop: 'any', exprNode: 'any', customFn: 'any',
@@ -195,7 +193,7 @@ export const TYPE_STAGE: Record<string, StageOf> = {
   rayMarch: 'march', rayRender: 'march', marchLoopGroup: 'march', giLitMarchGroup: 'march', volumetricScene: 'march',
   glassScene: 'march', sceneBuilder: 'march', timeCubeView: 'march', frameStack: 'march', volumeGlow: 'light',
   // Passes.
-  pass: 'pass', blurTexture: 'rule', displaceTexture: 'rule', jumpFloodTexture: 'rule', displacementMap: 'bend',
+  pass: 'pass', blurTexture: 'rule', dofTexture: 'readout', tiltShiftTexture: 'readout', displaceTexture: 'rule', jumpFloodTexture: 'rule', displacementMap: 'bend',
   textureFade: 'rule', textureFeedback: 'pass', textureNeighbours: 'rule', gridRules: 'rule', echo: 'pass',
   // Simulation: the Agents family, step by step.
   agentSense: 'sense', agentNeighbours: 'sense', agentSteer: 'steer',

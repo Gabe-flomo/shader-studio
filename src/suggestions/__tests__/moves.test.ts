@@ -185,7 +185,7 @@ describe('quick-add rules as moves', () => {
   it('a distance offers the quick-add consumers, and each compiles', () => {
     const nodes = [n('circleSDF', 'c', 0, 0), n('output', 'o', 800, 0)];
     const moves = quickAddMoves(nodes[0], 'distance', 'distance');
-    expect(moves.map(m => m.anchor?.type)).toEqual(['sdfFill', 'glowLayer', 'sdfColorize']);
+    expect(moves.map(m => m.anchor?.type)).toEqual(['sdfFill', 'light', 'sdfColorize']);
     for (const m of moves) {
       const r = applyMove(nodes, { nodeId: 'c', key: 'distance', side: 'out' }, m, {}, nextId, { heightOf: H })!;
       expect(compileGraph({ nodes: r.nodes }).errors, m.id).toBeUndefined();

@@ -35,7 +35,7 @@ describe('pass words', () => {
   });
   it('fade 0.5s: trails with that tail (the plan\'s example 12 and 35)', () => {
     const nodes = run('circle at=top-left · glow · the picture · fade 0.5s');
-    expect(nodes.find(n => n.type === 'textureFade')?.params.tail).toBe(0.5);
+    expect(nodes.find(n => n.type === 'textureFeedback')?.params.tail).toBe(0.5);
     run('circle · glow · pass "trails" · fade 0.5s');
   });
   it('glow on a Pass is the texture glow (example 36)', () => {

@@ -2834,72 +2834,6 @@ exports[`golden shaders: every example compiles as it did > comboArrayStars 1`] 
 }
 `;
 
-exports[`golden shaders: every example compiles as it did > comboBloomDots 1`] = `
-{
-  "audioUniforms": {},
-  "echo": null,
-  "errors": null,
-  "fragmentShader": "0718866fffc7c40ee84e2b2a6bef:5847",
-  "isStateful": true,
-  "liveUniforms": {},
-  "nodeSlugs": "10356e373e59d812d60321ab424d:225",
-  "paramBindings": "14a7db0b11f3880bdc7e00fc73b0:657",
-  "paramUniforms": [
-    "u_p_bloomx0_intensity",
-    "u_p_bloomx0_radius",
-    "u_p_bloomx0_softness",
-    "u_p_bloomx0_threshold",
-    "u_p_circx0_radius",
-    "u_p_fillx0_strokeWidth",
-    "u_p_gridlayoutx0_columns",
-    "u_p_mkv3x0_b",
-    "u_p_mkv3x0_g",
-    "u_p_mkv3x0_r",
-    "u_p_mulx0_b",
-    "u_p_noisex0_outMax",
-    "u_p_noisex0_outMin",
-    "u_p_noisex0_scale",
-    "u_p_noisex0_speed",
-    "u_p_palx0_scale",
-    "u_p_palx0_speed",
-  ],
-  "paramValues": "073c096e4fa0070c256e75214b13:440",
-  "passes": null,
-  "success": true,
-  "textureUniforms": {},
-  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
-  "videoUniforms": {},
-}
-`;
-
-exports[`golden shaders: every example compiles as it did > comboBlurDirectional 1`] = `
-{
-  "audioUniforms": {},
-  "echo": null,
-  "errors": null,
-  "fragmentShader": "0e50e908d5762500c28303001898:3404",
-  "isStateful": true,
-  "liveUniforms": {},
-  "nodeSlugs": "067506bfc809df0153774c621d75:143",
-  "paramBindings": "021df66c46b82118fc346b3de7f5:283",
-  "paramUniforms": [
-    "u_p_gaussianblx0_radius",
-    "u_p_palx0_scale",
-    "u_p_palx0_speed",
-    "u_p_postx0_levels",
-    "u_p_wavex0_distortion",
-    "u_p_wavex0_scale",
-    "u_p_wavex0_speed",
-  ],
-  "paramValues": "137af9c0af041f0fc40c138abdcc:177",
-  "passes": null,
-  "success": true,
-  "textureUniforms": {},
-  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
-  "videoUniforms": {},
-}
-`;
-
 exports[`golden shaders: every example compiles as it did > comboChaosStars 1`] = `
 {
   "audioUniforms": {},
@@ -4391,52 +4325,6 @@ exports[`golden shaders: every example compiles as it did > displaceText 1`] = `
 }
 `;
 
-exports[`golden shaders: every example compiles as it did > dofDepthBlur 1`] = `
-{
-  "audioUniforms": {},
-  "echo": null,
-  "errors": null,
-  "fragmentShader": "083bf3cf31479e065cd0c18c7c71:10013",
-  "isStateful": true,
-  "liveUniforms": {},
-  "nodeSlugs": "1d6fcc5ffd0e24082aaa9325d241:491",
-  "paramBindings": "09912db7e700b60c59d1feed8bde:1212",
-  "paramUniforms": [
-    "u_p_depthoffiex6_focalDist",
-    "u_p_depthoffiex6_focalRange",
-    "u_p_depthoffiex6_maxBlur",
-    "u_p_marchcamerx2_aperture",
-    "u_p_marchcamerx2_camAngle",
-    "u_p_marchcamerx2_camDist",
-    "u_p_marchcamerx2_camElevation",
-    "u_p_marchcamerx2_focalDist",
-    "u_p_marchcamerx2_fov",
-    "u_p_marchcamerx2_lensSpeed",
-    "u_p_marchcamerx2_rotSpeed",
-    "u_p_marchloopgx4_albedo",
-    "u_p_marchloopgx4_bg",
-    "u_p_marchloopgx4_jitter",
-    "u_p_marchloopgx4_maxDist",
-    "u_p_marchloopgx4_stepScale",
-    "u_p_threexspheresx3xsgxsphx0_radius",
-    "u_p_threexspheresx3xsgxsphx0xc2_radius",
-    "u_p_threexspheresx3xsgxsphx0xc3_radius",
-    "u_p_threexspheresx3xsgxtrx0_tx",
-    "u_p_threexspheresx3xsgxtrx0_ty",
-    "u_p_threexspheresx3xsgxtrx0_tz",
-    "u_p_threexspheresx3xsgxtrx0xc2_tx",
-    "u_p_threexspheresx3xsgxtrx0xc2_ty",
-    "u_p_threexspheresx3xsgxtrx0xc2_tz",
-  ],
-  "paramValues": "10039cabeda781003b21a9f06da6:934",
-  "passes": null,
-  "success": true,
-  "textureUniforms": {},
-  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
-  "videoUniforms": {},
-}
-`;
-
 exports[`golden shaders: every example compiles as it did > dofOrbitOrbs 1`] = `
 {
   "audioUniforms": {},
@@ -4699,33 +4587,6 @@ exports[`golden shaders: every example compiles as it did > fcGrainGradient 1`] 
 }
 `;
 
-exports[`golden shaders: every example compiles as it did > fcMainFrame 1`] = `
-{
-  "audioUniforms": {},
-  "echo": null,
-  "errors": null,
-  "fragmentShader": "1faba4d0f0fd76151df5b7aad862:5599",
-  "isStateful": true,
-  "liveUniforms": {},
-  "nodeSlugs": "1184c1ca8c10c21315fa10cf6e1d:604",
-  "paramBindings": "0da0579ab360070f1cd1a2ec2331:321",
-  "paramUniforms": [
-    "u_p_foldxlayersx0xgxpalx0_amplitude",
-    "u_p_foldxlayersx0xgxpalx0_freq",
-    "u_p_foldxlayersx0xgxpalx0_offset",
-    "u_p_foldxlayersx0xgxpalx0_phase",
-    "u_p_foldxlayersx0xgxpalx0_scale",
-    "u_p_foldxlayersx0xgxpalx0_speed",
-  ],
-  "paramValues": "109fa7846a6d681bf7f94cea9bef:365",
-  "passes": null,
-  "success": true,
-  "textureUniforms": {},
-  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
-  "videoUniforms": {},
-}
-`;
-
 exports[`golden shaders: every example compiles as it did > fcOrb 1`] = `
 {
   "audioUniforms": {},
@@ -4906,113 +4767,6 @@ exports[`golden shaders: every example compiles as it did > fcTiling 1`] = `
     "u_p_mulx0_b",
   ],
   "paramValues": "057e7732c11aaf006513f0d5563c:905",
-  "passes": null,
-  "success": true,
-  "textureUniforms": {},
-  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
-  "videoUniforms": {},
-}
-`;
-
-exports[`golden shaders: every example compiles as it did > fcTrippyNoise 1`] = `
-{
-  "audioUniforms": {},
-  "echo": null,
-  "errors": null,
-  "fragmentShader": "0549ca0ec8699a1ae36ea98cf097:9410",
-  "isStateful": true,
-  "liveUniforms": {},
-  "nodeSlugs": "179b3d8fa6075c1578c5f953f07c:677",
-  "paramBindings": "12b0f3bee635e61eedc54dc43e83:1497",
-  "paramUniforms": [
-    "u_p_addx1_b",
-    "u_p_addx3_b",
-    "u_p_blendx0_opacity",
-    "u_p_blendx0_strength",
-    "u_p_bloomx0_intensity",
-    "u_p_bloomx0_radius",
-    "u_p_bloomx0_threshold",
-    "u_p_mkv3x0_b",
-    "u_p_mkv3x0_g",
-    "u_p_mkv3x0_r",
-    "u_p_mkv3x1_b",
-    "u_p_mkv3x1_g",
-    "u_p_mkv3x1_r",
-    "u_p_mkv3x2_b",
-    "u_p_mkv3x2_g",
-    "u_p_mkv3x2_r",
-    "u_p_mkv3x3_b",
-    "u_p_mkv3x3_g",
-    "u_p_mkv3x3_r",
-    "u_p_mulx0_b",
-    "u_p_mulx1_b",
-    "u_p_noisex1_outMax",
-    "u_p_noisex1_outMin",
-    "u_p_noisex1_scale",
-    "u_p_noisex1_speed",
-    "u_p_noisex2_outMax",
-    "u_p_noisex2_outMin",
-    "u_p_noisex2_scale",
-    "u_p_noisex2_speed",
-    "u_p_noisex3_outMax",
-    "u_p_noisex3_outMin",
-    "u_p_noisex3_scale",
-    "u_p_noisex3_speed",
-    "u_p_sstepx1_edge0",
-    "u_p_sstepx1_edge1",
-    "u_p_sstepx2_edge0",
-    "u_p_sstepx2_edge1",
-    "u_p_sstepx3_edge0",
-    "u_p_sstepx3_edge1",
-    "u_p_vignettex0_radius",
-    "u_p_vignettex0_softness",
-    "u_p_vignettex0_strength",
-  ],
-  "paramValues": "19fdef18f10e810f678660236def:1022",
-  "passes": null,
-  "success": true,
-  "textureUniforms": {
-    "u_tex_tex_0": "tn_tex",
-  },
-  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
-  "videoUniforms": {},
-}
-`;
-
-exports[`golden shaders: every example compiles as it did > feedbackSmear 1`] = `
-{
-  "audioUniforms": {},
-  "echo": null,
-  "errors": null,
-  "fragmentShader": "00c6d83886b1440dc6285b3cc3ab:4226",
-  "isStateful": true,
-  "liveUniforms": {},
-  "nodeSlugs": "10a53b103441360aa1d3d543c77d:157",
-  "paramBindings": "0bdcac582f187d1198de56098687:740",
-  "paramUniforms": [
-    "u_p_fbmx0_gain",
-    "u_p_fbmx0_lacunarity",
-    "u_p_fbmx0_octaves",
-    "u_p_fbmx0_scale",
-    "u_p_fbmx0_time_scale",
-    "u_p_mixx0_t",
-    "u_p_palx0_amplitude",
-    "u_p_palx0_anim",
-    "u_p_palx0_freq",
-    "u_p_palx0_offset",
-    "u_p_palx0_phase",
-    "u_p_palx0_scale",
-    "u_p_palx0_speed",
-    "u_p_palx0_value",
-    "u_p_uvtransforx0_angle",
-    "u_p_uvtransforx0_pivotX",
-    "u_p_uvtransforx0_pivotY",
-    "u_p_uvtransforx0_sx",
-    "u_p_uvtransforx0_sy",
-    "u_p_uvtransforx0_tx",
-    "u_p_uvtransforx0_ty",
-  ],
-  "paramValues": "17233dfcdba47817180939833242:574",
   "passes": null,
   "success": true,
   "textureUniforms": {},
@@ -10117,22 +9871,22 @@ exports[`golden shaders: every example compiles as it did > groupCarryDomainWarp
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "1434797bede8441f400efa003fb2:3638",
+  "fragmentShader": "1847c4d2a4b27e1e0e18b02d0da9:3626",
   "isStateful": false,
   "liveUniforms": {},
-  "nodeSlugs": "11097b68e97f9812665684a9f934:155",
-  "paramBindings": "0404904f438c7604ed4973585fc2:357",
+  "nodeSlugs": "12e5a8b79c386e1cc801c3ab13ec:154",
+  "paramBindings": "10a0272371fc191e48b6f01e3853:354",
   "paramUniforms": [
     "u_p_fbmx2_gain",
     "u_p_fbmx2_lacunarity",
     "u_p_fbmx2_octaves",
     "u_p_fbmx2_scale",
     "u_p_fbmx2_time_scale",
-    "u_p_warpxstepx1xgxswrpx0_scale",
-    "u_p_warpxstepx1xgxswrpx0_speed",
-    "u_p_warpxstepx1xgxswrpx0_strength",
+    "u_p_warpxstepx1xgxuvwx0_scale",
+    "u_p_warpxstepx1xgxuvwx0_speed",
+    "u_p_warpxstepx1xgxuvwx0_strength",
   ],
-  "paramValues": "0f620c0ec24576032ea8b6412431:250",
+  "paramValues": "1e997ee910e5cf1c6378437602ba:247",
   "passes": null,
   "success": true,
   "textureUniforms": {},
@@ -13742,11 +13496,11 @@ exports[`golden shaders: every example compiles as it did > motionBlurTrails 1`]
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "0cad2590aa1a4400d93a79b47f60:3829",
-  "isStateful": true,
+  "fragmentShader": "125c0e3c43b86b0b542f735f01da:1546",
+  "isStateful": false,
   "liveUniforms": {},
-  "nodeSlugs": "1fb027f1a80657194d72300a2a17:112",
-  "paramBindings": "01f9c140334fa9093b7800530460:811",
+  "nodeSlugs": "1c478b0bbb0f4a02fbefdfed292e:145",
+  "paramBindings": "1f8d655291001f132865df431310:1077",
   "paramUniforms": [
     "u_p_fractalloox0_amplitude",
     "u_p_fractalloox0_fract_scale",
@@ -13759,14 +13513,151 @@ exports[`golden shaders: every example compiles as it did > motionBlurTrails 1`]
     "u_p_fractalloox0_ring_freq",
     "u_p_fractalloox0_scale_exp",
     "u_p_fractalloox0_time_scale",
-    "u_p_motionblurx0_decay_b",
-    "u_p_motionblurx0_decay_g",
-    "u_p_motionblurx0_decay_r",
-    "u_p_motionblurx0_history_weight",
-    "u_p_motionblurx0_scene_weight",
+    "u_p_trailsx0xc2_amount",
+    "u_p_trailsx0xc2_clean",
+    "u_p_trailsx0xc2_flowAmount",
+    "u_p_trailsx0xc2_hueDrift",
+    "u_p_trailsx0xc2_moveX",
+    "u_p_trailsx0xc2_moveY",
+    "u_p_trailsx0xc2_pivotX",
+    "u_p_trailsx0xc2_pivotY",
+    "u_p_trailsx0xc2_tail",
+    "u_p_trailsx0xc2_tint",
+    "u_p_trailsx0xc2_turn",
+    "u_p_trailsx0xc2_zoom",
   ],
-  "paramValues": "1c2ee654a49b1f170f7851d990fa:580",
-  "passes": null,
+  "paramValues": "114af9bef830430b8393b7b443b2:766",
+  "passes": [
+    {
+      "filter": "linear",
+      "format": "half",
+      "fragmentShader": "precision highp float;
+#define PI 3.1415926538
+#define TAU 6.2831853072
+
+uniform vec2 u_resolution;
+uniform float u_time;
+uniform vec2 u_mouse;
+uniform sampler2D u_fontTexture;
+uniform float u_p_fractalloox0_fract_scale;
+uniform float u_p_fractalloox0_scale_exp;
+uniform float u_p_fractalloox0_ring_freq;
+uniform float u_p_fractalloox0_glow;
+uniform float u_p_fractalloox0_glow_pow;
+uniform float u_p_fractalloox0_iter_offset;
+uniform float u_p_fractalloox0_time_scale;
+uniform vec3 u_p_fractalloox0_offset;
+uniform vec3 u_p_fractalloox0_amplitude;
+uniform vec3 u_p_fractalloox0_freq;
+uniform vec3 u_p_fractalloox0_phase;
+uniform float u_p_trailsx0xc2_tail;
+uniform float u_p_trailsx0xc2_clean;
+uniform vec3 u_p_trailsx0xc2_tint;
+uniform float u_p_trailsx0xc2_amount;
+uniform float u_p_trailsx0xc2_hueDrift;
+uniform float u_p_trailsx0xc2_zoom;
+uniform float u_p_trailsx0xc2_turn;
+uniform float u_p_trailsx0xc2_moveX;
+uniform float u_p_trailsx0xc2_moveY;
+uniform float u_p_trailsx0xc2_pivotX;
+uniform float u_p_trailsx0xc2_pivotY;
+uniform float u_p_trailsx0xc2_flowAmount;
+uniform sampler2D u_pass_trails_0_c2;
+uniform vec2 u_pass_trails_0_c2_px;
+uniform sampler2D u_passprev_trails_0_c2;
+uniform vec2 u_passprev_trails_0_c2_px;
+uniform float u_frameDt;
+
+varying vec2 vUv;
+
+// ── Always-available helpers (noise, rotation) ───────────────────────────────
+vec2 noiseHash2(vec2 p) {
+    p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+    return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+}
+float noiseHash1(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+float valueNoise(vec2 p) {
+    vec2 i = floor(p); vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(noiseHash1(i), noiseHash1(i+vec2(1,0)), u.x),
+               mix(noiseHash1(i+vec2(0,1)), noiseHash1(i+vec2(1,1)), u.x), u.y);
+}
+vec2 rotate(vec2 v, float angle) {
+    // Hoisted: the angle is usually a uniform expression, and the compiler
+    // can't share the four trig calls when the argument isn't a plain value.
+    float s = sin(angle), c = cos(angle);
+    return vec2(v.x * c - v.y * s, v.x * s + v.y * c);
+}
+mat2 rot2D(float a) { float s=sin(a), c=cos(a); return mat2(c,-s,s,c); }
+// ─────────────────────────────────────────────────────────────────────────
+
+vec3 palette(float t, vec3 offset, vec3 amplitude, vec3 freq, vec3 phase) {
+    return offset + amplitude * cos(6.28318 * (freq * t + phase));
+}
+
+void main() {
+    vec2 g_uv = (vUv - 0.5) * 2.0;
+    g_uv.x *= u_resolution.x / u_resolution.y;
+    float time_0_time = u_time;
+    vec2 uv_0_uv = (vUv - 0.5) * 2.0;
+    uv_0_uv.x *= u_resolution.x / u_resolution.y;
+    vec2 fractalloo_0_uv0 = uv_0_uv;
+    vec2 fractalloo_0_uv = uv_0_uv;
+    vec3 fractalloo_0_color = vec3(0.0);
+    for (float fractalloo_0_i = 0.0; fractalloo_0_i < 4.0; fractalloo_0_i++) {
+        fractalloo_0_uv = fract(fractalloo_0_uv * (u_p_fractalloox0_fract_scale * pow(u_p_fractalloox0_scale_exp, fractalloo_0_i))) - 0.5;
+        float fractalloo_0_d = length(fractalloo_0_uv) * exp(-length(fractalloo_0_uv0));
+        float fractalloo_0_t = length(fractalloo_0_uv0) + fractalloo_0_i * u_p_fractalloox0_iter_offset + time_0_time * u_p_fractalloox0_time_scale;
+        vec3 fractalloo_0_col = palette(fractalloo_0_t, u_p_fractalloox0_offset, u_p_fractalloox0_amplitude, u_p_fractalloox0_freq, u_p_fractalloox0_phase);
+        fractalloo_0_d = sin(fractalloo_0_d * u_p_fractalloox0_ring_freq + time_0_time) / u_p_fractalloox0_ring_freq;
+        fractalloo_0_d = abs(fractalloo_0_d);
+        fractalloo_0_d = pow(u_p_fractalloox0_glow / max(fractalloo_0_d, 0.0001), u_p_fractalloox0_glow_pow);
+        fractalloo_0_color += fractalloo_0_col * fractalloo_0_d;
+    }
+    // Feedback (texture): the fractal (Fresh, at 0.28) added over last frame's trails, which fade to 1% in 0.23 seconds (about 72% kept each frame at 60 fps), blue fastest (Tint): smooth motion trails at any frame rate.
+    vec4 trails_0_c2_src = vec4(fractalloo_0_color, 1.0);
+    vec3 trails_0_c2_fr = trails_0_c2_src.rgb * u_p_trailsx0xc2_amount;
+    vec2 trails_0_c2_rd_pv = vec2(u_p_trailsx0xc2_pivotX, u_p_trailsx0xc2_pivotY);
+    float trails_0_c2_rd_a = radians(u_p_trailsx0xc2_turn);
+    vec2 trails_0_c2_rd_p = (g_uv - trails_0_c2_rd_pv) / (abs(u_p_trailsx0xc2_zoom) < 0.0001 ? 0.0001 : u_p_trailsx0xc2_zoom);
+    vec2 trails_0_c2_rd_q = trails_0_c2_rd_pv + vec2(cos(trails_0_c2_rd_a) * trails_0_c2_rd_p.x + sin(trails_0_c2_rd_a) * trails_0_c2_rd_p.y, -sin(trails_0_c2_rd_a) * trails_0_c2_rd_p.x + cos(trails_0_c2_rd_a) * trails_0_c2_rd_p.y);
+    trails_0_c2_rd_q -= vec2(u_p_trailsx0xc2_moveX, u_p_trailsx0xc2_moveY) * 2.0 * u_passprev_trails_0_c2_px.y;
+    vec4 trails_0_c2_rd_s = texture2D(u_passprev_trails_0_c2, (trails_0_c2_rd_q / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5));
+    vec4 trails_0_c2_fd_old = texture2D(u_passprev_trails_0_c2, (trails_0_c2_rd_q / vec2(u_resolution.x / u_resolution.y, 1.0) * 0.5 + 0.5));
+    float trails_0_c2_fd_dt = u_frameDt > 0.0 ? u_frameDt : 1.0 / 60.0;
+    vec3 trails_0_c2_fd_tail = max(u_p_trailsx0xc2_tail * u_p_trailsx0xc2_tint, vec3(0.001));
+    vec3 trails_0_c2_fd_keep = exp(-4.605170186 * trails_0_c2_fd_dt / trails_0_c2_fd_tail);
+    vec3 trails_0_c2_fd_faded = max(trails_0_c2_fd_old.rgb * trails_0_c2_fd_keep - u_p_trailsx0xc2_clean * trails_0_c2_fd_dt, 0.0);
+    float trails_0_c2_fd_alpha = trails_0_c2_fd_old.a * exp(-4.605170186 * trails_0_c2_fd_dt / max(u_p_trailsx0xc2_tail, 0.001));
+    vec3 trails_0_c2_fd_color = trails_0_c2_fd_faded + trails_0_c2_fr;
+    float trails_0_c2_ha = radians(u_p_trailsx0xc2_hueDrift) * trails_0_c2_fd_dt;
+    vec3 trails_0_c2_k = vec3(0.57735027);
+    vec3 trails_0_c2_c = trails_0_c2_fd_color * cos(trails_0_c2_ha) + vec3(trails_0_c2_k.y * trails_0_c2_fd_color.z - trails_0_c2_k.z * trails_0_c2_fd_color.y, trails_0_c2_k.z * trails_0_c2_fd_color.x - trails_0_c2_k.x * trails_0_c2_fd_color.z, trails_0_c2_k.x * trails_0_c2_fd_color.y - trails_0_c2_k.y * trails_0_c2_fd_color.x) * sin(trails_0_c2_ha) + trails_0_c2_k * dot(trails_0_c2_k, trails_0_c2_fd_color) * (1.0 - cos(trails_0_c2_ha));
+    float trails_0_c2_a = max(trails_0_c2_fd_alpha, clamp(trails_0_c2_src.a * u_p_trailsx0xc2_amount, 0.0, 1.0));
+    gl_FragColor = vec4(trails_0_c2_c, trails_0_c2_a);
+}",
+      "label": "Trails",
+      "live": true,
+      "nodeId": "mb_blur",
+      "nodeIds": [
+        "mb_blur__fbstep",
+        "mb_frac",
+        "mb_time",
+        "mb_uv",
+        "mb_blur",
+      ],
+      "previous": true,
+      "reads": [],
+      "readsPrevious": [
+        "trails_0_c2",
+      ],
+      "scale": 1,
+      "slug": "trails_0_c2",
+      "wrap": "clamp",
+    },
+  ],
   "success": true,
   "textureUniforms": {},
   "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
@@ -13806,25 +13697,25 @@ exports[`golden shaders: every example compiles as it did > neonFloorGrid 1`] = 
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "10390dc51a3cc200ac83bf1d9c56:3041",
+  "fragmentShader": "002f5a3dfcc9c6077d8940f38860:3174",
   "isStateful": false,
   "liveUniforms": {},
-  "nodeSlugs": "0df6dc1a75094909d43a5ddd0072:135",
-  "paramBindings": "1ade0007f2f5dc0c07488256a27b:389",
+  "nodeSlugs": "1e24794aeba60c18c3993eec7447:136",
+  "paramBindings": "1ff89eda6538d119b72b17a5af10:383",
   "paramUniforms": [
     "u_p_boxsdfx0_height",
     "u_p_boxsdfx0_posX",
     "u_p_boxsdfx0_posY",
     "u_p_boxsdfx0_width",
-    "u_p_glowx0_intensity",
-    "u_p_glowx0_power",
     "u_p_gridlayoutx0_columns",
+    "u_p_lightx0_power",
+    "u_p_lightx0_reach",
     "u_p_mkv3x0_b",
     "u_p_mkv3x0_g",
     "u_p_mkv3x0_r",
     "u_p_perspectivx0_ratio",
   ],
-  "paramValues": "0e8abbd55ef7d4133546c8baa839:285",
+  "paramValues": "1ea252806dd2850721b8bfe6dc68:283",
   "passes": null,
   "success": true,
   "textureUniforms": {},
@@ -17702,101 +17593,16 @@ exports[`golden shaders: every example compiles as it did > ringGlow 1`] = `
 }
 `;
 
-exports[`golden shaders: every example compiles as it did > sb2DepthBeams 1`] = `
-{
-  "audioUniforms": {},
-  "echo": null,
-  "errors": null,
-  "fragmentShader": "0d1436af2ea61f12657e8e9a6e0d:18155",
-  "isStateful": true,
-  "liveUniforms": {},
-  "nodeSlugs": "06b01e521ecadf00c57491a6ed00:679",
-  "paramBindings": "097fefd145a3f01ee76018e9b3b6:3272",
-  "paramUniforms": [
-    "u_p_addcolorx16_scale",
-    "u_p_arep2x9_count",
-    "u_p_bloomx20_intensity",
-    "u_p_bloomx20_radius",
-    "u_p_bloomx20_threshold",
-    "u_p_colorpickex13_color",
-    "u_p_colorpickex14_color",
-    "u_p_depthmixx18_angle",
-    "u_p_depthmixx18_curve",
-    "u_p_depthmixx18_farEnd",
-    "u_p_depthmixx18_focus",
-    "u_p_depthmixx18_gradientAmount",
-    "u_p_depthmixx18_gradientPhase",
-    "u_p_depthmixx18_gradientScale",
-    "u_p_depthmixx18_level",
-    "u_p_depthmixx18_nearEnd",
-    "u_p_depthmixx18_pictureAmount",
-    "u_p_depthmixx18_sizeFar",
-    "u_p_depthmixx18_sizeNear",
-    "u_p_depthmixx18_softness",
-    "u_p_depthmixx18_spaceAmount",
-    "u_p_depthmixx5_angle",
-    "u_p_depthmixx5_curve",
-    "u_p_depthmixx5_farEnd",
-    "u_p_depthmixx5_focus",
-    "u_p_depthmixx5_gradientAmount",
-    "u_p_depthmixx5_gradientPhase",
-    "u_p_depthmixx5_gradientScale",
-    "u_p_depthmixx5_level",
-    "u_p_depthmixx5_nearEnd",
-    "u_p_depthmixx5_pictureAmount",
-    "u_p_depthmixx5_sizeFar",
-    "u_p_depthmixx5_sizeNear",
-    "u_p_depthmixx5_softness",
-    "u_p_depthmixx5_spaceAmount",
-    "u_p_depthx4_cutoff",
-    "u_p_depthx4_focus",
-    "u_p_depthx4_relief",
-    "u_p_depthx4_shift",
-    "u_p_depthx4_softness",
-    "u_p_glowx15_intensity",
-    "u_p_glowx15_power",
-    "u_p_motion2dx7_phase",
-    "u_p_motion2dx7_speed",
-    "u_p_mulx17_b",
-    "u_p_ringx11_posX",
-    "u_p_ringx11_posY",
-    "u_p_ringx11_radius",
-    "u_p_sdfoffsetx12_amount",
-    "u_p_smpx3_offsetX",
-    "u_p_smpx3_offsetY",
-    "u_p_transformx10_rotate",
-    "u_p_transformx10_scale",
-    "u_p_transformx10_spin",
-    "u_p_transformx10_x",
-    "u_p_transformx10_y",
-    "u_p_transformx8_rotate",
-    "u_p_transformx8_scale",
-    "u_p_transformx8_spin",
-    "u_p_transformx8_x",
-    "u_p_transformx8_y",
-  ],
-  "paramValues": "1dd1d4acc033db0955ca37370d8a:1832",
-  "passes": null,
-  "success": true,
-  "textureUniforms": {
-    "u_tex_depth_4": "sb2DepthBeams_4",
-    "u_tex_ridges_2": "sb2DepthBeams_pic",
-  },
-  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
-  "videoUniforms": {},
-}
-`;
-
 exports[`golden shaders: every example compiles as it did > sb2DepthSize 1`] = `
 {
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "15e55a57350d6207a57419066882:13223",
+  "fragmentShader": "144b853f7d8c5a0f52057ecd9f0c:13446",
   "isStateful": false,
   "liveUniforms": {},
-  "nodeSlugs": "13beee467dc52c17d6b184276935:493",
-  "paramBindings": "104bf7928edcbe1910df66ec01f5:2243",
+  "nodeSlugs": "1d8d5a0072decc0cd7cfb9572246:494",
+  "paramBindings": "0bd3fe19908bad165465cb8fc809:2345",
   "paramUniforms": [
     "u_p_addcolorx13_scale",
     "u_p_colorpickex10_color",
@@ -17828,11 +17634,13 @@ exports[`golden shaders: every example compiles as it did > sb2DepthSize 1`] = `
     "u_p_depthx5_relief",
     "u_p_depthx5_shift",
     "u_p_depthx5_softness",
-    "u_p_glowx12_intensity",
-    "u_p_glowx12_power",
     "u_p_irrpx3_cellX",
     "u_p_irrpx3_cellY",
     "u_p_irrpx3_stagger",
+    "u_p_lightx12_innerFalloff",
+    "u_p_lightx12_power",
+    "u_p_lightx12_reach",
+    "u_p_lightx12_tint",
     "u_p_mulx9_b",
     "u_p_shapex8_r",
     "u_p_smpx4_offsetX",
@@ -17843,7 +17651,7 @@ exports[`golden shaders: every example compiles as it did > sb2DepthSize 1`] = `
     "u_p_transformx7_x",
     "u_p_transformx7_y",
   ],
-  "paramValues": "1e1d9197c67e480a27788c7c1c23:1282",
+  "paramValues": "1106b6467b7b191352c06827db2c:1347",
   "passes": null,
   "success": true,
   "textureUniforms": {
@@ -17855,320 +17663,34 @@ exports[`golden shaders: every example compiles as it did > sb2DepthSize 1`] = `
 }
 `;
 
-exports[`golden shaders: every example compiles as it did > sb2Kaleidoscope 1`] = `
-{
-  "audioUniforms": {},
-  "echo": null,
-  "errors": null,
-  "fragmentShader": "1ce1b5ac944e10096f1c97fc9a71:18476",
-  "isStateful": true,
-  "liveUniforms": {},
-  "nodeSlugs": "1809770080927f0ee7250a84b169:1050",
-  "paramBindings": "0f4d90fab4e6591d7101591df794:3171",
-  "paramUniforms": [
-    "u_p_addcolorx22_scale",
-    "u_p_addcolorx25_scale",
-    "u_p_addcolorx28_scale",
-    "u_p_bloomx30_intensity",
-    "u_p_bloomx30_radius",
-    "u_p_bloomx30_threshold",
-    "u_p_colorpickex19_color",
-    "u_p_colorpickex20_color",
-    "u_p_colorpickex23_color",
-    "u_p_colorpickex26_color",
-    "u_p_glowx21_intensity",
-    "u_p_glowx21_power",
-    "u_p_glowx24_intensity",
-    "u_p_glowx24_power",
-    "u_p_glowx27_intensity",
-    "u_p_glowx27_power",
-    "u_p_kalix6_rotate",
-    "u_p_kalix6_segments",
-    "u_p_motion2dx11_amount",
-    "u_p_motion2dx11_phase",
-    "u_p_motion2dx11_speed",
-    "u_p_motion2dx16_amount",
-    "u_p_motion2dx16_direction",
-    "u_p_motion2dx16_phase",
-    "u_p_motion2dx16_speed",
-    "u_p_motion2dx7_amount",
-    "u_p_motion2dx7_phase",
-    "u_p_motion2dx7_speed",
-    "u_p_mulx15_b",
-    "u_p_mulx4_b",
-    "u_p_ringx13_posX",
-    "u_p_ringx13_posY",
-    "u_p_ringx13_radius",
-    "u_p_ringx9_posX",
-    "u_p_ringx9_posY",
-    "u_p_ringx9_radius",
-    "u_p_sdfoffsetx10_amount",
-    "u_p_sdfoffsetx14_amount",
-    "u_p_shapex18_r",
-    "u_p_transformx12_rotate",
-    "u_p_transformx12_scale",
-    "u_p_transformx12_spin",
-    "u_p_transformx12_x",
-    "u_p_transformx12_y",
-    "u_p_transformx17_rotate",
-    "u_p_transformx17_scale",
-    "u_p_transformx17_spin",
-    "u_p_transformx17_x",
-    "u_p_transformx17_y",
-    "u_p_transformx5_px",
-    "u_p_transformx5_py",
-    "u_p_transformx5_rotate",
-    "u_p_transformx5_scale",
-    "u_p_transformx5_spin",
-    "u_p_transformx5_x",
-    "u_p_transformx5_y",
-    "u_p_transformx8_rotate",
-    "u_p_transformx8_scale",
-    "u_p_transformx8_spin",
-    "u_p_transformx8_x",
-    "u_p_transformx8_y",
-  ],
-  "paramValues": "1de4f8bfedc39e1de9e7137958bb:1754",
-  "passes": null,
-  "success": true,
-  "textureUniforms": {},
-  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
-  "videoUniforms": {},
-}
-`;
-
 exports[`golden shaders: every example compiles as it did > sb2MouseGrid 1`] = `
 {
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "01272abfabb27400df5f6f344613:7389",
+  "fragmentShader": "07bb9326e54f4e13ffd602c9ad83:7614",
   "isStateful": false,
   "liveUniforms": {},
-  "nodeSlugs": "08fe4e964c60dc11b705a0d102ff:357",
-  "paramBindings": "1bbeaedad586e3079a664e1e3909:612",
+  "nodeSlugs": "025e762ad39dc00bd860c47c47a2:358",
+  "paramBindings": "042e943175fe0e16ef42dbe8ae1b:710",
   "paramUniforms": [
     "u_p_addcolorx10_scale",
     "u_p_colorpickex3_color",
     "u_p_fillx11_strokeWidth",
-    "u_p_glowx9_intensity",
-    "u_p_glowx9_power",
     "u_p_gridx6_amount",
     "u_p_gridx6_freq",
     "u_p_gridx6_size",
     "u_p_gridx6_speed",
+    "u_p_lightx9_innerFalloff",
+    "u_p_lightx9_power",
+    "u_p_lightx9_reach",
+    "u_p_lightx9_tint",
     "u_p_palx8_anim",
     "u_p_palx8_scale",
     "u_p_palx8_speed",
     "u_p_palx8_value",
   ],
-  "paramValues": "09bbfd2b091b550580203f030790:344",
-  "passes": null,
-  "success": true,
-  "textureUniforms": {},
-  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
-  "videoUniforms": {},
-}
-`;
-
-exports[`golden shaders: every example compiles as it did > sb2Orbits 1`] = `
-{
-  "audioUniforms": {},
-  "echo": null,
-  "errors": null,
-  "fragmentShader": "1853b1e96847d5158b69a793b596:23398",
-  "isStateful": true,
-  "liveUniforms": {},
-  "nodeSlugs": "181c8a1b92bc5e0026825d81b4f9:1143",
-  "paramBindings": "0dac2b520c149a053c289b37f4bd:3309",
-  "paramUniforms": [
-    "u_p_addcolorx25_scale",
-    "u_p_addcolorx30_scale",
-    "u_p_addcolorx33_scale",
-    "u_p_addcolorx36_scale",
-    "u_p_bloomx38_intensity",
-    "u_p_bloomx38_radius",
-    "u_p_bloomx38_threshold",
-    "u_p_colorpickex22_color",
-    "u_p_colorpickex23_color",
-    "u_p_colorpickex26_color",
-    "u_p_colorpickex28_color",
-    "u_p_colorpickex31_color",
-    "u_p_colorpickex34_color",
-    "u_p_fillx27_strokeWidth",
-    "u_p_glowx24_intensity",
-    "u_p_glowx24_power",
-    "u_p_glowx29_intensity",
-    "u_p_glowx29_power",
-    "u_p_glowx32_intensity",
-    "u_p_glowx32_power",
-    "u_p_glowx35_intensity",
-    "u_p_glowx35_power",
-    "u_p_motion2dx10_amount",
-    "u_p_motion2dx10_phase",
-    "u_p_motion2dx10_speed",
-    "u_p_motion2dx11_phase",
-    "u_p_motion2dx11_speed",
-    "u_p_motion2dx14_amount",
-    "u_p_motion2dx14_phase",
-    "u_p_motion2dx14_speed",
-    "u_p_motion2dx15_phase",
-    "u_p_motion2dx15_speed",
-    "u_p_motion2dx18_amount",
-    "u_p_motion2dx18_phase",
-    "u_p_motion2dx18_speed",
-    "u_p_motion2dx4_amount",
-    "u_p_motion2dx4_phase",
-    "u_p_motion2dx4_speed",
-    "u_p_mulx21_b",
-    "u_p_mulx7_b",
-    "u_p_ringx8_posX",
-    "u_p_ringx8_posY",
-    "u_p_ringx8_radius",
-    "u_p_sdfoffsetx9_amount",
-    "u_p_shapex13_r",
-    "u_p_shapex13_rf",
-    "u_p_shapex17_r",
-    "u_p_shapex6_r",
-    "u_p_transformx12_rotate",
-    "u_p_transformx12_scale",
-    "u_p_transformx12_spin",
-    "u_p_transformx12_x",
-    "u_p_transformx12_y",
-    "u_p_transformx16_rotate",
-    "u_p_transformx16_scale",
-    "u_p_transformx16_spin",
-    "u_p_transformx16_x",
-    "u_p_transformx16_y",
-    "u_p_transformx19_rotate",
-    "u_p_transformx19_scale",
-    "u_p_transformx19_spin",
-    "u_p_transformx19_x",
-    "u_p_transformx19_y",
-    "u_p_transformx5_rotate",
-    "u_p_transformx5_scale",
-    "u_p_transformx5_spin",
-    "u_p_transformx5_x",
-    "u_p_transformx5_y",
-    "u_p_vignettex39_radius",
-    "u_p_vignettex39_softness",
-    "u_p_vignettex39_strength",
-  ],
-  "paramValues": "0c37a19614494d0495dcee9dbe03:2079",
-  "passes": null,
-  "success": true,
-  "textureUniforms": {},
-  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
-  "videoUniforms": {},
-}
-`;
-
-exports[`golden shaders: every example compiles as it did > sb2RingOfRings 1`] = `
-{
-  "audioUniforms": {},
-  "echo": null,
-  "errors": null,
-  "fragmentShader": "1d761f95b24c640cb7b98ee6ae64:17062",
-  "isStateful": true,
-  "liveUniforms": {},
-  "nodeSlugs": "01b0df5e0f0b1300c141d129ea2a:919",
-  "paramBindings": "0a83f8d206fddb09727393a4792e:2852",
-  "paramUniforms": [
-    "u_p_addcolorx25_scale",
-    "u_p_arep2x13_count",
-    "u_p_arep2x15_count",
-    "u_p_arep2x6_count",
-    "u_p_arep2x8_count",
-    "u_p_bloomx27_intensity",
-    "u_p_bloomx27_radius",
-    "u_p_bloomx27_threshold",
-    "u_p_colorpickex23_color",
-    "u_p_glowx24_intensity",
-    "u_p_glowx24_power",
-    "u_p_motion2dx4_phase",
-    "u_p_motion2dx4_speed",
-    "u_p_mulx19_b",
-    "u_p_palx22_anim",
-    "u_p_palx22_scale",
-    "u_p_palx22_speed",
-    "u_p_palx22_value",
-    "u_p_ringx10_posX",
-    "u_p_ringx10_posY",
-    "u_p_ringx10_radius",
-    "u_p_ringx17_posX",
-    "u_p_ringx17_posY",
-    "u_p_ringx17_radius",
-    "u_p_sdfoffsetx11_amount",
-    "u_p_sdfoffsetx18_amount",
-    "u_p_sdfunionx20_k",
-    "u_p_transformx12_rotate",
-    "u_p_transformx12_scale",
-    "u_p_transformx12_spin",
-    "u_p_transformx12_x",
-    "u_p_transformx12_y",
-    "u_p_transformx14_rotate",
-    "u_p_transformx14_scale",
-    "u_p_transformx14_spin",
-    "u_p_transformx14_x",
-    "u_p_transformx14_y",
-    "u_p_transformx16_rotate",
-    "u_p_transformx16_scale",
-    "u_p_transformx16_spin",
-    "u_p_transformx16_x",
-    "u_p_transformx16_y",
-    "u_p_transformx5_rotate",
-    "u_p_transformx5_scale",
-    "u_p_transformx5_spin",
-    "u_p_transformx5_x",
-    "u_p_transformx5_y",
-    "u_p_transformx7_rotate",
-    "u_p_transformx7_scale",
-    "u_p_transformx7_spin",
-    "u_p_transformx7_x",
-    "u_p_transformx7_y",
-    "u_p_transformx9_rotate",
-    "u_p_transformx9_scale",
-    "u_p_transformx9_spin",
-    "u_p_transformx9_x",
-    "u_p_transformx9_y",
-  ],
-  "paramValues": "0c640d27c798a00650ca391d8e83:1558",
-  "passes": null,
-  "success": true,
-  "textureUniforms": {},
-  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
-  "videoUniforms": {},
-}
-`;
-
-exports[`golden shaders: every example compiles as it did > sb2RippleGrid 1`] = `
-{
-  "audioUniforms": {},
-  "echo": null,
-  "errors": null,
-  "fragmentShader": "10136458df37821e516daf6fb1d9:10086",
-  "isStateful": true,
-  "liveUniforms": {},
-  "nodeSlugs": "040001e6261e36198881b7d93928:369",
-  "paramBindings": "1dfaef101c71e40f90e9b2dc0e40:740",
-  "paramUniforms": [
-    "u_p_addcolorx9_scale",
-    "u_p_bloomx12_intensity",
-    "u_p_bloomx12_radius",
-    "u_p_bloomx12_threshold",
-    "u_p_colorpickex3_color",
-    "u_p_fillx10_strokeWidth",
-    "u_p_glowx8_intensity",
-    "u_p_glowx8_power",
-    "u_p_gridx5_freq",
-    "u_p_gridx5_size",
-    "u_p_gridx5_speed",
-    "u_p_palx7_anim",
-    "u_p_palx7_scale",
-    "u_p_palx7_speed",
-    "u_p_palx7_value",
-  ],
-  "paramValues": "12c8c1ceabfc0413d6905b3a9a14:408",
+  "paramValues": "18436e72c1b2a11f0db290181116:407",
   "passes": null,
   "success": true,
   "textureUniforms": {},
@@ -18984,95 +18506,6 @@ exports[`golden shaders: every example compiles as it did > splatRingsInScene 1`
     "u_tex_splat_0_color": "splatScan::color",
     "u_tex_splat_0_depth": "splatScan::depth",
   },
-  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
-  "videoUniforms": {},
-}
-`;
-
-exports[`golden shaders: every example compiles as it did > tiltShiftScene 1`] = `
-{
-  "audioUniforms": {},
-  "echo": null,
-  "errors": null,
-  "fragmentShader": "1cc94c3d018eb5063395c6af244a:5178",
-  "isStateful": true,
-  "liveUniforms": {},
-  "nodeSlugs": "1d9bc148b2118a087c7932e32629:142",
-  "paramBindings": "1feb6fec6b2754021357970f9bb4:514",
-  "paramUniforms": [
-    "u_p_boxsdfx0_height",
-    "u_p_boxsdfx0_posX",
-    "u_p_boxsdfx0_posY",
-    "u_p_boxsdfx0_width",
-    "u_p_gridlayoutx0_columns",
-    "u_p_lightx0_brightness",
-    "u_p_lightx0_tint",
-    "u_p_perspectivx0_ratio",
-    "u_p_tiltshiftbx0_band_width",
-    "u_p_tiltshiftbx0_focus_center",
-    "u_p_tiltshiftbx0_max_blur",
-    "u_p_tiltshiftbx0_tilt_angle",
-  ],
-  "paramValues": "09523a17681f60182cb52a6cb8b8:370",
-  "passes": null,
-  "success": true,
-  "textureUniforms": {},
-  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
-  "videoUniforms": {},
-}
-`;
-
-exports[`golden shaders: every example compiles as it did > volAnimatedRepeat 1`] = `
-{
-  "audioUniforms": {},
-  "echo": null,
-  "errors": null,
-  "fragmentShader": "0a35a66bda2bef00c9960f80563b:10937",
-  "isStateful": false,
-  "liveUniforms": {},
-  "nodeSlugs": "1900a81c5a76320e66e60ff445bf:855",
-  "paramBindings": "1b3a6ce0f14abb172e087b496dbb:1698",
-  "paramUniforms": [
-    "u_p_chromashifx8_angle_deg",
-    "u_p_chromashifx8_contrast",
-    "u_p_chromashifx8_strength",
-    "u_p_grainx9_amount",
-    "u_p_grainx9_scale",
-    "u_p_grainx9_seed",
-    "u_p_marchcamerx2_camAngle",
-    "u_p_marchcamerx2_camDist",
-    "u_p_marchcamerx2_fov",
-    "u_p_marchcamerx2_rotSpeed",
-    "u_p_marchloopgx4_albedo",
-    "u_p_marchloopgx4_bg",
-    "u_p_marchloopgx4_jitter",
-    "u_p_marchloopgx4_maxDist",
-    "u_p_marchloopgx4_passthrough",
-    "u_p_marchloopgx4_stepScale",
-    "u_p_marchloopgx4xmlxswrp3x0_amplitude",
-    "u_p_marchloopgx4xmlxswrp3x0_frequency",
-    "u_p_mulx5_b",
-    "u_p_palx7_amplitude",
-    "u_p_palx7_freq",
-    "u_p_palx7_offset",
-    "u_p_palx7_phase",
-    "u_p_repeatedxspheresx3xsgxcosx0_amp",
-    "u_p_repeatedxspheresx3xsgxcosx0_freq",
-    "u_p_repeatedxspheresx3xsgxmulx0_b",
-    "u_p_repeatedxspheresx3xsgxrepx0_cellX",
-    "u_p_repeatedxspheresx3xsgxrepx0_cellY",
-    "u_p_repeatedxspheresx3xsgxrepx0_cellZ",
-    "u_p_repeatedxspheresx3xsgxsinx0_amp",
-    "u_p_repeatedxspheresx3xsgxsinx0_freq",
-    "u_p_repeatedxspheresx3xsgxsphx0_radius",
-    "u_p_repeatedxspheresx3xsgxtrx0_tx",
-    "u_p_repeatedxspheresx3xsgxtrx0_ty",
-    "u_p_repeatedxspheresx3xsgxtrx0_tz",
-  ],
-  "paramValues": "1b9410b4c7b24418ae32734f6c93:1307",
-  "passes": null,
-  "success": true,
-  "textureUniforms": {},
   "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
   "videoUniforms": {},
 }

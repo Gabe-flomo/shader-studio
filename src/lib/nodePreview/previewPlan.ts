@@ -119,7 +119,7 @@ export const PARAM_LIST_TYPES: ReadonlySet<string> = new Set([
   'triPrismSDF3D', 'cappedConeSDF3D', 'roundedCylinderSDF3D', 'solidAngleSDF3D', 'verticalCapsuleSDF3D',
   'scale3d', 'rotateAxis3D', 'sinWarp3D', 'bend3D', 'limitedRepeat3D', 'polarRepeat3D', 'displace3D', 'sdfOnion',
   'vignette', 'scanlines', 'sobel', 'chromaticAberrationAuto', 'gaussianBlur', 'radialBlur', 'tiltShiftBlur', 'lensBlur',
-  'depthOfField', 'motionBlur', 'chromaShift', 'gravitationalLens', 'floatWarp', 'constant', 'weightedAverage',
+  'depthOfField', 'motionBlur', 'gravitationalLens', 'floatWarp', 'constant', 'weightedAverage',
   'fract', 'rotate2d', 'uvWarp', 'smoothWarp', 'curlWarp', 'swirlWarp', 'displace', 'domainWarp', 'flowField',
   'polarSpace', 'logPolarSpace', 'hyperbolicSpace', 'inversionSpace', 'mobiusSpace', 'swirlSpace', 'kaleidoSpace',
   'sphericalSpace', 'rippleSpace', 'infiniteRepeatSpace', 'shear', 'perspective2d', 'mirroredRepeat2D', 'limitedRepeat2D', 'angularRepeat2D',

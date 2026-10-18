@@ -6,7 +6,7 @@ Play's Finish. One implementation, in three places:
 
 | Where | What | Code |
 | --- | --- | --- |
-| Studio graph | the **Deep Glow (texture)** node (Passes; found as *Deep Glow*, *Bloom*, *Glow*) | `src/nodes/definitions/deepGlow.ts`; hidden passes in `src/compiler/blurPasses.ts` (`planDeepGlow`) and `hiddenBlurs.ts` |
+| Studio graph | **Glow (texture)**, Method **Deep glow** (Passes; found as *Deep Glow*, *Bloom*, *Glow*; a saved Deep Glow (texture) opens as it since 2026-10-17) | `src/nodes/definitions/deepGlow.ts`; hidden passes in `src/compiler/blurPasses.ts` (`planDeepGlow`) and `hiddenBlurs.ts` |
 | Builders' Effects page | the **Deep Glow** card (builds that node) | `src/builders/look/effects.ts`, see [builder-look.md](builder-look.md) |
 | Play → Finish | the **Deep Glow** effect (Film) | `src/play/kit/finish.js` (`deepglow`, `deepGlowPass`), see [finish-stack.md](finish-stack.md) |
 

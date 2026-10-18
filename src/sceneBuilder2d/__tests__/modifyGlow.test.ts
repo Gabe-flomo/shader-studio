@@ -9,7 +9,8 @@ import { buildScene2D, buildStandalone2D } from '../build';
 import { parseRecipe2D, printRecipe2D } from '../recipe';
 import { canonicalScene, starterScene, type Scene2D } from '../spec';
 import { MODS, checkCustom, newMod } from '../modify';
-import { GLOW_TYPES, GlowLayerNode } from '../../nodes/definitions/combiners';
+import { GLOW_TYPES } from '../../nodes/definitions/combiners';
+import { LightNode } from '../../nodes/definitions/effects';
 import { TEMPLATES_2D, templateScene } from '../templates';
 import type { GraphNode } from '../../types/nodeGraph';
 import { nodeMuted } from '../../builders/mute';
@@ -30,7 +31,7 @@ describe('Modify', () => {
       const n = byRole(s).get('s1:mod:x1')!;
       expect(n.type).toBe('exprNode');
       // The layer is drawn with the modified distance.
-      expect(byRole(s).get('s1:glow')!.inputs.d.connection?.nodeId).toBe(n.id);
+      expect(byRole(s).get('s1:glow')!.inputs.distance.connection?.nodeId).toBe(n.id);
       // Another value of each number: the same shader (sliders are uniforms).
       const b = structuredClone(s);
       const m = b.layers[0].mods![0];
@@ -71,23 +72,23 @@ describe('Modify', () => {
 
 describe('glow types', () => {
   for (const type of GLOW_TYPES) {
-    it(`${type}: the builder and the Glow Layer node compile it, amount and falloff live`, () => {
+    it(`${type}: the builder and SDF Glow compile it, amount and falloff live`, () => {
       const s = starterScene();
       s.look.glow.type = type;
       const a = shader(s);
       const b = structuredClone(s);
       b.look.glow.amount = 0.03; b.look.glow.falloff = 2.2;
       expect(shader(b)).toBe(a);
-      // Filled layers' halo goes through the Glow Layer node with the same type.
+      // Filled layers' halo goes through SDF Glow in the mode of the same name.
       const f = structuredClone(s);
       f.layers[0].style = 'filled';
       const n = byRole(f).get('s1:glow')!;
-      expect(n.type).toBe('glowLayer');
-      expect(n.params.mode ?? 'halo').toBe(type);
+      expect(n.type).toBe('light');
+      expect(n.params.mode).toBe(type);
       shader(f);
       // The node on its own.
-      const node: GraphNode = { id: 'g', type: 'glowLayer', position: { x: 0, y: 0 }, inputs: {}, outputs: {}, params: { mode: type } };
-      expect(GlowLayerNode.generateGLSL(node, { d: 'dd', intensity: 'ii', power: 'pp' }).code).toContain('dd');
+      const node: GraphNode = { id: 'g', type: 'light', position: { x: 0, y: 0 }, inputs: {}, outputs: {}, params: { mode: type } };
+      expect(LightNode.generateGLSL(node, { distance: 'dd', reach: 'ii', power: 'pp' }).code).toContain('dd');
     });
   }
 
@@ -100,16 +101,16 @@ describe('glow types', () => {
     shader(r.scene);
   });
 
-  it('the Halo node code is unchanged for graphs without a type', () => {
-    const node: GraphNode = { id: 'g', type: 'glowLayer', position: { x: 0, y: 0 }, inputs: {}, outputs: {}, params: {} };
-    expect(GlowLayerNode.generateGLSL(node, { d: 'dd', intensity: 'ii', power: 'pp' }).code).toContain('pow(ii / max(abs(dd), 0.0001), pp)');
+  it('SDF Glow\'s Halo mode is the old Glow Layer code', () => {
+    const node: GraphNode = { id: 'g', type: 'light', position: { x: 0, y: 0 }, inputs: {}, outputs: {}, params: { mode: 'halo' } };
+    expect(LightNode.generateGLSL(node, { distance: 'dd', reach: 'ii', power: 'pp' }).code).toContain('pow(ii / max(abs(dd), 0.0001), pp)');
   });
 
   it('old scenes (no types, no modify) build as before', () => {
     for (const t of TEMPLATES_2D) {
       const s = templateScene(t.key);
       for (const it of s.layers) it.style = 'filled';
-      expect(buildScene2D(s).nodes.filter(n => n.type === 'glowLayer').every(n => (n.params.mode ?? 'halo') === 'halo')).toBe(true);
+      expect(buildScene2D(s).nodes.filter(n => n.type === 'light' && String(n.id).endsWith(':glow')).every(n => n.params.mode === 'halo')).toBe(true);
     }
   });
 });

@@ -271,6 +271,9 @@ function spaceNode(b: B, op: SpaceOp, pos: Ref): Ref {
       const speed = n1('speed', 0);
       return ref(mk(c, 'domainWarp', op.id, { strength: n1('amount', 0.3), scale: n1('scale', 1.5), time_scale: speed }, { uv: pos, time: speed ? b.getTime() : null }, note(speed ? ' Time is wired so the noise drifts.' : '')), 'uv');
     }
+    case 'swirl':
+      // UV Warp, Kind Swirl: the twist round the centre (no spin; the old Swirl / Vortex).
+      return ref(mk(c, 'uvWarp', op.id, { kind: 'swirl', strength: n1('amount', 2), falloff: n1('falloff', 1), cx: 0, cy: 0, speed: 0 }, { input: pos }, note()), 'output');
     case 'fisheye':
       return ref(mk(c, 'sphericalSpace', op.id, { strength: n1('amount', 0.5), mode: 'fisheye' }, { input: pos }, note()), 'output');
     default: {
@@ -715,11 +718,11 @@ export function buildScene2D(spec: Scene2D, idFor: (role: string) => string = ro
         if (crisp) gateNode(g, L.mute?.glow, { from: 'crisp' });
         acc = ref(g, 'result');
       } else {
-        // Glow Layer (its Soft type is this formula) added over what is behind.
+        // SDF Glow in Soft mode (this formula) added over what is behind.
         const gt = gtype('soft');
-        const g = mk(c, 'glowLayer', `${it.id}:glow`, { intensity: L.glow.amount, power: L.glow.falloff, mode: gt }, { d, color: fill },
-          `The glow of ${name} (Style: Glow, type ${GLOW_TYPE_LABELS[gt].label}): ${GLOW_TYPE_LABELS[gt].blurb} With Soft (the default) it is the shape's own colour inside and at the edge, fading out from there, so the shape and its glow read as one. Intensity is how far it reaches, Power how fast it fades; both live.`);
-        acc = ref(mk(c, 'addColor', `${it.id}:addglow`, {}, { a: acc, b: ref(g, 'result') }, `Adds ${name}'s glow to what is behind it. No flat fill is painted over it. Light adds up, so it can go past 1; Tone Map brings it back.`), 'result');
+        const g = mk(c, 'light', `${it.id}:glow`, { mode: gt, reach: L.glow.amount, power: L.glow.falloff, perDistance: false }, { distance: d, tint: fill },
+          `The glow of ${name} (Style: Glow, type ${GLOW_TYPE_LABELS[gt].label}): ${GLOW_TYPE_LABELS[gt].blurb} With Soft (the default) it is the shape's own colour inside and at the edge, fading out from there, so the shape and its glow read as one. Reach is how far it reaches, Power how fast it fades; both live.`);
+        acc = ref(mk(c, 'addColor', `${it.id}:addglow`, {}, { a: acc, b: ref(g, 'tinted') }, `Adds ${name}'s glow to what is behind it. No flat fill is painted over it. Light adds up, so it can go past 1; Tone Map brings it back.`), 'result');
       }
     } else if (style === 'glow') {
       // Glow style on a layer that doesn't glow (Look → Glow off, or not marked): the crisp shape.
@@ -728,9 +731,9 @@ export function buildScene2D(spec: Scene2D, idFor: (role: string) => string = ro
     } else if (glows) {
       const glowFrom = acc;
       const ht = gtype('halo');
-      const g = mk(c, 'glowLayer', `${it.id}:glow`, { intensity: L.glow.amount, power: L.glow.falloff, ...(ht !== 'halo' ? { mode: ht } : {}) }, { d, color: glowTint ?? fill },
-        `The glow of ${name}: its colour × (${fmt(L.glow.amount)} ÷ distance) ^ ${fmt(L.glow.falloff)}. A bigger Intensity reaches further; a bigger Power makes it fall off faster. It is added to what is behind, then the shape is painted over it.`);
-      acc = ref(mk(c, 'addColor', `${it.id}:addglow`, {}, { a: acc, b: ref(g, 'result') }, `Adds ${name}'s glow to what is behind it. Light adds up, so it can go past 1; Tone Map brings it back.`), 'result');
+      const g = mk(c, 'light', `${it.id}:glow`, { mode: ht, reach: L.glow.amount, power: L.glow.falloff, perDistance: false }, { distance: d, tint: glowTint ?? fill },
+        `The glow of ${name}: its colour × (${fmt(L.glow.amount)} ÷ distance) ^ ${fmt(L.glow.falloff)}. A bigger Reach reaches further; a bigger Power makes it fall off faster. It is added to what is behind, then the shape is painted over it.`);
+      acc = ref(mk(c, 'addColor', `${it.id}:addglow`, {}, { a: acc, b: ref(g, 'tinted') }, `Adds ${name}'s glow to what is behind it. Light adds up, so it can go past 1; Tone Map brings it back.`), 'result');
       gateChain(c.nodes, glowFrom, acc, L.mute?.glow);
     }
     if (style === 'filled') {
@@ -776,7 +779,15 @@ export function buildScene2D(spec: Scene2D, idFor: (role: string) => string = ro
   final = emitGrades(c, L.grade, final, { swatches });
   final = emitEffects(c, spec.effects, final, { screen, getTime: b.getTime, texture: (name, what) => texFor(b, name, what)?.out ?? null });
   const P = L.post;
-  if (P.bloom > 0) final = effect('bloom', mk(c, 'bloom', 'bloom', { intensity: P.bloom, threshold: 0.35 }, { color: final, uv: screen }, `Bloom: bright areas bleed light into their surroundings. Intensity ${fmt(P.bloom)}.`), 'result');
+  if (P.bloom > 0) {
+    // The Look's bloom (an older setting): a Pass of the picture and a Glow (texture) Bloom chain, in the same frame.
+    const pass = mk(c, 'pass', 'bloom:pass', { scale: '1', format: 'half' }, { color: final }, 'Pass: the picture so far as a texture, so the bloom can read round each pixel (half float keeps brightness above 1).');
+    const glow = mk(c, 'glowTexture', 'bloom:glow', { method: 'bloom', threshold: 0.35, knee: 0.2, radius: 20, intensity: P.bloom, tail: 0.4 }, { texture: ref(pass, 'texture') },
+      `Bloom: the parts brighter than 0.35 spread a soft glow (a Bloom chain, same frame). Intensity ${fmt(P.bloom)}.`);
+    const add = mk(c, 'addColor', 'bloom', {}, { a: final, b: ref(glow, 'glow') }, 'Adds the bloom over the picture: light adds up, so it can pass 1.');
+    gateNode(add, M.bloom, { from: 'a' });
+    final = ref(add, 'result');
+  }
   if (P.vignette > 0) final = effect('vignette', mk(c, 'vignette', 'vignette', { strength: P.vignette }, { color: final, uv: screen }, `Vignette: darkens the corners. Strength ${fmt(P.vignette)}.`), 'result');
   if (P.scanlines > 0) final = effect('scanlines', mk(c, 'scanlines', 'scanlines', { intensity: P.scanlines }, { color: final, uv: screen }, `Scanlines: thin dark lines across the picture. Intensity ${fmt(P.scanlines)}.`), 'result');
   if (P.grain > 0) final = effect('grain', mk(c, 'grain', 'grain', { amount: P.grain }, { color: final, uv: screen }, `Film grain: a little noise over everything. Amount ${fmt(P.grain)}.`), 'color');
@@ -937,9 +948,9 @@ function emitGrid(b: B, g: GridSpec, pos: Ref, screen: Ref, behind: Ref, anim: R
   }
   let acc = behind;
   if (L.glow.mode === 'all' || (g.glow && L.glow.mode !== 'off')) {
-    const gl = mk(c, 'glowLayer', 'grid:glow', { intensity: L.glow.amount, power: L.glow.falloff }, { d, color: fill },
+    const gl = mk(c, 'light', 'grid:glow', { mode: 'halo', reach: L.glow.amount, power: L.glow.falloff, perDistance: false }, { distance: d, tint: fill },
       `The grid's glow: its colour × (${fmt(L.glow.amount)} ÷ distance) ^ ${fmt(L.glow.falloff)}, added to what is behind.`);
-    acc = ref(mk(c, 'addColor', 'grid:addglow', {}, { a: acc, b: ref(gl, 'result') }, 'Adds the grid\'s glow to what is behind it.'), 'result');
+    acc = ref(mk(c, 'addColor', 'grid:addglow', {}, { a: acc, b: ref(gl, 'tinted') }, 'Adds the grid\'s glow to what is behind it.'), 'result');
   }
   return ref(mk(c, 'sdfFill', 'grid:fill', {}, { d, fillColor: fill, background: acc }, 'Paints the grid\'s shapes over what is behind them.'), 'result');
 }

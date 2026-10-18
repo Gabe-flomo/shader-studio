@@ -113,7 +113,9 @@ describe('Bloom and Scanlines leave the finish options', () => {
     expect(p.errors).toEqual([]);
     expect(p.scene.look.post).toMatchObject({ bloom: 0.5, scanlines: 0.3 });
     const { nodes } = compiles(p.scene);
-    expect(types(nodes)).toEqual(expect.arrayContaining(['bloom', 'scanlines']));
+    // The old Bloom setting builds a same-frame Glow (texture) on a Pass now.
+    expect(types(nodes)).toEqual(expect.arrayContaining(['glowTexture', 'pass', 'scanlines']));
+    expect(types(nodes)).not.toContain('bloom');
     expect(printRecipe2D(p.scene)).toContain('bloom 0.5');
   });
   it('Surprise me never sets them', () => {
