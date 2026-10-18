@@ -193,7 +193,7 @@ export function Library({ size = 'rail', filter: initialFilter, onOpened, footer
   const full = size === 'full';
   const pad = full ? '0' : '0';
   return (
-    <div data-library={size} style={{ display: 'flex', flexDirection: 'column', gap: 6, minHeight: 0, padding: pad, font: `12.5px ${fontFamily.ui}`, color: tk.text.primary }}>
+    <div data-library={size} style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0, padding: pad, font: `12.5px ${fontFamily.ui}`, color: tk.text.primary }}>
       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
         <Field aria-label="Search the Library" placeholder="Search the Library…" value={query} onChange={e => setQuery(e.target.value)} height={size === 'popover' ? 30 : undefined}
           leading={<Icon name="search" size={15} style={{ color: tk.text.faint }} />} style={{ flex: 1, minWidth: 0 }} />
@@ -362,7 +362,7 @@ function PresetsList({ items, searching, row, query, actions }: { items: Library
               return (
                 <div key={k.id} data-preset-kind={k.id} style={{ marginBottom: 4 }}>
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, padding: '2px 6px 2px' }}>
-                    <span style={{ font: `600 12px ${fontFamily.ui}`, color: tk.text.secondary }}>{k.label}</span>
+                    <span style={{ font: `600 12px ${fontFamily.ui}`, color: tk.text.secondary, whiteSpace: 'nowrap', flexShrink: 0 }}>{k.label}</span>
                     <span style={{ fontSize: 11, color: tk.text.faint, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{k.appliesTo === k.label ? '' : k.appliesTo}</span>
                   </div>
                   {searching || k.noFolders

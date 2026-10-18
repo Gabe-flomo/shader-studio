@@ -136,6 +136,7 @@ export function RenameField({ value, onChange, onCommit, onCancel }: {
   return (
     <Field
       autoFocus
+      onFocus={e => e.currentTarget.select()}
       value={value}
       height={30}
       onChange={e => onChange(e.target.value)}
