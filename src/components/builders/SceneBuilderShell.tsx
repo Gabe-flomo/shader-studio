@@ -4,9 +4,10 @@
  *
  *  - "What kind of scene?": 2D scene, Agent scene, Grid scene, Grid simulation, 3D scene, Splat scene, each with a picture and a
  *    line. With nodes in the graph it asks first: Clear and start over (everything but the Output
- *    goes, as an undo step of its own) or Keep my graph, the default unless the graph is still the
- *    untouched starter.
+ *    goes) or Keep my graph, the default unless the graph is still the untouched starter.
  *    Picking a kind turns the window into that kind's builder (builders/open.ts startSceneKind).
+ *    Nothing reaches the graph until that builder's Done (builders/sceneDraft.ts): back here, or
+ *    closing, leaves the graph as it was.
  *  - On a graph a builder made: that scene, reopened as it was built (Edit this one, the default),
  *    Start over (it goes, then the kinds) or Add another (the kinds, keeping the graph). With
  *    several, pick which; a selected one is picked first.
@@ -22,14 +23,14 @@ import { StudioShell } from './studio/StudioShell';
 import { useNarrowWindow } from '../code/SidePanels';
 import { usePhoneDialog } from '../ui/phoneDialog';
 import { ScenePicture } from './scenePictures';
-import { SCENE_KINDS, abandonedSceneKind, builtScenes, clearForScene, discardAbandonedScene, graphWithoutAbandoned, defaultClearChoice, removeBuiltScene, sceneKindInfo, selectedBuiltScene, type BuiltScene, type SceneKind, type SceneKindInfo } from '../../builders/sceneKinds';
+import { SCENE_KINDS, builtScenes, clearForScene, defaultClearChoice, removeBuiltScene, sceneKindInfo, selectedBuiltScene, type BuiltScene, type SceneKind, type SceneKindInfo } from '../../builders/sceneKinds';
 import { editBuiltScene, startSceneKind } from '../../builders/open';
 import { clearableCount } from '../../agentBuilder/actions';
-import { finishBuilder } from '../../builders/finish';
 import { closeSceneShell, openSceneShell, type SceneShellPage } from '../../builders/windows';
+import { markSceneDraftRestart } from '../../builders/sceneDraft';
 
-/** Close (or Done): the shared builder finish (builders/finish.ts). Nothing is made on these pages, so there is nothing to frame. */
-const closeShell = () => finishBuilder(closeSceneShell);
+/** Close: nothing was made on these pages, so the session ends with the graph as it was (builders/sceneDraft.ts). */
+const closeShell = () => closeSceneShell();
 
 export function SceneBuilderShell({ page }: { page: SceneShellPage }) {
   return page.page === 'existing' ? <ExistingScenes /> : <KindPage note={page.note} keep={page.keep} />;
@@ -39,18 +40,15 @@ export function SceneBuilderShell({ page }: { page: SceneShellPage }) {
 
 function KindPage({ note, keep }: { note?: string; keep?: boolean }) {
   const tk = useTokens();
-  // Back from a new scene: picking a kind drops it first (sceneKinds.ts discardAbandonedScene), so the choice below is about the graph without it.
-  const [left] = useState(abandonedSceneKind);
-  const clearable = useNodeGraphStore(s => clearableCount(graphWithoutAbandoned(s.nodes)));
+  const clearable = useNodeGraphStore(s => clearableCount(s.nodes));
   // Keep by default; only the untouched starter is cleared without asking (sceneKinds.ts defaultClearChoice).
-  const fallback = useNodeGraphStore(s => defaultClearChoice(graphWithoutAbandoned(s.nodes), !!keep));
+  const fallback = useNodeGraphStore(s => defaultClearChoice(s.nodes, !!keep));
   const [choice, setChoice] = useState<'clear' | 'keep' | null>(null);
   // Three across (two rows of three), two on a narrow window, one on a phone.
   const phone = usePhoneDialog();
   const narrow = useNarrowWindow();
   const clearFirst = choice ?? fallback;
   const pick = (k: SceneKind) => {
-    discardAbandonedScene();
     if (clearFirst === 'clear' && clearableCount(useNodeGraphStore.getState().nodes) > 0) clearForScene();
     startSceneKind(k, { fromShell: true });
   };
@@ -59,24 +57,19 @@ function KindPage({ note, keep }: { note?: string; keep?: boolean }) {
       <div data-scene-kinds style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'safe center', padding: phone ? '20px 16px 32px' : '40px 24px 64px', gap: phone ? 16 : 22 }}>
         <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, textAlign: 'center' }}>
           <b style={{ fontSize: 20, fontWeight: 650, letterSpacing: '-0.01em' }}>What kind of scene?</b>
-          <span style={{ fontSize: 12.5, color: tk.text.muted }}>Pick one: the window becomes its builder. “Scene builder” at the top brings you back here.</span>
+          <span style={{ fontSize: 12.5, color: tk.text.muted }}>Pick one: the window becomes its builder. Nothing goes in the graph until you press Done; “Scene builder” at the top brings you back here.</span>
           {note && <span data-scene-note style={{ fontSize: 12, color: tk.text.secondary }}>{note}</span>}
-          {left && (
-            <span data-scene-replaces={left} style={{ fontSize: 12, color: tk.text.secondary }}>
-              Picking a kind replaces the {sceneKindInfo(left).title} you just made (undo brings it back). Close to keep it.
-            </span>
-          )}
         </span>
         {clearable > 0 && (
           <span data-scene-clear={clearFirst} style={{ display: 'inline-flex', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center', gap: 10, fontSize: 12.5, color: tk.text.muted }}
-            title="Clear: everything but the Output goes first, as an undo step of its own (undo brings it all back). Keep: the new scene is added beside what is there.">
+            title="Clear: everything but the Output goes when you press Done (one undo step with the new scene brings it all back). Keep: the new scene is added beside what is there.">
             Your graph has {clearable} {clearable === 1 ? 'node' : 'nodes'}:
             <Segmented ariaLabel="Clear the current graph first?" value={clearFirst} onChange={setChoice}
               options={[{ value: 'clear' as const, label: 'Clear and start over' }, { value: 'keep' as const, label: 'Keep my graph' }]} />
           </span>
         )}
         {clearFirst === 'clear' && clearable > 0 && (
-          <span data-scene-clear-note style={{ fontSize: 12, color: tk.status.warningText, marginTop: -10 }}>Picking a kind clears the graph first (all but the Output). Undo brings it back.</span>
+          <span data-scene-clear-note style={{ fontSize: 12, color: tk.status.warningText, marginTop: -10 }}>The new scene replaces everything but the Output when you press Done. Undo brings it back.</span>
         )}
         <div style={{ display: 'grid', gridTemplateColumns: `repeat(${phone ? 1 : narrow ? 2 : 3}, minmax(0, 1fr))`, gap: 14, width: '100%', maxWidth: narrow ? 640 : 940 }}>
           {SCENE_KINDS.map(k => <KindCard key={k.id} info={k} onPick={() => pick(k.id)} />)}
@@ -129,7 +122,10 @@ function ExistingScenes() {
   const many = scenes.length > 1;
   const name = (b: BuiltScene) => (b.label === sceneKindInfo(b.kind).title ? b.label : `${b.label} (${sceneKindInfo(b.kind).title})`);
   const startOver = () => {
-    if (removeBuiltScene(sel)) openSceneShell({ page: 'kinds', note: `Started over: ${name(sel)} is gone (undo brings it back).` });
+    if (!removeBuiltScene(sel)) return;
+    // Back from the next kind comes here again, without it; closing without Done keeps it after all.
+    markSceneDraftRestart();
+    openSceneShell({ page: 'kinds', note: `Started over: ${name(sel)} goes when you press Done on the new scene (closing keeps it).` });
   };
   return (
     <StudioShell prefsKey="scene-shell" icon="presets" title="Scene builder" kind={many ? `${scenes.length} scenes a builder made` : `A ${sceneKindInfo(sel.kind).title} a builder made`} onClose={closeShell}>
@@ -162,7 +158,7 @@ function ExistingScenes() {
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 10 }}>
           <Button variant="primary" icon="edit" onClick={() => editBuiltScene(sel)} data-existing-edit autoFocus>{many ? `Edit ${sel.label}` : 'Edit this one'}</Button>
-          <Button icon="rebuild" onClick={startOver} data-existing-over title={`Take ${sel.label} away, then pick a kind (undo brings it back)`}>Start over</Button>
+          <Button icon="rebuild" onClick={startOver} data-existing-over title={`Take ${sel.label} away, then pick a kind (it only goes when you press Done on the new one)`}>Start over</Button>
           <Button icon="plus" onClick={() => openSceneShell({ page: 'kinds', keep: true })} data-existing-add title="Keep what is here and add a new scene beside it">Add another</Button>
         </div>
       </div>

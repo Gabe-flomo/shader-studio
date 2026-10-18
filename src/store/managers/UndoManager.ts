@@ -33,6 +33,9 @@ export interface UndoEntry extends UndoMeta {
 /** Where the history begins: a loaded example or file, or the first change kept. */
 export interface UndoOrigin { label: string; at: number }
 
+/** Both stacks at one moment (UndoManager.snapshot). The entries are shared, not copied: a step is never changed once it is off the top. */
+export interface UndoSnapshot { history: UndoEntry[]; redo: UndoEntry[]; trimmed: boolean; origin: UndoOrigin | null }
+
 let nextEntryId = 1;
 
 /** Undo/redo history stacks, kept outside Zustand state so pushing snapshots never triggers a re-render. */
@@ -137,6 +140,20 @@ export class UndoManager {
       stack.shift();
       if (stack === this.history) this.trimmed = true;
     }
+  }
+
+  /** Both stacks as they are now, to put back later with restore (a Scene builder session closed without Done). */
+  snapshot(): UndoSnapshot {
+    return { history: [...this.history], redo: [...this.redoStack], trimmed: this.trimmed, origin: this.origin };
+  }
+
+  /** Put both stacks back as a snapshot had them: every step made since is gone, and the redo stack is back. */
+  restore(s: UndoSnapshot): void {
+    this.history = [...s.history];
+    this.redoStack = [...s.redo];
+    this.trimmed = s.trimmed;
+    this.origin = s.origin;
+    this.changed();
   }
 
   /** Forget everything. `origin` names what the history now starts from ("Loaded example: Neon Glow"). */

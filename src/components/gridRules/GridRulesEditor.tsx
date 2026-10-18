@@ -222,7 +222,7 @@ function GridRulesBuilder({ node, onClose }: { node: GraphNode; onClose: () => v
         <IconButton icon="dice" size="sm" label="Surprise me: a random rule that stays alive (one undo step)" onClick={() => surprise(newSeed())} data-surprise-top />
         <IconButton icon="fn" size="sm" disabled={!!problem} label={problem ?? 'Open as nodes: the same simulation from ordinary nodes, every node with a note'} onClick={() => { if (openAsNodes(node.id)) onClose(); }} data-open-as-nodes />
       </>}
-      primary={{ label: 'Done', onClick: () => finishBuilder(onClose, [node.id]), title: 'Close the builder and show the Grid Rules node (every change is already in the graph)' }}
+      primary={{ label: 'Done', onClick: () => finishBuilder(onClose, [node.id]), title: 'Keep your changes, close the builder and show the Grid Rules node' }}
       nav={nav} phoneNav={{ label: 'Rule type', icon: 'grid' }} phoneSettingsTitle={hood ? 'Under the hood' : undefined} inspector={inspector} inspectorWidth={432} navWidth={232} presets={presetStrip}
       presetsSummary={<PresetsSummary kind="gridRules" builtIns={Object.values(offered).map(p => p.label)} />}>
       <TryBoard params={params} nodeParams={node.params} focus={{ section, ...focus }} hood={hood} onUseAsStart={useAsStart} />

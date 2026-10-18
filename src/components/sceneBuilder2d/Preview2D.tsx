@@ -74,7 +74,7 @@ export function Preview2D({ scene, compiled: given, height = 260 }: {
         )}
         <PreviewClock size="sm" paused={paused} onPause={() => setPaused(p => !p)} style={{ position: 'absolute', right: 6, bottom: 6 }} />
       </div>
-      <span style={{ fontSize: 11.5, color: tk.text.muted }}>{error ? 'The preview could not draw this scene.' : `Live: the graph Build makes (${compiled.nodes} nodes), compiled in ${Math.round(compiled.ms)} ms`}</span>
+      <span style={{ fontSize: 11.5, color: tk.text.muted }}>{error ? 'The preview could not draw this scene.' : `Live: the graph Done adds (${compiled.nodes} nodes), compiled in ${Math.round(compiled.ms)} ms`}</span>
     </div>
   );
 }

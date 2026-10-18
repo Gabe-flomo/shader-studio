@@ -20,6 +20,7 @@ import { useNodeGraphStore, SAVED_GRAPHS_CHANGED, GRAPH_OPENED, type GraphOpened
 import { getNodeDefinition } from '../nodes/definitions';
 import { loadExampleGraphs } from '../store/exampleIndex';
 import { ACTIVITY_CHANGED } from '../files/activity';
+import { sceneDraftActive } from '../builders/sceneDraftFlag';
 
 export interface ExplorerStatus {
   phase: 'idle' | 'starting' | 'ready' | 'error';
@@ -176,7 +177,8 @@ function listen(): void {
   window.addEventListener(GRAPH_OPENED, e => { lastOpened = (e as CustomEvent<GraphOpened>).detail; soon(); });
   // Edits to the open graph: its nodes change.
   let nodes = useNodeGraphStore.getState().nodes;
-  useNodeGraphStore.subscribe(s => { if (s.nodes !== nodes) { nodes = s.nodes; scheduleUserSync(2000); } });
+  // Not a Scene builder's draft (builders/sceneDraft.ts): only what Done keeps.
+  useNodeGraphStore.subscribe(s => { if (s.nodes !== nodes && !sceneDraftActive()) { nodes = s.nodes; scheduleUserSync(2000); } });
 }
 
 /** Start the index (once): load it, then bring the user's code, the examples and linked folders up to date. */

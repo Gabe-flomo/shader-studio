@@ -37,7 +37,7 @@ export function SceneCrumb({ kind, leaf, onBack = backToSceneKinds }: { kind: Sc
   }
   return (
     <span data-scene-crumb={kind} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 0, maxWidth: '100%' }}>
-      <button type="button" data-scene-crumb-back onClick={onBack} title="Back to “What kind of scene?” (what you built stays in the graph)"
+      <button type="button" data-scene-crumb-back onClick={onBack} title="Back to “What kind of scene?” (this scene is dropped: nothing goes in the graph without Done)"
         style={{
           border: 0, background: 'none', padding: '1px 4px', margin: '0 -4px', borderRadius: radius.sm, cursor: 'pointer', flexShrink: 0,
           font: 'inherit', fontWeight: 550, color: hover ? tk.accent.text : tk.text.muted, textDecoration: 'underline', textDecorationColor: tk.border.default, textUnderlineOffset: 3,

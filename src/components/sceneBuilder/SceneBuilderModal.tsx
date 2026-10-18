@@ -189,13 +189,13 @@ export function SceneBuilderModal() {
         <IconButton icon="search" size="sm" data-describe label="Describe the 3D graph on the canvas" onClick={() => { setHood(false); describeIntoBuilder(); }} />
         <IconButton icon="dice" size="sm" data-surprise-top label="Surprise me: a whole random scene (one undo step)" onClick={() => void surpriseSceneAction(newSeed())} />
         <IconButton icon="fn" size="sm" data-open-as-nodes disabled={!shapes} label="Open as nodes: build it and open its Scene Group (every node with a note)" onClick={() => void openAsNodesAction()} />
-        <IconButton icon="more" size="sm" data-build-menu label="More: build now, or build a new copy" onClick={e => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setMore({ x: Math.max(8, r.right - 260), y: r.bottom + 4 }); }} />
+        <IconButton icon="more" size="sm" data-build-menu label="More: apply now, or build a new copy" onClick={e => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setMore({ x: Math.max(8, r.right - 260), y: r.bottom + 4 }); }} />
         {more && <Menu x={more.x} y={more.y} onClose={() => setMore(null)} items={[
-          { label: editing ? 'Rebuild now' : 'Build now', icon: 'rebuild', hint: editing ? 'Replaces the scene it was built as, keeping settings you changed on its nodes; the builder stays open' : 'Adds the graph to the canvas and shows it on the Output; the builder stays open', disabled: !shapes, onSelect: () => void buildFromBuilder(false) },
+          { label: 'Apply now', icon: 'rebuild', hint: 'Apply your edits to the scene (settings you changed on its nodes are kept); the builder stays open. It goes in the graph when you press Done.', disabled: !shapes, onSelect: () => void buildFromBuilder(false) },
           ...(editing ? [{ label: 'Build as a new copy', icon: 'copy' as IconName, hint: 'Leave the built scene as it is and build this one beside it', onSelect: () => void buildFromBuilder(true) }] : []),
         ]} />}
       </>}
-      primary={{ label: 'Done', onClick: () => void doneAction(), title: editing ? 'Done: rebuild the scene with your edits, then close and show it on the graph' : 'Done: build the scene into the graph, then close and show it' }}
+      primary={{ label: 'Done', onClick: () => void doneAction(), title: editing ? 'Done: put your edits in the graph (one undo step), then close and show the scene' : 'Done: put the scene in the graph (one undo step), then close and show it' }}
       nav={nav} phoneSettingsTitle={hood ? 'Under the hood' : undefined} inspector={inspector} inspectorWidth={hood ? 480 : 400} navWidth={236} presets={<PresetsStrip />}
       presetsSummary={<PresetsSummary kind="3d" builtIns={STRIP_TEMPLATE_KEYS.map(k => SCENE_TEMPLATES.find(t => t.key === k)?.label ?? k)} />}>
       <SceneViewport onPicked={() => { if (!SHAPE_SECTIONS.includes(section)) pick('shapes'); }} />

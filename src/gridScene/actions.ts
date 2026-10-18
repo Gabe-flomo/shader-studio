@@ -15,6 +15,7 @@ import { toast } from '../components/ui/toastStore';
 import { n } from '../store/graphBuilder';
 import { COUNT_PRESETS, LOOKS, STAGES_PRESETS, presetPatch } from '../gridRules/spec';
 import { doneBuilding, type BuildingBuilder } from '../builders/finish';
+import { beginSceneDraft } from '../builders/sceneDraft';
 import { clearDraft, hasUnbuiltEdits, reopenDraft } from '../builders/drafts';
 import { closeGridRulesEditor, openGridRulesEditor } from '../builders/windows';
 import { useGridBuilder } from './store';
@@ -27,6 +28,8 @@ export const FROM_GRID_KEY = '_gridSceneFrom';
 
 /** Open the builder on a new scene (Build or Done adds it). */
 export function openNewGridScene(at?: { x: number; y: number }): void {
+  // A Scene builder session (builders/sceneDraft.ts): Apply builds into a draft, Done puts it in the graph.
+  beginSceneDraft();
   const fresh = () => useGridBuilder.getState().openWith(starterGridScene(), { at: at ?? null });
   // A new grid left unbuilt last time comes back (builders/drafts.ts).
   if (reopenDraft({ kind: 'grid', store: useGridBuilder, target: null, original: starterGridScene(), label: 'grid scene', startFresh: fresh,
@@ -40,6 +43,7 @@ export function editGridSceneInBuilder(nodeId: string): boolean {
   const sceneId = gridSceneOfBuild(nodes, nodeId);
   const found = sceneId ? findGridBuild(nodes, sceneId) : null;
   if (!found) return false;
+  beginSceneDraft();
   const asBuilt = () => useGridBuilder.getState().openWith(found.meta.spec, { targetSceneId: sceneId });
   // Edits to this grid left unbuilt last time come back (builders/drafts.ts).
   if (!reopenDraft({ kind: 'grid', store: useGridBuilder, target: sceneId, original: found.meta.spec, label: 'grid scene', startFresh: asBuilt,

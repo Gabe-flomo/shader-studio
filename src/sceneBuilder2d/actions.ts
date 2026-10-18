@@ -10,6 +10,7 @@ import { applyScene2D, find2dBuild, scene2dOfBuild } from './apply';
 import { allShapes, starterScene } from './spec';
 import { clearDraft, hasUnbuiltEdits, reopenDraft } from '../builders/drafts';
 import type { BuildingBuilder } from '../builders/finish';
+import { beginSceneDraft, sceneDraftOpen } from '../builders/sceneDraft';
 import { attachQuickControls } from './quickPlay';
 import { can } from '../lib/plan';
 import { paletteSwatches } from '../builders/look/palette';
@@ -30,6 +31,8 @@ function lookMoveFor(scene: Scene2D, found: ReturnType<typeof find2dBuild>): Loo
 
 /** Open the builder on a new scene (Build adds it beside what is on the canvas). */
 export function openNewSceneBuilder2D(at?: { x: number; y: number }): void {
+  // A Scene builder session (builders/sceneDraft.ts): Apply builds into a draft, Done puts it in the graph.
+  beginSceneDraft();
   const fresh = () => useSceneBuilder2D.getState().openWith(starterScene(), { at: at ?? null });
   // A new scene left unbuilt last time comes back (builders/drafts.ts).
   if (reopenDraft({ kind: '2d', store: useSceneBuilder2D, target: null, original: starterScene(), label: '2D scene', startFresh: fresh,
@@ -48,6 +51,7 @@ export function editScene2DInBuilder(nodeId: string): boolean {
   const sceneId = scene2dOfBuild(nodes, nodeId);
   const found = sceneId ? find2dBuild(nodes, sceneId) : null;
   if (!found) return false;
+  beginSceneDraft();
   const asBuilt = () => useSceneBuilder2D.getState().openWith(found.meta.spec, { targetSceneId: sceneId });
   // Edits to this scene left unbuilt last time come back (builders/drafts.ts).
   if (!reopenDraft({ kind: '2d', store: useSceneBuilder2D, target: sceneId, original: found.meta.spec, label: '2D scene', startFresh: asBuilt,
@@ -102,6 +106,11 @@ export function buildFromBuilder2D(asNew = false): boolean {
     ...(result.kept.length ? [`Kept ${result.kept.length} setting${result.kept.length === 1 ? '' : 's'} you changed on the nodes.`] : []),
     ...result.warnings,
   ];
+  // In the Scene builder this is Apply (or Done's last step): nothing to announce unless there is something to say.
+  if (sceneDraftOpen()) {
+    if (notes.length) (result.warnings.length ? toast.warning : toast.info)('Applied', { message: notes.join(' ') });
+    return true;
+  }
   (result.warnings.length ? toast.warning : toast.success)(fresh ? '2D scene built' : '2D scene rebuilt', {
     message: notes.length ? notes.join(' ') : 'Every node has a note. Open the 2D Scene Builder from its UV node to change it here again.',
   });

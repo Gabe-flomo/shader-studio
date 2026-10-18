@@ -243,7 +243,7 @@ export function SceneViewport({ onPicked }: { onPicked?: (id: string) => void })
         {warnings.slice(0, 3).map((x, i) => (
           <span key={i} style={{ ...chip, color: '#f9e2af', display: 'flex', gap: 6, alignItems: 'flex-start', maxWidth: 560 }}><Icon name="warning" size={13} style={{ flexShrink: 0, marginTop: 1 }} />{x}</span>
         ))}
-        <span data-viewport-status style={{ ...chip, color: '#9a9aae' }}>{error ? 'The preview could not draw this scene.' : `Live: the graph Build makes · compiled in ${Math.round(compiled.ms)} ms`}</span>
+        <span data-viewport-status style={{ ...chip, color: '#9a9aae' }}>{error ? 'The preview could not draw this scene.' : `Live: the graph Done adds · compiled in ${Math.round(compiled.ms)} ms`}</span>
       </div>
       {error && (
         <div style={{ position: 'absolute', inset: 0, padding: 16, overflow: 'auto', color: '#f38ba8', font: `500 11px ${fontFamily.mono}`, background: 'rgba(13,13,18,0.86)', pointerEvents: 'none' }}>{error}</div>

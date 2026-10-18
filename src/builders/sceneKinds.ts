@@ -17,23 +17,28 @@
  *
  * Opening the Scene builder: a graph a builder made reopens that scene ("Edit this one / Start
  * over / Add another", the Agent Builder's prompt for every kind); any other graph goes to the
- * kind page, which keeps the graph by default (clearing, its own undo step, is the default only for the untouched starter).
+ * kind page, which keeps the graph by default (clearing is the default only for the untouched starter).
+ *
+ * The whole visit is one session (sceneDraft.ts): whatever the kinds build goes into a draft, and only Done puts it in
+ * the graph, as one undo step. Back to the kinds, or closing without Done, leaves the graph as it was.
  */
 import type { GraphNode } from '../types/nodeGraph';
 import { BLANK_GRAPH } from '../store/exampleIndex';
 import type { IconName } from '../components/ui/iconPaths';
-import { undoManager, useNodeGraphStore } from '../store/useNodeGraphStore';
+import { useNodeGraphStore } from '../store/useNodeGraphStore';
 import { metaOf } from '../sceneBuilder/build';
 import { allShapes } from '../sceneBuilder/spec';
 import { findBuild, sceneOfBuild } from '../sceneBuilder/apply';
 import { find2dBuild, meta2dOf, scene2dOfBuild } from '../sceneBuilder2d/apply';
 import { useSceneBuilder } from '../sceneBuilder/store';
 import { useSceneBuilder2D } from '../sceneBuilder2d/store';
-import { agentSetupIds, builderGroups, clearableCount, clearGraphForBuilder, removeSetupNodes, unwired } from '../agentBuilder/actions';
+import { agentSetupIds, builderGroups, clearableCount, clearGraphForBuilder, removeSetupNodes } from '../agentBuilder/actions';
 import { gridShape } from '../gridRules/spec';
 import { findGridBuild, gridMetaOf, gridSceneOfBuild } from '../gridScene/apply';
 import { useGridBuilder } from '../gridScene/store';
-import { closeAgentBuilder, closeGridRulesEditor, openSceneShell, useBuilderWindows } from './windows';
+import { closeAgentBuilder, closeAgentRulesWindow, closeGridRulesEditor, openSceneShell, useBuilderWindows } from './windows';
+import { beginSceneDraft, confirmDiscardScene, discardingWhile, openSceneKind as openKind, resetSceneDraft, sceneDraftChanged } from './sceneDraft';
+import { clearDraft } from './drafts';
 import { findSplatBuild, splatMetaOf, splatSceneOfBuild } from '../splatBuilder/apply';
 import { useSplatBuilder } from '../splatBuilder/store';
 import { closeSplatBuilder } from '../splatBuilder/actions';
@@ -169,18 +174,7 @@ export function builtSceneIds(nodes: readonly GraphNode[], b: Pick<BuiltScene, '
 // ── Store side ───────────────────────────────────────────────────────────────
 
 /** Which kind's builder window is open now (null: none). */
-export function openSceneKind(): SceneKind | null {
-  const w = useBuilderWindows.getState();
-  if (useSceneBuilder2D.getState().open) return '2d';
-  if (useSceneBuilder.getState().open) return '3d';
-  if (useGridBuilder.getState().open) return 'grid';
-  if (useSplatBuilder.getState().open) return 'splat';
-  if (useTimeCubeBuilder.getState().open) return 'timecube';
-  if (useWarpBuilder.getState().open) return 'warp';
-  if (w.agentBuilder) return 'agents';
-  if (w.gridRules) return 'simulation';
-  return null;
-}
+export const openSceneKind = openKind;
 
 /** Close whichever kind's builder window is open (the Scene builder's ‹ back to the kinds). */
 export function closeSceneKinds(): void {
@@ -191,105 +185,37 @@ export function closeSceneKinds(): void {
   if (useTimeCubeBuilder.getState().open) closeTimeCubeBuilder();
   if (useWarpBuilder.getState().open) useWarpBuilder.getState().close();
   if (useBuilderWindows.getState().agentBuilder) closeAgentBuilder();
+  if (useBuilderWindows.getState().agentRules) closeAgentRulesWindow();
   if (useBuilderWindows.getState().gridRules) closeGridRulesEditor();
 }
 
 /**
  * Open the Scene builder (the side list's one entry): a graph (or a selected group) a builder made
- * reopens it (Edit this one / Start over / Add another); any other graph, the kind page.
+ * reopens it (Edit this one / Start over / Add another); any other graph, the kind page. The session
+ * starts here: nothing reaches the graph until Done (sceneDraft.ts).
  */
 export function openSceneBuilderShell(): void {
+  beginSceneDraft();
   const nodes = useNodeGraphStore.getState().nodes;
   closeSceneKinds();
   openSceneShell(builderMade(nodes) ? { page: 'existing' } : { page: 'kinds' });
 }
 
-// ── Switching kind ───────────────────────────────────────────────────────────
-//
-// A kind picked on the kind page starts a NEW scene, and several kinds build into the graph at once (Splat, Time
-// Cube, Grid simulation, an Agent scene's card) or on Build. Back to the kinds and another kind picked means "this
-// one instead": what the abandoned session added goes (an undo step of its own), and the graph as it was before
-// that session (what you had before opening the builder, cleared or kept) is left as it was. Closing the kind page
-// instead keeps it. Editing a scene that was already built (Edit this one) is never a fresh session.
-
-/** The kind started from the kind page whose window is still open, and the graph before it. */
-let fresh: { kind: SceneKind; base: GraphNode[] } | null = null;
-/** Back from a fresh kind: what it made, until a kind is picked (it goes) or the kind page closes (it stays). */
-let abandoned: { kind: SceneKind; base: GraphNode[]; after: GraphNode[] } | null = null;
-let unwatchFresh: (() => void) | null = null;
-let unwatchShell: (() => void) | null = null;
-
-const stopFresh = () => { unwatchFresh?.(); unwatchFresh = null; fresh = null; };
-const forgetAbandoned = () => { unwatchShell?.(); unwatchShell = null; abandoned = null; };
-
-type Subscribable = { subscribe: (fn: () => void) => () => void };
-
 /**
- * startSceneKind (builders/open.ts) opened `kind`'s window on a new scene; `base` is the graph before it. Watched
- * until no kind's window is open any more (Done, ×, another route), so a later back from some other session
- * can't take this one's base for its own.
+ * Back to the kind page from a kind's builder: the scene goes (asking first when you changed something), the graph is
+ * as it was before the Scene builder opened, and another kind starts from there. True when it went back.
  */
-export function trackFreshScene(kind: SceneKind, base: GraphNode[]): void {
-  stopFresh();
-  forgetAbandoned();
-  if (openSceneKind() !== kind) return;
-  fresh = { kind, base };
-  const check = () => { if (fresh && openSceneKind() === null) stopFresh(); };
-  const stores: Subscribable[] = [useSceneBuilder2D, useSceneBuilder, useGridBuilder, useSplatBuilder, useTimeCubeBuilder, useWarpBuilder, useBuilderWindows];
-  const subs = stores.map(s => s.subscribe(check));
-  unwatchFresh = () => { for (const u of subs) u(); };
-}
-
-/** The kind page's graph as it will be once the abandoned scene goes (what its clear/keep choice counts). */
-export function graphWithoutAbandoned(nodes: GraphNode[]): GraphNode[] {
-  return abandoned && nodes === abandoned.after ? abandoned.base : nodes;
-}
-
-/** The kind left by going back from a new scene (null: none, or it was an edit of a built scene). */
-export const abandonedSceneKind = (): SceneKind | null => abandoned?.kind ?? null;
-
-/**
- * A kind was picked after going back: take away what the abandoned session added, an undo step of its own, and
- * put back the nodes it changed (the Output it rewired) as they were. Nodes added or changed since are left alone.
- */
-export function discardAbandonedScene(): boolean {
-  const a = abandoned;
-  forgetAbandoned();
-  if (!a) return false;
-  const st = useNodeGraphStore.getState();
-  if (st.activeGroupPath.length) st.exitToRoot();
-  const now = useNodeGraphStore.getState().nodes;
-  let next: GraphNode[];
-  if (now === a.after) next = a.base;
-  else {
-    const baseById = new Map(a.base.map(n => [n.id, n]));
-    const afterById = new Map(a.after.map(n => [n.id, n]));
-    const added = new Set(a.after.filter(n => !baseById.has(n.id)).map(n => n.id));
-    next = now.filter(n => !added.has(n.id)).map(n => {
-      const was = baseById.get(n.id);
-      return was && afterById.get(n.id) === n ? was : unwired(n, id => added.has(id));
-    });
-  }
-  if (next === now) return false;
-  undoManager.push(now, { label: `Scene builder: dropped the ${sceneKindInfo(a.kind).title}` });
-  useNodeGraphStore.setState({ nodes: next, selectedNodeId: null, selectedNodeIds: [] });
-  useNodeGraphStore.getState().compile();
+export async function backToSceneKinds(): Promise<boolean> {
+  if (sceneDraftChanged() && !(await confirmDiscardScene())) return false;
+  const kind = openKind();
+  const target = kind === '2d' ? useSceneBuilder2D.getState().targetSceneId : kind === '3d' ? useSceneBuilder.getState().targetSceneId : kind === 'grid' ? useGridBuilder.getState().targetSceneId : null;
+  beginSceneDraft();
+  discardingWhile(closeSceneKinds);
+  // An unbuilt draft the window kept as it closed (builders/drafts.ts) is discarded with the rest.
+  if (kind === '2d' || kind === '3d' || kind === 'grid') clearDraft(kind, target);
+  resetSceneDraft();
+  openSceneShell({ page: 'kinds' });
   return true;
-}
-
-/** Back to the kind page from a kind's builder: its window closes (its work stays in the graph until another kind is picked). */
-export function backToSceneKinds(): void {
-  const f = fresh;
-  stopFresh();
-  forgetAbandoned();
-  closeSceneKinds();
-  const now = useNodeGraphStore.getState().nodes;
-  if (f && now !== f.base) abandoned = { kind: f.kind, base: f.base, after: now };
-  // Something built stays by default; a graph no builder made clears by default, as on opening. Back from a new
-  // scene, what is left is what the kind page already kept (or cleared), so it stays too.
-  openSceneShell({ page: 'kinds', keep: !!abandoned || builderMade(now) });
-  // The kind page closing (×, or anything that opens another window) keeps the abandoned scene for good.
-  if (abandoned) unwatchShell = useBuilderWindows.subscribe(s => { if (!s.sceneShell) forgetAbandoned(); });
 }
 
 /** "Clear and start over": everything but the Output, one undo step of its own. Returns the graph as it was. */

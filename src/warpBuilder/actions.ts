@@ -13,6 +13,7 @@ import { useNodeGraphStore } from '../store/useNodeGraphStore';
 import { intoView } from '../components/NodeGraph/spawnPoint';
 import { toast } from '../components/ui/toastStore';
 import { finishBuilder } from '../builders/finish';
+import { beginSceneDraft } from '../builders/sceneDraft';
 import { useSceneBuilder2D } from '../sceneBuilder2d/store';
 import { openNewSceneBuilder2D } from '../sceneBuilder2d/actions';
 import { applyScene2D } from '../sceneBuilder2d/apply';
@@ -22,6 +23,7 @@ import { useWarpBuilder } from './store';
 
 /** The Scene builder's Warp kind: a new warp. */
 export function openNewWarpBuilder(): void {
+  beginSceneDraft();
   useWarpBuilder.getState().openWith(starterWarp(), { kind: 'new' });
 }
 

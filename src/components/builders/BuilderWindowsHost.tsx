@@ -21,8 +21,9 @@ import { useGridBuilder } from '../../gridScene/store';
 import { useSplatBuilder } from '../../splatBuilder/store';
 import { useWarpBuilder } from '../../warpBuilder/store';
 import { useTimeCubeBuilder } from '../../timeCubeBuilder/store';
+import { watchSceneDraft } from '../../builders/sceneDraft';
 
-/** The Agent Builder's Done (and close): back to the graph, framed on the group it is building. */
+/** The Agent Builder's Done (and close: in a Scene builder session × has already dropped the draft, so this only closes). */
 const finishAgentBuilder = () => finishBuilder(closeAgentBuilder, [useBuilderWindows.getState().agentBuilder?.groupId]);
 
 const GridRulesEditor = lazyWithSuspense<PropsOf<typeof GridRulesEditorT>>(() => import('../gridRules/GridRulesEditor').then(m => ({ default: m.GridRulesEditor })));
@@ -54,6 +55,8 @@ export function BuilderWindowsHost() {
   const timeCubeOpen = useTimeCubeBuilder(s => s.open);
   // The builder's preview comes first: the main preview waits while one with its own is open.
   useEffect(() => watchBuilderPreview(), []);
+  // Any Scene builder window that opens works on a draft until its Done (builders/sceneDraft.ts).
+  useEffect(() => watchSceneDraft(), []);
   const builderGroupOk = useNodeGraphStore(s => !builder?.groupId || s.nodes.some(nd => nd.id === builder.groupId && isRulesGroup(nd)));
   const gridThere = useNodeGraphStore(s => !!gridId && s.nodes.some(nd => nd.id === gridId && nd.type === 'gridRules'));
   // The editor keeps its own copy of the rules while open, so it gets the group once, not on every change.

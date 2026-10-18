@@ -29,7 +29,8 @@ import type { BuilderId } from './registry';
 import { closeSceneShell, openAgentBuilder, openGridRulesEditor, showRecipeOf } from './windows';
 import { readStartCells, startCellsFromGrid, type StartCells } from '../gridRules/startCells';
 import { editScene2DInBuilder } from '../sceneBuilder2d/actions';
-import { openSceneBuilderShell, trackFreshScene, type BuiltScene, type SceneKind } from './sceneKinds';
+import { openSceneBuilderShell, type BuiltScene, type SceneKind } from './sceneKinds';
+import { beginSceneDraft } from './sceneDraft';
 import { openAgentRulesEditor } from '../agentRules/storeActions';
 import { editGridSceneInBuilder, openNewGridScene } from '../gridScene/actions';
 import { builderRecipeOf } from './recipe';
@@ -87,8 +88,8 @@ export function newAgents3d(template?: string): string | null {
 /** Open a builder from the Builders section or menu. */
 export function openBuilder(id: BuilderId, at?: { x: number; y: number }): void {
   if (id === 'scenes') openSceneBuilderShell();
-  else if (id === 'scene') openNewSceneBuilder(at);
-  else if (id === 'scene2d') openNewSceneBuilder2D(at);
+  else if (id === 'scene') { beginSceneDraft(); openNewSceneBuilder(at); }
+  else if (id === 'scene2d') { beginSceneDraft(); openNewSceneBuilder2D(at); }
   else if (id === 'grid') newGridRules();
   else if (id === 'agents3d') newAgents3d();
   else if (id === 'expr') openExpressionBuilder({ place: at });
@@ -101,8 +102,9 @@ export function openBuilder(id: BuilderId, at?: { x: number; y: number }): void 
  * Agent Builder the kind page already asked about clearing the graph.
  */
 export function startSceneKind(kind: SceneKind, o: { at?: { x: number; y: number }; fromShell?: boolean } = {}): void {
+  // Part of the Scene builder's session (sceneDraft.ts): nothing it builds is in the graph until Done.
+  beginSceneDraft();
   closeSceneShell();
-  const base = useNodeGraphStore.getState().nodes;
   if (kind === '3d') openNewSceneBuilder(o.at);
   else if (kind === '2d') openNewSceneBuilder2D(o.at);
   else if (kind === 'grid') openNewGridScene(o.at);
@@ -111,12 +113,12 @@ export function startSceneKind(kind: SceneKind, o: { at?: { x: number; y: number
   else if (kind === 'timecube') openNewTimeCube(o.at);
   else if (kind === 'warp') openNewWarpBuilder();
   else openAgentBuilder(null, { fromShell: o.fromShell });
-  // Back to the kinds and another kind picked drops what this one made (sceneKinds.ts discardAbandonedScene).
-  trackFreshScene(kind, base);
 }
 
 /** "Edit this one": a built scene in its own builder, as it was built (its saved spec, its node, its group). */
 export function editBuiltScene(b: Pick<BuiltScene, 'kind' | 'id'>): boolean {
+  // Done rebuilds it in place as one undo step; closing without Done leaves it as it was (sceneDraft.ts).
+  beginSceneDraft();
   closeSceneShell();
   if (b.kind === '3d') return editSceneInBuilder(b.id);
   if (b.kind === '2d') return editScene2DInBuilder(b.id);
@@ -164,11 +166,11 @@ export function runBuilderAction(a: BuilderAction): boolean {
   const st = useNodeGraphStore.getState();
   switch (a.kind) {
     case 'open-scenes': openSceneBuilderShell(); return true;
-    case 'new-grid-scene': openNewGridScene(); return true;
-    case 'new-scene': openNewSceneBuilder(); return true;
-    case 'new-scene2d': openNewSceneBuilder2D(); return true;
+    case 'new-grid-scene': beginSceneDraft(); openNewGridScene(); return true;
+    case 'new-scene': beginSceneDraft(); openNewSceneBuilder(); return true;
+    case 'new-scene2d': beginSceneDraft(); openNewSceneBuilder2D(); return true;
     case 'new-expression': openExpressionBuilder(); return true;
-    case 'edit-scene': return editSceneInBuilder(a.sceneId);
+    case 'edit-scene': beginSceneDraft(); return editSceneInBuilder(a.sceneId);
     case 'new-grid': newGridRules(); return true;
     case 'open-grid': openGridRulesEditor(a.nodeId); return true;
     case 'new-agents': openAgentBuilder(null); return true;

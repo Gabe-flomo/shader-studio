@@ -762,7 +762,7 @@ function Viewport() {
         <PreviewClock paused={paused} onPause={() => setPaused(p => !p)} style={{ position: 'absolute', right: 8, bottom: 8 }} />
       </div>
       <span data-grid-stats style={{ fontSize: 11.5, color: tk.text.muted }}>
-        {error ? 'The preview could not draw this grid.' : `Live: the graph Build makes (${compiled.nodes} nodes, ${placed} drawn cells), compiled in ${Math.round(compiled.ms)} ms. Sliders are uniforms on the built nodes.`}
+        {error ? 'The preview could not draw this grid.' : `Live: the graph Done adds (${compiled.nodes} nodes, ${placed} drawn cells), compiled in ${Math.round(compiled.ms)} ms. Sliders are uniforms on the built nodes.`}
       </span>
     </div>
   );
@@ -875,12 +875,8 @@ export function GridSceneBuilder() {
     return () => window.removeEventListener('keydown', onKey, true);
   }, [undo, redo]);
 
-  // Back to the kinds: what you drew is kept in the graph (built first when you changed it).
-  const back = () => {
-    const gb = useGridBuilder.getState();
-    if (gb.dirty && gb.past.length) buildFromGridBuilder(false, { quiet: true });
-    backToSceneKinds();
-  };
+  // Back to the kinds: this grid is dropped (asking first when you changed it); nothing reaches the graph without Done.
+  const back = () => { void backToSceneKinds(); };
   return (
     <StudioShell prefsKey="grid-builder" icon="grid" title="Grid builder" crumb={<SceneCrumb kind="grid" onBack={back} />}
       kind={`${size} · ${editing ? 'editing a built grid' : 'a new grid'}${dirty ? ' · not built yet' : ''}`}
@@ -902,9 +898,9 @@ export function GridSceneBuilder() {
         <IconButton icon="undo" label="Undo" shortcut="cmd+z" size="sm" disabled={!canUndo} onClick={undo} />
         <IconButton icon="redo" label="Redo" shortcut="cmd+shift+z" size="sm" disabled={!canRedo} onClick={redo} />
         <SimulationButton hasSim={hasSim} />
-        <Button size="sm" icon="rebuild" data-grid-build onClick={() => void buildStaying({ label: 'grid scene', build: () => buildFromGridBuilder(false) })} title={editing ? 'Rebuild the grid in the graph (keeps settings you changed on its nodes) and keep the builder open' : 'Build the grid into the graph now and keep the builder open'}>{editing ? 'Rebuild' : 'Build'}</Button>
+        <Button size="sm" icon="rebuild" data-grid-build onClick={() => void buildStaying({ label: 'grid scene', build: () => buildFromGridBuilder(false) })} title="Apply your edits to the scene and keep the builder open (settings you changed on its nodes are kept). It goes in the graph when you press Done.">Apply</Button>
       </>}
-      primary={{ label: 'Done', onClick: () => void finishGridBuilder(), title: 'Done: build (or rebuild) what changed into the graph, then close and show it' }}
+      primary={{ label: 'Done', onClick: () => void finishGridBuilder(), title: 'Done: put the grid in the graph (one undo step), then close and show it' }}
       nav={<LeftPanel />} navWidth={318} phoneNav={{ label: 'Draw', icon: 'edit' }}
       inspector={<Inspector />} inspectorWidth={360}
       presets={<Presets />} presetsSummary={<PresetsSummary kind="grid" builtIns={stripOf(GRID_TEMPLATES, GRID_STRIP_KEYS).map(t => t.label)} />}>

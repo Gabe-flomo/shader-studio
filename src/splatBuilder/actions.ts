@@ -13,6 +13,7 @@ import type { GraphNode } from '../types/nodeGraph';
 import { undoManager, useNodeGraphStore } from '../store/useNodeGraphStore';
 import { intoView } from '../components/NodeGraph/spawnPoint';
 import { finishBuilder } from '../builders/finish';
+import { beginSceneDraft, markSceneDraft } from '../builders/sceneDraft';
 import { paramBindingKey } from '../compiler/uniformPatcher';
 import { useSplatBuilder } from './store';
 import { adoptCustomChains, applySplatScene, findSplatBuild, paramDiff, splatSceneOfBuild } from './apply';
@@ -27,14 +28,18 @@ const startSession = () => { session = { base: useNodeGraphStore.getState().node
 
 /** Open the builder on a new splat scene, built into the graph at once. */
 export function openNewSplatScene(at?: { x: number; y: number }, spec: SplatBuilderSpec = starterSplatScene()): string | null {
+  // A Scene builder session (builders/sceneDraft.ts): the build below is a draft until Done.
+  beginSceneDraft();
   useSplatBuilder.getState().openWith(spec, { at: at ?? null });
   const id = syncSplatBuilder({ first: true });
+  markSceneDraft();
   startSession();
   return id;
 }
 
 /** Open the builder on the splat scene `nodeId` belongs to, as it was built. False when it isn't one. */
 export function editSplatSceneInBuilder(nodeId: string, section?: SplatSection): boolean {
+  beginSceneDraft();
   const st = useNodeGraphStore.getState();
   if (st.activeGroupPath.length) st.exitToRoot();
   const nodes = useNodeGraphStore.getState().nodes;

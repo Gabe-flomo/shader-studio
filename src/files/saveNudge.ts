@@ -6,6 +6,7 @@
  */
 import { create } from 'zustand';
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
+import { sceneDraftActive } from '../builders/sceneDraftFlag';
 
 export const SAVE_NUDGE_AFTER_MS = 15 * 60 * 1000;
 
@@ -31,7 +32,8 @@ export function installSaveNudge(now: () => number = Date.now): () => void {
   const unsub = useNodeGraphStore.subscribe((s, prev) => {
     if (s.graphEpoch !== epoch) { epoch = s.graphEpoch; since = null; return; }
     if (s.currentGraph) { since = null; if (useSaveNudge.getState().open) useSaveNudge.setState({ open: false }); return; }
-    const edited = s.nodes !== prev.nodes || s.looseGroups !== prev.looseGroups || s.play !== prev.play || s.datasets !== prev.datasets;
+    // A Scene builder's draft isn't an edit until Done (builders/sceneDraft.ts).
+    const edited = !sceneDraftActive() && s.nodes !== prev.nodes || s.looseGroups !== prev.looseGroups || s.play !== prev.play || s.datasets !== prev.datasets;
     if (edited && since === null) since = now();
   });
   const tick = () => {

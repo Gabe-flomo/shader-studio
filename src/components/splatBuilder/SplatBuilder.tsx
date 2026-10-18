@@ -171,7 +171,7 @@ export function SplatBuilder() {
             stillCurrent: () => useSplatBuilder.getState().spec === made,
           });
         }} />}
-      primary={{ label: 'Done', onClick: finishSplatBuilder, title: 'Close and show the scene on the graph (it is built as you go)' }}
+      primary={{ label: 'Done', onClick: finishSplatBuilder, title: 'Put the scene in the graph and show it (closing without Done leaves the graph as it was)' }}
       nav={<Nav />} navWidth={248} phoneSettingsTitle={hood ? 'Under the hood' : undefined}
       inspector={<Inspector />} inspectorWidth={hood ? 480 : 380}
       presets={<Presets />} presetsSummary={<PresetsSummary kind="splat" builtIns={stripOf(SPLAT_TEMPLATES, SPLAT_STRIP_KEYS).map(t => t.label)} />}>
