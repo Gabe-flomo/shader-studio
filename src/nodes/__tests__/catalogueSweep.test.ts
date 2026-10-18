@@ -464,6 +464,23 @@ describe('C2: Brush, for painting into grid simulations', () => {
   });
 });
 
+describe('N9: every newer node has a commented example', () => {
+  it('Chromatic Aberration (lens), Glow (texture) Deep glow, Displace (texture), Band Level, Hit, Depth of Field and Tilt-Shift (texture)', () => {
+    const uses = (pred: (n: GraphNode) => boolean) => Object.entries(EXAMPLE_GRAPHS).filter(([, g]) => {
+      const all: GraphNode[] = [];
+      const walk = (ns: GraphNode[]) => { for (const n of ns) { all.push(n); const sg = n.params?.subgraph as { nodes?: GraphNode[] } | undefined; if (sg?.nodes) walk(sg.nodes); } };
+      walk(g.nodes);
+      return all.some(pred);
+    }).map(([k]) => k);
+    for (const t of ['chromaLens', 'displaceTexture', 'audioBand', 'audioHit', 'dofTexture', 'tiltShiftTexture']) expect(uses(n => n.type === t), t).not.toEqual([]);
+    expect(uses(n => n.type === 'glowTexture' && n.params.method === 'deep')).not.toEqual([]);
+    for (const k of ['ttDeepGlow', 'ttDisplaceNoise', 'audioHitBand']) {
+      for (const n of EXAMPLE_GRAPHS[k].nodes) expect(typeof n.params.__comment === 'string' && n.params.__comment.length > 20, `${k}: ${n.id}`).toBe(true);
+      expect(compileGraph({ nodes: migrateLoadedNodes(EXAMPLE_GRAPHS[k].nodes) }).errors ?? [], k).toEqual([]);
+    }
+  });
+});
+
 describe('Radiance Cascades 2D is retired (too slow)', () => {
   it('stays registered, is offered nowhere, and nothing uses it', () => {
     expect(NODE_REGISTRY.radianceCascadesApprox).toBeTruthy();

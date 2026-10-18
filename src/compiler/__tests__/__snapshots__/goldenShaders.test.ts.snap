@@ -1891,6 +1891,35 @@ exports[`golden shaders: every example compiles as it did > audioFilterSweep 1`]
 }
 `;
 
+exports[`golden shaders: every example compiles as it did > audioHitBand 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "0429aa786028031b65e44e5fd35d:3540",
+  "isStateful": false,
+  "liveUniforms": {
+    "u_aud_audioband_0_level": "bass::level",
+    "u_aud_audioband_0_peak": "bass::peak",
+    "u_aud_audiohit_0_count": "kick::count",
+    "u_aud_audiohit_0_envelope": "kick::envelope",
+    "u_aud_audiohit_0_strength": "kick::strength",
+    "u_aud_audiohit_0_trigger": "kick::trigger",
+    "u_aud_audiosourc_0_level": "src::level",
+    "u_aud_audiosourc_0_time": "src::time",
+  },
+  "nodeSlugs": "05b4a0165288b00d2c01c5bf02c3:117",
+  "paramBindings": "167d269bbddad80189e9f9473b28:2",
+  "paramUniforms": [],
+  "paramValues": "167d269bbddad80189e9f9473b28:2",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
 exports[`golden shaders: every example compiles as it did > audioKickRing 1`] = `
 {
   "audioUniforms": {},

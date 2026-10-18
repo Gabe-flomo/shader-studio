@@ -2124,7 +2124,6 @@ exports[`golden outputs: examples > simAgentTermites 1`] = `
 
 exports[`golden outputs: examples > simGridBrain 1`] = `
 {
-  "brushOn": "0.0000 x40, 1.0000 x15, 0.0000 x65",
   "density": "- x120",
   "dyingColour": "- x120",
   "glow": "- x120",
@@ -2147,7 +2146,6 @@ exports[`golden outputs: examples > simGridCave 1`] = `
 exports[`golden outputs: examples > simGridFire 1`] = `
 {
   "ashFade": "- x120",
-  "brushOn": "0.0000 x40, 1.0000 x15, 0.0000 x65",
   "glow": "- x120",
   "growth": "- x120",
   "lightning": "- x120",
@@ -2159,7 +2157,6 @@ exports[`golden outputs: examples > simGridFire 1`] = `
 exports[`golden outputs: examples > simGridHeat 1`] = `
 {
   "brush": "- x120",
-  "brushOn": "0.0000 x40, 1.0000 x15, 0.0000 x65",
   "cooling": "- x120",
   "heating": "- x120",
   "spotLevel": "- x120",
@@ -2173,7 +2170,6 @@ exports[`golden outputs: examples > simGridLife 1`] = `
   "aliveColour": "- x120",
   "born": "- x120",
   "brush": "- x120",
-  "brushOn": "0.0000 x40, 1.0000 x15, 0.0000 x65",
   "density": "- x120",
   "reset": "- x120",
   "speed": "- x120",
@@ -2194,7 +2190,6 @@ exports[`golden outputs: examples > simGridLifeLike 1`] = `
   "b6": "- x120",
   "b7": "- x120",
   "b8": "- x120",
-  "brushOn": "0.0000 x40, 1.0000 x15, 0.0000 x65",
   "density": "- x120",
   "reset": "- x120",
   "s0": "- x120",
@@ -2213,7 +2208,6 @@ exports[`golden outputs: examples > simGridLifeLike 1`] = `
 exports[`golden outputs: examples > simGridSand 1`] = `
 {
   "brush": "- x120",
-  "brushOn": "0.0000 x40, 1.0000 x15, 0.0000 x65",
   "clear": "- x120",
   "flow": "- x120",
   "swing": "- x120",
@@ -2222,7 +2216,6 @@ exports[`golden outputs: examples > simGridSand 1`] = `
 
 exports[`golden outputs: examples > simGridWater 1`] = `
 {
-  "brushOn": "0.0000 x40, 1.0000 x15, 0.0000 x65",
   "damping": "- x120",
   "depth": "- x120",
   "dropSize": "- x120",
@@ -2236,7 +2229,6 @@ exports[`golden outputs: examples > simGridWater 1`] = `
 exports[`golden outputs: examples > simGridWire 1`] = `
 {
   "bridges": "- x120",
-  "brushOn": "0.0000 x40, 1.0000 x15, 0.0000 x65",
   "drawWire": "- x120",
   "glow": "- x120",
   "pen": "- x120",
@@ -2344,6 +2336,21 @@ exports[`golden outputs: examples > ttColourKey 1`] = `
 
 exports[`golden outputs: examples > ttDataAdvect 1`] = `
 {
+  "speed": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > ttDeepGlow 1`] = `
+{
+  "intensity": "- x120",
+  "radius": "- x120",
+  "threshold": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > ttDisplaceNoise 1`] = `
+{
+  "amount": "- x120",
   "speed": "- x120",
 }
 `;

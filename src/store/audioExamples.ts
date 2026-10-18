@@ -44,6 +44,10 @@ export const AUDIO_EXAMPLE_INDEX: Record<string, { label: string; description: s
     label: 'Audio 9 · Sound landscape',
     description: 'Load a sound on the Audio Source. The Spectrogram\'s Field (the last two seconds of the spectrum as a function of position) is the height of a lit landscape (Height Light\'s Height ƒ), and it bends a pattern of stripes laid over it: loud moments rise as ridges and push the stripes aside.',
   },
+  audioHitBand: {
+    label: 'Audio 10 · Hit and Band Level',
+    description: 'Load a sound (or switch to Mic) on the Audio Source. Hit listens for the kick drum: its Envelope jumps to 1 on each kick and falls away, and its Count steps the colour. Band Level follows how loud the bass is, smoothed: it fills the background.',
+  },
 };
 
 export const AUDIO_EXAMPLE_KEYS = Object.keys(AUDIO_EXAMPLE_INDEX);
@@ -391,6 +395,39 @@ export function buildAudioExamples(): Record<string, ExampleGraph> {
         ],
       }),
       n('output', 'out', 1300, 300, note('Output: the sound as a landscape.'), { color: ['look', 'result'] }),
+    ],
+  };
+
+  // ── 10 · Audio Source → Hit (kick: Envelope, Count) and Band Level (bass) → a pulsing disc ──
+  g.audioHitBand = {
+    ...AUDIO_EXAMPLE_INDEX.audioHitBand,
+    counter: 40,
+    nodes: [
+      source(40, 300),
+      n('audioHit', 'kick', 400, 160, { sound: 'kick', sensitivity: 0.5, cooldown: 150, decay: 0.35, ...note([
+        'Hit, Sound Kick (30–150 Hz): listens to the Audio Source for kick drums.',
+        'Envelope: 1 on each kick, falling to 0 over Decay (0.35 s). Count: the kicks so far. Trigger is 1 on the frame of a kick only, for the memory nodes.',
+      ]) }, { audio: ['src', 'audio'] }),
+      n('audioBand', 'bass', 400, 420, { band: 'bass', attack: 0.01, release: 0.25, ...note('Band Level, Bass (60–250 Hz): how loud the low end is, 0 to 1, rising fast (Attack) and falling slowly (Release).') }, { audio: ['src', 'audio'] }),
+      uvNode(400, 620),
+      expr('look', 760, 300, {
+        label: 'Look', outputType: 'vec3',
+        inputs: [['uv', 'vec2', ['uv', 'uv']], ['e', 'float', ['kick', 'envelope']], ['n', 'float', ['kick', 'count']], ['b', 'float', ['bass', 'level']]],
+        lines: [
+          ['float r', '0.2 + e * 0.2'],
+          ['float disc', '1.0 - smoothstep(r - 0.01, r + 0.01, length(uv))'],
+          ['vec3 hue', '0.55 + 0.45 * cos(6.28318 * (n * 0.13 + vec3(0.0, 0.33, 0.67)))'],
+        ],
+        result: 'vec3(0.02, 0.02, 0.04) + vec3(0.1, 0.05, 0.2) * b * 3.0 + disc * hue * (0.5 + e)',
+        note: [
+          'Expression Block: a disc that jumps on each kick over a background that breathes with the bass.',
+          'r: the radius, bigger while the kick\'s Envelope is up.',
+          'disc: the disc itself, with a soft edge.',
+          'hue: a colour that steps round the wheel with each kick (Count).',
+          'Result: the background brightens with the bass Level (b).',
+        ],
+      }),
+      n('output', 'out', 1060, 300, note('Output: the disc on the kick, the bass behind it.'), { color: ['look', 'result'] }),
     ],
   };
 

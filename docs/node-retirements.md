@@ -256,3 +256,10 @@ nodes: Mouse (Pixels) → Multiply by the Pass's scale → Circle SDF round it �
 Play mapped to the mouse button. **Brush** (Inputs & media, `definitions/brush.ts`) is that chain in one node: Radius,
 Softness, Value, Scale (the Pass's) and Paint (*While pressed* reads the mouse button itself, so it paints in the editor
 too; *Always*). The eight examples use it, and their "(mouse button)" Play controls and mappings are gone.
+
+## New examples
+
+Every newer node has a short commented example: **Texture tools 22 · Deep glow on a video** (Glow (texture), Deep
+glow), **Texture tools 23 · Displace a video by a noise** (Displace (texture)), **Audio 10 · Hit and Band Level**. Chromatic
+Aberration (lens), Depth of Field (texture), Tilt-Shift (texture) and Band Level already had one (volAnimatedRepeat,
+dofDepthBlur, tiltShiftScene, beatGrid).

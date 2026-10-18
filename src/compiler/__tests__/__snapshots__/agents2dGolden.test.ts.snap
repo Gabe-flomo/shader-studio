@@ -1260,6 +1260,20 @@ exports[`2D agents and pass graphs compile as they did before 3D > ttBlobTrack 1
 }
 `;
 
+exports[`2D agents and pass graphs compile as they did before 3D > ttDisplaceNoise 1`] = `
+{
+  "agents": "1fe1f0024152e81521f99e5e13c1:4",
+  "errors": null,
+  "fragmentShader": "1c3fbf485e2ade02cd6a76b60d14:2523",
+  "paramBindings": "1c0fae638a96881b3696e7164f21:505",
+  "paramUniforms": "1bfddac6eb8bf0065589c04be6a0:353",
+  "passes": "00d943f10162d107b2af1018853f:3429",
+  "success": true,
+  "textureUniforms": "167d269bbddad80189e9f9473b28:2",
+  "web": null,
+}
+`;
+
 exports[`2D agents and pass graphs compile as they did before 3D > ttDistanceRings 1`] = `
 {
   "agents": "1fe1f0024152e81521f99e5e13c1:4",
