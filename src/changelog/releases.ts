@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.290',
+    date: '2026-10-18',
+    title: "Sampler",
+    highlights: [
+      { area: 'Studio', text: "Drum pads become the Sampler, modelled on Ableton: a Drum view with 128 pads and a Keys view with zones, slicing, filter, envelopes and LFO." },
+    ],
+  },
+  {
     id: '2026.10.289',
     date: '2026-10-18',
     title: "Time Cube from pictures",
