@@ -345,10 +345,10 @@ async function offerRecovery(previous: SessionMarker | null, list: SnapshotMeta[
   const others = d.others.length ? ` Other autosaves from then: ${d.others.map(o => formatClock(o.at)).join(', ')} (Files → App settings lists them).` : '';
   const why = previous?.reason && previous.reason !== 'unknown' && !NOT_A_CRASH.has(previous.reason) ? ` ${reasonWords(previous.reason)}.` : '';
   const choice = await askChoice(d.title, [
-    { id: 'recover', label: 'Recover', variant: 'primary' },
-    { id: 'files', label: 'Show in App settings', variant: 'ghost' },
     { id: 'discard', label: 'Discard', variant: 'danger' },
-  ], { message: d.message + why + others, ...(report ? { note: 'A crash report was saved.', links } : {}) });
+    { id: 'files', label: 'See all autosaves', variant: 'ghost' },
+    { id: 'recover', label: 'Recover', variant: 'primary' },
+  ], { message: d.message + why + others, cancel: false, ...(report ? { note: 'A crash report was saved.', links } : {}) });
   backend?.done();
   if (choice === 'recover') await restoreSnapshot(d.snapshot.file);
   else if (choice === 'files') showAutosavesInFiles();

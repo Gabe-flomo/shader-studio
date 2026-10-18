@@ -63,16 +63,25 @@ function ConfirmDialog({ req }: { req: ConfirmRequest }) {
 function ChoiceDialog({ req }: { req: ChoiceRequest }) {
   const tk = useTokens();
   const done = (id: string | null) => { closeDialog(); req.resolve(id); };
+  // One row: the quieter choices on the left (a destructive one as red text, not a loud red button), the
+  // main ones on the right. Cancel only when asked for: the × and Esc already cancel.
+  const main = req.options.filter(o => o.variant === 'primary');
+  const quiet = req.options.filter(o => o.variant !== 'primary');
+  const quietBtn = (o: ChoiceRequest['options'][number]) => (
+    <Button key={o.id} variant="ghost" onClick={() => done(o.id)}
+      style={o.variant === 'danger' ? { color: tk.status.danger } : undefined}>{o.label}</Button>
+  );
   return (
     <Modal
       title={req.title}
-      width={440}
+      width={460}
       onClose={() => done(null)}
       footer={<>
-        <Button variant="ghost" onClick={() => done(null)}>Cancel</Button>
+        {req.cancel !== false && <Button variant="ghost" onClick={() => done(null)}>Cancel</Button>}
+        {quiet.map(quietBtn)}
         <span style={{ flex: 1 }} />
-        {req.options.map((o, i) => (
-          <Button key={o.id} variant={o.variant ?? 'ghost'} autoFocus={i === req.options.length - 1} onClick={() => done(o.id)}>{o.label}</Button>
+        {main.map((o, i) => (
+          <Button key={o.id} variant="primary" autoFocus={i === main.length - 1} onClick={() => done(o.id)}>{o.label}</Button>
         ))}
       </>}
     >
