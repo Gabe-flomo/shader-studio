@@ -30,6 +30,8 @@ import { dropOutcome } from './inputs/sourceDrag';
 import { controlSwing } from '../../play/controlSwing';
 import { DetailWindow } from './detail/DetailWindow';
 import { startPlayNotes } from '../../lib/playNotes';
+import { startLiveActions } from '../../lib/liveActions';
+import { liveClient } from '../../lib/liveClient';
 import { openDetail } from './detail/detailStore';
 import { sourceLabel } from '../../play/playSources';
 import { grainSensorLayer, isGranulatorRack, parseGrainsTarget } from '../../types/playAudioEngine';
@@ -129,9 +131,14 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
     playEngine.setPerforming(true);
     // Play notes reactions sound on their racks while Play is open; leaving lets every note go.
     const stopNotes = startPlayNotes();
+    // Do in Live reactions go to Ableton Live (the Live connector) while Play is open.
+    const stopLive = startLiveActions();
+    // The desktop app listens for Ableton Live's connector while Play is open (cheap: one local UDP port).
+    const native = '__TAURI_INTERNALS__' in window;
+    if (native) liveClient.want('play-page', true);
     usePlayUi.getState().setPerforming(true);
     rackKeyboard.setPage(true);
-    return () => { stopNotes(); rackKeyboard.setPage(false); playEngine.setPerforming(false); usePlayUi.getState().setPerforming(false); usePlayUi.getState().clearSolo(); };
+    return () => { stopNotes(); stopLive(); if (native) liveClient.want('play-page', false); rackKeyboard.setPage(false); playEngine.setPerforming(false); usePlayUi.getState().setPerforming(false); usePlayUi.getState().clearSolo(); };
   }, []);
   // An image, video or colour background replaces the shader while this page shows (the Studio keeps the graph).
   useEffect(() => playBackground.claim(), []);

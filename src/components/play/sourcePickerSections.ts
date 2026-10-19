@@ -57,6 +57,12 @@ const SOURCE_GROUPS: { heading: string; entries: Entry[] }[] = [
     { value: 'gamepad', label: 'Gamepad', icon: 'gamepad', description: 'A stick axis or a button', keywords: 'controller joystick' },
     { value: 'tilt', label: 'Phone tilt', icon: 'phone', description: 'Tip the phone forward or sideways', keywords: 'gyro orientation' },
   ] },
+  { heading: 'Ableton Live', entries: [
+    { value: 'ableton:param', label: 'Live parameter', icon: 'link', description: 'A knob, fader or macro in Live, by name', keywords: 'ableton live connector rack macro device' },
+    { value: 'ableton:beat', label: 'Live beat', icon: 'clock', description: '0 → 1 on each of Live’s beats', keywords: 'ableton tempo bpm phase' },
+    { value: 'ableton:bar', label: 'Live bar', icon: 'clock', description: '0 → 1 on each bar', keywords: 'ableton tempo measure phase' },
+    { value: 'ableton:playing', label: 'Live playing', icon: 'play', description: '1 while Live plays', keywords: 'ableton transport' },
+  ] },
   { heading: 'Hands', entries: [
     { value: 'hand:point', label: 'Fingertip or joint', icon: 'hand', description: 'X, Y or Z of one point on the hand', keywords: 'finger' },
     { value: 'hand:pinch', label: 'Pinch', icon: 'hand', description: 'Thumb to a fingertip' },
@@ -135,6 +141,10 @@ const TRIGGER_GROUPS: { heading: string; kinds: { on: TriggerSpec['on']; label: 
   { heading: 'Devices', kinds: [
     { on: 'note', label: 'MIDI note', icon: 'piano', description: 'A MIDI note is played' },
     { on: 'osc', label: 'OSC message', icon: 'antenna', description: 'An OSC address arrives' },
+  ] },
+  { heading: 'Ableton Live', kinds: [
+    { on: 'liveClip', label: 'Live clip launches', icon: 'link', description: 'A clip in Live is launched or starts playing' },
+    { on: 'liveScene', label: 'Live scene launches', icon: 'link', description: 'A scene in Live is launched' },
   ] },
   { heading: 'Layers & hands', kinds: [
     { on: 'zone', label: 'Shape', icon: 'layoutCanvas', description: 'A shape is clicked, entered or filled' },

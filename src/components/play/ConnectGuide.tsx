@@ -1,6 +1,6 @@
 /**
  * ConnectGuide — first-time setup for getting outside signals into Play:
- * Ableton over MIDI, Ableton over OSC, Ableton's sound as live audio, and a
+ * Ableton through the Live connector (the recommended way), Ableton over MIDI, Ableton over OSC, Ableton's sound as live audio, and a
  * hardware MIDI controller. Step-by-step for macOS and Windows. The same text
  * lives in docs/connecting-ableton.md.
  */
@@ -11,15 +11,17 @@ import { Modal } from '../ui/Modal';
 import { Segmented } from '../ui/Choice';
 import { Button } from '../ui/Button';
 import { toast } from '../ui/toastStore';
+import { LiveConnectorGuide } from './live/LiveConnectorGuide';
 
-type Topic = 'which' | 'midi' | 'osc' | 'audio' | 'controller';
+export type ConnectTopic = 'which' | 'live' | 'midi' | 'osc' | 'audio' | 'controller';
+type Topic = ConnectTopic;
 type Platform = 'mac' | 'win';
 
 const isDesktopApp = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 
-export function ConnectGuide({ onClose }: { onClose: () => void }) {
-  const [topic, setTopic] = useState<Topic>('which');
+export function ConnectGuide({ onClose, initialTopic = 'which' }: { onClose: () => void; initialTopic?: Topic }) {
+  const [topic, setTopic] = useState<Topic>(initialTopic);
   const [os, setOs] = useState<Platform>(isMac ? 'mac' : 'win');
   return (
     <Modal title="Connect your gear" subtitle="Ableton, a MIDI controller, OSC or live audio, step by step" icon="bidir" onClose={onClose} width={660} height={660}>
@@ -32,6 +34,7 @@ export function ConnectGuide({ onClose }: { onClose: () => void }) {
           onChange={setTopic}
           options={[
             { value: 'which', label: 'Which one?' },
+            { value: 'live', label: 'Ableton · Live connector' },
             { value: 'midi', label: 'Ableton · MIDI' },
             { value: 'osc', label: 'Ableton · OSC' },
             { value: 'audio', label: 'Ableton · Audio' },
@@ -42,6 +45,7 @@ export function ConnectGuide({ onClose }: { onClose: () => void }) {
         {topic !== 'which' && <Segmented size="sm" ariaLabel="Computer" value={os} onChange={setOs} options={[{ value: 'mac', label: 'Mac' }, { value: 'win', label: 'Windows' }]} />}
       </div>
       {topic === 'which' && <Which onPick={setTopic} />}
+      {topic === 'live' && <LiveConnectorGuide os={os} P={P} Steps={Steps} H={H} B={B} Code={Code} Note={Note} />}
       {topic === 'midi' && <AbletonMidi os={os} />}
       {topic === 'osc' && <AbletonOsc os={os} />}
       {topic === 'audio' && <AbletonAudio os={os} />}
@@ -111,8 +115,9 @@ function Which({ onPick }: { onPick: (t: Topic) => void }) {
   );
   return (
     <>
-      <P>MIDI, OSC and audio carry different things. MIDI is notes and knobs, not sound. Audio is the sound itself, turned into loudness per band. You can use all three at once.</P>
+      <P>For Ableton Live, start with the <b>Live connector</b>: tempo, beat, clips, scenes and any parameter by name, with nothing else to run. MIDI, OSC and audio carry other things: MIDI is notes and knobs, not sound; audio is the sound itself, turned into loudness per band. You can use them all at once.</P>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {row('live', 'Ableton → Live connector (recommended)', 'Live’s tempo and beat, clip and scene launches, track names and colours, any parameter or rack macro by name; and launching clips back', 'following Live’s tempo; switching looks with the song’s scenes; mapping Live’s knobs and macros', isDesktopApp ? 'Live 11 or 12; one click installs it, then pick it in Live’s settings' : 'Live 11 or 12, copying one folder, and the bridge (npm run osc-bridge -- --live)')}
         {row('midi', 'Ableton → MIDI', 'notes (which, how hard), knobs as CC 0–127, pitch bend', 'hitting notes to fire envelopes; drawing CC automation', isDesktopApp ? 'a free virtual MIDI port (built into macOS: the IAC Driver)' : 'a free virtual MIDI port (built into macOS; loopMIDI on Windows), Chrome or Edge')}
         {row('osc', 'Ableton → OSC', 'any number from any knob or fader in Live, at full resolution', 'mapping many Live parameters, smooth sweeps, TouchOSC on a phone', isDesktopApp ? 'Max for Live (Suite) with the free Connection Kit; the app listens with one click' : 'Max for Live (Suite) with the free Connection Kit, and the small bridge (one download, one command)')}
         {row('audio', 'Ableton → Audio', 'the actual sound: level, bass, low-mid, high-mid, treble, plus hits', 'visuals that react to the music; kick-driven flashes', 'a free virtual audio cable (BlackHole on Mac, VB-CABLE on Windows), or just a microphone')}

@@ -252,6 +252,31 @@ export class Tape {
     if (rec?.started) this.finish(rec, Math.min(TAPE_MAX_SECONDS, at));
   }
 
+  /**
+   * Ableton Live started or stopped (the Live connector, with the tape's Follow Live on:
+   * docs/arrangement.md). Playing: the tape plays from where Live's playhead is, in the tape's
+   * own bars (beats at the tape's BPM; looping round the tape's length when Loop is on), and the
+   * page's time runs with it. Stopped: the tape stops (a recording is kept) and the time pauses.
+   * Does nothing when Follow Live is off or the tape is counting in.
+   */
+  followLive(playing: boolean, beats: number): void {
+    const a = this.arr();
+    if (!a.followLive) return;
+    const phase = useTape.getState().phase;
+    if (!playing) {
+      if (phase === 'stopped') return;
+      this.stop();
+      this.d.setTimePlaying(false);
+      return;
+    }
+    if (phase !== 'stopped' || !(a.length > 0)) return;
+    let at = Math.max(0, beats) * (60 / Math.max(20, Math.min(300, a.bpm || 120)));
+    if (a.loop) at %= a.length;
+    else if (at >= a.length) return;
+    this.playFrom(at);
+    if (this.running()) this.d.setTimePlaying(true);
+  }
+
   /** Move the record point (and the playback there, if playing). */
   setPoint(t: number): void {
     const a = this.arr();

@@ -91,6 +91,11 @@ export interface PlayArrangement {
    * highlights its notes. Absent: off.
    */
   scale?: ArrScale;
+  /**
+   * Ableton Live's play and stop start and stop the tape, from where Live's playhead is
+   * (the Live connector: lib/liveTape.ts). Absent: off.
+   */
+  followLive?: boolean;
 }
 
 /** The tape's scale: on or off, its root (0 = C … 11 = B) and which scale (play/scales.ts id). */
@@ -685,6 +690,7 @@ export function parseArrangement(raw: unknown): PlayArrangement | undefined {
     fade: fin(o.fade) ? Math.round(clamp(o.fade, 0, FADE_MAX_MS)) : 0,
     tracks,
   };
+  if (o.followLive === true) out.followLive = true;
   if (o.scale && typeof o.scale === 'object') {
     const sc = o.scale as Record<string, unknown>;
     out.scale = { on: sc.on === true, root: fin(sc.root) ? Math.round(clamp(sc.root, 0, 11)) : 0, name: typeof sc.name === 'string' && /^[A-Za-z0-9]{1,24}$/.test(sc.name) ? sc.name : 'major' };

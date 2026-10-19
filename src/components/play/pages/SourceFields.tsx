@@ -4,7 +4,7 @@
  */
 import { openProSheet, useCan } from '../../../lib/plan';
 import { sourceTypeNeedsPro } from '../../../play/planGates';
-import { useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ComponentProps, type ReactNode } from 'react';
 import { useNodeGraphStore } from '../../../store/useNodeGraphStore';
 import { DataSourceOptions } from '../DataSourceOptions';
 import { useTokens } from '../../../theme/themeStore';
@@ -29,6 +29,8 @@ import { GroupedPicker } from '../../ui/GroupedPicker';
 import { HAND_POINT_SECTIONS, sourcePickerSections } from '../sourcePickerSections';
 import { NumberInput } from '../../NodeGraph/NumberInput';
 import { LiveAudioChip, OscStatusChip } from '../chips';
+import { AbletonSourceOptions, useLive } from '../live/LiveFields';
+import { liveClient } from '../../../lib/liveClient';
 import { TrackPointPicker, TrackerChip } from '../TrackingChips';
 import { BLEND_OPTIONS, FACE_GESTURE_OPTIONS, FACE_READ_HINTS, POSE_GESTURE_OPTIONS, POSE_READ_HINTS } from '../../../play/trackSources';
 import type { FaceGesture, PoseGesture } from '../../../types/playTracking';
@@ -191,6 +193,8 @@ export function SourceOptions({ source, audioNodes, layerRefs, numStyle, labelSt
   const tk = useTokens();
   const taps = useRef<number[]>([]);
   const [tiltAsk, setTiltAsk] = useState(() => playEngine.tiltNeedsPermission());
+  // A Clock following Live shows Live's tempo: re-render as the Live connector changes (only then).
+  useSyncExternalStore(cb => liveClient.onChange(cb), () => (source.kind === 'clock' && source.follow ? liveClient.getVersion() : 0), () => 0);
   const hint = (text: string) => <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>{text}</span>;
   const row = (children: ReactNode) => (
     <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 6 }}>
@@ -218,13 +222,20 @@ export function SourceOptions({ source, audioNodes, layerRefs, numStyle, labelSt
           onChange({ ...source, bpm: Math.round(60000 / avg) });
         }
       };
+      // Follow Live: Live's tempo and beat (the Live connector), shown in place of the BPM; Playfield's own while Live isn't connected.
+      const following = !!source.follow && liveClient.hasTransport();
       return row(<>
-        <NumberInput value={source.bpm} min={1} max={999} step={1} title="Beats per minute" onCommit={n => onChange({ ...source, bpm: Math.max(1, n) })} style={numStyle} />
-        {hint('bpm')}
-        <Button size="sm" onClick={tap} title="Tap the tempo">Tap</Button>
+        {following
+          ? hint(`${Math.round(liveClient.state.follower.tempo * 10) / 10} bpm (Live)`)
+          : <>
+            <NumberInput value={source.bpm} min={1} max={999} step={1} title="Beats per minute" onCommit={n => onChange({ ...source, bpm: Math.max(1, n) })} style={numStyle} />
+            {hint('bpm')}
+            <Button size="sm" onClick={tap} title="Tap the tempo">Tap</Button>
+          </>}
         <NumberInput value={source.beats} min={0.0625} max={64} step={1} title="Beats per cycle" onCommit={n => onChange({ ...source, beats: Math.max(0.0625, n) })} style={{ ...numStyle, width: 48 }} />
         {hint('beats')}
         <Select ariaLabel="Clock shape" value={source.shape} options={LFO_SHAPES} onChange={v => onChange({ ...source, shape: v as LfoShape })} height={26} />
+        <ClockFollowToggle source={source} onChange={onChange} />
       </>);
     }
     case 'fn': {
@@ -305,6 +316,8 @@ export function SourceOptions({ source, audioNodes, layerRefs, numStyle, labelSt
           </>)}
         </>
       );
+    case 'ableton':
+      return <AbletonSourceOptions source={source} row={row} onChange={onChange} />;
     case 'live':
       return row(<>
         <Select ariaLabel="Band" value={source.band} options={LIVE_BAND_OPTIONS} onChange={v => onChange({ ...source, band: v as LiveAudioBand })} height={26} />
@@ -591,5 +604,15 @@ function CurvePad({ value, meter, range, onChange, onReset }: { value: number[];
       </div>
       <IconButton icon="reset" label="Back to a straight line" size="sm" onClick={onReset} style={{ alignSelf: 'flex-start' }} />
     </div>
+  );
+}
+
+/** The Clock's Follow Live switch (it re-renders as Live connects, so the BPM shows Live's). */
+function ClockFollowToggle({ source, onChange }: { source: Extract<PlaySource, { kind: 'clock' }>; onChange: (s: PlaySource) => void }) {
+  useLive();
+  return (
+    <span title="On Ableton Live’s tempo and beat through the Live connector; this BPM while Live isn’t connected" style={{ display: 'inline-flex' }}>
+      <Toggle checked={!!source.follow} label="Follow Live" onChange={on => { const n = { ...source }; if (on) n.follow = true; else delete n.follow; onChange(n); }} />
+    </span>
   );
 }

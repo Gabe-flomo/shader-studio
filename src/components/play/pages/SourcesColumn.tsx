@@ -24,6 +24,9 @@ import { mappingFoldKey, mappingGroupOf, mappingRangeText, sourceFoldKey, source
 import { openDetail } from '../detail/detailStore';
 import { COLOUR_CHANNELS, CURVES, OPEN_READERS, sourceFromType, withFire, sourceLabel, type SourceType } from '../../../play/playSources';
 import { ConnectGuide } from '../ConnectGuide';
+import { liveClient } from '../../../lib/liveClient';
+import { liveStatusText, useLive, useWantLive } from '../live/LiveFields';
+import type { MapPickerLive } from '../mapPicker';
 import { playEngine, sampleCurve } from '../../../lib/playEngine';
 import { midiEngine, midiNoteName } from '../../../lib/midiEngine';
 import { ASSIGN_FLASH_MS, claimMidiListen, isUnassignedCc, startMidiAutoLearn } from '../../../lib/midiAutoLearn';
@@ -101,7 +104,27 @@ export function MappingsDrawer({ play, mode, grid = false, height, onResizeStart
   // Learn: the next knob, key or MIDI note becomes a source. `learnFor` is a
   // mapping id (replace its source) or 'new' (add a mapping).
   const [learnFor, setLearnFor] = useState<string | null>(null);
-  const [guideOpen, setGuideOpen] = useState(false);
+  const [guideOpen, setGuideOpen] = useState<false | 'which' | 'live'>(false);
+  // + Map → Learn from Live: waiting for a parameter clicked in Live.
+  const [liveLearning, setLiveLearning] = useState(false);
+  useEffect(() => {
+    if (!liveLearning) return;
+    const stop = liveClient.onEvent(e => {
+      if (e.type !== 'selectedParam') return;
+      setLiveLearning(false);
+      const source: PlaySource = { kind: 'ableton', read: 'param', key: e.param.key };
+      let id = '';
+      onRecord(rec => { const x = addFreeSource(rec, source); id = x.id; return x.play; });
+      if (!id) return;
+      usePlayUi.getState().toggleFoldMany([sourceFoldKey(id), sourceGroupFoldKey(mappingGroupOf(source))], false);
+      useMapMode.getState().start(id, sourceLabel(source));
+    });
+    const esc = (ev: KeyboardEvent) => { if (ev.key === 'Escape') setLiveLearning(false); };
+    window.addEventListener('keydown', esc);
+    return () => { stop(); window.removeEventListener('keydown', esc); };
+    // onRecord is stable enough for a one-shot listen.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveLearning]);
   const [srcMore, setSrcMore] = useState<{ x: number; y: number } | null>(null);
   const [noteMap, setNoteMap] = useState(false);
   const [behavioursOpen, setBehavioursOpen] = useState(false);
@@ -239,6 +262,12 @@ export function MappingsDrawer({ play, mode, grid = false, height, onResizeStart
       )}
       {/* The board's Learn mode says what it waits for over the controls (LearnModeBar), and here too. */}
       <LearnModeBar label={id => controlLabel(id) ?? 'That control'} />
+      {liveLearning && (
+        <div data-live-learn="" style={{ margin: '6px 0 2px', padding: '8px 12px', borderRadius: radius.md, background: alpha(tk.accent.base, 0.1), color: tk.accent.text, font: `600 12px ${fontFamily.ui}`, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ flex: 1, minWidth: 160 }}>Click a parameter in Ableton Live… <span style={{ fontWeight: 500, opacity: 0.8 }}>{liveClient.isConnected() ? 'Esc to cancel' : `${liveStatusText()} · Esc to cancel`}</span></span>
+          <Button size="sm" variant="ghost" onClick={() => setLiveLearning(false)}>Cancel</Button>
+        </div>
+      )}
       {learnFor && (
         <div style={{ margin: '6px 0 2px', padding: '8px 12px', borderRadius: radius.md, background: alpha(tk.accent.base, 0.1), color: tk.accent.text, font: `600 12px ${fontFamily.ui}` }}>
           {learnTrigger
@@ -256,8 +285,21 @@ export function MappingsDrawer({ play, mode, grid = false, height, onResizeStart
   const openMapPicker = (anchor: 'head' | 'empty') => setMapPicker(m => (m ? null : { asSheet: menuAsSheet(window.innerWidth, 'auto'), anchor }));
   const midiFileOk = useCan('play.midiFile');
   const midiFileName = play.midiFile?.name ?? null, hasPadGrid = !!play.padGrid;
-  const mapSections = useMemo(() => mapPickerSections(readers, !allSources, play.signals, { midiFile: midiFileName, padGrid: hasPadGrid, midiFileLocked: !midiFileOk }),
-    [readers, allSources, play.signals, midiFileName, hasPadGrid, midiFileOk]);
+  // Ableton Live (the Live connector): listened for while the picker is open, or while Learn from Live waits.
+  const liveVersion = useLive();
+  useWantLive('map-picker', !!mapPicker || liveLearning);
+  const live = useMemo((): MapPickerLive => {
+    void liveVersion;
+    const st = liveClient.state, sel = st.selectedDevice;
+    return {
+      connected: liveClient.isConnected(),
+      status: liveClient.isConnected() ? liveStatusText().replace(/^Connected · /, '') : liveStatusText(),
+      rack: st.rackParams().map(p => ({ key: p.key, name: p.name, track: p.track })),
+      selected: sel && sel.keys.length ? { track: sel.track, device: sel.device, params: sel.keys.map(k => ({ key: k, name: st.params.get(k)?.name ?? k.slice(k.lastIndexOf(' / ') + 3) })) } : undefined,
+    };
+  }, [liveVersion]);
+  const mapSections = useMemo(() => mapPickerSections(readers, !allSources, play.signals, { midiFile: midiFileName, padGrid: hasPadGrid, midiFileLocked: !midiFileOk }, live),
+    [readers, allSources, play.signals, midiFileName, hasPadGrid, midiFileOk, live]);
   const midiInput = useRef<HTMLInputElement>(null);
   /** Open a file-source card (the MIDI file's, the pad grid's) and bring it into view. */
   const showFileCard = (key: string, kind: string) => {
@@ -276,6 +318,17 @@ export function MappingsDrawer({ play, mode, grid = false, height, onResizeStart
     let label = '';
     switch (p.kind) {
       case 'learn': useLearnMode.getState().start(); return;
+      case 'liveConnect': setGuideOpen('live'); return;
+      case 'liveLearn': if (!allSources) { pro(); return; } setLiveLearning(true); return;
+      case 'liveKey': {
+        if (!allSources) { pro(); return; }
+        source = { kind: 'ableton', read: 'param', key: p.key };
+        break;
+      }
+      case 'liveClip': case 'liveScene':
+        if (!allSources) { pro(); return; }
+        source = { ...(sourceFromType('trigger', { kind: 'mouse', axis: 'x' }) as Extract<PlaySource, { kind: 'trigger' }>), trigger: p.kind === 'liveClip' ? { on: 'liveClip', track: '', clip: '', when: 'triggered' } : { on: 'liveScene', scene: '' } };
+        break;
       case 'behaviours': setBehavioursOpen(true); return;
       case 'readers': useReadersPanel.getState().show({ focus: '' }); return;
       case 'notes12': if (!allSources) { pro(); return; } setNoteMap(true); return;
@@ -366,7 +419,7 @@ export function MappingsDrawer({ play, mode, grid = false, height, onResizeStart
               onAdded={ruleId => { setBehavioursOpen(false); toast.success('Behaviour added', { message: ruleId ? 'Its rule is on the Rules page; its sources are here.' : 'Its sources are here.' }); }} />}
             <IconButton icon="more" label="More: connect gear, expand or collapse all" onClick={e => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); setSrcMore({ x: r.right - 240, y: r.bottom + 4 }); }} />
             {srcMore && <Menu x={srcMore.x} y={srcMore.y} minWidth={240} title="Sources" onClose={() => setSrcMore(null)} items={[
-              { label: 'Connect gear…', icon: 'info', hint: 'Ableton, a MIDI controller, OSC or live audio, step by step', onSelect: () => setGuideOpen(true) },
+              { label: 'Connect gear…', icon: 'info', hint: 'Ableton (the Live connector, MIDI, OSC, audio), a MIDI controller, step by step', onSelect: () => setGuideOpen('which') },
               ...(play.mappings.length > 1 ? [{
                 label: allCollapsed ? 'Expand all mappings' : 'Collapse all mappings', icon: allCollapsed ? 'chevD' as const : 'chevU' as const,
                 onSelect: () => usePlayUi.getState().toggleFoldMany(play.mappings.map(m => mappingFoldKey(m.id)), !allCollapsed),
@@ -398,7 +451,7 @@ export function MappingsDrawer({ play, mode, grid = false, height, onResizeStart
       )}
       <input ref={midiInput} type="file" accept=".mid,.midi,audio/midi,audio/x-midi" data-midi-file-input="" style={{ display: 'none' }}
         onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void loadMidiFile(f); }} />
-      {guideOpen && <ConnectGuide onClose={() => setGuideOpen(false)} />}
+      {guideOpen && <ConnectGuide initialTopic={guideOpen} onClose={() => setGuideOpen(false)} />}
       {mapPicker && (
         <PickerPanel listId={mapListId} sections={mapSections} value="" ariaLabel="Map an input" title="Map an input" asSheet={mapPicker.asSheet} width={300}
           withSearch initialQuery="" searchPlaceholder="Search inputs" anchorRef={mapAnchor as unknown as RefObject<HTMLButtonElement | null>}

@@ -64,6 +64,8 @@ export function verbsFor(t0: TriggerSpec): Verb[] {
     case 'mouse': return three('clicks', 'is held down', 'is let go');
     case 'osc': return [{ id: 'rise', label: 'arrives', trigger: t }];
     case 'beat': return [{ id: 'rise', label: 'comes round', trigger: t }];
+    case 'liveClip': return [{ id: 'rise', label: t.when === 'playing' ? 'starts playing' : 'is launched', trigger: t }];
+    case 'liveScene': return [{ id: 'rise', label: 'is launched', trigger: t }];
     case 'signal': return three('fires', 'is on', 'stops');
     case 'hand':
       if (t.gesture === 'appear' || t.gesture === 'leave') return [{ id: 'rise', label: 'happens', trigger: t }];
