@@ -244,7 +244,7 @@ describe('an exported page runs the Audio nodes', () => {
       last = nowMs;
       const freq = new Float32Array(frame.freq), wave = new Float32Array(frame.wave);
       page.set('src::level', K.applyGain(freq, wave, src.gain));
-      K.stepSource(pageSt, src.bands, src.sounds, freq, sr, nowMs / 1000, dt, (ch: string, v: number) => page.set(`src::${ch}`, v));
+      K.stepSource(pageSt, src.bands, src.sounds, freq, sr, nowMs / 1000, dt, (ch: string, v: number) => page.set(`src::${ch}`, v), { delay: 0, wave });
       for (const l of pageLis) K.stepListener(l.run, l.cfg.spec, freq, wave, sr, true, nowMs, dt, (ch: string, v: number) => page.set(`${l.cfg.id}::${ch}`, v));
 
       for (const [k, v] of page) { expect(app.get(k), `${k} at frame ${f}`).toBe(v); compared++; }

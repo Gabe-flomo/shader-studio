@@ -1,23 +1,25 @@
 /**
- * Audio Source's bands and trim (lib/audioTools/bands.ts): cleaning saved bands, the quick presets (Kick / Snare /
- * Hi-hat come as triggers with Hit's ranges), the outputs a band adds, a trigger per band on a synthetic click train
- * (inside its range, not outside it), and the trim maths (seconds ↔ samples, the loop window).
+ * Audio Source's bands and trim (lib/audioTools/bands.ts): cleaning saved bands, the quick bands (Kick / Snare / Hats
+ * / Notes as hits with their preset, Sub / Bass / Vocals / Air as values), old bands upgraded to a preset and a
+ * Sensitivity, the outputs a band adds, a band's hits on a synthetic click train (inside its range, not outside it),
+ * and the trim maths (seconds ↔ samples, the loop window).
  */
 import { describe, expect, it } from 'vitest';
 import {
   BAND_QUICK_PRESETS, bandOutputs, bandsOf, intoWindow, newBand, newBandRun, samplesToSeconds, secondsToSamples, stepBandRun,
-  trimWindow, windowPosition, MIN_TRIM,
+  trimWindow, upgradeOldBand, windowPosition, MIN_TRIM,
 } from '../bands';
-import { spectrumDb } from '../dsp';
+import { AT_DET_PRESETS } from '../../../play/kit/audioTools.js';
 import { HIT_PRESETS } from '../../../nodes/definitions/audioTools';
 
-const SR = 48000, FFT = 2048, HOP = 800;
+const SR = 48000, HOP = 800, BUF = 4096;
 
-function frames(signal: Float32Array, to: number, fn: (db: Float32Array, t: number) => void): void {
-  const block = new Float32Array(FFT);
-  for (let end = 0; end <= Math.round(to * SR); end += HOP) {
-    for (let i = 0; i < FFT; i++) { const k = end - FFT + i; block[i] = k >= 0 && k < signal.length ? signal[k] : 0; }
-    fn(spectrumDb(block), end / SR);
+/** Animation frames (every HOP samples) with the last BUF samples heard, as the engine hands them over. */
+function frames(signal: Float32Array, to: number, fn: (wave: Float32Array, t: number) => void): void {
+  const block = new Float32Array(BUF);
+  for (let end = HOP; end <= Math.round(to * SR); end += HOP) {
+    for (let i = 0; i < BUF; i++) { const k = end - BUF + i; block[i] = k >= 0 && k < signal.length ? signal[k] : 0; }
+    fn(block, end / SR);
   }
 }
 
@@ -50,21 +52,48 @@ function hats(seconds: number): Float32Array {
 function countTriggers(signal: Float32Array, seconds: number, preset: string): number {
   const band = newBand([], preset), run = newBandRun();
   let hits = 0;
-  frames(signal, seconds, (db, t) => { stepBandRun(run, band, db, SR, t, HOP / SR); hits += run.hit.trigger; });
+  frames(signal, seconds, (w, t) => { stepBandRun(run, band, w, SR, t, HOP / SR); hits += run.hit.trigger; });
   return hits;
 }
 
 describe('bands', () => {
-  it('quick presets: Kick, Snare and Hi-hat are triggers with Hit\'s ranges; the rest send their level', () => {
-    for (const k of ['kick', 'snare', 'hihat']) {
-      const b = newBand([], k), h = HIT_PRESETS[k];
-      expect([b.lo, b.hi, b.trigger, b.value]).toEqual([h.lo, h.hi, true, false]);
-      expect([b.releaseAt, b.gate, b.minMs]).toEqual([0.8, 0.1, 10]);
-      expect(b.threshold).toBe(k === 'kick' ? 0.5 : k === 'snare' ? 0.35 : 0.2);
+  it('quick bands: Kick, Snare, Hats and Notes send hits (and a Value) with their preset\'s band; the rest send their level', () => {
+    for (const k of ['kick', 'snare', 'hats', 'notes'] as const) {
+      const b = newBand([], k), p = AT_DET_PRESETS[k];
+      expect([b.lo, b.hi, b.trigger, b.value, b.preset, b.sensitivity]).toEqual([p.lo, p.hi, true, true, k, 0.5]);
+      expect([b.minInterval, b.gateDb, b.trackNoise, b.character]).toEqual([null, null, null, 'auto']);
     }
-    expect(newBand([], 'kick').cooldown).toBe(150);
+    // Older keys still make the same bands; Hit's sounds share the presets' bands.
+    expect(newBand([], 'hihat').preset).toBe('hats');
+    expect(newBand([], 'kickDrums').preset).toBe('kick');
+    expect([HIT_PRESETS.kick.lo, HIT_PRESETS.kick.hi]).toEqual([AT_DET_PRESETS.kick.lo, AT_DET_PRESETS.kick.hi]);
     for (const k of ['sub', 'bass', 'vocals', 'air']) { const b = newBand([], k); expect(b.value && !b.trigger).toBe(true); }
-    expect(BAND_QUICK_PRESETS.map(p => p.name)).toEqual(['Sub', 'Bass', 'Kick', 'Snare', 'Hi-hat', 'Vocals', 'Air']);
+    expect(BAND_QUICK_PRESETS.map(p => p.name)).toEqual(['Kick', 'Snare', 'Hats', 'Notes', 'Sub', 'Bass', 'Vocals', 'Air']);
+    // A range drawn on the spectrum catches Custom hits.
+    expect(newBand([], { lo: 500, hi: 900 }).preset).toBe('custom');
+  });
+
+  it('old bands (a v1 Sensitivity, v2 lines, a Detect) upgrade to their nearest preset and Sensitivity', () => {
+    const [v1, v2, user, bright, notes, hat] = bandsOf({ bands: [
+      { id: 'a', lo: 30, hi: 150, trigger: true, sensitivity: 0.8 },
+      { id: 'b', lo: 200, hi: 5000, trigger: true, threshold: 0.4, releaseAt: 0.8, gate: 0.1, minMs: 10, cooldown: 120 },
+      { id: 'c', lo: 63, hi: 134, value: true, trigger: true, detect: 'transient', character: 'noisy', charAt: 0.3, threshold: 0.5, releaseAt: 0.8, gate: 0.71, minMs: 10, cooldown: 120 },
+      { id: 'd', lo: 100, hi: 8000, value: true, detect: 'brightness' },
+      { id: 'e', lo: 200, hi: 2000, trigger: true, detect: 'hits', character: 'tonal' },
+      { id: 'f', lo: 6000, hi: 16000, trigger: true, detect: 'hits', character: 'noisy', threshold: 0.5 },
+    ] });
+    expect([v1.preset, v1.sensitivity, v1.lo, v1.hi]).toEqual(['kick', 0.8, 30, 150]);
+    expect([v2.preset, v2.sensitivity]).toEqual(['snare', 0.75]);
+    // The bug report's band: a kick band (its edges kept), Only dropped (a kick is never noisy), the middle Sensitivity.
+    expect([user.preset, user.sensitivity, user.character, user.lo, user.hi]).toEqual(['kick', 0.5, 'auto', 63, 134]);
+    expect([bright.preset, bright.valueFrom, bright.trigger]).toEqual(['custom', 'brightness', false]);
+    expect([notes.preset, notes.character]).toEqual(['notes', 'tonal']);
+    expect([hat.preset, hat.character]).toEqual(['hats', 'noisy']);
+    // The fixed lines are gone from the saved band.
+    const up = upgradeOldBand({ lo: 30, hi: 150, trigger: true, threshold: 0.5, gate: 0.2, cooldown: 120, minMs: 10, releaseAt: 0.8 });
+    expect(Object.keys(up).filter(k => ['threshold', 'gate', 'cooldown', 'minMs', 'releaseAt', 'detect'].includes(k))).toEqual([]);
+    // A band already in today's terms is left as it is.
+    expect(upgradeOldBand({ preset: 'hats', sensitivity: 0.3 })).toEqual({ preset: 'hats', sensitivity: 0.3 });
   });
 
   it('new bands get fresh ids, names and colours', () => {
@@ -75,7 +104,7 @@ describe('bands', () => {
     expect([c.lo, c.hi]).toEqual([300, 500]);
   });
 
-  it('outputs: Value named after the band, Trigger "Name (trigger)"', () => {
+  it('outputs: Value named after the band, its hits "Name (trigger)"', () => {
     const bands = bandsOf({ bands: [{ id: 'k', name: 'Kick', lo: 30, hi: 150, value: true, trigger: true }, { id: 'b', name: 'Bass', lo: 60, hi: 250 }] });
     expect(bandOutputs(bands).map(o => [o.key, o.label])).toEqual([['k_v', 'Kick'], ['k_t', 'Kick (trigger)'], ['b_v', 'Bass']]);
   });
@@ -88,19 +117,19 @@ describe('bands', () => {
     expect(b.lo).toBe(20);
   });
 
-  it('a Kick band triggers on each kick, and not on hi-hats; a Hi-hat band the other way round', () => {
+  it('a Kick band hits on each kick, and not on hi-hats; a Hats band the other way round', () => {
     const k = countTriggers(kicks(3), 3, 'kick');
     expect(k).toBeGreaterThanOrEqual(5);
     expect(k).toBeLessThanOrEqual(6);
     expect(countTriggers(hats(3), 3, 'kick')).toBe(0);
-    expect(countTriggers(hats(3), 3, 'hihat')).toBeGreaterThanOrEqual(10);
+    expect(countTriggers(hats(3), 3, 'hats')).toBeGreaterThanOrEqual(10);
   });
 
   it('trigger is 1 for exactly one frame per hit, and Value follows the band', () => {
     const band = { ...newBand([], 'kick'), value: true }, run = newBandRun();
     let prev = 0, rises = 0, ones = 0, maxLevel = 0;
-    frames(kicks(2), 2, (db, t) => {
-      stepBandRun(run, band, db, SR, t, HOP / SR);
+    frames(kicks(2), 2, (w, t) => {
+      stepBandRun(run, band, w, SR, t, HOP / SR);
       if (run.hit.trigger === 1) ones++;
       if (run.hit.trigger > 0.5 && prev <= 0.5) rises++;
       prev = run.hit.trigger;

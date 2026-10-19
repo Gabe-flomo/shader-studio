@@ -12,11 +12,11 @@
 export {
   atDbToUnit as dbToUnit, AT_DB_FLOOR as DB_FLOOR, atBinHz as binHz, atBandLevel as bandLevel, atRmsLevel as rmsLevel,
   atFollow as follow, atNewBandState as newBandState, AT_PEAK_HOLD as PEAK_HOLD, AT_PEAK_FALL as PEAK_FALL, atStepBand as stepBand,
-  AT_HIT_HISTORY as HIT_HISTORY, atNewHitState as newHitState, atHitThreshold as hitThreshold, atBandFlux as bandFlux, atStepHit as stepHit,
+  AT_HIT_HISTORY as HIT_HISTORY, atHitThreshold as hitThreshold, atBandFlux as bandFlux,
   AT_SPECTRUM_MIN_HZ as SPECTRUM_MIN_HZ, atHzAt as hzAt, atXOfHz as xOfHz, atSpectrumMaxHz as spectrumMaxHz, atSpectrumBins as spectrumBins,
   atScrollRows as scrollRows, atWriteRow as writeRow, atWaveRow as waveRow,
 } from '../../play/kit/audioTools.js';
-export type { AtBandState as BandState, AtHitState as HitState, AtHitSettings as HitSettings, AtLayout as SpectrumLayout } from '../../play/kit/audioTools.js';
+export type { AtBandState as BandState, AtLayout as SpectrumLayout } from '../../play/kit/audioTools.js';
 
 // ── An FFT like AnalyserNode's, for tests and offline use ─────────────────────────────────────────────────────
 

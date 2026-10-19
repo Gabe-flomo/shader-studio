@@ -2650,7 +2650,8 @@ void main() {
         // Live hits wait for the speakers: the output's latency (a file or video), plus the source's Sync offset.
         const lat = at.ctx ? (at.ctx.baseLatency || 0) + (at.ctx.outputLatency || 0) : 0;
         s.delay = Math.max(0, (lat > 0 && lat < 1 ? lat : 0) + (c.syncOffset || 0) / 1000);
-        ATK.stepSource(s.st, c.bands, c.sounds, s.freq, s.sr, nowMs / 1000, dt, (ch, v) => put(id + '::' + ch, v), { delay: s.delay });
+        // The bands' hit detector reads the last samples heard (the probe's 2048), as the app's does.
+        ATK.stepSource(s.st, c.bands, c.sounds, s.freq, s.sr, nowMs / 1000, dt, (ch, v) => put(id + '::' + ch, v), { delay: s.delay, wave: s.wave });
       }
       // The effects: their numbers (a Play control on the page moves them through their uniforms), sound and texture.
       for (const f of at.fx.values()) {

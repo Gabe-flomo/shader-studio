@@ -24,7 +24,7 @@ describe('band shape migration', () => {
     expect(bs[2]).toMatchObject({ shape: 'band', slope: 24, lo: 200, hi: 900 });
   });
   it('gives a new band the Band shape', () => {
-    expect(newBand([], 'kick')).toMatchObject({ shape: 'band', slope: 24, lo: 30, hi: 150 });
+    expect(newBand([], 'kick')).toMatchObject({ shape: 'band', slope: 24, lo: 40, hi: 130 });
   });
 });
 

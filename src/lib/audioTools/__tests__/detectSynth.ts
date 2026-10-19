@@ -163,3 +163,46 @@ export function matchTimes(found: readonly number[], want: readonly number[], to
   }
   return { hit, extra: found.length - used.size };
 }
+
+/**
+ * The user's test file (drums-test.wav, 8 s): a bass line changing note each second (63–134 Hz holds its notes and
+ * their octaves), chords, melody notes every 0.5 s, kicks at 0.25 + n, snares at 0.75 + n, high-passed hats every
+ * 0.25 s from 0.125; normalised to a 0.9 peak and rounded to 16 bits, as the WAV is.
+ */
+export function drumsTest(): { mono: Float32Array; kicks: number[]; snares: number[]; hats: number[] } {
+  const secs = 8, N = SR * secs, m = new Float32Array(N);
+  let s = 7;
+  const rnd = () => { s ^= s << 13; s >>>= 0; s ^= s >> 17; s ^= s << 5; s >>>= 0; return (s / 0xffffffff) * 2 - 1; };
+  const tone = (hz: number, a: number, b: number, amp: number, harm = 1, fade = 0.01) => {
+    const i0 = Math.round(a * SR), i1 = Math.min(N, Math.round(b * SR)), f = fade * SR;
+    for (let i = i0; i < i1; i++) {
+      const env = Math.min(1, (i - i0) / f, (i1 - i) / f);
+      let v = 0;
+      for (let k = 1; k <= harm; k++) if (hz * k < SR / 2.2) v += Math.sin((2 * Math.PI * hz * k * i) / SR) / k;
+      m[i] += amp * env * v;
+    }
+  };
+  const kick = (t: number) => {
+    const i0 = Math.round(t * SR);
+    let ph = 0;
+    for (let i = 0; i < 0.35 * SR && i0 + i < N; i++) { const tt = i / SR, f = 50 + 100 * Math.exp(-tt / 0.03); ph += (2 * Math.PI * f) / SR; m[i0 + i] += 0.8 * Math.exp(-tt / 0.06) * Math.sin(ph) + (i < 48 ? 0.24 * (1 - i / 48) : 0); }
+  };
+  const hpNoise = (t: number, amp: number, decay: number, fc: number) => {
+    const i0 = Math.round(t * SR), a = 1 - Math.exp((-2 * Math.PI * fc) / SR);
+    let l1 = 0, l2 = 0;
+    for (let i = 0; i < decay * 6 * SR && i0 + i < N; i++) { const x = rnd(); l1 += a * (x - l1); const h = x - l1; l2 += a * (h - l2); m[i0 + i] += amp * Math.exp(-i / SR / decay) * (h - l2); }
+  };
+  const snare = (t: number) => { hpNoise(t, 0.4, 0.06, 400); const i0 = Math.round(t * SR); for (let i = 0; i < 0.25 * SR && i0 + i < N; i++) m[i0 + i] += 0.24 * Math.exp(-i / SR / 0.04) * Math.sin((2 * Math.PI * 190 * i) / SR); };
+  const bass = [55, 65.4, 73.4, 49], mel = [330, 392, 440, 494, 587, 523, 440, 392];
+  const kicks: number[] = [], snares: number[] = [], hats: number[] = [];
+  for (let k = 0; k < secs; k++) tone(bass[k % 4], k, k + 1, 0.3, 2, 0.03);
+  for (let k = 0; k < secs; k++) for (const hz of [261.6, 329.6, 392]) tone(hz * (k % 2 ? 1.122 : 1), k, k + 1, 0.04, 20, 0.05);
+  for (let k = 0, t = 0; t < secs - 0.3; k++, t += 0.5) tone(mel[k % 8], t, t + 0.45, 0.12, 4);
+  for (let t = 0.25; t < secs - 0.3; t += 1) { kick(t); kicks.push(t); }
+  for (let t = 0.75; t < secs - 0.3; t += 1) { snare(t); snares.push(t); }
+  for (let t = 0.125; t < secs - 0.2; t += 0.25) { hpNoise(t, 0.4, 0.02, 6000); hats.push(t); }
+  let peak = 0;
+  for (const v of m) peak = Math.max(peak, Math.abs(v));
+  for (let i = 0; i < N; i++) m[i] = Math.round(Math.max(-1, Math.min(1, (m[i] / peak) * 0.9)) * 32767) / 32768;
+  return { mono: m, kicks, snares, hats };
+}
