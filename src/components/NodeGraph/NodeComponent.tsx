@@ -178,6 +178,7 @@ import { resetRuntime } from '../../lib/runtimeReset';
 import { toast } from '../ui/toastStore';
 import { Tooltip } from '../ui/Tooltip';
 import { optionsShown } from '../../lib/selectOptions';
+import { isGradientRangeKey } from '../../lib/colourGradient';
 /** A Mac: ⌘-click hides a group slider (Ctrl-click is a right-click there). */
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 
@@ -685,7 +686,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   });
   const channelNames = channelNamesKey ? channelNamesKey.split('\u0001') : null;
   // The inputs the card shows (Input names… names these).
-  const inputNameKeys = Object.keys(node.inputs).filter(k => !def || Object.keys(def.inputs).length === 0 || k in def.inputs);
+  const inputNameKeys = Object.keys(node.inputs).filter(k => !def || Object.keys(def.inputs).length === 0 || k in def.inputs || isGradientRangeKey(k));
   // A builder mute (builders/mute.ts) is a bypass too: the node passes its input through, by a uniform.
   const builderMuted = nodeMuted(node);
   const isBypassed = !!node.bypassed || builderMuted;
@@ -3332,7 +3333,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
 
       <div style={{ padding: '6px 0' }}>
         {/* ── Inputs (always visible) ── */}
-        {Object.entries(node.inputs).filter(([key]) => (Object.keys(def.inputs).length === 0 || key in def.inputs || node.type === 'agentsGroup' || (node.type === 'drawAgents' && key in DRAW_3D_INPUTS)) && socketVisible(node, def, key)).map(([key, input]) => {
+        {Object.entries(node.inputs).filter(([key]) => (Object.keys(def.inputs).length === 0 || key in def.inputs || isGradientRangeKey(key) || node.type === 'agentsGroup' || (node.type === 'drawAgents' && key in DRAW_3D_INPUTS)) && socketVisible(node, def, key)).map(([key, input]) => {
           const isConnected = !!input.connection;
           const isExternal = externalInputKeys?.has(key) ?? false;
 

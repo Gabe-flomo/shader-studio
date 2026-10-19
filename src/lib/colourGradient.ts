@@ -12,7 +12,14 @@
  *   `${key}__grad`         { on, along, interp, n }  structure; changing it recompiles
  *   `${key}__gc0…7`        each stop's colour, a vec3 uniform
  *   `${key}__gp0…7`        each stop's place 0–1, a float uniform
- *   `${key}__gfrom / __gto`  the driver's range mapped onto 0–1, float uniforms
+ *   `${key}__gfrom / __gto`  the driver's range mapped onto 0–1, float uniforms. They are also optional
+ *                          input sockets ("Tint from", "Tint to") while the gradient is on: a wire there
+ *                          replaces the field, as a socket replaces a slider (withGradientRangeSockets), and
+ *                          Play controls can drive them like any slider (play/playControls.ts)
+ *
+ * A periodic driver (Angle) goes round: by default the gradient is cyclic there (Wrap: past the last stop it
+ * blends back into the first, so there is no seam where the angle wraps), or Mirror (0 → 1 → 0 round the circle).
+ * From / To still pick the start and the span, so animating From turns the gradient round without a seam.
  *
  * The colour param itself is untouched, so switching back to Solid gives the old colour, and a
  * graph that never used a gradient compiles to exactly the shader it always did.
@@ -24,6 +31,8 @@ import type { GradientStop, RGB } from '../components/ui/gradientStops';
 import { p, pv3 } from '../nodes/definitions/helpers';
 
 export type GradientInterp = 'smooth' | 'linear' | 'constant';
+/** How a periodic driver (Angle) goes round: Wrap blends the last stop back into the first; Mirror runs 0 → 1 → 0. */
+export type GradientRepeat = 'wrap' | 'mirror';
 export type GradientDriver =
   // 3D: a surface point (and its normal, the camera)
   | 'height' | 'centre' | 'axisX' | 'axisZ' | 'normal' | 'depth' | 'noise'
@@ -40,6 +49,8 @@ export interface ColourGradient {
   /** The driver's value that sits at place 0 … and at place 1. */
   from: number;
   to: number;
+  /** Periodic drivers only (Angle): Wrap (the default) or Mirror. Absent on the others. */
+  repeat?: GradientRepeat;
 }
 
 export const GRADIENT_MAX_STOPS = 8;
@@ -65,6 +76,8 @@ interface DriverInfo {
   /** Default range: the driver's value at place 0 and at place 1. */
   range: [number, number];
   glsl: (c: GradientContext) => string | null;
+  /** The value goes round (Angle: one turn is 1): the gradient wraps or mirrors instead of clamping. */
+  periodic?: boolean;
 }
 
 const uvOf = (c: GradientContext) => c.uv ?? 'g_uv';
@@ -83,7 +96,7 @@ export const GRADIENT_DRIVERS: Record<GradientDriver, DriverInfo> = {
   uvX: { label: 'UV X', hint: 'Across the picture: left to right.', range: [-1, 1], glsl: c => `(${uvOf(c)}).x` },
   uvY: { label: 'UV Y', hint: 'Up the picture: bottom to top.', range: [-1, 1], glsl: c => `(${uvOf(c)}).y` },
   radial: { label: 'Radial', hint: 'Distance from the middle of the picture.', range: [0, 1], glsl: c => `length(${uvOf(c)})` },
-  angle: { label: 'Angle', hint: 'Round the middle of the picture, one full turn.', range: [0, 1], glsl: c => `(atan((${uvOf(c)}).y, (${uvOf(c)}).x) / 6.28318 + 0.5)` },
+  angle: { label: 'Angle', hint: 'Round the middle of the picture: one full turn is 1. From turns the gradient round, To − From is how much of a turn it spans.', range: [0, 1], periodic: true, glsl: c => `(atan((${uvOf(c)}).y, (${uvOf(c)}).x) / 6.28318 + 0.5)` },
 };
 
 /** Driver lists for the usual contexts (a ParamDef's `gradient`). */
@@ -95,6 +108,12 @@ export const DRIVERS_2D: readonly GradientDriver[] = ['uvX', 'uvY', 'radial', 'a
 export const INTERP_OPTIONS: ReadonlyArray<{ value: GradientInterp; label: string }> = [
   { value: 'smooth', label: 'Smooth' }, { value: 'linear', label: 'Linear' }, { value: 'constant', label: 'Constant' },
 ];
+export const REPEAT_OPTIONS: ReadonlyArray<{ value: GradientRepeat; label: string; hint: string }> = [
+  { value: 'wrap', label: 'Wrap', hint: 'Round the circle and back to the start: past the last stop it blends into the first, no seam.' },
+  { value: 'mirror', label: 'Mirror', hint: 'There and back: the stops run 0 → 1 over half a turn, then 1 → 0.' },
+];
+/** Does this driver go round (so the gradient wraps or mirrors)? */
+export const isPeriodicDriver = (d: GradientDriver): boolean => GRADIENT_DRIVERS[d]?.periodic === true;
 
 // ── Params ────────────────────────────────────────────────────────────────────
 
@@ -103,8 +122,10 @@ export const stopColourKey = (key: string, i: number) => `${key}__gc${i}`;
 export const stopPosKey = (key: string, i: number) => `${key}__gp${i}`;
 export const fromKey = (key: string) => `${key}__gfrom`;
 export const toKey = (key: string) => `${key}__gto`;
+/** Is this param / socket key a gradient's From or To (`<key>__gfrom`, `<key>__gto`)? */
+export const isGradientRangeKey = (k: string): boolean => /__g(from|to)$/.test(k);
 
-interface GradHeader { on: boolean; along: GradientDriver; interp: GradientInterp; n: number }
+interface GradHeader { on: boolean; along: GradientDriver; interp: GradientInterp; n: number; repeat: GradientRepeat }
 
 const isRgb = (v: unknown): v is number[] => Array.isArray(v) && v.length >= 3 && v.slice(0, 3).every(n => typeof n === 'number');
 const clamp01 = (v: number) => Math.max(0, Math.min(1, Number.isFinite(v) ? v : 0));
@@ -115,7 +136,9 @@ function headerOf(params: Record<string, unknown>, key: string): GradHeader | nu
   const along = (typeof h.along === 'string' && h.along in GRADIENT_DRIVERS ? h.along : 'height') as GradientDriver;
   const interp: GradientInterp = h.interp === 'linear' || h.interp === 'constant' ? h.interp : 'smooth';
   const n = Math.max(GRADIENT_MIN_STOPS, Math.min(GRADIENT_MAX_STOPS, Math.round(Number(h.n) || 2)));
-  return { on: h.on === true, along, interp, n };
+  // A gradient saved before Wrap / Mirror existed wraps: its Angle seam was never wanted.
+  const repeat: GradientRepeat = h.repeat === 'mirror' ? 'mirror' : 'wrap';
+  return { on: h.on === true, along, interp, n, repeat };
 }
 
 /** Is this colour setting a gradient right now? */
@@ -135,7 +158,10 @@ export function readGradient(params: Record<string, unknown>, key: string): Colo
   }
   const r = GRADIENT_DRIVERS[h.along].range;
   const from = params[fromKey(key)], to = params[toKey(key)];
-  return { along: h.along, interp: h.interp, stops, from: typeof from === 'number' ? from : r[0], to: typeof to === 'number' ? to : r[1] };
+  return {
+    along: h.along, interp: h.interp, stops, from: typeof from === 'number' ? from : r[0], to: typeof to === 'number' ? to : r[1],
+    ...(isPeriodicDriver(h.along) ? { repeat: h.repeat } : {}),
+  };
 }
 
 /** Stops sorted by place, clamped to 2–8 (extra ones dropped; a lone stop doubled). */
@@ -149,7 +175,9 @@ export function normaliseStops(stops: readonly GradientStop[]): GradientStop[] {
 /** The params for a colour setting holding `g` (`on`: shown as a gradient, else kept for later behind Solid). */
 export function gradientParams(key: string, g: ColourGradient, on = true): Record<string, unknown> {
   const stops = normaliseStops(g.stops);
-  const out: Record<string, unknown> = { [gradKey(key)]: { on, along: g.along, interp: g.interp, n: stops.length } };
+  const out: Record<string, unknown> = {
+    [gradKey(key)]: { on, along: g.along, interp: g.interp, n: stops.length, ...(isPeriodicDriver(g.along) ? { repeat: g.repeat ?? 'wrap' } : {}) },
+  };
   stops.forEach((s, i) => { out[stopColourKey(key, i)] = [...s.color]; out[stopPosKey(key, i)] = s.pos; });
   out[fromKey(key)] = g.from;
   out[toKey(key)] = g.to;
@@ -169,7 +197,17 @@ export function starterGradient(colour: readonly number[], along: GradientDriver
   const dark: RGB = [c[0] * 0.35, c[1] * 0.35, c[2] * 0.35];
   const light: RGB = [c[0] + (1 - c[0]) * 0.6, c[1] + (1 - c[1]) * 0.6, c[2] + (1 - c[2]) * 0.6];
   const r = GRADIENT_DRIVERS[along].range;
-  return { along, interp: 'smooth', stops: [{ pos: 0, color: dark }, { pos: 0.5, color: [c[0], c[1], c[2]] }, { pos: 1, color: light }], from: r[0], to: r[1] };
+  return {
+    along, interp: 'smooth', stops: [{ pos: 0, color: dark }, { pos: 0.5, color: [c[0], c[1], c[2]] }, { pos: 1, color: light }], from: r[0], to: r[1],
+    ...(isPeriodicDriver(along) ? { repeat: 'wrap' as const } : {}),
+  };
+}
+
+/** A From / To slider's starting range for a driver: its default range, and as much again on each side (typing past widens it). */
+export function rangeSliderBounds(along: GradientDriver): { min: number; max: number } {
+  const [a, b] = GRADIENT_DRIVERS[along].range;
+  const lo = Math.min(a, b), hi = Math.max(a, b), span = hi - lo || 1;
+  return { min: lo - span, max: hi + span };
 }
 
 /** The live params a gradient puts in a shader (stop colours, places, range), for the uniform patcher. */
@@ -190,6 +228,43 @@ export function gradientT(v: number, from: number, to: number): number {
   return clamp01((v - from) / span);
 }
 
+/** Turns past From for a periodic driver: (v − from) / (to − from), not clamped (the gradient goes round). */
+export function gradientU(v: number, from: number, to: number): number {
+  const span = Math.abs(to - from) < 1e-5 ? (to >= from ? 1e-5 : -1e-5) : to - from;
+  return (v - from) / span;
+}
+const fract = (x: number) => x - Math.floor(x);
+
+/**
+ * Wrap: the colour at `u` turns round a cyclic gradient, exactly as pfGradientWrap computes it. One turn holds the
+ * stops' stretch of the bar plus a closing segment (the average gap between stops) where the last colour blends
+ * back into the first, so stops at 0, ½ and 1 share a turn in thirds and stops at 0, ¼, ½, ¾ land on the quarters.
+ */
+export function evalGradientWrap(stops: readonly GradientStop[], u: number, interp: GradientInterp = 'smooth'): RGB {
+  const s = normaliseStops(stops);
+  const p0 = s[0].pos, pl = s[s.length - 1].pos;
+  const span = pl - p0;
+  const gap = span > 1e-4 ? span / (s.length - 1) : 1;
+  const t = p0 + fract(u) * (span + gap);
+  if (t <= pl) return evalGradient(s, t, interp);
+  const a = s[s.length - 1].color, b = s[0].color;
+  const f = clamp01((t - pl) / gap);
+  const w = interp === 'constant' ? 0 : interp === 'linear' ? f : f * f * (3 - 2 * f);
+  return [a[0] + (b[0] - a[0]) * w, a[1] + (b[1] - a[1]) * w, a[2] + (b[2] - a[2]) * w];
+}
+
+/** Mirror: 0 → 1 over the first half of each turn, 1 → 0 over the second (as pfGradMirror). */
+export function mirrorT(u: number): number {
+  return 1 - Math.abs(1 - 2 * fract(u));
+}
+
+/** The colour a gradient gives a driver value `v`: clamped along the bar, or round it for a periodic driver (Wrap / Mirror). */
+export function evalGradientAt(g: ColourGradient, v: number): RGB {
+  if (!isPeriodicDriver(g.along)) return evalGradient(g.stops, gradientT(v, g.from, g.to), g.interp);
+  const u = gradientU(v, g.from, g.to);
+  return g.repeat === 'mirror' ? evalGradient(g.stops, mirrorT(u), g.interp) : evalGradientWrap(g.stops, u, g.interp);
+}
+
 /** The colour at place `t` (0–1), exactly as pfGradient computes it. */
 export function evalGradient(stops: readonly GradientStop[], t: number, interp: GradientInterp = 'smooth'): RGB {
   const s = normaliseStops(stops);
@@ -206,9 +281,19 @@ export function evalGradient(stops: readonly GradientStop[], t: number, interp: 
   return [...s[s.length - 1].color] as RGB;
 }
 
-/** A CSS linear-gradient of a gradient, for its bar and preset swatches. */
-export function gradientCssOf(g: Pick<ColourGradient, 'stops' | 'interp'>, angle = 90): string {
+/**
+ * A CSS gradient of a gradient, for its bar and preset swatches. Given a periodic `along` (Angle), it is drawn as
+ * one full turn, sampled from the shader's maths (evalGradientAt): Wrap's closing blend, or Mirror's there-and-back.
+ */
+export function gradientCssOf(g: Pick<ColourGradient, 'stops' | 'interp'> & Partial<Pick<ColourGradient, 'along' | 'repeat'>>, angle = 90): string {
   const s = normaliseStops(g.stops);
+  if (g.along && isPeriodicDriver(g.along)) {
+    const N = 48;
+    const rgb = (c: readonly number[]) => `rgb(${c.map(v => Math.round(clamp01(v) * 255)).join(' ')})`;
+    const turn: ColourGradient = { along: g.along, interp: g.interp, stops: s, from: 0, to: 1, repeat: g.repeat ?? 'wrap' };
+    const parts = Array.from({ length: N + 1 }, (_, i) => `${rgb(evalGradientAt(turn, Math.min(i / N, 0.99999)))} ${((i / N) * 100).toFixed(1)}%`);
+    return `linear-gradient(${angle}deg, ${parts.join(', ')})`;
+  }
   const css = (c: readonly number[]) => `rgb(${c.map(v => Math.round(clamp01(v) * 255)).join(' ')})`;
   if (g.interp === 'constant') {
     const parts = s.map((st, i) => `${css(st.color)} ${(st.pos * 100).toFixed(1)}% ${((s[i + 1]?.pos ?? 1) * 100).toFixed(1)}%`);
@@ -230,6 +315,12 @@ float pfGradT(float v, float from, float to) {
     if (abs(span) < 1e-5) span = span < 0.0 ? -1e-5 : 1e-5;
     return clamp((v - from) / span, 0.0, 1.0);
 }
+float pfGradU(float v, float from, float to) {
+    float span = to - from;
+    if (abs(span) < 1e-5) span = span < 0.0 ? -1e-5 : 1e-5;
+    return (v - from) / span;
+}
+float pfGradMirror(float u) { return 1.0 - abs(1.0 - 2.0 * fract(u)); }
 float pfGradHash(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
 float pfGradNoise(vec3 x) {
     vec3 i = floor(x); vec3 f = fract(x); f = f * f * (3.0 - 2.0 * f);
@@ -252,14 +343,29 @@ vec3 pfGradient(float t, int n, int interp, vec3 c0, vec3 c1, vec3 c2, vec3 c3, 
     if (n > 6 && t > p5) col = mix(c5, c6, pfGradW(t, p5, p6, interp));
     if (n > 7 && t > p6) col = mix(c6, c7, pfGradW(t, p6, p7, interp));
     return col;
+}
+// Wrap (a periodic driver, Angle): u turns; one turn is the stops' stretch plus a closing segment (their average
+// gap) where the last colour blends back into the first, so the gradient has no seam (evalGradientWrap in JS).
+vec3 pfGradientWrap(float u, int n, int interp, vec3 c0, vec3 c1, vec3 c2, vec3 c3, vec3 c4, vec3 c5, vec3 c6, vec3 c7,
+                    float p0, float p1, float p2, float p3, float p4, float p5, float p6, float p7) {
+    float pl = n > 7 ? p7 : n > 6 ? p6 : n > 5 ? p5 : n > 4 ? p4 : n > 3 ? p3 : n > 2 ? p2 : p1;
+    vec3 cl = n > 7 ? c7 : n > 6 ? c6 : n > 5 ? c5 : n > 4 ? c4 : n > 3 ? c3 : n > 2 ? c2 : c1;
+    float span = pl - p0;
+    float gap = span > 1e-4 ? span / float(n - 1) : 1.0;
+    float t = p0 + fract(u) * (span + gap);
+    if (t <= pl) return pfGradient(t, n, interp, c0, c1, c2, c3, c4, c5, c6, c7, p0, p1, p2, p3, p4, p5, p6, p7);
+    float f = clamp((t - pl) / gap, 0.0, 1.0);
+    float w = interp == 2 ? 0.0 : interp == 1 ? f : f * f * (3.0 - 2.0 * f);
+    return mix(cl, c0, w);
 }`;
 
 /**
  * The GLSL for a colour setting: the gradient call when it is on and its driver works here, else
  * null (the caller keeps its solid colour). Stop colours, places and the range come from the params,
  * which in uniform mode the compiler has swapped for uniform names (p / pv3 pass those through).
+ * `wires`: the node's resolved inputs; a wire into `<key>__gfrom` / `<key>__gto` replaces that field.
  */
-export function gradientColourGlsl(params: Record<string, unknown>, key: string, ctx: GradientContext, allowed?: readonly string[]): string | null {
+export function gradientColourGlsl(params: Record<string, unknown>, key: string, ctx: GradientContext, allowed?: readonly string[], wires?: Record<string, string | undefined>): string | null {
   const h = headerOf(params, key);
   if (!h?.on) return null;
   if (allowed && !allowed.includes(h.along)) return null;
@@ -272,9 +378,46 @@ export function gradientColourGlsl(params: Record<string, unknown>, key: string,
     cs.push(pv3(params[stopColourKey(key, j)], [0.5, 0.5, 0.5]));
     ps.push(i < h.n ? p(params[stopPosKey(key, j)], h.n > 1 ? j / (h.n - 1) : 0) : '2.0');
   }
-  const t = `pfGradT(${drive}, ${p(params[fromKey(key)], r[0])}, ${p(params[toKey(key)], r[1])})`;
+  const from = wires?.[fromKey(key)] ?? p(params[fromKey(key)], r[0]);
+  const to = wires?.[toKey(key)] ?? p(params[toKey(key)], r[1]);
   const mode = h.interp === 'constant' ? 2 : h.interp === 'linear' ? 1 : 0;
-  return `pfGradient(${t}, ${h.n}, ${mode}, ${cs.join(', ')}, ${ps.join(', ')})`;
+  const args = `${h.n}, ${mode}, ${cs.join(', ')}, ${ps.join(', ')}`;
+  if (isPeriodicDriver(h.along)) {
+    const u = `pfGradU(${drive}, ${from}, ${to})`;
+    return h.repeat === 'mirror' ? `pfGradient(pfGradMirror(${u}), ${args})` : `pfGradientWrap(${u}, ${args})`;
+  }
+  return `pfGradient(pfGradT(${drive}, ${from}, ${to}), ${args})`;
+}
+
+/** The From / To input sockets a node's gradient colour settings give it (labels "‹Setting› from", "‹Setting› to"). */
+export function gradientRangeInputs(params: Record<string, unknown>, settings: ReadonlyArray<{ key: string; label: string }>): Record<string, { type: 'float'; label: string; hint: string }> {
+  const out: Record<string, { type: 'float'; label: string; hint: string }> = {};
+  for (const s of settings) {
+    if (!gradientOn(params, s.key)) continue;
+    out[fromKey(s.key)] = { type: 'float', label: `${s.label} from`, hint: 'The gradient\'s From: the value at the bar\'s left end. A wire here replaces the field.' };
+    out[toKey(s.key)] = { type: 'float', label: `${s.label} to`, hint: 'The gradient\'s To: the value at the bar\'s right end. A wire here replaces the field.' };
+  }
+  return out;
+}
+
+/**
+ * A node with its gradient From / To sockets added (gradient on) or taken away (off and unwired). Kept on the
+ * node, not the definition, so a node without a gradient is the plain node it always was. `settings`: the
+ * node's gradient colour params (ParamDefs with `gradient`).
+ */
+export function withGradientRangeSockets<N extends { params: Record<string, unknown>; inputs: Record<string, { type: string; label?: string; connection?: unknown }> }>(
+  n: N, settings: ReadonlyArray<{ key: string; label: string }>,
+): N {
+  if (!settings.length) return n;
+  const want = gradientRangeInputs(n.params, settings);
+  let inputs: Record<string, unknown> | null = null;
+  for (const [k, s] of Object.entries(want)) {
+    if (!n.inputs[k]) { inputs ??= { ...n.inputs }; inputs[k] = { type: s.type, label: s.label }; }
+  }
+  for (const k of Object.keys(n.inputs)) {
+    if (isGradientRangeKey(k) && !want[k] && !n.inputs[k].connection) { inputs ??= { ...n.inputs }; delete inputs[k]; }
+  }
+  return inputs ? { ...n, inputs: inputs as N['inputs'] } : n;
 }
 
 /** Does any of these colour settings of a node hold an active gradient (so its shader needs PF_GRADIENT_GLSL)? */

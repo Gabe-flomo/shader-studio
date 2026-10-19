@@ -3,8 +3,8 @@ import { p, pv3 } from './helpers';
 import { DRIVERS_2D, PF_GRADIENT_GLSL, gradientColourGlsl, gradientOn } from '../../lib/colourGradient';
 
 /** A fill / glow colour setting the card can show when nothing is wired (docs/gradients.md). Absent: the old white, so saved graphs compile unchanged. */
-function ownColour(params: Record<string, unknown>, key: string, ctx: { value: string }, drivers: readonly string[]): string | null {
-  const g = gradientColourGlsl(params, key, ctx, drivers);
+function ownColour(params: Record<string, unknown>, key: string, ctx: { value: string }, drivers: readonly string[], wires?: Record<string, string | undefined>): string | null {
+  const g = gradientColourGlsl(params, key, ctx, drivers, wires);
   if (g) return g;
   const v = params[key];
   return typeof v === 'string' || Array.isArray(v) ? pv3(v, [1, 1, 1]) : null;
@@ -190,7 +190,7 @@ export const SDFFillNode: NodeDefinition = {
   generateGLSL: (node: GraphNode, inputVars) => {
     const id    = node.id;
     const dVar  = inputVars.d           || '1.0';
-    const fVar  = inputVars.fillColor   || ownColour(node.params, 'fillColor', { value: `${id}_d` }, FILL_DRIVERS) || 'vec3(1.0)';
+    const fVar  = inputVars.fillColor   || ownColour(node.params, 'fillColor', { value: `${id}_d` }, FILL_DRIVERS, inputVars) || 'vec3(1.0)';
     const sVar  = inputVars.strokeColor || 'vec3(0.0)';
     const bgVar = inputVars.background  || 'vec3(0.0)';
     const swVar = inputVars.strokeWidth || p(node.params.strokeWidth, 0.0);

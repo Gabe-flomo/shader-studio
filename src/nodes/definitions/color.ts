@@ -163,7 +163,7 @@ export const ColorizeNode: NodeDefinition = {
   generateGLSL: (node: GraphNode, inputVars) => {
     const id   = node.id;
     const fld  = inputVars.field ?? '0.0';
-    const col  = inputVars.color ?? gradientColourGlsl(node.params, 'color', { value: fld }, COLORIZE_DRIVERS) ?? pv3(node.params.color, [1.0, 0.55, 0.2]);
+    const col  = inputVars.color ?? gradientColourGlsl(node.params, 'color', { value: fld }, COLORIZE_DRIVERS, inputVars) ?? pv3(node.params.color, [1.0, 0.55, 0.2]);
     const bg   = inputVars.background ?? pv3(node.params.background, [0.0, 0.0, 0.0]);
     const gain = inputVars.gain ?? p(node.params.gain, 1.0);
     return {
@@ -936,7 +936,7 @@ export const ColorPickerNode: NodeDefinition = {
   glslFunctionsFor: node => (gradientOn(node.params, 'color') ? [PF_GRADIENT_GLSL] : []),
   generateGLSL: (node: GraphNode, inputVars) => {
     const id = node.id;
-    const grad = gradientColourGlsl(node.params, 'color', { pos: inputVars.point, normal: inputVars.normal }, DRIVERS_3D_POINT);
+    const grad = gradientColourGlsl(node.params, 'color', { pos: inputVars.point, normal: inputVars.normal }, DRIVERS_3D_POINT, inputVars);
     return {
       code: [
         `    vec3 ${id}_rgb = ${grad ?? pv3(node.params.color, [0.96, 0.55, 0.2])};\n`,

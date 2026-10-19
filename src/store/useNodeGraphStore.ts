@@ -199,6 +199,7 @@ import { runRebuildHandlers } from '../lib/rebuild';
 import type { KeyframePreset } from '../types/keyframePreset';
 import { bakedInfo } from '../nodes/definitions/baked';
 import { getNodeDefinition, getNodeDefinitionFor, resolveNodeAliases, resolveSubgraphAliases, NODE_ALIASES, aliasParams, clearNodeDefinitionCache } from '../nodes/definitions';
+import { withGradientRangeSockets } from '../lib/colourGradient';
 import { collapseToGroup } from './groupCollapse';
 import { colorPickerSockets, paletteNodeCoeffs, STOP_PALETTE_MAX } from '../nodes/definitions/color';
 import { autoFitCosineStops, fitCosineStops } from '../lib/palette';
@@ -606,10 +607,22 @@ function probeValuesEqual(a: Record<string, number[]>, b: Record<string, number[
 }
 
 /**
+ * A node's sockets after a params edit: its own retyping (retypeSockets), then the From / To sockets of any
+ * colour setting that is a gradient (lib/colourGradient.ts withGradientRangeSockets, docs/gradients.md).
+ */
+function retypeSwizzle(n: GraphNode): GraphNode {
+  const r = retypeSockets(n);
+  const pds = getNodeDefinitionFor(r)?.paramDefs;
+  if (!pds) return r;
+  const settings = Object.entries(pds).filter(([, pd]) => pd.gradient).map(([key, pd]) => ({ key, label: pd.label }));
+  return settings.length ? withGradientRangeSockets(r, settings) : r;
+}
+
+/**
  * A Swizzle card's sockets follow its params: the input is its input type, the output as wide as
  * its pattern. A wire into the input that no longer fits is dropped, as the type pills do.
  */
-function retypeSwizzle(n: GraphNode): GraphNode {
+function retypeSockets(n: GraphNode): GraphNode {
   // A Data card's sockets follow its settings the same way (mode, output groups).
   if (n.type === 'data') return retypeDataNode(n);
   // A Data Texture's sockets follow its fields and reads; Read channels' output its channels.

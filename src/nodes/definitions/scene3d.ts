@@ -62,11 +62,11 @@ export function keepOldJitter(params: Record<string, unknown>): Record<string, u
  * else the old per-channel floats (graphs compiled without migration, such as
  * raw example data in tests), else the fallback.
  */
-export function loopColour(node: GraphNode, key: 'bg' | 'albedo', wired: string | undefined, fallback: number[], gradient?: { ctx: GradientContext; addFunction: (glsl: string) => void }): string {
+export function loopColour(node: GraphNode, key: 'bg' | 'albedo', wired: string | undefined, fallback: number[], gradient?: { ctx: GradientContext; addFunction: (glsl: string) => void; wires?: Record<string, string | undefined> }): string {
   if (wired) return wired;
   // Albedo as a gradient over the hit point (docs/gradients.md); Solid compiles exactly as before.
   if (gradient) {
-    const g = gradientColourGlsl(node.params, key, gradient.ctx, DRIVERS_3D_SURFACE);
+    const g = gradientColourGlsl(node.params, key, gradient.ctx, DRIVERS_3D_SURFACE, gradient.wires);
     if (g) { gradient.addFunction(PF_GRADIENT_GLSL); return g; }
   }
   const v = node.params[key];

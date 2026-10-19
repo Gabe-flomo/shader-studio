@@ -97,6 +97,20 @@ Node labels live in the node definitions; their rules are under "Node labels" be
 - **colour.** The app's prose already leans British. Chrome strings say colour; node labels are a
   later pass, so "Add Color node" (the node's own name) is allowed.
 
+## Option names (2026-10-19)
+
+A select's options are short plain names: **Glow**, **Haze**, **Bounded**, not *Glow (exp)* or *Haze (1 / (1 + k·d²))*.
+The formula goes in the option's hint (its tooltip) and in the setting's **?** help. A qualifier stays only where two
+names would clash. The saved `value` ids never change, so graphs keep working.
+
+A choice that is no longer offered is **retired**: it leaves the list, the builders, the Do bar and Randomize (a
+ParamDef's `retiredOptions`), but a graph that already uses it still compiles the same and its card reads
+**Ring light (retired)**. Say *retired*, not removed or deprecated.
+
+In a gradient, **Wrap** and **Mirror** say how a periodic driver (Angle) goes round: Wrap blends the last stop back
+into the first, Mirror runs there and back. **From** and **To** are the driver's values at the bar's two ends; their
+sockets are **‹Setting› from** and **‹Setting› to** (Tint from, Tint to).
+
 ## Page ids
 
 Old page ids still work (deep links, `requestPage`, saved state): `glsl`, `convert` and `fn` open

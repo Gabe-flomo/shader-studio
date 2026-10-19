@@ -17,6 +17,7 @@
  * Results are cached per node object (nodes are replaced, not mutated).
  */
 import type { GraphNode, ParamDef } from '../types/nodeGraph';
+import { isGradientRangeKey } from '../lib/colourGradient';
 import { getNodeDefinitionFor } from '../nodes/definitions';
 
 export interface ParamDriver {
@@ -46,7 +47,11 @@ export function paramDrivers(node: GraphNode): Map<string, ParamDriver> {
       if (c && !out.has(k)) out.set(k, { socketKey: sk, socketLabel: socketLabel(sk), connection: { nodeId: c.nodeId, outputKey: c.outputKey } });
     }
   }
-  const wired = Object.entries(node.inputs).filter(([k, s]) => s.connection && !k.startsWith('__param_') && !sliders.includes(k));
+  // A gradient's From / To (lib/colourGradient.ts): its own socket wired.
+  for (const [k, s] of Object.entries(node.inputs)) {
+    if (isGradientRangeKey(k) && s.connection) out.set(k, { socketKey: k, socketLabel: socketLabel(k), connection: { nodeId: s.connection.nodeId, outputKey: s.connection.outputKey } });
+  }
+  const wired = Object.entries(node.inputs).filter(([k, s]) => s.connection && !k.startsWith('__param_') && !sliders.includes(k) && !isGradientRangeKey(k));
   if (!wired.length || !def.generateGLSL) return out;
   const marker = (k: string) => `__SS_PARAM_${k}__`;
   const params: Record<string, unknown> = { ...node.params };

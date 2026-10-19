@@ -291,7 +291,7 @@ float simpleLight(float d, float brightness) {
     const brightVar = inputVars.brightness ?? p(node.params.brightness, 10.0);
     const mode     = (node.params.mode as string) ?? 'glow';
     const ringFreq = p(node.params.ringFreq, 8.0);
-    const tintVar  = inputVars.tint ?? gradientColourGlsl(node.params, 'tint', { value: `abs(${distVar})` }, SDF_GLOW_DRIVERS) ?? pv3(node.params.tint, [1.0, 0.85, 0.6]);
+    const tintVar  = inputVars.tint ?? gradientColourGlsl(node.params, 'tint', { value: `abs(${distVar})` }, SDF_GLOW_DRIVERS, inputVars) ?? pv3(node.params.tint, [1.0, 0.85, 0.6]);
 
     const innerFalloff = p(node.params.innerFalloff, 8.0);
     let code: string;
