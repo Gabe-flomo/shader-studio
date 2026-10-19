@@ -63,6 +63,14 @@ export const BUILTIN_LAYERS: readonly BuiltinLayer[] = [
   { kind: 'script', variant: 'p5import', group: 'code', label: 'Import p5.js sketch…', hint: 'A p5.js sketch as a Script layer: paste it, or open its files, a folder or a .zip. Its sliders become controls; WEBGL sketches run in 3D.', icon: 'import' },
 ];
 
+/**
+ * What a phone's Add layer offers: everything but the sound layers, except the
+ * Sampler (user decision 2026-10-18; play/phoneTrim.ts). Saved setups keep any
+ * Audio layer they have.
+ */
+export const PHONE_HIDDEN_LAYER_KINDS: ReadonlySet<PlayLayerKind> = new Set<PlayLayerKind>(['audio']);
+export const PHONE_BUILTIN_LAYERS: readonly BuiltinLayer[] = BUILTIN_LAYERS.filter(l => !PHONE_HIDDEN_LAYER_KINDS.has(l.kind));
+
 /** Each kind's plain entry (not a variant), by kind. */
 export const BUILTIN_LAYER = Object.fromEntries(BUILTIN_LAYERS.filter(k => !k.variant).map(k => [k.kind, k])) as Record<PlayLayerKind, BuiltinLayer>;
 

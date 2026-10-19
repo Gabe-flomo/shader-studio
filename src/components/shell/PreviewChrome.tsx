@@ -6,7 +6,7 @@ import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Button, IconButton } from '../ui/Button';
 import { Popover } from '../ui/Popover';
 import { Tooltip } from '../ui/Tooltip';
-import { PREVIEW_ASPECTS } from '../../utils/graphImportPlan';
+import { aspectChoices, usePhonePlay, useShownAspect } from '../play/phoneTrim';
 import { timeReadoutRef } from '../../lib/timeTick';
 import { loadShortcutMap } from '../../hooks/useShortcuts';
 import { REBUILD_TOOLTIP, rebuildWithToast } from './rebuildAction';
@@ -37,11 +37,13 @@ export function PreviewHeader({ children }: { children?: ReactNode }) {
  */
 export function AspectPicker({ onPanel = false }: { onPanel?: boolean } = {}) {
   const tk = useTokens();
-  const value = useNodeGraphStore(s => s.previewAspect);
+  // A phone's Play page offers only Free and 1:1, and shows any other saved shape as Free (play/phoneTrim.ts).
+  const phone = usePhonePlay();
+  const value = useShownAspect();
   const set = useNodeGraphStore(s => s.setPreviewAspect);
   return (
-    <div role="radiogroup" aria-label="Canvas shape" style={{ display: 'flex', alignItems: 'center', gap: 1, marginRight: 6 }}>
-      {PREVIEW_ASPECTS.map(a => {
+    <div role="radiogroup" aria-label="Canvas shape" data-aspect-count={aspectChoices(phone).length} style={{ display: 'flex', alignItems: 'center', gap: 1, marginRight: 6 }}>
+      {aspectChoices(phone).map(a => {
         const on = a.id === value;
         const r = a.ratio ?? 1.5, w = r >= 1 ? 16 : 16 * r, h = r >= 1 ? 16 / r : 16;
         return (

@@ -23,9 +23,11 @@ import { RAIL_PX, showPage, usePlaySplit } from './playSplit';
 import { RAIL_CATEGORIES, RAIL_CATEGORY_SHORTCUT, RAIL_PAGES, categoryBadge, categoryOf, mappingsCountOf, pageCount, phonePageFor, phonePagesOf, stepIndex, type RailCategory, type RailCategoryDef, type RailPage } from './railPages';
 
 /** Categories that need Pro, and the plan feature that unlocks each. */
-function useLocked(): (cat: RailCategory) => boolean {
+function useLocked(phone = false): (cat: RailCategory) => boolean {
   const layers = useCan('play.layers'), finish = useCan('play.finish'), engine = useCan('audio.engine');
-  return cat => ((cat === 'layers' || cat === 'signals') && !layers) || (cat === 'finish' && !finish) || (cat === 'engine' && !engine);
+  // A phone's Sound has no Audio engine (phoneTrim.ts): it's the Sampler, readers and effects, each with its own Pro note.
+  const soundLocked = phone ? !layers && !finish : !engine;
+  return cat => ((cat === 'layers' || cat === 'signals') && !layers) || (cat === 'finish' && !finish) || (cat === 'engine' && soundLocked);
 }
 
 /** The rail on the left of the panel (or alone, with the panel closed): desktop and tablet. */
@@ -268,7 +270,7 @@ export function PlayRailBar() {
   const tk = useTokens();
   const play = useNodeGraphStore(s => s.play);
   const current = phonePageFor(usePlaySplit(s => s.railPage));
-  const locked = useLocked();
+  const locked = useLocked(true);
   const [sheet, setSheet] = useState<RailCategory | null>(null);
   const sheetDef = sheet ? RAIL_CATEGORIES.find(c => c.id === sheet) : undefined;
   return (

@@ -50,7 +50,7 @@ const OPTION_LABELS: Record<string, string> = {
   off: 'Off (ms)',
 };
 
-interface Source { id: string; label: string; icon: IconName; note: string }
+interface Source { id: string; label: string; icon: IconName; note: string; /** The MIDI synth's and the Audio engine's sounds: a phone lists them only when they already have effects (play/phoneTrim.ts). */ desktop?: true }
 
 export function AudioFxPanel({ play, onChange, touch, wide = false }: {
   play: PlayRecord;
@@ -73,7 +73,7 @@ export function AudioFxPanel({ play, onChange, touch, wide = false }: {
   const sources: Source[] = useMemo(() => {
     const out: Source[] = [
       { id: MASTER_CHAIN, label: 'Master', icon: 'sliders', note: 'Everything the app plays, after each sound’s own chain: songs, video sound, the synth, the test loop.' },
-      { id: SYNTH_CHAIN, label: 'MIDI synth', icon: 'piano', note: 'The tone synth that plays what the MIDI engine hears (turn it on in the MIDI settings).' },
+      { id: SYNTH_CHAIN, label: 'MIDI synth', icon: 'piano', note: 'The tone synth that plays what the MIDI engine hears (turn it on in the MIDI settings).', desktop: true },
     ];
     for (const l of play.layers) {
       if (l.kind === 'audio' && (l as { input?: string }).input === 'file') out.push({ id: layerChainId(l.id), label: l.label, icon: 'wave', note: 'This audio layer’s song.' });
@@ -81,10 +81,11 @@ export function AudioFxPanel({ play, onChange, touch, wide = false }: {
       if (l.kind === 'sampler') out.push({ id: layerChainId(l.id), label: l.label, icon: 'grid', note: 'This Drum pad layer’s pads, all through one chain (before its volume).' });
     }
     for (const n of nodes) if (n.type === 'audioInput') out.push({ id: nodeChainId(n.id), label: `Audio Input · ${n.id}`, icon: 'wave', note: 'This Audio Input node’s song.' });
-    for (const r of play.audioEngine?.racks ?? []) if (r.instrument?.kind === 'granulator' && !r.source) out.push({ id: rackChainId(r.id), label: `${r.name} · Granulator`, icon: 'piano', note: 'This Audio engine rack’s Granulator (before the rack’s volume).' });
+    for (const r of play.audioEngine?.racks ?? []) if (r.instrument?.kind === 'granulator' && !r.source) out.push({ id: rackChainId(r.id), label: `${r.name} · Granulator`, icon: 'piano', note: 'This Audio engine rack’s Granulator (before the rack’s volume).', desktop: true });
     for (const id of Object.keys(fx.chains)) if (!out.some(s => s.id === id)) out.push({ id, label: `${id} (not here)`, icon: 'warning', note: 'Its sound isn’t in this setup any more: remove the chain, or bring the sound back.' });
-    return out;
-  }, [play.layers, play.audioEngine, nodes, fx.chains]);
+    // A phone has no MIDI synth or Audio engine to edit: their chains show only when they already have effects.
+    return touch ? out.filter(s => !s.desktop || (fx.chains[s.id]?.effects.length ?? 0) > 0) : out;
+  }, [play.layers, play.audioEngine, nodes, fx.chains, touch]);
 
   const setFx = (fn: (f: PlayAudioFx) => PlayAudioFx) => onChange(p => {
     const next = tidyAudioFx(fn(p.audioFx ?? emptyAudioFx()));

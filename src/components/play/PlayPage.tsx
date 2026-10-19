@@ -94,6 +94,7 @@ import { FinishRailPage } from './pages/FinishPage';
 import { MidiFilePage, PadGridPage } from './pages/ControlsPage';
 import { RulesRailPage } from './pages/RulesPage';
 import { SoundArrangementPage, SoundEffectsPage } from './pages/SoundPage';
+import { PhoneSizeRow, PhoneSoundPage } from './pages/PhonePages';
 
 // Live values and meters are read where they show (liveValueStore.ts): a control's slider, a
 // mapping's meter. The page and the drawer don't hold them, so they don't render on every poll.
@@ -463,10 +464,11 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
     )}
   />;
   // The canvas shape sits at the top of the Layers page where the picture has no header of its own:
-  // phones (Play audit P20) and tablets (`canvasRow`). The Background is the list's pinned first row
-  // (LayersPanel, Play audit P13). The row wraps instead of running off the edge (past 390px).
-  const canvasRowEl = compact || canvasRow ? (
-      <div data-canvas-row="" data-phone-canvas-row={compact ? '' : undefined} style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px 8px', padding: '6px 12px' }}>
+  // tablets (`canvasRow`). The Background is the list's pinned first row (LayersPanel, Play audit P13).
+  // The row wraps instead of running off the edge. A phone's Layers top has only the picture's size,
+  // Free or 1:1, above the Background (user decision 2026-10-18; play/phoneTrim.ts).
+  const canvasRowEl = canvasRow && !compact ? (
+      <div data-canvas-row="" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px 8px', padding: '6px 12px' }}>
         <span style={{ color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Canvas</span>
         <AspectPicker onPanel />
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
@@ -476,7 +478,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
         </span>
       </div>
   ) : null;
-  const layersTop = compact ? <>{notesCard}{canvasRowEl}</> : canvasRowEl;
+  const layersTop = compact ? <PhoneSizeRow /> : canvasRowEl;
   // Pairs: right-click a slider (or its ⋯) to pair it with another, or with its X/Y partner as a position.
   const resolveGraphTarget = (target: string) => {
     const c = candidates.find(x => x.target === target && x.kind === 'float');
@@ -848,7 +850,8 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       case 'layers': return <LayersRailPage play={play} onChange={update} touch={touch} wide={wide} top={layersTop} />;
       case 'signals': return <RulesRailPage play={play} onChange={update} wide={wide} />;
       case 'finish-picture': return <FinishRailPage play={play} onChange={update} touch={touch} wide={wide} />;
-      case 'finish-sound': return <SoundEffectsPage play={play} onChange={update} touch={touch} wide={wide} />;
+      // A phone's Sound tab: the Sampler, readers and effects on one page; no Arrangement (play/phoneTrim.ts).
+      case 'finish-sound': return touch ? <PhoneSoundPage play={play} onChange={update} /> : <SoundEffectsPage play={play} onChange={update} touch={touch} wide={wide} />;
       case 'engine-performance': return <SoundArrangementPage play={play} onChange={update} touch={touch} wide={wide} />;
       case 'midi-file': return <MidiFilePage />;
       case 'pad-grid': return <PadGridPage />;

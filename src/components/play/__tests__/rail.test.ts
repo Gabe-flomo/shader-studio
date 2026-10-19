@@ -119,12 +119,16 @@ describe('categories and pages', () => {
     expect(phonePageFor('finish-sound')).toBe('finish-sound');
     expect(phonePageFor('midi-file')).toBe('controls');
     expect(phonePageFor('pad-grid')).toBe('controls');
+    // No Arrangement on a phone (2026-10-18): Sound is its one page.
+    expect(phonePageFor('engine-performance')).toBe('finish-sound');
   });
-  it('the phone’s bottom row goes straight to Controls and Layers; Sound keeps its sheet (Play audit P20)', () => {
+  it('the phone’s bottom row goes straight to every page, Sound included (Play audit P20; no Arrangement on a phone)', () => {
     expect(phonePagesOf('controls')).toEqual(['controls']);
     expect(phonePagesOf('layers')).toEqual(['layers']);
     expect(phonePagesOf('signals')).toEqual(['signals']);
-    expect(phonePagesOf('engine').length).toBeGreaterThan(1);
+    expect(phonePagesOf('engine')).toEqual(['finish-sound']);
+    // Desktop keeps both of Sound's pages.
+    expect(RAIL_CATEGORIES.find(c => c.id === 'engine')!.pages).toEqual(['engine-performance', 'finish-sound']);
   });
 
   it('a phone shows the same page state as the panel (one model): showPage moves both', () => {
