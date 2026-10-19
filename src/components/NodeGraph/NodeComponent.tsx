@@ -177,6 +177,7 @@ import { TO_TRANSFORM_TYPES } from '../../nodes/toTransform';
 import { resetRuntime } from '../../lib/runtimeReset';
 import { toast } from '../ui/toastStore';
 import { Tooltip } from '../ui/Tooltip';
+import { optionsShown } from '../../lib/selectOptions';
 /** A Mac: ⌘-click hides a group slider (Ctrl-click is a right-click there). */
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 
@@ -2465,7 +2466,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                   return (
                     <div key={paramKey} data-param-key={paramKey} style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 36, padding: '4px 10px 4px 14px' }}>
                       <ParamLabel title={paramDef.hint} help={paramDef.help}>{paramDef.label}</ParamLabel>
-                      <Select ariaLabel={paramDef.label} value={val} options={paramDef.channelsFrom ? namedChannelOptions(paramDef.options ?? [], channelNames) : (paramDef.options ?? [])}
+                      <Select ariaLabel={paramDef.label} value={val} options={paramDef.channelsFrom ? namedChannelOptions(paramDef.options ?? [], channelNames) : optionsShown(paramDef, paramDef.options ?? [], val)}
                         onChange={v => updateNodeParams(node.id, { [paramKey]: v }, { immediate: true })} style={{ flex: 1, minWidth: 0 }} />
                     </div>
                   );
@@ -3994,7 +3995,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                 <Select
                   ariaLabel={paramDef.label}
                   value={val}
-                  options={paramDef.channelsFrom ? namedChannelOptions(paramDef.options ?? [], channelNames) : (paramDef.options ?? [])}
+                  options={paramDef.channelsFrom ? namedChannelOptions(paramDef.options ?? [], channelNames) : optionsShown(paramDef, paramDef.options ?? [], val)}
                   onChange={v => updateNodeParams(node.id, { [key]: v }, { immediate: true })}
                   style={{ flex: 1 }}
                 />

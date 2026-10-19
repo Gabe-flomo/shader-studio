@@ -48,11 +48,21 @@ Each mode is the old node's formula, with that node's settings shown only for it
 
 | Modes | Settings | Was |
 |---|---|---|
-| Glow (exp), Haze, Bounded, Ring Light, Simple (1/d) | Falloff, Ring Freq | SDF Glow |
-| Halo, Soft, Exponential, Gaussian, Neon, Rim, Inverse square | Reach (Glow Layer's Intensity), Power | Glow Layer (`glowFormula`) |
-| Bounded inverse power, Gaussian bump, Cone, Wyvill bump | Falloff (Distance Falloff's Rate), Power | Distance Falloff |
-| Deep glow | Intensity, Radius, Saturation, Edge Softness | Deep Glow (SDF) |
+| Glow, Haze, Bounded, Simple | Falloff | SDF Glow |
+| Halo, Soft, Gaussian, Neon, Inverse square | Reach (Glow Layer's Intensity), Power | Glow Layer (`glowFormula`) |
+| Cone | Falloff (Distance Falloff's Rate) | Distance Falloff |
 | Point light | Falloff Model (Squared / Inverse / Linear), Intensity, Radius, Gamma | Point Light 2D's falloffs |
+
+Names are short and plain (2026-10-19); each mode's formula is its option's tooltip and is listed in the Mode's
+**?** (`SDF_GLOW_MODES`). The saved `value` ids (`glow`, `haze`, `halo`, `invsq`…) never changed.
+
+**Retired modes (2026-10-19).** Ring light, Exponential (Glow Layer's, not Glow), Rim, Bounded inverse power,
+Gaussian bump, Wyvill bump and Deep glow are no longer in the Mode list, the 2D Scene Builder's Glow type list
+(Exponential, Rim), the Do bar or Randomize (`SDF_GLOW_RETIRED_MODES`, the ParamDef's `retiredOptions`). A saved
+node set to one compiles exactly as before, with its settings (Ring Freq, Power, Intensity, Radius, Saturation,
+Edge Softness), and its card reads **Ring light (retired)** and so on. A Glow Layer, Distance Falloff or Deep Glow
+(SDF) opened from an old graph still migrates to the matching (retired) mode. The four Play examples with rings
+(Climb, Two hands, Terminal, Piano roll scale) keep Ring light: no offered mode draws rings.
 
 Tint takes a gradient (by distance from the shape, or across the picture), as Glow Layer's Color did. A
 migrated Glow Layer's **Glow** output is SDF Glow's **Tinted**; Distance Falloff's **Falloff** is **Glow**.

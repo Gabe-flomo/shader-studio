@@ -71,6 +71,7 @@ import { openDoBar } from '../../suggestions/doBarStore';
 import { useCodeJump } from '../../codeExplorer/jumpStore';
 import { canHaveInputExpr, getInputExpr } from '../../glsl/inputExpr';
 import { VOLUMETRIC_LOOP_TYPES } from '../../nodes/volumetricAuto';
+import { optionsShown } from '../../lib/selectOptions';
 
 /** Breadcrumb segment in the phone graph header: the current one is bold and dark. */
 const crumbStyle = (tk: Tokens, current: boolean): React.CSSProperties => ({
@@ -2735,7 +2736,7 @@ export function MobileGraphBrowser() {
               ariaLabel={inp.label}
               height={38}
               value={selectVal}
-              options={selectPd.options ?? []}
+              options={optionsShown(selectPd, selectPd.options ?? [], selectVal)}
               onChange={v => updateNodeParams(node.id, { [key]: v }, { immediate: true })}
             />
           )}

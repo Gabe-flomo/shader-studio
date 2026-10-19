@@ -34,7 +34,7 @@ import { COMBINE_MODES, TRAP_KINDS, checkBlock, clampTimes, linesText, parseBloc
 import { BLOCK_BY_ID, BLOCK_LIBRARY, blockFromEntry, isLibraryBlock } from './blockLibrary';
 import { findSavedBlock, loadSavedBlocks, sceneOpFromSaved } from './savedBlocks';
 import { MOD_BY_KIND, MOD_WORDS, MODS, newMod, type DistMod, type ModKind } from './modify';
-import { GLOW_TYPES, type GlowType } from '../nodes/definitions/combiners';
+import { GLOW_TYPES, GLOW_TYPES_OFFERED, type GlowType } from '../nodes/definitions/combiners';
 import { PIECES_MOVES, PIECES_SIZE_BYS, PIECES_VOCABULARY, defaultPieces, printPieces, type PiecesSpec } from './pieces';
 import { PIECE_SHAPES } from '../nodes/definitions/pieces';
 import { GRID_ASSIGNS, GRID_COLOUR_BYS, GRID_PIC_MODES, GRID_SHAPES, GRID_TARGETS, RIPPLE_FROMS, defaultGrid, printGrid, type GridPicMode, type GridShape, type GridSpec } from './grid';
@@ -310,7 +310,7 @@ class Parser {
       if (key === 'glow') { it.glow = !(a.value.k === 'word' && /^(no|off|false)$/i.test(a.value.v)) && !(a.value.k === 'num' && a.value.v === 0); if (it.glow) this.flagged = true; continue; }
       if (key === 'glow-type' || key === 'glowtype') {
         const w = this.word(a);
-        if (w && (GLOW_TYPES as readonly string[]).includes(w)) it.glowType = w as GlowType; else this.fail(a, `glow-type is ${GLOW_TYPES.join(', ')}.`);
+        if (w && (GLOW_TYPES as readonly string[]).includes(w)) it.glowType = w as GlowType; else this.fail(a, `glow-type is ${GLOW_TYPES_OFFERED.join(', ')}.`);
         continue;
       }
       if (key === 'style' || key === 'look') {
@@ -772,7 +772,7 @@ class Parser {
           else if (key === 'amount' || key === 'intensity') { const v = this.num(a, 'amount'); if (v !== null) L.glow.amount = Math.max(0.0005, v); }
           else if (key === 'falloff' || key === 'power') { const v = this.num(a, 'falloff'); if (v !== null) L.glow.falloff = Math.max(0.1, v); }
           else if (key === 'color' || key === 'colour' || key === 'tint') { const c = this.colour(a); if (c) L.glow.tint = c; }
-          else if (key === 'type') { const w = this.word(a); if (w && (GLOW_TYPES as readonly string[]).includes(w)) L.glow.type = w as GlowType; else this.fail(a, `glow type= is ${GLOW_TYPES.join(', ')}.`); }
+          else if (key === 'type') { const w = this.word(a); if (w && (GLOW_TYPES as readonly string[]).includes(w)) L.glow.type = w as GlowType; else this.fail(a, `glow type= is ${GLOW_TYPES_OFFERED.join(', ')}.`); }
           else this.fail(a, 'glow takes all or selected, an amount, falloff= and color=. Turn it off with glow off.');
         }
         return;
@@ -1075,7 +1075,7 @@ export const RECIPE_VOCABULARY_2D = {
   motion: ['@orbit(0.3 speed=0.25)', '@bob(0.15 dir=90)', '@spin(0.25)', '@pulse(0.25 speed=0.5)'],
   ring: ['@ring(6 r=0.5)', '@ring(6 r=0.5 inner=(5,0.2))', '@ring(6 r=0.5 levels=3 factor=1.6)'],
   modify: MODS.map(m => (m.kind === 'custom' ? '@fd("d - amp * sin(d * 40.0)" amp=0.05)' : `@${m.words[0]}${m.params.length ? `(${m.params.map((p, i) => (i ? `${p.key}=${p.def}` : String(p.def))).join(' ')})` : ''}`)),
-  look: [`glow [selected] [amount] falloff= color= type=${GLOW_TYPES.join('|')}`, `circle glow-type=${GLOW_TYPES.join('|')}`, `colour by ${COLOUR_BYS.join('|')} palette= scale= speed=`, `tone ${TONE_MODES.join('|')}`, 'background colour [picture=brick fit= tiles= still]', 'vignette 0.5', 'grain 0.05', 'palette fire | palette #1b1f3b #e94f37 #f6c90e name=Dusk', 'background slot=1 · circle slot=2', 'grade saturation 1.3 · grade levels blacks=0.05', 'output distance|mask|space palette='],
+  look: [`glow [selected] [amount] falloff= color= type=${GLOW_TYPES_OFFERED.join('|')}`, `circle glow-type=${GLOW_TYPES_OFFERED.join('|')}`, `colour by ${COLOUR_BYS.join('|')} palette= scale= speed=`, `tone ${TONE_MODES.join('|')}`, 'background colour [picture=brick fit= tiles= still]', 'vignette 0.5', 'grain 0.05', 'palette fire | palette #1b1f3b #e94f37 #f6c90e name=Dusk', 'background slot=1 · circle slot=2', 'grade saturation 1.3 · grade levels blacks=0.05', 'output distance|mask|space palette='],
   effects: ['crt mask=aperture size=4 strength=0.8 curve=0.04 vignette=0.35', 'chroma 4 mode=directional angle=30', 'fx displace 0.12 scale=2 · fx displace picture=clouds pixels=24', 'fx pixelate 0.025 · fx kaleido 6 · fx swirl 2 · fx ripple · fx lens 0.2', 'fx blur 4 · fx glow 0.8 threshold=0.6'],
   colours: Object.keys(COLOUR_TABLE),
   palettes: PALETTES.map(p => p.key),

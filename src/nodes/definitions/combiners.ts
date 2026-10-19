@@ -96,15 +96,26 @@ export const AddColorNode: NodeDefinition = {
  */
 export const GLOW_TYPES = ['halo', 'soft', 'exp', 'gauss', 'neon', 'rim', 'invsq'] as const;
 export type GlowType = typeof GLOW_TYPES[number];
+/**
+ * The glow types still offered (the 2D Scene Builder's Glow type lists). Exponential and Rim were retired with
+ * SDF Glow's modes of the same name on 2026-10-19: a saved scene or recipe that names one still builds it.
+ */
+export const GLOW_TYPES_OFFERED: readonly GlowType[] = GLOW_TYPES.filter(t => t !== 'exp' && t !== 'rim');
 export const GLOW_TYPE_LABELS: Record<GlowType, { label: string; blurb: string }> = {
-  halo: { label: 'Halo (inverse distance)', blurb: 'amount ÷ |distance|: a bright rim round the edge that falls off slowly. The classic glow; it goes past 1 at the edge.' },
+  halo: { label: 'Halo', blurb: 'amount ÷ |distance|: a bright rim round the edge that falls off slowly. The classic glow; it goes past 1 at the edge.' },
   soft: { label: 'Soft', blurb: 'amount ÷ (distance outside + amount): the shape\'s colour inside and at the edge, fading out from there. One shape.' },
   exp: { label: 'Exponential', blurb: 'exp(−distance ÷ 3·amount): a glow that dies away evenly, with no long tail.' },
   gauss: { label: 'Gaussian', blurb: 'exp(−(distance ÷ 4·amount)²): a broad, soft bloom with a flat top that ends cleanly.' },
   neon: { label: 'Neon', blurb: 'A bright core line on the edge plus a soft halo: a neon tube.' },
-  rim: { label: 'Rim (edge only)', blurb: 'Only the edge glows, inside and out: the middle stays dark.' },
+  rim: { label: 'Rim', blurb: 'Only the edge glows, inside and out: the middle stays dark.' },
   invsq: { label: 'Inverse square', blurb: '1 ÷ (1 + (distance ÷ amount)²): like light from a lamp, bright near and quickly gone.' },
 };
+/** A Glow type list's options: the offered types, plus `current` labelled "(retired)" when it is a retired one. */
+export function glowTypeOptions(current?: string | null): Array<{ value: GlowType; label: string }> {
+  const shown: GlowType[] = [...GLOW_TYPES_OFFERED];
+  if (current && (GLOW_TYPES as readonly string[]).includes(current) && !shown.includes(current as GlowType)) shown.push(current as GlowType);
+  return shown.map(t => ({ value: t, label: GLOW_TYPES_OFFERED.includes(t) ? GLOW_TYPE_LABELS[t].label : `${GLOW_TYPE_LABELS[t].label} (retired)` }));
+}
 /** The glow (a float, 0 far away) for distance `d`, amount `i` and falloff `p`, as GLSL. */
 export function glowFormula(type: string, d: string, i: string, pw: string): string {
   const x = `(max(${d}, 0.0) / max(${i}, 1.0e-5))`;

@@ -7,7 +7,7 @@ import { allBlockLines, clampCount, loopCode, loopCountValue, loopMax, loopOf } 
 import { FN_CRT_MASK_GLSL, FN_TONE_FUNCTIONS, FN_TONE_GLSL, FN_TONE_JODIE_GLSL } from '../../play/kit/finishGlsl.js';
 import { BL_BASE_GLSL, BL_PREV_GLSL, BL_GLSL2 as BL_GLSL2_GRAPH } from '../../play/kit/blur.js';
 import { passPxUniform, texUv } from './passes';
-import { GLOW_TYPES, GLOW_TYPE_LABELS, glowFormula } from './combiners';
+import { GLOW_TYPES, glowFormula } from './combiners';
 import { DRIVERS_2D, PF_GRADIENT_GLSL, gradientColourGlsl, gradientOn } from '../../lib/colourGradient';
 
 
@@ -167,16 +167,44 @@ vec3 grainTemporal(vec3 color, vec2 uv, float amount, float scale, float time) {
 /**
  * SDF Glow: a distance turned into light. Since the 2026-10-17 sweep it is the one distance-to-glow node: its
  * Mode list holds every falloff the separate nodes had, each with that node's exact formula and settings:
- *  - Glow / Haze / Bounded / Ring / Simple: the classic modes, shaped by Falloff;
- *  - Halo / Soft / Exponential / Gaussian / Neon / Rim / Inverse square: the old Glow Layer's types
+ *  - Glow / Haze / Bounded / Simple: the classic modes, shaped by Falloff;
+ *  - Halo / Soft / Gaussian / Neon / Inverse square: the old Glow Layer's types
  *    (combiners.ts glowFormula), shaped by Reach and Power;
- *  - Bounded inverse power / Gaussian bump / Cone / Wyvill: the old Distance Falloff, shaped by Falloff (its Rate) and Power;
- *  - Deep glow: the old (SDF) Deep Glow's core + bleed with its Reinhard roll-off;
+ *  - Cone: the old Distance Falloff's Linear, shaped by Falloff (its Rate);
  *  - Point light: the old Point Light 2D's Squared / Inverse / Linear falloffs of the distance.
+ * Retired 2026-10-19 (SDF_GLOW_RETIRED_MODES: hidden, still compiled exactly as before for saved graphs): Ring light,
+ * Exponential, Rim, Bounded inverse power, Gaussian bump, Wyvill bump and Deep glow.
  * Glow Layer, Distance Falloff and Deep Glow migrate here (NODE_ALIASES); Point Light 2D stays registered
  * for saved graphs (it measured its own distance from UV and Light Pos).
  */
 const CLASSIC_GLOW_MODES = ['glow', 'haze', 'bounded', 'ring', 'simple'];
+/**
+ * SDF Glow's Mode list (`value` ids are what graphs save, so they never change). Each hint is the mode's formula,
+ * shown as the option's tooltip and in the Mode's ? help (d is the distance).
+ */
+export const SDF_GLOW_MODES: ReadonlyArray<{ value: string; label: string; hint: string }> = [
+  { value: 'glow',    label: 'Glow',     hint: 'exp(−Falloff × d): the classic tight glow. Brighter than 1 inside the shape.' },
+  { value: 'haze',    label: 'Haze',     hint: '1 ÷ (1 + Falloff × d²): a fatter tail than Glow, so it reads as fog.' },
+  { value: 'bounded', label: 'Bounded',  hint: 'smoothstep(1 ÷ Falloff, 0, d): fades out and stops at a set radius, 1 ÷ Falloff.' },
+  { value: 'simple',  label: 'Simple',   hint: '0.01 × Falloff ÷ |d|: plain inverse distance, a long tail that goes past 1 near the edge.' },
+  { value: 'halo',    label: 'Halo',     hint: '(Reach ÷ |d|) ^ Power: a bright rim round the edge that falls off slowly. Goes past 1 at the edge.' },
+  { value: 'soft',    label: 'Soft',     hint: '(1 ÷ (1 + d ÷ Reach)) ^ Power, d outside only: the shape\'s colour inside and at the edge, fading out from there.' },
+  { value: 'gauss',   label: 'Gaussian', hint: 'exp(−Power × (d ÷ 4·Reach)²): a broad, soft bloom with a flat top that ends cleanly.' },
+  { value: 'neon',    label: 'Neon',     hint: '0.6 × Soft + 1.2 × exp(−|d| ÷ 0.35·Reach): a bright core line on the edge plus a soft halo, a neon tube.' },
+  { value: 'invsq',   label: 'Inverse square', hint: '(1 ÷ (1 + (d ÷ Reach)²)) ^ Power: like light from a lamp, bright near and quickly gone.' },
+  { value: 'cone',    label: 'Cone',     hint: 'max(0, 1 − Falloff × d): a straight ramp from 1 at the shape to 0 at 1 ÷ Falloff.' },
+  { value: 'point',   label: 'Point light', hint: 'Intensity × a lamp\'s falloff of d (wire the distance to the lamp). Squared: (1 − d × Radius)²; Inverse: Intensity ÷ d; Linear: 1 − d × Radius.' },
+];
+/** Modes retired on 2026-10-19: hidden from the list, builders and the Do bar; saved graphs keep them and compile as before. */
+export const SDF_GLOW_RETIRED_MODES: ReadonlyArray<{ value: string; label: string; hint: string }> = [
+  { value: 'ring',      label: 'Ring light',            hint: 'exp(−Falloff × |sin(d × Ring Freq)| × d): concentric rings of glow.' },
+  { value: 'exp',       label: 'Exponential',           hint: 'exp(−0.35 × Power × d ÷ Reach): a glow that dies away evenly.' },
+  { value: 'rim',       label: 'Rim',                   hint: '(1 ÷ (1 + |d| ÷ Reach)) ^ Power: only the edge glows, inside and out.' },
+  { value: 'invPow',    label: 'Bounded inverse power', hint: '1 ÷ (1 + Falloff × d ^ Power).' },
+  { value: 'gaussBump', label: 'Gaussian bump',         hint: 'exp(−Falloff × d²).' },
+  { value: 'wyvill',    label: 'Wyvill bump',           hint: '(1 − Falloff × d²)³.' },
+  { value: 'deep',      label: 'Deep glow',             hint: 'A sharp core plus an inverse-square bleed out to Radius, rolled off (Reinhard).' },
+];
 const FALLOFF_MODES = ['invPow', 'gaussBump', 'cone', 'wyvill'];
 const LAYER_MODES: string[] = [...GLOW_TYPES];
 const SDF_GLOW_DRIVERS = ['surface', ...DRIVERS_2D] as const;
@@ -195,8 +223,8 @@ vec3 deep_glow(float d, vec3 baseColor, float intensity, float radius, float sat
 
 export const LightNode: NodeDefinition = withParamSockets({
   type: 'light',
-  label: 'SDF Glow', aliases: ['Light', 'Make Light', 'Glow from Distance', 'ring light', 'Glow Layer', 'Distance Falloff', 'Deep Glow (SDF)', 'Point Light 2D', 'Halo', 'Neon', 'Falloff'],
-  description: 'Turns a distance field into light; Mode picks the falloff. Glow is the classic exp(-falloff · d); Haze has a fatter tail; Bounded stops at a set radius; Ring adds concentric rings; Simple is 1/d. Halo, Soft, Exponential, Gaussian, Neon, Rim and Inverse square are shaped by Reach and Power; Bounded inverse power, Gaussian bump, Cone and Wyvill turn a distance into a 0–1 falloff; Deep glow adds a hot core and a saturated bleed, rolled off so it never clips; Point light is a lamp\'s falloff. `Inner` lights the inside of the shape from the edge inward — add it to Glow for a neon tube. The `Tinted` output is the glow times `Tint`, so a coloured glow is one node.',
+  label: 'SDF Glow', aliases: ['Light', 'Make Light', 'Glow from Distance', 'Glow Layer', 'Distance Falloff', 'Point Light 2D', 'Halo', 'Neon', 'Falloff'],
+  description: 'Turns a distance field into light; Mode picks the falloff. Glow is the classic exp(-falloff · d); Haze has a fatter tail; Bounded stops at a set radius; Simple is 1/d; Cone is a straight ramp. Halo, Soft, Gaussian, Neon and Inverse square are shaped by Reach and Power; Point light is a lamp\'s falloff. `Inner` lights the inside of the shape from the edge inward — add it to Glow for a neon tube. The `Tinted` output is the glow times `Tint`, so a coloured glow is one node.',
   category: 'Effects',
   // Three outputs, but its glow is the classic += accumulator in a loop.
   assignable: true,
@@ -220,26 +248,13 @@ export const LightNode: NodeDefinition = withParamSockets({
     tint: { label: 'Tint', type: 'vec3color', gradient: SDF_GLOW_DRIVERS, hint: 'Colour of the Tinted output when nothing is wired to Tint. Gradient: by distance from the shape, or across the picture.' },
     mode: {
       label: 'Mode', type: 'select',
-      options: [
-        { value: 'glow',    label: 'Glow (exp)'   },
-        { value: 'haze',    label: 'Haze (1 / (1 + k·d²))' },
-        { value: 'bounded', label: 'Bounded (stops at 1/k)' },
-        { value: 'ring',    label: 'Ring Light'    },
-        { value: 'simple',  label: 'Simple (1/d)'  },
-        ...GLOW_TYPES.map(t => ({ value: t, label: GLOW_TYPE_LABELS[t].label })),
-        { value: 'invPow',    label: 'Bounded inverse power (1 / (1 + k·dᵖ))' },
-        { value: 'gaussBump', label: 'Gaussian bump (exp(−k·d²))' },
-        { value: 'cone',      label: 'Cone (1 − k·d)' },
-        { value: 'wyvill',    label: 'Wyvill bump ((1 − k·d²)³)' },
-        { value: 'deep',      label: 'Deep glow (core + bleed)' },
-        { value: 'point',     label: 'Point light' },
-      ],
-      hint: 'Glow is the classic tight halo. Haze has a fatter tail and reads as fog. Bounded stops at a definite radius (1/Falloff). Halo to Inverse square are shaped by Reach and Power. Bounded inverse power, Gaussian bump, Cone and Wyvill give a 0–1 falloff. Deep glow: a hot core with a saturated bleed. Point light: a lamp\'s falloff.',
+      options: SDF_GLOW_MODES.map(m => ({ value: m.value, label: m.label, hint: m.hint })),
+      // Retired 2026-10-19: no longer offered, but a saved node set to one compiles exactly as before.
+      retiredOptions: SDF_GLOW_RETIRED_MODES.map(m => ({ value: m.value, label: m.label, hint: m.hint })),
+      hint: 'How the distance turns into light. Glow, Haze, Bounded, Simple and Cone are shaped by Falloff; Halo, Soft, Gaussian, Neon and Inverse square by Reach and Power; Point light by Intensity and its Falloff Model. The ? lists each one\'s formula.',
       help: [
-        ...GLOW_TYPES.map(t => `${GLOW_TYPE_LABELS[t].label}: ${GLOW_TYPE_LABELS[t].blurb}`),
-        'Bounded inverse power: 1 at the shape, 1 ÷ (1 + Falloff × distance ^ Power) outside, never blowing up. Gaussian bump: exp(−Falloff × distance²), soft. Cone: 1 − Falloff × distance, a straight ramp. Wyvill: (1 − Falloff × distance²)³, a smooth bump that ends.',
-        'Deep glow: a sharp core inside the shape plus a wide inverse-square bleed out to Radius, its colour pushed by Saturation, rolled off (Reinhard) so it never clips to white. Tinted is the finished colour.',
-        'Point light: Intensity × the falloff of the distance (wire the distance to the lamp, e.g. a Circle SDF or a Length). Squared: (1 − distance × Radius)², physical-looking; Inverse: Intensity ÷ distance; Linear: 1 − distance × Radius.',
+        'd is the distance (0 at the shape\'s edge).',
+        ...SDF_GLOW_MODES.map(m => `${m.label}: ${m.hint}`),
       ].join('\n'),
     },
     innerFalloff: { label: 'Inner falloff', type: 'float', min: 0.1, max: 100, step: 0.1, hint: 'Falloff of the Inner output: light inside the shape, measured from the edge inward. Low floods the interior (frosted glass); high hugs the rim (neon tube).' },

@@ -2133,7 +2133,7 @@ Distance reads only while both hands are in view, so the rings hold their size w
     mappings: [map('breathe', 'radius', S.lfo('sine', 0.12), 0.12, 0.42, { smoothMs: 40 })],
     notes: `**What it shows.** An old green terminal. **Feedback** keeps fading copies of earlier frames (ghost trails as the rings breathe), **ASCII** redraws everything as text characters, from sparse dots in the dark to dense blocks in the light, then Bloom and a slight CRT curve finish the screen.
 
-**How it's built.** Rings of glow from one circle (SDF Glow in Ring Light mode), its Radius breathing with an LFO. Finish: Feedback (**Ghost trail** preset), ASCII (**Terminal**: one ink colour), Bloom, CRT. ASCII starts a pass of its own, so it draws the ghost trails too.
+**How it's built.** Rings of glow from one circle (SDF Glow in Ring light mode, retired from the Mode list but kept here for its rings), its Radius breathing with an LFO. Finish: Feedback (**Ghost trail** preset), ASCII (**Terminal**: one ink colour), Bloom, CRT. ASCII starts a pass of its own, so it draws the ghost trails too.
 
 **Try this.**
 • ASCII's **Colour** preset takes each character's colour from the picture; **Big type** makes huge characters.

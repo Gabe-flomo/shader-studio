@@ -7,6 +7,7 @@ import type { GraphNode, SubgraphData } from '../types/nodeGraph';
 import type { PlayRecord } from '../types/play';
 import { GROUP_PORT_SENTINEL } from '../types/nodeGraph';
 import { getNodeDefinitionFor } from '../nodes/definitions';
+import { optionLabel, retiredOption } from '../lib/selectOptions';
 
 /** A node's name as its card shows it. */
 export function nodeName(node: GraphNode | undefined): string {
@@ -85,8 +86,8 @@ export function valueText(node: GraphNode, key: string, v: unknown): string | nu
   if (typeof v === 'number') return Number.isFinite(v) ? String(round(v)) : String(v);
   if (typeof v === 'boolean') return v ? 'on' : 'off';
   if (typeof v === 'string') {
-    const opt = getNodeDefinitionFor(node)?.paramDefs?.[key]?.options?.find(o => o.value === v);
-    if (opt) return opt.label;
+    const pd = getNodeDefinitionFor(node)?.paramDefs?.[key];
+    if (pd?.options?.some(o => o.value === v) || retiredOption(pd, v)) return optionLabel(pd, v);
     if (v.includes('\n')) return null;
     const t = v.trim();
     return t.length > 28 ? `“${t.slice(0, 26)}…”` : `“${t}”`;
