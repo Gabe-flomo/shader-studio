@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.315',
+    date: '2026-10-19',
+    title: "Examples for every node",
+    highlights: [
+      { area: 'Studio', text: "Searching for a node or opening a node category shows examples that use those nodes; a node's preview lists where it's used." },
+    ],
+  },
+  {
     id: '2026.10.314',
     date: '2026-10-19',
     title: "Fewer, better examples",
