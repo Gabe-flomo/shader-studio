@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.298',
+    date: '2026-10-18',
+    title: "Simpler Play on phones",
+    highlights: [
+      { area: 'Studio', text: "Play on a phone: Layers starts with Background, sizes are 1:1 or Free, and Sound is just samples, readers and effects." },
+    ],
+  },
+  {
     id: '2026.10.297',
     date: '2026-10-18',
     title: "One rail",
