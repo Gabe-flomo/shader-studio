@@ -13,7 +13,7 @@ import { NodeGraph } from './components/NodeGraph/NodeGraph';
 import { NodePalette } from './components/NodeGraph/NodePalette';
 import { FreezeBehindBuilder } from './components/builders/FreezeBehindBuilder';
 import { CodeBarRow, CodePanel } from './components/CodePanel';
-import { tokenizeLine } from './components/glslSyntax';
+import { C as GLSL_DARK, C_LIGHT as GLSL_LIGHT, tokenizeLine } from './components/glslSyntax';
 import { DesktopTopNav } from './components/shell/DesktopTopNav';
 import { MobileTopBar } from './components/shell/MobileTopBar';
 import { fontFamily } from './theme/tokens';
@@ -26,7 +26,7 @@ import { Segmented } from './components/ui/Choice';
 import { MobilePreviewPill } from './components/shell/MobilePreviewPill';
 import { MobileIconSegment } from './components/shell/MobileIconSegment';
 import { Button, IconButton } from './components/ui/Button';
-import { ThemeOverrideContext, useTokens } from './theme/themeStore';
+import { ThemeOverrideContext, useThemeMode, useTokens } from './theme/themeStore';
 import { FinishButton, FinishDrawer } from './components/finish/FinishEditor';
 import { AspectPicker, CanvasFullscreenButton, PreviewFooter, PreviewHeader, PreviewQualityPicker, FrameRatePicker } from './components/shell/PreviewChrome';
 import { OverlayButton } from './components/PreviewOverlay';
@@ -201,6 +201,8 @@ function MobileCodeView({ code }: { code: string }) {
   const lines = code ? code.split('\n') : ['// No shader compiled yet'];
   // Function cards: tap a function name (or hold it) to explain it
   const fnScope = useFnCardScope({ source: code });
+  // The colours that suit the theme: the dark set on a light page washed every name out.
+  const pal = useThemeMode() === 'dark' ? GLSL_DARK : GLSL_LIGHT;
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(code);
@@ -223,8 +225,8 @@ function MobileCodeView({ code }: { code: string }) {
       <div {...fnScope} style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '8px 12px', fontFamily: 'monospace', fontSize: '11px', lineHeight: 1.6 }}>
         {lines.map((line, i) => (
           <div key={i} style={{ whiteSpace: 'pre' }}>
-            <span style={{ color: tc.surface1, userSelect: 'none', marginRight: '10px' }}>{String(i + 1).padStart(3, ' ')}</span>
-            <span data-fn-code="">{tokenizeLine(line).map((tok, j) => <span key={j} style={{ color: tok.color }}>{tok.text}</span>)}</span>
+            <span style={{ color: tc.overlay0, userSelect: 'none', marginRight: '10px' }}>{String(i + 1).padStart(3, ' ')}</span>
+            <span data-fn-code="">{tokenizeLine(line, pal).map((tok, j) => <span key={j} style={{ color: tok.color }}>{tok.text}</span>)}</span>
           </div>
         ))}
       </div>
