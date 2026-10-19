@@ -125,6 +125,15 @@ export const SHAPES: ShapeDef[] = [
       P('focus', 'Focus', 'focus', 0, -3, 3, 0.01, { hint: 'The depth (z) where the balls are sharp. Pairs with Blur.' }),
       P('blur', 'Blur', 'blur', 0, 0, 4, 0.01, { hint: 'Depth of field: out of focus, balls spread into soft discs that keep their light (0: everything sharp).' }),
     ] },
+  // A picture or video as a card (docs/pictures-in-3d.md): give it a picture (texture=); the card takes its shape from it
+  // (aspect, and its transparent parts are cut away). Its colour at the hit comes from the same card in Materials.
+  { kind: 'picture-card', label: 'Picture card', aliases: ['card', 'photo-card', 'image-card', 'video-card'], type: 'pictureCard', posKey: 'pos', distKey: 'dist', stepHint: 0.9,
+    blurb: 'A picture or video as a thin card, its shape from the picture: its aspect, and transparent parts cut away. Give it a picture.',
+    params: [
+      P('size', 'Size', 'size', 1.5, 0.05, 10, 0.01, { hint: 'The card\'s longer side; the other follows the picture.' }),
+      P('t', 'Thickness', 'thickness', 0.02, 0.001, 0.5, 0.001),
+      P('cut', 'Cutout threshold', 'threshold', 0.5, 0, 1, 0.005, { hint: 'Parts of the picture more transparent than this are cut away (a PNG with transparency). A picture with no transparency stays a rectangle.' }),
+    ] },
   // 4D shapes (docs/4d.md): sliced into the scene. W moves the slice; Spin turns the shape in the xw plane, so the slice morphs.
   { kind: 'hypersphere', label: 'Hypersphere', aliases: ['4d-ball', '4d-sphere'], type: 'hypersphereSDF', posKey: 'p4', distKey: 'dist', fourD: { slice: 'face' }, blurb: 'A 4D ball: its slice is a ball that grows and shrinks as W moves.',
     params: [P('r', 'Radius', 'radius', 0.6, 0.01, 5), P('w', 'Slice (w)', '', 0, -2, 2, 0.01, { hint: 'Where the 3D slice cuts the 4D shape.' }), P('spin', 'Spin', '', 0, -90, 90, 0.5, { hint: 'Degrees a second it turns in the xw plane.' })] },
@@ -143,6 +152,9 @@ export const SHAPES: ShapeDef[] = [
 ];
 
 export const SHAPE_BY_KIND: Record<string, ShapeDef> = Object.fromEntries(SHAPES.map(s => [s.kind, s]));
+
+/** Shapes made from their picture (it comes in through a group port): Picture balls and the Picture card. */
+export const isPictureShape = (kind: string): boolean => kind === 'picture-balls' || kind === 'picture-card';
 
 // ── Linked size (docs/scene-builder-3d.md, "Size") ─────────────────────────────
 
@@ -321,16 +333,19 @@ export type SceneItem = ShapeSpec | GroupSpec;
 /**
  * How a picture wraps a shape, in the shape's own space (so it moves, turns and repeats with it):
  * triplanar (three flat projections blended by which way the surface faces: no stretching on any
- * shape), planar (one projection along z), spherical (round the centre, like a globe) or face (the
- * picture fitted once to the shape's front: a picture panel).
+ * shape), planar (one projection along z), spherical (round the centre, like a globe), face (the
+ * picture fitted once to the shape's front: a picture panel), box (each side its own projection, no
+ * blend) or cylinder (round the sides like a label, the caps from above).
  */
-export const TEX_MAPS = ['triplanar', 'planar', 'spherical', 'face'] as const;
+export const TEX_MAPS = ['triplanar', 'planar', 'spherical', 'face', 'box', 'cylinder'] as const;
 export type TexMap = typeof TEX_MAPS[number];
 export const TEX_MAP_LABELS: Record<TexMap, { label: string; blurb: string }> = {
   triplanar: { label: 'Triplanar', blurb: 'Three flat projections, blended by which way the surface faces: no stretching, on any shape.' },
   planar: { label: 'Planar', blurb: 'Projected straight along z, like a slide projector: sharp on the front and back, streaked on the sides.' },
   spherical: { label: 'Spherical', blurb: 'Wrapped round the shape\'s centre like a globe (a seam at the back, pinched at the poles).' },
   face: { label: 'Face', blurb: 'The picture once over the shape\'s front, keeping its shape: a picture panel.' },
+  box: { label: 'Box', blurb: 'Each side takes the one projection that faces it: crisp edges between the sides, no blending (best on boxes).' },
+  cylinder: { label: 'Cylinder', blurb: 'Wrapped round the sides like a label (a seam at the back), the top and bottom projected straight down.' },
 };
 export interface ShapeTex {
   /** The picture's name in the scene's textures. */

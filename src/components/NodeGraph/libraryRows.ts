@@ -189,6 +189,7 @@ export const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: strin
     { label: 'Curved',  types: ['ellipsoidSDF3D', 'cappedTorusSDF3D', 'cappedConeSDF3D'] },
     { label: 'Complex', types: ['boxFrameSDF3D', 'linkSDF3D', 'pyramidSDF3D', 'hexPrismSDF3D', 'triPrismSDF3D', 'solidAngleSDF3D', 'sdCross3D'] },
     { label: 'Fields',  types: ['gyroidField', 'schwarzPField'] },
+    { label: 'Pictures', types: ['pictureCard'] },
   ],
   '3D Transforms': [
     { label: 'Move',   types: ['transform', 'rotateAxis3D'] },
@@ -207,7 +208,7 @@ export const CATEGORY_GROUPS: Record<string, Array<{ label: string; types: strin
   ],
   '3D Lighting': [
     { label: 'Shadow',  types: ['sdfAo', 'softShadow'] },
-    { label: 'Surface', types: ['blinnPhong', 'fresnel3d', 'fakeSSS', 'materialSelect', 'multiLight'] },
+    { label: 'Surface', types: ['blinnPhong', 'fresnel3d', 'fakeSSS', 'materialSelect', 'multiLight', 'textureMaterial'] },
     { label: 'Glass',   types: ['glass3d', 'fresnelSchlick', 'spectralDispersion'] },
     { label: 'Volume',  types: ['volumetricFog', 'phaseHG'] },
   ],

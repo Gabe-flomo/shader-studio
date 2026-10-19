@@ -21,7 +21,7 @@ import { getNodeDefinition } from '../nodes/definitions';
 import { startingSockets } from '../nodes/definitions/transformAny';
 import { estimateNodeHeight, layoutByRank } from '../store/graphLayout';
 import {
-  MAX_TEX_SHAPES, REVERSE_DEFAULTS, texturesUsed3D, SHAPE_BY_KIND, TEX_MAP_LABELS, TEX_SHARP_DEFAULT, WARP_BY_KIND, allShapes, effectiveStepScale, filterTree, itemName, mutedShapes, num, opLabel, pathTo, stepHints,
+  MAX_TEX_SHAPES, REVERSE_DEFAULTS, isPictureShape, texturesUsed3D, SHAPE_BY_KIND, TEX_MAP_LABELS, TEX_SHARP_DEFAULT, WARP_BY_KIND, allShapes, effectiveStepScale, filterTree, itemName, mutedShapes, num, opLabel, pathTo, stepHints,
   type GroupSpec, type SceneItem, type SceneSpec, type ShapeSpec, type Vec3, type WarpSpec,
 } from './spec';
 import { LUMA, findTex, fitLines, glf, picUv, sampleWrap, standInId, standIns } from '../builders/textures';
@@ -77,8 +77,12 @@ export interface Ctx {
   balls?: Array<{ node: GraphNode; sh: ShapeSpec }>;
 }
 
-/** Picture balls' node params beyond the catalogue's: their own grid, and the picture's shape. */
+/**
+ * Picture shapes' node params beyond the catalogue's. Balls: their own grid, and the picture's shape. The card: its shape
+ * from the picture's alpha (Cutout: Alpha; a picture with no transparency stays a rectangle); its aspect it reads itself.
+ */
 function ballsExtra(ctx: Ctx, sh: ShapeSpec): Record<string, unknown> {
+  if (sh.kind === 'picture-card') return { cutout: 'alpha', back: 'through' };
   const src = sh.tex ? findTex(ctx.spec.textures, sh.tex.tex) : undefined;
   return { layout: 'own', aspect: src?.aspect ?? 1.5 };
 }
@@ -362,12 +366,14 @@ function emitShape(ctx: Ctx, sh: ShapeSpec, pos: Ref, list: GraphNode[], local?:
       shapePos = ref(turn, 'p');
     }
   }
-  const isBalls = sh.kind === 'picture-balls';
+  const isBalls = isPictureShape(sh.kind);
   const node = mk(ctx, def.type, sh.id, { ...params, ...(isBalls ? ballsExtra(ctx, sh) : {}), _sbName: sh.name },
     { [def.posKey]: shapePos }, `${name}: a ${def.label.toLowerCase()}${shapeSummary(sh) ? `, ${shapeSummary(sh)}` : ''}. ${def.blurb}${colourWord}${isBalls ? ` Its picture comes in through the group's “Picture for ${itemName(ctx.spec, sh)}” port.` : ''}`, list);
   if (isBalls) {
     if (sh.tex) ctx.balls?.push({ node, sh });
-    else ctx.warnings.push(`${name} has no picture: give it one under its Picture (texture=), or its balls are a colour gradient, all at one depth.`);
+    else ctx.warnings.push(sh.kind === 'picture-card'
+      ? `${name} has no picture: give it one under its Picture (texture=), or it is a grey checker.`
+      : `${name} has no picture: give it one under its Picture (texture=), or its balls are a colour gradient, all at one depth.`);
   }
   // Muted (itself, or a group round it): its distance is far away, by a live uniform, so it draws
   // nothing and unions ignore it. What comes after (a cut to a ball, modifiers) keeps it far.
@@ -608,6 +614,16 @@ function surfacePictures(ctx: Ctx, texShapes: ShapeSpec[], mat: GraphNode, norma
       cols.push({ i, from: ref(b, 'color'), bump: t.bump ?? 0 });
       return;
     }
+    if (sh.kind === 'picture-card') {
+      // The card: the same Picture Card measured at the hit point (in its own space), so its Color is the picture there.
+      const def = SHAPE_BY_KIND['picture-card'];
+      const params: Record<string, unknown> = { ...ballsExtra(ctx, sh) };
+      for (const p of def.params) if (typeof p.param === 'string' && p.param) params[p.param] = Number(sh.size[p.key] ?? p.def);
+      const c = mk(ctx, 'pictureCard', `${role}:card`, params, { pos: ref(mat, `tp${i}`), picture: texRef },
+        `${name}'s colour: the same Picture Card measured at the hit point (in ${name}'s own space): the picture “${src.name}” where the ray hit it, read once, after the march.`);
+      cols.push({ i, from: ref(c, 'color'), bump: t.bump ?? 0 });
+      return;
+    }
     const map = TEX_MAP_LABELS[t.map];
     const tiled = t.map !== 'face';
     const sample = (k: string, uv: Ref) => ref(mk(ctx, 'sampleTexture', `${role}:${k}`, sampleWrap(tiled ? 'repeat' : 'once'), { texture: texRef, uv },
@@ -623,20 +639,28 @@ function surfacePictures(ctx: Ctx, texShapes: ShapeSpec[], mat: GraphNode, norma
     const place = (st: string) => picUv(`R * (${st} - 0.5) + 0.5 + vec2(ox, oy)`);
     const rotLines = [L('float ca', 'cos(radians(turn))'), L('float sa', 'sin(radians(turn))'), L('mat2 R', 'mat2(ca, sa, -sa, ca)')];
     const head = `Where ${name}'s picture “${src.name}” is read: p is the hit point in ${name}'s own space (after its move, turn and warps, so the picture moves and repeats with it). ${map.label}: ${map.blurb} `
-      + `k is ${t.map === 'face' ? 'a zoom, above 1 closer' : t.map === 'spherical' ? 'how many times it goes round' : 'how many times it repeats every 2 units'}; ox and oy slide it (1 is a whole picture), turn turns it (degrees). All live.`;
-    if (t.map === 'triplanar') {
-      const coords = exprBlock(ctx, `${role}:coords`, 'Triplanar', [
+      + `k is ${t.map === 'face' ? 'a zoom, above 1 closer' : t.map === 'spherical' || t.map === 'cylinder' ? 'how many times it goes round' : 'how many times it repeats every 2 units'}; ox and oy slide it (1 is a whole picture), turn turns it (degrees). All live.`;
+    if (t.map === 'triplanar' || t.map === 'box') {
+      const box = t.map === 'box';
+      const coords = exprBlock(ctx, `${role}:coords`, box ? 'Box map' : 'Triplanar', [
         { name: 'p', type: 'vec3', from: ref(mat, `tp${i}`) }, { name: 'n', type: 'vec3', from: normal },
-        ...common, { name: 'sharp', type: 'float', slider: { value: t.sharp ?? TEX_SHARP_DEFAULT, min: 1, max: 16 } },
-      ], 'ux', `${head} ux, uy and uz are the places to read for the projections along x, y and z (the picture keeps its shape, ${glf(src.aspect ?? 1)} wide for 1 tall); w how much of each to take, from how squarely the surface faces each axis, to the power sharp (1 a soft blend, 16 crisp edges between them).`);
+        ...common, ...(box ? [] : [{ name: 'sharp', type: 'float' as const, slider: { value: t.sharp ?? TEX_SHARP_DEFAULT, min: 1, max: 16 } }]),
+      ], 'ux', box
+        ? `${head} ux, uy and uz are the places to read for the projections along x, y and z (the picture keeps its shape, ${glf(src.aspect ?? 1)} wide for 1 tall); a is how squarely the surface faces each axis, and w takes all of the one it faces most (no blend: crisp edges between the sides).`
+        : `${head} ux, uy and uz are the places to read for the projections along x, y and z (the picture keeps its shape, ${glf(src.aspect ?? 1)} wide for 1 tall); w how much of each to take, from how squarely the surface faces each axis, to the power sharp (1 a soft blend, 16 crisp edges between them).`);
       coords.params.lines = [
         ...rotLines,
         L('vec3 q', 'p * k * 0.5'),
         L('vec2 ux', place(`vec2(q.z / ${a}, q.y)`)),
         L('vec2 uy', place(`vec2(q.x / ${a}, q.z)`)),
         L('vec2 uz', place(`vec2(q.x / ${a}, q.y)`)),
-        L('vec3 w', 'pow(abs(n), vec3(sharp))'),
-        L('w', 'w / max(w.x + w.y + w.z, 1e-4)'),
+        ...(box ? [
+          L('vec3 a', 'abs(n)'),
+          L('vec3 w', 'a.x >= a.y && a.x >= a.z ? vec3(1.0, 0.0, 0.0) : (a.y >= a.z ? vec3(0.0, 1.0, 0.0) : vec3(0.0, 0.0, 1.0))'),
+        ] : [
+          L('vec3 w', 'pow(abs(n), vec3(sharp))'),
+          L('w', 'w / max(w.x + w.y + w.z, 1e-4)'),
+        ]),
       ];
       coords.params.outputs = ['uy', 'uz', 'w'];
       coords.outputs = { result: { type: 'vec2', label: 'Result' }, uy: { type: 'vec2', label: 'uy' }, uz: { type: 'vec2', label: 'uz' }, w: { type: 'vec3', label: 'w' } };
@@ -644,16 +668,22 @@ function surfacePictures(ctx: Ctx, texShapes: ShapeSpec[], mat: GraphNode, norma
       const cx = sample('x', ref(coords, 'result')), cy = sample('y', ref(coords, 'uy')), cz = sample('z', ref(coords, 'uz'));
       const blend = exprBlock(ctx, `${role}:blend`, 'Triplanar blend', [
         { name: 'cx', type: 'vec3', from: cx }, { name: 'cy', type: 'vec3', from: cy }, { name: 'cz', type: 'vec3', from: cz }, { name: 'w', type: 'vec3', from: ref(coords, 'w') },
-      ], 'cx * w.x + cy * w.y + cz * w.z', `${name}'s picture: the three projections mixed by w, so each face takes the one that looks at it squarely.`);
+      ], 'cx * w.x + cy * w.y + cz * w.z', box ? `${name}'s picture: the projection each side faces (w picks one).` : `${name}'s picture: the three projections mixed by w, so each face takes the one that looks at it squarely.`);
       cols.push({ i, from: ref(blend, 'result'), bump: t.bump ?? 0 });
       return;
     }
-    const lines = t.map === 'planar'
+    const lines = t.map === 'cylinder'
+      ? [...rotLines,
+        L('vec2 side', 'vec2(atan(p.z, p.x) / 6.2831853 * k + 0.5, p.y * k * 0.5 + 0.5)'),
+        L('vec2 cap', `vec2(p.x / ${a}, p.z) * k * 0.5 + 0.5`),
+        L('vec2 uv', place('abs(n.y) > 0.7071 ? cap : side'))]
+      : t.map === 'planar'
       ? [...rotLines, L('vec2 uv', place(`vec2(p.x / ${a}, p.y) * k * 0.5 + 0.5`))]
       : t.map === 'spherical'
         ? [...rotLines, L('vec3 d', 'normalize(p + vec3(1e-5))'), L('vec2 uv', place('vec2(atan(d.z, d.x) / 6.2831853 + 0.5, acos(clamp(d.y, -1.0, 1.0)) / 3.1415927) * k'))]
         : [...rotLines, L('vec2 ext', `vec2(${faceExtent(sh).map(glf).join(', ')})`), ...fitLines('cover', 'p.xy', 'ext', a, 'k'), L('vec2 uv', place('st'))];
-    const coords = exprBlock(ctx, `${role}:coords`, `${map.label} map`, [{ name: 'p', type: 'vec3', from: ref(mat, `tp${i}`) }, ...common], 'uv', `${head} uv is the place to read, in the picture coordinates Sample (texture) reads.`);
+    const coords = exprBlock(ctx, `${role}:coords`, `${map.label} map`, [{ name: 'p', type: 'vec3', from: ref(mat, `tp${i}`) }, ...(t.map === 'cylinder' ? [{ name: 'n', type: 'vec3' as const, from: normal }] : []), ...common], 'uv',
+      `${head} ${t.map === 'cylinder' ? 'side is the place round the sides (k times round, a seam at the back), cap the place on the top and bottom (seen from above); n (which way the surface faces) picks between them. ' : ''}uv is the place to read, in the picture coordinates Sample (texture) reads.`);
     coords.params.lines = lines;
     coords.params.outputType = 'vec2';
     coords.outputs = { result: { type: 'vec2', label: 'Result' } };

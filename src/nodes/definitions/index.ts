@@ -25,6 +25,7 @@ import { MEMORY_NODES, MemoryPackNode, MemoryReadNode } from './memory';
 import { AUDIO_TOOL_NODES } from './audioTools';
 import { DepthCompositeNode, DepthLightNode, PictureEnvironmentNode } from './depthScene';
 import { DepthMixNode } from './depthMix';
+import { PictureCardNode, TextureMaterialNode } from './pictures3d';
 import { SplatProbeOutNode, SplatSceneNode } from './splatScene';
 import { SetSplatNode, SplatAttributesNode, SplatColorNode, SplatCropNode, SplatDissolveNode, SplatExplodeNode, SplatLookNode, SplatModOutNode, SplatPointsNode, SplatWaveNode } from './splatModifiers';
 import { TimeCubeNode, TimeCubeShapeNode, TimeCubeViewNode, TimeSliceNode } from './timeCube';
@@ -396,6 +397,9 @@ export const NODE_REGISTRY: Record<string, NodeDefinition> = {
   splatPoints: SplatPointsNode,
   depthLight: DepthLightNode,
   pictureEnvironment: PictureEnvironmentNode,
+  // Pictures in 3D (docs/pictures-in-3d.md): a picture card, and a picture wrapped onto any shape
+  pictureCard: PictureCardNode,
+  textureMaterial: TextureMaterialNode,
   // Time cube (docs/time-cube.md): a video as a box of time
   lift4D: Lift4DNode,
   rotate4D: Rotate4DNode,
