@@ -10,7 +10,8 @@
  *   (BandRow.tsx): each band's colour, name and range, What to catch, Sensitivity, Send a value and Send hits on one
  *   line, the rest folded under Fine-tune, and a scope showing why each hit fired, with hits per pass (a File) or per
  *   second (live). Every band is an output on the node (lib/audioTools/bands.ts). A File's hits come from the file
- *   analysed ahead, lined up with what is heard.
+ *   analysed ahead, lined up with what is heard. A band's **Listen** (lib/audioTools/listen.ts ListenControl): one
+ *   band at a time plays through its filters with a click on each hit; Esc or closing the window stops it.
  * - **The transport** (AudioTransport.tsx, as on the card): Play / Pause, Restart, Mute, Volume; then Loop, Gain and
  *   Sync offset (ms added to when its triggers fire, on top of the output latency taken off by itself).
  *
@@ -35,7 +36,8 @@ import { liveAudio } from '../../lib/liveAudio';
 import { useCan } from '../../lib/plan';
 import { LiveSendDetails, pickSourceTab, sourceTabOptions, useLiveSend } from './LiveSendPicker';
 import { BAND_QUICK_PRESETS, MIN_TRIM, bandsOf, newBand, trimWindow, type AudioBandSpec } from '../../lib/audioTools/bands';
-import { BandRow, drawBandScope, scopeCaption } from './BandRow';
+import { BandRow, drawBandScope, drawListenScope, listenFlash, scopeCaption } from './BandRow';
+import { ListenControl, readListenMix, writeListenMix } from '../../lib/audioTools/listen';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { Segmented, Toggle } from '../ui/Choice';
@@ -90,6 +92,31 @@ export function AudioSourceWindow({ nodeId, onClose, onLoad }: { nodeId: string;
   const [learnMsg, setLearnMsg] = useState('');
   const trimDrag = useRef<TrimDrag | null>(null);
   const [, redraw] = useState(0);
+
+  // ── Listen: one band at a time hears its sound and a click on each hit (lib/audioTools/listen.ts) ──
+  const listen = useRef<ListenControl | null>(null);
+  if (!listen.current) {
+    listen.current = new ListenControl({
+      start: (id, bandId, mix) => audioToolsEngine.listenBand(id, bandId, mix),
+      stop: () => audioToolsEngine.stopListen(),
+      setMix: m => audioToolsEngine.setListenMix(m),
+      isPlaying: id => {
+        const n = findNodeDeep(useNodeGraphStore.getState().nodes, id);
+        return n?.params.playing !== false;
+      },
+      setPlaying: (id, on) => useNodeGraphStore.getState().updateNodeParams(id, { playing: on }, { immediate: true }),
+    });
+  }
+  const [listening, setListening] = useState<string | null>(null);
+  const [mixes, setMixes] = useState<Record<string, number>>({});
+  useEffect(() => {
+    const L = listen.current!;
+    const offL = L.onChange(() => setListening(L.current()?.bandId ?? null));
+    // The engine stopped it (Solo or Hear hovered took the sound, the band or the source went): put Play back.
+    const offE = audioToolsEngine.onChange(() => { if (L.current() && !audioToolsEngine.listeningTo()) L.lost(); });
+    // Closing the window stops it.
+    return () => { offL(); offE(); L.stop(); };
+  }, []);
   // What the drawer reads (the latest node, without restarting the loop).
   const latest = useRef({ bands: [] as AudioBandSpec[], sounds: [] as AudioSoundSpec[], trimIn: 0, trimOut: 0, selected: null as string | null, selection: null as Span | null });
   const bands = node ? bandsOf(node.params) : [];
@@ -123,6 +150,7 @@ export function AudioSourceWindow({ nodeId, onClose, onLoad }: { nodeId: string;
       const fresh = audioToolsEngine.frame !== seen;
       seen = audioToolsEngine.frame;
       const L = latest.current;
+      const lv = audioToolsEngine.listenView();
       // ── Waveform ──
       const wv = fit(waveRef.current);
       if (wv) {
@@ -169,24 +197,27 @@ export function AudioSourceWindow({ nodeId, onClose, onLoad }: { nodeId: string;
       }
       // ── Each band: its Value meter, a blink on each hit, its scope and the scope's caption ──
       for (const b of L.bands) {
-        const lv = v.bands.get(b.id) ?? null;
+        const bl = lv && lv.nodeId === nodeId && lv.bandId === b.id ? lv : null;
+        const lv_ = v.bands.get(b.id) ?? null;
         const m = fit(meterRefs.current.get(b.id) ?? null);
         if (m) {
           const { g, w, h } = m;
           g.fillStyle = DIM; g.fillRect(0, 0, w, h);
-          g.fillStyle = b.color; g.fillRect(0, 0, w * (lv?.level ?? 0), h);
+          g.fillStyle = b.color; g.fillRect(0, 0, w * (lv_?.level ?? 0), h);
         }
         const k = fit(blinkRefs.current.get(b.id) ?? null);
         if (k) {
-          const { g, w, h } = k, flash = lv && b.trigger ? Math.max(0, 1 - (performance.now() - lv.hitAt) / 250) : 0;
+          // Listening to a File analysed ahead: lit as each click plays (where playback is heard); else on each hit.
+          const ahead = bl ? listenFlash(bl) : null;
+          const { g, w, h } = k, flash = ahead ?? (lv_ && b.trigger ? Math.max(0, 1 - (performance.now() - lv_.hitAt) / 250) : 0);
           g.clearRect(0, 0, w, h);
           g.fillStyle = `rgba(249,226,175,${0.15 + 0.85 * flash})`;
           g.beginPath(); g.arc(w / 2, h / 2, Math.min(w, h) / 2 - 1, 0, Math.PI * 2); g.fill();
         }
         const sc = fit(scopeRefs.current.get(b.id) ?? null);
-        if (sc) drawBandScope(sc.g, sc.w, sc.h, b, lv);
+        if (sc) { if (bl) drawListenScope(sc.g, sc.w, sc.h, b, lv_, bl); else drawBandScope(sc.g, sc.w, sc.h, b, lv_); }
         const cap = captionRefs.current.get(b.id);
-        if (cap) { const text = scopeCaption(b, lv); if (cap.textContent !== text) cap.textContent = text; }
+        if (cap) { const text = scopeCaption(b, lv_) + (bl ? ` · Listen: ${bl.mode === 'ahead' ? 'a click on each of the file\'s hits' : 'a click as each hit fires'}` : ''); if (cap.textContent !== text) cap.textContent = text; }
       }
       // ── Learned sounds: the fingerprint's bars, the Match now against its threshold, a flash when it fires ──
       for (const snd of L.sounds) {
@@ -223,6 +254,15 @@ export function AudioSourceWindow({ nodeId, onClose, onLoad }: { nodeId: string;
   /** Remove a band (and its outputs' wires); let go of it if it was selected. */
   const removeBand = (id: string) => { setBands(bands.filter(q => q.id !== id), true); if (selected === id) setSelected(null); };
   removeBandRef.current = removeBand;
+  /** Listen to a band (or stop it): the Mic starts if it is off; a File that played to its end starts again. */
+  const startListen = (bandId: string) => {
+    const L = listen.current!;
+    if (L.isListening(bandId)) { L.stop(); return; }
+    const on = L.toggle(nodeId, bandId, mixes[`${kind}:${bandId}`] ?? readListenMix(bandId, kind));
+    if (!on) { setLearnMsg('Listen needs the sound playing: load a file, or pick a video or a Live track.'); return; }
+    if (kind === 'mic' && !liveAudio.isOn()) void audioToolsEngine.startMic(nodeId);
+    if (kind === 'file' && audioEngine.isLoaded(nodeId) && !audioEngine.isPlaying(nodeId) && node.params.playing !== false) audioToolsEngine.restart(nodeId);
+  };
   // The editor's band, its row: picked in one, highlighted (and brought into view) in the other.
   useEffect(() => { if (selected) document.querySelector(`[data-band-row="${selected}"]`)?.scrollIntoView({ block: 'nearest' }); }, [selected]);
 
@@ -322,7 +362,8 @@ export function AudioSourceWindow({ nodeId, onClose, onLoad }: { nodeId: string;
   return (
     <Modal title={typeof node.params.label === 'string' && node.params.label.trim() ? node.params.label.trim() : 'Audio Source'}
       subtitle={kind === 'file' ? 'Audio Source · trim the file, pick frequency bands, learn sounds' : kind === 'video' ? 'Audio Source · a video\'s sound, its frequency bands and learned sounds' : live ? 'Audio Source · a track in Ableton Live, its frequency bands and learned sounds' : 'Audio Source · the Mic, its frequency bands and learned sounds'}
-      icon="wave" width={1240} height={800} onClose={onClose} headerActions={<Button variant="primary" onClick={onClose}>Done</Button>}>
+      icon="wave" width={1240} height={800} onClose={onClose}
+      onEscape={() => { if (!listen.current?.current()) return false; listen.current.stop(); return true; }} headerActions={<Button variant="primary" onClick={onClose}>Done</Button>}>
       <div data-audio-source-window style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 16, height: '100%', boxSizing: 'border-box', overflowY: 'auto', font: `500 12px ${fontFamily.ui}` }}>
         {/* Transport */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -373,7 +414,7 @@ export function AudioSourceWindow({ nodeId, onClose, onLoad }: { nodeId: string;
           </span>
         </div>
         <BandEqEditor nodeId={nodeId} bands={bands} selected={selected} onSelect={setSelected} patchBand={patchBand} setBands={setBands}
-          onAdd={addBand} hearHover={hearHover} onHearing={setHearing} />
+          onAdd={addBand} hearHover={hearHover} onHearing={setHearing} listening={listening} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
           <span style={small}>Add a band:</span>
           {BAND_QUICK_PRESETS.map((p, i) => (
@@ -393,7 +434,10 @@ export function AudioSourceWindow({ nodeId, onClose, onLoad }: { nodeId: string;
               meterRef={c => { if (c) meterRefs.current.set(b.id, c); else meterRefs.current.delete(b.id); }}
               blinkRef={c => { if (c) blinkRefs.current.set(b.id, c); else blinkRefs.current.delete(b.id); }}
               scopeRef={c => { if (c) scopeRefs.current.set(b.id, c); else scopeRefs.current.delete(b.id); }}
-              captionRef={e => { if (e) captionRefs.current.set(b.id, e); else captionRefs.current.delete(b.id); }} />
+              captionRef={e => { if (e) captionRefs.current.set(b.id, e); else captionRefs.current.delete(b.id); }}
+              listening={listening === b.id} mix={mixes[`${kind}:${b.id}`] ?? readListenMix(b.id, kind)}
+              onListen={() => startListen(b.id)}
+              onMix={m => { setMixes(x => ({ ...x, [`${kind}:${b.id}`]: m })); writeListenMix(b.id, kind, m); listen.current?.setMix(m); }} />
           ))}
         </div>
 

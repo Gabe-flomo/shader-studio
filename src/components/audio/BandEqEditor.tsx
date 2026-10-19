@@ -77,7 +77,7 @@ const withAlpha = (hex: string, a: number) => `${hex}${Math.round(Math.max(0, Ma
 type Drag = { id: string; dx: number; y0: number; width0: number; moved: boolean };
 
 export function BandEqEditor({
-  nodeId, bands, selected, onSelect, patchBand, setBands, onAdd, hearHover, onHearing, height = 240,
+  nodeId, bands, selected, onSelect, patchBand, setBands, onAdd, hearHover, onHearing, listening = null, height = 240,
 }: {
   nodeId: string;
   bands: AudioBandSpec[];
@@ -90,6 +90,8 @@ export function BandEqEditor({
   hearHover: boolean;
   /** What is playing through Hear hovered or Solo, for the window's label. */
   onHearing: (h: Hearing) => void;
+  /** The band Listening now (BandRow): it takes the sound, so Solo lets go. */
+  listening?: string | null;
   height?: number;
 }) {
   const tk = useTokens();
@@ -274,6 +276,8 @@ export function BandEqEditor({
     if (solo && !soloBand) setSolo(null);
   }, [solo, soloBand]);
   const stopHearing = () => { audioToolsEngine.stopAudition(); onHearing(null); };
+  // A band's Listen takes the sound: Solo lets go (the engine already stopped its audition).
+  useEffect(() => { if (listening) { setSolo(null); onHearing(null); } /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [listening]);
   useEffect(() => { if (!solo && !hearHover) stopHearing(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [solo]);
   useEffect(() => () => audioToolsEngine.stopAudition(), []);
 

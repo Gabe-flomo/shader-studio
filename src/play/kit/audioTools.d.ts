@@ -113,7 +113,7 @@ export function atNewScope(): AtScope;
 export interface AtDetView { odf: number; line: number; edb: number; gate: number; noise: number; open: boolean }
 export interface AtLiveFrame extends AtDetView { hit: number; subs: Array<{ t: number; hit: number; arrival: { flat: number; energy: number } }>; flat: number; bright: number }
 export interface AtExtHit extends AtDetView { fired: number; strength: number }
-export interface AtHitState { trigger: number; count: number; strength: number; envelope: number; lastHit: number; gateOpen: boolean; pending: number[]; cands: number[]; arr: Array<{ t: number; f: number; e: number }>; scope: AtScope }
+export interface AtHitState { trigger: number; count: number; strength: number; envelope: number; lastHit: number; gateOpen: boolean; pending: number[]; cands: number[]; arr: Array<{ t: number; f: number; e: number }>; scope: AtScope; queued?: number[] }
 export function atNewHitState(): AtHitState;
 export function atStepHit(s: AtHitState, now: number, dt: number, f: AtLiveFrame, o: { decay: number; delay?: number; character?: unknown; charAt?: number }, ext?: AtExtHit): AtHitState;
 export interface AtDetRun { det: AtDetector; pick: AtPicker; mag: Float32Array | null; pend: number; last: AtDetFrameOut | null }

@@ -704,7 +704,8 @@ export function atNewHitState() {
  * its sound reaches the speakers later), character / charAt (Only) }. `ext` (optional): this frame's hits decided ahead
  * (a File: { fired, strength, odf, line, edb, gate, noise, open }), which then fire instead of the live ones. With
  * Only noisy / tonal a live hit is held for AT_CHAR_WINDOW and fires only if what arrived passes; one that doesn't
- * never fires and isn't counted. Mutates and returns `s`.
+ * never fires and isn't counted. A live hit queued to fire is also pushed to `s.queued` when it is an array (the
+ * editor's Listen clicks on it: lib/audioTools/listen.ts). Mutates and returns `s`.
  */
 export function atStepHit(s, now, dt, f, o, ext) {
   s.envelope = o.decay > 0 ? Math.max(0, s.envelope - dt / o.decay) : 0;
@@ -723,7 +724,7 @@ export function atStepHit(s, now, dt, f, o, ext) {
       s.count += 1;
       s.strength = atDetLevel(f.edb);
       if (judged) s.cands.push(sub.t);
-      else s.pending.push(sub.t + delay);
+      else { s.pending.push(sub.t + delay); if (s.queued) s.queued.push(sub.t + delay); }
     }
     if (judged) { while (s.arr.length && now - s.arr[0].t > AT_CHAR_WINDOW + 0.5) s.arr.shift(); }
     else { s.arr.length = 0; s.cands.length = 0; }
@@ -731,7 +732,7 @@ export function atStepHit(s, now, dt, f, o, ext) {
       const t0 = s.cands.shift();
       let sf = 0, se = 0;
       for (const a of s.arr) if (a.t >= t0 - 0.006 && a.t <= t0 + AT_CHAR_WINDOW + 1e-6) { sf += a.f * a.e; se += a.e; }
-      if (atCharPass(o.character, se > 0 ? sf / se : 0, o.charAt)) s.pending.push(t0 + delay);
+      if (atCharPass(o.character, se > 0 ? sf / se : 0, o.charAt)) { s.pending.push(t0 + delay); if (s.queued) s.queued.push(t0 + delay); }
       else s.count = Math.max(0, s.count - 1);
     }
     while (s.pending.length && s.pending[0] <= now + 1e-9) { s.pending.shift(); fired = 1; s.lastHit = now; }

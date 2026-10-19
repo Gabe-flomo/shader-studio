@@ -13,16 +13,20 @@
  * The scope (drawBandScope): the onset function as a filled area with the line it must rise above (the recent mean +
  * δ), the band's loudness in dBFS with the silence gate and the room's noise floor, and a tick on the top edge for each
  * hit. Its caption counts hits per pass of the file (or per second, live) and says whether the band is quiet.
+ *
+ * Listen (lib/audioTools/listen.ts): plays the band's sound and a click on each hit, with a Band ↔ Clicks mix. While it
+ * listens the scope follows playback (drawListenScope): a File's page of the band's curves with a playhead running
+ * across, each tick flashing as its click plays; live, a "now" line at the right edge with the newest ticks flashing.
  */
 import { useState, type CSSProperties } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily, radius } from '../../theme/tokens';
-import { AT_SCOPE_DB_FLOOR } from '../../play/kit/audioTools.js';
+import { AT_DET_LAG, AT_SCOPE_DB_FLOOR, atCurveAt, atCurveMax, atScopeDb } from '../../play/kit/audioTools.js';
 import {
   BAND_CATCHES, BAND_CHARACTERS, BAND_MAX_HZ, BAND_MIN_HZ, BAND_VALUE_FROM, presetDefaults,
   type AudioBandCharacter, type AudioBandPreset, type AudioBandSpec, type AudioBandValueFrom,
 } from '../../lib/audioTools/bands';
-import type { BandView } from '../../lib/audioTools/engine';
+import type { BandView, ListenView } from '../../lib/audioTools/engine';
 import type { AudioSourceKind } from '../../nodes/definitions/audioTools';
 import { Select } from '../ui/Select';
 import { Button } from '../ui/Button';
@@ -79,6 +83,89 @@ export function drawBandScope(g: CanvasRenderingContext2D, w: number, h: number,
     g.fillStyle = HIT_TICK;
     for (let k = 0; k < n; k++) if (at(sc.hits, k)) g.fillRect(k * dx - 1, 0, 2, 9);
   }
+}
+
+/** How long a tick (and the hit blink) stays lit after its click, seconds. */
+export const LISTEN_FLASH = 0.25;
+/** The longest stretch a listening File's scope shows at once (a page; the playhead turns it). */
+export const LISTEN_PAGE = 4;
+
+/** The page of a File's trim a listening scope shows: `span` seconds from `start`, holding `pos`. */
+export function listenPage(pos: number, win: { start: number; end: number }): { start: number; span: number } {
+  const len = Math.max(1e-3, win.end - win.start), span = Math.min(len, LISTEN_PAGE);
+  const k = Math.max(0, Math.floor((Math.max(win.start, Math.min(win.end, pos)) - win.start) / span));
+  return { start: Math.min(win.start + k * span, Math.max(win.start, win.end - span)), span };
+}
+
+/** How lit a listening band's hit blink is now (1 just as a click plays, 0 after LISTEN_FLASH); null live. */
+export function listenFlash(lv: ListenView): number | null {
+  if (lv.mode !== 'ahead') return null;
+  let f = 0;
+  for (let i = 0; i < lv.times.length; i++) {
+    const d = lv.pos - lv.times[i];
+    if (d >= 0 && d < LISTEN_FLASH) f = Math.max(f, 1 - d / LISTEN_FLASH);
+  }
+  return f;
+}
+
+/**
+ * The scope while a band listens. A File analysed ahead: the page of the trim around playback (LISTEN_PAGE seconds at
+ * most) with the band's new sound, its line, loudness and gate, a tick per hit, and the playhead running across; a
+ * tick flashes (full height) as its click plays. Live: the usual scope, a "now" line at its right edge, and the hits
+ * of the last LISTEN_FLASH seconds lit.
+ */
+export function drawListenScope(g: CanvasRenderingContext2D, w: number, h: number, b: AudioBandSpec, bv: BandView | null, lv: ListenView): void {
+  if (lv.mode !== 'ahead') {
+    drawBandScope(g, w, h, b, bv);
+    if (bv && b.trigger) {
+      const sc = bv.scope, n = sc.vals.length, dx = w / (n - 1), per = bv.recentSeconds / Math.max(1, n);
+      const lit = Math.max(1, Math.ceil(LISTEN_FLASH / Math.max(1e-3, per)));
+      for (let k = Math.max(0, n - lit); k < n; k++) {
+        if (!sc.hits[(sc.at + k) % n]) continue;
+        const a = 1 - (n - 1 - k) / lit;
+        g.fillStyle = `rgba(249,226,175,${0.25 + 0.6 * a})`; g.fillRect(k * dx - 1.5, 0, 3, h);
+      }
+    }
+    playhead(g, w - 5, h);
+    return;
+  }
+  g.fillStyle = SCOPE_BG; g.fillRect(0, 0, w, h);
+  const { start, span } = listenPage(lv.pos, lv.win), hop = lv.hop, cols = Math.max(2, Math.round(w / 2)), cw = w / cols;
+  const tAt = (x: number) => start + (x / w) * span;
+  const line = (val: (a: number, z: number) => number, close: boolean) => {
+    g.beginPath();
+    if (close) g.moveTo(0, h - PAD);
+    for (let i = 0; i <= cols; i++) {
+      const x = i * cw, a = tAt(x) + AT_DET_LAG, y = yOf(val(a, a + cw / w * span), h);
+      if (i || close) g.lineTo(x, y); else g.moveTo(x, y);
+    }
+    if (close) { g.lineTo(w, h - PAD); g.closePath(); }
+  };
+  // Loudness and the gate underneath, then the new sound and its line (as the live scope draws them).
+  g.setLineDash([2, 3]); line(a => atScopeDb(atCurveAt(lv.gate, hop, a)), false); g.strokeStyle = 'rgba(205,214,244,0.5)'; g.lineWidth = 1; g.stroke(); g.setLineDash([]);
+  line((a, z) => atScopeDb(atCurveMax(lv.edb, hop, a, z)), false); g.strokeStyle = 'rgba(205,214,244,0.45)'; g.stroke();
+  line((a, z) => atCurveMax(lv.odf, hop, a, z), true); g.fillStyle = `${b.color}55`; g.fill();
+  line((a, z) => atCurveMax(lv.odf, hop, a, z), false); g.strokeStyle = b.color; g.lineWidth = 1.25; g.stroke();
+  g.setLineDash([4, 3]); line(a => atCurveAt(lv.line, hop, a), false); g.strokeStyle = 'rgba(255,255,255,0.7)'; g.lineWidth = 1; g.stroke(); g.setLineDash([]);
+  // A tick per hit; lit full height as its click plays.
+  for (let i = 0; i < lv.times.length; i++) {
+    const t = lv.times[i];
+    if (t < start || t > start + span) continue;
+    const x = ((t - start) / span) * w, d = lv.pos - t;
+    if (d >= 0 && d < LISTEN_FLASH) {
+      const a = 1 - d / LISTEN_FLASH;
+      g.fillStyle = `rgba(249,226,175,${0.25 + 0.65 * a})`; g.fillRect(x - 1.5, 0, 3, h);
+    }
+    g.fillStyle = HIT_TICK; g.fillRect(x - 1, 0, 2, 9);
+  }
+  playhead(g, ((lv.pos - start) / span) * w, h);
+}
+
+/** The listening playhead: a white line with a cap on top. */
+function playhead(g: CanvasRenderingContext2D, x: number, h: number): void {
+  g.fillStyle = '#ffffff';
+  g.fillRect(x - 1, 0, 2, h);
+  g.beginPath(); g.moveTo(x - 5, 0); g.lineTo(x + 5, 0); g.lineTo(x, 6); g.closePath(); g.fill();
 }
 
 /** The scope's legend, under it. */
@@ -139,9 +226,14 @@ export interface BandRowProps {
   scopeRef: (c: HTMLCanvasElement | null) => void;
   /** The scope's caption (the draw loop writes it: scopeCaption). */
   captionRef: (e: HTMLSpanElement | null) => void;
+  /** Listen: this band is the one listening, pressing it (starts / stops), its Band ↔ Clicks mix and moving it. */
+  listening?: boolean;
+  onListen?: () => void;
+  mix?: number;
+  onMix?: (m: number) => void;
 }
 
-export function BandRow({ b, kind, selected, onSelect, patch, remove, learnNoise, meterRef, blinkRef, scopeRef, captionRef }: BandRowProps) {
+export function BandRow({ b, kind, selected, onSelect, patch, remove, learnNoise, meterRef, blinkRef, scopeRef, captionRef, listening = false, onListen, mix = 0.5, onMix }: BandRowProps) {
   const tk = useTokens();
   const [open, setOpen] = useState(() => readOpen(b.id));
   const d = presetDefaults(b.preset);
@@ -204,8 +296,29 @@ export function BandRow({ b, kind, selected, onSelect, patch, remove, learnNoise
           <canvas ref={blinkRef} title="Blinks on each hit" style={{ width: 12, height: 12, display: 'block', opacity: b.trigger ? 1 : 0.35 }} />
         </span>
         <span style={{ marginLeft: 'auto' }} />
+        {onListen && (
+          <Button size="sm" variant={listening ? 'primary' : 'secondary'} data-band-listen={b.id} aria-pressed={listening}
+            onClick={e => { stop(e); onListen(); }}
+            title={listening ? 'Stop listening (Esc)' : 'Listen: hear the band, with a click on every hit it fires (plays a paused source)'}>
+            {listening ? '■ Listening' : '▶ Listen'}
+          </Button>
+        )}
         <Button size="sm" variant="ghost" onClick={e => { stop(e); remove(); }} title="Remove the band (and its outputs' wires)">✕</Button>
       </div>
+
+      {/* Listen's mix, while it listens. */}
+      {listening && onMix && (
+        <div data-band-listen-mix={b.id} onClick={stop} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', ...small }}>
+          <span title="0: only the band's sound; 1: only the clicks; in the middle both at full">Band</span>
+          <div style={{ width: 170 }}>
+            <RulerSlider ariaLabel="Band to clicks" value={mix} min={0} max={1} step={0.01} hard defaultValue={kind === 'mic' ? 1 : 0.5}
+              onChange={v => onMix(Math.max(0, Math.min(1, +v.toFixed(2))))} />
+          </div>
+          <span>Clicks</span>
+          {kind === 'mic' && <span style={hint} data-listen-mic-note>Band audio off for the mic to avoid feedback — use headphones to turn it up.</span>}
+          {kind === 'file' && !b.trigger && <span style={hint}>Send hits is off: no clicks.</span>}
+        </div>
+      )}
 
       {/* The scope, its caption and legend. */}
       <canvas ref={scopeRef} data-trigger-scope={b.id}
