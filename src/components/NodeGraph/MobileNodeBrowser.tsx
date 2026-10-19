@@ -33,6 +33,9 @@ import { INLINE_VIZ_TYPES } from './NodeInlineViz';
 import { useCtp, type CtpPalette } from '../../theme/nodePalette';
 import { BuildersSection } from '../builders/BuildersSection';
 import { rankMatches } from './nodeSearchModel';
+import { ExamplesStrip } from './ExampleLinks';
+import { searchFocusTypes, usingTitle } from './exampleLinksModel';
+import { examplesForCategory, examplesForType, examplesForTypes } from '../../store/exampleNodeIndex';
 
 function labelFor(n: GraphNode): string {
   return (typeof n.params.label === 'string' && n.params.label) || getNodeDefinitionFor(n)?.label || n.type;
@@ -97,13 +100,16 @@ export function MobileNodeBrowser({ onClose }: { onClose: () => void }) {
   const [openCategory, setOpenCategory] = useState<string | null>(null);
   // Search: the nodes offered here (hidden ones stay hidden), best match first.
   const [query, setQuery] = useState('');
-  const matches = useMemo(() => {
+  const ranked = useMemo(() => {
     const q = query.trim();
     if (!q) return null;
     const defs = CATEGORIES.flatMap(sec => sec.rows.flatMap(r => r.groups.flatMap(g => g.types)))
       .map(t => getNodeDefinition(t)).filter((d): d is NodeDefinition => !!d);
-    return rankMatches(defs, q).slice(0, 40).map(m => m.def);
+    return rankMatches(defs, q);
   }, [query, CATEGORIES]);
+  const matches = useMemo(() => ranked?.slice(0, 40).map(m => m.def) ?? null, [ranked]);
+  // Examples using the node(s) the search is about (docs/node-browser.md, "Examples using a node").
+  const focus = useMemo(() => (ranked ? searchFocusTypes(ranked) : []), [ranked]);
   const [selectedType, setSelectedType] = useState<string | null>(null);
   // "Add Connected" sub-flow: pick an existing node, then pick one of its
   // compatible socket pairings with selectedType. Reset whenever the detail
@@ -251,6 +257,8 @@ export function MobileNodeBrowser({ onClose }: { onClose: () => void }) {
           <div style={{ fontSize: 13, color: tc.subtext0, lineHeight: 1.5 }}>{def.description}</div>
         )}
 
+        <ExamplesStrip key={selectedType} id="used-in" hits={examplesForType(selectedType, 3)} title="Used in" layout="list" show={3} touch hideTypes onOpened={onClose} />
+
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px' }}>
           <button
             onClick={() => setConnectTargetId('')}
@@ -296,7 +304,10 @@ export function MobileNodeBrowser({ onClose }: { onClose: () => void }) {
       {matches ? (
         matches.length === 0
           ? <div style={{ fontSize: 13, color: tc.overlay0, padding: '12px' }}>No nodes match “{query.trim()}”.</div>
-          : matches.map(d => (
+          : <>
+          {/* The examples sit after the first few results: the nodes stay first, the examples in reach. */}
+          {/* The examples sit after the first few results: the nodes stay first, the examples in reach. */}
+          {matches.flatMap((d, i) => [(
             <button key={d.type} data-browse-result={d.type} onClick={() => openDetail(d.type)} style={{ ...rowBtnStyleFor(tc), height: 'auto', minHeight: 46, padding: '6px 12px', borderRadius: 10, gap: 10 }}>
               <span style={{ width: 9, height: 9, borderRadius: '50%', background: categoryColor(d.category, mode), flexShrink: 0 }} />
               <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
@@ -305,7 +316,12 @@ export function MobileNodeBrowser({ onClose }: { onClose: () => void }) {
               </span>
               <Icon name="chevR" size={14} style={{ color: tc.surface2, flexShrink: 0 }} />
             </button>
-          ))
+          ), i === Math.min(4, matches.length) - 1 && focus.length > 0 ? (
+            <div key="__examples__" style={{ padding: '4px 4px 8px' }}>
+              <ExamplesStrip key={focus.join('|')} id="search" hits={examplesForTypes(focus, 10)} title={usingTitle(focus.map(t => getNodeDefinition(t)?.label ?? t))} show={2} columns={2} touch onOpened={onClose} />
+            </div>
+          ) : null])}
+          </>
       ) : <>
       {/* The builders: the 3D Scene Builder, Grid Rules, Agent Rules (docs/node-browser.md) */}
       <BuildersSection touch onOpened={onClose} />
@@ -333,6 +349,11 @@ export function MobileNodeBrowser({ onClose }: { onClose: () => void }) {
                   <span style={{ flex: 1 }}>{cat.label}</span>
                   <span style={{ fontSize: 12, fontWeight: 500, color: tc.overlay0, background: tc.surface0, borderRadius: 7, padding: '2px 7px' }}>{total}</span>
                 </button>
+                {isOpen && (
+                  <div style={{ padding: '0 12px 2px 43px' }}>
+                    <ExamplesStrip key={cat.row} id="category" hits={examplesForCategory(cat.groups.flatMap(g => g.types), 6)} title="Examples" show={2} columns={2} touch onOpened={onClose} />
+                  </div>
+                )}
                 {isOpen && cat.groups.map(group => (
                   <div key={group.label ?? '__none__'}>
                     {!flat && group.label && (

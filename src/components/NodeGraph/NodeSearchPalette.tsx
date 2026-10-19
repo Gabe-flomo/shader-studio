@@ -44,6 +44,9 @@ import { Button, IconButton } from '../ui/Button';
 import { DocText } from '../ui/DocText';
 import { NodeInlineViz, INLINE_VIZ_TYPES } from './NodeInlineViz';
 import { nodeBlurb } from '../../nodes/plainDescriptions';
+import { ExamplesStrip } from './ExampleLinks';
+import { searchFocusTypes, usingTitle } from './exampleLinksModel';
+import { examplesForCategory, examplesForType, examplesForTypes } from '../../store/exampleNodeIndex';
 
 interface Props {
   open: boolean;
@@ -211,10 +214,25 @@ function SearchPanel({ onClose, spawnPosition, filterOutputType, filterInputType
   }), [relevantOnly, libCtx.flow]);
 
   // ── The screen: its groups of items ──
+  const matches = useMemo(() => {
+    const q = query.trim();
+    return q ? rankMatches(searchDefs, q, { context: t => contextScore(t, ctx), misfit }) : [];
+  }, [query, searchDefs, ctx, misfit]);
+  // Examples using the node(s) the search is about, or the open category's nodes (not while wiring).
+  const examples = useMemo(() => {
+    if (wiring) return null;
+    if (query.trim()) {
+      const focus = searchFocusTypes(matches);
+      if (!focus.length) return null;
+      return { id: 'search', title: usingTitle(focus.map(t => getNodeDefinition(t)?.label ?? t)), hits: examplesForTypes(focus, 12) };
+    }
+    if (view.kind === 'row') return { id: 'category', title: `Examples with ${rowLabel(view.row)}`, hits: examplesForCategory(nodesOfRow(view.row).map(d => d.type), 8) };
+    return null;
+  }, [wiring, query, matches, view]);
+
   const sections = useMemo<Section[]>(() => {
     const q = query.trim();
     if (q) {
-      const matches = rankMatches(searchDefs, q, { context: t => contextScore(t, ctx), misfit });
       const related = rankRelated(fitDefs, ctx, new Set(matches.map(m => m.def.type)), TOP_COUNT);
       const out: Section[] = [];
       const builders = wiring ? [] : matchBuilders(q);
@@ -281,7 +299,7 @@ function SearchPanel({ onClose, spawnPosition, filterOutputType, filterInputType
       if (showOther) out.push({ id: 'other', label: 'Not for this graph', layout: 'grid', items: other });
     }
     return out;
-  }, [query, view, searchDefs, offered, fitDefs, ctx, misfit, wiring, groupPresets, nodeItem, acceptBrowse, favorites, recents, usuallyNext, tk, pal, relevantOnly, libCtx.flow, showOther, goTo, onClose]);
+  }, [query, matches, view, offered, fitDefs, ctx, wiring, groupPresets, nodeItem, acceptBrowse, favorites, recents, usuallyNext, tk, pal, relevantOnly, libCtx.flow, showOther, goTo, onClose]);
 
   const searching = query.trim().length > 0;
   const navSections = useMemo(() => sections.map(s => ({ layout: s.layout, count: s.items.length })), [sections]);
@@ -427,6 +445,9 @@ function SearchPanel({ onClose, spawnPosition, filterOutputType, filterInputType
             {crumb && view.kind === 'row' && CATEGORY_INFO[view.row] && (
               <div data-category-info style={{ color: tk.text.muted, font: `12px/1.5 ${fontFamily.ui}`, padding: '6px 2px 2px', maxWidth: 720 }}>{CATEGORY_INFO[view.row]}</div>
             )}
+            {examples?.id === 'category' && (
+              <ExamplesStrip id="category" hits={examples.hits} title={examples.title} show={narrow ? 2 : 4} columns={narrow ? 2 : 4} touch={narrow} onOpened={onClose} />
+            )}
             {sections.map((sec, si) => (sec.items.length === 0 && !(sec.id === 'top' && searching) ? null : (
               <div key={sec.id} data-section={sec.id} data-search-group={sec.group}>
                 {sec.label && <SectionLabel tk={tk} label={sec.label} note={sec.note} rule={!sec.group || sec.group === 'related'} />}
@@ -451,12 +472,15 @@ function SearchPanel({ onClose, spawnPosition, filterOutputType, filterInputType
                     />
                   ))}
                 </div>
+                {sec.id === 'top' && examples?.id === 'search' && (
+                  <ExamplesStrip id="search" hits={examples.hits} title={examples.title} show={narrow ? 2 : 4} columns={narrow ? 2 : 4} touch={narrow} onOpened={onClose} />
+                )}
               </div>
             )))}
           </div>
           {!narrow && (
             <aside data-node-search-preview style={{ width: 300, flexShrink: 0, borderLeft: `1px solid ${tk.border.subtle}`, background: tk.bg.subtle, overflowY: 'auto', padding: 14 }}>
-              <Preview item={active} tk={tk} pal={pal} favorites={favorites} onToggleFavorite={toggleFav} onActivate={() => activate(active)} onDeletePreset={id => deleteGroupPreset(id)} />
+              <Preview item={active} tk={tk} pal={pal} favorites={favorites} onToggleFavorite={toggleFav} onActivate={() => activate(active)} onDeletePreset={id => deleteGroupPreset(id)} onExampleOpened={wiring ? undefined : onClose} />
             </aside>
           )}
         </div>
@@ -633,8 +657,10 @@ function syntheticNode(def: NodeDefinition): GraphNode {
   };
 }
 
-function Preview({ item, tk, pal, favorites, onToggleFavorite, onActivate, onDeletePreset }: {
+function Preview({ item, tk, pal, favorites, onToggleFavorite, onActivate, onDeletePreset, onExampleOpened }: {
   item: Item | null; tk: Tokens; pal: CtpPalette; favorites: string[]; onToggleFavorite: (type: string) => void; onActivate: () => void; onDeletePreset: (id: string) => void;
+  /** Set: the node's "Used in" examples show (not while wiring), and this runs after one opened. */
+  onExampleOpened?: () => void;
 }) {
   if (!item) return <div style={{ color: tk.text.faint, fontSize: 12 }}>Nothing here.</div>;
   const title = (t: ReactNode, extra?: ReactNode) => (
@@ -667,6 +693,7 @@ function Preview({ item, tk, pal, favorites, onToggleFavorite, onActivate, onDel
           </div>
         )}
         <Button size="sm" variant="primary" icon="plus" onClick={onActivate}>Add to graph</Button>
+        {onExampleOpened && <ExamplesStrip key={def.type} id="used-in" hits={examplesForType(def.type, 3)} title="Used in" layout="list" show={3} hideTypes onOpened={onExampleOpened} />}
       </div>
     );
   }
