@@ -87,6 +87,7 @@ export function Modal({
         ref={panelRef}
         role="dialog"
         aria-modal="true"
+        aria-label={typeof title === 'string' ? title : undefined}
         tabIndex={-1}
         style={{
           width: phone ? '100%' : width, maxWidth: '100%', height: phone ? '100%' : height, maxHeight: '100%',
@@ -102,14 +103,15 @@ export function Modal({
               <Icon name={icon} />
             </span>
           )}
-          {/* On a phone the title keeps one line (ellipsis) and the actions scroll sideways if they don't fit */}
-          <span style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: phone ? 96 : 0, marginRight: 'auto', ...(phone ? { flex: '1 1 0' } : null) }}>
-            <b style={{ fontSize: 15, fontWeight: 650, letterSpacing: '-0.01em', ...(phone ? ellipsis : null) }}>{title}</b>
-            {subtitle && <span style={{ fontSize: 12, color: tk.text.muted, ...(phone ? ellipsis : null) }}>{subtitle}</span>}
+          {/* The title and subtitle keep one line each (ellipsis): wrapped, they ran past the 60px header and
+              its top line (a builder's "Scene builder ›" link) was cut off. Actions that still don't fit scroll
+              sideways (docs/toolbars.md). */}
+          <span title={typeof subtitle === 'string' ? subtitle : undefined}
+            style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 96, marginRight: 'auto', flex: phone ? '1 1 0' : '1 1 auto' }}>
+            <b style={{ fontSize: 15, fontWeight: 650, letterSpacing: '-0.01em', ...ellipsis }}>{title}</b>
+            {subtitle && <span style={{ fontSize: 12, color: tk.text.muted, ...ellipsis }}>{subtitle}</span>}
           </span>
-          {phone && headerActions
-            ? <span style={{ display: 'flex', alignItems: 'center', minWidth: 0, flexShrink: 1, overflowX: 'auto', scrollbarWidth: 'none' }}>{headerActions}</span>
-            : headerActions}
+          {headerActions && <span data-modal-actions="" style={{ display: 'flex', alignItems: 'center', gap: phone ? 0 : 10, minWidth: 0, flexShrink: 1, overflowX: 'auto', scrollbarWidth: 'none' }}>{headerActions}</span>}
           <IconButton icon="close" label="Close" shortcut="esc" onClick={onClose} style={phone ? { width: 40, height: 40 } : undefined} />
         </div>
         <div style={{ flex: 1, minHeight: 0, overflow: 'auto', overscrollBehavior: 'contain' }}>{children}</div>

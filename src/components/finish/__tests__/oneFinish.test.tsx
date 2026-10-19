@@ -88,7 +88,7 @@ describe('one Finish, everywhere', () => {
     const modal = src('src/components/sceneBuilder2d/SceneBuilder2DModal.tsx');
     expect(modal).toMatch(/<FinishEditor embedded \/>/);
     expect(modal).not.toMatch(/id="look2-grade"/);
-    expect(src('src/App.tsx')).toMatch(/page !== 'play' && <FinishButton \/>/);
+    expect(src('src/App.tsx')).toMatch(/page !== 'play' \? \[\{ key: 'finish'[^\n]*node: <FinishButton \/>/);
     expect(src('src/components/shell/MobileTopBar.tsx')).toMatch(/label: 'Finish…'/);
   });
 

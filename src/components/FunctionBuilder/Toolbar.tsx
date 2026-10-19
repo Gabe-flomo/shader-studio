@@ -8,6 +8,7 @@ import { Button, IconButton } from '../ui/Button';
 import { Field } from '../ui/Field';
 import { Icon } from '../ui/Icon';
 import { Popover } from '../ui/Popover';
+import { FitToolbar } from '../ui/FitToolbar';
 import { toast } from '../ui/toastStore';
 
 interface Props {
@@ -157,101 +158,123 @@ export function Toolbar({ onNavigateToStudio }: Props) {
   const sep = <span style={{ width: 1, height: 20, background: tk.border.default, flexShrink: 0, margin: '0 2px' }} />;
   const axisLabel = (a: string) => <span style={{ font: `600 12px ${fontFamily.mono}`, color: tk.text.muted, marginRight: 2 }}>{a}</span>;
 
+  // Folds by priority as the window narrows (ui/FitToolbar, docs/toolbars.md): the function picker and
+  // Save to Expression Block stay; the view range, Sessions and Save group go into the "⋯" first.
+  const sessionsList = savedGroups.length === 0 ? (
+    <div style={{ padding: '14px 12px', fontSize: 12.5, lineHeight: 1.45, color: tk.text.muted }}>
+      No saved groups yet. <b style={{ color: tk.text.secondary, fontWeight: 600 }}>Save group</b> keeps every tab together.
+    </div>
+  ) : (
+    <div style={{ maxHeight: 280, overflowY: 'auto' }}>
+      {savedGroups.map(g => (
+        <SessionRow
+          key={g.id}
+          name={g.name}
+          meta={`${g.tabs.length} tab${g.tabs.length !== 1 ? 's' : ''} · ${new Date(g.savedAt).toLocaleDateString()}`}
+          onLoad={() => { loadGroup(g); setShowSessions(false); }}
+          onDelete={() => deleteGroup(g.id)}
+        />
+      ))}
+    </div>
+  );
+
   return (
     <div style={{
-      height: 56, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '0 16px',
-      borderTop: `1px solid ${tk.border.default}`, background: tk.bg.panel, overflowX: 'auto', scrollbarWidth: 'none',
+      height: 56, flexShrink: 0, display: 'flex', alignItems: 'center', padding: '0 10px 0 16px',
+      borderTop: `1px solid ${tk.border.default}`, background: tk.bg.panel, minWidth: 0,
     }}>
-      <span style={{ fontSize: 12, fontWeight: 600, color: tk.text.muted }}>Visualize</span>
-      {/* Native select under a styled face, as in TypeSelect */}
-      <span style={{
-        position: 'relative', height: 32, display: 'inline-flex', alignItems: 'center', gap: 8, padding: '0 8px 0 10px', flexShrink: 0,
-        borderRadius: radius.control, boxShadow: `inset 0 0 0 1px ${tk.border.default}`, background: tk.bg.panel,
-        font: `500 12.5px ${fontFamily.mono}`, color: tk.text.primary,
-      }}>
-        <span style={{ width: 9, height: 9, borderRadius: '50%', background: curveColor(activeIndex, mode) }} />
-        {activeFn ? `${activeFn.name} (${activeFn.returnType})` : '—'}
-        <Icon name="chevD" size={14} style={{ color: tk.text.faint }} />
-        <select
-          aria-label="Function to visualize"
-          value={activeId}
-          onChange={e => setActiveId(e.target.value)}
-          style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', font: 'inherit' }}
-        >
-          {functions.map(f => <option key={f.id} value={f.id}>{f.name} ({f.returnType})</option>)}
-        </select>
-      </span>
-
-      {activeFn?.returnType === 'float' && (
-        <>
-          {sep}
-          {axisLabel('x')}
-          <RangeInput label="x minimum" value={xRange[0]} onChange={v => setXRange([v, xRange[1]])} />
-          <RangeInput label="x maximum" value={xRange[1]} onChange={v => setXRange([xRange[0], v])} />
-          <span style={{ width: 6 }} />
-          {axisLabel('y')}
-          <RangeInput label="y minimum" value={yRange[0]} onChange={v => setYRange([v, yRange[1]])} />
-          <RangeInput label="y maximum" value={yRange[1]} onChange={v => setYRange([yRange[0], v])} />
-          <IconButton icon="fit" label="Reset view" size="sm" onClick={() => { setXRange([-2, 2]); setYRange([-2, 2]); }} />
-        </>
-      )}
-
-      <span style={{ flex: 1, minWidth: 8 }} />
-
-      {saving ? (
-        <>
-          <Field
-            autoFocus
-            height={30}
-            placeholder="Group name"
-            aria-label="Group name"
-            value={saveName}
-            onChange={e => setSaveName(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === 'Enter') handleSaveGroup();
-              if (e.key === 'Escape') { setSaving(false); setSaveName(''); }
-            }}
-            style={{ width: 150 }}
-          />
-          <Button size="sm" disabled={!saveName.trim()} onClick={handleSaveGroup}>Save</Button>
-          <IconButton icon="close" label="Cancel" size="sm" tooltip={false} onClick={() => { setSaving(false); setSaveName(''); }} />
-        </>
-      ) : (
-        <Button size="sm" icon="export" title="Save every tab as a named group" onClick={() => { setSaving(true); setShowSessions(false); }}>
-          Save group
-        </Button>
-      )}
-
-      <span ref={sessionsRef} style={{ display: 'inline-flex' }}>
-        <Button size="sm" icon="folder" onClick={() => setShowSessions(v => !v)} style={showSessions ? { background: tk.bg.hover } : undefined}>
-          Sessions{savedGroups.length > 0 && <span style={{ color: tk.text.faint, fontWeight: 500 }}>{savedGroups.length}</span>}
-        </Button>
-      </span>
-      {showSessions && (
-        <Popover anchorRef={sessionsRef} onClose={() => setShowSessions(false)} align="end" width={280} padding={4}>
-          {savedGroups.length === 0 ? (
-            <div style={{ padding: '14px 12px', fontSize: 12.5, lineHeight: 1.45, color: tk.text.muted }}>
-              No saved groups yet. <b style={{ color: tk.text.secondary, fontWeight: 600 }}>Save group</b> keeps every tab together.
-            </div>
-          ) : (
-            <div style={{ maxHeight: 280, overflowY: 'auto' }}>
-              {savedGroups.map(g => (
-                <SessionRow
-                  key={g.id}
-                  name={g.name}
-                  meta={`${g.tabs.length} tab${g.tabs.length !== 1 ? 's' : ''} · ${new Date(g.savedAt).toLocaleDateString()}`}
-                  onLoad={() => { loadGroup(g); setShowSessions(false); }}
-                  onDelete={() => deleteGroup(g.id)}
-                />
-              ))}
-            </div>
-          )}
-        </Popover>
-      )}
-
-      <Button size="sm" variant="primary" onClick={handleSave} title={linkedBlockId ? 'Write these functions back to the Expression Block they came from' : 'Add an Expression Block with this function to the graph'}>
-        {linkedBlockId ? 'Update Expression Block' : 'Save to Expression Block'}
-      </Button>
+      <FitToolbar ariaLabel="Function tools" gap={8} moreLabel="More function tools" items={[
+        { key: 'label', label: 'Visualize', menu: 'never', priority: 10, node: <span style={{ fontSize: 12, fontWeight: 600, color: tk.text.muted }}>Visualize</span> },
+        {
+          key: 'fn', label: 'Function to visualize', pinned: true,
+          node: (
+            // Native select under a styled face, as in TypeSelect
+            <span style={{
+              position: 'relative', height: 32, display: 'inline-flex', alignItems: 'center', gap: 8, padding: '0 8px 0 10px', flexShrink: 0, whiteSpace: 'nowrap',
+              borderRadius: radius.control, boxShadow: `inset 0 0 0 1px ${tk.border.default}`, background: tk.bg.panel,
+              font: `500 12.5px ${fontFamily.mono}`, color: tk.text.primary,
+            }}>
+              <span style={{ width: 9, height: 9, borderRadius: '50%', background: curveColor(activeIndex, mode) }} />
+              {activeFn ? `${activeFn.name} (${activeFn.returnType})` : '—'}
+              <Icon name="chevD" size={14} style={{ color: tk.text.faint }} />
+              <select
+                aria-label="Function to visualize"
+                value={activeId}
+                onChange={e => setActiveId(e.target.value)}
+                style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', font: 'inherit' }}
+              >
+                {functions.map(f => <option key={f.id} value={f.id}>{f.name} ({f.returnType})</option>)}
+              </select>
+            </span>
+          ),
+        },
+        ...(activeFn?.returnType === 'float' ? [{
+          key: 'range', label: 'View range', priority: 30,
+          node: (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              {sep}
+              {axisLabel('x')}
+              <RangeInput label="x minimum" value={xRange[0]} onChange={v => setXRange([v, xRange[1]])} />
+              <RangeInput label="x maximum" value={xRange[1]} onChange={v => setXRange([xRange[0], v])} />
+              <span style={{ width: 4 }} />
+              {axisLabel('y')}
+              <RangeInput label="y minimum" value={yRange[0]} onChange={v => setYRange([v, yRange[1]])} />
+              <RangeInput label="y maximum" value={yRange[1]} onChange={v => setYRange([yRange[0], v])} />
+              <IconButton icon="fit" label="Reset view" size="sm" onClick={() => { setXRange([-2, 2]); setYRange([-2, 2]); }} />
+            </span>
+          ),
+        }] : []),
+        { key: 'space', label: '', grow: true },
+        saving ? {
+          key: 'saveGroup', label: 'Save group', pinned: true,
+          node: (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <Field
+                autoFocus
+                height={30}
+                placeholder="Group name"
+                aria-label="Group name"
+                value={saveName}
+                onChange={e => setSaveName(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') handleSaveGroup();
+                  if (e.key === 'Escape') { setSaving(false); setSaveName(''); }
+                }}
+                style={{ width: 150 }}
+              />
+              <Button size="sm" disabled={!saveName.trim()} onClick={handleSaveGroup}>Save</Button>
+              <IconButton icon="close" label="Cancel" size="sm" tooltip={false} onClick={() => { setSaving(false); setSaveName(''); }} />
+            </span>
+          ),
+        } : {
+          key: 'saveGroup', label: 'Save group', hint: 'Every tab, as one named group', icon: 'export', priority: 50,
+          onSelect: () => { setSaving(true); setShowSessions(false); },
+          node: <Button size="sm" icon="export" title="Save every tab as a named group" onClick={() => { setSaving(true); setShowSessions(false); }}>Save group</Button>,
+        },
+        {
+          key: 'sessions', label: 'Sessions', hint: 'Open a saved group', priority: 45,
+          node: (
+            <span ref={sessionsRef} style={{ display: 'inline-flex' }}>
+              <Button size="sm" icon="folder" onClick={() => setShowSessions(v => !v)} style={showSessions ? { background: tk.bg.hover } : undefined}>
+                Sessions{savedGroups.length > 0 && <span style={{ color: tk.text.faint, fontWeight: 500 }}>{savedGroups.length}</span>}
+              </Button>
+              {showSessions && (
+                <Popover anchorRef={sessionsRef} onClose={() => setShowSessions(false)} align="end" width={280} padding={4}>
+                  {sessionsList}
+                </Popover>
+              )}
+            </span>
+          ),
+        },
+        {
+          key: 'save', label: linkedBlockId ? 'Update Expression Block' : 'Save to Expression Block', pinned: true,
+          node: (
+            <Button size="sm" variant="primary" onClick={handleSave} title={linkedBlockId ? 'Write these functions back to the Expression Block they came from' : 'Add an Expression Block with this function to the graph'}>
+              {linkedBlockId ? 'Update Expression Block' : 'Save to Expression Block'}
+            </Button>
+          ),
+        },
+      ]} />
     </div>
   );
 }

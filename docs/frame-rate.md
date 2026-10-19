@@ -6,7 +6,7 @@ stop-motion movement of After Effects' "Posterize Time", and a lower rate also s
 ## The control
 
 The **fps** button in the preview header (next to the resolution button, on the Studio, Play and
-page canvases) opens it:
+page canvases; in the header's ⋯ when the column is narrow, docs/toolbars.md) opens it:
 
 - **Auto (screen's max)**: the default. Draws at the screen's own refresh rate; time is smooth.
 - **6 / 8 / 12 / 15 / 24 / 30 / 60**, or a typed rate (decimals work: 23.98). Rates above the

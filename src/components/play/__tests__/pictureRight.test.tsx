@@ -89,7 +89,7 @@ describe('the picture is on the right', () => {
     const desk = src.slice(src.indexOf('data-preview-column=""'));
     const split = desk.indexOf('<PlaySplitArea active={page === \'play\'}>');
     expect(split).toBeGreaterThan(-1);
-    expect(desk.indexOf('<PreviewHeader>')).toBeGreaterThan(split);
+    expect(desk.indexOf('<PreviewHeader items={[')).toBeGreaterThan(split);
     expect(desk.indexOf('<PreviewFooter')).toBeLessThan(desk.indexOf('</PlaySplitArea>'));
     // Tablets reach Stage from the top bar.
     expect(readFileSync(join(__dirname, '../../shell/DesktopTopNav.tsx'), 'utf8')).toMatch(/compact && page === 'play' && <IconButton icon="play" label="Stage/);

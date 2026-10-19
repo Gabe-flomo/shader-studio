@@ -27,9 +27,8 @@ import { MobilePreviewPill } from './components/shell/MobilePreviewPill';
 import { MobileIconSegment } from './components/shell/MobileIconSegment';
 import { Button, IconButton } from './components/ui/Button';
 import { ThemeOverrideContext, useThemeMode, useTokens } from './theme/themeStore';
-import { FinishButton, FinishDrawer } from './components/finish/FinishEditor';
-import { AspectPicker, CanvasFullscreenButton, PreviewFooter, PreviewHeader, PreviewQualityPicker, FrameRatePicker } from './components/shell/PreviewChrome';
-import { OverlayButton } from './components/PreviewOverlay';
+import { FinishButton, FinishDrawer, useFinishDrawer } from './components/finish/FinishEditor';
+import { PreviewFooter, PreviewHeader, previewToolItems } from './components/shell/PreviewChrome';
 import { canvasFrameRef as canvasFrame, exitFullscreen, isFullscreenKey, isTyping, toggleFullscreenTarget, useFullscreen } from './lib/fullscreen';
 import { modalOpen } from './lib/modalOpen';
 import { GuidesToggle } from './components/play/GuidesToggle';
@@ -69,9 +68,10 @@ import type { Stage as StageT } from './components/play/Stage';
 import type { ConvertPage as ConvertPageT } from './components/convert/ConvertPage';
 import { requestConvert } from './components/convert/convertHandoff';
 import { useStage } from './components/play/stageStore';
+import { usePlayUi } from './components/play/playUi';
 import { hostsCanvas, usePageCanvas } from './components/shell/pageCanvasStore';
 import { usePreviewHost } from './lib/previewHost';
-import { OutputButton } from './components/output/OutputButton';
+import { OutputButton, OutputDialogHost, openOutputDialog } from './components/output/OutputButton';
 import type { KeyboardShortcutsModal as KeyboardShortcutsModalT } from './components/KeyboardShortcutsModal';
 import type { ShortcutsPage as ShortcutsPageT } from './components/ShortcutsPage';
 import type { FilesPage as FilesPageT } from './components/files/FilesPage';
@@ -1661,20 +1661,21 @@ function App() {
             <PlaySplitArea active={page === 'play'}>
             {/* Chrome around the picture follows the app's real theme; the picture itself stays dark (below). */}
             <ThemeOverrideContext.Provider value={null}>
-              {!pictureBehind && <PreviewHeader>
-                <AspectPicker onPanel />
-                <PreviewQualityPicker onPanel /><FrameRatePicker onPanel />
-                <OverlayButton />
-                {/* The one Finish (components/finish/FinishEditor.tsx): Play has it on its rail. */}
-                {page !== 'play' && <FinishButton />}
-                <CanvasFullscreenButton plainF={page === 'play'} />
-                {page === 'play' && <GuidesToggle />}
-                {page === 'play' && <SplitButton />}
-                {page === 'play' && <Button size="sm" variant="ghost" icon="play" onClick={() => useStage.getState().open('full')} title="Stage: the picture and its controls on their own, as people will play with it (Full or Exact, phone or screen, fullscreen, Record)">Stage</Button>}
-                {page === 'play' && <OutputButton />}
-                <IconButton icon="wave" label="Brightness histogram" size="sm" active={showHistogram} onClick={() => setShowHistogram(v => !v)} />
-                <IconButton icon="popout" label="Float the preview" size="sm" onClick={() => { setPreviewFloated(true); setFloatPos({ x: window.innerWidth - floatSize.w - 20, y: 60 }); }} />
-              </PreviewHeader>}
+              {/* The tools fold into a "⋯" by priority when the column is narrow (ui/FitToolbar, docs/toolbars.md). */}
+              {!pictureBehind && <PreviewHeader items={[
+                ...previewToolItems({ plainF: page === 'play' }),
+                // The one Finish (components/finish/FinishEditor.tsx): Play has it on its rail.
+                ...(page !== 'play' ? [{ key: 'finish', label: 'Finish', hint: 'Grade, lens, film and time effects over the whole picture', icon: 'curve' as const, onSelect: () => useFinishDrawer.getState().toggle(), node: <FinishButton />, priority: 80 }] : []),
+                ...(page === 'play' ? [
+                  { key: 'guides', label: 'Show or hide guides', hint: 'Null markers, handles, zone outlines and particle fields', icon: 'eye' as const, onSelect: () => usePlayUi.getState().toggleGuides(), node: <GuidesToggle />, priority: 40 },
+                  { key: 'split', label: 'Show or hide the panel', hint: 'The rail and its panel beside the picture', icon: 'splitPanel' as const, onSelect: () => usePlaySplit.getState().toggle(), node: <SplitButton />, priority: 75 },
+                  { key: 'stage', label: 'Stage', hint: 'The picture and its controls on their own, as people will play with it', priority: 85, icon: 'play' as const, onSelect: () => useStage.getState().open('full'),
+                    node: <Button size="sm" variant="ghost" icon="play" onClick={() => useStage.getState().open('full')} title="Stage: the picture and its controls on their own, as people will play with it (Full or Exact, phone or screen, fullscreen, Record)">Stage</Button> },
+                  { key: 'output', label: 'Output', hint: 'The picture alone on a projector or second display', icon: 'grid' as const, onSelect: openOutputDialog, node: <OutputButton />, priority: 45 },
+                ] : []),
+                { key: 'histogram', label: 'Brightness histogram', icon: 'wave', active: showHistogram, onSelect: () => setShowHistogram(v => !v), priority: 20 },
+                { key: 'float', label: 'Float the preview', hint: 'In its own window over the app', icon: 'popout', onSelect: () => { setPreviewFloated(true); setFloatPos({ x: window.innerWidth - floatSize.w - 20, y: 60 }); }, priority: 30 },
+              ]} />}
             </ThemeOverrideContext.Provider>
             <ThemeOverrideContext.Provider value="dark">
                 <div ref={canvasFrame} style={{ flex: 1, position: 'relative', minHeight: 0 }}>
@@ -1692,6 +1693,7 @@ function App() {
 
       {/* Floating preview window */}
       <FinishDrawer />
+      <OutputDialogHost />
       {previewFloated && (
         <div
           ref={floatContainerRef}

@@ -12,7 +12,7 @@ canvas** lets a page host that same preview inside its own layout, full size.
 
 `<PageCanvas page="convert" />` is the main preview, hosted: the same
 `ShaderCanvas`, the preview header (the page's own controls first, then shape,
-full screen and Record / Snapshot), the footer with play, reset, rebuild, the
+full screen and Record / Snapshot, folding into its ⋯ when narrow: docs/toolbars.md), the footer with play, reset, rebuild, the
 clock and the pixel under the cursor. While a page hosts the canvas, App's own
 preview column (and its divider) step aside, so there is only ever one
 `ShaderCanvas`; the mounted one registers with `lib/previewHost`, which is

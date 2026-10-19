@@ -21,6 +21,8 @@ import { Segmented } from './ui/Choice';
 import { Field } from './ui/Field';
 import { Icon } from './ui/Icon';
 import { Menu } from './ui/Menu';
+import { FitToolbar } from './ui/FitToolbar';
+import { Tooltip } from './ui/Tooltip';
 import { shaderFacts, type ShaderFacts } from '../glsl/shaderFacts';
 import { DiscoverFunctionsModal } from './code/DiscoverFunctionsModal';
 import { PageCanvas } from './shell/PageCanvas';
@@ -399,6 +401,12 @@ export function GLSLPage({ onConvert }: { onConvert?: (code: string, guided?: bo
     </div>
   );
 
+  // The graph's generated code into the editor. A graph built with a sealed node pack keeps that code hidden here too.
+  const openGraphShader = () => {
+    if (nodeGraphShader && redactSealedCode(nodeGraphShader) !== nodeGraphShader) { toast.info('This graph uses a sealed node pack', { message: 'Its code stays hidden, so the graph’s shader can’t be opened here.' }); return; }
+    setCode(nodeGraphShader || BOILERPLATE); setOpen(null);
+  };
+
   // The way back from Full canvas sits on the canvas itself (the editor's toolbar has no room for it there).
   const smallButton = <IconButton icon="layoutCanvas" label={phone ? 'Small: hide the preview' : 'Small preview: back to the app’s preview column'} size="sm" active onClick={() => toggleLayout('glsl')} />;
 
@@ -429,55 +437,93 @@ export function GLSLPage({ onConvert }: { onConvert?: (code: string, guided?: bo
 
       {/* ── Editor pane ───────────────────────────────────────────────── */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', borderRight: `1px solid ${tk.border.default}`, minWidth: 0 }}>
-        {/* A phone can't fit the toolbar: it scrolls sideways (the Code Explorer and Explain are at its end) */}
-        <div style={{ ...panelHead, padding: '0 12px 0 16px', ...(phone ? { overflowX: 'auto', scrollbarWidth: 'none' } : null) }}>
-          <span title={openShader ? `${openShader.name}${openEdited ? ' · edited since it was saved' : ' · saved'}` : 'An unsaved shader: Save gives it a name'} style={{ fontWeight: 650, fontSize: 13.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0, display: 'inline-flex', alignItems: 'center', gap: 6, ...(phone ? { flexShrink: 0, maxWidth: 140 } : null) }}>
+        {/* The editor's toolbar (docs/toolbars.md): the shader's name, then Save and the everyday tools; whatever
+            doesn't fit folds into the "⋯" by priority, and the rarely used ones (file actions, Step by step) live there. */}
+        <div data-glsl-toolbar="" style={{ ...panelHead, padding: '0 8px 0 16px', minWidth: 0 }}>
+          <span title={openShader ? `${openShader.name}${openEdited ? ' · edited since it was saved' : ' · saved'}` : 'An unsaved shader: Save gives it a name'} style={{ fontWeight: 650, fontSize: 13.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0, flex: '0 1 auto', maxWidth: phone ? 120 : 220, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{openShader ? openShader.name : 'Fragment shader'}</span>
             {openEdited && <span aria-label="Edited since it was saved" style={{ width: 7, height: 7, borderRadius: '50%', background: tk.status.warning, flexShrink: 0 }} />}
           </span>
-          {translation.dialect !== 'studio' && (
-            <span
-              title={[...translation.notes, ...translation.unsupported.map(u => `⚠ ${u}`)].join('\n')}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 5, height: 22, padding: '0 8px', borderRadius: 11, whiteSpace: 'nowrap', background: translation.unsupported.length ? alpha(tk.status.warning, 0.16) : alpha(tk.accent.base, 0.14), color: translation.unsupported.length ? tk.status.warningText : tk.accent.base, font: `600 11px ${fontFamily.ui}`, cursor: 'help' }}
-            >Read as {dialectLabel(translation.dialect)}</span>
-          )}
-          <span style={{ marginRight: 'auto' }} />
-          {/* A phone shows no preview until asked: the way to it comes first, not at the toolbar's scrolled-off end. */}
-          {phone && !full && <Button size="sm" variant="ghost" icon="layoutCanvas" onClick={() => toggleLayout('glsl')} title="Show the preview above the editor">Preview</Button>}
-          {showSaveInput ? (
-            <>
-              <Field
-                autoFocus
-                value={saveNameVal}
-                onChange={e => setSaveNameVal(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') commitSave(); if (e.key === 'Escape') { setShowSaveInput(false); setSaveNameVal(''); } }}
-                placeholder="Shader name"
-                height={30}
-                style={{ width: 170 }}
-              />
-              <Button size="sm" variant="primary" disabled={!saveNameVal.trim()} onClick={commitSave}>Save</Button>
-              <IconButton icon="close" label="Cancel" size="sm" onClick={() => { setShowSaveInput(false); setSaveNameVal(''); }} />
-            </>
-          ) : (
-            <Button size="sm" variant="primary" icon="plus" onClick={() => { setShowSaveInput(true); setSaveNameVal(''); }}>Save</Button>
-          )}
-          <Button size="sm" variant="ghost" onClick={tidy} title="Rewrite the text as Playfield GLSL: our names for time, resolution, mouse and the entry point, regular indentation">Tidy</Button>
-          {onConvert && <Button size="sm" variant="ghost" icon="nodes" onClick={() => onConvert(code)} title="Open this shader on the Convert page and see the nodes it would become">Convert<ProBadgeFor feature="convert" /></Button>}
-          {onConvert && <Button size="sm" variant="ghost" onClick={() => onConvert(code, true)} title="Convert it step by step: select lines, make nodes, group them (Guided Convert)">Step by step</Button>}
-          <IconButton icon="copy" label="Copy the whole shader" size="sm" onClick={() => { navigator.clipboard?.writeText(code).then(() => toast.success('Copied'), () => toast.error('Couldn’t copy')); }} />
-          <IconButton icon="search" label="Discover functions: extract from this file, or search the saved shaders" size="sm" onClick={() => setDiscoverOpen(true)} />
-          <IconButton icon="code" label="Code Explorer: how written code uses a function, across your code and the examples" size="sm" active={explorerOpen} onClick={toggleExplorer} />
-          <IconButton icon="info" label="Explain the selection, or the statement at the caret, in plain words" size="sm" active={!!explainSpan} data-glsl-action="explain" onMouseDown={e => e.preventDefault()} onClick={explainSelection} />
-          <IconButton icon="export" label="Download every saved shader: one .play file, or .glsl files in a ZIP (notes as a comment at the top), easy to share or to send for help" size="sm" onClick={e => offerSetExport(e.currentTarget, 'glsl')} />
-          <IconButton icon="graphs" label="Load the node graph's compiled shader into the editor" size="sm" onClick={() => {
-            // A graph built with a sealed node pack keeps that code hidden here too.
-            if (nodeGraphShader && redactSealedCode(nodeGraphShader) !== nodeGraphShader) { toast.info('This graph uses a sealed node pack', { message: 'Its code stays hidden, so the graph’s shader can’t be opened here.' }); return; }
-            setCode(nodeGraphShader || BOILERPLATE); setOpen(null);
-          }} />
-          <IconButton icon="reset" label="Reset to the blank template" size="sm" onClick={() => { setCode(BOILERPLATE); setOpen(null); }} />
-          <IconButton icon="trash" label="Clear the editor" size="sm" onClick={() => { setCode(''); setOpen(null); }} />
-          {!full && !phone && <IconButton icon="layoutCanvas" label="Full canvas: the preview here, wide, with its toolbar (shape, full screen, Record, time)" size="sm" onClick={() => toggleLayout('glsl')} />}
-          {(!sideOpen || explorerOpen) && <IconButton icon="popout" label="Show saved shaders and functions" size="sm" onClick={() => { if (explorerOpen) toggleExplorer(); setShowPanel(true); }} />}
+          <FitToolbar ariaLabel="Shader tools" keepFocus moreLabel="More shader tools" style={{ marginLeft: 6 }} items={[
+            ...(translation.dialect !== 'studio' ? [{
+              key: 'dialect', label: `Read as ${dialectLabel(translation.dialect)}`, menu: 'never' as const, priority: 30,
+              node: (
+                <span
+                  title={[...translation.notes, ...translation.unsupported.map(u => `⚠ ${u}`)].join('\n')}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 5, height: 22, padding: '0 8px', borderRadius: 11, whiteSpace: 'nowrap', background: translation.unsupported.length ? alpha(tk.status.warning, 0.16) : alpha(tk.accent.base, 0.14), color: translation.unsupported.length ? tk.status.warningText : tk.accent.base, font: `600 11px ${fontFamily.ui}`, cursor: 'help' }}
+                >Read as {dialectLabel(translation.dialect)}</span>
+              ),
+            }] : []),
+            { key: 'space', label: '', grow: true },
+            // A phone shows no preview until asked: the way to it comes first.
+            ...(phone && !full ? [{ key: 'preview', label: 'Preview', pinned: true, node: <Button size="sm" variant="ghost" icon="layoutCanvas" onClick={() => toggleLayout('glsl')} title="Show the preview above the editor">Preview</Button> }] : []),
+            {
+              key: 'save', label: 'Save', pinned: true,
+              node: showSaveInput ? (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <Field
+                    autoFocus
+                    value={saveNameVal}
+                    onChange={e => setSaveNameVal(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') commitSave(); if (e.key === 'Escape') { setShowSaveInput(false); setSaveNameVal(''); } }}
+                    placeholder="Shader name"
+                    aria-label="Shader name"
+                    height={30}
+                    style={{ width: phone ? 120 : 170 }}
+                  />
+                  <Button size="sm" variant="primary" disabled={!saveNameVal.trim()} onClick={commitSave}>Save</Button>
+                  <IconButton icon="close" label="Cancel" size="sm" onClick={() => { setShowSaveInput(false); setSaveNameVal(''); }} />
+                </span>
+              ) : (
+                <Tooltip label="Save" description="Keep this shader in your saved shaders (the panel beside the editor, and Files → Library)." placement="bottom">
+                  <Button size="sm" variant="primary" icon="plus" onClick={() => { setShowSaveInput(true); setSaveNameVal(''); }}>Save</Button>
+                </Tooltip>
+              ),
+            },
+            // ── Edit
+            {
+              key: 'explain', group: 'Edit', label: 'Explain', hint: 'The selection, or the statement at the caret, in plain words', priority: 90,
+              node: (
+                <Tooltip label="Explain" description="The selection, or the statement at the caret, in plain words, under the editor." placement="bottom">
+                  <Button size="sm" variant={explainSpan ? 'secondary' : 'ghost'} icon="info" data-glsl-action="explain" aria-pressed={!!explainSpan} onMouseDown={e => e.preventDefault()} onClick={explainSelection}>Explain</Button>
+                </Tooltip>
+              ),
+              icon: 'info', active: !!explainSpan, onSelect: explainSelection,
+            },
+            {
+              key: 'tidy', group: 'Edit', label: 'Tidy', hint: 'Even indentation, and Playfield names for time, resolution, mouse and main', priority: 85,
+              node: (
+                <Tooltip label="Tidy" description="Rewrite the text as Playfield GLSL: even indentation, and our names for time, resolution, mouse and the entry point. Undo brings it back." placement="bottom">
+                  <Button size="sm" variant="ghost" icon="text" onClick={tidy}>Tidy</Button>
+                </Tooltip>
+              ),
+              icon: 'text', onSelect: tidy,
+            },
+            { key: 'copy', group: 'Edit', label: 'Copy the shader', hint: 'The whole text, to the clipboard', icon: 'copy', priority: 40,
+              onSelect: () => { navigator.clipboard?.writeText(code).then(() => toast.success('Copied'), () => toast.error('Couldn’t copy')); } },
+            // ── Tools
+            ...(onConvert ? [{
+              key: 'convert', group: 'Tools', label: 'Convert to nodes', hint: 'Open this shader on the Convert tab and see the nodes it becomes', priority: 70,
+              node: (
+                <Tooltip label="Convert to nodes" description="Open this shader on the Convert tab and see the nodes it would become." placement="bottom">
+                  <Button size="sm" variant="ghost" icon="nodes" onClick={() => onConvert(code)}>Convert<ProBadgeFor feature="convert" /></Button>
+                </Tooltip>
+              ),
+              icon: 'nodes' as const, onSelect: () => onConvert(code),
+            }] : []),
+            { key: 'discover', group: 'Tools', label: 'Discover functions', hint: 'Find the functions in this file, or search your saved shaders', icon: 'search', priority: 50, onSelect: () => setDiscoverOpen(true) },
+            { key: 'explorer', group: 'Tools', label: 'Code Explorer', hint: 'How written code uses a function, across your code and the examples', icon: 'code', active: explorerOpen, priority: 45, onSelect: toggleExplorer },
+            ...(onConvert ? [{ key: 'stepByStep', group: 'Tools', label: 'Convert step by step', hint: 'Select lines, make nodes, group them (Guided Convert)', icon: 'nodes' as const, menu: 'always' as const, onSelect: () => onConvert(code, true) }] : []),
+            // ── View
+            ...((!sideOpen || explorerOpen) ? [{ key: 'side', group: 'View', label: 'Saved shaders and functions', hint: 'The panel beside the editor', icon: 'sidebar' as const, priority: 60, onSelect: () => { if (explorerOpen) toggleExplorer(); setShowPanel(true); } }] : []),
+            ...(!full && !phone ? [{ key: 'fullCanvas', group: 'View', label: 'Full canvas', hint: 'The preview here, wide, with its toolbar (shape, full screen, Record, time)', icon: 'layoutCanvas' as const, priority: 55, onSelect: () => toggleLayout('glsl') }] : []),
+            // ── File: rarely used, always in the "⋯"
+            { key: 'fromGraph', group: 'File', label: 'Open the graph’s generated code', hint: 'Load the Studio graph’s compiled shader into the editor', icon: 'graphs', menu: 'always', onSelect: openGraphShader },
+            { key: 'download', group: 'File', label: 'Download saved shaders…', hint: 'One .play file, or .glsl files in a ZIP, to share or to send for help', icon: 'export', menu: 'always',
+              onSelect: () => offerSetExport(document.querySelector('[data-glsl-toolbar] [data-fit-more]'), 'glsl') },
+            { key: 'blank', group: 'File', label: 'New blank shader', hint: 'Start again from the template', icon: 'reset', menu: 'always', onSelect: () => { setCode(BOILERPLATE); setOpen(null); } },
+            { key: 'clear', group: 'File', label: 'Clear the editor', icon: 'trash', danger: true, menu: 'always', onSelect: () => { setCode(''); setOpen(null); } },
+          ]} />
         </div>
 
         {/* Code area */}
