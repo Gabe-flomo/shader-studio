@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.295',
+    date: '2026-10-18',
+    title: "One + Map",
+    highlights: [
+      { area: 'Studio', text: "Play: one + Map button for every input, Learn highlights controls in blue, rules can set or nudge controls, Looks live in Finish Presets." },
+    ],
+  },
+  {
     id: '2026.10.294',
     date: '2026-10-18',
     title: "Play on phones",
