@@ -1,23 +1,14 @@
 /**
- * The Audio nodes' sums on synthetic sound (docs/audio-tools.md): band energy from a sine, onsets on a click train
- * (the count, the cooldown, nothing on a steady tone), the log frequency layout and the spectrogram's scroll.
+ * The Audio nodes' sums on synthetic sound (docs/audio-tools.md): band energy from a sine, a Hit on a click train
+ * (the count, Min interval, nothing on a held tone), the log frequency layout and the spectrogram's scroll.
  */
 import { describe, expect, it } from 'vitest';
 import {
-  bandLevel, follow, hzAt, newBandState, newHitState, rmsLevel, scrollRows, spectrumBins, spectrumDb, stepBand, stepHit,
-  waveRow, xOfHz, type HitSettings,
+  bandLevel, follow, hzAt, newBandState, rmsLevel, scrollRows, spectrumBins, spectrumDb, stepBand, waveRow, xOfHz,
 } from '../dsp';
+import { atNewListener, atStepListener, type AtListenerSpec } from '../../../play/kit/audioTools.js';
 
 const SR = 48000, FFT = 2048, HOP = 800; // 60 frames a second
-
-/** Run `fn` on the analysis frame ending at each hop between `from` and `to` seconds (zeros before the signal). */
-function frames(signal: Float32Array, from: number, to: number, fn: (db: Float32Array, t: number) => void): void {
-  const block = new Float32Array(FFT);
-  for (let end = Math.round(from * SR); end <= Math.round(to * SR); end += HOP) {
-    for (let i = 0; i < FFT; i++) { const k = end - FFT + i; block[i] = k >= 0 && k < signal.length ? signal[k] : 0; }
-    fn(spectrumDb(block), end / SR);
-  }
-}
 
 const sine = (hz: number, amp: number, seconds: number) => Float32Array.from({ length: Math.round(seconds * SR) }, (_, i) => amp * Math.sin((2 * Math.PI * hz * i) / SR));
 
@@ -41,15 +32,6 @@ function clicks(every: number, seconds: number): Float32Array {
   }
   return s;
 }
-
-function runHit(signal: Float32Array, o: HitSettings, from: number, to: number): number[] {
-  const st = newHitState(), hits: number[] = [];
-  frames(signal, from, to, (db, t) => { stepHit(st, db, SR, t, HOP / SR, o); if (st.trigger) hits.push(t); });
-  expect(st.count).toBe(hits.length);
-  return hits;
-}
-
-const KICK: HitSettings = { lo: 30, hi: 150, threshold: 0.5, cooldownMs: 120, decay: 0.3 };
 
 describe('band energy', () => {
   it('a 100 Hz sine is loud in its band and quiet elsewhere', () => {
@@ -78,39 +60,55 @@ describe('band energy', () => {
 });
 
 describe('Hit (onsets)', () => {
-  it('counts each kick of a kick train once', () => {
+  /** A Hit node's frames (atStepListener, the last BUF samples heard each 1/60 s): the times its Trigger read 1. */
+  const BUF = 4096;
+  function runHit(signal: Float32Array, o: Partial<AtListenerSpec>, from: number, to: number, l = atNewListener('audioHit', 0, 0)): number[] {
+    const spec: AtListenerSpec = { ...KICK, ...o } as AtListenerSpec, hits: number[] = [], block = new Float32Array(BUF);
+    let trig = 0;
+    const c0 = l.hit.count;
+    for (let end = Math.round(from * SR) + HOP; end <= Math.round(to * SR); end += HOP) {
+      for (let i = 0; i < BUF; i++) { const k = end - BUF + i; block[i] = k >= 0 && k < signal.length ? signal[k] : 0; }
+      atStepListener(l, spec, new Float32Array(FFT / 2), block, SR, true, (end / SR) * 1000, HOP / SR, (ch, v) => { if (ch === 'trigger') trig = v; });
+      if (trig) hits.push(end / SR);
+    }
+    expect(l.hit.count - c0).toBe(hits.length);
+    return hits;
+  }
+  const KICK = { type: 'audioHit', lo: 40, hi: 130, preset: 'kick', sensitivity: 0.5, minInterval: null, gateDb: null, trackNoise: null, decay: 0.3, attack: 0.01, release: 0.15, gain: 1, layout: 'log', minDb: -90, maxDb: -20, smoothing: 0 } as const;
+
+  it('counts each kick of a kick train once, within a frame or two of when it starts', () => {
     const times = [0.3, 0.8, 1.3, 1.8, 2.3, 2.8, 3.3, 3.8];
-    const hits = runHit(kicks(times, 4.2), KICK, 0, 4.2);
+    const hits = runHit(kicks(times, 4.2), {}, 0, 4.2);
     expect(hits.length).toBe(times.length);
-    hits.forEach((t, i) => expect(Math.abs(t - times[i])).toBeLessThan(0.06));
+    hits.forEach((t, i) => expect(t - times[i]).toBeGreaterThan(0));
+    hits.forEach((t, i) => expect(t - times[i]).toBeLessThan(0.045));
   });
 
-  it('respects the cooldown on a fast click train', () => {
-    const fast = runHit(clicks(0.1, 3), { lo: 2000, hi: 16000, threshold: 0.2, cooldownMs: 40, decay: 0.2 }, 0, 3);
-    expect(fast.length).toBe(28); // one per click: each falls back below Release before the next
-    const slow = runHit(clicks(0.1, 3), { lo: 2000, hi: 16000, threshold: 0.2, cooldownMs: 250, decay: 0.2 }, 0, 3);
+  it('Min interval is the shortest gap on a fast click train', () => {
+    const fast = runHit(clicks(0.1, 3), { lo: 6000, hi: 16000, preset: 'hats' }, 0, 3);
+    expect(fast.length).toBeGreaterThanOrEqual(27); // one per click
+    expect(fast.length).toBeLessThanOrEqual(28);
+    const slow = runHit(clicks(0.1, 3), { lo: 6000, hi: 16000, preset: 'hats', minInterval: 250 }, 0, 3);
     expect(slow.length).toBeGreaterThanOrEqual(9);
     expect(slow.length).toBeLessThanOrEqual(12);
-    for (let i = 1; i < slow.length; i++) expect(slow[i] - slow[i - 1]).toBeGreaterThanOrEqual(0.25 - 1e-9);
+    for (let i = 1; i < slow.length; i++) expect(slow[i] - slow[i - 1]).toBeGreaterThanOrEqual(0.25 - 1 / 60);
   });
 
-  it('a steady tone fires once (its rise), never again; Trigger lasts one frame', () => {
-    expect(runHit(sine(60, 0.6, 4), KICK, 1, 4)).toEqual([1]);
-    const st = newHitState(), triggers: number[] = [];
-    frames(kicks([0.3], 1), 0, 1, (db, t) => { stepHit(st, db, SR, t, HOP / SR, KICK); triggers.push(st.trigger); });
-    expect(triggers.filter(v => v === 1).length).toBe(1);
-    const at = triggers.indexOf(1);
-    expect(triggers[at + 1]).toBe(0);
-    expect(st.strength).toBeGreaterThan(0.3);
+  it('a steady tone never fires once it is held; Trigger lasts one frame', () => {
+    expect(runHit(sine(60, 0.6, 4), {}, 1, 4)).toEqual([]);
+    const l = atNewListener('audioHit', 0, 0);
+    const hits = runHit(kicks([0.3], 1), {}, 0, 1, l);
+    expect(hits.length).toBe(1);
+    expect(l.hit.trigger).toBe(0);
+    expect(l.hit.strength).toBeGreaterThan(0.3);
   });
 
   it('Envelope jumps to 1 on a hit and falls to 0 in Decay', () => {
-    const st = newHitState();
-    frames(kicks([0.3], 0.5), 0, 0.5, (db, t) => stepHit(st, db, SR, t, HOP / SR, KICK));
-    expect(st.envelope).toBeGreaterThan(0);
-    const quiet = new Float32Array(FFT / 2).fill(-200);
-    for (let i = 0; i < 30; i++) stepHit(st, quiet, SR, 1 + i / 60, 1 / 60, KICK);
-    expect(st.envelope).toBe(0);
+    const l = atNewListener('audioHit', 0, 0);
+    runHit(kicks([0.3], 0.5), {}, 0, 0.5, l);
+    expect(l.hit.envelope).toBeGreaterThan(0);
+    runHit(new Float32Array(SR), {}, 0, 0.6, l);
+    expect(l.hit.envelope).toBe(0);
   });
 });
 

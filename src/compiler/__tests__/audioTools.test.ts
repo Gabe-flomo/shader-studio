@@ -103,7 +103,7 @@ describe('Audio Source bands are outputs', () => {
   it('adding, renaming and removing a band adds, renames and removes its sockets; a removed band\'s wires go', () => {
     setUp();
     expect(Object.keys(src().outputs)).toEqual(['audio', 'level', 'time']);
-    const kick = newBand([], 'kick');
+    const kick = { ...newBand([], 'kick'), value: false };
     st().updateNodeParams('src', { bands: [kick] }, { immediate: true });
     expect(src().outputs[`${kick.id}_t`]?.label).toBe('Kick (trigger)');
     expect(src().outputs[`${kick.id}_v`]).toBeUndefined();
@@ -162,7 +162,7 @@ describe('Audio Source learned sounds are outputs', () => {
 
   it('a learned sound adds Trigger and Match outputs read as live uniforms; Match and Re-learn are live', () => {
     useNodeGraphStore.setState({ nodes: [
-      n('audioSource', 'src', 0, 0, { bands: [newBand([], 'kick')] }),
+      n('audioSource', 'src', 0, 0, { bands: [{ ...newBand([], 'kick'), value: false }] }),
       n('envelope', 'env', 0, 0, { mode: 'trigger' }),
       n('output', 'out', 0, 0, {}, { color: ['env', 'value'] }),
     ], activeGroupPath: [], activeGroupId: null });

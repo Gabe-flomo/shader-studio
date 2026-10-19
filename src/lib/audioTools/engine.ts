@@ -46,7 +46,7 @@ import { bakedVideos } from '../bakedVideos';
 import { mediaElementSourceOf } from '../videoSound';
 import { getVideo } from '../backgroundLibrary';
 import {
-  AUDIO_HIT_TYPE, AUDIO_SOURCE_TYPE, AUDIO_TEXTURE_TYPES, audioBandOf, audioSendIdOf, audioSoundsOf, audioSourceKind, audioTextureSize, effectSpecOf, isAudioFxType, isLiveInputKind, listenerSpecOf,
+  AUDIO_HIT_TYPE, AUDIO_SOURCE_TYPE, AUDIO_TEXTURE_TYPES, audioSendIdOf, audioSoundsOf, audioSourceKind, audioTextureSize, effectSpecOf, isAudioFxType, isLiveInputKind, listenerSpecOf,
   type AudioSourceKind,
 } from '../../nodes/definitions/audioTools';
 import { audioHearing, collectAudioNodes, findNodeDeep } from './graphWalk';
@@ -54,10 +54,11 @@ import { acBuild, acNewRun, acStepEffect, acTextureSize, type AcEffect, type AcR
 import { learnFromRing, learnFromSamples, newLearnListener, type AudioSoundSpec, type LearnListener, type LearnResult } from './learn';
 import { bandsOf, newBandRun, trimWindow, type AudioBandSpec, type BandRun } from './bands';
 import { bandSections, sectionsFor, webAudioQ } from './bandFilter';
-import { AheadAnalysis, type AheadPick, type AheadRange } from './ahead';
+import { AheadAnalysis } from './ahead';
 import {
-  atApplyGain, atBandCharacter, atCurveAt, atEventsHeard, atNewListener, atStepListener, atStepSource, atTriggerOpts,
-  type AtExtHit, type AtListener, type AtScope, type AtTriggerOpts,
+  AT_DET_LAG, AT_SCOPE_DB_FLOOR, atApplyGain, atCurveAt, atCurveMax, atDetConfig, atDetLevel, atEventsHeard, atEventsIn, atHeardSpan,
+  atNewListener, atStepListener, atStepSource,
+  type AtCharacter, type AtDetConfig, type AtExtHit, type AtListener, type AtScope,
 } from '../../play/kit/audioTools.js';
 
 const FFT = 2048;
@@ -179,10 +180,17 @@ export interface BandView {
   count: number;
   /** The last frames' measured signal and where it fired (a ring, `at` is the oldest). */
   scope: AtScope;
+  /** The band is louder than its Gate now (the file analysed ahead's, where its hits come from there). */
   gateOpen: boolean;
-  armed: boolean;
   /** Its hits come from the file analysed ahead (not the live frame). */
   ahead: boolean;
+  /**
+   * Hits in one pass of the trim (a File analysed ahead: the whole loop's, worked out once), or in the scope's last
+   * seconds live (`perSeconds` long). Count is a total since the graph loaded; this is what the window shows.
+   */
+  perPass: number | null;
+  recent: number;
+  recentSeconds: number;
 }
 
 /** Bins in the card's spectrum. */
@@ -206,6 +214,8 @@ class AudioToolsEngine implements InputSource {
   private sinks = new WeakMap<BaseAudioContext, GainNode>();
   private changeFns = new Set<() => void>();
   private lastTick = 0;
+  /** A frame's length lately (s): how long the scope's frames span. */
+  private frameSeconds = 1 / 60;
   private offBus: (() => void) | null = null;
   private silentFreq = new Float32Array(FFT / 2).fill(-200);
   private silentWave = new Float32Array(FFT);
@@ -251,9 +261,13 @@ class AudioToolsEngine implements InputSource {
     if (!s) return null;
     const bands = new Map<string, BandView>();
     for (const [id, r] of s.runs) {
+      const ahead = !!this.aheadSet.get(s)?.has(id), b = s.bands.find(x => x.id === id), sc = r.hit.scope, n = sc.hits.length;
+      let recent = 0;
+      for (let i = 0; i < n; i++) recent += sc.hits[i];
       bands.set(id, {
-        level: r.band.level, hitAt: Number.isFinite(r.hitAt) ? r.hitAt * 1000 : -Infinity, count: r.hit.count, scope: r.hit.scope,
-        gateOpen: r.hit.gateOpen, armed: r.hit.armed, ahead: !!this.aheadSet.get(s)?.has(id),
+        level: r.band.level, hitAt: Number.isFinite(r.hitAt) ? r.hitAt * 1000 : -Infinity, count: r.hit.count, scope: sc,
+        gateOpen: r.hit.gateOpen, ahead,
+        perPass: ahead && b ? this.hitsPerPass(s, b) : null, recent, recentSeconds: n * Math.max(1 / 240, this.frameSeconds),
       });
     }
     const sounds = new Map<string, { match: number; last: number; hitAt: number; count: number }>();
@@ -552,25 +566,25 @@ class AudioToolsEngine implements InputSource {
    * analysed ahead), else the last couple of seconds heard live — and a Gate just over it (the loudest 5% left out, so
    * a stray click doesn't count). The Gate, or why not.
    */
-  learnNoise(nodeId: string, bandId: string, range?: { from: number; to: number }): { gate: number; floor: number } | { error: string } {
+  learnNoise(nodeId: string, bandId: string, range?: { from: number; to: number }): { gateDb: number; floorDb: number } | { error: string } {
     const s = this.sources.get(nodeId), b = s?.bands.find(q => q.id === bandId);
     if (!s || !b) return { error: 'This band isn\'t running.' };
     let vals: number[] = [];
     if (range && s.kind === 'file' && s.ahead) {
-      // The Gate reads the band's level, whatever its Detect.
-      const c = s.ahead.curves(b)?.level;
+      const c = s.ahead.curves(atDetConfig(b))?.edb;
       if (!c) return { error: 'Still analysing the file: try again in a moment.' };
       const h = s.ahead.hopSeconds;
       for (let i = Math.max(0, Math.floor(range.from / h)); i <= Math.min(c.length - 1, Math.ceil(range.to / h)); i++) vals.push(c[i]);
     } else {
+      // The scope keeps the band's energy on its 0..1 scale (AT_SCOPE_DB_FLOOR … 0 dBFS).
       const sc = s.runs.get(b.id)?.hit.scope;
-      if (sc) for (let k = 0; k < 120; k++) vals.push(sc.lvls[(sc.at - 1 - k + sc.lvls.length * 2) % sc.lvls.length]);
+      if (sc) for (let k = 0; k < 120; k++) vals.push(AT_SCOPE_DB_FLOOR * (1 - sc.db[(sc.at - 1 - k + sc.db.length * 2) % sc.db.length]));
     }
     vals = vals.filter(v => Number.isFinite(v));
     if (vals.length < 4) return { error: range ? 'Select a longer quiet stretch (or trim to one).' : 'Let it listen to the quiet for a couple of seconds first.' };
     vals.sort((a, c) => a - c);
-    const floor = vals[Math.min(vals.length - 1, Math.floor(vals.length * 0.95))];
-    return { floor, gate: Math.min(0.95, Math.round((floor + 0.03) * 100) / 100) };
+    const floorDb = vals[Math.min(vals.length - 1, Math.floor(vals.length * 0.95))];
+    return { floorDb, gateDb: Math.max(-120, Math.min(-6, Math.round(floorDb + 6))) };
   }
 
   /** Open the microphone (call from a click: the browser asks). */
@@ -591,6 +605,7 @@ class AudioToolsEngine implements InputSource {
     const nowMs = performance.now();
     const dt = this.lastTick ? Math.min(0.1, (nowMs - this.lastTick) / 1000) : 1 / 60;
     this.lastTick = nowMs;
+    this.frameSeconds += (dt - this.frameSeconds) * 0.05;
     this.frame++;
     for (const [id, s] of this.sources) {
       this.readSource(s);
@@ -599,7 +614,7 @@ class AudioToolsEngine implements InputSource {
       // The card's spectrum, the bands' Value / Trigger, the learned sounds' Trigger / Match (play/kit/audioTools.js);
       // a File's band hits come from the file analysed ahead, as it is heard.
       const ext = this.aheadHits(s);
-      atStepSource(s, s.bands, s.sounds, s.freq, s.sampleRate, nowMs / 1000, dt, (ch, v) => write(`${id}::${ch}`, v), { delay: this.liveDelay(s), ext });
+      atStepSource(s, s.bands, s.sounds, s.freq, s.sampleRate, nowMs / 1000, dt, (ch, v) => write(`${id}::${ch}`, v), { wave: s.wave, delay: this.liveDelay(s), ext, liveInput: isLiveInputKind(s.kind) });
       this.setDry(id, s, this.dryMuted.has(id));
     }
     for (const [id, f] of this.effects) this.runEffect(id, f, dt, write);
@@ -635,37 +650,54 @@ class AudioToolsEngine implements InputSource {
     const ahead = s.ahead;
     const playing = audioEngine.isPlaying(id);
     // Ask for every band's range now, playing or not, so it is ready when it plays.
-    for (const b of s.bands) if (b.trigger) ahead.curve(b);
-    for (const l of this.listeners.values()) if (l.sourceId === id && l.node.type === AUDIO_HIT_TYPE) ahead.curve(audioBandOf(l.node));
+    for (const b of s.bands) if (b.trigger) ahead.curves(atDetConfig(b));
+    for (const l of this.listeners.values()) if (l.sourceId === id && l.node.type === AUDIO_HIT_TYPE) ahead.curves(atDetConfig(listenerSpecOf(l.node)));
     if (!playing) { s.heard = null; this.aheadSet.delete(s); return undefined; }
     const pos = audioEngine.positionAt(id, audioEngine.heardTime() - num(s.node.params.syncOffset, 0) / 1000) ?? 0;
     const token = audioEngine.playToken(id);
     const win = trimWindow(audioEngine.duration(id), s.node.params.trimIn, s.node.params.trimOut), loop = s.node.params.loop !== false;
-    let from = pos;
     // The same run (a seek or restart starts a new one): forward is heard since the last frame (however long a slow or
-    // throttled frame took), back is round the loop's end. A new run fires nothing until it moves on.
-    if (s.heard && s.heard.token === token && (pos >= s.heard.pos || loop)) from = s.heard.pos;
-    s.heard = { token, pos };
-    s.span = { from, to: pos, win, loop };
+    // throttled frame took), back is round the loop's end only when that is the shorter way; a small step back is the
+    // heard clock's wobble (nothing heard: once read as a loop, it fired every hit in the file). A new run fires nothing
+    // until it moves on.
+    const span = atHeardSpan(s.heard && s.heard.token === token ? s.heard.pos : null, pos, win, loop);
+    s.heard = { token, pos: span.keep };
+    s.span = { from: span.from, to: span.to, win, loop };
     const ext = new Map<string, AtExtHit>();
     const used = new Set<string>();
     for (const b of s.bands) {
       if (!b.trigger) continue;
-      const hit = this.heardHit(s, b, { ...trigOf(b), character: atBandCharacter(b), charAt: b.charAt });
+      const cfg = atDetConfig(b), hit = this.heardHit(s, cfg, { character: cfg.character, charAt: cfg.charAt });
       if (hit) { ext.set(b.id, hit); used.add(b.id); }
     }
     this.aheadSet.set(s, used);
     return ext;
   }
 
-  /** A range's hits heard this frame (s.span), from the file analysed ahead; null when it isn't ready. */
-  private heardHit(s: SourceSlot, range: AheadRange, o: AheadPick): AtExtHit | null {
+  /** A band's (or Hit's) hits heard this frame (s.span), from the file analysed ahead; null when it isn't ready. */
+  private heardHit(s: SourceSlot, cfg: AtDetConfig, only?: { character?: AtCharacter; charAt?: number }): AtExtHit | null {
     const sp = s.span, ahead = s.ahead;
     if (!sp || !ahead) return null;
-    const ev = ahead.events(range, o), c = ahead.curves(range);
+    const ev = ahead.events(cfg, only), c = ahead.curves(cfg);
     if (!ev || !c) return null;
     const r = atEventsHeard(ev, sp.from, sp.to, sp.win, sp.loop);
-    return { fired: r.count, signal: atCurveAt(c.value, ahead.hopSeconds, sp.to), strength: r.strength, level: atCurveAt(c.level, ahead.hopSeconds, sp.to) };
+    // The scope plots the stretch heard this frame at its peak (a 5 ms spike between two frames still shows, under its tick).
+    // Its curves are by decision (the end of each frame), AT_DET_LAG after the onsets the hits are stamped at: read
+    // them that much later, so a tick sits on its spike.
+    const win = sp.loop ? sp.win : undefined, h = ahead.hopSeconds, a = sp.from + AT_DET_LAG, b = sp.to + AT_DET_LAG;
+    const edb = atCurveMax(c.edb, h, a, b, win), gate = atCurveAt(ev.gate, h, b);
+    return {
+      fired: r.count, strength: r.strength || atDetLevel(edb), odf: atCurveMax(c.odf, h, a, b, win), line: atCurveAt(ev.line, h, b),
+      edb, gate, noise: -200, open: edb >= gate,
+    };
+  }
+
+  /** A band's hits in one pass of the trim, from the file analysed ahead (null until it is ready). */
+  private hitsPerPass(s: SourceSlot, b: AudioBandSpec): number | null {
+    const cfg = atDetConfig(b), ev = s.ahead?.events(cfg, { character: cfg.character, charAt: cfg.charAt });
+    if (!ev) return null;
+    const id = s.node.id, win = trimWindow(audioEngine.duration(id), s.node.params.trimIn, s.node.params.trimOut);
+    return atEventsIn(ev.times, win.start - 1e-9, win.end).count;
   }
 
   private dropAhead(s: SourceSlot): void {
@@ -853,10 +885,10 @@ class AudioToolsEngine implements InputSource {
     // Band level, Hit, or a texture (play/kit/audioTools.js): a silent Spectrogram holds what it had (no upload).
     // A Hit wired straight to a File takes its hits from the file analysed ahead, as heard; a live one waits for the speakers.
     const spec = listenerSpecOf(l.node);
-    let x: { delay?: number; ext?: AtExtHit } | undefined;
+    let x: { delay?: number; ext?: AtExtHit; liveInput?: boolean } | undefined;
     if (src && l.node.type === AUDIO_HIT_TYPE) {
-      const ext = src.span ? this.heardHit(src, spec, trigOf(spec)) ?? undefined : undefined;
-      x = { delay: this.liveDelay(src), ext };
+      const cfg = atDetConfig(spec), ext = src.span ? this.heardHit(src, cfg, { character: cfg.character, charAt: cfg.charAt }) ?? undefined : undefined;
+      x = { delay: this.liveDelay(src), ext, liveInput: isLiveInputKind(src.kind) };
     }
     const changed = atStepListener(l.run, spec, freq, wave, sr, !!s?.active, nowMs, dt, (ch, v) => write(`${id}::${ch}`, v), x);
     if (changed && l.tex) l.tex.needsUpdate = true;
@@ -934,9 +966,6 @@ class AudioToolsEngine implements InputSource {
 /** A source's Volume (0..1, what you hear). */
 function volumeOf(P: Record<string, unknown>): number { const v = Number(P.volume ?? 1); return Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 1; }
 
-/** A band's or Hit's trigger settings. */
-const trigOf = (o: { threshold: number; releaseAt: number; gate: number; minMs: number; cooldown: number }): AtTriggerOpts =>
-  atTriggerOpts({ threshold: o.threshold, releaseAt: o.releaseAt, gate: o.gate, minMs: o.minMs, cooldownMs: o.cooldown });
 
 /** Unmute a video element now if the page has had a click, else on the next one (browsers block sound before). */
 function unmuteWhenAllowed(el: HTMLMediaElement): void {

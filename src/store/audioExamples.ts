@@ -93,12 +93,12 @@ export function buildAudioExamples(): Record<string, ExampleGraph> {
     nodes: [
       source(40, 300, {
         bands: [
-          { id: 'kick', name: 'Kick', color: '#f38ba8', lo: 30, hi: 150, value: false, trigger: true, attack: 0.01, release: 0.15, gain: 1, threshold: 0.5, releaseAt: 0.8, gate: 0.1, minMs: 10, cooldown: 150 },
-          { id: 'bass', name: 'Bass', color: '#89b4fa', lo: 60, hi: 250, value: true, trigger: false, attack: 0.01, release: 0.25, gain: 1, threshold: 0.5, releaseAt: 0.8, gate: 0, minMs: 10, cooldown: 120 },
+          { id: 'kick', name: 'Kick', color: '#f38ba8', lo: 40, hi: 130, value: false, trigger: true, attack: 0.005, release: 0.12, gain: 1, preset: 'kick', sensitivity: 0.5 },
+          { id: 'bass', name: 'Bass', color: '#89b4fa', lo: 60, hi: 250, value: true, trigger: false, attack: 0.01, release: 0.25, gain: 1, preset: 'custom', sensitivity: 0.5 },
         ],
       }, [
-        'Two bands, picked on Open ↗: Kick (30–150 Hz) sends a trigger, 1 for one frame each time its level rises above the Threshold line (0.5; it re-arms once the level falls below Release, and Cooldown stops one kick counting twice); Bass (60–250 Hz) sends its level, 0–1.',
-        'Each band is an output here: Kick (trigger) and Bass. Add more with the quick bands (Snare, Hi-hat…) or by dragging across the spectrum.',
+        'Two bands, picked on Open ↗: Kick (What to catch: Kick, 40–130 Hz) sends its hits, 1 for one frame on each kick, even over a held bass; Bass (60–250 Hz) sends how loud it is, 0–1.',
+        'Each band is an output here: Kick (trigger) and Bass. Sensitivity sets how eager Kick is; add more with the quick bands (Snare, Hats, Notes…) or by dragging across the spectrum.',
       ]),
       n('envelope', 'env', 400, 160, { mode: 'trigger', attack: 0.01, decay: 0.4, ...note([
         'Envelope, Trigger mode: each kick plays a quick rise (Attack) and a fall to 0 (Decay).',
@@ -404,8 +404,8 @@ export function buildAudioExamples(): Record<string, ExampleGraph> {
     counter: 40,
     nodes: [
       source(40, 300),
-      n('audioHit', 'kick', 400, 160, { sound: 'kick', threshold: 0.5, releaseAt: 0.8, gate: 0.1, minMs: 10, cooldown: 150, decay: 0.35, ...note([
-        'Hit, Sound Kick (30–150 Hz): listens to the Audio Source for kick drums.',
+      n('audioHit', 'kick', 400, 160, { sound: 'kick', sensitivity: 0.5, decay: 0.35, ...note([
+        'Hit, Sound Kick (40–130 Hz): listens to the Audio Source for kick drums; Sensitivity sets how eager it is.',
         'Envelope: 1 on each kick, falling to 0 over Decay (0.35 s). Count: the kicks so far. Trigger is 1 on the frame of a kick only, for the memory nodes.',
       ]) }, { audio: ['src', 'audio'] }),
       n('audioBand', 'bass', 400, 420, { band: 'bass', attack: 0.01, release: 0.25, ...note('Band Level, Bass (60–250 Hz): how loud the low end is, 0 to 1, rising fast (Attack) and falling slowly (Release).') }, { audio: ['src', 'audio'] }),
