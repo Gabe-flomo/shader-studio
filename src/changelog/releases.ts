@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.297',
+    date: '2026-10-18',
+    title: "One rail",
+    highlights: [
+      { area: 'Studio', text: "Play has one way around: the labelled rail on the left, the picture on the right. Background is the pinned top row of Layers." },
+    ],
+  },
+  {
     id: '2026.10.296',
     date: '2026-10-18',
     title: "Phone tidy",
