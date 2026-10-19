@@ -50,9 +50,9 @@ import { acBuild, acNewRun, acStepEffect, acTextureSize, type AcEffect, type AcR
 import { learnFromRing, learnFromSamples, newLearnListener, type AudioSoundSpec, type LearnListener, type LearnResult } from './learn';
 import { bandsOf, newBandRun, trimWindow, type AudioBandSpec, type BandRun } from './bands';
 import { bandSections, sectionsFor, webAudioQ } from './bandFilter';
-import { AheadAnalysis } from './ahead';
+import { AheadAnalysis, type AheadPick, type AheadRange } from './ahead';
 import {
-  atApplyGain, atCurveAt, atEventsHeard, atNewListener, atStepListener, atStepSource, atTriggerOpts,
+  atApplyGain, atBandCharacter, atCurveAt, atEventsHeard, atNewListener, atStepListener, atStepSource, atTriggerOpts,
   type AtExtHit, type AtListener, type AtScope, type AtTriggerOpts,
 } from '../../play/kit/audioTools.js';
 
@@ -534,13 +534,14 @@ class AudioToolsEngine implements InputSource {
     if (!s || !b) return { error: 'This band isn\'t running.' };
     let vals: number[] = [];
     if (range && s.kind === 'file' && s.ahead) {
-      const c = s.ahead.curve(b);
+      // The Gate reads the band's level, whatever its Detect.
+      const c = s.ahead.curves(b)?.level;
       if (!c) return { error: 'Still analysing the file: try again in a moment.' };
       const h = s.ahead.hopSeconds;
       for (let i = Math.max(0, Math.floor(range.from / h)); i <= Math.min(c.length - 1, Math.ceil(range.to / h)); i++) vals.push(c[i]);
     } else {
       const sc = s.runs.get(b.id)?.hit.scope;
-      if (sc) for (let k = 0; k < 120; k++) vals.push(sc.vals[(sc.at - 1 - k + sc.vals.length * 2) % sc.vals.length]);
+      if (sc) for (let k = 0; k < 120; k++) vals.push(sc.lvls[(sc.at - 1 - k + sc.lvls.length * 2) % sc.lvls.length]);
     }
     vals = vals.filter(v => Number.isFinite(v));
     if (vals.length < 4) return { error: range ? 'Select a longer quiet stretch (or trim to one).' : 'Let it listen to the quiet for a couple of seconds first.' };
@@ -627,7 +628,7 @@ class AudioToolsEngine implements InputSource {
     const used = new Set<string>();
     for (const b of s.bands) {
       if (!b.trigger) continue;
-      const hit = this.heardHit(s, b, trigOf(b));
+      const hit = this.heardHit(s, b, { ...trigOf(b), character: atBandCharacter(b), charAt: b.charAt });
       if (hit) { ext.set(b.id, hit); used.add(b.id); }
     }
     this.aheadSet.set(s, used);
@@ -635,13 +636,13 @@ class AudioToolsEngine implements InputSource {
   }
 
   /** A range's hits heard this frame (s.span), from the file analysed ahead; null when it isn't ready. */
-  private heardHit(s: SourceSlot, range: { lo: number; hi: number }, o: Partial<AtTriggerOpts>): AtExtHit | null {
+  private heardHit(s: SourceSlot, range: AheadRange, o: AheadPick): AtExtHit | null {
     const sp = s.span, ahead = s.ahead;
     if (!sp || !ahead) return null;
-    const ev = ahead.events(range, o), curve = ahead.curve(range);
-    if (!ev || !curve) return null;
+    const ev = ahead.events(range, o), c = ahead.curves(range);
+    if (!ev || !c) return null;
     const r = atEventsHeard(ev, sp.from, sp.to, sp.win, sp.loop);
-    return { fired: r.count, signal: atCurveAt(curve, ahead.hopSeconds, sp.to), strength: r.strength };
+    return { fired: r.count, signal: atCurveAt(c.value, ahead.hopSeconds, sp.to), strength: r.strength, level: atCurveAt(c.level, ahead.hopSeconds, sp.to) };
   }
 
   private dropAhead(s: SourceSlot): void {
