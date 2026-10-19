@@ -76,9 +76,9 @@ function savedSections(rows: Row[]): Section[] {
 function exampleSections(all = false): Section[] {
   const sections: Section[] = [];
   const inPlayCourse = new Set(PLAY_EXAMPLE_KEYS);
-  // The Play course is long, so it comes as one folder per topic.
-  const folders = EXAMPLE_FOLDERS.flatMap(f => f.label === 'Play' && f.keys.every(k => inPlayCourse.has(k))
-    ? PLAY_EXAMPLE_GROUPS.map(g => ({ ...f, label: `Play · ${g.label}`, keys: g.keys }))
+  // The Play course is long, so it comes as one folder per topic (the five-example Play showcase stays one folder).
+  const folders = EXAMPLE_FOLDERS.flatMap(f => f.course && f.keys.length === inPlayCourse.size && f.keys.every(k => inPlayCourse.has(k))
+    ? PLAY_EXAMPLE_GROUPS.map(g => ({ ...f, label: `Play course · ${g.label}`, keys: g.keys }))
     : [f]);
   for (const f of folders) {
     const rows = f.keys.filter(k => EXAMPLE_INDEX[k] && (all || EXAMPLE_INDEX[k].play)).map(k => ({ kind: 'example' as const, id: k, label: EXAMPLE_INDEX[k].label, hint: EXAMPLE_INDEX[k].description, folder: f.label, source: EXAMPLE_INDEX[k].source }));

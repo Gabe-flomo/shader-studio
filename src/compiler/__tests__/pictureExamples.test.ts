@@ -8,7 +8,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { compileGraph } from '../graphCompiler';
 import type { CompilationResult } from '../types';
 import { buildPictureExamples, PICTURE_EXAMPLE_KEYS } from '../../store/pictureExamples';
-import { EXAMPLE_FOLDERS } from '../../store/exampleIndex';
+import { unfiledIn } from '../../store/exampleIndex';
 import { EXAMPLE_GRAPHS } from '../../store/exampleGraphs';
 import {
   BUILTIN_IMAGES, ROOM_AND_CAT_ID, WALKWAY_CAT_ID, builtinImageBlob, builtinImageParams, builtinImageUrl, canDecodeImage, isBuiltinImage,
@@ -41,7 +41,7 @@ describe('built-in pictures', () => {
 describe('the Pictures examples', () => {
   const built = buildPictureExamples();
   it('are a folder of their own, all registered', () => {
-    expect(EXAMPLE_FOLDERS.find(f => f.label === 'Pictures')?.keys).toEqual(PICTURE_EXAMPLE_KEYS);
+    expect(unfiledIn('Pictures', PICTURE_EXAMPLE_KEYS)).toEqual([]);
     expect(Object.keys(built)).toEqual(PICTURE_EXAMPLE_KEYS);
     for (const k of PICTURE_EXAMPLE_KEYS) expect(EXAMPLE_GRAPHS[k]).toBeDefined();
   });

@@ -13,7 +13,7 @@ vi.hoisted(() => {
 import { compileGraph } from '../graphCompiler';
 import { getNodeDefinition, resolveNodeAliases } from '../../nodes/definitions';
 import { EXAMPLE_GRAPHS } from '../../store/exampleGraphs';
-import { EXAMPLE_FOLDERS, EXAMPLE_INDEX } from '../../store/exampleIndex';
+import { EXAMPLE_INDEX, unfiledIn } from '../../store/exampleIndex';
 import { SIM_AGENT_EXAMPLE_KEYS } from '../../store/agentExamplesSim';
 import type { GraphNode } from '../../types/nodeGraph';
 
@@ -25,7 +25,7 @@ const inside = (k: string) => (EXAMPLE_GRAPHS[k].nodes.find(nd => nd.type === 'a
 
 describe('the Simulations: agents examples', () => {
   it('are a folder of their own, eight of them, listed in the index', () => {
-    expect(EXAMPLE_FOLDERS.find(f => f.label === 'Simulations: agents')?.keys).toEqual(SIM_AGENT_EXAMPLE_KEYS);
+    expect(unfiledIn('Agent rules & simulations', SIM_AGENT_EXAMPLE_KEYS)).toEqual([]);
     expect(SIM_AGENT_EXAMPLE_KEYS).toEqual([
       'simAgentPredatorPrey', 'simAgentDla', 'simAgentSandDrift', 'simAgentCrowd',
       'simAgentPainters', 'simAgentTermites', 'simAgentFireflies', 'simAgentInfection',

@@ -21,7 +21,7 @@ import { buildStandalone2D } from '../../sceneBuilder2d/build';
 import { parseRecipe2D, printRecipe2D } from '../../sceneBuilder2d/recipe';
 import { starterScene } from '../../sceneBuilder2d/spec';
 import { buildRaysExamples, RAYS_EXAMPLE_KEYS } from '../../store/raysExamples';
-import { EXAMPLE_FOLDERS } from '../../store/exampleIndex';
+import { unfiledIn } from '../../store/exampleIndex';
 import { kitScript } from '../../play/exportHtml';
 
 const parses = (fs: string) => expect(() => parser.parse(fs.replace(/^#version.*$/m, ''), { quiet: true })).not.toThrow();
@@ -296,6 +296,6 @@ describe('the examples', () => {
       // Every Play control names a slider on the node.
       for (const c of g[key].play!.controls) expect(g[key].nodes.find(x => x.id === c.target.split('::')[0]), c.target).toBeDefined();
     }
-    expect(EXAMPLE_FOLDERS.find(f => f.label === 'Effects & Lens')!.keys).toEqual(expect.arrayContaining(RAYS_EXAMPLE_KEYS));
+    expect(unfiledIn('Effects & Lens', RAYS_EXAMPLE_KEYS)).toEqual([]);
   });
 });

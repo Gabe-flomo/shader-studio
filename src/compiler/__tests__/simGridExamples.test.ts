@@ -13,7 +13,7 @@ vi.hoisted(() => {
 import { compileGraph } from '../graphCompiler';
 import { getNodeDefinition, resolveNodeAliases } from '../../nodes/definitions';
 import { EXAMPLE_GRAPHS } from '../../store/exampleGraphs';
-import { EXAMPLE_FOLDERS, EXAMPLE_INDEX } from '../../store/exampleIndex';
+import { EXAMPLE_INDEX, unfiledIn } from '../../store/exampleIndex';
 import { SIM_GRID_EXAMPLE_KEYS } from '../../store/simGridExamples';
 import type { GraphNode } from '../../types/nodeGraph';
 
@@ -24,7 +24,7 @@ const walk = (nodes: GraphNode[], visit: (nd: GraphNode) => void) => {
 describe('the Simulations: grids examples', () => {
   it('are a folder of their own and listed in the index', () => {
     // With the Grid Rules versions (gridRulesExamples.ts) beside them.
-    expect(EXAMPLE_FOLDERS.find(f => f.label === 'Simulations: grids')?.keys).toEqual(expect.arrayContaining(SIM_GRID_EXAMPLE_KEYS));
+    expect(unfiledIn('Grid simulations', SIM_GRID_EXAMPLE_KEYS)).toEqual([]);
     expect(SIM_GRID_EXAMPLE_KEYS.length).toBeGreaterThanOrEqual(7);
     for (const k of SIM_GRID_EXAMPLE_KEYS) {
       expect(EXAMPLE_INDEX[k]?.label, k).toBeTruthy();

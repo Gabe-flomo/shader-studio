@@ -14,7 +14,7 @@ import {
 } from '../layout';
 import { compileGraph } from '../../../compiler/graphCompiler';
 import { buildFrameStackExamples, FRAME_STACK_EXAMPLE_KEYS } from '../../../store/frameStackExamples';
-import { EXAMPLE_FOLDERS } from '../../../store/exampleIndex';
+import { unfiledIn } from '../../../store/exampleIndex';
 import { n } from '../../../store/graphBuilder';
 import { planTimeCubeAdd } from '../../timeCube/autoWire';
 import { buildMarchRig } from '../../../nodes/scene3dDefaults';
@@ -225,7 +225,7 @@ describe('the node', () => {
 
   it('every example compiles with one sampler (its Time Cube\'s), and every node has a note', () => {
     expect(Object.keys(ex).sort()).toEqual([...FRAME_STACK_EXAMPLE_KEYS].sort());
-    expect(EXAMPLE_FOLDERS.find(f => f.label === 'Frame Stack')?.keys).toEqual(FRAME_STACK_EXAMPLE_KEYS);
+    expect(unfiledIn('Frame Stack', FRAME_STACK_EXAMPLE_KEYS)).toEqual([]);
     for (const [k, g] of Object.entries(ex)) {
       const r = compileGraph({ nodes: g.nodes });
       expect(r.errors ?? [], k).toEqual([]);

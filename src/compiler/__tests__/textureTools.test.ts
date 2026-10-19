@@ -19,7 +19,7 @@ import {
 } from '../../nodes/definitions/textureTools';
 import { slimeMoldNodes } from '../../store/agentExamples';
 import { EXAMPLE_GRAPHS } from '../../store/exampleGraphs';
-import { EXAMPLE_FOLDERS } from '../../store/exampleIndex';
+import { showcaseFolderOf, RETIRED_EXAMPLE_KEYS } from '../../store/exampleIndex';
 import { TEXTURE_TOOL_EXAMPLE_KEYS } from '../../store/textureToolExamples';
 import { shaderShape } from '../../lib/shaderShape';
 import { suggestQuickAdds } from '../../components/NodeGraph/quickAdds';
@@ -368,7 +368,7 @@ describe('the Texture tools examples', () => {
   };
 
   it('are a folder of their own, use every Texture tool, and compile', () => {
-    expect(EXAMPLE_FOLDERS.find(f => f.label === 'Texture tools')?.keys).toEqual(TEXTURE_TOOL_EXAMPLE_KEYS);
+    expect(TEXTURE_TOOL_EXAMPLE_KEYS.filter(k => !['Texture tools', 'Seeing: segment, flow, track'].includes(showcaseFolderOf(k) ?? '') && !RETIRED_EXAMPLE_KEYS.includes(k))).toEqual([]);
     expect(TEXTURE_TOOL_EXAMPLE_KEYS.length).toBeGreaterThanOrEqual(4);
     const used = new Set<string>();
     for (const k of TEXTURE_TOOL_EXAMPLE_KEYS) {

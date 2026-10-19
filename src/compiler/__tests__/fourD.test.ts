@@ -12,7 +12,7 @@ import { getNodeDefinition, resolveNodeAliases } from '../../nodes/definitions';
 import { ROTATION_PLANES_4D } from '../../nodes/definitions/fourD';
 import { n } from '../../store/graphBuilder';
 import { EXAMPLE_GRAPHS } from '../../store/exampleGraphs';
-import { EXAMPLE_FOLDERS, EXAMPLE_INDEX } from '../../store/exampleIndex';
+import { EXAMPLE_INDEX, unfiledIn } from '../../store/exampleIndex';
 import { FOURD_EXAMPLE_KEYS } from '../../store/fourDExamples';
 import { collectPlayCandidates } from '../../play/playControls';
 import type { GraphNode } from '../../types/nodeGraph';
@@ -197,8 +197,7 @@ describe('Rotate 4D', () => {
 
 describe('4D examples', () => {
   it('are listed in a 4D folder', () => {
-    const f = EXAMPLE_FOLDERS.find(x => x.label === '4D')!;
-    expect(f.keys).toEqual(FOURD_EXAMPLE_KEYS);
+    expect(unfiledIn('4D', FOURD_EXAMPLE_KEYS)).toEqual([]);
     expect(FOURD_EXAMPLE_KEYS.length).toBe(15);
     for (const k of FOURD_EXAMPLE_KEYS) expect(EXAMPLE_GRAPHS[k].label).toBe(EXAMPLE_INDEX[k].label);
   });

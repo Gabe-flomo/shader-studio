@@ -3,7 +3,7 @@ import { compileGraph } from '../../compiler/graphCompiler';
 import { getNodeDefinition, resolveNodeAliases } from '../../nodes/definitions';
 import { collectPlayCandidates } from '../../play/playControls';
 import { EXAMPLE_GRAPHS } from '../exampleGraphs';
-import { EXAMPLE_FOLDERS, EXAMPLE_INDEX } from '../exampleIndex';
+import { EXAMPLE_FOLDERS, EXAMPLE_INDEX, RETIRED_EXAMPLE_KEYS } from '../exampleIndex';
 import { LEARN_EXAMPLE_KEYS, LEARN_MOVED_INDEX } from '../learnExampleIndex';
 import { parsePlayRecord } from '../../types/play';
 
@@ -30,8 +30,9 @@ const compile = (key: string) => {
 
 describe('Learn: the Book of Shaders as graphs', () => {
   it('has its own folder, numbered in order', () => {
-    const folder = EXAMPLE_FOLDERS.find(f => f.label === 'Learn')!;
+    const folder = EXAMPLE_FOLDERS.find(f => f.label === 'Learn · Book of Shaders course')!;
     expect(folder.keys).toEqual(LEARN_EXAMPLE_KEYS);
+    expect(EXAMPLE_FOLDERS.find(f => f.label === 'Learn')!.keys.every(k => LEARN_EXAMPLE_KEYS.includes(k))).toBe(true);
     LEARN_EXAMPLE_KEYS.forEach((k, n) => {
       expect(EXAMPLE_INDEX[k].label.startsWith(`${String(n + 1).padStart(2, '0')} · `), k).toBe(true);
       expect(EXAMPLE_GRAPHS[k].label, k).toBe(EXAMPLE_INDEX[k].label);
@@ -79,10 +80,10 @@ describe('Learn: the Book of Shaders as graphs', () => {
     expect(EXAMPLE_INDEX.learnStep.source).toMatchObject({ chapter: 5, chapterTitle: 'Shaping functions', section: 'Step and Smoothstep' });
   });
 
-  it('keeps the earlier lessons it moved out, each in exactly one other folder, with their notes', () => {
+  it('keeps the earlier lessons it moved out, each in exactly one other folder or retired, with their notes', () => {
     for (const key of Object.keys(LEARN_MOVED_INDEX)) {
       const folders = EXAMPLE_FOLDERS.filter(f => f.keys.includes(key)).map(f => f.label);
-      expect(folders, key).toHaveLength(1);
+      expect(folders.length + (RETIRED_EXAMPLE_KEYS.includes(key) ? 1 : 0), key).toBe(1);
       expect(folders[0], key).not.toBe('Learn');
       expect(EXAMPLE_GRAPHS[key].label, key).toBe(LEARN_MOVED_INDEX[key].label);
       expect(EXAMPLE_GRAPHS[key].play?.notes, key).toContain('**What it shows.**');

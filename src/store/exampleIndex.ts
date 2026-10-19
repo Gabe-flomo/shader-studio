@@ -14,43 +14,44 @@ import type { SourceCredit } from '../types/credit';
 import type { DatasetsRecord } from '../data/types';
 import { ctp } from '../theme/palette';
 import { PLAY_EXAMPLE_INDEX, PLAY_EXAMPLE_KEYS } from './playExampleIndex';
-import { LEARN_COLOR_KEYS, LEARN_CURVES_KEYS, LEARN_EXAMPLE_INDEX, LEARN_EXAMPLE_KEYS, LEARN_GRID_KEYS, LEARN_MOVED_INDEX } from './learnExampleIndex';
+import { LEARN_EXAMPLE_INDEX, LEARN_EXAMPLE_KEYS, LEARN_MOVED_INDEX } from './learnExampleIndex';
 import { LEARN3D_EXAMPLE_INDEX, LEARN3D_EXAMPLE_KEYS } from './learn3dExampleIndex';
-import { CURVED_EXAMPLE_INDEX, CURVED_EXAMPLE_KEYS } from './curvedSpaceExampleIndex';
-import { REPEAT_SCENE_EXAMPLE_INDEX, REPEAT_SCENE_EXAMPLE_KEYS } from './repeatSceneExampleIndex';
+import { CURVED_EXAMPLE_INDEX } from './curvedSpaceExampleIndex';
+import { REPEAT_SCENE_EXAMPLE_INDEX } from './repeatSceneExampleIndex';
 import { PIECES_EXAMPLE_INDEX, PIECES_EXAMPLE_KEYS } from './piecesExampleIndex';
 import { OFFER_PIECES } from '../nodes/notOffered';
-import { CURVE_TRACE_EXAMPLE_INDEX, CURVE_TRACE_2D_KEYS, CURVE_TRACE_3D_KEYS } from './curveTraceExampleIndex';
+import { CURVE_TRACE_EXAMPLE_INDEX } from './curveTraceExampleIndex';
 import { COMBO_EXAMPLE_INDEX } from './comboExamples';
-import { MATRIX_EXAMPLE_INDEX, MATRIX_EXAMPLE_KEYS } from './matrixExamples';
-import { DATA_EXAMPLE_INDEX, DATA_EXAMPLE_KEYS } from './dataExampleIndex';
-import { GRID_EXAMPLE_INDEX, GRID_EXAMPLE_KEYS } from './gridExamples';
-import { BOUNDS_EXAMPLE_INDEX, BOUNDS_EXAMPLE_KEYS } from './boundsExamples';
-import { PASS_EXAMPLE_INDEX, PASS_EXAMPLE_KEYS } from './passExamples';
-import { AGENT_EXAMPLE_INDEX, AGENT_EXAMPLE_KEYS, AGENT_RULE_INDEX } from './agentExamples';
-import { AGENT_SHADER_EXAMPLE_INDEX, AGENT_SHADER_EXAMPLE_KEYS } from './agentShaderExamples';
-import { AGENT_3D_EXAMPLE_INDEX, AGENT_3D_EXAMPLE_KEYS } from './agentExamples3d';
-import { SIM_AGENT_EXAMPLE_INDEX, SIM_AGENT_EXAMPLE_KEYS } from './agentExamplesSim';
-import { CONVERT_EXAMPLE_INDEX, CONVERT_EXAMPLE_KEYS } from './convertExampleIndex';
+import { MATRIX_EXAMPLE_INDEX } from './matrixExamples';
+import { DATA_EXAMPLE_INDEX } from './dataExampleIndex';
+import { GRID_EXAMPLE_INDEX } from './gridExamples';
+import { BOUNDS_EXAMPLE_INDEX } from './boundsExamples';
+import { PASS_EXAMPLE_INDEX } from './passExamples';
+import { AGENT_EXAMPLE_INDEX, AGENT_RULE_INDEX } from './agentExamples';
+import { AGENT_SHADER_EXAMPLE_INDEX } from './agentShaderExamples';
+import { AGENT_3D_EXAMPLE_INDEX } from './agentExamples3d';
+import { SIM_AGENT_EXAMPLE_INDEX } from './agentExamplesSim';
+import { CONVERT_EXAMPLE_INDEX } from './convertExampleIndex';
 import { BAKE_EXAMPLE_INDEX } from './bakeExamples';
-import { EXPR_LOOP_EXAMPLE_INDEX, EXPR_LOOP_EXAMPLE_KEYS } from './exprLoopExamples';
-import { SPLAT_EXAMPLE_INDEX, SPLAT_EXAMPLE_KEYS } from './splatExamples';
-import { TIME_CUBE_EXAMPLE_INDEX, TIME_CUBE_EXAMPLE_KEYS } from './timeCubeExamples';
-import { FRAME_STACK_EXAMPLE_INDEX, FRAME_STACK_EXAMPLE_KEYS } from './frameStackExamples';
-import { FOURD_EXAMPLE_INDEX, FOURD_EXAMPLE_KEYS } from './fourDExamples';
-import { TEXTURE_TOOL_EXAMPLE_INDEX, TEXTURE_TOOL_EXAMPLE_KEYS } from './textureToolExamples';
-import { MEMORY_EXAMPLE_INDEX, MEMORY_EXAMPLE_KEYS } from './memoryExamples';
-import { SEND_RECEIVE_EXAMPLE_INDEX, SEND_RECEIVE_EXAMPLE_KEYS } from './sendReceiveExamples';
-import { AUDIO_EXAMPLE_INDEX, AUDIO_EXAMPLE_KEYS } from './audioExamples';
-import { PICTURE_EXAMPLE_INDEX, PICTURE_EXAMPLE_KEYS } from './pictureExamples';
-import { PICTURES_3D_EXAMPLE_INDEX, PICTURES_3D_EXAMPLE_KEYS } from './pictures3dExamples';
-import { RAYS_EXAMPLE_INDEX, RAYS_EXAMPLE_KEYS } from './raysExamples';
+import { EXPR_LOOP_EXAMPLE_INDEX } from './exprLoopExamples';
+import { SPLAT_EXAMPLE_INDEX } from './splatExamples';
+import { TIME_CUBE_EXAMPLE_INDEX } from './timeCubeExamples';
+import { FRAME_STACK_EXAMPLE_INDEX } from './frameStackExamples';
+import { FOURD_EXAMPLE_INDEX } from './fourDExamples';
+import { TEXTURE_TOOL_EXAMPLE_INDEX } from './textureToolExamples';
+import { MEMORY_EXAMPLE_INDEX } from './memoryExamples';
+import { SEND_RECEIVE_EXAMPLE_INDEX } from './sendReceiveExamples';
+import { AUDIO_EXAMPLE_INDEX } from './audioExamples';
+import { PICTURE_EXAMPLE_INDEX } from './pictureExamples';
+import { PICTURES_3D_EXAMPLE_INDEX } from './pictures3dExamples';
+import { RAYS_EXAMPLE_INDEX } from './raysExamples';
 import { SIM_GRID_EXAMPLE_INDEX } from './simGridExamples';
-import { GRID_RULES_EXAMPLE_INDEX, simGridsFolderKeys } from './gridRulesExampleIndex';
-import { AGENT_RULE_EXAMPLE_INDEX, AGENT_RULE_EXAMPLE_KEYS } from './agentRuleExamples';
-import { RIDE_CURVE_EXAMPLE_INDEX, RIDE_CURVE_EXAMPLE_KEYS } from './agentRideCurveExamples';
-import { SCENE_BUILDER_EXAMPLE_INDEX, SCENE_BUILDER_EXAMPLE_KEYS } from './sceneBuilderExampleIndex';
-import { SCENE_BUILDER_2D_EXAMPLE_INDEX, SCENE_BUILDER_2D_EXAMPLE_KEYS } from './sceneBuilder2dExampleIndex';
+import { GRID_RULES_EXAMPLE_INDEX } from './gridRulesExampleIndex';
+import { AGENT_RULE_EXAMPLE_INDEX } from './agentRuleExamples';
+import { RIDE_CURVE_EXAMPLE_INDEX } from './agentRideCurveExamples';
+import { SCENE_BUILDER_EXAMPLE_INDEX } from './sceneBuilderExampleIndex';
+import { SCENE_BUILDER_2D_EXAMPLE_INDEX } from './sceneBuilder2dExampleIndex';
+import { RETIRED_EXAMPLE_KEYS } from './retiredExamples';
 
 export type ExampleGraph = {
   label: string; nodes: GraphNode[]; counter: number;
@@ -304,53 +305,65 @@ export const HIDDEN_EXAMPLE_KEYS: readonly string[] = OFFER_PIECES ? [] : PIECES
 // Groups example keys into categories for the desktop NodePalette's Examples
 // browser and the mobile examples picker (App.tsx) — one taxonomy, shared, so
 // the two surfaces never drift.
-export const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: string[] }> = [
-  { label: "Play",              color: ctp.pink, keys: PLAY_EXAMPLE_KEYS },
-  { label: "Learn",             color: ctp.lavender, keys: LEARN_EXAMPLE_KEYS },
-  { label: "Learn 3D",          color: ctp.lavender, keys: LEARN3D_EXAMPLE_KEYS },
-  { label: "Curved space",      color: ctp.lavender, keys: CURVED_EXAMPLE_KEYS },
-  { label: "Curves & Shapes",   color: ctp.lavender, keys: [...CURVE_TRACE_2D_KEYS, ...LEARN_CURVES_KEYS] },
-  { label: "Color & Lighting",  color: ctp.peach, keys: [...LEARN_COLOR_KEYS, 'neonGlow','colorStopsCycle'] },
-  { label: "Passes",            color: ctp.maroon, keys: PASS_EXAMPLE_KEYS },
-  { label: "Texture tools",     color: ctp.flamingo, keys: TEXTURE_TOOL_EXAMPLE_KEYS },
-  { label: "Pictures",          color: ctp.flamingo, keys: PICTURE_EXAMPLE_KEYS },
-  { label: "Memory",            color: ctp.flamingo, keys: MEMORY_EXAMPLE_KEYS },
-  { label: "Send & Receive",    color: ctp.flamingo, keys: SEND_RECEIVE_EXAMPLE_KEYS },
-  { label: "Audio",             color: ctp.pink, keys: AUDIO_EXAMPLE_KEYS },
-  { label: "Simulation",        color: ctp.green, keys: [...AGENT_EXAMPLE_KEYS, ...RIDE_CURVE_EXAMPLE_KEYS] },
-  { label: "Simulations: grids", color: ctp.green, keys: simGridsFolderKeys() },
-  { label: "Agents: rules",     color: ctp.green, keys: AGENT_RULE_EXAMPLE_KEYS },
-  { label: "Agents with shaders", color: ctp.green, keys: AGENT_SHADER_EXAMPLE_KEYS },
-  { label: "Agents in 3D",      color: ctp.green, keys: AGENT_3D_EXAMPLE_KEYS },
-  { label: "Simulations: agents", color: ctp.green, keys: SIM_AGENT_EXAMPLE_KEYS },
-  { label: "Effects & Lens",    color: ctp.mauve, keys: ['echoTrails','feedbackSmear','crtTv','lensBarrel', ...RAYS_EXAMPLE_KEYS] },
-  { label: "Space & Texture",   color: ctp.flamingo, keys: ['waveTextureDemo','waveInterference','magicTextureDemo','neonFloorGrid','spaceAtlas'] },
-  { label: "Grid",              color: ctp.sky, keys: [...GRID_EXAMPLE_KEYS, ...BOUNDS_EXAMPLE_KEYS, ...LEARN_GRID_KEYS, 'gridNeighborDisplaced','gridMetaballs','gridBreathing','gridDensityWave','gridLavaLamp','beatGrid'] },
-  // Pieces and Balls are hidden, not deleted (nodes/notOffered.ts): the examples still open by key (What's new links).
-  ...(HIDDEN_EXAMPLE_KEYS.length ? [] : [{ label: "Pictures in pieces", color: ctp.sky, keys: PIECES_EXAMPLE_KEYS }]),
-  { label: "Matrices",          color: ctp.peach, keys: MATRIX_EXAMPLE_KEYS },
-  { label: "Data",              color: ctp.teal, keys: DATA_EXAMPLE_KEYS },
-  { label: "Halftone",          color: '#a6e3d5', keys: ['cmykNoise','webcamCmyk'] },
-  { label: "Rings",             color: ctp.red, keys: ['fractalRings'] },
-  { label: "Iterated Groups",   color: ctp.green, keys: ['groupCarryRings','groupCarryFBM','groupCarryDomainWarp','publishAndKeyframes'] },
-  { label: "Fractals",          color: ctp.mauve, keys: ['newtonFractalZ5','gravitationalLens'] },
-  { label: "Physics",           color: ctp.teal, keys: ['chladniFieldQuickDemo','chladniModeFreqDemo'] },
-  { label: "Particles",         color: ctp.pink, keys: ['particlesRoundShape','particlesIn3dScene','particleSoundField','particleChladniSand','particleCymatics3d','particleStarOutline','particleFlowIntoShape','inkInWater','particleImageDissolve','particleDustInAir','particleEmbers','particleFlowDrift','particleRain','particleGalaxy'] },
-  { label: "Inputs",            color: ctp.teal, keys: ['midiGlowKeys'] },
-  { label: "Blur & Lens",       color: ctp.blue, keys: ['motionBlurTrails','tiltShiftScene','dofOrbitOrbs','dofDepthBlur','comboBlurDirectional'] },
-  { label: "Functions",         color: ctp.sapphire, keys: ['ringGlow', ...EXPR_LOOP_EXAMPLE_KEYS] },
-  { label: "3D Basics",         color: ctp.sky, keys: ['raymarchSpheres','shapesAndGround3D','softMetaballs3D','normalColorDemo', ...SPLAT_EXAMPLE_KEYS] },
-  { label: "3D SDF",            color: ctp.sky, keys: [...REPEAT_SCENE_EXAMPLE_KEYS, ...CURVE_TRACE_3D_KEYS, 'sdfPolarRepeat','sdfBend3D','sdCrossScene3D','infinitePillars3D','spiralWorld3D','gyroidWarped','bakeHeavyScene','mlgWiggleTunnel','voxelTerrain'] },
-  { label: "3D Lighting",       color: '#f9c468', keys: ['fresnelSchlickRim','refractDirFakeGlass','glassPhysical','glassMetaballs','litStillLife'] },
-  { label: "3D: Pictures",      color: '#f9c468', keys: PICTURES_3D_EXAMPLE_KEYS },
-  { label: "GI Lighting",       color: ctp.green, keys: ['giSphereGround','giBoxFrame'] },
-  { label: "3D: Scene Builder", color: ctp.sky, keys: SCENE_BUILDER_EXAMPLE_KEYS },
-  { label: "2D: Scene Builder", color: ctp.pink, keys: SCENE_BUILDER_2D_EXAMPLE_KEYS },
-  { label: "Volumetric",        color: '#f5a97f', keys: ['glowMarcher','volAnimatedRepeat','volumeGlowDemo'] },
-  { label: "Time Cube",         color: '#f5a97f', keys: TIME_CUBE_EXAMPLE_KEYS },
-  { label: "4D",                color: '#b4a0ff', keys: FOURD_EXAMPLE_KEYS },
-  { label: "Frame Stack",       color: '#f5a97f', keys: FRAME_STACK_EXAMPLE_KEYS },
+//
+// Curated (docs/examples-curation-proposal.md, user feedback 2026-10-19): each
+// category lists its five best examples, each showing a different feature.
+// The three numbered courses (Play, Book of Shaders, Learn 3D) stay whole as
+// `course` folders under Learn. Everything else is retired from the lists
+// (RETIRED_EXAMPLE_KEYS, retiredExamples.ts) but still opens by key: Present
+// lessons, the Start sheet, builder presets and What's new links use them.
+export type ExampleFolder = {
+  label: string; color: string; keys: string[];
+  /** A numbered course, kept whole (every step), listed under Learn after the showcase folders. */
+  course?: true;
+};
+
+export const EXAMPLE_FOLDERS: ExampleFolder[] = [
+  { label: "Play",              color: ctp.pink, keys: ['bgQueue','finishKaleidoscope','displaceText','bgPhotoFlow','p5FlowField'] },
+  { label: "Learn",             color: ctp.lavender, keys: ['learnTruchet','learnWood','learnVoronoi','learnFBM','learnFractal'] },
+  { label: "Learn 3D",          color: ctp.lavender, keys: ['learn3dMarch','learn3dLight','learn3dCombine','learn3dVolume','learn3dGI'] },
+  { label: "Learn · Play course",          color: ctp.pink, keys: PLAY_EXAMPLE_KEYS, course: true },
+  { label: "Learn · Book of Shaders course", color: ctp.lavender, keys: LEARN_EXAMPLE_KEYS, course: true },
+  { label: "Learn · 3D course",            color: ctp.lavender, keys: LEARN3D_EXAMPLE_KEYS, course: true },
+  { label: "2D: Shapes, Space & Colour", color: ctp.peach, keys: ['fractalRings','colorStopsCycle','spaceAtlas','perspectivePlanes','newtonFractalZ5'] },
+  { label: "2D: Scene Builder", color: ctp.pink, keys: ['sb2Kaleidoscope','sb2RingOfRings','sb2RippleGrid','sb2DepthBeams','sb2MirrorFlower'] },
+  { label: "Curves & Shapes",   color: ctp.lavender, keys: ['curveTraceBeam','curveTraceIntervals','curveTraceMorph','chladniModeFreqDemo','agentRideHarmonograph'] },
+  { label: "Grid",              color: ctp.sky, keys: ['gridTourMorph','gridTourRipple','gridTourOverflow','gridDensityWave','boundsBouncingCopies'] },
+  { label: "Matrices",          color: ctp.peach, keys: ['matrixFoldFractal','matrixLattices','matrixAnyBasis','matrixCornerPin','matrixNoiseOctaves'] },
+  { label: "Node Combos",       color: ctp.flamingo, keys: ['comboDomeRepeat','comboVoxelSpheres','comboGridGroupFlower','comboArrayStars','comboRepeatCellHash'] },
+  { label: "Groups & Code",     color: ctp.sapphire, keys: ['groupCarryRings','loopKali','ringGlow','publishAndKeyframes','convertPlasmaOptimised'] },
+  { label: "Signals & Inputs",  color: ctp.teal, keys: ['memFollow','memBeat','memReadout','sendReceiveBeat','midiGlowKeys'] },
+  { label: "Passes",            color: ctp.maroon, keys: ['passFeedbackTrails','passGlowBright','passJumpFlood','passEdgesFromPicture','displaceNoiseMap'] },
+  { label: "Effects & Lens",    color: ctp.mauve, keys: ['raysLightText','motionBlurTrails','dofDepthBlur','cmykNoise','crtTv'] },
+  { label: "Texture tools",     color: ctp.flamingo, keys: ['ttRenderTargets','ttDataAdvect','ttCacheTimeMachine','ttDistanceRings','ttFeedbackTunnel'] },
+  { label: "Seeing: segment, flow, track", color: ctp.flamingo, keys: ['ttSegmentPeople','ttSegmentClick','ttOpticalFlow','ttAnalyze','ttBlobStamp'] },
+  { label: "Pictures",          color: ctp.flamingo, keys: ['picChannelSplash','picHeightRelief','picPixelSort','picGlitch','picCurves'] },
+  { label: "Data",              color: ctp.teal, keys: ['dataCityBars','dataRoutePath','dataRouteGlow','dataPoemWords','dataLiveFeed'] },
+  { label: "Time Cube",         color: '#f5a97f', keys: ['timeCubeBox','timeCubeSlitScan','timeCubeHall','timeCubeSoftPill','timeCubeHighlights'] },
+  { label: "Frame Stack",       color: '#f5a97f', keys: ['frameStackRing','frameStackFocus','frameStackShuffle','frameStackIsometric','frameStackMorph'] },
+  { label: "3D: Shapes & Space", color: ctp.sky, keys: ['repeatSceneBubbles','voxelTerrain','mlgWiggleTunnel','curvedSpherical','bakeHeavyScene'] },
+  { label: "3D: Light & Materials", color: '#f9c468', keys: ['litStillLife','giSphereGround','glassMetaballs','pic3dVideoRoom','volAnimatedRepeat'] },
+  { label: "3D: Scene Builder", color: ctp.sky, keys: ['sbGlowingOrb','sbInfinitePillars','sbTwistedTorus','sbGlassObjects','sbMengerFold'] },
+  { label: "4D",                color: '#b4a0ff', keys: ['fourDHypersphereInTesseract','fourDTesseractProjection','fourDHopfRings','fourDQuatJulia','fourDFlatTesseract'] },
+  { label: "Splats",            color: ctp.sky, keys: ['splatRingsInScene','splatIsometric','splatModifiersBall','agentRulesScan3d','splatDissolvePlay'] },
+  { label: "Particles",         color: ctp.pink, keys: ['particleFlowDrift','particleStarOutline','particlesRoundShape','particleGalaxy','particleChladniSand'] },
+  { label: "Agents",            color: ctp.green, keys: ['slimeMold','agentMultiSlime','agentCurlSmoke','agentParticles','agentSoundBurst'] },
+  { label: "Agents with shaders", color: ctp.green, keys: ['agentShaderRings','agentShaderWalls','agentShaderPolar','agentShaderEmitter','agentShaderNoiseFlow'] },
+  { label: "Agents in 3D",      color: ctp.green, keys: ['agent3dSlime','agent3dTorus','agent3dGalaxy','agent3dRodSwarm','agent3dFireflies'] },
+  { label: "Agent rules & simulations", color: ctp.green, keys: ['agentRulesAnts','agentRulesPredatorPrey','agentRulesDla','agentRulesSwarm','simAgentSandDrift'] },
+  { label: "Grid simulations",  color: ctp.green, keys: ['gridRulesLife','gridRulesWire','gridRulesWater','simGridCave','simGridHeat'] },
   { label: "From the Internet",    color: ctp.yellow, keys: ['fcTrippyNoise','fcSolar','fcPillars','fcGradient4','fcGrainGradient','fcTiling','fcTheScreen','fcShield','fcMainFrame','fcAtlantic','fcOrb','fcBitshift'] },
-  { label: "Convert",            color: ctp.yellow, keys: CONVERT_EXAMPLE_KEYS },
-  { label: "Node Combos",        color: ctp.flamingo, keys: ['comboChaosStars','comboRepeatCellHash','comboTurbulenceGlow','comboBloomDots','comboDomeRepeat','comboVoxelSpheres','comboGridPaintShapes','comboGridPaintPictures','comboGridPaintGlow','comboGridShapeByWire','comboArrayStars','comboGridGroupFlower','comboArrayGroupMoons'] },
 ];
+
+/** The showcase folders only (five per category, plus From the Internet): the courses left out. */
+export const SHOWCASE_FOLDERS: ExampleFolder[] = EXAMPLE_FOLDERS.filter(f => !f.course);
+
+export { RETIRED_EXAMPLE_KEYS };
+
+/** The showcase folder an example is listed in (courses left out), or undefined when it is in none. */
+export const showcaseFolderOf = (key: string): string | undefined => SHOWCASE_FOLDERS.find(f => f.keys.includes(key))?.label;
+
+/** Keys of `keys` that are neither listed in the showcase folder `label` nor retired: what a folder test expects empty. */
+export function unfiledIn(label: string, keys: readonly string[]): string[] {
+  return keys.filter(k => showcaseFolderOf(k) !== label && !RETIRED_EXAMPLE_KEYS.includes(k));
+}

@@ -19,8 +19,8 @@ import { GETTING_STARTED } from '../../present/samples';
 import { openLesson } from './LearnDialog';
 import { useLearnUi } from './learnStore';
 
-/** A few examples with their pictures, across what Playfield does. */
-export const FEATURED_EXAMPLES = ['learnFBM', 'particleGalaxy', 'agentParticles', 'learn3dLight', 'echoTrails', 'playGlowText'];
+import { FEATURED_EXAMPLES } from './featuredExamples';
+export { FEATURED_EXAMPLES };
 
 export function StartSheet() {
   const tk = useTokens();
