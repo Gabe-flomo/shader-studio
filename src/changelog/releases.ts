@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.312',
+    date: '2026-10-19',
+    title: "Pause together",
+    highlights: [
+      { area: 'Studio', text: "Pausing the picture (Space or the preview's pause) pauses the music too, and playing resumes both." },
+    ],
+  },
+  {
     id: '2026.10.311',
     date: '2026-10-19',
     title: "Triggers, rebuilt",
