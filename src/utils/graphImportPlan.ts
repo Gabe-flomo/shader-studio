@@ -79,6 +79,20 @@ export function fitAspect(outerW: number, outerH: number, ratio: number): { widt
   return { width: Math.floor(outerH * ratio), height: Math.floor(outerH) };
 }
 
+/**
+ * The narrowest shape Free gives the picture on the Play page (width ÷ height). Most shaders scale
+ * their picture by the canvas height, so a frame narrower than square cuts the sides off (a big
+ * "PRESS" word reading "RESS"). On Play, Free fills the area while it's at least this wide and
+ * letterboxes to it when it's narrower (a tall panel beside the panel on a tablet, say).
+ */
+export const PLAY_FREE_MIN_RATIO = 1;
+
+/** Free's fitted size on the Play page: null (fill the area) unless the area is narrower than `minRatio`. */
+export function playFreeFit(outerW: number, outerH: number, minRatio = PLAY_FREE_MIN_RATIO): { width: number; height: number } | null {
+  if (outerW <= 0 || outerH <= 0 || outerW / outerH >= minRatio) return null;
+  return fitAspect(outerW, outerH, minRatio);
+}
+
 export type PreviewAspect = 'free' | '1:1' | '16:9' | '9:16' | '4:3' | '3:4' | '4:5' | '21:9';
 export const PREVIEW_ASPECTS: ReadonlyArray<{ id: PreviewAspect; label: string; ratio: number | null; hint: string }> = [
   { id: 'free',  label: 'Free',  ratio: null,   hint: 'Fill the preview panel' },

@@ -14,8 +14,13 @@
  * only). The rail keeps its own page and divider position, so leaving it
  * puts the sidebar and the panel back exactly as they were.
  *
- * On, side, ratio, tab, the sidebar state and the rail's page are remembered
- * on this device. Phones keep their own picture-over-panel split
+ * The picture is always on the right and the panel (with the rail) on its
+ * left, on desktop and tablet alike: there's no setting to swap them (the
+ * Play audit's user decision, 2026-10-18). The panel takes about a third of
+ * the width by default (DEFAULT_SPLIT.ratio) and the divider still resizes it.
+ *
+ * On, ratio, tab, the sidebar state and the rail's page are remembered on
+ * this device. Phones keep their own picture-over-panel split
  * (shell/PhoneSplit.tsx).
  */
 import { create } from 'zustand';
@@ -23,14 +28,11 @@ import { tabForPage, usePlayUi, type PlayTab } from './playUi';
 import { categoryOf, currentRailPage, firstPageOf, isRailPage, pageForTab, type RailCategory, type RailPage } from './railPages';
 import type { TriggerSpec } from '../../types/play';
 
-export type SplitSide = 'left' | 'right' | 'top' | 'bottom';
 /** The sidebar beside the big panel: all of it, a rail of icons, or nothing. */
 export type SidebarMode = 'full' | 'rail' | 'hidden';
 
 export interface SplitPrefs {
   on: boolean;
-  /** Where the panel sits, next to the picture. */
-  side: SplitSide;
   /** The panel's share of the preview area, 0..1. */
   ratio: number;
   tab: PlayTab;
@@ -47,22 +49,29 @@ export interface SplitPrefs {
 }
 
 export const SPLIT_KEY = 'shader-studio:play:split';
+/** The panel's share by default: about a third, so the picture gets most of the width. */
+export const DEFAULT_RATIO = 0.35;
 /** The Play page opens split, with the sidebar folded into the icon rail (the owner's preferred view). */
-export const DEFAULT_SPLIT: SplitPrefs = { on: true, side: 'right', ratio: 0.5, tab: 'controls', sidebar: 'rail', sidebarBefore: 'full', railPage: 'controls', railRatio: null, railPageMemory: {} };
-/** Bumped when the default view changes; older saves take the new default for `on` and `sidebar` once. */
-export const SPLIT_PREFS_VERSION = 2;
+export const DEFAULT_SPLIT: SplitPrefs = { on: true, ratio: DEFAULT_RATIO, tab: 'controls', sidebar: 'rail', sidebarBefore: 'full', railPage: 'controls', railRatio: null, railPageMemory: {} };
+/**
+ * Bumped when the default view changes. Saves from before 2 take the new
+ * default for `on` and `sidebar` once (the rail became the default); saves
+ * from before 3 also take the new ratios once, since they were measured with
+ * the panel to the right of the picture at half and half (and may have put it
+ * above, below or right of it: `side`, now gone, is ignored).
+ */
+export const SPLIT_PREFS_VERSION = 3;
 /** The rail's width, in px. */
 export const RAIL_PX = 60;
 /** The ratio is kept within these, whatever the pixels say. */
 export const RATIO_MIN = 0.2;
-export const RATIO_MAX = 0.8;
+export const RATIO_MAX = 0.7;
 /** The smallest the picture and the panel get, in px (as long as the area has room for both). */
-export const MIN_CANVAS_PX = 220;
+export const MIN_CANVAS_PX = 320;
 export const MIN_PANEL_PX = 300;
 /** From this width the panel lays its section out wide: a grid of cards, the layer list beside its editor. */
 export const WIDE_PANEL_PX = 640;
 
-const SIDES: readonly SplitSide[] = ['left', 'right', 'top', 'bottom'];
 const SIDEBARS: readonly SidebarMode[] = ['full', 'rail', 'hidden'];
 const TABS: readonly PlayTab[] = ['controls', 'layers', 'finish', 'engine', 'mappings'];
 
@@ -73,18 +82,20 @@ export function parseSplitPrefs(raw: string | null): SplitPrefs {
   try { v = JSON.parse(raw); } catch { return { ...DEFAULT_SPLIT }; }
   if (!v || typeof v !== 'object') return { ...DEFAULT_SPLIT };
   const o = v as Record<string, unknown>;
-  // A save from before the rail became the default keeps its side, ratio and page but opens the new way.
-  const current = o.v === SPLIT_PREFS_VERSION;
+  // A save from before the rail became the default keeps its page but opens the new way;
+  // one from before the picture moved right takes the new ratios (see SPLIT_PREFS_VERSION).
+  const ver = typeof o.v === 'number' ? o.v : 1;
+  const current = ver >= 2;
+  const ratiosKept = ver >= 3;
   return {
     on: current && typeof o.on === 'boolean' ? o.on : DEFAULT_SPLIT.on,
-    side: SIDES.includes(o.side as SplitSide) ? o.side as SplitSide : DEFAULT_SPLIT.side,
-    ratio: typeof o.ratio === 'number' && Number.isFinite(o.ratio) ? clampRatio(o.ratio) : DEFAULT_SPLIT.ratio,
+    ratio: ratiosKept && typeof o.ratio === 'number' && Number.isFinite(o.ratio) ? clampRatio(o.ratio) : DEFAULT_SPLIT.ratio,
     tab: TABS.includes(o.tab as PlayTab) ? o.tab as PlayTab : DEFAULT_SPLIT.tab,
     // `sidebarHidden` is how the hidden sidebar was saved before the rail.
     sidebar: !current ? DEFAULT_SPLIT.sidebar : SIDEBARS.includes(o.sidebar as SidebarMode) ? o.sidebar as SidebarMode : o.sidebarHidden === true ? 'hidden' : DEFAULT_SPLIT.sidebar,
     sidebarBefore: o.sidebarBefore === 'hidden' ? 'hidden' : 'full',
     railPage: (() => { const pg = currentRailPage(o.railPage); return isRailPage(pg) ? pg : DEFAULT_SPLIT.railPage; })(),
-    railRatio: typeof o.railRatio === 'number' && Number.isFinite(o.railRatio) ? clampRatio(o.railRatio) : null,
+    railRatio: ratiosKept && typeof o.railRatio === 'number' && Number.isFinite(o.railRatio) ? clampRatio(o.railRatio) : null,
     railPageMemory: parseRailPageMemory(o.railPageMemory),
   };
 }
@@ -113,12 +124,10 @@ function parseRailPageMemory(v: unknown): Partial<Record<RailCategory, RailPage>
 /**
  * The panel's share once the sidebar folds into the rail, so the picture keeps
  * its size and the panel takes the sidebar's width: `ratio` of an area
- * `total` px across, beside a sidebar `sidebarPx` wide. Above or below the
- * picture the area only gets wider, so the share stays.
+ * `total` px across, beside a sidebar `sidebarPx` wide.
  */
-export function railRatioFor(side: SplitSide, ratio: number, total: number, sidebarPx: number): number {
-  const horizontal = side === 'left' || side === 'right';
-  if (!horizontal || total <= 0 || sidebarPx <= 0) return clampRatio(ratio);
+export function railRatioFor(ratio: number, total: number, sidebarPx: number): number {
+  if (total <= 0 || sidebarPx <= 0) return clampRatio(ratio);
   const panel = ratio * total;
   return clampRatio((panel + sidebarPx) / (total + sidebarPx), total + sidebarPx);
 }
@@ -140,14 +149,11 @@ export function clampRatio(ratio: number, total?: number, minCanvas = MIN_CANVAS
   return Math.max(lo, Math.min(hi, r));
 }
 
-/** The panel's share for a pointer at (x, y) over an area `rect`, with the panel on `side`. */
-export function ratioAt(side: SplitSide, rect: { left: number; top: number; width: number; height: number }, x: number, y: number): number {
-  const horizontal = side === 'left' || side === 'right';
-  const total = horizontal ? rect.width : rect.height;
-  if (total <= 0) return 0.5;
-  const along = horizontal ? x - rect.left : y - rect.top;
-  const r = side === 'left' || side === 'top' ? along / total : 1 - along / total;
-  return clampRatio(r, total);
+/** The panel's share for a pointer at `x` over an area `rect` (the panel on the left, the picture on the right). */
+export function ratioAt(rect: { left: number; width: number }, x: number): number {
+  const total = rect.width;
+  if (total <= 0) return DEFAULT_RATIO;
+  return clampRatio((x - rect.left) / total, total);
 }
 
 /** The sections the sidebar can show (Mappings is its drawer on desktop). */
@@ -176,7 +182,7 @@ const round3 = (n: number) => Math.round(n * 1000) / 1000;
 function savePrefs(p: SplitPrefs): void {
   try {
     localStorage.setItem(SPLIT_KEY, JSON.stringify({
-      v: SPLIT_PREFS_VERSION, on: p.on, side: p.side, ratio: round3(p.ratio), tab: p.tab,
+      v: SPLIT_PREFS_VERSION, on: p.on, ratio: round3(p.ratio), tab: p.tab,
       sidebar: p.sidebar, sidebarBefore: p.sidebarBefore, railPage: p.railPage, railRatio: p.railRatio === null ? null : round3(p.railRatio),
       railPageMemory: p.railPageMemory,
     }));
@@ -200,7 +206,6 @@ interface PlaySplit extends SplitPrefs {
   setWide: (wide: boolean) => void;
   toggle: () => void;
   setOn: (on: boolean) => void;
-  setSide: (side: SplitSide) => void;
   setRatio: (ratio: number) => void;
   setTab: (tab: PlayTab) => void;
   /** Full sidebar, rail or hidden. Opening the rail starts it on the panel's page and keeps the picture's size. */
@@ -226,7 +231,6 @@ export const usePlaySplit = create<PlaySplit>((set, get) => {
     setWide: wide => { if (get().wide !== wide) set({ wide }); },
     toggle: () => save({ on: !get().on }),
     setOn: on => save({ on }),
-    setSide: side => save({ side }),
     setRatio: ratio => save({ ratio: clampRatio(ratio) }),
     setTab: tab => save({ tab }),
     setSidebar: mode => {
@@ -239,7 +243,7 @@ export const usePlaySplit = create<PlaySplit>((set, get) => {
         sidebar: 'rail',
         sidebarBefore: s.sidebar === 'hidden' ? 'hidden' : 'full',
         railPage: pageForTab(s.tab, usePlayUi.getState().finishView),
-        railRatio: m ? railRatioFor(s.side, clampRatio(s.ratio, m.total), m.total, m.sidebarPx) : s.ratio,
+        railRatio: m ? railRatioFor(clampRatio(s.ratio, m.total), m.total, m.sidebarPx) : s.ratio,
       });
     },
     toggleRail: () => {

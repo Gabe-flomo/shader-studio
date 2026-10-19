@@ -68,7 +68,7 @@ describe('Maximize graph: the picture behind the graph', () => {
     const r169 = PREVIEW_ASPECTS.find(a => a.id === '16:9')!.ratio!;
     expect(fitAspect(1180, 820, r169)).toEqual({ width: 1180, height: 663 });
     expect(fitAspect(800, 820, PREVIEW_ASPECTS.find(a => a.id === '9:16')!.ratio!)).toEqual({ width: 461, height: 820 });
-    expect(src('../../ShaderCanvas.tsx')).toContain('setFit(fitAspect(r.width, r.height, ratio))');
+    expect(src('../../ShaderCanvas.tsx')).toContain('setFit(ratio ? fitAspect(r.width, r.height, ratio) : playFreeFit(r.width, r.height))');
   });
 
   it('over the picture the graph has no background and no dot grid (the picture shows as it is); normally it is solid with dots', () => {

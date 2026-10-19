@@ -24,7 +24,8 @@ export function PreviewHeader({ children }: { children?: ReactNode }) {
   const tk = useTokens();
   return (
     <div style={{ height: 44, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 2, padding: '0 8px 0 18px', background: tk.bg.panel, borderBottom: `1px solid ${tk.border.default}` }}>
-      <span style={{ flex: 1, fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: tk.text.faint }}>PREVIEW</span>
+      {/* The label gives way first when the picture's column is narrow (Play, beside the panel). */}
+      <span style={{ flex: '1 1 0', minWidth: 0, overflow: 'hidden', whiteSpace: 'nowrap', fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: tk.text.faint }}>PREVIEW</span>
       {children}
     </div>
   );
