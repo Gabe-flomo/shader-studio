@@ -38,6 +38,11 @@ export interface ParamDef {
   /** Shown in degrees, stored on the node in radians. */
   deg?: boolean;
   hint?: string;
+  /**
+   * An extra that changes nothing at its default (a displace's Phase and Speed): left off the node, its note and the
+   * recipe while at it, and never drawn by Surprise, so scenes made before it build and read exactly as they did.
+   */
+  quiet?: boolean;
 }
 
 export interface ShapeDef {
@@ -217,6 +222,11 @@ export interface WarpDef {
 }
 
 const exact = () => 1;
+/** Phase and Speed of a patterned warp (nodes' phaseParamDefs): where the pattern is and how fast it moves on its own. */
+const PHASE_PARAMS = (what: string): ParamDef[] => [
+  P('phase', 'Phase', 'phase', 0, -6.2832, 6.2832, 0.01, { quiet: true, hint: `Slides the ${what} along (6.28 is one whole wave).` }),
+  P('speed', 'Speed', 'phaseSpeed', 0, -5, 5, 0.01, { quiet: true, hint: `How much Phase advances each second: the ${what} keep moving on their own. 0 holds them still.` }),
+];
 const stretch = (amount: number) => Math.max(0.3, Math.min(1, Math.round(20 / (1 + amount)) / 20));
 
 export const WARPS: WarpDef[] = [
@@ -254,12 +264,12 @@ export const WARPS: WarpDef[] = [
   { kind: 'sine', label: 'Sine warp', aliases: ['wave', 'sin', 'sine-warp'], type: 'sinWarp3D', posIn: 'p', posOut: 'p', stepHint: w => stretch(num(w.values.amp, 0.1) * num(w.values.freq, 2) * 1.5),
     blurb: 'Shifts one axis by a sine of another.', axes: { key: 'axis', label: 'Shifts', kind: 'one', param: 'distort_axis', def: 'y', options: ['x', 'y', 'z'] },
     select: { key: 'from', label: 'Along', param: 'source_axis', def: 'x', options: ['x', 'y', 'z'] },
-    params: [P('amp', 'Amplitude', 'amplitude', 0.1, 0, 2), P('freq', 'Frequency', 'frequency', 2, 0.01, 20)] },
+    params: [P('amp', 'Amplitude', 'amplitude', 0.1, 0, 2), P('freq', 'Frequency', 'frequency', 2, 0.01, 20), ...PHASE_PARAMS('waves')] },
   { kind: 'noise', label: 'Noise warp', aliases: ['domain-warp', 'warp'], type: 'domainWarp3D', posIn: 'pos', posOut: 'pos', stepHint: w => stretch(num(w.values.amt, 0.3) * num(w.values.scale, 1) * 3),
-    blurb: 'Pushes space about with smooth noise: lumpy, organic shapes.', params: [P('amt', 'Strength', 'strength', 0.3, 0, 2), P('scale', 'Scale', 'scale', 1, 0.1, 5), P('octaves', 'Octaves', 'octaves', 3, 1, 6, 1)] },
+    blurb: 'Pushes space about with smooth noise: lumpy, organic shapes.', params: [P('amt', 'Strength', 'strength', 0.3, 0, 2), P('scale', 'Scale', 'scale', 1, 0.1, 5), P('octaves', 'Octaves', 'octaves', 3, 1, 6, 1), ...PHASE_PARAMS('lumps')] },
   { kind: 'displace', label: 'Displace', aliases: ['bumps', 'ripple'], type: 'displace3D', posIn: 'pos', posOut: 'pos', modifier: true,
     distStep: { type: 'displace3D', distIn: 'dist', distOut: 'dist', posIn: 'pos' }, stepHint: w => stretch(num(w.values.amp, 0.05) * num(w.values.freq, 8) * 1.7),
-    blurb: 'Bumps on the surface: adds a 3D sine pattern to the distance.', params: [P('amp', 'Amplitude', 'amp', 0.05, 0, 0.5, 0.005), P('freq', 'Frequency', 'freq', 8, 0.1, 40, 0.1)] },
+    blurb: 'Bumps on the surface: adds a 3D sine pattern to the distance.', params: [P('amp', 'Amplitude', 'amp', 0.05, 0, 0.5, 0.005), P('freq', 'Frequency', 'freq', 8, 0.1, 40, 0.1), ...PHASE_PARAMS('bumps')] },
   { kind: 'round', label: 'Round', aliases: ['inflate', 'soften'], type: 'sdfOffset', posIn: 'pos', posOut: 'pos', modifier: true, stepHint: exact,
     distStep: { type: 'sdfOffset', distIn: 'sdf', distOut: 'result' },
     blurb: 'Rounds every edge and corner by growing the surface outward this much.', params: [P('r', 'Radius', '', 0.05, 0, 0.5, 0.005)] },

@@ -12,7 +12,7 @@
  * Transform nodes transform an incoming vec3 point and output the new vec3.
  */
 import type { NodeDefinition, GraphNode, ParamDef } from '../../types/nodeGraph';
-import { p, withParamSockets } from './helpers';
+import { p, withParamSockets, phaseParamDefs, phaseOf, plusPhase, PHASE_KEYS } from './helpers';
 
 // ─── Shared GLSL helpers ───────────────────────────────────────────────────────
 
@@ -616,7 +616,7 @@ export const RotateAxis3DNode: NodeDefinition = {
   },
 };
 
-export const SinWarp3DNode: NodeDefinition = {
+export const SinWarp3DNode: NodeDefinition = withParamSockets({
   type: 'sinWarp3D',
   label: 'Sin Warp 3D',
   category: '3D Transforms',
@@ -633,6 +633,8 @@ export const SinWarp3DNode: NodeDefinition = {
     source_axis:  'x',
     frequency: 2.0,
     amplitude: 0.1,
+    phase: 0,
+    phaseSpeed: 0,
   },
   paramDefs: {
     distort_axis: { label: 'Distort Axis', type: 'select', options: [
@@ -643,10 +645,11 @@ export const SinWarp3DNode: NodeDefinition = {
     ]},
     frequency: { label: 'Frequency', type: 'float', min: 0.01, max: 20.0, step: 0.1 },
     amplitude: { label: 'Amplitude', type: 'float', min: 0.0,  max: 2.0,  step: 0.01 },
+    ...phaseParamDefs(),
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const pVar = inputVars.p         ?? 'vec3(0.0)';
-    const t    = inputVars.time      ?? 'u_time';
+    const t    = plusPhase(inputVars.time ?? 'u_time', phaseOf(node));
     const freq = inputVars.frequency ?? p(node.params.frequency, 2.0);
     const amp  = inputVars.amplitude ?? p(node.params.amplitude, 0.1);
     const da   = (node.params.distort_axis as string) ?? 'y';
@@ -660,7 +663,7 @@ export const SinWarp3DNode: NodeDefinition = {
       outputVars: { p: `${id}_p` },
     };
   },
-};
+}, PHASE_KEYS);
 
 // ─── New 3D SDF Primitive Nodes ───────────────────────────────────────────────
 
@@ -1075,9 +1078,9 @@ export const PolarRepeat3DNode: NodeDefinition = {
   },
 };
 
-export const Displace3DNode: NodeDefinition = {
+export const Displace3DNode: NodeDefinition = withParamSockets({
   type: 'displace3D', label: 'Displace 3D', category: '3D Transforms',
-  description: 'Sine-based surface displacement added to an SDF. Creates bumpy/organic texture.',
+  description: 'Sine-based surface displacement added to an SDF. Creates bumpy/organic texture. Phase slides the bumps through the surface; Speed keeps them moving on their own.',
   inputs: {
     pos:  { type: 'vec3',  label: 'Position' },
     dist: { type: 'float', label: 'Distance' },
@@ -1085,10 +1088,11 @@ export const Displace3DNode: NodeDefinition = {
     amp:  { type: 'float', label: 'Amplitude' },
   },
   outputs: { dist: { type: 'float', label: 'Displaced Dist' } },
-  defaultParams: { freq: 8.0, amp: 0.05 },
+  defaultParams: { freq: 8.0, amp: 0.05, phase: 0, phaseSpeed: 0 },
   paramDefs: {
     freq: { label: 'Frequency', type: 'float', min: 0.1,  max: 40.0, step: 0.1 },
     amp:  { label: 'Amplitude', type: 'float', min: 0.0,  max: 0.5,  step: 0.005 },
+    ...phaseParamDefs({ phaseHint: 'Slides the bumps through the surface (6.28 is one whole bump). Wire it, or drive it from Play, to move them.' }),
   },
   generateGLSL: (node, inputVars) => {
     const id   = node.id;
@@ -1096,12 +1100,14 @@ export const Displace3DNode: NodeDefinition = {
     const d    = inputVars.dist || '0.0';
     const freq = inputVars.freq || p(node.params.freq, 8.0);
     const amp  = inputVars.amp  || p(node.params.amp,  0.05);
+    const ph   = phaseOf(node);
+    const wave = (ax: string) => `sin(${plusPhase(`${freq}*(${pv}).${ax}`, ph)})`;
     return {
-      code: `    float ${id}_disp = sin(${freq}*(${pv}).x)*sin(${freq}*(${pv}).y)*sin(${freq}*(${pv}).z);\n    float ${id}_dist = ${d} + ${amp}*${id}_disp;\n`,
+      code: `    float ${id}_disp = ${wave('x')}*${wave('y')}*${wave('z')};\n    float ${id}_dist = ${d} + ${amp}*${id}_disp;\n`,
       outputVars: { dist: `${id}_dist` },
     };
   },
-};
+}, PHASE_KEYS);
 
 export const SpiralWarp3DNode: NodeDefinition = {
   type: 'spiralWarp3D',
@@ -1660,7 +1666,7 @@ export const Turbulence3DNode: NodeDefinition = withParamSockets({
   outputs: {
     pos: { type: 'vec3', label: 'Warped Position' },
   },
-  defaultParams: { octaves: 8, strength: 0.3, frequency: 1.0, decay: 0.7, ax: 1.0, ay: 0.6, az: 0.6 },
+  defaultParams: { octaves: 8, strength: 0.3, frequency: 1.0, decay: 0.7, ax: 1.0, ay: 0.6, az: 0.6, phase: 0, phaseSpeed: 0 },
   paramDefs: {
     octaves:   { label: 'Octaves',   type: 'float', min: 1,   max: 12,   step: 1, compileTime: true,    hint: 'Sine layers per sample. 8–10 for water; every octave runs on every march step. Recompiles when changed.' },
     strength:  { label: 'Strength',  type: 'float', min: 0.0, max: 1.0,  step: 0.01, hint: 'Displacement per octave (divided by d).' },
@@ -1669,12 +1675,14 @@ export const Turbulence3DNode: NodeDefinition = withParamSockets({
     ax:        { label: 'Axis X',    type: 'float', min: -1.0, max: 1.0, step: 0.01, hint: 'Rotation axis each octave spins around (normalised for you).' },
     ay:        { label: 'Axis Y',    type: 'float', min: -1.0, max: 1.0, step: 0.01, hint: 'Rotation axis Y.' },
     az:        { label: 'Axis Z',    type: 'float', min: -1.0, max: 1.0, step: 0.01, hint: 'Rotation axis Z.' },
+    ...phaseParamDefs(),
   },
   glslFunction: ROTATE_AXIS_3D_GLSL,
   generateGLSL: (node: GraphNode, inputVars) => {
     const id    = node.id;
     const pos   = inputVars.pos      ?? 'vec3(0.0)';
-    const t     = inputVars.time     ?? '0.0';
+    const ph    = phaseOf(node);
+    const t     = inputVars.time ? plusPhase(inputVars.time, ph) : ph ?? '0.0';
     const str   = inputVars.strength ?? p(node.params.strength, 0.3);
     const freq  = p(node.params.frequency, 1.0);
     const decay = p(node.params.decay, 0.7);
@@ -1693,7 +1701,7 @@ export const Turbulence3DNode: NodeDefinition = withParamSockets({
       outputVars: { pos: `${id}_pos` },
     };
   },
-}, ['frequency', 'decay', 'ax', 'ay', 'az']);
+}, ['frequency', 'decay', 'ax', 'ay', 'az', ...PHASE_KEYS]);
 
 export const DomainWarp3DNode: NodeDefinition = withParamSockets({
   type: 'domainWarp3D',
@@ -1711,13 +1719,14 @@ export const DomainWarp3DNode: NodeDefinition = withParamSockets({
   outputs: {
     pos: { type: 'vec3', label: 'Warped Position' },
   },
-  defaultParams: { strength: 0.3, scale: 1.0, octaves: 3, gain: 0.5, lacunarity: 2.0 },
+  defaultParams: { strength: 0.3, scale: 1.0, octaves: 3, gain: 0.5, lacunarity: 2.0, phase: 0, phaseSpeed: 0 },
   paramDefs: {
     strength:   { label: 'Strength',   type: 'float', min: 0.0, max: 2.0, step: 0.01 },
     scale:      { label: 'Scale',      type: 'float', min: 0.1, max: 5.0, step: 0.1  },
     octaves:    { label: 'Octaves',    type: 'float', min: 1,   max: 6,   step: 1, compileTime: true, hint: 'Recompiles when changed.' },
     gain:       { label: 'Gain',       type: 'float', min: 0.0, max: 1.0, step: 0.01 },
     lacunarity: { label: 'Lacunarity', type: 'float', min: 1.0, max: 4.0, step: 0.01 },
+    ...phaseParamDefs({ phaseHint: 'Slides the point through the noise, so the lumps drift and change. Wire it, or drive it from Play, to move them.' }),
   },
   glslFunction: NOISE3D_GLSL_SDF3D,
   generateGLSL: (node: GraphNode, inputVars) => {
@@ -1731,7 +1740,7 @@ export const DomainWarp3DNode: NodeDefinition = withParamSockets({
     const lac = p(node.params.lacunarity, 2.0);
     return {
       code: [
-        `    vec3 ${id}_wpos = ${pos} * ${sc} + ${t} * 0.1;\n`,
+        `    vec3 ${id}_wpos = ${plusPhase(`${pos} * ${sc} + ${t} * 0.1`, phaseOf(node))};\n`,
         `    vec3 ${id}_off  = vec3(\n`,
         `        fbm3(${id}_wpos,                       ${oct}, ${lac}, ${gn}),\n`,
         `        fbm3(${id}_wpos + vec3(5.2, 1.3, 2.8), ${oct}, ${lac}, ${gn}),\n`,
@@ -1742,4 +1751,4 @@ export const DomainWarp3DNode: NodeDefinition = withParamSockets({
       outputVars: { pos: `${id}_pos` },
     };
   },
-}, ['gain', 'lacunarity']);
+}, ['gain', 'lacunarity', ...PHASE_KEYS]);

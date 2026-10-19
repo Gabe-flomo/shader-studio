@@ -3612,7 +3612,7 @@ Examples:
 Words: `sine`, `wave`, `sin`, `sine-warp`
 
 ```
-sine axis= [amp] freq= from=
+sine axis= [amp] freq= phase= speed= from=
 ```
 
 | Slot | What |
@@ -3620,6 +3620,8 @@ sine axis= [amp] freq= from=
 | axis | x, y, z |
 | amp (bare) | Amplitude · default 0.1 · random: 0.05–0.16000000000000003 |
 | freq | Frequency · default 2 · random: 1–3.2 |
+| phase | Phase · Slides the waves along (6.28 is one whole wave). · default 0 · random: -2.0944–2.0944 |
+| speed | Speed · How much Phase advances each second: the waves keep moving on their own. 0 holds them still. · default 0 · random: -1.6666666666666667–1.6666666666666667 |
 | from | x, y, z |
 
 Examples:
@@ -3633,7 +3635,7 @@ Examples:
 Words: `warp`, `domain-warp`
 
 ```
-warp [amt] scale= octaves=
+warp [amt] scale= octaves= phase= speed=
 ```
 
 | Slot | What |
@@ -3641,6 +3643,8 @@ warp [amt] scale= octaves=
 | amt (bare) | Strength · default 0.3 · random: 0.15–0.48 |
 | scale | Scale · default 1 · random: 0.5–1.6 |
 | octaves | Octaves · default 3 · random: 1.5–4.800000000000001 |
+| phase | Phase · Slides the lumps along (6.28 is one whole wave). · default 0 · random: -2.0944–2.0944 |
+| speed | Speed · How much Phase advances each second: the lumps keep moving on their own. 0 holds them still. · default 0 · random: -1.6666666666666667–1.6666666666666667 |
 
 Examples:
 
@@ -3653,13 +3657,15 @@ Examples:
 Words: `displace`, `bumps`, `ripple`
 
 ```
-displace [amp] freq=
+displace [amp] freq= phase= speed=
 ```
 
 | Slot | What |
 |---|---|
 | amp (bare) | Amplitude · default 0.05 · random: 0.025–0.08000000000000002 |
 | freq | Frequency · default 8 · random: 4–12.8 |
+| phase | Phase · Slides the bumps along (6.28 is one whole wave). · default 0 · random: -2.0944–2.0944 |
+| speed | Speed · How much Phase advances each second: the bumps keep moving on their own. 0 holds them still. · default 0 · random: -1.6666666666666667–1.6666666666666667 |
 
 Examples:
 

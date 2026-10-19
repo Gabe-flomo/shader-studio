@@ -1,4 +1,4 @@
-import type { GraphNode, NodeDefinition } from '../../types/nodeGraph';
+import type { GraphNode, NodeDefinition, ParamDef } from '../../types/nodeGraph';
 
 // Helper: emit a number or uniform-name string as a GLSL float literal.
 // Accepts a string so that p() results (uniform names) pass through unchanged.
@@ -139,3 +139,44 @@ export function withParamSockets(def: NodeDefinition, keys: readonly string[], s
   PARAM_SOCKETS.set(def.type, [...keys]);
   return { ...def, inputs, ...(Object.keys(onDemand).length ? { socketsOnDemand: onDemand } : {}), generateGLSL };
 }
+
+// ── Phase and Speed on the displace nodes ────────────────────────────────────
+//
+// Every displacement with a pattern (a sine, a ripple, noise) has a Phase (where the pattern is) and a Speed (how
+// much Phase advances each second, on the shader clock), so the pattern moves by itself without a Time wire. Both
+// stay literals at 0 (`literalAt`), and at 0 the node writes exactly the code it wrote before they existed, so old
+// graphs compile to the same GLSL. Off 0 each is a live uniform, a Play target and (withParamSockets) a socket.
+
+/** The Phase / Speed param keys (`phaseSpeed`, not `speed`: UV Warp and Domain Warp already have a Speed for their Time wire). */
+export const PHASE_KEYS = ['phase', 'phaseSpeed'] as const;
+
+/** Phase and Speed sliders. `speedLabel` when the node already has a slider called Speed. */
+export function phaseParamDefs(opts: { speedLabel?: string; phaseHint?: string } = {}): Record<string, ParamDef> {
+  return {
+    phase: {
+      label: 'Phase', type: 'float', min: -6.2832, max: 6.2832, step: 0.01, literalAt: 0,
+      hint: opts.phaseHint ?? 'Shifts the pattern along (6.28 is one whole wave). Wire it, or drive it from Play, to move the pattern.',
+    },
+    phaseSpeed: {
+      label: opts.speedLabel ?? 'Speed', type: 'float', min: -5, max: 5, step: 0.01, literalAt: 0,
+      hint: 'How much Phase advances each second, so the pattern keeps moving on its own (no Time wire needed). 0 holds it still; negative runs it backwards.',
+    },
+  };
+}
+
+/**
+ * The pattern's phase as a GLSL expression, `(phase + u_time * speed)`, or null when both are a plain 0 (or absent:
+ * graphs saved before Phase existed), so the node leaves it out and writes the code it always did.
+ */
+export function phaseOf(node: GraphNode): string | null {
+  const on = (v: unknown) => v !== undefined && v !== null && v !== 0;
+  const ph = node.params.phase;
+  const sp = node.params.phaseSpeed;
+  const parts: string[] = [];
+  if (on(ph)) parts.push(p(ph, 0));
+  if (on(sp)) parts.push(`u_time * ${p(sp, 0)}`);
+  return parts.length ? `(${parts.join(' + ')})` : null;
+}
+
+/** `expr + phase` when the node has a phase, else `expr` unchanged. */
+export const plusPhase = (expr: string, ph: string | null) => (ph ? `${expr} + ${ph}` : expr);

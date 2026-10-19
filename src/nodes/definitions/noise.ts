@@ -1,5 +1,5 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { f, p, pv3, withParamSockets } from './helpers';
+import { f, p, pv3, withParamSockets, phaseParamDefs, phaseOf, PHASE_KEYS } from './helpers';
 
 // ─── FBM — Fractal Brownian Motion ───────────────────────────────────────────
 
@@ -172,7 +172,7 @@ export const DomainWarpNode: NodeDefinition = withParamSockets({
     offset: { type: 'vec2', label: 'Warp Offset' },
   },
   glslFunction: DOMAIN_WARP_FULL_GLSL,
-  defaultParams: { strength: 0.5, scale: 1.0, octaves: 3, lacunarity: 2.0, gain: 0.5, time_scale: 0.0 },
+  defaultParams: { strength: 0.5, scale: 1.0, octaves: 3, lacunarity: 2.0, gain: 0.5, time_scale: 0.0, phase: 0, phaseSpeed: 0 },
   paramDefs: {
     strength:   { label: 'Strength',   type: 'float', min: 0.0, max: 3.0, step: 0.01, hint: 'How far the noise pushes UV. 0.5 is marbled, 2+ is soup.' },
     scale:      { label: 'Scale',      type: 'float', min: 0.1, max: 5.0, step: 0.1, hint: 'Frequency of the warp noise. Higher = smaller swirls.' },
@@ -180,6 +180,7 @@ export const DomainWarpNode: NodeDefinition = withParamSockets({
     lacunarity: { label: 'Lacunarity', type: 'float', min: 1.0, max: 4.0, step: 0.01, hint: 'Frequency jump between layers. 2 is standard.' },
     gain:       { label: 'Gain',       type: 'float', min: 0.0, max: 1.0, step: 0.01, hint: 'Contribution of each finer layer. 0.5 is natural.' },
     time_scale: { label: 'Speed', type: 'float', min: 0.0, max: 2.0, step: 0.01, hint: 'How fast the warp drifts. Needs Time wired.' },
+    ...phaseParamDefs({ speedLabel: 'Phase speed', phaseHint: 'Slides the point through the noise, so the warp drifts and changes (in noise units). Wire it, or drive it from Play, to move it.' }),
   },
   generateGLSL: (node: GraphNode, inputVars) => {
     const id        = node.id;
@@ -196,8 +197,10 @@ export const DomainWarpNode: NodeDefinition = withParamSockets({
     const animUV = parseFloat(timeScale) === 0.0
       ? `${uvVar} * ${scale}`
       : `(${uvVar} + ${timeVar} * ${timeScale} * vec2(0.11, 0.23)) * ${scale}`;
+    // A Phase or Phase speed slides the point through the noise (after Scale, so 1 is one noise unit).
+    const ph = phaseOf(node);
     const code = [
-      `    vec2 ${id}_inp = ${animUV};\n`,
+      `    vec2 ${id}_inp = ${ph ? `${animUV} + ${ph} * vec2(0.6, 0.8)` : animUV};\n`,
       `    vec2 ${warpedVar} = domainWarp(${id}_inp, ${strength}, ${octaves}, ${lacunarity}, ${gain});\n`,
       `    vec2 ${offsetVar} = ${warpedVar} - ${id}_inp;\n`,
     ].join('');
@@ -206,7 +209,7 @@ export const DomainWarpNode: NodeDefinition = withParamSockets({
       outputVars: { uv: warpedVar, offset: offsetVar },
     };
   },
-}, ['lacunarity', 'gain']);
+}, ['lacunarity', 'gain', ...PHASE_KEYS]);
 
 // ─── Flow Field — fake GLSL particle system ───────────────────────────────────
 

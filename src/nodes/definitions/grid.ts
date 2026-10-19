@@ -1,5 +1,5 @@
 import type { NodeDefinition, GraphNode } from '../../types/nodeGraph';
-import { p, f, withParamSockets } from './helpers';
+import { p, f, withParamSockets, phaseParamDefs, phaseOf } from './helpers';
 import { columnsExpr, gridColumnsMigration } from './gridColumns';
 import { GRID_HASH_GLSL } from './gridHash';
 
@@ -259,11 +259,13 @@ export const GridDensityWarpNode: NodeDefinition = withParamSockets({
   outputs: {
     warpedUV: { type: 'vec2', label: 'Warped UV' },
   },
-  defaultParams: { amplitude: 0.06, frequency: 2.0, phase: 0.0, axis: '0.0', shape: '0.0' },
+  defaultParams: { amplitude: 0.06, frequency: 2.0, phase: 0.0, phaseSpeed: 0, axis: '0.0', shape: '0.0' },
   paramDefs: {
     amplitude: { label: 'Amplitude', type: 'float', min: 0.0,   max: 0.15,  step: 0.001, hint: 'How far the wave pushes cells. Keep below half a cell width to avoid folds.' },
     frequency: { label: 'Frequency', type: 'float', min: 0.5,   max: 12.0,  step: 0.1, hint: 'Number of waves across the space. Higher = more density bands.' },
     phase:     { label: 'Phase',     type: 'float', min: -3.14, max: 3.14,  step: 0.05, hint: 'Shifts the wave along, in radians.' },
+    // Phase was here first (a live uniform, always in the code); Speed advances the waves each second.
+    phaseSpeed: phaseParamDefs().phaseSpeed,
     axis: { label: 'Axis', type: 'select', hint: 'Which direction the cells bunch up in.', options: [
       { value: '0.0', label: 'X' },
       { value: '1.0', label: 'Y' },
@@ -296,7 +298,9 @@ export const GridDensityWarpNode: NodeDefinition = withParamSockets({
   generateGLSL: (node: GraphNode, inputVars) => {
     const id    = node.id;
     const uv    = inputVars.uv    ?? 'g_uv';
-    const t     = inputVars.time  ?? '0.0';
+    // Speed only (this node always passed its Phase as its own argument).
+    const sp    = phaseOf({ ...node, params: { phaseSpeed: node.params.phaseSpeed } });
+    const t     = sp ? (inputVars.time ? `${inputVars.time} + ${sp}` : sp) : inputVars.time ?? '0.0';
     const amp   = p(node.params.amplitude, 0.06);
     const freq  = p(node.params.frequency, 2.0);
     const phase = p(node.params.phase, 0.0);
@@ -307,7 +311,7 @@ export const GridDensityWarpNode: NodeDefinition = withParamSockets({
       outputVars: { warpedUV: `${id}_wuv` },
     };
   },
-}, ['amplitude', 'frequency', 'phase']);
+}, ['amplitude', 'frequency', 'phase', 'phaseSpeed']);
 
 // Neighbor Offset 2D — converts flat loop index to 2D (dx,dy) offset for neighborhood iteration.
 export const NeighborOffset2dNode: NodeDefinition = {

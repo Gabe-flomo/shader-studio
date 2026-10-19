@@ -662,11 +662,17 @@ one vector: `@move(1, 0.5, 0)` is `by=(1,0.5,0)`, and that is how it prints.
 | kaleido (kaleidoscope) | n 3 folds · sym=oct/tet/icos |
 | twist | k 2 |
 | bend (curve) | k 0.5 |
-| sine (wave, sin) | amp 0.1 · freq 2 · axis=y (shifted) · from=x |
-| warp (domain-warp; `noise` with a hint) | amt 0.3 · scale 1 · octaves 3 |
-| displace (bumps, ripple) | amp 0.05 · freq 8 |
+| sine (wave, sin) | amp 0.1 · freq 2 · phase 0 · speed 0 · axis=y (shifted) · from=x |
+| warp (domain-warp; `noise` with a hint) | amt 0.3 · scale 1 · octaves 3 · phase 0 · speed 0 |
+| displace (bumps, ripple) | amp 0.05 · freq 8 · phase 0 · speed 0 |
 | round (inflate, soften) | r 0.05 |
 | onion (shell, hollow) | t 0.03 (thickness) |
+
+**Phase and speed** (sine, warp, displace): `phase` slides the pattern along (6.28 is one whole
+wave), `speed` is how much the phase advances each second, so the bumps or waves keep moving on
+their own: `sphere @displace(0.08 freq=6 speed=0.5)`. At 0 they are left off the recipe, the node
+and its note, and the scene builds exactly as before; the Displace card shows them under
+Amplitude and Frequency. They are the nodes' Phase and Speed ([displace-phase.md](displace-phase.md)).
 
 Nesting has no limit, and printing, parsing, Build and Describe round-trip any
 depth: `subtract(intersect(smooth-union(sphere @move(0.3,0,0), box @rotate(30,0,45) @round(0.05)) k=0.2 @twist(1.5), cylinder @onion(0.04)) @mirror(xz), sphere r=0.3) @move(0,0.2,0)`

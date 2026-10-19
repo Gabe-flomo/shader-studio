@@ -436,7 +436,7 @@ export function WarpCard({ item, w, index, count }: { item: SceneItem; w: WarpSp
   return (
     <Card id={`warp:${w.id}`} title={`${index + 1}. ${def?.label ?? `custom(${w.label})`}`} defaultOpen
       mute={{ muted: !!w.muted, onToggle: () => edit(d => toggleWarpMute(d, item.id, w.id)), onSolo: () => edit(d => soloWarp(d, item.id, w.id)), what: def?.label ?? 'this warp' }}
-      summary={def ? def.params.map(p => `${p.key} ${Array.isArray(w.values[p.key]) ? vecText(w.values[p.key] as Vec3) : fmtN(Number(w.values[p.key]))}`).join(' · ') : ''}
+      summary={def ? def.params.filter(p => !(p.quiet && (w.values[p.key] ?? p.def) === p.def)).map(p => `${p.key} ${Array.isArray(w.values[p.key]) ? vecText(w.values[p.key] as Vec3) : fmtN(Number(w.values[p.key]))}`).join(' · ') : ''}
       actions={<>
         {hint < 1 && <span title={`It stretches space: the march wants Step Scale ${hint} or less (Quality).`} style={{ padding: '1px 7px', borderRadius: 6, background: tk.status.warning, color: '#1a1b23', font: `700 10.5px ${fontFamily.ui}`, marginRight: 4 }}>step {hint}</span>}
         <IconButton icon="chevU" size="sm" tooltip={false} label="Earlier" disabled={index === 0} onClick={() => edit(d => moveWarp(d, item.id, w.id, -1))} />

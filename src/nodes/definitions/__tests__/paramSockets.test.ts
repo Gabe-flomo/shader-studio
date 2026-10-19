@@ -64,7 +64,10 @@ function graphFor(type: string, key: string, wired: boolean): GraphNode[] {
   const def = NODE_REGISTRY[type];
   const isVec = def.inputs[key].type === 'vec3';
   const src = isVec ? n('colorPicker', 'src', 0, 0, { color: [0.3, 0.6, 0.9] }) : n('lfo', 'src', 0, 0, { amplitude: 0.37 });
-  const params = showing(def, key);
+  const params: Record<string, unknown> = showing(def, key);
+  // A slider that stays a literal at one value (literalAt: a displace's Phase and Speed at 0) is read off it.
+  const lit = def.paramDefs?.[key]?.literalAt;
+  if (lit !== undefined) params[key] = lit + 0.5;
   const extra = NEEDS[`${type}.${key}`] ?? {};
   const wire: Record<string, [string, string]> = { ...extra, ...(wired ? { [key]: ['src', isVec ? 'rgb' : 'value'] } : {}) };
   if (SPLAT_NODE_TYPES.has(type)) {

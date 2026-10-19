@@ -194,6 +194,7 @@ export function warpParams(w: WarpSpec): Record<string, unknown> {
   for (const p of def.params) {
     if (!p.param) continue;
     const v = w.values[p.key];
+    if (p.quiet && (v === undefined || v === p.def)) continue;
     if (Array.isArray(p.param)) {
       const arr = Array.isArray(v) ? v : [Number(v ?? 0), Number(v ?? 0), Number(v ?? 0)];
       p.param.forEach((k, i) => { out[k] = arr[i]; });
@@ -221,7 +222,7 @@ export const scaleParam = (w: WarpSpec) => Math.round(1e6 / Math.max(0.001, num(
 function warpNote(ctx: Ctx, w: WarpSpec, on: string): string {
   const def = WARP_BY_KIND[w.kind];
   const hint = def.stepHint(w);
-  const vals = def.params.map(p => {
+  const vals = def.params.filter(p => !(p.quiet && (w.values[p.key] ?? p.def) === p.def)).map(p => {
     const v = w.values[p.key];
     return `${p.label} ${Array.isArray(v) ? v3(v as Vec3) : fmt(Number(v))}${p.deg || w.kind === 'rotate' ? '°' : ''}`;
   });
