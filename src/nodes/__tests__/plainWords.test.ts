@@ -28,7 +28,7 @@ describe('plain words', () => {
   });
 
   it('the jargon is gone from the buttons and headings', () => {
-    expect(src('src/components/play/PlayPage.tsx')).not.toMatch(/Drive with a null/);
+    for (const f of ['PlayPage.tsx', 'pages/ControlCards.tsx', 'pages/SourcesColumn.tsx', 'pages/SourceFields.tsx']) expect(src(`src/components/play/${f}`)).not.toMatch(/Drive with a null/);
     expect(src('src/components/NodeGraph/NodeGraph.tsx')).not.toMatch(/Drive with a null/);
     expect(src('src/components/convert/ConvertPage.tsx')).not.toMatch(/>Materialize</);
     expect(src('src/components/convert/guided/GuidedConvert.tsx')).not.toMatch(/>Materialize</);
@@ -36,7 +36,7 @@ describe('plain words', () => {
   });
 
   it('the built-in signal rows wait for a signal', () => {
-    expect(src('src/components/play/PlayPage.tsx')).toMatch(/!!play\.signals\?\.length && <ProLock feature="play\.sources"[^\n]*<BuiltInSignalsSection/);
+    expect(src('src/components/play/pages/SourcesColumn.tsx')).toMatch(/!!play\.signals\?\.length && <ProLock feature="play\.sources"[^\n]*<BuiltInSignalsSection/);
   });
 
   it('the list, the search and the preview card read the plain blurb', () => {
