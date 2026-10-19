@@ -36,10 +36,37 @@ export const SPLAT_EXAMPLE_KEYS = Object.keys(SPLAT_EXAMPLE_INDEX);
 
 const note = (...lines: string[]) => ({ __comment: lines.join('\n') });
 
+/** Notes for the nodes copied from 3D: Shapes + Ground (which has none), by id, inside groups too. */
+const SHAPES_NOTES: Record<string, string> = {
+  hb_uv: 'UV: this pixel, centred. The March Camera turns it into a ray.',
+  hb_time: 'Time: turns the scan (through Time × 12 below).',
+  hb_scene: 'Scene Group: the ray-marched shapes the scan shares the picture with, as one distance.',
+  hb_sp: 'Scene Pos: the point the march is asking about.',
+  hb_trS: 'Transform (Place): moves the sphere half a unit to the left.',
+  hb_sph: 'Sphere 3D: radius 0.35, at the moved point.',
+  hb_trB: 'Transform (Place): moves the box half a unit to the right.',
+  hb_box: 'Box 3D: a 0.6 cube (half-sizes 0.3), at the moved point.',
+  hb_gnd: 'Plane 3D: the ground, half a unit down.',
+  hb_sm1: 'Smooth Union (k 0.2): the sphere and the box melt together where they are close.',
+  hb_mn2: 'Min: the shapes and the ground together (the nearer surface wins), with a hard join where they meet.',
+  cam_hb_ray: 'March Camera: a ray for every pixel from 3.5 away, a little above. The Splat Scene uses the same rays, so the scan and the shapes line up.',
+  mlg_hb_ray: 'March Loop Group: marches each ray up to 80 steps into the scene and lights what it hits. Its colour, distance and hit go to the Splat Scene, which keeps whichever is nearer at each pixel.',
+  mli: 'March Loop inputs: the ray\'s current point and step, handed to the scene each step.',
+  mlo: 'March Loop output: what the loop keeps from each step (here only the position).',
+};
+function annotate(nodes: GraphNode[], notes: Record<string, string>): void {
+  for (const x of nodes) {
+    if (typeof x.params.__comment !== 'string' && notes[x.id]) x.params = { ...x.params, __comment: notes[x.id] };
+    const sg = x.params.subgraph as { nodes?: GraphNode[] } | undefined;
+    if (sg?.nodes) annotate(sg.nodes, notes);
+  }
+}
+
 export function buildSplatExamples(all: Record<string, ExampleGraph>): Record<string, ExampleGraph> {
   const src = all.shapesAndGround3D;
   if (!src?.nodes) return {};
   const nodes = JSON.parse(JSON.stringify(src.nodes)) as GraphNode[];
+  annotate(nodes, SHAPES_NOTES);
   const out = nodes.find(x => x.type === 'output');
   const loop = nodes.find(x => x.type === 'marchLoopGroup');
   const cam = nodes.find(x => x.type === 'marchCamera');
