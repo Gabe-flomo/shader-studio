@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.309',
+    date: '2026-10-19',
+    title: "Live tracks",
+    highlights: [
+      { area: 'Studio', text: "Pro, Mac desktop: put the Playfield Send plug-in on any Live track and pick it on the Audio Source's Live tab or in Play's readers." },
+    ],
+  },
+  {
     id: '2026.10.308',
     date: '2026-10-19',
     title: "Moving gradients",
