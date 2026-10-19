@@ -35,6 +35,9 @@ base64 = "0.22"
 notify = "8"
 # The Kaggle API key, in the system keychain.
 keyring = { version = "3", features = ["apple-native", "windows-native"] }
+# Playfield Send (Live tracks' audio): the shared-memory ring and hellos the plugin speaks (crates/pfsend-protocol).
+pfsend-protocol = { path = "../crates/pfsend-protocol" }
+libc = "0.2"
 
 # MIDI: CoreMIDI directly on macOS (one client, one input port per source); midir elsewhere.
 [target.'cfg(target_os = "macos")'.dependencies]

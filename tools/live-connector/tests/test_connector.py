@@ -1,6 +1,6 @@
 import unittest
 
-from Playfield import VERSION, osc
+from Playfield import VERSION, model, osc
 from Playfield.connector import Connector
 from tests import fake_live as fl
 
@@ -647,6 +647,150 @@ class ListenerBookkeepingTests(unittest.TestCase):
         c.start()
         c.tick()
         self.assertTrue(any("send failed" in l for l in logs))
+
+
+def sends_song():
+    rack = fl.make_rack("Rack", [fl.make_chain("Chain", [fl.make_send(1234, name="Bass send")])])
+    drums = fl.make_track("Drums", [fl.make_send(4821)], color=0xFF0000)
+    bass = fl.make_track("Bass", [fl.make_device("Auto Filter"), rack], color=0x00FF00)
+    ret = fl.make_track("A-Reverb", [fl.make_send(77)], color=3)
+    return fl.make_song([drums, bass], [ret])
+
+
+class PlayfieldSendTests(unittest.TestCase):
+    def setUp(self):
+        fl.reset()
+
+    def test_sent_on_first_tick_as_flat_tuples(self):
+        h = Harness(sends_song())
+        self.assertEqual(h.args("/pf/sends"), [])  # not inside start()
+        h.tick()
+        self.assertEqual(h.args("/pf/sends"), [[4821, "Drums", 0xFF0000, 0, "track",
+                                                1234, "Bass", 0x00FF00, 1, "track",
+                                                77, "A-Reverb", 3, 2, "return"]])
+        m = h.mark()
+        h.tick()
+        h.tick()
+        self.assertEqual(h.args("/pf/sends", m), [])  # unchanged: silent
+
+    def test_none_is_an_empty_message(self):
+        h = Harness(basic_song())
+        h.tick()
+        self.assertEqual(h.args("/pf/sends"), [[]])
+
+    def test_track_rename_and_recolour_resend(self):
+        song = sends_song()
+        h = Harness(song)
+        h.tick()
+        m = h.mark()
+        song.tracks[0].name = "Kit"
+        h.tick()
+        self.assertEqual(h.args("/pf/sends", m)[-1][:5], [4821, "Kit", 0xFF0000, 0, "track"])
+        m = h.mark()
+        song.tracks[0].color = 0x0000FF
+        h.tick()
+        sent = h.args("/pf/sends", m)
+        self.assertEqual(len(sent), 1)
+        self.assertEqual(sent[0][:5], [4821, "Kit", 0x0000FF, 0, "track"])
+
+    def test_device_removed_and_added(self):
+        song = sends_song()
+        h = Harness(song)
+        h.tick()
+        m = h.mark()
+        song.return_tracks[0].devices = ()
+        h.tick()
+        self.assertEqual(h.args("/pf/sends", m), [[4821, "Drums", 0xFF0000, 0, "track",
+                                                   1234, "Bass", 0x00FF00, 1, "track"]])
+        m = h.mark()
+        song.return_tracks[0].devices = (fl.make_send(500),)
+        h.tick()
+        self.assertEqual(h.args("/pf/sends", m)[0][10:], [500, "A-Reverb", 3, 2, "return"])
+
+    def test_renamed_device_does_not_change_content(self):
+        song = sends_song()
+        h = Harness(song)
+        h.tick()
+        m = h.mark()
+        song.tracks[0].devices[0].name = "Whatever"
+        h.tick()
+        self.assertEqual(h.args("/pf/sends", m), [])
+        self.assertEqual(h.c.sends[0].id, 4821)
+
+    def test_id_change_resends(self):
+        song = sends_song()
+        h = Harness(song)
+        h.tick()
+        m = h.mark()
+        fl.pairing(song.tracks[0].devices[0]).value = 2222 / 9999.0
+        self.assertEqual(h.args("/pf/sends", m), [])  # the listener only marks
+        h.tick()
+        self.assertEqual(h.args("/pf/sends", m)[0][:5], [2222, "Drums", 0xFF0000, 0, "track"])
+
+    def test_duplicate_id_reassigned_on_the_tick_not_in_the_listener(self):
+        song = sends_song()
+        h = Harness(song)
+        h.tick()
+        later = fl.pairing(song.return_tracks[0].devices[0])
+        changes = []
+        later.add_value_listener(lambda: changes.append(later.value))
+        m = h.mark()
+        later.value = 4821 / 9999.0  # the user loads a copy with Drums' id
+        self.assertEqual(changes, [4821 / 9999.0])  # nothing re-entered the listener
+        self.assertEqual(h.args("/pf/sends", m), [])
+        h.tick()
+        self.assertEqual(len(changes), 2)
+        new_id = model.pairing_id(later)
+        self.assertNotIn(new_id, (4821, 1234))
+        self.assertTrue(0 <= new_id <= 9999)
+        self.assertAlmostEqual(later.value, new_id / 9999.0)
+        self.assertEqual(fl.pairing(song.tracks[0].devices[0]).value, 4821 / 9999.0)  # first keeps it
+        sent = h.args("/pf/sends", m)
+        self.assertEqual(len(sent), 1)
+        self.assertEqual(sent[0][0::5], [4821, 1234, new_id])
+        self.assertTrue(any("pairing id 4821 was taken, now %d" % new_id in l for l in h.logs))
+        m = h.mark()
+        h.tick()
+        self.assertEqual(h.args("/pf/sends", m), [])  # the change's own listener: no resend
+
+    def test_duplicates_at_load_fixed_on_first_tick(self):
+        a = fl.make_send(10)
+        b = fl.make_send(10)
+        c = fl.make_send(10)
+        song = fl.make_song([fl.make_track("One", [a, b]), fl.make_track("Two", [c])])
+        h = Harness(song)
+        self.assertEqual(fl.pairing(b).value, 10 / 9999.0)  # untouched in start()
+        h.tick()
+        ids = h.args("/pf/sends")[0][0::5]
+        self.assertEqual(ids[0], 10)
+        self.assertEqual(len(set(ids)), 3)
+
+    def test_sends_request_answered_even_when_unchanged(self):
+        h = Harness(sends_song())
+        h.tick()
+        m = h.mark()
+        h.command("/pf/sends/request")
+        h.tick()
+        self.assertEqual(len(h.args("/pf/sends", m)), 1)
+        self.assertEqual(h.args("/pf/ack", m), [["/pf/sends/request", 1, "3 sends"]])
+
+    def test_catalog_request_resends_after_the_catalogue(self):
+        h = Harness(sends_song())
+        h.tick()
+        m = h.mark()
+        h.command("/pf/catalog/request")
+        h.tick()
+        names = [a for a, _ in h.messages(since=m)]
+        self.assertIn("/pf/sends", names)
+        self.assertLess(names.index("/pf/catalog/end"), names.index("/pf/sends"))
+
+    def test_disconnect_removes_pairing_listeners(self):
+        song = sends_song()
+        h = Harness(song)
+        h.tick()
+        self.assertEqual(fl.pairing(song.tracks[0].devices[0]).listener_count("value"), 1)
+        h.c.disconnect()
+        self.assertEqual(fl.total_listeners(), 0)
 
 
 if __name__ == "__main__":

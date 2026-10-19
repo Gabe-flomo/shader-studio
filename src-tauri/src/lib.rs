@@ -13,6 +13,8 @@ mod workspace;
 mod linked;
 mod osc_listener;
 mod live_connector;
+// Playfield Send: POSIX shared memory (macOS now; Windows' file mappings come with the Windows app).
+mod live_send;
 mod output_window;
 mod recovery;
 mod crash;
@@ -365,6 +367,7 @@ pub fn run() {
         .manage(FfmpegState(Mutex::new(None)))
         .manage(OscState(Mutex::new(None)))
         .manage(live_connector::LiveState::default())
+        .manage(live_send::LiveSendState::default())
         .manage(midi::MidiState::default())
         .manage(audio_engine::EngineState::default())
         .manage(audio_engine::safety::SafetyState::default())
@@ -386,6 +389,13 @@ pub fn run() {
             live_connector::live_connector_status,
             live_connector::live_connector_install,
             live_connector::live_reveal_log,
+            live_send::live_send_start,
+            live_send::live_send_stop,
+            live_send::live_send_subscribe,
+            live_send::live_send_names,
+            live_send::live_send_list,
+            live_send::pfsend_status,
+            live_send::pfsend_install,
             midi::midi_list,
             midi::midi_open_input,
             midi::midi_close_input,

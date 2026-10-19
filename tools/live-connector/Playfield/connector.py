@@ -12,6 +12,8 @@
 #   its main thread. tick() never raises.
 # - Every listener added is recorded and removed on rebuild and disconnect.
 
+import random
+
 from . import model
 from . import osc
 
@@ -63,6 +65,14 @@ class Connector(object):
         self._last_hello = None
         self._playing_slot = {}      # obj_id(track) -> slot index or -1
         self._selected_track = None
+
+        # Playfield Send devices: /pf/sends goes out when its content changes
+        # (checked on the tick after the catalogue drains) or on request.
+        self.sends = []
+        self._sends_dirty = False
+        self._sends_force = False
+        self._last_sends = None
+        self._random = random.Random()
 
         self._commands = []
         self._started = False
@@ -176,6 +186,8 @@ class Connector(object):
         self._safe("transport", self.send_transport)
         self._safe("params", self._flush_params)
         self._safe("catalogue", self._drain_catalogue)
+        # /pf/sends waits for the first tick: start() runs inside the surface's
+        # constructor, where a duplicate pairing id must not be changed yet.
 
     def disconnect(self):
         if self._closed:
@@ -222,6 +234,7 @@ class Connector(object):
             if self._last_hello is None or now - self._last_hello >= PROTOCOL_HELLO_INTERVAL:
                 self._safe("hello", self.send_hello)
             self._safe("catalogue", self._drain_catalogue)
+            self._safe("sends", self._maybe_send_sends)
         except Exception as e:  # belt and braces: the tick must never raise
             self.log("tick failed: %s" % e)
 
@@ -249,6 +262,7 @@ class Connector(object):
         self._watch_dirty = True
         self._selected_rehook = True
         self._selected_send = True
+        self._sends_dirty = True
         self._queue_catalogue()
 
     def _catalogue_messages(self):
@@ -286,6 +300,66 @@ class Connector(object):
     def catalogue_pending(self):
         return len(self._catalog_queue)
 
+    # ------------------------------------------------------------ Playfield Send
+
+    def _mark_sends_dirty(self):
+        self._sends_dirty = True
+
+    def _maybe_send_sends(self):
+        """Runs on the tick only (never from a listener): it may change ids."""
+        if not (self._sends_dirty or self._sends_force):
+            return
+        if self._catalog_queue:
+            return  # after the catalogue, so the app knows the tracks
+        self._check_sends(self._sends_force)
+
+    def _check_sends(self, force=False):
+        self._sends_dirty = False
+        self._sends_force = False
+        entries = model.send_entries(self.catalog)
+        self._fix_duplicate_ids(entries)
+        self.sends = entries
+        args = []
+        for e in entries:
+            if e.id is None:
+                continue
+            args.extend([("i", e.id), ("s", e.track), ("i", e.colour), ("i", e.track_index),
+                         ("s", e.kind)])
+        content = tuple(args)
+        if not force and content == self._last_sends:
+            return
+        self._last_sends = content
+        self.send("/pf/sends", args)
+
+    def _fix_duplicate_ids(self, entries):
+        """Gives a later Playfield Send that repeats an earlier one's id a fresh
+        unused id (the plugin re-rolls itself; this is the backup)."""
+        used = set(e.id for e in entries if e.id is not None)
+        seen = set()
+        for e in entries:
+            if e.id is None:
+                continue
+            if e.id not in seen:
+                seen.add(e.id)
+                continue
+            if len(used) > model.PAIRING_MAX:
+                self.log("Playfield Send: no free pairing id for %s" % e.track)
+                continue
+            new_id = self._random.randint(0, model.PAIRING_MAX)
+            while new_id in used:
+                new_id = self._random.randint(0, model.PAIRING_MAX)
+            try:
+                e.param.value = model.pairing_value(e.param, new_id)
+            except Exception as err:
+                self.log("Playfield Send on %s: could not change pairing id %d: %s"
+                         % (e.track, e.id, err))
+                continue
+            self.log("Playfield Send on %s: pairing id %d was taken, now %d"
+                     % (e.track, e.id, new_id))
+            used.add(new_id)
+            seen.add(new_id)
+            e.id = new_id
+
     # ------------------------------------------------------------ listeners
 
     def _mark_dirty(self):
@@ -318,6 +392,10 @@ class Connector(object):
         for d in cat.devices:
             self._add_listener(STRUCTURE, d.device, "name", self._mark_dirty)
             self._add_listener(STRUCTURE, d.device, "parameters", self._mark_dirty)
+            if model.is_playfield_send(d.device):
+                param = model.pairing_param(d.device)
+                if param is not None:
+                    self._add_listener(STRUCTURE, param, "value", self._mark_sends_dirty)
             if model.safe_get(d.device, "can_have_chains", False):
                 self._add_listener(STRUCTURE, d.device, "chains", self._mark_dirty)
                 for chain in d.chains:
@@ -343,6 +421,7 @@ class Connector(object):
                 index, name, colour = self._track_position(track)
                 if index >= 0:
                     self.send("/pf/track", [("i", index), ("s", name), ("i", colour)])
+                self._sends_dirty = True
                 if is_name:
                     self._structure_dirty = True
             except Exception as e:
@@ -632,7 +711,12 @@ class Connector(object):
 
     def _cmd_catalog_request(self, args):
         self._queue_catalogue()
+        self._sends_force = True
         return True, "gen %d" % self.catalog_gen
+
+    def _cmd_sends_request(self, args):
+        self._check_sends(True)
+        return True, "%d sends" % len(self.sends)
 
     def _cmd_watch(self, args):
         keys = []
@@ -697,6 +781,7 @@ class Connector(object):
 _COMMANDS = {
     "/pf/ping": Connector._cmd_ping,
     "/pf/catalog/request": Connector._cmd_catalog_request,
+    "/pf/sends/request": Connector._cmd_sends_request,
     "/pf/watch": Connector._cmd_watch,
     "/pf/fire/clip": Connector._cmd_fire_clip,
     "/pf/fire/scene": Connector._cmd_fire_scene,

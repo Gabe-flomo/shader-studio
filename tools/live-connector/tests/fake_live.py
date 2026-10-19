@@ -137,6 +137,26 @@ class Device(FakeLiveObject):
     class_name = "FakeDevice"
 
 
+class PairingParameter(DeviceParameter):
+    """The Playfield Send plugin's "Pairing ID": 0..9999 as a normalized value.
+    str() is the plugin's display string ("4821"), or `display` when set."""
+    _defaults = {"name": "Pairing ID", "is_quantized": False}
+
+    def __init__(self, **kwargs):
+        object.__setattr__(self, "display", None)
+        DeviceParameter.__init__(self, **kwargs)
+
+    def __str__(self):
+        if self.display is not None:
+            return self.display
+        return "%d" % int(round(self.value * 9999)) if self.max <= 1.0 else "%d" % int(round(self.value))
+
+
+class PluginDevice(Device):
+    class_name = "PluginDevice"
+    class_display_name = ""
+
+
 class Chain(FakeLiveObject):
     _props = ("name", "devices", "color")
     _defaults = {"name": "", "devices": (), "color": 0}
@@ -171,6 +191,7 @@ class Track(FakeLiveObject):
               "playing_slot_index")
     _defaults = {"name": "", "color": 0, "devices": (), "clip_slots": (),
                  "fired_slot_index": -1, "playing_slot_index": -1}
+    is_foldable = False
 
     def __init__(self, **kwargs):
         object.__setattr__(self, "view", None)
@@ -241,6 +262,24 @@ def make_rack(name, chains, macros=8):
         params.append(DeviceParameter(name="Macro %d" % (i + 1), value=0.0, min=0.0, max=127.0))
     params.append(DeviceParameter(name="Chain Selector", value=0.0, min=0.0, max=127.0))
     return RackDevice(name=name, parameters=tuple(params), chains=tuple(chains))
+
+
+def make_send(pairing_id, name="Playfield Send", display=None, plugin="Playfield Send"):
+    """A Playfield Send plugin device; `name` is what the user may rename it to."""
+    params = [DeviceParameter(name="Device On", value=1.0, is_quantized=True,
+                              value_items=["Off", "On"]),
+              DeviceParameter(name="Gain", value=0.5),
+              PairingParameter(value=pairing_id / 9999.0, display=display)]
+    device = PluginDevice(name=name, parameters=tuple(params))
+    object.__setattr__(device, "class_display_name", plugin)
+    return device
+
+
+def pairing(device):
+    for p in device.parameters:
+        if p.name == "Pairing ID":
+            return p
+    return None
 
 
 def make_chain(name, devices):

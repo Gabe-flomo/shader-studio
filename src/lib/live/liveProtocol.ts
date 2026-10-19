@@ -17,7 +17,7 @@ export const LIVE_OUT_PORT = 11100;
 /** The browser bridge's WebSocket for Live (`npm run osc-bridge -- --live`). */
 export const LIVE_BRIDGE_WS_PORT = 9002;
 /** The script this app ships (tools/live-connector/Playfield/__init__.py VERSION; a test keeps them equal). */
-export const LIVE_CONNECTOR_VERSION = '1.0.0';
+export const LIVE_CONNECTOR_VERSION = '1.1.0';
 /** No hello for this long: "not heard from". */
 export const LIVE_STALE_MS = 3000;
 
