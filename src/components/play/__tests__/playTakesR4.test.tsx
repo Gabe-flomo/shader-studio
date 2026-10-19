@@ -190,7 +190,8 @@ describe('P8: three recordings, one name each', () => {
     expect(modal).not.toContain('Start performance');
     const stage = src('../Stage.tsx');
     expect(stage).toContain("'Record video'");
-    expect(stage).toContain("'Record performance (take)'");
+    // The Stage's take button lives in Perform's bar (docs/perform-mode.md).
+    expect(src('../Perform.tsx')).toContain("'Record performance (take)'");
     const arr = src('../engine/ArrangementPanel.tsx');
     expect(arr).toContain('Arm track');
     expect(arr).not.toContain('Make a take');

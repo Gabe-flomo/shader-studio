@@ -1883,6 +1883,21 @@ class PlayEngine implements InputSource {
     inputBus.wake();
   }
 
+  /**
+   * Panic (Perform's Panic, docs/perform-mode.md): let go of everything momentary. Held keys,
+   * pads, clicks and OSC gates are released, presses not yet read are dropped, the mouse button
+   * is up, and Look actions let go. Controls keep their values.
+   */
+  releaseAll(): void {
+    this.presses.clear();
+    this.held.clear();
+    this.keysHeld.clear();
+    this.oscHeld.clear();
+    this.mouseDown = 0;
+    this.resetLooks();
+    inputBus.wake();
+  }
+
   /** Start every axis swap on A again (the editor's button; a rewind does it too). */
   resetSwaps(): void {
     for (const st of this.pairState.values()) st.swap = sgSwapNew();

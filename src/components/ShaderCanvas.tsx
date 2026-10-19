@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
 import { PREVIEW_ASPECTS, fitAspect, playFreeFit } from '../utils/graphImportPlan';
 import { usePlaySplit } from './play/playSplit';
+import { useStage } from './play/stageStore';
 import { useShownAspect } from './play/phoneTrim';
 import { drawScopeCanvas, vectorValueRegistry, floatValueRegistry, scopeCanvasRegistry } from '../lib/scopeRegistry';
 import { audioEngine } from '../lib/audioEngine';
@@ -3180,8 +3181,9 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
   // A builder that mirrors this preview into a big viewport of its own (the Splat builder) holds it to that size.
   const sizeOverride = usePreviewSizeOverride();
   const fit = sizeOverride ?? fitAspectSize;
-  // On the Play page (desktop and tablet split) Free never crops: it letterboxes when the area is narrower than square.
-  const onPlayArea = usePlaySplit(s => s.available);
+  // On the Play page (desktop and tablet split) and on the Stage, Free never crops: it letterboxes when the area is narrower than square.
+  const onStage = useStage(s => s.mode !== null);
+  const onPlayArea = usePlaySplit(s => s.available) || onStage;
   useEffect(() => {
     const ratio = PREVIEW_ASPECTS.find(a => a.id === previewAspect)?.ratio ?? null;
     const outer = outerRef.current;

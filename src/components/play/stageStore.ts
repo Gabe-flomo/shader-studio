@@ -17,6 +17,7 @@
 import { create } from 'zustand';
 import type { PlayRecord } from '../../types/play';
 import type { PlayHtmlInput } from '../../play/exportHtml';
+import { RANDOM_STRENGTH, type PerformSize } from '../../play/perform';
 
 /** A Present canvas on the Stage: the page to run and what to say about it. */
 export interface StageSnapshot {
@@ -51,6 +52,25 @@ interface StageState {
   exit: () => void;
   setDevice: (d: StageDevice) => void;
   togglePanel: () => void;
+  /** Perform (docs/perform-mode.md): the controls grid's size and Randomize's strength, kept on this computer. */
+  size: PerformSize;
+  strength: number;
+  setSize: (s: PerformSize) => void;
+  setStrength: (k: number) => void;
+}
+
+const PERFORM_KEY = 'shader-studio:perform';
+function loadPerform(): { size: PerformSize; strength: number } {
+  const d = { size: 'M' as PerformSize, strength: RANDOM_STRENGTH.default };
+  try {
+    const raw = JSON.parse(localStorage.getItem(PERFORM_KEY) ?? 'null') as { size?: unknown; strength?: unknown } | null;
+    const size = raw?.size === 'S' || raw?.size === 'M' || raw?.size === 'L' ? raw.size : d.size;
+    const k = typeof raw?.strength === 'number' && Number.isFinite(raw.strength) ? Math.max(RANDOM_STRENGTH.min, Math.min(RANDOM_STRENGTH.max, raw.strength)) : d.strength;
+    return { size, strength: k };
+  } catch { return d; }
+}
+function savePerform(v: { size: PerformSize; strength: number }): void {
+  try { localStorage.setItem(PERFORM_KEY, JSON.stringify(v)); } catch { /* private window: kept for this visit only */ }
 }
 
 export const useStage = create<StageState>(set => ({
@@ -63,6 +83,13 @@ export const useStage = create<StageState>(set => ({
   exit: () => set({ mode: null, snapshot: null }),
   setDevice: device => set({ device }),
   togglePanel: () => set(s => ({ panel: !s.panel })),
+  ...loadPerform(),
+  setSize: size => set(s => { savePerform({ size, strength: s.strength }); return { size }; }),
+  setStrength: k => set(s => {
+    const strength = Math.max(RANDOM_STRENGTH.min, Math.min(RANDOM_STRENGTH.max, k));
+    savePerform({ size: s.size, strength });
+    return { strength };
+  }),
 }));
 
 /** The phone frame the web player lays out for: an iPhone 14/15 viewport. */

@@ -29,12 +29,13 @@ import { arrowStep, drawHandles, handlesOf, hitTest, isOffView, moveHandle, nudg
 import { FrameLoop, watchVisible } from '../../output/frameLoop';
 import { isConvexQuad } from '../../output/warp';
 import { isDesktopApp } from '../../output/transport';
+import { fitPicture } from '../../output/previewFit';
 import {
   closeOutput, currentProjection, mappingHistory, moveOutputTo, openOutput, redoMapping, refreshMonitors, setOutputFullscreen, setOutputUi,
   setProjection, undoMapping, useOutput, pickMonitor,
 } from '../../output/outputHost';
 import {
-  defaultProjection, displayProjection, fullQuad, loadPresets, meshGrid, MESH_MAX, MESH_MIN, newId, newSurface, savePresets, TEST_PATTERNS,
+  displayProjection, fullQuad, loadPresets, meshGrid, MESH_MAX, MESH_MIN, newId, newSurface, savePresets, TEST_PATTERNS,
   type ProjectionPreset, type ProjectionRecord, type ProjQuad, type ProjSurface, type SurfaceSource, type TestPattern,
 } from '../../types/projection';
 
@@ -165,6 +166,7 @@ export function ProjectionDialog({ onClose }: { onClose: () => void }) {
           <Preview
             projection={projection}
             aspect={aspect}
+            pictureAspect={picAspect}
             outputPx={outputPx}
             selected={selected}
             pattern={out.ui.pattern}
@@ -329,15 +331,17 @@ function Presets({ projection, onLoad }: { projection: ProjectionRecord; onLoad:
           </>}
         />
       ))}
-      <Button size="sm" variant="ghost" onClick={() => { if (requireFeature('play.projection')) onLoad(defaultProjection()); }}>Start over (one surface)</Button>
     </Section>
   );
 }
 
 // ── The preview ─────────────────────────────────────────────────────────────
 
-function Preview({ projection, aspect, outputPx, selected, pattern, canEdit, drawingMask, setDrawingMask, onFinishMask }: {
-  projection: ProjectionRecord; aspect: number; outputPx: { w: number; h: number }; selected: string | null; pattern: TestPattern; canEdit: boolean;
+function Preview({ projection, aspect, pictureAspect, outputPx, selected, pattern, canEdit, drawingMask, setDrawingMask, onFinishMask }: {
+  projection: ProjectionRecord; aspect: number;
+  /** The output picture's shape: the app's picture is fitted to it (never stretched) before it is warped. */
+  pictureAspect: number;
+  outputPx: { w: number; h: number }; selected: string | null; pattern: TestPattern; canEdit: boolean;
   drawingMask: { x: number; y: number }[] | null; setDrawingMask: (p: { x: number; y: number }[] | null) => void; onFinishMask: (p: { x: number; y: number }[]) => void;
 }) {
   const boxRef = useRef<HTMLDivElement>(null);
@@ -345,7 +349,7 @@ function Preview({ projection, aspect, outputPx, selected, pattern, canEdit, dra
   const hRef = useRef<HTMLCanvasElement>(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
   // The newest props for the draw loop and the handlers, without restarting them.
-  const live = useRef({ projection, selected, pattern, drawingMask, active: null as HandleRef | null });
+  const live = useRef({ projection, selected, pattern, drawingMask, pictureAspect, active: null as HandleRef | null });
   const drag = useRef<{ ref: HandleRef; before: ProjectionRecord; last: { x: number; y: number }; moved: boolean; relative: boolean } | null>(null);
   const endDrag = () => {
     const d = drag.current;
@@ -354,7 +358,7 @@ function Preview({ projection, aspect, outputPx, selected, pattern, canEdit, dra
   };
   useEffect(() => {
     const L = live.current;
-    L.projection = projection; L.selected = selected; L.pattern = pattern; L.drawingMask = drawingMask;
+    L.projection = projection; L.selected = selected; L.pattern = pattern; L.drawingMask = drawingMask; L.pictureAspect = pictureAspect;
   });
 
   useEffect(() => {
@@ -377,13 +381,14 @@ function Preview({ projection, aspect, outputPx, selected, pattern, canEdit, dra
     if (!gl || !hc) return;
     const warp = new WarpRenderer(gl);
     const picture = playOverlay.acquirePicture();
+    const fitted = document.createElement('canvas');
     const draw = () => {
       const dpr = Math.min(2, window.devicePixelRatio || 1);
       const W = Math.max(1, Math.round(gl.clientWidth * dpr)), H = Math.max(1, Math.round(gl.clientHeight * dpr));
       if (gl.width !== W || gl.height !== H) { gl.width = W; gl.height = H; }
       if (hc.width !== W || hc.height !== H) { hc.width = W; hc.height = H; }
-      const pic = picture.canvas.width > 0 && picture.canvas.height > 0 ? picture.canvas : null;
       const L = live.current;
+      const pic = picture.canvas.width > 0 && picture.canvas.height > 0 ? fitPicture(picture.canvas, L.pictureAspect, fitted) : null;
       warp.render(L.projection, { shader: pic, layers: null, finished: pic, surfaceLayers: () => pic }, L.pattern, L.selected);
       const x = hc.getContext('2d')!;
       x.clearRect(0, 0, W, H);
