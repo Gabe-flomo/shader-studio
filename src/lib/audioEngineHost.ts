@@ -962,6 +962,17 @@ class AudioEngineHost {
     if (this.mirror.has(rackId)) void this.invoke?.('ae_midi', { rack: rackId, bytes: allNotesOff() }).catch(() => {});
   }
 
+  /** Panic (Perform's Panic, docs/perform-mode.md): all notes off on every rack, held or not. */
+  panic(): void {
+    const racks = new Set([...this.web.keys(), ...this.mirror.keys()]);
+    this.held.clear(); this.siHeld.clear(); this.slHeld.clear();
+    for (const rackId of racks) {
+      const w = this.web.get(rackId);
+      if (w) { w.midi(0xb0, 123, 0); continue; }
+      void this.invoke?.('ae_midi', { rack: rackId, bytes: allNotesOff() }).catch(() => {});
+    }
+  }
+
   /** For tests: forget everything. */
   resetForTests(): void {
     engineSend.stopAll();

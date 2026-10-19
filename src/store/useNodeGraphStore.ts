@@ -553,6 +553,13 @@ const compilationService = new CompilationService();
 let _historyParamTimer: ReturnType<typeof setTimeout> | null = null;
 let _historyParamPending = false;
 
+/** End a param edit burst now, so the next slider edit makes its own undo step (after an action that made one itself). */
+export function endParamBurst(): void {
+  if (_historyParamTimer) clearTimeout(_historyParamTimer);
+  _historyParamTimer = null;
+  _historyParamPending = false;
+}
+
 // ── Undo history ──────────────────────────────────────────────────────────────
 // Stored outside Zustand state so pushing snapshots never triggers a re-render.
 export const undoManager = new UndoManager();

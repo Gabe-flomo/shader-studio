@@ -9,9 +9,13 @@
  *          so you see what a visitor would, including what it leaves out.
  *
  * Both at the window's size or framed as a phone, the canvas shape from the
- * Play page, and fullscreen. The side panel has only what a visitor gets:
- * the controls, and which keys, clicks and MIDI do what. Record captures the
- * picture from whichever mode is showing. Esc leaves.
+ * Play page (Free letterboxes, never crops), and fullscreen. The picture is
+ * on the right, the controls on its left (a phone stacks the picture on top).
+ * In Full the controls are Perform (Perform.tsx, docs/perform-mode.md): big
+ * faders, knobs, pads and XY pads, with Randomize, Reset, Panic and takes.
+ * Exact's column has what the page leaves out (its own panel has the
+ * controls). Record captures the picture from whichever mode is showing.
+ * Esc leaves.
  *
  * A Present page's canvas can open here too: then the Stage runs that
  * canvas's snapshot (as the presentation has it, with the step's Script
@@ -21,34 +25,21 @@
 import { APP_HEIGHT } from '../../lib/viewport';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
-import { controlExists, readControlValue, targetParts } from '../../play/playControls';
-import { mappingLabel } from '../../play/incrementUi';
 import { leftBehind } from '../../play/exportHtml';
 import { webExportScope } from '../../play/exportScope';
 import { stagePageHtml } from '../../present/liveScript';
 import { playUses3D, useThreeSource } from '../../play/threeSource';
-import { parseLayerTarget, type PlayControl, type PlayRecord } from '../../types/play';
-import { parseFinishTarget, patchFinishEffect } from '../../types/playFinish';
-import { parseAudioFxTarget, patchAudioFxEffect } from '../../types/playAudioFx';
-import { aeRack, aeSlot, parseAuTarget, parseMacroTarget, patchSlot } from '../../types/playAudioEngine';
-import { setMacroValue } from '../../play/rackMacros';
-import { playEngine, pairDrives } from '../../lib/playEngine';
-import { pairOf } from '../../play/pairs';
-import { XYPad } from './PairControls';
 import { playBackground } from '../../play/background';
 import { useTokens } from '../../theme/themeStore';
-import { alpha, fontFamily, radius } from '../../theme/tokens';
+import { alpha, fontFamily } from '../../theme/tokens';
 import { Button, IconButton } from '../ui/Button';
 import { Segmented } from '../ui/Choice';
 import { Icon } from '../ui/Icon';
-import { RulerSlider } from '../ui/RulerSlider';
 import { AspectPicker } from '../shell/PreviewChrome';
-import { ColourPad } from './ColourPad';
-import { useLiveValues } from './useLiveValues';
 import { PHONE_SIZE, useStage, type StageMode, type StageSnapshot } from './stageStore';
-import { useTakes } from '../../lib/takes';
-import { TakesList } from './TakesList';
 import { showSnapshot, useOutput } from '../../output/outputHost';
+import { InputLegend, Perform, PerformView } from './Perform';
+import { PERFORM_STACK_PX, performSplit } from '../../play/perform';
 
 export function Stage({ canvas, onRecord }: {
   /** The app's live picture (Full). */
@@ -64,7 +55,11 @@ export function Stage({ canvas, onRecord }: {
   const openGraph = useNodeGraphStore(s => s.currentGraph?.name) ?? 'Playfield';
   const graphName = snap ? snap.title : openGraph;
   const graphPlay = useNodeGraphStore(s => s.play);
-  const narrow = useNarrow();
+  const narrow = useNarrow(PERFORM_STACK_PX);
+  const winW = useWindowWidth();
+  const split = performSplit(winW);
+  // A tablet-wide bar has no room for the phone frame (a desktop check) beside the rest.
+  const roomy = winW >= 1000;
 
   // The Stage shows the Play picture: its image, video or colour background too.
   useEffect(() => playBackground.claim(), []);
@@ -101,6 +96,8 @@ export function Stage({ canvas, onRecord }: {
     onRecord(c);
   };
 
+  // Perform is the Stage's default view: Full on the open graph (Exact and a snapshot run the page's own panel).
+  const perform = mode === 'full' && !snap;
   const stageBox = useFitBox(device === 'phone' && !narrow ? PHONE_SIZE : null);
 
   const bar = { height: 52, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10, padding: '0 12px', borderBottom: `1px solid ${alpha('#ffffff', 0.08)}`, background: '#101016', color: '#e8e8ef' } as const;
@@ -114,13 +111,16 @@ export function Stage({ canvas, onRecord }: {
             <Icon name="slides" size={12} />Snapshot
           </span>
         ) : (
-          <Segmented size="sm" ariaLabel="Stage mode" value={mode ?? 'full'} onChange={m => open(m as StageMode)} options={[
-            { value: 'full', label: 'Full', title: 'Everything Playfield can do: songs, MIDI files, every layer' },
-            { value: 'exact', label: 'Exact', title: 'The website player itself: exactly what a visitor to the exported page gets' },
-          ]} />
+          <span style={{ flexShrink: 0, display: 'inline-flex' }}>
+            <Segmented size="sm" ariaLabel="Stage mode" value={mode ?? 'full'} onChange={m => open(m as StageMode)} options={[
+              { value: 'full', label: 'Full', title: 'Everything Playfield can do: songs, MIDI files, every layer' },
+              { value: 'exact', label: 'Exact', title: 'The website player itself: exactly what a visitor to the exported page gets' },
+            ]} />
+          </span>
         )}
         <span style={{ flex: 1 }} />
-        {!narrow && (
+        {perform && panel && !narrow && <PerformView />}
+        {roomy && (
           <Segmented size="sm" ariaLabel="Screen" value={device} onChange={setDevice} options={[
             { value: 'screen', label: 'Screen', title: 'Fill the window' },
             { value: 'phone', label: 'Phone', title: `A phone's screen (${PHONE_SIZE.w} × ${PHONE_SIZE.h})` },
@@ -128,7 +128,7 @@ export function Stage({ canvas, onRecord }: {
         )}
         {mode === 'full' && !narrow && <AspectPicker />}
         {mode === 'exact' && !snap && <IconButton icon="reset" label="Rebuild the page with your latest changes" onClick={() => setBuild(b => b + 1)} />}
-        <IconButton icon="layoutSplit" label={panel ? 'Hide the side panel' : 'Show the side panel'} active={panel} onClick={togglePanel} />
+        <IconButton icon="layoutSplit" label={panel ? 'Hide the controls: the picture alone' : 'Show the controls'} active={panel} onClick={togglePanel} />
         {!narrow && <IconButton icon="fit" label={fullscreen ? 'Leave fullscreen' : 'Fullscreen'} active={fullscreen} onClick={toggleFullscreen} />}
         <StageOutput snap={snap} frame={() => frameRef.current} />
         <Button size="sm" variant="primary" icon="record" onClick={record} disabled={!!snap?.sandboxed}
@@ -136,8 +136,22 @@ export function Stage({ canvas, onRecord }: {
           title={snap?.sandboxed ? 'Its Script layers are someone else’s code, so it runs sealed off from Playfield, where Record video can’t reach its picture' : 'Record video: the picture to a file'}
           style={{ background: tk.status.danger }}>{narrow ? null : 'Record video'}</Button>
       </div>
-      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: narrow ? 'column' : 'row' }}>
-        <div ref={stageBox.ref} style={{ flex: 1, minWidth: 0, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+      {/* The controls on the left, the picture on the right (the user rule); a phone stacks the picture on top. */}
+      <div data-stage-body style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: narrow ? 'column' : 'row' }}>
+        {panel && (
+          <div data-stage-controls style={{
+            order: narrow ? 1 : 0, flexShrink: 0, minHeight: 0, minWidth: 0, background: '#101016', display: 'flex', flexDirection: 'column',
+            ...(narrow ? { flex: '1 1 0', borderTop: `1px solid ${alpha('#ffffff', 0.08)}` } : { width: perform ? split.controls : 300, borderRight: `1px solid ${alpha('#ffffff', 0.08)}` }),
+          }}>
+            {perform ? <Perform onRender={() => onRecord(null)} viewInBar={narrow} /> : (
+              <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '12px 14px 18px' }}>
+                {snap ? <SnapshotNotes snap={snap} /> : exact ? <ExactNotes missing={exact.missing} left={exact.left} /> : null}
+                <InputLegend play={snap ? snap.play : graphPlay} />
+              </div>
+            )}
+          </div>
+        )}
+        <div ref={stageBox.ref} data-stage-picture style={{ order: narrow ? 0 : 1, flex: narrow && panel ? '0 0 40%' : 1, minWidth: 0, minHeight: 0, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
           <div style={{
             position: 'relative', flexShrink: 0,
             ...(stageBox.size ? { width: stageBox.size.w, height: stageBox.size.h, borderRadius: 28, overflow: 'hidden', boxShadow: `0 0 0 10px #1c1c24, 0 30px 80px ${alpha('#000000', 0.6)}` } : { width: '100%', height: '100%' }),
@@ -155,16 +169,6 @@ export function Stage({ canvas, onRecord }: {
             ) : canvas}
           </div>
         </div>
-        {panel && (
-          <div style={{
-            flexShrink: 0, overflowY: 'auto', background: '#101016', padding: '12px 14px 18px',
-            ...(narrow ? { maxHeight: '32%', borderTop: `1px solid ${alpha('#ffffff', 0.08)}` } : { width: 300, borderLeft: `1px solid ${alpha('#ffffff', 0.08)}` }),
-          }}>
-            {snap ? <SnapshotNotes snap={snap} /> : mode === 'exact' && exact ? <ExactNotes missing={exact.missing} left={exact.left} /> : <StageControls />}
-            {mode === 'full' && <TakesPanel onRender={() => onRecord(null)} />}
-            <InputLegend play={snap ? snap.play : graphPlay} />
-          </div>
-        )}
       </div>
     </div>
   );
@@ -212,92 +216,15 @@ const heading = (text: string) => (
   <div style={{ color: alpha('#ffffff', 0.45), font: `600 10.5px ${fontFamily.ui}`, letterSpacing: '0.06em', textTransform: 'uppercase', margin: '4px 0 8px' }}>{text}</div>
 );
 
-/** The Play panel's controls, as a visitor has them: sliders, colours and buttons. */
-function StageControls() {
-  const tk = useTokens();
-  const play = useNodeGraphStore(s => s.play);
-  const nodes = useNodeGraphStore(s => s.nodes);
-  const setPlay = useNodeGraphStore(s => s.setPlay);
-  const updateNodeParams = useNodeGraphStore(s => s.updateNodeParams);
-  const live = useLiveValues(play);
-  const driven = new Set(play.mappings.filter(m => m.enabled).map(m => m.controlId));
-  // A pair's mappings drive its A and/or B too.
-  for (const pm of play.pairMappings ?? []) {
-    const pr = pm.enabled ? play.pairs?.find(x => x.id === pm.pairId) : undefined;
-    if (pr) for (const id of [pr.a, pr.b]) if (pairDrives(pm, pr, id)) driven.add(id);
-  }
-  const write = (c: PlayControl, value: number | number[]) => {
-    const ft = parseFinishTarget(c.target);
-    if (ft) { if (typeof value === 'number') setPlay(p => ({ ...p, finish: patchFinishEffect(p.finish, ft.effectId, { [ft.key]: value }) })); return; }
-    const at = parseAudioFxTarget(c.target);
-    if (at) { if (typeof value === 'number') setPlay(p => ({ ...p, audioFx: patchAudioFxEffect(p.audioFx, at.chainId, at.effectId, { [at.key]: value }) })); return; }
-    const au = parseAuTarget(c.target);
-    if (au) { if (typeof value === 'number') setPlay(p => ({ ...p, audioEngine: patchSlot(p.audioEngine, au.rackId, au.slotId, { params: { ...aeSlot(aeRack(p.audioEngine, au.rackId), au.slotId)?.params, [au.address]: value } }) })); return; }
-    const mt = parseMacroTarget(c.target);
-    if (mt) { if (typeof value === 'number') setPlay(p => setMacroValue(p, mt.rackId, mt.n, value)); return; }
-    const lt = parseLayerTarget(c.target);
-    if (lt) {
-      if (typeof value === 'number') setPlay(p => ({ ...p, layers: p.layers.map(l => (l.id === lt.layerId ? { ...l, [lt.key]: value } as typeof l : l)) }));
-      return;
-    }
-    const { nodeId, paramKey } = targetParts(c.target);
-    updateNodeParams(nodeId, { [paramKey]: value }, { immediate: true });
-  };
-  const shown = play.controls.filter(c => controlExists(nodes, c, play));
-  return (
-    <div style={{ marginBottom: 18 }}>
-      {heading('Controls')}
-      {shown.length === 0 && <div style={{ color: alpha('#ffffff', 0.5), lineHeight: 1.5 }}>No controls: visitors can only watch. Add some on the Play page.</div>}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {shown.map(c => {
-          const value = readControlValue(nodes, c.target, play);
-          const lv = live.get(c.id);
-          const isDriven = driven.has(c.id);
-          // A position pair is one XY pad, where its A is (as on the Play panel).
-          const pair = pairOf(play, c.id);
-          const cb = pair?.position ? shown.find(x => x.id === (c.id === pair.a ? pair.b : pair.a)) : undefined;
-          if (pair && cb) {
-            if (c.id !== pair.a) return null;
-            const num = (ctl: PlayControl) => { const l = live.get(ctl.id), v = readControlValue(nodes, ctl.target, play); return driven.has(ctl.id) && typeof l === 'number' ? l : typeof v === 'number' ? v : ctl.min; };
-            const dB = driven.has(cb.id);
-            return (
-              <div key={c.id} data-pair-id={pair.id} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, font: `600 12px ${fontFamily.ui}` }}>
-                  <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pair.label}</span>
-                  {(isDriven || dB) && <span title="A mapping moves it" style={{ color: tk.accent.base, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em' }}>LIVE</span>}
-                </div>
-                <XYPad a={c} b={cb} x={num(c)} y={num(cb)} lockX={isDriven} lockY={dB} onChange={(x, y) => { if (!isDriven) write(c, x); if (!dB) write(cb, y); }} />
-              </div>
-            );
-          }
-          return (
-            <div key={c.id} style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, font: `600 12px ${fontFamily.ui}` }}>
-                <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.label}</span>
-                {isDriven && c.kind !== 'action' && <span title="A mapping moves it" style={{ color: tk.accent.base, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em' }}>LIVE</span>}
-              </div>
-              {c.kind === 'action' ? (
-                <Button size="sm" variant="primary" icon="play" onClick={() => playEngine.fireControl(c.id)} style={{ justifyContent: 'center', boxShadow: typeof lv === 'number' && lv >= 0.5 ? `0 0 0 2px ${alpha(tk.accent.base, 0.5)}` : undefined }}>{c.label}</Button>
-              ) : c.kind === 'color' ? (
-                <ColourPad value={Array.isArray(value) ? value : [0, 0, 0]} live={isDriven && Array.isArray(lv) ? lv : undefined} disabled={false} onChange={v => write(c, v)} />
-              ) : (
-                <RulerSlider
-                  value={typeof lv === 'number' && isDriven ? lv : typeof value === 'number' ? value : c.min}
-                  min={c.min} max={c.max} step={c.step ?? 0.01}
-                  defaultValue={typeof value === 'number' ? value : (c.min + c.max) / 2}
-                  disabled={isDriven}
-                  onChange={v => write(c, v)}
-                  // Typing a value past the range widens it: the control keeps the new range, as on the panel.
-                  onRange={(min, max) => setPlay(p => ({ ...p, controls: p.controls.map(x => (x.id === c.id ? { ...x, min, max } : x)) }))}
-                  ariaLabel={c.label}
-                />
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
+/** The window's width, for the Stage's split (play/perform.ts performSplit). */
+function useWindowWidth(): number {
+  const [w, setW] = useState(() => (typeof window !== 'undefined' ? window.innerWidth : 1440));
+  useEffect(() => {
+    const on = () => setW(window.innerWidth);
+    window.addEventListener('resize', on);
+    return () => window.removeEventListener('resize', on);
+  }, []);
+  return w;
 }
 
 /** Phone-sized windows: the bar keeps what matters, the panel goes under the picture. */
@@ -312,30 +239,6 @@ function useNarrow(px = 640) {
     return () => m.removeEventListener('change', on);
   }, [q]);
   return narrow;
-}
-
-/** Which keys, clicks, MIDI and so on do what: the mappings, read as a legend. */
-function InputLegend({ play }: { play: PlayRecord }) {
-  const rows = play.mappings.filter(m => m.enabled).map(m => ({
-    id: m.id,
-    from: mappingLabel(m, play, true),
-    to: play.controls.find(c => c.id === m.controlId)?.label ?? '—',
-  }));
-  if (!rows.length) return null;
-  return (
-    <div>
-      {heading('Sources')}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        {rows.map(r => (
-          <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-            <span style={{ flexShrink: 0, maxWidth: '55%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', padding: '2px 7px', borderRadius: radius.sm, background: alpha('#ffffff', 0.08), font: `500 11.5px ${fontFamily.mono}` }}>{r.from}</span>
-            <Icon name="chevR" size={11} style={{ color: alpha('#ffffff', 0.35), flexShrink: 0 }} />
-            <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: alpha('#ffffff', 0.8) }}>{r.to}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
 }
 
 /** A Present canvas on the Stage: whose snapshot this is, and what the page leaves out. */
@@ -380,29 +283,6 @@ function ExactNotes({ missing, left }: { missing: string[]; left: { what: string
           ))}
         </div>
       )}
-    </div>
-  );
-}
-
-/**
- * Takes: perform (up to a minute) and every input is kept as keyframes, to
- * watch back and render later frame by frame (see lib/takes.ts, TakesList).
- */
-function TakesPanel({ onRender }: { onRender: () => void }) {
-  const phase = useTakes(s => s.phase);
-  const busy = phase === 'recording' || phase === 'countdown';
-  return (
-    <div style={{ marginBottom: 18 }}>
-      {heading('Takes')}
-      <Button size="sm" variant={busy ? 'danger' : 'secondary'} icon="record" style={{ width: '100%', justifyContent: 'center' }}
-        onClick={() => (busy ? useTakes.getState().stop() : useTakes.getState().begin())}
-        title={busy ? 'Stop and watch it back' : 'Play it for up to a minute: every input is kept, to watch back and export as a video frame by frame'}>
-        {busy ? 'Stop recording' : 'Record performance (take)'}
-      </Button>
-      <div style={{ color: alpha('#ffffff', 0.5), fontSize: 11.5, lineHeight: 1.45, margin: '6px 0 8px' }}>
-        Perform it once, then export it frame by frame: smooth at any size, with the song, no dropped frames. The takes are also under Sound → Arrangement → Takes.
-      </div>
-      <TakesList onRender={() => onRender()} />
     </div>
   );
 }
