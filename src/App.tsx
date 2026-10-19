@@ -810,6 +810,7 @@ function App() {
     import:         unlessScratch(() => { void importAnyFile(setPage); }),
     fitView:        () => _fitViewCallback?.(),
     maximizeGraph:  () => { if (page !== 'studio') return false; useGraphMaximize.getState().toggle(); },
+    clearGraph:     () => { if (page !== 'studio') return false; useNodeGraphStore.getState().clearToMinimal(); },
     fullscreen:     () => { if (page === 'present') void toggleFullscreenTarget('present'); else if (page === 'studio' || page === 'play' || hosted) void toggleFullscreenTarget('canvas'); },
     toggleCode:     () => setShowCode(v => !v),
     toggleRecord:   () => setShowExport(v => !v),
