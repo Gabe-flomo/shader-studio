@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.293',
+    date: '2026-10-18',
+    title: "Picture on the right",
+    highlights: [
+      { area: 'Studio', text: "On the Play page the picture is always on the right and gets most of the width; Free no longer crops." },
+    ],
+  },
+  {
     id: '2026.10.292',
     date: '2026-10-18',
     title: "Calmer Play page",
