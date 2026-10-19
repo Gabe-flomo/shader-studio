@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.310',
+    date: '2026-10-19',
+    title: "Moving displacement",
+    highlights: [
+      { area: 'Studio', text: "Displace nodes get Phase and Speed for patterns that keep moving. Pass lives in Texture tools, and no library group holds a single node." },
+    ],
+  },
+  {
     id: '2026.10.309',
     date: '2026-10-19',
     title: "Live tracks",
