@@ -8,7 +8,25 @@
  *
  * The trim is In / Out in seconds on the loaded file: playback loops between them.
  */
-import { AT_TRIGGER_DEFAULTS, atThresholdFromSensitivity } from '../../play/kit/audioTools.js';
+import { AT_CHAR_AT, AT_TRIGGER_DEFAULTS, atCharacterOf, atDetectOf, atThresholdFromSensitivity, type AtCharacter, type AtDetect } from '../../play/kit/audioTools.js';
+
+export type AudioBandDetect = AtDetect;
+export type AudioBandCharacter = AtCharacter;
+
+/** Detect's choices, in the window's order, with what each reads (docs/audio-tools.md "Detect"). */
+export const BAND_DETECTS: ReadonlyArray<{ key: AudioBandDetect; label: string; title: string }> = [
+  { key: 'level', label: 'Level', title: 'How loud the band is (as before): fires when it rises above the Threshold.' },
+  { key: 'hits', label: 'Hits', title: 'Onsets: how suddenly new sound arrives in the band, against how busy it has been. Catches kicks over a held bass line.' },
+  { key: 'transient', label: 'Transient', title: 'Attack sharpness: a click or snap reads high, a swell stays low.' },
+  { key: 'flatness', label: 'Noisy ↔ tonal', title: 'Spectral flatness: 0 a pure tone, near 1 noise (hats, snares, breath).' },
+  { key: 'brightness', label: 'Brightness', title: 'Where the band\'s energy sits: 0 at its bottom, 1 at its top (its spectral centroid).' },
+  { key: 'drums', label: 'Drums only', title: 'Separates the drums from sustained notes first (harmonic / percussive separation), then finds hits on the drums alone.' },
+];
+export const BAND_CHARACTERS: ReadonlyArray<{ key: AudioBandCharacter; label: string; title: string }> = [
+  { key: 'any', label: 'Any', title: 'Every hit counts.' },
+  { key: 'noisy', label: 'Noisy', title: 'Only hits that are noisy (drums, hats, snares): the band\'s flatness just after the hit is at least "Noisy at".' },
+  { key: 'tonal', label: 'Tonal', title: 'Only hits that are tonal (melodic notes): the band\'s flatness just after the hit is under "Noisy at".' },
+];
 
 export interface AudioBandSpec {
   id: string;
@@ -41,6 +59,15 @@ export interface AudioBandSpec {
   shape: AudioBandShape;
   /** How steeply its edges fall, dB per octave: the drawn curve and what Solo / Hear hovered play. */
   slope: AudioBandSlope;
+  /**
+   * What its Value sends and its Trigger fires on (play/kit/audioTools.js "Detect"): Level (the default, as before),
+   * Hits, Transient, Noisy ↔ tonal (flatness), Brightness, Drums only. The Gate reads the level whatever it detects.
+   */
+  detect: AudioBandDetect;
+  /** Only: let a hit through when the band is noisy (drums) or tonal (notes) just after it, or any. */
+  character: AudioBandCharacter;
+  /** Only's line on the band's flatness (0 tonal … 1 noise). */
+  charAt: number;
 }
 
 export type AudioBandShape = 'band' | 'lowcut' | 'highcut';
@@ -54,9 +81,13 @@ const BAND_DEFAULTS = {
   value: true, trigger: false, attack: 0.01, release: 0.15, gain: 1,
   threshold: AT_TRIGGER_DEFAULTS.threshold, releaseAt: AT_TRIGGER_DEFAULTS.releaseAt, gate: AT_TRIGGER_DEFAULTS.gate, minMs: AT_TRIGGER_DEFAULTS.minMs, cooldown: 120,
   shape: 'band' as AudioBandShape, slope: 24 as AudioBandSlope,
+  detect: 'level' as AudioBandDetect, character: 'any' as AudioBandCharacter, charAt: AT_CHAR_AT,
 };
 
-export interface BandPreset { key: string; name: string; lo: number; hi: number; value: boolean; trigger: boolean; threshold?: number; cooldown?: number; release?: number }
+export interface BandPreset {
+  key: string; name: string; lo: number; hi: number; value: boolean; trigger: boolean; threshold?: number; cooldown?: number; release?: number;
+  detect?: AudioBandDetect; character?: AudioBandCharacter; minMs?: number; title?: string;
+}
 
 /**
  * Quick bands. Kick, Snare and Hi-hat are triggers with Hit's ranges (nodes/definitions/audioTools.ts HIT_PRESETS, the
@@ -70,6 +101,22 @@ export const BAND_QUICK_PRESETS: readonly BandPreset[] = [
   { key: 'hihat', name: 'Hi-hat', lo: 6000, hi: 16000, value: false, trigger: true, threshold: 0.2, cooldown: 80 },
   { key: 'vocals', name: 'Vocals', lo: 300, hi: 3000, value: true, trigger: false },
   { key: 'air', name: 'Air', lo: 6000, hi: 16000, value: true, trigger: false },
+];
+
+/**
+ * Bands that set their Detect too: triggers that listen for a kind of sound rather than a loudness. Kick: Drums only
+ * (a bass line under it is separated out; a snare's low end still counts, it is a drum); Snare: Drums only, noisy hits
+ * only; Hats: Hits, noisy only; Melody notes: Hits, tonal only (each new note).
+ */
+export const BAND_DETECT_PRESETS: readonly BandPreset[] = [
+  { key: 'kickDrums', name: 'Kick', lo: 30, hi: 150, value: false, trigger: true, detect: 'drums', threshold: 0.5, cooldown: 150, minMs: 0,
+    title: 'Kick: Drums only on 30–150 Hz, so a bass line under it is ignored' },
+  { key: 'snareNoisy', name: 'Snare', lo: 150, hi: 5000, value: false, trigger: true, detect: 'drums', character: 'noisy', threshold: 0.5, cooldown: 120, minMs: 0,
+    title: 'Snare: Drums only on 150 Hz–5 kHz, noisy hits only' },
+  { key: 'hatsNoisy', name: 'Hats', lo: 6000, hi: 16000, value: false, trigger: true, detect: 'hits', character: 'noisy', threshold: 0.5, cooldown: 60, minMs: 0,
+    title: 'Hats: Hits on 6–16 kHz, noisy hits only' },
+  { key: 'melody', name: 'Melody notes', lo: 200, hi: 2000, value: false, trigger: true, detect: 'hits', character: 'tonal', threshold: 0.5, cooldown: 100, minMs: 0,
+    title: 'Melody notes: Hits on 200 Hz–2 kHz, tonal hits only (each new note)' },
 ];
 
 export const BAND_MIN_HZ = 20, BAND_MAX_HZ = 20000;
@@ -112,6 +159,10 @@ export function bandsOf(params: Record<string, unknown>): AudioBandSpec[] {
       cooldown: num(b.cooldown, BAND_DEFAULTS.cooldown, 40, 2000),
       shape,
       slope: BAND_SLOPES.includes(b.slope as AudioBandSlope) ? b.slope as AudioBandSlope : BAND_DEFAULTS.slope,
+      // Bands saved before Detect read their level, with every hit counting.
+      detect: atDetectOf(b.detect),
+      character: atCharacterOf(b.character),
+      charAt: num(b.charAt, BAND_DEFAULTS.charAt, 0, 1),
     });
   });
   // A band that sends nothing still sends its Value (otherwise it has no socket to show).
@@ -132,7 +183,7 @@ function freshName(bands: readonly AudioBandSpec[], name: string): string {
 
 /** A new band from a quick preset key (or a custom range), added after `bands`. */
 export function newBand(bands: readonly AudioBandSpec[], preset: string | { lo: number; hi: number }): AudioBandSpec {
-  const p = typeof preset === 'string' ? BAND_QUICK_PRESETS.find(q => q.key === preset) : undefined;
+  const p = typeof preset === 'string' ? [...BAND_QUICK_PRESETS, ...BAND_DETECT_PRESETS].find(q => q.key === preset) : undefined;
   const lo = p ? p.lo : typeof preset === 'object' ? preset.lo : 60;
   const hi = p ? p.hi : typeof preset === 'object' ? preset.hi : 250;
   const used = new Set(bands.map(b => b.color));
@@ -147,6 +198,9 @@ export function newBand(bands: readonly AudioBandSpec[], preset: string | { lo: 
     ...(p?.threshold !== undefined ? { threshold: p.threshold } : {}),
     ...(p?.cooldown !== undefined ? { cooldown: p.cooldown } : {}),
     ...(p?.release !== undefined ? { release: p.release } : {}),
+    ...(p?.detect !== undefined ? { detect: p.detect } : {}),
+    ...(p?.character !== undefined ? { character: p.character } : {}),
+    ...(p?.minMs !== undefined ? { minMs: p.minMs } : {}),
   };
 }
 

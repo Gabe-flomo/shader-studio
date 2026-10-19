@@ -132,6 +132,38 @@ describe('a File\'s triggers fire from the file analysed ahead, when they are he
   });
 });
 
+describe('a band\'s Detect on a File', () => {
+  it('Hits and Drums only bands fire each kick from the file analysed ahead; the scope shows the feature and the level', async () => {
+    const bands = [
+      { ...KICK_BAND, id: 'h', name: 'Hits', detect: 'hits', minMs: 0 },
+      { ...KICK_BAND, id: 'd', name: 'Drums', detect: 'drums', minMs: 0 },
+      { ...KICK_BAND, id: 'n', name: 'Noisy', lo: 2000, hi: 8000, detect: 'hits', character: 'noisy', minMs: 0 },
+    ];
+    await ready([n('audioSource', 'src', 0, 0, { _fileName: 'kicks.wav', bands })]);
+    // Each band's own analysis (its Detect) is ready too.
+    for (let i = 0; i < 40 && audioToolsEngine.sourceView('src')?.ahead !== 'ready'; i++) await new Promise(r => setTimeout(r, 20));
+    clock.token++;
+    const fired = { h: [] as number[], d: [] as number[], n: [] as number[] };
+    for (let f = 0; f <= 2.4 * 60; f++) {
+      clock.ctx = f / 60;
+      audioToolsEngine.tickInputs(1 / 60, clock.ctx, (k, v) => { for (const id of ['h', 'd', 'n'] as const) if (k === `src::${id}_t` && v === 1) fired[id].push(clock.ctx); });
+    }
+    expect(fired.h).toHaveLength(KICKS.length);
+    expect(fired.d).toHaveLength(KICKS.length);
+    fired.h.forEach((t, i) => expect(Math.abs(t - KICKS[i])).toBeLessThan(0.04));
+    // The noise floor up there is noise, but it never starts: no hits (and no Only to judge).
+    expect(fired.n).toHaveLength(0);
+    const v = audioToolsEngine.sourceView('src')!.bands.get('h')!;
+    expect(v.ahead).toBe(true);
+    // The scope: the feature (spiking at the kicks) and the level the Gate reads, apart.
+    expect(Math.max(...v.scope.vals)).toBeGreaterThan(0.5);
+    expect(Array.from(v.scope.vals).some((x, i) => Math.abs(x - v.scope.lvls[i]) > 0.1)).toBe(true);
+    // Learn noise reads the level (what the Gate reads), not the feature.
+    const quiet = audioToolsEngine.learnNoise('src', 'h', { from: 0.0, to: 0.3 });
+    expect('gate' in quiet && quiet.gate < 0.5).toBe(true);
+  });
+});
+
 describe('old graphs', () => {
   it('a band\'s and a Hit\'s Sensitivity become a fixed Threshold', () => {
     const src = migrateNodeParams(n('audioSource', 'src', 0, 0, {

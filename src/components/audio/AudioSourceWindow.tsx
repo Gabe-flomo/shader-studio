@@ -12,7 +12,10 @@
  *   node (lib/audioTools/bands.ts).
  * - **The trigger scope** under each trigger band: the last seconds of the level its trigger measures, the Threshold
  *   line (drag it), the Release and Gate lines (drag them too) and a tick where it fired, so it is tuned by eye. A File's
- *   comes from the file analysed ahead, lined up with what is heard.
+ *   comes from the file analysed ahead, lined up with what is heard. A band's **Detect** (Level, Hits, Transient,
+ *   Noisy ↔ tonal, Brightness, Drums only) and **Only** (any / noisy / tonal) pick what it measures; with a feature
+ *   picked the scope draws that curve, the level faint behind it (the Gate reads the level). **Add a detector** adds
+ *   bands with their Detect set (Kick, Snare, Hats, Melody notes).
  * - **The transport** (AudioTransport.tsx, as on the card): Play / Pause, Restart, Mute, Volume; then Loop, Gain and
  *   Sync offset (ms added to when its triggers fire, on top of the output latency taken off by itself).
  *
@@ -34,7 +37,11 @@ import { LEARN_BANDS, newSound, type AudioSoundSpec, type LearnResult } from '..
 import { audioToolsEngine, type BandView } from '../../lib/audioTools/engine';
 import { audioEngine } from '../../lib/audioEngine';
 import { liveAudio } from '../../lib/liveAudio';
-import { BAND_MAX_HZ, BAND_MIN_HZ, BAND_QUICK_PRESETS, MIN_TRIM, bandsOf, newBand, trimWindow, type AudioBandSpec } from '../../lib/audioTools/bands';
+import {
+  BAND_CHARACTERS, BAND_DETECTS, BAND_DETECT_PRESETS, BAND_MAX_HZ, BAND_MIN_HZ, BAND_QUICK_PRESETS, MIN_TRIM, bandsOf, newBand, trimWindow,
+  type AudioBandCharacter, type AudioBandDetect, type AudioBandSpec,
+} from '../../lib/audioTools/bands';
+import { Select } from '../ui/Select';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { Segmented, Toggle } from '../ui/Choice';
@@ -69,7 +76,14 @@ const SCOPE_PAD = 6;
 const scopeY = (v: number, h: number) => SCOPE_PAD + (1 - clamp01(v)) * (h - SCOPE_PAD * 2);
 const scopeValueAt = (y: number, h: number) => 1 - (y - SCOPE_PAD) / Math.max(1, h - SCOPE_PAD * 2);
 
-/** A band's trigger scope: the level it measured lately (oldest left), its lines, and a tick where it fired. */
+/** Whether a band has a scope: a trigger, or a Value that reads a feature (its curve is worth seeing). */
+const hasScope = (b: AudioBandSpec) => b.trigger || b.detect !== 'level';
+const detectLabel = (b: AudioBandSpec) => BAND_DETECTS.find(d => d.key === b.detect)?.label ?? 'Level';
+
+/**
+ * A band's scope: what its trigger measured lately (oldest left; the level, or the feature its Detect picked, then
+ * with the level faint behind it, as the Gate reads that), its lines, and a tick where it fired.
+ */
 function drawScope(g: CanvasRenderingContext2D, w: number, h: number, b: AudioBandSpec, bv: BandView | null) {
   g.fillStyle = BG; g.fillRect(0, 0, w, h);
   // Under the Gate: silence.
@@ -81,24 +95,35 @@ function drawScope(g: CanvasRenderingContext2D, w: number, h: number, b: AudioBa
     g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke();
     g.setLineDash([]);
   };
+  const feature = b.detect !== 'level';
   if (bv) {
     const sc = bv.scope, n = sc.vals.length, dx = w / (n - 1);
-    g.beginPath();
-    for (let k = 0; k < n; k++) { const v = sc.vals[(sc.at + k) % n], x = k * dx, y = scopeY(v, h); if (k) g.lineTo(x, y); else g.moveTo(x, y); }
-    g.strokeStyle = 'rgba(205,214,244,0.85)'; g.lineWidth = 1.25; g.stroke();
+    const trace = (arr: Float32Array, stroke: string, width: number) => {
+      g.beginPath();
+      for (let k = 0; k < n; k++) { const v = arr[(sc.at + k) % n], x = k * dx, y = scopeY(v, h); if (k) g.lineTo(x, y); else g.moveTo(x, y); }
+      g.strokeStyle = stroke; g.lineWidth = width; g.stroke();
+    };
+    if (feature) trace(sc.lvls, 'rgba(205,214,244,0.28)', 1);
+    trace(sc.vals, feature ? b.color : 'rgba(205,214,244,0.85)', feature ? 1.5 : 1.25);
     g.fillStyle = HIT_TICK;
-    for (let k = 0; k < n; k++) if (sc.hits[(sc.at + k) % n]) { const x = k * dx; g.fillRect(x - 1, 0, 2, h); }
+    if (b.trigger) for (let k = 0; k < n; k++) if (sc.hits[(sc.at + k) % n]) { const x = k * dx; g.fillRect(x - 1, 0, 2, h); }
   }
   line(b.gate, 'rgba(205,214,244,0.45)', [2, 3], 1);
-  line(b.threshold * b.releaseAt, b.color, [5, 4], 1);
-  line(b.threshold, b.color, [], 2);
   g.font = `10px ${fontFamily.ui}`; g.textAlign = 'right'; g.textBaseline = 'bottom';
   const tag = (text: string, v: number, color: string) => { g.fillStyle = color; g.fillText(text, w - 4, scopeY(v, h) - 2); };
-  tag(`Threshold ${b.threshold.toFixed(2)}`, b.threshold, b.color);
-  if (Math.abs(scopeY(b.threshold * b.releaseAt, h) - scopeY(b.threshold, h)) > 11) tag(`Release ${(b.threshold * b.releaseAt).toFixed(2)}`, b.threshold * b.releaseAt, b.color);
-  if (b.gate > 0 && Math.abs(scopeY(b.gate, h) - scopeY(b.threshold * b.releaseAt, h)) > 11) tag(`Gate ${b.gate.toFixed(2)}`, b.gate, LABEL);
+  if (b.trigger) {
+    line(b.threshold * b.releaseAt, b.color, [5, 4], 1);
+    line(b.threshold, b.color, [], 2);
+    tag(`Threshold ${b.threshold.toFixed(2)}`, b.threshold, b.color);
+    if (Math.abs(scopeY(b.threshold * b.releaseAt, h) - scopeY(b.threshold, h)) > 11) tag(`Release ${(b.threshold * b.releaseAt).toFixed(2)}`, b.threshold * b.releaseAt, b.color);
+  }
+  if (b.gate > 0 && (!b.trigger || Math.abs(scopeY(b.gate, h) - scopeY(b.threshold * b.releaseAt, h)) > 11)) tag(`Gate ${b.gate.toFixed(2)}${feature ? ' (level)' : ''}`, b.gate, LABEL);
   g.textAlign = 'left'; g.textBaseline = 'top'; g.fillStyle = LABEL;
-  g.fillText(bv ? `${bv.ahead ? 'analysed ahead · ' : ''}${bv.gateOpen ? 'gate open' : 'gate shut'} · ${bv.armed ? 'armed' : 'waiting to fall below Release'} · ${bv.count} hits` : 'not running', 4, 3);
+  const what = feature ? `${detectLabel(b)} (level faint)` : 'Level';
+  const only = b.trigger && b.character !== 'any' && b.detect !== 'flatness' && b.detect !== 'brightness' ? ` · only ${b.character}` : '';
+  g.fillText(bv
+    ? `${what}${only} · ${bv.ahead ? 'analysed ahead · ' : ''}${bv.gateOpen ? 'gate open' : 'gate shut'}${b.trigger ? ` · ${bv.armed ? 'armed' : 'waiting to fall below Release'} · ${bv.count} hits` : ''}`
+    : `${what} · not running`, 4, 3);
 }
 
 type TrimDrag = { which: 'in' | 'out' | 'new' | 'select'; anchor: number; start: number; end: number };
@@ -213,7 +238,7 @@ export function AudioSourceWindow({ nodeId, onClose, onLoad }: { nodeId: string;
       }
       // ── Trigger scopes: the measured level, the Threshold / Release / Gate lines, a tick on each hit ──
       for (const b of L.bands) {
-        if (!b.trigger) continue;
+        if (!hasScope(b)) continue;
         const m = fit(scopeRefs.current.get(b.id) ?? null), bv = v.bands.get(b.id);
         if (m) drawScope(m.g, m.w, m.h, b, bv ?? null);
       }
@@ -292,7 +317,8 @@ export function AudioSourceWindow({ nodeId, onClose, onLoad }: { nodeId: string;
       const y = e.clientY - r.top, near = (v: number) => Math.abs(scopeY(v, r.height) - y);
       const lines: Array<[ScopeLine, number]> = [['threshold', near(b.threshold)], ['release', near(b.threshold * b.releaseAt)], ['gate', near(b.gate)]];
       lines.sort((p, q) => p[1] - q[1]);
-      scopeDrag.current = { id: b.id, line: lines[0][1] <= 8 ? lines[0][0] : 'threshold' };
+      // A Value-only band (a feature's scope) has only its Gate to drag.
+      scopeDrag.current = { id: b.id, line: !b.trigger ? 'gate' : lines[0][1] <= 8 ? lines[0][0] : 'threshold' };
       setSelected(b.id);
     } else if (!scopeDrag.current || scopeDrag.current.id !== b.id || !(e.buttons & 1)) return;
     const line = scopeDrag.current!.line;
@@ -427,6 +453,12 @@ export function AudioSourceWindow({ nodeId, onClose, onLoad }: { nodeId: string;
               title={`${p.name}: ${fmtHz(p.lo)}–${fmtHz(p.hi)} Hz, sends ${p.trigger ? 'a Trigger on each hit' : 'its level'}`}>{p.name}</Button>
           ))}
         </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <span style={small} title="Bands that listen for a kind of sound (their Detect), not just a loudness">Add a detector:</span>
+          {BAND_DETECT_PRESETS.map(p => (
+            <Button key={p.key} size="sm" data-detect-preset={p.key} onClick={() => addBand(p.key)} title={p.title}>{p.name}</Button>
+          ))}
+        </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {!bands.length && <span style={small}>No bands yet. Each band you add becomes an output on the Audio Source: its level (Value) or a Trigger on each hit in it.</span>}
@@ -440,6 +472,28 @@ export function AudioSourceWindow({ nodeId, onClose, onLoad }: { nodeId: string;
                 style={{ width: 84, font: `600 12px ${fontFamily.ui}`, color: tk.text.primary, background: 'transparent', border: `1px solid ${tk.border.default}`, borderRadius: radius.sm, padding: '2px 5px' }} />
               {field('Low', b.lo, v => patchBand(b.id, { lo: Math.max(BAND_MIN_HZ, Math.min(v, b.hi - 1)) }), { step: 1, min: BAND_MIN_HZ, max: BAND_MAX_HZ, title: 'The band\'s bottom, in Hz.' })}
               {field('High', b.hi, v => patchBand(b.id, { hi: Math.min(BAND_MAX_HZ, Math.max(v, b.lo + 1)) }), { step: 1, min: BAND_MIN_HZ, max: BAND_MAX_HZ, title: 'The band\'s top, in Hz.' })}
+              <span style={{ width: 1, alignSelf: 'stretch', background: tk.border.default }} />
+              <label data-band-detect={b.id} style={{ display: 'flex', alignItems: 'center', gap: 4, ...small }} title={BAND_DETECTS.find(d => d.key === b.detect)?.title}
+                onClick={e => e.stopPropagation()}>
+                Detect
+                <Select value={b.detect} ariaLabel="Detect" height={24} style={{ minWidth: 118 }}
+                  options={BAND_DETECTS.map(d => ({ value: d.key, label: d.label }))}
+                  onChange={v => patchBand(b.id, { detect: v as AudioBandDetect })} />
+              </label>
+              {b.detect !== 'flatness' && b.detect !== 'brightness' && (
+                <label data-band-only={b.id} style={{ display: 'flex', alignItems: 'center', gap: 4, ...small, opacity: b.trigger ? 1 : 0.45 }}
+                  title="Only: let a hit through when the band is noisy (drums, hats, snares) or tonal (melodic notes) just after it"
+                  onClick={e => e.stopPropagation()}>
+                  Only
+                  <Select value={b.character} ariaLabel="Only" height={24} style={{ minWidth: 70 }}
+                    options={BAND_CHARACTERS.map(c => ({ value: c.key, label: c.label }))}
+                    onChange={v => patchBand(b.id, { character: v as AudioBandCharacter })} />
+                </label>
+              )}
+              {b.character !== 'any' && b.detect !== 'flatness' && b.detect !== 'brightness' && field('Noisy at', b.charAt, v => patchBand(b.id, { charAt: clamp01(v) }), {
+                step: 0.05, min: 0, max: 1, disabled: !b.trigger,
+                title: 'Only\'s line on the band\'s flatness (0 a pure tone … 1 noise), averaged over 40 ms after each hit: at or over it is noisy, under it tonal. Pick Detect: Noisy ↔ tonal to see where the band sits.',
+              })}
               <span style={{ width: 1, alignSelf: 'stretch', background: tk.border.default }} />
               <Toggle checked={b.value} onChange={c => patchBand(b.id, c || b.trigger ? { value: c } : { value: false, trigger: true }, true)} label="Value" />
               {field('Attack', b.attack, v => patchBand(b.id, { attack: Math.max(0, v) }), { step: 0.01, min: 0, title: 'Seconds the Value takes to rise.', disabled: !b.value })}
@@ -456,10 +510,12 @@ export function AudioSourceWindow({ nodeId, onClose, onLoad }: { nodeId: string;
                 title={kind === 'file' ? 'Set the Gate just over the band\'s noise in the selection (Drag: Select a quiet stretch)' : 'Set the Gate just over the band\'s noise in the last two seconds: keep it quiet first'}>Learn noise</Button>
               <canvas ref={c => { if (c) meterRefs.current.set(b.id, c); else meterRefs.current.delete(b.id); }} style={{ width: 84, height: 18, display: 'block', marginLeft: 'auto' }} title="The band now: its level, and a flash on each hit" />
               <Button size="sm" variant="ghost" onClick={e => { e.stopPropagation(); removeBand(b.id); }} title="Remove the band (and its outputs' wires)">✕</Button>
-              {b.trigger && (
+              {hasScope(b) && (
                 <canvas ref={c => { if (c) scopeRefs.current.set(b.id, c); else scopeRefs.current.delete(b.id); }} data-trigger-scope={b.id}
                   onPointerDown={e => onScope(e, b, 'down')} onPointerMove={e => onScope(e, b, 'move')} onPointerUp={() => { scopeDrag.current = null; }}
-                  title="The trigger scope: the level it measures (the last seconds), Threshold (solid), Release (dashed), Gate (grey) and a tick on each hit. Drag a line to move it."
+                  title={b.detect === 'level'
+                    ? 'The trigger scope: the level it measures (the last seconds), Threshold (solid), Release (dashed), Gate (grey) and a tick on each hit. Drag a line to move it.'
+                    : `The scope: ${detectLabel(b)} (the band's colour) with its level faint behind it, Threshold (solid), Release (dashed), Gate (grey, on the level) and a tick on each hit. Drag a line to move it.`}
                   style={{ flexBasis: '100%', width: '100%', height: 84, display: 'block', borderRadius: radius.sm, cursor: 'ns-resize', touchAction: 'none' }} />
               )}
             </div>

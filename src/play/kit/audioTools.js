@@ -129,19 +129,22 @@ export function atThresholdFromSensitivity(sensitivity) {
 }
 
 export function atNewTriggerState() {
-  return { gateOpen: false, below: 0, armed: true, above: 0, crossAt: 0, lastHit: -Infinity, trigger: 0, signal: 0, gated: 0, strength: 0, count: 0 };
+  return { gateOpen: false, below: 0, armed: true, above: 0, crossAt: 0, lastHit: -Infinity, trigger: 0, signal: 0, level: 0, gated: 0, strength: 0, count: 0 };
 }
 
 /**
  * One step of a trigger on signal `x` over the `dt` seconds ending at `now` (`o`: threshold, releaseAt, gate, minMs,
  * cooldownMs, as atTriggerOpts cleans them). Fires (s.trigger = 1) once the gated signal has been above Threshold for
  * Min time, when armed and out of the Cooldown; s.lastHit is then the moment it first rose above (the onset).
- * Mutates and returns `s`.
+ * `g` (optional): what the Gate reads, when it isn't `x` — a band's level, while `x` is a feature its Detect picked
+ * (Hits, Transient…): the Gate stays "below this level the band is silence". Mutates and returns `s`.
  */
-export function atStepTrigger(s, x, now, dt, o) {
+export function atStepTrigger(s, x, now, dt, o, g) {
   s.trigger = 0;
   s.signal = x;
-  if (x > o.gate) { s.gateOpen = true; s.below = 0; }
+  const gs = g === undefined ? x : g;
+  s.level = gs;
+  if (gs > o.gate) { s.gateOpen = true; s.below = 0; }
   else if (s.gateOpen) { s.below += dt; if (s.below >= AT_GATE_HOLD - 1e-9) s.gateOpen = false; }
   const v = s.gateOpen ? x : 0;
   s.gated = v;
@@ -183,34 +186,57 @@ export function atTriggerOpts(o) {
 
 /** Frames a trigger scope keeps (about 5 s at 60 fps): the signal it measured and where it fired. */
 export const AT_SCOPE_FRAMES = 300;
-export function atNewScope() { return { vals: new Float32Array(AT_SCOPE_FRAMES), hits: new Uint8Array(AT_SCOPE_FRAMES), at: 0 }; }
-function atPushScope(sc, v, hit) { sc.vals[sc.at] = v; sc.hits[sc.at] = hit ? 1 : 0; sc.at = (sc.at + 1) % sc.vals.length; }
+/** `vals` is what the trigger measured (the level, or the feature Detect picked), `lvls` the band's level (what the Gate reads). */
+export function atNewScope() { return { vals: new Float32Array(AT_SCOPE_FRAMES), lvls: new Float32Array(AT_SCOPE_FRAMES), hits: new Uint8Array(AT_SCOPE_FRAMES), at: 0 }; }
+function atPushScope(sc, v, hit, lvl) { sc.vals[sc.at] = v; sc.lvls[sc.at] = lvl === undefined ? v : lvl; sc.hits[sc.at] = hit ? 1 : 0; sc.at = (sc.at + 1) % sc.vals.length; }
 
 export function atNewHitState() {
-  return Object.assign(atNewTriggerState(), { envelope: 0, pending: [], scope: atNewScope() });
+  return Object.assign(atNewTriggerState(), { envelope: 0, pending: [], cands: [], arr: [], scope: atNewScope() });
 }
 
 /**
  * One frame of Hit: Trigger is 1 on the frame of a hit and 0 on every other. `o`: lo, hi, threshold, releaseAt, gate,
  * minMs, cooldownMs, decay, and `delay` (seconds to hold a live hit back: a sound that reaches the speakers later than
  * the analyser reads it). `ext` (optional): this frame's hit decided ahead (a file analysed ahead: { fired, signal,
- * strength }); the live trigger still runs then, for the gate. Mutates and returns `s`.
+ * strength, level? }); the live trigger still runs then, for the gate. `o.x` / `o.level` (optional): the signal the
+ * trigger measures and the band's level the Gate reads, when worked out already (a band's Detect); otherwise both are
+ * the band's level. `o.character` / `o.charAt` / `o.arrival` (optional, a band's Only; atBandArrival's { flat,
+ * energy } this frame): a live hit is held for AT_CHAR_WINDOW, then fired (stamped at its onset) only if what arrived
+ * in the band from its onset on was noisy / tonal enough (atCharPass on the arrivals' energy-weighted flatness); one that
+ * isn't never fires and isn't counted. Mutates and returns `s`.
  */
 export function atStepHit(s, freqDb, sampleRate, now, dt, o, ext) {
   s.envelope = o.decay > 0 ? Math.max(0, s.envelope - dt / o.decay) : 0;
-  const level = atBandLevel(freqDb, sampleRate, o.lo, o.hi);
+  const level = o.level !== undefined ? o.level : atBandLevel(freqDb, sampleRate, o.lo, o.hi);
+  const x = o.x !== undefined ? o.x : level;
   const count = s.count, strength = s.strength;
-  atStepTrigger(s, level, now, dt, atTriggerOpts(o));
+  atStepTrigger(s, x, now, dt, atTriggerOpts(o), level);
   let fired = 0;
   if (ext) {
     s.count = count; s.strength = strength;
     if (ext.fired) { fired = 1; s.count += ext.fired; s.strength = ext.strength; }
-    atPushScope(s.scope, ext.signal, fired);
+    atPushScope(s.scope, ext.signal, fired, ext.level);
   } else {
     const delay = o.delay > 0 ? o.delay : 0;
-    if (s.trigger) s.pending.push(s.lastHit + delay);
+    const judged = o.character === 'noisy' || o.character === 'tonal';
+    if (judged) {
+      const ar = o.arrival;
+      s.arr.push({ t: now, f: ar ? ar.flat : 0, e: ar ? ar.energy : 0 });
+      while (s.arr.length && now - s.arr[0].t > AT_CHAR_WINDOW + 0.5) s.arr.shift();
+    } else { s.arr.length = 0; s.cands.length = 0; }
+    if (s.trigger) {
+      if (judged) s.cands.push(s.lastHit);
+      else s.pending.push(s.lastHit + delay);
+    }
+    while (s.cands.length && now - s.cands[0] >= AT_CHAR_WINDOW - 1e-9) {
+      const t0 = s.cands.shift();
+      let sf = 0, se = 0;
+      for (const a of s.arr) if (a.t >= t0 - 1e-6 && a.t <= t0 + AT_CHAR_WINDOW + 1e-6) { sf += a.f * a.e; se += a.e; }
+      if (atCharPass(o.character, se > 0 ? sf / se : 0, o.charAt)) s.pending.push(t0 + delay);
+      else s.count = Math.max(0, s.count - 1);
+    }
     while (s.pending.length && s.pending[0] <= now + 1e-9) { s.pending.shift(); fired = 1; }
-    atPushScope(s.scope, level, fired);
+    atPushScope(s.scope, x, fired, level);
   }
   s.trigger = fired;
   if (fired) s.envelope = 1;
@@ -284,12 +310,12 @@ export function atAnalyseLevels(mono, sampleRate, ranges, hop, onProgress) {
 
 /**
  * The hits in a level curve (one value per `hopSeconds`), found by the same trigger as live: their times (the onsets,
- * in seconds) and strengths.
+ * in seconds) and strengths. `gateCurve` (optional): what the Gate reads, when the curve is a feature (the band's level).
  */
-export function atPickTriggers(curve, hopSeconds, o) {
+export function atPickTriggers(curve, hopSeconds, o, gateCurve) {
   const s = atNewTriggerState(), opts = atTriggerOpts(o), times = [], strengths = [];
   for (let i = 0; i < curve.length; i++) {
-    atStepTrigger(s, curve[i], i * hopSeconds, hopSeconds, opts);
+    atStepTrigger(s, curve[i], i * hopSeconds, hopSeconds, opts, gateCurve ? gateCurve[i] : undefined);
     if (s.trigger) { times.push(s.lastHit); strengths.push(s.strength); }
   }
   return { times: Float64Array.from(times), strengths: Float32Array.from(strengths) };
@@ -390,19 +416,363 @@ export function atWaveRow(wave, out, gain = 1) {
   for (let i = 0; i < n; i++) out[i] = Math.max(0, Math.min(1, 0.5 + 0.5 * (wave[start + i] ?? 0) * gain));
 }
 
-// ── An Audio Source's bands ──────────────────────────────────────────────────────────────────────────────────
+// ── Detect: what a band's Value and Trigger read (docs/audio-tools.md "Detect") ─────────────────────────────────────
+//
+// A band's Detect picks the 0..1 signal its Value sends and its Trigger fires on (the same fixed Threshold / Release /
+// Min ms / Cooldown). The Gate always reads the band's level: below it the band is silence, whatever it detects.
+//   level       the band's level (atBandLevel): as before Detect, and still the default
+//   hits        onset strength: spectral flux (half-wave rectified, on log-compressed magnitudes) over the band's bins,
+//               against its own recent mean (AT_ONSET_TAU): flux / (flux + K·mean + floor), so 0.5 is "K × the recent
+//               mean". A steady note has no flux: a kick over a held bass line reads near 1 at each kick, near 0 between.
+//   transient   attack sharpness: how far the band's level (dB) jumped above its own slow follower (AT_TRANSIENT_TAU),
+//               over AT_TRANSIENT_DB. A click or snap reads 1; a swell (rising slower than the follower) stays low.
+//   flatness    noisy ↔ tonal: the band's spectral flatness (geometric ÷ arithmetic mean of its bins' power) in dB,
+//               over AT_FLAT_DB: 0 a pure tone … about 0.9 white noise. Needs a band a few FFT bins wide.
+//   brightness  the band's spectral centroid, on a log scale from its bottom (0) to its top (1).
+//   drums       "Drums only": harmonic / percussive separation (HPSS: a median across time is the harmonic part, a
+//               median across frequency the percussive part, a soft mask P / (P + H)) on the band's spectrum, then Hits
+//               on what is left, so a sustained melody under the kick is ignored. Live (Mic, Video, a web page) it is
+//               causal: the time median covers the last AT_HPSS_SECONDS only. A File analysed ahead centres that window
+//               on each moment (atAnalyseFeatures), so it sees how long a sound lasts on both sides.
+// `character` (Only: any / noisy / tonal) lets a hit through only where the band's flatness is at least (noisy) or under
+// (tonal) `charAt`: drums, hats and snares are noisy, melodic notes tonal. It doesn't apply to Flatness or Brightness.
 
-export function atNewBandRun() { return { band: atNewBandState(), hit: atNewHitState(), hitAt: -Infinity }; }
+export const AT_DETECTS = ['level', 'hits', 'transient', 'flatness', 'brightness', 'drums'];
+export const AT_CHARACTERS = ['any', 'noisy', 'tonal'];
+export const AT_CHAR_AT = 0.3;
+export function atDetectOf(d) { return AT_DETECTS.indexOf(d) >= 0 ? d : 'level'; }
+export function atCharacterOf(c) { return AT_CHARACTERS.indexOf(c) >= 0 ? c : 'any'; }
+/** Whether Only (noisy / tonal) applies to a Detect. */
+export function atDetectTakesCharacter(d) { const k = atDetectOf(d); return k !== 'flatness' && k !== 'brightness'; }
 
 /**
- * One frame of a band (lib/audioTools/bands.ts AudioBandSpec): its Value (the level once the Gate lets it through,
- * followed with Attack / Release, times Gain) and its Trigger. `x` (optional): { delay, ext } — seconds to hold live
- * hits back, and this frame's hit decided ahead (a file analysed ahead). Mutates and returns `run`.
+ * Onsets: seconds of the recent mean flux an onset is measured against; the multiple of it that reads 0.5; the share of
+ * the band's own loudness (log-compressed) a flux must beat to count; a floor for near-silence.
+ */
+export const AT_ONSET_TAU = 0.5;
+export const AT_ONSET_K = 3;
+export const AT_ONSET_REL = 0.02;
+export const AT_ONSET_FLOOR = 0.0002;
+/** Transient: the slow follower's time constant (s) and the jump (dB) that reads 1. */
+export const AT_TRANSIENT_TAU = 0.1;
+export const AT_TRANSIENT_DB = 15;
+/** Flatness: the flatness in dB (10·log10 G/A) that reads 0. */
+export const AT_FLAT_DB = 30;
+/** HPSS: the time median's length (s), the frequency median's width (groups), the most frequency groups worked on. */
+export const AT_HPSS_SECONDS = 0.2;
+export const AT_HPSS_FREQ = 17;
+export const AT_HPSS_GROUPS = 96;
+/** The frame live analysis compares with (60 fps): a file analysed ahead (5 ms hops) compares about this far back. */
+export const AT_LIVE_FRAME = 1 / 60;
+export function atOfflineLag(hopSeconds) { return Math.max(1, Math.round(AT_LIVE_FRAME / hopSeconds)); }
+
+/** The bins a band reads: atBandLevel's. */
+function atBinRange(nb, sampleRate, lo, hi) {
+  const hz = atBinHz(sampleRate, nb);
+  return [Math.max(1, Math.floor(Math.min(lo, hi) / hz)), Math.min(nb - 1, Math.ceil(Math.max(lo, hi) / hz))];
+}
+
+/** Spectral flatness in the band, 0 (a pure tone) … 1 (flat): 1 + 10·log10(geometric / arithmetic mean power) / AT_FLAT_DB. */
+export function atBandFlatness(freqDb, sampleRate, lo, hi) {
+  const [a, b] = atBinRange(freqDb.length, sampleRate, lo, hi);
+  if (b < a) return 0;
+  let lg = 0, ar = 0;
+  for (let i = a; i <= b; i++) { const db = Math.max(AT_DB_FLOOR, freqDb[i]); lg += db; ar += Math.pow(10, db / 10); }
+  const n = b - a + 1, flatDb = lg / n - 10 * Math.log10(ar / n);
+  return Math.max(0, Math.min(1, 1 + flatDb / AT_FLAT_DB));
+}
+
+/** The band's spectral centroid (power-weighted), 0 at its bottom bin … 1 at its top, on a log scale. */
+export function atBandBrightness(freqDb, sampleRate, lo, hi) {
+  const [a, b] = atBinRange(freqDb.length, sampleRate, lo, hi);
+  if (b <= a) return 0;
+  let sp = 0, sf = 0;
+  for (let i = a; i <= b; i++) { const db = freqDb[i]; if (!(db > AT_DB_FLOOR)) continue; const p = Math.pow(10, db / 10); sp += p; sf += p * i; }
+  if (!(sp > 0)) return 0;
+  return Math.max(0, Math.min(1, Math.log(sf / sp / a) / Math.log(b / a)));
+}
+
+export function atNewFeature() { return { key: '', hist: [], mean: 0, slow: -1, t: 0, ring: [], perc: [] }; }
+
+/**
+ * Onset strength from a flux, against the recent mean (which then moves on by `dt` seconds) and a floor that scales
+ * with how loud the band is now (`ref`: its bins' mean log-compressed magnitude), so a quiet band's hits count as much
+ * as a loud one's while the tiny wobble of a held note never does: flux / (flux + K·mean + REL·ref + floor).
+ */
+function atOnsetNorm(f, flux, dt, ref) {
+  const v = flux / (flux + AT_ONSET_K * f.mean + AT_ONSET_REL * ref + AT_ONSET_FLOOR);
+  f.mean += (flux - f.mean) * (1 - Math.exp(-Math.max(0, dt) / AT_ONSET_TAU));
+  return v;
+}
+
+const atRowMean = row => { let s = 0; for (let i = 0; i < row.length; i++) s += row[i]; return row.length ? s / row.length : 0; };
+
+/** How much `row` (log-compressed magnitudes) rose over the row `lag` frames back (kept in `hist`), averaged. */
+function atLagFlux(hist, row, lag) {
+  let flux = 0;
+  if (hist.length >= lag) {
+    const p = hist[hist.length - lag];
+    for (let i = 0; i < row.length; i++) { const d = row[i] - p[i]; if (d > 0) flux += d; }
+    flux /= Math.max(1, row.length);
+  }
+  hist.push(row);
+  while (hist.length > lag) hist.shift();
+  return flux;
+}
+
+/** HPSS's frequency groups for a band: groups of `g` bins over it, and AT_HPSS_FREQ / 2 groups of context on each side. */
+export function atHpssRegion(nb, sampleRate, lo, hi) {
+  const [a, b] = atBinRange(nb, sampleRate, lo, hi);
+  const m = AT_HPSS_FREQ >> 1, n = Math.max(1, b - a + 1);
+  const g = Math.max(1, Math.ceil(n / (AT_HPSS_GROUPS - 2 * m)));
+  const nBand = Math.ceil(n / g);
+  return { nb, g, m, nBand, groups: nBand + 2 * m, start: a - m * g };
+}
+
+/**
+ * The power of each of a region's groups (the mean of its bins'). Past either end of the spectrum (and DC) is silence,
+ * so a low tone's few bins near 0 Hz don't fill the frequency median and pass for a broadband hit.
+ */
+export function atGroupPow(freqDb, R, out) {
+  for (let k = 0; k < R.groups; k++) {
+    let s = 0;
+    for (let j = 0; j < R.g; j++) {
+      const i = R.start + k * R.g + j, db = i >= 1 && i < R.nb ? freqDb[i] : AT_DB_FLOOR;
+      s += db > AT_DB_FLOOR ? Math.pow(10, db / 10) : 1e-10;
+    }
+    out[k] = s / R.g;
+  }
+  return out;
+}
+
+function atMedianOf(buf, n) {
+  const a = buf.subarray(0, n).sort();
+  return n & 1 ? a[n >> 1] : 0.5 * (a[(n >> 1) - 1] + a[n >> 1]);
+}
+
+/**
+ * The percussive part of one frame's band groups (`cur`, power) given their harmonic estimate (`harm`): the median
+ * across AT_HPSS_FREQ groups, a soft mask P / (P + H) on the power (the band's groups only).
+ */
+export function atPercRow(cur, harm, R) {
+  const row = new Float64Array(R.nBand), buf = new Float64Array(AT_HPSS_FREQ);
+  for (let kb = 0; kb < R.nBand; kb++) {
+    for (let j = 0; j < AT_HPSS_FREQ; j++) buf[j] = cur[kb + j];
+    const k = kb + R.m, p = atMedianOf(buf, AT_HPSS_FREQ);
+    row[kb] = cur[k] * (p / (p + harm[k] + 1e-20));
+  }
+  return row;
+}
+
+/** How loud a frame's band groups are (all of it, not only the percussive part): their mean log-compressed magnitude. */
+function atBandRef(cur, R) {
+  let s = 0;
+  for (let kb = 0; kb < R.nBand; kb++) { const p = cur[kb + R.m]; s += atFluxUnit(p > 1e-10 ? 10 * Math.log10(p) : AT_DB_FLOOR); }
+  return R.nBand ? s / R.nBand : 0;
+}
+
+/** The percussive power of a frame's band groups as log-compressed magnitudes, for the flux (atFluxUnit). */
+function atPercFlux(perc) {
+  const row = new Float32Array(perc.length);
+  for (let i = 0; i < perc.length; i++) row[i] = atFluxUnit(perc[i] > 1e-10 ? 10 * Math.log10(perc[i]) : AT_DB_FLOOR);
+  return row;
+}
+
+/**
+ * One frame of a band's feature (hits, transient, brightness, flatness, drums), 0..1, on a dB spectrum `dt` seconds after
+ * the last. `lag`: how many frames back the flux compares with (1 live; atOfflineLag ahead). `level` (optional): the
+ * band's level this frame, when known. Mutates `f`.
+ */
+export function atStepFeature(f, detect, freqDb, sampleRate, lo, hi, dt, lag, level) {
+  const nb = freqDb.length;
+  const key = `${detect}|${nb}|${sampleRate}|${Math.round(lo)}|${Math.round(hi)}`;
+  if (f.key !== key) { f.key = key; f.hist = []; f.mean = 0; f.slow = -1; f.t = 0; f.ring = []; f.perc = []; }
+  const L = Math.max(1, lag | 0), step = Math.max(0, dt);
+  f.t += step;
+  switch (detect) {
+    case 'hits': {
+      const [a, b] = atBinRange(nb, sampleRate, lo, hi);
+      if (b < a) return 0;
+      const row = new Float32Array(b - a + 1);
+      for (let i = a; i <= b; i++) row[i - a] = atFluxUnit(freqDb[i]);
+      return atOnsetNorm(f, atLagFlux(f.hist, row, L), step, atRowMean(row));
+    }
+    case 'transient': {
+      const cur = (level !== undefined ? level : atBandLevel(freqDb, sampleRate, lo, hi)) * 70;
+      if (!(f.slow >= 0)) f.slow = cur;
+      const v = Math.max(0, Math.min(1, (cur - f.slow) / AT_TRANSIENT_DB));
+      f.slow += (cur - f.slow) * (1 - Math.exp(-step / AT_TRANSIENT_TAU));
+      return v;
+    }
+    case 'brightness': return atBandBrightness(freqDb, sampleRate, lo, hi);
+    case 'flatness': return atBandFlatness(freqDb, sampleRate, lo, hi);
+    case 'drums': {
+      const R = atHpssRegion(nb, sampleRate, lo, hi);
+      const cur = atGroupPow(freqDb, R, new Float64Array(R.groups));
+      f.ring.push({ t: f.t, pow: cur });
+      while (f.ring.length > 1 && f.t - f.ring[0].t > AT_HPSS_SECONDS - 1e-9) f.ring.shift();
+      const harm = new Float64Array(R.groups), buf = new Float64Array(f.ring.length);
+      for (let k = 0; k < R.groups; k++) {
+        for (let j = 0; j < f.ring.length; j++) buf[j] = f.ring[j].pow[k];
+        harm[k] = atMedianOf(buf, f.ring.length);
+      }
+      return atOnsetNorm(f, atLagFlux(f.perc, atPercFlux(atPercRow(cur, harm, R)), L), step, atBandRef(cur, R));
+    }
+  }
+  return level !== undefined ? level : atBandLevel(freqDb, sampleRate, lo, hi);
+}
+
+/** Seconds after a hit's onset over which Only (noisy / tonal) judges what arrived. */
+export const AT_CHAR_WINDOW = 0.04;
+
+/**
+ * What arrived in the band since `st.prev` (`lag` frames back: its bins' power rises): the flatness of those rises on
+ * atBandFlatness's scale (a new note rises in a few harmonic bins: tonal; a hat or a snare in all of them: noisy),
+ * and their mean power (how much arrived, the weight Only judges a hit's frames by). Keeps this frame's power in `st`.
+ */
+export function atBandArrival(st, freqDb, sampleRate, lo, hi, lag) {
+  const [a, b] = atBinRange(freqDb.length, sampleRate, lo, hi);
+  const n = Math.max(0, b - a + 1), pow = new Float64Array(n);
+  for (let i = 0; i < n; i++) { const db = freqDb[a + i]; pow[i] = db > AT_DB_FLOOR ? Math.pow(10, db / 10) : 0; }
+  const L = Math.max(1, lag | 0);
+  const prev = st.hist.length >= L ? st.hist[st.hist.length - L] : null;
+  st.hist.push(pow);
+  while (st.hist.length > L) st.hist.shift();
+  if (!prev || prev.length !== n || !n) return { flat: 0, energy: 0 };
+  let sum = 0;
+  for (let i = 0; i < n; i++) { const r = pow[i] - prev[i]; if (r > 0) sum += r; }
+  if (!(sum > 0)) return { flat: 0, energy: 0 };
+  const mean = sum / n, floor = mean * 1e-4;
+  let lg = 0;
+  for (let i = 0; i < n; i++) lg += 10 * Math.log10(Math.max(floor, pow[i] - prev[i]));
+  return { flat: Math.max(0, Math.min(1, 1 + (lg / n - 10 * Math.log10(mean)) / AT_FLAT_DB)), energy: mean };
+}
+
+/** Whether a hit whose arrival's flatness was `flat` passes Only (`character`: any / noisy / tonal) at `charAt`. */
+export function atCharPass(character, flat, charAt) {
+  const c = atCharacterOf(character);
+  if (c === 'any') return true;
+  const cut = typeof charAt === 'number' && Number.isFinite(charAt) ? charAt : AT_CHAR_AT;
+  return c === 'noisy' ? flat >= cut : flat < cut;
+}
+
+/** The Only a band's trigger uses: its character, or 'any' when its Detect doesn't take one (Flatness, Brightness). */
+export function atBandCharacter(b) { return atDetectTakesCharacter(b.detect) ? atCharacterOf(b.character) : 'any'; }
+
+/**
+ * Hits picked ahead (atPickTriggers) kept only where Only passes, judged as a live hit is: the arrivals' flatness
+ * (`aflat`) weighted by their energy (`arise`), over AT_CHAR_WINDOW from each onset (curves one value per `hopSeconds`).
+ */
+export function atCharFilter(ev, aflat, arise, hopSeconds, character, charAt) {
+  if (atCharacterOf(character) === 'any') return ev;
+  const times = [], strengths = [];
+  for (let k = 0; k < ev.times.length; k++) {
+    const a = Math.max(0, Math.round(ev.times[k] / hopSeconds)), b = Math.min(aflat.length - 1, Math.round((ev.times[k] + AT_CHAR_WINDOW) / hopSeconds));
+    let sf = 0, se = 0;
+    for (let i = a; i <= b; i++) { sf += aflat[i] * arise[i]; se += arise[i]; }
+    if (atCharPass(character, se > 0 ? sf / se : 0, charAt)) { times.push(ev.times[k]); strengths.push(ev.strengths[k]); }
+  }
+  return { times: Float64Array.from(times), strengths: Float32Array.from(strengths) };
+}
+
+/** Sliding median of `col` over `w` (odd) values centred on each (past the ends, the end value), into `out`. */
+export function atSlidingMedian(col, w, out) {
+  const n = col.length, h = w >> 1, win = new Float64Array(w);
+  const at = i => col[Math.max(0, Math.min(n - 1, i))];
+  for (let j = 0; j < w; j++) win[j] = at(j - h);
+  win.sort();
+  for (let i = 0; i < n; i++) {
+    out[i] = win[h];
+    if (i + 1 >= n) break;
+    // Slide: the value leaving is replaced by the one entering, moved along until the window is sorted again.
+    const old = at(i - h), nu = at(i + 1 + h);
+    let p = 0;
+    while (p < w - 1 && win[p] !== old) p++;
+    while (p > 0 && win[p - 1] > nu) { win[p] = win[p - 1]; p--; }
+    while (p < w - 1 && win[p + 1] < nu) { win[p] = win[p + 1]; p++; }
+    win[p] = nu;
+  }
+  return out;
+}
+
+/**
+ * A whole sound's band features ahead (a File source): for each request { lo, hi, detect } its `value` (what Detect
+ * reads), `level` (what the Gate reads) and `flat` (what Only reads) curves, one value per `hop` samples, each centred
+ * on its time as atAnalyseLevels's are. Hits, Transient, Flatness and Brightness are the live sums stepped every hop
+ * (the flux compares atOfflineLag hops back: about one live frame). Drums only is non-causal here: its time median is
+ * centred on each moment.
+ */
+export function atAnalyseFeatures(mono, sampleRate, reqs, hop, onProgress) {
+  const n = AT_OFFLINE_FFT, frames = Math.max(1, Math.ceil(mono.length / hop)), hopSec = hop / sampleRate, lag = atOfflineLag(hopSec);
+  const db = new Float32Array(n / 2);
+  const out = reqs.map(r => {
+    const d = atDetectOf(r.detect);
+    return {
+      detect: d, level: new Float32Array(frames), value: d === 'level' ? null : new Float32Array(frames), flat: new Float32Array(frames),
+      aflat: new Float32Array(frames), arise: new Float32Array(frames), arr: { hist: [] }, st: atNewFeature(), R: null, mat: null, row: null,
+    };
+  });
+  for (let i = 0; i < frames; i++) {
+    atSpectrumDbAt(mono, i * hop - n / 2, n, db);
+    for (let r = 0; r < reqs.length; r++) {
+      const o = out[r], lo = reqs[r].lo, hi = reqs[r].hi;
+      const level = atBandLevel(db, sampleRate, lo, hi);
+      o.level[i] = level;
+      o.flat[i] = atBandFlatness(db, sampleRate, lo, hi);
+      const ar = atBandArrival(o.arr, db, sampleRate, lo, hi, lag);
+      o.aflat[i] = ar.flat; o.arise[i] = ar.energy;
+      if (o.detect === 'drums') {
+        if (!o.R) { o.R = atHpssRegion(db.length, sampleRate, lo, hi); o.mat = new Float32Array(frames * o.R.groups); o.row = new Float64Array(o.R.groups); }
+        o.mat.set(atGroupPow(db, o.R, o.row), i * o.R.groups);
+      } else if (o.detect === 'flatness') o.value[i] = o.flat[i];
+      else if (o.value) o.value[i] = atStepFeature(o.st, o.detect, db, sampleRate, lo, hi, hopSec, lag, level);
+    }
+    if (onProgress && (i & 1023) === 0) onProgress(i / frames);
+  }
+  for (const o of out) {
+    if (o.detect !== 'drums' || !o.R) continue;
+    const R = o.R, G = R.groups, w = Math.max(3, Math.round(AT_HPSS_SECONDS / hopSec) | 1);
+    const harm = new Float32Array(frames * G), col = new Float32Array(frames), med = new Float32Array(frames);
+    for (let k = 0; k < G; k++) {
+      for (let i = 0; i < frames; i++) col[i] = o.mat[i * G + k];
+      atSlidingMedian(col, w, med);
+      for (let i = 0; i < frames; i++) harm[i * G + k] = med[i];
+    }
+    const f = atNewFeature(), hist = [];
+    for (let i = 0; i < frames; i++) {
+      const cur = o.mat.subarray(i * G, (i + 1) * G), perc = atPercRow(cur, harm.subarray(i * G, (i + 1) * G), R);
+      o.value[i] = atOnsetNorm(f, atLagFlux(hist, atPercFlux(perc), lag), hopSec, atBandRef(cur, R));
+    }
+    o.mat = null;
+  }
+  return out.map(o => ({ value: o.value || o.level, level: o.level, flat: o.flat, aflat: o.aflat, arise: o.arise }));
+}
+
+// ── An Audio Source's bands ──────────────────────────────────────────────────────────────────────────────────
+
+export function atNewBandRun() { return { band: atNewBandState(), hit: atNewHitState(), hitAt: -Infinity, feat: atNewFeature(), flat: 0, arr: { hist: [] } }; }
+
+/**
+ * One frame of a band (lib/audioTools/bands.ts AudioBandSpec): its Value (what its Detect reads — the level, or a
+ * feature — once the Gate lets it through, followed with Attack / Release, times Gain) and its Trigger. `x` (optional):
+ * { delay, ext } — seconds to hold live hits back, and this frame's hit decided ahead (a file analysed ahead). A band
+ * on Level with Only: any runs exactly as before Detect. Only (noisy / tonal) judges each hit, never the Value.
+ * Mutates and returns `run`.
  */
 export function atStepBandRun(run, b, freqDb, sampleRate, now, dt, x) {
+  const detect = atDetectOf(b.detect), character = b.trigger ? atBandCharacter(b) : 'any';
+  let sig, level, arrival;
+  if (detect !== 'level' || character !== 'any') {
+    level = atBandLevel(freqDb, sampleRate, b.lo, b.hi);
+    const flat = atBandFlatness(freqDb, sampleRate, b.lo, b.hi);
+    run.flat = flat;
+    sig = detect === 'level' ? level : detect === 'flatness' ? flat : atStepFeature(run.feat, detect, freqDb, sampleRate, b.lo, b.hi, dt, 1, level);
+  }
+  if (character !== 'any') arrival = atBandArrival(run.arr, freqDb, sampleRate, b.lo, b.hi, 1);
+  else run.arr.hist.length = 0;
   atStepHit(run.hit, freqDb, sampleRate, now, dt, {
     lo: b.lo, hi: b.hi, threshold: b.threshold, releaseAt: b.releaseAt, gate: b.gate, minMs: b.minMs, cooldownMs: b.cooldown,
-    decay: 0.3, delay: x && x.delay ? x.delay : 0,
+    decay: 0.3, delay: x && x.delay ? x.delay : 0, x: sig, level, character, charAt: b.charAt, arrival,
   }, b.trigger && x && x.ext ? x.ext : undefined);
   if (!b.trigger) run.hit.trigger = 0;
   if (run.hit.trigger) run.hitAt = now;

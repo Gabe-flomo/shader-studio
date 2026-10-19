@@ -17,23 +17,23 @@ export function atStepBand(s: AtBandState, raw: number, dt: number, attack: numb
 export interface AtTriggerOpts { threshold: number; releaseAt: number; gate: number; minMs: number; cooldownMs: number }
 export interface AtTriggerState {
   gateOpen: boolean; below: number; armed: boolean; above: number; crossAt: number; lastHit: number;
-  trigger: number; signal: number; gated: number; strength: number; count: number;
+  trigger: number; signal: number; level: number; gated: number; strength: number; count: number;
 }
 export const AT_GATE_HOLD: number;
 export const AT_TRIGGER_DEFAULTS: AtTriggerOpts;
 export function atThresholdFromSensitivity(sensitivity: unknown): number;
 export function atNewTriggerState(): AtTriggerState;
-export function atStepTrigger(s: AtTriggerState, x: number, now: number, dt: number, o: AtTriggerOpts): AtTriggerState;
+export function atStepTrigger(s: AtTriggerState, x: number, now: number, dt: number, o: AtTriggerOpts, g?: number): AtTriggerState;
 export function atTriggerOpts(o: Partial<AtTriggerOpts> & { cooldown?: number }): AtTriggerOpts;
 
 export const AT_SCOPE_FRAMES: number;
-export interface AtScope { vals: Float32Array; hits: Uint8Array; at: number }
+export interface AtScope { vals: Float32Array; lvls: Float32Array; hits: Uint8Array; at: number }
 export function atNewScope(): AtScope;
 
 /** A hit decided ahead (a file analysed ahead) for one frame: how many fired, the signal to plot, the strength. */
-export interface AtExtHit { fired: number; signal: number; strength: number }
-export interface AtHitSettings extends Partial<AtTriggerOpts> { lo: number; hi: number; decay: number; delay?: number }
-export interface AtHitState extends AtTriggerState { envelope: number; pending: number[]; scope: AtScope }
+export interface AtExtHit { fired: number; signal: number; strength: number; level?: number }
+export interface AtHitSettings extends Partial<AtTriggerOpts> { lo: number; hi: number; decay: number; delay?: number; x?: number; level?: number; character?: AtCharacter; charAt?: number; arrival?: AtArrival }
+export interface AtHitState extends AtTriggerState { envelope: number; pending: number[]; cands: number[]; arr: Array<{ t: number; f: number; e: number }>; scope: AtScope }
 export const AT_HIT_HISTORY: number;
 export function atNewHitState(): AtHitState;
 export function atHitThreshold(meanFlux: number, sensitivity: number): number;
@@ -46,7 +46,7 @@ export function atOfflineHop(sampleRate: number): number;
 export function atSpectrumDbAt(mono: Float32Array, start: number, n: number, out: Float32Array): Float32Array;
 export function atAnalyseLevels(mono: Float32Array, sampleRate: number, ranges: ReadonlyArray<{ lo: number; hi: number }>, hop: number, onProgress?: (f: number) => void): Float32Array[];
 export interface AtEvents { times: Float64Array; strengths: Float32Array }
-export function atPickTriggers(curve: Float32Array, hopSeconds: number, o: Partial<AtTriggerOpts> & { cooldown?: number }): AtEvents;
+export function atPickTriggers(curve: Float32Array, hopSeconds: number, o: Partial<AtTriggerOpts> & { cooldown?: number }, gateCurve?: ArrayLike<number>): AtEvents;
 export function atEventsIn(times: Float64Array, a: number, b: number): { count: number; last: number };
 export function atEventsHeard(ev: AtEvents, from: number, to: number, win: { start: number; end: number }, loop: boolean): { count: number; strength: number };
 export function atCurveAt(curve: Float32Array, hopSeconds: number, t: number): number;
@@ -61,10 +61,50 @@ export function atScrollRows(data: Uint8Array, w: number, h: number, row: ArrayL
 export function atWaveRow(wave: Float32Array, out: Float32Array, gain?: number): void;
 
 /** The fields of a band (lib/audioTools/bands.ts AudioBandSpec) the frame reads. */
-export interface AtBand { id: string; lo: number; hi: number; value: boolean; trigger: boolean; attack: number; release: number; gain: number; threshold: number; releaseAt: number; gate: number; minMs: number; cooldown: number }
+export interface AtBand { id: string; lo: number; hi: number; value: boolean; trigger: boolean; attack: number; release: number; gain: number; threshold: number; releaseAt: number; gate: number; minMs: number; cooldown: number; detect?: AtDetect; character?: AtCharacter; charAt?: number }
 /** A frame's extras for a source's bands or a Hit: hold live hits back `delay` seconds; hits decided ahead. */
 export interface AtStepExtras { delay?: number; ext?: AtExtHit }
-export interface AtBandRun { band: AtBandState; hit: AtHitState; hitAt: number }
+export interface AtBandRun { band: AtBandState; hit: AtHitState; hitAt: number; feat: AtFeature; flat: number; arr: { hist: Float64Array[] } }
+
+// ── Detect: what a band's Value and Trigger read ──
+export type AtDetect = 'level' | 'hits' | 'transient' | 'flatness' | 'brightness' | 'drums';
+export type AtCharacter = 'any' | 'noisy' | 'tonal';
+export const AT_DETECTS: readonly AtDetect[];
+export const AT_CHARACTERS: readonly AtCharacter[];
+export const AT_CHAR_AT: number;
+export function atDetectOf(d: unknown): AtDetect;
+export function atCharacterOf(c: unknown): AtCharacter;
+export function atDetectTakesCharacter(d: unknown): boolean;
+export const AT_ONSET_TAU: number;
+export const AT_ONSET_K: number;
+export const AT_ONSET_FLOOR: number;
+export const AT_TRANSIENT_TAU: number;
+export const AT_TRANSIENT_DB: number;
+export const AT_FLAT_DB: number;
+export const AT_HPSS_SECONDS: number;
+export const AT_HPSS_FREQ: number;
+export const AT_HPSS_GROUPS: number;
+export const AT_LIVE_FRAME: number;
+export function atOfflineLag(hopSeconds: number): number;
+export function atBandFlatness(freqDb: Float32Array, sampleRate: number, lo: number, hi: number): number;
+export function atBandBrightness(freqDb: Float32Array, sampleRate: number, lo: number, hi: number): number;
+export interface AtFeature { key: string; hist: Float32Array[]; mean: number; slow: number; t: number; ring: Array<{ t: number; pow: Float64Array }>; perc: Float32Array[] }
+export function atNewFeature(): AtFeature;
+export interface AtHpssRegion { nb: number; g: number; m: number; nBand: number; groups: number; start: number }
+export function atHpssRegion(nb: number, sampleRate: number, lo: number, hi: number): AtHpssRegion;
+export function atGroupPow(freqDb: Float32Array, R: AtHpssRegion, out: Float64Array): Float64Array;
+export function atPercRow(cur: ArrayLike<number>, harm: ArrayLike<number>, R: AtHpssRegion): Float32Array;
+export function atStepFeature(f: AtFeature, detect: AtDetect, freqDb: Float32Array, sampleRate: number, lo: number, hi: number, dt: number, lag: number, level?: number): number;
+export const AT_CHAR_WINDOW: number;
+export function atCharPass(character: unknown, flat: number, charAt?: number): boolean;
+export function atBandCharacter(b: { detect?: unknown; character?: unknown }): AtCharacter;
+export function atCharFilter(ev: AtEvents, aflat: ArrayLike<number>, arise: ArrayLike<number>, hopSeconds: number, character: unknown, charAt?: number): AtEvents;
+export interface AtArrival { flat: number; energy: number }
+export function atBandArrival(st: { hist: Float64Array[] }, freqDb: Float32Array, sampleRate: number, lo: number, hi: number, lag: number): AtArrival;
+export function atSlidingMedian(col: ArrayLike<number>, w: number, out: Float32Array): Float32Array;
+/** A range analysed ahead: what its trigger measures, its level (the Gate), its flatness, and what arrived (Only). */
+export interface AtFeatureCurves { value: Float32Array; level: Float32Array; flat: Float32Array; aflat: Float32Array; arise: Float32Array }
+export function atAnalyseFeatures(mono: Float32Array, sampleRate: number, reqs: ReadonlyArray<{ lo: number; hi: number; detect?: string }>, hop: number, onProgress?: (f: number) => void): AtFeatureCurves[];
 export function atNewBandRun(): AtBandRun;
 export function atStepBandRun(run: AtBandRun, b: AtBand, freqDb: Float32Array, sampleRate: number, now: number, dt: number, x?: AtStepExtras): AtBandRun;
 
