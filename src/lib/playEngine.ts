@@ -376,6 +376,8 @@ class PlayEngine implements InputSource {
     // A rack playing from the keyboard (lib/rackKeyboard.ts) has every plain key; mappings wait.
     if (keyboardClaimed(e)) return;
     if (this.learnCb || this.learnTriggerCb) {
+      // Esc stops a Learn (the page listens for it): it's never learned as a key.
+      if (e.key === 'Escape' || e.code === 'Escape') return;
       e.preventDefault();
       e.stopPropagation();
       if (e.repeat) return;

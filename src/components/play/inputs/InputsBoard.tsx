@@ -2,20 +2,32 @@
  * InputsBoard — controls and sources on one page (implementation guide 7.1):
  * the controls column (each slider with what drives it) beside the sources
  * column (each source card with its routes). Map on a source card, then
- * click controls. Below WIDE_PANEL_PX the two columns are tabs.
+ * click controls. Below WIDE_PANEL_PX the two columns are tabs; which one is
+ * open is a small store, so a control's "driven by" chip can open Sources
+ * (PlayPage's openDriver, Play audit P7).
  */
-import { useState, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
+import { create } from 'zustand';
 import { useTokens } from '../../../theme/themeStore';
 import { Segmented } from '../../ui/Choice';
 import { useMapMode } from './mapMode';
+import { useLearnMode } from './learnMode';
+
+export type InputsTab = 'controls' | 'sources';
+/** The narrow board's open tab (UI state; not remembered). */
+export const useInputsBoard = create<{ tab: InputsTab; setTab: (tab: InputsTab) => void }>(set => ({
+  tab: 'controls',
+  setTab: tab => set({ tab }),
+}));
 
 export function InputsBoard({ wide, controls, sources, counts }: { wide: boolean; controls: ReactNode; sources: ReactNode; counts: { controls: number; sources: number } }) {
   const tk = useTokens();
-  const [tab, setTab] = useState<'controls' | 'sources'>('controls');
-  // Mapping on a phone: the controls are what to click.
+  const tab = useInputsBoard(s => s.tab), setTab = useInputsBoard(s => s.setTab);
+  // Mapping or learning: the controls are what to click.
   const mapping = useMapMode(m => m.sourceId !== null);
+  const learning = useLearnMode(m => m.on);
   if (!wide) {
-    const shown = mapping ? 'controls' : tab;
+    const shown = mapping || learning ? 'controls' : tab;
     return (
       <div data-inputs-board="tabs" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: '8px 12px 4px', flexShrink: 0 }}>

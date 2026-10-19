@@ -77,7 +77,7 @@ describe('Mappings page: empty state actions', () => {
     expect(errors).toEqual([]);
   });
 
-  it('with a control but no mappings, offers Add mapping', () => {
+  it('with a control but no mappings, offers “Map an input” (the + Map picker), which asks for nothing', () => {
     const layer = defaultLayer('shape', 'l1', 'Box');
     const play: PlayRecord = {
       ...emptyPlayRecord(),
@@ -87,10 +87,13 @@ describe('Mappings page: empty state actions', () => {
     const host = mountMappingsPage(play);
     expect(host.textContent).toContain('Nothing mapped');
     expect(byText(host, 'Add control')).toBeFalsy();
-    const addMapping = byText(host, 'Add mapping');
-    expect(addMapping).toBeTruthy();
-    click(addMapping!);
-    expect(useNodeGraphStore.getState().play.mappings.length).toBe(1);
+    const mapInput = byText(host, 'Map an input');
+    expect(mapInput).toBeTruthy();
+    click(mapInput!);
+    // The picker opens; nothing is made until a kind is picked (no silent MIDI CC row any more).
+    expect(document.querySelector('[role="listbox"]')).not.toBeNull();
+    expect(useNodeGraphStore.getState().play.mappings.length).toBe(0);
+    expect((useNodeGraphStore.getState().play.sources ?? []).length).toBe(0);
     expect(errors).toEqual([]);
   });
 

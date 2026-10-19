@@ -10,7 +10,7 @@ app and exported web pages do the same thing.
 
 ## A new knob mapping
 
-A **MIDI CC** row added with **Add** (or switched to MIDI CC in the picker)
+A **MIDI CC** row (or a **+ Map → MIDI → Knob or fader** source, or a row switched to MIDI CC in the picker)
 starts **unassigned**: it has no CC number yet and shows a pulsing "Turn a
 knob…". The first CC that moves on any enabled device becomes its CC and
 channel, the row flashes, and the **Knob** row reads "CC 70 · ch 1 · MPK
@@ -105,7 +105,7 @@ C2, C3 and C4 all count as C. Two places:
 The pitch class name shows wherever a note does: trigger labels read
 "C (any octave)", the trigger's number field shows the note's name (C#4).
 
-**Map 12 notes → 12 targets** (Inputs → **+ Source** → MIDI): pick up to twelve
+**Map 12 notes → 12 targets** (Sources → **+ Map** → MIDI): pick up to twelve
 controls or layers in the order they should play; the dialog shows which note
 each gets. **Start on** picks the first note (C by default) and **Channel** the
 MIDI channel. Each pick gets a source of the record: a trigger on its note class
