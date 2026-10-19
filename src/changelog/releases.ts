@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.300',
+    date: '2026-10-18',
+    title: "Perform",
+    highlights: [
+      { area: 'Studio', text: "The Stage opens in Perform: big faders, knobs, XY pads and pads beside the picture, with Randomize, Reset, Panic and Take." },
+    ],
+  },
+  {
     id: '2026.10.299',
     date: '2026-10-18',
     title: "Takes have a home",
