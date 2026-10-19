@@ -22,12 +22,17 @@ interface GraphMaximize {
   on: boolean;
   toggle: () => void;
   set: (on: boolean) => void;
+  /** Maximized only: the cards, wires and minimap hide so the picture shows alone (this session; leaving Maximize shows them again). */
+  nodesHidden: boolean;
+  setNodesHidden: (hidden: boolean) => void;
 }
 
 export const useGraphMaximize = create<GraphMaximize>((set, get) => ({
   on: read(MAX_KEY) === '1',
   toggle: () => get().set(!get().on),
-  set: on => { write(MAX_KEY, on ? '1' : null); set({ on }); },
+  set: on => { write(MAX_KEY, on ? '1' : null); set(on ? { on } : { on, nodesHidden: false }); },
+  nodesHidden: false,
+  setNodesHidden: nodesHidden => set({ nodesHidden: nodesHidden && get().on }),
 }));
 
 /**

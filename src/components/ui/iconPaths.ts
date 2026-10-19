@@ -27,8 +27,9 @@ export const ICONS = {
   redo: { sw: 1.5, body: "<path d='M10.5 3.5l3 3-3 3'/><path d='M13.5 6.5h-7a4 4 0 000 8h2'/>" },
   save: { sw: 1.5, body: "<path d='M3 2.5h8.2L13.5 4.8v8.2c0 .3-.2.5-.5.5H3c-.3 0-.5-.2-.5-.5V3c0-.3.2-.5.5-.5z'/><path d='M5.5 2.5v3h4.5v-3M5 13.5V9.5h6v4'/>" },
   folder: { sw: 1.5, body: "<path d='M2.5 5.2c0-.9.6-1.7 1.6-1.7h2.3l1.5 1.5h4c1 0 1.6.7 1.6 1.6v5c0 .9-.6 1.6-1.6 1.6H4.1c-1 0-1.6-.7-1.6-1.6z'/>" },
-  import: { sw: 1.5, body: "<path d='M8 2.5v7.5M5 7l3 3 3-3'/><path d='M2.5 10.5v2c0 .6.4 1 1 1h9c.6 0 1-.4 1-1v-2'/>" },
-  export: { sw: 1.5, body: "<path d='M8 10V2.5M5 5.5l3-3 3 3'/><path d='M2.5 10.5v2c0 .6.4 1 1 1h9c.6 0 1-.4 1-1v-2'/>" },
+  // Import points up (bringing a file in, as a tray's upload), export points down (saving it out, as a download).
+  import: { sw: 1.5, body: "<path d='M8 10V2.5M5 5.5l3-3 3 3'/><path d='M2.5 10.5v2c0 .6.4 1 1 1h9c.6 0 1-.4 1-1v-2'/>" },
+  export: { sw: 1.5, body: "<path d='M8 2.5v7.5M5 7l3 3 3-3'/><path d='M2.5 10.5v2c0 .6.4 1 1 1h9c.6 0 1-.4 1-1v-2'/>" },
   wave: { sw: 1.5, body: "<path d='M1.5 12.5h13'/><path d='M2 12c1.5 0 1.8-6 3.2-6s1.6 4 3 4 1.4-7.5 3-7.5 1.5 9.5 3 9.5'/>" },
   popout: { sw: 1.5, body: "<rect x='2' y='4' width='9' height='9.5' rx='1.8'/><path d='M8.5 2h5.5v5.5M14 2l-5.5 5.5'/>" },
   reset: { sw: 1.5, body: "<path d='M3.2 8a4.8 4.8 0 1 0 1.4-3.4'/><path d='M3.2 3v2.6h2.6'/>" },

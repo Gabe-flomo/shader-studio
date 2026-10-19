@@ -112,3 +112,23 @@ describe('no stages in the Studio graph', () => {
     expect(src('../../builders/BuilderWindow.tsx')).toContain('<BuilderFlowStrip');
   });
 });
+
+describe('Maximize: hide the nodes', () => {
+  it('the eye hides cards, wires and minimap over the picture; leaving Maximize shows them again', async () => {
+    const { useGraphMaximize } = await import('../graphLayout');
+    useNodeGraphStore.getState().replaceGraph([n('uv', 'u', 0, 0), n('output', 'o', 400, 0, {}, { color: ['u', 'uv'] })]);
+    useGraphMaximize.getState().set(true);
+    useGraphMaximize.getState().setNodesHidden(true);
+    const h = render(<NodeGraph redesignToolbar overPicture />);
+    const world = h.querySelector<HTMLElement>('[data-zoom-layer]')!.parentElement!;
+    expect(world.style.visibility).toBe('hidden');
+    act(() => useGraphMaximize.getState().setNodesHidden(false));
+    expect(world.style.visibility).toBe('');
+    act(() => useGraphMaximize.getState().setNodesHidden(true));
+    act(() => useGraphMaximize.getState().set(false));
+    expect(useGraphMaximize.getState().nodesHidden).toBe(false);
+    // Only while maximized
+    useGraphMaximize.getState().setNodesHidden(true);
+    expect(useGraphMaximize.getState().nodesHidden).toBe(false);
+  });
+});

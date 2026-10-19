@@ -103,12 +103,22 @@ function Sep() {
 function MaximizeGraphButton() {
   const on = useGraphMaximize(s => s.on);
   const toggle = useGraphMaximize(s => s.toggle);
+  const nodesHidden = useGraphMaximize(s => s.nodesHidden);
+  const setNodesHidden = useGraphMaximize(s => s.setNodesHidden);
   const bp = useBreakpoint();
   if (!isDesktop(bp)) return null;
   return (
-    <IconButton icon={on ? 'splitPanel' : 'layoutCanvas'} data-maximize-graph=""
-      label={on ? 'Bring the preview back beside the graph' : 'Maximize the graph: the picture goes behind it, full size'}
-      shortcut={loadShortcutMap().maximizeGraph} size="sm" active={on} onClick={toggle} />
+    <>
+      <IconButton icon={on ? 'splitPanel' : 'layoutCanvas'} data-maximize-graph=""
+        label={on ? 'Bring the preview back beside the graph' : 'Maximize the graph: the picture goes behind it, full size'}
+        shortcut={loadShortcutMap().maximizeGraph} size="sm" active={on} onClick={toggle} />
+      {/* Maximized: hide the cards and wires to see the picture alone */}
+      {on && (
+        <IconButton icon={nodesHidden ? 'eyeOff' : 'eye'} data-hide-nodes="" size="sm" active={nodesHidden}
+          label={nodesHidden ? 'Show the nodes again' : 'Hide the nodes: the picture alone'}
+          onClick={() => setNodesHidden(!nodesHidden)} />
+      )}
+    </>
   );
 }
 
