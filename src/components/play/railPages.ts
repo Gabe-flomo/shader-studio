@@ -160,6 +160,19 @@ export function phonePageShown(tab: PlayTab, finishView: 'picture' | 'sound', pi
   return pageForTab(tab, finishView);
 }
 
+/**
+ * The pages a phone's bottom row offers for a category (Play audit P20). Controls
+ * and Layers go straight to their page, with no sheet in between: the Controls
+ * page has a Controls / Sources switch (the MIDI file and the pad grid sit in
+ * Sources), and the Layers page carries the canvas shape and the background at
+ * its top. Sound keeps its two pages.
+ */
+export function phonePagesOf(cat: RailCategory): readonly RailPage[] {
+  if (cat === 'controls') return ['controls'];
+  if (cat === 'layers') return ['layers'];
+  return categoryDef(cat).pages;
+}
+
 /** Arrow-key movement through a list of `count` items (wraps; Home and End jump). */
 export function stepIndex(index: number, key: string, count: number): number {
   if (count <= 0) return -1;

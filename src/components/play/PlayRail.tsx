@@ -6,8 +6,9 @@
  * (PlaySplitArea's `RailPageTabs`, exported below) so switching between them
  * doesn't mean going back to the rail. ↑/↓ move between the rail's icons.
  *
- * Phones get the same categories as a bottom row (PlayRailBar); a category
- * with several pages opens a sheet of them (no room there for a tab strip).
+ * Phones get the same categories as a bottom row (PlayRailBar). Controls and
+ * Layers go straight to their page there (railPages.phonePagesOf); Sound, with
+ * two pages, opens a sheet of them (no room there for a tab strip).
  */
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { useTokens } from '../../theme/themeStore';
@@ -19,7 +20,7 @@ import { Sheet } from '../ui/Sheet';
 import { Tooltip } from '../ui/Tooltip';
 import { RAIL_PX, usePlaySplit } from './playSplit';
 import { usePlayUi } from './playUi';
-import { RAIL_CATEGORIES, RAIL_CATEGORY_SHORTCUT, RAIL_PAGES, categoryBadge, categoryOf, mappingsCountOf, pageCount, phonePageShown, stepIndex, type RailCategory, type RailCategoryDef, type RailPage } from './railPages';
+import { RAIL_CATEGORIES, RAIL_CATEGORY_SHORTCUT, RAIL_PAGES, categoryBadge, categoryOf, mappingsCountOf, pageCount, phonePageShown, phonePagesOf, stepIndex, type RailCategory, type RailCategoryDef, type RailPage } from './railPages';
 
 /** Categories that need Pro, and the plan feature that unlocks each. */
 function useLocked(): (cat: RailCategory) => boolean {
@@ -75,7 +76,7 @@ export function PlayRail() {
   );
 }
 
-function RailButton({ def, refFn, active, open, badge, hint, locked, onPress, phone = false }: {
+function RailButton({ def, refFn, active, open, badge, hint, locked, onPress, phone = false, pages = def.pages.length }: {
   def: RailCategoryDef;
   refFn?: (el: HTMLButtonElement | null) => void;
   active: boolean;
@@ -87,6 +88,8 @@ function RailButton({ def, refFn, active, open, badge, hint, locked, onPress, ph
   onPress: () => void;
   /** The phone's bottom row: a label under the icon, no tooltip. */
   phone?: boolean;
+  /** How many pages it offers (the phone's row: railPages.phonePagesOf); more than one opens a sheet. */
+  pages?: number;
 }) {
   const tk = useTokens();
   const [hover, setHover] = useState(false);
@@ -98,8 +101,8 @@ function RailButton({ def, refFn, active, open, badge, hint, locked, onPress, ph
       data-rail-category={def.id}
       aria-label={`${def.label}${locked ? ' (Pro)' : ''}`}
       aria-current={active ? 'page' : undefined}
-      aria-expanded={phone && def.pages.length > 1 ? open : undefined}
-      aria-haspopup={phone && def.pages.length > 1 ? 'menu' : undefined}
+      aria-expanded={phone && pages > 1 ? open : undefined}
+      aria-haspopup={phone && pages > 1 ? 'menu' : undefined}
       onClick={onPress}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
@@ -281,7 +284,8 @@ export function PlayRailBar() {
           open={sheet === c.id}
           badge={categoryBadge(c.id, play)}
           locked={locked(c.id)}
-          onPress={() => { if (c.pages.length === 1) showPage(c.pages[0]); else setSheet(c.id); }}
+          pages={phonePagesOf(c.id).length}
+          onPress={() => { const pages = phonePagesOf(c.id); if (pages.length === 1) showPage(pages[0]); else setSheet(c.id); }}
         />
       ))}
       {sheetDef && (

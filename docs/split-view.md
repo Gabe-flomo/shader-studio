@@ -76,8 +76,8 @@ category since 2026-09-28: the owner's call — the two were so closely
 related), so its tab is always one click from the rail, whatever page or
 category is open; ⌘⇧M jumps straight to it — on the Mappings tab specifically,
 not just the category — opening the split first if it's closed (`goToMappings`
-in `playSplit.ts`). Phones get the same: Controls' sheet always has a Mappings
-tab.
+in `playSplit.ts`). Phones get the same: the Controls page has a
+Controls / Sources switch at its top.
 
 **⌘1–5 jump to a rail category** in the rail's own order, top to bottom
 (`railControls`/`railLayers`/`railSignals`/`railFinish`/`railEngine` in
@@ -158,10 +158,32 @@ right) and at most two columns, stacking below 640 px (`WIDE_PANEL_PX`):
   the selection). Pair mappings follow the table.
 - **MIDI file**, **Pad grid:** their card, at a readable width.
 
-**Phones** have no split view; the same categories are a row along the bottom
-of the panel (`PlayRailBar`), and a category with several pages opens them in
-a sheet. A page that isn't a whole section (Signals, Background, MIDI
-file, Pad grid) shows in place of its tab (`usePlayUi.phonePage`).
+**Phones** have no split view; the picture sits over the panel, and the same
+categories are a row along the bottom of the panel (`PlayRailBar`). A window
+narrower than 600px gets this layout too, mouse or not (`playStacked` in
+`lib/viewport.ts`; the rest of the app still goes by `phone`), since the
+side-by-side layout has no room there. Since Play audit P20 (2026-10-18):
+
+- **Controls and Layers go straight to their page** (`phonePagesOf` in
+  `railPages.ts`); only Sound, with two pages, opens a sheet of them.
+- **Controls** has a **Controls / Sources** switch at its top (the tablet's
+  narrow board does the same). Sources lists the mappings and sources with the
+  MIDI file and the pad grid at the bottom (no pages of their own on a phone).
+  The header under it holds only **+ Control** and **⋯**, both 44px; Suggest
+  controls, Stage, notes and the Play setup are in the ⋯.
+- A control's **driven-by chip** opens what drives it in Sources: the switch
+  flips to Sources, the card and its group unfold, and it's scrolled to and
+  flashed (`driverCardFor` in `mappingGroups.ts`). On desktop it still opens
+  the details window.
+- Control cards fold their move/details/remove tools into one ⋯ and let a
+  long name wrap onto a second line, instead of cutting it short.
+- **Layers** carries the canvas row (shape, quality, frame rate, full screen,
+  guides; it wraps instead of running off the edge) and the **Background** row
+  at its top. They're no longer above the controls.
+
+A page that isn't a whole section (Signals, Background, MIDI file, Pad grid)
+still shows in place of its tab when something asks for it
+(`usePlayUi.phonePage`).
 
 ## The Controls board
 
@@ -225,8 +247,10 @@ and restore, opening a category straight to its remembered page, ⌘⇧B and ⌘
 workspace's groups), `controlsDensity.test.tsx` (the header's notes ⓘ, the
 filter row, folded mappings, the built-in group, the reset on a new graph, the
 control card's details) and `railPagesMount.test.tsx` (every page mounted in
-jsdom, wide and narrow, the phone's pages, the rail's click-through and the
-panel header's tab strip, all without a console error).
+jsdom, wide and narrow, the phone's pages, its Controls / Sources switch,
+header, chip and Layers top, the rail's click-through and the panel header's
+tab strip, all without a console error), `driverCard.test.ts` (what a phone's
+chip opens) and `lib/__tests__/viewport.test.ts` (`playStacked`),
 `pictureRight.test.tsx` (the picture on the right in every sidebar mode, the
 header and footer in its column, the default share, tablet Stage, and Free's
 letterbox on Play) and `playSplit.test.ts` (prefs, the v3 migration, ratios).

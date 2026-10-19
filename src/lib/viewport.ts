@@ -54,6 +54,19 @@ export const PHONE_SHORT_SIDE = 600;
 /** …and it stops being one only past this (hysteresis against the address bar). */
 export const PHONE_SHORT_SIDE_LEAVE = 640;
 
+/**
+ * A window this narrow gets the Play page's phone layout (the picture over the
+ * panel, the bottom row of sections) even with a mouse: the side-by-side
+ * layout has no room below it (Play audit P20). The rest of the app still goes
+ * by `phone`/`breakpoint`.
+ */
+export const NARROW_PLAY_PX = 600;
+
+/** Whether the Play page stacks the picture over its panel: a phone, or a window narrower than NARROW_PLAY_PX. */
+export function playStacked(v: Pick<Viewport, 'phone' | 'width'>): boolean {
+  return v.phone || v.width < NARROW_PLAY_PX;
+}
+
 /** The next viewport after a measurement, given the last one (for the latch and the hysteresis). */
 export function nextViewport(prev: Viewport | null, s: ViewportSample): Viewport {
   const touchSeen = !!prev?.touchSeen || s.touch;

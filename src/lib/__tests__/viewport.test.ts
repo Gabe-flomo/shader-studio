@@ -3,7 +3,7 @@
  * small, either way up; tablets and narrow desktop windows aren't. Plus the watcher's re-measure.
  */
 import { describe, expect, it, vi } from 'vitest';
-import { isTouchDevice, nextViewport, RECHECK_MS, viewportCssVars, watchViewport, type Viewport, type ViewportEvents } from '../viewport';
+import { isTouchDevice, nextViewport, playStacked, RECHECK_MS, viewportCssVars, watchViewport, type Viewport, type ViewportEvents } from '../viewport';
 
 const at = (width: number, height: number, touch: boolean, prev: Viewport | null = null) => nextViewport(prev, { width, height, touch });
 
@@ -115,5 +115,21 @@ describe('watchViewport', () => {
     expect(measure).toHaveBeenCalledTimes(2);
     stop();
     vi.useRealTimers();
+  });
+});
+
+describe('playStacked (Play audit P20)', () => {
+  it('a phone stacks the Play page, and so does a narrow window with a mouse', () => {
+    expect(playStacked(at(390, 844, true))).toBe(true);
+    // A 390px desktop window: not a phone (the rest of the app is unchanged), but Play stacks.
+    const narrow = at(390, 844, false);
+    expect(narrow.phone).toBe(false);
+    expect(narrow.breakpoint).toBe('tablet');
+    expect(playStacked(narrow)).toBe(true);
+  });
+  it('tablets and desktop windows keep the side-by-side layout', () => {
+    expect(playStacked(at(820, 1180, true))).toBe(false);
+    expect(playStacked(at(768, 900, false))).toBe(false);
+    expect(playStacked(at(1440, 900, false))).toBe(false);
   });
 });

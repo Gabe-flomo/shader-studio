@@ -24,6 +24,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { PlayPage } from '../PlayPage';
 import { PlayRail, RailPageTabs } from '../PlayRail';
+import { driverCardFor, mappingFoldKey, sourceGroupFoldKey } from '../mappingGroups';
 import { DEFAULT_SPLIT, usePlaySplit } from '../playSplit';
 import { usePlayUi } from '../playUi';
 import { RAIL_PAGE_IDS, categoryDef, type RailPage } from '../railPages';
@@ -178,6 +179,70 @@ describe('the phone’s pages', () => {
     expect(el.querySelector('[data-phone-page="signals"]')).not.toBeNull();
     act(() => usePlayUi.getState().showPage('layers'));
     expect(el.querySelector('[data-phone-page]')).toBeNull();
+    expect(errors).toEqual([]);
+  });
+});
+
+describe('the phone’s Controls and Layers (Play audit P20)', () => {
+  const mountPhone = (): HTMLElement => {
+    usePlaySplit.setState({ ...DEFAULT_SPLIT, available: false, host: null });
+    const el = document.createElement('div');
+    document.body.appendChild(el);
+    const root = createRoot(el);
+    roots.push({ root, el });
+    act(() => root.render(<PlayPage compact />));
+    return el;
+  };
+  const click = (el: Element | null | undefined) => { expect(el).toBeTruthy(); act(() => { (el as HTMLElement).dispatchEvent(new MouseEvent('click', { bubbles: true })); }); };
+  const button = (el: HTMLElement, label: string) => [...el.querySelectorAll('button')].find(b => b.getAttribute('aria-label') === label);
+
+  it('the header holds only “+ Control” and ⋯, 44px; no canvas or background rows over the controls', () => {
+    const el = mountPhone();
+    const add = button(el, 'Add control')!;
+    expect(add.textContent).toContain('Control');
+    expect(add.style.height).toBe('44px');
+    const more = button(el, 'More: notes, and the setup')!;
+    expect(more.style.width).toBe('44px');
+    expect(more.style.height).toBe('44px');
+    expect([...el.querySelectorAll('button')].some(b => /Suggest controls/.test(b.getAttribute('aria-label') ?? b.textContent ?? ''))).toBe(false);
+    expect(el.querySelector('[data-phone-canvas-row]')).toBeNull();
+    expect(el.textContent).not.toContain('Layers only');
+    expect(errors).toEqual([]);
+  });
+
+  it('a Controls / Sources switch shows the sources, MIDI file and pad grid included', () => {
+    const el = mountPhone();
+    expect(el.querySelector('[data-phone-inputs]')).not.toBeNull();
+    expect(el.querySelector('[data-mappings]')).toBeNull();
+    click([...el.querySelectorAll('[data-phone-inputs] button')].find(b => b.textContent?.startsWith('Sources')));
+    expect(usePlayUi.getState().tab).toBe('mappings');
+    expect(el.querySelector('[data-mappings]')).not.toBeNull();
+    expect(el.textContent).toContain('Play a MIDI file');
+    // The bottom row still lights Controls.
+    expect(el.querySelector('[data-rail-category="controls"]')?.getAttribute('aria-current')).toBe('page');
+    expect(errors).toEqual([]);
+  });
+
+  it('a control’s chip opens its mapping in Sources, unfolded', () => {
+    const el = mountPhone();
+    click(el.querySelector('[data-control-id="c2"] [data-driven-chip]'));
+    const ui = usePlayUi.getState();
+    expect(ui.tab).toBe('mappings');
+    const d = driverCardFor(useNodeGraphStore.getState().play, 'c2')!;
+    expect(d).toMatchObject({ kind: 'mapping', id: 'm1' });
+    expect(ui.folded[mappingFoldKey('m1')]).toBe(false);
+    expect(ui.folded[sourceGroupFoldKey(d.group)]).toBe(false);
+    expect(el.querySelector('[data-mapping-id="m1"]')).not.toBeNull();
+    expect(errors).toEqual([]);
+  });
+
+  it('Layers in the bottom row goes straight to Layers, with the canvas and the background at its top', () => {
+    const el = mountPhone();
+    click(el.querySelector('[data-rail-category="layers"]'));
+    expect(usePlayUi.getState().tab).toBe('layers');
+    expect(document.querySelector('[role="menu"][aria-label="Layers pages"]')).toBeNull();
+    expect(el.querySelector('[data-phone-canvas-row]')).not.toBeNull();
+    expect(el.textContent).toContain('Background');
     expect(errors).toEqual([]);
   });
 });
