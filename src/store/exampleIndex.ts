@@ -353,8 +353,8 @@ export const EXAMPLE_FOLDERS: ExampleFolder[] = [
   { label: "Agents",            color: ctp.green, keys: ['slimeMold','agentMultiSlime','agentCurlSmoke','agentParticles','agentSoundBurst'] },
   { label: "Agents with shaders", color: ctp.green, keys: ['agentShaderRings','agentShaderWalls','agentShaderPolar','agentShaderEmitter','agentShaderNoiseFlow'] },
   { label: "Agents in 3D",      color: ctp.green, keys: ['agent3dSlime','agent3dTorus','agent3dGalaxy','agent3dRodSwarm','agent3dFireflies'] },
-  { label: "Agent rules & simulations", color: ctp.green, keys: ['agentRulesAnts','agentRulesPredatorPrey','agentRulesDla','agentRulesSwarm','simAgentSandDrift'] },
-  { label: "Grid simulations",  color: ctp.green, keys: ['gridRulesLife','gridRulesWire','gridRulesWater','simGridCave','simGridHeat'] },
+  { label: "Agent rules & simulations", color: ctp.green, keys: ['agentRulesPredatorPrey','agentRulesDla','agentRulesSwarm','simAgentSandDrift','agentRulesSlime'] },
+  { label: "Grid simulations",  color: ctp.green, keys: ['gridRulesLife','gridRulesWire','gridRulesWater','simGridCave','gridRulesLabyrinth'] },
   { label: "From the Internet",    color: ctp.yellow, keys: ['fcTrippyNoise','fcSolar','fcPillars','fcGradient4','fcGrainGradient','fcTiling','fcTheScreen','fcShield','fcMainFrame','fcAtlantic','fcOrb','fcBitshift'] },
 ];
 
