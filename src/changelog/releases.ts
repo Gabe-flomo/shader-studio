@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.303',
+    date: '2026-10-18',
+    title: "Picture alone",
+    highlights: [
+      { area: 'Studio', text: "Maximized, an eye hides the nodes so you see the picture alone. Export's arrow points down, Import's up. Old Outputs show Opacity 1." },
+    ],
+  },
+  {
     id: '2026.10.302',
     date: '2026-10-18',
     title: "Live connector",
