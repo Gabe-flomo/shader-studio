@@ -4,13 +4,17 @@
  * so the canvas never remounts; it only splits while `active` (Play, not on a
  * phone) and switched on.
  *
- * The panel's frame is drawn here (its section switcher, where it sits, the
- * sidebar and close buttons); its body is a portal target that PlayPage fills
+ * The panel sits on the left and the picture on the right, always (no
+ * setting moves them). The panel's frame is drawn here (its section switcher,
+ * the sidebar and close buttons); its body is a portal target that PlayPage fills
  * with the chosen section. With the sidebar folded into the rail
  * (PlayRail.tsx), the rail sits on the panel's left edge and the bar names
  * the page instead of offering sections. The divider drags (the picture resizes a few times
  * a second while dragging, not every pointer move) and double-clicks back to
- * half and half.
+ * the default share (about a third for the panel).
+ *
+ * Everything passed as children (the preview's header, the canvas, its footer)
+ * stays in the picture's column, so the panel runs the full height on the left.
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ThemeOverrideContext, useTokens } from '../../theme/themeStore';
@@ -20,9 +24,9 @@ import { useCan } from '../../lib/plan';
 import { IconButton } from '../ui/Button';
 import { Segmented } from '../ui/Choice';
 import { Menu } from '../ui/Menu';
-import { playLayoutItems, sideIcon } from './playLayoutMenu';
+import { playLayoutItems, sidebarIcon } from './playLayoutMenu';
 import { usePlayUi, type PlayTab } from './playUi';
-import { clampRatio, ratioAt, setAreaMeasure, shownRatio, usePlaySplit, WIDE_PANEL_PX, type SidebarMode, type SplitSide } from './playSplit';
+import { clampRatio, DEFAULT_RATIO, ratioAt, setAreaMeasure, shownRatio, usePlaySplit, WIDE_PANEL_PX, type SidebarMode } from './playSplit';
 import { PlayRail, RailPageTabs } from './PlayRail';
 import { categoryDef, categoryOf, RAIL_PAGES } from './railPages';
 import { playSetupItems } from './playSetupMenu';
@@ -35,7 +39,6 @@ export const RAIL_SHORTCUT = 'cmd+shift+b';
 
 export function PlaySplitArea({ active, children }: { active: boolean; children: ReactNode }) {
   const splitOn = usePlaySplit(s => s.on);
-  const side = usePlaySplit(s => s.side);
   const stored = usePlaySplit(shownRatio);
   const rail = usePlaySplit(s => s.sidebar === 'rail');
   const on = active && splitOn;
@@ -51,7 +54,6 @@ export function PlaySplitArea({ active, children }: { active: boolean; children:
     return () => usePlaySplit.getState().setAvailable(false);
   }, [active]);
 
-  const horizontal = side === 'left' || side === 'right';
   // Opening the rail measures the area and the sidebar beside it, so the picture keeps its size.
   useEffect(() => {
     if (!on) return;
@@ -59,22 +61,21 @@ export function PlaySplitArea({ active, children }: { active: boolean; children:
       const el = areaRef.current;
       if (!el) return null;
       const bar = document.querySelector<HTMLElement>('[data-play-sidebar]');
-      return { total: horizontal ? el.clientWidth : el.clientHeight, sidebarPx: bar?.offsetWidth ?? 0 };
+      return { total: el.clientWidth, sidebarPx: bar?.offsetWidth ?? 0 };
     });
     return () => setAreaMeasure(null);
-  }, [on, horizontal]);
+  }, [on]);
   useEffect(() => {
     const el = areaRef.current;
     if (!on || !el) return;
-    const measure = () => setTotal(horizontal ? el.clientWidth : el.clientHeight);
+    const measure = () => setTotal(el.clientWidth);
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [on, horizontal]);
+  }, [on]);
 
   const ratio = clampRatio(dragRatio ?? stored, total || undefined);
-  const panelFirst = side === 'left' || side === 'top';
 
   const startDrag = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
@@ -87,7 +88,7 @@ export function PlaySplitArea({ active, children }: { active: boolean; children:
     let latest = ratio, applied = 0, timer = 0;
     const apply = () => { timer = 0; applied = performance.now(); setDragRatio(latest); };
     const onMove = (ev: PointerEvent) => {
-      latest = ratioAt(side, area.getBoundingClientRect(), ev.clientX, ev.clientY);
+      latest = ratioAt(area.getBoundingClientRect(), ev.clientX);
       // The canvas rebuilds its buffers on every resize: follow the pointer a few times a second.
       const wait = DRAG_APPLY_MS - (performance.now() - applied);
       if (wait <= 0) apply();
@@ -109,58 +110,57 @@ export function PlaySplitArea({ active, children }: { active: boolean; children:
   };
 
   return (
-    <div ref={areaRef} style={{ flex: 1, minHeight: 0, minWidth: 0, display: 'flex', flexDirection: horizontal ? 'row' : 'column', position: 'relative' }}>
-      {/* The picture: always the first child, so switching the split never remounts the canvas. */}
-      <div style={{ flex: '1 1 0', minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', order: panelFirst ? 2 : 0 }}>
+    <div ref={areaRef} data-play-split-area="" style={{ flex: 1, minHeight: 0, minWidth: 0, display: 'flex', flexDirection: 'row', position: 'relative' }}>
+      {/* The picture: always the first child, so switching the split never remounts the canvas; drawn on the right (order). */}
+      <div data-split-picture="" style={{ flex: '1 1 0', minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', order: 2 }}>
         {children}
       </div>
       {on && (
         <ThemeOverrideContext.Provider value={null}>
-          <SplitDivider horizontal={horizontal} dragging={dragging} onPointerDown={startDrag} onReset={() => { const st = usePlaySplit.getState(); if (rail) st.setRailRatio(0.5); else st.setRatio(0.5); }} />
-          <div style={{ flex: `0 0 ${(ratio * 100).toFixed(2)}%`, order: panelFirst ? 0 : 2, minWidth: 0, minHeight: 0, display: 'flex' }}>
+          <SplitDivider dragging={dragging} onPointerDown={startDrag} onReset={() => { const st = usePlaySplit.getState(); if (rail) st.setRailRatio(DEFAULT_RATIO); else st.setRatio(DEFAULT_RATIO); }} />
+          <div style={{ flex: `0 0 ${(ratio * 100).toFixed(2)}%`, order: 0, minWidth: 0, minHeight: 0, display: 'flex' }}>
             <SplitPanel />
           </div>
         </ThemeOverrideContext.Provider>
       )}
       {/* While dragging, the picture doesn't take the pointer. */}
-      {dragging && <div style={{ position: 'absolute', inset: 0, zIndex: 30, cursor: horizontal ? 'col-resize' : 'row-resize' }} />}
+      {dragging && <div style={{ position: 'absolute', inset: 0, zIndex: 30, cursor: 'col-resize' }} />}
     </div>
   );
 }
 
-function SplitDivider({ horizontal, dragging, onPointerDown, onReset }: { horizontal: boolean; dragging: boolean; onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => void; onReset: () => void }) {
+function SplitDivider({ dragging, onPointerDown, onReset }: { dragging: boolean; onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => void; onReset: () => void }) {
   const tk = useTokens();
   const [hover, setHover] = useState(false);
   const lit = hover || dragging;
   return (
     <div
       role="separator"
-      aria-orientation={horizontal ? 'vertical' : 'horizontal'}
+      aria-orientation="vertical"
       aria-label="Resize the panel"
-      title="Drag to resize · double-click for half and half"
+      title="Drag to resize · double-click for the default width"
       onPointerDown={onPointerDown}
       onDoubleClick={onReset}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{
         order: 1, flexShrink: 0, position: 'relative', zIndex: 31, touchAction: 'none',
-        ...(horizontal ? { width: 7, margin: '0 -3px', cursor: 'col-resize' } : { height: 7, margin: '-3px 0', cursor: 'row-resize' }),
+        width: 7, margin: '0 -3px', cursor: 'col-resize',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
       }}
     >
       <span style={{
-        ...(horizontal ? { width: lit ? 3 : 1, height: '100%' } : { height: lit ? 3 : 1, width: '100%' }),
+        width: lit ? 3 : 1, height: '100%',
         background: lit ? tk.accent.base : tk.border.default, transition: 'background 0.12s',
       }} />
     </div>
   );
 }
 
-/** The big panel: its header (section or page, side, sidebar, close), the rail, and the body PlayPage fills. */
+/** The big panel: its header (section or page, sidebar, close), the rail, and the body PlayPage fills. */
 function SplitPanel() {
   const tk = useTokens();
   const tab = usePlaySplit(s => s.tab), setTab = usePlaySplit(s => s.setTab);
-  const side = usePlaySplit(s => s.side), setSide = usePlaySplit(s => s.setSide);
   const sidebar = usePlaySplit(s => s.sidebar), setSidebar = usePlaySplit(s => s.setSidebar);
   const railPage = usePlaySplit(s => s.railPage);
   const setRailPage = usePlaySplit(s => s.setRailPage);
@@ -200,7 +200,7 @@ function SplitPanel() {
       <div data-split-header="" style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px 6px 12px', minHeight: 44, boxSizing: 'border-box', background: tk.bg.panel, borderBottom: `1px solid ${tk.border.default}`, flexWrap: 'nowrap' }}>
         {rail ? (
           // The category, and its pages as a tab strip when it has more than one.
-          <div data-rail-crumb="" style={{ flex: '1 1 auto', minWidth: 0, display: 'flex', alignItems: 'center', gap: 10, overflow: 'hidden' }}>
+          <div data-rail-crumb="" style={{ flex: '1 1 0', minWidth: 0, display: 'flex', alignItems: 'center', gap: 10, overflow: 'hidden' }}>
             <span style={{ flexShrink: 0, font: `650 13px ${fontFamily.ui}`, whiteSpace: 'nowrap' }}>{cat.label}</span>
             {cat.pages.length > 1 ? (
               <RailPageTabs def={cat} current={railPage} play={play} onPick={setRailPage} />
@@ -229,7 +229,7 @@ function SplitPanel() {
         )}
         <span style={{ flex: 1 }} />
         <SetupMenu />
-        <LayoutMenu side={side} sidebar={sidebar} setSide={setSide} setSidebar={setSidebar} />
+        <LayoutMenu sidebar={sidebar} setSidebar={setSidebar} />
         <IconButton icon="close" size="sm" label="Close the panel: back to the full picture" shortcut={SPLIT_SHORTCUT} onClick={() => usePlaySplit.getState().setOn(false)} />
       </div>
       <div style={{ flex: 1, minHeight: 0, minWidth: 0, display: 'flex' }}>
@@ -255,17 +255,17 @@ function SetupMenu() {
   );
 }
 
-/** One Layout button for where the panel sits and the sidebar (playLayoutMenu.ts), instead of seven radios. */
-function LayoutMenu({ side, sidebar, setSide, setSidebar }: { side: SplitSide; sidebar: SidebarMode; setSide: (s: SplitSide) => void; setSidebar: (m: SidebarMode) => void }) {
+/** One Layout button for the sidebar beside the panel (playLayoutMenu.ts). The panel's side isn't a choice: it's always left of the picture. */
+function LayoutMenu({ sidebar, setSidebar }: { sidebar: SidebarMode; setSidebar: (m: SidebarMode) => void }) {
   const tk = useTokens();
   const anchor = useRef<HTMLSpanElement>(null);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   return (
     <span ref={anchor} style={{ display: 'inline-flex' }}>
-      <IconButton icon={sideIcon(side)} size="sm" label="Layout: where the panel sits, and the sidebar" active={!!menu} tooltip={!menu}
+      <IconButton icon={sidebarIcon(sidebar)} size="sm" label="Layout: the sidebar beside the panel" active={!!menu} tooltip={!menu}
         aria-haspopup="menu" data-play-layout=""
         onClick={() => { const r = anchor.current?.getBoundingClientRect(); setMenu(menu || !r ? null : { x: r.right - 290, y: r.bottom + 6 }); }} />
-      {menu && <Menu x={menu.x} y={menu.y} minWidth={290} title="Layout" items={playLayoutItems(side, sidebar, setSide, setSidebar, tk.accent.base)} onClose={() => setMenu(null)} />}
+      {menu && <Menu x={menu.x} y={menu.y} minWidth={290} title="Layout" items={playLayoutItems(sidebar, setSidebar, tk.accent.base)} onClose={() => setMenu(null)} />}
     </span>
   );
 }

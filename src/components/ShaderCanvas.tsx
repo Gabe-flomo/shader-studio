@@ -6,7 +6,8 @@ import { currentPlan, usePlan } from '../lib/plan';
 import { useRef, useEffect, useState, useCallback } from 'react';
 import * as THREE from 'three';
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
-import { PREVIEW_ASPECTS, fitAspect } from '../utils/graphImportPlan';
+import { PREVIEW_ASPECTS, fitAspect, playFreeFit } from '../utils/graphImportPlan';
+import { usePlaySplit } from './play/playSplit';
 import { drawScopeCanvas, vectorValueRegistry, floatValueRegistry, scopeCanvasRegistry } from '../lib/scopeRegistry';
 import { audioEngine } from '../lib/audioEngine';
 import { audioSpectrumRegistry, drawSpectrumCanvas } from '../lib/audioSpectrumRegistry';
@@ -3177,19 +3178,21 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
   // A builder that mirrors this preview into a big viewport of its own (the Splat builder) holds it to that size.
   const sizeOverride = usePreviewSizeOverride();
   const fit = sizeOverride ?? fitAspectSize;
+  // On the Play page (desktop and tablet split) Free never crops: it letterboxes when the area is narrower than square.
+  const onPlayArea = usePlaySplit(s => s.available);
   useEffect(() => {
     const ratio = PREVIEW_ASPECTS.find(a => a.id === previewAspect)?.ratio ?? null;
     const outer = outerRef.current;
-    if (!ratio || !outer) { setFit(null); return; }
+    if ((!ratio && !onPlayArea) || !outer) { setFit(null); return; }
     const apply = () => {
       const r = outer.getBoundingClientRect();
-      setFit(fitAspect(r.width, r.height, ratio));
+      setFit(ratio ? fitAspect(r.width, r.height, ratio) : playFreeFit(r.width, r.height));
     };
     apply();
     const ro = new ResizeObserver(apply);
     ro.observe(outer);
     return () => ro.disconnect();
-  }, [previewAspect]);
+  }, [previewAspect, onPlayArea]);
 
   return (
     <div ref={outerRef} style={{ width: '100%', height: '100%', background: '#000', position: 'relative', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

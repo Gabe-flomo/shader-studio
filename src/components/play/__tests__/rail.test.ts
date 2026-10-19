@@ -141,12 +141,10 @@ describe('the rail’s state', () => {
 
   it('keeps the picture’s size: the panel takes the sidebar’s width', () => {
     // A 1000 px area, half each, beside a 460 px sidebar: the picture stays 500 px of 1460.
-    expect(railRatioFor('right', 0.5, 1000, 460)).toBeCloseTo(960 / 1460);
-    expect(railRatioFor('left', 0.3, 1000, 460)).toBeCloseTo(760 / 1460);
-    // Above or below, the area only gets wider: the share stays.
-    expect(railRatioFor('top', 0.4, 800, 460)).toBe(0.4);
+    expect(railRatioFor(0.5, 1000, 460)).toBeCloseTo(960 / 1460);
+    expect(railRatioFor(0.3, 1000, 460)).toBeCloseTo(760 / 1460);
     // Nothing to give.
-    expect(railRatioFor('right', 0.5, 1000, 0)).toBe(0.5);
+    expect(railRatioFor(0.5, 1000, 0)).toBe(0.5);
   });
 
   it('opening the rail starts on the panel’s page, measures, and leaves the sidebar’s layout alone', () => {

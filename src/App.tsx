@@ -1510,14 +1510,15 @@ function App() {
 
           {/* Right: Preview */}
           <div style={{ ...(page === 'play' ? { flexGrow: 1, flexBasis: 0, minWidth: 0 } : { width: previewWidth }), flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
+            {/* On Play the panel takes the left, full height; the picture and its status row stay together on the right. */}
             <PlaySplitArea active={page === 'play'}>
               <div ref={canvasFrame} style={{ flex: 1, position: 'relative', minHeight: 0 }}><ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} /><AudioMasterVolumeWidget /></div>
+              <div style={{ background: tc.mantle, borderTop: `1px solid ${tc.surface0}`, padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '10px', fontFamily: 'monospace', color: tc.surface2, minHeight: '28px', flexShrink: 0 }}>
+                <StatusReadout swatchSize={12} probeGap={10} emptyText="hover for colour · click node to probe" />
+                <div style={{ flex: 1 }} />
+                {errorBadge}
+              </div>
             </PlaySplitArea>
-            <div style={{ background: tc.mantle, borderTop: `1px solid ${tc.surface0}`, padding: '4px 10px', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '10px', fontFamily: 'monospace', color: tc.surface2, minHeight: '28px', flexShrink: 0 }}>
-              <StatusReadout swatchSize={12} probeGap={10} emptyText="hover for colour · click node to probe" />
-              <div style={{ flex: 1 }} />
-              {errorBadge}
-            </div>
             {errorPopup}
           </div>
         </div>
@@ -1640,6 +1641,9 @@ function App() {
               : page === 'play' ? { flexGrow: 1, flexBasis: 0, minWidth: 0 } : { width: previewWidth }),
             flexShrink: 0, display: 'flex', flexDirection: 'column', background: '#0d0d12',
           }}>
+            {/* On Play the panel takes the left of this column, full height; the preview's header,
+                the picture and its footer stay together on the right (PlaySplitArea). */}
+            <PlaySplitArea active={page === 'play'}>
             {/* Chrome around the picture follows the app's real theme; the picture itself stays dark (below). */}
             <ThemeOverrideContext.Provider value={null}>
               {!pictureBehind && <PreviewHeader>
@@ -1658,16 +1662,15 @@ function App() {
               </PreviewHeader>}
             </ThemeOverrideContext.Provider>
             <ThemeOverrideContext.Provider value="dark">
-              <PlaySplitArea active={page === 'play'}>
                 <div ref={canvasFrame} style={{ flex: 1, position: 'relative', minHeight: 0 }}>
                   <ShaderCanvas onCanvasReady={handleCanvasReady} onRegisterOfflineRender={handleRegisterOfflineRender} onHistogram={showHistogram ? handleHistogram : undefined} />
                   {showHistogram && histData && <HistogramOverlay data={histData} />}
                 </div>
-              </PlaySplitArea>
             </ThemeOverrideContext.Provider>
             <ThemeOverrideContext.Provider value={null}>
               {!pictureBehind && <PreviewFooter idleHint="Hover for colour · select a node to probe" />}
             </ThemeOverrideContext.Provider>
+            </PlaySplitArea>
           </div>
         )}
       </div>

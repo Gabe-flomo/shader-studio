@@ -5,8 +5,41 @@
 The split view puts a big panel beside the Play picture (⌘⇧L, or the split
 button in the preview's toolbar). It is how the Play page opens: split, with
 the sidebar folded into the icon rail (`DEFAULT_SPLIT`; saves from before this
-was the default take it once, keeping their side, ratio and page). The panel sits left, right, above or below
-the picture; the divider between them drags (double-click: half and half).
+was the default take it once, keeping their page).
+
+## The picture is always on the right
+
+*Updated 18 Oct 2026 (Play audit P3/P21, user decision).* The panel, with the
+rail, is on the left; the picture is on the right, on desktop and tablet alike.
+It isn't a setting: the Layout menu's four "Panel left/right/above/below" rows
+are gone and `SplitPrefs` has no `side`. Phones keep their stacked
+picture-over-panel layout (`shell/PhoneSplit.tsx`).
+
+- **Share.** The panel takes about a third of the width by default
+  (`DEFAULT_RATIO` = 0.35) so the picture gets most of it. The divider still
+  drags (`ratioAt`), between `RATIO_MIN` 0.2 and `RATIO_MAX` 0.7 and never
+  below `MIN_PANEL_PX` (300) for the panel or `MIN_CANVAS_PX` (320) for the
+  picture; a double-click goes back to the default.
+- **Migration.** `SPLIT_PREFS_VERSION` is 3. A save from before (v2 or older)
+  drops its `side` and takes the new ratios once (`ratio` 0.35, `railRatio`
+  re-measured), since its ratios were measured with the panel right of the
+  picture at half and half; everything else it saved stays.
+- **Header and footer.** The preview's header (shape, resolution, frame rate,
+  Overlay, Stage, Output…) and its footer sit in the picture's column, inside
+  `PlaySplitArea`, so the panel runs the full height on the left. The header's
+  "PREVIEW" label gives way first when the column is narrow.
+- **Free never crops on Play.** Most shaders scale by the canvas height, so a
+  frame narrower than square cut the sides off ("PRESS" read "RESS"). On the
+  Play page (`usePlaySplit.available`), Free fills the area while it's at least
+  square and letterboxes to square when it's narrower (`playFreeFit`,
+  `PLAY_FREE_MIN_RATIO` in `utils/graphImportPlan.ts`). The other shapes
+  letterbox as before; the Studio's preview is unchanged.
+- **Tablet.** The same side-by-side layout (the panel at its 300 px minimum
+  beside the picture on an 820 px iPad). Tablets have no preview header, so
+  Stage sits in the top bar (`DesktopTopNav`, `compact` on Play). The middle
+  tab level (Controls / MIDI file / Pad grid) stays until those pages move
+  into the "+ Map" picker (audit P10).
+
 State lives in `src/components/play/playSplit.ts`; the frame (bar, divider,
 rail) in `PlaySplitArea.tsx`; PlayPage renders the panel's content through a
 portal into the frame's body.
@@ -89,8 +122,7 @@ width, and the picture keeps its size: opening the rail measures the area and
 the sidebar and works out the rail's own divider position (`railRatioFor`).
 Dragging the divider in rail mode moves only that (`railRatio`), so leaving the
 rail puts the sidebar, the panel's section and the divider back exactly as
-they were. Above or below the picture, the rail still sits on the panel's
-left edge and the share stays as it was.
+they were.
 
 **Following you.** While the rail is out, a layer clicked on the picture (or
 revealed from a note, a control's "Go to layer") opens the Layers page; a
@@ -195,3 +227,6 @@ filter row, folded mappings, the built-in group, the reset on a new graph, the
 control card's details) and `railPagesMount.test.tsx` (every page mounted in
 jsdom, wide and narrow, the phone's pages, the rail's click-through and the
 panel header's tab strip, all without a console error).
+`pictureRight.test.tsx` (the picture on the right in every sidebar mode, the
+header and footer in its column, the default share, tablet Stage, and Free's
+letterbox on Play) and `playSplit.test.ts` (prefs, the v3 migration, ratios).

@@ -33,7 +33,7 @@ import { canvasMenuItems, randomiseMenuItems, type CanvasMenuActions, type Canva
 import { CanvasToolbar } from '../CanvasToolbar';
 import { useGraphMaximize } from '../graphLayout';
 import { useViewport } from '../../../lib/viewport';
-import { playLayoutItems, SIDE_OPTIONS, SIDEBAR_OPTIONS } from '../../play/playLayoutMenu';
+import { playLayoutItems, SIDEBAR_OPTIONS, sidebarIcon } from '../../play/playLayoutMenu';
 import type { MenuItem } from '../../ui/Menu';
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -179,16 +179,17 @@ describe('canvas right-click menu', () => {
 });
 
 describe('Play Layout menu', () => {
-  it('offers the four sides and three sidebar modes, marks the current ones, and sets them', () => {
-    const setSide = vi.fn(), setSidebar = vi.fn();
-    const items = playLayoutItems('right', 'rail', setSide, setSidebar, '#00f');
-    expect(labels(items)).toEqual([...SIDE_OPTIONS.map(o => o.label), ...SIDEBAR_OPTIONS.map(o => o.label)]);
+  it('offers only the three sidebar modes (the picture is always right of the panel), marks the current one, and sets it', () => {
+    const setSidebar = vi.fn();
+    const items = playLayoutItems('rail', setSidebar, '#00f');
+    expect(labels(items)).toEqual(SIDEBAR_OPTIONS.map(o => o.label));
+    // No row moves the panel to another side of the picture.
+    expect(labels(items).some(l => /right of the picture|above the picture|below the picture|left of the picture/i.test(l))).toBe(false);
     const rows = items.filter((i): i is Extract<MenuItem, { onSelect: () => void }> => i !== 'separator' && !('heading' in i));
-    expect(rows.filter(r => r.iconColor === '#00f').map(r => r.label)).toEqual(['Panel right of the picture', 'Fold the sidebar into icons']);
+    expect(rows.filter(r => r.iconColor === '#00f').map(r => r.label)).toEqual(['Fold the sidebar into icons']);
     rows[2].onSelect();
-    expect(setSide).toHaveBeenCalledWith('top');
-    rows[6].onSelect();
     expect(setSidebar).toHaveBeenCalledWith('hidden');
+    expect(sidebarIcon('hidden')).toBe('sidebarOff');
   });
 });
 
