@@ -49,7 +49,7 @@ On the rail, **Inputs** replaces Controls and Mappings. The page id stays `contr
 *Renamed 2026-10-17 (docs/glossary.md):* the rail reads **Controls, Layers, Rules, Finish, Sound** (⌘1–5 in that order, since 2026-10-18). The board is still the Inputs board in the code; on screen it is **Controls**, with its two columns **Controls** and **Sources**. ⌘1 is “Go to Controls”, ⌘⇧M “Go to Sources”.
 
 - **Controls column:** the controls board as before. Each control shows what drives it: its mappings, and every route from a source of the record (marked "(add)" for Add routes).
-- **Sources column:** the record's own sources as cards, then the old mapping cards. The mapping cards keep Learn, MIDI auto-learn, increments, trigger sources and pairs. **+ Source** adds a source that drives nothing yet.
+- **Sources column:** the record's own sources as cards, then the old mapping cards. The mapping cards keep Learn, MIDI auto-learn, increments, trigger sources and pairs. **+ Map** (below) adds a source.
 - **Map:** the + on a mapping card or Map on a source card starts Map mode (`inputs/mapMode.ts`). Every control becomes a target. A click routes the source there, or takes the route off. Esc or Done ends it.
   - Map works in the sidebar's controls list too.
   - On the first pick, a mapping becomes a source of the record with the same id (`routeOps.ts` `ownSource`), so its smoothing and delay state carry over.
@@ -59,7 +59,9 @@ On the rail, **Inputs** replaces Controls and Mappings. The page id stays `contr
   - Set or Add, with the range, the curve (drawn too), smoothing and delay folded.
   - A Step output uses the Increment editor.
 - **Phones:** the two columns are tabs; Map mode shows the controls.
-- **Route chips:** a control's "driven by" chip opens its detail window (phase 5, `detail-windows.md`).
+- **Route chips:** a control's "driven by" chip opens what drives it in the Sources column, on phones and desktop alike (Play audit P7; one implementation, PlayPage's `openDriver`): the Sources side shows (the phone's switch, the narrow board's tab, the drawer), its group and card unfold, and it scrolls into view with a brief outline. With nothing driving it, the chip isn't there; the details window is still a click away on the card.
+- **Mapped by:** a control card's details list each mapping and route onto it as a chip; a click opens that one in Sources (`driverCardOf`). **Learn** there starts Learn mode with this control picked.
+- **Target chip:** an open mapping card shows what it drives as a chip ("→ Radius ▾") beside its meter, instead of a CONTROL drop-down on every card. A click lists the controls to drive instead (retarget: the range resets to the new control's). A colour's channel picker sits beside it.
 - **Swing ring:** under a driven slider, a thin strip is the control's range laid flat (the ruler above scrolls under its needle, so it can't show a span itself). The part its sources can move it across is shaded in the accent, with a tick at the live value. Worked out in `play/controlSwing.ts` (pure, tested), the way `rtFrame` plays routes:
   - each Replace route (an old mapping is one) covers its range, either way round; several cover their union;
   - Add routes sum on top of the last Replace, else the slider, so they reach from + Σ low ends to from + Σ high ends;
@@ -69,7 +71,12 @@ On the rail, **Inputs** replaces Controls and Mappings. The page id stays `contr
 - **Sources by kind:** the sources column groups the record's own sources and the old mappings together by what they read: MIDI and OSC; keys, mouse and gamepad; audio; LFOs, clocks and noise; triggers; picture, hands and sensors; controls and data (`mappingGroups.ts` `groupSourceItems`, tested). Each heading folds its cards away and shows its count. From four cards on, a search box filters by name, what each reads and the controls it drives (a search shows folded groups too). Pair mappings, the MIDI file slot and the pad grid stay where they were.
 - **Folded by default:** mapping cards, source cards and pair mapping cards start folded to their one line: a mapping reads "source › control" with "0.05–0.7 · linear" and its meter under it; a source card keeps its header (name, Map, on/off) with "what it reads → what it drives". Opening one is remembered on this device (playUi's `folded`, `mappingFoldKey` / `sourceFoldKey`); a mapping or input just added opens, to be set up. The group headings' folds are remembered too.
 - **Built in:** at the very bottom, folded, the built-in signals (Signals: count, active, active share; docs/conditions-and-signals.md) as read-only cards with their value now and **Map**. They can't be deleted.
-- **+ Source → MIDI → Map 12 notes → 12 targets…:** one note class per control or layer, any octave (docs/midi.md). The sidebar's mappings drawer is unchanged.
+- **+ Map (Play audit P6):** the Sources header has one **+ Map** button (beside the hands toggle and the ⋯). It replaced Learn, Add (which silently made a MIDI CC mapping on the first control and asked the browser for MIDI access) and + Source (Random only). It opens a searchable picker grouped by kind (`mapPicker.ts`, tested): **Learn**, **MIDI** (knob or fader, note, velocity, gate, pitch bend, 12 notes → 12 targets…), **Keys**, **Mouse**, **Audio** (bands, readers, Spectrum readers…, an Audio Input node's band), **Hands**, **LFO / Beat** (LFO, Beat, Function), **Random** (Shake, Wander, Hop, Chaos, Noise), **Behaviours…** (the Behaviours library), then the rest under their own headings (More devices, From the setup, Face, Pose). Picking a type makes a source of the record, opens its card and starts Map mode; a knob or fader starts with no CC and takes the first knob turned (`midiAutoLearn` now covers the record's sources too). Free sees Pro on what it lacks. The empty state's **Map an input** opens the same picker.
+  - **No MIDI prompt until asked:** only a MIDI kind or Learn calls `connectWebMidi` (`mapPickAsksMidi`). A setup with no MIDI never asks.
+  - **Later (P10):** the MIDI file and the pad grid move in as MIDI kinds; `mapPicker.ts` notes where.
+  - **Connect gear…** stays in the Sources ⋯.
+- **Learn mode (`inputs/learnMode.ts`):** Ableton style. Every control card gets a blue overlay (`MapTarget`, `data-learn-target`); a click picks one (solid blue, "Move a knob or press a key…"). The next knob, note, key, sound or hand move becomes a mapping onto it across its whole range (`learnOnto`, tested). Learn stays on: another input replaces the one just learned (no second row), and another click picks another control. A strip over the controls (and in Sources) says what it waits for, with **Stop**; Esc stops it too (`playEngine` never learns Esc as a key). The + Map button reads **Learning** meanwhile and stops it on a click. Learn mode and Map mode end each other; the narrow board and the phone show the controls while it's on. A mapping row's own ✦ Learn (replace this row's source) is unchanged.
+- **+ Map → MIDI → 12 notes → 12 targets…:** one note class per control or layer, any octave (docs/midi.md). The sidebar's mappings drawer is unchanged.
 
 ## Random sources and readouts (guide phase 7)
 
@@ -77,7 +84,7 @@ On the rail, **Inputs** replaces Controls and Mappings. The page id stays `contr
   - Bell is the mean of three smooth noises: mostly near the middle.
   - Biased bends smooth noise towards the low or high end (Lean 0–100%).
   - **New each play** adds a per-play seed: Play's start in the app, the page's opening on a website. Without it, the seed stays and takes replay the same.
-- **+ Source → Random:** Shake, Wander, Hop and Chaos. Each makes a noise source and goes straight into Map mode.
+- **+ Map → Random:** Shake, Wander, Hop and Chaos (and a plain Noise). Each makes a noise source and goes straight into Map mode.
 - **Reads a value:** a Text layer can show a value path (a control, a source, a layer's number, a distance…) instead of its text: as a number to N decimals, a percent, ON/OFF, or its text with `{v}` replaced (`klReadText` in the kit, so app and website match). A layer that reads a value redraws every frame.
 
 Already in from the simplification work: percent of range; between, outside, not and never reached; rising and falling; counters (every Nth, N within T); route delay.

@@ -131,3 +131,11 @@ export function driverCardFor(p: Pick<PlayRecord, 'mappings' | 'sources'>, contr
 export function driverFoldKeys(d: DriverCard): string[] {
   return [sourceGroupFoldKey(d.group), d.kind === 'mapping' ? mappingFoldKey(d.id) : sourceFoldKey(d.id)];
 }
+
+/** The card of one driver by its id (a mapping's or a source of the record's): a control card's "Mapped by" list opens it. */
+export function driverCardOf(p: Pick<PlayRecord, 'mappings' | 'sources'>, id: string): DriverCard | null {
+  const m = p.mappings.find(x => x.id === id);
+  if (m) return { kind: 'mapping', id, group: mappingGroupOf(m) };
+  const s = (p.sources ?? []).find(x => x.id === id);
+  return s ? { kind: 'source', id, group: mappingGroupOf(s) } : null;
+}

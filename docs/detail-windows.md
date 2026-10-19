@@ -9,7 +9,7 @@ One window (`src/components/play/detail/DetailWindow.tsx`, on the shared Modal s
 | A rule | A badge when it is in a loop, its rule card (When, Options, Do), **Listens to** (the controls, sources and rules its inputs read) and **Listened to by** (rules, mappings and sources that take it). |
 
 Ways to open it:
-- On the Inputs board: a control's "driven by" chip, or the open button on a control's hover tools, a mapping card or a source card.
+- On the Inputs board: a control's "driven by" chip when no mapping or source card drives it (otherwise it opens that card in Sources, Play audit P7), or the open button on a control's hover tools, a mapping card or a source card.
 - On the Rules page: the open button on a rule card.
 - On the Layers page: a layer property that is already a control has **Open its details** in its right-click menu (the + menu on touch), and an open button beside its check on desktop. A property that isn't a control offers nothing new.
 - In the Rules page's Graph view (`docs/graph-view.md`): a click on a source, a rule or a control.

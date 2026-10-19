@@ -173,8 +173,9 @@ side-by-side layout has no room there. Since Play audit P20 (2026-10-18):
   controls, Stage, notes and the Play setup are in the ⋯.
 - A control's **driven-by chip** opens what drives it in Sources: the switch
   flips to Sources, the card and its group unfold, and it's scrolled to and
-  flashed (`driverCardFor` in `mappingGroups.ts`). On desktop it still opens
-  the details window.
+  flashed (`driverCardFor` in `mappingGroups.ts`). Since round 3 (P7) desktop
+  does the same with the same code: the narrow board's tab flips to Sources
+  (`useInputsBoard`), or the wide board's column scrolls to it.
 - Control cards fold their move/details/remove tools into one ⋯ and let a
   long name wrap onto a second line, instead of cutting it short.
 - **Layers** carries the canvas row (shape, quality, frame rate, full screen,
