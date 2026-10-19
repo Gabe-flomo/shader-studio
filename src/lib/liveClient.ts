@@ -123,7 +123,7 @@ class LiveClient {
       if (e.fresh) this.changed();
     } else if (e.type === 'bye') {
       this.setStatus('lost');
-    } else if (e.type === 'catalog' || e.type === 'selectedDevice' || e.type === 'track') {
+    } else if (e.type === 'catalog' || e.type === 'selectedDevice' || e.type === 'track' || e.type === 'sends') {
       this.changed();
     }
     for (const l of this.listeners) l(e);

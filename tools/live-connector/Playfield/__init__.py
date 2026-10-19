@@ -6,7 +6,7 @@
 # restart Live, then Settings > Link, Tempo & MIDI > Control Surface:
 # Playfield (Input and Output: None).
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 
 
 def create_instance(c_instance):

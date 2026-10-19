@@ -8,7 +8,8 @@
  * listen to, play/readerControls.ts), a source ("Reader · Kick") and a
  * trigger ("Audio reader crosses"). They listen to the live input, or to the
  * song in one of the graph's Audio Input nodes, a Video layer's sound, a
- * Drum pad layer or an Audio engine rack.
+ * Drum pad layer, an Audio engine rack, or a track in Ableton Live through
+ * the Playfield Send plug-in (desktop app, Pro: `send:<id>`).
  */
 import { useEffect, useMemo, useState } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
@@ -37,6 +38,8 @@ import { useCan } from '../../lib/plan';
 import { EMPTY_READERS as EMPTY, readerInputOptions, usesReader, useReadersPanel } from './readersPanelUi';
 import { ReaderMeter, readerHex as hex, useReaderLevels as useLevels } from './ReaderDots';
 import { usePlayUi } from './playUi';
+import { liveSend, sendIdOfInput } from '../../lib/liveSend';
+import { useLiveSend } from '../audio/LiveSendPicker';
 
 /** Mounted once on the Play page. */
 export function AudioReadersHost({ compact }: { compact: boolean }) {
@@ -86,6 +89,11 @@ function AudioReadersPanel({ compact }: { compact: boolean }) {
   const ticks = useMemo(() => thresholdsByReader(play), [play]);
   const status = useLiveStatus();
   const engineOk = useCan('audio.engine');
+  const sendOk = useCan('audio.liveSend');
+  useLiveSend();
+  // The picker lists the Live sends while it is open.
+  useEffect(() => { liveSend.want('readersPanel', true); return () => liveSend.want('readersPanel', false); }, []);
+  const sends = liveSend.available() && sendOk ? liveSend.list().map(i => ({ id: i.id, label: liveSend.label(i.id) })) : [];
 
   // What they listen to: the live input, or an Audio Input node's song.
   const songs = nodes.filter(n => n.type === 'audioInput').map(n => ({
@@ -122,7 +130,7 @@ function AudioReadersPanel({ compact }: { compact: boolean }) {
     hide();
   };
   const togglePeak = (on: boolean) => { setPeak(on); try { localStorage.setItem(PEAK_KEY, on ? '1' : '0'); } catch { /* preference only */ } };
-  const inputOptions = readerInputOptions(cfg.input, songs.map(x => ({ ...x, file: audioEngine.isLoaded(x.id) ? audioEngine.getFileName(x.id) : null })), play.layers, play.audioEngine?.racks ?? []);
+  const inputOptions = readerInputOptions(cfg.input, songs.map(x => ({ ...x, file: audioEngine.isLoaded(x.id) ? audioEngine.getFileName(x.id) : null })), play.layers, play.audioEngine?.racks ?? [], sends);
   const videoId = videoLayerOfInput(cfg.input);
   const video = videoId ? play.layers.find(v => v.id === videoId && v.kind === 'video') : undefined;
   const song = songs.find(s => s.id === cfg.input);
@@ -144,7 +152,16 @@ function AudioReadersPanel({ compact }: { compact: boolean }) {
   const padsLayer = padsId ? play.layers.find(v => v.id === padsId && v.kind === 'sampler') : undefined;
   const rackId = engineRackOfInput(cfg.input);
   const rack = rackId ? play.audioEngine?.racks.find(r => r.id === rackId) : undefined;
-  const sourceNote = rackId
+  const sendId = sendIdOfInput(cfg.input);
+  const sendInst = sendId === null ? undefined : liveSend.instance(sendId);
+  const sourceNote = sendId !== null
+    ? hint(!sendOk ? 'Live tracks are part of Pro: the readers are kept, and listen again with Pro.'
+      : !liveSend.available() ? 'Live tracks come in through the Playfield desktop app (the Playfield Send plug-in).'
+        : !sendInst ? `Playfield Send ${sendId} isn’t running: open the set in Live (with the plug-in on its track).`
+          : sendInst.status === 'paused' ? `${liveSend.sourceName(sendId)} is paused in Live (the device or track is off, or Live’s audio is stopped).`
+            : sendInst.status === 'offline' ? `${liveSend.sourceName(sendId)}: Live is exporting or freezing; that audio isn’t sent.`
+              : `${liveSend.sourceName(sendId)}: the readers hear the track where the plug-in sits in its device chain.`)
+    : rackId
     ? hint(!engineOk ? 'The Audio engine is part of Pro: its racks are kept, and play again with Pro.'
       : rackId === ENGINE_MASTER ? 'The Audio engine’s master: the readers hear every rack together. Play one to see them move.'
         : !rack ? 'That Audio engine rack has been deleted. Pick another input.'

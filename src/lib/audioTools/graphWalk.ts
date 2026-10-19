@@ -117,7 +117,8 @@ export function audioHearing(refs: readonly AudioNodeRef[], kindOf: (sourceId: s
   };
   for (const id of fx.keys()) root(id);
   const listens = (id: string) => fx.get(id)?.node.params.listen !== false;
-  const playable = (id: string) => { const s = rootOf.get(id); return !!s && kindOf(s) !== 'mic'; };
+  // Live input (the Mic, a Live track) is never played to the speakers.
+  const playable = (id: string) => { const s = rootOf.get(id); return !!s && kindOf(s) !== 'mic' && kindOf(s) !== 'send'; };
   // Effects that have a listening effect somewhere after them.
   const shadowed = new Set<string>();
   for (const id of fx.keys()) {

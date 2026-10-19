@@ -12,6 +12,13 @@ RACK_NAME = "playfield"
 MAX_RACK_DEPTH = 4
 MAX_SELECTED_KEYS = 64
 
+# Playfield Send: the VST3 plugin users put on Live tracks. Found by the
+# plugin's class, never by the device name (users rename devices).
+SEND_CLASS_NAMES = ("PluginDevice", "AuPluginDevice")
+SEND_DISPLAY_NAME = "Playfield Send"
+PAIRING_PARAM = "Pairing ID"
+PAIRING_MAX = 9999
+
 
 def safe_get(obj, name, default=None):
     """getattr that also survives Live raising RuntimeError on a stale object."""
@@ -317,6 +324,106 @@ def build_catalogue(song, log=None):
             if role == "rack":
                 cat.rack_keys.append(key)
     return cat
+
+
+# ---------------------------------------------------------------- Playfield Send
+
+class SendEntry(object):
+    def __init__(self, send_id, track, colour, track_index, kind, device, param):
+        self.id = send_id                   # 0..9999, or None when unreadable
+        self.track = track              # key-style track name
+        self.colour = colour
+        self.track_index = track_index  # the TrackEntry's index
+        self.kind = kind                # "track" | "return" | "group" | "master"
+        self.device = device
+        self.param = param              # the "Pairing ID" DeviceParameter or None
+
+
+def is_playfield_send(device):
+    if as_text(safe_get(device, "class_name", "")) not in SEND_CLASS_NAMES:
+        return False
+    return as_text(safe_get(device, "class_display_name", "")) == SEND_DISPLAY_NAME
+
+
+def pairing_param(device):
+    for param in safe_list(device, "parameters"):
+        if as_text(safe_get(param, "name", "")) == PAIRING_PARAM:
+            return param
+    return None
+
+
+def _parse_id_text(text):
+    text = as_text(text).strip()
+    if text.startswith("#"):
+        text = text[1:].strip()
+    if not text or len(text) > 4 or not text.isdigit():
+        return None
+    return int(text)
+
+
+def pairing_id(param):
+    """The id 0..9999 from the parameter's display string, else from its value."""
+    if param is None:
+        return None
+    try:
+        found = _parse_id_text(str(param))
+        if found is not None:
+            return found
+    except Exception:
+        pass
+    fn = safe_get(param, "str_for_value", None)
+    if callable(fn):
+        try:
+            found = _parse_id_text(fn(safe_get(param, "value", 0.0)))
+            if found is not None:
+                return found
+        except Exception:
+            pass
+    value = safe_get(param, "value", None)
+    if value is None:
+        return None
+    value = as_float(value, -1.0)
+    hi = as_float(safe_get(param, "max", 1.0), 1.0)
+    if hi > 1.0:
+        n = int(round(value))
+    elif 0.0 <= value <= 1.0:
+        n = int(round(value * PAIRING_MAX))
+    else:
+        return None
+    if 0 <= n <= PAIRING_MAX:
+        return n
+    return None
+
+
+def pairing_value(param, new_id):
+    """The parameter value that stands for `new_id`."""
+    if as_float(safe_get(param, "max", 1.0), 1.0) > 1.0:
+        return float(new_id)
+    return float(new_id) / PAIRING_MAX
+
+
+def send_kind(track_entry):
+    if track_entry.kind == "track" and safe_get(track_entry.track, "is_foldable", False):
+        return "group"
+    return track_entry.kind
+
+
+def send_entries(cat):
+    """Playfield Send devices in catalogue order, ids read now."""
+    out = []
+    for d in cat.devices:
+        try:
+            if not is_playfield_send(d.device):
+                continue
+            t = d.track_entry
+            param = pairing_param(d.device)
+            # The colour is read now: a recolour doesn't rebuild the catalogue.
+            colour = as_int(safe_get(t.track, "color", t.colour), t.colour)
+            out.append(SendEntry(pairing_id(param), t.name, colour, t.index, send_kind(t),
+                                 d.device, param))
+        except Exception:
+            continue
+    return out
 
 
 def selected_device_keys(cat, device):

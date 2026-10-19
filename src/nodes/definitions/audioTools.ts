@@ -73,9 +73,21 @@ export const audioToolSampler = (slug: string): string => `u_tex_${slug}`;
 
 // ── Settings the engine reads ────────────────────────────────────────────────────────────────────────────────
 
-/** Audio Source's tabs: a File, the Mic, or a Video node's own sound. Phase 1's Test loop opens as File, empty. */
-export type AudioSourceKind = 'file' | 'mic' | 'video';
-export const audioSourceKind = (node: GraphNode): AudioSourceKind => (node.params.source === 'mic' ? 'mic' : node.params.source === 'video' ? 'video' : 'file');
+/**
+ * Audio Source's tabs: a File, the Mic, a Video node's own sound, or a Live track through the Playfield Send plug-in
+ * (`send`: desktop app, Pro; `sendId` is its Pairing ID, `sendLabel` the track's name when it was picked, so a graph
+ * opened without it can say what it waits for). Phase 1's Test loop opens as File, empty.
+ */
+export type AudioSourceKind = 'file' | 'mic' | 'video' | 'send';
+export const audioSourceKind = (node: GraphNode): AudioSourceKind =>
+  (node.params.source === 'mic' ? 'mic' : node.params.source === 'video' ? 'video' : node.params.source === 'send' ? 'send' : 'file');
+/** A Live source's Pairing ID (0..9999), or null when none is picked yet. */
+export function audioSendIdOf(node: GraphNode): number | null {
+  const v = Number(node.params.sendId);
+  return node.params.sendId !== '' && node.params.sendId !== undefined && node.params.sendId !== null && Number.isInteger(v) && v >= 0 && v <= 9999 ? v : null;
+}
+/** Live sources and the Mic are live input: never played to the speakers. */
+export const isLiveInputKind = (kind: AudioSourceKind | null): boolean => kind === 'mic' || kind === 'send';
 
 /** The graph's nodes whose video can sound for the Video tab: a Texture node playing a video file, or a Baked node. */
 export const AUDIO_VIDEO_NODE_TYPES: ReadonlySet<string> = new Set(['videoInput', 'baked']);
@@ -189,7 +201,7 @@ const SOURCE_OUTPUTS = {
 export function retypeAudioSource(node: GraphNode): GraphNode {
   if (node.type !== AUDIO_SOURCE_TYPE) return node;
   let params = node.params;
-  if (params.source !== 'file' && params.source !== 'mic' && params.source !== 'video') params = { ...params, source: 'file' };
+  if (params.source !== 'file' && params.source !== 'mic' && params.source !== 'video' && params.source !== 'send') params = { ...params, source: 'file' };
   const outputs: GraphNode['outputs'] = {};
   for (const [k, s] of Object.entries(SOURCE_OUTPUTS)) outputs[k] = { type: s.type, label: s.label };
   for (const o of audioSourceExtraOutputs(params)) outputs[o.key] = { type: 'float', label: o.label };
@@ -225,12 +237,12 @@ export const AudioSourceNode: NodeDefinition = {
   label: 'Audio Source',
   category: AUDIO_CATEGORY,
   aliases: ['Audio', 'Sound', 'Music', 'Song', 'Microphone', 'Mic', 'Audio file', 'Audio In', 'Line in', 'Frequency bands', 'Kick trigger', 'Learn a sound', 'Sound match', 'Clap detect', 'Video sound', 'Beat trigger', 'Threshold trigger', 'Noise gate'],
-  description: 'Where the sound comes from: a File (Load a sound on the card; it is kept in the library, so it comes back after a reload), the Mic (or an audio interface), or a Video node\'s own sound (the Video tab: a Texture node playing a video, or a Baked node), picked with the tabs on the card. The card\'s transport plays or pauses it, Restarts it, Mutes it (silent, but still listened to: its triggers keep firing) and sets its Volume; it stays on the card when the card is folded. Open ↗ shows the whole file to trim, and a live spectrum where you pick frequency bands: each band becomes an output here, its level or a trigger each time it rises above a Threshold line you set (watch it on the trigger scope; a Gate keeps noise out). A band\'s Detect can listen for more than loudness: Hits (onsets, so kicks over a held bass each fire), Transient, Noisy ↔ tonal, Brightness, or Drums only (sustained notes separated out first); Only: noisy or tonal keeps just the drums or just the notes. A File is analysed ahead, so its triggers fire when you hear each hit. Learn a sound there too (select one clap, press Learn): it fires a trigger whenever a sound like it plays. Wire Audio into Band level, Hit, Spectrum, Spectrogram or Waveform; Level is how loud it is right now (0–1) and Time the seconds it has played.',
+  description: 'Where the sound comes from: a File (Load a sound on the card; it is kept in the library, so it comes back after a reload), the Mic (or an audio interface), a Video node\'s own sound (the Video tab: a Texture node playing a video, or a Baked node), or a track in Ableton Live (the Live tab, in the desktop app with Pro: put the Playfield Send plug-in on the track), picked with the tabs on the card. The card\'s transport plays or pauses it, Restarts it, Mutes it (silent, but still listened to: its triggers keep firing) and sets its Volume; it stays on the card when the card is folded. Open ↗ shows the whole file to trim, and a live spectrum where you pick frequency bands: each band becomes an output here, its level or a trigger each time it rises above a Threshold line you set (watch it on the trigger scope; a Gate keeps noise out). A band\'s Detect can listen for more than loudness: Hits (onsets, so kicks over a held bass each fire), Transient, Noisy ↔ tonal, Brightness, or Drums only (sustained notes separated out first); Only: noisy or tonal keeps just the drums or just the notes. A File is analysed ahead, so its triggers fire when you hear each hit. Learn a sound there too (select one clap, press Learn): it fires a trigger whenever a sound like it plays. Wire Audio into Band level, Hit, Spectrum, Spectrogram or Waveform; Level is how loud it is right now (0–1) and Time the seconds it has played.',
   inputs: {},
   outputs: SOURCE_OUTPUTS,
   // volume / muted: what you hear (after the analysis: a muted source still triggers). syncOffset: ms added to when its
   // triggers fire (on top of the output's own latency, which is taken off by itself).
-  defaultParams: { source: 'file', playing: true, loop: true, gain: 1, volume: 1, muted: false, syncOffset: 0, _fileName: '', sampleId: '', videoNode: '', bands: [], sounds: [], trimIn: 0, trimOut: 0 },
+  defaultParams: { source: 'file', playing: true, loop: true, gain: 1, volume: 1, muted: false, syncOffset: 0, _fileName: '', sampleId: '', videoNode: '', sendId: '', sendLabel: '', bands: [], sounds: [], trimIn: 0, trimOut: 0 },
   paramDefs: {
     playing: { label: 'Play', type: 'bool', hint: 'Plays the file or the video\'s sound (heard through the speakers), or listens to the Mic.' },
     loop: { label: 'Loop', type: 'bool', showWhen: { param: 'source', value: 'file' }, hint: 'Start again at the trim\'s end (or the file\'s). Off: it stops there.' },

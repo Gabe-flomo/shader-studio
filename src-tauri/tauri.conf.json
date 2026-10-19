@@ -39,6 +39,9 @@
     "macOS": {
       "entitlements": "./Entitlements.plist"
     },
+    "resources": {
+      "../tools/playfield-send/bundle/": "plugins/"
+    },
     "fileAssociations": [
       {
         "ext": [

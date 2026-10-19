@@ -10,6 +10,7 @@
  *   node tools/fake-live.mjs                     # sends to udp 11101, listens on 11100
  *   node tools/fake-live.mjs --jitter 15 --loss 0.2 --tempo 128 --verbose
  *   node tools/fake-live.mjs --learn-every 5     # "clicks" a parameter every 5 s (Learn)
+ *   node tools/fake-live.mjs --sends 4821:Drums,1234:Bass   # Playfield Send plugins (/pf/sends)
  *
  * The browser goes through the bridge: `npm run osc-bridge -- --live` beside it.
  * Tests import `FakeLive` and drive it with their own clock (no sockets).
@@ -18,7 +19,7 @@ import dgram from 'node:dgram';
 import { pathToFileURL } from 'node:url';
 import { decodeOsc, encodeOsc, encodeBundle } from '../src/lib/osc/decode.js';
 
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
 const RED = 0xff3b30, BLUE = 0x3b7bff, GREEN = 0x34c759, AMBER = 0xffb020, GREY = 0x8e8e93;
 
 /** The fake set: tracks, their devices and parameters, and scenes. */
@@ -61,7 +62,8 @@ function display(p, v) {
  * The fake Live. `tick(now)` returns the datagrams due by `now` (ms); `handle(packet, now)`
  * answers a command. Options: tempo, jitterMs (how late each transport send may be), loss
  * (0..1, the chance a transport or param datagram is lost), rand (for tests), playing,
- * transportMs (how often the transport goes out while playing), learnEveryMs.
+ * transportMs (how often the transport goes out while playing), learnEveryMs, sends
+ * ([{ id, track }] Playfield Send plugins: /pf/sends after the catalogue and on request).
  */
 export class FakeLive {
   constructor(o = {}) {
@@ -72,6 +74,7 @@ export class FakeLive {
     this.playing = o.playing ?? true;
     this.transportMs = o.transportMs ?? 40;
     this.learnEveryMs = o.learnEveryMs ?? 0;
+    this.sends = o.sends ?? null;
     this.set = makeSet();
     this.gen = 1;
     this.counter = 0;
@@ -144,6 +147,19 @@ export class FakeLive {
     return out;
   }
 
+  /** `/pf/sends`: repeated (id, track name, colour, track index, kind), made-up colours and indices. */
+  sendsMessage() {
+    const colours = [RED, BLUE, GREEN, AMBER, GREY];
+    const args = [];
+    (this.sends ?? []).forEach((s, i) => args.push({ i: s.id }, s.track, { i: colours[i % colours.length] }, { i }, 'track'));
+    return encodeOsc('/pf/sends', args);
+  }
+
+  /** The catalogue, then `/pf/sends` when `sends` was given. */
+  catalogAndSends(now) {
+    return this.sends ? [...this.catalog(now), this.sendsMessage()] : this.catalog(now);
+  }
+
   /** A parameter's value now: rack macros and the filter sweep, the rest stay put. */
   value(p, now) {
     const t = now / 1000;
@@ -203,7 +219,8 @@ export class FakeLive {
       const ack = (ok, detail = '') => out.push(encodeOsc('/pf/ack', [m.address, { i: ok ? 1 : 0 }, detail]));
       switch (m.address) {
         case '/pf/ping': out.push(this.hello()); break;
-        case '/pf/catalog/request': out.push(...this.catalog(now)); ack(true); break;
+        case '/pf/catalog/request': out.push(...this.catalogAndSends(now)); ack(true); break;
+        case '/pf/sends/request': out.push(this.sendsMessage()); ack(true, `${(this.sends ?? []).length} sends`); break;
         case '/pf/watch': {
           const next = new Set(a.filter(x => typeof x === 'string'));
           for (const k of next) if (!this.watched.has(k)) { const p = this.params.find(x => x.key === k); if (p) out.push(this.paramMessage(p, now)); }
@@ -243,7 +260,12 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const opt = (name, fallback) => { const i = argv.indexOf(`--${name}`); return i >= 0 && argv[i + 1] ? Number(argv[i + 1]) : fallback; };
   const verbose = argv.includes('--verbose');
   const toPort = opt('to', 11101), inPort = opt('port', 11100);
-  const live = new FakeLive({ tempo: opt('tempo', 120), jitterMs: opt('jitter', 0), loss: opt('loss', 0), learnEveryMs: opt('learn-every', 0) * 1000 });
+  const sendsArg = argv.indexOf('--sends') >= 0 ? argv[argv.indexOf('--sends') + 1] ?? '' : null;
+  const sends = sendsArg === null ? null : sendsArg.split(',').filter(Boolean).map(part => {
+    const [id, ...name] = part.split(':');
+    return { id: Math.max(0, Math.min(9999, Number(id) | 0)), track: name.join(':') || `Track ${id}` };
+  });
+  const live = new FakeLive({ tempo: opt('tempo', 120), jitterMs: opt('jitter', 0), loss: opt('loss', 0), learnEveryMs: opt('learn-every', 0) * 1000, sends });
   const sock = dgram.createSocket('udp4');
   const t0 = Date.now();
   const now = () => Date.now() - t0;
@@ -255,7 +277,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   sock.on('error', e => { console.error(`[fake-live] ${e.message}`); process.exit(1); });
   sock.bind(inPort, '127.0.0.1', () => {
     console.log(`Fake Live (${live.tempo} BPM, “${live.set.name}”): sending to udp://127.0.0.1:${toPort}, commands on ${inPort}. Ctrl+C to stop.`);
-    send(live.catalog(0));
+    send(live.catalogAndSends(0));
     setInterval(() => send(live.tick(now())), 10);
   });
 }

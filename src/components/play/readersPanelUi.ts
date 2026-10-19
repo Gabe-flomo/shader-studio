@@ -7,6 +7,7 @@ import { create } from 'zustand';
 import type { PlayAudioReaders, PlayLayer } from '../../types/play';
 import { padsLayerOfInput, padsReaderInput, videoLayerOfInput, videoReaderInput } from '../../types/playLayers';
 import { ENGINE_MASTER, engineRackOfInput, engineReaderInput } from '../../lib/engineSound';
+import { sendIdOfInput, sendReaderInput } from '../../lib/liveSendNames';
 
 interface ReadersPanelUi {
   open: boolean;
@@ -39,7 +40,7 @@ export { withReaders, removeReader, usesReader } from '../../play/readerControls
  * that is gone (a deleted node or layer) stays listed, saying so, so the
  * picker still shows what is chosen.
  */
-export function readerInputOptions(input: string, songs: ReadonlyArray<{ id: string; label: string; file: string | null }>, layers: readonly PlayLayer[], racks: ReadonlyArray<{ id: string; name: string }> = []): { value: string; label: string }[] {
+export function readerInputOptions(input: string, songs: ReadonlyArray<{ id: string; label: string; file: string | null }>, layers: readonly PlayLayer[], racks: ReadonlyArray<{ id: string; name: string }> = [], sends: ReadonlyArray<{ id: number; label: string }> = []): { value: string; label: string }[] {
   const out = [
     { value: '', label: 'Live input (mic, interface, cable)' },
     ...songs.map(s => ({ value: s.id, label: `Song · ${s.label}${s.file !== null ? ` · ${s.file}` : ' (no song loaded)'}` })),
@@ -48,8 +49,13 @@ export function readerInputOptions(input: string, songs: ReadonlyArray<{ id: str
   for (const l of layers) if (l.kind === 'sampler') out.push({ value: padsReaderInput(l.id), label: `Drum pads · ${l.label}` });
   for (const r of racks) out.push({ value: engineReaderInput(r.id), label: `Audio engine · ${r.name}` });
   if (racks.length || input === engineReaderInput(ENGINE_MASTER)) out.push({ value: engineReaderInput(ENGINE_MASTER), label: 'Audio engine · Master (every rack)' });
+  // Live tracks through Playfield Send (the desktop app), and one picked before that isn't running now.
+  for (const s of sends) out.push({ value: sendReaderInput(s.id), label: `Live · ${s.label}` });
+  const send = sendIdOfInput(input);
+  if (send !== null && !sends.some(s => s.id === send)) out.push({ value: input, label: `Live · Send ${send} (not running)` });
   const video = videoLayerOfInput(input), pads = padsLayerOfInput(input), rack = engineRackOfInput(input);
-  if (rack) { if (rack !== ENGINE_MASTER && !racks.some(r => r.id === rack)) out.push({ value: input, label: 'Audio engine · a rack no longer in the setup' }); }
+  if (send !== null) { /* listed above */ }
+  else if (rack) { if (rack !== ENGINE_MASTER && !racks.some(r => r.id === rack)) out.push({ value: input, label: 'Audio engine · a rack no longer in the setup' }); }
   else if (video && !layers.some(l => l.id === video && l.kind === 'video')) out.push({ value: input, label: 'Video · a layer no longer in the setup' });
   else if (pads && !layers.some(l => l.id === pads && l.kind === 'sampler')) out.push({ value: input, label: 'Drum pads · a layer no longer in the setup' });
   else if (input && !video && !pads && !rack && !songs.some(s => s.id === input)) out.push({ value: input, label: 'Song · a node no longer in the graph' });

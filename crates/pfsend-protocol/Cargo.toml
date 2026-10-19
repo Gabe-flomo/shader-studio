@@ -1,0 +1,18 @@
+[package]
+name = "pfsend-protocol"
+version = "1.0.0"
+edition = "2021"
+description = "Playfield Send: the shared-memory ring, the segment layout and the hello messages shared by the plugin and the desktop app (docs/playfield-send-plan.md)."
+license = "MIT OR Apache-2.0"
+publish = false
+
+[lib]
+path = "src/lib.rs"
+
+# The fake plugin: N instances writing test tones through the same protocol (tests and by hand).
+[[bin]]
+name = "pfsend-fake"
+path = "src/bin/pfsend-fake.rs"
+
+[dependencies]
+libc = "0.2"

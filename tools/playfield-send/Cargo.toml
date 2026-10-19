@@ -1,0 +1,35 @@
+[package]
+name = "playfield-send"
+version = "1.0.0"
+edition = "2021"
+description = "Playfield Send: a pass-through VST3 that streams a Live track's audio to the Playfield desktop app (docs/playfield-send-plan.md)."
+license = "MIT OR Apache-2.0"
+publish = false
+
+[lib]
+name = "playfield_send"
+# cdylib: the plugin binary inside "Playfield Send.vst3"; rlib: the unit tests and the host check use it.
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# MIT OR Apache-2.0; generated bindings for the MIT-licensed VST 3.8 SDK.
+vst3 = "0.3"
+pfsend-protocol = { path = "../../crates/pfsend-protocol" }
+libc = "0.2"
+
+# The plugin window (a small native status view): AppKit.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSGeometry", "NSTimer", "NSDate", "NSRunLoop", "NSObjCRuntime", "block2"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSView", "NSTextField", "NSControl", "NSResponder", "NSLevelIndicator", "NSLevelIndicatorCell", "NSActionCell", "NSCell", "NSColor", "NSFont", "NSText", "NSGraphics", "objc2-core-foundation"] }
+block2 = "0.6"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"
+
+[profile.dev]
+panic = "unwind"

@@ -17,7 +17,7 @@ export const LIVE_OUT_PORT = 11100;
 /** The browser bridge's WebSocket for Live (`npm run osc-bridge -- --live`). */
 export const LIVE_BRIDGE_WS_PORT = 9002;
 /** The script this app ships (tools/live-connector/Playfield/__init__.py VERSION; a test keeps them equal). */
-export const LIVE_CONNECTOR_VERSION = '1.0.0';
+export const LIVE_CONNECTOR_VERSION = '1.1.0';
 /** No hello for this long: "not heard from". */
 export const LIVE_STALE_MS = 3000;
 
@@ -43,6 +43,8 @@ export interface LiveParam {
 export interface LiveValue { value: number; min: number; max: number; display: string }
 export interface LiveHello { script: string; live: string; set: string; gen: number }
 export type LiveClipState = 'triggered' | 'playing' | 'stopped';
+/** A Playfield Send plug-in in the set (`/pf/sends`): its Pairing ID and the track it sits on. */
+export interface LiveSendPair { id: number; track: string; colour: number; trackIndex: number; kind: 'track' | 'return' | 'group' | 'master' }
 
 export type LiveEvent =
   | { type: 'hello'; hello: LiveHello; fresh: boolean }
@@ -55,6 +57,7 @@ export type LiveEvent =
   | { type: 'selectedParam'; param: LiveParam; value: LiveValue }
   | { type: 'selectedDevice'; track: string; device: string; keys: string[] }
   | { type: 'ack'; command: string; ok: boolean; detail: string }
+  | { type: 'sends'; sends: LiveSendPair[] }
   | { type: 'bye' };
 
 const num = (v: LiveArg | undefined, d = 0): number => (typeof v === 'number' && Number.isFinite(v) ? v : typeof v === 'boolean' ? (v ? 1 : 0) : d);
@@ -72,6 +75,8 @@ export class LiveState {
   values = new Map<string, LiveValue>();
   readonly follower = new TempoFollower();
   selectedDevice: { track: string; device: string; keys: string[] } | null = null;
+  /** The Playfield Send plug-ins in the set, as the script last reported them. */
+  sends: LiveSendPair[] = [];
   /** A catalogue arriving in pieces. */
   private building: { gen: number; tracks: LiveTrack[]; scenes: LiveScene[]; params: Map<string, LiveParam> } | null = null;
 
@@ -180,6 +185,16 @@ export class LiveState {
       }
       case '/pf/ack':
         return { type: 'ack', command: txt(a[0]), ok: num(a[1]) > 0, detail: txt(a[2]) };
+      case '/pf/sends': {
+        // Five per plug-in: id, track name, colour, track index, kind.
+        const sends: LiveSendPair[] = [];
+        for (let i = 0; i + 4 < a.length; i += 5) {
+          const kind = txt(a[i + 4]);
+          sends.push({ id: Math.round(num(a[i], -1)), track: txt(a[i + 1]), colour: num(a[i + 2]), trackIndex: num(a[i + 3]), kind: kind === 'return' || kind === 'group' || kind === 'master' ? kind : 'track' });
+        }
+        this.sends = sends.filter(x => x.id >= 0 && x.id <= 9999);
+        return { type: 'sends', sends: this.sends };
+      }
       default:
         return null;
     }
@@ -217,7 +232,8 @@ export type LiveCommand =
   | { cmd: 'scene'; scene: string }
   | { cmd: 'nextScene' }
   | { cmd: 'stopAll' }
-  | { cmd: 'tap' };
+  | { cmd: 'tap' }
+  | { cmd: 'sends' };
 
 /** A name, or a whole number typed as one ("3"), as the script wants it: an int is an index (from 1 in the app, from 0 on the wire). */
 function nameOrIndex(v: string): LiveArg | { i: number } {
@@ -236,5 +252,6 @@ export function commandMessage(c: LiveCommand): { address: string; args: Array<L
     case 'nextScene': return { address: '/pf/scene/next', args: [] };
     case 'stopAll': return { address: '/pf/stop/all', args: [] };
     case 'tap': return { address: '/pf/tap', args: [] };
+    case 'sends': return { address: '/pf/sends/request', args: [] };
   }
 }

@@ -18,6 +18,8 @@ import {
 } from '../../nodes/definitions/audioTools';
 import { acBiquadCoeffs, acBiquadMag, acNoteName, acResonatorNotes } from '../../play/kit/audioChain.js';
 import { liveAudio } from '../../lib/liveAudio';
+import { useCan } from '../../lib/plan';
+import { LiveSendPicker, pickSourceTab, sourceTabOptions, useLiveSend } from './LiveSendPicker';
 import { bandsOf, type AudioBandSpec } from '../../lib/audioTools/bands';
 import { xOfHz } from '../../lib/audioTools/dsp';
 import { Button } from '../ui/Button';
@@ -235,8 +237,6 @@ function useEngineText(nodeId: string): string {
   return useSyncExternalStore(sub, () => audioToolsEngine.status(nodeId));
 }
 
-const TABS: Array<{ value: AudioSourceKind; label: string }> = [{ value: 'file', label: 'File' }, { value: 'mic', label: 'Mic' }, { value: 'video', label: 'Video' }];
-
 /** Load a sound into an Audio Source and keep it in the library (so it comes back after a reload). An error, or null. */
 async function loadSound(nodeId: string, f: File): Promise<string | null> {
   const err = await audioToolsEngine.loadFile(nodeId, f);
@@ -301,7 +301,7 @@ function useVideoNodes(): Array<{ value: string; label: string }> {
   }), [nodes]);
 }
 
-/** Audio Source's card: File | Mic | Video tabs (as the Texture node's Image | Video | Webcam), the transport, Load / Library / Start / a video, Open ↗. */
+/** Audio Source's card: File | Mic | Video (| Live, desktop) tabs (as the Texture node's Image | Video | Webcam), the transport, Load / Library / Start / a video / a Live track, Open ↗. */
 function SourceControls({ node }: { node: GraphNode }) {
   const tk = useTokens();
   const text = useEngineText(node.id);
@@ -312,6 +312,8 @@ function SourceControls({ node }: { node: GraphNode }) {
   const [err, setErr] = useState('');
   const kind = audioSourceKind(node);
   const videos = useVideoNodes();
+  useLiveSend();
+  const liveOk = useCan('audio.liveSend');
   const set = (p: Record<string, unknown>) => useNodeGraphStore.getState().updateNodeParams(node.id, p, { immediate: true });
   const loaded = useSyncExternalStore(useMemo(() => (fn: () => void) => audioToolsEngine.onChange(fn), []), () => !!audioToolsEngine.sourceView(node.id)?.loaded);
   const pickFile = async (f: File | undefined) => {
@@ -322,12 +324,13 @@ function SourceControls({ node }: { node: GraphNode }) {
   const stop = (e: React.SyntheticEvent) => e.stopPropagation();
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '2px 0 6px' }} onPointerDown={stop} onMouseDown={stop} data-audio-source-card={kind}>
-      <Segmented<AudioSourceKind> size="sm" fill ariaLabel="Source" value={kind} onChange={v => set({ source: v })} options={TABS} />
+      <Segmented<AudioSourceKind> size="sm" fill ariaLabel="Source" value={kind} onChange={v => pickSourceTab(node.id, v)} options={sourceTabOptions(kind, liveOk)} />
       <input ref={fileRef} type="file" accept="audio/*" style={{ display: 'none' }} onChange={e => { void pickFile(e.target.files?.[0]); e.target.value = ''; }} />
       {kind === 'video' && (
         <Select ariaLabel="Video node" value={videoNode} onChange={v => set({ videoNode: v })}
           options={[{ value: '', label: videos.length ? 'Pick a video node…' : 'No video in the graph yet' }, ...videos]} />
       )}
+      {kind === 'send' && <LiveSendPicker node={node} />}
       <AudioTransport node={node} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
         {kind === 'file' && <Button size="sm" onClick={() => fileRef.current?.click()} title="Load an audio file (mp3, wav, ogg, m4a…); it is kept in the library">{loaded ? 'Replace…' : 'Load a sound…'}</Button>}

@@ -40,7 +40,8 @@ export function audioToolsForWeb(o: AudioToolsWebInput): PlayAudioTools | undefi
   const kinds = new Map(audio.filter(r => r.node.type === AUDIO_SOURCE_TYPE).map(r => [r.node.id, audioSourceKind(r.node)]));
   const hearing = audioHearing(audio, id => kinds.get(id) ?? null);
   const sources: PlayAudioTools['sources'] = audio.filter(r => r.node.type === AUDIO_SOURCE_TYPE).map(({ node: n }) => {
-    const kind = audioSourceKind(n), P = n.params;
+    // A Live track (Playfield Send) needs the desktop app: a page listens to its visitor's microphone instead.
+    const k = audioSourceKind(n), kind = k === 'send' ? 'mic' : k, P = n.params;
     const m = kind === 'file' ? o.mediaOf(n.id) : null;
     const vid = typeof P.videoNode === 'string' ? P.videoNode : '';
     const video = kind === 'video' && vid ? Object.entries(o.videoUniforms).find(([, id]) => id === vid)?.[0] : undefined;
