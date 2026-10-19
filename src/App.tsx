@@ -50,6 +50,7 @@ import { useNodeGraphStore, EXAMPLE_INDEX, EXAMPLE_FOLDERS, PLAY_SETUP_TOAST } f
 import { toast, useToastStore } from './components/ui/toastStore';
 import { OPEN_WHATS_NEW, openWhatsNew, takeUpdateAnnouncement, useWhatsNewUnread } from './changelog/releaseNotes';
 import { audioEngine } from './lib/audioEngine';
+import { useSyncPauseWithTime } from './lib/syncPauseWithTime';
 import { useBreakpoint, isMobile, isTablet, isDesktop, usePhoneLayout } from './hooks/useBreakpoint';
 import { APP_HEIGHT, playStacked, useViewport } from './lib/viewport';
 import { rotateShowsFullscreen, useRotateFullscreen } from './lib/rotateFullscreen';
@@ -155,7 +156,10 @@ function AudioMasterVolumeWidget() {
   const masterVolume = useNodeGraphStore(s => s.audioMasterVolume);
   const setVolume    = useNodeGraphStore(s => s.setAudioMasterVolume);
   const hasAudio     = nodes.some(n => n.type === 'audioInput' || n.type === 'audioSource');
-  const [paused, setPaused] = useState(false);
+  const [paused, setPaused] = useState(() => audioEngine.isMasterPaused());
+  // Space (and the preview's pause) pause the music too (useSyncPauseWithTime): keep this button in step.
+  const timePlaying  = useNodeGraphStore(s => s.timePlaying);
+  useEffect(() => { setPaused(audioEngine.isMasterPaused()); }, [timePlaying]);
   if (!hasAudio) return null;
 
   const togglePause = () => {
@@ -915,6 +919,7 @@ function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, [page]);
   useTimeHotkeys();
+  useSyncPauseWithTime();
 
 
 
