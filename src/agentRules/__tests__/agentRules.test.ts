@@ -17,7 +17,7 @@ import { n } from '../../store/graphBuilder';
 import type { GraphNode } from '../../types/nodeGraph';
 import { EXAMPLE_GRAPHS } from '../../store/exampleGraphs';
 import { antsNodes } from '../../store/agentExamplesP3';
-import { EXAMPLE_FOLDERS, EXAMPLE_INDEX } from '../../store/exampleIndex';
+import { EXAMPLE_INDEX, unfiledIn, showcaseFolderOf } from '../../store/exampleIndex';
 import { AGENT_RULE_EXAMPLE_KEYS } from '../../store/agentRuleExamples';
 import { applyRulesToGroup, backToRules, ensureBirthEmit, isRulesGroup, openRulesAsNodes, rulesNeedRegenerating } from '../apply';
 import { generateRulesInside, ruleIds } from '../generate';
@@ -400,7 +400,7 @@ describe('templates, examples and the starter', () => {
   });
 
   it('the Agents: rules folder holds every template as an example, each compiling, with notes everywhere', () => {
-    expect(EXAMPLE_FOLDERS.find(f => f.label === 'Agents: rules')?.keys).toEqual(AGENT_RULE_EXAMPLE_KEYS);
+    expect(unfiledIn('Agent rules & simulations', AGENT_RULE_EXAMPLE_KEYS).filter(k => showcaseFolderOf(k) !== 'Splats')).toEqual([]);
     expect(AGENT_RULE_EXAMPLE_KEYS.length).toBe(12); // Ants with food was deleted (2026-10-19)
     const walk = (nodes: GraphNode[], f: (x: GraphNode) => void) => { for (const x of nodes) { f(x); const sg = x.params.subgraph as { nodes?: GraphNode[] } | undefined; if (sg?.nodes) walk(sg.nodes, f); } };
     for (const k of AGENT_RULE_EXAMPLE_KEYS) {

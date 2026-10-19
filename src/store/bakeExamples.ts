@@ -20,10 +20,32 @@ export const BAKE_EXAMPLE_KEYS = Object.keys(BAKE_EXAMPLE_INDEX);
 
 const note = (text: string) => ({ __comment: text });
 
+/** Notes for the nodes copied from 3D: Gyroid + Domain Warp (which has none), by id, inside groups too. */
+const GYROID_NOTES: Record<string, string> = {
+  uv_0: 'UV: this pixel, centred. The March Camera turns it into a ray.',
+  time_1: 'Time: turns the camera round the gyroid (Rot speed on the camera).',
+  cam_2: 'March Camera: a ray for every pixel, from 2.5 away, circling the scene slowly (Rot speed 0.2). Its Ray Origin and Ray Dir go to the March Loop.',
+  scene_3: 'Scene Group (Warped Gyroid): the shape the March Loop asks about at every step, as one distance.',
+  sp_sg: 'Scene Pos: the point the march is asking about.',
+  tm_sg: 'Time, inside the scene: it drifts the warp, so the gyroid crawls.',
+  dw_sg: 'Domain Warp 3D: pushes the point about with three octaves of noise (Strength 0.25) before the gyroid sees it, so the regular lattice turns organic. This warp is what makes each step expensive.',
+  gy_sg: 'Gyroid Field: the triply periodic gyroid surface (sin x cos y + sin y cos z + sin z cos x), Frequency 3.5, thickened into a 0.05 shell: an endless lattice of tunnels.',
+  mli: 'March Loop inputs: the ray\'s current point and step, handed to the scene each step.',
+  mo_gw: 'March Loop output: what the loop keeps from each step (here only the position).',
+};
+function annotate(nodes: GraphNode[], notes: Record<string, string>): void {
+  for (const x of nodes) {
+    if (typeof x.params.__comment !== 'string' && notes[x.id]) x.params = { ...x.params, __comment: notes[x.id] };
+    const sg = x.params.subgraph as { nodes?: GraphNode[] } | undefined;
+    if (sg?.nodes) annotate(sg.nodes, notes);
+  }
+}
+
 export function buildBakeExamples(all: Record<string, ExampleGraph>): Record<string, ExampleGraph> {
   const src = all.gyroidWarped;
   if (!src?.nodes) return {};
   const nodes = JSON.parse(JSON.stringify(src.nodes)) as GraphNode[];
+  annotate(nodes, GYROID_NOTES);
   const out = nodes.find(x => x.type === 'output');
   const scene = nodes.find(x => x.id === out?.inputs.color?.connection?.nodeId);
   if (!out || !scene) return {};

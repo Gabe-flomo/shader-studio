@@ -22,6 +22,8 @@ type Wire = [fromId: string, outputKey: string];
 
 /** A node comment (shown on the card's Comment tab and in the generated code). */
 const note = (text: string) => ({ __comment: text });
+/** A ready-made node (uv(), time()) with a note added. */
+const noted = (node: GraphNode, text: string): GraphNode => ({ ...node, params: { ...node.params, __comment: text } });
 
 const BG: [number, number, number] = [0.04, 0.045, 0.07];
 
@@ -68,8 +70,8 @@ function loop(type: 'marchLoopGroup' | 'giLitMarchGroup', id: string, x: number,
 /** Left half of the screen shows `left`, right half `right`: UV x > 0 picks. */
 function splitScreen(left: Wire, right: Wire, x: number, y: number): GraphNode[] {
   return [
-    n('splitVec2', 'half', x, y + 260, {}, { v: ['uv', 'uv'] }),
-    n('compare', 'right', x + 220, y + 260, { operator: '>', smoothing: 0.002 }, { a: ['half', 'x'] }),
+    n('splitVec2', 'half', x, y + 260, { ...note('The screen position\'s x: negative on the left half, positive on the right.') }, { v: ['uv', 'uv'] }),
+    n('compare', 'right', x + 220, y + 260, { operator: '>', smoothing: 0.002, ...note('x > 0: 1 on the right half, 0 on the left, with a hairline soft edge at the split.') }, { a: ['half', 'x'] }),
     n('select', 'pick', x + 460, y, { outputType: 'vec3', ...note('Mask 1 (the right half) shows If True, the rest If False.') },
       { mask: ['right', 'mask'], ifTrue: right, ifFalse: left }),
   ];
@@ -120,12 +122,12 @@ lesson('learn3dDistance', [
 **Try.** Move **Slice depth (z)** toward ±0.5: the sheet moves off the sphere's centre, so the circle shrinks and then disappears, but the orange bands are still there: the distance exists everywhere, even where there is no surface. Change **Radius**. Count the bands between the white line and a point: that is how far a ray standing there could safely jump, the idea behind the next lesson.`);
 
 lesson('learn3dMarch', [
-  n('marchCamera', 'cam', 40, 220, { ...CAM }),
+  n('marchCamera', 'cam', 40, 220, { ...CAM, ...note('The rays: the camera sits 3 units from the centre and looks at it. Camera distance on the Play page moves it in and out.') }),
   scene('scene', 40, 480, 'Scene', [
-    n('sphereSDF3D', 'sph', 480, 200, { radius: 0.8 }, { pos: ['sp', 'pos'] }),
+    n('sphereSDF3D', 'sph', 480, 200, { radius: 0.8, ...note('A sphere of radius 0.8 at the centre: its distance is length(point) − 0.8.') }, { pos: ['sp', 'pos'] }),
   ], ['sph', 'dist'], 'The scene: a single sphere. Scene Pos is the point being measured; Scene Output is the distance the march loop sees.'),
   loop('marchLoopGroup', 'march', 340, 220, { maxSteps: 48, bg: BG, ...note('For each pixel: start at the camera, measure the scene, step forward by that distance, repeat. Stop when the distance is almost 0 (a hit), when the ray is further than Max Dist (a miss), or after Max Steps. Iter is how many steps that took, as 0–1 of Max Steps.') }),
-  n('colorRamp', 'heat', 640, 220, { stops: '4', color0: [0.03, 0.03, 0.12], color1: [0.45, 0.1, 0.55], color2: [0.95, 0.45, 0.15], color3: [1.0, 0.95, 0.6] }, { t: ['march', 'iter'] }),
+  n('colorRamp', 'heat', 640, 220, { stops: '4', color0: [0.03, 0.03, 0.12], color1: [0.45, 0.1, 0.55], color2: [0.95, 0.45, 0.15], color3: [1.0, 0.95, 0.6], ...note('Paints the step count as heat: dark blue for a few steps, through purple and orange, to pale yellow for all of Max Steps.') }, { t: ['march', 'iter'] }),
   out(['heat', 'color'], 880),
 ], [
   ctl('d', 'cam::camDist', 'Camera distance', 1.5, 8, 0.05),
@@ -136,17 +138,17 @@ lesson('learn3dMarch', [
 **Try.** Move **Camera distance**: from further away every ray needs a few more jumps to arrive. On the loop's card, lower **Step Scale**: each jump is only a fraction of the distance, safer but slower, and the whole picture gets hotter. Lower **Max Steps** on the loop's card to 16: the rays near the edge run out of steps before they arrive and turn yellow (and miss, so a plain Color output would show background there). Wire **Hit** into Output instead to see which pixels found the surface.`);
 
 lesson('learn3dLight', [
-  n('marchCamera', 'cam', 40, 220, { ...CAM }),
+  n('marchCamera', 'cam', 40, 220, { ...CAM, ...note('The same fixed camera as the last lesson: 3 units out, looking at the centre.') }),
   scene('scene', 40, 480, 'Scene', [
-    n('sphereSDF3D', 'sph', 480, 200, { radius: 0.8 }, { pos: ['sp', 'pos'] }),
+    n('sphereSDF3D', 'sph', 480, 200, { radius: 0.8, ...note('A sphere of radius 0.8: round, so the light falls across it smoothly.') }, { pos: ['sp', 'pos'] }),
   ], ['sph', 'dist'], 'A single sphere, as in the last lesson.'),
   loop('marchLoopGroup', 'march', 340, 220, { bg: BG, ...note('Normal is the direction the surface faces where the ray stopped (found by measuring the scene a tiny step either side of the hit). Hit is 1 where the ray touched a surface, 0 where it missed.') }),
-  n('colorPicker', 'base', 340, 520, { color: [0.95, 0.55, 0.3] }),
+  n('colorPicker', 'base', 340, 520, { color: [0.95, 0.55, 0.3], ...note('The surface colour the light is multiplied by. Surface colour on the Play page sets it.') }),
   n('multiLight', 'lit', 640, 220, {
     sunDirX: 0.8, sunDirY: 0.6, sunDirZ: -0.5, skyR: 0.1, skyG: 0.13, skyB: 0.2, bounceR: 0, bounceG: 0, bounceB: 0,
     ...note('Sun light is dot(Normal, Sun direction): 1 where the surface faces the sun, 0 where it faces away. A little sky light keeps the dark side from going black. Hit 0 (a miss) gives black.'),
   }, { baseColor: ['base', 'rgb'], normal: ['march', 'normal'], hit: ['march', 'hit'] }),
-  n('toneMap', 'tone', 900, 220, { mode: 'aces' }, { color: ['lit', 'color'] }),
+  n('toneMap', 'tone', 900, 220, { mode: 'aces', ...note('ACES tone mapping rolls the brightest part of the lit side off gently instead of clipping it to flat white.') }, { color: ['lit', 'color'] }),
   out(['tone', 'color'], 1140),
 ], [
   ctl('x', 'lit::sunDirX', 'Sun X', -1, 1, 0.01),
@@ -161,17 +163,17 @@ The sun here comes from the side, so the line between the lit and the dark half 
 **Try.** Move **Sun X** and **Sun Y**: the bright side follows. Set Sun Y to −1: the sun is below, so only the underside is lit. Wire the loop's Normal through Normal to Color into Output to see the normals themselves (the first ray march in the Learn folder does this).`);
 
 lesson('learn3dCombine', [
-  n('marchCamera', 'cam', 40, 220, { ...CAM }),
+  n('marchCamera', 'cam', 40, 220, { ...CAM, ...note('A fixed camera 3 units out. Camera angle on the Play page swings it round to see the join from the side.') }),
   n('constant', 'blend', 40, 760, { label: 'Blend radius', value: 0.25, ...note('The Union\'s blend radius, kept outside the Scene Group and wired in through a port so Play can move it (sliders inside a Scene Group are fixed when the shader is built).') }),
   scene('scene', 40, 480, 'Scene', [
     n('transform', 'mv', 240, 80, { dim: '3', x: 0.45, ...note('Moving a shape means moving the point it measures: Transform\'s Move subtracts the offset from the point before the sphere measures it, so the sphere\'s centre ends up at the offset (x = 0.45 here).') }, { p: ['sp', 'pos'] }),
-    n('sphereSDF3D', 'sph', 480, 80, { radius: 0.5 }, { pos: ['mv', 'p'] }),
-    n('transform', 'mvb', 240, 320, { dim: '3', x: -0.45 }, { p: ['sp', 'pos'] }),
-    n('boxSDF3D', 'box', 480, 320, { sizeX: 0.4, sizeY: 0.4, sizeZ: 0.4, edges: 'rounded', rounding: 0.05 }, { pos: ['mvb', 'p'] }),
+    n('sphereSDF3D', 'sph', 480, 80, { radius: 0.5, ...note('A sphere of radius 0.5, measured from the moved point, so it sits at x = 0.45.') }, { pos: ['mv', 'p'] }),
+    n('transform', 'mvb', 240, 320, { dim: '3', x: -0.45, ...note('The same trick for the box: its centre ends up at x = −0.45, so the two shapes just overlap in the middle.') }, { p: ['sp', 'pos'] }),
+    n('boxSDF3D', 'box', 480, 320, { sizeX: 0.4, sizeY: 0.4, sizeZ: 0.4, edges: 'rounded', rounding: 0.05, ...note('A box 0.4 on each side (half sizes) with edges rounded by 0.05.') }, { pos: ['mvb', 'p'] }),
     n('sdfUnion', 'un', 760, 200, { k: 0.25, ...note('Union keeps the smaller of the two distances, so a point is near the scene if it is near either shape. Blend radius above 0 rounds the join into a smooth blend; here it comes in from the Blend radius Constant outside.') }, { a: ['sph', 'dist'], b: ['box', 'dist'] }),
   ], ['un', 'dist'], 'Two shapes measured at the same point and joined by a Union. Only what reaches Scene Output counts: the Union, not the sphere or box on their own.',
   { key: 'k', label: 'Blend radius', from: ['blend', 'value'], to: ['un', 'k'] }),
-  loop('marchLoopGroup', 'march', 340, 220, { bg: BG, albedo: [0.55, 0.75, 0.95] }),
+  loop('marchLoopGroup', 'march', 340, 220, { bg: BG, albedo: [0.55, 0.75, 0.95], ...note('Marches the joined scene and shades it with its own fixed light in a pale blue (Albedo), so the blend reads as one surface.') }),
   out(['march', 'color'], 640),
 ], [
   ctl('k', 'blend::value', 'Blend radius', 0, 0.8, 0.01),
@@ -216,16 +218,16 @@ const volumeLoop = loop('marchLoopGroup', 'vol', 340, 520, {
 volumeLoop.outputs = { ...volumeLoop.outputs, acc0: { type: 'float', label: 'Glow' } };
 
 lesson('learn3dVolume', [
-  uv(40, 760),
-  n('marchCamera', 'cam', 40, 220, { ...CAM }),
+  noted(uv(40, 760), 'The screen position, used only to split the picture into a left and a right half.'),
+  n('marchCamera', 'cam', 40, 220, { ...CAM, ...note('One camera feeding both loops, so the two halves show exactly the same view.') }),
   scene('scene', 40, 480, 'Scene', [
-    n('sphereSDF3D', 'sph', 480, 200, { radius: 0.8 }, { pos: ['sp', 'pos'] }),
+    n('sphereSDF3D', 'sph', 480, 200, { radius: 0.8, ...note('A sphere of radius 0.8: solid on the left, a glowing gas on the right.') }, { pos: ['sp', 'pos'] }),
   ], ['sph', 'dist'], 'One sphere, wired into both loops.'),
   loop('marchLoopGroup', 'surf', 340, 220, { bg: [0, 0, 0], albedo: [0.3, 0.8, 1.0], ...note('The ordinary loop: stops at the surface and shades it.') }),
   volumeLoop,
-  n('glowToColor', 'g2c', 620, 520, { exposure: 1.2, tint: [0.3, 0.8, 1.0] }, { glow: ['vol', 'acc0'] }),
+  n('glowToColor', 'g2c', 620, 520, { exposure: 1.2, tint: [0.3, 0.8, 1.0], ...note('Turns the glow total into a cyan colour. Exposure 1.2 is the brightness (Glow brightness on the Play page).') }, { glow: ['vol', 'acc0'] }),
   ...splitScreen(['surf', 'color'], ['g2c', 'color'], 620, 220),
-  n('toneMap', 'tone', 1320, 220, { mode: 'aces' }, { color: ['pick', 'result'] }),
+  n('toneMap', 'tone', 1320, 220, { mode: 'aces', ...note('ACES keeps the dense middle of the glow from clipping to flat white.') }, { color: ['pick', 'result'] }),
   out(['tone', 'color'], 1560),
 ], [
   ctl('x', 'g2c::exposure', 'Glow brightness', 0.1, 5, 0.01),
@@ -238,12 +240,12 @@ lesson('learn3dVolume', [
 **Try.** Move **Glow brightness** and **Glow colour** (Glow to Color's Exposure and Tint). Then open the right-hand loop and, on Volume Glow, raise **Shell**: only a skin near the surface glows, so the sphere becomes a soap bubble, bright at the rim where rays run along the skin. Lower its **Falloff** for a softer, wider glow. Change the shape inside the Scene Group (a torus is good) and both halves change together.`);
 
 lesson('learn3dGI', [
-  uv(40, 760),
-  n('marchCamera', 'cam', 40, 220, { camDist: 3.6, camAngle: 0.25, camElevation: 0.35, rotSpeed: 0, fov: 1.5 }),
+  noted(uv(40, 760), 'The screen position, used only to split the picture into a left and a right half.'),
+  n('marchCamera', 'cam', 40, 220, { camDist: 3.6, camAngle: 0.25, camElevation: 0.35, rotSpeed: 0, fov: 1.5, ...note('One camera for both loops, raised a little (Elevation 0.35) so the floor and the shadow under the sphere are in view.') }),
   scene('scene', 40, 480, 'Scene', [
-    n('sphereSDF3D', 'sph', 480, 80, { radius: 0.7 }, { pos: ['sp', 'pos'] }),
-    n('planeSDF3D', 'floor', 480, 320, { height: -0.7 }, { p: ['sp', 'pos'] }),
-    n('sdfUnion', 'un', 760, 200, {}, { a: ['sph', 'dist'], b: ['floor', 'dist'] }),
+    n('sphereSDF3D', 'sph', 480, 80, { radius: 0.7, ...note('A sphere of radius 0.7 at the centre.') }, { pos: ['sp', 'pos'] }),
+    n('planeSDF3D', 'floor', 480, 320, { height: -0.7, ...note('A floor at y = −0.7: exactly the bottom of the sphere, so it rests on it and the contact shadow shows.') }, { p: ['sp', 'pos'] }),
+    n('sdfUnion', 'un', 760, 200, { ...note('Union keeps the nearer of the two surfaces, so the scene is the sphere and the floor together.') }, { a: ['sph', 'dist'], b: ['floor', 'dist'] }),
   ], ['un', 'dist'], 'A sphere resting on a floor, wired into both loops.'),
   loop('marchLoopGroup', 'plain', 340, 220, { bg: [0.55, 0.65, 0.8], albedo: [0.9, 0.85, 0.75], ...note('The plain loop\'s Color: the surface times one fixed light, nothing else.') }),
   loop('giLitMarchGroup', 'gi', 340, 520, {
@@ -251,7 +253,7 @@ lesson('learn3dGI', [
     ...note('After the hit, the GI loop marches more rays from the surface: toward the light (shadows), around it (ambient occlusion), a random bounce (GI) and a mirror ray (reflection).'),
   }),
   ...splitScreen(['plain', 'color'], ['gi', 'color'], 640, 220),
-  n('toneMap', 'tone', 1340, 220, { mode: 'aces' }, { color: ['pick', 'result'] }),
+  n('toneMap', 'tone', 1340, 220, { mode: 'aces', ...note('ACES on both halves, so the brighter GI side keeps its highlights instead of clipping.') }, { color: ['pick', 'result'] }),
   out(['tone', 'color'], 1580),
 ], [
   ctl('a', 'cam::camAngle', 'Camera angle', 0, 6.28, 0.02),

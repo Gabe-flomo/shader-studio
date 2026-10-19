@@ -15,7 +15,7 @@ import { newBand } from '../../lib/audioTools/bands';
 import { newSound } from '../../lib/audioTools/learn';
 import { compileGraph } from '../graphCompiler';
 import { buildAudioExamples, AUDIO_EXAMPLE_KEYS } from '../../store/audioExamples';
-import { EXAMPLE_FOLDERS } from '../../store/exampleIndex';
+import { RETIRED_EXAMPLE_KEYS } from '../../store/exampleIndex';
 import { n } from '../../store/graphBuilder';
 import { getOfferedDefinitions, getNodeDefinition } from '../../nodes/definitions';
 import { typesCompatible } from '../../lib/typesCompatible';
@@ -23,8 +23,9 @@ import { typesCompatible } from '../../lib/typesCompatible';
 const ex = buildAudioExamples();
 
 describe('Audio nodes compile', () => {
-  it('every Audio example compiles and is filed in the Audio folder', () => {
-    expect(EXAMPLE_FOLDERS.find(f => f.label === 'Audio')?.keys).toEqual(AUDIO_EXAMPLE_KEYS);
+  it('every Audio example compiles and is retired from the lists', () => {
+    // Off the Examples lists (user feedback 2026-10-19), still loadable by key.
+    expect(AUDIO_EXAMPLE_KEYS.filter(k => !RETIRED_EXAMPLE_KEYS.includes(k))).toEqual([]);
     for (const k of AUDIO_EXAMPLE_KEYS) {
       const r = compileGraph({ nodes: ex[k].nodes });
       expect(r.errors ?? [], k).toEqual([]);

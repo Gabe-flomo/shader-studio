@@ -16,7 +16,7 @@ import { compileGraph } from '../../compiler/graphCompiler';
 import { getNodeDefinition, resolveNodeAliases, NODE_REGISTRY } from '../definitions';
 import { PICTURES_3D_GLSL, TEXTURE_MAPPINGS } from '../definitions/pictures3d';
 import { EXAMPLE_GRAPHS } from '../../store/exampleGraphs';
-import { EXAMPLE_FOLDERS } from '../../store/exampleIndex';
+import { unfiledIn } from '../../store/exampleIndex';
 import { PICTURES_3D_EXAMPLE_KEYS } from '../../store/pictures3dExamples';
 import { CATEGORY_GROUPS } from '../../components/NodeGraph/libraryRows';
 import { n } from '../../store/graphBuilder';
@@ -217,7 +217,7 @@ describe('Texture Material', () => {
 
 describe('the 3D: Pictures examples', () => {
   it('are in their folder, and every node has a note', () => {
-    expect(EXAMPLE_FOLDERS.find(f => f.label === '3D: Pictures')?.keys).toEqual(PICTURES_3D_EXAMPLE_KEYS);
+    expect(unfiledIn('3D: Light & Materials', PICTURES_3D_EXAMPLE_KEYS)).toEqual([]);
     const all = (nodes: GraphNode[]): GraphNode[] => nodes.flatMap(x => [x, ...all(((x.params.subgraph as { nodes?: GraphNode[] } | undefined)?.nodes) ?? [])]);
     for (const k of PICTURES_3D_EXAMPLE_KEYS) {
       for (const x of all(EXAMPLE_GRAPHS[k].nodes)) {

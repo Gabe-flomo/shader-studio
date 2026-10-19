@@ -26,6 +26,8 @@ import { applyRows, emptyTable, tableToCsv } from '../data/streams/window';
 import type { Dataset, DatasetFormat, DatasetsRecord, ManualColumn } from '../data/types';
 
 const note = (text: string) => ({ __comment: text });
+/** A ready-made node (uv(), group()) with a note added. */
+const noted = (node: GraphNode, text: string): GraphNode => ({ ...node, params: { ...node.params, __comment: text } });
 const playRecord = (controls: PlayControl[], notes: string): PlayRecord => ({ version: 1, controls, mappings: [], layers: [], notes });
 
 /** A dataset from a file's text (CSV unless said) and notebook cells, with its result computed now. */
@@ -59,9 +61,9 @@ function dataPlay(p: { layers: PlayLayer[]; controls?: PlayControl[]; mappings?:
 /** A quiet backdrop for a chart: a wide, soft glow of `tint` in the middle of a dark picture. */
 function darkBackdrop(tint: [number, number, number]): GraphNode[] {
   return [
-    uv(40, 220),
-    n('circleSDF', 'disc', 300, 220, { radius: 0.05 }, { position: ['uv', 'uv'] }),
-    n('light', 'glow', 560, 220, { mode: 'glow', brightness: 1.6, innerFalloff: 1, tint }, { distance: ['disc', 'distance'] }),
+    noted(uv(40, 220), 'The canvas position, for the backdrop glow. The chart itself is drawn by the Data layer on the Play page, not by this graph.'),
+    n('circleSDF', 'disc', 300, 220, { radius: 0.05, ...note('A small circle (radius 0.05) in the middle: where the backdrop glow comes from.') }, { position: ['uv', 'uv'] }),
+    n('light', 'glow', 560, 220, { mode: 'glow', brightness: 1.6, innerFalloff: 1, tint, ...note('A wide, soft glow round the disc (Falloff 1.6, low, so it spreads far) in a dark tint, so the chart sits on a quiet backdrop instead of flat black.') }, { distance: ['disc', 'distance'] }),
     out(['glow', 'tinted'], 820),
   ];
 }
@@ -180,23 +182,23 @@ export function buildDataExamples(): Record<string, ExampleGraph> {
     dataNode('row', 280, 160, { dataset: 'route', blend: false, edge: 'clamp', outputs: [{ key: 'o1', columns: ['x', 'y'] }, { key: 'o2', columns: ['glow'] }],
       ...note('The same dataset, read one row per pass: x, y as a vec2 (the dot’s centre) and glow (its size). Blend is off: the index is always a whole row.') }, { index: ['li', 'i'] }),
     n('multiply', 'size', 540, 360, { b: 0.016, ...note('glow × 0.016: the dot’s radius, so later rows are bigger.') }, { a: ['row', 'o2'] }),
-    n('circleSDF', 'dot', 780, 100, { radius: 0.012 }, { position: port('p'), offset: ['row', 'o1'], radius: ['size', 'result'] }),
-    n('multiply', 'hue', 540, 560, { b: 1 / rows }, { a: ['li', 'i'] }),
-    n('palette', 'pal', 780, 520, { offset: [0.5, 0.5, 0.5], amplitude: [0.5, 0.5, 0.5], freq: [1, 1, 1], phase: [0.0, 0.33, 0.67] }, { value: ['hue', 'result'] }),
+    n('circleSDF', 'dot', 780, 100, { ...note('A circle at the row\'s x, y (wired into Offset), its radius from the row\'s glow column.'), radius: 0.012 }, { position: port('p'), offset: ['row', 'o1'], radius: ['size', 'result'] }),
+    n('multiply', 'hue', 540, 560, { ...note('Pass ÷ 48: the row\'s place along the route, 0 to 1.'), b: 1 / rows }, { a: ['li', 'i'] }),
+    n('palette', 'pal', 780, 520, { ...note('A rainbow colour from the row\'s place, so the dots run through the palette from the first row to the last.'), offset: [0.5, 0.5, 0.5], amplitude: [0.5, 0.5, 0.5], freq: [1, 1, 1], phase: [0.0, 0.33, 0.67] }, { value: ['hue', 'result'] }),
     { ...n('light', 'lamp', 1020, 160, { mode: 'glow', brightness: 90, ...note('+= : every pass adds its dot’s glow to the total.') }, { distance: ['dot', 'distance'], tint: ['pal', 'color'] }), assignOp: '+=' as const },
   ];
   add('dataRouteGlow', [
-    uv(40, 220),
-    group('dots', 320, 160, {
+    noted(uv(40, 220), 'The canvas position, into the group.'),
+    noted(group('dots', 320, 160, {
       label: 'Every row', iterations: rows,
       inputs: [{ key: 'p', type: 'vec2', label: 'UV', from: ['uv', 'uv'] }],
       outputs: [{ key: 'col', type: 'vec3', label: 'Glow', from: ['lamp', 'tinted'] }],
       nodes: inner,
-    }),
+    }), 'Runs 48 times, once per row of the route: pass i reads row i and adds its dot\'s glow to the total.'),
     dataNode('line', 320, 480, { dataset: 'route', mode: 'points', shape: 'path', pointColumns: ['x', 'y'], radius: 0.0, maxPoints: 64,
       ...note('Used as Points in Path mode: the rows joined in order, and the distance to that line. It loops over the rows itself (up to Max points).') }, {}),
-    n('light', 'trail', 620, 480, { mode: 'glow', brightness: 260, tint: [0.25, 0.32, 0.55] }, { distance: ['line', 'distance'] }),
-    vec3Op(n('add', 'sum', 880, 300, {}, { a: ['dots', 'col'], b: ['trail', 'tinted'] })),
+    n('light', 'trail', 620, 480, { ...note('A thin, faint glow along the path (Falloff 260 keeps it tight) in a dim blue, under the dots.'), mode: 'glow', brightness: 260, tint: [0.25, 0.32, 0.55] }, { distance: ['line', 'distance'] }),
+    vec3Op(n('add', 'sum', 880, 300, { ...note('The dots plus the trail.') }, { a: ['dots', 'col'], b: ['trail', 'tinted'] })),
     out(['sum', 'result'], 1120, 300),
   ], { route }, playRecord([], `**What it shows.** Every row of a table drawn at once. The dataset is a spiral route of 48 points (step, x, y); its notebook adds a **glow** column that grows along the route.
 
@@ -326,16 +328,16 @@ The columns reach the shader as a float texture (one row per texel, four columns
     '// x, y arrive as 0–1: put them around the middle of the picture\ndf.assign({ px: r => (r.x - 0.5) * 1.5, py: r => (r.y - 0.5) * 1.5 })',
   ]);
   add('dataLiveFeed', [
-    uv(40, 240),
+    noted(uv(40, 240), 'The canvas position, for the moving dot.'),
     dataNode('trail', 320, 80, { dataset: 'feed', mode: 'points', shape: 'path', pointColumns: ['px', 'py'], radius: 0.0, maxPoints: 256,
       ...note(`The stream's window (its last ${feedWindow} rows) joined in order: a trail behind the moving point. Every new row re-uploads the data texture; the shader is never rebuilt.`) }, {}),
-    n('light', 'trailGlow', 620, 80, { mode: 'glow', brightness: 120, tint: [0.25, 0.55, 0.9] }, { distance: ['trail', 'distance'] }),
+    n('light', 'trailGlow', 620, 80, { ...note('A tight blue glow along the trail (Falloff 120).'), mode: 'glow', brightness: 120, tint: [0.25, 0.55, 0.9] }, { distance: ['trail', 'distance'] }),
     dataNode('head', 320, 400, { dataset: 'feed', index: 100000, edge: 'clamp', blend: false, outputs: [{ key: 'o1', columns: ['px', 'py'] }, { key: 'o2', columns: ['level'] }],
       ...note('Index past the end, with the ends clamped: always the newest row. px, py place the dot; level (0–1) sets its size.') }, {}),
-    n('remap', 'size', 620, 520, { inMin: 0, inMax: 1, outMin: 0.01, outMax: 0.06 }, { value: ['head', 'o2'] }),
-    n('circleSDF', 'dot', 860, 400, { radius: 0.03 }, { position: ['uv', 'uv'], offset: ['head', 'o1'], radius: ['size', 'result'] }),
-    n('light', 'dotGlow', 1100, 400, { mode: 'glow', brightness: 90, tint: [1, 0.75, 0.4] }, { distance: ['dot', 'distance'] }),
-    vec3Op(n('add', 'sum', 1340, 240, {}, { a: ['trailGlow', 'tinted'], b: ['dotGlow', 'tinted'] })),
+    n('remap', 'size', 620, 520, { ...note('The newest row\'s level, 0–1, as a radius from 0.01 to 0.06: the dot swells as the level rises.'), inMin: 0, inMax: 1, outMin: 0.01, outMax: 0.06 }, { value: ['head', 'o2'] }),
+    n('circleSDF', 'dot', 860, 400, { ...note('A circle at the newest row\'s px, py (wired into Offset), its radius from the level.'), radius: 0.03 }, { position: ['uv', 'uv'], offset: ['head', 'o1'], radius: ['size', 'result'] }),
+    n('light', 'dotGlow', 1100, 400, { ...note('A warm orange glow round the dot (Falloff 90), wider than the trail\'s so the head of the feed stands out.'), mode: 'glow', brightness: 90, tint: [1, 0.75, 0.4] }, { distance: ['dot', 'distance'] }),
+    vec3Op(n('add', 'sum', 1340, 240, { ...note('The trail plus the dot.') }, { a: ['trailGlow', 'tinted'], b: ['dotGlow', 'tinted'] })),
     out(['sum', 'result'], 1580, 240),
   ], { feed }, playRecord([], `**What it shows.** A live dataset. Rows arrive while you watch, and the picture follows them without the shader being rebuilt.
 

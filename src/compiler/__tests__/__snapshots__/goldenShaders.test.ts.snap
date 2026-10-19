@@ -32,14 +32,14 @@ exports[`golden shaders: every Play example exports the same bundle > bgColourSk
 
 exports[`golden shaders: every Play example exports the same bundle > bgPhotoFlow 1`] = `
 {
-  "bundle": "06096c7fc66f3707f81417399b98:55465",
+  "bundle": "14df9a896892eb0904cb00e959d0:115004",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > bgQueue 1`] = `
 {
-  "bundle": "0109b4ec85d8241cb6ff6ae754bf:57823",
+  "bundle": "19b182f7f7a3400ee6bb08efaf73:117363",
   "missing": [],
 }
 `;
@@ -60,14 +60,14 @@ exports[`golden shaders: every Play example exports the same bundle > comboArray
 
 exports[`golden shaders: every Play example exports the same bundle > comboArrayStars 1`] = `
 {
-  "bundle": "13c460c9c2947013a22419dbb05c:7804",
+  "bundle": "14c1f7e28e2ee60194f25618f453:8875",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > comboGridGroupFlower 1`] = `
 {
-  "bundle": "11600c72bb639e09ee6e6ebbd135:19304",
+  "bundle": "12138679a0c8ea1929efc1b595ba:19518",
   "missing": [],
 }
 `;
@@ -117,6 +117,20 @@ exports[`golden shaders: every Play example exports the same bundle > convertCir
 exports[`golden shaders: every Play example exports the same bundle > convertCircleOptimised 1`] = `
 {
   "bundle": "06e5b4da7f51ed0ba2f192c6e5b4:3458",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > convertTunnel 1`] = `
+{
+  "bundle": "1394bea4b696ce1393aac653f16b:11496",
+  "missing": [],
+}
+`;
+
+exports[`golden shaders: every Play example exports the same bundle > convertTunnelOptimised 1`] = `
+{
+  "bundle": "01516c0d1e6e4c1422e5b0d6e81d:8859",
   "missing": [],
 }
 `;
@@ -186,42 +200,42 @@ exports[`golden shaders: every Play example exports the same bundle > curvedSphe
 
 exports[`golden shaders: every Play example exports the same bundle > dataCityBars 1`] = `
 {
-  "bundle": "079fb7078e08a804593da67fd51b:4297",
+  "bundle": "03de128c9710891244105c908614:4674",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > dataLiveFeed 1`] = `
 {
-  "bundle": "1f3fd7d272cc041d05d3e4d12013:6995",
+  "bundle": "0990e485c035951189a3c6b125c2:7442",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > dataPoemWords 1`] = `
 {
-  "bundle": "0b381900018ced01546575327d3d:4271",
+  "bundle": "03931bb807b4441fc636a84aedf0:4648",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > dataRouteGlow 1`] = `
 {
-  "bundle": "086192d2c32a0d1384f3653c5cbc:9367",
+  "bundle": "1dde86a18f8cb21fe37e3de0ecc4:9547",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > dataRoutePath 1`] = `
 {
-  "bundle": "037c12aa7953b91d59f983c7186b:3922",
+  "bundle": "099bf727f899f519e8ed1bf8d0eb:4299",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > dataScriptRings 1`] = `
 {
-  "bundle": "0a75dadea5fe7f042f12f22366a0:4909",
+  "bundle": "13f5dc4ad6816b1a9f74f2caafe3:5286",
   "missing": [],
 }
 `;
@@ -305,7 +319,7 @@ exports[`golden shaders: every Play example exports the same bundle > finishMoti
 
 exports[`golden shaders: every Play example exports the same bundle > finishPixelSort 1`] = `
 {
-  "bundle": "1f986208caa33a10383fd77fe618:55176",
+  "bundle": "03eab19c7747e901b648efc1905f:114718",
   "missing": [],
 }
 `;
@@ -585,7 +599,7 @@ exports[`golden shaders: every Play example exports the same bundle > gridTourBy
 
 exports[`golden shaders: every Play example exports the same bundle > gridTourMorph 1`] = `
 {
-  "bundle": "017a97018e312f014cd290d478e4:16064",
+  "bundle": "1e62eba507711413f3d824ef8d2d:17338",
   "missing": [],
 }
 `;
@@ -599,14 +613,14 @@ exports[`golden shaders: every Play example exports the same bundle > gridTourMo
 
 exports[`golden shaders: every Play example exports the same bundle > gridTourOverflow 1`] = `
 {
-  "bundle": "0d72629d7e338c1a9e547b97f6db:11824",
+  "bundle": "0f84ff55ac1ee51931112bfc93c4:12320",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > gridTourRipple 1`] = `
 {
-  "bundle": "11daa53e44b8320f09f190a6ea57:11219",
+  "bundle": "114374c9ac3d6d0a7097685d2990:12670",
   "missing": [],
 }
 `;
@@ -655,7 +669,7 @@ exports[`golden shaders: every Play example exports the same bundle > learn3dCam
 
 exports[`golden shaders: every Play example exports the same bundle > learn3dCombine 1`] = `
 {
-  "bundle": "0d24d7936584a30aa58320735451:15035",
+  "bundle": "0558e80460e8011776615cf08565:15148",
   "missing": [],
 }
 `;
@@ -669,21 +683,21 @@ exports[`golden shaders: every Play example exports the same bundle > learn3dDis
 
 exports[`golden shaders: every Play example exports the same bundle > learn3dGI 1`] = `
 {
-  "bundle": "0804f848480c100a67d89ac55466:20855",
+  "bundle": "11eb29fe4e3012048500d6a2de2b:21340",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > learn3dLight 1`] = `
 {
-  "bundle": "0793a7bf48ec061df5fc8f4471f1:12299",
+  "bundle": "1e07ac6864763c1c18883291c0e2:12597",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > learn3dMarch 1`] = `
 {
-  "bundle": "02938c5e202f050a688ca60bd184:9844",
+  "bundle": "1d72d8512cc06712e2101ea59e2a:10103",
   "missing": [],
 }
 `;
@@ -697,7 +711,7 @@ exports[`golden shaders: every Play example exports the same bundle > learn3dOrb
 
 exports[`golden shaders: every Play example exports the same bundle > learn3dVolume 1`] = `
 {
-  "bundle": "1b045a06d4a4ba1a5b18ed47df39:15077",
+  "bundle": "0da98f90a1fd380a69ee747d2de6:15619",
   "missing": [],
 }
 `;
@@ -767,7 +781,7 @@ exports[`golden shaders: every Play example exports the same bundle > learnDista
 
 exports[`golden shaders: every Play example exports the same bundle > learnFBM 1`] = `
 {
-  "bundle": "19d2d096000ba10fc620a18692af:3579",
+  "bundle": "1c46f02f8d766319e83a50d60216:3960",
   "missing": [],
 }
 `;
@@ -781,7 +795,7 @@ exports[`golden shaders: every Play example exports the same bundle > learnFract
 
 exports[`golden shaders: every Play example exports the same bundle > learnFractal 1`] = `
 {
-  "bundle": "1d6e50cf4c07ff1f17a9a7e2b36b:4985",
+  "bundle": "1216eb189c69b40ece536734cc18:5131",
   "missing": [],
 }
 `;
@@ -1005,7 +1019,7 @@ exports[`golden shaders: every Play example exports the same bundle > learnTrans
 
 exports[`golden shaders: every Play example exports the same bundle > learnTruchet 1`] = `
 {
-  "bundle": "06200498a9ec7b0a8afee45a9a46:5882",
+  "bundle": "082b48d9731514084a23857a4435:6509",
   "missing": [],
 }
 `;
@@ -1026,7 +1040,7 @@ exports[`golden shaders: every Play example exports the same bundle > learnUV 1`
 
 exports[`golden shaders: every Play example exports the same bundle > learnVoronoi 1`] = `
 {
-  "bundle": "08b7df5dc827060a350a17adaf05:4724",
+  "bundle": "04d64119c84f1c0ef44d94008060:5058",
   "missing": [],
 }
 `;
@@ -1040,7 +1054,7 @@ exports[`golden shaders: every Play example exports the same bundle > learnWarp 
 
 exports[`golden shaders: every Play example exports the same bundle > learnWood 1`] = `
 {
-  "bundle": "031cfd4ce4813d1e8298b9595c97:5673",
+  "bundle": "13617fc22328a906d8faea398445:6199",
   "missing": [],
 }
 `;
@@ -1075,7 +1089,7 @@ exports[`golden shaders: every Play example exports the same bundle > maskReveal
 
 exports[`golden shaders: every Play example exports the same bundle > matrixAnyBasis 1`] = `
 {
-  "bundle": "173cc2704ea3cc002a63efa71dba:11200",
+  "bundle": "0b803ddc56bfdf1c2cd217b05018:11995",
   "missing": [],
 }
 `;
@@ -1096,28 +1110,28 @@ exports[`golden shaders: every Play example exports the same bundle > matrixComb
 
 exports[`golden shaders: every Play example exports the same bundle > matrixCornerPin 1`] = `
 {
-  "bundle": "06c362893285601c2ec977efc871:9621",
+  "bundle": "0f7467c9ed8751174efb001aebac:9834",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > matrixFoldFractal 1`] = `
 {
-  "bundle": "085acd283140a21f698519108cf2:8378",
+  "bundle": "0f604f6f650a3a0924513c8f2d4c:8540",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > matrixLattices 1`] = `
 {
-  "bundle": "0e38b6a8249c6806af6c6a168e85:10370",
+  "bundle": "0ef9fd1c1550ad1e74191c3828de:10977",
   "missing": [],
 }
 `;
 
 exports[`golden shaders: every Play example exports the same bundle > matrixNoiseOctaves 1`] = `
 {
-  "bundle": "193dc22789f93b1bbfbce4c9e5a2:7531",
+  "bundle": "19c2ec6776106d1f5f28351c4be0:8858",
   "missing": [],
 }
 `;
@@ -1131,7 +1145,7 @@ exports[`golden shaders: every Play example exports the same bundle > matrixWhat
 
 exports[`golden shaders: every Play example exports the same bundle > matteParticles 1`] = `
 {
-  "bundle": "0240996906785103b83ddbfba430:55333",
+  "bundle": "0d3bc8ab8cfcd817920c03042057:114877",
   "missing": [],
 }
 `;
@@ -1152,7 +1166,7 @@ exports[`golden shaders: every Play example exports the same bundle > memReadout
 
 exports[`golden shaders: every Play example exports the same bundle > motionReveal 1`] = `
 {
-  "bundle": "0e349ac62af65d18d8965c8ab988:58988",
+  "bundle": "09cdf70a4f73981c567bf746720c:118532",
   "missing": [],
 }
 `;
@@ -2455,7 +2469,7 @@ exports[`golden shaders: every example compiles as it did > bakeHeavyScene 1`] =
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "00fefaa5ea670d1d17ed9018373a:11006",
+  "fragmentShader": "16523a72a1038900c1e29c44e586:11301",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "15210d024049621ac0b13ea16a0e:498",
@@ -2719,7 +2733,7 @@ exports[`golden shaders: every example compiles as it did > chladniModeFreqDemo 
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "1686632a76d7d719d642456f5595:3917",
+  "fragmentShader": "1cac19d17309ae0fedf38ef95b4b:4610",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "0eb7a4806f8a4503540ab54fdf2e:160",
@@ -2753,7 +2767,7 @@ exports[`golden shaders: every example compiles as it did > cmykNoise 1`] = `
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "05223b6cacfbd317bbc40748755d:4417",
+  "fragmentShader": "0898030df5e07e0e22c2f58c872a:4975",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "017913fa8b6b4a060e528745ff02:113",
@@ -2791,7 +2805,7 @@ exports[`golden shaders: every example compiles as it did > colorStopsCycle 1`] 
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "16a1ed71c740390c463d421834d0:4482",
+  "fragmentShader": "0ae80aa01c565511c68b2cf5b903:5477",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "106f8ef0d1d74b1ae32711f59759:190",
@@ -2876,7 +2890,7 @@ exports[`golden shaders: every example compiles as it did > comboArrayStars 1`] 
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "04dfe977f95d3f156a7f41e6c36e:6038",
+  "fragmentShader": "0f86dff088f811086bbce8180c1b:7100",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "0b5a45a637c05600194884c69405:105",
@@ -2948,7 +2962,7 @@ exports[`golden shaders: every example compiles as it did > comboDomeRepeat 1`] 
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "05071a493047441a2f7fb841dcdb:4410",
+  "fragmentShader": "1117e28355d7740ec5a44eff20ec:5423",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "0ce4ff8f4635581202ebe45027d4:257",
@@ -2985,7 +2999,7 @@ exports[`golden shaders: every example compiles as it did > comboGridGroupFlower
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "1527fdde04a6aa0e5115918d3e09:15568",
+  "fragmentShader": "17bc5f81c3cb0c0f1162410b9942:15779",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "17e0a0d53804b913e283a7dd3aa6:310",
@@ -3222,7 +3236,7 @@ exports[`golden shaders: every example compiles as it did > comboRepeatCellHash 
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "08df9b1919a50b17f85ec2f58c10:3770",
+  "fragmentShader": "0eb882fb18ee4c1cb088061d76f4:4490",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "0f4b55c8d33fbb17b6264af8e6df:176",
@@ -3387,12 +3401,107 @@ exports[`golden shaders: every example compiles as it did > convertCircleOptimis
 }
 `;
 
+exports[`golden shaders: every example compiles as it did > convertTunnel 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "0f2bbb508c924b141f2fd6ff52fa:9258",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "097228a20d008d1cc6e059c5d532:889",
+  "paramBindings": "1b4f559c2b14c10e85c6e9d301a2:1167",
+  "paramUniforms": [
+    "u_p_addx18_b",
+    "u_p_addx22_b",
+    "u_p_colorpickex27_color",
+    "u_p_colorpickex28_color",
+    "u_p_colx2x35_b",
+    "u_p_colx31_t",
+    "u_p_cosx23_amp",
+    "u_p_cosx23_freq",
+    "u_p_cosx23_input",
+    "u_p_divx11_b",
+    "u_p_fadex26_edge0",
+    "u_p_fadex26_edge1",
+    "u_p_mulx13_b",
+    "u_p_mulx15_b",
+    "u_p_mulx17_b",
+    "u_p_mulx20_b",
+    "u_p_mulx21_b",
+    "u_p_mulx24_b",
+    "u_p_mulx29_b",
+    "u_p_mulx30_b",
+    "u_p_mulx32_b",
+    "u_p_mulx33_b",
+    "u_p_mulx3_b",
+    "u_p_ringsx19_exponent",
+    "u_p_rx7_scale",
+    "u_p_sinx16_amp",
+    "u_p_sinx16_freq",
+    "u_p_sinx16_input",
+    "u_p_spokesx25_b",
+    "u_p_subx34_b",
+    "u_p_subx4_b",
+    "u_p_uvx6_b",
+    "u_p_zx14_b",
+  ],
+  "paramValues": "0fc08e0a436fe713f14294aa61c9:733",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > convertTunnelOptimised 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "1352744952758515706e1d50eb56:6872",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "0a38f507442d101fc9c5c2d1079d:232",
+  "paramBindings": "1c6f72df9f289f1e33b796da6b58:983",
+  "paramUniforms": [
+    "u_p_colorpickex27_color",
+    "u_p_colorpickex28_color",
+    "u_p_colx2x1_add_b",
+    "u_p_colx2x1_cos_amp",
+    "u_p_colx2x1_cos_freq",
+    "u_p_colx2x1_fade_edge0",
+    "u_p_colx2x1_fade_edge1",
+    "u_p_colx2x1_multiply_b",
+    "u_p_colx2x1_multiply_b_2",
+    "u_p_colx2x1_multiply_b_3",
+    "u_p_colx2x1_multiply_b_4",
+    "u_p_colx2x1_multiply_b_5",
+    "u_p_colx2x1_multiply_b_6",
+    "u_p_colx2x1_multiply_b_7",
+    "u_p_colx2x1_multiply_b_8",
+    "u_p_colx2x1_r_scale",
+    "u_p_colx2x1_rings_exponent",
+    "u_p_colx2x1_sin_amp",
+    "u_p_colx2x1_sin_freq",
+    "u_p_colx2x1_spokes_b",
+  ],
+  "paramValues": "0068d9bb6369ef16457f58c1e5b8:625",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
 exports[`golden shaders: every example compiles as it did > crtTv 1`] = `
 {
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "14f90883451e8914a8e854b2f25d:4920",
+  "fragmentShader": "1ae2fa9caf3e0c1200396caf8382:5660",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "1de979d75f68f2134b26ec5fa6dc:119",
@@ -4090,7 +4199,7 @@ exports[`golden shaders: every example compiles as it did > dataCityBars 1`] = `
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "10e0175a8839100570138c1c21a0:2125",
+  "fragmentShader": "177aa6ed022a3f1548c10503a870:2499",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "1acd389b3126ab1a7ce3d5f40cd3:68",
@@ -4117,7 +4226,7 @@ exports[`golden shaders: every example compiles as it did > dataLiveFeed 1`] = `
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "0ddfc94e268709197d6aff9658d9:5573",
+  "fragmentShader": "1d37439328b7a81137a61f832c3c:6014",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "09708c3e3d389d16e8ff5474eef6:172",
@@ -4155,7 +4264,7 @@ exports[`golden shaders: every example compiles as it did > dataPoemWords 1`] = 
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "10e0175a8839100570138c1c21a0:2125",
+  "fragmentShader": "177aa6ed022a3f1548c10503a870:2499",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "1acd389b3126ab1a7ce3d5f40cd3:68",
@@ -4182,7 +4291,7 @@ exports[`golden shaders: every example compiles as it did > dataRouteGlow 1`] = 
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "0b76096f90f37314ac4408b6e0ca:7131",
+  "fragmentShader": "1c07e6cc077c48153ee89e43c869:7308",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "18774fbe7a4a5c067840a77ba8d9:332",
@@ -4226,7 +4335,7 @@ exports[`golden shaders: every example compiles as it did > dataRoutePath 1`] = 
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "10e0175a8839100570138c1c21a0:2125",
+  "fragmentShader": "177aa6ed022a3f1548c10503a870:2499",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "1acd389b3126ab1a7ce3d5f40cd3:68",
@@ -4253,7 +4362,7 @@ exports[`golden shaders: every example compiles as it did > dataScriptRings 1`] 
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "10e0175a8839100570138c1c21a0:2125",
+  "fragmentShader": "177aa6ed022a3f1548c10503a870:2499",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "1acd389b3126ab1a7ce3d5f40cd3:68",
@@ -6576,7 +6685,7 @@ exports[`golden shaders: every example compiles as it did > fractalRings 1`] = `
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "09a21f2c48ef321da1ee4fa0d413:3151",
+  "fragmentShader": "12459a068e79050890f8381cf314:3600",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "03b87978b0bb1315d6f4e25fe63a:87",
@@ -10252,7 +10361,7 @@ exports[`golden shaders: every example compiles as it did > gridTourMorph 1`] = 
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "087dbea166ef701d7a81da624031:12558",
+  "fragmentShader": "1bf28ab08a551a1cfdf1d958a480:13820",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "11d3618ccd798f0864cb24a6be2e:277",
@@ -10357,7 +10466,7 @@ exports[`golden shaders: every example compiles as it did > gridTourOverflow 1`]
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "1549904d00e9dd13ea6fb1af059f:9402",
+  "fragmentShader": "0b79539361fd9017c9f94725810a:9890",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "1866a19951b56d1166443c9d456a:163",
@@ -10400,7 +10509,7 @@ exports[`golden shaders: every example compiles as it did > gridTourRipple 1`] =
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "1514e305eaacc8109084d394c45b:8576",
+  "fragmentShader": "125c593befbd1b0819f829ca4531:10013",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "1c1a400f35c67e09330bc7735500:199",
@@ -10853,7 +10962,7 @@ exports[`golden shaders: every example compiles as it did > learn3dCombine 1`] =
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "09792150c3f02003e7e63615ad0a:11405",
+  "fragmentShader": "19240b683825e1195ca2baa304d9:11517",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "058467190a6b4b1af49cd2b33453:401",
@@ -10957,7 +11066,7 @@ exports[`golden shaders: every example compiles as it did > learn3dGI 1`] = `
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "0efff2852755420a5c239c5bbc66:17827",
+  "fragmentShader": "13fee28b35560e0d621e9cab9b01:18307",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "0acaa8a94e755d06e3854cfe85d1:501",
@@ -11008,7 +11117,7 @@ exports[`golden shaders: every example compiles as it did > learn3dLight 1`] = `
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "0688be5ed8674e1c020d7966c60c:9430",
+  "fragmentShader": "02569752e72add0a2eca344d463b:9725",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "0b92cd9ee9b18d064f4506653ee9:312",
@@ -11059,7 +11168,7 @@ exports[`golden shaders: every example compiles as it did > learn3dMarch 1`] = `
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "1b4a8db74bbec5181234d0cbb5f9:7810",
+  "fragmentShader": "12c23259f1d2b416e9137f3fda0e:8067",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "180a7cace96fd51324eb558161d6:265",
@@ -11144,7 +11253,7 @@ exports[`golden shaders: every example compiles as it did > learn3dVolume 1`] = 
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "1a30263bbbdea91be96ba0067d44:12051",
+  "fragmentShader": "000d518254d6dd1973d64f0f5902:12587",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "0b58e82eb6192d0b1f17555cdb32:548",
@@ -11509,7 +11618,7 @@ exports[`golden shaders: every example compiles as it did > learnFBM 1`] = `
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "1e2a92e484284b0f0be3f0ef8c56:2599",
+  "fragmentShader": "1095d7575b66491270a96c19c377:2976",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "0a45590732eef702e8ef16da5bca:81",
@@ -11575,7 +11684,7 @@ exports[`golden shaders: every example compiles as it did > learnFractal 1`] = `
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "1bd8a1d39bc8660bd5b72b6eee3f:4388",
+  "fragmentShader": "0f0c0ff4a7e0e118bdf7b50ec803:4532",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "1b9605df3e0ba71a2112f904eca0:103",
@@ -12659,7 +12768,7 @@ exports[`golden shaders: every example compiles as it did > learnTruchet 1`] = `
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "00886a82c828a0088f75b8b90e5c:4335",
+  "fragmentShader": "12597182c02e6f1faf836b0c0859:4955",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "1617f3ca7311cc1b6a2a820ba28c:264",
@@ -12773,7 +12882,7 @@ exports[`golden shaders: every example compiles as it did > learnVoronoi 1`] = `
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "1c9d5973d97b4b12f5d865e0b031:3369",
+  "fragmentShader": "08f87fe09cf03e080079329a42ed:3699",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "1620f17ef89e9b1aaf936d277f9b:117",
@@ -12843,7 +12952,7 @@ exports[`golden shaders: every example compiles as it did > learnWood 1`] = `
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "136a3cb730ef7d14b2c50db869c3:3879",
+  "fragmentShader": "072a6860fef8760048bfe9eddf43:4399",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "02a4982ab5953e0c6079390ec3df:202",
@@ -13194,7 +13303,7 @@ exports[`golden shaders: every example compiles as it did > matrixAnyBasis 1`] =
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "17f32e920351321d4a1911c4589e:8553",
+  "fragmentShader": "0373728e80ac081f3174ca3b6a37:9336",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "1b72555ef0099d061d8b7c5384b9:270",
@@ -13322,7 +13431,7 @@ exports[`golden shaders: every example compiles as it did > matrixCornerPin 1`] 
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "1cf5fa53e623160d8a8e3b4bdd08:7065",
+  "fragmentShader": "1f0747d8fa42170f7d136c494603:7275",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "0a517d1d67925413792865dd47cd:115",
@@ -13364,7 +13473,7 @@ exports[`golden shaders: every example compiles as it did > matrixFoldFractal 1`
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "067926cb37b4f61e80bf63af763b:6311",
+  "fragmentShader": "168702fa1f61751c5eed4a346b2f:6471",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "01e9ec4f94d2690ee739d1db1a3a:563",
@@ -13398,7 +13507,7 @@ exports[`golden shaders: every example compiles as it did > matrixLattices 1`] =
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "056056a686224b013f2b23896bc6:8277",
+  "fragmentShader": "0a5cc4c09fb86b0810a601387370:8876",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "09b60492ce3e76137cc246dd84d5:145",
@@ -13438,7 +13547,7 @@ exports[`golden shaders: every example compiles as it did > matrixNoiseOctaves 1
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "0c9e7da79d453102dec422f52a10:5283",
+  "fragmentShader": "1dcdaaf63a51f314235cddefe6c9:6594",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "14e3f33f5b3ce2195e9b2c6e3deb:412",
@@ -13683,10 +13792,10 @@ exports[`golden shaders: every example compiles as it did > memFollow 1`] = `
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "08a3e124e46f571a390a448d3441:3354",
+  "fragmentShader": "10b14cbb5564390bdb0b744efcc8:4578",
   "isStateful": false,
   "liveUniforms": {},
-  "nodeSlugs": "1f0749ceda20820cd8099572d447:199",
+  "nodeSlugs": "1686a3baed90e707d14ca1c1bcbc:242",
   "paramBindings": "0a6c65943433a4153e2661809e80:59",
   "paramUniforms": [
     "u_p_mkv2x0_x",
@@ -13742,18 +13851,35 @@ mat2 rot2D(float a) { float s=sin(a), c=cos(a); return mat2(c,-s,s,c); }
 void main() {
     vec2 g_uv = (vUv - 0.5) * 2.0;
     g_uv.x *= u_resolution.x / u_resolution.y;
-    // Mouse: where the pointer is over the picture, in picture coordinates (X across, Y up).
+    // Mouse: where the pointer is over the picture, in picture coordinates (X across, Y up). Pixels is still 0, 0 until the pointer has moved over the picture.
     vec2 mouse_0_uv = (u_mouse / u_pictureRes.y - vec2(u_pictureRes.x / u_pictureRes.y, 1.0) * 0.5) * 2.0;
     float mouse_0_x = mouse_0_uv.x;
     float mouse_0_y = mouse_0_uv.y;
     vec2 mouse_0_px = u_mouse;
+    // Target: what the disc chases. Until you move the mouse it jumps to a new random place every 2.2 seconds, so the Lag and the Spring always have somewhere to go; once the pointer is over the picture it is the mouse.
+    // k: which 2.2-second slot this is (t is the clock). jump: a random place for that slot, from two hashes of k.
+    // live: 1 once the mouse has moved (its Pixels are no longer 0, 0).
+    vec2 target_0_result;
+    {
+        vec2 m = mouse_0_uv;
+        vec2 px = mouse_0_px;
+        float t = u_time;
+        vec2 p = vec2(0.0);
+        float k = floor(t / 2.2);
+        vec2 jump = vec2(fract(sin(k * 12.9898) * 43758.5453) * 2.2 - 1.1, fract(sin(k * 78.233) * 43758.5453) * 1.2 - 0.6);
+        float live = step(0.5, length(px));
+        target_0_result = mix(jump, m, live);
+    }
+    // Split Vec2: the target's X goes to the Lag, its Y to the Spring, so the two ways of following show side by side.
+    float splitvec2_0_x = (target_0_result).x;
+    float splitvec2_0_y = (target_0_result).y;
     int memorypack_0_i = int(floor(gl_FragCoord.x));
     vec4 memorypack_0_s = texelFetch(u_passprev_memory_0, ivec2(memorypack_0_i, 0), 0);
     float memorypack_0_dt = max(u_frameDt, 0.0);
     if (memorypack_0_i == 0) {
       vec4 s = memorypack_0_s; float dt = memorypack_0_dt;
-      if (s.w < 0.5) { s = vec4(mouse_0_x, 0.0, 0.0, 1.0); } else {
-        float x = mouse_0_x; float tau = x > s.x ? 0.35 : 0.35;
+      if (s.w < 0.5) { s = vec4(splitvec2_0_x, 0.0, 0.0, 1.0); } else {
+        float x = splitvec2_0_x; float tau = x > s.x ? 0.35 : 0.35;
         float y = tau <= 0.0 ? x : mix(x, s.x, exp(-dt / tau));
         s.y = dt > 0.0 ? (y - s.x) / dt : s.y; s.x = y;
       }
@@ -13761,8 +13887,8 @@ void main() {
     }
     else if (memorypack_0_i == 1) {
       vec4 s = memorypack_0_s; float dt = memorypack_0_dt;
-      if (s.w < 0.5) { s = vec4(mouse_0_y, 0.0, 0.0, 1.0); } else {
-        float x = mouse_0_y; float w = 6.28318 * 1.6; float h = dt / 8.0;
+      if (s.w < 0.5) { s = vec4(splitvec2_0_y, 0.0, 0.0, 1.0); } else {
+        float x = splitvec2_0_y; float w = 6.28318 * 1.6; float h = dt / 8.0;
         for (int k = 0; k < 8; k++) { float a = w * w * (x - s.x) - 2.0 * 0.18 * w * s.y; s.y += a * h; s.x += s.y * h; }
       }
       memorypack_0_s = s;
@@ -13774,6 +13900,8 @@ void main() {
       "nodeId": "__memory",
       "nodeIds": [
         "__memory__pack",
+        "xy",
+        "target",
         "mouse",
       ],
       "previous": true,
@@ -14023,7 +14151,7 @@ exports[`golden shaders: every example compiles as it did > midiGlowKeys 1`] = `
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "023084126b238c0126bc6107c723:3827",
+  "fragmentShader": "03848628c917d903ee0645d053cf:5040",
   "isStateful": false,
   "liveUniforms": {
     "u_midi_midi_0_bend": "mk_midi::bend",
@@ -14206,9 +14334,12 @@ vec3 palette(float t, vec3 offset, vec3 amplitude, vec3 freq, vec3 phase) {
 void main() {
     vec2 g_uv = (vUv - 0.5) * 2.0;
     g_uv.x *= u_resolution.x / u_resolution.y;
+    // Seconds since start. The fractal runs it at Time Scale 0.6, fast enough for the trails to show.
     float time_0_time = u_time;
+    // The canvas position, for the fractal.
     vec2 uv_0_uv = (vUv - 0.5) * 2.0;
     uv_0_uv.x *= u_resolution.x / u_resolution.y;
+    // The moving picture: the Fractal Rings loop (4 passes) at Time Scale 0.6. The Feedback node after it smears its motion into trails.
     vec2 fractalloo_0_uv0 = uv_0_uv;
     vec2 fractalloo_0_uv = uv_0_uv;
     vec3 fractalloo_0_color = vec3(0.0);
@@ -14363,7 +14494,7 @@ exports[`golden shaders: every example compiles as it did > newtonFractalZ5 1`] 
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "0e0516fc5e7eb418dff35d296af8:4492",
+  "fragmentShader": "0dc7060b31b4471582bef9f22acf:4986",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "1c2c06ea9eabc600e2bbf5c6a510:86",
@@ -15686,6 +15817,29 @@ exports[`golden shaders: every example compiles as it did > particlesRoundShape 
   "textureUniforms": {
     "u_tex_gpuparticl_0_image": "parts::image",
   },
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > perspectivePlanes 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "128e2761ddc150018696ab99a032:8993",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "054c1682ddf644143189062ae43f:244",
+  "paramBindings": "04b6b07606711b13aa1e006cdc75:89",
+  "paramUniforms": [
+    "u_p_perspectivx0_ratio",
+    "u_p_perspectivx0xc2_ratio",
+  ],
+  "paramValues": "085674ad9cc74b0ab33a6316df91:62",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
   "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
   "videoUniforms": {},
 }
@@ -18268,7 +18422,7 @@ exports[`golden shaders: every example compiles as it did > publishAndKeyframes 
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "1dabaa6cc98da615053050bf8382:5911",
+  "fragmentShader": "0a066854e2b0ce115cee2fe560bf:6203",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "026a87c52473e60ac32fc4124cd6:256",
@@ -18498,7 +18652,7 @@ exports[`golden shaders: every example compiles as it did > sb2DepthSize 1`] = `
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "144b853f7d8c5a0f52057ecd9f0c:13446",
+  "fragmentShader": "0f4370c1986f370e2e0052e75f42:13574",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "1d8d5a0072decc0cd7cfb9572246:494",
@@ -18558,6 +18712,159 @@ exports[`golden shaders: every example compiles as it did > sb2DepthSize 1`] = `
     "u_tex_depth_5": "sb2DepthSize_5",
     "u_tex_ridges_2": "sb2DepthSize_pic",
   },
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
+exports[`golden shaders: every example compiles as it did > sb2Melt 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "095c3162f53a1513bd639e3598fb:33261",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "174fe592887f60103a41de49cab5:1752",
+  "paramBindings": "02df72dc0a482f19730923fda74e:5874",
+  "paramUniforms": [
+    "u_p_addcolorx46_scale",
+    "u_p_addcolorx50_scale",
+    "u_p_addcolorx53_scale",
+    "u_p_addcolorx56_scale",
+    "u_p_addcolorx59_scale",
+    "u_p_colorpickex17_color",
+    "u_p_colorpickex19_color",
+    "u_p_colorpickex22_color",
+    "u_p_colorpickex25_color",
+    "u_p_colorpickex44_color",
+    "u_p_colorpickex48_color",
+    "u_p_colorpickex51_color",
+    "u_p_colorpickex54_color",
+    "u_p_colorpickex57_color",
+    "u_p_fillx47_strokeWidth",
+    "u_p_grainx62_amount",
+    "u_p_grainx62_scale",
+    "u_p_grainx62_seed",
+    "u_p_lightx45_innerFalloff",
+    "u_p_lightx45_power",
+    "u_p_lightx45_reach",
+    "u_p_lightx45_tint",
+    "u_p_lightx49_innerFalloff",
+    "u_p_lightx49_power",
+    "u_p_lightx49_reach",
+    "u_p_lightx49_tint",
+    "u_p_lightx52_innerFalloff",
+    "u_p_lightx52_power",
+    "u_p_lightx52_reach",
+    "u_p_lightx52_tint",
+    "u_p_lightx55_innerFalloff",
+    "u_p_lightx55_power",
+    "u_p_lightx55_reach",
+    "u_p_lightx55_tint",
+    "u_p_lightx58_innerFalloff",
+    "u_p_lightx58_power",
+    "u_p_lightx58_reach",
+    "u_p_lightx58_tint",
+    "u_p_motion2dx10_amount",
+    "u_p_motion2dx10_direction",
+    "u_p_motion2dx10_phase",
+    "u_p_motion2dx10_speed",
+    "u_p_motion2dx13_amount",
+    "u_p_motion2dx13_phase",
+    "u_p_motion2dx13_speed",
+    "u_p_motion2dx27_amount",
+    "u_p_motion2dx27_phase",
+    "u_p_motion2dx27_speed",
+    "u_p_motion2dx31_amount",
+    "u_p_motion2dx31_phase",
+    "u_p_motion2dx31_speed",
+    "u_p_motion2dx35_amount",
+    "u_p_motion2dx35_direction",
+    "u_p_motion2dx35_phase",
+    "u_p_motion2dx35_speed",
+    "u_p_motion2dx39_amount",
+    "u_p_motion2dx39_phase",
+    "u_p_motion2dx39_speed",
+    "u_p_motion2dx4_amount",
+    "u_p_motion2dx4_phase",
+    "u_p_motion2dx4_speed",
+    "u_p_motion2dx7_amount",
+    "u_p_motion2dx7_phase",
+    "u_p_motion2dx7_speed",
+    "u_p_mulx16_b",
+    "u_p_mulx43_b",
+    "u_p_ringx29_posX",
+    "u_p_ringx29_posY",
+    "u_p_ringx29_radius",
+    "u_p_ringx33_posX",
+    "u_p_ringx33_posY",
+    "u_p_ringx33_radius",
+    "u_p_ringx37_posX",
+    "u_p_ringx37_posY",
+    "u_p_ringx37_radius",
+    "u_p_ringx41_posX",
+    "u_p_ringx41_posY",
+    "u_p_ringx41_radius",
+    "u_p_sdfoffsetx30_amount",
+    "u_p_sdfoffsetx34_amount",
+    "u_p_sdfoffsetx38_amount",
+    "u_p_sdfoffsetx42_amount",
+    "u_p_sdfunionx18_k",
+    "u_p_sdfunionx21_k",
+    "u_p_sdfunionx24_k",
+    "u_p_shapex12_r",
+    "u_p_shapex15_r",
+    "u_p_shapex6_r",
+    "u_p_shapex9_r",
+    "u_p_transformx11_rotate",
+    "u_p_transformx11_scale",
+    "u_p_transformx11_spin",
+    "u_p_transformx11_x",
+    "u_p_transformx11_y",
+    "u_p_transformx14_rotate",
+    "u_p_transformx14_scale",
+    "u_p_transformx14_spin",
+    "u_p_transformx14_x",
+    "u_p_transformx14_y",
+    "u_p_transformx28_rotate",
+    "u_p_transformx28_scale",
+    "u_p_transformx28_spin",
+    "u_p_transformx28_x",
+    "u_p_transformx28_y",
+    "u_p_transformx32_rotate",
+    "u_p_transformx32_scale",
+    "u_p_transformx32_spin",
+    "u_p_transformx32_x",
+    "u_p_transformx32_y",
+    "u_p_transformx36_rotate",
+    "u_p_transformx36_scale",
+    "u_p_transformx36_spin",
+    "u_p_transformx36_x",
+    "u_p_transformx36_y",
+    "u_p_transformx40_rotate",
+    "u_p_transformx40_scale",
+    "u_p_transformx40_spin",
+    "u_p_transformx40_x",
+    "u_p_transformx40_y",
+    "u_p_transformx5_rotate",
+    "u_p_transformx5_scale",
+    "u_p_transformx5_spin",
+    "u_p_transformx5_x",
+    "u_p_transformx5_y",
+    "u_p_transformx8_rotate",
+    "u_p_transformx8_scale",
+    "u_p_transformx8_spin",
+    "u_p_transformx8_x",
+    "u_p_transformx8_y",
+    "u_p_vignettex61_radius",
+    "u_p_vignettex61_softness",
+    "u_p_vignettex61_strength",
+  ],
+  "paramValues": "02ca0155bbdaa5163669dd4f51ff:3985",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
   "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
   "videoUniforms": {},
 }
@@ -19132,7 +19439,7 @@ exports[`golden shaders: every example compiles as it did > spaceAtlas 1`] = `
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "0537da50a122a91db139c8698a3d:3637",
+  "fragmentShader": "1f464545ff56961544a8529576c1:4436",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "11903b2fc71a840058ed772122b3:125",
@@ -19385,7 +19692,7 @@ exports[`golden shaders: every example compiles as it did > splatRingsInScene 1`
   "audioUniforms": {},
   "echo": null,
   "errors": null,
-  "fragmentShader": "1dfb1177fbaadb040424f47874a6:14201",
+  "fragmentShader": "17af533a52ab961c574a00453174:14472",
   "isStateful": false,
   "liveUniforms": {},
   "nodeSlugs": "150c1bf2eb868503b449e54e84c9:606",

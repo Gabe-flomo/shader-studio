@@ -18,7 +18,7 @@ import { isOffered } from '../../nodes/notOffered';
 import { n } from '../../store/graphBuilder';
 import { agentsGroup } from '../../store/agentExampleKit';
 import { EXAMPLE_GRAPHS } from '../../store/exampleGraphs';
-import { EXAMPLE_FOLDERS } from '../../store/exampleIndex';
+import { unfiledIn } from '../../store/exampleIndex';
 import { RIDE_CURVE_EXAMPLE_KEYS } from '../../store/agentRideCurveExamples';
 import { collectPlayCandidates } from '../../play/playControls';
 import { runGlsl, type Env, type Val } from './glslEval';
@@ -105,9 +105,8 @@ describe('Ride a path', () => {
 });
 
 describe('Ride a path examples', () => {
-  it('are in the Simulation folder', () => {
-    const keys = EXAMPLE_FOLDERS.find(f => f.label === 'Simulation')!.keys;
-    for (const k of RIDE_CURVE_EXAMPLE_KEYS) expect(keys).toContain(k);
+  it('are in Curves & Shapes or retired', () => {
+    expect(unfiledIn('Curves & Shapes', RIDE_CURVE_EXAMPLE_KEYS)).toEqual([]);
     expect(RIDE_CURVE_EXAMPLE_KEYS).toEqual(['agentRideHarmonograph', 'agentRidePath', 'agentRideMorph']);
   });
   it.each(RIDE_CURVE_EXAMPLE_KEYS)('%s rides a wired shape, compiles, every program live, its Play controls live', k => {

@@ -15,7 +15,7 @@ import type { PlayRecord } from '../types/play';
 import { colourCtl, ctl, n } from './graphBuilder';
 import { retypeDataTexture } from '../nodes/definitions/dataTexture';
 import { slimeMoldNodes } from './agentExamples';
-import RIDGES_AT_DUSK from './playAssets/ridges-at-dusk.jpg?inline';
+import { builtinImageParams, ROOM_AND_CAT_ID, WALKWAY_CAT_ID } from '../lib/builtinImages';
 import { BALL_VIDEO } from '../lib/builtinVideos';
 
 /** A Video Input's params playing the built-in Ball action clip (lib/builtinVideos.ts), looping. */
@@ -64,7 +64,7 @@ export const TEXTURE_TOOL_EXAMPLE_INDEX: Record<string, { label: string; descrip
   },
   ttDataAdvect: {
     label: 'Texture tools 11 · Data Texture: positions that drift', play: true,
-    description: 'A simulation kept in a Data Texture: every texel stores a position (full float, exact reads). Each frame an Expression Block reads last frame\'s position, pushes it along a swirling flow and writes it back; a second one draws a checkerboard at the stored positions, so the board is smeared by the flow. ↺ starts it over.',
+    description: 'A simulation kept in a Data Texture: every texel stores a position (full float, exact reads). Each frame an Expression Block reads last frame\'s position, pushes it along a swirling flow, pulls it a little back home and writes it back; the built-in Room and cat photo is read at the stored positions, so the room swirls like paint and breathes back. ↺ starts it over.',
   },
   ttRenderTargets: {
     label: 'Texture tools 12 · Render Targets: motion and paint in one draw', play: true,
@@ -87,8 +87,8 @@ export const TEXTURE_TOOL_EXAMPLE_INDEX: Record<string, { label: string; descrip
     description: 'A Cache with a Delay map (TouchDesigner\'s Time Machine): every pixel is read from its own moment. Here the centre is now and the picture reaches further into the past towards the edges, so motion bends and smears outwards.',
   },
   ttAnalyze: {
-    label: 'Texture tools 17 · Analyze: a video steers a shape', play: true,
-    description: 'Analyze measures the Ball action clip every frame: its average colour paints the backdrop, the middle of its bright part (Centre) moves a ring, how much is lit (Coverage) sizes it, and how much changed (Motion) makes it flare. Choose the camera and wave a light.',
+    label: 'Texture tools 17 · Analyze: a video measured', play: true,
+    description: 'Analyze measures the Ball action clip every frame into numbers, drawn as a measuring overlay: hairlines cross at the middle of its bright part (Centre), a ring round it grows with how much is lit (Coverage), two meters show Coverage and how much changed (Motion), and a swatch shows the average colour. Choose the camera and wave a light.',
   },
   ttOpticalFlow: {
     label: 'Texture tools 18 · Optical Flow: trails that follow the motion', play: true,
@@ -99,12 +99,16 @@ export const TEXTURE_TOOL_EXAMPLE_INDEX: Record<string, { label: string; descrip
     description: 'Blob Track with Space 3D: each ball\'s marks stand at a depth (bigger balls nearer), the whole tracking overlay slowly orbits (an LFO turns its Yaw), stems drop to the flat picture, and labels read x / y / z. Wire a Depth node\'s texture into Depth for real depth from a photo or the camera.',
   },
   ttSegmentPeople: {
-    label: 'Texture tools 20 · Segment: cut yourself out', play: true,
-    description: 'Segment (People) finds the people in a video, on this device, no green screen: the cut-out goes over a moving colour field with a glowing outline from its Edge. Set the Video Input to the camera (the built-in clip has no people, so it guesses the middle shape).',
+    label: 'Texture tools 20 · Segment: portrait mode', play: true,
+    description: 'Segment (People) finds the person in the built-in Room and cat photo, on this device, no green screen, and its mask makes a portrait-mode shot: the person sharp and warm, the room behind blurred, cooled and dimmed, a faint rim of light along the Edge. Swap in a Video Input on the camera to do it live.',
   },
   ttSegmentClick: {
     label: 'Texture tools 21 · Segment: click to select', play: true,
     description: 'Segment (Click) cuts out whatever is under a point and follows it as it moves: here a ball cluster in the Ball action clip. Press Pick on preview on the Segment card and click anything to select it; everything else fades to grey.',
+  },
+  ttSegmentPick: {
+    label: 'Texture tools 24 · Segment: pick out the lamp', play: true,
+    description: 'Segment in Click mode cuts out the one thing under a point: here the paper lamp in the built-in Room and cat photo. The lamp keeps its warm colour; the room goes black and white. Pick on preview and click anything to choose again.',
   },
   ttDeepGlow: {
     label: 'Texture tools 22 · Deep glow on a video', play: true,
@@ -152,9 +156,12 @@ function colourMix(id: string, x: number, y: number, params: Record<string, unkn
   return { ...m, inputs: { ...m.inputs, a: { ...m.inputs.a, type: 'vec3' }, b: { ...m.inputs.b, type: 'vec3' } }, outputs: { result: { ...m.outputs.result, type: 'vec3' } } };
 }
 
-const photo = (id: string, x: number, y: number, why: string, wires: Record<string, [string, string]> = {}) =>
-  n('textureInput', id, x, y, { fit: 'stretch', ...note([
-    'Texture Input: a photo (ridges at dusk, until you load your own with Load image).',
+/** A Texture Input on one of the built-in photos (lib/builtinImages.ts): Room and cat (16:9) unless `walkway` (3:4, cropped to fill). */
+const photo = (id: string, x: number, y: number, why: string, wires: Record<string, [string, string]> = {}, walkway = false) =>
+  n('textureInput', id, x, y, { fit: walkway ? 'cover' : 'stretch', ...builtinImageParams(walkway ? WALKWAY_CAT_ID : ROOM_AND_CAT_ID), ...note([
+    walkway
+      ? 'Texture Input: the built-in "Walkway cat" photo (a grey cat held up on a stone walkway), until you load your own with Load image.'
+      : 'Texture Input: the built-in "Room and cat" photo (a warm-lit bedroom, a grey cat held close), until you load your own with Load image.',
     `Its Texture output is the image itself as a texture. ${why}`,
   ]) }, wires);
 
@@ -261,7 +268,6 @@ export function buildTextureToolExamples(): Record<string, ExampleGraph> {
   g.ttTrailFlow = {
     ...TEXTURE_TOOL_EXAMPLE_INDEX.ttTrailFlow,
     counter: 60,
-    images: { tfPhoto: RIDGES_AT_DUSK },
     nodes: [
       ...slime,
       n('textureFlow', 'tfFlow', 1260, 420, { channel: 'red', direction: 'along', length: 'unit', strength: 0.025, reach: 4,
@@ -405,7 +411,6 @@ export function buildTextureToolExamples(): Record<string, ExampleGraph> {
   g.ttGrowShrink = {
     ...TEXTURE_TOOL_EXAMPLE_INDEX.ttGrowShrink,
     counter: 40,
-    images: { gsPhoto: RIDGES_AT_DUSK },
     nodes: [
       photo('gsPhoto', 40, 300, 'Neighbours and Levels read it directly: no Pass needed, because the photo is already a texture.'),
       n('textureNeighbours', 'grow', 340, 120, { mode: 'max', size: '7', spacing: 2,
@@ -443,7 +448,6 @@ export function buildTextureToolExamples(): Record<string, ExampleGraph> {
   g.ttDistanceRings = {
     ...TEXTURE_TOOL_EXAMPLE_INDEX.ttDistanceRings,
     counter: 40,
-    images: { drPhoto: RIDGES_AT_DUSK },
     nodes: [
       photo('drPhoto', 40, 300, 'Mask reads it directly for the shapes to flood from.'),
       n('textureMask', 'drShape', 340, 160, { source: 'brightness', threshold: 'hard', level: 0.62,
@@ -459,10 +463,10 @@ export function buildTextureToolExamples(): Record<string, ExampleGraph> {
       n('distanceShape', 'drLine', 1840, 60, { mode: 'outline', offset: 0.025, width: 0.008, softness: 0.004, tint: [1, 0.85, 0.5],
         ...note('Outline (distance): a line 0.025 out from the shapes, 0.008 wide: an outline of any width, from the distance alone. Offset moves it.') },
         { distance: ['drRead', 'distance'] }),
-      n('distanceShape', 'drRings', 1840, 400, { mode: 'rings', offset: 0.06, spacing: 0.05, thickness: 0.006, softness: 0.004, fade: 4, speed: 0.4, tint: [0.4, 0.75, 1],
-        ...note('Outline (distance), Rings: contour lines every 0.05 beyond the outline, moving outwards 0.4 rings a second and fading with distance.') },
+      n('distanceShape', 'drRings', 1840, 400, { mode: 'rings', offset: 0.06, spacing: 0.07, thickness: 0.004, softness: 0.004, fade: 7, speed: 0.3, tint: [0.5, 0.7, 0.9],
+        ...note('Outline (distance), Rings: fine contour lines every 0.07 beyond the outline, moving outwards 0.3 rings a second and fading fast with distance, like a topographic map of the light.') },
         { distance: ['drRead', 'distance'] }),
-      n('textureLevels', 'drDim', 1840, 720, { outWhite: 0.25, ...note('Levels (texture): the photo at a quarter of its brightness, under the lines.') }, { texture: ['drPhoto', 'texture'] }),
+      n('textureLevels', 'drDim', 1840, 720, { outWhite: 0.45, ...note('Levels (texture): the photo at under half its brightness, under the lines, so the room still reads.') }, { texture: ['drPhoto', 'texture'] }),
       n('addColor', 'drSum1', 2140, 300, note('Add Colors: the dim photo plus the rings.'), { a: ['drDim', 'color'], b: ['drRings', 'light'] }),
       n('addColor', 'drSum2', 2440, 300, note('Add Colors: plus the outline.'), { a: ['drSum1', 'result'], b: ['drLine', 'light'] }),
       n('output', 'drOut', 2740, 300, note('Output: the photo\'s bright shapes with an outline and moving rings, all from one distance field.'), { color: ['drSum2', 'result'] }),
@@ -662,28 +666,30 @@ export function buildTextureToolExamples(): Record<string, ExampleGraph> {
 **Try.** ↺ to start over. Turn up Pull. Change the paint target to 8-bit and watch the faint trails band.`),
   };
 
-  // ── 11 · Data Texture: a position per texel, advected by a flow, drawn as a smeared checkerboard ──
+  // ── 11 · Data Texture: a position per texel, advected by a flow and pulled home: a photo read at the stored places ──
   g.ttDataAdvect = {
     ...TEXTURE_TOOL_EXAMPLE_INDEX.ttDataAdvect,
     counter: 20,
     nodes: [
-      n('uv', 'uvn', 40, 200, note('UV: this pixel\'s place in the picture. The simulation starts with every texel holding its own place.')),
+      n('uv', 'uvn', 40, 200, note('UV: this pixel\'s place in the picture. The simulation starts with every texel holding its own place, and is pulled back toward it.')),
       n('time', 'clock', 40, 420, note('Time: turns the flow slowly, so the swirls change.')),
-      n('constant', 'speed', 40, 600, { label: 'Speed', value: 0.004, ...note('Speed: how far each position moves along the flow every frame (picture units). A Play control.') }),
+      n('constant', 'speed', 40, 600, { label: 'Speed', value: 0.003, ...note('Speed: how far each position moves along the flow every frame (picture units). A Play control.') }),
+      n('constant', 'home', 40, 760, { label: 'Pull home', value: 0.02, ...note('Pull home: the share of the way back to its own pixel each position goes every frame. With the flow pushing and this pulling, every place settles a short, changing distance from home: the photo breathes instead of melting away. A Play control.') }),
       expr('advect', 340, 300, {
         label: 'Step', outputType: 'vec2',
-        inputs: [['prev', 'vec2', ['data', 'out0']], ['uv', 'vec2', ['uvn', 'uv']], ['t', 'float', ['clock', 'time']], ['speed', 'float', ['speed', 'value']]],
+        inputs: [['prev', 'vec2', ['data', 'out0']], ['uv', 'vec2', ['uvn', 'uv']], ['t', 'float', ['clock', 'time']], ['speed', 'float', ['speed', 'value']], ['home', 'float', ['home', 'value']]],
         lines: [
-          ['vec2 flow', 'vec2(sin(prev.y * 3.0 + t * 0.7), cos(prev.x * 3.0 - t * 0.5))'],
+          ['vec2 flow', 'vec2(sin(prev.y * 3.0 + t * 0.4), cos(prev.x * 3.0 - t * 0.3))'],
+          ['vec2 moved', 'mix(prev + speed * flow, uv, home)'],
           ['float fresh', 'step(dot(prev, prev), 1e-10)'],
         ],
-        result: 'mix(prev + speed * flow, uv, fresh)',
+        result: 'mix(moved, uv, fresh)',
         note: [
           'Expression Block: one step of the simulation.',
           'prev is the Data Texture\'s position output; this block feeds the Data Texture, so prev is last frame\'s value (the loop is a frame delay).',
           'flow: a swirl that depends on where the position is (sin and cos of its other coordinate) and slowly on time.',
+          'moved: last position pushed along the flow by Speed, then pulled a little (Pull home) back toward this pixel.',
           'fresh: 1 where nothing is stored yet (the texture starts at 0, and ↺ clears it), so the first frame writes this pixel\'s own place.',
-          'Result: last position pushed along the flow by Speed (or the start).',
         ],
       }),
       { ...n('dataTexture', 'data', 640, 300, {
@@ -692,33 +698,31 @@ export function buildTextureToolExamples(): Record<string, ExampleGraph> {
         ...note([
           'Data Texture: one vec2 per texel, written into r and g, kept at full float so the positions stay exact frame after frame (half float would drift in steps).',
           'Read: Exact texel, so a read never blends two positions.',
-          'Its position output read by Step (which feeds it) is last frame; read by Look it is this frame.',
+          'Its position output read by Step (which feeds it) is last frame; read by the photo and Look it is this frame.',
         ]) }, { in0: ['advect', 'result'] }) },
-      expr('look', 940, 300, {
+      photo('dtPhoto', 940, 120, 'Its UV input is wired to the stored positions: each pixel shows the photo from where its position has drifted to, so the room swirls.', { uv: ['data', 'out0'] }),
+      expr('look', 1240, 300, {
         label: 'Look', outputType: 'vec3',
-        inputs: [['p', 'vec2', ['data', 'out0']], ['uv', 'vec2', ['uvn', 'uv']]],
+        inputs: [['p', 'vec2', ['data', 'out0']], ['uv', 'vec2', ['uvn', 'uv']], ['photo', 'vec3', ['dtPhoto', 'color']]],
         lines: [
-          ['vec2 c', 'step(0.5, fract(p * 4.0))'],
-          ['float board', 'abs(c.x - c.y)'],
-          ['float moved', 'smoothstep(0.0, 0.4, length(p - uv))'],
+          ['float moved', 'smoothstep(0.0, 0.12, length(p - uv))'],
+          ['float vig', '1.0 - 0.3 * dot(uv * vec2(0.5, 0.8), uv * vec2(0.5, 0.8))'],
         ],
-        result: 'mix(vec3(0.07, 0.08, 0.16), vec3(1.0, 0.72, 0.3), board) * (0.55 + 0.45 * moved)',
+        result: 'photo * (1.0 - 0.18 * moved) * vig',
         note: [
-          'Expression Block: draws a checkerboard at each stored position, so the board is carried by the flow.',
-          'c: for x and y, 1 in the upper half of each of 4 squares per unit along that axis, 0 in the lower half.',
-          'board: 1 on the light squares, where the two halves differ.',
-          'moved: brighter where the position has travelled far from its pixel.',
+          'Look: the photo as read at the stored positions.',
+          'moved: how far this pixel\'s position has drifted from home: the most-moved parts are shaded a little, so you can see where the flow pulls hardest.',
+          'vig: the corners darkened.',
         ],
       }),
-      n('output', 'out', 1240, 300, note('Output: the smeared checkerboard.'), { color: ['look', 'result'] }),
+      n('output', 'out', 1540, 300, note('Output: the photo, swirled by the stored positions.'), { color: ['look', 'result'] }),
     ],
     play: playRecord([
       ctl('speed', 'speed::value', 'Speed', 0, 0.02, 0.0005),
-    ], `**What it shows.** A Data Texture keeping a simulation's state: a position per texel, stored exactly (full float) and read back as a vec2.
+      ctl('home', 'home::value', 'Pull home', 0, 0.2, 0.001),
+    ], `**What it shows.** A Data Texture keeping a simulation's state: a position per texel, stored exactly (full float) and read back as a vec2. The built-in Room and cat photo is read at those positions, so it swirls like paint and keeps drifting back.
 
-**How it is built.** UV and Time → Step (Expression Block) → Data Texture (position → r g) → Look (Expression Block) → Output. Step also reads the Data Texture's position output: because it feeds the node, that read is last frame's, so each frame moves every position a little further.
-
-**Try.** ↺ to start over. Set Precision to Half float and watch the motion turn steppy. Turn up Speed, or change 4.0 in Look for a finer board.`),
+**How it is built.** UV and Time → Step (Expression Block) → Data Texture (position → r g) → the photo's UV → Look → Output. Step also reads the Data Texture's position output: because it feeds the node, that read is last frame's, so each frame moves every position a little further along the flow, and Pull home draws it back.`),
   };
 
   // ── 13 · Video → Mask → Pass → Blob Track (brackets, crosses, x / y labels, curved arrows) over the video ──
@@ -769,7 +773,6 @@ export function buildTextureToolExamples(): Record<string, ExampleGraph> {
   g.ttBlobStamp = {
     ...TEXTURE_TOOL_EXAMPLE_INDEX.ttBlobStamp,
     counter: 40,
-    images: { bsPhoto: RIDGES_AT_DUSK },
     nodes: [
       n('videoInput', 'vid', 40, 300, { ...BALL_VIDEO_PARAMS, ...note([
         'Video Input: the built-in Ball action clip, looping. Choose the camera on this card to track yourself (a torch, a lit hand, a bright object on a dark wall).',
@@ -784,13 +787,13 @@ export function buildTextureToolExamples(): Record<string, ExampleGraph> {
       n('textureLevels', 'back', 940, 560, { outWhite: 0.6,
         ...note('Levels (texture): the video a little dimmed, a backdrop for the tracking.') },
         { texture: ['vid', 'texture'] }),
-      photo('bsPhoto', 640, 420, 'Blob Track\'s Stamp: the picture put on every blob. Load your own image, or wire a video, a Pass or a Shader Texture into Stamp instead.'),
+      photo('bsPhoto', 640, 420, 'Blob Track\'s Stamp: the picture put on every blob, cut round, so the cat rides on every ball. Load your own image, or wire a video, a Pass or a Shader Texture into Stamp instead.', {}, true),
       n('blobTrack', 'blobs', 940, 160, { minSize: 0.002, maxSize: 0.4, maxBlobs: 16, maxJump: 0.15, memory: 10, smoothing: 0.5,
-        boxStyle: 'none', marker: 'none', stampFit: 'circle', stampScale: 1.25, stampSpin: 1,
+        boxStyle: 'none', marker: 'none', stampFit: 'circle', stampScale: 1.6, stampSpin: 0.12,
         ...note([
           'Blob Track: reads the mask back small each frame, splits it into separate blobs and follows them, so each keeps its ID while it moves.',
           'Min size drops specks; Max jump is how far a blob may move in a frame and keep its ID; Memory keeps a lost blob\'s ID for a few frames.',
-          'Stamp: the photo on every blob. Fit Circle keeps its shape and cuts it round; Scale 1.25 makes it a little bigger than the blob; Spin by ID turns each one differently (and keeps it turned while it is followed).',
+          'Stamp: the photo on every blob. Fit Circle keeps its shape and cuts it round; Scale 1.6 makes it bigger than the blob so the cat reads; Spin by ID 0.12 tilts each one a little differently (and keeps it tilted while it is followed).',
           'Stamped is the pictures, Stamp alpha where they are. Sheet cells splits a sprite sheet so each blob shows its own cell.',
         ]) },
         { texture: ['maskPass', 'texture'], stamp: ['bsPhoto', 'texture'] }),
@@ -804,11 +807,11 @@ export function buildTextureToolExamples(): Record<string, ExampleGraph> {
         lines: [
           ['float rings', '(0.5 + 0.5 * cos(near * 40.0 - t * 6.0)) * exp(-near * 5.0) * (1.0 - a)'],
         ],
-        result: 'mix(back * 0.6, stamped, a) + rings * vec3(1.0, 0.55, 0.25) * 0.35',
+        result: 'mix(back * 0.5, stamped, a) + rings * vec3(1.0, 0.7, 0.45) * 0.14',
         note: [
           'Expression Block: the stamps over the video, ringed.',
           'rings: ripples moving outwards from every blob, from Nearest (the distance to the nearest blob\'s centre), fading with distance, not over the stamps.',
-          'Result: the video darker, the stamped photos over it by Stamp alpha, and warm rings added.',
+          'Result: the video at half brightness, the stamped photos over it by Stamp alpha, and faint warm rings added.',
         ],
       }),
       n('output', 'out', 1560, 360, note('Output: a photo riding on every ball.'), { color: ['look', 'result'] }),
@@ -900,53 +903,61 @@ export function buildTextureToolExamples(): Record<string, ExampleGraph> {
 **Try.** Choose the camera and move: you bend outwards in time. Change the map (a horizontal gradient for a slit-scan sweep, Fractal Noise for a time-melt).`),
   };
 
-  // ── 17 · Video → Analyze → a ring at the light's centre, sized by coverage, flaring with motion ──
+  // ── 17 · Video → Analyze → a measuring overlay: crosshair on the light's centre, a ring sized by coverage, meters ──
   g.ttAnalyze = {
     ...TEXTURE_TOOL_EXAMPLE_INDEX.ttAnalyze,
     counter: 40,
     nodes: [
       n('videoInput', 'vid', 40, 300, { ...BALL_VIDEO_PARAMS, ...note([
-        'Video Input: the built-in Ball action clip, looping. Choose the camera on this card to steer the ring with a light or your hand.',
+        'Video Input: the built-in Ball action clip, looping. Choose the camera on this card to steer the overlay with a light or your hand.',
         'Its Texture output is what Analyze measures.',
       ]) }),
       n('analyze', 'an', 340, 300, { resolution: '64', threshold: 0.45, smoothing: 0.6, motionGain: 12, ...note([
         'Analyze: reads the video back at 64 px each frame and measures it into numbers, one for the whole picture.',
         'Colour: the average colour. Centre: the middle of the part brighter than Threshold. Coverage: how much is that bright. Motion: how much changed since the last frame (times Motion gain).',
-        'Smoothing 0.6 calms the numbers so the ring glides instead of jittering.',
+        'Smoothing 0.6 calms the numbers so the overlay glides instead of jittering.',
       ]) }, { texture: ['vid', 'texture'] }),
-      n('textureLevels', 'back', 340, 620, { outWhite: 0.35, ...note('Levels (texture): the video dimmed, to show what is being measured.') }, { texture: ['vid', 'texture'] }),
-      n('uv', 'uv', 340, 860, note('UV: this pixel\'s place in the picture.')),
+      n('textureLevels', 'back', 340, 620, { outWhite: 0.7, ...note('Levels (texture): the video a little dimmed, so the overlay reads over it.') }, { texture: ['vid', 'texture'] }),
+      n('uv', 'uv', 340, 860, note('UV: this pixel\'s place in the picture (the frame 2 tall, about ±1.78 across).')),
       expr('look', 700, 400, {
-        label: 'Look', outputType: 'vec3',
+        label: 'Measuring overlay', outputType: 'vec3',
         inputs: [
           ['uv', 'vec2', ['uv', 'uv']], ['video', 'vec3', ['back', 'color']], ['avg', 'vec3', ['an', 'color']],
           ['c', 'vec2', ['an', 'centre']], ['cover', 'float', ['an', 'coverage']], ['mo', 'float', ['an', 'motion']],
         ],
         lines: [
-          ['float r', '0.08 + sqrt(cover) * 0.6'],
-          ['float ring', '1.0 - smoothstep(0.006, 0.012 + mo * 0.02, abs(length(uv - c) - r))'],
-          ['float flare', 'exp(-abs(length(uv - c) - r) * 10.0) * clamp(mo, 0.0, 2.0)'],
-          ['vec3 tint', 'normalize(avg + 0.001) * 1.2'],
+          ['float r', '0.06 + sqrt(cover) * 0.5'],
+          ['float ring', '1.0 - smoothstep(0.002, 0.004, abs(length(uv - c) - r))'],
+          ['float hair', 'max(1.0 - smoothstep(0.0, 0.0025, abs(uv.x - c.x)), 1.0 - smoothstep(0.0, 0.0025, abs(uv.y - c.y)))'],
+          ['float x0', '-1.6'],
+          ['float coverBar', 'step(abs(uv.y + 0.86), 0.006) * step(x0, uv.x) * step(uv.x, x0 + cover * 1.4)'],
+          ['float moBar', 'step(abs(uv.y + 0.92), 0.006) * step(x0, uv.x) * step(uv.x, x0 + clamp(mo, 0.0, 1.0) * 1.4)'],
+          ['float track', 'step(abs(uv.y + 0.89), 0.05) * step(x0 - 0.03, uv.x) * step(uv.x, x0 + 1.43)'],
+          ['float swatch', 'step(abs(uv.y + 0.89), 0.04) * step(abs(uv.x - 1.48), 0.1)'],
         ],
-        result: 'avg * 0.6 + video * 0.5 + (ring + flare * 0.6) * tint',
+        result: 'mix(video * 0.85, video * 0.4, track) + ring * vec3(1.0, 0.97, 0.92) * 0.9 + hair * 0.28 + coverBar * vec3(0.95, 0.82, 0.6) + moBar * vec3(0.6, 0.8, 0.95) + swatch * (normalize(avg + 0.001) * 0.9 - video * 0.4)',
         note: [
-          'Expression Block: the numbers drawn.',
-          'r: the ring\'s radius grows with Coverage (its square root, so a little light already shows).',
-          'ring: a ring round Centre, thicker while things move.',
-          'flare: a glow round it, as bright as Motion.',
-          'tint: the average colour at full strength, so the ring takes the video\'s colour.',
-          'Result: the average colour as a backdrop, the dimmed video, and the ring over both.',
+          'Measuring overlay: Analyze\'s numbers drawn as a camera operator\'s overlay, so you can watch each one move.',
+          'r: the ring\'s radius, growing with Coverage (its square root, so a little light already shows).',
+          'ring: a thin ring round Centre at that radius.',
+          'hair: two hairlines across the whole frame through Centre: where the light is.',
+          'x0: where the meters start, at the bottom left.',
+          'coverBar: the warm upper meter, Coverage from 0 to 1 as the bar fills.',
+          'moBar: the cool lower meter, Motion (clamped to 1).',
+          'track: a dark strip behind the two meters so they read.',
+          'swatch: the average Colour at full strength, bottom right.',
+          'Result: the video, the ring and hairlines, the meters and the swatch.',
         ],
       }),
-      n('output', 'out', 1000, 400, note('Output: the video measured and drawn as a ring.'), { color: ['look', 'result'] }),
+      n('output', 'out', 1000, 400, note('Output: the video with its measurements drawn over it.'), { color: ['look', 'result'] }),
     ],
     play: playRecord([
       ctl('gain', 'an::motionGain', 'Motion gain', 0, 40, 0.5),
-    ], `**What it shows.** Analyze (TouchDesigner's Analyze TOP and TOP to CHOP): a whole picture measured into numbers you wire like any other.
+    ], `**What it shows.** Analyze (TouchDesigner's Analyze TOP and TOP to CHOP): a whole picture measured into numbers you wire like any other, drawn here as an overlay so you can see each number move.
 
-**How it is built.** Video → Analyze → Look. The average colour fills the backdrop, the lit part's Centre places a ring, Coverage sizes it, Motion makes it flare.
+**How it is built.** Video → Analyze → Measuring overlay. Hairlines cross at the lit part's Centre, a ring round it grows with Coverage, two meters show Coverage (warm) and Motion (cool), and a swatch shows the average Colour.
 
-**Try.** Choose the camera: hold up a light and move it, the ring follows. Wire Brightness into a Lag, then into anything, for a smooth light meter. Wire Motion into an Envelope's Gate to flash on movement.`),
+**Try.** Choose the camera: hold up a light and move it, the crosshair follows. Raise Analyze\'s Threshold (on its card) so only the brightest balls count. Wire Motion into an Envelope's Gate to flash on movement, or Centre into anything that takes a position.`),
   };
 
   // ── 18 · Video → Optical Flow → Feedback (texture) pushed by the flow, the flow's view on top ──
@@ -963,11 +974,11 @@ export function buildTextureToolExamples(): Record<string, ExampleGraph> {
         'Strength 3 exaggerates it so the trails stream further; Smoothing 0.6 steadies it; Min speed ignores the tiniest jitter.',
         'View is the flow as colour: hue is the direction, brightness the speed.',
       ]) }, { texture: ['vid', 'texture'] }),
-      n('textureFeedback', 'trail', 640, 300, { label: 'Trail', tail: 1.6, clean: 0.03, tint: [1, 0.85, 0.7], amount: 0.7, blend: 'add', flowAmount: 1, ...note([
+      n('textureFeedback', 'trail', 640, 300, { label: 'Trail', tail: 0.9, clean: 0.03, tint: [1, 0.86, 0.72], amount: 0.6, blend: 'max', flowAmount: 1, ...note([
         'Feedback (texture): the video laid over last frame, which is pushed along Flow every frame: each smear moves the way that part of the picture is moving.',
-        'Tail 1.6 s; Tint fades blue first, so old smears warm.',
+        'Tail 0.9 s; Tint fades blue first, so old smears warm. Blend Max keeps the brighter of the fresh video and the trail, so the smears never pile up into white (Add would).',
       ]) }, { texture: ['vid', 'texture'], flow: ['flow', 'flow'] }),
-      n('addColor', 'mixView', 940, 300, { scale: 0.35, ...note('Add Colors: the trail plus the flow\'s colour view, a third as bright, so you can see the directions it finds.') }, { a: ['trail', 'color'], b: ['flow', 'color'] }),
+      n('addColor', 'mixView', 940, 300, { scale: 0.12, ...note('Add Colors: the trail plus a faint touch of the flow\'s colour view (an eighth as bright), so you can see the directions it finds without washing the picture.') }, { a: ['trail', 'color'], b: ['flow', 'color'] }),
       n('output', 'out', 1240, 300, note('Output: motion trails that follow the movement.'), { color: ['mixView', 'result'] }),
     ],
     play: playRecord([
@@ -1017,45 +1028,51 @@ export function buildTextureToolExamples(): Record<string, ExampleGraph> {
 **Try.** Wire a Depth node (Texture: the video) into Blob Track's Depth for real depth. Set Labels to x / y / z, turn Stems off, wire Mouse X into Yaw to steer.`),
   };
 
-  // ── 20 · Video → Segment (People) → cut-out over a moving colour field, outlined by its Edge ──
+  // ── 20 · Photo → Segment (People) → portrait mode: the room blurred, cooled and dimmed behind the person ──
   g.ttSegmentPeople = {
     ...TEXTURE_TOOL_EXAMPLE_INDEX.ttSegmentPeople,
     counter: 40,
     nodes: [
-      n('videoInput', 'vid', 40, 300, { ...BALL_VIDEO_PARAMS, ...note('Video Input: the built-in Ball action clip, looping. Choose the camera on this card to segment yourself.') }),
-      n('segment', 'seg', 340, 300, { mode: 'people', threshold: 0.5, softness: 0.12, grow: 1, smoothing: 0.4, ...note([
-        'Segment, People: a small model (MediaPipe Selfie Segmenter, on this device) finds the people in each frame: Mask is 1 on them.',
-        'Threshold and Softness shape the edge; Grow widens it a pixel; Smoothing 0.4 calms flicker between frames.',
-        'Cut-out is the video there; Edge is bright along the outline.',
-      ]) }, { texture: ['vid', 'texture'] }),
-      n('uv', 'uv', 340, 620, note('UV: this pixel\'s place in the picture, for the colour field.')),
-      n('time', 'clock', 340, 780, note('Time: seconds, to move the colour field.')),
-      expr('look', 680, 400, {
-        label: 'Look', outputType: 'vec3',
-        inputs: [['cut', 'vec3', ['seg', 'cutout']], ['m', 'float', ['seg', 'mask']], ['edge', 'float', ['seg', 'edge']], ['uv', 'vec2', ['uv', 'uv']], ['t', 'float', ['clock', 'time']]],
+      photo('sgPhoto', 40, 300, 'Segment finds the person in it, Blur makes the soft backdrop from it, and its Color is the sharp photo for the person.'),
+      n('segment', 'seg', 340, 160, { mode: 'people', threshold: 0.88, softness: 0.04, grow: 0, smoothing: 0.2, refine: 'on', ...note([
+        'Segment, People: a small model (MediaPipe Selfie Segmenter, on this device) finds the people in the picture: Mask is 1 on them, 0 on the room. The cat held close counts as part of the person.',
+        'Edge refine On snaps the mask\'s edge to the photo\'s own edges (the model works at 256 px), so the outline follows the hat and the shoulder instead of stepping.',
+        'Edge is bright along that outline: the look uses a little of it as a rim of light.',
+      ]) }, { texture: ['sgPhoto', 'texture'] }),
+      n('blurTexture', 'bokeh', 340, 520, { method: 'smooth', radius: 18, ...note('Blur (texture): the whole photo softened, for the room behind the person, like a lens wide open (portrait mode). Radius in picture pixels.') }, { texture: ['sgPhoto', 'texture'] }),
+      n('uv', 'uv', 340, 760, note('UV: this pixel\'s place, for the vignette.')),
+      expr('look', 700, 360, {
+        label: 'Portrait look', outputType: 'vec3',
+        inputs: [['photo', 'vec3', ['sgPhoto', 'color']], ['bg', 'vec3', ['bokeh', 'color']], ['m', 'float', ['seg', 'mask']], ['edge', 'float', ['seg', 'edge']], ['uv', 'vec2', ['uv', 'uv']]],
         lines: [
-          ['vec3 field', '0.5 + 0.5 * cos(6.28318 * (uv.x * 0.3 + uv.y * 0.2 + t * 0.08 + vec3(0.0, 0.33, 0.67)))'],
-          ['vec3 glow', 'edge * vec3(0.3, 0.9, 1.0) * 1.5'],
+          ['float lum', 'dot(bg, vec3(0.2126, 0.7152, 0.0722))'],
+          ['vec3 room', 'mix(vec3(lum), bg, 0.5) * vec3(0.9, 0.95, 1.06) * 0.5'],
+          ['vec3 subject', 'photo * vec3(1.04, 1.0, 0.95)'],
+          ['float rim', 'edge * m * 0.3'],
+          ['float vig', '1.0 - 0.35 * dot(uv * vec2(0.5, 0.8), uv * vec2(0.5, 0.8))'],
         ],
-        result: 'mix(field * 0.6, cut, m) + glow',
+        result: '(mix(room, subject, m) + rim * vec3(1.0, 0.86, 0.66)) * vig',
         note: [
-          'Expression Block: the cut-out over a new background.',
-          'field: a slow colour gradient drifting across the picture: the new background.',
-          'glow: a cyan line along the mask\'s Edge.',
-          'Result: the background where the mask is 0, the person where it is 1, and the outline on top.',
+          'Portrait look: the mask decides, pixel by pixel, between a sharp warm subject and a soft quiet room.',
+          'lum: the blurred room\'s brightness. room: half its colour taken out, cooled a little and at half brightness, so it steps back.',
+          'subject: the sharp photo, warmed a touch.',
+          'rim: a faint warm line along the mask\'s Edge, only where the mask is (so unsure, faint parts of the mask draw no line), like a back light catching the outline.',
+          'vig: the corners darkened.',
+          'Result: room where Mask is 0, the person where it is 1, the rim on top.',
         ],
       }),
-      n('output', 'out', 980, 400, note('Output: the people cut out over a moving colour field.'), { color: ['look', 'result'] }),
+      n('output', 'out', 1000, 360, note('Output: the person sharp in front of a blurred, quiet room.'), { color: ['look', 'result'] }),
     ],
     play: playRecord([
       ctl('thr', 'seg::threshold', 'Threshold', 0, 1, 0.01),
       ctl('soft', 'seg::softness', 'Edge softness', 0, 0.5, 0.005),
       ctl('grow', 'seg::grow', 'Grow', -20, 20, 0.5),
-    ], `**What it shows.** Segment: people found and cut out of a video on this device, with no green screen.
+      ctl('blur', 'bokeh::radius', 'Background blur', 0, 40, 0.5),
+    ], `**What it shows.** Segment: the person found and cut out of a photo on this device, with no green screen, used as a portrait-mode mask.
 
-**How it is built.** Video → Segment (People) → Look: the Cut-out mixed over a moving gradient by Mask, with a glowing line from Edge.
+**How it is built.** The built-in Room and cat photo → Segment (People, Edge refine on) and → Blur (texture). Portrait look mixes the sharp photo (where Mask is 1) over the blurred, dimmed room (where it is 0), with a faint rim from Edge.
 
-**Try.** Choose the camera on the Video Input. Turn Invert on (on Segment) to keep the room and lose the person. Wire Mask texture into Blob Track, a Cache or Particles' Emit from.`),
+**Try.** Turn Invert on (on Segment) to blur the person and keep the room sharp. Raise Grow to take in more round the outline. Swap the photo for a Video Input on the camera to do it live.`),
   };
 
   // ── 21 · Video → Segment (Click, Follow) → the selected thing in colour, the rest grey ──
@@ -1141,6 +1158,49 @@ export function buildTextureToolExamples(): Record<string, ExampleGraph> {
 **How it is built.** Two Fractal Noises → Make Vec3 (red, green) → Pass (the map) → Displace (texture) of the Video Input's Texture → Output.
 
 **Try.** Amount 80 for heavy warping. Swap the noises for a Spectrogram or a Pass of something you draw. Displace (2D Space) does the same to a UV instead of a texture.`),
+  };
+
+  // ── 24 · Photo → Segment (Click on the lamp) → the lamp in colour, the room in black and white ──
+  g.ttSegmentPick = {
+    ...TEXTURE_TOOL_EXAMPLE_INDEX.ttSegmentPick,
+    counter: 40,
+    nodes: [
+      photo('scPhoto', 40, 300, 'Segment cuts the lamp out of it; its Color is the photo for both halves of the look.'),
+      n('segment', 'seg', 340, 160, { mode: 'click', pointX: 0.36, pointY: 0.95, follow: false, threshold: 0.5, softness: 0.06, grow: 1, smoothing: 0.2, refine: 'on', ...note([
+        'Segment, Click: a small model (MediaPipe MagicTouch, on this device) cuts out the one thing under a point. Point X 0.36, Y 0.95 (0 is the left and the bottom) sits on the paper lamp at the top of the room, so Mask is 1 on the lamp and 0 everywhere else.',
+        'Press Pick on preview on this card and click something else (the hat, the candles on the dresser) to pick it instead. Follow is off: a still photo has nothing to follow.',
+        'Edge refine On snaps the mask to the photo\'s own edges, so it follows the lamp\'s round outline instead of the model\'s blocky one; Grow 1 takes in its soft rim.',
+      ]) }, { texture: ['scPhoto', 'texture'] }),
+      n('uv', 'uv', 340, 560, note('UV: this pixel\'s place, for the vignette.')),
+      expr('look', 680, 360, {
+        label: 'Colour key', outputType: 'vec3',
+        inputs: [['photo', 'vec3', ['scPhoto', 'color']], ['m', 'float', ['seg', 'mask']], ['edge', 'float', ['seg', 'edge']], ['uv', 'vec2', ['uv', 'uv']]],
+        lines: [
+          ['float lum', 'dot(photo, vec3(0.2126, 0.7152, 0.0722))'],
+          ['vec3 mono', 'vec3(pow(lum, 1.15)) * 0.62'],
+          ['vec3 picked', 'photo * 1.05'],
+          ['float vig', '1.0 - 0.35 * dot(uv * vec2(0.5, 0.8), uv * vec2(0.5, 0.8))'],
+        ],
+        result: '(mix(mono, picked, m) + edge * vec3(1.0, 0.9, 0.78) * 0.2) * vig',
+        note: [
+          'Colour key: the classic "one thing in colour" shot, decided by the mask alone.',
+          'lum: the photo\'s brightness. mono: the room in black and white, a little more contrast, dimmed so the colour stands out.',
+          'picked: the photo itself, a touch brighter: the lamp\'s warm glow.',
+          'vig: the corners darkened.',
+          'Result: black and white where Mask is 0, colour where it is 1, and a faint light line along the Edge.',
+        ],
+      }),
+      n('output', 'out', 980, 360, note('Output: the lamp in colour in a black-and-white room.'), { color: ['look', 'result'] }),
+    ],
+    play: playRecord([
+      ctl('thr', 'seg::threshold', 'Threshold', 0, 1, 0.01),
+      ctl('soft', 'seg::softness', 'Edge softness', 0, 0.5, 0.005),
+      ctl('grow', 'seg::grow', 'Grow', -20, 20, 0.5),
+    ], `**What it shows.** Segment's Click mode: point at something and it is cut out, edge and all. Here the point sits on the paper lamp, so the lamp keeps its warm colour and the rest of the room goes black and white.
+
+**How it is built.** The built-in Room and cat photo → Segment (Click, a point on the lamp, Edge refine on) → Colour key: the photo in colour where Mask is 1, in black and white where it is 0.
+
+**Try.** Press Pick on preview on the Segment card and click the hat or the candles. Switch Find to People to keep the person and the cat (Texture tools 20 does), or to Objects for things by name. Wire Mask texture into Blur (texture) or Particles' Emit from.`),
   };
 
   return g;

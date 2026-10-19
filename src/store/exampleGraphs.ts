@@ -38,6 +38,7 @@ import { buildAudioExamples } from './audioExamples';
 import { buildPictureExamples } from './pictureExamples';
 import { buildPictures3DExamples } from './pictures3dExamples';
 import { buildRaysExamples } from './raysExamples';
+import { buildCuratedExamples } from './curatedExamples';
 import { buildSimGridExamples } from './simGridExamples';
 import { buildGridRulesExamples } from './gridRulesExamples';
 import { buildAgentRuleExamples } from './agentRuleExamples';
@@ -77,7 +78,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         position: { x: 40, y: 200 },
         inputs: {},
         outputs: { uv: { type: 'vec2', label: 'UV' } },
-        params: {},
+        params: { __comment: 'The canvas position, centred on 0. Fractal Loop tiles and folds it.' },
       },
       {
         id: 'time_1',
@@ -85,7 +86,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         position: { x: 40, y: 400 },
         inputs: {},
         outputs: { time: { type: 'float', label: 'Time' } },
-        params: {},
+        params: { __comment: 'Seconds since start. Fractal Loop multiplies it by its Time Scale of 0.4, so the rings pulse and shift at a calm pace.' },
       },
       {
         id: 'fractal_2',
@@ -101,6 +102,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           uv0: { type: 'vec2', label: 'UV0' },
         },
         params: {
+          __comment: 'Four passes: each one tiles the UV (Fract Scale 1.5), measures the distance to the tile centre and adds glowing rings (Ring Freq 8, Glow 0.01) coloured by its cosine palette. Raise Iterations for denser detail; lower Glow for thinner rings.',
           iterations: 4,
           fract_scale: 1.5,
           scale_exp: 1,
@@ -567,7 +569,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         position: { x: 40, y: 260 },
         inputs: {},
         outputs: { uv: { type: 'vec2', label: 'UV' } },
-        params: {},
+        params: { __comment: 'The canvas position: the square plate the pattern is drawn on.' },
       },
       {
         id: 'time_1',
@@ -575,7 +577,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         position: { x: 40, y: 440 },
         inputs: {},
         outputs: { time: { type: 'float', label: 'Time' } },
-        params: {},
+        params: { __comment: 'Seconds since start, driving the LFO.' },
       },
       {
         id: 'lfo_2',
@@ -585,7 +587,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
         },
         outputs: { value: { type: 'float', label: 'Value' } },
-        params: { freq: 0.08, phase: 0, amplitude: 6, offset: 7, waveform: 'sine' },
+        params: { __comment: 'A slow sine (0.08 Hz, one sweep about every 12 seconds) swinging between 1 and 13: the plate\'s drive frequency.', freq: 0.08, phase: 0, amplitude: 6, offset: 7, waveform: 'sine' },
       },
       {
         id: 'modefreq_3',
@@ -595,7 +597,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           frequency: { type: 'float', label: 'Frequency', connection: { nodeId: 'lfo_2', outputKey: 'value' } },
         },
         outputs: { n: { type: 'float', label: 'n' }, m: { type: 'float', label: 'm' } },
-        params: { frequency: 5, seed: 3 },
+        params: { __comment: 'One frequency in, a pair of mode numbers out: n follows the frequency, m is it times a ratio picked by Seed 3. Sweeping the one knob drifts smoothly through patterns. Try another Seed for a different family.', frequency: 5, seed: 3 },
       },
       {
         id: 'field_4',
@@ -607,7 +609,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           m: { type: 'float', label: 'm', connection: { nodeId: 'modefreq_3', outputKey: 'm' } },
         },
         outputs: { field: { type: 'float', label: 'Field' }, uv: { type: 'vec2', label: 'UV (scaled)' } },
-        params: { n: 6, m: 4, mix: 1, scale: 1, geometry: 'square', aspect: 'square' },
+        params: { __comment: 'The square plate\'s vibration for those n and m, with Mix 1 adding the swapped mode. Field is 0 on the still lines, where sand would gather.', n: 6, m: 4, mix: 1, scale: 1, geometry: 'square', aspect: 'square' },
       },
       {
         id: 'lines_5',
@@ -615,7 +617,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         position: { x: 1000, y: 260 },
         inputs: { field: { type: 'float', label: 'Field', connection: { nodeId: 'field_4', outputKey: 'field' } } },
         outputs: { density: { type: 'float', label: 'Density' }, color: { type: 'vec3', label: 'Color' } },
-        params: { line_width: 1.5, aa: 1, brightness: 1.2 },
+        params: { __comment: 'Draws where the field crosses 0 as 1.5-pixel lines at brightness 1.2: the Chladni figure.', line_width: 1.5, aa: 1, brightness: 1.2 },
       },
       {
         id: 'output_6',
@@ -1056,7 +1058,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         position: { x: 60, y: 200 },
         inputs: {},
         outputs: { uv: { type: 'vec2', label: 'UV' } },
-        params: {},
+        params: { __comment: 'The canvas position: each pixel is a starting point z on the complex plane.' },
       },
       {
         id: 'time_1',
@@ -1064,7 +1066,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         position: { x: 60, y: 380 },
         inputs: {},
         outputs: { time: { type: 'float', label: 'Time' } },
-        params: {},
+        params: { __comment: 'Seconds since start, wired into the Newton Fractal\'s Time socket. The node does not use it yet, so the picture is still.' },
       },
       {
         id: 'newton_2',
@@ -1080,6 +1082,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           root: { type: 'float', label: 'Root Index' },
         },
         params: {
+          __comment: 'Newton\'s method on z⁵ − 1 for up to 64 steps: every pixel slides towards one of the five roots. The colour (palette 7) says which root it reached, and Shade Power 2 darkens the slow, chaotic borders between them. Raise Zoom and move the centre onto a border to see it repeat.',
           polynomial: 'z5-1',
           max_iter: 64,
           zoom: 1.8,
@@ -2271,7 +2274,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         position: { x: 40, y: 200 },
         inputs: {},
         outputs: { uv: { type: 'vec2', label: 'UV' } },
-        params: {},
+        params: { __comment: 'The canvas position, for the fractal.' },
       },
       {
         id: 'mb_time',
@@ -2279,7 +2282,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         position: { x: 40, y: 380 },
         inputs: {},
         outputs: { time: { type: 'float', label: 'Time' } },
-        params: {},
+        params: { __comment: 'Seconds since start. The fractal runs it at Time Scale 0.6, fast enough for the trails to show.' },
       },
       {
         id: 'mb_frac',
@@ -2295,6 +2298,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           uv0: { type: 'vec2', label: 'UV0' },
         },
         params: {
+          __comment: 'The moving picture: the Fractal Rings loop (4 passes) at Time Scale 0.6. The Feedback node after it smears its motion into trails.',
           iterations: 4,
           fract_scale: 1.5,
           scale_exp: 1,
@@ -4686,7 +4690,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         position: { x: 60, y: 180 },
         inputs: {},
         outputs: { uv: { type: 'vec2', label: 'UV' } },
-        params: {},
+        params: { __comment: 'The canvas position, turned into one ray per pixel by the camera.' },
       },
       {
         id: 'time_1',
@@ -4694,7 +4698,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         position: { x: 60, y: 340 },
         inputs: {},
         outputs: { time: { type: 'float', label: 'Time' } },
-        params: {},
+        params: { __comment: 'Seconds since start: the camera orbits with it, so the spheres slide past the focal plane.' },
       },
       {
         id: 'cam_2',
@@ -4706,6 +4710,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         },
         outputs: { ro: { type: 'vec3', label: 'Ray Origin' }, rd: { type: 'vec3', label: 'Ray Dir' } },
         params: {
+          __comment: 'Camera 6 units out, nearly level, orbiting slowly (0.06 radians a second). Its own Aperture is 0: all the blur comes from the Depth of Field node after the Pass, focused at 5.5.',
           camDist: 6,
           camAngle: 0.15,
           camElevation: 0.08,
@@ -4723,6 +4728,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         inputs: {},
         outputs: { scene: { type: 'scene3d', label: 'Scene' } },
         params: {
+          __comment: 'Three spheres at different depths: one near the camera, one at the centre (in focus) and one far behind, so the blur has something at each distance.',
           label: 'Three Spheres',
           subgraph: {
             nodes: [
@@ -4732,7 +4738,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
                 position: { x: 60, y: 240 },
                 inputs: {},
                 outputs: { pos: { type: 'vec3', label: 'Position' } },
-                params: {},
+                params: { __comment: 'The point being measured, fed to each sphere (through a Transform for the two that are moved).' },
               },
               {
                 id: 'tr_a',
@@ -4746,7 +4752,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
                   dist: { type: 'float', label: 'Distance (in)' },
                 },
                 outputs: { p: { type: 'vec3', label: 'Local' }, scale: { type: 'float', label: 'Scale' }, dist: { type: 'float', label: 'Distance' } },
-                params: { dim: '3', mode: 'place', x: 2, y: 0.6, z: 3, w: 0, px: 0, py: 0, pz: 0, pw: 0, rotate: 0, rx: 0, ry: 0, rz: 0, rxy: 0, rxz: 0, rxw: 0, ryz: 0, ryw: 0, rzw: 0, spin: 0, spinAxis: 'y', spinPlane: 'xw', scale: 1, stretch: false, sx: 1, sy: 1, sz: 1, sw: 1 },
+                params: { __comment: 'Places the small sphere at (2, 0.6, 3), towards the camera, so it sits in front of the focal plane and blurs.', dim: '3', mode: 'place', x: 2, y: 0.6, z: 3, w: 0, px: 0, py: 0, pz: 0, pw: 0, rotate: 0, rx: 0, ry: 0, rz: 0, rxy: 0, rxz: 0, rxw: 0, ryz: 0, ryw: 0, rzw: 0, spin: 0, spinAxis: 'y', spinPlane: 'xw', scale: 1, stretch: false, sx: 1, sy: 1, sz: 1, sw: 1 },
               },
               {
                 id: 'sdf_a',
@@ -4754,7 +4760,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
                 position: { x: 440, y: 80 },
                 inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'tr_a', outputKey: 'p' } } },
                 outputs: { dist: { type: 'float', label: 'Distance' } },
-                params: { radius: 0.45 },
+                params: { __comment: 'The near sphere, radius 0.45.', radius: 0.45 },
               },
               {
                 id: 'sdf_b',
@@ -4762,7 +4768,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
                 position: { x: 440, y: 240 },
                 inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'sp', outputKey: 'pos' } } },
                 outputs: { dist: { type: 'float', label: 'Distance' } },
-                params: { radius: 0.65 },
+                params: { __comment: 'The middle sphere, radius 0.65, at the centre: about 6 units from the camera, close to the focal distance, so it stays sharp.', radius: 0.65 },
               },
               {
                 id: 'tr_c',
@@ -4776,7 +4782,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
                   dist: { type: 'float', label: 'Distance (in)' },
                 },
                 outputs: { p: { type: 'vec3', label: 'Local' }, scale: { type: 'float', label: 'Scale' }, dist: { type: 'float', label: 'Distance' } },
-                params: { dim: '3', mode: 'place', x: -2.5, y: -0.4, z: -5, w: 0, px: 0, py: 0, pz: 0, pw: 0, rotate: 0, rx: 0, ry: 0, rz: 0, rxy: 0, rxz: 0, rxw: 0, ryz: 0, ryw: 0, rzw: 0, spin: 0, spinAxis: 'y', spinPlane: 'xw', scale: 1, stretch: false, sx: 1, sy: 1, sz: 1, sw: 1 },
+                params: { __comment: 'Places the big sphere at (−2.5, −0.4, −5), far behind the centre, so it blurs the other way.', dim: '3', mode: 'place', x: -2.5, y: -0.4, z: -5, w: 0, px: 0, py: 0, pz: 0, pw: 0, rotate: 0, rx: 0, ry: 0, rz: 0, rxy: 0, rxz: 0, rxw: 0, ryz: 0, ryw: 0, rzw: 0, spin: 0, spinAxis: 'y', spinPlane: 'xw', scale: 1, stretch: false, sx: 1, sy: 1, sz: 1, sw: 1 },
               },
               {
                 id: 'sdf_c',
@@ -4784,7 +4790,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
                 position: { x: 440, y: 400 },
                 inputs: { pos: { type: 'vec3', label: 'Position', connection: { nodeId: 'tr_c', outputKey: 'p' } } },
                 outputs: { dist: { type: 'float', label: 'Distance' } },
-                params: { radius: 0.85 },
+                params: { __comment: 'The far sphere, radius 0.85.', radius: 0.85 },
               },
               {
                 id: 'u_ab',
@@ -4795,7 +4801,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
                   b: { type: 'float', label: 'B', connection: { nodeId: 'sdf_b', outputKey: 'dist' } },
                 },
                 outputs: { dist: { type: 'float', label: 'Distance' } },
-                params: {},
+                params: { __comment: 'Union: the nearer of the near and middle spheres.' },
               },
               {
                 id: 'u_abc',
@@ -4806,7 +4812,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
                   b: { type: 'float', label: 'B', connection: { nodeId: 'sdf_c', outputKey: 'dist' } },
                 },
                 outputs: { dist: { type: 'float', label: 'Distance' } },
-                params: {},
+                params: { __comment: 'Union with the far sphere: the whole scene, into Scene Output.' },
               },
             ],
             outputNodeId: 'u_abc',
@@ -4834,6 +4840,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           hit: { type: 'float', label: 'Hit' },
         },
         params: {
+          __comment: 'Marches the three spheres (80 steps, out to 22 units) and lights them pale grey. Its Dist output goes to the Pass as each pixel\'s depth.',
           maxSteps: 80,
           maxDist: 22,
           stepScale: 1,
@@ -4851,7 +4858,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         position: { x: 1100, y: 240 },
         inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'mlg_4', outputKey: 'color' } } },
         outputs: { color: { type: 'vec3', label: 'Color' } },
-        params: { mode: 'aces' },
+        params: { __comment: 'ACES tone mapping before the Pass, so the blur works on the finished colours.', mode: 'aces' },
       },
       n('pass', 'dof_pass', 1300, 60, { label: 'Scene + depth', __comment: 'Pass: the lit scene as a texture, this frame, with each pixel\'s ray distance in its alpha (half float holds distances past 1), so the blur can read the picture and its depth round each pixel.' },
         { color: ['tone_5', 'color'], alpha: ['mlg_4', 'dist'] }),
@@ -5307,7 +5314,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         position: { x: 60, y: 240 },
         inputs: {},
         outputs: { uv: { type: 'vec2', label: 'UV' } },
-        params: {},
+        params: { __comment: 'The canvas position, read by the noise and by the halftone\'s dot grid.' },
       },
       {
         id: 'time_1',
@@ -5315,7 +5322,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         position: { x: 60, y: 420 },
         inputs: {},
         outputs: { time: { type: 'float', label: 'Time' } },
-        params: {},
+        params: { __comment: 'Seconds since start; the FBM drifts at 0.18 of it.' },
       },
       {
         id: 'fbm_2',
@@ -5326,7 +5333,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           time: { type: 'float', label: 'Time', connection: { nodeId: 'time_1', outputKey: 'time' } },
         },
         outputs: { value: { type: 'float', label: 'Value' }, uv: { type: 'vec2', label: 'UV (pass-through)' } },
-        params: { octaves: 4, lacunarity: 2, gain: 0.5, scale: 1.5, time_scale: 0.18 },
+        params: { __comment: 'Four octaves of noise at Scale 1.5: soft cloudy shapes to print.', octaves: 4, lacunarity: 2, gain: 0.5, scale: 1.5, time_scale: 0.18 },
       },
       {
         id: 'pal_3',
@@ -5334,7 +5341,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         position: { x: 490, y: 240 },
         inputs: { t: { type: 'float', label: 'T', connection: { nodeId: 'fbm_2', outputKey: 'value' } } },
         outputs: { color: { type: 'vec3', label: 'Color' } },
-        params: { offset: [0.5, 0.5, 0.5], amplitude: [0.5, 0.5, 0.5], freq: [1, 1, 1], phase: [0, 0.1, 0.2] },
+        params: { __comment: 'Colours the noise height with a cosine palette (phases 0, 0.1, 0.2), giving the halftone a range of hues to split into inks.', offset: [0.5, 0.5, 0.5], amplitude: [0.5, 0.5, 0.5], freq: [1, 1, 1], phase: [0, 0.1, 0.2] },
       },
       {
         id: 'cmyk_4',
@@ -5346,6 +5353,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         },
         outputs: { result: { type: 'vec3', label: 'Result' } },
         params: {
+          __comment: 'Splits the colour into cyan, magenta, yellow and black and prints each as dots on its own screen angle (15°, 75°, 0°, 45°), 24 dots across, on cream paper. Lower Grid Size for coarser print, raise it for finer.',
           gridSize: 24,
           dotRadius: 0.48,
           softness: 0.01,
@@ -7898,7 +7906,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         position: { x: 60, y: 200 },
         inputs: {},
         outputs: { uv: { type: 'vec2', label: 'UV' } },
-        params: {},
+        params: { __comment: 'The canvas position: into the Möbius map, and unwarped into Scanlines so the lines stay straight.' },
       },
       {
         id: 't',
@@ -7906,7 +7914,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         position: { x: 60, y: 360 },
         inputs: {},
         outputs: { time: { type: 'float', label: 'Time' } },
-        params: {},
+        params: { __comment: 'Seconds since start. × 0.2 below turns the Möbius map; Truchet also gets it, but its Animate is 0, so the tiles themselves do not scroll.' },
       },
       {
         id: 'spin',
@@ -7917,7 +7925,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           b: { type: 'float', label: 'B' },
         },
         outputs: { result: { type: 'float', label: 'Result' } },
-        params: { b: 0.2 },
+        params: { __comment: 'Time × 0.2: the Möbius angle grows by 0.2 radians a second, so the warp turns slowly.', b: 0.2 },
       },
       {
         id: 'mob',
@@ -7930,7 +7938,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           angle: { type: 'float', label: 'Angle', connection: { nodeId: 'spin', outputKey: 'result' } },
         },
         outputs: { output: { type: 'vec2', label: 'Möbius UV' } },
-        params: { poleX: 0.4, poleY: 0.1, angle: 0 },
+        params: { __comment: 'Möbius transform with its pole at (0.4, 0.1): circles stay circles, but space bunches up near the pole and swirls as Angle turns. Move the pole to move the knot.', poleX: 0.4, poleY: 0.1, angle: 0 },
       },
       {
         id: 'tru',
@@ -7948,6 +7956,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           mask: { type: 'float', label: 'Mask' },
         },
         params: {
+          __comment: 'Truchet tiles (Scale 6, line width 0.1) drawn in the warped space, so the arcs bend and shrink towards the pole. Swap the Möbius node for Polar or Kaleidoscope to compare maps.',
           scale: 6,
           line_width: 0.1,
           aa: 0.02,
@@ -7968,7 +7977,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           time: { type: 'float', label: 'Time (scroll)' },
         },
         outputs: { result: { type: 'vec3', label: 'Result' } },
-        params: { count: 200, intensity: 0.25, scroll: 0 },
+        params: { __comment: '200 scanlines at 25% darkness over the finished picture, on the plain UV so they stay straight.', count: 200, intensity: 0.25, scroll: 0 },
       },
       {
         id: 'out',
@@ -7993,7 +8002,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         position: { x: 60, y: 200 },
         inputs: {},
         outputs: { uv: { type: 'vec2', label: 'UV' } },
-        params: {},
+        params: { __comment: 'The canvas position, into the group.' },
       },
       {
         id: 'grp',
@@ -8002,6 +8011,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         inputs: { in0: { type: 'vec2', label: 'UV', connection: { nodeId: 'uv', outputKey: 'uv' } } },
         outputs: { out0: { type: 'vec2', label: 'UV' }, out1: { type: 'float', label: 'Distance' } },
         params: {
+          __comment: 'Runs its body 3 times (Iterations): each pass turns the UV by its own angle, tiles it and measures a circle. Select it and press Publish as node to turn it into a node of its own, with Iterations as a slider.',
           label: 'Ring Tiles',
           iterations: 3,
           subgraph: {
@@ -8012,7 +8022,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
                 position: { x: 60, y: 420 },
                 inputs: {},
                 outputs: { i: { type: 'float', label: 'i' } },
-                params: {},
+                params: { __comment: 'The pass number: 0, 1 or 2.' },
               },
               {
                 id: 'ang',
@@ -8023,7 +8033,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
                   b: { type: 'float', label: 'B' },
                 },
                 outputs: { result: { type: 'float', label: 'Result' } },
-                params: { b: 0.7 },
+                params: { __comment: 'Pass number × 0.7 radians: each pass turns a little further than the last.', b: 0.7 },
               },
               {
                 id: 'rot',
@@ -8037,7 +8047,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
                   dist: { type: 'float', label: 'Distance (in)' },
                 },
                 outputs: { p: { type: 'vec2', label: 'Local' }, scale: { type: 'float', label: 'Scale' }, dist: { type: 'float', label: 'Distance' } },
-                params: { dim: '2', mode: 'space', x: 0, y: 0, z: 0, w: 0, px: 0, py: 0, pz: 0, pw: 0, rotate: 0, rx: 0, ry: 0, rz: 0, rxy: 0, rxz: 0, rxw: 0, ryz: 0, ryw: 0, rzw: 0, spin: 0, spinAxis: 'y', spinPlane: 'xw', scale: 1, stretch: false, sx: 1, sy: 1, sz: 1, sw: 1 },
+                params: { __comment: 'Turns the incoming UV by this pass\'s angle.', dim: '2', mode: 'space', x: 0, y: 0, z: 0, w: 0, px: 0, py: 0, pz: 0, pw: 0, rotate: 0, rx: 0, ry: 0, rz: 0, rxy: 0, rxz: 0, rxw: 0, ryz: 0, ryw: 0, rzw: 0, spin: 0, spinAxis: 'y', spinPlane: 'xw', scale: 1, stretch: false, sx: 1, sy: 1, sz: 1, sw: 1 },
               },
               {
                 id: 'tile',
@@ -8048,7 +8058,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
                   scale: { type: 'float', label: 'Tile count' },
                 },
                 outputs: { output: { type: 'vec2', label: 'Output' } },
-                params: { scale: 2 },
+                params: { __comment: 'Repeats the turned UV in tiles (Tile count 2), each centred on 0.', scale: 2 },
               },
               {
                 id: 'circ',
@@ -8060,7 +8070,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
                   offset: { type: 'vec2', label: 'Center' },
                 },
                 outputs: { distance: { type: 'float', label: 'Distance' } },
-                params: { radius: 0.25, posX: 0, posY: 0 },
+                params: { __comment: 'A circle of radius 0.25 in each tile; its distance leaves the group.', radius: 0.25, posX: 0, posY: 0 },
               },
             ],
             inputPorts: [{ key: 'in0', type: 'vec2', label: 'UV', toNodeId: 'rot', toInputKey: 'input' }],
@@ -8082,6 +8092,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         },
         outputs: { glow: { type: 'float', label: 'Glow' }, tinted: { type: 'vec3', label: 'Tinted' } },
         params: {
+          __comment: 'Glow from the circles with an orange tint. Falloff has a keyframe track (Keys tab): 6 to 40 over three seconds, looping, so the glow tightens from a broad haze to thin rings.',
           mode: 'glow',
           brightness: 6,
           ringFreq: 8,
@@ -8098,7 +8109,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         position: { x: 1320, y: 200 },
         inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'glow', outputKey: 'tinted' } } },
         outputs: { color: { type: 'vec3', label: 'Color' } },
-        params: { mode: 'aces' },
+        params: { __comment: 'ACES tone mapping keeps the bright overlaps from clipping.', mode: 'aces' },
       },
       {
         id: 'out',
@@ -8482,7 +8493,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         position: { x: 60, y: 200 },
         inputs: {},
         outputs: { uv: { type: 'vec2', label: 'UV' } },
-        params: {},
+        params: { __comment: 'The screen position. CRT Screen bends it for the picture; CRT Mask gets it straight, so the grille follows real pixels.' },
       },
       {
         id: 't',
@@ -8490,7 +8501,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         position: { x: 60, y: 360 },
         inputs: {},
         outputs: { time: { type: 'float', label: 'Time' } },
-        params: {},
+        params: { __comment: 'Seconds since start; the FBM drifts at 0.2 of it.' },
       },
       {
         id: 'crt',
@@ -8501,7 +8512,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           curvature: { type: 'float', label: 'Curvature' },
         },
         outputs: { uv: { type: 'vec2', label: 'UV' }, vignette: { type: 'float', label: 'Vignette' } },
-        params: { curvature: 0.07, cellSize: 5, snap: 'on', vignettePower: 0.4 },
+        params: { __comment: 'Bows the screen like a tube (Curvature 0.07) and snaps the picture to 5-pixel cells to match the mask. Its Vignette (curve 0.4) darkens towards the bent corners.', curvature: 0.07, cellSize: 5, snap: 'on', vignettePower: 0.4 },
       },
       {
         id: 'n',
@@ -8514,7 +8525,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           time_scale: { type: 'float', label: 'Speed' },
         },
         outputs: { value: { type: 'float', label: 'Value' }, uv: { type: 'vec2', label: 'UV (pass-through)' } },
-        params: { octaves: 4, lacunarity: 2, gain: 0.5, scale: 1.6, time_scale: 0.2 },
+        params: { __comment: 'The picture on the tube: four octaves of noise at Scale 1.6, read in the curved, snapped UV.', octaves: 4, lacunarity: 2, gain: 0.5, scale: 1.6, time_scale: 0.2 },
       },
       {
         id: 'pal',
@@ -8530,6 +8541,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         },
         outputs: { color: { type: 'vec3', label: 'Color' } },
         params: {
+          __comment: 'Colours the noise with a rainbow cosine palette, Scale 1.3.',
           value: 0,
           anim: 0,
           scale: 1.3,
@@ -8552,6 +8564,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         },
         outputs: { result: { type: 'vec3', label: 'Color' }, mask: { type: 'vec3', label: 'Mask' } },
         params: {
+          __comment: 'Lays the staggered RGB grille over the picture (5-pixel cells, border 0.6), with scanlines at 0.35, a faint travelling pulse (0.04) and the screen\'s vignette. Set Cell size to match CRT Screen\'s if you change it.',
           cellSize: 5,
           border: 0.6,
           stagger: 'on',
@@ -11638,7 +11651,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         position: { x: 40, y: 200 },
         inputs: {},
         outputs: { uv: { type: 'vec2', label: 'UV' } },
-        params: {},
+        params: { __comment: 'The canvas position, tiled by Infinite Repeat.' },
       },
       {
         id: 'cr_t',
@@ -11646,7 +11659,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         position: { x: 40, y: 340 },
         inputs: {},
         outputs: { time: { type: 'float', label: 'Time' } },
-        params: {},
+        params: { __comment: 'Seconds since start: shifts every colour along the palette at Speed 0.2.' },
       },
       {
         id: 'cr_rep',
@@ -11658,7 +11671,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           cellY: { type: 'float', label: 'Cell H' },
         },
         outputs: { output: { type: 'vec2', label: 'Cell UV' }, cellID: { type: 'vec2', label: 'Cell ID' } },
-        params: { cellX: 0.5, cellY: 0.5, stagger: 0.5 },
+        params: { __comment: 'Repeats the space every 0.5 units; Stagger 0.5 shifts every other column by half a cell, like bricks. Cell UV goes to the circle, Cell ID to the hash.', cellX: 0.5, cellY: 0.5, stagger: 0.5 },
       },
       {
         id: 'cr_sdf',
@@ -11670,7 +11683,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           offset: { type: 'vec2', label: 'Center' },
         },
         outputs: { distance: { type: 'float', label: 'Distance' } },
-        params: { radius: 0.18 },
+        params: { __comment: 'A circle of radius 0.18 in each cell; the cells are 0.5 wide, so gaps remain between them.', radius: 0.18 },
       },
       {
         id: 'cr_hash',
@@ -11681,7 +11694,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           time: { type: 'float', label: 'Time' },
         },
         outputs: { value: { type: 'float', label: 'Value (0–1)' }, signed: { type: 'float', label: 'Signed (−1–1)' } },
-        params: { mode: 'hash', scale: 1, speed: 0, outMin: 0, outMax: 1 },
+        params: { __comment: 'Hash mode: a random 0–1 number from the Cell ID, the same across the whole cell.', mode: 'hash', scale: 1, speed: 0, outMin: 0, outMax: 1 },
       },
       {
         id: 'cr_pal',
@@ -11696,7 +11709,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           phase: { type: 'vec3', label: 'Phase' },
         },
         outputs: { color: { type: 'vec3', label: 'Color' } },
-        params: { preset: '5', scale: 1, speed: 0.2 },
+        params: { __comment: 'That random number picks the cell\'s colour (preset 5); Time drifts all the colours together.', preset: '5', scale: 1, speed: 0.2 },
       },
       {
         id: 'cr_bg',
@@ -11704,7 +11717,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         position: { x: 760, y: 520 },
         inputs: { r: { type: 'float', label: 'R' }, g: { type: 'float', label: 'G' }, b: { type: 'float', label: 'B' } },
         outputs: { rgb: { type: 'vec3', label: 'RGB' } },
-        params: { r: 0.06, g: 0.06, b: 0.09 },
+        params: { __comment: 'The background, a near-black blue.', r: 0.06, g: 0.06, b: 0.09 },
       },
       {
         id: 'cr_fill',
@@ -11719,7 +11732,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           antialias: { type: 'float', label: 'Softness' },
         },
         outputs: { result: { type: 'vec3', label: 'Color' }, alpha: { type: 'float', label: 'Alpha' } },
-        params: { strokeWidth: 0, antialias: 0.01, strokeAlign: 'center', aaMode: 'pixel' },
+        params: { __comment: 'Fills each circle with its cell\'s colour on the background, the edge anti-aliased per pixel.', strokeWidth: 0, antialias: 0.01, strokeAlign: 'center', aaMode: 'pixel' },
       },
       {
         id: 'cr_out',
@@ -11960,7 +11973,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         position: { x: 40, y: 200 },
         inputs: {},
         outputs: { uv: { type: 'vec2', label: 'UV' } },
-        params: {},
+        params: { __comment: 'The canvas position, centred on 0.' },
       },
       {
         id: 'dr_t',
@@ -11968,7 +11981,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         position: { x: 40, y: 340 },
         inputs: {},
         outputs: { time: { type: 'float', label: 'Time' } },
-        params: {},
+        params: { __comment: 'Seconds since start: scrolls the tiles sideways in the Expression Block.' },
       },
       {
         id: 'dr_zoom',
@@ -11979,7 +11992,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           b: { type: 'vec2', label: 'B' },
         },
         outputs: { result: { type: 'vec2', label: 'Result' } },
-        params: { outputType: 'vec2', b: 1.1 },
+        params: { __comment: 'UV × 1.1: shows a little more of the plane, so the whole dome fits on screen with a margin.', outputType: 'vec2', b: 1.1 },
       },
       {
         id: 'dr_dome',
@@ -11990,7 +12003,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           strength: { type: 'float', label: 'Strength' },
         },
         outputs: { output: { type: 'vec2', label: 'Projected UV' }, height: { type: 'float', label: 'Height' } },
-        params: { mode: 'dome', strength: 0.7 },
+        params: { __comment: 'Spherical space in Dome mode (Strength 0.7): maps the unit disc as a hemisphere, so the pattern stretches towards the rim. Its Height is 1 at the centre and 0 at and beyond the rim.', mode: 'dome', strength: 0.7 },
       },
       {
         id: 'dr_scroll',
@@ -12002,6 +12015,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         },
         outputs: { result: { type: 'vec2', label: 'Result' } },
         params: {
+          __comment: 'p * 3.0 + vec2(t * 0.3, 0.0): makes the tiles three times smaller and slides them sideways at 0.3 units a second, so the pattern rolls over the dome.',
           inputs: [
             { name: 'p', type: 'vec2', slider: undefined },
             { name: 't', type: 'float', slider: undefined },
@@ -12023,7 +12037,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           cellY: { type: 'float', label: 'Cell H' },
         },
         outputs: { output: { type: 'vec2', label: 'Cell UV' }, cellID: { type: 'vec2', label: 'Cell ID' } },
-        params: { cellX: 1, cellY: 1, stagger: 0.5 },
+        params: { __comment: 'Repeats the space every 1 unit; Stagger 0.5 shifts every other column by half a cell, a brick layout.', cellX: 1, cellY: 1, stagger: 0.5 },
       },
       {
         id: 'dr_box',
@@ -12041,7 +12055,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           n: { type: 'vec2', label: 'Normal (ring)' },
         },
         outputs: { distance: { type: 'float', label: 'Distance' } },
-        params: { shape: 'roundedBox', rx: 0.38, ry: 0.22, roundness: 0.05 },
+        params: { __comment: 'A rounded box 0.38 × 0.22 (half sizes) in each cell: one brick.', shape: 'roundedBox', rx: 0.38, ry: 0.22, roundness: 0.05 },
       },
       {
         id: 'dr_c1',
@@ -12049,7 +12063,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         position: { x: 1200, y: 400 },
         inputs: { r: { type: 'float', label: 'R' }, g: { type: 'float', label: 'G' }, b: { type: 'float', label: 'B' } },
         outputs: { rgb: { type: 'vec3', label: 'RGB' } },
-        params: { r: 0.95, g: 0.55, b: 0.2 },
+        params: { __comment: 'The brick colour, orange.', r: 0.95, g: 0.55, b: 0.2 },
       },
       {
         id: 'dr_c2',
@@ -12057,7 +12071,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
         position: { x: 1200, y: 520 },
         inputs: { r: { type: 'float', label: 'R' }, g: { type: 'float', label: 'G' }, b: { type: 'float', label: 'B' } },
         outputs: { rgb: { type: 'vec3', label: 'RGB' } },
-        params: { r: 0.12, g: 0.1, b: 0.16 },
+        params: { __comment: 'The background colour, a dark plum.', r: 0.12, g: 0.1, b: 0.16 },
       },
       {
         id: 'dr_fill',
@@ -12072,7 +12086,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           antialias: { type: 'float', label: 'Softness' },
         },
         outputs: { result: { type: 'vec3', label: 'Color' }, alpha: { type: 'float', label: 'Alpha' } },
-        params: { strokeWidth: 0, antialias: 0.02, strokeAlign: 'center', aaMode: 'fixed' },
+        params: { __comment: 'Paints the bricks orange on the dark background, with a fixed 0.02 soft edge.', strokeWidth: 0, antialias: 0.02, strokeAlign: 'center', aaMode: 'fixed' },
       },
       {
         id: 'dr_shade',
@@ -12083,7 +12097,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           b: { type: 'float', label: 'B', connection: { nodeId: 'dr_dome', outputKey: 'height' } },
         },
         outputs: { result: { type: 'vec3', label: 'Result' } },
-        params: { outputType: 'vec3' },
+        params: { __comment: 'Colour × the dome\'s Height: bright in the middle, darker towards the rim, black outside the dome.', outputType: 'vec3' },
       },
       {
         id: 'dr_out',
@@ -12263,17 +12277,17 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
     description: 'MIDI Input turns a controller into floats — or the computer keyboard: turn on the keyboard stand-in on the card and play the A–K row. Velocity sets the circle\'s Radius (Multiply + Add), Gate brightens the SDF Glow while a key is held (Multiply on the Tinted output), Note picks the Palette colour, and CC 1 (the mod wheel) drives Turbulence strength on the UV. The same shape as the Audio examples: an outside signal in, floats out, everything else is ordinary nodes.',
     counter: 14,
     nodes: [
-      { id: 'mk_uv', type: 'uv', position: { x: 40, y: 120 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
-      { id: 'mk_t', type: 'time', position: { x: 40, y: 260 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      { id: 'mk_uv', type: 'uv', position: { x: 40, y: 120 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: { __comment: 'The canvas position, warped by Turbulence before the circle reads it.' } },
+      { id: 'mk_t', type: 'time', position: { x: 40, y: 260 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: { __comment: 'Seconds since start: flows the turbulence and slowly cycles the palette.' } },
       {
         id: 'mk_midi', type: 'midiInput', position: { x: 40, y: 420 }, inputs: {},
         outputs: { note: { type: 'float', label: 'Note' }, velocity: { type: 'float', label: 'Velocity' }, gate: { type: 'float', label: 'Gate' }, bend: { type: 'float', label: 'Pitch Bend' }, cc_1: { type: 'float', label: 'CC 1' } },
-        params: { channel: 'all', smooth_ms: 20, _ccs: [1] },
+        params: { __comment: 'Your controller on any channel, or the A–K keyboard stand-in on the card. Note, Velocity, Gate and CC 1 (the mod wheel) come out as 0–1 floats, smoothed over 20 ms.', channel: 'all', smooth_ms: 20, _ccs: [1] },
       },
       {
         id: 'mk_ccStr', type: 'multiply', position: { x: 300, y: 560 },
         inputs: { a: { type: 'float', label: 'A', connection: { nodeId: 'mk_midi', outputKey: 'cc_1' } }, b: { type: 'float', label: 'B' } },
-        outputs: { result: { type: 'float', label: 'Result' } }, params: { b: 0.4 },
+        outputs: { result: { type: 'float', label: 'Result' } }, params: { __comment: 'Mod wheel × 0.4: the turbulence strength, 0 at rest and 0.4 fully up.', b: 0.4 },
       },
       {
         id: 'mk_turb', type: 'turbulence', position: { x: 300, y: 120 },
@@ -12283,17 +12297,17 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           strength: { type: 'float', label: 'Strength', connection: { nodeId: 'mk_ccStr', outputKey: 'result' } },
         },
         outputs: { output: { type: 'vec2', label: 'Warped UV' } },
-        params: { octaves: 5, strength: 0.2, frequency: 1.5, decay: 0.7, rotate: 1 },
+        params: { __comment: 'Wobbles the UV with 5 layers of sine waves. Strength comes from the mod wheel, so the circle melts as you push it.', octaves: 5, strength: 0.2, frequency: 1.5, decay: 0.7, rotate: 1 },
       },
       {
         id: 'mk_velR', type: 'multiply', position: { x: 300, y: 340 },
         inputs: { a: { type: 'float', label: 'A', connection: { nodeId: 'mk_midi', outputKey: 'velocity' } }, b: { type: 'float', label: 'B' } },
-        outputs: { result: { type: 'float', label: 'Result' } }, params: { b: 0.35 },
+        outputs: { result: { type: 'float', label: 'Result' } }, params: { __comment: 'Velocity × 0.35: harder key presses make a bigger circle.', b: 0.35 },
       },
       {
         id: 'mk_rad', type: 'add', position: { x: 520, y: 340 },
         inputs: { a: { type: 'float', label: 'A', connection: { nodeId: 'mk_velR', outputKey: 'result' } }, b: { type: 'float', label: 'B' } },
-        outputs: { result: { type: 'float', label: 'Result' } }, params: { b: 0.2 },
+        outputs: { result: { type: 'float', label: 'Result' } }, params: { __comment: '+ 0.2: the radius never drops below 0.2, so the circle is there before you play.', b: 0.2 },
       },
       {
         id: 'mk_sdf', type: 'circleSDF', position: { x: 760, y: 200 },
@@ -12303,17 +12317,17 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           offset: { type: 'vec2', label: 'Center' },
         },
         outputs: { distance: { type: 'float', label: 'Distance' } },
-        params: { radius: 0.3 },
+        params: { __comment: 'The circle, its radius set by velocity, measured in the turbulent UV.', radius: 0.3 },
       },
       {
         id: 'mk_gateB', type: 'multiply', position: { x: 520, y: 480 },
         inputs: { a: { type: 'float', label: 'A', connection: { nodeId: 'mk_midi', outputKey: 'gate' } }, b: { type: 'float', label: 'B' } },
-        outputs: { result: { type: 'float', label: 'Result' } }, params: { b: 0.6 },
+        outputs: { result: { type: 'float', label: 'Result' } }, params: { __comment: 'Gate × 0.6: 0.6 while a key is held, 0 when it is released.', b: 0.6 },
       },
       {
         id: 'mk_bright', type: 'add', position: { x: 760, y: 480 },
         inputs: { a: { type: 'float', label: 'A', connection: { nodeId: 'mk_gateB', outputKey: 'result' } }, b: { type: 'float', label: 'B' } },
-        outputs: { result: { type: 'float', label: 'Result' } }, params: { b: 0.35 },
+        outputs: { result: { type: 'float', label: 'Result' } }, params: { __comment: '+ 0.35: brightness 0.35 at rest, 0.95 while a key is down.', b: 0.35 },
       },
       {
         id: 'mk_pal', type: 'palette', position: { x: 760, y: 660 },
@@ -12323,7 +12337,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           offset: { type: 'vec3', label: 'Offset' }, amplitude: { type: 'vec3', label: 'Amplitude' }, freq: { type: 'vec3', label: 'Frequency' }, phase: { type: 'vec3', label: 'Phase' },
         },
         outputs: { color: { type: 'vec3', label: 'Color' } },
-        params: { preset: '3', scale: 2, speed: 0.05 },
+        params: { __comment: 'The note number picks the colour (Scale 2 runs the palette twice over the note range), drifting slowly with Time (Speed 0.05).', preset: '3', scale: 2, speed: 0.05 },
       },
       {
         id: 'mk_glow', type: 'light', position: { x: 1020, y: 340 },
@@ -12333,12 +12347,12 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           tint: { type: 'vec3', label: 'Tint', connection: { nodeId: 'mk_pal', outputKey: 'color' } },
         },
         outputs: { glow: { type: 'float', label: 'Glow' }, inner: { type: 'float', label: 'Inner' }, tinted: { type: 'vec3', label: 'Tinted' } },
-        params: { mode: 'glow', brightness: 5 },
+        params: { __comment: 'Glow from the circle\'s edge (Falloff 5, a wide soft halo), tinted by the note\'s palette colour.', mode: 'glow', brightness: 5 },
       },
       {
         id: 'mk_amp', type: 'multiply', position: { x: 1260, y: 340 },
         inputs: { a: { type: 'vec3', label: 'A', connection: { nodeId: 'mk_glow', outputKey: 'tinted' } }, b: { type: 'float', label: 'B', connection: { nodeId: 'mk_bright', outputKey: 'result' } } },
-        outputs: { result: { type: 'vec3', label: 'Result' } }, params: { outputType: 'vec3' },
+        outputs: { result: { type: 'vec3', label: 'Result' } }, params: { __comment: 'Tinted glow × the gate brightness: the picture brightens while a key is held.', outputType: 'vec3' },
       },
       { id: 'mk_out', type: 'output', position: { x: 1500, y: 340 }, inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'mk_amp', outputKey: 'result' } } }, outputs: {}, params: {} },
     ],
@@ -12348,8 +12362,8 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
     description: 'Stops Palette builds a palette from five colour stops (Loop, Smooth) and cycles it with Time on Angle offset; the angle around the centre (Vec2 → Angle, Scale 1/2π) runs the stops once around the ring, and Loop makes the join seamless. A ring\'s SDF Glow is the field, and Colorize paints it with the palette: Colour × Field, the job Scale Color used to do. Change a stop\'s swatch or the Wrap mode to see the cycle change.',
     counter: 10,
     nodes: [
-      { id: 'cc_uv', type: 'uv', position: { x: 40, y: 160 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: {} },
-      { id: 'cc_t', type: 'time', position: { x: 40, y: 320 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: {} },
+      { id: 'cc_uv', type: 'uv', position: { x: 40, y: 160 }, inputs: {}, outputs: { uv: { type: 'vec2', label: 'UV' } }, params: { __comment: 'The canvas position, centred on 0: read as an angle for the colours and as a position for the ring.' } },
+      { id: 'cc_t', type: 'time', position: { x: 40, y: 320 }, inputs: {}, outputs: { time: { type: 'float', label: 'Time' } }, params: { __comment: 'Seconds since start, into the palette\'s Angle offset. Its Speed of 0.15 makes one trip round the stops take about 7 seconds.' } },
       {
         id: 'cc_len',
         type: 'atan2',
@@ -12358,7 +12372,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           v: { type: 'vec2', label: 'Vector', connection: { nodeId: 'cc_uv', outputKey: 'uv' } },
         },
         outputs: { angle: { type: 'float', label: 'Angle' } },
-        params: {},
+        params: { __comment: 'The angle of each pixel around the centre, from −π to π, so the colours run once round the ring.' },
       },
       {
         id: 'cc_pal', type: 'stopPalette', position: { x: 500, y: 300 },
@@ -12367,20 +12381,20 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           anim: { type: 'float', label: 'Angle offset', connection: { nodeId: 'cc_t', outputKey: 'time' } },
         },
         outputs: { color: { type: 'vec3', label: 'Color' } },
-        params: { value: 0, anim: 0, scale: 0.159155, speed: 0.15, stops: '5', wrap: 'loop', blend: 'smooth',
+        params: { __comment: 'Five colour stops with Loop wrap and Smooth blend. Scale 0.159 (1 ÷ 2π) turns the angle into exactly one trip through the stops per turn, and Loop makes the join seamless. Change a swatch or the Wrap to see the cycle change.', value: 0, anim: 0, scale: 0.159155, speed: 0.15, stops: '5', wrap: 'loop', blend: 'smooth',
           color0: [0.16, 0.07, 0.35], color1: [0.72, 0.13, 0.52], color2: [0.98, 0.45, 0.22], color3: [0.99, 0.84, 0.38], color4: [0.18, 0.62, 0.67],
           color5: [0.35, 0.8, 0.45], color6: [0.2, 0.35, 0.85], color7: [0.95, 0.95, 0.95] },
       },
       {
         id: 'cc_ring', type: 'ringSDF', position: { x: 260, y: 120 },
         inputs: { position: { type: 'vec2', label: 'UV', connection: { nodeId: 'cc_uv', outputKey: 'uv' } }, radius: { type: 'float', label: 'Radius' } },
-        outputs: { distance: { type: 'float', label: 'Distance' } }, params: { radius: 0.45, posX: 0, posY: 0 },
+        outputs: { distance: { type: 'float', label: 'Distance' } }, params: { __comment: 'A ring of radius 0.45 round the centre; its distance feeds the glow.', radius: 0.45, posX: 0, posY: 0 },
       },
       {
         id: 'cc_glow', type: 'light', position: { x: 500, y: 100 },
         inputs: { distance: { type: 'float', label: 'Distance', connection: { nodeId: 'cc_ring', outputKey: 'distance' } }, brightness: { type: 'float', label: 'Brightness' }, tint: { type: 'vec3', label: 'Tint' } },
         outputs: { glow: { type: 'float', label: 'Glow' }, inner: { type: 'float', label: 'Inner' }, tinted: { type: 'vec3', label: 'Tinted' } },
-        params: { mode: 'simple', brightness: 1.5, tint: [1, 1, 1] },
+        params: { __comment: 'Simple mode: 0.015 ÷ distance (Falloff 1.5 × 0.01), a bright thin line on the ring that fades slowly outward.', mode: 'simple', brightness: 1.5, tint: [1, 1, 1] },
       },
       {
         id: 'cc_col', type: 'colorize', position: { x: 760, y: 200 },
@@ -12391,12 +12405,12 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
           gain: { type: 'float', label: 'Gain' },
         },
         outputs: { color: { type: 'vec3', label: 'Color' } },
-        params: { color: [1, 0.55, 0.2], background: [0.02, 0.01, 0.05], gain: 1 },
+        params: { __comment: 'Colour × Field: the palette colour (wired into Colour) scaled by the glow, over a near-black background.', color: [1, 0.55, 0.2], background: [0.02, 0.01, 0.05], gain: 1 },
       },
       {
         id: 'cc_tone', type: 'toneMap', position: { x: 1000, y: 200 },
         inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'cc_col', outputKey: 'color' } } },
-        outputs: { color: { type: 'vec3', label: 'Color' } }, params: { mode: 'tanh' },
+        outputs: { color: { type: 'vec3', label: 'Color' } }, params: { __comment: 'Tanh tone mapping squashes the glow\'s core, which grows without limit on the ring, into a smooth highlight.', mode: 'tanh' },
       },
       { id: 'cc_out', type: 'output', position: { x: 1220, y: 200 }, inputs: { color: { type: 'vec3', label: 'Color', connection: { nodeId: 'cc_tone', outputKey: 'color' } } }, outputs: {}, params: {} },
     ],
@@ -12407,7 +12421,7 @@ export const EXAMPLE_GRAPHS: Record<string, ExampleGraph> = {
 };
 
 // The Learn folder is built from the node definitions at load; its last lesson reuses a graph above.
-Object.assign(EXAMPLE_GRAPHS, buildLearnExamples(EXAMPLE_GRAPHS), buildVoxelExamples(), buildLearn3dExamples(), buildCurvedSpaceExamples(), buildRepeatSceneExamples(), buildPiecesExamples(), buildCurveTraceExamples(), buildComboExamples(), buildMatrixExamples(), buildDataExamples(), buildGridExamples(), buildBoundsExamples(), buildConvertExamples(), buildPassExamples(), buildAgentExamples(), buildAgentShaderExamples(), buildAgent3dExamples(), buildSimAgentExamples(), buildRideCurveExamples(), buildAgentSketchExamples(), buildBakeExamples(EXAMPLE_GRAPHS), buildExprLoopExamples(), buildSplatExamples(EXAMPLE_GRAPHS), buildTimeCubeExamples(), buildFrameStackExamples(), buildFourDExamples(), buildFourDProjectionExamples(), buildTextureToolExamples(), buildMemoryExamples(), buildSendReceiveExamples(), buildAudioExamples(), buildPictureExamples(), buildPictures3DExamples(), buildRaysExamples(), buildSimGridExamples(), buildSceneBuilderExamples(), buildSceneBuilder2DExamples(), buildAgentRuleExamples(), buildGridRulesExamples());
+Object.assign(EXAMPLE_GRAPHS, buildLearnExamples(EXAMPLE_GRAPHS), buildVoxelExamples(), buildLearn3dExamples(), buildCurvedSpaceExamples(), buildRepeatSceneExamples(), buildPiecesExamples(), buildCurveTraceExamples(), buildComboExamples(), buildMatrixExamples(), buildDataExamples(), buildGridExamples(), buildBoundsExamples(), buildConvertExamples(), buildPassExamples(), buildAgentExamples(), buildAgentShaderExamples(), buildAgent3dExamples(), buildSimAgentExamples(), buildRideCurveExamples(), buildAgentSketchExamples(), buildBakeExamples(EXAMPLE_GRAPHS), buildExprLoopExamples(), buildSplatExamples(EXAMPLE_GRAPHS), buildTimeCubeExamples(), buildFrameStackExamples(), buildFourDExamples(), buildFourDProjectionExamples(), buildTextureToolExamples(), buildMemoryExamples(), buildSendReceiveExamples(), buildAudioExamples(), buildPictureExamples(), buildPictures3DExamples(), buildRaysExamples(), buildSimGridExamples(), buildSceneBuilderExamples(), buildSceneBuilder2DExamples(), buildAgentRuleExamples(), buildGridRulesExamples(), buildCuratedExamples());
 // 3D: Hello Sphere was the same graph as Learn's first ray march (which is built from it above, with notes and
 // Play controls): one copy is kept, in Learn (MERGED_EXAMPLES opens the old key there).
 delete EXAMPLE_GRAPHS.rayMarchOutputs3D;

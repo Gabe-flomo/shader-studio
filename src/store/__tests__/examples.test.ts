@@ -4,7 +4,8 @@ import { parseAudioFxTarget, readAudioFxValue } from '../../types/playAudioFx';
 import { compileGraph } from '../../compiler/graphCompiler';
 import { getNodeDefinition, resolveNodeAliases } from '../../nodes/definitions';
 import { EXAMPLE_GRAPHS } from '../exampleGraphs';
-import { EXAMPLE_FOLDERS, EXAMPLE_INDEX, HIDDEN_EXAMPLE_KEYS } from '../exampleIndex';
+import { EXAMPLE_FOLDERS, EXAMPLE_INDEX, HIDDEN_EXAMPLE_KEYS, RETIRED_EXAMPLE_KEYS, SHOWCASE_FOLDERS } from '../exampleIndex';
+import { FEATURED_EXAMPLES } from '../../components/learn/featuredExamples';
 import { PLAY_EXAMPLE_KEYS } from '../playExampleIndex';
 import { PASS_EXAMPLE_KEYS } from '../passExamples';
 import type { GraphNode } from '../../types/nodeGraph';
@@ -31,13 +32,49 @@ const walk = (nodes: GraphNode[], visit: (n: GraphNode) => void) => {
 describe('bundled examples', () => {
   const keys = Object.keys(EXAMPLE_GRAPHS);
 
-  it('are all listed in the index and filed in exactly one folder', () => {
+  it('are all listed in the index, and each is in one showcase folder, a course, hidden or retired', () => {
     expect(Object.keys(EXAMPLE_INDEX).sort()).toEqual(keys.sort());
     const filed = EXAMPLE_FOLDERS.flatMap(f => f.keys);
-    const missing = keys.filter(k => k !== 'blank' && !filed.includes(k) && !HIDDEN_EXAMPLE_KEYS.includes(k));
-    expect(missing, 'examples no folder shows').toEqual([]);
-    expect(filed.filter((k, i) => filed.indexOf(k) !== i), 'filed twice').toEqual([]);
+    const missing = keys.filter(k => k !== 'blank' && !filed.includes(k) && !HIDDEN_EXAMPLE_KEYS.includes(k) && !RETIRED_EXAMPLE_KEYS.includes(k));
+    expect(missing, 'examples in no folder and not retired').toEqual([]);
+    const shown = SHOWCASE_FOLDERS.flatMap(f => f.keys);
+    expect(shown.filter((k, i) => shown.indexOf(k) !== i), 'in two showcase folders').toEqual([]);
+    const courses = EXAMPLE_FOLDERS.filter(f => f.course).flatMap(f => f.keys);
+    expect(courses.filter((k, i) => courses.indexOf(k) !== i), 'in two courses').toEqual([]);
     expect(filed.filter(k => !EXAMPLE_GRAPHS[k]), 'folder points at a missing example').toEqual([]);
+    // Retired examples stay loadable by key, and are listed nowhere.
+    expect(RETIRED_EXAMPLE_KEYS.filter(k => !EXAMPLE_GRAPHS[k]), 'retired but gone').toEqual([]);
+    expect(RETIRED_EXAMPLE_KEYS.filter(k => filed.includes(k)), 'retired but listed').toEqual([]);
+  });
+
+  it('the curated showcase: five per category (From the Internet as it is), the courses under Learn', () => {
+    for (const f of SHOWCASE_FOLDERS) if (f.label !== 'From the Internet') expect(f.keys.length, f.label).toBe(5);
+    expect(EXAMPLE_FOLDERS.filter(f => f.course).map(f => f.label)).toEqual(['Learn · Play course', 'Learn · Book of Shaders course', 'Learn · 3D course']);
+    expect(EXAMPLE_FOLDERS.find(f => f.label === 'Learn · Play course')!.keys).toEqual(PLAY_EXAMPLE_KEYS);
+    // Audio examples are off the lists (user feedback 2026-10-19); they still open by key.
+    expect(EXAMPLE_FOLDERS.map(f => f.label)).not.toContain('Audio');
+    expect(SHOWCASE_FOLDERS.flatMap(f => f.keys).filter(k => k.startsWith('audio'))).toEqual([]);
+    // The Start sheet's featured examples are all listed.
+    const shown = new Set(SHOWCASE_FOLDERS.flatMap(f => f.keys));
+    expect(FEATURED_EXAMPLES.filter(k => !shown.has(k))).toEqual([]);
+  });
+
+  it('every listed showcase example explains itself: a note on every node (and Play notes on a Play setup)', () => {
+    const bare: string[] = [];
+    for (const f of SHOWCASE_FOLDERS) {
+      if (f.label === 'From the Internet') continue;
+      for (const k of f.keys) {
+        const g = EXAMPLE_GRAPHS[k];
+        if (!g) continue;
+        if (g.play && !g.play.notes?.includes('**What it shows.**')) bare.push(`${k}: Play notes`);
+        // A Play showcase is about its layers and mappings: its notes carry it; the graph is a stand-in shader.
+        if (f.label === 'Play') continue;
+        const missing: string[] = [];
+        walk(g.nodes, n => { if (n.type !== 'output' && n.type !== 'comment' && !n.params?._groupOriginal && typeof n.params?.__comment !== 'string') missing.push(n.id); });
+        if (missing.length) bare.push(`${k}: ${missing.length} node(s) without a note (${missing.slice(0, 4).join(', ')})`);
+      }
+    }
+    expect(bare).toEqual([]);
   });
 
   it('are written in the current Grid Columns units, so none relies on the load migration', () => {
@@ -99,10 +136,9 @@ describe('bundled examples', () => {
     expect(problems).toEqual([]);
   });
 
-  it('the Play folder comes first, numbered in order, and every example has notes', () => {
-    const folder = EXAMPLE_FOLDERS[0];
-    expect(folder.label).toBe('Play');
-    expect(folder.keys).toEqual(PLAY_EXAMPLE_KEYS);
+  it('the Play folder comes first; the Play course is numbered in order, and every step has notes', () => {
+    expect(EXAMPLE_FOLDERS[0].label).toBe('Play');
+    expect(EXAMPLE_FOLDERS[0].keys.every(k => PLAY_EXAMPLE_KEYS.includes(k))).toBe(true);
     PLAY_EXAMPLE_KEYS.forEach((k, i) => {
       // The browser sorts by label, so the zero-padded number keeps learning order.
       expect(EXAMPLE_INDEX[k].label.startsWith(`${String(i + 1).padStart(2, '0')} · `), k).toBe(true);

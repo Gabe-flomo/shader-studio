@@ -72,7 +72,15 @@ const tile = (template: string) => $$('[data-xb-tile]').find(t => t.querySelecto
 const pick = (template: string) => click(tile(template)?.querySelector('[data-xb-pick]'));
 const rows = () => $$('[data-xb-step]').map(r => ({ i: r.getAttribute('data-xb-step'), ahead: r.hasAttribute('data-ahead'), text: r.querySelector('code')?.textContent }));
 
-beforeAll(() => setBuilderCatalogue(unpackCatalogue(JSON.parse(raw) as PackedCatalogue)));
+const CATALOGUE = unpackCatalogue(JSON.parse(raw) as PackedCatalogue);
+beforeAll(() => setBuilderCatalogue(CATALOGUE));
+/** The default of `x * #a` on a vec2, as a step writes it: the most common factor in the examples (it moves as examples change). */
+const SCALE = (() => {
+  const m = CATALOGUE.moves.find(mv => mv.template === 'x * #a' && mv.sig.in === 'vec2');
+  const h = m?.holes.find(x => x.kind === 'number');
+  const v = h && h.kind === 'number' ? h.default : 2;
+  return Number.isInteger(v) ? v.toFixed(1) : String(v);
+})();
 beforeEach(() => {
   localStorage.clear();
   rendered.calls.length = 0;
@@ -103,7 +111,7 @@ describe('the Expression Builder window', () => {
     // The empty chain's help, with the worked example
     expect($('[data-builder-help="empty:empty-chain"]')?.textContent).toMatch(/UV → Repeat → Centre → Circle/);
     // The renders asked for were the tiles applied to the seed
-    expect(rendered.calls.some(c => c.rows.some(r => r.expr === 'uv * 2.0'))).toBe(true);
+    expect(rendered.calls.some(c => c.rows.some(r => r.expr === `uv * ${SCALE}`))).toBe(true);
   });
 
   it('pick a move, go back to a step, walk forward, then add to graph', async () => {
@@ -116,8 +124,8 @@ describe('the Expression Builder window', () => {
     await settle(10);
     pick('length(x)');
     await settle();
-    expect(rows().map(r => r.text)).toEqual(['uv', 's1 = uv * 2.0', 's2 = fract(s1)', 's3 = length(s2)']);
-    expect($('[role="dialog"]')?.textContent).toContain('UV → zoom → repeat → distance · float');
+    expect(rows().map(r => r.text)).toEqual(['uv', `s1 = uv * ${SCALE}`, 's2 = fract(s1)', 's3 = length(s2)']);
+    expect($('[role="dialog"]')?.textContent).toMatch(/UV → \w+ → repeat → distance · float/);
 
     // Back to step 1: steps 2 and 3 stay, dimmed; the grid is for a vec2 again
     click($('[data-xb-step="1"]'));

@@ -37,6 +37,11 @@ export const TEMPLATES_2D: Template2D[] = [
     recipe: 'polar-repeat 6 · mirror x · smooth-union(circle r=0.12 at=(0.35,0.1), rounded-box size=(0.2,0.05) round=0.04 at=(0.55,0.2) rot=30) k=0.08 color=pink · glow 0.006 · tone aces · background night',
   },
   {
+    key: 'melt', label: 'Shapes melting together',
+    blurb: 'Four discs on their own orbits, joined by a smooth union: where they come close they melt into one body and their colours blend across the join (mix). Thin rings trace the four discs on their own, so you can see what is being melted. The Blend (k) sets how far apart they start to melt.',
+    recipe: 'smooth-union(circle r=0.22 at=(-0.42,0.02) color=#e3b48a @orbit(0.24 speed=0.1), circle r=0.18 at=(0.42,-0.04) color=#7fa6bf @orbit(0.24 speed=-0.1 phase=180), circle r=0.14 at=(0.02,0.34) color=#d8c7a0 @bob(0.2 speed=0.13), circle r=0.24 at=(0,-0.12) color=#b9765a @pulse(0.06 speed=0.2)) k=0.32 mix style=filled · ring r=0.22 th=0.002 at=(-0.42,0.02) color=#f2efe8 @orbit(0.24 speed=0.1) · ring r=0.18 th=0.002 at=(0.42,-0.04) color=#f2efe8 @orbit(0.24 speed=-0.1 phase=180) · ring r=0.14 th=0.002 at=(0.02,0.34) color=#f2efe8 @bob(0.2 speed=0.13) · ring r=0.24 th=0.002 at=(0,-0.12) color=#f2efe8 @pulse(0.06 speed=0.2) · glow 0.0018 falloff=1.6 · tone aces · vignette 0.45 · grain 0.02 · background night',
+  },
+  {
     key: 'pieces', label: 'Picture in pieces', hidden: !OFFER_PIECES,
     blurb: 'A picture rebuilt from circles, each its colour at home, that scatter on a noise field and flow back together. Pick the picture under Pictures.',
     recipe: 'texture picture · pieces picture count=36 · tone aces · background night',
@@ -53,8 +58,8 @@ export const TEMPLATES_2D: Template2D[] = [
   },
   {
     key: 'depthBeams', label: 'Glow beaming through depth',
-    blurb: 'Rings whose point is moved by the picture\'s depth: near and far parts pull them apart, so their glow beams through the picture. A sunset gradient flows along depth. Drop a picture on the Texture node it makes (or pick one on the Depth tab).',
-    recipe: 'ring r=0.22 th=0.012 color=gold glow @ring(6 r=0.45) @spin(0.05) · glow 0.006 falloff=1.1 · tone aces · bloom 0.4 · background black · depth-picture ridges fit=stretch space=shift shift=0.9 dir=90 focus=0.3 picture=0.8 gradient=sunset cycles=1.5 flow=0.05',
+    blurb: 'Fine rings of light whose space is moved by the picture\'s depth: where near meets far they bend and break, so they seem to pass behind the subject and in front of the room. A faint warm gradient flows along depth. Drop a picture on the Texture node it makes (or pick one on the Depth tab).',
+    recipe: 'ring r=0.2 th=0.0035 color=#ffdcb0 glow @ring(6 r=0.52) @spin(0.03) · glow 0.0022 falloff=1.5 · tone aces · bloom 0.12 · vignette 0.35 · background black · depth-picture photo fit=stretch space=shift shift=0.9 dir=90 focus=0.3 picture=1 gradient=sunset gradient-amount=0.22 cycles=1 flow=0.03',
   },
 ];
 

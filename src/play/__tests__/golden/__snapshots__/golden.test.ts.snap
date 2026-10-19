@@ -187,6 +187,18 @@ exports[`golden outputs: examples > convertCircleOptimised 1`] = `
 }
 `;
 
+exports[`golden outputs: examples > convertTunnel 1`] = `
+{
+  "warm": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > convertTunnelOptimised 1`] = `
+{
+  "warm": "- x120",
+}
+`;
+
 exports[`golden outputs: examples > curveTraceBeam 1`] = `
 {
   "g": "- x120",
@@ -1448,8 +1460,8 @@ exports[`golden outputs: examples > passEdgeGlow 1`] = `
 exports[`golden outputs: examples > passEdgesFromPicture 1`] = `
 {
   "gain": "- x120",
-  "soft": "- x120",
   "strength": "- x120",
+  "width": "- x120",
 }
 `;
 
@@ -1963,8 +1975,7 @@ exports[`golden outputs: examples > raysColourBurst 1`] = `
 
 exports[`golden outputs: examples > raysLightText 1`] = `
 {
-  "cx": "- x120",
-  "cy": "- x120",
+  "decay": "- x120",
   "int": "- x120",
   "len": "- x120",
   "thr": "- x120",
@@ -2379,6 +2390,7 @@ exports[`golden outputs: examples > ttColourKey 1`] = `
 
 exports[`golden outputs: examples > ttDataAdvect 1`] = `
 {
+  "home": "- x120",
   "speed": "- x120",
 }
 `;
@@ -2481,6 +2493,15 @@ exports[`golden outputs: examples > ttSegmentClick 1`] = `
 `;
 
 exports[`golden outputs: examples > ttSegmentPeople 1`] = `
+{
+  "blur": "- x120",
+  "grow": "- x120",
+  "soft": "- x120",
+  "thr": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > ttSegmentPick 1`] = `
 {
   "grow": "- x120",
   "soft": "- x120",

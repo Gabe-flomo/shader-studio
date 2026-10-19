@@ -50,5 +50,5 @@ offline, web pages), so it lands where the pointer is.
 - Inside a group they don't remember: they pass their input through (Lag, Spring, Hold), or give 0.
 - Settings aren't Play controls yet (they are compile-time).
 
-Examples: Memory 1 · Lag and Spring follow the mouse; Memory 2 · A beat with Envelope and Counter.
+Examples: Memory 1 · Lag and Spring follow a target (a jumping point until the mouse moves); Memory 2 · A beat with Envelope and Counter.
 Code: `src/nodes/definitions/memory.ts`, `src/compiler/memoryExpand.ts`. Tests: `src/compiler/__tests__/memoryNodes.test.ts`.

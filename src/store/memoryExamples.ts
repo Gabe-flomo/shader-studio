@@ -10,8 +10,8 @@ import { ctl, n } from './graphBuilder';
 
 export const MEMORY_EXAMPLE_INDEX: Record<string, { label: string; description: string; play?: true }> = {
   memFollow: {
-    label: 'Memory 1 · Lag and Spring follow the mouse',
-    description: 'Move the mouse over the picture. The orange disc follows it: across with a Lag (a smooth glide that slows as it arrives), up and down with a Spring (it overshoots and wobbles into place). The grey ring is the mouse itself.',
+    label: 'Memory 1 · Lag and Spring follow a target',
+    description: 'The amber disc chases a target (the grey ring): across with a Lag (a smooth glide that slows as it arrives), up and down with a Spring (it overshoots and wobbles into place). The target jumps somewhere new every couple of seconds until you move the mouse; then it is the mouse.',
   },
   memBeat: {
     label: 'Memory 2 · A beat with Envelope and Counter', play: true,
@@ -59,35 +59,53 @@ export function buildMemoryExamples(): Record<string, ExampleGraph> {
     label: MEMORY_EXAMPLE_INDEX.memFollow.label, description: MEMORY_EXAMPLE_INDEX.memFollow.description,
     counter: 40,
     nodes: [
-      n('mouse', 'mouse', 40, 300, note('Mouse: where the pointer is over the picture, in picture coordinates (X across, Y up).')),
-      n('lag', 'lag', 340, 160, { rise: 0.35, fall: 0.35, ...note([
-        'Lag: follows the mouse\'s X slowly. Each frame it moves a share of the way there, so it glides and slows as it arrives.',
-        'Rise and Fall: seconds to get 63% of the way, going right and going left. Set Fall longer for a quick move out and a slow drift back.',
-        'It remembers where it was last frame (in a shared one-pixel-per-node texture), which a shader alone can\'t.',
-      ]) }, { input: ['mouse', 'x'] }),
-      n('spring', 'spring', 340, 460, { frequency: 1.6, damping: 0.18, ...note([
-        'Spring: follows the mouse\'s Y like a weight on a spring: it shoots past and wobbles into place.',
-        'Frequency: swings a second. Damping: how fast the wobble dies (1 settles without overshooting).',
-      ]) }, { input: ['mouse', 'y'] }),
-      n('makeVec2', 'follow', 640, 300, note('Make Vec2: the Lag\'s X and the Spring\'s Y, as one position.'), { x: ['lag', 'value'], y: ['spring', 'value'] }),
-      n('uv', 'uv', 640, 560, note('UV: this pixel\'s place in the picture.')),
-      expr('look', 940, 300, {
-        label: 'Look', outputType: 'vec3',
-        inputs: [['uv', 'vec2', ['uv', 'uv']], ['m', 'vec2', ['mouse', 'uv']], ['f', 'vec2', ['follow', 'xy']], ['vy', 'float', ['spring', 'velocity']]],
+      n('mouse', 'mouse', 40, 300, note('Mouse: where the pointer is over the picture, in picture coordinates (X across, Y up). Pixels is still 0, 0 until the pointer has moved over the picture.')),
+      expr('target', 340, 300, {
+        label: 'Target', outputType: 'vec2',
+        inputs: [['m', 'vec2', ['mouse', 'uv']], ['px', 'vec2', ['mouse', 'px']]],
         lines: [
-          ['float ring', '1.0 - smoothstep(0.004, 0.012, abs(length(uv - m) - 0.06))'],
-          ['float disc', '1.0 - smoothstep(0.09, 0.1, length(uv - f))'],
-          ['float glow', 'exp(-length(uv - f) * 6.0) * min(abs(vy), 2.0) * 0.25'],
+          ['float k', 'floor(t / 2.2)'],
+          ['vec2 jump', 'vec2(fract(sin(k * 12.9898) * 43758.5453) * 2.2 - 1.1, fract(sin(k * 78.233) * 43758.5453) * 1.2 - 0.6)'],
+          ['float live', 'step(0.5, length(px))'],
         ],
-        result: 'vec3(0.05, 0.06, 0.09) + glow * vec3(1.0, 0.5, 0.2) + disc * vec3(1.0, 0.55, 0.2) + ring * 0.5',
+        result: 'mix(jump, m, live)',
         note: [
-          'Expression Block: draws the mouse and its follower.',
-          'ring: a thin grey ring where the mouse is.',
-          'disc: the orange disc at the followed position.',
-          'glow: a halo that grows with the Spring\'s Velocity, so it flares as it swings.',
+          'Target: what the disc chases. Until you move the mouse it jumps to a new random place every 2.2 seconds, so the Lag and the Spring always have somewhere to go; once the pointer is over the picture it is the mouse.',
+          'k: which 2.2-second slot this is (t is the clock). jump: a random place for that slot, from two hashes of k.',
+          'live: 1 once the mouse has moved (its Pixels are no longer 0, 0).',
         ],
       }),
-      n('output', 'out', 1240, 300, note('Output: the follower and the mouse.'), { color: ['look', 'result'] }),
+      n('splitVec2', 'xy', 600, 300, note('Split Vec2: the target\'s X goes to the Lag, its Y to the Spring, so the two ways of following show side by side.'), { v: ['target', 'result'] }),
+      n('lag', 'lag', 860, 160, { rise: 0.35, fall: 0.35, ...note([
+        'Lag: follows the target\'s X slowly. Each frame it moves a share of the way there, so it glides and slows as it arrives.',
+        'Rise and Fall: seconds to get 63% of the way, going right and going left. Set Fall longer for a quick move out and a slow drift back.',
+        'It remembers where it was last frame (in a shared one-pixel-per-node texture), which a shader alone can\'t.',
+      ]) }, { input: ['xy', 'x'] }),
+      n('spring', 'spring', 860, 460, { frequency: 1.6, damping: 0.18, ...note([
+        'Spring: follows the target\'s Y like a weight on a spring: it shoots past and wobbles into place.',
+        'Frequency: swings a second. Damping: how fast the wobble dies (1 settles without overshooting).',
+      ]) }, { input: ['xy', 'y'] }),
+      n('makeVec2', 'follow', 1160, 300, note('Make Vec2: the Lag\'s X and the Spring\'s Y, as one position.'), { x: ['lag', 'value'], y: ['spring', 'value'] }),
+      n('uv', 'uv', 1160, 560, note('UV: this pixel\'s place in the picture.')),
+      expr('look', 1460, 300, {
+        label: 'Look', outputType: 'vec3',
+        inputs: [['uv', 'vec2', ['uv', 'uv']], ['m', 'vec2', ['target', 'result']], ['f', 'vec2', ['follow', 'xy']], ['vy', 'float', ['spring', 'velocity']]],
+        lines: [
+          ['float ring', '1.0 - smoothstep(0.003, 0.008, abs(length(uv - m) - 0.06))'],
+          ['float cross', '(1.0 - smoothstep(0.0, 0.004, abs(uv.x - f.x))) * step(abs(uv.y - f.y), 0.16) + (1.0 - smoothstep(0.0, 0.004, abs(uv.y - f.y))) * step(abs(uv.x - f.x), 0.16)'],
+          ['float disc', '1.0 - smoothstep(0.085, 0.092, length(uv - f))'],
+          ['float glow', 'exp(-length(uv - f) * 9.0) * min(abs(vy), 2.0) * 0.12'],
+        ],
+        result: 'vec3(0.035, 0.04, 0.055) + glow * vec3(1.0, 0.6, 0.3) + disc * vec3(0.95, 0.6, 0.32) + cross * 0.12 * (1.0 - disc) + ring * 0.45',
+        note: [
+          'Expression Block: draws the target and its follower.',
+          'ring: a thin grey ring where the target is.',
+          'cross: faint hairlines through the follower, so you can see X (the Lag) and Y (the Spring) arrive separately.',
+          'disc: the amber disc at the followed position.',
+          'glow: a faint halo that grows with the Spring\'s Velocity, so it warms as it swings.',
+        ],
+      }),
+      n('output', 'out', 1760, 300, note('Output: the follower and its target.'), { color: ['look', 'result'] }),
     ],
   };
 

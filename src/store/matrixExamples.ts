@@ -58,6 +58,8 @@ export const MATRIX_EXAMPLE_KEYS = Object.keys(MATRIX_EXAMPLE_INDEX);
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 const note = (text: string) => ({ __comment: text });
+/** A ready-made node (uv(), time(), group()) with a note added. */
+const noted = (node: GraphNode, text: string): GraphNode => ({ ...node, params: { ...node.params, __comment: text } });
 const map = (id: string, controlId: string, source: PlaySource, outMin: number, outMax: number): PlayMapping =>
   ({ id, controlId, source, outMin, outMax, curve: 'linear', smoothMs: 0, enabled: true });
 const lfo = (rate: number, shape: 'sine' | 'triangle' | 'saw' = 'sine'): PlaySource => ({ kind: 'lfo', shape, rate, phase: 0 });
@@ -136,12 +138,12 @@ export function buildMatrixExamples(): Record<string, ExampleGraph> {
 
   // ── 3 · Lattices ──────────────────────────────────────────────────────────
   add('matrixLattices', [
-    uv(),
-    n('mouse', 'mouse', 40, 420),
-    n('fieldCell', 'cell', 40, 640),
+    noted(uv(), 'The canvas position, into Grid Pattern.'),
+    n('mouse', 'mouse', 40, 420, { ...note('The mouse position: cells near it shrink (Affect Shrink, Mouse radius on the Play page).') }),
+    n('fieldCell', 'cell', 40, 640, { ...note('The cell being drawn; its Cell ID seeds the colour hash.') }),
     n('shapeSDF', 'hex', 320, 540, { shape: 'hexagon', r: 0.4, ...note('A hexagon in every hexagonal cell. Its size is in cell units: 0.5 would touch the neighbours.') }),
-    n('noiseFloat', 'hash', 320, 760, { mode: 'hash', scale: 1, speed: 0 }, { uv: ['cell', 'cellID'] }),
-    n('palette', 'pal', 580, 760, { preset: '3', scale: 0.6 }, { value: ['hash', 'value'] }),
+    n('noiseFloat', 'hash', 320, 760, { ...note('Hash mode: a random 0–1 number per cell from its Cell ID.'), mode: 'hash', scale: 1, speed: 0 }, { uv: ['cell', 'cellID'] }),
+    n('palette', 'pal', 580, 760, { ...note('That number picks each hexagon\'s colour (preset 3; Scale 0.6 keeps to part of the palette).'), preset: '3', scale: 0.6 }, { value: ['hash', 'value'] }),
     n('gridPattern', 'gp', 860, 260, { columns: 18, lattice: 'hex', rotation: 0.5236, affect: 'shrink', affectRadius: 0.8, affectSoftness: 0.9, affectAmount: 0.7, background: BG,
       ...note('Lattice: Hexagons. Every lattice is a basis matrix: the two steps from one cell centre to its neighbours, here (1, 0) and (0.5, 0.87). Rotation 30° lines the hexagon up with its cell.') },
       { uv: ['uv', 'uv'], affectPos: ['mouse', 'uv'], shape: ['hex', 'distance'], picture: ['pal', 'color'] }),
@@ -158,17 +160,17 @@ export function buildMatrixExamples(): Record<string, ExampleGraph> {
 
   // ── 4 · Any basis ─────────────────────────────────────────────────────────
   add('matrixAnyBasis', [
-    uv(),
-    time(40, 700),
-    n('multiply', 'spin', 260, 700, { b: 0.08 }, { a: ['time', 'time'] }),
-    n('rotationMatrix', 'rot', 300, 460, {}, { angle: ['spin', 'result'] }),
+    noted(uv(), 'The canvas position, into Grid Pattern.'),
+    noted(time(40, 700), 'Seconds since start, for the lattice\'s slow turn.'),
+    n('multiply', 'spin', 260, 700, { ...note('Time × 0.08: the lattice turns 0.08 radians a second (Turn speed on the Play page).'), b: 0.08 }, { a: ['time', 'time'] }),
+    n('rotationMatrix', 'rot', 300, 460, { ...note('A rotation matrix from that angle: it turns the whole lattice.') }, { angle: ['spin', 'result'] }),
     n('shearMatrix', 'sh', 300, 220, { x: 0.5, y: 0, ...note('Shear 0.5 turns squares into bricks; 1.0 into diamonds. An LFO sweeps it in Play.') }),
-    n('scaleMatrix', 'sc', 300, 0, { x: 1.0, y: 0.8 }),
-    n('mat2Mul', 'rs', 560, 340, {}, { a: ['rot', 'mat2'], b: ['sh', 'mat'] }),
+    n('scaleMatrix', 'sc', 300, 0, { ...note('A scale matrix: steps of 1 across and 0.8 up (Step across and Step up on the Play page).'), x: 1.0, y: 0.8 }),
+    n('mat2Mul', 'rs', 560, 340, { ...note('Rotation × Shear: the first half of the basis.') }, { a: ['rot', 'mat2'], b: ['sh', 'mat'] }),
     n('mat2Mul', 'basis', 800, 200, { ...note('Rotation × Shear × Scale: the columns of this matrix are the two steps between neighbouring cell centres.') }, { a: ['rs', 'mat'], b: ['sc', 'mat'] }),
-    n('fieldCell', 'cell', 800, 640),
-    n('noiseFloat', 'hash', 1040, 640, { mode: 'hash', scale: 1, speed: 0 }, { uv: ['cell', 'cellID'] }),
-    n('palette', 'pal', 1280, 640, { preset: '1', scale: 1 }, { value: ['hash', 'value'] }),
+    n('fieldCell', 'cell', 800, 640, { ...note('The cell being drawn; its Cell ID seeds the colour hash.') }),
+    n('noiseFloat', 'hash', 1040, 640, { ...note('Hash mode: a random 0–1 number per cell from its Cell ID.'), mode: 'hash', scale: 1, speed: 0 }, { uv: ['cell', 'cellID'] }),
+    n('palette', 'pal', 1280, 640, { ...note('That number picks each dot\'s colour (preset 1).'), preset: '1', scale: 1 }, { value: ['hash', 'value'] }),
     n('circleSDF', 'dot', 1040, 420, { radius: 0.24, ...note('Round dots, so the lattice itself is what you see changing.') }),
     n('gridPattern', 'gp', 1320, 220, { columns: 20, lattice: 'custom', affect: 'none', background: BG,
       ...note('Lattice: Custom reads the grid from the Basis input.') },
@@ -188,28 +190,28 @@ export function buildMatrixExamples(): Record<string, ExampleGraph> {
 
   // ── 5 · Fold, rotate, scale ───────────────────────────────────────────────
   add('matrixFoldFractal', [
-    uv(40, 300),
-    group('loop', 320, 200, {
+    noted(uv(40, 300), 'The canvas position: the carried point\'s value before the first pass.'),
+    noted(group('loop', 320, 200, {
       label: 'Fold · Rotate · Scale ×7', iterations: 7,
       inputs: [{ key: 'in_uv', type: 'vec2', label: 'UV', from: ['uv', 'uv'] }],
       outputs: [{ key: 'out_color', type: 'vec3', label: 'Color', from: ['glow', 'tinted'] }],
       nodes: [
-        n('loopCarry', 'carry', 60, 200, { dataType: 'vec2' }, { init: port('in_uv'), next: ['grow', 'result'] }),
+        n('loopCarry', 'carry', 60, 200, { ...note('The point carried across passes: the canvas UV before the first, then whatever the last pass made of it.'), dataType: 'vec2' }, { init: port('in_uv'), next: ['grow', 'result'] }),
         n('transformVec', 'fold', 300, 200, { exprX: 'abs(x)', exprY: 'abs(y)', ...note('Fold: abs() mirrors every quadrant onto the first, so each pass doubles the symmetry.') }, { uv: ['carry', 'value'] }),
         vec2Op(n('subtract', 'off', 540, 200, { b: 0.5, ...note('Shift the folded space, so the next fold cuts somewhere new.') }, { a: ['fold', 'result'] })),
-        n('rotationMatrix', 'rot', 540, 420, { angle: 0.7 }),
+        n('rotationMatrix', 'rot', 540, 420, { ...note('A rotation matrix of 0.7 radians (Turn per pass on the Play page). Small changes reshape the whole fractal.'), angle: 0.7 }),
         n('mat2MulVec', 'turn', 780, 200, { ...note('Turn the space with the matrix: the one angle that shapes the whole fractal.') }, { mat: ['rot', 'mat2'], vec: ['off', 'result'] }),
         vec2Op(n('multiply', 'grow', 1020, 200, { b: 1.4, ...note('Scale up, so each pass zooms into the last: the carry feeds this back into the next pass.') }, { a: ['turn', 'output'] })),
-        n('length', 'len', 1260, 200, {}, { input: ['grow', 'result'] }),
-        n('subtract', 'ring', 1500, 200, { b: 0.4 }, { a: ['len', 'output'] }),
-        n('loopIndex', 'i', 1260, 440),
-        n('multiply', 'hue', 1500, 440, { b: 0.11 }, { a: ['i', 'i'] }),
-        n('palette', 'pal', 1740, 440, { preset: '1', scale: 1 }, { value: ['hue', 'result'] }),
+        n('length', 'len', 1260, 200, { ...note('The distance of this pass\'s point from the centre.') }, { input: ['grow', 'result'] }),
+        n('subtract', 'ring', 1500, 200, { ...note('− 0.4: zero on a circle of radius 0.4 in this pass\'s space, the ring the glow draws.'), b: 0.4 }, { a: ['len', 'output'] }),
+        n('loopIndex', 'i', 1260, 440, { ...note('The pass number, 0 to 6.') }),
+        n('multiply', 'hue', 1500, 440, { ...note('Pass × 0.11: each pass moves a little further along the palette.'), b: 0.11 }, { a: ['i', 'i'] }),
+        n('palette', 'pal', 1740, 440, { ...note('This pass\'s colour (preset 1), tinting its ring.'), preset: '1', scale: 1 }, { value: ['hue', 'result'] }),
         n('light', 'glow', 1740, 200, { mode: 'simple', brightness: 0.35, ...note('A thin glowing ring per pass, coloured by the pass number. Its assignment is += so all seven passes add up.') },
           { distance: ['ring', 'result'], tint: ['pal', 'color'] }, { assignOp: '+=' } as Partial<GraphNode>),
       ],
-    }),
-    n('toneMap', 'tone', 640, 300, { mode: 'aces' }, { color: ['loop', 'out_color'] }),
+    }), 'A for loop of 7 passes: fold, shift, turn and scale the point, then draw a ring. Its Color output is the seven rings added up.'),
+    n('toneMap', 'tone', 640, 300, { ...note('ACES tone mapping keeps the stacked rings from clipping where they overlap.'), mode: 'aces' }, { color: ['loop', 'out_color'] }),
     out(['tone', 'color'], 900, 300),
   ], playRecord([
     ctl('ang', 'loop::rot::angle', 'Turn per pass', -3.1416, 3.1416, 0.005),
@@ -224,11 +226,11 @@ export function buildMatrixExamples(): Record<string, ExampleGraph> {
 
   // ── 6 · Corner pin ────────────────────────────────────────────────────────
   add('matrixCornerPin', [
-    uv(),
+    noted(uv(), 'The canvas position, into Corner Pin.'),
     n('cornerPin', 'pin', 300, 220, { x0: -0.6, y0: -0.55, x1: 0.6, y1: -0.7, x2: 0.45, y2: 0.6, x3: -0.5, y3: 0.5, ...note('Four corners → one 3×3 projective matrix (square → quad). The canvas goes through its inverse, so Centred is −1…1 across the card however it is tilted.') }, { uv: ['uv', 'uv'] }),
-    n('gridPattern', 'gp', 600, 120, { columns: 6, shape: 'circle', size: 0.32, pattern: 'checker', affect: 'none', color: [0.98, 0.78, 0.4], background: [0.12, 0.2, 0.42] },
+    n('gridPattern', 'gp', 600, 120, { ...note('A 6-column checker of circles drawn in the card\'s own coordinates, so it looks printed on the tilted card.'), columns: 6, shape: 'circle', size: 0.32, pattern: 'checker', affect: 'none', color: [0.98, 0.78, 0.4], background: [0.12, 0.2, 0.42] },
       { uv: ['pin', 'centered'] }),
-    n('colorPicker', 'bg', 600, 460, { color: [0.04, 0.04, 0.06] }),
+    n('colorPicker', 'bg', 600, 460, { ...note('The near-black background outside the card.'), color: [0.04, 0.04, 0.06] }),
     n('mask', 'card', 900, 220, { edge: 0.004, ...note('Edge is negative inside the quad: Mask shows the pattern there and the background outside.') },
       { a: ['gp', 'color'], b: ['bg', 'rgb'], mask: ['pin', 'edge'] }),
     out(['card', 'result'], 1160),
@@ -246,14 +248,18 @@ export function buildMatrixExamples(): Record<string, ExampleGraph> {
 
   // ── 7 · Rotated noise octaves ─────────────────────────────────────────────
   /** One octave: the base UV through a matrix (none for octave 0), a noise, a weight. */
+  const POWER = ['', 'A', 'A²', 'A³'];
+  const WEIGHT = ['½', '¼', '⅛', '1⁄16'];
   const octave = (i: number, x: number, y: number, from?: [string, string]) => [
-    ...(from ? [n('mat2MulVec', `p${i}`, x, y, {}, { mat: from, vec: ['base', 'result'] })] : []),
-    n('noiseFloat', `n${i}`, x + 240, y, { mode: 'smooth', scale: 1, speed: 0.15 }, { uv: from ? [`p${i}`, 'output'] : ['base', 'result'] }),
-    n('multiply', `w${i}`, x + 480, y, { b: 0.5 ** (i + 1) }, { a: [`n${i}`, 'value'] }),
+    ...(from ? [n('mat2MulVec', `p${i}`, x, y, { ...note(`The base UV through ${POWER[i]}: octave ${i} is turned ${i} × the Octave turn and about ${2 ** i} times finer, so its grid lines cross the others.`) }, { mat: from, vec: ['base', 'result'] })] : []),
+    n('noiseFloat', `n${i}`, x + 240, y, { mode: 'smooth', scale: 1, speed: 0.15, ...note(i === 0
+      ? 'Octave 0: smooth value noise on the base UV, as it is. The biggest shapes. Speed 0.15 drifts it slowly.'
+      : `Octave ${i}: the same smooth value noise, read in the turned, finer space.`) }, { uv: from ? [`p${i}`, 'output'] : ['base', 'result'] }),
+    n('multiply', `w${i}`, x + 480, y, { b: 0.5 ** (i + 1), ...note(`Octave ${i} × ${WEIGHT[i]}: each finer octave counts half as much as the last.`) }, { a: [`n${i}`, 'value'] }),
   ];
   add('matrixNoiseOctaves', [
-    uv(),
-    vec2Op(n('multiply', 'base', 260, 220, { b: 3 }, { a: ['uv', 'uv'] })),
+    noted(uv(), 'The canvas position.'),
+    vec2Op(n('multiply', 'base', 260, 220, { ...note('UV × 3: sets the size of the biggest noise shapes. Every octave starts from this.'), b: 3 }, { a: ['uv', 'uv'] })),
     n('rotationMatrix', 'rot', 40, 520, { angle: 0.64, ...note('The turn between octaves. At 0 every octave lines up with the same grid and it shows.') }),
     n('scaleMatrix', 'sc', 40, 760, { x: 2.03, y: 2.03, ...note('Each octave twice as fine (2.03, not 2, so the octaves never line up exactly).') }),
     n('mat2Mul', 'A', 300, 640, { ...note('A = Rotation × Scale: one octave step.') }, { a: ['rot', 'mat2'], b: ['sc', 'mat'] }),
@@ -263,10 +269,10 @@ export function buildMatrixExamples(): Record<string, ExampleGraph> {
     ...octave(1, 560, 260, ['A', 'mat']),
     ...octave(2, 800, 460, ['A2', 'mat']),
     ...octave(3, 1040, 660, ['A3', 'mat']),
-    n('add', 's01', 1340, 160, {}, { a: ['w0', 'result'], b: ['w1', 'result'] }),
-    n('add', 's23', 1580, 560, {}, { a: ['w2', 'result'], b: ['w3', 'result'] }),
+    n('add', 's01', 1340, 160, { ...note('Octaves 0 and 1 added.') }, { a: ['w0', 'result'], b: ['w1', 'result'] }),
+    n('add', 's23', 1580, 560, { ...note('Octaves 2 and 3 added.') }, { a: ['w2', 'result'], b: ['w3', 'result'] }),
     n('add', 'fbm', 1580, 300, { ...note('Octaves weighted ½, ¼, ⅛, 1⁄16 and added: FBM.') }, { a: ['s01', 'result'], b: ['s23', 'result'] }),
-    n('palette', 'pal', 1820, 300, { preset: '0', scale: 2.2 }, { value: ['fbm', 'result'] }),
+    n('palette', 'pal', 1820, 300, { ...note('Colours the FBM (preset 0). Scale 2.2 spreads its fairly narrow range over most of the palette.'), preset: '0', scale: 2.2 }, { value: ['fbm', 'result'] }),
     out(['pal', 'color'], 2060, 300),
   ], playRecord([
     ctl('turn', 'rot::angle', 'Octave turn', 0, 1.5708, 0.005),

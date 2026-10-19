@@ -18,7 +18,7 @@ import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { clampCount, loopCode, loopNameClashes, loopOnPatch, LOOP_MAX_DEFAULT, type ExprLoop } from '../exprLoop';
 import { exprBlockFunctionText, exprBlockLinesText, exprBlockToCustomFn } from '../exprToCustomFn';
 import { buildExprLoopExamples, EXPR_LOOP_EXAMPLE_KEYS } from '../../store/exprLoopExamples';
-import { EXAMPLE_FOLDERS } from '../../store/exampleIndex';
+import { unfiledIn } from '../../store/exampleIndex';
 import { exprPresetParams } from '../../lib/glslPatterns';
 import { workedLoop } from '../../lib/glslPatterns';
 import { loopPassesOf } from '../../components/explain/LoopPasses';
@@ -220,8 +220,8 @@ describe('saving', () => {
 
 describe('the examples', () => {
   const all = buildExprLoopExamples();
-  it('are in the Functions folder', () => {
-    expect(EXAMPLE_FOLDERS.find(f => f.label === 'Functions')!.keys).toEqual(expect.arrayContaining(EXPR_LOOP_EXAMPLE_KEYS));
+  it('are in Groups & Code or retired', () => {
+    expect(unfiledIn('Groups & Code', EXPR_LOOP_EXAMPLE_KEYS)).toEqual([]);
   });
   it.each(EXPR_LOOP_EXAMPLE_KEYS)('%s compiles, parses, has a live Iterations and notes on every node', key => {
     const nodes = resolveNodeAliases(all[key].nodes, getNodeDefinition);

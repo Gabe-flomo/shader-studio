@@ -17,7 +17,8 @@ describe('Learn 3D lessons', () => {
   it('sit in their own folder right after Learn, numbered in order', () => {
     const i = EXAMPLE_FOLDERS.findIndex(f => f.label === 'Learn 3D');
     expect(EXAMPLE_FOLDERS[i - 1].label).toBe('Learn');
-    expect(EXAMPLE_FOLDERS[i].keys).toEqual(LEARN3D_EXAMPLE_KEYS);
+    expect(EXAMPLE_FOLDERS[i].keys.every(k => LEARN3D_EXAMPLE_KEYS.includes(k))).toBe(true);
+    expect(EXAMPLE_FOLDERS.find(f => f.label === 'Learn · 3D course')?.keys).toEqual(LEARN3D_EXAMPLE_KEYS);
     expect(LEARN3D_EXAMPLE_KEYS.length).toBe(9);
     LEARN3D_EXAMPLE_KEYS.forEach((k, n) => {
       expect(EXAMPLE_INDEX[k].label.startsWith(`3D ${n + 1} · `), k).toBe(true);
