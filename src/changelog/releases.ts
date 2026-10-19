@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.304',
+    date: '2026-10-19',
+    title: "Clear is back",
+    highlights: [
+      { area: 'Studio', text: "The graph toolbar has Clear again (⌘⇧⌫): back to UV and Output in one undo step; right-click to reset to the starter graph." },
+    ],
+  },
+  {
     id: '2026.10.303',
     date: '2026-10-18',
     title: "Picture alone",
