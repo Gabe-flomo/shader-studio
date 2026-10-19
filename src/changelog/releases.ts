@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.313',
+    date: '2026-10-19',
+    title: "Listen to a band",
+    highlights: [
+      { area: 'Studio', text: "Press Listen on an audio band to hear what it listens to, with a click on every hit; slide between the band and the clicks." },
+    ],
+  },
+  {
     id: '2026.10.312',
     date: '2026-10-19',
     title: "Pause together",
