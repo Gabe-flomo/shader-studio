@@ -108,6 +108,8 @@ describe('Noisy ↔ tonal', () => {
     const db = new Float32Array(1024);
     expect(atBandFlatness(atSpectrumDbAt(tone, 0, 2048, db), SR, 200, 4000)).toBeLessThan(0.05);
     expect(atBandFlatness(atSpectrumDbAt(noise, 0, 2048, db), SR, 200, 4000)).toBeGreaterThan(1 - 4.5 / AT_FLAT_DB);
+    // Silence is neither noisy nor tonal: 0.
+    expect(atBandFlatness(new Float32Array(1024).fill(-Infinity), SR, 200, 4000)).toBe(0);
     // Hits on the band with Only: noisy finds every hat, live and ahead.
     const hb = band({ lo: 5000, hi: 16000, detect: 'hits', character: 'noisy', cooldown: 80 });
     for (const hits of [live(mono, hb).hits, ahead(mono, hb).hits]) expect(matchTimes(hits, hats, 0.045)).toEqual({ hit: hats.length, extra: 0 });

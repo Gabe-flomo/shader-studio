@@ -118,12 +118,16 @@ function drawScope(g: CanvasRenderingContext2D, w: number, h: number, b: AudioBa
     if (Math.abs(scopeY(b.threshold * b.releaseAt, h) - scopeY(b.threshold, h)) > 11) tag(`Release ${(b.threshold * b.releaseAt).toFixed(2)}`, b.threshold * b.releaseAt, b.color);
   }
   if (b.gate > 0 && (!b.trigger || Math.abs(scopeY(b.gate, h) - scopeY(b.threshold * b.releaseAt, h)) > 11)) tag(`Gate ${b.gate.toFixed(2)}${feature ? ' (level)' : ''}`, b.gate, LABEL);
-  g.textAlign = 'left'; g.textBaseline = 'top'; g.fillStyle = LABEL;
+  g.textAlign = 'left'; g.textBaseline = 'top';
   const what = feature ? `${detectLabel(b)} (level faint)` : 'Level';
   const only = b.trigger && b.character !== 'any' && b.detect !== 'flatness' && b.detect !== 'brightness' ? ` · only ${b.character}` : '';
-  g.fillText(bv
+  const label = bv
     ? `${what}${only} · ${bv.ahead ? 'analysed ahead · ' : ''}${bv.gateOpen ? 'gate open' : 'gate shut'}${b.trigger ? ` · ${bv.armed ? 'armed' : 'waiting to fall below Release'} · ${bv.count} hits` : ''}`
-    : `${what} · not running`, 4, 3);
+    : `${what} · not running`;
+  // A backing so the label reads over the traces and ticks.
+  g.fillStyle = 'rgba(17,17,27,0.78)'; g.fillRect(0, 0, g.measureText(label).width + 8, 15);
+  g.fillStyle = LABEL;
+  g.fillText(label, 4, 3);
 }
 
 type TrimDrag = { which: 'in' | 'out' | 'new' | 'select'; anchor: number; start: number; end: number };

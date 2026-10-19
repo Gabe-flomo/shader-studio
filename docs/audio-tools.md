@@ -54,7 +54,9 @@ The card shows a small live spectrum (bass on the left, log frequency) with your
   most any lets through). Bands saved before shapes open as Band.
 - **Add a band**: Sub, Bass, Kick, Snare, Hi-hat, Vocals, Air. Kick, Snare and Hi-hat come as triggers with Hit's
   ranges (Threshold 0.5, 0.35 and 0.2: broad, noisy bands read lower); the others send their level.
-- **Each band** has a name and a colour, **Low** and **High** in Hz, its **Gate**, and what it sends out:
+  **Add a detector**: Kick, Snare, Hats, Melody notes: bands that listen for a kind of sound (see *Detect* below).
+- **Each band** has a name and a colour, **Low** and **High** in Hz, its **Detect** (Level unless you pick another;
+  see *Detect* below) and **Only**, its **Gate**, and what it sends out:
   - **Value**: the band's level, 0–1, with **Attack**, **Release** (rise and fall times in seconds) and **Gain**;
   - **Trigger**: 1 for one frame each time the band's level rises above its **Threshold** (see *Triggers* below),
     exactly what Envelope (Trigger mode), Counter and Sample & Hold count;
@@ -72,7 +74,7 @@ If you hear nothing, click anywhere in the app: browsers only start sound after 
 
 ### Triggers: a line that stays put
 A trigger (a band's, and Hit's) watches the band's **level** (0–1, the same number its Value shows before Attack /
-Release / Gain) against lines that never move:
+Release / Gain), or what its Detect picked (see *Detect* below), against lines that never move:
 
 - **Threshold**: it fires when the level rises above this line.
 - **Release** (× Threshold, 0.8 to start): it re-arms only once the level falls back below Threshold × Release. A held
@@ -93,6 +95,48 @@ level it measures (newest on the right), the **Threshold** (solid, the band's co
 move it (it picks the nearest). The top-left says whether the gate is open, whether it is armed, and how many hits so far.
 Aim for: one tick per drum hit, the Threshold under the hits' peaks, the Gate over the noise floor between them.
 
+### Detect: what a band listens for
+A band's **Detect** picks what its Value sends and its Trigger fires on. The Threshold, Release, Min ms and Cooldown work
+on that number the same way; the **Gate** still reads the band's *level* (below it the band is silence, whatever it
+detects). Every choice is a number 0–1 (play/kit/audioTools.js "Detect"; the app and exported pages run the same code):
+
+- **Level** (the default; every band from before is Level): how loud the band is, as above.
+- **Hits**: onsets. How much the band's bins rose since the last frame (spectral flux: only rises count, on
+  log-compressed magnitudes), measured against the band's own recent average (half a second) and its loudness now:
+  flux ÷ (flux + 3 × recent average + 0.02 × loudness). 0.5 means "three times as much new sound as lately". A held note
+  has no flux, so a kick over a held bass line reads near 1 at each kick and near 0 between, where Level stays over its
+  line and merges the kicks into one.
+- **Transient**: attack sharpness. How far the band's level (in dB) jumped above a slow follower of itself (0.1 s), over
+  15 dB. A click, a snap or a drum reads 1; a swell that rises 50 dB a second stays under 0.4.
+- **Noisy ↔ tonal**: spectral flatness of the band (the geometric over the arithmetic mean of its bins' power, in dB,
+  over 30 dB): 0 is a pure tone, about 0.9 white noise, silence 0. Hats, snares and breath read high, chords and notes
+  low. It needs a band a few FFT bins wide (a bin is about 23 Hz).
+- **Brightness**: where the band's energy sits: its spectral centroid, on a log scale from the band's bottom (0) to its
+  top (1). A filter opening reads as a rising line.
+- **Drums only**: separates the drums from sustained sound first (harmonic / percussive separation: across time a
+  held note is steady, across frequency a hit is broad; a median each way and a soft mask), then finds Hits on the
+  drums alone. A bass line changing note under the kick is ignored; Hits would fire on every new note. A snare's low end
+  is a drum too, so it can fire a Kick band: narrow the band or raise the Threshold if it does.
+
+**Only** (Any / Noisy / Tonal), on Level, Hits, Transient and Drums only: lets a hit through only when what *arrived* in
+the band just after it (its bins' rises over the next 40 ms, weighted by how much rose) is noisy (drums, hats, snares)
+or tonal (melodic notes). **Noisy at** (0.3 to start) is the line on that flatness. A live hit waits those 40 ms to be
+judged (a File's are judged ahead, so they don't). Only never touches the Value.
+
+**The scope** draws the number Detect picked in the band's colour, with the level faint behind it (what the Gate
+reads). A band that sends only a Value and detects a feature gets a scope too (its Gate line is the only one to drag).
+
+**Add a detector** (under *Add a band*) adds bands with their Detect set: **Kick** (Drums only, 30–150 Hz), **Snare**
+(Drums only, noisy hits only, 150 Hz–5 kHz), **Hats** (Hits, noisy only, 6–16 kHz), **Melody notes** (Hits, tonal only,
+200 Hz–2 kHz). Each is a trigger with Threshold 0.5 and Min ms 0.
+
+**File, Mic, Video, web page.** A File is analysed ahead with the same sums every 5 ms (each flux compares with the
+moment ~15 ms before, about a live frame), and its hits fire as they are heard. Drums only differs there: ahead, the
+"held note" median is centred on each moment (0.1 s either side), so it sees how long a sound lasts both ways; live
+(Mic, Video and every web page, even for a File) it can only look back (the last 0.2 s), so a note that has just started
+looks "new" for a moment more. Hits, Transient, Noisy ↔ tonal and Brightness read the same live and ahead within a few
+hundredths (the tests check it); live hits come a frame or so later, as before. The Value is always read live.
+
 Graphs from before this change had a **Sensitivity** (a moving threshold). They open with a Threshold in its place
 (0.5 for the old default; higher sensitivity is a lower line: 0 → 0.7, 1 → 0.3) and Release 0.8; a band that sent a
 Value keeps no Gate, so its Value reads as it did.
@@ -102,8 +146,8 @@ A File's whole song is in memory, so its trigger bands are worked out **ahead**:
 background (a few seconds for a long song; the window says *Analysing the file…*, then *Triggers: analysed ahead*).
 Each hit is then fired when playback is **heard** reaching it, not when a frame happens to read the sound: the same at
 30, 60 or 120 frames a second, and lined up with the speakers. A Hit wired straight to a File works the same way.
-Changing a Threshold, Release, Gate, Min ms or Cooldown re-picks the hits at once; moving a band's range analyses that
-range again (the live frame stands in for the moment). The Mic and a Video are analysed live, frame by frame, with the
+Changing a Threshold, Release, Gate, Min ms, Cooldown or Only re-picks the hits at once; moving a band's range or
+changing its Detect analyses that range again (the live frame stands in for the moment). The Mic and a Video are analysed live, frame by frame, with the
 same Threshold, Release, Gate and Min ms.
 
 **Latency.** The browser plays a sound a little after it renders it (a few ms wired, 150–250 ms on Bluetooth or

@@ -476,8 +476,10 @@ function atBinRange(nb, sampleRate, lo, hi) {
 export function atBandFlatness(freqDb, sampleRate, lo, hi) {
   const [a, b] = atBinRange(freqDb.length, sampleRate, lo, hi);
   if (b < a) return 0;
-  let lg = 0, ar = 0;
-  for (let i = a; i <= b; i++) { const db = Math.max(AT_DB_FLOOR, freqDb[i]); lg += db; ar += Math.pow(10, db / 10); }
+  let lg = 0, ar = 0, top = AT_DB_FLOOR;
+  for (let i = a; i <= b; i++) { const db = Math.max(AT_DB_FLOOR, freqDb[i]); lg += db; ar += Math.pow(10, db / 10); if (db > top) top = db; }
+  // Silence is neither: 0 (not the 1 its equal, empty bins would read).
+  if (top <= AT_DB_FLOOR + 1) return 0;
   const n = b - a + 1, flatDb = lg / n - 10 * Math.log10(ar / n);
   return Math.max(0, Math.min(1, 1 + flatDb / AT_FLAT_DB));
 }

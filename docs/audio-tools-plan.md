@@ -166,6 +166,18 @@ Offset and Gain are uniforms (Spectrogram left SKIP_UNIFORM_TYPES; Min / Max dB 
 effectively before). Tested in Height Light, Ride a path inside an Agents group (the walkers' program samples the
 history), Step; example Audio 9 lights it as a landscape and bends stripes with it.
 
+## Band Detect (built, 2026-10-19)
+A band's **Detect** (docs/audio-tools.md "Detect"): Level (default, unchanged), Hits (spectral flux against the recent
+mean and the band's loudness), Transient (dB jump over a 0.1 s follower), Noisy ↔ tonal (flatness), Brightness
+(centroid), Drums only (HPSS, then Hits). **Only** (any / noisy / tonal) judges each hit by the flatness of what arrived
+in the 40 ms after it. Code: play/kit/audioTools.js "Detect" (atStepFeature, atBandArrival, atAnalyseFeatures; the
+same sums live, ahead and on pages), ahead.ts (curves per range + Detect: value, level, flatness, arrival), bands.ts
+(fields, BAND_DETECT_PRESETS), AudioSourceWindow.tsx (pickers, "Add a detector", the scope). Tests: detect.test.ts
+(synthetic kick/bass, hats/chords, notes/bursts, sweep, a little song; live vs ahead; page parity).
+
+Not done: Detect on the Hit node (it stays Level); a per-band FFT size (the 30–150 Hz kick band is only ~6 bins at
+2048, so HPSS there leans on the broadband start of a hit); tuning against real songs by ear.
+
 ## Phase 4 — Stems (plan only)
 Stem separation (drums / bass / vocals / other) as an offline bake with a local model, each stem becoming its
 own Audio Source. Any model download only after asking the user. (Built as Separate, then removed on 2026-10-18: the
