@@ -27,6 +27,9 @@ Node labels live in the node definitions; their rules are under "Node labels" be
 | **Inputs & media** | The node library row of UV, Time, Mouse, Texture, MIDI and data nodes (category `Sources` in the definitions) | Sources (as a node row) |
 | **Sound** | Play's section for the Audio engine. Its tabs: **Arrangement** (racks, the tape) and **Effects** (the effects on each sound and the master) | Engine (as a section), Sound (as its own tab) |
 | **Rules** | Play's When/Do section. A *signal* is one event a rule listens for | Signals (as the section) |
+| **Set a control · Nudge a control** | A rule's Do on a control's own value, as if its slider moved: *Set* puts it at a value, *Nudge* adds a step (stopping at the ends, or *wraps round*); a switch flips. They need no layers | Jump a control, Increment (that is a mapping's Step) |
+| **arrives** | How a rule with no When of its own reads when other rules send it: "When ‹Reached› arrives · sent by …" | Nothing yet (for a rule that is sent) |
+| **Behaviours** | Ready-made rules and sources (pinch to burst, pulse to the beat) in one library: the Rules header, the Rules start pane, and the Controls and Sources empty states | Templates, Recipes (for these) |
 | **Next** | The one suggestion surface: next moves for the selected node, learned from your graphs | |
 | **App settings** | The app's own preferences, in the top bar's ⋯ menu | |
 | **Library** | What you saved that goes on the graph (group presets first, My nodes, functions, Expression Blocks, transforms, palettes) and your media, drawn like the Nodes list: the sidebar entry, Files → Library (`docs/library.md`). Saved graphs are the top bar's **Load** | Saved Graphs, Saved Keyframes |
@@ -64,6 +67,13 @@ Node labels live in the node definitions; their rules are under "Node labels" be
   the name of the rack system inside it.
 - **Sound's Sound tab → Effects** (2026-10-18). The section was Sound and its effects tab was
   Sound too. The tab is named for what it holds; in context it can't be mistaken for effect nodes.
+- **Looks live in Presets** (2026-10-18, Play audit P17). The Grade card had a Look picker of its
+  own beside the Finish's Presets button: two preset systems for one stack. The Presets menu now
+  holds them all: *Your looks*, the built-in *Looks* and the *Starting stacks*, with *Save the
+  Grade as a look…* beside *Save stack as preset…*. The Grade card only says which look it's on.
+- **Set a control / Nudge a control** (2026-10-18, Play audit P11). With no layers a rule could only
+  send a signal. "Set" and "Nudge" are what the reaction does to the control, in the words the
+  rest of the Do list uses (Burst, Pulse, Set a setting); "Increment" stays the mapping's Step.
 - **Signals → Rules.** Only the shortcut id said Signals (its label already read "Go to Rules").
   "Signal" stays as the word for one event (a layer's *Signals out*, the built-in signals).
 - **colour.** The app's prose already leans British. Chrome strings say colour; node labels are a

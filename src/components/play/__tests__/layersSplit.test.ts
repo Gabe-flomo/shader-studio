@@ -14,12 +14,12 @@ const store = vi.hoisted(() => {
   return m;
 });
 import {
-  clampLayersSplitRatio, LAYERS_SPLIT_DEFAULT_RATIO, LAYERS_SPLIT_MIN_EDITOR_PX, LAYERS_SPLIT_MIN_LIST_PX, usePlayUi,
+  clampLayersSplitRatio, defaultLayersSplitRatio, LAYERS_LIST_DEFAULT_PX, LAYERS_SPLIT_DEFAULT_RATIO, LAYERS_SPLIT_MIN_EDITOR_PX, LAYERS_SPLIT_MIN_LIST_PX, usePlayUi,
 } from '../playUi';
 
 beforeEach(() => {
   store.clear();
-  usePlayUi.setState({ layersSplitRatio: LAYERS_SPLIT_DEFAULT_RATIO });
+  usePlayUi.setState({ layersSplitRatio: null });
 });
 
 describe('clampLayersSplitRatio', () => {
@@ -47,12 +47,26 @@ describe('clampLayersSplitRatio', () => {
   });
 });
 
+describe('the list’s default width (Play audit P12)', () => {
+  it('is about 220px, whatever the page’s width, until the divider is dragged', () => {
+    for (const total of [700, 900, 1400]) expect(defaultLayersSplitRatio(total) * total).toBeCloseTo(LAYERS_LIST_DEFAULT_PX);
+    expect(LAYERS_LIST_DEFAULT_PX).toBeGreaterThanOrEqual(LAYERS_SPLIT_MIN_LIST_PX);
+    expect(LAYERS_LIST_DEFAULT_PX).toBeLessThan(240);
+  });
+  it('falls back to the ratio while the width isn’t known', () => {
+    expect(defaultLayersSplitRatio()).toBe(LAYERS_SPLIT_DEFAULT_RATIO);
+  });
+});
+
 describe('usePlayUi layersSplitRatio', () => {
-  it('starts at the default and remembers a new ratio across "sessions"', () => {
-    expect(usePlayUi.getState().layersSplitRatio).toBe(LAYERS_SPLIT_DEFAULT_RATIO);
+  it('starts undragged (null) and remembers a new ratio across "sessions"; null forgets it', () => {
+    expect(usePlayUi.getState().layersSplitRatio).toBeNull();
     usePlayUi.getState().setLayersSplitRatio(0.55);
     expect(usePlayUi.getState().layersSplitRatio).toBe(0.55);
     expect(store.get('shader-studio:play:layersSplitRatio')).toBe('0.55');
+    usePlayUi.getState().setLayersSplitRatio(null);
+    expect(usePlayUi.getState().layersSplitRatio).toBeNull();
+    expect(store.has('shader-studio:play:layersSplitRatio')).toBe(false);
   });
 
   it('clamps whatever it is asked to remember', () => {

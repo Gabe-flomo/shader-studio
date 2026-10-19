@@ -1445,7 +1445,7 @@ Actions use them like keys, and they work on websites too (a background can reac
 **Try this.**
 • Drag on the picture to write with the pen.
 • Open the Studio to see the graph: UV → Layers → SDF Glow → Tone Map.
-• Turn "Seen by the Layers node" off on a layer to leave it out.`,
+• Turn "Shader effects see it" off in a layer's ⋯ menu to leave it out.`,
   })),
 
   // ─ Scripts ─
@@ -1628,12 +1628,12 @@ Actions use them like keys, and they work on websites too (a background can reac
     mappings: [map('depth', 'depth', S.lfo('sine', 0.05), 0.3, 0.8)],
     notes: `**What it shows.** What a sketch draws can go back into the shader. The **Layers** node gives the graph the layers' colour, alpha and a signed **distance** to them; SDF Glow on that distance turns thin white lines into neon.
 
-**How it's built.** UV → Layers → SDF Glow → Tone Map → Output. The Rose layer draws two rose curves, 2 pixels wide, and has **Seen by the Layers node** on (the default). An LFO sweeps the petals' depth.
+**How it's built.** UV → Layers → SDF Glow → Tone Map → Output. The Rose layer draws two rose curves, 2 pixels wide, and has **Shader effects see it** on (the default, in its ⋯ menu). An LFO sweeps the petals' depth.
 
 **Try this.**
 • Drag Glow falloff down for a wide haze, up for a tight tube.
 • In the editor, draw a filled circle: the glow hugs its outline.
-• Turn "Seen by the Layers node" off on the layer: the lines stay, the glow goes.`,
+• Turn "Shader effects see it" off in the layer's ⋯ menu: the lines stay, the glow goes.`,
   })),
 
   // ─ Backgrounds: an image, a video or a colour instead of the shader ─

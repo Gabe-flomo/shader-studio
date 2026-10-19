@@ -8,6 +8,7 @@
  * does nothing you can see. Node cards use this to say so, and to offer the
  * way back: pause those mappings, or take the slider off the Play panel.
  */
+import { withoutControlReactions } from './controlActions';
 import type { PlayRecord } from '../types/play';
 import { parseActionTarget, parsePropTarget } from '../types/play';
 import { mappingLabel } from './incrementUi';
@@ -53,5 +54,6 @@ export function removeFromPlay(play: PlayRecord, controlId: string): PlayRecord 
   const out: PlayRecord = { ...play, controls: play.controls.filter(c => c.id !== controlId), mappings: play.mappings.filter(m => m.controlId !== controlId) };
   // Its routes go; the sources stay (a source can drive nothing).
   if (play.sources) out.sources = play.sources.map(s => ({ ...s, outputs: s.outputs.map(o => ({ ...o, routes: o.routes.filter(r => r.to !== controlId) })) }));
-  return out;
+  // Rules that set or nudge it lose those reactions.
+  return withoutControlReactions(out, controlId);
 }

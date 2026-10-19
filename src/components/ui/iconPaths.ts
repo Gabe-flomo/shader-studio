@@ -101,6 +101,21 @@ export const ICONS = {
   layers: { sw: 1.4, body: "<path d='M8 2.2l5.8 3L8 8.2 2.2 5.2z'/><path d='M2.2 8.1L8 11.1l5.8-3'/><path d='M2.2 10.9L8 13.9l5.8-3'/>" },
   rail: { sw: 1.5, body: "<rect x='2' y='2.5' width='12' height='11' rx='2'/><path d='M5.2 2.5v11'/><circle cx='3.6' cy='5.4' r='.7' fill='currentColor' stroke='none'/><circle cx='3.6' cy='8' r='.7' fill='currentColor' stroke='none'/><circle cx='3.6' cy='10.6' r='.7' fill='currentColor' stroke='none'/>" },
   sidebarOff: { sw: 1.5, body: "<rect x='2' y='2.5' width='12' height='11' rx='2'/><path d='M4.5 5.5l7 5' opacity='.7'/>" },
+  // Play layer kinds (the Add layer menu and the layer list, play/layers/addLayerCatalog.ts): one set, 1.4 strokes.
+  shapes: { sw: 1.4, body: "<circle cx='5.9' cy='5.9' r='3.6'/><rect x='7.6' y='7.6' width='6.4' height='6.4' rx='1.3'/>" },
+  brush: { sw: 1.4, body: "<path d='M13.6 2.4L7.8 8.2'/><path d='M7.8 8.2c-1.5-.7-3.3.2-3.5 2-.1 1.3-.7 2.2-1.8 2.9 2.7.6 5.2-.1 5.8-2.1.3-1.1.1-2.1-.5-2.8z'/>" },
+  image: { sw: 1.4, body: "<rect x='2' y='3' width='12' height='10' rx='1.8'/><circle cx='5.7' cy='6.4' r='1.2'/><path d='M2.4 11.8l3.6-3.3 2.5 2.3 2-1.8 3.1 2.8'/>" },
+  film: { sw: 1.4, body: "<rect x='2' y='3' width='12' height='10' rx='1.8'/><path d='M5 3v10M11 3v10M2 6.4h3M2 9.6h3M11 6.4h3M11 9.6h3'/>" },
+  particles: { sw: 1.4, body: "<g fill='currentColor' stroke='none'><circle cx='3.2' cy='9.2' r='1.15'/><circle cx='6.4' cy='5' r='1.35'/><circle cx='8.3' cy='10.8' r='1.05'/><circle cx='11.4' cy='6.6' r='1.45'/><circle cx='12.9' cy='11.8' r='.95'/><circle cx='9.7' cy='2.7' r='.85'/><circle cx='4.6' cy='13' r='.8'/></g>" },
+  bodies: { sw: 1.4, body: "<path d='M1.8 14.2h12.4'/><circle cx='5' cy='11.4' r='2.6'/><circle cx='10.7' cy='11.8' r='2.2'/><circle cx='8.2' cy='6.2' r='2.4'/>" },
+  relation: { sw: 1.4, body: "<circle cx='3.8' cy='8' r='2.2'/><circle cx='12.2' cy='8' r='2.2'/><path d='M6.6 6.5h3.3M8.6 5.1l1.3 1.4M9.4 9.5H6.1M7.4 10.9L6.1 9.5'/>" },
+  contours: { sw: 1.4, body: "<path d='M2.6 9.2C2 5.8 4.4 2.6 7.8 2.5c3.3-.1 6 2.1 5.7 5.2-.2 2.2-1.9 2.6-2 4.4-.1 1.4-1.6 2.2-3.4 1.7-2.4-.7-5-1.6-5.5-4.6z'/><path d='M5.5 8.4c-.2-1.7 1-3.1 2.7-3.1 1.5 0 2.6 1 2.4 2.3-.1.9-.9 1.1-1 1.9-.1.7-.8 1-1.7.8-1.1-.3-2.3-.7-2.4-1.9z'/>" },
+  motion: { sw: 1.4, body: "<circle cx='10.6' cy='8' r='3.1'/><path d='M1.8 5.4h4M3 8h2.6M1.8 10.6h4'/>" },
+  droplet: { sw: 1.4, body: "<path d='M8 1.9S3.6 6.7 3.6 9.8a4.4 4.4 0 0 0 8.8 0C12.4 6.7 8 1.9 8 1.9z'/><path d='M6 10.2a2 2 0 0 0 1.8 1.9' opacity='.7'/>" },
+  nullPoint: { sw: 1.4, body: "<circle cx='8' cy='8' r='4.2'/><path d='M8 1.4v3M8 11.6v3M1.4 8h3M11.6 8h3'/><circle cx='8' cy='8' r='.9' fill='currentColor' stroke='none'/>" },
+  pads: { sw: 1.4, body: "<rect x='2' y='2' width='5.2' height='5.2' rx='1.2'/><rect x='8.8' y='2' width='5.2' height='5.2' rx='1.2'/><rect x='2' y='8.8' width='5.2' height='5.2' rx='1.2'/><rect x='8.8' y='8.8' width='5.2' height='5.2' rx='1.2' fill='currentColor'/>" },
+  /** The Finish rail page: the picture, finished (a frame with a sparkle). */
+  finish: { sw: 1.4, body: "<rect x='1.8' y='5.2' width='9.2' height='8.6' rx='1.8'/><path d='M4 11.6l2.2-2.2 1.6 1.4 1.4-1.2' opacity='.75'/><path d='M12.7 1.3l.6 1.6 1.6.6-1.6.6-.6 1.6-.6-1.6-1.6-.6 1.6-.6z'/>" },
 } satisfies Record<string, IconDef>;
 
 export type IconName = keyof typeof ICONS;

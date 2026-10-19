@@ -2271,7 +2271,7 @@ void main() {
         return f.fresh ? 0 : Math.min(4, stepFire(f.slot.st, a.trigger.fire, inp.presses, inp.gate, again ? 0 : dt, time));
       };
       // A Look action changes a Finish effect's numbers (layerValue reads them); the rest go to the layer kit.
-      const act = a => { if (looks && LK.is(a.do)) LK.act(looks, a, time); else if (K) K.act(a); };
+      const act = a => { if (a.do === 'ctlset' || a.do === 'ctlnudge') ctlAct(a); else if (looks && LK.is(a.do)) LK.act(looks, a, time); else if (K) K.act(a); };
       if (SG) { SG.runActions(actions, fires, act, emitSignal); return; }
       for (const a of actions) { const n = fires(a); if (a.do !== 'signal') for (let i = 0; i < n; i++) act(a); }
     }
@@ -2785,6 +2785,18 @@ void main() {
     // A control moved by hand (its slider, its colour, or the host through set()).
     const setColour = (c, rgb) => { base.set(c.id, rgb); const u = uniformFor(c); if (u && !live.has(c.id)) uniformValues[u] = rgb; needsDraw = true; };
     const setFloat = (c, v) => { base.set(c.id, v); const lt = layerTarget(c.target); if (lt) { const l = layersById.get(lt.layerId); if (l) l[lt.key] = v; } else { const u = uniformFor(c); if (u && !live.has(c.id)) uniformValues[u] = v; } needsDraw = true; };
+    // A rule's Set a control or Nudge a control (the app's play/controlActions.ts): as if its slider were moved.
+    function ctlAct(a) {
+      const c = controls.get(a.control);
+      if (!c || c.kind !== 'float') return;
+      const v = typeof a.value === 'number' && isFinite(a.value) ? a.value : 0;
+      if (a.do === 'ctlset') { setFloat(c, v); return; }
+      const lo = Math.min(c.min, c.max), hi = Math.max(c.min, c.max), b = base.get(c.id), cur = typeof b === 'number' ? b : c.min;
+      let next;
+      if (c.toggle) next = cur >= (lo + hi) / 2 ? c.min : c.max;
+      else { next = Math.round((cur + v) * 1e6) / 1e6; next = a.key === 'wrap' ? (next > hi + 1e-9 ? lo : next < lo - 1e-9 ? hi : next) : Math.max(lo, Math.min(hi, next)); }
+      setFloat(c, next);
+    }
     const fireAction = c => { const at = actTarget(c.target); if (at && K) { K.act({ do: at.do, layerId: at.layerId, amount: c.amount || 1 }); needsDraw = true; } };
     if (showPanel) {
       const head = el('div', 'ssp-head');

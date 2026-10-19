@@ -24,7 +24,9 @@ import { LoopsPanel } from '../SignalDefEditor';
 import { usePlayUi } from '../playUi';
 import { QuickRule } from './QuickRule';
 import { BehavioursDialog } from './BehavioursDialog';
+import { RulesStart } from './BehavioursLink';
 import { RuleCard } from './RuleCard';
+import { sendersOf } from './SentenceBuilder';
 import { reactionText } from './reactionChoices';
 import { signalStructure, type SignalShape } from '../signalFlow';
 import { ShapeBadge } from './ShapeBadge';
@@ -68,7 +70,8 @@ export function RulesPage({ play: raw, onChange: rawChange, wide }: { play: Play
       {!rules.length && !quick && (
         <div style={{ padding: '18px 16px', borderRadius: radius.lg, border: `1px dashed ${tk.border.strong}`, color: tk.text.muted, font: `12px/1.5 ${fontFamily.ui}` }}>
           <div style={{ font: `600 12.5px ${fontFamily.ui}`, color: tk.text.secondary, marginBottom: 4 }}>Nothing happens yet</div>
-          A rule says when something happens, what to do: when you pinch, burst the sparks; when the bass hits, step the text. Press + Rule, do the thing, and pick what happens.
+          {/* Wide, the other half says what a rule is (RulesStart): here just the way in. */}
+          {wide ? 'Press + Rule, do the thing (a key, a note, a pinch), and pick what happens.' : 'A rule says when something happens, what to do: when you pinch, burst the sparks; when the bass hits, step the text. Press + Rule, do the thing, and pick what happens.'}
           <div style={{ marginTop: 10 }}><Button size="sm" variant="primary" icon="plus" onClick={startQuick}>Rule</Button></div>
         </div>
       )}
@@ -77,7 +80,10 @@ export function RulesPage({ play: raw, onChange: rawChange, wide }: { play: Play
       </div>
     </div>
   );
-  const side = selected ? <RuleCard key={selected.id} rule={selected} play={play} onChange={onChange} on={!!on[selected.id]} flash={flash[selected.id] ?? 0} /> : null;
+  // Nothing to show yet: what a rule is, and behaviours to start from (stacked under the list, only the behaviours).
+  const side = selected
+    ? <RuleCard key={selected.id} rule={selected} play={play} onChange={onChange} on={!!on[selected.id]} flash={flash[selected.id] ?? 0} />
+    : !quick ? <RulesStart play={play} onChange={onChange} onAdded={id => { if (id) pick(id); }} compact={!wide} /> : null;
   return (
     <>
       <PageHeader title="Rules" count={rules.length} extra={<>
@@ -106,6 +112,8 @@ function RuleRow({ rule: r, play, shape, on, flash, selected, onPick }: { rule: 
   const tk = useTokens();
   const does = (r.do ?? []).filter(x => x.enabled);
   const auto = ruleName(play, r.inputs ?? [], sharedFire(r) ?? undefined, r.combine);
+  // A receiver (nothing of its own turns it on): who sends it.
+  const from = r.inputs?.length ? [] : sendersOf(play, r.id);
   return (
     <div role="option" aria-selected={selected} tabIndex={0} data-rule-row={r.id} onClick={onPick}
       onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPick(); } }}
@@ -118,6 +126,7 @@ function RuleRow({ rule: r, play, shape, on, flash, selected, onPick }: { rule: 
         </span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 4, font: `11.5px ${fontFamily.ui}`, color: tk.text.muted, minWidth: 0 }}>
           {r.name !== auto && (r.inputs?.length ?? 0) > 0 && <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '45%' }}>{auto.replace(/^When /, '')}</span>}
+          {from.length > 0 && <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '45%' }} title={`Sent by ${from.join(', ')}`}>arrives from {from.length === 1 ? from[0] : `${from.length} places`}</span>}
           <Icon name="chevR" size={11} style={{ flexShrink: 0, color: tk.text.faint }} />
           <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{does.length ? does.map(x => reactionText(x, play)).join(', ') : 'nothing yet'}</span>
         </span>

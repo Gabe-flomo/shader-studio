@@ -22,6 +22,12 @@ import { Select } from '../../ui/Select';
 import { NumberInput } from '../../NodeGraph/NumberInput';
 import { TriggerPicker } from '../TriggerPicker';
 import { labelContext } from '../ConditionFields';
+import { signalLinks } from '../FullPages';
+
+/** Who sends this rule's signal (other rules, layers), in words without their kind: "When Radius crosses up 0.28". */
+export function sendersOf(play: PlayRecord, id: string): string[] {
+  return [...new Set(signalLinks(play, id).sentBy.filter(x => !x.startsWith('Its own')).map(x => x.replace(/^(Rule|Action): /, '')))];
+}
 
 const COMBINES: { value: SignalCombine; label: string; title: string }[] = [
   { value: 'any', label: 'Any', title: 'On while any of them is' },
@@ -94,12 +100,24 @@ export function SentenceBuilder({ rule, play, fire, onInputs, onCombine, onVerb 
           <IconButton icon="close" size="sm" label="Remove this input" onClick={() => onInputs(inputs.filter((_, j) => j !== i))} />
         </div>
       ))}
-      {!inputs.length && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minHeight: 30 }}>
-          <span style={word}>When</span>
-          <span style={{ color: tk.text.faint, font: `12px ${fontFamily.ui}` }}>{learning === 0 ? 'Listening… move, press, pinch, play or make a sound' : 'Nothing yet: only a Test, or another rule sending it, turns it on.'}</span>
-        </div>
-      )}
+      {!inputs.length && (() => {
+        // A receiver: nothing of its own turns it on, but another rule (or a layer) sends it.
+        const from = learning === 0 ? [] : sendersOf(play, rule.id);
+        return (
+          <div data-receiver={from.length ? '' : undefined} style={{ display: 'flex', alignItems: 'baseline', gap: 6, minHeight: 30, paddingTop: 6 }}>
+            <span style={word}>When</span>
+            {from.length ? (
+              <span style={{ flex: 1, minWidth: 0, font: `12px/1.5 ${fontFamily.ui}`, color: tk.text.muted }}>
+                <span style={{ display: 'inline-block', padding: '1px 8px', borderRadius: radius.md, background: tk.bg.field, color: tk.text.primary, font: `600 12px ${fontFamily.ui}` }}>{rule.name}</span>
+                <span style={{ color: tk.text.primary }}> arrives</span>
+                <span> · sent by {from.join(', ')}</span>
+              </span>
+            ) : (
+              <span style={{ color: tk.text.faint, font: `12px ${fontFamily.ui}` }}>{learning === 0 ? 'Listening… move, press, pinch, play or make a sound' : 'Nothing yet: only a Test, or another rule sending it, turns it on.'}</span>
+            )}
+          </div>
+        );
+      })()}
       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 4, paddingLeft: 44 }}>
         <Button size="sm" variant="ghost" icon="spark" disabled={full} onClick={() => learn(inputs.length)}>{learning === inputs.length ? 'Listening…' : inputs.length ? 'Or when… (learn)' : 'Learn'}</Button>
         <Button size="sm" variant="ghost" icon="plus" disabled={full} onClick={() => onInputs([...inputs, { kind: 'trigger', trigger: { on: 'key', code: 'Space' } }])}>A key</Button>

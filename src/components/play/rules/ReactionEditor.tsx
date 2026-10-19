@@ -7,7 +7,8 @@
 import { useState } from 'react';
 import { useTokens } from '../../../theme/themeStore';
 import { fontFamily } from '../../../theme/tokens';
-import { NOTES_ACTION, SIGNAL_ACTION, defaultNotes, isLookAction, type PlayReaction, type PlayRecord, type TriggerSpec } from '../../../types/play';
+import { CONTROL_NUDGE_ACTION, NOTES_ACTION, SIGNAL_ACTION, defaultNotes, isControlAction, isLookAction, type PlayReaction, type PlayRecord, type TriggerSpec } from '../../../types/play';
+import { settableControls } from '../../../play/controlActions';
 import { NotesEditor } from './NotesEditor';
 import { padHasSound, padName } from '../../../types/playLayers';
 import { smNoteName, smNoteOfPad } from '../../../play/kit/sampler.js';
@@ -18,7 +19,7 @@ import { NumberInput } from '../../NodeGraph/NumberInput';
 import { SignalPicker } from '../ConditionFields';
 import { FirePicker } from '../TriggerPicker';
 import { fireOf } from '../../../play/playSources';
-import { defaultAmount, doChoices, doValue, lookDefaults, lookEffectOf } from './reactionChoices';
+import { controlDefaults, defaultAmount, doChoices, doValue, lookDefaults, lookEffectOf } from './reactionChoices';
 import { finishParamOf, finishParamsOf } from '../../../types/playFinish';
 
 export function ReactionEditor({ ruleId, r, play, onPatch, onRemove }: {
@@ -47,10 +48,13 @@ export function ReactionEditor({ ruleId, r, play, onPatch, onRemove }: {
           const l = play.layers.find(x => x.id === c.layerId);
           // A Look action on another effect (or a new kind) starts from its defaults; the same one keeps its setting.
           const look = isLookAction(c.do) ? (c.do === r.do && c.layerId === r.layerId ? {} : { key: undefined, value: undefined, seconds: undefined, x: undefined, y: undefined, ...lookDefaults(c.do, c.layerId, play) }) : {};
-          onPatch({ do: c.do, layerId: c.layerId, amount: c.do === r.do ? r.amount : defaultAmount(c.do, l), ...look, ...(c.do === SIGNAL_ACTION ? { signal: r.signal ?? play.signals?.find(s => s.id !== ruleId)?.id ?? '' } : {}),
+          // Set or Nudge a control keeps its control when switching between them; anything else lets go of it.
+          const ctl = isControlAction(c.do) ? (c.do === r.do ? {} : controlDefaults(c.do, play, r.control)) : r.control !== undefined ? { control: undefined } : {};
+          onPatch({ do: c.do, layerId: c.layerId, amount: c.do === r.do ? r.amount : defaultAmount(c.do, l), ...look, ...ctl, ...(c.do === SIGNAL_ACTION ? { signal: r.signal ?? play.signals?.find(s => s.id !== ruleId)?.id ?? '' } : {}),
             ...(c.do === NOTES_ACTION && c.rackId ? { notes: r.notes ? { ...r.notes, rackId: c.rackId } : defaultNotes(c.rackId) } : {}) });
         }} />
-        {r.do === SIGNAL_ACTION && <SignalPicker value={r.signal ?? ''} onChange={signal => onPatch({ signal })} />}
+        {r.do === SIGNAL_ACTION && <SignalPicker value={r.signal ?? ''} exclude={ruleId} onChange={signal => onPatch({ signal })} />}
+        {isControlAction(r.do) && <ControlFields r={r} play={play} numStyle={numStyle} onPatch={onPatch} />}
         {isLookAction(r.do) && <LookFields r={r} play={play} numStyle={numStyle} onPatch={onPatch} />}
         {(r.do === 'burst' || r.do === 'scatter' || r.do === 'multiply' || r.do === 'cull') && (
           <NumberInput value={r.amount} min={0} max={r.do === 'scatter' ? 10 : 5000} step={r.do === 'scatter' ? 0.5 : 10}
@@ -88,6 +92,39 @@ export function ReactionEditor({ ruleId, r, play, onPatch, onRemove }: {
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Set or Nudge a control's own fields: which control, then "to" a value or "by" a step (negative
+ * takes away) and whether a nudge stops at the ends of its range or goes round. A switch has on/off.
+ */
+function ControlFields({ r, play, numStyle, onPatch }: { r: PlayReaction; play: PlayRecord; numStyle: React.CSSProperties; onPatch: (patch: Partial<PlayReaction>) => void }) {
+  const tk = useTokens();
+  const w = (t: string) => <span style={{ color: tk.text.muted, font: `11.5px ${fontFamily.ui}` }}>{t}</span>;
+  const list = settableControls(play);
+  const c = list.find(x => x.id === r.control);
+  const nudge = r.do === CONTROL_NUDGE_ACTION;
+  const v = typeof r.value === 'number' ? r.value : 0;
+  const span = c ? Math.abs(c.max - c.min) || 1 : 1;
+  return (
+    <>
+      <Select ariaLabel="Which control" value={c ? c.id : r.control ?? ''} height={26} style={{ maxWidth: 170 }}
+        options={[...(c ? [] : [{ value: r.control ?? '', label: 'A removed control' }]), ...list.map(x => ({ value: x.id, label: x.label }))]}
+        onChange={id => onPatch(controlDefaults(r.do, play, id))} />
+      {c?.toggle
+        ? (nudge ? w('on ↔ off') : <Select ariaLabel="On or off" value={v >= (c.min + c.max) / 2 ? 'on' : 'off'} height={26} options={[{ value: 'on', label: 'on' }, { value: 'off', label: 'off' }]} onChange={o => onPatch({ value: o === 'on' ? c.max : c.min })} />)
+        : <>
+            {w(nudge ? 'by' : 'to')}
+            {/* A set may go past the slider's range, as typing on the slider does; a nudge is a step, any size. */}
+            <NumberInput value={v} min={nudge ? -span * 100 : -1e9} max={nudge ? span * 100 : 1e9} step={c?.step ?? (span / 100)}
+              title={nudge ? 'How much each time: negative takes away' : c ? `The value it goes to (its slider runs ${c.min} to ${c.max})` : 'The value it goes to'}
+              onCommit={n => onPatch({ value: n })} style={numStyle} />
+            {nudge && <Select ariaLabel="At the ends" value={r.key === 'wrap' ? 'wrap' : 'stop'} height={26} style={{ maxWidth: 150 }}
+              options={[{ value: 'stop', label: 'stops at the ends' }, { value: 'wrap', label: 'wraps round' }]}
+              onChange={k => onPatch({ key: k === 'wrap' ? 'wrap' : undefined })} />}
+          </>}
+    </>
   );
 }
 

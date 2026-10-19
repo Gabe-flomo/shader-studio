@@ -64,7 +64,7 @@ export const RAIL_CATEGORIES: readonly RailCategoryDef[] = [
   { id: 'controls', label: 'Controls', icon: 'sliders', description: 'The controls people play, and the sources that drive them', pages: ['controls', 'midi-file', 'pad-grid'] },
   { id: 'layers', label: 'Layers', icon: 'layers', description: 'What acts on the picture, and the background', pages: ['layers', 'background'] },
   { id: 'signals', label: 'Rules', icon: 'bolt', description: 'When something happens, what to do', pages: ['signals'] },
-  { id: 'finish', label: 'Finish', icon: 'curve', description: 'Grade, lens, film and time effects over the whole picture', pages: ['finish-picture'] },
+  { id: 'finish', label: 'Finish', icon: 'finish', description: 'Grade, lens, film and time effects over the whole picture', pages: ['finish-picture'] },
   { id: 'engine', label: 'Sound', icon: 'piano', description: 'The Audio engine, and effects on the sound', pages: ['engine-performance', 'finish-sound'] },
 ];
 

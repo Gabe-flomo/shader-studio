@@ -115,7 +115,7 @@ export function NullEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
             <label style={{ position: 'relative', width: 44, height: 26, borderRadius: 8, background: hex, cursor: 'pointer' }}>
               <input type="color" aria-label={`${l.label} marker colour`} value={hex} onChange={e => f.set({ color: e.target.value })} style={{ position: 'absolute', inset: 0, opacity: 0, width: '100%', height: '100%', cursor: 'pointer' }} />
             </label>
-            <span style={{ color: f.tk.text.faint, font: '11px Inter, system-ui, sans-serif' }}>Drag it on the picture. Its X and Y are sources in the mappings drawer.</span>
+            <span style={{ color: f.tk.text.faint, font: '11px Inter, system-ui, sans-serif' }}>Drag it on the picture. Its X and Y can drive controls: Map… under Accepts and emits.</span>
           </>
         ))}
       </Section>
@@ -485,7 +485,7 @@ export function ShapeEditor({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
         </Section>
       )}
       <Section kind="shape" title="Particles">
-        {f.select('Does', 'action', (Object.keys(ZONE_HELP) as ZoneAction[]).map(k => ({ value: k, label: ZONE_HELP[k].label })), 'What the shape does to particles (and bodies, for walls). Every shape also measures: map its Fill or Hover from the mappings drawer (source: Layer sensor).')}
+        {f.select('Does', 'action', (Object.keys(ZONE_HELP) as ZoneAction[]).map(k => ({ value: k, label: ZONE_HELP[k].label })), 'What the shape does to particles (and bodies, for walls). Every shape also measures: send its Fill or Hover to a control with Map… under Accepts and emits.')}
         {f.note(ZONE_HELP[action].body)}
         {['attract', 'repel', 'wind', 'vortex', 'drag', 'emitter', 'absorber'].includes(action) && f.prop('strength')}
         {['attract', 'repel', 'vortex', 'emitter', 'absorber'].includes(action) && f.prop('reach')}
