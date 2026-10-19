@@ -3,9 +3,11 @@
  * arrangement (docs/arrangement.md, "The Arrangement view"):
  *
  *   transport   Play/Pause (Space while the engine has focus), Stop (back to
- *               the start), Record, Loop, Metronome, Count-in, BPM, where the
- *               tape is (bars.beats.sixteenths and time), Make a take, MIDI
- *   tracks      one per rack: a header (colour, instrument, name, Lead, arm,
+ *               the start), Record (the armed tracks), Loop, Metronome,
+ *               Count-in, BPM, where the tape is (bars.beats.sixteenths and
+ *               time), MIDI. Making a take of the tape is in the Takes
+ *               section under the page (TakesSection.tsx, Play audit P8)
+ *   tracks      one per rack: a header (colour, instrument, name, Lead, Arm track,
  *               mute, solo, volume, meter; drag to reorder) and a lane on the
  *               bar/beat timeline with the loop brace, the record point and the
  *               playhead. Recordings are clips that look like audio (the
@@ -35,7 +37,6 @@ import type { IconName } from '../../ui/iconPaths';
 import { Menu, type MenuItem } from '../../ui/Menu';
 import { loadRackPresets, rackPresetSummary } from '../../../play/rackPresets';
 import { applyRackPresetToPlay, presetSoundToMaster, saveRackAsPreset } from '../presetsUi';
-import { toast } from '../../ui/toastStore';
 import { askConfirm } from '../../ui/dialogStore';
 import type { PlayRecord } from '../../../types/play';
 import {
@@ -45,8 +46,6 @@ import {
 import { AE_RACKS_MAX, newRack, patchRack, type AeRack } from '../../../types/playAudioEngine';
 import { tape, useTape, type TapePhase } from '../../../lib/tape';
 import { refreshPreviews, useTapePreviews, type LanePreview } from '../../../lib/tapePreview';
-import { arrangementTake } from '../../../lib/tapeTake';
-import { addTake, useTakes } from '../../../lib/takes';
 import { audioEngineHost, useEngineSelection, useEnginePrefs, useEngineUi } from '../../../lib/audioEngineHost';
 import { ENGINE_MASTER } from '../../../lib/engineSound';
 import { keyboardClaimed } from '../../../lib/keyboardClaim';
@@ -380,16 +379,11 @@ function TransportBar({ play, arr, touch, narrow }: { play: PlayRecord; arr: Pla
   const startEdit = () => { if (!recording) setPosEdit(barsBeats(tape.position(), arr.bpm).split('.').slice(0, 2).join('.')); };
   const aloneName = alone ? play.audioEngine?.racks.find(r => r.id === alone)?.name : '';
   const playLabel = running ? (recording ? (phase === 'counting' ? 'Pause: cancel the count-in' : 'Pause: stop recording (kept) and hold here') : 'Pause (Space)') : length > 0 ? `Play from ${barsBeats(point, arr.bpm)} (Space)` : 'Nothing on the tape yet: press Record';
+  // The transport's Record records the armed tracks (Arm track, ● on each track); Record video and takes are elsewhere (Play audit P8).
   const recLabel = recording ? 'Stop recording (keeps it: one undo step)'
-    : phase === 'playing' ? 'Punch in: record from here while the tape plays'
-      : length > 0 ? `Record ${aloneName ? `${aloneName} alone ` : ''}from ${barsBeats(point, arr.bpm)}${arr.countIn ? ` after ${arr.countIn} bar${arr.countIn > 1 ? 's' : ''} of count-in` : ''}` : 'Record: the first recording sets the tape’s length';
+    : phase === 'playing' ? 'Punch in: record the armed tracks from here while the tape plays'
+      : length > 0 ? `Record ${aloneName ? `${aloneName} alone ` : 'the armed tracks '}from ${barsBeats(point, arr.bpm)}${arr.countIn ? ` after ${arr.countIn} bar${arr.countIn > 1 ? 's' : ''} of count-in` : ''}` : 'Record the armed tracks: the first recording sets the tape’s length';
   const b = touch ? 38 : 30;
-  const makeTake = () => {
-    const take = arrangementTake(play, `Tape ${(play.takes ?? []).filter(t => t.tape?.made).length + 1}`);
-    if (!take) { toast.info('Nothing on the tape to make a take of'); return; }
-    addTake(take);
-    toast.success(`${take.name} is a take`, { message: 'Render it from Record like any take: the racks play the tape offline, sample by sample.', action: { label: 'Render…', onClick: () => useTakes.getState().renderTake(take.id) } });
-  };
   const desktop = isTauri();
   const engineLine = !desktop ? '' : status.error ? status.error : status.ready ? `${Math.round(status.sampleRate / 100) / 10} kHz` : '';
   return (
@@ -447,7 +441,6 @@ function TransportBar({ play, arr, touch, narrow }: { play: PlayRecord; arr: Pla
         <Select ariaLabel="Fade in" value={String(arr.fade)} height={b} style={{ flex: '0 1 118px', minWidth: 0 }}
           options={[0, 10, 50, 200, 500, 1000].map(ms => ({ value: String(ms), label: ms ? `Fade in ${ms} ms` : 'No fade in' }))}
           onChange={v => setArr(a => ({ ...a, fade: Number(v) }))} />
-        <IconButton icon="record" size={touch ? 'md' : 'sm'} disabled={!(arr.length > 0)} onClick={makeTake} label="Make a take: the tape as a take (its notes and rack controls), to render from Record" />
         <IconButton icon="antenna" size={touch ? 'md' : 'sm'} active={midi} label={midi ? 'Hide MIDI devices and the monitor' : 'MIDI devices and the monitor: which controllers are seen, and what they send'} onClick={() => setMidi(m => !m)} />
         {engineLine && <span title={status.error ? 'The desktop engine' : 'The desktop engine is running'} style={{ color: status.error ? tk.status.danger : tk.text.faint, font: `11px ${fontFamily.ui}`, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{engineLine}</span>}
       </div>
@@ -622,7 +615,7 @@ function Timeline({ play, arr, racks, rows, span, lanes, phase, narrow, touch, m
       {rows.length === 0 && (
         <div style={{ margin: '8px 0', padding: '16px 14px', borderRadius: radius.lg, border: `1px dashed ${tk.border.strong}`, color: tk.text.muted, font: `12px/1.5 ${fontFamily.ui}` }}>
           <div style={{ font: `600 12.5px ${fontFamily.ui}`, color: tk.text.secondary, marginBottom: 4 }}>No tracks yet</div>
-          A track is a rack: an instrument and its effects. {isTauri() ? 'Load an Audio Unit synth (Apple’s DLSMusicDevice is on every Mac), the sample player or the Granulator, add effects, and play it from a MIDI keyboard or the computer keyboard.' : 'In a browser a track plays the sample player or the Granulator; Audio Unit synths and effects need the desktop app on a Mac.'} Press Record and play: what you play lands on the track as a clip.
+          A track is a rack: an instrument and its effects. {isTauri() ? 'Load an Audio Unit synth (Apple’s DLSMusicDevice is on every Mac), the sample player or the Granulator, add effects, and play it from a MIDI keyboard or the computer keyboard.' : 'In a browser a track plays the sample player or the Granulator; Audio Unit synths and effects need the desktop app on a Mac.'} Tracks start armed (the ● on each, Arm track): press Record and play, and what you play lands on the armed tracks as clips.
         </div>
       )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', flexWrap: 'wrap' }}>
@@ -759,7 +752,7 @@ function Track({ play, arr, rack, row, index, count, track, span, preview, narro
           <IconButton icon="more" size="sm" label={`${rack.name}: rename, colour, lock as lead, move, clear, delete`} onClick={e => { e.stopPropagation(); const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); openMenu(r.left, r.bottom + 4); }} />
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 3, minWidth: 0 }}>
-          <Toggle2 on={row.arm} label="●" title={row.arm ? 'Armed: records when you press Record' : 'Not armed: Record leaves this track alone'} onClick={() => patchT({ arm: !row.arm })} touch={touch} color={tk.status.danger} />
+          <Toggle2 on={row.arm} label="●" title={row.arm ? 'Arm track: on, the transport’s Record records it' : 'Arm track: off, the transport’s Record leaves it alone'} onClick={() => patchT({ arm: !row.arm })} touch={touch} color={tk.status.danger} />
           <Toggle2 on={row.mute} label="M" title={row.mute ? 'Unmute this track' : 'Mute this track (live and on the tape)'} onClick={() => { edits.toggleMute(); if (track?.mute) patchT({ mute: false }); }} touch={touch} color={tk.status.warning} />
           <Toggle2 on={row.solo} label="S" title={row.solo ? 'Unsolo' : 'Solo on the tape: only soloed tracks play back'} onClick={() => patchT({ solo: !row.solo })} touch={touch} color={tk.accent.base} />
           <span style={{ flex: 1, minWidth: 40, display: 'flex', flexDirection: 'column', gap: 3, marginLeft: 3 }}>

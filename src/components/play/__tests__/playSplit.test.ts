@@ -29,7 +29,9 @@ describe('split prefs', () => {
     expect(parseSplitPrefs(JSON.stringify({ v: 4, railPageMemory: { layers: 'signals' } })).railPageMemory).toEqual({ signals: 'signals' });
     expect(parseSplitPrefs(JSON.stringify({ v: 4, railPage: 'actions' })).railPage).toBe('signals');
     // A save from before Controls and Mappings merged (2026-09-28) still has a `mappings` key: its pages now live under `controls`.
-    expect(parseSplitPrefs(JSON.stringify({ v: 4, railPageMemory: { mappings: 'midi-file', layers: 'actions' } })).railPageMemory).toEqual({ controls: 'midi-file', signals: 'signals' });
+    expect(parseSplitPrefs(JSON.stringify({ v: 4, railPageMemory: { mappings: 'midi-file', layers: 'actions' } })).railPageMemory).toEqual({ controls: 'controls', signals: 'signals' });
+    // The MIDI file and Pad grid pages are sources in Controls now (Play audit P10): a save on one opens Controls.
+    expect(parseSplitPrefs(JSON.stringify({ v: 4, railPage: 'midi-file', railPageMemory: { controls: 'pad-grid' } }))).toMatchObject({ railPage: 'controls', railPageMemory: { controls: 'controls' } });
     // The Background page is the Layers list's pinned row now (P13): a save on it opens Layers.
     expect(parseSplitPrefs(JSON.stringify({ v: 4, railPage: 'background', railPageMemory: { layers: 'background' } }))).toMatchObject({ railPage: 'layers', railPageMemory: { layers: 'layers' } });
     expect(parseSplitPrefs(JSON.stringify({ v: 4, railPage: 'nope' })).railPage).toBe('controls');

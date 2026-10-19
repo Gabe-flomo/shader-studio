@@ -5,7 +5,7 @@
  * it is held; and where the last pad landed.
  *
  * The grid's size, how pads line up with its cells and how a cell answers a
- * hit are set on the Play page (Mappings → Pad grid); the node only reads.
+ * hit are set on the Play page (Controls → Sources → + Map → Pad grid); the node only reads.
  * The cells tile the picture: column 0 at the left, row 0 at the bottom, so
  * the node gives each pixel its cell, its offset from the cell's centre in
  * UV units, and the cell's size, ready for a Circle SDF per cell.
@@ -40,7 +40,7 @@ export const PadGridNode: NodeDefinition = {
   label: 'Pad Grid',
   category: 'Sources',
   aliases: ['Launchpad', 'Push', 'MIDI pads', 'Pad matrix', 'Grid controller'],
-  description: 'The Play page\'s pad grid (Push, Launchpad, or the on-screen pads): each cell\'s Level (held, latched or fading after a hit), Velocity, Pressure and Held, and where the last pad landed. The cells tile the picture (column 0 left, row 0 bottom); Local and Cell Size place a shape in each cell. Set the grid up on the Play page: Mappings → Pad grid.',
+  description: 'The Play page\'s pad grid (Push, Launchpad, or the on-screen pads): each cell\'s Level (held, latched or fading after a hit), Velocity, Pressure and Held, and where the last pad landed. The cells tile the picture (column 0 left, row 0 bottom); Local and Cell Size place a shape in each cell. Set the grid up on the Play page: Sources → + Map → Pad grid.',
   inputs: {
     uv: { type: 'vec2', label: 'UV', hint: 'Where to read (the UV node\'s centred coordinates). Unwired: this pixel.' },
     cell: { type: 'vec2', label: 'Cell', hint: 'Read this cell (column, row) instead of the one under UV: wire a Grid\'s or a Cell node\'s Cell ID.' },

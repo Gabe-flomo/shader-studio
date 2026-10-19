@@ -1,7 +1,7 @@
 /**
- * The Controls page's sources column (pages/ControlsPage.tsx): the mappings
- * and the record's sources that drive the controls (MappingsDrawer), each
- * mapping's row, each source's card and its routes.
+ * The Controls page's sources column: the mappings and the record's sources
+ * that drive the controls (MappingsDrawer), each mapping's row, each source's
+ * card and its routes, and the MIDI file and pad grid cards (inputs/FileSources.tsx).
  */
 import { can, openProSheet, useCan } from '../../../lib/plan';
 import { sourceNeedsPro, sourceTypeNeedsPro, triggerNeedsPro } from '../../../play/planGates';
@@ -47,7 +47,6 @@ import { usesHands } from '../../../types/play';
 import { SoloButton, SoloStrip } from '../Solo';
 import { BuiltInSignalsSection } from '../BuiltInSignals';
 import { NoteClassMapDialog } from '../NoteClassMapDialog';
-import { PadGridCard } from '../PadGridCard';
 import { useReadersPanel } from '../readersPanelUi';
 import { BehavioursButton } from '../rules/BehavioursLink';
 import type { AudioReader } from '../../../types/play';
@@ -63,13 +62,15 @@ import { defaultIncrement, type PlayIncrement } from '../../../types/play';
 import { recordBpm } from '../../../types/playArrangement';
 import { NO_SOURCES, PANEL_GRID_WIDE, PanelHeader, usesMidi } from './shared';
 import { FedCurvePad, FedMeter, type LayerRef, type MeterFeed, SourceFields, SourceOptions, firstDataset, firstSensor, round3 } from './SourceFields';
-import { MidiFileSlot } from './ControlsPage';
+import { FileSources, MIDI_FILE_FOLD, PAD_GRID_FOLD, hasFileSources } from '../inputs/FileSources';
+import { loadMidiFile } from '../MidiFileCard';
+import { DEFAULT_PAD_GRID } from '../../../types/playMidi';
 
 // ── Mappings drawer ──────────────────────────────────────────────────────────
 
 export interface AudioNodeOption { id: string; label: string; bands: number }
 
-export function MappingsDrawer({ play, mode, grid = false, pages = false, height, onResizeStart, open, onToggle, onUpdate, onRemove, onAddPair, onUpdatePair, onRemovePair, onRecord, audioNodes, nullLayers, layerRefs, addControlButton }: {
+export function MappingsDrawer({ play, mode, grid = false, height, onResizeStart, open, onToggle, onUpdate, onRemove, onAddPair, onUpdatePair, onRemovePair, onRecord, audioNodes, nullLayers, layerRefs, addControlButton }: {
   play: PlayRecord;
   /** Edits to the record's own sources (their cards, Learn, + Map). */
   onRecord: (fn: (p: PlayRecord) => PlayRecord) => void;
@@ -79,8 +80,6 @@ export function MappingsDrawer({ play, mode, grid = false, pages = false, height
   mode: 'drawer' | 'tab';
   /** The rows as cards in columns (the split view's panel). */
   grid?: boolean;
-  /** The MIDI file and the pad grid have pages of their own: leave them out. */
-  pages?: boolean;
   height: number;
   onResizeStart: (e: React.PointerEvent) => void;
   open: boolean;
@@ -255,7 +254,16 @@ export function MappingsDrawer({ play, mode, grid = false, pages = false, height
     ? 'Add a control first, then map an input onto it.'
     : `Map a knob, a key, the mouse, the sound or your hands onto the controls: pick one, or Learn and move it. ${midi.status === 'ready' && midi.inputs.length ? `Listening to ${midi.inputs.join(', ')}. ` : ''}Connecting Ableton, a controller, OSC or live audio for the first time? “Connect gear…” in the ⋯ walks you through it.`;
   const openMapPicker = (anchor: 'head' | 'empty') => setMapPicker(m => (m ? null : { asSheet: menuAsSheet(window.innerWidth, 'auto'), anchor }));
-  const mapSections = useMemo(() => mapPickerSections(readers, !allSources, play.signals), [readers, allSources, play.signals]);
+  const midiFileOk = useCan('play.midiFile');
+  const midiFileName = play.midiFile?.name ?? null, hasPadGrid = !!play.padGrid;
+  const mapSections = useMemo(() => mapPickerSections(readers, !allSources, play.signals, { midiFile: midiFileName, padGrid: hasPadGrid, midiFileLocked: !midiFileOk }),
+    [readers, allSources, play.signals, midiFileName, hasPadGrid, midiFileOk]);
+  const midiInput = useRef<HTMLInputElement>(null);
+  /** Open a file-source card (the MIDI file's, the pad grid's) and bring it into view. */
+  const showFileCard = (key: string, kind: string) => {
+    usePlayUi.getState().toggleFold(key, false);
+    requestAnimationFrame(() => document.querySelector(`[data-file-source="${kind}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }));
+  };
   /** A "+ Map" pick: Learn, a dialog, or a new source of the record and Map mode (click the controls it drives). */
   const pickMap = (v: string) => {
     setMapPicker(null);
@@ -271,6 +279,20 @@ export function MappingsDrawer({ play, mode, grid = false, pages = false, height
       case 'behaviours': setBehavioursOpen(true); return;
       case 'readers': useReadersPanel.getState().show({ focus: '' }); return;
       case 'notes12': if (!allSources) { pro(); return; } setNoteMap(true); return;
+      // The MIDI file and the pad grid (Play audit P10): one of each, as cards here.
+      case 'midiFile':
+        if (play.midiFile) { showFileCard(MIDI_FILE_FOLD, 'midi-file'); return; }
+        if (!midiFileOk) { openProSheet('play.midiFile'); return; }
+        usePlayUi.getState().toggleFold(MIDI_FILE_FOLD, false);
+        midiInput.current?.click();
+        return;
+      case 'padGrid':
+        if (!play.padGrid) {
+          if (!allSources) { pro(); return; }
+          onRecord(rec => (rec.padGrid ? rec : { ...rec, padGrid: { ...DEFAULT_PAD_GRID } }));
+        }
+        showFileCard(PAD_GRID_FOLD, 'pad-grid');
+        return;
       case 'random': {
         if (!allSources && sourceTypeNeedsPro('noise')) { pro(); return; }
         const r = RANDOM_SOURCES[p.index];
@@ -357,8 +379,9 @@ export function MappingsDrawer({ play, mode, grid = false, pages = false, height
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: grid ? '8px 16px 16px' : '6px 12px 12px' }}>
           {status}
           <SoloStrip kind="mapping" total={play.mappings.length} />
-          {play.midiFile && !pages && <MidiFileSlot />}
-          {!ownSources.length && !play.mappings.length ? emptyState : mode === 'drawer' ? <>
+          {/* The MIDI file and the pad grid: source kinds from "+ Map", edited here (Play audit P10). */}
+          <FileSources />
+          {!ownSources.length && !play.mappings.length ? (hasFileSources(play) ? null : emptyState) : mode === 'drawer' ? <>
             {ownSources.length > 0 && <div style={grid ? PANEL_GRID_WIDE : undefined}>{ownSources.map(sourceCard)}</div>}
             {play.mappings.length > 0 && <div style={grid ? PANEL_GRID_WIDE : undefined}>{play.mappings.map(m => rowFor(m, { collapsed: isCollapsed(m.id) }))}</div>}
           </> : (
@@ -369,12 +392,12 @@ export function MappingsDrawer({ play, mode, grid = false, pages = false, height
           {!!play.pairs?.length && (
             <PairMappingsSection play={play} grid={grid} audioNodes={audioNodes} layerRefs={layerRefs} onAdd={onAddPair} onUpdate={onUpdatePair} onRemove={onRemovePair} />
           )}
-          {!play.midiFile && !pages && <MidiFileSlot />}
-          {!pages && <ProLock feature="play.sources" style={{ display: 'block', width: '100%' }}><PadGridCard /></ProLock>}
           {/* The built-in signals (Signals: count, active, share), folded at the bottom: once the setup has a signal to count. */}
           {mode !== 'drawer' && !!play.signals?.length && <ProLock feature="play.sources" style={{ display: 'block', width: '100%' }}><BuiltInSignalsSection onRecord={onRecord} /></ProLock>}
         </div>
       )}
+      <input ref={midiInput} type="file" accept=".mid,.midi,audio/midi,audio/x-midi" data-midi-file-input="" style={{ display: 'none' }}
+        onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void loadMidiFile(f); }} />
       {guideOpen && <ConnectGuide onClose={() => setGuideOpen(false)} />}
       {mapPicker && (
         <PickerPanel listId={mapListId} sections={mapSections} value="" ariaLabel="Map an input" title="Map an input" asSheet={mapPicker.asSheet} width={300}

@@ -38,6 +38,11 @@ export const GLOSSARY: readonly GlossaryTerm[] = [
   { name: 'Rules', means: 'Play’s When/Do section. A signal is one event a rule listens for', avoid: ['Signals (as the section)'] },
   { name: 'Set a control · Nudge a control', means: 'A rule’s Do on a control’s own value, as if its slider moved: Set puts it at a value, Nudge adds a step (stopping at the ends, or wrapping round); they need no layers', avoid: ['Jump a control', 'Increment (that is a mapping’s Step)'] },
   { name: 'arrives', means: 'How a rule with no When of its own reads when other rules send it: “When Reached arrives · sent by …”', avoid: ['Nothing yet (for a rule that is sent)'] },
+  { name: 'MIDI file · Pad grid', means: 'Source kinds in Sources’ “+ Map” picker (under MIDI), one of each per setup, their cards in the Sources column', avoid: ['MIDI file page', 'Pad grid page (they are not Controls sub-tabs)'] },
+  { name: 'Record video', means: 'The top bar Record’s first tab (and Stage’s Record video): the picture rendered or recorded to a video file, or a Snapshot PNG', avoid: ['Video (as the tab)'] },
+  { name: 'Record performance (take)', means: 'The top bar Record’s second tab (and Stage’s button): your moves kept as keyframes, a take, to watch back and export as a video', avoid: ['Performance (as the tab)', 'Record a performance', 'Start performance'] },
+  { name: 'Takes', means: 'The recorded performances. Their home is Sound → Arrangement → Takes (watch, rename, delete, Export video…); Record and Stage list them too', avoid: ['Render… (as a take’s button)', 'Make a take (as a transport button)'] },
+  { name: 'Arm track', means: 'The ● on a Sound track: the transport’s Record records the armed tracks onto the tape', avoid: ['Record enable'] },
   { name: 'Behaviours', means: 'Ready-made rules and sources in one library: the Rules header, the Rules start pane, and the Controls and Sources empty states', avoid: ['Templates', 'Recipes (for these)'] },
   { name: 'Next', means: 'The one suggestion surface: next moves for the selected node, learned from your graphs', avoid: [] },
   { name: 'App settings', means: 'The app’s own preferences, in the top bar’s ⋯ menu', avoid: [] },
@@ -64,6 +69,8 @@ export const BANNED: readonly BannedWord[] = [
   { pattern: /\bGo to (Mappings|Engine|Inputs|Look|Signals)\b/, use: 'the rail’s own name: Controls, Sources, Finish, Sound, Rules' },
   { pattern: /^(Inputs|Look|Engine|Mappings|Signals)( ·.*)?$/, use: 'Controls, Finish, Sound, Sources or Rules' },
   { pattern: /\bSaved (Graphs|Keyframes)\b/, use: 'Load (saved graphs) or the keyframe editor’s Presets' },
+  { pattern: /\bRecord a performance\b|\bStart performance\b/, use: 'Record performance (take), and Start the take' },
+  { pattern: /\b(MIDI file|Pad grid) (page|tab)\b/, use: 'the MIDI file / Pad grid source (“+ Map” → MIDI), not a Controls page' },
   { pattern: /\b[Cc]olor\b/, use: 'colour', allow: /\bAdd Color node\b|\bColor constant node\b/ },
 ];
 

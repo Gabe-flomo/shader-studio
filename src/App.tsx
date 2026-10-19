@@ -660,7 +660,7 @@ function App() {
 
   // Export animation modal
   const [showExport, setShowExport]           = useState(false);
-  // Render… on a take, or Record a performance on the Play page (lib/takes.ts).
+  // Export video… on a take, or Record performance (take) on the Play page (lib/takes.ts).
   useEffect(() => {
     const open = () => setShowExport(true);
     window.addEventListener('open-record', open);

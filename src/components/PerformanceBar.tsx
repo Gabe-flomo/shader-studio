@@ -6,7 +6,7 @@
  *
  *   count-in   Recording in 3… · Cancel
  *   recording  ● 0:07 / 0:15 · progress · Stop (⌘.)
- *   playback   play/pause · scrub · time · Render… · Record again · Discard · Done
+ *   playback   play/pause · scrub · time · Export video… · Record again · Discard · Done
  */
 import { useEffect, useRef, useState } from 'react';
 import { recordingStart, useTakes } from '../lib/takes';
@@ -164,8 +164,8 @@ function ReplayControls() {
         </span>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto' }}>
-        <Button size="sm" variant="primary" onClick={() => st().renderTake(take.id)} title="Render this take frame by frame, with no dropped frames">Render…</Button>
-        <Button size="sm" icon="record" onClick={() => st().begin()} title="Record another take (this one stays in the list)">Record again</Button>
+        <Button size="sm" variant="primary" onClick={() => st().renderTake(take.id)} title="Render this take frame by frame to a video file, with no dropped frames (opens Record video with it)">Export video…</Button>
+        <Button size="sm" icon="record" onClick={() => st().begin()} title="Record performance (take) again: this one stays in the Takes list">Record again</Button>
         <Button size="sm" variant="ghost" onClick={() => st().remove(take.id)} title="Delete this take">Discard</Button>
         <IconButton icon="close" label="Done: back to playing live" onClick={() => st().endReplay()} />
       </div>

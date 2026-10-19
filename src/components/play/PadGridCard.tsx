@@ -26,7 +26,8 @@ import { Select } from '../ui/Select';
 import { NumberInput } from '../NodeGraph/NumberInput';
 import { toast } from '../ui/toastStore';
 
-export function PadGridCard() {
+/** `bare`: inside its source card in the Sources column (inputs/FileSources.tsx), which names it: no box, no title of its own. */
+export function PadGridCard({ bare = false }: { bare?: boolean } = {}) {
   const tk = useTokens();
   const pg = useNodeGraphStore(s => s.play.padGrid);
   const setPlay = useNodeGraphStore(s => s.setPlay);
@@ -41,10 +42,10 @@ export function PadGridCard() {
       </div>
     );
   }
-  return <PadGridEditor pg={pg} />;
+  return <PadGridEditor pg={pg} bare={bare} />;
 }
 
-function PadGridEditor({ pg }: { pg: PlayPadGrid }) {
+function PadGridEditor({ pg, bare }: { pg: PlayPadGrid; bare: boolean }) {
   const tk = useTokens();
   const setPlay = useNodeGraphStore(s => s.setPlay);
   const patch = (p: Partial<PlayPadGrid>) => setPlay(r => (r.padGrid ? { ...r, padGrid: { ...r.padGrid, ...p } } : r));
@@ -87,10 +88,10 @@ function PadGridEditor({ pg }: { pg: PlayPadGrid }) {
   };
 
   return (
-    <div data-testid="pad-grid-card" style={{ margin: '8px 0 4px', padding: '8px 10px', borderRadius: radius.md, background: tk.bg.field }}>
+    <div data-testid="pad-grid-card" style={bare ? { margin: '6px 0 4px' } : { margin: '8px 0 4px', padding: '8px 10px', borderRadius: radius.md, background: tk.bg.field }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <Icon name="grid" size={14} style={{ color: tk.accent.base, flexShrink: 0 }} />
-        <span style={{ font: `600 12px ${fontFamily.ui}` }}>Pad grid</span>
+        {!bare && <Icon name="grid" size={14} style={{ color: tk.accent.base, flexShrink: 0 }} />}
+        {!bare && <span style={{ font: `600 12px ${fontFamily.ui}` }}>Pad grid</span>}
         <span style={{ color: tk.text.faint, font: `500 10.5px ${fontFamily.mono}` }}>{geo.cols}×{geo.rows} pads → {pg.cols}×{pg.rows} cells</span>
         <span style={{ flex: 1 }} />
         <IconButton icon="reset" label="Clear every cell (latched ones too)" size="sm" onClick={() => padGrid.clear()} />

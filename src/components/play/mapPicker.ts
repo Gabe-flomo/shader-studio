@@ -10,9 +10,11 @@
  * controls it should drive); Learn starts Learn mode (inputs/learnMode.ts).
  * Only MIDI kinds and Learn ask for the browser's MIDI access (mapPickAsksMidi).
  *
- * Room for later kinds: the MIDI file and the pad grid move in here as source
- * kinds in a later round (audit P10): add them to MAP_KIND_ENTRIES' MIDI entry
- * and handle their pick in PlayPage's MappingsDrawer.
+ * The MIDI file and the pad grid are kinds here too, under MIDI (audit P10):
+ * picking one adds it to the record (a .mid from the file picker; the pad grid
+ * with its defaults) and opens its card in the Sources column, where it is
+ * edited like the other sources (inputs/FileSources.tsx). There is one of
+ * each, so once the setup has it the item says so and picking it opens it.
  *
  * Pure: the page and its tests share it.
  */
@@ -26,6 +28,10 @@ export const MAP_LEARN = 'learn';
 export const MAP_BEHAVIOURS = 'behaviours';
 /** "12 notes → 12 targets…" (NoteClassMapDialog). */
 export const MAP_NOTES12 = 'notes12';
+/** A .mid played as if from a controller (the record's one `midiFile`). */
+export const MAP_MIDI_FILE = 'midiFile';
+/** A Push or Launchpad's pads as a grid shader's cells (the record's one `padGrid`). */
+export const MAP_PAD_GRID = 'padGrid';
 const TYPE = 'type:';
 const RANDOM = 'random:';
 
@@ -36,6 +42,8 @@ export type MapPick =
   | { kind: 'learn' }
   | { kind: 'behaviours' }
   | { kind: 'notes12' }
+  | { kind: 'midiFile' }
+  | { kind: 'padGrid' }
   | { kind: 'readers' }
   | { kind: 'random'; index: number }
   | { kind: 'signal'; id: string }
@@ -45,6 +53,8 @@ export function parseMapPick(v: string): MapPick | null {
   if (v === MAP_LEARN) return { kind: 'learn' };
   if (v === MAP_BEHAVIOURS) return { kind: 'behaviours' };
   if (v === MAP_NOTES12) return { kind: 'notes12' };
+  if (v === MAP_MIDI_FILE) return { kind: 'midiFile' };
+  if (v === MAP_PAD_GRID) return { kind: 'padGrid' };
   if (v.startsWith(RANDOM)) { const i = Number(v.slice(RANDOM.length)); return Number.isInteger(i) && RANDOM_SOURCES[i] ? { kind: 'random', index: i } : null; }
   if (!v.startsWith(TYPE)) return null;
   const t = v.slice(TYPE.length);
@@ -57,7 +67,8 @@ export function parseMapPick(v: string): MapPick | null {
 export function mapPickAsksMidi(v: string): boolean {
   const p = parseMapPick(v);
   if (!p) return false;
-  if (p.kind === 'learn' || p.kind === 'notes12') return true;
+  // A MIDI file plays inside the app: it needs no MIDI access. The pad grid listens to a controller.
+  if (p.kind === 'learn' || p.kind === 'notes12' || p.kind === 'padGrid') return true;
   return p.kind === 'type' && (p.type.startsWith('midi:') || p.type === 'pad');
 }
 
@@ -75,11 +86,33 @@ const RELABEL: Record<string, { label: string; description?: string }> = {
   clock: { label: 'Beat', description: 'A shape in time with a BPM' },
 };
 
+/** What the picker needs to know about the setup's one MIDI file and one pad grid. */
+export interface MapPickerFiles {
+  /** The setup has a MIDI file (its name), or not. */
+  midiFile?: string | null;
+  /** The setup has a pad grid. */
+  padGrid?: boolean;
+  /** Playing a MIDI file is Pro (`play.midiFile`) and the plan lacks it. */
+  midiFileLocked?: boolean;
+}
+
+/** The MIDI file and the pad grid as picker items: add one, or open the one the setup has. */
+export function fileKindItems(files: MapPickerFiles, locked: boolean): PickerItem[] {
+  return [
+    files.midiFile
+      ? { value: MAP_MIDI_FILE, label: 'MIDI file', icon: 'wave', description: `“${files.midiFile}” is playing: open its card`, keywords: 'mid song sequence file' }
+      : { value: MAP_MIDI_FILE, label: 'MIDI file…', icon: 'wave', description: 'A .mid plays in time, as if from a controller', keywords: 'mid song sequence file', pro: !!files.midiFileLocked },
+    files.padGrid
+      ? { value: MAP_PAD_GRID, label: 'Pad grid', icon: 'grid', description: 'Set up: open its card', keywords: 'push launchpad mpc pads cells' }
+      : { value: MAP_PAD_GRID, label: 'Pad grid', icon: 'grid', description: 'Push, Launchpad or on-screen pads as grid cells', keywords: 'push launchpad mpc pads cells', pro: locked },
+  ];
+}
+
 /**
  * The picker's sections. `locked` (Free) marks Pro on the kinds the plan lacks;
  * picking one opens the Pro sheet instead.
  */
-export function mapPickerSections(readers: ReadonlyArray<{ id: string; name: string }>, locked: boolean, signals: ReadonlyArray<{ id: string; name: string }> = []): PickerSection[] {
+export function mapPickerSections(readers: ReadonlyArray<{ id: string; name: string }>, locked: boolean, signals: ReadonlyArray<{ id: string; name: string }> = [], files: MapPickerFiles = {}): PickerSection[] {
   const typed = sourcePickerSections(readers, locked, signals);
   const byValue = new Map<string, PickerItem>();
   for (const s of typed) for (const it of s.items) byValue.set(it.value, it);
@@ -99,7 +132,7 @@ export function mapPickerSections(readers: ReadonlyArray<{ id: string; name: str
     { heading: 'MIDI', items: [
       ...types(KIND_TYPES.MIDI),
       { value: MAP_NOTES12, label: '12 notes → 12 targets…', icon: 'piano', description: 'C to B onto controls or layers, in order', keywords: 'note class octave', pro: locked },
-      // Later (audit P10): the MIDI file and the pad grid as kinds here.
+      ...fileKindItems(files, locked),
     ] },
     { heading: 'Keys', items: types(KIND_TYPES.Keys) },
     { heading: 'Mouse', items: types(KIND_TYPES.Mouse) },

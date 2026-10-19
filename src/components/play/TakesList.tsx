@@ -1,7 +1,9 @@
 /**
  * TakesList — the setup's recorded performances (lib/takes.ts): watch one
- * back, render it, rename or delete it. The Record dialog's Performance tab
- * and the Stage's side panel show the same list.
+ * back, rename it, delete it, or export it as a video (rendered frame by
+ * frame in Record video). Its home is Sound → Arrangement → Takes
+ * (TakesSection.tsx, Play audit P8); the Record dialog's "Record performance
+ * (take)" tab and the Stage's side panel show the same list.
  */
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { useTakes } from '../../lib/takes';
@@ -18,7 +20,7 @@ import type { PlayTake } from '../../types/play';
 const NO_TAKES: PlayTake[] = [];
 
 export function TakesList({ onRender, empty }: {
-  /** Render… was pressed (the take is already set for the Record dialog). */
+  /** Export video… was pressed (the take is already set for the Record dialog). */
   onRender?: (id: string) => void;
   /** Shown when there are no takes; nothing when left out. */
   empty?: string;
@@ -72,7 +74,7 @@ export function TakesList({ onRender, empty }: {
             <IconButton size="sm" icon={on ? 'pause' : 'play'} label={on ? 'Stop watching' : 'Watch it back'} onClick={() => (on ? useTakes.getState().endReplay() : useTakes.getState().replay(t.id))} />
             <IconButton size="sm" icon="edit" label="Rename" onClick={() => void rename(t)} />
             <IconButton size="sm" icon="trash" tone="danger" label="Delete this take" onClick={() => remove(t)} />
-            <Button size="sm" variant="ghost" onClick={() => { useTakes.getState().renderTake(t.id); onRender?.(t.id); }} title="Render it frame by frame: open Record with this take">Render…</Button>
+            <Button size="sm" variant="ghost" onClick={() => { useTakes.getState().renderTake(t.id); onRender?.(t.id); }} title="Render it frame by frame to a video file: opens Record video with this take">Export video…</Button>
           </div>
         );
       })}
