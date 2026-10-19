@@ -19,7 +19,7 @@ import type { GraphNode } from '../types/nodeGraph';
 import type { PassProgram } from './types';
 import type { generateFragmentShader } from './shaderAssembler';
 import { PASS_SCALES, passRepeat, passUniform } from '../nodes/definitions/passes';
-import { HIDDEN_PASS_TYPES, MAX_HIDDEN_PASSES, RAYS_NODE_TYPE, SOCKETED_HIDDEN_TYPES, blurMethod, hiddenSlug, isDeepGlow, planBlur, planDeepGlow, planRays } from './blurPasses';
+import { HIDDEN_PASS_TYPES, MAX_HIDDEN_PASSES, RAYS_NODE_TYPE, SOCKETED_HIDDEN_TYPES, blurMethod, hiddenSlug, isDeepGlow, planBlur, planDeepGlow, planRays, type BlurPlan } from './blurPasses';
 import { getNodeDefinitionFor } from '../nodes/definitions';
 
 /** The final picture's key in `before` / annotate. */
@@ -60,6 +60,24 @@ const nodeLabel = (n: GraphNode) => {
   return own || getNodeDefinitionFor(n)?.label || n.type;
 };
 
+/**
+ * A node's hidden passes, if it has any: a Blur / Glow (texture), Radial Fast Blur or Deep Glow with its
+ * Texture wired and a method that isn't Fast. Shared by planHiddenBlurs and the pass budget (passBudget.ts).
+ */
+export function hiddenPlanOf(node: GraphNode, byId: ReadonlyMap<string, GraphNode>): { wire: Wire; src: GraphNode; srcScale: number; plan: BlurPlan } | null {
+  if (!HIDDEN_PASS_TYPES.has(node.type)) return null;
+  const rays = node.type === RAYS_NODE_TYPE, deep = isDeepGlow(node);
+  const method = rays ? 'rays' : deep ? 'deepGlow' : blurMethod(node);
+  const wire = node.inputs.texture?.connection;
+  if (method === 'fast' || !wire) return null;
+  const src = byId.get(wire.nodeId);
+  if (!src) return null;
+  const srcScale = src.type === 'pass' ? (PASS_SCALES[String(src.params.scale ?? '1')] ?? 1) : 1;
+  const radius = typeof node.params.radius === 'number' ? node.params.radius : (node.type === 'glowTexture' ? 12 : 8);
+  const plan = rays ? planRays(srcScale) : deep ? planDeepGlow(srcScale) : planBlur(blurMethod(node), radius, srcScale, node.type === 'glowTexture');
+  return plan ? { wire, src, srcScale, plan } : null;
+}
+
 export function planHiddenBlurs(ctx: HiddenBlurCtx): HiddenBlurs {
   const before = new Map<string, PassProgram[]>();
   const reads = new Map<string, string[]>();
@@ -75,14 +93,10 @@ export function planHiddenBlurs(ctx: HiddenBlurCtx): HiddenBlurs {
     }) : list),
   };
   for (const node of ctx.nodes) {
-    if (!HIDDEN_PASS_TYPES.has(node.type)) continue;
-    const rays = node.type === RAYS_NODE_TYPE, deep = isDeepGlow(node);
+    const planned = hiddenPlanOf(node, ctx.byId);
+    if (!planned) continue;
+    const { wire, srcScale, plan } = planned;
     const socketed = SOCKETED_HIDDEN_TYPES.has(node.type);
-    const method = rays ? 'rays' : deep ? 'deepGlow' : blurMethod(node);
-    const wire = node.inputs.texture?.connection;
-    if (method === 'fast' || !wire) continue;
-    const src = ctx.byId.get(wire.nodeId);
-    if (!src) continue;
     // Programs that have the node, in drawing order; then whether each can read hidden passes.
     const programs = [...ctx.order.filter(id => ctx.passLists.get(id)!.nodes.has(node.id)), ...(ctx.finalList.nodes.has(node.id) ? [FINAL] : [])];
     const usable = programs.filter(id => {
@@ -91,10 +105,7 @@ export function planHiddenBlurs(ctx: HiddenBlurCtx): HiddenBlurs {
       return !(passRepeat(pass.params.repeat) > 1 && wire.nodeId === id && wire.outputKey === 'previous');
     });
     if (!usable.length) continue;
-    const srcScale = src.type === 'pass' ? (PASS_SCALES[String(src.params.scale ?? '1')] ?? 1) : 1;
-    const radius = typeof node.params.radius === 'number' ? node.params.radius : (node.type === 'glowTexture' ? 12 : 8);
-    const plan = rays ? planRays(srcScale) : deep ? planDeepGlow(srcScale) : planBlur(blurMethod(node), radius, srcScale, node.type === 'glowTexture');
-    if (!plan || plan.stages.length > budget) continue;
+    if (plan.stages.length > budget) continue;
     budget -= plan.stages.length;
 
     const first = usable[0];

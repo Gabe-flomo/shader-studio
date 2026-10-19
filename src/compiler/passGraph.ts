@@ -38,24 +38,20 @@ import {
   groupSound, hasAgentsNode, insideSlugs, isAgentEngineOnly, isAgentLoopWire, isAgentSource, listenersOf, MAX_AGENT_GROUPS, MAX_TRAILS, trailHasStepProgram, trailSpec, trailStepSink,
 } from './agentGraph';
 import { agentPlacementProblems, agentProgramProblems } from './agentRules';
-import { expandPassGroups } from './passGroups';
 import { FINAL, planHiddenBlurs } from './hiddenBlurs';
-import { GRID_TYPE, expandGridRules } from './gridRulesExpand';
-import { expandCurveBeams, isBeamTrace } from './curveBeamExpand';
-import { expandShaderTextures, hasShaderTexture } from './shaderTextureExpand';
-import { expandFeedback, isFeedbackNode } from './feedbackExpand';
-import { expandDataTextures, isDataTexture } from './dataTextureExpand';
-import { expandRenderTargets, isRenderTargets } from './renderTargetsExpand';
-import { expandSpriteSources } from './spriteExpand';
-import { MEMORY_PASS_ID, expandMemory, isMemoryNode } from './memoryExpand';
-import { expandOpticalFlow, isOpticalFlow } from './opticalFlowExpand';
-import { PROBE_PASS_ID, expandProbes, expandTextProbes, isProbe, pinUvGlsl, textNeedsProbe } from './probeExpand';
+import { GRID_TYPE } from './gridRulesExpand';
+import { isBeamTrace } from './curveBeamExpand';
+import { isFeedbackNode } from './feedbackExpand';
+import { isDataTexture } from './dataTextureExpand';
+import { isRenderTargets } from './renderTargetsExpand';
+import { MEMORY_PASS_ID, isMemoryNode } from './memoryExpand';
+import { isOpticalFlow } from './opticalFlowExpand';
+import { PROBE_PASS_ID, isProbe, pinUvGlsl, textNeedsProbe } from './probeExpand';
 import { SHADER_TEXTURE_TYPE } from '../nodes/definitions/shaderTexture';
-import { expandSmoothDof } from './smoothDofExpand';
 
-export const PASS_TYPE = 'pass';
-/** Most Pass nodes in one graph. */
-export const MAX_PASSES = 8;
+import { MAX_PASSES, PASS_TYPE, expandPassNodes } from './passExpand';
+import { overBudgetMessage, passBudget } from './passBudget';
+export { MAX_PASSES, PASS_TYPE, expandPassNodes };
 /** WebGL2 guarantees 16 texture units per fragment shader. */
 export const MAX_SAMPLERS = 16;
 
@@ -198,34 +194,10 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
       const placement = agentPlacementProblems(graph.nodes, getNodeDefinitionFor);
       if (placement.length) return failure(placement);
     }
-    // A Pass inside a plain group (phase 7): the group is opened onto the top level for the cut
-    // (compiler/passGroups.ts). Inside any other kind of group, an error saying why.
-    // Shader Textures (docs/texture-builder.md) are opened into their inside and a Pass first, and again after a
-    // plain group with one inside has been opened (a few rounds at most); without one, exactly as before.
-    let opened = expandPassGroups(expandShaderTextures(graph.nodes));
-    if ('errors' in opened) return failure(opened.errors);
-    for (let round = 0; round < 8 && hasShaderTexture(opened.nodes); round++) {
-      const more = expandPassGroups(expandShaderTextures(opened.nodes));
-      if ('errors' in more) return failure(more.errors);
-      opened = { nodes: more.nodes, groups: new Map([...opened.groups, ...more.groups]) };
-    }
-    // Grid Rules nodes: each opened into its board Pass and step (compiler/gridRulesExpand.ts); without one, unchanged.
-    // March Camera Lens: Smooth: the picture into a hidden Pass with its CoC, then the gather (compiler/smoothDofExpand.ts).
-    const gridOnly = expandGridRules(expandSmoothDof(opened.nodes));
-    // Curve Trace in Draw: Beam: each opened into its screen Pass and step (compiler/curveBeamExpand.ts); without one, unchanged.
-    const beams = expandCurveBeams(gridOnly.nodes);
-    // Feedback (texture): each opened into its step and buffer Pass (compiler/feedbackExpand.ts); without one, unchanged.
-    // Data Textures: each opened into its pack, its Pass and a Read channels per output (compiler/dataTextureExpand.ts).
-    // Render Targets: each opened into its pack and one Pass with extra targets (compiler/renderTargetsExpand.ts).
-    // Draw agents' Sprite from a texture that isn't a Pass's: a hidden Pass in between (compiler/spriteExpand.ts).
-    // Memory nodes (Lag, Spring, Envelope…): all in one shared Pass, a texel each (compiler/memoryExpand.ts).
-    // Optical Flow: each opened into its source Pass, its step and its flow Pass (compiler/opticalFlowExpand.ts).
-    // Value at point (and a Text's wired Value): one shared Pass reading each value at its point (compiler/probeExpand.ts).
-    const flows = expandOpticalFlow(expandProbes(expandTextProbes(beams.nodes)));
-    const feedback = expandFeedback(expandRenderTargets(expandDataTextures(expandSpriteSources(expandMemory(flows.nodes)))));
-    const grid = beams.bindAs.size || feedback.bindAs.size || flows.bindAs.size
-      ? { nodes: feedback.nodes, bindAs: new Map([...gridOnly.bindAs, ...beams.bindAs, ...flows.bindAs, ...feedback.bindAs]) }
-      : feedback.nodes !== beams.nodes ? { nodes: feedback.nodes, bindAs: gridOnly.bindAs } : gridOnly;
+    const expanded = expandPassNodes(graph.nodes);
+    if ('errors' in expanded) return failure(expanded.errors);
+    const { grid } = expanded;
+    const opened = { groups: expanded.groups };
     // With agents: every node of (or wired into) a 3D group marked for its space (a 2D graph is left as it is).
     const nodes = agents ? syncAgentSpaces(grid.nodes, getNodeDefinition) : grid.nodes;
 
@@ -233,7 +205,8 @@ export function compilePassGraph(graph: NodeGraph): CompilationResult {
     if (!validation.valid) return failure(validation.errors ?? ['Invalid graph']);
 
     const passNodes = nodes.filter(n => n.type === PASS_TYPE);
-    if (passNodes.length > MAX_PASSES) return failure([`A graph can have up to ${MAX_PASSES} Pass nodes (this one has ${passNodes.length}${gridOnly.bindAs.size ? ', counting each Grid Rules board, and its picture when its Texture is wired' : ''}${beams.bindAs.size ? ', counting each Curve Trace Beam\'s screen' : ''}${feedback.bindAs.size ? ', counting each Feedback (texture) buffer' : ''})`]);
+    // Over the limit: the itemised account (compiler/passBudget.ts), from the same expansion.
+    if (passNodes.length > MAX_PASSES) { const b = passBudget(graph.nodes); return failure([overBudgetMessage({ ...b, used: passNodes.length })]); }
     const byId = new Map(nodes.map(n => [n.id, n]));
 
     // 1. Slugs, once for the whole graph, in the usual sort order (Previous wires left out, so feedback isn't a cycle;
