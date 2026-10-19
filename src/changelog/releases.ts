@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.296',
+    date: '2026-10-18',
+    title: "Phone tidy",
+    highlights: [
+      { area: 'Studio', text: "Phone: the code view is readable in light mode, and the graph is a plain list without the Graph toggle or Do\u2026 buttons." },
+    ],
+  },
+  {
     id: '2026.10.295',
     date: '2026-10-18',
     title: "One + Map",
