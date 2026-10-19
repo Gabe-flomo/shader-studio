@@ -4,19 +4,22 @@
  *   [Solid | Gradient]   the switch, beside the setting's swatch
  *   gradient bar         2–8 stops: click to add, drag to move, click a handle for its colour
  *   Along · Blend        what drives it here (Height, Normal, UV X…) and Smooth / Linear / Constant
- *   From · To            the driver's values at the bar's two ends
+ *   Wrap | Mirror        a periodic driver (Angle) only: round the circle, or there and back
+ *   From · To            the driver's values at the bar's two ends: small sliders (type past an end to widen
+ *                        them). On a node card each is also a socket and a Play control target (its row carries
+ *                        `data-param-key`, so right-click offers Add to Play); a wire there shows instead
  *   Presets ▾ / Save     the app's palettes (built in and yours, shared with the Palette nodes and
  *                        Play / Present backgrounds), Save as preset, rename or delete yours
  *
  * Pure UI over a ColourGradient; the node card (NodeGraph/GradientColourParam.tsx) and the Scene
  * Builder each map it onto their own data.
  */
-import { useRef, useState } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily } from '../../theme/tokens';
 import { Button } from './Button';
 import { Segmented } from './Choice';
-import { Field } from './Field';
+import { RulerSlider } from './RulerSlider';
 import { GradientStopsEditor } from './GradientStopsEditor';
 import { Menu, type MenuItem } from './Menu';
 import { Select } from './Select';
@@ -25,8 +28,8 @@ import { toast } from './toastStore';
 import { usePalettes } from '../backgrounds/useBackgrounds';
 import { deletePalette, freePaletteName, renamePalette, savePalette, type Palette } from '../../lib/backgroundLibrary';
 import {
-  GRADIENT_DRIVERS, GRADIENT_MAX_STOPS, INTERP_OPTIONS, evalGradient, gradientCssOf, normaliseStops,
-  type ColourGradient, type GradientDriver, type GradientInterp,
+  GRADIENT_DRIVERS, GRADIENT_MAX_STOPS, INTERP_OPTIONS, REPEAT_OPTIONS, evalGradient, gradientCssOf, isPeriodicDriver, normaliseStops, rangeSliderBounds,
+  type ColourGradient, type GradientDriver, type GradientInterp, type GradientRepeat,
 } from '../../lib/colourGradient';
 import type { GradientStop } from './gradientStops';
 
@@ -54,29 +57,32 @@ export function ColourModeSwitch({ mode, onChange, label }: { mode: ColourMode; 
   );
 }
 
-export function GradientSetting({ value, onChange, drivers, label, touch = false }: {
+export function GradientSetting({ value, onChange, drivers, label, touch = false, rangeKeys, wired }: {
   value: ColourGradient;
-  /** `structural`: the stop count, the driver or the blend changed (the shader is rebuilt); otherwise only live values. */
+  /** `structural`: the stop count, the driver, the blend or Wrap / Mirror changed (the shader is rebuilt); otherwise only live values. */
   onChange: (g: ColourGradient, structural: boolean) => void;
   drivers: readonly GradientDriver[];
   label: string;
   touch?: boolean;
+  /** On a node card: the From / To param keys, set as each row's `data-param-key` (right-click → Add to Play). */
+  rangeKeys?: { from: string; to: string };
+  /** A wire into the From / To socket: shown in place of the slider (the wire wins). */
+  wired?: { from?: ReactNode; to?: ReactNode };
 }) {
   const tk = useTokens();
   const palettes = usePalettes();
   const [menu, setMenu] = useState<{ x: number; y: number; items: MenuItem[] } | null>(null);
   const clearRef = useRef<HTMLElement | null>(null);
-  const [fromText, setFromText] = useState<string | null>(null);
-  const [toText, setToText] = useState<string | null>(null);
 
   const set = (patch: Partial<ColourGradient>) => {
     const next = { ...value, ...patch };
-    const structural = next.stops.length !== value.stops.length || next.along !== value.along || next.interp !== value.interp;
+    const structural = next.stops.length !== value.stops.length || next.along !== value.along || next.interp !== value.interp || next.repeat !== value.repeat;
     onChange(next, structural);
   };
   const setAlong = (along: GradientDriver) => {
     const r = GRADIENT_DRIVERS[along].range;
-    onChange({ ...value, along, from: r[0], to: r[1] }, true);
+    const { repeat: _r, ...rest } = value;
+    onChange({ ...rest, along, from: r[0], to: r[1], ...(isPeriodicDriver(along) ? { repeat: value.repeat ?? 'wrap' } : {}) }, true);
   };
   const applyPalette = (p: Palette) => {
     const stops = paletteAsGradientStops(p);
@@ -119,12 +125,23 @@ export function GradientSetting({ value, onChange, drivers, label, touch = false
     deletePalette(p.id);
   };
 
-  const num = (text: string | null, v: number) => text ?? String(Math.round(v * 1000) / 1000);
-  const commitNum = (which: 'from' | 'to', text: string) => {
-    const n = Number(text);
-    if (Number.isFinite(n) && text.trim() !== '') set({ [which]: n });
-  };
   const info = GRADIENT_DRIVERS[value.along];
+  const bounds = rangeSliderBounds(value.along);
+  const periodic = isPeriodicDriver(value.along);
+  const rangeRow = (which: 'from' | 'to') => (
+    <div key={which} data-param-key={rangeKeys?.[which]} data-gradient-range={which} style={{ display: 'flex', gap: 6, alignItems: 'center', minHeight: 28 }}
+      title={which === 'from' ? `${info.hint} From is ${periodic ? 'where the bar starts' : 'the value at the bar\'s left end'}.` : periodic ? `${info.hint}` : `${info.hint} To is the value at the bar's right end.`}>
+      <span style={{ ...labelStyle, width: 32 }}>{which === 'from' ? 'From' : periodic ? 'Span' : 'To'}</span>
+      {wired?.[which]
+        ? <div style={{ flex: 1, minWidth: 0 }}>{wired[which]}</div>
+        : (
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <RulerSlider ariaLabel={`${label}: gradient ${which}`} value={value[which]} min={bounds.min} max={bounds.max} step={0.001}
+              defaultValue={info.range[which === 'from' ? 0 : 1]} touch={touch} onChange={v => set({ [which]: v })} />
+          </div>
+        )}
+    </div>
+  );
   const labelStyle = { font: `500 11.5px ${fontFamily.ui}`, color: tk.text.muted, flexShrink: 0 } as const;
 
   return (
@@ -140,14 +157,15 @@ export function GradientSetting({ value, onChange, drivers, label, touch = false
         <Select ariaLabel={`${label}: blend`} value={value.interp} height={28} style={{ width: 96, flexShrink: 0 }}
           options={INTERP_OPTIONS} onChange={v => set({ interp: v as GradientInterp })} />
       </div>
-      <div style={{ display: 'flex', gap: 6, alignItems: 'center' }} title={`${info.hint} From is the value at the bar's left end, To at its right end.`}>
-        <span style={labelStyle}>From</span>
-        <Field aria-label={`${label}: gradient from`} mono height={28} value={num(fromText, value.from)} style={{ flex: 1 }}
-          onChange={e => { setFromText(e.target.value); commitNum('from', e.target.value); }} onBlur={() => setFromText(null)} />
-        <span style={labelStyle}>To</span>
-        <Field aria-label={`${label}: gradient to`} mono height={28} value={num(toText, value.to)} style={{ flex: 1 }}
-          onChange={e => { setToText(e.target.value); commitNum('to', e.target.value); }} onBlur={() => setToText(null)} />
-      </div>
+      {periodic && (
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }} title={REPEAT_OPTIONS.map(o => `${o.label}: ${o.hint}`).join('\n')}>
+          <span style={{ ...labelStyle, width: 32 }}>Ends</span>
+          <Segmented<GradientRepeat> size="sm" ariaLabel={`${label}: wrap or mirror`} value={value.repeat ?? 'wrap'} onChange={repeat => set({ repeat })}
+            options={REPEAT_OPTIONS.map(o => ({ value: o.value, label: o.label }))} />
+        </div>
+      )}
+      {rangeRow('from')}
+      {rangeRow('to')}
       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
         <Button size="sm" variant="secondary" onClick={e => openAt(e, presetItems())} aria-haspopup="menu">Presets ▾</Button>
         <Button size="sm" variant="ghost" onClick={() => { void save(); }}>Save as preset</Button>
@@ -158,7 +176,7 @@ export function GradientSetting({ value, onChange, drivers, label, touch = false
 }
 
 /** A small read-only strip of a gradient (for a folded row or a list). */
-export function GradientStrip({ value, width = 64, height = 18 }: { value: Pick<ColourGradient, 'stops' | 'interp'>; width?: number | string; height?: number }) {
+export function GradientStrip({ value, width = 64, height = 18 }: { value: Pick<ColourGradient, 'stops' | 'interp'> & Partial<Pick<ColourGradient, 'along' | 'repeat'>>; width?: number | string; height?: number }) {
   return <span style={{ display: 'inline-block', width, height, borderRadius: 4, background: gradientCssOf(value), boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.15)', flexShrink: 0 }} />;
 }
 

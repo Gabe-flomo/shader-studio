@@ -22,6 +22,7 @@ import { driverOf, nodeLabelOf, paramDrivers, type ParamDriver } from './paramDr
 import { collectParamCandidates } from '../nodes/userNodes/paramCandidates';
 import { isParamVisible } from '../compiler/uniformPatcher';
 import { bindingKeyOf } from '../lib/playEngine';
+import { fromKey, gradientOn, isPeriodicDriver, rangeSliderBounds, readGradient, toKey } from '../lib/colourGradient';
 
 export interface PlayCandidate {
   target: string;
@@ -68,6 +69,46 @@ function collectColourCandidates(nodes: GraphNode[]): PlayCandidate[] {
         const value = colourValue(overrides[`${node.id}::${key}`]) ?? colourValue(node.params[key]) ?? colourValue(def.defaultParams?.[key]);
         if (!value) continue;
         out.push({ target: `${prefix}${node.id}::${key}`, kind: 'color', nodeLabel: labelOf(node), groupLabel, paramLabel: pd.label, min: 0, max: 1, value, ...(pd.hint ? { hint: pd.hint } : {}) });
+      }
+    }
+  };
+  visit(nodes, '', undefined, {});
+  for (const g of nodes) {
+    if (g.type !== 'group' && g.type !== 'agentsGroup' && g.type !== 'sceneGroup') continue;
+    const inner = g.params.subgraph as SubgraphData | undefined;
+    if (inner) visit(inner.nodes, `${g.id}::`, labelOf(g), g.params);
+  }
+  return out;
+}
+
+/**
+ * A gradient colour setting's From and To (lib/colourGradient.ts): live float uniforms while the gradient is on,
+ * so each can be a Play control (`nodeId::tint__gfrom`). Not while a wire into its own socket drives it. The
+ * range is the driver's default one with as much again each side (rangeSliderBounds); typing past widens it.
+ */
+function collectGradientRangeCandidates(nodes: GraphNode[]): PlayCandidate[] {
+  const out: PlayCandidate[] = [];
+  const visit = (list: GraphNode[], prefix: string, groupLabel: string | undefined, overrides: Record<string, unknown>) => {
+    for (const node of list) {
+      if (SKIP_TYPES.has(node.type)) continue;
+      const def = getNodeDefinitionFor(node);
+      for (const [key, pd] of Object.entries(def?.paramDefs ?? {})) {
+        // A wire into the colour itself replaces the whole gradient: its From / To do nothing then.
+        if (!pd.gradient || !gradientOn(node.params, key) || node.inputs[key]?.connection) continue;
+        if (!isParamVisible(pd, node.params, def?.defaultParams)) continue;
+        const g = readGradient(node.params, key);
+        if (!g) continue;
+        const { min, max } = rangeSliderBounds(g.along);
+        for (const [pk, which, v] of [[fromKey(key), 'from', g.from], [toKey(key), 'to', g.to]] as const) {
+          if (node.inputs[pk]?.connection) continue;
+          const over = overrides[`${node.id}::${pk}`];
+          const value = typeof over === 'number' ? over : v;
+          out.push({
+            target: `${prefix}${node.id}::${pk}`, kind: 'float', nodeLabel: labelOf(node), groupLabel, paramLabel: `${pd.label} ${which === 'to' && isPeriodicDriver(g.along) ? 'span' : which}`,
+            min: Math.min(min, value), max: Math.max(max, value), step: 0.001, value,
+            hint: `The ${pd.label} gradient's ${which === 'from' ? 'From (the value at its left end)' : 'To (the value at its right end)'}.`,
+          });
+        }
       }
     }
   };
@@ -137,7 +178,7 @@ export function collectPlayCandidates(nodes: GraphNode[], paramBindings: Record<
     }
   }
   const seen = new Set(floats.map(c => c.target));
-  return [...floats, ...nested.filter(c => !seen.has(c.target)), ...collectExprSliderCandidates(nodes).filter(c => !seen.has(c.target)), ...collectColourCandidates(nodes)]
+  return [...floats, ...nested.filter(c => !seen.has(c.target)), ...collectExprSliderCandidates(nodes).filter(c => !seen.has(c.target)), ...collectGradientRangeCandidates(nodes).filter(c => !seen.has(c.target)), ...collectColourCandidates(nodes)]
     .filter(c => bindingKeyOf(c.target) in paramBindings)
     // A Scene Group's setting that a wire takes over (a wired port, or a ps_ socket) is replaced in the shader: no control.
     .filter(c => {

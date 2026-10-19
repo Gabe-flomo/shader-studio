@@ -2430,7 +2430,7 @@ export class ShaderAssembler {
           const mlPassthrough = fmtP(node.params.passthrough, 0.1);
           const mlJitter     = fmtP(node.params.jitter, 0.0);
           const mlBg     = loopColour(node, 'bg', inputVars.bg, [0.0, 0.0, 0.0]);
-          const mlAlbedo = loopColour(node, 'albedo', inputVars.albedo, [0.6, 0.7, 0.9], { ctx: { pos: `${nodeSlug}_hp`, normal: `${nodeSlug}_n`, eye: mlRo }, addFunction: fn => this.functions.add(fn) });
+          const mlAlbedo = loopColour(node, 'albedo', inputVars.albedo, [0.6, 0.7, 0.9], { ctx: { pos: `${nodeSlug}_hp`, normal: `${nodeSlug}_n`, eye: mlRo }, addFunction: fn => this.functions.add(fn), wires: inputVars });
 
           // Determine if subgraph uses new-style anchor (marchLoopInputs) vs legacy separate nodes
           const mlInputsNodeRaw = subgraph?.nodes.find(n => n.type === 'marchLoopInputs') ?? null;
@@ -3292,7 +3292,7 @@ export class ShaderAssembler {
           const mlVolumetric = !!node.params.volumetric;
           const mlPassthrough = fmtP(node.params.passthrough, 0.1);
           const mlJitter     = fmtP(node.params.jitter, 0.0);
-          const albedoVar     = loopColour(node, 'albedo', inputVars.albedo, [0.7, 0.7, 0.7], { ctx: { pos: `${nodeSlug}_hp`, normal: `${nodeSlug}_n`, eye: mlRo }, addFunction: fn => this.functions.add(fn) });
+          const albedoVar     = loopColour(node, 'albedo', inputVars.albedo, [0.7, 0.7, 0.7], { ctx: { pos: `${nodeSlug}_hp`, normal: `${nodeSlug}_n`, eye: mlRo }, addFunction: fn => this.functions.add(fn), wires: inputVars });
           const lightDirVar   = inputVars.lightDir   || `vec3(${fmtP(node.params.lightX, 1.5)}, ${fmtP(node.params.lightY, 3.0)}, ${fmtP(node.params.lightZ, 1.0)})`;
           const lightColorVar = inputVars.lightColor || `vec3(${fmtP(node.params.lightR, 1.0)}, ${fmtP(node.params.lightG, 0.95)}, ${fmtP(node.params.lightB, 0.85)})`;
           const skyTopVar     = inputVars.skyTop     || `vec3(${fmtP(node.params.skyTopR, 0.2)}, ${fmtP(node.params.skyTopG, 0.45)}, ${fmtP(node.params.skyTopB, 0.8)})`;

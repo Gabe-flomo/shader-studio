@@ -19,7 +19,7 @@ import {
   type CombineOp, type GlowMode, type GroupSpec, type ShapeStyle, type Item, type LookMute2D, type MotionKind, type ParamDef, type Scene2D, type ShapeSpec, type Show2D, type ToneMode, type Vec2, type Vec3,
 } from '../../sceneBuilder2d/spec';
 import { DEFAULT_SMOOTH_K, parseRecipe2D, printRecipe2D } from '../../sceneBuilder2d/recipe';
-import { GLOW_TYPES, GLOW_TYPE_LABELS, type GlowType } from '../../nodes/definitions/combiners';
+import { GLOW_TYPES_OFFERED, GLOW_TYPE_LABELS, glowTypeOptions, type GlowType } from '../../nodes/definitions/combiners';
 import { MODS, MOD_BY_KIND, checkCustom, modSummary, newMod, type DistMod, type ModKind } from '../../sceneBuilder2d/modify';
 import { ExprLineInput } from '../builders/ExprLineInput';
 import { paramNameProblem } from '../../sceneBuilder2d/blocks';
@@ -592,8 +592,8 @@ function ItemInspector({ id }: { id: string }) {
         {f.parent?.mix && it.type === 'shape' && <SlotColourRow label="Colour" value={it.color} slot={it.slot} swatches={paletteSwatches(scene.look.colour.palette, scene.look.custom)}
           onColour={v => upd(x => { x.color = v; }, 'color')} onSlot={s => upd(x => { if (s == null) delete x.slot; else x.slot = s; })} />}
         {!f.parent && <Row label="Glow"><Toggle checked={it.glow} onChange={v => upd(x => { x.glow = v; })} label="Glows when Look → Glow is Selected" /></Row>}
-        {!f.parent && <Row label="Glow type" hint={GLOW_TYPES.map(t => `${GLOW_TYPE_LABELS[t].label}: ${GLOW_TYPE_LABELS[t].blurb}`).join('\n')}>
-          <Select ariaLabel="Layer glow type" value={it.glowType ?? ''} options={[{ value: '', label: 'The Look\'s' }, ...GLOW_TYPES.map(t => ({ value: t, label: GLOW_TYPE_LABELS[t].label }))]}
+        {!f.parent && <Row label="Glow type" hint={GLOW_TYPES_OFFERED.map(t => `${GLOW_TYPE_LABELS[t].label}: ${GLOW_TYPE_LABELS[t].blurb}`).join('\n')}>
+          <Select ariaLabel="Layer glow type" value={it.glowType ?? ''} options={[{ value: '', label: 'The Look\'s' }, ...glowTypeOptions(it.glowType)]}
             onChange={v => upd(x => { if (v) x.glowType = v as GlowType; else delete x.glowType; })} />
         </Row>}
       </Card>
@@ -1008,8 +1008,8 @@ function LookTab() {
         </Row>
         {look.glow.mode !== 'off' && (
           <>
-            <Row label="Type" hint={GLOW_TYPES.map(t => `${GLOW_TYPE_LABELS[t].label}: ${GLOW_TYPE_LABELS[t].blurb}`).join('\n')}>
-              <Select ariaLabel="Glow type" value={look.glow.type ?? ''} options={[{ value: '', label: 'Soft (Glow style), Halo (Filled)' }, ...GLOW_TYPES.map(t => ({ value: t, label: GLOW_TYPE_LABELS[t].label }))]}
+            <Row label="Type" hint={GLOW_TYPES_OFFERED.map(t => `${GLOW_TYPE_LABELS[t].label}: ${GLOW_TYPE_LABELS[t].blurb}`).join('\n')}>
+              <Select ariaLabel="Glow type" value={look.glow.type ?? ''} options={[{ value: '', label: 'Soft (Glow style), Halo (Filled)' }, ...glowTypeOptions(look.glow.type)]}
                 onChange={v => set(l => { if (v) l.glow.type = v as GlowType; else delete l.glow.type; })} />
             </Row>
             {look.glow.type && <BuilderNote>{GLOW_TYPE_LABELS[look.glow.type].blurb}</BuilderNote>}

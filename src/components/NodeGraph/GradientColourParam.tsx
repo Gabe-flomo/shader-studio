@@ -4,7 +4,9 @@
  * (ui/GradientSetting.tsx, lib/colourGradient.ts, docs/gradients.md).
  *
  * Writes flat params: a stop or range edit is a uniform write (no recompile); the stop count,
- * the driver and the blend rebuild the shader. Switching to Solid keeps the gradient for later.
+ * the driver, the blend and Wrap / Mirror rebuild the shader. Switching to Solid keeps the gradient for later.
+ * From / To are also sockets ("Tint from", "Tint to": the store adds them while the gradient is on); a wire
+ * there shows in place of the slider, and each row's data-param-key makes right-click offer Add to Play.
  */
 import type { CSSProperties, ReactNode } from 'react';
 import type { GraphNode, ParamDef } from '../../types/nodeGraph';
@@ -13,9 +15,10 @@ import { useTokens } from '../../theme/themeStore';
 import { fontFamily } from '../../theme/tokens';
 import { ColorSwatch } from '../ui/ColorPicker';
 import { ColourModeSwitch, GradientSetting, GradientStrip } from '../ui/GradientSetting';
+import { WiredChip } from './NodeCardParts';
 import { toRgb } from '../../lib/colorMath';
 import {
-  gradKey, gradientOn, gradientParams, gradientValueParams, readGradient, starterGradient,
+  fromKey, gradKey, gradientOn, gradientParams, gradientValueParams, readGradient, starterGradient, toKey,
   type ColourGradient, type GradientDriver,
 } from '../../lib/colourGradient';
 
@@ -67,7 +70,12 @@ export function GradientColourParam({ node, paramKey, paramDef, defaultValue, la
       </div>
       {on && gradient && (
         <div style={{ padding: '2px 12px 8px 16px' }}>
-          <GradientSetting value={gradient} onChange={onChange} drivers={drivers} label={paramDef.label} touch={touch} />
+          <GradientSetting value={gradient} onChange={onChange} drivers={drivers} label={paramDef.label} touch={touch}
+            rangeKeys={{ from: fromKey(paramKey), to: toKey(paramKey) }}
+            wired={{
+              from: node.inputs[fromKey(paramKey)]?.connection ? <WiredChip source={node.inputs[fromKey(paramKey)].connection} /> : undefined,
+              to: node.inputs[toKey(paramKey)]?.connection ? <WiredChip source={node.inputs[toKey(paramKey)].connection} /> : undefined,
+            }} />
           {node.type === 'colorPicker' && !node.inputs.point?.connection && (
             <div style={{ font: `500 11px ${fontFamily.ui}`, color: tk.text.muted, marginTop: 4 }}>Wire a 3D point (a march loop’s Hit Pos) into Point; until then it shows the solid colour.</div>
           )}

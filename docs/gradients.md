@@ -36,8 +36,27 @@ Click **Gradient** beside the swatch. Then:
 - **Along**: what picks the place on the bar at each pixel.
 - **Blend**: Smooth eases into each stop, Linear mixes straight, Constant holds each colour until
   the next stop (bands).
-- **From / To**: the driver's values at the bar's left and right ends. Height runs from −1 to 1 at
-  first; set From 0 and To 2 to put the whole bar on the upper half of a scene. Swap them to flip it.
+- **Wrap | Mirror** (Angle only, the periodic driver): how the gradient goes round. **Wrap** (the default)
+  is cyclic: past the last stop it blends back into the first, so there is no seam where the angle wraps.
+  **Mirror** runs the stops 0 → 1 over half a turn and back 1 → 0 over the other half.
+- **From / To**: the driver's values at the bar's left and right ends, as small sliders (drag, or type a
+  number; typing past an end widens the slider, as everywhere). Height runs from −1 to 1 at first; set From 0
+  and To 2 to put the whole bar on the upper half of a scene. Swap them to flip it. For Angle the second
+  field is **Span**: From is where round the circle the gradient starts and Span how much of a turn the bar
+  covers (1 = one turn, 0.5 = the gradient twice round, negative runs it the other way), so animating From
+  alone turns a colour wheel with no seam and no change of size. (It is the same `__gto` param, read as a span.)
+
+### Animating From and To
+
+While a setting is a Gradient, its node has two more input sockets, **‹Setting› from** and **‹Setting› to**
+(SDF Glow's are *Tint from* and *Tint to*; *Tint span* along Angle). A wire there replaces the slider, the way a socket replaces a slider
+anywhere: wire Time into *Tint from* on an Angle gradient and the wheel turns. The slider row shows the wire
+instead. Switching back to Solid takes the sockets away (a wired one stays until it is unwired).
+
+Right-click the From or To row (or use the knob menu) for **Add to Play controls**: each is a Play control
+target (`nodeId::tint__gfrom`), so MIDI, keys, LFOs and the rest can drive it. Its range is the driver's default
+range with as much again each side, and typing past the end widens it. Both are live uniforms: dragging,
+wiring values in Play, or any mapping never recompiles the shader.
 - **Presets**: the app's palettes, built in (Sunset, Ocean, Fire, Mono, Neon, Earth, Dusk, Forest…)
   and yours, each with a small strip of its colours beside its name. **Save as preset** names the gradient and keeps it in the Library's palettes, the same
   store the Palette and Stops Palette nodes and the Play and Present backgrounds use, so a preset
@@ -58,16 +77,37 @@ The colour param is untouched. The gradient is stored next to it as flat params:
 
 | Param | What |
 | --- | --- |
-| `<key>__grad` | `{ on, along, interp, n }`: the shape of the gradient |
+| `<key>__grad` | `{ on, along, interp, n, repeat? }`: the shape of the gradient (`repeat`: `wrap` or `mirror`, periodic drivers only) |
 | `<key>__gc0…7` | each stop's colour (vec3) |
 | `<key>__gp0…7` | each stop's place, 0–1 |
-| `<key>__gfrom`, `<key>__gto` | the driver's range |
+| `<key>__gfrom`, `<key>__gto` | the driver's range; also the From / To socket keys |
 
 With the gradient on, the setting compiles to one call:
 
 ```glsl
 pfGradient(pfGradT(<driver>, from, to), n, blend, c0 … c7, p0 … p7)
 ```
+
+A periodic driver (Angle) goes round instead of clamping:
+
+```glsl
+pfGradientWrap(pfGradU(<driver>, from, to), n, blend, c0 … c7, p0 … p7)              // Wrap
+pfGradient(pfGradMirror(pfGradU(<driver>, from, to)), n, blend, c0 … c7, p0 … p7)    // Mirror
+```
+
+`pfGradU` is `(v − from) / span` unclamped (turns; the span is the `to` param). Wrap takes its fraction and lays one turn over the
+stops' stretch of the bar plus a closing segment, as long as the average gap between stops, where the last colour
+blends back into the first (Constant holds the last colour there). So stops at 0, ½ and 1 share the turn in thirds,
+and stops at 0, ¼, ½ and ¾ land on the quarters. Mirror is `1 − |1 − 2·fract(u)|`. `evalGradientWrap`,
+`mirrorT` and `evalGradientAt` are the same maths in JS, and the setting's swatch draws one turn from them.
+
+A gradient saved before Wrap / Mirror existed has no `repeat` and wraps: an Angle gradient's hard seam where
+the angle crossed ±π is gone, which is the point. Its To is read as a span from then on: the default range
+(0 → 1) is unchanged, a narrowed one (From 0.25, To 0.75, say) now covers 0.75 of a turn from 0.25. One that relied on the cut (it is hard to see why one would)
+can get it back with stops that end on the same colour they start with.
+
+A wire into From or To (the `<key>__gfrom` / `<key>__gto` sockets) is passed to `gradientColourGlsl` with the
+node's inputs and replaces that uniform in the call.
 
 The stop colours, places and the range are live uniforms, so dragging a stop or picking its colour
 never recompiles. Adding or removing a stop, changing Along or Blend, or switching Solid ↔ Gradient
@@ -92,13 +132,14 @@ Drivers (`GRADIENT_DRIVERS`) map a context's values onto a number:
 | Field brightness | the Field's value | 0 → 1 |
 | UV X / UV Y | the pixel's place | −1 → 1 |
 | Radial | distance from the middle | 0 → 1 |
-| Angle | round the middle, one turn | 0 → 1 |
+| Angle (periodic: Wrap / Mirror) | round the middle, one turn | From 0, Span 1 |
 
 To offer a gradient on another colour setting: list its drivers on the ParamDef (`gradient: [...]`),
-call `gradientColourGlsl(params, key, ctx, drivers)` in the node's GLSL with what the context has
+call `gradientColourGlsl(params, key, ctx, drivers, inputVars)` in the node's GLSL with what the context has
 (`pos`, `normal`, `eye`, `value`, `uv`), fall back to the solid colour when it returns null, and add
 `PF_GRADIENT_GLSL` through `glslFunctionsFor` (or the compiler's function set) when the gradient is on.
-The uniform patcher and the card pick it up from the ParamDef.
+The uniform patcher, the card, the From / To sockets (the store's `withGradientRangeSockets`) and the Play
+control list pick it up from the ParamDef.
 
 ## Scene Builder
 

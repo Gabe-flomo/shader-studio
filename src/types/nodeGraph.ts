@@ -123,8 +123,14 @@ export interface ParamDef {
    * beats and rules can still drive it (each rise past the middle fires once).
    */
   trigger?: boolean;
-  // Options for 'select' type
-  options?: { value: string; label: string }[];
+  // Options for 'select' type. `hint`: a line about the option (its formula, say), shown as its tooltip.
+  options?: { value: string; label: string; hint?: string }[];
+  /**
+   * Choices no longer offered (a select's retired options): hidden from the list, builders, the Do bar and
+   * Randomize, but a saved node set to one still compiles as before and its card reads "Label (retired)"
+   * (lib/selectOptions.ts optionsShown).
+   */
+  retiredOptions?: { value: string; label: string; hint?: string }[];
   /** A select picking a channel: the inputs whose wire may come from a Trail field, whose Channel names then label the options (nodes/channelNames.ts). */
   channelsFrom?: string[];
   // Conditionally show this param only when another param matches a value
