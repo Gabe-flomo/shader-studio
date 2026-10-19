@@ -72,8 +72,8 @@ describe('Wrap: a cyclic gradient with no seam', () => {
     expect(dist(evalGradientAt(g, 0.5), RGB3[2])).toBeLessThan(1e-6);
     expect(dist(evalGradientAt(g, 1 - 1e-7), evalGradientAt(g, 0))).toBeLessThan(1e-3);
   });
-  it('From turns the wheel: shifting From by ¼ shifts every colour by a quarter turn, seamlessly', () => {
-    const a = grad(), b = grad({ from: 0.25, to: 1.25 });
+  it('From turns the wheel: shifting From by ¼ (Span unchanged) shifts every colour by a quarter turn, seamlessly', () => {
+    const a = grad(), b = grad({ from: 0.25 });
     for (let i = 0; i < 20; i++) expect(dist(evalGradientAt(b, i / 20 + 0.25), evalGradientAt(a, i / 20))).toBeLessThan(1e-9);
   });
   it('a non-periodic driver still clamps at its ends', () => {
@@ -146,7 +146,7 @@ describe('From / To are animatable', () => {
     const line = r.fragmentShader.split('\n').find(l => l.includes('pfGradientWrap(pfGradU('))!;
     expect(line).toMatch(/pfGradU\([^;]*u_time|pfGradU\([^;]*\bt\w*_time/);
     expect(line).not.toContain('tintxxgfrom');
-    // The To field is still its uniform.
+    // The Span (To) field is still its uniform.
     expect(line).toContain('tintxxgto');
   });
 
@@ -155,7 +155,10 @@ describe('From / To are animatable', () => {
     const base = node('g', 'light', { mode: 'glow' });
     const on = withGradientRangeSockets({ ...base, params: { ...base.params, ...gradientParams('tint', grad()) } }, settings);
     expect(on.inputs.tint__gfrom).toMatchObject({ type: 'float', label: 'Tint from' });
-    expect(on.inputs.tint__gto).toMatchObject({ type: 'float', label: 'Tint to' });
+    // Angle: To is the span.
+    expect(on.inputs.tint__gto).toMatchObject({ type: 'float', label: 'Tint span' });
+    const radial = withGradientRangeSockets({ ...on, params: { ...on.params, ...gradientParams('tint', grad({ along: 'radial' })) } }, settings);
+    expect(radial.inputs.tint__gto).toMatchObject({ label: 'Tint to' });
     const off = withGradientRangeSockets({ ...on, params: { ...on.params, tint__grad: { ...(on.params.tint__grad as object), on: false } } }, settings);
     expect(off.inputs.tint__gfrom).toBeUndefined();
     const wired: GraphNode = { ...on, inputs: { ...on.inputs, tint__gfrom: { ...on.inputs.tint__gfrom, connection: { nodeId: 't', outputKey: 'time' } } } };
@@ -172,7 +175,7 @@ describe('From / To are animatable', () => {
     expect(Object.keys(g.inputs)).toEqual(expect.arrayContaining(['tint__gfrom', 'tint__gto']));
     const fs = st().fragmentShader;
     expect(fs).toContain('pfGradientWrap(');
-    st().updateNodeParams('g', gradientValueParams('tint', grad({ from: 0.3 })), { immediate: true });
+    st().updateNodeParams('g', gradientValueParams('tint', grad({ from: 0.3, to: 0.5 })), { immediate: true });
     expect(st().fragmentShader).toBe(fs);
     const name = st().paramBindings['g::tint__gfrom'];
     expect(st().paramUniforms?.[name]).toBe(0.3);
@@ -184,6 +187,7 @@ describe('From / To are animatable', () => {
     const cands = collectPlayCandidates(nodes, r.paramBindings);
     const from = cands.find(c => c.target === 'g::tint__gfrom')!;
     expect(from).toMatchObject({ kind: 'float', paramLabel: 'Tint from', value: 0 });
+    expect(cands.find(c => c.target === 'g::tint__gto')).toMatchObject({ paramLabel: 'Tint span', value: 1 });
     expect(from.max).toBeGreaterThan(1);
     expect(bindingKeyOf(from.target) in r.paramBindings).toBe(true);
     expect(cands.some(c => c.target === 'g::tint__gto')).toBe(true);

@@ -130,8 +130,8 @@ export function GradientSetting({ value, onChange, drivers, label, touch = false
   const periodic = isPeriodicDriver(value.along);
   const rangeRow = (which: 'from' | 'to') => (
     <div key={which} data-param-key={rangeKeys?.[which]} data-gradient-range={which} style={{ display: 'flex', gap: 6, alignItems: 'center', minHeight: 28 }}
-      title={which === 'from' ? `${info.hint} From is the value at the bar's left end.` : `${info.hint} To is the value at the bar's right end.`}>
-      <span style={{ ...labelStyle, width: 32 }}>{which === 'from' ? 'From' : 'To'}</span>
+      title={which === 'from' ? `${info.hint} From is ${periodic ? 'where the bar starts' : 'the value at the bar\'s left end'}.` : periodic ? `${info.hint}` : `${info.hint} To is the value at the bar's right end.`}>
+      <span style={{ ...labelStyle, width: 32 }}>{which === 'from' ? 'From' : periodic ? 'Span' : 'To'}</span>
       {wired?.[which]
         ? <div style={{ flex: 1, minWidth: 0 }}>{wired[which]}</div>
         : (

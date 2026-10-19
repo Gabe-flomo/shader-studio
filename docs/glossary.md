@@ -109,7 +109,8 @@ ParamDef's `retiredOptions`), but a graph that already uses it still compiles th
 
 In a gradient, **Wrap** and **Mirror** say how a periodic driver (Angle) goes round: Wrap blends the last stop back
 into the first, Mirror runs there and back. **From** and **To** are the driver's values at the bar's two ends; their
-sockets are **‹Setting› from** and **‹Setting› to** (Tint from, Tint to).
+sockets are **‹Setting› from** and **‹Setting› to** (Tint from, Tint to). Along Angle the second is **Span** (how
+much of a turn the bar covers; socket *Tint span*).
 
 ## Page ids
 

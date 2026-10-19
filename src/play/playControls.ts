@@ -22,7 +22,7 @@ import { driverOf, nodeLabelOf, paramDrivers, type ParamDriver } from './paramDr
 import { collectParamCandidates } from '../nodes/userNodes/paramCandidates';
 import { isParamVisible } from '../compiler/uniformPatcher';
 import { bindingKeyOf } from '../lib/playEngine';
-import { fromKey, gradientOn, rangeSliderBounds, readGradient, toKey } from '../lib/colourGradient';
+import { fromKey, gradientOn, isPeriodicDriver, rangeSliderBounds, readGradient, toKey } from '../lib/colourGradient';
 
 export interface PlayCandidate {
   target: string;
@@ -104,7 +104,7 @@ function collectGradientRangeCandidates(nodes: GraphNode[]): PlayCandidate[] {
           const over = overrides[`${node.id}::${pk}`];
           const value = typeof over === 'number' ? over : v;
           out.push({
-            target: `${prefix}${node.id}::${pk}`, kind: 'float', nodeLabel: labelOf(node), groupLabel, paramLabel: `${pd.label} ${which}`,
+            target: `${prefix}${node.id}::${pk}`, kind: 'float', nodeLabel: labelOf(node), groupLabel, paramLabel: `${pd.label} ${which === 'to' && isPeriodicDriver(g.along) ? 'span' : which}`,
             min: Math.min(min, value), max: Math.max(max, value), step: 0.001, value,
             hint: `The ${pd.label} gradient's ${which === 'from' ? 'From (the value at its left end)' : 'To (the value at its right end)'}.`,
           });

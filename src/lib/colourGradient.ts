@@ -19,7 +19,8 @@
  *
  * A periodic driver (Angle) goes round: by default the gradient is cyclic there (Wrap: past the last stop it
  * blends back into the first, so there is no seam where the angle wraps), or Mirror (0 → 1 → 0 round the circle).
- * From / To still pick the start and the span, so animating From turns the gradient round without a seam.
+ * There From is where the gradient starts and To is its span (how much of a turn the bar covers, 1 = one turn),
+ * so animating From alone turns the gradient round without a seam or a change of size.
  *
  * The colour param itself is untouched, so switching back to Solid gives the old colour, and a
  * graph that never used a gradient compiles to exactly the shader it always did.
@@ -46,7 +47,7 @@ export interface ColourGradient {
   interp: GradientInterp;
   /** Sorted by place, 2–8 of them. */
   stops: GradientStop[];
-  /** The driver's value that sits at place 0 … and at place 1. */
+  /** The driver's value that sits at place 0 … and at place 1. A periodic driver's `to` is the span instead (the bar covers From … From + To). */
   from: number;
   to: number;
   /** Periodic drivers only (Angle): Wrap (the default) or Mirror. Absent on the others. */
@@ -96,7 +97,7 @@ export const GRADIENT_DRIVERS: Record<GradientDriver, DriverInfo> = {
   uvX: { label: 'UV X', hint: 'Across the picture: left to right.', range: [-1, 1], glsl: c => `(${uvOf(c)}).x` },
   uvY: { label: 'UV Y', hint: 'Up the picture: bottom to top.', range: [-1, 1], glsl: c => `(${uvOf(c)}).y` },
   radial: { label: 'Radial', hint: 'Distance from the middle of the picture.', range: [0, 1], glsl: c => `length(${uvOf(c)})` },
-  angle: { label: 'Angle', hint: 'Round the middle of the picture: one full turn is 1. From turns the gradient round, To − From is how much of a turn it spans.', range: [0, 1], periodic: true, glsl: c => `(atan((${uvOf(c)}).y, (${uvOf(c)}).x) / 6.28318 + 0.5)` },
+  angle: { label: 'Angle', hint: 'Round the middle of the picture: one full turn is 1. From turns the gradient round; Span is how much of a turn the bar covers (0.5: twice round).', range: [0, 1], periodic: true, glsl: c => `(atan((${uvOf(c)}).y, (${uvOf(c)}).x) / 6.28318 + 0.5)` },
 };
 
 /** Driver lists for the usual contexts (a ParamDef's `gradient`). */
@@ -228,10 +229,10 @@ export function gradientT(v: number, from: number, to: number): number {
   return clamp01((v - from) / span);
 }
 
-/** Turns past From for a periodic driver: (v − from) / (to − from), not clamped (the gradient goes round). */
-export function gradientU(v: number, from: number, to: number): number {
-  const span = Math.abs(to - from) < 1e-5 ? (to >= from ? 1e-5 : -1e-5) : to - from;
-  return (v - from) / span;
+/** Times round the gradient for a periodic driver: (v − from) / span, not clamped (it goes round). Span is the `to` field there. */
+export function gradientU(v: number, from: number, span: number): number {
+  const s = Math.abs(span) < 1e-5 ? (span >= 0 ? 1e-5 : -1e-5) : span;
+  return (v - from) / s;
 }
 const fract = (x: number) => x - Math.floor(x);
 
@@ -315,8 +316,8 @@ float pfGradT(float v, float from, float to) {
     if (abs(span) < 1e-5) span = span < 0.0 ? -1e-5 : 1e-5;
     return clamp((v - from) / span, 0.0, 1.0);
 }
-float pfGradU(float v, float from, float to) {
-    float span = to - from;
+// A periodic driver's place in turns of the gradient: from is where it starts, span how much of the driver one turn covers.
+float pfGradU(float v, float from, float span) {
     if (abs(span) < 1e-5) span = span < 0.0 ? -1e-5 : 1e-5;
     return (v - from) / span;
 }
@@ -394,8 +395,12 @@ export function gradientRangeInputs(params: Record<string, unknown>, settings: R
   const out: Record<string, { type: 'float'; label: string; hint: string }> = {};
   for (const s of settings) {
     if (!gradientOn(params, s.key)) continue;
-    out[fromKey(s.key)] = { type: 'float', label: `${s.label} from`, hint: 'The gradient\'s From: the value at the bar\'s left end. A wire here replaces the field.' };
-    out[toKey(s.key)] = { type: 'float', label: `${s.label} to`, hint: 'The gradient\'s To: the value at the bar\'s right end. A wire here replaces the field.' };
+    const h = headerOf(params, s.key);
+    const periodic = !!h && isPeriodicDriver(h.along);
+    out[fromKey(s.key)] = { type: 'float', label: `${s.label} from`, hint: 'The gradient\'s From: where the bar starts. A wire here replaces the field.' };
+    out[toKey(s.key)] = periodic
+      ? { type: 'float', label: `${s.label} span`, hint: 'The gradient\'s Span: how much of a turn the bar covers. A wire here replaces the field.' }
+      : { type: 'float', label: `${s.label} to`, hint: 'The gradient\'s To: the value at the bar\'s right end. A wire here replaces the field.' };
   }
   return out;
 }
@@ -413,6 +418,7 @@ export function withGradientRangeSockets<N extends { params: Record<string, unkn
   let inputs: Record<string, unknown> | null = null;
   for (const [k, s] of Object.entries(want)) {
     if (!n.inputs[k]) { inputs ??= { ...n.inputs }; inputs[k] = { type: s.type, label: s.label }; }
+    else if (n.inputs[k].label !== s.label) { inputs ??= { ...n.inputs }; inputs[k] = { ...n.inputs[k], label: s.label }; } // To ↔ Span with Along
   }
   for (const k of Object.keys(n.inputs)) {
     if (isGradientRangeKey(k) && !want[k] && !n.inputs[k].connection) { inputs ??= { ...n.inputs }; delete inputs[k]; }

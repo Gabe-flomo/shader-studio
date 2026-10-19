@@ -41,14 +41,15 @@ Click **Gradient** beside the swatch. Then:
   **Mirror** runs the stops 0 → 1 over half a turn and back 1 → 0 over the other half.
 - **From / To**: the driver's values at the bar's left and right ends, as small sliders (drag, or type a
   number; typing past an end widens the slider, as everywhere). Height runs from −1 to 1 at first; set From 0
-  and To 2 to put the whole bar on the upper half of a scene. Swap them to flip it. For Angle, From is where
-  round the circle the gradient starts and To − From how much of a turn it spans (1 = one turn, 0.5 = the
-  gradient twice round), so animating From turns a colour wheel with no seam.
+  and To 2 to put the whole bar on the upper half of a scene. Swap them to flip it. For Angle the second
+  field is **Span**: From is where round the circle the gradient starts and Span how much of a turn the bar
+  covers (1 = one turn, 0.5 = the gradient twice round, negative runs it the other way), so animating From
+  alone turns a colour wheel with no seam and no change of size. (It is the same `__gto` param, read as a span.)
 
 ### Animating From and To
 
 While a setting is a Gradient, its node has two more input sockets, **‹Setting› from** and **‹Setting› to**
-(SDF Glow's are *Tint from* and *Tint to*). A wire there replaces the slider, the way a socket replaces a slider
+(SDF Glow's are *Tint from* and *Tint to*; *Tint span* along Angle). A wire there replaces the slider, the way a socket replaces a slider
 anywhere: wire Time into *Tint from* on an Angle gradient and the wheel turns. The slider row shows the wire
 instead. Switching back to Solid takes the sockets away (a wired one stays until it is unwired).
 
@@ -94,14 +95,15 @@ pfGradientWrap(pfGradU(<driver>, from, to), n, blend, c0 … c7, p0 … p7)     
 pfGradient(pfGradMirror(pfGradU(<driver>, from, to)), n, blend, c0 … c7, p0 … p7)    // Mirror
 ```
 
-`pfGradU` is `(v − from) / (to − from)` unclamped (turns). Wrap takes its fraction and lays one turn over the
+`pfGradU` is `(v − from) / span` unclamped (turns; the span is the `to` param). Wrap takes its fraction and lays one turn over the
 stops' stretch of the bar plus a closing segment, as long as the average gap between stops, where the last colour
 blends back into the first (Constant holds the last colour there). So stops at 0, ½ and 1 share the turn in thirds,
 and stops at 0, ¼, ½ and ¾ land on the quarters. Mirror is `1 − |1 − 2·fract(u)|`. `evalGradientWrap`,
 `mirrorT` and `evalGradientAt` are the same maths in JS, and the setting's swatch draws one turn from them.
 
 A gradient saved before Wrap / Mirror existed has no `repeat` and wraps: an Angle gradient's hard seam where
-the angle crossed ±π is gone, which is the point. One that relied on the cut (it is hard to see why one would)
+the angle crossed ±π is gone, which is the point. Its To is read as a span from then on: the default range
+(0 → 1) is unchanged, a narrowed one (From 0.25, To 0.75, say) now covers 0.75 of a turn from 0.25. One that relied on the cut (it is hard to see why one would)
 can get it back with stops that end on the same colour they start with.
 
 A wire into From or To (the `<key>__gfrom` / `<key>__gto` sockets) is passed to `gradientColourGlsl` with the
@@ -130,7 +132,7 @@ Drivers (`GRADIENT_DRIVERS`) map a context's values onto a number:
 | Field brightness | the Field's value | 0 → 1 |
 | UV X / UV Y | the pixel's place | −1 → 1 |
 | Radial | distance from the middle | 0 → 1 |
-| Angle (periodic: Wrap / Mirror) | round the middle, one turn | 0 → 1 |
+| Angle (periodic: Wrap / Mirror) | round the middle, one turn | From 0, Span 1 |
 
 To offer a gradient on another colour setting: list its drivers on the ParamDef (`gradient: [...]`),
 call `gradientColourGlsl(params, key, ctx, drivers, inputVars)` in the node's GLSL with what the context has
