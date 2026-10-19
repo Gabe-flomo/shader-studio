@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.305',
+    date: '2026-10-19',
+    title: "Pictures in 3D",
+    highlights: [
+      { area: 'Studio', text: "Put a picture or video into a 3D scene as a card, or wrap it onto any shape. Also in the 3D Scene Builder, with three new examples." },
+    ],
+  },
+  {
     id: '2026.10.304',
     date: '2026-10-19',
     title: "Clear is back",
