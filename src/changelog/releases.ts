@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.311',
+    date: '2026-10-19',
+    title: "Triggers, rebuilt",
+    highlights: [
+      { area: 'Studio', text: "Audio triggers catch the start of each hit and never fire in silence. Pick Kick, Snare, Hats or Notes and set one Sensitivity." },
+    ],
+  },
+  {
     id: '2026.10.310',
     date: '2026-10-19',
     title: "Moving displacement",
