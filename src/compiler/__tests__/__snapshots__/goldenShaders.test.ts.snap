@@ -15691,6 +15691,29 @@ exports[`golden shaders: every example compiles as it did > particlesRoundShape 
 }
 `;
 
+exports[`golden shaders: every example compiles as it did > perspectivePlanes 1`] = `
+{
+  "audioUniforms": {},
+  "echo": null,
+  "errors": null,
+  "fragmentShader": "128e2761ddc150018696ab99a032:8993",
+  "isStateful": false,
+  "liveUniforms": {},
+  "nodeSlugs": "054c1682ddf644143189062ae43f:244",
+  "paramBindings": "04b6b07606711b13aa1e006cdc75:89",
+  "paramUniforms": [
+    "u_p_perspectivx0_ratio",
+    "u_p_perspectivx0xc2_ratio",
+  ],
+  "paramValues": "085674ad9cc74b0ab33a6316df91:62",
+  "passes": null,
+  "success": true,
+  "textureUniforms": {},
+  "vertexShader": "1ddaa7d0b3c1631ea3c930991808:87",
+  "videoUniforms": {},
+}
+`;
+
 exports[`golden shaders: every example compiles as it did > pianoRollScale 1`] = `
 {
   "audioUniforms": {},

@@ -52,6 +52,7 @@ import { RIDE_CURVE_EXAMPLE_INDEX } from './agentRideCurveExamples';
 import { SCENE_BUILDER_EXAMPLE_INDEX } from './sceneBuilderExampleIndex';
 import { SCENE_BUILDER_2D_EXAMPLE_INDEX } from './sceneBuilder2dExampleIndex';
 import { RETIRED_EXAMPLE_KEYS } from './retiredExamples';
+import { CURATED_EXAMPLE_INDEX } from './curatedExamples';
 
 export type ExampleGraph = {
   label: string; nodes: GraphNode[]; counter: number;
@@ -287,6 +288,8 @@ export const EXAMPLE_INDEX: Record<string, ExampleIndexEntry> = {
   ...GRID_RULES_EXAMPLE_INDEX,
   // Agents: rules (agentRuleExamples.ts, docs/agent-rules.md): the Agent Rules templates, behaviour as When … Do … lines.
   ...AGENT_RULE_EXAMPLE_INDEX,
+  // Built for the curated lists (curatedExamples.ts): new showpieces where a category needed one.
+  ...CURATED_EXAMPLE_INDEX,
 };
 
 // The default graph to load on startup
@@ -326,7 +329,7 @@ export const EXAMPLE_FOLDERS: ExampleFolder[] = [
   { label: "Learn · Book of Shaders course", color: ctp.lavender, keys: LEARN_EXAMPLE_KEYS, course: true },
   { label: "Learn · 3D course",            color: ctp.lavender, keys: LEARN3D_EXAMPLE_KEYS, course: true },
   { label: "2D: Shapes, Space & Colour", color: ctp.peach, keys: ['fractalRings','colorStopsCycle','spaceAtlas','perspectivePlanes','newtonFractalZ5'] },
-  { label: "2D: Scene Builder", color: ctp.pink, keys: ['sb2Kaleidoscope','sb2RingOfRings','sb2RippleGrid','sb2DepthBeams','sb2MirrorFlower'] },
+  { label: "2D: Scene Builder", color: ctp.pink, keys: ['sb2Kaleidoscope','sb2RingOfRings','sb2RippleGrid','sb2DepthBeams','sb2Melt'] },
   { label: "Curves & Shapes",   color: ctp.lavender, keys: ['curveTraceBeam','curveTraceIntervals','curveTraceMorph','chladniModeFreqDemo','agentRideHarmonograph'] },
   { label: "Grid",              color: ctp.sky, keys: ['gridTourMorph','gridTourRipple','gridTourOverflow','gridDensityWave','boundsBouncingCopies'] },
   { label: "Matrices",          color: ctp.peach, keys: ['matrixFoldFractal','matrixLattices','matrixAnyBasis','matrixCornerPin','matrixNoiseOctaves'] },

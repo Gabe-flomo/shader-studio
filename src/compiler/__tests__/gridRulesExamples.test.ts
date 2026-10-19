@@ -13,7 +13,7 @@ import { compileGraph } from '../graphCompiler';
 import { getNodeDefinition, resolveNodeAliases } from '../../nodes/definitions';
 import { EXAMPLE_GRAPHS } from '../../store/exampleGraphs';
 import { EXAMPLE_INDEX, unfiledIn } from '../../store/exampleIndex';
-import { GRID_RULES_EXAMPLE_KEYS } from '../../store/gridRulesExampleIndex';
+import { GRID_RULES_EXAMPLE_KEYS, simGridsFolderKeys } from '../../store/gridRulesExampleIndex';
 import { SIM_GRID_EXAMPLE_KEYS } from '../../store/simGridExamples';
 import { gridCellsId } from '../gridRulesExpand';
 import { stepperFor } from './gridHarness';
@@ -22,6 +22,8 @@ import { makeBoard } from './glslRun';
 describe('the Grid Rules examples', () => {
   it('sit in Simulations: grids, each beside the wired version it rebuilds', () => {
     expect(unfiledIn('Grid simulations', [...GRID_RULES_EXAMPLE_KEYS, ...SIM_GRID_EXAMPLE_KEYS])).toEqual([]);
+    // Each Grid Rules example sits beside its wired twin in the full order (simGridsFolderKeys).
+    const keys = simGridsFolderKeys();
     for (const k of GRID_RULES_EXAMPLE_KEYS) {
       expect(EXAMPLE_INDEX[k].label).toMatch(/\(Grid Rules\)$/);
       const n = EXAMPLE_INDEX[k].label.match(/^Grid sims (\d+) ·/)![1];

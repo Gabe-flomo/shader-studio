@@ -18,6 +18,7 @@
  * param being driven instead of set.
  */
 import type { ExampleGraph } from './exampleIndex';
+import type { GraphNode } from '../types/nodeGraph';
 import type { PlayControl, PlayMapping, PlayRecord, PlaySource } from '../types/play';
 import { ctl, n, out, time, uv } from './graphBuilder';
 
@@ -63,6 +64,8 @@ export const GRID_EXAMPLE_KEYS = Object.keys(GRID_EXAMPLE_INDEX);
 
 /** A node comment (shown on the card's Comment tab and in the generated code). */
 const note = (text: string) => ({ __comment: text });
+/** A ready-made node (uv(), time(), group()) with a note added. */
+const noted = (node: GraphNode, text: string): GraphNode => ({ ...node, params: { ...node.params, __comment: text } });
 
 const map = (id: string, controlId: string, source: PlaySource, outMin: number, outMax: number): PlayMapping =>
   ({ id, controlId, source, outMin, outMax, curve: 'linear', smoothMs: 0, enabled: true });
@@ -136,22 +139,22 @@ export function buildGridExamples(): Record<string, ExampleGraph> {
 
   // ── 3 · One wire: morph + spin per cell ───────────────────────────────────
   add('gridTourMorph', [
-    time(40, 520),
+    noted(time(40, 520), 'Seconds since start: added to each cell\'s random phase to make its own clock.'),
     n('fieldCell', 'cell', 40, 260, { ...note('Inside the chain wired into Grid Pattern’s Shape, Cell is the cell being drawn. Its Cell ID seeds everything below, so every cell is on its own clock.') }),
     n('noiseFloat', 'phase', 280, 260, { mode: 'hash', scale: 1, speed: 0, outMin: 0, outMax: 6.2832,
       ...note('A random phase per cell, 0…2π.') }, { uv: ['cell', 'cellID'] }),
     n('add', 'clock', 520, 360, { ...note('Phase + Time: each cell’s own clock.') }, { a: ['phase', 'value'], b: ['time', 'time'] }),
-    n('sin', 'wave', 760, 440, { freq: 1.2 }, { input: ['clock', 'result'] }),
+    n('sin', 'wave', 760, 440, { ...note('Sine of the clock at Freq 1.2: each cell swings between star and square about every 5 seconds (Morph speed on the Play page).'), freq: 1.2 }, { input: ['clock', 'result'] }),
     n('remap', 'blend', 1000, 440, { inMin: -1, inMax: 1, outMin: 0, outMax: 1,
       ...note('The sine, from −1…1 to 0…1: how far this cell is between the star and the square.') }, { value: ['wave', 'output'] }),
     n('multiply', 'spin', 760, 200, { b: 0.6, ...note('The same clock, slower: the turning angle.') }, { a: ['clock', 'result'] }),
     n('uv', 'luv', 760, 40, { ...note('Inside a field chain the UV node is the cell’s own coordinates (−0.5…0.5), not the canvas.') }),
-    n('transform', 'rot', 1000, 120, { dim: '2', mode: 'space' }, { p: ['luv', 'uv'], turn: ['spin', 'result'] }),
-    n('shapeSDF', 'star', 1240, 40, { shape: 'starN', r: 0.36, n_pts: 5, m_pts: 2.4 }, { p: ['rot', 'p'] }),
-    n('boxSDF', 'box', 1240, 240, { width: 0.24, height: 0.24 }, { position: ['rot', 'p'] }),
+    n('transform', 'rot', 1000, 120, { ...note('Turns the cell\'s coordinates by the spin angle, so the star and the square spin together.'), dim: '2', mode: 'space' }, { p: ['luv', 'uv'], turn: ['spin', 'result'] }),
+    n('shapeSDF', 'star', 1240, 40, { ...note('A five-point star of radius 0.36: one end of the morph (Star size on the Play page).'), shape: 'starN', r: 0.36, n_pts: 5, m_pts: 2.4 }, { p: ['rot', 'p'] }),
+    n('boxSDF', 'box', 1240, 240, { ...note('A square, Width and Height 0.24: the other end of the morph (Square width on the Play page).'), width: 0.24, height: 0.24 }, { position: ['rot', 'p'] }),
     n('mix', 'morph', 1480, 200, { ...note('Mixing two distances gives the shapes in between: 0 is the star, 1 the square.') },
       { a: ['star', 'distance'], b: ['box', 'distance'], t: ['blend', 'result'] }),
-    n('palette', 'pal', 1480, 460, { preset: '1', scale: 0.16 }, { value: ['phase', 'value'] }),
+    n('palette', 'pal', 1480, 460, { ...note('The cell\'s random phase picks its colour. Scale 0.16 stretches the 0…2π phase over about one trip round the palette.'), preset: '1', scale: 0.16 }, { value: ['phase', 'value'] }),
     n('gridPattern', 'gp', 1740, 260, { columns: 18, pattern: 'all', affect: 'none', background: BG,
       ...note('Shape and Picture are field sockets (ƒ): the whole chain behind them is run once per cell, in that cell’s coordinates.') },
       { shape: ['morph', 'result'], picture: ['pal', 'color'] }),
@@ -169,17 +172,17 @@ export function buildGridExamples(): Record<string, ExampleGraph> {
 
   // ── 4 · Big patterns from per-cell numbers ────────────────────────────────
   add('gridTourRipple', [
-    time(40, 520),
-    n('multiply', 'speed', 280, 520, { b: 1.5 }, { a: ['time', 'time'] }),
+    noted(time(40, 520), 'Seconds since start: the clock the rings ride on.'),
+    n('multiply', 'speed', 280, 520, { ...note('Time × 1.5: how fast the rings roll outward (Speed on the Play page; negative rolls them inward).'), b: 1.5 }, { a: ['time', 'time'] }),
     n('fieldCell', 'cell', 40, 260, { ...note('Cell ID is the column and row, centred on the middle of the canvas: a number per cell that big patterns can be computed from.') }),
     n('length', 'dist', 280, 260, { scale: 0.9, ...note('How far this cell is from the centre, in cells. Scale sets the ring spacing (Play maps the mouse X to it).') }, { input: ['cell', 'cellID'] }),
     n('subtract', 'phase', 520, 360, { ...note('Distance − Time: rings moving outward.') }, { a: ['dist', 'output'], b: ['speed', 'result'] }),
-    n('sin', 'wave', 760, 360, {}, { input: ['phase', 'result'] }),
+    n('sin', 'wave', 760, 360, { ...note('Sine of distance − time: one ring every 2π of scaled distance, about every 7 cells at Scale 0.9.') }, { input: ['phase', 'result'] }),
     n('remap', 'size', 1000, 260, { inMin: -1, inMax: 1, outMin: 0.05, outMax: 0.46,
       ...note('The wave as a radius: each cell’s circle is as big as the wave is high at that cell.') }, { value: ['wave', 'output'] }),
-    n('circleSDF', 'circ', 1240, 200, {}, { radius: ['size', 'result'] }),
-    n('palette', 'pal', 1240, 440, { preset: '4', scale: 0.3 }, { value: ['wave', 'output'] }),
-    n('gridPattern', 'gp', 1500, 260, { columns: 36, pattern: 'all', affect: 'none', background: BG },
+    n('circleSDF', 'circ', 1240, 200, { ...note('A circle in each cell, its radius from the wave. Its UV is empty, so inside the field chain it is the cell\'s own coordinates.') }, { radius: ['size', 'result'] }),
+    n('palette', 'pal', 1240, 440, { ...note('The wave picks the colour too (preset 4, Scale 0.3), so crests and troughs differ in colour as well as size.'), preset: '4', scale: 0.3 }, { value: ['wave', 'output'] }),
+    n('gridPattern', 'gp', 1500, 260, { ...note('36 columns of cells, every one drawn (Pattern All). Shape and Picture are field sockets, so the chain behind them runs once per cell.'), columns: 36, pattern: 'all', affect: 'none', background: BG },
       { shape: ['circ', 'distance'], picture: ['pal', 'color'] }),
     out(['gp', 'color'], 1760),
   ], playRecord([
@@ -222,13 +225,13 @@ export function buildGridExamples(): Record<string, ExampleGraph> {
 
   // ── 6 · Overflow ──────────────────────────────────────────────────────────
   add('gridTourOverflow', [
-    uv(),
-    n('mouse', 'mouse', 40, 420),
-    n('fieldCell', 'cell', 40, 620),
+    noted(uv(), 'The canvas position, into Grid Pattern.'),
+    n('mouse', 'mouse', 40, 420, { ...note('The mouse position: Grid Pattern pushes the rings away from it.') }),
+    n('fieldCell', 'cell', 40, 620, { ...note('The cell being drawn; its Cell ID seeds the colour hash.') }),
     n('ringSDF', 'ring', 300, 520, { radius: 0.56, ...note('A ring wider than its cell (the cell is 1 across, the ring 1.12). Without Overflow it would be cut to a square.') }),
     n('subtract', 'thick', 540, 520, { b: 0.05, ...note('Ring SDF is a line; subtracting a width gives it thickness.') }, { a: ['ring', 'distance'] }),
-    n('noiseFloat', 'hash', 300, 740, { mode: 'hash', scale: 1, speed: 0 }, { uv: ['cell', 'cellID'] }),
-    n('palette', 'pal', 540, 740, { preset: '1', scale: 1 }, { value: ['hash', 'value'] }),
+    n('noiseFloat', 'hash', 300, 740, { ...note('Hash mode: a random 0–1 number per cell from its Cell ID.'), mode: 'hash', scale: 1, speed: 0 }, { uv: ['cell', 'cellID'] }),
+    n('palette', 'pal', 540, 740, { ...note('That number picks each ring\'s colour (preset 1).'), preset: '1', scale: 1 }, { value: ['hash', 'value'] }),
     n('gridPattern', 'gp', 820, 260, {
       columns: 14, pattern: 'all', jitter: 0.25, affect: 'push', affectRadius: 0.9, affectSoftness: 0.8, affectAmount: 0.45,
       overflow: 'neighbours', antialias: 0.012, background: BG,

@@ -30,6 +30,8 @@ type Wire = [string, string];
 type RGB = [number, number, number];
 
 const note = (text: string) => ({ __comment: text });
+/** A ready-made node (uv(), time()) with a note added. */
+const noted = (node: GraphNode, text: string): GraphNode => ({ ...node, params: { ...node.params, __comment: text } });
 
 /** A math node switched to a vector type, as the type pills on its card do: its main sockets, its result and params.outputType. */
 function vt(node: GraphNode, t: 'vec2' | 'vec3'): GraphNode {
@@ -519,19 +521,19 @@ lesson('learnBricks', [
 **Try.** Row offset 0 is a plain grid, 1 looks the same as 0 (a whole brick). Wire Time × 0.3 into the Multiply's B in place of the slider and the odd rows slide along forever. Do the same on x for columns.`);
 
 lesson('learnTruchet', [
-  uv(),
-  n('constant', 'cols', 40, 440, { value: 16 }),
+  noted(uv(), 'The canvas position, centred on 0. Grid cuts it into cells.'),
+  n('constant', 'cols', 40, 440, { value: 16, ...note('16 cells across the width. The Columns slider on the Play page sets this; fewer cells make the 2×2 blocks easier to see.') }),
   n('gridLayout', 'grid', 280, 220, { ...note('Cell UV: coordinates inside each cell. Cell ID: which cell, as whole numbers.') }, { uv: ['uv', 'uv'], columns: ['cols', 'value'] }),
-  n('splitVec2', 'id', 520, 400, {}, { v: ['grid', 'cellID'] }),
+  n('splitVec2', 'id', 520, 400, { ...note('The cell ID into its column (x) and row (y), so each can be tested for odd or even.') }, { v: ['grid', 'cellID'] }),
   n('mod', 'mx', 760, 340, { period: 2, ...note('Odd or even column?') }, { input: ['id', 'x'] }),
   n('mod', 'my', 760, 500, { period: 2, ...note('Odd or even row?') }, { input: ['id', 'y'] }),
-  n('multiply', 'my2', 1000, 500, { b: 2 }, { a: ['my', 'output'] }),
+  n('multiply', 'my2', 1000, 500, { b: 2, ...note('Row parity × 2, so column + 2 × row gives four different numbers.') }, { a: ['my', 'output'] }),
   n('add', 'index', 1240, 420, { ...note('0, 1, 2 or 3: where the cell sits in its 2×2 block.') }, { a: ['mx', 'output'], b: ['my2', 'result'] }),
   n('multiply', 'turn', 1480, 420, { b: 1.5708, ...note('Index × a quarter turn (π/2).') }, { a: ['index', 'result'] }),
-  n('transform', 'spun', 1720, 220, { dim: '2', mode: 'space' }, { p: ['grid', 'cellUV'], turn: ['turn', 'result'] }),
-  n('splitVec2', 'c', 1960, 220, {}, { v: ['spun', 'p'] }),
+  n('transform', 'spun', 1720, 220, { dim: '2', mode: 'space', ...note('Turns the Cell UV by this cell\'s angle, so the same triangle points four different ways.') }, { p: ['grid', 'cellUV'], turn: ['turn', 'result'] }),
+  n('splitVec2', 'c', 1960, 220, { ...note('The turned cell coordinates as x and y for the Step below.') }, { v: ['spun', 'p'] }),
   n('step', 'half', 2200, 220, { ...note('step(x, y): 1 above the diagonal, 0 below. One triangle, the whole tile design.') }, { edge: ['c', 'x'], x: ['c', 'y'] }),
-  n('colorize', 'paint', 2440, 220, { color: [0.96, 0.86, 0.62], background: [0.1, 0.3, 0.35] }, { field: ['half', 'result'] }),
+  n('colorize', 'paint', 2440, 220, { color: [0.96, 0.86, 0.62], background: [0.1, 0.3, 0.35], ...note('Cream where the Step is 1, teal where it is 0. Change the two colours to restyle the tiles.') }, { field: ['half', 'result'] }),
   out(['paint', 'color'], 2680),
 ], [ctl('n', 'cols::value', 'Columns', 4, 48, 1), ctl('t', 'turn::b', 'Turn per index', 0, 3.1416, 0.01)], `**What it shows.** Truchet tiles: one simple tile design, here a square cut into two triangles along its diagonal, turned four different ways. Turning each cell by a quarter turn per its place in a 2×2 block makes big patterns (diamonds, zigzags, arrows) out of that one triangle.
 
@@ -626,16 +628,16 @@ lesson('learnNoise', [
 **Try.** Scale 1 for one big blob, 16 for grain. Switch Mode between Smooth and Perlin and compare the shapes. Wire the noise into a circle's radius, a UV Transform angle, or a Palette.`);
 
 lesson('learnWood', [
-  uv(),
-  vt(n('multiply', 'pos', 280, 220, { b: 3 }, { a: ['uv', 'uv'] }), 'vec2'),
+  noted(uv(), 'The canvas position, the space the stripes are drawn in.'),
+  vt(n('multiply', 'pos', 280, 220, { b: 3, ...note('UV × 3: zooms out so more noise features fit across. The Scale slider sets this.') }, { a: ['uv', 'uv'] }), 'vec2'),
   n('noiseFloat', 'nz', 520, 400, { mode: 'smooth', scale: 1, speed: 0, ...note('A slowly changing number for every point.') }, { uv: ['pos', 'result'] }),
   n('multiply', 'twist', 760, 400, { b: 0.6, ...note('The noise becomes an angle.') }, { a: ['nz', 'value'] }),
   n('transform', 'bent', 1000, 220, { dim: '2', mode: 'space', ...note('Each point is turned by its own noise angle, so straight lines bend.') }, { p: ['pos', 'result'], turn: ['twist', 'result'] }),
-  n('splitVec2', 'b', 1240, 220, {}, { v: ['bent', 'p'] }),
+  n('splitVec2', 'b', 1240, 220, { ...note('Only the bent x is needed: the stripes run along it.') }, { v: ['bent', 'p'] }),
   n('sin', 'rings', 1480, 220, { freq: 14, amp: 1, ...note('Stripes: a sine of x.') }, { input: ['b', 'x'] }),
-  n('abs', 'a', 1720, 220, {}, { input: ['rings', 'output'] }),
-  n('smoothstep', 'grain', 1960, 220, { edge0: 0, edge1: 0.9 }, { value: ['a', 'output'] }),
-  n('colorize', 'wood', 2200, 220, { color: [0.86, 0.62, 0.38], background: [0.3, 0.14, 0.06] }, { field: ['grain', 'result'] }),
+  n('abs', 'a', 1720, 220, { ...note('Folds the negative half of the sine up, so each stripe becomes a pair of rings with a sharp dark seam between.') }, { input: ['rings', 'output'] }),
+  n('smoothstep', 'grain', 1960, 220, { edge0: 0, edge1: 0.9, ...note('Eases 0…0.9 into 0…1, widening the light part of each ring. Bring Edge 1 down towards 0.3 for thin dark lines.') }, { value: ['a', 'output'] }),
+  n('colorize', 'wood', 2200, 220, { color: [0.86, 0.62, 0.38], background: [0.3, 0.14, 0.06], ...note('Two browns: light wood where the grain is 1, dark where it is 0.') }, { field: ['grain', 'result'] }),
   out(['wood', 'color'], 2440),
 ], [ctl('t', 'twist::b', 'Twist', 0, 3, 0.01), ctl('r', 'rings::freq', 'Ring density', 2, 40, 0.1), ctl('s', 'pos::b', 'Scale', 0.5, 8, 0.01)], `**What it shows.** Noise is rarely the picture itself; it bends something else. Straight stripes (a sine of x) look like nothing; turn every point of the space by a noise-driven angle before drawing them and the stripes wander and bunch like the grain in a plank of wood.
 
@@ -670,11 +672,11 @@ lesson('learnCellDistance', [
 **Try.** Move point A with its sliders and watch the cell boundaries shift. Add a fifth point (another Circle SDF and Min). With hundreds of points this gets slow, which is what the next lesson solves.`);
 
 lesson('learnVoronoi', [
-  uv(),
+  noted(uv(), 'The canvas position, fed to Voronoi.'),
   n('voronoi', 'cells', 280, 220, { scale: 3, jitter: 1, time_scale: 0, ...note('Tiles the space; one random point per tile; each pixel checks only its own tile and the eight around it.') }, { uv: ['uv', 'uv'] }),
-  n('colorize', 'field', 520, 160, { color: [1.0, 0.75, 0.45], background: [0.06, 0.03, 0.12], gain: 1.3 }, { field: ['cells', 'dist'] }),
-  n('remap', 'dot', 520, 400, { inMin: 0.04, inMax: 0.07, outMin: 1, outMax: 0 }, { value: ['cells', 'dist'] }),
-  n('colorize', 'final', 760, 220, { color: [1, 1, 1] }, { field: ['dot', 'result'], background: ['field', 'color'] }),
+  n('colorize', 'field', 520, 160, { color: [1.0, 0.75, 0.45], background: [0.06, 0.03, 0.12], gain: 1.3, ...note('Shows the distance to the nearest point: dark at each point, brighter towards the cell edges. Gain 1.3 pushes the edges to full orange.') }, { field: ['cells', 'dist'] }),
+  n('remap', 'dot', 520, 400, { inMin: 0.04, inMax: 0.07, outMin: 1, outMax: 0, ...note('1 within 0.04 of a point, fading to 0 by 0.07: a small soft dot on every point.') }, { value: ['cells', 'dist'] }),
+  n('colorize', 'final', 760, 220, { color: [1, 1, 1], ...note('Paints the dots white over the distance colours.') }, { field: ['dot', 'result'], background: ['field', 'color'] }),
   out(['final', 'color'], 1000),
 ], [ctl('s', 'cells::scale', 'Density', 1, 15, 0.1), ctl('j', 'cells::jitter', 'Randomness', 0, 1, 0.01)], `**What it shows.** The previous lesson for any number of points, at a fixed cost. Cut the plane into tiles (the Patterns chapter) and put one random point in each (the Random chapter). The nearest point can only be in a pixel's own tile or one of the eight around it, so each pixel checks nine points, however many there are. The result, distance to the nearest point, is Steven Worley's *cellular noise*: cells like skin, stone or foam.
 
@@ -699,10 +701,10 @@ lesson('learnOctaves', [
 **Try.** Gain 0 leaves only the first octave: smooth hills. 0.5 is the natural look; 0.8 is jagged rock. Lacunarity near 1 stacks octaves of almost the same size; 3 or 4 spreads them far apart.`);
 
 lesson('learnFBM', [
-  uv(),
-  time(40, 420),
-  n('fbm', 'fbm', 300, 220, { octaves: 5, scale: 1.5, time_scale: 0.15 }, { uv: ['uv', 'uv'], time: ['time', 'time'] }),
-  n('palette', 'pal', 560, 220, { preset: '0', scale: 1 }, { value: ['fbm', 'value'] }),
+  noted(uv(), 'The canvas position the noise is read at.'),
+  noted(time(40, 420), 'Seconds since start. FBM multiplies it by its Speed of 0.15, so the clouds drift slowly.'),
+  n('fbm', 'fbm', 300, 220, { octaves: 5, scale: 1.5, time_scale: 0.15, ...note('Five octaves of noise, each twice as fine and half as strong. Scale 1.5 sets the size of the biggest shapes; Gain sets the roughness.') }, { uv: ['uv', 'uv'], time: ['time', 'time'] }),
+  n('palette', 'pal', 560, 220, { preset: '0', scale: 1, ...note('Turns the 0…1 noise height into a colour along a cosine palette. Try other presets.') }, { value: ['fbm', 'value'] }),
   out(['pal', 'color'], 820),
 ], [ctl('sc', 'fbm::scale', 'Scale', 0.3, 6, 0.05), ctl('g', 'fbm::gain', 'Gain (roughness)', 0.2, 0.8, 0.01)], `**What it shows.** The same stack of octaves in 2D: big soft shapes with finer and finer detail on top, the look of clouds, smoke, terrain and marble. Octaves is how many layers; Gain how much each finer layer counts.
 
@@ -746,10 +748,10 @@ lesson('learnWarp', [
 // ── Fractals (chapter 14, not yet written in the Book) ──────────────────────
 
 lesson('learnFractal', [
-  uv(),
+  noted(uv(), 'The canvas position, shrunk below before it becomes c.'),
   n('constant', 'zoom', 40, 440, { value: 8, ...note('How many times the view has doubled in magnification.') }),
   n('exp', 'size', 280, 440, { scale: -0.6931, ...note('exp(−zoom × ln 2) = 2^−zoom: the size of the view.') }, { input: ['zoom', 'value'] }),
-  vt(n('multiply', 'view', 280, 220, {}, { a: ['uv', 'uv'], b: ['size', 'output'] }), 'vec2'),
+  vt(n('multiply', 'view', 280, 220, { ...note('UV × the view size: each extra zoom step halves the area the pixels cover.') }, { a: ['uv', 'uv'], b: ['size', 'output'] }), 'vec2'),
   n('mandelbrot', 'm', 520, 220, { center_x: -0.7453, center_y: 0.1127, zoom: 0.7, color_scale: 3, ...note('For each pixel: z = z² + c, over and over, with c the pixel\'s position. The colour is how many steps z took to escape.') }, { uv: ['view', 'result'] }),
   out(['m', 'color'], 820),
 ], [ctl('z', 'zoom::value', 'Zoom (doublings)', 0, 16, 0.01)], `**What it shows.** A fractal is a shape made of smaller copies of itself, and the most famous one comes from one line of maths. Take the pixel's position as a complex number c, start z at 0, and repeat z = z² + c. For some pixels z stays small forever: they are the black **Mandelbrot set**. For the rest it flies off, and colouring by how quickly draws the glowing border, which is infinitely detailed.

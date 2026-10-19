@@ -16,6 +16,8 @@ export const SEND_RECEIVE_EXAMPLE_INDEX: Record<string, { label: string; descrip
 export const SEND_RECEIVE_EXAMPLE_KEYS = Object.keys(SEND_RECEIVE_EXAMPLE_INDEX);
 
 const note = (text: string | string[]) => ({ __comment: Array.isArray(text) ? text.join('\n') : text });
+/** A ready-made node (a group()) with a note added. */
+const noted = (node: GraphNode, text: string): GraphNode => ({ ...node, params: { ...node.params, __comment: text } });
 
 /** An Expression Block: named inputs (wired as given), lines `type name = rhs`, a result; its note explains every named line. */
 function expr(id: string, x: number, y: number, o: {
@@ -84,7 +86,7 @@ export function buildSendReceiveExamples(): Record<string, ExampleGraph> {
         'A Send carries a texture the same as a number: the Receive in the Warp group samples it.',
       ]),
 
-      group('rings', 640, 80, {
+      noted(group('rings', 640, 80, {
         label: 'Rings', iterations: 1, inputs: [],
         outputs: [{ key: 'color', type: 'vec3', label: 'Color', from: ['ringLook', 'result'] }],
         nodes: [
@@ -105,9 +107,9 @@ export function buildSendReceiveExamples(): Record<string, ExampleGraph> {
             ],
           }),
         ],
-      }),
+      }), 'Group "Rings": draws rings that pulse with the beat. It has no inputs at all: the beat arrives through the Receive inside it.'),
 
-      group('warp', 1240, 300, {
+      noted(group('warp', 1240, 300, {
         label: 'Warp', iterations: 1, inputs: [],
         outputs: [{ key: 'color', type: 'vec3', label: 'Color', from: ['samp', 'color'] }],
         nodes: [
@@ -127,7 +129,7 @@ export function buildSendReceiveExamples(): Record<string, ExampleGraph> {
           }),
           n('sampleTexture', 'samp', 640, 160, note('Sample (texture): reads the received picture at the wobbled place.'), { texture: ['rcvPic', 'value'], uv: ['wobble', 'result'] }),
         ],
-      }),
+      }), 'Group "Warp": reads the sent picture at a place that swirls with the beat. Both the picture and the beat come in through Receives, not group inputs.'),
 
       expr('combine', 1540, 80, {
         label: 'Combine', outputType: 'vec3',

@@ -189,7 +189,9 @@ describe('2D Scene Builder: a picture with depth', () => {
         expect(r.errors ?? [], key).toEqual([]);
         expect(r.success, key).toBe(true);
         const pic = g.nodes.find(n => n.type === 'textureInput')!;
-        expect(Object.keys(g.images ?? {})).toEqual([pic.id]);
+        // The built-in Room and cat photo (lib/builtinImages.ts), loaded by its id, not embedded.
+        expect(pic.params.libraryId).toBe('builtin:room-and-cat');
+        expect(g.images).toBeUndefined();
         expect(g.nodes.find(n => n.type === 'depth')!.inputs.texture.connection?.nodeId).toBe(pic.id);
       }
       // Size: shapes grow by depth; Beams: shapes read Depth UV, with a flowing gradient

@@ -9,7 +9,13 @@
  * including a shape built inside a Group.
  */
 import type { ExampleGraph } from './exampleIndex';
+import type { GraphNode } from '../types/nodeGraph';
 import { ctl, group, n, out, play, port, time, uv } from './graphBuilder';
+
+/** A node comment (shown on the card's Comment tab and in the generated code). */
+const note = (text: string) => ({ __comment: text });
+/** A ready-made node (uv(), time(), group()) with a note added. */
+const noted = (node: GraphNode, text: string): GraphNode => ({ ...node, params: { ...node.params, __comment: text } });
 
 export const COMBO_EXAMPLE_INDEX: Record<string, { label: string; description: string; play: true }> = {
   comboGridPaintShapes: {
@@ -116,11 +122,11 @@ export function buildComboExamples(): Record<string, ExampleGraph> {
 **Try.** Set Overflow back to Clip and pull: the circles are cut at their cell edges. Raise Largest radius past 0.5 so neighbours overlap. Swap Circle SDF for Shape SDF (Heart, Star) without touching anything else.`);
 
   add('comboArrayStars', [
-    time(40, 420),
-    n('fieldCell', 'cell', 40, 220),
-    n('shapeSDF', 'star', 320, 160, { shape: 'starN', r: 0.06, n_pts: 5, m_pts: 2.5, __inExpr_r: '0.045 + input * 0.009' }, { r: ['cell', 'index'] }),
-    n('palette', 'pal', 320, 400, { preset: '1', scale: 1, __inExpr_value: 'input / 12.0' }, { value: ['cell', 'index'] }),
-    n('arrayField', 'arr', 620, 220, { layout: 'ring', count: 12, radius: 0.62, combine: 'min', turn: true, antialias: 0.004, background: [0.04, 0.04, 0.07], __inExpr_rotation: 'input * 0.2' },
+    noted(time(40, 420), 'Seconds since start, into the Array\'s Rotation; the input expression input × 0.2 turns the ring 0.2 radians a second.'),
+    n('fieldCell', 'cell', 40, 220, { ...note('Inside the star\'s chain: the copy being drawn. Its Index (0 to 11) grows and colours the stars in order.') }),
+    n('shapeSDF', 'star', 320, 160, { ...note('A five-point star. Its radius comes from the Index through the input expression 0.045 + input × 0.009: from 0.045 up to about 0.14.'), shape: 'starN', r: 0.06, n_pts: 5, m_pts: 2.5, __inExpr_r: '0.045 + input * 0.009' }, { r: ['cell', 'index'] }),
+    n('palette', 'pal', 320, 400, { ...note('Index ÷ 12 (input expression) walks once round the palette over the twelve stars.'), preset: '1', scale: 1, __inExpr_value: 'input / 12.0' }, { value: ['cell', 'index'] }),
+    n('arrayField', 'arr', 620, 220, { ...note('Twelve copies of the star on a ring of radius 0.62, each turned to point outward (Turn copies), combined with Union. Time turns the ring.'), layout: 'ring', count: 12, radius: 0.62, combine: 'min', turn: true, antialias: 0.004, background: [0.04, 0.04, 0.07], __inExpr_rotation: 'input * 0.2' },
       { shape: ['star', 'distance'], picture: ['pal', 'color'], rotation: ['time', 'time'] }),
     out(['arr', 'color'], 900),
   ], [ctl('r', 'arr::radius', 'Ring radius', 0.1, 1.2, 0.005), ctl('w', 'arr::sweep', 'Sweep', 0.5, 6.2832, 0.01), ctl('s', 'arr::startAngle', 'Start angle', -3.1416, 3.1416, 0.01)],
@@ -131,25 +137,25 @@ export function buildComboExamples(): Record<string, ExampleGraph> {
 **Try.** Lower Sweep: the stars fan out over an arc from first to last. Switch Layout to Line or Grid. Set Combine to Smooth union and raise Smoothness until the stars melt into one another.`);
 
   add('comboGridGroupFlower', [
-    uv(),
-    n('mouse', 'mouse', 40, 420),
-    group('flower', 360, 520, {
+    noted(uv(), 'The canvas position, into Grid Pattern.'),
+    n('mouse', 'mouse', 40, 420, { ...note('The mouse position: flowers near it spin.') }),
+    noted(group('flower', 360, 520, {
       label: 'Flower', iterations: 1, inputs: [],
       outputs: [
         { key: 'd', type: 'float', label: 'Distance', from: ['bloom', 'dist'] },
         { key: 'c', type: 'vec3', label: 'Colour', from: ['pal', 'color'] },
       ],
       nodes: [
-        n('fieldCell', 'cell', 40, 220),
-        n('noiseFloat', 'hash', 300, 220, { mode: 'hash', scale: 1, speed: 0 }, { uv: ['cell', 'cellID'] }),
-        n('circleSDF', 'petal', 300, 40, { radius: 0.1 }),
-        n('arrayField', 'petals', 560, 40, { layout: 'ring', radius: 0.22, combine: 'smin', smoothK: 0.03, turn: true, __inExpr_count: '5.0 + floor(input * 4.0)' }, { shape: ['petal', 'distance'], count: ['hash', 'value'] }),
-        n('circleSDF', 'centre', 560, 260, { radius: 0.1 }),
-        n('sdfUnion', 'bloom', 820, 120, { k: 0.02 }, { a: ['petals', 'distance'], b: ['centre', 'distance'] }),
-        n('palette', 'pal', 560, 420, { preset: '1', scale: 1 }, { value: ['hash', 'value'] }),
+        n('fieldCell', 'cell', 40, 220, { ...note('Inside the field chain: the grid cell being drawn. Its Cell ID seeds the petal count and the colour.') }),
+        n('noiseFloat', 'hash', 300, 220, { ...note('Hash mode: a random 0–1 number per cell.'), mode: 'hash', scale: 1, speed: 0 }, { uv: ['cell', 'cellID'] }),
+        n('circleSDF', 'petal', 300, 40, { ...note('One petal: a circle of radius 0.1 in the copy\'s own coordinates.'), radius: 0.1 }),
+        n('arrayField', 'petals', 560, 40, { ...note('Repeats the petal on a ring of radius 0.22, each turned to face out, joined by a smooth union (0.03). Its Count expression 5 + floor(input × 4) gives 5 to 8 petals per cell.'), layout: 'ring', radius: 0.22, combine: 'smin', smoothK: 0.03, turn: true, __inExpr_count: '5.0 + floor(input * 4.0)' }, { shape: ['petal', 'distance'], count: ['hash', 'value'] }),
+        n('circleSDF', 'centre', 560, 260, { ...note('The middle of the flower: a circle of radius 0.1.'), radius: 0.1 }),
+        n('sdfUnion', 'bloom', 820, 120, { ...note('Petals and centre joined with a slight smoothing (0.02): the flower\'s distance, the group\'s Distance output.'), k: 0.02 }, { a: ['petals', 'distance'], b: ['centre', 'distance'] }),
+        n('palette', 'pal', 560, 420, { ...note('The same hash picks the flower\'s colour (preset 1): the group\'s Colour output.'), preset: '1', scale: 1 }, { value: ['hash', 'value'] }),
       ],
-    }),
-    n('gridPattern', 'gp', 700, 220, { columns: 8, pattern: 'all', affect: 'spin', affectRadius: 0.9, affectSoftness: 0.8, affectAmount: 1.5, background: [0.05, 0.06, 0.05] },
+    }), 'The Flower: two outputs, Distance into Grid Pattern\'s Shape and Colour into its Picture, so the whole group is run once per cell.'),
+    n('gridPattern', 'gp', 700, 220, { ...note('8 columns, one flower per cell. Affect Spin turns the flowers within 0.9 of the mouse by up to 1.5 radians.'), columns: 8, pattern: 'all', affect: 'spin', affectRadius: 0.9, affectSoftness: 0.8, affectAmount: 1.5, background: [0.05, 0.06, 0.05] },
       { uv: ['uv', 'uv'], affectPos: ['mouse', 'uv'], shape: ['flower', 'd'], picture: ['flower', 'c'] }),
     out(['gp', 'color'], 1000),
   ], [ctl('j', 'gp::jitter', 'Jitter', 0, 1, 0.01), ctl('r', 'gp::affectRadius', 'Mouse radius', 0.1, 3, 0.01), ctl('a', 'gp::affectAmount', 'Spin', 0, 6.2832, 0.01)],
