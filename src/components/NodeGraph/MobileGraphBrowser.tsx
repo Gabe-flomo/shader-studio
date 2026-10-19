@@ -1535,7 +1535,7 @@ export function MobileGraphBrowser() {
     sourceNodeId: string; sourceOutputKey: string; sourceOutputType: string;
     targetNodeId: string; targetInputKey: string; targetInputType: string;
   } | null>(null);
-  const [homeGraphView, setHomeGraphView] = useState(false);
+  const [homeGraphView] = useState(false); // The phone shows the list only (no Graph view)
   // 'rank' is the synthetic BFS-depth grid (computeGraphLayout); 'real' mirrors
   // the desktop canvas's actual spatial layout (computeRealLayout), read-only.
   const [homeGraphLayoutMode, setHomeGraphLayoutMode] = useState<'rank' | 'real'>('rank');
@@ -4056,11 +4056,6 @@ export function MobileGraphBrowser() {
               title="Cluster visually only — no wiring, no compile effect" style={{ height: 40 }}>
               Folder
             </Button>
-            {/* The selection in the Do… bar: teach it as a phrase, or check whether the chain is typical */}
-            <Button icon="edit" disabled={selectedIds.length < 1} onClick={() => { useNodeGraphStore.getState().selectNodes(selectedIds); openDoBar(); }}
-              title="Do… with these nodes: teach them as a phrase, or ask whether the chain is typical" style={{ height: 40 }}>
-              Do…
-            </Button>
           </div>
         )}
       </div>
@@ -4215,26 +4210,11 @@ export function MobileGraphBrowser() {
             since there's no canvas here to drag-select on. Only makes sense
             on the rank-grid list itself, not the graph diagram or a
             focused node's detail. */}
-        {/* Do…: type what to do. Desktop opens it with ⌘K; a phone has no keyboard shortcut, so it's a button. */}
-        {!focusedNode && !homeGraphView && !selectMode && (
-          <button
-            onClick={() => openDoBar()}
-            style={{
-              marginLeft: 'auto', flexShrink: 0, height: 30, padding: '0 10px', border: 0, borderRadius: 8, cursor: 'pointer',
-              touchAction: 'manipulation', display: 'flex', alignItems: 'center', gap: 5,
-              background: tk.bg.hover, color: tk.text.secondary, font: `500 12.5px ${fontFamily.ui}`,
-            }}
-            title="Do…: type what to do (circle with a glow, repeat 6 times around, tone map it)"
-            aria-label="Do…: type what to do"
-          >
-            <Icon name="edit" size={13} />Do…
-          </button>
-        )}
         {!focusedNode && !homeGraphView && (
           <button
             onClick={() => { setSelectMode(v => !v); setSelectedIds([]); }}
             style={{
-              marginLeft: selectMode ? 'auto' : 0, flexShrink: 0, height: 30, padding: '0 10px', border: 0, borderRadius: 8, cursor: 'pointer',
+              marginLeft: 'auto', flexShrink: 0, height: 30, padding: '0 10px', border: 0, borderRadius: 8, cursor: 'pointer',
               touchAction: 'manipulation', display: 'flex', alignItems: 'center', gap: 5,
               background: selectMode ? tk.bg.selected : tk.bg.hover, color: selectMode ? tk.accent.text : tk.text.secondary,
               font: `500 12.5px ${fontFamily.ui}`,
@@ -4244,31 +4224,6 @@ export function MobileGraphBrowser() {
             {selectMode ? 'Cancel' : <><Icon name="check" size={13} />Select</>}
           </button>
         )}
-        <div role="radiogroup" aria-label="View" style={{
-          marginLeft: focusedNode || homeGraphView ? 'auto' : 0, flexShrink: 0,
-          display: 'inline-flex', gap: 2, padding: 3, borderRadius: 10, background: tk.bg.hover,
-        }}>
-          {([['list', 'List'], ['graph', 'Graph']] as const).map(([v, label]) => {
-            const on = v === 'graph' ? (!focusedNode && homeGraphView) : (focusedNode ? true : !homeGraphView);
-            return (
-              <button
-                key={v}
-                role="radio"
-                aria-checked={on}
-                onClick={() => {
-                  if (v === 'graph') { if (focusedNode) setShowGraphOverlay(true); else setHomeGraphView(true); }
-                  else if (!focusedNode) setHomeGraphView(false);
-                }}
-                title={v === 'graph' ? 'See the flow as a connected graph' : 'List view'}
-                style={{
-                  height: 28, padding: '0 11px', border: 0, borderRadius: 8, cursor: 'pointer', touchAction: 'manipulation',
-                  background: on ? tk.bg.panel : 'transparent', boxShadow: on ? '0 1px 2px rgba(20,20,30,0.1)' : 'none',
-                  color: on ? tk.text.primary : tk.text.muted, font: `${on ? 600 : 500} 12.5px ${fontFamily.ui}`,
-                }}
-              >{label}</button>
-            );
-          })}
-        </div>
             </div>
             {showHiddenPath && hiddenPathSegments.length > 0 && (
               <>
