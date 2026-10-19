@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.308',
+    date: '2026-10-19',
+    title: "Moving gradients",
+    highlights: [
+      { area: 'Studio', text: "Gradient From/To can be wired or played, Angle gradients wrap with no seam, and SDF Glow has fewer, plainly named modes." },
+    ],
+  },
+  {
     id: '2026.10.307',
     date: '2026-10-19',
     title: "Quieter sockets",
