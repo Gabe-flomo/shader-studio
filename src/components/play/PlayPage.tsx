@@ -39,28 +39,23 @@ import { claimMidiListen } from '../../lib/midiAutoLearn';
 import { candidateLabel, collectPlayCandidates, controlExists, controlHelp, findTargetNode, locateTarget, playId, readControlValue, targetParts, type PlayCandidate } from '../../play/playControls';
 import { Button, IconButton } from '../ui/Button';
 import { Segmented } from '../ui/Choice';
-import { LayersPanel } from './LayersPanel';
-import { FinishPanel } from './finish/FinishPanel';
 import { NOTES_FOLD_KEY, NotesCard } from './NotesCard';
 import { AspectPicker, CanvasFullscreenButton, PreviewQualityPicker, FrameRatePicker } from '../shell/PreviewChrome';
 import type { NoteRefKind } from './noteRefs';
 import { LayerContextMenu } from './LayerContextMenu';
 import { driveWithNull, pairedKey, type NullDrive } from './layerOps';
 import { toast } from '../ui/toastStore';
-import { usePlayUi, type PanelSize, type PlayTab } from './playUi';
+import { usePlayUi } from './playUi';
 import { applyControlLink, LinkableControl, useControlLinkEscape } from './ControlLink';
 import { setLayerDropHandler } from '../../play/layerDrop';
 import { addDroppedLayers, dropLabel } from './dropLayers';
 import { appDropMakers } from './dropMakers';
-import { sidebarView, startRule, useBigPage, useBigTab, usePlaySplit } from './playSplit';
+import { showPage, startRule, useBigPage, usePlaySplit } from './playSplit';
 import { PlayRailBar } from './PlayRail';
-import { phonePageShown, type RailPage } from './railPages';
-import { BackgroundPage } from './FullPages';
+import { phonePageFor, type RailPage } from './railPages';
 import { ControlsBoard, type BoardSlot } from './ControlsBoard';
-import { AudioEnginePanel } from './engine/AudioEnginePanel';
 import { aeRack, aeSlot, aeSlotLabel, parseAuTarget, parseMacroTarget, patchSlot, rackMacros } from '../../types/playAudioEngine';
 import { setMacroValue } from '../../play/rackMacros';
-import { SplitButton } from './PlaySplitArea';
 import { PlaySetupDialogs, playSetupItems } from './playSetupMenu';
 import { wireRuleWhen } from './miniMapperCore';
 import { rackKeyboard } from '../../lib/rackKeyboard';
@@ -73,7 +68,6 @@ import { actionsForLayer, layerNumericProps, actionTarget, defaultActionAmount, 
 import { AUDIO_FX_EFFECTS, audioFxControlFor, audioFxEffect, audioFxHosts, audioFxParam, parseAudioFxTarget, patchAudioFxEffect, readAudioFxValue } from '../../types/playAudioFx';
 import { finishHost, finishHostLabel, finishHosts, finishNumericProps, finishParamOf, finishTarget, parseFinishTarget, patchFinishEffect, readFinishValue } from '../../types/playFinish';
 import { playBackground } from '../../play/background';
-import { BackgroundRow } from './BackgroundRow';
 import { actionLabel } from './layers/help';
 import { AudioReadersHost } from './AudioReadersPanel';
 import { useReadersPanel } from './readersPanelUi';
@@ -95,8 +89,8 @@ import { mappingLabel } from '../../play/incrementUi';
 import { EmptyState, NO_LAYER_CANDIDATES, PANEL_GRID, PanelHeader, joinParts, usesMidi } from './pages/shared';
 import { AddControlButton, ControlGroup, ControlRow, type ControlSource, type LayerCandidates, LivePairCard } from './pages/ControlCards';
 import { type AudioNodeOption, DetailSource, MappingsDrawer } from './pages/SourcesColumn';
-import { LayersRailPage, LockedBackground, LockedLayers } from './pages/LayersPage';
-import { FinishRailPage, LockedFinish } from './pages/FinishPage';
+import { LayersRailPage } from './pages/LayersPage';
+import { FinishRailPage } from './pages/FinishPage';
 import { MidiFilePage, PadGridPage } from './pages/ControlsPage';
 import { RulesRailPage } from './pages/RulesPage';
 import { SoundArrangementPage, SoundEffectsPage } from './pages/SoundPage';
@@ -224,8 +218,6 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
   const layersOk = useCan('play.layers');
   const finishOk = useCan('play.finish');
   const audioFxOk = useCan('play.audioFx');
-  const engineOk = useCan('audio.engine');
-  const backgroundsOk = useCan('play.backgrounds');
   const plan = usePlanName();
   const lockedParts = useMemo(() => proOnlyParts(play, plan), [play, plan]);
 
@@ -262,12 +254,12 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
     const aut = parseAuTarget(c.target);
     if (aut) {
       const r = aeRack(play.audioEngine, aut.rackId), sl = aeSlot(r, aut.slotId);
-      return { kind: 'layer', title: r && sl ? aeSlotLabel(r, sl) : 'a removed Audio Unit', param: c.label.split(' · ').pop() ?? aut.address, missing: !sl, go: () => usePlayUi.getState().setTab('engine') };
+      return { kind: 'layer', title: r && sl ? aeSlotLabel(r, sl) : 'a removed Audio Unit', param: c.label.split(' · ').pop() ?? aut.address, missing: !sl, go: () => showPage('engine-performance') };
     }
     const mct = parseMacroTarget(c.target);
     if (mct) {
       const r = aeRack(play.audioEngine, mct.rackId);
-      return { kind: 'layer', title: r ? `${r.name} · Macros` : 'a removed rack', param: r ? rackMacros(r)[mct.n - 1].name : `Macro ${mct.n}`, missing: !r, go: () => usePlayUi.getState().setTab('engine') };
+      return { kind: 'layer', title: r ? `${r.name} · Macros` : 'a removed rack', param: r ? rackMacros(r)[mct.n - 1].name : `Macro ${mct.n}`, missing: !r, go: () => showPage('engine-performance') };
     }
     const ft = parseFinishTarget(c.target);
     if (ft) {
@@ -345,28 +337,18 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
     if (made) toast.success(`Added “${label}”`, { message: 'Drag the dot on the picture to change the value.' });
   }, [update]);
 
-  const [drawerOpen, setDrawerOpen] = useState(true);
-  // Phones: Controls and Mappings are tabs instead of stacked panes.
-  const tab = usePlayUi(s => s.tab), setTab = usePlayUi(s => s.setTab);
-  const panel = usePlayUi(s => s.panel), setPanel = usePlayUi(s => s.setPanel);
-  // Split view (playSplit.ts): a big panel beside the picture shows one section, which the sidebar then leaves out.
-  const bigTab = useBigTab();
-  const big = compact ? null : bigTab;
-  // The sidebar folded into the rail: the panel shows one page full width (railPages.ts).
-  const railPage = useBigPage();
-  const bigPage = compact ? null : railPage;
+  // The one navigation model (playSplit.ts): the page in view is the rail's, in its panel on desktop
+  // and tablet, under the picture on a phone (picked from the bottom row).
+  const panelPage = useBigPage();
+  const bigPage = compact ? null : panelPage;
   const splitHost = usePlaySplit(s => s.host);
-  // The split panel is out (desktop): its header's ⋯ has the setup's actions (playSetupMenu.tsx).
-  const setupInPanel = usePlaySplit(s => s.on && s.available && !!s.host) && !compact;
   const splitWide = usePlaySplit(s => s.wide);
-  const sidebarGone = usePlaySplit(s => s.sidebar !== 'full') && big !== null;
-  // Phones: the page picked from the bottom row (a Layers or Mappings page of its own, or the tab's).
-  const phonePicked = usePlayUi(s => s.phonePage), finishView = usePlayUi(s => s.finishView);
-  const phonePage: RailPage | null = compact ? phonePageShown(tab, finishView, phonePicked) : null;
-  const sideView = sidebarView(tab, big);
-  // A phone page that isn't a whole section (Actions, Signals, Background, MIDI file, Pad grid) shows on its own.
-  const phoneOwn = !!phonePage && OWN_PAGES.has(phonePage);
-  const shown: PlayTab | null = compact ? (phoneOwn ? null : tab) : sideView.tab;
+  // Phones: the page under the picture (the same page, unless a phone shows it elsewhere: railPages.phonePageFor).
+  const phonePage = phonePageFor(usePlaySplit(s => s.railPage));
+  // The Controls page's Controls / Sources switch (the narrow board's tabs; a phone's segmented switch).
+  const inputsTab = useInputsBoard(s => s.tab);
+  // The Play setup's actions (Open, Import, Export…) sit in the panel's ⋯ on desktop; a phone has them in the Controls ⋯.
+  const setupInPanel = !compact;
   const phoneSourceCount = play.mappings.length + (play.sources?.length ?? 0) + (play.pairMappings?.length ?? 0);
   const nullLayers = useMemo(() => play.layers.filter(l => l.kind === 'null').map(l => ({ id: l.id, label: l.label })), [play.layers]);
   const [notesEditing, setNotesEditing] = useState(false);
@@ -377,7 +359,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
   const revealLayer = usePlayUi(s => s.reveal);
   const openRef = useCallback((kind: NoteRefKind, id: string) => {
     if (kind === 'layer') { revealLayer(id); return; }
-    setTab('controls');
+    showPage('controls');
     // After the tab renders: scroll to the control and flash it.
     requestAnimationFrame(() => {
       const sel = `[data-control-id="${CSS.escape(id)}"]`;
@@ -388,7 +370,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       el.style.boxShadow = `inset 0 0 0 2px ${tk.accent.base}`;
       window.setTimeout(() => { el.style.boxShadow = was; }, 900);
     });
-  }, [revealLayer, setTab, tk.accent.base]);
+  }, [revealLayer, tk.accent.base]);
   // Readers with no control (an older setup): offered once, until dismissed for this set of readers.
   const missingReaderControls = useMemo(() => readersWithoutControls(play), [play]);
   const missingReaderKey = missingReaderControls.map(r => r.id).join(',');
@@ -420,29 +402,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
     // The graph's Agents groups read like layers too (alive, centre, spread…), as `ag:<node id>` (lib/agentReadings.ts).
     ...(agentGroupsKey ? agentGroupsKey.split('\n').map(line => { const [id, label] = line.split('\t'); return { id: agentReadLayer(id), label: `${label || 'Agents'} · walkers`, kind: 'agentsGroup' }; }) : []),
   ], [play.layers, play.audioEngine, agentGroupsKey]);
-  // Desktop: the drawer's height, dragged from its top edge and remembered.
   const rootRef = useRef<HTMLDivElement>(null);
-  const [drawerH, setDrawerH] = useState<number>(() => {
-    try { const v = parseInt(localStorage.getItem(DRAWER_HEIGHT_KEY) ?? '', 10); return Number.isFinite(v) && v > 0 ? v : 340; } catch { return 340; }
-  });
-  const startDrawerResize = useCallback((e: React.PointerEvent) => {
-    e.preventDefault();
-    const startY = e.clientY;
-    const startH = drawerH;
-    const rootH = rootRef.current?.clientHeight ?? 800;
-    let next = startH;
-    const onMove = (ev: PointerEvent) => {
-      next = Math.max(120, Math.min(rootH - 180, startH + (startY - ev.clientY)));
-      setDrawerH(next);
-    };
-    const onUp = () => {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-      try { localStorage.setItem(DRAWER_HEIGHT_KEY, String(Math.round(next))); } catch { /* preference only */ }
-    };
-    window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup', onUp);
-  }, [drawerH]);
   // Audio Input nodes a mapping can read a band from.
   const audioNodes = useMemo<AudioNodeOption[]>(() => nodes.filter(n => n.type === 'audioInput').map(n => ({
     id: n.id,
@@ -502,12 +462,11 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       </>
     )}
   />;
-  // Phones: the canvas shape and the background sit at the top of the Layers page (Play audit P20).
-  // The canvas row wraps instead of running off the edge (Full screen and the guides were past 390px).
-  const phoneLayersTop = compact ? (
-    <>
-      {notesCard}
-      <div data-phone-canvas-row="" style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px 8px', padding: '6px 12px' }}>
+  // The canvas shape sits at the top of the Layers page where the picture has no header of its own:
+  // phones (Play audit P20) and tablets (`canvasRow`). The Background is the list's pinned first row
+  // (LayersPanel, Play audit P13). The row wraps instead of running off the edge (past 390px).
+  const canvasRowEl = compact || canvasRow ? (
+      <div data-canvas-row="" data-phone-canvas-row={compact ? '' : undefined} style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px 8px', padding: '6px 12px' }}>
         <span style={{ color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Canvas</span>
         <AspectPicker onPanel />
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
@@ -516,9 +475,8 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
           <GuidesToggle onPanel />
         </span>
       </div>
-      {backgroundsOk ? <BackgroundRow play={play} onChange={update} /> : <LockedBackground />}
-    </>
   ) : null;
+  const layersTop = compact ? <>{notesCard}{canvasRowEl}</> : canvasRowEl;
   // Pairs: right-click a slider (or its ⋯) to pair it with another, or with its X/Y partner as a position.
   const resolveGraphTarget = (target: string) => {
     const c = candidates.find(x => x.target === target && x.kind === 'float');
@@ -527,8 +485,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
   const addPairMapping = (pairId: string) => {
     if (!requireFeature('play.sources')) return;
     update(p => { const m = newPairMapping(p, pairId); return m ? { ...p, pairMappings: [...(p.pairMappings ?? []), m] } : p; });
-    setDrawerOpen(true);
-    if (compact) setTab('mappings');
+    useInputsBoard.getState().setTab('sources');
   };
   useEffect(() => { wireSpreadResets(); }, []);
   /** Spread items for a slider's menu (docs/spread-control.md): join one, leave one, or start one with it. */
@@ -627,8 +584,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
     usePlayUi.getState().toggleFoldMany(driverFoldKeys(d), false);
     useMapMode.getState().stop();
     useLearnMode.getState().stop();
-    if (compact) setTab('mappings');
-    else { useInputsBoard.getState().setTab('sources'); setDrawerOpen(true); }
+    useInputsBoard.getState().setTab('sources');
     const sel = d.kind === 'mapping' ? `[data-mapping-id="${CSS.escape(d.id)}"]` : `[data-source-card="${CSS.escape(d.id)}"]`;
     // After the Sources side renders (in the page, or the split view's panel).
     requestAnimationFrame(() => requestAnimationFrame(() => {
@@ -641,7 +597,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
     }));
   };
   // Mapping or learning on a phone: the controls are what to tap, so a Map or Learn started in Sources goes back to them.
-  useEffect(() => { if (compact && (mapSrc || learnOn) && usePlayUi.getState().tab === 'mappings') setTab('controls'); }, [compact, mapSrc, learnOn, setTab]);
+  useEffect(() => { if (compact && (mapSrc || learnOn) && useInputsBoard.getState().tab === 'sources') useInputsBoard.getState().setTab('controls'); }, [compact, mapSrc, learnOn]);
   // Learn mode (inputs/learnMode.ts, Play audit P6): MIDI connects when it starts (the user asked for
   // it), Esc stops it, and once a control is picked the next input becomes a mapping onto it.
   useEffect(() => {
@@ -836,17 +792,17 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       return items;
       })()}</div>
   );
-  // `pages`: the MIDI file and the pad grid have pages of their own (the rail's, the phone's row).
+  // `pages`: the MIDI file and the pad grid have pages of their own (the rail's; a phone keeps them in Sources).
   const renderMappings = (inPanel: boolean, pages = false) => (
     <MappingsDrawer
       play={play}
-      mode={compact || inPanel ? 'tab' : 'drawer'}
+      mode="tab"
       grid={inPanel}
       pages={pages}
-      height={drawerH}
-      onResizeStart={startDrawerResize}
-      open={compact || inPanel || drawerOpen}
-      onToggle={() => setDrawerOpen(o => !o)}
+      height={0}
+      onResizeStart={NOOP}
+      open
+      onToggle={NOOP}
       onUpdate={(id, patch) => update(p => ({ ...p, mappings: p.mappings.map(m => m.id === id ? { ...m, ...patch } : m) }))}
       onRemove={id => update(p => ({ ...p, mappings: p.mappings.filter(m => m.id !== id) }))}
       onAddPair={addPairMapping}
@@ -859,20 +815,38 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       addControlButton={addControlButtonEl}
     />
   );
+  // Phones: Controls and Sources (the mappings) on one page, a switch between them (Play audit P20). The
+  // MIDI file and the pad grid sit in Sources (a phone has no pages of their own for them).
+  const phoneControlsPage = compact ? (
+    <>
+      <div data-phone-inputs="" style={{ flexShrink: 0, padding: '8px 12px 6px', background: tk.bg.panel }}>
+        <Segmented fill ariaLabel="Controls or sources" value={inputsTab} onChange={v => useInputsBoard.getState().setTab(v)} options={[
+          { value: 'controls' as const, label: `Controls${play.controls.length ? ` · ${play.controls.length}` : ''}` },
+          { value: 'sources' as const, label: `Sources${phoneSourceCount ? ` · ${phoneSourceCount}` : ''}`, title: 'What drives the controls: MIDI, keys, the mouse, audio, hands, a MIDI file, a pad grid' },
+        ]} />
+      </div>
+      {inputsTab === 'controls' ? (
+        <>
+          {controlsHeader}
+          <div style={{ padding: '0 12px', flexShrink: 0 }}><MapModeBar /><LearnModeBar label={controlName} /></div>
+          {renderControls(false)}
+        </>
+      ) : renderMappings(false)}
+    </>
+  ) : null;
   /**
-   * One of the rail's pages (railPages.ts), full width in the big panel, or a
-   * page of its own on a phone (`touch`). `wide`: room for two columns.
+   * One of the rail's pages (railPages.ts): in the panel beside the rail, or
+   * under the picture on a phone (`touch`). `wide`: room for two columns.
    */
   const renderPage = (page: RailPage, wide: boolean, touch: boolean): ReactNode => {
     switch (page) {
-      case 'controls': return (
+      case 'controls': return touch ? phoneControlsPage : (
         <InputsBoard wide={wide} counts={{ controls: play.controls.length, sources: play.mappings.length + (play.sources?.length ?? 0) + (play.pairMappings?.length ?? 0) }}
           controls={<>{controlsHeader}{notesCard}<div style={{ padding: '0 16px', flexShrink: 0 }}><MapModeBar /><LearnModeBar label={controlName} /></div>{renderControls(true)}</>}
           sources={renderMappings(true, true)} />
       );
-      case 'layers': return <LayersRailPage play={play} onChange={update} touch={touch} wide={wide} />;
+      case 'layers': return <LayersRailPage play={play} onChange={update} touch={touch} wide={wide} top={layersTop} />;
       case 'signals': return <RulesRailPage play={play} onChange={update} wide={wide} />;
-      case 'background': return <BackgroundPage play={play} onChange={update} locked={!backgroundsOk} />;
       case 'finish-picture': return <FinishRailPage play={play} onChange={update} touch={touch} wide={wide} />;
       case 'finish-sound': return <SoundEffectsPage play={play} onChange={update} touch={touch} wide={wide} />;
       case 'engine-performance': return <SoundArrangementPage play={play} onChange={update} touch={touch} wide={wide} />;
@@ -880,111 +854,43 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       case 'pad-grid': return <PadGridPage />;
     }
   };
-  // The big panel's section, rendered into the split view's panel (PlaySplitArea.tsx).
-  const bigPanel = big && splitHost ? createPortal(
-    <div data-big-page={bigPage ?? undefined} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-      {bigPage ? renderPage(bigPage, splitWide, false) : <>
-      {big === 'controls' && <>{controlsHeader}{renderControls(true)}</>}
-      {big === 'layers' && (layersOk
-        ? <LayersPanel play={play} touch={false} split={splitWide} big exposedTargets={new Set(play.controls.map(c => c.target))} onChange={update} onExpose={control => update(p => (p.controls.some(c => c.target === control.target) ? p : { ...p, controls: [...p.controls, control] }))} />
-        : <LockedLayers play={play} />)}
-      {big === 'finish' && (finishOk ? <FinishPanel play={play} onChange={update} touch={false} wide={splitWide} /> : <LockedFinish play={play} />)}
-      {big === 'engine' && <AudioEnginePanel play={play} onChange={update} touch={false} wide={splitWide} />}
-      {big === 'mappings' && renderMappings(true)}
-      </>}
+  // The page, rendered into the panel beside the rail (PlaySplitArea.tsx).
+  const panel = bigPage && splitHost ? createPortal(
+    <div data-big-page={bigPage} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      {renderPage(bigPage, splitWide, false)}
     </div>,
     splitHost,
   ) : null;
-
-  // The sidebar hidden beside the big panel: only the panel's section and what floats (dialogs, menus) stay.
-  if (sidebarGone) {
-    return (
-      <div ref={rootRef} style={{ position: 'absolute', inset: 0 }}>
-        {bigPanel}
-        <DetailWindow play={play} onChange={update} renderSource={id => <DetailSource id={id} play={play} update={update} audioNodes={audioNodes} nullLayers={nullLayers} layerRefs={layerRefs} />} />
-        <PlaySetupDialogs />
-        <AudioReadersHost compact={compact} />
-        <LayerContextMenu play={play} onChange={update} />
-      </div>
-    );
-  }
-
-  return (
-    <div ref={rootRef} style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', background: tk.bg.subtle, color: tk.text.primary, font: `12.5px ${fontFamily.ui}` }}>
-      {/* Sections. Desktop keeps Mappings as a drawer underneath; phones pick sections from the row along the bottom (PlayRailBar). */}
-      {!compact && <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px 2px', background: tk.bg.panel }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-        <Segmented
-          fill
-          ariaLabel="Play section"
-          value={sideView.tab}
-          onChange={setTab}
-          options={[
-            ...(compact || sideView.tabs.includes('controls') ? [{ value: 'controls' as const, label: `Controls${play.controls.length ? ` · ${play.controls.length}` : ''}` }] : []),
-            ...(compact || sideView.tabs.includes('layers') ? [{ value: 'layers' as const, label: `Layers${play.layers.length ? ` · ${play.layers.length}` : ''}${layersOk ? '' : ' · Pro'}` }] : []),
-            ...(compact || sideView.tabs.includes('finish') ? [{ value: 'finish' as const, label: `Finish${play.finish?.effects.length ? ` · ${play.finish.effects.length}` : ''}${finishOk ? '' : ' · Pro'}`, title: 'Grade, lens, film and time effects over the whole picture, and effects on the sound' }] : []),
-            ...(compact || sideView.tabs.includes('engine') ? [{ value: 'engine' as const, label: `Sound${play.audioEngine?.racks.length ? ` · ${play.audioEngine.racks.length}` : ''}${engineOk ? '' : ' · Pro'}`, title: 'The Audio engine: racks of synths (Audio Units on a Mac, or the sample player) and effects, played from MIDI and the keyboard' }] : []),
-            ...(compact ? [{ value: 'mappings' as const, label: `Sources${play.mappings.length + (play.pairMappings?.length ?? 0) ? ` · ${play.mappings.length + (play.pairMappings?.length ?? 0)}` : ''}` }] : []),
-          ]}
-        />
-        </div>
-        <Segmented size="sm" ariaLabel="Panel width" value={panel} onChange={v => setPanel(v as PanelSize)} options={[{ value: 's', label: 'S', title: 'Narrow panel' }, { value: 'm', label: 'M', title: 'Medium panel' }, { value: 'l', label: 'L', title: 'Wide panel' }]} />
-      </div>}
-      {/* Phones: a page of its own, picked from the bottom row's sheet. */}
-      {phoneOwn && <div data-phone-page={phonePage} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>{renderPage(phonePage!, false, true)}</div>}
-      {!compact && notesCard}
-      {shown === 'layers' && !layersOk && compact && <div style={{ flexShrink: 0 }}>{phoneLayersTop}</div>}
-      {shown === 'layers' && !layersOk && <LockedLayers play={play} />}
-      {shown === 'layers' && layersOk && (
-        <LayersPanel
-          top={compact ? phoneLayersTop : undefined}
-          play={play}
-          touch={compact}
-          extras={!compact}
-          exposedTargets={new Set(play.controls.map(c => c.target))}
-          onChange={update}
-          onExpose={control => update(p => (p.controls.some(c => c.target === control.target) ? p : { ...p, controls: [...p.controls, control] }))}
-        />
-      )}
-      {shown === 'engine' && <AudioEnginePanel play={play} onChange={update} touch={compact} />}
-      {shown === 'finish' && (finishOk ? <FinishPanel play={play} onChange={update} touch={compact} /> : <LockedFinish play={play} />)}
-      {/* Phones: Controls and Sources (the mappings) on one page, a switch between them (Play audit P20). */}
-      {compact && !phoneOwn && (tab === 'controls' || tab === 'mappings') && (
-        <div data-phone-inputs="" style={{ flexShrink: 0, padding: '8px 12px 6px', background: tk.bg.panel }}>
-          <Segmented fill ariaLabel="Controls or sources" value={tab} onChange={v => setTab(v)} options={[
-            { value: 'controls' as const, label: `Controls${play.controls.length ? ` · ${play.controls.length}` : ''}` },
-            { value: 'mappings' as const, label: `Sources${phoneSourceCount ? ` · ${phoneSourceCount}` : ''}`, title: 'What drives the controls: MIDI, keys, the mouse, audio, hands, a MIDI file, a pad grid' },
-          ]} />
-        </div>
-      )}
-      {shown === 'controls' && controlsHeader}
-      {canvasRow && !compact && (
-        <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, padding: '4px 12px', borderBottom: `1px solid ${tk.border.subtle}`, background: tk.bg.panel, overflowX: 'auto' }}>
-          <span style={{ color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Canvas</span>
-          <AspectPicker onPanel />
-          <CanvasFullscreenButton onPanel plainF />
-          <GuidesToggle onPanel />
-          <SplitButton />
-        </div>
-      )}
-      {!compact && (backgroundsOk ? <BackgroundRow play={play} onChange={update} /> : <LockedBackground />)}
-      {shown === 'controls' && <div style={{ padding: '0 12px', flexShrink: 0 }}><MapModeBar /><LearnModeBar label={controlName} /></div>}
-      {shown === 'controls' && renderControls(false)}
-
-      {/* Phones keep the MIDI file and the pad grid in Sources (no pages of their own in the bottom row). */}
-      {(compact ? tab === 'mappings' && !phoneOwn : sideView.drawer) && renderMappings(false)}
-      {compact && <PlayRailBar />}
-      {bigPanel}
+  // What floats over every page: the detail window, the setup's dialogs, the audio readers, a layer's menu.
+  const floating = (
+    <>
       <DetailWindow play={play} onChange={update} renderSource={id => <DetailSource id={id} play={play} update={update} audioNodes={audioNodes} nullLayers={nullLayers} layerRefs={layerRefs} />} />
       <PlaySetupDialogs />
       <AudioReadersHost compact={compact} />
       <LayerContextMenu play={play} onChange={update} />
+    </>
+  );
+
+  // Desktop and tablet: the page is in the panel (by portal); this column only holds what floats.
+  if (!compact) {
+    return (
+      <div ref={rootRef} style={{ position: 'absolute', inset: 0 }}>
+        {panel}
+        {floating}
+      </div>
+    );
+  }
+
+  // Phones: the page under the picture, the categories along the bottom (PlayRailBar).
+  return (
+    <div ref={rootRef} style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', background: tk.bg.subtle, color: tk.text.primary, font: `12.5px ${fontFamily.ui}` }}>
+      <div data-phone-page={phonePage} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>{renderPage(phonePage, false, true)}</div>
+      <PlayRailBar />
+      {floating}
     </div>
   );
 }
 
-const DRAWER_HEIGHT_KEY = 'shader-studio:play:drawerHeight';
+const NOOP = () => {};
 /** A phone's touch target in the Controls header: 44px each way (Play audit P20). */
 export const PHONE_TARGET = { width: 44, height: 44 } as const;
-/** Pages that aren't a whole sidebar section: a phone shows them in place of its tab's section. */
-const OWN_PAGES: ReadonlySet<RailPage> = new Set<RailPage>(['signals', 'background', 'midi-file', 'pad-grid']);

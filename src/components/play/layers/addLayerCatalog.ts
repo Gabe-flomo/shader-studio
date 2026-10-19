@@ -30,7 +30,7 @@ export const BUILTIN_GROUPS: ReadonlyArray<{ id: BuiltinGroupId; label: string }
 
 /** `variant`: the same kind set up another way (a Script layer in 3D, a Shape made from hand nulls). */
 export type BuiltinVariant = 'script3d' | 'handPath' | 'p5import';
-export interface BuiltinLayer { kind: PlayLayerKind; label: string; hint: string; icon: IconName; group: BuiltinGroupId; variant?: BuiltinVariant }
+export interface BuiltinLayer { kind: PlayLayerKind; label: string; hint: string; icon: IconName; group: BuiltinGroupId; variant?: BuiltinVariant; /** Named and drawn like the others, but not offered in Add layer. */ hidden?: true }
 
 /** The built-in layer kinds: name, one-line hint, icon, and the group Add layer shows them in. */
 export const BUILTIN_LAYERS: readonly BuiltinLayer[] = [
@@ -38,7 +38,9 @@ export const BUILTIN_LAYERS: readonly BuiltinLayer[] = [
   { kind: 'shape', variant: 'handPath', group: 'drawing', label: 'Hand path', hint: 'A shape between your thumb and index fingertips, both hands, that moves as they do (hand tracking). Fill it, mask with it, use it as a matte or a zone.', icon: 'hand' },
   { kind: 'brush', group: 'drawing', label: 'Brush', hint: 'Paint on the picture with the mouse. Strokes fade and can be walls.', icon: 'brush' },
   { kind: 'cloner', group: 'drawing', label: 'Cloner', hint: 'Copies of a shape, text, image or null in a grid, ring, line or along a stroke. Vary them by index; nulls and shapes push, grow, turn or hide the copies near them.', icon: 'copy' },
-  { kind: 'background', group: 'textImages', label: 'Background', hint: 'Under every layer: a queue of graphs, sketches, images, videos and colours, one showing at a time. Step through it with keys, beats, notes or hands; cut or crossfade. One per setup.', icon: 'slides' },
+  // Not offered in Add layer: the Background is the Layers list's pinned first row (Play audit P13), and its
+  // Graph…, Image… or Video… makes the one Background layer. Kept here for its name and icon in the list.
+  { kind: 'background', group: 'textImages', label: 'Background', hint: 'Under every layer: a queue of graphs, sketches, images, videos and colours, one showing at a time. Step through it with keys, beats, notes or hands; cut or crossfade. One per setup.', icon: 'slides', hidden: true },
   { kind: 'text', group: 'textImages', label: 'Text', hint: 'Words over the picture or the picture inside them. Can step through lines.', icon: 'text' },
   { kind: 'image', group: 'textImages', label: 'Image', hint: 'A picture of your own, blended or matted.', icon: 'image' },
   { kind: 'video', group: 'textImages', label: 'Video', hint: 'A video file of your own over the picture, placed like an image. Its sound can feed audio readers: map its bass, voice or hi-hats to controls.', icon: 'film' },
@@ -94,7 +96,7 @@ export interface MenuGroup<T> {
 /** Built-ins grouped, filtered by the query; groups with no match are left out while searching. */
 export function builtinGroups(query = '', layers: readonly BuiltinLayer[] = BUILTIN_LAYERS): MenuGroup<BuiltinLayer>[] {
   return BUILTIN_GROUPS.map(g => {
-    const all = layers.filter(l => l.group === g.id);
+    const all = layers.filter(l => l.group === g.id && !l.hidden);
     return { key: `builtin:${g.id}`, label: g.label, total: all.length, items: all.filter(l => matchesQuery(query, l.label, l.hint, g.label)) };
   }).filter(g => g.total > 0 && (!query.trim() || g.items.length > 0));
 }

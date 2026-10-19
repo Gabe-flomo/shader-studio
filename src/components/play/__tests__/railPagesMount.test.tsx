@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
 /**
- * Every full-width page the rail offers mounts into the split view's big
- * panel (as PlayPage renders it) without a console error, wide and narrow;
- * and the phone's bottom row shows each page of its own.
+ * Every page the rail offers mounts into the panel beside it (as PlayPage
+ * renders it) without a console error, wide and narrow; PlayPage renders
+ * nothing else there (one navigation model, Play audit P1); the phone's
+ * bottom row shows the same pages; and the Background is the Layers list's
+ * pinned first row (P13).
  */
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -25,7 +27,10 @@ import { createRoot, type Root } from 'react-dom/client';
 import { PlayPage } from '../PlayPage';
 import { PlayRail, RailPageTabs } from '../PlayRail';
 import { driverCardFor, mappingFoldKey, sourceGroupFoldKey } from '../mappingGroups';
-import { DEFAULT_SPLIT, usePlaySplit } from '../playSplit';
+import { DEFAULT_SPLIT, showPage, usePlaySplit } from '../playSplit';
+import { useInputsBoard } from '../inputs/InputsBoard';
+import { BACKGROUND_ROW } from '../layers/BackgroundPinnedRow';
+import { addBackground } from '../../../play/backgroundQueue';
 import { usePlayUi } from '../playUi';
 import { RAIL_PAGE_IDS, categoryDef, type RailPage } from '../railPages';
 import { useNodeGraphStore } from '../../../store/useNodeGraphStore';
@@ -66,13 +71,15 @@ afterEach(() => {
 beforeEach(() => {
   errors.length = 0;
   useNodeGraphStore.getState().setPlay(() => setup());
-  usePlayUi.setState({ tab: 'controls', phonePage: '', selected: '' });
+  usePlayUi.setState({ selected: '', folded: {} });
+  useInputsBoard.setState({ tab: 'controls' });
+  usePlaySplit.setState({ ...DEFAULT_SPLIT });
 });
 
 function mountPage(page: RailPage, wide: boolean): HTMLElement {
   const host = document.createElement('div');
   document.body.appendChild(host);
-  usePlaySplit.setState({ ...DEFAULT_SPLIT, on: true, available: true, sidebar: 'rail', railPage: page, host, wide });
+  usePlaySplit.setState({ ...DEFAULT_SPLIT, on: true, available: true, railPage: page, host, wide });
   const el = document.createElement('div');
   document.body.appendChild(el);
   const root = createRoot(el);
@@ -118,14 +125,15 @@ describe('the rail’s full-width pages', () => {
     expect(slots[0].getAttribute('data-trace-key')).toBe('c2');
   });
 
-  it('the sidebar stays out while the rail is out', () => {
+  it('PlayPage renders only the page in the panel (and what floats): no sidebar, no tab strip, no S/M/L', () => {
     mountPage('layers', true);
-    // PlayPage renders only the portal (and what floats): no tab strip of its own.
     expect(document.querySelector('[aria-label="Play section"]')).toBeNull();
+    expect(document.querySelector('[aria-label="Panel width"]')).toBeNull();
+    expect(document.querySelector('[aria-label="Panel section"]')).toBeNull();
   });
 
   it('the rail is always there, Mappings included, and a click goes straight to a page — no drawer', () => {
-    usePlaySplit.setState({ ...DEFAULT_SPLIT, on: true, available: true, sidebar: 'rail', railPage: 'controls' });
+    usePlaySplit.setState({ ...DEFAULT_SPLIT, on: true, available: true, railPage: 'controls' });
     const el = document.createElement('div');
     document.body.appendChild(el);
     const root = createRoot(el);
@@ -142,31 +150,32 @@ describe('the rail’s full-width pages', () => {
   });
 
   it('the panel header’s tab strip lists a category’s pages, switches on click, and the page is remembered per category', () => {
-    usePlaySplit.setState({ ...DEFAULT_SPLIT, on: true, available: true, sidebar: 'rail', railPage: 'layers' });
-    const layers = categoryDef('layers');
-    expect(layers.pages.length).toBeGreaterThan(1);
+    usePlaySplit.setState({ ...DEFAULT_SPLIT, on: true, available: true, railPage: 'engine-performance' });
+    const sound = categoryDef('engine');
+    expect(sound.pages.length).toBeGreaterThan(1);
     expect(categoryDef('controls').pages.length).toBe(3); // Inputs, the MIDI file and the pad grid: a strip.
     expect(categoryDef('signals').pages.length).toBe(1); // Rules stays a plain page, not a strip.
+    expect(categoryDef('layers').pages.length).toBe(1); // The Background is the list's pinned row, not a page (P13).
     const el = document.createElement('div');
     document.body.appendChild(el);
     const root = createRoot(el);
     roots.push({ root, el });
-    const render = () => root.render(<RailPageTabs def={layers} current={usePlaySplit.getState().railPage} play={setup()} onPick={p => usePlaySplit.getState().setRailPage(p)} />);
+    const render = () => root.render(<RailPageTabs def={sound} current={usePlaySplit.getState().railPage} play={setup()} onPick={p => usePlaySplit.getState().setRailPage(p)} />);
     act(render);
     const tabs = el.querySelectorAll('[data-rail-tab]');
-    expect(Array.from(tabs).map(t => t.getAttribute('data-rail-tab'))).toEqual(['layers', 'background']);
-    act(() => { (el.querySelector('[data-rail-tab="background"]') as HTMLButtonElement).click(); render(); });
-    expect(usePlaySplit.getState().railPage).toBe('background');
-    expect(el.querySelector('[data-rail-tab="background"]')?.getAttribute('aria-selected')).toBe('true');
-    // Leaving Layers and coming back returns to Background, not the category's first page.
+    expect(Array.from(tabs).map(t => t.getAttribute('data-rail-tab'))).toEqual(['engine-performance', 'finish-sound']);
+    act(() => { (el.querySelector('[data-rail-tab="finish-sound"]') as HTMLButtonElement).click(); render(); });
+    expect(usePlaySplit.getState().railPage).toBe('finish-sound');
+    expect(el.querySelector('[data-rail-tab="finish-sound"]')?.getAttribute('aria-selected')).toBe('true');
+    // Leaving Sound and coming back returns to Effects, not the category's first page.
     usePlaySplit.getState().openRailCategory('controls');
-    usePlaySplit.getState().openRailCategory('layers');
-    expect(usePlaySplit.getState().railPage).toBe('background');
+    usePlaySplit.getState().openRailCategory('engine');
+    expect(usePlaySplit.getState().railPage).toBe('finish-sound');
   });
 });
 
 describe('the phone’s pages', () => {
-  it('a page of its own replaces the tab’s section, and the bottom row is there', () => {
+  it('shows the rail’s page under the picture, with the bottom row', () => {
     usePlaySplit.setState({ ...DEFAULT_SPLIT, available: false, host: null });
     const el = document.createElement('div');
     document.body.appendChild(el);
@@ -175,10 +184,14 @@ describe('the phone’s pages', () => {
     act(() => root.render(<PlayPage compact />));
     expect(el.querySelector('[data-play-railbar]')).not.toBeNull();
     expect(el.querySelectorAll('[data-rail-category]').length).toBe(5);
-    act(() => usePlayUi.getState().showPage('signals'));
+    expect(el.querySelector('[data-phone-page="controls"]')).not.toBeNull();
+    act(() => showPage('signals'));
     expect(el.querySelector('[data-phone-page="signals"]')).not.toBeNull();
-    act(() => usePlayUi.getState().showPage('layers'));
-    expect(el.querySelector('[data-phone-page]')).toBeNull();
+    act(() => showPage('layers'));
+    expect(el.querySelector('[data-phone-page="layers"]')).not.toBeNull();
+    // A desktop-only page (the pad grid) shows the phone's Controls page, where Sources has it.
+    act(() => showPage('pad-grid'));
+    expect(el.querySelector('[data-phone-page="controls"]')).not.toBeNull();
     expect(errors).toEqual([]);
   });
 });
@@ -215,7 +228,7 @@ describe('the phone’s Controls and Layers (Play audit P20)', () => {
     expect(el.querySelector('[data-phone-inputs]')).not.toBeNull();
     expect(el.querySelector('[data-mappings]')).toBeNull();
     click([...el.querySelectorAll('[data-phone-inputs] button')].find(b => b.textContent?.startsWith('Sources')));
-    expect(usePlayUi.getState().tab).toBe('mappings');
+    expect(useInputsBoard.getState().tab).toBe('sources');
     expect(el.querySelector('[data-mappings]')).not.toBeNull();
     expect(el.textContent).toContain('Play a MIDI file');
     // The bottom row still lights Controls.
@@ -227,7 +240,7 @@ describe('the phone’s Controls and Layers (Play audit P20)', () => {
     const el = mountPhone();
     click(el.querySelector('[data-control-id="c2"] [data-driven-chip]'));
     const ui = usePlayUi.getState();
-    expect(ui.tab).toBe('mappings');
+    expect(useInputsBoard.getState().tab).toBe('sources');
     const d = driverCardFor(useNodeGraphStore.getState().play, 'c2')!;
     expect(d).toMatchObject({ kind: 'mapping', id: 'm1' });
     expect(ui.folded[mappingFoldKey('m1')]).toBe(false);
@@ -236,13 +249,54 @@ describe('the phone’s Controls and Layers (Play audit P20)', () => {
     expect(errors).toEqual([]);
   });
 
-  it('Layers in the bottom row goes straight to Layers, with the canvas and the background at its top', () => {
+  it('Layers in the bottom row goes straight to Layers, with the canvas at its top and the Background pinned first', () => {
     const el = mountPhone();
     click(el.querySelector('[data-rail-category="layers"]'));
-    expect(usePlayUi.getState().tab).toBe('layers');
+    expect(usePlaySplit.getState().railPage).toBe('layers');
     expect(document.querySelector('[role="menu"][aria-label="Layers pages"]')).toBeNull();
     expect(el.querySelector('[data-phone-canvas-row]')).not.toBeNull();
-    expect(el.textContent).toContain('Background');
+    // The same model as desktop: the Background is the list's pinned row, not a bar of its own.
+    expect(el.querySelector('[data-background-pinned] [data-background-row]')).not.toBeNull();
+    expect(el.querySelector('[data-background-settings]')).toBeNull();
+    click(el.querySelector('[data-background-row]'));
+    expect(el.querySelector('[data-background-settings]')).not.toBeNull();
     expect(errors).toEqual([]);
+  });
+});
+
+describe('the Background, pinned on top of the Layers list (Play audit P13)', () => {
+  it('without a Background layer: a pinned row first; picking it opens its settings beside the list', () => {
+    const host = mountPage('layers', true);
+    const list = host.querySelector('[data-layer-list]')!;
+    const pinned = list.querySelector('[data-background-pinned]')!;
+    expect(pinned).not.toBeNull();
+    // First in the list, before any layer.
+    const firstLayer = list.querySelector('[data-layer-id]');
+    expect(pinned.compareDocumentPosition(firstLayer!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(pinned.textContent).toContain('The shader');
+    // The first layer is picked on its own (P12); picking the Background opens its settings instead.
+    expect(host.querySelector('[data-background-editor]')).toBeNull();
+    act(() => (pinned.querySelector('[data-background-row]') as HTMLButtonElement).click());
+    expect(usePlayUi.getState().selected).toBe(BACKGROUND_ROW);
+    expect(host.querySelector('[data-background-editor] [data-background-settings]')).not.toBeNull();
+    expect(errors).toEqual([]);
+  });
+
+  it('with a Background layer: that layer is the pinned row, listed once', () => {
+    useNodeGraphStore.getState().setPlay(p => addBackground(p, [], 'bg1').play);
+    const host = mountPage('layers', true);
+    const list = host.querySelector('[data-layer-list]')!;
+    expect(list.querySelector('[data-background-pinned] [data-layer-id="bg1"]')).not.toBeNull();
+    expect(list.querySelectorAll('[data-layer-id="bg1"]').length).toBe(1);
+    expect(list.querySelector('[data-background-row]')).toBeNull();
+    expect(errors).toEqual([]);
+  });
+
+  it('there is no Background page, nor a Background bar above the list', () => {
+    expect(RAIL_PAGE_IDS).not.toContain('background' as RailPage);
+    const host = mountPage('layers', false);
+    expect(host.querySelectorAll('[data-background-row], [data-background-pinned]').length).toBeGreaterThan(0);
+    // Only the pinned row says Background before the first layer: no separate bar.
+    expect(host.querySelectorAll('[data-background-pinned]').length).toBe(1);
   });
 });

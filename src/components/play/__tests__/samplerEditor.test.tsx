@@ -81,15 +81,15 @@ describe('the Sampler editor', () => {
     expect(html).toContain('data-sampler-envelope');
   });
 
-  it('opening in split turns the split on, on Layers, with the layer selected', () => {
+  it('opening in split turns the panel on, on Layers, with the layer selected', () => {
     usePlaySplit.setState({ on: false });
     expect(openLayerInSplit('dp1')).toBe(false);
     expect(usePlaySplit.getState().on).toBe(false);
-    usePlaySplit.setState({ available: true, tab: 'finish', sidebar: 'full' });
+    usePlaySplit.setState({ available: true, railPage: 'finish-picture' });
     expect(openLayerInSplit('dp1')).toBe(true);
     const s = usePlaySplit.getState();
     expect(s.on).toBe(true);
-    expect(s.tab).toBe('layers');
+    expect(s.railPage).toBe('layers');
     expect(usePlayUi.getState().selected).toBe('dp1');
   });
 

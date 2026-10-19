@@ -5,6 +5,8 @@
 import { openProSheet, useCan } from '../../../lib/plan';
 import { LayersPanel } from '../LayersPanel';
 import type { RailPageProps } from './shared';
+import type { ReactNode } from 'react';
+import { BackgroundSettings } from '../FullPages';
 import { ProBadge } from '../../account/ProSheet';
 import { useTokens } from '../../../theme/themeStore';
 import { fontFamily, radius } from '../../../theme/tokens';
@@ -43,26 +45,24 @@ export function LockedLayers({ play }: { play: PlayRecord }) {
   );
 }
 
-/** Free's Background row: the shader, with backgrounds shown as Pro. */
-export function LockedBackground() {
-  const tk = useTokens();
-  return (
-    <button type="button" onClick={() => openProSheet('play.backgrounds')} style={{
-      flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '6px 12px', border: 0, borderBottom: `1px solid ${tk.border.subtle}`,
-      background: tk.bg.panel, cursor: 'pointer', color: tk.text.muted, font: `12px ${fontFamily.ui}`, textAlign: 'left',
-    }}>
-      <span style={{ color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Background</span>
-      <span style={{ flex: 1 }}>The shader</span>
-      <span style={{ color: tk.text.faint }}>Images, video, gradients</span>
-      <ProBadge />
-    </button>
-  );
-}
-
-
-/** The Layers page: the list beside the selected layer's editor (wide), or stacked. */
-export function LayersRailPage({ play, onChange, touch, wide }: RailPageProps) {
+/**
+ * The Layers page: the list beside the selected layer's editor (wide), or
+ * stacked. The Background is the list's pinned first row (LayersPanel, Play
+ * audit P13); `top` scrolls above it (a phone's notes and canvas shape, a
+ * tablet's canvas shape). Free keeps the Background's row (the shader, or
+ * Pro's backgrounds shown locked) above what layers would do.
+ */
+export function LayersRailPage({ play, onChange, touch, wide, top }: RailPageProps & { top?: ReactNode }) {
   const layersOk = useCan('play.layers');
-  if (!layersOk) return <LockedLayers play={play} />;
-  return <LayersPanel play={play} touch={touch} split={wide} big extras={false} exposedTargets={new Set(play.controls.map(c => c.target))} onChange={onChange} onExpose={control => onChange(p => (p.controls.some(c => c.target === control.target) ? p : { ...p, controls: [...p.controls, control] }))} />;
+  const backgroundsOk = useCan('play.backgrounds');
+  if (!layersOk) {
+    return (
+      <div data-layers-locked="" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+        {top && <div style={{ flexShrink: 0 }}>{top}</div>}
+        <div style={{ flexShrink: 0, padding: '12px 12px 0' }}><BackgroundSettings play={play} onChange={onChange} locked={!backgroundsOk} /></div>
+        <LockedLayers play={play} />
+      </div>
+    );
+  }
+  return <LayersPanel play={play} touch={touch} split={wide} big={!touch} extras={false} top={top ?? undefined} exposedTargets={new Set(play.controls.map(c => c.target))} onChange={onChange} onExpose={control => onChange(p => (p.controls.some(c => c.target === control.target) ? p : { ...p, controls: [...p.controls, control] }))} />;
 }

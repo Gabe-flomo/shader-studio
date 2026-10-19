@@ -32,6 +32,7 @@ import { setReaderInput } from '../../../play/readerControls';
 import { LISTENER, applyChainOrder, chainOrder, deviceChain, deviceControlSummary, reorderChain, type Device, type TrackRow } from '../../../play/engineView';
 import { rackControlsOf } from '../../../play/rackControls';
 import { usePlayUi, deviceFoldKey } from '../playUi';
+import { showPage } from '../playSplit';
 import { withEngine } from './engineOps';
 import { GrainChainRow, InputRow, Keys, Note, RackSpectrum, SendView, SlotView, SourceRow, useRackEdits } from './RackParts';
 import { RackControlsStrip } from './RackControls';
@@ -135,7 +136,7 @@ export function DeviceChain({ rack, row, play, onChange, touch, narrow, onPick }
       ...(!rack.instrument && !rack.source ? [{ label: 'Instrument…', icon: 'piano' as IconName, hint: 'An Audio Unit synth, the sample player or the Granulator', onSelect: () => onPick('instrument') }] : []),
       { label: 'Audio Unit effect…', icon: 'wave', disabled: rack.effects.length >= AE_EFFECTS_MAX, hint: desktop ? 'After the instrument: delay, reverb, filter…' : 'Kept here; heard in the desktop app on a Mac', onSelect: () => onPick('effect') },
       { label: 'Listener (audio readers)', icon: 'target', disabled: listening, hint: listening ? 'Already on this track' : readersElsewhere ? `Moves the readers here from ${readersElsewhere}` : 'Readers here drive controls from this track’s sound', onSelect: addListener },
-      ...(rack.instrument?.kind === 'granulator' ? [{ label: 'Sound effects (Sound → Effects)…', icon: 'sliders' as IconName, onSelect: () => { usePlayUi.getState().setFinishView('sound'); usePlayUi.getState().setTab('finish'); } }] : []),
+      ...(rack.instrument?.kind === 'granulator' ? [{ label: 'Sound effects (Sound → Effects)…', icon: 'sliders' as IconName, onSelect: () => { showPage('finish-sound'); } }] : []),
     ],
   });
 
@@ -290,7 +291,7 @@ export function MasterChain({ play, onChange, narrow }: { play: PlayRecord; onCh
   const effects = chain?.effects ?? [];
   const openSound = (id?: string) => {
     if (id) usePlayUi.getState().revealAudioFx(id);
-    else { usePlayUi.getState().setFinishView('sound'); usePlayUi.getState().setTab('finish'); }
+    else { showPage('finish-sound'); }
   };
   const toggleFx = (id: string) => onChange(p => ({ ...p, audioFx: patchChain(p.audioFx, MASTER_CHAIN, c => ({ ...c, effects: c.effects.map(e => (e.id === id ? { ...e, enabled: !e.enabled } : e)) })) }));
   const items: ReactNode[] = [];

@@ -1,66 +1,68 @@
 /**
- * playSplit.ts — the Play page's split view (desktop and tablet): the picture
- * shares the preview area with a big panel that shows one of the sidebar's
- * sections (Controls, Layers, Finish, the Audio engine or Mappings) with room to breathe.
+ * playSplit.ts — the Play page's one navigation model (Play audit P1): a
+ * labelled rail of categories (PlayRail.tsx, railPages.ts) on the left, the
+ * panel beside it showing one page of the open category, and the picture on
+ * the right. Desktop and tablet draw it with PlaySplitArea.tsx; phones show
+ * the same pages under the picture, picked from the same categories along the
+ * bottom (PlayRailBar), so the page shown is one piece of state everywhere
+ * (`railPage`).
  *
- * PlaySplitArea.tsx draws the divider and the panel's frame; PlayPage renders
- * the chosen section into the frame's body through a portal, so the section
- * keeps its one set of state and logic. The sidebar leaves out whatever the
- * big panel shows (sidebarView below), and can be hidden altogether.
+ * PlaySplitArea.tsx draws the rail, the divider and the panel's frame;
+ * PlayPage renders the page into the frame's body through a portal, so each
+ * page keeps its one set of state and logic.
  *
- * The sidebar has three states beside the panel (`sidebar`): full, collapsed
- * into an icon rail (PlayRail.tsx; the panel then shows one page of a
- * category full width: railPages.ts), or hidden (the picture and the panel
- * only). The rail keeps its own page and divider position, so leaving it
- * puts the sidebar and the panel back exactly as they were.
+ * Three views, and nothing else (there is no second sidebar beside the panel
+ * any more: its "Sidebar beside the panel" mode is gone):
+ *   - the rail and the panel (`on`), the default;
+ *   - the rail alone (the panel closed with its ×, ⌘⇧L or the preview's split
+ *     button): clicking a category opens the panel on it;
+ *   - the picture alone (`railHidden`, ⌘⇧B): the most room. ⌘⇧B again, a
+ *     category shortcut (⌘1–5) or the split button bring the rail back.
  *
  * The picture is always on the right and the panel (with the rail) on its
  * left, on desktop and tablet alike: there's no setting to swap them (the
  * Play audit's user decision, 2026-10-18). The panel takes about a third of
  * the width by default (DEFAULT_SPLIT.ratio) and the divider still resizes it.
  *
- * On, ratio, tab, the sidebar state and the rail's page are remembered on
- * this device. Phones keep their own picture-over-panel split
- * (shell/PhoneSplit.tsx).
+ * On, ratio, the page, each category's last page and railHidden are
+ * remembered on this device. Saves from before the one model (a full sidebar
+ * beside the panel, a tab-strip panel) open on the rail, on the page the
+ * panel showed (parseSplitPrefs).
  */
 import { create } from 'zustand';
-import { tabForPage, usePlayUi, type PlayTab } from './playUi';
-import { categoryOf, currentRailPage, firstPageOf, isRailPage, pageForTab, type RailCategory, type RailPage } from './railPages';
+import { usePlayUi } from './playUi';
+import { categoryOf, currentRailPage, firstPageOf, isRailPage, type RailCategory, type RailPage } from './railPages';
+import { useInputsBoard } from './inputs/InputsBoard';
 import type { TriggerSpec } from '../../types/play';
 
-/** The sidebar beside the big panel: all of it, a rail of icons, or nothing. */
-export type SidebarMode = 'full' | 'rail' | 'hidden';
-
 export interface SplitPrefs {
+  /** The panel is open beside the rail (off: the rail alone). */
   on: boolean;
-  /** The panel's share of the preview area, 0..1. */
+  /** The panel's share of the preview area (the rail included), 0..1. */
   ratio: number;
-  tab: PlayTab;
-  /** The left sidebar while split: full, a rail of icons (full-width pages), or hidden. */
-  sidebar: SidebarMode;
-  /** What the sidebar was before the rail (⌘⇧B goes back to it). */
-  sidebarBefore: 'full' | 'hidden';
-  /** The page the panel shows in rail mode. */
+  /** The page the panel shows (and a phone shows under the picture). */
   railPage: RailPage;
-  /** The panel's share in rail mode (null: worked out when the rail opens, so the picture keeps its size). */
-  railRatio: number | null;
   /** The page last shown for each category, so opening a category from the rail goes back to it (railPage stays the single source of truth for what's shown). */
   railPageMemory: Partial<Record<RailCategory, RailPage>>;
+  /** The picture alone: the rail (and the panel) hidden for the most room (⌘⇧B). */
+  railHidden: boolean;
 }
 
 export const SPLIT_KEY = 'shader-studio:play:split';
 /** The panel's share by default: about a third, so the picture gets most of the width. */
 export const DEFAULT_RATIO = 0.35;
-/** The Play page opens split, with the sidebar folded into the icon rail (the owner's preferred view). */
-export const DEFAULT_SPLIT: SplitPrefs = { on: true, ratio: DEFAULT_RATIO, tab: 'controls', sidebar: 'rail', sidebarBefore: 'full', railPage: 'controls', railRatio: null, railPageMemory: {} };
+/** The Play page opens with the rail and the panel, on Controls. */
+export const DEFAULT_SPLIT: SplitPrefs = { on: true, ratio: DEFAULT_RATIO, railPage: 'controls', railPageMemory: {}, railHidden: false };
 /**
- * Bumped when the default view changes. Saves from before 2 take the new
- * default for `on` and `sidebar` once (the rail became the default); saves
- * from before 3 also take the new ratios once, since they were measured with
- * the panel to the right of the picture at half and half (and may have put it
- * above, below or right of it: `side`, now gone, is ignored).
+ * Bumped when the saved shape changes. Saves from before 2 take the default
+ * for `on` once (the rail became the default); saves from before 3 take the
+ * default ratio once (measured with the panel right of the picture). Saves
+ * from before 4 had a sidebar mode (`sidebar`: full, rail or hidden) and a
+ * tab-strip panel (`tab`): they open on the rail, on the page the panel was
+ * showing (the rail's own page, or the tab's), with the rail's ratio when it
+ * was out.
  */
-export const SPLIT_PREFS_VERSION = 3;
+export const SPLIT_PREFS_VERSION = 4;
 /** The rail's width, in px. */
 export const RAIL_PX = 60;
 /** The ratio is kept within these, whatever the pixels say. */
@@ -72,8 +74,10 @@ export const MIN_PANEL_PX = 300;
 /** From this width the panel lays its section out wide: a grid of cards, the layer list beside its editor. */
 export const WIDE_PANEL_PX = 640;
 
-const SIDEBARS: readonly SidebarMode[] = ['full', 'rail', 'hidden'];
-const TABS: readonly PlayTab[] = ['controls', 'layers', 'finish', 'engine', 'mappings'];
+/** A tab of the old tab-strip panel (before SPLIT_PREFS_VERSION 4), as the page it showed. */
+const LEGACY_TAB_PAGE: Readonly<Record<string, RailPage>> = {
+  controls: 'controls', mappings: 'controls', layers: 'layers', finish: 'finish-picture', engine: 'engine-performance',
+};
 
 /** Remembered prefs from storage text; anything missing or odd falls back to the default. */
 export function parseSplitPrefs(raw: string | null): SplitPrefs {
@@ -82,21 +86,24 @@ export function parseSplitPrefs(raw: string | null): SplitPrefs {
   try { v = JSON.parse(raw); } catch { return { ...DEFAULT_SPLIT }; }
   if (!v || typeof v !== 'object') return { ...DEFAULT_SPLIT };
   const o = v as Record<string, unknown>;
-  // A save from before the rail became the default keeps its page but opens the new way;
-  // one from before the picture moved right takes the new ratios (see SPLIT_PREFS_VERSION).
   const ver = typeof o.v === 'number' ? o.v : 1;
-  const current = ver >= 2;
+  const onKept = ver >= 2;
   const ratiosKept = ver >= 3;
+  const oneModel = ver >= 4;
+  const num = (x: unknown) => (typeof x === 'number' && Number.isFinite(x) ? x : null);
+  // Before the one model, the rail had a ratio of its own; the tab-strip panel (beside a full or no sidebar) another.
+  const wasRail = !oneModel && o.sidebar === 'rail';
+  const savedRatio = ratiosKept ? (wasRail ? num(o.railRatio) ?? num(o.ratio) : num(o.ratio)) : null;
+  const savedPage = (() => { const pg = currentRailPage(o.railPage); return isRailPage(pg) ? pg : null; })();
+  const railPage = oneModel || wasRail || !onKept
+    ? savedPage ?? DEFAULT_SPLIT.railPage
+    : LEGACY_TAB_PAGE[typeof o.tab === 'string' ? o.tab : ''] ?? savedPage ?? DEFAULT_SPLIT.railPage;
   return {
-    on: current && typeof o.on === 'boolean' ? o.on : DEFAULT_SPLIT.on,
-    ratio: ratiosKept && typeof o.ratio === 'number' && Number.isFinite(o.ratio) ? clampRatio(o.ratio) : DEFAULT_SPLIT.ratio,
-    tab: TABS.includes(o.tab as PlayTab) ? o.tab as PlayTab : DEFAULT_SPLIT.tab,
-    // `sidebarHidden` is how the hidden sidebar was saved before the rail.
-    sidebar: !current ? DEFAULT_SPLIT.sidebar : SIDEBARS.includes(o.sidebar as SidebarMode) ? o.sidebar as SidebarMode : o.sidebarHidden === true ? 'hidden' : DEFAULT_SPLIT.sidebar,
-    sidebarBefore: o.sidebarBefore === 'hidden' ? 'hidden' : 'full',
-    railPage: (() => { const pg = currentRailPage(o.railPage); return isRailPage(pg) ? pg : DEFAULT_SPLIT.railPage; })(),
-    railRatio: ratiosKept && typeof o.railRatio === 'number' && Number.isFinite(o.railRatio) ? clampRatio(o.railRatio) : null,
+    on: onKept && typeof o.on === 'boolean' ? o.on : DEFAULT_SPLIT.on,
+    ratio: savedRatio !== null ? clampRatio(savedRatio) : DEFAULT_SPLIT.ratio,
+    railPage,
     railPageMemory: parseRailPageMemory(o.railPageMemory),
+    railHidden: oneModel && o.railHidden === true,
   };
 }
 
@@ -119,17 +126,6 @@ function parseRailPageMemory(v: unknown): Partial<Record<RailCategory, RailPage>
     if (real === cat || LEGACY_CATEGORY[cat] === real || MOVED_FROM[page] === cat) out[real] = page;
   }
   return out;
-}
-
-/**
- * The panel's share once the sidebar folds into the rail, so the picture keeps
- * its size and the panel takes the sidebar's width: `ratio` of an area
- * `total` px across, beside a sidebar `sidebarPx` wide.
- */
-export function railRatioFor(ratio: number, total: number, sidebarPx: number): number {
-  if (total <= 0 || sidebarPx <= 0) return clampRatio(ratio);
-  const panel = ratio * total;
-  return clampRatio((panel + sidebarPx) / (total + sidebarPx), total + sidebarPx);
 }
 
 /**
@@ -156,23 +152,6 @@ export function ratioAt(rect: { left: number; width: number }, x: number): numbe
   return clampRatio((x - rect.left) / total, total);
 }
 
-/** The sections the sidebar can show (Mappings is its drawer on desktop). */
-export type SideTab = 'controls' | 'layers' | 'finish' | 'engine';
-const SIDE_TABS: readonly SideTab[] = ['controls', 'layers', 'finish', 'engine'];
-
-/**
- * What the sidebar shows beside a big panel on `big` (null: not split): the
- * section in view, the sections its switcher offers, and whether the Mappings
- * drawer sits underneath. It never shows what the big panel shows, and the
- * tab the person picked (`tab`) is left as it was, so closing the split
- * brings it back.
- */
-export function sidebarView(tab: PlayTab, big: PlayTab | null): { tab: SideTab; tabs: SideTab[]; drawer: boolean } {
-  const tabs = SIDE_TABS.filter(t => t !== big);
-  const own: SideTab = tab === 'layers' || tab === 'finish' || tab === 'engine' ? tab : 'controls';
-  return { tab: tabs.includes(own) ? own : tabs[0], tabs, drawer: big !== 'mappings' };
-}
-
 function loadPrefs(): SplitPrefs {
   try { return parseSplitPrefs(localStorage.getItem(SPLIT_KEY)); } catch { return { ...DEFAULT_SPLIT }; }
 }
@@ -182,41 +161,32 @@ const round3 = (n: number) => Math.round(n * 1000) / 1000;
 function savePrefs(p: SplitPrefs): void {
   try {
     localStorage.setItem(SPLIT_KEY, JSON.stringify({
-      v: SPLIT_PREFS_VERSION, on: p.on, ratio: round3(p.ratio), tab: p.tab,
-      sidebar: p.sidebar, sidebarBefore: p.sidebarBefore, railPage: p.railPage, railRatio: p.railRatio === null ? null : round3(p.railRatio),
-      railPageMemory: p.railPageMemory,
+      v: SPLIT_PREFS_VERSION, on: p.on, ratio: round3(p.ratio),
+      railPage: p.railPage, railPageMemory: p.railPageMemory, railHidden: p.railHidden,
     }));
   } catch { /* preference only */ }
 }
-
-/** Measures the split area and the sidebar beside it (PlaySplitArea registers it while on screen). */
-type AreaMeasure = () => { total: number; sidebarPx: number } | null;
-let measureArea: AreaMeasure | null = null;
-export function setAreaMeasure(fn: AreaMeasure | null): void { measureArea = fn; }
 
 interface PlaySplit extends SplitPrefs {
   /** A split area is on screen (the Play page, not on a phone): the toggle and its shortcut work. */
   available: boolean;
   setAvailable: (on: boolean) => void;
-  /** The panel's body, where PlayPage renders the section. */
+  /** The panel's body, where PlayPage renders the page. */
   host: HTMLElement | null;
   setHost: (el: HTMLElement | null) => void;
   /** The panel is at least WIDE_PANEL_PX across. */
   wide: boolean;
   setWide: (wide: boolean) => void;
+  /** ⌘⇧L, the preview's split button: the panel open or closed (the rail stays; a hidden rail comes back). */
   toggle: () => void;
   setOn: (on: boolean) => void;
   setRatio: (ratio: number) => void;
-  setTab: (tab: PlayTab) => void;
-  /** Full sidebar, rail or hidden. Opening the rail starts it on the panel's page and keeps the picture's size. */
-  setSidebar: (mode: SidebarMode) => void;
-  /** ⌘⇧B: into the rail, or back to what the sidebar was (turning the split on if it's off). */
+  /** ⌘⇧B: the picture alone, or the rail (and the panel, if it was open) back. */
   toggleRail: () => void;
-  /** Show a page in the panel (rail mode). Remembers it as that page's category's last page. */
+  /** Show a page (in the panel, or a phone's). Remembers it as that page's category's last page. */
   setRailPage: (page: RailPage) => void;
-  /** A rail category was clicked: its remembered page, else its first. */
+  /** A rail category was clicked: its remembered page, else its first, with the panel open. */
   openRailCategory: (cat: RailCategory) => void;
-  setRailRatio: (ratio: number) => void;
 }
 
 export const usePlaySplit = create<PlaySplit>((set, get) => {
@@ -229,127 +199,93 @@ export const usePlaySplit = create<PlaySplit>((set, get) => {
     setHost: host => set({ host }),
     wide: false,
     setWide: wide => { if (get().wide !== wide) set({ wide }); },
-    toggle: () => save({ on: !get().on }),
-    setOn: on => save({ on }),
+    toggle: () => { const s = get(); save(s.railHidden ? { on: true, railHidden: false } : { on: !s.on }); },
+    setOn: on => save(on ? { on, railHidden: false } : { on }),
     setRatio: ratio => save({ ratio: clampRatio(ratio) }),
-    setTab: tab => save({ tab }),
-    setSidebar: mode => {
-      const s = get();
-      if (mode === s.sidebar) return;
-      if (mode !== 'rail') { save({ sidebar: mode }); return; }
-      // Into the rail: the page the panel was on, and the sidebar's width to the panel.
-      const m = measureArea?.();
-      save({
-        sidebar: 'rail',
-        sidebarBefore: s.sidebar === 'hidden' ? 'hidden' : 'full',
-        railPage: pageForTab(s.tab, usePlayUi.getState().finishView),
-        railRatio: m ? railRatioFor(clampRatio(s.ratio, m.total), m.total, m.sidebarPx) : s.ratio,
-      });
-    },
-    toggleRail: () => {
-      const s = get();
-      if (!s.on) { save({ on: true }); if (s.sidebar === 'rail') return; }
-      get().setSidebar(s.sidebar === 'rail' ? s.sidebarBefore : 'rail');
-    },
+    toggleRail: () => save({ railHidden: !get().railHidden }),
     setRailPage: railPage => save({ railPage, railPageMemory: { ...get().railPageMemory, [categoryOf(railPage)]: railPage } }),
-    openRailCategory: cat => get().setRailPage(get().railPageMemory[cat] ?? firstPageOf(cat)),
-    setRailRatio: ratio => save({ railRatio: clampRatio(ratio) }),
+    openRailCategory: cat => { get().setRailPage(get().railPageMemory[cat] ?? firstPageOf(cat)); get().setOn(true); },
   };
 });
 
-/** The rail is what's beside the panel (split on, on screen). */
-export const railActive = (s: Pick<PlaySplit, 'on' | 'available' | 'sidebar'>): boolean => s.on && s.available && s.sidebar === 'rail';
-
-/** The panel's share as shown: the rail's own while the rail is out. */
-export const shownRatio = (s: Pick<SplitPrefs, 'sidebar' | 'ratio' | 'railRatio'>): number => (s.sidebar === 'rail' && s.railRatio !== null ? s.railRatio : s.ratio);
-
-/** A rail category as the tab-strip section it sits under (Signals has no tab of its own: it rides with Layers there). */
-const tabOfCategory = (c: RailCategory): PlayTab => (c === 'signals' ? 'layers' : c);
-
-/** The section the big panel shows, or null when there's no big panel on screen. */
-export const useBigTab = (): PlayTab | null => usePlaySplit(s => (s.on && s.available && s.host ? (s.sidebar === 'rail' ? tabOfCategory(categoryOf(s.railPage)) : s.tab) : null));
-
-/** The full-width page the panel shows in rail mode, or null (no rail, or no panel on screen). */
-export const useBigPage = (): RailPage | null => usePlaySplit(s => (s.on && s.available && s.host && s.sidebar === 'rail' ? s.railPage : null));
+/** The page the panel shows, or null when there's no panel on screen (closed, the rail hidden, or not on Play). */
+export const useBigPage = (): RailPage | null => usePlaySplit(s => (s.on && !s.railHidden && s.available && s.host ? s.railPage : null));
 
 /**
- * Show a page wherever the split shows pages: the rail's panel when the rail
- * is out, else the tab-strip panel's section (a Finish page sets its view).
+ * Show a page wherever pages show: the panel (opened if it's closed or the
+ * rail is hidden), or a phone's page under the picture.
  */
-export function showPageInSplit(page: RailPage): void {
+export function showPage(page: RailPage): void {
   const split = usePlaySplit.getState();
-  if (split.sidebar === 'rail') { split.setRailPage(page); return; }
-  if (page === 'finish-picture' || page === 'finish-sound') usePlayUi.getState().setFinishView(page === 'finish-sound' ? 'sound' : 'picture');
-  // The tab-strip's own section for this page, not the rail's icon grouping: Mappings is its
-  // own tab there even though it shares the Controls rail icon (railPages.ts, tabForPage).
-  split.setTab(tabForPage(page));
+  split.setRailPage(page);
+  if (split.available && (!split.on || split.railHidden)) split.setOn(true);
 }
 
 /**
- * Mappings, wherever the split shows pages: opens the split if it's closed,
- * then its Mappings page (the rail's own, or the tab-strip's). ⌘⇧M and the
- * rail's own Mappings icon are both always there, so this is never the only
- * way in — it's for reaching it from anywhere else on the Play page. False
- * when there's no split view on screen (phones; the bottom row's Mappings
- * icon covers it there).
+ * The Sources side of the Controls page, wherever pages show: the Controls
+ * page, with its narrow board (or a phone's switch) on Sources. ⌘⇧M; also for
+ * reaching it from anywhere else on the Play page ("Show" on a toast).
  */
 export function goToMappings(): boolean {
-  const split = usePlaySplit.getState();
-  if (!split.available) return false;
-  if (!split.on) split.setOn(true);
-  // The rail's Inputs board, or the tab-strip's own Mappings tab.
-  if (split.sidebar === 'rail') split.setRailPage('controls'); else split.setTab('mappings');
+  showPage('controls');
+  useInputsBoard.getState().setTab('sources');
   return true;
+}
+
+/** Open the Rules page on Quick rule, with its When (or its Do's layer) filled in. */
+export function startRule(pre: { when?: TriggerSpec; layerId?: string } = {}): void {
+  usePlayUi.getState().askQuickRule(pre);
+  showPage('signals');
 }
 
 /**
  * Show the Rules page with one signal or reaction selected (a signal just
- * made from a slider's +, say): in the split view when there is one, else as
- * the phone's page.
+ * made from a slider's +, say).
  */
-/** Open the Rules page on Quick rule, with its When (or its Do's layer) filled in. */
-export function startRule(pre: { when?: TriggerSpec; layerId?: string } = {}): void {
-  usePlayUi.getState().askQuickRule(pre);
-  const split = usePlaySplit.getState();
-  if (!split.available) { usePlayUi.getState().showPage('signals'); return; }
-  if (!split.on) split.setOn(true);
-  showPageInSplit('signals');
-}
-
 export function goToSignal(id: string): void {
   usePlayUi.getState().focusSignal(id);
-  const split = usePlaySplit.getState();
-  if (!split.available) { usePlayUi.getState().showPage('signals'); return; }
-  if (!split.on) split.setOn(true);
-  showPageInSplit('signals');
+  showPage('signals');
 }
 
 /**
- * Open a rail category, wherever the split shows pages, on the page it was
- * last left on (else its first) — the keyboard's own way in (⌘1–5 or ⌃1–5:
- * App.tsx), same as clicking its rail icon. False when there's no split view
- * on screen (phones; the bottom row's icons cover it there).
+ * Open a rail category on the page it was last left on (else its first) —
+ * the keyboard's own way in (⌘1–5 or ⌃1–5: App.tsx), same as clicking its
+ * rail icon. True when a panel shows it (false on phones, where the page
+ * under the picture changes all the same).
  */
 export function goToRailCategory(cat: RailCategory): boolean {
-  const split = usePlaySplit.getState();
-  if (!split.available) return false;
-  if (!split.on) split.setOn(true);
-  showPageInSplit(usePlaySplit.getState().railPageMemory[cat] ?? firstPageOf(cat));
-  return true;
+  showPage(usePlaySplit.getState().railPageMemory[cat] ?? firstPageOf(cat));
+  return usePlaySplit.getState().available;
 }
 
 /**
- * Open a layer's full editor in the split view's big panel: the split on, its
- * panel on Layers, the layer selected (a big editor like the drum pads' only
- * shows in full there; the sidebar keeps a summary). False when there's no
- * split view on screen (phones), for the caller to show it another way.
+ * Open a layer's full editor in the panel: the panel open on Layers, the
+ * layer selected (a big editor like the drum pads' only shows in full
+ * there). False when there's no panel on screen (phones), for the caller to
+ * show it another way.
  */
 export function openLayerInSplit(layerId: string): boolean {
   const split = usePlaySplit.getState();
   if (!split.available) return false;
-  if (split.sidebar === 'rail') split.setRailPage('layers');
-  else split.setTab('layers');
-  if (!split.on) split.setOn(true);
+  showPage('layers');
   usePlayUi.getState().select(layerId);
   return true;
 }
+
+/**
+ * Follow what asks for a place (playUi's reveals): a layer revealed (clicked
+ * on the picture, a note's link, a control's source), a Finish or sound
+ * effect, a control group. The page moves there (and the panel opens).
+ * Started once, below; returns the unsubscribe (for tests).
+ */
+export function followReveals(): () => void {
+  let prev = usePlayUi.getState();
+  return usePlayUi.subscribe(ui => {
+    const was = prev;
+    prev = ui;
+    if (ui.revealTick !== was.revealTick) showPage('layers');
+    else if (ui.finishTick !== was.finishTick) showPage(ui.finishView === 'sound' ? 'finish-sound' : 'finish-picture');
+    else if (ui.controlGroupTick !== was.controlGroupTick) showPage('controls');
+  });
+}
+followReveals();

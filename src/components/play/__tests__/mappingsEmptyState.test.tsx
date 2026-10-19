@@ -42,14 +42,14 @@ afterEach(() => {
 });
 beforeEach(() => {
   errors.length = 0;
-  usePlayUi.setState({ tab: 'controls', phonePage: '', selected: '' });
+  usePlayUi.setState({ selected: '' });
 });
 
 function mountMappingsPage(play: PlayRecord): HTMLElement {
   useNodeGraphStore.getState().setPlay(() => play);
   const host = document.createElement('div');
   document.body.appendChild(host);
-  usePlaySplit.setState({ ...DEFAULT_SPLIT, on: true, available: true, sidebar: 'rail', railPage: 'controls', host, wide: true });
+  usePlaySplit.setState({ ...DEFAULT_SPLIT, on: true, available: true, railPage: 'controls', host, wide: true });
   const el = document.createElement('div');
   document.body.appendChild(el);
   const root = createRoot(el);

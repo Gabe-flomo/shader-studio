@@ -33,7 +33,6 @@ import { OverlayButton } from './components/PreviewOverlay';
 import { canvasFrameRef as canvasFrame, exitFullscreen, isFullscreenKey, isTyping, toggleFullscreenTarget, useFullscreen } from './lib/fullscreen';
 import { modalOpen } from './lib/modalOpen';
 import { GuidesToggle } from './components/play/GuidesToggle';
-import { PANEL_WIDTHS, usePlayUi } from './components/play/playUi';
 import { PlaySplitArea, SplitButton } from './components/play/PlaySplitArea';
 import { goToMappings, goToRailCategory, usePlaySplit } from './components/play/playSplit';
 import { TimeControlsStrip } from './components/TimeControlsStrip';
@@ -93,6 +92,13 @@ import { useUnseenActivity } from './components/ui/activityStore';
 // it, and vice versa for the desktop-only pieces it doesn't need). Each lazy
 // component carries its own Suspense boundary so a chunk loading never blanks
 // the rest of the app.
+
+/**
+ * Play's pages live in the rail's panel (PlaySplitArea, filled by portal), so
+ * PlayPage's own column takes no width: it only holds what floats (dialogs,
+ * menus). There is no Play sidebar beside the panel (Play audit P1).
+ */
+const PLAY_HOST_STYLE: React.CSSProperties = { width: 0, flexShrink: 0, position: 'relative', overflow: 'hidden' };
 
 const KeyboardShortcutsModal = lazyWithSuspense<PropsOf<typeof KeyboardShortcutsModalT>>(() => import('./components/KeyboardShortcutsModal').then(m => ({ default: m.KeyboardShortcutsModal })));
 const FilesPage              = lazyWithSuspense<PropsOf<typeof FilesPageT>>(() => import('./components/files/FilesPage').then(m => ({ default: m.FilesPage })));
@@ -567,9 +573,6 @@ function App() {
     const run = () => { void preloadLazyComponents().then(() => preloadLazyComponents()); };
     if (w.requestIdleCallback) w.requestIdleCallback(run, { timeout: 4000 }); else window.setTimeout(run, 2000);
   }, []);
-  const playWidth = PANEL_WIDTHS[usePlayUi(s => s.panel)];
-  // Play's split view can fold the sidebar (the panel column) into the panel's rail or hide it, leaving the picture and the big panel.
-  const playSidebarHidden = usePlaySplit(s => s.on && s.available && s.sidebar !== 'full');
   // "This graph has a Play setup · Open Play" means nothing while Play is already open.
   useEffect(() => {
     if (page !== 'play') return;
@@ -1480,9 +1483,9 @@ function App() {
             )}
           </div>}
 
-          {/* Play: the control panel takes the graph's place, the picture gets the rest */}
+          {/* Play: the rail and its panel sit in the preview's split area; this column only hosts what floats */}
           {page === 'play' && (
-            <div data-play-sidebar="" style={playSidebarHidden ? { width: 0, flexShrink: 0, position: 'relative', overflow: 'hidden' } : { width: `min(${playWidth}px, 50vw)`, flexShrink: 0, position: 'relative', borderRight: `1px solid ${tk.border.default}` }}>
+            <div data-play-host="" style={PLAY_HOST_STYLE}>
               <PlayPage canvasRow />
             </div>
           )}
@@ -1597,9 +1600,9 @@ function App() {
           </div>
         )}
 
-        {/* Center content. On Play the panel is a fixed column and the picture takes the rest. */}
-        <div data-play-sidebar={page === 'play' ? '' : undefined} style={page === 'play'
-          ? (playSidebarHidden ? { width: 0, flexShrink: 0, position: 'relative', overflow: 'hidden' } : { width: playWidth, flexShrink: 0, position: 'relative', borderRight: `1px solid ${tk.border.default}` })
+        {/* Center content. On Play this column only hosts what floats: the rail and its panel are in the preview's split area. */}
+        <div data-play-host={page === 'play' ? '' : undefined} style={page === 'play'
+          ? PLAY_HOST_STYLE
           : pictureBehind
             // Maximized: the graph takes the whole window, over the picture (the preview, moved behind it below).
             ? graphOverPictureStyle(paletteBaseW > 0 ? effectivePaletteW : 0)

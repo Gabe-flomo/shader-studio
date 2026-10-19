@@ -33,7 +33,6 @@ import { canvasMenuItems, randomiseMenuItems, type CanvasMenuActions, type Canva
 import { CanvasToolbar } from '../CanvasToolbar';
 import { useGraphMaximize } from '../graphLayout';
 import { useViewport } from '../../../lib/viewport';
-import { playLayoutItems, SIDEBAR_OPTIONS, sidebarIcon } from '../../play/playLayoutMenu';
 import type { MenuItem } from '../../ui/Menu';
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -178,18 +177,11 @@ describe('canvas right-click menu', () => {
   });
 });
 
-describe('Play Layout menu', () => {
-  it('offers only the three sidebar modes (the picture is always right of the panel), marks the current one, and sets it', () => {
-    const setSidebar = vi.fn();
-    const items = playLayoutItems('rail', setSidebar, '#00f');
-    expect(labels(items)).toEqual(SIDEBAR_OPTIONS.map(o => o.label));
-    // No row moves the panel to another side of the picture.
-    expect(labels(items).some(l => /right of the picture|above the picture|below the picture|left of the picture/i.test(l))).toBe(false);
-    const rows = items.filter((i): i is Extract<MenuItem, { onSelect: () => void }> => i !== 'separator' && !('heading' in i));
-    expect(rows.filter(r => r.iconColor === '#00f').map(r => r.label)).toEqual(['Fold the sidebar into icons']);
-    rows[2].onSelect();
-    expect(setSidebar).toHaveBeenCalledWith('hidden');
-    expect(sidebarIcon('hidden')).toBe('sidebarOff');
+describe('Play layout', () => {
+  it('has no Layout menu: one navigation model, the rail with its panel left of the picture (Play audit P1)', () => {
+    const src = readFileSync(resolve(__dirname, '../../play/PlaySplitArea.tsx'), 'utf8');
+    expect(src).not.toContain('data-play-layout');
+    expect(src).not.toContain('Sidebar beside the panel');
   });
 });
 

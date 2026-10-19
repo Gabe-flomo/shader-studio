@@ -44,8 +44,8 @@ export const DEFAULT_ACTIONS: ShortcutAction[] = [
   { id: 'rebuild',           label: 'Rebuild the preview',   group: 'View',       defaultCombo: 'cmd+shift+enter', description: 'Recompile the shader and reset the GPU; the graph, time and Play setup stay', inEditors: true },
   { id: 'fullscreen',        label: 'Full screen',           group: 'View',       defaultCombo: 'cmd+shift+f', description: 'The picture on its own (Studio and Play preview), or the presentation (Present). F alone does it too on Play and in Present’s Slides and Scroll. Esc leaves', inEditors: true },
   // Play
-  { id: 'playSplit',         label: 'Split the Play view',   group: 'View',       defaultCombo: 'cmd+shift+l', description: 'On the Play page: the picture beside a big Controls, Layers or Finish panel, or back to the full picture' },
-  { id: 'playRail',          label: 'Fold the Play sidebar', group: 'View',       defaultCombo: 'cmd+shift+b', description: 'On the Play page, split: fold the sidebar into a rail of icons so the panel takes its width, one page at a time; again to bring it back' },
+  { id: 'playSplit',         label: 'Play panel',            group: 'View',       defaultCombo: 'cmd+shift+l', description: 'On the Play page: open or close the panel beside the rail (closed, the rail stays; a category opens it again)' },
+  { id: 'playRail',          label: 'Play picture alone',    group: 'View',       defaultCombo: 'cmd+shift+b', description: 'On the Play page: hide the rail and its panel for the picture alone; again (or ⌘1–5) to bring them back' },
   // The id is older than the name (docs/glossary.md): the list of sources is what it shows.
   { id: 'gotoMappings',      label: 'Go to Sources',         group: 'View',       defaultCombo: 'cmd+shift+m', description: 'On the Play page: open the split (if it’s closed) and show Sources, the list of what drives each control' },
   // The rail's own categories, ⌘1–5 in the rail's order (Controls, Layers, Rules, Finish, Sound). A plain browser

@@ -1,7 +1,8 @@
 /**
- * PlayRail — the split view's sidebar folded into a rail of icons, one per
- * category (railPages.ts). Clicking an icon opens that category straight
- * away, on the page it was last on (else its first) — no drawer in between.
+ * PlayRail — the Play page's labelled rail, one icon per category
+ * (railPages.ts), on the left beside the panel (the one navigation model,
+ * Play audit P1). Clicking an icon opens that category straight away, on the
+ * page it was last on (else its first), opening the panel if it was closed.
  * A category with more than one page gets a tab strip in the panel's header
  * (PlaySplitArea's `RailPageTabs`, exported below) so switching between them
  * doesn't mean going back to the rail. ↑/↓ move between the rail's icons.
@@ -18,9 +19,8 @@ import { useCan } from '../../lib/plan';
 import { Icon } from '../ui/Icon';
 import { Sheet } from '../ui/Sheet';
 import { Tooltip } from '../ui/Tooltip';
-import { RAIL_PX, usePlaySplit } from './playSplit';
-import { usePlayUi } from './playUi';
-import { RAIL_CATEGORIES, RAIL_CATEGORY_SHORTCUT, RAIL_PAGES, categoryBadge, categoryOf, mappingsCountOf, pageCount, phonePageShown, phonePagesOf, stepIndex, type RailCategory, type RailCategoryDef, type RailPage } from './railPages';
+import { RAIL_PX, showPage, usePlaySplit } from './playSplit';
+import { RAIL_CATEGORIES, RAIL_CATEGORY_SHORTCUT, RAIL_PAGES, categoryBadge, categoryOf, mappingsCountOf, pageCount, phonePageFor, phonePagesOf, stepIndex, type RailCategory, type RailCategoryDef, type RailPage } from './railPages';
 
 /** Categories that need Pro, and the plan feature that unlocks each. */
 function useLocked(): (cat: RailCategory) => boolean {
@@ -28,12 +28,14 @@ function useLocked(): (cat: RailCategory) => boolean {
   return cat => ((cat === 'layers' || cat === 'signals') && !layers) || (cat === 'finish' && !finish) || (cat === 'engine' && !engine);
 }
 
-/** The rail on the big panel's left edge (desktop and tablet split view). */
+/** The rail on the left of the panel (or alone, with the panel closed): desktop and tablet. */
 export function PlayRail() {
   const tk = useTokens();
   const play = useNodeGraphStore(s => s.play);
   const page = usePlaySplit(s => s.railPage);
   const openCategory = usePlaySplit(s => s.openRailCategory);
+  // With the panel closed no category is open: the rail only offers them.
+  const panelOn = usePlaySplit(s => s.on);
   const locked = useLocked();
   const railRef = useRef<HTMLDivElement>(null);
   const buttons = useRef<Partial<Record<RailCategory, HTMLButtonElement | null>>>({});
@@ -64,7 +66,7 @@ export function PlayRail() {
           key={c.id}
           def={c}
           refFn={el => { buttons.current[c.id] = el; }}
-          active={active === c.id}
+          active={panelOn && active === c.id}
           open={false}
           badge={categoryBadge(c.id, play)}
           hint={c.id === 'controls' && mappingsCountOf(play) > 0 ? `Mappings · ${mappingsCountOf(play)}` : undefined}
@@ -265,13 +267,9 @@ export function RailPageTabs({ def, current, play, onPick }: {
 export function PlayRailBar() {
   const tk = useTokens();
   const play = useNodeGraphStore(s => s.play);
-  const tab = usePlayUi(s => s.tab);
-  const finishView = usePlayUi(s => s.finishView);
-  const picked = usePlayUi(s => s.phonePage);
-  const showPage = usePlayUi(s => s.showPage);
+  const current = phonePageFor(usePlaySplit(s => s.railPage));
   const locked = useLocked();
   const [sheet, setSheet] = useState<RailCategory | null>(null);
-  const current = phonePageShown(tab, finishView, picked);
   const sheetDef = sheet ? RAIL_CATEGORIES.find(c => c.id === sheet) : undefined;
   return (
     <nav data-play-railbar="" aria-label="Play sections" style={{ flexShrink: 0, display: 'flex', gap: 2, padding: '2px 6px calc(2px + env(safe-area-inset-bottom, 0px))', background: tk.bg.panel, borderTop: `1px solid ${tk.border.default}`, boxShadow: `0 -1px 0 ${alpha(tk.border.default, 0.4)}` }}>

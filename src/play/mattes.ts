@@ -108,7 +108,7 @@ export function patchBackgroundMatte(p: PlayRecord, patch: Partial<Omit<Backgrou
   return { ...p, backgroundMatte: next };
 }
 
-/** "Matted by Hand path 1 · inverted · 12 px", for the Background page. */
+/** "Matted by Hand path 1 · inverted · 12 px", for the Background's settings (the Layers list's pinned row). */
 export function backgroundMatteSummary(p: PlayRecord): string {
   const t = p.backgroundMatte;
   const m = t && p.layers.find(x => x.id === t.id);

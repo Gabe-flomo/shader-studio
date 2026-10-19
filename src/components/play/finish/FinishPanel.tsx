@@ -36,6 +36,7 @@ import { moveWaterToLayer } from '../../../play/waterLayers';
 import { Section } from '../layers/Section';
 import { BigEditorScaffold } from '../layers/BigEditorScaffold';
 import { usePlayUi } from '../playUi';
+import { showPage } from '../playSplit';
 import { CurveEditor } from './CurveEditor';
 import { AudioFxPanel } from './AudioFxPanel';
 import { ColourWheel } from './ColourWheel';
@@ -142,7 +143,7 @@ export function PictureFinish({ play, onChange, touch, wide = false, embedded = 
     const target = finishTarget(e.id, p.key);
     if (r.controls.some(c => c.target === target)) return r;
     const control: PlayControl = { id: playId('ctl'), target, kind: 'float', label: `${finishHostLabel(e)} · ${p.label}`, min: p.min, max: p.max, ...(p.step ? { step: p.step } : {}) };
-    toast.success(`${control.label} is a control`, { message: 'Map a source onto it in Mappings (audio, an LFO, the mouse…).', action: { label: 'Show', onClick: () => usePlayUi.getState().setTab('controls') } });
+    toast.success(`${control.label} is a control`, { message: 'Map a source onto it in Mappings (audio, an LFO, the mouse…).', action: { label: 'Show', onClick: () => showPage('controls') } });
     return { ...r, controls: [...r.controls, control] };
   });
   const push = (e: FinishEffect) => {
@@ -176,7 +177,7 @@ export function PictureFinish({ play, onChange, touch, wide = false, embedded = 
     let made = '', left = 0;
     onChange(p => { const r = moveWaterToLayer(p, e.id, playId('layer'), 'Water'); made = r.id; left = r.wavesLeft; return r.play; });
     if (!made) return;
-    usePlayUi.getState().setTab('layers');
+    showPage('layers');
     toast.success('Water is a layer now', { message: `It is at the top of the layers, with the same settings, controls and Splashes. Move layers above it to keep them dry (a boat on the water).${left ? ` ${left === 1 ? 'One effect' : `${left} effects`} here showed only where the water moves: give ${left === 1 ? 'it' : 'them'} a Where of their own.` : ''}` });
   };
   const add = (value: string) => {

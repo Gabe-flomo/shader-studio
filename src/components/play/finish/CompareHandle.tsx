@@ -1,12 +1,13 @@
 /**
  * CompareHandle — the before/after wipe's divider on the picture, while the
- * Finish tab is open (the wipe itself is `finish.compare`, drawn by the
+ * Finish page is in view (the wipe itself is `finish.compare`, drawn by the
  * Finish pass in the preview, renders and exports). On one side is the
  * picture before the Finish stack; drag the grip to move it (`pos`), or use
  * the arrow keys. The line follows the wipe's angle.
  */
 import { useEffect, useRef, useState } from 'react';
 import { usePlayUi } from '../playUi';
+import { usePlaySplit } from '../playSplit';
 import { useNodeGraphStore } from '../../../store/useNodeGraphStore';
 import { fnActive } from '../../../play/kit/finish.js';
 import { FINISH_COMPARE_ID, patchFinishEffect, renderableFinish } from '../../../types/playFinish';
@@ -21,7 +22,8 @@ function wipePosAt(x: number, y: number, angle: number, aspect: number): number 
 
 export function CompareHandle() {
   const compare = useNodeGraphStore(s => s.play.finish?.compare);
-  const tab = usePlayUi(s => s.tab);
+  // The Finish page in view: in the panel (open, the rail out), or a phone's page.
+  const onFinish = usePlaySplit(s => s.railPage === 'finish-picture' && (!s.available || (s.on && !s.railHidden)));
   const performing = usePlayUi(s => s.performing);
   const active = useNodeGraphStore(s => fnActive(renderableFinish(s.play.finish)));
   // A mapping moves the wipe on its own: the divider here would show where it rests, not where it is.
@@ -40,7 +42,7 @@ export function CompareHandle() {
     return () => ro.disconnect();
   }, [el]);
   const drag = useRef(false);
-  if (!compare?.on || !performing || !active || tab !== 'finish' || driven) return null;
+  if (!compare?.on || !performing || !active || !onFinish || driven) return null;
   const set = (patch: Record<string, number>) => useNodeGraphStore.getState().setPlay(p => ({ ...p, finish: patchFinishEffect(p.finish, FINISH_COMPARE_ID, patch) }));
   const at = (clientX: number, clientY: number) => {
     const b = el?.getBoundingClientRect();

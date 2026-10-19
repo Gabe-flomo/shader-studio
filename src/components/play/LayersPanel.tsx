@@ -5,6 +5,11 @@
  * make it a control (target `layer:<id>::<key>`) you can map and drive.
  * Below the layers, actions fire things on triggers.
  *
+ * The Background is the list's pinned first row (Play audit P13): the
+ * Background layer's own card when there is one, else a row for what the
+ * picture is under the layers (layers/BackgroundPinnedRow.tsx), which opens
+ * the Background's settings like a layer opens its editor.
+ *
  * Layers can be put in groups (types/layerGroups.ts, groupOps.ts): pick
  * cards with ⇧/⌘-click (Select, or a long press, on a phone) and Group (⌘G).
  * A group shows as one card; entering it lists its layers. Rows drag to a
@@ -41,7 +46,9 @@ import { canMove, placeNewLayer, createGroup, duplicateGroup, moveItem, moveItem
 import { BackgroundEditor } from './layers/BackgroundEditor';
 import { GroupCard } from './layers/GroupCard';
 import { layerLook } from './layers/layerLook';
-import { addBackground, thisGraphSource } from '../../play/backgroundQueue';
+import { useCan } from '../../lib/plan';
+import { BackgroundMatteRow, BackgroundSettings } from './FullPages';
+import { BACKGROUND_ROW, BackgroundPinnedRow } from './layers/BackgroundPinnedRow';
 import { toast } from '../ui/toastStore';
 import { askConfirm } from '../ui/dialogStore';
 import { SoloButton, SoloStrip } from './Solo';
@@ -79,6 +86,8 @@ import { appDropMakers } from './dropMakers';
 import { clampLines } from '../ui/textFit';
 
 const KIND = BUILTIN_LAYER;
+/** The pinned Background row's settings open under it (a stacked list, no Background layer): its fold key. */
+const BG_FOLD_KEY = 'layers:background';
 
 /** Dragging a row to reorder it: the drag's data type, and which row it is (dragover can't read the data). */
 const ROW_TYPE = 'application/x-playfield-row';
@@ -183,16 +192,9 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
     setSelected(id);
   };
   const add = (kind: PlayLayerKind, variant?: BuiltinVariant) => {
-    if (kind === 'background') {
-      // One per setup, at the bottom. A new one starts with this graph, so the picture stays as it was.
-      const there = backgroundLayerOf(play);
-      if (there) { enter(''); usePlayUi.getState().reveal(there.id); toast.info('This setup has a Background layer', { message: 'Add sources to its queue.' }); return; }
-      const id = playId('layer');
-      onChange(p => addBackground(p, [thisGraphSource()], id).play);
-      enter('');
-      setSelected(id);
-      return;
-    }
+    // The Background isn't added from here: it's the list's pinned first row, and its Graph…, Image…
+    // or Video… make the Background layer (Play audit P13). An old caller asking for one goes there.
+    if (kind === 'background') { enter(''); setSelected(backgroundLayerOf(play)?.id ?? BACKGROUND_ROW); return; }
     // A hand path: fingertip nulls (the missing ones) and a filled path between them; tracking starts.
     if (variant === 'handPath') {
       const id = playId('layer');
@@ -350,9 +352,17 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
   const [dropAt, setDropAt] = useState<{ key: string; where: 'before' | 'after' } | null>(null);
   const layerCount = play.layers.length;
 
-  // Split: the editor beside the list always has a layer to show; with none picked, the first in the list (Play audit P12).
-  const firstInView = rows.find((n): n is Extract<TreeNode, { kind: 'layer' }> => n.kind === 'layer')?.layer.id ?? play.layers[play.layers.length - 1]?.id ?? '';
-  const nothingPicked = !play.layers.some(l => l.id === selected);
+  // The Background: the list's pinned first row (the Background layer's card, or the settings' row).
+  const bgLayer = backgroundLayerOf(play);
+  const bgSelected = selected === BACKGROUND_ROW || (!!bgLayer && selected === bgLayer.id);
+  const backgroundsOk = useCan('play.backgrounds');
+  // Without a Background layer, a stacked list opens the settings under the row (remembered, folded by default).
+  const bgOpen = usePlayUi(s => s.folded[BG_FOLD_KEY] === false);
+
+  // Split: the editor beside the list always has something to show; with nothing picked, the first layer
+  // in the list (Play audit P12), else the Background.
+  const firstInView = rows.find((n): n is Extract<TreeNode, { kind: 'layer' }> => n.kind === 'layer' && n.layer.kind !== 'background')?.layer.id ?? bgLayer?.id ?? BACKGROUND_ROW;
+  const nothingPicked = !play.layers.some(l => l.id === selected) && selected !== BACKGROUND_ROW;
   useEffect(() => {
     if (split && nothingPicked && firstInView) setSelected(firstInView);
   }, [split, nothingPicked, firstInView, setSelected]);
@@ -487,8 +497,21 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
         <span aria-hidden style={{ width: 1, height: '100%', background: tk.border.default }} />
       </div>
       <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: '6px 16px 16px' }}>
-        {editing
-          ? <LayerRow key={editing.id} {...rowProps(editing, false)} />
+        {bgSelected && !bgLayer
+          ? (
+            <div data-background-editor="" style={{ paddingTop: 6 }}>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, margin: '4px 2px 10px' }}>
+                <span style={{ font: `650 13px ${fontFamily.ui}` }}>Background</span>
+                <span style={{ color: tk.text.muted, font: `11.5px ${fontFamily.ui}` }}>What the picture is under the layers</span>
+              </div>
+              <BackgroundSettings play={play} onChange={onChange} locked={!backgroundsOk} />
+            </div>
+          )
+          : editing
+          ? <>
+            <LayerRow key={editing.id} {...rowProps(editing, false)} />
+            {editing.kind === 'background' && <BackgroundMatteRow play={play} onChange={onChange} />}
+          </>
           : (
             <div style={{ margin: '18px 4px', padding: '16px 14px', borderRadius: radius.lg, border: `1px dashed ${tk.border.strong}`, color: tk.text.muted, lineHeight: 1.5 }}>
               {play.layers.length ? 'Pick a layer in the list to edit it here.' : 'Add a layer and edit it here.'}
@@ -591,7 +614,24 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
             {hiddenAbove && <span style={{ flexShrink: 0, color: tk.text.faint, font: `600 11px ${fontFamily.ui}` }}>Hidden</span>}
           </div>
         )}
-        {play.layers.length === 0 ? (
+        {!entered && (
+          // The Background, pinned on top: not dragged, not picked, not grouped.
+          <div data-background-pinned="" style={{ margin: '6px 0 8px' }}>
+            {bgLayer
+              ? <>
+                <LayerRow {...rowProps(bgLayer, false)} headerOnly={split} />
+                {!split && bgSelected && <BackgroundMatteRow play={play} onChange={onChange} />}
+              </>
+              : <>
+                <BackgroundPinnedRow
+                  play={play} touch={touch} selected={bgSelected} open={split ? undefined : bgOpen}
+                  onSelect={() => { setSelected(BACKGROUND_ROW); if (!split) usePlayUi.getState().toggleFold(BG_FOLD_KEY, bgOpen); }}
+                />
+                {!split && bgOpen && <div style={{ marginTop: 6 }}><BackgroundSettings play={play} onChange={onChange} locked={!backgroundsOk} /></div>}
+              </>}
+          </div>
+        )}
+        {play.layers.filter(l => l.kind !== 'background').length === 0 ? (
           <div style={{ margin: '18px 4px', padding: '16px 14px', borderRadius: radius.lg, border: `1px dashed ${tk.border.strong}`, color: tk.text.muted, lineHeight: 1.5 }}>
             <div style={{ font: `600 12.5px ${fontFamily.ui}`, color: tk.text.secondary, marginBottom: 4 }}>No layers yet</div>
             Layers sit on top of the picture: particles that flow along it, shapes that act as walls and emitters, text, images, falling letters, a brush, audio, ASCII, contours, a lens, your camera. Every number can be a control, and actions fire them from keys, beats and notes.
@@ -610,6 +650,8 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
           const prev = rows[i - 1];
           // A relationship's members render nested under it (below), not at their own spot.
           if (n.kind === 'layer' && nesting.byMember.has(n.layer.id)) return null;
+          // The Background layer is the pinned row above.
+          if (n.kind === 'layer' && n.layer.kind === 'background') return null;
           const rowShell = rowShellFor(item, k, !(n.kind === 'layer' && n.layer.kind === 'background'), (
             n.kind === 'group' ? (
               <GroupCard

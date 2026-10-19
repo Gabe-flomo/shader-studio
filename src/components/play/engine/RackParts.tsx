@@ -48,7 +48,7 @@ import { useLibraryVideos } from '../../backgrounds/useBackgrounds';
 import { LinkedPickButton } from '../../linked/LinkedPickButton';
 import type { UnitChoice } from './UnitPicker';
 import { playId } from '../../../play/playControls';
-import { usePlayUi } from '../playUi';
+import { showPage } from '../playSplit';
 import { engineId, withEngine } from './engineOps';
 import { sendChoices, sendLabel } from '../../../lib/engineSend';
 import { GranulatorPanel, ParamRow } from './GranulatorPanel';
@@ -264,7 +264,7 @@ export function GrainChainRow({ rack, play }: { rack: AeRack; play: PlayRecord }
   const tk = useTokens();
   const chain = play.audioFx?.chains[rackChainId(rack.id)];
   const n = chain?.effects.length ?? 0;
-  const open = () => { usePlayUi.getState().setFinishView('sound'); usePlayUi.getState().setTab('finish'); };
+  const open = () => { showPage('finish-sound'); };
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
       <span style={{ ...labelStyle(tk), width: 64 }}>Sound fx</span>
@@ -447,7 +447,7 @@ export function Params({ rack, slot, play, onChange, touch, onKeep }: { rack: Ae
     const label = `${rack.name} · ${slot.unit?.name ?? 'Audio Unit'} · ${p.name}`;
     onChange(pr => {
       if (pr.controls.some(c => c.target === target)) return pr;
-      toast.success(`${label} is a control`, { message: 'Map a source onto it in Mappings (audio readers, MIDI, an LFO…).', action: { label: 'Show', onClick: () => usePlayUi.getState().setTab('controls') } });
+      toast.success(`${label} is a control`, { message: 'Map a source onto it in Mappings (audio readers, MIDI, an LFO…).', action: { label: 'Show', onClick: () => showPage('controls') } });
       // The value it has now is kept, so the control starts there (and a mapping that lets go comes back to it).
       const withValue = withEngine(pr, patchSlot(pr.audioEngine, rack.id, slot.id, { params: { ...aeSlot(aeRack(pr.audioEngine, rack.id), slot.id)?.params, [p.address]: slot.params?.[p.address] ?? p.value } }));
       return { ...withValue, controls: [...withValue.controls, { id: playId('ctl'), target, kind: 'float', label, min: p.min, max: p.max, ...(p.step ? { step: p.step } : {}) }] };
@@ -506,7 +506,7 @@ export function SamplerIndex({ rack, slot, play, onChange, touch }: { rack: AeRa
     const label = `${rack.name} · Sample player · ${p.name}`;
     onChange(pr => {
       if (pr.controls.some(c => c.target === target)) return pr;
-      toast.success(`${label} is a control`, { message: 'Map a source onto it in Mappings (an Increment, a beat, a signal, MIDI…).', action: { label: 'Show', onClick: () => usePlayUi.getState().setTab('controls') } });
+      toast.success(`${label} is a control`, { message: 'Map a source onto it in Mappings (an Increment, a beat, a signal, MIDI…).', action: { label: 'Show', onClick: () => showPage('controls') } });
       return { ...pr, controls: [...pr.controls, { id: playId('ctl'), target, kind: 'float', label, min: p.min, max: p.max, ...(p.step ? { step: p.step } : {}) }] };
     });
   };

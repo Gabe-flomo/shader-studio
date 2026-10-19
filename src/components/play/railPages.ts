@@ -1,32 +1,24 @@
 /**
- * railPages.ts — what the split view's icon rail offers (docs/split-view.md,
- * "Rail and full-width pages"): the Play page's categories, named for Play's
- * three nouns (Mappings: the controls and the values flowing in; Layers;
- * Signals: conditions and what they set off) plus Finish and the Engine,
- * each with its pages. A page is
- * what the big panel shows full width once the sidebar is collapsed into the
- * rail; the phone's bottom row offers the same pages in a sheet.
+ * railPages.ts — the Play page's one navigation model (docs/split-view.md,
+ * "Rail and pages"; Play audit P1): the labelled rail's categories (Controls,
+ * Layers, Rules, Finish, Sound), each with its pages. A page is what the
+ * panel beside the rail shows; the phone's bottom row offers the same
+ * categories and pages. There is no other set of sections: the old sidebar's
+ * tab strip (and its PlayTab union) is gone.
  *
- * Pure data and helpers: PlayRail.tsx draws the rail and its drawer,
- * PlayPage renders each page into the panel.
+ * Pure data and helpers: PlayRail.tsx draws the rail, PlayPage renders each
+ * page (pages/*Page.tsx) into the panel.
  */
 import type { PlayRecord } from '../../types/play';
 import type { IconName } from '../ui/iconPaths';
-import { tabForPage, type PlayTab } from './playUi';
 import { asRules } from '../../play/rules';
 
-/**
- * The rail's own grouping of pages, which sections its icons (RAIL_CATEGORIES
- * below). It used to be the same union as PlayTab (the sidebar's own tab-strip
- * sections, playUi.ts), one category per tab; Controls and Mappings merged
- * into one rail category (the owner's call, 2026-09-28) while the tab-strip
- * elsewhere still keeps them apart, so the two unions parted ways here.
- */
+/** The rail's categories, one icon each (RAIL_CATEGORIES below). */
 export type RailCategory = 'controls' | 'layers' | 'signals' | 'finish' | 'engine';
 
 export type RailPage =
   | 'controls'
-  | 'layers' | 'signals' | 'background'
+  | 'layers' | 'signals'
   | 'finish-picture' | 'finish-sound'
   | 'engine-performance'
   | 'midi-file' | 'pad-grid';
@@ -52,7 +44,6 @@ export const RAIL_PAGES: Readonly<Record<RailPage, RailPageDef>> = {
   controls: { id: 'controls', category: 'controls', label: 'Controls', description: 'The controls people play beside the sources that drive them' },
   layers: { id: 'layers', category: 'layers', label: 'Layers', description: 'What sits on the picture, with the selected layer’s editor' },
   signals: { id: 'signals', category: 'signals', label: 'Rules', description: 'When something happens, what to do: a pinch bursts the sparks' },
-  background: { id: 'background', category: 'layers', label: 'Background', description: 'What the picture is under the layers' },
   'finish-picture': { id: 'finish-picture', category: 'finish', label: 'Picture', description: 'Grade, lens, film and time effects over the whole picture' },
   'finish-sound': { id: 'finish-sound', category: 'engine', label: 'Effects', description: 'Reverb, echo, filter and more on each sound and the master' },
   'engine-performance': { id: 'engine-performance', category: 'engine', label: 'Arrangement', description: 'Racks of synths and effects, played live' },
@@ -62,7 +53,7 @@ export const RAIL_PAGES: Readonly<Record<RailPage, RailPageDef>> = {
 
 export const RAIL_CATEGORIES: readonly RailCategoryDef[] = [
   { id: 'controls', label: 'Controls', icon: 'sliders', description: 'The controls people play, and the sources that drive them', pages: ['controls', 'midi-file', 'pad-grid'] },
-  { id: 'layers', label: 'Layers', icon: 'layers', description: 'What acts on the picture, and the background', pages: ['layers', 'background'] },
+  { id: 'layers', label: 'Layers', icon: 'layers', description: 'What acts on the picture, with the background pinned on top', pages: ['layers'] },
   { id: 'signals', label: 'Rules', icon: 'bolt', description: 'When something happens, what to do', pages: ['signals'] },
   { id: 'finish', label: 'Finish', icon: 'finish', description: 'Grade, lens, film and time effects over the whole picture', pages: ['finish-picture'] },
   { id: 'engine', label: 'Sound', icon: 'piano', description: 'The Audio engine, and effects on the sound', pages: ['engine-performance', 'finish-sound'] },
@@ -85,9 +76,13 @@ export function isRailPage(v: unknown): v is RailPage {
   return typeof v === 'string' && Object.prototype.hasOwnProperty.call(RAIL_PAGES, v);
 }
 
-/** A saved page id from before a page was folded into another (Actions into Signals, 2026-09-30), as today's. */
+/**
+ * A saved page id from before a page was folded into another, as today's:
+ * Actions into Signals (2026-09-30), Mappings into Controls, and Background
+ * into Layers (its pinned top row, Play audit P13).
+ */
 export function currentRailPage(v: unknown): unknown {
-  return v === 'actions' ? 'signals' : v === 'mappings' ? 'controls' : v;
+  return v === 'actions' ? 'signals' : v === 'mappings' ? 'controls' : v === 'background' ? 'layers' : v;
 }
 
 export function categoryOf(page: RailPage): RailCategory {
@@ -101,21 +96,6 @@ export function categoryDef(cat: RailCategory): RailCategoryDef {
 /** The page a category opens on. */
 export function firstPageOf(cat: RailCategory): RailPage {
   return categoryDef(cat).pages[0];
-}
-
-/**
- * The page matching what the tab-strip panel shows (the rail starts where the
- * panel was). Independent of the rail's own category grouping (RailCategory):
- * Mappings is its own tab-strip tab even though it shares the Controls rail
- * icon.
- */
-export function pageForTab(tab: PlayTab, finishView: 'picture' | 'sound' = 'picture'): RailPage {
-  switch (tab) {
-    case 'finish': return finishView === 'sound' ? 'finish-sound' : 'finish-picture';
-    case 'engine': return 'engine-performance';
-    case 'layers': return 'layers';
-    default: return 'controls';
-  }
 }
 
 /** How many things a page holds, for the drawer (undefined: nothing worth counting). */
@@ -150,27 +130,21 @@ export function mappingsCountOf(play: PlayRecord): number {
 }
 
 /**
- * The page a phone shows: the one picked from the bottom row's sheet while
- * its category is the open tab, else the tab's own (Finish follows its
- * Picture or Sound view).
- */
-export function phonePageShown(tab: PlayTab, finishView: 'picture' | 'sound', picked: RailPage | ''): RailPage {
-  if (tab === 'finish') return pageForTab(tab, finishView);
-  if (picked && tabForPage(picked) === tab) return picked;
-  return pageForTab(tab, finishView);
-}
-
-/**
  * The pages a phone's bottom row offers for a category (Play audit P20). Controls
  * and Layers go straight to their page, with no sheet in between: the Controls
  * page has a Controls / Sources switch (the MIDI file and the pad grid sit in
- * Sources), and the Layers page carries the canvas shape and the background at
- * its top. Sound keeps its two pages.
+ * Sources), and the Layers page carries the canvas shape at its top and the
+ * Background as its pinned first row. Sound keeps its two pages.
  */
 export function phonePagesOf(cat: RailCategory): readonly RailPage[] {
   if (cat === 'controls') return ['controls'];
-  if (cat === 'layers') return ['layers'];
   return categoryDef(cat).pages;
+}
+
+/** The page a phone shows for the page in view: the same, unless a phone has no page of its own for it (MIDI file, Pad grid: in Sources there). */
+export function phonePageFor(page: RailPage): RailPage {
+  const cat = categoryOf(page);
+  return phonePagesOf(cat).includes(page) ? page : firstPageOf(cat);
 }
 
 /** Arrow-key movement through a list of `count` items (wraps; Home and End jump). */

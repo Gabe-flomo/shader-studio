@@ -67,7 +67,7 @@ beforeEach(() => {
   errors.length = 0;
   usePlan.setState({ session: { status: 'signed-in', user: '', plan: 'pro', source: 'open' } });
   useNodeGraphStore.getState().setPlay(() => setup());
-  usePlayUi.setState({ tab: 'controls', phonePage: '', selected: '', folded: {} });
+  usePlayUi.setState({ selected: '', folded: {} });
   useInputsBoard.setState({ tab: 'controls' });
   useMapMode.getState().stop();
   useLearnMode.getState().stop();
@@ -85,7 +85,7 @@ afterEach(() => {
 function mount(wide: boolean): HTMLElement {
   const host = document.createElement('div');
   document.body.appendChild(host);
-  usePlaySplit.setState({ ...DEFAULT_SPLIT, on: true, available: true, sidebar: 'rail', railPage: 'controls', host, wide });
+  usePlaySplit.setState({ ...DEFAULT_SPLIT, on: true, available: true, railPage: 'controls', host, wide });
   const el = document.createElement('div');
   document.body.appendChild(el);
   const root = createRoot(el);
