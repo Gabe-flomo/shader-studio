@@ -233,10 +233,10 @@ export function DesktopTopNav({ page, onPageChange, onRecord, compact = false }:
         <HelpMenu />
         {/* Tablets have no preview bar (where Stage lives on desktop), so Play's Stage sits here. */}
         {compact && page === 'play' && <IconButton icon="play" label="Stage: the picture and its controls on their own, as people will play with it" data-top-stage="" onClick={() => useStage.getState().open('full')} />}
-        <Tooltip label="Record the preview as video or a still" shortcut={shortcuts.toggleRecord}>
+        <Tooltip label="Record: a video of the picture, or a performance (take)" shortcut={shortcuts.toggleRecord}>
           <button
             type="button"
-            aria-label="Record the preview as video or a still"
+            aria-label="Record: a video of the picture, or a performance (take)"
             onClick={onRecord}
             style={{
               height: 32, marginLeft: 4, padding: showRecordLabel ? '0 13px 0 11px' : '0 11px', border: 0, borderRadius: radius.control, cursor: 'pointer',

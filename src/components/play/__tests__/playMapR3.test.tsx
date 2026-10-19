@@ -116,7 +116,7 @@ describe('P6: the + Map picker (pure)', () => {
     const asks = mapPickerSections([], false).flatMap(s => s.items.map(i => i.value)).filter(mapPickAsksMidi);
     expect(asks).toContain(MAP_LEARN);
     expect(asks).toContain('type:midi:cc');
-    expect(asks.every(v => v === MAP_LEARN || v === 'notes12' || v.startsWith('type:midi:') || v === 'type:pad')).toBe(true);
+    expect(asks.every(v => v === MAP_LEARN || v === 'notes12' || v === 'padGrid' || v.startsWith('type:midi:') || v === 'type:pad')).toBe(true);
     expect(mapPickAsksMidi('type:mouse:x')).toBe(false);
     expect(mapPickAsksMidi('random:1')).toBe(false);
     expect(parseMapPick('type:midi:cc')).toEqual({ kind: 'type', type: 'midi:cc' });

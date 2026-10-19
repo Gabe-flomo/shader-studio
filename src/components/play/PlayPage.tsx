@@ -91,7 +91,6 @@ import { AddControlButton, ControlGroup, ControlRow, type ControlSource, type La
 import { type AudioNodeOption, DetailSource, MappingsDrawer } from './pages/SourcesColumn';
 import { LayersRailPage } from './pages/LayersPage';
 import { FinishRailPage } from './pages/FinishPage';
-import { MidiFilePage, PadGridPage } from './pages/ControlsPage';
 import { RulesRailPage } from './pages/RulesPage';
 import { SoundArrangementPage, SoundEffectsPage } from './pages/SoundPage';
 import { PhoneSizeRow, PhoneSoundPage } from './pages/PhonePages';
@@ -794,13 +793,12 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       return items;
       })()}</div>
   );
-  // `pages`: the MIDI file and the pad grid have pages of their own (the rail's; a phone keeps them in Sources).
-  const renderMappings = (inPanel: boolean, pages = false) => (
+  // The sources column: the mappings, the record's sources, and the MIDI file and pad grid as source cards (Play audit P10).
+  const renderMappings = (inPanel: boolean) => (
     <MappingsDrawer
       play={play}
       mode="tab"
       grid={inPanel}
-      pages={pages}
       height={0}
       onResizeStart={NOOP}
       open
@@ -817,8 +815,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       addControlButton={addControlButtonEl}
     />
   );
-  // Phones: Controls and Sources (the mappings) on one page, a switch between them (Play audit P20). The
-  // MIDI file and the pad grid sit in Sources (a phone has no pages of their own for them).
+  // Phones: Controls and Sources (the mappings) on one page, a switch between them (Play audit P20).
   const phoneControlsPage = compact ? (
     <>
       <div data-phone-inputs="" style={{ flexShrink: 0, padding: '8px 12px 6px', background: tk.bg.panel }}>
@@ -845,7 +842,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       case 'controls': return touch ? phoneControlsPage : (
         <InputsBoard wide={wide} counts={{ controls: play.controls.length, sources: play.mappings.length + (play.sources?.length ?? 0) + (play.pairMappings?.length ?? 0) }}
           controls={<>{controlsHeader}{notesCard}<div style={{ padding: '0 16px', flexShrink: 0 }}><MapModeBar /><LearnModeBar label={controlName} /></div>{renderControls(true)}</>}
-          sources={renderMappings(true, true)} />
+          sources={renderMappings(true)} />
       );
       case 'layers': return <LayersRailPage play={play} onChange={update} touch={touch} wide={wide} top={layersTop} />;
       case 'signals': return <RulesRailPage play={play} onChange={update} wide={wide} />;
@@ -853,8 +850,6 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
       // A phone's Sound tab: the Sampler, readers and effects on one page; no Arrangement (play/phoneTrim.ts).
       case 'finish-sound': return touch ? <PhoneSoundPage play={play} onChange={update} /> : <SoundEffectsPage play={play} onChange={update} touch={touch} wide={wide} />;
       case 'engine-performance': return <SoundArrangementPage play={play} onChange={update} touch={touch} wide={wide} />;
-      case 'midi-file': return <MidiFilePage />;
-      case 'pad-grid': return <PadGridPage />;
     }
   };
   // The page, rendered into the panel beside the rail (PlaySplitArea.tsx).

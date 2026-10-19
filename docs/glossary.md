@@ -29,6 +29,11 @@ Node labels live in the node definitions; their rules are under "Node labels" be
 | **Rules** | Play's When/Do section. A *signal* is one event a rule listens for | Signals (as the section) |
 | **Set a control · Nudge a control** | A rule's Do on a control's own value, as if its slider moved: *Set* puts it at a value, *Nudge* adds a step (stopping at the ends, or *wraps round*); a switch flips. They need no layers | Jump a control, Increment (that is a mapping's Step) |
 | **arrives** | How a rule with no When of its own reads when other rules send it: "When ‹Reached› arrives · sent by …" | Nothing yet (for a rule that is sent) |
+| **MIDI file · Pad grid** | Source kinds in Sources' **+ Map** picker (under MIDI), one of each per setup; their cards sit in the Sources column, folded to one line until opened | MIDI file page, Pad grid page (they are not Controls sub-tabs) |
+| **Record video** | The top bar Record's first tab, and Stage's **Record video**: the picture rendered or recorded to a video file, or a Snapshot PNG | Video (as the tab) |
+| **Record performance (take)** | The top bar Record's second tab, and Stage's button: your moves kept as keyframes (a *take*), to watch back and export as a video | Performance (as the tab), Record a performance, Start performance |
+| **Takes** | The recorded performances. Their home is **Sound → Arrangement → Takes** (watch it back, rename, delete, **Export video…**, and **From the tape**); Record and Stage list them too | Render… (as a take's button), Make a take (as a transport button) |
+| **Arm track** | The ● on a Sound track: the transport's Record records the armed tracks onto the tape | Record enable |
 | **Behaviours** | Ready-made rules and sources (pinch to burst, pulse to the beat) in one library: the Rules header, the Rules start pane, and the Controls and Sources empty states | Templates, Recipes (for these) |
 | **Next** | The one suggestion surface: next moves for the selected node, learned from your graphs | |
 | **App settings** | The app's own preferences, in the top bar's ⋯ menu | |
@@ -74,6 +79,16 @@ Node labels live in the node definitions; their rules are under "Node labels" be
 - **Set a control / Nudge a control** (2026-10-18, Play audit P11). With no layers a rule could only
   send a signal. "Set" and "Nudge" are what the reaction does to the control, in the words the
   rest of the Do list uses (Burst, Pulse, Set a setting); "Increment" stays the mapping's Step.
+- **Three recordings, three names** (2026-10-18, Play audit P8). "Record" meant the top bar's
+  dialog, a ⦿ in the Controls toolbar, and the red button in Sound's transport. Now the top bar's
+  **Record** opens **Record video** and **Record performance (take)** (Stage has both too), and the
+  transport's red button records the tracks you **Arm**. The Controls-toolbar duplicate is gone, and
+  so is the transport's "Make a take" ●: it is **From the tape** in the Takes section. A take's
+  *Render…* is **Export video…**, since that is what it gives you.
+- **MIDI file and Pad grid are sources** (2026-10-18, Play audit P10). They were Controls sub-tabs
+  (a whole page for one button, in the MIDI file's case). Now they are kinds in **+ Map** like every
+  other source, so Controls has no middle tab level. Saved setups keep `midiFile` and `padGrid` as
+  they are; their cards show in Sources.
 - **Signals → Rules.** Only the shortcut id said Signals (its label already read "Go to Rules").
   "Signal" stays as the word for one event (a layer's *Signals out*, the built-in signals).
 - **colour.** The app's prose already leans British. Chrome strings say colour; node labels are a

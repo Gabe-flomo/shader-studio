@@ -174,7 +174,7 @@ describe('P5: mappings folded to one line', () => {
 
 describe('P14: a new graph starts fresh', () => {
   it('each rail category goes back to its primary page', () => {
-    usePlaySplit.setState({ ...DEFAULT_SPLIT, railPage: 'finish-sound', railPageMemory: { engine: 'finish-sound', controls: 'midi-file' } });
+    usePlaySplit.setState({ ...DEFAULT_SPLIT, railPage: 'finish-sound', railPageMemory: { engine: 'finish-sound', controls: 'controls' } });
     usePlayUi.setState({ finishView: 'sound', selected: 'l1', entered: 'g1' });
     resetPlayPagesForNewGraph();
     expect(usePlaySplit.getState().railPage).toBe('engine-performance');

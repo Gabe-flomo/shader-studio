@@ -37,7 +37,7 @@ describe('DesktopTopNav', () => {
     const el = mount();
     const nameless = Array.from(el.querySelectorAll('button')).filter(b => !(b.getAttribute('aria-label') || b.textContent?.trim()));
     expect(nameless.map(b => b.outerHTML.slice(0, 80))).toEqual([]);
-    for (const name of ['Import a .play file, graph or presentation file', 'Import a GLSL shader as a node', 'Export this graph as a .play file', 'Record the preview as video or a still']) {
+    for (const name of ['Import a .play file, graph or presentation file', 'Import a GLSL shader as a node', 'Export this graph as a .play file', 'Record: a video of the picture, or a performance (take)']) {
       expect(el.querySelector(`button[aria-label="${name}"]`), name).toBeTruthy();
     }
   });

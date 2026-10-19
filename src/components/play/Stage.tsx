@@ -132,8 +132,9 @@ export function Stage({ canvas, onRecord }: {
         {!narrow && <IconButton icon="fit" label={fullscreen ? 'Leave fullscreen' : 'Fullscreen'} active={fullscreen} onClick={toggleFullscreen} />}
         <StageOutput snap={snap} frame={() => frameRef.current} />
         <Button size="sm" variant="primary" icon="record" onClick={record} disabled={!!snap?.sandboxed}
-          title={snap?.sandboxed ? 'Its Script layers are someone else’s code, so it runs sealed off from Playfield, where Record can’t reach its picture' : undefined}
-          style={{ background: tk.status.danger }}>{narrow ? null : 'Record'}</Button>
+          aria-label="Record video"
+          title={snap?.sandboxed ? 'Its Script layers are someone else’s code, so it runs sealed off from Playfield, where Record video can’t reach its picture' : 'Record video: the picture to a file'}
+          style={{ background: tk.status.danger }}>{narrow ? null : 'Record video'}</Button>
       </div>
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: narrow ? 'column' : 'row' }}>
         <div ref={stageBox.ref} style={{ flex: 1, minWidth: 0, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
@@ -395,11 +396,11 @@ function TakesPanel({ onRender }: { onRender: () => void }) {
       {heading('Takes')}
       <Button size="sm" variant={busy ? 'danger' : 'secondary'} icon="record" style={{ width: '100%', justifyContent: 'center' }}
         onClick={() => (busy ? useTakes.getState().stop() : useTakes.getState().begin())}
-        title={busy ? 'Stop and watch it back' : 'Play it for up to a minute: every input is kept, to watch back and render frame by frame'}>
-        {busy ? 'Stop recording' : 'Record a performance'}
+        title={busy ? 'Stop and watch it back' : 'Play it for up to a minute: every input is kept, to watch back and export as a video frame by frame'}>
+        {busy ? 'Stop recording' : 'Record performance (take)'}
       </Button>
       <div style={{ color: alpha('#ffffff', 0.5), fontSize: 11.5, lineHeight: 1.45, margin: '6px 0 8px' }}>
-        Perform it once, then render it frame by frame: smooth at any size, with the song, no dropped frames.
+        Perform it once, then export it frame by frame: smooth at any size, with the song, no dropped frames. The takes are also under Sound → Arrangement → Takes.
       </div>
       <TakesList onRender={() => onRender()} />
     </div>

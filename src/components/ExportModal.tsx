@@ -872,7 +872,7 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
   const cancelBtn = <Button variant="ghost" onClick={onClose} style={wide}>Cancel</Button>;
   const footer = state === 'idle' && tab === 'performance' ? footerRows(
     <Button variant="primary" onClick={() => { useTakes.getState().begin(); onClose(); }} title="This closes, and a small bar shows the time and Stop" style={tall}>
-      <span style={{ width: 8, height: 8, borderRadius: '50%', background: tk.status.danger }} />Start performance
+      <span style={{ width: 8, height: 8, borderRadius: '50%', background: tk.status.danger }} />Start the take
     </Button>,
     null, cancelBtn,
   ) : state === 'idle' ? footerRows(
@@ -918,8 +918,8 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
             value={tab}
             onChange={setTab}
             options={[
-              { value: 'video', label: 'Video', sub: 'the picture, or a take' },
-              { value: 'performance', label: takesOk ? 'Performance' : 'Performance · Pro', sub: 'play live, render later' },
+              { value: 'video', label: 'Record video', sub: 'the picture to a file' },
+              { value: 'performance', label: takesOk ? 'Record performance (take)' : 'Record performance (take) · Pro', sub: 'your moves, render later' },
             ]}
           />
         )}
@@ -947,7 +947,7 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
               </Help>
             </Section>
             <Section label="Takes" meta={takes.length ? String(takes.length) : undefined}>
-              <TakesList empty="None yet. Takes are saved with the graph and in play files." />
+              <TakesList empty="None yet. Takes are saved with the graph and in play files, and listed under Sound → Arrangement → Takes." />
             </Section>
             <Section label="Keep the last minute">
               <Toggle tall={phone} checked={rolling} onChange={v => useTakes.getState().setRolling(v)} label="Always keep the last minute of playing" />

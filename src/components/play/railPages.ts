@@ -20,8 +20,7 @@ export type RailPage =
   | 'controls'
   | 'layers' | 'signals'
   | 'finish-picture' | 'finish-sound'
-  | 'engine-performance'
-  | 'midi-file' | 'pad-grid';
+  | 'engine-performance';
 
 export interface RailPageDef {
   id: RailPage;
@@ -47,12 +46,10 @@ export const RAIL_PAGES: Readonly<Record<RailPage, RailPageDef>> = {
   'finish-picture': { id: 'finish-picture', category: 'finish', label: 'Picture', description: 'Grade, lens, film and time effects over the whole picture' },
   'finish-sound': { id: 'finish-sound', category: 'engine', label: 'Effects', description: 'Reverb, echo, filter and more on each sound and the master' },
   'engine-performance': { id: 'engine-performance', category: 'engine', label: 'Arrangement', description: 'Racks of synths and effects, played live' },
-  'midi-file': { id: 'midi-file', category: 'controls', label: 'MIDI file', description: 'A MIDI file played as if from a controller' },
-  'pad-grid': { id: 'pad-grid', category: 'controls', label: 'Pad grid', description: 'A grid of pads from a controller, read as sources' },
 };
 
 export const RAIL_CATEGORIES: readonly RailCategoryDef[] = [
-  { id: 'controls', label: 'Controls', icon: 'sliders', description: 'The controls people play, and the sources that drive them', pages: ['controls', 'midi-file', 'pad-grid'] },
+  { id: 'controls', label: 'Controls', icon: 'sliders', description: 'The controls people play, and the sources that drive them', pages: ['controls'] },
   { id: 'layers', label: 'Layers', icon: 'layers', description: 'What acts on the picture, with the background pinned on top', pages: ['layers'] },
   { id: 'signals', label: 'Rules', icon: 'bolt', description: 'When something happens, what to do', pages: ['signals'] },
   { id: 'finish', label: 'Finish', icon: 'finish', description: 'Grade, lens, film and time effects over the whole picture', pages: ['finish-picture'] },
@@ -78,11 +75,15 @@ export function isRailPage(v: unknown): v is RailPage {
 
 /**
  * A saved page id from before a page was folded into another, as today's:
- * Actions into Signals (2026-09-30), Mappings into Controls, and Background
- * into Layers (its pinned top row, Play audit P13).
+ * Actions into Signals (2026-09-30), Mappings into Controls, Background
+ * into Layers (its pinned top row, Play audit P13), and the MIDI file and
+ * Pad grid pages into Controls (they are sources in its Sources column now,
+ * Play audit P10).
  */
 export function currentRailPage(v: unknown): unknown {
-  return v === 'actions' ? 'signals' : v === 'mappings' ? 'controls' : v === 'background' ? 'layers' : v;
+  return v === 'actions' ? 'signals'
+    : v === 'mappings' || v === 'midi-file' || v === 'pad-grid' ? 'controls'
+      : v === 'background' ? 'layers' : v;
 }
 
 export function categoryOf(page: RailPage): RailCategory {
@@ -132,10 +133,11 @@ export function mappingsCountOf(play: PlayRecord): number {
 /**
  * The pages a phone's bottom row offers for a category (Play audit P20). Every
  * category goes straight to its one page, with no sheet in between: the Controls
- * page has a Controls / Sources switch (the MIDI file and the pad grid sit in
- * Sources), the Layers page has the picture's size (Free or 1:1) at its top and
- * the Background as its pinned first row, and Sound is one page of the Sampler,
- * readers and effects (no Arrangement on a phone: phoneTrim.ts, 2026-10-18).
+ * page has a Controls / Sources switch (the MIDI file and the pad grid are
+ * sources there, as on every screen), the Layers page has the picture's size
+ * (Free or 1:1) at its top and the Background as its pinned first row, and Sound
+ * is one page of the Sampler, readers and effects (no Arrangement on a phone:
+ * phoneTrim.ts, 2026-10-18).
  */
 export function phonePagesOf(cat: RailCategory): readonly RailPage[] {
   if (cat === 'controls') return ['controls'];
@@ -143,7 +145,7 @@ export function phonePagesOf(cat: RailCategory): readonly RailPage[] {
   return categoryDef(cat).pages;
 }
 
-/** The page a phone shows for the page in view: the same, unless a phone has no page of its own for it (MIDI file, Pad grid: in Sources there; Arrangement: Sound's one page). */
+/** The page a phone shows for the page in view: the same, unless a phone has no page of its own for it (Arrangement: Sound's one page). */
 export function phonePageFor(page: RailPage): RailPage {
   const pages = phonePagesOf(categoryOf(page));
   return pages.includes(page) ? page : pages[0];

@@ -125,7 +125,7 @@ plays E3 (`0x80` lets it go).
 
 ## Pad grid (Push, Launchpad)
 
-**Mappings → Set up a pad grid** adds the grid (`record.padGrid`). Its card:
+**Controls → Sources → + Map → Pad grid** adds the grid (`record.padGrid`); it is a source kind like the others (Play audit P10), its card in the Sources column, folded to one line (pads → cells · mode) until opened. Its card:
 
 - **Pads**: the layout. *Push 2 / 3* (User mode, notes 36–99, bottom-left to
   top-right), *Launchpad (programmer)* (X, Mini MK3, Pro MK3, MK2: 11–88, ten

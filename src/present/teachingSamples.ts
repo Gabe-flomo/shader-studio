@@ -201,11 +201,11 @@ To make a layer glow, go back to the Studio, add a **Layers** card and wire its 
       render('playTake', 'This example ships with an 8-second take. Move the mouse; press Space.'),
       text(`A **take** records a performance as what you did (every slider, key and mouse move), not as video. So you can watch it back, and render it smoothly at any size.
 
-1. Press **Record a performance** (the ● in the Controls header). The **Record** window opens on **Performance**.
-2. Press **Start performance** and play. **Stop** ends it.
-3. Press **Render…** to turn the take into a video, frame by frame.
+1. Press **Record** in the top bar and pick **Record performance (take)**.
+2. Press **Start the take** and play. **Stop** ends it.
+3. Press **Export video…** to turn the take into a video, frame by frame.
 
-Your takes are in the **Takes** list, saved with the graph. One ships with **Examples → Play →** ${ex('playTake')}: open it, then **Watch it back**.`),
+Your takes are in the **Takes** list (**Sound → Arrangement → Takes**), saved with the graph. One ships with **Examples → Play →** ${ex('playTake')}: open it, then **Watch it back**.`),
     ], 2),
   ];
   return presentation(FIRST_PLAY_TITLE, keys, src, steps, now);

@@ -174,7 +174,7 @@ so anything a layer draws can glow, warp or mask the shader.`),
       render('playTake', 'Live: the comet and the glow follow the mouse; Space sparkles'),
       text(`Playing live is real time: a screen recording is only as smooth as the machine was. A **take** keeps the performance as keyframes instead (every control, null, the pointer and each action), so it can be watched back and then **rendered** frame by frame at any size.
 
-Open this example on the Play page: it ships with an 8-second take. **Record → Performance → Takes**, press ▶ to watch it, then **Render…**.`),
+Open this example on the Play page: it ships with an 8-second take. **Sound → Arrangement → Takes** (or **Record → Record performance (take)**), press ▶ to watch it, then **Export video…**.`),
     ], 2),
   ];
   return presentation(PLAYING_TITLE, keys, src, steps, now);

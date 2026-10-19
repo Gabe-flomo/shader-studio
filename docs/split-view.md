@@ -43,9 +43,9 @@ picture-over-panel layout (`shell/PhoneSplit.tsx`).
   letterbox as before; the Studio's preview is unchanged.
 - **Tablet.** The same side-by-side layout (the panel at its 300 px minimum
   beside the picture on an 820 px iPad). Tablets have no preview header, so
-  Stage sits in the top bar (`DesktopTopNav`, `compact` on Play). The middle
-  tab level (Controls / MIDI file / Pad grid) stays until those pages move
-  into the "+ Map" picker (audit P10).
+  Stage sits in the top bar (`DesktopTopNav`, `compact` on Play). There is no
+  middle tab level any more: the MIDI file and the pad grid are source kinds in
+  the "+ Map" picker, their cards in the Sources column (audit P10, 2026-10-18).
 
 State lives in `src/components/play/playSplit.ts`; the frame (bar, divider,
 rail) in `PlaySplitArea.tsx`; PlayPage renders the panel's content through a
@@ -164,14 +164,17 @@ right) and at most two columns, stacking below 640 px (`WIDE_PANEL_PX`):
   `mappingGroups.ts`), each row with its switch, a live meter and solo; a
   search and group chips above; the selected row's editor beside it (↑/↓ move
   the selection). Pair mappings follow the table.
-- **MIDI file**, **Pad grid:** their card, at a readable width.
+- **MIDI file**, **Pad grid:** no pages of their own since Play audit P10: they
+  are source kinds in "+ Map" (under MIDI), their cards in the Sources column,
+  folded to one line until opened. A saved `midi-file` or `pad-grid` page opens
+  Controls (`currentRailPage`).
 
 **Phones** have no split view; the picture sits over the panel, and the same
 categories are a row along the bottom of the panel (`PlayRailBar`). The page
 shown is the same state as the panel's (`usePlaySplit.railPage`), so ⌘⇧M,
 reveals and a toast's "Show" move a phone's page too; a page a phone has no
-room for (the MIDI file, the pad grid) shows its Controls page instead, and the
-Arrangement shows Sound's one page (`phonePageFor`). A window
+room for shows its category's first page instead, and the Arrangement shows
+Sound's one page (`phonePageFor`). A window
 narrower than 600px gets this layout too, mouse or not (`playStacked` in
 `lib/viewport.ts`; the rest of the app still goes by `phone`), since the
 side-by-side layout has no room there. Since Play audit P20 (2026-10-18):
@@ -180,8 +183,8 @@ side-by-side layout has no room there. Since Play audit P20 (2026-10-18):
   `railPages.ts`), with no sheet in between. Sound has one page on a phone
   (see "Phones: what's left out" below).
 - **Controls** has a **Controls / Sources** switch at its top (the tablet's
-  narrow board does the same). Sources lists the mappings and sources with the
-  MIDI file and the pad grid at the bottom (no pages of their own on a phone).
+  narrow board does the same). Sources lists the mappings and sources, the
+  MIDI file and the pad grid among them, as on every screen.
   The header under it holds only **+ Control** and **⋯**, both 44px; Suggest
   controls, Stage, notes and the Play setup are in the ⋯.
 - A control's **driven-by chip** opens what drives it in Sources: the switch

@@ -36,6 +36,7 @@ import { RAIL_PAGE_IDS, categoryDef, type RailPage } from '../railPages';
 import { useNodeGraphStore } from '../../../store/useNodeGraphStore';
 import { emptyPlayRecord, type PlayRecord } from '../../../types/play';
 import { defaultLayer } from '../../../types/playLayers';
+import { DEFAULT_PAD_GRID } from '../../../types/playMidi';
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -153,7 +154,7 @@ describe('the rail’s full-width pages', () => {
     usePlaySplit.setState({ ...DEFAULT_SPLIT, on: true, available: true, railPage: 'engine-performance' });
     const sound = categoryDef('engine');
     expect(sound.pages.length).toBeGreaterThan(1);
-    expect(categoryDef('controls').pages.length).toBe(3); // Inputs, the MIDI file and the pad grid: a strip.
+    expect(categoryDef('controls').pages.length).toBe(1); // No middle tab level: the MIDI file and the pad grid are sources (P10).
     expect(categoryDef('signals').pages.length).toBe(1); // Rules stays a plain page, not a strip.
     expect(categoryDef('layers').pages.length).toBe(1); // The Background is the list's pinned row, not a page (P13).
     const el = document.createElement('div');
@@ -189,8 +190,7 @@ describe('the phone’s pages', () => {
     expect(el.querySelector('[data-phone-page="signals"]')).not.toBeNull();
     act(() => showPage('layers'));
     expect(el.querySelector('[data-phone-page="layers"]')).not.toBeNull();
-    // A desktop-only page (the pad grid) shows the phone's Controls page, where Sources has it.
-    act(() => showPage('pad-grid'));
+    act(() => showPage('controls'));
     expect(el.querySelector('[data-phone-page="controls"]')).not.toBeNull();
     expect(errors).toEqual([]);
   });
@@ -223,14 +223,17 @@ describe('the phone’s Controls and Layers (Play audit P20)', () => {
     expect(errors).toEqual([]);
   });
 
-  it('a Controls / Sources switch shows the sources, MIDI file and pad grid included', () => {
+  it('a Controls / Sources switch shows the sources, the pad grid’s card included', () => {
     const el = mountPhone();
     expect(el.querySelector('[data-phone-inputs]')).not.toBeNull();
     expect(el.querySelector('[data-mappings]')).toBeNull();
     click([...el.querySelectorAll('[data-phone-inputs] button')].find(b => b.textContent?.startsWith('Sources')));
     expect(useInputsBoard.getState().tab).toBe('sources');
     expect(el.querySelector('[data-mappings]')).not.toBeNull();
-    expect(el.textContent).toContain('Play a MIDI file');
+    // The MIDI file and the pad grid are source cards there, as on every screen (P10).
+    expect(el.querySelector('[data-file-source]')).toBeNull();
+    act(() => useNodeGraphStore.getState().setPlay(p => ({ ...p, padGrid: { ...DEFAULT_PAD_GRID } })));
+    expect(el.querySelector('[data-file-source="pad-grid"]')).not.toBeNull();
     // The bottom row still lights Controls.
     expect(el.querySelector('[data-rail-category="controls"]')?.getAttribute('aria-current')).toBe('page');
     expect(errors).toEqual([]);

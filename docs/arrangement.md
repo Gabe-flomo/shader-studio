@@ -24,7 +24,7 @@ The Engine tab is **one view, laid out like Ableton Live's Arrangement**. The Pe
 
 - **Play/Pause** (one button; **Space** while the engine has focus, unless a rack has the computer keyboard or you're typing): stopped, it plays from the record point; playing, it **pauses where the tape is** (the record point moves there, so the next Play carries on); recording, it stops recording (kept, one undo step) and pauses there; counting in, it cancels. `play/engineView.ts` `transportPlan`, run by `tape.togglePlay()`.
 - **Stop** stops whatever runs (a recording is kept) and goes **back to the start** (`tape.stopToStart()`).
-- **Record**, **Loop**, **Metronome**, **Count-in**, **BPM** and **Fade in** as below; the position reads **bar.beat.sixteenth** and time / length. **Make a take** and the **MIDI** devices and monitor (the antenna) are at the end.
+- **Record** (it records the tracks you **Arm**: the ● on each track), **Loop**, **Metronome**, **Count-in**, **BPM** and **Fade in** as below; the position reads **bar.beat.sixteenth** and time / length. The **MIDI** devices and monitor (the antenna) are at the end. Making a take of the tape moved to the **Takes** section under the arrangement (Play audit P8).
 
 ## Clips
 
@@ -84,10 +84,10 @@ A rack removed takes its track; a file's track for a rack it lacks is dropped on
 
 ## Takes and the tape
 
-A take is a performance of the whole page; the tape is the engine's own multitrack. They meet two ways:
+A take is a performance of the whole page; the tape is the engine's own multitrack. The takes have a home under the arrangement: the **Takes** section (`TakesSection.tsx`, Play audit P8), folded to one line ("3 takes · newest Take 3 · 0:12") until opened, listing each take with watch it back, rename, delete and **Export video…** (Stage and the Record dialog list the same takes). The three recordings have one name each: **Record video** and **Record performance (take)** (the top bar's Record, and Stage), and **Arm track** (the ● on a track, for the transport's Record). They meet two ways:
 
-- **A performance over the tape**: Record → Performance has **Play the Audio engine's tape along, from its top** (on by default when the setup has a tape). Starting a take plays the tape from 0; its notes pass through the Play overlay and its automation through the controls, so the take records them like anything played live (and whatever you play on top). The take notes `tape: { at: 0 }`. Rendering it is the ordinary take render.
-- **Make a take** (the transport) turns the tape itself into a take (`lib/tapeTake.ts`): each audible track's notes (muted clips left out) as `ae:<rack>` pad events and each rack control's moves as a control track, `tape: { at: 0, made: true }`. Render it from Record like any take.
+- **A performance over the tape**: Record → Record performance (take) has **Play the Audio engine's tape along, from its top** (on by default when the setup has a tape). Starting a take plays the tape from 0; its notes pass through the Play overlay and its automation through the controls, so the take records them like anything played live (and whatever you play on top). The take notes `tape: { at: 0 }`. Rendering it is the ordinary take render.
+- **From the tape** (the Takes section under the arrangement; it was *Make a take* in the transport) turns the tape itself into a take (`lib/tapeTake.ts`): each audible track's notes (muted clips left out) as `ae:<rack>` pad events and each rack control's moves as a control track, `tape: { at: 0, made: true }`. Export it (Export video…) like any take.
 
 Either way the existing render path replays the tape **sample-exactly** offline: Audio Unit and sample player racks through the native replay (`engineRender.ts` jobNotes / jobParams → `ae_render_take`, #336), a Granulator through the kit's grain engine (`recordingAudio.ts` renderGrains). The live replay sends the same notes at the same seconds (tested).
 
@@ -122,7 +122,7 @@ Dev: `__shaderStudioDev.tape` / `useTape` / `audioEngine` (`audioEngine.setMaste
 2. Select the second track (it becomes the lead), Play, press Record while it plays, play a line, stop: the first rack's notes are untouched.
 3. Configure on the synth: its window opens; turn a knob: it's added at once. Add two. Map a MIDI knob to one; record while turning it: its line appears on the lane; play back: the fader's dot follows. Try a third-party AUv3 and an AUv2: whether the window's moves are reported.
 4. Count-in 1 bar with the metronome on, record from the middle: the clicks line up with the notes already there; the new notes land after the point.
-5. Make a take → Record → render with FFmpeg: the video's sound has the tape.
+5. Takes → From the tape → Export video… → render with FFmpeg: the video's sound has the tape.
 6. Record past the end until 60 s: the notice, the tape kept.
 
 

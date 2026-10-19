@@ -62,7 +62,7 @@ Every hit names a pad: pad *N* is note (`baseNote` + *N* − 1) mod 128, so pad 
 - **Clicks** on the pads, or on the zone editor's keyboard.
 - **Keys** (on the Play page, not while typing): in the Drum view Z X C V, A S D F, Q W E R and 1 2 3 4 play the 16 pads in view (bottom row first, like the pads). In the Keys view the keyboard is Live's: A W S E D F T G Y H U J K O L P ; ' from C of the layer's **Octave** (3: C3), Z and X move the octave. Turn off with **Keys**.
 - **MIDI notes** play the pad on their note (Drum, all 128) or the zones under them (Keys), on any channel or one. Note-on velocity sets how hard; note-off lets a Classic sound go.
-- **The pad grid** (MIDI settings → Pad grid): its lower-left 4 × 4 plays the 16 pads in view (Drum view).
+- **The pad grid** (Sources → + Map → Pad grid): its lower-left 4 × 4 plays the 16 pads in view (Drum view).
 - **Actions**: **Do: Play pad N** from any trigger or signal.
 - **Takes** record every hit as a `pad` event (pad number, velocity, 0 for a let-go) stamped with the clock time it landed, and what it picked (`slot`: the pad its Sample index chose, or the zone a round robin or random pick chose), so a replay and a render play the same sounds.
 
@@ -109,6 +109,17 @@ Samples live in the media library next to the videos (IndexedDB), named on the p
 ## Plan
 
 The Sampler is a layer, so it's Pro (`play.layers`). On Free it isn't in what plays.
+
+## Moving to Sound as an instrument (plan, not built)
+
+Play audit P10 (2026-10-18): the Sampler is an instrument, but it lives as a *layer* under Add layer → Inputs & helpers, while Sound has tracks and racks. The long-term move, in steps, each its own PR:
+
+1. **A Sampler instrument on a track.** A rack's instrument picker gets **Sampler** beside the sample player and the Granulator (`TrackInstrument` already has `sampler`): the same engine (`samplerEngine`), the same editor (its sidebar card and big panel) opened from the track's device chain. Its sound goes through the track's chain and the master, so Sound → Effects shows it as the track, not as `layer:<id>`.
+2. **Its visual reader stays a layer.** What the picture needs from it (hits, levels: `pads:<id>` for the audio readers, Play pad N actions) is kept by a small **Sampler reader** layer that points at the track, so Rules, readers and the picture keep working without the layer owning the sound.
+3. **Migration.** A setup with a Sampler layer opens with a track holding that Sampler (pads, zones, kit, chain moved over, control targets and takes rewritten, as Drum pads → Sampler did) plus the reader layer in the layer's place; it must render the same (an offline-mix test like `sampler.test.ts`).
+4. **Then** Add layer stops offering Sampler; Add track offers it. Phones keep uploading audio through the Sampler (the phone trim: Sampler upload, effects and readers only), so on a phone the Sampler stays reachable outside the Arrangement.
+
+Open questions: whether the reader layer is added automatically (yes, if anything reads `pads:<id>`), and whether a Sampler track records to the tape like other tracks (it should: its hits are notes).
 
 ## Tests
 

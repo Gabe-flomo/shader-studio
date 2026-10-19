@@ -20,7 +20,7 @@ import { NumberInput } from '../NodeGraph/NumberInput';
 import { toast } from '../ui/toastStore';
 
 /** Read a picked .mid into the record (checked first, so a bad file never replaces a good one). */
-async function loadMidiFile(file: File): Promise<void> {
+export async function loadMidiFile(file: File): Promise<void> {
   try {
     const bytes = new Uint8Array(await file.arrayBuffer());
     const data = parseMidiFile(bytes);
@@ -35,7 +35,8 @@ async function loadMidiFile(file: File): Promise<void> {
   }
 }
 
-export function MidiFileCard() {
+/** `bare`: inside its source card in the Sources column (inputs/FileSources.tsx), which names it: no box of its own. */
+export function MidiFileCard({ bare = false }: { bare?: boolean } = {}) {
   const tk = useTokens();
   const midiFile = useNodeGraphStore(s => s.play.midiFile);
   const setPlay = useNodeGraphStore(s => s.setPlay);
@@ -68,10 +69,10 @@ export function MidiFileCard() {
   const dur = info && 'duration' in info ? info.duration : 0;
   const frac = dur > 0 && pos !== null ? Math.max(0, Math.min(1, pos / dur)) : 0;
   return (
-    <div style={{ margin: '6px 0 4px', padding: '8px 10px', borderRadius: radius.md, background: tk.bg.field }}>
+    <div style={bare ? { margin: '6px 0 4px' } : { margin: '6px 0 4px', padding: '8px 10px', borderRadius: radius.md, background: tk.bg.field }}>
       {picker}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-        <Icon name="wave" size={14} style={{ color: tk.accent.base, flexShrink: 0 }} />
+        {!bare && <Icon name="wave" size={14} style={{ color: tk.accent.base, flexShrink: 0 }} />}
         <span style={{ font: `600 12px ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{midiFile.name}</span>
         <span style={{ flex: 1 }} />
         <IconButton icon="folder" label="Replace with another MIDI file" size="sm" onClick={() => input.current?.click()} />

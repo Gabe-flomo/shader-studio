@@ -25,6 +25,12 @@ const CHROME_FILES = [
   'src/components/learn/StartSheet.tsx',
   'src/components/library/Library.tsx',
   'src/components/presets/PresetMenu.tsx',
+  'src/components/play/TakesList.tsx',
+  'src/components/play/TakesSection.tsx',
+  'src/components/play/Stage.tsx',
+  'src/components/ExportModal.tsx',
+  'src/components/PerformanceBar.tsx',
+  'src/components/play/mapPicker.ts',
 ];
 
 const ATTR = /\b(label|title|hint|description|aria-label|ariaLabel|placeholder)\s*[:=]\s*\{?\s*(['"`])((?:(?!\2)[^\\]|\\.)*)\2/g;
@@ -52,6 +58,11 @@ describe('glossary', () => {
     expect(glossaryProblems('Engine${n ? ` · ${n}` : \'\'}')).toHaveLength(1);
     expect(glossaryProblems('Hover for color')).toHaveLength(1);
     expect(glossaryProblems('Saved Graphs')).toHaveLength(1);
+    // The three recordings have one name each (Play audit P8), and the MIDI file / pad grid are sources (P10).
+    expect(glossaryProblems('Record a performance')).toHaveLength(1);
+    expect(glossaryProblems('Start performance')).toHaveLength(1);
+    expect(glossaryProblems('Open the MIDI file page')).toHaveLength(1);
+    for (const ok of ['Record video', 'Record performance (take)', 'Arm track', 'Start the take', 'MIDI file…', 'Pad grid']) expect(glossaryProblems(ok), ok).toEqual([]);
     // …and leaves the right ones alone.
     for (const ok of ['Publish node', 'Functions', 'Import shader', 'Go to Controls', 'Sound · 2', 'Hover for colour', 'Add Color node', 'Scene builder', 'Inputs & media']) {
       expect(glossaryProblems(ok), ok).toEqual([]);

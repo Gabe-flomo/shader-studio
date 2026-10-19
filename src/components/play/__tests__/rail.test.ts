@@ -14,7 +14,7 @@ const store = vi.hoisted(() => {
   return m;
 });
 import {
-  RAIL_CATEGORIES, RAIL_CATEGORY_SHORTCUT, RAIL_PAGES, RAIL_PAGE_IDS, categoryBadge, categoryOf, currentRailPage, firstPageOf, isRailPage, mappingsCountOf, pageCount, phonePageFor, phonePagesOf, stepIndex,
+  RAIL_CATEGORIES, RAIL_CATEGORY_SHORTCUT, RAIL_PAGES, RAIL_PAGE_IDS, categoryBadge, categoryDef, categoryOf, currentRailPage, firstPageOf, isRailPage, mappingsCountOf, pageCount, phonePageFor, phonePagesOf, stepIndex,
 } from '../railPages';
 import { DEFAULT_SPLIT, SPLIT_KEY, goToMappings, goToRailCategory, openLayerInSplit, parseSplitPrefs, showPage, usePlaySplit } from '../playSplit';
 import { usePlayUi } from '../playUi';
@@ -37,7 +37,8 @@ describe('categories and pages', () => {
   it('gives each category the pages the owner listed', () => {
     const pages = Object.fromEntries(RAIL_CATEGORIES.map(c => [c.id, c.pages.map(p => RAIL_PAGES[p].label)]));
     expect(pages).toEqual({
-      controls: ['Controls', 'MIDI file', 'Pad grid'],
+      // The MIDI file and the pad grid are sources in Controls, not pages (P10).
+      controls: ['Controls'],
       signals: ['Rules'],
       // The Background is the Layers list's pinned first row, not a page of its own (P13).
       layers: ['Layers'],
@@ -56,7 +57,11 @@ describe('categories and pages', () => {
     expect(currentRailPage('mappings')).toBe('controls');
     expect(currentRailPage('background')).toBe('layers');
     expect(isRailPage('background')).toBe(false);
-    expect(isRailPage('pad-grid')).toBe(true);
+    // The MIDI file and Pad grid pages are sources now (Play audit P10): saved ids open Controls.
+    expect(isRailPage('pad-grid')).toBe(false);
+    expect(isRailPage('midi-file')).toBe(false);
+    expect(currentRailPage('midi-file')).toBe('controls');
+    expect(currentRailPage('pad-grid')).toBe('controls');
     expect(isRailPage('notes')).toBe(false);
     expect(isRailPage('toString')).toBe(false);
   });
@@ -65,7 +70,6 @@ describe('categories and pages', () => {
     const play: PlayRecord = { ...emptyPlayRecord(), actions: [{ id: 'a', trigger: { on: 'key', code: 'Space' }, do: 'show', layerId: 'l', amount: 1, enabled: true }], signals: [{ id: 's', name: 'Hit' }, { id: 't', name: 'Go' }] };
     // Rules: each signal is one, and actions read as rules (actions sharing a trigger share one).
     expect(pageCount('signals', play)).toBe(3);
-    expect(pageCount('midi-file', play)).toBeUndefined();
     expect(categoryBadge('layers', play)).toBeUndefined();
     const withMappingsOnly: PlayRecord = { ...play, mappings: [{ id: 'm', controlId: 'c', source: { kind: 'key', code: 'KeyA' }, outMin: 0, outMax: 1, curve: 'linear', smoothMs: 0, enabled: true }] };
     expect(categoryBadge('controls', withMappingsOnly)).toBeUndefined(); // No controls yet, so no badge — even with a mapping.
@@ -114,13 +118,17 @@ describe('categories and pages', () => {
     expect(stepIndex(0, 'ArrowDown', 0)).toBe(-1);
   });
 
-  it('on a phone, shows the rail’s page, unless a phone keeps it elsewhere (the MIDI file and pad grid are in Sources)', () => {
+  it('on a phone, shows the rail’s page', () => {
     expect(phonePageFor('signals')).toBe('signals');
     expect(phonePageFor('finish-sound')).toBe('finish-sound');
-    expect(phonePageFor('midi-file')).toBe('controls');
-    expect(phonePageFor('pad-grid')).toBe('controls');
     // No Arrangement on a phone (2026-10-18): Sound is its one page.
     expect(phonePageFor('engine-performance')).toBe('finish-sound');
+    expect(phonePageFor('controls')).toBe('controls');
+  });
+  it('Controls has one page: no MIDI file / Pad grid sub-tabs (the middle tab level, Play audit P10)', () => {
+    expect(categoryDef('controls').pages).toEqual(['controls']);
+    expect(RAIL_PAGE_IDS).not.toContain('midi-file');
+    expect(RAIL_PAGE_IDS).not.toContain('pad-grid');
   });
   it('the phone’s bottom row goes straight to every page, Sound included (Play audit P20; no Arrangement on a phone)', () => {
     expect(phonePagesOf('controls')).toEqual(['controls']);
@@ -198,8 +206,8 @@ describe('pages into the panel', () => {
   });
 
   it('shows a page in the panel, opening it if closed or the rail is hidden', () => {
-    showPage('pad-grid');
-    expect(usePlaySplit.getState().railPage).toBe('pad-grid');
+    showPage('layers');
+    expect(usePlaySplit.getState().railPage).toBe('layers');
     usePlaySplit.setState({ on: false });
     showPage('finish-sound');
     expect(usePlaySplit.getState()).toMatchObject({ railPage: 'finish-sound', on: true });
@@ -209,7 +217,7 @@ describe('pages into the panel', () => {
   });
 
   it('opens a layer’s full editor on the Layers page', () => {
-    usePlaySplit.setState({ railPage: 'pad-grid', on: false });
+    usePlaySplit.setState({ railPage: 'finish-sound', on: false });
     expect(openLayerInSplit('l9')).toBe(true);
     expect(usePlaySplit.getState()).toMatchObject({ railPage: 'layers', on: true });
     expect(usePlayUi.getState().selected).toBe('l9');
@@ -218,7 +226,7 @@ describe('pages into the panel', () => {
   });
 
   it('follows reveals, always (a layer clicked on the picture, a Finish effect, a control group)', () => {
-    usePlaySplit.setState({ railPage: 'pad-grid', on: false });
+    usePlaySplit.setState({ railPage: 'finish-sound', on: false });
     usePlayUi.getState().reveal('l1');
     expect(usePlaySplit.getState()).toMatchObject({ railPage: 'layers', on: true });
     usePlayUi.getState().revealAudioFx('fx1');
