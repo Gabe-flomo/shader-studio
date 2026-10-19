@@ -39,6 +39,15 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.314',
+    date: '2026-10-19',
+    title: "Fewer, better examples",
+    highlights: [
+      { area: 'Studio', text: "Five hand-picked examples per category, restyled to look cinematic, with notes on every node. Courses live under Learn." },
+      { area: 'Studio', text: "One voxel system (now in GI scenes too), a 2D perspective hall, Labyrinth, and Segment, Optical Flow and Analyze examples." },
+    ],
+  },
+  {
     id: '2026.10.313',
     date: '2026-10-19',
     title: "Listen to a band",
