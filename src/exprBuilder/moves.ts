@@ -223,6 +223,12 @@ export class CatalogueBuilder {
   private docIndex = new Map<string, number>();
   private accs = new Map<string, Acc>();
   private order = new Map<string, number>();
+  /**
+   * Slider ranges that came in with a whole catalogue (addCatalogue), by move key and hole name. A catalogue keeps
+   * only a hole's most common values, so a range worked out again from those can come out narrower than the one it
+   * had: finish() never lets a range shrink below what came in.
+   */
+  private carried = new Map<string, Map<string, { min: number; max: number }>>();
 
   doc(d: CatalogueDoc): number {
     let i = this.docIndex.get(d.id);
@@ -310,6 +316,10 @@ export class CatalogueBuilder {
           const vm = a.vals.get(h.name);
           if (!vm) continue;
           for (const [v, n] of h.vals) bump(vm, v, n);
+          let ranges = this.carried.get(src.key);
+          if (!ranges) this.carried.set(src.key, ranges = new Map());
+          const had = ranges.get(h.name);
+          ranges.set(h.name, had ? { min: Math.min(had.min, h.range.min), max: Math.max(had.max, h.range.max) } : { ...h.range });
           // Values beyond the kept few still widen the range.
           if (Number.isFinite(h.seenMin)) { bump(vm, h.seenMin, 0); bump(vm, h.seenMax, 0); }
         } else {
@@ -343,7 +353,10 @@ export class CatalogueBuilder {
           const seenMin = Math.min(...all), seenMax = Math.max(...all);
           const def = counted[0]?.[0] ?? h.default;
           // The slider covers the usual values (10th to 90th percentile), not one shader's 100000.
-          return { ...h, default: def, seenMin, seenMax, range: robustRange(entries, def, m.sig.role), vals: counted.slice(0, VALS_CAP) };
+          const r = robustRange(entries, def, m.sig.role);
+          const had = this.carried.get(m.key)?.get(h.name);
+          const range = had ? { min: Math.min(r.min, had.min), max: Math.max(r.max, had.max) } : r;
+          return { ...h, default: def, seenMin, seenMax, range, vals: counted.slice(0, VALS_CAP) };
         }
         const nm = a.names.get(h.name);
         const names = nm ? [...nm.entries()].sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0])).slice(0, 4).map(([k]) => k) : h.names;
