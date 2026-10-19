@@ -1,7 +1,8 @@
 /**
  * FullPages — the rail's full-width pages that aren't a whole sidebar
  * section already (docs/split-view.md, "Rail and full-width pages"): the
- * frame they share (the Rules page is rules/RulesPage.tsx), the Background, and the frame the single-card pages (MIDI file, Pad grid)
+ * frame they share (the Rules page is rules/RulesPage.tsx), the Background's settings (opened from the
+ * Layers list's pinned top row), and the frame the single-card pages (MIDI file, Pad grid)
  * sit in. Controls, Layers, Finish, the Engine and Mappings reuse their
  * sections, laid out wide (PlayPage renders them).
  *
@@ -23,7 +24,7 @@ import { ProBadge } from '../account/ProSheet';
 import { openProSheet } from '../../lib/plan';
 import { triggerLabel } from '../../play/playSources';
 import { layerSignalListeners, layerSignalSenders } from '../../play/pairs';
-import { backgroundLayerOf, SIGNAL_ACTION, type PlayAction, type PlayRecord, type SignalDef, type SignalLogic } from '../../types/play';
+import { SIGNAL_ACTION, type PlayAction, type PlayRecord, type SignalDef, type SignalLogic } from '../../types/play';
 import { BackgroundRow } from './BackgroundRow';
 import { actionLabel } from './layers/help';
 import { usePlayUi } from './playUi';
@@ -131,42 +132,34 @@ export function signalDefLabel(w: SignalDef, play: PlayRecord): string {
 
 // ── Background ──────────────────────────────────────────────────────────────
 
-export function BackgroundPage({ play, onChange, locked }: { play: PlayRecord; onChange: Change; locked: boolean }) {
+/**
+ * The Background's own settings, opened from the Layers list's pinned top row
+ * (LayersPanel, Play audit P13): what the picture is under the layers (the
+ * shader, a colour or gradient, or a graph, an image or a video, which add a
+ * Background layer), and its matte. Locked on Free: the shader stays.
+ */
+export function BackgroundSettings({ play, onChange, locked }: { play: PlayRecord; onChange: Change; locked: boolean }) {
   const tk = useTokens();
-  const layer = backgroundLayerOf(play);
+  if (locked) {
+    return (
+      <button type="button" onClick={() => openProSheet('play.backgrounds')} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '12px 14px', border: 0, borderRadius: radius.card, cursor: 'pointer', background: alpha(tk.accent.base, 0.08), color: tk.text.secondary, font: `12px/1.5 ${fontFamily.ui}`, textAlign: 'left' }}>
+        <ProBadge />
+        <span style={{ flex: 1 }}>The picture is the shader on Free. Images, video, gradients and other graphs as the background are part of Pro.</span>
+      </button>
+    );
+  }
   return (
-    <CardPage
-      title="Background"
-      intro="What the picture is under the layers: the shader, a flat colour or gradient, or a graph, an image or a video. Choosing a graph, an image or a video adds a Background layer with it as the first source, so more can queue behind it."
-    >
-      {locked ? (
-        <button type="button" onClick={() => openProSheet('play.backgrounds')} style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', padding: '12px 14px', border: 0, borderRadius: radius.card, cursor: 'pointer', background: alpha(tk.accent.base, 0.08), color: tk.text.secondary, font: `12px/1.5 ${fontFamily.ui}`, textAlign: 'left' }}>
-          <ProBadge />
-          <span style={{ flex: 1 }}>The picture is the shader on Free. Images, video, gradients and other graphs as the background are part of Pro.</span>
-        </button>
-      ) : (
-        <>
-          <div style={{ borderRadius: radius.card, overflow: 'hidden', boxShadow: `inset 0 0 0 1px ${tk.border.default}`, background: tk.bg.panel }}>
-            <BackgroundRow play={play} onChange={onChange} />
-          </div>
-          <BackgroundMatteRow play={play} onChange={onChange} />
-        </>
-      )}
-      {layer && (
-        <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: radius.card, background: tk.bg.panel, boxShadow: `inset 0 0 0 1px ${tk.border.default}` }}>
-          <Icon name="layers" size={16} style={{ color: tk.text.faint }} />
-          <span style={{ flex: 1, minWidth: 0, color: tk.text.secondary, font: `12px/1.45 ${fontFamily.ui}` }}>
-            <b style={{ color: tk.text.primary }}>{layer.label}</b> · {layer.sources.length} source{layer.sources.length === 1 ? '' : 's'} in its queue. Its sources, timing and transitions are in its editor.
-          </span>
-          <Button size="sm" variant="ghost" onClick={() => usePlayUi.getState().reveal(layer.id)}>Edit the layer</Button>
-        </div>
-      )}
-    </CardPage>
+    <div data-background-settings="">
+      <div style={{ borderRadius: radius.card, overflow: 'hidden', boxShadow: `inset 0 0 0 1px ${tk.border.default}`, background: tk.bg.panel }}>
+        <BackgroundRow play={play} onChange={onChange} />
+      </div>
+      <BackgroundMatteRow play={play} onChange={onChange} />
+    </div>
   );
 }
 
 /** The Matte button and its summary, under the Background row: another layer cuts the picture. */
-function BackgroundMatteRow({ play, onChange }: { play: PlayRecord; onChange: Change }) {
+export function BackgroundMatteRow({ play, onChange }: { play: PlayRecord; onChange: Change }) {
   const tk = useTokens();
   const matteRef = useRef<HTMLSpanElement>(null);
   const [open, setOpen] = useState(false);

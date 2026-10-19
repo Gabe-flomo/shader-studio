@@ -70,14 +70,14 @@ afterEach(() => {
 beforeEach(() => {
   errors.length = 0;
   localStorage.clear();
-  usePlayUi.setState({ tab: 'controls', phonePage: '', selected: '', folded: {} });
+  usePlayUi.setState({ selected: '', folded: {} });
   useNodeGraphStore.getState().setPlay(() => setup());
 });
 
 function mount(): HTMLElement {
   const host = document.createElement('div');
   document.body.appendChild(host);
-  usePlaySplit.setState({ ...DEFAULT_SPLIT, on: true, available: true, sidebar: 'rail', railPage: 'controls', host, wide: true });
+  usePlaySplit.setState({ ...DEFAULT_SPLIT, on: true, available: true, railPage: 'controls', host, wide: true });
   const el = document.createElement('div');
   document.body.appendChild(el);
   const root = createRoot(el);
@@ -174,13 +174,13 @@ describe('P5: mappings folded to one line', () => {
 
 describe('P14: a new graph starts fresh', () => {
   it('each rail category goes back to its primary page', () => {
-    usePlaySplit.setState({ ...DEFAULT_SPLIT, railPage: 'background', railPageMemory: { layers: 'background', controls: 'midi-file' } });
-    usePlayUi.setState({ phonePage: 'midi-file', finishView: 'sound', selected: 'l1', entered: 'g1' });
+    usePlaySplit.setState({ ...DEFAULT_SPLIT, railPage: 'finish-sound', railPageMemory: { engine: 'finish-sound', controls: 'midi-file' } });
+    usePlayUi.setState({ finishView: 'sound', selected: 'l1', entered: 'g1' });
     resetPlayPagesForNewGraph();
-    expect(usePlaySplit.getState().railPage).toBe('layers');
-    expect(usePlaySplit.getState().railPageMemory).toEqual({ layers: 'layers' });
+    expect(usePlaySplit.getState().railPage).toBe('engine-performance');
+    expect(usePlaySplit.getState().railPageMemory).toEqual({ engine: 'engine-performance' });
     const ui = usePlayUi.getState();
-    expect([ui.phonePage, ui.finishView, ui.selected, ui.entered]).toEqual(['', 'picture', '', '']);
+    expect([ui.finishView, ui.selected, ui.entered]).toEqual(['picture', '', '']);
   });
 
   it('an example is named after itself until something else is loaded or it is saved', () => {

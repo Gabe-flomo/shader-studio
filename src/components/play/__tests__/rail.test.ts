@@ -1,7 +1,7 @@
 /**
- * The split view's rail (docs/split-view.md, "Rail and full-width pages"):
- * the category → pages model, the rail's state (toggle, remember, restore
- * exactly), and pages routed into the panel.
+ * The Play page's one navigation model (docs/split-view.md, "Rail and pages";
+ * Play audit P1): the category → pages model, the rail's state (remembered),
+ * and pages routed into the panel, the same page state on a phone.
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -14,11 +14,12 @@ const store = vi.hoisted(() => {
   return m;
 });
 import {
-  RAIL_CATEGORIES, RAIL_CATEGORY_SHORTCUT, RAIL_PAGES, RAIL_PAGE_IDS, categoryBadge, categoryOf, currentRailPage, firstPageOf, isRailPage, mappingsCountOf, pageCount, pageForTab, phonePageShown, phonePagesOf, stepIndex,
+  RAIL_CATEGORIES, RAIL_CATEGORY_SHORTCUT, RAIL_PAGES, RAIL_PAGE_IDS, categoryBadge, categoryOf, currentRailPage, firstPageOf, isRailPage, mappingsCountOf, pageCount, phonePageFor, phonePagesOf, stepIndex,
 } from '../railPages';
-import { DEFAULT_SPLIT, SPLIT_KEY, goToMappings, goToRailCategory, openLayerInSplit, parseSplitPrefs, railRatioFor, setAreaMeasure, showPageInSplit, shownRatio, usePlaySplit } from '../playSplit';
-import { followReveals } from '../PlaySplitArea';
-import { tabForPage, usePlayUi } from '../playUi';
+import { DEFAULT_SPLIT, SPLIT_KEY, goToMappings, goToRailCategory, openLayerInSplit, parseSplitPrefs, showPage, usePlaySplit } from '../playSplit';
+import { usePlayUi } from '../playUi';
+import { useInputsBoard } from '../inputs/InputsBoard';
+import * as playUiModule from '../playUi';
 import { DEFAULT_ACTIONS, findShortcut, normaliseCombo, type ShortcutMap } from '../../../hooks/useShortcuts';
 import { emptyPlayRecord, type PlayRecord } from '../../../types/play';
 
@@ -38,22 +39,23 @@ describe('categories and pages', () => {
     expect(pages).toEqual({
       controls: ['Controls', 'MIDI file', 'Pad grid'],
       signals: ['Rules'],
-      layers: ['Layers', 'Background'],
+      // The Background is the Layers list's pinned first row, not a page of its own (P13).
+      layers: ['Layers'],
       finish: ['Picture'],
       engine: ['Arrangement', 'Effects'],
     });
     for (const p of RAIL_PAGE_IDS) expect(RAIL_PAGES[p].description.length).toBeGreaterThan(10);
   });
 
-  it('starts the rail where the tab-strip panel was (Mappings keeps its own tab, even though it shares the Controls rail icon)', () => {
-    expect(pageForTab('controls')).toBe('controls');
-    expect(pageForTab('layers')).toBe('layers');
-    expect(pageForTab('finish', 'sound')).toBe('finish-sound');
-    expect(pageForTab('finish')).toBe('finish-picture');
-    expect(pageForTab('engine')).toBe('engine-performance');
-    expect(pageForTab('mappings')).toBe('controls');
+  it('has one set of pages: no tab-strip union beside the rail’s (P1); old page ids map onto today’s', () => {
+    expect(playUiModule).not.toHaveProperty('tabForPage');
+    expect(usePlayUi.getState()).not.toHaveProperty('tab');
+    expect(usePlayUi.getState()).not.toHaveProperty('phonePage');
+    expect(usePlayUi.getState()).not.toHaveProperty('panel');
     expect(firstPageOf('controls')).toBe('controls');
     expect(currentRailPage('mappings')).toBe('controls');
+    expect(currentRailPage('background')).toBe('layers');
+    expect(isRailPage('background')).toBe(false);
     expect(isRailPage('pad-grid')).toBe(true);
     expect(isRailPage('notes')).toBe(false);
     expect(isRailPage('toString')).toBe(false);
@@ -86,17 +88,20 @@ describe('categories and pages', () => {
     }
   });
 
-  it('goToRailCategory opens the split (if closed) on the category’s remembered page, else its first', () => {
-    usePlaySplit.setState({ ...DEFAULT_SPLIT, on: false, available: true, sidebar: 'rail', railPageMemory: {} });
+  it('goToRailCategory opens the panel (if closed, or the rail hidden) on the category’s remembered page, else its first', () => {
+    usePlaySplit.setState({ ...DEFAULT_SPLIT, on: false, available: true, railPageMemory: {} });
     expect(goToRailCategory('layers')).toBe(true);
     expect(usePlaySplit.getState()).toMatchObject({ on: true, railPage: 'layers' });
-    usePlaySplit.getState().setRailPage('background');
-    expect(goToRailCategory('layers')).toBe(true);
-    expect(usePlaySplit.getState().railPage).toBe('background');
+    usePlaySplit.getState().setRailPage('finish-sound');
+    usePlaySplit.setState({ railHidden: true });
+    expect(goToRailCategory('engine')).toBe(true);
+    expect(usePlaySplit.getState()).toMatchObject({ railPage: 'finish-sound', railHidden: false, on: true });
     expect(goToRailCategory('signals')).toBe(true);
     expect(usePlaySplit.getState().railPage).toBe('signals');
+    // A phone (no panel on screen): its page under the picture changes all the same.
     usePlaySplit.setState({ available: false });
     expect(goToRailCategory('engine')).toBe(false);
+    expect(usePlaySplit.getState().railPage).toBe('finish-sound');
   });
 
   it('moves through a list with the arrows, wrapping', () => {
@@ -109,11 +114,11 @@ describe('categories and pages', () => {
     expect(stepIndex(0, 'ArrowDown', 0)).toBe(-1);
   });
 
-  it('on a phone, shows the picked page while its tab is open', () => {
-    expect(phonePageShown('layers', 'picture', 'signals')).toBe('signals');
-    expect(phonePageShown('controls', 'picture', 'signals')).toBe('controls');
-    expect(phonePageShown('mappings', 'picture', '')).toBe('controls');
-    expect(phonePageShown('finish', 'sound', 'finish-picture')).toBe('finish-sound');
+  it('on a phone, shows the rail’s page, unless a phone keeps it elsewhere (the MIDI file and pad grid are in Sources)', () => {
+    expect(phonePageFor('signals')).toBe('signals');
+    expect(phonePageFor('finish-sound')).toBe('finish-sound');
+    expect(phonePageFor('midi-file')).toBe('controls');
+    expect(phonePageFor('pad-grid')).toBe('controls');
   });
   it('the phone’s bottom row goes straight to Controls and Layers; Sound keeps its sheet (Play audit P20)', () => {
     expect(phonePagesOf('controls')).toEqual(['controls']);
@@ -122,19 +127,12 @@ describe('categories and pages', () => {
     expect(phonePagesOf('engine').length).toBeGreaterThan(1);
   });
 
-  it('a phone page opens its tab; setTab and reveals go back to the tab’s own', () => {
-    const ui = usePlayUi.getState();
-    ui.showPage('pad-grid');
-    expect(usePlayUi.getState()).toMatchObject({ tab: 'mappings', phonePage: 'pad-grid' });
-    ui.showPage('finish-sound');
-    expect(usePlayUi.getState()).toMatchObject({ tab: 'finish', finishView: 'sound' });
-    ui.showPage('signals');
-    ui.reveal('l1');
-    expect(usePlayUi.getState()).toMatchObject({ tab: 'layers', phonePage: '' });
-    ui.showPage('background');
-    ui.setTab('layers');
-    expect(usePlayUi.getState().phonePage).toBe('');
-    for (const p of RAIL_PAGE_IDS) { ui.showPage(p); expect(usePlayUi.getState().tab).toBe(tabForPage(p)); }
+  it('a phone shows the same page state as the panel (one model): showPage moves both', () => {
+    usePlaySplit.setState({ ...DEFAULT_SPLIT, available: false });
+    showPage('finish-sound');
+    expect(usePlaySplit.getState().railPage).toBe('finish-sound');
+    usePlayUi.getState().reveal('l1');
+    expect(usePlaySplit.getState().railPage).toBe('layers');
   });
 });
 
@@ -142,85 +140,42 @@ describe('the rail’s state', () => {
   beforeEach(() => {
     store.clear();
     usePlaySplit.setState({ ...DEFAULT_SPLIT, on: true, available: true });
-    setAreaMeasure(null);
   });
 
-  it('keeps the picture’s size: the panel takes the sidebar’s width', () => {
-    // A 1000 px area, half each, beside a 460 px sidebar: the picture stays 500 px of 1460.
-    expect(railRatioFor(0.5, 1000, 460)).toBeCloseTo(960 / 1460);
-    expect(railRatioFor(0.3, 1000, 460)).toBeCloseTo(760 / 1460);
-    // Nothing to give.
-    expect(railRatioFor(0.5, 1000, 0)).toBe(0.5);
-  });
-
-  it('opening the rail starts on the panel’s page, measures, and leaves the sidebar’s layout alone', () => {
-    usePlaySplit.setState({ tab: 'finish', ratio: 0.5, sidebar: 'full' });
-    usePlayUi.setState({ finishView: 'sound' });
-    setAreaMeasure(() => ({ total: 1000, sidebarPx: 460 }));
-    usePlaySplit.getState().setSidebar('rail');
-    const s = usePlaySplit.getState();
-    expect(s.sidebar).toBe('rail');
-    expect(s.railPage).toBe('finish-sound');
-    expect(s.railRatio).toBeCloseTo(960 / 1460, 2);
-    expect(s.ratio).toBe(0.5);
-    expect(shownRatio(s)).toBeCloseTo(960 / 1460, 2);
-    // Remembered.
-    expect(parseSplitPrefs(store.get(SPLIT_KEY) ?? null)).toMatchObject({ sidebar: 'rail', railPage: 'finish-sound', sidebarBefore: 'full' });
-  });
-
-  it('dragging in the rail moves only the rail’s share; leaving restores the sidebar and panel exactly', () => {
-    usePlaySplit.setState({ tab: 'layers', ratio: 0.42, sidebar: 'full' });
+  it('opening a category from the rail goes straight to its remembered page, else its first, opening the panel', () => {
     const st = usePlaySplit.getState();
-    st.setSidebar('rail');
-    st.setRailRatio(0.7);
-    st.setRailPage('signals');
-    expect(usePlaySplit.getState().ratio).toBe(0.42);
-    st.toggleRail();
-    const s = usePlaySplit.getState();
-    expect(s.sidebar).toBe('full');
-    expect(s.ratio).toBe(0.42);
-    expect(s.tab).toBe('layers');
-    expect(shownRatio(s)).toBe(0.42);
-    // And back into the rail from a hidden sidebar: ⌘⇧B returns to hidden.
-    st.setSidebar('hidden');
-    st.toggleRail();
-    expect(usePlaySplit.getState().sidebar).toBe('rail');
-    st.toggleRail();
-    expect(usePlaySplit.getState().sidebar).toBe('hidden');
-  });
-
-  it('opening a category from the rail goes straight to its remembered page, else its first', () => {
-    const st = usePlaySplit.getState();
-    st.setSidebar('rail');
     st.openRailCategory('layers');
     expect(usePlaySplit.getState().railPage).toBe('layers');
-    st.setRailPage('background');
+    st.setRailPage('finish-sound');
     st.openRailCategory('controls');
     expect(usePlaySplit.getState().railPage).toBe('controls');
-    // Coming back to Layers: the page it was left on, not its first.
-    st.openRailCategory('layers');
-    expect(usePlaySplit.getState().railPage).toBe('background');
+    // Coming back to Sound: the page it was left on, not its first.
+    usePlaySplit.getState().setOn(false);
+    st.openRailCategory('engine');
+    expect(usePlaySplit.getState()).toMatchObject({ railPage: 'finish-sound', on: true });
     // Remembered across a reload.
-    expect(parseSplitPrefs(store.get(SPLIT_KEY) ?? null).railPageMemory).toMatchObject({ layers: 'background', controls: 'controls' });
+    expect(parseSplitPrefs(store.get(SPLIT_KEY) ?? null).railPageMemory).toMatchObject({ engine: 'finish-sound', controls: 'controls', layers: 'layers' });
   });
 
-  it('Mappings is always reachable: ⌘⇧M opens the split (if closed) on the Inputs board', () => {
-    usePlaySplit.setState({ on: false, sidebar: 'rail', railPage: 'layers' });
+  it('Mappings is always reachable: ⌘⇧M opens the panel (if closed) on the Controls page’s Sources', () => {
+    usePlaySplit.setState({ on: false, railPage: 'layers' });
+    useInputsBoard.setState({ tab: 'controls' });
     expect(goToMappings()).toBe(true);
     expect(usePlaySplit.getState()).toMatchObject({ on: true, railPage: 'controls' });
-    // From the tab-strip panel too.
-    usePlaySplit.setState({ on: true, sidebar: 'full', tab: 'controls' });
+    expect(useInputsBoard.getState().tab).toBe('sources');
+    // A phone: its Controls page, on Sources.
+    usePlaySplit.setState({ available: false, railPage: 'signals' });
+    useInputsBoard.setState({ tab: 'controls' });
     expect(goToMappings()).toBe(true);
-    expect(usePlaySplit.getState().tab).toBe('mappings');
-    // Unavailable (no split area on screen, e.g. a phone): nothing to do.
-    usePlaySplit.setState({ available: false });
-    expect(goToMappings()).toBe(false);
+    expect(usePlaySplit.getState().railPage).toBe('controls');
+    expect(useInputsBoard.getState().tab).toBe('sources');
   });
 
-  it('⌘⇧B with the split closed opens it with the rail out', () => {
-    usePlaySplit.setState({ on: false, sidebar: 'full' });
+  it('⌘⇧B hides the rail (the picture alone) and brings it back', () => {
     usePlaySplit.getState().toggleRail();
-    expect(usePlaySplit.getState()).toMatchObject({ on: true, sidebar: 'rail' });
+    expect(usePlaySplit.getState()).toMatchObject({ on: true, railHidden: true });
+    usePlaySplit.getState().toggleRail();
+    expect(usePlaySplit.getState()).toMatchObject({ on: true, railHidden: false });
   });
 
   it('is ⌘⇧B, clashing with no other default; Mappings is ⌘⇧M', () => {
@@ -238,35 +193,35 @@ describe('pages into the panel', () => {
     usePlaySplit.setState({ ...DEFAULT_SPLIT, on: true, available: true });
   });
 
-  it('shows a page in the rail’s panel, or the tab-strip panel’s section', () => {
-    usePlaySplit.setState({ sidebar: 'rail' });
-    showPageInSplit('pad-grid');
+  it('shows a page in the panel, opening it if closed or the rail is hidden', () => {
+    showPage('pad-grid');
     expect(usePlaySplit.getState().railPage).toBe('pad-grid');
-    usePlaySplit.setState({ sidebar: 'full', tab: 'controls' });
-    showPageInSplit('finish-sound');
-    expect(usePlaySplit.getState().tab).toBe('finish');
-    expect(usePlayUi.getState().finishView).toBe('sound');
-    expect(usePlaySplit.getState().railPage).toBe('pad-grid');
+    usePlaySplit.setState({ on: false });
+    showPage('finish-sound');
+    expect(usePlaySplit.getState()).toMatchObject({ railPage: 'finish-sound', on: true });
+    usePlaySplit.setState({ railHidden: true });
+    showPage('signals');
+    expect(usePlaySplit.getState()).toMatchObject({ railPage: 'signals', railHidden: false });
   });
 
-  it('opens a layer’s full editor on the rail’s Layers page', () => {
-    usePlaySplit.setState({ sidebar: 'rail', railPage: 'pad-grid', tab: 'controls' });
+  it('opens a layer’s full editor on the Layers page', () => {
+    usePlaySplit.setState({ railPage: 'pad-grid', on: false });
     expect(openLayerInSplit('l9')).toBe(true);
-    expect(usePlaySplit.getState()).toMatchObject({ railPage: 'layers', tab: 'controls' });
+    expect(usePlaySplit.getState()).toMatchObject({ railPage: 'layers', on: true });
     expect(usePlayUi.getState().selected).toBe('l9');
+    usePlaySplit.setState({ available: false });
+    expect(openLayerInSplit('l9')).toBe(false);
   });
 
-  it('follows reveals while the rail is out (a layer clicked on the picture, a Finish effect, a control group)', () => {
-    usePlaySplit.setState({ sidebar: 'rail', railPage: 'pad-grid' });
-    const stop = followReveals();
+  it('follows reveals, always (a layer clicked on the picture, a Finish effect, a control group)', () => {
+    usePlaySplit.setState({ railPage: 'pad-grid', on: false });
     usePlayUi.getState().reveal('l1');
-    expect(usePlaySplit.getState().railPage).toBe('layers');
+    expect(usePlaySplit.getState()).toMatchObject({ railPage: 'layers', on: true });
     usePlayUi.getState().revealAudioFx('fx1');
     expect(usePlaySplit.getState().railPage).toBe('finish-sound');
+    usePlayUi.getState().revealFinish('fx2');
+    expect(usePlaySplit.getState().railPage).toBe('finish-picture');
     usePlayUi.getState().revealControlGroup('Live');
-    expect(usePlaySplit.getState().railPage).toBe('controls');
-    stop();
-    usePlayUi.getState().reveal('l1');
     expect(usePlaySplit.getState().railPage).toBe('controls');
   });
 });

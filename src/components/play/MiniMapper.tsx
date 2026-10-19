@@ -30,9 +30,8 @@ import { Icon } from '../ui/Icon';
 import { NumberInput } from '../NodeGraph/NumberInput';
 import { Popover } from '../ui/Popover';
 import { Sheet } from '../ui/Sheet';
-import { usePlayUi } from './playUi';
 import { CREATE_SIGNAL, MIDI_LEARN, miniMapperSections, wireMiniMapperPick, wireRuleWhen, wireSource, type MiniMapperTarget } from './miniMapperCore';
-import { startRule } from './playSplit';
+import { goToMappings, startRule } from './playSplit';
 import { toast } from '../ui/toastStore';
 import { audioReaderBank } from '../../lib/audioReaderBank';
 
@@ -108,7 +107,7 @@ export function MiniMapper({ anchorRef, target, label, onClose, unfold }: {
   const control = wired ? play.controls.find(c => c.id === wired.controlId) : undefined;
   const mapping = wired?.mappingId ? play.mappings.find(m => m.id === wired.mappingId) : undefined;
   const setRange = (patch: { outMin?: number; outMax?: number }) => setPlay(p => ({ ...p, mappings: p.mappings.map(m => (m.id === mapping?.id ? { ...m, ...patch } : m)) }));
-  const openMappings = () => { usePlayUi.getState().setTab('mappings'); onClose(); };
+  const openMappings = () => { goToMappings(); onClose(); };
 
   const asSheet = typeof window !== 'undefined' && menuAsSheet(window.innerWidth);
   // A plain function, not a component: a component made here would be a new type each render, and

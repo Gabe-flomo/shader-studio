@@ -44,7 +44,7 @@ import { readControlValue, controlExists } from '../playControls';
 import { describeSetting } from '../../files/appSettings';
 import { countVideoRefs, videoUses } from '../../lib/videoUsage';
 import { usePlan } from '../../lib/plan';
-import { sidebarView } from '../../components/play/playSplit';
+import { RAIL_CATEGORIES } from '../../components/play/railPages';
 
 const DLS = { type: fourCC('aumu'), subtype: fourCC('dls '), manufacturer: fourCC('appl'), name: 'DLSMusicDevice', vendor: 'Apple' };
 const DELAY = { type: fourCC('aufx'), subtype: fourCC('dely'), manufacturer: fourCC('appl'), name: 'AUDelay', vendor: 'Apple' };
@@ -524,9 +524,8 @@ describe('around the app', () => {
     expect(describeSetting('shader-studio:audio:engine').category).toBe('devices');
   });
 
-  it('has an Engine section in the sidebar and the split panel', () => {
-    expect(sidebarView('engine', null)).toEqual({ tab: 'engine', tabs: ['controls', 'layers', 'finish', 'engine'], drawer: true });
-    expect(sidebarView('engine', 'engine').tabs).not.toContain('engine');
+  it('has a Sound category on the rail, its arrangement first', () => {
+    expect(RAIL_CATEGORIES.find(c => c.id === 'engine')).toMatchObject({ label: 'Sound', pages: ['engine-performance', 'finish-sound'] });
   });
 });
 

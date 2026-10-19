@@ -1,4 +1,4 @@
-/** The Play split view's prefs and layout (playSplit.ts): parsed safely, clamped, remembered, and the sidebar never doubles the panel. */
+/** The Play page's one navigation model's prefs (playSplit.ts): parsed safely, clamped, remembered, and older saves (a full sidebar, a tab-strip panel) migrated onto the rail. */
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const store = vi.hoisted(() => {
@@ -9,7 +9,7 @@ const store = vi.hoisted(() => {
   });
   return m;
 });
-import { DEFAULT_RATIO, DEFAULT_SPLIT, MIN_CANVAS_PX, MIN_PANEL_PX, RATIO_MAX, RATIO_MIN, SPLIT_KEY, SPLIT_PREFS_VERSION, clampRatio, parseSplitPrefs, ratioAt, sidebarView, usePlaySplit } from '../playSplit';
+import { DEFAULT_RATIO, DEFAULT_SPLIT, MIN_CANVAS_PX, MIN_PANEL_PX, RATIO_MAX, RATIO_MIN, SPLIT_KEY, SPLIT_PREFS_VERSION, clampRatio, parseSplitPrefs, ratioAt, usePlaySplit } from '../playSplit';
 import { DEFAULT_ACTIONS, findShortcut, normaliseCombo, type ShortcutMap } from '../../../hooks/useShortcuts';
 
 describe('split prefs', () => {
@@ -21,51 +21,65 @@ describe('split prefs', () => {
   });
 
   it('keep what was saved, with the ratio in range', () => {
-    expect(parseSplitPrefs(JSON.stringify({ v: 3, on: true, ratio: 0.45, tab: 'layers', sidebar: 'rail', sidebarBefore: 'hidden', railPage: 'finish-sound', railRatio: 0.6 })))
-      .toEqual({ on: true, ratio: 0.45, tab: 'layers', sidebar: 'rail', sidebarBefore: 'hidden', railPage: 'finish-sound', railRatio: 0.6, railPageMemory: {} });
+    expect(parseSplitPrefs(JSON.stringify({ v: 4, on: false, ratio: 0.45, railPage: 'finish-sound', railHidden: true, railPageMemory: { engine: 'finish-sound' } })))
+      .toEqual({ on: false, ratio: 0.45, railPage: 'finish-sound', railHidden: true, railPageMemory: { engine: 'finish-sound' } });
     // Only entries naming a real page under the category they claim survive.
-    expect(parseSplitPrefs(JSON.stringify({ v: 2, railPageMemory: { layers: 'background', finish: 'layers', mappings: 'nope' } })).railPageMemory).toEqual({ layers: 'background' });
+    expect(parseSplitPrefs(JSON.stringify({ v: 4, railPageMemory: { finish: 'layers', mappings: 'nope', engine: 'finish-sound' } })).railPageMemory).toEqual({ engine: 'finish-sound' });
     // Signals left Layers for a category of its own (2026-09-30), taking the old Actions page with it.
-    expect(parseSplitPrefs(JSON.stringify({ v: 2, railPageMemory: { layers: 'signals' } })).railPageMemory).toEqual({ signals: 'signals' });
-    expect(parseSplitPrefs(JSON.stringify({ v: 2, railPage: 'actions' })).railPage).toBe('signals');
+    expect(parseSplitPrefs(JSON.stringify({ v: 4, railPageMemory: { layers: 'signals' } })).railPageMemory).toEqual({ signals: 'signals' });
+    expect(parseSplitPrefs(JSON.stringify({ v: 4, railPage: 'actions' })).railPage).toBe('signals');
     // A save from before Controls and Mappings merged (2026-09-28) still has a `mappings` key: its pages now live under `controls`.
-    expect(parseSplitPrefs(JSON.stringify({ v: 2, railPageMemory: { mappings: 'midi-file', layers: 'actions' } })).railPageMemory).toEqual({ controls: 'midi-file', signals: 'signals' });
-    // A current save keeps a hidden sidebar (and the pre-rail `sidebarHidden` spelling).
-    expect(parseSplitPrefs(JSON.stringify({ v: 2, on: true, sidebarHidden: true })).sidebar).toBe('hidden');
-    expect(parseSplitPrefs(JSON.stringify({ v: 2, on: false, sidebar: 'full' })).on).toBe(false);
-    // Saved before the rail became the default: opens split with the rail, keeps the rest.
-    expect(parseSplitPrefs(JSON.stringify({ on: false, side: 'bottom', sidebar: 'hidden', railPage: 'mappings' }))).toMatchObject({ on: true, sidebar: 'rail', railPage: 'controls' }); // Mappings is on the Inputs board now.
-    expect(parseSplitPrefs(JSON.stringify({ v: 2, sidebar: 'drawer', railPage: 'nope', railRatio: 'x' }))).toMatchObject({ sidebar: 'rail', railPage: 'controls', railRatio: null });
-    expect(parseSplitPrefs(JSON.stringify({ v: 3, ratio: 0.99 })).ratio).toBe(RATIO_MAX);
-    expect(parseSplitPrefs(JSON.stringify({ v: 3, ratio: -3 })).ratio).toBe(RATIO_MIN);
+    expect(parseSplitPrefs(JSON.stringify({ v: 4, railPageMemory: { mappings: 'midi-file', layers: 'actions' } })).railPageMemory).toEqual({ controls: 'midi-file', signals: 'signals' });
+    // The Background page is the Layers list's pinned row now (P13): a save on it opens Layers.
+    expect(parseSplitPrefs(JSON.stringify({ v: 4, railPage: 'background', railPageMemory: { layers: 'background' } }))).toMatchObject({ railPage: 'layers', railPageMemory: { layers: 'layers' } });
+    expect(parseSplitPrefs(JSON.stringify({ v: 4, railPage: 'nope' })).railPage).toBe('controls');
+    expect(parseSplitPrefs(JSON.stringify({ v: 4, ratio: 0.99 })).ratio).toBe(RATIO_MAX);
+    expect(parseSplitPrefs(JSON.stringify({ v: 4, ratio: -3 })).ratio).toBe(RATIO_MIN);
   });
 
   it('give the panel about a third by default, so the picture gets most of the width', () => {
     expect(DEFAULT_RATIO).toBeCloseTo(0.35);
     expect(DEFAULT_SPLIT.ratio).toBe(DEFAULT_RATIO);
-    expect(DEFAULT_SPLIT.railRatio).toBeNull();
     // Resizable within sensible bounds, and the default sits inside them.
     expect(RATIO_MIN).toBeLessThan(DEFAULT_RATIO);
     expect(RATIO_MAX).toBeLessThanOrEqual(0.7);
     expect(clampRatio(DEFAULT_RATIO, 1440)).toBeCloseTo(0.35);
   });
 
-  it('have no side any more: every save, whatever side it named, ends up with the picture on the right', () => {
-    expect(SPLIT_PREFS_VERSION).toBe(3);
-    for (const side of ['left', 'right', 'top', 'bottom']) {
-      const p = parseSplitPrefs(JSON.stringify({ v: 3, on: true, side, ratio: 0.4 }));
-      expect(p).not.toHaveProperty('side');
-      expect(p.ratio).toBe(0.4);
-    }
+  it('have one model: no sidebar mode, no tab strip, no side, no second ratio', () => {
+    expect(SPLIT_PREFS_VERSION).toBe(4);
+    const p = parseSplitPrefs(JSON.stringify({ v: 3, on: true, side: 'top', sidebar: 'full', sidebarBefore: 'hidden', tab: 'layers', ratio: 0.4, railRatio: 0.6 }));
+    expect(Object.keys(p).sort()).toEqual(['on', 'railHidden', 'railPage', 'railPageMemory', 'ratio']);
+    expect(Object.keys(DEFAULT_SPLIT).sort()).toEqual(['on', 'railHidden', 'railPage', 'railPageMemory', 'ratio']);
   });
 
-  it('migrate a save from before the picture moved right to the new ratios once, keeping the rest', () => {
-    // v2: panel on the right at half and half, a rail share measured that way.
+  it('migrate the full sidebar (and the hidden one) onto the rail, on the page the panel was showing', () => {
+    // "Sidebar beside the panel" with the panel on Layers: the rail, on Layers, the panel's ratio.
+    expect(parseSplitPrefs(JSON.stringify({ v: 3, on: true, sidebar: 'full', tab: 'layers', ratio: 0.42, railPage: 'signals', railRatio: 0.6 })))
+      .toEqual({ on: true, ratio: 0.42, railPage: 'layers', railPageMemory: {}, railHidden: false });
+    // No sidebar beside a tab-strip panel on Sound: the rail too (not hidden: the rail is the panel's own navigation).
+    expect(parseSplitPrefs(JSON.stringify({ v: 3, on: true, sidebar: 'hidden', tab: 'engine', ratio: 0.5 }))).toMatchObject({ railPage: 'engine-performance', railHidden: false, ratio: 0.5 });
+    // The tab strip's Finish and Sources tabs.
+    expect(parseSplitPrefs(JSON.stringify({ v: 3, sidebar: 'full', tab: 'finish' })).railPage).toBe('finish-picture');
+    expect(parseSplitPrefs(JSON.stringify({ v: 3, sidebar: 'full', tab: 'mappings' })).railPage).toBe('controls');
+    // The full sidebar with the panel closed: the rail alone, as it is now with the panel closed.
+    expect(parseSplitPrefs(JSON.stringify({ v: 3, on: false, sidebar: 'full', tab: 'controls' }))).toMatchObject({ on: false, railHidden: false });
+  });
+
+  it('keep the rail’s page and its own ratio for a save that was already on the rail', () => {
+    expect(parseSplitPrefs(JSON.stringify({ v: 3, on: true, sidebar: 'rail', tab: 'layers', ratio: 0.3, railPage: 'finish-sound', railRatio: 0.55, railPageMemory: { engine: 'finish-sound' } })))
+      .toEqual({ on: true, ratio: 0.55, railPage: 'finish-sound', railPageMemory: { engine: 'finish-sound' }, railHidden: false });
+    // No rail ratio of its own yet: the panel's.
+    expect(parseSplitPrefs(JSON.stringify({ v: 3, sidebar: 'rail', ratio: 0.3, railRatio: null })).ratio).toBe(0.3);
+  });
+
+  it('migrate a save from before the picture moved right to the default ratio, and older ones onto the rail', () => {
+    // v2: panel on the right at half and half.
     const old = parseSplitPrefs(JSON.stringify({ v: 2, on: false, side: 'right', ratio: 0.5, tab: 'finish', sidebar: 'hidden', railPage: 'layers', railRatio: 0.62 }));
-    expect(old).toMatchObject({ on: false, ratio: DEFAULT_RATIO, railRatio: null, tab: 'finish', sidebar: 'hidden', railPage: 'layers' });
+    expect(old).toMatchObject({ on: false, ratio: DEFAULT_RATIO, railPage: 'finish-picture' });
     expect(old).not.toHaveProperty('side');
-    // Older still (no version): the new ratios too, plus the rail.
-    expect(parseSplitPrefs(JSON.stringify({ side: 'top', ratio: 0.7, railRatio: 0.3 }))).toMatchObject({ ratio: DEFAULT_RATIO, railRatio: null, sidebar: 'rail', on: true });
+    // Older still (no version): the default ratio, open, on the rail's saved page.
+    expect(parseSplitPrefs(JSON.stringify({ side: 'top', ratio: 0.7, railRatio: 0.3, on: false, railPage: 'mappings' }))).toMatchObject({ ratio: DEFAULT_RATIO, on: true, railPage: 'controls' });
   });
 
   it('save as the current version without a side', () => {
@@ -104,37 +118,35 @@ describe('split ratio', () => {
   });
 });
 
-describe('sidebar beside the big panel', () => {
-  it('is unchanged without a split', () => {
-    expect(sidebarView('controls', null)).toEqual({ tab: 'controls', tabs: ['controls', 'layers', 'finish', 'engine'], drawer: true });
-    expect(sidebarView('layers', null)).toEqual({ tab: 'layers', tabs: ['controls', 'layers', 'finish', 'engine'], drawer: true });
-    expect(sidebarView('finish', null)).toEqual({ tab: 'finish', tabs: ['controls', 'layers', 'finish', 'engine'], drawer: true });
-    // Desktop has no Mappings tab (it's the drawer): Controls shows.
-    expect(sidebarView('mappings', null).tab).toBe('controls');
-  });
-
-  it('never shows what the panel shows', () => {
-    expect(sidebarView('controls', 'controls')).toEqual({ tab: 'layers', tabs: ['layers', 'finish', 'engine'], drawer: true });
-    expect(sidebarView('layers', 'layers')).toEqual({ tab: 'controls', tabs: ['controls', 'finish', 'engine'], drawer: true });
-    expect(sidebarView('finish', 'finish')).toEqual({ tab: 'controls', tabs: ['controls', 'layers', 'engine'], drawer: true });
-    expect(sidebarView('finish', 'layers')).toEqual({ tab: 'finish', tabs: ['controls', 'finish', 'engine'], drawer: true });
-    expect(sidebarView('engine', 'engine')).toEqual({ tab: 'controls', tabs: ['controls', 'layers', 'finish'], drawer: true });
-    expect(sidebarView('engine', null).tab).toBe('engine');
-    expect(sidebarView('layers', 'mappings')).toEqual({ tab: 'layers', tabs: ['controls', 'layers', 'finish', 'engine'], drawer: false });
-  });
-});
-
 describe('split store', () => {
-  beforeEach(() => store.clear());
+  beforeEach(() => { store.clear(); usePlaySplit.setState({ ...DEFAULT_SPLIT }); });
 
-  it('remembers on, ratio, tab and the hidden sidebar', () => {
+  it('remembers on, ratio, the page and the hidden rail', () => {
     const s = usePlaySplit.getState();
-    s.setOn(true); s.setRatio(0.3333); s.setTab('mappings'); s.setSidebar('hidden');
-    expect(parseSplitPrefs(store.get(SPLIT_KEY) ?? null)).toMatchObject({ on: true, ratio: 0.333, tab: 'mappings', sidebar: 'hidden' });
-    expect(s).not.toHaveProperty('setSide');
+    s.setOn(true); s.setRatio(0.3333); s.setRailPage('signals'); s.toggleRail();
+    expect(parseSplitPrefs(store.get(SPLIT_KEY) ?? null)).toMatchObject({ on: true, ratio: 0.333, railPage: 'signals', railHidden: true, railPageMemory: { signals: 'signals' } });
+    for (const gone of ['setSide', 'setSidebar', 'setTab', 'setRailRatio', 'sidebar', 'tab', 'railRatio']) expect(usePlaySplit.getState()).not.toHaveProperty(gone);
+  });
+
+  it('closes the panel to the rail alone, and the hidden rail (⌘⇧B) comes back with the split button or a category', () => {
+    const s = usePlaySplit.getState();
     s.toggle();
-    expect(usePlaySplit.getState().on).toBe(false);
-    expect(parseSplitPrefs(store.get(SPLIT_KEY) ?? null).on).toBe(false);
+    expect(usePlaySplit.getState()).toMatchObject({ on: false, railHidden: false });
+    s.toggle();
+    expect(usePlaySplit.getState()).toMatchObject({ on: true, railHidden: false });
+    s.toggleRail();
+    expect(usePlaySplit.getState()).toMatchObject({ on: true, railHidden: true });
+    // The split button (⌘⇧L) brings the rail and the panel back.
+    usePlaySplit.getState().toggle();
+    expect(usePlaySplit.getState()).toMatchObject({ on: true, railHidden: false });
+    // ⌘⇧B twice: back as it was.
+    usePlaySplit.getState().toggleRail(); usePlaySplit.getState().toggleRail();
+    expect(usePlaySplit.getState()).toMatchObject({ on: true, railHidden: false });
+    // A category opens the panel, the rail with it.
+    usePlaySplit.getState().setOn(false); usePlaySplit.getState().toggleRail();
+    usePlaySplit.getState().openRailCategory('layers');
+    expect(usePlaySplit.getState()).toMatchObject({ on: true, railHidden: false, railPage: 'layers' });
+    expect(parseSplitPrefs(store.get(SPLIT_KEY) ?? null)).toMatchObject({ on: true, railHidden: false, railPage: 'layers' });
   });
 });
 

@@ -27,8 +27,7 @@ import { toast } from '../ui/toastStore';
 import { mapSourceTo } from './layerOps';
 import { layerPorts, readingRange } from '../../play/layerPorts';
 import { ruleWhenFrom } from '../../play/createSignal';
-import { startRule } from './playSplit';
-import { usePlayUi } from './playUi';
+import { goToMappings, startRule } from './playSplit';
 
 /** `button`: the button's text (Map… by default); `smoothMs`: the new mapping's smoothing (a Set jumps: 0). */
 export function MapToMenu({ source, label, button = 'Map…', smoothMs = 60 }: { source: PlaySource; label: string; button?: string; smoothMs?: number }) {
@@ -56,7 +55,7 @@ export function MapToMenu({ source, label, button = 'Map…', smoothMs = 60 }: {
     let made: string | undefined;
     setPlay(p => { const r = mapSourceTo(p, source, target, smoothMs); made = r.control?.label; return r.play; });
     setOpen(false); setQ('');
-    if (made) toast.success(`${label} → ${made}`, { message: 'Tune its range and curve in Mappings.', action: { label: 'Show', onClick: () => usePlayUi.getState().setTab('mappings') } });
+    if (made) toast.success(`${label} → ${made}`, { message: 'Tune its range and curve in Mappings.', action: { label: 'Show', onClick: () => goToMappings() } });
   };
   const item = { width: '100%', display: 'flex', alignItems: 'center', gap: 8, minHeight: 30, padding: '0 8px', border: 0, borderRadius: radius.md, background: 'none', cursor: 'pointer', color: tk.text.primary, font: `12.5px ${fontFamily.ui}`, textAlign: 'left' as const };
   const hover = {

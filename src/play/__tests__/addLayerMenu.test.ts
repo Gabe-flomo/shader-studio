@@ -11,9 +11,11 @@ const kind = (id: string, name: string, hint = ''): KindEntry => ({
 const folder = (id: string, label: string): FolderEntry => ({ id, label, collapsed: false, createdAt: 0 });
 
 describe('Add layer: built-in groups', () => {
-  it('offers every layer kind exactly once (variants aside), the hidden Data layer apart', () => {
+  it('offers every layer kind exactly once (variants aside), the hidden Data layer and the Background apart', () => {
     const offered = builtinGroups().flatMap(g => g.items.filter(i => !i.variant).map(i => i.kind));
-    expect([...offered].sort()).toEqual([...LAYER_KINDS].filter(k => k !== 'data').sort());
+    // The Background is the Layers list's pinned first row, not a kind to add (Play audit P13).
+    expect([...offered].sort()).toEqual([...LAYER_KINDS].filter(k => k !== 'data' && k !== 'background').sort());
+    expect(builtinGroups('background').flatMap(g => g.items.map(i => i.kind))).not.toContain('background');
     expect(new Set(offered).size).toBe(offered.length);
   });
 

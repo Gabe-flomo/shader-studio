@@ -32,6 +32,7 @@ import { toast } from '../../ui/toastStore';
 import { moveItem } from '../../../lib/reorder';
 import { playId } from '../../../play/playControls';
 import { usePlayUi } from '../playUi';
+import { showPage } from '../playSplit';
 import { useNodeGraphStore } from '../../../store/useNodeGraphStore';
 import type { PlayControl, PlayRecord } from '../../../types/play';
 import {
@@ -109,7 +110,7 @@ export function AudioFxPanel({ play, onChange, touch, wide = false }: {
     const target = audioFxTarget(chainId, e.id, p.key);
     if (r.controls.some(c => c.target === target)) return r;
     const control: PlayControl = { id: playId('ctl'), target, kind: 'float', label: `${source} · ${AUDIO_FX_EFFECTS[e.kind].label} · ${p.label}`, min: p.min, max: p.max, ...(p.step ? { step: p.step } : {}) };
-    toast.success(`${control.label} is a control`, { message: 'Map a source onto it in Mappings (the mouse, audio, an LFO…).', action: { label: 'Show', onClick: () => usePlayUi.getState().setTab('controls') } });
+    toast.success(`${control.label} is a control`, { message: 'Map a source onto it in Mappings (the mouse, audio, an LFO…).', action: { label: 'Show', onClick: () => showPage('controls') } });
     return { ...r, controls: [...r.controls, control] };
   });
 
@@ -135,14 +136,14 @@ export function AudioFxPanel({ play, onChange, touch, wide = false }: {
           return { ...next, layers: next.layers.map(l => (l.id === pads.id ? { ...l, volume: 0 } as typeof l : l)) };
         });
       }
-      usePlayUi.getState().setTab('engine');
+      showPage('engine-performance');
       return;
     }
     const pick = await askChoice('Audio Unit effects play in the Audio engine', [
       { id: 'cancel', label: 'Not now', variant: 'ghost' },
       { id: 'engine', label: 'Open the Audio engine', variant: 'primary' },
     ], { message: 'Audio Units run in the desktop app’s Audio engine, on its racks: an instrument (a synth or the sample player) and its effects. This sound plays in the page and can’t pass through them yet. Put the sound in the Library’s Sounds and play it from a rack’s sample player, or use the built-in effects here.' });
-    if (pick === 'engine') usePlayUi.getState().setTab('engine');
+    if (pick === 'engine') showPage('engine-performance');
   };
 
   const [presetMenu, setPresetMenu] = useState<{ x: number; y: number; chainId: string } | null>(null);

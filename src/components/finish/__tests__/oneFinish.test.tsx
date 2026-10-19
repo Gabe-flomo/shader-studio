@@ -82,7 +82,7 @@ describe('one Finish, everywhere', () => {
   });
 
   it('Play, the builder and the Studio all use the same component on play.finish', () => {
-    expect(src('src/components/play/PlayPage.tsx')).toMatch(/<FinishPanel play=\{play\}/);
+    expect(src('src/components/play/pages/FinishPage.tsx')).toMatch(/<FinishPanel play=\{play\}/);
     expect(src('src/components/play/finish/FinishPanel.tsx')).toMatch(/export function PictureFinish/);
     expect(src('src/components/finish/FinishEditor.tsx')).toMatch(/m\.PictureFinish/);
     const modal = src('src/components/sceneBuilder2d/SceneBuilder2DModal.tsx');

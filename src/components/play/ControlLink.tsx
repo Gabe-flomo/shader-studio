@@ -15,7 +15,7 @@ import { Icon } from '../ui/Icon';
 import { Kbd } from '../ui/Kbd';
 import { Popover } from '../ui/Popover';
 import { toast } from '../ui/toastStore';
-import { usePlayUi } from './playUi';
+import { goToMappings } from './playSplit';
 
 interface ControlLinkUi {
   /** The control picked as the link's source ('' none). */
@@ -143,7 +143,7 @@ function LinkDirectionPopover({ play, sourceId, targetId, anchorRef, onLink, onC
     <Popover anchorRef={anchorRef} onClose={onClose} align="start" width={280} padding={6}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         {existing ? (
-          row(<>Open mapping</>, () => usePlayUi.getState().setTab('mappings'), 'open')
+          row(<>Open mapping</>, () => goToMappings(), 'open')
         ) : (
           <>
             {row(<>Link <b>{a.label}</b> → <b>{b.label}</b></>, () => onLink(sourceId, targetId), 'a-b')}
@@ -166,6 +166,6 @@ export function applyControlLink(play: PlayRecord, update: (fn: (p: PlayRecord) 
   if (!ok) return;
   toast.success(`Linked ${source.label} → ${target.label}`, {
     message: 'Tune its range and curve in Mappings.',
-    action: { label: 'Open in Mappings', onClick: () => usePlayUi.getState().setTab('mappings') },
+    action: { label: 'Open in Mappings', onClick: () => goToMappings() },
   });
 }

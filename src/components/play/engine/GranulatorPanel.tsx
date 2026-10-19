@@ -33,7 +33,7 @@ import { LinkedPickButton, LinkedRelinkButton, linkedMissingText } from '../../l
 import { isLinkedRef } from '../../../files/linkedRefs';
 import { playId } from '../../../play/playControls';
 import { addGrainNulls, addGrainReadouts } from '../../../play/grainControls';
-import { usePlayUi } from '../playUi';
+import { showPage } from '../playSplit';
 import { withEngine } from './engineOps';
 import { clientSize } from '../../../lib/elementSize';
 import { useOnScreen } from '../../../hooks/useOnScreen';
@@ -76,7 +76,7 @@ export function GranulatorPanel({ rack, slot, play, onChange, touch }: { rack: A
     const label = `${rack.name} · Granulator · ${p.name}`;
     onChange(pr => {
       if (pr.controls.some(c => c.target === target)) return pr;
-      toast.success(`${label} is a control`, { message: 'Map a source onto it in Mappings (the mouse, audio readers, MIDI, an LFO…).', action: { label: 'Show', onClick: () => usePlayUi.getState().setTab('controls') } });
+      toast.success(`${label} is a control`, { message: 'Map a source onto it in Mappings (the mouse, audio readers, MIDI, an LFO…).', action: { label: 'Show', onClick: () => showPage('controls') } });
       return { ...pr, controls: [...pr.controls, { id: playId('ctl'), target, kind: 'float', label, min: p.min, max: p.max, ...(p.step ? { step: p.step } : {}) }] };
     });
   };
@@ -460,7 +460,7 @@ function hexRgb(c: string): [number, number, number] {
 
 function Readouts({ rack, onChange }: { rack: AeRack; onChange: Change }) {
   const tk = useTokens();
-  const show = () => usePlayUi.getState().setTab('controls');
+  const show = () => showPage('controls');
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginTop: 2 }}>
       <span style={labelStyle(tk)}>Grains for the picture</span>

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /**
  * The Play page's picture is always on the right, the panel (with the rail) on its left, in every
- * sidebar mode (Play audit, user decision 2026-10-18); the preview's header and footer ride with
+ * view (Play audit, user decision 2026-10-18); the preview's header and footer ride with
  * the picture; and Free never crops on Play (it letterboxes to square when the area is narrower).
  */
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -22,7 +22,7 @@ vi.hoisted(() => {
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { PlaySplitArea } from '../PlaySplitArea';
-import { DEFAULT_SPLIT, usePlaySplit, type SidebarMode } from '../playSplit';
+import { DEFAULT_SPLIT, usePlaySplit } from '../playSplit';
 import { PLAY_FREE_MIN_RATIO, fitAspect, playFreeFit } from '../../../utils/graphImportPlan';
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -32,8 +32,8 @@ let host: HTMLDivElement | null = null;
 beforeAll(() => { usePlaySplit.setState({ ...DEFAULT_SPLIT }); });
 afterEach(() => { act(() => root?.unmount()); host?.remove(); root = null; host = null; });
 
-function mount(sidebar: SidebarMode): HTMLDivElement {
-  usePlaySplit.setState({ ...DEFAULT_SPLIT, on: true, sidebar });
+function mount(view: { on?: boolean; railHidden?: boolean } = {}): HTMLDivElement {
+  usePlaySplit.setState({ ...DEFAULT_SPLIT, on: true, ...view });
   host = document.createElement('div');
   document.body.appendChild(host);
   root = createRoot(host);
@@ -44,27 +44,42 @@ function mount(sidebar: SidebarMode): HTMLDivElement {
 const orderOf = (el: Element | null | undefined) => Number((el as HTMLElement | null)?.style.order ?? NaN);
 
 describe('the picture is on the right', () => {
-  for (const sidebar of ['rail', 'full', 'hidden'] as SidebarMode[]) {
-    it(`with the sidebar ${sidebar}: the panel first (left), then the divider, then the picture`, () => {
-      const h = mount(sidebar);
-      const area = h.querySelector('[data-play-split-area]') as HTMLElement;
-      expect(area.style.flexDirection).toBe('row');
-      const picture = h.querySelector('[data-split-picture]');
-      const panel = h.querySelector('[data-split-panel]')?.parentElement;
-      const divider = h.querySelector('[role="separator"]');
-      expect(orderOf(panel)).toBeLessThan(orderOf(divider));
-      expect(orderOf(divider)).toBeLessThan(orderOf(picture));
-      // The preview's header, picture and footer all sit in the picture's column.
-      expect([...picture!.children].map(c => c.getAttribute('data-testid'))).toEqual(['header', 'picture', 'footer']);
-      // The panel takes the default share (about a third).
-      expect((panel as HTMLElement).style.flex).toContain('35.00%');
-      // The layout menu offers no way to move the panel to another side.
-      expect(h.querySelector('[data-play-layout]')?.getAttribute('aria-label')).not.toMatch(/where the panel sits/);
-    });
-  }
+  it('with the panel open: the panel (rail inside) first (left), then the divider, then the picture', () => {
+    const h = mount();
+    const area = h.querySelector('[data-play-split-area]') as HTMLElement;
+    expect(area.style.flexDirection).toBe('row');
+    const picture = h.querySelector('[data-split-picture]');
+    const panel = h.querySelector('[data-split-panel]')?.parentElement;
+    const divider = h.querySelector('[role="separator"]');
+    expect(orderOf(panel)).toBeLessThan(orderOf(divider));
+    expect(orderOf(divider)).toBeLessThan(orderOf(picture));
+    // The rail is inside the panel, down its left edge: the one navigation model (P1).
+    expect(h.querySelector('[data-split-panel] [data-play-rail]')).not.toBeNull();
+    // The preview's header, picture and footer all sit in the picture's column.
+    expect([...picture!.children].map(c => c.getAttribute('data-testid'))).toEqual(['header', 'picture', 'footer']);
+    // The panel takes the default share (about a third).
+    expect((panel as HTMLElement).style.flex).toContain('35.00%');
+    // No layout menu: there's no sidebar mode to pick, nor a side for the panel.
+    expect(h.querySelector('[data-play-layout]')).toBeNull();
+  });
+
+  it('with the panel closed: the rail alone, still on the left of the picture', () => {
+    const h = mount({ on: false });
+    expect(h.querySelector('[data-split-panel]')).toBeNull();
+    const rail = h.querySelector('[data-rail-only]');
+    expect(rail?.querySelector('[data-play-rail]')).not.toBeNull();
+    expect(orderOf(rail)).toBeLessThan(orderOf(h.querySelector('[data-split-picture]')));
+  });
+
+  it('with the rail hidden (⌘⇧B): the picture alone', () => {
+    const h = mount({ railHidden: true });
+    expect(h.querySelector('[data-split-panel]')).toBeNull();
+    expect(h.querySelector('[data-play-rail]')).toBeNull();
+    expect(h.querySelector('[data-split-picture]')).not.toBeNull();
+  });
 
   it('the canvas stays the area’s first child (never remounted by the split), drawn last by order', () => {
-    const h = mount('rail');
+    const h = mount();
     const area = h.querySelector('[data-play-split-area]')!;
     expect(area.firstElementChild?.hasAttribute('data-split-picture')).toBe(true);
   });
