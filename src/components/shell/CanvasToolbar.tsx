@@ -90,6 +90,7 @@ export function CanvasToolbar({ showOutline = false, onToggleOutline, readOnly =
           label={showOutline ? 'Hide the outline' : 'Outline: list every node, jump to one, or step through the graph'} onClick={onToggleOutline} />
       )}
       {!readOnly && <RandomiseButton />}
+      {!readOnly && <ClearGraphButton />}
     </div>
   );
 }
@@ -97,6 +98,29 @@ export function CanvasToolbar({ showOutline = false, onToggleOutline, readOnly =
 function Sep() {
   const tk = useTokens();
   return <span style={{ width: 1, height: 18, margin: '0 4px', background: tk.border.subtle, flex: 'none' }} />;
+}
+
+/**
+ * Clear the graph: a click leaves just UV and Output (one undo step, so ⌘Z brings it all back).
+ * A right-click also offers Reset to the starter graph (the canvas right-click menu has both too).
+ */
+function ClearGraphButton() {
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const clear = () => useNodeGraphStore.getState().clearToMinimal();
+  return (
+    <>
+      <IconButton icon="trash" size="sm" data-clear-graph="" aria-haspopup="menu" active={!!menu}
+        label="Clear the graph to UV and Output (undo brings it back). Right-click for more"
+        shortcut={loadShortcutMap().clearGraph} onClick={clear}
+        onContextMenu={e => { e.preventDefault(); e.stopPropagation(); setMenu({ x: e.clientX, y: e.clientY }); }} />
+      {menu && (
+        <Menu x={menu.x} y={menu.y} minWidth={240} title="Clear" onClose={() => setMenu(null)} items={[
+          { label: 'Clear to UV and Output', danger: true, onSelect: clear },
+          { label: 'Reset to the starter graph', danger: true, onSelect: () => { void useNodeGraphStore.getState().loadExampleGraph('blank'); } },
+        ]} />
+      )}
+    </>
+  );
 }
 
 /** Desktop Studio: the graph takes the whole window and the picture goes behind it (shell/graphLayout.ts), or the split comes back. */

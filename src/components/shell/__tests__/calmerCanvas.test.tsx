@@ -34,6 +34,10 @@ import { CanvasToolbar } from '../CanvasToolbar';
 import { useGraphMaximize } from '../graphLayout';
 import { useViewport } from '../../../lib/viewport';
 import type { MenuItem } from '../../ui/Menu';
+import { useNodeGraphStore } from '../../../store/useNodeGraphStore';
+import { n } from '../../../store/graphBuilder';
+import { DEFAULT_ACTIONS } from '../../../hooks/useShortcuts';
+
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -73,6 +77,7 @@ describe('canvas toolbar', () => {
       expect.stringMatching(/^Maximize the graph/),
       expect.stringMatching(/^Outline/),
       expect.stringMatching(/^Randomise settings/),
+      expect.stringMatching(/^Clear the graph/),
     ]);
     // No Do… bar, suggestions, minimap, flow strip or Graph menu.
     for (const gone of ['Do', 'Next', 'Suggest', 'minimap', 'Show minimap', 'Flow strip', 'Graph']) {
@@ -80,6 +85,11 @@ describe('canvas toolbar', () => {
     }
     act(() => buttons[3].click()); act(() => buttons[4].click()); act(() => buttons[2].click());
     expect(fit).toHaveBeenCalledOnce(); expect(layout).toHaveBeenCalledOnce(); expect(zoomTo).toHaveBeenCalledWith(1.2);
+    // Clear: back to UV and Output in one undo step; ⌘⇧⌫ does the same (App.tsx)
+    useNodeGraphStore.getState().replaceGraph([n('uv', 'u', 0, 0), n('circleSDF', 'c', 300, 0), n('output', 'o', 600, 0)]);
+    act(() => buttons[buttons.length - 1].click());
+    expect(useNodeGraphStore.getState().nodes.map(x => x.type).sort()).toEqual(['output', 'uv']);
+    expect(DEFAULT_ACTIONS.find(a => a.id === 'clearGraph')?.defaultCombo).toBe('cmd+shift+backspace');
   });
 
   it('a locked canvas keeps the view tools and the Outline; Maximize is desktop only', () => {

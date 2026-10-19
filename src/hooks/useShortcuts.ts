@@ -69,6 +69,7 @@ export const DEFAULT_ACTIONS: ShortcutAction[] = [
   { id: 'addMix',            label: 'Add Mix node',          group: 'Add Nodes',  defaultCombo: 'm',           description: 'Instantly add a Mix node' },
   { id: 'addColor',          label: 'Add Color node',        group: 'Add Nodes',  defaultCombo: 'c',           description: 'Instantly add a Color constant node' },
   // Node graph — group / multi-select
+  { id: 'clearGraph',        label: 'Clear the graph',       group: 'Graph',      defaultCombo: 'cmd+shift+backspace', description: 'Studio: clear the graph to UV and Output, as the toolbar\'s Clear button (one undo step)' },
   { id: 'groupSelected',     label: 'Group selected nodes',  group: 'Graph',      defaultCombo: 'cmd+g',       description: 'Collapse selected nodes into a group' },
   { id: 'duplicateSelected', label: 'Duplicate selection',   group: 'Graph',      defaultCombo: 'cmd+d',       description: 'Copy the selected nodes, with the wires between them' },
   { id: 'deleteSelected',    label: 'Delete selection',      group: 'Graph',      defaultCombo: 'backspace',   description: 'Remove the selected nodes' },
