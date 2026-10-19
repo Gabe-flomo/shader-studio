@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.316',
+    date: '2026-10-19',
+    title: "Toolbars that fit",
+    highlights: [
+      { area: 'Studio', text: "Toolbars fold what doesn't fit into a ⋯ menu instead of running off screen; the canvas shapes are one dropdown and the Code toolbar is clearer." },
+    ],
+  },
+  {
     id: '2026.10.315',
     date: '2026-10-19',
     title: "Examples for every node",
