@@ -46,30 +46,35 @@ not just the category — opening the split first if it's closed (`goToMappings`
 in `playSplit.ts`). Phones get the same: Controls' sheet always has a Mappings
 tab.
 
-**⌘1–5 jump to a rail category** (`railControls`/`railLayers`/`railFinish`/
-`railEngine`/`railSignals` in `useShortcuts.ts`, wired in `App.tsx`; `goToRailCategory` in
-`playSplit.ts`), same as clicking its icon: the category opens on the page it
-was last on, else its first (so ⌘1 opens Controls & Mappings on whichever of
-the two it was left on). A plain browser tab claims ⌘1–4 for switching its own
-tabs before the page ever sees the keydown, so ⌃1–5 do the same five things
-there, fixed (not in the remappable shortcuts panel). Each rail icon's tooltip
-shows its ⌘ combo.
+**⌘1–5 jump to a rail category** in the rail's own order, top to bottom
+(`railControls`/`railLayers`/`railSignals`/`railFinish`/`railEngine` in
+`useShortcuts.ts`, wired in `App.tsx`; `goToRailCategory` in `playSplit.ts`),
+same as clicking its icon: the category opens on the page it was last on, else
+its first (so ⌘1 opens Controls on whichever of its tabs it was left on). A
+plain browser tab claims ⌘1–5 for switching its own tabs before the page ever
+sees the keydown, so ⌃1–5 do the same five things there, fixed (not in the
+remappable shortcuts panel). Each rail icon's tooltip shows its ⌘ combo, and
+each icon has its name under it (like the phone's bottom row).
 
 The categories and pages are data (`railPages.ts`):
 
 | Category | Pages |
 | --- | --- |
-| Mappings (⌘1 / ⌃1) | Controls · Mappings · MIDI file · Pad grid |
+| Controls (⌘1 / ⌃1) | Controls · MIDI file · Pad grid |
 | Layers (⌘2 / ⌃2) | Layers · Background |
-| Signals (⌘5 / ⌃5) | Signals |
-| Finish (⌘3 / ⌃3) | Picture · Sound |
-| Engine (⌘4 / ⌃4) | Arrangement |
+| Rules (⌘3 / ⌃3) | Rules |
+| Finish (⌘4 / ⌃4) | Picture |
+| Sound (⌘5 / ⌃5) | Arrangement · Effects |
 
-The first three are Play's three nouns (the simplification plan, 2026-09-30):
-Layers act on the picture, Mappings bring values in, Signals report what is
-happening and set things off. Signals sits third on the rail but keeps ⌘5,
-so the older shortcuts didn't move. The old Actions page folded into Signals;
-a saved `actions` page opens Signals.
+The order and the shortcuts match (the Play audit, 2026-10-18, P18: the rail
+used to read Controls, Rules, Layers… while ⌘5 was Rules). The old Actions
+page folded into Rules; a saved `actions` page opens Rules.
+
+The panel's header is one row at every width: what doesn't fit scrolls or
+ellipsizes, and its ⋯ (the Play setup: Open Play setup, Import .play, Export
+.play, Put it on a website, Clear Play setup; `playSetupMenu.tsx`), Layout and ×
+stay on it. Without a panel (phones, the split closed) the Controls ⋯ carries
+the same setup actions.
 
 Controls' rail badge is the controls count (not mappings', so the two counts
 never get added into one confusing number); the mappings count sits in the

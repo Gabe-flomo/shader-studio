@@ -168,7 +168,7 @@ export type Device =
   | { kind: 'instrument'; key: 'inst'; slot: AeSlot | null }
   /** A send: a page sound instead of an instrument (desktop). */
   | { kind: 'send'; key: 'send' }
-  /** A Granulator's own Sound chain (Finish → Sound, `rack:<id>`). */
+  /** A Granulator's own Sound chain (Sound → Effects, `rack:<id>`). */
   | { kind: 'soundfx'; key: 'soundfx' }
   /** An effect; `heard`: it shapes the sound here (Audio Units play in the desktop app; after a Granulator its sound is sent in). */
   | { kind: 'effect'; key: string; slot: AeSlot; index: number; heard: boolean }

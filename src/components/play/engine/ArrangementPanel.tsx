@@ -65,12 +65,14 @@ import { PianoRoll } from './PianoRoll';
 import { PianoRollWindowHost } from './PianoRollWindow';
 import { usePianoRollWindow } from './pianoRollWindowStore';
 import { scaleBadge } from '../../../play/pianoRollWindow';
+import { syncEchoTempo } from '../../../play/echoTempo';
 
 type Change = (fn: (p: PlayRecord) => PlayRecord) => void;
 
 /** Settings changes (loop, metronome, mute…) aren't undo steps: they're how the tape plays, like a mixer's. */
 function setArr(fn: (a: PlayArrangement) => PlayArrangement): void {
-  useNodeGraphStore.getState().setPlay(p => ({ ...p, arrangement: fn(p.arrangement ?? emptyArrangement(recordBpm(p.mappings))) }), false);
+  // A synced Echo follows the arrangement's tempo (play/echoTempo.ts).
+  useNodeGraphStore.getState().setPlay(p => syncEchoTempo({ ...p, arrangement: fn(p.arrangement ?? emptyArrangement(recordBpm(p.mappings))) }), false);
 }
 
 /** An edit to the tape that is an undo step. */
@@ -643,12 +645,12 @@ function presetItems(pick: (p: ReturnType<typeof loadRackPresets>[number]) => vo
   return list.map(p => ({ label: p.name, icon: 'presets' as IconName, hint: rackPresetSummary(p), onSelect: () => pick(p) }));
 }
 
-/** Add track → From a preset…: a new track from each, and the ones with Sound effects as a Finish → Sound chain. */
+/** Add track → From a preset…: a new track from each, and the ones with Sound effects as a Sound → Effects chain. */
 function fromPresetItems(): MenuItem[] {
   const items = presetItems(p => applyRackPresetToPlay(p));
   const withSound = loadRackPresets().filter(p => p.soundFx?.effects.length);
   if (!withSound.length) return items;
-  return [...items, 'separator', { heading: 'Only its Sound effects, on Finish → Sound' }, ...withSound.map(p => ({ label: p.name, icon: 'sliders' as IconName, hint: p.soundFx!.effects.map(e => e.kind).join(' → '), onSelect: () => presetSoundToMaster(p) }))];
+  return [...items, 'separator', { heading: 'Only its Sound effects, on Sound → Effects' }, ...withSound.map(p => ({ label: p.name, icon: 'sliders' as IconName, hint: p.soundFx!.effects.map(e => e.kind).join(' → '), onSelect: () => presetSoundToMaster(p) }))];
 }
 
 function DropLine({ top = false }: { top?: boolean }) {

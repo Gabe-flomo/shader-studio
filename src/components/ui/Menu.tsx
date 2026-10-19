@@ -16,6 +16,16 @@ export type MenuItem =
 const MARGIN = 8;
 
 /**
+ * Does a menu row's hint go under its label? A shortcut or a value ("⌘K", "Rotation 0°") stays
+ * at the right in mono; anything of four words or more (or over 28 characters) is prose, so it goes
+ * under the label in the UI font (a mono "Fast and jittery: a tremble" squeezed beside the label read badly).
+ */
+export function isLongHint(hint: string | undefined): boolean {
+  if (!hint) return false;
+  return hint.length > 28 || hint.trim().split(/\s+/).length >= 4;
+}
+
+/**
  * Context/popup menu opened at a viewport point. Closes on outside click, Esc, or selecting an
  * item; ↑/↓ + Enter work from the keyboard. Kept inside the viewport.
  *
@@ -46,11 +56,14 @@ export function Menu({ x, y, items, onClose, minWidth = 190, maxWidth = 360, tit
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el || asSheet) return;
+    // Measured at the left edge, where the whole viewport is free: measured where it was asked for, near the
+    // right edge, its hints wrap to fit, and once moved left it grows past the edge.
+    el.style.left = `${MARGIN}px`;
     const r = el.getBoundingClientRect();
-    setPos({
-      left: Math.max(MARGIN, Math.min(x, window.innerWidth - r.width - MARGIN)),
-      top: Math.max(MARGIN, Math.min(y, window.innerHeight - r.height - MARGIN)),
-    });
+    const left = Math.max(MARGIN, Math.min(x, window.innerWidth - r.width - MARGIN));
+    // Written straight back too: when the state doesn't change, React wouldn't put it back.
+    el.style.left = `${left}px`;
+    setPos({ left, top: Math.max(MARGIN, Math.min(y, window.innerHeight - r.height - MARGIN)) });
   }, [x, y, asSheet]);
 
   useEffect(() => {
@@ -82,8 +95,8 @@ export function Menu({ x, y, items, onClose, minWidth = 190, maxWidth = 360, tit
   const rows = items.map((it, i) => {
     if (it === 'separator') return <div key={i} style={{ height: 1, background: tk.border.subtle, margin: asSheet ? '6px 4px' : '4px 2px' }} />;
     if ('heading' in it) return <div key={i} role="presentation" style={{ padding: asSheet ? '12px 12px 4px' : '8px 10px 3px', color: tk.text.faint, font: `700 ${asSheet ? 11 : 10}px ${fontFamily.ui}`, letterSpacing: '0.07em', textTransform: 'uppercase' }}>{it.heading}</div>;
-    // A short hint (a shortcut, "Rotation 0°") sits at the right; a sentence goes under the label.
-    const long = !!it.hint && it.hint.length > 28;
+    // A short hint (a shortcut, "Rotation 0°") sits at the right in mono; a phrase or a sentence goes under the label.
+    const long = isLongHint(it.hint);
     return (
       <button
         key={i}
@@ -110,7 +123,7 @@ export function Menu({ x, y, items, onClose, minWidth = 190, maxWidth = 360, tit
         ) : (
           <>
             <span style={{ flex: 1 }}>{it.label}</span>
-            {it.hint && <span style={{ font: `500 ${asSheet ? 12 : 11}px ${fontFamily.mono}`, color: tk.text.faint }}>{it.hint}</span>}
+            {it.hint && <span style={{ font: `500 ${asSheet ? 12 : 11}px ${fontFamily.mono}`, color: tk.text.faint, whiteSpace: 'nowrap' }}>{it.hint}</span>}
           </>
         )}
       </button>

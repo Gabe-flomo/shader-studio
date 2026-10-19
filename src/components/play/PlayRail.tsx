@@ -106,25 +106,26 @@ function RailButton({ def, refFn, active, open, badge, hint, locked, onPress, ph
       style={{
         position: 'relative', border: 0, cursor: 'pointer', padding: 0, flexShrink: 0,
         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3,
-        ...(phone ? { flex: 1, minWidth: 0, height: 52, borderRadius: radius.md } : { width: 44, height: 44, borderRadius: radius.control }),
+        ...(phone ? { flex: 1, minWidth: 0, height: 52, borderRadius: radius.md } : { width: 54, height: 50, gap: 2, borderRadius: radius.control }),
         background: lit ? tk.bg.selected : hover ? tk.bg.hover : 'transparent',
         color: lit ? tk.accent.base : hover ? tk.text.secondary : tk.text.muted,
         opacity: locked && !lit ? 0.7 : 1, transition: 'background 0.12s, color 0.12s',
       }}
     >
       {/* The open category: a bar on the rail's edge (phones: along the top). */}
-      {active && <span aria-hidden style={{ position: 'absolute', background: tk.accent.base, borderRadius: 2, ...(phone ? { top: 0, left: '30%', right: '30%', height: 2 } : { left: -8, top: 10, bottom: 10, width: 3 }) }} />}
-      <Icon name={def.icon} size={phone ? 18 : 19} />
-      {phone && <span style={{ font: `600 10px ${fontFamily.ui}`, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>{def.label}</span>}
+      {active && <span aria-hidden style={{ position: 'absolute', background: tk.accent.base, borderRadius: 2, ...(phone ? { top: 0, left: '30%', right: '30%', height: 2 } : { left: -3, top: 12, bottom: 12, width: 3 }) }} />}
+      <Icon name={def.icon} size={18} />
+      {/* The name under the icon, on the rail as on the phone's bottom row (Play audit P18). */}
+      <span data-rail-label="" style={{ font: `600 ${phone ? 10 : 9.5}px ${fontFamily.ui}`, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%' }}>{def.label}</span>
       {badge !== undefined && (
         <span aria-hidden style={{
-          position: 'absolute', top: phone ? 4 : 3, ...(phone ? { left: 'calc(50% + 6px)' } : { right: 2 }), minWidth: 16, height: 15, padding: '0 4px', boxSizing: 'border-box',
+          position: 'absolute', top: phone ? 4 : 2, ...(phone ? { left: 'calc(50% + 6px)' } : { left: 'calc(50% + 5px)' }), minWidth: 16, height: 15, padding: '0 4px', boxSizing: 'border-box',
           borderRadius: 8, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
           background: lit ? tk.accent.base : tk.bg.field, color: lit ? '#fff' : tk.text.secondary,
           boxShadow: `0 0 0 2px ${tk.bg.panel}`, font: `600 9.5px ${fontFamily.mono}`,
         }}>{badge > 99 ? '99+' : badge}</span>
       )}
-      {locked && <span aria-hidden style={{ position: 'absolute', bottom: phone ? 20 : 4, right: phone ? 'calc(50% - 16px)' : 4, color: tk.text.faint, display: 'inline-flex' }}><Icon name="lock" size={9} /></span>}
+      {locked && <span aria-hidden style={{ position: 'absolute', bottom: phone ? 20 : 17, right: 'calc(50% - 16px)', color: tk.text.faint, display: 'inline-flex' }}><Icon name="lock" size={9} /></span>}
     </button>
   );
   if (phone) return button;

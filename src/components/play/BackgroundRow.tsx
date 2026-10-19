@@ -370,11 +370,11 @@ export function BackgroundRow({ play, onChange }: { play: PlayRecord; onChange: 
           {source === 'image' && (
             <>
               {d.image && <img src={d.image.src} alt="" title={d.image.name} style={{ width: 40, height: 24, objectFit: 'cover', borderRadius: 5, boxShadow: `inset 0 0 0 1px ${alpha('#000', 0.12)}`, flexShrink: 0 }} />}
-              <Button size="sm" icon="import" disabled={busy} onClick={() => replaceLegacy('image')}>{busy ? 'Loading…' : d.image ? 'Replace' : 'Choose image'}</Button>
+              <Button size="sm" icon="folder" disabled={busy} onClick={() => replaceLegacy('image')}>{busy ? 'Loading…' : d.image ? 'Replace' : 'Choose image'}</Button>
             </>
           )}
           {source === 'video' && (
-            <Button size="sm" icon="import" disabled={busy} onClick={() => replaceLegacy('video')}>{busy ? 'Loading…' : !video ? 'Choose video' : videoMissing ? 'Load it again' : 'Replace'}</Button>
+            <Button size="sm" icon="folder" disabled={busy} onClick={() => replaceLegacy('video')}>{busy ? 'Loading…' : !video ? 'Choose video' : videoMissing ? 'Load it again' : 'Replace'}</Button>
           )}
           {(source === 'image' ? !!d.image : source === 'video' ? !!video && !videoMissing : false) && (
             <Select ariaLabel="Fit" height={26} value={d.fit ?? 'cover'} options={FITS} onChange={v => setDisplay({ fit: v as BackgroundFit })} style={{ fontSize: 12 }} />
@@ -414,7 +414,7 @@ export function BackgroundRow({ play, onChange }: { play: PlayRecord; onChange: 
       )}
       {videoMenu && (
         <Menu x={videoMenu.x} y={videoMenu.y} minWidth={240} onClose={() => setVideoMenu(null)} items={[
-          { label: 'Upload a file…', icon: 'import', hint: 'MP4, WebM or MOV', onSelect: () => { legacyPick.current = videoMenu.legacy; setVideoMenu(null); videoInput.current?.click(); } },
+          { label: 'Upload a file…', icon: 'folder', hint: 'MP4, WebM or MOV', onSelect: () => { legacyPick.current = videoMenu.legacy; setVideoMenu(null); videoInput.current?.click(); } },
           { label: 'From a linked folder…', icon: 'link', hint: 'Plays from disk where it is: not copied', onSelect: () => { const legacy = videoMenu.legacy; setVideoMenu(null); void fromLinked('video', legacy); } },
         ]} />
       )}

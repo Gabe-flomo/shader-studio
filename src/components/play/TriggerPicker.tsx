@@ -126,7 +126,7 @@ export function TriggerPicker({ trigger: t, layers, numStyle, onChange }: {
         <Segmented size="sm" ariaLabel="Which hand" value={t.side} options={HAND_SIDES} onChange={side => onChange({ ...t, side })} />
         <Select ariaLabel="Gesture" value={t.gesture} options={HAND_GESTURE_OPTIONS} onChange={v => onChange({ ...t, gesture: v as HandGesture })} height={26} />
         {hint('or Learn and make it')}
-        <HandsChip settings={false} />
+        <HandsChip settings={false} enable={false} />
       </>}
       {t.on === 'face' && <>
         <Select ariaLabel="Face gesture" value={t.gesture} options={FACE_GESTURE_OPTIONS} onChange={v => onChange({ ...t, gesture: v as FaceGesture })} height={26} />
@@ -293,7 +293,7 @@ function ProximityFields({ trigger: t, layers, onChange }: {
       <div style={line}>
         <span style={cap}>To</span>
         <AnchorPicker value={t.b} layers={layers} exclude={t.a} ariaLabel="To (B)" onChange={b => onChange({ ...t, b })} />
-        {usesHand && <HandsChip settings={false} />}
+        {usesHand && <HandsChip settings={false} enable={false} />}
       </div>
       <div style={line}>
         <span style={cap}>While</span>

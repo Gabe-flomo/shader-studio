@@ -135,7 +135,7 @@ export function DeviceChain({ rack, row, play, onChange, touch, narrow, onPick }
       ...(!rack.instrument && !rack.source ? [{ label: 'Instrument…', icon: 'piano' as IconName, hint: 'An Audio Unit synth, the sample player or the Granulator', onSelect: () => onPick('instrument') }] : []),
       { label: 'Audio Unit effect…', icon: 'wave', disabled: rack.effects.length >= AE_EFFECTS_MAX, hint: desktop ? 'After the instrument: delay, reverb, filter…' : 'Kept here; heard in the desktop app on a Mac', onSelect: () => onPick('effect') },
       { label: 'Listener (audio readers)', icon: 'target', disabled: listening, hint: listening ? 'Already on this track' : readersElsewhere ? `Moves the readers here from ${readersElsewhere}` : 'Readers here drive controls from this track’s sound', onSelect: addListener },
-      ...(rack.instrument?.kind === 'granulator' ? [{ label: 'Sound effects (Finish → Sound)…', icon: 'sliders' as IconName, onSelect: () => { usePlayUi.getState().setFinishView('sound'); usePlayUi.getState().setTab('finish'); } }] : []),
+      ...(rack.instrument?.kind === 'granulator' ? [{ label: 'Sound effects (Sound → Effects)…', icon: 'sliders' as IconName, onSelect: () => { usePlayUi.getState().setFinishView('sound'); usePlayUi.getState().setTab('finish'); } }] : []),
     ],
   });
 
@@ -187,7 +187,7 @@ export function DeviceChain({ rack, row, play, onChange, touch, narrow, onPick }
         return (
           <DevicePanel key="soundfx" narrow={narrow} width={240} title="Sound effects" icon="sliders" folded={isFolded('soundfx')} onToggleFold={() => foldToggle('soundfx')}>
             <GrainChainRow rack={rack} play={play} />
-            <Note>A Granulator plays in the page’s own audio: this chain (Finish → Sound) shapes it.</Note>
+            <Note>A Granulator plays in the page’s own audio: this chain (Sound → Effects) shapes it.</Note>
           </DevicePanel>
         );
       case 'effect': {
@@ -319,14 +319,14 @@ export function MasterChain({ play, onChange, narrow }: { play: PlayRecord; onCh
       <DevicePanel key={e.id} narrow={narrow} width={220} title={def?.label ?? e.kind} icon="sliders" dim={!e.enabled || chain?.on === false}
         actions={<IconButton icon="bypass" size="sm" active={e.enabled} label={e.enabled ? 'On: turn it off' : 'Off: turn it on'} onClick={() => toggleFx(e.id)} />}>
         <Note>{def?.summary}</Note>
-        <div><Button size="sm" variant="ghost" icon="sliders" onClick={() => openSound(e.id)}>Edit in Finish → Sound</Button></div>
+        <div><Button size="sm" variant="ghost" icon="sliders" onClick={() => openSound(e.id)}>Edit in Sound → Effects</Button></div>
       </DevicePanel>,
     );
   }
   const addMenu = (x: number, y: number) => setMenu({
     x, y, items: [
       { label: 'Listener (audio readers)', icon: 'target', disabled: listening, hint: 'Readers on every track together', onSelect: () => onChange(p => setReaderInput(p, input)) },
-      { label: 'A Sound effect (Finish → Sound)…', icon: 'sliders', hint: desktop ? 'Shapes the page’s sound and the browser racks (Audio Units go straight to the output)' : 'Shapes the page’s sound, the racks with it', onSelect: () => openSound() },
+      { label: 'A Sound effect (Sound → Effects)…', icon: 'sliders', hint: desktop ? 'Shapes the page’s sound and the browser racks (Audio Units go straight to the output)' : 'Shapes the page’s sound, the racks with it', onSelect: () => openSound() },
     ],
   });
   return (
@@ -335,7 +335,7 @@ export function MasterChain({ play, onChange, narrow }: { play: PlayRecord; onCh
         <Icon name="wave" size={12} style={{ color: tk.text.muted }} />
         <b style={{ font: `650 12px ${fontFamily.ui}`, color: tk.text.primary }}>Master</b>
         <span style={{ color: tk.text.faint, font: `11px ${fontFamily.ui}` }}>
-          {desktop ? 'Audio Unit tracks play straight to the output; the Sound master chain shapes the page and the browser racks.' : 'The tracks play through the page’s sound: its master chain (Finish → Sound) is here.'}
+          {desktop ? 'Audio Unit tracks play straight to the output; the Sound master chain shapes the page and the browser racks.' : 'The tracks play through the page’s sound: its master chain (Sound → Effects) is here.'}
         </span>
       </div>
       <div role="list" aria-label="The master’s devices" style={{ flex: 1, minHeight: narrow ? undefined : 0, display: 'flex', alignItems: 'stretch', gap: 8, overflowX: 'auto', padding: '0 12px 10px', maxHeight: narrow ? 420 : undefined }}>

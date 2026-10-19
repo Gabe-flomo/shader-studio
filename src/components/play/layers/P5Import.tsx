@@ -146,7 +146,7 @@ export function P5ImportPanel({ initialText = '', narrow = false, actions }: {
   const input = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, minHeight: 0, flex: narrow ? undefined : 1 }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
-        <Button size="sm" icon="import" onClick={() => filesRef.current?.click()} disabled={busy} title="One or more .js files, or a .zip of a p5 project (with its index.html)">Open files or .zip…</Button>
+        <Button size="sm" icon="folder" onClick={() => filesRef.current?.click()} disabled={busy} title="One or more .js files, or a .zip of a p5 project (with its index.html)">Open files or .zip…</Button>
         <Button size="sm" icon="folder" onClick={() => folderRef.current?.click()} disabled={busy} title="A p5 project folder: index.html, the sketch files and their assets">Open a folder…</Button>
         {fromFiles && <Button size="sm" variant="ghost" onClick={() => { setFromFiles(false); setProject(null); setText(''); }}>Start over</Button>}
         <input ref={filesRef} type="file" multiple accept=".js,.mjs,.zip,.html,.htm,.json,.txt,.csv,.tsv,.png,.jpg,.jpeg,.gif,.webp,.svg,.ttf,.otf,.woff,.woff2" style={{ display: 'none' }} onChange={e => { void readFiles(e.target.files); e.target.value = ''; }} />

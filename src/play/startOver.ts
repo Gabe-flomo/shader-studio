@@ -1,7 +1,7 @@
 /**
- * startOver.ts — "Start over": empty the whole Play record (docs: the Play
- * page header's ⋯ menu and the Layers page header), after a confirm the call
- * site asks for. Everything isPlayRecordEmpty checks goes: layers, controls,
+ * startOver.ts — "Clear Play setup…": empty the whole Play record (docs: the
+ * Play panel header's ⋯ menu, playSetupMenu.tsx; the Controls ⋯ where there's
+ * no panel), after a confirm the call site asks for. Everything isPlayRecordEmpty checks goes: layers, controls,
  * mappings, actions, signals, pairs, Finish (Picture and Sound), the audio
  * engine's racks and tape, drum pads, projection, the split view's own
  * selection. One undo step; the Studio graph is untouched.
@@ -31,17 +31,17 @@ export function startOverPlay(): void {
   useNodeGraphStore.getState().setPlay(emptyPlayRecord(), { label: 'Started over' });
 }
 
-/** Confirm, then start over. Shared by the Play page's and the Layers page's ⋯ menu. */
+/** Confirm, then start over. Shared by the Play setup menus (playSetupMenu.tsx). */
 export async function confirmStartOverPlay(): Promise<void> {
-  const ok = await askConfirm('Clear everything on Play?', {
-    message: 'Layers, controls, mappings, effects and the engine. You can undo.',
-    confirmLabel: 'Start over',
+  const ok = await askConfirm('Clear the Play setup?', {
+    message: 'Layers, controls, mappings, effects and the engine. The Studio graph stays. You can undo.',
+    confirmLabel: 'Clear',
     danger: true,
   });
   if (ok) startOverPlay();
 }
 
-/** The "Start over" menu item, for a ⋯ menu (closes it first, then asks and clears). */
+/** The "Clear Play setup…" menu item, for a ⋯ menu (closes it first, then asks and clears). */
 export function startOverMenuItem(onClose: () => void): MenuItem {
-  return { label: 'Start over…', icon: 'trash', danger: true, hint: 'Empty layers, controls, effects and the engine', onSelect: () => { onClose(); void confirmStartOverPlay(); } };
+  return { label: 'Clear Play setup…', icon: 'trash', danger: true, hint: 'Empty layers, controls, effects and the engine', onSelect: () => { onClose(); void confirmStartOverPlay(); } };
 }

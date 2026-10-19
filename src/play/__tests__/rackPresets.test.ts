@@ -138,7 +138,7 @@ describe('rack presets: apply', () => {
     expect(res.play.audioFx?.chains['rack:rk1']?.effects[0].id).not.toBe('fx_verb');
   });
 
-  it('puts a preset’s Sound effects on Finish → Sound’s master chain', () => {
+  it('puts a preset’s Sound effects on Sound → Effects’ master chain', () => {
     const p = setup();
     const { preset } = rackPresetFrom(p, 'rk2', 'Clouds');
     const out = presetSoundOnMaster(emptyPlayRecord(), preset!);

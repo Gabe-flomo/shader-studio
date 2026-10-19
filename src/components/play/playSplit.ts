@@ -322,7 +322,7 @@ export function goToSignal(id: string): void {
 
 /**
  * Open a rail category, wherever the split shows pages, on the page it was
- * last left on (else its first) — the keyboard's own way in (⌘1–4 or ⌃1–4:
+ * last left on (else its first) — the keyboard's own way in (⌘1–5 or ⌃1–5:
  * App.tsx), same as clicking its rail icon. False when there's no split view
  * on screen (phones; the bottom row's icons cover it there).
  */

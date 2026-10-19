@@ -1,7 +1,7 @@
 /**
  * webGranulator.ts — a Granulator rack live in Web Audio (docs/granulator.md),
  * for lib/audioEngineHost.ts: the kit's granulator (an AudioWorklet, else a
- * ScriptProcessor) → the rack's own Sound chain (`rack:<id>`, Finish → Sound)
+ * ScriptProcessor) → the rack's own Sound chain (`rack:<id>`, Sound → Effects)
  * → the rack's volume → an analyser (its spectrum, the readers) and the app's
  * output (the master chain, recordings).
  *

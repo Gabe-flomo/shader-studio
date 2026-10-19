@@ -29,8 +29,8 @@ describe('categories and pages', () => {
     for (const [cat, page] of listed) expect(categoryOf(page)).toBe(cat);
     // Controls and Mappings are one rail category (the owner's call, 2026-09-28): they're so closely related.
     // Rules is a category of its own (Signals until the implementation guide's phase 3; the id stays).
-    // The implementation guide's rail (phase 4): Inputs, Rules, Layers, Look, Sound.
-    expect(RAIL_CATEGORIES.map(c => c.id)).toEqual(['controls', 'signals', 'layers', 'finish', 'engine']);
+    // The Play audit (2026-10-18, P18): Controls, Layers, Rules, Finish, Sound — the order ⌘1–5 follow.
+    expect(RAIL_CATEGORIES.map(c => c.id)).toEqual(['controls', 'layers', 'signals', 'finish', 'engine']);
   });
 
   it('gives each category the pages the owner listed', () => {
@@ -40,7 +40,7 @@ describe('categories and pages', () => {
       signals: ['Rules'],
       layers: ['Layers', 'Background'],
       finish: ['Picture'],
-      engine: ['Arrangement', 'Sound'],
+      engine: ['Arrangement', 'Effects'],
     });
     for (const p of RAIL_PAGE_IDS) expect(RAIL_PAGES[p].description.length).toBeGreaterThan(10);
   });
@@ -71,14 +71,16 @@ describe('categories and pages', () => {
     expect(categoryBadge('controls', { ...play, controls: [{ id: 'c', target: 'n::k', kind: 'float', label: 'K', min: 0, max: 1 }] })).toBe(1);
   });
 
-  it('⌘1–4 open the rail categories, matching useShortcuts.ts', () => {
-    expect(RAIL_CATEGORY_SHORTCUT).toEqual({ controls: 'cmd+1', layers: 'cmd+2', finish: 'cmd+3', engine: 'cmd+4', signals: 'cmd+5' });
+  it('⌘1–5 open the rail categories in the rail’s own order, matching useShortcuts.ts', () => {
+    expect(RAIL_CATEGORY_SHORTCUT).toEqual({ controls: 'cmd+1', layers: 'cmd+2', signals: 'cmd+3', finish: 'cmd+4', engine: 'cmd+5' });
+    // Top to bottom on the rail is ⌘1, ⌘2, … (P18).
+    expect(RAIL_CATEGORIES.map(c => RAIL_CATEGORY_SHORTCUT[c.id])).toEqual(['cmd+1', 'cmd+2', 'cmd+3', 'cmd+4', 'cmd+5']);
     const map: ShortcutMap = Object.fromEntries(DEFAULT_ACTIONS.map(a => [a.id, a.defaultCombo]));
     expect(findShortcut(map, 'cmd+1')).toBe('railControls');
     expect(findShortcut(map, 'cmd+2')).toBe('railLayers');
-    expect(findShortcut(map, 'cmd+3')).toBe('railFinish');
-    expect(findShortcut(map, 'cmd+4')).toBe('railEngine');
-    expect(findShortcut(map, 'cmd+5')).toBe('railSignals');
+    expect(findShortcut(map, 'cmd+3')).toBe('railSignals');
+    expect(findShortcut(map, 'cmd+4')).toBe('railFinish');
+    expect(findShortcut(map, 'cmd+5')).toBe('railEngine');
     for (const cat of RAIL_CATEGORIES.map(c => c.id)) {
       expect(map[`rail${cat[0].toUpperCase()}${cat.slice(1)}`]).toBe(RAIL_CATEGORY_SHORTCUT[cat]);
     }

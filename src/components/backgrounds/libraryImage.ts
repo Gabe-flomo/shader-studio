@@ -21,7 +21,7 @@ export async function libraryImageSource(id: string): Promise<BackgroundItem | n
 export function imageMenuItems(fromLibrary: () => void, fromFile: () => void, fromLinked?: () => void): MenuItem[] {
   return [
     { label: 'From your backgrounds…', icon: 'overlay', hint: 'An image background from the Library: captured from a graph, or imported', onSelect: fromLibrary },
-    { label: 'Upload a file…', icon: 'import', hint: 'PNG, JPG, WebP or SVG', onSelect: fromFile },
+    { label: 'Upload a file…', icon: 'folder', hint: 'PNG, JPG, WebP or SVG', onSelect: fromFile },
     ...(fromLinked ? [{ label: 'From a linked folder…', icon: 'link' as const, hint: 'A picture in a folder you linked on the Files page', onSelect: fromLinked }] : []),
   ];
 }

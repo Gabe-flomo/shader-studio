@@ -14,9 +14,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { useTokens } from '../../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../../theme/tokens';
 import { IconButton } from '../../ui/Button';
-import { Toggle, Segmented } from '../../ui/Choice';
+import { Toggle } from '../../ui/Choice';
 import { Select } from '../../ui/Select';
 import { RulerSlider } from '../../ui/RulerSlider';
+import { LogRulerSlider } from '../../ui/LogRulerSlider';
+import { isCountRange, isLogRange } from '../../ui/rulerMath';
 import { Tooltip } from '../../ui/Tooltip';
 import { Icon } from '../../ui/Icon';
 import { Menu, type MenuItem } from '../../ui/Menu';
@@ -38,6 +40,7 @@ import {
   type AudioFxChain, type AudioFxEffect, type AudioFxKind, type PlayAudioFx,
 } from '../../../types/playAudioFx';
 import { AF_SYNC, afShownParams, type AfParam } from '../../../play/kit/audioFx.js';
+import { isSyncedEcho, playTempo, syncEchoTempo } from '../../../play/echoTempo';
 
 const OPTION_LABELS: Record<string, string> = {
   lowpass: 'Low-pass', highpass: 'High-pass', bandpass: 'Band-pass', notch: 'Notch',
@@ -90,8 +93,17 @@ export function AudioFxPanel({ play, onChange, touch, wide = false }: {
     const out: PlayRecord = { ...p, audioFx: next };
     if (!next) delete out.audioFx;
     if (gone.length) { const g = new Set(gone); out.controls = p.controls.filter(c => !g.has(c.id)); out.mappings = p.mappings.filter(m => !g.has(m.controlId)); }
-    return out;
+    // A synced Echo follows the setup's tempo (play/echoTempo.ts).
+    return syncEchoTempo(out);
   });
+  const tempo = playTempo(play);
+  const [moreMenu, setMoreMenu] = useState<{ x: number; y: number } | null>(null);
+  const pre = fx.analyse === 'pre';
+  const moreItems: MenuItem[] = [
+    { heading: 'Readers hear' },
+    { label: 'After the effects', icon: 'check', iconColor: pre ? 'transparent' : undefined, hint: 'Audio readers, audio layers and Audio Input uniforms read each sound after its effects, so a filter sweep shows in them', onSelect: () => setFx(f => ({ ...f, analyse: undefined })) },
+    { label: 'Before the effects', icon: 'check', iconColor: pre ? undefined : 'transparent', hint: 'They read the dry sound', onSelect: () => setFx(f => ({ ...f, analyse: 'pre' })) },
+  ];
   const setChain = (chainId: string, fn: (c: AudioFxChain) => AudioFxChain) => setFx(f => patchChain(f, chainId, fn));
   const expose = (chainId: string, e: AudioFxEffect, p: AfParam, source: string) => onChange(r => {
     const target = audioFxTarget(chainId, e.id, p.key);
@@ -155,12 +167,13 @@ export function AudioFxPanel({ play, onChange, touch, wide = false }: {
 
   return (
     <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '8px 12px 24px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', margin: '2px 0 8px' }}>
-        <Tooltip label="What the readers hear" description="Audio readers, audio layers and Audio Input uniforms read each sound after its effects (so a filter sweep shows in them), or before." placement="bottom">
-          <span style={{ color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase', cursor: 'help' }}>Readers hear</span>
-        </Tooltip>
-        <Segmented size="sm" ariaLabel="What the readers hear" value={fx.analyse === 'pre' ? 'pre' : 'post'} onChange={v => setFx(f => ({ ...f, analyse: v === 'pre' ? 'pre' : undefined }))}
-          options={[{ value: 'post', label: 'After effects' }, { value: 'pre', label: 'Before' }]} />
+      {/* One quiet line; the readers' before/after setting lives in its ⋯ (Play audit P9). */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 0 8px' }}>
+        <span style={{ flex: 1, minWidth: 0, color: tk.text.faint, font: `11.5px ${fontFamily.ui}`, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          Each sound’s chain, then the master’s{pre ? ' · readers hear the dry sound' : ''}
+        </span>
+        <IconButton icon="more" size="sm" label="More: what the readers hear" active={!!moreMenu} tooltip={!moreMenu}
+          onClick={ev => { const r = (ev.currentTarget as HTMLElement).getBoundingClientRect(); setMoreMenu(moreMenu ? null : { x: r.right - 260, y: r.bottom + 4 }); }} />
       </div>
       <div style={wide ? { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(380px, 100%), 1fr))', gap: 10, alignItems: 'start' } : { display: 'flex', flexDirection: 'column', gap: 10 }}>
         {sources.map(src => (
@@ -175,18 +188,20 @@ export function AudioFxPanel({ play, onChange, touch, wide = false }: {
             onExpose={(e, p) => expose(src.id, e, p, src.label)}
             onPresets={ev => { const r = (ev.currentTarget as HTMLElement).getBoundingClientRect(); setPresetMenu({ x: r.left, y: r.bottom + 4, chainId: src.id }); }}
             onAudioUnit={isTauri() ? () => void audioUnitFor(src.id) : undefined}
+            tempo={tempo}
           />
         ))}
       </div>
       <div style={{ marginTop: 10, color: tk.text.faint, font: `11px/1.45 ${fontFamily.ui}` }}>
         Effects run top to bottom, each sound’s chain before the master’s. They play live, go into recordings and rendered takes (following what the take recorded), and into websites. Nothing sounds until you press play.
       </div>
+      {moreMenu && <Menu x={moreMenu.x} y={moreMenu.y} minWidth={260} title="Effects" items={moreItems} onClose={() => setMoreMenu(null)} />}
       {presetMenu && <Menu x={presetMenu.x} y={presetMenu.y} items={presetItems(presetMenu.chainId)} onClose={() => setPresetMenu(null)} title="Chain presets" minWidth={230} />}
     </div>
   );
 }
 
-function ChainCard({ source, chain, touch, exposed, onChain, onRemoveChain, onExpose, onPresets, onAudioUnit }: {
+function ChainCard({ source, chain, touch, exposed, onChain, onRemoveChain, onExpose, onPresets, onAudioUnit, tempo }: {
   source: Source;
   chain: AudioFxChain | undefined;
   touch: boolean;
@@ -197,6 +212,8 @@ function ChainCard({ source, chain, touch, exposed, onChain, onRemoveChain, onEx
   onPresets: (ev: React.MouseEvent) => void;
   /** The desktop app: "+ Audio Unit effect…" (the Audio engine). */
   onAudioUnit?: () => void;
+  /** The setup's tempo, which a synced Echo follows. */
+  tempo: number;
 }) {
   const tk = useTokens();
   const c = chain ?? emptyChain();
@@ -236,6 +253,7 @@ function ChainCard({ source, chain, touch, exposed, onChain, onRemoveChain, onEx
               dimmed={!c.on}
               touch={touch}
               exposed={exposed}
+              tempo={tempo}
               onPatch={change => onChain(x => ({ ...x, effects: x.effects.map(y => (y.id === e.id ? { ...y, ...change } as AudioFxEffect : y)) }))}
               onReset={() => onChain(x => ({ ...x, effects: x.effects.map(y => (y.id === e.id ? { ...newAudioFxEffect(e.kind, e.id), enabled: e.enabled } : y)) }))}
               onExpose={p => onExpose(e, p)}
@@ -249,7 +267,7 @@ function ChainCard({ source, chain, touch, exposed, onChain, onRemoveChain, onEx
   );
 }
 
-function EffectCard({ chainId, effect: e, index, count, dimmed, touch, exposed, onPatch, onReset, onExpose, onReorder, onRemove }: {
+function EffectCard({ chainId, effect: e, index, count, dimmed, touch, exposed, tempo, onPatch, onReset, onExpose, onReorder, onRemove }: {
   chainId: string;
   effect: AudioFxEffect;
   index: number;
@@ -257,6 +275,7 @@ function EffectCard({ chainId, effect: e, index, count, dimmed, touch, exposed, 
   dimmed: boolean;
   touch: boolean;
   exposed: Set<string>;
+  tempo: number;
   onPatch: (change: Record<string, unknown>) => void;
   onReset: () => void;
   onExpose: (p: AfParam) => void;
@@ -321,17 +340,19 @@ function EffectCard({ chainId, effect: e, index, count, dimmed, touch, exposed, 
           {e.kind === 'distortion' && opt('curve', 'Curve', 'Soft rounds the peaks, hard clips them flat, wavefold folds them back, tube bends one side more, bitcrush steps the level.')}
           {e.kind === 'echo' && (
             <>
-              <Row label="Sync" hint="Off: the time in ms. A note value: the echo follows the tempo below.">
-                <div style={{ flex: 1, minWidth: 120 }}>
-                  <Select ariaLabel="Echo sync" value={String(e.sync ?? 'off')} height={26} options={Object.keys(AF_SYNC).map(v => ({ value: v, label: OPTION_LABELS[v] ?? v }))} onChange={v => onPatch({ sync: v })} />
+              <Row label="Sync" hint="Off: the time in ms. A note value: the echo follows the setup’s tempo (Sound → Arrangement’s BPM).">
+                <div style={isSyncedEcho(e) ? { flex: '0 1 auto', minWidth: 0 } : { flex: 1, minWidth: 120 }}>
+                  <Select ariaLabel="Echo sync" value={String(e.sync ?? 'off')} height={26} options={Object.keys(AF_SYNC).map(v => ({ value: v, label: OPTION_LABELS[v] ?? v }))} onChange={v => onPatch(v === 'off' ? { sync: v } : { sync: v, bpm: tempo })} />
                 </div>
+                {isSyncedEcho(e) && <span data-echo-tempo="" title="The setup’s tempo: Sound → Arrangement’s BPM (else the Clock source’s)" style={{ color: tk.text.faint, font: `11.5px ${fontFamily.ui}`, whiteSpace: 'nowrap' }}>at {Math.round(tempo * 10) / 10} BPM</span>}
               </Row>
               <Row label="Ping-pong" hint="Repeats bounce between left and right.">
                 <Toggle checked={!!e.pingpong} onChange={pingpong => onPatch({ pingpong })} />
               </Row>
             </>
           )}
-          {afShownParams(e).map(p => (
+          {/* A synced Echo follows the setup's tempo, so its own Tempo isn't shown. */}
+          {afShownParams(e).filter(p => !(p.key === 'bpm' && isSyncedEcho(e))).map(p => (
             <NumRow key={p.key} p={p} value={typeof e[p.key] === 'number' ? e[p.key] as number : p.value} touch={touch} label={def.label}
               exposed={exposed.has(audioFxTarget(chainId, e.id, p.key))} onSet={v => onPatch({ [p.key]: v })} onExpose={() => onExpose(p)} />
           ))}
@@ -346,7 +367,8 @@ function EffectCard({ chainId, effect: e, index, count, dimmed, touch, exposed, 
 
 function Label({ text, hint }: { text: string; hint?: string }) {
   const tk = useTokens();
-  const st: React.CSSProperties = { color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase', width: 78, flexShrink: 0, display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
+  // Wraps onto a second line rather than cutting off ("Resonance Q", "LFO depth oct").
+  const st: React.CSSProperties = { color: tk.text.faint, font: `600 10px/1.25 ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase', width: 78, flexShrink: 0, display: 'inline-block', whiteSpace: 'normal', overflowWrap: 'break-word' };
   return hint ? <Tooltip label={text} description={hint} placement="top"><span style={{ ...st, cursor: 'help' }}>{text}</span></Tooltip> : <span style={st}>{text}</span>;
 }
 function Row({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
@@ -361,8 +383,11 @@ function NumRow({ p, value, label, touch, exposed, onSet, onExpose }: { p: AfPar
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
       <Label text={p.unit ? `${p.label} ${p.unit}` : p.label} hint={p.hint || undefined} />
       <div style={{ flex: 1, minWidth: 0 }}>
-        {/* An effect's ranges are the DSP's (a filter's Hz, a 0–1 mix) and the kit clamps stored values into them, so they're hard. */}
-        <RulerSlider value={value} min={p.min} max={p.max} step={p.step} defaultValue={p.value} hard onChange={onSet} ariaLabel={`${label} ${p.label}`} touch={touch} integer={p.step === 1} />
+        {/* An effect's ranges are the DSP's (a filter's Hz, a 0–1 mix) and the kit clamps stored values into them, so they're hard.
+            A frequency over decades (20 Hz–20 kHz) runs on a log scale; only a small whole-number range is a count. */}
+        {isLogRange(p.min, p.max, p.unit)
+          ? <LogRulerSlider value={value} min={p.min} max={p.max} step={p.step} defaultValue={p.value} onChange={onSet} ariaLabel={`${label} ${p.label}`} touch={touch} />
+          : <RulerSlider value={value} min={p.min} max={p.max} step={p.step} defaultValue={p.value} hard onChange={onSet} ariaLabel={`${label} ${p.label}`} touch={touch} integer={isCountRange(p.step, p.min, p.max)} />}
       </div>
       <IconButton icon={exposed ? 'check' : 'plus'} size="sm" active={exposed} disabled={exposed} label={exposed ? 'Already a control' : `Make ${p.label} a control, to map the mouse, audio or an LFO onto it`} onClick={onExpose} />
     </div>

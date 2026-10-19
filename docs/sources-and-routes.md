@@ -46,7 +46,7 @@ order so behaviour doesn't change).
 
 On the rail, **Inputs** replaces Controls and Mappings. The page id stays `controls`, and a saved `mappings` page opens there. The rail now reads **Inputs, Rules, Layers, Look, Sound**. Sound holds the Audio engine and the sound effects.
 
-*Renamed 2026-10-17 (docs/glossary.md):* the rail reads **Controls, Rules, Layers, Finish, Sound**. The board is still the Inputs board in the code; on screen it is **Controls**, with its two columns **Controls** and **Sources**. ⌘1 is “Go to Controls”, ⌘⇧M “Go to Sources”.
+*Renamed 2026-10-17 (docs/glossary.md):* the rail reads **Controls, Layers, Rules, Finish, Sound** (⌘1–5 in that order, since 2026-10-18). The board is still the Inputs board in the code; on screen it is **Controls**, with its two columns **Controls** and **Sources**. ⌘1 is “Go to Controls”, ⌘⇧M “Go to Sources”.
 
 - **Controls column:** the controls board as before. Each control shows what drives it: its mappings, and every route from a source of the record (marked "(add)" for Add routes).
 - **Sources column:** the record's own sources as cards, then the old mapping cards. The mapping cards keep Learn, MIDI auto-learn, increments, trigger sources and pairs. **+ Source** adds a source that drives nothing yet.

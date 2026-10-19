@@ -48,14 +48,15 @@ export const DEFAULT_ACTIONS: ShortcutAction[] = [
   { id: 'playRail',          label: 'Fold the Play sidebar', group: 'View',       defaultCombo: 'cmd+shift+b', description: 'On the Play page, split: fold the sidebar into a rail of icons so the panel takes its width, one page at a time; again to bring it back' },
   // The id is older than the name (docs/glossary.md): the list of sources is what it shows.
   { id: 'gotoMappings',      label: 'Go to Sources',         group: 'View',       defaultCombo: 'cmd+shift+m', description: 'On the Play page: open the split (if it’s closed) and show Sources, the list of what drives each control' },
-  // The rail's own categories. A plain browser tab claims ⌘1–4 for switching its own tabs before the
-  // page ever sees the keydown, so App.tsx also binds ⌃1–4 to the same four, fixed (not remappable here).
+  // The rail's own categories, ⌘1–5 in the rail's order (Controls, Layers, Rules, Finish, Sound). A plain browser
+  // tab claims ⌘1–5 for switching its own tabs before the page ever sees the keydown, so App.tsx also binds ⌃1–5
+  // to the same five, fixed (not remappable here).
   // Labels match the rail's names (railPages.ts); the ids are older and stay, so rebindings keep working.
   { id: 'railControls',      label: 'Go to Controls',        group: 'View',       defaultCombo: 'cmd+1',       description: 'On the Play page: open the split (if it’s closed) and show Controls (the controls and the sources that drive them), on the tab it was last on. Also ⌃1' },
   { id: 'railLayers',        label: 'Go to Layers',          group: 'View',       defaultCombo: 'cmd+2',       description: 'On the Play page: open the split (if it’s closed) and show Layers, on the page it was last on. Also ⌃2' },
-  { id: 'railFinish',        label: 'Go to Finish',          group: 'View',       defaultCombo: 'cmd+3',       description: 'On the Play page: open the split (if it’s closed) and show Finish (grade, lens, film and time effects over the whole picture), on the page it was last on. Also ⌃3' },
-  { id: 'railEngine',        label: 'Go to Sound',           group: 'View',       defaultCombo: 'cmd+4',       description: 'On the Play page: open the split (if it’s closed) and show Sound: the Audio engine’s arrangement and the effects on the sound. Also ⌃4' },
-  { id: 'railSignals',       label: 'Go to Rules',           group: 'View',       defaultCombo: 'cmd+5',       description: 'On the Play page: open the split (if it’s closed) and show Rules: when something happens, what to do. Also ⌃5' },
+  { id: 'railSignals',       label: 'Go to Rules',           group: 'View',       defaultCombo: 'cmd+3',       description: 'On the Play page: open the split (if it’s closed) and show Rules: when something happens, what to do. Also ⌃3' },
+  { id: 'railFinish',        label: 'Go to Finish',          group: 'View',       defaultCombo: 'cmd+4',       description: 'On the Play page: open the split (if it’s closed) and show Finish (grade, lens, film and time effects over the whole picture), on the page it was last on. Also ⌃4' },
+  { id: 'railEngine',        label: 'Go to Sound',           group: 'View',       defaultCombo: 'cmd+5',       description: 'On the Play page: open the split (if it’s closed) and show Sound: the Audio engine’s arrangement and the effects on the sound. Also ⌃5' },
   // Node graph — add nodes
   { id: 'doBar',             label: 'Do…',                   group: 'Add Nodes',  defaultCombo: 'cmd+k',       description: 'Type what to do: “circle with a glow”, “repeat 6 times around”, “tone map it”, “is this typical?”' },
   // ⌘⇧D (Ctrl+Shift+D off a Mac): from any page and from a text field. In a scene builder: its recipe.

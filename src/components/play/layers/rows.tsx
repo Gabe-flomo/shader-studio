@@ -82,7 +82,7 @@ export function AudioSourceRows({ f }: { f: FieldKit }) {
       {input === 'file' && f.row('Song', (
         <>
           <input ref={fileRef} type="file" accept={audioAccept()} style={{ display: 'none' }} onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; if (file) void pick(file); }} />
-          <Button size="sm" icon="import" disabled={busy} onClick={() => fileRef.current?.click()}>{busy ? 'Loading…' : loaded ? 'Change song' : fileName ? 'Load it again' : 'Load a song'}</Button>
+          <Button size="sm" icon="folder" disabled={busy} onClick={() => fileRef.current?.click()}>{busy ? 'Loading…' : loaded ? 'Change song' : fileName ? 'Load it again' : 'Load a song'}</Button>
           <LinkedPickButton filter="audio" label="Linked…" variant="ghost" disabled={busy} onPick={ref => { void linkedFile(ref).then(pick, e => toast.error('Couldn’t load that song', { message: e instanceof Error ? e.message : String(e) })); }} />
           {loaded && <ClockButton />}
           {fileName && <span style={{ color: f.tk.text.faint, font: '11px Inter, system-ui, sans-serif', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, flex: 1 }} title={fileName}>{fileName}</span>}

@@ -185,7 +185,7 @@ function SoundRow({ f, sound, busy, onFile, onLinked, onSynth, onClear }: {
     <>
       {f.row('Sound', (
         <>
-          <Button size="sm" icon="import" disabled={busy} onClick={onFile}>{status === 'missing' ? 'Pick it again' : sound.sampleId ? 'Replace…' : 'Choose file…'}</Button>
+          <Button size="sm" icon="folder" disabled={busy} onClick={onFile}>{status === 'missing' ? 'Pick it again' : sound.sampleId ? 'Replace…' : 'Choose file…'}</Button>
           <LinkedPickButton filter="audio" label="Linked folder…" disabled={busy} onPick={(ref, e) => onLinked(ref, e.name, e.size)} />
           {status === 'missing' && <LinkedRelinkButton id={sound.sampleId} filter="audio" onRelinked={ref => onLinked(ref, ref.split('/').pop() ?? sound.fileName, sound.bytes)} />}
           <Select ariaLabel="Generated drum" value={sound.sampleId ? '' : sound.synth} height={26}
@@ -406,15 +406,15 @@ function DrumSections({ f, ctx, compact, header, sel, setSel, snap, setSnap, num
           if (files.length) void loadFiles(i, files);
         }}
         style={{
-          position: 'relative', minHeight: compact ? 40 : 54, padding: compact ? '4px 5px' : '5px 7px', borderRadius: radius.md, border: 0, cursor: 'pointer', textAlign: 'left', touchAction: 'none',
+          position: 'relative', minHeight: compact ? 44 : 58, padding: compact ? '4px 5px' : '5px 7px', borderRadius: radius.md, border: 0, cursor: 'pointer', textAlign: 'left', touchAction: 'none',
           background: lit ? alpha(tk.accent.base, 0.35 + 0.5 * lit) : hasP ? tk.bg.field : alpha(tk.bg.field, 0.45),
           boxShadow: `inset 0 0 0 ${selected || over === i ? 1.5 : 1}px ${over === i || selected ? tk.accent.base : tk.border.default}`,
           display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minWidth: 0, transition: 'background 90ms',
         }}>
-        <span style={{ color: hasP ? tk.text.primary : tk.text.faint, font: `600 ${compact ? 10.5 : 11}px/1.2 ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%' }}>
+        <span style={{ color: hasP ? tk.text.primary : tk.text.faint, font: `600 ${compact ? 11.5 : 12.5}px/1.2 ${fontFamily.ui}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%' }}>
           {busy === `pad${i}` ? 'Opening…' : hasP ? padName(p, i) : ''}
         </span>
-        <span style={{ display: 'flex', justifyContent: 'space-between', gap: 4, color: st === 'missing' || st === 'error' ? tk.status.danger : tk.text.faint, font: `500 9.5px ${fontFamily.mono}` }}>
+        <span style={{ display: 'flex', justifyContent: 'space-between', gap: 4, color: st === 'missing' || st === 'error' ? tk.status.danger : tk.text.muted, font: `500 ${compact ? 10 : 11}px ${fontFamily.mono}` }}>
           <span>{st === 'missing' ? 'missing' : st === 'error' ? 'error' : smNoteName(n)}</span>
           {!compact && hasP && p.choke ? <span title={`Choke group ${p.choke}`}>⊘{p.choke}</span> : null}
           {l.keys && !compact && <span>{keyName(DP_KEYS[k])}</span>}
@@ -724,7 +724,7 @@ function PlaySection({ f, ctx }: { f: FieldKit; ctx: EditorContext }) {
         <Button size="sm" variant={mine ? 'primary' : 'ghost'} icon="wave" onClick={openReaders} title="The spectrum and readers, listening to this Sampler">Audio readers…</Button>
       </div>
       {mine && <div style={{ marginTop: 6 }}><ReaderDots play={ctx.play} input={padsReaderInput(l.id)} compact /></div>}
-      {note(tk, 'Actions play it too (Do: Play pad N, from any trigger or signal). Takes record every hit; a render plays each where it landed. The effect chain is in Finish → Sound.')}
+      {note(tk, 'Actions play it too (Do: Play pad N, from any trigger or signal). Takes record every hit; a render plays each where it landed. The effect chain is in Sound → Effects.')}
     </Section>
   );
 }
