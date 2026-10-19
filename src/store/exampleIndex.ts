@@ -334,7 +334,7 @@ export const EXAMPLE_FOLDERS: ExampleFolder[] = [
   { label: "Grid",              color: ctp.sky, keys: ['gridTourMorph','gridTourRipple','gridTourOverflow','gridDensityWave','boundsBouncingCopies'] },
   { label: "Matrices",          color: ctp.peach, keys: ['matrixFoldFractal','matrixLattices','matrixAnyBasis','matrixCornerPin','matrixNoiseOctaves'] },
   { label: "Node Combos",       color: ctp.flamingo, keys: ['comboDomeRepeat','comboVoxelSpheres','comboGridGroupFlower','comboArrayStars','comboRepeatCellHash'] },
-  { label: "Groups & Code",     color: ctp.sapphire, keys: ['groupCarryRings','loopKali','ringGlow','publishAndKeyframes','convertPlasmaOptimised'] },
+  { label: "Groups & Code",     color: ctp.sapphire, keys: ['groupCarryRings','loopKali','ringGlow','publishAndKeyframes','convertTunnelOptimised'] },
   { label: "Signals & Inputs",  color: ctp.teal, keys: ['memFollow','memBeat','memReadout','sendReceiveBeat','midiGlowKeys'] },
   { label: "Passes",            color: ctp.maroon, keys: ['passFeedbackTrails','passGlowBright','passJumpFlood','passEdgesFromPicture','displaceNoiseMap'] },
   { label: "Effects & Lens",    color: ctp.mauve, keys: ['raysLightText','motionBlurTrails','dofDepthBlur','cmykNoise','crtTv'] },

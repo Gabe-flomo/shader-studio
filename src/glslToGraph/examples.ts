@@ -35,6 +35,18 @@ export const CONVERT_EXAMPLES: Record<string, { label: string; code: string }> =
   }
   gl_FragColor = vec4(vec3(0.5 + v) * vec3(0.4, 0.8, 1.0), 1.0);
 }` },
+  tunnel: { label: 'Warm tunnel', code: `void main() {
+  vec2 uv = (gl_FragCoord.xy - 0.5 * u_resolution.xy) / u_resolution.y;
+  float r = length(uv);
+  float a = atan(uv.y, uv.x);
+  float z = 0.35 / r + u_time * 0.4;
+  float rings = pow(0.5 + 0.5 * sin(z * 12.0), 4.0);
+  float spokes = 0.5 + 0.5 * cos(a * 6.0 + z * 2.0);
+  float fade = smoothstep(0.0, 0.6, r);
+  vec3 col = mix(vec3(0.05, 0.04, 0.06), vec3(1.0, 0.72, 0.45), rings * spokes * fade);
+  col *= 1.0 - 0.6 * r * r;
+  gl_FragColor = vec4(col, 1.0);
+}` },
   shadertoy: { label: 'Shadertoy: fbm', code: `float hash21(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 float noise(vec2 p) {
   vec2 i = floor(p); vec2 f = fract(p);

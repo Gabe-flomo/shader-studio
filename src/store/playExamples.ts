@@ -18,8 +18,8 @@ import { SKETCH_DISPLACE_WAVES } from './playSketches';
 import { SKETCH_3D, SKETCH_3D_SHAPES, SKETCH_3D_TEXTURE, SKETCH_BUTTONS, SKETCH_COMET, SKETCH_FIREFLIES, SKETCH_FIRST, SKETCH_GLOW, SKETCH_MOUSE, SKETCH_NULLS, SKETCH_INK, SKETCH_P5, SKETCH_PARTICLES, SKETCH_PICTURE, SKETCH_HALATION, SKETCH_ORBIT } from './playSketches';
 import { GRADE_LOOKS, applyLook, newCustomEffect, newFinishEffect, type FinishEffect, type FinishKind, type PlayFinish } from '../types/playFinish';
 import { newAudioFxEffect, type AudioFxEffect, type AudioFxKind, type PlayAudioFx } from '../types/playAudioFx';
-// An original picture made for the Background example (tools/ridges-at-dusk.mjs), inlined as a data URL.
-import RIDGES_AT_DUSK from './playAssets/ridges-at-dusk.jpg?inline';
+// The user's Room and cat photo (public/media/room-and-cat.jpg, scaled to 960 × 540), inlined as a data URL: a Play setup keeps its pictures.
+import ROOM_AND_CAT from './playAssets/room-and-cat.jpg?inline';
 // An original picture of a pool's floor for the Water example (tools/pool-floor.mjs): straight tile lines show the water bending the light.
 import POOL_FLOOR from './playAssets/pool-floor.jpg?inline';
 import {
@@ -1653,14 +1653,14 @@ Actions use them like keys, and they work on websites too (a background can reac
   })),
   ex('bgPhotoFlow', glowGraph({ radius: 0.1 }), play({
     layers: [
-      layer('particles', 'wind', 'Wind', { count: 1400, field: 'flow', turns: 1, speed: 0.7, size: 1.3, trail: 0.75, colour: 'palette', palette: 3, paletteBy: 'heading', blend: 'screen', detail: 'fine' }),
+      layer('particles', 'wind', 'Wind', { count: 3500, field: 'flow', turns: 1, speed: 0.7, size: 1.2, trail: 0.85, colour: 'palette', palette: 3, paletteBy: 'heading', blend: 'add', detail: 'fine' }),
     ],
     controls: [ctl('turns', 'layer:wind::turns', 'Wind · Turns', 0, 4), ctl('dir', 'layer:wind::angle', 'Wind · Direction', -180, 180, 1), ctl('speed', 'layer:wind::speed', 'Wind · Speed', 0, 2)],
     mappings: [map('turn', 'dir', S.lfo('triangle', 0.015), -60, 60)],
-    display: { picture: true, backdrop: [0, 0, 0], source: 'image', image: { name: 'Ridges at dusk.jpg', src: RIDGES_AT_DUSK } },
-    notes: `**What it shows.** **Background → Image**: a photo instead of the shader. Everything that reads the picture reads the photo: here a **Flow** particle field turns its brightness into headings, so the particles stream along the ridges and circle the sun.
+    display: { picture: true, backdrop: [0, 0, 0], source: 'image', image: { name: 'Room and cat.jpg', src: ROOM_AND_CAT } },
+    notes: `**What it shows.** **Background → Image**: a photo instead of the shader. Everything that reads the picture reads the photo: here a **Flow** particle field turns its brightness into headings, so the particles stream along the lit walls and circle the lamp.
 
-**How it's built.** The picture is a still (made for this example), kept in the setup, so saves, play files and web pages carry it. The graph is paused on this page. The particles read the photo at 128 × 72 (Detail: fine); an LFO slowly turns the whole field.
+**How it's built.** The picture is the built-in Room and cat photo, kept in the setup, so saves, play files and web pages carry it. The graph is paused on this page. The particles read the photo at 128 × 72 (Detail: fine); an LFO slowly turns the whole field.
 
 **Try this.**
 • Drag Turns: at 0 every particle heads the same way; higher, they wrap around the light.
@@ -1674,7 +1674,7 @@ Actions use them like keys, and they work on websites too (a background can reac
         sources: [
           { id: 'clouds', kind: 'graph', name: 'Clouds', graph: 'this' },
           { id: 'rings', kind: 'graph', name: 'Fractal Rings', graph: 'example:fractalRings' },
-          { id: 'ridges', kind: 'image', name: 'Ridges at dusk', src: RIDGES_AT_DUSK },
+          { id: 'room', kind: 'image', name: 'Room and cat', src: ROOM_AND_CAT },
         ],
         transition: 'fade', duration: 1.2,
       }),
@@ -1702,7 +1702,7 @@ Actions use them like keys, and they work on websites too (a background can reac
   // A photo matted by a hidden particles layer: the photo shows only where the particles (and their trails) are.
   ex('matteParticles', quietGraph(), play({
     layers: [
-      layer('image', 'photo', 'Photo', { src: RIDGES_AT_DUSK, scale: 1.02, toShader: false, trackMatte: { id: 'dust', mode: 'alpha', invert: false } }),
+      layer('image', 'photo', 'Photo', { src: ROOM_AND_CAT, scale: 1.02, toShader: false, trackMatte: { id: 'dust', mode: 'alpha', invert: false } }),
       layer('particles', 'dust', 'Dust', {
         visible: false, toShader: false, count: 1100, field: 'noise', noiseScale: 1.4, noiseEvolve: 0.25, speed: 0.55, steer: 0.35, size: 9, sizeJitter: 0.6,
         trail: 0.94, life: 5, fade: 0.3, spawn: 'anywhere', attractor: 'mouse', force: 'spiral', strength: 0.6, catchRadius: 0, colour: 'tint', color: [1, 1, 1], opacity: 1, flock: 0, seed: 7,
@@ -1741,7 +1741,7 @@ Actions use them like keys, and they work on websites too (a background can reac
   // A Motion layer watching the picture (or the camera, or a video): its matte reveals a photo, particles are born in it, its readings drive a readout and two rules.
   ex('motionReveal', glowGraph({ radius: 0.16, falloff: 10, tint: [0.45, 0.8, 1], comment: 'The glow that moves: its position orbits (two LFOs) and its radius jumps every few seconds (a square LFO). The Watcher layer sees that movement.' }), play({
     layers: [
-      layer('image', 'photo', 'Photo · shows where it moves', { src: RIDGES_AT_DUSK, scale: 1.02, toShader: false, trackMatte: { id: 'watch', mode: 'alpha', invert: false } }),
+      layer('image', 'photo', 'Photo · shows where it moves', { src: ROOM_AND_CAT, scale: 1.02, toShader: false, trackMatte: { id: 'watch', mode: 'alpha', invert: false } }),
       layer('motion', 'watch', 'Watcher', { visible: false, readFrom: 'picture', sensitivity: 0.7, delay: 2, smoothing: 0.85, cell: 0.035, show: 'mask', feather: 0.05 }),
       layer('particles', 'sparks', 'Sparks · born where it moves', {
         toShader: false, count: 900, emit: 'burst', spawn: 'motion', motionId: 'watch', life: 1.4, fade: 0.6, field: 'noise', noiseScale: 2, speed: 0.7, size: 2.2, sizeJitter: 0.5,
@@ -2056,7 +2056,7 @@ Distance reads only while both hands are in view, so the rings hold their size w
   })),
   // ─ Finish: the newer looks (pixel sort, halftone, ASCII, light leaks) and the effects' presets ─
   ex('finishPixelSort', quietGraph(), play({
-    display: { picture: true, backdrop: [0, 0, 0], source: 'image', image: { name: 'Ridges at dusk.jpg', src: RIDGES_AT_DUSK } },
+    display: { picture: true, backdrop: [0, 0, 0], source: 'image', image: { name: 'Room and cat.jpg', src: ROOM_AND_CAT } },
     finish: {
       on: true,
       effects: [
@@ -2077,7 +2077,7 @@ Distance reads only while both hands are in view, so the rings hold their size w
       map('breathe', 'len', S.lfo('sine', 0.05), 0.12, 0.45, { smoothMs: 60 }),
       map('drift', 'thr', S.lfo('sine', 0.031, 0.25), 0.38, 0.62, { smoothMs: 60 }),
     ],
-    notes: `**What it shows.** Two of the newer Finish effects on a photo. **Pixel sort** finds the runs of pixels brighter than its Threshold and sorts them into streaks, so the sky and the sun drip down over the ridges. **Light leaks** wash warm light in from the edges, drifting slowly, like film fogged at the gate.
+    notes: `**What it shows.** Two of the newer Finish effects on a photo. **Pixel sort** finds the runs of pixels brighter than its Threshold and sorts them into streaks, so the lamp and the lit walls drip down over the room. **Light leaks** wash warm light in from the edges, drifting slowly, like film fogged at the gate.
 
 **How it's built.** Background → Image holds the photo (the graph is paused). Finish: Pixel sort with its **Drip** preset, Light leaks with **Warm**, then a little Film grain and a Vignette. Two slow LFOs breathe the streaks' Length and move the Threshold, so different parts of the picture sort over time.
 
