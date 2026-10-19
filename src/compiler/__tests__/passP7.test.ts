@@ -345,7 +345,8 @@ describe('the phase 7 examples (Passes 7 to 9)', () => {
     // No Pass node: only the Smooth blur's own hidden passes.
     expect(r.passes!.every(p => p.hidden)).toBe(true);
     expect(r.fragmentShader).toMatch(/#define u_tex_\w+_px/);
-    expect(Object.keys(EXAMPLE_GRAPHS.passEdgesFromPicture.images ?? {})).toEqual(['epImage']);
+    // The built-in Room and cat photo, loaded by its id (lib/builtinImages.ts).
+    expect(EXAMPLE_GRAPHS.passEdgesFromPicture.nodes.find(x => x.id === 'epImage')!.params.libraryId).toBe('builtin:room-and-cat');
   });
 
   it('Passes 9 · A reusable blur group: two plain groups, a Pass each', () => {

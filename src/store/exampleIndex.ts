@@ -339,7 +339,7 @@ export const EXAMPLE_FOLDERS: ExampleFolder[] = [
   { label: "Passes",            color: ctp.maroon, keys: ['passFeedbackTrails','passGlowBright','passJumpFlood','passEdgesFromPicture','displaceNoiseMap'] },
   { label: "Effects & Lens",    color: ctp.mauve, keys: ['raysLightText','motionBlurTrails','dofDepthBlur','cmykNoise','crtTv'] },
   { label: "Texture tools",     color: ctp.flamingo, keys: ['ttRenderTargets','ttDataAdvect','ttCacheTimeMachine','ttDistanceRings','ttFeedbackTunnel'] },
-  { label: "Seeing: segment, flow, track", color: ctp.flamingo, keys: ['ttSegmentPeople','ttSegmentClick','ttOpticalFlow','ttAnalyze','ttBlobStamp'] },
+  { label: "Seeing: segment, flow, track", color: ctp.flamingo, keys: ['ttSegmentPeople','ttSegmentPick','ttOpticalFlow','ttAnalyze','ttBlobStamp'] },
   { label: "Pictures",          color: ctp.flamingo, keys: ['picChannelSplash','picHeightRelief','picPixelSort','picGlitch','picCurves'] },
   { label: "Data",              color: ctp.teal, keys: ['dataCityBars','dataRoutePath','dataRouteGlow','dataPoemWords','dataLiveFeed'] },
   { label: "Time Cube",         color: '#f5a97f', keys: ['timeCubeBox','timeCubeSlitScan','timeCubeHall','timeCubeSoftPill','timeCubeHighlights'] },

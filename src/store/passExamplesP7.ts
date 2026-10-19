@@ -12,7 +12,7 @@ import type { ExampleGraph } from './exampleIndex';
 import type { GraphNode } from '../types/nodeGraph';
 import type { PlayRecord } from '../types/play';
 import { ctl, group, n, port } from './graphBuilder';
-import RIDGES_AT_DUSK from './playAssets/ridges-at-dusk.jpg?inline';
+import { builtinImageParams, ROOM_AND_CAT_ID } from '../lib/builtinImages';
 
 export const PASS_EXAMPLE_INDEX_P7: Record<string, { label: string; description: string; play: true }> = {
   passJumpFlood: {
@@ -21,7 +21,7 @@ export const PASS_EXAMPLE_INDEX_P7: Record<string, { label: string; description:
   },
   passEdgesFromPicture: {
     label: 'Passes 8 · Edges straight from a picture', play: true,
-    description: 'A Texture Input\'s new Texture output goes straight into Edges (texture) and Blur (texture), with no copy Pass in between: the photo\'s outlines glow over a soft, dimmed copy of it. Load your own picture on the Texture Input.',
+    description: 'A Texture Input\'s Texture output goes straight into Edges (texture) and Blur (texture), with no copy Pass in between. A slow wipe shows the built-in Room and cat photo on one side and its pen drawing (fine outlines over a faint wash) on the other. Load your own picture on the Texture Input.',
   },
   passBlurGroup: {
     label: 'Passes 9 · A reusable blur group', play: true,
@@ -177,52 +177,54 @@ export function buildPassExamplesP7(): Record<string, ExampleGraph> {
   graphs.passEdgesFromPicture = {
     ...PASS_EXAMPLE_INDEX_P7.passEdgesFromPicture,
     counter: 40,
-    images: { epImage: RIDGES_AT_DUSK },
     nodes: [
-      uvNode('uv', 40, 300, 'The pulse along the outlines spreads out from the centre with it.'),
-      n('textureInput', 'epImage', 300, 300, { fit: 'stretch',
+      uvNode('uv', 40, 300, 'The wipe between the photo and its drawing slides across it.'),
+      n('textureInput', 'epImage', 300, 300, { fit: 'stretch', ...builtinImageParams(ROOM_AND_CAT_ID),
         ...note([
-          'Texture Input: the picture (ridges at dusk, until you load your own with Load image).',
-          'Its Texture output is the image itself as a texture, so Edges and Blur (texture) can read the pixels round each one without a Pass copying it first. Before, this needed Texture Input → Pass → Edges.',
+          'Texture Input: the built-in "Room and cat" photo (load your own with Load image).',
+          'Its Texture output is the image itself as a texture, so Edges and Blur (texture) can read the pixels round each one without a Pass copying it first. Its Color output is this pixel of the photo, for the left side of the wipe.',
         ]) }),
-      n('edgesTexture', 'epEdges', 600, 160, { strength: 3, width: 1.5,
-        ...note('Edges (texture): reads the picture at the 8 pixels round this one (a 3×3 Sobel on brightness). Edges is 1 on outlines, Color the picture\'s own colour kept on them. Width is in picture pixels: raise it for bolder lines on a busy photo.') },
+      n('edgesTexture', 'epEdges', 600, 160, { strength: 1.6, width: 1,
+        ...note('Edges (texture): reads the picture at the 8 pixels round this one (a 3×3 Sobel on brightness). Edges is 1 on outlines, Color the picture\'s own colour kept on them. Width is in picture pixels: 1 keeps the lines fine, like a pen; Strength 1.6 leaves the soft parts of the face undrawn.') },
         { texture: ['epImage', 'texture'] }),
       n('blurTexture', 'epSoft', 600, 460, { method: 'smooth', radius: 14,
-        ...note('Blur (texture): a soft copy of the picture, read straight from its texture too, as the dim backdrop under the lines.') },
+        ...note('Blur (texture): a soft copy of the picture, read straight from its texture too: a faint wash of the room\'s colours under the lines.') },
         { texture: ['epImage', 'texture'] }),
-      n('constant', 'epGain', 900, 620, { value: 1.6, label: 'Line glow',
-        ...note('How bright the outlines glow. A constant so Play can drive it: see the Line glow control.') }),
+      n('constant', 'epGain', 900, 620, { value: 1, label: 'Ink',
+        ...note('How strong the drawn lines are. A constant so Play can drive it: see the Ink control.') }),
       expr('epLook', 900, 300, {
-        label: 'Glowing outlines', outputType: 'vec3',
-        inputs: [['soft', 'vec3', ['epSoft', 'color']], ['edges', 'float', ['epEdges', 'edges']], ['tint', 'vec3', ['epEdges', 'color']], ['uv', 'vec2', ['uv', 'uv']], ['gain', 'float', ['epGain', 'value']]],
+        label: 'Photo → drawing', outputType: 'vec3',
+        inputs: [['photo', 'vec3', ['epImage', 'color']], ['soft', 'vec3', ['epSoft', 'color']], ['edges', 'float', ['epEdges', 'edges']], ['tint', 'vec3', ['epEdges', 'color']], ['uv', 'vec2', ['uv', 'uv']], ['gain', 'float', ['epGain', 'value']]],
         lines: [
-          ['float pulse', '0.65 + 0.35 * sin(t * 2.0 - length(uv) * 5.0)'],
-          ['vec3 back', 'soft * 0.35'],
-          ['float keep', 'smoothstep(0.2, 0.6, edges)'],
-          ['vec3 line', '(tint * 1.6 + vec3(1.0, 0.8, 0.55) * 0.7) * keep * pulse'],
+          ['float wipe', '0.55 * sin(t * 0.3)'],
+          ['float side', 'smoothstep(wipe - 0.003, wipe + 0.003, uv.x)'],
+          ['float keep', 'smoothstep(0.3, 0.75, edges)'],
+          ['vec3 drawing', 'soft * 0.16 + (vec3(0.96, 0.92, 0.85) * 0.7 + tint * 0.3) * keep * gain'],
+          ['vec3 graded', 'photo * vec3(1.0, 0.97, 0.93) * 0.92'],
+          ['float seam', 'exp(-abs(uv.x - wipe) * 600.0) * 0.35'],
         ],
-        result: 'back + line * gain',
+        result: 'mix(graded, drawing, side) + seam * vec3(1.0, 0.92, 0.82)',
         note: [
-          'Glowing outlines: lays the picture\'s outlines, lit, over a dim soft copy of it.',
-          'pulse: a slow wave of brightness travelling out from the centre (t is the clock).',
-          'back: the blurred picture, darkened, so the lines stand out.',
-          'keep: 1 on clear outlines, 0 on faint ones, so the photo\'s grain and soft gradients don\'t light up.',
-          'line: the kept outlines in the picture\'s own colours plus a warm white, pulsing.',
-          'result: the backdrop with the lines added, Line glow times as bright.',
+          'Photo → drawing: the photo on the left of a slow wipe, and what Edges and Blur make of it on the right, so you can compare the two at the same place.',
+          'wipe: where the split is, sliding back and forth across the frame every 20 seconds or so (t is the clock).',
+          'side: 0 left of the split, 1 right of it, with a hairline soft edge.',
+          'keep: 1 on clear outlines, 0 on faint ones, so the photo\'s grain and soft gradients don\'t draw.',
+          'drawing: pale ink lines (a warm white, with a little of the picture\'s own colour from Edges\' Color) over a faint wash of the blurred photo.',
+          'graded: the photo itself, warmed and dimmed a touch.',
+          'seam: a thin line of light on the split.',
         ],
       }),
-      n('output', 'out', 1180, 300, note('Output: the picture\'s outlines glowing over its blurred copy. One program: no Pass is drawn at all.'), { color: ['epLook', 'result'] }),
+      n('output', 'out', 1180, 300, note('Output: the photo and its drawing, side by side. One program: no Pass is drawn at all.'), { color: ['epLook', 'result'] }),
     ],
     play: playRecord([
-      ctl('gain', 'epGain::value', 'Line glow', 0, 4, 0.05),
+      ctl('gain', 'epGain::value', 'Ink', 0, 3, 0.05),
       ctl('strength', 'epEdges::strength', 'Edge strength', 0, 8, 0.05),
-      ctl('soft', 'epSoft::radius', 'Backdrop blur', 0, 40, 0.5),
+      ctl('width', 'epEdges::width', 'Line width', 0.5, 4, 0.05),
     ], `**What it shows.** A Texture Input (and a Video Input) has a **Texture** output: the image itself, ready for Sample, Edges, Blur, Glow and Displace (texture) and for Particles' Emit from. No copy Pass is needed in between, so this graph is a single program.
 
-**How it is built.** The picture's Texture goes into Edges (texture), which reads the pixels round each one, and into Blur (texture) for a soft backdrop. An Expression Block lays the lit outlines over the dimmed blur.
+**How it is built.** The built-in Room and cat photo's Texture goes into Edges (texture), which reads the pixels round each one, and into Blur (texture) for a faint wash. An Expression Block wipes between the photo (its Color output) and the drawing, so you see the input and the result at the same place.
 
-**Try.** Load your own picture on the Texture Input. Raise Edges' Width for a busy photo. Swap the Texture Input for a Video Input and wire its Texture the same way for moving outlines.`),
+**Try.** Load your own picture on the Texture Input. Raise Edge strength for a busy photo, or Line width for a felt-tip look. Swap the Texture Input for a Video Input and wire its Texture the same way for moving outlines.`),
   };
 
   // ── 9 · A reusable blur group: a plain group holding a Pass, used twice (tight halo + wide bloom) ──

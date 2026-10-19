@@ -41,6 +41,6 @@ export const RETIRED_EXAMPLE_KEYS: readonly string[] = [
   'raysColourBurst', 'sbBlobSculpture', 'sb2Orbits', 'sb2MouseGrid', 'sb2DepthSize', 'simGridLife', 'simGridLifeLike',
   'simGridBrain', 'simGridWater', 'simGridFire', 'simGridSand', 'simGridWire', 'gridRulesLifeLike', 'gridRulesBrain',
   'gridRulesCave', 'gridRulesHeat', 'gridRulesFire', 'gridRulesSand', 'gridRulesCrystal', 'gridRulesGas',
-  'agentRulesSlime', 'agentRulesBoids', 'agentRulesSir', 'agentRulesTermites', 'agentRulesFireflies', 'agentRulesParticles',
+  'ttSegmentClick', 'agentRulesSlime', 'agentRulesBoids', 'agentRulesSir', 'agentRulesTermites', 'agentRulesFireflies', 'agentRulesParticles',
   'agentRulesCrowd', 'agentRulesScan',
 ];
