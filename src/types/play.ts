@@ -267,9 +267,11 @@ export interface PlayReaction {
   signal?: string;
   /** Play notes: what and how. */
   notes?: NotesSpec;
-  /** A Look action (LookActionKind): the effect's setting it changes (fxpulse, fxset). */
+  /** Set or Nudge a control (ControlActionKind): which control (a PlayControl id). */
+  control?: string;
+  /** A Look action (LookActionKind): the effect's setting it changes (fxpulse, fxset). Nudge a control: 'wrap' goes round its range instead of stopping at the ends. */
   key?: string;
-  /** A Look action: the value it sets (fxpulse, fxset). */
+  /** A Look action: the value it sets (fxpulse, fxset). Set a control: its new value; Nudge a control: how much it adds (negative takes away). */
   value?: number;
   /** A Look action: how long, in seconds (mosh, fxpulse). */
   seconds?: number;
@@ -907,7 +909,18 @@ export type LookActionKind = 'mosh' | 'moshreset' | 'fxpulse' | 'fxset' | 'splas
 export const LOOK_ACTION_KINDS: readonly LookActionKind[] = ['mosh', 'moshreset', 'fxpulse', 'fxset', 'splash'];
 export function isLookAction(kind: string): kind is LookActionKind { return (LOOK_ACTION_KINDS as readonly string[]).includes(kind); }
 /** A built-in action, a Look action, or a button a Script layer declares (`script:<key>`). */
-export type ActionKind = BuiltinActionKind | LookActionKind | 'signal' | 'notes' | `script:${string}`;
+export type ActionKind = BuiltinActionKind | LookActionKind | ControlActionKind | 'signal' | 'notes' | `script:${string}`;
+/**
+ * Actions on a control instead of a layer (play/controlActions.ts): the control's own value moves, as
+ * if its slider were dragged, so they work with no layers at all. `control` is the control's id.
+ *   ctlset    the control to `value`
+ *   ctlnudge  the control by `value` (negative takes away), stopping at its range's ends, or going
+ *             round them when `key` is 'wrap'
+ */
+export type ControlActionKind = 'ctlset' | 'ctlnudge';
+export const CONTROL_SET_ACTION = 'ctlset' as const;
+export const CONTROL_NUDGE_ACTION = 'ctlnudge' as const;
+export function isControlAction(kind: string): kind is ControlActionKind { return kind === CONTROL_SET_ACTION || kind === CONTROL_NUDGE_ACTION; }
 /** The action that sends a signal (its `signal`) instead of doing something to a layer. */
 export const SIGNAL_ACTION = 'signal' as const;
 /** The reaction that plays notes on a rack of the Audio engine (its `notes`) instead of doing something to a layer. */
@@ -956,7 +969,9 @@ export interface PlayAction {
   signal?: string;
   /** Play notes (a rule's reaction): what and how. */
   notes?: NotesSpec;
-  /** A Look action's setting, value and seconds, and a Splash's point (see PlayReaction). */
+  /** Set or Nudge a control (a rule's reaction): which control. */
+  control?: string;
+  /** A Look action's setting, value and seconds, a Splash's point, a control action's value (see PlayReaction). */
   key?: string;
   value?: number;
   seconds?: number;
@@ -1765,8 +1780,18 @@ function parseReaction(raw: unknown): PlayReaction | null {
   const a = raw as Record<string, unknown> | null;
   const id = a && str(a.id);
   if (!a || !id) return null;
-  const kind = typeof a.do === 'string' && ((ACTION_KINDS as readonly string[]).includes(a.do) || isLookAction(a.do) || scriptActionKey(a.do) || a.do === SIGNAL_ACTION || a.do === NOTES_ACTION) ? (a.do as ActionKind) : null;
+  const kind = typeof a.do === 'string' && ((ACTION_KINDS as readonly string[]).includes(a.do) || isLookAction(a.do) || isControlAction(a.do) || scriptActionKey(a.do) || a.do === SIGNAL_ACTION || a.do === NOTES_ACTION) ? (a.do as ActionKind) : null;
   if (!kind) return null;
+  if (isControlAction(kind)) {
+    // Set or Nudge a control: which one, and the value (a set) or step (a nudge); a nudge may wrap.
+    const control = str(a.control);
+    if (!control) return null;
+    const value = typeof a.value === 'number' && Number.isFinite(a.value) ? a.value : kind === CONTROL_SET_ACTION ? 1 : 0.1;
+    const r: PlayReaction = { id, do: kind, layerId: '', amount: 1, enabled: a.enabled !== false, control: control.slice(0, 80), value, ...(kind === CONTROL_NUDGE_ACTION && a.key === 'wrap' ? { key: 'wrap' } : {}) };
+    const f = parseFire(a.fire);
+    if (f) r.fire = f;
+    return r;
+  }
   if (isLookAction(kind)) {
     const r: PlayReaction = { id, do: kind, layerId: (str(a.layerId) ?? '').slice(0, 120), amount: 1, enabled: a.enabled !== false, ...parseLookFields(a) };
     const f = parseFire(a.fire);
@@ -2200,7 +2225,7 @@ export function parsePlayRecordAsSaved(raw: unknown): PlayRecord {
   // A reaction on a missing layer goes, as an action would; a trigger input on something missing goes too.
   for (const s of signals) {
     // A Look action needs its effect ('finish:<effectId>'); a Splash may drop into a Water layer instead.
-    if (s.do) { const d = s.do.filter(x => x.do === SIGNAL_ACTION || x.do === NOTES_ACTION || (isLookAction(x.do) ? (x.layerId.startsWith(FINISH_TARGET_PREFIX) && effectIds.has(x.layerId.slice(FINISH_TARGET_PREFIX.length))) || (x.do === 'splash' && waterIds.has(x.layerId)) : layerIds.has(x.layerId))); if (d.length) s.do = d; else delete s.do; }
+    if (s.do) { const d = s.do.filter(x => x.do === SIGNAL_ACTION || x.do === NOTES_ACTION || (isControlAction(x.do) ? keptIds.has(x.control ?? '') : false) || (isLookAction(x.do) ? (x.layerId.startsWith(FINISH_TARGET_PREFIX) && effectIds.has(x.layerId.slice(FINISH_TARGET_PREFIX.length))) || (x.do === 'splash' && waterIds.has(x.layerId)) : layerIds.has(x.layerId))); if (d.length) s.do = d; else delete s.do; }
     if (s.inputs) { const k = s.inputs.filter(x => x.kind !== 'trigger' || triggerOk(x.trigger)); if (k.length) s.inputs = k; else delete s.inputs; }
   }
   if (signals.length) out.signals = signals;

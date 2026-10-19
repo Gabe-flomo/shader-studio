@@ -7,7 +7,7 @@
  * The layer kit renders the layers after the shader, so the node reads the
  * previous frame (1/60 s behind). Distance is in the graph's UV units (a
  * picture height is 2), negative inside a shape, like the SDF nodes. Which
- * layers it sees is each layer's "Seen by the Layers node" switch.
+ * layers it sees is each layer's "Shader effects see it" switch (its ⋯ menu).
  *
  * The uniforms are shared by every Layers node; the app (play/overlay.ts →
  * play/layersTexture.ts → ShaderCanvas) and the web runtime bind them. The

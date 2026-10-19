@@ -120,7 +120,9 @@ import { AudioReadersHost } from './AudioReadersPanel';
 import { useReadersPanel } from './readersPanelUi';
 import { formatHz, formatWidth } from '../../play/audioReaders';
 import { addMissingReaderControls, readerSourceName, readersWithoutControls, removeReader, renameReader } from '../../play/readerControls';
-import { parseReaderTarget } from '../../types/play';
+import { isControlAction, parseReaderTarget } from '../../types/play';
+import { controlActionValue, settableControls, withoutControlReactions } from '../../play/controlActions';
+import { BehavioursButton } from './rules/BehavioursLink';
 import type { AudioReader } from '../../types/play';
 import type { PlayPairMapping } from '../../types/play';
 import { ContextMenuArea } from '../ui/ContextMenuArea';
@@ -238,6 +240,16 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
     const { nodeId, paramKey } = targetParts(control.target);
     updateNodeParams(nodeId, { [paramKey]: value }, { immediate: true });
   }, [updateNodeParams, setPlay]);
+
+  // A rule's Set a control and Nudge a control (play/controlActions.ts): the control moves as if its slider were dragged.
+  useEffect(() => playEngine.onAction(a => {
+    if (!isControlAction(a.do) || !a.enabled) return;
+    const st = useNodeGraphStore.getState();
+    const c = settableControls(st.play).find(x => x.id === a.control);
+    if (!c) return;
+    const now = readControlValue(st.nodes, c.target, st.play);
+    writeControl(c, controlActionValue(a, c, typeof now === 'number' ? now : c.min));
+  }), [writeControl]);
 
   const update = useCallback((fn: (p: PlayRecord) => PlayRecord) => setPlay(fn), [setPlay]);
   // ⌘-click a control, then a second one, to quick-link them (ControlLink.tsx); Esc cancels.
@@ -746,7 +758,7 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
         return { ...p, controls };
       })}
       removeLabel={parseReaderTarget(c.target) ? 'Delete the reader (and this control)' : undefined}
-      onRemove={() => update(p => { const rt = parseReaderTarget(c.target); return rt ? removeReader(p, rt.readerId) : { ...p, controls: p.controls.filter(x => x.id !== c.id), mappings: p.mappings.filter(m => m.controlId !== c.id) }; })}
+      onRemove={() => update(p => { const rt = parseReaderTarget(c.target); return rt ? removeReader(p, rt.readerId) : withoutControlReactions({ ...p, controls: p.controls.filter(x => x.id !== c.id), mappings: p.mappings.filter(m => m.controlId !== c.id) }, c.id); })}
       trace={board?.trace}
       onName={board?.onIsolate}
       isolated={board?.isolated}
@@ -806,7 +818,13 @@ export function PlayPage({ compact = false, canvasRow = false }: { compact?: boo
           body={candidates.length === 0
             ? 'Add a node with a slider or a colour in the Studio first. Any live slider can be a control.'
             : 'Pick sliders and colours from the graph to build your panel. Then map MIDI, the mouse or keys onto them below.'}
-        />
+        >
+          {/* Behaviours: ready-made motion and rules once there's a slider or a layer (Play audit P11). */}
+          <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <BehavioursButton play={play} onChange={update} />
+            <span style={{ font: `11.5px ${fontFamily.ui}`, color: tk.text.faint }}>Pulse to the beat, bass shakes it, pinch to burst…</span>
+          </div>
+        </EmptyState>
       ) : inPanel ? (
         <>
           <SpreadsSection play={play} nodes={nodes} update={update} />
@@ -1061,12 +1079,13 @@ function usesMidi(play: PlayRecord): boolean {
     || !!play.audioEngine?.racks.some(r => r.midi !== 'off');
 }
 
-function EmptyState({ title, body }: { title: string; body: string }) {
+function EmptyState({ title, body, children }: { title: string; body: string; children?: ReactNode }) {
   const tk = useTokens();
   return (
     <div style={{ margin: '18px 4px', padding: '16px 14px', borderRadius: radius.lg, border: `1px dashed ${tk.border.strong}`, color: tk.text.muted, lineHeight: 1.5 }}>
       <div style={{ font: `600 12.5px ${fontFamily.ui}`, color: tk.text.secondary, marginBottom: 4 }}>{title}</div>
       {body}
+      {children}
     </div>
   );
 }
@@ -1678,8 +1697,10 @@ function MappingsDrawer({ play, mode, grid = false, pages = false, height, onRes
     <div style={{ margin: '18px 4px', padding: '16px 14px', borderRadius: radius.lg, border: `1px dashed ${tk.border.strong}`, color: tk.text.muted, lineHeight: 1.5 }}>
       <div style={{ font: `600 12.5px ${fontFamily.ui}`, color: tk.text.secondary, marginBottom: 4 }}>Nothing mapped</div>
       {emptyBody}
-      <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         {noControls ? addControlButton : <Button size="sm" icon="plus" onClick={addDefaultMapping}>Add mapping</Button>}
+        {/* Or a ready-made one: pulse to the beat, mouse moves it, wander (Play audit P11). */}
+        <BehavioursButton play={play} onChange={onRecord} />
       </div>
     </div>
   );

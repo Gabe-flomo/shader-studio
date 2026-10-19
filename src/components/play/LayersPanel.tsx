@@ -48,7 +48,7 @@ import { SoloButton, SoloStrip } from './Solo';
 import { LayerPortsView } from './LayerPortsView';
 import { Section } from './layers/Section';
 import { BigEditorScaffold } from './layers/BigEditorScaffold';
-import { clampLayersSplitRatio, LAYERS_SPLIT_DEFAULT_RATIO, usePlayUi } from './playUi';
+import { clampLayersSplitRatio, defaultLayersSplitRatio, usePlayUi } from './playUi';
 import { NOTE_REF_TYPE, noteRef } from './noteRefs';
 import { playOverlay, type ShapeDrawing } from '../../play/overlay';
 import { Button, IconButton } from '../ui/Button';
@@ -350,6 +350,13 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
   const [dropAt, setDropAt] = useState<{ key: string; where: 'before' | 'after' } | null>(null);
   const layerCount = play.layers.length;
 
+  // Split: the editor beside the list always has a layer to show; with none picked, the first in the list (Play audit P12).
+  const firstInView = rows.find((n): n is Extract<TreeNode, { kind: 'layer' }> => n.kind === 'layer')?.layer.id ?? play.layers[play.layers.length - 1]?.id ?? '';
+  const nothingPicked = !play.layers.some(l => l.id === selected);
+  useEffect(() => {
+    if (split && nothingPicked && firstInView) setSelected(firstInView);
+  }, [split, nothingPicked, firstInView, setSelected]);
+
   // A layer's card: its row in the list and, split, its editor beside the list.
   const rowProps = (l: PlayLayer, nested: boolean): LayerRowProps => {
     const it: ItemRef = { kind: 'layer', id: l.id };
@@ -429,7 +436,7 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
   }, [split]);
   const storedSplitRatio = usePlayUi(s => s.layersSplitRatio), setStoredSplitRatio = usePlayUi(s => s.setLayersSplitRatio);
   const [dragSplitRatio, setDragSplitRatio] = useState<number | null>(null);
-  const splitRatio = clampLayersSplitRatio(dragSplitRatio ?? storedSplitRatio, splitTotal || undefined);
+  const splitRatio = clampLayersSplitRatio(dragSplitRatio ?? storedSplitRatio ?? defaultLayersSplitRatio(splitTotal || undefined), splitTotal || undefined);
   const startSplitDrag = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
     e.preventDefault();
@@ -469,11 +476,11 @@ export function LayersPanel({ play, touch, exposedTargets, onChange, onExpose, t
         tabIndex={0}
         title="Drag to resize · double-click for the default width"
         onPointerDown={startSplitDrag}
-        onDoubleClick={() => setStoredSplitRatio(LAYERS_SPLIT_DEFAULT_RATIO)}
+        onDoubleClick={() => setStoredSplitRatio(null)}
         onKeyDown={e => {
           if (e.key === 'ArrowLeft') { e.preventDefault(); nudgeSplit(-1); }
           else if (e.key === 'ArrowRight') { e.preventDefault(); nudgeSplit(1); }
-          else if (e.key === 'Enter') { e.preventDefault(); setStoredSplitRatio(LAYERS_SPLIT_DEFAULT_RATIO); }
+          else if (e.key === 'Enter') { e.preventDefault(); setStoredSplitRatio(null); }
         }}
         style={{ flexShrink: 0, width: 9, margin: '0 -4px', cursor: 'col-resize', touchAction: 'none', position: 'relative', zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
       >
@@ -875,6 +882,17 @@ function LayerRow({ layer: l, layers, play, onChangePlay, canUp, canDown, touch,
   }
   // The Background layer stays at the bottom: it doesn't move, and there is only one.
   const isBackground = l.kind === 'background';
+  // Hidden (or in a hidden group): only its icon and name dim, so its switch and settings stay readable.
+  // A hidden matte is still at work: it isn't dimmed like a hidden layer.
+  const hiddenRow = (!l.visible && !matteOf.length) || dim;
+  // Shader effects (the graph's Layers node) see it: an advanced switch, in the ⋯ menu (Play audit P12).
+  const shaderItems: MenuItem[] = l.kind !== 'null' && l.kind !== 'sampler' && !isBackground ? [{
+    label: 'Shader effects see it', icon: l.toShader ? 'check' : undefined,
+    hint: l.toShader
+      ? 'On: a Layers node in the graph reads this layer (its colour, edges and distance), for effects like SDF Glow. Click to turn it off'
+      : 'Off: the graph’s Layers node leaves it out. Click to let shader effects like SDF Glow use it',
+    onSelect: () => set({ toShader: !l.toShader }),
+  }] : [];
 
   const shows = open && !headerOnly;
   const summary = !shows ? matteMaskSummary(play, l) : '';
@@ -901,8 +919,6 @@ function LayerRow({ layer: l, layers, play, onChangePlay, canUp, canDown, touch,
         position: 'relative', padding: '8px 10px 10px', marginTop: nested || relNest ? 4 : 6, marginLeft: relNest ? relIndent : nested ? 18 : 0, borderRadius: radius.card,
         background: relHighlight && relNest ? alpha(relNest.colour, 0.1) : tk.bg.panel,
         boxShadow: `inset 0 0 0 ${selected ? 1.5 : relOutline ? 1.5 : 1}px ${selected ? tk.accent.base : relOutline ?? tk.border.default}`,
-        // A hidden matte is still at work: it isn't dimmed like a hidden layer.
-        opacity: (l.visible || matteOf.length) && !dim ? 1 : 0.6,
       }}
     >
       {stripe && <span aria-hidden style={{ position: 'absolute', left: 3, top: 10, bottom: 10, width: 3, borderRadius: 2, background: stripe }} />}
@@ -922,11 +938,11 @@ function LayerRow({ layer: l, layers, play, onChangePlay, canUp, canDown, touch,
         style={{ display: 'flex', alignItems: 'center', gap: 6, minHeight: 26 }}
       >
         {!headerOnly && <IconButton icon={open ? 'chevD' : 'chevR'} label={open ? 'Collapse layer' : 'Expand layer'} size="sm" tooltip={false} onClick={() => setOpen(o => !o)} style={{ marginLeft: -6 }} />}
-        <Tooltip label={look.label} description={look.hint}><Icon name={look.icon} size={14} style={{ color: look.color, flexShrink: 0 }} /></Tooltip>
+        <Tooltip label={hiddenRow ? `${look.label} · hidden` : look.label} description={look.hint}><Icon name={look.icon} size={14} style={{ color: look.color, flexShrink: 0, opacity: hiddenRow ? 0.45 : 1 }} /></Tooltip>
         {editing ? (
           <Field autoFocus value={draft} onChange={e => setDraft(e.target.value)} onBlur={commit} onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { setDraft(l.label); setEditing(false); } }} height={26} style={{ flex: 1 }} />
         ) : (
-          <button type="button" title={headerOnly ? 'Edit' : 'Rename'} onClick={() => { if (headerOnly) return; setDraft(l.label); setEditing(true); }} style={{ flex: 1, minWidth: 0, textAlign: 'left', border: 0, background: 'none', padding: 0, cursor: headerOnly ? 'pointer' : 'text', color: tk.text.primary, font: `600 12.5px/1.25 ${fontFamily.ui}`, ...clampLines(2) }}>{l.label}</button>
+          <button type="button" title={headerOnly ? 'Edit' : 'Rename'} onClick={() => { if (headerOnly) return; setDraft(l.label); setEditing(true); }} style={{ flex: 1, minWidth: 0, textAlign: 'left', border: 0, background: 'none', padding: 0, cursor: headerOnly ? 'pointer' : 'text', color: hiddenRow ? tk.text.faint : tk.text.primary, font: `600 12.5px/1.25 ${fontFamily.ui}`, ...clampLines(2) }}>{l.label}</button>
         )}
         {relNest && (
           <>
@@ -951,7 +967,7 @@ function LayerRow({ layer: l, layers, play, onChangePlay, canUp, canDown, touch,
         <span ref={moreRef} style={{ display: 'inline-flex' }}>
           <IconButton icon="more" label="More: duplicate, reset, delete" size="sm" tooltip={false} onClick={() => { const r = moreRef.current?.getBoundingClientRect(); setMenu(r ? { x: r.right - 220, y: r.bottom + 4 } : null); }} />
         </span>
-        {menu && <Menu x={menu.x} y={menu.y} minWidth={220} onClose={() => setMenu(null)} items={isBackground ? backgroundMenuItems({ onReset, onRemove }) : [...moveItems, ...groupItems, 'separator', ...layerMenuItems({ onDuplicate, onReset, onRemove, onRule: () => startRule({ layerId: l.id }) })]} />}
+        {menu && <Menu x={menu.x} y={menu.y} minWidth={220} onClose={() => setMenu(null)} items={isBackground ? backgroundMenuItems({ onReset, onRemove }) : [...moveItems, ...groupItems, ...(shaderItems.length ? ['separator' as const, ...shaderItems] : []), 'separator', ...layerMenuItems({ onDuplicate, onReset, onRemove, onRule: () => startRule({ layerId: l.id }) })]} />}
       </div>
       {relMembers && (
         <button
@@ -1015,7 +1031,6 @@ function LayerRow({ layer: l, layers, play, onChangePlay, canUp, canDown, touch,
               </Section>
             )}
           </BigEditorScaffold>
-          {l.kind !== 'null' && l.kind !== 'sampler' && !isBackground && f.toggle('Shader', 'toShader', 'Seen by the Layers node', 'Include this layer in what the graph\'s Layers node reads (its colour, alpha and distance), so shader effects like SDF Glow can use it.')}
         </>
       )}
     </div>

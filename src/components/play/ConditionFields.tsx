@@ -328,8 +328,13 @@ function fmt(v: number): string {
 const NEW_SIGNAL = '__new';
 
 /** Pick a signal, or make a new one right here. `none` offers "No signal" (an optional one). */
-export function SignalPicker({ value, onChange, none, ariaLabel = 'Signal' }: { value: string; onChange: (id: string) => void; none?: string; ariaLabel?: string }) {
-  const signals = useNodeGraphStore(s => s.play.signals) ?? NO_SIGNALS;
+export function SignalPicker({ value, onChange, none, ariaLabel = 'Signal', exclude }: {
+  value: string; onChange: (id: string) => void; none?: string; ariaLabel?: string;
+  /** Left out of the list (a rule's own signal: sending itself would only loop), unless it is the one picked already. */
+  exclude?: string;
+}) {
+  const all = useNodeGraphStore(s => s.play.signals) ?? NO_SIGNALS;
+  const signals = exclude && exclude !== value ? all.filter(s => s.id !== exclude) : all;
   const setPlay = useNodeGraphStore(s => s.setPlay);
   const known = signals.some(s => s.id === value);
   const options = [

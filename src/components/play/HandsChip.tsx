@@ -4,7 +4,7 @@
  *   HandsChip   "Hands: tracking 2 hands", an eye to show or hide the hand
  *               on the picture, Enable / Stop and the settings (hands to
  *               track, strictness, smoothing, mirroring, sides, a readout).
- *               Shown wherever hands are used: the mappings drawer, a hand
+ *               Shown wherever hands are used: the Sources column, a hand
  *               trigger, a null that follows a hand, a Camera layer.
  *   ShowHandToggle  "Show hand on picture", for the Camera layer's section.
  *   HandsPill   the same Enable, floating on the picture while the setup

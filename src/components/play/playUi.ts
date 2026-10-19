@@ -21,12 +21,17 @@ const GUIDES_KEY = 'shader-studio:play:guides';
 const ALWAYS_EXPAND_KEY = 'shader-studio:play:alwaysExpandCards';
 const LAYERS_SPLIT_KEY = 'shader-studio:play:layersSplitRatio';
 
-/** The Layers page's list ↔ editor divider (LayersPanel's `split` mode): the list's share of the width, 0..1. */
+/**
+ * The Layers page's list ↔ editor divider (LayersPanel's `split` mode): the list's share of the width,
+ * 0..1, once dragged. Until then the list is LAYERS_LIST_DEFAULT_PX wide, about a name and its switch
+ * (Play audit P12: a few rows don't need a third of the page); the ratio is only the fallback.
+ */
 export const LAYERS_SPLIT_DEFAULT_RATIO = 0.38;
+export const LAYERS_LIST_DEFAULT_PX = 224;
 /** Neither column collapses below these, in px (as long as the page has room for both). */
-export const LAYERS_SPLIT_MIN_LIST_PX = 220;
+export const LAYERS_SPLIT_MIN_LIST_PX = 200;
 export const LAYERS_SPLIT_MIN_EDITOR_PX = 360;
-const LAYERS_SPLIT_RATIO_MIN = 0.2;
+const LAYERS_SPLIT_RATIO_MIN = 0.12;
 const LAYERS_SPLIT_RATIO_MAX = 0.7;
 
 /**
@@ -48,11 +53,17 @@ export function clampLayersSplitRatio(ratio: number, total?: number, minList = L
   return Math.max(lo, Math.min(hi, r));
 }
 
-function loadLayersSplitRatio(): number {
+/** The list's share before any drag: LAYERS_LIST_DEFAULT_PX of `total` (the ratio fallback while the width isn't known). */
+export function defaultLayersSplitRatio(total?: number): number {
+  return total && total > 0 ? clampLayersSplitRatio(LAYERS_LIST_DEFAULT_PX / total, total) : LAYERS_SPLIT_DEFAULT_RATIO;
+}
+
+function loadLayersSplitRatio(): number | null {
   try {
-    const v = Number(localStorage.getItem(LAYERS_SPLIT_KEY));
-    return Number.isFinite(v) && v > 0 ? clampLayersSplitRatio(v) : LAYERS_SPLIT_DEFAULT_RATIO;
-  } catch { return LAYERS_SPLIT_DEFAULT_RATIO; }
+    const raw = localStorage.getItem(LAYERS_SPLIT_KEY);
+    const v = raw === null ? NaN : Number(raw);
+    return Number.isFinite(v) && v > 0 ? clampLayersSplitRatio(v) : null;
+  } catch { return null; }
 }
 
 const SHOW_ALL_KEY = 'shader-studio:play:sectionsShowAll';
@@ -202,8 +213,10 @@ interface PlayUi {
   /** Open the Controls section at this control group ("Audio readers · Live"). */
   revealControlGroup: (group: string) => void;
   /** The Layers page's list ↔ editor divider (LayersPanel's `split` mode): the list's share, 0..1, remembered. */
-  layersSplitRatio: number;
-  setLayersSplitRatio: (ratio: number) => void;
+  /** null: never dragged, the list is LAYERS_LIST_DEFAULT_PX wide. */
+  layersSplitRatio: number | null;
+  /** A dragged ratio, remembered; null goes back to the default width. */
+  setLayersSplitRatio: (ratio: number | null) => void;
 }
 
 const NONE: ReadonlySet<string> = new Set();
@@ -345,6 +358,11 @@ export const usePlayUi = create<PlayUi>((set, get) => ({
   },
   layersSplitRatio: loadLayersSplitRatio(),
   setLayersSplitRatio: ratio => {
+    if (ratio === null) {
+      try { localStorage.removeItem(LAYERS_SPLIT_KEY); } catch { /* preference only */ }
+      set({ layersSplitRatio: null });
+      return;
+    }
     const clamped = clampLayersSplitRatio(ratio);
     try { localStorage.setItem(LAYERS_SPLIT_KEY, String(Math.round(clamped * 1000) / 1000)); } catch { /* preference only */ }
     set({ layersSplitRatio: clamped });

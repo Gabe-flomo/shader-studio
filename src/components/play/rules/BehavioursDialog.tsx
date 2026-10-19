@@ -16,12 +16,14 @@ import { toast } from '../../ui/toastStore';
 
 const NEED_WORDS = { hands: 'Hands', audio: 'Sound', midi: 'MIDI' } as const;
 
-export function BehavioursDialog({ play, onChange, onAdded, onClose }: {
+export function BehavioursDialog({ play, onChange, onAdded, onClose, initial }: {
   play: PlayRecord;
   onChange: (fn: (p: PlayRecord) => PlayRecord) => void;
   /** The first rule it added (to select), or '' when it added only sources. */
   onAdded: (ruleId: string) => void;
   onClose: () => void;
+  /** A behaviour to open on (picked, its slots filled in), by id. */
+  initial?: string;
 }) {
   const tk = useTokens();
   const [mine, setMine] = useState(() => loadBehaviours());
@@ -30,12 +32,14 @@ export function BehavioursDialog({ play, onChange, onAdded, onClose }: {
     window.addEventListener(BEHAVIOURS_CHANGED, on);
     return () => window.removeEventListener(BEHAVIOURS_CHANGED, on);
   }, []);
-  const [picked, setPicked] = useState<Behaviour | null>(null);
-  const [fill, setFill] = useState<Record<string, string>>({});
+  const fillFor = (b: Behaviour) => Object.fromEntries(b.slots.map(s => [s.key, slotChoices(play, s)[0]?.id ?? '']));
+  const first = initial ? BUILT_IN_BEHAVIOURS.find(b => b.id === initial && !missingFor(play, b)) ?? null : null;
+  const [picked, setPicked] = useState<Behaviour | null>(first);
+  const [fill, setFill] = useState<Record<string, string>>(() => (first ? fillFor(first) : {}));
   const all = useMemo(() => [...BUILT_IN_BEHAVIOURS, ...mine], [mine]);
   const pick = (b: Behaviour) => {
     setPicked(b);
-    setFill(Object.fromEntries(b.slots.map(s => [s.key, slotChoices(play, s)[0]?.id ?? ''])));
+    setFill(fillFor(b));
   };
   const add = () => {
     if (!picked) return;

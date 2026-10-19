@@ -11,7 +11,7 @@ vi.hoisted(() => {
   (globalThis as { localStorage?: unknown }).localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {}, key: () => null, length: 0, clear: () => {} };
 });
 import { controlGroupOf, playGraph } from '../playGraph';
-import { layoutPlayGraph } from '../playGraphLayout';
+import { fitView, GRAPH_FIT_MIN, layoutPlayGraph } from '../playGraphLayout';
 import { defaultLayer, emptyPlayRecord, SIGNAL_ACTION, type PlayControl, type PlayLayer, type PlayRecord, type PlayRoute } from '../../types/play';
 
 const ctl = (id: string, over: Partial<PlayControl> = {}): PlayControl => ({ id, target: `n::${id}`, kind: 'float', label: id, min: 0, max: 1, ...over });
@@ -126,5 +126,19 @@ describe('layoutPlayGraph', () => {
       signals: [{ id: 'r1', name: 'R1', inputs: [above('src:v')] }, { id: 'r2', name: 'R2', inputs: [above('src:u')] }] };
     const l = layoutPlayGraph(playGraph(p));
     expect(l.nodes.get('rule:r2')!.y).toBeLessThan(l.nodes.get('rule:r1')!.y);
+  });
+});
+
+describe('fitView (Play audit P11)', () => {
+  it('fits a small drawing whole, centred, never above 1:1', () => {
+    expect(fitView(400, 200, 800, 600)).toEqual({ x: 200, y: 200, k: 1 });
+  });
+  it('never zooms out past readable text: a wide drawing starts at its left (the sources) to drag along', () => {
+    const v = fitView(3000, 300, 800, 600);
+    expect(v.k).toBe(GRAPH_FIT_MIN);
+    expect(11.5 * v.k).toBeGreaterThanOrEqual(8.5);
+    expect(v.x).toBe(32);
+    // It still fits vertically, so it stays centred that way.
+    expect(v.y).toBe(Math.round((600 - 300 * v.k) / 2));
   });
 });

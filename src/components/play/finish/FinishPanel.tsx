@@ -6,16 +6,17 @@
  * Each effect is a card: on/off, fold, move, reset, remove. Every number is a
  * ruler with a + that makes it a control (`finish:<effect>::<key>`), so the
  * mouse, audio, LFOs or hands can drive it like any slider. The Grade card is
- * laid out like Lumetri: a Look to start from, Basic, Curves, Colour wheels,
+ * laid out like Lumetri (its Looks are Finish presets, in Presets): Basic, Curves, Colour wheels,
  * Split toning, HSL secondary, Tone mapping.
  */
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTokens } from '../../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../../theme/tokens';
 import { Button, IconButton } from '../../ui/Button';
 import { Toggle, Segmented } from '../../ui/Choice';
 import { Select } from '../../ui/Select';
 import { rowField } from '../../ui/rowLayout';
+import { clampLines } from '../../ui/textFit';
 import { Field } from '../../ui/Field';
 import { DM_BEHAVIOURS, DM_BEHAVIOUR_LABELS, DM_CHANNELS, DM_CHANNEL_LABELS, DM_HINTS } from '../../../play/kit/displace.js';
 import { GY_SETS, gyList } from '../../../play/kit/glyphs.js';
@@ -24,7 +25,8 @@ import { Tooltip } from '../../ui/Tooltip';
 import { Icon } from '../../ui/Icon';
 import { Menu, type MenuItem } from '../../ui/Menu';
 import { ColorSwatch } from '../../ui/ColorPicker';
-import { GroupedPicker, type PickerSection } from '../../ui/GroupedPicker';
+import { PickerPanel, type PickerSection } from '../../ui/GroupedPicker';
+import { menuAsSheet } from '../../ui/menuSheet';
 import type { IconName } from '../../ui/iconPaths';
 import { askConfirm, askText } from '../../ui/dialogStore';
 import { toast } from '../../ui/toastStore';
@@ -52,7 +54,7 @@ import type { PlayControl, PlayRecord } from '../../../types/play';
 import {
   FINISH_COMPARE_ID, FINISH_EFFECTS, FINISH_KINDS, FINISH_TIME_QUALITY, GRADE_LOOKS, applyLook, compareHost, emptyFinish, finishCustomCode, finishHostLabel, finishHosts,
   finishParamOf, finishParamsOf, finishTarget, lookFromGrade, newCustomEffect, newFinishEffect, patchFinishEffect, withCustomCode,
-  type FinishCompare, type FinishEffect, type FinishHost, type FinishKind, type PlayFinish,
+  type FinishCompare, type FinishEffect, type FinishHost, type FinishKind, type GradeLook, type PlayFinish,
 } from '../../../types/playFinish';
 import { FN_COMPARE_PARAMS, FN_RETIRED, FN_SORT_MOTION, fnUpgradeEffect, fnCheckCustom, fnDefaultCompare, fnParseCustom, fnRingSize, type FnParam, type FnPreset } from '../../../play/kit/finish.js';
 
@@ -240,25 +242,59 @@ export function PictureFinish({ play, onChange, touch, wide = false, embedded = 
   const removePreset = async (pr: StackPreset) => {
     if (await askConfirm(`Delete the preset “${pr.name}”?`, { message: 'Plays that loaded it keep their stacks.', confirmLabel: 'Delete', danger: true })) deleteStackPreset(pr.id);
   };
-  // A Look sets the stack's Grade to it (the grade keeps its place and controls) or adds one; a stack adds its effects.
+  // Looks are Finish presets (docs/glossary.md): one menu for the stack's presets and the Grade's looks
+  // (Play audit P17; the Grade card had a Look picker of its own). A look sets the stack's Grade to it
+  // (the grade keeps its place and controls) or adds a Grade; a stack adds its effects.
+  const grade = finish.effects.find(e => e.kind === 'grade');
+  const setLook = (look: GradeLook) => {
+    if (grade) setFinish(f => ({ ...f, on: true, effects: f.effects.map(e => (e.id === grade.id ? applyLook(e, look) : e)) }));
+    else push(applyLook(newFinishEffect('grade'), look));
+  };
   const applyBuiltIn = (pr: BuiltInFinishPreset) => {
     const look = pr.look ? GRADE_LOOKS.find(l => l.id === pr.look) : undefined;
-    const grade = finish.effects.find(e => e.kind === 'grade');
-    if (look && grade) { setFinish(f => ({ ...f, on: true, effects: f.effects.map(e => (e.id === grade.id ? applyLook(e, look) : e)) })); return; }
+    if (look && grade) { setLook(look); return; }
     loadPreset(pr, finish.effects.length ? 'add' : 'replace');
   };
+  // Your own looks, saved from a Grade on this device (savedLooks.ts).
+  const [looks, setLooks] = useState<SavedLook[]>(() => loadSavedLooks());
+  useEffect(() => {
+    const on = () => setLooks(loadSavedLooks());
+    window.addEventListener(SAVED_LOOKS_CHANGED, on);
+    return () => window.removeEventListener(SAVED_LOOKS_CHANGED, on);
+  }, []);
+  const saveGradeLook = async () => {
+    if (!grade) return;
+    const name = await askText('Save the Grade as a look', { label: 'Name', initial: lookName(grade.look ?? '') || 'My look', confirmLabel: 'Save look' });
+    if (!name?.trim()) return;
+    const { result, id } = saveLook(name.trim(), lookFromGrade(grade));
+    if (!result.ok) { toast.error('Couldn’t save the look', { message: result.error }); return; }
+    patch(grade.id, { look: id });
+    toast.success(`Saved “${name.trim()}”`, { message: 'It is under Presets → Your looks on this device.' });
+  };
+  const currentSaved = grade ? looks.find(l => l.id === grade.look) : undefined;
+  const removeLook = async (l: SavedLook) => {
+    if (!(await askConfirm(`Delete the look “${l.name}”?`, { message: 'Grades that used it keep their settings.', confirmLabel: 'Delete', danger: true }))) return;
+    deleteLook(l.id);
+    if (grade?.look === l.id) patch(grade.id, { look: undefined });
+  };
+  // What picking one does, said once in each heading rather than on every row.
+  const lookDoes = grade ? 'set the Grade' : 'add a Grade';
   // The presets that come with the app: the grade's Looks and a few starting stacks (play/finishPresets.ts).
   const builtInItems: MenuItem[] = [
+    ...(looks.length ? ['separator' as const, { heading: `Your looks · ${lookDoes}` },
+      ...looks.map((l): MenuItem => ({ label: l.name, icon: 'sliders', onSelect: () => setLook(l) })),
+      ...(currentSaved ? [{ label: `Delete “${currentSaved.name}”`, icon: 'trash', danger: true, hint: 'The look the Grade is on; the Grade keeps its settings', onSelect: () => { void removeLook(currentSaved); } } as MenuItem] : []),
+    ] : []),
     'separator',
-    { heading: 'Built in' },
-    ...BUILTIN_FINISH_PRESETS.map((pr): MenuItem => ({
-      label: pr.name, icon: pr.look ? 'sliders' : 'presets',
-      hint: pr.look ? `${pr.description}. Sets the Grade to this look` : `${pr.description}. Adds to the stack`,
-      onSelect: () => applyBuiltIn(pr),
-    })),
+    { heading: `Looks · ${lookDoes}` },
+    ...BUILTIN_FINISH_PRESETS.filter(pr => pr.look).map((pr): MenuItem => ({ label: pr.name, icon: 'sliders', hint: pr.description, onSelect: () => applyBuiltIn(pr) })),
+    'separator',
+    { heading: 'Starting stacks · add to the stack' },
+    ...BUILTIN_FINISH_PRESETS.filter(pr => !pr.look).map((pr): MenuItem => ({ label: pr.name, icon: 'presets', hint: pr.description, onSelect: () => applyBuiltIn(pr) })),
   ];
   const presetItems: MenuItem[] = [
     { label: 'Save stack as preset…', icon: 'save', disabled: !finish.effects.length, hint: 'Every effect, its order and settings', onSelect: () => { void savePreset(); } },
+    { label: 'Save the Grade as a look…', icon: 'save', disabled: !grade, hint: grade ? 'Its numbers, curves and tone mapping, to set any Grade to' : 'Add a Grade first', onSelect: () => { void saveGradeLook(); } },
     ...lib.presets.flatMap((pr): MenuItem[] => [
       'separator',
       { heading: `${pr.name} · ${pr.finish.effects.map(e => finishHostLabel(e)).join(', ')}`.slice(0, 90) },
@@ -284,9 +320,7 @@ export function PictureFinish({ play, onChange, touch, wide = false, embedded = 
         </Tooltip>
         <Button size="sm" icon="presets" onClick={ev => { const r = (ev.currentTarget as HTMLElement).getBoundingClientRect(); setPresetMenu({ x: r.left, y: r.bottom + 4 }); }}>Presets</Button>
         <span style={{ flex: 1 }} />
-        <div style={{ minWidth: 170 }}>
-          <GroupedPicker value="" placeholder="+ Add effect" ariaLabel="Add an effect" title="Add an effect" sections={sections} onChange={add} width={320} search searchPlaceholder="Search effects and nodes" />
-        </div>
+        <AddEffectButton sections={sections} onAdd={add} />
       </div>
       {presetMenu && <Menu x={presetMenu.x} y={presetMenu.y} items={presetItems} onClose={() => setPresetMenu(null)} title="Finish presets" minWidth={230} />}
       {compare?.on && active && (
@@ -301,7 +335,8 @@ export function PictureFinish({ play, onChange, touch, wide = false, embedded = 
           </div>
         </div>
       )}
-      <div style={wide ? { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(380px, 100%), 1fr))', gap: 10, alignItems: 'start' } : { display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {/* Cards fill the width: one column, two once each can have 420px (auto-fit, so one card isn't left in half the row). */}
+      <div style={wide ? { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(420px, 100%), 1fr))', gap: 10, alignItems: 'start' } : { display: 'flex', flexDirection: 'column', gap: 8 }}>
         {finish.effects.map((e, i) => (
           <EffectCard
             key={e.id}
@@ -339,6 +374,28 @@ export function PictureFinish({ play, onChange, touch, wide = false, embedded = 
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * "+ Add effect": a button like the other + buttons on Play (Add layer, + Rule), opening the grouped,
+ * searchable list of effects (Play audit P17; it was a dropdown face before).
+ */
+function AddEffectButton({ sections, onAdd }: { sections: PickerSection[]; onAdd: (value: string) => void }) {
+  const wrap = useRef<HTMLSpanElement>(null);
+  // The popover anchors on the button inside the wrapper.
+  const anchor = useMemo(() => ({ get current() { return wrap.current?.querySelector('button') ?? null; } }), []);
+  const [open, setOpen] = useState<{ asSheet: boolean } | null>(null);
+  const listId = useId();
+  return (
+    <span ref={wrap} style={{ display: 'inline-flex' }}>
+      <Button size="sm" icon="plus" aria-haspopup="listbox" aria-expanded={!!open} onClick={() => setOpen(o => (o ? null : { asSheet: menuAsSheet(window.innerWidth, 'auto') }))}>Add effect</Button>
+      {open && (
+        <PickerPanel listId={listId} sections={sections} value="" ariaLabel="Add an effect" title="Add an effect" asSheet={open.asSheet} width={320}
+          withSearch initialQuery="" searchPlaceholder="Search effects and nodes" anchorRef={anchor}
+          onPick={v => { setOpen(null); onAdd(v); }} onClose={() => setOpen(null)} />
+      )}
+    </span>
   );
 }
 
@@ -491,7 +548,8 @@ const num = (e: FinishHost, key: string): number => { const v = e[key]; return t
 
 function Label({ text, hint }: { text: string; hint?: string }) {
   const tk = useTokens();
-  const st: React.CSSProperties = { color: tk.text.faint, font: `600 10px ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase', width: 78, flexShrink: 0, display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
+  // A long name ("Frames a second") takes a second line rather than an ellipsis (Play audit P17).
+  const st: React.CSSProperties = { color: tk.text.faint, font: `600 10px/1.25 ${fontFamily.ui}`, letterSpacing: '0.04em', textTransform: 'uppercase', width: 88, flexShrink: 0, ...clampLines(2) };
   return hint ? <Tooltip label={text} description={hint} placement="top"><span style={{ ...st, cursor: 'help' }}>{text}</span></Tooltip> : <span style={st}>{text}</span>;
 }
 function Row({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
@@ -531,7 +589,7 @@ function presetsFor(e: FinishEffect, k: RowKit, onPatch: (c: Partial<FinishEffec
 
 function editorFor(e: FinishEffect, k: RowKit, touch: boolean, layers: LayerRef[], onPatch: (c: Partial<FinishEffect>) => void, onReplace: (e: FinishEffect) => void, onEdit?: () => void): ReactNode {
   switch (e.kind) {
-    case 'grade': return <GradeEditor e={e} k={k} touch={touch} onPatch={onPatch} onReplace={onReplace} />;
+    case 'grade': return <GradeEditor e={e} k={k} touch={touch} onPatch={onPatch} />;
     case 'halation': return (
       <>
         {k.nums('amount', 'reach', 'threshold', 'headroom', 'warmth', 'growth', 'conserve')}
@@ -947,42 +1005,13 @@ function effectSummary(e: FinishEffect): string {
   return shown.length ? shown.map(p => `${p.label.toLowerCase()} ${fmtNum(num(e, p.key))}`).join(' · ') : 'Default settings';
 }
 
-function GradeEditor({ e, k, touch, onPatch, onReplace }: { e: FinishEffect; k: RowKit; touch: boolean; onPatch: (c: Partial<FinishEffect>) => void; onReplace: (e: FinishEffect) => void }) {
-  const [saved, setSaved] = useState<SavedLook[]>(() => loadSavedLooks());
-  useEffect(() => {
-    const on = () => setSaved(loadSavedLooks());
-    window.addEventListener(SAVED_LOOKS_CHANGED, on);
-    return () => window.removeEventListener(SAVED_LOOKS_CHANGED, on);
-  }, []);
-  const lookSections: PickerSection[] = [
-    { heading: 'Looks', items: [{ value: '__none', label: 'Neutral', description: 'Every control back to its default' }, ...GRADE_LOOKS.map(l => ({ value: l.id, label: l.name, description: l.description }))] },
-    ...(saved.length ? [{ heading: 'Saved on this device', items: saved.map(l => ({ value: l.id, label: l.name, description: 'Your look' })) }] : []),
-  ];
-  const pickLook = (id: string) => {
-    if (id === '__none') { onReplace({ ...newFinishEffect('grade', e.id), enabled: e.enabled }); return; }
-    const look = GRADE_LOOKS.find(l => l.id === id) ?? saved.find(l => l.id === id);
-    if (look) onReplace(applyLook(e, look));
-  };
-  const save = async () => {
-    const name = await askText('Save this grade as a look', { label: 'Name', initial: lookName(e.look ?? '') || 'My look', confirmLabel: 'Save look' });
-    if (!name?.trim()) return;
-    const { result, id } = saveLook(name.trim(), lookFromGrade(e));
-    if (!result.ok) { toast.error('Couldn’t save the look', { message: result.error }); return; }
-    onPatch({ look: id });
-    toast.success(`Saved “${name.trim()}”`, { message: 'It is in the Looks list on this device.' });
-  };
-  const savedCurrent = saved.find(l => l.id === e.look);
-  const remove = async () => {
-    if (!savedCurrent || !(await askConfirm(`Delete the look “${savedCurrent.name}”?`, { message: 'Grades that used it keep their settings.', confirmLabel: 'Delete', danger: true }))) return;
-    deleteLook(savedCurrent.id);
-    onPatch({ look: undefined });
-  };
+function GradeEditor({ e, k, touch, onPatch }: { e: FinishEffect; k: RowKit; touch: boolean; onPatch: (c: Partial<FinishEffect>) => void }) {
   const curves = e.curves!;
   const wheels = touch ? { display: 'grid', gridTemplateColumns: '1fr', gap: 14, justifyItems: 'center' } : { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 10 };
   const hueTrack = (key: string) => (
     <div style={{ position: 'relative' }}>
       {k.num(key)}
-      <div aria-hidden style={{ height: 4, margin: '2px 34px 0 84px', borderRadius: 2, background: 'linear-gradient(90deg,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)', opacity: 0.8 }} />
+      <div aria-hidden style={{ height: 4, margin: '2px 34px 0 94px', borderRadius: 2, background: 'linear-gradient(90deg,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)', opacity: 0.8 }} />
     </div>
   );
   return (
@@ -994,24 +1023,18 @@ function GradeEditor({ e, k, touch, onPatch, onReplace }: { e: FinishEffect; k: 
       { id: 'grade-hsl', label: 'HSL secondary' },
       { id: 'grade-tone', label: 'Tone and amount' },
     ]}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
-        <Label text="Look" hint="A starting point: it sets the controls below, which you can then change. Your own grades can be saved as looks." />
-        <div style={{ flex: 1, minWidth: 140 }}>
-          <GroupedPicker value={e.look ?? ''} placeholder="Pick a look" ariaLabel="Look" title="Looks" sections={lookSections} onChange={pickLook} width={300} />
-        </div>
-        <IconButton icon="save" size="sm" label="Save this grade as a look" onClick={() => { void save(); }} />
-        {savedCurrent && <IconButton icon="trash" size="sm" tone="danger" label={`Delete the saved look “${savedCurrent.name}”`} onClick={() => { void remove(); }} />}
-      </div>
+      {/* Looks are Finish presets: picked and saved from Presets at the top of the Finish (Play audit P17). */}
+      <Note>{e.look ? <>On the look <b>{lookName(e.look) || 'a deleted look'}</b>. </> : null}Looks (Teal &amp; orange, Bleach bypass… and your own) are in <b>Presets</b> at the top.</Note>
       <Section id="grade-basic" kind="finish-grade" title="Basic" primary summary={effectSummary(e)} hint="Light and white balance, like Lightroom’s Basic panel.">
         {k.nums('exposure', 'contrast', 'highlights', 'shadows', 'whites', 'blacks')}
         <div style={{ height: 4 }} />
         <div style={{ position: 'relative' }}>
           {k.num('temperature')}
-          <div aria-hidden style={{ height: 4, margin: '2px 34px 0 84px', borderRadius: 2, background: 'linear-gradient(90deg,#4a7bff,#e8e8e8,#ffae3a)', opacity: 0.85 }} />
+          <div aria-hidden style={{ height: 4, margin: '2px 34px 0 94px', borderRadius: 2, background: 'linear-gradient(90deg,#4a7bff,#e8e8e8,#ffae3a)', opacity: 0.85 }} />
         </div>
         <div style={{ position: 'relative' }}>
           {k.num('tint')}
-          <div aria-hidden style={{ height: 4, margin: '2px 34px 0 84px', borderRadius: 2, background: 'linear-gradient(90deg,#3fcf5a,#e8e8e8,#e04fd8)', opacity: 0.85 }} />
+          <div aria-hidden style={{ height: 4, margin: '2px 34px 0 94px', borderRadius: 2, background: 'linear-gradient(90deg,#3fcf5a,#e8e8e8,#e04fd8)', opacity: 0.85 }} />
         </div>
         {k.nums('vibrance', 'saturation')}
       </Section>

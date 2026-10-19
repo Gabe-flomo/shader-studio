@@ -134,11 +134,19 @@ export function wirePathOf(a: Box, b: Box): { d: string; mid: { x: number; y: nu
   return cubic(x1, x1 + swing, b.x - swing, b.x);
 }
 
-/** The view that shows `w`×`h` of content whole in a `vw`×`vh` viewport, centred, never above 1:1. */
-export function fitView(w: number, h: number, vw: number, vh: number, margin = 32): { x: number; y: number; k: number } {
-  const k = Math.max(GRAPH_ZOOM_MIN, Math.min(1, (vw - 2 * margin) / Math.max(1, w), (vh - 2 * margin) / Math.max(1, h)));
-  return { x: Math.round((vw - w * k) / 2), y: Math.round((vh - h * k) / 2), k };
+/**
+ * The view that shows `w`×`h` of content whole in a `vw`×`vh` viewport, centred, never above 1:1
+ * and never below `minK` (GRAPH_FIT_MIN: the boxes' 11.5px text stays about 9px, readable). A drawing
+ * too big for that starts at its left (the sources, where the setup begins) and top, to drag along.
+ */
+export function fitView(w: number, h: number, vw: number, vh: number, margin = 32, minK = GRAPH_FIT_MIN): { x: number; y: number; k: number } {
+  const k = Math.max(minK, GRAPH_ZOOM_MIN, Math.min(1, (vw - 2 * margin) / Math.max(1, w), (vh - 2 * margin) / Math.max(1, h)));
+  const place = (size: number, view: number) => (size * k <= view - 2 * margin ? Math.round((view - size * k) / 2) : margin);
+  return { x: place(w, vw), y: place(h, vh), k };
 }
+
+/** Fit's smallest zoom: below it the boxes' text is too small to read (Play audit P11). */
+export const GRAPH_FIT_MIN = 0.78;
 
 export const GRAPH_ZOOM_MIN = 0.15;
 export const GRAPH_ZOOM_MAX = 2.5;

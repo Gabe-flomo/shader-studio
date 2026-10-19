@@ -49,7 +49,13 @@ Finish locked and the scene's own grade, vignette and grain stay nodes, editable
 (`play/finishPresets.ts`): every grade Look (Teal & orange, Bleach bypass…) as a Grade set to it,
 and starting stacks (Film, Old TV, Dreamy, Cheap lens). In the Presets menu, a built-in Look sets
 the stack's Grade to it (keeping its place and controls) or adds one; a built-in stack adds its
-effects (replaces an empty stack).
+effects (replaces an empty stack). The menu's sections: **Save stack as preset…** and **Save the
+Grade as a look…**, your stacks, **Your looks** (saved on this device; *Delete “…”* for the one the
+Grade is on), **Looks** and **Starting stacks**. The Grade card has no picker of its own any more
+(Play audit P17, 2026-10-18): it says which look it is on and points at Presets.
+
+**Cards** fill the column: one per row, two once each can have 420px (a wide panel). **+ Add
+effect** is a button like Add layer and + Rule, opening the grouped, searchable list.
 
 ## The stack
 
@@ -171,8 +177,9 @@ Lumetri-style sections on one card:
 
 - **Look**: starting points that only set the grade's own controls (Teal &
   orange, Bleach bypass, Faded print, Cross-process, Mono with toned shadows,
-  Warm film, Day for night). Save your own with the disk button; saved looks
-  live in `localStorage` (`shader-studio:finish-looks`) like palette presets.
+  Warm film, Day for night), picked from **Presets** at the top of the Finish.
+  Save your own there (*Save the Grade as a look…*); saved looks live in
+  `localStorage` (`shader-studio:finish-looks`) like palette presets.
 - **Basic**: Exposure (stops, in linear light), Contrast (an S around 0.5 that
   never clips), Highlights, Shadows (luma-masked gammas), Whites, Blacks
   (levels), Temperature, Tint (luminance-preserving white balance in linear
@@ -926,8 +933,8 @@ state) is gone: the wipe is the one divider.
 Stored in `localStorage` as a list, `shader-studio:finish-presets`
 (`{ id, name, savedAt, finish }`, checked with `parseFinish` when read).
 
-Under **Built in** the menu lists the Finish presets that come with the app (see "One Finish"
-above): the grade's Looks and a few starting stacks.
+Under **Looks** and **Starting stacks** the menu lists the Finish presets that come with the app
+(see "One Finish" above).
 
 ## Custom effects
 

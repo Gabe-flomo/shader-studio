@@ -1,16 +1,18 @@
 /**
  * What a rule can do, as one list: each layer's actions ("Burst · Sparks"),
- * then Send a signal. Quick rule offers them as chips, the reaction editor as
- * one picker. Pure.
+ * then Set a control and Nudge a control (they need no layer), then Send a
+ * signal. Quick rule offers them as chips, the reaction editor as one picker.
+ * Pure.
  */
-import { actionsForLayer, isLookAction, NOTES_ACTION, SIGNAL_ACTION, type ActionKind, type LookActionKind, type PlayLayer, type PlayReaction, type PlayRecord } from '../../../types/play';
+import { actionsForLayer, CONTROL_NUDGE_ACTION, CONTROL_SET_ACTION, isControlAction, isLookAction, NOTES_ACTION, SIGNAL_ACTION, type ActionKind, type LookActionKind, type PlayLayer, type PlayReaction, type PlayRecord } from '../../../types/play';
+import { controlActionText, defaultControlValue, settableControls } from '../../../play/controlActions';
 import { FINISH_TARGET_PREFIX, finishHostLabel, finishParamOf, finishParamsOf, finishPropId, type FinishEffect } from '../../../types/playFinish';
 import { notesSummary } from '../../../play/notes';
 import { actionLabel, LOOK_ACTION_LABELS } from '../layers/help';
 
-export interface DoChoice { value: string; label: string; layerId: string; do: ActionKind | typeof SIGNAL_ACTION; rackId?: string }
+export interface DoChoice { value: string; label: string; layerId: string; do: ActionKind; rackId?: string }
 
-export const doValue = (r: Pick<PlayReaction, 'do' | 'layerId' | 'notes'>) => (r.do === SIGNAL_ACTION ? SIGNAL_ACTION : r.do === NOTES_ACTION ? `notes|${r.notes?.rackId ?? ''}` : `${r.layerId}|${r.do}`);
+export const doValue = (r: Pick<PlayReaction, 'do' | 'layerId' | 'notes'>) => (r.do === SIGNAL_ACTION || isControlAction(r.do) ? r.do : r.do === NOTES_ACTION ? `notes|${r.notes?.rackId ?? ''}` : `${r.layerId}|${r.do}`);
 
 /** Every layer's actions, the preferred layer first, then Send a signal. */
 export function doChoices(play: PlayRecord, preferLayer?: string): DoChoice[] {
@@ -33,6 +35,11 @@ export function doChoices(play: PlayRecord, preferLayer?: string): DoChoice[] {
   }
   // Play notes on each rack of the Audio engine.
   for (const r of play.audioEngine?.racks ?? []) out.push({ value: `notes|${r.id}`, label: `Play notes · ${r.name}`, layerId: '', do: NOTES_ACTION, rackId: r.id });
+  // A control's own value (play/controlActions.ts): which control is picked beside it.
+  if (settableControls(play).length) {
+    out.push({ value: CONTROL_SET_ACTION, label: 'Set a control', layerId: '', do: CONTROL_SET_ACTION });
+    out.push({ value: CONTROL_NUDGE_ACTION, label: 'Nudge a control', layerId: '', do: CONTROL_NUDGE_ACTION });
+  }
   out.push({ value: SIGNAL_ACTION, label: 'Send a signal', layerId: '', do: SIGNAL_ACTION });
   return out;
 }
@@ -60,6 +67,14 @@ export function lookDefaults(kind: string, layerId: string, play: PlayRecord): P
   return { key: p.key, value: p.max, ...(kind === 'fxpulse' ? { seconds: 1 } : {}) };
 }
 
+/** A new Set or Nudge a control's own fields: the control (`keep` when it still can be, else the first) and its value. */
+export function controlDefaults(kind: string, play: PlayRecord, keep?: string): Partial<PlayReaction> {
+  if (!isControlAction(kind)) return {};
+  const list = settableControls(play);
+  const c = list.find(x => x.id === keep) ?? list[0];
+  return { control: c?.id ?? '', value: defaultControlValue(kind, c), key: undefined };
+}
+
 /** How much a new reaction of this kind does by default. */
 export function defaultAmount(kind: string, l: PlayLayer | undefined): number {
   if (kind === SIGNAL_ACTION || kind === 'goto' || kind === 'pad' || l?.kind === 'sampler') return 1;
@@ -70,6 +85,7 @@ export function defaultAmount(kind: string, l: PlayLayer | undefined): number {
 /** "Burst 60 · Sparks", "Send Hit": a reaction in words. */
 export function reactionText(r: PlayReaction, play: PlayRecord): string {
   if (r.do === SIGNAL_ACTION) return `Send ${play.signals?.find(s => s.id === r.signal)?.name ?? 'a signal'}`;
+  if (isControlAction(r.do)) return controlActionText(r, play);
   if (r.do === NOTES_ACTION && r.notes) return `Play ${notesSummary(r.notes)} · ${play.audioEngine?.racks.find(x => x.id === r.notes!.rackId)?.name ?? 'a missing rack'}`;
   if (isLookAction(r.do)) {
     const e = lookEffectOf(play, r.layerId);
