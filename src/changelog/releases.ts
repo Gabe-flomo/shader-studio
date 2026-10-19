@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.292',
+    date: '2026-10-18',
+    title: "Calmer Play page",
+    highlights: [
+      { area: 'Studio', text: "Play: controls come first, mappings fold to one line, each action has one button, the rail has labels, Sound's tab is Effects." },
+    ],
+  },
+  {
     id: '2026.10.291',
     date: '2026-10-18',
     title: "Cleaner pads",
