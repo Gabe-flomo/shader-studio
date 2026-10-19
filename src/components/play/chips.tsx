@@ -22,6 +22,7 @@ import { useReadersPanel } from './readersPanelUi';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { Popover } from '../ui/Popover';
 import { ReaderDots } from './ReaderDots';
+import { LiveSendsButton } from '../audio/LiveSendPicker';
 
 /**
  * Inside another site's frame (a preview on claude.ai, say) the browser refuses the camera,
@@ -170,6 +171,7 @@ export function LiveAudioChip({ readers = true }: { readers?: boolean } = {}) {
       {status !== 'on' && status !== 'unsupported' && <Button size="sm" onClick={() => void liveAudio.start(deviceId)}>Listen</Button>}
       {status === 'on' && <Button size="sm" variant="ghost" onClick={() => liveAudio.stop()}>Stop</Button>}
       {readers && <Button size="sm" variant="ghost" icon="wave" onClick={() => useReadersPanel.getState().show()} title="See the live spectrum and place readers on it">Spectrum</Button>}
+      {readers && <LiveSendsButton />}
       {liveReaders > 0 && (
         <span ref={dotsRef} style={{ display: 'inline-flex' }}>
           <Button size="sm" variant={dotsOpen ? 'secondary' : 'ghost'} onClick={() => setDotsOpen(o => !o)} title="The readers on the live input, with their levels and their controls">{liveReaders} reader{liveReaders === 1 ? '' : 's'}</Button>

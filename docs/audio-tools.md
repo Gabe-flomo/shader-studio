@@ -17,6 +17,16 @@ Where the sound comes from. The card has tabs, like the Texture node's Image | V
 - **Video**: pick a video node in the graph (a Texture node playing a video file, or a Baked node). Its own sound is
   what the Audio nodes hear, in step with the picture: it plays and loops with the video (there is no trim). You hear it
   through the speakers while Play is on. A video without a sound track reads silence; so does the webcam.
+- **Live** (the desktop app, Pro): a track in Ableton Live, through the **Playfield Send** plug-in (put it on the track;
+  install it from Connect → Ableton · Audio). The tab lists every Playfield Send that is running, named after its track
+  ("Live · Drums") when the Live connector is on, with a meter and its state (*Streaming*, *Paused in Live*, *Rendering
+  in Live* while Live exports or freezes, which isn't sent). Pick one. A saved one that isn't running is listed as *Not
+  found* and the card says *Waiting for Playfield Send 4821 (Drums)*, reading silence until it appears. It is never
+  played to the speakers, so it has Play / Pause only, and an effect on it isn't heard either. Open ↗ adds a **Name**
+  for a send the Live connector doesn't name (kept per Pairing ID), the stream's counters (buffer, drops, pads, gaps,
+  dropouts) and the **Cushion** (how much audio the page keeps in hand, 30 ms by default, 10–100). It arrives about
+  40–70 ms after Live plays it; **Sync offset** lines it up. Hidden in the browser; an exported page listens to the
+  visitor's microphone in its place. See docs/playfield-send-plan.md.
 
 - **The transport** (the top row of the card, and of the Open ↗ window; it stays on the card when you fold it):
   - **Play / Pause**: plays the file or the video's sound, or listens to the Mic. Paused, nothing plays and nothing is
@@ -25,7 +35,7 @@ Where the sound comes from. The card has tabs, like the Texture node's Image | V
   - **Mute**: silent, but still analysed: the bands, triggers, learned sounds and every listening node go on as if you
     heard it. For pictures that move to a song you don't want to hear.
   - **Volume**: how loud you hear it. It acts after the analysis, so moving it moves no trigger.
-  - The Mic is never played to the speakers (it would feed back), so it has Play / Pause only.
+  - The Mic and a Live track are never played to the speakers (the Mic would feed back; Live plays the track itself), so they have Play / Pause only.
 - **Loop** (File only): start again at the end of the trim (or the file). A Video loops as its video node does.
 - **Gain**: how loud the bands and the listening nodes hear it, not how loud you hear it. Raise it for a quiet microphone.
 - Outputs: **Audio** (for the nodes below), **Level** (how loud it is right now, 0–1), **Time** (seconds played),

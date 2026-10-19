@@ -51,6 +51,7 @@ export const FEATURES = {
   'play.midiFile': { plan: 'pro', label: 'Playing a MIDI file into Play' },
   'audio.engine': { plan: 'pro', label: 'The Audio engine: racks with a sample player, played from MIDI and the keyboard, with readers on their sound' },
   'audio.plugins': { plan: 'pro', label: 'Audio Unit synths and effects in the Audio engine (the desktop app on a Mac)' },
+  'audio.liveSend': { plan: 'pro', label: 'Ableton Live tracks as sound sources, through the Playfield Send plug-in (the desktop app on a Mac)' },
   'play.output': { plan: 'pro', label: 'The output window: the picture alone on a projector or second display, full screen, in step with the app' },
   'play.projection': { plan: 'pro', label: 'Projection mapping: corner pins, mesh warps, masks, edge blends and test patterns on the output' },
   convert: { plan: 'pro', label: 'Convert: GLSL into nodes' },

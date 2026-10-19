@@ -14,7 +14,7 @@ import { useNodeGraphStore } from '../../store/useNodeGraphStore';
 import { useTokens } from '../../theme/themeStore';
 import { fontFamily } from '../../theme/tokens';
 import type { GraphNode } from '../../types/nodeGraph';
-import { audioSourceKind } from '../../nodes/definitions/audioTools';
+import { audioSourceKind, isLiveInputKind } from '../../nodes/definitions/audioTools';
 import { audioToolsEngine } from '../../lib/audioTools/engine';
 import { Button, IconButton } from '../ui/Button';
 
@@ -26,7 +26,7 @@ export function AudioTransport({ node, compact = false }: { node: GraphNode; com
   const volume = Number.isFinite(Number(P.volume)) ? Math.max(0, Math.min(1, Number(P.volume ?? 1))) : 1;
   const set = (p: Record<string, unknown>, live = false) => useNodeGraphStore.getState().updateNodeParams(node.id, p, live ? { immediate: true, live: true } : { immediate: true });
   const stop = (e: React.SyntheticEvent) => e.stopPropagation();
-  const heard = kind !== 'mic';
+  const heard = !isLiveInputKind(kind);
   const row: CSSProperties = { display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, padding: compact ? '4px 10px 6px' : 0 };
   return (
     <div style={row} data-audio-transport={compact ? 'compact' : 'full'} onPointerDown={stop} onMouseDown={stop} onDoubleClick={stop}>

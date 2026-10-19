@@ -12,6 +12,7 @@ import { Segmented } from '../ui/Choice';
 import { Button } from '../ui/Button';
 import { toast } from '../ui/toastStore';
 import { LiveConnectorGuide } from './live/LiveConnectorGuide';
+import { PlayfieldSendGuide } from './live/PlayfieldSendGuide';
 
 export type ConnectTopic = 'which' | 'live' | 'midi' | 'osc' | 'audio' | 'controller';
 type Topic = ConnectTopic;
@@ -120,7 +121,7 @@ function Which({ onPick }: { onPick: (t: Topic) => void }) {
         {row('live', 'Ableton → Live connector (recommended)', 'Live’s tempo and beat, clip and scene launches, track names and colours, any parameter or rack macro by name; and launching clips back', 'following Live’s tempo; switching looks with the song’s scenes; mapping Live’s knobs and macros', isDesktopApp ? 'Live 11 or 12; one click installs it, then pick it in Live’s settings' : 'Live 11 or 12, copying one folder, and the bridge (npm run osc-bridge -- --live)')}
         {row('midi', 'Ableton → MIDI', 'notes (which, how hard), knobs as CC 0–127, pitch bend', 'hitting notes to fire envelopes; drawing CC automation', isDesktopApp ? 'a free virtual MIDI port (built into macOS: the IAC Driver)' : 'a free virtual MIDI port (built into macOS; loopMIDI on Windows), Chrome or Edge')}
         {row('osc', 'Ableton → OSC', 'any number from any knob or fader in Live, at full resolution', 'mapping many Live parameters, smooth sweeps, TouchOSC on a phone', isDesktopApp ? 'Max for Live (Suite) with the free Connection Kit; the app listens with one click' : 'Max for Live (Suite) with the free Connection Kit, and the small bridge (one download, one command)')}
-        {row('audio', 'Ableton → Audio', 'the actual sound: level, bass, low-mid, high-mid, treble, plus hits', 'visuals that react to the music; kick-driven flashes', 'a free virtual audio cable (BlackHole on Mac, VB-CABLE on Windows), or just a microphone')}
+        {row('audio', 'Ableton → Audio', 'the actual sound: level, bass, low-mid, high-mid, treble, plus hits; with Playfield Send, each track on its own', 'visuals that react to the music; kick-driven flashes; the drums and the bass driving different things', isDesktopApp ? 'the Playfield Send plug-in (one click installs it; Pro), or a free virtual audio cable for the whole mix' : 'a free virtual audio cable (BlackHole on Mac, VB-CABLE on Windows), or just a microphone; each track on its own needs the desktop app')}
         {row('controller', 'A MIDI controller', 'the keys, knobs and pads of any USB MIDI controller', 'playing the visuals by hand', isDesktopApp ? 'nothing else: the desktop app reads it directly' : 'Chrome or Edge; no Ableton needed')}
       </div>
     </>
@@ -208,6 +209,10 @@ function AbletonOsc({ os }: { os: Platform }) {
 function AbletonAudio({ os }: { os: Platform }) {
   return (
     <>
+      {os === 'mac'
+        ? <PlayfieldSendGuide P={P} Steps={Steps} H={H} B={B} Code={Code} Note={Note} />
+        : <Note>One track at a time (the <B>Playfield Send</B> plug-in) is in the Mac desktop app for now; Windows comes with the Windows app.</Note>}
+      <H>The whole mix: a virtual audio cable</H>
       <P>To make the visuals react to the <B>sound</B> itself, send Ableton's output into a <B>virtual audio cable</B> and let Playfield listen to it like a microphone. Playfield only analyses it and never plays it, so there's no echo.</P>
       <H>1 · Install a virtual audio cable</H>
       {os === 'mac' ? (

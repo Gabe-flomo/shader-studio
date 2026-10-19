@@ -17,8 +17,11 @@ import { videoSound } from './videoSound';
 import { padsLayerOfInput, videoLayerOfInput } from '../types/playLayers';
 import { padSound } from './padSound';
 import { engineRackOfInput, engineSound } from './engineSound';
+import { sendIdOfInput } from './liveSendNames';
+import { liveSend } from './liveSend';
+import { can } from './plan';
 
-export type ReaderInputState = 'live-on' | 'live-off' | 'song' | 'song-missing' | 'video' | 'video-missing' | 'pads' | 'pads-missing' | 'engine' | 'engine-missing';
+export type ReaderInputState = 'live-on' | 'live-off' | 'song' | 'song-missing' | 'video' | 'video-missing' | 'pads' | 'pads-missing' | 'engine' | 'engine-missing' | 'send' | 'send-missing';
 
 class AudioReaderBank {
   private cfg: PlayAudioReaders | undefined;
@@ -31,6 +34,13 @@ class AudioReaderBank {
 
   setConfig(cfg: PlayAudioReaders | undefined): void {
     this.cfg = cfg;
+    // Readers on a Live track keep Playfield Send listening.
+    liveSend.want('readers', !!cfg?.readers.length && sendIdOfInput(cfg.input) !== null);
+  }
+
+  /** A Live track's analyser (Pro, desktop), made on first use. */
+  private sendAnalyser(id: number): AnalyserNode | null {
+    return can('audio.liveSend') && liveSend.available() ? liveSend.analyser(id) : null;
   }
 
   readers(): readonly AudioReader[] { return this.cfg?.readers ?? []; }
@@ -48,6 +58,8 @@ class AudioReaderBank {
     if (pads) return padSound.analyser(pads) ? 'pads' : 'pads-missing';
     const rack = engineRackOfInput(input);
     if (rack) return engineSound.has(rack) ? 'engine' : 'engine-missing';
+    const send = sendIdOfInput(input);
+    if (send !== null) return liveSend.instance(send)?.status === 'streaming' && this.sendAnalyser(send) ? 'send' : 'send-missing';
     return audioEngine.isLoaded(input) ? 'song' : 'song-missing';
   }
 
@@ -64,8 +76,8 @@ class AudioReaderBank {
       const s = engineSound.spectrum(rack);
       return s ? { freq: s.freq, sampleRate: s.sampleRate } : null;
     }
-    const video = videoLayerOfInput(input), pads = padsLayerOfInput(input);
-    const an = video ? videoSound.analyser(video) : pads ? padSound.analyser(pads) : audioEngine.getAnalyser(input);
+    const video = videoLayerOfInput(input), pads = padsLayerOfInput(input), send = sendIdOfInput(input);
+    const an = video ? videoSound.analyser(video) : pads ? padSound.analyser(pads) : send !== null ? this.sendAnalyser(send) : audioEngine.getAnalyser(input);
     if (!an) return null;
     if (!this.buf || this.buf.length !== an.frequencyBinCount) this.buf = new Float32Array(an.frequencyBinCount);
     const now = performance.now();

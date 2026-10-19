@@ -21,6 +21,7 @@ import type { AudioReader, PlayAudioReaders, PlayControl, PlayMapping, PlayRecor
 import { parseReaderTarget, readerControlTarget } from '../types/play';
 import { padsLayerOfInput, videoLayerOfInput } from '../types/playLayers';
 import { ENGINE_MASTER, engineRackOfInput } from '../lib/engineSound';
+import { sendIdOfInput, sendLabel } from '../lib/liveSendNames';
 import { formatHz, newReader as newReaderAt } from './audioReaders';
 import { playId } from './playControls';
 
@@ -79,6 +80,9 @@ export function readerSourceName(p: PlayRecord, songLabel?: (nodeId: string) => 
   if (video) return p.layers.find(l => l.id === video)?.label ?? 'Video';
   const pads = padsLayerOfInput(input);
   if (pads) return p.layers.find(l => l.id === pads)?.label ?? 'Drum pads';
+  // A Live track through Playfield Send: "Live · Drums".
+  const send = sendIdOfInput(input);
+  if (send !== null) return `Live · ${sendLabel(send)}`;
   return songLabel?.(input) ?? 'Song';
 }
 

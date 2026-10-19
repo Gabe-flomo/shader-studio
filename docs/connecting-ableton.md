@@ -61,6 +61,20 @@ A small script that runs inside Live as a **Control Surface** (`tools/live-conne
 
 ## Ableton → Audio
 
+### One track at a time: Playfield Send (desktop app on a Mac, Pro)
+
+**Playfield Send** is a small VST3 plug-in. Put it on any Live track, return or group: it passes the sound through untouched and sends that track's audio to Playfield on the same Mac. Each one is a source named after its track ("Live · Drums").
+
+1. **Install it:** Connect → Ableton · Audio → **Install Playfield Send** (it copies the plug-in to `~/Library/Audio/Plug-Ins/VST3/`; no admin rights). Restart Live, or Live → Settings → Plug-Ins → **Rescan** (with **Use VST3 Plug-In System Folders** on, the default).
+2. **In Live:** browser → Plug-Ins → VST3 → Playfield → drag **Playfield Send** onto a track, where in the chain you want to listen.
+3. **In Playfield:** an **Audio Source** node → **Live** tab → pick the track; or Play's audio readers → **Listen to** → *Live · Drums*. With the **Live connector** on, sends are named after their tracks; without it, name them in the source's Open ↗ window.
+
+The plug-in's window (the wrench on the device) shows whether Playfield is listening, its four-digit **Pairing ID**, the track it is paired to and a level meter. Duplicating a track gives the copy a new ID. Expect 40–70 ms from Live to the picture (less than that behind what you hear); the source's **Sync offset** lines it up.
+
+**If Live doesn't list it:** rescan or restart Live. A copy you **downloaded** (rather than installed from Playfield) carries macOS's quarantine flag and Live won't load it; install it from Playfield, or run `xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/Playfield\ Send.vst3` and restart Live. Playfield's builds sign the plug-in ad hoc (no Apple Developer ID yet), which is fine for a copy Playfield installs. An Intel Mac (or Live under Rosetta) needs a build that includes the Intel half.
+
+### The whole mix: a virtual audio cable
+
 1. **Install a virtual audio cable.**
    - *Mac:* **BlackHole 2ch** (existential.audio/blackhole or `brew install blackhole-2ch`). To keep hearing the music: Audio MIDI Setup → **+** → **Create Multi-Output Device** → tick your speakers and BlackHole 2ch (Drift Correction on BlackHole).
    - *Windows:* **VB-CABLE** (vb-audio.com/Cable). To keep hearing: Sound settings → More sound settings → Recording → **CABLE Output** → Properties → Listen → **Listen to this device** on your speakers.

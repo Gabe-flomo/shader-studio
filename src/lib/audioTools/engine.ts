@@ -26,6 +26,8 @@
  *   (lib/audioEngine.ts heardTime: less the output's latency, plus the source's Sync offset). Mic and Video run live,
  *   per frame; a Video's hits wait for its sound to reach the speakers (the output latency plus Sync offset).
  * - Volume and Mute (the card's transport) act after the analysis: a muted source is silent but still triggers.
+ * - Live (desktop, Pro): a track in Ableton Live through the Playfield Send plug-in (lib/liveSend.ts): its worklet node
+ *   is the upstream, read live like the Mic and never played to the speakers (effects on it aren't heard either).
  *
  * Nodes inside groups (plain, iterated, nested) are followed too (graphWalk.ts): an `audio` wire through a group
  * ports reaches its source, and every node is keyed by its own id, as the compiler binds it.
@@ -37,12 +39,14 @@ import { inputBus } from '../inputBus';
 import { audioEngine, trackChainId } from '../audioEngine';
 import { audioFxHost } from '../audioFx';
 import { liveAudio } from '../liveAudio';
+import { liveSend } from '../liveSend';
+import { can } from '../plan';
 import { videoEngine } from '../videoEngine';
 import { bakedVideos } from '../bakedVideos';
 import { mediaElementSourceOf } from '../videoSound';
 import { getVideo } from '../backgroundLibrary';
 import {
-  AUDIO_HIT_TYPE, AUDIO_SOURCE_TYPE, AUDIO_TEXTURE_TYPES, audioBandOf, audioSoundsOf, audioSourceKind, audioTextureSize, effectSpecOf, isAudioFxType, listenerSpecOf,
+  AUDIO_HIT_TYPE, AUDIO_SOURCE_TYPE, AUDIO_TEXTURE_TYPES, audioBandOf, audioSendIdOf, audioSoundsOf, audioSourceKind, audioTextureSize, effectSpecOf, isAudioFxType, isLiveInputKind, listenerSpecOf,
   type AudioSourceKind,
 } from '../../nodes/definitions/audioTools';
 import { audioHearing, collectAudioNodes, findNodeDeep } from './graphWalk';
@@ -258,7 +262,7 @@ class AudioToolsEngine implements InputSource {
       kind: s.kind, active: s.active, loaded: s.loaded, freq: s.freq, wave: s.wave, sampleRate: s.sampleRate, level: s.level, time: s.time,
       duration: s.kind === 'file' && s.loaded ? audioEngine.duration(nodeId) : 0, bands, sounds,
       ahead: s.kind !== 'file' || !s.ahead ? 'live' : s.ahead.busy() ? 'analysing' : 'ready',
-      latencyMs: s.kind === 'mic' ? 0 : Math.round(audioEngine.outputLatency() * 1000),
+      latencyMs: isLiveInputKind(s.kind) ? 0 : Math.round(audioEngine.outputLatency() * 1000),
     };
   }
 
@@ -275,6 +279,8 @@ class AudioToolsEngine implements InputSource {
     for (const [id, f] of this.effects) if (!audio.some(r => r.node.id === id && isAudioFxType(r.node.type))) this.dropEffect(id, f);
     // Sources first, then effects, so a listener finds the slot of the sound it takes.
     for (const r of audio) if (r.node.type === AUDIO_SOURCE_TYPE) this.syncSource(r.node);
+    // Live sources: listen for Playfield Send while any source is on the Live tab.
+    liveSend.want('audioTools', [...this.sources.values()].some(s => s.kind === 'send'));
     const hearing = audioHearing(audio, id => this.sources.get(id)?.kind ?? null);
     this.dryMuted = hearing.dryMuted;
     for (const r of audio) if (isAudioFxType(r.node.type)) this.syncEffect(r.node, r.sourceId, hearing.rootOf.get(r.node.id) ?? null, hearing.heard.has(r.node.id));
@@ -352,7 +358,7 @@ class AudioToolsEngine implements InputSource {
     s.applied = key;
     if (s.kind !== 'file') {
       if (audioEngine.isPlaying(id)) audioEngine.stopAudio(id);
-      if (s.kind === 'mic' && playing && !s.micSince) s.micSince = performance.now();
+      if (isLiveInputKind(s.kind) && playing && !s.micSince) s.micSince = performance.now();
       if (!playing) s.micSince = 0;
     } else if (s.loaded) {
       const want = playing && !audioEngine.isMasterPaused();
@@ -375,6 +381,8 @@ class AudioToolsEngine implements InputSource {
         : 'Microphone off: press Start.';
     } else if (s.kind === 'video') {
       text = this.videoStatus(s);
+    } else if (s.kind === 'send') {
+      text = this.sendStatus(s);
     } else if (!s.loaded) {
       const was = typeof s.node.params._fileName === 'string' ? s.node.params._fileName : '';
       const kept = typeof s.node.params.sampleId === 'string' && s.node.params.sampleId;
@@ -385,6 +393,21 @@ class AudioToolsEngine implements InputSource {
       text = `${audioEngine.getFileName(s.node.id) || 'Sound'} · ${audioEngine.isPlaying(s.node.id) ? 'playing' : 'stopped'}${s.node.params.muted === true ? ' (muted)' : ''}`;
     }
     this.setStatus(s, text);
+  }
+
+  /** A Live source's line: what it waits for, or the track and how it streams. */
+  private sendStatus(s: SourceSlot): string {
+    const id = audioSendIdOf(s.node);
+    const saved = typeof s.node.params.sendLabel === 'string' ? s.node.params.sendLabel : '';
+    if (!can('audio.liveSend')) return 'Live tracks are part of Pro: this source is silent.';
+    if (!liveSend.available()) return 'Live tracks come in through the desktop app (the Playfield Send plug-in).';
+    if (id === null) return 'Pick a Live track: put the Playfield Send plug-in on it in Live.';
+    const inst = liveSend.instance(id);
+    const name = liveSend.label(id, saved);
+    if (!inst) return `Waiting for Playfield Send ${id}${name && name !== `Send ${id}` ? ` (${name})` : ''}: is Live open with it on a track?`;
+    const playing = s.node.params.playing !== false;
+    const state = inst.status === 'paused' ? 'paused in Live' : inst.status === 'offline' ? 'rendering in Live (not sent)' : inst.status === 'unreadable' ? 'can’t be read' : 'streaming';
+    return `Live · ${name} · ${state}${playing ? '' : ' (Play is off)'}`;
   }
 
   private setStatus(s: SourceSlot, text: string): void {
@@ -588,7 +611,7 @@ class AudioToolsEngine implements InputSource {
   /** Seconds a live hit waits so it lands when its sound is heard: a Video's (and a File's still being analysed) output latency, plus Sync offset. */
   private liveDelay(s: SourceSlot): number {
     const offset = num(s.node.params.syncOffset, 0) / 1000;
-    return Math.max(0, (s.kind === 'mic' ? 0 : audioEngine.outputLatency()) + offset);
+    return Math.max(0, (isLiveInputKind(s.kind) ? 0 : audioEngine.outputLatency()) + offset);
   }
 
   /** Which bands' hits came from the file analysed ahead on the last frame. */
@@ -662,6 +685,7 @@ class AudioToolsEngine implements InputSource {
     if (!s || s.node.params.playing === false) return null;
     if (s.kind === 'mic') return liveAudio.tapNode();
     if (s.kind === 'video') return s.videoIn;
+    if (s.kind === 'send') return this.sendUpstream(s);
     return s.loaded ? audioEngine.getAnalyser(id) : null;
   }
 
@@ -686,7 +710,7 @@ class AudioToolsEngine implements InputSource {
     }
     f.fx?.update(spec);
     // Heard: through the master volume and the recording bus, as the songs are (a Mic's context never is).
-    const audible = !!(f.heard && f.fx && f.rootId && this.sources.get(f.rootId)?.kind !== 'mic');
+    const audible = !!(f.heard && f.fx && f.rootId && !isLiveInputKind(this.sources.get(f.rootId)?.kind ?? null));
     if (audible && !f.unplugOut) f.unplugOut = audioEngine.connectOutside(f.fx!.output);
     else if (!audible && f.unplugOut) { f.unplugOut(); f.unplugOut = null; }
     const root = f.rootId ? this.sources.get(f.rootId) : undefined;
@@ -777,6 +801,7 @@ class AudioToolsEngine implements InputSource {
     const upstream = !playing ? null
       : s.kind === 'mic' ? liveAudio.tapNode()
       : s.kind === 'video' ? this.videoUpstream(s)
+      : s.kind === 'send' ? this.sendUpstream(s)
       : (audioEngine.isPlaying(id) ? audioEngine.getAnalyser(id) : null);
     if (upstream !== s.upstream) {
       if (s.upstream && s.probe) { try { s.upstream.disconnect(s.probe); } catch { /* gone */ } }
@@ -790,8 +815,10 @@ class AudioToolsEngine implements InputSource {
         upstream.connect(s.probe);
         s.sampleRate = upstream.context.sampleRate;
       }
-      if (s.kind === 'mic') this.refreshStatus(s);
+      if (isLiveInputKind(s.kind)) this.refreshStatus(s);
     }
+    // A Live source's line follows the plug-in (found, paused in Live, gone).
+    if (s.kind === 'send' && this.frame % 15 === 0) this.refreshStatus(s);
     // A video that is paused or still opening sounds nothing: silence, not its last frame.
     s.active = !!upstream && !!s.probe && !(s.kind === 'video' && (!s.videoEl || s.videoEl.paused));
     if (s.active) {
@@ -803,11 +830,18 @@ class AudioToolsEngine implements InputSource {
       s.wave.fill(0);
       s.level = 0;
     }
-    s.time = s.kind === 'mic' ? (s.micSince && s.active ? (performance.now() - s.micSince) / 1000 : 0)
+    s.time = isLiveInputKind(s.kind) ? (s.micSince && s.active ? (performance.now() - s.micSince) / 1000 : 0)
       : s.kind === 'video' ? (s.videoEl?.currentTime ?? 0) : audioEngine.position(id) ?? 0;
     if (s.kind === 'video') this.refreshStatus(s);
     // A file that played to its end: the card says so.
     if (s.kind === 'file' && s.loaded && !audioEngine.isPlaying(id) && s.status.endsWith('playing')) this.refreshStatus(s);
+  }
+
+  /** A Live source's sound: the Playfield Send instance's receive node (made on first use; null while waiting, or on Free). */
+  private sendUpstream(s: SourceSlot): AudioNode | null {
+    const id = audioSendIdOf(s.node);
+    if (id === null || !can('audio.liveSend') || !liveSend.available()) return null;
+    return liveSend.tap(id);
   }
 
   private runListener(id: string, l: ListenSlot, nowMs: number, dt: number, write: InputWriter): void {

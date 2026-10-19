@@ -37,6 +37,8 @@ import { LEARN_BANDS, newSound, type AudioSoundSpec, type LearnResult } from '..
 import { audioToolsEngine, type BandView } from '../../lib/audioTools/engine';
 import { audioEngine } from '../../lib/audioEngine';
 import { liveAudio } from '../../lib/liveAudio';
+import { useCan } from '../../lib/plan';
+import { LiveSendDetails, pickSourceTab, sourceTabOptions, useLiveSend } from './LiveSendPicker';
 import {
   BAND_CHARACTERS, BAND_DETECTS, BAND_DETECT_PRESETS, BAND_MAX_HZ, BAND_MIN_HZ, BAND_QUICK_PRESETS, MIN_TRIM, bandsOf, newBand, trimWindow,
   type AudioBandCharacter, type AudioBandDetect, type AudioBandSpec,
@@ -133,6 +135,13 @@ function drawScope(g: CanvasRenderingContext2D, w: number, h: number, b: AudioBa
 type TrimDrag = { which: 'in' | 'out' | 'new' | 'select'; anchor: number; start: number; end: number };
 type Span = { start: number; end: number };
 const SELECT = '#a6e3a1';
+
+/** File | Mic | Video (| Live, in the desktop app) for the window. */
+function SourceTabs({ nodeId, kind }: { nodeId: string; kind: AudioSourceKind }) {
+  useLiveSend();
+  const liveOk = useCan('audio.liveSend');
+  return <Segmented<AudioSourceKind> size="sm" fill ariaLabel="Source" value={kind} onChange={v => pickSourceTab(nodeId, v)} options={sourceTabOptions(kind, liveOk)} />;
+}
 
 export function AudioSourceWindow({ nodeId, onClose, onLoad }: { nodeId: string; onClose: () => void; onLoad: () => void }) {
   const tk = useTokens();
@@ -269,6 +278,7 @@ export function AudioSourceWindow({ nodeId, onClose, onLoad }: { nodeId: string;
 
   if (!node) return null;
   const kind = audioSourceKind(node);
+  const live = kind === 'send';
   const view = audioToolsEngine.sourceView(nodeId);
   const duration = view?.duration ?? 0;
   const win = trimWindow(duration, node.params.trimIn, node.params.trimOut);
@@ -399,13 +409,13 @@ export function AudioSourceWindow({ nodeId, onClose, onLoad }: { nodeId: string;
 
   return (
     <Modal title={typeof node.params.label === 'string' && node.params.label.trim() ? node.params.label.trim() : 'Audio Source'}
-      subtitle={kind === 'file' ? 'Audio Source · trim the file, pick frequency bands, learn sounds' : kind === 'video' ? 'Audio Source · a video\'s sound, its frequency bands and learned sounds' : 'Audio Source · the Mic, its frequency bands and learned sounds'}
+      subtitle={kind === 'file' ? 'Audio Source · trim the file, pick frequency bands, learn sounds' : kind === 'video' ? 'Audio Source · a video\'s sound, its frequency bands and learned sounds' : live ? 'Audio Source · a track in Ableton Live, its frequency bands and learned sounds' : 'Audio Source · the Mic, its frequency bands and learned sounds'}
       icon="wave" width={1240} height={800} onClose={onClose} headerActions={<Button variant="primary" onClick={onClose}>Done</Button>}>
       <div data-audio-source-window style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: 16, height: '100%', boxSizing: 'border-box', overflowY: 'auto', font: `500 12px ${fontFamily.ui}` }}>
         {/* Transport */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <div style={{ width: 220 }}>
-            <Segmented<AudioSourceKind> size="sm" fill ariaLabel="Source" value={kind} onChange={v => set({ source: v })} options={[{ value: 'file', label: 'File' }, { value: 'mic', label: 'Mic' }, { value: 'video', label: 'Video' }]} />
+          <div style={{ width: 280 }}>
+            <SourceTabs nodeId={nodeId} kind={kind} />
           </div>
           <div style={{ minWidth: 300 }}><AudioTransport node={node} /></div>
           {kind === 'file' && <Toggle checked={node.params.loop !== false} onChange={c => set({ loop: c })} label="Loop" />}
@@ -414,11 +424,13 @@ export function AudioSourceWindow({ nodeId, onClose, onLoad }: { nodeId: string;
           {kind === 'mic' && !liveAudio.isOn() && <Button size="sm" onClick={() => { void audioToolsEngine.startMic(nodeId); redraw(x => x + 1); }}>Start</Button>}
           {field('Sync offset', Number(node.params.syncOffset ?? 0), v => set({ syncOffset: Math.max(-500, Math.min(1000, Math.round(v))) }, true), {
             step: 5, min: -500, max: 1000,
-            title: `Milliseconds added to when its triggers fire: + if the picture is early, − if it is late. The output's own latency (${view?.latencyMs ?? 0} ms here) is already taken off${kind === 'mic' ? ' (the Mic is heard in the room: only a + offset applies)' : ''}.`,
+            title: `Milliseconds added to when its triggers fire: + if the picture is early, − if it is late. The output's own latency (${view?.latencyMs ?? 0} ms here) is already taken off${kind === 'mic' ? ' (the Mic is heard in the room: only a + offset applies)' : live ? ' (a Live track arrives about 40–70 ms after Live plays it, part of which Live\'s own output delay hides: + or − to line it up)' : ''}.`,
           })}
-          <span style={small} data-audio-sync>{kind === 'file' ? (view?.ahead === 'analysing' ? 'Analysing the file…' : view?.ahead === 'ready' ? 'Triggers: analysed ahead' : '') : 'Triggers: live'}{kind !== 'mic' && view ? ` · output ${view.latencyMs} ms` : ''}</span>
+          <span style={small} data-audio-sync>{kind === 'file' ? (view?.ahead === 'analysing' ? 'Analysing the file…' : view?.ahead === 'ready' ? 'Triggers: analysed ahead' : '') : 'Triggers: live'}{kind !== 'mic' && !live && view ? ` · output ${view.latencyMs} ms` : ''}</span>
           <span style={{ ...small, marginLeft: 'auto' }}>{audioToolsEngine.status(nodeId)}</span>
         </div>
+
+        {live && <LiveSendDetails node={node} />}
 
         {/* Waveform + trim */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
