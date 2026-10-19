@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.299',
+    date: '2026-10-18',
+    title: "Takes have a home",
+    highlights: [
+      { area: 'Studio', text: "Recording has clear names, takes live in Sound \u2192 Arrangement, and MIDI files and the pad grid are added from + Map." },
+    ],
+  },
+  {
     id: '2026.10.298',
     date: '2026-10-18',
     title: "Simpler Play on phones",
