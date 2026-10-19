@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.306',
+    date: '2026-10-19',
+    title: "Smarter triggers",
+    highlights: [
+      { area: 'Studio', text: "Audio bands can detect hits, transients, noisy vs tonal sound, brightness or drums only, with Kick, Snare, Hats and Melody presets." },
+    ],
+  },
+  {
     id: '2026.10.305',
     date: '2026-10-19',
     title: "Pictures in 3D",
