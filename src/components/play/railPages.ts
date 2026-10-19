@@ -130,21 +130,23 @@ export function mappingsCountOf(play: PlayRecord): number {
 }
 
 /**
- * The pages a phone's bottom row offers for a category (Play audit P20). Controls
- * and Layers go straight to their page, with no sheet in between: the Controls
+ * The pages a phone's bottom row offers for a category (Play audit P20). Every
+ * category goes straight to its one page, with no sheet in between: the Controls
  * page has a Controls / Sources switch (the MIDI file and the pad grid sit in
- * Sources), and the Layers page carries the canvas shape at its top and the
- * Background as its pinned first row. Sound keeps its two pages.
+ * Sources), the Layers page has the picture's size (Free or 1:1) at its top and
+ * the Background as its pinned first row, and Sound is one page of the Sampler,
+ * readers and effects (no Arrangement on a phone: phoneTrim.ts, 2026-10-18).
  */
 export function phonePagesOf(cat: RailCategory): readonly RailPage[] {
   if (cat === 'controls') return ['controls'];
+  if (cat === 'engine') return ['finish-sound'];
   return categoryDef(cat).pages;
 }
 
-/** The page a phone shows for the page in view: the same, unless a phone has no page of its own for it (MIDI file, Pad grid: in Sources there). */
+/** The page a phone shows for the page in view: the same, unless a phone has no page of its own for it (MIDI file, Pad grid: in Sources there; Arrangement: Sound's one page). */
 export function phonePageFor(page: RailPage): RailPage {
-  const cat = categoryOf(page);
-  return phonePagesOf(cat).includes(page) ? page : firstPageOf(cat);
+  const pages = phonePagesOf(categoryOf(page));
+  return pages.includes(page) ? page : pages[0];
 }
 
 /** Arrow-key movement through a list of `count` items (wraps; Home and End jump). */

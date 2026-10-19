@@ -49,6 +49,7 @@ import { TAKE_MAX_SECONDS, type PlayTake } from '../types/play';
 import { Select } from './ui/Select';
 import { holdAutosave } from '../files/recovery';
 import { resetRuntime } from '../lib/runtimeReset';
+import { aspectChoices, usePhonePlay, useShownAspect } from './play/phoneTrim';
 import { frameIsOpaque, graphOwnAlpha } from '../lib/graphAlpha';
 
 // ── Progress bar ──────────────────────────────────────────────────────────────
@@ -181,7 +182,10 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
   const [resId, setResId]           = useState<string>(() => canvas ? defaultResolutionId(canvas.width, canvas.height) : 'preview');
   // Full-screen dialog with stacked footer and finger-sized rows below 480px (ui/phoneDialog.ts).
   const phone = usePhoneDialog();
-  const previewAspect    = useNodeGraphStore(s => s.previewAspect);
+  // A phone's Play page offers only Free and 1:1, and shows another saved shape as Free (play/phoneTrim.ts).
+  const phonePlay = usePhonePlay();
+  const previewAspect    = useShownAspect();
+  const aspects = aspectChoices(phonePlay);
   const setPreviewAspect = useNodeGraphStore(s => s.setPreviewAspect);
   const [codec, setCodec]           = useState<DesktopFormat>('h264');
   // The MP4's encoder (Speed): hardware VideoToolbox when this FFmpeg has it (asked once), else x264. null: not picked yet.
@@ -1198,11 +1202,11 @@ export function ExportModal({ canvas, offlineRender, external = false, onClose }
               <Segmented
                 fill
                 tall={phone}
-                wrap={choiceRowWraps(PREVIEW_ASPECTS.length, phone)}
+                wrap={choiceRowWraps(aspects.length, phone)}
                 ariaLabel="Aspect ratio"
                 value={previewAspect}
                 onChange={v => setPreviewAspect(v as typeof previewAspect)}
-                options={PREVIEW_ASPECTS.map(a => ({ value: a.id, label: a.label, title: a.hint }))}
+                options={aspects.map(a => ({ value: a.id, label: a.label, title: a.hint }))}
               />
               <Help>The preview takes this shape too, so what you see is what you export. Free follows the panel.</Help>
             </Section>

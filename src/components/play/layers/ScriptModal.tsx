@@ -33,7 +33,7 @@ import { CodeField } from '../../code/CodeField';
 import { tokenizeJsLine } from '../../code/jsSyntax';
 import { changedLines } from '../../code/lineDiff';
 import { insertSnippet } from '../../code/useCompletion';
-import { useNodeGraphStore } from '../../../store/useNodeGraphStore';
+import { useShownAspect } from '../phoneTrim';
 import { PREVIEW_ASPECTS } from '../../../utils/graphImportPlan';
 import { removeScript, saveScript, scriptFunctions, useSavedScripts } from '../../../play/savedScripts';
 import type { FieldKit } from './fields';
@@ -236,7 +236,7 @@ export function ScriptModal({ l, f, act, layers, drafts, setDrafts, apply, apply
   const [previewFiles, setPreviewFiles] = useState(drafts);
   useEffect(() => { const t = setTimeout(() => setPreviewFiles(drafts), 500); return () => clearTimeout(t); }, [drafts]);
   const values = useMemo(() => { const o: Record<string, number> = {}; const raw = l as unknown as Record<string, unknown>; for (const k in raw) if (k.startsWith('p_') && typeof raw[k] === 'number') o[k.slice(2)] = raw[k] as number; return o; }, [l]);
-  const aspectId = useNodeGraphStore(s => s.previewAspect);
+  const aspectId = useShownAspect();
   const ratio = PREVIEW_ASPECTS.find(a => a.id === aspectId)?.ratio ?? 16 / 9;
 
   // ── Edits ─────────────────────────────────────────────────────────────────

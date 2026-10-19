@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import { useNodeGraphStore } from '../store/useNodeGraphStore';
 import { PREVIEW_ASPECTS, fitAspect, playFreeFit } from '../utils/graphImportPlan';
 import { usePlaySplit } from './play/playSplit';
+import { useShownAspect } from './play/phoneTrim';
 import { drawScopeCanvas, vectorValueRegistry, floatValueRegistry, scopeCanvasRegistry } from '../lib/scopeRegistry';
 import { audioEngine } from '../lib/audioEngine';
 import { audioSpectrumRegistry, drawSpectrumCanvas } from '../lib/audioSpectrumRegistry';
@@ -3159,7 +3160,8 @@ function ShaderCanvasSurface({ onCanvasReady, onRegisterOfflineRender, onHistogr
   // The export renders at the canvas size × scale, so a 16:9 preview gives a
   // 16:9 video whatever shape the panel is. The inner div keeps its own
   // ResizeObserver above, so the renderer follows the fitted size.
-  const previewAspect = useNodeGraphStore(s => s.previewAspect);
+  // A phone's Play page shows any saved shape but 1:1 as Free (play/phoneTrim.ts).
+  const previewAspect = useShownAspect();
   const outerRef = useRef<HTMLDivElement>(null);
   const overlayRef = useCallback((el: HTMLCanvasElement | null) => { playOverlay.setCanvas(el); }, []);
   // Null markers drag from the picture itself.

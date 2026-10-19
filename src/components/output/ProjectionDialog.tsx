@@ -11,6 +11,7 @@
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useNodeGraphStore } from '../../store/useNodeGraphStore';
+import { useShownAspect } from '../play/phoneTrim';
 import { useTokens } from '../../theme/themeStore';
 import { alpha, fontFamily, radius } from '../../theme/tokens';
 import { Modal } from '../ui/Modal';
@@ -41,7 +42,7 @@ export function ProjectionDialog({ onClose }: { onClose: () => void }) {
   const tk = useTokens();
   const out = useOutput();
   const saved = useNodeGraphStore(s => s.play.projection);
-  const previewAspect = useNodeGraphStore(s => s.previewAspect);
+  const previewAspect = useShownAspect();
   const chosen = out.monitors.length ? pickMonitor(out.monitors, out.display.name) : null;
   const aspect = out.status && out.status.height > 0 ? out.status.width / out.status.height : chosen ? chosen.width / chosen.height : 16 / 9;
   // The picture's shape (a Play of any shape takes the output's). A mapping that changes nothing shows it

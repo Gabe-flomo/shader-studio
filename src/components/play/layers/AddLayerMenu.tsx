@@ -31,7 +31,7 @@ import { KindDialog } from './KindDialog';
 import { addKindToList, applyKindLook, removeKindFromFile, removeKindFromList } from './kindActions';
 import { useLayerSets } from '../presetsUi';
 import { setSummary, type LayerSet } from '../../../play/layerSets';
-import { builtinGroups, builtinKey, LAYER_KIND_FOLDER_SCOPE, type BuiltinVariant, loadClosed, saveClosed, yourLayers, type KindEntry } from './addLayerCatalog';
+import { BUILTIN_LAYERS, PHONE_BUILTIN_LAYERS, builtinGroups, builtinKey, LAYER_KIND_FOLDER_SCOPE, type BuiltinVariant, loadClosed, saveClosed, yourLayers, type KindEntry } from './addLayerCatalog';
 
 const WIDTH = 340;
 const SEARCH_H = 48;
@@ -92,7 +92,8 @@ export function AddLayerMenu({ play, touch, anchorRef, initialSection, onAdd, on
   // ── What to show ──────────────────────────────────────────────────────────
   const kinds = useMemo(() => addableKinds(play, installed), [play, installed]);
   const listed = useMemo(() => new Set(installed.map(k => k.def.id)), [installed]);
-  const builtins = builtinGroups(query);
+  // A phone leaves out the sound layers but the Sampler (play/phoneTrim.ts).
+  const builtins = builtinGroups(query, touch ? PHONE_BUILTIN_LAYERS : BUILTIN_LAYERS);
   const yours = yourLayers(kinds, folders, membership, query);
   const builtinTotal = builtins.reduce((n, g) => n + (searching ? g.items.length : g.total), 0);
   const yoursCount = searching ? yours.loose.length + yours.folders.reduce((n, g) => n + g.items.length, 0) : kinds.length;

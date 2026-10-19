@@ -17,7 +17,8 @@ The Engine tab is **one view, laid out like Ableton Live's Arrangement**. The Pe
 
 - **Tracks are racks** (`play/engineView.ts` `engineTracks`): up to **8**, each **1 instrument + up to 8 effects**. The header and the device chain are docs/audio-engine.md, "The track and its device chain"; the Master and Listeners are there too. **Add track** adds a rack, selects it and offers the instrument picker.
 - **The timeline**: the ruler is in **bars and beats** at the tape's BPM (4/4; labels thinned when bars are narrow, `rulerTicks`), with the **loop brace** over the tape's length when Loop is on, the tape's end, and the **record point** (the red marker; click the ruler or an empty stretch of a lane to move it). The view spans the tape and some room (the whole 60 s while recording).
-- **Narrow panels and phones** (under 560 px of panel): the header sits above its lane, the tracks stack, the whole view scrolls, and the device chain scrolls sideways.
+- **Narrow panels** (under 560 px of panel): the header sits above its lane, the tracks stack, the whole view scrolls, and the device chain scrolls sideways.
+- **Phones have no Arrangement** (2026-10-18): a phone's Sound tab is the Sampler, readers and effects (docs/split-view.md, "Phones: what's left out"). A setup's racks still play there.
 
 ## The transport
 

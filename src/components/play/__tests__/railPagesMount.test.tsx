@@ -249,12 +249,16 @@ describe('the phone’s Controls and Layers (Play audit P20)', () => {
     expect(errors).toEqual([]);
   });
 
-  it('Layers in the bottom row goes straight to Layers, with the canvas at its top and the Background pinned first', () => {
+  it('Layers in the bottom row goes straight to Layers, with only the picture’s size at its top and the Background pinned first', () => {
     const el = mountPhone();
     click(el.querySelector('[data-rail-category="layers"]'));
     expect(usePlaySplit.getState().railPage).toBe('layers');
     expect(document.querySelector('[role="menu"][aria-label="Layers pages"]')).toBeNull();
-    expect(el.querySelector('[data-phone-canvas-row]')).not.toBeNull();
+    // No Canvas row (shapes, resolution, fps, full screen, guides): the size, Free or 1:1, only (2026-10-18).
+    expect(el.querySelector('[data-canvas-row]')).toBeNull();
+    expect(el.querySelector('[aria-label^="Preview resolution"]')).toBeNull();
+    expect(el.querySelector('[data-phone-size-row]')).not.toBeNull();
+    expect([...el.querySelectorAll('[data-phone-size-row] [role="radio"], [data-phone-size-row] button')].map(b => b.textContent)).toEqual(['Free', '1:1']);
     // The same model as desktop: the Background is the list's pinned row, not a bar of its own.
     expect(el.querySelector('[data-background-pinned] [data-background-row]')).not.toBeNull();
     expect(el.querySelector('[data-background-settings]')).toBeNull();

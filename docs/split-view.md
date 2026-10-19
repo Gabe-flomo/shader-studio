@@ -170,14 +170,15 @@ right) and at most two columns, stacking below 640 px (`WIDE_PANEL_PX`):
 categories are a row along the bottom of the panel (`PlayRailBar`). The page
 shown is the same state as the panel's (`usePlaySplit.railPage`), so ⌘⇧M,
 reveals and a toast's "Show" move a phone's page too; a page a phone has no
-room for (the MIDI file, the pad grid) shows its Controls page instead
-(`phonePageFor`). A window
+room for (the MIDI file, the pad grid) shows its Controls page instead, and the
+Arrangement shows Sound's one page (`phonePageFor`). A window
 narrower than 600px gets this layout too, mouse or not (`playStacked` in
 `lib/viewport.ts`; the rest of the app still goes by `phone`), since the
 side-by-side layout has no room there. Since Play audit P20 (2026-10-18):
 
-- **Controls and Layers go straight to their page** (`phonePagesOf` in
-  `railPages.ts`); only Sound, with two pages, opens a sheet of them.
+- **Every category goes straight to its page** (`phonePagesOf` in
+  `railPages.ts`), with no sheet in between. Sound has one page on a phone
+  (see "Phones: what's left out" below).
 - **Controls** has a **Controls / Sources** switch at its top (the tablet's
   narrow board does the same). Sources lists the mappings and sources with the
   MIDI file and the pad grid at the bottom (no pages of their own on a phone).
@@ -190,10 +191,36 @@ side-by-side layout has no room there. Since Play audit P20 (2026-10-18):
   (`useInputsBoard`), or the wide board's column scrolls to it.
 - Control cards fold their move/details/remove tools into one ⋯ and let a
   long name wrap onto a second line, instead of cutting it short.
-- **Layers** carries the canvas row (shape, quality, frame rate, full screen,
-  guides; it wraps instead of running off the edge) at its top, and the
-  **Background** as the list's pinned first row, the same model as desktop
-  (P13). Tablets, whose preview has no header, get the same canvas row there.
+- **Layers** has only the picture's size at its top (**Free** or **1:1**,
+  `PhoneSizeRow` in `pages/PhonePages.tsx`), and the **Background** as the
+  list's pinned first row, the same model as desktop (P13). Tablets, whose
+  preview has no header, get the full canvas row there instead (shape,
+  quality, frame rate, full screen, guides; it wraps instead of running off
+  the edge).
+
+### Phones: what's left out (user decisions, 2026-10-18)
+
+Phone only (the stacked layout above); desktop and tablet keep everything.
+`play/phoneTrim.ts` holds the rules.
+
+- **Picture sizes:** a phone offers only **Free** and **1:1**, wherever sizes
+  are offered (the Layers top, the preview's picker, Stage, Record's Shape).
+  A saved size other than 1:1 shows, and renders, as Free on a phone
+  (`useShownAspect`, which ShaderCanvas, Output and the Script editor read);
+  the saved size isn't rewritten unless the phone picks one, so the same
+  setup on a desktop keeps its 16:9.
+- **Sound** is one page (`PhoneSoundPage`): **Sounds** (each Sampler, with
+  Open and "Readers hear it", and **+ Sampler**, which opens the new one in
+  Layers to put sounds on its pads; readers with nothing to listen to yet
+  listen to it), **Readers** (how many, what they hear, and the readers
+  sheet), and **Effects** (each sound's chain and the master's). There's no
+  Arrangement, Audio engine, Granulator, MIDI synth or tracks: the MIDI
+  synth's and a Granulator rack's chains are listed only when they already
+  have effects. A setup made on a desktop with racks still plays them; a
+  small note says they're edited on a computer.
+- **Add layer** leaves out the Audio layer (the sound layers but the Sampler:
+  `PHONE_BUILTIN_LAYERS` in `addLayerCatalog.ts`). A saved Audio layer stays
+  and plays.
 
 ## The Controls board
 
@@ -261,7 +288,9 @@ jsdom, wide and narrow, the phone's pages, its Controls / Sources switch,
 header, chip and Layers top, the rail's click-through, the panel header's
 tab strip, PlayPage rendering nothing but the page, and the Background pinned
 on top of the Layers list, all without a console error), `driverCard.test.ts` (what a phone's
-chip opens) and `lib/__tests__/viewport.test.ts` (`playStacked`),
+chip opens), `phoneTrim.test.tsx` (the phone's Layers top, its two sizes,
+its Sound page, Add layer, and desktop and tablet unchanged) and
+`lib/__tests__/viewport.test.ts` (`playStacked`),
 `pictureRight.test.tsx` (the picture on the right with the panel open, the
 rail alone, or the picture alone; the header and footer in its column, the
 default share, tablet Stage, and Free's letterbox on Play),
