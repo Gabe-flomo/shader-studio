@@ -2339,8 +2339,8 @@ sphere [r] at= rot= color= shine= name= texture= map= tiles= sharp= tex-offset= 
 | shine | random: 0–0.8 |
 | name | name |
 | texture | A picture on its surface: a name from a texture clause (Surface mode). |
-| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
-| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe), face (once over its front: a picture panel), box (each side its own projection, crisp edges) or cylinder (round the sides like a label). · triplanar, planar, spherical, face, box, cylinder · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom; spherical and cylinder: how many times round). · default 1 |
 | sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
 | tex-offset | Slides the picture across the surface (1 is a whole picture). |
 | tex-rot | Turns the picture on the surface. |
@@ -2373,8 +2373,8 @@ box [size] round= width= height= depth= at= rot= color= shine= name= texture= ma
 | shine | random: 0–0.8 |
 | name | name |
 | texture | A picture on its surface: a name from a texture clause (Surface mode). |
-| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
-| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe), face (once over its front: a picture panel), box (each side its own projection, crisp edges) or cylinder (round the sides like a label). · triplanar, planar, spherical, face, box, cylinder · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom; spherical and cylinder: how many times round). · default 1 |
 | sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
 | tex-offset | Slides the picture across the surface (1 is a whole picture). |
 | tex-rot | Turns the picture on the surface. |
@@ -2404,8 +2404,8 @@ torus [R] r= at= rot= color= shine= name= texture= map= tiles= sharp= tex-offset
 | shine | random: 0–0.8 |
 | name | name |
 | texture | A picture on its surface: a name from a texture clause (Surface mode). |
-| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
-| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe), face (once over its front: a picture panel), box (each side its own projection, crisp edges) or cylinder (round the sides like a label). · triplanar, planar, spherical, face, box, cylinder · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom; spherical and cylinder: how many times round). · default 1 |
 | sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
 | tex-offset | Slides the picture across the surface (1 is a whole picture). |
 | tex-rot | Turns the picture on the surface. |
@@ -2435,8 +2435,8 @@ cone [angle] height= at= rot= color= shine= name= texture= map= tiles= sharp= te
 | shine | random: 0–0.8 |
 | name | name |
 | texture | A picture on its surface: a name from a texture clause (Surface mode). |
-| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
-| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe), face (once over its front: a picture panel), box (each side its own projection, crisp edges) or cylinder (round the sides like a label). · triplanar, planar, spherical, face, box, cylinder · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom; spherical and cylinder: how many times round). · default 1 |
 | sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
 | tex-offset | Slides the picture across the surface (1 is a whole picture). |
 | tex-rot | Turns the picture on the surface. |
@@ -2467,8 +2467,8 @@ capped-cone [height] r1= r2= at= rot= color= shine= name= texture= map= tiles= s
 | shine | random: 0–0.8 |
 | name | name |
 | texture | A picture on its surface: a name from a texture clause (Surface mode). |
-| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
-| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe), face (once over its front: a picture panel), box (each side its own projection, crisp edges) or cylinder (round the sides like a label). · triplanar, planar, spherical, face, box, cylinder · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom; spherical and cylinder: how many times round). · default 1 |
 | sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
 | tex-offset | Slides the picture across the surface (1 is a whole picture). |
 | tex-rot | Turns the picture on the surface. |
@@ -2500,8 +2500,8 @@ cylinder [radius] height= round= size= at= rot= color= shine= name= texture= map
 | shine | random: 0–0.8 |
 | name | name |
 | texture | A picture on its surface: a name from a texture clause (Surface mode). |
-| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
-| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe), face (once over its front: a picture panel), box (each side its own projection, crisp edges) or cylinder (round the sides like a label). · triplanar, planar, spherical, face, box, cylinder · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom; spherical and cylinder: how many times round). · default 1 |
 | sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
 | tex-offset | Slides the picture across the surface (1 is a whole picture). |
 | tex-rot | Turns the picture on the surface. |
@@ -2532,8 +2532,8 @@ capsule [height] radius= size= at= rot= color= shine= name= texture= map= tiles=
 | shine | random: 0–0.8 |
 | name | name |
 | texture | A picture on its surface: a name from a texture clause (Surface mode). |
-| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
-| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe), face (once over its front: a picture panel), box (each side its own projection, crisp edges) or cylinder (round the sides like a label). · triplanar, planar, spherical, face, box, cylinder · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom; spherical and cylinder: how many times round). · default 1 |
 | sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
 | tex-offset | Slides the picture across the surface (1 is a whole picture). |
 | tex-rot | Turns the picture on the surface. |
@@ -2562,8 +2562,8 @@ plane [y] at= rot= color= shine= name= texture= map= tiles= sharp= tex-offset= t
 | shine | random: 0–0.8 |
 | name | name |
 | texture | A picture on its surface: a name from a texture clause (Surface mode). |
-| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
-| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe), face (once over its front: a picture panel), box (each side its own projection, crisp edges) or cylinder (round the sides like a label). · triplanar, planar, spherical, face, box, cylinder · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom; spherical and cylinder: how many times round). · default 1 |
 | sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
 | tex-offset | Slides the picture across the surface (1 is a whole picture). |
 | tex-rot | Turns the picture on the surface. |
@@ -2592,8 +2592,8 @@ octahedron [s] at= rot= color= shine= name= texture= map= tiles= sharp= tex-offs
 | shine | random: 0–0.8 |
 | name | name |
 | texture | A picture on its surface: a name from a texture clause (Surface mode). |
-| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
-| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe), face (once over its front: a picture panel), box (each side its own projection, crisp edges) or cylinder (round the sides like a label). · triplanar, planar, spherical, face, box, cylinder · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom; spherical and cylinder: how many times round). · default 1 |
 | sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
 | tex-offset | Slides the picture across the surface (1 is a whole picture). |
 | tex-rot | Turns the picture on the surface. |
@@ -2622,8 +2622,8 @@ pyramid [height] at= rot= color= shine= name= texture= map= tiles= sharp= tex-of
 | shine | random: 0–0.8 |
 | name | name |
 | texture | A picture on its surface: a name from a texture clause (Surface mode). |
-| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
-| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe), face (once over its front: a picture panel), box (each side its own projection, crisp edges) or cylinder (round the sides like a label). · triplanar, planar, spherical, face, box, cylinder · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom; spherical and cylinder: how many times round). · default 1 |
 | sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
 | tex-offset | Slides the picture across the surface (1 is a whole picture). |
 | tex-rot | Turns the picture on the surface. |
@@ -2655,8 +2655,8 @@ ellipsoid [size] width= height= depth= at= rot= color= shine= name= texture= map
 | shine | random: 0–0.8 |
 | name | name |
 | texture | A picture on its surface: a name from a texture clause (Surface mode). |
-| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
-| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe), face (once over its front: a picture panel), box (each side its own projection, crisp edges) or cylinder (round the sides like a label). · triplanar, planar, spherical, face, box, cylinder · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom; spherical and cylinder: how many times round). · default 1 |
 | sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
 | tex-offset | Slides the picture across the surface (1 is a whole picture). |
 | tex-rot | Turns the picture on the surface. |
@@ -2687,8 +2687,8 @@ hex-prism [radius] height= size= at= rot= color= shine= name= texture= map= tile
 | shine | random: 0–0.8 |
 | name | name |
 | texture | A picture on its surface: a name from a texture clause (Surface mode). |
-| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
-| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe), face (once over its front: a picture panel), box (each side its own projection, crisp edges) or cylinder (round the sides like a label). · triplanar, planar, spherical, face, box, cylinder · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom; spherical and cylinder: how many times round). · default 1 |
 | sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
 | tex-offset | Slides the picture across the surface (1 is a whole picture). |
 | tex-rot | Turns the picture on the surface. |
@@ -2719,8 +2719,8 @@ tri-prism [radius] height= size= at= rot= color= shine= name= texture= map= tile
 | shine | random: 0–0.8 |
 | name | name |
 | texture | A picture on its surface: a name from a texture clause (Surface mode). |
-| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
-| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe), face (once over its front: a picture panel), box (each side its own projection, crisp edges) or cylinder (round the sides like a label). · triplanar, planar, spherical, face, box, cylinder · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom; spherical and cylinder: how many times round). · default 1 |
 | sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
 | tex-offset | Slides the picture across the surface (1 is a whole picture). |
 | tex-rot | Turns the picture on the surface. |
@@ -2751,8 +2751,8 @@ link [len] R= r= at= rot= color= shine= name= texture= map= tiles= sharp= tex-of
 | shine | random: 0–0.8 |
 | name | name |
 | texture | A picture on its surface: a name from a texture clause (Surface mode). |
-| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
-| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe), face (once over its front: a picture panel), box (each side its own projection, crisp edges) or cylinder (round the sides like a label). · triplanar, planar, spherical, face, box, cylinder · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom; spherical and cylinder: how many times round). · default 1 |
 | sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
 | tex-offset | Slides the picture across the surface (1 is a whole picture). |
 | tex-rot | Turns the picture on the surface. |
@@ -2785,8 +2785,8 @@ box-frame [size] t= width= height= depth= at= rot= color= shine= name= texture= 
 | shine | random: 0–0.8 |
 | name | name |
 | texture | A picture on its surface: a name from a texture clause (Surface mode). |
-| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
-| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe), face (once over its front: a picture panel), box (each side its own projection, crisp edges) or cylinder (round the sides like a label). · triplanar, planar, spherical, face, box, cylinder · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom; spherical and cylinder: how many times round). · default 1 |
 | sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
 | tex-offset | Slides the picture across the surface (1 is a whole picture). |
 | tex-rot | Turns the picture on the surface. |
@@ -2817,8 +2817,8 @@ capped-torus [R] r= angle= at= rot= color= shine= name= texture= map= tiles= sha
 | shine | random: 0–0.8 |
 | name | name |
 | texture | A picture on its surface: a name from a texture clause (Surface mode). |
-| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
-| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe), face (once over its front: a picture panel), box (each side its own projection, crisp edges) or cylinder (round the sides like a label). · triplanar, planar, spherical, face, box, cylinder · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom; spherical and cylinder: how many times round). · default 1 |
 | sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
 | tex-offset | Slides the picture across the surface (1 is a whole picture). |
 | tex-rot | Turns the picture on the surface. |
@@ -2848,8 +2848,8 @@ solid-angle [r] angle= at= rot= color= shine= name= texture= map= tiles= sharp= 
 | shine | random: 0–0.8 |
 | name | name |
 | texture | A picture on its surface: a name from a texture clause (Surface mode). |
-| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
-| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe), face (once over its front: a picture panel), box (each side its own projection, crisp edges) or cylinder (round the sides like a label). · triplanar, planar, spherical, face, box, cylinder · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom; spherical and cylinder: how many times round). · default 1 |
 | sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
 | tex-offset | Slides the picture across the surface (1 is a whole picture). |
 | tex-rot | Turns the picture on the surface. |
@@ -2878,8 +2878,8 @@ cross [s] at= rot= color= shine= name= texture= map= tiles= sharp= tex-offset= t
 | shine | random: 0–0.8 |
 | name | name |
 | texture | A picture on its surface: a name from a texture clause (Surface mode). |
-| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
-| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe), face (once over its front: a picture panel), box (each side its own projection, crisp edges) or cylinder (round the sides like a label). · triplanar, planar, spherical, face, box, cylinder · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom; spherical and cylinder: how many times round). · default 1 |
 | sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
 | tex-offset | Slides the picture across the surface (1 is a whole picture). |
 | tex-rot | Turns the picture on the surface. |
@@ -2910,8 +2910,8 @@ gyroid [freq] t= ball= at= rot= color= shine= name= texture= map= tiles= sharp= 
 | shine | random: 0–0.8 |
 | name | name |
 | texture | A picture on its surface: a name from a texture clause (Surface mode). |
-| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
-| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe), face (once over its front: a picture panel), box (each side its own projection, crisp edges) or cylinder (round the sides like a label). · triplanar, planar, spherical, face, box, cylinder · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom; spherical and cylinder: how many times round). · default 1 |
 | sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
 | tex-offset | Slides the picture across the surface (1 is a whole picture). |
 | tex-rot | Turns the picture on the surface. |
@@ -2942,8 +2942,8 @@ schwarz-p [freq] t= ball= at= rot= color= shine= name= texture= map= tiles= shar
 | shine | random: 0–0.8 |
 | name | name |
 | texture | A picture on its surface: a name from a texture clause (Surface mode). |
-| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
-| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe), face (once over its front: a picture panel), box (each side its own projection, crisp edges) or cylinder (round the sides like a label). · triplanar, planar, spherical, face, box, cylinder · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom; spherical and cylinder: how many times round). · default 1 |
 | sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
 | tex-offset | Slides the picture across the surface (1 is a whole picture). |
 | tex-rot | Turns the picture on the surface. |
@@ -2983,8 +2983,8 @@ picture-balls [width] across= lift= ball= wave= jitter= scatter= depth-scatter= 
 | shine | random: 0–0.8 |
 | name | name |
 | texture | A picture on its surface: a name from a texture clause (Surface mode). |
-| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
-| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe), face (once over its front: a picture panel), box (each side its own projection, crisp edges) or cylinder (round the sides like a label). · triplanar, planar, spherical, face, box, cylinder · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom; spherical and cylinder: how many times round). · default 1 |
 | sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
 | tex-offset | Slides the picture across the surface (1 is a whole picture). |
 | tex-rot | Turns the picture on the surface. |
@@ -2993,6 +2993,38 @@ picture-balls [width] across= lift= ball= wave= jitter= scatter= depth-scatter= 
 Examples:
 
 - `picture-balls` — on an empty graph (just an Output)
+
+### picture-card
+
+3D scene · maker. Picture card: A picture or video as a thin card, its shape from the picture: its aspect, and transparent parts cut away. Give it a picture. Also: card, photo-card, image-card, video-card.
+
+Words: `picture-card`, `card`, `photo-card`, `image-card`, `video-card`
+
+```
+picture-card [size] t= cut= at= rot= color= shine= name= texture= map= tiles= sharp= tex-offset= tex-rot= bump= [glass]
+```
+
+| Slot | What |
+|---|---|
+| size (bare) | Size · The card's longer side; the other follows the picture. · default 1.5 · random: 0.75–2.4000000000000004 |
+| t | Thickness · default 0.02 · random: 0.01–0.032 |
+| cut | Cutout threshold · Parts of the picture more transparent than this are cut away (a PNG with transparency). A picture with no transparency stays a rectangle. · default 0.5 · random: 0.25–0.8 |
+| at | random: (-0.6…0.6)×3 |
+| rot | random: (-45…45)×3 |
+| color | random: a harmonious colour |
+| shine | random: 0–0.8 |
+| name | name |
+| texture | A picture on its surface: a name from a texture clause (Surface mode). |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe), face (once over its front: a picture panel), box (each side its own projection, crisp edges) or cylinder (round the sides like a label). · triplanar, planar, spherical, face, box, cylinder · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom; spherical and cylinder: how many times round). · default 1 |
+| sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
+| tex-offset | Slides the picture across the surface (1 is a whole picture). |
+| tex-rot | Turns the picture on the surface. |
+| bump | Bump from brightness: bright parts of the picture stand out under the light. · default 0 |
+
+Examples:
+
+- `picture-card` — on an empty graph (just an Output)
 
 ### hypersphere
 
@@ -3015,8 +3047,8 @@ hypersphere [r] w= spin= at= rot= color= shine= name= texture= map= tiles= sharp
 | shine | random: 0–0.8 |
 | name | name |
 | texture | A picture on its surface: a name from a texture clause (Surface mode). |
-| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
-| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe), face (once over its front: a picture panel), box (each side its own projection, crisp edges) or cylinder (round the sides like a label). · triplanar, planar, spherical, face, box, cylinder · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom; spherical and cylinder: how many times round). · default 1 |
 | sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
 | tex-offset | Slides the picture across the surface (1 is a whole picture). |
 | tex-rot | Turns the picture on the surface. |
@@ -3048,8 +3080,8 @@ tesseract [size] round= w= spin= at= rot= color= shine= name= texture= map= tile
 | shine | random: 0–0.8 |
 | name | name |
 | texture | A picture on its surface: a name from a texture clause (Surface mode). |
-| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
-| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe), face (once over its front: a picture panel), box (each side its own projection, crisp edges) or cylinder (round the sides like a label). · triplanar, planar, spherical, face, box, cylinder · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom; spherical and cylinder: how many times round). · default 1 |
 | sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
 | tex-offset | Slides the picture across the surface (1 is a whole picture). |
 | tex-rot | Turns the picture on the surface. |
@@ -3081,8 +3113,8 @@ duocylinder [r1] r2= w= spin= at= rot= color= shine= name= texture= map= tiles= 
 | shine | random: 0–0.8 |
 | name | name |
 | texture | A picture on its surface: a name from a texture clause (Surface mode). |
-| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
-| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe), face (once over its front: a picture panel), box (each side its own projection, crisp edges) or cylinder (round the sides like a label). · triplanar, planar, spherical, face, box, cylinder · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom; spherical and cylinder: how many times round). · default 1 |
 | sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
 | tex-offset | Slides the picture across the surface (1 is a whole picture). |
 | tex-rot | Turns the picture on the surface. |
@@ -3114,8 +3146,8 @@ clifford-torus [r] t= w= spin= at= rot= color= shine= name= texture= map= tiles=
 | shine | random: 0–0.8 |
 | name | name |
 | texture | A picture on its surface: a name from a texture clause (Surface mode). |
-| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
-| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe), face (once over its front: a picture panel), box (each side its own projection, crisp edges) or cylinder (round the sides like a label). · triplanar, planar, spherical, face, box, cylinder · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom; spherical and cylinder: how many times round). · default 1 |
 | sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
 | tex-offset | Slides the picture across the surface (1 is a whole picture). |
 | tex-rot | Turns the picture on the surface. |
@@ -3146,8 +3178,8 @@ cell24 [r] w= spin= at= rot= color= shine= name= texture= map= tiles= sharp= tex
 | shine | random: 0–0.8 |
 | name | name |
 | texture | A picture on its surface: a name from a texture clause (Surface mode). |
-| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
-| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe), face (once over its front: a picture panel), box (each side its own projection, crisp edges) or cylinder (round the sides like a label). · triplanar, planar, spherical, face, box, cylinder · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom; spherical and cylinder: how many times round). · default 1 |
 | sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
 | tex-offset | Slides the picture across the surface (1 is a whole picture). |
 | tex-rot | Turns the picture on the surface. |
@@ -3180,8 +3212,8 @@ julia4d [cx] cy= scale= w= spin= at= rot= color= shine= name= texture= map= tile
 | shine | random: 0–0.8 |
 | name | name |
 | texture | A picture on its surface: a name from a texture clause (Surface mode). |
-| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
-| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe), face (once over its front: a picture panel), box (each side its own projection, crisp edges) or cylinder (round the sides like a label). · triplanar, planar, spherical, face, box, cylinder · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom; spherical and cylinder: how many times round). · default 1 |
 | sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
 | tex-offset | Slides the picture across the surface (1 is a whole picture). |
 | tex-rot | Turns the picture on the surface. |
@@ -3212,8 +3244,8 @@ mandel4d [scale] w= spin= at= rot= color= shine= name= texture= map= tiles= shar
 | shine | random: 0–0.8 |
 | name | name |
 | texture | A picture on its surface: a name from a texture clause (Surface mode). |
-| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel). · triplanar, planar, spherical, face · default triplanar |
-| tiles | How many times the picture repeats every 2 units (face: a zoom). · default 1 |
+| map | How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe), face (once over its front: a picture panel), box (each side its own projection, crisp edges) or cylinder (round the sides like a label). · triplanar, planar, spherical, face, box, cylinder · default triplanar |
+| tiles | How many times the picture repeats every 2 units (face: a zoom; spherical and cylinder: how many times round). · default 1 |
 | sharp | Triplanar: how sharply the three projections meet (1 soft, 16 crisp). · default 4 |
 | tex-offset | Slides the picture across the surface (1 is a whole picture). |
 | tex-rot | Turns the picture on the surface. |

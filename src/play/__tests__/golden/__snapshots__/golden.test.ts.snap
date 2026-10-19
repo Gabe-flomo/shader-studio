@@ -1489,6 +1489,32 @@ exports[`golden outputs: examples > pianoRollScale 1`] = `
 }
 `;
 
+exports[`golden outputs: examples > pic3dCutouts 1`] = `
+{
+  "e": "- x120",
+  "h": "- x120",
+  "t": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > pic3dTexturedShapes 1`] = `
+{
+  "f": "- x120",
+  "s": "- x120",
+  "t": "- x120",
+  "z": "- x120",
+}
+`;
+
+exports[`golden outputs: examples > pic3dVideoRoom 1`] = `
+{
+  "a": "- x120",
+  "e": "- x120",
+  "g": "- x120",
+  "r": "- x120",
+}
+`;
+
 exports[`golden outputs: examples > picBlockSwap 1`] = `
 {
   "amount": "- x120",

@@ -259,8 +259,8 @@ function shapeWord(s: ShapeDef, p: ParamSpec): ParamSpec {
 /** A shape's picture settings (docs/scene-builder-3d.md, "Textures"). */
 const TEXTURE_SHAPE_PARAMS: ParamSpec[] = [
   { key: 'texture', aliases: ['tex', 'picture'], type: 'name', hint: 'A picture on its surface: a name from a texture clause (Surface mode).' },
-  { key: 'map', type: 'choice', options: ['triplanar', 'planar', 'spherical', 'face'], def: 'triplanar', hint: 'How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe) or face (once over its front: a picture panel).' },
-  { key: 'tiles', type: 'number', min: 0.1, max: 16, def: 1, hint: 'How many times the picture repeats every 2 units (face: a zoom).' },
+  { key: 'map', type: 'choice', options: ['triplanar', 'planar', 'spherical', 'face', 'box', 'cylinder'], def: 'triplanar', hint: 'How the picture wraps it: triplanar (no stretching), planar (along z), spherical (a globe), face (once over its front: a picture panel), box (each side its own projection, crisp edges) or cylinder (round the sides like a label).' },
+  { key: 'tiles', type: 'number', min: 0.1, max: 16, def: 1, hint: 'How many times the picture repeats every 2 units (face: a zoom; spherical and cylinder: how many times round).' },
   { key: 'sharp', type: 'number', min: 1, max: 16, def: 4, hint: 'Triplanar: how sharply the three projections meet (1 soft, 16 crisp).' },
   { key: 'tex-offset', type: 'vec2', hint: 'Slides the picture across the surface (1 is a whole picture).' },
   { key: 'tex-rot', type: 'angle', min: -180, max: 180, hint: 'Turns the picture on the surface.' },

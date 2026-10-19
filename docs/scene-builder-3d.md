@@ -765,7 +765,9 @@ pictures (no PBR maps). In Surface mode; other modes keep the shapes' colours an
   - **Wrap:** Triplanar (default: three projections blended by which way the surface faces; no
     stretching on any shape), Planar (along z), Spherical (a globe; a seam at the back), Face (once
     over the shape's front, keeping the picture's shape: a picture panel; **Make it a picture panel**
-    sizes a box to the picture).
+    sizes a box to the picture), Box (each side the one projection it faces: crisp edges, built as the
+    triplanar block with one-hot weights) and Cylinder (round the sides like a label, Tiles times round;
+    the caps projected from above, picked by the normal).
   - **Tiles** (repeats every 2 units; Face: a zoom), **Blend sharpness** (triplanar: 1 soft … 16
     crisp), **Slide across / up** (an offset, 1 is a whole picture), **Turn** (degrees). All live
     sliders on the built coordinates block.
@@ -776,6 +778,11 @@ pictures (no PBR maps). In Surface mode; other modes keep the shapes' colours an
   - **Good filtering.** Tiled maps read through Sample (texture) with Edges: Repeat (`textureGrad`
     from the unwrapped place): no seam where the picture repeats, no shimmer far away; pictures have
     mipmaps and anisotropic filtering.
+- **Picture card** (a shape kind: the gallery's Picture card, recipe `picture-card size=1.5 t=0.02 cut=0.5
+  texture=name`): the picture as a card, its shape from the picture (its aspect, and transparent parts cut
+  away below `cut`), built as a Picture Card node with its picture through the Scene Group's port (as for
+  Picture balls); its colour is the same card measured in Materials. Wrap, Tiles and the slides don't apply.
+  See [pictures-in-3d.md](pictures-in-3d.md).
 - **Background** (Look › Background › Picture): the picture as the backdrop the camera looks at,
   through **Picture Environment** (from the depth work, [depth-node.md](depth-node.md)) on the
   camera's rays, Forward, Right and Up, its FOV the camera's Zoom.
@@ -804,7 +811,7 @@ box size=0.5 texture=pond sharp=8 @repeat(2)
 background navy picture=pond
 ```
 
-Shape keys: `texture=` (`tex=`, `picture=`), `map=triplanar|planar|spherical|face`, `tiles=`,
+Shape keys: `texture=` (`tex=`, `picture=`), `map=triplanar|planar|spherical|face|box|cylinder`, `tiles=`,
 `sharp=`, `tex-offset=(x,y)`, `tex-rot=`, `bump=`. The recipe help (hover a word) has entries for
 `texture`, these keys and `background picture=`.
 

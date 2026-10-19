@@ -43,6 +43,7 @@ import { MEMORY_EXAMPLE_INDEX, MEMORY_EXAMPLE_KEYS } from './memoryExamples';
 import { SEND_RECEIVE_EXAMPLE_INDEX, SEND_RECEIVE_EXAMPLE_KEYS } from './sendReceiveExamples';
 import { AUDIO_EXAMPLE_INDEX, AUDIO_EXAMPLE_KEYS } from './audioExamples';
 import { PICTURE_EXAMPLE_INDEX, PICTURE_EXAMPLE_KEYS } from './pictureExamples';
+import { PICTURES_3D_EXAMPLE_INDEX, PICTURES_3D_EXAMPLE_KEYS } from './pictures3dExamples';
 import { RAYS_EXAMPLE_INDEX, RAYS_EXAMPLE_KEYS } from './raysExamples';
 import { SIM_GRID_EXAMPLE_INDEX } from './simGridExamples';
 import { GRID_RULES_EXAMPLE_INDEX, simGridsFolderKeys } from './gridRulesExampleIndex';
@@ -266,6 +267,8 @@ export const EXAMPLE_INDEX: Record<string, ExampleIndexEntry> = {
   ...TEXTURE_TOOL_EXAMPLE_INDEX,
   // Pictures (pictureExamples.ts): Channel, Shuffle, Channel Colours, Height Light, Show data, Random (from ID), a pixel sort, Curves, Threshold, on the built-in photos.
   ...PICTURE_EXAMPLE_INDEX,
+  // Pictures in 3D (pictures3dExamples.ts): Picture Card and Texture Material in ray-marched scenes.
+  ...PICTURES_3D_EXAMPLE_INDEX,
   // Memory (memoryExamples.ts, docs/memory-nodes.md): Lag, Spring, Envelope, Counter.
   ...MEMORY_EXAMPLE_INDEX,
   // Send & Receive (sendReceiveExamples.ts, docs/send-receive.md): wireless links across groups.
@@ -339,6 +342,7 @@ export const EXAMPLE_FOLDERS: Array<{ label: string; color: string; keys: string
   { label: "3D Basics",         color: ctp.sky, keys: ['raymarchSpheres','shapesAndGround3D','softMetaballs3D','normalColorDemo', ...SPLAT_EXAMPLE_KEYS] },
   { label: "3D SDF",            color: ctp.sky, keys: [...REPEAT_SCENE_EXAMPLE_KEYS, ...CURVE_TRACE_3D_KEYS, 'sdfPolarRepeat','sdfBend3D','sdCrossScene3D','infinitePillars3D','spiralWorld3D','gyroidWarped','bakeHeavyScene','mlgWiggleTunnel','voxelTerrain'] },
   { label: "3D Lighting",       color: '#f9c468', keys: ['fresnelSchlickRim','refractDirFakeGlass','glassPhysical','glassMetaballs','litStillLife'] },
+  { label: "3D: Pictures",      color: '#f9c468', keys: PICTURES_3D_EXAMPLE_KEYS },
   { label: "GI Lighting",       color: ctp.green, keys: ['giSphereGround','giBoxFrame'] },
   { label: "3D: Scene Builder", color: ctp.sky, keys: SCENE_BUILDER_EXAMPLE_KEYS },
   { label: "2D: Scene Builder", color: ctp.pink, keys: SCENE_BUILDER_2D_EXAMPLE_KEYS },

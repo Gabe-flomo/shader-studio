@@ -220,6 +220,11 @@ export function makeSdf(def: ShapeDef, over: Record<string, number | Vec3> = {})
         return Math.max(l, m * sgn(cy * qx - cx * qy));
       };
     }
+    case 'picture-card': {
+      // A 3:2 card facing the camera (the picture's own aspect isn't known here).
+      const sz = Math.min(num(s, 'size'), 1.6) * 0.5, t = Math.max(num(s, 't'), 0.02) * 0.5;
+      return (x, y, z) => box(x, y, z, [sz, sz / 1.5, t]);
+    }
     case 'picture-balls': {
       // A flat grid of balls (the picture's lift isn't known here), 3:2.
       // At most 7 across, so a small tile reads as balls.

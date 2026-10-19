@@ -49,7 +49,36 @@ describe('3D Scene Builder: pictures on surfaces', () => {
 
   it.each(TEX_MAPS.map(m => [m] as const))('every map compiles: %s', map => {
     const { g } = compiles(`${PIC} · box size=0.5 texture=pond map=${map} tiles=2`);
-    expect(g.nodes.filter(n => n.type === 'sampleTexture')).toHaveLength(map === 'triplanar' ? 3 : 1);
+    expect(g.nodes.filter(n => n.type === 'sampleTexture')).toHaveLength(map === 'triplanar' || map === 'box' ? 3 : 1);
+  });
+
+  it('box takes the one projection each side faces; cylinder reads the normal to give the caps their own place', () => {
+    const box = compiles(`${PIC} · box size=0.5 texture=pond map=box`).g.nodes.find(n => n.params._sbRole === 's1:pic:coords')!;
+    expect((box.params.lines as Array<{ lhs: string }>).map(l => l.lhs)).toContain('vec3 a');
+    expect(box.params.label).toBe('Box map');
+    const cyl = compiles(`${PIC} · cylinder radius=0.4 texture=pond map=cylinder tiles=2`).g;
+    const coords = cyl.nodes.find(n => n.params._sbRole === 's1:pic:coords')!;
+    expect(coords.inputs.n.connection?.outputKey).toBe('normal');
+    expect(String((coords.params.lines as Array<{ rhs: string }>).at(-1)!.rhs)).toMatch(/abs\(n\.y\) > 0\.7071 \? cap : side/);
+  });
+
+  it('a Picture card: its picture through the Scene Group\'s port, its colour from the same card in Materials, after the march', () => {
+    const { g, r, spec } = compiles(`surface · ${PIC} · picture-card size=2 t=0.03 cut=0.4 texture=pond at=(0,0.5,0) rot=(0,20,0) · plane y=-1`);
+    expect(g.warnings).toEqual([]);
+    const cards = g.nodes.filter(n => n.type === 'pictureCard');
+    expect(cards).toHaveLength(1); // the colour card at the top level
+    expect(cards[0].params).toMatchObject({ size: 2, thickness: 0.03, threshold: 0.4, cutout: 'alpha' });
+    expect(cards[0].inputs.picture.connection).toEqual({ nodeId: 'pic1', outputKey: 'texture' });
+    const sg = g.nodes.find(n => n.type === 'sceneGroup')!;
+    const inner = sg.params.subgraph as SubgraphData;
+    expect(inner.nodes.filter(n => n.type === 'pictureCard')).toHaveLength(1);
+    expect(inner.inputPorts.find(p => p.toInputKey === 'picture')).toBeTruthy();
+    expect(sg.inputs[inner.inputPorts.find(p => p.toInputKey === 'picture')!.key].connection).toEqual({ nodeId: 'pic1', outputKey: 'texture' });
+    expect(r.fragmentShader).toMatch(/pt3_read\(/);
+    // The recipe round-trips
+    const printed = printRecipe(spec);
+    expect(printed).toMatch(/picture-card size=2 t=0\.03 cut=0\.4/);
+    expect(printRecipe(parseRecipe(printed).spec)).toBe(printed);
   });
 
   it('several painted shapes, and plain ones beside them, each take their own picture', () => {

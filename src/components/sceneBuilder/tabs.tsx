@@ -9,7 +9,7 @@ import { useSceneBuilder } from '../../sceneBuilder/store';
 import {
   DEFAULT_LOOK, MODIFIER_KINDS, SHAPES, SHAPE_BY_KIND, TONE_MODES, WARPS, WARP_BY_KIND, allShapes, autoStepScale, defaultSize, findItem, itemName, modifierSummary, opLabel, starterSpec, stepHints, walkItems,
   type GroupSpec, type LookMute3D, type ParamDef, type RenderMode, type SceneItem, type SceneSpec, type ShapeSpec, type Vec3, type WarpSpec,
-  TEX_MAPS, TEX_MAP_LABELS, TEX_SHARP_DEFAULT, type TexMap, CAMERA_PROJECTIONS, REVERSE_DEFAULTS, type CameraNumKey, type CameraProjection,
+  TEX_MAPS, TEX_MAP_LABELS, isPictureShape, TEX_SHARP_DEFAULT, type TexMap, CAMERA_PROJECTIONS, REVERSE_DEFAULTS, type CameraNumKey, type CameraProjection,
 } from '../../sceneBuilder/spec';
 import { TexturePicker } from '../builders/TexturePicker';
 import { DepthPictureCard } from './DepthPictureCard';
@@ -216,11 +216,12 @@ function ShapePicture({ sh }: { sh: ShapeSpec }) {
     <TexturePicker id={`tex-${sh.id}`} sources={spec.textures ?? []} value={t?.tex} none="Its colour"
       onAdd={src2 => edit(d => { d.textures = withSource(d.textures, src2); })}
       onChange={name => set(s => { s.tex = name ? (s.tex ? { ...s.tex, tex: name } : { tex: name, map: 'triplanar', scale: 1 }) : null; })} />
-    {t && <>
+    {t && isPictureShape(sh.kind) && <BuilderNote>{sh.kind === 'picture-card' ? 'The card shows the whole picture, its shape from it.' : 'The balls take their colours from the picture.'}</BuilderNote>}
+    {t && !isPictureShape(sh.kind) && <>
       <Row label="Wrap" hint={TEX_MAP_LABELS[t.map].blurb}>
         <Select ariaLabel="Picture wrap" value={t.map} options={TEX_MAPS.map(m => ({ value: m, label: TEX_MAP_LABELS[m].label }))} onChange={v => set(s => { if (s.tex) s.tex.map = v as TexMap; })} />
       </Row>
-      <NumRow label={tiled ? 'Tiles' : 'Zoom'} hint={t.map === 'face' ? 'Above 1 closer.' : t.map === 'spherical' ? 'How many times it goes round.' : 'How many times it repeats every 2 units.'} value={t.scale} defaultValue={1} min={0.1} max={16} onChange={v => set(s => { if (s.tex) s.tex.scale = v; }, `texk:${sh.id}`)} />
+      <NumRow label={tiled ? 'Tiles' : 'Zoom'} hint={t.map === 'face' ? 'Above 1 closer.' : t.map === 'spherical' || t.map === 'cylinder' ? 'How many times it goes round.' : 'How many times it repeats every 2 units.'} value={t.scale} defaultValue={1} min={0.1} max={16} onChange={v => set(s => { if (s.tex) s.tex.scale = v; }, `texk:${sh.id}`)} />
       {t.map === 'triplanar' && <NumRow label="Blend sharpness" hint="How sharply the three projections meet on a curve: 1 a soft blend, 16 crisp edges." value={t.sharp ?? TEX_SHARP_DEFAULT} defaultValue={TEX_SHARP_DEFAULT} min={1} max={16} step={0.1} onChange={v => set(s => { if (s.tex) s.tex.sharp = v; }, `texs:${sh.id}`)} />}
       <NumRow label="Slide across" hint="Moves the picture sideways on the surface (1 is a whole picture)." value={t.offset?.[0] ?? 0} defaultValue={0} min={-1} max={1} onChange={v => set(s => { if (s.tex) s.tex.offset = [v, s.tex.offset?.[1] ?? 0]; }, `texox:${sh.id}`)} />
       <NumRow label="Slide up" hint="Moves the picture up the surface (1 is a whole picture)." value={t.offset?.[1] ?? 0} defaultValue={0} min={-1} max={1} onChange={v => set(s => { if (s.tex) s.tex.offset = [s.tex.offset?.[0] ?? 0, v]; }, `texoy:${sh.id}`)} />
