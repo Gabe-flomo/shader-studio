@@ -68,6 +68,7 @@ import { turnIntoShaderTexture } from '../shaderTexture/actions';
 import { isEditableTarget, readClipboardPicture } from '../../lib/texture/texturePaste';
 import { spawnPoint } from './spawnPoint';
 import { FreezeBehindBuilder } from '../builders/FreezeBehindBuilder';
+import { useGraphMaximize } from '../shell/graphLayout';
 const OptimizeModal = lazyWithSuspense<PropsOf<typeof OptimizeModalT>>(() => import('./OptimizeModal').then(m => ({ default: m.OptimizeModal })));
 const BakeDialogHost = lazyWithSuspense<Record<string, never>>(() => import('../bake/BakeDialog').then(m => ({ default: m.BakeDialogHost })));
 const SceneBuilderModal = lazyWithSuspense<Record<string, never>>(() => import('../sceneBuilder/SceneBuilderModal').then(m => ({ default: m.SceneBuilderModal })));
@@ -441,6 +442,8 @@ export const NodeGraph = React.memo(function NodeGraph({ transparent = false, re
   const panRef  = useRef(pan);
   const worldRef = useRef<HTMLDivElement>(null);
   const zoomLayerRef = useRef<HTMLDivElement>(null);
+  // Maximized with the eye off: the cards, wires and minimap hide over the picture.
+  const nodesHidden = useGraphMaximize(s => s.nodesHidden) && overPicture;
   // WebKit (the desktop app, Safari) draws a scaled layer from its unscaled pixels: zoomed in, cards
   // look like an enlarged picture. Once a zoom above 100% stops changing it becomes layout zoom, which
   // WebKit lays out and draws at full sharpness; while it changes it stays a cheap scale. Chromium
@@ -2192,7 +2195,7 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
       {/* Behind a Splat builder or an Agent Builder window the cards, wires and minimap wait (builders/builderFocus.ts). */}
       <FreezeBehindBuilder>
       {/* Minimap overlay — screen space, bottom-right (hidden on touch devices) */}
-      {showMinimap && !isTouchDevice.current && (
+      {showMinimap && !isTouchDevice.current && !nodesHidden && (
         <Minimap
           nodes={displayNodes}
           viewportWidth={canvasWidth}
@@ -2211,7 +2214,9 @@ const handleCanvasTouchEnd = useCallback((e: React.TouchEvent) => {
           width: 0,
           height: 0,
           transform: `translate(${pan.x}px, ${pan.y}px)`,
-          pointerEvents: locked ? 'none' : undefined,
+          pointerEvents: locked || nodesHidden ? 'none' : undefined,
+          // Maximized with the nodes hidden: the picture alone (the toolbar's eye brings them back)
+          visibility: nodesHidden ? 'hidden' : undefined,
         }}
       >
         {/* The zoom: a scale while it changes (and always below 100%), then (WebKit) layout zoom once a zoom above 100% settles, so text is redrawn sharp. Set by applyView only. */}

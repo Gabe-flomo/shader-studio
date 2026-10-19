@@ -2696,7 +2696,10 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
         </div>
       );
     }
-    const val = typeof node.params[key] === 'number' ? (node.params[key] as number) : 0;
+    // A value never saved (a graph from before the setting existed) shows the definition's default, as it compiles,
+    // not 0: an old Output read Opacity 0.000 while drawing at 1.
+    const savedDefault = def?.defaultParams?.[key];
+    const val = typeof node.params[key] === 'number' ? (node.params[key] as number) : typeof savedDefault === 'number' ? savedDefault : 0;
     // A wire into another socket has taken this slider over (Center X under a wired Center):
     // greyed, naming the source; hovering lights the wire and the node it comes from.
     const driver = !isParamInternallyWired ? driverOf(node, key) : null;
