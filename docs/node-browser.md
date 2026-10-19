@@ -212,6 +212,42 @@ Type in the search bar to filter across all categories. Results show the node na
 
 ---
 
+## Examples using a node
+
+The node browsers show the examples that use what you're looking at (`ExampleLinks.tsx`,
+`exampleLinksModel.ts`):
+
+- **A search** about a node or a few nodes shows **Examples using …** under the matches (the node
+  search: under the top tiles; the node list: under the results; the phone's Browse: after the first
+  few results). "About" means the best match tier is a name match (exact, prefix or word), up to three
+  of that tier's nodes; or three or fewer matches in all. A vague search shows no strip; so does a
+  search opened from a wire.
+- **A category** (the node search's category grid: at the top; the node list: at the bottom; the
+  phone's Browse: at the top of an open category) shows **Examples with …**: the examples that use
+  the category's nodes, by curation, then how many of them they use, then how central.
+- **A node's preview** (the search's side panel, the node list's preview card, the phone's node page)
+  lists **Used in** with up to three examples.
+
+Up to four cards show (two on a phone); **More** shows the rest in place. A card is the example's
+poster when the poster cache already has one (drawn by a node page in Files), else a text card in the
+example's folder colour; nothing is rendered for the strip. A click opens the example the normal way:
+it asks first when the open graph has unsaved changes, then goes to the Studio and closes the search
+or sheet.
+
+**The index.** `src/store/exampleNodes.json` (about 45 KB) holds each indexed example's node types
+(groups walked at any depth, aliases resolved, the Output left out) with a 0–100 centrality: near the
+Output (hops upstream, into groups through their output ports) in a small graph scores high, a node
+off to the side of a big graph low. Built by `store/exampleNodeIndexBuild.ts`; read by
+`store/exampleNodeIndex.ts`, so the app never loads the examples chunk to answer "which examples use
+X". Which examples: every curated keep (showcase folders, tier 0) and every course step under Learn
+(tier 1); a retired example (tier 2) only for the node types no listed example uses. An example whose
+graph is only the new-graph starter (UV → Circle SDF → Glow, a Play, data or p5 example doing its work
+elsewhere) is indexed with no types. Regenerate after changing examples or folders with
+`WRITE_EXAMPLE_NODES=1 npx vitest run src/store/__tests__/exampleNodeIndex.test.ts`; that test fails
+while the JSON is stale.
+
+---
+
 ## Node search (Shift+Space)
 
 **Shift+Space** on the canvas (or **A**, a wire's **+**, a socket's **Add node…**, the phone's Add node)

@@ -27,6 +27,10 @@ import { recordRecentNode } from '../../nodes/recentNodes';
 
 import { HIDDEN_NODES, CATEGORY_SECTIONS, rowLabel, VIRTUAL_ROWS, rowOfType, MERGED_CATEGORIES, CATEGORY_INFO, ROW_ADD_PARAMS, nodesOfRow, CATEGORY_ORDER, CATEGORY_GROUPS, byLabel } from './libraryRows';
 import { nodeBlurb } from '../../nodes/plainDescriptions';
+import { ExamplesStrip } from './ExampleLinks';
+import { searchFocusTypes, usingTitle } from './exampleLinksModel';
+import { rankMatches } from './nodeSearchModel';
+import { examplesForCategory, examplesForType, examplesForTypes } from '../../store/exampleNodeIndex';
 
 
 // ── GLSL source extractor ─────────────────────────────────────────────────────
@@ -140,7 +144,7 @@ function CategoryChip({ children }: { children: ReactNode }) {
 }
 
 // ── Preview card ──────────────────────────────────────────────────────────────
-function NodePreviewCard({ type, onAdd, isFavorite, onToggleFavorite, context, onGlslInsert, swapMode, onDismiss }: {
+function NodePreviewCard({ type, onAdd, isFavorite, onToggleFavorite, context, onGlslInsert, swapMode, onDismiss, onExampleOpened }: {
   type: string; onAdd: () => void;
   isFavorite: boolean; onToggleFavorite: () => void;
   context?: 'studio' | 'glsl';
@@ -148,6 +152,8 @@ function NodePreviewCard({ type, onAdd, isFavorite, onToggleFavorite, context, o
   swapMode: boolean;
   /** Close the preview (after the previewed type was deleted). */
   onDismiss?: () => void;
+  /** After one of its "Used in" examples opened. */
+  onExampleOpened?: () => void;
 }) {
   const tk = useTokens();
   const def = getNodeDefinition(type);
@@ -213,6 +219,7 @@ function NodePreviewCard({ type, onAdd, isFavorite, onToggleFavorite, context, o
       ) : (
         <Button size="sm" variant="primary" icon="plus" onClick={onAdd}>{swapMode ? 'Replace with this' : 'Add to graph'}</Button>
       )}
+      {!isGlsl && !swapMode && <ExamplesStrip key={type} id="used-in" hits={examplesForType(type, 3)} title="Used in" layout="list" show={3} hideTypes onOpened={onExampleOpened} />}
       {userNode && !isGlsl && (
         <div style={{ display: 'flex', gap: 6, paddingTop: 6, borderTop: `1px solid ${tk.border.subtle}`, flexWrap: 'wrap' }}>
           {userNode.sealed ? (
@@ -374,6 +381,7 @@ export function NodeBrowser({
           onGlslInsert={onGlslInsert}
           swapMode={!!swapTargetNodeId}
           onDismiss={() => setPreviewType(null)}
+          onExampleOpened={onBuilderOpened}
         />
       )}
     </>
@@ -393,12 +401,17 @@ export function NodeBrowser({
       .sort((a, b) => b.score - a.score || a.def.label.localeCompare(b.def.label))
       .map(({ def }) => ({ type: def.type, label: def.label, description: nodeBlurb(def), badge: relevanceOn ? misfitBadge(def.category, libCtx.flow) ?? undefined : undefined }));
     const builderHits = showBuilders ? matchBuilders(trimmed).length : 0;
+    // Examples using the node(s) the search is about (docs/node-browser.md, "Examples using a node").
+    const focus = isGlsl || swapTargetNodeId ? [] : searchFocusTypes(rankMatches(getOfferedDefinitions().filter(d => !hidden.has(d.type)), trimmed));
     innerContent = (
       <>
         {builderHits > 0 && <BuildersSection query={trimmed} onOpened={onBuilderOpened} />}
         {results.length === 0
           ? (builderHits ? null : <div style={{ color: tk.text.faint, fontSize: 12, padding: '4px 2px' }}>No matches</div>)
           : <div>{renderPills(results)}</div>}
+        {focus.length > 0 && (
+          <ExamplesStrip key={focus.join('|')} id="search" hits={examplesForTypes(focus, 10)} title={usingTitle(focus.map(t => getNodeDefinition(t)?.label ?? t))} layout="list" show={3} onOpened={onBuilderOpened} />
+        )}
       </>
     );
 
@@ -527,6 +540,9 @@ export function NodeBrowser({
           })
         ) : (
           <div style={{ marginTop: 4 }}>{renderPills(shown(rawNodes))}</div>
+        )}
+        {!isGlsl && !swapTargetNodeId && (
+          <ExamplesStrip key={cat} id="category" hits={examplesForCategory(rawNodes.map(d => d.type), 8)} title={`Examples with ${rowLabel(cat)}`} layout="list" show={4} onOpened={onBuilderOpened} />
         )}
       </div>
     );
