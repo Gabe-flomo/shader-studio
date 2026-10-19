@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.307',
+    date: '2026-10-19',
+    title: "Quieter sockets",
+    highlights: [
+      { area: 'Studio', text: "Keyframes are on a socket's right-click menu only; the hover chip that got in the way of wiring is gone." },
+    ],
+  },
+  {
     id: '2026.10.306',
     date: '2026-10-19',
     title: "Smarter triggers",
