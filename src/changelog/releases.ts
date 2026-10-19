@@ -39,6 +39,14 @@ export interface Release {
 
 export const RELEASES: Release[] = [
   {
+    id: '2026.10.301',
+    date: '2026-10-18',
+    title: "Live connector",
+    highlights: [
+      { area: 'Studio', text: "Connect Ableton Live without Max for Live: install the Playfield script, map knobs and rack macros, follow Live's tempo, fire on clip launches." },
+    ],
+  },
+  {
     id: '2026.10.300',
     date: '2026-10-18',
     title: "Perform",
