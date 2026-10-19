@@ -732,7 +732,6 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
   const exprAnchorRef = useMemo(() => ({ current: exprEditKey ? exprAnchors.current[exprEditKey] ?? null : null }), [exprEditKey]);
   const [hoveredRowKey, setHoveredRowKey] = useState<string | null>(null);
   const [hoveredInput, setHoveredInput] = useState<string | null>(null);
-  const [kfChipHover, setKfChipHover] = useState(false);
   const [hoveredOutput, setHoveredOutput] = useState<string | null>(null);
   const [showNodeTooltip, setShowNodeTooltip] = useState(false);
   // The full node list is only read by the socket / node tooltips ("connected
@@ -3476,7 +3475,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                 }}
               />
               {/* Hover tooltip */}
-              {isHovered && !draggingType && !kfChipHover && (
+              {isHovered && !draggingType && (
                 <SocketTooltip
                   lines={isExternal ? [`🔒 Wired from outside group`, `(${input.type})`] : [
                     ...buildInputTooltip(key),
@@ -3488,33 +3487,7 @@ export const NodeComponent = React.memo(function NodeComponent({ node, onStartCo
                   onMouseLeave={() => setHoveredInput(null)}
                 />
               )}
-              {/* Discoverability hint: unconnected float sockets can be keyframed —
-                  surface that on hover instead of requiring right-click to find it.
-                  Only float, unconnected, non-external sockets are kfEligible, so a
-                  wired input never shows this (you'd delete the connection first). */}
-              {isHovered && !draggingType && kfEligible && !isKeyframed && !isTouchDevice && (
-                // Sits out in the canvas gutter left of the socket, so it never collides with the
-                // socket tooltip (which opens to the right). The padding bridges the gap from the dot.
-                <div
-                  onMouseEnter={() => { setHoveredInput(key); setKfChipHover(true); }}
-                  onMouseLeave={() => { setHoveredInput(null); setKfChipHover(false); }}
-                  // Its padding overlaps the socket dot: a right-click there is still the socket's keyframe menu
-                  onContextMenu={e => { e.preventDefault(); e.stopPropagation(); setKfChipHover(false); setKfMenu({ x: e.clientX, y: e.clientY, key }); }}
-                  style={{ position: 'absolute', right: '100%', top: '50%', transform: 'translateY(-50%)', zIndex: 200, marginRight: -4, paddingRight: 12 }}
-                >
-                  <button
-                    onMouseDown={e => e.stopPropagation()}
-                    onClick={e => { e.stopPropagation(); setKfChipHover(false); setKfModalKey(key); }}
-                    title="Add keyframes to this input"
-                    style={{
-                      height: 20, padding: '0 7px', borderRadius: 6,
-                      display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer', whiteSpace: 'nowrap',
-                      border: 0, background: tk.bg.panel, color: tk.status.warningText, font: `600 10.5px ${fontFamily.ui}`,
-                      boxShadow: `inset 0 0 0 1px ${alpha(tk.status.warning, 0.6)}, ${tk.shadow.float}`,
-                    }}
-                  ><Icon name="kf" size={10} />Keyframe</button>
-                </div>
-              )}
+              {/* Keyframes are a right-click on the socket only (its menu); a hover chip here fought with connecting wires. */}
               {/* When dragging: show a drop-here indicator on compatible sockets (not external) */}
               {!isExternal && draggingType && (compat0(draggingType) || typesCompatible(draggingType, input.type as DataType)) && (
                 <div style={{
